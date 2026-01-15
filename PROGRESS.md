@@ -14,9 +14,9 @@
 
 ---
 
-## Aktualny Etap: 1 - Setup Projektu
+## Aktualny Etap: 2 - Wyjątki
 
-**Status:** Do zrobienia
+**Status:** W trakcie (exceptions.py utworzony, do weryfikacji import)
 
 ---
 
@@ -28,7 +28,7 @@
 ---
 
 ### Etap 1: Setup Projektu (S - 20 min)
-- [ ] Ukończony
+- [x] Ukończony
 
 **Pliki do utworzenia:**
 - `pyproject.toml` - konfiguracja projektu, entry points
