@@ -14,7 +14,7 @@
 
 ---
 
-## Aktualny Etap: 8 - Download Manager
+## Aktualny Etap: 9 - CLI - Parse
 
 **Status:** Do rozpoczęcia
 
@@ -147,7 +147,7 @@ WCS_GEOTIFF = f"{BASE_URL}/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModelFo
 ---
 
 ### Etap 8: Download Manager (M - 50 min)
-- [ ] Ukończony
+- [x] Ukończony
 
 **Pliki:**
 - `src/kartograf/download/manager.py`
