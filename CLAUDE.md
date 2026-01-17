@@ -7,6 +7,7 @@ Używaj środowiska wirtualnego z `.venv`:
 
 ## Dokumentacja
 **Przed rozpoczęciem pracy przeczytaj:**
-- `IMPLEMENTATION_PROMPT.md` - wymagania i architektura projektu
-- `DEVELOPMENT_STANDARDS.md` - standardy kodowania
-- `docs/` - szczegółowa dokumentacja (SCOPE, PRD)
+- `docs/IMPLEMENTATION_PROMPT.md` - wymagania i architektura projektu
+- `docs/DEVELOPMENT_STANDARDS.md` - standardy kodowania
+- `docs/PROGRESS.md` - plan i status implementacji
+- `docs/` - szczegółowa dokumentacja (SCOPE, PRD, CHANGELOG)
