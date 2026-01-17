@@ -67,8 +67,10 @@ paths = manager.download_hierarchy(
 
 - [SCOPE.md](docs/SCOPE.md) - Zakres projektu (co JEST i czego NIE MA)
 - [PRD.md](docs/PRD.md) - Product Requirements Document
-- [IMPLEMENTATION_PROMPT.md](IMPLEMENTATION_PROMPT.md) - Instrukcje dla AI assistants
-- [DEVELOPMENT_STANDARDS.md](DEVELOPMENT_STANDARDS.md) - Standardy kodowania
+- [IMPLEMENTATION_PROMPT.md](docs/IMPLEMENTATION_PROMPT.md) - Instrukcje dla AI assistants
+- [DEVELOPMENT_STANDARDS.md](docs/DEVELOPMENT_STANDARDS.md) - Standardy kodowania
+- [PROGRESS.md](docs/PROGRESS.md) - Plan i status implementacji
+- [CHANGELOG.md](docs/CHANGELOG.md) - Historia zmian
 
 ## Wymagania
 
@@ -127,4 +129,4 @@ Piotr Daldek
 
 ## Status
 
-**Wersja 0.1.0** - MVP gotowy do użycia. Zobacz [CHANGELOG.md](CHANGELOG.md) dla szczegółów
+**Wersja 0.1.0** - MVP gotowy do użycia. Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów

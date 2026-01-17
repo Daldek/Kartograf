@@ -474,8 +474,11 @@ kartograf/
 ├── requirements.txt
 ├── README.md
 ├── CLAUDE.md
-├── IMPLEMENTATION_PROMPT.md
-└── DEVELOPMENT_STANDARDS.md
+└── docs/
+    ├── IMPLEMENTATION_PROMPT.md
+    ├── DEVELOPMENT_STANDARDS.md
+    ├── PROGRESS.md
+    └── CHANGELOG.md
 ```
 
 ---
