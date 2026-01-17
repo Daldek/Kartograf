@@ -14,7 +14,7 @@
 
 ---
 
-## Aktualny Etap: 7 - Storage
+## Aktualny Etap: 8 - Download Manager
 
 **Status:** Do rozpoczęcia
 
@@ -132,7 +132,7 @@ WCS_GEOTIFF = f"{BASE_URL}/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModelFo
 ---
 
 ### Etap 7: Storage (S - 25 min)
-- [ ] Ukończony
+- [x] Ukończony
 
 **Pliki:**
 - `src/kartograf/download/__init__.py`
