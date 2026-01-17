@@ -14,7 +14,7 @@
 
 ---
 
-## Aktualny Etap: 12 - Testy Integracyjne
+## Aktualny Etap: 13 - Dokumentacja
 
 **Status:** Do rozpoczęcia
 
@@ -199,7 +199,7 @@ WCS_GEOTIFF = f"{BASE_URL}/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModelFo
 ---
 
 ### Etap 12: Testy Integracyjne (M - 40 min)
-- [ ] Ukończony
+- [x] Ukończony
 
 **Pliki:**
 - `tests/test_integration.py`
