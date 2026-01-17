@@ -354,3 +354,383 @@ class TestSheetParserScaleHierarchy:
         """Test że wszystkie skale mają zdefiniowane wzorce."""
         for scale in SheetParser.SCALE_HIERARCHY:
             assert scale in SheetParser.PATTERNS
+
+
+# =============================================================================
+# Testy metod hierarchii (Etap 4)
+# =============================================================================
+
+
+class TestSheetParserGetParent:
+    """Testy metody get_parent()."""
+
+    def test_get_parent_from_10k(self):
+        """Test get_parent() dla skali 1:10000."""
+        parser = SheetParser("N-34-130-D-d-2-4")
+        parent = parser.get_parent()
+
+        assert parent is not None
+        assert parent.godlo == "N-34-130-D-d-2"
+        assert parent.scale == "1:25000"
+        assert parent.uklad == "1992"
+
+    def test_get_parent_from_25k(self):
+        """Test get_parent() dla skali 1:25000."""
+        parser = SheetParser("N-34-130-D-d-2")
+        parent = parser.get_parent()
+
+        assert parent is not None
+        assert parent.godlo == "N-34-130-D-d"
+        assert parent.scale == "1:50000"
+
+    def test_get_parent_from_50k(self):
+        """Test get_parent() dla skali 1:50000."""
+        parser = SheetParser("N-34-130-D-d")
+        parent = parser.get_parent()
+
+        assert parent is not None
+        assert parent.godlo == "N-34-130-D"
+        assert parent.scale == "1:100000"
+
+    def test_get_parent_from_100k(self):
+        """Test get_parent() dla skali 1:100000."""
+        parser = SheetParser("N-34-130-D")
+        parent = parser.get_parent()
+
+        assert parent is not None
+        assert parent.godlo == "N-34-130"
+        assert parent.scale == "1:200000"
+
+    def test_get_parent_from_200k_section_a(self):
+        """Test get_parent() dla skali 1:200000 w sekcji A (1-36)."""
+        parser = SheetParser("N-34-1")  # Arkusz 1 → sekcja A
+        parent = parser.get_parent()
+
+        assert parent is not None
+        assert parent.godlo == "N-34-A"
+        assert parent.scale == "1:500000"
+
+    def test_get_parent_from_200k_section_b(self):
+        """Test get_parent() dla skali 1:200000 w sekcji B (37-72)."""
+        parser = SheetParser("N-34-37")  # Arkusz 37 → sekcja B
+        parent = parser.get_parent()
+
+        assert parent is not None
+        assert parent.godlo == "N-34-B"
+        assert parent.scale == "1:500000"
+
+    def test_get_parent_from_200k_section_c(self):
+        """Test get_parent() dla skali 1:200000 w sekcji C (73-108)."""
+        parser = SheetParser("N-34-73")  # Arkusz 73 → sekcja C
+        parent = parser.get_parent()
+
+        assert parent is not None
+        assert parent.godlo == "N-34-C"
+        assert parent.scale == "1:500000"
+
+    def test_get_parent_from_200k_section_d(self):
+        """Test get_parent() dla skali 1:200000 w sekcji D (109-144)."""
+        parser = SheetParser("N-34-130")  # Arkusz 130 → sekcja D
+        parent = parser.get_parent()
+
+        assert parent is not None
+        assert parent.godlo == "N-34-D"
+        assert parent.scale == "1:500000"
+
+    def test_get_parent_from_500k(self):
+        """Test get_parent() dla skali 1:500000."""
+        parser = SheetParser("N-34-A")
+        parent = parser.get_parent()
+
+        assert parent is not None
+        assert parent.godlo == "N-34"
+        assert parent.scale == "1:1000000"
+
+    def test_get_parent_from_1m_returns_none(self):
+        """Test get_parent() dla skali 1:1000000 zwraca None."""
+        parser = SheetParser("N-34")
+        parent = parser.get_parent()
+
+        assert parent is None
+
+    def test_get_parent_preserves_uklad(self):
+        """Test że get_parent() zachowuje układ."""
+        parser = SheetParser("N-34-130-D", uklad="2000")
+        parent = parser.get_parent()
+
+        assert parent.uklad == "2000"
+
+
+class TestSheetParserGetChildren:
+    """Testy metody get_children()."""
+
+    def test_get_children_from_1m(self):
+        """Test get_children() dla skali 1:1000000 (4 dzieci)."""
+        parser = SheetParser("N-34")
+        children = parser.get_children()
+
+        assert len(children) == 4
+        assert children[0].godlo == "N-34-A"
+        assert children[1].godlo == "N-34-B"
+        assert children[2].godlo == "N-34-C"
+        assert children[3].godlo == "N-34-D"
+        assert all(c.scale == "1:500000" for c in children)
+
+    def test_get_children_from_500k_section_a(self):
+        """Test get_children() dla skali 1:500000 sekcja A (36 dzieci)."""
+        parser = SheetParser("N-34-A")
+        children = parser.get_children()
+
+        assert len(children) == 36
+        assert children[0].godlo == "N-34-1"
+        assert children[35].godlo == "N-34-36"
+        assert all(c.scale == "1:200000" for c in children)
+
+    def test_get_children_from_500k_section_d(self):
+        """Test get_children() dla skali 1:500000 sekcja D (36 dzieci)."""
+        parser = SheetParser("N-34-D")
+        children = parser.get_children()
+
+        assert len(children) == 36
+        assert children[0].godlo == "N-34-109"
+        assert children[35].godlo == "N-34-144"
+        assert all(c.scale == "1:200000" for c in children)
+
+    def test_get_children_from_200k(self):
+        """Test get_children() dla skali 1:200000 (4 dzieci)."""
+        parser = SheetParser("N-34-130")
+        children = parser.get_children()
+
+        assert len(children) == 4
+        assert children[0].godlo == "N-34-130-A"
+        assert children[1].godlo == "N-34-130-B"
+        assert children[2].godlo == "N-34-130-C"
+        assert children[3].godlo == "N-34-130-D"
+        assert all(c.scale == "1:100000" for c in children)
+
+    def test_get_children_from_100k(self):
+        """Test get_children() dla skali 1:100000 (4 dzieci)."""
+        parser = SheetParser("N-34-130-D")
+        children = parser.get_children()
+
+        assert len(children) == 4
+        assert children[0].godlo == "N-34-130-D-a"
+        assert children[1].godlo == "N-34-130-D-b"
+        assert children[2].godlo == "N-34-130-D-c"
+        assert children[3].godlo == "N-34-130-D-d"
+        assert all(c.scale == "1:50000" for c in children)
+
+    def test_get_children_from_50k(self):
+        """Test get_children() dla skali 1:50000 (4 dzieci)."""
+        parser = SheetParser("N-34-130-D-d")
+        children = parser.get_children()
+
+        assert len(children) == 4
+        assert children[0].godlo == "N-34-130-D-d-1"
+        assert children[1].godlo == "N-34-130-D-d-2"
+        assert children[2].godlo == "N-34-130-D-d-3"
+        assert children[3].godlo == "N-34-130-D-d-4"
+        assert all(c.scale == "1:25000" for c in children)
+
+    def test_get_children_from_25k(self):
+        """Test get_children() dla skali 1:25000 (4 dzieci)."""
+        parser = SheetParser("N-34-130-D-d-2")
+        children = parser.get_children()
+
+        assert len(children) == 4
+        assert children[0].godlo == "N-34-130-D-d-2-1"
+        assert children[1].godlo == "N-34-130-D-d-2-2"
+        assert children[2].godlo == "N-34-130-D-d-2-3"
+        assert children[3].godlo == "N-34-130-D-d-2-4"
+        assert all(c.scale == "1:10000" for c in children)
+
+    def test_get_children_from_10k_returns_empty(self):
+        """Test get_children() dla skali 1:10000 zwraca pustą listę."""
+        parser = SheetParser("N-34-130-D-d-2-4")
+        children = parser.get_children()
+
+        assert children == []
+
+    def test_get_children_preserves_uklad(self):
+        """Test że get_children() zachowuje układ."""
+        parser = SheetParser("N-34-130-D", uklad="2000")
+        children = parser.get_children()
+
+        assert all(c.uklad == "2000" for c in children)
+
+
+class TestSheetParserGetHierarchyUp:
+    """Testy metody get_hierarchy_up()."""
+
+    def test_hierarchy_up_from_10k(self):
+        """Test get_hierarchy_up() od 1:10000 do 1:1M."""
+        parser = SheetParser("N-34-130-D-d-2-4")
+        hierarchy = parser.get_hierarchy_up()
+
+        expected_scales = [
+            "1:10000",
+            "1:25000",
+            "1:50000",
+            "1:100000",
+            "1:200000",
+            "1:500000",
+            "1:1000000",
+        ]
+
+        assert len(hierarchy) == 7
+        assert [p.scale for p in hierarchy] == expected_scales
+
+    def test_hierarchy_up_from_100k(self):
+        """Test get_hierarchy_up() od 1:100000 do 1:1M."""
+        parser = SheetParser("N-34-130-D")
+        hierarchy = parser.get_hierarchy_up()
+
+        expected_scales = [
+            "1:100000",
+            "1:200000",
+            "1:500000",
+            "1:1000000",
+        ]
+
+        assert len(hierarchy) == 4
+        assert [p.scale for p in hierarchy] == expected_scales
+
+    def test_hierarchy_up_from_1m(self):
+        """Test get_hierarchy_up() od 1:1M (tylko 1 element)."""
+        parser = SheetParser("N-34")
+        hierarchy = parser.get_hierarchy_up()
+
+        assert len(hierarchy) == 1
+        assert hierarchy[0].scale == "1:1000000"
+        assert hierarchy[0].godlo == "N-34"
+
+    def test_hierarchy_up_godlo_values(self):
+        """Test poprawnych wartości godło w hierarchii."""
+        parser = SheetParser("N-34-130-D-d-2-4")
+        hierarchy = parser.get_hierarchy_up()
+
+        expected_godla = [
+            "N-34-130-D-d-2-4",
+            "N-34-130-D-d-2",
+            "N-34-130-D-d",
+            "N-34-130-D",
+            "N-34-130",
+            "N-34-D",  # 130 → sekcja D
+            "N-34",
+        ]
+
+        assert [p.godlo for p in hierarchy] == expected_godla
+
+
+class TestSheetParserGetAllDescendants:
+    """Testy metody get_all_descendants()."""
+
+    def test_descendants_from_50k_to_10k(self):
+        """Test get_all_descendants() od 1:50000 do 1:10000."""
+        parser = SheetParser("N-34-130-D-d")
+        descendants = parser.get_all_descendants("1:10000")
+
+        # 1:50k → 1:25k (4) → 1:10k (4) = 16 arkuszy
+        assert len(descendants) == 16
+        assert all(d.scale == "1:10000" for d in descendants)
+
+    def test_descendants_from_100k_to_10k(self):
+        """Test get_all_descendants() od 1:100000 do 1:10000."""
+        parser = SheetParser("N-34-130-D")
+        descendants = parser.get_all_descendants("1:10000")
+
+        # 1:100k → 1:50k (4) → 1:25k (4) → 1:10k (4) = 64 arkuszy
+        assert len(descendants) == 64
+        assert all(d.scale == "1:10000" for d in descendants)
+
+    def test_descendants_from_25k_to_10k(self):
+        """Test get_all_descendants() od 1:25000 do 1:10000."""
+        parser = SheetParser("N-34-130-D-d-2")
+        descendants = parser.get_all_descendants("1:10000")
+
+        assert len(descendants) == 4
+        assert all(d.scale == "1:10000" for d in descendants)
+        assert descendants[0].godlo == "N-34-130-D-d-2-1"
+        assert descendants[3].godlo == "N-34-130-D-d-2-4"
+
+    def test_descendants_from_500k_to_200k(self):
+        """Test get_all_descendants() od 1:500000 do 1:200000 (36 arkuszy)."""
+        parser = SheetParser("N-34-A")
+        descendants = parser.get_all_descendants("1:200000")
+
+        assert len(descendants) == 36
+        assert all(d.scale == "1:200000" for d in descendants)
+
+    def test_descendants_from_1m_to_100k(self):
+        """Test get_all_descendants() od 1:1M do 1:100000."""
+        parser = SheetParser("N-34")
+        descendants = parser.get_all_descendants("1:100000")
+
+        # 1:1M → 1:500k (4) → 1:200k (36) → 1:100k (4) = 576 arkuszy
+        assert len(descendants) == 576
+        assert all(d.scale == "1:100000" for d in descendants)
+
+    def test_descendants_invalid_target_scale(self):
+        """Test get_all_descendants() z nieprawidłową skalą docelową."""
+        parser = SheetParser("N-34-130-D")
+
+        with pytest.raises(ValidationError, match="Nieprawidłowa skala"):
+            parser.get_all_descendants("1:5000")
+
+    def test_descendants_target_scale_not_smaller(self):
+        """Test get_all_descendants() gdy skala docelowa >= bieżąca."""
+        parser = SheetParser("N-34-130-D")  # 1:100000
+
+        with pytest.raises(ValueError, match="musi być większa"):
+            parser.get_all_descendants("1:100000")
+
+        with pytest.raises(ValueError, match="musi być większa"):
+            parser.get_all_descendants("1:200000")
+
+    def test_descendants_preserves_uklad(self):
+        """Test że get_all_descendants() zachowuje układ."""
+        parser = SheetParser("N-34-130-D-d", uklad="2000")
+        descendants = parser.get_all_descendants("1:10000")
+
+        assert all(d.uklad == "2000" for d in descendants)
+
+
+class TestSheetParserHierarchyRoundTrip:
+    """Testy spójności hierarchii (parent ↔ children)."""
+
+    def test_parent_child_consistency(self):
+        """Test że dziecko.get_parent() zwraca rodzica."""
+        parser = SheetParser("N-34-130-D")
+        children = parser.get_children()
+
+        for child in children:
+            parent = child.get_parent()
+            assert parent == parser
+
+    def test_children_parent_consistency_for_500k(self):
+        """Test spójności parent ↔ children dla 1:500k."""
+        parser = SheetParser("N-34-D")
+        children = parser.get_children()
+
+        assert len(children) == 36
+        for child in children:
+            parent = child.get_parent()
+            assert parent == parser
+
+    def test_full_hierarchy_roundtrip(self):
+        """Test pełnej ścieżki w górę i w dół."""
+        # Start od 1:10k
+        parser_10k = SheetParser("N-34-130-D-d-2-4")
+
+        # Idź w górę do 1:1M
+        hierarchy = parser_10k.get_hierarchy_up()
+        parser_1m = hierarchy[-1]
+
+        assert parser_1m.scale == "1:1000000"
+        assert parser_1m.godlo == "N-34"
+
+        # Znajdź drogę z powrotem do oryginalnego arkusza
+        descendants = parser_1m.get_all_descendants("1:10000")
+
+        # Oryginalny arkusz powinien być wśród potomków
+        assert parser_10k in descendants
