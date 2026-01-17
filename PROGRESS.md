@@ -14,7 +14,7 @@
 
 ---
 
-## Aktualny Etap: 6 - GugikClient - Pobieranie
+## Aktualny Etap: 7 - Storage
 
 **Status:** Do rozpoczęcia
 
@@ -113,7 +113,7 @@ PATTERNS = {
 ---
 
 ### Etap 6: GugikClient - Pobieranie (M - 50 min)
-- [ ] Ukończony
+- [x] Ukończony
 
 **Pliki:** Rozszerzenie `gugik.py`, `tests/test_gugik_client.py`
 
