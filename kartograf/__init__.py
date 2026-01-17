@@ -17,7 +17,7 @@ Example usage::
     path = manager.download_sheet("N-34-130-D-d-2-4")
 """
 
-from kartograf.core.sheet_parser import SheetParser
+from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.manager import DownloadManager, DownloadProgress
 from kartograf.download.storage import FileStorage
 from kartograf.exceptions import (
@@ -29,11 +29,12 @@ from kartograf.exceptions import (
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.gugik import GugikProvider
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     # Core
     "SheetParser",
+    "BBox",
     # Download
     "DownloadManager",
     "DownloadProgress",

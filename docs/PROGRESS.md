@@ -1,7 +1,7 @@
 # Plan Implementacji Kartograf
 
 **Repozytorium:** https://github.com/Daldek/Kartograf.git
-**Status:** W trakcie implementacji
+**Status:** Wersja 0.2.0
 **Ostatnia aktualizacja:** 2026-01-17
 
 ---
@@ -16,7 +16,7 @@
 
 ## Aktualny Etap: UKOŃCZONY
 
-**Status:** Wszystkie etapy zakończone
+**Status:** Wszystkie etapy zakończone (v0.2.0)
 
 ---
 
@@ -215,6 +215,36 @@ WCS_GEOTIFF = f"{BASE_URL}/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModelFo
 **Pliki:**
 - `README.md` - aktualizacja przykładów
 - `CHANGELOG.md` - wersja 0.1.0
+
+---
+
+### Etap 14: Nowa architektura pobierania (L - 120 min) - v0.2.0
+- [x] Ukończony
+
+**Problem:** API GUGiK WCS zmieniło się - format AAIGrid nie jest już obsługiwany. Dotychczasowa logika była zbyt skomplikowana.
+
+**Nowa architektura:**
+```
+Godło  →  OpenData  →  ASC       (pliki są indeksowane po godle)
+BBox   →  WCS       →  GeoTIFF   (WCS wycina dowolny prostokąt)
+```
+
+**Zmiany:**
+- `kartograf/providers/gugik.py`:
+  - `download(godlo, path)` - zawsze OpenData, zawsze ASC
+  - `download_bbox(bbox, path, format)` - WCS dla dowolnego bbox
+  - `_get_opendata_url()` - znajdowanie URL przez WMS GetFeatureInfo
+  - Usunięto `construct_url()` z publicznego API
+- `kartograf/download/manager.py`:
+  - `download_sheet()` - usunięto parametr `format` (zawsze ASC)
+  - `download_bbox()` - nowa metoda dla pobierania przez bbox
+- `kartograf/providers/base.py` - zaktualizowano interfejs
+- 245 testów
+
+**Kryterium ukończenia:**
+- `manager.download_sheet("N-34-130-D")` pobiera ASC przez OpenData
+- `manager.download_bbox(bbox, "area.tif")` pobiera GeoTIFF przez WCS
+- Wszystkie testy przechodzą
 
 ---
 

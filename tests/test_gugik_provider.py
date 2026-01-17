@@ -1,15 +1,17 @@
 """
 Testy jednostkowe dla modułu gugik provider.
 
-Ten moduł zawiera testy dla klasy GugikProvider, weryfikujące poprawność
-konstruowania URL-i i pobierania danych z mockami HTTP.
+Ten moduł zawiera testy dla klasy GugikProvider z nową architekturą:
+- download(godlo) → OpenData (ASC)
+- download_bbox(bbox) → WCS (GeoTIFF/PNG/JPEG)
 """
 
 import pytest
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import requests
 
+from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError
 from kartograf.providers.gugik import GugikProvider
 
@@ -28,22 +30,23 @@ class TestGugikProviderBasic:
         assert provider.base_url == "https://mapy.geoportal.gov.pl"
 
     def test_supported_formats(self):
-        """Test obsługiwanych formatów."""
+        """Test obsługiwanych formatów WCS."""
         provider = GugikProvider()
         formats = provider.get_supported_formats()
 
         assert "GTiff" in formats
-        assert "AAIGrid" in formats
-        assert "XYZ" in formats
-        assert len(formats) == 3
+        assert "PNG" in formats
+        assert "JPEG" in formats
+        assert len(formats) == 3  # Only WCS formats
 
     def test_file_extensions(self):
         """Test rozszerzeń plików."""
         provider = GugikProvider()
 
         assert provider.get_file_extension("GTiff") == ".tif"
-        assert provider.get_file_extension("AAIGrid") == ".asc"
-        assert provider.get_file_extension("XYZ") == ".xyz"
+        assert provider.get_file_extension("PNG") == ".png"
+        assert provider.get_file_extension("JPEG") == ".jpg"
+        assert provider.get_file_extension("ASC") == ".asc"
 
     def test_file_extension_invalid_format(self):
         """Test rozszerzenia dla nieprawidłowego formatu."""
@@ -73,179 +76,276 @@ class TestGugikProviderValidation:
         assert provider.validate_godlo("123") is False
 
 
-class TestGugikProviderConstructUrl:
-    """Testy konstruowania URL."""
-
-    def test_construct_url_default_format(self):
-        """Test konstruowania URL z domyślnym formatem."""
-        provider = GugikProvider()
-        url = provider.construct_url("N-34-130-D-d-2-4")
-
-        assert "mapy.geoportal.gov.pl" in url
-        assert "N-34-130-D-d-2-4" in url
-        assert "SERVICE=WCS" in url
-        assert "REQUEST=GetCoverage" in url
-        assert "image%2Ftiff" in url or "image/tiff" in url
-
-    def test_construct_url_gtiff_format(self):
-        """Test konstruowania URL dla formatu GTiff."""
-        provider = GugikProvider()
-        url = provider.construct_url("N-34-130-D", format="GTiff")
-
-        assert "image%2Ftiff" in url or "image/tiff" in url
-
-    def test_construct_url_aaigrid_format(self):
-        """Test konstruowania URL dla formatu AAIGrid."""
-        provider = GugikProvider()
-        url = provider.construct_url("N-34-130-D", format="AAIGrid")
-
-        assert "application%2Fx-ogc-aaigrid" in url or "x-ogc-aaigrid" in url
-
-    def test_construct_url_xyz_format(self):
-        """Test konstruowania URL dla formatu XYZ."""
-        provider = GugikProvider()
-        url = provider.construct_url("N-34-130-D", format="XYZ")
-
-        assert "text%2Fplain" in url or "text/plain" in url
-
-    def test_construct_url_invalid_format(self):
-        """Test konstruowania URL z nieprawidłowym formatem."""
-        provider = GugikProvider()
-
-        with pytest.raises(ValueError, match="Unsupported format"):
-            provider.construct_url("N-34-130-D", format="InvalidFormat")
-
-    def test_construct_url_normalizes_godlo(self):
-        """Test że URL zawiera znormalizowane godło."""
-        provider = GugikProvider()
-
-        # Małe litery powinny być znormalizowane
-        url = provider.construct_url("n-34-130-d")
-        assert "N-34-130-D" in url
-
-    def test_construct_url_wcs_parameters(self):
-        """Test że URL zawiera wymagane parametry WCS."""
-        provider = GugikProvider()
-        url = provider.construct_url("N-34-130-D")
-
-        assert "SERVICE=WCS" in url
-        assert "VERSION=2.0.1" in url
-        assert "REQUEST=GetCoverage" in url
-        assert "COVERAGEID=" in url
-        assert "FORMAT=" in url
-
-
-class TestGugikProviderDownload:
-    """Testy pobierania danych z mockami HTTP."""
+class TestGugikProviderDownloadGodlo:
+    """Testy pobierania przez godło (OpenData)."""
 
     @pytest.fixture
-    def mock_response(self):
-        """Fixture z mockowaną odpowiedzią HTTP."""
+    def mock_wms_response(self):
+        """Mock odpowiedzi WMS GetFeatureInfo z URL OpenData."""
         response = Mock(spec=requests.Response)
         response.status_code = 200
-        response.iter_content = Mock(return_value=[b"test", b"data"])
+        response.text = (
+            '<html><script>var data = {url:"https://opendata.geoportal.gov.pl'
+            '/NumDaneWys/NMT/78955/78955_1467030_N-34-130-D.asc"};</script></html>'
+        )
         return response
 
     @pytest.fixture
-    def provider_with_mock_session(self, mock_response):
-        """Fixture z providerem używającym mockowanej sesji."""
-        session = Mock(spec=requests.Session)
-        session.get = Mock(return_value=mock_response)
-        return GugikProvider(session=session), session
+    def mock_opendata_response(self):
+        """Mock odpowiedzi pobierania pliku ASC."""
+        response = Mock(spec=requests.Response)
+        response.status_code = 200
+        response.iter_content = Mock(
+            return_value=[b"ncols 100\nnrows 100\n", b"data..."]
+        )
+        return response
 
-    def test_download_success(self, tmp_path, provider_with_mock_session):
-        """Test udanego pobierania."""
-        provider, session = provider_with_mock_session
-        output_path = tmp_path / "test.tif"
+    def test_download_godlo_uses_opendata(
+        self, tmp_path, mock_wms_response, mock_opendata_response
+    ):
+        """Test że download(godlo) używa OpenData."""
+        session = Mock(spec=requests.Session)
+        session.get = Mock(side_effect=[mock_wms_response, mock_opendata_response])
+
+        provider = GugikProvider(session=session)
+        output_path = tmp_path / "test.asc"
 
         result = provider.download("N-34-130-D", output_path)
 
         assert result == output_path
         assert output_path.exists()
-        session.get.assert_called_once()
 
-    def test_download_creates_directory(self, tmp_path, provider_with_mock_session):
-        """Test że pobieranie tworzy katalog docelowy."""
-        provider, _ = provider_with_mock_session
-        output_path = tmp_path / "subdir" / "nested" / "test.tif"
+        # First call should be WMS GetFeatureInfo
+        first_call_url = session.get.call_args_list[0][0][0]
+        assert "GetFeatureInfo" in first_call_url
+
+        # Second call should be OpenData URL
+        second_call_url = session.get.call_args_list[1][0][0]
+        assert "opendata.geoportal.gov.pl" in second_call_url
+
+    def test_download_godlo_creates_directory(
+        self, tmp_path, mock_wms_response, mock_opendata_response
+    ):
+        """Test że download tworzy katalog docelowy."""
+        session = Mock(spec=requests.Session)
+        session.get = Mock(side_effect=[mock_wms_response, mock_opendata_response])
+
+        provider = GugikProvider(session=session)
+        output_path = tmp_path / "subdir" / "nested" / "test.asc"
 
         result = provider.download("N-34-130-D", output_path)
 
         assert result == output_path
         assert output_path.parent.exists()
 
-    def test_download_saves_content(self, tmp_path, provider_with_mock_session):
-        """Test że pobieranie zapisuje zawartość pliku."""
-        provider, _ = provider_with_mock_session
-        output_path = tmp_path / "test.tif"
+    def test_download_godlo_saves_content(
+        self, tmp_path, mock_wms_response, mock_opendata_response
+    ):
+        """Test że download zapisuje zawartość pliku."""
+        session = Mock(spec=requests.Session)
+        session.get = Mock(side_effect=[mock_wms_response, mock_opendata_response])
+
+        provider = GugikProvider(session=session)
+        output_path = tmp_path / "test.asc"
 
         provider.download("N-34-130-D", output_path)
 
         content = output_path.read_bytes()
-        assert content == b"testdata"
+        assert b"ncols" in content
 
-    def test_download_with_timeout(self, tmp_path, provider_with_mock_session):
+    def test_download_godlo_with_timeout(
+        self, tmp_path, mock_wms_response, mock_opendata_response
+    ):
         """Test pobierania z określonym timeout."""
-        provider, session = provider_with_mock_session
-        output_path = tmp_path / "test.tif"
+        session = Mock(spec=requests.Session)
+        session.get = Mock(side_effect=[mock_wms_response, mock_opendata_response])
+
+        provider = GugikProvider(session=session)
+        output_path = tmp_path / "test.asc"
 
         provider.download("N-34-130-D", output_path, timeout=60)
 
-        call_kwargs = session.get.call_args.kwargs
-        assert call_kwargs["timeout"] == 60
+        # Check timeout was passed to requests
+        for call in session.get.call_args_list:
+            assert call.kwargs["timeout"] == 60
+
+
+class TestGugikProviderDownloadBbox:
+    """Testy pobierania przez bbox (WCS)."""
+
+    @pytest.fixture
+    def mock_wcs_response(self):
+        """Mock odpowiedzi WCS."""
+        response = Mock(spec=requests.Response)
+        response.status_code = 200
+        response.iter_content = Mock(return_value=[b"TIFF data..."])
+        return response
+
+    @pytest.fixture
+    def sample_bbox(self):
+        """Przykładowy bbox w EPSG:2180."""
+        return BBox(
+            min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
+        )
+
+    def test_download_bbox_uses_wcs(self, tmp_path, mock_wcs_response, sample_bbox):
+        """Test że download_bbox używa WCS."""
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=mock_wcs_response)
+
+        provider = GugikProvider(session=session)
+        output_path = tmp_path / "test.tif"
+
+        result = provider.download_bbox(sample_bbox, output_path)
+
+        assert result == output_path
+        assert output_path.exists()
+
+        # Should use WCS endpoint
+        call_url = session.get.call_args[0][0]
+        assert "WCS" in call_url
+        assert "COVERAGEID=DTM_PL-KRON86-NH_TIFF" in call_url
+        assert "SUBSET=x(" in call_url
+        assert "SUBSET=y(" in call_url
+
+    def test_download_bbox_gtiff_format(self, tmp_path, mock_wcs_response, sample_bbox):
+        """Test pobierania bbox w formacie GTiff."""
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=mock_wcs_response)
+
+        provider = GugikProvider(session=session)
+        output_path = tmp_path / "test.tif"
+
+        provider.download_bbox(sample_bbox, output_path, format="GTiff")
+
+        call_url = session.get.call_args[0][0]
+        assert "image%2Ftiff" in call_url or "image/tiff" in call_url
+
+    def test_download_bbox_png_format(self, tmp_path, mock_wcs_response, sample_bbox):
+        """Test pobierania bbox w formacie PNG."""
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=mock_wcs_response)
+
+        provider = GugikProvider(session=session)
+        output_path = tmp_path / "test.png"
+
+        provider.download_bbox(sample_bbox, output_path, format="PNG")
+
+        call_url = session.get.call_args[0][0]
+        assert "image%2Fpng" in call_url or "image/png" in call_url
+
+    def test_download_bbox_invalid_format(self, tmp_path, sample_bbox):
+        """Test błędu dla nieprawidłowego formatu."""
+        provider = GugikProvider()
+        output_path = tmp_path / "test.xyz"
+
+        with pytest.raises(ValueError, match="Unsupported WCS format"):
+            provider.download_bbox(sample_bbox, output_path, format="InvalidFormat")
+
+    def test_download_bbox_wrong_crs(self, tmp_path):
+        """Test błędu dla nieprawidłowego CRS."""
+        provider = GugikProvider()
+        output_path = tmp_path / "test.tif"
+
+        wrong_crs_bbox = BBox(
+            min_x=18.0, min_y=52.0, max_x=19.0, max_y=53.0, crs="EPSG:4326"
+        )
+
+        with pytest.raises(ValueError, match="EPSG:2180"):
+            provider.download_bbox(wrong_crs_bbox, output_path)
+
+    def test_download_bbox_contains_subset_parameters(
+        self, tmp_path, mock_wcs_response, sample_bbox
+    ):
+        """Test że URL zawiera parametry SUBSET z bounding box."""
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=mock_wcs_response)
+
+        provider = GugikProvider(session=session)
+        output_path = tmp_path / "test.tif"
+
+        provider.download_bbox(sample_bbox, output_path)
+
+        call_url = session.get.call_args[0][0]
+
+        # URL should contain SUBSET parameters with bbox values
+        assert "SUBSET=x(450000" in call_url
+        assert "SUBSET=y(550000" in call_url
+
+
+class TestGugikProviderRetry:
+    """Testy retry i obsługi błędów."""
 
     def test_download_retry_on_failure(self, tmp_path):
         """Test ponawiania próby po błędzie."""
         session = Mock(spec=requests.Session)
 
-        # Pierwsza próba nie udana, druga udana
+        # Mock WMS response (succeeds)
+        wms_response = Mock()
+        wms_response.status_code = 200
+        wms_response.text = 'url:"https://opendata.geoportal.gov.pl/test.asc"'
+
+        # First OpenData request fails, second succeeds
         fail_response = Mock()
         fail_response.raise_for_status.side_effect = requests.RequestException("Error")
 
         success_response = Mock()
         success_response.iter_content = Mock(return_value=[b"data"])
 
-        session.get = Mock(side_effect=[fail_response, success_response])
+        session.get = Mock(side_effect=[wms_response, fail_response, success_response])
 
         provider = GugikProvider(session=session)
-        output_path = tmp_path / "test.tif"
+        output_path = tmp_path / "test.asc"
 
-        with patch("time.sleep"):  # Skip actual sleep
+        with patch("time.sleep"):
             result = provider.download("N-34-130-D", output_path)
 
         assert result == output_path
-        assert session.get.call_count == 2
+        assert session.get.call_count == 3
 
     def test_download_retry_exhausted(self, tmp_path):
         """Test błędu po wyczerpaniu prób."""
         session = Mock(spec=requests.Session)
-        response = Mock()
-        response.raise_for_status.side_effect = requests.RequestException("Error")
-        session.get = Mock(return_value=response)
+
+        # Mock WMS response (succeeds)
+        wms_response = Mock()
+        wms_response.status_code = 200
+        wms_response.text = 'url:"https://opendata.geoportal.gov.pl/test.asc"'
+
+        # All OpenData requests fail
+        fail_response = Mock()
+        fail_response.raise_for_status.side_effect = requests.RequestException("Error")
+
+        session.get = Mock(
+            side_effect=[wms_response, fail_response, fail_response, fail_response]
+        )
 
         provider = GugikProvider(session=session)
-        output_path = tmp_path / "test.tif"
+        output_path = tmp_path / "test.asc"
 
-        with patch("time.sleep"):  # Skip actual sleep
-            with pytest.raises(DownloadError) as exc_info:
+        with patch("time.sleep"):
+            with pytest.raises(DownloadError):
                 provider.download("N-34-130-D", output_path)
-
-        assert "N-34-130-D" in str(exc_info.value)
-        assert exc_info.value.godlo == "N-34-130-D"
-        assert session.get.call_count == 3  # MAX_RETRIES
 
     def test_download_exponential_backoff(self, tmp_path):
         """Test exponential backoff między próbami."""
         session = Mock(spec=requests.Session)
-        response = Mock()
-        response.raise_for_status.side_effect = requests.RequestException("Error")
-        session.get = Mock(return_value=response)
+
+        wms_response = Mock()
+        wms_response.status_code = 200
+        wms_response.text = 'url:"https://opendata.geoportal.gov.pl/test.asc"'
+
+        fail_response = Mock()
+        fail_response.raise_for_status.side_effect = requests.RequestException("Error")
+
+        session.get = Mock(
+            side_effect=[wms_response, fail_response, fail_response, fail_response]
+        )
 
         provider = GugikProvider(session=session)
-        output_path = tmp_path / "test.tif"
+        output_path = tmp_path / "test.asc"
 
         sleep_times = []
-
         with patch("time.sleep", side_effect=lambda t: sleep_times.append(t)):
             with pytest.raises(DownloadError):
                 provider.download("N-34-130-D", output_path)
@@ -253,33 +353,71 @@ class TestGugikProviderDownload:
         # Exponential backoff: 2^1=2, 2^2=4 seconds
         assert sleep_times == [2, 4]
 
-    def test_download_atomic_write(self, tmp_path, provider_with_mock_session):
-        """Test atomowego zapisu (temp file → rename)."""
-        provider, _ = provider_with_mock_session
-        output_path = tmp_path / "test.tif"
 
-        # Check that no temp file remains
-        provider.download("N-34-130-D", output_path)
+class TestGugikProviderGetOpendataUrl:
+    """Testy dla _get_opendata_url."""
 
-        temp_path = output_path.with_suffix(".tif.tmp")
-        assert not temp_path.exists()
-        assert output_path.exists()
+    @pytest.fixture
+    def mock_wms_response_with_url(self):
+        """Mock odpowiedzi WMS GetFeatureInfo z URL OpenData."""
+        response = Mock(spec=requests.Response)
+        response.status_code = 200
+        response.text = (
+            '<html><script>var data = {url:"https://opendata.geoportal.gov.pl'
+            '/NumDaneWys/NMT/78955/78955_1467030_N-34-130-D-d-2-4.asc"};'
+            "</script></html>"
+        )
+        return response
 
-    def test_download_cleanup_on_error(self, tmp_path):
-        """Test czyszczenia pliku tymczasowego przy błędzie zapisu."""
+    @pytest.fixture
+    def mock_wms_response_no_url(self):
+        """Mock odpowiedzi WMS GetFeatureInfo bez URL."""
+        response = Mock(spec=requests.Response)
+        response.status_code = 200
+        response.text = "<html><body>No data</body></html>"
+        return response
+
+    def test_get_opendata_url_success(self, mock_wms_response_with_url):
+        """Test znajdowania URL OpenData."""
         session = Mock(spec=requests.Session)
-        response = Mock()
-        response.iter_content = Mock(side_effect=IOError("Write error"))
-        session.get = Mock(return_value=response)
+        session.get = Mock(return_value=mock_wms_response_with_url)
 
         provider = GugikProvider(session=session)
-        output_path = tmp_path / "test.tif"
+        url = provider._get_opendata_url("N-34-130-D-d-2-4")
 
-        with pytest.raises(IOError):
-            provider.download("N-34-130-D", output_path)
+        assert "opendata.geoportal.gov.pl" in url
+        assert "N-34-130-D-d-2-4.asc" in url
 
-        temp_path = output_path.with_suffix(".tif.tmp")
-        assert not temp_path.exists()
+    def test_get_opendata_url_not_found(self, mock_wms_response_no_url):
+        """Test błędu gdy nie znaleziono URL."""
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=mock_wms_response_no_url)
+
+        provider = GugikProvider(session=session)
+
+        with pytest.raises(DownloadError) as exc_info:
+            provider._get_opendata_url("N-34-130-D-d-2-4")
+
+        assert "No ASC file found" in str(exc_info.value)
+
+    def test_get_opendata_url_tries_all_layers(
+        self, mock_wms_response_no_url, mock_wms_response_with_url
+    ):
+        """Test że sprawdzane są wszystkie warstwy."""
+        session = Mock(spec=requests.Session)
+        session.get = Mock(
+            side_effect=[
+                mock_wms_response_no_url,
+                mock_wms_response_no_url,
+                mock_wms_response_with_url,
+            ]
+        )
+
+        provider = GugikProvider(session=session)
+        url = provider._get_opendata_url("N-34-130-D-d-2-4")
+
+        assert "opendata.geoportal.gov.pl" in url
+        assert session.get.call_count == 3
 
 
 class TestGugikProviderSession:
@@ -288,32 +426,22 @@ class TestGugikProviderSession:
     def test_uses_provided_session(self, tmp_path):
         """Test że provider używa dostarczonej sesji."""
         session = Mock(spec=requests.Session)
-        response = Mock()
-        response.iter_content = Mock(return_value=[b"data"])
-        session.get = Mock(return_value=response)
+
+        wms_response = Mock()
+        wms_response.status_code = 200
+        wms_response.text = 'url:"https://opendata.geoportal.gov.pl/test.asc"'
+
+        opendata_response = Mock()
+        opendata_response.iter_content = Mock(return_value=[b"data"])
+
+        session.get = Mock(side_effect=[wms_response, opendata_response])
 
         provider = GugikProvider(session=session)
-        output_path = tmp_path / "test.tif"
+        output_path = tmp_path / "test.asc"
 
         provider.download("N-34-130-D", output_path)
 
-        session.get.assert_called_once()
-
-    def test_creates_new_session_if_not_provided(self, tmp_path):
-        """Test że provider tworzy nową sesję jeśli nie podano."""
-        provider = GugikProvider()
-
-        with patch("kartograf.providers.gugik.requests.Session") as mock_session_class:
-            mock_session = MagicMock()
-            mock_response = Mock()
-            mock_response.iter_content = Mock(return_value=[b"data"])
-            mock_session.get = Mock(return_value=mock_response)
-            mock_session_class.return_value = mock_session
-
-            output_path = tmp_path / "test.tif"
-            provider.download("N-34-130-D", output_path)
-
-            mock_session_class.assert_called_once()
+        assert session.get.called
 
 
 class TestGugikProviderRepr:

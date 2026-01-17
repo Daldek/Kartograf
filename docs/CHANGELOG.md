@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-01-18
+
+### Changed - Nowa architektura pobierania
+
+**Uproszczona logika pobierania:**
+- **Godło → OpenData (ASC)** - pobieranie arkusza przez godło zawsze daje plik ASC
+- **BBox → WCS (GeoTIFF)** - pobieranie przez bounding box daje GeoTIFF/PNG/JPEG
+
+**Zmiany API:**
+- `download_sheet(godlo)` - zawsze pobiera ASC (usunięto parametr `format`)
+- `download_hierarchy(godlo, target_scale)` - pobiera wszystkie arkusze jako ASC
+- `download_bbox(bbox, filename, format)` - **nowa metoda** dla pobierania przez bbox
+- Usunięto `construct_url()` z publicznego API
+- `DownloadManager` nie przyjmuje już parametru `format` w konstruktorze
+
+### Added
+
+- **Pobieranie ASC przez OpenData** - Automatyczne wyszukiwanie URL przez WMS GetFeatureInfo
+  - Zapytania do warstw: `SkorowidzeNMT2019`, `SkorowidzeNMT2018`, `SkorowidzeNMT2017iStarsze`
+  - Pobieranie z `opendata.geoportal.gov.pl`
+
+- **SheetParser.get_bbox()** - Obliczanie bounding box arkusza
+  - Obsługiwane CRS: `EPSG:2180` (PL-1992), `EPSG:4326` (WGS84)
+  - Transformacja współrzędnych przez `pyproj`
+
+- **BBox** - Nowy typ danych w public API
+
+- **GugikProvider.download_bbox()** - Pobieranie przez bounding box z WCS
+
+### Dependencies
+
+- Dodano `pyproj>=3.6.0` do wymagań
+
+### Technical Details
+
+- 245 testów
+
 ## [0.1.0] - 2026-01-17
 
 ### Added
@@ -57,4 +94,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
+[0.2.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.1.0

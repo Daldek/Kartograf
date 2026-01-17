@@ -33,7 +33,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version="%(prog)s 0.1.0",
+        version="%(prog)s 0.2.0",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -68,7 +68,9 @@ def create_parser() -> argparse.ArgumentParser:
     download_parser = subparsers.add_parser(
         "download",
         help="Download NMT data for a map sheet",
-        description="Download NMT (Digital Terrain Model) data from GUGiK",
+        description=(
+            "Download NMT (Digital Terrain Model) data from GUGiK OpenData as ASC files"
+        ),
     )
     download_parser.add_argument(
         "godlo",
@@ -80,13 +82,8 @@ def create_parser() -> argparse.ArgumentParser:
         help="Download all descendants to target scale (e.g., 1:10000)",
     )
     download_parser.add_argument(
-        "--format",
-        default="GTiff",
-        choices=["GTiff", "AAIGrid"],
-        help="Output format (default: GTiff)",
-    )
-    download_parser.add_argument(
-        "--output", "-o",
+        "--output",
+        "-o",
         metavar="DIR",
         default="./data",
         help="Output directory (default: ./data)",
@@ -97,7 +94,8 @@ def create_parser() -> argparse.ArgumentParser:
         help="Overwrite existing files",
     )
     download_parser.add_argument(
-        "--quiet", "-q",
+        "--quiet",
+        "-q",
         action="store_true",
         help="Suppress progress output",
     )
@@ -339,10 +337,7 @@ def cmd_download(args: argparse.Namespace) -> int:
 
     # Create download manager
     output_dir = Path(args.output)
-    manager = DownloadManager(
-        output_dir=output_dir,
-        format=args.format,
-    )
+    manager = DownloadManager(output_dir=output_dir)
 
     skip_existing = not args.force
     on_progress = create_progress_callback(args.quiet)
