@@ -14,7 +14,7 @@
 
 ---
 
-## Aktualny Etap: 4 - Parser Godła - Hierarchia
+## Aktualny Etap: 5 - Provider Base
 
 **Status:** Do rozpoczęcia
 
@@ -86,7 +86,7 @@ PATTERNS = {
 ---
 
 ### Etap 4: Parser Godła - Hierarchia (M - 40 min)
-- [ ] Ukończony
+- [x] Ukończony
 
 **Pliki:** Rozszerzenie `sheet_parser.py` i `test_sheet_parser.py`
 
