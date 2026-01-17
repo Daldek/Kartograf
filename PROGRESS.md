@@ -14,9 +14,9 @@
 
 ---
 
-## Aktualny Etap: 13 - Dokumentacja
+## Aktualny Etap: UKOŃCZONY
 
-**Status:** Do rozpoczęcia
+**Status:** Wszystkie etapy zakończone
 
 ---
 
@@ -210,7 +210,7 @@ WCS_GEOTIFF = f"{BASE_URL}/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModelFo
 ---
 
 ### Etap 13: Dokumentacja (S - 20 min)
-- [ ] Ukończony
+- [x] Ukończony
 
 **Pliki:**
 - `README.md` - aktualizacja przykładów

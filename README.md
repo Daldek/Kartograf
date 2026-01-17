@@ -8,7 +8,7 @@ Narzędzie do automatycznego pobierania danych NMT (Numeryczny Model Terenu) z z
 
 ```bash
 # Klonowanie repozytorium
-git clone https://github.com/yourusername/kartograf.git
+git clone https://github.com/Daldek/Kartograf.git
 cd kartograf
 
 # Utworzenie środowiska wirtualnego
@@ -41,8 +41,10 @@ kartograf download N-34-130-D --scale 1:10000 --output ./data
 from kartograf import SheetParser, DownloadManager
 
 # Parsowanie godła
-parser = SheetParser("N-34-130-D-d-2-4", uklad="1992")
-print(parser.scale)  # "1:10000"
+parser = SheetParser("N-34-130-D-d-2-4")
+print(parser.scale)      # "1:10000"
+print(parser.godlo)      # "N-34-130-D-d-2-4"
+print(parser.components) # {"pas": "N", "slup": "34", ...}
 
 # Pobieranie danych
 manager = DownloadManager(output_dir="./data")
@@ -125,4 +127,4 @@ Piotr Daldek
 
 ## Status
 
-🚧 **MVP w budowie** - Zobacz [SCOPE.md](docs/SCOPE.md) dla szczegółów
+**Wersja 0.1.0** - MVP gotowy do użycia. Zobacz [CHANGELOG.md](CHANGELOG.md) dla szczegółów
