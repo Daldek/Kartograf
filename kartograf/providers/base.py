@@ -2,12 +2,14 @@
 Base provider class for data download services.
 
 This module defines the abstract base class for all data providers
-in Kartograf. Providers are responsible for constructing URLs and
-downloading data from specific services.
+in Kartograf. Providers are responsible for downloading NMT data
+from specific services.
 """
 
 from abc import ABC, abstractmethod
 from pathlib import Path
+
+from kartograf.core.sheet_parser import BBox
 
 
 class BaseProvider(ABC):
@@ -16,6 +18,10 @@ class BaseProvider(ABC):
 
     All data providers must inherit from this class and implement
     the required abstract methods.
+
+    Providers support two download modes:
+    - By godło (map sheet ID): returns data in provider's native format
+    - By bbox (bounding box): returns data in specified format (optional)
 
     Attributes
     ----------
@@ -35,10 +41,7 @@ class BaseProvider(ABC):
     ...     def base_url(self) -> str:
     ...         return "https://example.com/api"
     ...
-    ...     def construct_url(self, godlo: str, format: str) -> str:
-    ...         return f"{self.base_url}/data/{godlo}.{format}"
-    ...
-    ...     def download(self, godlo: str, output_path: Path, format: str) -> Path:
+    ...     def download(self, godlo: str, output_path: Path) -> Path:
     ...         # Implementation
     ...         pass
     """
@@ -70,49 +73,52 @@ class BaseProvider(ABC):
         pass
 
     @abstractmethod
-    def construct_url(
+    def download(
         self,
         godlo: str,
-        format: str = "GTiff",
-    ) -> str:
+        output_path: Path,
+        timeout: int = 30,
+    ) -> Path:
         """
-        Construct download URL for given sheet and format.
+        Download data for given map sheet (godło).
 
         Parameters
         ----------
         godlo : str
             Map sheet identifier (e.g., "N-34-130-D-d-2-4")
-        format : str, optional
-            Output format (default: "GTiff").
-            Supported formats depend on the provider.
+        output_path : Path
+            Path where the file should be saved
+        timeout : int, optional
+            Request timeout in seconds (default: 30)
 
         Returns
         -------
-        str
-            Full URL for downloading the data
+        Path
+            Path to the downloaded file
 
         Raises
         ------
-        ValueError
-            If the format is not supported by this provider
+        DownloadError
+            If the download fails after all retry attempts
         """
         pass
 
-    @abstractmethod
-    def download(
+    def download_bbox(
         self,
-        godlo: str,
+        bbox: BBox,
         output_path: Path,
         format: str = "GTiff",
         timeout: int = 30,
     ) -> Path:
         """
-        Download data for given sheet to specified path.
+        Download data for a bounding box.
+
+        Optional method - not all providers support bbox downloads.
 
         Parameters
         ----------
-        godlo : str
-            Map sheet identifier (e.g., "N-34-130-D-d-2-4")
+        bbox : BBox
+            Bounding box defining the area to download
         output_path : Path
             Path where the file should be saved
         format : str, optional
@@ -127,32 +133,53 @@ class BaseProvider(ABC):
 
         Raises
         ------
+        NotImplementedError
+            If the provider doesn't support bbox downloads
         DownloadError
-            If the download fails after all retry attempts
-        ValueError
-            If the format is not supported
+            If the download fails
         """
-        pass
+        raise NotImplementedError(
+            f"{self.__class__.__name__} does not support bbox downloads"
+        )
 
     def get_supported_formats(self) -> list[str]:
         """
-        Return list of supported output formats.
+        Return list of supported output formats for bbox downloads.
 
         Returns
         -------
         list[str]
-            List of format identifiers (e.g., ["GTiff", "AAIGrid", "XYZ"])
-
-        Notes
-        -----
-        Subclasses should override this method to return their
-        actual supported formats.
+            List of format identifiers (e.g., ["GTiff", "PNG", "JPEG"])
         """
         return ["GTiff"]
 
+    def get_file_extension(self, format: str) -> str:
+        """
+        Get file extension for given format.
+
+        Parameters
+        ----------
+        format : str
+            Output format name
+
+        Returns
+        -------
+        str
+            File extension including dot (e.g., ".tif")
+        """
+        extensions = {
+            "GTiff": ".tif",
+            "PNG": ".png",
+            "JPEG": ".jpg",
+            "ASC": ".asc",
+        }
+        if format not in extensions:
+            raise ValueError(f"Unknown format: {format}")
+        return extensions[format]
+
     def validate_godlo(self, godlo: str) -> bool:
         """
-        Validate that godlo is in correct format for this provider.
+        Validate that godło is in correct format for this provider.
 
         Parameters
         ----------
@@ -162,12 +189,7 @@ class BaseProvider(ABC):
         Returns
         -------
         bool
-            True if godlo is valid, False otherwise
-
-        Notes
-        -----
-        Default implementation returns True. Subclasses can override
-        to add provider-specific validation.
+            True if godło is valid, False otherwise
         """
         return True
 

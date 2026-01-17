@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
-from kartograf.core.sheet_parser import SheetParser
+from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.storage import FileStorage
 from kartograf.exceptions import DownloadError
 from kartograf.providers.base import BaseProvider
@@ -63,22 +63,27 @@ class DownloadManager:
     Coordinates between the provider (data source), storage (file system),
     and sheet parser to download single sheets or entire hierarchies.
 
-    Attributes
-    ----------
-    provider : BaseProvider
-        Data provider for downloading sheets
-    storage : FileStorage
-        Storage manager for saving files
+    Two download modes:
+    - By godło: downloads ASC files from OpenData
+    - By bbox: downloads GeoTIFF from WCS
 
     Examples
     --------
     >>> manager = DownloadManager(output_dir="./data")
+    >>>
+    >>> # Download single sheet (ASC)
     >>> manager.download_sheet("N-34-130-D-d-2-4")
-    PosixPath('data/N-34/130/D/d/2/4/N-34-130-D-d-2-4.tif')
-
-    >>> def on_progress(p):
-    ...     print(f"{p.current}/{p.total}: {p.godlo} - {p.status}")
-    >>> manager.download_hierarchy("N-34-130-D", "1:10000", on_progress=on_progress)
+    PosixPath('data/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc')
+    >>>
+    >>> # Download hierarchy (ASC)
+    >>> manager.download_hierarchy("N-34-130-D", "1:10000")
+    >>>
+    >>> # Download by bounding box (GeoTIFF)
+    >>> from kartograf import BBox
+    >>> bbox = BBox(
+    ...     min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
+    ... )
+    >>> manager.download_bbox(bbox, "area.tif")
     """
 
     def __init__(
@@ -86,7 +91,6 @@ class DownloadManager:
         output_dir: str | Path = "./data",
         provider: Optional[BaseProvider] = None,
         storage: Optional[FileStorage] = None,
-        format: str = "GTiff",
     ):
         """
         Initialize download manager.
@@ -99,12 +103,9 @@ class DownloadManager:
             Data provider (default: GugikProvider)
         storage : FileStorage, optional
             Storage manager (default: FileStorage with output_dir)
-        format : str, optional
-            Default output format (default: "GTiff")
         """
         self._provider = provider or GugikProvider()
         self._storage = storage or FileStorage(output_dir)
-        self._format = format
 
     @property
     def provider(self) -> BaseProvider:
@@ -116,33 +117,29 @@ class DownloadManager:
         """Return the storage manager."""
         return self._storage
 
-    @property
-    def format(self) -> str:
-        """Return the default format."""
-        return self._format
+    # =========================================================================
+    # Download by godło → ASC
+    # =========================================================================
 
     def download_sheet(
         self,
         godlo: str,
-        format: Optional[str] = None,
         skip_existing: bool = True,
     ) -> Path:
         """
-        Download a single map sheet.
+        Download a single map sheet as ASC.
 
         Parameters
         ----------
         godlo : str
             Map sheet identifier (e.g., "N-34-130-D-d-2-4")
-        format : str, optional
-            Output format (default: instance default)
         skip_existing : bool, optional
             Skip download if file exists (default: True)
 
         Returns
         -------
         Path
-            Path to the downloaded file
+            Path to the downloaded ASC file
 
         Raises
         ------
@@ -151,11 +148,8 @@ class DownloadManager:
         ParseError
             If godlo is invalid
         """
-        format = format or self._format
-        ext = self._provider.get_file_extension(format)
-
-        # Get target path
-        target_path = self._storage.get_path(godlo, ext)
+        # Get target path (always .asc for godło downloads)
+        target_path = self._storage.get_path(godlo, ".asc")
 
         # Check if already exists
         if skip_existing and target_path.exists():
@@ -164,7 +158,7 @@ class DownloadManager:
 
         # Download
         logger.info(f"Downloading {godlo}...")
-        self._provider.download(godlo, target_path, format=format)
+        self._provider.download(godlo, target_path)
 
         return target_path
 
@@ -172,12 +166,11 @@ class DownloadManager:
         self,
         godlo: str,
         target_scale: str,
-        format: Optional[str] = None,
         skip_existing: bool = True,
         on_progress: Optional[ProgressCallback] = None,
     ) -> list[Path]:
         """
-        Download all descendant sheets to target scale.
+        Download all descendant sheets to target scale as ASC.
 
         Parameters
         ----------
@@ -185,18 +178,15 @@ class DownloadManager:
             Starting map sheet identifier (e.g., "N-34-130-D")
         target_scale : str
             Target scale to download (e.g., "1:10000")
-        format : str, optional
-            Output format (default: instance default)
         skip_existing : bool, optional
             Skip download if file exists (default: True)
         on_progress : callable, optional
             Callback function for progress updates.
-            Called with DownloadProgress object for each sheet.
 
         Returns
         -------
         list[Path]
-            List of paths to downloaded files
+            List of paths to downloaded ASC files
 
         Raises
         ------
@@ -214,8 +204,6 @@ class DownloadManager:
         >>> len(paths)  # 4 * 4 = 16 sheets
         16
         """
-        format = format or self._format
-
         # Parse starting sheet and get all descendants
         parser = SheetParser(godlo)
         descendants = parser.get_all_descendants(target_scale)
@@ -232,9 +220,7 @@ class DownloadManager:
             current_godlo = descendant.godlo
 
             try:
-                # Check if exists
-                ext = self._provider.get_file_extension(format)
-                target_path = self._storage.get_path(current_godlo, ext)
+                target_path = self._storage.get_path(current_godlo, ".asc")
 
                 if skip_existing and target_path.exists():
                     # Skipped
@@ -262,9 +248,7 @@ class DownloadManager:
                         )
                     )
 
-                path = self._provider.download(
-                    current_godlo, target_path, format=format
-                )
+                path = self._provider.download(current_godlo, target_path)
                 downloaded_paths.append(path)
 
                 if on_progress:
@@ -299,11 +283,64 @@ class DownloadManager:
 
         return downloaded_paths
 
+    # =========================================================================
+    # Download by bbox → GeoTIFF
+    # =========================================================================
+
+    def download_bbox(
+        self,
+        bbox: BBox,
+        filename: str,
+        format: str = "GTiff",
+    ) -> Path:
+        """
+        Download NMT data for a bounding box as GeoTIFF.
+
+        Use this method when you need data for an arbitrary area
+        (not aligned to standard map sheets).
+
+        Parameters
+        ----------
+        bbox : BBox
+            Bounding box in EPSG:2180 coordinates
+        filename : str
+            Output filename (will be placed in output_dir)
+        format : str, optional
+            Output format: "GTiff", "PNG", or "JPEG" (default: "GTiff")
+
+        Returns
+        -------
+        Path
+            Path to the downloaded file
+
+        Raises
+        ------
+        DownloadError
+            If download fails
+        ValueError
+            If format is not supported or bbox CRS is wrong
+
+        Examples
+        --------
+        >>> manager = DownloadManager(output_dir="./data")
+        >>> bbox = BBox(
+        ...     min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
+        ... )
+        >>> path = manager.download_bbox(bbox, "my_area.tif")
+        """
+        output_path = self._storage.output_dir / filename
+
+        logger.info(f"Downloading bbox to {output_path}...")
+        return self._provider.download_bbox(bbox, output_path, format=format)
+
+    # =========================================================================
+    # Utility methods
+    # =========================================================================
+
     def get_missing_sheets(
         self,
         godlo: str,
         target_scale: str,
-        format: Optional[str] = None,
     ) -> list[str]:
         """
         Get list of sheets that haven't been downloaded yet.
@@ -314,23 +351,18 @@ class DownloadManager:
             Starting map sheet identifier
         target_scale : str
             Target scale to check
-        format : str, optional
-            Output format (default: instance default)
 
         Returns
         -------
         list[str]
             List of godło identifiers for missing sheets
         """
-        format = format or self._format
-        ext = self._provider.get_file_extension(format)
-
         parser = SheetParser(godlo)
         descendants = parser.get_all_descendants(target_scale)
 
         missing = []
         for descendant in descendants:
-            if not self._storage.exists(descendant.godlo, ext):
+            if not self._storage.exists(descendant.godlo, ".asc"):
                 missing.append(descendant.godlo)
 
         return missing

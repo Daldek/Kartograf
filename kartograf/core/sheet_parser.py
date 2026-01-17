@@ -7,9 +7,21 @@ coordinate system, and sheet components.
 """
 
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List, NamedTuple, Optional
+
+from pyproj import Transformer
 
 from kartograf.exceptions import ParseError, ValidationError
+
+
+class BBox(NamedTuple):
+    """Bounding box z współrzędnymi i układem odniesienia."""
+
+    min_x: float
+    min_y: float
+    max_x: float
+    max_y: float
+    crs: str
 
 
 class SheetParser:
@@ -498,3 +510,258 @@ class SheetParser:
             return all_descendants
 
         return collect_descendants(self)
+
+    # =========================================================================
+    # Metody obliczania bounding box
+    # =========================================================================
+
+    # Wymiary arkuszy w minutach kątowych (szerokość geo., długość geo.)
+    # Obliczone na podstawie hierarchii podziału
+    _SHEET_DIMENSIONS = {
+        "1:1000000": (240.0, 360.0),  # 4° × 6°
+        "1:500000": (120.0, 180.0),  # 2° × 3°
+        "1:200000": (20.0, 30.0),  # 20' × 30' (36 na 1:500k)
+        "1:100000": (10.0, 15.0),  # 10' × 15' (4 na 1:200k)
+        "1:50000": (5.0, 7.5),  # 5' × 7.5' (4 na 1:100k)
+        "1:25000": (2.5, 3.75),  # 2.5' × 3.75' (4 na 1:50k)
+        "1:10000": (1.25, 1.875),  # 1.25' × 1.875' (4 na 1:25k)
+    }
+
+    # Mapowanie liter na pozycje w siatce 2×2 (row, col) - 0-indexed
+    # A/a/1 = NW (góra-lewo), B/b/2 = NE (góra-prawo)
+    # C/c/3 = SW (dół-lewo), D/d/4 = SE (dół-prawo)
+    _QUADRANT_POSITIONS = {
+        "A": (0, 0),
+        "B": (0, 1),
+        "C": (1, 0),
+        "D": (1, 1),
+        "a": (0, 0),
+        "b": (0, 1),
+        "c": (1, 0),
+        "d": (1, 1),
+        "1": (0, 0),
+        "2": (0, 1),
+        "3": (1, 0),
+        "4": (1, 1),
+    }
+
+    def get_bbox(self, crs: str = "EPSG:2180") -> BBox:
+        """
+        Oblicza bounding box arkusza w zadanym układzie współrzędnych.
+
+        Parameters
+        ----------
+        crs : str, optional
+            Docelowy układ współrzędnych (default: "EPSG:2180").
+            Obsługiwane: "EPSG:2180", "EPSG:4326"
+
+        Returns
+        -------
+        BBox
+            NamedTuple z polami: min_x, min_y, max_x, max_y, crs
+
+        Examples
+        --------
+        >>> parser = SheetParser("N-34-130-D-d-2-4")
+        >>> bbox = parser.get_bbox("EPSG:4326")
+        >>> print(f"SW: ({bbox.min_x}, {bbox.min_y})")
+        """
+        # Oblicz bbox w WGS84 (stopnie)
+        south, north, west, east = self._calculate_wgs84_bbox()
+
+        if crs == "EPSG:4326":
+            return BBox(
+                min_x=west, min_y=south, max_x=east, max_y=north, crs="EPSG:4326"
+            )
+
+        if crs == "EPSG:2180":
+            # Transformacja WGS84 → PL-1992
+            transformer = Transformer.from_crs("EPSG:4326", "EPSG:2180", always_xy=True)
+
+            # Transformuj wszystkie 4 rogi i znajdź min/max
+            corners_wgs84 = [
+                (west, south),  # SW
+                (west, north),  # NW
+                (east, south),  # SE
+                (east, north),  # NE
+            ]
+
+            corners_2180 = [
+                transformer.transform(lon, lat) for lon, lat in corners_wgs84
+            ]
+
+            min_x = min(c[0] for c in corners_2180)
+            max_x = max(c[0] for c in corners_2180)
+            min_y = min(c[1] for c in corners_2180)
+            max_y = max(c[1] for c in corners_2180)
+
+            return BBox(
+                min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, crs="EPSG:2180"
+            )
+
+        raise ValidationError(
+            f"Nieobsługiwany układ współrzędnych: {crs}. "
+            "Obsługiwane: EPSG:2180, EPSG:4326"
+        )
+
+    def _calculate_wgs84_bbox(self) -> tuple:
+        """
+        Oblicza bounding box w WGS84 (stopnie).
+
+        Returns
+        -------
+        tuple
+            (south_lat, north_lat, west_lon, east_lon) w stopniach
+        """
+        # Podstawowe współrzędne arkusza 1:1M
+        pas = self._components["pas"]
+        slup = int(self._components["slup"])
+
+        # Pas: A=0, B=1, ..., N=13
+        row_1m = ord(pas) - ord("A")
+
+        # Współrzędne 1:1M
+        south_1m = row_1m * 4.0  # 4° na pas
+        north_1m = south_1m + 4.0
+        west_1m = (slup - 31) * 6.0  # Słup 31 = 0°E
+        east_1m = west_1m + 6.0
+
+        if self._scale == "1:1000000":
+            return (south_1m, north_1m, west_1m, east_1m)
+
+        # 1:500k - podział 2×2 w 1:1M
+        if self._scale in (
+            "1:500000",
+            "1:200000",
+            "1:100000",
+            "1:50000",
+            "1:25000",
+            "1:10000",
+        ):
+            south, north, west, east = self._apply_500k_subdivision(
+                south_1m, north_1m, west_1m, east_1m
+            )
+        else:
+            south, north, west, east = south_1m, north_1m, west_1m, east_1m
+
+        return (south, north, west, east)
+
+    def _apply_500k_subdivision(
+        self, south: float, north: float, west: float, east: float
+    ) -> tuple:
+        """Aplikuje podział dla 1:500k i mniejszych skal."""
+
+        # 1:500k - arkusz_200k zawiera literę A-D (mylące nazewnictwo w COMPONENT_NAMES)
+        if "arkusz_200k" in self._components:
+            letter = self._components["arkusz_200k"]
+
+            # Jeśli to litera A-D, to jest podział 1:500k
+            if letter in "ABCD":
+                row, col = self._QUADRANT_POSITIONS[letter]
+                height = (north - south) / 2.0
+                width = (east - west) / 2.0
+                north = north - row * height
+                south = north - height
+                west = west + col * width
+                east = west + width
+
+                if self._scale == "1:500000":
+                    return (south, north, west, east)
+
+            # Jeśli to liczba, to jest numer arkusza 1:200k (1-144)
+            elif letter.isdigit() or (len(self._components.get("arkusz_200k", "")) > 1):
+                arkusz_num = int(self._components["arkusz_200k"])
+                return self._apply_200k_subdivision(
+                    south_1m=south,
+                    north_1m=north,
+                    west_1m=west,
+                    east_1m=east,
+                    arkusz_num=arkusz_num,
+                )
+
+        return (south, north, west, east)
+
+    def _apply_200k_subdivision(
+        self,
+        south_1m: float,
+        north_1m: float,
+        west_1m: float,
+        east_1m: float,
+        arkusz_num: int,
+    ) -> tuple:
+        """
+        Oblicza bbox dla arkusza 1:200k i mniejszych.
+
+        Arkusze 1:200k są numerowane 1-144 w siatce 12×12 w obrębie 1:1M.
+        """
+        # Pozycja w siatce 12×12 (numeracja od góry-lewej, wierszami)
+        row = (arkusz_num - 1) // 12  # 0-11
+        col = (arkusz_num - 1) % 12  # 0-11
+
+        # Wymiary pojedynczego arkusza 1:200k w stopniach
+        height = (north_1m - south_1m) / 12.0  # 4°/12 = 20'
+        width = (east_1m - west_1m) / 12.0  # 6°/12 = 30'
+
+        # Oblicz bbox (arkusze numerowane od góry, więc row=0 to północ)
+        north = north_1m - row * height
+        south = north - height
+        west = west_1m + col * width
+        east = west + width
+
+        if self._scale == "1:200000":
+            return (south, north, west, east)
+
+        # 1:100k - podział arkusza 1:200k na 4 części (A-D)
+        if "arkusz_100k" in self._components:
+            letter = self._components["arkusz_100k"]
+            row_q, col_q = self._QUADRANT_POSITIONS[letter]
+            q_height = height / 2.0
+            q_width = width / 2.0
+            north = north - row_q * q_height
+            south = north - q_height
+            west = west + col_q * q_width
+            east = west + q_width
+
+            if self._scale == "1:100000":
+                return (south, north, west, east)
+
+        # 1:50k - podział arkusza 1:100k na 4 części (a-d)
+        if "arkusz_50k" in self._components:
+            letter = self._components["arkusz_50k"]
+            row_q, col_q = self._QUADRANT_POSITIONS[letter]
+            q_height = (north - south) / 2.0
+            q_width = (east - west) / 2.0
+            north = north - row_q * q_height
+            south = north - q_height
+            west = west + col_q * q_width
+            east = west + q_width
+
+            if self._scale == "1:50000":
+                return (south, north, west, east)
+
+        # 1:25k - podział arkusza 1:50k na 4 części (1-4)
+        if "arkusz_25k" in self._components:
+            num = self._components["arkusz_25k"]
+            row_q, col_q = self._QUADRANT_POSITIONS[num]
+            q_height = (north - south) / 2.0
+            q_width = (east - west) / 2.0
+            north = north - row_q * q_height
+            south = north - q_height
+            west = west + col_q * q_width
+            east = west + q_width
+
+            if self._scale == "1:25000":
+                return (south, north, west, east)
+
+        # 1:10k - podział arkusza 1:25k na 4 części (1-4)
+        if "arkusz_10k" in self._components:
+            num = self._components["arkusz_10k"]
+            row_q, col_q = self._QUADRANT_POSITIONS[num]
+            q_height = (north - south) / 2.0
+            q_width = (east - west) / 2.0
+            north = north - row_q * q_height
+            south = north - q_height
+            west = west + col_q * q_width
+            east = west + q_width
+
+        return (south, north, west, east)

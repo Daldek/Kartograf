@@ -7,7 +7,7 @@ parsowania godeł dla wszystkich obsługiwanych skal (1:1M do 1:10k).
 
 import pytest
 
-from kartograf.core.sheet_parser import SheetParser
+from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.exceptions import ParseError, ValidationError
 
 
@@ -734,3 +734,149 @@ class TestSheetParserHierarchyRoundTrip:
 
         # Oryginalny arkusz powinien być wśród potomków
         assert parser_10k in descendants
+
+
+# =============================================================================
+# Testy metody get_bbox() (obliczanie bounding box)
+# =============================================================================
+
+
+class TestSheetParserGetBBox:
+    """Testy metody get_bbox()."""
+
+    def test_bbox_returns_named_tuple(self):
+        """Test że get_bbox() zwraca BBox NamedTuple."""
+        parser = SheetParser("N-34")
+        bbox = parser.get_bbox()
+
+        assert isinstance(bbox, BBox)
+        assert hasattr(bbox, "min_x")
+        assert hasattr(bbox, "min_y")
+        assert hasattr(bbox, "max_x")
+        assert hasattr(bbox, "max_y")
+        assert hasattr(bbox, "crs")
+
+    def test_bbox_1m_wgs84(self):
+        """Test bbox dla 1:1M w WGS84."""
+        parser = SheetParser("N-34")
+        bbox = parser.get_bbox(crs="EPSG:4326")
+
+        assert bbox.crs == "EPSG:4326"
+        # N-34: pas N (row 13) → 52°N-56°N, słup 34 → 18°E-24°E
+        assert bbox.min_y == pytest.approx(52.0, abs=0.01)  # south
+        assert bbox.max_y == pytest.approx(56.0, abs=0.01)  # north
+        assert bbox.min_x == pytest.approx(18.0, abs=0.01)  # west
+        assert bbox.max_x == pytest.approx(24.0, abs=0.01)  # east
+
+    def test_bbox_1m_epsg2180(self):
+        """Test bbox dla 1:1M w EPSG:2180."""
+        parser = SheetParser("N-34")
+        bbox = parser.get_bbox(crs="EPSG:2180")
+
+        assert bbox.crs == "EPSG:2180"
+        # Współrzędne w metrach, powinny być w sensownym zakresie dla Polski
+        # N-34 to duży arkusz (4° × 6°), więc max_y może przekraczać 900000
+        assert 100_000 < bbox.min_x < 900_000
+        assert 100_000 < bbox.max_x < 1_000_000
+        assert 100_000 < bbox.min_y < 900_000
+        assert 100_000 < bbox.max_y < 1_000_000
+
+    def test_bbox_500k(self):
+        """Test bbox dla 1:500k."""
+        parser = SheetParser("N-34-A")
+        bbox = parser.get_bbox(crs="EPSG:4326")
+
+        # A = NW quarter: 54°N-56°N, 18°E-21°E
+        assert bbox.min_y == pytest.approx(54.0, abs=0.01)
+        assert bbox.max_y == pytest.approx(56.0, abs=0.01)
+        assert bbox.min_x == pytest.approx(18.0, abs=0.01)
+        assert bbox.max_x == pytest.approx(21.0, abs=0.01)
+
+    def test_bbox_200k(self):
+        """Test bbox dla 1:200k."""
+        parser = SheetParser("N-34-1")
+        bbox = parser.get_bbox(crs="EPSG:4326")
+
+        # Arkusz 1 = pierwszy w siatce 12x12 (NW corner)
+        # Wymiary: 20' lat × 30' lon
+        # row=0, col=0 → N: 56°-20/60=55.667°, S: 55.667°-20/60=55.333°
+        # W: 18°, E: 18.5°
+        assert bbox.max_y == pytest.approx(56.0, abs=0.01)  # north
+        assert bbox.min_y == pytest.approx(56.0 - 20 / 60, abs=0.01)  # south
+        assert bbox.min_x == pytest.approx(18.0, abs=0.01)  # west
+        assert bbox.max_x == pytest.approx(18.5, abs=0.01)  # east
+
+    def test_bbox_100k(self):
+        """Test bbox dla 1:100k."""
+        parser = SheetParser("N-34-130-D")
+        bbox = parser.get_bbox(crs="EPSG:4326")
+
+        # Arkusz 130 w 12x12: row=10, col=9
+        # D = SE quarter of 1:200k
+        # Bbox powinien być sensowny (w granicach N-34)
+        assert 52.0 < bbox.min_y < 56.0
+        assert 52.0 < bbox.max_y < 56.0
+        assert 18.0 < bbox.min_x < 24.0
+        assert 18.0 < bbox.max_x < 24.0
+        # D jest w SE, więc min_y/min_x powinny być większe niż dla A
+        assert bbox.min_y > 52.0
+
+    def test_bbox_child_within_parent(self):
+        """Test że bbox dziecka mieści się w bbox rodzica."""
+        parent = SheetParser("N-34-130-D")
+        parent_bbox = parent.get_bbox(crs="EPSG:4326")
+
+        for child in parent.get_children():
+            child_bbox = child.get_bbox(crs="EPSG:4326")
+
+            assert child_bbox.min_x >= parent_bbox.min_x - 0.0001
+            assert child_bbox.max_x <= parent_bbox.max_x + 0.0001
+            assert child_bbox.min_y >= parent_bbox.min_y - 0.0001
+            assert child_bbox.max_y <= parent_bbox.max_y + 0.0001
+
+    def test_bbox_10k(self):
+        """Test bbox dla 1:10k."""
+        parser = SheetParser("N-34-130-D-d-2-4")
+        bbox = parser.get_bbox(crs="EPSG:4326")
+
+        # Bbox powinien być bardzo mały (ok 1.25' × 1.875')
+        lat_span = bbox.max_y - bbox.min_y
+        lon_span = bbox.max_x - bbox.min_x
+
+        # 1.25' = 1.25/60 deg ≈ 0.0208 deg
+        assert lat_span == pytest.approx(1.25 / 60, abs=0.001)
+        # 1.875' = 1.875/60 deg ≈ 0.03125 deg
+        assert lon_span == pytest.approx(1.875 / 60, abs=0.001)
+
+    def test_bbox_invalid_crs(self):
+        """Test błędu dla nieobsługiwanego CRS."""
+        parser = SheetParser("N-34")
+
+        with pytest.raises(ValidationError, match="Nieobsługiwany układ"):
+            parser.get_bbox(crs="EPSG:3857")
+
+    def test_bbox_default_crs_is_2180(self):
+        """Test że domyślny CRS to EPSG:2180."""
+        parser = SheetParser("N-34")
+        bbox = parser.get_bbox()
+
+        assert bbox.crs == "EPSG:2180"
+
+    def test_bbox_consistency_across_hierarchy(self):
+        """Test spójności bbox w hierarchii - suma dzieci = rodzic."""
+        parser = SheetParser("N-34-130-D-d")
+        parent_bbox = parser.get_bbox(crs="EPSG:4326")
+
+        children = parser.get_children()
+        assert len(children) == 4
+
+        # Oblicz sumaryczny bbox wszystkich dzieci
+        all_min_x = min(c.get_bbox(crs="EPSG:4326").min_x for c in children)
+        all_max_x = max(c.get_bbox(crs="EPSG:4326").max_x for c in children)
+        all_min_y = min(c.get_bbox(crs="EPSG:4326").min_y for c in children)
+        all_max_y = max(c.get_bbox(crs="EPSG:4326").max_y for c in children)
+
+        assert all_min_x == pytest.approx(parent_bbox.min_x, abs=0.0001)
+        assert all_max_x == pytest.approx(parent_bbox.max_x, abs=0.0001)
+        assert all_min_y == pytest.approx(parent_bbox.min_y, abs=0.0001)
+        assert all_max_y == pytest.approx(parent_bbox.max_y, abs=0.0001)
