@@ -14,7 +14,7 @@
 
 ---
 
-## Aktualny Etap: 9 - CLI - Parse
+## Aktualny Etap: 10 - CLI - Download
 
 **Status:** Do rozpoczęcia
 
@@ -162,7 +162,7 @@ WCS_GEOTIFF = f"{BASE_URL}/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModelFo
 ---
 
 ### Etap 9: CLI - Parse (S - 30 min)
-- [ ] Ukończony
+- [x] Ukończony
 
 **Pliki:**
 - `src/kartograf/cli/__init__.py`
