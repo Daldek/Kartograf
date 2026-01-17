@@ -14,7 +14,7 @@
 
 ---
 
-## Aktualny Etap: 11 - Public API
+## Aktualny Etap: 12 - Testy Integracyjne
 
 **Status:** Do rozpoczęcia
 
@@ -190,7 +190,7 @@ WCS_GEOTIFF = f"{BASE_URL}/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModelFo
 ---
 
 ### Etap 11: Public API (S - 15 min)
-- [ ] Ukończony
+- [x] Ukończony
 
 **Pliki:** Wszystkie `__init__.py`
 
