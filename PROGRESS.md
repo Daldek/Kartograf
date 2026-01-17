@@ -2,7 +2,7 @@
 
 **Repozytorium:** https://github.com/Daldek/Kartograf.git
 **Status:** W trakcie implementacji
-**Ostatnia aktualizacja:** 2026-01-15
+**Ostatnia aktualizacja:** 2026-01-17
 
 ---
 
@@ -14,9 +14,9 @@
 
 ---
 
-## Aktualny Etap: 2 - Wyjątki
+## Aktualny Etap: 4 - Parser Godła - Hierarchia
 
-**Status:** W trakcie (exceptions.py utworzony, do weryfikacji import)
+**Status:** Do rozpoczęcia
 
 ---
 
@@ -47,7 +47,7 @@
 ---
 
 ### Etap 2: Wyjątki (S - 15 min)
-- [ ] Ukończony
+- [x] Ukończony
 
 **Pliki:**
 - `src/kartograf/exceptions.py`
@@ -58,7 +58,7 @@
 ---
 
 ### Etap 3: Parser Godła - Podstawy (M - 45 min)
-- [ ] Ukończony
+- [x] Ukończony
 
 **Pliki:**
 - `src/kartograf/core/sheet_parser.py`
