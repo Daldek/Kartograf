@@ -14,7 +14,7 @@
 
 ---
 
-## Aktualny Etap: 10 - CLI - Download
+## Aktualny Etap: 11 - Public API
 
 **Status:** Do rozpoczęcia
 
@@ -177,7 +177,7 @@ WCS_GEOTIFF = f"{BASE_URL}/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModelFo
 ---
 
 ### Etap 10: CLI - Download (M - 35 min)
-- [ ] Ukończony
+- [x] Ukończony
 
 **Pliki:** Rozszerzenie `commands.py`
 
