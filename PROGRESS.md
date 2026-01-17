@@ -14,7 +14,7 @@
 
 ---
 
-## Aktualny Etap: 5 - Provider Base
+## Aktualny Etap: 6 - GugikClient - Pobieranie
 
 **Status:** Do rozpoczęcia
 
@@ -101,7 +101,7 @@ PATTERNS = {
 ---
 
 ### Etap 5: Provider Base (S - 25 min)
-- [ ] Ukończony
+- [x] Ukończony
 
 **Pliki:**
 - `src/kartograf/providers/__init__.py`
