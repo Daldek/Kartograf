@@ -5,10 +5,13 @@ This module contains tests for command-line interface commands,
 verifying correct parsing and output formatting.
 """
 
+from unittest.mock import Mock, patch
+
 import pytest  # noqa: F401 - required for fixtures
 
 from kartograf.cli.commands import (
     create_parser,
+    create_progress_callback,
     main,
     format_sheet_info,
     format_hierarchy,
@@ -16,6 +19,8 @@ from kartograf.cli.commands import (
     format_descendants,
 )
 from kartograf.core.sheet_parser import SheetParser
+from kartograf.download.manager import DownloadProgress
+from kartograf.exceptions import DownloadError
 
 
 class TestCreateParser:
@@ -295,3 +300,267 @@ class TestCLIIntegration:
             assert result == 0, f"Failed for {godlo}"
             captured = capsys.readouterr()
             assert expected_scale in captured.out, f"Scale not found for {godlo}"
+
+
+class TestCreateParserDownload:
+    """Tests for download subparser."""
+
+    def test_has_download_subcommand(self):
+        """Test that download subcommand exists."""
+        parser = create_parser()
+        args = parser.parse_args(["download", "N-34-130-D"])
+        assert args.command == "download"
+        assert args.godlo == "N-34-130-D"
+
+    def test_download_scale_option(self):
+        """Test --scale option."""
+        parser = create_parser()
+        args = parser.parse_args(["download", "N-34-130-D", "--scale", "1:10000"])
+        assert args.scale == "1:10000"
+
+    def test_download_format_option(self):
+        """Test --format option."""
+        parser = create_parser()
+        args = parser.parse_args(["download", "N-34-130-D", "--format", "AAIGrid"])
+        assert args.format == "AAIGrid"
+
+    def test_download_output_option(self):
+        """Test --output option."""
+        parser = create_parser()
+        args = parser.parse_args(["download", "N-34-130-D", "-o", "/custom/path"])
+        assert args.output == "/custom/path"
+
+    def test_download_force_flag(self):
+        """Test --force flag."""
+        parser = create_parser()
+        args = parser.parse_args(["download", "N-34-130-D", "--force"])
+        assert args.force is True
+
+    def test_download_quiet_flag(self):
+        """Test --quiet flag."""
+        parser = create_parser()
+        args = parser.parse_args(["download", "N-34-130-D", "-q"])
+        assert args.quiet is True
+
+    def test_download_default_values(self):
+        """Test default values for download options."""
+        parser = create_parser()
+        args = parser.parse_args(["download", "N-34-130-D"])
+        assert args.format == "GTiff"
+        assert args.output == "./data"
+        assert args.force is False
+        assert args.quiet is False
+        assert args.scale is None
+
+
+class TestProgressCallback:
+    """Tests for create_progress_callback()."""
+
+    def test_quiet_returns_none(self):
+        """Test that quiet mode returns None."""
+        callback = create_progress_callback(quiet=True)
+        assert callback is None
+
+    def test_returns_callable(self):
+        """Test that non-quiet mode returns a callable."""
+        callback = create_progress_callback(quiet=False)
+        assert callable(callback)
+
+    def test_callback_handles_downloading_status(self, capsys):
+        """Test callback for downloading status."""
+        callback = create_progress_callback(quiet=False)
+        progress = DownloadProgress(
+            current=1, total=4, godlo="N-34-130-D", status="downloading"
+        )
+        callback(progress)
+        captured = capsys.readouterr()
+        assert "N-34-130-D" in captured.out
+        assert "1/4" in captured.out
+
+    def test_callback_handles_completed_status(self, capsys):
+        """Test callback for completed status."""
+        callback = create_progress_callback(quiet=False)
+        progress = DownloadProgress(
+            current=4, total=4, godlo="N-34-130-D", status="completed"
+        )
+        callback(progress)
+        captured = capsys.readouterr()
+        assert "N-34-130-D" in captured.out
+        assert "✓" in captured.out
+
+    def test_callback_handles_skipped_status(self, capsys):
+        """Test callback for skipped status."""
+        callback = create_progress_callback(quiet=False)
+        progress = DownloadProgress(
+            current=2, total=4, godlo="N-34-130-D", status="skipped"
+        )
+        callback(progress)
+        captured = capsys.readouterr()
+        assert "○" in captured.out
+
+    def test_callback_handles_failed_status(self, capsys):
+        """Test callback for failed status."""
+        callback = create_progress_callback(quiet=False)
+        progress = DownloadProgress(
+            current=3, total=4, godlo="N-34-130-D", status="failed"
+        )
+        callback(progress)
+        captured = capsys.readouterr()
+        assert "✗" in captured.out
+
+
+class TestCmdDownload:
+    """Tests for cmd_download command."""
+
+    def test_download_invalid_godlo(self, capsys):
+        """Test downloading with invalid godlo."""
+        result = main(["download", "INVALID", "-q"])
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Error" in captured.err
+
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_single_sheet(self, mock_manager_class, capsys, tmp_path):
+        """Test downloading a single sheet."""
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.tif"
+        mock_manager_class.return_value = mock_manager
+
+        result = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"])
+
+        assert result == 0
+        mock_manager.download_sheet.assert_called_once_with(
+            "N-34-130-D-d-2-4", skip_existing=True
+        )
+
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_hierarchy(self, mock_manager_class, capsys, tmp_path):
+        """Test downloading a hierarchy."""
+        mock_manager = Mock()
+        mock_manager.count_sheets.return_value = 4
+        mock_manager.download_hierarchy.return_value = [
+            tmp_path / f"test{i}.tif" for i in range(4)
+        ]
+        mock_manager_class.return_value = mock_manager
+
+        result = main([
+            "download", "N-34-130-D-d-2",
+            "--scale", "1:10000",
+            "-o", str(tmp_path),
+            "-q"
+        ])
+
+        assert result == 0
+        mock_manager.download_hierarchy.assert_called_once()
+
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_with_force(self, mock_manager_class, tmp_path):
+        """Test downloading with --force flag."""
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.tif"
+        mock_manager_class.return_value = mock_manager
+
+        result = main([
+            "download", "N-34-130-D-d-2-4",
+            "-o", str(tmp_path),
+            "--force", "-q"
+        ])
+
+        assert result == 0
+        mock_manager.download_sheet.assert_called_once_with(
+            "N-34-130-D-d-2-4", skip_existing=False
+        )
+
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_handles_error(self, mock_manager_class, capsys, tmp_path):
+        """Test that download errors are handled."""
+        mock_manager = Mock()
+        mock_manager.download_sheet.side_effect = DownloadError(
+            "Network error", godlo="N-34-130-D"
+        )
+        mock_manager_class.return_value = mock_manager
+
+        result = main(["download", "N-34-130-D", "-o", str(tmp_path), "-q"])
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Error" in captured.err
+
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_invalid_scale(self, mock_manager_class, capsys, tmp_path):
+        """Test downloading with invalid scale."""
+        from kartograf.exceptions import ValidationError
+
+        mock_manager = Mock()
+        # count_sheets is only called when not quiet, so mock download_hierarchy
+        mock_manager.download_hierarchy.side_effect = ValidationError("Invalid scale")
+        mock_manager_class.return_value = mock_manager
+
+        result = main([
+            "download", "N-34-130-D",
+            "--scale", "1:invalid",
+            "-o", str(tmp_path),
+            "-q"
+        ])
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Error" in captured.err
+
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_with_format(self, mock_manager_class, tmp_path):
+        """Test downloading with custom format."""
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_class.return_value = mock_manager
+
+        result = main([
+            "download", "N-34-130-D",
+            "--format", "AAIGrid",
+            "-o", str(tmp_path),
+            "-q"
+        ])
+
+        assert result == 0
+        # Verify manager was created with the correct format
+        mock_manager_class.assert_called_once()
+        call_kwargs = mock_manager_class.call_args.kwargs
+        assert call_kwargs["format"] == "AAIGrid"
+
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_shows_progress(self, mock_manager_class, capsys, tmp_path):
+        """Test that download shows progress when not quiet."""
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.tif"
+        mock_manager_class.return_value = mock_manager
+
+        result = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path)])
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Downloading" in captured.out
+        assert "Downloaded to" in captured.out
+
+
+class TestDownloadCLIIntegration:
+    """Integration tests for download CLI."""
+
+    def test_download_help(self, capsys):
+        """Test download --help."""
+        with pytest.raises(SystemExit) as exc_info:
+            main(["download", "--help"])
+
+        assert exc_info.value.code == 0
+        captured = capsys.readouterr()
+        assert "download" in captured.out.lower()
+        assert "--scale" in captured.out
+        assert "--format" in captured.out
+
+    def test_main_includes_download(self, capsys):
+        """Test that main help includes download command."""
+        result = main([])
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "download" in captured.out

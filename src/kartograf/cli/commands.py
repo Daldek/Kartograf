@@ -1,16 +1,18 @@
 """
 Command-line interface for Kartograf.
 
-This module provides CLI commands for parsing map sheet identifiers
-and displaying hierarchy information.
+This module provides CLI commands for parsing map sheet identifiers,
+displaying hierarchy information, and downloading NMT data.
 """
 
 import argparse
 import sys
+from pathlib import Path
 from typing import Optional
 
 from kartograf.core.sheet_parser import SheetParser
-from kartograf.exceptions import ParseError, ValidationError
+from kartograf.download.manager import DownloadManager, DownloadProgress
+from kartograf.exceptions import DownloadError, ParseError, ValidationError
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -60,6 +62,44 @@ def create_parser() -> argparse.ArgumentParser:
         "--descendants",
         metavar="SCALE",
         help="Display all descendants to target scale (e.g., 1:10000)",
+    )
+
+    # Download command
+    download_parser = subparsers.add_parser(
+        "download",
+        help="Download NMT data for a map sheet",
+        description="Download NMT (Digital Terrain Model) data from GUGiK",
+    )
+    download_parser.add_argument(
+        "godlo",
+        help="Map sheet identifier (e.g., N-34-130-D-d-2-4)",
+    )
+    download_parser.add_argument(
+        "--scale",
+        metavar="SCALE",
+        help="Download all descendants to target scale (e.g., 1:10000)",
+    )
+    download_parser.add_argument(
+        "--format",
+        default="GTiff",
+        choices=["GTiff", "AAIGrid"],
+        help="Output format (default: GTiff)",
+    )
+    download_parser.add_argument(
+        "--output", "-o",
+        metavar="DIR",
+        default="./data",
+        help="Output directory (default: ./data)",
+    )
+    download_parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite existing files",
+    )
+    download_parser.add_argument(
+        "--quiet", "-q",
+        action="store_true",
+        help="Suppress progress output",
     )
 
     return parser
@@ -230,6 +270,124 @@ def cmd_parse(args: argparse.Namespace) -> int:
     return 0
 
 
+def create_progress_callback(quiet: bool = False):
+    """
+    Create a progress callback for download operations.
+
+    Parameters
+    ----------
+    quiet : bool
+        If True, suppress output
+
+    Returns
+    -------
+    callable
+        Progress callback function
+    """
+    if quiet:
+        return None
+
+    def on_progress(progress: DownloadProgress) -> None:
+        """Print progress bar and status."""
+        bar_width = 30
+        filled = int(bar_width * progress.current / max(progress.total, 1))
+        bar = "=" * filled + "-" * (bar_width - filled)
+
+        status_icon = {
+            "downloading": "↓",
+            "completed": "✓",
+            "skipped": "○",
+            "failed": "✗",
+        }.get(progress.status, " ")
+
+        line = (
+            f"\r[{bar}] {progress.current}/{progress.total} "
+            f"{status_icon} {progress.godlo}"
+        )
+
+        # Pad to overwrite previous longer lines
+        line = line.ljust(80)
+
+        if progress.status in ("completed", "failed"):
+            print(line, flush=True)
+        else:
+            print(line, end="", flush=True)
+
+    return on_progress
+
+
+def cmd_download(args: argparse.Namespace) -> int:
+    """
+    Execute the download command.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed command-line arguments
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, 1 for error)
+    """
+    try:
+        # Validate godlo first
+        SheetParser(args.godlo)
+    except (ParseError, ValidationError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    # Create download manager
+    output_dir = Path(args.output)
+    manager = DownloadManager(
+        output_dir=output_dir,
+        format=args.format,
+    )
+
+    skip_existing = not args.force
+    on_progress = create_progress_callback(args.quiet)
+
+    try:
+        if args.scale:
+            # Download hierarchy
+            if not args.quiet:
+                count = manager.count_sheets(args.godlo, args.scale)
+                print(f"Downloading {count} sheets from {args.godlo} to {args.scale}")
+                print()
+
+            paths = manager.download_hierarchy(
+                args.godlo,
+                args.scale,
+                skip_existing=skip_existing,
+                on_progress=on_progress,
+            )
+
+            if not args.quiet:
+                print()
+                print(f"Downloaded {len(paths)} files to {output_dir}")
+        else:
+            # Download single sheet
+            if not args.quiet:
+                print(f"Downloading {args.godlo}...")
+
+            path = manager.download_sheet(
+                args.godlo,
+                skip_existing=skip_existing,
+            )
+
+            if not args.quiet:
+                print(f"Downloaded to {path}")
+
+    except DownloadError as e:
+        print(f"\nError: {e}", file=sys.stderr)
+        return 1
+    except ValidationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    return 0
+
+
 def main(args: Optional[list[str]] = None) -> int:
     """
     Main entry point for the CLI.
@@ -253,6 +411,9 @@ def main(args: Optional[list[str]] = None) -> int:
 
     if parsed_args.command == "parse":
         return cmd_parse(parsed_args)
+
+    if parsed_args.command == "download":
+        return cmd_download(parsed_args)
 
     # Unknown command (shouldn't happen with argparse)
     print(f"Unknown command: {parsed_args.command}", file=sys.stderr)
