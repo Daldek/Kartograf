@@ -36,7 +36,7 @@ Repository = "https://github.com/Daldek/Kartograf.git"
 Issues = "https://github.com/Daldek/Kartograf/issues"
 
 [tool.setuptools.packages.find]
-where = ["src"]
+where = ["."]
 
 [tool.black]
 line-length = 88
@@ -58,7 +58,7 @@ python_functions = ["test_*"]
 addopts = "-v"
 
 [tool.coverage.run]
-source = ["src/kartograf"]
+source = ["kartograf"]
 omit = ["*/tests/*", "*/__init__.py"]
 
 [tool.coverage.report]

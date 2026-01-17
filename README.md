@@ -80,9 +80,9 @@ paths = manager.download_hierarchy(
 ## Struktura Projektu
 
 ```
-kartograf/
-├── src/kartograf/       # Kod źródłowy
-│   ├── core/            # Logika główna
+Kartograf/
+├── kartograf/           # Kod źródłowy
+│   ├── core/            # Parser godeł
 │   ├── providers/       # Providery danych (GUGiK)
 │   ├── download/        # Download management
 │   └── cli/             # CLI interface
