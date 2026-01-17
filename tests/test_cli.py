@@ -256,7 +256,7 @@ class TestMain:
 
         assert exc_info.value.code == 0
         captured = capsys.readouterr()
-        assert "0.1.0" in captured.out
+        assert "0.2.0" in captured.out
 
     def test_parse_subcommand(self, capsys):
         """Test parse subcommand."""
@@ -318,12 +318,6 @@ class TestCreateParserDownload:
         args = parser.parse_args(["download", "N-34-130-D", "--scale", "1:10000"])
         assert args.scale == "1:10000"
 
-    def test_download_format_option(self):
-        """Test --format option."""
-        parser = create_parser()
-        args = parser.parse_args(["download", "N-34-130-D", "--format", "AAIGrid"])
-        assert args.format == "AAIGrid"
-
     def test_download_output_option(self):
         """Test --output option."""
         parser = create_parser()
@@ -346,7 +340,6 @@ class TestCreateParserDownload:
         """Test default values for download options."""
         parser = create_parser()
         args = parser.parse_args(["download", "N-34-130-D"])
-        assert args.format == "GTiff"
         assert args.output == "./data"
         assert args.force is False
         assert args.quiet is False
@@ -444,12 +437,17 @@ class TestCmdDownload:
         ]
         mock_manager_class.return_value = mock_manager
 
-        result = main([
-            "download", "N-34-130-D-d-2",
-            "--scale", "1:10000",
-            "-o", str(tmp_path),
-            "-q"
-        ])
+        result = main(
+            [
+                "download",
+                "N-34-130-D-d-2",
+                "--scale",
+                "1:10000",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
 
         assert result == 0
         mock_manager.download_hierarchy.assert_called_once()
@@ -461,11 +459,9 @@ class TestCmdDownload:
         mock_manager.download_sheet.return_value = tmp_path / "test.tif"
         mock_manager_class.return_value = mock_manager
 
-        result = main([
-            "download", "N-34-130-D-d-2-4",
-            "-o", str(tmp_path),
-            "--force", "-q"
-        ])
+        result = main(
+            ["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "--force", "-q"]
+        )
 
         assert result == 0
         mock_manager.download_sheet.assert_called_once_with(
@@ -497,36 +493,21 @@ class TestCmdDownload:
         mock_manager.download_hierarchy.side_effect = ValidationError("Invalid scale")
         mock_manager_class.return_value = mock_manager
 
-        result = main([
-            "download", "N-34-130-D",
-            "--scale", "1:invalid",
-            "-o", str(tmp_path),
-            "-q"
-        ])
+        result = main(
+            [
+                "download",
+                "N-34-130-D",
+                "--scale",
+                "1:invalid",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
 
         assert result == 1
         captured = capsys.readouterr()
         assert "Error" in captured.err
-
-    @patch("kartograf.cli.commands.DownloadManager")
-    def test_download_with_format(self, mock_manager_class, tmp_path):
-        """Test downloading with custom format."""
-        mock_manager = Mock()
-        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
-        mock_manager_class.return_value = mock_manager
-
-        result = main([
-            "download", "N-34-130-D",
-            "--format", "AAIGrid",
-            "-o", str(tmp_path),
-            "-q"
-        ])
-
-        assert result == 0
-        # Verify manager was created with the correct format
-        mock_manager_class.assert_called_once()
-        call_kwargs = mock_manager_class.call_args.kwargs
-        assert call_kwargs["format"] == "AAIGrid"
 
     @patch("kartograf.cli.commands.DownloadManager")
     def test_download_shows_progress(self, mock_manager_class, capsys, tmp_path):
@@ -555,7 +536,7 @@ class TestDownloadCLIIntegration:
         captured = capsys.readouterr()
         assert "download" in captured.out.lower()
         assert "--scale" in captured.out
-        assert "--format" in captured.out
+        assert "ASC" in captured.out  # Should mention ASC files in description
 
     def test_main_includes_download(self, capsys):
         """Test that main help includes download command."""

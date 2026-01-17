@@ -1,15 +1,15 @@
 """
 Testy jednostkowe dla modułu download manager.
 
-Ten moduł zawiera testy dla klasy DownloadManager, weryfikujące poprawność
-pobierania pojedynczych arkuszy i całych hierarchii.
+Ten moduł zawiera testy dla klasy DownloadManager z nową architekturą:
+- download_sheet(godlo) → ASC
+- download_bbox(bbox) → GeoTIFF
 """
 
-from pathlib import Path
-
-import pytest  # noqa: F401 - required for fixtures
+import pytest
 from unittest.mock import Mock
 
+from kartograf.core.sheet_parser import BBox
 from kartograf.download.manager import DownloadManager, DownloadProgress
 from kartograf.download.storage import FileStorage
 from kartograf.exceptions import DownloadError
@@ -67,7 +67,6 @@ class TestDownloadManagerBasic:
         """Test inicjalizacji z domyślnymi wartościami."""
         manager = DownloadManager()
 
-        assert manager.format == "GTiff"
         assert isinstance(manager.provider, GugikProvider)
         assert isinstance(manager.storage, FileStorage)
 
@@ -84,12 +83,6 @@ class TestDownloadManagerBasic:
 
         assert manager.provider == mock_provider
 
-    def test_init_custom_format(self):
-        """Test inicjalizacji z własnym formatem."""
-        manager = DownloadManager(format="AAIGrid")
-
-        assert manager.format == "AAIGrid"
-
     def test_repr(self, tmp_path):
         """Test reprezentacji tekstowej."""
         manager = DownloadManager(output_dir=tmp_path)
@@ -100,80 +93,71 @@ class TestDownloadManagerBasic:
 
 
 class TestDownloadManagerDownloadSheet:
-    """Testy metody download_sheet()."""
+    """Testy metody download_sheet() - pobiera ASC przez OpenData."""
 
     @pytest.fixture
     def mock_provider(self):
         """Fixture z mockowanym providerem."""
         provider = Mock(spec=GugikProvider)
-        provider.get_file_extension = Mock(return_value=".tif")
-        provider.download = Mock(return_value=Path("/mock/path/file.tif"))
+
+        def mock_download(godlo, path, timeout=30):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"ASC data")
+            return path
+
+        provider.download = mock_download
         return provider
 
     def test_download_sheet_success(self, tmp_path, mock_provider):
-        """Test udanego pobierania arkusza."""
+        """Test udanego pobierania arkusza jako ASC."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         result = manager.download_sheet("N-34-130-D")
 
-        assert result.suffix == ".tif"
-        mock_provider.download.assert_called_once()
+        assert result.suffix == ".asc"
+        assert result.exists()
 
     def test_download_sheet_skip_existing(self, tmp_path, mock_provider):
         """Test pomijania istniejącego pliku."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
-        # Create existing file
+        # Create existing ASC file
         storage = FileStorage(tmp_path)
-        storage.write_atomic("N-34-130-D", b"existing data")
+        existing_path = storage.get_path("N-34-130-D", ".asc")
+        existing_path.parent.mkdir(parents=True, exist_ok=True)
+        existing_path.write_bytes(b"existing data")
 
         result = manager.download_sheet("N-34-130-D", skip_existing=True)
 
         # Should return existing path without downloading
         assert result.exists()
-        mock_provider.download.assert_not_called()
+        assert result.read_bytes() == b"existing data"
 
     def test_download_sheet_overwrite_existing(self, tmp_path, mock_provider):
         """Test nadpisywania istniejącego pliku."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
-        # Create existing file
+        # Create existing ASC file
         storage = FileStorage(tmp_path)
-        storage.write_atomic("N-34-130-D", b"existing data")
-
-        # Mock the download to actually create a file
-        def mock_download(godlo, path, format):
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"new data")
-            return path
-
-        mock_provider.download = mock_download
+        existing_path = storage.get_path("N-34-130-D", ".asc")
+        existing_path.parent.mkdir(parents=True, exist_ok=True)
+        existing_path.write_bytes(b"existing data")
 
         result = manager.download_sheet("N-34-130-D", skip_existing=False)
 
         assert result.exists()
-
-    def test_download_sheet_custom_format(self, tmp_path, mock_provider):
-        """Test pobierania z własnym formatem."""
-        mock_provider.get_file_extension = Mock(return_value=".asc")
-        manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
-
-        manager.download_sheet("N-34-130-D", format="AAIGrid")
-
-        call_kwargs = mock_provider.download.call_args.kwargs
-        assert call_kwargs["format"] == "AAIGrid"
+        assert result.read_bytes() == b"ASC data"  # New data
 
 
 class TestDownloadManagerDownloadHierarchy:
-    """Testy metody download_hierarchy()."""
+    """Testy metody download_hierarchy() - pobiera ASC przez OpenData."""
 
     @pytest.fixture
     def mock_provider(self):
         """Fixture z mockowanym providerem."""
         provider = Mock(spec=GugikProvider)
-        provider.get_file_extension = Mock(return_value=".tif")
 
-        def mock_download(godlo, path, format):
+        def mock_download(godlo, path, timeout=30):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"data")
             return path
@@ -190,6 +174,7 @@ class TestDownloadManagerDownloadHierarchy:
 
         assert len(results) == 16
         assert all(p.exists() for p in results)
+        assert all(p.suffix == ".asc" for p in results)
 
     def test_download_hierarchy_with_progress(self, tmp_path, mock_provider):
         """Test pobierania z callback postępu."""
@@ -210,10 +195,12 @@ class TestDownloadManagerDownloadHierarchy:
         """Test pomijania istniejących plików w hierarchii."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
-        # Pre-create some files
+        # Pre-create some ASC files
         storage = FileStorage(tmp_path)
-        storage.write_atomic("N-34-130-D-d-2-1", b"existing")
-        storage.write_atomic("N-34-130-D-d-2-2", b"existing")
+        for godlo in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"]:
+            path = storage.get_path(godlo, ".asc")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"existing")
 
         progress_calls = []
 
@@ -234,12 +221,11 @@ class TestDownloadManagerDownloadHierarchy:
     def test_download_hierarchy_handles_failures(self, tmp_path):
         """Test obsługi błędów pobierania."""
         provider = Mock(spec=GugikProvider)
-        provider.get_file_extension = Mock(return_value=".tif")
 
         # First two succeed, third fails, fourth succeeds
         call_count = [0]
 
-        def mock_download(godlo, path, format):
+        def mock_download(godlo, path, timeout=30):
             call_count[0] += 1
             if call_count[0] == 3:
                 raise DownloadError("Network error", godlo=godlo)
@@ -277,6 +263,59 @@ class TestDownloadManagerDownloadHierarchy:
         assert count == 64
 
 
+class TestDownloadManagerDownloadBbox:
+    """Testy metody download_bbox() - pobiera GeoTIFF przez WCS."""
+
+    @pytest.fixture
+    def mock_provider(self):
+        """Fixture z mockowanym providerem."""
+        provider = Mock(spec=GugikProvider)
+
+        def mock_download_bbox(bbox, path, format="GTiff", timeout=30):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"TIFF data")
+            return path
+
+        provider.download_bbox = mock_download_bbox
+        return provider
+
+    @pytest.fixture
+    def sample_bbox(self):
+        """Przykładowy bbox."""
+        return BBox(
+            min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
+        )
+
+    def test_download_bbox_success(self, tmp_path, mock_provider, sample_bbox):
+        """Test udanego pobierania bbox."""
+        manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
+
+        result = manager.download_bbox(sample_bbox, "test.tif")
+
+        assert result.exists()
+        assert result.name == "test.tif"
+
+    def test_download_bbox_custom_format(self, tmp_path, sample_bbox):
+        """Test pobierania bbox z własnym formatem."""
+        mock_provider = Mock(spec=GugikProvider)
+
+        def mock_download_bbox(bbox, path, format="GTiff", timeout=30):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"PNG data")
+            return path
+
+        mock_provider.download_bbox = Mock(side_effect=mock_download_bbox)
+
+        manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
+
+        manager.download_bbox(sample_bbox, "test.png", format="PNG")
+
+        # Verify format was passed
+        mock_provider.download_bbox.assert_called_once()
+        call_kwargs = mock_provider.download_bbox.call_args.kwargs
+        assert call_kwargs["format"] == "PNG"
+
+
 class TestDownloadManagerGetMissingSheets:
     """Testy metody get_missing_sheets()."""
 
@@ -292,10 +331,12 @@ class TestDownloadManagerGetMissingSheets:
         """Test gdy niektóre arkusze istnieją."""
         manager = DownloadManager(output_dir=tmp_path)
 
-        # Pre-create some files
+        # Pre-create some ASC files
         storage = FileStorage(tmp_path)
-        storage.write_atomic("N-34-130-D-d-2-1", b"data")
-        storage.write_atomic("N-34-130-D-d-2-3", b"data")
+        for godlo in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-3"]:
+            path = storage.get_path(godlo, ".asc")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"data")
 
         missing = manager.get_missing_sheets("N-34-130-D-d-2", "1:10000")
 
@@ -309,12 +350,13 @@ class TestDownloadManagerGetMissingSheets:
         """Test gdy żaden arkusz nie brakuje."""
         manager = DownloadManager(output_dir=tmp_path)
 
-        # Pre-create all files
+        # Pre-create all ASC files
         storage = FileStorage(tmp_path)
-        storage.write_atomic("N-34-130-D-d-2-1", b"data")
-        storage.write_atomic("N-34-130-D-d-2-2", b"data")
-        storage.write_atomic("N-34-130-D-d-2-3", b"data")
-        storage.write_atomic("N-34-130-D-d-2-4", b"data")
+        for i in range(1, 5):
+            godlo = f"N-34-130-D-d-2-{i}"
+            path = storage.get_path(godlo, ".asc")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"data")
 
         missing = manager.get_missing_sheets("N-34-130-D-d-2", "1:10000")
 

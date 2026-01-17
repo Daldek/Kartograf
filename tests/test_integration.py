@@ -5,7 +5,7 @@ This module contains end-to-end integration tests that verify the complete
 workflow of parsing, storing, and downloading map sheets.
 """
 
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest  # noqa: F401 - required for fixtures
 
@@ -48,7 +48,7 @@ class TestPublicAPIImports:
         """Test version is accessible."""
         from kartograf import __version__
 
-        assert __version__ == "0.1.0"
+        assert __version__ == "0.2.0"
 
 
 class TestParserStorageIntegration:
@@ -99,16 +99,8 @@ class TestParserStorageIntegration:
 class TestDownloadManagerIntegration:
     """Test DownloadManager integration with components."""
 
-    @patch("kartograf.providers.gugik.requests.Session")
-    def test_manager_uses_provider_and_storage(self, mock_session, test_data_dir):
+    def test_manager_uses_provider_and_storage(self, test_data_dir):
         """Test that manager correctly coordinates provider and storage."""
-        # Mock the HTTP response
-        mock_response = Mock()
-        mock_response.status_code = 200
-        mock_response.iter_content.return_value = [b"test data"]
-        mock_response.raise_for_status = Mock()
-        mock_session.return_value.get.return_value = mock_response
-
         manager = DownloadManager(output_dir=test_data_dir)
 
         # Verify components are properly initialized
@@ -119,10 +111,13 @@ class TestDownloadManagerIntegration:
     def test_manager_skip_existing(self, test_data_dir, mock_tif_data):
         """Test that manager skips existing files."""
         storage = FileStorage(test_data_dir)
-        storage.write_atomic("N-34-130-D-d-2-4", mock_tif_data)
+
+        # Create existing ASC file
+        existing_path = storage.get_path("N-34-130-D-d-2-4", ".asc")
+        existing_path.parent.mkdir(parents=True, exist_ok=True)
+        existing_path.write_bytes(mock_tif_data)
 
         mock_provider = Mock()
-        mock_provider.get_file_extension.return_value = ".tif"
         manager = DownloadManager(
             output_dir=test_data_dir,
             provider=mock_provider,
@@ -150,9 +145,11 @@ class TestDownloadManagerIntegration:
         """Test missing sheets detection."""
         storage = FileStorage(test_data_dir)
 
-        # Pre-create 2 of 4 sheets
-        storage.write_atomic("N-34-130-D-d-2-1", mock_tif_data)
-        storage.write_atomic("N-34-130-D-d-2-3", mock_tif_data)
+        # Pre-create 2 of 4 sheets (as ASC files)
+        for godlo in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-3"]:
+            path = storage.get_path(godlo, ".asc")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(mock_tif_data)
 
         manager = DownloadManager(output_dir=test_data_dir)
         missing = manager.get_missing_sheets("N-34-130-D-d-2", "1:10000")
@@ -213,30 +210,33 @@ class TestProgressCallback:
         """Test that progress callback receives correct status updates."""
         storage = FileStorage(test_data_dir)
 
-        # Pre-create one file to trigger skip
-        storage.write_atomic("N-34-130-D-d-2-1", mock_tif_data)
+        # Pre-create one ASC file to trigger skip
+        existing_path = storage.get_path("N-34-130-D-d-2-1", ".asc")
+        existing_path.parent.mkdir(parents=True, exist_ok=True)
+        existing_path.write_bytes(mock_tif_data)
 
         mock_provider = Mock()
 
-        def mock_download(godlo, path, format):
+        def mock_download(godlo, path, timeout=30):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(mock_tif_data)
             return path
 
         mock_provider.download = mock_download
-        mock_provider.get_file_extension = Mock(return_value=".tif")
 
         manager = DownloadManager(output_dir=test_data_dir, provider=mock_provider)
 
         progress_calls = []
 
         def on_progress(p: DownloadProgress):
-            progress_calls.append({
-                "godlo": p.godlo,
-                "status": p.status,
-                "current": p.current,
-                "total": p.total,
-            })
+            progress_calls.append(
+                {
+                    "godlo": p.godlo,
+                    "status": p.status,
+                    "current": p.current,
+                    "total": p.total,
+                }
+            )
 
         manager.download_hierarchy(
             "N-34-130-D-d-2",
@@ -244,7 +244,7 @@ class TestProgressCallback:
             on_progress=on_progress,
         )
 
-        # Should have 8 calls: 1 skipped, 3 × (downloading + completed)
+        # Should have 7 calls: 1 skipped, 3 × (downloading + completed)
         # First file is skipped, others are downloaded
         statuses = [p["status"] for p in progress_calls]
         assert "skipped" in statuses
