@@ -1,9 +1,11 @@
 # Kartograf
 
-Narzędzie do automatycznego pobierania danych przestrzennych z zasobów GUGiK i Copernicus dla Polski:
+Narzędzie do automatycznego pobierania danych przestrzennych z zasobów GUGiK, Copernicus i ISRIC dla Polski:
 - **NMT/NMPT** - Numeryczny Model Terenu / Pokrycia Terenu (dane wysokościowe)
 - **BDOT10k** - Baza Danych Obiektów Topograficznych (pokrycie terenu, wektory)
 - **CORINE Land Cover** - Europejska klasyfikacja pokrycia terenu (44 klasy)
+- **SoilGrids** - Globalne dane glebowe (tekstura, węgiel organiczny, pH)
+- **HSG** - Hydrologic Soil Groups dla metody SCS-CN (grupy hydrologiczne gleb)
 
 ## Szybki Start
 
@@ -46,9 +48,18 @@ kartograf landcover download --source bdot10k --godlo N-34-130-D
 # Pobieranie Land Cover (CORINE)
 kartograf landcover download --source corine --year 2018 --godlo N-34-130-D
 
+# Pobieranie danych glebowych (SoilGrids)
+kartograf landcover download --source soilgrids --godlo N-34-130-D --property soc
+kartograf landcover download --source soilgrids --godlo N-34-130-D --property clay --depth 15-30cm
+
+# Obliczanie Hydrologic Soil Groups (HSG) dla metody SCS-CN
+kartograf soilgrids hsg --godlo N-34-130-D --stats
+kartograf soilgrids hsg --godlo N-34-130-D --output /tmp/hsg.tif --keep-intermediate
+
 # Lista źródeł i warstw
 kartograf landcover list-sources
 kartograf landcover list-layers --source bdot10k
+kartograf landcover list-layers --source soilgrids
 ```
 
 #### Jako biblioteka Python
@@ -95,6 +106,23 @@ lc.download(teryt="1465")
 # CORINE - przez godło
 lc.set_provider("corine")
 lc.download(godlo="N-34-130-D", year=2018)
+
+# SoilGrids - dane glebowe
+lc.set_provider("soilgrids")
+lc.download(godlo="N-34-130-D", property="soc", depth="0-5cm")
+
+# ===== Hydrologic Soil Groups =====
+from kartograf.hydrology import HSGCalculator
+
+calc = HSGCalculator()
+
+# Oblicz HSG dla godła
+calc.calculate_hsg_by_godlo("N-34-130-D", Path("./hsg.tif"))
+
+# Statystyki HSG
+stats = calc.get_hsg_statistics(Path("./hsg.tif"))
+for group, data in stats.items():
+    print(f"Grupa {group}: {data['percent']:.1f}%")
 ```
 
 ## Funkcjonalności
@@ -114,6 +142,31 @@ lc.download(godlo="N-34-130-D", year=2018)
 - ✅ **CORINE Land Cover** - Europejska klasyfikacja (Copernicus), 44 klasy
 - ✅ **Metody selekcji** - TERYT (powiat), bbox, godło arkusza
 - ✅ **Formaty** - GeoPackage, Shapefile, GeoTIFF, PNG
+
+### SoilGrids (Dane Glebowe)
+- ✅ **ISRIC SoilGrids** - Globalne dane glebowe, rozdzielczość 250m
+- ✅ **11 parametrów glebowych:**
+  - `clay`, `sand`, `silt` - tekstura gleby (%)
+  - `soc` - węgiel organiczny (g/kg)
+  - `phh2o` - pH w H2O
+  - `nitrogen` - azot całkowity (g/kg)
+  - `bdod` - gęstość objętościowa (kg/dm³)
+  - `cec` - pojemność wymiany kationowej (cmol/kg)
+  - `cfvo` - fragmenty gruboziarniste (%)
+  - `ocd`, `ocs` - gęstość i zasób węgla organicznego
+- ✅ **6 głębokości:** 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm
+- ✅ **5 statystyk:** mean, Q0.05, Q0.5, Q0.95, uncertainty
+
+### Hydrologic Soil Groups (HSG)
+- ✅ **Kalkulacja HSG** dla metody SCS-CN (Curve Number)
+- ✅ **Klasyfikacja USDA** - trójkąt tekstury, 12 klas
+- ✅ **4 grupy hydrologiczne:**
+  - A - wysoka infiltracja (piasek)
+  - B - umiarkowana infiltracja (glina)
+  - C - wolna infiltracja (glina ilasta)
+  - D - bardzo wolna infiltracja (ił)
+- ✅ **Automatyczne pobieranie** clay/sand/silt z SoilGrids
+- ✅ **Statystyki pokrycia** dla każdej grupy HSG
 
 ## Konfiguracja CLMS API (opcjonalne)
 
@@ -154,6 +207,8 @@ Główna aplikacja nigdy nie widzi kluczy prywatnych.
 - requests >= 2.31.0
 - pyproj >= 3.6.0
 - PyJWT[crypto] >= 2.8.0
+- rasterio >= 1.3.0
+- numpy >= 1.24.0
 
 ## Struktura Projektu
 
@@ -162,11 +217,12 @@ Kartograf/
 ├── kartograf/           # Kod źródłowy
 │   ├── auth/            # Auth Proxy (bezpieczna autentykacja CLMS)
 │   ├── core/            # Parser godeł, BBox
-│   ├── providers/       # Providery danych (GUGiK, BDOT10k, CORINE)
+│   ├── providers/       # Providery danych (GUGiK, BDOT10k, CORINE, SoilGrids)
 │   ├── download/        # Download management (NMT)
 │   ├── landcover/       # Land Cover management
+│   ├── hydrology/       # Hydrologic Soil Groups (HSG)
 │   └── cli/             # CLI interface
-├── tests/               # Testy (285)
+├── tests/               # Testy (347)
 ├── docs/                # Dokumentacja
 └── README.md
 ```
@@ -209,4 +265,4 @@ Projekt udostępniony na licencji MIT. Szczegóły w pliku `LICENSE`.
 
 ## Status
 
-**Wersja 0.3.0** - Dodano funkcjonalność Land Cover (BDOT10k, CORINE). Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów
+**Wersja 0.3.0** - Dodano funkcjonalność Land Cover (BDOT10k, CORINE), SoilGrids (dane glebowe) oraz HSG (grupy hydrologiczne dla SCS-CN). Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów

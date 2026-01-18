@@ -14,6 +14,7 @@ from kartograf.download.storage import FileStorage
 from kartograf.providers.bdot10k import Bdot10kProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.landcover_base import LandCoverProvider
+from kartograf.providers.soilgrids import SoilGridsProvider
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ logger = logging.getLogger(__name__)
 PROVIDERS = {
     "bdot10k": Bdot10kProvider,
     "corine": CorineProvider,
+    "soilgrids": SoilGridsProvider,
 }
 
 
