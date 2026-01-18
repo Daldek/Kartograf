@@ -190,7 +190,11 @@ class TestCorineProvider:
         # Test with mock credentials
         mock_credentials = {
             "client_id": "test-client",
-            "private_key": "-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----",
+            "private_key": (
+                "-----BEGIN RSA PRIVATE KEY-----\n"
+                "test\n"
+                "-----END RSA PRIVATE KEY-----"
+            ),
             "token_uri": "https://example.com/token",
         }
         provider_with_creds = CorineProvider(clms_credentials=mock_credentials)
