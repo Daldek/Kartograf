@@ -1,8 +1,8 @@
 # Plan Implementacji Kartograf
 
 **Repozytorium:** https://github.com/Daldek/Kartograf.git
-**Status:** Wersja 0.2.0
-**Ostatnia aktualizacja:** 2026-01-17
+**Status:** Wersja 0.3.0-dev
+**Ostatnia aktualizacja:** 2026-01-18
 
 ---
 
@@ -14,9 +14,10 @@
 
 ---
 
-## Aktualny Etap: UKOŃCZONY
+## Aktualny Etap: 15 - Land Cover (Pokrycie Terenu)
 
-**Status:** Wszystkie etapy zakończone (v0.2.0)
+**Status:** W trakcie implementacji (v0.3.0)
+**Cel:** Dodanie funkcjonalności pobierania danych o pokryciu terenu z BDOT10k i CORINE
 
 ---
 
@@ -245,6 +246,56 @@ BBox   →  WCS       →  GeoTIFF   (WCS wycina dowolny prostokąt)
 - `manager.download_sheet("N-34-130-D")` pobiera ASC przez OpenData
 - `manager.download_bbox(bbox, "area.tif")` pobiera GeoTIFF przez WCS
 - Wszystkie testy przechodzą
+
+---
+
+### Etap 15: Land Cover - Pokrycie Terenu (L - 4-5h) - v0.3.0
+- [x] Ukończony
+
+**Cel:** Dodanie funkcjonalności pobierania danych o pokryciu terenu z dwóch źródeł:
+- **BDOT10k** (GUGiK) - polska baza wektorowa, wysoka szczegółowość 1:10k
+- **CORINE Land Cover** (Copernicus/GIOŚ) - europejski standard, 44 klasy
+
+**Decyzje projektowe:**
+- Źródła danych: BDOT10k + CORINE Land Cover
+- Metody selekcji: TERYT (powiat), bbox, godło arkusza
+- Format wyjściowy: GeoPackage (.gpkg) jako domyślny
+
+**Podetapy:**
+
+**15.1 Abstrakcja LandCoverProvider (S - 30 min)**
+- [ ] `kartograf/providers/landcover_base.py`
+- Interfejs: `download_by_teryt()`, `download_by_bbox()`, `download_by_godlo()`
+
+**15.2 BDOT10k Provider (M - 60 min)**
+- [ ] `kartograf/providers/bdot10k.py`
+- [ ] `tests/test_bdot10k.py`
+- Pobieranie paczek powiatowych (OpenData)
+- Pobieranie przez WFS dla bbox
+- URL: `https://opendata.geoportal.gov.pl/bdot10k/`
+
+**15.3 CORINE Provider (M - 60 min)**
+- [ ] `kartograf/providers/corine.py`
+- [ ] `tests/test_corine.py`
+- Lata: 1990, 2000, 2006, 2012, 2018
+- URL GIOŚ: `http://mapy.gios.gov.pl/arcgis/services/WMS/CLC_2018/MapServer/WMSServer`
+
+**15.4 LandCover Manager (S - 30 min)**
+- [ ] `kartograf/landcover/__init__.py`
+- [ ] `kartograf/landcover/manager.py`
+
+**15.5 CLI - Komendy landcover (M - 45 min)**
+- [ ] Rozszerzenie `kartograf/cli/commands.py`
+- Komendy: `kartograf landcover download`, `list-sources`, `list-layers`
+
+**15.6 Testy i dokumentacja (S - 30 min)**
+- [ ] `tests/test_landcover_integration.py`
+- [ ] Aktualizacja README.md
+
+**Kryterium ukończenia:**
+- `kartograf landcover download --source bdot10k --teryt 1465` pobiera paczkę
+- `kartograf landcover download --source corine --year 2018 --godlo N-34-130-D` pobiera CLC
+- Pokrycie testami >= 80%
 
 ---
 

@@ -256,7 +256,7 @@ class TestMain:
 
         assert exc_info.value.code == 0
         captured = capsys.readouterr()
-        assert "0.2.0" in captured.out
+        assert "0.3.0" in captured.out
 
     def test_parse_subcommand(self, capsys):
         """Test parse subcommand."""
