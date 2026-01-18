@@ -18,6 +18,7 @@ BDOT10k contains land cover classes (PT - Pokrycie Terenu):
 """
 
 import logging
+import sqlite3
 import time
 import zipfile
 from io import BytesIO
@@ -547,9 +548,7 @@ class Bdot10kProvider(LandCoverProvider):
         output_path : Path
             Target path for merged GPKG
         """
-        import sqlite3
         import tempfile
-        import shutil
 
         # Read ZIP into memory
         zip_data = BytesIO()
@@ -613,8 +612,6 @@ class Bdot10kProvider(LandCoverProvider):
         output_path : Path
             Output merged GPKG file
         """
-        import sqlite3
-
         if not source_files:
             raise DownloadError("No files to merge")
 
@@ -658,8 +655,6 @@ class Bdot10kProvider(LandCoverProvider):
         source_path : Path
             Source GPKG file
         """
-        import sqlite3
-
         # Attach source database
         cursor.execute(f"ATTACH DATABASE '{source_path}' AS src")
 
@@ -688,7 +683,7 @@ class Bdot10kProvider(LandCoverProvider):
 
                 # Get table schema from source
                 cursor.execute(
-                    f"SELECT sql FROM src.sqlite_master WHERE type='table' AND name=?",
+                    "SELECT sql FROM src.sqlite_master WHERE type='table' AND name=?",
                     (table_name,),
                 )
                 create_sql = cursor.fetchone()[0]

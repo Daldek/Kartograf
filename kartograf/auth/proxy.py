@@ -21,7 +21,6 @@ The server prints the actual port to stdout for the parent process.
 import argparse
 import json
 import logging
-import os
 import platform
 import re
 import subprocess
@@ -29,7 +28,7 @@ import sys
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Optional
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse
 
 # Configure logging to stderr (stdout reserved for port number)
 logging.basicConfig(
@@ -76,8 +75,8 @@ class CLMSCredentials:
             if not creds_data.startswith("{"):
                 try:
                     decoded = bytes.fromhex(creds_data).decode("utf-8")
-                    decoded = re.sub(r'\x1b\[\d+~', '', decoded)
-                    decoded = decoded.lstrip('\x1b')
+                    decoded = re.sub(r"\x1b\[\d+~", "", decoded)
+                    decoded = decoded.lstrip("\x1b")
                     creds_data = decoded.strip()
                 except (ValueError, UnicodeDecodeError):
                     pass
@@ -178,10 +177,12 @@ class ProxyHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
 
         if parsed.path == "/health":
-            self.send_json({
-                "status": "ok",
-                "credentials_available": self.credentials.is_available,
-            })
+            self.send_json(
+                {
+                    "status": "ok",
+                    "credentials_available": self.credentials.is_available,
+                }
+            )
         elif parsed.path == "/token":
             token = self.credentials.get_access_token()
             if token:
@@ -243,11 +244,13 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     return
 
                 # Return proxied response
-                self.send_json({
-                    "status_code": resp.status_code,
-                    "headers": dict(resp.headers),
-                    "body": resp.text,
-                })
+                self.send_json(
+                    {
+                        "status_code": resp.status_code,
+                        "headers": dict(resp.headers),
+                        "body": resp.text,
+                    }
+                )
 
             except requests.RequestException as e:
                 self.send_json({"error": f"Proxy request failed: {e}"}, 502)
@@ -323,7 +326,8 @@ def run_server(port: int = 0) -> None:
 def main():
     parser = argparse.ArgumentParser(description="CLMS Authentication Proxy")
     parser.add_argument(
-        "--port", "-p",
+        "--port",
+        "-p",
         type=int,
         default=0,
         help="Port to listen on (0 = auto-select)",

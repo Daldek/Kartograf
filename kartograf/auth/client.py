@@ -6,7 +6,6 @@ The proxy is automatically started as a subprocess when needed.
 """
 
 import atexit
-import json
 import logging
 import subprocess
 import sys
@@ -87,8 +86,10 @@ class AuthProxyClient:
             self._proxy_process = subprocess.Popen(
                 [
                     sys.executable,
-                    "-m", "kartograf.auth.proxy",
-                    "--port", "0",
+                    "-m",
+                    "kartograf.auth.proxy",
+                    "--port",
+                    "0",
                 ],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
