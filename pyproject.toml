@@ -26,6 +26,7 @@ classifiers = [
 dependencies = [
     "requests>=2.31.0",
     "pyproj>=3.6.0",
+    "PyJWT[crypto]>=2.8.0",
 ]
 
 [project.scripts]

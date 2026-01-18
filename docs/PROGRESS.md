@@ -264,33 +264,49 @@ BBox   →  WCS       →  GeoTIFF   (WCS wycina dowolny prostokąt)
 **Podetapy:**
 
 **15.1 Abstrakcja LandCoverProvider (S - 30 min)**
-- [ ] `kartograf/providers/landcover_base.py`
+- [x] `kartograf/providers/landcover_base.py`
 - Interfejs: `download_by_teryt()`, `download_by_bbox()`, `download_by_godlo()`
 
 **15.2 BDOT10k Provider (M - 60 min)**
-- [ ] `kartograf/providers/bdot10k.py`
-- [ ] `tests/test_bdot10k.py`
+- [x] `kartograf/providers/bdot10k.py`
+- [x] `tests/test_landcover.py` (wspólne testy dla landcover)
 - Pobieranie paczek powiatowych (OpenData)
-- Pobieranie przez WFS dla bbox
+- Pobieranie przez WMS GetFeatureInfo dla URL paczki
 - URL: `https://opendata.geoportal.gov.pl/bdot10k/`
 
 **15.3 CORINE Provider (M - 60 min)**
-- [ ] `kartograf/providers/corine.py`
-- [ ] `tests/test_corine.py`
+- [x] `kartograf/providers/corine.py`
+- [x] `tests/test_landcover.py`
 - Lata: 1990, 2000, 2006, 2012, 2018
-- URL GIOŚ: `http://mapy.gios.gov.pl/arcgis/services/WMS/CLC_2018/MapServer/WMSServer`
+- **Źródła danych (w kolejności priorytetu):**
+  1. CLMS API (GeoTIFF z kodami klas) - wymaga OAuth2 credentials
+  2. EEA Discomap WMS (podgląd PNG) - lata 2000-2018
+  3. DLR WMS (fallback dla 1990)
 
 **15.4 LandCover Manager (S - 30 min)**
-- [ ] `kartograf/landcover/__init__.py`
-- [ ] `kartograf/landcover/manager.py`
+- [x] `kartograf/landcover/__init__.py`
+- [x] `kartograf/landcover/manager.py`
 
 **15.5 CLI - Komendy landcover (M - 45 min)**
-- [ ] Rozszerzenie `kartograf/cli/commands.py`
+- [x] Rozszerzenie `kartograf/cli/commands.py`
 - Komendy: `kartograf landcover download`, `list-sources`, `list-layers`
 
 **15.6 Testy i dokumentacja (S - 30 min)**
-- [ ] `tests/test_landcover_integration.py`
+- [x] `tests/test_landcover.py` - 42 testy
 - [ ] Aktualizacja README.md
+
+**15.7 CORINE OAuth2 Authentication (M - 60 min)**
+- [x] OAuth2 RSA authentication dla CLMS API
+- [x] Przechowywanie credentials w macOS Keychain (serwis: `clms-token`)
+- [x] JWT assertion z RSA private key → access token exchange
+- [x] Automatyczne odświeżanie tokenu
+
+**15.8 Auth Proxy - izolacja credentials (M - 60 min)**
+- [x] `kartograf/auth/proxy.py` - serwer HTTP (subprocess)
+- [x] `kartograf/auth/client.py` - klient singleton
+- [x] Credentials izolowane w osobnym procesie (niedostępne dla głównej aplikacji)
+- [x] Automatyczne uruchamianie proxy przez CorineProvider
+- [x] Tryb `use_proxy=True` (domyślny) vs `use_proxy=False` (testowy)
 
 **Kryterium ukończenia:**
 - `kartograf landcover download --source bdot10k --teryt 1465` pobiera paczkę
@@ -335,11 +351,11 @@ source .venv/bin/activate
 
 # Testy
 pytest tests/ -v
-pytest tests/ --cov=src/kartograf --cov-report=html
+pytest tests/ --cov=kartograf --cov-report=html
 
 # Formatowanie i linting
-black src/ tests/
-flake8 src/ tests/ --max-line-length=88
+black kartograf/ tests/
+flake8 kartograf/ tests/ --max-line-length=88
 
 # Instalacja w trybie dev
 pip install -e .
@@ -349,11 +365,14 @@ pip install -e .
 
 ## Pliki Krytyczne
 
-1. `src/kartograf/core/sheet_parser.py` - parser godeł
-2. `src/kartograf/providers/gugik.py` - integracja z GUGiK
-3. `src/kartograf/download/manager.py` - zarządzanie pobieraniem
-4. `src/kartograf/cli/commands.py` - interfejs CLI
-5. `pyproject.toml` - konfiguracja projektu
+1. `kartograf/core/sheet_parser.py` - parser godeł
+2. `kartograf/providers/gugik.py` - integracja z GUGiK (NMT)
+3. `kartograf/providers/corine.py` - CORINE Land Cover
+4. `kartograf/providers/bdot10k.py` - BDOT10k
+5. `kartograf/auth/proxy.py` - Auth Proxy (izolacja credentials)
+6. `kartograf/download/manager.py` - zarządzanie pobieraniem
+7. `kartograf/cli/commands.py` - interfejs CLI
+8. `pyproject.toml` - konfiguracja projektu
 
 ---
 
@@ -362,3 +381,60 @@ pip install -e .
 - **Podział 1:500k → 1:200k:** 36 arkuszy (nie 4!)
 - **URL WCS:** może wymagać weryfikacji z API GUGiK
 - **Testy:** zawsze uruchamiaj przed commitem
+
+---
+
+## Stan CLMS API (2026-01-18)
+
+### Auth Proxy (tryb bezpieczny - domyślny)
+
+CorineProvider domyślnie używa **Auth Proxy** - osobnego procesu który izoluje credentials:
+
+```
+CorineProvider → HTTP localhost → AuthProxy subprocess → Keychain → CLMS API
+                                        ↑
+                              Credentials nigdy nie opuszczają tego procesu
+```
+
+**Architektura:**
+- `kartograf/auth/proxy.py` - serwer HTTP (subprocess)
+- `kartograf/auth/client.py` - klient singleton, automatycznie uruchamia proxy
+- Proxy odczytuje credentials z Keychain, wykonuje JWT→token, zwraca tylko odpowiedzi
+
+**Konfiguracja credentials:**
+```bash
+# Zapisz credentials do Keychain
+security add-generic-password -a "$USER" -s "clms-token" -w '<json_credentials>'
+
+# Format JSON:
+{
+  "client_id": "...",
+  "private_key": "-----BEGIN RSA PRIVATE KEY-----\n...",
+  "token_uri": "https://land.copernicus.eu/@@oauth2-token",
+  "key_id": "...",
+  "user_id": "..."
+}
+```
+
+**Tryby CorineProvider:**
+```python
+# Tryb proxy (domyślny, bezpieczny)
+provider = CorineProvider()  # use_proxy=True
+
+# Tryb bezpośredni (dla testów, credentials widoczne)
+provider = CorineProvider(clms_credentials={...}, use_proxy=False)
+```
+
+### Status CLMS API
+
+- **Token exchange działa** przez proxy
+- **CLMS API przyjmuje żądania** - przetwarzanie może trwać długo (kolejka)
+- **Fallback na WMS** gdy brak credentials lub timeout
+
+**Pliki kluczowe:**
+- `kartograf/auth/proxy.py` - Auth Proxy server
+- `kartograf/auth/client.py` - Auth Proxy client
+- `kartograf/providers/corine.py` - CorineProvider
+- `kartograf/providers/bdot10k.py` - Bdot10kProvider
+- `kartograf/providers/landcover_base.py` - abstrakcja LandCoverProvider
+- `tests/test_landcover.py` - 42 testy
