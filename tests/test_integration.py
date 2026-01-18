@@ -48,7 +48,7 @@ class TestPublicAPIImports:
         """Test version is accessible."""
         from kartograf import __version__
 
-        assert __version__ == "0.2.0"
+        assert __version__ == "0.3.0-dev"
 
 
 class TestParserStorageIntegration:

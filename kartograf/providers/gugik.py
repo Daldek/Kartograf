@@ -33,6 +33,10 @@ class GugikProvider(BaseProvider):
     - By godło (map sheet ID): downloads from OpenData as ASC
     - By bbox (bounding box): downloads from WCS as GeoTIFF/PNG/JPEG
 
+    Supports two vertical coordinate systems:
+    - KRON86 (PL-KRON86-NH) - default, Kronsztadt 86
+    - EVRF2007 (PL-EVRF2007-NH) - European Vertical Reference Frame 2007
+
     Examples
     --------
     >>> provider = GugikProvider()
@@ -45,30 +49,52 @@ class GugikProvider(BaseProvider):
     ...     min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
     ... )
     >>> provider.download_bbox(bbox, Path("./area.tif"))
+    >>>
+    >>> # Download in EVRF2007 vertical CRS
+    >>> provider = GugikProvider(vertical_crs="EVRF2007")
+    >>> provider.download("N-34-130-D-d-2-4", Path("./sheet_evrf.asc"))
     """
 
     # Base URL for GUGiK services
     BASE_URL = "https://mapy.geoportal.gov.pl"
 
-    # WCS endpoint for NMT data
-    WCS_ENDPOINT = (
-        f"{BASE_URL}/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModelFormatTIFF"
-    )
+    # WCS endpoints for NMT data (by vertical CRS)
+    WCS_ENDPOINTS = {
+        "KRON86": f"{BASE_URL}/wss/service/PZGIK/NMT/GRID1/WCS/"
+        "DigitalTerrainModelFormatTIFF",
+        "EVRF2007": f"{BASE_URL}/wss/service/PZGIK/NMT/GRID1/WCS/"
+        "DigitalTerrainModelFormatTIFFEVRF2007",
+    }
 
-    # WMS endpoint for skorowidze (index maps) - used to find OpenData URLs
-    WMS_SKOROWIDZE_ENDPOINT = (
-        f"{BASE_URL}/wss/service/PZGIK/NMT/WMS/SkorowidzeUkladKRON86"
-    )
+    # WMS endpoints for skorowidze (index maps) - used to find OpenData URLs
+    WMS_SKOROWIDZE_ENDPOINTS = {
+        "KRON86": f"{BASE_URL}/wss/service/PZGIK/NMT/WMS/SkorowidzeUkladKRON86",
+        "EVRF2007": f"{BASE_URL}/wss/service/PZGIK/NMT/WMS/SkorowidzeUkladEVRF2007",
+    }
 
-    # Layers to query for ASC files (ordered from newest to oldest)
-    WMS_LAYERS = [
-        "SkorowidzeNMT2019",
-        "SkorowidzeNMT2018",
-        "SkorowidzeNMT2017iStarsze",
-    ]
+    # Layers to query for ASC files (by vertical CRS, ordered from newest to oldest)
+    WMS_LAYERS = {
+        "KRON86": [
+            "SkorowidzeNMT2019",
+            "SkorowidzeNMT2018",
+            "SkorowidzeNMT2017iStarsze",
+        ],
+        "EVRF2007": [
+            "SkorowidzeNMT2025",
+            "SkorowidzeNMT2024",
+            "SkorowidzeNMT2023",
+            "SkorowidzeNMT2022iStarsze",
+        ],
+    }
 
-    # Coverage ID for WCS - single coverage for all of Poland
-    COVERAGE_ID = "DTM_PL-KRON86-NH_TIFF"
+    # Coverage IDs for WCS (by vertical CRS)
+    COVERAGE_IDS = {
+        "KRON86": "DTM_PL-KRON86-NH_TIFF",
+        "EVRF2007": "DTM_PL-EVRF2007-NH_TIFF",
+    }
+
+    # Supported vertical CRS
+    SUPPORTED_VERTICAL_CRS = ["KRON86", "EVRF2007"]
 
     # WCS formats (for bbox downloads)
     WCS_FORMATS = {
@@ -90,7 +116,11 @@ class GugikProvider(BaseProvider):
     MAX_RETRIES = 3
     RETRY_BACKOFF_BASE = 2
 
-    def __init__(self, session: requests.Session | None = None):
+    def __init__(
+        self,
+        session: requests.Session | None = None,
+        vertical_crs: str = "KRON86",
+    ):
         """
         Initialize GUGiK provider.
 
@@ -98,8 +128,22 @@ class GugikProvider(BaseProvider):
         ----------
         session : requests.Session, optional
             HTTP session to use for requests.
+        vertical_crs : str, optional
+            Vertical coordinate reference system: "KRON86" or "EVRF2007".
+            Default is "KRON86" (Kronsztadt 86).
         """
+        if vertical_crs not in self.SUPPORTED_VERTICAL_CRS:
+            raise ValueError(
+                f"Unsupported vertical CRS: '{vertical_crs}'. "
+                f"Supported: {self.SUPPORTED_VERTICAL_CRS}"
+            )
         self._session = session
+        self._vertical_crs = vertical_crs
+
+    @property
+    def vertical_crs(self) -> str:
+        """Return current vertical CRS."""
+        return self._vertical_crs
 
     @property
     def name(self) -> str:
@@ -206,9 +250,11 @@ class GugikProvider(BaseProvider):
         )
 
         session = self._session or requests.Session()
+        wms_endpoint = self.WMS_SKOROWIDZE_ENDPOINTS[self._vertical_crs]
+        wms_layers = self.WMS_LAYERS[self._vertical_crs]
 
         # Try each layer from newest to oldest
-        for layer in self.WMS_LAYERS:
+        for layer in wms_layers:
             params = {
                 "SERVICE": "WMS",
                 "VERSION": "1.3.0",
@@ -225,7 +271,7 @@ class GugikProvider(BaseProvider):
             }
 
             try:
-                url = f"{self.WMS_SKOROWIDZE_ENDPOINT}?{urlencode(params)}"
+                url = f"{wms_endpoint}?{urlencode(params)}"
                 logger.debug(f"Querying WMS for {godlo} on layer {layer}")
 
                 response = session.get(url, timeout=timeout)
@@ -348,15 +394,18 @@ class GugikProvider(BaseProvider):
         str
             Full WCS URL
         """
+        wcs_endpoint = self.WCS_ENDPOINTS[self._vertical_crs]
+        coverage_id = self.COVERAGE_IDS[self._vertical_crs]
+
         params = {
             "SERVICE": "WCS",
             "VERSION": "2.0.1",
             "REQUEST": "GetCoverage",
-            "COVERAGEID": self.COVERAGE_ID,
+            "COVERAGEID": coverage_id,
             "FORMAT": self.WCS_FORMATS[format],
         }
 
-        base_url = f"{self.WCS_ENDPOINT}?{urlencode(params)}"
+        base_url = f"{wcs_endpoint}?{urlencode(params)}"
         subset_x = f"SUBSET=x({bbox.min_x:.2f},{bbox.max_x:.2f})"
         subset_y = f"SUBSET=y({bbox.min_y:.2f},{bbox.max_y:.2f})"
 
