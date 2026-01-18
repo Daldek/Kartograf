@@ -14,10 +14,10 @@
 
 ---
 
-## Aktualny Etap: 15 - Land Cover (Pokrycie Terenu) - UKOŃCZONY
+## Aktualny Etap: 17 - Hydrologic Soil Groups (HSG) - UKOŃCZONY
 
-**Status:** Ukończony (v0.3.0)
-**Cel:** Dodanie funkcjonalności pobierania danych o pokryciu terenu z BDOT10k i CORINE
+**Status:** Ukończony
+**Cel:** Kalkulacja Hydrologic Soil Groups (HSG) z danych SoilGrids dla metody SCS-CN
 
 ---
 
@@ -321,6 +321,150 @@ BBox   →  WCS       →  GeoTIFF   (WCS wycina dowolny prostokąt)
 
 ---
 
+### Etap 16: SoilGrids - Dane Glebowe (M - 2-3h)
+- [x] Ukończony
+
+**Cel:** Dodanie funkcjonalności pobierania danych o glebie z ISRIC SoilGrids (WCS API)
+
+**Źródło danych:**
+- **ISRIC SoilGrids** (https://soilgrids.org)
+- WCS Endpoint: `https://maps.isric.org/mapserv?map=/map/{property}.map`
+- Rozdzielczość: 250m
+- Pokrycie: Globalne
+- Format: GeoTIFF
+
+**Dostępne parametry glebowe:**
+- `bdod` - Gęstość objętościowa (kg/dm³)
+- `cec` - Pojemność wymiany kationowej (cmol/kg)
+- `cfvo` - Fragmenty gruboziarniste (%)
+- `clay` - Zawartość gliny (%)
+- `nitrogen` - Azot całkowity (g/kg)
+- `ocd` - Gęstość węgla organicznego (kg/m³)
+- `ocs` - Zasób węgla organicznego (t/ha)
+- `phh2o` - pH w H2O
+- `sand` - Zawartość piasku (%)
+- `silt` - Zawartość pyłu (%)
+- `soc` - Węgiel organiczny (g/kg)
+
+**Głębokości:** 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm
+
+**Statystyki:** mean, Q0.05, Q0.5, Q0.95, uncertainty
+
+**Podetapy:**
+
+**16.1 SoilGridsProvider (M - 60 min)**
+- [x] `kartograf/providers/soilgrids.py`
+- [x] Implementacja `download_by_bbox()` przez WCS
+- [x] Transformacja CRS (EPSG:2180 → WGS84)
+
+**16.2 Obsługa TERYT (S - 30 min)**
+- [x] Implementacja `download_by_teryt()` - lookup bbox dla powiatu
+- [x] Reuse wzorca z Bdot10kProvider
+
+**16.3 Integracja z Manager i CLI (S - 30 min)**
+- [x] Rejestracja w `PROVIDERS` dict w `manager.py`
+- [x] Export w `providers/__init__.py`
+- [x] Opcje CLI: `--property`, `--depth`, `--stat`
+
+**16.4 Testy (S - 30 min)**
+- [x] `tests/test_soilgrids.py` - 28 testów
+- [x] Walidacja parametrów
+- [x] Mock HTTP dla pobierania
+
+**Przykłady użycia:**
+```bash
+# Pobierz węgiel organiczny (SOC) dla godła
+kartograf landcover download --source soilgrids --godlo N-34-130-D --property soc --depth 0-5cm
+
+# Pobierz zawartość gliny dla bbox
+kartograf landcover download --source soilgrids --bbox 450000,550000,460000,560000 --property clay --depth 15-30cm --stat mean
+
+# Lista dostępnych parametrów
+kartograf landcover list-layers --source soilgrids
+```
+
+**Kryterium ukończenia:**
+- `kartograf landcover download --source soilgrids --godlo N-34-130-D --property soc` pobiera GeoTIFF
+- `kartograf landcover list-layers --source soilgrids` wyświetla parametry
+- Testy przechodzą (28 testów)
+- Linting OK (black, flake8)
+
+---
+
+### Etap 17: Hydrologic Soil Groups - HSG (M - 2h)
+- [x] Ukończony
+
+**Cel:** Kalkulacja Hydrologic Soil Groups (HSG) z danych tekstury gleby dla metody SCS-CN
+
+**Tło:**
+Metoda SCS-CN (Soil Conservation Service - Curve Number) wymaga klasyfikacji gleb do grup hydrologicznych (A, B, C, D) na podstawie ich zdolności infiltracyjnej. HSG można wyznaczyć z danych tekstury gleby (clay, sand, silt) pobieranych z SoilGrids.
+
+**Grupy hydrologiczne (HSG):**
+| Grupa | Infiltracja | Tekstury gleby | Potencjał odpływu |
+|-------|-------------|----------------|-------------------|
+| A | Wysoka | piasek, piasek gliniasty | Niski |
+| B | Umiarkowana | glina piaszczysta, glina, pył | Umiarkowany |
+| C | Wolna | glina piaszczysto-ilasta, glina ilasta | Wysoki |
+| D | Bardzo wolna | ił piaszczysty, ił pylasty, ił | Bardzo wysoki |
+
+**Podetapy:**
+
+**17.1 Moduł hydrologiczny (M - 45 min)**
+- [x] `kartograf/hydrology/__init__.py`
+- [x] `kartograf/hydrology/hsg.py`
+- [x] Klasyfikacja tekstury wg trójkąta USDA (12 klas)
+- [x] Mapowanie tekstury → HSG
+
+**17.2 HSGCalculator (M - 45 min)**
+- [x] `HSGCalculator.calculate_hsg_by_godlo()` - pobiera clay/sand/silt, klasyfikuje
+- [x] `HSGCalculator.calculate_hsg_by_bbox()` - j.w. dla bbox
+- [x] `HSGCalculator.get_hsg_statistics()` - statystyki wynikowego rastra
+
+**17.3 CLI - komenda soilgrids hsg (S - 30 min)**
+- [x] `kartograf soilgrids hsg --godlo <godło>` - kalkulacja HSG
+- [x] Opcje: `--depth`, `--output`, `--keep-intermediate`, `--stats`
+
+**17.4 Testy (S - 30 min)**
+- [x] `tests/test_hsg.py` - 34 testy
+- [x] Testy klasyfikacji USDA
+- [x] Testy mapowania HSG
+- [x] Testy CLI
+
+**Nowe zależności:**
+- `rasterio>=1.3.0` - przetwarzanie rastrów
+- `numpy>=1.24.0` - operacje na tablicach
+
+**Przykłady użycia:**
+```bash
+# Oblicz HSG dla godła
+kartograf soilgrids hsg --godlo N-34-130-D --output /tmp/hsg.tif
+
+# Ze statystykami
+kartograf soilgrids hsg --godlo N-34-130-D --stats
+
+# Inna głębokość
+kartograf soilgrids hsg --godlo N-34-130-D --depth 15-30cm
+
+# Zachowaj pliki pośrednie (clay, sand, silt)
+kartograf soilgrids hsg --godlo N-34-130-D --keep-intermediate
+```
+
+**Format wyjściowy:**
+Raster GeoTIFF z wartościami 1-4:
+- 1 = Grupa A
+- 2 = Grupa B
+- 3 = Grupa C
+- 4 = Grupa D
+- 0 = NoData
+
+**Kryterium ukończenia:**
+- `kartograf soilgrids hsg --godlo N-34-130-D` generuje raster HSG
+- `kartograf soilgrids hsg --godlo N-34-130-D --stats` wyświetla statystyki
+- Testy przechodzą (347 testów łącznie)
+- Linting OK (black, flake8)
+
+---
+
 ## Diagram Zależności
 
 ```
@@ -375,10 +519,12 @@ pip install -e .
 2. `kartograf/providers/gugik.py` - integracja z GUGiK (NMT)
 3. `kartograf/providers/corine.py` - CORINE Land Cover
 4. `kartograf/providers/bdot10k.py` - BDOT10k
-5. `kartograf/auth/proxy.py` - Auth Proxy (izolacja credentials)
-6. `kartograf/download/manager.py` - zarządzanie pobieraniem
-7. `kartograf/cli/commands.py` - interfejs CLI
-8. `pyproject.toml` - konfiguracja projektu
+5. `kartograf/providers/soilgrids.py` - ISRIC SoilGrids (dane glebowe)
+6. `kartograf/hydrology/hsg.py` - kalkulacja HSG (grupy hydrologiczne)
+7. `kartograf/auth/proxy.py` - Auth Proxy (izolacja credentials)
+8. `kartograf/download/manager.py` - zarządzanie pobieraniem
+9. `kartograf/cli/commands.py` - interfejs CLI
+10. `pyproject.toml` - konfiguracja projektu
 
 ---
 
