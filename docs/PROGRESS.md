@@ -1,7 +1,7 @@
 # Plan Implementacji Kartograf
 
 **Repozytorium:** https://github.com/Daldek/Kartograf.git
-**Status:** Wersja 0.3.0-dev
+**Status:** Wersja 0.3.0
 **Ostatnia aktualizacja:** 2026-01-18
 
 ---
@@ -14,9 +14,9 @@
 
 ---
 
-## Aktualny Etap: 15 - Land Cover (Pokrycie Terenu)
+## Aktualny Etap: 15 - Land Cover (Pokrycie Terenu) - UKOŃCZONY
 
-**Status:** W trakcie implementacji (v0.3.0)
+**Status:** Ukończony (v0.3.0)
 **Cel:** Dodanie funkcjonalności pobierania danych o pokryciu terenu z BDOT10k i CORINE
 
 ---
@@ -293,7 +293,7 @@ BBox   →  WCS       →  GeoTIFF   (WCS wycina dowolny prostokąt)
 
 **15.6 Testy i dokumentacja (S - 30 min)**
 - [x] `tests/test_landcover.py` - 42 testy
-- [ ] Aktualizacja README.md
+- [x] Aktualizacja README.md
 
 **15.7 CORINE OAuth2 Authentication (M - 60 min)**
 - [x] OAuth2 RSA authentication dla CLMS API
@@ -307,6 +307,12 @@ BBox   →  WCS       →  GeoTIFF   (WCS wycina dowolny prostokąt)
 - [x] Credentials izolowane w osobnym procesie (niedostępne dla głównej aplikacji)
 - [x] Automatyczne uruchamianie proxy przez CorineProvider
 - [x] Tryb `use_proxy=True` (domyślny) vs `use_proxy=False` (testowy)
+
+**15.9 BDOT10k - naprawa ekstrakcji warstw (S - 30 min)**
+- [x] Naprawiono ekstrakcję z ZIP - scalanie warstw PT* zamiast pojedynczego pliku
+- [x] Nowa metoda `_merge_gpkg_files()` - scalanie przez SQLite ATTACH DATABASE
+- [x] Zaktualizowano listę warstw PT* (9 → 12 warstw)
+- [x] Warstwy: PTGN, PTKM, PTLZ, PTNZ, PTPL, PTRK, PTSO, PTTR, PTUT, PTWP, PTWZ, PTZB
 
 **Kryterium ukończenia:**
 - `kartograf landcover download --source bdot10k --teryt 1465` pobiera paczkę

@@ -102,15 +102,18 @@ class Bdot10kProvider(LandCoverProvider):
 
     # Land cover layer names in BDOT10k
     PT_LAYERS = [
-        "PTLZ",  # Tereny leśne (forests)
-        "PTWP",  # Wody powierzchniowe (surface waters)
-        "PTRK",  # Roślinność krzewiasta (shrub vegetation)
-        "PTUT",  # Uprawy trwałe (permanent crops)
         "PTGN",  # Grunty nieużytkowe (unused land)
         "PTKM",  # Tereny komunikacyjne (transportation)
+        "PTLZ",  # Tereny leśne (forests)
+        "PTNZ",  # Tereny niezabudowane (unbuilt areas)
         "PTPL",  # Place (squares/plazas)
+        "PTRK",  # Roślinność krzewiasta (shrub vegetation)
         "PTSO",  # Składowiska (landfills)
+        "PTTR",  # Tereny rolne (agricultural land)
+        "PTUT",  # Uprawy trwałe (permanent crops)
+        "PTWP",  # Wody powierzchniowe (surface waters)
         "PTWZ",  # Tereny zabagnione (wetlands)
+        "PTZB",  # Tereny zabudowane (built-up areas)
     ]
 
     # Default settings
@@ -531,15 +534,23 @@ class Bdot10kProvider(LandCoverProvider):
         self, response: requests.Response, output_path: Path
     ) -> None:
         """
-        Extract GeoPackage file from downloaded ZIP.
+        Extract and merge land cover (PT*) layers from downloaded ZIP.
+
+        BDOT10k packages contain separate GPKG files for each layer.
+        This method extracts only PT* (land cover) layers and merges
+        them into a single GeoPackage file.
 
         Parameters
         ----------
         response : requests.Response
             HTTP response with ZIP content
         output_path : Path
-            Target path for extracted GPKG
+            Target path for merged GPKG
         """
+        import sqlite3
+        import tempfile
+        import shutil
+
         # Read ZIP into memory
         zip_data = BytesIO()
         for chunk in response.iter_content(chunk_size=8192):
@@ -548,33 +559,173 @@ class Bdot10kProvider(LandCoverProvider):
 
         try:
             with zipfile.ZipFile(zip_data, "r") as zf:
-                # Find GPKG file in archive
-                gpkg_files = [f for f in zf.namelist() if f.endswith(".gpkg")]
+                # Find PT* (land cover) GPKG files in archive
+                all_gpkg = [f for f in zf.namelist() if f.endswith(".gpkg")]
+                pt_gpkg = [f for f in all_gpkg if "_PT" in f.upper()]
 
-                if not gpkg_files:
-                    # Try to find any usable file
-                    all_files = zf.namelist()
-                    raise DownloadError(
-                        f"No GPKG file found in ZIP. Contents: {all_files}"
+                if not pt_gpkg:
+                    # Fallback: if no PT* layers, check for any GPKG
+                    if not all_gpkg:
+                        raise DownloadError(
+                            f"No GPKG files found in ZIP. Contents: {zf.namelist()}"
+                        )
+                    # Use all GPKG files if no PT* specific ones
+                    pt_gpkg = all_gpkg
+                    logger.warning(
+                        f"No PT* layers found, extracting all {len(all_gpkg)} layers"
                     )
 
-                # Extract first GPKG file
-                gpkg_name = gpkg_files[0]
-                logger.debug(f"Extracting {gpkg_name} from ZIP")
+                logger.debug(f"Found {len(pt_gpkg)} PT* layers to merge")
 
-                # Extract to temp file then rename
-                temp_path = output_path.with_suffix(".gpkg.tmp")
-                try:
-                    with zf.open(gpkg_name) as src, open(temp_path, "wb") as dst:
-                        dst.write(src.read())
-                    temp_path.rename(output_path.with_suffix(".gpkg"))
-                except Exception:
-                    if temp_path.exists():
-                        temp_path.unlink()
-                    raise
+                # Create temp directory for extraction
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    tmpdir_path = Path(tmpdir)
+
+                    # Extract PT* files
+                    extracted_files = []
+                    for gpkg_file in pt_gpkg:
+                        # Extract to temp directory
+                        extracted_path = tmpdir_path / Path(gpkg_file).name
+                        with zf.open(gpkg_file) as src:
+                            with open(extracted_path, "wb") as dst:
+                                dst.write(src.read())
+                        extracted_files.append(extracted_path)
+                        logger.debug(f"Extracted {Path(gpkg_file).name}")
+
+                    # Merge all PT* files into single GPKG
+                    output_gpkg = output_path.with_suffix(".gpkg")
+                    self._merge_gpkg_files(extracted_files, output_gpkg)
 
         except zipfile.BadZipFile as e:
             raise DownloadError(f"Invalid ZIP file: {e}")
+
+    def _merge_gpkg_files(self, source_files: list[Path], output_path: Path) -> None:
+        """
+        Merge multiple GeoPackage files into one.
+
+        Each source file is expected to have a single data table.
+        All tables are copied to the output file, preserving geometry.
+
+        Parameters
+        ----------
+        source_files : list[Path]
+            List of source GPKG files to merge
+        output_path : Path
+            Output merged GPKG file
+        """
+        import sqlite3
+
+        if not source_files:
+            raise DownloadError("No files to merge")
+
+        temp_path = output_path.with_suffix(".gpkg.tmp")
+
+        try:
+            # Copy first file as base (includes GPKG metadata structure)
+            first_file = source_files[0]
+            with open(first_file, "rb") as src, open(temp_path, "wb") as dst:
+                dst.write(src.read())
+
+            logger.debug(f"Using {first_file.name} as base GPKG")
+
+            # Merge remaining files
+            conn = sqlite3.connect(temp_path)
+            cursor = conn.cursor()
+
+            for source_file in source_files[1:]:
+                self._copy_gpkg_layer(cursor, source_file)
+
+            conn.commit()
+            conn.close()
+
+            # Atomic rename
+            temp_path.rename(output_path)
+            logger.info(f"Merged {len(source_files)} layers into {output_path}")
+
+        except Exception:
+            if temp_path.exists():
+                temp_path.unlink()
+            raise
+
+    def _copy_gpkg_layer(self, cursor, source_path: Path) -> None:
+        """
+        Copy a layer from source GPKG to destination (via cursor).
+
+        Parameters
+        ----------
+        cursor : sqlite3.Cursor
+            Cursor to destination database
+        source_path : Path
+            Source GPKG file
+        """
+        import sqlite3
+
+        # Attach source database
+        cursor.execute(f"ATTACH DATABASE '{source_path}' AS src")
+
+        try:
+            # Get data table name (exclude gpkg_* and rtree_* tables)
+            cursor.execute(
+                """
+                SELECT name FROM src.sqlite_master
+                WHERE type='table'
+                AND name NOT LIKE 'gpkg_%'
+                AND name NOT LIKE 'rtree_%'
+                AND name NOT LIKE 'sqlite_%'
+                """
+            )
+            tables = [row[0] for row in cursor.fetchall()]
+
+            for table_name in tables:
+                # Check if table already exists in destination
+                cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+                    (table_name,),
+                )
+                if cursor.fetchone():
+                    logger.debug(f"Table {table_name} already exists, skipping")
+                    continue
+
+                # Get table schema from source
+                cursor.execute(
+                    f"SELECT sql FROM src.sqlite_master WHERE type='table' AND name=?",
+                    (table_name,),
+                )
+                create_sql = cursor.fetchone()[0]
+
+                # Create table in destination
+                cursor.execute(create_sql)
+
+                # Copy data
+                cursor.execute(
+                    f"INSERT INTO {table_name} SELECT * FROM src.{table_name}"
+                )
+
+                # Copy gpkg_contents entry
+                cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO gpkg_contents
+                    SELECT * FROM src.gpkg_contents WHERE table_name=?
+                    """,
+                    (table_name,),
+                )
+
+                # Copy gpkg_geometry_columns entry
+                cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO gpkg_geometry_columns
+                    SELECT * FROM src.gpkg_geometry_columns WHERE table_name=?
+                    """,
+                    (table_name,),
+                )
+
+                logger.debug(f"Copied layer {table_name}")
+
+            # Commit before detaching to release locks
+            cursor.connection.commit()
+
+        finally:
+            cursor.execute("DETACH DATABASE src")
 
     # =========================================================================
     # Info methods
@@ -603,14 +754,17 @@ class Bdot10kProvider(LandCoverProvider):
             Layer description in Polish
         """
         descriptions = {
-            "PTLZ": "Tereny leśne",
-            "PTWP": "Wody powierzchniowe",
-            "PTRK": "Roślinność krzewiasta",
-            "PTUT": "Uprawy trwałe",
             "PTGN": "Grunty nieużytkowe",
             "PTKM": "Tereny komunikacyjne",
+            "PTLZ": "Tereny leśne",
+            "PTNZ": "Tereny niezabudowane",
             "PTPL": "Place",
+            "PTRK": "Roślinność krzewiasta",
             "PTSO": "Składowiska",
+            "PTTR": "Tereny rolne",
+            "PTUT": "Uprawy trwałe",
+            "PTWP": "Wody powierzchniowe",
             "PTWZ": "Tereny zabagnione",
+            "PTZB": "Tereny zabudowane",
         }
         return descriptions.get(layer, layer)

@@ -109,6 +109,8 @@ lc.download(godlo="N-34-130-D", year=2018)
 
 ### Land Cover (Pokrycie Terenu)
 - ✅ **BDOT10k** - Polska baza wektorowa (GUGiK), szczegółowość 1:10 000
+  - 12 warstw pokrycia terenu (PT*): lasy, wody, zabudowa, tereny rolne, itp.
+  - Automatyczne scalanie warstw do jednego GeoPackage
 - ✅ **CORINE Land Cover** - Europejska klasyfikacja (Copernicus), 44 klasy
 - ✅ **Metody selekcji** - TERYT (powiat), bbox, godło arkusza
 - ✅ **Formaty** - GeoPackage, Shapefile, GeoTIFF, PNG
@@ -207,4 +209,4 @@ Projekt udostępniony na licencji MIT. Szczegóły w pliku `LICENSE`.
 
 ## Status
 
-**Wersja 0.3.0-dev** - Dodano funkcjonalność Land Cover (BDOT10k, CORINE). Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów
+**Wersja 0.3.0** - Dodano funkcjonalność Land Cover (BDOT10k, CORINE). Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów
