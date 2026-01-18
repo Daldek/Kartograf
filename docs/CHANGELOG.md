@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - v0.3.0
+
+### Added - Land Cover (Pokrycie Terenu)
+
+- **LandCoverProvider** - Nowa abstrakcja dla providerów danych pokrycia terenu
+  - Metody: `download_by_teryt()`, `download_by_bbox()`, `download_by_godlo()`
+  - Wspólny interfejs dla różnych źródeł danych
+
+- **Bdot10kProvider** - Provider dla BDOT10k (GUGiK)
+  - Pobieranie paczek powiatowych przez TERYT
+  - Pobieranie przez WFS dla dowolnego bbox
+  - Pobieranie przez godło arkusza (konwersja na bbox)
+  - Klasy pokrycia terenu: PTLZ (lasy), PTWP (wody), PTRK (roślinność), PTUT (uprawy), itp.
+  - Format wyjściowy: GeoPackage (.gpkg)
+
+- **CorineProvider** - Provider dla CORINE Land Cover (Copernicus/GIOŚ)
+  - Europejska klasyfikacja pokrycia terenu (44 klasy)
+  - Dostępne lata: 1990, 2000, 2006, 2012, 2018
+  - Pobieranie przez bbox lub godło
+  - Format wyjściowy: GeoPackage (.gpkg)
+
+- **LandCoverManager** - Zarządzanie pobieraniem danych pokrycia terenu
+  - Dispatch do odpowiedniego providera
+  - Obsługa wielu metod selekcji obszaru
+
+- **CLI landcover** - Nowe komendy CLI
+  - `kartograf landcover download --source bdot10k --teryt <kod>`
+  - `kartograf landcover download --source corine --year <rok> --godlo <godło>`
+  - `kartograf landcover list-sources`
+  - `kartograf landcover list-layers --source bdot10k`
+
+### Technical Details
+
+- 283 testów (pokrycie ~79%)
+- Formatowanie: black, flake8
+
+### Sources
+
+- BDOT10k: https://www.geoportal.gov.pl/en/data/topographic-objects-database-bdot10k/
+- CORINE Land Cover: https://land.copernicus.eu/en/products/corine-land-cover
+- GIOŚ CORINE: https://clc.gios.gov.pl/
+
+---
+
 ## [0.2.0] - 2026-01-18
 
 ### Changed - Nowa architektura pobierania
