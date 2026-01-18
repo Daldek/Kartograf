@@ -58,8 +58,10 @@ def _get_auth_proxy():
     global _auth_proxy_client
     if _auth_proxy_client is None:
         from kartograf.auth import AuthProxyClient
+
         _auth_proxy_client = AuthProxyClient()
     return _auth_proxy_client
+
 
 # Keychain service name for CLMS credentials
 KEYCHAIN_SERVICE = "clms-token"
@@ -86,7 +88,8 @@ def get_credentials_from_keychain() -> Optional[dict]:
             [
                 "security",
                 "find-generic-password",
-                "-s", KEYCHAIN_SERVICE,
+                "-s",
+                KEYCHAIN_SERVICE,
                 "-w",
             ],
             capture_output=True,
@@ -105,11 +108,10 @@ def get_credentials_from_keychain() -> Optional[dict]:
             try:
                 decoded = bytes.fromhex(creds_data).decode("utf-8")
                 # Remove terminal escape sequences like ESC[200~ and ESC[201~
-                import re
                 # \x1b is ESC character, followed by [NNN~
-                decoded = re.sub(r'\x1b\[\d+~', '', decoded)
+                decoded = re.sub(r"\x1b\[\d+~", "", decoded)
                 # Also remove lone ESC characters
-                decoded = decoded.lstrip('\x1b')
+                decoded = decoded.lstrip("\x1b")
                 creds_data = decoded.strip()
             except (ValueError, UnicodeDecodeError):
                 pass  # Not hex, use as-is
@@ -147,6 +149,7 @@ def save_credentials_to_keychain(credentials: dict) -> bool:
 
     try:
         import json
+
         creds_json = json.dumps(credentials)
 
         # First try to delete existing entry (ignore errors)
@@ -154,8 +157,10 @@ def save_credentials_to_keychain(credentials: dict) -> bool:
             [
                 "security",
                 "delete-generic-password",
-                "-a", os.environ.get("USER", ""),
-                "-s", KEYCHAIN_SERVICE,
+                "-a",
+                os.environ.get("USER", ""),
+                "-s",
+                KEYCHAIN_SERVICE,
             ],
             capture_output=True,
             timeout=5,
@@ -166,9 +171,12 @@ def save_credentials_to_keychain(credentials: dict) -> bool:
             [
                 "security",
                 "add-generic-password",
-                "-a", os.environ.get("USER", ""),
-                "-s", KEYCHAIN_SERVICE,
-                "-w", creds_json,
+                "-a",
+                os.environ.get("USER", ""),
+                "-s",
+                KEYCHAIN_SERVICE,
+                "-w",
+                creds_json,
             ],
             capture_output=True,
             text=True,
@@ -424,7 +432,11 @@ class CorineProvider(LandCoverProvider):
         self._clms_auth: Optional[CLMSAuth] = None
 
         # Direct mode: use provided credentials
-        if clms_credentials and clms_credentials.get("client_id") and clms_credentials.get("private_key"):
+        if (
+            clms_credentials
+            and clms_credentials.get("client_id")
+            and clms_credentials.get("private_key")
+        ):
             self._use_proxy = False
             try:
                 self._clms_auth = CLMSAuth(clms_credentials)
@@ -635,7 +647,8 @@ class CorineProvider(LandCoverProvider):
 
         if response.get("status_code") != 200:
             raise DownloadError(
-                f"CLMS API error: {response.get('status_code')} - {response.get('body')}"
+                f"CLMS API error: {response.get('status_code')} - "
+                f"{response.get('body')}"
             )
 
         result = json.loads(response.get("body", "{}"))
@@ -752,7 +765,7 @@ class CorineProvider(LandCoverProvider):
             download_url = self._poll_clms_task(session, headers, task_id, timeout)
 
             # Download the file
-            logger.info(f"Downloading GeoTIFF from CLMS...")
+            logger.info("Downloading GeoTIFF from CLMS...")
             return self._download_with_retry(
                 url=download_url,
                 output_path=output_path.with_suffix(".tif"),
@@ -788,7 +801,7 @@ class CorineProvider(LandCoverProvider):
                 response.raise_for_status()
                 result = response.json()
 
-                # Response format: {task_id: {..., "Status": "...", "DownloadURL": "..."}}
+                # Response format: {task_id: {..., "Status": "...", ...}}
                 task_info = result.get(task_id, result)
 
                 status = task_info.get("Status", "")
@@ -799,9 +812,8 @@ class CorineProvider(LandCoverProvider):
                     raise DownloadError("CLMS task finished but no DownloadURL")
 
                 if status in ("Failed", "Cancelled", "Rejected"):
-                    raise DownloadError(
-                        f"CLMS task {status}: {task_info.get('Message', 'Unknown error')}"
-                    )
+                    msg = task_info.get("Message", "Unknown error")
+                    raise DownloadError(f"CLMS task {status}: {msg}")
 
                 logger.info(f"CLMS task status: {status}, waiting...")
                 time.sleep(self.CLMS_POLL_INTERVAL)
@@ -997,9 +1009,7 @@ class CorineProvider(LandCoverProvider):
 
         return (min_x, min_y, max_x, max_y)
 
-    def _transform_bbox_to_wgs84(
-        self, bbox: BBox
-    ) -> tuple[float, float, float, float]:
+    def _transform_bbox_to_wgs84(self, bbox: BBox) -> tuple[float, float, float, float]:
         """
         Transform EPSG:2180 bounding box to WGS84 (EPSG:4326).
 
