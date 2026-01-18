@@ -15,16 +15,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Bdot10kProvider** - Provider dla BDOT10k (GUGiK)
   - Pobieranie paczek powiatowych przez TERYT
-  - Pobieranie przez WFS dla dowolnego bbox
+  - Pobieranie przez WMS GetFeatureInfo dla URL paczki
   - Pobieranie przez godło arkusza (konwersja na bbox)
   - Klasy pokrycia terenu: PTLZ (lasy), PTWP (wody), PTRK (roślinność), PTUT (uprawy), itp.
-  - Format wyjściowy: GeoPackage (.gpkg)
+  - Format wyjściowy: GeoPackage (.gpkg), SHP
 
-- **CorineProvider** - Provider dla CORINE Land Cover (Copernicus/GIOŚ)
+- **CorineProvider** - Provider dla CORINE Land Cover (Copernicus)
   - Europejska klasyfikacja pokrycia terenu (44 klasy)
   - Dostępne lata: 1990, 2000, 2006, 2012, 2018
-  - Pobieranie przez bbox lub godło
-  - Format wyjściowy: GeoPackage (.gpkg)
+  - **Trzy źródła danych (w kolejności priorytetu):**
+    1. **CLMS API** - GeoTIFF z kodami klas (wymaga OAuth2)
+    2. **EEA Discomap WMS** - Podgląd PNG (lata 2000-2018)
+    3. **DLR WMS** - Fallback dla 1990
+  - OAuth2 RSA authentication dla CLMS API
+  - Przechowywanie credentials w macOS Keychain (serwis: `clms-token`)
 
 - **LandCoverManager** - Zarządzanie pobieraniem danych pokrycia terenu
   - Dispatch do odpowiedniego providera
@@ -36,16 +40,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `kartograf landcover list-sources`
   - `kartograf landcover list-layers --source bdot10k`
 
+### CLMS API Authentication - Auth Proxy
+
+CorineProvider używa **Auth Proxy** dla bezpiecznej autentykacji CLMS API:
+
+**Architektura bezpieczeństwa:**
+```
+CorineProvider → localhost HTTP → AuthProxy (subprocess) → Keychain → CLMS API
+```
+
+- Credentials (klucz prywatny RSA) są izolowane w osobnym procesie
+- Główna aplikacja nigdy nie widzi credentials
+- Tylko odpowiedzi API są przekazywane do aplikacji
+
+**Nowe moduły:**
+- `kartograf/auth/proxy.py` - serwer HTTP izolujący credentials
+- `kartograf/auth/client.py` - klient automatycznie uruchamiający proxy
+
+**Konfiguracja:**
+1. Zarejestruj się na https://land.copernicus.eu
+2. Wygeneruj API credentials (JSON)
+3. Zapisz do Keychain:
+   ```bash
+   security add-generic-password -a "$USER" -s "clms-token" -w '<json_credentials>'
+   ```
+
+**Tryby pracy:**
+```python
+# Domyślny (bezpieczny) - używa proxy
+provider = CorineProvider()
+
+# Bezpośredni (dla testów) - credentials widoczne
+provider = CorineProvider(clms_credentials={...}, use_proxy=False)
+```
+
+**Uwaga:** Jeśli credentials nie są skonfigurowane, CorineProvider automatycznie używa WMS (podgląd PNG zamiast GeoTIFF z kodami klas).
+
+### Dependencies
+
+- Dodano `PyJWT[crypto]>=2.8.0` - JWT generation dla OAuth2
+
 ### Technical Details
 
-- 283 testów (pokrycie ~79%)
+- 285 testów (42 dla landcover)
 - Formatowanie: black, flake8
 
 ### Sources
 
 - BDOT10k: https://www.geoportal.gov.pl/en/data/topographic-objects-database-bdot10k/
 - CORINE Land Cover: https://land.copernicus.eu/en/products/corine-land-cover
-- GIOŚ CORINE: https://clc.gios.gov.pl/
+- EEA Discomap: https://image.discomap.eea.europa.eu
+- DLR EOC: https://geoservice.dlr.de/eoc/land/wms
 
 ---
 
