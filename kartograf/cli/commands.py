@@ -100,6 +100,12 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Suppress progress output",
     )
+    download_parser.add_argument(
+        "--vertical-crs",
+        choices=["KRON86", "EVRF2007"],
+        default="KRON86",
+        help="Vertical CRS: KRON86 (Kronsztadt 86) or EVRF2007 (default: KRON86)",
+    )
 
     # Landcover command group
     landcover_parser = subparsers.add_parser(
@@ -415,9 +421,10 @@ def cmd_download(args: argparse.Namespace) -> int:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    # Create download manager
+    # Create download manager with vertical CRS
     output_dir = Path(args.output)
-    manager = DownloadManager(output_dir=output_dir)
+    vertical_crs = getattr(args, "vertical_crs", "KRON86")
+    manager = DownloadManager(output_dir=output_dir, vertical_crs=vertical_crs)
 
     skip_existing = not args.force
     on_progress = create_progress_callback(args.quiet)

@@ -23,8 +23,6 @@ import zipfile
 from io import BytesIO
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlencode
-
 import requests
 
 from kartograf.core.sheet_parser import BBox
@@ -86,16 +84,20 @@ class Bdot10kProvider(LandCoverProvider):
     >>> provider.download_by_godlo("N-34-130-D", Path("./data/sheet.gpkg"))
     """
 
-    # OpenData base URLs for BDOT10k packages (schemat 2021)
-    OPENDATA_URLS = {
-        "GPKG": "https://opendata.geoportal.gov.pl/bdot10k/schemat2021/GPKG",
-        "SHP": "https://opendata.geoportal.gov.pl/bdot10k/schemat2021/SHP",
-        "GML": "https://opendata.geoportal.gov.pl/bdot10k/schemat2021",
+    # OpenData base URL for BDOT10k packages
+    OPENDATA_BASE = "https://opendata.geoportal.gov.pl/bdot10k"
+
+    # URL patterns for different formats (schemat 2021)
+    # Pattern: {base}/schemat2021/{subdir}/{woj_code}/{teryt}_{suffix}.zip
+    OPENDATA_PATTERNS = {
+        "GPKG": "{base}/schemat2021/GPKG/{woj}/{teryt}_GPKG.zip",
+        "SHP": "{base}/schemat2021/SHP/{woj}/{teryt}_SHP.zip",
+        "GML": "{base}/schemat2021/{woj}/{teryt}_GML.zip",
     }
 
-    # WFS endpoint for BDOT10k
-    WFS_ENDPOINT = (
-        "https://mapy.geoportal.gov.pl/wss/service/PZGIK/BDOT/WFS/PobieranieBDOT10k"
+    # WMS endpoint for BDOT10k downloads (used to get OpenData URLs)
+    WMS_ENDPOINT = (
+        "https://mapy.geoportal.gov.pl/wss/service/PZGIK/BDOT/WMS/PobieranieBDOT10k"
     )
 
     # Land cover layer names in BDOT10k
@@ -205,7 +207,7 @@ class Bdot10kProvider(LandCoverProvider):
         """
         Construct OpenData URL for BDOT10k package.
 
-        URL pattern: .../bdot10k/schemat2021/{FORMAT}/{woj}/{teryt}.zip
+        URL pattern: .../bdot10k/schemat2021/{subdir}/{woj}/{teryt}_{suffix}.zip
 
         Parameters
         ----------
@@ -220,43 +222,190 @@ class Bdot10kProvider(LandCoverProvider):
             Full OpenData URL
         """
         woj_code = teryt[:2]
-        woj_name = WOJEWODZTWO_NAMES.get(woj_code)
 
-        if not woj_name:
+        if woj_code not in WOJEWODZTWO_NAMES:
             raise ValidationError(
                 f"Unknown województwo code: {woj_code}. "
                 f"Valid codes: {list(WOJEWODZTWO_NAMES.keys())}"
             )
 
-        base_url = self.OPENDATA_URLS.get(format, self.OPENDATA_URLS["GPKG"])
+        pattern = self.OPENDATA_PATTERNS.get(format, self.OPENDATA_PATTERNS["GPKG"])
 
-        return f"{base_url}/{woj_name}/{teryt}.zip"
+        return pattern.format(base=self.OPENDATA_BASE, woj=woj_code, teryt=teryt)
 
     # =========================================================================
-    # Download by bbox → WFS
+    # Download by godło → OpenData (via TERYT lookup)
+    # =========================================================================
+
+    def download_by_godlo(
+        self,
+        godlo: str,
+        output_path: Path,
+        timeout: int = 120,
+        format: str = "GPKG",
+        **kwargs,
+    ) -> Path:
+        """
+        Download BDOT10k data for a map sheet (godło).
+
+        Finds the powiat (county) TERYT code for the given godło
+        and downloads the entire county package. This is the recommended
+        method as it provides complete data coverage.
+
+        Parameters
+        ----------
+        godlo : str
+            Map sheet identifier (e.g., "N-34-130-D")
+        output_path : Path
+            Path where the file should be saved
+        timeout : int, optional
+            Request timeout in seconds (default: 120)
+        format : str, optional
+            Output format: "GPKG" or "SHP" (default: "GPKG")
+        **kwargs
+            Additional options (unused)
+
+        Returns
+        -------
+        Path
+            Path to the downloaded file
+        """
+        from kartograf.core.sheet_parser import SheetParser
+
+        parser = SheetParser(godlo)
+        bbox = parser.get_bbox(crs="EPSG:2180")
+
+        # Get center point of the map sheet
+        center_x = (bbox.min_x + bbox.max_x) / 2
+        center_y = (bbox.min_y + bbox.max_y) / 2
+
+        # Find TERYT code for this location via WMS GetFeatureInfo
+        teryt = self._get_teryt_for_point(center_x, center_y, timeout)
+
+        logger.info(f"Godło {godlo} is in powiat {teryt}, downloading county package")
+
+        # Download the entire county package
+        return self.download_by_teryt(teryt, output_path, timeout, format=format)
+
+    def _get_teryt_for_point(
+        self,
+        x: float,
+        y: float,
+        timeout: int = 30,
+    ) -> str:
+        """
+        Get powiat TERYT code for a point using WMS GetFeatureInfo.
+
+        Parameters
+        ----------
+        x : float
+            X coordinate in EPSG:2180
+        y : float
+            Y coordinate in EPSG:2180
+        timeout : int
+            Request timeout
+
+        Returns
+        -------
+        str
+            4-digit TERYT code for the powiat
+
+        Raises
+        ------
+        DownloadError
+            If TERYT code cannot be determined
+        """
+        import re
+
+        session = self._session or requests.Session()
+
+        # Create small bbox around the point
+        buffer = 100  # meters
+        # WMS 1.3.0 with EPSG:2180 uses y,x order
+        query_bbox = f"{y - buffer},{x - buffer},{y + buffer},{x + buffer}"
+
+        params = {
+            "SERVICE": "WMS",
+            "VERSION": "1.3.0",
+            "REQUEST": "GetFeatureInfo",
+            "LAYERS": "Powiaty",
+            "QUERY_LAYERS": "Powiaty",
+            "INFO_FORMAT": "text/html",
+            "CRS": "EPSG:2180",
+            "BBOX": query_bbox,
+            "WIDTH": 100,
+            "HEIGHT": 100,
+            "I": 50,
+            "J": 50,
+        }
+
+        from urllib.parse import urlencode
+
+        url = f"{self.WMS_ENDPOINT}?{urlencode(params)}"
+        logger.debug(f"Querying WMS for TERYT at ({x:.2f}, {y:.2f})")
+
+        try:
+            response = session.get(url, timeout=timeout)
+            response.raise_for_status()
+
+            # Extract TERYT from GPKG URL pattern: .../GPKG/{woj}/{teryt}_GPKG.zip
+            gpkg_pattern = r"/GPKG/\d{2}/(\d{4})_GPKG\.zip"
+            match = re.search(gpkg_pattern, response.text)
+
+            if match:
+                teryt = match.group(1)
+                logger.debug(f"Found TERYT: {teryt}")
+                return teryt
+
+            # Alternative: extract from SHP URL pattern
+            shp_pattern = r"/SHP/\d{2}/(\d{4})_SHP\.zip"
+            match = re.search(shp_pattern, response.text)
+
+            if match:
+                teryt = match.group(1)
+                logger.debug(f"Found TERYT: {teryt}")
+                return teryt
+
+            raise DownloadError(
+                f"Could not determine TERYT for point ({x:.2f}, {y:.2f}). "
+                f"The location may be outside Poland or in a water body."
+            )
+
+        except requests.RequestException as e:
+            raise DownloadError(f"WMS GetFeatureInfo failed: {e}")
+
+    # =========================================================================
+    # Download by bbox → Download county package
     # =========================================================================
 
     def download_by_bbox(
         self,
         bbox: BBox,
         output_path: Path,
-        timeout: int = DEFAULT_TIMEOUT,
-        layers: Optional[list[str]] = None,
+        timeout: int = 120,
+        format: str = "GPKG",
         **kwargs,
     ) -> Path:
         """
-        Download BDOT10k land cover data for a bounding box via WFS.
+        Download BDOT10k land cover data for a bounding box.
+
+        Finds the powiat (county) containing the center of the bbox
+        and downloads the entire county package. This provides complete
+        data coverage for the area.
+
+        Note: The returned data covers the entire county, not just the bbox.
+        Use GIS software to clip to the exact bbox if needed.
 
         Parameters
         ----------
         bbox : BBox
             Bounding box in EPSG:2180 coordinates
         output_path : Path
-            Path where the GML file should be saved
+            Path where the file should be saved
         timeout : int, optional
-            Request timeout in seconds (default: 60)
-        layers : list[str], optional
-            List of PT layers to download (default: all PT layers)
+            Request timeout in seconds (default: 120)
+        format : str, optional
+            Output format: "GPKG" or "SHP" (default: "GPKG")
         **kwargs
             Additional options (unused)
 
@@ -278,108 +427,17 @@ class Bdot10kProvider(LandCoverProvider):
                 f"Use SheetParser.get_bbox(crs='EPSG:2180') to convert."
             )
 
-        output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
+        # Get center point of the bbox
+        center_x = (bbox.min_x + bbox.max_x) / 2
+        center_y = (bbox.min_y + bbox.max_y) / 2
 
-        # Use specified layers or default to all PT layers
-        target_layers = layers or self.PT_LAYERS
+        # Find TERYT code for this location
+        teryt = self._get_teryt_for_point(center_x, center_y, timeout)
 
-        # Download each layer and combine
-        all_data = []
-        session = self._session or requests.Session()
+        logger.info(f"Bbox center is in powiat {teryt}, downloading county package")
 
-        for layer in target_layers:
-            try:
-                url = self._construct_wfs_url(bbox, layer)
-                logger.debug(f"Downloading WFS layer {layer}")
-
-                response = session.get(url, timeout=timeout)
-                response.raise_for_status()
-
-                if response.content:
-                    all_data.append((layer, response.content))
-
-            except requests.RequestException as e:
-                logger.warning(f"Failed to download layer {layer}: {e}")
-                continue
-
-        if not all_data:
-            raise DownloadError(
-                f"No data found for bbox "
-                f"({bbox.min_x:.0f},{bbox.min_y:.0f})-"
-                f"({bbox.max_x:.0f},{bbox.max_y:.0f})"
-            )
-
-        # Save combined GML data
-        self._save_wfs_response(all_data, output_path)
-
-        logger.info(
-            f"Downloaded {len(all_data)} layers for bbox "
-            f"({bbox.min_x:.0f},{bbox.min_y:.0f})-"
-            f"({bbox.max_x:.0f},{bbox.max_y:.0f})"
-        )
-
-        return output_path
-
-    def _construct_wfs_url(self, bbox: BBox, layer: str) -> str:
-        """
-        Construct WFS GetFeature URL.
-
-        Parameters
-        ----------
-        bbox : BBox
-            Bounding box in EPSG:2180
-        layer : str
-            Layer name (e.g., "PTLZ")
-
-        Returns
-        -------
-        str
-            Full WFS URL
-        """
-        # WFS 2.0.0 BBOX filter
-        bbox_filter = f"{bbox.min_x},{bbox.min_y},{bbox.max_x},{bbox.max_y},EPSG:2180"
-
-        params = {
-            "SERVICE": "WFS",
-            "VERSION": "2.0.0",
-            "REQUEST": "GetFeature",
-            "TYPENAMES": layer,
-            "BBOX": bbox_filter,
-            "OUTPUTFORMAT": "application/gml+xml; version=3.2",
-        }
-
-        return f"{self.WFS_ENDPOINT}?{urlencode(params)}"
-
-    def _save_wfs_response(
-        self, data: list[tuple[str, bytes]], output_path: Path
-    ) -> None:
-        """
-        Save WFS response data to file.
-
-        For simplicity, saves as GML. Each layer is saved separately
-        with layer name as filename suffix.
-
-        Parameters
-        ----------
-        data : list[tuple[str, bytes]]
-            List of (layer_name, gml_content) tuples
-        output_path : Path
-            Base output path
-        """
-        if len(data) == 1:
-            # Single layer - save directly
-            layer_name, content = data[0]
-            output_path = output_path.with_suffix(".gml")
-            output_path.write_bytes(content)
-        else:
-            # Multiple layers - save each with suffix
-            output_dir = output_path.parent
-            base_name = output_path.stem
-
-            for layer_name, content in data:
-                layer_path = output_dir / f"{base_name}_{layer_name}.gml"
-                layer_path.write_bytes(content)
+        # Download the entire county package
+        return self.download_by_teryt(teryt, output_path, timeout, format=format)
 
     # =========================================================================
     # Common utilities

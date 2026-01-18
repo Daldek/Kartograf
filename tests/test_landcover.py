@@ -79,28 +79,20 @@ class TestBdot10kProvider:
         url = provider._construct_opendata_url("1465", "GPKG")
         assert "opendata.geoportal.gov.pl/bdot10k" in url
         assert "GPKG" in url
-        assert "1465.zip" in url
+        assert "1465_GPKG.zip" in url
 
     def test_construct_opendata_url_shp(self):
         """Test OpenData URL construction for SHP."""
         provider = Bdot10kProvider()
         url = provider._construct_opendata_url("1465", "SHP")
         assert "SHP" in url
+        assert "1465_SHP.zip" in url
 
     def test_construct_opendata_url_invalid_woj(self):
         """Test OpenData URL with invalid województwo code."""
         provider = Bdot10kProvider()
         with pytest.raises(ValidationError):
             provider._construct_opendata_url("9999", "GPKG")
-
-    def test_construct_wfs_url(self):
-        """Test WFS URL construction."""
-        provider = Bdot10kProvider()
-        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        url = provider._construct_wfs_url(bbox, "PTLZ")
-        assert "WFS" in url
-        assert "GetFeature" in url
-        assert "PTLZ" in url
 
     def test_download_by_teryt_invalid(self):
         """Test download with invalid TERYT."""
@@ -135,8 +127,10 @@ class TestCorineProvider:
         years = provider.get_available_years()
         assert 2018 in years
         assert 2012 in years
+        assert 2006 in years
+        assert 2000 in years
         assert 1990 in years
-        assert len(years) == 5
+        assert len(years) == 5  # EEA: 2018, 2012, 2006, 2000 + DLR: 1990
 
     def test_clc_classes(self):
         """Test CLC classification dictionary."""
@@ -166,14 +160,47 @@ class TestCorineProvider:
         with pytest.raises(ValueError):
             provider.download_by_bbox(bbox, Path("/tmp/test.png"), year=2020)
 
-    def test_construct_wms_url(self):
-        """Test WMS URL construction."""
+    def test_construct_wms_url_eea(self):
+        """Test WMS URL construction for EEA endpoint."""
         provider = CorineProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         url = provider._construct_wms_url(bbox, 2018, 100, 100)
         assert "WMS" in url
         assert "GetMap" in url
-        assert "2180" in url
+        assert "discomap.eea.europa.eu" in url  # EEA Discomap endpoint
+        assert "CLC2018" in url
+
+    def test_construct_wms_url_dlr_fallback(self):
+        """Test WMS URL construction for DLR fallback (1990)."""
+        provider = CorineProvider()
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        url = provider._construct_wms_url(bbox, 1990, 100, 100)
+        assert "WMS" in url
+        assert "GetMap" in url
+        assert "geoservice.dlr.de" in url  # DLR WMS endpoint
+        assert "CORINE" in url
+
+    def test_clms_token_property(self):
+        """Test CLMS OAuth2 credentials property."""
+        # Test with empty credentials (explicitly disabled)
+        provider = CorineProvider(clms_credentials={})
+        assert provider.has_clms_token is False
+
+        # Test with mock credentials
+        mock_credentials = {
+            "client_id": "test-client",
+            "private_key": "-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----",
+            "token_uri": "https://example.com/token",
+        }
+        provider_with_creds = CorineProvider(clms_credentials=mock_credentials)
+        assert provider_with_creds.has_clms_token is True
+
+    def test_clms_years(self):
+        """Test CLMS API supported years."""
+        provider = CorineProvider()
+        assert 2018 in provider.CLMS_YEARS
+        assert 2012 in provider.CLMS_YEARS
+        assert 1990 not in provider.CLMS_YEARS  # Only via DLR WMS
 
 
 class TestLandCoverManager:
@@ -278,7 +305,7 @@ class TestLandCoverCLI:
         result = main(["landcover", "list-layers", "--source", "corine"])
         assert result == 0
         captured = capsys.readouterr()
-        assert "2018" in captured.out
+        assert "2018" in captured.out  # Most recent available year
 
     def test_landcover_download_no_selection(self, capsys):
         """Test download without selection method."""

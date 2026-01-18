@@ -1,8 +1,9 @@
 # Kartograf
 
 Narzędzie do automatycznego pobierania danych przestrzennych z zasobów GUGiK i Copernicus dla Polski:
-- **NMT** (Numeryczny Model Terenu) - dane wysokościowe
-- **Land Cover** - pokrycie terenu (BDOT10k, CORINE)
+- **NMT/NMPT** - Numeryczny Model Terenu / Pokrycia Terenu (dane wysokościowe)
+- **BDOT10k** - Baza Danych Obiektów Topograficznych (pokrycie terenu, wektory)
+- **CORINE Land Cover** - Europejska klasyfikacja pokrycia terenu (44 klasy)
 
 ## Szybki Start
 
@@ -11,15 +12,15 @@ Narzędzie do automatycznego pobierania danych przestrzennych z zasobów GUGiK i
 ```bash
 # Klonowanie repozytorium
 git clone https://github.com/Daldek/Kartograf.git
-cd kartograf
+cd Kartograf
 
 # Utworzenie środowiska wirtualnego
 python3.12 -m venv .venv
 source .venv/bin/activate  # Linux/Mac
 # .venv\Scripts\activate   # Windows
 
-# Instalacja zależności
-pip install -r requirements.txt
+# Instalacja pakietu
+pip install -e .
 ```
 
 ### Użycie
@@ -110,7 +111,31 @@ lc.download(godlo="N-34-130-D", year=2018)
 - ✅ **BDOT10k** - Polska baza wektorowa (GUGiK), szczegółowość 1:10 000
 - ✅ **CORINE Land Cover** - Europejska klasyfikacja (Copernicus), 44 klasy
 - ✅ **Metody selekcji** - TERYT (powiat), bbox, godło arkusza
-- ✅ **Formaty** - GeoPackage, Shapefile, GML
+- ✅ **Formaty** - GeoPackage, Shapefile, GeoTIFF, PNG
+
+## Konfiguracja CLMS API (opcjonalne)
+
+Aby pobierać dane CORINE jako **GeoTIFF z kodami klas** (zamiast podglądu PNG),
+potrzebujesz konta w Copernicus Land Monitoring Service:
+
+1. Zarejestruj się na https://land.copernicus.eu
+2. Wygeneruj API credentials (profil → API access)
+3. Zapisz credentials do macOS Keychain:
+
+```bash
+security add-generic-password -a "$USER" -s "clms-token" -w '{
+  "client_id": "...",
+  "private_key": "-----BEGIN RSA PRIVATE KEY-----\n...",
+  "token_uri": "https://land.copernicus.eu/@@oauth2-token",
+  "key_id": "...",
+  "user_id": "..."
+}'
+```
+
+**Bezpieczeństwo:** Credentials są izolowane w osobnym procesie (Auth Proxy).
+Główna aplikacja nigdy nie widzi kluczy prywatnych.
+
+**Bez konfiguracji:** CORINE automatycznie pobiera podgląd PNG przez WMS.
 
 ## Dokumentacja
 
@@ -126,18 +151,20 @@ lc.download(godlo="N-34-130-D", year=2018)
 - Python 3.12+
 - requests >= 2.31.0
 - pyproj >= 3.6.0
+- PyJWT[crypto] >= 2.8.0
 
 ## Struktura Projektu
 
 ```
 Kartograf/
 ├── kartograf/           # Kod źródłowy
-│   ├── core/            # Parser godeł
+│   ├── auth/            # Auth Proxy (bezpieczna autentykacja CLMS)
+│   ├── core/            # Parser godeł, BBox
 │   ├── providers/       # Providery danych (GUGiK, BDOT10k, CORINE)
 │   ├── download/        # Download management (NMT)
 │   ├── landcover/       # Land Cover management
 │   └── cli/             # CLI interface
-├── tests/               # Testy (283)
+├── tests/               # Testy (285)
 ├── docs/                # Dokumentacja
 └── README.md
 ```
@@ -172,11 +199,11 @@ flake8 kartograf/ tests/ --max-line-length=88
 
 ## Licencja
 
-MIT
+Projekt udostępniony na licencji MIT. Szczegóły w pliku `LICENSE`.
 
 ## Autor
 
-Piotr Daldek
+[Piotr de Bever](https://www.linkedin.com/in/piotr-de-bever/)
 
 ## Status
 
