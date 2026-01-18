@@ -8,6 +8,7 @@ from various sources. Currently supported providers:
 - LandCoverProvider: Abstract base for land cover data providers
 - Bdot10kProvider: Downloads land cover data from BDOT10k (GUGiK)
 - CorineProvider: Downloads CORINE Land Cover data (Copernicus/GIOŚ)
+- SoilGridsProvider: Downloads soil property data from ISRIC SoilGrids
 """
 
 from kartograf.providers.base import BaseProvider
@@ -15,6 +16,7 @@ from kartograf.providers.bdot10k import Bdot10kProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.gugik import GugikProvider
 from kartograf.providers.landcover_base import LandCoverProvider
+from kartograf.providers.soilgrids import SoilGridsProvider
 
 __all__ = [
     "BaseProvider",
@@ -22,4 +24,5 @@ __all__ = [
     "LandCoverProvider",
     "Bdot10kProvider",
     "CorineProvider",
+    "SoilGridsProvider",
 ]
