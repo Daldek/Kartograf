@@ -67,6 +67,10 @@ class DownloadManager:
     - By godło: downloads ASC files from OpenData
     - By bbox: downloads GeoTIFF from WCS
 
+    Supports vertical CRS:
+    - KRON86 (default) - Kronsztadt 86
+    - EVRF2007 - European Vertical Reference Frame 2007
+
     Examples
     --------
     >>> manager = DownloadManager(output_dir="./data")
@@ -84,6 +88,10 @@ class DownloadManager:
     ...     min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
     ... )
     >>> manager.download_bbox(bbox, "area.tif")
+    >>>
+    >>> # Download in EVRF2007 vertical CRS
+    >>> manager = DownloadManager(vertical_crs="EVRF2007")
+    >>> manager.download_sheet("N-34-130-D-d-2-4")
     """
 
     def __init__(
@@ -91,6 +99,7 @@ class DownloadManager:
         output_dir: str | Path = "./data",
         provider: Optional[BaseProvider] = None,
         storage: Optional[FileStorage] = None,
+        vertical_crs: str = "KRON86",
     ):
         """
         Initialize download manager.
@@ -100,12 +109,20 @@ class DownloadManager:
         output_dir : str or Path, optional
             Base directory for downloads (default: "./data")
         provider : BaseProvider, optional
-            Data provider (default: GugikProvider)
+            Data provider (default: GugikProvider with specified vertical_crs)
         storage : FileStorage, optional
             Storage manager (default: FileStorage with output_dir)
+        vertical_crs : str, optional
+            Vertical CRS: "KRON86" or "EVRF2007" (default: "KRON86")
         """
-        self._provider = provider or GugikProvider()
+        self._provider = provider or GugikProvider(vertical_crs=vertical_crs)
         self._storage = storage or FileStorage(output_dir)
+        self._vertical_crs = vertical_crs
+
+    @property
+    def vertical_crs(self) -> str:
+        """Return current vertical CRS."""
+        return self._vertical_crs
 
     @property
     def provider(self) -> BaseProvider:

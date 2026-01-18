@@ -1,6 +1,9 @@
 # Kartograf
 
-Narzędzie do automatycznego pobierania danych NMT (Numeryczny Model Terenu) z zasobów GUGiK dla Polski.
+Narzędzie do automatycznego pobierania danych przestrzennych z zasobów GUGiK i Copernicus dla Polski:
+- **NMT/NMPT** - Numeryczny Model Terenu / Pokrycia Terenu (dane wysokościowe)
+- **BDOT10k** - Baza Danych Obiektów Topograficznych (pokrycie terenu, wektory)
+- **CORINE Land Cover** - Europejska klasyfikacja pokrycia terenu (44 klasy)
 
 ## Szybki Start
 
@@ -9,15 +12,15 @@ Narzędzie do automatycznego pobierania danych NMT (Numeryczny Model Terenu) z z
 ```bash
 # Klonowanie repozytorium
 git clone https://github.com/Daldek/Kartograf.git
-cd kartograf
+cd Kartograf
 
 # Utworzenie środowiska wirtualnego
 python3.12 -m venv .venv
 source .venv/bin/activate  # Linux/Mac
 # .venv\Scripts\activate   # Windows
 
-# Instalacja zależności
-pip install -r requirements.txt
+# Instalacja pakietu
+pip install -e .
 ```
 
 ### Użycie
@@ -28,11 +31,24 @@ pip install -r requirements.txt
 # Informacje o godle
 kartograf parse N-34-130-D-d-2-4
 
-# Pobieranie pojedynczego arkusza
-kartograf download N-34-130-D-d-2-4 --format GTiff
+# Pobieranie NMT (pojedynczy arkusz)
+kartograf download N-34-130-D-d-2-4
 
-# Pobieranie hierarchii
+# Pobieranie NMT (hierarchia)
 kartograf download N-34-130-D --scale 1:10000 --output ./data
+
+# Pobieranie Land Cover (BDOT10k - powiat)
+kartograf landcover download --source bdot10k --teryt 1465
+
+# Pobieranie Land Cover (BDOT10k - godło)
+kartograf landcover download --source bdot10k --godlo N-34-130-D
+
+# Pobieranie Land Cover (CORINE)
+kartograf landcover download --source corine --year 2018 --godlo N-34-130-D
+
+# Lista źródeł i warstw
+kartograf landcover list-sources
+kartograf landcover list-layers --source bdot10k
 ```
 
 #### Jako biblioteka Python
@@ -64,16 +80,64 @@ paths = manager.download_hierarchy(
 # Pobieranie przez bbox → GeoTIFF (WCS)
 bbox = BBox(min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180")
 path = manager.download_bbox(bbox, "my_area.tif")  # → .tif
+
+# ===== Land Cover =====
+from kartograf import LandCoverManager
+
+lc = LandCoverManager()
+
+# BDOT10k - przez godło
+lc.download(godlo="N-34-130-D")
+
+# BDOT10k - przez TERYT (powiat)
+lc.download(teryt="1465")
+
+# CORINE - przez godło
+lc.set_provider("corine")
+lc.download(godlo="N-34-130-D", year=2018)
 ```
 
 ## Funkcjonalności
 
+### NMT (Numeryczny Model Terenu)
 - ✅ **Parser godeł** - Obsługa układów 1992 i 2000, skal 1:1 000 000 - 1:10 000
 - ✅ **Bounding box** - Obliczanie współrzędnych arkusza (EPSG:2180, EPSG:4326)
 - ✅ **Hierarchia arkuszy** - Automatyczne określanie arkuszy nadrzędnych i podrzędnych
 - ✅ **Pobieranie NMT** - Z retry logic i progress tracking
 - ✅ **Organizacja plików** - Automatyczna struktura katalogów
 - ✅ **Formaty** - GeoTIFF, PNG, JPEG (WCS), ASC (OpenData)
+
+### Land Cover (Pokrycie Terenu)
+- ✅ **BDOT10k** - Polska baza wektorowa (GUGiK), szczegółowość 1:10 000
+  - 12 warstw pokrycia terenu (PT*): lasy, wody, zabudowa, tereny rolne, itp.
+  - Automatyczne scalanie warstw do jednego GeoPackage
+- ✅ **CORINE Land Cover** - Europejska klasyfikacja (Copernicus), 44 klasy
+- ✅ **Metody selekcji** - TERYT (powiat), bbox, godło arkusza
+- ✅ **Formaty** - GeoPackage, Shapefile, GeoTIFF, PNG
+
+## Konfiguracja CLMS API (opcjonalne)
+
+Aby pobierać dane CORINE jako **GeoTIFF z kodami klas** (zamiast podglądu PNG),
+potrzebujesz konta w Copernicus Land Monitoring Service:
+
+1. Zarejestruj się na https://land.copernicus.eu
+2. Wygeneruj API credentials (profil → API access)
+3. Zapisz credentials do macOS Keychain:
+
+```bash
+security add-generic-password -a "$USER" -s "clms-token" -w '{
+  "client_id": "...",
+  "private_key": "-----BEGIN RSA PRIVATE KEY-----\n...",
+  "token_uri": "https://land.copernicus.eu/@@oauth2-token",
+  "key_id": "...",
+  "user_id": "..."
+}'
+```
+
+**Bezpieczeństwo:** Credentials są izolowane w osobnym procesie (Auth Proxy).
+Główna aplikacja nigdy nie widzi kluczy prywatnych.
+
+**Bez konfiguracji:** CORINE automatycznie pobiera podgląd PNG przez WMS.
 
 ## Dokumentacja
 
@@ -89,17 +153,20 @@ path = manager.download_bbox(bbox, "my_area.tif")  # → .tif
 - Python 3.12+
 - requests >= 2.31.0
 - pyproj >= 3.6.0
+- PyJWT[crypto] >= 2.8.0
 
 ## Struktura Projektu
 
 ```
 Kartograf/
 ├── kartograf/           # Kod źródłowy
-│   ├── core/            # Parser godeł
-│   ├── providers/       # Providery danych (GUGiK)
-│   ├── download/        # Download management
+│   ├── auth/            # Auth Proxy (bezpieczna autentykacja CLMS)
+│   ├── core/            # Parser godeł, BBox
+│   ├── providers/       # Providery danych (GUGiK, BDOT10k, CORINE)
+│   ├── download/        # Download management (NMT)
+│   ├── landcover/       # Land Cover management
 │   └── cli/             # CLI interface
-├── tests/               # Testy
+├── tests/               # Testy (285)
 ├── docs/                # Dokumentacja
 └── README.md
 ```
@@ -134,12 +201,12 @@ flake8 kartograf/ tests/ --max-line-length=88
 
 ## Licencja
 
-MIT
+Projekt udostępniony na licencji MIT. Szczegóły w pliku `LICENSE`.
 
 ## Autor
 
-Piotr Daldek
+[Piotr de Bever](https://www.linkedin.com/in/piotr-de-bever/)
 
 ## Status
 
-**Wersja 0.2.0** - Dostosowano do nowego API GUGiK WCS. Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów
+**Wersja 0.3.0** - Dodano funkcjonalność Land Cover (BDOT10k, CORINE). Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów

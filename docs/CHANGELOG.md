@@ -5,6 +5,108 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-01-18
+
+### Added - Land Cover (Pokrycie Terenu)
+
+- **LandCoverProvider** - Nowa abstrakcja dla providerów danych pokrycia terenu
+  - Metody: `download_by_teryt()`, `download_by_bbox()`, `download_by_godlo()`
+  - Wspólny interfejs dla różnych źródeł danych
+
+- **Bdot10kProvider** - Provider dla BDOT10k (GUGiK)
+  - Pobieranie paczek powiatowych przez TERYT
+  - Pobieranie przez WMS GetFeatureInfo dla URL paczki
+  - Pobieranie przez godło arkusza (konwersja na bbox)
+  - **12 warstw pokrycia terenu (PT*):**
+    - PTGN - Grunty nieużytkowe
+    - PTKM - Tereny komunikacyjne
+    - PTLZ - Tereny leśne
+    - PTNZ - Tereny niezabudowane
+    - PTPL - Place
+    - PTRK - Roślinność krzewiasta
+    - PTSO - Składowiska
+    - PTTR - Tereny rolne
+    - PTUT - Uprawy trwałe
+    - PTWP - Wody powierzchniowe
+    - PTWZ - Tereny zabagnione
+    - PTZB - Tereny zabudowane
+  - Automatyczne scalanie warstw PT* z ZIP do jednego GeoPackage
+  - Format wyjściowy: GeoPackage (.gpkg), SHP
+
+- **CorineProvider** - Provider dla CORINE Land Cover (Copernicus)
+  - Europejska klasyfikacja pokrycia terenu (44 klasy)
+  - Dostępne lata: 1990, 2000, 2006, 2012, 2018
+  - **Trzy źródła danych (w kolejności priorytetu):**
+    1. **CLMS API** - GeoTIFF z kodami klas (wymaga OAuth2)
+    2. **EEA Discomap WMS** - Podgląd PNG (lata 2000-2018)
+    3. **DLR WMS** - Fallback dla 1990
+  - OAuth2 RSA authentication dla CLMS API
+  - Przechowywanie credentials w macOS Keychain (serwis: `clms-token`)
+
+- **LandCoverManager** - Zarządzanie pobieraniem danych pokrycia terenu
+  - Dispatch do odpowiedniego providera
+  - Obsługa wielu metod selekcji obszaru
+
+- **CLI landcover** - Nowe komendy CLI
+  - `kartograf landcover download --source bdot10k --teryt <kod>`
+  - `kartograf landcover download --source corine --year <rok> --godlo <godło>`
+  - `kartograf landcover list-sources`
+  - `kartograf landcover list-layers --source bdot10k`
+
+### CLMS API Authentication - Auth Proxy
+
+CorineProvider używa **Auth Proxy** dla bezpiecznej autentykacji CLMS API:
+
+**Architektura bezpieczeństwa:**
+```
+CorineProvider → localhost HTTP → AuthProxy (subprocess) → Keychain → CLMS API
+```
+
+- Credentials (klucz prywatny RSA) są izolowane w osobnym procesie
+- Główna aplikacja nigdy nie widzi credentials
+- Tylko odpowiedzi API są przekazywane do aplikacji
+
+**Nowe moduły:**
+- `kartograf/auth/proxy.py` - serwer HTTP izolujący credentials
+- `kartograf/auth/client.py` - klient automatycznie uruchamiający proxy
+
+**Konfiguracja:**
+1. Zarejestruj się na https://land.copernicus.eu
+2. Wygeneruj API credentials (JSON)
+3. Zapisz do Keychain:
+   ```bash
+   security add-generic-password -a "$USER" -s "clms-token" -w '<json_credentials>'
+   ```
+
+**Tryby pracy:**
+```python
+# Domyślny (bezpieczny) - używa proxy
+provider = CorineProvider()
+
+# Bezpośredni (dla testów) - credentials widoczne
+provider = CorineProvider(clms_credentials={...}, use_proxy=False)
+```
+
+**Uwaga:** Jeśli credentials nie są skonfigurowane, CorineProvider automatycznie używa WMS (podgląd PNG zamiast GeoTIFF z kodami klas).
+
+### Dependencies
+
+- Dodano `PyJWT[crypto]>=2.8.0` - JWT generation dla OAuth2
+
+### Technical Details
+
+- 285 testów (42 dla landcover)
+- Formatowanie: black, flake8
+
+### Sources
+
+- BDOT10k: https://www.geoportal.gov.pl/en/data/topographic-objects-database-bdot10k/
+- CORINE Land Cover: https://land.copernicus.eu/en/products/corine-land-cover
+- EEA Discomap: https://image.discomap.eea.europa.eu
+- DLR EOC: https://geoservice.dlr.de/eoc/land/wms
+
+---
+
 ## [0.2.0] - 2026-01-18
 
 ### Changed - Nowa architektura pobierania
@@ -94,5 +196,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
+[0.3.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.1.0

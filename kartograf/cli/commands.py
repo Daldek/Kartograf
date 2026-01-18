@@ -2,7 +2,7 @@
 Command-line interface for Kartograf.
 
 This module provides CLI commands for parsing map sheet identifiers,
-displaying hierarchy information, and downloading NMT data.
+displaying hierarchy information, and downloading NMT and land cover data.
 """
 
 import argparse
@@ -10,9 +10,10 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from kartograf.core.sheet_parser import SheetParser
+from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.manager import DownloadManager, DownloadProgress
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
+from kartograf.landcover.manager import LandCoverManager
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -33,7 +34,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version="%(prog)s 0.2.0",
+        version="%(prog)s 0.3.0-dev",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -98,6 +99,91 @@ def create_parser() -> argparse.ArgumentParser:
         "-q",
         action="store_true",
         help="Suppress progress output",
+    )
+    download_parser.add_argument(
+        "--vertical-crs",
+        choices=["KRON86", "EVRF2007"],
+        default="KRON86",
+        help="Vertical CRS: KRON86 (Kronsztadt 86) or EVRF2007 (default: KRON86)",
+    )
+
+    # Landcover command group
+    landcover_parser = subparsers.add_parser(
+        "landcover",
+        help="Download land cover data (BDOT10k, CORINE)",
+        description="Download land cover data from BDOT10k or CORINE",
+    )
+    landcover_subparsers = landcover_parser.add_subparsers(
+        dest="landcover_command",
+        help="Land cover commands",
+    )
+
+    # Landcover download command
+    lc_download = landcover_subparsers.add_parser(
+        "download",
+        help="Download land cover data",
+        description="Download land cover data from selected source",
+    )
+    lc_download.add_argument(
+        "--source",
+        "-s",
+        choices=["bdot10k", "corine"],
+        default="bdot10k",
+        help="Data source (default: bdot10k)",
+    )
+    lc_download.add_argument(
+        "--teryt",
+        metavar="CODE",
+        help="TERYT code (4-digit powiat code, e.g., 1465)",
+    )
+    lc_download.add_argument(
+        "--bbox",
+        metavar="BBOX",
+        help="Bounding box: min_x,min_y,max_x,max_y in EPSG:2180",
+    )
+    lc_download.add_argument(
+        "--godlo",
+        metavar="GODLO",
+        help="Map sheet identifier (e.g., N-34-130-D)",
+    )
+    lc_download.add_argument(
+        "--year",
+        type=int,
+        default=2018,
+        help="Reference year for CORINE (default: 2018)",
+    )
+    lc_download.add_argument(
+        "--output",
+        "-o",
+        metavar="DIR",
+        default="./data/landcover",
+        help="Output directory (default: ./data/landcover)",
+    )
+    lc_download.add_argument(
+        "--format",
+        "-f",
+        choices=["GPKG", "SHP", "GML"],
+        default="GPKG",
+        help="Output format for BDOT10k (default: GPKG)",
+    )
+
+    # Landcover list-sources command
+    landcover_subparsers.add_parser(
+        "list-sources",
+        help="List available data sources",
+    )
+
+    # Landcover list-layers command
+    lc_layers = landcover_subparsers.add_parser(
+        "list-layers",
+        help="List available layers for a source",
+    )
+    lc_layers.add_argument(
+        "--source",
+        "-s",
+        choices=["bdot10k", "corine"],
+        default="bdot10k",
+        help="Data source (default: bdot10k)",
     )
 
     return parser
@@ -335,9 +421,10 @@ def cmd_download(args: argparse.Namespace) -> int:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    # Create download manager
+    # Create download manager with vertical CRS
     output_dir = Path(args.output)
-    manager = DownloadManager(output_dir=output_dir)
+    vertical_crs = getattr(args, "vertical_crs", "KRON86")
+    manager = DownloadManager(output_dir=output_dir, vertical_crs=vertical_crs)
 
     skip_existing = not args.force
     on_progress = create_progress_callback(args.quiet)
@@ -383,6 +470,157 @@ def cmd_download(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_landcover(args: argparse.Namespace) -> int:
+    """
+    Execute landcover commands.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed command-line arguments
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, 1 for error)
+    """
+    if args.landcover_command is None:
+        print("Usage: kartograf landcover <command>")
+        print("Commands: download, list-sources, list-layers")
+        print("Run 'kartograf landcover <command> --help' for details")
+        return 0
+
+    if args.landcover_command == "list-sources":
+        return cmd_landcover_list_sources(args)
+
+    if args.landcover_command == "list-layers":
+        return cmd_landcover_list_layers(args)
+
+    if args.landcover_command == "download":
+        return cmd_landcover_download(args)
+
+    return 0
+
+
+def cmd_landcover_list_sources(args: argparse.Namespace) -> int:
+    """List available land cover data sources."""
+    print("Available land cover data sources:")
+    print()
+    print("  bdot10k  - BDOT10k (GUGiK)")
+    print("             Polish topographic database, land cover classes (PT)")
+    print("             High resolution (1:10000), vector data")
+    print("             Formats: GPKG, SHP, GML")
+    print()
+    print("  corine   - CORINE Land Cover (Copernicus/GIOŚ)")
+    print("             European land cover classification (44 classes)")
+    print("             Resolution: 100m, raster data")
+    print("             Years: 1990, 2000, 2006, 2012, 2018")
+    print()
+    return 0
+
+
+def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
+    """List available layers for a source."""
+    manager = LandCoverManager(provider=args.source)
+
+    print(f"Available layers for {manager.provider_name}:")
+    print()
+
+    if args.source == "bdot10k":
+        from kartograf.providers.bdot10k import Bdot10kProvider
+
+        provider = Bdot10kProvider()
+        for layer in provider.get_available_layers():
+            desc = provider.get_layer_description(layer)
+            print(f"  {layer}  - {desc}")
+    else:
+        from kartograf.providers.corine import CorineProvider
+
+        provider = CorineProvider()
+        print("  CORINE provides unified land cover classification.")
+        print("  Available years:")
+        for year in provider.get_available_years():
+            print(f"    {year}")
+        print()
+        print("  Use --year option to select reference year.")
+
+    return 0
+
+
+def cmd_landcover_download(args: argparse.Namespace) -> int:
+    """Execute landcover download command."""
+    # Check that exactly one selection method is provided
+    methods = [args.teryt, args.bbox, args.godlo]
+    provided = [m for m in methods if m is not None]
+
+    if len(provided) == 0:
+        print(
+            "Error: Must provide one of: --teryt, --bbox, or --godlo", file=sys.stderr
+        )
+        return 1
+
+    if len(provided) > 1:
+        print(
+            "Error: Provide only one of: --teryt, --bbox, or --godlo", file=sys.stderr
+        )
+        return 1
+
+    # Parse bbox if provided
+    bbox = None
+    if args.bbox:
+        try:
+            parts = [float(x.strip()) for x in args.bbox.split(",")]
+            if len(parts) != 4:
+                raise ValueError("BBOX must have 4 values")
+            bbox = BBox(parts[0], parts[1], parts[2], parts[3], "EPSG:2180")
+        except ValueError as e:
+            print(f"Error: Invalid bbox format: {e}", file=sys.stderr)
+            print(
+                "Expected: min_x,min_y,max_x,max_y (e.g., 450000,550000,460000,560000)"
+            )
+            return 1
+
+    # Create manager with selected provider
+    output_dir = Path(args.output)
+    manager = LandCoverManager(output_dir=output_dir, provider=args.source)
+
+    print(f"Downloading land cover data from {manager.provider_name}...")
+
+    try:
+        # Build kwargs for provider-specific options
+        kwargs = {}
+        if args.source == "corine":
+            kwargs["year"] = args.year
+        if args.source == "bdot10k":
+            kwargs["format"] = args.format
+
+        # Download
+        if args.teryt:
+            print(f"  TERYT: {args.teryt}")
+            path = manager.download(teryt=args.teryt, **kwargs)
+        elif bbox:
+            print(
+                f"  BBox: ({bbox.min_x}, {bbox.min_y}) - ({bbox.max_x}, {bbox.max_y})"
+            )
+            path = manager.download(bbox=bbox, **kwargs)
+        else:
+            print(f"  Godło: {args.godlo}")
+            path = manager.download(godlo=args.godlo, **kwargs)
+
+        print(f"Downloaded to: {path}")
+        return 0
+
+    except NotImplementedError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    except DownloadError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    except (ParseError, ValidationError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
 def main(args: Optional[list[str]] = None) -> int:
     """
     Main entry point for the CLI.
@@ -409,6 +647,9 @@ def main(args: Optional[list[str]] = None) -> int:
 
     if parsed_args.command == "download":
         return cmd_download(parsed_args)
+
+    if parsed_args.command == "landcover":
+        return cmd_landcover(parsed_args)
 
     # Unknown command (shouldn't happen with argparse)
     print(f"Unknown command: {parsed_args.command}", file=sys.stderr)
