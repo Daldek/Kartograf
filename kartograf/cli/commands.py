@@ -127,7 +127,7 @@ def create_parser() -> argparse.ArgumentParser:
     lc_download.add_argument(
         "--source",
         "-s",
-        choices=["bdot10k", "corine"],
+        choices=["bdot10k", "corine", "soilgrids"],
         default="bdot10k",
         help="Data source (default: bdot10k)",
     )
@@ -166,6 +166,26 @@ def create_parser() -> argparse.ArgumentParser:
         default="GPKG",
         help="Output format for BDOT10k (default: GPKG)",
     )
+    lc_download.add_argument(
+        "--property",
+        "-p",
+        default="soc",
+        help="Soil property for SoilGrids (default: soc). "
+        "Options: bdod, cec, cfvo, clay, nitrogen, ocd, ocs, phh2o, sand, silt, soc",
+    )
+    lc_download.add_argument(
+        "--depth",
+        "-d",
+        default="0-5cm",
+        help="Depth interval for SoilGrids (default: 0-5cm). "
+        "Options: 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm",
+    )
+    lc_download.add_argument(
+        "--stat",
+        default="mean",
+        help="Statistic for SoilGrids (default: mean). "
+        "Options: mean, Q0.05, Q0.5, Q0.95, uncertainty",
+    )
 
     # Landcover list-sources command
     landcover_subparsers.add_parser(
@@ -181,9 +201,64 @@ def create_parser() -> argparse.ArgumentParser:
     lc_layers.add_argument(
         "--source",
         "-s",
-        choices=["bdot10k", "corine"],
+        choices=["bdot10k", "corine", "soilgrids"],
         default="bdot10k",
         help="Data source (default: bdot10k)",
+    )
+
+    # Soilgrids command group (for HSG calculation)
+    soilgrids_parser = subparsers.add_parser(
+        "soilgrids",
+        help="SoilGrids data processing (HSG calculation)",
+        description="Process SoilGrids data for hydrological analysis",
+    )
+    soilgrids_subparsers = soilgrids_parser.add_subparsers(
+        dest="soilgrids_command",
+        help="SoilGrids commands",
+    )
+
+    # Soilgrids HSG command
+    sg_hsg = soilgrids_subparsers.add_parser(
+        "hsg",
+        help="Calculate Hydrologic Soil Groups from texture data",
+        description=(
+            "Download clay, sand, silt data from SoilGrids and calculate "
+            "Hydrologic Soil Groups (HSG) for SCS-CN method"
+        ),
+    )
+    sg_hsg.add_argument(
+        "--godlo",
+        metavar="GODLO",
+        help="Map sheet identifier (e.g., N-34-130-D)",
+    )
+    sg_hsg.add_argument(
+        "--bbox",
+        metavar="BBOX",
+        help="Bounding box: min_x,min_y,max_x,max_y in EPSG:2180",
+    )
+    sg_hsg.add_argument(
+        "--output",
+        "-o",
+        metavar="PATH",
+        default="./data/hsg",
+        help="Output path or directory (default: ./data/hsg)",
+    )
+    sg_hsg.add_argument(
+        "--depth",
+        "-d",
+        default="0-5cm",
+        help="Depth interval (default: 0-5cm). "
+        "Options: 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm",
+    )
+    sg_hsg.add_argument(
+        "--keep-intermediate",
+        action="store_true",
+        help="Keep intermediate clay/sand/silt files",
+    )
+    sg_hsg.add_argument(
+        "--stats",
+        action="store_true",
+        help="Print HSG statistics after calculation",
     )
 
     return parser
@@ -506,15 +581,21 @@ def cmd_landcover_list_sources(args: argparse.Namespace) -> int:
     """List available land cover data sources."""
     print("Available land cover data sources:")
     print()
-    print("  bdot10k  - BDOT10k (GUGiK)")
-    print("             Polish topographic database, land cover classes (PT)")
-    print("             High resolution (1:10000), vector data")
-    print("             Formats: GPKG, SHP, GML")
+    print("  bdot10k   - BDOT10k (GUGiK)")
+    print("              Polish topographic database, land cover classes (PT)")
+    print("              High resolution (1:10000), vector data")
+    print("              Formats: GPKG, SHP, GML")
     print()
-    print("  corine   - CORINE Land Cover (Copernicus/GIOŚ)")
-    print("             European land cover classification (44 classes)")
-    print("             Resolution: 100m, raster data")
-    print("             Years: 1990, 2000, 2006, 2012, 2018")
+    print("  corine    - CORINE Land Cover (Copernicus/GIOŚ)")
+    print("              European land cover classification (44 classes)")
+    print("              Resolution: 100m, raster data")
+    print("              Years: 1990, 2000, 2006, 2012, 2018")
+    print()
+    print("  soilgrids - ISRIC SoilGrids")
+    print("              Global soil property predictions")
+    print("              Resolution: 250m, raster data (GeoTIFF)")
+    print("              Properties: clay, sand, silt, soc, phh2o, nitrogen, etc.")
+    print("              Depths: 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm")
     print()
     return 0
 
@@ -533,7 +614,7 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
         for layer in provider.get_available_layers():
             desc = provider.get_layer_description(layer)
             print(f"  {layer}  - {desc}")
-    else:
+    elif args.source == "corine":
         from kartograf.providers.corine import CorineProvider
 
         provider = CorineProvider()
@@ -543,6 +624,24 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
             print(f"    {year}")
         print()
         print("  Use --year option to select reference year.")
+    elif args.source == "soilgrids":
+        from kartograf.providers.soilgrids import SoilGridsProvider
+
+        provider = SoilGridsProvider()
+        print("  Available soil properties:")
+        for prop in provider.get_available_properties():
+            desc = provider.get_property_description(prop)
+            print(f"    {prop:10} - {desc}")
+        print()
+        print("  Available depths:")
+        for depth in provider.get_available_depths():
+            print(f"    {depth}")
+        print()
+        print("  Available statistics:")
+        for stat in provider.get_available_stats():
+            print(f"    {stat}")
+        print()
+        print("  Use --property, --depth, --stat options to configure download.")
 
     return 0
 
@@ -593,6 +692,10 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
             kwargs["year"] = args.year
         if args.source == "bdot10k":
             kwargs["format"] = args.format
+        if args.source == "soilgrids":
+            kwargs["property"] = args.property
+            kwargs["depth"] = args.depth
+            kwargs["stat"] = args.stat
 
         # Download
         if args.teryt:
@@ -617,6 +720,144 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
         print(f"Error: {e}", file=sys.stderr)
         return 1
     except (ParseError, ValidationError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+def cmd_soilgrids(args: argparse.Namespace) -> int:
+    """
+    Execute soilgrids commands.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed command-line arguments
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, 1 for error)
+    """
+    if args.soilgrids_command is None:
+        print("Usage: kartograf soilgrids <command>")
+        print("Commands: hsg")
+        print("Run 'kartograf soilgrids <command> --help' for details")
+        return 0
+
+    if args.soilgrids_command == "hsg":
+        return cmd_soilgrids_hsg(args)
+
+    return 0
+
+
+def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
+    """
+    Execute soilgrids HSG calculation command.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed command-line arguments
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, 1 for error)
+    """
+    from kartograf.hydrology import HSGCalculator
+
+    # Check that exactly one selection method is provided
+    methods = [args.bbox, args.godlo]
+    provided = [m for m in methods if m is not None]
+
+    if len(provided) == 0:
+        print("Error: Must provide one of: --bbox or --godlo", file=sys.stderr)
+        return 1
+
+    if len(provided) > 1:
+        print("Error: Provide only one of: --bbox or --godlo", file=sys.stderr)
+        return 1
+
+    # Determine output path
+    output_path = Path(args.output)
+    if args.godlo:
+        if output_path.suffix.lower() != ".tif":
+            # Output is a directory, create filename
+            output_path.mkdir(parents=True, exist_ok=True)
+            output_path = output_path / f"hsg_{args.godlo}.tif"
+    elif args.bbox and output_path.suffix.lower() != ".tif":
+        output_path.mkdir(parents=True, exist_ok=True)
+        output_path = output_path / "hsg_bbox.tif"
+
+    # Parse bbox if provided
+    bbox = None
+    if args.bbox:
+        try:
+            parts = [float(x.strip()) for x in args.bbox.split(",")]
+            if len(parts) != 4:
+                raise ValueError("BBOX must have 4 values")
+            bbox = BBox(parts[0], parts[1], parts[2], parts[3], "EPSG:2180")
+        except ValueError as e:
+            print(f"Error: Invalid bbox format: {e}", file=sys.stderr)
+            print(
+                "Expected: min_x,min_y,max_x,max_y (e.g., 450000,550000,460000,560000)"
+            )
+            return 1
+
+    # Create calculator
+    calc = HSGCalculator()
+
+    print("Calculating Hydrologic Soil Groups (HSG)...")
+    if args.godlo:
+        print(f"  Godło: {args.godlo}")
+    if bbox:
+        print(f"  BBox: ({bbox.min_x}, {bbox.min_y}) - ({bbox.max_x}, {bbox.max_y})")
+    print(f"  Depth: {args.depth}")
+    print()
+
+    try:
+        if args.godlo:
+            result_path = calc.calculate_hsg_by_godlo(
+                godlo=args.godlo,
+                output_path=output_path,
+                depth=args.depth,
+                keep_intermediate=args.keep_intermediate,
+            )
+        else:
+            result_path = calc.calculate_hsg_by_bbox(
+                bbox=bbox,
+                output_path=output_path,
+                depth=args.depth,
+                keep_intermediate=args.keep_intermediate,
+            )
+
+        print(f"HSG raster saved to: {result_path}")
+
+        # Print statistics if requested
+        if args.stats:
+            print()
+            print("HSG Statistics:")
+            stats = calc.get_hsg_statistics(result_path)
+            for group, data in stats.items():
+                pct = data["percent"]
+                area = data["area_ha"]
+                print(f"  Group {group}: {pct:.1f}% ({area:.2f} ha)")
+                print(f"           {data['description']}")
+
+        print()
+        print("Legend: 1=A (high infiltration), 2=B (moderate),")
+        print("        3=C (slow), 4=D (very slow)")
+        print("Use with SCS-CN method: HSG + Land Use -> Curve Number")
+
+        return 0
+
+    except (ParseError, ValidationError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    except DownloadError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
@@ -650,6 +891,9 @@ def main(args: Optional[list[str]] = None) -> int:
 
     if parsed_args.command == "landcover":
         return cmd_landcover(parsed_args)
+
+    if parsed_args.command == "soilgrids":
+        return cmd_soilgrids(parsed_args)
 
     # Unknown command (shouldn't happen with argparse)
     print(f"Unknown command: {parsed_args.command}", file=sys.stderr)

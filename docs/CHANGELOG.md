@@ -7,6 +7,57 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.3.0] - 2026-01-18
 
+### Added - SoilGrids i Hydrologic Soil Groups (HSG)
+
+- **SoilGridsProvider** - Provider dla ISRIC SoilGrids (dane glebowe)
+  - Globalne dane glebowe w rozdzielczości 250m
+  - WCS Endpoint: `https://maps.isric.org/mapserv`
+  - **11 parametrów glebowych:**
+    - `bdod` - Gęstość objętościowa (kg/dm³)
+    - `cec` - Pojemność wymiany kationowej (cmol/kg)
+    - `cfvo` - Fragmenty gruboziarniste (%)
+    - `clay` - Zawartość gliny (%)
+    - `nitrogen` - Azot całkowity (g/kg)
+    - `ocd` - Gęstość węgla organicznego (kg/m³)
+    - `ocs` - Zasób węgla organicznego (t/ha)
+    - `phh2o` - pH w H2O
+    - `sand` - Zawartość piasku (%)
+    - `silt` - Zawartość pyłu (%)
+    - `soc` - Węgiel organiczny (g/kg)
+  - **6 głębokości:** 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm
+  - **5 statystyk:** mean, Q0.05, Q0.5, Q0.95, uncertainty
+  - Transformacja CRS: EPSG:2180 → WGS84
+
+- **HSGCalculator** - Kalkulacja Hydrologic Soil Groups dla metody SCS-CN
+  - `kartograf/hydrology/hsg.py` - moduł hydrologiczny
+  - Klasyfikacja tekstury gleby wg trójkąta USDA (12 klas)
+  - Mapowanie tekstury do HSG (A, B, C, D)
+  - **Grupy hydrologiczne:**
+    - A - wysoka infiltracja (piasek, piasek gliniasty)
+    - B - umiarkowana infiltracja (glina piaszczysta, glina)
+    - C - wolna infiltracja (glina ilasta)
+    - D - bardzo wolna infiltracja (ił)
+  - Automatyczne pobieranie clay/sand/silt z SoilGrids
+  - Statystyki pokrycia dla każdej grupy HSG
+
+- **CLI soilgrids** - Nowe komendy CLI
+  - `kartograf landcover download --source soilgrids --property <param> --depth <głębokość>`
+  - `kartograf landcover list-layers --source soilgrids`
+  - `kartograf soilgrids hsg --godlo <godło>` - kalkulacja HSG
+  - Opcje HSG: `--depth`, `--output`, `--keep-intermediate`, `--stats`
+
+**Przykłady użycia:**
+```bash
+# Pobierz węgiel organiczny
+kartograf landcover download --source soilgrids --godlo N-34-130-D --property soc
+
+# Pobierz zawartość gliny
+kartograf landcover download --source soilgrids --godlo N-34-130-D --property clay --depth 15-30cm
+
+# Oblicz HSG dla metody SCS-CN
+kartograf soilgrids hsg --godlo N-34-130-D --stats
+```
+
 ### Added - Land Cover (Pokrycie Terenu)
 
 - **LandCoverProvider** - Nowa abstrakcja dla providerów danych pokrycia terenu
@@ -92,10 +143,12 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 ### Dependencies
 
 - Dodano `PyJWT[crypto]>=2.8.0` - JWT generation dla OAuth2
+- Dodano `rasterio>=1.3.0` - przetwarzanie rastrów GeoTIFF
+- Dodano `numpy>=1.24.0` - operacje na tablicach
 
 ### Technical Details
 
-- 285 testów (42 dla landcover)
+- 347 testów (42 dla landcover, 28 dla soilgrids, 34 dla HSG)
 - Formatowanie: black, flake8
 
 ### Sources
@@ -104,6 +157,8 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - CORINE Land Cover: https://land.copernicus.eu/en/products/corine-land-cover
 - EEA Discomap: https://image.discomap.eea.europa.eu
 - DLR EOC: https://geoservice.dlr.de/eoc/land/wms
+- ISRIC SoilGrids: https://soilgrids.org/
+- SoilGrids Documentation: https://docs.isric.org/globaldata/soilgrids/
 
 ---
 
