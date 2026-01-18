@@ -1,8 +1,9 @@
 """
-Kartograf - Tool for downloading NMT data from GUGiK.
+Kartograf - Tool for downloading spatial data from GUGiK.
 
 This package provides tools for downloading Digital Terrain Model (NMT)
-data from the Polish GUGiK (Główny Urząd Geodezji i Kartografii) service.
+and Land Cover data from Polish GUGiK (Główny Urząd Geodezji i Kartografii)
+and European Copernicus services.
 
 Example usage::
 
@@ -15,6 +16,11 @@ Example usage::
     # Download NMT data
     manager = DownloadManager(output_dir="./data")
     path = manager.download_sheet("N-34-130-D-d-2-4")
+
+    # Download Land Cover data
+    from kartograf import LandCoverManager
+    lc_manager = LandCoverManager()
+    lc_manager.download(godlo="N-34-130-D")
 """
 
 from kartograf.core.sheet_parser import BBox, SheetParser
@@ -26,22 +32,31 @@ from kartograf.exceptions import (
     ParseError,
     ValidationError,
 )
+from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.base import BaseProvider
+from kartograf.providers.bdot10k import Bdot10kProvider
+from kartograf.providers.corine import CorineProvider
 from kartograf.providers.gugik import GugikProvider
+from kartograf.providers.landcover_base import LandCoverProvider
 
-__version__ = "0.2.0"
+__version__ = "0.3.0-dev"
 
 __all__ = [
     # Core
     "SheetParser",
     "BBox",
-    # Download
+    # Download (NMT)
     "DownloadManager",
     "DownloadProgress",
     "FileStorage",
+    # Land Cover
+    "LandCoverManager",
     # Providers
     "BaseProvider",
     "GugikProvider",
+    "LandCoverProvider",
+    "Bdot10kProvider",
+    "CorineProvider",
     # Exceptions
     "KartografError",
     "ParseError",
