@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased] - v0.3.0
+## [0.3.0] - 2026-01-18
 
 ### Added - Land Cover (Pokrycie Terenu)
 
@@ -17,7 +17,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Pobieranie paczek powiatowych przez TERYT
   - Pobieranie przez WMS GetFeatureInfo dla URL paczki
   - Pobieranie przez godło arkusza (konwersja na bbox)
-  - Klasy pokrycia terenu: PTLZ (lasy), PTWP (wody), PTRK (roślinność), PTUT (uprawy), itp.
+  - **12 warstw pokrycia terenu (PT*):**
+    - PTGN - Grunty nieużytkowe
+    - PTKM - Tereny komunikacyjne
+    - PTLZ - Tereny leśne
+    - PTNZ - Tereny niezabudowane
+    - PTPL - Place
+    - PTRK - Roślinność krzewiasta
+    - PTSO - Składowiska
+    - PTTR - Tereny rolne
+    - PTUT - Uprawy trwałe
+    - PTWP - Wody powierzchniowe
+    - PTWZ - Tereny zabagnione
+    - PTZB - Tereny zabudowane
+  - Automatyczne scalanie warstw PT* z ZIP do jednego GeoPackage
   - Format wyjściowy: GeoPackage (.gpkg), SHP
 
 - **CorineProvider** - Provider dla CORINE Land Cover (Copernicus)
@@ -183,5 +196,6 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
+[0.3.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.1.0

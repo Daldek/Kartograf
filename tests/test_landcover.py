@@ -58,7 +58,8 @@ class TestBdot10kProvider:
         layers = provider.get_available_layers()
         assert "PTLZ" in layers  # forests
         assert "PTWP" in layers  # waters
-        assert len(layers) == 9
+        assert "PTZB" in layers  # built-up areas
+        assert len(layers) == 12
 
     def test_layer_description(self):
         """Test layer descriptions."""
