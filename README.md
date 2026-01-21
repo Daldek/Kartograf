@@ -233,7 +233,7 @@ Kartograf/
 │   ├── landcover/       # Land Cover management
 │   ├── hydrology/       # Hydrologic Soil Groups (HSG)
 │   └── cli/             # CLI interface
-├── tests/               # Testy (347)
+├── tests/               # Testy (365)
 ├── docs/                # Dokumentacja
 └── README.md
 ```
@@ -276,4 +276,4 @@ Projekt udostępniony na licencji MIT. Szczegóły w pliku `LICENSE`.
 
 ## Status
 
-**Wersja 0.3.0** - Dodano funkcjonalność Land Cover (BDOT10k, CORINE), SoilGrids (dane glebowe) oraz HSG (grupy hydrologiczne dla SCS-CN). Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów
+**Wersja 0.3.1** - Dodano wybór rozdzielczości NMT (1m/5m), Land Cover (BDOT10k, CORINE), SoilGrids (dane glebowe) oraz HSG (grupy hydrologiczne dla SCS-CN). Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów.

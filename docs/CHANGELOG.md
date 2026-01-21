@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.1] - 2026-01-20
+## [0.3.1] - 2026-01-21
 
 ### Added - NMT Resolution Selection
 
@@ -46,6 +46,21 @@ kartograf download N-34-130-D --scale 1:10000 -r 5m
 ### Changed
 
 - **Testy** - 365 testów (18 nowych dla resolution)
+
+### Fixed - QA Review (2026-01-21)
+
+- **Synchronizacja wersji** - Ujednolicono wersję we wszystkich plikach
+  - `pyproject.toml`: 0.3.0 → 0.3.1
+  - `kartograf/__init__.py`: 0.3.0-dev → 0.3.1
+  - `README.md`: zaktualizowano status i liczbę testów
+
+- **Synchronizacja zależności** - Uzupełniono brakujące zależności
+  - `pyproject.toml`: dodano `rasterio>=1.3.0`, `numpy>=1.24.0`
+  - `requirements.txt`: dodano `PyJWT[crypto]>=2.8.0`
+
+- **Testy** - Naprawiono test wersji w `test_integration.py`
+
+- **Dokumentacja** - Dodano sekcję QA Review do `PROGRESS.md`
 
 ---
 

@@ -39,7 +39,7 @@ from kartograf.providers.corine import CorineProvider
 from kartograf.providers.gugik import GugikProvider
 from kartograf.providers.landcover_base import LandCoverProvider
 
-__version__ = "0.3.0-dev"
+__version__ = "0.3.1"
 
 __all__ = [
     # Core
