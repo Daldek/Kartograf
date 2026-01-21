@@ -41,7 +41,7 @@ from kartograf.providers.landcover_base import LandCoverProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 from kartograf.hydrology.hsg import HSGCalculator
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 
 __all__ = [
     # Core

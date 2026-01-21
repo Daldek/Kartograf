@@ -34,7 +34,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version="%(prog)s 0.3.0-dev",
+        version="%(prog)s 0.3.2",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -103,8 +103,8 @@ def create_parser() -> argparse.ArgumentParser:
     download_parser.add_argument(
         "--vertical-crs",
         choices=["KRON86", "EVRF2007"],
-        default="KRON86",
-        help="Vertical CRS: KRON86 (Kronsztadt 86) or EVRF2007 (default: KRON86)",
+        default="EVRF2007",
+        help="Vertical CRS: EVRF2007 (default) or KRON86 (legacy Kronsztadt 86)",
     )
     download_parser.add_argument(
         "--resolution",

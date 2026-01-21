@@ -16,22 +16,26 @@ class FileStorage:
     Manages file storage for downloaded NMT data.
 
     Files are organized in a hierarchical directory structure based on
-    the godło components, making it easy to navigate and find specific sheets.
+    resolution and godło components, making it easy to navigate and find
+    specific sheets while keeping different resolutions separate.
 
     Directory structure example:
-        data/N-34/130/D/d/2/4/N-34-130-D-d-2-4.tif
+        data/1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
+        data/5m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
 
     Attributes
     ----------
     output_dir : Path
         Base directory for storing downloaded files
+    resolution : str
+        Resolution subdirectory ("1m" or "5m")
 
     Examples
     --------
-    >>> storage = FileStorage("./data")
-    >>> path = storage.get_path("N-34-130-D-d-2-4", ".tif")
+    >>> storage = FileStorage("./data", resolution="1m")
+    >>> path = storage.get_path("N-34-130-D-d-2-4", ".asc")
     >>> print(path)
-    data/N-34/130/D/d/2/4/N-34-130-D-d-2-4.tif
+    data/1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
 
     Notes
     -----
@@ -39,7 +43,9 @@ class FileStorage:
     partial files in case of errors.
     """
 
-    def __init__(self, output_dir: str | Path = "./data"):
+    SUPPORTED_RESOLUTIONS = ["1m", "5m"]
+
+    def __init__(self, output_dir: str | Path = "./data", resolution: str = "1m"):
         """
         Initialize file storage.
 
@@ -48,33 +54,48 @@ class FileStorage:
         output_dir : str or Path
             Base directory for storing downloaded files.
             Will be created if it doesn't exist.
+        resolution : str, optional
+            Resolution for subdirectory: "1m" or "5m" (default: "1m").
+            Files will be stored in output_dir/resolution/...
         """
+        if resolution not in self.SUPPORTED_RESOLUTIONS:
+            raise ValueError(
+                f"Unsupported resolution: '{resolution}'. "
+                f"Supported: {self.SUPPORTED_RESOLUTIONS}"
+            )
         self._output_dir = Path(output_dir)
+        self._resolution = resolution
 
     @property
     def output_dir(self) -> Path:
         """Return the base output directory."""
         return self._output_dir
 
-    def get_path(self, godlo: str, ext: str = ".tif") -> Path:
+    @property
+    def resolution(self) -> str:
+        """Return the resolution subdirectory."""
+        return self._resolution
+
+    def get_path(self, godlo: str, ext: str = ".asc") -> Path:
         """
         Generate file path for given godło and extension.
 
-        The path follows a hierarchical structure based on godło components:
-        - 1:1M (N-34) → N-34/N-34.tif
-        - 1:500k (N-34-A) → N-34/A/N-34-A.tif
-        - 1:200k (N-34-130) → N-34/130/N-34-130.tif
-        - 1:100k (N-34-130-D) → N-34/130/D/N-34-130-D.tif
-        - 1:50k (N-34-130-D-d) → N-34/130/D/d/N-34-130-D-d.tif
-        - 1:25k (N-34-130-D-d-2) → N-34/130/D/d/2/N-34-130-D-d-2.tif
-        - 1:10k (N-34-130-D-d-2-4) → N-34/130/D/d/2/4/N-34-130-D-d-2-4.tif
+        The path follows a hierarchical structure based on resolution
+        and godło components:
+        - 1:1M (N-34) → 1m/N-34/N-34.asc
+        - 1:500k (N-34-A) → 1m/N-34/A/N-34-A.asc
+        - 1:200k (N-34-130) → 1m/N-34/130/N-34-130.asc
+        - 1:100k (N-34-130-D) → 1m/N-34/130/D/N-34-130-D.asc
+        - 1:50k (N-34-130-D-d) → 1m/N-34/130/D/d/N-34-130-D-d.asc
+        - 1:25k (N-34-130-D-d-2) → 1m/N-34/130/D/d/2/N-34-130-D-d-2.asc
+        - 1:10k (N-34-130-D-d-2-4) → 1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
 
         Parameters
         ----------
         godlo : str
             Map sheet identifier (e.g., "N-34-130-D-d-2-4")
         ext : str, optional
-            File extension including dot (default: ".tif")
+            File extension including dot (default: ".asc")
 
         Returns
         -------
@@ -83,9 +104,9 @@ class FileStorage:
 
         Examples
         --------
-        >>> storage = FileStorage("./data")
-        >>> storage.get_path("N-34-130-D-d-2-4", ".tif")
-        PosixPath('data/N-34/130/D/d/2/4/N-34-130-D-d-2-4.tif')
+        >>> storage = FileStorage("./data", resolution="1m")
+        >>> storage.get_path("N-34-130-D-d-2-4", ".asc")
+        PosixPath('data/1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc')
         """
         # Normalize godło using SheetParser
         parser = SheetParser(godlo)
@@ -94,8 +115,8 @@ class FileStorage:
         # Build directory path from godło components
         dir_parts = self._get_directory_parts(normalized_godlo)
 
-        # Construct full path
-        dir_path = self._output_dir
+        # Construct full path with resolution subdirectory
+        dir_path = self._output_dir / self._resolution
         for part in dir_parts:
             dir_path = dir_path / part
 
@@ -145,7 +166,7 @@ class FileStorage:
         path.parent.mkdir(parents=True, exist_ok=True)
         return path.parent
 
-    def exists(self, godlo: str, ext: str = ".tif") -> bool:
+    def exists(self, godlo: str, ext: str = ".asc") -> bool:
         """
         Check if file for given godło exists.
 
@@ -154,7 +175,7 @@ class FileStorage:
         godlo : str
             Map sheet identifier
         ext : str, optional
-            File extension including dot (default: ".tif")
+            File extension including dot (default: ".asc")
 
         Returns
         -------
@@ -167,7 +188,7 @@ class FileStorage:
         self,
         godlo: str,
         content: bytes | BinaryIO,
-        ext: str = ".tif",
+        ext: str = ".asc",
     ) -> Path:
         """
         Write content to file atomically.
@@ -181,7 +202,7 @@ class FileStorage:
         content : bytes or BinaryIO
             Content to write (bytes or file-like object)
         ext : str, optional
-            File extension including dot (default: ".tif")
+            File extension including dot (default: ".asc")
 
         Returns
         -------
@@ -190,8 +211,8 @@ class FileStorage:
 
         Examples
         --------
-        >>> storage = FileStorage("./data")
-        >>> path = storage.write_atomic("N-34-130-D", b"data", ".tif")
+        >>> storage = FileStorage("./data", resolution="1m")
+        >>> path = storage.write_atomic("N-34-130-D", b"data", ".asc")
         """
         target_path = self.get_path(godlo, ext)
         target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -217,7 +238,7 @@ class FileStorage:
                 temp_path.unlink()
             raise
 
-    def delete(self, godlo: str, ext: str = ".tif") -> bool:
+    def delete(self, godlo: str, ext: str = ".asc") -> bool:
         """
         Delete file for given godło.
 
@@ -226,7 +247,7 @@ class FileStorage:
         godlo : str
             Map sheet identifier
         ext : str, optional
-            File extension including dot (default: ".tif")
+            File extension including dot (default: ".asc")
 
         Returns
         -------
@@ -239,25 +260,28 @@ class FileStorage:
             return True
         return False
 
-    def list_files(self, pattern: str = "**/*.tif") -> list[Path]:
+    def list_files(self, pattern: str = "**/*.asc") -> list[Path]:
         """
         List all files matching pattern in storage directory.
+
+        Searches within the resolution subdirectory.
 
         Parameters
         ----------
         pattern : str, optional
-            Glob pattern for matching files (default: "**/*.tif")
+            Glob pattern for matching files (default: "**/*.asc")
 
         Returns
         -------
         list[Path]
             List of matching file paths
         """
-        if not self._output_dir.exists():
+        resolution_dir = self._output_dir / self._resolution
+        if not resolution_dir.exists():
             return []
-        return list(self._output_dir.glob(pattern))
+        return list(resolution_dir.glob(pattern))
 
-    def get_size(self, godlo: str, ext: str = ".tif") -> int | None:
+    def get_size(self, godlo: str, ext: str = ".asc") -> int | None:
         """
         Get file size for given godło.
 
@@ -266,7 +290,7 @@ class FileStorage:
         godlo : str
             Map sheet identifier
         ext : str, optional
-            File extension including dot (default: ".tif")
+            File extension including dot (default: ".asc")
 
         Returns
         -------
@@ -280,4 +304,7 @@ class FileStorage:
 
     def __repr__(self) -> str:
         """Return string representation."""
-        return f"FileStorage(output_dir='{self._output_dir}')"
+        return (
+            f"FileStorage(output_dir='{self._output_dir}', "
+            f"resolution='{self._resolution}')"
+        )
