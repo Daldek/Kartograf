@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.2] - 2026-01-21
+
+### Changed - Storage Structure and Default Vertical CRS
+
+- **Domyślny układ wysokościowy zmieniony na EVRF2007**
+  - `GugikProvider`: domyślny `vertical_crs` zmieniony z `"KRON86"` na `"EVRF2007"`
+  - `DownloadManager`: domyślny `vertical_crs` zmieniony z `"KRON86"` na `"EVRF2007"`
+  - CLI: `--vertical-crs` domyślnie `EVRF2007`
+  - Kronsztadt 86 (KRON86) jest przestarzały i dostępny jako opcja legacy
+
+- **Nowa struktura katalogów z rozdzielczością**
+  - `FileStorage`: nowy parametr `resolution` (domyślnie `"1m"`)
+  - Pliki NMT są teraz rozdzielone według rozdzielczości:
+    ```
+    data/1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc   # dla 1m
+    data/5m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc   # dla 5m
+    ```
+  - `DownloadManager` automatycznie przekazuje `resolution` do `FileStorage`
+  - Domyślne rozszerzenie pliku zmienione z `.tif` na `.asc`
+
+### Breaking Changes
+
+- **Struktura katalogów** - pliki NMT są teraz zapisywane w podkatalogu `1m/` lub `5m/`
+  - Stara ścieżka: `data/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc`
+  - Nowa ścieżka: `data/1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc`
+
+- **Domyślny vertical_crs** - zmieniony z `KRON86` na `EVRF2007`
+  - Aby używać starego układu: `--vertical-crs KRON86`
+
+**Przykłady użycia:**
+```bash
+# Pobierz NMT 1m (EVRF2007 domyślnie)
+kartograf download N-34-130-D-d-2-4
+# → data/1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
+
+# Pobierz NMT 5m
+kartograf download N-34-130-D-d-2-4 --resolution 5m
+# → data/5m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
+
+# Użyj starego układu Kronsztadt (legacy)
+kartograf download N-34-130-D-d-2-4 --vertical-crs KRON86
+```
+
+---
+
 ## [0.3.1] - 2026-01-21
 
 ### Added - NMT Resolution Selection
@@ -317,6 +362,7 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
+[0.3.2]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.2
 [0.3.1]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.2.0

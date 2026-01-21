@@ -68,11 +68,11 @@ class DownloadManager:
     - By bbox: downloads GeoTIFF from WCS (only 1m resolution)
 
     Supports vertical CRS:
-    - KRON86 (default) - Kronsztadt 86
-    - EVRF2007 - European Vertical Reference Frame 2007
+    - EVRF2007 (default) - European Vertical Reference Frame 2007
+    - KRON86 - legacy Kronsztadt 86
 
     Supports resolutions:
-    - 1m (default) - high resolution, available for both KRON86 and EVRF2007
+    - 1m (default) - high resolution, available for both EVRF2007 and KRON86
     - 5m - lower resolution, available only for EVRF2007
 
     Examples
@@ -93,8 +93,8 @@ class DownloadManager:
     ... )
     >>> manager.download_bbox(bbox, "area.tif")
     >>>
-    >>> # Download in EVRF2007 vertical CRS
-    >>> manager = DownloadManager(vertical_crs="EVRF2007")
+    >>> # Download in legacy KRON86 vertical CRS
+    >>> manager = DownloadManager(vertical_crs="KRON86")
     >>> manager.download_sheet("N-34-130-D-d-2-4")
     >>>
     >>> # Download 5m resolution (only EVRF2007)
@@ -107,7 +107,7 @@ class DownloadManager:
         output_dir: str | Path = "./data",
         provider: Optional[BaseProvider] = None,
         storage: Optional[FileStorage] = None,
-        vertical_crs: str = "KRON86",
+        vertical_crs: str = "EVRF2007",
         resolution: str = "1m",
     ):
         """
@@ -122,7 +122,7 @@ class DownloadManager:
         storage : FileStorage, optional
             Storage manager (default: FileStorage with output_dir)
         vertical_crs : str, optional
-            Vertical CRS: "KRON86" or "EVRF2007" (default: "KRON86").
+            Vertical CRS: "EVRF2007" or "KRON86" (default: "EVRF2007").
             Note: 5m resolution only supports EVRF2007.
         resolution : str, optional
             Grid resolution: "1m" or "5m" (default: "1m").
@@ -140,7 +140,7 @@ class DownloadManager:
         self._provider = provider or GugikProvider(
             vertical_crs=vertical_crs, resolution=resolution
         )
-        self._storage = storage or FileStorage(output_dir)
+        self._storage = storage or FileStorage(output_dir, resolution=resolution)
         self._vertical_crs = vertical_crs
         self._resolution = resolution
 

@@ -1,7 +1,7 @@
 # Plan Implementacji Kartograf
 
 **Repozytorium:** https://github.com/Daldek/Kartograf.git
-**Status:** Wersja 0.3.1
+**Status:** Wersja 0.3.2
 **Ostatnia aktualizacja:** 2026-01-21
 
 ---
@@ -14,7 +14,33 @@
 
 ---
 
-## Aktualny Etap: 20 - Cross-Project Compatibility - UKOŃCZONY
+## Aktualny Etap: 21 - Storage Structure & Default CRS - UKOŃCZONY
+
+**Status:** Ukończony
+**Cel:** Rozdzielenie plików NMT według rozdzielczości i zmiana domyślnego układu wysokościowego
+
+**Wykonane prace:**
+- Zmieniono domyślny `vertical_crs` z `KRON86` na `EVRF2007` (Kronsztadt jest przestarzały)
+- Dodano parametr `resolution` do `FileStorage` dla rozdzielenia plików 1m/5m
+- Nowa struktura katalogów: `data/1m/N-34/130/...` i `data/5m/N-34/130/...`
+- Zaktualizowano `DownloadManager` aby przekazywał `resolution` do `FileStorage`
+- Zaktualizowano CLI (`--vertical-crs` domyślnie EVRF2007)
+- Wszystkie 365 testów przechodzi
+
+**Nowa struktura katalogów:**
+```
+data/
+├── 1m/
+│   └── N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
+└── 5m/
+    └── N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
+```
+
+**Poprzedni etap:** 20 - Cross-Project Compatibility - UKOŃCZONY
+
+---
+
+## Etap 20 - Cross-Project Compatibility - UKOŃCZONY
 
 **Status:** Ukończony
 **Cel:** Naprawa kompatybilności z pozostałymi projektami (Hydrograf, Hydrolog, IMGWTools)

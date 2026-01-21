@@ -278,10 +278,10 @@ class TestGugikProviderDownloadBbox:
         assert result == output_path
         assert output_path.exists()
 
-        # Should use WCS endpoint
+        # Should use WCS endpoint (default is now EVRF2007)
         call_url = session.get.call_args[0][0]
         assert "WCS" in call_url
-        assert "COVERAGEID=DTM_PL-KRON86-NH_TIFF" in call_url
+        assert "COVERAGEID=DTM_PL-EVRF2007-NH_TIFF" in call_url
         assert "SUBSET=x(" in call_url
         assert "SUBSET=y(" in call_url
 
@@ -499,7 +499,7 @@ class TestGugikProviderGetOpendataUrl:
     def test_get_opendata_url_uses_correct_endpoint_for_1m(
         self, mock_wms_response_with_url
     ):
-        """Test że 1m używa właściwego endpointu."""
+        """Test że 1m używa właściwego endpointu (domyślnie EVRF2007)."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=mock_wms_response_with_url)
 
@@ -507,7 +507,8 @@ class TestGugikProviderGetOpendataUrl:
         provider._get_opendata_url("N-34-130-D-d-2-4")
 
         call_url = session.get.call_args[0][0]
-        assert "SkorowidzeUkladKRON86" in call_url
+        # Default vertical CRS is now EVRF2007
+        assert "SkorowidzeUkladEVRF2007" in call_url
 
     def test_get_opendata_url_uses_correct_endpoint_for_5m(
         self, mock_wms_response_with_url
