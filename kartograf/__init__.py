@@ -38,6 +38,8 @@ from kartograf.providers.bdot10k import Bdot10kProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.gugik import GugikProvider
 from kartograf.providers.landcover_base import LandCoverProvider
+from kartograf.providers.soilgrids import SoilGridsProvider
+from kartograf.hydrology.hsg import HSGCalculator
 
 __version__ = "0.3.1"
 
@@ -57,6 +59,9 @@ __all__ = [
     "LandCoverProvider",
     "Bdot10kProvider",
     "CorineProvider",
+    "SoilGridsProvider",
+    # Hydrology
+    "HSGCalculator",
     # Exceptions
     "KartografError",
     "ParseError",
