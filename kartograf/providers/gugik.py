@@ -8,6 +8,10 @@ Digital Terrain Model (NMT) data from the Polish GUGiK
 Two download methods based on input type:
 - Godło (map sheet ID) → OpenData (ASC format)
 - BBox (bounding box) → WCS (GeoTIFF/PNG/JPEG formats)
+
+Supported resolutions:
+- 1m (GRID1) - available for KRON86 and EVRF2007
+- 5m (GRID5) - available only for EVRF2007
 """
 
 import logging
@@ -37,6 +41,10 @@ class GugikProvider(BaseProvider):
     - KRON86 (PL-KRON86-NH) - default, Kronsztadt 86
     - EVRF2007 (PL-EVRF2007-NH) - European Vertical Reference Frame 2007
 
+    Supports two resolutions:
+    - 1m (default) - high resolution, available for both KRON86 and EVRF2007
+    - 5m - lower resolution, available only for EVRF2007
+
     Examples
     --------
     >>> provider = GugikProvider()
@@ -53,12 +61,20 @@ class GugikProvider(BaseProvider):
     >>> # Download in EVRF2007 vertical CRS
     >>> provider = GugikProvider(vertical_crs="EVRF2007")
     >>> provider.download("N-34-130-D-d-2-4", Path("./sheet_evrf.asc"))
+    >>>
+    >>> # Download 5m resolution (only EVRF2007)
+    >>> provider = GugikProvider(resolution="5m")
+    >>> provider.download("N-34-130-D-d-2-4", Path("./sheet_5m.asc"))
     """
 
     # Base URL for GUGiK services
     BASE_URL = "https://mapy.geoportal.gov.pl"
 
-    # WCS endpoints for NMT data (by vertical CRS)
+    # Supported resolutions
+    SUPPORTED_RESOLUTIONS = ["1m", "5m"]
+
+    # WCS endpoints for NMT data (by vertical CRS) - only 1m resolution
+    # Note: 5m resolution is NOT available via WCS
     WCS_ENDPOINTS = {
         "KRON86": f"{BASE_URL}/wss/service/PZGIK/NMT/GRID1/WCS/"
         "DigitalTerrainModelFormatTIFF",
@@ -67,34 +83,54 @@ class GugikProvider(BaseProvider):
     }
 
     # WMS endpoints for skorowidze (index maps) - used to find OpenData URLs
+    # Structure: {resolution: {vertical_crs: endpoint}}
     WMS_SKOROWIDZE_ENDPOINTS = {
-        "KRON86": f"{BASE_URL}/wss/service/PZGIK/NMT/WMS/SkorowidzeUkladKRON86",
-        "EVRF2007": f"{BASE_URL}/wss/service/PZGIK/NMT/WMS/SkorowidzeUkladEVRF2007",
+        "1m": {
+            "KRON86": f"{BASE_URL}/wss/service/PZGIK/NMT/WMS/SkorowidzeUkladKRON86",
+            "EVRF2007": f"{BASE_URL}/wss/service/PZGIK/NMT/WMS/SkorowidzeUkladEVRF2007",
+        },
+        "5m": {
+            # 5m is only available in EVRF2007
+            "EVRF2007": f"{BASE_URL}/wss/service/PZGIK/NMT/WMS/SheetsGrid5mEVRF2007",
+        },
     }
 
-    # Layers to query for ASC files (by vertical CRS, ordered from newest to oldest)
+    # Layers to query for ASC files (by resolution and vertical CRS)
+    # Ordered from newest to oldest
     WMS_LAYERS = {
-        "KRON86": [
-            "SkorowidzeNMT2019",
-            "SkorowidzeNMT2018",
-            "SkorowidzeNMT2017iStarsze",
-        ],
-        "EVRF2007": [
-            "SkorowidzeNMT2025",
-            "SkorowidzeNMT2024",
-            "SkorowidzeNMT2023",
-            "SkorowidzeNMT2022iStarsze",
-        ],
+        "1m": {
+            "KRON86": [
+                "SkorowidzeNMT2019",
+                "SkorowidzeNMT2018",
+                "SkorowidzeNMT2017iStarsze",
+            ],
+            "EVRF2007": [
+                "SkorowidzeNMT2025",
+                "SkorowidzeNMT2024",
+                "SkorowidzeNMT2023",
+                "SkorowidzeNMT2022iStarsze",
+            ],
+        },
+        "5m": {
+            # 5m layers (only EVRF2007)
+            "EVRF2007": [
+                "SkorowidzeNMT2024",
+                "SkorowidzeNMT2023",
+                "SkorowidzeNMT2022",
+                "SkorowidzeNMT2021iStarsze",
+            ],
+        },
     }
 
-    # Coverage IDs for WCS (by vertical CRS)
+    # Coverage IDs for WCS (by vertical CRS) - only 1m resolution
     COVERAGE_IDS = {
         "KRON86": "DTM_PL-KRON86-NH_TIFF",
         "EVRF2007": "DTM_PL-EVRF2007-NH_TIFF",
     }
 
-    # Supported vertical CRS
+    # Supported vertical CRS by resolution
     SUPPORTED_VERTICAL_CRS = ["KRON86", "EVRF2007"]
+    SUPPORTED_VERTICAL_CRS_5M = ["EVRF2007"]  # 5m only supports EVRF2007
 
     # WCS formats (for bbox downloads)
     WCS_FORMATS = {
@@ -120,6 +156,7 @@ class GugikProvider(BaseProvider):
         self,
         session: requests.Session | None = None,
         vertical_crs: str = "KRON86",
+        resolution: str = "1m",
     ):
         """
         Initialize GUGiK provider.
@@ -131,19 +168,44 @@ class GugikProvider(BaseProvider):
         vertical_crs : str, optional
             Vertical coordinate reference system: "KRON86" or "EVRF2007".
             Default is "KRON86" (Kronsztadt 86).
+        resolution : str, optional
+            Grid resolution: "1m" or "5m". Default is "1m".
+            Note: 5m resolution is only available for EVRF2007.
         """
-        if vertical_crs not in self.SUPPORTED_VERTICAL_CRS:
+        if resolution not in self.SUPPORTED_RESOLUTIONS:
             raise ValueError(
-                f"Unsupported vertical CRS: '{vertical_crs}'. "
-                f"Supported: {self.SUPPORTED_VERTICAL_CRS}"
+                f"Unsupported resolution: '{resolution}'. "
+                f"Supported: {self.SUPPORTED_RESOLUTIONS}"
             )
+
+        # 5m resolution only supports EVRF2007
+        if resolution == "5m":
+            if vertical_crs not in self.SUPPORTED_VERTICAL_CRS_5M:
+                raise ValueError(
+                    f"Resolution 5m is only available for EVRF2007, "
+                    f"got vertical_crs='{vertical_crs}'. "
+                    f"Use vertical_crs='EVRF2007' for 5m resolution."
+                )
+        else:
+            if vertical_crs not in self.SUPPORTED_VERTICAL_CRS:
+                raise ValueError(
+                    f"Unsupported vertical CRS: '{vertical_crs}'. "
+                    f"Supported: {self.SUPPORTED_VERTICAL_CRS}"
+                )
+
         self._session = session
         self._vertical_crs = vertical_crs
+        self._resolution = resolution
 
     @property
     def vertical_crs(self) -> str:
         """Return current vertical CRS."""
         return self._vertical_crs
+
+    @property
+    def resolution(self) -> str:
+        """Return current resolution."""
+        return self._resolution
 
     @property
     def name(self) -> str:
@@ -250,8 +312,28 @@ class GugikProvider(BaseProvider):
         )
 
         session = self._session or requests.Session()
-        wms_endpoint = self.WMS_SKOROWIDZE_ENDPOINTS[self._vertical_crs]
-        wms_layers = self.WMS_LAYERS[self._vertical_crs]
+
+        # Get WMS endpoint and layers for current resolution and vertical CRS
+        resolution_endpoints = self.WMS_SKOROWIDZE_ENDPOINTS.get(self._resolution, {})
+        wms_endpoint = resolution_endpoints.get(self._vertical_crs)
+
+        if not wms_endpoint:
+            raise DownloadError(
+                f"No WMS endpoint available for resolution={self._resolution}, "
+                f"vertical_crs={self._vertical_crs}. "
+                f"5m resolution is only available for EVRF2007.",
+                godlo=godlo,
+            )
+
+        resolution_layers = self.WMS_LAYERS.get(self._resolution, {})
+        wms_layers = resolution_layers.get(self._vertical_crs, [])
+
+        if not wms_layers:
+            raise DownloadError(
+                f"No WMS layers configured for resolution={self._resolution}, "
+                f"vertical_crs={self._vertical_crs}.",
+                godlo=godlo,
+            )
 
         # Try each layer from newest to oldest
         for layer in wms_layers:
@@ -272,7 +354,10 @@ class GugikProvider(BaseProvider):
 
             try:
                 url = f"{wms_endpoint}?{urlencode(params)}"
-                logger.debug(f"Querying WMS for {godlo} on layer {layer}")
+                logger.debug(
+                    f"Querying WMS for {godlo} on layer {layer} "
+                    f"(resolution={self._resolution})"
+                )
 
                 response = session.get(url, timeout=timeout)
                 response.raise_for_status()
@@ -299,7 +384,8 @@ class GugikProvider(BaseProvider):
                 continue
 
         raise DownloadError(
-            f"No ASC file found for {godlo} in any WMS layer",
+            f"No ASC file found for {godlo} in any WMS layer "
+            f"(resolution={self._resolution}, vertical_crs={self._vertical_crs})",
             godlo=godlo,
         )
 
@@ -319,6 +405,9 @@ class GugikProvider(BaseProvider):
 
         Use this method when you need data for an arbitrary area
         (not aligned to standard map sheets).
+
+        Note: WCS is only available for 1m resolution. For 5m resolution,
+        use download() with a godło instead.
 
         Parameters
         ----------
@@ -341,7 +430,8 @@ class GugikProvider(BaseProvider):
         DownloadError
             If the download fails
         ValueError
-            If format is not supported or bbox CRS is not EPSG:2180
+            If format is not supported, bbox CRS is not EPSG:2180,
+            or resolution is 5m (WCS not available for 5m)
 
         Examples
         --------
@@ -351,6 +441,13 @@ class GugikProvider(BaseProvider):
         ... )
         >>> path = provider.download_bbox(bbox, Path("./area.tif"))
         """
+        # WCS is only available for 1m resolution
+        if self._resolution == "5m":
+            raise ValueError(
+                "WCS download (download_bbox) is not available for 5m resolution. "
+                "Use download() with a godło instead, or use resolution='1m'."
+            )
+
         if bbox.crs != "EPSG:2180":
             raise ValueError(
                 f"BBox must be in EPSG:2180, got {bbox.crs}. "
@@ -505,6 +602,31 @@ class GugikProvider(BaseProvider):
         """Return list of supported WCS formats."""
         return list(self.WCS_FORMATS.keys())
 
+    def get_supported_resolutions(self) -> list[str]:
+        """Return list of supported resolutions."""
+        return list(self.SUPPORTED_RESOLUTIONS)
+
+    def get_supported_vertical_crs_for_resolution(
+        self, resolution: str | None = None
+    ) -> list[str]:
+        """
+        Return list of supported vertical CRS for given resolution.
+
+        Parameters
+        ----------
+        resolution : str, optional
+            Resolution to check. If None, uses current resolution.
+
+        Returns
+        -------
+        list[str]
+            Supported vertical CRS for the resolution.
+        """
+        res = resolution or self._resolution
+        if res == "5m":
+            return list(self.SUPPORTED_VERTICAL_CRS_5M)
+        return list(self.SUPPORTED_VERTICAL_CRS)
+
     def get_file_extension(self, format: str) -> str:
         """Get file extension for given format."""
         if format not in self.FORMAT_EXTENSIONS:
@@ -521,3 +643,16 @@ class GugikProvider(BaseProvider):
             return True
         except ParseError:
             return False
+
+    def is_wcs_available(self) -> bool:
+        """
+        Check if WCS download is available for current configuration.
+
+        WCS is only available for 1m resolution.
+
+        Returns
+        -------
+        bool
+            True if WCS is available, False otherwise.
+        """
+        return self._resolution == "1m"
