@@ -106,6 +106,13 @@ def create_parser() -> argparse.ArgumentParser:
         default="KRON86",
         help="Vertical CRS: KRON86 (Kronsztadt 86) or EVRF2007 (default: KRON86)",
     )
+    download_parser.add_argument(
+        "--resolution",
+        "-r",
+        choices=["1m", "5m"],
+        default="1m",
+        help="Grid resolution: 1m or 5m (default: 1m). Note: 5m only for EVRF2007",
+    )
 
     # Landcover command group
     landcover_parser = subparsers.add_parser(
@@ -496,10 +503,13 @@ def cmd_download(args: argparse.Namespace) -> int:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    # Create download manager with vertical CRS
+    # Create download manager with vertical CRS and resolution
     output_dir = Path(args.output)
     vertical_crs = getattr(args, "vertical_crs", "KRON86")
-    manager = DownloadManager(output_dir=output_dir, vertical_crs=vertical_crs)
+    resolution = getattr(args, "resolution", "1m")
+    manager = DownloadManager(
+        output_dir=output_dir, vertical_crs=vertical_crs, resolution=resolution
+    )
 
     skip_existing = not args.force
     on_progress = create_progress_callback(args.quiet)
@@ -509,7 +519,10 @@ def cmd_download(args: argparse.Namespace) -> int:
             # Download hierarchy
             if not args.quiet:
                 count = manager.count_sheets(args.godlo, args.scale)
-                print(f"Downloading {count} sheets from {args.godlo} to {args.scale}")
+                print(
+                    f"Downloading {count} sheets from {args.godlo} to {args.scale} "
+                    f"(resolution: {resolution})"
+                )
                 print()
 
             paths = manager.download_hierarchy(
@@ -525,7 +538,7 @@ def cmd_download(args: argparse.Namespace) -> int:
         else:
             # Download single sheet
             if not args.quiet:
-                print(f"Downloading {args.godlo}...")
+                print(f"Downloading {args.godlo} (resolution: {resolution})...")
 
             path = manager.download_sheet(
                 args.godlo,

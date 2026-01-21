@@ -39,6 +39,10 @@ kartograf download N-34-130-D-d-2-4
 # Pobieranie NMT (hierarchia)
 kartograf download N-34-130-D --scale 1:10000 --output ./data
 
+# Pobieranie NMT w rozdzielczości 5m (tylko EVRF2007)
+kartograf download N-34-130-D-d-2-4 --resolution 5m
+kartograf download N-34-130-D --scale 1:10000 -r 5m
+
 # Pobieranie Land Cover (BDOT10k - powiat)
 kartograf landcover download --source bdot10k --teryt 1465
 
@@ -88,7 +92,11 @@ paths = manager.download_hierarchy(
     target_scale="1:10000"
 )  # → 64 plików .asc
 
-# Pobieranie przez bbox → GeoTIFF (WCS)
+# Pobieranie NMT w rozdzielczości 5m (tylko EVRF2007)
+manager_5m = DownloadManager(output_dir="./data", resolution="5m")
+path = manager_5m.download_sheet("N-34-130-D-d-2-4")  # → .asc (5m)
+
+# Pobieranie przez bbox → GeoTIFF (WCS) - tylko dla 1m
 bbox = BBox(min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180")
 path = manager.download_bbox(bbox, "my_area.tif")  # → .tif
 
@@ -134,6 +142,9 @@ for group, data in stats.items():
 - ✅ **Pobieranie NMT** - Z retry logic i progress tracking
 - ✅ **Organizacja plików** - Automatyczna struktura katalogów
 - ✅ **Formaty** - GeoTIFF, PNG, JPEG (WCS), ASC (OpenData)
+- ✅ **Rozdzielczości:**
+  - `1m` (GRID1) - wysoka rozdzielczość, KRON86 i EVRF2007
+  - `5m` (GRID5) - niższa rozdzielczość, tylko EVRF2007
 
 ### Land Cover (Pokrycie Terenu)
 - ✅ **BDOT10k** - Polska baza wektorowa (GUGiK), szczegółowość 1:10 000

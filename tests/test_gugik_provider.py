@@ -56,6 +56,83 @@ class TestGugikProviderBasic:
             provider.get_file_extension("InvalidFormat")
 
 
+class TestGugikProviderResolution:
+    """Testy obsługi rozdzielczości (1m/5m)."""
+
+    def test_default_resolution_is_1m(self):
+        """Test że domyślna rozdzielczość to 1m."""
+        provider = GugikProvider()
+        assert provider.resolution == "1m"
+
+    def test_resolution_1m_explicit(self):
+        """Test jawnego ustawienia rozdzielczości 1m."""
+        provider = GugikProvider(resolution="1m")
+        assert provider.resolution == "1m"
+
+    def test_resolution_5m(self):
+        """Test ustawienia rozdzielczości 5m (wymaga EVRF2007)."""
+        provider = GugikProvider(resolution="5m", vertical_crs="EVRF2007")
+        assert provider.resolution == "5m"
+        assert provider.vertical_crs == "EVRF2007"
+
+    def test_resolution_5m_requires_evrf2007(self):
+        """Test że rozdzielczość 5m wymaga EVRF2007."""
+        with pytest.raises(ValueError, match="5m is only available for EVRF2007"):
+            GugikProvider(resolution="5m", vertical_crs="KRON86")
+
+    def test_resolution_invalid(self):
+        """Test nieprawidłowej rozdzielczości."""
+        with pytest.raises(ValueError, match="Unsupported resolution"):
+            GugikProvider(resolution="2m")
+
+    def test_supported_resolutions(self):
+        """Test listy obsługiwanych rozdzielczości."""
+        provider = GugikProvider()
+        resolutions = provider.get_supported_resolutions()
+
+        assert "1m" in resolutions
+        assert "5m" in resolutions
+        assert len(resolutions) == 2
+
+    def test_supported_vertical_crs_for_1m(self):
+        """Test obsługiwanych CRS dla 1m."""
+        provider = GugikProvider(resolution="1m")
+        crs_list = provider.get_supported_vertical_crs_for_resolution()
+
+        assert "KRON86" in crs_list
+        assert "EVRF2007" in crs_list
+
+    def test_supported_vertical_crs_for_5m(self):
+        """Test obsługiwanych CRS dla 5m."""
+        provider = GugikProvider(resolution="5m", vertical_crs="EVRF2007")
+        crs_list = provider.get_supported_vertical_crs_for_resolution()
+
+        assert "EVRF2007" in crs_list
+        assert "KRON86" not in crs_list
+
+    def test_is_wcs_available_1m(self):
+        """Test dostępności WCS dla 1m."""
+        provider = GugikProvider(resolution="1m")
+        assert provider.is_wcs_available() is True
+
+    def test_is_wcs_available_5m(self):
+        """Test niedostępności WCS dla 5m."""
+        provider = GugikProvider(resolution="5m", vertical_crs="EVRF2007")
+        assert provider.is_wcs_available() is False
+
+    def test_download_bbox_not_available_for_5m(self, tmp_path):
+        """Test że download_bbox nie jest dostępne dla 5m."""
+        provider = GugikProvider(resolution="5m", vertical_crs="EVRF2007")
+        output_path = tmp_path / "test.tif"
+
+        bbox = BBox(
+            min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
+        )
+
+        with pytest.raises(ValueError, match="not available for 5m"):
+            provider.download_bbox(bbox, output_path)
+
+
 class TestGugikProviderValidation:
     """Testy walidacji godła."""
 
@@ -418,6 +495,34 @@ class TestGugikProviderGetOpendataUrl:
 
         assert "opendata.geoportal.gov.pl" in url
         assert session.get.call_count == 3
+
+    def test_get_opendata_url_uses_correct_endpoint_for_1m(
+        self, mock_wms_response_with_url
+    ):
+        """Test że 1m używa właściwego endpointu."""
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=mock_wms_response_with_url)
+
+        provider = GugikProvider(session=session, resolution="1m")
+        provider._get_opendata_url("N-34-130-D-d-2-4")
+
+        call_url = session.get.call_args[0][0]
+        assert "SkorowidzeUkladKRON86" in call_url
+
+    def test_get_opendata_url_uses_correct_endpoint_for_5m(
+        self, mock_wms_response_with_url
+    ):
+        """Test że 5m używa właściwego endpointu."""
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=mock_wms_response_with_url)
+
+        provider = GugikProvider(
+            session=session, resolution="5m", vertical_crs="EVRF2007"
+        )
+        provider._get_opendata_url("N-34-130-D-d-2-4")
+
+        call_url = session.get.call_args[0][0]
+        assert "SheetsGrid5mEVRF2007" in call_url
 
 
 class TestGugikProviderSession:

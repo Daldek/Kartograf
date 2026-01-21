@@ -65,11 +65,15 @@ class DownloadManager:
 
     Two download modes:
     - By godło: downloads ASC files from OpenData
-    - By bbox: downloads GeoTIFF from WCS
+    - By bbox: downloads GeoTIFF from WCS (only 1m resolution)
 
     Supports vertical CRS:
     - KRON86 (default) - Kronsztadt 86
     - EVRF2007 - European Vertical Reference Frame 2007
+
+    Supports resolutions:
+    - 1m (default) - high resolution, available for both KRON86 and EVRF2007
+    - 5m - lower resolution, available only for EVRF2007
 
     Examples
     --------
@@ -82,7 +86,7 @@ class DownloadManager:
     >>> # Download hierarchy (ASC)
     >>> manager.download_hierarchy("N-34-130-D", "1:10000")
     >>>
-    >>> # Download by bounding box (GeoTIFF)
+    >>> # Download by bounding box (GeoTIFF) - only 1m resolution
     >>> from kartograf import BBox
     >>> bbox = BBox(
     ...     min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
@@ -92,6 +96,10 @@ class DownloadManager:
     >>> # Download in EVRF2007 vertical CRS
     >>> manager = DownloadManager(vertical_crs="EVRF2007")
     >>> manager.download_sheet("N-34-130-D-d-2-4")
+    >>>
+    >>> # Download 5m resolution (only EVRF2007)
+    >>> manager = DownloadManager(resolution="5m")
+    >>> manager.download_sheet("N-34-130-D-d-2-4")
     """
 
     def __init__(
@@ -100,6 +108,7 @@ class DownloadManager:
         provider: Optional[BaseProvider] = None,
         storage: Optional[FileStorage] = None,
         vertical_crs: str = "KRON86",
+        resolution: str = "1m",
     ):
         """
         Initialize download manager.
@@ -109,20 +118,41 @@ class DownloadManager:
         output_dir : str or Path, optional
             Base directory for downloads (default: "./data")
         provider : BaseProvider, optional
-            Data provider (default: GugikProvider with specified vertical_crs)
+            Data provider (default: GugikProvider with specified settings)
         storage : FileStorage, optional
             Storage manager (default: FileStorage with output_dir)
         vertical_crs : str, optional
-            Vertical CRS: "KRON86" or "EVRF2007" (default: "KRON86")
+            Vertical CRS: "KRON86" or "EVRF2007" (default: "KRON86").
+            Note: 5m resolution only supports EVRF2007.
+        resolution : str, optional
+            Grid resolution: "1m" or "5m" (default: "1m").
+            Note: 5m is only available for EVRF2007 and does not support
+            bbox download (WCS).
         """
-        self._provider = provider or GugikProvider(vertical_crs=vertical_crs)
+        # If resolution is 5m, force EVRF2007
+        if resolution == "5m" and vertical_crs != "EVRF2007":
+            logger.warning(
+                f"Resolution 5m only supports EVRF2007, changing "
+                f"vertical_crs from '{vertical_crs}' to 'EVRF2007'"
+            )
+            vertical_crs = "EVRF2007"
+
+        self._provider = provider or GugikProvider(
+            vertical_crs=vertical_crs, resolution=resolution
+        )
         self._storage = storage or FileStorage(output_dir)
         self._vertical_crs = vertical_crs
+        self._resolution = resolution
 
     @property
     def vertical_crs(self) -> str:
         """Return current vertical CRS."""
         return self._vertical_crs
+
+    @property
+    def resolution(self) -> str:
+        """Return current resolution."""
+        return self._resolution
 
     @property
     def provider(self) -> BaseProvider:
@@ -316,6 +346,9 @@ class DownloadManager:
         Use this method when you need data for an arbitrary area
         (not aligned to standard map sheets).
 
+        Note: WCS download is only available for 1m resolution.
+        For 5m resolution, use download_sheet() with a godło instead.
+
         Parameters
         ----------
         bbox : BBox
@@ -335,7 +368,7 @@ class DownloadManager:
         DownloadError
             If download fails
         ValueError
-            If format is not supported or bbox CRS is wrong
+            If format is not supported, bbox CRS is wrong, or resolution is 5m
 
         Examples
         --------
@@ -408,5 +441,6 @@ class DownloadManager:
         """Return string representation."""
         return (
             f"DownloadManager(provider={self._provider.name}, "
-            f"output_dir='{self._storage.output_dir}')"
+            f"output_dir='{self._storage.output_dir}', "
+            f"resolution='{self._resolution}')"
         )
