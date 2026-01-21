@@ -701,6 +701,54 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
    - Brak opisu Land Cover, SoilGrids, HSG
    - Sekcja "Out of Scope" zawiera już zaimplementowane funkcje
 
-4. **[API] Uzupełnienie eksportów w __init__.py**
+4. **[API] Uzupełnienie eksportów w __init__.py** ⚠️ PRIORYTET
    - Dodać `SoilGridsProvider` do głównego modułu
    - Dodać `HSGCalculator` do głównego modułu
+
+---
+
+## Cross-Project Analysis (2026-01-21)
+
+Przeprowadzono analizę integracji 4 repozytoriów: **Hydrograf**, **Hydrolog**, **Kartograf**, **IMGWTools**.
+
+### Mapa zależności
+
+```
+HYDROGRAF (główna aplikacja)
+    ├── IMGWTools (dane IMGW)
+    ├── Kartograf (dane GIS) ← TEN PROJEKT
+    └── Hydrolog (obliczenia hydrologiczne)
+            ├── IMGWTools (wymagany)
+            └── Kartograf (opcjonalny)
+```
+
+### Problemy wykryte w Kartograf
+
+| Problem | Status | Priorytet |
+|---------|--------|-----------|
+| Brak `SoilGridsProvider` w `__init__.py` | 🟠 Do naprawy | WAŻNY |
+| Brak `HSGCalculator` w `__init__.py` | 🟠 Do naprawy | WAŻNY |
+| SCOPE.md/PRD.md nieaktualne (tylko MVP) | 🟡 Backlog | NISKI |
+
+### Standardy kodu - porównanie z innymi projektami
+
+| Aspekt | Kartograf | Hydrolog | IMGWTools | Zgodność |
+|--------|-----------|----------|-----------|----------|
+| Python | >=3.12 | >=3.12 | >=3.11 | ⚠️ |
+| Line length | 88 | 88 | 88 | ✅ |
+| Formatter | black | black | ruff | ⚠️ |
+| numpy | >=1.24.0 | >=1.24 | - | ✅ |
+
+### Plan naprawy Kartograf
+
+1. **[WAŻNE]** Dodać eksporty do `__init__.py`:
+   ```python
+   from kartograf.providers.soilgrids import SoilGridsProvider
+   from kartograf.hydrology.hsg import HSGCalculator
+   ```
+
+2. **[BACKLOG]** Zaktualizować SCOPE.md i PRD.md
+
+### Pełna dokumentacja
+
+Szczegółowa analiza cross-project: `Hydrograf/docs/CROSS_PROJECT_ANALYSIS.md`
