@@ -47,6 +47,13 @@ kartograf download N-34-130-D --scale 1:10000 -r 5m
 
 - **Testy** - 365 testów (18 nowych dla resolution)
 
+### Fixed - Cross-Project Compatibility (2026-01-21)
+
+- **Public API exports** - Uzupełniono brakujące eksporty w głównym module
+  - Dodano `SoilGridsProvider` do `kartograf/__init__.py`
+  - Dodano `HSGCalculator` do `kartograf/__init__.py`
+  - Teraz możliwy import: `from kartograf import SoilGridsProvider, HSGCalculator`
+
 ### Fixed - QA Review (2026-01-21)
 
 - **Synchronizacja wersji** - Ujednolicono wersję we wszystkich plikach

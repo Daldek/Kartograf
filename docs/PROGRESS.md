@@ -14,19 +14,23 @@
 
 ---
 
-## Aktualny Etap: 19 - QA i naprawy krytyczne - UKOŃCZONY
+## Aktualny Etap: 20 - Cross-Project Compatibility - UKOŃCZONY
 
 **Status:** Ukończony
-**Cel:** Naprawa problemów krytycznych wykrytych podczas QA (wersje, zależności)
+**Cel:** Naprawa kompatybilności z pozostałymi projektami (Hydrograf, Hydrolog, IMGWTools)
 
 **Wykonane prace:**
-- Zsynchronizowano wersje do 0.3.1 (pyproject.toml, __init__.py, README.md)
-- Zsynchronizowano zależności (pyproject.toml + requirements.txt)
-- Zaktualizowano liczbę testów w README.md (365)
-- Naprawiono test wersji w test_integration.py
-- Dodano sekcję QA Review do PROGRESS.md
+- Dodano eksport `SoilGridsProvider` do głównego `kartograf/__init__.py`
+- Dodano eksport `HSGCalculator` do głównego `kartograf/__init__.py`
+- Zaktualizowano `__all__` z nowymi eksportami
+- Wszystkie 365 testów przechodzi
 
-**Poprzedni etap:** 18 - NMT Resolution Selection - UKOŃCZONY
+**Import z głównego modułu teraz działa:**
+```python
+from kartograf import SoilGridsProvider, HSGCalculator
+```
+
+**Poprzedni etap:** 19 - QA i naprawy krytyczne - UKOŃCZONY
 
 ---
 
@@ -701,9 +705,9 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
    - Brak opisu Land Cover, SoilGrids, HSG
    - Sekcja "Out of Scope" zawiera już zaimplementowane funkcje
 
-4. **[API] Uzupełnienie eksportów w __init__.py** ⚠️ PRIORYTET
-   - Dodać `SoilGridsProvider` do głównego modułu
-   - Dodać `HSGCalculator` do głównego modułu
+4. ✅ **[API] Uzupełnienie eksportów w __init__.py** - NAPRAWIONE (2026-01-21)
+   - Dodano `SoilGridsProvider` do głównego modułu
+   - Dodano `HSGCalculator` do głównego modułu
 
 ---
 
@@ -726,8 +730,8 @@ HYDROGRAF (główna aplikacja)
 
 | Problem | Status | Priorytet |
 |---------|--------|-----------|
-| Brak `SoilGridsProvider` w `__init__.py` | 🟠 Do naprawy | WAŻNY |
-| Brak `HSGCalculator` w `__init__.py` | 🟠 Do naprawy | WAŻNY |
+| Brak `SoilGridsProvider` w `__init__.py` | ✅ Naprawione | WAŻNY |
+| Brak `HSGCalculator` w `__init__.py` | ✅ Naprawione | WAŻNY |
 | SCOPE.md/PRD.md nieaktualne (tylko MVP) | 🟡 Backlog | NISKI |
 
 ### Standardy kodu - porównanie z innymi projektami
@@ -741,7 +745,7 @@ HYDROGRAF (główna aplikacja)
 
 ### Plan naprawy Kartograf
 
-1. **[WAŻNE]** Dodać eksporty do `__init__.py`:
+1. ✅ **[NAPRAWIONE 2026-01-21]** Dodano eksporty do `__init__.py`:
    ```python
    from kartograf.providers.soilgrids import SoilGridsProvider
    from kartograf.hydrology.hsg import HSGCalculator
