@@ -1,8 +1,8 @@
 # Plan Implementacji Kartograf
 
 **Repozytorium:** https://github.com/Daldek/Kartograf.git
-**Status:** Wersja 0.3.0
-**Ostatnia aktualizacja:** 2026-01-18
+**Status:** Wersja 0.3.1
+**Ostatnia aktualizacja:** 2026-01-20
 
 ---
 
@@ -14,10 +14,10 @@
 
 ---
 
-## Aktualny Etap: 17 - Hydrologic Soil Groups (HSG) - UKOŃCZONY
+## Aktualny Etap: 18 - NMT Resolution Selection - UKOŃCZONY
 
 **Status:** Ukończony
-**Cel:** Kalkulacja Hydrologic Soil Groups (HSG) z danych SoilGrids dla metody SCS-CN
+**Cel:** Wybór rozdzielczości NMT (1m/5m) dla danych z GUGiK
 
 ---
 
@@ -461,6 +461,61 @@ Raster GeoTIFF z wartościami 1-4:
 - `kartograf soilgrids hsg --godlo N-34-130-D` generuje raster HSG
 - `kartograf soilgrids hsg --godlo N-34-130-D --stats` wyświetla statystyki
 - Testy przechodzą (347 testów łącznie)
+- Linting OK (black, flake8)
+
+---
+
+### Etap 18: NMT Resolution Selection (S - 1h)
+- [x] Ukończony
+
+**Cel:** Dodanie możliwości wyboru rozdzielczości NMT (1m/5m) dla danych z GUGiK
+
+**Tło:**
+GUGiK udostępnia dane NMT w dwóch rozdzielczościach:
+- **1m** (GRID1) - wysoka rozdzielczość, dostępna dla KRON86 i EVRF2007
+- **5m** (GRID5) - niższa rozdzielczość, dostępna tylko dla EVRF2007
+
+**Ograniczenia:**
+- Rozdzielczość 5m dostępna tylko w układzie EVRF2007
+- WCS (download_bbox) dostępne tylko dla 1m
+- 5m pobierane przez OpenData (arkusze ASC)
+
+**Zmiany:**
+
+**18.1 GugikProvider (M - 30 min)**
+- [x] Dodano parametr `resolution` ("1m" lub "5m")
+- [x] Nowe endpointy WMS dla 5m: `SheetsGrid5mEVRF2007`
+- [x] Walidacja: 5m wymaga EVRF2007
+- [x] `download_bbox()` rzuca ValueError dla 5m
+- [x] Nowe metody: `get_supported_resolutions()`, `is_wcs_available()`
+
+**18.2 DownloadManager (S - 15 min)**
+- [x] Dodano parametr `resolution`
+- [x] Automatyczne wymuszenie EVRF2007 dla 5m
+
+**18.3 CLI (S - 15 min)**
+- [x] Opcja `--resolution` / `-r` dla komendy `download`
+- [x] Komunikaty o rozdzielczości w progress
+
+**18.4 Testy (S - 15 min)**
+- [x] 18 nowych testów dla resolution
+- [x] Testy walidacji, endpointów, WCS availability
+
+**Przykłady użycia:**
+```bash
+# Pobierz NMT 1m (domyślnie)
+kartograf download N-34-130-D-d-2-4
+
+# Pobierz NMT 5m (wymusza EVRF2007)
+kartograf download N-34-130-D-d-2-4 --resolution 5m
+
+# Pobierz hierarchię w 5m
+kartograf download N-34-130-D --scale 1:10000 --resolution 5m
+```
+
+**Kryterium ukończenia:**
+- `kartograf download N-34-130-D --resolution 5m` pobiera NMT 5m
+- Testy przechodzą (365 testów łącznie)
 - Linting OK (black, flake8)
 
 ---

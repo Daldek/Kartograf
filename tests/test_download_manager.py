@@ -91,6 +91,37 @@ class TestDownloadManagerBasic:
         assert "DownloadManager" in repr_str
         assert "GUGiK" in repr_str
 
+    def test_default_resolution(self):
+        """Test domyślnej rozdzielczości."""
+        manager = DownloadManager()
+        assert manager.resolution == "1m"
+
+    def test_resolution_1m_explicit(self):
+        """Test jawnego ustawienia rozdzielczości 1m."""
+        manager = DownloadManager(resolution="1m")
+        assert manager.resolution == "1m"
+
+    def test_resolution_5m(self):
+        """Test ustawienia rozdzielczości 5m."""
+        manager = DownloadManager(resolution="5m")
+        assert manager.resolution == "5m"
+        # 5m forces EVRF2007
+        assert manager.vertical_crs == "EVRF2007"
+
+    def test_resolution_5m_forces_evrf2007(self):
+        """Test że 5m wymusza EVRF2007."""
+        manager = DownloadManager(resolution="5m", vertical_crs="KRON86")
+        # Should be changed to EVRF2007
+        assert manager.vertical_crs == "EVRF2007"
+        assert manager.resolution == "5m"
+
+    def test_repr_includes_resolution(self, tmp_path):
+        """Test że repr zawiera rozdzielczość."""
+        manager = DownloadManager(output_dir=tmp_path, resolution="5m")
+        repr_str = repr(manager)
+
+        assert "resolution='5m'" in repr_str
+
 
 class TestDownloadManagerDownloadSheet:
     """Testy metody download_sheet() - pobiera ASC przez OpenData."""

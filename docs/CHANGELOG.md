@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-01-20
+
+### Added - NMT Resolution Selection
+
+- **Wybór rozdzielczości NMT** - Obsługa danych NMT w dwóch rozdzielczościach
+  - `1m` (GRID1) - wysoka rozdzielczość, domyślna
+  - `5m` (GRID5) - niższa rozdzielczość, tylko dla EVRF2007
+
+- **GugikProvider** - Nowy parametr `resolution`
+  - `GugikProvider(resolution="5m", vertical_crs="EVRF2007")`
+  - Nowe endpointy WMS dla 5m: `SheetsGrid5mEVRF2007`
+  - Automatyczna walidacja: 5m wymaga EVRF2007
+  - Nowe metody: `get_supported_resolutions()`, `is_wcs_available()`
+  - `download_bbox()` rzuca ValueError dla 5m (WCS niedostępne)
+
+- **DownloadManager** - Nowy parametr `resolution`
+  - `DownloadManager(resolution="5m")` - automatycznie wymusza EVRF2007
+
+- **CLI** - Nowa opcja `--resolution`
+  - `kartograf download N-34-130-D --resolution 5m`
+  - Skrót: `-r 5m`
+
+**Ograniczenia 5m:**
+- Dostępne tylko w układzie EVRF2007
+- Brak obsługi WCS (download_bbox) - tylko arkusze OpenData
+
+**Przykłady użycia:**
+```bash
+# Pobierz NMT 1m (domyślnie)
+kartograf download N-34-130-D-d-2-4
+
+# Pobierz NMT 5m
+kartograf download N-34-130-D-d-2-4 --resolution 5m
+
+# Pobierz hierarchię w 5m
+kartograf download N-34-130-D --scale 1:10000 -r 5m
+```
+
+### Changed
+
+- **Testy** - 365 testów (18 nowych dla resolution)
+
+---
+
 ## [0.3.0] - 2026-01-18
 
 ### Added - SoilGrids i Hydrologic Soil Groups (HSG)
