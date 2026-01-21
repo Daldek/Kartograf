@@ -1,390 +1,264 @@
 # SCOPE.md - Zakres Projektu Kartograf
-**Narzędzie do Pobierania Danych NMT z GUGiK**
+**Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 1.0  
-**Data:** 2026-01-15  
-**Status:** MVP Definition
+**Wersja:** 2.0
+**Data:** 2026-01-21
+**Status:** Production (v0.3.1)
 
 ---
 
 ## 1. Cel Projektu
 
-**Kartograf** to narzędzie do pobierania Numerycznego Modelu Terenu (NMT) z zasobów Głównego Urzędu Geodezji i Kartografii (GUGiK) dla Polski. 
+**Kartograf** to narzędzie do pobierania danych przestrzennych z zasobów GUGiK, Copernicus i ISRIC dla Polski.
 
 ### 1.1 Problem
 
-Pobieranie danych NMT z GUGiK wymaga:
-- Znajomości systemu godeł map topograficznych
-- Ręcznego nawigowania przez interfejs webowy
-- Pobierania arkuszy jeden po drugim
+Pobieranie danych przestrzennych z różnych źródeł wymaga:
+- Znajomości systemów identyfikacji (godła, TERYT, bbox)
+- Nawigowania przez różne interfejsy webowe i API
 - Ręcznej organizacji pobranych plików
+- Różnych protokołów autentykacji (OAuth2, API keys)
 
 ### 1.2 Rozwiązanie
 
 Kartograf automatyzuje ten proces oferując:
-- **Parser godeł** - walidacja i parsowanie godeł map
-- **Hierarchia arkuszy** - automatyczne określanie arkuszy nadrzędnych i podrzędnych
-- **Automatyczne pobieranie** - pobieranie wielu arkuszy jedną komendą
-- **Organizacja plików** - automatyczna struktura katalogów odzwierciedlająca hierarchię
+- **Unified API** - jednolity interfejs dla różnych źródeł danych
+- **Parser godeł** - walidacja i parsowanie godeł map topograficznych
+- **Providery danych** - abstrakcja nad różnymi serwisami (GUGiK, Copernicus, ISRIC)
+- **Automatyczne pobieranie** - pobieranie wielu plików jedną komendą
+- **Organizacja plików** - automatyczna struktura katalogów
 
 ### 1.3 Użytkownicy
 
-1. **Główny użytkownik (Piotr)** - deweloper HydroLOG potrzebujący danych NMT
-2. **Specjaliści GIS** - pracownicy urzędów gmin potrzebujący danych topograficznych
-3. **Inni deweloperzy** - wykorzystanie jako biblioteka w innych projektach
+1. **Deweloperzy Hydrograf/Hydrolog** - integracja jako biblioteka Python
+2. **Specjaliści GIS** - CLI do pobierania danych
+3. **Hydrolodzy** - dane glebowe i HSG dla metody SCS-CN
 
 ---
 
-## 2. Zakres MVP
+## 2. Zakres - Wersja 0.3.x
 
-### 2.1 Core Functionality - IN SCOPE ✅
+### 2.1 NMT (Numeryczny Model Terenu) - IN SCOPE
 
-#### 2.1.1 Parser Godła
 ```python
 # Funkcjonalności:
-✅ Parsowanie godeł w układach 1992 i 2000
-✅ Obsługa skal: 1:1 000 000 do 1:10 000
-✅ Walidacja poprawności godła
-✅ Automatyczna detekcja układu (domyślnie 1992)
-✅ Ekstrakcja komponentów (pas, słup, subdivisions)
+- Parser godeł w układach 1992 i 2000
+- Obsługa skal: 1:1 000 000 do 1:10 000
+- Hierarchia arkuszy (get_parent, get_children, get_all_descendants)
+- Bounding box arkusza (EPSG:2180, EPSG:4326)
+- Pobieranie przez godło → ASC (OpenData)
+- Pobieranie przez bbox → GeoTIFF (WCS)
+- Rozdzielczości: 1m (GRID1), 5m (GRID5)
+- Układy wysokościowe: KRON86, EVRF2007
 
-# Przykład:
-parser = SheetParser("N-34-130-D-d-2-4", uklad="1992")
-# → scale: "1:10000", components: {...}
+# Źródło: GUGiK (Główny Urząd Geodezji i Kartografii)
+# API: WCS, WMS GetFeatureInfo, OpenData
 ```
 
-#### 2.1.2 Hierarchia Arkuszy
+### 2.2 Land Cover (Pokrycie Terenu) - IN SCOPE
+
 ```python
-# Funkcjonalności:
-✅ Ścieżka w górę - wszystkie arkusze nadrzędne do 1:1M
-✅ Ścieżka w dół - wszystkie arkusze podrzędne do zadanej skali
-✅ Walidacja spójności hierarchii
+# BDOT10k (GUGiK):
+- 12 warstw pokrycia terenu (PT*)
+- Pobieranie przez TERYT (powiat)
+- Pobieranie przez godło lub bbox
+- Format: GeoPackage, Shapefile
+- Automatyczne scalanie warstw
 
-# Przykład:
-hierarchy_up = parser.get_hierarchy_up()
-# → [1:10000, 1:25000, 1:50000, ..., 1:1M]
-
-descendants = parser.get_all_descendants("1:10000")
-# → wszystkie arkusze 1:10k zawarte w bieżącym arkuszu
+# CORINE Land Cover (Copernicus):
+- 44 klasy pokrycia terenu
+- Lata: 1990, 2000, 2006, 2012, 2018
+- Pobieranie przez godło lub bbox
+- Format: GeoTIFF (CLMS API) lub PNG (WMS fallback)
+- OAuth2 RSA authentication (opcjonalne)
+- Auth Proxy dla izolacji credentials
 ```
 
-#### 2.1.3 Pobieranie NMT z GUGiK
+### 2.3 SoilGrids (Dane Glebowe) - IN SCOPE
+
 ```python
-# Funkcjonalności:
-✅ Pobieranie dla pojedynczego godła
-✅ Pobieranie dla hierarchii (godło → wszystkie w dół do skali)
-✅ Obsługa formatów: GeoTIFF (domyślny), Arc/Info ASCII Grid, XYZ
-✅ Retry logic dla failed requests (3 próby)
-✅ Progress tracking (ile pobranych / ile total)
-✅ Resumowanie przerwanych pobrań (skip już pobranych)
+# ISRIC SoilGrids:
+- 11 parametrów glebowych (clay, sand, silt, soc, pH, etc.)
+- 6 głębokości (0-5cm do 100-200cm)
+- 5 statystyk (mean, Q0.05, Q0.5, Q0.95, uncertainty)
+- Rozdzielczość: 250m (globalne)
+- Pobieranie przez godło, bbox lub TERYT
+- Format: GeoTIFF
 
-# Przykład:
-manager = DownloadManager(output_dir="./data")
-paths = manager.download_hierarchy(
-    godlo="N-34-130-D",
-    target_scale="1:10000",
-    format="GTiff"
-)
-# → lista ścieżek do pobranych plików
+# Źródło: ISRIC (International Soil Reference and Information Centre)
+# API: WCS
 ```
 
-#### 2.1.4 Organizacja Plików
-```
-# Struktura katalogów:
-data/
-├── N-34/                     # Pas + Słup
-│   ├── 130/                  # Podział 1:200k
-│   │   ├── D/                # Podział 1:100k
-│   │   │   ├── d/            # Podział 1:50k
-│   │   │   │   ├── 2/        # Podział 1:25k
-│   │   │   │   │   ├── 4/    # Podział 1:10k
-│   │   │   │   │   │   ├── N-34-130-D-d-2-4.tif
-│   │   │   │   │   │   ├── N-34-130-D-d-2-4.asc
-│   │   │   │   │   │   └── N-34-130-D-d-2-4.xyz
+### 2.4 HSG (Hydrologic Soil Groups) - IN SCOPE
 
-✅ Hierarchiczna struktura katalogów
-✅ Nazwa pliku = pełne godło + rozszerzenie
-✅ Różne formaty w tym samym katalogu
+```python
+# Kalkulacja HSG dla metody SCS-CN:
+- Klasyfikacja tekstury wg trójkąta USDA (12 klas)
+- Mapowanie tekstury → HSG (A, B, C, D)
+- Automatyczne pobieranie clay/sand/silt z SoilGrids
+- Statystyki pokrycia dla każdej grupy
+- Format wyjściowy: GeoTIFF (wartości 1-4)
+
+# Moduł: kartograf.hydrology.hsg
 ```
 
-#### 2.1.5 CLI Interface
+### 2.5 CLI Interface - IN SCOPE
+
 ```bash
-# Funkcjonalności:
-✅ Parsowanie i wyświetlenie informacji o godle
-✅ Pobieranie pojedynczego arkusza
-✅ Pobieranie hierarchii
-✅ Wybór formatu pliku
-✅ Wybór katalogu docelowego
-
 # Komendy:
-kartograf parse N-34-130-D-d-2-4                    # info o godle
-kartograf download N-34-130-D --scale 1:10000       # pobierz hierarchię
-kartograf download N-34-130-D-d-2-4 --format AAIGrid # jeden arkusz
+kartograf parse <godlo>                    # info o godle
+kartograf download <godlo>                 # pobierz NMT
+kartograf download <godlo> --resolution 5m # NMT 5m
+kartograf landcover download --source bdot10k --teryt <kod>
+kartograf landcover download --source corine --godlo <godlo>
+kartograf landcover download --source soilgrids --property <param>
+kartograf landcover list-sources
+kartograf landcover list-layers --source <source>
+kartograf soilgrids hsg --godlo <godlo>    # oblicz HSG
 ```
 
-#### 2.1.6 Python API (Biblioteka)
-```python
-# Funkcjonalności:
-✅ Import jako biblioteka
-✅ Obiektowy interfejs (SheetParser, DownloadManager)
-✅ Type hints
-✅ Docstrings
-
-# Przykład użycia w HydroLOG:
-from kartograf import SheetParser, DownloadManager
-
-parser = SheetParser("N-34-130-D")
-manager = DownloadManager(output_dir="./nmt_data")
-manager.download_hierarchy(parser, target_scale="1:10000")
-```
-
----
-
-### 2.2 Architecture - IN SCOPE ✅
-
-#### 2.2.1 Moduły
-```
-src/kartograf/
-├── core/                  # Logika główna
-│   ├── sheet_parser.py    # Parser godła
-│   └── hierarchy.py       # Operacje na hierarchii
-├── providers/             # Providery danych
-│   ├── base.py            # Abstrakcyjna klasa Provider
-│   └── gugik.py           # Implementacja dla GUGiK
-├── download/              # Download management
-│   ├── manager.py         # Zarządzanie pobieraniem
-│   └── storage.py         # Organizacja plików
-└── cli/                   # CLI interface
-    └── commands.py        # Komendy argparse
-```
-
-#### 2.2.2 Zależności
-```
-Python 3.12+
-requests       # HTTP client
-argparse       # CLI (stdlib)
-typing         # Type hints (stdlib)
-dataclasses    # Data structures (stdlib)
-logging        # Logging (stdlib)
-pathlib        # Path operations (stdlib)
-```
-
----
-
-### 2.3 Testing - IN SCOPE ✅
+### 2.6 Python API - IN SCOPE
 
 ```python
-# Pokrycie kodu:
-✅ Minimum 80% dla core logic (sheet_parser, gugik, manager)
-✅ Opcjonalnie < 80% dla CLI
-
-# Typy testów:
-✅ Unit tests - wszystkie moduły
-✅ Integration tests - download flow
-✅ Mock HTTP responses dla testów
-
-# Test framework:
-✅ pytest
-✅ pytest-cov (coverage)
-✅ unittest.mock (mocking)
+# Public API (kartograf/__init__.py):
+from kartograf import (
+    # Core
+    SheetParser, BBox,
+    # Download (NMT)
+    DownloadManager, DownloadProgress, FileStorage,
+    # Land Cover
+    LandCoverManager,
+    # Providers
+    BaseProvider, GugikProvider, LandCoverProvider,
+    Bdot10kProvider, CorineProvider, SoilGridsProvider,
+    # Hydrology
+    HSGCalculator,
+    # Exceptions
+    KartografError, ParseError, ValidationError, DownloadError,
+)
 ```
 
 ---
 
-### 2.4 Documentation - IN SCOPE ✅
+## 3. Out of Scope - Wersja 0.3.x
 
-```markdown
-✅ README.md - quick start, podstawowe przykłady
-✅ SCOPE.md - ten dokument
-✅ PRD.md - funkcjonalności, user stories
-✅ IMPLEMENTATION_PROMPT.md - dla AI assistants
-✅ DEVELOPMENT_STANDARDS.md - standardy kodowania
-✅ Docstrings - wszystkie public funkcje/klasy
-✅ Type hints - wszędzie
-```
-
----
-
-## 3. Out of Scope - MVP ❌
-
-### 3.1 Funkcjonalności Zaawansowane - FUTURE 🔮
+### 3.1 Funkcjonalności Zaplanowane - FUTURE
 
 ```python
-# Te funkcje będą w przyszłych wersjach:
-
-❌ Pobieranie po bounding box (zamiast godła)
-   # Przykład:
-   # manager.download_for_bbox(
-   #     bbox=[50.0, 19.0, 51.0, 20.0],
-   #     scale="1:10000"
-   # )
-
-❌ Automatyczne mozaikowanie (merge wielu arkuszy)
-   # Wymaga GDAL/rasterio
-
-❌ Pobieranie równoległe (multi-threading)
-   # MVP: sekwencyjne pobieranie
-
-❌ GUI interface (okienkowy)
-   # MVP: tylko CLI + Python API
-
-❌ Websocket progress notifications
-   # MVP: console progress
-
-❌ Inteligentna detekcja układu z geometrii arkusza
-   # MVP: użytkownik podaje układ lub domyślnie 1992
-
-❌ Cache dla metadanych arkuszy
-   # MVP: każde wywołanie parsuje od zera
-
-❌ Pobieranie innych danych niż NMT (ortofotomapy, LIDAR, etc.)
-   # MVP: tylko NMT
-```
-
-### 3.2 Optymalizacje - FUTURE 🔮
-
-```python
-❌ Async/await dla HTTP requests
-   # MVP: synchroniczne requests
-
-❌ Connection pooling
-   # MVP: pojedyncze requesty
-
-❌ Kompresja pobranych plików
-   # MVP: pliki jak z serwera
-
-❌ Automatyczne usuwanie starych wersji
-   # MVP: append only (nie kasuje)
-```
-
-### 3.3 Integracje - FUTURE 🔮
-
-```python
-❌ Integracja z PostGIS (import do bazy)
-   # MVP: tylko pliki na dysku
-
-❌ Upload do cloud storage (S3, GCS)
-   # MVP: tylko lokalny filesystem
-
-❌ Webhook notifications po zakończeniu
-   # MVP: synchroniczne wykonanie
-
-❌ REST API server
-   # MVP: tylko biblioteka + CLI
-```
-
----
-
-## 4. Założenia i Ograniczenia
-
-### 4.1 Założenia
-
-```
-✅ Użytkownik ma dostęp do internetu
-✅ Serwery GUGiK są dostępne i działają
-✅ Użytkownik ma wystarczająco miejsca na dysku
-✅ Python 3.12+ zainstalowany
-✅ Użytkownik zna układ współrzędnych lub używa domyślnego (1992)
-```
-
-### 4.2 Ograniczenia MVP
-
-```
-⚠️ Jeden format na wywołanie (nie można pobrać GeoTIFF + ASCII jednocześnie)
-⚠️ Brak weryfikacji poprawności pobranych plików (integrity check)
-⚠️ Brak inteligentnej kolejki priorytetowej (FIFO)
-⚠️ Timeout dla pojedynczego arkusza: 30s (nie konfigurowalne)
-⚠️ Max 3 próby retry (nie konfigurowalne)
-⚠️ Brak statystyk pobierania (ile MB, średni czas, etc.)
-```
-
-### 4.3 Limity Techniczne
-
-```
-📊 Maksymalna liczba arkuszy na wywołanie: Bez limitu*
-   * Ale może być czasochłonne dla dużych hierarchii
-
-📊 Maksymalny rozmiar pojedynczego pliku: ~50MB
-   (typowy rozmiar arkusza NMT 1:10k)
-
-📊 Request timeout: 30s
-
-📊 Retry delay: 1s, 2s, 4s (exponential backoff)
-```
-
----
-
-## 5. Success Criteria MVP
-
-### 5.1 Funkcjonalne
-
-```
-✅ Parser poprawnie parsuje wszystkie godła z zakresu 1:1M - 1:10k
-✅ Hierarchia poprawnie generuje ścieżki w górę i w dół
-✅ DownloadManager pobiera pliki NMT z GUGiK
-✅ Pliki organizowane w poprawnej strukturze katalogów
-✅ CLI pozwala na podstawowe operacje bez kodu Python
-✅ Może być używany jako biblioteka w HydroLOG
-```
-
-### 5.2 Jakościowe
-
-```
-✅ Pokrycie testami ≥ 80% dla core logic
-✅ Wszystkie public funkcje mają docstrings
-✅ Type hints wszędzie
-✅ Kod zgodny z black + flake8
-✅ Dokumentacja kompletna i aktualna
-```
-
-### 5.3 Performance
-
-```
-✅ Parsowanie godła < 0.1s
-✅ Pobieranie arkusza < 30s (network dependent)
-✅ Generowanie hierarchii dla 256 arkuszy < 1s
-```
-
----
-
-## 6. Roadmap Poza MVP
-
-### Wersja 1.1 - Optymalizacje
+# Wersja 0.4+:
 - Pobieranie równoległe (multi-threading)
-- Connection pooling
 - Cache dla metadanych
+- Automatyczne mozaikowanie (merge arkuszy)
 
-### Wersja 1.2 - BBox Support
-- Pobieranie po bounding box
-- Automatyczne mozaikowanie (wymaga GDAL)
-
-### Wersja 2.0 - Advanced
+# Wersja 1.0+:
 - GUI interface
 - Pobieranie innych danych (ortofotomapy, LIDAR)
-- Integration z PostGIS
+- Integracja z PostGIS
+- REST API server
+```
+
+### 3.2 Ograniczenia Techniczne
+
+```
+- Brak weryfikacji integralności plików (checksums)
+- Timeout: 30s dla GUGiK, 60s dla Land Cover
+- Max 3 próby retry (nie konfigurowalne)
+- Synchroniczne pobieranie (bez async)
+- CORINE 5m wymaga EVRF2007
+- SoilGrids: tylko WGS84 bbox (transformacja automatyczna)
+```
 
 ---
 
-## 7. Zmiany w Zakresie
+## 4. Architektura
 
-| Data | Wersja | Zmiana | Autor |
-|------|--------|--------|-------|
-| 2026-01-15 | 1.0 | Initial scope definition | Piotr |
+### 4.1 Moduły
+
+```
+kartograf/
+├── core/                  # Parser godeł, BBox
+│   └── sheet_parser.py
+├── providers/             # Providery danych
+│   ├── base.py            # BaseProvider (NMT)
+│   ├── gugik.py           # GugikProvider (NMT)
+│   ├── landcover_base.py  # LandCoverProvider (abstrakcja)
+│   ├── bdot10k.py         # Bdot10kProvider
+│   ├── corine.py          # CorineProvider
+│   └── soilgrids.py       # SoilGridsProvider
+├── download/              # Download management (NMT)
+│   ├── manager.py
+│   └── storage.py
+├── landcover/             # Land Cover management
+│   └── manager.py
+├── hydrology/             # Obliczenia hydrologiczne
+│   └── hsg.py             # HSGCalculator
+├── auth/                  # Autentykacja (CLMS)
+│   ├── proxy.py           # Auth Proxy server
+│   └── client.py          # Auth Proxy client
+└── cli/                   # CLI interface
+    └── commands.py
+```
+
+### 4.2 Zależności
+
+```
+Python 3.12+
+requests >= 2.31.0     # HTTP client
+pyproj >= 3.6.0        # CRS transformations
+PyJWT[crypto] >= 2.8.0 # OAuth2 JWT (CLMS)
+rasterio >= 1.3.0      # GeoTIFF processing (HSG)
+numpy >= 1.24.0        # Array operations (HSG)
+```
 
 ---
 
-**Ważne:**  
-Ten dokument definiuje TYLKO zakres MVP. Wszystkie funkcje "Out of Scope" mogą być dodane w przyszłych wersjach po dokładnej analizie i planowaniu.
+## 5. Źródła Danych
 
-**Pytania lub propozycje zmian?**  
-Otwórz issue z tagiem `scope-change` i opisz proponowaną zmianę wraz z uzasadnieniem.
-
----
-
-**Wersja dokumentu:** 1.0  
-**Data ostatniej aktualizacji:** 2026-01-15  
-**Status:** Approved - MVP Definition  
+| Źródło | Typ danych | API | Autentykacja |
+|--------|-----------|-----|--------------|
+| GUGiK | NMT, BDOT10k | WCS, WMS, OpenData | Brak |
+| Copernicus CLMS | CORINE | REST API | OAuth2 RSA |
+| EEA Discomap | CORINE (podgląd) | WMS | Brak |
+| ISRIC SoilGrids | Gleba | WCS | Brak |
 
 ---
 
-*Scope freeze po zatwierdzeniu tego dokumentu. Zmiany wymagają uzasadnienia i approval.*
+## 6. Success Criteria
+
+### 6.1 Funkcjonalne
+
+```
+- Parser poprawnie parsuje godła 1:1M - 1:10k
+- NMT pobiera się w rozdzielczościach 1m i 5m
+- BDOT10k pobiera się przez TERYT i godło
+- CORINE pobiera się przez godło (GeoTIFF lub PNG fallback)
+- SoilGrids pobiera dane glebowe
+- HSG oblicza grupy hydrologiczne z danych SoilGrids
+- Integracja z Hydrograf/Hydrolog działa
+```
+
+### 6.2 Jakościowe
+
+```
+- 365 testów przechodzi
+- Pokrycie testami >= 57% (cel: 80%)
+- Kod zgodny z black + flake8
+- Type hints wszędzie
+- Dokumentacja aktualna
+```
+
+---
+
+## 7. Historia Zmian
+
+| Data | Wersja | Zmiana |
+|------|--------|--------|
+| 2026-01-15 | 1.0 | Initial MVP (NMT only) |
+| 2026-01-18 | 1.1 | Added Land Cover, SoilGrids, HSG |
+| 2026-01-21 | 2.0 | Updated to reflect v0.3.1 features |
+
+---
+
+**Wersja dokumentu:** 2.0
+**Data ostatniej aktualizacji:** 2026-01-21
+**Status:** Production - v0.3.1
