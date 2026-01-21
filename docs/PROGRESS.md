@@ -700,10 +700,10 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 2. **[TEST] Zwiększenie pokrycia testami do 80%**
    - Priorytet: `auth/`, `providers/bdot10k.py`, `providers/corine.py`
 
-3. **[DOCS] Aktualizacja SCOPE.md i PRD.md**
-   - Dokumentacja opisuje tylko MVP (NMT)
-   - Brak opisu Land Cover, SoilGrids, HSG
-   - Sekcja "Out of Scope" zawiera już zaimplementowane funkcje
+3. ✅ **[DOCS] Aktualizacja SCOPE.md i PRD.md** - NAPRAWIONE (2026-01-21)
+   - Zaktualizowano do wersji 2.0
+   - Dodano opisy Land Cover, SoilGrids, HSG
+   - Zaktualizowano sekcje "In Scope" / "Out of Scope"
 
 4. ✅ **[API] Uzupełnienie eksportów w __init__.py** - NAPRAWIONE (2026-01-21)
    - Dodano `SoilGridsProvider` do głównego modułu
@@ -732,7 +732,7 @@ HYDROGRAF (główna aplikacja)
 |---------|--------|-----------|
 | Brak `SoilGridsProvider` w `__init__.py` | ✅ Naprawione | WAŻNY |
 | Brak `HSGCalculator` w `__init__.py` | ✅ Naprawione | WAŻNY |
-| SCOPE.md/PRD.md nieaktualne (tylko MVP) | 🟡 Backlog | NISKI |
+| SCOPE.md/PRD.md nieaktualne (tylko MVP) | ✅ Naprawione | NISKI |
 
 ### Standardy kodu - porównanie z innymi projektami
 
@@ -751,7 +751,7 @@ HYDROGRAF (główna aplikacja)
    from kartograf.hydrology.hsg import HSGCalculator
    ```
 
-2. **[BACKLOG]** Zaktualizować SCOPE.md i PRD.md
+2. ✅ **[NAPRAWIONE 2026-01-21]** Zaktualizowano SCOPE.md i PRD.md do wersji 2.0
 
 ### Pełna dokumentacja
 
