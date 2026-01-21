@@ -10,7 +10,7 @@ Two download methods based on input type:
 - BBox (bounding box) → WCS (GeoTIFF/PNG/JPEG formats)
 
 Supported resolutions:
-- 1m (GRID1) - available for KRON86 and EVRF2007
+- 1m (GRID1) - available for EVRF2007 and KRON86
 - 5m (GRID5) - available only for EVRF2007
 """
 
@@ -38,11 +38,11 @@ class GugikProvider(BaseProvider):
     - By bbox (bounding box): downloads from WCS as GeoTIFF/PNG/JPEG
 
     Supports two vertical coordinate systems:
-    - KRON86 (PL-KRON86-NH) - default, Kronsztadt 86
-    - EVRF2007 (PL-EVRF2007-NH) - European Vertical Reference Frame 2007
+    - EVRF2007 (PL-EVRF2007-NH) - default, European Vertical Reference Frame 2007
+    - KRON86 (PL-KRON86-NH) - legacy Kronsztadt 86
 
     Supports two resolutions:
-    - 1m (default) - high resolution, available for both KRON86 and EVRF2007
+    - 1m (default) - high resolution, available for both EVRF2007 and KRON86
     - 5m - lower resolution, available only for EVRF2007
 
     Examples
@@ -58,9 +58,9 @@ class GugikProvider(BaseProvider):
     ... )
     >>> provider.download_bbox(bbox, Path("./area.tif"))
     >>>
-    >>> # Download in EVRF2007 vertical CRS
-    >>> provider = GugikProvider(vertical_crs="EVRF2007")
-    >>> provider.download("N-34-130-D-d-2-4", Path("./sheet_evrf.asc"))
+    >>> # Download in legacy KRON86 vertical CRS
+    >>> provider = GugikProvider(vertical_crs="KRON86")
+    >>> provider.download("N-34-130-D-d-2-4", Path("./sheet_kron.asc"))
     >>>
     >>> # Download 5m resolution (only EVRF2007)
     >>> provider = GugikProvider(resolution="5m")
@@ -155,7 +155,7 @@ class GugikProvider(BaseProvider):
     def __init__(
         self,
         session: requests.Session | None = None,
-        vertical_crs: str = "KRON86",
+        vertical_crs: str = "EVRF2007",
         resolution: str = "1m",
     ):
         """
@@ -167,7 +167,7 @@ class GugikProvider(BaseProvider):
             HTTP session to use for requests.
         vertical_crs : str, optional
             Vertical coordinate reference system: "KRON86" or "EVRF2007".
-            Default is "KRON86" (Kronsztadt 86).
+            Default is "EVRF2007" (European Vertical Reference Frame 2007).
         resolution : str, optional
             Grid resolution: "1m" or "5m". Default is "1m".
             Note: 5m resolution is only available for EVRF2007.

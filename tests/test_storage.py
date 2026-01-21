@@ -322,8 +322,8 @@ class TestFileStorageDirectoryStructure:
         storage = FileStorage(tmp_path)
         storage.write_atomic("N-34-130-D-d-2-4", b"data")
 
-        # Verify directory structure
-        expected_parts = ["N-34", "130", "D", "d", "2", "4"]
+        # Verify directory structure (includes resolution subfolder)
+        expected_parts = ["1m", "N-34", "130", "D", "d", "2", "4"]
         current_dir = tmp_path
 
         for part in expected_parts:
@@ -331,8 +331,8 @@ class TestFileStorageDirectoryStructure:
             assert current_dir.exists(), f"Directory {current_dir} should exist"
             assert current_dir.is_dir(), f"{current_dir} should be a directory"
 
-        # Verify file exists in final directory
-        file_path = current_dir / "N-34-130-D-d-2-4.tif"
+        # Verify file exists in final directory (default extension is .asc)
+        file_path = current_dir / "N-34-130-D-d-2-4.asc"
         assert file_path.exists()
 
     def test_multiple_files_share_directories(self, tmp_path):
@@ -346,15 +346,15 @@ class TestFileStorageDirectoryStructure:
         storage.write_atomic("N-34-130-D-d-2-4", b"data4")
 
         # Each file goes in its own final directory, but they share parent dirs
-        # Check the common parent directory (1:25k level = N-34/130/D/d/2)
-        common_parent = tmp_path / "N-34" / "130" / "D" / "d" / "2"
+        # Check the common parent directory (1:25k level = 1m/N-34/130/D/d/2)
+        common_parent = tmp_path / "1m" / "N-34" / "130" / "D" / "d" / "2"
         assert common_parent.exists()
 
         # Should have 4 subdirectories (1, 2, 3, 4)
         subdirs = list(common_parent.iterdir())
         assert len(subdirs) == 4
 
-        # Each subdirectory should contain one file
+        # Each subdirectory should contain one file (default extension is .asc)
         for subdir in subdirs:
-            files = list(subdir.glob("*.tif"))
+            files = list(subdir.glob("*.asc"))
             assert len(files) == 1
