@@ -120,7 +120,7 @@ lc.set_provider("soilgrids")
 lc.download(godlo="N-34-130-D", property="soc", depth="0-5cm")
 
 # ===== Hydrologic Soil Groups =====
-from kartograf.hydrology import HSGCalculator
+from kartograf import HSGCalculator
 
 calc = HSGCalculator()
 
