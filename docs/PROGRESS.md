@@ -2,7 +2,7 @@
 
 **Repozytorium:** https://github.com/Daldek/Kartograf.git
 **Status:** Wersja 0.3.1
-**Ostatnia aktualizacja:** 2026-01-20
+**Ostatnia aktualizacja:** 2026-01-21
 
 ---
 
@@ -14,10 +14,19 @@
 
 ---
 
-## Aktualny Etap: 18 - NMT Resolution Selection - UKOŃCZONY
+## Aktualny Etap: 19 - QA i naprawy krytyczne - UKOŃCZONY
 
 **Status:** Ukończony
-**Cel:** Wybór rozdzielczości NMT (1m/5m) dla danych z GUGiK
+**Cel:** Naprawa problemów krytycznych wykrytych podczas QA (wersje, zależności)
+
+**Wykonane prace:**
+- Zsynchronizowano wersje do 0.3.1 (pyproject.toml, __init__.py, README.md)
+- Zsynchronizowano zależności (pyproject.toml + requirements.txt)
+- Zaktualizowano liczbę testów w README.md (365)
+- Naprawiono test wersji w test_integration.py
+- Dodano sekcję QA Review do PROGRESS.md
+
+**Poprzedni etap:** 18 - NMT Resolution Selection - UKOŃCZONY
 
 ---
 
@@ -645,3 +654,53 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - `kartograf/providers/bdot10k.py` - Bdot10kProvider
 - `kartograf/providers/landcover_base.py` - abstrakcja LandCoverProvider
 - `tests/test_landcover.py` - 42 testy
+
+---
+
+## QA Review (2026-01-21)
+
+### Przeprowadzone sprawdzenia
+
+| Obszar | Status | Uwagi |
+|--------|--------|-------|
+| Testy | ✅ 365/365 PASS | 0.92s |
+| Linting (black, flake8) | ✅ OK | Wszystkie pliki zgodne |
+| Bezpieczeństwo | ✅ OK | Brak hardcoded secrets, Auth Proxy OK |
+| Spójność wersji | ✅ NAPRAWIONE | Zsynchronizowano do 0.3.1 |
+| Spójność zależności | ✅ NAPRAWIONE | pyproject.toml + requirements.txt |
+| Pokrycie testami | ⚠️ 57% | Cel 80%, do poprawy w przyszłości |
+
+### Pokrycie testami - szczegóły
+
+**Dobre pokrycie (>80%):**
+- `download/manager.py`: 100%
+- `exceptions.py`: 100%
+- `core/sheet_parser.py`: 98%
+- `providers/gugik.py`: 94%
+- `providers/soilgrids.py`: 80%
+
+**Do poprawy (<60%):**
+- `auth/client.py`: 0%
+- `auth/proxy.py`: 0%
+- `providers/bdot10k.py`: 28%
+- `providers/corine.py`: 34%
+- `hydrology/hsg.py`: 59%
+
+### Backlog - do zrobienia w przyszłości
+
+1. **[REFACTOR] Ujednolicenie interfejsów providerów**
+   - `BaseProvider` używa `base_url`, `LandCoverProvider` używa `source_url`
+   - Różne domyślne timeouty (30s vs 60s)
+   - Rozważyć wspólną klasę bazową lub dokumentację różnic
+
+2. **[TEST] Zwiększenie pokrycia testami do 80%**
+   - Priorytet: `auth/`, `providers/bdot10k.py`, `providers/corine.py`
+
+3. **[DOCS] Aktualizacja SCOPE.md i PRD.md**
+   - Dokumentacja opisuje tylko MVP (NMT)
+   - Brak opisu Land Cover, SoilGrids, HSG
+   - Sekcja "Out of Scope" zawiera już zaimplementowane funkcje
+
+4. **[API] Uzupełnienie eksportów w __init__.py**
+   - Dodać `SoilGridsProvider` do głównego modułu
+   - Dodać `HSGCalculator` do głównego modułu

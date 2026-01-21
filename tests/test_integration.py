@@ -45,10 +45,15 @@ class TestPublicAPIImports:
             SheetParser("INVALID")
 
     def test_version(self):
-        """Test version is accessible."""
+        """Test version is accessible and follows semver format."""
         from kartograf import __version__
 
-        assert __version__ == "0.3.0-dev"
+        # Version should be a valid semver string (e.g., "0.3.1" or "0.3.1-dev")
+        import re
+
+        semver_pattern = r"^\d+\.\d+\.\d+(-\w+)?$"
+        assert re.match(semver_pattern, __version__), f"Invalid version: {__version__}"
+        assert __version__ == "0.3.1"
 
 
 class TestParserStorageIntegration:
