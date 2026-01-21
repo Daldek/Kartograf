@@ -317,6 +317,7 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
+[0.3.1]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.2.0
 [0.1.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.1.0
