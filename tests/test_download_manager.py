@@ -6,8 +6,9 @@ Ten moduł zawiera testy dla klasy DownloadManager z nową architekturą:
 - download_bbox(bbox) → GeoTIFF
 """
 
-import pytest
 from unittest.mock import Mock
+
+import pytest
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.manager import DownloadManager, DownloadProgress

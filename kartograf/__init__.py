@@ -32,6 +32,7 @@ from kartograf.exceptions import (
     ParseError,
     ValidationError,
 )
+from kartograf.hydrology.hsg import HSGCalculator
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.bdot10k import Bdot10kProvider
@@ -39,7 +40,6 @@ from kartograf.providers.corine import CorineProvider
 from kartograf.providers.gugik import GugikProvider
 from kartograf.providers.landcover_base import LandCoverProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
-from kartograf.hydrology.hsg import HSGCalculator
 
 __version__ = "0.3.2"
 

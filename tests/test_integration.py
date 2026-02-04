@@ -10,12 +10,12 @@ from unittest.mock import Mock
 import pytest  # noqa: F401 - required for fixtures
 
 from kartograf import (
-    SheetParser,
     DownloadManager,
     DownloadProgress,
     FileStorage,
     GugikProvider,
     ParseError,
+    SheetParser,
     ValidationError,
 )
 
@@ -46,10 +46,10 @@ class TestPublicAPIImports:
 
     def test_version(self):
         """Test version is accessible and follows semver format."""
-        from kartograf import __version__
-
         # Version should be a valid semver string (e.g., "0.3.1" or "0.3.1-dev")
         import re
+
+        from kartograf import __version__
 
         semver_pattern = r"^\d+\.\d+\.\d+(-\w+)?$"
         assert re.match(semver_pattern, __version__), f"Invalid version: {__version__}"

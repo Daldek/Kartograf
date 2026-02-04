@@ -1,9 +1,34 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+Wszystkie istotne zmiany w projekcie sa dokumentowane w tym pliku.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
+projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Changed
+- Migracja z black + flake8 na ruff (pyproject.toml)
+- Usuniecie .flake8, dodanie .editorconfig
+- Standaryzacja dokumentacji wg shared/standards
+- Przepisanie CLAUDE.md (7 sekcji, ~148 linii)
+- Przepisanie PROGRESS.md (4 sekcje, skondensowane z 785 linii)
+- Rozbudowanie DEVELOPMENT_STANDARDS.md (722 linii, 15 sekcji wg shared/standards)
+- Rozbudowanie IMPLEMENTATION_PROMPT.md (284 linii, 11 sekcji, aktualny kontekst v0.3.2)
+- Aktualizacja README.md, PRD.md, SCOPE.md
+- Auto-naprawa kodu przez `ruff check --fix` (63 poprawki: importy, type annotations)
+
+### Added
+- Konfiguracja ruff (linter + formatter) w pyproject.toml
+- Plik .editorconfig
+- Sekcja [project.optional-dependencies] dev w pyproject.toml
+- docs/DECISIONS.md — rejestr 9 decyzji architektonicznych (ADR)
+
+### Removed
+- Plik .flake8 (konfiguracja pokryta przez ruff)
+- Sekcja [tool.black] z pyproject.toml
+
+---
 
 ## [0.3.2] - 2026-01-21
 
@@ -362,6 +387,7 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
+[Unreleased]: https://github.com/Daldek/Kartograf/compare/v0.3.2...HEAD
 [0.3.2]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.2
 [0.3.1]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.0

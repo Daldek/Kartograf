@@ -12,11 +12,11 @@ import pytest  # noqa: F401 - required for fixtures
 from kartograf.cli.commands import (
     create_parser,
     create_progress_callback,
-    main,
-    format_sheet_info,
-    format_hierarchy,
     format_children,
     format_descendants,
+    format_hierarchy,
+    format_sheet_info,
+    main,
 )
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.manager import DownloadProgress
