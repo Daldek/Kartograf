@@ -6,9 +6,9 @@ single sheets and entire hierarchies of map sheets.
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
 
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.storage import FileStorage
@@ -105,8 +105,8 @@ class DownloadManager:
     def __init__(
         self,
         output_dir: str | Path = "./data",
-        provider: Optional[BaseProvider] = None,
-        storage: Optional[FileStorage] = None,
+        provider: BaseProvider | None = None,
+        storage: FileStorage | None = None,
         vertical_crs: str = "EVRF2007",
         resolution: str = "1m",
     ):
@@ -214,7 +214,7 @@ class DownloadManager:
         godlo: str,
         target_scale: str,
         skip_existing: bool = True,
-        on_progress: Optional[ProgressCallback] = None,
+        on_progress: ProgressCallback | None = None,
     ) -> list[Path]:
         """
         Download all descendant sheets to target scale as ASC.

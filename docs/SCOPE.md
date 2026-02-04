@@ -3,7 +3,7 @@
 
 **Wersja:** 2.0
 **Data:** 2026-01-21
-**Status:** Production (v0.3.1)
+**Status:** Production (v0.3.2)
 
 ---
 
@@ -242,7 +242,7 @@ numpy >= 1.24.0        # Array operations (HSG)
 ```
 - 365 testów przechodzi
 - Pokrycie testami >= 57% (cel: 80%)
-- Kod zgodny z black + flake8
+- Kod zgodny z ruff
 - Type hints wszędzie
 - Dokumentacja aktualna
 ```
@@ -261,4 +261,4 @@ numpy >= 1.24.0        # Array operations (HSG)
 
 **Wersja dokumentu:** 2.0
 **Data ostatniej aktualizacji:** 2026-01-21
-**Status:** Production - v0.3.1
+**Status:** Production - v0.3.2

@@ -7,7 +7,7 @@ coordinate system, and sheet components.
 """
 
 import re
-from typing import Dict, List, NamedTuple, Optional
+from typing import NamedTuple, Optional
 
 from pyproj import Transformer
 
@@ -87,7 +87,7 @@ class SheetParser:
     # Dozwolone układy współrzędnych
     VALID_UKLADY = ("1992", "2000")
 
-    def __init__(self, godlo: str, uklad: Optional[str] = None):
+    def __init__(self, godlo: str, uklad: str | None = None):
         """
         Inicjalizuje parser dla podanego godła.
 
@@ -170,7 +170,7 @@ class SheetParser:
 
         return "-".join(normalized)
 
-    def _validate_uklad(self, uklad: Optional[str]) -> str:
+    def _validate_uklad(self, uklad: str | None) -> str:
         """
         Waliduje układ współrzędnych.
 
@@ -223,7 +223,7 @@ class SheetParser:
             f"Godło musi być w formacie zgodnym z układem 1992/2000."
         )
 
-    def _parse_components(self) -> Dict[str, str]:
+    def _parse_components(self) -> dict[str, str]:
         """
         Parsuje składowe godła.
 
@@ -262,7 +262,7 @@ class SheetParser:
         return self._uklad
 
     @property
-    def components(self) -> Dict[str, str]:
+    def components(self) -> dict[str, str]:
         """Zwraca słownik ze składowymi godła."""
         return self._components.copy()
 
@@ -360,7 +360,7 @@ class SheetParser:
         )
         return SheetParser(parent_godlo, self._uklad)
 
-    def get_children(self) -> List["SheetParser"]:
+    def get_children(self) -> list["SheetParser"]:
         """
         Zwraca wszystkie arkusze podrzędne (o skali większej).
 
@@ -398,7 +398,7 @@ class SheetParser:
 
         return children
 
-    def _get_children_from_500k(self) -> List["SheetParser"]:
+    def _get_children_from_500k(self) -> list["SheetParser"]:
         """
         Zwraca 36 arkuszy 1:200k dla arkusza 1:500k.
 
@@ -422,7 +422,7 @@ class SheetParser:
 
         return children
 
-    def get_hierarchy_up(self) -> List["SheetParser"]:
+    def get_hierarchy_up(self) -> list["SheetParser"]:
         """
         Zwraca pełną hierarchię w górę (do 1:1000000).
 
@@ -453,7 +453,7 @@ class SheetParser:
 
         return hierarchy
 
-    def get_all_descendants(self, target_scale: str) -> List["SheetParser"]:
+    def get_all_descendants(self, target_scale: str) -> list["SheetParser"]:
         """
         Zwraca wszystkie arkusze potomne do zadanej skali.
 
@@ -499,7 +499,7 @@ class SheetParser:
             )
 
         # Rekurencyjnie zbieramy potomków
-        def collect_descendants(parser: "SheetParser") -> List["SheetParser"]:
+        def collect_descendants(parser: "SheetParser") -> list["SheetParser"]:
             if parser.scale == target_scale:
                 return [parser]
 
