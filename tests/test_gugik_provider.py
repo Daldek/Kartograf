@@ -422,9 +422,11 @@ class TestGugikProviderRetry:
         output_path = tmp_path / "test.asc"
 
         sleep_times = []
-        with patch("time.sleep", side_effect=lambda t: sleep_times.append(t)):
-            with pytest.raises(DownloadError):
-                provider.download("N-34-130-D", output_path)
+        with (
+            patch("time.sleep", side_effect=lambda t: sleep_times.append(t)),
+            pytest.raises(DownloadError),
+        ):
+            provider.download("N-34-130-D", output_path)
 
         # Exponential backoff: 2^1=2, 2^2=4 seconds
         assert sleep_times == [2, 4]

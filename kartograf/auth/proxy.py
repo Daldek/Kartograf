@@ -90,9 +90,8 @@ class CLMSCredentials:
 
     def get_access_token(self) -> str | None:
         """Get valid access token, refreshing if needed."""
-        if not self._credentials:
-            if not self.load_from_keychain():
-                return None
+        if not self._credentials and not self.load_from_keychain():
+            return None
 
         # Return cached token if still valid
         if self._access_token and time.time() < self._token_expires - 60:

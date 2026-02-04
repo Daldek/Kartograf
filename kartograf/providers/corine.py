@@ -301,7 +301,7 @@ class CLMSAuth:
                 headers=headers if headers else None,
             )
         except Exception as e:
-            raise DownloadError(f"Failed to create JWT assertion: {e}")
+            raise DownloadError(f"Failed to create JWT assertion: {e}") from e
 
         # Exchange for access token
         sess = session or requests.Session()
@@ -325,7 +325,7 @@ class CLMSAuth:
             return access_token
 
         except requests.RequestException as e:
-            raise DownloadError(f"Token exchange failed: {e}")
+            raise DownloadError(f"Token exchange failed: {e}") from e
 
 
 class CorineProvider(LandCoverProvider):
@@ -773,7 +773,7 @@ class CorineProvider(LandCoverProvider):
             )
 
         except requests.RequestException as e:
-            raise DownloadError(f"CLMS API request failed: {e}")
+            raise DownloadError(f"CLMS API request failed: {e}") from e
 
     def _poll_clms_task(
         self,
