@@ -45,7 +45,7 @@
 
 ## Ostatnia sesja
 
-**Data:** 2026-02-03
+**Data:** 2026-02-04
 
 ### Co zrobiono
 - Migracja konfiguracji z black+flake8 na ruff (pyproject.toml)
@@ -57,17 +57,13 @@
 - Rozbudowanie IMPLEMENTATION_PROMPT.md (284 linii, 11 sekcji, aktualny kontekst v0.3.2)
 - Utworzenie docs/DECISIONS.md — rejestr 9 decyzji architektonicznych (ADR)
 - Auto-naprawa kodu przez `ruff check --fix` (63 poprawki: importy, type annotations)
-- Pozostalo ~10 bledow B904 (`raise ... from err`) — do naprawy w przyszlosci
-
-### W trakcie
-- Zmiany niescommitowane — wymaga `git config user.name/email` w Docker
+- Reczna naprawa 8 bledow ruff (B904, SIM102, SIM117, E501)
+- `ruff check` — 0 bledow, `pytest tests/ -v` — 365 testow przechodzi
+- Wszystkie zmiany scommitowane
 
 ### Nastepne kroki
-1. Scommitowac zmiany (ustawic git identity, `git add`, `git commit`)
-2. Uruchomic `pytest tests/ -v` — potwierdzic ze testy przechodza po ruff fix
-3. Naprawic bledy B904 (`raise ... from err/None`) w providers/
-4. Pokrycie testami do 80% (priorytet: auth/, providers/bdot10k.py, providers/corine.py)
-5. Pobieranie rownolegle (v0.4+)
+1. Pokrycie testami do 80% (priorytet: auth/, providers/bdot10k.py, providers/corine.py)
+2. Pobieranie rownolegle (v0.4+)
 
 ## Backlog
 
