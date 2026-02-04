@@ -33,7 +33,6 @@ Statistics: mean, Q0.05, Q0.5, Q0.95, uncertainty
 import logging
 import time
 from pathlib import Path
-from typing import Optional
 from urllib.parse import urlencode
 
 import requests
@@ -130,7 +129,7 @@ class SoilGridsProvider(LandCoverProvider):
         "https://mapy.geoportal.gov.pl/wss/service/PZGIK/BDOT/WMS/PobieranieBDOT10k"
     )
 
-    def __init__(self, session: Optional[requests.Session] = None):
+    def __init__(self, session: requests.Session | None = None):
         """
         Initialize SoilGrids provider.
 

@@ -348,7 +348,7 @@ class TestSheetParserScaleHierarchy:
             "1:25000",
             "1:10000",
         ]
-        assert SheetParser.SCALE_HIERARCHY == expected
+        assert expected == SheetParser.SCALE_HIERARCHY
 
     def test_all_scales_have_patterns(self):
         """Test że wszystkie skale mają zdefiniowane wzorce."""

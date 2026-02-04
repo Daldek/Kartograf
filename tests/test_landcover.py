@@ -5,15 +5,16 @@ Tests cover LandCoverProvider, Bdot10kProvider, CorineProvider,
 and LandCoverManager classes.
 """
 
-import pytest
 from pathlib import Path
 
+import pytest
+
 from kartograf.core.sheet_parser import BBox
-from kartograf.providers.landcover_base import LandCoverProvider
-from kartograf.providers.bdot10k import Bdot10kProvider, WOJEWODZTWO_NAMES
-from kartograf.providers.corine import CorineProvider
-from kartograf.landcover.manager import LandCoverManager
 from kartograf.exceptions import ValidationError
+from kartograf.landcover.manager import LandCoverManager
+from kartograf.providers.bdot10k import WOJEWODZTWO_NAMES, Bdot10kProvider
+from kartograf.providers.corine import CorineProvider
+from kartograf.providers.landcover_base import LandCoverProvider
 
 
 class TestLandCoverProviderBase:

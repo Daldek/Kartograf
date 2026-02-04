@@ -4,7 +4,7 @@
 **Wersja:** 2.0
 **Data:** 2026-01-21
 **Product Owner:** Piotr
-**Status:** Production (v0.3.1)
+**Status:** Production (v0.3.2)
 
 ---
 
@@ -46,7 +46,7 @@ Kartograf to narzędzie CLI + biblioteka Python oferujące:
 | Test coverage (core) | >= 80% | 57% (w trakcie) |
 | Reliability | >= 95% success rate | Osiągnięty |
 | Performance | Download < 60s | Osiągnięty |
-| Code quality | black + flake8 | Osiągnięty |
+| Code quality | ruff | Osiągnięty |
 
 ### 2.2 Integration Goals
 
@@ -399,7 +399,7 @@ from kartograf import (
     DownloadError,
 
     # Version
-    __version__,  # "0.3.1"
+    __version__,  # "0.3.2"
 )
 ```
 
@@ -421,10 +421,10 @@ numpy >= 1.24.0        # Array operations
 ### 6.2 Development Dependencies
 
 ```
-pytest >= 7.4.0        # Testing
-pytest-cov >= 4.1.0    # Coverage
-black >= 23.7.0        # Formatting
-flake8 >= 6.1.0        # Linting
+pytest >= 8.0          # Testing
+pytest-cov >= 5.0      # Coverage
+ruff >= 0.8            # Linting + Formatting
+mypy >= 1.13           # Type checking
 ```
 
 ---
@@ -494,4 +494,4 @@ HYDROGRAF (główna aplikacja)
 
 **Wersja dokumentu:** 2.0
 **Data ostatniej aktualizacji:** 2026-01-21
-**Status:** Production - v0.3.1
+**Status:** Production - v0.3.2

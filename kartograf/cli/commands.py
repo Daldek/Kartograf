@@ -8,7 +8,6 @@ displaying hierarchy information, and downloading NMT and land cover data.
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
 
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.manager import DownloadManager, DownloadProgress
@@ -875,7 +874,7 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
         return 1
 
 
-def main(args: Optional[list[str]] = None) -> int:
+def main(args: list[str] | None = None) -> int:
     """
     Main entry point for the CLI.
 

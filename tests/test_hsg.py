@@ -4,18 +4,19 @@ Tests for Hydrologic Soil Group (HSG) calculation functionality.
 Tests cover USDA texture classification, HSG mapping, and HSGCalculator.
 """
 
-import numpy as np
 from unittest.mock import Mock
 
+import numpy as np
+
 from kartograf.hydrology.hsg import (
-    classify_usda_texture,
-    texture_to_hsg,
-    classify_usda_texture_array,
-    texture_to_hsg_array,
-    HSGCalculator,
-    TEXTURE_CLASSES,
-    HSG_VALUES,
     HSG_DESCRIPTIONS,
+    HSG_VALUES,
+    TEXTURE_CLASSES,
+    HSGCalculator,
+    classify_usda_texture,
+    classify_usda_texture_array,
+    texture_to_hsg,
+    texture_to_hsg_array,
 )
 
 

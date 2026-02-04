@@ -6,9 +6,9 @@ Ten moduł zawiera testy dla klasy GugikProvider z nową architekturą:
 - download_bbox(bbox) → WCS (GeoTIFF/PNG/JPEG)
 """
 
-import pytest
 from unittest.mock import Mock, patch
 
+import pytest
 import requests
 
 from kartograf.core.sheet_parser import BBox
@@ -400,9 +400,8 @@ class TestGugikProviderRetry:
         provider = GugikProvider(session=session)
         output_path = tmp_path / "test.asc"
 
-        with patch("time.sleep"):
-            with pytest.raises(DownloadError):
-                provider.download("N-34-130-D", output_path)
+        with patch("time.sleep"), pytest.raises(DownloadError):
+            provider.download("N-34-130-D", output_path)
 
     def test_download_exponential_backoff(self, tmp_path):
         """Test exponential backoff między próbami."""
