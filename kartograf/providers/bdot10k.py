@@ -376,7 +376,7 @@ class Bdot10kProvider(LandCoverProvider):
             )
 
         except requests.RequestException as e:
-            raise DownloadError(f"WMS GetFeatureInfo failed: {e}")
+            raise DownloadError(f"WMS GetFeatureInfo failed: {e}") from e
 
     # =========================================================================
     # Download by bbox → Download county package
@@ -585,9 +585,11 @@ class Bdot10kProvider(LandCoverProvider):
                     for gpkg_file in pt_gpkg:
                         # Extract to temp directory
                         extracted_path = tmpdir_path / Path(gpkg_file).name
-                        with zf.open(gpkg_file) as src:
-                            with open(extracted_path, "wb") as dst:
-                                dst.write(src.read())
+                        with (
+                            zf.open(gpkg_file) as src,
+                            open(extracted_path, "wb") as dst,
+                        ):
+                            dst.write(src.read())
                         extracted_files.append(extracted_path)
                         logger.debug(f"Extracted {Path(gpkg_file).name}")
 
@@ -596,7 +598,7 @@ class Bdot10kProvider(LandCoverProvider):
                     self._merge_gpkg_files(extracted_files, output_gpkg)
 
         except zipfile.BadZipFile as e:
-            raise DownloadError(f"Invalid ZIP file: {e}")
+            raise DownloadError(f"Invalid ZIP file: {e}") from e
 
     def _merge_gpkg_files(self, source_files: list[Path], output_path: Path) -> None:
         """
