@@ -535,17 +535,22 @@ def cmd_download(args: argparse.Namespace) -> int:
                 print()
                 print(f"Downloaded {len(paths)} files to {output_dir}")
         else:
-            # Download single sheet
+            # Download single sheet (may expand to hierarchy for non-1:10000)
             if not args.quiet:
                 print(f"Downloading {args.godlo} (resolution: {resolution})...")
 
-            path = manager.download_sheet(
+            result = manager.download_sheet(
                 args.godlo,
                 skip_existing=skip_existing,
+                on_progress=on_progress,
             )
 
             if not args.quiet:
-                print(f"Downloaded to {path}")
+                if isinstance(result, list):
+                    print()
+                    print(f"Downloaded {len(result)} files to {output_dir}")
+                else:
+                    print(f"Downloaded to {result}")
 
     except DownloadError as e:
         print(f"\nError: {e}", file=sys.stderr)

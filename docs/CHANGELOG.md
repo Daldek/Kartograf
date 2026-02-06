@@ -7,6 +7,18 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Automatyczne rozwijanie godeł do 1:10000 w `download_sheet()`**
+  - `download_sheet("N-34-130-D-d-2")` (1:25000) → automatycznie pobiera 4 arkusze 1:10000
+  - `download_sheet("N-34-130-D-d")` (1:50000) → pobiera 16 arkuszy 1:10000
+  - Dla godeł 1:10000 zachowanie bez zmian (pojedynczy plik)
+  - Nowy parametr `on_progress` — callback postępu przy rozwijaniu hierarchii
+  - Zwracany typ: `Path` (1:10000) lub `list[Path]` (coarser scales)
+  - CLI dostosowane — wyświetla liczbę pobranych plików przy rozwijaniu
+
+### Fixed
+- Poprawiony komunikat błędu przy braku pokrycia NMT 5m — zamiast technicznego "No ASC file found in any WMS layer" wyświetla czytelną informację o braku pokrycia danego obszaru w GUGiK
+
 ### Changed
 - Migracja z black + flake8 na ruff (pyproject.toml)
 - Usuniecie .flake8, dodanie .editorconfig
