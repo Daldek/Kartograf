@@ -172,9 +172,14 @@ class DownloadManager:
         self,
         godlo: str,
         skip_existing: bool = True,
-    ) -> Path:
+        on_progress: ProgressCallback | None = None,
+    ) -> Path | list[Path]:
         """
-        Download a single map sheet as ASC.
+        Download a map sheet as ASC.
+
+        For sheets at scale 1:10000, downloads a single file.
+        For coarser scales (e.g. 1:25000, 1:50000), automatically expands
+        to all descendant 1:10000 sheets via download_hierarchy().
 
         Parameters
         ----------
@@ -182,11 +187,14 @@ class DownloadManager:
             Map sheet identifier (e.g., "N-34-130-D-d-2-4")
         skip_existing : bool, optional
             Skip download if file exists (default: True)
+        on_progress : callable, optional
+            Callback function for progress updates (used when expanding hierarchy).
 
         Returns
         -------
-        Path
-            Path to the downloaded ASC file
+        Path or list[Path]
+            Path to the downloaded ASC file (for 1:10000),
+            or list of paths (for coarser scales expanded to 1:10000)
 
         Raises
         ------
@@ -195,6 +203,13 @@ class DownloadManager:
         ParseError
             If godlo is invalid
         """
+        parser = SheetParser(godlo)
+
+        if parser.scale != "1:10000":
+            return self.download_hierarchy(
+                godlo, "1:10000", skip_existing=skip_existing, on_progress=on_progress
+            )
+
         # Get target path (always .asc for godło downloads)
         target_path = self._storage.get_path(godlo, ".asc")
 

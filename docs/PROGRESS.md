@@ -45,21 +45,32 @@
 
 ## Ostatnia sesja
 
-**Data:** 2026-02-04
+**Data:** 2026-02-06
 
 ### Co zrobiono
-- Migracja konfiguracji z black+flake8 na ruff (pyproject.toml)
-- Usuniecie .flake8, dodanie .editorconfig
-- Przepisanie CLAUDE.md (7 sekcji, ~148 linii)
-- Przepisanie PROGRESS.md (4 sekcje, skondensowane z 785 linii)
-- Aktualizacja README.md, CHANGELOG.md, PRD.md, SCOPE.md
-- Rozbudowanie DEVELOPMENT_STANDARDS.md (722 linii, 15 sekcji wg shared/standards)
-- Rozbudowanie IMPLEMENTATION_PROMPT.md (284 linii, 11 sekcji, aktualny kontekst v0.3.2)
-- Utworzenie docs/DECISIONS.md — rejestr 9 decyzji architektonicznych (ADR)
-- Auto-naprawa kodu przez `ruff check --fix` (63 poprawki: importy, type annotations)
-- Reczna naprawa 8 bledow ruff (B904, SIM102, SIM117, E501)
-- `ruff check` — 0 bledow, `pytest tests/ -v` — 365 testow przechodzi
-- Wszystkie zmiany scommitowane
+- Testy: 369 testow przechodzi (pytest tests/ -v)
+- Pobrano komplet danych dla N-34-130-D-d-2: NMT 1m, BDOT10k, CORINE, SoilGrids, HSG
+- Diagnostyka braku NMT 5m: zbadano WMS GetFeatureInfo dla endpointu SheetsGrid5mEVRF2007
+  - Potwierdzono: obszar N-34-130-D-d-2 nie ma pokrycia 5m w GUGiK (brak danych we wszystkich 4 warstwach)
+  - Porownanie z Warszawa: ten sam endpoint dziala poprawnie — kod jest prawidlowy
+- Poprawiono komunikat bledu w GugikProvider._get_opendata_url() (gugik.py:386-391)
+  - Bylo: "No ASC file found for {godlo} in any WMS layer"
+  - Jest: "No NMT {resolution} data available for {godlo} ... This area may not have {resolution} coverage in GUGiK"
+- Zaktualizowano test (test_gugik_provider.py:479) pod nowy komunikat
+- **feat(download): automatyczne rozwijanie godel do 1:10000 w `download_sheet()`**
+  - `download_sheet()` w `DownloadManager` (manager.py:171-221): dla godel wyzszych niz 1:10000 deleguje do `download_hierarchy(godlo, "1:10000")`
+  - Nowy parametr `on_progress`, zwracany typ `Path | list[Path]`
+  - CLI `cmd_download()` (commands.py:537-550): obsluga wyniku list[Path], wyswietlanie liczby plikow
+  - 4 nowe testy w test_download_manager.py (expands 25k/50k/100k, progress callback)
+  - Zaktualizowano 2 istniejace testy CLI (on_progress w assert)
+  - Testy: 369 testow przechodzi, ruff clean
+- **Testy pobierania na zywym API GUGiK:**
+  - NMT 1m: N-34-130-D-d-2 (Bialystok) — 4/4 arkusze, 144 MB, cellsize=1.00
+  - NMT 5m: N-33-130-D-d-2 (Lodzkie) — 4/4 arkusze, 4.7 MB, cellsize=5.00 (warstwa SkorowidzeNMT2021iStarsze)
+  - NMT 1m+5m: M-34-76-A-a-1 (Krakow) — oba 4/4
+  - skip_existing dziala poprawnie (0.00s przy ponownym uruchomieniu)
+  - CLI: progress bar + "Downloaded 4 files" — OK
+- Pokrycie 5m w GUGiK jest niekompletne i rozni sie od 1m — to zachowanie serwisu, nie bug
 
 ### Nastepne kroki
 1. Pokrycie testami do 80% (priorytet: auth/, providers/bdot10k.py, providers/corine.py)

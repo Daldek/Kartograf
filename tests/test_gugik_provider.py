@@ -476,7 +476,7 @@ class TestGugikProviderGetOpendataUrl:
         with pytest.raises(DownloadError) as exc_info:
             provider._get_opendata_url("N-34-130-D-d-2-4")
 
-        assert "No ASC file found" in str(exc_info.value)
+        assert "No NMT 1m data available" in str(exc_info.value)
 
     def test_get_opendata_url_tries_all_layers(
         self, mock_wms_response_no_url, mock_wms_response_with_url
