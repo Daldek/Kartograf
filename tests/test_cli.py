@@ -424,7 +424,7 @@ class TestCmdDownload:
 
         assert result == 0
         mock_manager.download_sheet.assert_called_once_with(
-            "N-34-130-D-d-2-4", skip_existing=True
+            "N-34-130-D-d-2-4", skip_existing=True, on_progress=None
         )
 
     @patch("kartograf.cli.commands.DownloadManager")
@@ -465,7 +465,7 @@ class TestCmdDownload:
 
         assert result == 0
         mock_manager.download_sheet.assert_called_once_with(
-            "N-34-130-D-d-2-4", skip_existing=False
+            "N-34-130-D-d-2-4", skip_existing=False, on_progress=None
         )
 
     @patch("kartograf.cli.commands.DownloadManager")

@@ -384,8 +384,10 @@ class GugikProvider(BaseProvider):
                 continue
 
         raise DownloadError(
-            f"No ASC file found for {godlo} in any WMS layer "
-            f"(resolution={self._resolution}, vertical_crs={self._vertical_crs})",
+            f"No NMT {self._resolution} data available for {godlo} "
+            f"(vertical_crs={self._vertical_crs}). "
+            f"This area may not have {self._resolution} coverage in GUGiK. "
+            f"Check https://mapy.geoportal.gov.pl for data availability.",
             godlo=godlo,
         )
 

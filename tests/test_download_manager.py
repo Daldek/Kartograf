@@ -6,6 +6,7 @@ Ten moduł zawiera testy dla klasy DownloadManager z nową architekturą:
 - download_bbox(bbox) → GeoTIFF
 """
 
+from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
@@ -141,11 +142,12 @@ class TestDownloadManagerDownloadSheet:
         return provider
 
     def test_download_sheet_success(self, tmp_path, mock_provider):
-        """Test udanego pobierania arkusza jako ASC."""
+        """Test udanego pobierania arkusza 1:10000 jako ASC."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
-        result = manager.download_sheet("N-34-130-D")
+        result = manager.download_sheet("N-34-130-D-d-2-4")
 
+        assert isinstance(result, Path)
         assert result.suffix == ".asc"
         assert result.exists()
 
@@ -155,13 +157,14 @@ class TestDownloadManagerDownloadSheet:
 
         # Create existing ASC file
         storage = FileStorage(tmp_path)
-        existing_path = storage.get_path("N-34-130-D", ".asc")
+        existing_path = storage.get_path("N-34-130-D-d-2-4", ".asc")
         existing_path.parent.mkdir(parents=True, exist_ok=True)
         existing_path.write_bytes(b"existing data")
 
-        result = manager.download_sheet("N-34-130-D", skip_existing=True)
+        result = manager.download_sheet("N-34-130-D-d-2-4", skip_existing=True)
 
         # Should return existing path without downloading
+        assert isinstance(result, Path)
         assert result.exists()
         assert result.read_bytes() == b"existing data"
 
@@ -171,14 +174,63 @@ class TestDownloadManagerDownloadSheet:
 
         # Create existing ASC file
         storage = FileStorage(tmp_path)
-        existing_path = storage.get_path("N-34-130-D", ".asc")
+        existing_path = storage.get_path("N-34-130-D-d-2-4", ".asc")
         existing_path.parent.mkdir(parents=True, exist_ok=True)
         existing_path.write_bytes(b"existing data")
 
-        result = manager.download_sheet("N-34-130-D", skip_existing=False)
+        result = manager.download_sheet("N-34-130-D-d-2-4", skip_existing=False)
 
+        assert isinstance(result, Path)
         assert result.exists()
         assert result.read_bytes() == b"ASC data"  # New data
+
+    def test_download_sheet_expands_25k_to_10k(self, tmp_path, mock_provider):
+        """Test że download_sheet z godłem 1:25000 rozwija do 4 arkuszy 1:10000."""
+        manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
+
+        result = manager.download_sheet("N-34-130-D-d-2")
+
+        assert isinstance(result, list)
+        assert len(result) == 4
+        assert all(p.suffix == ".asc" for p in result)
+        assert all(p.exists() for p in result)
+
+    def test_download_sheet_expands_50k_to_10k(self, tmp_path, mock_provider):
+        """Test że download_sheet z godłem 1:50000 rozwija do 16 arkuszy 1:10000."""
+        manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
+
+        result = manager.download_sheet("N-34-130-D-d")
+
+        assert isinstance(result, list)
+        assert len(result) == 16
+        assert all(p.suffix == ".asc" for p in result)
+        assert all(p.exists() for p in result)
+
+    def test_download_sheet_expands_100k_to_10k(self, tmp_path, mock_provider):
+        """Test że download_sheet z godłem 1:100000 rozwija do 64 arkuszy 1:10000."""
+        manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
+
+        result = manager.download_sheet("N-34-130-D")
+
+        assert isinstance(result, list)
+        assert len(result) == 64
+        assert all(p.suffix == ".asc" for p in result)
+
+    def test_download_sheet_expands_with_progress(self, tmp_path, mock_provider):
+        """Test że download_sheet przekazuje on_progress przy rozwijaniu."""
+        manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
+
+        progress_calls = []
+
+        def on_progress(p):
+            progress_calls.append(p)
+
+        result = manager.download_sheet("N-34-130-D-d-2", on_progress=on_progress)
+
+        assert isinstance(result, list)
+        assert len(result) == 4
+        # Each sheet gets 2 progress calls (downloading + completed)
+        assert len(progress_calls) == 8
 
 
 class TestDownloadManagerDownloadHierarchy:
