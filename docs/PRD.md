@@ -1,10 +1,10 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 2.0
-**Data:** 2026-01-21
+**Wersja:** 3.0
+**Data:** 2026-02-07
 **Product Owner:** Piotr
-**Status:** Production (v0.3.1)
+**Status:** Production (v0.4.0)
 
 ---
 
@@ -21,8 +21,8 @@ Pobieranie danych przestrzennych z różnych źródeł (GUGiK, Copernicus, ISRIC
 ### 1.2 Solution
 
 Kartograf to narzędzie CLI + biblioteka Python oferujące:
-1. **Unified API** - jednolity interfejs dla NMT, Land Cover, SoilGrids
-2. **Multiple Providers** - GUGiK, BDOT10k, CORINE, SoilGrids
+1. **Unified API** - jednolity interfejs dla NMT, NMPT, Ortofoto, Land Cover, SoilGrids
+2. **Multiple Providers** - GUGiK (NMT/NMPT/Orto/BDOT10k), CORINE, SoilGrids
 3. **Intelligent Selection** - godło, TERYT, bbox
 4. **Automatic Processing** - scalanie warstw, kalkulacja HSG
 5. **Secure Auth** - Auth Proxy dla izolacji credentials
@@ -43,10 +43,10 @@ Kartograf to narzędzie CLI + biblioteka Python oferujące:
 
 | Cel | Target | Status |
 |-----|--------|--------|
-| Test coverage (core) | >= 80% | 57% (w trakcie) |
+| Test coverage (core) | >= 80% | 84% (osiągnięty) |
 | Reliability | >= 95% success rate | Osiągnięty |
 | Performance | Download < 60s | Osiągnięty |
-| Code quality | black + flake8 | Osiągnięty |
+| Code quality | ruff | Osiągnięty |
 
 ### 2.2 Integration Goals
 
@@ -79,6 +79,11 @@ print(parser.get_bbox())  # BBox(min_x=..., max_x=..., ...)
 hierarchy = parser.get_hierarchy_up()
 descendants = parser.get_all_descendants("1:10000")
 
+# Reverse lookup: bbox → godła
+from kartograf import find_sheets_for_bbox
+bbox = BBox(419000, 230000, 426000, 237000, "EPSG:2180")
+sheets = find_sheets_for_bbox(bbox, "1:10000")
+
 # Pobieranie przez godło (ASC)
 manager = DownloadManager(output_dir="./data")
 path = manager.download_sheet("N-34-130-D-d-2-4")
@@ -98,12 +103,75 @@ kartograf parse N-34-130-D-d-2-4
 kartograf parse N-34-130-D --hierarchy
 kartograf download N-34-130-D-d-2-4
 kartograf download N-34-130-D --scale 1:10000
+kartograf download --bbox 419000,230000,426000,237000
+kartograf download --bbox 19.93,50.05,19.95,50.07 --bbox-crs EPSG:4326
 kartograf download N-34-130-D --resolution 5m
+kartograf download N-34-130-D-d-2-4 --product nmpt
+kartograf download N-34-130-D-d-2-4 --product orto
+kartograf download --bbox 419000,230000,426000,237000 --product orto
 ```
 
 ---
 
-### 3.2 Feature: BDOT10k (Land Cover - GUGiK)
+### 3.2 Feature: NMPT (Numeryczny Model Pokrycia Terenu)
+
+**Priority:** P0 (Critical)
+**Status:** Production
+
+#### Description
+Pobieranie danych NMPT (Digital Surface Model) z GUGiK — teren + obiekty powierzchniowe (drzewa, budynki).
+
+#### Capabilities
+```python
+from kartograf import GugikNmptProvider
+
+# NMPT provider (tylko 1m, KRON86 lub EVRF2007)
+provider = GugikNmptProvider(vertical_crs="EVRF2007")
+provider.download("N-34-130-D-d-2-4", Path("./sheet.asc"))
+
+# Przez bbox (WCS)
+bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+provider.download_bbox(bbox, Path("./area.tif"))
+```
+
+#### CLI Commands
+```bash
+kartograf download N-34-130-D-d-2-4 --product nmpt
+kartograf download --bbox 419000,230000,426000,237000 --product nmpt
+```
+
+---
+
+### 3.3 Feature: Ortofotomapa (Standard Resolution)
+
+**Priority:** P0 (Critical)
+**Status:** Production
+
+#### Description
+Pobieranie ortofotomapy (zdjęcia lotnicze) z GUGiK w rozdzielczości 25cm.
+
+#### Capabilities
+```python
+from kartograf import GugikOrtoProvider
+
+# Ortofoto provider (brak vertical CRS — 2D RGB)
+provider = GugikOrtoProvider()
+provider.download("N-34-130-D-d-2-4", Path("./sheet.tif"))
+
+# Przez bbox (WCS, formaty: GTiff, PNG, JPEG)
+bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+provider.download_bbox(bbox, Path("./area.tif"), format="GTiff")
+```
+
+#### CLI Commands
+```bash
+kartograf download N-34-130-D-d-2-4 --product orto
+kartograf download --bbox 419000,230000,426000,237000 --product orto
+```
+
+---
+
+### 3.4 Feature: BDOT10k (Land Cover - GUGiK)
 
 **Priority:** P1
 **Status:** Production
@@ -150,7 +218,7 @@ kartograf landcover list-layers --source bdot10k
 
 ---
 
-### 3.3 Feature: CORINE Land Cover (Copernicus)
+### 3.5 Feature: CORINE Land Cover (Copernicus)
 
 **Priority:** P1
 **Status:** Production
@@ -191,7 +259,7 @@ kartograf landcover list-layers --source corine
 
 ---
 
-### 3.4 Feature: SoilGrids (Dane Glebowe)
+### 3.6 Feature: SoilGrids (Dane Glebowe)
 
 **Priority:** P1
 **Status:** Production
@@ -253,7 +321,7 @@ kartograf landcover list-layers --source soilgrids
 
 ---
 
-### 3.5 Feature: HSG (Hydrologic Soil Groups)
+### 3.7 Feature: HSG (Hydrologic Soil Groups)
 
 **Priority:** P1
 **Status:** Production
@@ -323,19 +391,18 @@ kartograf soilgrids hsg --godlo N-34-130-D --keep-intermediate
 └──────────┬─────────────┴─────────────┬──────────────────────┘
            │                           │
            v                           v
-┌─────────────────────────────────────────────────────────────┐
-│                      Providers                              │
-├───────────┬───────────┬───────────┬─────────────────────────┤
-│ GugikProv │ Bdot10k   │ Corine    │ SoilGrids               │
-│ (NMT)     │ Provider  │ Provider  │ Provider                │
-└─────┬─────┴─────┬─────┴─────┬─────┴──────────┬──────────────┘
-      │           │           │                │
-      v           v           v                v
-┌─────────┐ ┌─────────┐ ┌──────────────┐ ┌─────────────┐
-│ GUGiK   │ │ GUGiK   │ │ CLMS API     │ │ ISRIC WCS   │
-│ WCS/    │ │ OpenData│ │ (Auth Proxy) │ │             │
-│ OpenData│ │         │ │ EEA WMS      │ │             │
-└─────────┘ └─────────┘ └──────────────┘ └─────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                         Providers                               │
+├─────────┬──────────┬──────────┬──────────┬──────────┬───────────┤
+│ Gugik   │ GugikNmpt│ GugikOrto│ Bdot10k  │ Corine   │ SoilGrids │
+│ (NMT)   │ (NMPT)   │ (Orto)   │ Provider │ Provider │ Provider  │
+└────┬────┴────┬─────┴────┬─────┴────┬─────┴────┬─────┴─────┬─────┘
+     │         │          │          │          │           │
+     v         v          v          v          v           v
+┌───────────────────────┐ ┌─────────┐ ┌──────────────┐ ┌─────────┐
+│ GUGiK WCS / OpenData  │ │ GUGiK   │ │ CLMS API     │ │ ISRIC   │
+│ (NMT, NMPT, Ortofoto) │ │ OpenData│ │ (Auth Proxy) │ │ WCS     │
+└───────────────────────┘ └─────────┘ └──────────────┘ └─────────┘
 ```
 
 ### 4.2 Hydrology Module
@@ -372,8 +439,9 @@ from kartograf import (
     # Core
     SheetParser,
     BBox,
+    find_sheets_for_bbox,
 
-    # Download (NMT)
+    # Download (NMT/NMPT/Orto)
     DownloadManager,
     DownloadProgress,
     FileStorage,
@@ -384,6 +452,8 @@ from kartograf import (
     # Providers
     BaseProvider,
     GugikProvider,
+    GugikNmptProvider,
+    GugikOrtoProvider,
     LandCoverProvider,
     Bdot10kProvider,
     CorineProvider,
@@ -399,7 +469,7 @@ from kartograf import (
     DownloadError,
 
     # Version
-    __version__,  # "0.3.1"
+    __version__,  # "0.4.0"
 )
 ```
 
@@ -421,10 +491,10 @@ numpy >= 1.24.0        # Array operations
 ### 6.2 Development Dependencies
 
 ```
-pytest >= 7.4.0        # Testing
-pytest-cov >= 4.1.0    # Coverage
-black >= 23.7.0        # Formatting
-flake8 >= 6.1.0        # Linting
+pytest >= 8.0          # Testing
+pytest-cov >= 5.0      # Coverage
+ruff >= 0.8            # Linting + Formatting
+mypy >= 1.13           # Type checking
 ```
 
 ---
@@ -457,14 +527,14 @@ flake8 >= 6.1.0        # Linting
 
 ## 8. Future Enhancements
 
-### Version 0.4+
+### Version 0.5+
 - [ ] Parallel downloads (multi-threading)
 - [ ] Metadata cache (SQLite)
 - [ ] Automatic mosaic creation
 
 ### Version 1.0+
 - [ ] GUI interface
-- [ ] Additional data sources (ortophoto, LIDAR)
+- [ ] Additional data sources (LIDAR)
 - [ ] PostGIS integration
 - [ ] REST API server
 
@@ -492,6 +562,6 @@ HYDROGRAF (główna aplikacja)
 
 ---
 
-**Wersja dokumentu:** 2.0
-**Data ostatniej aktualizacji:** 2026-01-21
-**Status:** Production - v0.3.1
+**Wersja dokumentu:** 3.0
+**Data ostatniej aktualizacji:** 2026-02-07
+**Status:** Production - v0.4.0

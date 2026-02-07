@@ -6,9 +6,9 @@ Ten moduł zawiera testy dla klasy GugikProvider z nową architekturą:
 - download_bbox(bbox) → WCS (GeoTIFF/PNG/JPEG)
 """
 
-import pytest
 from unittest.mock import Mock, patch
 
+import pytest
 import requests
 
 from kartograf.core.sheet_parser import BBox
@@ -400,9 +400,8 @@ class TestGugikProviderRetry:
         provider = GugikProvider(session=session)
         output_path = tmp_path / "test.asc"
 
-        with patch("time.sleep"):
-            with pytest.raises(DownloadError):
-                provider.download("N-34-130-D", output_path)
+        with patch("time.sleep"), pytest.raises(DownloadError):
+            provider.download("N-34-130-D", output_path)
 
     def test_download_exponential_backoff(self, tmp_path):
         """Test exponential backoff między próbami."""
@@ -423,9 +422,11 @@ class TestGugikProviderRetry:
         output_path = tmp_path / "test.asc"
 
         sleep_times = []
-        with patch("time.sleep", side_effect=lambda t: sleep_times.append(t)):
-            with pytest.raises(DownloadError):
-                provider.download("N-34-130-D", output_path)
+        with (
+            patch("time.sleep", side_effect=lambda t: sleep_times.append(t)),
+            pytest.raises(DownloadError),
+        ):
+            provider.download("N-34-130-D", output_path)
 
         # Exponential backoff: 2^1=2, 2^2=4 seconds
         assert sleep_times == [2, 4]
@@ -475,7 +476,7 @@ class TestGugikProviderGetOpendataUrl:
         with pytest.raises(DownloadError) as exc_info:
             provider._get_opendata_url("N-34-130-D-d-2-4")
 
-        assert "No ASC file found" in str(exc_info.value)
+        assert "No NMT 1m data available" in str(exc_info.value)
 
     def test_get_opendata_url_tries_all_layers(
         self, mock_wms_response_no_url, mock_wms_response_with_url

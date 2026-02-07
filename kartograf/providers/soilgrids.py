@@ -33,7 +33,6 @@ Statistics: mean, Q0.05, Q0.5, Q0.95, uncertainty
 import logging
 import time
 from pathlib import Path
-from typing import Optional
 from urllib.parse import urlencode
 
 import requests
@@ -130,7 +129,7 @@ class SoilGridsProvider(LandCoverProvider):
         "https://mapy.geoportal.gov.pl/wss/service/PZGIK/BDOT/WMS/PobieranieBDOT10k"
     )
 
-    def __init__(self, session: Optional[requests.Session] = None):
+    def __init__(self, session: requests.Session | None = None):
         """
         Initialize SoilGrids provider.
 
@@ -210,20 +209,19 @@ class SoilGridsProvider(LandCoverProvider):
         # Validate property
         if property not in self.PROPERTIES:
             raise ValueError(
-                f"Invalid property: {property}. "
-                f"Available: {', '.join(self.PROPERTIES)}"
+                f"Invalid property: {property}. Available: {', '.join(self.PROPERTIES)}"
             )
 
         # Validate depth
         if depth not in self.DEPTHS:
             raise ValueError(
-                f"Invalid depth: {depth}. " f"Available: {', '.join(self.DEPTHS)}"
+                f"Invalid depth: {depth}. Available: {', '.join(self.DEPTHS)}"
             )
 
         # Validate stat
         if stat not in self.STATS:
             raise ValueError(
-                f"Invalid stat: {stat}. " f"Available: {', '.join(self.STATS)}"
+                f"Invalid stat: {stat}. Available: {', '.join(self.STATS)}"
             )
 
         output_path = Path(output_path)

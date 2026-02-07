@@ -12,11 +12,11 @@ import pytest  # noqa: F401 - required for fixtures
 from kartograf.cli.commands import (
     create_parser,
     create_progress_callback,
-    main,
-    format_sheet_info,
-    format_hierarchy,
     format_children,
     format_descendants,
+    format_hierarchy,
+    format_sheet_info,
+    main,
 )
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.manager import DownloadProgress
@@ -256,7 +256,7 @@ class TestMain:
 
         assert exc_info.value.code == 0
         captured = capsys.readouterr()
-        assert "0.3.2" in captured.out
+        assert "0.4.0" in captured.out
 
     def test_parse_subcommand(self, capsys):
         """Test parse subcommand."""
@@ -424,7 +424,7 @@ class TestCmdDownload:
 
         assert result == 0
         mock_manager.download_sheet.assert_called_once_with(
-            "N-34-130-D-d-2-4", skip_existing=True
+            "N-34-130-D-d-2-4", skip_existing=True, on_progress=None
         )
 
     @patch("kartograf.cli.commands.DownloadManager")
@@ -465,7 +465,7 @@ class TestCmdDownload:
 
         assert result == 0
         mock_manager.download_sheet.assert_called_once_with(
-            "N-34-130-D-d-2-4", skip_existing=False
+            "N-34-130-D-d-2-4", skip_existing=False, on_progress=None
         )
 
     @patch("kartograf.cli.commands.DownloadManager")
@@ -536,7 +536,7 @@ class TestDownloadCLIIntegration:
         captured = capsys.readouterr()
         assert "download" in captured.out.lower()
         assert "--scale" in captured.out
-        assert "ASC" in captured.out  # Should mention ASC files in description
+        assert "--product" in captured.out  # Should show product option
 
     def test_main_includes_download(self, capsys):
         """Test that main help includes download command."""
@@ -545,3 +545,660 @@ class TestDownloadCLIIntegration:
         assert result == 0
         captured = capsys.readouterr()
         assert "download" in captured.out
+
+
+class TestCmdDownloadProduct:
+    """Tests for --product flag in download command."""
+
+    def test_download_parser_has_product_option(self):
+        """Test that download parser has --product option."""
+        parser = create_parser()
+        args = parser.parse_args(["download", "N-34-130-D", "--product", "nmpt"])
+        assert args.product == "nmpt"
+
+    def test_download_product_default_nmt(self):
+        """Test that --product defaults to nmt."""
+        parser = create_parser()
+        args = parser.parse_args(["download", "N-34-130-D"])
+        assert args.product == "nmt"
+
+    @patch("kartograf.cli.commands._create_provider_and_storage")
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_product_nmpt(
+        self, mock_manager_cls, mock_create, capsys, tmp_path
+    ):
+        """Test --product nmpt creates GugikNmptProvider."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".asc"
+        mock_storage = Mock()
+        mock_create.return_value = (mock_provider, mock_storage)
+
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--product",
+                "nmpt",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        mock_create.assert_called_once()
+        call_args = mock_create.call_args
+        assert call_args[0][0] == "nmpt"
+
+    @patch("kartograf.cli.commands._create_provider_and_storage")
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_product_orto(
+        self, mock_manager_cls, mock_create, capsys, tmp_path
+    ):
+        """Test --product orto creates GugikOrtoProvider."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".tif"
+        mock_storage = Mock()
+        mock_create.return_value = (mock_provider, mock_storage)
+
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.tif"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--product",
+                "orto",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        mock_create.assert_called_once()
+        call_args = mock_create.call_args
+        assert call_args[0][0] == "orto"
+
+    @patch("kartograf.cli.commands._create_provider_and_storage")
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_product_nmt_default(
+        self, mock_manager_cls, mock_create, capsys, tmp_path
+    ):
+        """Test default product creates GugikProvider."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".asc"
+        mock_storage = Mock()
+        mock_create.return_value = (mock_provider, mock_storage)
+
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"])
+
+        assert result == 0
+        mock_create.assert_called_once()
+        call_args = mock_create.call_args
+        assert call_args[0][0] == "nmt"
+
+    @patch("kartograf.cli.commands._create_provider_and_storage")
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_bbox_product_nmpt(
+        self, mock_manager_cls, mock_create, capsys, tmp_path
+    ):
+        """Test --bbox + --product nmpt."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".asc"
+        mock_storage = Mock()
+        mock_create.return_value = (mock_provider, mock_storage)
+
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "--product",
+                "nmpt",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        mock_create.assert_called_once()
+        call_args = mock_create.call_args
+        assert call_args[0][0] == "nmpt"
+
+    @patch("kartograf.cli.commands._create_provider_and_storage")
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_bbox_product_orto(
+        self, mock_manager_cls, mock_create, capsys, tmp_path
+    ):
+        """Test --bbox + --product orto."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".tif"
+        mock_storage = Mock()
+        mock_create.return_value = (mock_provider, mock_storage)
+
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.tif"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "--product",
+                "orto",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        mock_create.assert_called_once()
+        call_args = mock_create.call_args
+        assert call_args[0][0] == "orto"
+
+
+class TestCreateProviderAndStorage:
+    """Tests for _create_provider_and_storage helper."""
+
+    def test_nmt_creates_gugik_provider(self, tmp_path):
+        """Test that nmt creates GugikProvider + FileStorage."""
+        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.providers.gugik import GugikProvider
+
+        provider, storage = _create_provider_and_storage(
+            "nmt", tmp_path, "EVRF2007", "1m"
+        )
+        assert isinstance(provider, GugikProvider)
+        assert storage._product is None
+        assert storage._resolution == "1m"
+
+    def test_nmpt_creates_nmpt_provider(self, tmp_path):
+        """Test that nmpt creates GugikNmptProvider."""
+        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.providers.gugik_nmpt import GugikNmptProvider
+
+        provider, storage = _create_provider_and_storage(
+            "nmpt", tmp_path, "EVRF2007", "1m"
+        )
+        assert isinstance(provider, GugikNmptProvider)
+        assert storage._product == "nmpt"
+
+    def test_orto_creates_orto_provider(self, tmp_path):
+        """Test that orto creates GugikOrtoProvider."""
+        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.providers.gugik_orto import GugikOrtoProvider
+
+        provider, storage = _create_provider_and_storage(
+            "orto", tmp_path, "EVRF2007", "1m"
+        )
+        assert isinstance(provider, GugikOrtoProvider)
+        assert storage._product == "orto"
+
+
+class TestCmdDownloadBBox:
+    """Tests for download command with --bbox option."""
+
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_bbox_basic(self, mock_manager_class, capsys, tmp_path):
+        """Test --bbox wywołuje find_sheets_for_bbox i download_sheet."""
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_class.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        # download_sheet powinien być wywołany co najmniej raz
+        assert mock_manager.download_sheet.call_count >= 1
+
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_bbox_epsg4326(self, mock_manager_class, capsys, tmp_path):
+        """Test --bbox z --bbox-crs EPSG:4326."""
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_class.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "19.93,50.05,19.95,50.07",
+                "--bbox-crs",
+                "EPSG:4326",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        assert mock_manager.download_sheet.call_count >= 1
+
+    def test_download_bbox_and_godlo_error(self, capsys):
+        """Test oba godlo i --bbox → exit 1."""
+        result = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Cannot specify both" in captured.err
+
+    def test_download_no_input_error(self, capsys):
+        """Test brak godlo i --bbox → exit 1."""
+        result = main(["download", "-q"])
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Must specify" in captured.err
+
+    def test_download_bbox_invalid_format(self, capsys):
+        """Test zły format bbox → exit 1."""
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "not,a,valid,bbox",
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Invalid bbox format" in captured.err
+
+    def test_download_bbox_too_few_values(self, capsys):
+        """Test za mało wartości w bbox → exit 1."""
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000",
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Invalid bbox format" in captured.err
+
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_bbox_with_scale(self, mock_manager_class, capsys, tmp_path):
+        """Test --bbox z --scale 1:100000."""
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_class.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "--scale",
+                "1:100000",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        # Mniejsza skala = mniej arkuszy
+        assert mock_manager.download_sheet.call_count >= 1
+
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_bbox_shows_summary(self, mock_manager_class, capsys, tmp_path):
+        """Test that bbox mode shows summary when not quiet."""
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_class.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "19.93,50.05,19.95,50.07",
+                "--bbox-crs",
+                "EPSG:4326",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Found" in captured.out
+        assert "sheets" in captured.out
+
+    def test_download_parser_has_bbox_options(self):
+        """Test that download parser has --bbox and --bbox-crs options."""
+        parser = create_parser()
+        args = parser.parse_args(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "--bbox-crs",
+                "EPSG:4326",
+            ]
+        )
+        assert args.bbox == "419000,230000,426000,237000"
+        assert args.bbox_crs == "EPSG:4326"
+
+    def test_download_parser_bbox_crs_default(self):
+        """Test that --bbox-crs defaults to EPSG:2180."""
+        parser = create_parser()
+        args = parser.parse_args(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+            ]
+        )
+        assert args.bbox_crs == "EPSG:2180"
+
+    def test_download_parser_godlo_optional(self):
+        """Test that godlo is now optional."""
+        parser = create_parser()
+        args = parser.parse_args(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+            ]
+        )
+        assert args.godlo is None
+        assert args.bbox == "419000,230000,426000,237000"
+
+
+# ===========================================================================
+# Landcover CLI tests
+# ===========================================================================
+
+
+class TestCmdLandcoverDownload:
+    """Tests for landcover download CLI."""
+
+    @patch("kartograf.cli.commands.LandCoverManager")
+    def test_landcover_download_by_teryt(self, mock_mgr_cls, capsys, tmp_path):
+        """landcover download --teryt calls manager.download with teryt."""
+        mock_mgr = Mock()
+        mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.download.return_value = tmp_path / "out.gpkg"
+        mock_mgr_cls.return_value = mock_mgr
+
+        result = main(["landcover", "download", "--teryt", "1465", "-o", str(tmp_path)])
+        assert result == 0
+        mock_mgr.download.assert_called_once()
+        call_kwargs = mock_mgr.download.call_args
+        assert call_kwargs.kwargs.get("teryt") == "1465"
+
+    @patch("kartograf.cli.commands.LandCoverManager")
+    def test_landcover_download_by_godlo(self, mock_mgr_cls, capsys, tmp_path):
+        """landcover download --godlo calls manager.download with godlo."""
+        mock_mgr = Mock()
+        mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.download.return_value = tmp_path / "out.gpkg"
+        mock_mgr_cls.return_value = mock_mgr
+
+        result = main(
+            ["landcover", "download", "--godlo", "N-34-130-D", "-o", str(tmp_path)]
+        )
+        assert result == 0
+        mock_mgr.download.assert_called_once()
+        call_kwargs = mock_mgr.download.call_args
+        assert call_kwargs.kwargs.get("godlo") == "N-34-130-D"
+
+    @patch("kartograf.cli.commands.LandCoverManager")
+    def test_landcover_download_by_bbox_success(self, mock_mgr_cls, capsys, tmp_path):
+        """landcover download --bbox calls manager.download with bbox."""
+        mock_mgr = Mock()
+        mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.download.return_value = tmp_path / "out.gpkg"
+        mock_mgr_cls.return_value = mock_mgr
+
+        result = main(
+            [
+                "landcover",
+                "download",
+                "--bbox",
+                "450000,550000,460000,560000",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 0
+        mock_mgr.download.assert_called_once()
+        captured = capsys.readouterr()
+        assert "Downloaded to" in captured.out
+
+    @patch("kartograf.cli.commands.LandCoverManager")
+    def test_landcover_download_source_corine(self, mock_mgr_cls, capsys, tmp_path):
+        """--source corine creates manager with corine provider."""
+        mock_mgr = Mock()
+        mock_mgr.provider_name = "CORINE Land Cover"
+        mock_mgr.download.return_value = tmp_path / "out.png"
+        mock_mgr_cls.return_value = mock_mgr
+
+        result = main(
+            [
+                "landcover",
+                "download",
+                "--source",
+                "corine",
+                "--godlo",
+                "N-34-130-D",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 0
+        # Manager was created with provider="corine"
+        mock_mgr_cls.assert_called_once()
+        call_kwargs = mock_mgr_cls.call_args
+        assert call_kwargs.kwargs.get("provider") == "corine"
+
+    @patch("kartograf.cli.commands.LandCoverManager")
+    def test_landcover_download_error(self, mock_mgr_cls, capsys, tmp_path):
+        """DownloadError in download -> exit 1."""
+        mock_mgr = Mock()
+        mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.download.side_effect = DownloadError("Network error")
+        mock_mgr_cls.return_value = mock_mgr
+
+        result = main(["landcover", "download", "--teryt", "1465", "-o", str(tmp_path)])
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Error" in captured.err
+
+    def test_landcover_download_multiple_selection(self, capsys):
+        """Multiple selection methods -> exit 1."""
+        result = main(
+            ["landcover", "download", "--teryt", "1465", "--godlo", "N-34-130-D"]
+        )
+        assert result == 1
+        captured = capsys.readouterr()
+        err = captured.err
+        assert "only one of" in err.lower() or "Provide only one" in err
+
+    def test_landcover_list_layers_soilgrids(self, capsys):
+        """list-layers --source soilgrids shows soil properties."""
+        result = main(["landcover", "list-layers", "--source", "soilgrids"])
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "clay" in captured.out
+        assert "sand" in captured.out
+        assert "silt" in captured.out
+
+
+# ===========================================================================
+# Soilgrids CLI tests
+# ===========================================================================
+
+
+class TestCmdSoilgrids:
+    """Tests for soilgrids CLI commands."""
+
+    def test_soilgrids_help(self, capsys):
+        """soilgrids with no subcommand shows help."""
+        result = main(["soilgrids"])
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "hsg" in captured.out
+
+    @patch("kartograf.hydrology.HSGCalculator")
+    def test_soilgrids_hsg_success(self, mock_calc_cls, capsys, tmp_path):
+        """soilgrids hsg --godlo -> success output."""
+        mock_calc = Mock()
+        mock_calc.calculate_hsg_by_godlo.return_value = tmp_path / "hsg.tif"
+        mock_calc_cls.return_value = mock_calc
+
+        result = main(
+            [
+                "soilgrids",
+                "hsg",
+                "--godlo",
+                "N-34-130-D",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "HSG raster saved to" in captured.out
+        mock_calc.calculate_hsg_by_godlo.assert_called_once()
+
+    @patch("kartograf.hydrology.HSGCalculator")
+    def test_soilgrids_hsg_with_stats(self, mock_calc_cls, capsys, tmp_path):
+        """soilgrids hsg --stats prints statistics."""
+        mock_calc = Mock()
+        mock_calc.calculate_hsg_by_godlo.return_value = tmp_path / "hsg.tif"
+        mock_calc.get_hsg_statistics.return_value = {
+            "A": {
+                "count": 100,
+                "area_m2": 10000,
+                "area_ha": 1.0,
+                "percent": 50.0,
+                "description": "High infiltration",
+            },
+            "B": {
+                "count": 50,
+                "area_m2": 5000,
+                "area_ha": 0.5,
+                "percent": 25.0,
+                "description": "Moderate infiltration",
+            },
+            "C": {
+                "count": 30,
+                "area_m2": 3000,
+                "area_ha": 0.3,
+                "percent": 15.0,
+                "description": "Slow infiltration",
+            },
+            "D": {
+                "count": 20,
+                "area_m2": 2000,
+                "area_ha": 0.2,
+                "percent": 10.0,
+                "description": "Very slow infiltration",
+            },
+        }
+        mock_calc_cls.return_value = mock_calc
+
+        result = main(
+            [
+                "soilgrids",
+                "hsg",
+                "--godlo",
+                "N-34-130-D",
+                "-o",
+                str(tmp_path),
+                "--stats",
+            ]
+        )
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "HSG Statistics" in captured.out
+        assert "Group A" in captured.out
+        assert "50.0%" in captured.out
+
+    @patch("kartograf.hydrology.HSGCalculator")
+    def test_soilgrids_hsg_error(self, mock_calc_cls, capsys, tmp_path):
+        """soilgrids hsg raises DownloadError -> exit 1."""
+        mock_calc = Mock()
+        mock_calc.calculate_hsg_by_godlo.side_effect = DownloadError("Network error")
+        mock_calc_cls.return_value = mock_calc
+
+        result = main(
+            [
+                "soilgrids",
+                "hsg",
+                "--godlo",
+                "N-34-130-D",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Error" in captured.err
+
+    def test_soilgrids_hsg_no_selection(self, capsys):
+        """soilgrids hsg without --godlo or --bbox -> exit 1."""
+        result = main(["soilgrids", "hsg"])
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Must provide one of" in captured.err
+
+    @patch("kartograf.hydrology.HSGCalculator")
+    def test_soilgrids_hsg_by_bbox(self, mock_calc_cls, capsys, tmp_path):
+        """soilgrids hsg --bbox -> calculate_hsg_by_bbox called."""
+        mock_calc = Mock()
+        mock_calc.calculate_hsg_by_bbox.return_value = tmp_path / "hsg.tif"
+        mock_calc_cls.return_value = mock_calc
+
+        result = main(
+            [
+                "soilgrids",
+                "hsg",
+                "--bbox",
+                "450000,550000,460000,560000",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 0
+        mock_calc.calculate_hsg_by_bbox.assert_called_once()

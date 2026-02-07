@@ -46,8 +46,8 @@ class AuthProxyClient:
     """
 
     _instance: Optional["AuthProxyClient"] = None
-    _proxy_process: Optional[subprocess.Popen] = None
-    _proxy_port: Optional[int] = None
+    _proxy_process: subprocess.Popen | None = None
+    _proxy_port: int | None = None
 
     def __new__(cls):
         """Singleton pattern - only one proxy instance."""
@@ -142,7 +142,7 @@ class AuthProxyClient:
         return self._start_proxy()
 
     @property
-    def proxy_url(self) -> Optional[str]:
+    def proxy_url(self) -> str | None:
         """Return proxy base URL if available."""
         if self._proxy_port:
             return f"http://127.0.0.1:{self._proxy_port}"
@@ -173,7 +173,7 @@ class AuthProxyClient:
 
         return False
 
-    def get_access_token(self) -> Optional[str]:
+    def get_access_token(self) -> str | None:
         """
         Get CLMS access token from proxy.
 
@@ -204,9 +204,9 @@ class AuthProxyClient:
         self,
         url: str,
         method: str = "GET",
-        headers: Optional[dict] = None,
-        payload: Optional[dict] = None,
-    ) -> Optional[dict]:
+        headers: dict | None = None,
+        payload: dict | None = None,
+    ) -> dict | None:
         """
         Send authenticated request through proxy.
 

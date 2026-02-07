@@ -8,9 +8,8 @@ displaying hierarchy information, and downloading NMT and land cover data.
 import argparse
 import sys
 from pathlib import Path
-from typing import Optional
 
-from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
 from kartograf.download.manager import DownloadManager, DownloadProgress
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
@@ -34,7 +33,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version="%(prog)s 0.3.2",
+        version="%(prog)s 0.4.0",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -68,14 +67,28 @@ def create_parser() -> argparse.ArgumentParser:
     # Download command
     download_parser = subparsers.add_parser(
         "download",
-        help="Download NMT data for a map sheet",
+        help="Download geospatial data from GUGiK",
         description=(
-            "Download NMT (Digital Terrain Model) data from GUGiK OpenData as ASC files"
+            "Download geospatial data from GUGiK: NMT (terrain), NMPT (surface), "
+            "or orthophoto"
         ),
     )
     download_parser.add_argument(
         "godlo",
+        nargs="?",
+        default=None,
         help="Map sheet identifier (e.g., N-34-130-D-d-2-4)",
+    )
+    download_parser.add_argument(
+        "--bbox",
+        metavar="BBOX",
+        help="Bounding box: min_x,min_y,max_x,max_y (default CRS: EPSG:2180)",
+    )
+    download_parser.add_argument(
+        "--bbox-crs",
+        choices=["EPSG:2180", "EPSG:4326"],
+        default="EPSG:2180",
+        help="CRS for --bbox coordinates (default: EPSG:2180)",
     )
     download_parser.add_argument(
         "--scale",
@@ -112,6 +125,13 @@ def create_parser() -> argparse.ArgumentParser:
         choices=["1m", "5m"],
         default="1m",
         help="Grid resolution: 1m or 5m (default: 1m). Note: 5m only for EVRF2007",
+    )
+    download_parser.add_argument(
+        "--product",
+        choices=["nmt", "nmpt", "orto"],
+        default="nmt",
+        help="Data product: nmt (terrain), nmpt (surface), "
+        "orto (orthophoto). Default: nmt",
     )
 
     # Landcover command group
@@ -482,6 +502,28 @@ def create_progress_callback(quiet: bool = False):
     return on_progress
 
 
+def _create_provider_and_storage(product, output_dir, vertical_crs, resolution):
+    """Create provider and storage based on product type."""
+    from kartograf.download.storage import FileStorage
+    from kartograf.providers.gugik import GugikProvider
+
+    if product == "nmpt":
+        from kartograf.providers.gugik_nmpt import GugikNmptProvider
+
+        provider = GugikNmptProvider(vertical_crs=vertical_crs)
+        storage = FileStorage(output_dir, product="nmpt")
+    elif product == "orto":
+        from kartograf.providers.gugik_orto import GugikOrtoProvider
+
+        provider = GugikOrtoProvider()
+        storage = FileStorage(output_dir, product="orto")
+    else:
+        provider = GugikProvider(vertical_crs=vertical_crs, resolution=resolution)
+        storage = FileStorage(output_dir, resolution=resolution)
+
+    return provider, storage
+
+
 def cmd_download(args: argparse.Namespace) -> int:
     """
     Execute the download command.
@@ -496,6 +538,22 @@ def cmd_download(args: argparse.Namespace) -> int:
     int
         Exit code (0 for success, 1 for error)
     """
+    has_godlo = args.godlo is not None
+    has_bbox = args.bbox is not None
+
+    if has_godlo and has_bbox:
+        print("Error: Cannot specify both godlo and --bbox", file=sys.stderr)
+        return 1
+
+    if not has_godlo and not has_bbox:
+        print("Error: Must specify either godlo or --bbox", file=sys.stderr)
+        return 1
+
+    # --- Tryb bbox ---
+    if has_bbox:
+        return _cmd_download_bbox(args)
+
+    # --- Tryb godlo (istniejąca logika) ---
     try:
         # Validate godlo first
         SheetParser(args.godlo)
@@ -503,12 +561,21 @@ def cmd_download(args: argparse.Namespace) -> int:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    # Create download manager with vertical CRS and resolution
+    # Create download manager with vertical CRS, resolution, and product
     output_dir = Path(args.output)
     vertical_crs = getattr(args, "vertical_crs", "KRON86")
     resolution = getattr(args, "resolution", "1m")
+    product = getattr(args, "product", "nmt")
+
+    provider, storage = _create_provider_and_storage(
+        product, output_dir, vertical_crs, resolution
+    )
     manager = DownloadManager(
-        output_dir=output_dir, vertical_crs=vertical_crs, resolution=resolution
+        output_dir=output_dir,
+        provider=provider,
+        storage=storage,
+        vertical_crs=vertical_crs,
+        resolution=resolution,
     )
 
     skip_existing = not args.force
@@ -536,17 +603,119 @@ def cmd_download(args: argparse.Namespace) -> int:
                 print()
                 print(f"Downloaded {len(paths)} files to {output_dir}")
         else:
-            # Download single sheet
+            # Download single sheet (may expand to hierarchy for non-1:10000)
             if not args.quiet:
                 print(f"Downloading {args.godlo} (resolution: {resolution})...")
 
-            path = manager.download_sheet(
+            result = manager.download_sheet(
                 args.godlo,
                 skip_existing=skip_existing,
+                on_progress=on_progress,
             )
 
             if not args.quiet:
-                print(f"Downloaded to {path}")
+                if isinstance(result, list):
+                    print()
+                    print(f"Downloaded {len(result)} files to {output_dir}")
+                else:
+                    print(f"Downloaded to {result}")
+
+    except DownloadError as e:
+        print(f"\nError: {e}", file=sys.stderr)
+        return 1
+    except ValidationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    return 0
+
+
+def _cmd_download_bbox(args: argparse.Namespace) -> int:
+    """
+    Handle download command in bbox mode.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed command-line arguments (with args.bbox set)
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, 1 for error)
+    """
+    # Parse bbox string
+    try:
+        parts = [float(x.strip()) for x in args.bbox.split(",")]
+        if len(parts) != 4:
+            raise ValueError("BBOX must have 4 values")
+        bbox = BBox(parts[0], parts[1], parts[2], parts[3], args.bbox_crs)
+    except ValueError as e:
+        print(f"Error: Invalid bbox format: {e}", file=sys.stderr)
+        print("Expected: min_x,min_y,max_x,max_y (e.g., 419000,230000,426000,237000)")
+        return 1
+
+    target_scale = args.scale or "1:10000"
+
+    # Find sheets covering the bbox
+    try:
+        godlo_list = find_sheets_for_bbox(bbox, target_scale)
+    except ValidationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    if not godlo_list:
+        print("Error: No sheets found for the given bbox", file=sys.stderr)
+        return 1
+
+    # Create download manager
+    output_dir = Path(args.output)
+    vertical_crs = getattr(args, "vertical_crs", "KRON86")
+    resolution = getattr(args, "resolution", "1m")
+    product = getattr(args, "product", "nmt")
+
+    provider, storage = _create_provider_and_storage(
+        product, output_dir, vertical_crs, resolution
+    )
+    manager = DownloadManager(
+        output_dir=output_dir,
+        provider=provider,
+        storage=storage,
+        vertical_crs=vertical_crs,
+        resolution=resolution,
+    )
+
+    skip_existing = not args.force
+    on_progress = create_progress_callback(args.quiet)
+
+    if not args.quiet:
+        print(
+            f"Found {len(godlo_list)} sheets at {target_scale} "
+            f"for bbox (resolution: {resolution})"
+        )
+        if len(godlo_list) <= 10:
+            print(f"  Sheets: {', '.join(godlo_list)}")
+        else:
+            sample = godlo_list[:3] + ["..."] + godlo_list[-2:]
+            print(f"  Sheets: {', '.join(sample)}")
+        print()
+
+    try:
+        all_paths = []
+        for godlo in godlo_list:
+            result = manager.download_sheet(
+                godlo,
+                skip_existing=skip_existing,
+                on_progress=on_progress,
+            )
+            if isinstance(result, list):
+                all_paths.extend(result)
+            else:
+                all_paths.append(result)
+
+        if not args.quiet:
+            print()
+            print(f"Downloaded {len(all_paths)} files to {output_dir}")
 
     except DownloadError as e:
         print(f"\nError: {e}", file=sys.stderr)
@@ -875,7 +1044,7 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
         return 1
 
 
-def main(args: Optional[list[str]] = None) -> int:
+def main(args: list[str] | None = None) -> int:
     """
     Main entry point for the CLI.
 

@@ -6,8 +6,10 @@ Ten moduł zawiera testy dla klasy DownloadManager z nową architekturą:
 - download_bbox(bbox) → GeoTIFF
 """
 
+from pathlib import Path
+from unittest.mock import Mock, PropertyMock
+
 import pytest
-from unittest.mock import Mock
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.manager import DownloadManager, DownloadProgress
@@ -130,6 +132,7 @@ class TestDownloadManagerDownloadSheet:
     def mock_provider(self):
         """Fixture z mockowanym providerem."""
         provider = Mock(spec=GugikProvider)
+        type(provider).default_extension = PropertyMock(return_value=".asc")
 
         def mock_download(godlo, path, timeout=30):
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -140,11 +143,12 @@ class TestDownloadManagerDownloadSheet:
         return provider
 
     def test_download_sheet_success(self, tmp_path, mock_provider):
-        """Test udanego pobierania arkusza jako ASC."""
+        """Test udanego pobierania arkusza 1:10000 jako ASC."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
-        result = manager.download_sheet("N-34-130-D")
+        result = manager.download_sheet("N-34-130-D-d-2-4")
 
+        assert isinstance(result, Path)
         assert result.suffix == ".asc"
         assert result.exists()
 
@@ -154,13 +158,14 @@ class TestDownloadManagerDownloadSheet:
 
         # Create existing ASC file
         storage = FileStorage(tmp_path)
-        existing_path = storage.get_path("N-34-130-D", ".asc")
+        existing_path = storage.get_path("N-34-130-D-d-2-4", ".asc")
         existing_path.parent.mkdir(parents=True, exist_ok=True)
         existing_path.write_bytes(b"existing data")
 
-        result = manager.download_sheet("N-34-130-D", skip_existing=True)
+        result = manager.download_sheet("N-34-130-D-d-2-4", skip_existing=True)
 
         # Should return existing path without downloading
+        assert isinstance(result, Path)
         assert result.exists()
         assert result.read_bytes() == b"existing data"
 
@@ -170,14 +175,63 @@ class TestDownloadManagerDownloadSheet:
 
         # Create existing ASC file
         storage = FileStorage(tmp_path)
-        existing_path = storage.get_path("N-34-130-D", ".asc")
+        existing_path = storage.get_path("N-34-130-D-d-2-4", ".asc")
         existing_path.parent.mkdir(parents=True, exist_ok=True)
         existing_path.write_bytes(b"existing data")
 
-        result = manager.download_sheet("N-34-130-D", skip_existing=False)
+        result = manager.download_sheet("N-34-130-D-d-2-4", skip_existing=False)
 
+        assert isinstance(result, Path)
         assert result.exists()
         assert result.read_bytes() == b"ASC data"  # New data
+
+    def test_download_sheet_expands_25k_to_10k(self, tmp_path, mock_provider):
+        """Test że download_sheet z godłem 1:25000 rozwija do 4 arkuszy 1:10000."""
+        manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
+
+        result = manager.download_sheet("N-34-130-D-d-2")
+
+        assert isinstance(result, list)
+        assert len(result) == 4
+        assert all(p.suffix == ".asc" for p in result)
+        assert all(p.exists() for p in result)
+
+    def test_download_sheet_expands_50k_to_10k(self, tmp_path, mock_provider):
+        """Test że download_sheet z godłem 1:50000 rozwija do 16 arkuszy 1:10000."""
+        manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
+
+        result = manager.download_sheet("N-34-130-D-d")
+
+        assert isinstance(result, list)
+        assert len(result) == 16
+        assert all(p.suffix == ".asc" for p in result)
+        assert all(p.exists() for p in result)
+
+    def test_download_sheet_expands_100k_to_10k(self, tmp_path, mock_provider):
+        """Test że download_sheet z godłem 1:100000 rozwija do 64 arkuszy 1:10000."""
+        manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
+
+        result = manager.download_sheet("N-34-130-D")
+
+        assert isinstance(result, list)
+        assert len(result) == 64
+        assert all(p.suffix == ".asc" for p in result)
+
+    def test_download_sheet_expands_with_progress(self, tmp_path, mock_provider):
+        """Test że download_sheet przekazuje on_progress przy rozwijaniu."""
+        manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
+
+        progress_calls = []
+
+        def on_progress(p):
+            progress_calls.append(p)
+
+        result = manager.download_sheet("N-34-130-D-d-2", on_progress=on_progress)
+
+        assert isinstance(result, list)
+        assert len(result) == 4
+        # Each sheet gets 2 progress calls (downloading + completed)
+        assert len(progress_calls) == 8
 
 
 class TestDownloadManagerDownloadHierarchy:
@@ -187,6 +241,7 @@ class TestDownloadManagerDownloadHierarchy:
     def mock_provider(self):
         """Fixture z mockowanym providerem."""
         provider = Mock(spec=GugikProvider)
+        type(provider).default_extension = PropertyMock(return_value=".asc")
 
         def mock_download(godlo, path, timeout=30):
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -252,6 +307,7 @@ class TestDownloadManagerDownloadHierarchy:
     def test_download_hierarchy_handles_failures(self, tmp_path):
         """Test obsługi błędów pobierania."""
         provider = Mock(spec=GugikProvider)
+        type(provider).default_extension = PropertyMock(return_value=".asc")
 
         # First two succeed, third fails, fourth succeeds
         call_count = [0]
@@ -301,6 +357,7 @@ class TestDownloadManagerDownloadBbox:
     def mock_provider(self):
         """Fixture z mockowanym providerem."""
         provider = Mock(spec=GugikProvider)
+        type(provider).default_extension = PropertyMock(return_value=".asc")
 
         def mock_download_bbox(bbox, path, format="GTiff", timeout=30):
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -329,6 +386,7 @@ class TestDownloadManagerDownloadBbox:
     def test_download_bbox_custom_format(self, tmp_path, sample_bbox):
         """Test pobierania bbox z własnym formatem."""
         mock_provider = Mock(spec=GugikProvider)
+        type(mock_provider).default_extension = PropertyMock(return_value=".asc")
 
         def mock_download_bbox(bbox, path, format="GTiff", timeout=30):
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -431,3 +489,33 @@ class TestDownloadManagerCountSheets:
         count = manager.count_sheets("N-34-A", "1:200000")
 
         assert count == 36
+
+
+class TestDownloadManagerDefaultExtension:
+    """Tests for dynamic file extension based on provider."""
+
+    def test_default_extension_asc(self, tmp_path):
+        """Test that default GugikProvider uses .asc extension."""
+        manager = DownloadManager(output_dir=tmp_path)
+        assert manager._default_ext == ".asc"
+
+    def test_custom_extension_tif(self, tmp_path):
+        """Test that provider with .tif extension is used."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".tif"
+
+        manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
+        assert manager._default_ext == ".tif"
+
+    def test_manager_product_storage(self, tmp_path):
+        """Test that manager uses product-based storage correctly."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".tif"
+
+        storage = FileStorage(tmp_path, product="orto")
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=mock_provider, storage=storage
+        )
+
+        assert manager._default_ext == ".tif"
+        assert manager.storage._product == "orto"

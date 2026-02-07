@@ -1,290 +1,510 @@
-# DEVELOPMENT_STANDARDS.md - Standardy Deweloperskie
-## Kartograf - Narzędzie do Pobierania Danych NMT
+# Standardy deweloperskie — Kartograf
 
-**Wersja:** 1.0  
-**Data:** 2026-01-15  
-**Status:** Obowiązujący
-
----
-
-## 1. Wprowadzenie
-
-Ten dokument definiuje **wszystkie standardy deweloperskie** dla projektu Kartograf:
-- 📝 Konwencje nazewnictwa i formatowania
-- ✅ Zasady testowania i jakości kodu
-- 🔀 Git workflow i code review
-- 📚 Dokumentacja
-
-**Wszyscy członkowie zespołu muszą przestrzegać tych standardów.**
+**Wersja:** 2.0
+**Data:** 2026-02-03
+**Status:** Obowiazujacy
+**Zrodlo:** Zunifikowane standardy workspace (`shared/standards/DEVELOPMENT_STANDARDS.md`)
 
 ---
 
-## CZĘŚĆ I: KONWENCJE KODOWANIA
+## Spis tresci
+
+1. [Git Workflow](#1-git-workflow)
+2. [Conventional Commits](#2-conventional-commits)
+3. [Code Review](#3-code-review)
+4. [Python — nazewnictwo](#4-python--nazewnictwo)
+5. [Python — formatowanie (Ruff)](#5-python--formatowanie-ruff)
+6. [Python — srodowisko wirtualne](#6-python--srodowisko-wirtualne)
+7. [Python — struktura projektu](#7-python--struktura-projektu)
+8. [Python — type hints](#8-python--type-hints)
+9. [Python — docstrings](#9-python--docstrings)
+10. [Python — testowanie](#10-python--testowanie)
+11. [Python — obsluga bledow](#11-python--obsluga-bledow)
+12. [Python — logging](#12-python--logging)
+13. [Python — wydajnosc](#13-python--wydajnosc)
+14. [Bezpieczenstwo](#14-bezpieczenstwo)
+15. [Pre-merge checklist](#15-pre-merge-checklist)
 
 ---
 
-## 2. Nazewnictwo
+## 1. Git Workflow
 
-### 2.1 Python
+### 1.1 Branching (Git Flow)
 
-#### Zmienne i Funkcje
+```
+main              # Stabilna wersja (tylko merge z develop)
+develop           # Aktywny rozwoj (DOMYSLNA GALAZ ROBOCZA)
+feature/<nazwa>   # Nowe funkcjonalnosci
+fix/<nazwa>       # Poprawki bledow
+hotfix/<nazwa>    # Pilne poprawki produkcyjne (branch z main)
+```
+
+**Zasady:**
+- `main` — tylko stabilny, przetestowany kod
+- `develop` — integracja feature'ow, domyslna galaz robocza
+- `feature/*` — branch z `develop`, merge do `develop`
+- `fix/*` — branch z `develop`, merge do `develop`
+- `hotfix/*` — branch z `main`, merge do `main` i `develop`
+
+### 1.2 Tagowanie
+
+Tagi `v<X.Y.Z>` (SemVer) przy wydaniach:
+
+```bash
+git tag -a v0.3.2 -m "Release v0.3.2: storage structure and EVRF2007"
+git push origin v0.3.2
+```
+
+Checkpointy robocze (CP) sa sledzone tylko w `docs/PROGRESS.md`, bez tagow Git.
+
+### 1.3 Zasady commitow
+
+- Kazda logiczna zmiana = osobny commit
+- Commituj czesto, malymi porcjami
+- Latwiejsze code review i rollback
+
+---
+
+## 2. Conventional Commits
+
+### 2.1 Format
+
+```
+<type>(<scope>): <opis>
+
+<body>           # opcjonalny
+
+<footer>         # opcjonalny (np. Closes #12)
+```
+
+### 2.2 Typy
+
+| Typ | Kiedy |
+|-----|-------|
+| `feat` | Nowa funkcjonalnosc |
+| `fix` | Poprawka bledu |
+| `docs` | Tylko dokumentacja |
+| `test` | Dodanie/zmiana testow |
+| `refactor` | Refaktoryzacja (bez zmian funkcjonalnosci) |
+| `perf` | Optymalizacja wydajnosci |
+| `style` | Formatowanie (nie wplywa na logike) |
+| `chore` | Config, dependencies, build |
+
+### 2.3 Scope — specyficzne dla Kartograf
+
+```bash
+feat(parser): add support for 2000 coordinate system
+fix(download): handle timeout in retry logic
+feat(landcover): add BDOT10k provider
+feat(soilgrids): add WCS download for soil data
+feat(hsg): implement USDA texture classification
+fix(auth): fix proxy token refresh
+docs(readme): update installation instructions
+test(parser): add edge case tests for hierarchy
+refactor(providers): extract common validation
+chore(deps): update requests to 2.32.0
+```
+
+---
+
+## 3. Code Review
+
+### 3.1 Proces
+
+```
+1. Deweloper tworzy PR
+2. Automated checks:
+   ├─ Formatowanie (ruff format --check)
+   ├─ Linting (ruff check)
+   ├─ Type checking (mypy)
+   └─ Testy (pytest --cov)
+3. Manual review
+4. Poprawki jesli potrzeba
+5. Approval → Merge
+```
+
+### 3.2 Co sprawdza reviewer
+
+- **Poprawnosc** — czy kod dziala zgodnie z wymaganiami?
+- **Testy** — czy pokrywaja nowa logike i edge cases?
+- **Standardy** — zgodnosc z tym dokumentem
+- **Czytelnosc** — czy kod jest zrozumialy bez nadmiernych komentarzy?
+- **Bezpieczenstwo** — brak hardcoded secrets, walidacja inputu
+
+### 3.3 Wymagania PR
+
+- Wszystkie testy przechodza
+- Pokrycie kodu w normie (patrz sekcja 10)
+- Brak bledow ruff / mypy
+- Minimum 1 approval
+- Brak konfliktow z target branch
+- Dokumentacja zaktualizowana (jesli potrzeba)
+
+---
+
+## 4. Python — nazewnictwo
+
+### 4.1 Konwencje
+
+| Element | Konwencja | Przyklad |
+|---------|-----------|----------|
+| Zmienne | snake_case + jednostka | `area_km2`, `elevation_m` |
+| Funkcje | snake_case + czasownik | `download_sheet()`, `parse_godlo()` |
+| Klasy | PascalCase | `SheetParser`, `GugikProvider` |
+| Stale | UPPER_SNAKE_CASE | `DEFAULT_FORMAT`, `MAX_RETRIES` |
+| Pliki .py | snake_case | `sheet_parser.py`, `landcover_base.py` |
+| Protected | `_prefix` | `self._cache` |
+| Private | `__prefix` | `self.__internal_state` |
+
+### 4.2 Jednostki w nazwach zmiennych
+
+**ZAWSZE** dodawaj jednostke do nazwy zmiennej fizycznej:
+
 ```python
-# DOBRZE - snake_case + jednostka gdzie potrzeba
+# GOOD
 area_km2 = 45.3
-sheet_count = 256
-download_path = "/path/to/data"
-
-def parse_godlo(godlo_str: str) -> SheetInfo:
-    pass
-
-def download_sheet(godlo: str, format: str) -> str:
-    pass
-
-# ŹLE
-areaKm2 = 45.3  # camelCase
-a = 45.3  # nieopisowe
-def ParseGodlo(godlo):  # PascalCase
-    pass
-```
-
-#### Klasy i Stałe
-```python
-# DOBRZE - PascalCase dla klas
-class SheetParser:
-    pass
-
-class GugikClient:
-    pass
-
-class DownloadManager:
-    pass
-
-# DOBRZE - UPPER_SNAKE_CASE dla stałych
-DEFAULT_FORMAT = "GTiff"
-MAX_RETRIES = 3
-BASE_URL = "https://mapy.geoportal.gov.pl"
-
-# ŹLE
-class sheet_parser:  # snake_case
-    pass
-
-max_retries = 3  # nie wygląda jak stała
-```
-
-#### Zmienne Prywatne
-```python
-class SheetParser:
-    def __init__(self):
-        self.godlo = ""             # publiczne
-        self._components = {}        # protected (konwencja)
-        self.__cache = {}            # private (name mangling)
-```
-
----
-
-### 2.2 Pliki i Katalogi
-
-#### Struktura
-```
-kartograf/                 # kebab-case dla głównego folderu
-├── src/
-│   └── kartograf/        # snake_case
-│       ├── core/
-│       │   ├── sheet_parser.py
-│       │   └── hierarchy.py
-│       ├── providers/
-│       │   ├── base.py
-│       │   └── gugik.py
-│       ├── download/
-│       │   ├── manager.py
-│       │   └── storage.py
-│       └── cli/
-│           └── commands.py
-├── tests/
-│   ├── test_sheet_parser.py
-│   └── test_gugik_client.py
-└── docs/
-```
-
-#### Nazwy Plików
-```
-# Python - snake_case
-sheet_parser.py
-gugik_client.py
-test_download_manager.py
-
-# Dokumentacja - UPPERCASE lub kebab-case
-README.md
-SCOPE.md
-architecture-diagram.png
-```
-
----
-
-### 2.3 Jednostki
-
-**Dodawaj jednostkę do nazwy zmiennej gdy ma to sens:**
-
-```python
-# DOBRZE
-area_km2 = 45.3
-length_m = 8200
+elevation_m = 250.0
+resolution_m = 1  # 1m or 5m
 bbox_coords = [50.0, 19.0, 51.0, 20.0]
+timeout_s = 30
 
-# ŹLE
-area = 45.3      # km2 czy m2?
-length = 8200    # m czy km?
+# BAD — unit ambiguity
+area = 45.3       # km2 or m2?
+resolution = 1    # meters or pixels?
 ```
+
+### 4.3 Prefiksy semantyczne
+
+| Prefiks | Znaczenie | Przyklad w Kartograf |
+|---------|-----------|----------------------|
+| `download_*` | Pobranie pliku / archiwum | `download_sheet()`, `download_bbox()` |
+| `parse_*` | Parsowanie danych | `parse_godlo()` |
+| `calculate_*` | Obliczenie wyniku | `calculate_hsg_by_godlo()` |
+| `get_*` | Pobranie atrybutu / danych | `get_parent()`, `get_children()` |
+| `list_*` | Listowanie zasobow | `list_sources()`, `list_layers()` |
+| `classify_*` | Klasyfikacja | `classify_usda_texture()` |
 
 ---
 
-## 3. Formatowanie Kodu
+## 5. Python — formatowanie (Ruff)
 
-### 3.1 Python (PEP 8 + Black)
+### 5.1 Konfiguracja
 
-#### Długość Linii i Wcięcia
+```toml
+# pyproject.toml
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+```
+
+### 5.2 Komendy
+
+```bash
+# Formatowanie
+ruff format kartograf/ tests/
+
+# Sprawdzenie (bez zmian)
+ruff format --check kartograf/ tests/
+
+# Linting
+ruff check kartograf/ tests/
+
+# Linting z auto-fix
+ruff check --fix kartograf/ tests/
+```
+
+### 5.3 Zasady formatowania
+
 ```python
-# Maksymalnie 88 znaków (Black standard)
-# 4 spacje (NIGDY tabulatory)
+# Line length: 88 characters
+# Indentation: 4 spaces (NEVER tabs)
 
-# DOBRZE
-def download_sheets_for_hierarchy(
+# GOOD — multi-line when exceeds 88 chars
+def download_hierarchy(
     godlo: str,
     target_scale: str,
-    format: str = "GTiff"
-) -> List[str]:
+    skip_existing: bool = True,
+    on_progress: ProgressCallback | None = None,
+) -> list[Path]:
     pass
 
-# ŹLE (> 88 znaków)
-def download_sheets_for_hierarchy(godlo: str, target_scale: str, format: str = "GTiff") -> List[str]:
+# BAD — too long
+def download_hierarchy(godlo: str, target_scale: str, skip_existing: bool = True) -> list[Path]:
     pass
 ```
 
-#### Importy
-```python
-# Kolejność: stdlib → third-party → local
-# Alfabetycznie w każdej grupie
-# Puste linie między grupami
+### 5.4 Importy
 
-import os
-import sys
-from typing import List, Optional, Dict
+```python
+# Order: stdlib → third-party → local
+# Alphabetical within groups
+# Blank lines between groups
+# Ruff sorts automatically (rule I)
+
+import logging
+from pathlib import Path
 
 import requests
-from dataclasses import dataclass
+from pyproj import Transformer
 
-from kartograf.core.sheet_parser import SheetParser
-from kartograf.providers.gugik import GugikClient
+from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.exceptions import DownloadError
 ```
 
-#### Spacje
-```python
-# DOBRZE
-x = 5
-result = function(a, b, c)
-my_list = [1, 2, 3]
-my_dict = {'key': 'value'}
+---
 
-if x > 0:
+## 6. Python — srodowisko wirtualne
+
+### 6.1 Dwa konteksty pracy
+
+| Kontekst | Srodowisko | Lokalizacja |
+|----------|------------|-------------|
+| Deweloper (czlowiek) | venv w projekcie | `Kartograf/.venv/` |
+| Agent AI (Claude Code) | Docker container | `/workspace/` mount |
+
+### 6.2 Deweloper — lokalne venv
+
+```bash
+cd ~/workspace/projects/Kartograf
+python3.12 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+```
+
+### 6.3 Uruchamianie testow
+
+```bash
+# Z aktywnym venv
+pytest tests/ -v --tb=short
+
+# Jawne wskazanie interpretera (bez aktywacji)
+.venv/bin/python -m pytest tests/ -v
+```
+
+---
+
+## 7. Python — struktura projektu
+
+### 7.1 Kartograf — flat layout
+
+```
+Kartograf/
+├── kartograf/               # kod zrodlowy (flat layout)
+│   ├── __init__.py          # public API exports
+│   ├── exceptions.py        # hierarchia wyjatkow
+│   ├── core/                # parser godel, BBox
+│   ├── providers/           # providery danych (GUGiK, BDOT10k, CORINE, SoilGrids)
+│   ├── download/            # download management (NMT)
+│   ├── landcover/           # land cover management
+│   ├── hydrology/           # obliczenia hydrologiczne (HSG)
+│   ├── auth/                # autentykacja CLMS (Auth Proxy)
+│   └── cli/                 # interfejs CLI
+├── tests/                   # testy (365)
+│   ├── conftest.py
+│   ├── test_sheet_parser.py
+│   ├── test_gugik_provider.py
+│   ├── test_download_manager.py
+│   ├── test_landcover.py
+│   ├── test_soilgrids.py
+│   ├── test_hsg.py
+│   ├── test_cli.py
+│   └── test_integration.py
+├── docs/                    # dokumentacja
+├── CLAUDE.md
+├── README.md
+├── pyproject.toml
+├── .editorconfig
+└── .gitignore
+```
+
+### 7.2 Konfiguracja w pyproject.toml
+
+Wszystkie narzedzia konfiguruj w jednym pliku `pyproject.toml`.
+Nie tworz osobnych plikow konfiguracyjnych (`setup.cfg`, `tox.ini`, `.flake8`, itp.).
+
+---
+
+## 8. Python — type hints
+
+### 8.1 Python 3.12+ style
+
+```python
+# GOOD — modern syntax
+def download_sheet(godlo: str) -> Path:
     pass
 
-# ŹLE
-x=5                        # brak spacji wokół =
-result = function (a,b,c)  # spacja przed (, brak po przecinkach
-my_list=[1,2,3]            # brak spacji
+def get_provider(name: str | None = None) -> LandCoverProvider | None:
+    pass
+
+def download_hierarchy(
+    godlo: str,
+    target_scale: str,
+    on_progress: ProgressCallback | None = None,
+) -> list[Path]:
+    pass
+
+# BAD — legacy typing
+from typing import List, Optional, Union
+
+def get_provider(name: Optional[str] = None) -> Optional[LandCoverProvider]:
+    pass
 ```
 
-#### Docstrings (NumPy Style)
+### 8.2 Wymagane wszedzie
+
+Type hints sa wymagane dla:
+- Wszystkich argumentow funkcji publicznych
+- Wartosci zwracanych
+- Atrybutow klas (dataclass)
+
+### 8.3 Type checking
+
+```bash
+mypy kartograf/ --strict
+```
+
+---
+
+## 9. Python — docstrings
+
+### 9.1 Styl: NumPy, jezyk: angielski
+
 ```python
 def download_sheet(
     godlo: str,
-    format: str = 'GTiff',
-    output_dir: str = './data'
-) -> str:
+    output_dir: str = "./data",
+) -> Path:
     """
-    Pobiera plik NMT dla podanego godła arkusza.
+    Download NMT sheet from GUGiK OpenData.
 
     Parameters
     ----------
     godlo : str
-        Godło arkusza mapy (np. "N-34-130-D-d-2-4")
-    format : str, optional
-        Format pliku: 'GTiff', 'AAIGrid', lub 'XYZ', domyślnie 'GTiff'
+        Sheet identifier (e.g. "N-34-130-D-d-2-4").
     output_dir : str, optional
-        Katalog docelowy, domyślnie './data'
+        Output directory, by default "./data".
 
     Returns
     -------
-    str
-        Pełna ścieżka do pobranego pliku
+    Path
+        Full path to the downloaded file.
 
     Raises
     ------
-    ValueError
-        Jeśli format jest nieobsługiwany
     DownloadError
-        Jeśli pobieranie się nie powiodło
+        If download fails after retries.
 
     Examples
     --------
-    >>> path = download_sheet("N-34-130-D-d-2-4", format="GTiff")
-    >>> print(path)
-    './data/N-34/130/D/d/2/4/N-34-130-D-d-2-4.tif'
+    >>> manager = DownloadManager()
+    >>> path = manager.download_sheet("N-34-130-D-d-2-4")
     """
     pass
 ```
 
+### 9.2 Klasy
+
+```python
+class SheetParser:
+    """
+    Parser for Polish topographic map sheet identifiers (godlo).
+
+    Supports scales from 1:1,000,000 to 1:10,000 in "1992" and "2000"
+    coordinate system layouts.
+
+    Parameters
+    ----------
+    godlo : str
+        Sheet identifier (e.g. "N-34-130-D-d-2-4").
+    uklad : str or None, optional
+        Coordinate system layout ("1992" or "2000").
+
+    Examples
+    --------
+    >>> parser = SheetParser("N-34-130-D-d-2-4")
+    >>> parser.scale
+    '1:10000'
+    """
+    pass
+```
+
+### 9.3 Komentarze inline
+
+```python
+# GOOD — explains "why", not "what"
+# 1:500k to 1:200k division produces 36 sheets (not 4!)
+children = self._get_children_from_500k()
+
+# EVRF2007 is the current standard; KRON86 is legacy
+default_crs = "EVRF2007"
+
+# BAD — states the obvious
+# Set timeout to 30
+timeout = 30
+```
+
+### 9.4 Jezyk
+
+- **Pliki .md** — po polsku
+- **Docstrings i komentarze w kodzie** — po angielsku
+- **Commit messages** — po angielsku
+
 ---
 
-## 4. Testowanie
+## 10. Python — testowanie
 
-### 4.1 Pokrycie Kodu
+### 10.1 Progi pokrycia
 
-```python
-# Minimum 80% dla core logic
-# pytest --cov=src/kartograf --cov-report=html
+| Warstwa | Wymagane pokrycie |
+|---------|-------------------|
+| Core (parser, providers, manager) | **>= 80%** |
+| CLI, utility, formatowanie | **>= 60%** |
 
-# Core modules (wymagane ≥ 80%):
-# - sheet_parser.py
-# - gugik.py
-# - manager.py
-
-# Utility modules (opcjonalne < 80%):
-# - cli/commands.py
+```bash
+pytest tests/ --cov=kartograf --cov-report=html --cov-fail-under=60
 ```
 
-### 4.2 Struktura Testów
+### 10.2 Nazewnictwo testow
 
 ```python
-# Nazwa pliku: test_<module_name>.py
-# Nazwa funkcji: test_<function_name>_<scenario>
+# Pattern: test_<function>_<scenario>[_<expected>]
 
-def test_parse_valid_godlo():
-    """Test parsowania poprawnego godła."""
-    parser = SheetParser("N-34-130-D")
-    assert parser.scale == "1:100000"
+def test_parse_valid_godlo_10k():
+    """Test parsing 1:10000 scale sheet identifier."""
+    pass
 
+def test_download_with_retry_on_timeout():
+    """Test download retries on HTTP timeout."""
+    pass
 
-def test_parse_invalid_godlo():
-    """Test walidacji niepoprawnego godła."""
-    with pytest.raises(ValueError):
-        SheetParser("INVALID")
+def test_parse_invalid_godlo_raises():
+    """Test that invalid godlo raises ValueError."""
+    pass
+```
 
+### 10.3 AAA Pattern (Arrange-Act-Assert)
 
-def test_download_with_retry():
-    """Test pobierania z ponowną próbą po błędzie."""
-    # Setup
-    client = GugikClient()
-    
+```python
+def test_sheet_hierarchy_up():
+    # Arrange
+    parser = SheetParser("N-34-130-D-d-2-4")
+
     # Act
-    with patch('requests.get', side_effect=[RequestException, Mock()]):
-        result = client.download("N-34-130-D")
-    
+    hierarchy = parser.get_hierarchy_up()
+
     # Assert
-    assert result is not None
+    assert len(hierarchy) == 7
+    assert hierarchy[0].scale == "1:10000"
+    assert hierarchy[-1].scale == "1:1000000"
 ```
 
-### 4.3 Fixtures i Mocking
+### 10.4 Fixtures i mocking
 
 ```python
 import pytest
@@ -292,333 +512,210 @@ from unittest.mock import Mock, patch
 
 @pytest.fixture
 def sample_godlo():
-    """Fixture z przykładowym godłem."""
+    """Fixture with sample sheet identifier."""
     return "N-34-130-D-d-2-4"
 
-
-@pytest.fixture
-def mock_http_response():
-    """Mock odpowiedzi HTTP."""
-    response = Mock()
-    response.status_code = 200
-    response.content = b"mock_data"
-    return response
-
-
-def test_with_fixtures(sample_godlo, mock_http_response):
-    """Test używający fixtures."""
-    parser = SheetParser(sample_godlo)
-    assert parser.godlo == "N-34-130-D-D-2-4"
+def test_download_with_mock_http(sample_godlo):
+    """Test download using mocked HTTP response."""
+    with patch("requests.get") as mock_get:
+        mock_get.return_value = Mock(status_code=200, content=b"data")
+        result = provider.download(sample_godlo, Path("/tmp/test.asc"))
+        assert result.exists()
 ```
 
 ---
 
-## 5. Git Workflow
+## 11. Python — obsluga bledow
 
-### 5.1 Conventional Commits
-
-```bash
-# Format: <type>(<scope>): <subject>
-
-feat(parser): dodaj obsługę układu 2000
-fix(download): napraw retry logic dla timeout
-docs(readme): aktualizuj przykłady użycia
-test(parser): dodaj testy dla hierarchii
-refactor(core): wydziel walidację do osobnej funkcji
-chore(deps): aktualizuj requests do 2.31.0
-
-# Type:
-# - feat: nowa funkcja
-# - fix: naprawa błędu
-# - docs: tylko dokumentacja
-# - test: dodanie testów
-# - refactor: refaktoryzacja bez zmian funkcjonalności
-# - chore: zmiany w buildzie, dependencies, etc.
-```
-
-### 5.2 Branching Strategy
-
-```
-main (stable, tagged releases)
-  ↑
-develop (integration branch)
-  ↑
-feature/sheet-parser
-feature/gugik-client
-fix/download-retry
-```
-
-### 5.3 Pull Request Template
-
-```markdown
-## Opis
-Krótki opis zmian (1-2 zdania)
-
-## Typ zmian
-- [ ] feat - nowa funkcja
-- [ ] fix - naprawa błędu
-- [ ] docs - dokumentacja
-- [ ] test - testy
-- [ ] refactor - refaktoryzacja
-
-## Checklist
-- [ ] Kod sformatowany (black)
-- [ ] Linting przeszedł (flake8)
-- [ ] Type hints dodane
-- [ ] Docstrings dla public funkcji
-- [ ] Testy napisane (pokrycie ≥ 80% dla core)
-- [ ] Wszystkie testy przechodzą
-- [ ] Dokumentacja zaktualizowana
-
-## Związane Issue
-Closes #XX
-```
-
----
-
-## 6. Code Review
-
-### 6.1 Reviewer Checklist
-
-**Sprawdź:**
-- **Funkcjonalność:** Czy kod robi to co powinien?
-- **Testy:** Czy są testy? Czy pokrywają edge cases?
-- **Czytelność:** Czy kod jest zrozumiały?
-- **Konwencje:** Zgodność z DEVELOPMENT_STANDARDS.md?
-- **Dokumentacja:** Czy docstrings są kompletne?
-
-### 6.2 Czas Odpowiedzi
-
-- Standardowy PR: **24 godziny**
-- Krytyczny PR: **4 godziny**
-
----
-
-## 7. Bezpieczeństwo
-
-### 7.1 NIGDY
+### 11.1 Hierarchia wyjatkow Kartograf
 
 ```python
-# ❌ NIGDY hardcode secrets
-API_KEY = "secret-key"  # NIGDY!
+# kartograf/exceptions.py
 
-# ❌ NIGDY commit .env
-# Dodaj do .gitignore:
-.env
-.env.local
-*.pem
-*.key
+class KartografError(Exception):
+    """Base exception for Kartograf."""
+    pass
 
-# ❌ NIGDY eval() na user input
-eval(user_input)  # NIGDY!
+class ParseError(KartografError):
+    """Invalid sheet identifier (godlo)."""
+    pass
+
+class ValidationError(KartografError):
+    """Invalid input parameter."""
+    pass
+
+class DownloadError(KartografError):
+    """Download or network error."""
+    pass
 ```
 
-### 7.2 ZAWSZE
+### 11.2 Walidacja na wejsciu
 
 ```python
-# ✅ ZAWSZE zmienne środowiskowe
-import os
-API_KEY = os.getenv('GUGIK_API_KEY')
+def download_sheet(godlo: str) -> Path:
+    """Download NMT sheet."""
+    if not godlo or not godlo.strip():
+        raise ValidationError("Godlo cannot be empty")
 
-# ✅ ZAWSZE walidacja input
-def parse_godlo(godlo: str) -> SheetParser:
-    if not isinstance(godlo, str):
-        raise TypeError("Godło musi być string")
-    
-    if not godlo.strip():
-        raise ValueError("Godło nie może być puste")
-    
-    return SheetParser(godlo)
+    parser = SheetParser(godlo)  # raises ParseError if invalid
+    ...
+```
 
-# ✅ ZAWSZE timeout dla requests
-response = requests.get(url, timeout=30)
+### 11.3 Raise from
+
+```python
+# GOOD — preserve exception chain
+try:
+    response = requests.get(url, timeout=30)
+except requests.RequestException as e:
+    raise DownloadError(f"Failed to download {godlo}: {e}") from e
+
+# BAD — loses original traceback
+except requests.RequestException as e:
+    raise DownloadError(f"Failed: {e}")
 ```
 
 ---
 
-## 8. Wydajność
+## 12. Python — logging
 
-### 8.1 Priorytety
-
-```
-Poprawność > Czytelność > Wydajność
-```
-
-**Najpierw:** Zrób działające  
-**Potem:** Zrób czytelne  
-**Na końcu:** Zrób szybkie (jeśli potrzeba)
-
-### 8.2 HTTP Requests
-
-```python
-# ✅ DOBRZE - używaj session dla multiple requests
-import requests
-
-session = requests.Session()
-for godlo in godla:
-    response = session.get(url)
-
-# ❌ ŹLE - nowy connection dla każdego request
-for godlo in godla:
-    response = requests.get(url)  # Wolniejsze!
-```
-
-### 8.3 File I/O
-
-```python
-# ✅ DOBRZE - context manager
-with open(filepath, 'wb') as f:
-    f.write(content)
-
-# ✅ DOBRZE - chunked download dla dużych plików
-def download_large_file(url: str, filepath: str):
-    with requests.get(url, stream=True) as r:
-        r.raise_for_status()
-        with open(filepath, 'wb') as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
-```
-
-### 8.4 Limity Czasowe
-
-- Parsowanie godła: **< 0.1s**
-- Pobieranie pojedynczego arkusza: **< 30s**
-- Request timeout: **30s**
-
----
-
-## 9. Logging
-
-### 9.1 Log Levels
+### 12.1 Konfiguracja
 
 ```python
 import logging
 
 logger = logging.getLogger(__name__)
-
-# DEBUG - szczegóły debugowania (tylko development)
-logger.debug(f"Parsing godlo: {godlo}")
-
-# INFO - normalne operacje
-logger.info(f"Downloaded {filename} successfully")
-
-# WARNING - ostrzeżenia (nie błędy)
-logger.warning(f"Retrying download after {retry_count} attempts")
-
-# ERROR - błędy które nie przerywają działania
-logger.error(f"Failed to download {godlo}: {e}")
-
-# CRITICAL - błędy krytyczne
-logger.critical(f"Configuration file not found")
 ```
 
-### 9.2 Format Logów
+### 12.2 Poziomy logowania
 
 ```python
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('kartograf.log'),
-        logging.StreamHandler()
-    ]
-)
+# DEBUG — development only
+logger.debug("Parsing sheet: %s", godlo)
+
+# INFO — normal operations
+logger.info("Downloaded %s successfully", filename)
+
+# WARNING — unusual but not an error
+logger.warning("Retry %d/%d for %s", attempt, max_retries, url)
+
+# ERROR — failure that doesn't crash the app
+logger.error("Failed to fetch data: %s", exc)
 ```
+
+**Uwaga:** Uzywaj `%s` formatting w loggerze (lazy evaluation), nie f-stringow.
 
 ---
 
-## 10. Dokumentacja
+## 13. Python — wydajnosc
 
-### 10.1 Wymagana Dokumentacja
+### 13.1 Priorytet
 
-**Code-level:**
-- ✅ Docstrings dla wszystkich public funkcji/klas
-- ✅ Inline comments dla nieoczywistej logiki
-- ✅ Type hints
-
-**Project-level:**
-- ✅ README.md z quick start
-- ✅ docs/SCOPE.md
-- ✅ docs/PRD.md
-- ✅ CHANGELOG.md
-
-### 10.2 README.md Template
-
-```markdown
-# Kartograf
-
-## Instalacja
-```bash
-python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-pip install -r requirements.txt
+```
+Poprawnosc > Czytelnosc > Wydajnosc
 ```
 
-## Użycie
+### 13.2 HTTP requests
 
-### Jako CLI
-```bash
-kartograf parse N-34-130-D-d-2-4
-kartograf download N-34-130-D --scale 1:10000
-```
-
-### Jako biblioteka
 ```python
-from kartograf import SheetParser, DownloadManager
+# GOOD — reuse session for multiple requests
+session = requests.Session()
+for godlo in godla:
+    response = session.get(url, timeout=30)
 
-parser = SheetParser("N-34-130-D")
-manager = DownloadManager()
-manager.download_hierarchy(parser, target_scale="1:10000")
+# BAD — new connection each time
+for godlo in godla:
+    response = requests.get(url)
 ```
 
-## Testy
-```bash
-pytest tests/ --cov=src/kartograf
+### 13.3 Duze pliki — streaming
+
+```python
+def download_large_file(url: str, filepath: Path) -> None:
+    """Download large file with streaming."""
+    with requests.get(url, stream=True, timeout=60) as r:
+        r.raise_for_status()
+        with open(filepath, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
 ```
-```
+
+### 13.4 Limity czasowe Kartograf
+
+| Operacja | Timeout |
+|----------|---------|
+| GUGiK (NMT) | 30s |
+| Land Cover (BDOT10k, CORINE) | 60s |
+| SoilGrids (ISRIC WCS) | 60s |
+| Retry: max 3 proby, exponential backoff | — |
 
 ---
 
-## 11. Pre-Merge Checklist
+## 14. Bezpieczenstwo
 
-**Przed każdym merge sprawdź:**
+### 14.1 NIGDY
+
+```python
+# NEVER hardcode secrets
+API_KEY = "sk-1234567890"  # NEVER!
+
+# NEVER commit .env
+# .gitignore must contain: .env, *.pem, *.key
+
+# NEVER eval() on user input
+eval(user_input)  # NEVER!
+```
+
+### 14.2 ZAWSZE
+
+```python
+import os
+
+# ALWAYS use environment variables for secrets
+client_id = os.getenv("CLMS_CLIENT_ID")
+
+# ALWAYS validate input at system boundaries
+if not godlo or not godlo.strip():
+    raise ValidationError("Godlo cannot be empty")
+
+# ALWAYS set timeouts for HTTP requests
+response = requests.get(url, timeout=30)
+```
+
+### 14.3 Auth Proxy — specyficzne dla Kartograf
+
+CLMS credentials sa izolowane w osobnym procesie (Auth Proxy):
+
+```
+CorineProvider → localhost HTTP → AuthProxy (subprocess) → Keychain → CLMS API
+```
+
+- Credentials (klucz prywatny RSA) nigdy nie opuszczaja procesu proxy
+- Glowna aplikacja nigdy nie widzi credentials
+- Tylko odpowiedzi API sa przekazywane do aplikacji
+
+---
+
+## 15. Pre-merge checklist
 
 ```markdown
-- [ ] Kod sformatowany (black)
-- [ ] Brak linting errors (flake8 --max-line-length=88)
-- [ ] Type hints dodane
-- [ ] Docstrings dla public funkcji
-- [ ] Testy napisane (pokrycie ≥ 80% dla core)
-- [ ] Wszystkie testy przechodzą
-- [ ] Dokumentacja zaktualizowana
+- [ ] Testy przechodza (`pytest tests/ -v`)
+- [ ] Pokrycie kodu w normie (80% core / 60% utility)
+- [ ] Formatowanie OK (`ruff format --check kartograf/ tests/`)
+- [ ] Linting OK (`ruff check kartograf/ tests/`)
+- [ ] Type hints OK (`mypy kartograf/`)
+- [ ] Docstrings dla publicznych funkcji/klas
 - [ ] Brak hardcoded secrets
+- [ ] Dokumentacja zaktualizowana (jesli potrzeba)
+- [ ] PROGRESS.md / CHANGELOG.md zaktualizowany
 - [ ] Minimum 1 approval
-- [ ] Brak konfliktów z target branch
+- [ ] Brak konfliktow z target branch
 ```
 
 ---
 
-## 12. Podsumowanie Kluczowych Standardów
+**Wersja dokumentu:** 2.0
+**Data ostatniej aktualizacji:** 2026-02-03
+**Zrodlo:** `shared/standards/DEVELOPMENT_STANDARDS.md` v1.0
 
-| Aspekt | Standard | Przykład |
-|--------|----------|----------|
-| **Python zmienne** | snake_case | `sheet_count`, `godlo_str` |
-| **Python funkcje** | snake_case + czasownik | `parse_godlo()`, `download_sheet()` |
-| **Python klasy** | PascalCase | `SheetParser`, `GugikClient` |
-| **Pliki Python** | snake_case | `sheet_parser.py` |
-| **Stałe** | UPPER_SNAKE_CASE | `DEFAULT_FORMAT`, `MAX_RETRIES` |
-| **Commits** | Conventional Commits | `feat(parser): add hierarchy` |
-| **Testy** | Pokrycie ≥ 80% (core) | pytest --cov |
-| **Długość linii** | Python: 88 | Black |
-| **Code review** | Minimum 1 approval | - |
-
----
-
-**Wersja dokumentu:** 1.0  
-**Data ostatniej aktualizacji:** 2026-01-15  
-**Status:** Obowiązujący dla wszystkich członków zespołu  
-
----
-
-*Te standardy są obowiązkowe. Odstępstwa wymagają uzasadnienia i zatwierdzenia przez Tech Lead.*
+*Odstepstwa od tych standardow wymagaja uzasadnienia w `CLAUDE.md` projektu.*

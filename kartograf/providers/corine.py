@@ -38,7 +38,6 @@ import re
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional
 from urllib.parse import urlencode
 
 import requests
@@ -67,7 +66,7 @@ def _get_auth_proxy():
 KEYCHAIN_SERVICE = "clms-token"
 
 
-def get_credentials_from_keychain() -> Optional[dict]:
+def get_credentials_from_keychain() -> dict | None:
     """
     Retrieve CLMS OAuth2 credentials from macOS Keychain.
 
@@ -193,7 +192,7 @@ def save_credentials_to_keychain(credentials: dict) -> bool:
     return False
 
 
-def get_clms_credentials() -> Optional[dict]:
+def get_clms_credentials() -> dict | None:
     """
     Get CLMS OAuth2 credentials from available sources.
 
@@ -248,10 +247,10 @@ class CLMSAuth:
         self.key_id = credentials.get("key_id")
         self.user_id = credentials.get("user_id")
 
-        self._access_token: Optional[str] = None
+        self._access_token: str | None = None
         self._token_expires: float = 0
 
-    def get_access_token(self, session: Optional[requests.Session] = None) -> str:
+    def get_access_token(self, session: requests.Session | None = None) -> str:
         """
         Get valid access token, refreshing if necessary.
 
@@ -276,7 +275,7 @@ class CLMSAuth:
 
         return self._access_token
 
-    def _exchange_token(self, session: Optional[requests.Session] = None) -> str:
+    def _exchange_token(self, session: requests.Session | None = None) -> str:
         """Exchange JWT assertion for access token."""
         import jwt
 
@@ -302,7 +301,7 @@ class CLMSAuth:
                 headers=headers if headers else None,
             )
         except Exception as e:
-            raise DownloadError(f"Failed to create JWT assertion: {e}")
+            raise DownloadError(f"Failed to create JWT assertion: {e}") from e
 
         # Exchange for access token
         sess = session or requests.Session()
@@ -326,7 +325,7 @@ class CLMSAuth:
             return access_token
 
         except requests.RequestException as e:
-            raise DownloadError(f"Token exchange failed: {e}")
+            raise DownloadError(f"Token exchange failed: {e}") from e
 
 
 class CorineProvider(LandCoverProvider):
@@ -407,8 +406,8 @@ class CorineProvider(LandCoverProvider):
 
     def __init__(
         self,
-        session: Optional[requests.Session] = None,
-        clms_credentials: Optional[dict] = None,
+        session: requests.Session | None = None,
+        clms_credentials: dict | None = None,
         use_proxy: bool = True,
     ):
         """
@@ -429,7 +428,7 @@ class CorineProvider(LandCoverProvider):
         """
         self._session = session
         self._use_proxy = use_proxy and clms_credentials is None
-        self._clms_auth: Optional[CLMSAuth] = None
+        self._clms_auth: CLMSAuth | None = None
 
         # Direct mode: use provided credentials
         if (
@@ -774,7 +773,7 @@ class CorineProvider(LandCoverProvider):
             )
 
         except requests.RequestException as e:
-            raise DownloadError(f"CLMS API request failed: {e}")
+            raise DownloadError(f"CLMS API request failed: {e}") from e
 
     def _poll_clms_task(
         self,

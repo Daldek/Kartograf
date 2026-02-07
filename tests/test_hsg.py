@@ -4,18 +4,19 @@ Tests for Hydrologic Soil Group (HSG) calculation functionality.
 Tests cover USDA texture classification, HSG mapping, and HSGCalculator.
 """
 
+from unittest.mock import Mock, patch
+
 import numpy as np
-from unittest.mock import Mock
 
 from kartograf.hydrology.hsg import (
-    classify_usda_texture,
-    texture_to_hsg,
-    classify_usda_texture_array,
-    texture_to_hsg_array,
-    HSGCalculator,
-    TEXTURE_CLASSES,
-    HSG_VALUES,
     HSG_DESCRIPTIONS,
+    HSG_VALUES,
+    TEXTURE_CLASSES,
+    HSGCalculator,
+    classify_usda_texture,
+    classify_usda_texture_array,
+    texture_to_hsg,
+    texture_to_hsg_array,
 )
 
 
@@ -307,3 +308,189 @@ class TestHSGCLI:
         assert args.output == "/tmp/custom.tif"
         assert args.keep_intermediate is True
         assert args.stats is True
+
+
+def _create_test_raster(path, data, transform=None):
+    """Helper to create a minimal GeoTIFF for testing."""
+    import rasterio
+    from rasterio.transform import from_bounds
+
+    if transform is None:
+        transform = from_bounds(
+            450000, 550000, 460000, 560000, data.shape[1], data.shape[0]
+        )
+
+    profile = {
+        "driver": "GTiff",
+        "dtype": data.dtype,
+        "width": data.shape[1],
+        "height": data.shape[0],
+        "count": 1,
+        "crs": "EPSG:2180",
+        "transform": transform,
+        "nodata": 0,
+    }
+
+    with rasterio.open(path, "w", **profile) as dst:
+        dst.write(data, 1)
+
+
+class TestHSGCalculatorCalculateFull:
+    """Test HSGCalculator calculation with mocked provider and rasterio."""
+
+    def test_calculate_hsg_by_godlo(self, tmp_path):
+        """calculate_hsg_by_godlo downloads clay/sand/silt and produces HSG."""
+        mock_provider = Mock()
+        calc = HSGCalculator(provider=mock_provider)
+
+        # Mock download_by_bbox to create test rasters
+        def fake_download(bbox, path, timeout, property, depth, stat):
+            # Create raster with data in g/kg
+            if property == "clay":
+                data = np.full((10, 10), 200, dtype=np.float32)  # 20%
+            elif property == "sand":
+                data = np.full((10, 10), 400, dtype=np.float32)  # 40%
+            else:  # silt
+                data = np.full((10, 10), 400, dtype=np.float32)  # 40%
+            _create_test_raster(path, data)
+            return path
+
+        mock_provider.download_by_bbox.side_effect = fake_download
+
+        output = tmp_path / "hsg.tif"
+
+        with patch("kartograf.core.sheet_parser.SheetParser") as mock_parser_cls:
+            from kartograf.core.sheet_parser import BBox
+
+            mock_parser = Mock()
+            mock_parser.get_bbox.return_value = BBox(
+                450000, 550000, 460000, 560000, "EPSG:2180"
+            )
+            mock_parser_cls.return_value = mock_parser
+
+            result = calc.calculate_hsg_by_godlo("N-34-130-D", output)
+
+        assert result == output
+        assert output.exists()
+
+        # Verify HSG content
+        import rasterio
+
+        with rasterio.open(output) as src:
+            hsg = src.read(1)
+        # 20% clay, 40% sand, 40% silt -> loam -> HSG B = 2
+        assert np.all(hsg == 2)
+
+    def test_calculate_hsg_by_bbox(self, tmp_path):
+        """calculate_hsg_by_bbox produces HSG raster."""
+        from kartograf.core.sheet_parser import BBox
+
+        mock_provider = Mock()
+        calc = HSGCalculator(provider=mock_provider)
+
+        def fake_download(bbox, path, timeout, property, depth, stat):
+            if property == "clay":
+                data = np.full((5, 5), 50, dtype=np.float32)  # 5%
+            elif property == "sand":
+                data = np.full((5, 5), 900, dtype=np.float32)  # 90%
+            else:  # silt
+                data = np.full((5, 5), 50, dtype=np.float32)  # 5%
+            _create_test_raster(path, data)
+            return path
+
+        mock_provider.download_by_bbox.side_effect = fake_download
+
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        output = tmp_path / "hsg.tif"
+        result = calc.calculate_hsg_by_bbox(bbox, output)
+
+        assert result == output
+
+        import rasterio
+
+        with rasterio.open(output) as src:
+            hsg = src.read(1)
+        # 5% clay, 90% sand, 5% silt -> sand -> HSG A = 1
+        assert np.all(hsg == 1)
+
+    def test_calculate_hsg_nodata_handling(self, tmp_path):
+        """Cells with all-zero values -> nodata (0)."""
+        from kartograf.core.sheet_parser import BBox
+
+        mock_provider = Mock()
+        calc = HSGCalculator(provider=mock_provider)
+
+        def fake_download(bbox, path, timeout, property, depth, stat):
+            data = np.zeros((5, 5), dtype=np.float32)
+            _create_test_raster(path, data)
+            return path
+
+        mock_provider.download_by_bbox.side_effect = fake_download
+
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        output = tmp_path / "hsg.tif"
+        calc.calculate_hsg_by_bbox(bbox, output)
+
+        import rasterio
+
+        with rasterio.open(output) as src:
+            hsg = src.read(1)
+        assert np.all(hsg == 0)
+
+    def test_calculate_hsg_keep_intermediate(self, tmp_path):
+        """keep_intermediate=True copies clay/sand/silt files."""
+        from kartograf.core.sheet_parser import BBox
+
+        mock_provider = Mock()
+        calc = HSGCalculator(provider=mock_provider)
+
+        def fake_download(bbox, path, timeout, property, depth, stat):
+            data = np.full((3, 3), 333, dtype=np.float32)
+            _create_test_raster(path, data)
+            return path
+
+        mock_provider.download_by_bbox.side_effect = fake_download
+
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        output = tmp_path / "out" / "hsg.tif"
+        calc.calculate_hsg_by_bbox(bbox, output, keep_intermediate=True)
+
+        assert (tmp_path / "out" / "clay.tif").exists()
+        assert (tmp_path / "out" / "sand.tif").exists()
+        assert (tmp_path / "out" / "silt.tif").exists()
+
+    def test_get_hsg_statistics(self, tmp_path):
+        """get_hsg_statistics returns correct counts and areas."""
+        calc = HSGCalculator()
+
+        # Create test HSG raster: 2x A, 1x B, 1x C
+        data = np.array([[1, 1], [2, 3]], dtype=np.uint8)
+        hsg_path = tmp_path / "hsg.tif"
+        _create_test_raster(hsg_path, data)
+
+        stats = calc.get_hsg_statistics(hsg_path)
+
+        assert stats["A"]["count"] == 2
+        assert stats["B"]["count"] == 1
+        assert stats["C"]["count"] == 1
+        assert stats["D"]["count"] == 0
+        assert abs(stats["A"]["percent"] - 50.0) < 0.1
+        assert abs(stats["B"]["percent"] - 25.0) < 0.1
+
+    def test_get_hsg_statistics_structure(self, tmp_path):
+        """Verify stats dict has required keys."""
+        calc = HSGCalculator()
+
+        data = np.array([[1, 2], [3, 4]], dtype=np.uint8)
+        hsg_path = tmp_path / "hsg.tif"
+        _create_test_raster(hsg_path, data)
+
+        stats = calc.get_hsg_statistics(hsg_path)
+
+        for group in ["A", "B", "C", "D"]:
+            assert group in stats
+            assert "count" in stats[group]
+            assert "area_m2" in stats[group]
+            assert "area_ha" in stats[group]
+            assert "percent" in stats[group]
+            assert "description" in stats[group]
