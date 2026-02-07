@@ -143,6 +143,7 @@ class DownloadManager:
         self._storage = storage or FileStorage(output_dir, resolution=resolution)
         self._vertical_crs = vertical_crs
         self._resolution = resolution
+        self._default_ext = self._provider.default_extension
 
     @property
     def vertical_crs(self) -> str:
@@ -210,8 +211,8 @@ class DownloadManager:
                 godlo, "1:10000", skip_existing=skip_existing, on_progress=on_progress
             )
 
-        # Get target path (always .asc for godło downloads)
-        target_path = self._storage.get_path(godlo, ".asc")
+        # Get target path
+        target_path = self._storage.get_path(godlo, self._default_ext)
 
         # Check if already exists
         if skip_existing and target_path.exists():
@@ -282,7 +283,7 @@ class DownloadManager:
             current_godlo = descendant.godlo
 
             try:
-                target_path = self._storage.get_path(current_godlo, ".asc")
+                target_path = self._storage.get_path(current_godlo, self._default_ext)
 
                 if skip_existing and target_path.exists():
                     # Skipped
@@ -427,7 +428,7 @@ class DownloadManager:
 
         missing = []
         for descendant in descendants:
-            if not self._storage.exists(descendant.godlo, ".asc"):
+            if not self._storage.exists(descendant.godlo, self._default_ext):
                 missing.append(descendant.godlo)
 
         return missing

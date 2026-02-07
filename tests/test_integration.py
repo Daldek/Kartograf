@@ -53,7 +53,7 @@ class TestPublicAPIImports:
 
         semver_pattern = r"^\d+\.\d+\.\d+(-\w+)?$"
         assert re.match(semver_pattern, __version__), f"Invalid version: {__version__}"
-        assert __version__ == "0.3.2"
+        assert __version__ == "0.4.0"
 
 
 class TestParserStorageIntegration:
@@ -89,7 +89,7 @@ class TestParserStorageIntegration:
             assert storage.exists(child.godlo)
 
         # Verify common parent directory (includes resolution subfolder)
-        common_parent = test_data_dir / "1m" / "N-34" / "130" / "D" / "d" / "2"
+        common_parent = test_data_dir / "nmt_1m" / "N-34" / "130" / "D" / "d" / "2"
         assert common_parent.exists()
 
     def test_all_scales_storage(self, test_data_dir, sample_godlos, mock_tif_data):
@@ -123,6 +123,7 @@ class TestDownloadManagerIntegration:
         existing_path.write_bytes(mock_tif_data)
 
         mock_provider = Mock()
+        mock_provider.default_extension = ".asc"
         manager = DownloadManager(
             output_dir=test_data_dir,
             provider=mock_provider,
@@ -221,6 +222,7 @@ class TestProgressCallback:
         existing_path.write_bytes(mock_tif_data)
 
         mock_provider = Mock()
+        mock_provider.default_extension = ".asc"
 
         def mock_download(godlo, path, timeout=30):
             path.parent.mkdir(parents=True, exist_ok=True)

@@ -213,6 +213,11 @@ class GugikProvider(BaseProvider):
         return "GUGiK"
 
     @property
+    def default_extension(self) -> str:
+        """Return default file extension for NMT data."""
+        return ".asc"
+
+    @property
     def base_url(self) -> str:
         """Return base URL for GUGiK service."""
         return self.BASE_URL

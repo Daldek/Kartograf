@@ -33,7 +33,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version="%(prog)s 0.3.2",
+        version="%(prog)s 0.4.0",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -67,9 +67,10 @@ def create_parser() -> argparse.ArgumentParser:
     # Download command
     download_parser = subparsers.add_parser(
         "download",
-        help="Download NMT data for a map sheet",
+        help="Download geospatial data from GUGiK",
         description=(
-            "Download NMT (Digital Terrain Model) data from GUGiK OpenData as ASC files"
+            "Download geospatial data from GUGiK: NMT (terrain), NMPT (surface), "
+            "or orthophoto"
         ),
     )
     download_parser.add_argument(
@@ -124,6 +125,13 @@ def create_parser() -> argparse.ArgumentParser:
         choices=["1m", "5m"],
         default="1m",
         help="Grid resolution: 1m or 5m (default: 1m). Note: 5m only for EVRF2007",
+    )
+    download_parser.add_argument(
+        "--product",
+        choices=["nmt", "nmpt", "orto"],
+        default="nmt",
+        help="Data product: nmt (terrain), nmpt (surface), "
+        "orto (orthophoto). Default: nmt",
     )
 
     # Landcover command group
@@ -494,6 +502,28 @@ def create_progress_callback(quiet: bool = False):
     return on_progress
 
 
+def _create_provider_and_storage(product, output_dir, vertical_crs, resolution):
+    """Create provider and storage based on product type."""
+    from kartograf.download.storage import FileStorage
+    from kartograf.providers.gugik import GugikProvider
+
+    if product == "nmpt":
+        from kartograf.providers.gugik_nmpt import GugikNmptProvider
+
+        provider = GugikNmptProvider(vertical_crs=vertical_crs)
+        storage = FileStorage(output_dir, product="nmpt")
+    elif product == "orto":
+        from kartograf.providers.gugik_orto import GugikOrtoProvider
+
+        provider = GugikOrtoProvider()
+        storage = FileStorage(output_dir, product="orto")
+    else:
+        provider = GugikProvider(vertical_crs=vertical_crs, resolution=resolution)
+        storage = FileStorage(output_dir, resolution=resolution)
+
+    return provider, storage
+
+
 def cmd_download(args: argparse.Namespace) -> int:
     """
     Execute the download command.
@@ -531,12 +561,21 @@ def cmd_download(args: argparse.Namespace) -> int:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    # Create download manager with vertical CRS and resolution
+    # Create download manager with vertical CRS, resolution, and product
     output_dir = Path(args.output)
     vertical_crs = getattr(args, "vertical_crs", "KRON86")
     resolution = getattr(args, "resolution", "1m")
+    product = getattr(args, "product", "nmt")
+
+    provider, storage = _create_provider_and_storage(
+        product, output_dir, vertical_crs, resolution
+    )
     manager = DownloadManager(
-        output_dir=output_dir, vertical_crs=vertical_crs, resolution=resolution
+        output_dir=output_dir,
+        provider=provider,
+        storage=storage,
+        vertical_crs=vertical_crs,
+        resolution=resolution,
     )
 
     skip_existing = not args.force
@@ -633,8 +672,17 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
     output_dir = Path(args.output)
     vertical_crs = getattr(args, "vertical_crs", "KRON86")
     resolution = getattr(args, "resolution", "1m")
+    product = getattr(args, "product", "nmt")
+
+    provider, storage = _create_provider_and_storage(
+        product, output_dir, vertical_crs, resolution
+    )
     manager = DownloadManager(
-        output_dir=output_dir, vertical_crs=vertical_crs, resolution=resolution
+        output_dir=output_dir,
+        provider=provider,
+        storage=storage,
+        vertical_crs=vertical_crs,
+        resolution=resolution,
     )
 
     skip_existing = not args.force
