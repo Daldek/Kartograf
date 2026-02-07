@@ -1,7 +1,9 @@
 # Kartograf
 
 Narzędzie do automatycznego pobierania danych przestrzennych z zasobów GUGiK, Copernicus i ISRIC dla Polski:
-- **NMT/NMPT** - Numeryczny Model Terenu / Pokrycia Terenu (dane wysokościowe)
+- **NMT** - Numeryczny Model Terenu (dane wysokościowe, 1m/5m)
+- **NMPT** - Numeryczny Model Pokrycia Terenu / DSM (teren + obiekty, 1m)
+- **Ortofotomapa** - Zdjęcia lotnicze Standard Resolution (25cm, TIF)
 - **BDOT10k** - Baza Danych Obiektów Topograficznych (pokrycie terenu, wektory)
 - **CORINE Land Cover** - Europejska klasyfikacja pokrycia terenu (44 klasy)
 - **SoilGrids** - Globalne dane glebowe (tekstura, węgiel organiczny, pH)
@@ -42,6 +44,13 @@ kartograf download N-34-130-D --scale 1:10000 --output ./data
 # Pobieranie NMT w rozdzielczości 5m (tylko EVRF2007)
 kartograf download N-34-130-D-d-2-4 --resolution 5m
 kartograf download N-34-130-D --scale 1:10000 -r 5m
+
+# Pobieranie NMPT (Digital Surface Model)
+kartograf download N-34-130-D-d-2-4 --product nmpt
+
+# Pobieranie ortofotomapy
+kartograf download N-34-130-D-d-2-4 --product orto
+kartograf download --bbox 419000,230000,426000,237000 --product orto
 
 # Pobieranie Land Cover (BDOT10k - powiat)
 kartograf landcover download --source bdot10k --teryt 1465
@@ -100,6 +109,17 @@ path = manager_5m.download_sheet("N-34-130-D-d-2-4")  # → .asc (5m)
 bbox = BBox(min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180")
 path = manager.download_bbox(bbox, "my_area.tif")  # → .tif
 
+# ===== NMPT (Digital Surface Model) =====
+from kartograf import GugikNmptProvider
+provider = GugikNmptProvider(vertical_crs="EVRF2007")
+provider.download("N-34-130-D-d-2-4", Path("./nmpt.asc"))
+
+# ===== Ortofotomapa =====
+from kartograf import GugikOrtoProvider
+orto = GugikOrtoProvider()
+orto.download("N-34-130-D-d-2-4", Path("./orto.tif"))
+orto.download_bbox(bbox, Path("./orto_area.tif"))
+
 # ===== Land Cover =====
 from kartograf import LandCoverManager
 
@@ -140,11 +160,25 @@ for group, data in stats.items():
 - ✅ **Bounding box** - Obliczanie współrzędnych arkusza (EPSG:2180, EPSG:4326)
 - ✅ **Hierarchia arkuszy** - Automatyczne określanie arkuszy nadrzędnych i podrzędnych
 - ✅ **Pobieranie NMT** - Z retry logic i progress tracking
-- ✅ **Organizacja plików** - Automatyczna struktura katalogów
+- ✅ **Organizacja plików** - Automatyczna struktura katalogów (`data/nmt_1m/`, `data/nmt_5m/`)
 - ✅ **Formaty** - GeoTIFF, PNG, JPEG (WCS), ASC (OpenData)
 - ✅ **Rozdzielczości:**
   - `1m` (GRID1) - wysoka rozdzielczość, KRON86 i EVRF2007
   - `5m` (GRID5) - niższa rozdzielczość, tylko EVRF2007
+
+### NMPT (Numeryczny Model Pokrycia Terenu)
+- ✅ **Digital Surface Model** - Teren + obiekty powierzchniowe (drzewa, budynki)
+- ✅ **Pobieranie przez godło** → ASC (OpenData)
+- ✅ **Pobieranie przez bbox** → GeoTIFF (WCS)
+- ✅ **Rozdzielczość** - Tylko 1m, układy KRON86 i EVRF2007
+- ✅ **Organizacja** - `data/nmpt/`
+
+### Ortofotomapa (Standard Resolution)
+- ✅ **Zdjęcia lotnicze** - 25cm, format TIF
+- ✅ **Pobieranie przez godło** → TIF (OpenData)
+- ✅ **Pobieranie przez bbox** → GeoTIFF (WCS), także PNG i JPEG
+- ✅ **9 warstw WMS** - od 2018 do 2025+starsze
+- ✅ **Organizacja** - `data/orto/`
 
 ### Land Cover (Pokrycie Terenu)
 - ✅ **BDOT10k** - Polska baza wektorowa (GUGiK), szczegółowość 1:10 000
@@ -229,12 +263,12 @@ Kartograf/
 ├── kartograf/           # Kod źródłowy
 │   ├── auth/            # Auth Proxy (bezpieczna autentykacja CLMS)
 │   ├── core/            # Parser godeł, BBox
-│   ├── providers/       # Providery danych (GUGiK, BDOT10k, CORINE, SoilGrids)
-│   ├── download/        # Download management (NMT)
+│   ├── providers/       # Providery danych (GUGiK NMT/NMPT/Orto, BDOT10k, CORINE, SoilGrids)
+│   ├── download/        # Download management (NMT/NMPT/Orto)
 │   ├── landcover/       # Land Cover management
 │   ├── hydrology/       # Hydrologic Soil Groups (HSG)
 │   └── cli/             # CLI interface
-├── tests/               # Testy (365)
+├── tests/               # Testy (574)
 ├── docs/                # Dokumentacja
 └── README.md
 ```
@@ -277,4 +311,4 @@ Projekt udostępniony na licencji MIT. Szczegóły w pliku `LICENSE`.
 
 ## Status
 
-**Wersja 0.3.2** - Nowa struktura katalogów NMT (1m/5m), domyślny układ EVRF2007, Land Cover (BDOT10k, CORINE), SoilGrids (dane glebowe) oraz HSG (grupy hydrologiczne dla SCS-CN). Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów.
+**Wersja 0.4.0** - NMPT (Digital Surface Model), Ortofotomapa (25cm), CLI `--product {nmt,nmpt,orto}`, nowa struktura katalogów (`nmt_1m`/`nmt_5m`/`nmpt`/`orto`). 574 testów, pokrycie 84%. Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów.
