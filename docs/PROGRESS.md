@@ -9,7 +9,8 @@
 | Land Cover (CORINE) | ✅ Gotowy | v0.3.0+ |
 | SoilGrids | ✅ Gotowy | v0.3.0+ |
 | HSG | ✅ Gotowy | v0.3.0+ |
-| CLI | ✅ Gotowy | 5 komend |
+| bbox → godla | ✅ Gotowy | find_sheets_for_bbox(), CLI --bbox |
+| CLI | ✅ Gotowy | 5 komend + --bbox |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | Pokrycie testami | 🔧 W trakcie | 57%, cel 80% |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
@@ -45,32 +46,22 @@
 
 ## Ostatnia sesja
 
-**Data:** 2026-02-06
+**Data:** 2026-02-07
 
 ### Co zrobiono
-- Testy: 369 testow przechodzi (pytest tests/ -v)
-- Pobrano komplet danych dla N-34-130-D-d-2: NMT 1m, BDOT10k, CORINE, SoilGrids, HSG
-- Diagnostyka braku NMT 5m: zbadano WMS GetFeatureInfo dla endpointu SheetsGrid5mEVRF2007
-  - Potwierdzono: obszar N-34-130-D-d-2 nie ma pokrycia 5m w GUGiK (brak danych we wszystkich 4 warstwach)
-  - Porownanie z Warszawa: ten sam endpoint dziala poprawnie — kod jest prawidlowy
-- Poprawiono komunikat bledu w GugikProvider._get_opendata_url() (gugik.py:386-391)
-  - Bylo: "No ASC file found for {godlo} in any WMS layer"
-  - Jest: "No NMT {resolution} data available for {godlo} ... This area may not have {resolution} coverage in GUGiK"
-- Zaktualizowano test (test_gugik_provider.py:479) pod nowy komunikat
-- **feat(download): automatyczne rozwijanie godel do 1:10000 w `download_sheet()`**
-  - `download_sheet()` w `DownloadManager` (manager.py:171-221): dla godel wyzszych niz 1:10000 deleguje do `download_hierarchy(godlo, "1:10000")`
-  - Nowy parametr `on_progress`, zwracany typ `Path | list[Path]`
-  - CLI `cmd_download()` (commands.py:537-550): obsluga wyniku list[Path], wyswietlanie liczby plikow
-  - 4 nowe testy w test_download_manager.py (expands 25k/50k/100k, progress callback)
-  - Zaktualizowano 2 istniejace testy CLI (on_progress w assert)
-  - Testy: 369 testow przechodzi, ruff clean
-- **Testy pobierania na zywym API GUGiK:**
-  - NMT 1m: N-34-130-D-d-2 (Bialystok) — 4/4 arkusze, 144 MB, cellsize=1.00
-  - NMT 5m: N-33-130-D-d-2 (Lodzkie) — 4/4 arkusze, 4.7 MB, cellsize=5.00 (warstwa SkorowidzeNMT2021iStarsze)
-  - NMT 1m+5m: M-34-76-A-a-1 (Krakow) — oba 4/4
-  - skip_existing dziala poprawnie (0.00s przy ponownym uruchomieniu)
-  - CLI: progress bar + "Downloaded 4 files" — OK
-- Pokrycie 5m w GUGiK jest niekompletne i rozni sie od 1m — to zachowanie serwisu, nie bug
+- **feat(parser): `find_sheets_for_bbox()` — reverse lookup: bbox → godla arkuszy**
+  - Nowe funkcje w `sheet_parser.py`: `find_sheets_for_bbox()`, `_bboxes_intersect()`, `_transform_bbox_to_wgs84()`, `_find_1m_sheets()`, `_find_200k_sheets()`, `_find_children_intersecting()`
+  - Algorytm hierarchicznego przycinania: 1:1M → 1:200k (siatka 12x12) → rekurencyjne drążenie do docelowej skali
+  - Obsługa EPSG:2180 i EPSG:4326, walidacja CRS i skali
+  - Eksport w `__init__.py`
+- **feat(cli): `kartograf download --bbox` — pobieranie NMT dla bbox**
+  - `--bbox min_x,min_y,max_x,max_y` + `--bbox-crs {EPSG:2180,EPSG:4326}`
+  - `godlo` staje się opcjonalny (pozycyjny, nargs="?")
+  - Walidacja: godlo XOR --bbox (oba lub żaden → error)
+  - Nowa `_cmd_download_bbox()` — find sheets, iterate download
+- Testy: 398 testów przechodzi (pytest tests/ -v), ruff clean
+  - 18 nowych testów find_sheets_for_bbox (roundtrip, boundary, 2180/4326, invalid)
+  - 11 nowych testów CLI bbox (basic, epsg4326, errors, scale, parser)
 
 ### Nastepne kroki
 1. Pokrycie testami do 80% (priorytet: auth/, providers/bdot10k.py, providers/corine.py)

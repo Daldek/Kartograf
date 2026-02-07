@@ -23,7 +23,7 @@ Example usage::
     lc_manager.download(godlo="N-34-130-D")
 """
 
-from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
 from kartograf.download.manager import DownloadManager, DownloadProgress
 from kartograf.download.storage import FileStorage
 from kartograf.exceptions import (
@@ -47,6 +47,7 @@ __all__ = [
     # Core
     "SheetParser",
     "BBox",
+    "find_sheets_for_bbox",
     # Download (NMT)
     "DownloadManager",
     "DownloadProgress",

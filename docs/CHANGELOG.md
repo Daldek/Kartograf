@@ -8,6 +8,16 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **`find_sheets_for_bbox()` — reverse lookup: bbox → godła arkuszy**
+  - Algorytm hierarchicznego przycinania (matematyczny, bez WFS)
+  - Obsługa EPSG:2180 i EPSG:4326
+  - Dowolna skala docelowa (1:1M do 1:10k)
+  - Zoptymalizowane wyszukiwanie 1:200k (siatka 12x12)
+- **CLI `kartograf download --bbox` — pobieranie NMT dla bbox**
+  - `--bbox min_x,min_y,max_x,max_y` — współrzędne bbox
+  - `--bbox-crs {EPSG:2180,EPSG:4326}` — CRS bbox (domyślnie EPSG:2180)
+  - `godlo` staje się opcjonalny (godlo XOR --bbox)
+  - Automatyczne wykrywanie arkuszy i pobieranie w pętli
 - **Automatyczne rozwijanie godeł do 1:10000 w `download_sheet()`**
   - `download_sheet("N-34-130-D-d-2")` (1:25000) → automatycznie pobiera 4 arkusze 1:10000
   - `download_sheet("N-34-130-D-d")` (1:50000) → pobiera 16 arkuszy 1:10000
