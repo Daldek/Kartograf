@@ -6,6 +6,8 @@ Kartograf — narzedzie do pobierania danych przestrzennych (NMT z GUGiK, BDOT10
 
 Glowne funkcjonalnosci:
 - **NMT** — pobieranie Numerycznego Modelu Terenu z GUGiK (1m i 5m)
+- **NMPT** — Numeryczny Model Pokrycia Terenu / DSM z GUGiK (1m)
+- **Ortofotomapa** — zdjecia lotnicze Standard Resolution (25cm, TIF) z GUGiK
 - **BDOT10k** — polska baza pokrycia terenu (12 warstw PT*)
 - **CORINE Land Cover** — europejska klasyfikacja pokrycia terenu (44 klasy)
 - **SoilGrids** — globalne dane glebowe z ISRIC (11 parametrow, 6 glebokosci)
@@ -44,11 +46,13 @@ kartograf/
 ├── providers/           # Providery danych (abstrakcje nad API)
 │   ├── base.py          # BaseProvider — abstrakcja dla NMT
 │   ├── gugik.py         # GugikProvider — NMT z GUGiK (WCS + OpenData)
+│   ├── gugik_nmpt.py    # GugikNmptProvider — NMPT/DSM z GUGiK (dziedziczy z GugikProvider)
+│   ├── gugik_orto.py    # GugikOrtoProvider — Ortofotomapa z GUGiK (BaseProvider)
 │   ├── landcover_base.py # LandCoverProvider — abstrakcja dla pokrycia terenu
 │   ├── bdot10k.py       # Bdot10kProvider — BDOT10k z GUGiK
 │   ├── corine.py        # CorineProvider — CORINE z Copernicus (CLMS API + WMS)
 │   └── soilgrids.py     # SoilGridsProvider — dane glebowe z ISRIC (WCS)
-├── download/            # Zarzadzanie pobieraniem NMT
+├── download/            # Zarzadzanie pobieraniem NMT/NMPT/Orto
 │   ├── manager.py       # DownloadManager — koordynacja pobierania arkuszy
 │   └── storage.py       # FileStorage — hierarchiczna struktura katalogow
 ├── landcover/           # Zarzadzanie pobieraniem pokrycia terenu
@@ -87,6 +91,8 @@ kartograf/
 kartograf --help
 kartograf parse N-34-130-D-d-2-4
 kartograf download N-34-130-D-d-2-4
+kartograf download N-34-130-D-d-2-4 --product nmpt
+kartograf download N-34-130-D-d-2-4 --product orto
 kartograf download N-34-130-D --scale 1:10000 --resolution 5m
 kartograf landcover download --source bdot10k --teryt 1465
 kartograf landcover download --source corine --year 2018 --godlo N-34-130-D
@@ -138,7 +144,7 @@ kartograf landcover list-layers --source soilgrids
 - Kartograf NIE zawiera danych obserwacyjnych — to zadanie IMGWTools
 
 ### Ograniczenia
-- Pobieranie jest synchroniczne (brak async/parallel) — zaplanowane na v0.4+
+- Pobieranie jest synchroniczne (brak async/parallel) — zaplanowane na v0.5+
 - NMT 5m dostepne tylko w ukladzie EVRF2007
 - WCS (download_bbox) niedostepne dla NMT 5m — tylko arkusze OpenData
 - CORINE GeoTIFF wymaga OAuth2 credentials w CLMS — bez nich fallback na PNG (WMS)

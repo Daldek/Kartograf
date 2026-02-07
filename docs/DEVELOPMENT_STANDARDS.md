@@ -51,8 +51,8 @@ hotfix/<nazwa>    # Pilne poprawki produkcyjne (branch z main)
 Tagi `v<X.Y.Z>` (SemVer) przy wydaniach:
 
 ```bash
-git tag -a v0.3.2 -m "Release v0.3.2: storage structure and EVRF2007"
-git push origin v0.3.2
+git tag -a v0.4.0 -m "Release v0.4.0: NMPT, Ortofotomapa, nowa struktura storage"
+git push origin v0.4.0
 ```
 
 Checkpointy robocze (CP) sa sledzone tylko w `docs/PROGRESS.md`, bez tagow Git.
@@ -299,16 +299,18 @@ Kartograf/
 │   ├── __init__.py          # public API exports
 │   ├── exceptions.py        # hierarchia wyjatkow
 │   ├── core/                # parser godel, BBox
-│   ├── providers/           # providery danych (GUGiK, BDOT10k, CORINE, SoilGrids)
-│   ├── download/            # download management (NMT)
+│   ├── providers/           # providery danych (GUGiK NMT/NMPT/Orto, BDOT10k, CORINE, SoilGrids)
+│   ├── download/            # download management (NMT/NMPT/Orto)
 │   ├── landcover/           # land cover management
 │   ├── hydrology/           # obliczenia hydrologiczne (HSG)
 │   ├── auth/                # autentykacja CLMS (Auth Proxy)
 │   └── cli/                 # interfejs CLI
-├── tests/                   # testy (365)
+├── tests/                   # testy (574)
 │   ├── conftest.py
 │   ├── test_sheet_parser.py
 │   ├── test_gugik_provider.py
+│   ├── test_gugik_nmpt.py
+│   ├── test_gugik_orto.py
 │   ├── test_download_manager.py
 │   ├── test_landcover.py
 │   ├── test_soilgrids.py
