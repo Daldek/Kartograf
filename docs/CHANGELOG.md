@@ -8,6 +8,18 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **NMPT (Numeryczny Model Pokrycia Terenu / Digital Surface Model)**
+  - `GugikNmptProvider` — dziedziczy z GugikProvider, nadpisuje endpointy NMPT
+  - Tylko rozdzielczość 1m, vertical CRS: KRON86 lub EVRF2007
+  - Download: godło → OpenData ASC, bbox → WCS GeoTIFF
+- **Ortofotomapa (Standard Resolution, 25cm)**
+  - `GugikOrtoProvider` — osobna klasa, format TIF
+  - Brak vertical CRS (2D RGB), 9 warstw WMS (2018-2025+starsze)
+  - Download: godło → OpenData TIF, bbox → WCS GeoTIFF
+- **CLI `--product {nmt,nmpt,orto}` — wybór produktu w komendzie download**
+  - `kartograf download N-34-130-D-d-2-4 --product nmpt` — pobiera NMPT
+  - `kartograf download --bbox ... --product orto` — pobiera ortofoto
+  - Domyślnie: nmt (bez zmian)
 - **`find_sheets_for_bbox()` — reverse lookup: bbox → godła arkuszy**
   - Algorytm hierarchicznego przycinania (matematyczny, bez WFS)
   - Obsługa EPSG:2180 i EPSG:4326
@@ -27,17 +39,27 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - CLI dostosowane — wyświetla liczbę pobranych plików przy rozwijaniu
 
 ### Tests
-- **Pokrycie testami 59% → 83% (cel 80% osiagniety, 507 testow)**
-  - Nowy `tests/test_auth_client.py` — 30 testow dla AuthProxyClient (singleton, proxy lifecycle, token, requests, downloads, cleanup)
-  - Nowy `tests/test_auth_proxy.py` — 24 testy dla CLMSCredentials, ProxyHandler, run_server
-  - Rozszerzony `tests/test_landcover.py` — +38 testow dla Bdot10kProvider, CorineProvider, LandCoverManager
-  - Rozszerzony `tests/test_hsg.py` — +6 testow dla HSGCalculator (calculate, statistics)
-  - Rozszerzony `tests/test_cli.py` — +11 testow dla landcover CLI i soilgrids CLI
+- **574 testow, pokrycie 83.95% (cel 80% osiagniety)**
+  - Nowy `tests/test_gugik_nmpt.py` — 21 testow dla GugikNmptProvider
+  - Nowy `tests/test_gugik_orto.py` — 25 testow dla GugikOrtoProvider
+  - Nowy `tests/test_auth_client.py` — 30 testow dla AuthProxyClient
+  - Nowy `tests/test_auth_proxy.py` — 24 testy dla CLMSCredentials, ProxyHandler
+  - Rozszerzony `tests/test_cli.py` — +12 testow (product CLI), +11 testow (landcover/soilgrids CLI)
+  - Rozszerzony `tests/test_storage.py` — +8 testow (product storage)
+  - Rozszerzony `tests/test_download_manager.py` — +3 testy (default_ext)
+  - Rozszerzony `tests/test_landcover.py` — +38 testow
+  - Rozszerzony `tests/test_hsg.py` — +6 testow
 
 ### Fixed
 - Poprawiony komunikat błędu przy braku pokrycia NMT 5m — zamiast technicznego "No ASC file found in any WMS layer" wyświetla czytelną informację o braku pokrycia danego obszaru w GUGiK
 
 ### Changed
+- **FileStorage: podkatalogi `1m`/`5m` → `nmt_1m`/`nmt_5m`**
+  - Nowy parametr `product` w FileStorage (np. product="nmpt", product="orto")
+  - Struktura: `data/nmt_1m/...`, `data/nmt_5m/...`, `data/nmpt/...`, `data/orto/...`
+- **DownloadManager: dynamiczne rozszerzenie pliku**
+  - `_default_ext` pobierane z `provider.default_extension` zamiast hardcoded `.asc`
+- **BaseProvider: nowa property `default_extension`** (domyślnie `.asc`)
 - Migracja z black + flake8 na ruff (pyproject.toml)
 - Usuniecie .flake8, dodanie .editorconfig
 - Standaryzacja dokumentacji wg shared/standards

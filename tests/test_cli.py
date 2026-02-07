@@ -256,7 +256,7 @@ class TestMain:
 
         assert exc_info.value.code == 0
         captured = capsys.readouterr()
-        assert "0.3.2" in captured.out
+        assert "0.4.0" in captured.out
 
     def test_parse_subcommand(self, capsys):
         """Test parse subcommand."""
@@ -536,7 +536,7 @@ class TestDownloadCLIIntegration:
         captured = capsys.readouterr()
         assert "download" in captured.out.lower()
         assert "--scale" in captured.out
-        assert "ASC" in captured.out  # Should mention ASC files in description
+        assert "--product" in captured.out  # Should show product option
 
     def test_main_includes_download(self, capsys):
         """Test that main help includes download command."""
@@ -545,6 +545,212 @@ class TestDownloadCLIIntegration:
         assert result == 0
         captured = capsys.readouterr()
         assert "download" in captured.out
+
+
+class TestCmdDownloadProduct:
+    """Tests for --product flag in download command."""
+
+    def test_download_parser_has_product_option(self):
+        """Test that download parser has --product option."""
+        parser = create_parser()
+        args = parser.parse_args(["download", "N-34-130-D", "--product", "nmpt"])
+        assert args.product == "nmpt"
+
+    def test_download_product_default_nmt(self):
+        """Test that --product defaults to nmt."""
+        parser = create_parser()
+        args = parser.parse_args(["download", "N-34-130-D"])
+        assert args.product == "nmt"
+
+    @patch("kartograf.cli.commands._create_provider_and_storage")
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_product_nmpt(
+        self, mock_manager_cls, mock_create, capsys, tmp_path
+    ):
+        """Test --product nmpt creates GugikNmptProvider."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".asc"
+        mock_storage = Mock()
+        mock_create.return_value = (mock_provider, mock_storage)
+
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--product",
+                "nmpt",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        mock_create.assert_called_once()
+        call_args = mock_create.call_args
+        assert call_args[0][0] == "nmpt"
+
+    @patch("kartograf.cli.commands._create_provider_and_storage")
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_product_orto(
+        self, mock_manager_cls, mock_create, capsys, tmp_path
+    ):
+        """Test --product orto creates GugikOrtoProvider."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".tif"
+        mock_storage = Mock()
+        mock_create.return_value = (mock_provider, mock_storage)
+
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.tif"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--product",
+                "orto",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        mock_create.assert_called_once()
+        call_args = mock_create.call_args
+        assert call_args[0][0] == "orto"
+
+    @patch("kartograf.cli.commands._create_provider_and_storage")
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_product_nmt_default(
+        self, mock_manager_cls, mock_create, capsys, tmp_path
+    ):
+        """Test default product creates GugikProvider."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".asc"
+        mock_storage = Mock()
+        mock_create.return_value = (mock_provider, mock_storage)
+
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"])
+
+        assert result == 0
+        mock_create.assert_called_once()
+        call_args = mock_create.call_args
+        assert call_args[0][0] == "nmt"
+
+    @patch("kartograf.cli.commands._create_provider_and_storage")
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_bbox_product_nmpt(
+        self, mock_manager_cls, mock_create, capsys, tmp_path
+    ):
+        """Test --bbox + --product nmpt."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".asc"
+        mock_storage = Mock()
+        mock_create.return_value = (mock_provider, mock_storage)
+
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "--product",
+                "nmpt",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        mock_create.assert_called_once()
+        call_args = mock_create.call_args
+        assert call_args[0][0] == "nmpt"
+
+    @patch("kartograf.cli.commands._create_provider_and_storage")
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_bbox_product_orto(
+        self, mock_manager_cls, mock_create, capsys, tmp_path
+    ):
+        """Test --bbox + --product orto."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".tif"
+        mock_storage = Mock()
+        mock_create.return_value = (mock_provider, mock_storage)
+
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.tif"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "--product",
+                "orto",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        mock_create.assert_called_once()
+        call_args = mock_create.call_args
+        assert call_args[0][0] == "orto"
+
+
+class TestCreateProviderAndStorage:
+    """Tests for _create_provider_and_storage helper."""
+
+    def test_nmt_creates_gugik_provider(self, tmp_path):
+        """Test that nmt creates GugikProvider + FileStorage."""
+        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.providers.gugik import GugikProvider
+
+        provider, storage = _create_provider_and_storage(
+            "nmt", tmp_path, "EVRF2007", "1m"
+        )
+        assert isinstance(provider, GugikProvider)
+        assert storage._product is None
+        assert storage._resolution == "1m"
+
+    def test_nmpt_creates_nmpt_provider(self, tmp_path):
+        """Test that nmpt creates GugikNmptProvider."""
+        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.providers.gugik_nmpt import GugikNmptProvider
+
+        provider, storage = _create_provider_and_storage(
+            "nmpt", tmp_path, "EVRF2007", "1m"
+        )
+        assert isinstance(provider, GugikNmptProvider)
+        assert storage._product == "nmpt"
+
+    def test_orto_creates_orto_provider(self, tmp_path):
+        """Test that orto creates GugikOrtoProvider."""
+        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.providers.gugik_orto import GugikOrtoProvider
+
+        provider, storage = _create_provider_and_storage(
+            "orto", tmp_path, "EVRF2007", "1m"
+        )
+        assert isinstance(provider, GugikOrtoProvider)
+        assert storage._product == "orto"
 
 
 class TestCmdDownloadBBox:

@@ -20,8 +20,10 @@ class FileStorage:
     specific sheets while keeping different resolutions separate.
 
     Directory structure example:
-        data/1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
-        data/5m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
+        data/nmt_1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
+        data/nmt_5m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
+        data/nmpt/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
+        data/orto/N-34/130/D/d/2/4/N-34-130-D-d-2-4.tif
 
     Attributes
     ----------
@@ -35,7 +37,7 @@ class FileStorage:
     >>> storage = FileStorage("./data", resolution="1m")
     >>> path = storage.get_path("N-34-130-D-d-2-4", ".asc")
     >>> print(path)
-    data/1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
+    data/nmt_1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
 
     Notes
     -----
@@ -45,7 +47,12 @@ class FileStorage:
 
     SUPPORTED_RESOLUTIONS = ["1m", "5m"]
 
-    def __init__(self, output_dir: str | Path = "./data", resolution: str = "1m"):
+    def __init__(
+        self,
+        output_dir: str | Path = "./data",
+        resolution: str = "1m",
+        product: str | None = None,
+    ):
         """
         Initialize file storage.
 
@@ -57,14 +64,29 @@ class FileStorage:
         resolution : str, optional
             Resolution for subdirectory: "1m" or "5m" (default: "1m").
             Files will be stored in output_dir/resolution/...
+            Ignored when product is set.
+        product : str, optional
+            Product name for subdirectory (e.g. "nmpt", "orto").
+            When set, uses product instead of resolution as subdirectory.
         """
-        if resolution not in self.SUPPORTED_RESOLUTIONS:
-            raise ValueError(
-                f"Unsupported resolution: '{resolution}'. "
-                f"Supported: {self.SUPPORTED_RESOLUTIONS}"
-            )
+        if product:
+            self._product = product
+            self._resolution = ""
+        else:
+            if resolution not in self.SUPPORTED_RESOLUTIONS:
+                raise ValueError(
+                    f"Unsupported resolution: '{resolution}'. "
+                    f"Supported: {self.SUPPORTED_RESOLUTIONS}"
+                )
+            self._product = None
+            self._resolution = resolution
         self._output_dir = Path(output_dir)
-        self._resolution = resolution
+
+    # Mapping from resolution to subdirectory name
+    _RESOLUTION_SUBDIRS = {
+        "1m": "nmt_1m",
+        "5m": "nmt_5m",
+    }
 
     @property
     def output_dir(self) -> Path:
@@ -76,19 +98,21 @@ class FileStorage:
         """Return the resolution subdirectory."""
         return self._resolution
 
+    @property
+    def _subdir(self) -> str:
+        """Return subdirectory name (product or nmt_<resolution>)."""
+        if self._product:
+            return self._product
+        return self._RESOLUTION_SUBDIRS.get(self._resolution, self._resolution)
+
     def get_path(self, godlo: str, ext: str = ".asc") -> Path:
         """
         Generate file path for given godło and extension.
 
         The path follows a hierarchical structure based on resolution
         and godło components:
-        - 1:1M (N-34) → 1m/N-34/N-34.asc
-        - 1:500k (N-34-A) → 1m/N-34/A/N-34-A.asc
-        - 1:200k (N-34-130) → 1m/N-34/130/N-34-130.asc
-        - 1:100k (N-34-130-D) → 1m/N-34/130/D/N-34-130-D.asc
-        - 1:50k (N-34-130-D-d) → 1m/N-34/130/D/d/N-34-130-D-d.asc
-        - 1:25k (N-34-130-D-d-2) → 1m/N-34/130/D/d/2/N-34-130-D-d-2.asc
-        - 1:10k (N-34-130-D-d-2-4) → 1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
+        - 1:1M (N-34) → nmt_1m/N-34/N-34.asc
+        - 1:10k (N-34-130-D-d-2-4) → nmt_1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
 
         Parameters
         ----------
@@ -106,7 +130,7 @@ class FileStorage:
         --------
         >>> storage = FileStorage("./data", resolution="1m")
         >>> storage.get_path("N-34-130-D-d-2-4", ".asc")
-        PosixPath('data/1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc')
+        PosixPath('data/nmt_1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc')
         """
         # Normalize godło using SheetParser
         parser = SheetParser(godlo)
@@ -115,8 +139,8 @@ class FileStorage:
         # Build directory path from godło components
         dir_parts = self._get_directory_parts(normalized_godlo)
 
-        # Construct full path with resolution subdirectory
-        dir_path = self._output_dir / self._resolution
+        # Construct full path with subdirectory (product or resolution)
+        dir_path = self._output_dir / self._subdir
         for part in dir_parts:
             dir_path = dir_path / part
 
@@ -211,7 +235,7 @@ class FileStorage:
 
         Examples
         --------
-        >>> storage = FileStorage("./data", resolution="1m")
+        >>> storage = FileStorage("./data")
         >>> path = storage.write_atomic("N-34-130-D", b"data", ".asc")
         """
         target_path = self.get_path(godlo, ext)
@@ -276,10 +300,10 @@ class FileStorage:
         list[Path]
             List of matching file paths
         """
-        resolution_dir = self._output_dir / self._resolution
-        if not resolution_dir.exists():
+        subdir = self._output_dir / self._subdir
+        if not subdir.exists():
             return []
-        return list(resolution_dir.glob(pattern))
+        return list(subdir.glob(pattern))
 
     def get_size(self, godlo: str, ext: str = ".asc") -> int | None:
         """
@@ -304,6 +328,11 @@ class FileStorage:
 
     def __repr__(self) -> str:
         """Return string representation."""
+        if self._product:
+            return (
+                f"FileStorage(output_dir='{self._output_dir}', "
+                f"product='{self._product}')"
+            )
         return (
             f"FileStorage(output_dir='{self._output_dir}', "
             f"resolution='{self._resolution}')"
