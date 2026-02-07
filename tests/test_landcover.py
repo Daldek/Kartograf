@@ -5,12 +5,17 @@ Tests cover LandCoverProvider, Bdot10kProvider, CorineProvider,
 and LandCoverManager classes.
 """
 
+import sqlite3
+import zipfile
+from io import BytesIO
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 import pytest
+import requests
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import ValidationError
+from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.bdot10k import WOJEWODZTWO_NAMES, Bdot10kProvider
 from kartograf.providers.corine import CorineProvider
@@ -342,3 +347,653 @@ class TestWojewodztwoMapping:
         assert WOJEWODZTWO_NAMES["14"] == "mazowieckie"
         assert WOJEWODZTWO_NAMES["12"] == "malopolskie"
         assert WOJEWODZTWO_NAMES["02"] == "dolnoslaskie"
+
+
+# ===========================================================================
+# New tests for Bdot10kProvider (download, retry, extract, merge)
+# ===========================================================================
+
+
+class TestBdot10kProviderDownload:
+    """Test Bdot10kProvider download methods with mocks."""
+
+    def test_download_by_teryt_invalid_format(self):
+        """Invalid format raises ValueError."""
+        provider = Bdot10kProvider()
+        with pytest.raises(ValueError, match="Unsupported format"):
+            provider.download_by_teryt("1465", Path("/tmp/out.gpkg"), format="XML")
+
+    def test_download_by_teryt_success(self, tmp_path):
+        """Successful download by TERYT."""
+        provider = Bdot10kProvider()
+        output = tmp_path / "out.gpkg"
+
+        with patch.object(
+            provider, "_download_with_retry", return_value=output
+        ) as mock_dl:
+            result = provider.download_by_teryt("1465", output)
+
+        assert result == output
+        mock_dl.assert_called_once()
+        call_kwargs = mock_dl.call_args
+        assert "1465" in call_kwargs.kwargs.get(
+            "description", call_kwargs[1].get("description", "")
+        )
+
+    @patch("kartograf.core.sheet_parser.SheetParser")
+    def test_download_by_godlo_success(self, mock_parser_cls, tmp_path):
+        """download_by_godlo resolves TERYT via center point."""
+        provider = Bdot10kProvider()
+        output = tmp_path / "out.gpkg"
+
+        mock_parser = Mock()
+        mock_parser.get_bbox.return_value = BBox(
+            450000, 550000, 460000, 560000, "EPSG:2180"
+        )
+        mock_parser_cls.return_value = mock_parser
+
+        with (
+            patch.object(provider, "_get_teryt_for_point", return_value="1465"),
+            patch.object(provider, "download_by_teryt", return_value=output) as mock_dl,
+        ):
+            result = provider.download_by_godlo("N-34-130-D", output)
+
+        assert result == output
+        mock_dl.assert_called_once()
+
+    def test_get_teryt_for_point_gpkg_pattern(self):
+        """Extract TERYT from GPKG URL pattern in WMS response."""
+        provider = Bdot10kProvider()
+        mock_session = Mock()
+        mock_resp = Mock()
+        mock_resp.text = (
+            '<a href="https://opendata.geoportal.gov.pl/bdot10k/GPKG/14/1465_GPKG.zip">'
+        )
+        mock_resp.raise_for_status = Mock()
+        mock_session.get.return_value = mock_resp
+        provider._session = mock_session
+
+        teryt = provider._get_teryt_for_point(500000, 600000)
+        assert teryt == "1465"
+
+    def test_get_teryt_for_point_shp_fallback(self):
+        """Fall back to SHP URL pattern when no GPKG match."""
+        provider = Bdot10kProvider()
+        mock_session = Mock()
+        mock_resp = Mock()
+        mock_resp.text = (
+            '<a href="https://opendata.geoportal.gov.pl/bdot10k/SHP/14/1465_SHP.zip">'
+        )
+        mock_resp.raise_for_status = Mock()
+        mock_session.get.return_value = mock_resp
+        provider._session = mock_session
+
+        teryt = provider._get_teryt_for_point(500000, 600000)
+        assert teryt == "1465"
+
+    def test_get_teryt_for_point_not_found(self):
+        """No URL match -> DownloadError."""
+        provider = Bdot10kProvider()
+        mock_session = Mock()
+        mock_resp = Mock()
+        mock_resp.text = "<html>No data here</html>"
+        mock_resp.raise_for_status = Mock()
+        mock_session.get.return_value = mock_resp
+        provider._session = mock_session
+
+        with pytest.raises(DownloadError, match="Could not determine TERYT"):
+            provider._get_teryt_for_point(500000, 600000)
+
+    def test_get_teryt_for_point_network_error(self):
+        """Network error -> DownloadError."""
+        provider = Bdot10kProvider()
+        mock_session = Mock()
+        mock_session.get.side_effect = requests.RequestException("timeout")
+        provider._session = mock_session
+
+        with pytest.raises(DownloadError, match="WMS GetFeatureInfo failed"):
+            provider._get_teryt_for_point(500000, 600000)
+
+
+class TestBdot10kRetryAndIO:
+    """Test retry, save, extract, merge."""
+
+    def test_download_with_retry_success(self, tmp_path):
+        """Successful download on first attempt."""
+        provider = Bdot10kProvider()
+        output = tmp_path / "out.shp"
+        mock_session = Mock()
+        mock_resp = Mock()
+        mock_resp.iter_content.return_value = [b"shp_data"]
+        mock_resp.raise_for_status = Mock()
+        mock_session.get.return_value = mock_resp
+        provider._session = mock_session
+
+        result = provider._download_with_retry(
+            url="https://example.com/file.shp",
+            output_path=output,
+            timeout=30,
+            description="test",
+        )
+        assert result == output
+        assert output.read_bytes() == b"shp_data"
+
+    @patch("kartograf.providers.bdot10k.time.sleep")
+    def test_download_with_retry_all_fail(self, _sleep, tmp_path):
+        """All retries fail -> DownloadError."""
+        provider = Bdot10kProvider()
+        output = tmp_path / "out.shp"
+        mock_session = Mock()
+        mock_session.get.side_effect = requests.RequestException("fail")
+        provider._session = mock_session
+
+        with pytest.raises(DownloadError, match="after 3 attempts"):
+            provider._download_with_retry(
+                url="https://example.com/file.shp",
+                output_path=output,
+                timeout=30,
+                description="test",
+            )
+
+    def test_save_response(self, tmp_path):
+        """_save_response writes response content to file."""
+        provider = Bdot10kProvider()
+        output = tmp_path / "out.gpkg"
+        mock_resp = Mock()
+        mock_resp.iter_content.return_value = [b"chunk1", b"chunk2"]
+
+        provider._save_response(mock_resp, output)
+        assert output.read_bytes() == b"chunk1chunk2"
+
+    def test_extract_gpkg_from_zip(self, tmp_path):
+        """Extract PT* GPKG files from ZIP and merge."""
+        provider = Bdot10kProvider()
+        output = tmp_path / "merged.gpkg"
+
+        # Create a minimal SQLite GPKG file
+        gpkg_path = tmp_path / "temp_PTLZ.gpkg"
+        conn = sqlite3.connect(str(gpkg_path))
+        c = conn.cursor()
+        c.execute(
+            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+            "identifier TEXT, description TEXT, last_change TEXT, "
+            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+        )
+        c.execute(
+            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+        )
+        c.execute("CREATE TABLE PTLZ (id INTEGER PRIMARY KEY, name TEXT)")
+        c.execute("INSERT INTO PTLZ VALUES (1, 'forest')")
+        conn.commit()
+        conn.close()
+
+        # Create a ZIP with the GPKG
+        zip_buf = BytesIO()
+        with zipfile.ZipFile(zip_buf, "w") as zf, open(gpkg_path, "rb") as f:
+            zf.writestr("data/BDOT10k_PTLZ.gpkg", f.read())
+        zip_buf.seek(0)
+
+        # Create mock response
+        mock_resp = Mock()
+        mock_resp.iter_content.return_value = [zip_buf.getvalue()]
+
+        provider._extract_gpkg_from_zip(mock_resp, output)
+        assert output.with_suffix(".gpkg").exists()
+
+    def test_extract_gpkg_bad_zip(self, tmp_path):
+        """Invalid ZIP -> DownloadError."""
+        provider = Bdot10kProvider()
+        output = tmp_path / "merged.gpkg"
+
+        mock_resp = Mock()
+        mock_resp.iter_content.return_value = [b"not a zip file"]
+
+        with pytest.raises(DownloadError, match="Invalid ZIP"):
+            provider._extract_gpkg_from_zip(mock_resp, output)
+
+    def test_merge_gpkg_files_empty(self):
+        """Empty file list -> DownloadError."""
+        provider = Bdot10kProvider()
+        with pytest.raises(DownloadError, match="No files to merge"):
+            provider._merge_gpkg_files([], Path("/tmp/out.gpkg"))
+
+    def test_merge_gpkg_files(self, tmp_path):
+        """Merge two GPKG files into one."""
+        provider = Bdot10kProvider()
+
+        # Create first GPKG
+        gpkg1 = tmp_path / "one.gpkg"
+        conn1 = sqlite3.connect(str(gpkg1))
+        c1 = conn1.cursor()
+        c1.execute(
+            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+            "identifier TEXT, description TEXT, last_change TEXT, "
+            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+        )
+        c1.execute(
+            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+        )
+        c1.execute("CREATE TABLE PTLZ (id INTEGER PRIMARY KEY, name TEXT)")
+        c1.execute("INSERT INTO PTLZ VALUES (1, 'forest')")
+        conn1.commit()
+        conn1.close()
+
+        # Create second GPKG
+        gpkg2 = tmp_path / "two.gpkg"
+        conn2 = sqlite3.connect(str(gpkg2))
+        c2 = conn2.cursor()
+        c2.execute(
+            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+            "identifier TEXT, description TEXT, last_change TEXT, "
+            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+        )
+        c2.execute(
+            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+        )
+        c2.execute("CREATE TABLE PTWP (id INTEGER PRIMARY KEY, name TEXT)")
+        c2.execute("INSERT INTO PTWP VALUES (1, 'water')")
+        conn2.commit()
+        conn2.close()
+
+        output = tmp_path / "merged.gpkg"
+        provider._merge_gpkg_files([gpkg1, gpkg2], output)
+
+        assert output.exists()
+        conn = sqlite3.connect(str(output))
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name NOT LIKE 'gpkg_%' AND name NOT LIKE 'sqlite_%'"
+        )
+        tables = [r[0] for r in cursor.fetchall()]
+        conn.close()
+
+        assert "PTLZ" in tables
+        assert "PTWP" in tables
+
+
+# ===========================================================================
+# New tests for CorineProvider
+# ===========================================================================
+
+
+class TestCorineProviderInit:
+    """Test CorineProvider initialization."""
+
+    def test_init_with_credentials(self):
+        """Credentials with client_id + private_key -> direct mode."""
+        creds = {
+            "client_id": "test",
+            "private_key": (
+                "-----BEGIN RSA PRIVATE KEY-----\nk\n-----END RSA PRIVATE KEY-----"
+            ),
+            "token_uri": "https://example.com/token",
+        }
+        provider = CorineProvider(clms_credentials=creds)
+        assert provider._clms_auth is not None
+        assert provider._use_proxy is False
+
+    def test_init_empty_credentials(self):
+        """Empty dict -> no auth."""
+        provider = CorineProvider(clms_credentials={})
+        assert provider._clms_auth is None
+
+    def test_init_no_proxy(self):
+        """use_proxy=False without creds."""
+        provider = CorineProvider(use_proxy=False)
+        assert provider._use_proxy is False
+
+
+class TestCorineProviderDownload:
+    """Test CorineProvider download methods."""
+
+    def test_download_by_bbox_wms_fallback(self, tmp_path):
+        """No CLMS token -> WMS fallback."""
+        provider = CorineProvider(use_proxy=False)
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        output = tmp_path / "test.png"
+
+        with patch.object(
+            provider, "_download_via_wms", return_value=output
+        ) as mock_wms:
+            provider.download_by_bbox(bbox, output)
+        mock_wms.assert_called_once()
+
+    def test_download_via_wms_success(self, tmp_path):
+        """WMS download returns PNG file."""
+        provider = CorineProvider(use_proxy=False)
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        output = tmp_path / "test.png"
+
+        with patch.object(
+            provider, "_download_with_retry", return_value=output
+        ) as mock_dl:
+            result = provider._download_via_wms(bbox, output, 2018, 60)
+
+        assert result == output
+        mock_dl.assert_called_once()
+
+    def test_download_via_wms_calculates_dimensions(self, tmp_path):
+        """WMS dimensions are calculated from bbox size."""
+        provider = CorineProvider(use_proxy=False)
+        # 10km x 10km bbox at 100m resolution -> 100 x 100 pixels
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        output = tmp_path / "test.png"
+
+        with patch.object(
+            provider, "_download_with_retry", return_value=output
+        ) as mock_dl:
+            provider._download_via_wms(bbox, output, 2018, 60)
+
+        call_args = mock_dl.call_args
+        url = call_args.kwargs.get("url", call_args[1].get("url", ""))
+        assert "WIDTH=100" in url
+        assert "HEIGHT=100" in url
+
+    def test_download_via_wms_max_size_limit(self, tmp_path):
+        """Huge bbox dimensions capped at 4096."""
+        provider = CorineProvider(use_proxy=False)
+        # 500km x 500km -> 5000px at 100m resolution -> capped to 4096
+        bbox = BBox(200000, 300000, 700000, 800000, "EPSG:2180")
+        output = tmp_path / "test.png"
+
+        with patch.object(
+            provider, "_download_with_retry", return_value=output
+        ) as mock_dl:
+            provider._download_via_wms(bbox, output, 2018, 60)
+
+        call_args = mock_dl.call_args
+        url = call_args.kwargs.get("url", call_args[1].get("url", ""))
+        assert "WIDTH=4096" in url
+        assert "HEIGHT=4096" in url
+
+    @patch("kartograf.core.sheet_parser.SheetParser")
+    def test_download_by_godlo_delegates_to_bbox(self, mock_parser_cls, tmp_path):
+        """download_by_godlo delegates to download_by_bbox."""
+        provider = CorineProvider(use_proxy=False)
+        output = tmp_path / "test.png"
+
+        mock_parser = Mock()
+        mock_parser.get_bbox.return_value = BBox(
+            450000, 550000, 460000, 560000, "EPSG:2180"
+        )
+        mock_parser_cls.return_value = mock_parser
+
+        with patch.object(provider, "download_by_bbox", return_value=output) as mock_dl:
+            result = provider.download_by_godlo("N-34-130-D", output, year=2018)
+
+        assert result == output
+        mock_dl.assert_called_once()
+
+    def test_download_with_retry_success(self, tmp_path):
+        """Successful download on first attempt."""
+        provider = CorineProvider(use_proxy=False)
+        output = tmp_path / "test.png"
+        mock_session = Mock()
+        mock_resp = Mock()
+        mock_resp.headers = {"Content-Type": "image/png"}
+        mock_resp.iter_content.return_value = [b"png_data"]
+        mock_resp.raise_for_status = Mock()
+        mock_session.get.return_value = mock_resp
+        provider._session = mock_session
+
+        result = provider._download_with_retry(
+            url="https://example.com/wms",
+            output_path=output,
+            timeout=30,
+            description="test",
+        )
+        assert result == output
+
+    def test_download_with_retry_wms_error_response(self, tmp_path):
+        """XML content type -> DownloadError."""
+        provider = CorineProvider(use_proxy=False)
+        output = tmp_path / "test.png"
+        mock_session = Mock()
+        mock_resp = Mock()
+        mock_resp.headers = {"Content-Type": "application/xml"}
+        mock_resp.text = "<ServiceException>Error</ServiceException>"
+        mock_resp.raise_for_status = Mock()
+        mock_session.get.return_value = mock_resp
+        provider._session = mock_session
+
+        with pytest.raises(DownloadError, match="WMS returned error"):
+            provider._download_with_retry(
+                url="https://example.com/wms",
+                output_path=output,
+                timeout=30,
+                description="test",
+            )
+
+    @patch("kartograf.providers.corine.time.sleep")
+    def test_download_with_retry_all_fail(self, _sleep, tmp_path):
+        """All retries fail -> DownloadError."""
+        provider = CorineProvider(use_proxy=False)
+        output = tmp_path / "test.png"
+        mock_session = Mock()
+        mock_session.get.side_effect = requests.RequestException("timeout")
+        provider._session = mock_session
+
+        with pytest.raises(DownloadError, match="after 3 attempts"):
+            provider._download_with_retry(
+                url="https://example.com/wms",
+                output_path=output,
+                timeout=30,
+                description="test",
+            )
+
+    def test_save_response_atomic(self, tmp_path):
+        """_save_response writes atomically via temp file."""
+        provider = CorineProvider(use_proxy=False)
+        output = tmp_path / "out.png"
+        mock_resp = Mock()
+        mock_resp.iter_content.return_value = [b"data"]
+
+        provider._save_response(mock_resp, output)
+        assert output.read_bytes() == b"data"
+        # Temp file should not remain
+        assert not output.with_suffix(".png.tmp").exists()
+
+    def test_transform_bbox_to_wgs84(self):
+        """Known EPSG:2180 bbox transforms to WGS84."""
+        provider = CorineProvider(use_proxy=False)
+        bbox = BBox(500000, 600000, 510000, 610000, "EPSG:2180")
+        result = provider._transform_bbox_to_wgs84(bbox)
+        # Should be roughly in Poland (14-25 E, 49-55 N)
+        assert 14 < result[0] < 25  # min_lon
+        assert 49 < result[1] < 56  # min_lat
+        assert 14 < result[2] < 25  # max_lon
+        assert 49 < result[3] < 56  # max_lat
+
+    def test_transform_bbox_to_epsg3857(self):
+        """Known EPSG:2180 bbox transforms to EPSG:3857."""
+        provider = CorineProvider(use_proxy=False)
+        bbox = BBox(500000, 600000, 510000, 610000, "EPSG:2180")
+        result = provider._transform_bbox_to_epsg3857(bbox)
+        # EPSG:3857 values are in millions for European coordinates
+        assert result[0] > 1_000_000
+        assert result[2] > result[0]
+        assert result[3] > result[1]
+
+    def test_get_available_layers(self):
+        """Returns CLC_year strings."""
+        provider = CorineProvider(use_proxy=False)
+        layers = provider.get_available_layers()
+        assert "CLC_2018" in layers
+        assert "CLC_1990" in layers
+
+    def test_get_supported_formats(self):
+        """Returns PNG and GTiff."""
+        provider = CorineProvider(use_proxy=False)
+        formats = provider.get_supported_formats()
+        assert "PNG" in formats
+        assert "GTiff" in formats
+
+
+# ===========================================================================
+# New tests for LandCoverManager
+# ===========================================================================
+
+
+class TestLandCoverManagerDownload:
+    """Test LandCoverManager download methods with mocks."""
+
+    def test_download_by_teryt(self, tmp_path):
+        """download_by_teryt delegates to provider."""
+        mock_provider = Mock()
+        mock_provider.name = "MockProvider"
+        mock_provider.download_by_teryt.return_value = tmp_path / "out.gpkg"
+
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+        result = manager.download_by_teryt("1465", output_path=tmp_path / "out.gpkg")
+
+        assert result == tmp_path / "out.gpkg"
+        mock_provider.download_by_teryt.assert_called_once()
+
+    def test_download_by_teryt_auto_path(self, tmp_path):
+        """download_by_teryt generates path when not provided."""
+        mock_provider = Mock()
+        mock_provider.name = "TestProv"
+        mock_provider.download_by_teryt.return_value = tmp_path / "auto.gpkg"
+
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+        manager.download_by_teryt("1465")
+
+        # Check auto-generated path contains provider name and TERYT
+        call_args = mock_provider.download_by_teryt.call_args
+        auto_path = call_args[0][1]
+        assert "TestProv" in str(auto_path)
+        assert "1465" in str(auto_path)
+
+    def test_download_by_bbox(self, tmp_path):
+        """download_by_bbox delegates to provider."""
+        mock_provider = Mock()
+        mock_provider.name = "MockProvider"
+        mock_provider.download_by_bbox.return_value = tmp_path / "out.gpkg"
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+        result = manager.download_by_bbox(bbox, output_path=tmp_path / "out.gpkg")
+
+        assert result == tmp_path / "out.gpkg"
+        mock_provider.download_by_bbox.assert_called_once()
+
+    def test_download_by_bbox_auto_path(self, tmp_path):
+        """download_by_bbox generates path with bbox coordinates."""
+        mock_provider = Mock()
+        mock_provider.name = "Test"
+        mock_provider.download_by_bbox.return_value = tmp_path / "auto.gpkg"
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+        manager.download_by_bbox(bbox)
+
+        call_args = mock_provider.download_by_bbox.call_args
+        auto_path = call_args[0][1]
+        assert "bbox" in str(auto_path)
+
+    def test_download_by_godlo(self, tmp_path):
+        """download_by_godlo delegates to provider."""
+        mock_provider = Mock()
+        mock_provider.name = "MockProvider"
+        mock_provider.download_by_godlo.return_value = tmp_path / "out.gpkg"
+
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+        result = manager.download_by_godlo(
+            "N-34-130-D", output_path=tmp_path / "out.gpkg"
+        )
+
+        assert result == tmp_path / "out.gpkg"
+        mock_provider.download_by_godlo.assert_called_once()
+
+    def test_download_by_godlo_auto_path(self, tmp_path):
+        """download_by_godlo generates path with godlo."""
+        mock_provider = Mock()
+        mock_provider.name = "Test"
+        mock_provider.download_by_godlo.return_value = tmp_path / "auto.gpkg"
+
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+        manager.download_by_godlo("N-34-130-D")
+
+        call_args = mock_provider.download_by_godlo.call_args
+        auto_path = call_args[0][1]
+        assert "N-34-130-D" in str(auto_path)
+
+    def test_download_dispatches_teryt(self, tmp_path):
+        """download(teryt=...) dispatches to download_by_teryt."""
+        mock_provider = Mock()
+        mock_provider.name = "MockProvider"
+        mock_provider.download_by_teryt.return_value = tmp_path / "out.gpkg"
+
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+        manager.download(teryt="1465")
+
+        mock_provider.download_by_teryt.assert_called_once()
+
+    def test_download_dispatches_godlo(self, tmp_path):
+        """download(godlo=...) dispatches to download_by_godlo."""
+        mock_provider = Mock()
+        mock_provider.name = "MockProvider"
+        mock_provider.download_by_godlo.return_value = tmp_path / "out.gpkg"
+
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+        manager.download(godlo="N-34-130-D")
+
+        mock_provider.download_by_godlo.assert_called_once()
+
+    def test_download_dispatches_bbox(self, tmp_path):
+        """download(bbox=...) dispatches to download_by_bbox."""
+        mock_provider = Mock()
+        mock_provider.name = "MockProvider"
+        mock_provider.download_by_bbox.return_value = tmp_path / "out.gpkg"
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+        manager.download(bbox=bbox)
+
+        mock_provider.download_by_bbox.assert_called_once()
+
+    def test_get_available_layers(self, tmp_path):
+        """get_available_layers delegates to provider."""
+        mock_provider = Mock()
+        mock_provider.name = "MockProvider"
+        mock_provider.get_available_layers.return_value = ["layer1", "layer2"]
+
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+        layers = manager.get_available_layers()
+
+        assert layers == ["layer1", "layer2"]
+
+    def test_get_supported_formats(self, tmp_path):
+        """get_supported_formats delegates to provider."""
+        mock_provider = Mock()
+        mock_provider.name = "MockProvider"
+        mock_provider.get_supported_formats.return_value = ["GPKG"]
+
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+        formats = manager.get_supported_formats()
+
+        assert formats == ["GPKG"]
+
+    def test_generate_output_path(self, tmp_path):
+        """_generate_output_path creates correct paths."""
+        mock_provider = Mock()
+        mock_provider.name = "Test Provider"
+
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+
+        # By TERYT
+        path = manager._generate_output_path("1465", None, None)
+        assert "teryt_1465" in str(path)
+
+        # By bbox
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        path = manager._generate_output_path(None, bbox, None)
+        assert "bbox" in str(path)
+
+        # By godlo
+        path = manager._generate_output_path(None, None, "N-34-130-D")
+        assert "godlo_N-34-130-D" in str(path)
