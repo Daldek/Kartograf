@@ -323,7 +323,7 @@ class TestFileStorageDirectoryStructure:
         storage.write_atomic("N-34-130-D-d-2-4", b"data")
 
         # Verify directory structure (includes resolution subfolder)
-        expected_parts = ["1m", "N-34", "130", "D", "d", "2", "4"]
+        expected_parts = ["nmt_1m", "N-34", "130", "D", "d", "2", "4"]
         current_dir = tmp_path
 
         for part in expected_parts:
@@ -346,8 +346,8 @@ class TestFileStorageDirectoryStructure:
         storage.write_atomic("N-34-130-D-d-2-4", b"data4")
 
         # Each file goes in its own final directory, but they share parent dirs
-        # Check the common parent directory (1:25k level = 1m/N-34/130/D/d/2)
-        common_parent = tmp_path / "1m" / "N-34" / "130" / "D" / "d" / "2"
+        # Check the common parent directory (1:25k level = nmt_1m/N-34/130/D/d/2)
+        common_parent = tmp_path / "nmt_1m" / "N-34" / "130" / "D" / "d" / "2"
         assert common_parent.exists()
 
         # Should have 4 subdirectories (1, 2, 3, 4)
@@ -358,3 +358,77 @@ class TestFileStorageDirectoryStructure:
         for subdir in subdirs:
             files = list(subdir.glob("*.asc"))
             assert len(files) == 1
+
+
+class TestFileStorageProduct:
+    """Tests for product-based storage (nmpt, orto)."""
+
+    def test_product_nmpt_subdir(self, tmp_path):
+        """Test that product='nmpt' uses nmpt as subdirectory."""
+        storage = FileStorage(tmp_path, product="nmpt")
+        path = storage.get_path("N-34-130-D-d-2-4", ".asc")
+
+        parts = str(path).split("/")
+        assert "nmpt" in parts
+        assert "nmt_1m" not in parts
+
+    def test_product_orto_subdir(self, tmp_path):
+        """Test that product='orto' uses orto as subdirectory."""
+        storage = FileStorage(tmp_path, product="orto")
+        path = storage.get_path("N-34-130-D-d-2-4", ".tif")
+
+        parts = str(path).split("/")
+        assert "orto" in parts
+        assert path.name == "N-34-130-D-d-2-4.tif"
+
+    def test_product_none_backward_compatible(self, tmp_path):
+        """Test that product=None preserves resolution-based behavior."""
+        storage = FileStorage(tmp_path, resolution="1m")
+        path = storage.get_path("N-34-130-D", ".asc")
+
+        parts = str(path).split("/")
+        assert "nmt_1m" in parts
+
+    def test_product_subdir_structure(self, tmp_path):
+        """Test full directory structure with product."""
+        storage = FileStorage(tmp_path, product="orto")
+        storage.write_atomic("N-34-130-D-d-2-4", b"TIF data", ".tif")
+
+        # Verify directory structure
+        expected_parts = ["orto", "N-34", "130", "D", "d", "2", "4"]
+        current_dir = tmp_path
+
+        for part in expected_parts:
+            current_dir = current_dir / part
+            assert current_dir.exists(), f"Directory {current_dir} should exist"
+
+        # Verify file exists
+        file_path = current_dir / "N-34-130-D-d-2-4.tif"
+        assert file_path.exists()
+
+    def test_product_skips_resolution_validation(self, tmp_path):
+        """Test that product mode skips resolution validation."""
+        # Should not raise ValueError even though resolution default is "1m"
+        storage = FileStorage(tmp_path, product="custom_product")
+        assert storage._product == "custom_product"
+
+    def test_product_repr(self, tmp_path):
+        """Test repr includes product."""
+        storage = FileStorage(tmp_path, product="nmpt")
+        repr_str = repr(storage)
+
+        assert "product='nmpt'" in repr_str
+
+    def test_resolution_subdir_nmt_1m(self, tmp_path):
+        """Test that resolution='1m' maps to 'nmt_1m' subdirectory."""
+        storage = FileStorage(tmp_path, resolution="1m")
+        path = storage.get_path("N-34-130-D", ".asc")
+
+        assert "/nmt_1m/" in str(path)
+
+    def test_resolution_subdir_nmt_5m(self, tmp_path):
+        """Test that resolution='5m' maps to 'nmt_5m' subdirectory."""
+        storage = FileStorage(tmp_path, resolution="5m")
+        path = storage.get_path("N-34-130-D", ".asc")
+
+        assert "/nmt_5m/" in str(path)

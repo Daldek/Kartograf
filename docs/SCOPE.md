@@ -1,9 +1,9 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 2.0
-**Data:** 2026-01-21
-**Status:** Production (v0.3.1)
+**Wersja:** 3.0
+**Data:** 2026-02-07
+**Status:** Production (v0.4.0)
 
 ---
 
@@ -36,7 +36,7 @@ Kartograf automatyzuje ten proces oferując:
 
 ---
 
-## 2. Zakres - Wersja 0.3.x
+## 2. Zakres - Wersja 0.4.x
 
 ### 2.1 NMT (Numeryczny Model Terenu) - IN SCOPE
 
@@ -46,8 +46,9 @@ Kartograf automatyzuje ten proces oferując:
 - Obsługa skal: 1:1 000 000 do 1:10 000
 - Hierarchia arkuszy (get_parent, get_children, get_all_descendants)
 - Bounding box arkusza (EPSG:2180, EPSG:4326)
+- Reverse lookup: bbox → godła (find_sheets_for_bbox)
 - Pobieranie przez godło → ASC (OpenData)
-- Pobieranie przez bbox → GeoTIFF (WCS)
+- Pobieranie przez bbox → GeoTIFF (WCS) lub automatyczne wykrywanie arkuszy
 - Rozdzielczości: 1m (GRID1), 5m (GRID5)
 - Układy wysokościowe: KRON86, EVRF2007
 
@@ -55,7 +56,37 @@ Kartograf automatyzuje ten proces oferując:
 # API: WCS, WMS GetFeatureInfo, OpenData
 ```
 
-### 2.2 Land Cover (Pokrycie Terenu) - IN SCOPE
+### 2.2 NMPT (Numeryczny Model Pokrycia Terenu) - IN SCOPE
+
+```python
+# Funkcjonalności:
+- Digital Surface Model (DSM) — teren + obiekty (drzewa, budynki)
+- Pobieranie przez godło → ASC (OpenData)
+- Pobieranie przez bbox → GeoTIFF (WCS)
+- Rozdzielczość: tylko 1m
+- Układy wysokościowe: KRON86, EVRF2007
+- Dziedziczenie z GugikProvider (wspólna logika pobierania)
+
+# Źródło: GUGiK
+# API: WCS, WMS GetFeatureInfo, OpenData
+```
+
+### 2.3 Ortofotomapa - IN SCOPE
+
+```python
+# Funkcjonalności:
+- Zdjęcia lotnicze Standard Resolution (25cm)
+- Pobieranie przez godło → TIF (OpenData)
+- Pobieranie przez bbox → GeoTIFF (WCS)
+- Brak vertical CRS (2D RGB)
+- 9 warstw WMS (2018-2025+starsze)
+- Obsługa formatów WCS: GTiff, PNG, JPEG
+
+# Źródło: GUGiK
+# API: WCS, WMS GetFeatureInfo, OpenData
+```
+
+### 2.4 Land Cover (Pokrycie Terenu) - IN SCOPE
 
 ```python
 # BDOT10k (GUGiK):
@@ -74,7 +105,7 @@ Kartograf automatyzuje ten proces oferując:
 - Auth Proxy dla izolacji credentials
 ```
 
-### 2.3 SoilGrids (Dane Glebowe) - IN SCOPE
+### 2.5 SoilGrids (Dane Glebowe) - IN SCOPE
 
 ```python
 # ISRIC SoilGrids:
@@ -89,7 +120,7 @@ Kartograf automatyzuje ten proces oferując:
 # API: WCS
 ```
 
-### 2.4 HSG (Hydrologic Soil Groups) - IN SCOPE
+### 2.6 HSG (Hydrologic Soil Groups) - IN SCOPE
 
 ```python
 # Kalkulacja HSG dla metody SCS-CN:
@@ -102,12 +133,16 @@ Kartograf automatyzuje ten proces oferując:
 # Moduł: kartograf.hydrology.hsg
 ```
 
-### 2.5 CLI Interface - IN SCOPE
+### 2.7 CLI Interface - IN SCOPE
 
 ```bash
 # Komendy:
 kartograf parse <godlo>                    # info o godle
 kartograf download <godlo>                 # pobierz NMT
+kartograf download <godlo> --product nmpt  # pobierz NMPT
+kartograf download <godlo> --product orto  # pobierz ortofoto
+kartograf download --bbox min_x,min_y,max_x,max_y  # NMT dla bbox
+kartograf download --bbox ... --product orto  # ortofoto dla bbox
 kartograf download <godlo> --resolution 5m # NMT 5m
 kartograf landcover download --source bdot10k --teryt <kod>
 kartograf landcover download --source corine --godlo <godlo>
@@ -117,20 +152,20 @@ kartograf landcover list-layers --source <source>
 kartograf soilgrids hsg --godlo <godlo>    # oblicz HSG
 ```
 
-### 2.6 Python API - IN SCOPE
+### 2.8 Python API - IN SCOPE
 
 ```python
 # Public API (kartograf/__init__.py):
 from kartograf import (
     # Core
-    SheetParser, BBox,
-    # Download (NMT)
+    SheetParser, BBox, find_sheets_for_bbox,
+    # Download (NMT/NMPT/Orto)
     DownloadManager, DownloadProgress, FileStorage,
     # Land Cover
     LandCoverManager,
     # Providers
-    BaseProvider, GugikProvider, LandCoverProvider,
-    Bdot10kProvider, CorineProvider, SoilGridsProvider,
+    BaseProvider, GugikProvider, GugikNmptProvider, GugikOrtoProvider,
+    LandCoverProvider, Bdot10kProvider, CorineProvider, SoilGridsProvider,
     # Hydrology
     HSGCalculator,
     # Exceptions
@@ -140,19 +175,19 @@ from kartograf import (
 
 ---
 
-## 3. Out of Scope - Wersja 0.3.x
+## 3. Out of Scope - Wersja 0.4.x
 
 ### 3.1 Funkcjonalności Zaplanowane - FUTURE
 
 ```python
-# Wersja 0.4+:
+# Wersja 0.5+:
 - Pobieranie równoległe (multi-threading)
 - Cache dla metadanych
 - Automatyczne mozaikowanie (merge arkuszy)
 
 # Wersja 1.0+:
 - GUI interface
-- Pobieranie innych danych (ortofotomapy, LIDAR)
+- Pobieranie danych LIDAR
 - Integracja z PostGIS
 - REST API server
 ```
@@ -181,11 +216,13 @@ kartograf/
 ├── providers/             # Providery danych
 │   ├── base.py            # BaseProvider (NMT)
 │   ├── gugik.py           # GugikProvider (NMT)
+│   ├── gugik_nmpt.py      # GugikNmptProvider (NMPT/DSM)
+│   ├── gugik_orto.py      # GugikOrtoProvider (Ortofotomapa)
 │   ├── landcover_base.py  # LandCoverProvider (abstrakcja)
 │   ├── bdot10k.py         # Bdot10kProvider
 │   ├── corine.py          # CorineProvider
 │   └── soilgrids.py       # SoilGridsProvider
-├── download/              # Download management (NMT)
+├── download/              # Download management (NMT/NMPT/Orto)
 │   ├── manager.py
 │   └── storage.py
 ├── landcover/             # Land Cover management
@@ -216,7 +253,7 @@ numpy >= 1.24.0        # Array operations (HSG)
 
 | Źródło | Typ danych | API | Autentykacja |
 |--------|-----------|-----|--------------|
-| GUGiK | NMT, BDOT10k | WCS, WMS, OpenData | Brak |
+| GUGiK | NMT, NMPT, Ortofoto, BDOT10k | WCS, WMS, OpenData | Brak |
 | Copernicus CLMS | CORINE | REST API | OAuth2 RSA |
 | EEA Discomap | CORINE (podgląd) | WMS | Brak |
 | ISRIC SoilGrids | Gleba | WCS | Brak |
@@ -240,9 +277,9 @@ numpy >= 1.24.0        # Array operations (HSG)
 ### 6.2 Jakościowe
 
 ```
-- 365 testów przechodzi
-- Pokrycie testami >= 57% (cel: 80%)
-- Kod zgodny z black + flake8
+- 574 testów przechodzi
+- Pokrycie testami ~84% (cel 80% osiągnięty)
+- Kod zgodny z ruff
 - Type hints wszędzie
 - Dokumentacja aktualna
 ```
@@ -256,9 +293,10 @@ numpy >= 1.24.0        # Array operations (HSG)
 | 2026-01-15 | 1.0 | Initial MVP (NMT only) |
 | 2026-01-18 | 1.1 | Added Land Cover, SoilGrids, HSG |
 | 2026-01-21 | 2.0 | Updated to reflect v0.3.1 features |
+| 2026-02-07 | 3.0 | Added NMPT, Ortofotomapa, updated storage structure |
 
 ---
 
-**Wersja dokumentu:** 2.0
-**Data ostatniej aktualizacji:** 2026-01-21
-**Status:** Production - v0.3.1
+**Wersja dokumentu:** 3.0
+**Data ostatniej aktualizacji:** 2026-02-07
+**Status:** Production - v0.4.0

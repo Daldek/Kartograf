@@ -207,10 +207,11 @@ Główna aplikacja nigdy nie widzi kluczy prywatnych.
 
 - [SCOPE.md](docs/SCOPE.md) - Zakres projektu (co JEST i czego NIE MA)
 - [PRD.md](docs/PRD.md) - Product Requirements Document
-- [IMPLEMENTATION_PROMPT.md](docs/IMPLEMENTATION_PROMPT.md) - Instrukcje dla AI assistants
-- [DEVELOPMENT_STANDARDS.md](docs/DEVELOPMENT_STANDARDS.md) - Standardy kodowania
-- [PROGRESS.md](docs/PROGRESS.md) - Plan i status implementacji
+- [PROGRESS.md](docs/PROGRESS.md) - Status implementacji i checkpointy
 - [CHANGELOG.md](docs/CHANGELOG.md) - Historia zmian
+- [DECISIONS.md](docs/DECISIONS.md) - Rejestr decyzji architektonicznych (ADR)
+- [DEVELOPMENT_STANDARDS.md](docs/DEVELOPMENT_STANDARDS.md) - Standardy kodowania
+- [IMPLEMENTATION_PROMPT.md](docs/IMPLEMENTATION_PROMPT.md) - Kontekst dla asystentow AI
 
 ## Wymagania
 
@@ -260,10 +261,10 @@ pytest tests/
 pytest tests/ --cov=kartograf --cov-report=html
 
 # Formatowanie
-black kartograf/ tests/
+ruff format kartograf/ tests/
 
 # Linting
-flake8 kartograf/ tests/ --max-line-length=88
+ruff check kartograf/ tests/
 ```
 
 ## Licencja
@@ -276,4 +277,4 @@ Projekt udostępniony na licencji MIT. Szczegóły w pliku `LICENSE`.
 
 ## Status
 
-**Wersja 0.3.1** - Dodano wybór rozdzielczości NMT (1m/5m), Land Cover (BDOT10k, CORINE), SoilGrids (dane glebowe) oraz HSG (grupy hydrologiczne dla SCS-CN). Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów.
+**Wersja 0.3.2** - Nowa struktura katalogów NMT (1m/5m), domyślny układ EVRF2007, Land Cover (BDOT10k, CORINE), SoilGrids (dane glebowe) oraz HSG (grupy hydrologiczne dla SCS-CN). Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów.

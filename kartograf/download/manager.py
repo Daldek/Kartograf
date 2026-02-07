@@ -6,9 +6,9 @@ single sheets and entire hierarchies of map sheets.
 """
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Optional
 
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.storage import FileStorage
@@ -105,8 +105,8 @@ class DownloadManager:
     def __init__(
         self,
         output_dir: str | Path = "./data",
-        provider: Optional[BaseProvider] = None,
-        storage: Optional[FileStorage] = None,
+        provider: BaseProvider | None = None,
+        storage: FileStorage | None = None,
         vertical_crs: str = "EVRF2007",
         resolution: str = "1m",
     ):
@@ -143,6 +143,7 @@ class DownloadManager:
         self._storage = storage or FileStorage(output_dir, resolution=resolution)
         self._vertical_crs = vertical_crs
         self._resolution = resolution
+        self._default_ext = self._provider.default_extension
 
     @property
     def vertical_crs(self) -> str:
@@ -172,9 +173,14 @@ class DownloadManager:
         self,
         godlo: str,
         skip_existing: bool = True,
-    ) -> Path:
+        on_progress: ProgressCallback | None = None,
+    ) -> Path | list[Path]:
         """
-        Download a single map sheet as ASC.
+        Download a map sheet as ASC.
+
+        For sheets at scale 1:10000, downloads a single file.
+        For coarser scales (e.g. 1:25000, 1:50000), automatically expands
+        to all descendant 1:10000 sheets via download_hierarchy().
 
         Parameters
         ----------
@@ -182,11 +188,14 @@ class DownloadManager:
             Map sheet identifier (e.g., "N-34-130-D-d-2-4")
         skip_existing : bool, optional
             Skip download if file exists (default: True)
+        on_progress : callable, optional
+            Callback function for progress updates (used when expanding hierarchy).
 
         Returns
         -------
-        Path
-            Path to the downloaded ASC file
+        Path or list[Path]
+            Path to the downloaded ASC file (for 1:10000),
+            or list of paths (for coarser scales expanded to 1:10000)
 
         Raises
         ------
@@ -195,8 +204,15 @@ class DownloadManager:
         ParseError
             If godlo is invalid
         """
-        # Get target path (always .asc for godło downloads)
-        target_path = self._storage.get_path(godlo, ".asc")
+        parser = SheetParser(godlo)
+
+        if parser.scale != "1:10000":
+            return self.download_hierarchy(
+                godlo, "1:10000", skip_existing=skip_existing, on_progress=on_progress
+            )
+
+        # Get target path
+        target_path = self._storage.get_path(godlo, self._default_ext)
 
         # Check if already exists
         if skip_existing and target_path.exists():
@@ -214,7 +230,7 @@ class DownloadManager:
         godlo: str,
         target_scale: str,
         skip_existing: bool = True,
-        on_progress: Optional[ProgressCallback] = None,
+        on_progress: ProgressCallback | None = None,
     ) -> list[Path]:
         """
         Download all descendant sheets to target scale as ASC.
@@ -267,7 +283,7 @@ class DownloadManager:
             current_godlo = descendant.godlo
 
             try:
-                target_path = self._storage.get_path(current_godlo, ".asc")
+                target_path = self._storage.get_path(current_godlo, self._default_ext)
 
                 if skip_existing and target_path.exists():
                     # Skipped
@@ -412,7 +428,7 @@ class DownloadManager:
 
         missing = []
         for descendant in descendants:
-            if not self._storage.exists(descendant.godlo, ".asc"):
+            if not self._storage.exists(descendant.godlo, self._default_ext):
                 missing.append(descendant.godlo)
 
         return missing

@@ -7,7 +7,6 @@ downloads of land cover data from multiple providers.
 
 import logging
 from pathlib import Path
-from typing import Optional, Union
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.storage import FileStorage
@@ -65,8 +64,8 @@ class LandCoverManager:
 
     def __init__(
         self,
-        output_dir: Union[str, Path] = "./data/landcover",
-        provider: Optional[Union[LandCoverProvider, str]] = None,
+        output_dir: str | Path = "./data/landcover",
+        provider: LandCoverProvider | str | None = None,
     ):
         """
         Initialize LandCoverManager.
@@ -127,7 +126,7 @@ class LandCoverManager:
         """Return current provider name."""
         return self._provider.name
 
-    def set_provider(self, provider: Union[LandCoverProvider, str]) -> None:
+    def set_provider(self, provider: LandCoverProvider | str) -> None:
         """
         Set the active provider.
 
@@ -144,10 +143,10 @@ class LandCoverManager:
 
     def download(
         self,
-        teryt: Optional[str] = None,
-        bbox: Optional[BBox] = None,
-        godlo: Optional[str] = None,
-        output_path: Optional[Path] = None,
+        teryt: str | None = None,
+        bbox: BBox | None = None,
+        godlo: str | None = None,
+        output_path: Path | None = None,
         **kwargs,
     ) -> Path:
         """
@@ -202,7 +201,7 @@ class LandCoverManager:
     def download_by_teryt(
         self,
         teryt: str,
-        output_path: Optional[Path] = None,
+        output_path: Path | None = None,
         **kwargs,
     ) -> Path:
         """
@@ -229,7 +228,7 @@ class LandCoverManager:
     def download_by_bbox(
         self,
         bbox: BBox,
-        output_path: Optional[Path] = None,
+        output_path: Path | None = None,
         **kwargs,
     ) -> Path:
         """
@@ -261,7 +260,7 @@ class LandCoverManager:
     def download_by_godlo(
         self,
         godlo: str,
-        output_path: Optional[Path] = None,
+        output_path: Path | None = None,
         **kwargs,
     ) -> Path:
         """
@@ -287,9 +286,9 @@ class LandCoverManager:
 
     def _generate_output_path(
         self,
-        teryt: Optional[str],
-        bbox: Optional[BBox],
-        godlo: Optional[str],
+        teryt: str | None,
+        bbox: BBox | None,
+        godlo: str | None,
     ) -> Path:
         """Generate output path based on selection method."""
         provider_prefix = self._provider.name.lower().replace(" ", "_")

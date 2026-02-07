@@ -1,9 +1,86 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+Wszystkie istotne zmiany w projekcie sa dokumentowane w tym pliku.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
+projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- **NMPT (Numeryczny Model Pokrycia Terenu / Digital Surface Model)**
+  - `GugikNmptProvider` — dziedziczy z GugikProvider, nadpisuje endpointy NMPT
+  - Tylko rozdzielczość 1m, vertical CRS: KRON86 lub EVRF2007
+  - Download: godło → OpenData ASC, bbox → WCS GeoTIFF
+- **Ortofotomapa (Standard Resolution, 25cm)**
+  - `GugikOrtoProvider` — osobna klasa, format TIF
+  - Brak vertical CRS (2D RGB), 9 warstw WMS (2018-2025+starsze)
+  - Download: godło → OpenData TIF, bbox → WCS GeoTIFF
+- **CLI `--product {nmt,nmpt,orto}` — wybór produktu w komendzie download**
+  - `kartograf download N-34-130-D-d-2-4 --product nmpt` — pobiera NMPT
+  - `kartograf download --bbox ... --product orto` — pobiera ortofoto
+  - Domyślnie: nmt (bez zmian)
+- **`find_sheets_for_bbox()` — reverse lookup: bbox → godła arkuszy**
+  - Algorytm hierarchicznego przycinania (matematyczny, bez WFS)
+  - Obsługa EPSG:2180 i EPSG:4326
+  - Dowolna skala docelowa (1:1M do 1:10k)
+  - Zoptymalizowane wyszukiwanie 1:200k (siatka 12x12)
+- **CLI `kartograf download --bbox` — pobieranie NMT dla bbox**
+  - `--bbox min_x,min_y,max_x,max_y` — współrzędne bbox
+  - `--bbox-crs {EPSG:2180,EPSG:4326}` — CRS bbox (domyślnie EPSG:2180)
+  - `godlo` staje się opcjonalny (godlo XOR --bbox)
+  - Automatyczne wykrywanie arkuszy i pobieranie w pętli
+- **Automatyczne rozwijanie godeł do 1:10000 w `download_sheet()`**
+  - `download_sheet("N-34-130-D-d-2")` (1:25000) → automatycznie pobiera 4 arkusze 1:10000
+  - `download_sheet("N-34-130-D-d")` (1:50000) → pobiera 16 arkuszy 1:10000
+  - Dla godeł 1:10000 zachowanie bez zmian (pojedynczy plik)
+  - Nowy parametr `on_progress` — callback postępu przy rozwijaniu hierarchii
+  - Zwracany typ: `Path` (1:10000) lub `list[Path]` (coarser scales)
+  - CLI dostosowane — wyświetla liczbę pobranych plików przy rozwijaniu
+
+### Tests
+- **574 testow, pokrycie 83.95% (cel 80% osiagniety)**
+  - Nowy `tests/test_gugik_nmpt.py` — 21 testow dla GugikNmptProvider
+  - Nowy `tests/test_gugik_orto.py` — 25 testow dla GugikOrtoProvider
+  - Nowy `tests/test_auth_client.py` — 30 testow dla AuthProxyClient
+  - Nowy `tests/test_auth_proxy.py` — 24 testy dla CLMSCredentials, ProxyHandler
+  - Rozszerzony `tests/test_cli.py` — +12 testow (product CLI), +11 testow (landcover/soilgrids CLI)
+  - Rozszerzony `tests/test_storage.py` — +8 testow (product storage)
+  - Rozszerzony `tests/test_download_manager.py` — +3 testy (default_ext)
+  - Rozszerzony `tests/test_landcover.py` — +38 testow
+  - Rozszerzony `tests/test_hsg.py` — +6 testow
+
+### Fixed
+- Poprawiony komunikat błędu przy braku pokrycia NMT 5m — zamiast technicznego "No ASC file found in any WMS layer" wyświetla czytelną informację o braku pokrycia danego obszaru w GUGiK
+
+### Changed
+- **FileStorage: podkatalogi `1m`/`5m` → `nmt_1m`/`nmt_5m`**
+  - Nowy parametr `product` w FileStorage (np. product="nmpt", product="orto")
+  - Struktura: `data/nmt_1m/...`, `data/nmt_5m/...`, `data/nmpt/...`, `data/orto/...`
+- **DownloadManager: dynamiczne rozszerzenie pliku**
+  - `_default_ext` pobierane z `provider.default_extension` zamiast hardcoded `.asc`
+- **BaseProvider: nowa property `default_extension`** (domyślnie `.asc`)
+- Migracja z black + flake8 na ruff (pyproject.toml)
+- Usuniecie .flake8, dodanie .editorconfig
+- Standaryzacja dokumentacji wg shared/standards
+- Przepisanie CLAUDE.md (7 sekcji, ~148 linii)
+- Przepisanie PROGRESS.md (4 sekcje, skondensowane z 785 linii)
+- Rozbudowanie DEVELOPMENT_STANDARDS.md (722 linii, 15 sekcji wg shared/standards)
+- Rozbudowanie IMPLEMENTATION_PROMPT.md (284 linii, 11 sekcji, aktualny kontekst v0.3.2)
+- Aktualizacja README.md, PRD.md, SCOPE.md
+- Auto-naprawa kodu przez `ruff check --fix` (63 poprawki: importy, type annotations)
+
+### Added
+- Konfiguracja ruff (linter + formatter) w pyproject.toml
+- Plik .editorconfig
+- Sekcja [project.optional-dependencies] dev w pyproject.toml
+- docs/DECISIONS.md — rejestr 9 decyzji architektonicznych (ADR)
+
+### Removed
+- Plik .flake8 (konfiguracja pokryta przez ruff)
+- Sekcja [tool.black] z pyproject.toml
+
+---
 
 ## [0.3.2] - 2026-01-21
 
@@ -362,6 +439,7 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
+[Unreleased]: https://github.com/Daldek/Kartograf/compare/v0.3.2...HEAD
 [0.3.2]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.2
 [0.3.1]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.0

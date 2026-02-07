@@ -26,8 +26,7 @@ import re
 import subprocess
 import sys
 import time
-from http.server import HTTPServer, BaseHTTPRequestHandler
-from typing import Optional
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 
 # Configure logging to stderr (stdout reserved for port number)
@@ -46,8 +45,8 @@ class CLMSCredentials:
     """Manages CLMS OAuth2 credentials from Keychain."""
 
     def __init__(self):
-        self._credentials: Optional[dict] = None
-        self._access_token: Optional[str] = None
+        self._credentials: dict | None = None
+        self._access_token: str | None = None
         self._token_expires: float = 0
 
     def load_from_keychain(self) -> bool:
@@ -89,11 +88,10 @@ class CLMSCredentials:
             logger.error(f"Failed to load credentials: {e}")
             return False
 
-    def get_access_token(self) -> Optional[str]:
+    def get_access_token(self) -> str | None:
         """Get valid access token, refreshing if needed."""
-        if not self._credentials:
-            if not self.load_from_keychain():
-                return None
+        if not self._credentials and not self.load_from_keychain():
+            return None
 
         # Return cached token if still valid
         if self._access_token and time.time() < self._token_expires - 60:
