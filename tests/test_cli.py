@@ -736,3 +736,263 @@ class TestCmdDownloadBBox:
         )
         assert args.godlo is None
         assert args.bbox == "419000,230000,426000,237000"
+
+
+# ===========================================================================
+# Landcover CLI tests
+# ===========================================================================
+
+
+class TestCmdLandcoverDownload:
+    """Tests for landcover download CLI."""
+
+    @patch("kartograf.cli.commands.LandCoverManager")
+    def test_landcover_download_by_teryt(self, mock_mgr_cls, capsys, tmp_path):
+        """landcover download --teryt calls manager.download with teryt."""
+        mock_mgr = Mock()
+        mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.download.return_value = tmp_path / "out.gpkg"
+        mock_mgr_cls.return_value = mock_mgr
+
+        result = main(["landcover", "download", "--teryt", "1465", "-o", str(tmp_path)])
+        assert result == 0
+        mock_mgr.download.assert_called_once()
+        call_kwargs = mock_mgr.download.call_args
+        assert call_kwargs.kwargs.get("teryt") == "1465"
+
+    @patch("kartograf.cli.commands.LandCoverManager")
+    def test_landcover_download_by_godlo(self, mock_mgr_cls, capsys, tmp_path):
+        """landcover download --godlo calls manager.download with godlo."""
+        mock_mgr = Mock()
+        mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.download.return_value = tmp_path / "out.gpkg"
+        mock_mgr_cls.return_value = mock_mgr
+
+        result = main(
+            ["landcover", "download", "--godlo", "N-34-130-D", "-o", str(tmp_path)]
+        )
+        assert result == 0
+        mock_mgr.download.assert_called_once()
+        call_kwargs = mock_mgr.download.call_args
+        assert call_kwargs.kwargs.get("godlo") == "N-34-130-D"
+
+    @patch("kartograf.cli.commands.LandCoverManager")
+    def test_landcover_download_by_bbox_success(self, mock_mgr_cls, capsys, tmp_path):
+        """landcover download --bbox calls manager.download with bbox."""
+        mock_mgr = Mock()
+        mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.download.return_value = tmp_path / "out.gpkg"
+        mock_mgr_cls.return_value = mock_mgr
+
+        result = main(
+            [
+                "landcover",
+                "download",
+                "--bbox",
+                "450000,550000,460000,560000",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 0
+        mock_mgr.download.assert_called_once()
+        captured = capsys.readouterr()
+        assert "Downloaded to" in captured.out
+
+    @patch("kartograf.cli.commands.LandCoverManager")
+    def test_landcover_download_source_corine(self, mock_mgr_cls, capsys, tmp_path):
+        """--source corine creates manager with corine provider."""
+        mock_mgr = Mock()
+        mock_mgr.provider_name = "CORINE Land Cover"
+        mock_mgr.download.return_value = tmp_path / "out.png"
+        mock_mgr_cls.return_value = mock_mgr
+
+        result = main(
+            [
+                "landcover",
+                "download",
+                "--source",
+                "corine",
+                "--godlo",
+                "N-34-130-D",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 0
+        # Manager was created with provider="corine"
+        mock_mgr_cls.assert_called_once()
+        call_kwargs = mock_mgr_cls.call_args
+        assert call_kwargs.kwargs.get("provider") == "corine"
+
+    @patch("kartograf.cli.commands.LandCoverManager")
+    def test_landcover_download_error(self, mock_mgr_cls, capsys, tmp_path):
+        """DownloadError in download -> exit 1."""
+        mock_mgr = Mock()
+        mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.download.side_effect = DownloadError("Network error")
+        mock_mgr_cls.return_value = mock_mgr
+
+        result = main(["landcover", "download", "--teryt", "1465", "-o", str(tmp_path)])
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Error" in captured.err
+
+    def test_landcover_download_multiple_selection(self, capsys):
+        """Multiple selection methods -> exit 1."""
+        result = main(
+            ["landcover", "download", "--teryt", "1465", "--godlo", "N-34-130-D"]
+        )
+        assert result == 1
+        captured = capsys.readouterr()
+        err = captured.err
+        assert "only one of" in err.lower() or "Provide only one" in err
+
+    def test_landcover_list_layers_soilgrids(self, capsys):
+        """list-layers --source soilgrids shows soil properties."""
+        result = main(["landcover", "list-layers", "--source", "soilgrids"])
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "clay" in captured.out
+        assert "sand" in captured.out
+        assert "silt" in captured.out
+
+
+# ===========================================================================
+# Soilgrids CLI tests
+# ===========================================================================
+
+
+class TestCmdSoilgrids:
+    """Tests for soilgrids CLI commands."""
+
+    def test_soilgrids_help(self, capsys):
+        """soilgrids with no subcommand shows help."""
+        result = main(["soilgrids"])
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "hsg" in captured.out
+
+    @patch("kartograf.hydrology.HSGCalculator")
+    def test_soilgrids_hsg_success(self, mock_calc_cls, capsys, tmp_path):
+        """soilgrids hsg --godlo -> success output."""
+        mock_calc = Mock()
+        mock_calc.calculate_hsg_by_godlo.return_value = tmp_path / "hsg.tif"
+        mock_calc_cls.return_value = mock_calc
+
+        result = main(
+            [
+                "soilgrids",
+                "hsg",
+                "--godlo",
+                "N-34-130-D",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "HSG raster saved to" in captured.out
+        mock_calc.calculate_hsg_by_godlo.assert_called_once()
+
+    @patch("kartograf.hydrology.HSGCalculator")
+    def test_soilgrids_hsg_with_stats(self, mock_calc_cls, capsys, tmp_path):
+        """soilgrids hsg --stats prints statistics."""
+        mock_calc = Mock()
+        mock_calc.calculate_hsg_by_godlo.return_value = tmp_path / "hsg.tif"
+        mock_calc.get_hsg_statistics.return_value = {
+            "A": {
+                "count": 100,
+                "area_m2": 10000,
+                "area_ha": 1.0,
+                "percent": 50.0,
+                "description": "High infiltration",
+            },
+            "B": {
+                "count": 50,
+                "area_m2": 5000,
+                "area_ha": 0.5,
+                "percent": 25.0,
+                "description": "Moderate infiltration",
+            },
+            "C": {
+                "count": 30,
+                "area_m2": 3000,
+                "area_ha": 0.3,
+                "percent": 15.0,
+                "description": "Slow infiltration",
+            },
+            "D": {
+                "count": 20,
+                "area_m2": 2000,
+                "area_ha": 0.2,
+                "percent": 10.0,
+                "description": "Very slow infiltration",
+            },
+        }
+        mock_calc_cls.return_value = mock_calc
+
+        result = main(
+            [
+                "soilgrids",
+                "hsg",
+                "--godlo",
+                "N-34-130-D",
+                "-o",
+                str(tmp_path),
+                "--stats",
+            ]
+        )
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "HSG Statistics" in captured.out
+        assert "Group A" in captured.out
+        assert "50.0%" in captured.out
+
+    @patch("kartograf.hydrology.HSGCalculator")
+    def test_soilgrids_hsg_error(self, mock_calc_cls, capsys, tmp_path):
+        """soilgrids hsg raises DownloadError -> exit 1."""
+        mock_calc = Mock()
+        mock_calc.calculate_hsg_by_godlo.side_effect = DownloadError("Network error")
+        mock_calc_cls.return_value = mock_calc
+
+        result = main(
+            [
+                "soilgrids",
+                "hsg",
+                "--godlo",
+                "N-34-130-D",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Error" in captured.err
+
+    def test_soilgrids_hsg_no_selection(self, capsys):
+        """soilgrids hsg without --godlo or --bbox -> exit 1."""
+        result = main(["soilgrids", "hsg"])
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Must provide one of" in captured.err
+
+    @patch("kartograf.hydrology.HSGCalculator")
+    def test_soilgrids_hsg_by_bbox(self, mock_calc_cls, capsys, tmp_path):
+        """soilgrids hsg --bbox -> calculate_hsg_by_bbox called."""
+        mock_calc = Mock()
+        mock_calc.calculate_hsg_by_bbox.return_value = tmp_path / "hsg.tif"
+        mock_calc_cls.return_value = mock_calc
+
+        result = main(
+            [
+                "soilgrids",
+                "hsg",
+                "--bbox",
+                "450000,550000,460000,560000",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 0
+        mock_calc.calculate_hsg_by_bbox.assert_called_once()
