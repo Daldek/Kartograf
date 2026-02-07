@@ -46,8 +46,9 @@ Kartograf automatyzuje ten proces oferując:
 - Obsługa skal: 1:1 000 000 do 1:10 000
 - Hierarchia arkuszy (get_parent, get_children, get_all_descendants)
 - Bounding box arkusza (EPSG:2180, EPSG:4326)
+- Reverse lookup: bbox → godła (find_sheets_for_bbox)
 - Pobieranie przez godło → ASC (OpenData)
-- Pobieranie przez bbox → GeoTIFF (WCS)
+- Pobieranie przez bbox → GeoTIFF (WCS) lub automatyczne wykrywanie arkuszy
 - Rozdzielczości: 1m (GRID1), 5m (GRID5)
 - Układy wysokościowe: KRON86, EVRF2007
 
@@ -108,6 +109,7 @@ Kartograf automatyzuje ten proces oferując:
 # Komendy:
 kartograf parse <godlo>                    # info o godle
 kartograf download <godlo>                 # pobierz NMT
+kartograf download --bbox min_x,min_y,max_x,max_y  # NMT dla bbox
 kartograf download <godlo> --resolution 5m # NMT 5m
 kartograf landcover download --source bdot10k --teryt <kod>
 kartograf landcover download --source corine --godlo <godlo>
@@ -123,7 +125,7 @@ kartograf soilgrids hsg --godlo <godlo>    # oblicz HSG
 # Public API (kartograf/__init__.py):
 from kartograf import (
     # Core
-    SheetParser, BBox,
+    SheetParser, BBox, find_sheets_for_bbox,
     # Download (NMT)
     DownloadManager, DownloadProgress, FileStorage,
     # Land Cover
@@ -240,7 +242,7 @@ numpy >= 1.24.0        # Array operations (HSG)
 ### 6.2 Jakościowe
 
 ```
-- 365 testów przechodzi
+- 398 testów przechodzi
 - Pokrycie testami >= 57% (cel: 80%)
 - Kod zgodny z ruff
 - Type hints wszędzie

@@ -79,6 +79,11 @@ print(parser.get_bbox())  # BBox(min_x=..., max_x=..., ...)
 hierarchy = parser.get_hierarchy_up()
 descendants = parser.get_all_descendants("1:10000")
 
+# Reverse lookup: bbox → godła
+from kartograf import find_sheets_for_bbox
+bbox = BBox(419000, 230000, 426000, 237000, "EPSG:2180")
+sheets = find_sheets_for_bbox(bbox, "1:10000")
+
 # Pobieranie przez godło (ASC)
 manager = DownloadManager(output_dir="./data")
 path = manager.download_sheet("N-34-130-D-d-2-4")
@@ -98,6 +103,8 @@ kartograf parse N-34-130-D-d-2-4
 kartograf parse N-34-130-D --hierarchy
 kartograf download N-34-130-D-d-2-4
 kartograf download N-34-130-D --scale 1:10000
+kartograf download --bbox 419000,230000,426000,237000
+kartograf download --bbox 19.93,50.05,19.95,50.07 --bbox-crs EPSG:4326
 kartograf download N-34-130-D --resolution 5m
 ```
 
@@ -372,6 +379,7 @@ from kartograf import (
     # Core
     SheetParser,
     BBox,
+    find_sheets_for_bbox,
 
     # Download (NMT)
     DownloadManager,
