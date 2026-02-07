@@ -5,8 +5,9 @@ This module contains pytest fixtures and configuration that are shared
 across all test modules.
 """
 
-import pytest
 from pathlib import Path
+
+import pytest
 
 
 @pytest.fixture

@@ -6,8 +6,9 @@ map sheet identifiers (godła) and extracting information about scale,
 coordinate system, and sheet components.
 """
 
+import math
 import re
-from typing import Dict, List, NamedTuple, Optional
+from typing import NamedTuple, Optional
 
 from pyproj import Transformer
 
@@ -87,7 +88,7 @@ class SheetParser:
     # Dozwolone układy współrzędnych
     VALID_UKLADY = ("1992", "2000")
 
-    def __init__(self, godlo: str, uklad: Optional[str] = None):
+    def __init__(self, godlo: str, uklad: str | None = None):
         """
         Inicjalizuje parser dla podanego godła.
 
@@ -170,7 +171,7 @@ class SheetParser:
 
         return "-".join(normalized)
 
-    def _validate_uklad(self, uklad: Optional[str]) -> str:
+    def _validate_uklad(self, uklad: str | None) -> str:
         """
         Waliduje układ współrzędnych.
 
@@ -223,7 +224,7 @@ class SheetParser:
             f"Godło musi być w formacie zgodnym z układem 1992/2000."
         )
 
-    def _parse_components(self) -> Dict[str, str]:
+    def _parse_components(self) -> dict[str, str]:
         """
         Parsuje składowe godła.
 
@@ -262,7 +263,7 @@ class SheetParser:
         return self._uklad
 
     @property
-    def components(self) -> Dict[str, str]:
+    def components(self) -> dict[str, str]:
         """Zwraca słownik ze składowymi godła."""
         return self._components.copy()
 
@@ -360,7 +361,7 @@ class SheetParser:
         )
         return SheetParser(parent_godlo, self._uklad)
 
-    def get_children(self) -> List["SheetParser"]:
+    def get_children(self) -> list["SheetParser"]:
         """
         Zwraca wszystkie arkusze podrzędne (o skali większej).
 
@@ -398,7 +399,7 @@ class SheetParser:
 
         return children
 
-    def _get_children_from_500k(self) -> List["SheetParser"]:
+    def _get_children_from_500k(self) -> list["SheetParser"]:
         """
         Zwraca 36 arkuszy 1:200k dla arkusza 1:500k.
 
@@ -422,7 +423,7 @@ class SheetParser:
 
         return children
 
-    def get_hierarchy_up(self) -> List["SheetParser"]:
+    def get_hierarchy_up(self) -> list["SheetParser"]:
         """
         Zwraca pełną hierarchię w górę (do 1:1000000).
 
@@ -453,7 +454,7 @@ class SheetParser:
 
         return hierarchy
 
-    def get_all_descendants(self, target_scale: str) -> List["SheetParser"]:
+    def get_all_descendants(self, target_scale: str) -> list["SheetParser"]:
         """
         Zwraca wszystkie arkusze potomne do zadanej skali.
 
@@ -499,7 +500,7 @@ class SheetParser:
             )
 
         # Rekurencyjnie zbieramy potomków
-        def collect_descendants(parser: "SheetParser") -> List["SheetParser"]:
+        def collect_descendants(parser: "SheetParser") -> list["SheetParser"]:
             if parser.scale == target_scale:
                 return [parser]
 
@@ -765,3 +766,267 @@ class SheetParser:
             east = west + q_width
 
         return (south, north, west, east)
+
+
+# =========================================================================
+# Standalone functions: bbox → godła lookup
+# =========================================================================
+
+
+def _bboxes_intersect(a: BBox, b: BBox) -> bool:
+    """
+    Sprawdza czy dwa bounding boxy się przecinają.
+
+    Parameters
+    ----------
+    a, b : BBox
+        Bounding boxy do sprawdzenia (powinny być w tym samym CRS)
+
+    Returns
+    -------
+    bool
+        True jeśli boxy się przecinają
+    """
+    return not (
+        a.max_x < b.min_x or a.min_x > b.max_x or a.max_y < b.min_y or a.min_y > b.max_y
+    )
+
+
+def _transform_bbox_to_wgs84(bbox: BBox) -> BBox:
+    """
+    Transformuje BBox z EPSG:2180 do EPSG:4326.
+
+    Parameters
+    ----------
+    bbox : BBox
+        Bbox w EPSG:2180
+
+    Returns
+    -------
+    BBox
+        Bbox w EPSG:4326 (min_x=west_lon, min_y=south_lat, ...)
+    """
+    transformer = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
+
+    corners_2180 = [
+        (bbox.min_x, bbox.min_y),  # SW
+        (bbox.min_x, bbox.max_y),  # NW
+        (bbox.max_x, bbox.min_y),  # SE
+        (bbox.max_x, bbox.max_y),  # NE
+    ]
+
+    corners_4326 = [transformer.transform(x, y) for x, y in corners_2180]
+
+    min_lon = min(c[0] for c in corners_4326)
+    max_lon = max(c[0] for c in corners_4326)
+    min_lat = min(c[1] for c in corners_4326)
+    max_lat = max(c[1] for c in corners_4326)
+
+    return BBox(
+        min_x=min_lon, min_y=min_lat, max_x=max_lon, max_y=max_lat, crs="EPSG:4326"
+    )
+
+
+def find_sheets_for_bbox(
+    bbox: BBox,
+    target_scale: str = "1:10000",
+) -> list[str]:
+    """
+    Znajduje godła arkuszy pokrywających podany bounding box.
+
+    Algorytm: hierarchiczne przycinanie — oblicza matematycznie arkusze 1:1M
+    i 1:200k, potem rekurencyjnie zawęża do docelowej skali.
+
+    Parameters
+    ----------
+    bbox : BBox
+        Bounding box w EPSG:2180 lub EPSG:4326
+    target_scale : str
+        Docelowa skala (default: "1:10000")
+
+    Returns
+    -------
+    list[str]
+        Posortowana lista godeł arkuszy pokrywających bbox
+
+    Raises
+    ------
+    ValidationError
+        Jeśli target_scale jest nieprawidłowa lub CRS nieobsługiwany
+    """
+    if target_scale not in SheetParser.SCALE_HIERARCHY:
+        raise ValidationError(
+            f"Nieprawidłowa skala: '{target_scale}'. "
+            f"Dozwolone: {', '.join(SheetParser.SCALE_HIERARCHY)}"
+        )
+
+    if bbox.crs not in ("EPSG:2180", "EPSG:4326"):
+        raise ValidationError(
+            f"Nieobsługiwany CRS: '{bbox.crs}'. Obsługiwane: EPSG:2180, EPSG:4326"
+        )
+
+    # Normalizuj do WGS84
+    wgs_bbox = _transform_bbox_to_wgs84(bbox) if bbox.crs == "EPSG:2180" else bbox
+
+    target_idx = SheetParser.SCALE_HIERARCHY.index(target_scale)
+
+    # --- Krok 1: Znajdź arkusze 1:1M ---
+    sheets_1m = _find_1m_sheets(wgs_bbox)
+
+    if target_idx == 0:  # 1:1000000
+        return sorted(sheets_1m)
+
+    # --- Krok 2: Znajdź arkusze 1:500k ---
+    if target_idx == 1:  # 1:500000
+        result = []
+        for godlo_1m in sheets_1m:
+            result.extend(_find_children_intersecting(godlo_1m, wgs_bbox))
+        return sorted(result)
+
+    # --- Krok 3: Znajdź arkusze 1:200k (zoptymalizowane) ---
+    sheets_200k = []
+    for godlo_1m in sheets_1m:
+        sheets_200k.extend(_find_200k_sheets(godlo_1m, wgs_bbox))
+
+    if target_idx == 2:  # 1:200000
+        return sorted(sheets_200k)
+
+    # --- Krok 4: Rekurencyjnie drąż do docelowej skali ---
+    current_sheets = sheets_200k
+    current_scale_idx = 2  # 1:200000
+
+    while current_scale_idx < target_idx:
+        next_sheets = []
+        for godlo in current_sheets:
+            next_sheets.extend(_find_children_intersecting(godlo, wgs_bbox))
+        current_sheets = next_sheets
+        current_scale_idx += 1
+
+    return sorted(current_sheets)
+
+
+def _find_1m_sheets(wgs_bbox: BBox) -> list[str]:
+    """
+    Znajduje arkusze 1:1M przecinające bbox (WGS84).
+
+    Parameters
+    ----------
+    wgs_bbox : BBox
+        Bbox w EPSG:4326 (min_x=west, min_y=south, max_x=east, max_y=north)
+
+    Returns
+    -------
+    list[str]
+        Lista godeł 1:1M
+    """
+    south, north = wgs_bbox.min_y, wgs_bbox.max_y
+    west, east = wgs_bbox.min_x, wgs_bbox.max_x
+
+    # Pas: row = floor(lat / 4), litera = chr(ord('A') + row)
+    min_row = max(0, math.floor(south / 4.0))
+    max_row = max(0, math.floor((north - 1e-10) / 4.0))
+    # Jeśli north jest dokładnie na granicy (np. 56.0), to należy do pasa niżej
+    if north == math.floor(north / 4.0) * 4.0 and north > south:
+        max_row = max(0, int(north / 4.0) - 1)
+
+    # Słup: slup = floor(lon / 6) + 31
+    min_slup = math.floor(west / 6.0) + 31
+    max_slup = math.floor((east - 1e-10) / 6.0) + 31
+    if east == math.floor(east / 6.0) * 6.0 and east > west:
+        max_slup = int(east / 6.0) + 31 - 1
+
+    result = []
+    for row in range(min_row, max_row + 1):
+        pas = chr(ord("A") + row)
+        for slup in range(min_slup, max_slup + 1):
+            result.append(f"{pas}-{slup}")
+
+    return result
+
+
+def _find_200k_sheets(godlo_1m: str, wgs_bbox: BBox) -> list[str]:
+    """
+    Znajduje arkusze 1:200k w obrębie arkusza 1:1M przecinające bbox.
+
+    Optymalizacja: oblicza matematycznie zakres wierszy/kolumn w siatce 12x12.
+
+    Parameters
+    ----------
+    godlo_1m : str
+        Godło arkusza 1:1M (np. "N-34")
+    wgs_bbox : BBox
+        Bbox w EPSG:4326
+
+    Returns
+    -------
+    list[str]
+        Lista godeł 1:200k
+    """
+    parser_1m = SheetParser(godlo_1m)
+    bbox_1m = parser_1m.get_bbox(crs="EPSG:4326")
+
+    north_1m = bbox_1m.max_y
+    south_1m = bbox_1m.min_y
+    west_1m = bbox_1m.min_x
+    east_1m = bbox_1m.max_x
+
+    height_200k = (north_1m - south_1m) / 12.0
+    width_200k = (east_1m - west_1m) / 12.0
+
+    # Oblicz zakres wierszy (od góry)
+    min_row = max(0, math.floor((north_1m - wgs_bbox.max_y) / height_200k))
+    max_row = min(11, math.floor((north_1m - wgs_bbox.min_y - 1e-10) / height_200k))
+
+    # Oblicz zakres kolumn (od lewej)
+    min_col = max(0, math.floor((wgs_bbox.min_x - west_1m) / width_200k))
+    max_col = min(11, math.floor((wgs_bbox.max_x - west_1m - 1e-10) / width_200k))
+
+    # Clamp ranges
+    min_row = max(0, min(11, min_row))
+    max_row = max(0, min(11, max_row))
+    min_col = max(0, min(11, min_col))
+    max_col = max(0, min(11, max_col))
+
+    pas = godlo_1m.split("-")[0]
+    slup = godlo_1m.split("-")[1]
+
+    result = []
+    for row in range(min_row, max_row + 1):
+        for col in range(min_col, max_col + 1):
+            arkusz_num = row * 12 + col + 1
+            godlo = f"{pas}-{slup}-{arkusz_num}"
+            # Weryfikacja przecięcia (na wypadek edge case'ów)
+            sp = SheetParser(godlo)
+            sb = sp.get_bbox(crs="EPSG:4326")
+            if _bboxes_intersect(wgs_bbox, sb):
+                result.append(godlo)
+
+    return result
+
+
+def _find_children_intersecting(godlo: str, wgs_bbox: BBox) -> list[str]:
+    """
+    Znajduje dzieci arkusza, które przecinają bbox.
+
+    Parameters
+    ----------
+    godlo : str
+        Godło arkusza nadrzędnego
+    wgs_bbox : BBox
+        Bbox w EPSG:4326
+
+    Returns
+    -------
+    list[str]
+        Lista godeł dzieci przecinających bbox
+    """
+    parser = SheetParser(godlo)
+    children = parser.get_children()
+
+    result = []
+    for child in children:
+        child_bbox = child.get_bbox(crs="EPSG:4326")
+        if _bboxes_intersect(wgs_bbox, child_bbox):
+            result.append(child.godlo)
+
+    return result

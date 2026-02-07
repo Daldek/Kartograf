@@ -60,6 +60,11 @@ class BaseProvider(ABC):
         pass
 
     @property
+    def default_extension(self) -> str:
+        """Default file extension for this provider (e.g. '.asc', '.tif')."""
+        return ".asc"
+
+    @property
     @abstractmethod
     def base_url(self) -> str:
         """
