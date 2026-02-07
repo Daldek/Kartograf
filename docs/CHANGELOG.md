@@ -26,6 +26,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Zwracany typ: `Path` (1:10000) lub `list[Path]` (coarser scales)
   - CLI dostosowane — wyświetla liczbę pobranych plików przy rozwijaniu
 
+### Tests
+- **Pokrycie testami 59% → 83% (cel 80% osiagniety, 507 testow)**
+  - Nowy `tests/test_auth_client.py` — 30 testow dla AuthProxyClient (singleton, proxy lifecycle, token, requests, downloads, cleanup)
+  - Nowy `tests/test_auth_proxy.py` — 24 testy dla CLMSCredentials, ProxyHandler, run_server
+  - Rozszerzony `tests/test_landcover.py` — +38 testow dla Bdot10kProvider, CorineProvider, LandCoverManager
+  - Rozszerzony `tests/test_hsg.py` — +6 testow dla HSGCalculator (calculate, statistics)
+  - Rozszerzony `tests/test_cli.py` — +11 testow dla landcover CLI i soilgrids CLI
+
 ### Fixed
 - Poprawiony komunikat błędu przy braku pokrycia NMT 5m — zamiast technicznego "No ASC file found in any WMS layer" wyświetla czytelną informację o braku pokrycia danego obszaru w GUGiK
 

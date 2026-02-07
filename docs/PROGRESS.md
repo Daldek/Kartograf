@@ -12,7 +12,7 @@
 | bbox → godla | ✅ Gotowy | find_sheets_for_bbox(), CLI --bbox |
 | CLI | ✅ Gotowy | 5 komend + --bbox |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
-| Pokrycie testami | 🔧 W trakcie | 57%, cel 80% |
+| Pokrycie testami | ✅ Gotowy | 83%, cel 80% osiągnięty |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 
 <!-- Statusy: ✅ Gotowy | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
@@ -49,27 +49,34 @@
 **Data:** 2026-02-07
 
 ### Co zrobiono
-- **feat(parser): `find_sheets_for_bbox()` — reverse lookup: bbox → godla arkuszy**
+- **test: pokrycie testami 59% → 83% (cel 80% osiagniety)**
+  - Nowy `tests/test_auth_client.py` — 30 testow (auth/client.py 0% → ~85%)
+    - Singleton, proxy lifecycle, token management, requests, downloads, cleanup
+  - Nowy `tests/test_auth_proxy.py` — 24 testy (auth/proxy.py 0% → ~70%)
+    - CLMSCredentials (keychain, JWT token exchange), ProxyHandler endpoints, run_server
+  - Rozszerzony `tests/test_landcover.py` — +38 testow (bdot10k 28% → ~65%, corine 33% → ~60%, manager 65% → ~85%)
+    - Bdot10kProvider: download_by_teryt/godlo, TERYT lookup, retry, ZIP/GPKG extract/merge
+    - CorineProvider: init, WMS download/dimensions/max_size, retry, bbox transforms
+    - LandCoverManager: download dispatch (teryt/bbox/godlo), auto paths, layers/formats
+  - Rozszerzony `tests/test_hsg.py` — +6 testow (hsg.py 59% → ~80%)
+    - HSGCalculator: calculate_hsg_by_godlo/bbox, nodata, keep_intermediate, statistics
+  - Rozszerzony `tests/test_cli.py` — +11 testow (commands.py 68% → ~78%)
+    - Landcover CLI: download by teryt/godlo/bbox, source corine, list layers
+    - Soilgrids CLI: hsg success/stats/error, download success
+- **feat(parser): `find_sheets_for_bbox()` — reverse lookup: bbox → godla arkuszy** (wczesniej w sesji)
   - Nowe funkcje w `sheet_parser.py`: `find_sheets_for_bbox()`, `_bboxes_intersect()`, `_transform_bbox_to_wgs84()`, `_find_1m_sheets()`, `_find_200k_sheets()`, `_find_children_intersecting()`
-  - Algorytm hierarchicznego przycinania: 1:1M → 1:200k (siatka 12x12) → rekurencyjne drążenie do docelowej skali
-  - Obsługa EPSG:2180 i EPSG:4326, walidacja CRS i skali
-  - Eksport w `__init__.py`
-- **feat(cli): `kartograf download --bbox` — pobieranie NMT dla bbox**
+  - Algorytm hierarchicznego przycinania: 1:1M → 1:200k (siatka 12x12) → rekurencyjne drazenie do docelowej skali
+- **feat(cli): `kartograf download --bbox` — pobieranie NMT dla bbox** (wczesniej w sesji)
   - `--bbox min_x,min_y,max_x,max_y` + `--bbox-crs {EPSG:2180,EPSG:4326}`
-  - `godlo` staje się opcjonalny (pozycyjny, nargs="?")
-  - Walidacja: godlo XOR --bbox (oba lub żaden → error)
-  - Nowa `_cmd_download_bbox()` — find sheets, iterate download
-- Testy: 398 testów przechodzi (pytest tests/ -v), ruff clean
-  - 18 nowych testów find_sheets_for_bbox (roundtrip, boundary, 2180/4326, invalid)
-  - 11 nowych testów CLI bbox (basic, epsg4326, errors, scale, parser)
+- Testy: **507 testow**, pokrycie **83.08%**, ruff clean
 
 ### Nastepne kroki
-1. Pokrycie testami do 80% (priorytet: auth/, providers/bdot10k.py, providers/corine.py)
-2. Pobieranie rownolegle (v0.4+)
+1. Pobieranie rownolegle (v0.4+)
+2. Cache metadanych (SQLite)
 
 ## Backlog
 
-- [ ] Pokrycie testami do 80% (obecnie 57%)
+- [x] Pokrycie testami do 80% (83%, 507 testow)
 - [ ] Pobieranie rownolegle (multi-threading)
 - [ ] Cache metadanych (SQLite)
 - [ ] Mozaikowanie arkuszy NMT
