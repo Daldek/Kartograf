@@ -38,10 +38,12 @@ from kartograf.providers.base import BaseProvider
 from kartograf.providers.bdot10k import Bdot10kProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.gugik import GugikProvider
+from kartograf.providers.gugik_nmpt import GugikNmptProvider
+from kartograf.providers.gugik_orto import GugikOrtoProvider
 from kartograf.providers.landcover_base import LandCoverProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 
-__version__ = "0.3.2"
+__version__ = "0.4.0"
 
 __all__ = [
     # Core
@@ -57,6 +59,8 @@ __all__ = [
     # Providers
     "BaseProvider",
     "GugikProvider",
+    "GugikNmptProvider",
+    "GugikOrtoProvider",
     "LandCoverProvider",
     "Bdot10kProvider",
     "CorineProvider",
