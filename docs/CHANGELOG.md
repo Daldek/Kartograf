@@ -7,6 +7,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.4.0] - 2026-02-07
+
 ### Added
 - **NMPT (Numeryczny Model Pokrycia Terenu / Digital Surface Model)**
   - `GugikNmptProvider` — dziedziczy z GugikProvider, nadpisuje endpointy NMPT
@@ -439,7 +443,8 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
-[Unreleased]: https://github.com/Daldek/Kartograf/compare/v0.3.2...HEAD
+[Unreleased]: https://github.com/Daldek/Kartograf/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Daldek/Kartograf/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.2
 [0.3.1]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.0
