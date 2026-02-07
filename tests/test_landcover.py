@@ -192,9 +192,7 @@ class TestCorineProvider:
         mock_credentials = {
             "client_id": "test-client",
             "private_key": (
-                "-----BEGIN RSA PRIVATE KEY-----\n"
-                "test\n"
-                "-----END RSA PRIVATE KEY-----"
+                "-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----"
             ),
             "token_uri": "https://example.com/token",
         }

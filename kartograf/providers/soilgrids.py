@@ -209,20 +209,19 @@ class SoilGridsProvider(LandCoverProvider):
         # Validate property
         if property not in self.PROPERTIES:
             raise ValueError(
-                f"Invalid property: {property}. "
-                f"Available: {', '.join(self.PROPERTIES)}"
+                f"Invalid property: {property}. Available: {', '.join(self.PROPERTIES)}"
             )
 
         # Validate depth
         if depth not in self.DEPTHS:
             raise ValueError(
-                f"Invalid depth: {depth}. " f"Available: {', '.join(self.DEPTHS)}"
+                f"Invalid depth: {depth}. Available: {', '.join(self.DEPTHS)}"
             )
 
         # Validate stat
         if stat not in self.STATS:
             raise ValueError(
-                f"Invalid stat: {stat}. " f"Available: {', '.join(self.STATS)}"
+                f"Invalid stat: {stat}. Available: {', '.join(self.STATS)}"
             )
 
         output_path = Path(output_path)
