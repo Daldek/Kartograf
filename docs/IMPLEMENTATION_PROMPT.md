@@ -12,11 +12,13 @@ Pracujesz nad **Kartograf** — narzedziem do pobierania danych przestrzennych z
 
 **Funkcjonalnosci:**
 - **NMT** — Numeryczny Model Terenu (1m, 5m) z GUGiK
+- **NMPT** — Numeryczny Model Pokrycia Terenu / DSM (1m) z GUGiK
+- **Ortofotomapa** — zdjecia lotnicze Standard Resolution (25cm, TIF) z GUGiK
 - **BDOT10k** — pokrycie terenu (12 warstw) z GUGiK
 - **CORINE Land Cover** — europejska klasyfikacja (44 klasy) z Copernicus
 - **SoilGrids** — dane glebowe (11 parametrow, 6 glebokosci) z ISRIC
 - **HSG** — grupy hydrologiczne SCS-CN z danych SoilGrids
-- **CLI** — 5 komend (parse, download, landcover, soilgrids, hsg)
+- **CLI** — 5 komend (parse, download, landcover, soilgrids, hsg) + --product {nmt,nmpt,orto}
 
 **Stack technologiczny:**
 - Python 3.12+
@@ -56,12 +58,14 @@ kartograf/
 ├── providers/               # WARSTWA DANYCH (abstrakcje nad API)
 │   ├── base.py              # BaseProvider — abstrakcja dla NMT
 │   ├── gugik.py             # GugikProvider — NMT z GUGiK (WCS + OpenData)
+│   ├── gugik_nmpt.py        # GugikNmptProvider — NMPT/DSM (dziedziczy z GugikProvider)
+│   ├── gugik_orto.py        # GugikOrtoProvider — Ortofotomapa (BaseProvider, TIF)
 │   ├── landcover_base.py    # LandCoverProvider — abstrakcja dla pokrycia terenu
 │   ├── bdot10k.py           # Bdot10kProvider — BDOT10k z GUGiK
 │   ├── corine.py            # CorineProvider — CORINE z Copernicus (CLMS API + WMS)
 │   └── soilgrids.py         # SoilGridsProvider — dane glebowe z ISRIC (WCS)
 │
-├── download/                # WARSTWA POBIERANIA (NMT)
+├── download/                # WARSTWA POBIERANIA (NMT/NMPT/Orto)
 │   ├── manager.py           # DownloadManager — koordynacja pobierania arkuszy
 │   └── storage.py           # FileStorage — hierarchiczna struktura katalogow
 │
@@ -83,6 +87,8 @@ kartograf/
 
 ```
 CLI → DownloadManager → GugikProvider → GUGiK API (WCS/OpenData) → FileStorage
+CLI → DownloadManager → GugikNmptProvider → GUGiK API (WCS/OpenData) → FileStorage
+CLI → DownloadManager → GugikOrtoProvider → GUGiK API (WCS/OpenData) → FileStorage
 CLI → LandCoverManager → Bdot10kProvider → GUGiK API (WFS) → FileStorage
 CLI → LandCoverManager → CorineProvider → AuthProxy → CLMS API → FileStorage
 CLI → LandCoverManager → SoilGridsProvider → ISRIC WCS → FileStorage
@@ -95,7 +101,8 @@ CLI → HSGCalculator → SoilGridsProvider → rasterio → numpy → FileStora
 
 | Zrodlo | Typ danych | API | Autentykacja | Timeout |
 |--------|-----------|-----|--------------|---------|
-| GUGiK | NMT (ASC/GeoTIFF) | WCS, OpenData | Brak | 30s |
+| GUGiK | NMT/NMPT (ASC/GeoTIFF) | WCS, OpenData | Brak | 30s |
+| GUGiK | Ortofoto (TIF/GeoTIFF) | WCS, OpenData | Brak | 60s |
 | GUGiK | BDOT10k (GeoPackage) | WFS | Brak | 60s |
 | Copernicus CLMS | CORINE (GeoTIFF) | REST API | OAuth2 RSA | 60s |
 | EEA Discomap | CORINE (PNG) | WMS | Brak | 60s |
@@ -124,14 +131,14 @@ CLI → HSGCalculator → SoilGridsProvider → rasterio → numpy → FileStora
 ```python
 from kartograf import (
     # Core
-    SheetParser, BBox,
-    # Download (NMT)
+    SheetParser, BBox, find_sheets_for_bbox,
+    # Download (NMT/NMPT/Orto)
     DownloadManager, DownloadProgress, FileStorage,
     # Land Cover
     LandCoverManager,
     # Providers
-    BaseProvider, GugikProvider, LandCoverProvider,
-    Bdot10kProvider, CorineProvider, SoilGridsProvider,
+    BaseProvider, GugikProvider, GugikNmptProvider, GugikOrtoProvider,
+    LandCoverProvider, Bdot10kProvider, CorineProvider, SoilGridsProvider,
     # Hydrology
     HSGCalculator,
     # Exceptions
@@ -236,7 +243,7 @@ from kartograf import (
 
 ## 9. Ograniczenia techniczne
 
-- **Synchroniczne pobieranie** — brak async/parallel (zaplanowane na v0.4+)
+- **Synchroniczne pobieranie** — brak async/parallel (zaplanowane na v0.5+)
 - **NMT 5m** — tylko OpenData (ASC), brak WCS; wymaga EVRF2007
 - **CORINE GeoTIFF** — wymaga OAuth2 credentials; bez nich fallback na PNG (WMS)
 - **SoilGrids** — tylko WGS84 bbox (transformacja automatyczna)
@@ -278,6 +285,6 @@ hsg_path = calc.calculate_hsg_by_godlo("N-34-130-D")
 
 ---
 
-**Wersja dokumentu:** 2.0
-**Data ostatniej aktualizacji:** 2026-02-03
+**Wersja dokumentu:** 3.0
+**Data ostatniej aktualizacji:** 2026-02-07
 **Status:** Aktywny dla wszystkich asystentow AI pracujacych nad projektem
