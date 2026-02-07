@@ -545,3 +545,194 @@ class TestDownloadCLIIntegration:
         assert result == 0
         captured = capsys.readouterr()
         assert "download" in captured.out
+
+
+class TestCmdDownloadBBox:
+    """Tests for download command with --bbox option."""
+
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_bbox_basic(self, mock_manager_class, capsys, tmp_path):
+        """Test --bbox wywołuje find_sheets_for_bbox i download_sheet."""
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_class.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        # download_sheet powinien być wywołany co najmniej raz
+        assert mock_manager.download_sheet.call_count >= 1
+
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_bbox_epsg4326(self, mock_manager_class, capsys, tmp_path):
+        """Test --bbox z --bbox-crs EPSG:4326."""
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_class.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "19.93,50.05,19.95,50.07",
+                "--bbox-crs",
+                "EPSG:4326",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        assert mock_manager.download_sheet.call_count >= 1
+
+    def test_download_bbox_and_godlo_error(self, capsys):
+        """Test oba godlo i --bbox → exit 1."""
+        result = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Cannot specify both" in captured.err
+
+    def test_download_no_input_error(self, capsys):
+        """Test brak godlo i --bbox → exit 1."""
+        result = main(["download", "-q"])
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Must specify" in captured.err
+
+    def test_download_bbox_invalid_format(self, capsys):
+        """Test zły format bbox → exit 1."""
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "not,a,valid,bbox",
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Invalid bbox format" in captured.err
+
+    def test_download_bbox_too_few_values(self, capsys):
+        """Test za mało wartości w bbox → exit 1."""
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000",
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Invalid bbox format" in captured.err
+
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_bbox_with_scale(self, mock_manager_class, capsys, tmp_path):
+        """Test --bbox z --scale 1:100000."""
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_class.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "--scale",
+                "1:100000",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        # Mniejsza skala = mniej arkuszy
+        assert mock_manager.download_sheet.call_count >= 1
+
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_bbox_shows_summary(self, mock_manager_class, capsys, tmp_path):
+        """Test that bbox mode shows summary when not quiet."""
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_class.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "19.93,50.05,19.95,50.07",
+                "--bbox-crs",
+                "EPSG:4326",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Found" in captured.out
+        assert "sheets" in captured.out
+
+    def test_download_parser_has_bbox_options(self):
+        """Test that download parser has --bbox and --bbox-crs options."""
+        parser = create_parser()
+        args = parser.parse_args(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "--bbox-crs",
+                "EPSG:4326",
+            ]
+        )
+        assert args.bbox == "419000,230000,426000,237000"
+        assert args.bbox_crs == "EPSG:4326"
+
+    def test_download_parser_bbox_crs_default(self):
+        """Test that --bbox-crs defaults to EPSG:2180."""
+        parser = create_parser()
+        args = parser.parse_args(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+            ]
+        )
+        assert args.bbox_crs == "EPSG:2180"
+
+    def test_download_parser_godlo_optional(self):
+        """Test that godlo is now optional."""
+        parser = create_parser()
+        args = parser.parse_args(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+            ]
+        )
+        assert args.godlo is None
+        assert args.bbox == "419000,230000,426000,237000"

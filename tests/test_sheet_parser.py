@@ -7,7 +7,12 @@ parsowania godeł dla wszystkich obsługiwanych skal (1:1M do 1:10k).
 
 import pytest
 
-from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.core.sheet_parser import (
+    BBox,
+    SheetParser,
+    _bboxes_intersect,
+    find_sheets_for_bbox,
+)
 from kartograf.exceptions import ParseError, ValidationError
 
 
@@ -880,3 +885,213 @@ class TestSheetParserGetBBox:
         assert all_max_x == pytest.approx(parent_bbox.max_x, abs=0.0001)
         assert all_min_y == pytest.approx(parent_bbox.min_y, abs=0.0001)
         assert all_max_y == pytest.approx(parent_bbox.max_y, abs=0.0001)
+
+
+# =============================================================================
+# Testy _bboxes_intersect()
+# =============================================================================
+
+
+class TestBBoxesIntersect:
+    """Testy funkcji _bboxes_intersect()."""
+
+    def test_overlapping_boxes(self):
+        """Test przecinających się boxów."""
+        a = BBox(0, 0, 10, 10, "EPSG:4326")
+        b = BBox(5, 5, 15, 15, "EPSG:4326")
+        assert _bboxes_intersect(a, b) is True
+
+    def test_non_overlapping_right(self):
+        """Test nieprzecinających się boxów (b na prawo od a)."""
+        a = BBox(0, 0, 5, 5, "EPSG:4326")
+        b = BBox(6, 0, 10, 5, "EPSG:4326")
+        assert _bboxes_intersect(a, b) is False
+
+    def test_non_overlapping_above(self):
+        """Test nieprzecinających się boxów (b powyżej a)."""
+        a = BBox(0, 0, 5, 5, "EPSG:4326")
+        b = BBox(0, 6, 5, 10, "EPSG:4326")
+        assert _bboxes_intersect(a, b) is False
+
+    def test_touching_edge(self):
+        """Test boxów stykających się krawędzią — traktowane jako przecinające."""
+        a = BBox(0, 0, 5, 5, "EPSG:4326")
+        b = BBox(5, 0, 10, 5, "EPSG:4326")
+        # Touching at edge (a.max_x == b.min_x) — considered intersecting
+        # (shared boundary counts as overlap)
+        assert _bboxes_intersect(a, b) is True
+
+    def test_contained_box(self):
+        """Test boxa zawartego w innym boxie."""
+        a = BBox(0, 0, 10, 10, "EPSG:4326")
+        b = BBox(2, 2, 8, 8, "EPSG:4326")
+        assert _bboxes_intersect(a, b) is True
+
+    def test_identical_boxes(self):
+        """Test identycznych boxów."""
+        a = BBox(0, 0, 10, 10, "EPSG:4326")
+        assert _bboxes_intersect(a, a) is True
+
+
+# =============================================================================
+# Testy find_sheets_for_bbox()
+# =============================================================================
+
+
+class TestFindSheetsForBBox:
+    """Testy funkcji find_sheets_for_bbox()."""
+
+    def test_single_sheet_exact_match(self):
+        """Test bbox = get_bbox() jednego 1:10k → zwraca dokładnie to jedno godło."""
+        godlo = "N-34-130-D-d-2-4"
+        parser = SheetParser(godlo)
+        bbox = parser.get_bbox(crs="EPSG:4326")
+
+        # Nieco zmniejszamy bbox, żeby mieścił się wewnątrz arkusza
+        shrink = 0.0001
+        inner_bbox = BBox(
+            bbox.min_x + shrink,
+            bbox.min_y + shrink,
+            bbox.max_x - shrink,
+            bbox.max_y - shrink,
+            "EPSG:4326",
+        )
+
+        result = find_sheets_for_bbox(inner_bbox, "1:10000")
+        assert result == [godlo]
+
+    def test_100k_contains_64_sheets(self):
+        """Test bbox = get_bbox() jednego 1:100k → 64 arkuszy 1:10k."""
+        godlo_100k = "N-34-130-D"
+        parser = SheetParser(godlo_100k)
+        bbox = parser.get_bbox(crs="EPSG:4326")
+
+        # Nieco zmniejszamy, żeby nie chwycić sąsiadów
+        shrink = 0.0001
+        inner_bbox = BBox(
+            bbox.min_x + shrink,
+            bbox.min_y + shrink,
+            bbox.max_x - shrink,
+            bbox.max_y - shrink,
+            "EPSG:4326",
+        )
+
+        result = find_sheets_for_bbox(inner_bbox, "1:10000")
+        assert len(result) == 64
+        # Wszystkie powinny zaczynać się od N-34-130-D
+        assert all(g.startswith("N-34-130-D") for g in result)
+
+    def test_bbox_epsg2180(self):
+        """Test bbox w EPSG:2180 → poprawna konwersja i wynik."""
+        # Użyj bbox jednego arkusza 1:10k w EPSG:2180
+        godlo = "N-34-130-D-d-2-4"
+        parser = SheetParser(godlo)
+        bbox_2180 = parser.get_bbox(crs="EPSG:2180")
+
+        # Nieco zmniejszamy
+        shrink = 10  # 10 metrów
+        inner_bbox = BBox(
+            bbox_2180.min_x + shrink,
+            bbox_2180.min_y + shrink,
+            bbox_2180.max_x - shrink,
+            bbox_2180.max_y - shrink,
+            "EPSG:2180",
+        )
+
+        result = find_sheets_for_bbox(inner_bbox, "1:10000")
+        assert godlo in result
+
+    def test_bbox_epsg4326(self):
+        """Test bbox w EPSG:4326 → poprawny wynik."""
+        # Mały bbox w centrum Krakowa (powinien trafić w M-34)
+        bbox = BBox(19.93, 50.05, 19.95, 50.07, "EPSG:4326")
+        result = find_sheets_for_bbox(bbox, "1:10000")
+        assert len(result) >= 1
+        # Powinny być w okolicy M-34
+        assert all(g.startswith("M-34") for g in result)
+
+    def test_bbox_on_1m_boundary(self):
+        """Test bbox na granicy dwóch 1:1M → arkusze z obu."""
+        # Bbox rozciągający się na granicy pasów N i M (52°N)
+        # N: 52-56°N, M: 48-52°N
+        bbox = BBox(20.0, 51.99, 20.1, 52.01, "EPSG:4326")
+        result = find_sheets_for_bbox(bbox, "1:1000000")
+        godla = sorted(result)
+        # Powinien zawierać oba pasy: M (48-52) i N (52-56)
+        pasy = {g.split("-")[0] for g in godla}
+        assert "M" in pasy
+        assert "N" in pasy
+
+    def test_target_scale_1m(self):
+        """Test target 1:1M → zwraca godła 1:1M."""
+        bbox = BBox(20.0, 52.5, 20.5, 53.0, "EPSG:4326")
+        result = find_sheets_for_bbox(bbox, "1:1000000")
+        assert len(result) >= 1
+        # Sprawdź format — godło 1:1M to X-YY
+        for godlo in result:
+            parser = SheetParser(godlo)
+            assert parser.scale == "1:1000000"
+
+    def test_target_scale_200k(self):
+        """Test target 1:200k → godła formatu N-34-XXX."""
+        bbox = BBox(20.0, 52.5, 20.5, 53.0, "EPSG:4326")
+        result = find_sheets_for_bbox(bbox, "1:200000")
+        assert len(result) >= 1
+        for godlo in result:
+            parser = SheetParser(godlo)
+            assert parser.scale == "1:200000"
+
+    def test_invalid_scale(self):
+        """Test złej skali docelowej → ValidationError."""
+        bbox = BBox(20.0, 52.0, 20.5, 52.5, "EPSG:4326")
+        with pytest.raises(ValidationError, match="Nieprawidłowa skala"):
+            find_sheets_for_bbox(bbox, "1:5000")
+
+    def test_invalid_crs(self):
+        """Test nieobsługiwanego CRS → ValidationError."""
+        bbox = BBox(0, 0, 1, 1, "EPSG:3857")
+        with pytest.raises(ValidationError, match="Nieobsługiwany CRS"):
+            find_sheets_for_bbox(bbox, "1:10000")
+
+    def test_sorted_output(self):
+        """Test że wynik jest posortowany."""
+        # Bbox pokrywający kilka arkuszy
+        bbox = BBox(20.0, 52.5, 20.3, 52.7, "EPSG:4326")
+        result = find_sheets_for_bbox(bbox, "1:10000")
+        assert result == sorted(result)
+
+    def test_target_scale_500k(self):
+        """Test target 1:500k."""
+        bbox = BBox(20.0, 52.5, 20.5, 53.0, "EPSG:4326")
+        result = find_sheets_for_bbox(bbox, "1:500000")
+        assert len(result) >= 1
+        for godlo in result:
+            parser = SheetParser(godlo)
+            assert parser.scale == "1:500000"
+
+    def test_roundtrip_single_sheet_all_scales(self):
+        """Test roundtrip: get_bbox → find_sheets_for_bbox dla różnych skal."""
+        test_cases = [
+            ("N-34", "1:1000000"),
+            ("N-34-A", "1:500000"),
+            ("N-34-130", "1:200000"),
+            ("N-34-130-D", "1:100000"),
+            ("N-34-130-D-d", "1:50000"),
+            ("N-34-130-D-d-2", "1:25000"),
+            ("N-34-130-D-d-2-4", "1:10000"),
+        ]
+
+        for godlo, scale in test_cases:
+            parser = SheetParser(godlo)
+            bbox = parser.get_bbox(crs="EPSG:4326")
+            # Zmniejsz bbox żeby mieścił się wewnątrz
+            shrink = 0.00001
+            inner_bbox = BBox(
+                bbox.min_x + shrink,
+                bbox.min_y + shrink,
+                bbox.max_x - shrink,
+                bbox.max_y - shrink,
+                "EPSG:4326",
+            )
+            result = find_sheets_for_bbox(inner_bbox, scale)
+            assert godlo in result, f"Expected {godlo} in result for scale {scale}"
