@@ -160,6 +160,24 @@ Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja
 
 ---
 
+## ADR-010: Algorytm find_sheets_for_bbox — hierarchiczne przycinanie bez WFS
+
+**Data:** 2026-02-07
+**Status:** Przyjeta
+
+**Kontekst:** Potrzeba reverse lookup: podaj bbox, otrzymaj liste godel arkuszy. GUGiK nie oferuje WFS do wyszukiwania arkuszy po bbox. Siatka map topograficznych jest czysto matematyczna.
+
+**Opcje:**
+- A) WFS query do GUGiK — wymaga sieciowego zapytania, serwis moze byc niedostepny
+- B) Brute-force: wygeneruj wszystkie godla, oblicz bbox kazdego, sprawdz przeciecie — O(n) gdzie n = WSZYSTKIE arkusze
+- C) Hierarchiczne przycinanie: oblicz matematycznie 1:1M i 1:200k, potem rekurencyjnie drąż z pruningiem — O(n) gdzie n = ZNALEZIONE arkusze
+
+**Decyzja:** Opcja C. Algorytm: (1) floor division dla 1:1M (pas/slup), (2) siatka 12x12 dla 1:200k z clamped row/col, (3) rekurencyjne get_children() + _bboxes_intersect() do docelowej skali. Bez zadnego zapytania sieciowego.
+
+**Konsekwencje:** Dziala offline. Szybkie (~1s dla 1:10k). Zalezy od poprawnosci _calculate_wgs84_bbox() — jesli zmieni sie logika bbox, find_sheets_for_bbox tez sie zmieni. CLI download godlo staje sie opcjonalne (nargs="?").
+
+---
+
 <!-- Szablon nowej decyzji:
 
 ## ADR-XXX: Tytul
