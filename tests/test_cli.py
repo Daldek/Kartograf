@@ -18,7 +18,7 @@ from kartograf.cli.commands import (
     format_sheet_info,
     main,
 )
-from kartograf.core.sheet_parser import SheetParser
+from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.manager import DownloadProgress
 from kartograf.exceptions import DownloadError
 
@@ -256,7 +256,7 @@ class TestMain:
 
         assert exc_info.value.code == 0
         captured = capsys.readouterr()
-        assert "0.4.0" in captured.out
+        assert "0.4.1" in captured.out
 
     def test_parse_subcommand(self, capsys):
         """Test parse subcommand."""
@@ -815,7 +815,7 @@ class TestCmdDownloadBBox:
 
         assert result == 1
         captured = capsys.readouterr()
-        assert "Cannot specify both" in captured.err
+        assert "Specify only one of" in captured.err
 
     def test_download_no_input_error(self, capsys):
         """Test brak godlo i --bbox → exit 1."""
@@ -1202,3 +1202,337 @@ class TestCmdSoilgrids:
         )
         assert result == 0
         mock_calc.calculate_hsg_by_bbox.assert_called_once()
+
+
+# ===========================================================================
+# BDOT10k --category CLI tests
+# ===========================================================================
+
+
+class TestCmdLandcoverCategory:
+    """Tests for --category option in landcover download."""
+
+    @patch("kartograf.cli.commands.LandCoverManager")
+    def test_landcover_download_bdot10k_category_hydro(
+        self, mock_mgr_cls, capsys, tmp_path
+    ):
+        """--category hydro passes category to manager.download."""
+        mock_mgr = Mock()
+        mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.download.return_value = tmp_path / "out.gpkg"
+        mock_mgr_cls.return_value = mock_mgr
+
+        result = main(
+            [
+                "landcover",
+                "download",
+                "--source",
+                "bdot10k",
+                "--teryt",
+                "1465",
+                "--category",
+                "hydro",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 0
+        call_kwargs = mock_mgr.download.call_args.kwargs
+        assert call_kwargs.get("category") == "hydro"
+
+    @patch("kartograf.cli.commands.LandCoverManager")
+    def test_landcover_download_bdot10k_category_default(
+        self, mock_mgr_cls, capsys, tmp_path
+    ):
+        """Default category is 'pt'."""
+        mock_mgr = Mock()
+        mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.download.return_value = tmp_path / "out.gpkg"
+        mock_mgr_cls.return_value = mock_mgr
+
+        result = main(
+            [
+                "landcover",
+                "download",
+                "--teryt",
+                "1465",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 0
+        call_kwargs = mock_mgr.download.call_args.kwargs
+        assert call_kwargs.get("category") == "pt"
+
+    def test_landcover_download_no_selection(self, capsys):
+        """No selection method -> exit 1."""
+        result = main(["landcover", "download"])
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Must provide one of" in captured.err
+
+    def test_landcover_list_layers_shows_hydro(self, capsys):
+        """list-layers --source bdot10k shows hydro layers."""
+        result = main(["landcover", "list-layers", "--source", "bdot10k"])
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "SWRS" in captured.out
+        assert "SWKN" in captured.out
+        assert "hydro" in captured.out.lower()
+
+
+# ===========================================================================
+# Geometry CLI tests — download command
+# ===========================================================================
+
+
+class TestCmdDownloadGeometry:
+    """Tests for download command with --geometry option."""
+
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_geometry_basic(
+        self, mock_manager_cls, mock_find, capsys, tmp_path
+    ):
+        """--geometry calls find_sheets_for_geometry and downloads."""
+        # Create a fake SHP file
+        shp_file = tmp_path / "area.shp"
+        shp_file.touch()
+
+        mock_find.return_value = ["N-34-130-D-d-2-4"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            ["download", "--geometry", str(shp_file), "-o", str(tmp_path), "-q"]
+        )
+
+        assert result == 0
+        mock_find.assert_called_once()
+        mock_manager.download_sheet.assert_called_once()
+
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_geometry_with_layer(
+        self, mock_manager_cls, mock_find, capsys, tmp_path
+    ):
+        """--geometry --layer passes layer parameter."""
+        gpkg_file = tmp_path / "area.gpkg"
+        gpkg_file.touch()
+
+        mock_find.return_value = ["N-34-130-D-d-2-4"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--geometry",
+                str(gpkg_file),
+                "--layer",
+                "my_layer",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        call_kwargs = mock_find.call_args
+        assert call_kwargs.kwargs.get("layer") == "my_layer"
+
+    def test_download_geometry_and_godlo_error(self, capsys, tmp_path):
+        """--geometry + godlo -> mutual exclusivity error."""
+        shp_file = tmp_path / "area.shp"
+        shp_file.touch()
+
+        result = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--geometry",
+                str(shp_file),
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Specify only one of" in captured.err
+
+    def test_download_geometry_and_bbox_error(self, capsys, tmp_path):
+        """--geometry + --bbox -> mutual exclusivity error."""
+        shp_file = tmp_path / "area.shp"
+        shp_file.touch()
+
+        result = main(
+            [
+                "download",
+                "--geometry",
+                str(shp_file),
+                "--bbox",
+                "419000,230000,426000,237000",
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Specify only one of" in captured.err
+
+    def test_download_geometry_file_not_found(self, capsys, tmp_path):
+        """--geometry with nonexistent file -> error."""
+        result = main(
+            [
+                "download",
+                "--geometry",
+                str(tmp_path / "nonexistent.shp"),
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "File not found" in captured.err
+
+    def test_download_no_input_error_updated(self, capsys):
+        """No input at all shows updated error message."""
+        result = main(["download", "-q"])
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "--geometry" in captured.err
+
+
+# ===========================================================================
+# Geometry CLI tests — landcover download command
+# ===========================================================================
+
+
+class TestCmdLandcoverDownloadGeometry:
+    """Tests for landcover download command with --geometry option."""
+
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    @patch("kartograf.cli.commands.LandCoverManager")
+    def test_landcover_geometry_basic(self, mock_mgr_cls, mock_bbox, capsys, tmp_path):
+        """--geometry computes overall bbox and downloads."""
+        shp_file = tmp_path / "area.shp"
+        shp_file.touch()
+
+        mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
+        mock_mgr = Mock()
+        mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.download.return_value = tmp_path / "out.gpkg"
+        mock_mgr_cls.return_value = mock_mgr
+
+        result = main(
+            [
+                "landcover",
+                "download",
+                "--geometry",
+                str(shp_file),
+                "-o",
+                str(tmp_path),
+            ]
+        )
+
+        assert result == 0
+        mock_bbox.assert_called_once()
+        mock_mgr.download.assert_called_once()
+        call_kwargs = mock_mgr.download.call_args
+        assert call_kwargs.kwargs.get("bbox") is not None
+
+    def test_landcover_geometry_and_teryt_error(self, capsys, tmp_path):
+        """--geometry + --teryt -> mutual exclusivity error."""
+        shp_file = tmp_path / "area.shp"
+        shp_file.touch()
+
+        result = main(
+            [
+                "landcover",
+                "download",
+                "--geometry",
+                str(shp_file),
+                "--teryt",
+                "1465",
+            ]
+        )
+
+        assert result == 1
+        captured = capsys.readouterr()
+        err = captured.err
+        assert "only one of" in err.lower() or "Provide only one" in err
+
+    def test_landcover_geometry_file_not_found(self, capsys, tmp_path):
+        """--geometry with nonexistent file -> error."""
+        result = main(
+            [
+                "landcover",
+                "download",
+                "--geometry",
+                str(tmp_path / "nonexistent.shp"),
+            ]
+        )
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "File not found" in captured.err
+
+
+# ===========================================================================
+# Geometry CLI tests — soilgrids hsg command
+# ===========================================================================
+
+
+class TestCmdSoilgridsHsgGeometry:
+    """Tests for soilgrids hsg command with --geometry option."""
+
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    @patch("kartograf.hydrology.HSGCalculator")
+    def test_soilgrids_hsg_geometry(self, mock_calc_cls, mock_bbox, capsys, tmp_path):
+        """--geometry computes bbox and calls calculate_hsg_by_bbox."""
+        shp_file = tmp_path / "area.shp"
+        shp_file.touch()
+
+        mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
+        mock_calc = Mock()
+        mock_calc.calculate_hsg_by_bbox.return_value = tmp_path / "hsg.tif"
+        mock_calc_cls.return_value = mock_calc
+
+        result = main(
+            [
+                "soilgrids",
+                "hsg",
+                "--geometry",
+                str(shp_file),
+                "-o",
+                str(tmp_path),
+            ]
+        )
+
+        assert result == 0
+        mock_bbox.assert_called_once()
+        mock_calc.calculate_hsg_by_bbox.assert_called_once()
+
+    def test_soilgrids_hsg_geometry_and_godlo_error(self, capsys, tmp_path):
+        """--geometry + --godlo -> mutual exclusivity error."""
+        shp_file = tmp_path / "area.shp"
+        shp_file.touch()
+
+        result = main(
+            [
+                "soilgrids",
+                "hsg",
+                "--geometry",
+                str(shp_file),
+                "--godlo",
+                "N-34-130-D",
+            ]
+        )
+
+        assert result == 1
+        captured = capsys.readouterr()
+        err = captured.err
+        assert "only one of" in err.lower() or "Provide only one" in err

@@ -52,8 +52,18 @@ kartograf download N-34-130-D-d-2-4 --product nmpt
 kartograf download N-34-130-D-d-2-4 --product orto
 kartograf download --bbox 419000,230000,426000,237000 --product orto
 
+# Pobieranie NMT z pliku geometrii (SHP/GPKG)
+kartograf download --geometry zlewnia.shp
+kartograf download --geometry zlewnia.gpkg --layer catchments --product nmpt
+
 # Pobieranie Land Cover (BDOT10k - powiat)
 kartograf landcover download --source bdot10k --teryt 1465
+
+# Pobieranie danych hydrograficznych (BDOT10k - rzeki, kanały, rowy)
+kartograf landcover download --source bdot10k --teryt 1465 --category hydro
+
+# Pobieranie Land Cover z pliku geometrii
+kartograf landcover download --source bdot10k --geometry zlewnia.shp
 
 # Pobieranie Land Cover (BDOT10k - godło)
 kartograf landcover download --source bdot10k --godlo N-34-130-D
@@ -159,6 +169,7 @@ for group, data in stats.items():
 - ✅ **Parser godeł** - Obsługa układów 1992 i 2000, skal 1:1 000 000 - 1:10 000
 - ✅ **Bounding box** - Obliczanie współrzędnych arkusza (EPSG:2180, EPSG:4326)
 - ✅ **Hierarchia arkuszy** - Automatyczne określanie arkuszy nadrzędnych i podrzędnych
+- ✅ **Selekcja obszaru** - Godło, bbox, plik geometrii (SHP/GPKG)
 - ✅ **Pobieranie NMT** - Z retry logic i progress tracking
 - ✅ **Organizacja plików** - Automatyczna struktura katalogów (`data/nmt_1m/`, `data/nmt_5m/`)
 - ✅ **Formaty** - GeoTIFF, PNG, JPEG (WCS), ASC (OpenData)
@@ -183,9 +194,10 @@ for group, data in stats.items():
 ### Land Cover (Pokrycie Terenu)
 - ✅ **BDOT10k** - Polska baza wektorowa (GUGiK), szczegółowość 1:10 000
   - 12 warstw pokrycia terenu (PT*): lasy, wody, zabudowa, tereny rolne, itp.
-  - Automatyczne scalanie warstw do jednego GeoPackage
+  - 4 warstwy hydrograficzne (SW* + PTWP): rzeki, kanały, rowy, wody powierzchniowe
+  - Automatyczne scalanie warstw do jednego GeoPackage (z zachowaniem rtree index)
 - ✅ **CORINE Land Cover** - Europejska klasyfikacja (Copernicus), 44 klasy
-- ✅ **Metody selekcji** - TERYT (powiat), bbox, godło arkusza
+- ✅ **Metody selekcji** - TERYT (powiat), bbox, godło arkusza, plik geometrii (SHP/GPKG)
 - ✅ **Formaty** - GeoPackage, Shapefile, GeoTIFF, PNG
 
 ### SoilGrids (Dane Glebowe)
@@ -255,6 +267,7 @@ Główna aplikacja nigdy nie widzi kluczy prywatnych.
 - PyJWT[crypto] >= 2.8.0
 - rasterio >= 1.3.0
 - numpy >= 1.24.0
+- pyshp >= 2.3.0
 
 ## Struktura Projektu
 
@@ -262,13 +275,13 @@ Główna aplikacja nigdy nie widzi kluczy prywatnych.
 Kartograf/
 ├── kartograf/           # Kod źródłowy
 │   ├── auth/            # Auth Proxy (bezpieczna autentykacja CLMS)
-│   ├── core/            # Parser godeł, BBox
+│   ├── core/            # Parser godeł, BBox, geometria (SHP/GPKG)
 │   ├── providers/       # Providery danych (GUGiK NMT/NMPT/Orto, BDOT10k, CORINE, SoilGrids)
 │   ├── download/        # Download management (NMT/NMPT/Orto)
 │   ├── landcover/       # Land Cover management
 │   ├── hydrology/       # Hydrologic Soil Groups (HSG)
 │   └── cli/             # CLI interface
-├── tests/               # Testy (574)
+├── tests/               # Testy (636)
 ├── docs/                # Dokumentacja
 └── README.md
 ```
@@ -311,4 +324,4 @@ Projekt udostępniony na licencji MIT. Szczegóły w pliku `LICENSE`.
 
 ## Status
 
-**Wersja 0.4.0** - NMPT (Digital Surface Model), Ortofotomapa (25cm), CLI `--product {nmt,nmpt,orto}`, nowa struktura katalogów (`nmt_1m`/`nmt_5m`/`nmpt`/`orto`). 574 testów, pokrycie 84%. Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów.
+**Wersja 0.4.1** - Geometry file selection (`--geometry` SHP/GPKG), BDOT10k: naprawa rtree spatial index, kategoria hydro (`--category hydro`). 636 testów, pokrycie ~84%. Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów.

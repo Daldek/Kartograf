@@ -7,14 +7,15 @@
 | NMT (parser + pobieranie) | ✅ Gotowy | v0.1.0+ |
 | NMPT (Digital Surface Model) | ✅ Gotowy | v0.4.0 |
 | Ortofotomapa | ✅ Gotowy | v0.4.0 |
-| Land Cover (BDOT10k) | ✅ Gotowy | v0.3.0+ |
+| Land Cover (BDOT10k) | ✅ Gotowy | v0.3.0+, hydro v0.4.1 |
 | Land Cover (CORINE) | ✅ Gotowy | v0.3.0+ |
 | SoilGrids | ✅ Gotowy | v0.3.0+ |
 | HSG | ✅ Gotowy | v0.3.0+ |
 | bbox → godla | ✅ Gotowy | find_sheets_for_bbox(), CLI --bbox |
-| CLI | ✅ Gotowy | 5 komend + --bbox + --product |
+| geometry → godla | ✅ Gotowy | find_sheets_for_geometry(), CLI --geometry |
+| CLI | ✅ Gotowy | 5 komend + --bbox + --product + --category + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
-| Pokrycie testami | ✅ Gotowy | 83.95%, 574 testy, cel 80% osiagniety |
+| Pokrycie testami | ✅ Gotowy | ~84%, 636 testow, cel 80% osiagniety |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 
 <!-- Statusy: ✅ Gotowy | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
@@ -51,40 +52,39 @@
 - **Wersja:** v0.4.0
 - **Zakres:** GugikNmptProvider, GugikOrtoProvider, --product CLI, podkatalogi nmt_1m/nmt_5m/nmpt/orto, 574 testow, 83.95% pokrycie
 
+### CP7 — BDOT10k rtree fix + hydro category + geometry selection
+- **Data:** 2026-02-08
+- **Wersja:** v0.4.1
+- **Zakres:** _copy_rtree_index() fix, HYDRO_LAYERS/CATEGORY_FILTERS, --category CLI, geometry.py, --geometry CLI, pyshp, 636 testow
+
 ## Ostatnia sesja
 
-**Data:** 2026-02-07
+**Data:** 2026-02-08
 
 ### Co zrobiono
-- **feat(providers): NMPT i Ortofotomapa — nowe produkty GUGiK**
-  - `GugikNmptProvider` — dziedziczy z GugikProvider, nadpisuje endpointy NMPT/DSM
-  - `GugikOrtoProvider` — osobna klasa, ortofoto Standard Resolution (25cm, TIF)
-  - `FileStorage` — parametr `product` (nmpt, orto), podkatalogi `nmt_1m`/`nmt_5m`/`nmpt`/`orto`
-  - `DownloadManager` — dynamiczne `_default_ext` z `provider.default_extension`
-  - `BaseProvider` — nowa property `default_extension` (domyslnie `.asc`)
-  - CLI `--product {nmt,nmpt,orto}` — wybor produktu w komendzie download
-  - Public API: `GugikNmptProvider`, `GugikOrtoProvider` w `kartograf/__init__.py`
-  - Nowy `tests/test_gugik_nmpt.py` — 21 testow
-  - Nowy `tests/test_gugik_orto.py` — 25 testow
-  - Rozszerzony `tests/test_cli.py` — +12 testow (product CLI)
-  - Rozszerzony `tests/test_storage.py` — +8 testow (product storage)
-  - Rozszerzony `tests/test_download_manager.py` — +3 testy (default_ext)
-- **docs: aktualizacja SCOPE, PRD, DECISIONS, CHANGELOG, PROGRESS**
-  - SCOPE.md v3.0 — dodane NMPT i Ortofoto do zakresu
-  - PRD.md v3.0 — nowe features 3.2 (NMPT) i 3.3 (Ortofoto)
-  - DECISIONS.md — ADR-011 (NMPT inheritance), ADR-012 (Orto separate class), ADR-013 (storage rename)
-  - Wersja projektu: 0.3.2 → 0.4.0
+- **feat(geometry): reading SHP/GPKG files for spatial selection**
+  - Nowy modul `kartograf/core/geometry.py`
+  - `_parse_gpkg_envelope()` — GeoPackage Binary header parsing (envelope extraction)
+  - `_read_shp_bboxes()` — pyshp Reader → per-feature bbox
+  - `_read_gpkg_bboxes()` — sqlite3 → geometry blobs → envelope parsing
+  - CRS auto-detection: `.prj` (SHP), `gpkg_spatial_ref_sys` (GPKG)
+  - `_transform_bbox()` — pyproj 4-corner transformation
+  - `read_feature_bboxes()` — dispatch SHP/GPKG
+  - `get_overall_bbox()` — union bbox of all features
+  - `find_sheets_for_geometry()` — per-feature bbox → find_sheets_for_bbox → deduplicate
+- **feat(cli): --geometry/--layer for download, landcover, soilgrids**
+  - `kartograf download --geometry area.shp` — tiles intersecting features
+  - `kartograf download --geometry area.gpkg --layer catchments`
+  - `kartograf landcover download --geometry area.shp` — overall bbox
+  - `kartograf soilgrids hsg --geometry area.shp` — overall bbox
+  - Mutual exclusivity: godlo XOR --bbox XOR --geometry
+  - `_cmd_download_geometry()` — new CLI handler
+- **deps: pyshp>=2.3.0 added**
+- **Public API: find_sheets_for_geometry exported**
+- **docs: CHANGELOG, DECISIONS (ADR-015), SCOPE, PRD, README, CLAUDE.md, PROGRESS**
 - **Wyniki testow:**
-  - **574 testow passed** (67 nowych)
-  - **Pokrycie: 83.95%** (cel 80% osiagniety)
+  - **636 testow passed** (+43 nowych: 31 geometry + 12 CLI)
   - **Ruff: clean** (lint + format)
-  - Pokrycie per-modul:
-    - gugik_nmpt.py: 100%
-    - gugik_orto.py: 94%
-    - manager.py: 100%
-    - storage.py: 93%
-    - cli/commands.py: 90%
-    - sheet_parser.py: 98%
 
 ### Nastepne kroki
 1. Pobieranie rownolegle (v0.5+)
@@ -92,7 +92,7 @@
 
 ## Backlog
 
-- [x] Pokrycie testami do 80% (83.95%, 574 testow)
+- [x] Pokrycie testami do 80% (~84%, 636 testow)
 - [x] NMPT provider (GugikNmptProvider)
 - [x] Ortofotomapa provider (GugikOrtoProvider)
 - [x] CLI --product {nmt,nmpt,orto}
