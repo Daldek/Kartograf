@@ -117,6 +117,20 @@ class Bdot10kProvider(LandCoverProvider):
         "PTZB",  # Tereny zabudowane (built-up areas)
     ]
 
+    # Hydrographic layer names in BDOT10k
+    HYDRO_LAYERS = [
+        "SWRS",  # Rzeki i strumienie (rivers/streams) - LINE
+        "SWKN",  # Kanały (canals) - LINE
+        "SWRM",  # Rowy melioracyjne (drainage ditches) - LINE
+        "PTWP",  # Wody powierzchniowe (surface waters) - POLYGON
+    ]
+
+    # Filename patterns for each category (matched against uppercase filenames)
+    CATEGORY_FILTERS = {
+        "pt": ["_PT"],
+        "hydro": ["_SW", "_PTWP"],
+    }
+
     # Default settings
     DEFAULT_TIMEOUT = 60
     MAX_RETRIES = 3
@@ -193,6 +207,13 @@ class Bdot10kProvider(LandCoverProvider):
         if format not in ["GPKG", "SHP"]:
             raise ValueError(f"Unsupported format: {format}. Use 'GPKG' or 'SHP'")
 
+        category = kwargs.get("category", "pt")
+        if category not in self.CATEGORY_FILTERS:
+            raise ValueError(
+                f"Unknown category: {category}. "
+                f"Use one of: {list(self.CATEGORY_FILTERS)}"
+            )
+
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -205,6 +226,7 @@ class Bdot10kProvider(LandCoverProvider):
             timeout=timeout,
             description=f"BDOT10k TERYT {teryt}",
             extract_from_zip=(format == "GPKG"),
+            category=category,
         )
 
     def _construct_opendata_url(self, teryt: str, format: str) -> str:
@@ -289,7 +311,9 @@ class Bdot10kProvider(LandCoverProvider):
         logger.info(f"Godło {godlo} is in powiat {teryt}, downloading county package")
 
         # Download the entire county package
-        return self.download_by_teryt(teryt, output_path, timeout, format=format)
+        return self.download_by_teryt(
+            teryt, output_path, timeout, format=format, **kwargs
+        )
 
     def _get_teryt_for_point(
         self,
@@ -441,7 +465,9 @@ class Bdot10kProvider(LandCoverProvider):
         logger.info(f"Bbox center is in powiat {teryt}, downloading county package")
 
         # Download the entire county package
-        return self.download_by_teryt(teryt, output_path, timeout, format=format)
+        return self.download_by_teryt(
+            teryt, output_path, timeout, format=format, **kwargs
+        )
 
     # =========================================================================
     # Common utilities
@@ -454,6 +480,7 @@ class Bdot10kProvider(LandCoverProvider):
         timeout: int,
         description: str,
         extract_from_zip: bool = False,
+        category: str = "pt",
     ) -> Path:
         """
         Download file with automatic retry on failure.
@@ -494,7 +521,7 @@ class Bdot10kProvider(LandCoverProvider):
                 response.raise_for_status()
 
                 if extract_from_zip:
-                    self._extract_gpkg_from_zip(response, output_path)
+                    self._extract_gpkg_from_zip(response, output_path, category)
                 else:
                     self._save_response(response, output_path)
 
@@ -532,13 +559,16 @@ class Bdot10kProvider(LandCoverProvider):
             raise
 
     def _extract_gpkg_from_zip(
-        self, response: requests.Response, output_path: Path
+        self,
+        response: requests.Response,
+        output_path: Path,
+        category: str = "pt",
     ) -> None:
         """
-        Extract and merge land cover (PT*) layers from downloaded ZIP.
+        Extract and merge layers from downloaded ZIP by category.
 
         BDOT10k packages contain separate GPKG files for each layer.
-        This method extracts only PT* (land cover) layers and merges
+        This method extracts layers matching the category filter and merges
         them into a single GeoPackage file.
 
         Parameters
@@ -547,6 +577,9 @@ class Bdot10kProvider(LandCoverProvider):
             HTTP response with ZIP content
         output_path : Path
             Target path for merged GPKG
+        category : str, optional
+            Layer category to extract: "pt" (land cover) or "hydro"
+            (hydrographic). Default: "pt"
         """
         import tempfile
 
@@ -556,25 +589,32 @@ class Bdot10kProvider(LandCoverProvider):
             zip_data.write(chunk)
         zip_data.seek(0)
 
+        filters = self.CATEGORY_FILTERS.get(category, self.CATEGORY_FILTERS["pt"])
+
         try:
             with zipfile.ZipFile(zip_data, "r") as zf:
-                # Find PT* (land cover) GPKG files in archive
+                # Find GPKG files matching category filter
                 all_gpkg = [f for f in zf.namelist() if f.endswith(".gpkg")]
-                pt_gpkg = [f for f in all_gpkg if "_PT" in f.upper()]
+                matched_gpkg = [
+                    f
+                    for f in all_gpkg
+                    if any(pattern in f.upper() for pattern in filters)
+                ]
 
-                if not pt_gpkg:
-                    # Fallback: if no PT* layers, check for any GPKG
+                if not matched_gpkg:
+                    # Fallback: if no matching layers, check for any GPKG
                     if not all_gpkg:
                         raise DownloadError(
                             f"No GPKG files found in ZIP. Contents: {zf.namelist()}"
                         )
-                    # Use all GPKG files if no PT* specific ones
-                    pt_gpkg = all_gpkg
+                    # Use all GPKG files if no category-specific ones
+                    matched_gpkg = all_gpkg
                     logger.warning(
-                        f"No PT* layers found, extracting all {len(all_gpkg)} layers"
+                        f"No {category} layers found, "
+                        f"extracting all {len(all_gpkg)} layers"
                     )
 
-                logger.debug(f"Found {len(pt_gpkg)} PT* layers to merge")
+                logger.debug(f"Found {len(matched_gpkg)} {category} layers to merge")
 
                 # Create temp directory for extraction
                 with tempfile.TemporaryDirectory() as tmpdir:
@@ -582,7 +622,7 @@ class Bdot10kProvider(LandCoverProvider):
 
                     # Extract PT* files
                     extracted_files = []
-                    for gpkg_file in pt_gpkg:
+                    for gpkg_file in matched_gpkg:
                         # Extract to temp directory
                         extracted_path = tmpdir_path / Path(gpkg_file).name
                         with (
@@ -716,6 +756,9 @@ class Bdot10kProvider(LandCoverProvider):
                     (table_name,),
                 )
 
+                # Copy rtree spatial index if present
+                self._copy_rtree_index(cursor, table_name)
+
                 logger.debug(f"Copied layer {table_name}")
 
             # Commit before detaching to release locks
@@ -724,12 +767,93 @@ class Bdot10kProvider(LandCoverProvider):
         finally:
             cursor.execute("DETACH DATABASE src")
 
+    def _copy_rtree_index(self, cursor, table_name: str) -> None:
+        """
+        Copy rtree spatial index for a table from attached source database.
+
+        Parameters
+        ----------
+        cursor : sqlite3.Cursor
+            Cursor to destination database (with source attached as 'src')
+        table_name : str
+            Name of the data table to copy rtree index for
+        """
+        # Get geometry column name from gpkg_geometry_columns
+        cursor.execute(
+            """
+            SELECT column_name FROM src.gpkg_geometry_columns
+            WHERE table_name=?
+            """,
+            (table_name,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return  # No geometry column -> no rtree
+
+        geom_col = row[0]
+        rtree_name = f"rtree_{table_name}_{geom_col}"
+
+        # Check if rtree exists in source
+        cursor.execute(
+            "SELECT name FROM src.sqlite_master WHERE type='table' AND name=?",
+            (rtree_name,),
+        )
+        if not cursor.fetchone():
+            return  # No rtree in source
+
+        # Create rtree virtual table in destination
+        cursor.execute(
+            f"CREATE VIRTUAL TABLE [{rtree_name}] "
+            f"USING rtree(id, minx, maxx, miny, maxy)"
+        )
+
+        # Copy rtree data
+        cursor.execute(f"INSERT INTO [{rtree_name}] SELECT * FROM src.[{rtree_name}]")
+
+        # Copy gpkg_extensions entry for rtree if gpkg_extensions exists in source
+        cursor.execute(
+            "SELECT name FROM src.sqlite_master "
+            "WHERE type='table' AND name='gpkg_extensions'"
+        )
+        if cursor.fetchone():
+            # Ensure gpkg_extensions exists in destination
+            cursor.execute(
+                "SELECT name FROM sqlite_master "
+                "WHERE type='table' AND name='gpkg_extensions'"
+            )
+            if not cursor.fetchone():
+                cursor.execute(
+                    "CREATE TABLE gpkg_extensions ("
+                    "table_name TEXT, column_name TEXT, extension_name TEXT, "
+                    "definition TEXT, scope TEXT)"
+                )
+
+            cursor.execute(
+                """
+                INSERT OR IGNORE INTO gpkg_extensions
+                SELECT * FROM src.gpkg_extensions
+                WHERE table_name=? AND extension_name='gpkg_rtree_index'
+                """,
+                (table_name,),
+            )
+
+        logger.debug(f"Copied rtree index {rtree_name}")
+
     # =========================================================================
     # Info methods
     # =========================================================================
 
-    def get_available_layers(self) -> list[str]:
-        """Return list of available land cover layers."""
+    def get_available_layers(self, category: str = "pt") -> list[str]:
+        """
+        Return list of available layers for a category.
+
+        Parameters
+        ----------
+        category : str, optional
+            "pt" for land cover (default), "hydro" for hydrographic
+        """
+        if category == "hydro":
+            return self.HYDRO_LAYERS.copy()
         return self.PT_LAYERS.copy()
 
     def get_supported_formats(self) -> list[str]:
@@ -751,6 +875,7 @@ class Bdot10kProvider(LandCoverProvider):
             Layer description in Polish
         """
         descriptions = {
+            # PT (land cover) layers
             "PTGN": "Grunty nieużytkowe",
             "PTKM": "Tereny komunikacyjne",
             "PTLZ": "Tereny leśne",
@@ -763,5 +888,9 @@ class Bdot10kProvider(LandCoverProvider):
             "PTWP": "Wody powierzchniowe",
             "PTWZ": "Tereny zabagnione",
             "PTZB": "Tereny zabudowane",
+            # Hydro layers
+            "SWRS": "Rzeki i strumienie",
+            "SWKN": "Kanały",
+            "SWRM": "Rowy melioracyjne",
         }
         return descriptions.get(layer, layer)
