@@ -1,7 +1,7 @@
 # Prompt implementacyjny — Kartograf
 
-**Wersja:** 2.0
-**Data:** 2026-02-03
+**Wersja:** 3.0
+**Data:** 2026-02-08
 **Dla:** Claude Code i inni asystenci AI
 
 ---
@@ -18,11 +18,11 @@ Pracujesz nad **Kartograf** — narzedziem do pobierania danych przestrzennych z
 - **CORINE Land Cover** — europejska klasyfikacja (44 klasy) z Copernicus
 - **SoilGrids** — dane glebowe (11 parametrow, 6 glebokosci) z ISRIC
 - **HSG** — grupy hydrologiczne SCS-CN z danych SoilGrids
-- **CLI** — 5 komend (parse, download, landcover, soilgrids, hsg) + --product {nmt,nmpt,orto}
+- **CLI** — 5 komend (parse, download, landcover, soilgrids, hsg) + --product, --geometry, --category
 
 **Stack technologiczny:**
 - Python 3.12+
-- requests (HTTP), pyproj (CRS), PyJWT (OAuth2), rasterio (GeoTIFF), numpy (arrays)
+- requests (HTTP), pyproj (CRS), PyJWT (OAuth2), rasterio (GeoTIFF), numpy (arrays), pyshp (SHP)
 - Flat layout, pyproject.toml, ruff, pytest
 
 **Uzycie:**
@@ -52,8 +52,9 @@ kartograf/
 ├── exceptions.py            # KartografError → ParseError, ValidationError, DownloadError
 │
 ├── core/                    # WARSTWA BAZOWA
-│   └── sheet_parser.py      # SheetParser — parser godel (1:1M do 1:10k)
-│                            # BBox — bounding box z transformacja CRS
+│   ├── sheet_parser.py      # SheetParser — parser godel (1:1M do 1:10k)
+│   │                        # BBox — bounding box z transformacja CRS
+│   └── geometry.py          # Czytanie SHP/GPKG, find_sheets_for_geometry
 │
 ├── providers/               # WARSTWA DANYCH (abstrakcje nad API)
 │   ├── base.py              # BaseProvider — abstrakcja dla NMT
@@ -131,7 +132,7 @@ CLI → HSGCalculator → SoilGridsProvider → rasterio → numpy → FileStora
 ```python
 from kartograf import (
     # Core
-    SheetParser, BBox, find_sheets_for_bbox,
+    SheetParser, BBox, find_sheets_for_bbox, find_sheets_for_geometry,
     # Download (NMT/NMPT/Orto)
     DownloadManager, DownloadProgress, FileStorage,
     # Land Cover
