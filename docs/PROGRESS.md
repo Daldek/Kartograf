@@ -62,29 +62,17 @@
 **Data:** 2026-02-08
 
 ### Co zrobiono
-- **feat(geometry): reading SHP/GPKG files for spatial selection**
-  - Nowy modul `kartograf/core/geometry.py`
-  - `_parse_gpkg_envelope()` — GeoPackage Binary header parsing (envelope extraction)
-  - `_read_shp_bboxes()` — pyshp Reader → per-feature bbox
-  - `_read_gpkg_bboxes()` — sqlite3 → geometry blobs → envelope parsing
-  - CRS auto-detection: `.prj` (SHP), `gpkg_spatial_ref_sys` (GPKG)
-  - `_transform_bbox()` — pyproj 4-corner transformation
-  - `read_feature_bboxes()` — dispatch SHP/GPKG
-  - `get_overall_bbox()` — union bbox of all features
-  - `find_sheets_for_geometry()` — per-feature bbox → find_sheets_for_bbox → deduplicate
-- **feat(cli): --geometry/--layer for download, landcover, soilgrids**
-  - `kartograf download --geometry area.shp` — tiles intersecting features
-  - `kartograf download --geometry area.gpkg --layer catchments`
-  - `kartograf landcover download --geometry area.shp` — overall bbox
-  - `kartograf soilgrids hsg --geometry area.shp` — overall bbox
-  - Mutual exclusivity: godlo XOR --bbox XOR --geometry
-  - `_cmd_download_geometry()` — new CLI handler
-- **deps: pyshp>=2.3.0 added**
-- **Public API: find_sheets_for_geometry exported**
-- **docs: CHANGELOG, DECISIONS (ADR-015), SCOPE, PRD, README, CLAUDE.md, PROGRESS**
-- **Wyniki testow:**
-  - **636 testow passed** (+43 nowych: 31 geometry + 12 CLI)
-  - **Ruff: clean** (lint + format)
+- **docs: sprawdzenie spojnosci dokumentacji (15 niespojnosci naprawionych)**
+  - README.md: brak geometry w Funkcjonalnosci, test count 593→636, brak pyshp
+  - PRD.md: brak find_sheets_for_geometry i pyshp, niezgodnosc wersji header/footer
+  - IMPLEMENTATION_PROMPT.md: brak geometry.py, pyshp, --geometry, niezgodnosc wersji
+  - DEVELOPMENT_STANDARDS.md: test count 574→636, brak 4 plikow testowych
+  - SCOPE.md: literowka "CORINE 5m" → "NMT 5m"
+  - PROGRESS.md: backlog test count 593→636
+- **release: v0.4.1**
+  - Merge develop → main (--no-ff)
+  - Tag v0.4.1 na main
+  - Push main + tag
 
 ### Nastepne kroki
 1. Pobieranie rownolegle (v0.5+)
