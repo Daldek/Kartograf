@@ -169,6 +169,7 @@ for group, data in stats.items():
 - ✅ **Parser godeł** - Obsługa układów 1992 i 2000, skal 1:1 000 000 - 1:10 000
 - ✅ **Bounding box** - Obliczanie współrzędnych arkusza (EPSG:2180, EPSG:4326)
 - ✅ **Hierarchia arkuszy** - Automatyczne określanie arkuszy nadrzędnych i podrzędnych
+- ✅ **Selekcja obszaru** - Godło, bbox, plik geometrii (SHP/GPKG)
 - ✅ **Pobieranie NMT** - Z retry logic i progress tracking
 - ✅ **Organizacja plików** - Automatyczna struktura katalogów (`data/nmt_1m/`, `data/nmt_5m/`)
 - ✅ **Formaty** - GeoTIFF, PNG, JPEG (WCS), ASC (OpenData)
@@ -196,7 +197,7 @@ for group, data in stats.items():
   - 4 warstwy hydrograficzne (SW* + PTWP): rzeki, kanały, rowy, wody powierzchniowe
   - Automatyczne scalanie warstw do jednego GeoPackage (z zachowaniem rtree index)
 - ✅ **CORINE Land Cover** - Europejska klasyfikacja (Copernicus), 44 klasy
-- ✅ **Metody selekcji** - TERYT (powiat), bbox, godło arkusza
+- ✅ **Metody selekcji** - TERYT (powiat), bbox, godło arkusza, plik geometrii (SHP/GPKG)
 - ✅ **Formaty** - GeoPackage, Shapefile, GeoTIFF, PNG
 
 ### SoilGrids (Dane Glebowe)
