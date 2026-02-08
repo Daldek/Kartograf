@@ -305,16 +305,20 @@ Kartograf/
 │   ├── hydrology/           # obliczenia hydrologiczne (HSG)
 │   ├── auth/                # autentykacja CLMS (Auth Proxy)
 │   └── cli/                 # interfejs CLI
-├── tests/                   # testy (574)
+├── tests/                   # testy (636)
 │   ├── conftest.py
 │   ├── test_sheet_parser.py
 │   ├── test_gugik_provider.py
 │   ├── test_gugik_nmpt.py
 │   ├── test_gugik_orto.py
 │   ├── test_download_manager.py
+│   ├── test_storage.py
+│   ├── test_auth_client.py
+│   ├── test_auth_proxy.py
 │   ├── test_landcover.py
 │   ├── test_soilgrids.py
 │   ├── test_hsg.py
+│   ├── test_geometry.py
 │   ├── test_cli.py
 │   └── test_integration.py
 ├── docs/                    # dokumentacja

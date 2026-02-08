@@ -1,10 +1,10 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.0
-**Data:** 2026-02-07
+**Wersja:** 3.2
+**Data:** 2026-02-08
 **Product Owner:** Piotr
-**Status:** Production (v0.4.0)
+**Status:** Production (v0.4.1)
 
 ---
 
@@ -84,6 +84,10 @@ from kartograf import find_sheets_for_bbox
 bbox = BBox(419000, 230000, 426000, 237000, "EPSG:2180")
 sheets = find_sheets_for_bbox(bbox, "1:10000")
 
+# Reverse lookup: geometry file → godła
+from kartograf import find_sheets_for_geometry
+sheets = find_sheets_for_geometry(Path("area.shp"), "1:10000")
+
 # Pobieranie przez godło (ASC)
 manager = DownloadManager(output_dir="./data")
 path = manager.download_sheet("N-34-130-D-d-2-4")
@@ -109,6 +113,8 @@ kartograf download N-34-130-D --resolution 5m
 kartograf download N-34-130-D-d-2-4 --product nmpt
 kartograf download N-34-130-D-d-2-4 --product orto
 kartograf download --bbox 419000,230000,426000,237000 --product orto
+kartograf download --geometry area.shp
+kartograf download --geometry area.gpkg --layer catchments
 ```
 
 ---
@@ -193,7 +199,7 @@ lc.download(teryt="1465", output_dir="./data")
 lc.download(godlo="N-34-130-D", output_dir="./data")
 ```
 
-#### Warstwy PT* (12 warstw)
+#### Warstwy PT* — pokrycie terenu (12 warstw, `--category pt` domyślna)
 | Warstwa | Opis |
 |---------|------|
 | PTGN | Grunty nieużytkowe |
@@ -209,9 +215,18 @@ lc.download(godlo="N-34-130-D", output_dir="./data")
 | PTWZ | Tereny zabagnione |
 | PTZB | Tereny zabudowane |
 
+#### Warstwy hydrograficzne (4 warstwy, `--category hydro`)
+| Warstwa | Opis |
+|---------|------|
+| SWRS | Rzeki i strumienie |
+| SWKN | Kanały |
+| SWRM | Rowy melioracyjne |
+| PTWP | Wody powierzchniowe |
+
 #### CLI Commands
 ```bash
 kartograf landcover download --source bdot10k --teryt 1465
+kartograf landcover download --source bdot10k --teryt 1465 --category hydro
 kartograf landcover download --source bdot10k --godlo N-34-130-D
 kartograf landcover list-layers --source bdot10k
 ```
@@ -440,6 +455,7 @@ from kartograf import (
     SheetParser,
     BBox,
     find_sheets_for_bbox,
+    find_sheets_for_geometry,
 
     # Download (NMT/NMPT/Orto)
     DownloadManager,
@@ -469,7 +485,7 @@ from kartograf import (
     DownloadError,
 
     # Version
-    __version__,  # "0.4.0"
+    __version__,  # "0.4.1"
 )
 ```
 
@@ -486,6 +502,7 @@ pyproj >= 3.6.0        # CRS transformations
 PyJWT[crypto] >= 2.8.0 # OAuth2 JWT (CLMS)
 rasterio >= 1.3.0      # GeoTIFF processing
 numpy >= 1.24.0        # Array operations
+pyshp >= 2.3.0         # Shapefile reading
 ```
 
 ### 6.2 Development Dependencies
@@ -562,6 +579,6 @@ HYDROGRAF (główna aplikacja)
 
 ---
 
-**Wersja dokumentu:** 3.0
-**Data ostatniej aktualizacji:** 2026-02-07
-**Status:** Production - v0.4.0
+**Wersja dokumentu:** 3.2
+**Data ostatniej aktualizacji:** 2026-02-08
+**Status:** Production - v0.4.1
