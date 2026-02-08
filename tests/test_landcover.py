@@ -17,7 +17,10 @@ import requests
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
-from kartograf.providers.bdot10k import WOJEWODZTWO_NAMES, Bdot10kProvider
+from kartograf.providers.bdot10k import (
+    WOJEWODZTWO_NAMES,
+    Bdot10kProvider,
+)
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.landcover_base import LandCoverProvider
 
@@ -997,3 +1000,516 @@ class TestLandCoverManagerDownload:
         # By godlo
         path = manager._generate_output_path(None, None, "N-34-130-D")
         assert "godlo_N-34-130-D" in str(path)
+
+
+# ===========================================================================
+# Tests for rtree spatial index preservation during GPKG merge
+# ===========================================================================
+
+
+def _create_gpkg_with_rtree(path: Path, table_name: str, geom_col: str = "geom"):
+    """Helper: create a minimal GPKG with an rtree spatial index."""
+    conn = sqlite3.connect(str(path))
+    c = conn.cursor()
+    c.execute(
+        "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+        "identifier TEXT, description TEXT, last_change TEXT, "
+        "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+    )
+    c.execute(
+        "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+        "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+    )
+    c.execute(
+        f"INSERT INTO gpkg_geometry_columns VALUES "
+        f"('{table_name}', '{geom_col}', 'POLYGON', 2180, 0, 0)"
+    )
+    c.execute(
+        f"INSERT INTO gpkg_contents VALUES "
+        f"('{table_name}', 'features', '{table_name}', '', '', "
+        f"0.0, 0.0, 1.0, 1.0, 2180)"
+    )
+    c.execute(
+        f"CREATE TABLE [{table_name}] "
+        f"(fid INTEGER PRIMARY KEY, [{geom_col}] BLOB, name TEXT)"
+    )
+    c.execute(f"INSERT INTO [{table_name}] VALUES (1, X'00', 'test')")
+    # Create rtree
+    rtree_name = f"rtree_{table_name}_{geom_col}"
+    c.execute(
+        f"CREATE VIRTUAL TABLE [{rtree_name}] USING rtree(id, minx, maxx, miny, maxy)"
+    )
+    c.execute(f"INSERT INTO [{rtree_name}] VALUES (1, 0.0, 1.0, 0.0, 1.0)")
+    # Create gpkg_extensions entry
+    c.execute(
+        "CREATE TABLE gpkg_extensions ("
+        "table_name TEXT, column_name TEXT, extension_name TEXT, "
+        "definition TEXT, scope TEXT)"
+    )
+    c.execute(
+        f"INSERT INTO gpkg_extensions VALUES "
+        f"('{table_name}', '{geom_col}', 'gpkg_rtree_index', "
+        f"'http://www.geopackage.org/spec120/#extension_rtree', 'write-only')"
+    )
+    conn.commit()
+    conn.close()
+
+
+class TestBdot10kRtreeIndex:
+    """Test rtree spatial index preservation during GPKG merge."""
+
+    def test_merge_preserves_rtree_indices(self, tmp_path):
+        """Merge 2 GPKGs with rtree — both should have indices in output."""
+        provider = Bdot10kProvider()
+
+        gpkg1 = tmp_path / "one.gpkg"
+        _create_gpkg_with_rtree(gpkg1, "PTLZ")
+
+        gpkg2 = tmp_path / "two.gpkg"
+        _create_gpkg_with_rtree(gpkg2, "PTWP")
+
+        output = tmp_path / "merged.gpkg"
+        provider._merge_gpkg_files([gpkg1, gpkg2], output)
+
+        conn = sqlite3.connect(str(output))
+        cursor = conn.cursor()
+
+        # Check that rtree for PTWP (copied layer) exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE name='rtree_PTWP_geom'")
+        assert cursor.fetchone() is not None, "rtree_PTWP_geom should exist"
+
+        # Check rtree has data
+        cursor.execute("SELECT COUNT(*) FROM rtree_PTWP_geom")
+        assert cursor.fetchone()[0] == 1
+
+        # Base file rtree should also be intact
+        cursor.execute("SELECT name FROM sqlite_master WHERE name='rtree_PTLZ_geom'")
+        assert cursor.fetchone() is not None, "rtree_PTLZ_geom should exist"
+
+        conn.close()
+
+    def test_copy_rtree_no_geometry(self, tmp_path):
+        """Table without geometry — no error, no rtree created."""
+        provider = Bdot10kProvider()
+
+        gpkg1 = tmp_path / "base.gpkg"
+        conn1 = sqlite3.connect(str(gpkg1))
+        c1 = conn1.cursor()
+        c1.execute(
+            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+            "identifier TEXT, description TEXT, last_change TEXT, "
+            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+        )
+        c1.execute(
+            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+        )
+        c1.execute("CREATE TABLE dummy (id INTEGER PRIMARY KEY)")
+        conn1.commit()
+        conn1.close()
+
+        # Create source with table that has no geometry
+        gpkg2 = tmp_path / "src.gpkg"
+        conn2 = sqlite3.connect(str(gpkg2))
+        c2 = conn2.cursor()
+        c2.execute(
+            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+            "identifier TEXT, description TEXT, last_change TEXT, "
+            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+        )
+        c2.execute(
+            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+        )
+        c2.execute("CREATE TABLE no_geom_table (id INTEGER PRIMARY KEY, val TEXT)")
+        conn2.commit()
+        conn2.close()
+
+        output = tmp_path / "merged.gpkg"
+        provider._merge_gpkg_files([gpkg1, gpkg2], output)
+
+        conn = sqlite3.connect(str(output))
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE name LIKE 'rtree_%'")
+        assert cursor.fetchone() is None  # No rtree should be created
+        conn.close()
+
+    def test_copy_rtree_no_index_in_source(self, tmp_path):
+        """Geometry but no rtree in source — no error."""
+        provider = Bdot10kProvider()
+
+        gpkg1 = tmp_path / "base.gpkg"
+        conn1 = sqlite3.connect(str(gpkg1))
+        c1 = conn1.cursor()
+        c1.execute(
+            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+            "identifier TEXT, description TEXT, last_change TEXT, "
+            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+        )
+        c1.execute(
+            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+        )
+        c1.execute("CREATE TABLE dummy (id INTEGER PRIMARY KEY)")
+        conn1.commit()
+        conn1.close()
+
+        # Source has geometry columns entry but no rtree virtual table
+        gpkg2 = tmp_path / "src.gpkg"
+        conn2 = sqlite3.connect(str(gpkg2))
+        c2 = conn2.cursor()
+        c2.execute(
+            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+            "identifier TEXT, description TEXT, last_change TEXT, "
+            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+        )
+        c2.execute(
+            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+        )
+        c2.execute(
+            "INSERT INTO gpkg_geometry_columns VALUES "
+            "('PTLZ', 'geom', 'POLYGON', 2180, 0, 0)"
+        )
+        c2.execute(
+            "INSERT INTO gpkg_contents VALUES "
+            "('PTLZ', 'features', 'PTLZ', '', '', 0, 0, 1, 1, 2180)"
+        )
+        c2.execute("CREATE TABLE PTLZ (fid INTEGER PRIMARY KEY, geom BLOB)")
+        conn2.commit()
+        conn2.close()
+
+        output = tmp_path / "merged.gpkg"
+        provider._merge_gpkg_files([gpkg1, gpkg2], output)
+
+        conn = sqlite3.connect(str(output))
+        cursor = conn.cursor()
+        cursor.execute("SELECT name FROM sqlite_master WHERE name LIKE 'rtree_%'")
+        assert cursor.fetchone() is None  # No rtree should be created
+        conn.close()
+
+    def test_copy_rtree_gpkg_extensions_copied(self, tmp_path):
+        """gpkg_extensions entry for rtree is copied."""
+        provider = Bdot10kProvider()
+
+        gpkg1 = tmp_path / "base.gpkg"
+        _create_gpkg_with_rtree(gpkg1, "PTLZ")
+
+        gpkg2 = tmp_path / "src.gpkg"
+        _create_gpkg_with_rtree(gpkg2, "PTWP")
+
+        output = tmp_path / "merged.gpkg"
+        provider._merge_gpkg_files([gpkg1, gpkg2], output)
+
+        conn = sqlite3.connect(str(output))
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM gpkg_extensions "
+            "WHERE table_name='PTWP' AND extension_name='gpkg_rtree_index'"
+        )
+        row = cursor.fetchone()
+        assert row is not None, "gpkg_extensions entry for PTWP rtree should exist"
+        conn.close()
+
+    def test_base_file_rtree_preserved(self, tmp_path):
+        """First file's rtree still works after merge."""
+        provider = Bdot10kProvider()
+
+        gpkg1 = tmp_path / "base.gpkg"
+        _create_gpkg_with_rtree(gpkg1, "PTLZ")
+
+        gpkg2 = tmp_path / "src.gpkg"
+        _create_gpkg_with_rtree(gpkg2, "PTWP")
+
+        output = tmp_path / "merged.gpkg"
+        provider._merge_gpkg_files([gpkg1, gpkg2], output)
+
+        conn = sqlite3.connect(str(output))
+        cursor = conn.cursor()
+        # Query the base file's rtree — should work
+        cursor.execute(
+            "SELECT * FROM rtree_PTLZ_geom WHERE minx <= 0.5 AND maxx >= 0.5"
+        )
+        results = cursor.fetchall()
+        assert len(results) == 1
+        conn.close()
+
+
+# ===========================================================================
+# Tests for BDOT10k hydro category support
+# ===========================================================================
+
+
+class TestBdot10kCategory:
+    """Test BDOT10k category-based layer extraction."""
+
+    def test_category_filters_mapping(self):
+        """Verify CATEGORY_FILTERS constant."""
+        assert "pt" in Bdot10kProvider.CATEGORY_FILTERS
+        assert "hydro" in Bdot10kProvider.CATEGORY_FILTERS
+        assert "_PT" in Bdot10kProvider.CATEGORY_FILTERS["pt"]
+        assert "_SW" in Bdot10kProvider.CATEGORY_FILTERS["hydro"]
+        assert "_PTWP" in Bdot10kProvider.CATEGORY_FILTERS["hydro"]
+
+    def test_hydro_layers_list(self):
+        """Verify HYDRO_LAYERS constant."""
+        assert "SWRS" in Bdot10kProvider.HYDRO_LAYERS
+        assert "SWKN" in Bdot10kProvider.HYDRO_LAYERS
+        assert "SWRM" in Bdot10kProvider.HYDRO_LAYERS
+        assert "PTWP" in Bdot10kProvider.HYDRO_LAYERS
+
+    def test_extract_category_pt_default(self, tmp_path):
+        """Default category extracts only PT* files."""
+        provider = Bdot10kProvider()
+        output = tmp_path / "merged.gpkg"
+
+        # Create GPKG files for both PT and SW layers
+        gpkg_pt = tmp_path / "temp_PTLZ.gpkg"
+        conn = sqlite3.connect(str(gpkg_pt))
+        c = conn.cursor()
+        c.execute(
+            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+            "identifier TEXT, description TEXT, last_change TEXT, "
+            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+        )
+        c.execute(
+            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+        )
+        c.execute("CREATE TABLE PTLZ (id INTEGER PRIMARY KEY, name TEXT)")
+        c.execute("INSERT INTO PTLZ VALUES (1, 'forest')")
+        conn.commit()
+        conn.close()
+
+        gpkg_sw = tmp_path / "temp_SWRS.gpkg"
+        conn2 = sqlite3.connect(str(gpkg_sw))
+        c2 = conn2.cursor()
+        c2.execute(
+            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+            "identifier TEXT, description TEXT, last_change TEXT, "
+            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+        )
+        c2.execute(
+            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+        )
+        c2.execute("CREATE TABLE SWRS (id INTEGER PRIMARY KEY, name TEXT)")
+        c2.execute("INSERT INTO SWRS VALUES (1, 'river')")
+        conn2.commit()
+        conn2.close()
+
+        # Create ZIP with both
+        zip_buf = BytesIO()
+        with zipfile.ZipFile(zip_buf, "w") as zf:
+            with open(gpkg_pt, "rb") as f:
+                zf.writestr("data/BDOT10k_PTLZ.gpkg", f.read())
+            with open(gpkg_sw, "rb") as f:
+                zf.writestr("data/BDOT10k_SWRS.gpkg", f.read())
+        zip_buf.seek(0)
+
+        mock_resp = Mock()
+        mock_resp.iter_content.return_value = [zip_buf.getvalue()]
+
+        # Default category="pt" should only extract PT*
+        provider._extract_gpkg_from_zip(mock_resp, output)
+        out_gpkg = output.with_suffix(".gpkg")
+        assert out_gpkg.exists()
+
+        conn = sqlite3.connect(str(out_gpkg))
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name NOT LIKE 'gpkg_%' AND name NOT LIKE 'sqlite_%' "
+            "AND name NOT LIKE 'rtree_%'"
+        )
+        tables = [r[0] for r in cursor.fetchall()]
+        conn.close()
+
+        assert "PTLZ" in tables
+        assert "SWRS" not in tables
+
+    def test_extract_category_hydro(self, tmp_path):
+        """Hydro category extracts SW* + PTWP files."""
+        provider = Bdot10kProvider()
+        output = tmp_path / "merged.gpkg"
+
+        # Create SW GPKG
+        gpkg_sw = tmp_path / "temp_SWRS.gpkg"
+        conn = sqlite3.connect(str(gpkg_sw))
+        c = conn.cursor()
+        c.execute(
+            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+            "identifier TEXT, description TEXT, last_change TEXT, "
+            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+        )
+        c.execute(
+            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+        )
+        c.execute("CREATE TABLE SWRS (id INTEGER PRIMARY KEY, name TEXT)")
+        c.execute("INSERT INTO SWRS VALUES (1, 'river')")
+        conn.commit()
+        conn.close()
+
+        # Create PT GPKG (should not be extracted)
+        gpkg_pt = tmp_path / "temp_PTLZ.gpkg"
+        conn2 = sqlite3.connect(str(gpkg_pt))
+        c2 = conn2.cursor()
+        c2.execute(
+            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+            "identifier TEXT, description TEXT, last_change TEXT, "
+            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+        )
+        c2.execute(
+            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+        )
+        c2.execute("CREATE TABLE PTLZ (id INTEGER PRIMARY KEY, name TEXT)")
+        c2.execute("INSERT INTO PTLZ VALUES (1, 'forest')")
+        conn2.commit()
+        conn2.close()
+
+        zip_buf = BytesIO()
+        with zipfile.ZipFile(zip_buf, "w") as zf:
+            with open(gpkg_sw, "rb") as f:
+                zf.writestr("data/BDOT10k_SWRS.gpkg", f.read())
+            with open(gpkg_pt, "rb") as f:
+                zf.writestr("data/BDOT10k_PTLZ.gpkg", f.read())
+        zip_buf.seek(0)
+
+        mock_resp = Mock()
+        mock_resp.iter_content.return_value = [zip_buf.getvalue()]
+
+        provider._extract_gpkg_from_zip(mock_resp, output, category="hydro")
+        out_gpkg = output.with_suffix(".gpkg")
+
+        conn = sqlite3.connect(str(out_gpkg))
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name NOT LIKE 'gpkg_%' AND name NOT LIKE 'sqlite_%' "
+            "AND name NOT LIKE 'rtree_%'"
+        )
+        tables = [r[0] for r in cursor.fetchall()]
+        conn.close()
+
+        assert "SWRS" in tables
+        assert "PTLZ" not in tables
+
+    def test_extract_category_hydro_includes_ptwp(self, tmp_path):
+        """PTWP is included in hydro category."""
+        provider = Bdot10kProvider()
+        output = tmp_path / "merged.gpkg"
+
+        gpkg_ptwp = tmp_path / "temp_PTWP.gpkg"
+        conn = sqlite3.connect(str(gpkg_ptwp))
+        c = conn.cursor()
+        c.execute(
+            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+            "identifier TEXT, description TEXT, last_change TEXT, "
+            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+        )
+        c.execute(
+            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+        )
+        c.execute("CREATE TABLE PTWP (id INTEGER PRIMARY KEY, name TEXT)")
+        c.execute("INSERT INTO PTWP VALUES (1, 'lake')")
+        conn.commit()
+        conn.close()
+
+        zip_buf = BytesIO()
+        with zipfile.ZipFile(zip_buf, "w") as zf, open(gpkg_ptwp, "rb") as f:
+            zf.writestr("data/BDOT10k_PTWP.gpkg", f.read())
+        zip_buf.seek(0)
+
+        mock_resp = Mock()
+        mock_resp.iter_content.return_value = [zip_buf.getvalue()]
+
+        provider._extract_gpkg_from_zip(mock_resp, output, category="hydro")
+        out_gpkg = output.with_suffix(".gpkg")
+
+        conn = sqlite3.connect(str(out_gpkg))
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name NOT LIKE 'gpkg_%' AND name NOT LIKE 'sqlite_%' "
+            "AND name NOT LIKE 'rtree_%'"
+        )
+        tables = [r[0] for r in cursor.fetchall()]
+        conn.close()
+
+        assert "PTWP" in tables
+
+    def test_download_by_teryt_passes_category(self, tmp_path):
+        """category kwarg flows through download_by_teryt."""
+        provider = Bdot10kProvider()
+        output = tmp_path / "out.gpkg"
+
+        with patch.object(
+            provider, "_download_with_retry", return_value=output
+        ) as mock_dl:
+            provider.download_by_teryt("1465", output, category="hydro")
+
+        call_kwargs = mock_dl.call_args
+        assert call_kwargs.kwargs.get("category") == "hydro"
+
+    def test_download_by_teryt_invalid_category(self, tmp_path):
+        """Invalid category raises ValueError."""
+        provider = Bdot10kProvider()
+        output = tmp_path / "out.gpkg"
+
+        with pytest.raises(ValueError, match="Unknown category"):
+            provider.download_by_teryt("1465", output, category="invalid")
+
+    @patch("kartograf.core.sheet_parser.SheetParser")
+    def test_download_by_godlo_passes_category(self, mock_parser_cls, tmp_path):
+        """category kwarg flows through download_by_godlo."""
+        provider = Bdot10kProvider()
+        output = tmp_path / "out.gpkg"
+
+        mock_parser = Mock()
+        mock_parser.get_bbox.return_value = BBox(
+            450000, 550000, 460000, 560000, "EPSG:2180"
+        )
+        mock_parser_cls.return_value = mock_parser
+
+        with (
+            patch.object(provider, "_get_teryt_for_point", return_value="1465"),
+            patch.object(provider, "download_by_teryt", return_value=output) as mock_dl,
+        ):
+            provider.download_by_godlo("N-34-130-D", output, category="hydro")
+
+        call_kwargs = mock_dl.call_args
+        assert call_kwargs.kwargs.get("category") == "hydro"
+
+    def test_download_by_bbox_passes_category(self, tmp_path):
+        """category kwarg flows through download_by_bbox."""
+        provider = Bdot10kProvider()
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        output = tmp_path / "out.gpkg"
+
+        with (
+            patch.object(provider, "_get_teryt_for_point", return_value="1465"),
+            patch.object(provider, "download_by_teryt", return_value=output) as mock_dl,
+        ):
+            provider.download_by_bbox(bbox, output, category="hydro")
+
+        call_kwargs = mock_dl.call_args
+        assert call_kwargs.kwargs.get("category") == "hydro"
+
+    def test_get_available_layers_hydro(self):
+        """get_available_layers("hydro") returns HYDRO_LAYERS."""
+        provider = Bdot10kProvider()
+        layers = provider.get_available_layers("hydro")
+        assert "SWRS" in layers
+        assert "SWKN" in layers
+        assert "SWRM" in layers
+        assert "PTWP" in layers
+
+    def test_get_layer_description_hydro(self):
+        """Hydro layers have descriptions."""
+        provider = Bdot10kProvider()
+        assert provider.get_layer_description("SWRS") == "Rzeki i strumienie"
+        assert provider.get_layer_description("SWKN") == "Kanały"
+        assert provider.get_layer_description("SWRM") == "Rowy melioracyjne"

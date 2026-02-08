@@ -42,7 +42,8 @@ kartograf/
 ├── __init__.py          # Public API exports
 ├── exceptions.py        # KartografError, ParseError, ValidationError, DownloadError
 ├── core/                # Logika bazowa
-│   └── sheet_parser.py  # SheetParser — parser godel map topograficznych, BBox
+│   ├── sheet_parser.py  # SheetParser — parser godel map topograficznych, BBox
+│   └── geometry.py      # Czytanie SHP/GPKG, find_sheets_for_geometry, get_overall_bbox
 ├── providers/           # Providery danych (abstrakcje nad API)
 │   ├── base.py          # BaseProvider — abstrakcja dla NMT
 │   ├── gugik.py         # GugikProvider — NMT z GUGiK (WCS + OpenData)
@@ -94,7 +95,10 @@ kartograf download N-34-130-D-d-2-4
 kartograf download N-34-130-D-d-2-4 --product nmpt
 kartograf download N-34-130-D-d-2-4 --product orto
 kartograf download N-34-130-D --scale 1:10000 --resolution 5m
+kartograf download --geometry area.shp
+kartograf download --geometry area.gpkg --layer catchments
 kartograf landcover download --source bdot10k --teryt 1465
+kartograf landcover download --source bdot10k --teryt 1465 --category hydro
 kartograf landcover download --source corine --year 2018 --godlo N-34-130-D
 kartograf landcover download --source soilgrids --godlo N-34-130-D --property soc
 kartograf soilgrids hsg --godlo N-34-130-D --stats
@@ -136,6 +140,7 @@ kartograf landcover list-layers --source soilgrids
 - **PyJWT[crypto]** >= 2.8.0 — OAuth2 JWT dla CLMS API (wymagane)
 - **rasterio** >= 1.3.0 — przetwarzanie rastrow GeoTIFF (wymagane)
 - **numpy** >= 1.24.0 — operacje na tablicach (wymagane)
+- **pyshp** >= 2.3.0 — czytanie plikow Shapefile (wymagane)
 
 ### Integracje
 - Kartograf jest uzywany przez **Hydrograf** jako zrodlo danych GIS (NMT, Land Cover)

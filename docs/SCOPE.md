@@ -1,9 +1,9 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.0
-**Data:** 2026-02-07
-**Status:** Production (v0.4.0)
+**Wersja:** 3.2
+**Data:** 2026-02-08
+**Status:** Production (v0.4.1)
 
 ---
 
@@ -25,6 +25,7 @@ Kartograf automatyzuje ten proces oferując:
 - **Unified API** - jednolity interfejs dla różnych źródeł danych
 - **Parser godeł** - walidacja i parsowanie godeł map topograficznych
 - **Providery danych** - abstrakcja nad różnymi serwisami (GUGiK, Copernicus, ISRIC)
+- **Selekcja obszaru** - godło, TERYT, bbox, plik geometrii (SHP/GPKG)
 - **Automatyczne pobieranie** - pobieranie wielu plików jedną komendą
 - **Organizacja plików** - automatyczna struktura katalogów
 
@@ -47,6 +48,8 @@ Kartograf automatyzuje ten proces oferując:
 - Hierarchia arkuszy (get_parent, get_children, get_all_descendants)
 - Bounding box arkusza (EPSG:2180, EPSG:4326)
 - Reverse lookup: bbox → godła (find_sheets_for_bbox)
+- Reverse lookup: geometry file → godła (find_sheets_for_geometry)
+- Selekcja obszaru: godło, bbox, plik geometrii (SHP/GPKG)
 - Pobieranie przez godło → ASC (OpenData)
 - Pobieranie przez bbox → GeoTIFF (WCS) lub automatyczne wykrywanie arkuszy
 - Rozdzielczości: 1m (GRID1), 5m (GRID5)
@@ -90,11 +93,12 @@ Kartograf automatyzuje ten proces oferując:
 
 ```python
 # BDOT10k (GUGiK):
-- 12 warstw pokrycia terenu (PT*)
+- 12 warstw pokrycia terenu (PT*) — category "pt" (domyślna)
+- 4 warstwy hydrograficzne (SW* + PTWP) — category "hydro"
 - Pobieranie przez TERYT (powiat)
 - Pobieranie przez godło lub bbox
 - Format: GeoPackage, Shapefile
-- Automatyczne scalanie warstw
+- Automatyczne scalanie warstw z zachowaniem rtree spatial index
 
 # CORINE Land Cover (Copernicus):
 - 44 klasy pokrycia terenu
@@ -143,8 +147,11 @@ kartograf download <godlo> --product nmpt  # pobierz NMPT
 kartograf download <godlo> --product orto  # pobierz ortofoto
 kartograf download --bbox min_x,min_y,max_x,max_y  # NMT dla bbox
 kartograf download --bbox ... --product orto  # ortofoto dla bbox
+kartograf download --geometry area.shp         # NMT z pliku geometrii
+kartograf download --geometry area.gpkg --layer catchments
 kartograf download <godlo> --resolution 5m # NMT 5m
 kartograf landcover download --source bdot10k --teryt <kod>
+kartograf landcover download --source bdot10k --teryt <kod> --category hydro
 kartograf landcover download --source corine --godlo <godlo>
 kartograf landcover download --source soilgrids --property <param>
 kartograf landcover list-sources
@@ -158,7 +165,7 @@ kartograf soilgrids hsg --godlo <godlo>    # oblicz HSG
 # Public API (kartograf/__init__.py):
 from kartograf import (
     # Core
-    SheetParser, BBox, find_sheets_for_bbox,
+    SheetParser, BBox, find_sheets_for_bbox, find_sheets_for_geometry,
     # Download (NMT/NMPT/Orto)
     DownloadManager, DownloadProgress, FileStorage,
     # Land Cover
@@ -199,7 +206,7 @@ from kartograf import (
 - Timeout: 30s dla GUGiK, 60s dla Land Cover
 - Max 3 próby retry (nie konfigurowalne)
 - Synchroniczne pobieranie (bez async)
-- CORINE 5m wymaga EVRF2007
+- NMT 5m wymaga EVRF2007
 - SoilGrids: tylko WGS84 bbox (transformacja automatyczna)
 ```
 
@@ -211,8 +218,9 @@ from kartograf import (
 
 ```
 kartograf/
-├── core/                  # Parser godeł, BBox
-│   └── sheet_parser.py
+├── core/                  # Parser godeł, BBox, geometria
+│   ├── sheet_parser.py
+│   └── geometry.py        # SHP/GPKG reading, find_sheets_for_geometry
 ├── providers/             # Providery danych
 │   ├── base.py            # BaseProvider (NMT)
 │   ├── gugik.py           # GugikProvider (NMT)
@@ -245,6 +253,7 @@ pyproj >= 3.6.0        # CRS transformations
 PyJWT[crypto] >= 2.8.0 # OAuth2 JWT (CLMS)
 rasterio >= 1.3.0      # GeoTIFF processing (HSG)
 numpy >= 1.24.0        # Array operations (HSG)
+pyshp >= 2.3.0         # Shapefile reading
 ```
 
 ---
@@ -277,7 +286,7 @@ numpy >= 1.24.0        # Array operations (HSG)
 ### 6.2 Jakościowe
 
 ```
-- 574 testów przechodzi
+- 636 testów przechodzi
 - Pokrycie testami ~84% (cel 80% osiągnięty)
 - Kod zgodny z ruff
 - Type hints wszędzie
@@ -294,9 +303,11 @@ numpy >= 1.24.0        # Array operations (HSG)
 | 2026-01-18 | 1.1 | Added Land Cover, SoilGrids, HSG |
 | 2026-01-21 | 2.0 | Updated to reflect v0.3.1 features |
 | 2026-02-07 | 3.0 | Added NMPT, Ortofotomapa, updated storage structure |
+| 2026-02-08 | 3.1 | BDOT10k hydro category, rtree fix |
+| 2026-02-08 | 3.2 | Geometry file selection (--geometry SHP/GPKG) |
 
 ---
 
-**Wersja dokumentu:** 3.0
-**Data ostatniej aktualizacji:** 2026-02-07
-**Status:** Production - v0.4.0
+**Wersja dokumentu:** 3.2
+**Data ostatniej aktualizacji:** 2026-02-08
+**Status:** Production - v0.4.1
