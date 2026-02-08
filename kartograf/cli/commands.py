@@ -33,7 +33,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version="%(prog)s 0.4.0",
+        version="%(prog)s 0.4.1",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -133,6 +133,16 @@ def create_parser() -> argparse.ArgumentParser:
         help="Data product: nmt (terrain), nmpt (surface), "
         "orto (orthophoto). Default: nmt",
     )
+    download_parser.add_argument(
+        "--geometry",
+        metavar="FILE",
+        help="Geometry file (SHP or GPKG) — download tiles intersecting features",
+    )
+    download_parser.add_argument(
+        "--layer",
+        metavar="NAME",
+        help="Layer name for multi-layer GPKG (default: first layer)",
+    )
 
     # Landcover command group
     landcover_parser = subparsers.add_parser(
@@ -192,6 +202,22 @@ def create_parser() -> argparse.ArgumentParser:
         choices=["GPKG", "SHP", "GML"],
         default="GPKG",
         help="Output format for BDOT10k (default: GPKG)",
+    )
+    lc_download.add_argument(
+        "--category",
+        choices=["pt", "hydro"],
+        default="pt",
+        help="BDOT10k data category: pt (land cover, default) or hydro (water network)",
+    )
+    lc_download.add_argument(
+        "--geometry",
+        metavar="FILE",
+        help="Geometry file (SHP or GPKG) for area selection",
+    )
+    lc_download.add_argument(
+        "--layer",
+        metavar="NAME",
+        help="Layer name for multi-layer GPKG (default: first layer)",
     )
     lc_download.add_argument(
         "--property",
@@ -262,6 +288,16 @@ def create_parser() -> argparse.ArgumentParser:
         "--bbox",
         metavar="BBOX",
         help="Bounding box: min_x,min_y,max_x,max_y in EPSG:2180",
+    )
+    sg_hsg.add_argument(
+        "--geometry",
+        metavar="FILE",
+        help="Geometry file (SHP or GPKG) for area selection",
+    )
+    sg_hsg.add_argument(
+        "--layer",
+        metavar="NAME",
+        help="Layer name for multi-layer GPKG (default: first layer)",
     )
     sg_hsg.add_argument(
         "--output",
@@ -540,14 +576,26 @@ def cmd_download(args: argparse.Namespace) -> int:
     """
     has_godlo = args.godlo is not None
     has_bbox = args.bbox is not None
+    has_geometry = getattr(args, "geometry", None) is not None
 
-    if has_godlo and has_bbox:
-        print("Error: Cannot specify both godlo and --bbox", file=sys.stderr)
+    provided = sum([has_godlo, has_bbox, has_geometry])
+    if provided > 1:
+        print(
+            "Error: Specify only one of: godlo, --bbox, or --geometry",
+            file=sys.stderr,
+        )
         return 1
 
-    if not has_godlo and not has_bbox:
-        print("Error: Must specify either godlo or --bbox", file=sys.stderr)
+    if provided == 0:
+        print(
+            "Error: Must specify one of: godlo, --bbox, or --geometry",
+            file=sys.stderr,
+        )
         return 1
+
+    # --- Tryb geometry ---
+    if has_geometry:
+        return _cmd_download_geometry(args)
 
     # --- Tryb bbox ---
     if has_bbox:
@@ -727,6 +775,101 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_download_geometry(args: argparse.Namespace) -> int:
+    """
+    Handle download command in geometry mode.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed command-line arguments (with args.geometry set)
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, 1 for error)
+    """
+    from kartograf.core.geometry import find_sheets_for_geometry
+
+    filepath = Path(args.geometry)
+    if not filepath.exists():
+        print(f"Error: File not found: {filepath}", file=sys.stderr)
+        return 1
+
+    target_scale = args.scale or "1:10000"
+    layer = getattr(args, "layer", None)
+
+    try:
+        godlo_list = find_sheets_for_geometry(
+            filepath, target_scale=target_scale, layer=layer
+        )
+    except ValidationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    if not godlo_list:
+        print("Error: No sheets found for the given geometry", file=sys.stderr)
+        return 1
+
+    # Create download manager
+    output_dir = Path(args.output)
+    vertical_crs = getattr(args, "vertical_crs", "KRON86")
+    resolution = getattr(args, "resolution", "1m")
+    product = getattr(args, "product", "nmt")
+
+    provider, storage = _create_provider_and_storage(
+        product, output_dir, vertical_crs, resolution
+    )
+    manager = DownloadManager(
+        output_dir=output_dir,
+        provider=provider,
+        storage=storage,
+        vertical_crs=vertical_crs,
+        resolution=resolution,
+    )
+
+    skip_existing = not args.force
+    on_progress = create_progress_callback(args.quiet)
+
+    if not args.quiet:
+        print(
+            f"Found {len(godlo_list)} sheets at {target_scale} "
+            f"for geometry {filepath.name} (resolution: {resolution})"
+        )
+        if len(godlo_list) <= 10:
+            print(f"  Sheets: {', '.join(godlo_list)}")
+        else:
+            sample = godlo_list[:3] + ["..."] + godlo_list[-2:]
+            print(f"  Sheets: {', '.join(sample)}")
+        print()
+
+    try:
+        all_paths = []
+        for godlo in godlo_list:
+            result = manager.download_sheet(
+                godlo,
+                skip_existing=skip_existing,
+                on_progress=on_progress,
+            )
+            if isinstance(result, list):
+                all_paths.extend(result)
+            else:
+                all_paths.append(result)
+
+        if not args.quiet:
+            print()
+            print(f"Downloaded {len(all_paths)} files to {output_dir}")
+
+    except DownloadError as e:
+        print(f"\nError: {e}", file=sys.stderr)
+        return 1
+    except ValidationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    return 0
+
+
 def cmd_landcover(args: argparse.Namespace) -> int:
     """
     Execute landcover commands.
@@ -793,9 +936,15 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
         from kartograf.providers.bdot10k import Bdot10kProvider
 
         provider = Bdot10kProvider()
-        for layer in provider.get_available_layers():
+        print("  Land cover (--category pt, default):")
+        for layer in provider.get_available_layers("pt"):
             desc = provider.get_layer_description(layer)
-            print(f"  {layer}  - {desc}")
+            print(f"    {layer}  - {desc}")
+        print()
+        print("  Hydrography (--category hydro):")
+        for layer in provider.get_available_layers("hydro"):
+            desc = provider.get_layer_description(layer)
+            print(f"    {layer}  - {desc}")
     elif args.source == "corine":
         from kartograf.providers.corine import CorineProvider
 
@@ -831,18 +980,23 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
 def cmd_landcover_download(args: argparse.Namespace) -> int:
     """Execute landcover download command."""
     # Check that exactly one selection method is provided
+    has_geometry = getattr(args, "geometry", None) is not None
     methods = [args.teryt, args.bbox, args.godlo]
     provided = [m for m in methods if m is not None]
+    if has_geometry:
+        provided.append(args.geometry)
 
     if len(provided) == 0:
         print(
-            "Error: Must provide one of: --teryt, --bbox, or --godlo", file=sys.stderr
+            "Error: Must provide one of: --teryt, --bbox, --godlo, or --geometry",
+            file=sys.stderr,
         )
         return 1
 
     if len(provided) > 1:
         print(
-            "Error: Provide only one of: --teryt, --bbox, or --godlo", file=sys.stderr
+            "Error: Provide only one of: --teryt, --bbox, --godlo, or --geometry",
+            file=sys.stderr,
         )
         return 1
 
@@ -874,13 +1028,24 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
             kwargs["year"] = args.year
         if args.source == "bdot10k":
             kwargs["format"] = args.format
+            kwargs["category"] = args.category
         if args.source == "soilgrids":
             kwargs["property"] = args.property
             kwargs["depth"] = args.depth
             kwargs["stat"] = args.stat
 
         # Download
-        if args.teryt:
+        if has_geometry:
+            from kartograf.core.geometry import get_overall_bbox
+
+            filepath = Path(args.geometry)
+            if not filepath.exists():
+                print(f"Error: File not found: {filepath}", file=sys.stderr)
+                return 1
+            bbox = get_overall_bbox(filepath, layer=getattr(args, "layer", None))
+            print(f"  Geometry: {filepath.name}")
+            path = manager.download(bbox=bbox, **kwargs)
+        elif args.teryt:
             print(f"  TERYT: {args.teryt}")
             path = manager.download(teryt=args.teryt, **kwargs)
         elif bbox:
@@ -949,15 +1114,24 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
     from kartograf.hydrology import HSGCalculator
 
     # Check that exactly one selection method is provided
+    has_geometry = getattr(args, "geometry", None) is not None
     methods = [args.bbox, args.godlo]
     provided = [m for m in methods if m is not None]
+    if has_geometry:
+        provided.append(args.geometry)
 
     if len(provided) == 0:
-        print("Error: Must provide one of: --bbox or --godlo", file=sys.stderr)
+        print(
+            "Error: Must provide one of: --bbox, --godlo, or --geometry",
+            file=sys.stderr,
+        )
         return 1
 
     if len(provided) > 1:
-        print("Error: Provide only one of: --bbox or --godlo", file=sys.stderr)
+        print(
+            "Error: Provide only one of: --bbox, --godlo, or --geometry",
+            file=sys.stderr,
+        )
         return 1
 
     # Determine output path
@@ -967,13 +1141,25 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
             # Output is a directory, create filename
             output_path.mkdir(parents=True, exist_ok=True)
             output_path = output_path / f"hsg_{args.godlo}.tif"
-    elif args.bbox and output_path.suffix.lower() != ".tif":
+    elif (args.bbox or has_geometry) and output_path.suffix.lower() != ".tif":
         output_path.mkdir(parents=True, exist_ok=True)
         output_path = output_path / "hsg_bbox.tif"
 
-    # Parse bbox if provided
+    # Parse bbox if provided (or compute from geometry)
     bbox = None
-    if args.bbox:
+    if has_geometry:
+        from kartograf.core.geometry import get_overall_bbox
+
+        filepath = Path(args.geometry)
+        if not filepath.exists():
+            print(f"Error: File not found: {filepath}", file=sys.stderr)
+            return 1
+        try:
+            bbox = get_overall_bbox(filepath, layer=getattr(args, "layer", None))
+        except ValidationError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+    elif args.bbox:
         try:
             parts = [float(x.strip()) for x in args.bbox.split(",")]
             if len(parts) != 4:
@@ -992,6 +1178,8 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
     print("Calculating Hydrologic Soil Groups (HSG)...")
     if args.godlo:
         print(f"  Godło: {args.godlo}")
+    if has_geometry:
+        print(f"  Geometry: {Path(args.geometry).name}")
     if bbox:
         print(f"  BBox: ({bbox.min_x}, {bbox.min_y}) - ({bbox.max_x}, {bbox.max_y})")
     print(f"  Depth: {args.depth}")

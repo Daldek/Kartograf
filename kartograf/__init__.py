@@ -23,6 +23,7 @@ Example usage::
     lc_manager.download(godlo="N-34-130-D")
 """
 
+from kartograf.core.geometry import find_sheets_for_geometry
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
 from kartograf.download.manager import DownloadManager, DownloadProgress
 from kartograf.download.storage import FileStorage
@@ -43,13 +44,14 @@ from kartograf.providers.gugik_orto import GugikOrtoProvider
 from kartograf.providers.landcover_base import LandCoverProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 __all__ = [
     # Core
     "SheetParser",
     "BBox",
     "find_sheets_for_bbox",
+    "find_sheets_for_geometry",
     # Download (NMT)
     "DownloadManager",
     "DownloadProgress",

@@ -9,6 +9,48 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.4.1] - 2026-02-08
+
+### Fixed
+- **BDOT10k: rtree spatial indices preserved during GPKG merge**
+  - After merging multiple GPKG files, only the base (first) file kept its rtree index
+  - New `_copy_rtree_index()` method copies rtree virtual table, data, and `gpkg_extensions` entry
+  - All merged layers now retain spatial indices for fast spatial queries
+
+### Added
+- **Geometry file selection (`--geometry FILE`)**
+  - Support for SHP (via pyshp) and GPKG (via sqlite3 + envelope parsing) input files
+  - Per-feature bbox extraction for precise tile selection (not entire file bbox)
+  - `find_sheets_for_geometry()` — public API for geometry → godla lookup
+  - `get_overall_bbox()` — union bbox for landcover/soilgrids
+  - CRS auto-detection from .prj (SHP) and gpkg_spatial_ref_sys (GPKG)
+  - New dependency: `pyshp>=2.3.0`
+- **CLI: `--geometry` and `--layer` for all download commands**
+  - `kartograf download --geometry area.shp` — NMT tiles intersecting features
+  - `kartograf download --geometry area.gpkg --layer catchments` — GPKG layer selection
+  - `kartograf landcover download --source bdot10k --geometry area.shp`
+  - `kartograf soilgrids hsg --geometry area.shp`
+- **BDOT10k: hydrographic data download (`--category hydro`)**
+  - New `HYDRO_LAYERS` constant: SWRS (rivers/streams), SWKN (canals), SWRM (drainage ditches), PTWP (surface waters)
+  - `CATEGORY_FILTERS` mapping for category-based layer extraction from ZIP
+  - `category` parameter threaded through `download_by_teryt()`, `download_by_godlo()`, `download_by_bbox()`
+  - `get_available_layers(category="hydro")` returns hydrographic layers
+  - Hydro layer descriptions in `get_layer_description()`
+- **CLI: `--category` option for `landcover download`**
+  - `kartograf landcover download --source bdot10k --teryt 2262 --category hydro`
+  - Choices: `pt` (land cover, default), `hydro` (water network)
+- **CLI: `landcover list-layers` shows both PT and hydro categories**
+
+### Tests
+- **636 testow** (+62 nowych)
+  - 31 testow `test_geometry.py`: envelope parsing, SHP/GPKG reading, CRS transform, find_sheets_for_geometry, get_overall_bbox
+  - 12 testow CLI geometry: download/landcover/soilgrids --geometry, mutual exclusivity
+  - 5 testow `TestBdot10kRtreeIndex`: merge preserves indices, no geometry, no index, extensions copied, base preserved
+  - 11 testow `TestBdot10kCategory`: extraction filters, category flow, layers, descriptions
+  - 3 testy `TestCmdLandcoverCategory`: CLI --category hydro/default, list-layers shows hydro
+
+---
+
 ## [0.4.0] - 2026-02-07
 
 ### Added
@@ -443,7 +485,8 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
-[Unreleased]: https://github.com/Daldek/Kartograf/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Daldek/Kartograf/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/Daldek/Kartograf/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Daldek/Kartograf/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.2
 [0.3.1]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.1
