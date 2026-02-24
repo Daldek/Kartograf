@@ -393,6 +393,178 @@ class Parser2000:
         new_east = new_west + width
         return (new_south, new_north, new_west, new_east)
 
+    # =========================================================================
+    # Hierarchia
+    # =========================================================================
+
+    def get_parent(self) -> "Parser2000 | None":
+        """
+        Zwraca rodzica arkusza (grubsza skala).
+
+        Returns
+        -------
+        Parser2000 | None
+            Rodzic lub None jesli 1:10000 (najgrubsza skala).
+
+        Examples
+        --------
+        >>> Parser2000("6.179.12.15.2").get_parent().godlo
+        '6.179.12.15'
+        """
+        if self._scale == "1:10000":
+            return None
+
+        # 1:5000 -> 1:10000 (usun ark_5k — ostatni segment)
+        # 1:2000 -> 1:10000 (usun ark_2k — ostatni segment)
+        # 1:1000 -> 1:2000 (usun ark_1k — ostatni segment)
+        # 1:500  -> 1:1000 (usun ark_500 — ostatni segment)
+        parent_godlo = self._godlo.rsplit(".", 1)[0]
+        return Parser2000(parent_godlo)
+
+    def get_children(self, scale: str | None = None) -> list["Parser2000"]:
+        """
+        Zwraca dzieci arkusza (drobniejsza skala).
+
+        Parameters
+        ----------
+        scale : str, optional
+            Skala dzieci. Istotne tylko dla 1:10000, ktore ma dwie sciezki:
+            - "1:5000" -> 4 dzieci (siatka 2x2)
+            - "1:2000" -> 25 dzieci (siatka 5x5) — domyslnie
+
+        Returns
+        -------
+        list[Parser2000]
+            Lista dzieci posortowana wg godla.
+
+        Examples
+        --------
+        >>> [c.godlo for c in Parser2000("6.179.12").get_children(scale="1:5000")]
+        ['6.179.12.1', '6.179.12.2', '6.179.12.3', '6.179.12.4']
+        """
+        if self._scale == "1:10000":
+            if scale is None:
+                scale = "1:2000"
+            if scale == "1:5000":
+                # 2x2: kwadrenty 1-4
+                return [Parser2000(f"{self._godlo}.{q}") for q in range(1, 5)]
+            if scale == "1:2000":
+                # 5x5: arkusze 01-25
+                return [Parser2000(f"{self._godlo}.{i:02d}") for i in range(1, 26)]
+            return []
+
+        if self._scale == "1:2000":
+            # 2x2: kwadrenty 1-4
+            return [Parser2000(f"{self._godlo}.{q}") for q in range(1, 5)]
+
+        if self._scale == "1:1000":
+            # 2x2: kwadrenty 1-4
+            return [Parser2000(f"{self._godlo}.{q}") for q in range(1, 5)]
+
+        # 1:5000 i 1:500 to liscie — brak dzieci
+        return []
+
+    def get_all_descendants(self, target_scale: str) -> list["Parser2000"]:
+        """
+        Zwraca wszystkich potomkow na docelowej skali.
+
+        Parameters
+        ----------
+        target_scale : str
+            Docelowa skala (np. "1:1000").
+
+        Returns
+        -------
+        list[Parser2000]
+            Lista potomkow posortowana wg godla.
+
+        Raises
+        ------
+        ValidationError
+            Jesli target_scale jest grubsza niz biezaca skala lub
+            jesli sciezka do target_scale nie istnieje (np. 1:5000 -> 1:2000).
+
+        Examples
+        --------
+        >>> len(Parser2000("6.179.12").get_all_descendants("1:1000"))
+        100
+        """
+        if target_scale == self._scale:
+            return [self]
+
+        # Sprawdz czy target_scale jest drobniejsza
+        if target_scale not in SCALE_HIERARCHY_2000:
+            raise ValidationError(
+                f"Nieznana skala: {target_scale}. "
+                f"Dozwolone: {', '.join(SCALE_HIERARCHY_2000)}"
+            )
+
+        # Znajdz indeksy w hierarchii
+        current_idx = SCALE_HIERARCHY_2000.index(self._scale)
+        target_idx = SCALE_HIERARCHY_2000.index(target_scale)
+
+        if target_idx < current_idx:
+            raise ValidationError(
+                f"Skala docelowa {target_scale} jest grubsza niz "
+                f"biezaca skala {self._scale}."
+            )
+
+        # Specjalny przypadek: z 1:10000 do 1:5000 — galaz 5k
+        if self._scale == "1:10000" and target_scale == "1:5000":
+            return self.get_children(scale="1:5000")
+
+        # Specjalny przypadek: z 1:5000 nie mozna isc dalej (liscie)
+        if self._scale == "1:5000" and target_scale != "1:5000":
+            raise ValidationError(
+                f"Arkusz 1:5000 nie ma potomkow w skali {target_scale}. "
+                f"Galaz 1:5000 jest niezalezna i nie ma drobniejszych podzialkow."
+            )
+
+        # Rekurencyjnie: rozwin dzieci az do target_scale
+        children = self.get_children()
+        if not children:
+            raise ValidationError(
+                f"Arkusz {self._godlo} ({self._scale}) nie ma potomkow "
+                f"w skali {target_scale}."
+            )
+
+        if children[0].scale == target_scale:
+            return sorted(children, key=lambda p: p.godlo)
+
+        # Rekurencja
+        result = []
+        for child in children:
+            result.extend(child.get_all_descendants(target_scale))
+        return sorted(result, key=lambda p: p.godlo)
+
+    def get_hierarchy_up(self) -> list["Parser2000"]:
+        """
+        Zwraca lancuch od biezacego arkusza do 1:10000.
+
+        Returns
+        -------
+        list[Parser2000]
+            Lista od self (pierwszy) do 1:10000 (ostatni).
+
+        Examples
+        --------
+        >>> [p.scale for p in Parser2000("6.179.12.15.2").get_hierarchy_up()]
+        ['1:1000', '1:2000', '1:10000']
+        """
+        chain = [self]
+        current = self
+        while True:
+            parent = current.get_parent()
+            if parent is None:
+                break
+            chain.append(parent)
+            current = parent
+        return chain
+
+    # =========================================================================
+    # BBox — metody prywatne
+    # =========================================================================
+
     @staticmethod
     def _transform_bbox(
         south: float,
