@@ -432,3 +432,112 @@ class TestFileStorageProduct:
         path = storage.get_path("N-34-130-D", ".asc")
 
         assert "/nmt_5m/" in str(path)
+
+
+class TestFileStoragePL2000:
+    """Testy struktury katalogów dla godeł PL-2000 (format z kropkami)."""
+
+    def test_get_path_pl2000_10k(self, tmp_path):
+        """Test ścieżki dla PL-2000 1:10000 (3 komponenty: strefa.pas.slup)."""
+        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        path = storage.get_path("6.179.12")
+
+        assert path.name == "6.179.12.asc"
+        parts = path.relative_to(tmp_path).parts
+        assert "nmt_2000_1m" in parts
+        assert "6" in parts
+        assert "179" in parts
+        assert "12" in parts
+
+    def test_get_path_pl2000_2k(self, tmp_path):
+        """Test ścieżki dla PL-2000 1:2000 (4 komponenty: strefa.pas.slup.ark_2k)."""
+        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        path = storage.get_path("6.179.12.20")
+
+        assert path.name == "6.179.12.20.asc"
+        parts = path.relative_to(tmp_path).parts
+        assert "nmt_2000_1m" in parts
+        assert "6" in parts
+        assert "179" in parts
+        assert "12" in parts
+        assert "20" in parts
+
+    def test_get_path_pl2000_1k(self, tmp_path):
+        """Test ścieżki dla PL-2000 1:1000 (5 komponentów)."""
+        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        path = storage.get_path("6.179.12.20.3")
+
+        assert path.name == "6.179.12.20.3.asc"
+        parts = path.relative_to(tmp_path).parts
+        assert "6" in parts
+        assert "179" in parts
+        assert "12" in parts
+        assert "20" in parts
+        assert "3" in parts
+
+    def test_get_path_pl2000_5k(self, tmp_path):
+        """Test ścieżki dla PL-2000 1:5000 (4 komponenty: strefa.pas.slup.ark_5k)."""
+        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        path = storage.get_path("6.179.12.2")
+
+        assert path.name == "6.179.12.2.asc"
+        parts = path.relative_to(tmp_path).parts
+        assert "6" in parts
+        assert "179" in parts
+        assert "12" in parts
+        assert "2" in parts
+
+    def test_get_path_pl1992_unchanged(self, tmp_path):
+        """Test że PL-1992 godło nie jest dotknięte zmianami PL-2000."""
+        storage = FileStorage(tmp_path, product="nmt_1m")
+        path = storage.get_path("N-34-130-D-d-2-4")
+
+        assert path.name == "N-34-130-D-d-2-4.asc"
+        parts = path.relative_to(tmp_path).parts
+        assert "N-34" in parts
+        assert "130" in parts
+        assert "D" in parts
+
+    def test_exists_pl2000_false(self, tmp_path):
+        """Test że exists() zwraca False dla nieistniejącego pliku PL-2000."""
+        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        assert not storage.exists("6.179.12.20")
+
+    def test_write_and_exists_pl2000(self, tmp_path):
+        """Test zapisu i sprawdzenia istnienia pliku PL-2000."""
+        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        storage.write_atomic("6.179.12.20", b"PL-2000 data")
+
+        assert storage.exists("6.179.12.20")
+
+    def test_directory_structure_pl2000_2k(self, tmp_path):
+        """Test pełnej struktury katalogów dla PL-2000 1:2000."""
+        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        storage.write_atomic("6.179.12.20", b"data")
+
+        expected_parts = ["nmt_2000_1m", "6", "179", "12", "20"]
+        current_dir = tmp_path
+
+        for part in expected_parts:
+            current_dir = current_dir / part
+            assert current_dir.exists(), f"Directory {current_dir} should exist"
+            assert current_dir.is_dir(), f"{current_dir} should be a directory"
+
+        file_path = current_dir / "6.179.12.20.asc"
+        assert file_path.exists()
+
+    def test_multiple_files_share_directories_pl2000(self, tmp_path):
+        """Test że pliki PL-2000 z tego samego 10k dzielą katalogi nadrzędne."""
+        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+
+        # Kilka arkuszy 1:2000 w jednym 1:10000
+        storage.write_atomic("6.179.12.01", b"data1")
+        storage.write_atomic("6.179.12.02", b"data2")
+        storage.write_atomic("6.179.12.25", b"data3")
+
+        # Wspólny katalog nadrzędny (1:10k level)
+        common_parent = tmp_path / "nmt_2000_1m" / "6" / "179" / "12"
+        assert common_parent.exists()
+
+        subdirs = list(common_parent.iterdir())
+        assert len(subdirs) == 3
