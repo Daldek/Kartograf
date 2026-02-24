@@ -11,6 +11,7 @@ from kartograf.core.parser_2000 import (
     SCALE_HIERARCHY_2000,
     SHEET_DIMENSIONS_2000,
     Parser2000,
+    find_sheets_2000_for_bbox,
 )
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import ParseError, ValidationError
@@ -1243,3 +1244,339 @@ class TestParser2000GetHierarchyUp:
         chain = p.get_hierarchy_up()
         for item in chain:
             assert isinstance(item, Parser2000)
+
+
+# =========================================================================
+# find_sheets_2000_for_bbox
+# =========================================================================
+
+
+class TestFindSheets2000ForBBox:
+    """Testy funkcji find_sheets_2000_for_bbox()."""
+
+    # --- Pojedynczy arkusz 1:10000 ---
+
+    def test_single_10k_sheet_native_crs(self):
+        """Bbox wewnatrz jednego arkusza 1:10k -> zwraca dokladnie ten arkusz."""
+        # Punkt wewnatrz 6.179.12 (zone 6, native CRS EPSG:2177)
+        # Sheet bbox: south=5815000, north=5820000, west=6428000, east=6436000
+        bbox = BBox(
+            min_x=6430000, min_y=5816000, max_x=6434000, max_y=5818000, crs="EPSG:2177"
+        )
+        result = find_sheets_2000_for_bbox(bbox)
+        assert result == ["6.179.12"]
+
+    def test_single_10k_sheet_wgs84(self):
+        """Bbox w WGS84 wewnatrz jednego arkusza 1:10k -> auto-detect zone."""
+        # 6.179.12 WGS84 bbox: lon ~16.94-17.06, lat ~52.46-52.51
+        bbox = BBox(min_x=16.97, min_y=52.47, max_x=17.03, max_y=52.50, crs="EPSG:4326")
+        result = find_sheets_2000_for_bbox(bbox)
+        assert result == ["6.179.12"]
+
+    # --- Wiele arkuszy 1:10000 ---
+
+    def test_multiple_10k_sheets(self):
+        """Bbox rozciagajacy sie na kilka arkuszy 1:10k."""
+        # Bbox covering 6.179.12 and 6.179.13 (adjacent columns)
+        # 6.179.12: west=6428000, east=6436000
+        # 6.179.13: west=6436000, east=6444000
+        bbox = BBox(
+            min_x=6434000, min_y=5816000, max_x=6438000, max_y=5818000, crs="EPSG:2177"
+        )
+        result = find_sheets_2000_for_bbox(bbox)
+        assert "6.179.12" in result
+        assert "6.179.13" in result
+        assert len(result) >= 2
+
+    def test_multiple_10k_sheets_rows_and_cols(self):
+        """Bbox rozciagajacy sie na 4 arkusze (2x2) 1:10k."""
+        # Bbox crossing 6.179.12 / 6.179.13 / 6.180.12 / 6.180.13
+        # Row boundary at northing=5820000
+        # Col boundary at easting=6436000
+        bbox = BBox(
+            min_x=6434000, min_y=5818000, max_x=6438000, max_y=5822000, crs="EPSG:2177"
+        )
+        result = find_sheets_2000_for_bbox(bbox)
+        assert "6.179.12" in result
+        assert "6.179.13" in result
+        assert "6.180.12" in result
+        assert "6.180.13" in result
+
+    # --- Drill down do 1:2000 ---
+
+    def test_drill_down_to_2k(self):
+        """Bbox w jednym arkuszu 1:10k -> drill down to 1:2k, mniejsza ilosc."""
+        # Maly bbox w srodku 6.179.12 -> powinien dac kilka arkuszy 1:2k
+        bbox = BBox(
+            min_x=6431000, min_y=5817000, max_x=6433000, max_y=5818500, crs="EPSG:2177"
+        )
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:2000")
+        assert len(result) > 0
+        # Wszystkie powinny byc potomkami 6.179.12
+        for godlo in result:
+            assert godlo.startswith("6.179.12.")
+        # Nie powinno byc wiecej niz 25 (caly arkusz 10k to 25 ark. 2k)
+        assert len(result) <= 25
+
+    def test_small_bbox_fewer_2k_sheets(self):
+        """Bardzo maly bbox -> mala ilosc arkuszy 1:2000."""
+        # Bbox ~200m x 200m w srodku jednego 1:2k arkusza
+        # 1:2000 sheet 6.179.12.13 bbox: S=5817000 N=5818000 W=6431200 E=6432800
+        bbox = BBox(
+            min_x=6431500, min_y=5817300, max_x=6431700, max_y=5817500, crs="EPSG:2177"
+        )
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:2000")
+        assert len(result) == 1
+        assert result == ["6.179.12.13"]
+
+    def test_drill_down_full_10k_all_2k(self):
+        """Bbox pokrywajacy caly arkusz 1:10k (lekko zmniejszony) -> 25 arkuszy 1:2k."""
+        # Caly arkusz 6.179.12 — lekko scisniety, zeby nie zahaczac o sasiednie
+        # (transformacja CRS powoduje lekkie poszerzenie na granicach)
+        bbox = BBox(
+            min_x=6428001, min_y=5815001, max_x=6435999, max_y=5819999, crs="EPSG:2177"
+        )
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:2000")
+        assert len(result) == 25
+
+    # --- Target 1:5000 ---
+
+    def test_target_5k(self):
+        """Target 1:5000 — zwraca kwadrenty 5k."""
+        # Maly bbox w polnocno-zachodnim rogu 6.179.12 -> 1:5k kwadrant 1
+        # 5k.1 (NW): south=5817500, north=5820000, west=6428000, east=6432000
+        bbox = BBox(
+            min_x=6429000, min_y=5818000, max_x=6431000, max_y=5819000, crs="EPSG:2177"
+        )
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:5000")
+        assert "6.179.12.1" in result
+        assert len(result) >= 1
+
+    def test_target_5k_all_four(self):
+        """Target 1:5000 — caly arkusz 10k (lekko zmniejszony) -> 4 kwadrenty."""
+        # Lekko scisniety, zeby nie zahaczac o sasiednie arkusze
+        bbox = BBox(
+            min_x=6428001, min_y=5815001, max_x=6435999, max_y=5819999, crs="EPSG:2177"
+        )
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:5000")
+        assert len(result) == 4
+        assert result == ["6.179.12.1", "6.179.12.2", "6.179.12.3", "6.179.12.4"]
+
+    # --- WGS84 bbox z auto-detekcja strefy ---
+
+    def test_wgs84_bbox_auto_detect_zone_6(self):
+        """WGS84 bbox w strefie 6 (lon 16.5-19.5)."""
+        # Punkt okolo Warszawy (lon ~18, lat ~52)
+        p = Parser2000("6.179.12")
+        wgs_bbox = p.get_bbox("EPSG:4326")
+        # Uzyjmy bbox nieco mniejszy, zeby byc pewnym jednego arkusza
+        bbox = BBox(
+            min_x=wgs_bbox.min_x + 0.01,
+            min_y=wgs_bbox.min_y + 0.01,
+            max_x=wgs_bbox.max_x - 0.01,
+            max_y=wgs_bbox.max_y - 0.01,
+            crs="EPSG:4326",
+        )
+        result = find_sheets_2000_for_bbox(bbox)
+        assert "6.179.12" in result
+
+    def test_wgs84_bbox_auto_detect_zone_7(self):
+        """WGS84 bbox w strefie 7 (lon 19.5-22.5)."""
+        p = Parser2000("7.179.12")
+        wgs_bbox = p.get_bbox("EPSG:4326")
+        bbox = BBox(
+            min_x=wgs_bbox.min_x + 0.01,
+            min_y=wgs_bbox.min_y + 0.01,
+            max_x=wgs_bbox.max_x - 0.01,
+            max_y=wgs_bbox.max_y - 0.01,
+            crs="EPSG:4326",
+        )
+        result = find_sheets_2000_for_bbox(bbox)
+        assert "7.179.12" in result
+
+    # --- Bbox w EPSG:2180 (PL-1992) ---
+
+    def test_accept_epsg_2180_bbox(self):
+        """Bbox w PL-1992 (EPSG:2180) — transformacja do WGS84 i auto-detect zone."""
+        p = Parser2000("6.179.12")
+        bbox_2180 = p.get_bbox("EPSG:2180")
+        # Lekko zmniejsz bbox zeby byc w jednym arkuszu
+        bbox = BBox(
+            min_x=bbox_2180.min_x + 500,
+            min_y=bbox_2180.min_y + 500,
+            max_x=bbox_2180.max_x - 500,
+            max_y=bbox_2180.max_y - 500,
+            crs="EPSG:2180",
+        )
+        result = find_sheets_2000_for_bbox(bbox)
+        assert "6.179.12" in result
+
+    # --- Roundtrip: get_bbox -> find_sheets -> oryginalny arkusz ---
+
+    def test_roundtrip_10k(self):
+        """Roundtrip: get_bbox -> find_sheets -> oryginalne godlo w wynikach."""
+        p = Parser2000("6.179.12")
+        native_bbox = p.get_bbox()
+        # Lekko scisniety bbox, zeby na pewno w srodku
+        bbox = BBox(
+            min_x=native_bbox.min_x + 100,
+            min_y=native_bbox.min_y + 100,
+            max_x=native_bbox.max_x - 100,
+            max_y=native_bbox.max_y - 100,
+            crs=native_bbox.crs,
+        )
+        result = find_sheets_2000_for_bbox(bbox)
+        assert "6.179.12" in result
+
+    def test_roundtrip_zone_5(self):
+        """Roundtrip zone 5."""
+        p = Parser2000("5.179.12")
+        native_bbox = p.get_bbox()
+        bbox = BBox(
+            min_x=native_bbox.min_x + 100,
+            min_y=native_bbox.min_y + 100,
+            max_x=native_bbox.max_x - 100,
+            max_y=native_bbox.max_y - 100,
+            crs=native_bbox.crs,
+        )
+        result = find_sheets_2000_for_bbox(bbox)
+        assert "5.179.12" in result
+
+    def test_roundtrip_zone_8(self):
+        """Roundtrip zone 8 — uzywamy arkusza centralnie w strefie."""
+        # Arkusz 8.100.15 (lon ~23.3-23.5) jest bezpiecznie w strefie 8
+        p = Parser2000("8.100.15")
+        native_bbox = p.get_bbox()
+        bbox = BBox(
+            min_x=native_bbox.min_x + 100,
+            min_y=native_bbox.min_y + 100,
+            max_x=native_bbox.max_x - 100,
+            max_y=native_bbox.max_y - 100,
+            crs=native_bbox.crs,
+        )
+        result = find_sheets_2000_for_bbox(bbox)
+        assert "8.100.15" in result
+
+    def test_roundtrip_2k(self):
+        """Roundtrip z target_scale 1:2000."""
+        p = Parser2000("6.179.12.13")
+        native_bbox = p.get_bbox()
+        bbox = BBox(
+            min_x=native_bbox.min_x + 10,
+            min_y=native_bbox.min_y + 10,
+            max_x=native_bbox.max_x - 10,
+            max_y=native_bbox.max_y - 10,
+            crs=native_bbox.crs,
+        )
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:2000")
+        assert "6.179.12.13" in result
+
+    def test_roundtrip_wgs84(self):
+        """Roundtrip z WGS84 bbox."""
+        p = Parser2000("6.179.12")
+        wgs_bbox = p.get_bbox("EPSG:4326")
+        bbox = BBox(
+            min_x=wgs_bbox.min_x + 0.01,
+            min_y=wgs_bbox.min_y + 0.01,
+            max_x=wgs_bbox.max_x - 0.01,
+            max_y=wgs_bbox.max_y - 0.01,
+            crs="EPSG:4326",
+        )
+        result = find_sheets_2000_for_bbox(bbox)
+        assert "6.179.12" in result
+
+    # --- Explicit zone parameter ---
+
+    def test_explicit_zone_parameter(self):
+        """Jawne podanie strefy ogranicza wyszukiwanie do tej strefy."""
+        # Bbox w strefie 6
+        bbox = BBox(
+            min_x=6430000, min_y=5816000, max_x=6434000, max_y=5818000, crs="EPSG:2177"
+        )
+        result = find_sheets_2000_for_bbox(bbox, zone=6)
+        assert "6.179.12" in result
+        # Wszystkie wyniki sa w strefie 6
+        for godlo in result:
+            assert godlo.startswith("6.")
+
+    def test_explicit_zone_wrong_zone_empty(self):
+        """Jawna strefa inna niz faktyczna -> pusty wynik (brak przeciecia)."""
+        # Bbox w natywnym CRS strefy 6, ale pytamy o strefe 7
+        # W strefie 7 te wspolrzedne nie beda sensowne (rozne CRS)
+        # Ale jesli bbox jest w WGS84 i jest w strefie 6, a pytamy o zone=7
+        p = Parser2000("6.179.12")
+        wgs_bbox = p.get_bbox("EPSG:4326")
+        bbox = BBox(
+            min_x=wgs_bbox.min_x + 0.01,
+            min_y=wgs_bbox.min_y + 0.01,
+            max_x=wgs_bbox.max_x - 0.01,
+            max_y=wgs_bbox.max_y - 0.01,
+            crs="EPSG:4326",
+        )
+        result = find_sheets_2000_for_bbox(bbox, zone=7)
+        assert result == []
+
+    # --- Posortowane wyniki ---
+
+    def test_results_sorted(self):
+        """Wyniki sa zawsze posortowane."""
+        bbox = BBox(
+            min_x=6434000, min_y=5818000, max_x=6438000, max_y=5822000, crs="EPSG:2177"
+        )
+        result = find_sheets_2000_for_bbox(bbox)
+        assert result == sorted(result)
+
+    def test_results_sorted_2k(self):
+        """Wyniki 1:2000 sa posortowane."""
+        bbox = BBox(
+            min_x=6428000, min_y=5815000, max_x=6436000, max_y=5820000, crs="EPSG:2177"
+        )
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:2000")
+        assert result == sorted(result)
+
+    # --- Bbox na granicy stref ---
+
+    def test_bbox_spanning_two_zones(self):
+        """Bbox na granicy stref 6 i 7 (lon ~19.5) -> arkusze z obu stref."""
+        # Granica stref 6/7 jest na 19.5E
+        bbox = BBox(min_x=19.4, min_y=52.0, max_x=19.6, max_y=52.1, crs="EPSG:4326")
+        result = find_sheets_2000_for_bbox(bbox)
+        # Powinny byc arkusze z obu stref
+        has_zone_6 = any(g.startswith("6.") for g in result)
+        has_zone_7 = any(g.startswith("7.") for g in result)
+        assert has_zone_6
+        assert has_zone_7
+
+    # --- Zwracane typy ---
+
+    def test_returns_list_of_strings(self):
+        """Wynik to lista stringow."""
+        bbox = BBox(
+            min_x=6430000, min_y=5816000, max_x=6434000, max_y=5818000, crs="EPSG:2177"
+        )
+        result = find_sheets_2000_for_bbox(bbox)
+        assert isinstance(result, list)
+        for item in result:
+            assert isinstance(item, str)
+
+    # --- Validacja godla: kazdy wynik to prawidlowe godlo ---
+
+    def test_each_result_is_valid_godlo(self):
+        """Kazdy wynik to prawidlowe godlo Parser2000."""
+        bbox = BBox(
+            min_x=6428000, min_y=5815000, max_x=6436000, max_y=5820000, crs="EPSG:2177"
+        )
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:2000")
+        for godlo in result:
+            p = Parser2000(godlo)
+            assert p.scale == "1:2000"
+
+    def test_each_10k_result_is_valid(self):
+        """Kazdy wynik 1:10k to prawidlowe godlo 1:10000."""
+        bbox = BBox(
+            min_x=6434000, min_y=5818000, max_x=6438000, max_y=5822000, crs="EPSG:2177"
+        )
+        result = find_sheets_2000_for_bbox(bbox)
+        for godlo in result:
+            p = Parser2000(godlo)
+            assert p.scale == "1:10000"
