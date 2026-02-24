@@ -28,6 +28,19 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `--bbox-crs` rozszerzony o EPSG:2176-2179
 - **FileStorage: obsluga sciezek PL-2000**
   - Struktura katalogow: `nmt_2000_1m/6/179/12/20/6.179.12.20.asc`
+- **Public API: eksport Parser2000 i find_sheets_2000_for_bbox**
+  - `from kartograf import Parser2000, find_sheets_2000_for_bbox`
+
+### Fixed
+- **download_sheet(): PL-2000 sub-10k godla pobierane bezposrednio**
+  - Godla PL-2000 w skalach 1:5000, 1:2000, 1:1000, 1:500 sa teraz pobierane
+    jako pojedyncze pliki, bez proby rozwijania do 1:10000
+- **CLI: dynamiczne etykiety skal**
+  - `format_hierarchy()` — naglowek "from current to X" zamiast hardcoded "1:1000000"
+  - `format_children()` — "finest scale X" zamiast hardcoded "1:10000"
+
+### Tests
+- **849 testow** (+213 nowych)
 
 ---
 
