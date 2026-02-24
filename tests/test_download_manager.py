@@ -563,8 +563,8 @@ class TestDownloadManagerPL2000:
         count = manager.count_sheets("6.179.12.20", target_scale="1:1000")
         assert count == 4
 
-    def test_download_sheet_pl2000_10k_expands_to_2k(self, tmp_path):
-        """Test że download_sheet z godłem PL-2000 1:10000 rozwija do 1:2000."""
+    def test_download_sheet_pl2000_10k_direct(self, tmp_path):
+        """Test że download_sheet z godłem PL-2000 1:10000 pobiera bezpośrednio."""
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
 
@@ -580,15 +580,56 @@ class TestDownloadManagerPL2000:
             output_dir=tmp_path, provider=mock_provider, storage=storage
         )
 
-        # PL-2000 1:10000 is NOT the leaf scale, but download_sheet checks scale
-        # SheetParser("6.179.12").scale == "1:10000" which matches "1:10000"
-        # in PL-1992 hierarchy, so it should try single download
-        # Actually, SheetParser delegates to Parser2000 for PL-2000 format.
-        # Parser2000 scale "1:10000" != PL-1992 "1:10000" in SCALE_HIERARCHY
-        # but SheetParser.scale returns "1:10000" from Parser2000.
-        # In download_sheet, check is parser.scale != "1:10000" → expand.
-        # For PL-2000 "6.179.12", scale == "1:10000" → single file.
         result = manager.download_sheet("6.179.12")
+
+        assert isinstance(result, Path)
+        assert result.suffix == ".asc"
+        assert result.exists()
+
+    def test_download_sheet_pl2000_sub10k_direct(self, tmp_path):
+        """Test że PL-2000 1:2000 pobiera bezpośrednio."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".asc"
+
+        def mock_download(godlo, path, timeout=30):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"ASC data")
+            return path
+
+        mock_provider.download = mock_download
+
+        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=mock_provider, storage=storage
+        )
+
+        # PL-2000 1:2000 godło — should download directly, NOT expand to 1:10000
+        result = manager.download_sheet("6.179.12.20")
+
+        assert isinstance(result, Path)
+        assert result.suffix == ".asc"
+        assert result.exists()
+        assert "6.179.12.20" in str(result)
+
+    def test_download_sheet_pl2000_5k_direct(self, tmp_path):
+        """Test że download_sheet z godłem PL-2000 1:5000 pobiera bezpośrednio."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".asc"
+
+        def mock_download(godlo, path, timeout=30):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"ASC data")
+            return path
+
+        mock_provider.download = mock_download
+
+        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=mock_provider, storage=storage
+        )
+
+        # PL-2000 1:5000 godło — should download directly
+        result = manager.download_sheet("6.179.12.1")
 
         assert isinstance(result, Path)
         assert result.suffix == ".asc"

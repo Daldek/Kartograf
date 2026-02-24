@@ -389,7 +389,8 @@ def format_hierarchy(parser: SheetParser) -> str:
         Formatted hierarchy string
     """
     hierarchy = parser.get_hierarchy_up()
-    lines = ["Hierarchy (from current to 1:1000000):", ""]
+    top_scale = hierarchy[-1].scale if hierarchy else parser.scale
+    lines = [f"Hierarchy (from current to {top_scale}):", ""]
 
     for i, sheet in enumerate(hierarchy):
         indent = "  " * i
@@ -416,7 +417,10 @@ def format_children(parser: SheetParser) -> str:
     children = parser.get_children()
 
     if not children:
-        return f"Sheet {parser.godlo} has no children (already at finest scale 1:10000)"
+        return (
+            f"Sheet {parser.godlo} has no children "
+            f"(already at finest scale {parser.scale})"
+        )
 
     lines = [
         f"Children of {parser.godlo} ({len(children)} sheets):",
