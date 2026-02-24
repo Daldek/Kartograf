@@ -7,6 +7,28 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **PL-2000 sheet naming system — full support**
+  - `Parser2000` class for parsing PL-2000 godla (format `zone.row.column[.subdivisions]`)
+  - 5 skal: 1:10000, 1:5000, 1:2000, 1:1000, 1:500
+  - 4 strefy merydianowe: 5 (EPSG:2176), 6 (EPSG:2177), 7 (EPSG:2178), 8 (EPSG:2179)
+  - BBox calculation z transformacja CRS (pyproj)
+  - Hierarchia: get_parent(), get_children(), get_all_descendants(), get_hierarchy_up()
+  - `find_sheets_2000_for_bbox()` — BBox to PL-2000 godla lookup
+- **SheetParser auto-detekcja PL-1992 vs PL-2000**
+  - `SheetParser("6.179.12")` automatycznie rozpoznaje PL-2000
+  - `SheetParser("N-34-130-D")` automatycznie rozpoznaje PL-1992
+  - Walidacja zgodnosci uklad/format
+- **find_sheets_for_bbox: parametr system="1992"|"2000"**
+  - `find_sheets_for_bbox(bbox, system="2000")` zwraca godla PL-2000
+  - `find_sheets_for_geometry()` rowniez obsluguje parametr system
+- **CLI: pelna obsluga PL-2000**
+  - `kartograf parse 6.179.12.20` — auto-detekcja, wyswietla strefe i CRS
+  - `kartograf download --bbox ... --system 2000` — pobieranie z godlami PL-2000
+  - `--bbox-crs` rozszerzony o EPSG:2176-2179
+- **FileStorage: obsluga sciezek PL-2000**
+  - Struktura katalogow: `nmt_2000_1m/6/179/12/20/6.179.12.20.asc`
+
 ---
 
 ## [0.4.1] - 2026-02-08
