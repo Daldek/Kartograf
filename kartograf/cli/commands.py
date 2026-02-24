@@ -86,7 +86,14 @@ def create_parser() -> argparse.ArgumentParser:
     )
     download_parser.add_argument(
         "--bbox-crs",
-        choices=["EPSG:2180", "EPSG:4326"],
+        choices=[
+            "EPSG:2180",
+            "EPSG:4326",
+            "EPSG:2176",
+            "EPSG:2177",
+            "EPSG:2178",
+            "EPSG:2179",
+        ],
         default="EPSG:2180",
         help="CRS for --bbox coordinates (default: EPSG:2180)",
     )
@@ -142,6 +149,12 @@ def create_parser() -> argparse.ArgumentParser:
         "--layer",
         metavar="NAME",
         help="Layer name for multi-layer GPKG (default: first layer)",
+    )
+    download_parser.add_argument(
+        "--system",
+        choices=["1992", "2000"],
+        default="1992",
+        help="System godłowania dla --bbox/--geometry (domyślnie 1992)",
     )
 
     # Landcover command group
@@ -350,6 +363,13 @@ def format_sheet_info(parser: SheetParser) -> str:
 
     for name, value in parser.components.items():
         lines.append(f"  {name}: {value}")
+
+    if parser.uklad == "2000":
+        from kartograf.core.parser_2000 import ZONE_EPSG
+
+        zone = int(parser.components["strefa"])
+        lines.append(f"  Strefa: {zone}")
+        lines.append(f"  Natywny CRS: {ZONE_EPSG[zone]}")
 
     return "\n".join(lines)
 
@@ -707,7 +727,7 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
 
     # Find sheets covering the bbox
     try:
-        godlo_list = find_sheets_for_bbox(bbox, target_scale)
+        godlo_list = find_sheets_for_bbox(bbox, target_scale, system=args.system)
     except ValidationError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
@@ -801,7 +821,7 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
 
     try:
         godlo_list = find_sheets_for_geometry(
-            filepath, target_scale=target_scale, layer=layer
+            filepath, target_scale=target_scale, layer=layer, system=args.system
         )
     except ValidationError as e:
         print(f"Error: {e}", file=sys.stderr)
