@@ -1198,3 +1198,33 @@ class TestSheetParserAutoDetection:
         assert p.scale == "1:10000"
         bbox = p.get_bbox()
         assert bbox.crs == "EPSG:2180"
+
+
+class TestFindSheetsForBBoxSystem:
+    """find_sheets_for_bbox with system parameter."""
+
+    def test_default_system_1992(self):
+        """Default system='1992' returns PL-1992 godla (dash-separated)."""
+        bbox = BBox(400000, 500000, 410000, 510000, "EPSG:2180")
+        result = find_sheets_for_bbox(bbox, target_scale="1:10000")
+        assert all("-" in g for g in result)
+
+    def test_system_2000(self):
+        """system='2000' returns PL-2000 godla (dot-separated)."""
+        bbox = BBox(400000, 500000, 410000, 510000, "EPSG:2180")
+        result = find_sheets_for_bbox(bbox, target_scale="1:10000", system="2000")
+        assert all("." in g for g in result)
+        assert len(result) > 0
+
+    def test_backward_compatible(self):
+        """Calling without system param gives same result as system='1992'."""
+        bbox = BBox(400000, 500000, 410000, 510000, "EPSG:2180")
+        result_default = find_sheets_for_bbox(bbox, "1:10000")
+        result_explicit = find_sheets_for_bbox(bbox, "1:10000", system="1992")
+        assert result_default == result_explicit
+
+    def test_system_2000_wgs84(self):
+        """system='2000' works with WGS84 bbox, zone detected from longitude."""
+        bbox = BBox(17.0, 52.0, 17.1, 52.1, "EPSG:4326")
+        result = find_sheets_for_bbox(bbox, "1:10000", system="2000")
+        assert all(g.startswith("6.") for g in result)

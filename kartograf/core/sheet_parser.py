@@ -881,6 +881,7 @@ def _transform_bbox_to_wgs84(bbox: BBox) -> BBox:
 def find_sheets_for_bbox(
     bbox: BBox,
     target_scale: str = "1:10000",
+    system: str = "1992",
 ) -> list[str]:
     """
     Znajduje godła arkuszy pokrywających podany bounding box.
@@ -894,6 +895,9 @@ def find_sheets_for_bbox(
         Bounding box w EPSG:2180 lub EPSG:4326
     target_scale : str
         Docelowa skala (default: "1:10000")
+    system : str
+        Układ współrzędnych: "1992" (PL-1992) lub "2000" (PL-2000).
+        Default: "1992" — pełna kompatybilność wsteczna.
 
     Returns
     -------
@@ -905,6 +909,11 @@ def find_sheets_for_bbox(
     ValidationError
         Jeśli target_scale jest nieprawidłowa lub CRS nieobsługiwany
     """
+    if system == "2000":
+        from kartograf.core.parser_2000 import find_sheets_2000_for_bbox
+
+        return find_sheets_2000_for_bbox(bbox, target_scale)
+
     if target_scale not in SheetParser.SCALE_HIERARCHY:
         raise ValidationError(
             f"Nieprawidłowa skala: '{target_scale}'. "
