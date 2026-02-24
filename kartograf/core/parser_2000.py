@@ -7,6 +7,7 @@ PL-2000 uses dot-separated numeric format: zone.row.column[.subdivisions]
 (e.g., 6.179.12, 6.179.12.20).
 """
 
+import math
 import re
 
 from pyproj import Transformer
@@ -610,3 +611,266 @@ class Parser2000:
         max_y = max(c[1] for c in transformed)
 
         return BBox(min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, crs=dst_crs)
+
+
+# =========================================================================
+# Standalone functions: bbox → godła lookup (PL-2000)
+# =========================================================================
+
+# Zakresy dlugosci geograficznej dla stref PL-2000
+_ZONE_LON_RANGES = {
+    5: (13.5, 16.5),
+    6: (16.5, 19.5),
+    7: (19.5, 22.5),
+    8: (22.5, 25.5),
+}
+
+
+def _bboxes_intersect_2000(a: BBox, b: BBox) -> bool:
+    """
+    Sprawdza czy dwa bounding boxy sie przecinaja.
+
+    Uzywa `<` (nie `<=`) — stykajace sie krawedzie = intersect,
+    zgodnie z konwencja z PL-1992 (sheet_parser.py).
+
+    Parameters
+    ----------
+    a, b : BBox
+        Bounding boxy do sprawdzenia (powinny byc w tym samym CRS)
+
+    Returns
+    -------
+    bool
+        True jesli boxy sie przecinaja
+    """
+    return not (
+        a.max_x < b.min_x or a.min_x > b.max_x or a.max_y < b.min_y or a.min_y > b.max_y
+    )
+
+
+def _determine_zones_for_bbox(bbox_wgs84: BBox) -> list[int]:
+    """
+    Okreslenie stref PL-2000 przecinanych przez bbox w WGS84.
+
+    Parameters
+    ----------
+    bbox_wgs84 : BBox
+        Bbox w EPSG:4326 (min_x=west_lon, max_x=east_lon)
+
+    Returns
+    -------
+    list[int]
+        Lista numerow stref (5-8) posortowana rosnaco
+    """
+    west_lon = bbox_wgs84.min_x
+    east_lon = bbox_wgs84.max_x
+
+    zones = []
+    for zone_num, (zone_west, zone_east) in _ZONE_LON_RANGES.items():
+        # Strefa przecina bbox jesli zakresy dlugosci sie nakladaja
+        if west_lon < zone_east and east_lon > zone_west:
+            zones.append(zone_num)
+
+    return sorted(zones)
+
+
+def _transform_bbox_to_wgs84(bbox: BBox) -> BBox:
+    """
+    Transformuje BBox z dowolnego obslugiwanego CRS do WGS84 (EPSG:4326).
+
+    Parameters
+    ----------
+    bbox : BBox
+        Bbox w obslugiwanym CRS
+
+    Returns
+    -------
+    BBox
+        Bbox w EPSG:4326
+    """
+    if bbox.crs == "EPSG:4326":
+        return bbox
+
+    transformer = Transformer.from_crs(bbox.crs, "EPSG:4326", always_xy=True)
+
+    corners = [
+        (bbox.min_x, bbox.min_y),  # SW
+        (bbox.min_x, bbox.max_y),  # NW
+        (bbox.max_x, bbox.min_y),  # SE
+        (bbox.max_x, bbox.max_y),  # NE
+    ]
+
+    transformed = [transformer.transform(x, y) for x, y in corners]
+
+    min_lon = min(c[0] for c in transformed)
+    max_lon = max(c[0] for c in transformed)
+    min_lat = min(c[1] for c in transformed)
+    max_lat = max(c[1] for c in transformed)
+
+    return BBox(
+        min_x=min_lon, min_y=min_lat, max_x=max_lon, max_y=max_lat, crs="EPSG:4326"
+    )
+
+
+def _transform_bbox_to_zone_crs(bbox_wgs84: BBox, zone: int) -> BBox:
+    """
+    Transformuje BBox z WGS84 do natywnego CRS strefy PL-2000.
+
+    Parameters
+    ----------
+    bbox_wgs84 : BBox
+        Bbox w EPSG:4326
+    zone : int
+        Numer strefy (5-8)
+
+    Returns
+    -------
+    BBox
+        Bbox w EPSG:2176-2179
+    """
+    dst_crs = ZONE_EPSG[zone]
+    transformer = Transformer.from_crs("EPSG:4326", dst_crs, always_xy=True)
+
+    corners = [
+        (bbox_wgs84.min_x, bbox_wgs84.min_y),  # SW
+        (bbox_wgs84.min_x, bbox_wgs84.max_y),  # NW
+        (bbox_wgs84.max_x, bbox_wgs84.min_y),  # SE
+        (bbox_wgs84.max_x, bbox_wgs84.max_y),  # NE
+    ]
+
+    transformed = [transformer.transform(x, y) for x, y in corners]
+
+    min_x = min(c[0] for c in transformed)
+    max_x = max(c[0] for c in transformed)
+    min_y = min(c[1] for c in transformed)
+    max_y = max(c[1] for c in transformed)
+
+    return BBox(min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, crs=dst_crs)
+
+
+def find_sheets_2000_for_bbox(
+    bbox: BBox,
+    target_scale: str = "1:10000",
+    zone: int | None = None,
+) -> list[str]:
+    """
+    Znajduje godla arkuszy PL-2000 pokrywajacych podany bounding box.
+
+    Parameters
+    ----------
+    bbox : BBox
+        Bounding box w dowolnym obslugiwanym CRS
+        (EPSG:2176-2179, EPSG:2180, EPSG:4326)
+    target_scale : str
+        Docelowa skala (default: "1:10000").
+        Obslugiwane: 1:10000, 1:5000, 1:2000, 1:1000, 1:500
+    zone : int | None
+        Jesli podano, ogranicza wyszukiwanie do tej strefy (5-8).
+        Jesli None, automatyczna detekcja na podstawie bbox.
+
+    Returns
+    -------
+    list[str]
+        Posortowana lista godel arkuszy PL-2000 pokrywajacych bbox
+
+    Raises
+    ------
+    ValidationError
+        Jesli target_scale jest nieprawidlowa lub CRS nieobslugiwany
+    """
+    if target_scale not in SCALE_HIERARCHY_2000:
+        raise ValidationError(
+            f"Nieprawidlowa skala: '{target_scale}'. "
+            f"Dozwolone: {', '.join(SCALE_HIERARCHY_2000)}"
+        )
+
+    # Krok 1: Transformuj do WGS84 dla detekcji strefy
+    bbox_wgs84 = _transform_bbox_to_wgs84(bbox)
+
+    # Krok 2: Okresl strefy
+    zones = [zone] if zone is not None else _determine_zones_for_bbox(bbox_wgs84)
+
+    if not zones:
+        return []
+
+    # Krok 3: Dla kazdej strefy znajdz arkusze 1:10k
+    all_godla: set[str] = set()
+
+    for z in zones:
+        zone_crs = ZONE_EPSG[z]
+
+        # Transformuj bbox do CRS strefy
+        if bbox.crs == zone_crs:
+            zone_bbox = bbox
+        else:
+            zone_bbox = _transform_bbox_to_zone_crs(bbox_wgs84, z)
+
+        # Oblicz zakres row/col dla 1:10k
+        min_row = math.floor((zone_bbox.min_y - 4_920_000) / 5000) - 1
+        max_row = math.floor((zone_bbox.max_y - 4_920_000) / 5000) + 1
+        min_col = math.floor((zone_bbox.min_x - z * 1_000_000 - 332_000) / 8000) - 1
+        max_col = math.floor((zone_bbox.max_x - z * 1_000_000 - 332_000) / 8000) + 1
+
+        # Clamp do rozsadnych wartosci (pas >= 0, slup >= 0)
+        min_row = max(0, min_row)
+        min_col = max(0, min_col)
+
+        # Krok 4: Dla kazdego kandydata sprawdz przeciecie
+        for row in range(min_row, max_row + 1):
+            for col in range(min_col, max_col + 1):
+                godlo_10k = f"{z}.{row}.{col}"
+
+                # Sprobuj utworzyc Parser2000 — jesli godlo nieprawidlowe, pomin
+                try:
+                    p = Parser2000(godlo_10k)
+                except (ParseError, ValidationError):
+                    continue
+
+                sheet_bbox = p.get_bbox()
+
+                if _bboxes_intersect_2000(zone_bbox, sheet_bbox):
+                    if target_scale == "1:10000":
+                        all_godla.add(godlo_10k)
+                    else:
+                        # Drill down do target_scale
+                        _drill_down(p, zone_bbox, target_scale, all_godla)
+
+    return sorted(all_godla)
+
+
+def _drill_down(
+    parent: Parser2000,
+    zone_bbox: BBox,
+    target_scale: str,
+    result: set[str],
+) -> None:
+    """
+    Rekurencyjnie drazy w dol hierarchii, sprawdzajac przeciecie z bbox.
+
+    Parameters
+    ----------
+    parent : Parser2000
+        Rodzic do drylowania
+    zone_bbox : BBox
+        Bbox w natywnym CRS strefy
+    target_scale : str
+        Docelowa skala
+    result : set[str]
+        Zbiór wynikowych godel (modyfikowany in-place)
+    """
+    # Specjalny przypadek: z 1:10000 do 1:5000 — galaz 5k
+    if parent.scale == "1:10000" and target_scale == "1:5000":
+        children = parent.get_children(scale="1:5000")
+    else:
+        children = parent.get_children()
+
+    for child in children:
+        child_bbox = child.get_bbox()
+
+        if not _bboxes_intersect_2000(zone_bbox, child_bbox):
+            continue
+
+        if child.scale == target_scale:
+            result.add(child.godlo)
+        else:
+            _drill_down(child, zone_bbox, target_scale, result)
