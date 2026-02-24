@@ -24,6 +24,7 @@ Example usage::
 """
 
 from kartograf.core.geometry import find_sheets_for_geometry
+from kartograf.core.parser_2000 import Parser2000, find_sheets_2000_for_bbox
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
 from kartograf.download.manager import DownloadManager, DownloadProgress
 from kartograf.download.storage import FileStorage
@@ -49,8 +50,10 @@ __version__ = "0.4.1"
 __all__ = [
     # Core
     "SheetParser",
+    "Parser2000",
     "BBox",
     "find_sheets_for_bbox",
+    "find_sheets_2000_for_bbox",
     "find_sheets_for_geometry",
     # Download (NMT)
     "DownloadManager",
