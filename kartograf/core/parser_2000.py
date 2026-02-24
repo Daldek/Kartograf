@@ -247,10 +247,7 @@ class Parser2000:
 
     def __repr__(self) -> str:
         """Zwraca reprezentacje obiektu do debugowania."""
-        return (
-            f"Parser2000(godlo='{self._godlo}', "
-            f"scale='{self._scale}', uklad='2000')"
-        )
+        return f"Parser2000(godlo='{self._godlo}', scale='{self._scale}', uklad='2000')"
 
     def __str__(self) -> str:
         """Zwraca czytelna reprezentacje arkusza."""
@@ -301,9 +298,7 @@ class Parser2000:
         native_crs = self.native_crs
 
         if crs == native_crs:
-            return BBox(
-                min_x=west, min_y=south, max_x=east, max_y=north, crs=crs
-            )
+            return BBox(min_x=west, min_y=south, max_x=east, max_y=north, crs=crs)
 
         # Transformacja do docelowego CRS
         return self._transform_bbox(south, north, west, east, native_crs, crs)
@@ -442,6 +437,4 @@ class Parser2000:
         min_y = min(c[1] for c in transformed)
         max_y = max(c[1] for c in transformed)
 
-        return BBox(
-            min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, crs=dst_crs
-        )
+        return BBox(min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, crs=dst_crs)
