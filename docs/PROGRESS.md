@@ -15,7 +15,8 @@
 | geometry → godla | ✅ Gotowy | find_sheets_for_geometry(), CLI --geometry |
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --category + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
-| Pokrycie testami | ✅ Gotowy | ~84%, 636 testow, cel 80% osiagniety |
+| PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
+| Pokrycie testami | ✅ Gotowy | 847 testow, cel 80% osiagniety |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 
 <!-- Statusy: ✅ Gotowy | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
@@ -57,33 +58,42 @@
 - **Wersja:** v0.4.1
 - **Zakres:** _copy_rtree_index() fix, HYDRO_LAYERS/CATEGORY_FILTERS, --category CLI, geometry.py, --geometry CLI, pyshp, 636 testow
 
+### CP8 — PL-2000 sheet naming system
+- **Data:** 2026-02-24
+- **Wersja:** v0.5.0 (w trakcie)
+- **Zakres:** Parser2000, auto-detekcja PL-1992/PL-2000, find_sheets_2000_for_bbox, CLI --system, FileStorage PL-2000, 847 testow
+
 ## Ostatnia sesja
 
-**Data:** 2026-02-08
+**Data:** 2026-02-24
 
 ### Co zrobiono
-- **docs: sprawdzenie spojnosci dokumentacji (15 niespojnosci naprawionych)**
-  - README.md: brak geometry w Funkcjonalnosci, test count 593→636, brak pyshp
-  - PRD.md: brak find_sheets_for_geometry i pyshp, niezgodnosc wersji header/footer
-  - IMPLEMENTATION_PROMPT.md: brak geometry.py, pyshp, --geometry, niezgodnosc wersji
-  - DEVELOPMENT_STANDARDS.md: test count 574→636, brak 4 plikow testowych
-  - SCOPE.md: literowka "CORINE 5m" → "NMT 5m"
-  - PROGRESS.md: backlog test count 593→636
-- **release: v0.4.1**
-  - Merge develop → main (--no-ff)
-  - Tag v0.4.1 na main
-  - Push main + tag
+- **feat: pelna obsluga godlowania PL-2000**
+  - Parser2000 — parsing, walidacja, BBox, hierarchia (5 skal: 1:10k-1:500)
+  - 4 strefy merydianowe (EPSG:2176-2179)
+  - find_sheets_2000_for_bbox() — BBox to PL-2000 godla lookup
+  - SheetParser auto-detekcja: kropki=PL-2000, myslniki=PL-1992
+  - find_sheets_for_bbox/geometry: parametr system="1992"|"2000"
+  - FileStorage: struktura katalogow PL-2000
+  - CLI: parse/download z auto-detekcja, --system, --bbox-crs EPSG:2176-2179
+  - 211 nowych testow (636→847)
+- **docs: design doc + implementation plan**
+  - docs/plans/2026-02-24-pl2000-support-design.md
+  - docs/plans/2026-02-24-pl2000-implementation.md
 
 ### Nastepne kroki
-1. Pobieranie rownolegle (v0.5+)
-2. Cache metadanych (SQLite)
+1. Weryfikacja z realnymi danymi GUGiK (download 6.179.12.20.asc, porownanie BBox z headerem)
+2. Pobieranie rownolegle (v0.5+)
+3. Cache metadanych (SQLite)
 
 ## Backlog
 
-- [x] Pokrycie testami do 80% (~84%, 636 testow)
+- [x] Pokrycie testami do 80% (847 testow)
 - [x] NMPT provider (GugikNmptProvider)
 - [x] Ortofotomapa provider (GugikOrtoProvider)
 - [x] CLI --product {nmt,nmpt,orto}
+- [x] PL-2000 godlowanie (Parser2000, auto-detekcja, CLI)
+- [ ] Weryfikacja BBox PL-2000 z realnymi danymi GUGiK
 - [ ] Pobieranie rownolegle (multi-threading)
 - [ ] Cache metadanych (SQLite)
 - [ ] Mozaikowanie arkuszy NMT
