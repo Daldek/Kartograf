@@ -16,7 +16,7 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --category + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
-| Pokrycie testami | ✅ Gotowy | 847 testow, cel 80% osiagniety |
+| Pokrycie testami | ✅ Gotowy | 849 testow, cel 80% osiagniety |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 
 <!-- Statusy: ✅ Gotowy | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
@@ -61,7 +61,7 @@
 ### CP8 — PL-2000 sheet naming system
 - **Data:** 2026-02-24
 - **Wersja:** v0.5.0 (w trakcie)
-- **Zakres:** Parser2000, auto-detekcja PL-1992/PL-2000, find_sheets_2000_for_bbox, CLI --system, FileStorage PL-2000, 847 testow
+- **Zakres:** Parser2000, auto-detekcja PL-1992/PL-2000, find_sheets_2000_for_bbox, CLI --system, FileStorage PL-2000, 849 testow
 
 ## Ostatnia sesja
 
@@ -76,19 +76,28 @@
   - find_sheets_for_bbox/geometry: parametr system="1992"|"2000"
   - FileStorage: struktura katalogow PL-2000
   - CLI: parse/download z auto-detekcja, --system, --bbox-crs EPSG:2176-2179
-  - 211 nowych testow (636→847)
+  - 213 nowych testow (636→849)
+- **fix: download_sheet() dla PL-2000 sub-10k**
+  - PL-2000 godla (1:5000, 1:2000, 1:1000, 1:500) pobierane bezposrednio
+  - Wczesniej crash: probowal rozwinac do 1:10000 co jest grubsza skala
+- **fix: CLI dynamiczne etykiety skal**
+  - format_hierarchy() — dynamiczny naglowek zamiast hardcoded "1:1000000"
+  - format_children() — dynamiczna najdrobniejsza skala zamiast "1:10000"
+- **export: Parser2000, find_sheets_2000_for_bbox w __init__.py**
 - **docs: design doc + implementation plan**
   - docs/plans/2026-02-24-pl2000-support-design.md
   - docs/plans/2026-02-24-pl2000-implementation.md
+- **review: final code review — 1 critical + 3 important issues fixed**
 
 ### Nastepne kroki
 1. Weryfikacja z realnymi danymi GUGiK (download 6.179.12.20.asc, porownanie BBox z headerem)
-2. Pobieranie rownolegle (v0.5+)
-3. Cache metadanych (SQLite)
+2. Bump wersji do v0.5.0 i merge develop → main
+3. Pobieranie rownolegle (v0.5+)
+4. Cache metadanych (SQLite)
 
 ## Backlog
 
-- [x] Pokrycie testami do 80% (847 testow)
+- [x] Pokrycie testami do 80% (849 testow)
 - [x] NMPT provider (GugikNmptProvider)
 - [x] Ortofotomapa provider (GugikOrtoProvider)
 - [x] CLI --product {nmt,nmpt,orto}
