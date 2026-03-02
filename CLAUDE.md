@@ -8,7 +8,7 @@ Glowne funkcjonalnosci:
 - **NMT** — pobieranie Numerycznego Modelu Terenu z GUGiK (1m i 5m)
 - **NMPT** — Numeryczny Model Pokrycia Terenu / DSM z GUGiK (1m)
 - **Ortofotomapa** — zdjecia lotnicze Standard Resolution (25cm, TIF) z GUGiK
-- **BDOT10k** — polska baza pokrycia terenu (12 warstw PT*)
+- **BDOT10k** — polska baza pokrycia terenu (15 warstw: 12 PT* + 3 SW*)
 - **CORINE Land Cover** — europejska klasyfikacja pokrycia terenu (44 klasy)
 - **SoilGrids** — globalne dane glebowe z ISRIC (11 parametrow, 6 glebokosci)
 - **HSG** — kalkulacja Hydrologic Soil Groups dla metody SCS-CN
@@ -43,6 +43,7 @@ kartograf/
 ├── exceptions.py        # KartografError, ParseError, ValidationError, DownloadError
 ├── core/                # Logika bazowa
 │   ├── sheet_parser.py  # SheetParser — parser godel map topograficznych, BBox
+│   ├── parser_2000.py   # Parser2000 — parser godal PL-2000, find_sheets_2000_for_bbox
 │   └── geometry.py      # Czytanie SHP/GPKG, find_sheets_for_geometry, get_overall_bbox
 ├── providers/           # Providery danych (abstrakcje nad API)
 │   ├── base.py          # BaseProvider — abstrakcja dla NMT
@@ -97,8 +98,10 @@ kartograf download N-34-130-D-d-2-4 --product orto
 kartograf download N-34-130-D --scale 1:10000 --resolution 5m
 kartograf download --geometry area.shp
 kartograf download --geometry area.gpkg --layer catchments
+kartograf parse 6.179.12.20
+kartograf download 6.179.12.20
+kartograf download --bbox 6500000,5895000,6508000,5900000 --bbox-crs EPSG:2177 --system 2000
 kartograf landcover download --source bdot10k --teryt 1465
-kartograf landcover download --source bdot10k --teryt 1465 --category hydro
 kartograf landcover download --source corine --year 2018 --godlo N-34-130-D
 kartograf landcover download --source soilgrids --godlo N-34-130-D --property soc
 kartograf soilgrids hsg --godlo N-34-130-D --stats
@@ -149,7 +152,7 @@ kartograf landcover list-layers --source soilgrids
 - Kartograf NIE zawiera danych obserwacyjnych — to zadanie IMGWTools
 
 ### Ograniczenia
-- Pobieranie jest synchroniczne (brak async/parallel) — zaplanowane na v0.5+
+- Pobieranie jest synchroniczne (brak async/parallel) — zaplanowane na v0.6+
 - NMT 5m dostepne tylko w ukladzie EVRF2007
 - WCS (download_bbox) niedostepne dla NMT 5m — tylko arkusze OpenData
 - CORINE GeoTIFF wymaga OAuth2 credentials w CLMS — bez nich fallback na PNG (WMS)

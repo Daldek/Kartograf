@@ -9,6 +9,54 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.5.0] - 2026-03-02
+
+### Added
+- **PL-2000 sheet naming system — full support**
+  - `Parser2000` class for parsing PL-2000 godla (format `zone.row.column[.subdivisions]`)
+  - 5 skal: 1:10000, 1:5000, 1:2000, 1:1000, 1:500
+  - 4 strefy merydianowe: 5 (EPSG:2176), 6 (EPSG:2177), 7 (EPSG:2178), 8 (EPSG:2179)
+  - BBox calculation z transformacja CRS (pyproj)
+  - Hierarchia: get_parent(), get_children(), get_all_descendants(), get_hierarchy_up()
+  - `find_sheets_2000_for_bbox()` — BBox to PL-2000 godla lookup
+- **SheetParser auto-detekcja PL-1992 vs PL-2000**
+  - `SheetParser("6.179.12")` automatycznie rozpoznaje PL-2000
+  - `SheetParser("N-34-130-D")` automatycznie rozpoznaje PL-1992
+  - Walidacja zgodnosci uklad/format
+- **find_sheets_for_bbox: parametr system="1992"|"2000"**
+  - `find_sheets_for_bbox(bbox, system="2000")` zwraca godla PL-2000
+  - `find_sheets_for_geometry()` rowniez obsluguje parametr system
+- **CLI: pelna obsluga PL-2000**
+  - `kartograf parse 6.179.12.20` — auto-detekcja, wyswietla strefe i CRS
+  - `kartograf download --bbox ... --system 2000` — pobieranie z godlami PL-2000
+  - `--bbox-crs` rozszerzony o EPSG:2176-2179
+- **FileStorage: obsluga sciezek PL-2000**
+  - Struktura katalogow: `nmt_2000_1m/6/179/12/20/6.179.12.20.asc`
+- **Public API: eksport Parser2000 i find_sheets_2000_for_bbox**
+  - `from kartograf import Parser2000, find_sheets_2000_for_bbox`
+
+### Removed
+- **BDOT10k: usunięto filtrowanie po kategorii (--category pt/hydro)**
+  - Pobierany jest cały plik BDOT10k bez podziału na kategorie
+  - Usunięto stałe `PT_LAYERS`, `HYDRO_LAYERS`, `CATEGORY_FILTERS`
+  - Usunięto parametr `category` z `download_by_teryt()`, `_download_with_retry()`, `_extract_gpkg_from_zip()`
+  - Usunięto argument CLI `--category`
+  - `_extract_gpkg_from_zip()` wyciąga i scala wszystkie warstwy GPKG z ZIP
+  - `get_available_layers()` zwraca wszystkie 15 warstw (PT* + SW*)
+
+### Fixed
+- **download_sheet(): PL-2000 sub-10k godla pobierane bezposrednio**
+  - Godla PL-2000 w skalach 1:5000, 1:2000, 1:1000, 1:500 sa teraz pobierane
+    jako pojedyncze pliki, bez proby rozwijania do 1:10000
+- **CLI: dynamiczne etykiety skal**
+  - `format_hierarchy()` — naglowek "from current to X" zamiast hardcoded "1:1000000"
+  - `format_children()` — "finest scale X" zamiast hardcoded "1:10000"
+
+### Tests
+- **849 testow** (+213 nowych)
+
+---
+
 ## [0.4.1] - 2026-02-08
 
 ### Fixed
@@ -30,24 +78,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `kartograf download --geometry area.gpkg --layer catchments` — GPKG layer selection
   - `kartograf landcover download --source bdot10k --geometry area.shp`
   - `kartograf soilgrids hsg --geometry area.shp`
-- **BDOT10k: hydrographic data download (`--category hydro`)**
-  - New `HYDRO_LAYERS` constant: SWRS (rivers/streams), SWKN (canals), SWRM (drainage ditches), PTWP (surface waters)
-  - `CATEGORY_FILTERS` mapping for category-based layer extraction from ZIP
-  - `category` parameter threaded through `download_by_teryt()`, `download_by_godlo()`, `download_by_bbox()`
-  - `get_available_layers(category="hydro")` returns hydrographic layers
-  - Hydro layer descriptions in `get_layer_description()`
-- **CLI: `--category` option for `landcover download`**
-  - `kartograf landcover download --source bdot10k --teryt 2262 --category hydro`
-  - Choices: `pt` (land cover, default), `hydro` (water network)
-- **CLI: `landcover list-layers` shows both PT and hydro categories**
 
 ### Tests
 - **636 testow** (+62 nowych)
   - 31 testow `test_geometry.py`: envelope parsing, SHP/GPKG reading, CRS transform, find_sheets_for_geometry, get_overall_bbox
   - 12 testow CLI geometry: download/landcover/soilgrids --geometry, mutual exclusivity
   - 5 testow `TestBdot10kRtreeIndex`: merge preserves indices, no geometry, no index, extensions copied, base preserved
-  - 11 testow `TestBdot10kCategory`: extraction filters, category flow, layers, descriptions
-  - 3 testy `TestCmdLandcoverCategory`: CLI --category hydro/default, list-layers shows hydro
 
 ---
 
@@ -485,7 +521,8 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
-[Unreleased]: https://github.com/Daldek/Kartograf/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/Daldek/Kartograf/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Daldek/Kartograf/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Daldek/Kartograf/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Daldek/Kartograf/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.2

@@ -519,3 +519,118 @@ class TestDownloadManagerDefaultExtension:
 
         assert manager._default_ext == ".tif"
         assert manager.storage._product == "orto"
+
+
+class TestDownloadManagerPL2000:
+    """Testy DownloadManager z godłami PL-2000."""
+
+    def test_count_sheets_pl2000_10k_to_2k(self, tmp_path):
+        """Test liczenia arkuszy PL-2000 1:10000 → 1:2000 (25 arkuszy)."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".asc"
+
+        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=mock_provider, storage=storage
+        )
+
+        count = manager.count_sheets("6.179.12", target_scale="1:2000")
+        assert count == 25
+
+    def test_count_sheets_pl2000_10k_to_5k(self, tmp_path):
+        """Test liczenia arkuszy PL-2000 1:10000 → 1:5000 (4 arkusze)."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".asc"
+
+        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=mock_provider, storage=storage
+        )
+
+        count = manager.count_sheets("6.179.12", target_scale="1:5000")
+        assert count == 4
+
+    def test_count_sheets_pl2000_2k_to_1k(self, tmp_path):
+        """Test liczenia arkuszy PL-2000 1:2000 → 1:1000 (4 arkusze)."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".asc"
+
+        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=mock_provider, storage=storage
+        )
+
+        count = manager.count_sheets("6.179.12.20", target_scale="1:1000")
+        assert count == 4
+
+    def test_download_sheet_pl2000_10k_direct(self, tmp_path):
+        """Test że download_sheet z godłem PL-2000 1:10000 pobiera bezpośrednio."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".asc"
+
+        def mock_download(godlo, path, timeout=30):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"ASC data")
+            return path
+
+        mock_provider.download = mock_download
+
+        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=mock_provider, storage=storage
+        )
+
+        result = manager.download_sheet("6.179.12")
+
+        assert isinstance(result, Path)
+        assert result.suffix == ".asc"
+        assert result.exists()
+
+    def test_download_sheet_pl2000_sub10k_direct(self, tmp_path):
+        """Test że PL-2000 1:2000 pobiera bezpośrednio."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".asc"
+
+        def mock_download(godlo, path, timeout=30):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"ASC data")
+            return path
+
+        mock_provider.download = mock_download
+
+        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=mock_provider, storage=storage
+        )
+
+        # PL-2000 1:2000 godło — should download directly, NOT expand to 1:10000
+        result = manager.download_sheet("6.179.12.20")
+
+        assert isinstance(result, Path)
+        assert result.suffix == ".asc"
+        assert result.exists()
+        assert "6.179.12.20" in str(result)
+
+    def test_download_sheet_pl2000_5k_direct(self, tmp_path):
+        """Test że download_sheet z godłem PL-2000 1:5000 pobiera bezpośrednio."""
+        mock_provider = Mock()
+        mock_provider.default_extension = ".asc"
+
+        def mock_download(godlo, path, timeout=30):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"ASC data")
+            return path
+
+        mock_provider.download = mock_download
+
+        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=mock_provider, storage=storage
+        )
+
+        # PL-2000 1:5000 godło — should download directly
+        result = manager.download_sheet("6.179.12.1")
+
+        assert isinstance(result, Path)
+        assert result.suffix == ".asc"
+        assert result.exists()

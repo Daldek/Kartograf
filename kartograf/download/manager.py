@@ -206,7 +206,9 @@ class DownloadManager:
         """
         parser = SheetParser(godlo)
 
-        if parser.scale != "1:10000":
+        # PL-2000 godła are always downloaded directly (individual files on GUGiK)
+        # PL-1992 coarser than 1:10000 must be expanded to 1:10000 descendants
+        if parser.uklad != "2000" and parser.scale != "1:10000":
             return self.download_hierarchy(
                 godlo, "1:10000", skip_existing=skip_existing, on_progress=on_progress
             )

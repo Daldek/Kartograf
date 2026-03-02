@@ -1,9 +1,9 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.2
-**Data:** 2026-02-08
-**Status:** Production (v0.4.1)
+**Wersja:** 3.4
+**Data:** 2026-03-02
+**Status:** Production (v0.5.0)
 
 ---
 
@@ -37,17 +37,18 @@ Kartograf automatyzuje ten proces oferując:
 
 ---
 
-## 2. Zakres - Wersja 0.4.x
+## 2. Zakres - Wersja 0.5.0
 
 ### 2.1 NMT (Numeryczny Model Terenu) - IN SCOPE
 
 ```python
 # Funkcjonalności:
-- Parser godeł w układach 1992 i 2000
-- Obsługa skal: 1:1 000 000 do 1:10 000
+- Parser godeł PL-1992 (SheetParser): skale 1:1M do 1:10k
+- Parser godeł PL-2000 (Parser2000): skale 1:10k do 1:500, 4 strefy (EPSG:2176-2179)
+- Auto-detekcja systemu: SheetParser automatycznie rozpoznaje PL-1992 vs PL-2000
 - Hierarchia arkuszy (get_parent, get_children, get_all_descendants)
-- Bounding box arkusza (EPSG:2180, EPSG:4326)
-- Reverse lookup: bbox → godła (find_sheets_for_bbox)
+- Bounding box arkusza (EPSG:2180, EPSG:4326, EPSG:2176-2179)
+- Reverse lookup: bbox → godła (find_sheets_for_bbox, find_sheets_2000_for_bbox)
 - Reverse lookup: geometry file → godła (find_sheets_for_geometry)
 - Selekcja obszaru: godło, bbox, plik geometrii (SHP/GPKG)
 - Pobieranie przez godło → ASC (OpenData)
@@ -93,8 +94,8 @@ Kartograf automatyzuje ten proces oferując:
 
 ```python
 # BDOT10k (GUGiK):
-- 12 warstw pokrycia terenu (PT*) — category "pt" (domyślna)
-- 4 warstwy hydrograficzne (SW* + PTWP) — category "hydro"
+- 15 warstw (12 pokrycia terenu PT* + 3 hydrograficzne SW*)
+- Pobieranie calego pliku BDOT10k (wszystkie warstwy)
 - Pobieranie przez TERYT (powiat)
 - Pobieranie przez godło lub bbox
 - Format: GeoPackage, Shapefile
@@ -141,17 +142,18 @@ Kartograf automatyzuje ten proces oferując:
 
 ```bash
 # Komendy:
-kartograf parse <godlo>                    # info o godle
+kartograf parse <godlo>                    # info o godle (PL-1992 lub PL-2000)
+kartograf parse 6.179.12.20               # PL-2000 auto-detekcja
 kartograf download <godlo>                 # pobierz NMT
 kartograf download <godlo> --product nmpt  # pobierz NMPT
 kartograf download <godlo> --product orto  # pobierz ortofoto
 kartograf download --bbox min_x,min_y,max_x,max_y  # NMT dla bbox
+kartograf download --bbox ... --system 2000  # NMT w ukladzie PL-2000
 kartograf download --bbox ... --product orto  # ortofoto dla bbox
 kartograf download --geometry area.shp         # NMT z pliku geometrii
 kartograf download --geometry area.gpkg --layer catchments
 kartograf download <godlo> --resolution 5m # NMT 5m
 kartograf landcover download --source bdot10k --teryt <kod>
-kartograf landcover download --source bdot10k --teryt <kod> --category hydro
 kartograf landcover download --source corine --godlo <godlo>
 kartograf landcover download --source soilgrids --property <param>
 kartograf landcover list-sources
@@ -165,7 +167,8 @@ kartograf soilgrids hsg --godlo <godlo>    # oblicz HSG
 # Public API (kartograf/__init__.py):
 from kartograf import (
     # Core
-    SheetParser, BBox, find_sheets_for_bbox, find_sheets_for_geometry,
+    SheetParser, Parser2000, BBox,
+    find_sheets_for_bbox, find_sheets_2000_for_bbox, find_sheets_for_geometry,
     # Download (NMT/NMPT/Orto)
     DownloadManager, DownloadProgress, FileStorage,
     # Land Cover
@@ -182,12 +185,12 @@ from kartograf import (
 
 ---
 
-## 3. Out of Scope - Wersja 0.4.x
+## 3. Out of Scope - Wersja 0.5.0
 
 ### 3.1 Funkcjonalności Zaplanowane - FUTURE
 
 ```python
-# Wersja 0.5+:
+# Wersja 0.6+:
 - Pobieranie równoległe (multi-threading)
 - Cache dla metadanych
 - Automatyczne mozaikowanie (merge arkuszy)
@@ -219,7 +222,8 @@ from kartograf import (
 ```
 kartograf/
 ├── core/                  # Parser godeł, BBox, geometria
-│   ├── sheet_parser.py
+│   ├── sheet_parser.py    # SheetParser (PL-1992), auto-detekcja PL-2000
+│   ├── parser_2000.py     # Parser2000 (PL-2000), find_sheets_2000_for_bbox
 │   └── geometry.py        # SHP/GPKG reading, find_sheets_for_geometry
 ├── providers/             # Providery danych
 │   ├── base.py            # BaseProvider (NMT)
@@ -286,7 +290,7 @@ pyshp >= 2.3.0         # Shapefile reading
 ### 6.2 Jakościowe
 
 ```
-- 636 testów przechodzi
+- 835 testów przechodzi
 - Pokrycie testami ~84% (cel 80% osiągnięty)
 - Kod zgodny z ruff
 - Type hints wszędzie
@@ -305,9 +309,11 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-02-07 | 3.0 | Added NMPT, Ortofotomapa, updated storage structure |
 | 2026-02-08 | 3.1 | BDOT10k hydro category, rtree fix |
 | 2026-02-08 | 3.2 | Geometry file selection (--geometry SHP/GPKG) |
+| 2026-03-02 | 3.3 | Removed BDOT10k category filtering (download full package) |
+| 2026-03-02 | 3.4 | PL-2000 support, bump to v0.5.0 |
 
 ---
 
-**Wersja dokumentu:** 3.2
-**Data ostatniej aktualizacji:** 2026-02-08
-**Status:** Production - v0.4.1
+**Wersja dokumentu:** 3.4
+**Data ostatniej aktualizacji:** 2026-03-02
+**Status:** Production - v0.5.0

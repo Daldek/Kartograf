@@ -256,7 +256,7 @@ class TestMain:
 
         assert exc_info.value.code == 0
         captured = capsys.readouterr()
-        assert "0.4.1" in captured.out
+        assert "0.5.0" in captured.out
 
     def test_parse_subcommand(self, capsys):
         """Test parse subcommand."""
@@ -1204,81 +1204,12 @@ class TestCmdSoilgrids:
         mock_calc.calculate_hsg_by_bbox.assert_called_once()
 
 
-# ===========================================================================
-# BDOT10k --category CLI tests
-# ===========================================================================
-
-
-class TestCmdLandcoverCategory:
-    """Tests for --category option in landcover download."""
-
-    @patch("kartograf.cli.commands.LandCoverManager")
-    def test_landcover_download_bdot10k_category_hydro(
-        self, mock_mgr_cls, capsys, tmp_path
-    ):
-        """--category hydro passes category to manager.download."""
-        mock_mgr = Mock()
-        mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download.return_value = tmp_path / "out.gpkg"
-        mock_mgr_cls.return_value = mock_mgr
-
-        result = main(
-            [
-                "landcover",
-                "download",
-                "--source",
-                "bdot10k",
-                "--teryt",
-                "1465",
-                "--category",
-                "hydro",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-        assert result == 0
-        call_kwargs = mock_mgr.download.call_args.kwargs
-        assert call_kwargs.get("category") == "hydro"
-
-    @patch("kartograf.cli.commands.LandCoverManager")
-    def test_landcover_download_bdot10k_category_default(
-        self, mock_mgr_cls, capsys, tmp_path
-    ):
-        """Default category is 'pt'."""
-        mock_mgr = Mock()
-        mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download.return_value = tmp_path / "out.gpkg"
-        mock_mgr_cls.return_value = mock_mgr
-
-        result = main(
-            [
-                "landcover",
-                "download",
-                "--teryt",
-                "1465",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-        assert result == 0
-        call_kwargs = mock_mgr.download.call_args.kwargs
-        assert call_kwargs.get("category") == "pt"
-
-    def test_landcover_download_no_selection(self, capsys):
-        """No selection method -> exit 1."""
-        result = main(["landcover", "download"])
-        assert result == 1
-        captured = capsys.readouterr()
-        assert "Must provide one of" in captured.err
-
-    def test_landcover_list_layers_shows_hydro(self, capsys):
-        """list-layers --source bdot10k shows hydro layers."""
-        result = main(["landcover", "list-layers", "--source", "bdot10k"])
-        assert result == 0
-        captured = capsys.readouterr()
-        assert "SWRS" in captured.out
-        assert "SWKN" in captured.out
-        assert "hydro" in captured.out.lower()
+def test_landcover_download_no_selection(capsys):
+    """No selection method -> exit 1."""
+    result = main(["landcover", "download"])
+    assert result == 1
+    captured = capsys.readouterr()
+    assert "Must provide one of" in captured.err
 
 
 # ===========================================================================
@@ -1536,3 +1467,325 @@ class TestCmdSoilgridsHsgGeometry:
         captured = capsys.readouterr()
         err = captured.err
         assert "only one of" in err.lower() or "Provide only one" in err
+
+
+# ===========================================================================
+# PL-2000 CLI tests
+# ===========================================================================
+
+
+class TestFormatSheetInfoPL2000:
+    """Tests for format_sheet_info() with PL-2000 godla."""
+
+    def test_format_pl2000_sheet_basic(self):
+        """PL-2000 godlo shows correct layout and components."""
+        parser = SheetParser("6.179.12")
+        output = format_sheet_info(parser)
+
+        assert "6.179.12" in output
+        assert "1:10000" in output
+        assert "2000" in output
+        assert "Components:" in output
+        assert "strefa: 6" in output
+        assert "pas: 179" in output
+        assert "slup: 12" in output
+
+    def test_format_pl2000_shows_strefa(self):
+        """PL-2000 output should include Strefa line."""
+        parser = SheetParser("6.179.12")
+        output = format_sheet_info(parser)
+
+        assert "Strefa: 6" in output
+
+    def test_format_pl2000_shows_native_crs(self):
+        """PL-2000 output should include native CRS."""
+        parser = SheetParser("6.179.12")
+        output = format_sheet_info(parser)
+
+        assert "Natywny CRS: EPSG:2177" in output
+
+    def test_format_pl2000_zone5(self):
+        """Zone 5 shows EPSG:2176."""
+        parser = SheetParser("5.100.10")
+        output = format_sheet_info(parser)
+
+        assert "Strefa: 5" in output
+        assert "Natywny CRS: EPSG:2176" in output
+
+    def test_format_pl2000_zone8(self):
+        """Zone 8 shows EPSG:2179."""
+        parser = SheetParser("8.100.10")
+        output = format_sheet_info(parser)
+
+        assert "Strefa: 8" in output
+        assert "Natywny CRS: EPSG:2179" in output
+
+    def test_format_pl1992_no_strefa(self):
+        """PL-1992 godlo should NOT show Strefa or Natywny CRS."""
+        parser = SheetParser("N-34-130-D")
+        output = format_sheet_info(parser)
+
+        assert "Strefa:" not in output
+        assert "Natywny CRS:" not in output
+
+
+class TestParsePL2000Command:
+    """Tests for 'kartograf parse' with PL-2000 godla."""
+
+    def test_parse_pl2000_godlo(self, capsys):
+        """kartograf parse 6.179.12 should work."""
+        result = main(["parse", "6.179.12"])
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "6.179.12" in captured.out
+        assert "1:10000" in captured.out
+        assert "2000" in captured.out
+
+    def test_parse_pl2000_shows_strefa_in_output(self, capsys):
+        """Parse command output includes zone info for PL-2000."""
+        result = main(["parse", "6.179.12"])
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "Strefa: 6" in captured.out
+        assert "Natywny CRS: EPSG:2177" in captured.out
+
+    def test_parse_pl2000_finer_scale(self, capsys):
+        """kartograf parse 6.179.12.15 should show 1:2000."""
+        result = main(["parse", "6.179.12.15"])
+
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "1:2000" in captured.out
+        assert "Strefa: 6" in captured.out
+
+    def test_parse_pl2000_invalid(self, capsys):
+        """Invalid PL-2000 godlo returns error."""
+        result = main(["parse", "9.179.12"])
+
+        assert result == 1
+
+
+class TestCreateParserDownloadSystem:
+    """Tests for --system argument on download subparser."""
+
+    def test_system_default_is_1992(self):
+        """--system defaults to 1992."""
+        parser = create_parser()
+        args = parser.parse_args(["download", "--bbox", "419000,230000,426000,237000"])
+        assert args.system == "1992"
+
+    def test_system_2000_accepted(self):
+        """--system 2000 is accepted."""
+        parser = create_parser()
+        args = parser.parse_args(
+            ["download", "--bbox", "419000,230000,426000,237000", "--system", "2000"]
+        )
+        assert args.system == "2000"
+
+    def test_system_1992_accepted(self):
+        """--system 1992 is accepted."""
+        parser = create_parser()
+        args = parser.parse_args(
+            ["download", "--bbox", "419000,230000,426000,237000", "--system", "1992"]
+        )
+        assert args.system == "1992"
+
+    def test_system_invalid_rejected(self):
+        """--system invalid is rejected."""
+        parser = create_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(
+                ["download", "--bbox", "419000,230000,426000,237000", "--system", "xyz"]
+            )
+
+
+class TestCreateParserBBoxCrsExtended:
+    """Tests for extended --bbox-crs choices with PL-2000 CRS."""
+
+    def test_bbox_crs_epsg2177(self):
+        """--bbox-crs EPSG:2177 is accepted."""
+        parser = create_parser()
+        args = parser.parse_args(
+            [
+                "download",
+                "--bbox",
+                "6500000,5800000,6510000,5810000",
+                "--bbox-crs",
+                "EPSG:2177",
+            ]
+        )
+        assert args.bbox_crs == "EPSG:2177"
+
+    def test_bbox_crs_epsg2176(self):
+        """--bbox-crs EPSG:2176 is accepted."""
+        parser = create_parser()
+        args = parser.parse_args(
+            [
+                "download",
+                "--bbox",
+                "5500000,5800000,5510000,5810000",
+                "--bbox-crs",
+                "EPSG:2176",
+            ]
+        )
+        assert args.bbox_crs == "EPSG:2176"
+
+    def test_bbox_crs_epsg2178(self):
+        """--bbox-crs EPSG:2178 is accepted."""
+        parser = create_parser()
+        args = parser.parse_args(
+            [
+                "download",
+                "--bbox",
+                "7500000,5800000,7510000,5810000",
+                "--bbox-crs",
+                "EPSG:2178",
+            ]
+        )
+        assert args.bbox_crs == "EPSG:2178"
+
+    def test_bbox_crs_epsg2179(self):
+        """--bbox-crs EPSG:2179 is accepted."""
+        parser = create_parser()
+        args = parser.parse_args(
+            [
+                "download",
+                "--bbox",
+                "8500000,5800000,8510000,5810000",
+                "--bbox-crs",
+                "EPSG:2179",
+            ]
+        )
+        assert args.bbox_crs == "EPSG:2179"
+
+
+class TestDownloadBBoxSystem:
+    """Tests for download --bbox --system integration."""
+
+    @patch("kartograf.cli.commands.find_sheets_for_bbox")
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_bbox_system_2000_passes_param(
+        self, mock_manager_cls, mock_find, capsys, tmp_path
+    ):
+        """--system 2000 passes system='2000' to find_sheets_for_bbox."""
+        mock_find.return_value = ["6.179.12"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "--system",
+                "2000",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        mock_find.assert_called_once()
+        call_kwargs = mock_find.call_args
+        assert call_kwargs.kwargs.get("system") == "2000" or (
+            len(call_kwargs.args) >= 3 and call_kwargs.args[2] == "2000"
+        )
+
+    @patch("kartograf.cli.commands.find_sheets_for_bbox")
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_bbox_default_system_1992(
+        self, mock_manager_cls, mock_find, capsys, tmp_path
+    ):
+        """Default system='1992' is passed to find_sheets_for_bbox."""
+        mock_find.return_value = ["N-34-130-D-d-2-4"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        mock_find.assert_called_once()
+        call_kwargs = mock_find.call_args
+        assert call_kwargs.kwargs.get("system") == "1992" or (
+            len(call_kwargs.args) >= 3 and call_kwargs.args[2] == "1992"
+        )
+
+
+class TestDownloadGeometrySystem:
+    """Tests for download --geometry --system integration."""
+
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_geometry_system_2000(
+        self, mock_manager_cls, mock_find, capsys, tmp_path
+    ):
+        """--geometry --system 2000 passes system='2000' to find_sheets_for_geometry."""
+        shp_file = tmp_path / "area.shp"
+        shp_file.touch()
+
+        mock_find.return_value = ["6.179.12"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--geometry",
+                str(shp_file),
+                "--system",
+                "2000",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        mock_find.assert_called_once()
+        call_kwargs = mock_find.call_args
+        assert call_kwargs.kwargs.get("system") == "2000"
+
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.commands.DownloadManager")
+    def test_download_geometry_default_system_1992(
+        self, mock_manager_cls, mock_find, capsys, tmp_path
+    ):
+        """Default system='1992' for geometry download."""
+        shp_file = tmp_path / "area.shp"
+        shp_file.touch()
+
+        mock_find.return_value = ["N-34-130-D-d-2-4"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--geometry",
+                str(shp_file),
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        mock_find.assert_called_once()
+        call_kwargs = mock_find.call_args
+        assert call_kwargs.kwargs.get("system") == "1992"
