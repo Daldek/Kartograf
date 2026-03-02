@@ -98,7 +98,6 @@ kartograf download N-34-130-D --scale 1:10000 --resolution 5m
 kartograf download --geometry area.shp
 kartograf download --geometry area.gpkg --layer catchments
 kartograf landcover download --source bdot10k --teryt 1465
-kartograf landcover download --source bdot10k --teryt 1465 --category hydro
 kartograf landcover download --source corine --year 2018 --godlo N-34-130-D
 kartograf landcover download --source soilgrids --godlo N-34-130-D --property soc
 kartograf soilgrids hsg --godlo N-34-130-D --stats

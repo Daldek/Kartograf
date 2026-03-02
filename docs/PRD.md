@@ -199,7 +199,7 @@ lc.download(teryt="1465", output_dir="./data")
 lc.download(godlo="N-34-130-D", output_dir="./data")
 ```
 
-#### Warstwy PT* — pokrycie terenu (12 warstw, `--category pt` domyślna)
+#### Warstwy (15 warstw — pobierane wszystkie)
 | Warstwa | Opis |
 |---------|------|
 | PTGN | Grunty nieużytkowe |
@@ -214,19 +214,13 @@ lc.download(godlo="N-34-130-D", output_dir="./data")
 | PTWP | Wody powierzchniowe |
 | PTWZ | Tereny zabagnione |
 | PTZB | Tereny zabudowane |
-
-#### Warstwy hydrograficzne (4 warstwy, `--category hydro`)
-| Warstwa | Opis |
-|---------|------|
 | SWRS | Rzeki i strumienie |
 | SWKN | Kanały |
 | SWRM | Rowy melioracyjne |
-| PTWP | Wody powierzchniowe |
 
 #### CLI Commands
 ```bash
 kartograf landcover download --source bdot10k --teryt 1465
-kartograf landcover download --source bdot10k --teryt 1465 --category hydro
 kartograf landcover download --source bdot10k --godlo N-34-130-D
 kartograf landcover list-layers --source bdot10k
 ```

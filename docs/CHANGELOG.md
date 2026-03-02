@@ -31,6 +31,15 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Public API: eksport Parser2000 i find_sheets_2000_for_bbox**
   - `from kartograf import Parser2000, find_sheets_2000_for_bbox`
 
+### Removed
+- **BDOT10k: usunięto filtrowanie po kategorii (--category pt/hydro)**
+  - Pobierany jest cały plik BDOT10k bez podziału na kategorie
+  - Usunięto stałe `PT_LAYERS`, `HYDRO_LAYERS`, `CATEGORY_FILTERS`
+  - Usunięto parametr `category` z `download_by_teryt()`, `_download_with_retry()`, `_extract_gpkg_from_zip()`
+  - Usunięto argument CLI `--category`
+  - `_extract_gpkg_from_zip()` wyciąga i scala wszystkie warstwy GPKG z ZIP
+  - `get_available_layers()` zwraca wszystkie 15 warstw (PT* + SW*)
+
 ### Fixed
 - **download_sheet(): PL-2000 sub-10k godla pobierane bezposrednio**
   - Godla PL-2000 w skalach 1:5000, 1:2000, 1:1000, 1:500 sa teraz pobierane
