@@ -1233,5 +1233,3 @@ class TestBdot10kRtreeIndex:
         results = cursor.fetchall()
         assert len(results) == 1
         conn.close()
-
-
