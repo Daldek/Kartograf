@@ -45,7 +45,7 @@ from kartograf.providers.gugik_orto import GugikOrtoProvider
 from kartograf.providers.landcover_base import LandCoverProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"
 
 __all__ = [
     # Core

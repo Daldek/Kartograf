@@ -5,16 +5,26 @@ This module provides the Bdot10kProvider class for downloading
 land cover data from the Polish BDOT10k database (Baza Danych
 Obiektów Topograficznych) maintained by GUGiK.
 
-BDOT10k contains land cover classes (PT - Pokrycie Terenu):
-- PTLZ: Tereny leśne (forests)
-- PTWP: Wody powierzchniowe (surface waters)
-- PTRK: Roślinność krzewiasta (shrub vegetation)
-- PTUT: Uprawy trwałe (permanent crops)
+BDOT10k contains 15 layers in two categories:
+
+Land cover (PT - Pokrycie Terenu, 12 layers):
 - PTGN: Grunty nieużytkowe (unused land)
 - PTKM: Tereny komunikacyjne (transportation areas)
+- PTLZ: Tereny leśne (forests)
+- PTNZ: Tereny niezabudowane (unbuilt areas)
 - PTPL: Place (squares/plazas)
+- PTRK: Roślinność krzewiasta (shrub vegetation)
 - PTSO: Składowiska (landfills)
+- PTTR: Tereny rolne (agricultural land)
+- PTUT: Uprawy trwałe (permanent crops)
+- PTWP: Wody powierzchniowe (surface waters)
 - PTWZ: Tereny zabagnione (wetlands)
+- PTZB: Tereny zabudowane (built-up areas)
+
+Hydrographic (SW - Sieć Wodna, 3 layers):
+- SWKN: Kanały (canals)
+- SWRM: Rowy melioracyjne (drainage ditches)
+- SWRS: Rzeki i strumienie (rivers/streams)
 """
 
 import logging
@@ -672,7 +682,7 @@ class Bdot10kProvider(LandCoverProvider):
 
                 # Copy data
                 cursor.execute(
-                    f"INSERT INTO {table_name} SELECT * FROM src.{table_name}"
+                    f"INSERT INTO [{table_name}] SELECT * FROM src.[{table_name}]"
                 )
 
                 # Copy gpkg_contents entry

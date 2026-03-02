@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kartograf"
-version = "0.4.1"
-description = "Tool for downloading NMT (Digital Terrain Model) data from GUGiK"
+version = "0.5.0"
+description = "Tool for downloading spatial data from GUGiK (NMT, NMPT, Ortophoto, BDOT10k), Copernicus (CORINE) and ISRIC (SoilGrids)"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.12"
 authors = [
     {name = "Piotr", email = "piotr@example.com"}
 ]
-keywords = ["nmt", "dem", "gugik", "gis", "terrain", "geodata"]
+keywords = ["nmt", "dem", "gugik", "gis", "terrain", "geodata", "bdot10k", "corine", "soilgrids", "land-cover", "ortophoto"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
