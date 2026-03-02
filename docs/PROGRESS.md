@@ -7,15 +7,16 @@
 | NMT (parser + pobieranie) | ✅ Gotowy | v0.1.0+ |
 | NMPT (Digital Surface Model) | ✅ Gotowy | v0.4.0 |
 | Ortofotomapa | ✅ Gotowy | v0.4.0 |
-| Land Cover (BDOT10k) | ✅ Gotowy | v0.3.0+, hydro v0.4.1 |
+| Land Cover (BDOT10k) | ✅ Gotowy | v0.3.0+, 15 warstw v0.5.0 |
 | Land Cover (CORINE) | ✅ Gotowy | v0.3.0+ |
 | SoilGrids | ✅ Gotowy | v0.3.0+ |
 | HSG | ✅ Gotowy | v0.3.0+ |
 | bbox → godla | ✅ Gotowy | find_sheets_for_bbox(), CLI --bbox |
 | geometry → godla | ✅ Gotowy | find_sheets_for_geometry(), CLI --geometry |
-| CLI | ✅ Gotowy | 5 komend + --bbox + --product + --category + --geometry |
+| CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
-| Pokrycie testami | ✅ Gotowy | ~84%, 636 testow, cel 80% osiagniety |
+| PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
+| Pokrycie testami | ✅ Gotowy | ~84%, 835 testow, cel 80% osiagniety |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 
 <!-- Statusy: ✅ Gotowy | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
@@ -57,45 +58,51 @@
 - **Wersja:** v0.4.1
 - **Zakres:** _copy_rtree_index() fix, HYDRO_LAYERS/CATEGORY_FILTERS, --category CLI, geometry.py, --geometry CLI, pyshp, 636 testow
 
+### CP8 — PL-2000 sheet naming system
+- **Data:** 2026-03-02
+- **Wersja:** v0.5.0
+- **Zakres:** Parser2000, auto-detekcja PL-1992/PL-2000, find_sheets_2000_for_bbox, CLI --system, FileStorage PL-2000, usuniecie --category, 835 testow
+
 ## Ostatnia sesja
 
-**Data:** 2026-02-08
+**Data:** 2026-03-02
 
 ### Co zrobiono
-- **feat(geometry): reading SHP/GPKG files for spatial selection**
-  - Nowy modul `kartograf/core/geometry.py`
-  - `_parse_gpkg_envelope()` — GeoPackage Binary header parsing (envelope extraction)
-  - `_read_shp_bboxes()` — pyshp Reader → per-feature bbox
-  - `_read_gpkg_bboxes()` — sqlite3 → geometry blobs → envelope parsing
-  - CRS auto-detection: `.prj` (SHP), `gpkg_spatial_ref_sys` (GPKG)
-  - `_transform_bbox()` — pyproj 4-corner transformation
-  - `read_feature_bboxes()` — dispatch SHP/GPKG
-  - `get_overall_bbox()` — union bbox of all features
-  - `find_sheets_for_geometry()` — per-feature bbox → find_sheets_for_bbox → deduplicate
-- **feat(cli): --geometry/--layer for download, landcover, soilgrids**
-  - `kartograf download --geometry area.shp` — tiles intersecting features
-  - `kartograf download --geometry area.gpkg --layer catchments`
-  - `kartograf landcover download --geometry area.shp` — overall bbox
-  - `kartograf soilgrids hsg --geometry area.shp` — overall bbox
-  - Mutual exclusivity: godlo XOR --bbox XOR --geometry
-  - `_cmd_download_geometry()` — new CLI handler
-- **deps: pyshp>=2.3.0 added**
-- **Public API: find_sheets_for_geometry exported**
-- **docs: CHANGELOG, DECISIONS (ADR-015), SCOPE, PRD, README, CLAUDE.md, PROGRESS**
+- **feat(parser): PL-2000 sheet naming system**
+  - Nowy modul `kartograf/core/parser_2000.py` — Parser2000
+  - 5 skal (1:10k-1:500), 4 strefy (5-8), BBox z transformacja CRS
+  - Hierarchia: get_parent(), get_children(), get_all_descendants(), get_hierarchy_up()
+  - `find_sheets_2000_for_bbox()` — BBox to PL-2000 godla lookup
+- **feat(parser): SheetParser auto-detekcja PL-1992 vs PL-2000**
+  - `SheetParser("6.179.12")` automatycznie rozpoznaje PL-2000
+  - Walidacja zgodnosci uklad/format
+- **feat(cli): PL-2000 obsluga w parse/download**
+  - `kartograf parse 6.179.12.20` — auto-detekcja, strefa, CRS
+  - `kartograf download --bbox ... --system 2000`
+  - `--bbox-crs` rozszerzony o EPSG:2176-2179
+- **feat(storage): PL-2000 directory structure**
+  - `nmt_2000_1m/6/179/12/20/6.179.12.20.asc`
+- **refactor(bdot10k): usunięcie filtrowania po kategorii**
+  - Pobierany caly plik BDOT10k (15 warstw: 12 PT* + 3 SW*)
+  - Usunieto --category, CATEGORY_FILTERS, PT_LAYERS, HYDRO_LAYERS
+- **docs: aktualizacja calej dokumentacji dla v0.5.0**
 - **Wyniki testow:**
-  - **636 testow passed** (+43 nowych: 31 geometry + 12 CLI)
+  - **835 testow passed**
   - **Ruff: clean** (lint + format)
 
 ### Nastepne kroki
-1. Pobieranie rownolegle (v0.5+)
-2. Cache metadanych (SQLite)
+1. Weryfikacja BBox PL-2000 z realnymi danymi GUGiK
+2. Pobieranie rownolegle (v0.6+)
+3. Cache metadanych (SQLite)
 
 ## Backlog
 
-- [x] Pokrycie testami do 80% (~84%, 636 testow)
+- [x] Pokrycie testami do 80% (~84%, 835 testow)
 - [x] NMPT provider (GugikNmptProvider)
 - [x] Ortofotomapa provider (GugikOrtoProvider)
 - [x] CLI --product {nmt,nmpt,orto}
+- [x] PL-2000 godlowanie (Parser2000, auto-detekcja, CLI)
+- [ ] Weryfikacja BBox PL-2000 z realnymi danymi GUGiK
 - [ ] Pobieranie rownolegle (multi-threading)
 - [ ] Cache metadanych (SQLite)
 - [ ] Mozaikowanie arkuszy NMT

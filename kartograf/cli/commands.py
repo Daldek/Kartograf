@@ -33,7 +33,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version="%(prog)s 0.4.1",
+        version="%(prog)s 0.5.0",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -86,7 +86,14 @@ def create_parser() -> argparse.ArgumentParser:
     )
     download_parser.add_argument(
         "--bbox-crs",
-        choices=["EPSG:2180", "EPSG:4326"],
+        choices=[
+            "EPSG:2180",
+            "EPSG:4326",
+            "EPSG:2176",
+            "EPSG:2177",
+            "EPSG:2178",
+            "EPSG:2179",
+        ],
         default="EPSG:2180",
         help="CRS for --bbox coordinates (default: EPSG:2180)",
     )
@@ -142,6 +149,12 @@ def create_parser() -> argparse.ArgumentParser:
         "--layer",
         metavar="NAME",
         help="Layer name for multi-layer GPKG (default: first layer)",
+    )
+    download_parser.add_argument(
+        "--system",
+        choices=["1992", "2000"],
+        default="1992",
+        help="System godłowania dla --bbox/--geometry (domyślnie 1992)",
     )
 
     # Landcover command group
@@ -202,12 +215,6 @@ def create_parser() -> argparse.ArgumentParser:
         choices=["GPKG", "SHP", "GML"],
         default="GPKG",
         help="Output format for BDOT10k (default: GPKG)",
-    )
-    lc_download.add_argument(
-        "--category",
-        choices=["pt", "hydro"],
-        default="pt",
-        help="BDOT10k data category: pt (land cover, default) or hydro (water network)",
     )
     lc_download.add_argument(
         "--geometry",
@@ -351,6 +358,13 @@ def format_sheet_info(parser: SheetParser) -> str:
     for name, value in parser.components.items():
         lines.append(f"  {name}: {value}")
 
+    if parser.uklad == "2000":
+        from kartograf.core.parser_2000 import ZONE_EPSG
+
+        zone = int(parser.components["strefa"])
+        lines.append(f"  Strefa: {zone}")
+        lines.append(f"  Natywny CRS: {ZONE_EPSG[zone]}")
+
     return "\n".join(lines)
 
 
@@ -369,7 +383,8 @@ def format_hierarchy(parser: SheetParser) -> str:
         Formatted hierarchy string
     """
     hierarchy = parser.get_hierarchy_up()
-    lines = ["Hierarchy (from current to 1:1000000):", ""]
+    top_scale = hierarchy[-1].scale if hierarchy else parser.scale
+    lines = [f"Hierarchy (from current to {top_scale}):", ""]
 
     for i, sheet in enumerate(hierarchy):
         indent = "  " * i
@@ -396,7 +411,10 @@ def format_children(parser: SheetParser) -> str:
     children = parser.get_children()
 
     if not children:
-        return f"Sheet {parser.godlo} has no children (already at finest scale 1:10000)"
+        return (
+            f"Sheet {parser.godlo} has no children "
+            f"(already at finest scale {parser.scale})"
+        )
 
     lines = [
         f"Children of {parser.godlo} ({len(children)} sheets):",
@@ -707,7 +725,7 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
 
     # Find sheets covering the bbox
     try:
-        godlo_list = find_sheets_for_bbox(bbox, target_scale)
+        godlo_list = find_sheets_for_bbox(bbox, target_scale, system=args.system)
     except ValidationError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
@@ -801,7 +819,7 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
 
     try:
         godlo_list = find_sheets_for_geometry(
-            filepath, target_scale=target_scale, layer=layer
+            filepath, target_scale=target_scale, layer=layer, system=args.system
         )
     except ValidationError as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -936,13 +954,7 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
         from kartograf.providers.bdot10k import Bdot10kProvider
 
         provider = Bdot10kProvider()
-        print("  Land cover (--category pt, default):")
-        for layer in provider.get_available_layers("pt"):
-            desc = provider.get_layer_description(layer)
-            print(f"    {layer}  - {desc}")
-        print()
-        print("  Hydrography (--category hydro):")
-        for layer in provider.get_available_layers("hydro"):
+        for layer in provider.get_available_layers():
             desc = provider.get_layer_description(layer)
             print(f"    {layer}  - {desc}")
     elif args.source == "corine":
@@ -1028,7 +1040,6 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
             kwargs["year"] = args.year
         if args.source == "bdot10k":
             kwargs["format"] = args.format
-            kwargs["category"] = args.category
         if args.source == "soilgrids":
             kwargs["property"] = args.property
             kwargs["depth"] = args.depth
