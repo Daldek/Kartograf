@@ -7,16 +7,16 @@
 | NMT (parser + pobieranie) | ✅ Gotowy | v0.1.0+ |
 | NMPT (Digital Surface Model) | ✅ Gotowy | v0.4.0 |
 | Ortofotomapa | ✅ Gotowy | v0.4.0 |
-| Land Cover (BDOT10k) | ✅ Gotowy | v0.3.0+, hydro v0.4.1 |
+| Land Cover (BDOT10k) | ✅ Gotowy | v0.3.0+, 15 warstw v0.5.0 |
 | Land Cover (CORINE) | ✅ Gotowy | v0.3.0+ |
 | SoilGrids | ✅ Gotowy | v0.3.0+ |
 | HSG | ✅ Gotowy | v0.3.0+ |
 | bbox → godla | ✅ Gotowy | find_sheets_for_bbox(), CLI --bbox |
 | geometry → godla | ✅ Gotowy | find_sheets_for_geometry(), CLI --geometry |
-| CLI | ✅ Gotowy | 5 komend + --bbox + --product + --category + --geometry |
+| CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
-| Pokrycie testami | ✅ Gotowy | 835 testow, cel 80% osiagniety |
+| Pokrycie testami | ✅ Gotowy | ~84%, 835 testow, cel 80% osiagniety |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 
 <!-- Statusy: ✅ Gotowy | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
@@ -59,35 +59,45 @@
 - **Zakres:** _copy_rtree_index() fix, HYDRO_LAYERS/CATEGORY_FILTERS, --category CLI, geometry.py, --geometry CLI, pyshp, 636 testow
 
 ### CP8 — PL-2000 sheet naming system
-- **Data:** 2026-02-24
-- **Wersja:** v0.5.0 (w trakcie)
-- **Zakres:** Parser2000, auto-detekcja PL-1992/PL-2000, find_sheets_2000_for_bbox, CLI --system, FileStorage PL-2000, 849 testow
+- **Data:** 2026-03-02
+- **Wersja:** v0.5.0
+- **Zakres:** Parser2000, auto-detekcja PL-1992/PL-2000, find_sheets_2000_for_bbox, CLI --system, FileStorage PL-2000, usuniecie --category, 835 testow
 
 ## Ostatnia sesja
 
 **Data:** 2026-03-02
 
 ### Co zrobiono
-- **refactor: usunięcie filtrowania BDOT10k po kategorii**
-  - Usunięto stałe `PT_LAYERS`, `HYDRO_LAYERS`, `CATEGORY_FILTERS`
-  - Usunięto parametr `category` z `download_by_teryt()`, `_download_with_retry()`, `_extract_gpkg_from_zip()`
-  - `_extract_gpkg_from_zip()` wyciąga i scala **wszystkie** warstwy GPKG z ZIP
-  - `get_available_layers()` zwraca wszystkie 15 warstw (PT* + SW*)
-  - Usunięto argument CLI `--category`
-  - Zaktualizowano `cmd_landcover_list_layers` — płaska lista warstw
-  - Usunięto 14 testów kategorii (849→835), zaktualizowano `test_available_layers`
-  - ADR-014 zastąpiona przez ADR-016
-  - Zaktualizowano docs: CHANGELOG, SCOPE, PRD, DECISIONS, CLAUDE.md
+- **feat(parser): PL-2000 sheet naming system**
+  - Nowy modul `kartograf/core/parser_2000.py` — Parser2000
+  - 5 skal (1:10k-1:500), 4 strefy (5-8), BBox z transformacja CRS
+  - Hierarchia: get_parent(), get_children(), get_all_descendants(), get_hierarchy_up()
+  - `find_sheets_2000_for_bbox()` — BBox to PL-2000 godla lookup
+- **feat(parser): SheetParser auto-detekcja PL-1992 vs PL-2000**
+  - `SheetParser("6.179.12")` automatycznie rozpoznaje PL-2000
+  - Walidacja zgodnosci uklad/format
+- **feat(cli): PL-2000 obsluga w parse/download**
+  - `kartograf parse 6.179.12.20` — auto-detekcja, strefa, CRS
+  - `kartograf download --bbox ... --system 2000`
+  - `--bbox-crs` rozszerzony o EPSG:2176-2179
+- **feat(storage): PL-2000 directory structure**
+  - `nmt_2000_1m/6/179/12/20/6.179.12.20.asc`
+- **refactor(bdot10k): usunięcie filtrowania po kategorii**
+  - Pobierany caly plik BDOT10k (15 warstw: 12 PT* + 3 SW*)
+  - Usunieto --category, CATEGORY_FILTERS, PT_LAYERS, HYDRO_LAYERS
+- **docs: aktualizacja calej dokumentacji dla v0.5.0**
+- **Wyniki testow:**
+  - **835 testow passed**
+  - **Ruff: clean** (lint + format)
 
 ### Nastepne kroki
-1. Weryfikacja z realnymi danymi GUGiK (download 6.179.12.20.asc, porownanie BBox z headerem)
-2. Bump wersji do v0.5.0 i merge develop → main
-3. Pobieranie rownolegle (v0.5+)
-4. Cache metadanych (SQLite)
+1. Weryfikacja BBox PL-2000 z realnymi danymi GUGiK
+2. Pobieranie rownolegle (v0.6+)
+3. Cache metadanych (SQLite)
 
 ## Backlog
 
-- [x] Pokrycie testami do 80% (849 testow)
+- [x] Pokrycie testami do 80% (~84%, 835 testow)
 - [x] NMPT provider (GugikNmptProvider)
 - [x] Ortofotomapa provider (GugikOrtoProvider)
 - [x] CLI --product {nmt,nmpt,orto}

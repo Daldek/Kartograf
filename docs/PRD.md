@@ -1,10 +1,10 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.2
-**Data:** 2026-02-08
+**Wersja:** 3.3
+**Data:** 2026-03-02
 **Product Owner:** Piotr
-**Status:** Production (v0.4.1)
+**Status:** Production (v0.5.0)
 
 ---
 
@@ -23,7 +23,7 @@ Pobieranie danych przestrzennych z różnych źródeł (GUGiK, Copernicus, ISRIC
 Kartograf to narzędzie CLI + biblioteka Python oferujące:
 1. **Unified API** - jednolity interfejs dla NMT, NMPT, Ortofoto, Land Cover, SoilGrids
 2. **Multiple Providers** - GUGiK (NMT/NMPT/Orto/BDOT10k), CORINE, SoilGrids
-3. **Intelligent Selection** - godło, TERYT, bbox
+3. **Intelligent Selection** - godło (PL-1992/PL-2000), TERYT, bbox, geometry file
 4. **Automatic Processing** - scalanie warstw, kalkulacja HSG
 5. **Secure Auth** - Auth Proxy dla izolacji credentials
 
@@ -199,7 +199,9 @@ lc.download(teryt="1465", output_dir="./data")
 lc.download(godlo="N-34-130-D", output_dir="./data")
 ```
 
-#### Warstwy (15 warstw — pobierane wszystkie)
+#### Warstwy (15 warstw — pobierany caly plik)
+
+**Pokrycie terenu (PT* — 12 warstw):**
 | Warstwa | Opis |
 |---------|------|
 | PTGN | Grunty nieużytkowe |
@@ -214,6 +216,10 @@ lc.download(godlo="N-34-130-D", output_dir="./data")
 | PTWP | Wody powierzchniowe |
 | PTWZ | Tereny zabagnione |
 | PTZB | Tereny zabudowane |
+
+**Hydrografia (SW* — 3 warstwy):**
+| Warstwa | Opis |
+|---------|------|
 | SWRS | Rzeki i strumienie |
 | SWKN | Kanały |
 | SWRM | Rowy melioracyjne |
@@ -447,8 +453,10 @@ kartograf soilgrids hsg --godlo N-34-130-D --keep-intermediate
 from kartograf import (
     # Core
     SheetParser,
+    Parser2000,
     BBox,
     find_sheets_for_bbox,
+    find_sheets_2000_for_bbox,
     find_sheets_for_geometry,
 
     # Download (NMT/NMPT/Orto)
@@ -479,7 +487,7 @@ from kartograf import (
     DownloadError,
 
     # Version
-    __version__,  # "0.4.1"
+    __version__,  # "0.5.0"
 )
 ```
 
@@ -538,7 +546,7 @@ mypy >= 1.13           # Type checking
 
 ## 8. Future Enhancements
 
-### Version 0.5+
+### Version 0.6+
 - [ ] Parallel downloads (multi-threading)
 - [ ] Metadata cache (SQLite)
 - [ ] Automatic mosaic creation
@@ -573,6 +581,6 @@ HYDROGRAF (główna aplikacja)
 
 ---
 
-**Wersja dokumentu:** 3.2
-**Data ostatniej aktualizacji:** 2026-02-08
-**Status:** Production - v0.4.1
+**Wersja dokumentu:** 3.3
+**Data ostatniej aktualizacji:** 2026-03-02
+**Status:** Production - v0.5.0

@@ -7,6 +7,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [0.5.0] - 2026-03-02
+
 ### Added
 - **PL-2000 sheet naming system — full support**
   - `Parser2000` class for parsing PL-2000 godla (format `zone.row.column[.subdivisions]`)
@@ -74,24 +78,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `kartograf download --geometry area.gpkg --layer catchments` — GPKG layer selection
   - `kartograf landcover download --source bdot10k --geometry area.shp`
   - `kartograf soilgrids hsg --geometry area.shp`
-- **BDOT10k: hydrographic data download (`--category hydro`)**
-  - New `HYDRO_LAYERS` constant: SWRS (rivers/streams), SWKN (canals), SWRM (drainage ditches), PTWP (surface waters)
-  - `CATEGORY_FILTERS` mapping for category-based layer extraction from ZIP
-  - `category` parameter threaded through `download_by_teryt()`, `download_by_godlo()`, `download_by_bbox()`
-  - `get_available_layers(category="hydro")` returns hydrographic layers
-  - Hydro layer descriptions in `get_layer_description()`
-- **CLI: `--category` option for `landcover download`**
-  - `kartograf landcover download --source bdot10k --teryt 2262 --category hydro`
-  - Choices: `pt` (land cover, default), `hydro` (water network)
-- **CLI: `landcover list-layers` shows both PT and hydro categories**
 
 ### Tests
 - **636 testow** (+62 nowych)
   - 31 testow `test_geometry.py`: envelope parsing, SHP/GPKG reading, CRS transform, find_sheets_for_geometry, get_overall_bbox
   - 12 testow CLI geometry: download/landcover/soilgrids --geometry, mutual exclusivity
   - 5 testow `TestBdot10kRtreeIndex`: merge preserves indices, no geometry, no index, extensions copied, base preserved
-  - 11 testow `TestBdot10kCategory`: extraction filters, category flow, layers, descriptions
-  - 3 testy `TestCmdLandcoverCategory`: CLI --category hydro/default, list-layers shows hydro
 
 ---
 
@@ -529,7 +521,8 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
-[Unreleased]: https://github.com/Daldek/Kartograf/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/Daldek/Kartograf/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Daldek/Kartograf/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Daldek/Kartograf/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Daldek/Kartograf/compare/v0.3.2...v0.4.0
 [0.3.2]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.2

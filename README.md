@@ -56,11 +56,13 @@ kartograf download --bbox 419000,230000,426000,237000 --product orto
 kartograf download --geometry zlewnia.shp
 kartograf download --geometry zlewnia.gpkg --layer catchments --product nmpt
 
+# PL-2000: parsowanie i pobieranie (auto-detekcja systemu)
+kartograf parse 6.179.12.20
+kartograf download 6.179.12.20
+kartograf download --bbox 6500000,5895000,6508000,5900000 --bbox-crs EPSG:2177 --system 2000
+
 # Pobieranie Land Cover (BDOT10k - powiat)
 kartograf landcover download --source bdot10k --teryt 1465
-
-# Pobieranie danych hydrograficznych (BDOT10k - rzeki, kanały, rowy)
-kartograf landcover download --source bdot10k --teryt 1465 --category hydro
 
 # Pobieranie Land Cover z pliku geometrii
 kartograf landcover download --source bdot10k --geometry zlewnia.shp
@@ -166,7 +168,7 @@ for group, data in stats.items():
 ## Funkcjonalności
 
 ### NMT (Numeryczny Model Terenu)
-- ✅ **Parser godeł** - Obsługa układów 1992 i 2000, skal 1:1 000 000 - 1:10 000
+- ✅ **Parser godeł** - Obsługa układów PL-1992 (1:1M - 1:10k) i PL-2000 (1:10k - 1:500)
 - ✅ **Bounding box** - Obliczanie współrzędnych arkusza (EPSG:2180, EPSG:4326)
 - ✅ **Hierarchia arkuszy** - Automatyczne określanie arkuszy nadrzędnych i podrzędnych
 - ✅ **Selekcja obszaru** - Godło, bbox, plik geometrii (SHP/GPKG)
@@ -193,8 +195,8 @@ for group, data in stats.items():
 
 ### Land Cover (Pokrycie Terenu)
 - ✅ **BDOT10k** - Polska baza wektorowa (GUGiK), szczegółowość 1:10 000
-  - 12 warstw pokrycia terenu (PT*): lasy, wody, zabudowa, tereny rolne, itp.
-  - 4 warstwy hydrograficzne (SW* + PTWP): rzeki, kanały, rowy, wody powierzchniowe
+  - 15 warstw: 12 pokrycia terenu (PT*) + 3 hydrograficzne (SW*)
+  - Lasy, wody, zabudowa, tereny rolne, rzeki, kanały, rowy melioracyjne, itp.
   - Automatyczne scalanie warstw do jednego GeoPackage (z zachowaniem rtree index)
 - ✅ **CORINE Land Cover** - Europejska klasyfikacja (Copernicus), 44 klasy
 - ✅ **Metody selekcji** - TERYT (powiat), bbox, godło arkusza, plik geometrii (SHP/GPKG)
@@ -281,7 +283,7 @@ Kartograf/
 │   ├── landcover/       # Land Cover management
 │   ├── hydrology/       # Hydrologic Soil Groups (HSG)
 │   └── cli/             # CLI interface
-├── tests/               # Testy (636)
+├── tests/               # Testy (835)
 ├── docs/                # Dokumentacja
 └── README.md
 ```
@@ -324,4 +326,4 @@ Projekt udostępniony na licencji MIT. Szczegóły w pliku `LICENSE`.
 
 ## Status
 
-**Wersja 0.4.1** - Geometry file selection (`--geometry` SHP/GPKG), BDOT10k: naprawa rtree spatial index, kategoria hydro (`--category hydro`). 636 testów, pokrycie ~84%. Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów.
+**Wersja 0.5.0** - PL-2000 sheet naming (Parser2000, auto-detekcja PL-1992/PL-2000, CLI `--system`), BDOT10k: pobieranie wszystkich 15 warstw (PT* + SW*). 835 testow, pokrycie ~84%. Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegolów.
