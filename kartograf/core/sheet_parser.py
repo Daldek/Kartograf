@@ -6,13 +6,20 @@ map sheet identifiers (godła) and extracting information about scale,
 coordinate system, and sheet components.
 """
 
+from __future__ import annotations
+
 import math
 import re
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 from pyproj import Transformer
 
 from kartograf.exceptions import ParseError, ValidationError
+
+
+def _is_pl2000_format(godlo: str) -> bool:
+    """Check if godlo uses PL-2000 dot-separated numeric format."""
+    return bool(re.match(r"^[5-8]\.\d", godlo))
 
 
 class BBox(NamedTuple):
@@ -116,21 +123,43 @@ class SheetParser:
         if not isinstance(godlo, str):
             raise ParseError(f"Godło musi być stringiem, otrzymano: {type(godlo)}")
 
-        self._original_godlo = godlo.strip()
-        if not self._original_godlo:
+        cleaned = godlo.strip()
+        if not cleaned:
             raise ParseError("Godło nie może być puste")
 
-        # Normalizacja godła (zachowuj małe litery dla arkuszy 50k i mniejszych)
-        self._godlo = self._normalize_godlo(self._original_godlo)
+        # Auto-detect PL-2000 format (dots + digits only, starts with 5-8)
+        if _is_pl2000_format(cleaned):
+            from kartograf.core.parser_2000 import Parser2000
 
-        # Walidacja i ustawienie układu
-        self._uklad = self._validate_uklad(uklad)
+            if uklad is not None and uklad != "2000":
+                raise ValidationError(
+                    f"Godło '{cleaned}' ma format PL-2000, ale podano uklad='{uklad}'"
+                )
+            self._pl2000 = Parser2000(cleaned)
+            self._original_godlo = cleaned
+            self._godlo = self._pl2000.godlo
+            self._uklad = "2000"
+            self._scale = self._pl2000.scale
+            self._components = self._pl2000.components
+        else:
+            if uklad is not None and uklad == "2000":
+                raise ValidationError(
+                    f"Godło '{cleaned}' ma format PL-1992, ale podano uklad='2000'"
+                )
+            self._pl2000 = None
+            self._original_godlo = cleaned
 
-        # Określenie skali i walidacja formatu
-        self._scale = self._determine_scale()
+            # Normalizacja godła (zachowuj małe litery dla arkuszy 50k i mniejszych)
+            self._godlo = self._normalize_godlo(self._original_godlo)
 
-        # Parsowanie komponentów
-        self._components = self._parse_components()
+            # Walidacja i ustawienie układu
+            self._uklad = self._validate_uklad(uklad)
+
+            # Określenie skali i walidacja formatu
+            self._scale = self._determine_scale()
+
+            # Parsowanie komponentów
+            self._components = self._parse_components()
 
     def _normalize_godlo(self, godlo: str) -> str:
         """
@@ -302,7 +331,7 @@ class SheetParser:
         "1:25000": ["1", "2", "3", "4"],  # 1:25k → 1:10k (4 części)
     }
 
-    def get_parent(self) -> Optional["SheetParser"]:
+    def get_parent(self) -> SheetParser | None:
         """
         Zwraca arkusz nadrzędny (o skali mniejszej).
 
@@ -320,6 +349,10 @@ class SheetParser:
         >>> parent.scale
         '1:25000'
         """
+        if self._pl2000 is not None:
+            p = self._pl2000.get_parent()
+            return SheetParser(p.godlo) if p is not None else None
+
         current_scale_idx = self.SCALE_HIERARCHY.index(self._scale)
 
         if current_scale_idx == 0:
@@ -337,7 +370,7 @@ class SheetParser:
         parent_godlo = "-".join(parts[:-1])
         return SheetParser(parent_godlo, self._uklad)
 
-    def _get_parent_from_200k(self) -> "SheetParser":
+    def _get_parent_from_200k(self) -> SheetParser:
         """
         Zwraca arkusz nadrzędny 1:500k dla arkusza 1:200k.
 
@@ -361,7 +394,7 @@ class SheetParser:
         )
         return SheetParser(parent_godlo, self._uklad)
 
-    def get_children(self) -> list["SheetParser"]:
+    def get_children(self) -> list[SheetParser]:
         """
         Zwraca wszystkie arkusze podrzędne (o skali większej).
 
@@ -380,6 +413,10 @@ class SheetParser:
         >>> children[0].godlo
         'N-34-130-D-d-2-1'
         """
+        if self._pl2000 is not None:
+            children = self._pl2000.get_children()
+            return [SheetParser(c.godlo) for c in children]
+
         current_scale_idx = self.SCALE_HIERARCHY.index(self._scale)
 
         if current_scale_idx == len(self.SCALE_HIERARCHY) - 1:
@@ -399,7 +436,7 @@ class SheetParser:
 
         return children
 
-    def _get_children_from_500k(self) -> list["SheetParser"]:
+    def _get_children_from_500k(self) -> list[SheetParser]:
         """
         Zwraca 36 arkuszy 1:200k dla arkusza 1:500k.
 
@@ -423,7 +460,7 @@ class SheetParser:
 
         return children
 
-    def get_hierarchy_up(self) -> list["SheetParser"]:
+    def get_hierarchy_up(self) -> list[SheetParser]:
         """
         Zwraca pełną hierarchię w górę (do 1:1000000).
 
@@ -442,6 +479,10 @@ class SheetParser:
         >>> hierarchy[0].scale, hierarchy[-1].scale
         ('1:10000', '1:1000000')
         """
+        if self._pl2000 is not None:
+            h = self._pl2000.get_hierarchy_up()
+            return [SheetParser(x.godlo) for x in h]
+
         hierarchy = [self]
         current = self
 
@@ -454,7 +495,7 @@ class SheetParser:
 
         return hierarchy
 
-    def get_all_descendants(self, target_scale: str) -> list["SheetParser"]:
+    def get_all_descendants(self, target_scale: str) -> list[SheetParser]:
         """
         Zwraca wszystkie arkusze potomne do zadanej skali.
 
@@ -484,6 +525,10 @@ class SheetParser:
         >>> all(d.scale == "1:10000" for d in descendants)
         True
         """
+        if self._pl2000 is not None:
+            desc = self._pl2000.get_all_descendants(target_scale)
+            return [SheetParser(d.godlo) for d in desc]
+
         if target_scale not in self.SCALE_HIERARCHY:
             raise ValidationError(
                 f"Nieprawidłowa skala: '{target_scale}'. "
@@ -500,7 +545,7 @@ class SheetParser:
             )
 
         # Rekurencyjnie zbieramy potomków
-        def collect_descendants(parser: "SheetParser") -> list["SheetParser"]:
+        def collect_descendants(parser: SheetParser) -> list[SheetParser]:
             if parser.scale == target_scale:
                 return [parser]
 
@@ -546,15 +591,16 @@ class SheetParser:
         "4": (1, 1),
     }
 
-    def get_bbox(self, crs: str = "EPSG:2180") -> BBox:
+    def get_bbox(self, crs: str | None = None) -> BBox:
         """
         Oblicza bounding box arkusza w zadanym układzie współrzędnych.
 
         Parameters
         ----------
         crs : str, optional
-            Docelowy układ współrzędnych (default: "EPSG:2180").
-            Obsługiwane: "EPSG:2180", "EPSG:4326"
+            Docelowy układ współrzędnych.
+            Domyślnie: "EPSG:2180" dla PL-1992, natywny CRS strefy dla PL-2000.
+            Obsługiwane: "EPSG:2180", "EPSG:4326", "EPSG:2176"-"EPSG:2179"
 
         Returns
         -------
@@ -567,6 +613,13 @@ class SheetParser:
         >>> bbox = parser.get_bbox("EPSG:4326")
         >>> print(f"SW: ({bbox.min_x}, {bbox.min_y})")
         """
+        if self._pl2000 is not None:
+            return self._pl2000.get_bbox(crs=crs)
+
+        # Default CRS for PL-1992
+        if crs is None:
+            crs = "EPSG:2180"
+
         # Oblicz bbox w WGS84 (stopnie)
         south, north, west, east = self._calculate_wgs84_bbox()
 
@@ -830,6 +883,7 @@ def _transform_bbox_to_wgs84(bbox: BBox) -> BBox:
 def find_sheets_for_bbox(
     bbox: BBox,
     target_scale: str = "1:10000",
+    system: str = "1992",
 ) -> list[str]:
     """
     Znajduje godła arkuszy pokrywających podany bounding box.
@@ -843,6 +897,9 @@ def find_sheets_for_bbox(
         Bounding box w EPSG:2180 lub EPSG:4326
     target_scale : str
         Docelowa skala (default: "1:10000")
+    system : str
+        Układ współrzędnych: "1992" (PL-1992) lub "2000" (PL-2000).
+        Default: "1992" — pełna kompatybilność wsteczna.
 
     Returns
     -------
@@ -854,6 +911,11 @@ def find_sheets_for_bbox(
     ValidationError
         Jeśli target_scale jest nieprawidłowa lub CRS nieobsługiwany
     """
+    if system == "2000":
+        from kartograf.core.parser_2000 import find_sheets_2000_for_bbox
+
+        return find_sheets_2000_for_bbox(bbox, target_scale)
+
     if target_scale not in SheetParser.SCALE_HIERARCHY:
         raise ValidationError(
             f"Nieprawidłowa skala: '{target_scale}'. "

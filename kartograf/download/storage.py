@@ -19,11 +19,15 @@ class FileStorage:
     resolution and godło components, making it easy to navigate and find
     specific sheets while keeping different resolutions separate.
 
-    Directory structure example:
+    Directory structure example (PL-1992):
         data/nmt_1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
         data/nmt_5m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
         data/nmpt/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
         data/orto/N-34/130/D/d/2/4/N-34-130-D-d-2-4.tif
+
+    Directory structure example (PL-2000):
+        data/nmt_2000_1m/6/179/12/6.179.12.asc
+        data/nmt_2000_1m/6/179/12/20/6.179.12.20.asc
 
     Attributes
     ----------
@@ -151,6 +155,11 @@ class FileStorage:
         """
         Extract directory parts from godło.
 
+        Supports both PL-1992 (dash-separated) and PL-2000 (dot-separated)
+        formats:
+        - PL-1992: "N-34-130-D-d-2-4" → ["N-34", "130", "D", "d", "2", "4"]
+        - PL-2000: "6.179.12.20" → ["6", "179", "12", "20"]
+
         Parameters
         ----------
         godlo : str
@@ -161,16 +170,16 @@ class FileStorage:
         list[str]
             List of directory parts
         """
-        parts = godlo.split("-")
-
-        # First two parts form the base: N-34
-        dir_parts = [f"{parts[0]}-{parts[1]}"]
-
-        # Add remaining parts as subdirectories
-        for part in parts[2:]:
-            dir_parts.append(part)
-
-        return dir_parts
+        if "." in godlo:
+            # PL-2000: split on dots, use all parts as directory hierarchy
+            return godlo.split(".")
+        else:
+            # PL-1992: split on dashes, first two parts form the base (e.g. N-34)
+            parts = godlo.split("-")
+            dir_parts = [f"{parts[0]}-{parts[1]}"]
+            for part in parts[2:]:
+                dir_parts.append(part)
+            return dir_parts
 
     def ensure_directory(self, godlo: str) -> Path:
         """

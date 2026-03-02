@@ -436,6 +436,7 @@ def find_sheets_for_geometry(
     filepath: Path,
     target_scale: str = "1:10000",
     layer: str | None = None,
+    system: str = "1992",
 ) -> list[str]:
     """
     Find map sheets intersecting features in a geometry file.
@@ -452,6 +453,9 @@ def find_sheets_for_geometry(
         Target scale (default: "1:10000")
     layer : str or None
         Layer name for GPKG (None = first layer)
+    system : str
+        Układ współrzędnych: "1992" (PL-1992) lub "2000" (PL-2000).
+        Default: "1992" — pełna kompatybilność wsteczna.
 
     Returns
     -------
@@ -465,7 +469,7 @@ def find_sheets_for_geometry(
 
     all_godla: set[str] = set()
     for bbox in bboxes:
-        godla = find_sheets_for_bbox(bbox, target_scale)
+        godla = find_sheets_for_bbox(bbox, target_scale, system=system)
         all_godla.update(godla)
 
     return sorted(all_godla)

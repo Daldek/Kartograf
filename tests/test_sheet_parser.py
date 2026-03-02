@@ -139,8 +139,8 @@ class TestSheetParserUklad:
         assert parser.uklad == "1992"
 
     def test_uklad_2000(self):
-        """Test układu 2000."""
-        parser = SheetParser("N-34-130-D", uklad="2000")
+        """Test układu 2000 z godłem PL-2000."""
+        parser = SheetParser("6.179.12", uklad="2000")
         assert parser.uklad == "2000"
 
     def test_auto_detect_uklad(self):
@@ -291,9 +291,9 @@ class TestSheetParserEquality:
         assert parser1 != parser2
 
     def test_different_uklad(self):
-        """Test nierówności przy różnych układach."""
+        """Test nierówności przy różnych układach — PL-1992 vs PL-2000."""
         parser1 = SheetParser("N-34-130-D", uklad="1992")
-        parser2 = SheetParser("N-34-130-D", uklad="2000")
+        parser2 = SheetParser("6.179.12", uklad="2000")
 
         assert parser1 != parser2
 
@@ -460,10 +460,10 @@ class TestSheetParserGetParent:
 
     def test_get_parent_preserves_uklad(self):
         """Test że get_parent() zachowuje układ."""
-        parser = SheetParser("N-34-130-D", uklad="2000")
+        parser = SheetParser("N-34-130-D", uklad="1992")
         parent = parser.get_parent()
 
-        assert parent.uklad == "2000"
+        assert parent.uklad == "1992"
 
 
 class TestSheetParserGetChildren:
@@ -558,10 +558,10 @@ class TestSheetParserGetChildren:
 
     def test_get_children_preserves_uklad(self):
         """Test że get_children() zachowuje układ."""
-        parser = SheetParser("N-34-130-D", uklad="2000")
+        parser = SheetParser("N-34-130-D", uklad="1992")
         children = parser.get_children()
 
-        assert all(c.uklad == "2000" for c in children)
+        assert all(c.uklad == "1992" for c in children)
 
 
 class TestSheetParserGetHierarchyUp:
@@ -694,10 +694,10 @@ class TestSheetParserGetAllDescendants:
 
     def test_descendants_preserves_uklad(self):
         """Test że get_all_descendants() zachowuje układ."""
-        parser = SheetParser("N-34-130-D-d", uklad="2000")
+        parser = SheetParser("N-34-130-D-d", uklad="1992")
         descendants = parser.get_all_descendants("1:10000")
 
-        assert all(d.uklad == "2000" for d in descendants)
+        assert all(d.uklad == "1992" for d in descendants)
 
 
 class TestSheetParserHierarchyRoundTrip:
@@ -1095,3 +1095,136 @@ class TestFindSheetsForBBox:
             )
             result = find_sheets_for_bbox(inner_bbox, scale)
             assert godlo in result, f"Expected {godlo} in result for scale {scale}"
+
+
+# =============================================================================
+# Testy auto-detekcji PL-1992 vs PL-2000
+# =============================================================================
+
+
+class TestSheetParserAutoDetection:
+    """Auto-detection of PL-1992 vs PL-2000 format."""
+
+    def test_pl1992_detected(self):
+        p = SheetParser("N-34-130-D")
+        assert p.uklad == "1992"
+
+    def test_pl2000_detected(self):
+        p = SheetParser("6.179.12")
+        assert p.uklad == "2000"
+        assert p.scale == "1:10000"
+
+    def test_pl2000_2k(self):
+        p = SheetParser("6.179.12.20")
+        assert p.uklad == "2000"
+        assert p.scale == "1:2000"
+
+    def test_pl2000_5k(self):
+        p = SheetParser("6.179.12.3")
+        assert p.uklad == "2000"
+        assert p.scale == "1:5000"
+
+    def test_pl2000_500(self):
+        p = SheetParser("6.179.12.01.1.1")
+        assert p.uklad == "2000"
+        assert p.scale == "1:500"
+
+    def test_pl2000_bbox(self):
+        p = SheetParser("6.179.12")
+        bbox = p.get_bbox()
+        assert bbox.crs == "EPSG:2177"
+
+    def test_pl2000_parent(self):
+        p = SheetParser("6.179.12.01")
+        parent = p.get_parent()
+        assert parent is not None
+        assert parent.godlo == "6.179.12"
+        assert isinstance(parent, SheetParser)
+
+    def test_pl2000_children(self):
+        p = SheetParser("6.179.12")
+        children = p.get_children()
+        assert len(children) == 25
+        assert all(isinstance(c, SheetParser) for c in children)
+
+    def test_pl2000_hierarchy_up(self):
+        p = SheetParser("6.179.12.01.1")
+        h = p.get_hierarchy_up()
+        assert len(h) == 3
+        assert all(isinstance(x, SheetParser) for x in h)
+
+    def test_pl2000_descendants(self):
+        p = SheetParser("6.179.12")
+        desc = p.get_all_descendants("1:2000")
+        assert len(desc) == 25
+        assert all(isinstance(d, SheetParser) for d in desc)
+
+    def test_explicit_uklad_2000_match(self):
+        p = SheetParser("6.179.12", uklad="2000")
+        assert p.uklad == "2000"
+
+    def test_explicit_uklad_1992_conflict(self):
+        with pytest.raises(ValidationError):
+            SheetParser("6.179.12", uklad="1992")
+
+    def test_explicit_uklad_2000_conflict_with_1992_format(self):
+        with pytest.raises(ValidationError):
+            SheetParser("N-34-130-D", uklad="2000")
+
+    def test_pl2000_components(self):
+        p = SheetParser("6.179.12")
+        c = p.components
+        assert c["strefa"] == "6"
+        assert c["pas"] == "179"
+
+    def test_pl2000_equality(self):
+        a = SheetParser("6.179.12")
+        b = SheetParser("6.179.12")
+        assert a == b
+        assert hash(a) == hash(b)
+
+    def test_pl2000_repr(self):
+        p = SheetParser("6.179.12")
+        assert "6.179.12" in repr(p)
+
+    def test_pl2000_str(self):
+        p = SheetParser("6.179.12")
+        assert "2000" in str(p)
+
+    def test_pl1992_backward_compat(self):
+        """Existing PL-1992 usage unchanged."""
+        p = SheetParser("N-34-130-D-d-2-4")
+        assert p.uklad == "1992"
+        assert p.scale == "1:10000"
+        bbox = p.get_bbox()
+        assert bbox.crs == "EPSG:2180"
+
+
+class TestFindSheetsForBBoxSystem:
+    """find_sheets_for_bbox with system parameter."""
+
+    def test_default_system_1992(self):
+        """Default system='1992' returns PL-1992 godla (dash-separated)."""
+        bbox = BBox(400000, 500000, 410000, 510000, "EPSG:2180")
+        result = find_sheets_for_bbox(bbox, target_scale="1:10000")
+        assert all("-" in g for g in result)
+
+    def test_system_2000(self):
+        """system='2000' returns PL-2000 godla (dot-separated)."""
+        bbox = BBox(400000, 500000, 410000, 510000, "EPSG:2180")
+        result = find_sheets_for_bbox(bbox, target_scale="1:10000", system="2000")
+        assert all("." in g for g in result)
+        assert len(result) > 0
+
+    def test_backward_compatible(self):
+        """Calling without system param gives same result as system='1992'."""
+        bbox = BBox(400000, 500000, 410000, 510000, "EPSG:2180")
+        result_default = find_sheets_for_bbox(bbox, "1:10000")
+        result_explicit = find_sheets_for_bbox(bbox, "1:10000", system="1992")
+        assert result_default == result_explicit
+
+    def test_system_2000_wgs84(self):
+        """system='2000' works with WGS84 bbox, zone detected from longitude."""
+        bbox = BBox(17.0, 52.0, 17.1, 52.1, "EPSG:4326")
+        result = find_sheets_for_bbox(bbox, "1:10000", system="2000")
+        assert all(g.startswith("6.") for g in result)
