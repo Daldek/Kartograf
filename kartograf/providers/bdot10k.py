@@ -101,36 +101,6 @@ class Bdot10kProvider(LandCoverProvider):
         "https://mapy.geoportal.gov.pl/wss/service/PZGIK/BDOT/WMS/PobieranieBDOT10k"
     )
 
-    # Land cover layer names in BDOT10k
-    PT_LAYERS = [
-        "PTGN",  # Grunty nieużytkowe (unused land)
-        "PTKM",  # Tereny komunikacyjne (transportation)
-        "PTLZ",  # Tereny leśne (forests)
-        "PTNZ",  # Tereny niezabudowane (unbuilt areas)
-        "PTPL",  # Place (squares/plazas)
-        "PTRK",  # Roślinność krzewiasta (shrub vegetation)
-        "PTSO",  # Składowiska (landfills)
-        "PTTR",  # Tereny rolne (agricultural land)
-        "PTUT",  # Uprawy trwałe (permanent crops)
-        "PTWP",  # Wody powierzchniowe (surface waters)
-        "PTWZ",  # Tereny zabagnione (wetlands)
-        "PTZB",  # Tereny zabudowane (built-up areas)
-    ]
-
-    # Hydrographic layer names in BDOT10k
-    HYDRO_LAYERS = [
-        "SWRS",  # Rzeki i strumienie (rivers/streams) - LINE
-        "SWKN",  # Kanały (canals) - LINE
-        "SWRM",  # Rowy melioracyjne (drainage ditches) - LINE
-        "PTWP",  # Wody powierzchniowe (surface waters) - POLYGON
-    ]
-
-    # Filename patterns for each category (matched against uppercase filenames)
-    CATEGORY_FILTERS = {
-        "pt": ["_PT"],
-        "hydro": ["_SW", "_PTWP"],
-    }
-
     # Default settings
     DEFAULT_TIMEOUT = 60
     MAX_RETRIES = 3
@@ -186,9 +156,6 @@ class Bdot10kProvider(LandCoverProvider):
             Request timeout in seconds (default: 120)
         format : str, optional
             Output format: "GPKG" or "SHP" (default: "GPKG")
-        **kwargs
-            Additional options (unused)
-
         Returns
         -------
         Path
@@ -207,13 +174,6 @@ class Bdot10kProvider(LandCoverProvider):
         if format not in ["GPKG", "SHP"]:
             raise ValueError(f"Unsupported format: {format}. Use 'GPKG' or 'SHP'")
 
-        category = kwargs.get("category", "pt")
-        if category not in self.CATEGORY_FILTERS:
-            raise ValueError(
-                f"Unknown category: {category}. "
-                f"Use one of: {list(self.CATEGORY_FILTERS)}"
-            )
-
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -226,7 +186,6 @@ class Bdot10kProvider(LandCoverProvider):
             timeout=timeout,
             description=f"BDOT10k TERYT {teryt}",
             extract_from_zip=(format == "GPKG"),
-            category=category,
         )
 
     def _construct_opendata_url(self, teryt: str, format: str) -> str:
@@ -480,7 +439,6 @@ class Bdot10kProvider(LandCoverProvider):
         timeout: int,
         description: str,
         extract_from_zip: bool = False,
-        category: str = "pt",
     ) -> Path:
         """
         Download file with automatic retry on failure.
@@ -521,7 +479,7 @@ class Bdot10kProvider(LandCoverProvider):
                 response.raise_for_status()
 
                 if extract_from_zip:
-                    self._extract_gpkg_from_zip(response, output_path, category)
+                    self._extract_gpkg_from_zip(response, output_path)
                 else:
                     self._save_response(response, output_path)
 
@@ -562,14 +520,13 @@ class Bdot10kProvider(LandCoverProvider):
         self,
         response: requests.Response,
         output_path: Path,
-        category: str = "pt",
     ) -> None:
         """
-        Extract and merge layers from downloaded ZIP by category.
+        Extract and merge all layers from downloaded ZIP.
 
         BDOT10k packages contain separate GPKG files for each layer.
-        This method extracts layers matching the category filter and merges
-        them into a single GeoPackage file.
+        This method extracts all layers and merges them into a single
+        GeoPackage file.
 
         Parameters
         ----------
@@ -577,9 +534,6 @@ class Bdot10kProvider(LandCoverProvider):
             HTTP response with ZIP content
         output_path : Path
             Target path for merged GPKG
-        category : str, optional
-            Layer category to extract: "pt" (land cover) or "hydro"
-            (hydrographic). Default: "pt"
         """
         import tempfile
 
@@ -589,40 +543,23 @@ class Bdot10kProvider(LandCoverProvider):
             zip_data.write(chunk)
         zip_data.seek(0)
 
-        filters = self.CATEGORY_FILTERS.get(category, self.CATEGORY_FILTERS["pt"])
-
         try:
             with zipfile.ZipFile(zip_data, "r") as zf:
-                # Find GPKG files matching category filter
                 all_gpkg = [f for f in zf.namelist() if f.endswith(".gpkg")]
-                matched_gpkg = [
-                    f
-                    for f in all_gpkg
-                    if any(pattern in f.upper() for pattern in filters)
-                ]
 
-                if not matched_gpkg:
-                    # Fallback: if no matching layers, check for any GPKG
-                    if not all_gpkg:
-                        raise DownloadError(
-                            f"No GPKG files found in ZIP. Contents: {zf.namelist()}"
-                        )
-                    # Use all GPKG files if no category-specific ones
-                    matched_gpkg = all_gpkg
-                    logger.warning(
-                        f"No {category} layers found, "
-                        f"extracting all {len(all_gpkg)} layers"
+                if not all_gpkg:
+                    raise DownloadError(
+                        f"No GPKG files found in ZIP. Contents: {zf.namelist()}"
                     )
 
-                logger.debug(f"Found {len(matched_gpkg)} {category} layers to merge")
+                logger.debug(f"Found {len(all_gpkg)} layers to merge")
 
                 # Create temp directory for extraction
                 with tempfile.TemporaryDirectory() as tmpdir:
                     tmpdir_path = Path(tmpdir)
 
-                    # Extract PT* files
                     extracted_files = []
-                    for gpkg_file in matched_gpkg:
+                    for gpkg_file in all_gpkg:
                         # Extract to temp directory
                         extracted_path = tmpdir_path / Path(gpkg_file).name
                         with (
@@ -633,7 +570,7 @@ class Bdot10kProvider(LandCoverProvider):
                         extracted_files.append(extracted_path)
                         logger.debug(f"Extracted {Path(gpkg_file).name}")
 
-                    # Merge all PT* files into single GPKG
+                    # Merge all layers into single GPKG
                     output_gpkg = output_path.with_suffix(".gpkg")
                     self._merge_gpkg_files(extracted_files, output_gpkg)
 
@@ -843,18 +780,30 @@ class Bdot10kProvider(LandCoverProvider):
     # Info methods
     # =========================================================================
 
-    def get_available_layers(self, category: str = "pt") -> list[str]:
-        """
-        Return list of available layers for a category.
+    def get_available_layers(self) -> list[str]:
+        """Return list of available BDOT10k layers."""
+        return list(self._layer_descriptions().keys())
 
-        Parameters
-        ----------
-        category : str, optional
-            "pt" for land cover (default), "hydro" for hydrographic
-        """
-        if category == "hydro":
-            return self.HYDRO_LAYERS.copy()
-        return self.PT_LAYERS.copy()
+    @staticmethod
+    def _layer_descriptions() -> dict[str, str]:
+        """Return mapping of layer codes to descriptions."""
+        return {
+            "PTGN": "Grunty nieużytkowe",
+            "PTKM": "Tereny komunikacyjne",
+            "PTLZ": "Tereny leśne",
+            "PTNZ": "Tereny niezabudowane",
+            "PTPL": "Place",
+            "PTRK": "Roślinność krzewiasta",
+            "PTSO": "Składowiska",
+            "PTTR": "Tereny rolne",
+            "PTUT": "Uprawy trwałe",
+            "PTWP": "Wody powierzchniowe",
+            "PTWZ": "Tereny zabagnione",
+            "PTZB": "Tereny zabudowane",
+            "SWRS": "Rzeki i strumienie",
+            "SWKN": "Kanały",
+            "SWRM": "Rowy melioracyjne",
+        }
 
     def get_supported_formats(self) -> list[str]:
         """Return list of supported output formats."""
@@ -874,23 +823,4 @@ class Bdot10kProvider(LandCoverProvider):
         str
             Layer description in Polish
         """
-        descriptions = {
-            # PT (land cover) layers
-            "PTGN": "Grunty nieużytkowe",
-            "PTKM": "Tereny komunikacyjne",
-            "PTLZ": "Tereny leśne",
-            "PTNZ": "Tereny niezabudowane",
-            "PTPL": "Place",
-            "PTRK": "Roślinność krzewiasta",
-            "PTSO": "Składowiska",
-            "PTTR": "Tereny rolne",
-            "PTUT": "Uprawy trwałe",
-            "PTWP": "Wody powierzchniowe",
-            "PTWZ": "Tereny zabagnione",
-            "PTZB": "Tereny zabudowane",
-            # Hydro layers
-            "SWRS": "Rzeki i strumienie",
-            "SWKN": "Kanały",
-            "SWRM": "Rowy melioracyjne",
-        }
-        return descriptions.get(layer, layer)
+        return self._layer_descriptions().get(layer, layer)

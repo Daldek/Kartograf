@@ -16,7 +16,7 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --category + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
-| Pokrycie testami | ✅ Gotowy | 849 testow, cel 80% osiagniety |
+| Pokrycie testami | ✅ Gotowy | 835 testow, cel 80% osiagniety |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 
 <!-- Statusy: ✅ Gotowy | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
@@ -65,29 +65,19 @@
 
 ## Ostatnia sesja
 
-**Data:** 2026-02-24
+**Data:** 2026-03-02
 
 ### Co zrobiono
-- **feat: pelna obsluga godlowania PL-2000**
-  - Parser2000 — parsing, walidacja, BBox, hierarchia (5 skal: 1:10k-1:500)
-  - 4 strefy merydianowe (EPSG:2176-2179)
-  - find_sheets_2000_for_bbox() — BBox to PL-2000 godla lookup
-  - SheetParser auto-detekcja: kropki=PL-2000, myslniki=PL-1992
-  - find_sheets_for_bbox/geometry: parametr system="1992"|"2000"
-  - FileStorage: struktura katalogow PL-2000
-  - CLI: parse/download z auto-detekcja, --system, --bbox-crs EPSG:2176-2179
-  - 213 nowych testow (636→849)
-- **fix: download_sheet() dla PL-2000 sub-10k**
-  - PL-2000 godla (1:5000, 1:2000, 1:1000, 1:500) pobierane bezposrednio
-  - Wczesniej crash: probowal rozwinac do 1:10000 co jest grubsza skala
-- **fix: CLI dynamiczne etykiety skal**
-  - format_hierarchy() — dynamiczny naglowek zamiast hardcoded "1:1000000"
-  - format_children() — dynamiczna najdrobniejsza skala zamiast "1:10000"
-- **export: Parser2000, find_sheets_2000_for_bbox w __init__.py**
-- **docs: design doc + implementation plan**
-  - docs/plans/2026-02-24-pl2000-support-design.md
-  - docs/plans/2026-02-24-pl2000-implementation.md
-- **review: final code review — 1 critical + 3 important issues fixed**
+- **refactor: usunięcie filtrowania BDOT10k po kategorii**
+  - Usunięto stałe `PT_LAYERS`, `HYDRO_LAYERS`, `CATEGORY_FILTERS`
+  - Usunięto parametr `category` z `download_by_teryt()`, `_download_with_retry()`, `_extract_gpkg_from_zip()`
+  - `_extract_gpkg_from_zip()` wyciąga i scala **wszystkie** warstwy GPKG z ZIP
+  - `get_available_layers()` zwraca wszystkie 15 warstw (PT* + SW*)
+  - Usunięto argument CLI `--category`
+  - Zaktualizowano `cmd_landcover_list_layers` — płaska lista warstw
+  - Usunięto 14 testów kategorii (849→835), zaktualizowano `test_available_layers`
+  - ADR-014 zastąpiona przez ADR-016
+  - Zaktualizowano docs: CHANGELOG, SCOPE, PRD, DECISIONS, CLAUDE.md
 
 ### Nastepne kroki
 1. Weryfikacja z realnymi danymi GUGiK (download 6.179.12.20.asc, porownanie BBox z headerem)

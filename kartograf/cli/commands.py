@@ -217,12 +217,6 @@ def create_parser() -> argparse.ArgumentParser:
         help="Output format for BDOT10k (default: GPKG)",
     )
     lc_download.add_argument(
-        "--category",
-        choices=["pt", "hydro"],
-        default="pt",
-        help="BDOT10k data category: pt (land cover, default) or hydro (water network)",
-    )
-    lc_download.add_argument(
         "--geometry",
         metavar="FILE",
         help="Geometry file (SHP or GPKG) for area selection",
@@ -960,13 +954,7 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
         from kartograf.providers.bdot10k import Bdot10kProvider
 
         provider = Bdot10kProvider()
-        print("  Land cover (--category pt, default):")
-        for layer in provider.get_available_layers("pt"):
-            desc = provider.get_layer_description(layer)
-            print(f"    {layer}  - {desc}")
-        print()
-        print("  Hydrography (--category hydro):")
-        for layer in provider.get_available_layers("hydro"):
+        for layer in provider.get_available_layers():
             desc = provider.get_layer_description(layer)
             print(f"    {layer}  - {desc}")
     elif args.source == "corine":
@@ -1052,7 +1040,6 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
             kwargs["year"] = args.year
         if args.source == "bdot10k":
             kwargs["format"] = args.format
-            kwargs["category"] = args.category
         if args.source == "soilgrids":
             kwargs["property"] = args.property
             kwargs["depth"] = args.depth

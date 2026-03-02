@@ -1204,81 +1204,12 @@ class TestCmdSoilgrids:
         mock_calc.calculate_hsg_by_bbox.assert_called_once()
 
 
-# ===========================================================================
-# BDOT10k --category CLI tests
-# ===========================================================================
-
-
-class TestCmdLandcoverCategory:
-    """Tests for --category option in landcover download."""
-
-    @patch("kartograf.cli.commands.LandCoverManager")
-    def test_landcover_download_bdot10k_category_hydro(
-        self, mock_mgr_cls, capsys, tmp_path
-    ):
-        """--category hydro passes category to manager.download."""
-        mock_mgr = Mock()
-        mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download.return_value = tmp_path / "out.gpkg"
-        mock_mgr_cls.return_value = mock_mgr
-
-        result = main(
-            [
-                "landcover",
-                "download",
-                "--source",
-                "bdot10k",
-                "--teryt",
-                "1465",
-                "--category",
-                "hydro",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-        assert result == 0
-        call_kwargs = mock_mgr.download.call_args.kwargs
-        assert call_kwargs.get("category") == "hydro"
-
-    @patch("kartograf.cli.commands.LandCoverManager")
-    def test_landcover_download_bdot10k_category_default(
-        self, mock_mgr_cls, capsys, tmp_path
-    ):
-        """Default category is 'pt'."""
-        mock_mgr = Mock()
-        mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download.return_value = tmp_path / "out.gpkg"
-        mock_mgr_cls.return_value = mock_mgr
-
-        result = main(
-            [
-                "landcover",
-                "download",
-                "--teryt",
-                "1465",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-        assert result == 0
-        call_kwargs = mock_mgr.download.call_args.kwargs
-        assert call_kwargs.get("category") == "pt"
-
-    def test_landcover_download_no_selection(self, capsys):
-        """No selection method -> exit 1."""
-        result = main(["landcover", "download"])
-        assert result == 1
-        captured = capsys.readouterr()
-        assert "Must provide one of" in captured.err
-
-    def test_landcover_list_layers_shows_hydro(self, capsys):
-        """list-layers --source bdot10k shows hydro layers."""
-        result = main(["landcover", "list-layers", "--source", "bdot10k"])
-        assert result == 0
-        captured = capsys.readouterr()
-        assert "SWRS" in captured.out
-        assert "SWKN" in captured.out
-        assert "hydro" in captured.out.lower()
+def test_landcover_download_no_selection(capsys):
+    """No selection method -> exit 1."""
+    result = main(["landcover", "download"])
+    assert result == 1
+    captured = capsys.readouterr()
+    assert "Must provide one of" in captured.err
 
 
 # ===========================================================================
