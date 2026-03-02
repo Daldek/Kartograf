@@ -1,8 +1,8 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.2
-**Data:** 2026-02-08
+**Wersja:** 3.3
+**Data:** 2026-03-02
 **Status:** Production (v0.4.1)
 
 ---
@@ -93,8 +93,7 @@ Kartograf automatyzuje ten proces oferując:
 
 ```python
 # BDOT10k (GUGiK):
-- 12 warstw pokrycia terenu (PT*) — category "pt" (domyślna)
-- 4 warstwy hydrograficzne (SW* + PTWP) — category "hydro"
+- 15 warstw (12 pokrycia terenu PT* + 3 hydrograficzne SW*)
 - Pobieranie przez TERYT (powiat)
 - Pobieranie przez godło lub bbox
 - Format: GeoPackage, Shapefile
@@ -151,7 +150,6 @@ kartograf download --geometry area.shp         # NMT z pliku geometrii
 kartograf download --geometry area.gpkg --layer catchments
 kartograf download <godlo> --resolution 5m # NMT 5m
 kartograf landcover download --source bdot10k --teryt <kod>
-kartograf landcover download --source bdot10k --teryt <kod> --category hydro
 kartograf landcover download --source corine --godlo <godlo>
 kartograf landcover download --source soilgrids --property <param>
 kartograf landcover list-sources
@@ -286,7 +284,7 @@ pyshp >= 2.3.0         # Shapefile reading
 ### 6.2 Jakościowe
 
 ```
-- 636 testów przechodzi
+- 835 testów przechodzi
 - Pokrycie testami ~84% (cel 80% osiągnięty)
 - Kod zgodny z ruff
 - Type hints wszędzie
@@ -305,9 +303,10 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-02-07 | 3.0 | Added NMPT, Ortofotomapa, updated storage structure |
 | 2026-02-08 | 3.1 | BDOT10k hydro category, rtree fix |
 | 2026-02-08 | 3.2 | Geometry file selection (--geometry SHP/GPKG) |
+| 2026-03-02 | 3.3 | Removed BDOT10k category filtering (download full package) |
 
 ---
 
-**Wersja dokumentu:** 3.2
-**Data ostatniej aktualizacji:** 2026-02-08
+**Wersja dokumentu:** 3.3
+**Data ostatniej aktualizacji:** 2026-03-02
 **Status:** Production - v0.4.1

@@ -232,7 +232,7 @@ Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja
 ## ADR-014: BDOT10k category-based extraction (pt vs hydro)
 
 **Data:** 2026-02-08
-**Status:** Przyjeta
+**Status:** Zastapiona przez ADR-016
 
 **Kontekst:** BDOT10k ZIP z GUGiK zawiera ~60 plikow GPKG na powiat, w tym warstwy pokrycia terenu (PT*) i hydrografii (SW*). Dotychczas ekstrakcja filtrowala tylko `_PT` w nazwie pliku. Potrzeba pobierania danych hydrograficznych (rzeki, kanaly, rowy) bez zmiany istniejacego API.
 
@@ -262,6 +262,23 @@ Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja
 **Decyzja:** Opcja B. Do ekstrakcji per-feature bounding boxow nie potrzeba pelnego OGR. pyshp czyta `.shp` natywnie (shape.bbox). GPKG to SQLite — envelope jest w binarnym naglowku geometrii (GeoPackage Binary: magic + flags + SRS + 4×float64). CRS z `.prj` (WKT) i `gpkg_spatial_ref_sys` (WKT). Transformacja przez pyproj (juz w zaleznosci).
 
 **Konsekwencje:** Minimalne zaleznosci (+1 pakiet ~100KB). Brak wsparcia dla formatow innych niz SHP/GPKG — akceptowalne, bo to jedyne formaty uzywane w polskim GIS workflow. Envelope parsing jest kruchy (zalezy od specyfikacji GeoPackage Binary) ale stabilny i dobrze udokumentowany.
+
+---
+
+## ADR-016: BDOT10k — usunięcie filtrowania po kategorii, pobieranie całego pliku
+
+**Data:** 2026-03-02
+**Status:** Przyjeta (zastepuje ADR-014)
+
+**Kontekst:** Filtrowanie po kategorii (pt/hydro) w Bdot10kProvider dodane w ADR-014 okazalo sie niepotrzebna komplikacja. Uzytkownik i tak pobiera caly ZIP z GUGiK — filtrowanie po stronie klienta powodowalo utrate danych (np. SW* warstwy pomijane domyslnie). Lepiej pobrac wszystko i pozwolic uzytkownikowi filtrowac w GIS.
+
+**Opcje:**
+- A) Zostawic category — backward compatible, ale komplikuje API i domyslnie traci dane
+- B) Usunac category, pobierac wszystko — prostsze API, brak utraty danych
+
+**Decyzja:** Opcja B. Usunieto `CATEGORY_FILTERS`, `PT_LAYERS`, `HYDRO_LAYERS`, parametr `category` z metod, argument CLI `--category`. `_extract_gpkg_from_zip()` wyciaga wszystkie pliki GPKG z ZIP i scala je w jeden plik. `get_available_layers()` zwraca wszystkie 15 warstw.
+
+**Konsekwencje:** Breaking change — kod uzywajacy `category="hydro"` musi byc zaktualizowany (parametr jest ignorowany przez `**kwargs`). Prostsze API. Brak utraty danych. 835 testow (z 849 — 14 testow category usunietych).
 
 ---
 
