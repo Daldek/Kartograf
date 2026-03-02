@@ -14,11 +14,11 @@ Pracujesz nad **Kartograf** — narzedziem do pobierania danych przestrzennych z
 - **NMT** — Numeryczny Model Terenu (1m, 5m) z GUGiK
 - **NMPT** — Numeryczny Model Pokrycia Terenu / DSM (1m) z GUGiK
 - **Ortofotomapa** — zdjecia lotnicze Standard Resolution (25cm, TIF) z GUGiK
-- **BDOT10k** — pokrycie terenu (12 warstw) z GUGiK
+- **BDOT10k** — pokrycie terenu (15 warstw: 12 PT* + 3 SW*) z GUGiK
 - **CORINE Land Cover** — europejska klasyfikacja (44 klasy) z Copernicus
 - **SoilGrids** — dane glebowe (11 parametrow, 6 glebokosci) z ISRIC
 - **HSG** — grupy hydrologiczne SCS-CN z danych SoilGrids
-- **CLI** — 5 komend (parse, download, landcover, soilgrids, hsg) + --product, --geometry, --category
+- **CLI** — 5 komend (parse, download, landcover, soilgrids, hsg) + --product, --geometry, --system
 
 **Stack technologiczny:**
 - Python 3.12+
@@ -52,8 +52,10 @@ kartograf/
 ├── exceptions.py            # KartografError → ParseError, ValidationError, DownloadError
 │
 ├── core/                    # WARSTWA BAZOWA
-│   ├── sheet_parser.py      # SheetParser — parser godel (1:1M do 1:10k)
+│   ├── sheet_parser.py      # SheetParser — parser godel PL-1992 (1:1M do 1:10k)
 │   │                        # BBox — bounding box z transformacja CRS
+│   ├── parser_2000.py       # Parser2000 — parser godel PL-2000 (1:10k do 1:500)
+│   │                        # find_sheets_2000_for_bbox
 │   └── geometry.py          # Czytanie SHP/GPKG, find_sheets_for_geometry
 │
 ├── providers/               # WARSTWA DANYCH (abstrakcje nad API)
@@ -132,7 +134,8 @@ CLI → HSGCalculator → SoilGridsProvider → rasterio → numpy → FileStora
 ```python
 from kartograf import (
     # Core
-    SheetParser, BBox, find_sheets_for_bbox, find_sheets_for_geometry,
+    SheetParser, Parser2000, BBox,
+    find_sheets_for_bbox, find_sheets_2000_for_bbox, find_sheets_for_geometry,
     # Download (NMT/NMPT/Orto)
     DownloadManager, DownloadProgress, FileStorage,
     # Land Cover
@@ -244,7 +247,7 @@ from kartograf import (
 
 ## 9. Ograniczenia techniczne
 
-- **Synchroniczne pobieranie** — brak async/parallel (zaplanowane na v0.5+)
+- **Synchroniczne pobieranie** — brak async/parallel (zaplanowane na v0.6+)
 - **NMT 5m** — tylko OpenData (ASC), brak WCS; wymaga EVRF2007
 - **CORINE GeoTIFF** — wymaga OAuth2 credentials; bez nich fallback na PNG (WMS)
 - **SoilGrids** — tylko WGS84 bbox (transformacja automatyczna)
@@ -286,6 +289,6 @@ hsg_path = calc.calculate_hsg_by_godlo("N-34-130-D")
 
 ---
 
-**Wersja dokumentu:** 3.0
-**Data ostatniej aktualizacji:** 2026-02-07
+**Wersja dokumentu:** 3.1
+**Data ostatniej aktualizacji:** 2026-03-02
 **Status:** Aktywny dla wszystkich asystentow AI pracujacych nad projektem

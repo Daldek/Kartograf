@@ -8,7 +8,7 @@ coordinate system, and sheet components.
 
 import math
 import re
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 from pyproj import Transformer
 
@@ -329,7 +329,7 @@ class SheetParser:
         "1:25000": ["1", "2", "3", "4"],  # 1:25k → 1:10k (4 części)
     }
 
-    def get_parent(self) -> Optional["SheetParser"]:
+    def get_parent(self) -> "SheetParser" | None:
         """
         Zwraca arkusz nadrzędny (o skali mniejszej).
 
