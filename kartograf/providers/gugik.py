@@ -152,11 +152,15 @@ class GugikProvider(BaseProvider):
     MAX_RETRIES = 3
     RETRY_BACKOFF_BASE = 2
 
+    # Product identifier for cache key
+    _CACHE_PRODUCT = "nmt"
+
     def __init__(
         self,
         session: requests.Session | None = None,
         vertical_crs: str = "EVRF2007",
         resolution: str = "1m",
+        cache=None,
     ):
         """
         Initialize GUGiK provider.
@@ -171,6 +175,9 @@ class GugikProvider(BaseProvider):
         resolution : str, optional
             Grid resolution: "1m" or "5m". Default is "1m".
             Note: 5m resolution is only available for EVRF2007.
+        cache : MetadataCache, optional
+            Metadata cache instance for caching WMS lookup results.
+            If None, no caching is performed (default behavior).
         """
         if resolution not in self.SUPPORTED_RESOLUTIONS:
             raise ValueError(
@@ -196,6 +203,7 @@ class GugikProvider(BaseProvider):
         self._session = session
         self._vertical_crs = vertical_crs
         self._resolution = resolution
+        self._cache = cache
 
     @property
     def vertical_crs(self) -> str:
@@ -300,6 +308,15 @@ class GugikProvider(BaseProvider):
         DownloadError
             If no ASC file is found
         """
+        # Check cache first
+        if self._cache is not None:
+            cached_url = self._cache.get_url(
+                godlo, self._resolution, self._vertical_crs, self._CACHE_PRODUCT
+            )
+            if cached_url is not None:
+                logger.debug(f"Using cached URL for {godlo}")
+                return cached_url
+
         from kartograf.core.sheet_parser import SheetParser
 
         parser = SheetParser(godlo)
@@ -378,10 +395,12 @@ class GugikProvider(BaseProvider):
                     for found_url in urls:
                         if godlo in found_url:
                             logger.debug(f"Found OpenData URL: {found_url}")
+                            self._cache_url(godlo, found_url)
                             return found_url
 
                     # Fallback to first found URL
                     logger.debug(f"Found OpenData URL (no exact match): {urls[0]}")
+                    self._cache_url(godlo, urls[0])
                     return urls[0]
 
             except requests.RequestException as e:
@@ -395,6 +414,14 @@ class GugikProvider(BaseProvider):
             f"Check https://mapy.geoportal.gov.pl for data availability.",
             godlo=godlo,
         )
+
+    def _cache_url(self, godlo: str, url: str) -> None:
+        """Store URL in cache if cache is available."""
+        if self._cache is not None:
+            self._cache.set_url(
+                godlo, self._resolution, self._vertical_crs,
+                self._CACHE_PRODUCT, url,
+            )
 
     # =========================================================================
     # Download by bbox → WCS (GeoTIFF/PNG/JPEG)
