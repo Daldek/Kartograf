@@ -97,12 +97,15 @@ class GugikNmptProvider(GugikProvider):
     # Only 1m vertical CRS supported
     SUPPORTED_VERTICAL_CRS_5M: list[str] = []  # no 5m at all
 
+    # Product identifier for cache key (overrides GugikProvider's "nmt")
+    _CACHE_PRODUCT = "nmpt"
+
     @property
     def name(self) -> str:
         """Return provider name."""
         return "GUGiK NMPT"
 
-    def __init__(self, session=None, vertical_crs="EVRF2007"):
+    def __init__(self, session=None, vertical_crs="EVRF2007", cache=None):
         """
         Initialize GUGiK NMPT provider.
 
@@ -112,5 +115,10 @@ class GugikNmptProvider(GugikProvider):
             HTTP session to use for requests.
         vertical_crs : str, optional
             Vertical CRS: "KRON86" or "EVRF2007" (default: "EVRF2007").
+        cache : MetadataCache, optional
+            Metadata cache instance for caching WMS lookup results.
+            If None, no caching is performed (default behavior).
         """
-        super().__init__(session=session, vertical_crs=vertical_crs, resolution="1m")
+        super().__init__(
+            session=session, vertical_crs=vertical_crs, resolution="1m", cache=cache
+        )
