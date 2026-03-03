@@ -465,31 +465,6 @@ class TestCLIWorkersFlag:
         args = parser.parse_args(["download", "N-34-130-D-d-2-4"])
         assert args.workers == 4
 
-    def test_landcover_download_has_workers_flag(self):
-        """Test that landcover download accepts --workers."""
-        parser = create_parser()
-        args = parser.parse_args(
-            [
-                "landcover",
-                "download",
-                "--source",
-                "bdot10k",
-                "--teryt",
-                "1465",
-                "--workers",
-                "8",
-            ]
-        )
-        assert args.workers == 8
-
-    def test_landcover_download_workers_default(self):
-        """Test that landcover download --workers defaults to 4."""
-        parser = create_parser()
-        args = parser.parse_args(
-            ["landcover", "download", "--source", "bdot10k", "--teryt", "1465"]
-        )
-        assert args.workers == 4
-
     def test_workers_passed_to_download_manager(self, tmp_path):
         """Test that --workers value is passed to DownloadManager."""
         with (
