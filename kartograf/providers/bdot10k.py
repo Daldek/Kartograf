@@ -28,7 +28,9 @@ Hydrographic (SW - Sieć Wodna, 3 layers):
 """
 
 import logging
+import os
 import sqlite3
+import threading
 import time
 import zipfile
 from io import BytesIO
@@ -528,8 +530,15 @@ class Bdot10kProvider(LandCoverProvider):
         )
 
     def _save_response(self, response: requests.Response, output_path: Path) -> None:
-        """Save HTTP response to file atomically."""
-        temp_path = output_path.with_suffix(output_path.suffix + ".tmp")
+        """
+        Save HTTP response to file atomically.
+
+        Uses a unique temp filename per process/thread to prevent
+        collisions when multiple threads download concurrently.
+        """
+        thread_id = threading.current_thread().ident
+        temp_suffix = f"{output_path.suffix}.{os.getpid()}_{thread_id}.tmp"
+        temp_path = output_path.with_suffix(temp_suffix)
 
         try:
             with open(temp_path, "wb") as f:
