@@ -16,8 +16,7 @@ Tests cover:
 from __future__ import annotations
 
 import time
-from pathlib import Path
-from unittest.mock import MagicMock, Mock, PropertyMock, patch
+from unittest.mock import Mock
 
 import pytest
 import requests
@@ -29,7 +28,6 @@ from kartograf.providers.gugik import GugikProvider
 from kartograf.providers.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.gugik_orto import GugikOrtoProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
-
 
 # =========================================================================
 # Fixtures
@@ -68,8 +66,13 @@ class TestMetadataCacheURL:
 
     def test_set_and_get(self, cache):
         """Test that set_url followed by get_url returns the same URL."""
-        cache.set_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt",
-                       "https://opendata.example.com/file.asc")
+        cache.set_url(
+            "N-34-130-D-d-2-4",
+            "1m",
+            "EVRF2007",
+            "nmt",
+            "https://opendata.example.com/file.asc",
+        )
         result = cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt")
         assert result == "https://opendata.example.com/file.asc"
 
@@ -81,69 +84,109 @@ class TestMetadataCacheURL:
     def test_ttl_expiry(self, short_ttl_cache):
         """Test that entries expire after TTL."""
         short_ttl_cache.set_url(
-            "N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt",
+            "N-34-130-D-d-2-4",
+            "1m",
+            "EVRF2007",
+            "nmt",
             "https://opendata.example.com/file.asc",
         )
         # Immediately should return the URL
-        assert short_ttl_cache.get_url(
-            "N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt"
-        ) is not None
+        assert (
+            short_ttl_cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt")
+            is not None
+        )
 
         # Wait for TTL to expire
         time.sleep(1.1)
 
-        result = short_ttl_cache.get_url(
-            "N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt"
-        )
+        result = short_ttl_cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt")
         assert result is None
 
     def test_overwrite(self, cache):
         """Test that setting the same key overwrites the value."""
-        cache.set_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt",
-                       "https://old-url.com/file.asc")
-        cache.set_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt",
-                       "https://new-url.com/file.asc")
+        cache.set_url(
+            "N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt", "https://old-url.com/file.asc"
+        )
+        cache.set_url(
+            "N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt", "https://new-url.com/file.asc"
+        )
         result = cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt")
         assert result == "https://new-url.com/file.asc"
 
     def test_different_products_are_separate(self, cache):
         """Test that different products have separate cache entries."""
-        cache.set_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt",
-                       "https://nmt.example.com/file.asc")
-        cache.set_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmpt",
-                       "https://nmpt.example.com/file.asc")
-        assert cache.get_url(
-            "N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt"
-        ) == "https://nmt.example.com/file.asc"
-        assert cache.get_url(
-            "N-34-130-D-d-2-4", "1m", "EVRF2007", "nmpt"
-        ) == "https://nmpt.example.com/file.asc"
+        cache.set_url(
+            "N-34-130-D-d-2-4",
+            "1m",
+            "EVRF2007",
+            "nmt",
+            "https://nmt.example.com/file.asc",
+        )
+        cache.set_url(
+            "N-34-130-D-d-2-4",
+            "1m",
+            "EVRF2007",
+            "nmpt",
+            "https://nmpt.example.com/file.asc",
+        )
+        assert (
+            cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt")
+            == "https://nmt.example.com/file.asc"
+        )
+        assert (
+            cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmpt")
+            == "https://nmpt.example.com/file.asc"
+        )
 
     def test_different_resolutions_are_separate(self, cache):
         """Test that different resolutions have separate cache entries."""
-        cache.set_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt",
-                       "https://1m.example.com/file.asc")
-        cache.set_url("N-34-130-D-d-2-4", "5m", "EVRF2007", "nmt",
-                       "https://5m.example.com/file.asc")
-        assert cache.get_url(
-            "N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt"
-        ) == "https://1m.example.com/file.asc"
-        assert cache.get_url(
-            "N-34-130-D-d-2-4", "5m", "EVRF2007", "nmt"
-        ) == "https://5m.example.com/file.asc"
+        cache.set_url(
+            "N-34-130-D-d-2-4",
+            "1m",
+            "EVRF2007",
+            "nmt",
+            "https://1m.example.com/file.asc",
+        )
+        cache.set_url(
+            "N-34-130-D-d-2-4",
+            "5m",
+            "EVRF2007",
+            "nmt",
+            "https://5m.example.com/file.asc",
+        )
+        assert (
+            cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt")
+            == "https://1m.example.com/file.asc"
+        )
+        assert (
+            cache.get_url("N-34-130-D-d-2-4", "5m", "EVRF2007", "nmt")
+            == "https://5m.example.com/file.asc"
+        )
 
     def test_different_vertical_crs_are_separate(self, cache):
         """Test that different vertical CRS have separate cache entries."""
-        cache.set_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt",
-                       "https://evrf.example.com/file.asc")
-        cache.set_url("N-34-130-D-d-2-4", "1m", "KRON86", "nmt",
-                       "https://kron.example.com/file.asc")
-        assert cache.get_url(
-            "N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt"
-        ) == "https://evrf.example.com/file.asc"
-        assert cache.get_url(
-            "N-34-130-D-d-2-4", "1m", "KRON86", "nmt"
-        ) == "https://kron.example.com/file.asc"
+        cache.set_url(
+            "N-34-130-D-d-2-4",
+            "1m",
+            "EVRF2007",
+            "nmt",
+            "https://evrf.example.com/file.asc",
+        )
+        cache.set_url(
+            "N-34-130-D-d-2-4",
+            "1m",
+            "KRON86",
+            "nmt",
+            "https://kron.example.com/file.asc",
+        )
+        assert (
+            cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt")
+            == "https://evrf.example.com/file.asc"
+        )
+        assert (
+            cache.get_url("N-34-130-D-d-2-4", "1m", "KRON86", "nmt")
+            == "https://kron.example.com/file.asc"
+        )
 
 
 # =========================================================================
@@ -258,7 +301,9 @@ class TestMetadataCacheManagement:
 class TestGugikProviderCacheIntegration:
     """Tests for GugikProvider cache integration."""
 
-    def _make_wms_response(self, url="https://opendata.example.com/N-34-130-D-d-2-4.asc"):
+    def _make_wms_response(
+        self, url="https://opendata.example.com/N-34-130-D-d-2-4.asc"
+    ):
         """Create a mock WMS response containing an OpenData URL."""
         mock_resp = Mock(spec=requests.Response)
         mock_resp.status_code = 200
@@ -270,7 +315,10 @@ class TestGugikProviderCacheIntegration:
         """Test that a cache hit skips the WMS GetFeatureInfo query."""
         # Pre-populate cache
         cache.set_url(
-            "N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt",
+            "N-34-130-D-d-2-4",
+            "1m",
+            "EVRF2007",
+            "nmt",
             "https://opendata.cached.com/file.asc",
         )
 
@@ -315,14 +363,15 @@ class TestGugikProviderCacheIntegration:
     def test_5m_resolution_with_cache(self, cache):
         """Test cache integration with 5m resolution."""
         cache.set_url(
-            "N-34-130-D-d-2-4", "5m", "EVRF2007", "nmt",
+            "N-34-130-D-d-2-4",
+            "5m",
+            "EVRF2007",
+            "nmt",
             "https://opendata.cached.com/5m.asc",
         )
 
         mock_session = Mock(spec=requests.Session)
-        provider = GugikProvider(
-            session=mock_session, resolution="5m", cache=cache
-        )
+        provider = GugikProvider(session=mock_session, resolution="5m", cache=cache)
 
         result = provider._get_opendata_url("N-34-130-D-d-2-4")
         assert result == "https://opendata.cached.com/5m.asc"
@@ -344,7 +393,10 @@ class TestGugikNmptProviderCacheIntegration:
     def test_cache_hit(self, cache):
         """Test that NMPT provider uses cache correctly."""
         cache.set_url(
-            "N-34-130-D-d-2-4", "1m", "EVRF2007", "nmpt",
+            "N-34-130-D-d-2-4",
+            "1m",
+            "EVRF2007",
+            "nmpt",
             "https://opendata.cached.com/nmpt.asc",
         )
 
@@ -379,7 +431,10 @@ class TestGugikOrtoProviderCacheIntegration:
     def test_cache_hit_skips_wms(self, cache):
         """Test that a cache hit skips the WMS query for ortofoto."""
         cache.set_url(
-            "N-34-130-D-d-2-4", "orto", "none", "orto",
+            "N-34-130-D-d-2-4",
+            "orto",
+            "none",
+            "orto",
             "https://opendata.cached.com/orto.tif",
         )
 

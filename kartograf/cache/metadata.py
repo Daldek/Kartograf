@@ -269,12 +269,10 @@ class MetadataCache:
             - db_size_bytes: size of the database file in bytes
             - db_path: path to the database file
         """
-        url_count = self._conn.execute(
-            "SELECT COUNT(*) FROM url_cache"
-        ).fetchone()[0]
-        teryt_count = self._conn.execute(
-            "SELECT COUNT(*) FROM teryt_cache"
-        ).fetchone()[0]
+        url_count = self._conn.execute("SELECT COUNT(*) FROM url_cache").fetchone()[0]
+        teryt_count = self._conn.execute("SELECT COUNT(*) FROM teryt_cache").fetchone()[
+            0
+        ]
 
         db_size = 0
         if self._db_path.exists():
@@ -296,11 +294,13 @@ class MetadataCache:
 
     def __del__(self):
         """Ensure database connection is closed on garbage collection."""
+        import contextlib
+
         if hasattr(self, "_conn") and self._conn is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._conn.close()
-            except Exception:
-                pass
 
     def __repr__(self) -> str:
-        return f"MetadataCache(db_path={self._db_path!r}, ttl_seconds={self._ttl_seconds})"
+        return (
+            f"MetadataCache(db_path={self._db_path!r}, ttl_seconds={self._ttl_seconds})"
+        )
