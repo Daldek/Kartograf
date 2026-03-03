@@ -15,7 +15,9 @@ Supported resolutions:
 """
 
 import logging
+import os
 import re
+import threading
 import time
 from pathlib import Path
 from urllib.parse import urlencode
@@ -611,15 +613,30 @@ class GugikProvider(BaseProvider):
         )
 
     def _make_request(self, url: str, timeout: int) -> requests.Response:
-        """Make HTTP GET request."""
+        """
+        Make HTTP GET request.
+
+        Thread-safety: When self._session is None (default), a new
+        requests.Session is created per call, making this method safe
+        for concurrent use from multiple threads. If a shared session
+        is provided via constructor, callers must ensure thread-safety
+        of that session externally.
+        """
         session = self._session or requests.Session()
         response = session.get(url, timeout=timeout, stream=True)
         response.raise_for_status()
         return response
 
     def _save_response(self, response: requests.Response, output_path: Path) -> None:
-        """Save HTTP response to file atomically."""
-        temp_path = output_path.with_suffix(output_path.suffix + ".tmp")
+        """
+        Save HTTP response to file atomically.
+
+        Uses a unique temp filename per process/thread to prevent
+        collisions when multiple threads download concurrently.
+        """
+        thread_id = threading.current_thread().ident
+        temp_suffix = f"{output_path.suffix}.{os.getpid()}_{thread_id}.tmp"
+        temp_path = output_path.with_suffix(temp_suffix)
 
         try:
             with open(temp_path, "wb") as f:
