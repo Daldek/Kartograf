@@ -5,6 +5,8 @@ This module provides the FileStorage class for managing file paths
 and storage operations for downloaded data.
 """
 
+import os
+import threading
 from pathlib import Path
 from typing import BinaryIO
 
@@ -250,7 +252,11 @@ class FileStorage:
         target_path = self.get_path(godlo, ext)
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
-        temp_path = target_path.with_suffix(target_path.suffix + ".tmp")
+        # Use unique temp filename per process/thread to prevent collisions
+        # when multiple threads write concurrently
+        thread_id = threading.current_thread().ident
+        temp_suffix = f"{target_path.suffix}.{os.getpid()}_{thread_id}.tmp"
+        temp_path = target_path.with_suffix(temp_suffix)
 
         try:
             with open(temp_path, "wb") as f:
