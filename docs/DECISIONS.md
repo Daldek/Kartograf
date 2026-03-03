@@ -300,6 +300,42 @@ Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja
 
 ---
 
+## ADR-018: ThreadPoolExecutor dla rownoleglego pobierania
+
+**Data:** 2026-03-03
+**Status:** Przyjeta
+
+**Kontekst:** Pobieranie hierarchii arkuszy (np. N-34-130-D → 256 arkuszy 1:10000) bylo sekwencyjne, co przy wolnym laczeniu z GUGiK trwalo bardzo dlugo. Potrzebna rownoleglosc.
+
+**Opcje:**
+- A) asyncio + aiohttp — pelna asynchronicznosc, wymaga refaktoryzacji calego stacku I/O
+- B) ThreadPoolExecutor — proste dodanie do istniejacego kodu, requests jest thread-safe
+- C) multiprocessing — osobne procesy, wiekszy narzut, trudniejsze wspoldzielenie stanu
+
+**Decyzja:** ThreadPoolExecutor (B). Requests jest thread-safe, I/O-bound task idealny dla watkow, minimalny refaktoring. `max_workers=4` jako domyslny, konfigurowalny przez CLI `--workers`.
+
+**Konsekwencje:** Wymagane thread-safe temp filenames we wszystkich providerach (pattern `pid_threadid.tmp`). DownloadResult zamiast list[Path] dla structured results. Backward-compatible: `max_workers=1` daje sekwencyjne pobieranie.
+
+---
+
+## ADR-019: SQLite WAL jako metadata cache
+
+**Data:** 2026-03-03
+**Status:** Przyjeta
+
+**Kontekst:** Kazde pobieranie arkusza wymaga request do GUGiK API po URL OpenData. Przy powtarzanych pobieraniach te same URLe sa odpytywane wielokrotnie. Podobnie BDOT10k — mapowanie punkt→TERYT.
+
+**Opcje:**
+- A) SQLite z WAL mode — plik lokalny, zero zaleznosci, concurrent reads, TTL
+- B) Redis — szybki, ale wymaga serwera, overengineering
+- C) Pickle/JSON file — proste, ale brak concurrent access, brak TTL
+
+**Decyzja:** SQLite WAL (A). Zero dodatkowych zaleznosci (sqlite3 w stdlib), WAL mode umozliwia rownoczesne odczyty z ThreadPoolExecutor, TTL 7 dni zapobiega stalym danym, threading.Lock chroni zapisy.
+
+**Konsekwencje:** Nowy modul `kartograf/cache/metadata.py`, `.kartograf_cache.db` w katalogu roboczym, CLI `kartograf cache` do zarzadzania. `prune_expired()` czysci stale wpisy. Optional — providery dzialaja bez cache.
+
+---
+
 <!-- Szablon nowej decyzji:
 
 ## ADR-XXX: Tytul

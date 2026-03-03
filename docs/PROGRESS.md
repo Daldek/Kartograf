@@ -16,8 +16,11 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
-| Pokrycie testami | ✅ Gotowy | ~84%, 835 testow, cel 80% osiagniety |
+| Pokrycie testami | ✅ Gotowy | ~84%, 990 testow, cel 80% osiagniety |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
+| Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
+| Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0 |
+| Weryfikacja BBox PL-2000 | ✅ Gotowy | 67 testow, reference values + live WMS |
 
 <!-- Statusy: ✅ Gotowy | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
@@ -63,47 +66,52 @@
 - **Wersja:** v0.5.0
 - **Zakres:** Parser2000, auto-detekcja PL-1992/PL-2000, find_sheets_2000_for_bbox, CLI --system, FileStorage PL-2000, usuniecie --category, 835 testow
 
+### CP9 — Parallel downloads, metadata cache, PL-2000 verification
+- **Data:** 2026-03-03
+- **Wersja:** v0.6.0
+- **Zakres:** ThreadPoolExecutor parallel downloads (--workers), SQLite MetadataCache (WAL, TTL, prune), PL-2000 BBox verification (67 testow), 990 testow
+
 ## Ostatnia sesja
 
-**Data:** 2026-03-02
+**Data:** 2026-03-03
 
 ### Co zrobiono
-- **feat(parser): PL-2000 sheet naming system**
-  - Nowy modul `kartograf/core/parser_2000.py` — Parser2000
-  - 5 skal (1:10k-1:500), 4 strefy (5-8), BBox z transformacja CRS
-  - Hierarchia: get_parent(), get_children(), get_all_descendants(), get_hierarchy_up()
-  - `find_sheets_2000_for_bbox()` — BBox to PL-2000 godla lookup
-- **feat(parser): SheetParser auto-detekcja PL-1992 vs PL-2000**
-  - `SheetParser("6.179.12")` automatycznie rozpoznaje PL-2000
-  - Walidacja zgodnosci uklad/format
-- **feat(cli): PL-2000 obsluga w parse/download**
-  - `kartograf parse 6.179.12.20` — auto-detekcja, strefa, CRS
-  - `kartograf download --bbox ... --system 2000`
-  - `--bbox-crs` rozszerzony o EPSG:2176-2179
-- **feat(storage): PL-2000 directory structure**
-  - `nmt_2000_1m/6/179/12/20/6.179.12.20.asc`
-- **refactor(bdot10k): usunięcie filtrowania po kategorii**
-  - Pobierany caly plik BDOT10k (15 warstw: 12 PT* + 3 SW*)
-  - Usunieto --category, CATEGORY_FILTERS, PT_LAYERS, HYDRO_LAYERS
-- **docs: aktualizacja calej dokumentacji dla v0.5.0**
+- **feat(download): parallel downloads with ThreadPoolExecutor**
+  - `DownloadManager(max_workers=4)` — konfigurowalny thread pool
+  - `DownloadResult` — structured results (succeeded/failed/skipped)
+  - `LandCoverManager.download_batch()` — parallel batch download
+  - CLI: `--workers`/`-w` na `kartograf download`
+  - Thread-safe temp filenames we wszystkich providerach
+- **feat(cache): MetadataCache z SQLite**
+  - `kartograf/cache/metadata.py` — WAL mode, TTL 7 dni, thread-safe writes
+  - URL cache dla GUGiK OpenData, TERYT cache dla BDOT10k
+  - `prune_expired()` — automatyczne czyszczenie
+  - CLI: `kartograf cache stats|clear|path`
+  - Integracja z GugikProvider, GugikNmptProvider, GugikOrtoProvider, Bdot10kProvider
+- **test(pl2000): PL-2000 BBox verification**
+  - 67 nowych testow: reference values, hierarchy, live WMS, edge cases
+  - `@pytest.mark.live` marker dla testow integracyjnych GUGiK WMS
+- **Organizacja pracy:** 3 rownolegle zespoly subagentow na git worktrees
+  - Spec compliance review + code quality review po kazdym zespole
+  - Sekwencyjny merge: verification → cache → parallel
 - **Wyniki testow:**
-  - **835 testow passed**
+  - **990 testow passed** (+155 nowych)
   - **Ruff: clean** (lint + format)
 
 ### Nastepne kroki
-1. Weryfikacja BBox PL-2000 z realnymi danymi GUGiK
-2. Pobieranie rownolegle (v0.6+)
-3. Cache metadanych (SQLite)
+1. Mozaikowanie arkuszy NMT
+2. Ujednolicenie interfejsow providerow (BaseProvider vs LandCoverProvider)
+3. Merge develop → main (v0.6.0 release)
 
 ## Backlog
 
-- [x] Pokrycie testami do 80% (~84%, 835 testow)
+- [x] Pokrycie testami do 80% (~84%, 990 testow)
 - [x] NMPT provider (GugikNmptProvider)
 - [x] Ortofotomapa provider (GugikOrtoProvider)
 - [x] CLI --product {nmt,nmpt,orto}
 - [x] PL-2000 godlowanie (Parser2000, auto-detekcja, CLI)
-- [ ] Weryfikacja BBox PL-2000 z realnymi danymi GUGiK
-- [ ] Pobieranie rownolegle (multi-threading)
-- [ ] Cache metadanych (SQLite)
+- [x] Weryfikacja BBox PL-2000 z realnymi danymi GUGiK (67 testow)
+- [x] Pobieranie rownolegle (ThreadPoolExecutor, --workers)
+- [x] Cache metadanych (SQLite WAL, TTL 7d, prune)
 - [ ] Mozaikowanie arkuszy NMT
 - [ ] Ujednolicenie interfejsow providerow (BaseProvider vs LandCoverProvider)
