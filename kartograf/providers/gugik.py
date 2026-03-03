@@ -419,8 +419,11 @@ class GugikProvider(BaseProvider):
         """Store URL in cache if cache is available."""
         if self._cache is not None:
             self._cache.set_url(
-                godlo, self._resolution, self._vertical_crs,
-                self._CACHE_PRODUCT, url,
+                godlo,
+                self._resolution,
+                self._vertical_crs,
+                self._CACHE_PRODUCT,
+                url,
             )
 
     # =========================================================================
