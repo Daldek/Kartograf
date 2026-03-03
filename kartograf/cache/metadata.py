@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import os
 import sqlite3
+import threading
 import time
 from pathlib import Path
 
@@ -60,42 +61,47 @@ class MetadataCache:
             db_path = Path(os.getcwd()) / DEFAULT_DB_NAME
         self._db_path = Path(db_path)
         self._ttl_seconds = ttl_seconds
+        self._write_lock = threading.Lock()
         self._conn = sqlite3.connect(
             str(self._db_path),
             check_same_thread=False,
         )
         # Enable WAL mode for better concurrent read/write performance
-        self._conn.execute("PRAGMA journal_mode=WAL")
+        result = self._conn.execute("PRAGMA journal_mode=WAL").fetchone()
+        if result is None or result[0].lower() != "wal":
+            actual = result[0] if result else "unknown"
+            logger.warning(f"Failed to enable WAL journal mode, got: {actual}")
         self._create_tables()
         logger.debug(f"MetadataCache opened at {self._db_path}")
 
     def _create_tables(self) -> None:
         """Create cache tables if they don't exist."""
-        self._conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS url_cache (
-                godlo TEXT NOT NULL,
-                resolution TEXT NOT NULL,
-                vertical_crs TEXT NOT NULL,
-                product TEXT NOT NULL,
-                url TEXT NOT NULL,
-                cached_at REAL NOT NULL,
-                PRIMARY KEY (godlo, resolution, vertical_crs, product)
+        with self._write_lock:
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS url_cache (
+                    godlo TEXT NOT NULL,
+                    resolution TEXT NOT NULL,
+                    vertical_crs TEXT NOT NULL,
+                    product TEXT NOT NULL,
+                    url TEXT NOT NULL,
+                    cached_at REAL NOT NULL,
+                    PRIMARY KEY (godlo, resolution, vertical_crs, product)
+                )
+                """
             )
-            """
-        )
-        self._conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS teryt_cache (
-                x REAL NOT NULL,
-                y REAL NOT NULL,
-                teryt TEXT NOT NULL,
-                cached_at REAL NOT NULL,
-                PRIMARY KEY (x, y)
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS teryt_cache (
+                    x REAL NOT NULL,
+                    y REAL NOT NULL,
+                    teryt TEXT NOT NULL,
+                    cached_at REAL NOT NULL,
+                    PRIMARY KEY (x, y)
+                )
+                """
             )
-            """
-        )
-        self._conn.commit()
+            self._conn.commit()
 
     # =========================================================================
     # URL cache (for GugikProvider, GugikNmptProvider, GugikOrtoProvider)
@@ -141,6 +147,16 @@ class MetadataCache:
         url, cached_at = row
         if time.time() - cached_at >= self._ttl_seconds:
             logger.debug(f"URL cache expired for {godlo} ({product})")
+            # Opportunistically delete the expired entry
+            with self._write_lock:
+                self._conn.execute(
+                    """
+                    DELETE FROM url_cache
+                    WHERE godlo=? AND resolution=? AND vertical_crs=? AND product=?
+                    """,
+                    (godlo, resolution, vertical_crs, product),
+                )
+                self._conn.commit()
             return None
 
         logger.debug(f"URL cache hit for {godlo} ({product})")
@@ -170,15 +186,16 @@ class MetadataCache:
         url : str
             OpenData URL to cache
         """
-        self._conn.execute(
-            """
-            INSERT OR REPLACE INTO url_cache
-            (godlo, resolution, vertical_crs, product, url, cached_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """,
-            (godlo, resolution, vertical_crs, product, url, time.time()),
-        )
-        self._conn.commit()
+        with self._write_lock:
+            self._conn.execute(
+                """
+                INSERT OR REPLACE INTO url_cache
+                (godlo, resolution, vertical_crs, product, url, cached_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (godlo, resolution, vertical_crs, product, url, time.time()),
+            )
+            self._conn.commit()
         logger.debug(f"Cached URL for {godlo} ({product})")
 
     # =========================================================================
@@ -212,6 +229,13 @@ class MetadataCache:
         teryt, cached_at = row
         if time.time() - cached_at >= self._ttl_seconds:
             logger.debug(f"TERYT cache expired for ({x}, {y})")
+            # Opportunistically delete the expired entry
+            with self._write_lock:
+                self._conn.execute(
+                    "DELETE FROM teryt_cache WHERE x=? AND y=?",
+                    (x, y),
+                )
+                self._conn.commit()
             return None
 
         logger.debug(f"TERYT cache hit for ({x}, {y}): {teryt}")
@@ -230,14 +254,15 @@ class MetadataCache:
         teryt : str
             TERYT code to cache
         """
-        self._conn.execute(
-            """
-            INSERT OR REPLACE INTO teryt_cache (x, y, teryt, cached_at)
-            VALUES (?, ?, ?, ?)
-            """,
-            (x, y, teryt, time.time()),
-        )
-        self._conn.commit()
+        with self._write_lock:
+            self._conn.execute(
+                """
+                INSERT OR REPLACE INTO teryt_cache (x, y, teryt, cached_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (x, y, teryt, time.time()),
+            )
+            self._conn.commit()
         logger.debug(f"Cached TERYT {teryt} for ({x}, {y})")
 
     # =========================================================================
@@ -246,14 +271,16 @@ class MetadataCache:
 
     def clear(self) -> None:
         """Delete all cached entries from both tables."""
-        self._conn.execute("DELETE FROM url_cache")
-        self._conn.execute("DELETE FROM teryt_cache")
-        self._conn.commit()
+        with self._write_lock:
+            self._conn.execute("DELETE FROM url_cache")
+            self._conn.execute("DELETE FROM teryt_cache")
+            self._conn.commit()
         logger.info("Cache cleared")
 
     def vacuum(self) -> None:
         """Reclaim unused space in the database file."""
-        self._conn.execute("VACUUM")
+        with self._write_lock:
+            self._conn.execute("VACUUM")
         logger.debug("Cache vacuumed")
 
     def stats(self) -> dict:
@@ -285,9 +312,35 @@ class MetadataCache:
             "db_path": str(self._db_path),
         }
 
+    def prune_expired(self) -> int:
+        """
+        Delete all expired cache entries from both tables.
+
+        Returns
+        -------
+        int
+            Total number of entries deleted.
+        """
+        now = time.time()
+        cutoff = now - self._ttl_seconds
+        with self._write_lock:
+            self._conn.execute("DELETE FROM url_cache WHERE cached_at < ?", (cutoff,))
+            url_deleted = self._conn.execute("SELECT changes()").fetchone()[0]
+            self._conn.execute("DELETE FROM teryt_cache WHERE cached_at < ?", (cutoff,))
+            teryt_deleted = self._conn.execute("SELECT changes()").fetchone()[0]
+            self._conn.commit()
+        total = url_deleted + teryt_deleted
+        if total > 0:
+            logger.debug(
+                f"Pruned {total} expired entries "
+                f"({url_deleted} URL, {teryt_deleted} TERYT)"
+            )
+        return total
+
     def close(self) -> None:
-        """Close the database connection."""
+        """Close the database connection, pruning expired entries first."""
         if self._conn:
+            self.prune_expired()
             self._conn.close()
             self._conn = None
             logger.debug("MetadataCache closed")
