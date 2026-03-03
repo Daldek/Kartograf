@@ -82,7 +82,7 @@ class DownloadResult:
 
     @property
     def all_paths(self) -> list[Path]:
-        """Return all paths (succeeded + skipped have valid paths)."""
+        """Return paths of successfully downloaded files."""
         return list(self.succeeded)
 
 
