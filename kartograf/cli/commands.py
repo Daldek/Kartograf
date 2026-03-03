@@ -254,14 +254,6 @@ def create_parser() -> argparse.ArgumentParser:
         help="Statistic for SoilGrids (default: mean). "
         "Options: mean, Q0.05, Q0.5, Q0.95, uncertainty",
     )
-    lc_download.add_argument(
-        "--workers",
-        "-w",
-        type=int,
-        default=4,
-        help="Number of parallel download threads for batch operations "
-        "(default: 4). Use 1 for sequential downloads.",
-    )
 
     # Landcover list-sources command
     landcover_subparsers.add_parser(
