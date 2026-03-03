@@ -707,6 +707,82 @@ def cmd_download(args: argparse.Namespace) -> int:
     return 0
 
 
+def _download_godlo_list(
+    manager: DownloadManager,
+    godlo_list: list[str],
+    skip_existing: bool,
+    on_progress,
+    max_workers: int,
+) -> list[Path]:
+    """
+    Download a list of godla, using parallel threads when max_workers > 1.
+
+    Parameters
+    ----------
+    manager : DownloadManager
+        Configured download manager
+    godlo_list : list[str]
+        List of godlo identifiers to download
+    skip_existing : bool
+        Whether to skip already-downloaded files
+    on_progress : callable or None
+        Progress callback
+    max_workers : int
+        Number of parallel download threads
+
+    Returns
+    -------
+    list[Path]
+        List of downloaded file paths
+    """
+    if max_workers <= 1:
+        # Sequential download
+        all_paths: list[Path] = []
+        for godlo in godlo_list:
+            result = manager.download_sheet(
+                godlo,
+                skip_existing=skip_existing,
+                on_progress=on_progress,
+            )
+            if isinstance(result, list):
+                all_paths.extend(result)
+            else:
+                all_paths.append(result)
+        return all_paths
+
+    # Parallel download using ThreadPoolExecutor
+    import concurrent.futures
+    import threading
+
+    all_paths: list[Path] = []
+    lock = threading.Lock()
+
+    def _download_one(godlo: str) -> list[Path]:
+        result = manager.download_sheet(
+            godlo,
+            skip_existing=skip_existing,
+            on_progress=on_progress,
+        )
+        if isinstance(result, list):
+            return result
+        return [result]
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_godlo = {
+            executor.submit(_download_one, godlo): godlo for godlo in godlo_list
+        }
+        for future in concurrent.futures.as_completed(future_to_godlo):
+            godlo = future_to_godlo[future]
+            try:
+                paths = future.result()
+                with lock:
+                    all_paths.extend(paths)
+            except (DownloadError, ValidationError):
+                raise
+
+    return all_paths
+
+
 def _cmd_download_bbox(args: argparse.Namespace) -> int:
     """
     Handle download command in bbox mode.
@@ -780,17 +856,9 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
         print()
 
     try:
-        all_paths = []
-        for godlo in godlo_list:
-            result = manager.download_sheet(
-                godlo,
-                skip_existing=skip_existing,
-                on_progress=on_progress,
-            )
-            if isinstance(result, list):
-                all_paths.extend(result)
-            else:
-                all_paths.append(result)
+        all_paths = _download_godlo_list(
+            manager, godlo_list, skip_existing, on_progress, workers
+        )
 
         if not args.quiet:
             print()
@@ -877,17 +945,9 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
         print()
 
     try:
-        all_paths = []
-        for godlo in godlo_list:
-            result = manager.download_sheet(
-                godlo,
-                skip_existing=skip_existing,
-                on_progress=on_progress,
-            )
-            if isinstance(result, list):
-                all_paths.extend(result)
-            else:
-                all_paths.append(result)
+        all_paths = _download_godlo_list(
+            manager, godlo_list, skip_existing, on_progress, workers
+        )
 
         if not args.quiet:
             print()
