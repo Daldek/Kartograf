@@ -745,7 +745,6 @@ class TestWALVerification:
     def test_wal_failure_logs_warning(self, cache_path, caplog):
         """Test that a warning is logged when WAL mode fails."""
         real_conn = sqlite3.connect(str(cache_path), check_same_thread=False)
-        original_execute = real_conn.execute
 
         call_count = 0
 
@@ -773,14 +772,12 @@ class TestWALVerification:
                 return self._conn.close()
 
         wrapper = ConnWrapper(real_conn)
-        with patch(
-            "kartograf.cache.metadata.sqlite3.connect", return_value=wrapper
+        with (
+            patch("kartograf.cache.metadata.sqlite3.connect", return_value=wrapper),
+            caplog.at_level(logging.WARNING, logger="kartograf.cache.metadata"),
         ):
-            with caplog.at_level(
-                logging.WARNING, logger="kartograf.cache.metadata"
-            ):
-                cache = MetadataCache(db_path=cache_path)
-                cache._conn = real_conn  # Restore real conn for cleanup
+            cache = MetadataCache(db_path=cache_path)
+            cache._conn = real_conn  # Restore real conn for cleanup
 
         assert any(
             "Failed to enable WAL journal mode" in record.message
@@ -816,12 +813,8 @@ class TestPruneExpired:
         assert deleted == 2
 
         # Verify: A and B gone, C still there
-        assert cache._conn.execute(
-            "SELECT COUNT(*) FROM url_cache"
-        ).fetchone()[0] == 1
-        assert (
-            cache.get_url("C", "1m", "EVRF2007", "nmt") == "https://c.com"
-        )
+        assert cache._conn.execute("SELECT COUNT(*) FROM url_cache").fetchone()[0] == 1
+        assert cache.get_url("C", "1m", "EVRF2007", "nmt") == "https://c.com"
         cache.close()
 
     def test_prune_expired_removes_old_teryt_entries(self, cache_path):
@@ -838,9 +831,9 @@ class TestPruneExpired:
         deleted = cache.prune_expired()
         assert deleted == 2
 
-        assert cache._conn.execute(
-            "SELECT COUNT(*) FROM teryt_cache"
-        ).fetchone()[0] == 1
+        assert (
+            cache._conn.execute("SELECT COUNT(*) FROM teryt_cache").fetchone()[0] == 1
+        )
         assert cache.get_teryt(5.0, 6.0) == "9999"
         cache.close()
 
@@ -885,9 +878,7 @@ class TestPruneExpired:
         assert result is None
 
         # Verify entry is actually deleted from the database
-        count = cache._conn.execute(
-            "SELECT COUNT(*) FROM url_cache"
-        ).fetchone()[0]
+        count = cache._conn.execute("SELECT COUNT(*) FROM url_cache").fetchone()[0]
         assert count == 0
         cache.close()
 
@@ -903,8 +894,6 @@ class TestPruneExpired:
         assert result is None
 
         # Verify entry is actually deleted from the database
-        count = cache._conn.execute(
-            "SELECT COUNT(*) FROM teryt_cache"
-        ).fetchone()[0]
+        count = cache._conn.execute("SELECT COUNT(*) FROM teryt_cache").fetchone()[0]
         assert count == 0
         cache.close()
