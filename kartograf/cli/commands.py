@@ -331,6 +331,32 @@ def create_parser() -> argparse.ArgumentParser:
         help="Print HSG statistics after calculation",
     )
 
+    # Cache command group
+    cache_parser = subparsers.add_parser(
+        "cache",
+        help="Manage metadata cache",
+        description="Manage the local SQLite metadata cache for WMS lookups",
+    )
+    cache_subparsers = cache_parser.add_subparsers(
+        dest="cache_command",
+        help="Cache commands",
+    )
+
+    cache_subparsers.add_parser(
+        "stats",
+        help="Show cache statistics (entry counts, db size)",
+    )
+
+    cache_subparsers.add_parser(
+        "clear",
+        help="Delete all cached entries",
+    )
+
+    cache_subparsers.add_parser(
+        "path",
+        help="Show path to cache database file",
+    )
+
     return parser
 
 
@@ -1243,6 +1269,60 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_cache(args: argparse.Namespace) -> int:
+    """
+    Execute cache management commands.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed command-line arguments
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, 1 for error)
+    """
+    from kartograf.cache import MetadataCache
+
+    if args.cache_command is None:
+        print("Usage: kartograf cache <command>")
+        print("Commands: stats, clear, path")
+        print("Run 'kartograf cache <command> --help' for details")
+        return 0
+
+    cache = MetadataCache()
+
+    try:
+        if args.cache_command == "path":
+            print(cache.stats()["db_path"])
+            return 0
+
+        if args.cache_command == "stats":
+            st = cache.stats()
+            print("Metadata cache statistics:")
+            print(f"  URL entries:   {st['url_count']}")
+            print(f"  TERYT entries: {st['teryt_count']}")
+            db_size_kb = st["db_size_bytes"] / 1024
+            if db_size_kb < 1024:
+                print(f"  Database size: {db_size_kb:.1f} KB")
+            else:
+                print(f"  Database size: {db_size_kb / 1024:.1f} MB")
+            print(f"  Database path: {st['db_path']}")
+            return 0
+
+        if args.cache_command == "clear":
+            cache.clear()
+            cache.vacuum()
+            print("Cache cleared.")
+            return 0
+
+    finally:
+        cache.close()
+
+    return 0
+
+
 def main(args: list[str] | None = None) -> int:
     """
     Main entry point for the CLI.
@@ -1275,6 +1355,9 @@ def main(args: list[str] | None = None) -> int:
 
     if parsed_args.command == "soilgrids":
         return cmd_soilgrids(parsed_args)
+
+    if parsed_args.command == "cache":
+        return cmd_cache(parsed_args)
 
     # Unknown command (shouldn't happen with argparse)
     print(f"Unknown command: {parsed_args.command}", file=sys.stderr)
