@@ -116,7 +116,7 @@ class Bdot10kProvider(LandCoverProvider):
     MAX_RETRIES = 3
     RETRY_BACKOFF_BASE = 2
 
-    def __init__(self, session: requests.Session | None = None):
+    def __init__(self, session: requests.Session | None = None, cache=None):
         """
         Initialize BDOT10k provider.
 
@@ -124,8 +124,12 @@ class Bdot10kProvider(LandCoverProvider):
         ----------
         session : requests.Session, optional
             HTTP session to use for requests.
+        cache : MetadataCache, optional
+            Metadata cache instance for caching TERYT lookup results.
+            If None, no caching is performed (default behavior).
         """
         self._session = session
+        self._cache = cache
 
     @property
     def name(self) -> str:
@@ -312,6 +316,13 @@ class Bdot10kProvider(LandCoverProvider):
         DownloadError
             If TERYT code cannot be determined
         """
+        # Check cache first
+        if self._cache is not None:
+            cached_teryt = self._cache.get_teryt(x, y)
+            if cached_teryt is not None:
+                logger.debug(f"Using cached TERYT {cached_teryt} for ({x}, {y})")
+                return cached_teryt
+
         import re
 
         session = self._session or requests.Session()
@@ -352,6 +363,8 @@ class Bdot10kProvider(LandCoverProvider):
             if match:
                 teryt = match.group(1)
                 logger.debug(f"Found TERYT: {teryt}")
+                if self._cache is not None:
+                    self._cache.set_teryt(x, y, teryt)
                 return teryt
 
             # Alternative: extract from SHP URL pattern
@@ -361,6 +374,8 @@ class Bdot10kProvider(LandCoverProvider):
             if match:
                 teryt = match.group(1)
                 logger.debug(f"Found TERYT: {teryt}")
+                if self._cache is not None:
+                    self._cache.set_teryt(x, y, teryt)
                 return teryt
 
             raise DownloadError(
