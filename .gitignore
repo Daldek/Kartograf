@@ -60,3 +60,8 @@ data/
 
 # Python version
 .python-version
+
+# Kartograf metadata cache
+.kartograf_cache.db
+.kartograf_cache.db-wal
+.kartograf_cache.db-shm
