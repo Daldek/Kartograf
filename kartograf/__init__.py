@@ -46,7 +46,7 @@ from kartograf.providers.gugik_orto import GugikOrtoProvider
 from kartograf.providers.landcover_base import LandCoverProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 __all__ = [
     # Cache

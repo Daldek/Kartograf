@@ -7,6 +7,32 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-03-03
+
+### Added
+- **Parallel downloads with ThreadPoolExecutor**
+  - `DownloadManager(max_workers=4)` — configurable thread pool for hierarchy downloads
+  - `DownloadResult` dataclass — structured results with succeeded/failed/skipped tracking
+  - `_download_hierarchy_parallel()` — concurrent sheet downloads with progress callbacks
+  - `LandCoverManager.download_batch()` — parallel batch download for land cover data
+  - CLI: `--workers`/`-w` flag on `kartograf download` (default: 4)
+  - Thread-safe temp filenames in all providers (`pid_threadid.tmp` pattern)
+- **SQLite metadata cache (MetadataCache)**
+  - `kartograf/cache/metadata.py` — SQLite WAL mode, TTL 7 days, thread-safe writes
+  - URL cache for GUGiK OpenData lookups (NMT, NMPT, Orto)
+  - TERYT cache for BDOT10k point-to-TERYT resolution
+  - `prune_expired()` — automatic cleanup of stale entries
+  - Integrated with GugikProvider, GugikNmptProvider, GugikOrtoProvider, Bdot10kProvider
+  - CLI: `kartograf cache stats|clear|path`
+- **PL-2000 BBox verification tests**
+  - 67 new tests: reference values, hierarchy consistency, live WMS, edge cases
+  - `@pytest.mark.live` marker for GUGiK WMS integration tests
+- **Public API: eksport MetadataCache i DownloadResult**
+  - `from kartograf import MetadataCache, DownloadResult`
+
+### Tests
+- **990 testow** (+155 nowych)
+
 ---
 
 ## [0.5.0] - 2026-03-02
