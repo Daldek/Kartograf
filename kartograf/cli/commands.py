@@ -156,6 +156,14 @@ def create_parser() -> argparse.ArgumentParser:
         default="1992",
         help="System godłowania dla --bbox/--geometry (domyślnie 1992)",
     )
+    download_parser.add_argument(
+        "--workers",
+        "-w",
+        type=int,
+        default=4,
+        help="Number of parallel download threads (default: 4). "
+        "Use 1 for sequential downloads.",
+    )
 
     # Landcover command group
     landcover_parser = subparsers.add_parser(
@@ -245,6 +253,14 @@ def create_parser() -> argparse.ArgumentParser:
         default="mean",
         help="Statistic for SoilGrids (default: mean). "
         "Options: mean, Q0.05, Q0.5, Q0.95, uncertainty",
+    )
+    lc_download.add_argument(
+        "--workers",
+        "-w",
+        type=int,
+        default=4,
+        help="Number of parallel download threads for batch operations "
+        "(default: 4). Use 1 for sequential downloads.",
     )
 
     # Landcover list-sources command
@@ -633,6 +649,8 @@ def cmd_download(args: argparse.Namespace) -> int:
     resolution = getattr(args, "resolution", "1m")
     product = getattr(args, "product", "nmt")
 
+    workers = getattr(args, "workers", 4)
+
     provider, storage = _create_provider_and_storage(
         product, output_dir, vertical_crs, resolution
     )
@@ -642,6 +660,7 @@ def cmd_download(args: argparse.Namespace) -> int:
         storage=storage,
         vertical_crs=vertical_crs,
         resolution=resolution,
+        max_workers=workers,
     )
 
     skip_existing = not args.force
@@ -739,6 +758,7 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
     vertical_crs = getattr(args, "vertical_crs", "KRON86")
     resolution = getattr(args, "resolution", "1m")
     product = getattr(args, "product", "nmt")
+    workers = getattr(args, "workers", 4)
 
     provider, storage = _create_provider_and_storage(
         product, output_dir, vertical_crs, resolution
@@ -749,6 +769,7 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
         storage=storage,
         vertical_crs=vertical_crs,
         resolution=resolution,
+        max_workers=workers,
     )
 
     skip_existing = not args.force
@@ -834,6 +855,7 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
     vertical_crs = getattr(args, "vertical_crs", "KRON86")
     resolution = getattr(args, "resolution", "1m")
     product = getattr(args, "product", "nmt")
+    workers = getattr(args, "workers", 4)
 
     provider, storage = _create_provider_and_storage(
         product, output_dir, vertical_crs, resolution
@@ -844,6 +866,7 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
         storage=storage,
         vertical_crs=vertical_crs,
         resolution=resolution,
+        max_workers=workers,
     )
 
     skip_existing = not args.force
