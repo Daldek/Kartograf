@@ -33,7 +33,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version="%(prog)s 0.5.0",
+        version="%(prog)s 0.6.1",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -155,6 +155,14 @@ def create_parser() -> argparse.ArgumentParser:
         choices=["1992", "2000"],
         default="1992",
         help="System godłowania dla --bbox/--geometry (domyślnie 1992)",
+    )
+    download_parser.add_argument(
+        "--workers",
+        "-w",
+        type=int,
+        default=4,
+        help="Number of parallel download threads (default: 4). "
+        "Use 1 for sequential downloads.",
     )
 
     # Landcover command group
@@ -329,6 +337,32 @@ def create_parser() -> argparse.ArgumentParser:
         "--stats",
         action="store_true",
         help="Print HSG statistics after calculation",
+    )
+
+    # Cache command group
+    cache_parser = subparsers.add_parser(
+        "cache",
+        help="Manage metadata cache",
+        description="Manage the local SQLite metadata cache for WMS lookups",
+    )
+    cache_subparsers = cache_parser.add_subparsers(
+        dest="cache_command",
+        help="Cache commands",
+    )
+
+    cache_subparsers.add_parser(
+        "stats",
+        help="Show cache statistics (entry counts, db size)",
+    )
+
+    cache_subparsers.add_parser(
+        "clear",
+        help="Delete all cached entries",
+    )
+
+    cache_subparsers.add_parser(
+        "path",
+        help="Show path to cache database file",
     )
 
     return parser
@@ -633,6 +667,8 @@ def cmd_download(args: argparse.Namespace) -> int:
     resolution = getattr(args, "resolution", "1m")
     product = getattr(args, "product", "nmt")
 
+    workers = getattr(args, "workers", 4)
+
     provider, storage = _create_provider_and_storage(
         product, output_dir, vertical_crs, resolution
     )
@@ -642,6 +678,7 @@ def cmd_download(args: argparse.Namespace) -> int:
         storage=storage,
         vertical_crs=vertical_crs,
         resolution=resolution,
+        max_workers=workers,
     )
 
     skip_existing = not args.force
@@ -696,6 +733,82 @@ def cmd_download(args: argparse.Namespace) -> int:
     return 0
 
 
+def _download_godlo_list(
+    manager: DownloadManager,
+    godlo_list: list[str],
+    skip_existing: bool,
+    on_progress,
+    max_workers: int,
+) -> list[Path]:
+    """
+    Download a list of godla, using parallel threads when max_workers > 1.
+
+    Parameters
+    ----------
+    manager : DownloadManager
+        Configured download manager
+    godlo_list : list[str]
+        List of godlo identifiers to download
+    skip_existing : bool
+        Whether to skip already-downloaded files
+    on_progress : callable or None
+        Progress callback
+    max_workers : int
+        Number of parallel download threads
+
+    Returns
+    -------
+    list[Path]
+        List of downloaded file paths
+    """
+    if max_workers <= 1:
+        # Sequential download
+        all_paths: list[Path] = []
+        for godlo in godlo_list:
+            result = manager.download_sheet(
+                godlo,
+                skip_existing=skip_existing,
+                on_progress=on_progress,
+            )
+            if isinstance(result, list):
+                all_paths.extend(result)
+            else:
+                all_paths.append(result)
+        return all_paths
+
+    # Parallel download using ThreadPoolExecutor
+    import concurrent.futures
+    import threading
+
+    all_paths: list[Path] = []
+    lock = threading.Lock()
+
+    def _download_one(godlo: str) -> list[Path]:
+        result = manager.download_sheet(
+            godlo,
+            skip_existing=skip_existing,
+            on_progress=on_progress,
+        )
+        if isinstance(result, list):
+            return result
+        return [result]
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_godlo = {
+            executor.submit(_download_one, godlo): godlo for godlo in godlo_list
+        }
+        for future in concurrent.futures.as_completed(future_to_godlo):
+            godlo = future_to_godlo[future]
+            try:
+                paths = future.result()
+                with lock:
+                    all_paths.extend(paths)
+            except (DownloadError, ValidationError):
+                raise
+
+    return all_paths
+
+
 def _cmd_download_bbox(args: argparse.Namespace) -> int:
     """
     Handle download command in bbox mode.
@@ -739,6 +852,7 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
     vertical_crs = getattr(args, "vertical_crs", "KRON86")
     resolution = getattr(args, "resolution", "1m")
     product = getattr(args, "product", "nmt")
+    workers = getattr(args, "workers", 4)
 
     provider, storage = _create_provider_and_storage(
         product, output_dir, vertical_crs, resolution
@@ -749,6 +863,7 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
         storage=storage,
         vertical_crs=vertical_crs,
         resolution=resolution,
+        max_workers=workers,
     )
 
     skip_existing = not args.force
@@ -767,17 +882,9 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
         print()
 
     try:
-        all_paths = []
-        for godlo in godlo_list:
-            result = manager.download_sheet(
-                godlo,
-                skip_existing=skip_existing,
-                on_progress=on_progress,
-            )
-            if isinstance(result, list):
-                all_paths.extend(result)
-            else:
-                all_paths.append(result)
+        all_paths = _download_godlo_list(
+            manager, godlo_list, skip_existing, on_progress, workers
+        )
 
         if not args.quiet:
             print()
@@ -834,6 +941,7 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
     vertical_crs = getattr(args, "vertical_crs", "KRON86")
     resolution = getattr(args, "resolution", "1m")
     product = getattr(args, "product", "nmt")
+    workers = getattr(args, "workers", 4)
 
     provider, storage = _create_provider_and_storage(
         product, output_dir, vertical_crs, resolution
@@ -844,6 +952,7 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
         storage=storage,
         vertical_crs=vertical_crs,
         resolution=resolution,
+        max_workers=workers,
     )
 
     skip_existing = not args.force
@@ -862,17 +971,9 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
         print()
 
     try:
-        all_paths = []
-        for godlo in godlo_list:
-            result = manager.download_sheet(
-                godlo,
-                skip_existing=skip_existing,
-                on_progress=on_progress,
-            )
-            if isinstance(result, list):
-                all_paths.extend(result)
-            else:
-                all_paths.append(result)
+        all_paths = _download_godlo_list(
+            manager, godlo_list, skip_existing, on_progress, workers
+        )
 
         if not args.quiet:
             print()
@@ -1243,6 +1344,60 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
         return 1
 
 
+def cmd_cache(args: argparse.Namespace) -> int:
+    """
+    Execute cache management commands.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed command-line arguments
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, 1 for error)
+    """
+    from kartograf.cache import MetadataCache
+
+    if args.cache_command is None:
+        print("Usage: kartograf cache <command>")
+        print("Commands: stats, clear, path")
+        print("Run 'kartograf cache <command> --help' for details")
+        return 0
+
+    cache = MetadataCache()
+
+    try:
+        if args.cache_command == "path":
+            print(cache.stats()["db_path"])
+            return 0
+
+        if args.cache_command == "stats":
+            st = cache.stats()
+            print("Metadata cache statistics:")
+            print(f"  URL entries:   {st['url_count']}")
+            print(f"  TERYT entries: {st['teryt_count']}")
+            db_size_kb = st["db_size_bytes"] / 1024
+            if db_size_kb < 1024:
+                print(f"  Database size: {db_size_kb:.1f} KB")
+            else:
+                print(f"  Database size: {db_size_kb / 1024:.1f} MB")
+            print(f"  Database path: {st['db_path']}")
+            return 0
+
+        if args.cache_command == "clear":
+            cache.clear()
+            cache.vacuum()
+            print("Cache cleared.")
+            return 0
+
+    finally:
+        cache.close()
+
+    return 0
+
+
 def main(args: list[str] | None = None) -> int:
     """
     Main entry point for the CLI.
@@ -1275,6 +1430,9 @@ def main(args: list[str] | None = None) -> int:
 
     if parsed_args.command == "soilgrids":
         return cmd_soilgrids(parsed_args)
+
+    if parsed_args.command == "cache":
+        return cmd_cache(parsed_args)
 
     # Unknown command (shouldn't happen with argparse)
     print(f"Unknown command: {parsed_args.command}", file=sys.stderr)

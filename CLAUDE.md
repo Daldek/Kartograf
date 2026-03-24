@@ -54,8 +54,10 @@ kartograf/
 │   ├── bdot10k.py       # Bdot10kProvider — BDOT10k z GUGiK
 │   ├── corine.py        # CorineProvider — CORINE z Copernicus (CLMS API + WMS)
 │   └── soilgrids.py     # SoilGridsProvider — dane glebowe z ISRIC (WCS)
+├── cache/               # Cache metadanych
+│   └── metadata.py      # MetadataCache — SQLite WAL, TTL 7d, thread-safe
 ├── download/            # Zarzadzanie pobieraniem NMT/NMPT/Orto
-│   ├── manager.py       # DownloadManager — koordynacja pobierania arkuszy
+│   ├── manager.py       # DownloadManager — koordynacja pobierania arkuszy (parallel)
 │   └── storage.py       # FileStorage — hierarchiczna struktura katalogow
 ├── landcover/           # Zarzadzanie pobieraniem pokrycia terenu
 │   └── manager.py       # LandCoverManager — dispatch do providerow
@@ -95,7 +97,7 @@ kartograf parse N-34-130-D-d-2-4
 kartograf download N-34-130-D-d-2-4
 kartograf download N-34-130-D-d-2-4 --product nmpt
 kartograf download N-34-130-D-d-2-4 --product orto
-kartograf download N-34-130-D --scale 1:10000 --resolution 5m
+kartograf download N-34-130-D --scale 1:10000 --resolution 5m --workers 8
 kartograf download --geometry area.shp
 kartograf download --geometry area.gpkg --layer catchments
 kartograf parse 6.179.12.20
@@ -107,6 +109,9 @@ kartograf landcover download --source soilgrids --godlo N-34-130-D --property so
 kartograf soilgrids hsg --godlo N-34-130-D --stats
 kartograf landcover list-sources
 kartograf landcover list-layers --source soilgrids
+kartograf cache stats
+kartograf cache clear
+kartograf cache path
 ```
 
 ## Workflow sesji
@@ -152,7 +157,7 @@ kartograf landcover list-layers --source soilgrids
 - Kartograf NIE zawiera danych obserwacyjnych — to zadanie IMGWTools
 
 ### Ograniczenia
-- Pobieranie jest synchroniczne (brak async/parallel) — zaplanowane na v0.6+
+- Pobieranie rownolegle: ThreadPoolExecutor, domyslnie 4 workery (CLI: --workers)
 - NMT 5m dostepne tylko w ukladzie EVRF2007
 - WCS (download_bbox) niedostepne dla NMT 5m — tylko arkusze OpenData
 - CORINE GeoTIFF wymaga OAuth2 credentials w CLMS — bez nich fallback na PNG (WMS)
