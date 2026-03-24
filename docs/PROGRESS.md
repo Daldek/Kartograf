@@ -102,7 +102,7 @@
 ### Nastepne kroki
 1. Mozaikowanie arkuszy NMT
 2. Ujednolicenie interfejsow providerow (BaseProvider vs LandCoverProvider)
-3. Merge develop → main (v0.6.0 + v0.6.1 release)
+3. Walidacja warstw WMS dla GugikOrtoProvider (osobna hierarchia dziedziczenia)
 
 ## Backlog
 
