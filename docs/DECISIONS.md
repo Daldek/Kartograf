@@ -300,6 +300,61 @@ Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja
 
 ---
 
+## ADR-018: ThreadPoolExecutor dla rownoleglego pobierania
+
+**Data:** 2026-03-03
+**Status:** Przyjeta
+
+**Kontekst:** Pobieranie hierarchii arkuszy (np. N-34-130-D → 256 arkuszy 1:10000) bylo sekwencyjne, co przy wolnym laczeniu z GUGiK trwalo bardzo dlugo. Potrzebna rownoleglosc.
+
+**Opcje:**
+- A) asyncio + aiohttp — pelna asynchronicznosc, wymaga refaktoryzacji calego stacku I/O
+- B) ThreadPoolExecutor — proste dodanie do istniejacego kodu, requests jest thread-safe
+- C) multiprocessing — osobne procesy, wiekszy narzut, trudniejsze wspoldzielenie stanu
+
+**Decyzja:** ThreadPoolExecutor (B). Requests jest thread-safe, I/O-bound task idealny dla watkow, minimalny refaktoring. `max_workers=4` jako domyslny, konfigurowalny przez CLI `--workers`.
+
+**Konsekwencje:** Wymagane thread-safe temp filenames we wszystkich providerach (pattern `pid_threadid.tmp`). DownloadResult zamiast list[Path] dla structured results. Backward-compatible: `max_workers=1` daje sekwencyjne pobieranie.
+
+---
+
+## ADR-019: SQLite WAL jako metadata cache
+
+**Data:** 2026-03-03
+**Status:** Przyjeta
+
+**Kontekst:** Kazde pobieranie arkusza wymaga request do GUGiK API po URL OpenData. Przy powtarzanych pobieraniach te same URLe sa odpytywane wielokrotnie. Podobnie BDOT10k — mapowanie punkt→TERYT.
+
+**Opcje:**
+- A) SQLite z WAL mode — plik lokalny, zero zaleznosci, concurrent reads, TTL
+- B) Redis — szybki, ale wymaga serwera, overengineering
+- C) Pickle/JSON file — proste, ale brak concurrent access, brak TTL
+
+**Decyzja:** SQLite WAL (A). Zero dodatkowych zaleznosci (sqlite3 w stdlib), WAL mode umozliwia rownoczesne odczyty z ThreadPoolExecutor, TTL 7 dni zapobiega stalym danym, threading.Lock chroni zapisy.
+
+**Konsekwencje:** Nowy modul `kartograf/cache/metadata.py`, `.kartograf_cache.db` w katalogu roboczym, CLI `kartograf cache` do zarzadzania. `prune_expired()` czysci stale wpisy. Optional — providery dzialaja bez cache.
+
+---
+
+## ADR-020: Walidacja warstw WMS przez GetCapabilities
+
+**Data:** 2026-03-24
+**Status:** Przyjeta
+
+**Kontekst:** Hardcoded nazwy warstw WMS w GugikProvider okazaly sie bledne dla NMT 5m — GUGiK zmienil nazwy warstw (np. `SkorowidzeNMT2022` → `SkorowidzeNMT2022iStarsze`, dodal `SkorowidzeNMT2025`). Blad powodowal niepowodzenie wszystkich pobrań NMT 5m. Potrzebny mechanizm wykrywania rozbieznosci miedzy hardcoded a live WMS.
+
+**Opcje:**
+- A) Walidacja przy inicjalizacji providera — zapytanie GetCapabilities w `__init__()`, natychmiastowa detekcja
+- B) Lazy validation — zapytanie przy pierwszym `_get_opendata_url()`, bez kosztu jesli provider nie jest uzywany
+- C) Periodyczna walidacja — cron/timer co N godzin
+- D) Brak walidacji — poleganie na hardcoded wartosciach, reczna aktualizacja
+
+**Decyzja:** Lazy validation (opcja B). Nowe metody `_fetch_wms_layers()` (GetCapabilities XML → lista warstw) i `_get_validated_layers()` (porownanie hardcoded z live). Walidacja wykonywana raz, wynik cache'owany in-memory per instancja providera (bez lock — benign duplicate przy concurrent access). Osobny timeout 10s dla GetCapabilities (krotszy niz standardowy 30s). Przy rozbieznosci: warning + auto-aktualizacja do live warstw. Przy bledie GetCapabilities: warning + fallback na hardcoded warstwy.
+
+**Konsekwencje:** Automatyczne wykrywanie zmian warstw WMS bez recznej aktualizacji kodu. Zero kosztu jesli provider nie jest uzywany (lazy). GugikNmptProvider dziedziczy walidacje z GugikProvider bez dodatkowego kodu. GugikOrtoProvider poza zakresem (inna hierarchia dziedziczenia, inny format warstw). 17 nowych testow w `tests/test_wms_layer_validation.py`.
+
+---
+
 <!-- Szablon nowej decyzji:
 
 ## ADR-XXX: Tytul

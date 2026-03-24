@@ -3,8 +3,11 @@ Land Cover download manager.
 
 This module provides the LandCoverManager class for coordinating
 downloads of land cover data from multiple providers.
+
+Supports parallel batch downloads via ThreadPoolExecutor.
 """
 
+import concurrent.futures
 import logging
 from pathlib import Path
 
@@ -283,6 +286,88 @@ class LandCoverManager:
         if output_path is None:
             output_path = self._output_dir / f"{self._provider.name}_{godlo}.gpkg"
         return self._provider.download_by_godlo(godlo, output_path, **kwargs)
+
+    def download_batch(
+        self,
+        items: list[dict],
+        max_workers: int = 4,
+        **kwargs,
+    ) -> list[Path]:
+        """
+        Download land cover data for multiple items in parallel.
+
+        Each item dict should contain exactly one of: teryt, bbox, godlo.
+
+        Parameters
+        ----------
+        items : list[dict]
+            List of download items, each with one of:
+            - {"teryt": "1465"}
+            - {"bbox": BBox(...)}
+            - {"godlo": "N-34-130-D"}
+        max_workers : int, optional
+            Maximum number of parallel download threads (default: 4).
+            When <= 1, downloads sequentially.
+        **kwargs
+            Additional provider-specific options passed to each download.
+
+        Returns
+        -------
+        list[Path]
+            List of paths to successfully downloaded files.
+            Failed items are logged but do not stop the batch.
+
+        Examples
+        --------
+        >>> manager = LandCoverManager()
+        >>> items = [
+        ...     {"teryt": "1465"},
+        ...     {"teryt": "1261"},
+        ...     {"godlo": "N-34-130-D"},
+        ... ]
+        >>> paths = manager.download_batch(items, max_workers=2)
+        """
+        if not items:
+            return []
+
+        def _download_single(item: dict) -> Path | None:
+            """Download a single item, returning path or None on failure."""
+            try:
+                return self.download(**item, **kwargs)
+            except Exception as e:
+                item_desc = str(item)
+                logger.error(f"Batch download failed for {item_desc}: {e}")
+                return None
+
+        results: list[Path] = []
+
+        if max_workers <= 1:
+            # Sequential
+            for item in items:
+                path = _download_single(item)
+                if path is not None:
+                    results.append(path)
+        else:
+            # Parallel
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=max_workers
+            ) as executor:
+                futures = {
+                    executor.submit(_download_single, item): item for item in items
+                }
+                for future in concurrent.futures.as_completed(futures):
+                    try:
+                        path = future.result()
+                        if path is not None:
+                            results.append(path)
+                    except Exception as e:
+                        item_desc = str(futures[future])
+                        logger.error(
+                            f"Unexpected error in batch download for {item_desc}: {e}"
+                        )
+
+        logger.info(f"Batch download complete: {len(results)}/{len(items)} successful")
+        return results
 
     def _generate_output_path(
         self,

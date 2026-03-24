@@ -7,6 +7,59 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-03-24
+
+### Fixed
+- **NMT 5m: naprawione nazwy warstw WMS**
+  - `WMS_LAYERS["5m"]["EVRF2007"]`: `SkorowidzeNMT2022` → `SkorowidzeNMT2022iStarsze`
+  - Usunieta nieistniejaca warstwa `SkorowidzeNMT2021iStarsze`
+  - Dodana brakujaca warstwa `SkorowidzeNMT2025`
+  - Bledne nazwy powodowaly brak wynikow przy pobieraniu NMT 5m mimo dostepnosci danych
+
+### Added
+- **Walidacja warstw WMS przez GetCapabilities**
+  - `_fetch_wms_layers()` — pobiera liste dostepnych warstw z WMS GetCapabilities
+  - `_get_validated_layers()` — porownuje hardcoded warstwy z live WMS, auto-aktualizacja przy rozbieznosci
+  - Lazy validation: tylko przy pierwszym wywolaniu `_get_opendata_url()`
+  - Graceful fallback: jesli GetCapabilities niedostepne, uzywa hardcoded warstw
+  - Warning logowany przy wykryciu rozbieznosci miedzy hardcoded a live
+  - In-memory cache per instancja providera (bez lock, benign duplicate OK)
+  - Osobny timeout 10s dla GetCapabilities
+  - Dziala dla GugikProvider (NMT) i GugikNmptProvider (NMPT) przez dziedziczenie
+  - GugikOrtoProvider nieobslugiwany (inna hierarchia dziedziczenia)
+
+### Tests
+- **1007 testow** (+17 nowych)
+  - Nowy `tests/test_wms_layer_validation.py` — 17 testow dla walidacji warstw WMS
+
+---
+
+## [0.6.0] - 2026-03-03
+
+### Added
+- **Parallel downloads with ThreadPoolExecutor**
+  - `DownloadManager(max_workers=4)` — configurable thread pool for hierarchy downloads
+  - `DownloadResult` dataclass — structured results with succeeded/failed/skipped tracking
+  - `_download_hierarchy_parallel()` — concurrent sheet downloads with progress callbacks
+  - `LandCoverManager.download_batch()` — parallel batch download for land cover data
+  - CLI: `--workers`/`-w` flag on `kartograf download` (default: 4)
+  - Thread-safe temp filenames in all providers (`pid_threadid.tmp` pattern)
+- **SQLite metadata cache (MetadataCache)**
+  - `kartograf/cache/metadata.py` — SQLite WAL mode, TTL 7 days, thread-safe writes
+  - URL cache for GUGiK OpenData lookups (NMT, NMPT, Orto)
+  - TERYT cache for BDOT10k point-to-TERYT resolution
+  - `prune_expired()` — automatic cleanup of stale entries
+  - Integrated with GugikProvider, GugikNmptProvider, GugikOrtoProvider, Bdot10kProvider
+  - CLI: `kartograf cache stats|clear|path`
+- **PL-2000 BBox verification tests**
+  - 67 new tests: reference values, hierarchy consistency, live WMS, edge cases
+  - `@pytest.mark.live` marker for GUGiK WMS integration tests
+- **Public API: eksport MetadataCache i DownloadResult**
+  - `from kartograf import MetadataCache, DownloadResult`
+
+### Tests
+- **990 testow** (+155 nowych)
+
 ---
 
 ## [0.5.0] - 2026-03-02
@@ -521,7 +574,9 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
-[Unreleased]: https://github.com/Daldek/Kartograf/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Daldek/Kartograf/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/Daldek/Kartograf/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/Daldek/Kartograf/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Daldek/Kartograf/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Daldek/Kartograf/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Daldek/Kartograf/compare/v0.3.2...v0.4.0

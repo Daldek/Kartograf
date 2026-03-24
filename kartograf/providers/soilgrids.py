@@ -31,6 +31,8 @@ Statistics: mean, Q0.05, Q0.5, Q0.95, uncertainty
 """
 
 import logging
+import os
+import threading
 import time
 from pathlib import Path
 from urllib.parse import urlencode
@@ -129,7 +131,7 @@ class SoilGridsProvider(LandCoverProvider):
         "https://mapy.geoportal.gov.pl/wss/service/PZGIK/BDOT/WMS/PobieranieBDOT10k"
     )
 
-    def __init__(self, session: requests.Session | None = None):
+    def __init__(self, session: requests.Session | None = None, cache=None):
         """
         Initialize SoilGrids provider.
 
@@ -137,8 +139,13 @@ class SoilGridsProvider(LandCoverProvider):
         ----------
         session : requests.Session, optional
             HTTP session to use for requests.
+        cache : MetadataCache, optional
+            Metadata cache instance. Currently unused for SoilGrids
+            (WCS URLs are computed, not looked up), but accepted for
+            API consistency with other providers.
         """
         self._session = session
+        self._cache = cache
 
     @property
     def name(self) -> str:
@@ -598,8 +605,15 @@ class SoilGridsProvider(LandCoverProvider):
         )
 
     def _save_response(self, response: requests.Response, output_path: Path) -> None:
-        """Save HTTP response to file atomically."""
-        temp_path = output_path.with_suffix(output_path.suffix + ".tmp")
+        """
+        Save HTTP response to file atomically.
+
+        Uses a unique temp filename per process/thread to prevent
+        collisions when multiple threads download concurrently.
+        """
+        thread_id = threading.current_thread().ident
+        temp_suffix = f"{output_path.suffix}.{os.getpid()}_{thread_id}.tmp"
+        temp_path = output_path.with_suffix(temp_suffix)
 
         try:
             with open(temp_path, "wb") as f:

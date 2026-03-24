@@ -1,10 +1,10 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.3
-**Data:** 2026-03-02
+**Wersja:** 3.4
+**Data:** 2026-03-24
 **Product Owner:** Piotr
-**Status:** Production (v0.5.0)
+**Status:** Production (v0.6.1)
 
 ---
 
@@ -487,7 +487,7 @@ from kartograf import (
     DownloadError,
 
     # Version
-    __version__,  # "0.5.0"
+    __version__,  # "0.6.1"
 )
 ```
 
@@ -581,6 +581,6 @@ HYDROGRAF (główna aplikacja)
 
 ---
 
-**Wersja dokumentu:** 3.3
-**Data ostatniej aktualizacji:** 2026-03-02
-**Status:** Production - v0.5.0
+**Wersja dokumentu:** 3.4
+**Data ostatniej aktualizacji:** 2026-03-24
+**Status:** Production - v0.6.1

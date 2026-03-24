@@ -14,7 +14,9 @@ Unlike NMT/NMPT, orthophotos:
 """
 
 import logging
+import os
 import re
+import threading
 import time
 from pathlib import Path
 from urllib.parse import urlencode
@@ -84,7 +86,7 @@ class GugikOrtoProvider(BaseProvider):
     MAX_RETRIES = 3
     RETRY_BACKOFF_BASE = 2
 
-    def __init__(self, session: requests.Session | None = None):
+    def __init__(self, session: requests.Session | None = None, cache=None):
         """
         Initialize GUGiK Ortofotomapa provider.
 
@@ -92,8 +94,12 @@ class GugikOrtoProvider(BaseProvider):
         ----------
         session : requests.Session, optional
             HTTP session to use for requests.
+        cache : MetadataCache, optional
+            Metadata cache instance for caching WMS lookup results.
+            If None, no caching is performed (default behavior).
         """
         self._session = session
+        self._cache = cache
 
     @property
     def name(self) -> str:
@@ -179,6 +185,13 @@ class GugikOrtoProvider(BaseProvider):
         DownloadError
             If no file is found
         """
+        # Check cache first
+        if self._cache is not None:
+            cached_url = self._cache.get_url(godlo, "orto", "none", "orto")
+            if cached_url is not None:
+                logger.debug(f"Using cached URL for ortofoto {godlo}")
+                return cached_url
+
         from kartograf.core.sheet_parser import SheetParser
 
         parser = SheetParser(godlo)
@@ -224,9 +237,11 @@ class GugikOrtoProvider(BaseProvider):
                     for found_url in urls:
                         if godlo in found_url:
                             logger.debug(f"Found OpenData URL: {found_url}")
+                            self._cache_url(godlo, found_url)
                             return found_url
 
                     logger.debug(f"Found OpenData URL (no exact match): {urls[0]}")
+                    self._cache_url(godlo, urls[0])
                     return urls[0]
 
             except requests.RequestException as e:
@@ -239,6 +254,11 @@ class GugikOrtoProvider(BaseProvider):
             f"Check https://mapy.geoportal.gov.pl for data availability.",
             godlo=godlo,
         )
+
+    def _cache_url(self, godlo: str, url: str) -> None:
+        """Store URL in cache if cache is available."""
+        if self._cache is not None:
+            self._cache.set_url(godlo, "orto", "none", "orto", url)
 
     # =========================================================================
     # Download by bbox → WCS (GeoTIFF)
@@ -370,8 +390,15 @@ class GugikOrtoProvider(BaseProvider):
         return response
 
     def _save_response(self, response: requests.Response, output_path: Path) -> None:
-        """Save HTTP response to file atomically."""
-        temp_path = output_path.with_suffix(output_path.suffix + ".tmp")
+        """
+        Save HTTP response to file atomically.
+
+        Uses a unique temp filename per process/thread to prevent
+        collisions when multiple threads download concurrently.
+        """
+        thread_id = threading.current_thread().ident
+        temp_suffix = f"{output_path.suffix}.{os.getpid()}_{thread_id}.tmp"
+        temp_path = output_path.with_suffix(temp_suffix)
 
         try:
             with open(temp_path, "wb") as f:

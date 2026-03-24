@@ -3,11 +3,15 @@ Download manager for coordinating NMT data downloads.
 
 This module provides the DownloadManager class for downloading
 single sheets and entire hierarchies of map sheets.
+
+Supports parallel downloads via ThreadPoolExecutor when max_workers > 1.
 """
 
+import concurrent.futures
 import logging
+import threading
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from kartograf.core.sheet_parser import BBox, SheetParser
@@ -50,6 +54,36 @@ class DownloadProgress:
         if self.total == 0:
             return 100.0
         return (self.current / self.total) * 100
+
+
+@dataclass
+class DownloadResult:
+    """
+    Result of a batch/hierarchy download operation.
+
+    Attributes
+    ----------
+    succeeded : list[Path]
+        Paths to successfully downloaded files
+    failed : list[str]
+        Godlo identifiers that failed to download
+    skipped : list[str]
+        Godlo identifiers that were skipped (already existed)
+    """
+
+    succeeded: list[Path] = field(default_factory=list)
+    failed: list[str] = field(default_factory=list)
+    skipped: list[str] = field(default_factory=list)
+
+    @property
+    def total(self) -> int:
+        """Return total number of sheets processed."""
+        return len(self.succeeded) + len(self.failed) + len(self.skipped)
+
+    @property
+    def all_paths(self) -> list[Path]:
+        """Return paths of successfully downloaded files."""
+        return list(self.succeeded)
 
 
 # Type alias for progress callback
@@ -109,6 +143,7 @@ class DownloadManager:
         storage: FileStorage | None = None,
         vertical_crs: str = "EVRF2007",
         resolution: str = "1m",
+        max_workers: int = 1,
     ):
         """
         Initialize download manager.
@@ -128,6 +163,10 @@ class DownloadManager:
             Grid resolution: "1m" or "5m" (default: "1m").
             Note: 5m is only available for EVRF2007 and does not support
             bbox download (WCS).
+        max_workers : int, optional
+            Maximum number of parallel download threads (default: 1).
+            When 1, downloads are sequential (backward compatible).
+            When > 1, uses ThreadPoolExecutor for parallel downloads.
         """
         # If resolution is 5m, force EVRF2007
         if resolution == "5m" and vertical_crs != "EVRF2007":
@@ -144,6 +183,7 @@ class DownloadManager:
         self._vertical_crs = vertical_crs
         self._resolution = resolution
         self._default_ext = self._provider.default_extension
+        self._max_workers = max(1, max_workers)
 
     @property
     def vertical_crs(self) -> str:
@@ -233,6 +273,7 @@ class DownloadManager:
         target_scale: str,
         skip_existing: bool = True,
         on_progress: ProgressCallback | None = None,
+        max_workers: int | None = None,
     ) -> list[Path]:
         """
         Download all descendant sheets to target scale as ASC.
@@ -247,6 +288,9 @@ class DownloadManager:
             Skip download if file exists (default: True)
         on_progress : callable, optional
             Callback function for progress updates.
+        max_workers : int, optional
+            Maximum parallel download threads. If None, uses instance default.
+            When <= 1, downloads sequentially (backward compatible).
 
         Returns
         -------
@@ -274,12 +318,68 @@ class DownloadManager:
         descendants = parser.get_all_descendants(target_scale)
 
         total = len(descendants)
-        downloaded_paths = []
-        failed_count = 0
+        workers = max_workers if max_workers is not None else self._max_workers
 
         logger.info(
-            f"Starting hierarchy download: {godlo} → {target_scale} ({total} sheets)"
+            f"Starting hierarchy download: {godlo} → {target_scale} "
+            f"({total} sheets, workers={workers})"
         )
+
+        if workers <= 1:
+            # Sequential download (backward compatible)
+            return self._download_hierarchy_sequential(
+                descendants, total, skip_existing, on_progress
+            )
+        else:
+            # Parallel download with ThreadPoolExecutor
+            return self._download_hierarchy_parallel(
+                descendants, total, skip_existing, on_progress, workers
+            )
+
+    def _download_single_sheet_task(
+        self,
+        descendant_godlo: str,
+        skip_existing: bool,
+    ) -> tuple[str, Path | None, str, str]:
+        """
+        Download a single sheet — used as a task for both sequential and parallel modes.
+
+        Parameters
+        ----------
+        descendant_godlo : str
+            Godlo identifier of the sheet to download
+        skip_existing : bool
+            Whether to skip if file already exists
+
+        Returns
+        -------
+        tuple[str, Path | None, str, str]
+            (godlo, path_or_none, status, message)
+            status is one of: "skipped", "completed", "failed"
+        """
+        try:
+            target_path = self._storage.get_path(descendant_godlo, self._default_ext)
+
+            if skip_existing and target_path.exists():
+                return (descendant_godlo, target_path, "skipped", "Already exists")
+
+            path = self._provider.download(descendant_godlo, target_path)
+            return (descendant_godlo, path, "completed", "")
+
+        except DownloadError as e:
+            logger.error(f"Failed to download {descendant_godlo}: {e}")
+            return (descendant_godlo, None, "failed", str(e))
+
+    def _download_hierarchy_sequential(
+        self,
+        descendants: list,
+        total: int,
+        skip_existing: bool,
+        on_progress: ProgressCallback | None,
+    ) -> list[Path]:
+        """Execute sequential download of all descendants."""
+        downloaded_paths = []
+        failed_count = 0
 
         for i, descendant in enumerate(descendants, 1):
             current_godlo = descendant.godlo
@@ -340,6 +440,100 @@ class DownloadManager:
                             message=str(e),
                         )
                     )
+
+        logger.info(
+            f"Hierarchy download complete: {len(downloaded_paths)}/{total} successful, "
+            f"{failed_count} failed"
+        )
+
+        return downloaded_paths
+
+    def _download_hierarchy_parallel(
+        self,
+        descendants: list,
+        total: int,
+        skip_existing: bool,
+        on_progress: ProgressCallback | None,
+        max_workers: int,
+    ) -> list[Path]:
+        """Execute parallel download of all descendants using ThreadPoolExecutor."""
+        downloaded_paths: list[Path] = []
+        failed_count = 0
+        lock = threading.Lock()
+        counter = [0]  # mutable counter for progress tracking
+
+        def _submit_and_handle(descendant):
+            """Download a single descendant and return the result."""
+            return self._download_single_sheet_task(descendant.godlo, skip_existing)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_godlo = {
+                executor.submit(_submit_and_handle, desc): desc.godlo
+                for desc in descendants
+            }
+
+            for future in concurrent.futures.as_completed(future_to_godlo):
+                godlo_id = future_to_godlo[future]
+                try:
+                    current_godlo, path, status, message = future.result()
+                except Exception as e:
+                    # Unexpected exception from the future
+                    logger.error(f"Unexpected error downloading {godlo_id}: {e}")
+                    with lock:
+                        failed_count += 1
+                        counter[0] += 1
+                        current_count = counter[0]
+                    if on_progress:
+                        on_progress(
+                            DownloadProgress(
+                                current=current_count,
+                                total=total,
+                                godlo=godlo_id,
+                                status="failed",
+                                message=str(e),
+                            )
+                        )
+                    continue
+
+                with lock:
+                    counter[0] += 1
+                    current_count = counter[0]
+
+                    if status in ("completed", "skipped") and path is not None:
+                        downloaded_paths.append(path)
+                    elif status == "failed":
+                        failed_count += 1
+
+                if on_progress:
+                    if status == "skipped":
+                        on_progress(
+                            DownloadProgress(
+                                current=current_count,
+                                total=total,
+                                godlo=current_godlo,
+                                status="skipped",
+                                message=message,
+                            )
+                        )
+                    elif status == "completed":
+                        on_progress(
+                            DownloadProgress(
+                                current=current_count,
+                                total=total,
+                                godlo=current_godlo,
+                                status="completed",
+                            )
+                        )
+                    elif status == "failed":
+                        on_progress(
+                            DownloadProgress(
+                                current=current_count,
+                                total=total,
+                                godlo=current_godlo,
+                                status="failed",
+                                message=message,
+                            )
+                        )
 
         logger.info(
             f"Hierarchy download complete: {len(downloaded_paths)}/{total} successful, "
@@ -460,5 +654,6 @@ class DownloadManager:
         return (
             f"DownloadManager(provider={self._provider.name}, "
             f"output_dir='{self._storage.output_dir}', "
-            f"resolution='{self._resolution}')"
+            f"resolution='{self._resolution}', "
+            f"max_workers={self._max_workers})"
         )

@@ -1,9 +1,9 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.4
-**Data:** 2026-03-02
-**Status:** Production (v0.5.0)
+**Wersja:** 3.5
+**Data:** 2026-03-24
+**Status:** Production (v0.6.1)
 
 ---
 
@@ -311,9 +311,10 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-02-08 | 3.2 | Geometry file selection (--geometry SHP/GPKG) |
 | 2026-03-02 | 3.3 | Removed BDOT10k category filtering (download full package) |
 | 2026-03-02 | 3.4 | PL-2000 support, bump to v0.5.0 |
+| 2026-03-24 | 3.5 | WMS layer validation, 5m bugfix, bump to v0.6.1 |
 
 ---
 
-**Wersja dokumentu:** 3.4
-**Data ostatniej aktualizacji:** 2026-03-02
-**Status:** Production - v0.5.0
+**Wersja dokumentu:** 3.5
+**Data ostatniej aktualizacji:** 2026-03-24
+**Status:** Production - v0.6.1

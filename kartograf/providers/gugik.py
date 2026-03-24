@@ -15,8 +15,11 @@ Supported resolutions:
 """
 
 import logging
+import os
 import re
+import threading
 import time
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -114,10 +117,10 @@ class GugikProvider(BaseProvider):
         "5m": {
             # 5m layers (only EVRF2007)
             "EVRF2007": [
+                "SkorowidzeNMT2025",
                 "SkorowidzeNMT2024",
                 "SkorowidzeNMT2023",
-                "SkorowidzeNMT2022",
-                "SkorowidzeNMT2021iStarsze",
+                "SkorowidzeNMT2022iStarsze",
             ],
         },
     }
@@ -152,11 +155,15 @@ class GugikProvider(BaseProvider):
     MAX_RETRIES = 3
     RETRY_BACKOFF_BASE = 2
 
+    # Product identifier for cache key
+    _CACHE_PRODUCT = "nmt"
+
     def __init__(
         self,
         session: requests.Session | None = None,
         vertical_crs: str = "EVRF2007",
         resolution: str = "1m",
+        cache=None,
     ):
         """
         Initialize GUGiK provider.
@@ -171,6 +178,9 @@ class GugikProvider(BaseProvider):
         resolution : str, optional
             Grid resolution: "1m" or "5m". Default is "1m".
             Note: 5m resolution is only available for EVRF2007.
+        cache : MetadataCache, optional
+            Metadata cache instance for caching WMS lookup results.
+            If None, no caching is performed (default behavior).
         """
         if resolution not in self.SUPPORTED_RESOLUTIONS:
             raise ValueError(
@@ -196,6 +206,8 @@ class GugikProvider(BaseProvider):
         self._session = session
         self._vertical_crs = vertical_crs
         self._resolution = resolution
+        self._cache = cache
+        self._validated_layers: dict[tuple[str, str], list[str]] = {}
 
     @property
     def vertical_crs(self) -> str:
@@ -221,6 +233,134 @@ class GugikProvider(BaseProvider):
     def base_url(self) -> str:
         """Return base URL for GUGiK service."""
         return self.BASE_URL
+
+    # =========================================================================
+    # WMS layer validation
+    # =========================================================================
+
+    def _fetch_wms_layers(self, wms_endpoint: str, timeout: int = 10) -> list[str]:
+        """
+        Fetch available Skorowidze layers from WMS GetCapabilities.
+
+        Parameters
+        ----------
+        wms_endpoint : str
+            WMS endpoint URL
+        timeout : int, optional
+            Request timeout in seconds (default: 10)
+
+        Returns
+        -------
+        list[str]
+            Sorted list of Skorowidze layer names (newest first,
+            iStarsze layers last)
+
+        Raises
+        ------
+        ValueError
+            If no Skorowidze layers found in response
+        requests.RequestException
+            On network errors
+        """
+        # Use a dedicated session to avoid interfering with the main
+        # session's mock side_effects in tests or download state
+        session = requests.Session()
+        params = {
+            "SERVICE": "WMS",
+            "VERSION": "1.3.0",
+            "REQUEST": "GetCapabilities",
+        }
+        response = session.get(wms_endpoint, params=params, timeout=timeout)
+        response.raise_for_status()
+
+        root = ET.fromstring(response.text)
+
+        # Try WMS 1.3.0 namespace first, fall back to namespace-less
+        wms_ns = "{http://www.opengis.net/wms}"
+        names = [elem.text for elem in root.iter(f"{wms_ns}Name") if elem.text]
+        if not names:
+            names = [elem.text for elem in root.iter("Name") if elem.text]
+
+        # Filter to Skorowidze layers
+        skorowidze = [n for n in names if n.startswith("Skorowidze")]
+
+        if not skorowidze:
+            raise ValueError("No Skorowidze layers found in GetCapabilities response")
+
+        # Sort: regular entries by year descending first,
+        # then iStarsze by year descending, then entries without year
+        def sort_key(name: str) -> tuple[int, int]:
+            year_match = re.search(r"(\d{4})", name)
+            if not year_match:
+                return (2, 0)
+            year = int(year_match.group(1))
+            if "iStarsze" in name:
+                return (1, -year)
+            return (0, -year)
+
+        skorowidze.sort(key=sort_key)
+
+        return skorowidze
+
+    def _get_validated_layers(
+        self, resolution: str, vertical_crs: str, timeout: int = 10
+    ) -> list[str]:
+        """
+        Get validated WMS layers, checking GetCapabilities against hardcoded.
+
+        Results are cached per (resolution, vertical_crs) pair for the
+        lifetime of this provider instance.
+
+        Parameters
+        ----------
+        resolution : str
+            Grid resolution ("1m" or "5m")
+        vertical_crs : str
+            Vertical CRS ("KRON86" or "EVRF2007")
+        timeout : int, optional
+            Request timeout for GetCapabilities (default: 10)
+
+        Returns
+        -------
+        list[str]
+            List of WMS layer names to query
+        """
+        cached = self._validated_layers.get((resolution, vertical_crs))
+        if cached is not None:
+            return cached
+
+        hardcoded = self.WMS_LAYERS.get(resolution, {}).get(vertical_crs, [])
+
+        resolution_endpoints = self.WMS_SKOROWIDZE_ENDPOINTS.get(resolution, {})
+        wms_endpoint = resolution_endpoints.get(vertical_crs)
+
+        if not wms_endpoint:
+            self._validated_layers[(resolution, vertical_crs)] = hardcoded
+            return hardcoded
+
+        try:
+            discovered = self._fetch_wms_layers(wms_endpoint, timeout)
+
+            if set(discovered) != set(hardcoded):
+                logger.warning(
+                    f"WMS GetCapabilities returned different layers than hardcoded for "
+                    f"resolution={resolution}, vertical_crs={vertical_crs}. "
+                    f"Hardcoded: {hardcoded}. Discovered: {discovered}. "
+                    f"Using discovered layers. Consider updating WMS_LAYERS in code."
+                )
+                self._validated_layers[(resolution, vertical_crs)] = discovered
+                return discovered
+
+            self._validated_layers[(resolution, vertical_crs)] = hardcoded
+            return hardcoded
+
+        except (requests.RequestException, ValueError, ET.ParseError) as e:
+            logger.warning(
+                f"Failed to fetch WMS GetCapabilities from {wms_endpoint}: {e}. "
+                f"Using hardcoded WMS_LAYERS as fallback."
+            )
+            self._validated_layers[(resolution, vertical_crs)] = hardcoded
+            return hardcoded
 
     # =========================================================================
     # Download by godło → OpenData (ASC)
@@ -300,6 +440,15 @@ class GugikProvider(BaseProvider):
         DownloadError
             If no ASC file is found
         """
+        # Check cache first
+        if self._cache is not None:
+            cached_url = self._cache.get_url(
+                godlo, self._resolution, self._vertical_crs, self._CACHE_PRODUCT
+            )
+            if cached_url is not None:
+                logger.debug(f"Using cached URL for {godlo}")
+                return cached_url
+
         from kartograf.core.sheet_parser import SheetParser
 
         parser = SheetParser(godlo)
@@ -330,8 +479,7 @@ class GugikProvider(BaseProvider):
                 godlo=godlo,
             )
 
-        resolution_layers = self.WMS_LAYERS.get(self._resolution, {})
-        wms_layers = resolution_layers.get(self._vertical_crs, [])
+        wms_layers = self._get_validated_layers(self._resolution, self._vertical_crs)
 
         if not wms_layers:
             raise DownloadError(
@@ -378,10 +526,12 @@ class GugikProvider(BaseProvider):
                     for found_url in urls:
                         if godlo in found_url:
                             logger.debug(f"Found OpenData URL: {found_url}")
+                            self._cache_url(godlo, found_url)
                             return found_url
 
                     # Fallback to first found URL
                     logger.debug(f"Found OpenData URL (no exact match): {urls[0]}")
+                    self._cache_url(godlo, urls[0])
                     return urls[0]
 
             except requests.RequestException as e:
@@ -395,6 +545,17 @@ class GugikProvider(BaseProvider):
             f"Check https://mapy.geoportal.gov.pl for data availability.",
             godlo=godlo,
         )
+
+    def _cache_url(self, godlo: str, url: str) -> None:
+        """Store URL in cache if cache is available."""
+        if self._cache is not None:
+            self._cache.set_url(
+                godlo,
+                self._resolution,
+                self._vertical_crs,
+                self._CACHE_PRODUCT,
+                url,
+            )
 
     # =========================================================================
     # Download by bbox → WCS (GeoTIFF/PNG/JPEG)
@@ -581,15 +742,30 @@ class GugikProvider(BaseProvider):
         )
 
     def _make_request(self, url: str, timeout: int) -> requests.Response:
-        """Make HTTP GET request."""
+        """
+        Make HTTP GET request.
+
+        Thread-safety: When self._session is None (default), a new
+        requests.Session is created per call, making this method safe
+        for concurrent use from multiple threads. If a shared session
+        is provided via constructor, callers must ensure thread-safety
+        of that session externally.
+        """
         session = self._session or requests.Session()
         response = session.get(url, timeout=timeout, stream=True)
         response.raise_for_status()
         return response
 
     def _save_response(self, response: requests.Response, output_path: Path) -> None:
-        """Save HTTP response to file atomically."""
-        temp_path = output_path.with_suffix(output_path.suffix + ".tmp")
+        """
+        Save HTTP response to file atomically.
+
+        Uses a unique temp filename per process/thread to prevent
+        collisions when multiple threads download concurrently.
+        """
+        thread_id = threading.current_thread().ident
+        temp_suffix = f"{output_path.suffix}.{os.getpid()}_{thread_id}.tmp"
+        temp_path = output_path.with_suffix(temp_suffix)
 
         try:
             with open(temp_path, "wb") as f:
