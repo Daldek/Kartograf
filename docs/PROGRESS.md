@@ -16,11 +16,12 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
-| Pokrycie testami | ✅ Gotowy | ~84%, 990 testow, cel 80% osiagniety |
+| Pokrycie testami | ✅ Gotowy | ~84%, 1007 testow, cel 80% osiagniety |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0 |
 | Weryfikacja BBox PL-2000 | ✅ Gotowy | 67 testow, reference values + live WMS |
+| Walidacja warstw WMS | ✅ Gotowy | GetCapabilities, lazy, fallback, v0.6.1 |
 
 <!-- Statusy: ✅ Gotowy | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
@@ -71,37 +72,37 @@
 - **Wersja:** v0.6.0
 - **Zakres:** ThreadPoolExecutor parallel downloads (--workers), SQLite MetadataCache (WAL, TTL, prune), PL-2000 BBox verification (67 testow), 990 testow
 
+### CP10 — WMS layer validation, NMT 5m bugfix
+- **Data:** 2026-03-24
+- **Wersja:** v0.6.1
+- **Zakres:** Naprawione nazwy warstw WMS 5m, walidacja warstw WMS przez GetCapabilities (lazy, fallback, in-memory cache), 1007 testow
+
 ## Ostatnia sesja
 
-**Data:** 2026-03-03
+**Data:** 2026-03-24
 
 ### Co zrobiono
-- **feat(download): parallel downloads with ThreadPoolExecutor**
-  - `DownloadManager(max_workers=4)` — konfigurowalny thread pool
-  - `DownloadResult` — structured results (succeeded/failed/skipped)
-  - `LandCoverManager.download_batch()` — parallel batch download
-  - CLI: `--workers`/`-w` na `kartograf download`
-  - Thread-safe temp filenames we wszystkich providerach
-- **feat(cache): MetadataCache z SQLite**
-  - `kartograf/cache/metadata.py` — WAL mode, TTL 7 dni, thread-safe writes
-  - URL cache dla GUGiK OpenData, TERYT cache dla BDOT10k
-  - `prune_expired()` — automatyczne czyszczenie
-  - CLI: `kartograf cache stats|clear|path`
-  - Integracja z GugikProvider, GugikNmptProvider, GugikOrtoProvider, Bdot10kProvider
-- **test(pl2000): PL-2000 BBox verification**
-  - 67 nowych testow: reference values, hierarchy, live WMS, edge cases
-  - `@pytest.mark.live` marker dla testow integracyjnych GUGiK WMS
-- **Organizacja pracy:** 3 rownolegle zespoly subagentow na git worktrees
-  - Spec compliance review + code quality review po kazdym zespole
-  - Sekwencyjny merge: verification → cache → parallel
+- **fix(gugik): naprawione nazwy warstw WMS dla NMT 5m**
+  - `SkorowidzeNMT2022` → `SkorowidzeNMT2022iStarsze`
+  - Usunieta nieistniejaca warstwa `SkorowidzeNMT2021iStarsze`
+  - Dodana brakujaca warstwa `SkorowidzeNMT2025`
+  - Blad powodowal niepowodzenie wszystkich pobrań NMT 5m
+- **feat(gugik): walidacja warstw WMS przez GetCapabilities**
+  - `_fetch_wms_layers()` — pobiera dostepne warstwy z WMS
+  - `_get_validated_layers()` — porownuje hardcoded z live, auto-aktualizacja
+  - Lazy validation (przy pierwszym `_get_opendata_url()`)
+  - Graceful fallback na hardcoded warstwy jesli GetCapabilities niedostepne
+  - In-memory cache, osobny timeout 10s
+  - Dziala dla GugikProvider i GugikNmptProvider (dziedziczenie)
+- **Dokumentacja:** ADR-020, CHANGELOG v0.6.1, PROGRESS
 - **Wyniki testow:**
-  - **990 testow passed** (+155 nowych)
+  - **1007 testow passed** (+17 nowych)
   - **Ruff: clean** (lint + format)
 
 ### Nastepne kroki
 1. Mozaikowanie arkuszy NMT
 2. Ujednolicenie interfejsow providerow (BaseProvider vs LandCoverProvider)
-3. Merge develop → main (v0.6.0 release)
+3. Merge develop → main (v0.6.0 + v0.6.1 release)
 
 ## Backlog
 
