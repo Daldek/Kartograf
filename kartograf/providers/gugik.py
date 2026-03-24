@@ -19,6 +19,7 @@ import os
 import re
 import threading
 import time
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -116,10 +117,10 @@ class GugikProvider(BaseProvider):
         "5m": {
             # 5m layers (only EVRF2007)
             "EVRF2007": [
+                "SkorowidzeNMT2025",
                 "SkorowidzeNMT2024",
                 "SkorowidzeNMT2023",
-                "SkorowidzeNMT2022",
-                "SkorowidzeNMT2021iStarsze",
+                "SkorowidzeNMT2022iStarsze",
             ],
         },
     }
@@ -206,6 +207,7 @@ class GugikProvider(BaseProvider):
         self._vertical_crs = vertical_crs
         self._resolution = resolution
         self._cache = cache
+        self._validated_layers: dict[tuple[str, str], list[str]] = {}
 
     @property
     def vertical_crs(self) -> str:
@@ -231,6 +233,134 @@ class GugikProvider(BaseProvider):
     def base_url(self) -> str:
         """Return base URL for GUGiK service."""
         return self.BASE_URL
+
+    # =========================================================================
+    # WMS layer validation
+    # =========================================================================
+
+    def _fetch_wms_layers(self, wms_endpoint: str, timeout: int = 10) -> list[str]:
+        """
+        Fetch available Skorowidze layers from WMS GetCapabilities.
+
+        Parameters
+        ----------
+        wms_endpoint : str
+            WMS endpoint URL
+        timeout : int, optional
+            Request timeout in seconds (default: 10)
+
+        Returns
+        -------
+        list[str]
+            Sorted list of Skorowidze layer names (newest first,
+            iStarsze layers last)
+
+        Raises
+        ------
+        ValueError
+            If no Skorowidze layers found in response
+        requests.RequestException
+            On network errors
+        """
+        # Use a dedicated session to avoid interfering with the main
+        # session's mock side_effects in tests or download state
+        session = requests.Session()
+        params = {
+            "SERVICE": "WMS",
+            "VERSION": "1.3.0",
+            "REQUEST": "GetCapabilities",
+        }
+        response = session.get(wms_endpoint, params=params, timeout=timeout)
+        response.raise_for_status()
+
+        root = ET.fromstring(response.text)
+
+        # Try WMS 1.3.0 namespace first, fall back to namespace-less
+        wms_ns = "{http://www.opengis.net/wms}"
+        names = [elem.text for elem in root.iter(f"{wms_ns}Name") if elem.text]
+        if not names:
+            names = [elem.text for elem in root.iter("Name") if elem.text]
+
+        # Filter to Skorowidze layers
+        skorowidze = [n for n in names if n.startswith("Skorowidze")]
+
+        if not skorowidze:
+            raise ValueError("No Skorowidze layers found in GetCapabilities response")
+
+        # Sort: regular entries by year descending first,
+        # then iStarsze by year descending, then entries without year
+        def sort_key(name: str) -> tuple[int, int]:
+            year_match = re.search(r"(\d{4})", name)
+            if not year_match:
+                return (2, 0)
+            year = int(year_match.group(1))
+            if "iStarsze" in name:
+                return (1, -year)
+            return (0, -year)
+
+        skorowidze.sort(key=sort_key)
+
+        return skorowidze
+
+    def _get_validated_layers(
+        self, resolution: str, vertical_crs: str, timeout: int = 10
+    ) -> list[str]:
+        """
+        Get validated WMS layers, checking GetCapabilities against hardcoded.
+
+        Results are cached per (resolution, vertical_crs) pair for the
+        lifetime of this provider instance.
+
+        Parameters
+        ----------
+        resolution : str
+            Grid resolution ("1m" or "5m")
+        vertical_crs : str
+            Vertical CRS ("KRON86" or "EVRF2007")
+        timeout : int, optional
+            Request timeout for GetCapabilities (default: 10)
+
+        Returns
+        -------
+        list[str]
+            List of WMS layer names to query
+        """
+        cached = self._validated_layers.get((resolution, vertical_crs))
+        if cached is not None:
+            return cached
+
+        hardcoded = self.WMS_LAYERS.get(resolution, {}).get(vertical_crs, [])
+
+        resolution_endpoints = self.WMS_SKOROWIDZE_ENDPOINTS.get(resolution, {})
+        wms_endpoint = resolution_endpoints.get(vertical_crs)
+
+        if not wms_endpoint:
+            self._validated_layers[(resolution, vertical_crs)] = hardcoded
+            return hardcoded
+
+        try:
+            discovered = self._fetch_wms_layers(wms_endpoint, timeout)
+
+            if set(discovered) != set(hardcoded):
+                logger.warning(
+                    f"WMS GetCapabilities returned different layers than hardcoded for "
+                    f"resolution={resolution}, vertical_crs={vertical_crs}. "
+                    f"Hardcoded: {hardcoded}. Discovered: {discovered}. "
+                    f"Using discovered layers. Consider updating WMS_LAYERS in code."
+                )
+                self._validated_layers[(resolution, vertical_crs)] = discovered
+                return discovered
+
+            self._validated_layers[(resolution, vertical_crs)] = hardcoded
+            return hardcoded
+
+        except (requests.RequestException, ValueError, ET.ParseError) as e:
+            logger.warning(
+                f"Failed to fetch WMS GetCapabilities from {wms_endpoint}: {e}. "
+                f"Using hardcoded WMS_LAYERS as fallback."
+            )
+            self._validated_layers[(resolution, vertical_crs)] = hardcoded
+            return hardcoded
 
     # =========================================================================
     # Download by godło → OpenData (ASC)
@@ -349,8 +479,7 @@ class GugikProvider(BaseProvider):
                 godlo=godlo,
             )
 
-        resolution_layers = self.WMS_LAYERS.get(self._resolution, {})
-        wms_layers = resolution_layers.get(self._vertical_crs, [])
+        wms_layers = self._get_validated_layers(self._resolution, self._vertical_crs)
 
         if not wms_layers:
             raise DownloadError(
