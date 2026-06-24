@@ -111,11 +111,24 @@
 - **Wyniki testow:**
   - **1060 testow passed** (+53: +12 WMS layers, +41 LAZ provider/CLI/storage)
   - **Ruff: clean** (lint + format)
+- **Stan repo:** galaz `develop`, 2 commity, **niewypchniete** (brak push/PR):
+  - `333f3f8 fix(providers): refresh WMS skorowidze layer names for NMT and Orto`
+  - `d3bcb18 feat(laz): add LAZ point-cloud (LIDAR) download via GUGiK WFS`
+  - working tree czysty, nic w trakcie
+
+### Do weryfikacji (obserwacja z tej sesji)
+- Bbox godła `M-34-27-B-b-2-1` (z `SheetParser.get_bbox` EPSG:2180) zwraca z WFS
+  kafle LAZ o godłach z innym prefiksem (`N-33-131-B-a-1-*`). Przestrzennie OK
+  (envelope kafli ⊂ bbox, pliki LAZ poprawne), wiec dla feature LAZ bez znaczenia —
+  ale warto potwierdzic, czy `get_bbox` jest geograficznie poprawny, czy GUGiK
+  godluje kafle LAZ w innym ukladzie (np. 1942/legacy) niz `SheetParser` (1992).
+  Dotyczy tez ewentualnie pobierania NMT po godle. Patrz [[gugik-laz-wfs]].
 
 ### Nastepne kroki
 1. Mozaikowanie arkuszy NMT
 2. Ujednolicenie interfejsow providerow (BaseProvider vs LandCoverProvider)
 3. (opcjonalnie) LAZ: pasek postępu z rozmiarami, integracja MetadataCache dla WFS
+4. (do weryfikacji) zgodnosc `get_bbox` z godlowaniem kafli LAZ (patrz wyzej)
 
 ## Backlog
 
