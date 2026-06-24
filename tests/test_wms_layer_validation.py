@@ -10,6 +10,7 @@ GUGiK WMS service actually exposes, falling back to hardcoded layers
 on errors.
 """
 
+import re
 import xml.etree.ElementTree as ET
 from unittest.mock import MagicMock, patch
 
@@ -18,6 +19,7 @@ import requests
 
 from kartograf.providers.gugik import GugikProvider
 from kartograf.providers.gugik_nmpt import GugikNmptProvider
+from kartograf.providers.gugik_orto import GugikOrtoProvider
 
 # ---------------------------------------------------------------------------
 # XML fixtures
@@ -230,6 +232,69 @@ class TestFetchWmsLayers:
 
 
 # ===========================================================================
+# TestHardcodedLayerNames
+# ===========================================================================
+
+
+class TestHardcodedLayerNames:
+    """Regression guards for the hardcoded WMS_LAYERS roczniki.
+
+    These values were verified against live GUGiK GetCapabilities responses
+    (2026-06-24). They guard against silent drift / typos and document the
+    fact that the 5m endpoint lags behind the 1m EVRF2007 endpoint.
+    """
+
+    def test_1m_kron86_layers(self):
+        """1m/KRON86 matches SkorowidzeUkladKRON86 GetCapabilities."""
+        assert GugikProvider.WMS_LAYERS["1m"]["KRON86"] == [
+            "SkorowidzeNMT2019",
+            "SkorowidzeNMT2018",
+            "SkorowidzeNMT2017iStarsze",
+        ]
+
+    def test_1m_evrf2007_layers(self):
+        """1m/EVRF2007 matches SkorowidzeUkladEVRF2007 GetCapabilities."""
+        assert GugikProvider.WMS_LAYERS["1m"]["EVRF2007"] == [
+            "SkorowidzeNMT2026",
+            "SkorowidzeNMT2025",
+            "SkorowidzeNMT2024",
+            "SkorowidzeNMT2023iStarsze",
+        ]
+
+    def test_5m_evrf2007_layers(self):
+        """5m/EVRF2007 matches SheetsGrid5mEVRF2007 GetCapabilities.
+
+        The 5m skorowidze endpoint has NOT been rolled forward to 2026 — it
+        still serves the older roczniki, so this list intentionally differs
+        from the 1m/EVRF2007 list above.
+        """
+        assert GugikProvider.WMS_LAYERS["5m"]["EVRF2007"] == [
+            "SkorowidzeNMT2025",
+            "SkorowidzeNMT2024",
+            "SkorowidzeNMT2023",
+            "SkorowidzeNMT2022iStarsze",
+        ]
+
+    def test_5m_differs_from_1m_evrf2007(self):
+        """The 5m and 1m EVRF2007 lists diverge (5m lags behind)."""
+        assert (
+            GugikProvider.WMS_LAYERS["5m"]["EVRF2007"]
+            != GugikProvider.WMS_LAYERS["1m"]["EVRF2007"]
+        )
+
+    def test_layers_ordered_newest_first(self):
+        """Every hardcoded list is ordered newest → oldest (iStarsze last)."""
+
+        def sort_key(name):
+            year = int(re.search(r"(\d{4})", name).group(1))
+            return (1, -year) if "iStarsze" in name else (0, -year)
+
+        for crs_layers in GugikProvider.WMS_LAYERS.values():
+            for layers in crs_layers.values():
+                assert layers == sorted(layers, key=sort_key)
+
+
+# ===========================================================================
 # TestGetValidatedLayers
 # ===========================================================================
 
@@ -240,12 +305,16 @@ class TestGetValidatedLayers:
     def test_returns_discovered_layers_on_mismatch(self):
         """Discovered layers are used on mismatch, with warning."""
         provider = _make_provider()
+        # A hypothetical future roczniki set that differs from the hardcoded
+        # 1m/EVRF2007 list, so the mismatch branch (warn + use discovered)
+        # is exercised regardless of the current hardcoded values.
         discovered = [
+            "SkorowidzeNMT2027",
             "SkorowidzeNMT2026",
             "SkorowidzeNMT2025",
-            "SkorowidzeNMT2024",
-            "SkorowidzeNMT2023iStarsze",
+            "SkorowidzeNMT2024iStarsze",
         ]
+        assert set(discovered) != set(GugikProvider.WMS_LAYERS["1m"]["EVRF2007"])
 
         with (
             patch.object(provider, "_fetch_wms_layers", return_value=discovered),
@@ -418,6 +487,129 @@ class TestNmptInheritsValidation:
 # ===========================================================================
 # TestLayerSorting
 # ===========================================================================
+
+
+_ORTO_SESSION_PATCH = "kartograf.providers.gugik_orto.requests.Session"
+
+ORTO_WMS_XML = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<WMS_Capabilities xmlns="http://www.opengis.net/wms" version="1.3.0">
+  <Capability><Layer><Layer>
+    <Name>SkorowidzeOrtofotomapy2024</Name>
+  </Layer><Layer>
+    <Name>SkorowidzeOrtofotomapyStarsze</Name>
+  </Layer><Layer>
+    <Name>SkorowidzeOrtofotomapy2026</Name>
+  </Layer><Layer>
+    <Name>SkorowidzeOrtofotomapy2025</Name>
+  </Layer><Layer>
+    <Name>SkorowidzeOrtofotomapyZasiegi2026</Name>
+  </Layer><Layer>
+    <Name>SkorowidzeOrtofotomapyZasiegiStarsze</Name>
+  </Layer></Layer></Capability>
+</WMS_Capabilities>
+"""
+
+
+class TestOrtoLayerValidation:
+    """Tests for GugikOrtoProvider WMS GetCapabilities validation."""
+
+    def test_hardcoded_orto_layers(self):
+        """Hardcoded orto layers match the verified GetCapabilities set."""
+        assert GugikOrtoProvider.WMS_LAYERS == [
+            "SkorowidzeOrtofotomapy2026",
+            "SkorowidzeOrtofotomapy2025",
+            "SkorowidzeOrtofotomapy2024",
+            "SkorowidzeOrtofotomapyStarsze",
+        ]
+
+    def test_fetch_orto_layers_sorts_and_excludes_zasiegi(self):
+        """Year layers sort descending, Starsze last, Zasiegi excluded."""
+        mock_session = MagicMock()
+        mock_session.get.return_value = _make_mock_response(ORTO_WMS_XML)
+        provider = GugikOrtoProvider()
+
+        with patch(_ORTO_SESSION_PATCH, return_value=mock_session):
+            result = provider._fetch_wms_layers(timeout=10)
+
+        assert result == [
+            "SkorowidzeOrtofotomapy2026",
+            "SkorowidzeOrtofotomapy2025",
+            "SkorowidzeOrtofotomapy2024",
+            "SkorowidzeOrtofotomapyStarsze",
+        ]
+
+    def test_fetch_orto_layers_empty_raises(self):
+        """ValueError raised when no SkorowidzeOrtofotomapy layers found."""
+        mock_session = MagicMock()
+        mock_session.get.return_value = _make_mock_response(WMS_XML_NO_SKOROWIDZE)
+        provider = GugikOrtoProvider()
+
+        with (
+            patch(_ORTO_SESSION_PATCH, return_value=mock_session),
+            pytest.raises(ValueError),
+        ):
+            provider._fetch_wms_layers(timeout=10)
+
+    def test_get_validated_orto_returns_discovered_on_mismatch(self):
+        """Discovered layers used (with warning) when they differ from hardcoded."""
+        provider = GugikOrtoProvider()
+        discovered = ["SkorowidzeOrtofotomapy2027", "SkorowidzeOrtofotomapyStarsze"]
+        assert set(discovered) != set(GugikOrtoProvider.WMS_LAYERS)
+
+        with (
+            patch.object(provider, "_fetch_wms_layers", return_value=discovered),
+            patch("kartograf.providers.gugik_orto.logger") as mock_logger,
+        ):
+            result = provider._get_validated_layers()
+
+        assert result == discovered
+        mock_logger.warning.assert_called_once()
+
+    def test_get_validated_orto_returns_hardcoded_on_match(self):
+        """Hardcoded layers used (no warning) when GetCapabilities matches."""
+        provider = GugikOrtoProvider()
+        hardcoded = list(GugikOrtoProvider.WMS_LAYERS)
+
+        with (
+            patch.object(provider, "_fetch_wms_layers", return_value=hardcoded),
+            patch("kartograf.providers.gugik_orto.logger") as mock_logger,
+        ):
+            result = provider._get_validated_layers()
+
+        assert result == hardcoded
+        mock_logger.warning.assert_not_called()
+
+    def test_get_validated_orto_falls_back_on_network_error(self):
+        """On network error, hardcoded layers returned with a warning."""
+        provider = GugikOrtoProvider()
+        hardcoded = list(GugikOrtoProvider.WMS_LAYERS)
+
+        with (
+            patch.object(
+                provider,
+                "_fetch_wms_layers",
+                side_effect=requests.ConnectionError("timeout"),
+            ),
+            patch("kartograf.providers.gugik_orto.logger") as mock_logger,
+        ):
+            result = provider._get_validated_layers()
+
+        assert result == hardcoded
+        mock_logger.warning.assert_called_once()
+
+    def test_get_validated_orto_caches_result(self):
+        """Second call uses cache; _fetch_wms_layers called once."""
+        provider = GugikOrtoProvider()
+        hardcoded = list(GugikOrtoProvider.WMS_LAYERS)
+
+        with patch.object(
+            provider, "_fetch_wms_layers", return_value=hardcoded
+        ) as mock_fetch:
+            provider._get_validated_layers()
+            provider._get_validated_layers()
+
+        mock_fetch.assert_called_once()
 
 
 class TestLayerSorting:

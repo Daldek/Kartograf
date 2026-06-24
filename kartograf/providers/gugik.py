@@ -108,14 +108,17 @@ class GugikProvider(BaseProvider):
                 "SkorowidzeNMT2017iStarsze",
             ],
             "EVRF2007": [
+                "SkorowidzeNMT2026",
                 "SkorowidzeNMT2025",
                 "SkorowidzeNMT2024",
-                "SkorowidzeNMT2023",
-                "SkorowidzeNMT2022iStarsze",
+                "SkorowidzeNMT2023iStarsze",
             ],
         },
         "5m": {
             # 5m layers (only EVRF2007)
+            # Note: the 5m skorowidze endpoint (SheetsGrid5mEVRF2007) still
+            # serves the older roczniki — it has NOT been rolled forward to
+            # 2026 like the 1m EVRF2007 endpoint. Verified via GetCapabilities.
             "EVRF2007": [
                 "SkorowidzeNMT2025",
                 "SkorowidzeNMT2024",
