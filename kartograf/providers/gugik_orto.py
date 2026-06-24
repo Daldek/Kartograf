@@ -18,6 +18,7 @@ import os
 import re
 import threading
 import time
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -59,17 +60,24 @@ class GugikOrtoProvider(BaseProvider):
         f"{BASE_URL}/wss/service/PZGIK/ORTO/WMS/SkorowidzeWgAktualnosci"
     )
 
+    # Layers to query for OpenData URLs, ordered newest to oldest.
+    # Verified against GetCapabilities of SkorowidzeWgAktualnosci (2026-06-24).
+    # GUGiK consolidated the older per-year layers (2023..2018) into the single
+    # "SkorowidzeOrtofotomapyStarsze" layer — querying the removed year layers
+    # returns "Invalid layer(s) given in the LAYERS parameter".
+    # Note: the endpoint also exposes "SkorowidzeOrtofotomapyZasiegi*" layers
+    # (coverage extents, no OpenData URLs) which are intentionally excluded.
     WMS_LAYERS = [
+        "SkorowidzeOrtofotomapy2026",
         "SkorowidzeOrtofotomapy2025",
         "SkorowidzeOrtofotomapy2024",
-        "SkorowidzeOrtofotomapy2023",
-        "SkorowidzeOrtofotomapy2022",
-        "SkorowidzeOrtofotomapy2021",
-        "SkorowidzeOrtofotomapy2020",
-        "SkorowidzeOrtofotomapy2019",
-        "SkorowidzeOrtofotomapy2018",
         "SkorowidzeOrtofotomapyStarsze",
     ]
+
+    # Prefix used to identify orthophoto skorowidze layers in GetCapabilities
+    _SKOROWIDZE_PREFIX = "SkorowidzeOrtofotomapy"
+    # Substring marking the extent ("Zasiegi") variants that must be excluded
+    _EXCLUDE_SUBSTRING = "Zasiegi"
 
     # OpenData URL pattern in WMS GetFeatureInfo response
     OPENDATA_URL_PATTERN = re.compile(r'url:"(https://[^"]+)"')
@@ -100,6 +108,8 @@ class GugikOrtoProvider(BaseProvider):
         """
         self._session = session
         self._cache = cache
+        # In-memory cache of validated WMS layers (None until first lookup)
+        self._validated_layers: list[str] | None = None
 
     @property
     def name(self) -> str:
@@ -115,6 +125,125 @@ class GugikOrtoProvider(BaseProvider):
     def default_extension(self) -> str:
         """Return default file extension for orthophoto data."""
         return ".tif"
+
+    # =========================================================================
+    # WMS layer validation (GetCapabilities)
+    # =========================================================================
+
+    def _fetch_wms_layers(self, timeout: int = 10) -> list[str]:
+        """
+        Fetch available SkorowidzeOrtofotomapy layers from WMS GetCapabilities.
+
+        Parameters
+        ----------
+        timeout : int, optional
+            Request timeout in seconds (default: 10)
+
+        Returns
+        -------
+        list[str]
+            Skorowidze layer names ordered newest first, the year-less
+            "Starsze" layer last. Excludes the "Zasiegi" extent variants.
+
+        Raises
+        ------
+        ValueError
+            If no SkorowidzeOrtofotomapy layers are found in the response
+        requests.RequestException
+            On network errors
+        """
+        # Dedicated session to avoid interfering with the main (possibly
+        # mocked) download session — mirrors GugikProvider._fetch_wms_layers.
+        session = requests.Session()
+        params = {
+            "SERVICE": "WMS",
+            "VERSION": "1.3.0",
+            "REQUEST": "GetCapabilities",
+        }
+        response = session.get(
+            self.WMS_SKOROWIDZE_ENDPOINT, params=params, timeout=timeout
+        )
+        response.raise_for_status()
+
+        root = ET.fromstring(response.text)
+
+        wms_ns = "{http://www.opengis.net/wms}"
+        names = [elem.text for elem in root.iter(f"{wms_ns}Name") if elem.text]
+        if not names:
+            names = [elem.text for elem in root.iter("Name") if elem.text]
+
+        layers = [
+            n
+            for n in names
+            if n.startswith(self._SKOROWIDZE_PREFIX)
+            and self._EXCLUDE_SUBSTRING not in n
+        ]
+
+        if not layers:
+            raise ValueError(
+                "No SkorowidzeOrtofotomapy layers found in GetCapabilities response"
+            )
+
+        # Sort: year-bearing layers descending, "Starsze" (no year) last
+        def sort_key(name: str) -> tuple[int, int]:
+            year_match = re.search(r"(\d{4})", name)
+            if not year_match:
+                return (1, 0)
+            return (0, -int(year_match.group(1)))
+
+        layers.sort(key=sort_key)
+
+        return layers
+
+    def _get_validated_layers(self, timeout: int = 10) -> list[str]:
+        """
+        Get validated WMS layers, checking GetCapabilities against hardcoded.
+
+        The result is cached for the lifetime of this provider instance.
+        On any error (network, parse, empty) the hardcoded WMS_LAYERS are
+        used as a fallback so downloads keep working offline.
+
+        Parameters
+        ----------
+        timeout : int, optional
+            Request timeout for GetCapabilities (default: 10)
+
+        Returns
+        -------
+        list[str]
+            List of WMS layer names to query
+        """
+        if self._validated_layers is not None:
+            return self._validated_layers
+
+        hardcoded = list(self.WMS_LAYERS)
+
+        try:
+            discovered = self._fetch_wms_layers(timeout)
+
+            if set(discovered) != set(hardcoded):
+                logger.warning(
+                    "WMS GetCapabilities returned different ortofoto layers than "
+                    "hardcoded. Hardcoded: %s. Discovered: %s. Using discovered "
+                    "layers. Consider updating WMS_LAYERS in code.",
+                    hardcoded,
+                    discovered,
+                )
+                self._validated_layers = discovered
+                return discovered
+
+            self._validated_layers = hardcoded
+            return hardcoded
+
+        except (requests.RequestException, ValueError, ET.ParseError) as e:
+            logger.warning(
+                "Failed to fetch ortofoto WMS GetCapabilities from %s: %s. "
+                "Using hardcoded WMS_LAYERS as fallback.",
+                self.WMS_SKOROWIDZE_ENDPOINT,
+                e,
+            )
+            self._validated_layers = hardcoded
+            return hardcoded
 
     # =========================================================================
     # Download by godło → OpenData (TIF)
@@ -208,7 +337,7 @@ class GugikOrtoProvider(BaseProvider):
 
         session = self._session or requests.Session()
 
-        for layer in self.WMS_LAYERS:
+        for layer in self._get_validated_layers():
             params = {
                 "SERVICE": "WMS",
                 "VERSION": "1.3.0",

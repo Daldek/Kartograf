@@ -16,6 +16,24 @@ from kartograf.exceptions import DownloadError
 from kartograf.providers.gugik_orto import GugikOrtoProvider
 
 
+@pytest.fixture(autouse=True)
+def _stub_wms_getcapabilities():
+    """Keep WMS layer validation offline and deterministic.
+
+    `_get_opendata_url` calls `_get_validated_layers`, which performs a live
+    GetCapabilities request via a dedicated session. Stub `_fetch_wms_layers`
+    to return the hardcoded layers so unit tests never hit the network and the
+    validation reports a clean match (no warning). Tests that specifically
+    exercise validation live in tests/test_wms_layer_validation.py.
+    """
+    with patch.object(
+        GugikOrtoProvider,
+        "_fetch_wms_layers",
+        return_value=list(GugikOrtoProvider.WMS_LAYERS),
+    ):
+        yield
+
+
 class TestGugikOrtoProviderInit:
     """Testy inicjalizacji GugikOrtoProvider."""
 
@@ -271,21 +289,27 @@ class TestGugikOrtoProviderGetOpendataUrl:
     def test_get_opendata_url_tries_all_layers(
         self, mock_wms_response_no_url, mock_wms_response_with_url
     ):
-        """Test że sprawdzane są wszystkie 9 warstw WMS."""
+        """Test że sprawdzane są wszystkie warstwy WMS (po walidacji)."""
         session = Mock(spec=requests.Session)
-        # All layers return empty, should query all 9
+        # All layers return empty, should query every validated layer
         session.get = Mock(return_value=mock_wms_response_no_url)
 
         provider = GugikOrtoProvider(session=session)
+        expected_layers = len(GugikOrtoProvider.WMS_LAYERS)
 
         with pytest.raises(DownloadError):
             provider._get_opendata_url("N-34-130-D-d-2-4")
 
-        # Should have tried all 9 layers
-        assert session.get.call_count == 9
+        # Should have tried every layer returned by validation
+        assert session.get.call_count == expected_layers
 
-        # Verify it queries the correct number of layers
-        assert len(provider.WMS_LAYERS) == 9
+        # Verify the hardcoded layer list matches the verified GetCapabilities set
+        assert provider.WMS_LAYERS == [
+            "SkorowidzeOrtofotomapy2026",
+            "SkorowidzeOrtofotomapy2025",
+            "SkorowidzeOrtofotomapy2024",
+            "SkorowidzeOrtofotomapyStarsze",
+        ]
 
 
 class TestGugikOrtoProviderRetry:

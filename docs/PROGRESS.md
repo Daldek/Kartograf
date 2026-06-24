@@ -16,12 +16,12 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
-| Pokrycie testami | ✅ Gotowy | ~84%, 1007 testow, cel 80% osiagniety |
+| Pokrycie testami | ✅ Gotowy | ~84%, 1019 testow, cel 80% osiagniety |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0 |
 | Weryfikacja BBox PL-2000 | ✅ Gotowy | 67 testow, reference values + live WMS |
-| Walidacja warstw WMS | ✅ Gotowy | GetCapabilities, lazy, fallback, v0.6.1 |
+| Walidacja warstw WMS | ✅ Gotowy | GetCapabilities, lazy, fallback; NMT+NMPT v0.6.1, Orto 2026-06-24 |
 
 <!-- Statusy: ✅ Gotowy | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
@@ -79,30 +79,31 @@
 
 ## Ostatnia sesja
 
-**Data:** 2026-03-24
+**Data:** 2026-06-24
 
 ### Co zrobiono
-- **fix(gugik): naprawione nazwy warstw WMS dla NMT 5m**
-  - `SkorowidzeNMT2022` → `SkorowidzeNMT2022iStarsze`
-  - Usunieta nieistniejaca warstwa `SkorowidzeNMT2021iStarsze`
-  - Dodana brakujaca warstwa `SkorowidzeNMT2025`
-  - Blad powodowal niepowodzenie wszystkich pobrań NMT 5m
-- **feat(gugik): walidacja warstw WMS przez GetCapabilities**
-  - `_fetch_wms_layers()` — pobiera dostepne warstwy z WMS
-  - `_get_validated_layers()` — porownuje hardcoded z live, auto-aktualizacja
-  - Lazy validation (przy pierwszym `_get_opendata_url()`)
-  - Graceful fallback na hardcoded warstwy jesli GetCapabilities niedostepne
-  - In-memory cache, osobny timeout 10s
-  - Dziala dla GugikProvider i GugikNmptProvider (dziedziczenie)
-- **Dokumentacja:** ADR-020, CHANGELOG v0.6.1, PROGRESS
+- **fix(gugik): zaktualizowane nazwy warstw WMS dla NMT 1m/EVRF2007**
+  - `WMS_LAYERS["1m"]["EVRF2007"]`: `[2025, 2024, 2023, 2022iStarsze]` →
+    `[2026, 2025, 2024, 2023iStarsze]`
+  - Dodana `SkorowidzeNMT2026`, usuniete nieistniejace `2023` i `2022iStarsze`
+  - Zweryfikowane live przez GetCapabilities 3 endpointow (KRON86, EVRF2007, 5m)
+  - `1m/KRON86` i `5m/EVRF2007` bez zmian (5m endpoint nadal serwuje starsze roczniki)
+  - Wykryte przy godle M-34-27-B-b-1-2 (Kielchinow)
+- **fix(orto): naprawione warstwy WMS Ortofotomapy** (wykryte przy weryfikacji)
+  - `WMS_LAYERS`: `[2025..2018, Starsze]` (9) → `[2026, 2025, 2024, Starsze]` (4)
+  - GUGiK skonsolidowal roczniki 2023..2018 w `SkorowidzeOrtofotomapyStarsze`;
+    stara lista miala 6 nieistniejacych warstw i brak `2026` → twarde bledy WMS
+- **feat(orto): walidacja warstw WMS przez GetCapabilities dla GugikOrtoProvider**
+  - `_fetch_wms_layers()` + `_get_validated_layers()` (dotad orto bez fallbacku)
+  - Wyklucza warianty `Zasiegi*`, lazy in-memory cache, graceful fallback
+- **Dokumentacja:** CHANGELOG (Unreleased), PROGRESS
 - **Wyniki testow:**
-  - **1007 testow passed** (+17 nowych)
+  - **1019 testow passed** (+12: 5 NMT regression guards, 7 orto validation)
   - **Ruff: clean** (lint + format)
 
 ### Nastepne kroki
 1. Mozaikowanie arkuszy NMT
 2. Ujednolicenie interfejsow providerow (BaseProvider vs LandCoverProvider)
-3. Walidacja warstw WMS dla GugikOrtoProvider (osobna hierarchia dziedziczenia)
 
 ## Backlog
 

@@ -7,6 +7,49 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **NMT 1m/EVRF2007: zaktualizowane nazwy warstw WMS (nowe roczniki)**
+  - `WMS_LAYERS["1m"]["EVRF2007"]`: `[2025, 2024, 2023, 2022iStarsze]` →
+    `[2026, 2025, 2024, 2023iStarsze]`
+  - Dodana brakujaca warstwa `SkorowidzeNMT2026`
+  - Usuniete nieistniejace juz warstwy `SkorowidzeNMT2023` i `SkorowidzeNMT2022iStarsze`
+    (GetFeatureInfo zwracalo "Invalid layer(s) given in the LAYERS parameter")
+  - Zweryfikowane przez GetCapabilities endpointu `SkorowidzeUkladEVRF2007` (2026-06-24)
+  - Wykryte podczas rozpoznania danych dla godla M-34-27-B-b-1-2 (Kielchinow)
+  - `1m/KRON86` (`SkorowidzeUkladKRON86`) i `5m/EVRF2007` (`SheetsGrid5mEVRF2007`)
+    zweryfikowane — bez zmian; endpoint 5m nadal udostepnia starsze roczniki
+    (`[2025, 2024, 2023, 2022iStarsze]`) i nie zostal przesuniety do 2026 jak 1m
+  - Mechanizm `_get_validated_layers()` (GetCapabilities + fallback z v0.6.1) i tak
+    auto-korygowal te liste w runtime; aktualizacja usuwa rozbieznosc i warning
+- **Ortofotomapa: naprawione i odswiezone nazwy warstw WMS**
+  - `WMS_LAYERS` (GugikOrtoProvider): `[2025, 2024, 2023, 2022, 2021, 2020, 2019,
+    2018, Starsze]` → `[2026, 2025, 2024, Starsze]`
+  - GUGiK skonsolidowal starsze warstwy rocznikowe (2023..2018) w jedna
+    `SkorowidzeOrtofotomapyStarsze` — zapytania o usuniete warstwy zwracaly
+    "Invalid layer(s) given in the LAYERS parameter"; brakowalo tez `2026`
+  - Zweryfikowane przez GetCapabilities endpointu `SkorowidzeWgAktualnosci` (2026-06-24)
+  - Warstwy `SkorowidzeOrtofotomapyZasiegi*` (zasiegi, bez URL OpenData) sa pomijane
+
+### Added
+- **Walidacja warstw WMS przez GetCapabilities dla Ortofotomapy**
+  - `GugikOrtoProvider._fetch_wms_layers()` i `_get_validated_layers()` — analogicznie
+    do GugikProvider; dotad orto NIE mialo zadnego fallbacku (twarda lista)
+  - Lazy, in-memory cache per instancja; graceful fallback do `WMS_LAYERS` przy bledzie
+  - Filtruje prefiks `SkorowidzeOrtofotomapy`, wyklucza warianty `Zasiegi`,
+    sortuje malejaco po roczniku (warstwa `Starsze` na koncu)
+
+### Tests
+- `tests/test_wms_layer_validation.py` — nowa klasa `TestHardcodedLayerNames`
+  (5 testow): regresyjne strazniki nazw warstw zweryfikowanych z GetCapabilities
+  (KRON86, 1m EVRF2007, 5m EVRF2007, divergencja 5m vs 1m, kolejnosc newest-first)
+- Zaktualizowany `test_returns_discovered_layers_on_mismatch` — uzywa hipotetycznego
+  przyszlego zestawu rocznikow, aby galaz mismatch byla niezalezna od hardcoded
+- `tests/test_wms_layer_validation.py` — nowa klasa `TestOrtoLayerValidation`
+  (7 testow): parsowanie/sortowanie GetCapabilities orto, wykluczanie `Zasiegi`,
+  mismatch/match/fallback/cache, straznik nazw warstw
+- `tests/test_gugik_orto.py` — autouse fixture stubujaca GetCapabilities (offline),
+  zaktualizowany `test_get_opendata_url_tries_all_layers` (9 → 4 warstwy)
+
 ## [0.6.1] - 2026-03-24
 
 ### Fixed
