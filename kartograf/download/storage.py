@@ -153,6 +153,40 @@ class FileStorage:
         filename = f"{normalized_godlo}{ext}"
         return dir_path / filename
 
+    def get_raw_path(self, identifier: str, filename: str) -> Path:
+        """
+        Generate a file path for an opaque identifier WITHOUT parsing it.
+
+        Unlike :meth:`get_path`, this does not run the identifier through
+        ``SheetParser`` — it only splits it into a directory hierarchy. This is
+        required for LAZ point-cloud tiles, whose godła are finer than 1:10000
+        and would otherwise raise ``ParseError``.
+
+        Parameters
+        ----------
+        identifier : str
+            Opaque godło used purely for the directory hierarchy
+            (e.g. ``"N-33-131-B-a-1-1-4"`` or ``"6.162.34.02.3"``).
+        filename : str
+            File name to use as-is (e.g. the original OpenData ``.laz`` name).
+
+        Returns
+        -------
+        Path
+            ``output_dir / <subdir> / <hierarchy from identifier> / filename``
+
+        Examples
+        --------
+        >>> storage = FileStorage("./data", product="laz")
+        >>> storage.get_raw_path("N-33-131-B-a-1-1-4", "81121_x_N-33-131-B-a-1-1-4.laz")
+        PosixPath('data/laz/N-33/131/B/a/1/1/4/81121_x_N-33-131-B-a-1-1-4.laz')
+        """
+        dir_parts = self._get_directory_parts(identifier)
+        dir_path = self._output_dir / self._subdir
+        for part in dir_parts:
+            dir_path = dir_path / part
+        return dir_path / filename
+
     def _get_directory_parts(self, godlo: str) -> list[str]:
         """
         Extract directory parts from godło.

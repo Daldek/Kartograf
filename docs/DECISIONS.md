@@ -353,6 +353,27 @@ Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja
 
 **Konsekwencje:** Automatyczne wykrywanie zmian warstw WMS bez recznej aktualizacji kodu. Zero kosztu jesli provider nie jest uzywany (lazy). GugikNmptProvider dziedziczy walidacje z GugikProvider bez dodatkowego kodu. GugikOrtoProvider poza zakresem (inna hierarchia dziedziczenia, inny format warstw). 17 nowych testow w `tests/test_wms_layer_validation.py`.
 
+**Aktualizacja (2026-06-24):** GugikOrtoProvider otrzymal wlasna walidacje (`_fetch_wms_layers`/`_get_validated_layers`, wyklucza warianty `Zasiegi`). Nazwy warstw NMT 1m/EVRF2007 i Orto odswiezone (nowe roczniki 2026).
+
+---
+
+## ADR-021: LAZ (chmury punktów LIDAR) — discovery przez WFS, area-based
+
+**Data:** 2026-06-24
+**Status:** Przyjeta
+
+**Kontekst:** Dodanie pobierania plików LAZ (dane pomiarowe ALS) z GUGiK. Dwa problemy: (1) kafle LAZ są godłowane drobniej niz 1:10000 (np. `M-34-27-B-b-2-1-1`, modul 1:1000), a `SheetParser` parsuje maks. do 1:10000 — godło kafla jest nieparsowalne; (2) usługa **WMS** skorowidzy LAZ (`DanePomNMT/WMS/...`) zwraca HTTP 401, wiec mechanizm WMS GetFeatureInfo (jak w NMT/orto) nie dziala.
+
+**Opcje:**
+- A) Rozszerzyc `SheetParser` do 1:1000 (PL-1992 + PL-2000) i pobierac po godle kafla — duzo pracy, a godło i tak jest opaque w URL
+- B) Discovery przez **WFS** GetFeature po bbox — usługa otwarta (HTTP 200), feature zawiera `url_do_pobrania` wprost; godło kafla jako etykieta (bez parsowania)
+- C) Konstruowanie URL z wzorca `.../{density}/{density}_{id}_{godło}.laz` — wymaga nieprzewidywalnego `id` → niewykonalne
+- D) ATOM/CSW — bardziej zlozone i mniej bezposrednie niz WFS
+
+**Decyzja:** Opcja B. `GugikLazProvider` z discovery area-based: godło (≤1:10000) / `--bbox` / `--geometry` → bbox EPSG:2180 → WFS GetFeature (`gugik:SkorowidzDanychPomiarowychLIDAR{rok}`) → kafle z `url_do_pobrania`. Spojny schemat wejscia z NMT/NMPT/orto (te same tryby, finest = 1:10000); jedyna roznica wynika z danych GUGiK — jedno godło 1:10000 = wiele kafli LAZ. Godło kafla **nie jest parsowane** (opaque label) → `FileStorage.get_raw_path()` buduje sciezke bez `SheetParser`. Dwie usługi WFS wg ukladu wysokosciowego (EVRF2007 domyslnie, KRON86 legacy). Domyslnie newest-per-tile (dedup po godle), flagi `--year`/`--vertical-crs`/`--min-density`. Os EPSG:2180 dla WFS (`BBOX=min_x,min_y,max_x,max_y,urn:...EPSG::2180`) zweryfikowana live; dodatkowo client-side post-filter przeciecia kafla z bbox.
+
+**Konsekwencje:** Brak zmian w `SheetParser` (parser pozostaje przy 1:10000, spojnie z NMT/orto). LAZ omija `DownloadManager.download_sheet` — wlasny przeplyw `_cmd_download_laz` (area→WFS→tiles→parallel download). WFS daje metadane (rok/gestosc/CRS) za darmo. Zaleznosc od nazw feature-type `LIDAR{rok}` zlagodzona przez GetCapabilities + fallback `FALLBACK_YEARS`. 41 nowych testow; E2E zweryfikowane (pliki z magic `LASF`).
+
 ---
 
 <!-- Szablon nowej decyzji:

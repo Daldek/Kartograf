@@ -135,10 +135,23 @@ def create_parser() -> argparse.ArgumentParser:
     )
     download_parser.add_argument(
         "--product",
-        choices=["nmt", "nmpt", "orto"],
+        choices=["nmt", "nmpt", "orto", "laz"],
         default="nmt",
         help="Data product: nmt (terrain), nmpt (surface), "
-        "orto (orthophoto). Default: nmt",
+        "orto (orthophoto), laz (LIDAR point cloud). Default: nmt",
+    )
+    download_parser.add_argument(
+        "--year",
+        type=int,
+        metavar="YYYY",
+        help="LAZ only: restrict to a single acquisition year "
+        "(default: newest available per tile)",
+    )
+    download_parser.add_argument(
+        "--min-density",
+        type=int,
+        metavar="N",
+        help="LAZ only: keep tiles with point density >= N points/m²",
     )
     download_parser.add_argument(
         "--geometry",
@@ -605,6 +618,11 @@ def _create_provider_and_storage(product, output_dir, vertical_crs, resolution):
 
         provider = GugikOrtoProvider()
         storage = FileStorage(output_dir, product="orto")
+    elif product == "laz":
+        from kartograf.providers.gugik_laz import GugikLazProvider
+
+        provider = GugikLazProvider(vertical_crs=vertical_crs)
+        storage = FileStorage(output_dir, product="laz")
     else:
         provider = GugikProvider(vertical_crs=vertical_crs, resolution=resolution)
         storage = FileStorage(output_dir, resolution=resolution)
@@ -644,6 +662,10 @@ def cmd_download(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+
+    # --- Produkt LAZ: dyskretny przepływ area→WFS→tiles (wszystkie 3 tryby) ---
+    if getattr(args, "product", "nmt") == "laz":
+        return _cmd_download_laz(args)
 
     # --- Tryb geometry ---
     if has_geometry:
@@ -895,6 +917,141 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
         return 1
     except ValidationError as e:
         print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    return 0
+
+
+def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
+    """
+    Resolve a godło / --bbox / --geometry input to an EPSG:2180 BBox for LAZ.
+
+    Returns None (after printing an error) if a geometry file is missing.
+    Raises ParseError / ValidationError / ValueError on invalid input.
+    """
+    if getattr(args, "geometry", None):
+        from kartograf.core.geometry import get_overall_bbox
+
+        filepath = Path(args.geometry)
+        if not filepath.exists():
+            print(f"Error: File not found: {filepath}", file=sys.stderr)
+            return None
+        return get_overall_bbox(
+            filepath, layer=getattr(args, "layer", None), target_crs="EPSG:2180"
+        )
+
+    if args.bbox is not None:
+        parts = [float(x.strip()) for x in args.bbox.split(",")]
+        if len(parts) != 4:
+            raise ValueError("BBOX must have 4 values: min_x,min_y,max_x,max_y")
+        bbox = BBox(parts[0], parts[1], parts[2], parts[3], args.bbox_crs)
+        if bbox.crs != "EPSG:2180":
+            from pyproj import CRS
+
+            from kartograf.core.geometry import _transform_bbox
+
+            bbox = _transform_bbox(
+                bbox.min_x,
+                bbox.min_y,
+                bbox.max_x,
+                bbox.max_y,
+                CRS.from_user_input(bbox.crs),
+                "EPSG:2180",
+            )
+        return bbox
+
+    # godło mode — SheetParser validates and transforms to EPSG:2180
+    return SheetParser(args.godlo).get_bbox(crs="EPSG:2180")
+
+
+def _cmd_download_laz(args: argparse.Namespace) -> int:
+    """
+    Handle the download command for the LAZ product (area-based via WFS).
+
+    Accepts the same inputs as the other products — a godło (down to 1:10000),
+    --bbox/--bbox-crs, or --geometry/--layer — resolves them to an EPSG:2180
+    bbox, discovers every intersecting LAZ tile via WFS, and downloads them in
+    parallel. One 1:10000 area maps to many LAZ tiles (GUGiK tiles LAZ finer
+    than 1:10000); each tile is saved under its own opaque godło.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from kartograf.download.storage import FileStorage
+    from kartograf.providers.gugik_laz import GugikLazProvider
+
+    try:
+        bbox = _resolve_laz_bbox(args)
+    except (ParseError, ValidationError, ValueError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    if bbox is None:
+        return 1  # error already printed
+
+    vertical_crs = getattr(args, "vertical_crs", "EVRF2007")
+    year = getattr(args, "year", None)
+    min_density = getattr(args, "min_density", None)
+    workers = getattr(args, "workers", 4) or 1
+    output_dir = Path(args.output)
+    quiet = args.quiet
+    skip_existing = not args.force
+
+    provider = GugikLazProvider(vertical_crs=vertical_crs)
+    storage = FileStorage(output_dir, product="laz")
+
+    if not quiet:
+        print(f"Querying GUGiK WFS for LAZ tiles ({vertical_crs})...")
+    try:
+        tiles = provider.discover_tiles(bbox, year=year, min_density=min_density)
+    except (ValueError, DownloadError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    if not tiles:
+        print("Error: No LAZ tiles found for the given area.", file=sys.stderr)
+        return 1
+
+    if not quiet:
+        print(f"Found {len(tiles)} LAZ tiles. Downloading with {workers} worker(s)...")
+        print()
+
+    def _fetch(tile):
+        target = storage.get_raw_path(tile.godlo, tile.filename)
+        if skip_existing and target.exists():
+            return "skip", target, None
+        try:
+            provider.download(tile.url, target)
+            return "ok", target, None
+        except DownloadError as e:
+            return "fail", tile, e
+
+    results: list[tuple] = []
+    if workers > 1:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            futures = [executor.submit(_fetch, t) for t in tiles]
+            for future in as_completed(futures):
+                results.append(future.result())
+                if not quiet:
+                    print(f"\r  {len(results)}/{len(tiles)} tiles", end="", flush=True)
+    else:
+        for tile in tiles:
+            results.append(_fetch(tile))
+            if not quiet:
+                print(f"\r  {len(results)}/{len(tiles)} tiles", end="", flush=True)
+
+    ok = [r for r in results if r[0] == "ok"]
+    skipped = [r for r in results if r[0] == "skip"]
+    failed = [r for r in results if r[0] == "fail"]
+
+    if not quiet:
+        print()
+        print(
+            f"Downloaded {len(ok)} tiles "
+            f"({len(skipped)} skipped) to {output_dir / 'laz'}"
+        )
+    if failed:
+        print(f"Warning: {len(failed)} tiles failed to download", file=sys.stderr)
+        for _status, tile, error in failed[:5]:
+            print(f"  {tile.godlo}: {error}", file=sys.stderr)
         return 1
 
     return 0

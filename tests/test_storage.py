@@ -541,3 +541,41 @@ class TestFileStoragePL2000:
 
         subdirs = list(common_parent.iterdir())
         assert len(subdirs) == 3
+
+
+class TestFileStorageGetRawPath:
+    """Tests for get_raw_path (opaque identifiers, e.g. LAZ tile godła)."""
+
+    def test_raw_path_pl1992_fine_godlo(self, tmp_path):
+        """Fine PL-1992 godło (finer than 1:10000) is split without parsing."""
+        storage = FileStorage(tmp_path, product="laz")
+        path = storage.get_raw_path(
+            "N-33-131-B-a-1-1-4", "81121_1573132_N-33-131-B-a-1-1-4.laz"
+        )
+        parts = str(path).split("/")
+        assert "laz" in parts
+        # Hierarchy: base "N-33" then each remaining component
+        assert parts[-8:-1] == ["N-33", "131", "B", "a", "1", "1", "4"]
+        assert path.name == "81121_1573132_N-33-131-B-a-1-1-4.laz"
+
+    def test_raw_path_pl2000_godlo(self, tmp_path):
+        """PL-2000 dotted godło is split on dots."""
+        storage = FileStorage(tmp_path, product="laz")
+        path = storage.get_raw_path("6.162.34.02.3", "x_6.162.34.02.3.laz")
+        parts = str(path).split("/")
+        assert parts[-6:-1] == ["6", "162", "34", "02", "3"]
+        assert path.name == "x_6.162.34.02.3.laz"
+
+    def test_raw_path_does_not_parse_identifier(self, tmp_path):
+        """A non-parseable identifier must NOT raise (unlike get_path)."""
+        storage = FileStorage(tmp_path, product="laz")
+        # get_path would raise ParseError on this; get_raw_path must not
+        path = storage.get_raw_path("M-34-27-B-b-2-1-1", "f.laz")
+        assert path.name == "f.laz"
+        assert "laz" in str(path).split("/")
+
+    def test_raw_path_preserves_original_filename(self, tmp_path):
+        """The provided filename is used verbatim (preserves density/seq id)."""
+        storage = FileStorage(tmp_path, product="laz")
+        path = storage.get_raw_path("6.1.1", "12345_67890_tile.laz")
+        assert path.name == "12345_67890_tile.laz"

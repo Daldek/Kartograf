@@ -7,6 +7,27 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **Nowy produkt: LAZ — chmury punktów LIDAR (dane pomiarowe ALS) z GUGiK**
+  - `GugikLazProvider` (`kartograf/providers/gugik_laz.py`) — pobieranie plików
+    `.laz` przez **WFS** (`DanePomiaroweLidarEVRF2007` / `DanePomiaroweLidarKRON86`)
+  - Discovery **area-based**: godło (≤1:10000) / `--bbox` / `--geometry` → bbox
+    EPSG:2180 → `discover_tiles()` (WFS GetFeature) → pobranie wszystkich kafli
+  - Kafle LAZ są drobniejsze niż 1:10000 (jedno godło 1:10000 → wiele kafli);
+    godło kafla jest **nieparsowalne** i traktowane jako etykieta — `url_do_pobrania`
+    bierzemy wprost z atrybutu WFS, bez konstruowania URL i bez `SheetParser`
+  - WFS zwraca metadane: rok (`akt_rok`), gęstość (`char_przestrz`), CRS, geometria
+  - Domyślnie: EVRF2007, **najnowszy rok per kafel** (dedup po godle); flagi
+    `--year`, `--vertical-crs`, `--min-density` do nadpisania
+  - CLI: `kartograf download <godło|--bbox|--geometry> --product laz [...]`,
+    pobieranie równoległe (`--workers`), pomijanie istniejących plików
+  - `GugikLazProvider._fetch_available_years()` / `_get_available_years()` —
+    lista lat z WFS GetCapabilities, in-memory cache, fallback na hardcoded
+  - `FileStorage.get_raw_path()` — ścieżka dla nieparsowalnego (drobnego) godła
+    bez `SheetParser`; pliki w `laz/<hierarchia godła>/<oryginalna nazwa>.laz`
+  - Eksport: `GugikLazProvider`, `LazTile` w `kartograf/__init__.py`
+  - Weryfikacja: pobrano realne pliki LAZ (magic `LASF`) E2E; 41 nowych testów
+
 ### Fixed
 - **NMT 1m/EVRF2007: zaktualizowane nazwy warstw WMS (nowe roczniki)**
   - `WMS_LAYERS["1m"]["EVRF2007"]`: `[2025, 2024, 2023, 2022iStarsze]` →
