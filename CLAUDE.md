@@ -8,6 +8,7 @@ Glowne funkcjonalnosci:
 - **NMT** — pobieranie Numerycznego Modelu Terenu z GUGiK (1m i 5m)
 - **NMPT** — Numeryczny Model Pokrycia Terenu / DSM z GUGiK (1m)
 - **Ortofotomapa** — zdjecia lotnicze Standard Resolution (25cm, TIF) z GUGiK
+- **LAZ** — chmury punktów LIDAR (dane pomiarowe ALS, .laz) z GUGiK przez WFS
 - **BDOT10k** — polska baza pokrycia terenu (15 warstw: 12 PT* + 3 SW*)
 - **CORINE Land Cover** — europejska klasyfikacja pokrycia terenu (44 klasy)
 - **SoilGrids** — globalne dane glebowe z ISRIC (11 parametrow, 6 glebokosci)
@@ -50,6 +51,7 @@ kartograf/
 │   ├── gugik.py         # GugikProvider — NMT z GUGiK (WCS + OpenData)
 │   ├── gugik_nmpt.py    # GugikNmptProvider — NMPT/DSM z GUGiK (dziedziczy z GugikProvider)
 │   ├── gugik_orto.py    # GugikOrtoProvider — Ortofotomapa z GUGiK (BaseProvider)
+│   ├── gugik_laz.py     # GugikLazProvider — chmury punktów LAZ z GUGiK (WFS, area-based)
 │   ├── landcover_base.py # LandCoverProvider — abstrakcja dla pokrycia terenu
 │   ├── bdot10k.py       # Bdot10kProvider — BDOT10k z GUGiK
 │   ├── corine.py        # CorineProvider — CORINE z Copernicus (CLMS API + WMS)
@@ -97,6 +99,9 @@ kartograf parse N-34-130-D-d-2-4
 kartograf download N-34-130-D-d-2-4
 kartograf download N-34-130-D-d-2-4 --product nmpt
 kartograf download N-34-130-D-d-2-4 --product orto
+kartograf download N-34-130-D-d-2-4 --product laz
+kartograf download N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12
+kartograf download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86
 kartograf download N-34-130-D --scale 1:10000 --resolution 5m --workers 8
 kartograf download --geometry area.shp
 kartograf download --geometry area.gpkg --layer catchments

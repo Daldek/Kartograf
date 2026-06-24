@@ -1789,3 +1789,218 @@ class TestDownloadGeometrySystem:
         mock_find.assert_called_once()
         call_kwargs = mock_find.call_args
         assert call_kwargs.kwargs.get("system") == "1992"
+
+
+class TestCmdDownloadLaz:
+    """Tests for the LAZ product flow in the download command."""
+
+    def _fake_tiles(self):
+        from kartograf.providers.gugik_laz import LazTile
+
+        return [
+            LazTile(
+                godlo="N-33-131-B-a-1-1-4",
+                url="https://opendata.geoportal.gov.pl/x/81121_1_N-33-131-B-a-1-1-4.laz",
+                year=2024,
+                density=25,
+                crs="PL-2000:S6",
+                min_x=530500,
+                min_y=382500,
+                max_x=531000,
+                max_y=383000,
+            ),
+            LazTile(
+                godlo="N-33-131-B-a-1-2-3",
+                url="https://opendata.geoportal.gov.pl/x/81279_2_N-33-131-B-a-1-2-3.laz",
+                year=2024,
+                density=25,
+                crs="PL-2000:S6",
+                min_x=531000,
+                min_y=383000,
+                max_x=531500,
+                max_y=383500,
+            ),
+        ]
+
+    def test_parser_accepts_laz_and_flags(self):
+        parser = create_parser()
+        args = parser.parse_args(
+            [
+                "download",
+                "M-34-27-B-b-2-1",
+                "--product",
+                "laz",
+                "--year",
+                "2024",
+                "--min-density",
+                "12",
+            ]
+        )
+        assert args.product == "laz"
+        assert args.year == 2024
+        assert args.min_density == 12
+
+    def test_laz_invalid_product_choice_rejected(self):
+        parser = create_parser()
+        with pytest.raises(SystemExit):
+            parser.parse_args(["download", "X", "--product", "nope"])
+
+    @patch("kartograf.providers.gugik_laz.GugikLazProvider")
+    def test_laz_godlo_mode_downloads_all_tiles(self, mock_provider_cls, tmp_path):
+        """godło → discover tiles → download each via provider.download."""
+        instance = Mock()
+        instance.discover_tiles.return_value = self._fake_tiles()
+        instance.download.return_value = tmp_path / "x.laz"
+        mock_provider_cls.return_value = instance
+
+        result = main(
+            [
+                "download",
+                "M-34-27-B-b-2-1",
+                "--product",
+                "laz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        # discovery happened once, download once per tile
+        instance.discover_tiles.assert_called_once()
+        assert instance.download.call_count == 2
+        # bbox passed to discover_tiles is in EPSG:2180
+        bbox_arg = instance.discover_tiles.call_args[0][0]
+        assert bbox_arg.crs == "EPSG:2180"
+
+    @patch("kartograf.providers.gugik_laz.GugikLazProvider")
+    def test_laz_bbox_mode(self, mock_provider_cls, tmp_path):
+        instance = Mock()
+        instance.discover_tiles.return_value = self._fake_tiles()
+        instance.download.return_value = tmp_path / "x.laz"
+        mock_provider_cls.return_value = instance
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "530000,382000,533000,386000",
+                "--product",
+                "laz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+        assert result == 0
+        assert instance.download.call_count == 2
+
+    @patch("kartograf.providers.gugik_laz.GugikLazProvider")
+    def test_laz_year_and_density_forwarded(self, mock_provider_cls, tmp_path):
+        instance = Mock()
+        instance.discover_tiles.return_value = self._fake_tiles()
+        instance.download.return_value = tmp_path / "x.laz"
+        mock_provider_cls.return_value = instance
+
+        main(
+            [
+                "download",
+                "M-34-27-B-b-2-1",
+                "--product",
+                "laz",
+                "--year",
+                "2023",
+                "--min-density",
+                "12",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+        kwargs = instance.discover_tiles.call_args.kwargs
+        assert kwargs.get("year") == 2023
+        assert kwargs.get("min_density") == 12
+
+    @patch("kartograf.providers.gugik_laz.GugikLazProvider")
+    def test_laz_no_tiles_found_errors(self, mock_provider_cls, capsys, tmp_path):
+        instance = Mock()
+        instance.discover_tiles.return_value = []
+        mock_provider_cls.return_value = instance
+
+        result = main(
+            [
+                "download",
+                "M-34-27-B-b-2-1",
+                "--product",
+                "laz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+        assert result == 1
+        assert "No LAZ tiles" in capsys.readouterr().err
+
+    def test_laz_invalid_godlo_errors(self, capsys, tmp_path):
+        result = main(
+            ["download", "NOT-A-GODLO!!", "--product", "laz", "-o", str(tmp_path), "-q"]
+        )
+        assert result == 1
+
+    def test_laz_missing_geometry_file_errors(self, capsys, tmp_path):
+        result = main(
+            [
+                "download",
+                "--geometry",
+                str(tmp_path / "missing.shp"),
+                "--product",
+                "laz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+        assert result == 1
+        assert "not found" in capsys.readouterr().err.lower()
+
+
+class TestResolveLazBbox:
+    """Tests for _resolve_laz_bbox helper."""
+
+    def test_godlo_to_2180(self):
+        from argparse import Namespace
+
+        from kartograf.cli.commands import _resolve_laz_bbox
+
+        args = Namespace(godlo="M-34-27-B-b-2-1", bbox=None, geometry=None)
+        bbox = _resolve_laz_bbox(args)
+        assert bbox.crs == "EPSG:2180"
+        assert bbox.min_x < bbox.max_x and bbox.min_y < bbox.max_y
+
+    def test_bbox_2180_passthrough(self):
+        from argparse import Namespace
+
+        from kartograf.cli.commands import _resolve_laz_bbox
+
+        args = Namespace(
+            godlo=None,
+            bbox="530000,382000,533000,386000",
+            bbox_crs="EPSG:2180",
+            geometry=None,
+        )
+        bbox = _resolve_laz_bbox(args)
+        assert (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y) == (
+            530000.0,
+            382000.0,
+            533000.0,
+            386000.0,
+        )
+
+    def test_bbox_wrong_value_count_raises(self):
+        from argparse import Namespace
+
+        from kartograf.cli.commands import _resolve_laz_bbox
+
+        args = Namespace(godlo=None, bbox="1,2,3", bbox_crs="EPSG:2180", geometry=None)
+        with pytest.raises(ValueError):
+            _resolve_laz_bbox(args)

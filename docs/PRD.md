@@ -21,8 +21,8 @@ Pobieranie danych przestrzennych z różnych źródeł (GUGiK, Copernicus, ISRIC
 ### 1.2 Solution
 
 Kartograf to narzędzie CLI + biblioteka Python oferujące:
-1. **Unified API** - jednolity interfejs dla NMT, NMPT, Ortofoto, Land Cover, SoilGrids
-2. **Multiple Providers** - GUGiK (NMT/NMPT/Orto/BDOT10k), CORINE, SoilGrids
+1. **Unified API** - jednolity interfejs dla NMT, NMPT, Ortofoto, LAZ, Land Cover, SoilGrids
+2. **Multiple Providers** - GUGiK (NMT/NMPT/Orto/LAZ/BDOT10k), CORINE, SoilGrids
 3. **Intelligent Selection** - godło (PL-1992/PL-2000), TERYT, bbox, geometry file
 4. **Automatic Processing** - scalanie warstw, kalkulacja HSG
 5. **Secure Auth** - Auth Proxy dla izolacji credentials
@@ -112,6 +112,7 @@ kartograf download --bbox 19.93,50.05,19.95,50.07 --bbox-crs EPSG:4326
 kartograf download N-34-130-D --resolution 5m
 kartograf download N-34-130-D-d-2-4 --product nmpt
 kartograf download N-34-130-D-d-2-4 --product orto
+kartograf download N-34-130-D-d-2-4 --product laz
 kartograf download --bbox 419000,230000,426000,237000 --product orto
 kartograf download --geometry area.shp
 kartograf download --geometry area.gpkg --layer catchments
@@ -177,7 +178,41 @@ kartograf download --bbox 419000,230000,426000,237000 --product orto
 
 ---
 
-### 3.4 Feature: BDOT10k (Land Cover - GUGiK)
+### 3.4 Feature: LAZ (Chmury Punktów LIDAR)
+
+**Priority:** P1 (High)
+**Status:** Production
+
+#### Description
+Pobieranie chmur punktów LIDAR (dane pomiarowe ALS, pliki `.laz`) z GUGiK. Discovery jest **area-based** przez WFS: jedno godło 1:10000 (lub `--bbox` / `--geometry`) zwraca wiele kafli LAZ (godłowane drobniej niż 1:10000), każdy z własnym URL OpenData. Godło kafla jest nieparsowalne i traktowane jako etykieta.
+
+#### Capabilities
+```python
+from kartograf import GugikLazProvider, BBox
+
+provider = GugikLazProvider(vertical_crs="EVRF2007")
+bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
+tiles = provider.discover_tiles(bbox, year=2024, min_density=12)
+for tile in tiles:
+    provider.download(tile.url, Path("./laz") / tile.filename)
+```
+
+#### CLI Commands
+```bash
+kartograf download N-34-130-D-d-2-4 --product laz
+kartograf download N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12
+kartograf download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86
+kartograf download --geometry area.shp --product laz
+```
+
+#### Notes
+- Źródło: GUGiK WFS (`DanePomiaroweLidarEVRF2007` / `DanePomiaroweLidarKRON86`)
+- Domyślnie newest-per-tile (dedup po godle, najnowszy `akt_rok`)
+- Pobieranie równoległe (`--workers`), pomijanie istniejących plików
+
+---
+
+### 3.5 Feature: BDOT10k (Land Cover - GUGiK)
 
 **Priority:** P1
 **Status:** Production
@@ -233,7 +268,7 @@ kartograf landcover list-layers --source bdot10k
 
 ---
 
-### 3.5 Feature: CORINE Land Cover (Copernicus)
+### 3.6 Feature: CORINE Land Cover (Copernicus)
 
 **Priority:** P1
 **Status:** Production
@@ -274,7 +309,7 @@ kartograf landcover list-layers --source corine
 
 ---
 
-### 3.6 Feature: SoilGrids (Dane Glebowe)
+### 3.7 Feature: SoilGrids (Dane Glebowe)
 
 **Priority:** P1
 **Status:** Production
@@ -336,7 +371,7 @@ kartograf landcover list-layers --source soilgrids
 
 ---
 
-### 3.7 Feature: HSG (Hydrologic Soil Groups)
+### 3.8 Feature: HSG (Hydrologic Soil Groups)
 
 **Priority:** P1
 **Status:** Production

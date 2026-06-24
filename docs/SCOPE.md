@@ -90,7 +90,23 @@ Kartograf automatyzuje ten proces oferując:
 # API: WCS, WMS GetFeatureInfo, OpenData
 ```
 
-### 2.4 Land Cover (Pokrycie Terenu) - IN SCOPE
+### 2.4 LAZ (Chmury Punktów LIDAR) - IN SCOPE
+
+```python
+# Funkcjonalności:
+- Chmury punktów ALS (dane pomiarowe LIDAR), format .laz
+- Discovery area-based przez godło (≤1:10000) / bbox / geometry → WFS GetFeature
+- Kafle drobniejsze niż 1:10000 (jedno godło 1:10000 → wiele kafli .laz)
+- url_do_pobrania brany wprost z atrybutu WFS (godło kafla nieparsowane)
+- Domyślnie newest-per-tile; flagi --year, --vertical-crs, --min-density
+- Dwa układy wysokościowe: EVRF2007 (domyślny, 2018+), KRON86 (legacy, 2010-2019)
+- Pobieranie równoległe (--workers), pomijanie istniejących plików
+
+# Źródło: GUGiK
+# API: WFS (GetCapabilities + GetFeature), OpenData
+```
+
+### 2.5 Land Cover (Pokrycie Terenu) - IN SCOPE
 
 ```python
 # BDOT10k (GUGiK):
@@ -110,7 +126,7 @@ Kartograf automatyzuje ten proces oferując:
 - Auth Proxy dla izolacji credentials
 ```
 
-### 2.5 SoilGrids (Dane Glebowe) - IN SCOPE
+### 2.6 SoilGrids (Dane Glebowe) - IN SCOPE
 
 ```python
 # ISRIC SoilGrids:
@@ -125,7 +141,7 @@ Kartograf automatyzuje ten proces oferując:
 # API: WCS
 ```
 
-### 2.6 HSG (Hydrologic Soil Groups) - IN SCOPE
+### 2.7 HSG (Hydrologic Soil Groups) - IN SCOPE
 
 ```python
 # Kalkulacja HSG dla metody SCS-CN:
@@ -138,7 +154,7 @@ Kartograf automatyzuje ten proces oferując:
 # Moduł: kartograf.hydrology.hsg
 ```
 
-### 2.7 CLI Interface - IN SCOPE
+### 2.8 CLI Interface - IN SCOPE
 
 ```bash
 # Komendy:
@@ -147,6 +163,8 @@ kartograf parse 6.179.12.20               # PL-2000 auto-detekcja
 kartograf download <godlo>                 # pobierz NMT
 kartograf download <godlo> --product nmpt  # pobierz NMPT
 kartograf download <godlo> --product orto  # pobierz ortofoto
+kartograf download <godlo> --product laz   # pobierz chmury punktów LAZ (wiele kafli)
+kartograf download --bbox ... --product laz --year 2024 --min-density 12
 kartograf download --bbox min_x,min_y,max_x,max_y  # NMT dla bbox
 kartograf download --bbox ... --system 2000  # NMT w ukladzie PL-2000
 kartograf download --bbox ... --product orto  # ortofoto dla bbox
@@ -197,7 +215,6 @@ from kartograf import (
 
 # Wersja 1.0+:
 - GUI interface
-- Pobieranie danych LIDAR
 - Integracja z PostGIS
 - REST API server
 ```
@@ -230,6 +247,7 @@ kartograf/
 │   ├── gugik.py           # GugikProvider (NMT)
 │   ├── gugik_nmpt.py      # GugikNmptProvider (NMPT/DSM)
 │   ├── gugik_orto.py      # GugikOrtoProvider (Ortofotomapa)
+│   ├── gugik_laz.py       # GugikLazProvider (chmury punktów LAZ, WFS)
 │   ├── landcover_base.py  # LandCoverProvider (abstrakcja)
 │   ├── bdot10k.py         # Bdot10kProvider
 │   ├── corine.py          # CorineProvider

@@ -7,6 +7,7 @@
 | NMT (parser + pobieranie) | ✅ Gotowy | v0.1.0+ |
 | NMPT (Digital Surface Model) | ✅ Gotowy | v0.4.0 |
 | Ortofotomapa | ✅ Gotowy | v0.4.0 |
+| LAZ (chmury punktów LIDAR) | ✅ Gotowy | WFS, area-based, --product laz, 2026-06-24 |
 | Land Cover (BDOT10k) | ✅ Gotowy | v0.3.0+, 15 warstw v0.5.0 |
 | Land Cover (CORINE) | ✅ Gotowy | v0.3.0+ |
 | SoilGrids | ✅ Gotowy | v0.3.0+ |
@@ -16,7 +17,7 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
-| Pokrycie testami | ✅ Gotowy | ~84%, 1019 testow, cel 80% osiagniety |
+| Pokrycie testami | ✅ Gotowy | ~84%, 1060 testow, cel 80% osiagniety |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0 |
@@ -96,14 +97,25 @@
 - **feat(orto): walidacja warstw WMS przez GetCapabilities dla GugikOrtoProvider**
   - `_fetch_wms_layers()` + `_get_validated_layers()` (dotad orto bez fallbacku)
   - Wyklucza warianty `Zasiegi*`, lazy in-memory cache, graceful fallback
-- **Dokumentacja:** CHANGELOG (Unreleased), PROGRESS
+- **feat(laz): nowy produkt — chmury punktów LIDAR (LAZ) przez WFS**
+  - `GugikLazProvider` — discovery przez WFS GetFeature (nie WMS jak NMT/orto;
+    WMS dla LAZ jest 401-gated), `url_do_pobrania` wprost z atrybutu feature
+  - Area-based: godło/`--bbox`/`--geometry` → bbox EPSG:2180 → `discover_tiles()`
+  - Sidestep parsera: kafle LAZ drobniejsze niż 1:10000 (godło nieparsowalne),
+    traktowane jako etykieta; `FileStorage.get_raw_path()` bez `SheetParser`
+  - Newest-per-tile dedup, flagi `--year`/`--vertical-crs`/`--min-density`
+  - CLI `--product laz`, pobieranie równoległe `--workers`
+  - Oś EPSG:2180 dla WFS zweryfikowana live; E2E: realne pliki LAZ (magic `LASF`)
+  - ADR-021
+- **Dokumentacja:** CHANGELOG, PROGRESS, DECISIONS (ADR-021), CLAUDE.md, SCOPE, PRD
 - **Wyniki testow:**
-  - **1019 testow passed** (+12: 5 NMT regression guards, 7 orto validation)
+  - **1060 testow passed** (+53: +12 WMS layers, +41 LAZ provider/CLI/storage)
   - **Ruff: clean** (lint + format)
 
 ### Nastepne kroki
 1. Mozaikowanie arkuszy NMT
 2. Ujednolicenie interfejsow providerow (BaseProvider vs LandCoverProvider)
+3. (opcjonalnie) LAZ: pasek postępu z rozmiarami, integracja MetadataCache dla WFS
 
 ## Backlog
 
