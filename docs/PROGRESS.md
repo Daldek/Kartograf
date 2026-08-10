@@ -107,11 +107,14 @@
     zadanie Hydrografa → sidecar metadanych obowiazkowy
   - indeks SM5 live z KladyMapovychListu + MetadataCache
   - bez nazw modulow sugerujacych ESRI (client.py, nie arcgis.py)
+  - providers/pl **bez shimow zgodnosciowych** — Hydrograf/Hydrolog dostosuja
+    importy (BREAKING w CHANGELOG; publiczne `from kartograf import ...` stabilne)
 - **Spec etapu 0:** `docs/superpowers/specs/2026-08-10-etap0-zrodla-wielokrajowe-design.md`
   — deskryptory zrodel + rejestr, sidecar `.meta.json`, `transform/crs.py`
   (twarda polityka: ballpark ban, probe na inf, filtr dokladnosci),
   `transport/http+mosaic`, rejestr parserow godel, unifikacja ABC,
-  `providers/pl/`, podzial CLI; zachowanie bez zmian poza sidecarem
+  `providers/pl/` (bez shimow), podzial CLI; zachowanie bez zmian poza
+  sidecarem i sciezkami importow providerow
 - **Stan repo:** galaz `develop`, working tree czysty, commity niewypchniete:
   `1bbaf51` (research CZ), `91631a3` (research DE+SK), `9bbb6c1` (spec etapu 0)
   + aktualizacja PROGRESS
