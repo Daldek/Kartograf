@@ -965,6 +965,35 @@ def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
     return SheetParser(args.godlo).get_bbox(crs="EPSG:2180")
 
 
+def _write_laz_sidecar(provider, tile, target: Path, bbox: BBox) -> None:
+    """Best-effort sidecar dla kafla LAZ (blad nie przerywa pobrania)."""
+    import logging
+
+    try:
+        from kartograf.sources.registry import get_source
+        from kartograf.sources.sidecar import build_metadata, write_sidecar
+
+        meta = build_metadata(
+            get_source("pl.gugik.laz"),
+            request={
+                "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+                "bbox_crs": bbox.crs,
+            },
+            vertical_crs=provider.vertical_crs,
+            extra={
+                "godlo_kafla": tile.godlo,
+                "rok": tile.year,
+                "gestosc": tile.density,
+                "url": tile.url,
+            },
+        )
+        write_sidecar(target, meta)
+    except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
+        logging.getLogger(__name__).warning(
+            f"Nie udalo sie zapisac sidecara dla {target}: {e}"
+        )
+
+
 def _cmd_download_laz(args: argparse.Namespace) -> int:
     """
     Handle the download command for the LAZ product (area-based via WFS).
@@ -1021,6 +1050,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
             return "skip", target, None
         try:
             provider.download(tile.url, target)
+            _write_laz_sidecar(provider, tile, target, bbox)
             return "ok", target, None
         except DownloadError as e:
             return "fail", tile, e

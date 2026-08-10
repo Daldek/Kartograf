@@ -662,3 +662,67 @@ class TestCreateNmtProviderFactory:
         session, cache = MagicMock(), MagicMock()
         provider = create_nmt_provider(session=session, cache=cache)
         assert provider._session is session and provider._cache is cache
+
+
+class TestSidecarWritten:
+    """Sidecar .meta.json obok kazdego udanego pobrania (spec etap 0)."""
+
+    def _mock_provider(self):
+        from unittest.mock import MagicMock
+
+        provider = MagicMock()
+        provider.default_extension = ".asc"
+        provider.descriptor_key = "pl.gugik.nmt_1m"
+        provider.vertical_crs = "EVRF2007"
+
+        def fake_download(godlo, target, timeout=30):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(
+                "ncols 2\nnrows 2\nxllcorner 0\nyllcorner 0\n"
+                "cellsize 1\nNODATA_value -9999\n1 2\n3 4\n"
+            )
+            return target
+
+        provider.download.side_effect = fake_download
+        return provider
+
+    def test_download_sheet_writes_sidecar(self, tmp_path):
+        import json
+
+        manager = DownloadManager(output_dir=tmp_path, provider=self._mock_provider())
+        result = manager.download_sheet("N-34-130-D-d-2-4")
+        sidecar = result.parent / f"{result.name}.meta.json"
+        assert sidecar.exists()
+        payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        assert payload["dataset"] == "pl.gugik.nmt_1m"
+        assert payload["vertical_crs"] == "EPSG:9651"
+        assert payload["nodata"] == -9999.0
+        assert payload["request"] == {"godlo": "N-34-130-D-d-2-4"}
+
+    def test_skip_existing_writes_no_sidecar(self, tmp_path):
+        provider = self._mock_provider()
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+        result = manager.download_sheet("N-34-130-D-d-2-4")
+        sidecar = result.parent / f"{result.name}.meta.json"
+        sidecar.unlink()
+        manager.download_sheet("N-34-130-D-d-2-4")  # skip_existing=True
+        assert not sidecar.exists()
+
+    def test_sidecar_failure_does_not_break_download(self, tmp_path):
+        from unittest.mock import patch
+
+        manager = DownloadManager(output_dir=tmp_path, provider=self._mock_provider())
+        with patch(
+            "kartograf.sources.sidecar.write_sidecar",
+            side_effect=OSError("dysk pelny"),
+        ):
+            result = manager.download_sheet("N-34-130-D-d-2-4")
+        assert result.exists()
+
+    def test_mock_provider_without_key_is_skipped(self, tmp_path):
+        provider = self._mock_provider()
+        del provider.descriptor_key  # atrybut Mock zamiast str -> guard pomija
+        provider.descriptor_key = object()
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+        result = manager.download_sheet("N-34-130-D-d-2-4")
+        assert not (result.parent / f"{result.name}.meta.json").exists()

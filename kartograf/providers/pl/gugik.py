@@ -211,6 +211,7 @@ class GugikProvider(BaseProvider):
         self._resolution = resolution
         self._cache = cache
         self._validated_layers: dict[tuple[str, str], list[str]] = {}
+        self.descriptor_key = f"pl.gugik.nmt_{resolution}"
 
     @property
     def vertical_crs(self) -> str:

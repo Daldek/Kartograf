@@ -132,6 +132,7 @@ class Bdot10kProvider(LandCoverProvider):
         """
         self._session = session
         self._cache = cache
+        self.descriptor_key = "pl.gugik.bdot10k"
 
     @property
     def name(self) -> str:

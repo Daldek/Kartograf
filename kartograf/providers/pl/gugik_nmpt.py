@@ -122,3 +122,4 @@ class GugikNmptProvider(GugikProvider):
         super().__init__(
             session=session, vertical_crs=vertical_crs, resolution="1m", cache=cache
         )
+        self.descriptor_key = "pl.gugik.nmpt"

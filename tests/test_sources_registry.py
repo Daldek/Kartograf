@@ -214,3 +214,28 @@ class TestDescriptorProviderConsistency:
             assert d.default_extension == provider.get_file_extension(fmt)
             assert d.provider_name != ""
             assert d.license.attribution != ""
+
+    def test_descriptor_keys_bound(self):
+        from kartograf import (
+            Bdot10kProvider,
+            CorineProvider,
+            GugikLazProvider,
+            GugikNmptProvider,
+            GugikOrtoProvider,
+            GugikProvider,
+            SoilGridsProvider,
+        )
+
+        expected = {
+            GugikProvider(resolution="1m"): "pl.gugik.nmt_1m",
+            GugikProvider(resolution="5m"): "pl.gugik.nmt_5m",
+            GugikNmptProvider(): "pl.gugik.nmpt",
+            GugikOrtoProvider(): "pl.gugik.orto",
+            GugikLazProvider(): "pl.gugik.laz",
+            Bdot10kProvider(): "pl.gugik.bdot10k",
+            CorineProvider(use_proxy=False): "eu.clms.corine",
+            SoilGridsProvider(): "global.isric.soilgrids",
+        }
+        for provider, key in expected.items():
+            assert provider.descriptor_key == key
+            get_source(key)  # klucz istnieje w rejestrze
