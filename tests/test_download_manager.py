@@ -634,3 +634,31 @@ class TestDownloadManagerPL2000:
         assert isinstance(result, Path)
         assert result.suffix == ".asc"
         assert result.exists()
+
+
+class TestCreateNmtProviderFactory:
+    def test_defaults(self):
+        from kartograf.providers.pl import create_nmt_provider
+
+        provider = create_nmt_provider()
+        assert provider.resolution == "1m"
+        assert provider.vertical_crs == "EVRF2007"
+
+    def test_5m_forces_evrf2007_with_warning(self, caplog):
+        import logging
+
+        from kartograf.providers.pl import create_nmt_provider
+
+        with caplog.at_level(logging.WARNING):
+            provider = create_nmt_provider(vertical_crs="KRON86", resolution="5m")
+        assert provider.vertical_crs == "EVRF2007"
+        assert "5m only supports EVRF2007" in caplog.text
+
+    def test_passes_session_and_cache(self):
+        from unittest.mock import MagicMock
+
+        from kartograf.providers.pl import create_nmt_provider
+
+        session, cache = MagicMock(), MagicMock()
+        provider = create_nmt_provider(session=session, cache=cache)
+        assert provider._session is session and provider._cache is cache

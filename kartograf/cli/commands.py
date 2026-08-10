@@ -606,7 +606,6 @@ def create_progress_callback(quiet: bool = False):
 def _create_provider_and_storage(product, output_dir, vertical_crs, resolution):
     """Create provider and storage based on product type."""
     from kartograf.download.storage import FileStorage
-    from kartograf.providers.pl.gugik import GugikProvider
 
     if product == "nmpt":
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
@@ -624,7 +623,9 @@ def _create_provider_and_storage(product, output_dir, vertical_crs, resolution):
         provider = GugikLazProvider(vertical_crs=vertical_crs)
         storage = FileStorage(output_dir, product="laz")
     else:
-        provider = GugikProvider(vertical_crs=vertical_crs, resolution=resolution)
+        from kartograf.providers.pl import create_nmt_provider
+
+        provider = create_nmt_provider(vertical_crs=vertical_crs, resolution=resolution)
         storage = FileStorage(output_dir, resolution=resolution)
 
     return provider, storage
