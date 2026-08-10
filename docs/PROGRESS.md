@@ -80,55 +80,50 @@
 
 ## Ostatnia sesja
 
-**Data:** 2026-06-24
+**Data:** 2026-08-10
 
 ### Co zrobiono
-- **fix(gugik): zaktualizowane nazwy warstw WMS dla NMT 1m/EVRF2007**
-  - `WMS_LAYERS["1m"]["EVRF2007"]`: `[2025, 2024, 2023, 2022iStarsze]` →
-    `[2026, 2025, 2024, 2023iStarsze]`
-  - Dodana `SkorowidzeNMT2026`, usuniete nieistniejace `2023` i `2022iStarsze`
-  - Zweryfikowane live przez GetCapabilities 3 endpointow (KRON86, EVRF2007, 5m)
-  - `1m/KRON86` i `5m/EVRF2007` bez zmian (5m endpoint nadal serwuje starsze roczniki)
-  - Wykryte przy godle M-34-27-B-b-1-2 (Kielchinow)
-- **fix(orto): naprawione warstwy WMS Ortofotomapy** (wykryte przy weryfikacji)
-  - `WMS_LAYERS`: `[2025..2018, Starsze]` (9) → `[2026, 2025, 2024, Starsze]` (4)
-  - GUGiK skonsolidowal roczniki 2023..2018 w `SkorowidzeOrtofotomapyStarsze`;
-    stara lista miala 6 nieistniejacych warstw i brak `2026` → twarde bledy WMS
-- **feat(orto): walidacja warstw WMS przez GetCapabilities dla GugikOrtoProvider**
-  - `_fetch_wms_layers()` + `_get_validated_layers()` (dotad orto bez fallbacku)
-  - Wyklucza warianty `Zasiegi*`, lazy in-memory cache, graceful fallback
-- **feat(laz): nowy produkt — chmury punktów LIDAR (LAZ) przez WFS**
-  - `GugikLazProvider` — discovery przez WFS GetFeature (nie WMS jak NMT/orto;
-    WMS dla LAZ jest 401-gated), `url_do_pobrania` wprost z atrybutu feature
-  - Area-based: godło/`--bbox`/`--geometry` → bbox EPSG:2180 → `discover_tiles()`
-  - Sidestep parsera: kafle LAZ drobniejsze niż 1:10000 (godło nieparsowalne),
-    traktowane jako etykieta; `FileStorage.get_raw_path()` bez `SheetParser`
-  - Newest-per-tile dedup, flagi `--year`/`--vertical-crs`/`--min-density`
-  - CLI `--product laz`, pobieranie równoległe `--workers`
-  - Oś EPSG:2180 dla WFS zweryfikowana live; E2E: realne pliki LAZ (magic `LASF`)
-  - ADR-021
-- **Dokumentacja:** CHANGELOG, PROGRESS, DECISIONS (ADR-021), CLAUDE.md, SCOPE, PRD
-- **Wyniki testow:**
-  - **1060 testow passed** (+53: +12 WMS layers, +41 LAZ provider/CLI/storage)
-  - **Ruff: clean** (lint + format)
-- **Stan repo:** galaz `develop`, 2 commity, **niewypchniete** (brak push/PR):
-  - `333f3f8 fix(providers): refresh WMS skorowidze layer names for NMT and Orto`
-  - `d3bcb18 feat(laz): add LAZ point-cloud (LIDAR) download via GUGiK WFS`
-  - working tree czysty, nic w trakcie
-
-### Do weryfikacji (obserwacja z tej sesji)
-- Bbox godła `M-34-27-B-b-2-1` (z `SheetParser.get_bbox` EPSG:2180) zwraca z WFS
-  kafle LAZ o godłach z innym prefiksem (`N-33-131-B-a-1-*`). Przestrzennie OK
-  (envelope kafli ⊂ bbox, pliki LAZ poprawne), wiec dla feature LAZ bez znaczenia —
-  ale warto potwierdzic, czy `get_bbox` jest geograficznie poprawny, czy GUGiK
-  godluje kafle LAZ w innym ukladzie (np. 1942/legacy) niz `SheetParser` (1992).
-  Dotyczy tez ewentualnie pobierania NMT po godle. Patrz [[gugik-laz-wfs]].
+- **Research: rozszerzenie o zrodla wielokrajowe (CZ, DE, SK)** — wszystkie
+  endpointy weryfikowane na zywo, nie z dokumentacji:
+  - `docs/research/2026-08-10-czechy-dmr-zabaged.md` — CUZK: DMR 5G/4G, DMP,
+    Ortofoto, ZABAGED (149 warstw); exportImage po bboxie z `imageSR=2180`;
+    pliki openzu po przewidywalnych URL; SM5 nieobliczalne (indeks
+    KladyMapovychListu), siatka TM33 2x2 km obliczalna; Bpv=EPSG:8357
+  - `docs/research/2026-08-10-niemcy-dgm-atkis.md` — federacja 17 modeli;
+    otwarty krajowy DGM1 nie istnieje (BKG paywall); BB/MV maja WCS, SN tylko
+    kafle; basemap.de = krajowy Basis-DLM po bboxie; 25833→2180 acc 0,0;
+    KRON86 dla DE niewykonalne (geoida PL maskowana → inf); ballpark przy
+    braku sieci cicho zwraca identycznosc
+  - `docs/research/2026-08-10-slowacja-dmr-zbgis.md` — DMR 5.0 1 m (100% SR);
+    **WCS zwraca h elipsoidalne, pliki Bpv — roznica 42 m** → CRS pionowy musi
+    byc per kanal; JTSK03=8353 vs 5514 (0,2-1,5 m); brak plikow per arkusz;
+    ZBGIS przez ArcGIS REST (limit 1000, WAF blokuje `where=`)
+- **Decyzje kierunkowe (zatwierdzone przez uzytkownika):**
+  - pelna parytetowosc produktowa dla CZ; etapy: 0 refaktor → 1 fundament+DMR
+    → 2 DMP/Orto/LAZ → 3 ZABAGED; DE/SK pozniej
+  - dane zagraniczne domyslnie natywnie (S-JTSK/Bpv), transformacja opcjonalna
+    przez reprojekcje serwerowa; KRON86 dla zagranicy = odmowa z remedium
+  - `--country auto` (bbox ∩ extenty, osobne pliki per kraj); scalania brak —
+    zadanie Hydrografa → sidecar metadanych obowiazkowy
+  - indeks SM5 live z KladyMapovychListu + MetadataCache
+  - bez nazw modulow sugerujacych ESRI (client.py, nie arcgis.py)
+- **Spec etapu 0:** `docs/superpowers/specs/2026-08-10-etap0-zrodla-wielokrajowe-design.md`
+  — deskryptory zrodel + rejestr, sidecar `.meta.json`, `transform/crs.py`
+  (twarda polityka: ballpark ban, probe na inf, filtr dokladnosci),
+  `transport/http+mosaic`, rejestr parserow godel, unifikacja ABC,
+  `providers/pl/`, podzial CLI; zachowanie bez zmian poza sidecarem
+- **Stan repo:** galaz `develop`, working tree czysty, commity niewypchniete:
+  `1bbaf51` (research CZ), `91631a3` (research DE+SK), `9bbb6c1` (spec etapu 0)
+  + aktualizacja PROGRESS
 
 ### Nastepne kroki
-1. Mozaikowanie arkuszy NMT
-2. Ujednolicenie interfejsow providerow (BaseProvider vs LandCoverProvider)
-3. (opcjonalnie) LAZ: pasek postępu z rozmiarami, integracja MetadataCache dla WFS
-4. (do weryfikacji) zgodnosc `get_bbox` z godlowaniem kafli LAZ (patrz wyzej)
+1. **Review specu etapu 0 przez uzytkownika** (docs/superpowers/specs/...)
+2. Po akceptacji: plan implementacji etapu 0 (writing-plans), potem implementacja
+3. Etap 1 (CZ fundament + DMR) — spec po zamknieciu etapu 0
+4. Odziedziczone: (do weryfikacji) zgodnosc `get_bbox` z godlowaniem kafli LAZ
+   (patrz [[gugik-laz-wfs]]); mozaikowanie NMT wchodzi w etap 0 jako
+   `transport/mosaic.py`; unifikacja BaseProvider/LandCoverProvider wchodzi
+   w etap 0
 
 ## Backlog
 
