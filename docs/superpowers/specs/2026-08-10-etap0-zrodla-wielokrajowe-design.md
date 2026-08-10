@@ -48,10 +48,28 @@ abstrakcji — nie projektujemy "na zapas", tylko na zmierzone wymagania.
 Etap 0 (ten spec) → etap 1 → etap 2 → etap 3; DE i SK po osobnych decyzjach.
 Kazdy etap dostaje wlasny spec i plan.
 
+**Zasada natywnosci (dotyczy wszystkich etapow):** domyslnie Kartograf pobiera
+dane dokladnie tak, jak publikuje je zrodlo — bez lokalnej reprojekcji,
+resamplingu ani konwersji formatu; transformacje wylacznie na jawne zadanie
+(`--target-crs`/`--vertical-crs`), preferencyjnie po stronie serwera zrodla.
+Sidecar zawsze deklaruje faktyczny uklad i format wyniku. Doprecyzowania:
+- tryb bbox z uslug (WCS/exportImage) zwraca wycinek wygenerowany przez serwer
+  (GeoTIFF) w natywnym ukladzie kanalu — to pochodna, nie plik zrodlowy; kto
+  potrzebuje danych zrodlowych 1:1, uzywa trybu arkuszowego (np. CZ: LAZ/TIFF
+  z openzu to doslownie bajty publikowane przez CUZK; DMR 5G natywnie to
+  TIN/LAZ, raster 2 m jest produktem uslugi);
+- niektore kanaly nie oferuja natywnego ukladu produktu w ogole (SK WCS:
+  h elipsoidalne zamiast Bpv; DE basemap.de: tylko CRS84/3857) — zapisujemy to,
+  co kanal serwuje, a prawde niesie sidecar (`vertical_source` itd.);
+- uzupelnienie brakujacych metadanych CRS (CZ DMR4G-TIFF `crs=None` →
+  przypisanie EPSG:5514) i zadanie poprawnego oznaczenia nodata
+  (CZ `noData=-9999`) nie zmieniaja wartosci danych — to naprawa metadanych,
+  nie transformacja;
+- istniejacy wyjatek bez zmian: fallback CORINE na PNG z WMS (podglad, nie dane).
+
 **Etap 1 — fundament CZ + DMR** (decyzje juz podjete, doprecyzowanie w specu etapu 1):
-- `providers/cuzk/`: `client.py` (CuzkClient — pierwszy silnik sterowany deskryptorem;
-  nazwa neutralna, bez "arcgis" — decyzja uzytkownika), `sheets.py` (SheetIndex),
-  `dmr.py` (CuzkDmrProvider: DMR 5G raster 2 m + DMR 4G TIFF 5 m)
+- `providers/cuzk/`: `client.py` (CuzkClient — pierwszy silnik sterowany deskryptorem)
+, `sheets.py` (SheetIndex), `dmr.py` (CuzkDmrProvider: DMR 5G raster 2 m + DMR 4G TIFF 5 m)
 - Godla: `ParserTM33` obliczalny (`{E_km}_{N_km}`, naroznik SW, kafle 2x2 km);
   SM5 (`CTES86`) przez indeks `KladyMapovychListu` warstwa 24 (TM33 = warstwa 26)
   + `MetadataCache` (nowa tabela `sheet_cache`); auto-detekcja w rejestrze parserow
