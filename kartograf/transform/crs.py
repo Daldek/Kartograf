@@ -122,9 +122,12 @@ def build_pinned_transform(
 
     Rzuca ``TransformUnavailableError`` gdy brak bezpiecznej operacji.
     """
+    previous_network_enabled = network.is_network_enabled()
     network.set_network_enabled(policy.allow_network_grids)
-
-    group = TransformerGroup(src_crs, dst_crs, always_xy=True, allow_ballpark=False)
+    try:
+        group = TransformerGroup(src_crs, dst_crs, always_xy=True, allow_ballpark=False)
+    finally:
+        network.set_network_enabled(previous_network_enabled)
 
     rejected: list[tuple[str, str]] = []
     candidates = []
