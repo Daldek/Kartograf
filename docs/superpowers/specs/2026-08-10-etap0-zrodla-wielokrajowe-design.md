@@ -505,9 +505,12 @@ Zasady zgodnosci:
 - Kod `gugik.py`, `gugik_nmpt.py`, `gugik_orto.py`, `gugik_laz.py`,
   `bdot10k.py` przenosi sie **1:1** (bez zmian tresci poza importami) do
   `providers/pl/`.
-- Stare sciezki modulow zostaja jako **shimy**: jawny re-export publicznych
+- Stare sciezki modulow zostaja jako **shimy** (shim = cienki modul
+  zgodnosciowy bez wlasnej logiki, ktory pod stara sciezka importu jedynie
+  re-eksportuje nazwy z nowej lokalizacji): jawny re-export publicznych
   nazw (`from kartograf.providers.pl.gugik import GugikProvider, ...`).
-  Zewnetrzne `from kartograf.providers.gugik import GugikProvider` dziala.
+  Zewnetrzne `from kartograf.providers.gugik import GugikProvider` dziala —
+  istotne, bo Kartograf jest biblioteka konsumowana przez Hydrograf/Hydrolog.
 - **Caly kod wewnetrzny** (manager, CLI, `__init__.py`) przechodzi na sciezki
   kanoniczne `providers.pl.*`.
 - `providers/pl/__init__.py` dostaje fabryke
