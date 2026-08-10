@@ -119,10 +119,25 @@
   `1bbaf51` (research CZ), `91631a3` (research DE+SK), `9bbb6c1` (spec etapu 0)
   + aktualizacja PROGRESS
 
+- **Plan implementacji etapu 0 (sesja 2, agent planujacy):**
+  `docs/superpowers/plans/2026-08-10-etap0-zrodla-wielokrajowe.md` — 16 zadan
+  (0-15) w TDD, kazde z krokami test-fail-implement-pass-commit; oparte na
+  rekonesansie kodu (9 rownoleglych agentow: sygnatury, patch-targety testow,
+  inwentarz CLI, pomiar API pyproj/rasterio w .venv). Kluczowe decyzje planu
+  doprecyzowujace spec: filtr accuracy `< 0` zamiast `<= 0` (pyproj: -1 =
+  nieznana, 0.0 = dokladna — inaczej test 25833→2180 ze specu niespelnialny);
+  mechaniczna aktualizacja patch-targetow CLI po podziale commands.py; mypy
+  wzgledem baseline (nie byl zainstalowany); wersja pakietu zostaje 0.6.1 do
+  wydania (testy ja asertuja); regula 5m⇒EVRF2007 zostaje TAKZE w
+  DownloadManager (testy) oprocz nowej fabryki
+
 ### Nastepne kroki
-1. **Plan implementacji etapu 0 — napisze inny agent** (writing-plans na bazie
-   zaakceptowanego specu `2026-08-10-etap0-zrodla-wielokrajowe-design.md`),
-   potem implementacja
+1. **Implementacja etapu 0 wg planu** — na NOWEJ galezi
+   `feature/etap0-zrodla-wielokrajowe` z `develop` (Zadanie 0 planu);
+   wykonanie zadanie-po-zadaniu (subagent-driven lub executing-plans),
+   pelny pytest przed kazdym commitem
+2. Po zakonczeniu: review + merge do develop, potem spec+plan etapu 1
+   (fundament CZ + DMR)
 2. Etap 1 (CZ fundament + DMR) — spec po zamknieciu etapu 0
 3. Odziedziczone: (do weryfikacji) zgodnosc `get_bbox` z godlowaniem kafli LAZ
    (patrz [[gugik-laz-wfs]]); mozaikowanie NMT wchodzi w etap 0 jako
