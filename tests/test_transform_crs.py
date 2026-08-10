@@ -4,6 +4,7 @@ import math
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pyproj import network
 
 from kartograf.exceptions import KartografError
 from kartograf.transform.crs import (
@@ -57,6 +58,25 @@ class TestBuildPinnedTransform:
                 build_pinned_transform("EPSG:8357", "EPSG:9651", TransformPolicy())
         assert exc.value.remedy is not None
         assert "pl07_2019" in exc.value.remedy
+
+    def test_network_state_restored(self):
+        """(g) Globalny stan sieci PROJ przywracany po build_pinned_transform,
+        dla obu wartosci allow_network_grids — funkcja nie moze na trwale
+        mutowac stanu wspoldzielonego z innymi konsumentami pyproj w procesie.
+        """
+        for allow in (True, False):
+            before = network.is_network_enabled()
+            with patch(_GROUP_PATCH) as mock_cls:
+                mock_cls.return_value = _mock_group(
+                    [_mock_transformer(0.5, "op dokladna")]
+                )
+                build_pinned_transform(
+                    "EPSG:5514",
+                    "EPSG:2180",
+                    TransformPolicy(allow_network_grids=allow),
+                )
+            after = network.is_network_enabled()
+            assert after == before
 
     def test_accuracy_filter(self):
         """(c) Odrzuc accuracy < 0 (nieznana) i > min_accuracy_m; 0.0 akceptowane."""
