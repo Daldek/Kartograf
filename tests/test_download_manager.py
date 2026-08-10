@@ -15,7 +15,7 @@ from kartograf.core.sheet_parser import BBox
 from kartograf.download.manager import DownloadManager, DownloadProgress
 from kartograf.download.storage import FileStorage
 from kartograf.exceptions import DownloadError
-from kartograf.providers.gugik import GugikProvider
+from kartograf.providers.pl.gugik import GugikProvider
 
 
 class TestDownloadProgress:

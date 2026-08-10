@@ -13,7 +13,7 @@ import requests
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError
-from kartograf.providers.gugik_orto import GugikOrtoProvider
+from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
 
 @pytest.fixture(autouse=True)

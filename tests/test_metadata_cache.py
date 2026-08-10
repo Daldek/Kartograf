@@ -26,10 +26,10 @@ import requests
 
 from kartograf.cache.metadata import MetadataCache
 from kartograf.cli.commands import create_parser, main
-from kartograf.providers.bdot10k import Bdot10kProvider
-from kartograf.providers.gugik import GugikProvider
-from kartograf.providers.gugik_nmpt import GugikNmptProvider
-from kartograf.providers.gugik_orto import GugikOrtoProvider
+from kartograf.providers.pl.bdot10k import Bdot10kProvider
+from kartograf.providers.pl.gugik import GugikProvider
+from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
+from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 
 # =========================================================================

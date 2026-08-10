@@ -16,8 +16,8 @@ import requests
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.providers.base import BaseProvider
-from kartograf.providers.gugik import GugikProvider
-from kartograf.providers.gugik_nmpt import GugikNmptProvider
+from kartograf.providers.pl.gugik import GugikProvider
+from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
 # =========================================================================
 # TestGugikNmptProviderInit

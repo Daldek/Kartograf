@@ -18,11 +18,11 @@ from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.base import LandCoverProvider
-from kartograf.providers.bdot10k import (
+from kartograf.providers.corine import CorineProvider
+from kartograf.providers.pl.bdot10k import (
     WOJEWODZTWO_NAMES,
     Bdot10kProvider,
 )
-from kartograf.providers.corine import CorineProvider
 
 
 class TestLandCoverProviderBase:
@@ -483,7 +483,7 @@ class TestBdot10kRetryAndIO:
         assert result == output
         assert output.read_bytes() == b"shp_data"
 
-    @patch("kartograf.providers.bdot10k.time.sleep")
+    @patch("kartograf.providers.pl.bdot10k.time.sleep")
     def test_download_with_retry_all_fail(self, _sleep, tmp_path):
         """All retries fail -> DownloadError."""
         provider = Bdot10kProvider()

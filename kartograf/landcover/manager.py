@@ -14,8 +14,8 @@ from pathlib import Path
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.storage import FileStorage
 from kartograf.providers.base import LandCoverProvider
-from kartograf.providers.bdot10k import Bdot10kProvider
 from kartograf.providers.corine import CorineProvider
+from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 
 logger = logging.getLogger(__name__)

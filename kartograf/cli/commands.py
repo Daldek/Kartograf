@@ -606,20 +606,20 @@ def create_progress_callback(quiet: bool = False):
 def _create_provider_and_storage(product, output_dir, vertical_crs, resolution):
     """Create provider and storage based on product type."""
     from kartograf.download.storage import FileStorage
-    from kartograf.providers.gugik import GugikProvider
+    from kartograf.providers.pl.gugik import GugikProvider
 
     if product == "nmpt":
-        from kartograf.providers.gugik_nmpt import GugikNmptProvider
+        from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
         provider = GugikNmptProvider(vertical_crs=vertical_crs)
         storage = FileStorage(output_dir, product="nmpt")
     elif product == "orto":
-        from kartograf.providers.gugik_orto import GugikOrtoProvider
+        from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
         provider = GugikOrtoProvider()
         storage = FileStorage(output_dir, product="orto")
     elif product == "laz":
-        from kartograf.providers.gugik_laz import GugikLazProvider
+        from kartograf.providers.pl.gugik_laz import GugikLazProvider
 
         provider = GugikLazProvider(vertical_crs=vertical_crs)
         storage = FileStorage(output_dir, product="laz")
@@ -977,7 +977,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     from kartograf.download.storage import FileStorage
-    from kartograf.providers.gugik_laz import GugikLazProvider
+    from kartograf.providers.pl.gugik_laz import GugikLazProvider
 
     try:
         bbox = _resolve_laz_bbox(args)
@@ -1209,7 +1209,7 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
     print()
 
     if args.source == "bdot10k":
-        from kartograf.providers.bdot10k import Bdot10kProvider
+        from kartograf.providers.pl.bdot10k import Bdot10kProvider
 
         provider = Bdot10kProvider()
         for layer in provider.get_available_layers():

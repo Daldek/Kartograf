@@ -14,7 +14,7 @@ Supported resolutions:
 - 1m only (no 5m for NMPT)
 """
 
-from kartograf.providers.gugik import GugikProvider
+from kartograf.providers.pl.gugik import GugikProvider
 
 
 class GugikNmptProvider(GugikProvider):

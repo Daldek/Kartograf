@@ -10,13 +10,16 @@ from various sources. Currently supported providers:
 - Bdot10kProvider: Downloads land cover data from BDOT10k (GUGiK)
 - CorineProvider: Downloads CORINE Land Cover data (Copernicus/GIOŚ)
 - SoilGridsProvider: Downloads soil property data from ISRIC SoilGrids
+
+Polish providers (Gugik*, Bdot10kProvider) live in ``kartograf.providers.pl``;
+re-exported here for backward-compatible top-level access.
 """
 
 from kartograf.providers.base import BaseProvider, LandCoverProvider
-from kartograf.providers.bdot10k import Bdot10kProvider
 from kartograf.providers.corine import CorineProvider
-from kartograf.providers.gugik import GugikProvider
-from kartograf.providers.gugik_laz import GugikLazProvider
+from kartograf.providers.pl.bdot10k import Bdot10kProvider
+from kartograf.providers.pl.gugik import GugikProvider
+from kartograf.providers.pl.gugik_laz import GugikLazProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 
 __all__ = [
