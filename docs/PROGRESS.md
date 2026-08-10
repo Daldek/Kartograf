@@ -120,10 +120,11 @@
   + aktualizacja PROGRESS
 
 ### Nastepne kroki
-1. **Review specu etapu 0 przez uzytkownika** (docs/superpowers/specs/...)
-2. Po akceptacji: plan implementacji etapu 0 (writing-plans), potem implementacja
-3. Etap 1 (CZ fundament + DMR) — spec po zamknieciu etapu 0
-4. Odziedziczone: (do weryfikacji) zgodnosc `get_bbox` z godlowaniem kafli LAZ
+1. **Plan implementacji etapu 0 — napisze inny agent** (writing-plans na bazie
+   zaakceptowanego specu `2026-08-10-etap0-zrodla-wielokrajowe-design.md`),
+   potem implementacja
+2. Etap 1 (CZ fundament + DMR) — spec po zamknieciu etapu 0
+3. Odziedziczone: (do weryfikacji) zgodnosc `get_bbox` z godlowaniem kafli LAZ
    (patrz [[gugik-laz-wfs]]); mozaikowanie NMT wchodzi w etap 0 jako
    `transport/mosaic.py`; unifikacja BaseProvider/LandCoverProvider wchodzi
    w etap 0

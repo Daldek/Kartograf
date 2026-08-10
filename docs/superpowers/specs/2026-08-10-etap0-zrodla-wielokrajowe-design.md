@@ -1,7 +1,8 @@
 # Spec: Etap 0 — refaktor przygotowawczy pod zrodla wielokrajowe
 
 **Data:** 2026-08-10
-**Status:** do review uzytkownika
+**Status:** zaakceptowany 2026-08-10 (po review: + zasada natywnosci danych,
+przenosiny providers/pl bez shimow)
 **Wersja docelowa:** 0.7.0 (develop)
 **Dokumenty zrodlowe:**
 - `docs/research/2026-08-10-czechy-dmr-zabaged.md` (CUZK)
