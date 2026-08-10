@@ -13,10 +13,10 @@ import requests
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError
-from kartograf.providers.gugik_laz import GugikLazProvider, LazTile
+from kartograf.providers.pl.gugik_laz import GugikLazProvider, LazTile
 
 # Patch target for the dedicated session created in _fetch_available_years
-_LAZ_SESSION_PATCH = "kartograf.providers.gugik_laz.requests.Session"
+_LAZ_SESSION_PATCH = "kartograf.providers.pl.gugik_laz.requests.Session"
 
 
 # ---------------------------------------------------------------------------
@@ -403,7 +403,7 @@ class TestDownload:
         session.get.side_effect = requests.ConnectionError("down")
         p = GugikLazProvider(session=session)
         with (
-            patch("kartograf.providers.gugik_laz.time.sleep"),
+            patch("kartograf.providers.pl.gugik_laz.time.sleep"),
             pytest.raises(DownloadError),
         ):
             p.download("https://opendata.geoportal.gov.pl/x.laz", tmp_path / "t.laz")

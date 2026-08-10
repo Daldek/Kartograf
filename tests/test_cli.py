@@ -721,7 +721,7 @@ class TestCreateProviderAndStorage:
     def test_nmt_creates_gugik_provider(self, tmp_path):
         """Test that nmt creates GugikProvider + FileStorage."""
         from kartograf.cli.commands import _create_provider_and_storage
-        from kartograf.providers.gugik import GugikProvider
+        from kartograf.providers.pl.gugik import GugikProvider
 
         provider, storage = _create_provider_and_storage(
             "nmt", tmp_path, "EVRF2007", "1m"
@@ -733,7 +733,7 @@ class TestCreateProviderAndStorage:
     def test_nmpt_creates_nmpt_provider(self, tmp_path):
         """Test that nmpt creates GugikNmptProvider."""
         from kartograf.cli.commands import _create_provider_and_storage
-        from kartograf.providers.gugik_nmpt import GugikNmptProvider
+        from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
         provider, storage = _create_provider_and_storage(
             "nmpt", tmp_path, "EVRF2007", "1m"
@@ -744,7 +744,7 @@ class TestCreateProviderAndStorage:
     def test_orto_creates_orto_provider(self, tmp_path):
         """Test that orto creates GugikOrtoProvider."""
         from kartograf.cli.commands import _create_provider_and_storage
-        from kartograf.providers.gugik_orto import GugikOrtoProvider
+        from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
         provider, storage = _create_provider_and_storage(
             "orto", tmp_path, "EVRF2007", "1m"
@@ -1795,7 +1795,7 @@ class TestCmdDownloadLaz:
     """Tests for the LAZ product flow in the download command."""
 
     def _fake_tiles(self):
-        from kartograf.providers.gugik_laz import LazTile
+        from kartograf.providers.pl.gugik_laz import LazTile
 
         return [
             LazTile(
@@ -1845,7 +1845,7 @@ class TestCmdDownloadLaz:
         with pytest.raises(SystemExit):
             parser.parse_args(["download", "X", "--product", "nope"])
 
-    @patch("kartograf.providers.gugik_laz.GugikLazProvider")
+    @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
     def test_laz_godlo_mode_downloads_all_tiles(self, mock_provider_cls, tmp_path):
         """godło → discover tiles → download each via provider.download."""
         instance = Mock()
@@ -1873,7 +1873,7 @@ class TestCmdDownloadLaz:
         bbox_arg = instance.discover_tiles.call_args[0][0]
         assert bbox_arg.crs == "EPSG:2180"
 
-    @patch("kartograf.providers.gugik_laz.GugikLazProvider")
+    @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
     def test_laz_bbox_mode(self, mock_provider_cls, tmp_path):
         instance = Mock()
         instance.discover_tiles.return_value = self._fake_tiles()
@@ -1895,7 +1895,7 @@ class TestCmdDownloadLaz:
         assert result == 0
         assert instance.download.call_count == 2
 
-    @patch("kartograf.providers.gugik_laz.GugikLazProvider")
+    @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
     def test_laz_year_and_density_forwarded(self, mock_provider_cls, tmp_path):
         instance = Mock()
         instance.discover_tiles.return_value = self._fake_tiles()
@@ -1921,7 +1921,7 @@ class TestCmdDownloadLaz:
         assert kwargs.get("year") == 2023
         assert kwargs.get("min_density") == 12
 
-    @patch("kartograf.providers.gugik_laz.GugikLazProvider")
+    @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
     def test_laz_no_tiles_found_errors(self, mock_provider_cls, capsys, tmp_path):
         instance = Mock()
         instance.discover_tiles.return_value = []

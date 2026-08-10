@@ -17,9 +17,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 import requests
 
-from kartograf.providers.gugik import GugikProvider
-from kartograf.providers.gugik_nmpt import GugikNmptProvider
-from kartograf.providers.gugik_orto import GugikOrtoProvider
+from kartograf.providers.pl.gugik import GugikProvider
+from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
+from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
 # ---------------------------------------------------------------------------
 # XML fixtures
@@ -115,7 +115,7 @@ WMS_XML_WITH_NO_YEAR_LAYER = """\
 # ---------------------------------------------------------------------------
 
 # Patch target for requests.Session created inside _fetch_wms_layers
-_SESSION_PATCH = "kartograf.providers.gugik.requests.Session"
+_SESSION_PATCH = "kartograf.providers.pl.gugik.requests.Session"
 
 
 def _make_mock_response(text: str) -> MagicMock:
@@ -318,7 +318,7 @@ class TestGetValidatedLayers:
 
         with (
             patch.object(provider, "_fetch_wms_layers", return_value=discovered),
-            patch("kartograf.providers.gugik.logger") as mock_logger,
+            patch("kartograf.providers.pl.gugik.logger") as mock_logger,
         ):
             result = provider._get_validated_layers("1m", "EVRF2007")
 
@@ -335,7 +335,7 @@ class TestGetValidatedLayers:
 
         with (
             patch.object(provider, "_fetch_wms_layers", return_value=hardcoded),
-            patch("kartograf.providers.gugik.logger") as mock_logger,
+            patch("kartograf.providers.pl.gugik.logger") as mock_logger,
         ):
             result = provider._get_validated_layers("1m", "EVRF2007")
 
@@ -353,7 +353,7 @@ class TestGetValidatedLayers:
                 "_fetch_wms_layers",
                 side_effect=requests.ConnectionError("timeout"),
             ),
-            patch("kartograf.providers.gugik.logger") as mock_logger,
+            patch("kartograf.providers.pl.gugik.logger") as mock_logger,
         ):
             result = provider._get_validated_layers("1m", "EVRF2007")
 
@@ -371,7 +371,7 @@ class TestGetValidatedLayers:
                 "_fetch_wms_layers",
                 side_effect=ValueError("No Skorowidze layers"),
             ),
-            patch("kartograf.providers.gugik.logger") as mock_logger,
+            patch("kartograf.providers.pl.gugik.logger") as mock_logger,
         ):
             result = provider._get_validated_layers("1m", "EVRF2007")
 
@@ -402,7 +402,7 @@ class TestGetValidatedLayers:
         # with a valid hardcoded combo but missing endpoint.
         with (
             patch.dict(provider.WMS_SKOROWIDZE_ENDPOINTS, {"5m": {}}, clear=False),
-            patch("kartograf.providers.gugik.logger"),
+            patch("kartograf.providers.pl.gugik.logger"),
         ):
             # 5m/KRON86 has no endpoint AND no hardcoded layers
             # _get_validated_layers should handle this without raising
@@ -489,7 +489,7 @@ class TestNmptInheritsValidation:
 # ===========================================================================
 
 
-_ORTO_SESSION_PATCH = "kartograf.providers.gugik_orto.requests.Session"
+_ORTO_SESSION_PATCH = "kartograf.providers.pl.gugik_orto.requests.Session"
 
 ORTO_WMS_XML = """\
 <?xml version="1.0" encoding="UTF-8"?>
@@ -559,7 +559,7 @@ class TestOrtoLayerValidation:
 
         with (
             patch.object(provider, "_fetch_wms_layers", return_value=discovered),
-            patch("kartograf.providers.gugik_orto.logger") as mock_logger,
+            patch("kartograf.providers.pl.gugik_orto.logger") as mock_logger,
         ):
             result = provider._get_validated_layers()
 
@@ -573,7 +573,7 @@ class TestOrtoLayerValidation:
 
         with (
             patch.object(provider, "_fetch_wms_layers", return_value=hardcoded),
-            patch("kartograf.providers.gugik_orto.logger") as mock_logger,
+            patch("kartograf.providers.pl.gugik_orto.logger") as mock_logger,
         ):
             result = provider._get_validated_layers()
 
@@ -591,7 +591,7 @@ class TestOrtoLayerValidation:
                 "_fetch_wms_layers",
                 side_effect=requests.ConnectionError("timeout"),
             ),
-            patch("kartograf.providers.gugik_orto.logger") as mock_logger,
+            patch("kartograf.providers.pl.gugik_orto.logger") as mock_logger,
         ):
             result = provider._get_validated_layers()
 

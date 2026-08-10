@@ -18,7 +18,7 @@ from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.storage import FileStorage
 from kartograf.exceptions import DownloadError
 from kartograf.providers.base import BaseProvider
-from kartograf.providers.gugik import GugikProvider
+from kartograf.providers.pl.gugik import GugikProvider
 
 logger = logging.getLogger(__name__)
 

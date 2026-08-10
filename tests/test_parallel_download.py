@@ -22,7 +22,7 @@ from kartograf.download.manager import (
 from kartograf.download.storage import FileStorage
 from kartograf.exceptions import DownloadError
 from kartograf.landcover.manager import LandCoverManager
-from kartograf.providers.gugik import GugikProvider
+from kartograf.providers.pl.gugik import GugikProvider
 
 
 class TestDownloadResult:
