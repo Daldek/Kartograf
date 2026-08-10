@@ -607,3 +607,28 @@ class TestSubdirOverride:
 
     def test_repr_with_subdir(self, tmp_path):
         assert "subdir='cz_dmr5g'" in repr(FileStorage(tmp_path, subdir="cz_dmr5g"))
+
+
+class TestDeleteRemovesSidecar:
+    """delete() nie moze zostawiac osieroconego .meta.json."""
+
+    def test_delete_removes_data_file_and_sidecar(self, tmp_path):
+        storage = FileStorage(tmp_path, resolution="1m")
+        path = storage.get_path("N-34-130-D-d-2-4", ".asc")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("ncols 1\n", encoding="ascii")
+        sidecar = path.with_name(path.name + ".meta.json")
+        sidecar.write_text("{}\n", encoding="utf-8")
+
+        assert storage.delete("N-34-130-D-d-2-4") is True
+        assert not path.exists()
+        assert not sidecar.exists()
+
+    def test_delete_without_sidecar_still_works(self, tmp_path):
+        storage = FileStorage(tmp_path, resolution="1m")
+        path = storage.get_path("N-34-130-D-d-2-4", ".asc")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("ncols 1\n", encoding="ascii")
+
+        assert storage.delete("N-34-130-D-d-2-4") is True
+        assert not path.exists()

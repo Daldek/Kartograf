@@ -215,6 +215,26 @@ class TestDescriptorProviderConsistency:
             assert d.provider_name != ""
             assert d.license.attribution != ""
 
+    def test_horizontal_crs_matches_channel_reality(self):
+        """CRS poziomy deskryptora = CRS faktycznie zwracany przez dany kanal."""
+        for key in (
+            "pl.gugik.nmt_1m",
+            "pl.gugik.nmt_5m",
+            "pl.gugik.nmpt",
+            "pl.gugik.orto",
+            "pl.gugik.laz",
+            "pl.gugik.bdot10k",
+        ):
+            for ch in get_source(key).channels:
+                assert ch.horizontal_crs == "EPSG:2180", key
+        # CORINE: EPSG:3035 dotyczy kanalu CLMS GeoTIFF (fallback PNG z WMS ma
+        # inny CRS i jest korygowany w LandCoverManager._write_sidecar)
+        assert get_source("eu.clms.corine").channels[0].horizontal_crs == "EPSG:3035"
+        assert (
+            get_source("global.isric.soilgrids").channels[0].horizontal_crs
+            == "EPSG:4326"
+        )
+
     def test_descriptor_keys_bound(self):
         from kartograf import (
             Bdot10kProvider,

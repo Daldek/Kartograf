@@ -55,6 +55,19 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   w `Bdot10kProvider.download_by_admin_unit`) przekazany pozycyjnie (4. argument)
   konczy sie `TypeError`. Przekazuj takie argumenty jako keyword (`format=...`).
 
+### Fixed
+- CLI z `--resolution 5m --vertical-crs KRON86` tworzy teraz provider skorygowany
+  do EVRF2007 przez fabryke `create_nmt_provider` (wczesniej provider dostawal
+  niewspierana kombinacje). Skorygowana wartosc jest tez przekazywana do
+  `DownloadManager`, wiec ostrzezenie o zmianie ukladu pionowego pojawia sie
+  raz, a nie dwa razy.
+- Sidecar CORINE na sciezce fallbacku PNG (brak credentials CLMS) deklaruje
+  faktyczny CRS podgladu WMS — `EPSG:3857` (EEA Discomap) lub `EPSG:4326`
+  (DLR, rok 1990) — zamiast `EPSG:3035` wlasciwego wylacznie dla GeoTIFF z
+  CLMS; dochodzi `extra.fallback = "wms_png"` z adnotacja "podglad WMS, nie dane".
+- `FileStorage.delete()` usuwa takze sidecar `.meta.json` pliku danych
+  (wczesniej zostawal osierocony).
+
 ### Added
 - **Nowy produkt: LAZ — chmury punktów LIDAR (dane pomiarowe ALS) z GUGiK**
   - `GugikLazProvider` (`kartograf/providers/gugik_laz.py`) — pobieranie plików

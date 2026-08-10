@@ -12,7 +12,8 @@ from various sources. Currently supported providers:
 - SoilGridsProvider: Downloads soil property data from ISRIC SoilGrids
 
 Polish providers (Gugik*, Bdot10kProvider) live in ``kartograf.providers.pl``;
-re-exported here for backward-compatible top-level access.
+re-exported here as part of the stable package API
+(canonical surface: ``from kartograf import ...``).
 """
 
 from kartograf.providers.base import BaseProvider, LandCoverProvider

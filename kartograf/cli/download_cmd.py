@@ -153,7 +153,9 @@ def cmd_download(args: argparse.Namespace) -> int:
         output_dir=output_dir,
         provider=provider,
         storage=storage,
-        vertical_crs=vertical_crs,
+        # provider juz przeszedl korekte "5m => EVRF2007" w fabryce — przekazujemy
+        # jego faktyczna wartosc, zeby manager nie ostrzegal drugi raz
+        vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
         resolution=resolution,
         max_workers=workers,
     )
@@ -338,7 +340,9 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
         output_dir=output_dir,
         provider=provider,
         storage=storage,
-        vertical_crs=vertical_crs,
+        # provider juz przeszedl korekte "5m => EVRF2007" w fabryce — przekazujemy
+        # jego faktyczna wartosc, zeby manager nie ostrzegal drugi raz
+        vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
         resolution=resolution,
         max_workers=workers,
     )
@@ -427,8 +431,9 @@ def _write_laz_sidecar(provider, tile, target: Path, bbox: BBox) -> None:
         from kartograf.sources.registry import get_source
         from kartograf.sources.sidecar import build_metadata, write_sidecar
 
+        key = getattr(provider, "descriptor_key", None)
         meta = build_metadata(
-            get_source("pl.gugik.laz"),
+            get_source(key if isinstance(key, str) else "pl.gugik.laz"),
             request={
                 "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
                 "bbox_crs": bbox.crs,
@@ -592,7 +597,9 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
         output_dir=output_dir,
         provider=provider,
         storage=storage,
-        vertical_crs=vertical_crs,
+        # provider juz przeszedl korekte "5m => EVRF2007" w fabryce — przekazujemy
+        # jego faktyczna wartosc, zeby manager nie ostrzegal drugi raz
+        vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
         resolution=resolution,
         max_workers=workers,
     )

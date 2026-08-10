@@ -17,7 +17,7 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
-| Pokrycie testami | ✅ Gotowy | ~84%, 1060 testow, cel 80% osiagniety |
+| Pokrycie testami | ✅ Gotowy | ~88%, 1142 testow (po etapie 0) |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0 |
@@ -151,6 +151,10 @@
    gotowa (zadanie 15: koncowa weryfikacja/review), po akceptacji merge do
    `develop`
 2. **Spec + plan etapu 1** (fundament CZ + DMR) — po zamknieciu etapu 0
+   - do specu etapu 1 przeniesc: regula selekcji kanalu w `_select_channel`
+     dla zrodel wielokanalowych (dzis: bbox vs nie-bbox, przy wiekszej liczbie
+     kanalow bedzie niejednoznaczna) oraz objecie `probe` polityka sieci
+     w `transform/crs.py`
 3. Odziedziczone: (do weryfikacji) zgodnosc `get_bbox` z godlowaniem kafli LAZ
    (patrz [[gugik-laz-wfs]])
 
@@ -165,4 +169,5 @@
 - [x] Pobieranie rownolegle (ThreadPoolExecutor, --workers)
 - [x] Cache metadanych (SQLite WAL, TTL 7d, prune)
 - [ ] Mozaikowanie arkuszy NMT
-- [ ] Ujednolicenie interfejsow providerow (BaseProvider vs LandCoverProvider)
+- [x] Ujednolicenie interfejsow providerow (BaseProvider vs LandCoverProvider)
+      (etap 0: DataSourceProvider)
