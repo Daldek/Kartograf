@@ -243,13 +243,13 @@ kartograf/
 │   ├── parser_2000.py     # Parser2000 (PL-2000), find_sheets_2000_for_bbox
 │   └── geometry.py        # SHP/GPKG reading, find_sheets_for_geometry
 ├── providers/             # Providery danych
-│   ├── base.py            # BaseProvider (NMT)
-│   ├── gugik.py           # GugikProvider (NMT)
-│   ├── gugik_nmpt.py      # GugikNmptProvider (NMPT/DSM)
-│   ├── gugik_orto.py      # GugikOrtoProvider (Ortofotomapa)
-│   ├── gugik_laz.py       # GugikLazProvider (chmury punktów LAZ, WFS)
-│   ├── landcover_base.py  # LandCoverProvider (abstrakcja)
-│   ├── bdot10k.py         # Bdot10kProvider
+│   ├── base.py            # BaseProvider (NMT), LandCoverProvider (abstrakcja, dawniej landcover_base.py)
+│   ├── pl/                # Providery polskie
+│   │   ├── gugik.py           # GugikProvider (NMT)
+│   │   ├── gugik_nmpt.py      # GugikNmptProvider (NMPT/DSM)
+│   │   ├── gugik_orto.py      # GugikOrtoProvider (Ortofotomapa)
+│   │   ├── gugik_laz.py       # GugikLazProvider (chmury punktów LAZ, WFS)
+│   │   └── bdot10k.py         # Bdot10kProvider
 │   ├── corine.py          # CorineProvider
 │   └── soilgrids.py       # SoilGridsProvider
 ├── download/              # Download management (NMT/NMPT/Orto)

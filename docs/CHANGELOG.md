@@ -8,6 +8,54 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Added
+- **Etap 0 — architektura zrodel wielokrajowych (przygotowanie pod CZ/DE/SK)**
+  - `kartograf/sources/` — deskryptory zrodel (SourceDescriptor, AccessChannel,
+    TransportKind, LicenseInfo, CountryProfile) + rejestr (`get_source`,
+    `sources_for`, `get_country`, `vertical_crs_code`); zero IO przy imporcie
+  - **Sidecar metadanych**: po kazdym udanym pobraniu powstaje
+    `<plik>.meta.json` (schema `kartograf-meta/1`: dataset, CRS-y, nodata,
+    licencja, request, wersja) — kontrakt dla Hydrografa; blad zapisu sidecara
+    nie przerywa pobrania
+  - `kartograf/transform/crs.py` — twarda polityka transformacji:
+    `TransformerGroup(allow_ballpark=False)`, filtr dokladnosci, probe
+    odrzucajacy siatki obcych krajow (inf), kontrola isfinite,
+    `TransformError`/`TransformUnavailableError` z remedium; `KNOWN_PATHS`
+  - `kartograf/transport/` — `download_to()` (atomic write + retry) i
+    `mosaic_and_crop()` (rasterio.merge + przyciecie, propagacja nodata)
+  - `kartograf/core/parser_registry.py` — rejestr systemow godel (pl1992,
+    pl2000); `SheetParser` i `FileStorage` deleguja do rejestru (wyniki
+    identyczne)
+  - `providers/pl/__init__.py`: fabryka `create_nmt_provider()` — jedno
+    miejsce polskich domyslow NMT (w tym regula 5m => EVRF2007)
+  - `FileStorage(subdir=...)` — opcjonalny podkatalog sterowany deskryptorem
+  - `LandCoverProvider.download_by_admin_unit`/`validate_admin_unit`
+    (kanoniczne) + `download_by_teryt`/`validate_teryt`/`source_url` jako
+    dzialajace aliasy zgodnosciowe
+  - CLI podzielone na moduly (`cli/_parser.py`, `parse_cmd.py`,
+    `download_cmd.py`, `landcover_cmd.py`, `soilgrids_cmd.py`,
+    `cache_cmd.py`); `cli/commands.py` zostaje fasada zgodnosci (entry point
+    bez zmian)
+
+### Changed
+- **BREAKING: glebokie sciezki importu providerow** (bez shimow — decyzja
+  z review specu; publiczne API `from kartograf import ...` BEZ zmian):
+
+  | Stary import | Nowy import |
+  |---|---|
+  | `kartograf.providers.gugik` | `kartograf.providers.pl.gugik` |
+  | `kartograf.providers.gugik_nmpt` | `kartograf.providers.pl.gugik_nmpt` |
+  | `kartograf.providers.gugik_orto` | `kartograf.providers.pl.gugik_orto` |
+  | `kartograf.providers.gugik_laz` | `kartograf.providers.pl.gugik_laz` |
+  | `kartograf.providers.bdot10k` | `kartograf.providers.pl.bdot10k` |
+  | `kartograf.providers.landcover_base` | `kartograf.providers.base` |
+
+  Dodatkowo: wrapper zgodnosciowy `download_by_teryt` (w `LandCoverProvider`)
+  zweza pozycyjna arnosc wzgledem dotychczasowych podklas — przyjmuje pozycyjnie
+  tylko `teryt`, `output_path`, `timeout`; kazdy kolejny argument (np. `format`
+  w `Bdot10kProvider.download_by_admin_unit`) przekazany pozycyjnie (4. argument)
+  konczy sie `TypeError`. Przekazuj takie argumenty jako keyword (`format=...`).
+
+### Added
 - **Nowy produkt: LAZ — chmury punktów LIDAR (dane pomiarowe ALS) z GUGiK**
   - `GugikLazProvider` (`kartograf/providers/gugik_laz.py`) — pobieranie plików
     `.laz` przez **WFS** (`DanePomiaroweLidarEVRF2007` / `DanePomiaroweLidarKRON86`)

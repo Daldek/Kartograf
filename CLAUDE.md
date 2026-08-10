@@ -43,24 +43,35 @@ kartograf/
 ├── __init__.py          # Public API exports
 ├── exceptions.py        # KartografError, ParseError, ValidationError, DownloadError
 ├── core/                # Logika bazowa
-│   ├── sheet_parser.py  # SheetParser — parser godel map topograficznych, BBox
-│   ├── parser_2000.py   # Parser2000 — parser godal PL-2000, find_sheets_2000_for_bbox
-│   └── geometry.py      # Czytanie SHP/GPKG, find_sheets_for_geometry, get_overall_bbox
+│   ├── sheet_parser.py     # SheetParser — parser godel map topograficznych, BBox
+│   ├── parser_2000.py      # Parser2000 — parser godal PL-2000, find_sheets_2000_for_bbox
+│   ├── parser_registry.py  # Rejestr systemow godel (pl1992, pl2000); SheetParser/FileStorage delegowane
+│   └── geometry.py         # Czytanie SHP/GPKG, find_sheets_for_geometry, get_overall_bbox
+├── sources/             # Deskryptory zrodel jako dane (zero IO przy imporcie)
+│   ├── descriptor.py    # SourceDescriptor, AccessChannel, TransportKind, LicenseInfo, CountryProfile
+│   ├── registry.py      # Rejestr PL/EU/GLOBAL — get_source, sources_for, get_country, vertical_crs_code
+│   └── sidecar.py       # ResultMetadata, write_sidecar (<plik>.meta.json), read_asc_nodata
+├── transform/           # Transformacje CRS
+│   └── crs.py           # TransformerGroup (allow_ballpark=False, filtr dokladnosci, probe, isfinite)
+├── transport/           # Wspolny transport pobierania
+│   ├── http.py          # download_to — atomic write + retry z backoffem
+│   └── mosaic.py        # mosaic_and_crop — merge kafli (rasterio) + przyciecie, propagacja nodata
 ├── providers/           # Providery danych (abstrakcje nad API)
-│   ├── base.py          # BaseProvider — abstrakcja dla NMT
-│   ├── gugik.py         # GugikProvider — NMT z GUGiK (WCS + OpenData)
-│   ├── gugik_nmpt.py    # GugikNmptProvider — NMPT/DSM z GUGiK (dziedziczy z GugikProvider)
-│   ├── gugik_orto.py    # GugikOrtoProvider — Ortofotomapa z GUGiK (BaseProvider)
-│   ├── gugik_laz.py     # GugikLazProvider — chmury punktów LAZ z GUGiK (WFS, area-based)
-│   ├── landcover_base.py # LandCoverProvider — abstrakcja dla pokrycia terenu
-│   ├── bdot10k.py       # Bdot10kProvider — BDOT10k z GUGiK
+│   ├── base.py          # DataSourceProvider (ABC), BaseProvider (NMT), LandCoverProvider (pokrycie terenu)
+│   ├── pl/               # Providery polskie (GUGiK, BDOT10k) — landcover_base.py USUNIETY (patrz base.py)
+│   │   ├── gugik.py         # GugikProvider — NMT z GUGiK (WCS + OpenData)
+│   │   ├── gugik_nmpt.py    # GugikNmptProvider — NMPT/DSM z GUGiK (dziedziczy z GugikProvider)
+│   │   ├── gugik_orto.py    # GugikOrtoProvider — Ortofotomapa z GUGiK (BaseProvider)
+│   │   ├── gugik_laz.py     # GugikLazProvider — chmury punktów LAZ z GUGiK (WFS, area-based)
+│   │   ├── bdot10k.py       # Bdot10kProvider — BDOT10k z GUGiK
+│   │   └── __init__.py      # create_nmt_provider() — fabryka, jedno miejsce polskich domyslow NMT
 │   ├── corine.py        # CorineProvider — CORINE z Copernicus (CLMS API + WMS)
 │   └── soilgrids.py     # SoilGridsProvider — dane glebowe z ISRIC (WCS)
 ├── cache/               # Cache metadanych
 │   └── metadata.py      # MetadataCache — SQLite WAL, TTL 7d, thread-safe
 ├── download/            # Zarzadzanie pobieraniem NMT/NMPT/Orto
 │   ├── manager.py       # DownloadManager — koordynacja pobierania arkuszy (parallel)
-│   └── storage.py       # FileStorage — hierarchiczna struktura katalogow
+│   └── storage.py       # FileStorage — hierarchiczna struktura katalogow (subdir sterowany deskryptorem)
 ├── landcover/           # Zarzadzanie pobieraniem pokrycia terenu
 │   └── manager.py       # LandCoverManager — dispatch do providerow
 ├── hydrology/           # Obliczenia hydrologiczne
@@ -68,8 +79,14 @@ kartograf/
 ├── auth/                # Autentykacja CLMS (Auth Proxy)
 │   ├── proxy.py         # Serwer HTTP izolujacy credentials (subprocess)
 │   └── client.py        # Klient singleton, automatycznie uruchamia proxy
-└── cli/                 # Interfejs wiersza polecen
-    └── commands.py      # Komendy CLI (parse, download, landcover, soilgrids)
+└── cli/                 # Interfejs wiersza polecen (podzielony na moduly per komenda)
+    ├── _parser.py        # Definicja argparse (top-level + subkomendy)
+    ├── parse_cmd.py      # `kartograf parse`
+    ├── download_cmd.py   # `kartograf download` (godlo / bbox / geometry / LAZ)
+    ├── landcover_cmd.py  # `kartograf landcover` (download / list-sources / list-layers)
+    ├── soilgrids_cmd.py  # `kartograf soilgrids` (HSG)
+    ├── cache_cmd.py      # `kartograf cache` (stats / clear / path)
+    └── commands.py       # Fasada zgodnosci — re-eksport + entry point `main`
 ```
 
 ## Komendy
@@ -169,3 +186,4 @@ kartograf cache path
 - SoilGrids: tylko WGS84 bbox (transformacja z EPSG:2180 automatyczna)
 - Timeout: 30s dla GUGiK, 60s dla Land Cover
 - Max 3 proby retry (nie konfigurowalne)
+- Kazde udane pobranie tworzy sidecar `<plik>.meta.json` (metadane CRS/licencja/nodata)
