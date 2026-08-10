@@ -22,8 +22,10 @@ Przed dodaniem pierwszego nowego kraju wykonujemy **etap 0**: refaktor
 przygotowawczy, ktory usuwa polskie zalozenia z warstwy wspolnej i wprowadza
 architekture zrodel opisanych deklaratywnie. Etap 0 jest **zachowujacy
 zachowanie** — istniejaca funkcjonalnosc dziala identycznie, weryfikacja przez
-istniejacy zestaw ~1060 testow. Jedyna zamierzona zmiana obserwowalna to sidecar
-metadanych przy pobraniach (sekcja 6.3).
+istniejacy zestaw ~1060 testow. Zamierzone zmiany obserwowalne sa dwie: sidecar
+metadanych przy pobraniach (sekcja 6.3) oraz zmiana sciezek importu providerow
+polskich — przenosiny do `providers/pl/` **bez shimow zgodnosciowych**
+(sekcja 6.8; decyzja uzytkownika: Hydrograf/Hydrolog dostosuja importy).
 
 Motywacja szerokiego (a nie punktowego) refaktoru: research trzech krajow dal
 **cztery realne przypadki** (PL + CZ + DE + SK) do zaprojektowania granic
@@ -119,7 +121,7 @@ zakaz `where=`, retry na HTML).
 6. Ujednolicenie ABC: `DataSourceProvider` ← `BaseProvider`, `LandCoverProvider`;
    uogolnienie `download_by_teryt` → `download_by_admin_unit` (aliasy zachowane)
 7. Przeniesienie `providers/gugik*.py`, `providers/bdot10k.py` →
-   `providers/pl/` + shimy zgodnosci + fabryka domyslnego providera
+   `providers/pl/` **bez shimow** + fabryka domyslnego providera
 8. `FileStorage`: opcjonalny `subdir` sterowany deskryptorem (logika PL bez zmian)
 9. Podzial `cli/commands.py` (1600 linii) na moduly + fasada zgodnosci
 10. Dokumentacja: nowy ADR, CHANGELOG, CLAUDE.md (struktura modulow), PROGRESS
@@ -168,14 +170,10 @@ kartograf/
 │   │   ├── gugik_orto.py
 │   │   ├── gugik_laz.py
 │   │   └── bdot10k.py
-│   ├── gugik.py              # shim: re-export z providers.pl.gugik
-│   ├── gugik_nmpt.py         # shim
-│   ├── gugik_orto.py         # shim
-│   ├── gugik_laz.py          # shim
-│   ├── bdot10k.py            # shim
-│   ├── landcover_base.py     # shim: re-export LandCoverProvider z providers.base
 │   ├── corine.py             # bez przenosin (zakres EU)
 │   └── soilgrids.py          # bez przenosin (zakres GLOBAL)
+│                             # stare moduly gugik*.py, bdot10k.py,
+│                             #   landcover_base.py USUNIETE bez shimow (6.8)
 ├── download/
 │   ├── manager.py            # API bez zmian; domyslny provider przez fabryke pl
 │   └── storage.py            # + subdir override; path-parts przez parser_registry
@@ -497,29 +495,35 @@ Zasady zgodnosci:
   rekursje: wrapper woła nowa nazwe, nigdy odwrotnie.
 - Deprecje w etapie 0 tylko w docstringach (bez `DeprecationWarning` —
   nie smiecimy uzytkownikom CLI; ewentualne warningi przy nastepnym major).
-- `providers/landcover_base.py` zostaje jako shim re-eksportujacy
-  `LandCoverProvider` (istniejace importy i patche dzialaja).
+- `providers/landcover_base.py` zostaje **usuniety** (bez shima) —
+  `LandCoverProvider` zyje w `providers/base.py`; wszystkie importy w repo
+  (landcover/manager, corine, soilgrids, testy) przechodza na nowa sciezke.
 
-### 6.8 `providers/pl/` — przeniesienie kodu polskiego
+### 6.8 `providers/pl/` — przeniesienie kodu polskiego (bez shimow)
 
 - Kod `gugik.py`, `gugik_nmpt.py`, `gugik_orto.py`, `gugik_laz.py`,
   `bdot10k.py` przenosi sie **1:1** (bez zmian tresci poza importami) do
-  `providers/pl/`.
-- Stare sciezki modulow zostaja jako **shimy** (shim = cienki modul
-  zgodnosciowy bez wlasnej logiki, ktory pod stara sciezka importu jedynie
-  re-eksportuje nazwy z nowej lokalizacji): jawny re-export publicznych
-  nazw (`from kartograf.providers.pl.gugik import GugikProvider, ...`).
-  Zewnetrzne `from kartograf.providers.gugik import GugikProvider` dziala —
-  istotne, bo Kartograf jest biblioteka konsumowana przez Hydrograf/Hydrolog.
-- **Caly kod wewnetrzny** (manager, CLI, `__init__.py`) przechodzi na sciezki
-  kanoniczne `providers.pl.*`.
+  `providers/pl/`. Stare moduly zostaja **usuniete bez shimow zgodnosciowych**
+  (decyzja uzytkownika z review specu: Hydrograf/Hydrolog dostosuja importy).
+- Konsekwencje dla konsumentow biblioteki:
+  - `from kartograf import GugikProvider, ...` (publiczne API `__init__.py`)
+    — **dziala bez zmian**; to jest zalecana, stabilna powierzchnia importu
+  - `from kartograf.providers.gugik import ...` → **ImportError**; migracja
+    to jednoliniowa zmiana na `kartograf.providers.pl.gugik`
+  - wpis **BREAKING** w CHANGELOG z tabelka sciezek starych → nowych
+- **Caly kod wewnetrzny** (manager, CLI, `__init__.py`, testy) przechodzi na
+  sciezki kanoniczne `providers.pl.*`.
+- Aliasy metod z 6.7 (`download_by_teryt` itd.) **pozostaja** — to inna
+  warstwa niz shimy modulow: chronia inwariant testowy etapu 0 (zero zmian
+  asercji w ~1060 testach) kosztem trzyliniowego wrappera, bez utrzymywania
+  rownoleglego drzewa modulow. Do przegladu przy nastepnym major.
 - `providers/pl/__init__.py` dostaje fabryke
   `create_nmt_provider(vertical_crs, resolution, cache) -> GugikProvider`
   wyciagnieta z logiki domyslnej `DownloadManager` i CLI
   `_create_provider_and_storage` (w tym regula "5m ⇒ EVRF2007") — jedno
   miejsce wiedzy o polskich domyslach.
-- Testy: **jedyna dozwolona zmiana** to aktualizacja stalych patch-targetow
-  (sekcja 9).
+- Testy: dozwolone zmiany to aktualizacja stalych patch-targetow oraz
+  importow po usunietych modulach (sekcja 9).
 
 ### 6.9 `download/storage.py`
 
@@ -607,6 +611,10 @@ Dozwolone modyfikacje istniejacych testow (wylacznie mechaniczne):
     `kartograf.providers.pl.bdot10k.*`
   - pelna lista do wyznaczenia grepem w planie (`kartograf.providers.gugik`,
     `kartograf.providers.bdot10k` w `tests/`)
+- aktualizacja importow w testach po usunieciu starych modulow (bez shimow):
+  `kartograf.providers.gugik*` / `kartograf.providers.bdot10k` →
+  `kartograf.providers.pl.*`; `kartograf.providers.landcover_base` →
+  `kartograf.providers.base` (mechaniczna zamiana sciezek, bez zmian asercji)
 - jesli ktorys test asertuje dokladna zawartosc katalogu wynikowego —
   dopisanie `.meta.json` do oczekiwan (lista takich testow z grepa w planie).
 
@@ -620,8 +628,8 @@ pokrycie nie spada ponizej 80%.
 | Kontrakt | Status po etapie 0 |
 |---|---|
 | `from kartograf import GugikProvider, ...` (pelna lista `__all__`) | bez zmian |
-| `from kartograf.providers.gugik import GugikProvider` (i pokrewne) | dziala (shim) |
-| `from kartograf.providers.landcover_base import LandCoverProvider` | dziala (shim) |
+| `from kartograf.providers.gugik import GugikProvider` (i pokrewne) | **BREAKING** → `kartograf.providers.pl.gugik` (bez shimow — decyzja uzytkownika) |
+| `from kartograf.providers.landcover_base import LandCoverProvider` | **BREAKING** → `kartograf.providers.base` |
 | `LandCoverProvider.download_by_teryt` / `validate_teryt` / `source_url` | dziala (deprecated alias) |
 | CLI: wszystkie komendy z CLAUDE.md | identyczne zachowanie |
 | Struktura katalogow danych | identyczna + pliki `.meta.json` |
@@ -632,7 +640,7 @@ pokrycie nie spada ponizej 80%.
 | Ryzyko | Mitygacja |
 |---|---|
 | Przenosiny modulow lamia patch-targety testow | patch-targety sa stalymi w testach (1 linia/plik); pelna lista grepem; commit przenosin osobny i weryfikowany pelnym pytest |
-| Shimy nie pokrywaja jakiegos importu | test importow: dla kazdego shima `import` + `getattr` publicznych nazw |
+| Hydrograf/Hydrolog importuja gleboka sciezke providers | wpis BREAKING w CHANGELOG z tabelka starych → nowych sciezek; publiczne API `from kartograf import ...` bez zmian; migracja jednoliniowa |
 | Fasada CLI pominie helper uzywany w testach | grep `from kartograf.cli.commands import` + `kartograf.cli.commands.` w tests/ przed podzialem |
 | Sidecar psuje test asertujacy zawartosc katalogu | grep `iterdir\|listdir\|glob` w tests/ przy plikach wynikowych; korekta oczekiwan (dozwolona lista) |
 | Zbyt ambitna unifikacja ABC zmienia kontrakt | podzial abstract/konkret przepisany ze stanu obecnego; nowe metody tylko konkretne wrappery |
@@ -648,7 +656,8 @@ pokrycie nie spada ponizej 80%.
 4. Wszystkie kontrakty z sekcji 10 potwierdzone testami.
 5. Deskryptory PL kompletne; test spojnosci deskryptor↔provider zielony.
 6. Dokumentacja zaktualizowana: nowy ADR (deskryptory + rejestry + polityka
-   transformacji + sidecar; kontekst = research 3 krajow), CHANGELOG (0.7.0-dev),
+   transformacji + sidecar; kontekst = research 3 krajow), CHANGELOG (0.7.0-dev,
+   w tym wpis **BREAKING** o sciezkach importow providerow z tabelka migracji),
    CLAUDE.md (struktura modulow), PROGRESS.md.
 
 ## 13. Decyzje doprecyzowane wzgledem zatwierdzonego podsumowania
