@@ -59,6 +59,7 @@ class FileStorage:
         output_dir: str | Path = "./data",
         resolution: str = "1m",
         product: str | None = None,
+        subdir: str | None = None,
     ):
         """
         Initialize file storage.
@@ -75,7 +76,11 @@ class FileStorage:
         product : str, optional
             Product name for subdirectory (e.g. "nmpt", "orto").
             When set, uses product instead of resolution as subdirectory.
+        subdir : str, optional
+            Explicit subdirectory name sterowany deskryptorem zrodla
+            (np. "cz_dmr5g"). Ma pierwszenstwo przed product i resolution.
         """
+        self._subdir_override = subdir
         if product:
             self._product = product
             self._resolution = ""
@@ -107,7 +112,9 @@ class FileStorage:
 
     @property
     def _subdir(self) -> str:
-        """Return subdirectory name (product or nmt_<resolution>)."""
+        """Return subdirectory name (override, product or nmt_<resolution>)."""
+        if self._subdir_override:
+            return self._subdir_override
         if self._product:
             return self._product
         return self._RESOLUTION_SUBDIRS.get(self._resolution, self._resolution)
@@ -369,6 +376,11 @@ class FileStorage:
 
     def __repr__(self) -> str:
         """Return string representation."""
+        if self._subdir_override:
+            return (
+                f"FileStorage(output_dir='{self._output_dir}', "
+                f"subdir='{self._subdir_override}')"
+            )
         if self._product:
             return (
                 f"FileStorage(output_dir='{self._output_dir}', "
