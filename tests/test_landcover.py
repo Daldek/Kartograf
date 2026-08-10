@@ -17,12 +17,12 @@ import requests
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
+from kartograf.providers.base import LandCoverProvider
 from kartograf.providers.bdot10k import (
     WOJEWODZTWO_NAMES,
     Bdot10kProvider,
 )
 from kartograf.providers.corine import CorineProvider
-from kartograf.providers.landcover_base import LandCoverProvider
 
 
 class TestLandCoverProviderBase:
@@ -397,7 +397,9 @@ class TestBdot10kProviderDownload:
 
         with (
             patch.object(provider, "_get_teryt_for_point", return_value="1465"),
-            patch.object(provider, "download_by_teryt", return_value=output) as mock_dl,
+            patch.object(
+                provider, "download_by_admin_unit", return_value=output
+            ) as mock_dl,
         ):
             result = provider.download_by_godlo("N-34-130-D", output)
 
@@ -1233,3 +1235,34 @@ class TestBdot10kRtreeIndex:
         results = cursor.fetchall()
         assert len(results) == 1
         conn.close()
+
+
+class TestAdminUnitAliases:
+    """Etap 0 (spec 6.7): kanoniczne download_by_admin_unit + aliasy teryt."""
+
+    def test_validate_admin_unit_same_as_teryt(self):
+        provider = Bdot10kProvider()
+        assert provider.validate_admin_unit("1465") is True
+        assert provider.validate_admin_unit("123") is False
+        assert provider.validate_teryt("1465") is provider.validate_admin_unit("1465")
+
+    def test_download_by_teryt_delegates_to_admin_unit(self, tmp_path):
+        provider = Bdot10kProvider()
+        output = tmp_path / "out.gpkg"
+        with patch.object(
+            provider, "download_by_admin_unit", return_value=output
+        ) as mock_new:
+            result = provider.download_by_teryt("1465", output, timeout=99)
+        mock_new.assert_called_once_with("1465", output, timeout=99)
+        assert result == output
+
+    def test_source_url_aliases_base_url(self):
+        provider = Bdot10kProvider()
+        assert provider.source_url == provider.base_url
+
+    def test_data_source_provider_hierarchy(self):
+        from kartograf.providers.base import BaseProvider, DataSourceProvider
+
+        assert issubclass(LandCoverProvider, DataSourceProvider)
+        assert issubclass(BaseProvider, DataSourceProvider)
+        assert DataSourceProvider.descriptor_key is None

@@ -12,12 +12,11 @@ from various sources. Currently supported providers:
 - SoilGridsProvider: Downloads soil property data from ISRIC SoilGrids
 """
 
-from kartograf.providers.base import BaseProvider
+from kartograf.providers.base import BaseProvider, LandCoverProvider
 from kartograf.providers.bdot10k import Bdot10kProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.gugik import GugikProvider
 from kartograf.providers.gugik_laz import GugikLazProvider
-from kartograf.providers.landcover_base import LandCoverProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 
 __all__ = [
