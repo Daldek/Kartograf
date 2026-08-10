@@ -413,7 +413,7 @@ class TestCmdDownload:
         captured = capsys.readouterr()
         assert "Error" in captured.err
 
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_single_sheet(self, mock_manager_class, capsys, tmp_path):
         """Test downloading a single sheet."""
         mock_manager = Mock()
@@ -427,7 +427,7 @@ class TestCmdDownload:
             "N-34-130-D-d-2-4", skip_existing=True, on_progress=None
         )
 
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_hierarchy(self, mock_manager_class, capsys, tmp_path):
         """Test downloading a hierarchy."""
         mock_manager = Mock()
@@ -452,7 +452,7 @@ class TestCmdDownload:
         assert result == 0
         mock_manager.download_hierarchy.assert_called_once()
 
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_with_force(self, mock_manager_class, tmp_path):
         """Test downloading with --force flag."""
         mock_manager = Mock()
@@ -468,7 +468,7 @@ class TestCmdDownload:
             "N-34-130-D-d-2-4", skip_existing=False, on_progress=None
         )
 
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_handles_error(self, mock_manager_class, capsys, tmp_path):
         """Test that download errors are handled."""
         mock_manager = Mock()
@@ -483,7 +483,7 @@ class TestCmdDownload:
         captured = capsys.readouterr()
         assert "Error" in captured.err
 
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_invalid_scale(self, mock_manager_class, capsys, tmp_path):
         """Test downloading with invalid scale."""
         from kartograf.exceptions import ValidationError
@@ -509,7 +509,7 @@ class TestCmdDownload:
         captured = capsys.readouterr()
         assert "Error" in captured.err
 
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_shows_progress(self, mock_manager_class, capsys, tmp_path):
         """Test that download shows progress when not quiet."""
         mock_manager = Mock()
@@ -562,8 +562,8 @@ class TestCmdDownloadProduct:
         args = parser.parse_args(["download", "N-34-130-D"])
         assert args.product == "nmt"
 
-    @patch("kartograf.cli.commands._create_provider_and_storage")
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_product_nmpt(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
@@ -594,8 +594,8 @@ class TestCmdDownloadProduct:
         call_args = mock_create.call_args
         assert call_args[0][0] == "nmpt"
 
-    @patch("kartograf.cli.commands._create_provider_and_storage")
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_product_orto(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
@@ -626,8 +626,8 @@ class TestCmdDownloadProduct:
         call_args = mock_create.call_args
         assert call_args[0][0] == "orto"
 
-    @patch("kartograf.cli.commands._create_provider_and_storage")
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_product_nmt_default(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
@@ -648,8 +648,8 @@ class TestCmdDownloadProduct:
         call_args = mock_create.call_args
         assert call_args[0][0] == "nmt"
 
-    @patch("kartograf.cli.commands._create_provider_and_storage")
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_bbox_product_nmpt(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
@@ -681,8 +681,8 @@ class TestCmdDownloadProduct:
         call_args = mock_create.call_args
         assert call_args[0][0] == "nmpt"
 
-    @patch("kartograf.cli.commands._create_provider_and_storage")
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_bbox_product_orto(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
@@ -756,7 +756,7 @@ class TestCreateProviderAndStorage:
 class TestCmdDownloadBBox:
     """Tests for download command with --bbox option."""
 
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_bbox_basic(self, mock_manager_class, capsys, tmp_path):
         """Test --bbox wywołuje find_sheets_for_bbox i download_sheet."""
         mock_manager = Mock()
@@ -778,7 +778,7 @@ class TestCmdDownloadBBox:
         # download_sheet powinien być wywołany co najmniej raz
         assert mock_manager.download_sheet.call_count >= 1
 
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_bbox_epsg4326(self, mock_manager_class, capsys, tmp_path):
         """Test --bbox z --bbox-crs EPSG:4326."""
         mock_manager = Mock()
@@ -855,7 +855,7 @@ class TestCmdDownloadBBox:
         captured = capsys.readouterr()
         assert "Invalid bbox format" in captured.err
 
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_bbox_with_scale(self, mock_manager_class, capsys, tmp_path):
         """Test --bbox z --scale 1:100000."""
         mock_manager = Mock()
@@ -879,7 +879,7 @@ class TestCmdDownloadBBox:
         # Mniejsza skala = mniej arkuszy
         assert mock_manager.download_sheet.call_count >= 1
 
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_bbox_shows_summary(self, mock_manager_class, capsys, tmp_path):
         """Test that bbox mode shows summary when not quiet."""
         mock_manager = Mock()
@@ -952,7 +952,7 @@ class TestCmdDownloadBBox:
 class TestCmdLandcoverDownload:
     """Tests for landcover download CLI."""
 
-    @patch("kartograf.cli.commands.LandCoverManager")
+    @patch("kartograf.cli.landcover_cmd.LandCoverManager")
     def test_landcover_download_by_teryt(self, mock_mgr_cls, capsys, tmp_path):
         """landcover download --teryt calls manager.download with teryt."""
         mock_mgr = Mock()
@@ -966,7 +966,7 @@ class TestCmdLandcoverDownload:
         call_kwargs = mock_mgr.download.call_args
         assert call_kwargs.kwargs.get("teryt") == "1465"
 
-    @patch("kartograf.cli.commands.LandCoverManager")
+    @patch("kartograf.cli.landcover_cmd.LandCoverManager")
     def test_landcover_download_by_godlo(self, mock_mgr_cls, capsys, tmp_path):
         """landcover download --godlo calls manager.download with godlo."""
         mock_mgr = Mock()
@@ -982,7 +982,7 @@ class TestCmdLandcoverDownload:
         call_kwargs = mock_mgr.download.call_args
         assert call_kwargs.kwargs.get("godlo") == "N-34-130-D"
 
-    @patch("kartograf.cli.commands.LandCoverManager")
+    @patch("kartograf.cli.landcover_cmd.LandCoverManager")
     def test_landcover_download_by_bbox_success(self, mock_mgr_cls, capsys, tmp_path):
         """landcover download --bbox calls manager.download with bbox."""
         mock_mgr = Mock()
@@ -1005,7 +1005,7 @@ class TestCmdLandcoverDownload:
         captured = capsys.readouterr()
         assert "Downloaded to" in captured.out
 
-    @patch("kartograf.cli.commands.LandCoverManager")
+    @patch("kartograf.cli.landcover_cmd.LandCoverManager")
     def test_landcover_download_source_corine(self, mock_mgr_cls, capsys, tmp_path):
         """--source corine creates manager with corine provider."""
         mock_mgr = Mock()
@@ -1031,7 +1031,7 @@ class TestCmdLandcoverDownload:
         call_kwargs = mock_mgr_cls.call_args
         assert call_kwargs.kwargs.get("provider") == "corine"
 
-    @patch("kartograf.cli.commands.LandCoverManager")
+    @patch("kartograf.cli.landcover_cmd.LandCoverManager")
     def test_landcover_download_error(self, mock_mgr_cls, capsys, tmp_path):
         """DownloadError in download -> exit 1."""
         mock_mgr = Mock()
@@ -1221,7 +1221,7 @@ class TestCmdDownloadGeometry:
     """Tests for download command with --geometry option."""
 
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_geometry_basic(
         self, mock_manager_cls, mock_find, capsys, tmp_path
     ):
@@ -1244,7 +1244,7 @@ class TestCmdDownloadGeometry:
         mock_manager.download_sheet.assert_called_once()
 
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_geometry_with_layer(
         self, mock_manager_cls, mock_find, capsys, tmp_path
     ):
@@ -1346,7 +1346,7 @@ class TestCmdLandcoverDownloadGeometry:
     """Tests for landcover download command with --geometry option."""
 
     @patch("kartograf.core.geometry.get_overall_bbox")
-    @patch("kartograf.cli.commands.LandCoverManager")
+    @patch("kartograf.cli.landcover_cmd.LandCoverManager")
     def test_landcover_geometry_basic(self, mock_mgr_cls, mock_bbox, capsys, tmp_path):
         """--geometry computes overall bbox and downloads."""
         shp_file = tmp_path / "area.shp"
@@ -1664,8 +1664,8 @@ class TestCreateParserBBoxCrsExtended:
 class TestDownloadBBoxSystem:
     """Tests for download --bbox --system integration."""
 
-    @patch("kartograf.cli.commands.find_sheets_for_bbox")
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_bbox_system_2000_passes_param(
         self, mock_manager_cls, mock_find, capsys, tmp_path
     ):
@@ -1695,8 +1695,8 @@ class TestDownloadBBoxSystem:
             len(call_kwargs.args) >= 3 and call_kwargs.args[2] == "2000"
         )
 
-    @patch("kartograf.cli.commands.find_sheets_for_bbox")
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_bbox_default_system_1992(
         self, mock_manager_cls, mock_find, capsys, tmp_path
     ):
@@ -1729,7 +1729,7 @@ class TestDownloadGeometrySystem:
     """Tests for download --geometry --system integration."""
 
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_geometry_system_2000(
         self, mock_manager_cls, mock_find, capsys, tmp_path
     ):
@@ -1761,7 +1761,7 @@ class TestDownloadGeometrySystem:
         assert call_kwargs.kwargs.get("system") == "2000"
 
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.commands.DownloadManager")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_geometry_default_system_1992(
         self, mock_manager_cls, mock_find, capsys, tmp_path
     ):
