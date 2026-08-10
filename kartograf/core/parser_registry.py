@@ -62,8 +62,12 @@ def _pl2000_path_parts(godlo: str) -> list[str]:
 
 
 def _pl1992_path_parts(godlo: str) -> list[str]:
-    # PL-1992: split on dashes, first two parts form the base (e.g. N-34)
+    # PL-1992: split on dashes, first two parts form the base (e.g. N-34).
+    # Identifiers without a dash (e.g. opaque non-PL raw identifiers routed
+    # through the fallback system) are used as a single directory part.
     parts = godlo.split("-")
+    if len(parts) < 2:
+        return parts
     dir_parts = [f"{parts[0]}-{parts[1]}"]
     for part in parts[2:]:
         dir_parts.append(part)
