@@ -10,6 +10,7 @@ import threading
 from pathlib import Path
 from typing import BinaryIO
 
+from kartograf.core import parser_registry
 from kartograf.core.sheet_parser import SheetParser
 
 
@@ -206,16 +207,7 @@ class FileStorage:
         list[str]
             List of directory parts
         """
-        if "." in godlo:
-            # PL-2000: split on dots, use all parts as directory hierarchy
-            return godlo.split(".")
-        else:
-            # PL-1992: split on dashes, first two parts form the base (e.g. N-34)
-            parts = godlo.split("-")
-            dir_parts = [f"{parts[0]}-{parts[1]}"]
-            for part in parts[2:]:
-                dir_parts.append(part)
-            return dir_parts
+        return parser_registry.path_parts(godlo)
 
     def ensure_directory(self, godlo: str) -> Path:
         """
