@@ -41,7 +41,7 @@ import requests
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
-from kartograf.providers.landcover_base import LandCoverProvider
+from kartograf.providers.base import LandCoverProvider
 
 logger = logging.getLogger(__name__)
 
@@ -153,7 +153,7 @@ class SoilGridsProvider(LandCoverProvider):
         return "SoilGrids"
 
     @property
-    def source_url(self) -> str:
+    def base_url(self) -> str:
         """Return source URL."""
         return "https://soilgrids.org"
 

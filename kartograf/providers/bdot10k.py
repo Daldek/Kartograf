@@ -40,7 +40,7 @@ import requests
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
-from kartograf.providers.landcover_base import LandCoverProvider
+from kartograf.providers.base import LandCoverProvider
 
 logger = logging.getLogger(__name__)
 
@@ -139,7 +139,7 @@ class Bdot10kProvider(LandCoverProvider):
         return "BDOT10k"
 
     @property
-    def source_url(self) -> str:
+    def base_url(self) -> str:
         """Return source URL."""
         return "https://www.geoportal.gov.pl/dane/bdot10k"
 
@@ -147,9 +147,9 @@ class Bdot10kProvider(LandCoverProvider):
     # Download by TERYT → OpenData packages
     # =========================================================================
 
-    def download_by_teryt(
+    def download_by_admin_unit(
         self,
-        teryt: str,
+        code: str,
         output_path: Path,
         timeout: int = 120,
         format: str = "GPKG",
@@ -163,7 +163,7 @@ class Bdot10kProvider(LandCoverProvider):
 
         Parameters
         ----------
-        teryt : str
+        code : str
             4-digit TERYT code for powiat (e.g., "1465" for powiat
             warszawski zachodni)
         output_path : Path
@@ -184,8 +184,8 @@ class Bdot10kProvider(LandCoverProvider):
         DownloadError
             If the download fails
         """
-        if not self.validate_teryt(teryt):
-            raise ValidationError(f"Invalid TERYT code: {teryt}")
+        if not self.validate_admin_unit(code):
+            raise ValidationError(f"Invalid TERYT code: {code}")
 
         if format not in ["GPKG", "SHP"]:
             raise ValueError(f"Unsupported format: {format}. Use 'GPKG' or 'SHP'")
@@ -194,13 +194,13 @@ class Bdot10kProvider(LandCoverProvider):
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Construct OpenData URL
-        url = self._construct_opendata_url(teryt, format)
+        url = self._construct_opendata_url(code, format)
 
         return self._download_with_retry(
             url=url,
             output_path=output_path,
             timeout=timeout,
-            description=f"BDOT10k TERYT {teryt}",
+            description=f"BDOT10k TERYT {code}",
             extract_from_zip=(format == "GPKG"),
         )
 
@@ -286,7 +286,7 @@ class Bdot10kProvider(LandCoverProvider):
         logger.info(f"Godło {godlo} is in powiat {teryt}, downloading county package")
 
         # Download the entire county package
-        return self.download_by_teryt(
+        return self.download_by_admin_unit(
             teryt, output_path, timeout, format=format, **kwargs
         )
 
@@ -451,7 +451,7 @@ class Bdot10kProvider(LandCoverProvider):
         logger.info(f"Bbox center is in powiat {teryt}, downloading county package")
 
         # Download the entire county package
-        return self.download_by_teryt(
+        return self.download_by_admin_unit(
             teryt, output_path, timeout, format=format, **kwargs
         )
 

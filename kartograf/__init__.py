@@ -37,14 +37,13 @@ from kartograf.exceptions import (
 )
 from kartograf.hydrology.hsg import HSGCalculator
 from kartograf.landcover.manager import LandCoverManager
-from kartograf.providers.base import BaseProvider
+from kartograf.providers.base import BaseProvider, LandCoverProvider
 from kartograf.providers.bdot10k import Bdot10kProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.gugik import GugikProvider
 from kartograf.providers.gugik_laz import GugikLazProvider, LazTile
 from kartograf.providers.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.gugik_orto import GugikOrtoProvider
-from kartograf.providers.landcover_base import LandCoverProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 
 __version__ = "0.6.1"

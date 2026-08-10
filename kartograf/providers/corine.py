@@ -45,7 +45,7 @@ import requests
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError
-from kartograf.providers.landcover_base import LandCoverProvider
+from kartograf.providers.base import LandCoverProvider
 
 logger = logging.getLogger(__name__)
 
@@ -463,7 +463,7 @@ class CorineProvider(LandCoverProvider):
         return "CORINE Land Cover"
 
     @property
-    def source_url(self) -> str:
+    def base_url(self) -> str:
         """Return source URL."""
         return "https://land.copernicus.eu/en/products/corine-land-cover"
 
