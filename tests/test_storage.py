@@ -579,3 +579,31 @@ class TestFileStorageGetRawPath:
         storage = FileStorage(tmp_path, product="laz")
         path = storage.get_raw_path("6.1.1", "12345_67890_tile.laz")
         assert path.name == "12345_67890_tile.laz"
+
+
+class TestSubdirOverride:
+    """Etap 0: subdir sterowany deskryptorem (etap 1: np. cz_dmr5g)."""
+
+    def test_subdir_takes_precedence(self, tmp_path):
+        storage = FileStorage(tmp_path, subdir="cz_dmr5g")
+        path = storage.get_raw_path("302_5550", "302_5550.tif")
+        assert path == tmp_path / "cz_dmr5g" / "302_5550" / "302_5550.tif"
+
+    def test_subdir_wins_over_product_and_resolution(self, tmp_path):
+        storage = FileStorage(
+            tmp_path, resolution="5m", product="orto", subdir="wlasny"
+        )
+        assert storage.get_path("N-34", ".asc") == (
+            tmp_path / "wlasny" / "N-34" / "N-34.asc"
+        )
+
+    def test_none_keeps_legacy_behavior(self, tmp_path):
+        assert FileStorage(tmp_path, resolution="1m").get_path("N-34", ".asc") == (
+            tmp_path / "nmt_1m" / "N-34" / "N-34.asc"
+        )
+        assert FileStorage(tmp_path, product="nmpt").get_path("N-34", ".asc") == (
+            tmp_path / "nmpt" / "N-34" / "N-34.asc"
+        )
+
+    def test_repr_with_subdir(self, tmp_path):
+        assert "subdir='cz_dmr5g'" in repr(FileStorage(tmp_path, subdir="cz_dmr5g"))
