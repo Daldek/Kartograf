@@ -18,7 +18,7 @@ from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.storage import FileStorage
 from kartograf.exceptions import DownloadError
 from kartograf.providers.base import BaseProvider
-from kartograf.providers.pl.gugik import GugikProvider
+from kartograf.providers.pl import create_nmt_provider
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +176,7 @@ class DownloadManager:
             )
             vertical_crs = "EVRF2007"
 
-        self._provider = provider or GugikProvider(
+        self._provider = provider or create_nmt_provider(
             vertical_crs=vertical_crs, resolution=resolution
         )
         self._storage = storage or FileStorage(output_dir, resolution=resolution)
