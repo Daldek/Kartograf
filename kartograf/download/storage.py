@@ -329,6 +329,8 @@ class FileStorage:
         path = self.get_path(godlo, ext)
         if path.exists():
             path.unlink()
+            # Sidecar metadanych nie moze przezyc pliku danych.
+            path.with_name(path.name + ".meta.json").unlink(missing_ok=True)
             return True
         return False
 

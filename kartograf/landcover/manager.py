@@ -196,7 +196,7 @@ class LandCoverManager:
         # Dispatch to appropriate download method
         if teryt is not None:
             path = self._provider.download_by_teryt(teryt, output_path, **kwargs)
-            self._write_sidecar(path, {"teryt": teryt})
+            self._write_sidecar(path, {"teryt": teryt}, kwargs)
             return path
         elif bbox is not None:
             path = self._provider.download_by_bbox(bbox, output_path, **kwargs)
@@ -206,11 +206,12 @@ class LandCoverManager:
                     "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
                     "bbox_crs": bbox.crs,
                 },
+                kwargs,
             )
             return path
         else:
             path = self._provider.download_by_godlo(godlo, output_path, **kwargs)
-            self._write_sidecar(path, {"godlo": godlo})
+            self._write_sidecar(path, {"godlo": godlo}, kwargs)
             return path
 
     def download_by_teryt(
@@ -239,7 +240,7 @@ class LandCoverManager:
         if output_path is None:
             output_path = self._output_dir / f"{self._provider.name}_{teryt}.gpkg"
         path = self._provider.download_by_teryt(teryt, output_path, **kwargs)
-        self._write_sidecar(path, {"teryt": teryt})
+        self._write_sidecar(path, {"teryt": teryt}, kwargs)
         return path
 
     def download_by_bbox(
@@ -279,6 +280,7 @@ class LandCoverManager:
                 "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
                 "bbox_crs": bbox.crs,
             },
+            kwargs,
         )
         return path
 
@@ -308,7 +310,7 @@ class LandCoverManager:
         if output_path is None:
             output_path = self._output_dir / f"{self._provider.name}_{godlo}.gpkg"
         path = self._provider.download_by_godlo(godlo, output_path, **kwargs)
-        self._write_sidecar(path, {"godlo": godlo})
+        self._write_sidecar(path, {"godlo": godlo}, kwargs)
         return path
 
     def download_batch(
@@ -414,7 +416,9 @@ class LandCoverManager:
 
         return self._output_dir / filename
 
-    def _write_sidecar(self, data_path: Path, request: dict) -> None:
+    def _write_sidecar(
+        self, data_path: Path, request: dict, kwargs: dict | None = None
+    ) -> None:
         """Best-effort zapis sidecara .meta.json (blad nie przerywa pobrania)."""
         try:
             from kartograf.sources.registry import get_source
@@ -423,12 +427,24 @@ class LandCoverManager:
             key = getattr(self._provider, "descriptor_key", None)
             if not isinstance(key, str):
                 return
+            descriptor = get_source(key)
             meta = build_metadata(
-                get_source(key),
+                descriptor,
                 request=request,
                 vertical_crs=getattr(self._provider, "vertical_crs", None),
                 data_path=data_path,
             )
+            # CORINE bez credentials CLMS spada na podglad PNG z WMS — inny CRS
+            # niz deklarowany dla kanalu CLMS GeoTIFF (EPSG:3035).
+            is_png = data_path.suffix.lower() == ".png"
+            if is_png and descriptor.key == "eu.clms.corine":
+                year = (kwargs or {}).get("year", 2018)
+                # 1990 musi odpowiadac CorineProvider.DLR_YEARS (WMS DLR, EPSG:4326);
+                # pozostale roczniki ida przez EEA Discomap (EPSG:3857).
+                meta.horizontal_crs = "EPSG:4326" if year == 1990 else "EPSG:3857"
+                meta.extra.update(
+                    {"fallback": "wms_png", "uwaga": "podglad WMS, nie dane"}
+                )
             write_sidecar(data_path, meta)
         except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
             logger.warning(f"Nie udalo sie zapisac sidecara dla {data_path}: {e}")

@@ -52,7 +52,7 @@ def download_to(
         except requests.RequestException as e:
             last_error = e
             if temp_path.exists():
-                temp_path.unlink()
+                temp_path.unlink(missing_ok=True)
             if attempt < retries - 1:
                 wait = RETRY_BACKOFF_BASE**attempt
                 logger.warning(
@@ -62,7 +62,7 @@ def download_to(
                 time.sleep(wait)
         except Exception:
             if temp_path.exists():
-                temp_path.unlink()
+                temp_path.unlink(missing_ok=True)
             raise
 
     raise DownloadError(

@@ -1292,3 +1292,36 @@ class TestSidecarLandCover:
         assert payload["dataset"] == "pl.gugik.bdot10k"
         assert payload["request"] == {"teryt": "1465"}
         assert payload["vertical_crs"] is None
+
+    @staticmethod
+    def _corine_png_sidecar(tmp_path, **kwargs):
+        """Pobierz CORINE po bbox z fallbackiem PNG; zwroc payload sidecara."""
+        import json
+
+        mock_provider = Mock()
+        mock_provider.name = "CORINE"
+        mock_provider.descriptor_key = "eu.clms.corine"
+        out = tmp_path / "clc.png"
+
+        def fake(bbox, output_path, **_kwargs):
+            out.write_bytes(b"\x89PNG")
+            return out
+
+        mock_provider.download_by_bbox.side_effect = fake
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        result = manager.download_by_bbox(bbox, output_path=out, **kwargs)
+        sidecar = result.parent / f"{result.name}.meta.json"
+        assert sidecar.exists()
+        return json.loads(sidecar.read_text(encoding="utf-8"))
+
+    def test_corine_png_fallback_uses_web_mercator(self, tmp_path):
+        payload = self._corine_png_sidecar(tmp_path)
+        assert payload["horizontal_crs"] == "EPSG:3857"
+        assert payload["extra"]["fallback"] == "wms_png"
+        assert payload["extra"]["uwaga"] == "podglad WMS, nie dane"
+
+    def test_corine_png_fallback_1990_uses_wgs84(self, tmp_path):
+        payload = self._corine_png_sidecar(tmp_path, year=1990)
+        assert payload["horizontal_crs"] == "EPSG:4326"
+        assert payload["extra"]["fallback"] == "wms_png"
