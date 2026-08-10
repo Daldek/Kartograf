@@ -264,6 +264,7 @@ class DownloadManager:
         # Download
         logger.info(f"Downloading {godlo}...")
         self._provider.download(godlo, target_path)
+        self._write_sidecar(target_path, {"godlo": godlo})
 
         return target_path
 
@@ -364,6 +365,7 @@ class DownloadManager:
                 return (descendant_godlo, target_path, "skipped", "Already exists")
 
             path = self._provider.download(descendant_godlo, target_path)
+            self._write_sidecar(path, {"godlo": descendant_godlo})
             return (descendant_godlo, path, "completed", "")
 
         except DownloadError as e:
@@ -414,6 +416,7 @@ class DownloadManager:
                     )
 
                 path = self._provider.download(current_godlo, target_path)
+                self._write_sidecar(path, {"godlo": current_godlo})
                 downloaded_paths.append(path)
 
                 if on_progress:
@@ -593,7 +596,15 @@ class DownloadManager:
         output_path = self._storage.output_dir / filename
 
         logger.info(f"Downloading bbox to {output_path}...")
-        return self._provider.download_bbox(bbox, output_path, format=format)
+        result = self._provider.download_bbox(bbox, output_path, format=format)
+        self._write_sidecar(
+            result,
+            {
+                "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+                "bbox_crs": bbox.crs,
+            },
+        )
+        return result
 
     # =========================================================================
     # Utility methods
@@ -648,6 +659,25 @@ class DownloadManager:
         parser = SheetParser(godlo)
         descendants = parser.get_all_descendants(target_scale)
         return len(descendants)
+
+    def _write_sidecar(self, data_path: Path, request: dict) -> None:
+        """Best-effort zapis sidecara .meta.json (blad nie przerywa pobrania)."""
+        try:
+            from kartograf.sources.registry import get_source
+            from kartograf.sources.sidecar import build_metadata, write_sidecar
+
+            key = getattr(self._provider, "descriptor_key", None)
+            if not isinstance(key, str):
+                return
+            meta = build_metadata(
+                get_source(key),
+                request=request,
+                vertical_crs=getattr(self._provider, "vertical_crs", None),
+                data_path=data_path,
+            )
+            write_sidecar(data_path, meta)
+        except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
+            logger.warning(f"Nie udalo sie zapisac sidecara dla {data_path}: {e}")
 
     def __repr__(self) -> str:
         """Return string representation."""

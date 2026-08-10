@@ -1266,3 +1266,29 @@ class TestAdminUnitAliases:
         assert issubclass(LandCoverProvider, DataSourceProvider)
         assert issubclass(BaseProvider, DataSourceProvider)
         assert DataSourceProvider.descriptor_key is None
+
+
+class TestSidecarLandCover:
+    """Sidecar .meta.json po pobraniu pokrycia terenu (spec etap 0)."""
+
+    def test_download_by_teryt_writes_sidecar(self, tmp_path):
+        mock_provider = Mock()
+        mock_provider.name = "BDOT10k"
+        mock_provider.descriptor_key = "pl.gugik.bdot10k"
+        out = tmp_path / "out.gpkg"
+
+        def fake(teryt, output_path, **kwargs):
+            out.write_bytes(b"GPKG")
+            return out
+
+        mock_provider.download_by_teryt.side_effect = fake
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+        result = manager.download_by_teryt("1465", output_path=out)
+        sidecar = result.parent / f"{result.name}.meta.json"
+        assert sidecar.exists()
+        import json
+
+        payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        assert payload["dataset"] == "pl.gugik.bdot10k"
+        assert payload["request"] == {"teryt": "1465"}
+        assert payload["vertical_crs"] is None

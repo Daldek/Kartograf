@@ -444,6 +444,8 @@ class CorineProvider(LandCoverProvider):
             except Exception as e:
                 logger.warning(f"Failed to initialize CLMS auth: {e}")
 
+        self.descriptor_key = "eu.clms.corine"
+
     @property
     def has_clms_token(self) -> bool:
         """Return True if CLMS OAuth2 authentication is available."""

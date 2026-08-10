@@ -195,11 +195,23 @@ class LandCoverManager:
 
         # Dispatch to appropriate download method
         if teryt is not None:
-            return self._provider.download_by_teryt(teryt, output_path, **kwargs)
+            path = self._provider.download_by_teryt(teryt, output_path, **kwargs)
+            self._write_sidecar(path, {"teryt": teryt})
+            return path
         elif bbox is not None:
-            return self._provider.download_by_bbox(bbox, output_path, **kwargs)
+            path = self._provider.download_by_bbox(bbox, output_path, **kwargs)
+            self._write_sidecar(
+                path,
+                {
+                    "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+                    "bbox_crs": bbox.crs,
+                },
+            )
+            return path
         else:
-            return self._provider.download_by_godlo(godlo, output_path, **kwargs)
+            path = self._provider.download_by_godlo(godlo, output_path, **kwargs)
+            self._write_sidecar(path, {"godlo": godlo})
+            return path
 
     def download_by_teryt(
         self,
@@ -226,7 +238,9 @@ class LandCoverManager:
         """
         if output_path is None:
             output_path = self._output_dir / f"{self._provider.name}_{teryt}.gpkg"
-        return self._provider.download_by_teryt(teryt, output_path, **kwargs)
+        path = self._provider.download_by_teryt(teryt, output_path, **kwargs)
+        self._write_sidecar(path, {"teryt": teryt})
+        return path
 
     def download_by_bbox(
         self,
@@ -258,7 +272,15 @@ class LandCoverManager:
             output_path = (
                 self._output_dir / f"{self._provider.name}_bbox_{bbox_str}.gpkg"
             )
-        return self._provider.download_by_bbox(bbox, output_path, **kwargs)
+        path = self._provider.download_by_bbox(bbox, output_path, **kwargs)
+        self._write_sidecar(
+            path,
+            {
+                "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+                "bbox_crs": bbox.crs,
+            },
+        )
+        return path
 
     def download_by_godlo(
         self,
@@ -285,7 +307,9 @@ class LandCoverManager:
         """
         if output_path is None:
             output_path = self._output_dir / f"{self._provider.name}_{godlo}.gpkg"
-        return self._provider.download_by_godlo(godlo, output_path, **kwargs)
+        path = self._provider.download_by_godlo(godlo, output_path, **kwargs)
+        self._write_sidecar(path, {"godlo": godlo})
+        return path
 
     def download_batch(
         self,
@@ -389,6 +413,25 @@ class LandCoverManager:
             filename = f"{provider_prefix}_godlo_{godlo}.gpkg"
 
         return self._output_dir / filename
+
+    def _write_sidecar(self, data_path: Path, request: dict) -> None:
+        """Best-effort zapis sidecara .meta.json (blad nie przerywa pobrania)."""
+        try:
+            from kartograf.sources.registry import get_source
+            from kartograf.sources.sidecar import build_metadata, write_sidecar
+
+            key = getattr(self._provider, "descriptor_key", None)
+            if not isinstance(key, str):
+                return
+            meta = build_metadata(
+                get_source(key),
+                request=request,
+                vertical_crs=getattr(self._provider, "vertical_crs", None),
+                data_path=data_path,
+            )
+            write_sidecar(data_path, meta)
+        except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
+            logger.warning(f"Nie udalo sie zapisac sidecara dla {data_path}: {e}")
 
     # =========================================================================
     # Info methods

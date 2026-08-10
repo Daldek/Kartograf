@@ -1941,6 +1941,49 @@ class TestCmdDownloadLaz:
         assert result == 1
         assert "No LAZ tiles" in capsys.readouterr().err
 
+    @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
+    def test_laz_writes_sidecar_next_to_tile(self, mock_provider_cls, tmp_path):
+        """Kazdy pobrany kafel dostaje sidecar <nazwa>.laz.meta.json."""
+        import json
+
+        tile = self._fake_tiles()[0]
+        instance = Mock()
+        instance.vertical_crs = "EVRF2007"
+        instance.discover_tiles.return_value = [tile]
+
+        def fake_download(url, target, **kwargs):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"LASF")
+            return target
+
+        instance.download.side_effect = fake_download
+        mock_provider_cls.return_value = instance
+
+        result = main(
+            [
+                "download",
+                "M-34-27-B-b-2-1",
+                "--product",
+                "laz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        sidecars = list(tmp_path.rglob("*.meta.json"))
+        assert len(sidecars) == 1
+        sidecar = sidecars[0]
+        assert sidecar.name == f"{tile.filename}.meta.json"
+        assert (sidecar.parent / tile.filename).exists()
+        payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        assert payload["dataset"] == "pl.gugik.laz"
+        assert payload["vertical_crs"] == "EPSG:9651"
+        assert payload["extra"]["godlo_kafla"] == tile.godlo
+        assert payload["extra"]["rok"] == tile.year
+        assert payload["request"]["bbox_crs"] == "EPSG:2180"
+
     def test_laz_invalid_godlo_errors(self, capsys, tmp_path):
         result = main(
             ["download", "NOT-A-GODLO!!", "--product", "laz", "-o", str(tmp_path), "-q"]

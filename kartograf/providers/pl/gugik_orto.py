@@ -110,6 +110,7 @@ class GugikOrtoProvider(BaseProvider):
         self._cache = cache
         # In-memory cache of validated WMS layers (None until first lookup)
         self._validated_layers: list[str] | None = None
+        self.descriptor_key = "pl.gugik.orto"
 
     @property
     def name(self) -> str:

@@ -146,6 +146,7 @@ class SoilGridsProvider(LandCoverProvider):
         """
         self._session = session
         self._cache = cache
+        self.descriptor_key = "global.isric.soilgrids"
 
     @property
     def name(self) -> str:

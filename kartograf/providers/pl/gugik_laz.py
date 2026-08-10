@@ -163,6 +163,7 @@ class GugikLazProvider(BaseProvider):
         self._cache = cache
         # In-memory cache of available years per height system
         self._available_years: dict[str, list[int]] = {}
+        self.descriptor_key = "pl.gugik.laz"
 
     @property
     def name(self) -> str:
