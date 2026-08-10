@@ -14,12 +14,14 @@ from typing import NamedTuple
 
 from pyproj import Transformer
 
+from kartograf.core import parser_registry
 from kartograf.exceptions import ParseError, ValidationError
 
 
 def _is_pl2000_format(godlo: str) -> bool:
-    """Check if godlo uses PL-2000 dot-separated numeric format."""
-    return bool(re.match(r"^[5-8]\.\d", godlo))
+    """Check if godlo uses PL-2000 dot-separated numeric format (via registry)."""
+    system = parser_registry.detect_system(godlo)
+    return system is not None and system.id == "pl2000"
 
 
 class BBox(NamedTuple):
