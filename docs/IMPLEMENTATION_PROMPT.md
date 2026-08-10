@@ -59,12 +59,13 @@ kartograf/
 │   └── geometry.py          # Czytanie SHP/GPKG, find_sheets_for_geometry
 │
 ├── providers/               # WARSTWA DANYCH (abstrakcje nad API)
-│   ├── base.py              # BaseProvider — abstrakcja dla NMT
-│   ├── gugik.py             # GugikProvider — NMT z GUGiK (WCS + OpenData)
-│   ├── gugik_nmpt.py        # GugikNmptProvider — NMPT/DSM (dziedziczy z GugikProvider)
-│   ├── gugik_orto.py        # GugikOrtoProvider — Ortofotomapa (BaseProvider, TIF)
-│   ├── landcover_base.py    # LandCoverProvider — abstrakcja dla pokrycia terenu
-│   ├── bdot10k.py           # Bdot10kProvider — BDOT10k z GUGiK
+│   ├── base.py              # BaseProvider — abstrakcja dla NMT; LandCoverProvider — abstrakcja dla pokrycia terenu (dawniej landcover_base.py)
+│   ├── pl/                  # Providery polskie
+│   │   ├── gugik.py             # GugikProvider — NMT z GUGiK (WCS + OpenData)
+│   │   ├── gugik_nmpt.py        # GugikNmptProvider — NMPT/DSM (dziedziczy z GugikProvider)
+│   │   ├── gugik_orto.py        # GugikOrtoProvider — Ortofotomapa (BaseProvider, TIF)
+│   │   ├── gugik_laz.py         # GugikLazProvider — chmury punktów LAZ (WFS)
+│   │   └── bdot10k.py           # Bdot10kProvider — BDOT10k z GUGiK
 │   ├── corine.py            # CorineProvider — CORINE z Copernicus (CLMS API + WMS)
 │   └── soilgrids.py         # SoilGridsProvider — dane glebowe z ISRIC (WCS)
 │
@@ -215,7 +216,7 @@ from kartograf import (
 
 ```python
 # 1. Stworz klase w kartograf/providers/nowy_provider.py
-# 2. Dziedzicz z LandCoverProvider (landcover_base.py)
+# 2. Dziedzicz z LandCoverProvider (providers/base.py)
 # 3. Zaimplementuj metody: download_by_teryt, download_by_bbox, download_by_godlo
 # 4. Zarejestruj w LandCoverManager._init_providers()
 # 5. Dodaj eksport do kartograf/__init__.py

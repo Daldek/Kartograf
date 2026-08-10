@@ -84,7 +84,7 @@ class Bdot10kProvider(LandCoverProvider):
     >>> provider = Bdot10kProvider()
     >>>
     >>> # Download by TERYT (powiat code)
-    >>> provider.download_by_teryt("1465", Path("./data/powiat_1465.gpkg"))
+    >>> provider.download_by_admin_unit("1465", Path("./data/powiat_1465.gpkg"))
     >>>
     >>> # Download by bbox
     >>> from kartograf import BBox

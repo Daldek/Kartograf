@@ -23,6 +23,7 @@
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0 |
 | Weryfikacja BBox PL-2000 | ✅ Gotowy | 67 testow, reference values + live WMS |
 | Walidacja warstw WMS | ✅ Gotowy | GetCapabilities, lazy, fallback; NMT+NMPT v0.6.1, Orto 2026-06-24 |
+| Etap 0 — zrodla wielokrajowe (sources/transform/transport/providers-pl/CLI split/sidecar) | ✅ Gotowy | galaz feature/etap0-zrodla-wielokrajowe |
 
 <!-- Statusy: ✅ Gotowy | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
@@ -130,19 +131,28 @@
   wzgledem baseline (nie byl zainstalowany); wersja pakietu zostaje 0.6.1 do
   wydania (testy ja asertuja); regula 5m⇒EVRF2007 zostaje TAKZE w
   DownloadManager (testy) oprocz nowej fabryki
+- **Implementacja etapu 0 (sesja 3, subagent-driven, galaz
+  `feature/etap0-zrodla-wielokrajowe`)** — 15 commitow, `63ac66c`..`ad3fb8f`,
+  zadania 1-13 kodowe + zadanie 14 (ta aktualizacja dokumentacji):
+  `sources/` (descriptor, registry, sidecar), `transform/crs.py` (twarda
+  polityka transformacji), `transport/` (http, mosaic), `core/parser_registry.py`
+  (+ delegacje SheetParser/FileStorage), `FileStorage(subdir=...)`, unifikacja
+  ABC w `providers/base.py` (DataSourceProvider, `download_by_admin_unit` +
+  aliasy teryt), przenosiny `providers/gugik*`/`bdot10k.py` → `providers/pl/`
+  bez shimow, fabryka `create_nmt_provider()`, sidecar `.meta.json` spiety w
+  managerach i CLI LAZ, podzial `cli/commands.py` na 6 modulow per komenda +
+  fasada zgodnosci. **1137 testow zielonych** (bez zmiany asercji istniejacych),
+  pokrycie ~88%. Jedyna zmiana obserwowalna z zewnatrz: sidecar `.meta.json`
+  po kazdym udanym pobraniu; publiczne `from kartograf import ...` bez zmian,
+  BREAKING tylko dla glebokich importow providerow (ADR-022, CHANGELOG)
 
 ### Nastepne kroki
-1. **Implementacja etapu 0 wg planu** — na NOWEJ galezi
-   `feature/etap0-zrodla-wielokrajowe` z `develop` (Zadanie 0 planu);
-   wykonanie zadanie-po-zadaniu (subagent-driven lub executing-plans),
-   pelny pytest przed kazdym commitem
-2. Po zakonczeniu: review + merge do develop, potem spec+plan etapu 1
-   (fundament CZ + DMR)
-2. Etap 1 (CZ fundament + DMR) — spec po zamknieciu etapu 0
+1. **Review + merge do develop** — galaz `feature/etap0-zrodla-wielokrajowe`
+   gotowa (zadanie 15: koncowa weryfikacja/review), po akceptacji merge do
+   `develop`
+2. **Spec + plan etapu 1** (fundament CZ + DMR) — po zamknieciu etapu 0
 3. Odziedziczone: (do weryfikacji) zgodnosc `get_bbox` z godlowaniem kafli LAZ
-   (patrz [[gugik-laz-wfs]]); mozaikowanie NMT wchodzi w etap 0 jako
-   `transport/mosaic.py`; unifikacja BaseProvider/LandCoverProvider wchodzi
-   w etap 0
+   (patrz [[gugik-laz-wfs]])
 
 ## Backlog
 

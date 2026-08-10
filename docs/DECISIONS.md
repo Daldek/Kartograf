@@ -376,6 +376,24 @@ Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja
 
 ---
 
+## ADR-022: Architektura zrodel wielokrajowych — deskryptory, rejestry, sidecar, twarda polityka transformacji (etap 0)
+
+**Data:** 2026-08-10
+**Status:** Przyjeta
+
+**Kontekst:** Decyzja kierunkowa: rozszerzenie o Czechy (pelna parytetowosc produktowa), potem Niemcy i Slowacje (analizy transgraniczne). Research 3 krajow (docs/research/2026-08-10-*) dal 4 realne przypadki do zaprojektowania granic abstrakcji i wykazal pulapki: DE = federacja 17 modeli; SK WCS zwraca wysokosci elipsoidalne (42,3 m odchylki od Bpv); PROJ przy braku sieci cicho zwraca identycznosc (ballpark); siatki transformacyjne obcych krajow zwracaja inf poza swoim obszarem; CZ wypelnia obszar poza granica zerami (bez metadanych 0 m udaje poziom morza). Spec: docs/superpowers/specs/2026-08-10-etap0-zrodla-wielokrajowe-design.md.
+
+**Opcje:**
+- A) Dodawac kraje przez rozbudowe istniejacych klas GUGiK-centrycznych
+- B) Etap 0: zrodla opisane deklaratywnie (deskryptory jako dane), sidecar metadanych, twarda polityka transformacji, wspolny transport; providery per kraj w providers/<cc>/
+- C) Pelna ekstrakcja silnikow transportu (WMS-skorowidz/WCS) juz teraz
+
+**Decyzja:** Opcja B. `sources/` (SourceDescriptor/AccessChannel/rejestr; zero IO), `sources/sidecar.py` (ResultMetadata + `<plik>.meta.json` po kazdym udanym pobraniu — kontrakt dla Hydrografa, ktory scala dane transgraniczne), `transform/crs.py` (TransformerGroup z allow_ballpark=False; odrzucanie operacji o nieznanej dokladnosci — w pyproj accuracy=-1, 0.0 oznacza operacje dokladna i JEST akceptowane; probe na punkcie kontrolnym odrzuca siatki obcych krajow zwracajace inf; isfinite na kazdym wyniku), `transport/http.py` + `transport/mosaic.py`, `core/parser_registry.py`, unifikacja ABC (DataSourceProvider; download_by_admin_unit z aliasami teryt), przenosiny providers/pl/ BEZ shimow (decyzja uzytkownika: Hydrograf/Hydrolog dostosuja importy; stabilna powierzchnia = `from kartograf import ...`). Opcja C odrzucona: jedynym konsumentem WMS-skorowidzow jest GUGiK, ekstrakcja teraz to ryzyko dla ~1060 testow bez zysku; formalny interfejs silnika powstanie w etapie 1 przy CuzkClient.
+
+**Konsekwencje:** Zachowanie identyczne (inwariant ~1060 testow bez zmiany asercji); jedyna zmiana obserwowalna to sidecary `.meta.json`. BREAKING dla glebokich importow (tabela w CHANGELOG). Etap 1 (CZ DMR) buduje na fabryce providerow pl/, deskryptorach i polityce transformacji.
+
+---
+
 <!-- Szablon nowej decyzji:
 
 ## ADR-XXX: Tytul
