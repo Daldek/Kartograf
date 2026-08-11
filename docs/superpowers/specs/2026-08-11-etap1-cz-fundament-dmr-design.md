@@ -1,7 +1,8 @@
 # Spec: Etap 1 — fundament CZ + DMR (CUZK)
 
 **Data:** 2026-08-11
-**Status:** szkic do review
+**Status:** zaakceptowany 2026-08-11 (po review: + `extra.parent_request`
+dla trybu `--country auto`; decyzja EVRF2007 globalnie = EPSG:5621)
 **Wersja docelowa:** 0.7.0 (develop)
 **Dokumenty zrodlowe:**
 - `docs/superpowers/specs/2026-08-10-etap0-zrodla-wielokrajowe-design.md` (spec etapu 0,
