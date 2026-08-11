@@ -16,7 +16,7 @@ from typing import Any
 class SheetSystem:
     """Opis jednego systemu godlowania arkuszy."""
 
-    id: str  # "pl1992", "pl2000"
+    id: str  # "pl1992", "pl2000", "cz_tm33", "cz_sm5"
     country: str
     detect: Callable[[str], bool]
     parser_factory: Callable[[str], Any]  # obiekt z .godlo, .get_bbox(), ...
@@ -86,6 +86,26 @@ def _make_parser_pl1992(godlo: str) -> Any:
     return SheetParser(godlo)
 
 
+_CZ_TM33_PATTERN = re.compile(r"^\d{3}_\d{4}$")
+_CZ_SM5_PATTERN = re.compile(r"^[A-Z]{4}\d{2}$")
+
+
+def _make_parser_cz_tm33(godlo: str) -> Any:
+    from kartograf.core.parser_tm33 import ParserTM33
+
+    return ParserTM33(godlo)
+
+
+def _make_parser_cz_sm5(godlo: str) -> Any:
+    # Import leniwy: unika ciagniecia providers/cuzk (i jego IO-zaleznych
+    # importow, np. CuzkClient) do core przy imporcie modulu. Wartosc "cz_sm5"
+    # jest zgodna z Sm5Sheet.uklad i SheetIndex.SM5_SYSTEM (providers/cuzk/sheets.py) —
+    # nie importowana stad celowo, zeby nie naruszyc warstwy core/providers.
+    from kartograf.providers.cuzk.sheets import Sm5Sheet
+
+    return Sm5Sheet(godlo)
+
+
 register_system(
     SheetSystem(
         id="pl2000",
@@ -93,6 +113,24 @@ register_system(
         detect=_detect_pl2000,
         parser_factory=_make_parser_pl2000,
         path_parts=_pl2000_path_parts,
+    )
+)
+register_system(
+    SheetSystem(
+        id="cz_tm33",
+        country="CZ",
+        detect=lambda godlo: bool(_CZ_TM33_PATTERN.match(godlo)),
+        parser_factory=_make_parser_cz_tm33,
+        path_parts=lambda godlo: godlo.split("_"),
+    )
+)
+register_system(
+    SheetSystem(
+        id="cz_sm5",
+        country="CZ",
+        detect=lambda godlo: bool(_CZ_SM5_PATTERN.match(godlo)),
+        parser_factory=_make_parser_cz_sm5,
+        path_parts=lambda godlo: [godlo[:4], godlo[4:]],
     )
 )
 register_system(
