@@ -615,6 +615,19 @@ ale zostawia systematyczne **1,25 m na poludnie** — powtorzone na dwoch
 niezaleznych kaflach (`758_5514`, `760_5514`), przy samozgodnosci eksportow
 natywnych 0,045 m. Zrodlo tego 1,25 m pozostaje nieznane (po stronie serwera).
 
+**Korekta liczby (2026-08-11, po zywej weryfikacji fixu):** 1,25 m pochodzi
+z pomiaru na dwoch kaflach diagnozy kolo Cieszyna (`758_5514`, `760_5514`).
+Niezalezny pomiar na pliku E2E sprzed fixu (`302_5550`, zachodnie Czechy,
+zachowany z sesji E2E) dal **4,92 m** przesuniecia tresci wzgledem pliku po
+fixie (dE −4,50 m, dN −2,00 m; minimum RMS 0,042 m przy skanie ±30 m) —
+prawie 4x wiecej niz kolo Cieszyna. Wniosek: blad serwerowej reprojekcji
+5514→3045 byl **zmienny przestrzennie** (rozna realizacja transformacji
+datum po stronie serwera CUZK w roznych czesciach kraju), nie stala
+globalna — silniejszy argument za Opcja C (reprojekcja lokalna takze dla
+sciezki godlowej TM33) niz sugerowalaby sama liczba 1,25 m. Zrodlo:
+`seam/verify/verify-report.md`, sekcja 2 ("Dodatkowo: bezposredni pomiar
+skutku fixu na tym samym kaflu").
+
 **Opcje:**
 - A) Naprawic tylko `--target-crs`, zostawic godlowa sciezke TM33 na serwerze.
   Odrzucona: 1,25 m to 0,6 piksela DMR 5G, na stoku 20° daje 0,45 m bledu
@@ -707,6 +720,31 @@ wartosc `transform.horizontal`, niepuste `transform` dla kafli TM33.
 Sciezka SM5 (DMR 4G z openzu) jest nietknieta — pliki przychodza w 5514.
 Regula "nie ufaj reprojekcji serwerowej" jest wiazaca takze dla przyszlych
 zrodel DE/SK sterowanych serwerowym parametrem ukladu.
+
+**Zywa weryfikacja fixu (2026-08-11, dane CUZK+GUGiK,
+`seam/verify/verify-report.md`):** kontrola tresci (dopasowanie do
+referencji natywnej 5514 metoda minimum RMS w skanie przesuniec ±2 m/0,25 m)
+potwierdza fix na obu sciezkach, minimum dokladnie w (0,0) na obu:
+godlo TM33 (`302_5550`, EPSG:3045) — RMS(0,0) = **0,016 m**; bbox
+`--target-crs EPSG:2180` — RMS(0,0) = **0,031 m**. Porownanie z NMT PL
+w pasie nakladki (szew Olzy) daje mediane CZ−PL = **−0,086 m** przy
+korelacji **0,998** (zgodnie z pomiarem diagnozy powyzej: −0,083 m).
+Kontrole negatywne (ten sam test na plikach sprzed fixu) odtwarzaja
+oryginalne bledy (mediana +1,368 m, korelacja 0,499) — metoda jest wiec
+czula na blad tej klasy, a zerowy wynik na plikach po fixie nie jest
+artefaktem nieczulosci.
+
+Dwa znane koszty lokalnego warpu, zaobserwowane przy tej weryfikacji —
+kandydaci do optymalizacji w etapie 2 (nie blokuja fixu):
+(a) **utrata rzadkiego (sparse/tiled) ukladu TIFF serwera** — kafel
+93% nodata: 527 KB (serwerowy tiled TIFF, puste kafle pominiete) → 4,0 MB
+(lokalny zapis striped/gesty); dla kafli bez nodata roznicy praktycznie
+nie ma. Kierunek naprawy: `tiled=True` + kompresja w profilu zapisu warpu;
+(b) **halo interpolatora bilinear ~1 piksel na krawedzi waznosci**
+(~0,5% pikseli produktu ma referencje juz w nodata; wartosci pozostaja
+poprawne, GDAL renormalizuje wagi). Kierunek naprawy: maskowanie przed
+interpolacja na krawedzi, jesli konsument liczy dokladna powierzchnie
+pokrycia.
 
 <!-- Szablon nowej decyzji:
 

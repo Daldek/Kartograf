@@ -388,19 +388,46 @@ Regresja tresci: syntetyczny "serwer" oddaje raster z wbudowanym
 przesunieciem ballparku, a test sprawdza, gdzie **wyladowal wierzcholek**
 (< 1 px od wzorca pyproj) — na starym kodzie failowal z bledem 134,5 m.
 
+### Zywa weryfikacja fixu ADR-024 (2026-08-11)
+
+Bugfix ADR-024 zweryfikowany **live 3xPASS** na danych CUZK+GUGiK, galaz
+`feature/etap1-cz-dmr @ 2dd8dae` (commity `6bf5e2b`, `fd5c5b0`, `2dd8dae`
++ ten commit dokumentacyjny), metoda kontroli TRESCI (dopasowanie do
+referencji natywnej 5514, minimum RMS w skanie przesuniec) — zamyka luke
+odnotowana w E2E (punkty 1 i 4 sprawdzaly wtedy tylko bounds/CRS/res, nie
+georeferencje pikseli). Wyniki: godlo TM33 (`302_5550`, EPSG:3045) —
+RMS(0,0) = 0,016 m; bbox `--target-crs EPSG:2180` — RMS(0,0) = 0,031 m;
+oba minima skanu dokladnie w (0,0). Szew z NMT PL (Olza): mediana
+CZ−PL = −0,086 m, korelacja 0,998 (potwierdza diagnoze: −0,083 m).
+Korekta liczby z ADR-024: dawny blad sciezki godlowej TM33 nie byl stala
+1,25 m — pomiar na innym kaflu (E2E, zachodnie Czechy) dal 4,92 m; blad
+serwerowej reprojekcji 5514→3045 byl zmienny przestrzennie. Pelny raport:
+`docs/research/2026-08-11-etap1-e2e.md` (adnotacja) i ADR-024 w
+`docs/DECISIONS.md`. Dwa nowe koszty lokalnego warpu odnotowane jako
+backlog etapu 2 (patrz "Nastepne kroki" nizej): utrata rzadkiego/tiled
+ukladu TIFF serwera przy zapisie, halo interpolatora bilinear ~1 px na
+krawedzi waznosci.
+
 ### Nastepne kroki
 1. **Decyzja uzytkownika: merge `feature/etap1-cz-dmr` do `develop`** —
-   galaz jest zielona (1399 testow, ruff/mypy czyste), E2E 11/11 PASS
-   (z adnotacja o luce: E2E weryfikowalo bounds/CRS, nie georeferencje
-   tresci — patrz fix ADR-024 wyzej), dokumentacja kompletna. Wymaga:
+   galaz jest zielona (1399 testow, ruff/mypy czyste), E2E 11/11 PASS,
+   a luka odnotowana przy fixie ADR-024 (E2E weryfikowalo bounds/CRS, nie
+   georeferencje tresci) jest juz zamknieta — zywa weryfikacja tresci
+   3xPASS, patrz sekcja wyzej. Dokumentacja kompletna. Wymaga:
    superpowers:finishing-a-development-branch albo recznego przegladu.
-   **Warto przed mergem:** weryfikacja E2E na zywych danych po fixie
-   (punkty 1 i 4 macierzy — tym razem z kontrola tresci).
 2. **Etap 2** (DMP/Orto/LAZ CZ + wielokat granicy administracyjnej zamiast
    prostokatnej obwiedni + ujednolicenie `extra.parent_request.bbox_crs`
    miedzy trybami jawny/auto) — spec/plan do napisania po decyzji o mergu;
    punkt wyjscia: ADR-023 (ustalenia dodatkowe 3-4) i `docs/SCOPE.md`
-   (sekcje 2.2, 3.1, 3.2)
+   (sekcje 2.2, 3.1, 3.2). Do backlogu etapu 2, z zywej weryfikacji
+   ADR-024 (`seam/verify/verify-report.md`, Zastrzezenia 1-3): (a)
+   kompresja/`tiled=True` w profilu zapisu lokalnego warpu CZ (kafel
+   brzegowy 93% nodata: 527 KB serwerowy → 4,0 MB lokalny, 7,6x); (b)
+   maskowanie przed interpolacja bilinear na krawedzi waznosci (halo
+   ~1 px, ~0,5% pikseli); (c) przestroga: blad serwerowej reprojekcji
+   CUZK bywa zmienny przestrzennie (1,25 m kolo Cieszyna, 4,92 m w
+   zachodnich Czechach) — nie zakladac stalego offsetu przy podobnych
+   diagnozach w przyszlosci.
 3. **Push `develop` na origin** (36+ commitow lokalnie, decyzja z etapu 0
    nadal nierozwiazana) — patrz wyzej
 4. **Zgloszenie/naprawa WCS EVRF2007 GUGiK** (male, przedistniejace, poza
