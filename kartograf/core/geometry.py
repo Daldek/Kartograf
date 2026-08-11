@@ -219,6 +219,53 @@ def _read_gpkg_crs(conn: sqlite3.Connection, table_name: str) -> CRS:
             raise ValidationError(f"Cannot parse CRS for srs_id={srs_id}: {e}") from e
 
 
+def _resolve_gpkg_layer(
+    conn: sqlite3.Connection, filepath: Path, layer: str | None
+) -> str:
+    """
+    Nazwa tabeli obiektow do odczytu (walidacja ``--layer``, domyslnie pierwsza).
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open GPKG database connection
+    filepath : Path
+        Path to .gpkg file (do komunikatow bledu)
+    layer : str or None
+        Layer name (None = first feature table)
+
+    Returns
+    -------
+    str
+        Feature table name
+
+    Raises
+    ------
+    ValidationError
+        If the GeoPackage has no feature tables or the layer does not exist
+    """
+    tables = _get_gpkg_feature_tables(conn)
+    if not tables:
+        raise ValidationError(f"No feature tables found in GeoPackage: {filepath}")
+
+    if layer is not None:
+        if layer not in tables:
+            raise ValidationError(
+                f"Layer '{layer}' not found in GeoPackage. "
+                f"Available layers: {', '.join(tables)}"
+            )
+        return layer
+
+    table_name = tables[0]
+    if len(tables) > 1:
+        logger.info(
+            "Multiple layers in GPKG, using '%s'. Available: %s",
+            table_name,
+            ", ".join(tables),
+        )
+    return table_name
+
+
 def _read_gpkg_bboxes(filepath: Path, layer: str | None, target_crs: str) -> list[BBox]:
     """
     Read per-feature bounding boxes from a GeoPackage.
@@ -239,26 +286,7 @@ def _read_gpkg_bboxes(filepath: Path, layer: str | None, target_crs: str) -> lis
     """
     conn = sqlite3.connect(str(filepath))
     try:
-        tables = _get_gpkg_feature_tables(conn)
-        if not tables:
-            raise ValidationError(f"No feature tables found in GeoPackage: {filepath}")
-
-        if layer is not None:
-            if layer not in tables:
-                raise ValidationError(
-                    f"Layer '{layer}' not found in GeoPackage. "
-                    f"Available layers: {', '.join(tables)}"
-                )
-            table_name = layer
-        else:
-            table_name = tables[0]
-            if len(tables) > 1:
-                logger.info(
-                    "Multiple layers in GPKG, using '%s'. Available: %s",
-                    table_name,
-                    ", ".join(tables),
-                )
-
+        table_name = _resolve_gpkg_layer(conn, filepath, layer)
         source_crs = _read_gpkg_crs(conn, table_name)
 
         # Get geometry column name
@@ -390,6 +418,49 @@ def read_feature_bboxes(
             f"Unsupported geometry format: '{ext}'. "
             f"Supported: {', '.join(sorted(_SUPPORTED_EXTENSIONS))}"
         )
+
+
+def read_source_crs(filepath: Path, layer: str | None = None) -> CRS:
+    """
+    Read the CRS the geometry file stores its coordinates in (no transformation).
+
+    Pozwala policzyc obwiednie W UKLADZIE PLIKU (``target_crs`` rowny temu
+    ukladowi = brak transformacji) i wykonac skok do ukladu docelowego
+    mechanizmem przypietych operacji z ``kartograf.transform.crs`` zamiast
+    domyslnym transformerem pyproj uzywanym w tym module.
+
+    Parameters
+    ----------
+    filepath : Path
+        Path to SHP or GPKG file
+    layer : str or None
+        Layer name for GPKG (None = first feature table)
+
+    Returns
+    -------
+    CRS
+        pyproj CRS object
+
+    Raises
+    ------
+    ValidationError
+        If the format is unsupported or the CRS cannot be determined
+    """
+    ext = filepath.suffix.lower()
+
+    if ext == ".shp":
+        return _read_shp_crs(filepath)
+    if ext == ".gpkg":
+        conn = sqlite3.connect(str(filepath))
+        try:
+            return _read_gpkg_crs(conn, _resolve_gpkg_layer(conn, filepath, layer))
+        finally:
+            conn.close()
+
+    raise ValidationError(
+        f"Unsupported geometry format: '{ext}'. "
+        f"Supported: {', '.join(sorted(_SUPPORTED_EXTENSIONS))}"
+    )
 
 
 def get_overall_bbox(
