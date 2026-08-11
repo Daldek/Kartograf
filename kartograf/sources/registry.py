@@ -17,9 +17,16 @@ from kartograf.sources.descriptor import (
 
 # Mapowanie nazw ukladow pionowych uzywanych w CLI na kody EPSG.
 _VERTICAL_CRS_CODES = {
-    "KRON86": "EPSG:9650",  # PL-KRON86-NH
-    "EVRF2007": "EPSG:9651",  # PL-EVRF2007-NH (realizacja PL)
+    "KRON86": "EPSG:9650",  # PL-KRON86-NH (bez zmian)
+    "EVRF2007": "EPSG:5621",  # ogolnoeuropejski EVRF2007 (decyzja 2026-08-11)
+    "EVRF2007-PL": "EPSG:9651",  # realizacja polska PL-EVRF2007-NH
+    "Bpv": "EPSG:8357",  # Baltic 1957 (CZ)
 }
+
+# Rodzina -> realizacje krajowe; konsumowane przy budowie sidecara:
+# jesli kod rodziny nie wystepuje w vertical_crs_options kanalu, ale wystepuje
+# jego realizacja — sidecar zapisuje kod realizacji (fakt, nie zyczenie).
+_VERTICAL_FAMILY: dict[str, tuple[str, ...]] = {"EPSG:5621": ("EPSG:9651",)}
 
 _GUGIK_LICENSE = LicenseInfo(
     id="PL-PGiK-40a",
@@ -266,3 +273,14 @@ def vertical_crs_code(name: str) -> str:
     raise KeyError(
         f"Nieznany uklad pionowy: '{name}'. Dostepne: {sorted(_VERTICAL_CRS_CODES)}"
     )
+
+
+def resolve_vertical_crs(name: str, options: tuple[str, ...]) -> str:
+    """Kod EPSG dla nazwy ukladu wzgledem opcji kanalu (rodzina -> realizacja)."""
+    code = vertical_crs_code(name)
+    if code in options:
+        return code
+    for realization in _VERTICAL_FAMILY.get(code, ()):
+        if realization in options:
+            return realization
+    return code

@@ -5,7 +5,7 @@ Wszystkie istotne zmiany w projekcie sa dokumentowane w tym pliku.
 Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.7.0] - Unreleased
 
 ### Added
 - **Etap 0 — architektura zrodel wielokrajowych (przygotowanie pod CZ/DE/SK)**
@@ -131,6 +131,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   mismatch/match/fallback/cache, straznik nazw warstw
 - `tests/test_gugik_orto.py` — autouse fixture stubujaca GetCapabilities (offline),
   zaktualizowany `test_get_opendata_url_tries_all_layers` (9 → 4 warstwy)
+
+### BREAKING
+- **BREAKING:** `vertical_crs_code("EVRF2007")` zwraca teraz `EPSG:5621`
+  (ogólnoeuropejski EVRF2007), nie `EPSG:9651`. Realizacja polska dostępna
+  pod nową nazwą `EVRF2007-PL`. Sidecary PL bez zmian treści (mapowanie
+  rodzina→realizacja przez `resolve_vertical_crs`). Dotyczy: Hydrograf/Hydrolog,
+  jeśli wołają `vertical_crs_code` bezpośrednio.
 
 ## [0.6.1] - 2026-03-24
 

@@ -16,6 +16,7 @@ from kartograf.sources.descriptor import (
 from kartograf.sources.registry import (
     get_country,
     get_source,
+    resolve_vertical_crs,
     sources_for,
     vertical_crs_code,
 )
@@ -118,10 +119,26 @@ class TestRegistry:
 
     def test_vertical_crs_code(self):
         assert vertical_crs_code("KRON86") == "EPSG:9650"
-        assert vertical_crs_code("EVRF2007") == "EPSG:9651"
+        assert vertical_crs_code("EVRF2007") == "EPSG:5621"
+        assert vertical_crs_code("EVRF2007-PL") == "EPSG:9651"
+        assert vertical_crs_code("Bpv") == "EPSG:8357"
         assert vertical_crs_code("EPSG:9651") == "EPSG:9651"
         with pytest.raises(KeyError):
             vertical_crs_code("Kronsztad")
+
+    def test_resolve_vertical_crs(self):
+        # rodzina EVRF2007 -> realizacja PL, gdy kanal ja oferuje
+        assert (
+            resolve_vertical_crs("EVRF2007", ("EPSG:9650", "EPSG:9651")) == "EPSG:9651"
+        )
+        # kanal CZ (Bpv) nie ma realizacji -> kod rodziny (cel transformacji)
+        assert resolve_vertical_crs("EVRF2007", ("EPSG:8357",)) == "EPSG:5621"
+        assert resolve_vertical_crs("Bpv", ("EPSG:8357",)) == "EPSG:8357"
+        assert resolve_vertical_crs("KRON86", ("EPSG:9650", "EPSG:9651")) == "EPSG:9650"
+        assert (
+            resolve_vertical_crs("EVRF2007-PL", ("EPSG:9650", "EPSG:9651"))
+            == "EPSG:9651"
+        )
 
     def test_nmt_1m_entry_values(self):
         d = get_source("pl.gugik.nmt_1m")
@@ -154,8 +171,10 @@ class TestDescriptorProviderConsistency:
         storage = FileStorage(tmp_path, resolution="1m")
         assert d.storage_subdir == storage._subdir
         supported = provider.get_supported_vertical_crs_for_resolution("1m")
-        codes = {vertical_crs_code(n) for n in supported}
         for ch in d.channels:
+            codes = {
+                resolve_vertical_crs(n, ch.vertical_crs_options) for n in supported
+            }
             assert set(ch.vertical_crs_options) == codes
 
     def test_nmt_5m(self, tmp_path):
@@ -167,9 +186,10 @@ class TestDescriptorProviderConsistency:
         storage = FileStorage(tmp_path, resolution="5m")
         assert d.storage_subdir == storage._subdir
         supported = provider.get_supported_vertical_crs_for_resolution("5m")
-        assert {vertical_crs_code(n) for n in supported} == set(
-            d.channels[0].vertical_crs_options
-        )
+        assert {
+            resolve_vertical_crs(n, d.channels[0].vertical_crs_options)
+            for n in supported
+        } == set(d.channels[0].vertical_crs_options)
 
     def test_nmpt(self, tmp_path):
         from kartograf import FileStorage, GugikNmptProvider
@@ -178,7 +198,10 @@ class TestDescriptorProviderConsistency:
         provider = GugikNmptProvider()
         assert d.default_extension == provider.default_extension
         assert d.storage_subdir == FileStorage(tmp_path, product="nmpt")._subdir
-        codes = {vertical_crs_code(n) for n in provider.SUPPORTED_VERTICAL_CRS}
+        codes = {
+            resolve_vertical_crs(n, d.channels[0].vertical_crs_options)
+            for n in provider.SUPPORTED_VERTICAL_CRS
+        }
         assert set(d.channels[0].vertical_crs_options) == codes
 
     def test_orto(self, tmp_path):
@@ -197,7 +220,10 @@ class TestDescriptorProviderConsistency:
         provider = GugikLazProvider()
         assert d.default_extension == provider.default_extension
         assert d.storage_subdir == FileStorage(tmp_path, product="laz")._subdir
-        codes = {vertical_crs_code(n) for n in provider.SUPPORTED_VERTICAL_CRS}
+        codes = {
+            resolve_vertical_crs(n, d.channels[0].vertical_crs_options)
+            for n in provider.SUPPORTED_VERTICAL_CRS
+        }
         assert set(d.channels[0].vertical_crs_options) == codes
 
     def test_landcover_and_soil(self):
