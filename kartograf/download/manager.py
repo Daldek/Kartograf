@@ -144,6 +144,7 @@ class DownloadManager:
         vertical_crs: str = "EVRF2007",
         resolution: str = "1m",
         max_workers: int = 1,
+        sidecar_extra: dict | None = None,
     ):
         """
         Initialize download manager.
@@ -167,6 +168,9 @@ class DownloadManager:
             Maximum number of parallel download threads (default: 1).
             When 1, downloads are sequential (backward compatible).
             When > 1, uses ThreadPoolExecutor for parallel downloads.
+        sidecar_extra : dict, optional
+            Dodatkowe pola scalane do `extra` kazdego sidecara (etap 1:
+            `parent_request` w trybie bbox/geometry).
         """
         # If resolution is 5m, force EVRF2007
         if resolution == "5m" and vertical_crs != "EVRF2007":
@@ -184,6 +188,7 @@ class DownloadManager:
         self._resolution = resolution
         self._default_ext = self._provider.default_extension
         self._max_workers = max(1, max_workers)
+        self._sidecar_extra = sidecar_extra
 
     @property
     def vertical_crs(self) -> str:
@@ -674,6 +679,7 @@ class DownloadManager:
                 request=request,
                 vertical_crs=getattr(self._provider, "vertical_crs", None),
                 data_path=data_path,
+                extra=dict(self._sidecar_extra) if self._sidecar_extra else None,
             )
             write_sidecar(data_path, meta)
         except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
