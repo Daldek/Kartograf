@@ -17,13 +17,14 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
-| Pokrycie testami | ✅ Gotowy | ~88%, 1142 testow (po etapie 0) |
+| Pokrycie testami | ✅ Gotowy | ~89%, 1381 testow (po etapie 1, galaz feature/etap1-cz-dmr) |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0 |
 | Weryfikacja BBox PL-2000 | ✅ Gotowy | 67 testow, reference values + live WMS |
 | Walidacja warstw WMS | ✅ Gotowy | GetCapabilities, lazy, fallback; NMT+NMPT v0.6.1, Orto 2026-06-24 |
 | Etap 0 — zrodla wielokrajowe (sources/transform/transport/providers-pl/CLI split/sidecar) | ✅ Gotowy | zmergowane do develop 2026-08-11; E2E 12/12 na realnych danych |
+| Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | galaz `feature/etap1-cz-dmr` (niezmergowana do develop); 21 zadan TDD, E2E 11/11; wersja `0.7.0-dev` |
 
 <!-- Statusy: ✅ Gotowy | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
@@ -82,7 +83,7 @@
 ## Ostatnia sesja
 
 **Data:** 2026-08-10 — 2026-08-11 (sekcje datowane ponizej; najnowsza:
-"Plan implementacji etapu 1 (2026-08-11)")
+"Dokumentacja etapu 1 (2026-08-11, Zad. 21)")
 
 ### Co zrobiono
 - **Research: rozszerzenie o zrodla wielokrajowe (CZ, DE, SK)** — wszystkie
@@ -241,19 +242,133 @@ Rozstrzygniecia techniczne planu (sekcja "Rozstrzygniecia techniczne"):
 bboxa do extentu kraju tylko w auto; `tests/test_cache.py` ze specu =
 `tests/test_metadata_cache.py`.
 
+### Implementacja etapu 1 (2026-08-11, subagent-driven, galaz `feature/etap1-cz-dmr`)
+
+27 commitow, `7e9c039`..`c693530`, zadania 1-20 (kod + rekonesans + E2E) +
+zadanie 21 (ta aktualizacja dokumentacji): `providers/cuzk/` (`CuzkClient` —
+pierwszy silnik sterowany deskryptorem: `query()` z paginacja i filtrem
+nadmiarowego wyboru po stronie klienta, `export_image()` z kafelkowaniem
+15000x4100 px + nadpisaniem CRS, `fetch_file()` z ZIP openzu; `SheetIndex`/
+`SheetInfo`/`Sm5Sheet`; `CuzkDmrProvider` + `create_dmr_provider`),
+`core/parser_tm33.py` (`ParserTM33`, siatka TM33 2x2 km EPSG:3045) +
+rejestracja `cz_tm33`/`cz_sm5` w `parser_registry` (przed fallbackiem
+pl1992), `sources/registry.py` (deskryptory `cz.cuzk.dmr5g`/`dmr4g`,
+`CountryProfile` CZ, `all_countries()`, BREAKING `vertical_crs_code`
+EVRF2007→5621 + nowa `resolve_vertical_crs` rodzina→realizacja),
+`cache/metadata.py` (+`sheet_cache`, TTL 30d), `sources/sidecar.py`
+(`build_metadata(capability=, nodata=)`), `download/manager.py`
+(`sidecar_extra=`), CLI (`--country {pl,cz,auto}`, `--target-crs`, sentinele
+`resolution`/`vertical-crs`/`system` per kraj, `_cmd_download_cz`,
+auto-split bbox/geometrii transgranicznej, `extra.parent_request`),
+eksporty publiczne + wersja `0.7.0-dev`. **1381 testow zielonych**
+(+244 wzgledem stanu po etapie 0/1142), pokrycie ~89%, ruff + ruff format
+czyste, mypy bez nowego dlugu wzgledem baseline (33/34 przedistniejacych
+bledow, niezwiazanych z etapem 1).
+
+Model tieringu (feedback usera "team-driven-development"): sonnet dla
+zadan z gotowym kodem w planie + reviewery per-task; opus dla zadan z
+integracja wieloplikowa/diagnoza bugow; fable dla finalnego review calej
+galezi. **Pelny ledger kontrolera** (wszystkie rulingi K1-K9/R1-R9,
+~140 minor findings odroczonych per zadanie, kontekst przekazywany miedzy
+zadaniami): `.superpowers/sdd/2026-08-11-etap1-cz-fundament-dmr/progress.md`.
+
+**Odstepstwa proceduralne od planu** (za zgoda uzytkownika, precedens
+rulingow kontrolera K2-K4 "popraw wg intencji planu"):
+- **Zad. 11:** `tests/test_storage.py:189-192` zmieniony POZA zamknieta
+  liste planu — stara asercja byla artefaktem fallbacku pl1992 na
+  placeholderze; wlasna fixtura planu (Zad. 15, l. 3232) oczekuje
+  dokladnie nowej zagniezdzonej sciezki `cz_dmr5g/302/5550/302_5550.tif`.
+  Uznane za pominiecie na liscie planu, nie scope creep.
+- **Zad. 17:** bboxy w 7 testach SPOZA zamknietej listy planu podmienione —
+  lezaly W CALOSCI w obwiedni CZ (blad zalozenia bboxow przyjetych w planie,
+  nie danych zrodlowych); zmienione wylacznie literaly bboxa, zero zmian
+  asercji/mockow (zweryfikowane niezaleznie przez recenzenta).
+- **Zad. 20:** bbox Kroku 3 macierzy E2E podmieniony na Cieszyn — oryginalny
+  bbox z briefu rozwijal sie na 24 arkusze PL bez pokrycia NMT 1m EVRF2007
+  (`DownloadError` potwierdzony w zrodle, nie blad kodu); pelna diagnostyka
+  doboru bboxa w `docs/research/2026-08-11-etap1-e2e.md`.
+
+### E2E etapu 1 na zywych danych CUZK (2026-08-11)
+
+`docs/research/2026-08-11-etap1-e2e.md` — **11/11 PASS** (6 punktow macierzy
+akceptacyjnej ze specu + 5 dodatkowych, zero FAILi). Godlo TM33 `302_5550`
+(dmr5g, Bpv natywnie, `--country cz`); godlo SM5 `CTES96` (dmr4g, kraj
+auto-wykryty z godla, `podil=0.99`, diakrytyki UTF-8 `Český Těšín`
+zachowane); bbox przygraniczny Cieszyn `--country auto` (osobne pliki
+PL/CZ, wspolny `parent_request`, zero scalania — 67,2% nodata po stronie CZ
+potwierdza realne przeciecie granicy); `--target-crs EPSG:2180` (reprojekcja
+serwerowa, 0 pikseli nodata w wyniku); `--vertical-crs EVRF2007` (offset
+Bpv→EVRF2007 zmierzony na zywo **+0,132366 m** na 64722 pikselach, std
+2,22e-05 — zgodny z modelem z rekonesansu co do ~1 mm, domyka Amendment 4
+z Zad. 12); `--vertical-crs KRON86` (blad z czytelnym remedium); regresja
+PL bez zmian (godlo, `landcover list-sources`, `cache stats`). Odstepstwo:
+bbox Kroku 3 (patrz wyzej). Obserwacje nieblokujace zebrane dla Zad. 21:
+semantyka `vertical_source="native"` mimo transformacji (rozstrzygniete w
+ADR-023 pkt 1), skladnia `--bbox=...` dla ujemnych wspolrzednych Krovaka
+(dodana do przykladow CLAUDE.md), brak separatora przed "Remedium:" w
+komunikacie KRON86 (kosmetyka, odroczona), `cache stats` `URL=0` dla PL
+(stan sprzed etapu 1, cache nie jest wpiety w providery z poziomu CLI).
+
+### Dokumentacja etapu 1 (2026-08-11, Zad. 21)
+
+ADR-023 (`docs/DECISIONS.md`) — silnik CUZK, polityka ukladow CZ,
+EVRF2007→5621, plus 4 ustalenia dodatkowe (semantyka `transform.horizontal`,
+eager import `rasterio`, `parent_request.countries`=probowane/`bbox_crs`
+per-tryb, prostokatne extenty krajow). CHANGELOG 0.7.0 uporzadkowany:
+`### Breaking Changes` przeniesiony na gore sekcji (dwa wpisy: glebokie
+sciezki importu + `vertical_crs_code`, oba z tabelkami), `### Added`
+rozszerzone o `sheet_cache`/`capability=`/`nodata=`/`sidecar_extra`/
+`endpoint`, `### Changed` o sentinele CLI/polimorficzny `transform`/probe
+pod polityka sieci/`parent_request` w sidecarach PL. CLAUDE.md — nowe
+moduly (`core/parser_tm33.py`, `providers/cuzk/`), przyklady CLI CZ
+(w tym skladnia `--bbox=` dla Krovaka), sekcja ograniczen rozszerzona.
+SCOPE.md — zakres CZ jako nowa sekcja 2.2 (etap 1 in-scope, etap 2/3
+future), known limitations CZ w 3.2, **pelne odswiezone drzewo modulow**
+(zaleglosc z etapu 0 domknieta — SCOPE nie bylo aktualizowane od 0.6.1),
+liczby testow/pokrycia zsynchronizowane (1381/89%).
+
+**Rozstrzygniecie `pyproject.toml`:** `version = "0.6.1"` **pozostaje bez
+zmian** (NIE bumpowane do `0.7.0-dev`). Zbadana konwencja repo
+(`git log -p -- pyproject.toml`): `pyproject.toml` jest bumpowany leniwie,
+zwykle w tym samym commicie co finalizacja wydania — bump 0.5.0→0.6.1
+przeskoczyl 0.6.0 w jednym commicie (`4f6a33d`), mimo ze `__init__.py` mial
+`0.6.0` przez caly czas trwania tamtych prac. `pyproject.toml` NIE sledzi
+kazdego przyrostu `kartograf.__version__` (ktory bywa bumpowany na starcie
+prac, czasem z sufiksem `-dev`, jak teraz). Zaden test nie asertuje
+wartosci z `pyproject.toml` (tylko `kartograf.__version__`, sprawdzone
+`grep -rn "__version__" tests/`). Precedens z etapu 0 (ten sam projekt):
+"wersja pakietu zostaje 0.6.1 do wydania". Etap 1 jeszcze nie jest
+wydaniem (galaz `feature/etap1-cz-dmr` niezmergowana do `develop`, brak
+tagu `v0.7.0`) — `0.6.1` zostaje az do faktycznego mergu/wydania.
+
 ### Nastepne kroki
-1. **Implementacja etapu 1** (osobna sesja) wg planu
-   `docs/superpowers/plans/2026-08-11-etap1-cz-fundament-dmr.md` —
-   REQUIRED SUB-SKILL: superpowers:subagent-driven-development albo
-   superpowers:executing-plans; zaczac od zadania 1 (rekonesans live,
-   bez kodu produkcyjnego)
-2. **Push `develop` na origin** (36 commitow lokalnie) — decyzja uzytkownika
-3. **Zgloszenie/naprawa WCS EVRF2007** (male, poza etapem 0): aktualizacja
-   `WCS_ENDPOINTS`/`COVERAGE_IDS` w `providers/pl/gugik.py` po usunieciu
-   endpointu przez GUGiK (patrz "Znany problem uslugowy" wyzej); rozwazyc
-   walidacje WCS analogiczna do walidacji warstw WMS
-4. Odziedziczone: (do weryfikacji) zgodnosc `get_bbox` z godlowaniem kafli LAZ
-   (patrz [[gugik-laz-wfs]])
+1. **Decyzja uzytkownika: merge `feature/etap1-cz-dmr` do `develop`** —
+   galaz jest zielona (1381 testow, ruff/mypy czyste), E2E 11/11 PASS,
+   dokumentacja kompletna (ten wpis). Wymaga: superpowers:finishing-a-
+   -development-branch albo recznego przegladu.
+2. **Etap 2** (DMP/Orto/LAZ CZ + wielokat granicy administracyjnej zamiast
+   prostokatnej obwiedni + ujednolicenie `extra.parent_request.bbox_crs`
+   miedzy trybami jawny/auto) — spec/plan do napisania po decyzji o mergu;
+   punkt wyjscia: ADR-023 (ustalenia dodatkowe 3-4) i `docs/SCOPE.md`
+   (sekcje 2.2, 3.1, 3.2)
+3. **Push `develop` na origin** (36+ commitow lokalnie, decyzja z etapu 0
+   nadal nierozwiazana) — patrz wyzej
+4. **Zgloszenie/naprawa WCS EVRF2007 GUGiK** (male, przedistniejace, poza
+   etapami 0/1): aktualizacja `WCS_ENDPOINTS`/`COVERAGE_IDS` w
+   `providers/pl/gugik.py` po usunieciu endpointu przez GUGiK (patrz "Znany
+   problem uslugowy" wyzej); rozwazyc walidacje WCS analogiczna do
+   walidacji warstw WMS
+5. Odziedziczone: (do weryfikacji) zgodnosc `get_bbox` z godlowaniem kafli
+   LAZ (patrz [[gugik-laz-wfs]])
+6. **Minory odroczone z etapu 1** (nieblokujace; pelna lista ~140 pozycji
+   w ledgerze kontrolera, `.superpowers/sdd/2026-08-11-etap1-cz-fundament-dmr/progress.md`)
+   — najwazniejsze do rozwazenia przy etapie 2: eager import `rasterio`
+   przy `import kartograf` (+55-65 ms, ADR-023 pkt 2 — naprawa: lazy import
+   w `providers/cuzk/client.py`/`dmr.py`); `Sm5Sheet.get_bbox` traci
+   memoizacje `self._index` bez wstrzknietego indeksu (regresja wydajnosciowa
+   przy wielu wywolaniach); duplikacja regul walidacji sentineli miedzy
+   galezia PL i CZ w CLI; brak separatora przed "Remedium:" w komunikacie
+   bledu KRON86
 
 ## Backlog
 
@@ -268,3 +383,12 @@ bboxa do extentu kraju tylko w auto; `tests/test_cache.py` ze specu =
 - [ ] Mozaikowanie arkuszy NMT
 - [x] Ujednolicenie interfejsow providerow (BaseProvider vs LandCoverProvider)
       (etap 0: DataSourceProvider)
+- [x] Etap 0 — architektura zrodel wielokrajowych (deskryptory, sidecar,
+      transform/crs.py, transport/, providers/pl/, podzial CLI)
+- [x] Etap 1 — NMT Czechy: CUZK DMR 5G/4G (`providers/cuzk/`, `ParserTM33`,
+      `--country`/`--target-crs`/`--vertical-crs`), galaz `feature/etap1-cz-dmr`
+      (merge do develop: decyzja uzytkownika, patrz "Nastepne kroki")
+- [ ] Etap 2 — DMP/Orto/LAZ CZ, wielokat granicy administracyjnej CZ
+      (zamiast prostokatnej obwiedni), ujednolicenie
+      `extra.parent_request.bbox_crs` miedzy trybami jawny/auto
+- [ ] Etap 3 — ZABAGED (wektorowa baza topograficzna CZ, 149 warstw)

@@ -7,6 +7,38 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.7.0] - Unreleased
 
+### Breaking Changes
+- **Glebokie sciezki importu providerow** (bez shimow — decyzja z review
+  specu etapu 0; publiczne API `from kartograf import ...` BEZ zmian):
+
+  | Stary import | Nowy import |
+  |---|---|
+  | `kartograf.providers.gugik` | `kartograf.providers.pl.gugik` |
+  | `kartograf.providers.gugik_nmpt` | `kartograf.providers.pl.gugik_nmpt` |
+  | `kartograf.providers.gugik_orto` | `kartograf.providers.pl.gugik_orto` |
+  | `kartograf.providers.gugik_laz` | `kartograf.providers.pl.gugik_laz` |
+  | `kartograf.providers.bdot10k` | `kartograf.providers.pl.bdot10k` |
+  | `kartograf.providers.landcover_base` | `kartograf.providers.base` |
+
+  Dodatkowo: wrapper zgodnosciowy `download_by_teryt` (w `LandCoverProvider`)
+  zweza pozycyjna arnosc wzgledem dotychczasowych podklas — przyjmuje pozycyjnie
+  tylko `teryt`, `output_path`, `timeout`; kazdy kolejny argument (np. `format`
+  w `Bdot10kProvider.download_by_admin_unit`) przekazany pozycyjnie (4. argument)
+  konczy sie `TypeError`. Przekazuj takie argumenty jako keyword (`format=...`).
+- **`vertical_crs_code("EVRF2007")` zwraca teraz `EPSG:5621`** (ogolnoeuropejski
+  EVRF2007), nie `EPSG:9651` (dawna wartosc dla realizacji polskiej). Powod:
+  `EVRF2007` jest teraz nazwa RODZINY ukladow, wspolna dla PL i CZ. Realizacja
+  polska dostepna pod nowa nazwa `EVRF2007-PL`. Sidecary PL bez zmian tresci
+  (mapowanie rodzina→realizacja przez nowa funkcje `resolve_vertical_crs`).
+  Dotyczy: Hydrograf/Hydrolog, jesli woluja `vertical_crs_code` bezposrednio.
+
+  | Nazwa (CLI/API) | Stary kod (< 0.7.0) | Nowy kod (>= 0.7.0) |
+  |---|---|---|
+  | `KRON86` | `EPSG:9650` | `EPSG:9650` (bez zmian) |
+  | `EVRF2007` | `EPSG:9651` (realizacja PL) | `EPSG:5621` (rodzina, ogolnoeuropejski) |
+  | `EVRF2007-PL` | — (nie istniala) | `EPSG:9651` (nowa nazwa realizacji polskiej) |
+  | `Bpv` | — (nie istniala, CZ) | `EPSG:8357` (Baltic 1957, CUZK) |
+
 ### Added
 - **Etap 0 — architektura zrodel wielokrajowych (przygotowanie pod CZ/DE/SK)**
   - `kartograf/sources/` — deskryptory zrodel (SourceDescriptor, AccessChannel,
@@ -36,39 +68,66 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `cache_cmd.py`); `cli/commands.py` zostaje fasada zgodnosci (entry point
     bez zmian)
 - **Etap 1 — Czechy (CUZK)**
-  - `CuzkDmrProvider` + fabryka `create_dmr_provider` — DMR 5G/4G (CUZK),
+  - `providers/cuzk/` — `CuzkClient` (pierwszy silnik sterowany deskryptorem:
+    `AccessChannel.endpoint`; `query()` z paginacja i filtrem nadmiarowego
+    wyboru po stronie klienta, `export_image()` z kafelkowaniem 15000x4100 px
+    + nadpisaniem CRS, `fetch_file()` z ZIP openzu → TIFF+TFW), `SheetIndex`/
+    `SheetInfo`/`Sm5Sheet` (indeks arkuszy SM5/TM33 z KladyMapovychListu),
+    `CuzkDmrProvider` + fabryka `create_dmr_provider` — DMR 5G/4G (CUZK),
     godla TM33/SM5, bbox przez exportImage, opcjonalna transformacja
-    Bpv->EVRF2007 (EPSG:8357 -> EPSG:5621, offset +0,11..+0,15 m); endpointy
-    wylacznie z deskryptorow, naprawa metadanych CRS w plikach DMR4G-TIFF
+    Bpv->EVRF2007 (EPSG:8357 -> EPSG:5621, przypieta operacja 0,1 m, offset
+    +0,11..+0,15 m rosnacy S→N); endpointy wylacznie z deskryptorow, naprawa
+    metadanych CRS w plikach DMR4G-TIFF i w wynikach exportImage
+  - `core/parser_tm33.py` — `ParserTM33`: obliczalna siatka kafli TM33
+    2x2 km (EPSG:3045, godlo `{E_km}_{N_km}` = naroznik SW), wzorowana na
+    `Parser2000`; zarejestrowana w `parser_registry` jako `cz_tm33`/`cz_sm5`
+    (przed fallbackiem pl1992)
+  - `AccessChannel.endpoint` — nowe pole deskryptora: jedyne zrodlo URL-i dla
+    silnikow sterowanych deskryptorem (CZ); kanaly PL maja `endpoint=""`
+    (zrodlem prawdy pozostaja stale providerow z etapu 0)
+  - `sources/registry.py`: deskryptory `cz.cuzk.dmr5g`/`cz.cuzk.dmr4g`,
+    `CountryProfile` dla CZ (obwiednia prostokatna EPSG:4326), `all_countries()`
+  - `MetadataCache`: nowa tabela `sheet_cache` (indeks SM5, TTL 30 dni —
+    praktycznie staly); `cache stats` pokazuje tez liczbe wpisow Sheet
+  - `sources/sidecar.build_metadata(capability=, nodata=)` — jawna selekcja
+    kanalu po capability (zamiast wylacznie heurystyki bbox/nie-bbox) i jawne
+    nadpisanie `nodata` (potrzebne, bo usluga `exportImage` CUZK zwraca
+    `noDataValue: null` na poziomie ImageServera)
+  - `DownloadManager(sidecar_extra=...)` — addytywny parametr konstruktora:
+    dodatkowe pola scalane do `extra` kazdego sidecara (uzyty przez CLI PL w
+    trybie bbox/geometry do wpiecia `parent_request`, patrz nizej)
   - CLI `--country {pl,cz,auto}` z auto-podzialem bboxa/geometrii
     transgranicznej: obszar trafia do zrodel KAZDEGO przecietego kraju (w trybie
     auto przyciety do jego obwiedni), a opcje nierozwiazywalne dla ktoregos
     z krajow (np. `--resolution 1m` z CZ, `--system` z CZ, `--target-crs` z PL)
     sa odrzucane PRZED pobraniem, z podpowiedzia jawnego `--country`
+  - CLI `--target-crs {EPSG:2180,EPSG:5514,EPSG:3045}` — reprojekcja serwerowa
+    wyniku CZ w trybie `--bbox`/`--geometry` (godlo + `--target-crs` = blad,
+    patrz Changed); `--vertical-crs {Bpv,EVRF2007,KRON86}` rozszerzone o CZ
   - `extra.parent_request` w sidecarach trybu bbox/geometry (oryginalny bbox
-    zadania, jego uklad i pobrane kraje) — grupowanie plikow jednego zadania,
-    takze po obu stronach granicy; tryb godlowy sidecarow nie zmienia
+    zadania, jego uklad i **probowane** — niekoniecznie pobrane — kraje) —
+    grupowanie plikow jednego zadania, takze po obu stronach granicy; tryb
+    godlowy sidecarow nie zmienia (nigdy nie dostaje `parent_request`)
   - `--product laz` w trybie obszarowym `--country auto`: obszar siegajacy CZ
     konczy sie bledem z podpowiedzia `--country pl` (bez cichego pomijania kraju)
 
 ### Changed
-- **BREAKING: glebokie sciezki importu providerow** (bez shimow — decyzja
-  z review specu; publiczne API `from kartograf import ...` BEZ zmian):
-
-  | Stary import | Nowy import |
-  |---|---|
-  | `kartograf.providers.gugik` | `kartograf.providers.pl.gugik` |
-  | `kartograf.providers.gugik_nmpt` | `kartograf.providers.pl.gugik_nmpt` |
-  | `kartograf.providers.gugik_orto` | `kartograf.providers.pl.gugik_orto` |
-  | `kartograf.providers.gugik_laz` | `kartograf.providers.pl.gugik_laz` |
-  | `kartograf.providers.bdot10k` | `kartograf.providers.pl.bdot10k` |
-  | `kartograf.providers.landcover_base` | `kartograf.providers.base` |
-
-  Dodatkowo: wrapper zgodnosciowy `download_by_teryt` (w `LandCoverProvider`)
-  zweza pozycyjna arnosc wzgledem dotychczasowych podklas — przyjmuje pozycyjnie
-  tylko `teryt`, `output_path`, `timeout`; kazdy kolejny argument (np. `format`
-  w `Bdot10kProvider.download_by_admin_unit`) przekazany pozycyjnie (4. argument)
-  konczy sie `TypeError`. Przekazuj takie argumenty jako keyword (`format=...`).
+- CLI: sentinele `None` dla `--resolution`/`--vertical-crs`/`--system`
+  rozwiazywane dopiero po ustaleniu kraju docelowego (PL: 1m/EVRF2007/1992
+  bez zmian; CZ: 2m/Bpv, `--system` nie dotyczy) — zamiast twardo zakodowanych
+  domyslnych PL, ktore nie mialy sensu dla CZ
+- `PinnedTransform.transform` (`transform/crs.py`) jest teraz **polimorficzne**
+  — przyjmuje skalary LUB tablice `numpy` (`np.isfinite` zamiast
+  `math.isfinite`, ktory rzucal `TypeError` na `numpy.ndarray`); potrzebne do
+  transformacji pionowej calego rastra per-piksel (DMR CZ → EVRF2007)
+- `build_pinned_transform`: probe na punkcie kontrolnym wykonywany teraz
+  **wewnatrz** kontekstu `network.set_network_enabled(...)`, nie po jego
+  przywroceniu (poprawka semantyki "probe pod polityka sieci" odroczonej
+  z etapu 0)
+- Sidecary PL w trybie `--bbox`/`--geometry` (takze `--country pl`/`auto`)
+  dostaja teraz dodatkowo `extra.parent_request` — nowe pole, tresc
+  pozostalych pol bez zmian; wspolny klucz grupowania z sidecarami CZ dla
+  tego samego zadania
 
 ### Fixed
 - CLI z `--resolution 5m --vertical-crs KRON86` tworzy teraz provider skorygowany
@@ -147,12 +206,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `tests/test_gugik_orto.py` — autouse fixture stubujaca GetCapabilities (offline),
   zaktualizowany `test_get_opendata_url_tries_all_layers` (9 → 4 warstwy)
 
-### BREAKING
-- **BREAKING:** `vertical_crs_code("EVRF2007")` zwraca teraz `EPSG:5621`
-  (ogólnoeuropejski EVRF2007), nie `EPSG:9651`. Realizacja polska dostępna
-  pod nową nazwą `EVRF2007-PL`. Sidecary PL bez zmian treści (mapowanie
-  rodzina→realizacja przez `resolve_vertical_crs`). Dotyczy: Hydrograf/Hydrolog,
-  jeśli wołają `vertical_crs_code` bezpośrednio.
+### Tests
+- **1381 testow, pokrycie ~89%** (+244 wzgledem stanu po etapie 0/1142); ruff
+  i ruff format czyste, mypy bez nowych bledow wzgledem baseline (33/34
+  przedistniejacych, niezwiazanych z etapem 1)
+- E2E na zywych danych CUZK + regresja PL: **11/11 PASS**
+  (`docs/research/2026-08-11-etap1-e2e.md`) — godlo TM33 (dmr5g, Bpv),
+  godlo SM5 (dmr4g, kraj auto-wykryty), bbox przygraniczny `--country auto`
+  (osobne pliki PL/CZ, wspolny `parent_request`), `--target-crs EPSG:2180`,
+  transformacja pionowa `--vertical-crs EVRF2007` (offset zmierzony na zywo
+  +0,132366 m, zgodny z modelem), `--vertical-crs KRON86` (blad z remedium),
+  regresja PL (godlo, `landcover list-sources`, `cache stats`)
 
 ## [0.6.1] - 2026-03-24
 
@@ -721,7 +785,7 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
-[Unreleased]: https://github.com/Daldek/Kartograf/compare/v0.6.1...HEAD
+[0.7.0]: https://github.com/Daldek/Kartograf/compare/v0.6.1...HEAD
 [0.6.1]: https://github.com/Daldek/Kartograf/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/Daldek/Kartograf/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/Daldek/Kartograf/compare/v0.4.1...v0.5.0
