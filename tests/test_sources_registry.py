@@ -14,6 +14,7 @@ from kartograf.sources.descriptor import (
     TransportKind,
 )
 from kartograf.sources.registry import (
+    all_countries,
     get_country,
     get_source,
     resolve_vertical_crs,
@@ -30,6 +31,8 @@ EXPECTED_KEYS = {
     "pl.gugik.bdot10k",
     "eu.clms.corine",
     "global.isric.soilgrids",
+    "cz.cuzk.dmr5g",
+    "cz.cuzk.dmr4g",
 }
 
 
@@ -57,6 +60,7 @@ class TestDescriptorDataclasses:
         assert ch.vertical_source == "native"
         assert ch.server_reprojection is False
         assert ch.notes == ""
+        assert ch.endpoint == ""
 
     def test_descriptor_frozen(self):
         desc = SourceDescriptor(
@@ -100,7 +104,7 @@ class TestRegistry:
 
     def test_get_source_unknown_key_lists_available(self):
         with pytest.raises(KeyError) as exc:
-            get_source("cz.cuzk.dmr5g")
+            get_source("xx.none.zadne")
         assert "pl.gugik.nmt_1m" in str(exc.value)
 
     def test_sources_for_filters(self):
@@ -108,6 +112,8 @@ class TestRegistry:
         assert len(pl) == 6
         nmt = sources_for(country="PL", product="nmt")
         assert {d.key for d in nmt} == {"pl.gugik.nmt_1m", "pl.gugik.nmt_5m"}
+        cz = sources_for(country="CZ")
+        assert {d.key for d in cz} == {"cz.cuzk.dmr4g", "cz.cuzk.dmr5g"}
 
     def test_country_pl(self):
         pl = get_country("PL")
@@ -115,7 +121,7 @@ class TestRegistry:
         assert pl.extent_wgs84.crs == "EPSG:4326"
         assert set(pl.dataset_keys) == {k for k in EXPECTED_KEYS if k.startswith("pl.")}
         with pytest.raises(KeyError):
-            get_country("CZ")
+            get_country("XX")
 
     def test_vertical_crs_code(self):
         assert vertical_crs_code("KRON86") == "EPSG:9650"
@@ -157,6 +163,63 @@ class TestRegistry:
         ):
             for ch in get_source(key).channels:
                 assert ch.vertical_crs_options == ()
+
+    def test_country_cz(self):
+        cz = get_country("CZ")
+        assert cz.code == "CZ"
+        assert cz.extent_wgs84 == BBox(12.09, 48.55, 18.86, 51.06, "EPSG:4326")
+        assert cz.dataset_keys == ("cz.cuzk.dmr4g", "cz.cuzk.dmr5g")
+
+    def test_all_countries(self):
+        codes = [c.code for c in all_countries()]
+        assert codes == ["CZ", "PL"]
+
+    def test_cz_dmr5g_entry_values(self):
+        d = get_source("cz.cuzk.dmr5g")
+        assert d.country == "CZ"
+        assert d.product == "nmt"
+        assert d.resolution == "2m"
+        assert d.storage_subdir == "cz_dmr5g"
+        assert d.default_extension == ".tif"
+        assert d.license.id == "CC-BY-4.0"
+        assert len(d.channels) == 1
+        ch = d.channels[0]
+        assert ch.transport == TransportKind.ARCGIS_IMAGE
+        assert ch.horizontal_crs == "EPSG:5514"
+        assert ch.vertical_crs_options == ("EPSG:8357",)
+        assert ch.server_reprojection is True
+        assert ch.capabilities == frozenset({"bbox_raster"})
+        assert ch.endpoint == (
+            "https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr5g/ImageServer"
+        )
+        assert d.tile_scheme.kind == "computable"
+        assert d.tile_scheme.crs == "EPSG:3045"
+        assert (d.tile_scheme.width_m, d.tile_scheme.height_m) == (2000.0, 2000.0)
+
+    def test_cz_dmr4g_entry_values(self):
+        d = get_source("cz.cuzk.dmr4g")
+        assert d.resolution == "5m"
+        assert d.storage_subdir == "cz_dmr4g"
+        transports = [ch.transport for ch in d.channels]
+        assert transports == [TransportKind.DIRECT_FILES, TransportKind.ARCGIS_IMAGE]
+        for ch in d.channels:
+            assert ch.horizontal_crs == "EPSG:5514"
+            assert ch.vertical_crs_options == ("EPSG:8357",)
+        files_ch = d.channels[0]
+        assert files_ch.capabilities == frozenset({"sheet_files"})
+        assert files_ch.server_reprojection is False
+        assert files_ch.endpoint == (
+            "https://openzu.cuzk.gov.cz/opendata/DMR4G-TIFF/epsg-5514/{sheet}.zip"
+        )
+        image_ch = d.channels[1]
+        assert image_ch.capabilities == frozenset({"bbox_raster"})
+        assert image_ch.server_reprojection is True
+        assert image_ch.endpoint == (
+            "https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr4g/ImageServer"
+        )
+        assert d.tile_scheme.kind == "index"
+        assert d.tile_scheme.crs == "EPSG:5514"
+        assert (d.tile_scheme.width_m, d.tile_scheme.height_m) == (2500.0, 2000.0)
 
 
 class TestDescriptorProviderConsistency:

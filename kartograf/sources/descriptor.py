@@ -46,8 +46,9 @@ class AccessChannel:
     capabilities: frozenset[str] = frozenset()
     # {"bbox_raster","bbox_vector","sheet_files","area_files","admin_unit_files"}
     notes: str = ""
-    # endpointow celowo brak w etapie 0 — zrodlem prawdy pozostaja providery;
-    # pole endpoint dojdzie w etapie 1, gdy pierwszy silnik zacznie je konsumowac
+    endpoint: str = ""
+    # URL kanalu dla silnikow sterowanych deskryptorem (etap 1: CuzkClient).
+    # Wpisy PL: "" — zrodlem prawdy pozostaja stale providerow (etap 0).
 
 
 @dataclass(frozen=True)
