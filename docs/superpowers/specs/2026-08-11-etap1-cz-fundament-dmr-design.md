@@ -66,7 +66,9 @@ osobne pliki per kraj z pelnymi sidecarami (kontrakt z etapu 0).
    mapowanie rodzina→realizacja przy budowie sidecara
 8. Rozstrzygniecia odroczone z etapu 0: jawna selekcja kanalu w `build_metadata`
    (parametr `capability`), objecie probe polityka sieci w `transform/crs.py`
-9. Sidecary CZ: `transform` (konwencja opisow) i `extra` (`PODIL`, godlo kafla)
+9. Sidecary CZ: `transform` (konwencja opisow) i `extra` (`PODIL`, godlo kafla);
+   `extra.parent_request` grupujacy pliki jednego zadania `--country auto`
+   (fundament pod przyszle scalanie w Hydrografie lub Kartografie)
 10. Dokumentacja: nowy ADR (silnik CUZK + polityka ukladow CZ + decyzja EVRF2007),
     CHANGELOG, CLAUDE.md, SCOPE.md (w tym zalegle drzewo modulow z etapu 0), PROGRESS
 
@@ -75,7 +77,9 @@ osobne pliki per kraj z pelnymi sidecarami (kontrakt z etapu 0).
 - ZABAGED — **etap 3**
 - DE i SK — osobne decyzje po etapie 3
 - zmiany API `DownloadManager` i `LandCoverManager` (przeplyw CZ omija managera —
-  patrz sekcja 13.1)
+  patrz sekcja 13.1; jedyny wyjatek: addytywny opcjonalny parametr
+  `sidecar_extra` w konstruktorze `DownloadManager` dla `parent_request`,
+  sekcja 5.9)
 - ekstrakcja silnika ArcGIS z `providers/cuzk/client.py` do `transport/` (nastapi
   przy drugim konsumencie: DE/SK — patrz sekcja 13.4)
 - migracja PL na `transport/http.py` (bez zmian — oportunistycznie pozniej)
@@ -394,9 +398,10 @@ walidacja `resolution in {"2m", "5m"}`.
 3. `--bbox`/`--geometry` + `auto` → bbox transformowany do WGS84, przeciecie
    z `extent_wgs84` wszystkich `CountryProfile`; dla kazdego przecietego kraju
    osobne pobranie czesci bboxa (osobne pliki, osobne sidecary, zero scalania);
-   `--resolution`/`--vertical-crs` musza byc rozwiazywalne dla KAZDEGO
-   przecietego kraju — inaczej `ValidationError` z podpowiedzia jawnego
-   `--country` (bez cichego pomijania kraju)
+   kazdy sidecar dostaje `extra.parent_request` wiazacy pliki w jedno logiczne
+   zadanie (sekcja 5.9); `--resolution`/`--vertical-crs` musza byc
+   rozwiazywalne dla KAZDEGO przecietego kraju — inaczej `ValidationError`
+   z podpowiedzia jawnego `--country` (bez cichego pomijania kraju)
 4. brak godla CZ w `--geometry` (pliki SHP/GPKG daja bbox → pkt 3)
 
 Walidacje per kraj: `pl`+`2m` → `ValidationError`; `cz`+`1m` → `ValidationError`;
@@ -457,6 +462,27 @@ nie na danych). Bez zmian publicznego API; test jednostkowy na te wlasnosc.
   dla TM33: `{"in_cz": true}` gdy znane (bez zapytania do indeksu nie jest —
   wolno pominac); `podil < 1.0` to sygnal dla Hydrografa, ze arkusz jest
   przygraniczny (nodata/zera poza CZ).
+- **`extra.parent_request`** — grupowanie plikow jednego zadania `--country auto`.
+  Sidecary sa per plik; bez tego pola konsument (Hydrograf, przyszla scalarka)
+  nie ma deterministycznego sposobu powiazania czesci PL i CZ tego samego bboxa.
+  Przy trybie auto KAZDY plik wyniku (takze polskie arkusze) dostaje w `extra`:
+
+```json
+"parent_request": {
+  "bbox": [530000.0, 382000.0, 533000.0, 386000.0],
+  "bbox_crs": "EPSG:2180",
+  "countries": ["PL", "CZ"]
+}
+```
+
+  (`bbox`/`bbox_crs` = oryginalne zadanie uzytkownika PRZED podzialem na kraje;
+  `countries` = kraje faktycznie przeciete). Przy jawnym `--country pl|cz`
+  i w trybie godlowym pola nie ma (jedno zadanie = jeden kraj, grupowac nie ma
+  czego). Mechanika po stronie PL: `DownloadManager` dostaje addytywny,
+  opcjonalny parametr konstruktora `sidecar_extra: dict | None = None`,
+  scalany przez `_write_sidecar` do `extra` kazdego sidecara (domyslnie `None`
+  — zachowanie i tresc sidecarow PL poza trybem auto bez zmian); przeplyw CZ
+  przekazuje to samo przez `build_metadata(extra=...)`.
 - `horizontal_crs` w sidecarze = **faktyczny** uklad wyniku: `EPSG:3045` dla kafla
   TM33, `EPSG:5514` dla bbox natywnego, wartosc `--target-crs` przy reprojekcji
   serwerowej. `ResultMetadata` jest mutowalny — przeplyw CZ koryguje pole po
@@ -533,7 +559,11 @@ Nowe testy (offline; siec nigdy nie jest dotykana):
   do TIFF bez CRS, EVRF2007 (mock PinnedTransform), KRON86 → wyjatek, spojnosc
   deskryptor↔provider (wzor `TestDescriptorProviderConsistency`).
 - `tests/test_cli.py` — `--country` dispatch, konflikty, auto-split bboxa
-  (patch `_cmd_download_cz` i przeplywu PL), sentinel-defaults.
+  (patch `_cmd_download_cz` i przeplywu PL), sentinel-defaults;
+  `extra.parent_request` w sidecarach OBU krajow przy auto i jego brak przy
+  jawnym `--country`.
+- `tests/test_download_manager.py` — rozszerzenie addytywne: `sidecar_extra`
+  scalany do `extra` sidecara; `None` (domyslnie) nie zmienia tresci sidecara.
 - `tests/test_cache.py` — `sheet_cache` w stats/clear/prune.
 - `tests/test_transform_crs.py` — probe pod polityka sieci (5.8b).
 - `tests/test_sidecar.py` — `capability=`, `nodata=`, korekta `horizontal_crs`,
@@ -551,7 +581,7 @@ baseline), pokrycie nie spada ponizej 80%.
 | Sidecary PL (tresc `.meta.json`) | bez zmian (rodzina→realizacja: nadal 9651) |
 | `vertical_crs_code("EVRF2007")` | **BREAKING**: 9651 → 5621 (decyzja uzytkownika; `EVRF2007-PL` daje 9651) |
 | `MetadataCache` schemat | rozszerzony addytywnie (`sheet_cache`); stare bazy kompatybilne |
-| `DownloadManager` / `LandCoverManager` API | bez zmian |
+| `DownloadManager` / `LandCoverManager` API | bez zmian (wyjatek addytywny: `DownloadManager(sidecar_extra=None)`) |
 | Struktura katalogow PL | bez zmian; nowe podkatalogi `cz_dmr5g`, `cz_dmr4g` |
 | `AccessChannel` | + pole `endpoint` (addytywne, default `""`) |
 
@@ -578,7 +608,8 @@ baseline), pokrycie nie spada ponizej 80%.
    - `kartograf download CTES96 --resolution 5m` (kraj auto-wykryty) →
      `cz_dmr4g/CTES/96/CTES96.tif` z wpisanym EPSG:5514 + sidecar z `podil`
    - `kartograf download --bbox <przygraniczny> --country auto` → osobne pliki
-     PL i CZ, kazdy z wlasnym sidecar-em; zadnego scalania
+     PL i CZ, kazdy z wlasnym sidecar-em zawierajacym ten sam
+     `extra.parent_request` (oryginalny bbox + kraje); zadnego scalania
    - `--target-crs EPSG:2180` → GeoTIFF w 2180 (WKT zweryfikowany), sidecar
      `transform.horizontal = "server:EPSG:2180"`
    - `--vertical-crs EVRF2007 --country cz` → sidecar `vertical_crs = "EPSG:5621"`
