@@ -13,7 +13,7 @@ import rasterio
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
-from kartograf.providers.cuzk.client import CuzkClient, _wkid
+from kartograf.providers.cuzk.client import CuzkClient, wkid
 
 _CUZK_SESSION_PATCH = "kartograf.providers.cuzk.client.requests.Session"
 _DOWNLOAD_TO_PATCH = "kartograf.providers.cuzk.client.download_to"
@@ -47,10 +47,10 @@ def _feature(mapnom="CTES96", podil=0.507):
 
 class TestWkid:
     def test_epsg_prefix_stripped(self):
-        assert _wkid("EPSG:5514") == "5514"
+        assert wkid("EPSG:5514") == "5514"
 
     def test_bare_code_passes(self):
-        assert _wkid("3045") == "3045"
+        assert wkid("3045") == "3045"
 
 
 class TestSessionOwnership:

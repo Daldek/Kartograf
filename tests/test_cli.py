@@ -3165,7 +3165,7 @@ class TestAutoSplitBBox:
         self, mock_manager_class, mock_find, mock_cz, tmp_path
     ):
         """Tryb auto przycina czesc CZ do obwiedni kraju (18.86E)."""
-        from kartograf.providers.cuzk.dmr import _bbox_to_crs
+        from kartograf.providers.cuzk.dmr import bbox_to_crs
 
         mock_find.return_value = ["M-34-86-D-d-4-3"]
         mock_manager = Mock()
@@ -3187,7 +3187,7 @@ class TestAutoSplitBBox:
         )
 
         assert result == 0
-        expected = _bbox_to_crs(
+        expected = bbox_to_crs(
             BBox(18.4, 49.55, 18.86, 49.75, "EPSG:4326"), "EPSG:5514"
         )
         assert mock_cz.call_args.kwargs["bbox"] == expected
@@ -3211,7 +3211,7 @@ class TestAutoSplitBBox:
         from kartograf.cli.download_cmd import _bbox_to_wgs84
         from kartograf.core import geometry as geom
         from kartograf.providers.cuzk import dmr
-        from kartograf.providers.cuzk.client import _wkid
+        from kartograf.providers.cuzk.client import wkid
 
         mock_find.return_value = ["M-33-46-A-a-1-1"]
         mock_manager = Mock()
@@ -3220,7 +3220,7 @@ class TestAutoSplitBBox:
         mock_cz.return_value = 0
 
         with (
-            patch.object(dmr, "_bbox_to_crs", wraps=dmr._bbox_to_crs) as pinned,
+            patch.object(dmr, "bbox_to_crs", wraps=dmr.bbox_to_crs) as pinned,
             patch.object(geom, "_transform_bbox", wraps=geom._transform_bbox) as plain,
         ):
             result = main(
@@ -3245,8 +3245,7 @@ class TestAutoSplitBBox:
         assert any(call.args[1] == "EPSG:2180" for call in pinned.call_args_list)
         # niepinowany transformer nigdy nie celuje w uklad czeski
         assert not any(
-            _wkid(str(call.args[5])) in {"5514", "3045"}
-            for call in plain.call_args_list
+            wkid(str(call.args[5])) in {"5514", "3045"} for call in plain.call_args_list
         )
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
@@ -3403,7 +3402,7 @@ class TestAutoSplitBBox:
         assert "--country pl" not in err
         assert "No LAZ tiles" in err
 
-    @patch("kartograf.providers.cuzk.dmr._bbox_to_crs")
+    @patch("kartograf.providers.cuzk.dmr.bbox_to_crs")
     def test_cz_bbox_transform_error_returns_1_with_remedy(
         self, mock_to_crs, tmp_path, capsys
     ):

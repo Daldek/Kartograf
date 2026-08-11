@@ -150,10 +150,21 @@ class Sm5Sheet:
         self._index = index
 
     def get_bbox(self) -> BBox:
-        """BBox arkusza w EPSG:5514 (zapytanie do indeksu, z cache)."""
-        if self._index is None:
-            self._index = SheetIndex(cache=MetadataCache())
-        return self._index.sm5_sheet(self.godlo).bbox
+        """BBox arkusza w EPSG:5514 (zapytanie do indeksu, z cache).
+
+        Gdy indeks nie zostal wstrzykniety w konstruktorze, `MetadataCache`
+        jest budowany na potrzeby tego jednego zapytania i zawsze zamykany
+        (try/finally) — polaczenie sqlite nie zostaje otwarte po powrocie
+        z metody. Wstrzykniety indeks (`index=`) pozostaje wlasnoscia
+        wywolujacego — jego cache NIE jest tutaj zamykany.
+        """
+        if self._index is not None:
+            return self._index.sm5_sheet(self.godlo).bbox
+        cache = MetadataCache()
+        try:
+            return SheetIndex(cache=cache).sm5_sheet(self.godlo).bbox
+        finally:
+            cache.close()
 
     def __repr__(self) -> str:
         return f"Sm5Sheet('{self.godlo}')"

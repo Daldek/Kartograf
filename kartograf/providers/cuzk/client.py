@@ -25,7 +25,7 @@ from kartograf.transport.mosaic import mosaic_and_crop
 _TIFF_MAGIC = (b"II*\x00", b"MM\x00*")
 
 
-def _wkid(crs: str) -> str:
+def wkid(crs: str) -> str:
     """'EPSG:5514' -> '5514' (ArcGIS przyjmuje goly wkid)."""
     return crs.split(":", 1)[1] if ":" in crs else crs
 
@@ -70,10 +70,10 @@ class CuzkClient:
                     f"{bbox.min_x},{bbox.min_y},{bbox.max_x},{bbox.max_y}"
                 )
                 params["geometryType"] = "esriGeometryEnvelope"
-                params["inSR"] = _wkid(bbox.crs)
+                params["inSR"] = wkid(bbox.crs)
                 params["spatialRel"] = "esriSpatialRelIntersects"
             if out_sr is not None:
-                params["outSR"] = _wkid(out_sr)
+                params["outSR"] = wkid(out_sr)
             try:
                 response = self._session.get(url, params=params, timeout=self._timeout)
                 response.raise_for_status()
@@ -146,7 +146,7 @@ class CuzkClient:
             _overwrite_crs(output_path, image_sr)
             return output_path
 
-        if _wkid(bbox.crs) != _wkid(image_sr):
+        if wkid(bbox.crs) != wkid(image_sr):
             raise ValidationError(
                 f"Kafelkowanie exportImage wymaga bbox.crs == image_sr "
                 f"(bbox: {bbox.crs}, image_sr: {image_sr}) — znormalizuj bbox "
@@ -203,8 +203,8 @@ class CuzkClient:
                 format(v, ".10g")
                 for v in (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
             ),
-            "bboxSR": _wkid(bbox.crs),
-            "imageSR": _wkid(image_sr),
+            "bboxSR": wkid(bbox.crs),
+            "imageSR": wkid(image_sr),
             "size": f"{width_px},{height_px}",
             "noData": f"{no_data:g}",
             "noDataInterpretation": "esriNoDataMatchAny",
@@ -236,7 +236,7 @@ def _overwrite_crs(output_path: Path, image_sr: str) -> None:
     """
     try:
         with rasterio.open(output_path, "r+") as ds:
-            ds.crs = CRS.from_epsg(int(_wkid(image_sr)))
+            ds.crs = CRS.from_epsg(int(wkid(image_sr)))
     except Exception as e:
         output_path.unlink(missing_ok=True)
         raise DownloadError(
@@ -317,7 +317,7 @@ def _extract_zip_pair(
                 (n for n in zf.namelist() if n.lower() == f"{stem}.tfw"), None
             )
             has_tfw = tfw_member is not None
-            if has_tfw:
+            if tfw_member is not None:
                 _extract_to(zf, tfw_member, tmp_tfw)
 
         # Obie ekstrakcje gotowe w tmp -> commit atomowy razem.

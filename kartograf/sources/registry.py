@@ -292,8 +292,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                 width_m=2500.0,
                 height_m=2000.0,
                 description=(
-                    "SM5: 4 litery miasta + 2 cyfry; "
-                    "indeks KladyMapovychListu w. 24"
+                    "SM5: 4 litery miasta + 2 cyfry; indeks KladyMapovychListu w. 24"
                 ),
             ),
             storage_subdir="cz_dmr4g",
