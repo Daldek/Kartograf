@@ -28,7 +28,7 @@ from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.cuzk.client import CuzkClient, _wkid
 from kartograf.providers.cuzk.sheets import SheetIndex
-from kartograf.sources.descriptor import TransportKind
+from kartograf.sources.descriptor import AccessChannel, TransportKind
 from kartograf.sources.registry import get_source
 from kartograf.transform.crs import (
     REMEDIES,
@@ -325,7 +325,9 @@ class CuzkDmrProvider(BaseProvider):
                 ds.write(data, 1, window=window)
 
 
-def _endpoint_for(channels, transport: TransportKind) -> str | None:
+def _endpoint_for(
+    channels: tuple[AccessChannel, ...], transport: TransportKind
+) -> str | None:
     """Endpoint pierwszego kanalu danego transportu (None, gdy kanalu brak)."""
     return next(
         (ch.endpoint for ch in channels if ch.transport == transport and ch.endpoint),
