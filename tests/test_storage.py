@@ -587,7 +587,9 @@ class TestSubdirOverride:
     def test_subdir_takes_precedence(self, tmp_path):
         storage = FileStorage(tmp_path, subdir="cz_dmr5g")
         path = storage.get_raw_path("302_5550", "302_5550.tif")
-        assert path == tmp_path / "cz_dmr5g" / "302_5550" / "302_5550.tif"
+        # "302_5550" to godlo TM33 (rejestracja cz_tm33, Zad. 11) — nested
+        # katalogi ["302", "5550"] wg path_parts, jak inne systemy wieloczesciowe.
+        assert path == tmp_path / "cz_dmr5g" / "302" / "5550" / "302_5550.tif"
 
     def test_subdir_wins_over_product_and_resolution(self, tmp_path):
         storage = FileStorage(
