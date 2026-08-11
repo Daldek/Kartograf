@@ -6,16 +6,21 @@ parametryzowane endpointem; klient nie zna godel, produktow ani sidecarow.
 Retry/backoff i atomic write pochodza z transport/http.py.
 """
 
+import math
 import os
 import threading
 import zipfile
 from pathlib import Path
+from urllib.parse import urlencode
 
+import rasterio
 import requests
+from rasterio.crs import CRS
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.transport.http import download_to
+from kartograf.transport.mosaic import mosaic_and_crop
 
 _TIFF_MAGIC = (b"II*\x00", b"MM\x00*")
 
@@ -108,6 +113,172 @@ class CuzkClient:
         finally:
             zip_path.unlink(missing_ok=True)
         return output_path
+
+    def export_image(
+        self,
+        endpoint: str,
+        bbox: BBox,
+        *,
+        pixel_size: float,
+        image_sr: str,
+        no_data: float = -9999.0,
+        output_path: Path,
+    ) -> Path:
+        """GeoTIFF float32 z {endpoint}/exportImage; kafelkowanie nad limitem.
+
+        no_data NIGDY nie jest pomijane (obszar poza CZ bylby wypelniony
+        zerami bez oznaczenia — research 2026-08-10/11, Zad. 1 krok 4).
+
+        CRS zwracany przez exportImage jest bezuzyteczny do reprojekcji
+        (`to_epsg()` daje None zarowno dla 5514 — LOCAL_CS, jak i 3045 —
+        niedopasowany PROJCS z osiami "(N-E)" vs deklaracja E-N; rekonesans
+        Zad. 1, kroki 4-5), wiec po kazdym eksporcie (pojedynczym lub
+        mozaice) CRS jest nadpisywany bezwarunkowo na deklarowany image_sr.
+        """
+        output_path = Path(output_path)
+        width_px = max(1, round((bbox.max_x - bbox.min_x) / pixel_size))
+        height_px = max(1, round((bbox.max_y - bbox.min_y) / pixel_size))
+
+        if width_px <= self.MAX_EXPORT_WIDTH and height_px <= self.MAX_EXPORT_HEIGHT:
+            self._export_single(
+                endpoint, bbox, width_px, height_px, image_sr, no_data, output_path
+            )
+            _overwrite_crs(output_path, image_sr)
+            return output_path
+
+        if _wkid(bbox.crs) != _wkid(image_sr):
+            raise ValidationError(
+                f"Kafelkowanie exportImage wymaga bbox.crs == image_sr "
+                f"(bbox: {bbox.crs}, image_sr: {image_sr}) — znormalizuj bbox "
+                f"do ukladu wyjsciowego przed eksportem"
+            )
+
+        tiles = _tile_grid(
+            bbox,
+            pixel_size,
+            width_px,
+            height_px,
+            self.MAX_EXPORT_WIDTH,
+            self.MAX_EXPORT_HEIGHT,
+        )
+        tile_paths: list[Path] = []
+        try:
+            for i, (tile_bbox, tile_w, tile_h) in enumerate(tiles):
+                tile_path = output_path.with_name(
+                    f"{output_path.name}"
+                    f".{os.getpid()}_{threading.get_ident()}.part{i}.tif"
+                )
+                self._export_single(
+                    endpoint,
+                    tile_bbox,
+                    tile_w,
+                    tile_h,
+                    image_sr,
+                    no_data,
+                    tile_path,
+                )
+                tile_paths.append(tile_path)
+            mosaic_and_crop(tile_paths, bbox, output_path, nodata=no_data)
+            _overwrite_crs(output_path, image_sr)
+        finally:
+            for p in tile_paths:
+                p.unlink(missing_ok=True)
+        return output_path
+
+    def _export_single(
+        self,
+        endpoint: str,
+        bbox: BBox,
+        width_px: int,
+        height_px: int,
+        image_sr: str,
+        no_data: float,
+        output_path: Path,
+    ) -> None:
+        params = {
+            "f": "image",
+            "format": "tiff",
+            "pixelType": "F32",
+            "bbox": ",".join(
+                format(v, ".10g")
+                for v in (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
+            ),
+            "bboxSR": _wkid(bbox.crs),
+            "imageSR": _wkid(image_sr),
+            "size": f"{width_px},{height_px}",
+            "noData": f"{no_data:g}",
+            "noDataInterpretation": "esriNoDataMatchAny",
+        }
+        url = f"{endpoint}/exportImage?{urlencode(params)}"
+        download_to(self._session, url, output_path, timeout=self._timeout)
+        with open(output_path, "rb") as f:
+            head = f.read(4)
+        if head not in _TIFF_MAGIC:
+            with open(output_path, "rb") as f:
+                snippet = f.read(500)
+            output_path.unlink(missing_ok=True)
+            raise DownloadError(
+                f"exportImage nie zwrocil TIFF "
+                f"(poczatek odpowiedzi: {snippet[:200]!r}) [{url}]"
+            )
+
+
+def _overwrite_crs(output_path: Path, image_sr: str) -> None:
+    """Nadpisz CRS pliku na deklarowany image_sr zadania (rasterio "r+").
+
+    exportImage CUZK zwraca GeoTIFF, ktorego CRS jest bezuzyteczny do
+    reprojekcji przez GDAL/rasterio: `to_epsg()` daje None zarowno dla
+    5514 (zapisywany jako LOCAL_CS, nie PROJCS) jak i dla 3045
+    (PROJCS z AUTHORITY poprawnym, ale osiami "(N-E)" niezgodnymi z
+    deklaracja Easting/Northing — GDAL nie dopasowuje kodu EPSG).
+    Krok wykonywany bezwarunkowo, bo tag `nodata` serwer JUZ ustawia
+    poprawnie (rekonesans Zad. 1, krok 4) — nie ma potrzeby go dopisywac.
+    """
+    try:
+        with rasterio.open(output_path, "r+") as ds:
+            ds.crs = CRS.from_epsg(int(_wkid(image_sr)))
+    except Exception as e:
+        output_path.unlink(missing_ok=True)
+        raise DownloadError(
+            f"exportImage: nie udalo sie nadpisac CRS na {image_sr} "
+            f"w {output_path}: {e}"
+        ) from e
+
+
+def _tile_grid(
+    bbox: BBox,
+    pixel_size: float,
+    width_px: int,
+    height_px: int,
+    max_w: int,
+    max_h: int,
+) -> list[tuple[BBox, int, int]]:
+    """Deterministyczna siatka kafli cieta po pelnych pikselach (S->N, W->E)."""
+
+    def _splits(total_px: int, max_px: int) -> list[tuple[int, int]]:
+        n = math.ceil(total_px / max_px)
+        base, extra = divmod(total_px, n)
+        sizes = [base + (1 if i < extra else 0) for i in range(n)]
+        offsets = [sum(sizes[:i]) for i in range(n)]
+        return list(zip(offsets, sizes, strict=True))
+
+    tiles: list[tuple[BBox, int, int]] = []
+    for row_off, row_px in _splits(height_px, max_h):
+        for col_off, col_px in _splits(width_px, max_w):
+            tiles.append(
+                (
+                    BBox(
+                        bbox.min_x + col_off * pixel_size,
+                        bbox.min_y + row_off * pixel_size,
+                        bbox.min_x + (col_off + col_px) * pixel_size,
+                        bbox.min_y + (row_off + row_px) * pixel_size,
+                        bbox.crs,
+                    ),
+                    col_px,
+                    row_px,
+                )
+            )
+    return tiles
 
 
 def _extract_zip_pair(
