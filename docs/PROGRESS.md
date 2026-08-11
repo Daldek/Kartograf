@@ -23,7 +23,7 @@
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0 |
 | Weryfikacja BBox PL-2000 | ✅ Gotowy | 67 testow, reference values + live WMS |
 | Walidacja warstw WMS | ✅ Gotowy | GetCapabilities, lazy, fallback; NMT+NMPT v0.6.1, Orto 2026-06-24 |
-| Etap 0 — zrodla wielokrajowe (sources/transform/transport/providers-pl/CLI split/sidecar) | ✅ Gotowy | galaz feature/etap0-zrodla-wielokrajowe |
+| Etap 0 — zrodla wielokrajowe (sources/transform/transport/providers-pl/CLI split/sidecar) | ✅ Gotowy | zmergowane do develop 2026-08-11; E2E 12/12 na realnych danych |
 
 <!-- Statusy: ✅ Gotowy | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
@@ -166,16 +166,26 @@ z `vertical_crs="KRON86"`. Do osobnego zgloszenia: aktualizacja
 `WCS_ENDPOINTS`/`COVERAGE_IDS` w `providers/pl/gugik.py` + rozwazenie
 walidacji WCS analogicznej do walidacji warstw WMS.
 
+### Merge (2026-08-11)
+
+Etap 0 **zmergowany do `develop`** (fast-forward, HEAD `35ddd56`); pelny
+pytest na zmergowanym develop: **1142 passed**, ruff czysty. Galaz
+`feature/etap0-zrodla-wielokrajowe` usunieta po merge'u. `develop` jest
+lokalnie **31 commitow przed `origin/develop`** (research CZ/DE/SK + spec +
+plan + etap 0) — push do decyzji uzytkownika.
+
 ### Nastepne kroki
-1. **Review + merge do develop** — galaz `feature/etap0-zrodla-wielokrajowe`
-   gotowa (zadanie 15: koncowa weryfikacja/review + macierz E2E), po
-   akceptacji merge do `develop`
-2. **Spec + plan etapu 1** (fundament CZ + DMR) — po zamknieciu etapu 0
+1. **Push `develop` na origin** (31 commitow lokalnie) — decyzja uzytkownika
+2. **Zgloszenie/naprawa WCS EVRF2007** (male, poza etapem 0): aktualizacja
+   `WCS_ENDPOINTS`/`COVERAGE_IDS` w `providers/pl/gugik.py` po usunieciu
+   endpointu przez GUGiK (patrz "Znany problem uslugowy" wyzej); rozwazyc
+   walidacje WCS analogiczna do walidacji warstw WMS
+3. **Spec + plan etapu 1** (fundament CZ + DMR)
    - do specu etapu 1 przeniesc: regula selekcji kanalu w `_select_channel`
      dla zrodel wielokanalowych (dzis: bbox vs nie-bbox, przy wiekszej liczbie
      kanalow bedzie niejednoznaczna) oraz objecie `probe` polityka sieci
      w `transform/crs.py`
-3. Odziedziczone: (do weryfikacji) zgodnosc `get_bbox` z godlowaniem kafli LAZ
+4. Odziedziczone: (do weryfikacji) zgodnosc `get_bbox` z godlowaniem kafli LAZ
    (patrz [[gugik-laz-wfs]])
 
 ## Backlog
