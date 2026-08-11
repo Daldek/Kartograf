@@ -3,6 +3,7 @@
 import math
 from unittest.mock import MagicMock, patch
 
+import numpy as np
 import pytest
 from pyproj import network
 
@@ -150,3 +151,60 @@ class TestKnownPaths:
 
     def test_remedies_for_polish_vertical(self):
         assert "EPSG:9650" in REMEDIES and "EPSG:9651" in REMEDIES
+
+
+class TestTransformPolymorphic:
+    def _pinned(self, transformer):
+        with patch(_GROUP_PATCH) as mock_cls:
+            mock_cls.return_value = _mock_group([transformer])
+            return build_pinned_transform(
+                "EPSG:8357", "EPSG:5621", TransformPolicy(min_accuracy_m=0.2)
+            )
+
+    def test_transform_accepts_numpy_arrays(self):
+        t = _mock_transformer(0.1, "op pionowa")
+        t.transform.return_value = (
+            np.array([1.0, 2.0]),
+            np.array([3.0, 4.0]),
+            np.array([300.13, 300.14]),
+        )
+        pinned = self._pinned(t)
+        rx, ry, rz = pinned.transform(np.zeros(2), np.zeros(2), np.zeros(2))
+        assert rz.tolist() == [300.13, 300.14]
+
+    def test_transform_array_with_inf_raises(self):
+        t = _mock_transformer(0.1, "op pionowa")
+        t.transform.return_value = (
+            np.array([1.0, np.inf]),
+            np.array([3.0, 4.0]),
+        )
+        pinned = self._pinned(t)
+        with pytest.raises(TransformError, match="nieskonczon"):
+            pinned.transform(np.zeros(2), np.zeros(2))
+
+
+class TestProbeUnderNetworkPolicy:
+    def test_probe_runs_under_policy_network_context(self):
+        """5.8b: probe wykonuje sie w kontekscie sieci wg policy,
+        a nie po przywroceniu stanu globalnego."""
+        before = network.is_network_enabled()
+        states_during_probe = []
+
+        t = _mock_transformer(0.5, "op z probe")
+
+        def _probe(x, y):
+            states_during_probe.append(network.is_network_enabled())
+            return (x, y)
+
+        t.transform.side_effect = _probe
+        with patch(_GROUP_PATCH) as mock_cls:
+            mock_cls.return_value = _mock_group([t])
+            build_pinned_transform(
+                "EPSG:5514",
+                "EPSG:2180",
+                TransformPolicy(
+                    allow_network_grids=not before, probe_point=(1.0, 2.0)
+                ),
+            )
+        assert states_during_probe == [not before]
+        assert network.is_network_enabled() == before
