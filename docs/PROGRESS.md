@@ -177,7 +177,8 @@ plan + etap 0) — push do decyzji uzytkownika.
 ### Spec etapu 1 — fundament CZ + DMR (2026-08-11)
 
 `docs/superpowers/specs/2026-08-11-etap1-cz-fundament-dmr-design.md` — status:
-szkic do review. Zakres: `providers/cuzk/` (CuzkClient — pierwszy silnik
+**ZAAKCEPTOWANY 2026-08-11** (review uzytkownika; w ramach review dodano
+`extra.parent_request`). Zakres: `providers/cuzk/` (CuzkClient — pierwszy silnik
 sterowany deskryptorem: exportImage z kafelkowaniem, query z paginacja, pliki
 openzu; SheetIndex + tabela `sheet_cache` w MetadataCache; CuzkDmrProvider),
 `core/parser_tm33.py` + rejestracja `cz_tm33`/`cz_sm5` w parser_registry
@@ -205,10 +206,11 @@ Kluczowe decyzje sesji:
   HTTP openzu, bboxSR/imageSR=3045)
 
 ### Nastepne kroki
-1. **Review specu etapu 1** przez uzytkownika → po akceptacji **plan
-   implementacji etapu 1** (osobna sesja; zaczac od rekonesansu live z sekcji
-   12 specu)
-2. **Push `develop` na origin** (32 commity lokalnie) — decyzja uzytkownika
+1. **Plan implementacji etapu 1** (osobna sesja) — spec zaakceptowany;
+   zaczac od rekonesansu live z sekcji 12 specu (parametry query warstw
+   24/26, `noData` w exportImage, exportImage dmr4g, HTTP openzu,
+   bboxSR/imageSR=3045), dopiero potem zadania kodowe
+2. **Push `develop` na origin** (35 commitow lokalnie) — decyzja uzytkownika
 3. **Zgloszenie/naprawa WCS EVRF2007** (male, poza etapem 0): aktualizacja
    `WCS_ENDPOINTS`/`COVERAGE_IDS` w `providers/pl/gugik.py` po usunieciu
    endpointu przez GUGiK (patrz "Znany problem uslugowy" wyzej); rozwazyc
