@@ -146,10 +146,30 @@
   po kazdym udanym pobraniu; publiczne `from kartograf import ...` bez zmian,
   BREAKING tylko dla glebokich importow providerow (ADR-022, CHANGELOG)
 
+### Weryfikacja E2E na realnych danych (2026-08-11)
+
+12 kombinacji na zywych uslugach — wszystkie z poprawnym sidecar-em
+`.meta.json` (dataset/CRS-y/nodata/request): NMT 1m EVRF2007 (37M), NMT 1m
+KRON86 (37M, vcrs=EPSG:9650), NMT 5m (1,5M), NMPT (37M), PL-2000 6.179.12.20
+(43M), skip-existing (sidecar nienadpisywany), Orto (287M), LAZ bbox
+(3 kafle = 3 sidecary, 147M najwiekszy), BDOT10k teryt 1465 (317M GPKG),
+CORINE fallback PNG bez credentials (**hcrs=EPSG:3857 + fallback=wms_png** —
+poprawka z final review potwierdzona na zywo), SoilGrids (EPSG:4326),
+WCS bbox 1x1 km KRON86 (3,9M GeoTIFF).
+
+**Znany problem uslugowy (poza zakresem etapu 0, kod WCS bajt-w-bajt
+niezmieniony):** GUGiK usunal endpoint WCS NMT EVRF2007
+(`.../WCS/DigitalTerrainModelFormatTIFFEVRF2007` → HTTP 404 na poziomie
+Apache, takze GetCapabilities); endpoint KRON86 dziala i serwuje wylacznie
+`DTM_PL-KRON86-NH_TIFF`. Skutek: `download_bbox` NMT 1m dziala dzis tylko
+z `vertical_crs="KRON86"`. Do osobnego zgloszenia: aktualizacja
+`WCS_ENDPOINTS`/`COVERAGE_IDS` w `providers/pl/gugik.py` + rozwazenie
+walidacji WCS analogicznej do walidacji warstw WMS.
+
 ### Nastepne kroki
 1. **Review + merge do develop** — galaz `feature/etap0-zrodla-wielokrajowe`
-   gotowa (zadanie 15: koncowa weryfikacja/review), po akceptacji merge do
-   `develop`
+   gotowa (zadanie 15: koncowa weryfikacja/review + macierz E2E), po
+   akceptacji merge do `develop`
 2. **Spec + plan etapu 1** (fundament CZ + DMR) — po zamknieciu etapu 0
    - do specu etapu 1 przeniesc: regula selekcji kanalu w `_select_channel`
      dla zrodel wielokanalowych (dzis: bbox vs nie-bbox, przy wiekszej liczbie
