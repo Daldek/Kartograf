@@ -136,7 +136,7 @@ kartograf download 302_5550 --country cz                      # DMR 5G (TM33), 2
 kartograf download CTES96 --resolution 5m                     # DMR 4G (SM5), kraj auto z godla
 # bbox przygraniczny --country auto -> osobne pliki PL i CZ, wspolny extra.parent_request
 kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto
-# reprojekcja serwerowa CZ -> EPSG:2180 (tylko --bbox/--geometry, nie godlo)
+# reprojekcja CZ -> EPSG:2180, lokalna przypieta operacja (tylko --bbox/--geometry, nie godlo)
 kartograf download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --target-crs EPSG:2180
 kartograf download 302_5550 --country cz --vertical-crs EVRF2007  # Bpv -> EPSG:5621 (przypieta operacja)
 # Bboxy w EPSG:5514 (Krovak) sa ujemne na terytorium CZ — uzyj `--bbox=...` (bez spacji),
@@ -212,8 +212,11 @@ kartograf cache path
   jest niezalezna flaga jak w PL; `KRON86` jest **nieosiagalny** dla CZ (brak
   publicznych siatek Bpv->KRON86) — uzyj `--vertical-crs EVRF2007`; tryb
   `--bbox` jest **asymetryczny wzgledem PL** — PL zwraca liste arkuszy
-  OpenData (wiele plikow), CZ zwraca jeden plik (bezposredni wycinek
-  serwerowy `exportImage`); `--target-crs` dziala tylko z `--bbox`/`--geometry`
+  OpenData (wiele plikow), CZ zwraca jeden plik (wycinek `exportImage`);
+  rastry CZ sa ZAWSZE pobierane w ukladzie natywnym EPSG:5514, a reprojekcje
+  (`--target-crs`, kafel TM33 w 3045) robi lokalnie `rasterio.warp` przypieta
+  operacja — serwerowemu `imageSR` nie ufamy (ADR-024); `--target-crs`
+  dziala tylko z `--bbox`/`--geometry`
   — z godlem CZ konczy sie `ValidationError` (godlo dostarcza produkt natywny
   1:1); obwiednia kraju CZ (`CountryProfile.extent_wgs84`) jest **prostokatna**,
   nie wielokatem granicy — `--country auto` w poludniowej Polsce (lon<18,86°E,

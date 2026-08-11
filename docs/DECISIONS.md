@@ -508,22 +508,19 @@ przed jego ustaleniem.
 **Ustalenia dodatkowe (domkniecie zobowiazan zebranych w trakcie
 implementacji — patrz `.superpowers/sdd/2026-08-11-etap1-cz-fundament-dmr/progress.md`):**
 
-1. **Semantyka `transform.horizontal` w sidecarach = "reprojekcja zamowiona
-   przez uzytkownika (`--target-crs`)", NIE "praca serwera".** Kafel TM33
-   pobrany godlem jest serwerowo reprojektowany 5514→3045 wewnatrz
-   `exportImage` (dane leza natywnie w Krovaku), a mimo to jego sidecar ma
-   `transform: null` — bo z perspektywy uzytkownika godlo CZ zawsze
-   dostarcza natywny produkt 1:1 (uklad zdefiniowany schematem kafli, patrz
-   punkt c). Bbox z `--target-crs EPSG:3045`/`EPSG:2180` ma
-   `transform.horizontal = "server:EPSG:<kod>"` — bo tam uzytkownik jawnie
-   zazadal ukladu innego niz natywny dla danego trybu. Implementacja:
-   `_write_cz_sidecar()` (`cli/download_cmd.py`) ustawia `transform.horizontal`
-   TYLKO gdy `server_crs` (jawnie zadany `--target-crs`) rozni sie od
-   natywnego ukladu kanalu przed nadpisaniem — nie od faktycznego SR danych
-   zrodlowych na serwerze. Decyzja: sidecar opisuje **zadanie transformacji
-   wzgledem natywnego produktu trybu**, nie wewnetrzna mechanike serwera —
-   spojne z rola sidecara jako kontraktu dla Hydrografu (co dostal, nie jak
-   to policzono). Analogicznie po stronie pionowej: autorytatywnym sygnalem
+1. **Semantyka `transform.horizontal` w sidecarach** — **ZASTAPIONA przez
+   ADR-024 (2026-08-11)**. Pierwotnie: "reprojekcja zamowiona przez
+   uzytkownika (`--target-crs`)", NIE "praca serwera" — kafel TM33 pobrany
+   godlem mial `transform: null` (mimo serwerowej reprojekcji 5514→3045
+   wewnatrz `exportImage`), a bbox z `--target-crs` mial
+   `transform.horizontal = "server:EPSG:<kod>"`. Pomiary z 2026-08-11
+   pokazaly, ze "praca serwera" nie jest detalem implementacyjnym, ktory
+   mozna przemilczec: reprojekcja serwerowa gubila transformacje datum
+   (blad 135 m). Od ADR-024 Kartograf w ogole jej nie uzywa, a pole niesie
+   przypieta operacje lokalna z dokladnoscia — dla OBU trybow, takze
+   godlowego TM33. Nizej opisana implementacja (`server_crs`
+   w `_write_cz_sidecar()`) juz nie istnieje. Bez zmian pozostaje
+   rozroznienie po stronie pionowej: autorytatywnym sygnalem
    faktycznej transformacji jest `transform.vertical` (np.
    `"pinned: Bpv->EVRF2007"`), NIE `vertical_source` — `vertical_source`
    opisuje wylacznie **kanal zrodlowy** (`"native"` dla CUZK), wiec zostaje
@@ -586,6 +583,107 @@ konsumentow uzywa sidecarow, ktore niosa faktyczny kod bez zmian tresci).
 Etap 2 (DMP/Orto/LAZ CZ, wielokat granicy, ujednolicenie `parent_request`)
 buduje na tym samym `CuzkClient`/deskryptorach — kolejny konsument moze
 uzasadnic ekstrakcje silnika do `transport/` (punkt a).
+
+## ADR-024: Reprojekcja tresci CZ wylacznie lokalnie (zakaz `imageSR` != natywny)
+
+**Data:** 2026-08-11
+**Status:** Przyjeta (zastepuje ADR-023, "Ustalenia dodatkowe" pkt 1)
+
+**Kontekst:** Analiza szwu PL/CZ na Olzie (Cieszyn / Cesky Tesin) wykryla, ze
+`kartograf download --country cz --target-crs EPSG:2180` zwraca raster, ktorego
+tresc lezy **135 m obok** prawdy (dE 119 m, dN 64,5 m). Zrodlem nie byla zadna
+transformacja Kartografa: reprojekcje wykonywal serwer ArcGIS CUZK
+(`exportImage&imageSR=2180`) i robil to **bez transformacji datum**
+S-JTSK→ETRS89, czyli dokladnie tak, jak zakazana u nas operacja ballpark.
+Ironia architektoniczna: `transform/crs.py` zakazuje ballparku i ten zakaz
+dziala — obwiednia zadania liczona lokalnie zgadza sie z pyproj do 0,07 m —
+ale sama TRESC pikseli szla sciezka serwerowa, ktora ten sam blad wprowadzala
+z powrotem. Zaden sidecar tego nie sygnalizowal (`transform.horizontal =
+"server:EPSG:2180"`, bez pola dokladnosci).
+
+Pomiary kontrolne (2026-08-11, `exportImage` vs. dane natywne 5514
+zreprojektowane lokalnie przez pyproj/GDAL, dopasowanie przez minimum RMS):
+
+| sciezka | minimum RMS | przesuniecie | ballpark wg pyproj |
+|---|---|---|---|
+| `imageSR=2180` (`--target-crs`) | 0,041 m przy (−119,0; −64,5) | **135 m** | dE 118,8 / dN 64,4 |
+| `imageSR=3045` (godlo TM33) | 0,034 m przy (0; +1,25) | **1,25 m** | dE 115,3 / dN 70,7 |
+| natywny 5514 vs natywny 5514 | 0,045 m przy (0; 0) | 0 (kontrola) | — |
+
+Czyli: dla 3045 serwer datum **stosuje** (przesuniecie 135 m nie wystepuje),
+ale zostawia systematyczne **1,25 m na poludnie** — powtorzone na dwoch
+niezaleznych kaflach (`758_5514`, `760_5514`), przy samozgodnosci eksportow
+natywnych 0,045 m. Zrodlo tego 1,25 m pozostaje nieznane (po stronie serwera).
+
+**Opcje:**
+- A) Naprawic tylko `--target-crs`, zostawic godlowa sciezke TM33 na serwerze.
+  Odrzucona: 1,25 m to 0,6 piksela DMR 5G, na stoku 20° daje 0,45 m bledu
+  wysokosci — tego samego rzedu co caly budzet roznic zmierzony na szwie.
+  Zostawialaby tez dwie rozne zasady dla dwoch sciezek tego samego produktu.
+- B) Zostawic reprojekcje serwerowa + test kontrolny punktow (serwer vs
+  `PinnedTransform`) z twardym bledem przy rozjezdzie. Odrzucona: wykrywa
+  problem, ale go nie rozwiazuje — uzytkownik dostaje blad zamiast danych,
+  a koszt zadania jest juz poniesiony.
+- C) **Reprojekcja lokalna** — wybrana.
+
+**Decyzje:**
+
+(a) **Serwer CUZK dostaje zadania rastrowe WYLACZNIE w ukladzie natywnym**
+(`NATIVE_CRS = "EPSG:5514"`). Dotyczy obu sciezek: `--target-crs` i domyslnej
+godlowej TM33 (wynik w 3045). Obwiednia zadania to cel przeliczony do 5514
+istniejacym `bbox_to_crs()` (probkowanie krawedzi) plus zapas
+`_WARP_MARGIN_PX = 4` piksele — pokrywa niepewnosc operacji obwiedniowej
+(≤ 2 m) i halo interpolatora na krawedzi.
+
+(b) **Reprojekcja tresci lokalnie przez `rasterio.warp.reproject`, operacja
+WYMUSZONA.** Bez wymuszenia GDAL wybiera operacje sam, poza polityka
+`transform/crs.py` (zmierzona roznica wzgledem przypietej: srednio 0,08 m,
+maks. 1,9 m). Mechanizm: `PinnedTransform.gdal_operation()` zwraca te sama
+operacje jako pipeline PROJ dla GDAL-owego `COORDINATE_OPERATION`.
+
+(c) **Korekta kolejnosci osi w `gdal_operation()` jest obowiazkowa.**
+`PinnedTransform` powstaje z `always_xy=True` (kolejnosc E-N), a GDAL podaje
+operacji wspolrzedne w kolejnosci **autorytatywnej** obu ukladow. Oba realne
+cele CZ→PL sa northing-first (`EPSG:2180`: x=north, `EPSG:3045`: N-E), wiec
+bez `step proj=axisswap order=2,1` warp daje raster **w calosci nodata** —
+cicha awaria, latwa do przeoczenia w potoku. Korekta jest wyliczana z
+`CRS.axis_info`, nie zakladana. Sprawdzone alternatywy: `to_wkt()` operacji
+(GDAL nakłada wlasna obsluge osi — tez cale nodata) i wyszukanie
+autorytatywnej wersji operacji w `TransformerGroup(always_xy=False)`
+(nie da sie dopasowac po opisie: normalizacja dokleja "+ axis order change").
+
+(d) **Kafelkowanie i mozaikowanie zostaja po stronie natywnej — przed
+warpem.** Limity `exportImage` tna zadanie w 5514, `mosaic_and_crop` sklada
+je w jeden raster i dopiero on jest reprojektowany. Odwrotna kolejnosc
+(warp per kafel) utrwalilaby szwy: interpolacja na krawedzi kafla nie ma
+sasiadow z kafla obok.
+
+(e) **`transform.horizontal` w sidecarze niesie operacje lokalna
+z dokladnoscia** — `"pinned: <opis> (<acc> m)"`, symetrycznie do
+`transform.vertical`. Zastepuje `"server:EPSG:<kod>"` (bez dokladnosci) i
+pojawia sie takze dla kafla TM33, ktory dotad mial `transform: null`.
+Konsument sidecara ma dzis sygnal, ze reprojekcja w ogole zaszla i z jaka
+dokladnoscia; wczesniej `"server:EPSG:2180"` moglo znaczyc "blad 135 m".
+
+(f) **Fail-fast przed transferem.** Brak bezpiecznej operacji poziomej
+przerywa w konstruktorze providera (jak przy operacji pionowej Bpv→EVRF2007),
+zanim uzytkownik zaplaci za pobranie. Polityka: `_HORIZONTAL_POLICY`
+(`min_accuracy_m=1.0`, bez siatek z CDN) — ostrzejsza niz obwiedniowa
+(2 m), bo to jedyna operacja, ktora **przesuwa piksele**; znane operacje
+z Krovaka do 2180/3045 maja 0,5 m.
+
+**Konsekwencje:** Kazde pobranie CZ w ukladzie innym niz 5514 kosztuje jedno
+lokalne przeprobkowanie (bilinear) i nieco wiekszy transfer (obwiednia
+prostokata obroconego wzgledem siatki + margines). Liczba przeprobkowan sie
+NIE zmienia — serwer i tak reprojektowal, tylko gorzej i bez sladu w
+metadanych. Nodata (`-9999`) nie wchodzi do interpolacji (maska GDAL,
+zweryfikowane testem), zapis pozostaje atomowy (tmp + `os.replace`), a wynik
+lezy na tej samej siatce co dotad (zasieg i rozmiar liczone identycznie jak
+w `CuzkClient.export_image`). BREAKING dla konsumentow sidecarow: inna
+wartosc `transform.horizontal`, niepuste `transform` dla kafli TM33.
+Sciezka SM5 (DMR 4G z openzu) jest nietknieta — pliki przychodza w 5514.
+Regula "nie ufaj reprojekcji serwerowej" jest wiazaca takze dla przyszlych
+zrodel DE/SK sterowanych serwerowym parametrem ukladu.
 
 <!-- Szablon nowej decyzji:
 
