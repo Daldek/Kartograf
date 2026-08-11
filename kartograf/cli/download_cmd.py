@@ -99,6 +99,12 @@ def cmd_download(args: argparse.Namespace) -> int:
     int
         Exit code (0 for success, 1 for error)
     """
+    # TYMCZASOWE (Zad. 14): sentinele -> polskie domysly; Zad. 16 zastapi
+    # to pelna dyspozycja per kraj (_resolve_pl_sentinels)
+    args.resolution = args.resolution or "1m"
+    args.vertical_crs = args.vertical_crs or "EVRF2007"
+    args.system = getattr(args, "system", None) or "1992"
+
     has_godlo = args.godlo is not None
     has_bbox = args.bbox is not None
     has_geometry = getattr(args, "geometry", None) is not None
