@@ -14,13 +14,17 @@ import logging
 import os
 import shutil
 import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
 import rasterio
 import requests
 from rasterio.crs import CRS
+from rasterio.enums import Resampling
+from rasterio.transform import from_origin
 from rasterio.transform import xy as _pixel_xy
+from rasterio.warp import reproject
 from rasterio.windows import Window
 
 from kartograf.cache.metadata import MetadataCache
@@ -45,6 +49,12 @@ logger = logging.getLogger(__name__)
 
 CUZK_NODATA = -9999.0
 
+# Uklad, w ktorym CUZK TRZYMA dane rastrowe. Serwer dostaje zadania wylacznie
+# w nim: reprojekcja serwerowa (`imageSR` != natywny) jest niewiarygodna —
+# 5514->2180 gubi transformacje datum (blad 135 m), a 5514->3045 przesuwa
+# tresc o 1,25 m na poludnie (pomiary 2026-08-11, ADR-024).
+NATIVE_CRS = "EPSG:5514"
+
 _RESOLUTION_KEYS = {"2m": "cz.cuzk.dmr5g", "5m": "cz.cuzk.dmr4g"}
 _PIXEL_SIZES = {"2m": 2.0, "5m": 5.0}
 _SUPPORTED_VERTICAL = ("Bpv", "EVRF2007")
@@ -59,6 +69,13 @@ _VERTICAL_POLICY = TransformPolicy(min_accuracy_m=0.2)
 # ~2 s na pare ukladow), dlatego allow_network_grids=False.
 _LONLAT_POLICY = TransformPolicy(min_accuracy_m=2.0, allow_network_grids=False)
 _ENVELOPE_POLICY = TransformPolicy(min_accuracy_m=2.0, allow_network_grids=False)
+# Operacja reprojektujaca TRESC rastra — jedyna, ktora przesuwa piksele, wiec
+# limit dokladnosci jest ostrzejszy niz dla obwiedni. Znane operacje z Krovaka
+# do ukladow docelowych (2180, 3045) maja 0,5 m (KNOWN_PATHS).
+_HORIZONTAL_POLICY = TransformPolicy(min_accuracy_m=1.0, allow_network_grids=False)
+# Zapas obwiedni zadania natywnego w pikselach: pokrywa niepewnosc operacji
+# obwiedniowej (<= 2 m) i halo interpolatora bilinear (1 px) na krawedziach.
+_WARP_MARGIN_PX = 4
 
 # Transformacja idzie pasami o stalej liczbie PIKSELI (nie wierszy): przy szerokim
 # rastrze pas wierszowy wygenerowalby wielkie tablice indeksow i lon/lat.
@@ -112,6 +129,10 @@ class CuzkDmrProvider(BaseProvider):
             if vertical_crs == "EVRF2007"
             else None
         )
+        # Ta sama zasada dla poziomu: gdy uzytkownik zazadal ukladu innego niz
+        # natywny, brak bezpiecznej operacji ma przerwac przed transferem.
+        if target_crs is not None:
+            self.horizontal_transform(target_crs)
 
         descriptor = get_source(self.descriptor_key)
         image_endpoint = _endpoint_for(descriptor.channels, TransportKind.ARCGIS_IMAGE)
@@ -154,6 +175,17 @@ class CuzkDmrProvider(BaseProvider):
         """Wspoldzielony indeks arkuszy (walidacja SM5, PODIL do sidecara)."""
         return self._sheet_index
 
+    def horizontal_transform(self, target_crs: str) -> PinnedTransform | None:
+        """Przypieta operacja ``EPSG:5514 -> target_crs`` uzyta do reprojekcji
+        TRESCI rastra; ``None``, gdy wynik zostaje w ukladzie natywnym.
+
+        Ta sama instancja co uzyta przy pobieraniu (cache ``_transforms``), wiec
+        opis i dokladnosc w sidecarze opisuja faktycznie wykonana operacje.
+        """
+        if wkid(target_crs) == wkid(NATIVE_CRS):
+            return None
+        return self._pinned(NATIVE_CRS, target_crs, _HORIZONTAL_POLICY)
+
     @property
     def vertical_transform(self) -> PinnedTransform | None:
         """Przypieta operacja 8357->5621 (None, gdy pobieranie natywne Bpv).
@@ -184,14 +216,7 @@ class CuzkDmrProvider(BaseProvider):
             # Parsowanie przez ParserTM33 (pelna walidacja: kilometry parzyste),
             # nie przez sam regex rejestru systemow.
             bbox = ParserTM33(godlo).get_bbox()
-            self._client_for(timeout).export_image(
-                self._image_endpoint,
-                bbox,
-                pixel_size=self._pixel_size,
-                image_sr=bbox.crs,
-                no_data=CUZK_NODATA,
-                output_path=output_path,
-            )
+            self._export_raster(bbox, output_path, timeout)
         if self.vertical_transform is not None:
             self._apply_vertical_shift(output_path)
         return output_path
@@ -203,27 +228,78 @@ class CuzkDmrProvider(BaseProvider):
         format: str = "GTiff",
         timeout: int = _DEFAULT_TIMEOUT,
     ) -> Path:
-        """Jeden wycinek serwerowy (exportImage) dla dowolnego bboxa."""
+        """Jeden wycinek dla dowolnego bboxa (`--target-crs` => warp lokalny)."""
         if format != "GTiff":
             raise ValidationError(
                 f"CuzkDmrProvider.download_bbox obsluguje tylko GTiff "
                 f"(zadano: {format})"
             )
         output_path = Path(output_path)
-        image_sr = self._target_crs or "EPSG:5514"
+        image_sr = self._target_crs or NATIVE_CRS
         if wkid(bbox.crs) != wkid(image_sr):
             bbox = self._bbox_to_crs(bbox, image_sr)
-        self._client_for(timeout).export_image(
-            self._image_endpoint,
-            bbox,
-            pixel_size=self._pixel_size,
-            image_sr=image_sr,
-            no_data=CUZK_NODATA,
-            output_path=output_path,
-        )
+        self._export_raster(bbox, output_path, timeout)
         if self.vertical_transform is not None:
             self._apply_vertical_shift(output_path)
         return output_path
+
+    def _export_raster(self, bbox: BBox, output_path: Path, timeout: int) -> None:
+        """Raster pokrywajacy ``bbox`` w ukladzie ``bbox.crs``.
+
+        Serwer dostaje zadanie WYLACZNIE w ukladzie natywnym (``NATIVE_CRS``);
+        gdy cel jest inny, tresc jest reprojektowana lokalnie przypieta
+        operacja. Powod jest empiryczny (pomiary 2026-08-11, ADR-024):
+        ``exportImage&imageSR=2180`` gubi transformacje datum S-JTSK->ETRS89
+        (tresc przesunieta o 135 m), a ``imageSR=3045`` przesuwa ja o 1,25 m —
+        oba bledy sa niewidoczne w metadanych pliku, wiec jedyna obrona jest
+        nieuzywanie tej sciezki.
+
+        Kafelkowanie (limity ``exportImage``) i mozaikowanie dzieja sie po
+        stronie ukladu natywnego, czyli PRZED warpem — szew kafli nie moze
+        wiec zostac utrwalony przez interpolacje.
+        """
+        client = self._client_for(timeout)
+        # None == cel jest ukladem natywnym: serwer wydaje dane wprost
+        pinned = self.horizontal_transform(bbox.crs)
+        if pinned is None:
+            client.export_image(
+                self._image_endpoint,
+                bbox,
+                pixel_size=self._pixel_size,
+                image_sr=NATIVE_CRS,
+                no_data=CUZK_NODATA,
+                output_path=output_path,
+            )
+            return
+
+        native_bbox = self._native_request_bbox(bbox)
+        native_path = output_path.with_name(
+            f"{output_path.name}.{os.getpid()}_{threading.get_ident()}.native.tif"
+        )
+        try:
+            client.export_image(
+                self._image_endpoint,
+                native_bbox,
+                pixel_size=self._pixel_size,
+                image_sr=NATIVE_CRS,
+                no_data=CUZK_NODATA,
+                output_path=native_path,
+            )
+            _warp_to_grid(native_path, output_path, bbox, self._pixel_size, pinned)
+        finally:
+            native_path.unlink(missing_ok=True)
+
+    def _native_request_bbox(self, bbox: BBox) -> BBox:
+        """Obwiednia zadania natywnego: cel przeliczony do 5514 plus zapas."""
+        native = self._bbox_to_crs(bbox, NATIVE_CRS)
+        margin = _WARP_MARGIN_PX * self._pixel_size
+        return BBox(
+            native.min_x - margin,
+            native.min_y - margin,
+            native.max_x + margin,
+            native.max_y + margin,
+            NATIVE_CRS,
+        )
 
     def _download_sm5(self, godlo: str, output_path: Path, timeout: int) -> None:
         """Arkusz SM5 (DMR 4G) z openzu + naprawa metadanych CRS."""
@@ -342,6 +418,92 @@ class CuzkDmrProvider(BaseProvider):
                 _, _, shifted = pinned.transform(lon, lat, data[mask].astype("float64"))
                 data[mask] = np.asarray(shifted, dtype=data.dtype)
                 ds.write(data, 1, window=window)
+
+
+@contextmanager
+def _quiet_transformer_only_option():
+    """Wycisz jeden komunikat GDAL: ``COORDINATE_OPERATION`` jest opcja
+    TRANSFORMERA, a `rasterio.warp.reproject` podaje kwargs takze jako opcje
+    warpera, ktory jej nie zna i zglasza `CPLE_NotSupported`. Operacja dziala
+    (test `test_bbox_target_crs_puts_content_where_pyproj_says` to sprawdza na
+    tresci), a ostrzezenie trafialoby na stderr kazdego pobrania CZ z
+    reprojekcja. Filtr jest waski (dopasowanie po nazwie opcji) i zdejmowany
+    natychmiast, wiec nie ukrywa innych bledow GDAL.
+    """
+    gdal_logger = logging.getLogger("rasterio._env")
+
+    def _filter(record: logging.LogRecord) -> bool:
+        return "COORDINATE_OPERATION" not in record.getMessage()
+
+    gdal_logger.addFilter(_filter)
+    try:
+        yield
+    finally:
+        gdal_logger.removeFilter(_filter)
+
+
+def _warp_to_grid(
+    src_path: Path,
+    dst_path: Path,
+    bbox: BBox,
+    pixel_size: float,
+    pinned: PinnedTransform,
+) -> None:
+    """Zreprojektuj raster natywny na siatke ``bbox``/``pixel_size``.
+
+    Operacja jest WYMUSZONA (`COORDINATE_OPERATION`) — bez tego GDAL wybiera
+    ja sam, poza polityka `transform/crs.py` (zakaz ballparku, limit
+    dokladnosci, probe). Siatka wyniku liczona jest identycznie jak w
+    `CuzkClient.export_image`, wiec zasieg i rozmiar pliku nie zaleza od tego,
+    czy po drodze byla reprojekcja.
+
+    `src_nodata`/`dst_nodata` sprawiaja, ze GDAL maskuje piksele puste i nie
+    wpuszcza `-9999` do interpolacji (zweryfikowane pomiarem i testem
+    `test_nodata_does_not_bleed_into_interpolation`). Zapis jest atomowy:
+    plik docelowy powstaje dopiero z gotowej kopii tymczasowej.
+    """
+    width = max(1, round((bbox.max_x - bbox.min_x) / pixel_size))
+    height = max(1, round((bbox.max_y - bbox.min_y) / pixel_size))
+    dst_transform = from_origin(bbox.min_x, bbox.max_y, pixel_size, pixel_size)
+    tmp_path = dst_path.with_name(
+        f"{dst_path.name}.{os.getpid()}_{threading.get_ident()}.warp.tif"
+    )
+    logger.debug(
+        f"Reprojekcja lokalna {src_path.name} -> {bbox.crs}: "
+        f"{pinned.description} (dokladnosc {pinned.accuracy_m} m)"
+    )
+    try:
+        with rasterio.open(src_path) as src:
+            profile = {
+                "driver": "GTiff",
+                "dtype": "float32",
+                "count": 1,
+                "width": width,
+                "height": height,
+                "crs": CRS.from_string(bbox.crs),
+                "transform": dst_transform,
+                "nodata": CUZK_NODATA,
+            }
+            with (
+                rasterio.open(tmp_path, "w", **profile) as dst,
+                _quiet_transformer_only_option(),
+            ):
+                reproject(
+                    source=rasterio.band(src, 1),
+                    destination=rasterio.band(dst, 1),
+                    src_crs=CRS.from_string(NATIVE_CRS),
+                    src_nodata=CUZK_NODATA,
+                    dst_crs=CRS.from_string(bbox.crs),
+                    dst_nodata=CUZK_NODATA,
+                    resampling=Resampling.bilinear,
+                    COORDINATE_OPERATION=pinned.gdal_operation(),
+                )
+        os.replace(tmp_path, dst_path)
+    except BaseException:
+        dst_path.unlink(missing_ok=True)
+        raise
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 def bbox_to_crs(

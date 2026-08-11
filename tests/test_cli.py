@@ -2200,6 +2200,17 @@ def _cz_provider_mock(resolution="2m"):
     provider.vertical_crs = "Bpv"
     provider.vertical_transform = None
 
+    def fake_horizontal(target_crs):
+        """Kontrakt CuzkDmrProvider.horizontal_transform: None dla natywnego."""
+        if target_crs.endswith("5514"):
+            return None
+        pinned = Mock()
+        pinned.description = f"S-JTSK to ETRS89 (3) -> {target_crs}"
+        pinned.accuracy_m = 0.5
+        return pinned
+
+    provider.horizontal_transform.side_effect = fake_horizontal
+
     def fake_download(godlo, target, timeout=60):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(b"II*\x00dane")
@@ -2253,7 +2264,11 @@ class TestCmdDownloadCz:
         assert payload["vertical_crs"] == "EPSG:8357"  # Bpv natywnie
         assert payload["license"]["id"] == "CC-BY-4.0"
         assert payload["request"] == {"godlo": "302_5550"}
-        assert payload["transform"] is None  # pobrano natywnie
+        # kafel TM33 lezy w 3045, a dane CUZK w 5514 — reprojekcja jest LOKALNA
+        # i sidecar niesie jej dokladnosc (ADR-024)
+        assert payload["transform"] == {
+            "horizontal": "pinned: S-JTSK to ETRS89 (3) -> EPSG:3045 (0.5 m)"
+        }
         assert "parent_request" not in payload["extra"]  # tryb godlowy bez pola
 
     def test_sm5_godlo_enriches_extra_with_podil(self, tmp_path):
@@ -2351,7 +2366,7 @@ class TestCmdDownloadCz:
             f"_{format(sent_bbox.max_y, '.10g')}.tif"
         )
 
-    def test_bbox_with_target_crs_records_server_transform(self, tmp_path):
+    def test_bbox_with_target_crs_records_pinned_transform(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
@@ -2369,7 +2384,9 @@ class TestCmdDownloadCz:
             (target.parent / f"{target.name}.meta.json").read_text(encoding="utf-8")
         )
         assert payload["horizontal_crs"] == "EPSG:3045"
-        assert payload["transform"] == {"horizontal": "server:EPSG:3045"}
+        assert payload["transform"] == {
+            "horizontal": "pinned: S-JTSK to ETRS89 (3) -> EPSG:3045 (0.5 m)"
+        }
 
     def test_invalid_bbox_string_returns_1(self, tmp_path, capsys):
         from kartograf.cli.download_cmd import _cmd_download_cz
