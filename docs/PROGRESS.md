@@ -183,7 +183,9 @@ openzu; SheetIndex + tabela `sheet_cache` w MetadataCache; CuzkDmrProvider),
 `core/parser_tm33.py` + rejestracja `cz_tm33`/`cz_sm5` w parser_registry
 (PRZED fallbackiem pl1992), deskryptory `cz.cuzk.dmr5g`/`cz.cuzk.dmr4g` +
 pole `endpoint` w AccessChannel, CLI `--country {pl,cz,auto}` + `--target-crs`
-+ `2m`/`Bpv`, sidecary CZ z `transform`/`extra` (PODIL). Elementy odroczone
++ `2m`/`Bpv`, sidecary CZ z `transform`/`extra` (PODIL;
+`extra.parent_request` grupujacy pliki jednego zadania `--country auto` —
+fundament pod przyszle scalanie). Elementy odroczone
 z etapu 0 wchodza: jawna selekcja kanalu (`build_metadata(capability=...)`),
 probe pod polityka sieci.
 
