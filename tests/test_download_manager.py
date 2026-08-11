@@ -726,3 +726,32 @@ class TestSidecarWritten:
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
         result = manager.download_sheet("N-34-130-D-d-2-4")
         assert not (result.parent / f"{result.name}.meta.json").exists()
+
+    def test_sidecar_extra_merged_into_extra(self, tmp_path):
+        import json
+
+        parent = {
+            "bbox": [530000.0, 382000.0, 533000.0, 386000.0],
+            "bbox_crs": "EPSG:2180",
+            "countries": ["CZ", "PL"],
+        }
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=self._mock_provider(),
+            sidecar_extra={"parent_request": parent},
+        )
+        result = manager.download_sheet("N-34-130-D-d-2-4")
+        payload = json.loads(
+            (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
+        )
+        assert payload["extra"]["parent_request"] == parent
+
+    def test_sidecar_extra_none_keeps_extra_empty(self, tmp_path):
+        import json
+
+        manager = DownloadManager(output_dir=tmp_path, provider=self._mock_provider())
+        result = manager.download_sheet("N-34-130-D-d-2-4")
+        payload = json.loads(
+            (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
+        )
+        assert payload["extra"] == {}
