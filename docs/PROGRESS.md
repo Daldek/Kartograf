@@ -81,7 +81,8 @@
 
 ## Ostatnia sesja
 
-**Data:** 2026-08-10
+**Data:** 2026-08-10 — 2026-08-11 (sekcje datowane ponizej; najnowsza:
+"Plan implementacji etapu 1 (2026-08-11)")
 
 ### Co zrobiono
 - **Research: rozszerzenie o zrodla wielokrajowe (CZ, DE, SK)** — wszystkie
@@ -205,12 +206,48 @@ Kluczowe decyzje sesji:
   (parametry query warstw 24/26, `noData` w exportImage, exportImage dmr4g,
   HTTP openzu, bboxSR/imageSR=3045)
 
+### Plan implementacji etapu 1 (2026-08-11)
+
+`docs/superpowers/plans/2026-08-11-etap1-cz-fundament-dmr.md` — **21 zadan
+TDD** (kazde: test-fail-implement-pass-commit), napisany wg
+superpowers:writing-plans na bazie zaakceptowanego specu + rekonesansu kodu
+(inwentaryzacja testow do zmiany, sygnatury istniejacych helperow). Struktura:
+zad. 1 rekonesans live (sekcja 12 specu + semantyka pyproj 8357→5621, fixtury
+do `tests/fixtures/cuzk/`); zad. 2-4 rejestr pionowy (BREAKING
+`vertical_crs_code`, nowa publiczna `resolve_vertical_crs`) + deskryptory CZ
+(+`all_countries()`) + `build_metadata(capability=, nodata=)`; zad. 5
+`transform/crs.py`; zad. 6 `ParserTM33`; zad. 7 `sheet_cache`; zad. 8-9
+`CuzkClient`; zad. 10 `SheetIndex`/`Sm5Sheet`; zad. 11 rejestracja systemow;
+zad. 12 `CuzkDmrProvider`; zad. 13 `DownloadManager(sidecar_extra=)`;
+zad. 14-17 CLI (dyspozycja per kraj, `_cmd_download_cz`, auto-split,
+`parent_request`); zad. 18 eksporty + wersja `0.7.0-dev`; zad. 19 brama
+jakosci; zad. 20 E2E live (macierz akceptacyjna 11.3-11.4); zad. 21
+dokumentacja (ADR-023).
+
+**Decyzje uzytkownika z konsultacji przy planie (wiazace, sekcja
+"Rozstrzygniecia z konsultacji" planu):**
+- `extra.parent_request` pisany **zawsze w trybie bbox/geometry** (auto
+  I jawny `--country`; nigdy w godlowym) — umozliwia dwuetapowe dociaganie
+  drugiego kraju dla tego samego bboxa (klucz grupowania: identyczny
+  bbox+crs); koryguje "sidecary PL bez zmian tresci" ze specu (addytywnie)
+- `--target-crs` + godlo CZ → **ValidationError** (reprojekcja serwerowa
+  tylko w trybie --bbox/--geometry; spojne z decyzja 13.2 specu)
+- `PinnedTransform.transform` **polimorficzne** (skalary lub tablice numpy,
+  `np.isfinite`) — zamiast osobnej metody; korekta notki "bez zmian API"
+
+Rozstrzygniecia techniczne planu (sekcja "Rozstrzygniecia techniczne"):
+`--system` tez sentinel `None`; kafelkowanie exportImage wymaga
+`bbox.crs == image_sr` (provider normalizuje bbox wczesniej); przycinanie
+bboxa do extentu kraju tylko w auto; `tests/test_cache.py` ze specu =
+`tests/test_metadata_cache.py`.
+
 ### Nastepne kroki
-1. **Plan implementacji etapu 1** (osobna sesja) — spec zaakceptowany;
-   zaczac od rekonesansu live z sekcji 12 specu (parametry query warstw
-   24/26, `noData` w exportImage, exportImage dmr4g, HTTP openzu,
-   bboxSR/imageSR=3045), dopiero potem zadania kodowe
-2. **Push `develop` na origin** (35 commitow lokalnie) — decyzja uzytkownika
+1. **Implementacja etapu 1** (osobna sesja) wg planu
+   `docs/superpowers/plans/2026-08-11-etap1-cz-fundament-dmr.md` —
+   REQUIRED SUB-SKILL: superpowers:subagent-driven-development albo
+   superpowers:executing-plans; zaczac od zadania 1 (rekonesans live,
+   bez kodu produkcyjnego)
+2. **Push `develop` na origin** (36 commitow lokalnie) — decyzja uzytkownika
 3. **Zgloszenie/naprawa WCS EVRF2007** (male, poza etapem 0): aktualizacja
    `WCS_ENDPOINTS`/`COVERAGE_IDS` w `providers/pl/gugik.py` po usunieciu
    endpointu przez GUGiK (patrz "Znany problem uslugowy" wyzej); rozwazyc
