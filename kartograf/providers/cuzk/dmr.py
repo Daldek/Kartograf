@@ -268,28 +268,9 @@ class CuzkDmrProvider(BaseProvider):
         return self._transforms[key]
 
     def _bbox_to_crs(self, bbox: BBox, target_crs: str) -> BBox:
-        """Obwiednia bboxa w ukladzie docelowym (normalizacja zadan exportImage).
-
-        Krawedzie sa probkowane (nie tylko naroza), bo obraz prostokata w innym
-        ukladzie jest czworokatem o krzywych bokach — obwiednia z samych naroznikow
-        potrafi uciac skrawek zadanego obszaru.
-        """
-        pinned = self._pinned(bbox.crs, target_crs, _ENVELOPE_POLICY)
-        xs = np.linspace(bbox.min_x, bbox.max_x, _EDGE_SAMPLES)
-        ys = np.linspace(bbox.min_y, bbox.max_y, _EDGE_SAMPLES)
-        west = np.full(_EDGE_SAMPLES, bbox.min_x)
-        east = np.full(_EDGE_SAMPLES, bbox.max_x)
-        south = np.full(_EDGE_SAMPLES, bbox.min_y)
-        north = np.full(_EDGE_SAMPLES, bbox.max_y)
-        edge_x = np.concatenate([xs, xs, west, east])
-        edge_y = np.concatenate([south, north, ys, ys])
-        out_x, out_y = pinned.transform(edge_x, edge_y)
-        return BBox(
-            float(np.min(out_x)),
-            float(np.min(out_y)),
-            float(np.max(out_x)),
-            float(np.max(out_y)),
-            target_crs,
+        """Obwiednia bboxa w ukladzie docelowym, z transformacja z cache providera."""
+        return _bbox_to_crs(
+            bbox, target_crs, self._pinned(bbox.crs, target_crs, _ENVELOPE_POLICY)
         )
 
     def _apply_vertical_shift(self, path: Path) -> None:
@@ -361,6 +342,39 @@ class CuzkDmrProvider(BaseProvider):
                 _, _, shifted = pinned.transform(lon, lat, data[mask].astype("float64"))
                 data[mask] = np.asarray(shifted, dtype=data.dtype)
                 ds.write(data, 1, window=window)
+
+
+def _bbox_to_crs(
+    bbox: BBox, target_crs: str, pinned: PinnedTransform | None = None
+) -> BBox:
+    """Obwiednia bboxa w ukladzie docelowym (normalizacja zadan exportImage).
+
+    Krawedzie sa probkowane (nie tylko naroza), bo obraz prostokata w innym
+    ukladzie jest czworokatem o krzywych bokach — obwiednia z samych naroznikow
+    potrafi uciac skrawek zadanego obszaru.
+
+    Funkcja modulowa (nie tylko metoda), bo warstwa CLI normalizuje bbox PRZED
+    zbudowaniem nazwy pliku — nazwa musi niesc wspolrzedne faktycznie zadanego
+    wycinka. Powtorna normalizacja w `download_bbox` jest wtedy strzezonym no-opem.
+    """
+    if pinned is None:
+        pinned = build_pinned_transform(bbox.crs, target_crs, _ENVELOPE_POLICY)
+    xs = np.linspace(bbox.min_x, bbox.max_x, _EDGE_SAMPLES)
+    ys = np.linspace(bbox.min_y, bbox.max_y, _EDGE_SAMPLES)
+    west = np.full(_EDGE_SAMPLES, bbox.min_x)
+    east = np.full(_EDGE_SAMPLES, bbox.max_x)
+    south = np.full(_EDGE_SAMPLES, bbox.min_y)
+    north = np.full(_EDGE_SAMPLES, bbox.max_y)
+    edge_x = np.concatenate([xs, xs, west, east])
+    edge_y = np.concatenate([south, north, ys, ys])
+    out_x, out_y = pinned.transform(edge_x, edge_y)
+    return BBox(
+        float(np.min(out_x)),
+        float(np.min(out_y)),
+        float(np.max(out_x)),
+        float(np.max(out_y)),
+        target_crs,
+    )
 
 
 def _endpoint_for(

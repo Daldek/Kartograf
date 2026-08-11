@@ -5,6 +5,8 @@ This module contains tests for command-line interface commands,
 verifying correct parsing and output formatting.
 """
 
+import argparse
+import json
 from unittest.mock import Mock, patch
 
 import pytest  # noqa: F401 - required for fixtures
@@ -20,7 +22,7 @@ from kartograf.cli.commands import (
 )
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.manager import DownloadProgress
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, ValidationError
 
 
 class TestCreateParser:
@@ -2094,3 +2096,424 @@ class TestResolveLazBbox:
         args = Namespace(godlo=None, bbox="1,2,3", bbox_crs="EPSG:2180", geometry=None)
         with pytest.raises(ValueError):
             _resolve_laz_bbox(args)
+
+
+def _cz_args(tmp_path, **overrides):
+    """Namespace dla bezposrednich wywolan _cmd_download_cz."""
+    base = dict(
+        godlo="302_5550",
+        bbox=None,
+        bbox_crs="EPSG:2180",
+        geometry=None,
+        layer=None,
+        scale=None,
+        output=str(tmp_path),
+        force=False,
+        quiet=True,
+        vertical_crs=None,
+        resolution=None,
+        product="nmt",
+        system=None,
+        country="cz",
+        target_crs=None,
+        workers=1,
+        year=None,
+        min_density=None,
+    )
+    base.update(overrides)
+    return argparse.Namespace(**base)
+
+
+def _cz_provider_mock(resolution="2m"):
+    """Mock CuzkDmrProvider dla przeplywu CLI."""
+    provider = Mock()
+    provider.descriptor_key = "cz.cuzk.dmr5g" if resolution == "2m" else "cz.cuzk.dmr4g"
+    provider.resolution = resolution
+    provider.vertical_crs = "Bpv"
+    provider.vertical_transform = None
+
+    def fake_download(godlo, target, timeout=60):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"II*\x00dane")
+        return target
+
+    provider.download.side_effect = fake_download
+    provider.download_bbox.side_effect = lambda bbox, target, **kw: fake_download(
+        "x", target
+    )
+    return provider
+
+
+_CZ_FACTORY_PATCH = "kartograf.providers.cuzk.create_dmr_provider"
+
+
+class TestCmdDownloadCz:
+    """Tests for the CZ (CUZK) flow in the download command."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_cache(self, tmp_path, monkeypatch):
+        """MetadataCache laduje w cwd — poza repo i poza katalogiem wyjsciowym."""
+        cwd = tmp_path / "cwd"
+        cwd.mkdir()
+        monkeypatch.chdir(cwd)
+
+    def test_tm33_godlo_saves_under_cz_dmr5g(self, tmp_path):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        provider = _cz_provider_mock()
+        with patch(_CZ_FACTORY_PATCH, return_value=provider) as factory:
+            result = _cmd_download_cz(_cz_args(tmp_path))
+
+        assert result == 0
+        assert factory.call_args.kwargs["resolution"] == "2m"
+        assert factory.call_args.kwargs["vertical_crs"] == "Bpv"
+        target = provider.download.call_args.args[1]
+        assert target == tmp_path / "cz_dmr5g" / "302" / "5550" / "302_5550.tif"
+
+    def test_tm33_godlo_writes_sidecar(self, tmp_path):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        with patch(_CZ_FACTORY_PATCH, return_value=_cz_provider_mock()):
+            _cmd_download_cz(_cz_args(tmp_path))
+
+        sidecar = tmp_path / "cz_dmr5g" / "302" / "5550" / "302_5550.tif.meta.json"
+        assert sidecar.exists()
+        payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        assert payload["dataset"] == "cz.cuzk.dmr5g"
+        assert payload["country"] == "CZ"
+        assert payload["horizontal_crs"] == "EPSG:3045"  # faktyczny uklad kafla
+        assert payload["vertical_crs"] == "EPSG:8357"  # Bpv natywnie
+        assert payload["license"]["id"] == "CC-BY-4.0"
+        assert payload["request"] == {"godlo": "302_5550"}
+        assert payload["transform"] is None  # pobrano natywnie
+        assert "parent_request" not in payload["extra"]  # tryb godlowy bez pola
+
+    def test_sm5_godlo_enriches_extra_with_podil(self, tmp_path):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+        from kartograf.providers.cuzk.sheets import SheetInfo
+
+        provider = _cz_provider_mock(resolution="5m")
+        provider.sheet_index.sm5_sheet.return_value = SheetInfo(
+            godlo="CTES96",
+            name="Český Těšín 9-6",
+            bbox=BBox(-450000, -1114000, -447500, -1112000, "EPSG:5514"),
+            podil=0.99,
+            in_cz=None,
+        )
+        with patch(_CZ_FACTORY_PATCH, return_value=provider):
+            result = _cmd_download_cz(
+                _cz_args(tmp_path, godlo="CTES96", resolution="5m")
+            )
+
+        assert result == 0
+        sidecar = tmp_path / "cz_dmr4g" / "CTES" / "96" / "CTES96.tif.meta.json"
+        payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        assert payload["horizontal_crs"] == "EPSG:5514"
+        assert payload["extra"]["mapname"] == "Český Těšín 9-6"
+        assert payload["extra"]["podil"] == 0.99
+
+    def test_sm5_index_failure_after_download_keeps_file(self, tmp_path):
+        """Blad indeksu przy PODIL: warning, plik i sidecar bez podil zostaja."""
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        provider = _cz_provider_mock(resolution="5m")
+        provider.sheet_index.sm5_sheet.side_effect = DownloadError("siec padla")
+        with patch(_CZ_FACTORY_PATCH, return_value=provider):
+            result = _cmd_download_cz(
+                _cz_args(tmp_path, godlo="CTES96", resolution="5m")
+            )
+
+        assert result == 0
+        target = tmp_path / "cz_dmr4g" / "CTES" / "96" / "CTES96.tif"
+        assert target.exists()
+        payload = json.loads(
+            (target.parent / "CTES96.tif.meta.json").read_text(encoding="utf-8")
+        )
+        assert "podil" not in payload["extra"]
+
+    def test_bbox_mode_flat_file_and_parent_request(self, tmp_path):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        provider = _cz_provider_mock()
+        parent = {
+            "bbox": [530000.0, 382000.0, 533000.0, 386000.0],
+            "bbox_crs": "EPSG:2180",
+            "countries": ["CZ", "PL"],
+        }
+        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+        with patch(_CZ_FACTORY_PATCH, return_value=provider):
+            result = _cmd_download_cz(
+                _cz_args(tmp_path, godlo=None), bbox=bbox, parent_request=parent
+            )
+
+        assert result == 0
+        target = tmp_path / "cz_dmr5g_-447000_-1114000_-446000_-1113000.tif"
+        assert provider.download_bbox.call_args.args[1] == target
+        payload = json.loads(
+            (tmp_path / f"{target.name}.meta.json").read_text(encoding="utf-8")
+        )
+        assert payload["extra"]["parent_request"] == parent
+        assert payload["horizontal_crs"] == "EPSG:5514"
+        assert payload["request"]["bbox_crs"] == "EPSG:5514"
+        assert payload["nodata"] == -9999.0  # tag GeoTIFF nieczytelny -> domyslna
+        assert payload["transform"] is None  # bez --target-crs: uklad natywny
+
+    def test_bbox_string_is_normalized_to_image_sr(self, tmp_path):
+        """Nazwa pliku niesie wspolrzedne FINALNEGO zadania (po normalizacji)."""
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        provider = _cz_provider_mock()
+        args = _cz_args(
+            tmp_path,
+            godlo=None,
+            bbox="472887.5,208337.5,473808.0,209409.8",
+            bbox_crs="EPSG:2180",
+        )
+        with patch(_CZ_FACTORY_PATCH, return_value=provider):
+            result = _cmd_download_cz(args)
+
+        assert result == 0
+        sent_bbox, target = provider.download_bbox.call_args.args[:2]
+        assert sent_bbox.crs == "EPSG:5514"
+        assert -450000 < sent_bbox.min_x < -440000  # Krovak: wartosci ujemne
+        assert target.name == (
+            f"cz_dmr5g_{format(sent_bbox.min_x, '.10g')}"
+            f"_{format(sent_bbox.min_y, '.10g')}"
+            f"_{format(sent_bbox.max_x, '.10g')}"
+            f"_{format(sent_bbox.max_y, '.10g')}.tif"
+        )
+
+    def test_bbox_with_target_crs_records_server_transform(self, tmp_path):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        provider = _cz_provider_mock()
+        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+        with patch(_CZ_FACTORY_PATCH, return_value=provider) as factory:
+            result = _cmd_download_cz(
+                _cz_args(tmp_path, godlo=None, target_crs="EPSG:3045"), bbox=bbox
+            )
+
+        assert result == 0
+        assert factory.call_args.kwargs["target_crs"] == "EPSG:3045"
+        sent_bbox, target = provider.download_bbox.call_args.args[:2]
+        assert sent_bbox.crs == "EPSG:3045"
+        payload = json.loads(
+            (target.parent / f"{target.name}.meta.json").read_text(encoding="utf-8")
+        )
+        assert payload["horizontal_crs"] == "EPSG:3045"
+        assert payload["transform"] == {"horizontal": "server:EPSG:3045"}
+
+    def test_invalid_bbox_string_returns_1(self, tmp_path, capsys):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        with patch(_CZ_FACTORY_PATCH, return_value=_cz_provider_mock()):
+            result = _cmd_download_cz(_cz_args(tmp_path, godlo=None, bbox="1,2,3"))
+
+        assert result == 1
+        assert "bbox" in capsys.readouterr().err.lower()
+
+    def test_target_crs_with_godlo_rejected(self, tmp_path):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        with pytest.raises(ValidationError, match="--target-crs"):
+            _cmd_download_cz(_cz_args(tmp_path, target_crs="EPSG:2180"))
+
+    def test_resolution_1m_rejected(self, tmp_path, capsys):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        result = _cmd_download_cz(_cz_args(tmp_path, resolution="1m"))
+        assert result == 1
+        assert "2m" in capsys.readouterr().err
+
+    def test_system_flag_rejected(self, tmp_path, capsys):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        result = _cmd_download_cz(_cz_args(tmp_path, system="1992"))
+        assert result == 1
+        assert "--system" in capsys.readouterr().err
+
+    def test_kron86_prints_remedy(self, tmp_path, capsys):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+        from kartograf.transform.crs import TransformUnavailableError
+
+        with patch(
+            _CZ_FACTORY_PATCH,
+            side_effect=TransformUnavailableError(
+                "brak operacji", remedy="uzyj EVRF2007 (EPSG:5621)"
+            ),
+        ):
+            result = _cmd_download_cz(_cz_args(tmp_path, vertical_crs="KRON86"))
+        assert result == 1
+        err = capsys.readouterr().err
+        assert "EVRF2007" in err
+
+    def test_download_error_returns_1(self, tmp_path, capsys):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        provider = _cz_provider_mock()
+        provider.download.side_effect = DownloadError("404 openzu")
+        with patch(_CZ_FACTORY_PATCH, return_value=provider):
+            result = _cmd_download_cz(_cz_args(tmp_path))
+
+        assert result == 1
+        assert "404 openzu" in capsys.readouterr().err
+        assert not (tmp_path / "cz_dmr5g").exists()
+
+    def test_skip_existing(self, tmp_path):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        target = tmp_path / "cz_dmr5g" / "302" / "5550" / "302_5550.tif"
+        target.parent.mkdir(parents=True)
+        target.write_bytes(b"stare")
+        provider = _cz_provider_mock()
+        with patch(_CZ_FACTORY_PATCH, return_value=provider):
+            result = _cmd_download_cz(_cz_args(tmp_path))
+        assert result == 0
+        provider.download.assert_not_called()
+
+    def test_force_overwrites_existing(self, tmp_path):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        target = tmp_path / "cz_dmr5g" / "302" / "5550" / "302_5550.tif"
+        target.parent.mkdir(parents=True)
+        target.write_bytes(b"stare")
+        provider = _cz_provider_mock()
+        with patch(_CZ_FACTORY_PATCH, return_value=provider):
+            result = _cmd_download_cz(_cz_args(tmp_path, force=True))
+        assert result == 0
+        provider.download.assert_called_once()
+
+    def test_evrf2007_transform_lands_in_sidecar(self, tmp_path):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        provider = _cz_provider_mock()
+        provider.vertical_crs = "EVRF2007"
+        pinned = Mock()
+        pinned.description = "Baltic 1957 height to EVRF2007 height (1)"
+        pinned.accuracy_m = 0.1
+        provider.vertical_transform = pinned
+        with patch(_CZ_FACTORY_PATCH, return_value=provider):
+            _cmd_download_cz(_cz_args(tmp_path, vertical_crs="EVRF2007"))
+
+        payload = json.loads(
+            (
+                tmp_path / "cz_dmr5g" / "302" / "5550" / "302_5550.tif.meta.json"
+            ).read_text(encoding="utf-8")
+        )
+        assert payload["vertical_crs"] == "EPSG:5621"
+        assert payload["transform"]["vertical"] == (
+            "pinned: Baltic 1957 height to EVRF2007 height (1) (0.1 m)"
+        )
+
+    def test_sidecar_failure_does_not_fail_download(self, tmp_path, caplog):
+        """Blad zapisu sidecara = warning, nie porazka pobrania."""
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        provider = _cz_provider_mock()
+        with (
+            patch(_CZ_FACTORY_PATCH, return_value=provider),
+            patch(
+                "kartograf.sources.sidecar.build_metadata",
+                side_effect=RuntimeError("deskryptor padl"),
+            ),
+        ):
+            result = _cmd_download_cz(_cz_args(tmp_path))
+
+        assert result == 0
+        target = tmp_path / "cz_dmr5g" / "302" / "5550" / "302_5550.tif"
+        assert target.exists()
+        assert not (target.parent / "302_5550.tif.meta.json").exists()
+
+    def test_factory_validation_error_returns_1(self, tmp_path, capsys):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        with patch(
+            _CZ_FACTORY_PATCH,
+            side_effect=ValidationError("Nieobslugiwany uklad pionowy dla CZ"),
+        ):
+            result = _cmd_download_cz(_cz_args(tmp_path, vertical_crs="KRON86"))
+
+        assert result == 1
+        assert "Error: Nieobslugiwany uklad pionowy" in capsys.readouterr().err
+
+    def test_verbose_godlo_reports_progress_and_skip(self, tmp_path, capsys):
+        """Komunikaty per plik w konwencji przeplywu LAZ/PL."""
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        provider = _cz_provider_mock()
+        with patch(_CZ_FACTORY_PATCH, return_value=provider):
+            assert _cmd_download_cz(_cz_args(tmp_path, quiet=False)) == 0
+            first = capsys.readouterr().out
+            assert _cmd_download_cz(_cz_args(tmp_path, quiet=False)) == 0
+            second = capsys.readouterr().out
+
+        assert "Downloading 302_5550 (CZ, resolution: 2m)" in first
+        assert "Downloaded to " in first
+        assert "Skipped 302_5550 - already exists at " in second
+        provider.download.assert_called_once()
+
+    def test_verbose_bbox_reports_progress_and_skip(self, tmp_path, capsys):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        provider = _cz_provider_mock()
+        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+        args = _cz_args(tmp_path, godlo=None, quiet=False)
+        with patch(_CZ_FACTORY_PATCH, return_value=provider):
+            assert _cmd_download_cz(args, bbox=bbox) == 0
+            first = capsys.readouterr().out
+            assert _cmd_download_cz(args, bbox=bbox) == 0
+            second = capsys.readouterr().out
+
+        assert "Downloading CZ bbox (2m, EPSG:5514)" in first
+        assert "Downloaded to " in first
+        assert "Skipped - already exists at " in second
+        provider.download_bbox.assert_called_once()
+
+    def test_bbox_download_error_returns_1(self, tmp_path, capsys):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        provider = _cz_provider_mock()
+        provider.download_bbox.side_effect = DownloadError("exportImage 500")
+        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+        with patch(_CZ_FACTORY_PATCH, return_value=provider):
+            result = _cmd_download_cz(_cz_args(tmp_path, godlo=None), bbox=bbox)
+
+        assert result == 1
+        assert "exportImage 500" in capsys.readouterr().err
+
+    def test_sidecar_nodata_comes_from_geotiff_tag(self, tmp_path):
+        """Nodata w sidecarze pochodzi z tagu pobranego rastra, nie ze stalej."""
+        import numpy as np
+        import rasterio
+        from rasterio.transform import from_origin
+
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        def real_tif(godlo, target, timeout=60):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with rasterio.open(
+                target,
+                "w",
+                driver="GTiff",
+                width=2,
+                height=2,
+                count=1,
+                dtype="float32",
+                crs="EPSG:3045",
+                transform=from_origin(302000.0, 5552000.0, 2.0, 2.0),
+                nodata=-32767.0,
+            ) as ds:
+                ds.write(np.zeros((2, 2), dtype="float32"), 1)
+            return target
+
+        provider = _cz_provider_mock()
+        provider.download.side_effect = real_tif
+        with patch(_CZ_FACTORY_PATCH, return_value=provider):
+            assert _cmd_download_cz(_cz_args(tmp_path)) == 0
+
+        payload = json.loads(
+            (
+                tmp_path / "cz_dmr5g" / "302" / "5550" / "302_5550.tif.meta.json"
+            ).read_text(encoding="utf-8")
+        )
+        assert payload["nodata"] == -32767.0
