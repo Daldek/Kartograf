@@ -284,6 +284,23 @@ class TestRetryPropagation:
 
 DMR5G = "https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr5g/ImageServer"
 
+# CRS faktycznie zwracany przez exportImage CUZK (rekonesans Zad. 1, krok 4):
+# LOCAL_CS zamiast PROJCS — GDAL nie rozwiazuje go do kodu EPSG mimo poprawnego
+# AUTHORITY. Uzywany w fixture'ach TestExportImage zamiast zwyklego
+# "EPSG:3045", zeby testy CRS-nadpisania faktycznie wykrywaly regresje: przy
+# hardkodowanym z gory poprawnym CRS-ie asercja `to_epsg() == 3045` przechodzi
+# nawet po usunieciu wywolania _overwrite_crs z export_image (reproduce
+# potwierdzone standalone przy review).
+_UNRESOLVABLE_CRS_WKT = (
+    'LOCAL_CS["S-JTSK / Krovak East North",'
+    'UNIT["metre",1,AUTHORITY["EPSG","9001"]],'
+    'AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","5514"]]'
+)
+assert rasterio.crs.CRS.from_wkt(_UNRESOLVABLE_CRS_WKT).to_epsg() is None, (
+    "sanity: fixture CRS musi byc nierozwiazywalny do EPSG, inaczej test nie "
+    "wykryje regresji nadpisania CRS"
+)
+
 
 def _write_geotiff(
     path: Path,
@@ -292,6 +309,7 @@ def _write_geotiff(
     height: int,
     value: float = 100.0,
     nodata: float = -9999.0,
+    crs: str = "EPSG:3045",
 ) -> None:
     """Syntetyczny GeoTIFF float32 pokrywajacy bbox (do testow mozaiki)."""
     from rasterio.transform import from_bounds
@@ -305,7 +323,7 @@ def _write_geotiff(
         "count": 1,
         "width": width,
         "height": height,
-        "crs": "EPSG:3045",
+        "crs": crs,
         "transform": transform,
         "nodata": nodata,
     }
@@ -323,8 +341,9 @@ class TestExportImage:
             # Poprawka 2 (rekonesans): export_image nadpisuje CRS bezwarunkowo
             # po kazdym eksporcie (rasterio "r+"), wiec fixture musi byc
             # naprawde otwieralnym GeoTIFF-em, nie tylko 4-bajtowym naglowkiem
-            # sniffowanym po magic number.
-            _write_geotiff(Path(output_path), bbox, 2, 2)
+            # sniffowanym po magic number. CRS ustawiony na nierozwiazywalny
+            # (jak realna odpowiedz CUZK) — patrz asercja PO nizej.
+            _write_geotiff(Path(output_path), bbox, 2, 2, crs=_UNRESOLVABLE_CRS_WKT)
             return Path(output_path)
 
         target = tmp_path / "out.tif"
@@ -352,6 +371,9 @@ class TestExportImage:
         assert params["noDataInterpretation"] == ["esriNoDataMatchAny"]
         # CRS nadpisany bezwarunkowo (rekonesans: to_epsg() bezuzyteczne dla
         # obu SR zwracanych przez CUZK — patrz docs/research/...krok 4-5).
+        # Fixture PRZED nadpisaniem miala to_epsg()==None (_UNRESOLVABLE_CRS_WKT
+        # sanity-checkowany wyzej) — ta asercja wiec faktycznie dowodzi, ze
+        # _overwrite_crs zadzialal, a nie tylko przepisal juz-poprawny CRS.
         with rasterio.open(target) as src:
             assert src.crs.to_epsg() == 3045
 
@@ -385,6 +407,9 @@ class TestExportImage:
             tile_bbox = [float(v) for v in params["bbox"][0].split(",")]
             w, h = (int(v) for v in params["size"][0].split(","))
             requested.append((tile_bbox, w, h, params["noData"][0]))
+            # CRS nierozwiazywalny (jak realna odpowiedz CUZK dla kazdego
+            # kafla) — patrz asercja PO nizej i sanity-check przy
+            # _UNRESOLVABLE_CRS_WKT.
             _write_geotiff(
                 Path(output_path),
                 BBox(
@@ -393,6 +418,7 @@ class TestExportImage:
                 w,
                 h,
                 value=float(len(requested)),
+                crs=_UNRESOLVABLE_CRS_WKT,
             )
             return Path(output_path)
 
@@ -418,6 +444,9 @@ class TestExportImage:
             assert src.width == 8 and src.height == 8
             assert src.bounds == (0.0, 0.0, 16.0, 16.0)
             assert src.nodata == -9999.0
+            # Kazdy kafel mial to_epsg()==None (LOCAL_CS) przed mozaika/
+            # nadpisaniem — ta asercja dowodzi, ze _overwrite_crs zadzialal
+            # po mosaic_and_crop, a nie ze przepisal juz-poprawny CRS.
             assert src.crs.to_epsg() == 3045
         # pliki czastkowe posprzatane
         assert list(tmp_path.glob("*.part*.tif")) == []
