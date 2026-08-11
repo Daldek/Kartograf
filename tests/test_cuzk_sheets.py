@@ -354,3 +354,34 @@ class TestSm5SheetParserObject:
             index_cls.assert_called_once_with(cache=cache_cls.return_value)
             index_cls.return_value.sm5_sheet.assert_called_once_with("CTES96")
             assert bbox is index_cls.return_value.sm5_sheet.return_value.bbox
+
+    def test_get_bbox_without_index_closes_cache_after_use(self):
+        """Cache utworzony samodzielnie w get_bbox() jest zamykany po zapytaniu."""
+        with (
+            patch("kartograf.providers.cuzk.sheets.SheetIndex"),
+            patch("kartograf.providers.cuzk.sheets.MetadataCache") as cache_cls,
+        ):
+            sheet = Sm5Sheet("CTES96")
+            sheet.get_bbox()
+            cache_cls.return_value.close.assert_called_once()
+
+    def test_get_bbox_without_index_closes_cache_even_on_error(self):
+        """Blad zapytania nie zostawia otwartego polaczenia z cache (finally)."""
+        with (
+            patch("kartograf.providers.cuzk.sheets.SheetIndex") as index_cls,
+            patch("kartograf.providers.cuzk.sheets.MetadataCache") as cache_cls,
+        ):
+            index_cls.return_value.sm5_sheet.side_effect = ValidationError("boom")
+            sheet = Sm5Sheet("CTES96")
+            with pytest.raises(ValidationError, match="boom"):
+                sheet.get_bbox()
+            cache_cls.return_value.close.assert_called_once()
+
+    def test_get_bbox_with_injected_index_does_not_close_its_cache(self):
+        """Wstrzykniety indeks zostaje wlasnoscia wywolujacego — bez auto-close."""
+        session = _session_returning(_fixture("klady_sm5_where_ctes96.json"))
+        with patch("kartograf.providers.cuzk.sheets.MetadataCache") as cache_cls:
+            index = SheetIndex(session=session)
+            sheet = Sm5Sheet("CTES96", index=index)
+            sheet.get_bbox()
+            cache_cls.assert_not_called()

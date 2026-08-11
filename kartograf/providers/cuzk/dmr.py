@@ -29,7 +29,7 @@ from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import BaseProvider
-from kartograf.providers.cuzk.client import CuzkClient, _wkid
+from kartograf.providers.cuzk.client import CuzkClient, wkid
 from kartograf.providers.cuzk.sheets import SheetIndex
 from kartograf.sources.descriptor import AccessChannel, TransportKind
 from kartograf.sources.registry import get_source
@@ -211,7 +211,7 @@ class CuzkDmrProvider(BaseProvider):
             )
         output_path = Path(output_path)
         image_sr = self._target_crs or "EPSG:5514"
-        if _wkid(bbox.crs) != _wkid(image_sr):
+        if wkid(bbox.crs) != wkid(image_sr):
             bbox = self._bbox_to_crs(bbox, image_sr)
         self._client_for(timeout).export_image(
             self._image_endpoint,
@@ -269,7 +269,7 @@ class CuzkDmrProvider(BaseProvider):
 
     def _bbox_to_crs(self, bbox: BBox, target_crs: str) -> BBox:
         """Obwiednia bboxa w ukladzie docelowym, z transformacja z cache providera."""
-        return _bbox_to_crs(
+        return bbox_to_crs(
             bbox, target_crs, self._pinned(bbox.crs, target_crs, _ENVELOPE_POLICY)
         )
 
@@ -344,7 +344,7 @@ class CuzkDmrProvider(BaseProvider):
                 ds.write(data, 1, window=window)
 
 
-def _bbox_to_crs(
+def bbox_to_crs(
     bbox: BBox, target_crs: str, pinned: PinnedTransform | None = None
 ) -> BBox:
     """Obwiednia bboxa w ukladzie docelowym (normalizacja zadan exportImage).

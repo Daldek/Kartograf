@@ -190,7 +190,7 @@ def _bbox_to_wgs84(bbox: BBox) -> BBox:
     Uzywa transformacji z ``core/geometry`` (obwiednia z naroznikow): sluzy
     do ROZPOZNANIA kraju i przyciecia do jego obwiedni, a nie do zadania
     pobrania — bboxy faktycznie wysylane do serwerow ida przez transformacje
-    przypieta (``_country_bbox`` -> ``_bbox_to_crs``).
+    przypieta (``_country_bbox`` -> ``bbox_to_crs``).
     """
     from pyproj import CRS
 
@@ -255,12 +255,12 @@ def _country_bbox(
     from pyproj import CRS
 
     from kartograf.core.geometry import _transform_bbox
-    from kartograf.providers.cuzk.client import _wkid
-    from kartograf.providers.cuzk.dmr import _bbox_to_crs
+    from kartograf.providers.cuzk.client import wkid
+    from kartograf.providers.cuzk.dmr import bbox_to_crs
     from kartograf.sources.registry import get_country
 
-    if code != "CZ" and _wkid(bbox.crs) in _CZ_CRS_WKIDS:
-        bbox = _bbox_to_crs(bbox, "EPSG:2180")
+    if code != "CZ" and wkid(bbox.crs) in _CZ_CRS_WKIDS:
+        bbox = bbox_to_crs(bbox, "EPSG:2180")
 
     if not auto:
         return bbox
@@ -279,12 +279,12 @@ def _country_bbox(
         source = BBox(*clipped, "EPSG:4326")
 
     target = cz_crs if code == "CZ" else bbox.crs
-    if _wkid(source.crs) == _wkid(target):
+    if wkid(source.crs) == wkid(target):
         return source
     if code == "CZ":
         # do ukladu czeskiego wylacznie przypieta operacja z probkowaniem
         # krawedzi (obraz prostokata w Krovaku ma krzywe boki)
-        return _bbox_to_crs(source, target)
+        return bbox_to_crs(source, target)
     return _transform_bbox(
         source.min_x,
         source.min_y,
@@ -429,7 +429,7 @@ def _resolve_cz_geometry_bbox(args: argparse.Namespace) -> BBox | None:
     w przeplywie LAZ, tyle ze w ukladzie czeskim zamiast EPSG:2180).
 
     Obwiednia liczona jest W UKLADZIE PLIKU, a skok do ukladu docelowego robi
-    ``_bbox_to_crs`` (przypieta operacja + probkowanie krawedzi). Transformacja
+    ``bbox_to_crs`` (przypieta operacja + probkowanie krawedzi). Transformacja
     z ``core/geometry`` jest tu niedopuszczalna: uzywa domyslnego transformera
     pyproj (ballpark dozwolony, nieznana dokladnosc) i obwiedni z czterech
     naroznikow, ktora przy obroconym Krovaku ucina skrawki obszaru. Jeden skok
@@ -439,7 +439,7 @@ def _resolve_cz_geometry_bbox(args: argparse.Namespace) -> BBox | None:
     from pyproj import CRS
 
     from kartograf.core.geometry import get_overall_bbox, read_source_crs
-    from kartograf.providers.cuzk.dmr import _bbox_to_crs
+    from kartograf.providers.cuzk.dmr import bbox_to_crs
     from kartograf.transform.crs import TransformError
 
     filepath = Path(args.geometry)
@@ -455,7 +455,7 @@ def _resolve_cz_geometry_bbox(args: argparse.Namespace) -> BBox | None:
         if source_crs == CRS.from_user_input(image_sr):
             # plik juz w ukladzie zadania — tylko etykieta, zero transformacji
             return BBox(bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y, image_sr)
-        return _bbox_to_crs(bbox, image_sr)
+        return bbox_to_crs(bbox, image_sr)
     except (ValidationError, ValueError, TransformError) as e:
         remedy = getattr(e, "remedy", None)
         print(
@@ -1025,7 +1025,7 @@ def _write_cz_sidecar(
     import logging
 
     try:
-        from kartograf.providers.cuzk.client import _wkid
+        from kartograf.providers.cuzk.client import wkid
         from kartograf.sources.registry import get_source
         from kartograf.sources.sidecar import build_metadata, write_sidecar
 
@@ -1040,7 +1040,7 @@ def _write_cz_sidecar(
         transform: dict = {}
         # tylko FAKTYCZNA reprojekcja serwerowa — zadanie o uklad natywny kanalu
         # (meta.horizontal_crs przed nadpisaniem) transformacja nie jest
-        if server_crs is not None and _wkid(server_crs) != _wkid(meta.horizontal_crs):
+        if server_crs is not None and wkid(server_crs) != wkid(meta.horizontal_crs):
             transform["horizontal"] = f"server:{server_crs}"
         pinned = provider.vertical_transform
         if pinned is not None:
@@ -1121,8 +1121,8 @@ def _cz_download_bbox(
     skip_existing: bool,
 ) -> int:
     """Bbox CZ: jeden wycinek serwerowy plasko w katalogu wyjsciowym."""
-    from kartograf.providers.cuzk.client import _wkid
-    from kartograf.providers.cuzk.dmr import CUZK_NODATA, _bbox_to_crs
+    from kartograf.providers.cuzk.client import wkid
+    from kartograf.providers.cuzk.dmr import CUZK_NODATA, bbox_to_crs
     from kartograf.sources.registry import get_source
 
     if bbox is None:
@@ -1136,10 +1136,10 @@ def _cz_download_bbox(
             return 1
 
     image_sr = args.target_crs or "EPSG:5514"
-    if _wkid(bbox.crs) != _wkid(image_sr):
+    if wkid(bbox.crs) != wkid(image_sr):
         # normalizacja PRZED nazwaniem pliku: nazwa niesie wspolrzedne
         # faktycznie zadanego wycinka (w download_bbox to juz no-op)
-        bbox = _bbox_to_crs(bbox, image_sr)
+        bbox = bbox_to_crs(bbox, image_sr)
 
     descriptor = get_source(provider.descriptor_key)
     coords = "_".join(

@@ -202,9 +202,7 @@ class TestProbeUnderNetworkPolicy:
             build_pinned_transform(
                 "EPSG:5514",
                 "EPSG:2180",
-                TransformPolicy(
-                    allow_network_grids=not before, probe_point=(1.0, 2.0)
-                ),
+                TransformPolicy(allow_network_grids=not before, probe_point=(1.0, 2.0)),
             )
         assert states_during_probe == [not before]
         assert network.is_network_enabled() == before
