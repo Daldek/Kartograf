@@ -150,17 +150,260 @@ def _run_cz(
     Wywolaj przeplyw CZ, tlumaczac wyjatek zadania na komunikat CLI.
 
     ``main`` nie lapi wyjatkow, a przeplyw CZ sygnalizuje zle zadanie
-    wyjatkiem: ``ValidationError`` (np. ``--target-crs`` z godlem) albo
+    wyjatkiem: ``ValidationError`` (np. ``--target-crs`` z godlem),
     ``ParseError`` (godlo pasujace wzorcem do TM33/SM5, ale niepoprawne —
-    np. nieparzyste kilometry). Dyspozycja jest ostatnim miejscem, w ktorym
-    moga one zostac zamienione na kod wyjscia zamiast tracebacku; galaz PL
-    lapie dokladnie te sama pare w ``cmd_download``.
+    np. nieparzyste kilometry) albo ``TransformError`` (normalizacja bboxa
+    do ukladu zadania nie ma bezpiecznej operacji). Dyspozycja jest ostatnim
+    miejscem, w ktorym moga one zostac zamienione na kod wyjscia zamiast
+    tracebacku; galaz PL lapie te same wyjatki w ``cmd_download``.
     """
+    from kartograf.transform.crs import TransformError
+
     try:
         return _cmd_download_cz(args, bbox=bbox, parent_request=parent_request)
     except (ParseError, ValidationError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
+    except TransformError as e:
+        return _print_transform_error(e)
+
+
+def _print_transform_error(error: Exception) -> int:
+    """Komunikat bledu transformacji (z remedium, gdy jest); zawsze zwraca 1."""
+    remedy = getattr(error, "remedy", None)
+    print(
+        f"Error: {error}" + (f" Remedium: {remedy}" if remedy else ""),
+        file=sys.stderr,
+    )
+    return 1
+
+
+def _bbox_to_wgs84(bbox: BBox) -> BBox:
+    """
+    Bbox w WGS84 — wspolny uklad rozpoznawania krajow i przycinania.
+
+    Uzywa transformacji z ``core/geometry`` (obwiednia z naroznikow): sluzy
+    do ROZPOZNANIA kraju i przyciecia do jego obwiedni, a nie do zadania
+    pobrania — bboxy faktycznie wysylane do serwerow ida przez transformacje
+    przypieta (``_country_bbox`` -> ``_bbox_to_crs``).
+    """
+    from pyproj import CRS
+
+    from kartograf.core.geometry import _transform_bbox
+
+    if bbox.crs == "EPSG:4326":
+        return bbox
+    return _transform_bbox(
+        bbox.min_x,
+        bbox.min_y,
+        bbox.max_x,
+        bbox.max_y,
+        CRS.from_user_input(bbox.crs),
+        "EPSG:4326",
+    )
+
+
+def _countries_for_bbox(bbox: BBox) -> tuple[str, ...]:
+    """
+    Kody krajow, ktorych ``extent_wgs84`` przecina bbox (posortowane).
+
+    Obwiednie krajow sa prostokatami, wiec pas przygraniczny jednego kraju
+    potrafi lezec wewnatrz prostokata sasiada (np. Opolszczyzna wewnatrz
+    obwiedni CZ) — auto-split zada wtedy obu zrodel, a nie zgaduje granicy.
+    """
+    from kartograf.sources.registry import all_countries
+
+    wgs = _bbox_to_wgs84(bbox)
+    hits = [
+        profile.code
+        for profile in all_countries()
+        if (
+            wgs.min_x < profile.extent_wgs84.max_x
+            and wgs.max_x > profile.extent_wgs84.min_x
+            and wgs.min_y < profile.extent_wgs84.max_y
+            and wgs.max_y > profile.extent_wgs84.min_y
+        )
+    ]
+    return tuple(sorted(hits))
+
+
+def _country_bbox(
+    bbox: BBox, code: str, *, auto: bool, cz_crs: str = "EPSG:5514"
+) -> BBox:
+    """
+    Czesc bboxa dla kraju w ukladzie jego zadania.
+
+    Tryb ``auto`` przycina bbox do obwiedni kraju (w WGS84) i podaje wynik
+    w ukladzie roboczym: CZ — ``cz_crs`` (Krovak albo ``--target-crs``), PL —
+    uklad zadania bez zmian (zachowuje strefe PL-2000 i zerowy dryf). Jawny
+    ``--country`` NIE przycina niczego (uzytkownik zna zasieg swojego zadania).
+
+    Gdy przyciecie nic nie zmienia, transformowany jest ORYGINALNY bbox —
+    jeden skok z ukladu zadania zamiast dwoch (przez WGS84).
+    """
+    if not auto:
+        return bbox
+
+    from pyproj import CRS
+
+    from kartograf.core.geometry import _transform_bbox
+    from kartograf.providers.cuzk.client import _wkid
+    from kartograf.providers.cuzk.dmr import _bbox_to_crs
+    from kartograf.sources.registry import get_country
+
+    wgs = _bbox_to_wgs84(bbox)
+    extent = get_country(code).extent_wgs84
+    clipped = (
+        max(wgs.min_x, extent.min_x),
+        max(wgs.min_y, extent.min_y),
+        min(wgs.max_x, extent.max_x),
+        min(wgs.max_y, extent.max_y),
+    )
+    if clipped == (wgs.min_x, wgs.min_y, wgs.max_x, wgs.max_y):
+        source = bbox  # przyciecie bylo no-opem
+    else:
+        source = BBox(*clipped, "EPSG:4326")
+
+    target = cz_crs if code == "CZ" else bbox.crs
+    if _wkid(source.crs) == _wkid(target):
+        return source
+    if code == "CZ":
+        # do ukladu czeskiego wylacznie przypieta operacja z probkowaniem
+        # krawedzi (obraz prostokata w Krovaku ma krzywe boki)
+        return _bbox_to_crs(source, target)
+    return _transform_bbox(
+        source.min_x,
+        source.min_y,
+        source.max_x,
+        source.max_y,
+        CRS.from_user_input(source.crs),
+        target,
+    )
+
+
+def _build_parent_request(bbox: BBox, countries: tuple[str, ...]) -> dict:
+    """
+    Opis zadania obszarowego do ``extra.parent_request`` sidecarow.
+
+    Grupuje pliki jednego zadania bbox/geometry (takze te lezace po roznych
+    stronach granicy): niesie ORYGINALNY bbox zadania — przed przycieciem per
+    kraj — jego uklad i kraje faktycznie pobrane w tym wywolaniu.
+
+    Zwrocony slownik NIE moze byc pozniej mutowany: konsumenci (sidecary CZ,
+    ``DownloadManager(sidecar_extra=)``) trzymaja go przez referencje, a plytka
+    kopia w managerze nie chroni zagniezdzen.
+    """
+    return {
+        "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+        "bbox_crs": bbox.crs,
+        "countries": list(countries),
+    }
+
+
+_CROSS_COUNTRY_HINT = "uzyj jawnie --country pl albo --country cz"
+
+
+def _validate_cross_country(
+    args: argparse.Namespace, countries: tuple[str, ...]
+) -> int:
+    """
+    Opcje musza byc rozwiazywalne dla KAZDEGO przecietego kraju (0=OK, 1=blad).
+
+    Walidacja idzie PRZED jakimkolwiek pobraniem — inaczej czesc jednego kraju
+    zostalaby pobrana, a druga galaz dopiero potem odrzucilaby zadanie
+    (czesciowe wykonanie). Zamiast cicho pomijac kraj, CLI podpowiada jawny
+    ``--country`` — ale tylko gdy obszar faktycznie przecina wiecej niz jeden
+    kraj (przy jednym kraju wybor jest juz rozstrzygniety).
+    """
+    product = getattr(args, "product", "nmt")
+    resolution = getattr(args, "resolution", None)
+    vertical_crs = getattr(args, "vertical_crs", None)
+    checks: list[tuple[bool, str]] = [
+        (
+            "CZ" in countries and product != "nmt",
+            f"--product {product} jest dostepny tylko dla PL",
+        ),
+        (
+            "CZ" in countries and resolution == "1m",
+            "--resolution 1m nie istnieje dla CZ (dostepne 2m/5m)",
+        ),
+        (
+            "PL" in countries and resolution == "2m",
+            "--resolution 2m nie istnieje dla PL (dostepne 1m/5m)",
+        ),
+        (
+            "CZ" in countries and vertical_crs == "KRON86",
+            "KRON86 nie jest osiagalny dla CZ (siatki GUGiK niepubliczne)",
+        ),
+        ("PL" in countries and vertical_crs == "Bpv", "Bpv to uklad czeski"),
+        (
+            "CZ" in countries and getattr(args, "system", None) is not None,
+            "--system dotyczy tylko PL",
+        ),
+        (
+            "PL" in countries and getattr(args, "target_crs", None) is not None,
+            "--target-crs dziala tylko dla CZ — PL pobiera natywnie w EPSG:2180",
+        ),
+    ]
+    hint = f"; {_CROSS_COUNTRY_HINT}" if len(countries) > 1 else ""
+    for failed, message in checks:
+        if failed:
+            print(f"Error: {message}{hint}", file=sys.stderr)
+            return 1
+    return 0
+
+
+def _dispatch_area(
+    args: argparse.Namespace, bbox: BBox, filepath: Path | None = None
+) -> int:
+    """
+    Rozdziel zadanie obszarowe (bbox albo geometria) na kraje i wykonaj je.
+
+    ``bbox`` to zadanie uzytkownika: podany bbox albo obwiednia geometrii.
+    Przy ``filepath`` galaz PL pracuje dalej na pliku (arkusze per obiekt,
+    a nie z obwiedni), a bbox sluzy rozpoznaniu krajow i ``parent_request``.
+    """
+    from kartograf.transform.crs import TransformError
+
+    country_flag = getattr(args, "country", "auto")
+    auto = country_flag == "auto"
+    countries = _countries_for_bbox(bbox) if auto else (country_flag.upper(),)
+    if not countries:
+        print(
+            "Error: obszar nie przecina zasiegu zadnego znanego kraju (PL, CZ)",
+            file=sys.stderr,
+        )
+        return 1
+    product = getattr(args, "product", "nmt")
+    # obszar w calosci czeski: komunikat o etapie 2 jest trafniejszy niz
+    # podpowiedz "wybierz kraj" — kraj jest juz rozstrzygniety
+    if countries == ("CZ",) and _reject_non_nmt_for_cz(product):
+        return 1
+    if _validate_cross_country(args, countries):
+        return 1
+
+    parent_request = _build_parent_request(bbox, countries)
+    cz_crs = getattr(args, "target_crs", None) or "EPSG:5514"
+
+    exit_codes = []
+    for code in countries:
+        try:
+            part = _country_bbox(bbox, code, auto=auto, cz_crs=cz_crs)
+        except TransformError as e:
+            return _print_transform_error(e)
+        if code == "CZ":
+            exit_codes.append(_run_cz(args, bbox=part, parent_request=parent_request))
+        else:
+            # KOPIA args: _resolve_pl_sentinels mutuje Namespace (None->"1m"),
+            # co zatrulo by galaz CZ; kopia uniezaleznia od kolejnosci krajow
+            pl_args = argparse.Namespace(**vars(args))
+            if filepath is not None:
+                exit_codes.append(
+                    _download_pl_geometry(pl_args, filepath, parent_request)
+                )
+            else:
+                exit_codes.append(_download_pl_bbox(pl_args, part, parent_request))
+    return max(exit_codes)
 
 
 def _resolve_cz_geometry_bbox(args: argparse.Namespace) -> BBox | None:
@@ -269,23 +512,6 @@ def cmd_download(args: argparse.Namespace) -> int:
     # --- Produkt LAZ: dyskretny przepływ area→WFS→tiles (wszystkie 3 tryby) ---
     if product == "laz":
         return _cmd_download_laz(args)
-
-    # TYMCZASOWE (Zad. 17 zastapi auto-splitem): tryby obszarowe nie dziela
-    # jeszcze zadania per kraj — jawny --country cz idzie w calosci do CUZK
-    # (bez parent_request, ktore dolozy Zad. 17), a pl/auto zachowuje sie
-    # jak dotychczas, czyli PL.
-    if has_bbox or has_geometry:
-        if country_flag == "cz":
-            if _reject_non_nmt_for_cz(product):
-                return 1
-            bbox = None
-            if has_geometry:
-                bbox = _resolve_cz_geometry_bbox(args)
-                if bbox is None:
-                    return 1  # error already printed
-            return _run_cz(args, bbox=bbox)
-        if _resolve_pl_sentinels(args):
-            return 1
 
     # --- Tryb geometry ---
     if has_geometry:
@@ -455,7 +681,7 @@ def _download_godlo_list(
 
 def _cmd_download_bbox(args: argparse.Namespace) -> int:
     """
-    Handle download command in bbox mode.
+    Handle download command in bbox mode (dyspozycja per kraj).
 
     Parameters
     ----------
@@ -477,6 +703,37 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
         print(f"Error: Invalid bbox format: {e}", file=sys.stderr)
         print("Expected: min_x,min_y,max_x,max_y (e.g., 419000,230000,426000,237000)")
         return 1
+
+    return _dispatch_area(args, bbox)
+
+
+def _download_pl_bbox(
+    args: argparse.Namespace, bbox: BBox, parent_request: dict
+) -> int:
+    """
+    Polska czesc zadania bbox: arkusze GUGiK z sidecarami niosacymi rodzica.
+
+    ``args`` to KOPIA namespace'u zadania (patrz ``_dispatch_area``) — sentinele
+    rozwiazywane sa tutaj, zeby nie dotknac argumentow lecacych do CZ.
+    """
+    if _resolve_pl_sentinels(args):
+        return 1
+
+    if bbox.crs in ("EPSG:5514", "EPSG:3045"):
+        # jawny --country pl z bboxem w ukladzie czeskim — skorowidze GUGiK
+        # pracuja w EPSG:2180
+        from pyproj import CRS
+
+        from kartograf.core.geometry import _transform_bbox
+
+        bbox = _transform_bbox(
+            bbox.min_x,
+            bbox.min_y,
+            bbox.max_x,
+            bbox.max_y,
+            CRS.from_user_input(bbox.crs),
+            "EPSG:2180",
+        )
 
     target_scale = args.scale or "1:10000"
 
@@ -510,6 +767,7 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
         vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
         resolution=resolution,
         max_workers=workers,
+        sidecar_extra={"parent_request": parent_request},
     )
 
     skip_existing = not args.force
@@ -648,6 +906,21 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         return 1
     if bbox is None:
         return 1  # error already printed
+
+    # tryb obszarowy: LAZ istnieje tylko dla PL, wiec obszar siegajacy CZ
+    # zostalby pobrany po cichu tylko czesciowo (spec 5.7: bez cichego pomijania
+    # kraju). Godlo PL jednoznacznie wskazuje kraj — bez guardu.
+    if (
+        getattr(args, "country", "auto") == "auto"
+        and args.godlo is None
+        and "CZ" in _countries_for_bbox(bbox)
+    ):
+        print(
+            "Error: --product laz jest dostepny tylko dla PL, a obszar "
+            "przecina CZ (LAZ dla CZ: etap 2); uzyj jawnie --country pl",
+            file=sys.stderr,
+        )
+        return 1
 
     vertical_crs = args.vertical_crs
     year = getattr(args, "year", None)
@@ -1006,7 +1279,13 @@ def _cmd_download_cz(
 
 def _cmd_download_geometry(args: argparse.Namespace) -> int:
     """
-    Handle download command in geometry mode.
+    Handle download command in geometry mode (dyspozycja per kraj).
+
+    Jawny ``--country cz`` idzie sciezka ``_resolve_cz_geometry_bbox``
+    (obwiednia w ukladzie PLIKU + jeden skok przypieta operacja). Tryb auto
+    i ``--country pl`` licza obwiednie w EPSG:2180: rozstrzyga ona kraje
+    i trafia do ``parent_request``, a arkusze PL dalej wyznacza sama geometria
+    (per obiekt), nie jej obwiednia.
 
     Parameters
     ----------
@@ -1018,11 +1297,46 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
     int
         Exit code (0 for success, 1 for error)
     """
-    from kartograf.core.geometry import find_sheets_for_geometry
+    from kartograf.core.geometry import get_overall_bbox
+
+    country_flag = getattr(args, "country", "auto")
+    if country_flag == "cz":
+        if _reject_non_nmt_for_cz(getattr(args, "product", "nmt")):
+            return 1
+        bbox = _resolve_cz_geometry_bbox(args)
+        if bbox is None:
+            return 1  # error already printed
+        return _run_cz(
+            args, bbox=bbox, parent_request=_build_parent_request(bbox, ("CZ",))
+        )
 
     filepath = Path(args.geometry)
     if not filepath.exists():
         print(f"Error: File not found: {filepath}", file=sys.stderr)
+        return 1
+
+    try:
+        overall = get_overall_bbox(
+            filepath, layer=getattr(args, "layer", None), target_crs="EPSG:2180"
+        )
+    except ValidationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    return _dispatch_area(args, overall, filepath=filepath)
+
+
+def _download_pl_geometry(
+    args: argparse.Namespace, filepath: Path, parent_request: dict
+) -> int:
+    """
+    Polska czesc zadania geometrycznego (arkusze per obiekt, nie z obwiedni).
+
+    ``args`` to KOPIA namespace'u zadania — patrz ``_dispatch_area``.
+    """
+    from kartograf.core.geometry import find_sheets_for_geometry
+
+    if _resolve_pl_sentinels(args):
         return 1
 
     target_scale = args.scale or "1:10000"
@@ -1059,6 +1373,7 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
         vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
         resolution=resolution,
         max_workers=workers,
+        sidecar_extra={"parent_request": parent_request},
     )
 
     skip_existing = not args.force

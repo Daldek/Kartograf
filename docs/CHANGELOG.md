@@ -40,6 +40,16 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     godla TM33/SM5, bbox przez exportImage, opcjonalna transformacja
     Bpv->EVRF2007 (EPSG:8357 -> EPSG:5621, offset +0,11..+0,15 m); endpointy
     wylacznie z deskryptorow, naprawa metadanych CRS w plikach DMR4G-TIFF
+  - CLI `--country {pl,cz,auto}` z auto-podzialem bboxa/geometrii
+    transgranicznej: obszar trafia do zrodel KAZDEGO przecietego kraju (w trybie
+    auto przyciety do jego obwiedni), a opcje nierozwiazywalne dla ktoregos
+    z krajow (np. `--resolution 1m` z CZ, `--system` z CZ, `--target-crs` z PL)
+    sa odrzucane PRZED pobraniem, z podpowiedzia jawnego `--country`
+  - `extra.parent_request` w sidecarach trybu bbox/geometry (oryginalny bbox
+    zadania, jego uklad i pobrane kraje) — grupowanie plikow jednego zadania,
+    takze po obu stronach granicy; tryb godlowy sidecarow nie zmienia
+  - `--product laz` w trybie obszarowym `--country auto`: obszar siegajacy CZ
+    konczy sie bledem z podpowiedzia `--country pl` (bez cichego pomijania kraju)
 
 ### Changed
 - **BREAKING: glebokie sciezki importu providerow** (bez shimow — decyzja

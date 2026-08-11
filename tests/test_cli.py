@@ -716,7 +716,7 @@ class TestCmdDownloadProduct:
             [
                 "download",
                 "--bbox",
-                "419000,230000,426000,237000",
+                "630000,480000,637000,487000",
                 "--product",
                 "nmpt",
                 "-o",
@@ -749,7 +749,7 @@ class TestCmdDownloadProduct:
             [
                 "download",
                 "--bbox",
-                "419000,230000,426000,237000",
+                "630000,480000,637000,487000",
                 "--product",
                 "orto",
                 "-o",
@@ -816,7 +816,7 @@ class TestCmdDownloadBBox:
             [
                 "download",
                 "--bbox",
-                "419000,230000,426000,237000",
+                "630000,480000,637000,487000",
                 "-o",
                 str(tmp_path),
                 "-q",
@@ -915,7 +915,7 @@ class TestCmdDownloadBBox:
             [
                 "download",
                 "--bbox",
-                "419000,230000,426000,237000",
+                "630000,480000,637000,487000",
                 "--scale",
                 "1:100000",
                 "-o",
@@ -1271,14 +1271,18 @@ class TestCmdDownloadGeometry:
 
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
     @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.core.geometry.get_overall_bbox")
     def test_download_geometry_basic(
-        self, mock_manager_cls, mock_find, capsys, tmp_path
+        self, mock_overall, mock_manager_cls, mock_find, capsys, tmp_path
     ):
         """--geometry calls find_sheets_for_geometry and downloads."""
         # Create a fake SHP file
         shp_file = tmp_path / "area.shp"
         shp_file.touch()
 
+        mock_overall.return_value = BBox(
+            630000.0, 480000.0, 640000.0, 490000.0, "EPSG:2180"
+        )  # Warszawa (20.90-21.05E) — glebia PL, auto-split nie dotknie CZ
         mock_find.return_value = ["N-34-130-D-d-2-4"]
         mock_manager = Mock()
         mock_manager.download_sheet.return_value = tmp_path / "test.asc"
@@ -1294,13 +1298,17 @@ class TestCmdDownloadGeometry:
 
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
     @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.core.geometry.get_overall_bbox")
     def test_download_geometry_with_layer(
-        self, mock_manager_cls, mock_find, capsys, tmp_path
+        self, mock_overall, mock_manager_cls, mock_find, capsys, tmp_path
     ):
         """--geometry --layer passes layer parameter."""
         gpkg_file = tmp_path / "area.gpkg"
         gpkg_file.touch()
 
+        mock_overall.return_value = BBox(
+            630000.0, 480000.0, 640000.0, 490000.0, "EPSG:2180"
+        )  # Warszawa — glebia PL
         mock_find.return_value = ["N-34-130-D-d-2-4"]
         mock_manager = Mock()
         mock_manager.download_sheet.return_value = tmp_path / "test.asc"
@@ -1728,7 +1736,7 @@ class TestDownloadBBoxSystem:
             [
                 "download",
                 "--bbox",
-                "419000,230000,426000,237000",
+                "630000,480000,637000,487000",
                 "--system",
                 "2000",
                 "-o",
@@ -1759,7 +1767,7 @@ class TestDownloadBBoxSystem:
             [
                 "download",
                 "--bbox",
-                "419000,230000,426000,237000",
+                "630000,480000,637000,487000",
                 "-o",
                 str(tmp_path),
                 "-q",
@@ -1779,13 +1787,17 @@ class TestDownloadGeometrySystem:
 
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
     @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.core.geometry.get_overall_bbox")
     def test_download_geometry_system_2000(
-        self, mock_manager_cls, mock_find, capsys, tmp_path
+        self, mock_overall, mock_manager_cls, mock_find, capsys, tmp_path
     ):
         """--geometry --system 2000 passes system='2000' to find_sheets_for_geometry."""
         shp_file = tmp_path / "area.shp"
         shp_file.touch()
 
+        mock_overall.return_value = BBox(
+            630000.0, 480000.0, 640000.0, 490000.0, "EPSG:2180"
+        )  # Warszawa — glebia PL (--system dotyczy tylko PL)
         mock_find.return_value = ["6.179.12"]
         mock_manager = Mock()
         mock_manager.download_sheet.return_value = tmp_path / "test.asc"
@@ -1811,13 +1823,17 @@ class TestDownloadGeometrySystem:
 
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
     @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.core.geometry.get_overall_bbox")
     def test_download_geometry_default_system_1992(
-        self, mock_manager_cls, mock_find, capsys, tmp_path
+        self, mock_overall, mock_manager_cls, mock_find, capsys, tmp_path
     ):
         """Default system='1992' for geometry download."""
         shp_file = tmp_path / "area.shp"
         shp_file.touch()
 
+        mock_overall.return_value = BBox(
+            630000.0, 480000.0, 640000.0, 490000.0, "EPSG:2180"
+        )  # Warszawa — glebia PL
         mock_find.return_value = ["N-34-130-D-d-2-4"]
         mock_manager = Mock()
         mock_manager.download_sheet.return_value = tmp_path / "test.asc"
@@ -2759,7 +2775,7 @@ class TestCountryDispatch:
         assert "etapie 2" in capsys.readouterr().err
         mock_cz.assert_not_called()
 
-    # --- TYMCZASOWE (Zad. 17 zastapi auto-splitem) ---
+    # --- tryby obszarowe: jawny --country cz ---
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     def test_bbox_with_country_cz_routes_to_cz_flow(self, mock_cz, tmp_path):
@@ -2912,7 +2928,7 @@ class TestCountryDispatch:
     @patch("kartograf.cli.download_cmd.DownloadManager")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
     def test_bbox_auto_stays_pl(self, mock_find, mock_manager_class, mock_cz, tmp_path):
-        """--country auto w trybie obszarowym: jak dotad PL (auto-split w Zad. 17)."""
+        """--country auto + bbox w glebi PL (Warszawa): przeplyw CZ nietkniety."""
         mock_find.return_value = ["N-34-130-D-d-2-4"]
         mock_manager = Mock()
         mock_manager.download_sheet.return_value = tmp_path / "x.asc"
@@ -2922,7 +2938,7 @@ class TestCountryDispatch:
             [
                 "download",
                 "--bbox",
-                "419000,230000,426000,237000",
+                "630000,480000,637000,487000",
                 "-o",
                 str(tmp_path),
                 "-q",
@@ -2932,3 +2948,505 @@ class TestCountryDispatch:
         assert result == 0
         mock_cz.assert_not_called()
         assert mock_find.call_args.kwargs.get("system") == "1992"
+
+
+# ===========================================================================
+# Auto-split bbox/geometrii per kraj + extra.parent_request (Zad. 17)
+# ===========================================================================
+
+
+class TestAutoSplitBBox:
+    """--country auto: bbox transgraniczny dzielony na kraje, parent_request."""
+
+    # 18.4-18.8E / 49.55-49.75N — pas przygraniczny PL/CZ (obie obwiednie
+    # krajow zawieraja ten prostokat: CZ do 18.86E/51.06N, PL od 14.07E/49.0N)
+    _BORDER = [
+        "download",
+        "--bbox",
+        "18.4,49.55,18.8,49.75",
+        "--bbox-crs",
+        "EPSG:4326",
+        "-q",
+    ]
+    # 21.0-21.2E / 52.0-52.2N — Warszawa, na wschod od obwiedni CZ (18.86E)
+    _PL_ONLY = [
+        "download",
+        "--bbox",
+        "21.0,52.0,21.2,52.2",
+        "--bbox-crs",
+        "EPSG:4326",
+        "-q",
+    ]
+    # 13.3-13.5E / 49.7-49.8N — Pilzno, na zachod od obwiedni PL (14.07E)
+    _CZ_ONLY = [
+        "download",
+        "--bbox",
+        "13.3,49.7,13.5,49.8",
+        "--bbox-crs",
+        "EPSG:4326",
+        "-q",
+    ]
+
+    @pytest.fixture(autouse=True)
+    def _isolate_cache(self, tmp_path, monkeypatch):
+        """MetadataCache laduje w cwd — poza repo i katalogiem wyjsciowym."""
+        cwd = tmp_path / "cwd"
+        cwd.mkdir()
+        monkeypatch.chdir(cwd)
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_border_bbox_splits_into_both_countries(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path
+    ):
+        mock_find.return_value = ["M-34-86-D-d-4-3"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = mock_manager
+        mock_cz.return_value = 0
+
+        result = main(self._BORDER + ["-o", str(tmp_path)])
+
+        assert result == 0
+        expected_parent = {
+            "bbox": [18.4, 49.55, 18.8, 49.75],
+            "bbox_crs": "EPSG:4326",
+            "countries": ["CZ", "PL"],
+        }
+        # PL: manager dostal sidecar_extra z parent_request
+        kwargs = mock_manager_class.call_args.kwargs
+        assert kwargs["sidecar_extra"] == {"parent_request": expected_parent}
+        # CZ: przeplyw wywolany z tym samym parent_request i bboxem w Krovaku
+        cz_kwargs = mock_cz.call_args.kwargs
+        assert cz_kwargs["parent_request"] == expected_parent
+        assert cz_kwargs["bbox"].crs == "EPSG:5514"
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_country_order_is_deterministic(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path
+    ):
+        """Kolejnosc krajow z all_countries() — posortowana (CZ przed PL)."""
+        mock_find.return_value = ["M-34-86-D-d-4-3"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = mock_manager
+        mock_cz.return_value = 0
+
+        main(self._BORDER + ["-o", str(tmp_path)])
+
+        parent = mock_cz.call_args.kwargs["parent_request"]
+        assert parent["countries"] == sorted(parent["countries"])
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_pl_branch_does_not_poison_cz_args(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path
+    ):
+        """Galaz PL pracuje na KOPII args — sentinele CZ zostaja None."""
+        mock_find.return_value = ["M-34-86-D-d-4-3"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = mock_manager
+        mock_cz.return_value = 0
+
+        main(self._BORDER + ["-o", str(tmp_path)])
+
+        # mock trzyma REFERENCJE do Namespace'u — gdyby galaz PL (idaca po CZ)
+        # mutowala ten sam obiekt, sentinele bylyby juz rozwiazane
+        cz_args = mock_cz.call_args.args[0]
+        assert cz_args.resolution is None
+        assert cz_args.vertical_crs is None
+        assert cz_args.system is None
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_pl_only_bbox_no_cz_flow_but_parent_request_present(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path
+    ):
+        mock_find.return_value = ["N-34-138-A-b-1-1"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = mock_manager
+
+        result = main(self._PL_ONLY + ["-o", str(tmp_path)])
+
+        assert result == 0
+        mock_cz.assert_not_called()
+        kwargs = mock_manager_class.call_args.kwargs
+        assert kwargs["sidecar_extra"]["parent_request"]["countries"] == ["PL"]
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_cz_only_bbox_skips_pl_flow(self, mock_manager_class, mock_cz, tmp_path):
+        """Bbox w calosci w CZ (13.3-13.5E, na zachod od 14.07E): tylko CUZK."""
+        mock_cz.return_value = 0
+        result = main(self._CZ_ONLY + ["-o", str(tmp_path)])
+
+        assert result == 0
+        mock_manager_class.assert_not_called()
+        assert mock_cz.call_args.kwargs["parent_request"]["countries"] == ["CZ"]
+
+    def test_cz_only_bbox_with_orto_rejected_as_stage_2(self, tmp_path, capsys):
+        """Kraj rozstrzygniety obszarem — komunikat o etapie 2, nie o wyborze."""
+        result = main(self._CZ_ONLY + ["--product", "orto", "-o", str(tmp_path)])
+        assert result == 1
+        assert "etapie 2" in capsys.readouterr().err
+
+    def test_single_country_error_has_no_country_hint(self, tmp_path, capsys):
+        """Przy jednym kraju podpowiedz --country byla by bez tresci."""
+        result = main(self._CZ_ONLY + ["--resolution", "1m", "-o", str(tmp_path)])
+        assert result == 1
+        err = capsys.readouterr().err
+        assert "nie istnieje dla CZ" in err
+        assert "uzyj jawnie" not in err
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    def test_explicit_cz_bbox_gets_parent_request(self, mock_cz, tmp_path):
+        mock_cz.return_value = 0
+        result = main(
+            [
+                "download",
+                "--bbox=-447000,-1114000,-446000,-1113000",
+                "--bbox-crs",
+                "EPSG:5514",
+                "--country",
+                "cz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+        assert result == 0
+        parent = mock_cz.call_args.kwargs["parent_request"]
+        assert parent["countries"] == ["CZ"]
+        assert parent["bbox_crs"] == "EPSG:5514"
+        # jawny kraj: bbox bez przycinania (przekazany oryginal)
+        assert mock_cz.call_args.kwargs["bbox"] == BBox(
+            -447000, -1114000, -446000, -1113000, "EPSG:5514"
+        )
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_explicit_pl_bbox_not_clipped(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path
+    ):
+        """Jawny --country pl: caly bbox transgraniczny idzie do PL, bez CZ."""
+        mock_find.return_value = ["M-34-86-D-d-4-3"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = mock_manager
+
+        result = main(self._BORDER + ["--country", "pl", "-o", str(tmp_path)])
+
+        assert result == 0
+        mock_cz.assert_not_called()
+        used_bbox = mock_find.call_args.args[0]
+        assert (used_bbox.min_x, used_bbox.max_x) == (18.4, 18.8)
+        assert mock_manager_class.call_args.kwargs["sidecar_extra"] == {
+            "parent_request": {
+                "bbox": [18.4, 49.55, 18.8, 49.75],
+                "bbox_crs": "EPSG:4326",
+                "countries": ["PL"],
+            }
+        }
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_auto_clips_cz_part_to_country_extent(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path
+    ):
+        """Tryb auto przycina czesc CZ do obwiedni kraju (18.86E)."""
+        from kartograf.providers.cuzk.dmr import _bbox_to_crs
+
+        mock_find.return_value = ["M-34-86-D-d-4-3"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = mock_manager
+        mock_cz.return_value = 0
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "18.4,49.55,19.5,49.75",
+                "--bbox-crs",
+                "EPSG:4326",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        expected = _bbox_to_crs(
+            BBox(18.4, 49.55, 18.86, 49.75, "EPSG:4326"), "EPSG:5514"
+        )
+        assert mock_cz.call_args.kwargs["bbox"] == expected
+        # parent_request niesie ORYGINALNY bbox zadania (przed przycieciem)
+        parent = mock_cz.call_args.kwargs["parent_request"]
+        assert parent["bbox"] == [18.4, 49.55, 19.5, 49.75]
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_godlo_mode_has_no_parent_request(self, mock_manager_class, tmp_path):
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = mock_manager
+        result = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"])
+        assert result == 0
+        kwargs = mock_manager_class.call_args.kwargs
+        assert kwargs.get("sidecar_extra") is None
+
+    def test_border_bbox_with_1m_unresolvable_for_cz(self, tmp_path, capsys):
+        result = main(self._BORDER + ["--resolution", "1m", "-o", str(tmp_path)])
+        assert result == 1
+        assert "--country" in capsys.readouterr().err  # podpowiedz jawnego kraju
+
+    def test_border_bbox_with_kron86_unresolvable_for_cz(self, tmp_path, capsys):
+        result = main(self._BORDER + ["--vertical-crs", "KRON86", "-o", str(tmp_path)])
+        assert result == 1
+        assert "--country" in capsys.readouterr().err
+
+    def test_border_bbox_with_2m_unresolvable_for_pl(self, tmp_path, capsys):
+        result = main(self._BORDER + ["--resolution", "2m", "-o", str(tmp_path)])
+        assert result == 1
+        assert "--country" in capsys.readouterr().err
+
+    def test_border_bbox_with_system_rejected(self, tmp_path, capsys):
+        result = main(self._BORDER + ["--system", "2000", "-o", str(tmp_path)])
+        assert result == 1
+        assert "--system" in capsys.readouterr().err
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    def test_border_bbox_with_target_crs_rejected_before_any_download(
+        self, mock_cz, tmp_path, capsys
+    ):
+        """Walidacja PRZED pobraniem — inaczej CZ pobralby sie, a PL odrzucil."""
+        result = main(self._BORDER + ["--target-crs", "EPSG:3045", "-o", str(tmp_path)])
+        assert result == 1
+        assert "--country" in capsys.readouterr().err
+        mock_cz.assert_not_called()
+
+    def test_border_bbox_with_nmpt_rejected(self, tmp_path, capsys):
+        result = main(self._BORDER + ["--product", "nmpt", "-o", str(tmp_path)])
+        assert result == 1
+        assert "--country" in capsys.readouterr().err
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_resolution_5m_resolvable_for_both(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path
+    ):
+        """5m istnieje po obu stronach — auto-split przechodzi."""
+        mock_find.return_value = ["M-34-86-D"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = mock_manager
+        mock_cz.return_value = 0
+        result = main(self._BORDER + ["--resolution", "5m", "-o", str(tmp_path)])
+        assert result == 0
+        assert mock_cz.called
+
+    def test_bbox_outside_known_countries(self, tmp_path, capsys):
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "2.0,40.0,2.5,40.5",
+                "--bbox-crs",
+                "EPSG:4326",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+        assert result == 1
+        assert "kraju" in capsys.readouterr().err
+
+    def test_laz_bbox_border_auto_rejected(self, tmp_path, capsys):
+        """LAZ (PL-only) + bbox przecinajacy CZ + auto => blad z podpowiedzia,
+        zamiast cichego pobrania tylko czesci PL (spec 5.7: bez cichego
+        pomijania kraju)."""
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "18.4,49.55,18.8,49.75",
+                "--bbox-crs",
+                "EPSG:4326",
+                "--product",
+                "laz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+        assert result == 1
+        assert "--country pl" in capsys.readouterr().err
+
+    def test_laz_godlo_untouched_by_guard(self, tmp_path, capsys):
+        """Tryb godlowy LAZ nie przechodzi przez guard transgraniczny.
+
+        Godlo M-34-86-D-d-4-3 lezy przy granicy z CZ (wewnatrz obwiedni CZ),
+        wiec w trybie obszarowym guard by zadzialal — kraj godla jest jednak
+        jednoznaczny.
+        """
+        from kartograf.providers.pl import gugik_laz
+
+        with patch.object(gugik_laz, "GugikLazProvider") as provider_cls:
+            provider_cls.return_value.discover_tiles.return_value = []
+            result = main(
+                ["download", "M-34-86-D-d-4-3", "--product", "laz", "-o", str(tmp_path)]
+            )
+
+        assert result == 1
+        err = capsys.readouterr().err
+        assert "--country pl" not in err
+        assert "No LAZ tiles" in err
+
+    @patch("kartograf.providers.cuzk.dmr._bbox_to_crs")
+    def test_cz_bbox_transform_error_returns_1_with_remedy(
+        self, mock_to_crs, tmp_path, capsys
+    ):
+        """TransformError z normalizacji bboxa CZ = komunikat CLI, nie traceback."""
+        from kartograf.transform.crs import TransformUnavailableError
+
+        mock_to_crs.side_effect = TransformUnavailableError(
+            "brak bezpiecznej operacji", remedy="podaj --target-crs EPSG:5514"
+        )
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "--country",
+                "cz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+        assert result == 1
+        err = capsys.readouterr().err
+        assert "brak bezpiecznej operacji" in err
+        assert "Remedium" in err
+
+
+class TestAutoSplitGeometry:
+    """--geometry w trybie auto: obwiednia decyduje o krajach."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_cache(self, tmp_path, monkeypatch):
+        cwd = tmp_path / "cwd"
+        cwd.mkdir()
+        monkeypatch.chdir(cwd)
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_geometry_border_splits(
+        self, mock_manager_class, mock_find, mock_overall, mock_cz, tmp_path
+    ):
+        geometry_file = tmp_path / "area.shp"
+        geometry_file.write_bytes(b"stub")
+        # obwiednia w 2180 przecinajaca oba kraje (okolice Cieszyna:
+        # 18.513-18.792E / 49.666-49.847N — wewnatrz obwiedni CZ i PL)
+        mock_overall.return_value = BBox(
+            465000.0, 200000.0, 485000.0, 220000.0, "EPSG:2180"
+        )
+        mock_find.return_value = ["M-34-86-D-d-4-3"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = mock_manager
+        mock_cz.return_value = 0
+
+        result = main(
+            ["download", "--geometry", str(geometry_file), "-o", str(tmp_path), "-q"]
+        )
+
+        assert result == 0
+        parent = mock_cz.call_args.kwargs["parent_request"]
+        assert parent["bbox"] == [465000.0, 200000.0, 485000.0, 220000.0]
+        assert parent["bbox_crs"] == "EPSG:2180"
+        assert parent["countries"] == ["CZ", "PL"]
+        assert mock_cz.call_args.kwargs["bbox"].crs == "EPSG:5514"
+        assert mock_manager_class.call_args.kwargs["sidecar_extra"] == {
+            "parent_request": parent
+        }
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_geometry_pl_only_skips_cz(
+        self, mock_manager_class, mock_find, mock_overall, mock_cz, tmp_path
+    ):
+        geometry_file = tmp_path / "area.shp"
+        geometry_file.write_bytes(b"stub")
+        mock_overall.return_value = BBox(
+            630000.0, 480000.0, 640000.0, 490000.0, "EPSG:2180"
+        )  # Warszawa — poza obwiednia CZ
+        mock_find.return_value = ["N-34-138-A-b-1-1"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = mock_manager
+
+        result = main(
+            ["download", "--geometry", str(geometry_file), "-o", str(tmp_path), "-q"]
+        )
+
+        assert result == 0
+        mock_cz.assert_not_called()
+        parent = mock_manager_class.call_args.kwargs["sidecar_extra"]["parent_request"]
+        assert parent["countries"] == ["PL"]
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    def test_geometry_explicit_cz_gets_parent_request(self, mock_cz, tmp_path):
+        """Jawny --country cz: parent_request z obwiedni w ukladzie zadania."""
+        shp = _write_prague_shp(tmp_path)
+        mock_cz.return_value = 0
+
+        result = main(
+            [
+                "download",
+                "--geometry",
+                str(shp),
+                "--country",
+                "cz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        parent = mock_cz.call_args.kwargs["parent_request"]
+        assert parent["countries"] == ["CZ"]
+        assert parent["bbox_crs"] == "EPSG:5514"
+        assert parent["bbox"] == [
+            mock_cz.call_args.kwargs["bbox"].min_x,
+            mock_cz.call_args.kwargs["bbox"].min_y,
+            mock_cz.call_args.kwargs["bbox"].max_x,
+            mock_cz.call_args.kwargs["bbox"].max_y,
+        ]
+
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    def test_geometry_outside_known_countries(self, mock_overall, tmp_path, capsys):
+        geometry_file = tmp_path / "area.shp"
+        geometry_file.write_bytes(b"stub")
+        mock_overall.return_value = BBox(2.0, 40.0, 2.5, 40.5, "EPSG:4326")
+
+        result = main(
+            ["download", "--geometry", str(geometry_file), "-o", str(tmp_path), "-q"]
+        )
+
+        assert result == 1
+        assert "kraju" in capsys.readouterr().err
