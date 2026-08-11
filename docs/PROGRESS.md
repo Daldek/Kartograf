@@ -17,7 +17,7 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
-| Pokrycie testami | ✅ Gotowy | ~89%, 1381 testow (po etapie 1, galaz feature/etap1-cz-dmr) |
+| Pokrycie testami | ✅ Gotowy | ~89%, 1399 testow (etap 1 + fix ADR-024, galaz feature/etap1-cz-dmr) |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0 |
@@ -83,7 +83,7 @@
 ## Ostatnia sesja
 
 **Data:** 2026-08-10 — 2026-08-11 (sekcje datowane ponizej; najnowsza:
-"Dokumentacja etapu 1 (2026-08-11, Zad. 21)")
+"Fix po etapie 1: reprojekcja CZ lokalnie zamiast serwerowo (2026-08-11)")
 
 ### Co zrobiono
 - **Research: rozszerzenie o zrodla wielokrajowe (CZ, DE, SK)** — wszystkie
@@ -105,7 +105,9 @@
   - pelna parytetowosc produktowa dla CZ; etapy: 0 refaktor → 1 fundament+DMR
     → 2 DMP/Orto/LAZ → 3 ZABAGED; DE/SK pozniej
   - dane zagraniczne domyslnie natywnie (S-JTSK/Bpv), transformacja opcjonalna
-    przez reprojekcje serwerowa; KRON86 dla zagranicy = odmowa z remedium
+    (pierwotnie: przez reprojekcje serwerowa — **zmienione na lokalna**,
+    ADR-024, patrz sekcja "Fix po etapie 1"); KRON86 dla zagranicy = odmowa
+    z remedium
   - `--country auto` (bbox ∩ extenty, osobne pliki per kraj); scalania brak —
     zadanie Hydrografa → sidecar metadanych obowiazkowy
   - indeks SM5 live z KladyMapovychListu + MetadataCache
@@ -296,8 +298,9 @@ akceptacyjnej ze specu + 5 dodatkowych, zero FAILi). Godlo TM33 `302_5550`
 auto-wykryty z godla, `podil=0.99`, diakrytyki UTF-8 `Český Těšín`
 zachowane); bbox przygraniczny Cieszyn `--country auto` (osobne pliki
 PL/CZ, wspolny `parent_request`, zero scalania — 67,2% nodata po stronie CZ
-potwierdza realne przeciecie granicy); `--target-crs EPSG:2180` (reprojekcja
-serwerowa, 0 pikseli nodata w wyniku); `--vertical-crs EVRF2007` (offset
+potwierdza realne przeciecie granicy); `--target-crs EPSG:2180` (wowczas
+reprojekcja serwerowa, 0 pikseli nodata w wyniku — pozniej okazalo sie, ze
+tresc byla przesunieta o 135 m, patrz "Fix po etapie 1"); `--vertical-crs EVRF2007` (offset
 Bpv→EVRF2007 zmierzony na zywo **+0,132366 m** na 64722 pikselach, std
 2,22e-05 — zgodny z modelem z rekonesansu co do ~1 mm, domyka Amendment 4
 z Zad. 12); `--vertical-crs KRON86` (blad z czytelnym remedium); regresja
@@ -341,11 +344,58 @@ wartosci z `pyproject.toml` (tylko `kartograf.__version__`, sprawdzone
 wydaniem (galaz `feature/etap1-cz-dmr` niezmergowana do `develop`, brak
 tagu `v0.7.0`) — `0.6.1` zostaje az do faktycznego mergu/wydania.
 
+### Fix po etapie 1: reprojekcja CZ lokalnie zamiast serwerowo (2026-08-11)
+
+**Zgloszenie:** analiza szwu PL/CZ na Olzie wykryla, ze `--target-crs
+EPSG:2180` dla CZ zwraca raster przesuniety o **135 m**. Winna reprojekcja
+serwerowa CUZK (`exportImage&imageSR=2180` bez transformacji datum
+S-JTSK→ETRS89); nasza kontrola przypietych operacji obejmowala tylko
+OBWIEDNIE zadania (zgodna do 0,07 m), a tresc pikseli szla obok niej.
+
+**Diagnoza zakresu (na zywo, `758_5514`/`760_5514` kolo Cieszyna;
+dopasowanie przez minimum RMS wzgledem danych natywnych 5514
+zreprojektowanych lokalnie):**
+
+| sciezka | minimum RMS | przesuniecie tresci |
+|---|---|---|
+| `imageSR=2180` (`--target-crs`) | 0,041 m przy (−119,0; −64,5) | **135 m** (= ballpark wg pyproj: dE 118,8 / dN 64,4) |
+| `imageSR=3045` (godlo TM33) | 0,034 m przy (0; +1,25) | **1,25 m** na poludnie (2 niezalezne kafle) |
+| kontrola: natywny vs natywny | 0,045 m przy (0; 0) | 0 |
+
+Czyli 3045 **nie** ma bledu datum (serwer go stosuje), ale ma wlasne,
+niewyjasnione 1,25 m — 0,6 piksela DMR 5G.
+
+**Naprawa (ADR-024, commit `6bf5e2b`):** serwer dostaje zadania rastrowe
+wylacznie w ukladzie natywnym `EPSG:5514`; reprojekcje tresci robi lokalnie
+`rasterio.warp.reproject` z **wymuszonym** pipeline'em przypietej operacji
+(`PinnedTransform.gdal_operation()` → `COORDINATE_OPERATION`). Objete obie
+sciezki: `--target-crs` i domyslna godlowa TM33. Kafelkowanie/mozaikowanie
+zostaja po stronie natywnej (przed warpem). Sidecar: `transform.horizontal`
+= `"pinned: <opis> (<acc> m)"` zamiast `"server:EPSG:<kod>"` (BREAKING),
+takze dla kafla TM33 (dotad `transform: null`). Fail-fast operacji poziomej
+w konstruktorze providera.
+
+**Pulapka do zapamietania:** GDAL podaje operacji wspolrzedne w kolejnosci
+osi **autorytatywnej**, a `PinnedTransform` powstaje z `always_xy=True` —
+dla celu northing-first (2180, 3045) brak `step proj=axisswap order=2,1`
+daje raster **w calosci nodata**, bez zadnego bledu. Sprawdzone i odrzucone
+alternatywy: `to_wkt()` operacji (to samo — cale nodata) oraz dopasowanie
+autorytatywnej wersji operacji po opisie w `TransformerGroup(always_xy=
+False)` (opis rozni sie o "+ axis order change").
+
+**Testy:** 1399 zielonych (+18), ruff/format czyste, mypy 33 (baseline).
+Regresja tresci: syntetyczny "serwer" oddaje raster z wbudowanym
+przesunieciem ballparku, a test sprawdza, gdzie **wyladowal wierzcholek**
+(< 1 px od wzorca pyproj) — na starym kodzie failowal z bledem 134,5 m.
+
 ### Nastepne kroki
 1. **Decyzja uzytkownika: merge `feature/etap1-cz-dmr` do `develop`** —
-   galaz jest zielona (1381 testow, ruff/mypy czyste), E2E 11/11 PASS,
-   dokumentacja kompletna (ten wpis). Wymaga: superpowers:finishing-a-
-   -development-branch albo recznego przegladu.
+   galaz jest zielona (1399 testow, ruff/mypy czyste), E2E 11/11 PASS
+   (z adnotacja o luce: E2E weryfikowalo bounds/CRS, nie georeferencje
+   tresci — patrz fix ADR-024 wyzej), dokumentacja kompletna. Wymaga:
+   superpowers:finishing-a-development-branch albo recznego przegladu.
+   **Warto przed mergem:** weryfikacja E2E na zywych danych po fixie
+   (punkty 1 i 4 macierzy — tym razem z kontrola tresci).
 2. **Etap 2** (DMP/Orto/LAZ CZ + wielokat granicy administracyjnej zamiast
    prostokatnej obwiedni + ujednolicenie `extra.parent_request.bbox_crs`
    miedzy trybami jawny/auto) — spec/plan do napisania po decyzji o mergu;

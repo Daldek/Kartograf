@@ -71,8 +71,10 @@ Kartograf automatyzuje ten proces oferując:
 - Selekcja obszaru: godło (TM33/SM5), bbox, plik geometrii — `--country
   {pl,cz,auto}`; `auto` wykrywa kraj z godła/bboxa, dzieli bbox/geometrię
   transgraniczną na osobne pliki per kraj (bez scalania — zadanie Hydrografu)
-- Reprojekcja pozioma serwerowa: `--target-crs {EPSG:2180,EPSG:5514,
-  EPSG:3045}` — tylko w trybie `--bbox`/`--geometry` (z godłem = błąd)
+- Reprojekcja pozioma **lokalna** (rasterio.warp + przypięta operacja; serwer
+  dostaje żądania wyłącznie w natywnym EPSG:5514 — ADR-024):
+  `--target-crs {EPSG:2180,EPSG:5514,EPSG:3045}` — tylko w trybie
+  `--bbox`/`--geometry` (z godłem = błąd)
 - Układ wysokościowy natywny: Bpv (Baltic 1957, EPSG:8357); opcjonalna
   transformacja do EVRF2007 (EPSG:5621, przypięta operacja 0,1 m); KRON86
   nieosiągalny (brak publicznych siatek Bpv→KRON86)
@@ -204,7 +206,7 @@ kartograf download <godlo> --resolution 5m # NMT 5m
 kartograf download 302_5550 --country cz               # DMR 5G (CZ), godlo TM33
 kartograf download CTES96 --resolution 5m               # DMR 4G (CZ), godlo SM5, kraj auto
 kartograf download --bbox ... --bbox-crs EPSG:4326 --country auto   # bbox transgraniczny -> pliki per kraj
-kartograf download --bbox ... --country cz --target-crs EPSG:2180   # reprojekcja serwerowa CZ
+kartograf download --bbox ... --country cz --target-crs EPSG:2180   # reprojekcja lokalna (pinned)
 kartograf download 302_5550 --country cz --vertical-crs EVRF2007    # Bpv -> EVRF2007 (EPSG:5621)
 kartograf landcover download --source bdot10k --teryt <kod>
 kartograf landcover download --source corine --godlo <godlo>
@@ -285,7 +287,8 @@ from kartograf import (
   transformacja pionowa to Bpv→EVRF2007 (EPSG:5621)
 - --target-crs działa tylko z --bbox/--geometry; z godłem CZ = ValidationError
 - Asymetria trybu --bbox: PL zwraca listę arkuszy (wiele plików), CZ zwraca
-  jeden plik (bezpośredni wycinek serwerowy exportImage)
+  jeden plik (wycinek exportImage, pobierany natywnie w 5514 i reprojektowany
+  lokalnie, gdy zażądano innego układu)
 - CountryProfile.extent_wgs84 dla CZ to PROSTOKĄT (obwiednia), nie wielokąt
   granicy — --country auto w południowej Polsce (lon<18,86°E, lat<51,06°N)
   wysyła zapytanie do CUZK także dla bboxów leżących w całości w Polsce

@@ -25,6 +25,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   tylko `teryt`, `output_path`, `timeout`; kazdy kolejny argument (np. `format`
   w `Bdot10kProvider.download_by_admin_unit`) przekazany pozycyjnie (4. argument)
   konczy sie `TypeError`. Przekazuj takie argumenty jako keyword (`format=...`).
+- **Sidecary CZ: `transform.horizontal` zmienia format i zakres** (ADR-024).
+  Bylo `"server:EPSG:<kod>"` (tylko przy `--target-crs`), jest
+  `"pinned: <opis operacji> (<dokladnosc> m)"` — i pojawia sie takze dla kafli
+  TM33 pobranych godlem, ktore dotad mialy `transform: null`. Konsumenci
+  parsujacy prefiks `server:` musza zostac dostosowani; format jest teraz
+  wspolny dla obu osi (`transform.vertical` mial go od poczatku).
 - **`vertical_crs_code("EVRF2007")` zwraca teraz `EPSG:5621`** (ogolnoeuropejski
   EVRF2007), nie `EPSG:9651` (dawna wartosc dla realizacji polskiej). Powod:
   `EVRF2007` jest teraz nazwa RODZINY ukladow, wspolna dla PL i CZ. Realizacja
@@ -128,6 +134,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dostaja teraz dodatkowo `extra.parent_request` — nowe pole, tresc
   pozostalych pol bez zmian; wspolny klucz grupowania z sidecarami CZ dla
   tego samego zadania
+- **Sidecary CZ: `transform.horizontal` niesie operacje przypieta zamiast
+  serwerowej** (ADR-024) — `"pinned: <opis operacji> (<dokladnosc> m)"`,
+  symetrycznie do `transform.vertical`, zamiast `"server:EPSG:<kod>"` bez pola
+  dokladnosci. Pole pojawia sie takze dla kafli TM33 pobranych godlem, ktore
+  dotad mialy `transform: null` (kafel lezy w EPSG:3045, a dane CUZK w
+  EPSG:5514 — reprojekcja zachodzi i jest teraz opisana). Sciezka SM5
+  (DMR 4G, pliki openzu w 5514) nadal ma `transform` bez czesci poziomej.
+- `PinnedTransform` niesie pare ukladow (`src_crs`/`dst_crs`) i udostepnia
+  `gdal_operation()` — te sama operacje jako pipeline PROJ dla GDAL-owego
+  `COORDINATE_OPERATION`, z korekta kolejnosci osi (cel northing-first bez
+  `axisswap` daje raster w calosci nodata)
 - `import kartograf` laduje teraz eagerly `rasterio` (GDAL/PROJ bindings) —
   eksporty CZ w `__init__.py` importuja `providers/cuzk/client.py`, ktory
   importuje `rasterio` na poziomie modulu; zmierzony koszt +55–65 ms
@@ -137,6 +154,23 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   jako zaleznosc (patrz ADR-023, "Ustalenia dodatkowe" pkt 2)
 
 ### Fixed
+- **Reprojekcja tresci CZ szla przez serwer CUZK i gubila transformacje datum**
+  (ADR-024). `--target-crs EPSG:2180` zwracal raster przesuniety o **135 m**
+  (dE 119, dN 64,5 — `exportImage&imageSR=2180` traktowal S-JTSK jak ETRS89),
+  a domyslna sciezka godlowa TM33 (`imageSR=3045`) — o **1,25 m** na poludnie.
+  Zaden z tych bledow nie byl widoczny w metadanych: zasieg, CRS, rozdzielczosc
+  i nodata byly poprawne, a sidecar niosl tylko `transform.horizontal =
+  "server:EPSG:<kod>"` bez dokladnosci. Kontrola przypietych transformow
+  obejmowala wylacznie obwiednie zadania (zgodna do 0,07 m) — tresc pikseli
+  szla obok niej.
+  Serwer dostaje teraz zadania **wylacznie w ukladzie natywnym `EPSG:5514`**,
+  a reprojekcje wykonuje `rasterio.warp` z **wymuszonym** pipeline'em
+  przypietej operacji (`COORDINATE_OPERATION`) — dla obu sciezek rastrowych.
+  Kafelkowanie i mozaikowanie zostaja po stronie natywnej (przed warpem), wiec
+  szwy kafli nie sa utrwalane przez interpolacje; nodata nie wchodzi do
+  interpolacji, zapis pozostaje atomowy, a zasieg i rozmiar wyniku sa
+  identyczne jak dotad. Brak bezpiecznej operacji poziomej przerywa teraz
+  w konstruktorze providera, przed transferem.
 - CLI z `--resolution 5m --vertical-crs KRON86` tworzy teraz provider skorygowany
   do EVRF2007 przez fabryke `create_nmt_provider` (wczesniej provider dostawal
   niewspierana kombinacje). Skorygowana wartosc jest tez przekazywana do
