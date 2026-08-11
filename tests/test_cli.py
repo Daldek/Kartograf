@@ -2517,3 +2517,298 @@ class TestCmdDownloadCz:
             ).read_text(encoding="utf-8")
         )
         assert payload["nodata"] == -32767.0
+
+
+class TestCountryDispatch:
+    """Dyspozycja per kraj w cmd_download (godlo -> rejestr systemow)."""
+
+    @pytest.fixture(autouse=True)
+    def _isolate_cache(self, tmp_path, monkeypatch):
+        """MetadataCache laduje w cwd — poza repo i katalogiem wyjsciowym."""
+        cwd = tmp_path / "cwd"
+        cwd.mkdir()
+        monkeypatch.chdir(cwd)
+
+    # --- godlo -> kraj ---
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    def test_cz_godlo_routes_to_cz_flow(self, mock_cz, tmp_path):
+        mock_cz.return_value = 0
+        result = main(["download", "302_5550", "-o", str(tmp_path), "-q"])
+        assert result == 0
+        mock_cz.assert_called_once()
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    def test_sm5_godlo_auto_detected(self, mock_cz, tmp_path):
+        mock_cz.return_value = 0
+        result = main(
+            ["download", "CTES96", "--resolution", "5m", "-o", str(tmp_path), "-q"]
+        )
+        assert result == 0
+        mock_cz.assert_called_once()
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    def test_cz_godlo_with_country_cz_routes_to_cz_flow(self, mock_cz, tmp_path):
+        """Jawny --country cz zgodny z godlem nie jest konfliktem."""
+        mock_cz.return_value = 0
+        result = main(
+            ["download", "302_5550", "--country", "cz", "-o", str(tmp_path), "-q"]
+        )
+        assert result == 0
+        mock_cz.assert_called_once()
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    def test_cz_godlo_keeps_sentinels_unresolved(self, mock_cz, tmp_path):
+        """Sentinele PL nie moga dotknac argumentow lecacych do CZ."""
+        mock_cz.return_value = 0
+        main(["download", "302_5550", "-o", str(tmp_path), "-q"])
+        args = mock_cz.call_args.args[0]
+        assert args.resolution is None
+        assert args.vertical_crs is None
+        assert args.system is None
+
+    def test_cz_godlo_with_country_pl_conflicts(self, tmp_path, capsys):
+        result = main(["download", "CTES96", "--country", "pl", "-o", str(tmp_path)])
+        assert result == 1
+        assert "cz_sm5" in capsys.readouterr().err
+
+    def test_pl_godlo_with_country_cz_conflicts(self, tmp_path, capsys):
+        result = main(
+            ["download", "N-34-130-D-d-2-4", "--country", "cz", "-o", str(tmp_path)]
+        )
+        assert result == 1
+        assert "pl" in capsys.readouterr().err.lower()
+
+    # --- sentinele PL ---
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_pl_godlo_sentinels_resolved_to_defaults(
+        self, mock_manager_class, tmp_path
+    ):
+        """Zachowanie obserwowalne PL bez zmian: None -> 1m/EVRF2007."""
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = mock_manager
+        result = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"])
+        assert result == 0
+        kwargs = mock_manager_class.call_args.kwargs
+        assert kwargs["resolution"] == "1m"
+        assert kwargs["vertical_crs"] == "EVRF2007"
+
+    def test_pl_godlo_with_2m_rejected(self, tmp_path, capsys):
+        result = main(
+            ["download", "N-34-130-D-d-2-4", "--resolution", "2m", "-o", str(tmp_path)]
+        )
+        assert result == 1
+        assert "2m" in capsys.readouterr().err
+
+    def test_pl_godlo_with_bpv_rejected(self, tmp_path, capsys):
+        result = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--vertical-crs",
+                "Bpv",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 1
+        assert "Bpv" in capsys.readouterr().err
+
+    def test_pl_godlo_with_target_crs_rejected(self, tmp_path, capsys):
+        result = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--target-crs",
+                "EPSG:2180",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 1
+        assert "natywnie" in capsys.readouterr().err
+
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    def test_pl_bbox_with_target_crs_rejected(self, mock_find, tmp_path, capsys):
+        """Sentinele PL dzialaja tez w trybie obszarowym (przed szukaniem arkuszy)."""
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "--target-crs",
+                "EPSG:2180",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 1
+        assert "natywnie" in capsys.readouterr().err
+        mock_find.assert_not_called()
+
+    # --- ValidationError z przeplywu CZ nie wychodzi jako traceback ---
+
+    def test_cz_godlo_with_target_crs_returns_1_without_traceback(
+        self, tmp_path, capsys
+    ):
+        """R9: --target-crs + godlo CZ = blad CLI (main nie lapie wyjatkow)."""
+        result = main(
+            ["download", "302_5550", "--target-crs", "EPSG:3045", "-o", str(tmp_path)]
+        )
+        assert result == 1
+        assert "--target-crs" in capsys.readouterr().err
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    def test_cz_validation_error_from_area_mode_returns_1(
+        self, mock_cz, tmp_path, capsys
+    ):
+        mock_cz.side_effect = ValidationError("cos nie gra")
+        result = main(
+            [
+                "download",
+                "--bbox=-447000,-1114000,-446000,-1113000",
+                "--bbox-crs",
+                "EPSG:5514",
+                "--country",
+                "cz",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 1
+        assert "cos nie gra" in capsys.readouterr().err
+
+    # --- produkty inne niz nmt dla CZ ---
+
+    def test_laz_with_country_cz_rejected(self, tmp_path, capsys):
+        result = main(["download", "302_5550", "--product", "laz", "-o", str(tmp_path)])
+        assert result == 1
+        assert "etapie 2" in capsys.readouterr().err
+
+    def test_laz_bbox_with_country_cz_rejected(self, tmp_path, capsys):
+        result = main(
+            [
+                "download",
+                "--bbox=-447000,-1114000,-446000,-1113000",
+                "--bbox-crs",
+                "EPSG:5514",
+                "--country",
+                "cz",
+                "--product",
+                "laz",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 1
+        assert "etapie 2" in capsys.readouterr().err
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    def test_orto_bbox_with_country_cz_rejected(self, mock_cz, tmp_path, capsys):
+        result = main(
+            [
+                "download",
+                "--bbox=-447000,-1114000,-446000,-1113000",
+                "--bbox-crs",
+                "EPSG:5514",
+                "--country",
+                "cz",
+                "--product",
+                "orto",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 1
+        assert "etapie 2" in capsys.readouterr().err
+        mock_cz.assert_not_called()
+
+    # --- TYMCZASOWE (Zad. 17 zastapi auto-splitem) ---
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    def test_bbox_with_country_cz_routes_to_cz_flow(self, mock_cz, tmp_path):
+        mock_cz.return_value = 0
+        result = main(
+            [
+                "download",
+                "--bbox=-447000,-1114000,-446000,-1113000",
+                "--bbox-crs",
+                "EPSG:5514",
+                "--country",
+                "cz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+        assert result == 0
+        mock_cz.assert_called_once()
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    def test_geometry_with_country_cz_passes_bbox(self, mock_bbox, mock_cz, tmp_path):
+        """Geometria dla CZ jest sprowadzana do obwiedni (brak kladu CZ w plikach)."""
+        shp = tmp_path / "area.shp"
+        shp.touch()
+        mock_bbox.return_value = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+        mock_cz.return_value = 0
+
+        result = main(
+            [
+                "download",
+                "--geometry",
+                str(shp),
+                "--country",
+                "cz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        assert mock_bbox.call_args.kwargs["target_crs"] == "EPSG:5514"
+        assert mock_cz.call_args.kwargs["bbox"].crs == "EPSG:5514"
+
+    def test_geometry_with_country_cz_missing_file(self, tmp_path, capsys):
+        result = main(
+            [
+                "download",
+                "--geometry",
+                str(tmp_path / "missing.shp"),
+                "--country",
+                "cz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+        assert result == 1
+        assert "not found" in capsys.readouterr().err.lower()
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    def test_bbox_auto_stays_pl(self, mock_find, mock_manager_class, mock_cz, tmp_path):
+        """--country auto w trybie obszarowym: jak dotad PL (auto-split w Zad. 17)."""
+        mock_find.return_value = ["N-34-130-D-d-2-4"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        mock_cz.assert_not_called()
+        assert mock_find.call_args.kwargs.get("system") == "1992"
