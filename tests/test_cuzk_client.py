@@ -5,11 +5,14 @@ import json
 import zipfile
 from pathlib import Path
 from unittest.mock import Mock, patch
+from urllib.parse import parse_qs, urlparse
 
+import numpy as np
 import pytest
+import rasterio
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.cuzk.client import CuzkClient, _wkid
 
 _CUZK_SESSION_PATCH = "kartograf.providers.cuzk.client.requests.Session"
@@ -277,3 +280,160 @@ class TestRetryPropagation:
             )
         assert session.get.call_count == 3
         assert mock_sleep.call_count == 2
+
+
+DMR5G = "https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr5g/ImageServer"
+
+
+def _write_geotiff(
+    path: Path,
+    bbox: BBox,
+    width: int,
+    height: int,
+    value: float = 100.0,
+    nodata: float = -9999.0,
+) -> None:
+    """Syntetyczny GeoTIFF float32 pokrywajacy bbox (do testow mozaiki)."""
+    from rasterio.transform import from_bounds
+
+    transform = from_bounds(
+        bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y, width, height
+    )
+    profile = {
+        "driver": "GTiff",
+        "dtype": "float32",
+        "count": 1,
+        "width": width,
+        "height": height,
+        "crs": "EPSG:3045",
+        "transform": transform,
+        "nodata": nodata,
+    }
+    data = np.full((height, width), value, dtype="float32")
+    with rasterio.open(path, "w", **profile) as dst:
+        dst.write(data, 1)
+
+
+class TestExportImage:
+    def test_single_shot_url_params(self, tmp_path):
+        captured = {}
+
+        def fake_download(session, url, output_path, *, timeout, **kwargs):
+            captured["url"] = url
+            # Poprawka 2 (rekonesans): export_image nadpisuje CRS bezwarunkowo
+            # po kazdym eksporcie (rasterio "r+"), wiec fixture musi byc
+            # naprawde otwieralnym GeoTIFF-em, nie tylko 4-bajtowym naglowkiem
+            # sniffowanym po magic number.
+            _write_geotiff(Path(output_path), bbox, 2, 2)
+            return Path(output_path)
+
+        target = tmp_path / "out.tif"
+        bbox = BBox(302000, 5550000, 304000, 5552000, "EPSG:3045")
+        with patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download):
+            CuzkClient(session=Mock()).export_image(
+                DMR5G,
+                bbox,
+                pixel_size=2.0,
+                image_sr="EPSG:3045",
+                output_path=target,
+            )
+
+        parsed = urlparse(captured["url"])
+        assert parsed.path.endswith("/exportImage")
+        params = parse_qs(parsed.query)
+        assert params["f"] == ["image"]
+        assert params["format"] == ["tiff"]
+        assert params["pixelType"] == ["F32"]
+        assert params["bbox"] == ["302000,5550000,304000,5552000"]
+        assert params["bboxSR"] == ["3045"]
+        assert params["imageSR"] == ["3045"]
+        assert params["size"] == ["1000,1000"]
+        assert params["noData"] == ["-9999"]
+        assert params["noDataInterpretation"] == ["esriNoDataMatchAny"]
+        # CRS nadpisany bezwarunkowo (rekonesans: to_epsg() bezuzyteczne dla
+        # obu SR zwracanych przez CUZK — patrz docs/research/...krok 4-5).
+        with rasterio.open(target) as src:
+            assert src.crs.to_epsg() == 3045
+
+    def test_non_tiff_response_raises_with_content(self, tmp_path):
+        def fake_download(session, url, output_path, *, timeout, **kwargs):
+            Path(output_path).write_bytes(b'{"error":{"code":400,"message":"Bad"}}')
+            return Path(output_path)
+
+        target = tmp_path / "out.tif"
+        bbox = BBox(0, 0, 100, 100, "EPSG:5514")
+        with (
+            patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
+            pytest.raises(DownloadError, match="error"),
+        ):
+            CuzkClient(session=Mock()).export_image(
+                DMR5G,
+                bbox,
+                pixel_size=2.0,
+                image_sr="EPSG:5514",
+                output_path=target,
+            )
+        assert not target.exists()
+
+    def test_tiling_above_limits_mosaics(self, tmp_path):
+        """Patch limitow na male wartosci: bbox 8x8 px przy limicie 4x4
+        => 4 kafle 4x4, kazdy z tym samym noData, zszyte mosaic_and_crop."""
+        requested = []
+
+        def fake_download(session, url, output_path, *, timeout, **kwargs):
+            params = parse_qs(urlparse(url).query)
+            tile_bbox = [float(v) for v in params["bbox"][0].split(",")]
+            w, h = (int(v) for v in params["size"][0].split(","))
+            requested.append((tile_bbox, w, h, params["noData"][0]))
+            _write_geotiff(
+                Path(output_path),
+                BBox(
+                    tile_bbox[0], tile_bbox[1], tile_bbox[2], tile_bbox[3], "EPSG:3045"
+                ),
+                w,
+                h,
+                value=float(len(requested)),
+            )
+            return Path(output_path)
+
+        target = tmp_path / "mosaic.tif"
+        bbox = BBox(0, 0, 16, 16, "EPSG:3045")  # 8x8 px przy pixel_size=2
+        client = CuzkClient(session=Mock())
+        with (
+            patch.object(CuzkClient, "MAX_EXPORT_WIDTH", 4),
+            patch.object(CuzkClient, "MAX_EXPORT_HEIGHT", 4),
+            patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
+        ):
+            client.export_image(
+                DMR5G,
+                bbox,
+                pixel_size=2.0,
+                image_sr="EPSG:3045",
+                output_path=target,
+            )
+
+        assert len(requested) == 4
+        assert all(nd == "-9999" for (_, _, _, nd) in requested)
+        with rasterio.open(target) as src:
+            assert src.width == 8 and src.height == 8
+            assert src.bounds == (0.0, 0.0, 16.0, 16.0)
+            assert src.nodata == -9999.0
+            assert src.crs.to_epsg() == 3045
+        # pliki czastkowe posprzatane
+        assert list(tmp_path.glob("*.part*.tif")) == []
+
+    def test_tiling_with_crs_mismatch_raises(self, tmp_path):
+        bbox = BBox(0, 0, 16, 16, "EPSG:5514")
+        client = CuzkClient(session=Mock())
+        with (
+            patch.object(CuzkClient, "MAX_EXPORT_WIDTH", 4),
+            patch.object(CuzkClient, "MAX_EXPORT_HEIGHT", 4),
+            pytest.raises(ValidationError, match="image_sr"),
+        ):
+            client.export_image(
+                DMR5G,
+                bbox,
+                pixel_size=2.0,
+                image_sr="EPSG:2180",
+                output_path=tmp_path / "x.tif",
+            )
