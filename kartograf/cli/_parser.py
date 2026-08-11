@@ -7,6 +7,8 @@ subcommand parsers (parse, download, landcover, soilgrids, cache).
 
 import argparse
 
+from kartograf import __version__
+
 
 def create_parser() -> argparse.ArgumentParser:
     """
@@ -26,7 +28,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--version",
         action="version",
-        version="%(prog)s 0.6.1",
+        version=f"%(prog)s {__version__}",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")

@@ -253,12 +253,14 @@ class TestMain:
 
     def test_version_flag(self, capsys):
         """Test --version flag."""
+        from kartograf import __version__
+
         with pytest.raises(SystemExit) as exc_info:
             main(["--version"])
 
         assert exc_info.value.code == 0
         captured = capsys.readouterr()
-        assert "0.6.1" in captured.out
+        assert __version__ in captured.out
 
     def test_parse_subcommand(self, capsys):
         """Test parse subcommand."""
@@ -3540,3 +3542,19 @@ class TestAutoSplitGeometry:
 
         assert result == 1
         assert "kraju" in capsys.readouterr().err
+
+
+class TestPublicApiCz:
+    """Eksporty publiczne API dla modulow CZ (zad. 18)."""
+
+    def test_cz_exports_available(self):
+        from kartograf import CuzkDmrProvider, ParserTM33, create_dmr_provider
+
+        assert ParserTM33("302_5550").get_bbox().crs == "EPSG:3045"
+        assert callable(create_dmr_provider)
+        assert CuzkDmrProvider.__name__ == "CuzkDmrProvider"
+
+    def test_version_bumped(self):
+        from kartograf import __version__
+
+        assert __version__ == "0.7.0-dev"
