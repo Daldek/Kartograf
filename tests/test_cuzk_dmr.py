@@ -25,7 +25,7 @@ from kartograf.providers.cuzk.dmr import CUZK_NODATA, CuzkDmrProvider
 from kartograf.providers.cuzk.sheets import SheetInfo
 from kartograf.sources.descriptor import TransportKind
 from kartograf.sources.registry import get_source
-from kartograf.transform.crs import TransformUnavailableError
+from kartograf.transform.crs import TransformError, TransformUnavailableError
 
 _CLIENT_PATCH = "kartograf.providers.cuzk.dmr.CuzkClient"
 _INDEX_PATCH = "kartograf.providers.cuzk.dmr.SheetIndex"
@@ -391,6 +391,73 @@ class TestVerticalTransform:
         with rasterio.open(target) as src:
             assert np.all(src.read(1) == CUZK_NODATA)
         assert not vertical.transform.called
+
+    def test_unavailable_operation_fails_before_any_download(self, tmp_path):
+        """Fail-fast jak przy KRON86: brak bezpiecznej operacji 8357->5621
+        przerywa w konstruktorze, zanim cokolwiek zostanie pobrane."""
+        with (
+            patch(_CLIENT_PATCH) as client_cls,
+            patch(
+                _PINNED_PATCH,
+                side_effect=TransformUnavailableError("brak bezpiecznej operacji"),
+            ),
+        ):
+            with pytest.raises(TransformUnavailableError):
+                CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
+            client_cls.return_value.export_image.assert_not_called()
+            client_cls.return_value.fetch_file.assert_not_called()
+        assert not list(tmp_path.iterdir())
+
+    def test_failed_shift_leaves_no_half_transformed_file(self, tmp_path):
+        """Awaria na drugim pasie nie moze zostawic rastra o wymieszanych
+        ukladach pionowych pod docelowa nazwa (skip_existing utrwalilby korupcje)."""
+        target = tmp_path / "302_5550.tif"
+        factory, vertical = self._pinned_fakes()
+        calls = {"n": 0}
+
+        def failing(x, y, z):
+            calls["n"] += 1
+            if calls["n"] > 1:
+                raise TransformError("Transformacja zwrocila wartosc nieskonczona")
+            return (x, y, np.asarray(z) + 0.13)
+
+        vertical.transform.side_effect = failing
+        with (
+            patch(_CLIENT_PATCH) as client_cls,
+            patch(_PINNED_PATCH, side_effect=factory),
+            patch("kartograf.providers.cuzk.dmr._CHUNK_PIXELS", 20),  # 5 pasow
+        ):
+            client_cls.return_value.export_image.side_effect = _exporting("EPSG:3045")
+            provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
+            with pytest.raises(TransformError):
+                provider.download("302_5550", target)
+
+        assert calls["n"] > 1  # awaria faktycznie po zapisaniu pierwszego pasa
+        assert not target.exists()
+        assert list(tmp_path.iterdir()) == []  # zero plikow tymczasowych
+
+    def test_failed_shift_removes_sm5_worldfile_too(self, tmp_path):
+        """Sciezka SM5: razem z .tif znika towarzyszacy .tfw (zaden osierocony
+        plik nie zostaje na dysku)."""
+        target = tmp_path / "CTES96.tif"
+        factory, vertical = self._pinned_fakes()
+        vertical.transform.side_effect = TransformError("wartosc nieskonczona")
+        with (
+            patch(_CLIENT_PATCH) as client_cls,
+            patch(_INDEX_PATCH) as index_cls,
+            patch(_PINNED_PATCH, side_effect=factory),
+        ):
+            index_cls.return_value.sm5_sheet.return_value = _ctes96_info()
+            client_cls.return_value.fetch_file.side_effect = (
+                lambda url, output_path, **kw: (
+                    _write_dmr4g_pair(Path(output_path)) or Path(output_path)
+                )
+            )
+            provider = CuzkDmrProvider(resolution="5m", vertical_crs="EVRF2007")
+            with pytest.raises(TransformError):
+                provider.download("CTES96", target)
+
+        assert list(tmp_path.iterdir()) == []
 
     def test_raster_without_crs_reports_clear_error(self, tmp_path):
         """Bez CRS nie da sie policzyc (lon, lat) — czytelny blad zamiast CRSError."""
