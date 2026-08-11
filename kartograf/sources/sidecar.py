@@ -65,6 +65,18 @@ def _select_channel(descriptor: SourceDescriptor, request: dict) -> AccessChanne
     return descriptor.channels[0]
 
 
+def _select_channel_by_capability(
+    descriptor: SourceDescriptor, capability: str
+) -> AccessChannel:
+    """Pierwszy kanal deklarujacy capability; KeyError gdy brak."""
+    for ch in descriptor.channels:
+        if capability in ch.capabilities:
+            return ch
+    raise KeyError(
+        f"Deskryptor '{descriptor.key}' nie ma kanalu z capability '{capability}'"
+    )
+
+
 def build_metadata(
     descriptor: SourceDescriptor,
     *,
@@ -73,18 +85,22 @@ def build_metadata(
     data_path: Path | None = None,
     transform: dict | None = None,
     extra: dict | None = None,
+    capability: str | None = None,
+    nodata: float | None = None,
 ) -> ResultMetadata:
     """Zbuduj metadane z deskryptora + kontekstu wywolania."""
     from kartograf import __version__  # lazy: unika cyklu importow
 
-    channel = _select_channel(descriptor, request)
+    if capability is not None:
+        channel = _select_channel_by_capability(descriptor, capability)
+    else:
+        channel = _select_channel(descriptor, request)
 
     vertical: str | None = None
     if channel.vertical_crs_options and vertical_crs is not None:
         vertical = resolve_vertical_crs(vertical_crs, channel.vertical_crs_options)
 
-    nodata: float | None = None
-    if data_path is not None and data_path.suffix.lower() == ".asc":
+    if nodata is None and data_path is not None and data_path.suffix.lower() == ".asc":
         nodata = read_asc_nodata(data_path)
 
     return ResultMetadata(

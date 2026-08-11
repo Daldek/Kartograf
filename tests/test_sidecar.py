@@ -3,9 +3,13 @@
 import json
 import logging
 
+import pytest
+
+from kartograf.sources.descriptor import TransportKind
 from kartograf.sources.registry import get_source
 from kartograf.sources.sidecar import (
     ResultMetadata,
+    _select_channel_by_capability,
     build_metadata,
     read_asc_nodata,
     write_sidecar,
@@ -96,6 +100,77 @@ class TestWriteSidecar:
             out = write_sidecar(data, self._meta())
         assert not out.exists()
         assert "sidecar" in caplog.text.lower()
+
+
+class TestSelectChannelByCapability:
+    # dmr4g (Zad. 3) ma dwa kanaly o TYM SAMYM horizontal_crs (EPSG:5514) —
+    # ResultMetadata nie niesie pola transport, wiec asercje na samym
+    # ResultMetadata nie odrozniaja poprawnej selekcji od heurystyki/ignorowania
+    # `capability=`. Testujemy wiec `_select_channel_by_capability` bezposrednio
+    # na zwroconym kanale (transport + capabilities) — patrz R5 w task brief.
+    def test_sheet_files_returns_direct_files_channel(self):
+        d = get_source("cz.cuzk.dmr4g")
+        ch = _select_channel_by_capability(d, "sheet_files")
+        assert ch.transport == TransportKind.DIRECT_FILES
+        assert "sheet_files" in ch.capabilities
+
+    def test_bbox_raster_returns_arcgis_image_channel(self):
+        d = get_source("cz.cuzk.dmr4g")
+        ch = _select_channel_by_capability(d, "bbox_raster")
+        assert ch.transport == TransportKind.ARCGIS_IMAGE
+        assert "bbox_raster" in ch.capabilities
+
+    def test_unknown_capability_raises_keyerror(self):
+        d = get_source("pl.gugik.orto")
+        with pytest.raises(KeyError):
+            _select_channel_by_capability(d, "bbox_raster")
+
+
+class TestBuildMetadataCapabilityAndNodata:
+    def test_capability_selects_named_channel(self):
+        # Smoke test z briefu: oba kanaly dmr4g maja EPSG:5514, wiec ta
+        # asercja sama w sobie nie dowodzi poprawnej selekcji (patrz
+        # TestSelectChannelByCapability powyzej dla wlasciwego dowodu).
+        d = get_source("cz.cuzk.dmr4g")
+        meta_files = build_metadata(
+            d, request={"godlo": "CTES96"}, capability="sheet_files"
+        )
+        assert meta_files.horizontal_crs == "EPSG:5514"
+        meta_bbox = build_metadata(
+            d, request={"godlo": "CTES96"}, capability="bbox_raster"
+        )
+        # oba kanaly dmr4g maja 5514; rozroznia je transport — sprawdzamy,
+        # ze selekcja nie uzyla heurystyki bbox (request godlo + capability bbox)
+        assert meta_bbox.horizontal_crs == "EPSG:5514"
+
+    def test_capability_unknown_raises_keyerror(self):
+        d = get_source("pl.gugik.orto")
+        with pytest.raises(KeyError):
+            build_metadata(d, request={"godlo": "X"}, capability="bbox_raster")
+
+    def test_nodata_param_takes_precedence_over_asc_sniff(self, tmp_path):
+        asc = tmp_path / "x.asc"
+        asc.write_text(
+            "ncols 1\nnrows 1\nxllcorner 0\nyllcorner 0\n"
+            "cellsize 1\nNODATA_value -9999\n"
+        )
+        meta = build_metadata(
+            get_source("pl.gugik.nmt_1m"),
+            request={"godlo": "N-34-130-D-d-2-4"},
+            data_path=asc,
+            nodata=-8888.0,
+        )
+        assert meta.nodata == -8888.0
+
+    def test_nodata_param_for_tif(self, tmp_path):
+        meta = build_metadata(
+            get_source("cz.cuzk.dmr5g"),
+            request={"bbox": [1.0, 2.0, 3.0, 4.0], "bbox_crs": "EPSG:5514"},
+            nodata=-9999.0,
+        )
+        assert meta.nodata == -9999.0
+        assert meta.dataset == "cz.cuzk.dmr5g"
+        assert meta.license["id"] == "CC-BY-4.0"
 
 
 class TestReadAscNodata:
