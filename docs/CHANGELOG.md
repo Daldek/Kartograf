@@ -128,6 +128,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dostaja teraz dodatkowo `extra.parent_request` — nowe pole, tresc
   pozostalych pol bez zmian; wspolny klucz grupowania z sidecarami CZ dla
   tego samego zadania
+- `import kartograf` laduje teraz eagerly `rasterio` (GDAL/PROJ bindings) —
+  eksporty CZ w `__init__.py` importuja `providers/cuzk/client.py`, ktory
+  importuje `rasterio` na poziomie modulu; zmierzony koszt +55–65 ms
+  (~185 ms → ~244 ms). Zepsuty GDAL/PROJ (np. brakujaca biblioteka natywna)
+  psuje teraz sam `import kartograf`, nie dopiero pierwsze wywolanie funkcji
+  rastrowej — istotne dla Hydrografu/Hydrologu, ktore importuja Kartograf
+  jako zaleznosc (patrz ADR-023, "Ustalenia dodatkowe" pkt 2)
 
 ### Fixed
 - CLI z `--resolution 5m --vertical-crs KRON86` tworzy teraz provider skorygowany

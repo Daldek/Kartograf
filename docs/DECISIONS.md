@@ -523,7 +523,13 @@ implementacji — patrz `.superpowers/sdd/2026-08-11-etap1-cz-fundament-dmr/prog
    zrodlowych na serwerze. Decyzja: sidecar opisuje **zadanie transformacji
    wzgledem natywnego produktu trybu**, nie wewnetrzna mechanike serwera —
    spojne z rola sidecara jako kontraktu dla Hydrografu (co dostal, nie jak
-   to policzono).
+   to policzono). Analogicznie po stronie pionowej: autorytatywnym sygnalem
+   faktycznej transformacji jest `transform.vertical` (np.
+   `"pinned: Bpv->EVRF2007"`), NIE `vertical_source` — `vertical_source`
+   opisuje wylacznie **kanal zrodlowy** (`"native"` dla CUZK), wiec zostaje
+   `"native"` takze wtedy, gdy `vertical_crs` w sidecarze jest juz po
+   przeliczeniu (np. `EPSG:5621` po Bpv→EVRF2007, patrz punkt (e)); to nie
+   jest niespojnosc, tylko dwa rozne pola opisujace dwie rozne rzeczy.
 2. **Eager import `rasterio` przy `import kartograf`** (eksporty CZ w
    `__init__.py`, Zad. 18): `providers/cuzk/client.py` importuje `rasterio`
    na poziomie modulu (potrzebne do `export_image`/`fetch_file`), a
