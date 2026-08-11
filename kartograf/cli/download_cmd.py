@@ -178,6 +178,11 @@ def _print_transform_error(error: Exception) -> int:
     return 1
 
 
+# wkidy ukladow, w ktorych CUZK wydaje dane — zadanie w nich podane musi
+# opuscic Krovaka przypieta operacja, zanim dotknie go cokolwiek polskiego
+_CZ_CRS_WKIDS = frozenset({"5514", "3045"})
+
+
 def _bbox_to_wgs84(bbox: BBox) -> BBox:
     """
     Bbox w WGS84 — wspolny uklad rozpoznawania krajow i przycinania.
@@ -240,16 +245,25 @@ def _country_bbox(
 
     Gdy przyciecie nic nie zmienia, transformowany jest ORYGINALNY bbox —
     jeden skok z ukladu zadania zamiast dwoch (przez WGS84).
-    """
-    if not auto:
-        return bbox
 
+    Zadanie podane w ukladzie czeskim, ale kierowane do PL (``--bbox-crs
+    EPSG:5514`` z ``--country pl`` albo z auto-splitem), opuszcza Krovaka
+    OD RAZU i wylacznie przypieta operacja: dalsze kroki (przyciecie, wybor
+    arkuszy) pracuja juz w EPSG:2180, wiec selekcja arkuszy GUGiK nigdy nie
+    wynika z niepinowanej transformacji Krovaka.
+    """
     from pyproj import CRS
 
     from kartograf.core.geometry import _transform_bbox
     from kartograf.providers.cuzk.client import _wkid
     from kartograf.providers.cuzk.dmr import _bbox_to_crs
     from kartograf.sources.registry import get_country
+
+    if code != "CZ" and _wkid(bbox.crs) in _CZ_CRS_WKIDS:
+        bbox = _bbox_to_crs(bbox, "EPSG:2180")
+
+    if not auto:
+        return bbox
 
     wgs = _bbox_to_wgs84(bbox)
     extent = get_country(code).extent_wgs84
@@ -715,25 +729,13 @@ def _download_pl_bbox(
 
     ``args`` to KOPIA namespace'u zadania (patrz ``_dispatch_area``) — sentinele
     rozwiazywane sa tutaj, zeby nie dotknac argumentow lecacych do CZ.
+
+    ``bbox`` jest juz w ukladzie polskim: zadania podane w ukladzie czeskim
+    normalizuje ``_country_bbox`` przypieta operacja (tu drugi, niepinowany
+    skok Krovaka bylby wlasnie tym, czego etap zabrania).
     """
     if _resolve_pl_sentinels(args):
         return 1
-
-    if bbox.crs in ("EPSG:5514", "EPSG:3045"):
-        # jawny --country pl z bboxem w ukladzie czeskim — skorowidze GUGiK
-        # pracuja w EPSG:2180
-        from pyproj import CRS
-
-        from kartograf.core.geometry import _transform_bbox
-
-        bbox = _transform_bbox(
-            bbox.min_x,
-            bbox.min_y,
-            bbox.max_x,
-            bbox.max_y,
-            CRS.from_user_input(bbox.crs),
-            "EPSG:2180",
-        )
 
     target_scale = args.scale or "1:10000"
 

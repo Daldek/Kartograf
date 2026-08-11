@@ -3193,6 +3193,96 @@ class TestAutoSplitBBox:
         parent = mock_cz.call_args.kwargs["parent_request"]
         assert parent["bbox"] == [18.4, 49.55, 19.5, 49.75]
 
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_pl_part_of_cz_crs_bbox_leaves_krovak_pinned(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path
+    ):
+        """Zadanie w Krovaku kierowane tez do PL: skok 5514->2180 przypiety.
+
+        Bbox 13.73-14.46E / 49.95-50.35N (podany w EPSG:5514) przecina oba
+        kraje i jest dla PL FAKTYCZNIE przycinany (obwiednia PL zaczyna sie
+        na 14.07E) — czyli wchodzi w sciezke, w ktorej selekcja arkuszy GUGiK
+        moglaby wyniknac z niepinowanych transformacji Krovaka.
+        """
+        from kartograf.cli.download_cmd import _bbox_to_wgs84
+        from kartograf.core import geometry as geom
+        from kartograf.providers.cuzk import dmr
+        from kartograf.providers.cuzk.client import _wkid
+
+        mock_find.return_value = ["M-33-46-A-a-1-1"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = mock_manager
+        mock_cz.return_value = 0
+
+        with (
+            patch.object(dmr, "_bbox_to_crs", wraps=dmr._bbox_to_crs) as pinned,
+            patch.object(geom, "_transform_bbox", wraps=geom._transform_bbox) as plain,
+        ):
+            result = main(
+                [
+                    "download",
+                    "--bbox=-788231,-1052442,-741087,-1013379",
+                    "--bbox-crs",
+                    "EPSG:5514",
+                    "-o",
+                    str(tmp_path),
+                    "-q",
+                ]
+            )
+
+        assert result == 0
+        # galaz PL dostala bbox w ukladzie polskim
+        pl_bbox = mock_find.call_args.args[0]
+        assert pl_bbox.crs == "EPSG:2180"
+        # ...przyciety do obwiedni PL (zadanie siegalo 13.73E, PL od 14.07E)
+        assert _bbox_to_wgs84(pl_bbox).min_x > 13.9
+        # ...i wyprowadzony przypieta operacja z Krovaka
+        assert any(call.args[1] == "EPSG:2180" for call in pinned.call_args_list)
+        # niepinowany transformer nigdy nie celuje w uklad czeski
+        assert not any(
+            _wkid(str(call.args[5])) in {"5514", "3045"}
+            for call in plain.call_args_list
+        )
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_cz_failure_does_not_skip_pl_and_fails_request(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path
+    ):
+        """Porazka pierwszego kraju nie anuluje drugiego, ale psuje wynik."""
+        mock_find.return_value = ["M-34-86-D-d-4-3"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = mock_manager
+        mock_cz.return_value = 1  # CZ idzie pierwsze (sortowanie) i pada
+
+        result = main(self._BORDER + ["-o", str(tmp_path)])
+
+        assert result == 1
+        assert mock_cz.called
+        mock_manager.download_sheet.assert_called()
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_pl_failure_fails_request_despite_cz_success(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path
+    ):
+        mock_find.return_value = ["M-34-86-D-d-4-3"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.side_effect = DownloadError("serwer padl")
+        mock_manager_class.return_value = mock_manager
+        mock_cz.return_value = 0
+
+        result = main(self._BORDER + ["-o", str(tmp_path)])
+
+        assert result == 1
+        assert mock_cz.called
+
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_godlo_mode_has_no_parent_request(self, mock_manager_class, tmp_path):
         mock_manager = Mock()
