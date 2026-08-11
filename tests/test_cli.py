@@ -2519,6 +2519,32 @@ class TestCmdDownloadCz:
         assert payload["nodata"] == -32767.0
 
 
+def _write_prague_shp(directory):
+    """Maly shapefile (poligon w okolicach Pragi) w EPSG:4326 — dane offline."""
+    import shapefile
+    from pyproj import CRS
+
+    shp_path = directory / "area_cz.shp"
+    with shapefile.Writer(str(shp_path)) as w:
+        w.field("name", "C", 40)
+        w.poly(
+            [
+                [
+                    (14.40, 50.06),
+                    (14.45, 50.06),
+                    (14.45, 50.10),
+                    (14.40, 50.10),
+                    (14.40, 50.06),
+                ]
+            ]
+        )
+        w.record("praha")
+    shp_path.with_suffix(".prj").write_text(
+        CRS.from_epsg(4326).to_wkt(), encoding="utf-8"
+    )
+    return shp_path
+
+
 class TestCountryDispatch:
     """Dyspozycja per kraj w cmd_download (godlo -> rejestr systemow)."""
 
@@ -2650,6 +2676,14 @@ class TestCountryDispatch:
 
     # --- ValidationError z przeplywu CZ nie wychodzi jako traceback ---
 
+    def test_cz_godlo_parse_error_returns_1_without_traceback(self, tmp_path, capsys):
+        """Wzorzec TM33 z nieparzystymi km: blad CLI (ParseError), nie traceback."""
+        result = main(["download", "301_5551", "-o", str(tmp_path), "-q"])
+        assert result == 1
+        err = capsys.readouterr().err
+        assert "Error:" in err
+        assert "301_5551" in err
+
     def test_cz_godlo_with_target_crs_returns_1_without_traceback(
         self, tmp_path, capsys
     ):
@@ -2747,12 +2781,94 @@ class TestCountryDispatch:
         mock_cz.assert_called_once()
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.core.geometry.get_overall_bbox")
-    def test_geometry_with_country_cz_passes_bbox(self, mock_bbox, mock_cz, tmp_path):
-        """Geometria dla CZ jest sprowadzana do obwiedni (brak kladu CZ w plikach)."""
-        shp = tmp_path / "area.shp"
-        shp.touch()
-        mock_bbox.return_value = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+    def test_geometry_with_country_cz_reads_bbox_in_file_crs(self, mock_cz, tmp_path):
+        """Obwiednia liczona w ukladzie PLIKU — transformacje robi warstwa CZ."""
+        from pyproj import CRS
+
+        from kartograf.core import geometry as geom
+
+        shp = _write_prague_shp(tmp_path)
+        mock_cz.return_value = 0
+        with patch.object(
+            geom, "get_overall_bbox", wraps=geom.get_overall_bbox
+        ) as spy_bbox:
+            result = main(
+                [
+                    "download",
+                    "--geometry",
+                    str(shp),
+                    "--country",
+                    "cz",
+                    "-o",
+                    str(tmp_path),
+                    "-q",
+                ]
+            )
+
+        assert result == 0
+        requested = CRS.from_user_input(spy_bbox.call_args.kwargs["target_crs"])
+        assert requested == CRS.from_epsg(4326)  # uklad pliku, nie Krovak
+        assert mock_cz.call_args.kwargs["bbox"].crs == "EPSG:5514"
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    def test_geometry_cz_bbox_goes_through_pinned_transform(self, mock_cz, tmp_path):
+        """Skok do Krovaka idzie przypieta operacja z probkowaniem krawedzi."""
+        from kartograf.providers.cuzk import dmr
+
+        shp = _write_prague_shp(tmp_path)
+        mock_cz.return_value = 0
+        with patch.object(
+            dmr, "build_pinned_transform", wraps=dmr.build_pinned_transform
+        ) as spy:
+            result = main(
+                [
+                    "download",
+                    "--geometry",
+                    str(shp),
+                    "--country",
+                    "cz",
+                    "-o",
+                    str(tmp_path),
+                    "-q",
+                ]
+            )
+
+        assert result == 0
+        spy.assert_called_once()
+        assert spy.call_args.args[1] == "EPSG:5514"
+        bbox = mock_cz.call_args.kwargs["bbox"]
+        assert bbox.crs == "EPSG:5514"
+        # Praga w Krovaku: obie wspolrzedne ujemne, |X| ~ 743 km, |Y| ~ 1044 km
+        assert -745000 < bbox.min_x < -740000
+        assert -1047000 < bbox.min_y < -1041000
+        assert bbox.max_x > bbox.min_x and bbox.max_y > bbox.min_y
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    def test_geometry_cz_skips_unpinned_transformer(self, mock_cz, tmp_path):
+        """core/geometry Transformer (ballpark dozwolony) nie jest uzywany."""
+        shp = _write_prague_shp(tmp_path)
+        mock_cz.return_value = 0
+        with patch("kartograf.core.geometry.Transformer") as mock_transformer:
+            result = main(
+                [
+                    "download",
+                    "--geometry",
+                    str(shp),
+                    "--country",
+                    "cz",
+                    "-o",
+                    str(tmp_path),
+                    "-q",
+                ]
+            )
+
+        assert result == 0
+        mock_transformer.from_crs.assert_not_called()
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    def test_geometry_cz_target_crs_in_one_hop(self, mock_cz, tmp_path):
+        """--target-crs: obwiednia od razu w ukladzie zadanym serwerowi."""
+        shp = _write_prague_shp(tmp_path)
         mock_cz.return_value = 0
 
         result = main(
@@ -2762,6 +2878,8 @@ class TestCountryDispatch:
                 str(shp),
                 "--country",
                 "cz",
+                "--target-crs",
+                "EPSG:3045",
                 "-o",
                 str(tmp_path),
                 "-q",
@@ -2769,8 +2887,10 @@ class TestCountryDispatch:
         )
 
         assert result == 0
-        assert mock_bbox.call_args.kwargs["target_crs"] == "EPSG:5514"
-        assert mock_cz.call_args.kwargs["bbox"].crs == "EPSG:5514"
+        bbox = mock_cz.call_args.kwargs["bbox"]
+        assert bbox.crs == "EPSG:3045"
+        assert 450000 < bbox.min_x < 465000
+        assert 5540000 < bbox.min_y < 5555000
 
     def test_geometry_with_country_cz_missing_file(self, tmp_path, capsys):
         result = main(

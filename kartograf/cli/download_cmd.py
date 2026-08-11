@@ -147,40 +147,63 @@ def _run_cz(
     parent_request: dict | None = None,
 ) -> int:
     """
-    Wywolaj przeplyw CZ, tlumaczac ValidationError na komunikat CLI.
+    Wywolaj przeplyw CZ, tlumaczac wyjatek zadania na komunikat CLI.
 
-    ``main`` nie lapi wyjatkow, a ``_cmd_download_cz`` sygnalizuje sprzeczne
-    zadanie (np. ``--target-crs`` z godlem) wyjatkiem — dyspozycja jest
-    ostatnim miejscem, w ktorym moze on zostac zamieniony na kod wyjscia
-    zamiast tracebacku.
+    ``main`` nie lapi wyjatkow, a przeplyw CZ sygnalizuje zle zadanie
+    wyjatkiem: ``ValidationError`` (np. ``--target-crs`` z godlem) albo
+    ``ParseError`` (godlo pasujace wzorcem do TM33/SM5, ale niepoprawne —
+    np. nieparzyste kilometry). Dyspozycja jest ostatnim miejscem, w ktorym
+    moga one zostac zamienione na kod wyjscia zamiast tracebacku; galaz PL
+    lapie dokladnie te sama pare w ``cmd_download``.
     """
     try:
         return _cmd_download_cz(args, bbox=bbox, parent_request=parent_request)
-    except ValidationError as e:
+    except (ParseError, ValidationError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
 
 def _resolve_cz_geometry_bbox(args: argparse.Namespace) -> BBox | None:
     """
-    Obwiednia geometrii w Krovaku dla przeplywu CZ (None => blad wypisany).
+    Obwiednia geometrii w ukladzie zadania CZ (None => blad juz wypisany).
 
     CUZK nie przyjmuje pliku geometrii — zadanie obszarowe to jeden wycinek
     ``exportImage``, wiec geometria sprowadza sie tu do obwiedni (jak
-    w przeplywie LAZ, tyle ze w EPSG:5514 zamiast EPSG:2180).
+    w przeplywie LAZ, tyle ze w ukladzie czeskim zamiast EPSG:2180).
+
+    Obwiednia liczona jest W UKLADZIE PLIKU, a skok do ukladu docelowego robi
+    ``_bbox_to_crs`` (przypieta operacja + probkowanie krawedzi). Transformacja
+    z ``core/geometry`` jest tu niedopuszczalna: uzywa domyslnego transformera
+    pyproj (ballpark dozwolony, nieznana dokladnosc) i obwiedni z czterech
+    naroznikow, ktora przy obroconym Krovaku ucina skrawki obszaru. Jeden skok
+    prosto do ukladu zadania oznacza tez, ze ``_cz_download_bbox`` nie
+    transformuje juz po raz drugi.
     """
-    from kartograf.core.geometry import get_overall_bbox
+    from pyproj import CRS
+
+    from kartograf.core.geometry import get_overall_bbox, read_source_crs
+    from kartograf.providers.cuzk.dmr import _bbox_to_crs
+    from kartograf.transform.crs import TransformError
 
     filepath = Path(args.geometry)
     if not filepath.exists():
         print(f"Error: File not found: {filepath}", file=sys.stderr)
         return None
+
+    layer = getattr(args, "layer", None)
+    image_sr = getattr(args, "target_crs", None) or "EPSG:5514"
     try:
-        return get_overall_bbox(
-            filepath, layer=getattr(args, "layer", None), target_crs="EPSG:5514"
+        source_crs = read_source_crs(filepath, layer=layer)
+        bbox = get_overall_bbox(filepath, layer=layer, target_crs=source_crs.to_wkt())
+        if source_crs == CRS.from_user_input(image_sr):
+            # plik juz w ukladzie zadania — tylko etykieta, zero transformacji
+            return BBox(bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y, image_sr)
+        return _bbox_to_crs(bbox, image_sr)
+    except (ValidationError, ValueError, TransformError) as e:
+        remedy = getattr(e, "remedy", None)
+        print(
+            f"Error: {e}" + (f" Remedium: {remedy}" if remedy else ""), file=sys.stderr
         )
-    except (ValidationError, ValueError) as e:
-        print(f"Error: {e}", file=sys.stderr)
         return None
 
 

@@ -637,6 +637,58 @@ class TestGetOverallBbox:
 
 
 # =========================================================================
+# Tests — read_source_crs
+# =========================================================================
+
+
+class TestReadSourceCrs:
+    """Tests for read_source_crs (uklad zapisu pliku, bez transformacji)."""
+
+    def test_shp_crs(self, shp_epsg4326):
+        """SHP: CRS z .prj."""
+        from pyproj import CRS
+
+        from kartograf.core.geometry import read_source_crs
+
+        assert read_source_crs(shp_epsg4326) == CRS.from_epsg(4326)
+
+    def test_shp_missing_prj_raises(self, shp_no_prj):
+        from kartograf.core.geometry import read_source_crs
+
+        with pytest.raises(ValidationError, match="Missing .prj"):
+            read_source_crs(shp_no_prj)
+
+    def test_gpkg_crs(self, gpkg_epsg2180):
+        """GPKG: CRS z gpkg_spatial_ref_sys pierwszej warstwy."""
+        from pyproj import CRS
+
+        from kartograf.core.geometry import read_source_crs
+
+        assert read_source_crs(gpkg_epsg2180) == CRS.from_epsg(2180)
+
+    def test_gpkg_layer_selection_matches_bboxes(self, gpkg_multi_layer):
+        """Wybor warstwy taki sam jak przy czytaniu obiektow."""
+        from kartograf.core.geometry import read_source_crs
+
+        crs = read_source_crs(gpkg_multi_layer, layer="layer_b")
+        assert crs.to_epsg() is not None
+
+    def test_gpkg_unknown_layer_raises(self, gpkg_multi_layer):
+        from kartograf.core.geometry import read_source_crs
+
+        with pytest.raises(ValidationError, match="not found in GeoPackage"):
+            read_source_crs(gpkg_multi_layer, layer="nie_ma")
+
+    def test_unsupported_format_raises(self, tmp_path):
+        from kartograf.core.geometry import read_source_crs
+
+        path = tmp_path / "area.geojson"
+        path.write_text("{}", encoding="utf-8")
+        with pytest.raises(ValidationError, match="Unsupported geometry format"):
+            read_source_crs(path)
+
+
+# =========================================================================
 # Tests — _transform_bbox
 # =========================================================================
 
