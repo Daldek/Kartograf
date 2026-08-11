@@ -13,10 +13,10 @@ sekcja 6.4 i docs/research/2026-08-10-*):
 4. Kazdy wynik transformacji przechodzi kontrole isfinite; inaczej TransformError.
 """
 
-import math
 from dataclasses import dataclass, field
 from typing import Any
 
+import numpy as np
 from pyproj import network
 from pyproj.transformer import TransformerGroup
 
@@ -58,16 +58,15 @@ class PinnedTransform:
     description: str  # opis operacji (trafia do sidecara w etapie 1+)
     _transformer: Any = field(repr=False)
 
-    def transform(self, x: float, y: float, z: float | None = None) -> tuple:
-        """Transformuj punkt; wynik nieskonczony/NaN => TransformError."""
+    def transform(self, x, y, z=None) -> tuple:
+        """Transformuj punkt lub tablice numpy; wynik inf/NaN => TransformError."""
         if z is None:
             result = self._transformer.transform(x, y)
         else:
             result = self._transformer.transform(x, y, z)
-        if not all(math.isfinite(v) for v in result):
+        if not all(bool(np.all(np.isfinite(v))) for v in result):
             raise TransformError(
-                f"Transformacja zwrocila wartosc nieskonczona dla ({x}, {y})"
-                f" [{self.description}]"
+                f"Transformacja zwrocila wartosc nieskonczona [{self.description}]"
             )
         return result
 
@@ -126,41 +125,40 @@ def build_pinned_transform(
     network.set_network_enabled(policy.allow_network_grids)
     try:
         group = TransformerGroup(src_crs, dst_crs, always_xy=True, allow_ballpark=False)
-    finally:
-        network.set_network_enabled(previous_network_enabled)
-
-    rejected: list[tuple[str, str]] = []
-    candidates = []
-    for transformer in group.transformers:
-        accuracy = transformer.accuracy
-        description = str(transformer.description)
-        if accuracy < 0:
-            rejected.append((description, "nieznana dokladnosc (accuracy < 0)"))
-            continue
-        if accuracy > policy.min_accuracy_m:
-            rejected.append(
-                (
-                    description,
-                    f"dokladnosc {accuracy} m > limit {policy.min_accuracy_m} m",
-                )
-            )
-            continue
-        if policy.probe_point is not None:
-            px, py = policy.probe_point
-            try:
-                probe = transformer.transform(px, py)
-            except Exception as e:  # noqa: BLE001 — kazdy blad probe = odrzut
-                rejected.append((description, f"probe rzucil wyjatek: {e}"))
+        rejected: list[tuple[str, str]] = []
+        candidates = []
+        for transformer in group.transformers:
+            accuracy = transformer.accuracy
+            description = str(transformer.description)
+            if accuracy < 0:
+                rejected.append((description, "nieznana dokladnosc (accuracy < 0)"))
                 continue
-            if not all(math.isfinite(v) for v in probe):
+            if accuracy > policy.min_accuracy_m:
                 rejected.append(
                     (
                         description,
-                        "probe zwrocil inf/NaN (siatka nie pokrywa obszaru danych)",
+                        f"dokladnosc {accuracy} m > limit {policy.min_accuracy_m} m",
                     )
                 )
                 continue
-        candidates.append((accuracy, transformer, description))
+            if policy.probe_point is not None:
+                px, py = policy.probe_point
+                try:
+                    probe = transformer.transform(px, py)
+                except Exception as e:  # noqa: BLE001 — kazdy blad probe = odrzut
+                    rejected.append((description, f"probe rzucil wyjatek: {e}"))
+                    continue
+                if not all(bool(np.all(np.isfinite(v))) for v in probe):
+                    rejected.append(
+                        (
+                            description,
+                            "probe zwrocil inf/NaN (siatka nie pokrywa obszaru danych)",
+                        )
+                    )
+                    continue
+            candidates.append((accuracy, transformer, description))
+    finally:
+        network.set_network_enabled(previous_network_enabled)
 
     if not candidates:
         raise TransformUnavailableError(
