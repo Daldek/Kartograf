@@ -199,6 +199,9 @@ class TestFetchFile:
                 "http://x/CTES96.zip", target, unzip_single=".tif"
             )
         assert not target.exists()
+        # ZIP i ewentualne pliki tymczasowe posprzatane po bledzie
+        assert list(tmp_path.glob("*.zip")) == []
+        assert list(tmp_path.glob("*.tmp")) == []
 
     def test_corrupted_zip_raises_download_error(self, tmp_path):
         target = tmp_path / "CTES96.tif"
@@ -210,6 +213,50 @@ class TestFetchFile:
             CuzkClient(session=Mock()).fetch_file(
                 "http://x/CTES96.zip", target, unzip_single=".tif"
             )
+        assert not target.exists()
+        # ZIP i ewentualne pliki tymczasowe posprzatane po bledzie
+        assert list(tmp_path.glob("*.zip")) == []
+        assert list(tmp_path.glob("*.tmp")) == []
+
+    def test_unzip_single_tfw_extraction_failure_leaves_no_files(self, tmp_path):
+        """Regresja (review Zad. 8): jesli ekstrakcja towarzyszacego .tfw
+        zawiedzie PO udanej ekstrakcji .tif (np. OSError, dysk pelny), cala
+        operacja ma byc atomowa jako calosc — na dysku nie moze zostac ani
+        czesciowy .tif, ani osierocony .tfw, ani smieci tymczasowe/ZIP."""
+        zip_content = _zip_bytes(
+            {"CTES96.tif": b"II*\x00tifdata", "CTES96.tfw": b"5\n0\n0\n-5\n1\n2\n"}
+        )
+        target = tmp_path / "CTES96.tif"
+        fake_download = self._client_with_zip(tmp_path, zip_content)
+
+        import kartograf.providers.cuzk.client as client_module
+
+        real_extract_to = client_module._extract_to
+        calls = {"n": 0}
+
+        def flaky_extract_to(zf, member, dest):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                # Druga ekstrakcja (towarzyszacy .tfw) pada - symulacja
+                # OSError/dysk pelny PO tym, jak .tif juz zostal wypakowany
+                # do pliku tymczasowego.
+                raise OSError("disk full (symulowany)")
+            real_extract_to(zf, member, dest)
+
+        with (
+            patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
+            patch.object(client_module, "_extract_to", side_effect=flaky_extract_to),
+            pytest.raises(DownloadError, match="Rozpakowanie"),
+        ):
+            CuzkClient(session=Mock()).fetch_file(
+                "http://x/CTES96.zip", target, unzip_single=".tif"
+            )
+
+        assert calls["n"] == 2
+        assert not target.exists()
+        assert not (tmp_path / "CTES96.tfw").exists()
+        assert list(tmp_path.glob("*.zip")) == []
+        assert list(tmp_path.glob("*.tmp")) == []
 
 
 class TestRetryPropagation:

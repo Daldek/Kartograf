@@ -92,7 +92,9 @@ class CuzkClient:
         unzip_single: str | None = None,
     ) -> Path:
         """Pobierz plik; przy unzip_single wyciagnij jedyny plik o rozszerzeniu
-        (+ towarzyszacy .tfw), zapisz atomowo, usun ZIP."""
+        (+ towarzyszacy .tfw), zapisz atomowo (oba pliki razem albo zaden),
+        usun ZIP. Kazdy blad ekstrakcji => DownloadError, bez pozostawiania
+        czesciowych wynikow na dysku."""
         output_path = Path(output_path)
         if unzip_single is None:
             return download_to(self._session, url, output_path, timeout=self._timeout)
@@ -102,36 +104,73 @@ class CuzkClient:
         )
         download_to(self._session, url, zip_path, timeout=self._timeout)
         try:
-            with zipfile.ZipFile(zip_path) as zf:
-                suffix = unzip_single.lower()
-                names = [n for n in zf.namelist() if n.lower().endswith(suffix)]
-                if len(names) != 1:
-                    raise DownloadError(
-                        f"ZIP {url}: oczekiwano dokladnie 1 pliku "
-                        f"'{unzip_single}', znaleziono {len(names)}"
-                    )
-                _extract_member(zf, names[0], output_path)
-                stem = names[0].rsplit(".", 1)[0].lower()
-                tfw = next(
-                    (n for n in zf.namelist() if n.lower() == f"{stem}.tfw"), None
-                )
-                if tfw is not None:
-                    _extract_member(zf, tfw, output_path.with_suffix(".tfw"))
-        except zipfile.BadZipFile as e:
-            raise DownloadError(f"Uszkodzony ZIP z {url}: {e}") from e
+            _extract_zip_pair(zip_path, output_path, unzip_single, url)
         finally:
             zip_path.unlink(missing_ok=True)
         return output_path
 
 
-def _extract_member(zf: zipfile.ZipFile, member: str, target: Path) -> None:
-    """Wypakuj element ZIP do target atomowo (tmp + os.replace)."""
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_name(f"{target.name}.{os.getpid()}_{threading.get_ident()}.tmp")
+def _extract_zip_pair(
+    zip_path: Path, output_path: Path, unzip_single: str, url: str
+) -> None:
+    """Wyciagnij dokladnie 1 plik o rozszerzeniu unzip_single (+ opcjonalny
+    towarzyszacy .tfw) z zip_path do output_path.
+
+    Oba pliki sa najpierw rozpakowywane do lokalizacji tymczasowych; dopiero
+    gdy WSZYSTKIE ekstrakcje sie powioda, sa commitowane (os.replace) razem.
+    Kazdy blad na dowolnym etapie (uszkodzony ZIP, zla liczba dopasowan, IO,
+    nieobslugiwana kompresja, zaszyfrowany element, blad commitu) mapuje sie
+    na DownloadError, a wszelkie juz zapisane pliki tymczasowe/wynikowe sa
+    sprzatane — na dysku nie zostaje ani czesciowy .tif, ani osierocony .tfw.
+    """
+    tfw_path = output_path.with_suffix(".tfw")
+    tmp_main = output_path.with_name(
+        f"{output_path.name}.{os.getpid()}_{threading.get_ident()}.tmp"
+    )
+    tmp_tfw = tfw_path.with_name(
+        f"{tfw_path.name}.{os.getpid()}_{threading.get_ident()}.tmp"
+    )
+    has_tfw = False
     try:
-        with zf.open(member) as src, open(tmp, "wb") as dst:
-            while chunk := src.read(1_048_576):
-                dst.write(chunk)
-        os.replace(tmp, target)
+        with zipfile.ZipFile(zip_path) as zf:
+            suffix = unzip_single.lower()
+            names = [n for n in zf.namelist() if n.lower().endswith(suffix)]
+            if len(names) != 1:
+                raise DownloadError(
+                    f"ZIP {url}: oczekiwano dokladnie 1 pliku "
+                    f"'{unzip_single}', znaleziono {len(names)}"
+                )
+            _extract_to(zf, names[0], tmp_main)
+            stem = names[0].rsplit(".", 1)[0].lower()
+            tfw_member = next(
+                (n for n in zf.namelist() if n.lower() == f"{stem}.tfw"), None
+            )
+            has_tfw = tfw_member is not None
+            if has_tfw:
+                _extract_to(zf, tfw_member, tmp_tfw)
+
+        # Obie ekstrakcje gotowe w tmp -> commit atomowy razem.
+        os.replace(tmp_main, output_path)
+        try:
+            if has_tfw:
+                os.replace(tmp_tfw, tfw_path)
+        except OSError:
+            output_path.unlink(missing_ok=True)
+            raise
+    except DownloadError:
+        raise
+    except zipfile.BadZipFile as e:
+        raise DownloadError(f"Uszkodzony ZIP z {url}: {e}") from e
+    except Exception as e:
+        raise DownloadError(f"Rozpakowanie ZIP {url} nieudane: {e}") from e
     finally:
-        tmp.unlink(missing_ok=True)
+        tmp_main.unlink(missing_ok=True)
+        tmp_tfw.unlink(missing_ok=True)
+
+
+def _extract_to(zf: zipfile.ZipFile, member: str, target: Path) -> None:
+    """Wypakuj element ZIP do target (bez commitu/rename — robi to wolajacy)."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with zf.open(member) as src, open(target, "wb") as dst:
+        while chunk := src.read(1_048_576):
+            dst.write(chunk)
