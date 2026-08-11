@@ -2115,6 +2115,56 @@ class TestResolveLazBbox:
         with pytest.raises(ValueError):
             _resolve_laz_bbox(args)
 
+    def test_bbox_from_krovak_uses_pinned_transform(self):
+        """--bbox-crs EPSG:5514 (F2): przejscie do 2180 musi isc przypieta
+        operacja (bbox_to_crs), NIE niepinowanym _transform_bbox — inaczej
+        selekcja kafli LAZ na pasie granicznym mogla wyniknac z ballparku."""
+        from argparse import Namespace
+
+        from kartograf.cli.commands import _resolve_laz_bbox
+        from kartograf.core import geometry as geom
+        from kartograf.providers.cuzk import dmr
+
+        args = Namespace(
+            godlo=None,
+            bbox="-788231,-1052442,-741087,-1013379",
+            bbox_crs="EPSG:5514",
+            geometry=None,
+        )
+        with (
+            patch.object(dmr, "bbox_to_crs", wraps=dmr.bbox_to_crs) as pinned,
+            patch.object(geom, "_transform_bbox", wraps=geom._transform_bbox) as plain,
+        ):
+            bbox = _resolve_laz_bbox(args)
+
+        assert bbox.crs == "EPSG:2180"
+        assert pinned.called
+        plain.assert_not_called()
+
+    def test_bbox_from_utm33n_uses_pinned_transform(self):
+        """Jak wyzej, ale dla drugiego czeskiego ukladu (EPSG:3045)."""
+        from argparse import Namespace
+
+        from kartograf.cli.commands import _resolve_laz_bbox
+        from kartograf.core import geometry as geom
+        from kartograf.providers.cuzk import dmr
+
+        args = Namespace(
+            godlo=None,
+            bbox="450000,5540000,455000,5545000",
+            bbox_crs="EPSG:3045",
+            geometry=None,
+        )
+        with (
+            patch.object(dmr, "bbox_to_crs", wraps=dmr.bbox_to_crs) as pinned,
+            patch.object(geom, "_transform_bbox", wraps=geom._transform_bbox) as plain,
+        ):
+            bbox = _resolve_laz_bbox(args)
+
+        assert bbox.crs == "EPSG:2180"
+        assert pinned.called
+        plain.assert_not_called()
+
 
 def _cz_args(tmp_path, **overrides):
     """Namespace dla bezposrednich wywolan _cmd_download_cz."""

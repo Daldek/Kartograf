@@ -189,8 +189,10 @@ def _bbox_to_wgs84(bbox: BBox) -> BBox:
 
     Uzywa transformacji z ``core/geometry`` (obwiednia z naroznikow): sluzy
     do ROZPOZNANIA kraju i przyciecia do jego obwiedni, a nie do zadania
-    pobrania — bboxy faktycznie wysylane do serwerow ida przez transformacje
-    przypieta (``_country_bbox`` -> ``bbox_to_crs``).
+    pobrania. Przypieta operacja (``_country_bbox`` -> ``bbox_to_crs``)
+    obowiazuje przy OPUSZCZANIU ukladow czeskich (Krovak/UTM33N) — dla
+    przycietego bboxa PL skok WGS84->EPSG:2180 idzie swiadomie domyslnym
+    (niepinowanym) transformerem pyproj, patrz ``_country_bbox``.
     """
     from pyproj import CRS
 
@@ -830,18 +832,29 @@ def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
             raise ValueError("BBOX must have 4 values: min_x,min_y,max_x,max_y")
         bbox = BBox(parts[0], parts[1], parts[2], parts[3], args.bbox_crs)
         if bbox.crs != "EPSG:2180":
-            from pyproj import CRS
+            from kartograf.providers.cuzk.client import wkid
 
-            from kartograf.core.geometry import _transform_bbox
+            if wkid(bbox.crs) in _CZ_CRS_WKIDS:
+                # Uklad czeski (Krovak/UTM33N) opuszczany WYLACZNIE przypieta
+                # operacja (jak _country_bbox) — niepinowany _transform_bbox
+                # (ballpark, nieznana dokladnosc) grozilby zla selekcja kafli
+                # LAZ na pasie granicznym.
+                from kartograf.providers.cuzk.dmr import bbox_to_crs
 
-            bbox = _transform_bbox(
-                bbox.min_x,
-                bbox.min_y,
-                bbox.max_x,
-                bbox.max_y,
-                CRS.from_user_input(bbox.crs),
-                "EPSG:2180",
-            )
+                bbox = bbox_to_crs(bbox, "EPSG:2180")
+            else:
+                from pyproj import CRS
+
+                from kartograf.core.geometry import _transform_bbox
+
+                bbox = _transform_bbox(
+                    bbox.min_x,
+                    bbox.min_y,
+                    bbox.max_x,
+                    bbox.max_y,
+                    CRS.from_user_input(bbox.crs),
+                    "EPSG:2180",
+                )
         return bbox
 
     # godło mode — SheetParser validates and transforms to EPSG:2180
