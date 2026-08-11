@@ -13,7 +13,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from kartograf.sources.descriptor import AccessChannel, SourceDescriptor
-from kartograf.sources.registry import vertical_crs_code
+from kartograf.sources.registry import resolve_vertical_crs
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ def build_metadata(
 
     vertical: str | None = None
     if channel.vertical_crs_options and vertical_crs is not None:
-        vertical = vertical_crs_code(vertical_crs)
+        vertical = resolve_vertical_crs(vertical_crs, channel.vertical_crs_options)
 
     nodata: float | None = None
     if data_path is not None and data_path.suffix.lower() == ".asc":
