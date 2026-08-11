@@ -666,11 +666,31 @@ Konsument sidecara ma dzis sygnal, ze reprojekcja w ogole zaszla i z jaka
 dokladnoscia; wczesniej `"server:EPSG:2180"` moglo znaczyc "blad 135 m".
 
 (f) **Fail-fast przed transferem.** Brak bezpiecznej operacji poziomej
-przerywa w konstruktorze providera (jak przy operacji pionowej Bpv→EVRF2007),
-zanim uzytkownik zaplaci za pobranie. Polityka: `_HORIZONTAL_POLICY`
-(`min_accuracy_m=1.0`, bez siatek z CDN) — ostrzejsza niz obwiedniowa
-(2 m), bo to jedyna operacja, ktora **przesuwa piksele**; znane operacje
-z Krovaka do 2180/3045 maja 0,5 m.
+przerywa, zanim uzytkownik zaplaci za pobranie — ale **w dwoch roznych
+miejscach**, bo uklad docelowy jest znany w dwoch roznych momentach:
+- `--target-crs` (tryb bbox/geometry): cel znany przy konstrukcji, wiec
+  operacja budowana jest **w konstruktorze providera**, jak pionowa
+  Bpv→EVRF2007; CLI tlumaczy wyjatek na komunikat z remedium przy tworzeniu
+  providera;
+- **godlo TM33**: `target_crs` jest `None` (godlo dostarcza produkt natywny
+  dla swojej siatki), a cel — EPSG:3045 — wynika dopiero z godla, wiec
+  operacja powstaje w `_export_raster()`, **przed** pierwszym zadaniem HTTP.
+  Wyjatek lapie dopiero `_run_cz()` w CLI (wspolny handler `TransformError`
+  dla calego przeplywu CZ) i drukuje ten sam komunikat z remedium. To
+  zabezpieczenie lezy daleko od miejsca rzucenia, wiec jest przypiete testem
+  `test_godlo_without_safe_horizontal_operation_exits_cleanly`.
+
+Polityka: `_HORIZONTAL_POLICY` (`min_accuracy_m=1.0`, bez siatek z CDN) —
+ostrzejsza niz obwiedniowa (2 m), bo to jedyna operacja, ktora **przesuwa
+piksele**; znane operacje z Krovaka do 2180/3045 maja 0,5 m.
+
+(g) **Wymuszenie operacji musi byc pilnowane osobnym testem.** Sam test
+tresci go NIE broni: po usunieciu `COORDINATE_OPERATION` warp nadal dziala
+i nadal trafia ~1,0 m od wzorca pyproj, czyli **wewnatrz** tolerancji
+1 px (2 m) testu tresci — zmierzone. `TestGdalOperation` sprawdza z kolei
+tylko postac stringa, nigdy jego uzycia. Dlatego
+`test_warp_forces_the_pinned_operation` (obie sciezki: bbox i godlo)
+asertuje wprost, ze do GDAL-a poszla operacja z `gdal_operation()`.
 
 **Konsekwencje:** Kazde pobranie CZ w ukladzie innym niz 5514 kosztuje jedno
 lokalne przeprobkowanie (bilinear) i nieco wiekszy transfer (obwiednia
@@ -678,8 +698,11 @@ prostokata obroconego wzgledem siatki + margines). Liczba przeprobkowan sie
 NIE zmienia — serwer i tak reprojektowal, tylko gorzej i bez sladu w
 metadanych. Nodata (`-9999`) nie wchodzi do interpolacji (maska GDAL,
 zweryfikowane testem), zapis pozostaje atomowy (tmp + `os.replace`), a wynik
-lezy na tej samej siatce co dotad (zasieg i rozmiar liczone identycznie jak
-w `CuzkClient.export_image`). BREAKING dla konsumentow sidecarow: inna
+lezy na tej samej siatce co dotad: **rozmiar w pikselach jest identyczny**,
+a zasieg — jak dotad — przyklejony do wielokrotnosci `pixel_size` liczonej od
+poludniowo-zachodniego naroza zadania (`round()` na liczbie pikseli, dokladnie
+jak w `CuzkClient.export_image`), wiec moze roznic sie od zadanego o **≤ ½
+piksela** na krawedzi. BREAKING dla konsumentow sidecarow: inna
 wartosc `transform.horizontal`, niepuste `transform` dla kafli TM33.
 Sciezka SM5 (DMR 4G z openzu) jest nietknieta — pliki przychodza w 5514.
 Regula "nie ufaj reprojekcji serwerowej" jest wiazaca takze dla przyszlych

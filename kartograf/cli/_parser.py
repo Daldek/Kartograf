@@ -66,8 +66,8 @@ def create_parser() -> argparse.ArgumentParser:
         description=(
             "Download geospatial data from GUGiK: NMT (terrain), NMPT (surface), "
             "or orthophoto. Dla PL --bbox rozwija sie na arkusze zrodlowe; dla CZ "
-            "--bbox zwraca jeden wycinek serwerowy (exportImage) — dane zrodlowe "
-            "1:1 daje tryb godlowy (TM33/SM5)."
+            "--bbox zwraca jeden wycinek (exportImage w ukladzie natywnym "
+            "EPSG:5514) — dane zrodlowe 1:1 daje tryb godlowy (TM33/SM5)."
         ),
     )
     download_parser.add_argument(
@@ -108,8 +108,9 @@ def create_parser() -> argparse.ArgumentParser:
         "--target-crs",
         choices=["EPSG:2180", "EPSG:5514", "EPSG:3045"],
         default=None,
-        help="Reprojekcja serwerowa wyniku (tylko CZ, tylko tryb --bbox/"
-        "--geometry; PL pobiera natywnie w EPSG:2180)",
+        help="Reprojekcja wyniku, wykonywana lokalnie przypieta operacja "
+        "(tylko CZ, tylko tryb --bbox/--geometry; PL pobiera natywnie "
+        "w EPSG:2180)",
     )
     download_parser.add_argument(
         "--scale",
