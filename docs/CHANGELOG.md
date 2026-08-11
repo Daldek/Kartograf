@@ -35,6 +35,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `download_cmd.py`, `landcover_cmd.py`, `soilgrids_cmd.py`,
     `cache_cmd.py`); `cli/commands.py` zostaje fasada zgodnosci (entry point
     bez zmian)
+- **Etap 1 — Czechy (CUZK)**
+  - `CuzkDmrProvider` + fabryka `create_dmr_provider` — DMR 5G/4G (CUZK),
+    godla TM33/SM5, bbox przez exportImage, opcjonalna transformacja
+    Bpv->EVRF2007 (EPSG:8357 -> EPSG:5621, offset +0,11..+0,15 m); endpointy
+    wylacznie z deskryptorow, naprawa metadanych CRS w plikach DMR4G-TIFF
 
 ### Changed
 - **BREAKING: glebokie sciezki importu providerow** (bez shimow — decyzja
