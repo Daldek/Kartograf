@@ -11,6 +11,7 @@ and supports time-based TTL for cache expiration.
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import sqlite3
@@ -22,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 # Default TTL: 7 days in seconds
 DEFAULT_TTL_SECONDS = 7 * 24 * 3600
+
+# TTL dla sheet_cache (indeks arkuszy CZ jest praktycznie staly): 30 dni.
+SHEET_TTL_SECONDS = 30 * 24 * 3600
 
 # Default database filename
 DEFAULT_DB_NAME = ".kartograf_cache.db"
@@ -98,6 +102,17 @@ class MetadataCache:
                     teryt TEXT NOT NULL,
                     cached_at REAL NOT NULL,
                     PRIMARY KEY (x, y)
+                )
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS sheet_cache (
+                    system    TEXT NOT NULL,
+                    godlo     TEXT NOT NULL,
+                    payload   TEXT NOT NULL,
+                    cached_at REAL NOT NULL,
+                    PRIMARY KEY (system, godlo)
                 )
                 """
             )
@@ -266,14 +281,54 @@ class MetadataCache:
         logger.debug(f"Cached TERYT {teryt} for ({x}, {y})")
 
     # =========================================================================
+    # Sheet cache (indeks arkuszy CZ: KladyMapovychListu)
+    # =========================================================================
+
+    def get_sheet(self, system: str, godlo: str) -> dict | None:
+        """Zwroc zdekodowany payload arkusza albo None (brak/wygasly)."""
+        cursor = self._conn.execute(
+            "SELECT payload, cached_at FROM sheet_cache WHERE system=? AND godlo=?",
+            (system, godlo),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            return None
+        payload, cached_at = row
+        if time.time() - cached_at >= SHEET_TTL_SECONDS:
+            logger.debug(f"Sheet cache expired for {system}/{godlo}")
+            with self._write_lock:
+                self._conn.execute(
+                    "DELETE FROM sheet_cache WHERE system=? AND godlo=?",
+                    (system, godlo),
+                )
+                self._conn.commit()
+            return None
+        logger.debug(f"Sheet cache hit for {system}/{godlo}")
+        return json.loads(payload)
+
+    def set_sheet(self, system: str, godlo: str, payload: dict) -> None:
+        """Zapisz payload arkusza (JSON) pod kluczem (system, godlo)."""
+        with self._write_lock:
+            self._conn.execute(
+                """
+                INSERT OR REPLACE INTO sheet_cache
+                (system, godlo, payload, cached_at) VALUES (?, ?, ?, ?)
+                """,
+                (system, godlo, json.dumps(payload, ensure_ascii=False), time.time()),
+            )
+            self._conn.commit()
+        logger.debug(f"Cached sheet {system}/{godlo}")
+
+    # =========================================================================
     # Management methods
     # =========================================================================
 
     def clear(self) -> None:
-        """Delete all cached entries from both tables."""
+        """Delete all cached entries from all tables."""
         with self._write_lock:
             self._conn.execute("DELETE FROM url_cache")
             self._conn.execute("DELETE FROM teryt_cache")
+            self._conn.execute("DELETE FROM sheet_cache")
             self._conn.commit()
         logger.info("Cache cleared")
 
@@ -293,11 +348,15 @@ class MetadataCache:
             Dictionary with keys:
             - url_count: number of cached URL entries
             - teryt_count: number of cached TERYT entries
+            - sheet_count: number of cached sheet entries
             - db_size_bytes: size of the database file in bytes
             - db_path: path to the database file
         """
         url_count = self._conn.execute("SELECT COUNT(*) FROM url_cache").fetchone()[0]
         teryt_count = self._conn.execute("SELECT COUNT(*) FROM teryt_cache").fetchone()[
+            0
+        ]
+        sheet_count = self._conn.execute("SELECT COUNT(*) FROM sheet_cache").fetchone()[
             0
         ]
 
@@ -308,6 +367,7 @@ class MetadataCache:
         return {
             "url_count": url_count,
             "teryt_count": teryt_count,
+            "sheet_count": sheet_count,
             "db_size_bytes": db_size,
             "db_path": str(self._db_path),
         }
@@ -328,12 +388,17 @@ class MetadataCache:
             url_deleted = self._conn.execute("SELECT changes()").fetchone()[0]
             self._conn.execute("DELETE FROM teryt_cache WHERE cached_at < ?", (cutoff,))
             teryt_deleted = self._conn.execute("SELECT changes()").fetchone()[0]
+            sheet_cutoff = now - SHEET_TTL_SECONDS
+            self._conn.execute(
+                "DELETE FROM sheet_cache WHERE cached_at < ?", (sheet_cutoff,)
+            )
+            sheet_deleted = self._conn.execute("SELECT changes()").fetchone()[0]
             self._conn.commit()
-        total = url_deleted + teryt_deleted
+        total = url_deleted + teryt_deleted + sheet_deleted
         if total > 0:
             logger.debug(
                 f"Pruned {total} expired entries "
-                f"({url_deleted} URL, {teryt_deleted} TERYT)"
+                f"({url_deleted} URL, {teryt_deleted} TERYT, {sheet_deleted} Sheet)"
             )
         return total
 

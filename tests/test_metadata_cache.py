@@ -235,6 +235,67 @@ class TestMetadataCacheTERYT:
 
 
 # =========================================================================
+# TestMetadataCacheSheet
+# =========================================================================
+
+
+class TestMetadataCacheSheet:
+    """Tabela sheet_cache (indeks arkuszy CZ) — TTL wg SHEET_TTL_SECONDS."""
+
+    _PAYLOAD = {
+        "godlo": "CTES96",
+        "name": "Cesky Tesin 8-6",
+        "bbox": [-450000.0, -1105000.0, -447500.0, -1103000.0],
+        "bbox_crs": "EPSG:5514",
+        "podil": 0.507,
+        "in_cz": None,
+    }
+
+    def test_set_and_get(self, cache):
+        cache.set_sheet("cz_sm5", "CTES96", self._PAYLOAD)
+        assert cache.get_sheet("cz_sm5", "CTES96") == self._PAYLOAD
+
+    def test_get_returns_none_when_missing(self, cache):
+        assert cache.get_sheet("cz_sm5", "XXXX99") is None
+
+    def test_systems_are_separate(self, cache):
+        cache.set_sheet("cz_sm5", "CTES96", self._PAYLOAD)
+        assert cache.get_sheet("cz_tm33", "CTES96") is None
+
+    def test_sheet_ttl_expiry(self, cache, monkeypatch):
+        cache.set_sheet("cz_sm5", "CTES96", self._PAYLOAD)
+        monkeypatch.setattr("kartograf.cache.metadata.SHEET_TTL_SECONDS", 0)
+        assert cache.get_sheet("cz_sm5", "CTES96") is None
+        # wpis usuniety oportunistycznie
+        row = cache._conn.execute("SELECT COUNT(*) FROM sheet_cache").fetchone()
+        assert row[0] == 0
+
+    def test_sheet_ttl_independent_from_url_ttl(self, cache_path):
+        """ttl_seconds=1 (url/teryt) nie dotyczy sheet_cache (TTL 30 dni)."""
+        c = MetadataCache(db_path=cache_path, ttl_seconds=1)
+        c.set_sheet("cz_sm5", "CTES96", self._PAYLOAD)
+        time.sleep(1.1)
+        assert c.get_sheet("cz_sm5", "CTES96") == self._PAYLOAD
+        c.close()
+
+    def test_prune_expired_covers_sheet_cache(self, cache, monkeypatch):
+        cache.set_sheet("cz_sm5", "CTES96", self._PAYLOAD)
+        monkeypatch.setattr("kartograf.cache.metadata.SHEET_TTL_SECONDS", 0)
+        assert cache.prune_expired() == 1
+
+    def test_old_database_gains_sheet_table(self, cache_path):
+        """Stara baza (bez sheet_cache) doposaza sie przy otwarciu."""
+        c = MetadataCache(db_path=cache_path)
+        c._conn.execute("DROP TABLE sheet_cache")
+        c._conn.commit()
+        c._conn.close()
+        c._conn = None
+        c2 = MetadataCache(db_path=cache_path)
+        assert c2.stats()["sheet_count"] == 0
+        c2.close()
+
+
+# =========================================================================
 # TestMetadataCacheManagement
 # =========================================================================
 
@@ -246,23 +307,28 @@ class TestMetadataCacheManagement:
         """Test that clear removes all entries."""
         cache.set_url("A", "1m", "EVRF2007", "nmt", "https://a.com")
         cache.set_teryt(1.0, 2.0, "1234")
+        cache.set_sheet("cz_sm5", "CTES96", {"podil": 0.5})
         cache.clear()
         assert cache.get_url("A", "1m", "EVRF2007", "nmt") is None
         assert cache.get_teryt(1.0, 2.0) is None
+        assert cache.get_sheet("cz_sm5", "CTES96") is None
 
     def test_stats(self, cache):
         """Test that stats returns correct counts."""
         st = cache.stats()
         assert st["url_count"] == 0
         assert st["teryt_count"] == 0
+        assert st["sheet_count"] == 0
 
         cache.set_url("A", "1m", "EVRF2007", "nmt", "https://a.com")
         cache.set_url("B", "1m", "EVRF2007", "nmt", "https://b.com")
         cache.set_teryt(1.0, 2.0, "1234")
+        cache.set_sheet("cz_sm5", "CTES96", {"podil": 0.5})
 
         st = cache.stats()
         assert st["url_count"] == 2
         assert st["teryt_count"] == 1
+        assert st["sheet_count"] == 1
         assert st["db_size_bytes"] > 0
         assert "db_path" in st
 
@@ -596,6 +662,7 @@ class TestCLICacheCommands:
         captured = capsys.readouterr()
         assert "URL entries" in captured.out
         assert "TERYT entries" in captured.out
+        assert "Sheet entries:" in captured.out
 
     def test_cmd_cache_clear(self, tmp_path, monkeypatch, capsys):
         """Test that 'cache clear' clears and vacuums."""
