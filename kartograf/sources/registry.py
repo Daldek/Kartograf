@@ -12,6 +12,7 @@ from kartograf.sources.descriptor import (
     CountryProfile,
     LicenseInfo,
     SourceDescriptor,
+    TileScheme,
     TransportKind,
 )
 
@@ -50,6 +51,12 @@ _SOILGRIDS_LICENSE = LicenseInfo(
     id="CC-BY-4.0",
     attribution="SoilGrids — ISRIC World Soil Information, CC BY 4.0",
     url="https://www.isric.org/explore/soilgrids",
+)
+
+_CUZK_LICENSE = LicenseInfo(
+    id="CC-BY-4.0",
+    attribution="Podklad: Cesky urad zememericky a katastralni (CUZK), CC BY 4.0",
+    url="https://geoportal.cuzk.gov.cz",
 )
 
 _PL_VERTICAL_BOTH = ("EPSG:9650", "EPSG:9651")
@@ -219,6 +226,81 @@ _SOURCES: dict[str, SourceDescriptor] = {
             default_extension=".tif",
             license=_SOILGRIDS_LICENSE,
         ),
+        SourceDescriptor(
+            key="cz.cuzk.dmr5g",
+            country="CZ",
+            product="nmt",
+            name="DMR 5G — Digitalni model reliefu (raster 2 m z exportImage)",
+            provider_name="CUZK",
+            channels=(
+                AccessChannel(
+                    transport=TransportKind.ARCGIS_IMAGE,
+                    horizontal_crs="EPSG:5514",
+                    vertical_crs_options=("EPSG:8357",),
+                    server_reprojection=True,
+                    capabilities=frozenset({"bbox_raster"}),
+                    endpoint=(
+                        "https://ags.cuzk.gov.cz/arcgis2/rest/services/"
+                        "dmr5g/ImageServer"
+                    ),
+                ),
+            ),
+            tile_scheme=TileScheme(
+                kind="computable",
+                crs="EPSG:3045",
+                width_m=2000.0,
+                height_m=2000.0,
+                description="TM33 {E_km}_{N_km}, naroznik SW",
+            ),
+            storage_subdir="cz_dmr5g",
+            default_extension=".tif",
+            license=_CUZK_LICENSE,
+            resolution="2m",
+        ),
+        SourceDescriptor(
+            key="cz.cuzk.dmr4g",
+            country="CZ",
+            product="nmt",
+            name="DMR 4G — Digitalni model reliefu (GeoTIFF 5 m, arkusze SM5)",
+            provider_name="CUZK",
+            channels=(
+                AccessChannel(
+                    transport=TransportKind.DIRECT_FILES,
+                    horizontal_crs="EPSG:5514",
+                    vertical_crs_options=("EPSG:8357",),
+                    capabilities=frozenset({"sheet_files"}),
+                    endpoint=(
+                        "https://openzu.cuzk.gov.cz/opendata/DMR4G-TIFF/"
+                        "epsg-5514/{sheet}.zip"
+                    ),
+                ),
+                AccessChannel(
+                    transport=TransportKind.ARCGIS_IMAGE,
+                    horizontal_crs="EPSG:5514",
+                    vertical_crs_options=("EPSG:8357",),
+                    server_reprojection=True,
+                    capabilities=frozenset({"bbox_raster"}),
+                    endpoint=(
+                        "https://ags.cuzk.gov.cz/arcgis2/rest/services/"
+                        "dmr4g/ImageServer"
+                    ),
+                ),
+            ),
+            tile_scheme=TileScheme(
+                kind="index",
+                crs="EPSG:5514",
+                width_m=2500.0,
+                height_m=2000.0,
+                description=(
+                    "SM5: 4 litery miasta + 2 cyfry; "
+                    "indeks KladyMapovychListu w. 24"
+                ),
+            ),
+            storage_subdir="cz_dmr4g",
+            default_extension=".tif",
+            license=_CUZK_LICENSE,
+            resolution="5m",
+        ),
     )
 }
 
@@ -228,6 +310,12 @@ _COUNTRIES: dict[str, CountryProfile] = {
         name="Polska",
         extent_wgs84=BBox(14.07, 49.00, 24.20, 54.90, "EPSG:4326"),
         dataset_keys=tuple(sorted(k for k in _SOURCES if k.startswith("pl."))),
+    ),
+    "CZ": CountryProfile(
+        code="CZ",
+        name="Czechy",
+        extent_wgs84=BBox(12.09, 48.55, 18.86, 51.06, "EPSG:4326"),
+        dataset_keys=("cz.cuzk.dmr4g", "cz.cuzk.dmr5g"),
     ),
 }
 
@@ -262,6 +350,11 @@ def get_country(code: str) -> CountryProfile:
         raise KeyError(
             f"Nieznany kraj: '{code}'. Dostepne: {sorted(_COUNTRIES)}"
         ) from None
+
+
+def all_countries() -> list[CountryProfile]:
+    """Wszystkie profile krajow, deterministycznie po kodzie (dla --country auto)."""
+    return [_COUNTRIES[code] for code in sorted(_COUNTRIES)]
 
 
 def vertical_crs_code(name: str) -> str:
