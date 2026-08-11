@@ -394,6 +394,193 @@ Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja
 
 ---
 
+## ADR-023: Silnik CUZK, polityka układów CZ i EVRF2007→5621 (etap 1)
+
+**Data:** 2026-08-11
+**Status:** Przyjeta
+
+**Kontekst:** Etap 1 dodaje pierwsze zagraniczne zrodlo danych — CUZK (Czeski
+Urzad Zememericky a Katastralni), DMR 5G (2 m, `exportImage`) i DMR 4G (5 m,
+pliki openzu + `exportImage`). To pierwszy realny konsument architektury
+etapu 0 (deskryptory, sidecar, `transform/crs.py`), wiec kilka decyzji z
+etapu 0 oznaczonych jako "odroczone do etapu 1" (formalny interfejs silnika,
+jawna selekcja kanalu, probe pod polityka sieci) musialo zostac domknietych.
+Rekonesans na zywo (`docs/research/2026-08-11-etap1-rekonesans.md`) i E2E
+(`docs/research/2026-08-11-etap1-e2e.md`) zweryfikowaly zalozenia specu i
+wymusily kilka korekt (m.in. limit `exportImage` asymetryczny 15000x4100 px,
+CRS z `exportImage`/openzu zawsze wymaga nadpisania, `PODIL`/`MAPNAME`
+rzeczywiste wartosci CTES96). Konsultacja z uzytkownikiem przy planie
+(2026-08-11) rozstrzygnela trzy otwarte pytania specu (`parent_request`,
+`--target-crs` + godlo, polimorfizm `PinnedTransform.transform`).
+
+**Decyzje:**
+
+(a) **`CuzkClient` (`kartograf/providers/cuzk/client.py`) jako pierwszy silnik
+sterowany deskryptorem.** Metody `query()`, `export_image()`, `fetch_file()`
+sa generyczne, parametryzowane URL-em z `AccessChannel.endpoint` (nowe pole
+deskryptora) — klient nie zna godel, produktow ani sidecarow (por. docstring
+modulu). To realizuje zapowiedz ADR-022 ("formalny interfejs silnika powstanie
+w etapie 1 przy CuzkClient"). Mimo to `CuzkClient` **zostaje** w
+`providers/cuzk/`, nie w `transport/` — ekstrakcja wspolnego "silnika ArcGIS
+REST" (analogicznie do `transport/http.py`/`transport/mosaic.py`) jest
+swiadomie odroczona do **drugiego konsumenta** tego samego wzorca (DE/SK maja
+podobne API REST/WCS) — jeden konsument nie uzasadnia jeszcze abstrakcji
+(zgodnie z odrzuceniem opcji C w ADR-022).
+
+(b) **Przeplyw CZ omija `DownloadManager`** — precedens LAZ (ADR-021).
+`CuzkDmrProvider` i CLI (`_cmd_download_cz`) nie wolaja
+`download_sheet()`/`download_bbox()`; maja wlasny przeplyw, bo model danych
+CZ rozni sie strukturalnie od PL: godlo CZ (TM33 lub SM5) **zawsze** daje
+dokladnie jeden plik — nie ma hierarchii arkuszy do rozwijania jak w PL-1992.
+API `DownloadManager` pozostaje nietkniete; jedynym punktem styku jest
+addytywny parametr `sidecar_extra` (Zad. 13), uzywany przez CLI PL w trybie
+`--bbox`/`--geometry` (Zad. 17) do wpiecia wspolnego `parent_request`.
+
+(c) **TM33 w trybie godlowym pobierany w EPSG:3045; asymetria trybu bbox
+PL/CZ.** Siatka kafli TM33 (2x2 km, `{E_km}_{N_km}`) jest zdefiniowana w
+ETRS89/UTM33N (EPSG:3045, `ParserTM33` — obliczalna matematycznie, wzor jak
+`Parser2000`), mimo ze dane DMR 5G leza natywnie w S-JTSK/Krovak (EPSG:5514,
+`AccessChannel.horizontal_crs` kanalu `ARCGIS_IMAGE`). Pobranie godlem zada
+wiec `exportImage` z `bboxSR=imageSR=3045` — serwer reprojektuje w locie;
+"natywny" produkt trybu godlowego CZ to 3045 (definicja siatki kafli), nie
+5514 (katalog danych danych). To tworzy jawna asymetrie wzgledem PL: `--bbox` w PL
+zwraca **liste arkuszy** OpenData (wiele plikow po godle, `find_sheets_for_bbox`
++ petla pobran), `--bbox` w CZ zwraca **jeden plik** — bezposredni wycinek
+serwerowy `exportImage`, bo CZ nie ma odpowiednika "OpenData po dowolnym
+bboxie". Asymetria jest udokumentowana (research krok 5, spec), nie ukrywana.
+
+(d) **EVRF2007 = EPSG:5621 globalnie + mapa rodzina→realizacja** (BREAKING
+ograniczony do `vertical_crs_code`). Decyzja uzytkownika 2026-08-11:
+`vertical_crs_code("EVRF2007")` zwraca teraz ogolnoeuropejski **EPSG:5621**
+(nie polska realizacje EPSG:9651) — bo `EVRF2007` jest teraz nazwa RODZINY
+ukladow, wspolna dla PL i CZ (Bpv→EVRF2007 to operacja do 5621, nie do
+zadnej realizacji krajowej). Nowa funkcja `resolve_vertical_crs(name, options)`
+mapuje nazwe na kod rodziny, ale jesli kanal deklaruje w
+`vertical_crs_options` realizacje krajowa (PL: EPSG:9651) zamiast kodu
+rodziny, zwraca realizacje. Efekt: sidecary PL nadal niosa faktyczny kod
+9651 (tresc bez zmian), a BREAKING dotyczy **wylacznie** bezposrednich wywolan
+`vertical_crs_code("EVRF2007")` spoza Kartografu (Hydrograf/Hydrolog, jesli
+wolaja funkcje wprost). Mapa starego/nowego kodu — patrz CHANGELOG.
+
+(e) **`Bpv` = EPSG:8357 (Baltic 1957, nie 1977); pionowa 8357→5621 przypieta
+operacja 0,1 m; KRON86 nieosiagalny dla CZ.** Natywny uklad wysokosciowy
+CUZK to Bpv (Baltický po vyrovnání) = EPSG:8357, realizacja **Baltic 1957**
+(potwierdzone przez `vcsWkid` uslug `ImageServer` oraz nazwe operacji PROJ
+"Baltic 1957 height to EVRF2007 height (1)") — **nie** Baltic 1977
+(EPSG:5705, inna realizacja, latwa do pomylenia z nazwy). Transformacja
+8357→5621 jest przypieta operacja EPSG o dokladnosci 0,1 m; offset zmierzony
+na zywo (E2E, 64722 pikseli) to **+0,132366 m** (std 2,22e-05), w oczekiwanym
+zakresie rekonesansu +0,112..+0,148 m (gradient ~+0,014 m/stopien szerokosci,
+rosnacy S→N). Transformacja 8357→9650 (KRON86, polska realizacja
+Kronsztadt 86) jest **nieosiagalna** — jedyne sciezki PROJ sa ballpark
+(siatki `pl86_2019`/`pl07_2019` nie sa publiczne) i sa twardo odrzucane
+przez `allow_ballpark=False` (ADR-022); uzytkownik dostaje
+`TransformUnavailableError` z remedium ("zainstaluj siatki recznie do
+`PROJ_DATA` albo uzyj EVRF2007 (EPSG:5621)").
+
+(f) **Rozstrzygniecia z konsultacji 2026-08-11 (wiazace):**
+1. `extra.parent_request` jest zapisywany **zawsze** w trybie
+   `--bbox`/`--geometry` (auto I jawny `--country`), **nigdy** w trybie
+   godlowym. Klucz grupowania to identyczny `bbox`+`bbox_crs` — umozliwia
+   scenariusz dwuetapowego dociagania drugiego kraju dla tego samego zadania
+   (np. najpierw `--country pl`, potem `--country cz` dla tego samego bboxa:
+   oba zestawy sidecarow beda mialy ten sam `parent_request` i da sie je
+   pogrupowac po stronie Hydrografu).
+2. `--target-crs` razem z godlem CZ jest twardym `ValidationError`
+   (reprojekcja serwerowa ma sens tylko wzgledem zadanego obszaru
+   `--bbox`/`--geometry`; pojedynczy kafel pobrany godlem jest z definicji
+   juz-natywnym produktem 1:1 — patrz tez punkt 1 nizej).
+3. `PinnedTransform.transform` jest **polimorficzne** (skalary lub tablice
+   `numpy`, `np.isfinite` zamiast `math.isfinite`) zamiast osobnej metody
+   `transform_grid` — rekonesans (Zad. 1, krok 7d) pokazal, ze
+   `math.isfinite` rzuca `TypeError` na `numpy.ndarray`, a transformacja
+   pionowa per-piksel calego rastra (Zad. 12) wymaga wywolania tablicowego.
+
+(g) **Sentinele `None` dla `--resolution`/`--vertical-crs`/`--system`
+rozwiazywane per kraj.** CLI (`cli/_parser.py`) zmienilo domyslne wartosci
+tych trzech flag z twardo zakodowanych PL-owych domyslnych na sentinel
+`None`, rozwiazywany dopiero po ustaleniu kraju docelowego (z godla lub
+`--country`) — PL i CZ maja rozlaczne domyslne (PL: 1m/EVRF2007/1992 bez
+zmian; CZ: 2m/Bpv, `--system` nie dotyczy). Jeden `argparse.ArgumentParser`
+obsluguje oba kraje bez duplikowania definicji flag i bez zgadywania kraju
+przed jego ustaleniem.
+
+**Ustalenia dodatkowe (domkniecie zobowiazan zebranych w trakcie
+implementacji — patrz `.superpowers/sdd/2026-08-11-etap1-cz-fundament-dmr/progress.md`):**
+
+1. **Semantyka `transform.horizontal` w sidecarach = "reprojekcja zamowiona
+   przez uzytkownika (`--target-crs`)", NIE "praca serwera".** Kafel TM33
+   pobrany godlem jest serwerowo reprojektowany 5514→3045 wewnatrz
+   `exportImage` (dane leza natywnie w Krovaku), a mimo to jego sidecar ma
+   `transform: null` — bo z perspektywy uzytkownika godlo CZ zawsze
+   dostarcza natywny produkt 1:1 (uklad zdefiniowany schematem kafli, patrz
+   punkt c). Bbox z `--target-crs EPSG:3045`/`EPSG:2180` ma
+   `transform.horizontal = "server:EPSG:<kod>"` — bo tam uzytkownik jawnie
+   zazadal ukladu innego niz natywny dla danego trybu. Implementacja:
+   `_write_cz_sidecar()` (`cli/download_cmd.py`) ustawia `transform.horizontal`
+   TYLKO gdy `server_crs` (jawnie zadany `--target-crs`) rozni sie od
+   natywnego ukladu kanalu przed nadpisaniem — nie od faktycznego SR danych
+   zrodlowych na serwerze. Decyzja: sidecar opisuje **zadanie transformacji
+   wzgledem natywnego produktu trybu**, nie wewnetrzna mechanike serwera —
+   spojne z rola sidecara jako kontraktu dla Hydrografu (co dostal, nie jak
+   to policzono).
+2. **Eager import `rasterio` przy `import kartograf`** (eksporty CZ w
+   `__init__.py`, Zad. 18): `providers/cuzk/client.py` importuje `rasterio`
+   na poziomie modulu (potrzebne do `export_image`/`fetch_file`), a
+   `CuzkDmrProvider` importuje `client.py` na poziomie modulu — w efekcie
+   zwykle `import kartograf` **po raz pierwszy** laduje eagerly `rasterio`
+   (GDAL/PROJ bindings), zmierzony koszt **+55–65 ms** (z ~185 ms do ~244 ms,
+   3x pomiar `time.perf_counter()`). To zmiana **failure-domain**: zepsuty
+   GDAL/PROJ (np. brakujaca biblioteka natywna w srodowisku Hydrografu/
+   Hydrologu) psuje teraz sam `import kartograf`, nie dopiero pierwsze
+   wywolanie funkcji rastrowej. Decyzja: zaakceptowano wariant prosty (eager,
+   plain top-level import, spojny stylistycznie z reszta `__init__.py` —
+   `GugikOrtoProvider`, `Bdot10kProvider` itp. sa eksportowane identycznie),
+   NIE wprowadzono lazy-loadingu (`__getattr__`/PEP 562) w `__init__.py` —
+   `rasterio` jest i tak twardym, wymaganym zaleznosciem calego pakietu
+   (pyproject: `rasterio >= 1.3.0`), wiec to przesuniecie w czasie momentu
+   zaladowania, nie nowa zaleznosc; a niemal kazda realna operacja CLI na
+   danych CZ i tak natychmiast potrzebuje `rasterio`. **Sciezka przyszlej
+   naprawy** (poza zakresem etapu 1): przeniesc `import rasterio`/
+   `from rasterio.crs import CRS` w `providers/cuzk/client.py` i `dmr.py` na
+   poziom funkcji/metod, analogicznie do wzorca juz stosowanego w
+   `hydrology/hsg.py` i `transport/mosaic.py` — przywrocilyby lazy-loading
+   bez zmiany publicznego API.
+3. **`parent_request.countries` to kraje PROBOWANE, nie pobrane.** Przy
+   awarii jednego kraju w trybie `--country auto` (np. CZ zwraca
+   `DownloadError`), sidecary pozostalego kraju (PL) nadal niosa
+   `countries: ["CZ", "PL"]` — pole opisuje zamiar zadania (ktore kraje
+   przecina bbox), nie fakt sukcesu pobrania per kraj. Dodatkowo
+   `parent_request.bbox_crs` **rozni sie per tryb dla tego samego pliku
+   geometrii**: jawny `--country cz` zapisuje CRS pliku geometrii (np.
+   EPSG:5514/3045), a `auto`/jawny `--country pl` zapisuje EPSG:2180 —
+   wiec ten sam plik `.shp` uzyty w dwoch wywolaniach CLI (raz `--country cz`,
+   raz bez flagi) NIE wyprodukuje identycznego `parent_request` mimo
+   identycznego zadania uzytkownika. To znane ograniczenie klucza
+   grupowania (punkt f.1) — do ujednolicenia w etapie 2 (patrz tez
+   `docs/SCOPE.md`, sekcja ograniczen).
+4. **Prostokatne extenty krajow wysylaja zapytania CUZK takze poza faktyczna
+   granica CZ.** `CountryProfile.extent_wgs84` dla CZ to prostokat
+   `BBox(12.09, 48.55, 18.86, 51.06)` (obwiednia, nie wielokat granicy) —
+   kazde zadanie `--country auto` w poludniowej Polsce (lon < 18,86°E,
+   lat < 51,06°N — pas siegajacy np. okolic Krakowa/Rzeszowa) wysyla
+   zapytanie do CUZK, mimo ze bbox realnie lezy w calosci w Polsce. Skutek:
+   dodatkowy raster wypelniony `nodata` (`-9999`) + dodatkowy sidecar CZ bez
+   uzytecznych danych, a nie blad — ale zbedny ruch sieciowy i plik.
+   Wlasciwa naprawa (wielokat granicy administracyjnej zamiast prostokata)
+   jest zaplanowana na etap 2 (patrz `docs/SCOPE.md`).
+
+**Konsekwencje:** Pelna parytetowosc produktowa DMR miedzy PL i CZ (godlo,
+bbox, transformacja pozioma/pionowa opcjonalna). 1381 testow zielonych
+(+244 wzgledem stanu po etapie 0), pokrycie ~89%, ruff/mypy bez nowego
+dlugu wzgledem baseline, E2E 11/11 PASS na zywych danych CUZK+GUGiK
+(`docs/research/2026-08-11-etap1-e2e.md`). BREAKING ograniczone do
+`vertical_crs_code()` (funkcja publiczna, ale niszowa — wiekszosc
+konsumentow uzywa sidecarow, ktore niosa faktyczny kod bez zmian tresci).
+Etap 2 (DMP/Orto/LAZ CZ, wielokat granicy, ujednolicenie `parent_request`)
+buduje na tym samym `CuzkClient`/deskryptorach — kolejny konsument moze
+uzasadnic ekstrakcje silnika do `transport/` (punkt a).
+
 <!-- Szablon nowej decyzji:
 
 ## ADR-XXX: Tytul
