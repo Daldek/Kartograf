@@ -85,6 +85,105 @@ def _create_provider_and_storage(product, output_dir, vertical_crs, resolution):
     return provider, storage
 
 
+_CZ_ONLY_NMT_MSG = (
+    "Error: --product {product} dla CZ bedzie dostepny w etapie 2 — teraz tylko nmt"
+)
+
+
+def _reject_non_nmt_for_cz(product: str) -> bool:
+    """
+    True (po komunikacie na stderr), gdy produkt CZ jest inny niz ``nmt``.
+
+    Guard zyje w warstwie dyspozycji — przeplyw ``_cmd_download_cz`` zaklada
+    juz rozstrzygniety produkt.
+    """
+    if product == "nmt":
+        return False
+    print(_CZ_ONLY_NMT_MSG.format(product=product), file=sys.stderr)
+    return True
+
+
+def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
+    """
+    Rozwiaz sentinele None na polskie domysly; walidacje PL.
+
+    Wywolywane WYLACZNIE na galezi PL, po rozstrzygnieciu kraju — mutuje
+    ``args``, wiec argumenty lecace do CZ musza zachowac wartosc ``None``
+    (``_cmd_download_cz`` odroznia „nie podano" od wartosci polskiej).
+
+    Returns
+    -------
+    int
+        0 = OK, 1 = blad (komunikat juz wypisany na stderr)
+    """
+    args.resolution = getattr(args, "resolution", None) or "1m"
+    args.vertical_crs = getattr(args, "vertical_crs", None) or "EVRF2007"
+    args.system = getattr(args, "system", None) or "1992"
+
+    if args.resolution == "2m":
+        print(
+            "Error: PL nie ma rozdzielczosci 2m — dostepne: 1m, 5m (2m to DMR 5G w CZ)",
+            file=sys.stderr,
+        )
+        return 1
+    if args.vertical_crs == "Bpv":
+        print(
+            "Error: Bpv to uklad czeski — dla PL dostepne: KRON86, EVRF2007",
+            file=sys.stderr,
+        )
+        return 1
+    if getattr(args, "target_crs", None) is not None:
+        print(
+            "Error: --target-crs dziala tylko dla CZ — PL pobiera natywnie w EPSG:2180",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
+def _run_cz(
+    args: argparse.Namespace,
+    bbox: BBox | None = None,
+    parent_request: dict | None = None,
+) -> int:
+    """
+    Wywolaj przeplyw CZ, tlumaczac ValidationError na komunikat CLI.
+
+    ``main`` nie lapi wyjatkow, a ``_cmd_download_cz`` sygnalizuje sprzeczne
+    zadanie (np. ``--target-crs`` z godlem) wyjatkiem — dyspozycja jest
+    ostatnim miejscem, w ktorym moze on zostac zamieniony na kod wyjscia
+    zamiast tracebacku.
+    """
+    try:
+        return _cmd_download_cz(args, bbox=bbox, parent_request=parent_request)
+    except ValidationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+
+def _resolve_cz_geometry_bbox(args: argparse.Namespace) -> BBox | None:
+    """
+    Obwiednia geometrii w Krovaku dla przeplywu CZ (None => blad wypisany).
+
+    CUZK nie przyjmuje pliku geometrii — zadanie obszarowe to jeden wycinek
+    ``exportImage``, wiec geometria sprowadza sie tu do obwiedni (jak
+    w przeplywie LAZ, tyle ze w EPSG:5514 zamiast EPSG:2180).
+    """
+    from kartograf.core.geometry import get_overall_bbox
+
+    filepath = Path(args.geometry)
+    if not filepath.exists():
+        print(f"Error: File not found: {filepath}", file=sys.stderr)
+        return None
+    try:
+        return get_overall_bbox(
+            filepath, layer=getattr(args, "layer", None), target_crs="EPSG:5514"
+        )
+    except (ValidationError, ValueError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return None
+
+
 def cmd_download(args: argparse.Namespace) -> int:
     """
     Execute the download command.
@@ -99,12 +198,6 @@ def cmd_download(args: argparse.Namespace) -> int:
     int
         Exit code (0 for success, 1 for error)
     """
-    # TYMCZASOWE (Zad. 14): sentinele -> polskie domysly; Zad. 16 zastapi
-    # to pelna dyspozycja per kraj (_resolve_pl_sentinels)
-    args.resolution = args.resolution or "1m"
-    args.vertical_crs = args.vertical_crs or "EVRF2007"
-    args.system = getattr(args, "system", None) or "1992"
-
     has_godlo = args.godlo is not None
     has_bbox = args.bbox is not None
     has_geometry = getattr(args, "geometry", None) is not None
@@ -124,9 +217,52 @@ def cmd_download(args: argparse.Namespace) -> int:
         )
         return 1
 
+    # --- Dyspozycja per kraj: godlo rozstrzyga kraj przez rejestr systemow ---
+    from kartograf.core.parser_registry import detect_system
+
+    country_flag = getattr(args, "country", "auto")
+    product = getattr(args, "product", "nmt")
+
+    if has_godlo:
+        system = detect_system(args.godlo)
+        # rejestr konczy sie fallbackiem pl1992 (zawsze pasuje) — None tylko
+        # gdyby rejestr byl pusty
+        system_id = system.id if system is not None else "pl1992"
+        system_country = system.country if system is not None else "PL"
+        if country_flag != "auto" and country_flag.upper() != system_country:
+            print(
+                f"Error: Godlo '{args.godlo}' nalezy do systemu {system_id} "
+                f"(kraj {system_country}), a podano --country {country_flag}",
+                file=sys.stderr,
+            )
+            return 1
+        if system_country == "CZ":
+            if _reject_non_nmt_for_cz(product):
+                return 1
+            return _run_cz(args)
+        if _resolve_pl_sentinels(args):
+            return 1
+
     # --- Produkt LAZ: dyskretny przepływ area→WFS→tiles (wszystkie 3 tryby) ---
-    if getattr(args, "product", "nmt") == "laz":
+    if product == "laz":
         return _cmd_download_laz(args)
+
+    # TYMCZASOWE (Zad. 17 zastapi auto-splitem): tryby obszarowe nie dziela
+    # jeszcze zadania per kraj — jawny --country cz idzie w calosci do CUZK
+    # (bez parent_request, ktore dolozy Zad. 17), a pl/auto zachowuje sie
+    # jak dotychczas, czyli PL.
+    if has_bbox or has_geometry:
+        if country_flag == "cz":
+            if _reject_non_nmt_for_cz(product):
+                return 1
+            bbox = None
+            if has_geometry:
+                bbox = _resolve_cz_geometry_bbox(args)
+                if bbox is None:
+                    return 1  # error already printed
+            return _run_cz(args, bbox=bbox)
+        if _resolve_pl_sentinels(args):
+            return 1
 
     # --- Tryb geometry ---
     if has_geometry:
@@ -474,6 +610,14 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     from kartograf.download.storage import FileStorage
     from kartograf.providers.pl.gugik_laz import GugikLazProvider
 
+    # godlo CZ + laz odpada juz w dyspozycji; tu zostaje jawny --country cz
+    # w trybie obszarowym (LAZ omija galezie bbox/geometry w cmd_download)
+    if getattr(args, "country", "auto") == "cz":
+        print(_CZ_ONLY_NMT_MSG.format(product="laz"), file=sys.stderr)
+        return 1
+    if _resolve_pl_sentinels(args):
+        return 1
+
     try:
         bbox = _resolve_laz_bbox(args)
     except (ParseError, ValidationError, ValueError) as e:
@@ -482,7 +626,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     if bbox is None:
         return 1  # error already printed
 
-    vertical_crs = getattr(args, "vertical_crs", "EVRF2007")
+    vertical_crs = args.vertical_crs
     year = getattr(args, "year", None)
     min_density = getattr(args, "min_density", None)
     workers = getattr(args, "workers", 4) or 1
