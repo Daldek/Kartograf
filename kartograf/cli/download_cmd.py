@@ -553,6 +553,290 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     return 0
 
 
+def _read_tif_nodata(path: Path) -> float | None:
+    """Nodata z tagu GeoTIFF (None gdy brak/nieczytelny)."""
+    try:
+        import rasterio
+
+        with rasterio.open(path) as src:
+            return src.nodata
+    except Exception:  # noqa: BLE001 — metadane wzbogacone < dane
+        return None
+
+
+def _write_cz_sidecar(
+    provider,
+    target: Path,
+    *,
+    request: dict,
+    capability: str,
+    horizontal_crs: str,
+    nodata: float | None,
+    server_crs: str | None = None,
+    extra: dict | None = None,
+) -> None:
+    """Best-effort sidecar dla wyniku CZ (blad nie przerywa pobrania).
+
+    `horizontal_crs` to uklad FAKTYCZNEGO wyniku (kafel TM33: EPSG:3045,
+    --target-crs: uklad zadany serwerowi), a nie domyslny uklad kanalu.
+    """
+    import logging
+
+    try:
+        from kartograf.providers.cuzk.client import _wkid
+        from kartograf.sources.registry import get_source
+        from kartograf.sources.sidecar import build_metadata, write_sidecar
+
+        meta = build_metadata(
+            get_source(provider.descriptor_key),
+            request=request,
+            vertical_crs=provider.vertical_crs,
+            capability=capability,
+            nodata=nodata,
+            extra=extra,
+        )
+        transform: dict = {}
+        # tylko FAKTYCZNA reprojekcja serwerowa — zadanie o uklad natywny kanalu
+        # (meta.horizontal_crs przed nadpisaniem) transformacja nie jest
+        if server_crs is not None and _wkid(server_crs) != _wkid(meta.horizontal_crs):
+            transform["horizontal"] = f"server:{server_crs}"
+        pinned = provider.vertical_transform
+        if pinned is not None:
+            transform["vertical"] = (
+                f"pinned: {pinned.description} ({pinned.accuracy_m} m)"
+            )
+        meta.transform = transform or None
+        meta.horizontal_crs = horizontal_crs
+        write_sidecar(target, meta)
+    except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
+        logging.getLogger(__name__).warning(
+            f"Nie udalo sie zapisac sidecara dla {target}: {e}"
+        )
+
+
+def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> int:
+    """Godlo CZ: kafel TM33 (exportImage) lub arkusz SM5 (openzu) do FileStorage."""
+    import logging
+
+    from kartograf.core.parser_registry import detect_system
+    from kartograf.download.storage import FileStorage
+    from kartograf.sources.registry import get_source
+
+    godlo = args.godlo
+    system = detect_system(godlo)
+    descriptor = get_source(provider.descriptor_key)
+    storage = FileStorage(args.output, subdir=descriptor.storage_subdir)
+    target = storage.get_raw_path(godlo, f"{godlo}{descriptor.default_extension}")
+
+    if skip_existing and target.exists():
+        if not quiet:
+            print(f"Skipped {godlo} - already exists at {target}")
+        return 0
+
+    if not quiet:
+        print(f"Downloading {godlo} (CZ, resolution: {provider.resolution})...")
+    try:
+        provider.download(godlo, target)
+    except (DownloadError, ValidationError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    is_sm5 = system is not None and system.id == "cz_sm5"
+    extra: dict = {}
+    if is_sm5:
+        try:
+            info = provider.sheet_index.sm5_sheet(godlo)
+            if info.name is not None:
+                extra["mapname"] = info.name
+            if info.podil is not None:
+                extra["podil"] = info.podil
+        except Exception as e:  # noqa: BLE001 — dane wazniejsze niz metadane
+            logging.getLogger(__name__).warning(
+                f"Sidecar {godlo} bez PODIL (blad indeksu): {e}"
+            )
+    _write_cz_sidecar(
+        provider,
+        target,
+        request={"godlo": godlo},
+        capability="sheet_files" if is_sm5 else "bbox_raster",
+        # arkusz SM5 przychodzi w Krovaku, kafel TM33 w siatce UTM33/ETRS89
+        horizontal_crs="EPSG:5514" if is_sm5 else "EPSG:3045",
+        nodata=_read_tif_nodata(target),
+        extra=extra or None,
+    )
+    if not quiet:
+        print(f"Downloaded to {target}")
+    return 0
+
+
+def _cz_download_bbox(
+    args,
+    provider,
+    bbox: BBox | None,
+    parent_request: dict | None,
+    *,
+    quiet: bool,
+    skip_existing: bool,
+) -> int:
+    """Bbox CZ: jeden wycinek serwerowy plasko w katalogu wyjsciowym."""
+    from kartograf.providers.cuzk.client import _wkid
+    from kartograf.providers.cuzk.dmr import CUZK_NODATA, _bbox_to_crs
+    from kartograf.sources.registry import get_source
+
+    if bbox is None:
+        try:
+            parts = [float(x.strip()) for x in args.bbox.split(",")]
+            if len(parts) != 4:
+                raise ValueError("BBOX must have 4 values")
+            bbox = BBox(parts[0], parts[1], parts[2], parts[3], args.bbox_crs)
+        except ValueError as e:
+            print(f"Error: Invalid bbox format: {e}", file=sys.stderr)
+            return 1
+
+    image_sr = args.target_crs or "EPSG:5514"
+    if _wkid(bbox.crs) != _wkid(image_sr):
+        # normalizacja PRZED nazwaniem pliku: nazwa niesie wspolrzedne
+        # faktycznie zadanego wycinka (w download_bbox to juz no-op)
+        bbox = _bbox_to_crs(bbox, image_sr)
+
+    descriptor = get_source(provider.descriptor_key)
+    coords = "_".join(
+        format(v, ".10g") for v in (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
+    )
+    target = Path(args.output) / (
+        f"{descriptor.storage_subdir}_{coords}{descriptor.default_extension}"
+    )
+
+    if skip_existing and target.exists():
+        if not quiet:
+            print(f"Skipped - already exists at {target}")
+        return 0
+
+    if not quiet:
+        print(f"Downloading CZ bbox ({provider.resolution}, {image_sr})...")
+    try:
+        provider.download_bbox(bbox, target)
+    except (DownloadError, ValidationError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    nodata = _read_tif_nodata(target)
+    _write_cz_sidecar(
+        provider,
+        target,
+        request={
+            "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+            "bbox_crs": bbox.crs,
+        },
+        capability="bbox_raster",
+        horizontal_crs=image_sr,
+        nodata=nodata if nodata is not None else CUZK_NODATA,
+        server_crs=args.target_crs,
+        extra={"parent_request": parent_request} if parent_request else None,
+    )
+    if not quiet:
+        print(f"Downloaded to {target}")
+    return 0
+
+
+def _cmd_download_cz(
+    args: argparse.Namespace,
+    bbox: BBox | None = None,
+    parent_request: dict | None = None,
+) -> int:
+    """
+    Handle the download command for Czech (CUZK) sources.
+
+    Wzor: :func:`_cmd_download_laz` — przeplyw poza ``DownloadManager``, bo
+    zadanie CZ daje dokladnie jeden plik (kafel TM33, arkusz SM5 albo wycinek
+    serwerowy), a sidecary pisze warstwa CLI.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Sparsowane argumenty (godlo / --bbox / --target-crs / --resolution ...).
+    bbox : BBox, optional
+        Gotowy bbox — pomija parsowanie ``args.bbox`` (uzywane przez auto-split
+        wieloknajowy, Zad. 17).
+    parent_request : dict, optional
+        Oryginalne zadanie uzytkownika przed podzialem per kraj; trafia do
+        ``extra.parent_request`` sidecara.
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, 1 for error)
+
+    Raises
+    ------
+    ValidationError
+        Gdy ``--target-crs`` towarzyszy godlu (tryb godlowy jest natywny 1:1).
+        Warstwa dyspozycji (``cmd_download``) tlumaczy ten wyjatek na komunikat
+        CLI — tak jak inne przeplywy traktuja ValidationError.
+    """
+    from kartograf.cache import MetadataCache
+    from kartograf.providers.cuzk import create_dmr_provider
+    from kartograf.transform.crs import TransformError
+
+    resolution = args.resolution or "2m"
+    vertical_crs = args.vertical_crs or "Bpv"
+    has_godlo = args.godlo is not None and bbox is None
+
+    if resolution == "1m":
+        print(
+            "Error: CZ nie ma rozdzielczosci 1m — dostepne: 2m (DMR 5G), 5m (DMR 4G)",
+            file=sys.stderr,
+        )
+        return 1
+    if getattr(args, "system", None) is not None:
+        print(
+            "Error: --system dotyczy tylko PL (godla CZ wykrywane wzorcem)",
+            file=sys.stderr,
+        )
+        return 1
+    if has_godlo and args.target_crs is not None:
+        # provider ignoruje target_crs w trybie godlowym — cisza bylaby klamstwem
+        raise ValidationError(
+            "--target-crs dziala tylko z --bbox/--geometry; "
+            "tryb godlowy dostarcza dane natywne 1:1"
+        )
+
+    cache = MetadataCache()
+    try:
+        try:
+            provider = create_dmr_provider(
+                resolution=resolution,
+                cache=cache,
+                target_crs=None if has_godlo else args.target_crs,
+                vertical_crs=vertical_crs,
+            )
+        except TransformError as e:
+            remedy = getattr(e, "remedy", None)
+            message = f"Error: {e}" + (f" Remedium: {remedy}" if remedy else "")
+            print(message, file=sys.stderr)
+            return 1
+        except ValidationError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+        quiet = args.quiet
+        skip_existing = not args.force
+        if has_godlo:
+            return _cz_download_godlo(
+                args, provider, quiet=quiet, skip_existing=skip_existing
+            )
+        return _cz_download_bbox(
+            args,
+            provider,
+            bbox,
+            parent_request,
+            quiet=quiet,
+            skip_existing=skip_existing,
+        )
+    finally:
+        cache.close()
+
+
 def _cmd_download_geometry(args: argparse.Namespace) -> int:
     """
     Handle download command in geometry mode.
