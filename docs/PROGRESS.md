@@ -174,17 +174,43 @@ pytest na zmergowanym develop: **1142 passed**, ruff czysty. Galaz
 lokalnie **31 commitow przed `origin/develop`** (research CZ/DE/SK + spec +
 plan + etap 0) — push do decyzji uzytkownika.
 
+### Spec etapu 1 — fundament CZ + DMR (2026-08-11)
+
+`docs/superpowers/specs/2026-08-11-etap1-cz-fundament-dmr-design.md` — status:
+szkic do review. Zakres: `providers/cuzk/` (CuzkClient — pierwszy silnik
+sterowany deskryptorem: exportImage z kafelkowaniem, query z paginacja, pliki
+openzu; SheetIndex + tabela `sheet_cache` w MetadataCache; CuzkDmrProvider),
+`core/parser_tm33.py` + rejestracja `cz_tm33`/`cz_sm5` w parser_registry
+(PRZED fallbackiem pl1992), deskryptory `cz.cuzk.dmr5g`/`cz.cuzk.dmr4g` +
+pole `endpoint` w AccessChannel, CLI `--country {pl,cz,auto}` + `--target-crs`
++ `2m`/`Bpv`, sidecary CZ z `transform`/`extra` (PODIL). Elementy odroczone
+z etapu 0 wchodza: jawna selekcja kanalu (`build_metadata(capability=...)`),
+probe pod polityka sieci.
+
+Kluczowe decyzje sesji:
+- **EVRF2007 globalnie = EPSG:5621** (decyzja uzytkownika): `vertical_crs_code`
+  zmienia mapowanie (BREAKING dla tej funkcji), nowa nazwa `EVRF2007-PL` →
+  9651, `Bpv` → 8357; mapa rodzina→realizacja sprawia, ze sidecary PL dalej
+  niosa faktyczny kod 9651
+- przeplyw CZ omija DownloadManager (precedens LAZ) — API managera nietkniete
+- TM33 w trybie godlowym pobierany w EPSG:3045 (kafel zdefiniowany w 3045);
+  tryb bbox natywnie 5514; asymetria bbox PL (arkusze) vs CZ (wycinek
+  serwerowy) jawnie udokumentowana
+- domyslne `--resolution`/`--vertical-crs` przez sentinel `None` rozwiazywany
+  per kraj (PL: 1m/EVRF2007 bez zmian; CZ: 2m/Bpv)
+- sekcja 12 specu: 5 faktow do potwierdzenia live PRZED implementacja
+  (parametry query warstw 24/26, `noData` w exportImage, exportImage dmr4g,
+  HTTP openzu, bboxSR/imageSR=3045)
+
 ### Nastepne kroki
-1. **Push `develop` na origin** (31 commitow lokalnie) — decyzja uzytkownika
-2. **Zgloszenie/naprawa WCS EVRF2007** (male, poza etapem 0): aktualizacja
+1. **Review specu etapu 1** przez uzytkownika → po akceptacji **plan
+   implementacji etapu 1** (osobna sesja; zaczac od rekonesansu live z sekcji
+   12 specu)
+2. **Push `develop` na origin** (32 commity lokalnie) — decyzja uzytkownika
+3. **Zgloszenie/naprawa WCS EVRF2007** (male, poza etapem 0): aktualizacja
    `WCS_ENDPOINTS`/`COVERAGE_IDS` w `providers/pl/gugik.py` po usunieciu
    endpointu przez GUGiK (patrz "Znany problem uslugowy" wyzej); rozwazyc
    walidacje WCS analogiczna do walidacji warstw WMS
-3. **Spec + plan etapu 1** (fundament CZ + DMR)
-   - do specu etapu 1 przeniesc: regula selekcji kanalu w `_select_channel`
-     dla zrodel wielokanalowych (dzis: bbox vs nie-bbox, przy wiekszej liczbie
-     kanalow bedzie niejednoznaczna) oraz objecie `probe` polityka sieci
-     w `transform/crs.py`
 4. Odziedziczone: (do weryfikacji) zgodnosc `get_bbox` z godlowaniem kafli LAZ
    (patrz [[gugik-laz-wfs]])
 
