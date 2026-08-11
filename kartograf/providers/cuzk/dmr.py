@@ -11,6 +11,9 @@ Endpointy pochodza WYLACZNIE z deskryptorow (`get_source(...).channels[..].endpo
 """
 
 import logging
+import os
+import shutil
+import threading
 from pathlib import Path
 
 import numpy as np
@@ -101,6 +104,14 @@ class CuzkDmrProvider(BaseProvider):
         self._client_timeout = _DEFAULT_TIMEOUT
         self._sheet_index = SheetIndex(session=self._session, cache=cache)
         self._transforms: dict[tuple[str, str], PinnedTransform] = {}
+        # Fail-fast jak przy KRON86: brak bezpiecznej operacji 8357->5621 ma
+        # przerwac PRZED jakimkolwiek pobieraniem, zeby uzytkownik nie zaplacil
+        # za transfer i nie dostal pliku w Bpv pod nazwa zamowiona jako EVRF2007.
+        self._vertical_transform: PinnedTransform | None = (
+            self._pinned("EPSG:8357", "EPSG:5621", _VERTICAL_POLICY)
+            if vertical_crs == "EVRF2007"
+            else None
+        )
 
         descriptor = get_source(self.descriptor_key)
         image_endpoint = _endpoint_for(descriptor.channels, TransportKind.ARCGIS_IMAGE)
@@ -145,10 +156,11 @@ class CuzkDmrProvider(BaseProvider):
 
     @property
     def vertical_transform(self) -> PinnedTransform | None:
-        """Przypieta operacja 8357->5621 (None, gdy pobieranie natywne Bpv)."""
-        if self._vertical_crs != "EVRF2007":
-            return None
-        return self._pinned("EPSG:8357", "EPSG:5621", _VERTICAL_POLICY)
+        """Przypieta operacja 8357->5621 (None, gdy pobieranie natywne Bpv).
+
+        Budowana w konstruktorze — patrz uwaga o fail-fast tamze.
+        """
+        return self._vertical_transform
 
     def download(
         self, godlo: str, output_path: Path, timeout: int = _DEFAULT_TIMEOUT
@@ -288,20 +300,46 @@ class CuzkDmrProvider(BaseProvider):
         krok 7a; zamiana argumentow daje cichy blad ~0,44 m). Piksele nodata
         (oraz ewentualne NaN/inf) NIE sa transformowane — inaczej wartosc
         -9999 zostalaby przesunieta o offset i przestala byc rozpoznawana.
+
+        Przeliczenie idzie pasami, wiec pracuje na KOPII tymczasowej i dopiero
+        po pelnym sukcesie podmienia plik (`os.replace`) — inaczej awaria na
+        pasie k zostawilaby pod docelowa nazwa raster o wymieszanych ukladach
+        pionowych (pasy 0..k-1 w EVRF2007, reszta w Bpv), a `skip_existing`
+        w DownloadManagerze utrwalilby taka korupcje. Przy bledzie znikaja
+        zarowno kopia, jak i plik zrodlowy (wraz z towarzyszacym `.tfw`).
         """
-        pinned = self.vertical_transform
+        pinned = self._vertical_transform
         if pinned is None:  # pragma: no cover — wolane tylko dla EVRF2007
             return
+        temp_path = path.with_name(
+            f"{path.name}.{os.getpid()}_{threading.get_ident()}.vshift.tif"
+        )
+        try:
+            shutil.copy2(path, temp_path)
+            self._shift_in_place(temp_path, pinned, path.name)
+            os.replace(temp_path, path)
+        except BaseException:
+            temp_path.unlink(missing_ok=True)
+            path.unlink(missing_ok=True)
+            path.with_suffix(".tfw").unlink(missing_ok=True)
+            raise
+
+    def _shift_in_place(self, path: Path, pinned: PinnedTransform, label: str) -> None:
+        """Przelicz wysokosci pasami w podanym pliku (patrz _apply_vertical_shift).
+
+        `label` to nazwa pliku DOCELOWEGO — komunikaty nie moga wskazywac na
+        nazwe kopii tymczasowej, ktorej uzytkownik nigdy nie zobaczy.
+        """
         with rasterio.open(path, "r+") as ds:
             if ds.crs is None:
                 raise ValidationError(
-                    f"Raster {path.name} nie ma CRS — nie da sie wyznaczyc "
+                    f"Raster {label} nie ma CRS — nie da sie wyznaczyc "
                     f"(lon, lat) wymaganych przez operacje pionowa"
                 )
             horizontal = self._pinned(str(ds.crs), "EPSG:4326", _LONLAT_POLICY)
             nodata = ds.nodata if ds.nodata is not None else CUZK_NODATA
             logger.debug(
-                f"Transformacja pionowa {path.name}: {pinned.description} "
+                f"Transformacja pionowa {label}: {pinned.description} "
                 f"(dokladnosc {pinned.accuracy_m} m), nodata {nodata}"
             )
             chunk_rows = max(1, _CHUNK_PIXELS // ds.width)
