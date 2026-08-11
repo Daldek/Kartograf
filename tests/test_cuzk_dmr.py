@@ -16,16 +16,21 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 import rasterio
-from rasterio.transform import from_bounds
+from rasterio.transform import from_bounds, from_origin
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.cuzk import create_dmr_provider
-from kartograf.providers.cuzk.dmr import CUZK_NODATA, CuzkDmrProvider
+from kartograf.providers.cuzk.client import wkid
+from kartograf.providers.cuzk.dmr import CUZK_NODATA, CuzkDmrProvider, bbox_to_crs
 from kartograf.providers.cuzk.sheets import SheetInfo
 from kartograf.sources.descriptor import TransportKind
 from kartograf.sources.registry import get_source
-from kartograf.transform.crs import TransformError, TransformUnavailableError
+from kartograf.transform.crs import (
+    TransformError,
+    TransformUnavailableError,
+    build_pinned_transform,
+)
 
 _CLIENT_PATCH = "kartograf.providers.cuzk.dmr.CuzkClient"
 _INDEX_PATCH = "kartograf.providers.cuzk.dmr.SheetIndex"
@@ -151,24 +156,34 @@ class TestConstruction:
 
 
 class TestDownloadDispatch:
-    def test_tm33_godlo_exports_native_3045(self, tmp_path):
+    def test_tm33_godlo_requests_native_then_warps_to_3045(self, tmp_path):
+        """Kafel TM33 jest zdefiniowany w 3045, ale sciagany w 5514: reprojekcje
+        robi Kartograf, nie serwer (ADR-024)."""
         target = tmp_path / "302_5550.tif"
         with patch(_CLIENT_PATCH) as client_cls:
             client = client_cls.return_value
-            client.export_image.side_effect = _exporting("EPSG:3045")
+            client.export_image.side_effect = _server_emulator()
             provider = CuzkDmrProvider(resolution="2m")
             result = provider.download("302_5550", target)
 
         assert result == target
         kwargs = client.export_image.call_args.kwargs
         assert kwargs["pixel_size"] == 2.0
-        assert kwargs["image_sr"] == "EPSG:3045"
+        assert kwargs["image_sr"] == "EPSG:5514"
         assert kwargs["no_data"] == CUZK_NODATA
         called_endpoint, called_bbox = client.export_image.call_args.args[:2]
         assert called_endpoint == (
             "https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr5g/ImageServer"
         )
-        assert called_bbox == BBox(302000, 5550000, 304000, 5552000, "EPSG:3045")
+        assert called_bbox.crs == "EPSG:5514"
+        # zadanie natywne pokrywa kafel po przeliczeniu z powrotem do 3045
+        tile = BBox(302000, 5550000, 304000, 5552000, "EPSG:3045")
+        back = bbox_to_crs(called_bbox, "EPSG:3045")
+        assert back.min_x <= tile.min_x and back.min_y <= tile.min_y
+        assert back.max_x >= tile.max_x and back.max_y >= tile.max_y
+        with rasterio.open(target) as src:
+            assert src.crs.to_epsg() == 3045
+            assert src.bounds == (302000.0, 5550000.0, 304000.0, 5552000.0)
 
     def test_sm5_godlo_validates_fetches_and_repairs_crs(self, tmp_path):
         target = tmp_path / "CTES96.tif"
@@ -289,6 +304,226 @@ class TestDownloadDispatch:
         )
 
 
+# --- emulator serwera CUZK (wspolny dla testow poziomych i pionowych) --------
+
+# zmierzony blad reprojekcji serwerowej dla okolic Cieszyna (dE, dN):
+# pominiety datum shift S-JTSK->ETRS89, |d| = 135 m (pomiar 2026-08-11)
+_BALLPARK_SHIFT = (119.0, 64.0)
+_APEX_5514 = (-449000.0, -1113000.0)
+_NATIVE_BBOX = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
+
+
+def _pinned_5514_to(target_crs):
+    from kartograf.providers.cuzk.dmr import _HORIZONTAL_POLICY, NATIVE_CRS
+
+    return build_pinned_transform(NATIVE_CRS, target_crs, _HORIZONTAL_POLICY)
+
+
+def _apex_in(target_crs):
+    """Wierzcholek stozka w ukladzie docelowym wg pyproj (wzorzec prawdy)."""
+    x, y = _pinned_5514_to(target_crs).transform(*_APEX_5514)
+    return float(x), float(y)
+
+
+def _server_emulator(calls=None, *, nodata_west_of=None, flat=None):
+    """side_effect dla export_image odtwarzajacy zachowanie ArcGIS CUZK.
+
+    Odpowiedz natywna (5514) jest poprawna; kazda inna dostaje tresc
+    przesunieta o `_BALLPARK_SHIFT` — dokladnie tak, jak zmierzony serwer.
+    Kod ufajacy reprojekcji serwerowej przepusci to przesuniecie do pliku
+    wynikowego; kod pobierajacy natywnie i reprojektujacy lokalnie — nie.
+    """
+
+    def _fake(endpoint, bbox, **kwargs):
+        if calls is not None:
+            calls.append((bbox, kwargs["image_sr"], kwargs["pixel_size"]))
+        pixel = kwargs["pixel_size"]
+        output_path = Path(kwargs["output_path"])
+        if wkid(kwargs["image_sr"]) == "5514":
+            apex = _APEX_5514
+        else:
+            ax, ay = _apex_in(kwargs["image_sr"])
+            apex = (ax + _BALLPARK_SHIFT[0], ay + _BALLPARK_SHIFT[1])
+        width = max(1, round((bbox.max_x - bbox.min_x) / pixel))
+        height = max(1, round((bbox.max_y - bbox.min_y) / pixel))
+        cols, rows = np.meshgrid(np.arange(width), np.arange(height))
+        xs = bbox.min_x + (cols + 0.5) * pixel
+        ys = bbox.max_y - (rows + 0.5) * pixel
+        if flat is None:
+            data = (1000.0 - np.hypot(xs - apex[0], ys - apex[1])).astype("float32")
+        else:
+            data = np.full((height, width), flat, dtype="float32")
+        if nodata_west_of is not None:
+            data[xs < nodata_west_of] = CUZK_NODATA
+        profile = {
+            "driver": "GTiff",
+            "dtype": "float32",
+            "count": 1,
+            "width": width,
+            "height": height,
+            "crs": kwargs["image_sr"],
+            "transform": from_origin(bbox.min_x, bbox.max_y, pixel, pixel),
+            "nodata": CUZK_NODATA,
+        }
+        with rasterio.open(output_path, "w", **profile) as dst:
+            dst.write(data, 1)
+        return output_path
+
+    return _fake
+
+
+def _apex_of(path):
+    """Wspolrzedne piksela o najwyzszej wartosci (wierzcholek stozka)."""
+    with rasterio.open(path) as ds:
+        data = ds.read(1, masked=True)
+        row, col = np.unravel_index(np.argmax(data.filled(-np.inf)), data.shape)
+        return ds.xy(int(row), int(col))
+
+
+class TestHorizontalReprojection:
+    """Reprojekcja tresci CZ jest LOKALNA (przypieta operacja), a nie serwerowa."""
+
+    BALLPARK_SHIFT = _BALLPARK_SHIFT
+    APEX_5514 = _APEX_5514
+
+    _apex_in = staticmethod(_apex_in)
+    _apex_of = staticmethod(_apex_of)
+
+    @staticmethod
+    def _fake_server(calls, **kwargs):
+        return _server_emulator(calls, **kwargs)
+
+    def test_bbox_target_crs_puts_content_where_pyproj_says(self, tmp_path):
+        """Regresja TRESCI: wierzcholek ma trafic tam, gdzie wskazuje pyproj."""
+        target = tmp_path / "area.tif"
+        bbox = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
+        calls: list = []
+        with patch(_CLIENT_PATCH) as client_cls:
+            client_cls.return_value.export_image.side_effect = self._fake_server(calls)
+            provider = CuzkDmrProvider(resolution="2m", target_crs="EPSG:2180")
+            provider.download_bbox(bbox, target)
+
+        expected = self._apex_in("EPSG:2180")
+        got = self._apex_of(target)
+        assert abs(got[0] - expected[0]) < 2.0, f"E: {got} vs {expected}"
+        assert abs(got[1] - expected[1]) < 2.0, f"N: {got} vs {expected}"
+
+    def test_server_is_asked_only_for_native_5514(self, tmp_path):
+        """Zadania exportImage bija wylacznie w uklad natywny, niezaleznie od celu."""
+        bbox = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
+        calls: list = []
+        with patch(_CLIENT_PATCH) as client_cls:
+            client_cls.return_value.export_image.side_effect = self._fake_server(calls)
+            provider = CuzkDmrProvider(resolution="2m", target_crs="EPSG:2180")
+            provider.download_bbox(bbox, tmp_path / "area.tif")
+
+        assert calls, "serwer nie zostal odpytany"
+        assert all(wkid(image_sr) == "5514" for _, image_sr, _ in calls)
+        assert all(wkid(sent.crs) == "5514" for sent, _, _ in calls)
+
+    def test_tm33_godlo_also_goes_native_then_local_warp(self, tmp_path):
+        """Kafel TM33 (3045) tez nie ufa reprojekcji serwerowej."""
+        target = tmp_path / "302_5550.tif"
+        calls: list = []
+        with patch(_CLIENT_PATCH) as client_cls:
+            client_cls.return_value.export_image.side_effect = self._fake_server(calls)
+            CuzkDmrProvider(resolution="2m").download("302_5550", target)
+
+        assert all(wkid(image_sr) == "5514" for _, image_sr, _ in calls)
+        with rasterio.open(target) as ds:
+            assert ds.crs.to_epsg() == 3045
+            assert ds.bounds == (302000.0, 5550000.0, 304000.0, 5552000.0)
+            assert (ds.width, ds.height) == (1000, 1000)
+
+    def test_native_request_covers_whole_target_bbox(self, tmp_path):
+        """Obwiednia zadania natywnego musi POKRYWAC cel (z zapasem na warp)."""
+        bbox = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
+        calls: list = []
+        with patch(_CLIENT_PATCH) as client_cls:
+            client_cls.return_value.export_image.side_effect = self._fake_server(calls)
+            provider = CuzkDmrProvider(resolution="2m", target_crs="EPSG:2180")
+            provider.download_bbox(bbox, tmp_path / "area.tif")
+
+        target_bbox = bbox_to_crs(bbox, "EPSG:2180")
+        sent = calls[0][0]
+        corners = bbox_to_crs(sent, "EPSG:2180")
+        assert corners.min_x <= target_bbox.min_x
+        assert corners.min_y <= target_bbox.min_y
+        assert corners.max_x >= target_bbox.max_x
+        assert corners.max_y >= target_bbox.max_y
+
+    def test_nodata_does_not_bleed_into_interpolation(self, tmp_path):
+        """Piksele nodata nie moga rozcienczac wartosci sasiadow ani zniknac.
+
+        Pole zrodlowe jest PLASKIE (300 m) z polowa obszaru jako nodata:
+        kazda wartosc rozna od 300 w wyniku byloby dowodem, ze interpolator
+        wmieszal `-9999` do sredniej wazonej na krawedzi maski.
+        """
+        target = tmp_path / "area.tif"
+        bbox = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
+        with patch(_CLIENT_PATCH) as client_cls:
+            client_cls.return_value.export_image.side_effect = self._fake_server(
+                [], nodata_west_of=-449000.0, flat=300.0
+            )
+            provider = CuzkDmrProvider(resolution="2m", target_crs="EPSG:2180")
+            provider.download_bbox(bbox, target)
+
+        with rasterio.open(target) as ds:
+            data = ds.read(1)
+            assert ds.nodata == CUZK_NODATA
+            valid = data[data != CUZK_NODATA]
+            assert valid.size > 0
+            assert (data == CUZK_NODATA).sum() > 0
+            assert np.array_equal(valid, np.full(valid.shape, 300.0, dtype="float32"))
+
+    def test_temporary_native_file_is_cleaned_up(self, tmp_path):
+        target = tmp_path / "area.tif"
+        bbox = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
+        with patch(_CLIENT_PATCH) as client_cls:
+            client_cls.return_value.export_image.side_effect = self._fake_server([])
+            provider = CuzkDmrProvider(resolution="2m", target_crs="EPSG:2180")
+            provider.download_bbox(bbox, target)
+
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["area.tif"]
+
+    def test_failed_warp_leaves_no_output(self, tmp_path):
+        target = tmp_path / "area.tif"
+        bbox = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
+        with (
+            patch(_CLIENT_PATCH) as client_cls,
+            patch(
+                "kartograf.providers.cuzk.dmr.reproject",
+                side_effect=RuntimeError("warp padl"),
+            ),
+            pytest.raises(RuntimeError),
+        ):
+            client_cls.return_value.export_image.side_effect = self._fake_server([])
+            provider = CuzkDmrProvider(resolution="2m", target_crs="EPSG:2180")
+            provider.download_bbox(bbox, target)
+
+        assert list(tmp_path.iterdir()) == []
+
+    def test_horizontal_transform_is_none_for_native(self):
+        provider = CuzkDmrProvider(resolution="2m")
+        assert provider.horizontal_transform("EPSG:5514") is None
+        pinned = provider.horizontal_transform("EPSG:2180")
+        assert pinned is not None
+        assert pinned.accuracy_m <= 1.0
+
+    def test_unavailable_horizontal_operation_fails_before_download(self, tmp_path):
+        """Fail-fast: brak bezpiecznej operacji przerywa PRZED transferem."""
+        with (
+            patch(_CLIENT_PATCH) as client_cls,
+            patch(
+                _PINNED_PATCH,
+                side_effect=TransformUnavailableError("brak operacji"),
+            ),
+            pytest.raises(TransformUnavailableError),
+        ):
+            CuzkDmrProvider(resolution="2m", target_crs="EPSG:2180")
+        client_cls.return_value.export_image.assert_not_called()
+
+
 class TestDownloadBbox:
     def test_native_5514(self, tmp_path):
         target = tmp_path / "area.tif"
@@ -312,21 +547,28 @@ class TestDownloadBbox:
             "https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr4g/ImageServer"
         )
 
-    def test_target_crs_via_server_reprojection(self, tmp_path):
+    def test_target_crs_produces_target_grid_from_native_request(self, tmp_path):
+        """`--target-crs` zmienia siatke WYNIKU, ale nie uklad ZADANIA."""
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+        target = tmp_path / "area.tif"
         with patch(_CLIENT_PATCH) as client_cls:
             client = client_cls.return_value
-            client.export_image.side_effect = _exporting("EPSG:2180")
+            client.export_image.side_effect = _server_emulator()
             provider = CuzkDmrProvider(resolution="2m", target_crs="EPSG:2180")
-            provider.download_bbox(bbox, tmp_path / "area.tif")
+            provider.download_bbox(bbox, target)
+
         kwargs = client.export_image.call_args.kwargs
-        assert kwargs["image_sr"] == "EPSG:2180"
-        # bbox znormalizowany do ukladu wyjsciowego (kafelkowanie bez szwow)
+        assert kwargs["image_sr"] == "EPSG:5514"
         sent = client.export_image.call_args.args[1]
-        assert sent.crs == "EPSG:2180"
-        # okolice Cieszyna w PL-1992: E ~470 km, N ~209 km
-        assert 460_000 < sent.min_x < 480_000
-        assert 200_000 < sent.min_y < 220_000
+        assert sent.crs == "EPSG:5514"
+        # wynik lezy na siatce zadanej: okolice Cieszyna w PL-1992
+        expected = bbox_to_crs(bbox, "EPSG:2180")
+        with rasterio.open(target) as src:
+            assert src.crs.to_epsg() == 2180
+            assert src.bounds.left == pytest.approx(expected.min_x, abs=2.0)
+            assert src.bounds.top == pytest.approx(expected.max_y, abs=2.0)
+            assert 460_000 < src.bounds.left < 480_000
+            assert 200_000 < src.bounds.bottom < 220_000
 
     def test_non_gtiff_format_rejected(self, tmp_path):
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
@@ -335,11 +577,20 @@ class TestDownloadBbox:
 
 
 class TestVerticalTransform:
-    def _pinned_fakes(self):
+    """Przedmiotem testow jest `_apply_vertical_shift`, dlatego rastry ida
+    sciezka NATYWNA (bbox w 5514) — bez reprojekcji poziomej, ktora
+    przeprobkowalaby syntetyczne fixtury. Wspolgranie obu transformacji
+    sprawdza `test_tm33_godlo_warps_then_shifts_vertically`."""
+
+    def _pinned_fakes(self, real_horizontal=False):
         """side_effect dla build_pinned_transform: OSOBNE fake'i dla operacji
         pionowej 8357->5621 (3-argumentowa, przesuwa z o +0.13) i pomocniczej
         poziomej raster_crs->4326 (2-argumentowa, identycznosc) —
-        _apply_vertical_shift buduje obie przez te sama funkcje."""
+        _apply_vertical_shift buduje obie przez te sama funkcje.
+
+        `real_horizontal=True` zostawia operacje reprojekcji TRESCI (5514->cel)
+        prawdziwa — fake'owy pipeline nie przeszedlby przez GDAL.
+        """
         vertical = MagicMock()
         vertical.description = "Baltic 1957 height to EVRF2007 height (1)"
         vertical.accuracy_m = 0.1
@@ -348,7 +599,11 @@ class TestVerticalTransform:
         horizontal.transform.side_effect = lambda x, y: (x, y)
 
         def factory(src_crs, dst_crs, policy):
-            return vertical if src_crs == "EPSG:8357" else horizontal
+            if src_crs == "EPSG:8357":
+                return vertical
+            if real_horizontal and dst_crs != "EPSG:4326":
+                return build_pinned_transform(src_crs, dst_crs, policy)
+            return horizontal
 
         return factory, vertical
 
@@ -364,21 +619,44 @@ class TestVerticalTransform:
         assert pinned_mock.call_args.args[:2] == ("EPSG:8357", "EPSG:5621")
 
     def test_evrf2007_shifts_values_and_keeps_nodata(self, tmp_path):
-        target = tmp_path / "302_5550.tif"
+        target = tmp_path / "area.tif"
         factory, vertical = self._pinned_fakes()
         with (
             patch(_CLIENT_PATCH) as client_cls,
             patch(_PINNED_PATCH, side_effect=factory),
         ):
             client = client_cls.return_value
-            client.export_image.side_effect = _exporting("EPSG:3045")
+            client.export_image.side_effect = _exporting("EPSG:5514")
             provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
-            provider.download("302_5550", target)
+            provider.download_bbox(_NATIVE_BBOX, target)
 
         with rasterio.open(target) as src:
             data = src.read(1)
         assert data[5, 5] == pytest.approx(100.13, abs=1e-4)
         assert data[0, 0] == CUZK_NODATA  # nodata NIE jest transformowane
+        assert vertical.transform.called
+
+    def test_tm33_godlo_warps_then_shifts_vertically(self, tmp_path):
+        """Kafel TM33: reprojekcja pozioma i przesuniecie pionowe skladaja sie
+        (raster w 3045, wartosci po operacji Bpv->EVRF2007, nodata nietkniete)."""
+        target = tmp_path / "302_5550.tif"
+        factory, vertical = self._pinned_fakes(real_horizontal=True)
+        with (
+            patch(_CLIENT_PATCH) as client_cls,
+            patch(_PINNED_PATCH, side_effect=factory),
+        ):
+            client_cls.return_value.export_image.side_effect = _server_emulator(
+                flat=300.0
+            )
+            provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
+            provider.download("302_5550", target)
+
+        with rasterio.open(target) as src:
+            assert src.crs.to_epsg() == 3045
+            data = src.read(1)
+        valid = data[data != CUZK_NODATA]
+        assert valid.size > 0
+        assert np.all(valid == pytest.approx(300.13, abs=1e-4))
         assert vertical.transform.called
 
     def test_bbox_mode_also_shifts_values(self, tmp_path):
@@ -408,11 +686,11 @@ class TestVerticalTransform:
             patch(_PINNED_PATCH, side_effect=factory),
         ):
             client_cls.return_value.export_image.side_effect = lambda e, b, **kw: (
-                _write_tif(Path(kw["output_path"]), crs="EPSG:3045", value=CUZK_NODATA)
+                _write_tif(Path(kw["output_path"]), crs="EPSG:5514", value=CUZK_NODATA)
                 or Path(kw["output_path"])
             )
             provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
-            provider.download("302_5550", target)
+            provider.download_bbox(_NATIVE_BBOX, target)
 
         with rasterio.open(target) as src:
             assert np.all(src.read(1) == CUZK_NODATA)
@@ -437,7 +715,7 @@ class TestVerticalTransform:
     def test_failed_shift_leaves_no_half_transformed_file(self, tmp_path):
         """Awaria na drugim pasie nie moze zostawic rastra o wymieszanych
         ukladach pionowych pod docelowa nazwa (skip_existing utrwalilby korupcje)."""
-        target = tmp_path / "302_5550.tif"
+        target = tmp_path / "area.tif"
         factory, vertical = self._pinned_fakes()
         calls = {"n": 0}
 
@@ -453,10 +731,10 @@ class TestVerticalTransform:
             patch(_PINNED_PATCH, side_effect=factory),
             patch("kartograf.providers.cuzk.dmr._CHUNK_PIXELS", 20),  # 5 pasow
         ):
-            client_cls.return_value.export_image.side_effect = _exporting("EPSG:3045")
+            client_cls.return_value.export_image.side_effect = _exporting("EPSG:5514")
             provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
             with pytest.raises(TransformError):
-                provider.download("302_5550", target)
+                provider.download_bbox(_NATIVE_BBOX, target)
 
         assert calls["n"] > 1  # awaria faktycznie po zapisaniu pierwszego pasa
         assert not target.exists()
@@ -495,7 +773,7 @@ class TestVerticalTransform:
             client_cls.return_value.export_image.side_effect = _exporting(None)
             provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
             with pytest.raises(ValidationError, match="CRS"):
-                provider.download("302_5550", tmp_path / "t.tif")
+                provider.download_bbox(_NATIVE_BBOX, tmp_path / "t.tif")
 
     def test_chunking_covers_whole_raster(self, tmp_path):
         """Raster wyzszy niz jeden pas: kazdy piksel danych przesuniety raz."""
@@ -507,11 +785,11 @@ class TestVerticalTransform:
             patch("kartograf.providers.cuzk.dmr._CHUNK_PIXELS", 20),
         ):
             client_cls.return_value.export_image.side_effect = lambda e, b, **kw: (
-                _write_tif(Path(kw["output_path"]), crs="EPSG:3045", size=(10, 10))
+                _write_tif(Path(kw["output_path"]), crs="EPSG:5514", size=(10, 10))
                 or Path(kw["output_path"])
             )
             provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
-            provider.download("302_5550", target)
+            provider.download_bbox(_NATIVE_BBOX, target)
 
         with rasterio.open(target) as src:
             data = src.read(1)
@@ -537,7 +815,7 @@ class TestVerticalTransform:
                 or Path(kw["output_path"])
             )
             provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
-            provider.download("302_5550", tmp_path / "t.tif")
+            provider.download_bbox(_NATIVE_BBOX, tmp_path / "t.tif")
 
         # transformacja pomocnicza budowana z CRS rastra do WGS84
         horizontal_calls = [

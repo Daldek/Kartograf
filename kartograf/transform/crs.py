@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
-from pyproj import network
+from pyproj import CRS, network
 from pyproj.transformer import TransformerGroup
 
 from kartograf.exceptions import KartografError
@@ -57,6 +57,8 @@ class PinnedTransform:
     accuracy_m: float
     description: str  # opis operacji (trafia do sidecara w etapie 1+)
     _transformer: Any = field(repr=False)
+    src_crs: str | None = None
+    dst_crs: str | None = None
 
     def transform(self, x, y, z=None) -> tuple:
         """Transformuj punkt lub tablice numpy; wynik inf/NaN => TransformError."""
@@ -69,6 +71,46 @@ class PinnedTransform:
                 f"Transformacja zwrocila wartosc nieskonczona [{self.description}]"
             )
         return result
+
+    def gdal_operation(self) -> str:
+        """Ta sama operacja jako pipeline PROJ dla GDAL (``COORDINATE_OPERATION``).
+
+        Pozwala wymusic na ``rasterio.warp.reproject`` DOKLADNIE te operacje,
+        ktora przeszla polityke z ``build_pinned_transform`` — bez tego GDAL
+        wybiera operacje sam (zmierzone 2026-08-11: wybor GDAL-a rozni sie od
+        przypietego o srednio 0,08 m, maks. 1,9 m) i nie ma zadnego zakazu
+        ballparku.
+
+        Korekta osi jest konieczna: pipeline pochodzi z transformera
+        ``always_xy=True`` (kolejnosc E-N), a GDAL podaje operacji wspolrzedne
+        w kolejnosci osi AUTORYTATYWNEJ obu ukladow. Dla celu northing-first
+        (EPSG:2180, EPSG:3045) brak ``axisswap`` daje raster w calosci nodata
+        — cichy, latwy do przeoczenia tryb awarii, dlatego korekta jest
+        wyliczana z ``axis_info``, a nie zakladana.
+        """
+        if self.src_crs is None or self.dst_crs is None:
+            raise TransformError(
+                f"Operacja GDAL wymaga znanej pary ukladow "
+                f"[{self.description}] — PinnedTransform zbudowany bez nich"
+            )
+        pipeline = str(self._transformer.definition).strip()
+        if not pipeline.startswith("proj=pipeline"):
+            pipeline = f"proj=pipeline step {pipeline}"
+        if _is_northing_first(self.src_crs):
+            head, sep, rest = pipeline.partition(" step ")
+            pipeline = f"{head} step {_AXIS_SWAP}{sep}{rest}"
+        if _is_northing_first(self.dst_crs):
+            pipeline = f"{pipeline} step {_AXIS_SWAP}"
+        return pipeline
+
+
+_AXIS_SWAP = "proj=axisswap order=2,1"
+
+
+def _is_northing_first(crs: str) -> bool:
+    """Czy autorytatywna kolejnosc osi ukladu zaczyna sie od polnocy/poludnia?"""
+    axes = CRS.from_user_input(crs).axis_info
+    return bool(axes) and axes[0].direction.lower() in ("north", "south")
 
 
 @dataclass(frozen=True)
@@ -170,5 +212,9 @@ def build_pinned_transform(
 
     accuracy, transformer, description = min(candidates, key=lambda c: c[0])
     return PinnedTransform(
-        accuracy_m=accuracy, description=description, _transformer=transformer
+        accuracy_m=accuracy,
+        description=description,
+        _transformer=transformer,
+        src_crs=src_crs,
+        dst_crs=dst_crs,
     )

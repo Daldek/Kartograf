@@ -183,6 +183,46 @@ class TestTransformPolymorphic:
             pinned.transform(np.zeros(2), np.zeros(2))
 
 
+class TestGdalOperation:
+    """Pipeline dla GDAL-owego COORDINATE_OPERATION (rasterio.warp.reproject).
+
+    GDAL podaje operacji wspolrzedne w kolejnosci osi AUTORYTATYWNEJ ukladu,
+    a `PinnedTransform` jest zbudowany z `always_xy=True` (kolejnosc E-N).
+    Bez korekty osi warp do ukladu northing-first (EPSG:2180, EPSG:3045)
+    daje raster w calosci nodata — zmierzone 2026-08-11.
+    """
+
+    _POLICY = TransformPolicy(min_accuracy_m=1.0, allow_network_grids=False)
+
+    def test_northing_first_target_gets_axisswap(self):
+        pinned = build_pinned_transform("EPSG:5514", "EPSG:2180", self._POLICY)
+        operation = pinned.gdal_operation()
+        assert operation.startswith("proj=pipeline")
+        assert operation.endswith("step proj=axisswap order=2,1")
+
+    def test_easting_first_target_has_no_axisswap(self):
+        pinned = build_pinned_transform("EPSG:5514", "EPSG:32633", self._POLICY)
+        assert "axisswap" not in pinned.gdal_operation()
+
+    def test_operation_carries_datum_step(self):
+        """Sedno: operacja MUSI niesc transformacje datum S-JTSK->ETRS89."""
+        pinned = build_pinned_transform("EPSG:5514", "EPSG:2180", self._POLICY)
+        assert "molobadekas" in pinned.gdal_operation()
+
+    def test_crs_pair_is_recorded(self):
+        pinned = build_pinned_transform("EPSG:5514", "EPSG:2180", self._POLICY)
+        assert (pinned.src_crs, pinned.dst_crs) == ("EPSG:5514", "EPSG:2180")
+
+    def test_without_crs_pair_raises(self):
+        from kartograf.transform.crs import PinnedTransform
+
+        pinned = PinnedTransform(
+            accuracy_m=0.5, description="op", _transformer=MagicMock()
+        )
+        with pytest.raises(TransformError, match="uklad"):
+            pinned.gdal_operation()
+
+
 class TestProbeUnderNetworkPolicy:
     def test_probe_runs_under_policy_network_context(self):
         """5.8b: probe wykonuje sie w kontekscie sieci wg policy,

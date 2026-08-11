@@ -1027,18 +1027,21 @@ def _write_cz_sidecar(
     capability: str,
     horizontal_crs: str,
     nodata: float | None,
-    server_crs: str | None = None,
     extra: dict | None = None,
 ) -> None:
     """Best-effort sidecar dla wyniku CZ (blad nie przerywa pobrania).
 
     `horizontal_crs` to uklad FAKTYCZNEGO wyniku (kafel TM33: EPSG:3045,
-    --target-crs: uklad zadany serwerowi), a nie domyslny uklad kanalu.
+    --target-crs: uklad zadany przez uzytkownika), a nie domyslny uklad kanalu.
+
+    Obie pozycje `transform` opisuja PRZYPIETE operacje wykonane lokalnie —
+    poziomo i pionowo tak samo (ADR-024). Wczesniej pole poziome niosło
+    `"server:EPSG:<kod>"` bez dokladnosci, co ukrywalo blad reprojekcji
+    serwerowej (135 m) przed konsumentem sidecara.
     """
     import logging
 
     try:
-        from kartograf.providers.cuzk.client import wkid
         from kartograf.sources.registry import get_source
         from kartograf.sources.sidecar import build_metadata, write_sidecar
 
@@ -1051,15 +1054,14 @@ def _write_cz_sidecar(
             extra=extra,
         )
         transform: dict = {}
-        # tylko FAKTYCZNA reprojekcja serwerowa — zadanie o uklad natywny kanalu
-        # (meta.horizontal_crs przed nadpisaniem) transformacja nie jest
-        if server_crs is not None and wkid(server_crs) != wkid(meta.horizontal_crs):
-            transform["horizontal"] = f"server:{server_crs}"
-        pinned = provider.vertical_transform
-        if pinned is not None:
-            transform["vertical"] = (
-                f"pinned: {pinned.description} ({pinned.accuracy_m} m)"
-            )
+        for axis, pinned in (
+            ("horizontal", provider.horizontal_transform(horizontal_crs)),
+            ("vertical", provider.vertical_transform),
+        ):
+            if pinned is not None:
+                transform[axis] = (
+                    f"pinned: {pinned.description} ({pinned.accuracy_m} m)"
+                )
         meta.transform = transform or None
         meta.horizontal_crs = horizontal_crs
         write_sidecar(target, meta)
@@ -1186,7 +1188,6 @@ def _cz_download_bbox(
         capability="bbox_raster",
         horizontal_crs=image_sr,
         nodata=nodata if nodata is not None else CUZK_NODATA,
-        server_crs=args.target_crs,
         extra={"parent_request": parent_request} if parent_request else None,
     )
     if not quiet:
