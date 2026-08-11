@@ -503,6 +503,45 @@ class TestHorizontalReprojection:
 
         assert list(tmp_path.iterdir()) == []
 
+    @pytest.mark.parametrize(
+        ("kind", "target_crs"),
+        [("bbox", "EPSG:2180"), ("godlo", "EPSG:3045")],
+    )
+    def test_warp_forces_the_pinned_operation(self, tmp_path, kind, target_crs):
+        """Operacja MUSI byc podana GDAL-owi jawnie (ADR-024 pkt b).
+
+        Bez `COORDINATE_OPERATION` warp nadal sie udaje i nadal trafia blisko
+        prawdy — GDAL wybiera wtedy operacje sam, poza polityka
+        `transform/crs.py` (zakaz ballparku, limit dokladnosci, probe).
+        Roznica wzgledem operacji przypietej to srednio 0,08 m, ale do 1,9 m
+        w pojedynczych pikselach — czyli za malo, by wywrocic asercje TRESCI
+        (tolerancja 1 px = 2 m), a wiec za malo, by wykryc regresje. Ten test
+        pilnuje samego wymuszenia: sprawdza, ktora operacja poszla do GDAL-a.
+        """
+        from rasterio.warp import reproject as real_reproject
+
+        with (
+            patch(_CLIENT_PATCH) as client_cls,
+            patch(
+                "kartograf.providers.cuzk.dmr.reproject", wraps=real_reproject
+            ) as warp,
+        ):
+            client_cls.return_value.export_image.side_effect = _server_emulator()
+            if kind == "bbox":
+                provider = CuzkDmrProvider(resolution="2m", target_crs=target_crs)
+                provider.download_bbox(_NATIVE_BBOX, tmp_path / "area.tif")
+            else:
+                CuzkDmrProvider(resolution="2m").download(
+                    "302_5550", tmp_path / "302_5550.tif"
+                )
+
+        warp.assert_called_once()
+        expected = _pinned_5514_to(target_crs).gdal_operation()
+        assert warp.call_args.kwargs["COORDINATE_OPERATION"] == expected
+        # sanity: wymuszona operacja niesie transformacje datum S-JTSK->ETRS89
+        # (jej brak to wlasnie zmierzony blad 135 m serwera CUZK)
+        assert "molobadekas" in expected
+
     def test_horizontal_transform_is_none_for_native(self):
         provider = CuzkDmrProvider(resolution="2m")
         assert provider.horizontal_transform("EPSG:5514") is None

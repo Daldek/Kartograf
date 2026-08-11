@@ -1135,7 +1135,13 @@ def _cz_download_bbox(
     quiet: bool,
     skip_existing: bool,
 ) -> int:
-    """Bbox CZ: jeden wycinek serwerowy plasko w katalogu wyjsciowym."""
+    """Bbox CZ: jeden wycinek `exportImage` plasko w katalogu wyjsciowym.
+
+    Bbox jest normalizowany do ukladu WYNIKU (`--target-crs` albo natywny
+    5514) — nazwa pliku niesie wspolrzedne faktycznie zadanego wycinka.
+    Do serwera idzie potem zadanie w ukladzie natywnym, a na siatke wyniku
+    przenosi je lokalny warp w providerze (ADR-024).
+    """
     from kartograf.providers.cuzk.client import wkid
     from kartograf.providers.cuzk.dmr import CUZK_NODATA, bbox_to_crs
     from kartograf.sources.registry import get_source
@@ -1205,7 +1211,7 @@ def _cmd_download_cz(
 
     Wzor: :func:`_cmd_download_laz` — przeplyw poza ``DownloadManager``, bo
     zadanie CZ daje dokladnie jeden plik (kafel TM33, arkusz SM5 albo wycinek
-    serwerowy), a sidecary pisze warstwa CLI.
+    `exportImage`), a sidecary pisze warstwa CLI.
 
     Parameters
     ----------

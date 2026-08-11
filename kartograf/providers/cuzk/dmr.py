@@ -62,11 +62,16 @@ _DEFAULT_TIMEOUT = 60
 
 # Operacja pionowa Bpv->EVRF2007 ma dokladnosc 0,1 m (rekonesans Zad. 1, krok 7).
 _VERTICAL_POLICY = TransformPolicy(min_accuracy_m=0.2)
-# Pomocnicze przeliczenia poziome (lon/lat dla operacji pionowej, obwiednia
-# zadania exportImage) NIE dotykaja wartosci danych: offset pionowy zmienia sie
-# o 0,014 m na stopien szerokosci, wiec blad 2 m to ~3e-7 m wysokosci, a bbox
-# zadania i tak reprojektuje serwer. Siatki z CDN nie sa tu potrzebne (kosztuja
-# ~2 s na pare ukladow), dlatego allow_network_grids=False.
+# Pomocnicze przeliczenia poziome NIE dotykaja wartosci danych, wiec limit
+# jest luzniejszy niz dla operacji reprojektujacej tresc:
+#  - lon/lat dla operacji pionowej: offset zmienia sie o 0,014 m na stopien
+#    szerokosci, wiec blad 2 m to ~3e-7 m wysokosci;
+#  - obwiednia zadania natywnego: ma tylko POKRYC obszar celu, a ewentualny
+#    rozjazd z operacja przypieta (<= 2 m) miesci sie w zapasie
+#    _WARP_MARGIN_PX (4 px = 8 m przy 2 m) — zmniejszajac ten zapas trzeba
+#    zaostrzyc te polityke albo policzyc obwiednie ta sama operacja co warp.
+# Siatki z CDN nie sa tu potrzebne (kosztuja ~2 s na pare ukladow), dlatego
+# allow_network_grids=False.
 _LONLAT_POLICY = TransformPolicy(min_accuracy_m=2.0, allow_network_grids=False)
 _ENVELOPE_POLICY = TransformPolicy(min_accuracy_m=2.0, allow_network_grids=False)
 # Operacja reprojektujaca TRESC rastra — jedyna, ktora przesuwa piksele, wiec
@@ -197,11 +202,13 @@ class CuzkDmrProvider(BaseProvider):
     def download(
         self, godlo: str, output_path: Path, timeout: int = _DEFAULT_TIMEOUT
     ) -> Path:
-        """Pobierz kafel TM33 (exportImage w 3045) lub arkusz SM5 (openzu).
+        """Pobierz kafel TM33 (siatka w 3045) lub arkusz SM5 (openzu, 5514).
 
-        `target_crs` dotyczy wylacznie trybu bbox — arkusze i kafle sa zawsze
-        pobierane w ukladzie natywnym swojej siatki (godlo definiuje zasieg
-        w konkretnym ukladzie, wiec reprojekcja rozjechalaby go z siatka).
+        `target_crs` dotyczy wylacznie trybu bbox — godlo definiuje zasieg
+        w konkretnym ukladzie, wiec reprojekcja rozjechalaby go z siatka.
+        Kafel TM33 lezy w EPSG:3045, a dane CUZK w EPSG:5514: `exportImage`
+        dostaje zadanie natywne, a na siatke kafla przenosi je lokalny warp
+        (ADR-024). Arkusz SM5 przychodzi plikiem juz w 5514 — bez warpu.
         """
         output_path = Path(output_path)
         system = detect_system(godlo)

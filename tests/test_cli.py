@@ -2388,6 +2388,40 @@ class TestCmdDownloadCz:
             "horizontal": "pinned: S-JTSK to ETRS89 (3) -> EPSG:3045 (0.5 m)"
         }
 
+    def test_godlo_without_safe_horizontal_operation_exits_cleanly(
+        self, tmp_path, capsys
+    ):
+        """Sciezka godlowa TM33 buduje operacje pozioma dopiero przy pobieraniu
+        (godlo nie ma `--target-crs`, wiec konstruktor jej nie tyka) — brak
+        bezpiecznej operacji ma dac komunikat z remedium i kod 1, NIE traceback.
+
+        Zabezpieczenie lezy w `_run_cz`, nie w `_cz_download_godlo`, wiec jest
+        latwe do przeoczenia przy refaktorze — stad ten test na pelnym
+        przeplywie CLI (`main`), a nie na samej funkcji pomocniczej.
+        """
+        from kartograf.cli.commands import main
+        from kartograf.transform.crs import TransformUnavailableError
+
+        def _boom(src_crs, dst_crs, policy):
+            raise TransformUnavailableError(
+                f"Brak bezpiecznej operacji transformacji {src_crs} -> {dst_crs}",
+                remedy="zainstaluj siatki recznie do PROJ_DATA",
+            )
+
+        with patch(
+            "kartograf.providers.cuzk.dmr.build_pinned_transform", side_effect=_boom
+        ):
+            result = main(
+                ["download", "302_5550", "--country", "cz", "-o", str(tmp_path)]
+            )
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "EPSG:5514 -> EPSG:3045" in captured.err
+        assert "Remedium: zainstaluj siatki recznie" in captured.err
+        assert "Traceback" not in captured.err
+        assert not list(tmp_path.rglob("*.tif"))
+
     def test_invalid_bbox_string_returns_1(self, tmp_path, capsys):
         from kartograf.cli.download_cmd import _cmd_download_cz
 

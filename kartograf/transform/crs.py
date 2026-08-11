@@ -129,7 +129,8 @@ KNOWN_PATHS: tuple[KnownPath, ...] = (
         "EPSG:5514",
         "EPSG:2180",
         0.5,
-        "probe odrzuca sk_gku (inf w CZ); preferowac reprojekcje serwerowa CUZK",
+        "probe odrzuca sk_gku (inf w CZ); reprojekcja tresci LOKALNA — "
+        "serwerowej CUZK nie uzywamy, gubi datum shift (ADR-024)",
     ),
     KnownPath("EPSG:8353", "EPSG:2180", 0.001, "SK, bez siatek"),
     KnownPath("EPSG:25833", "EPSG:2180", 0.0, "DE, jedyna operacja, bez siatek"),
