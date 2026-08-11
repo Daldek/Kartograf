@@ -346,6 +346,53 @@ class TestCreateParserDownload:
         assert args.scale is None
 
 
+class TestCreateParserCountry:
+    """Tests for --country/--target-crs and per-country sentinels on download."""
+
+    def test_country_default_auto(self):
+        args = create_parser().parse_args(["download", "X"])
+        assert args.country == "auto"
+
+    def test_country_choices(self):
+        for value in ("pl", "cz", "auto"):
+            args = create_parser().parse_args(["download", "X", "--country", value])
+            assert args.country == value
+
+    def test_country_invalid_rejected(self):
+        with pytest.raises(SystemExit):
+            create_parser().parse_args(["download", "X", "--country", "de"])
+
+    def test_target_crs_default_none_and_choices(self):
+        args = create_parser().parse_args(["download", "X"])
+        assert args.target_crs is None
+        for value in ("EPSG:2180", "EPSG:5514", "EPSG:3045"):
+            args = create_parser().parse_args(["download", "X", "--target-crs", value])
+            assert args.target_crs == value
+        with pytest.raises(SystemExit):
+            create_parser().parse_args(["download", "X", "--target-crs", "EPSG:4326"])
+
+    def test_sentinel_defaults(self):
+        """Domyslne --resolution/--vertical-crs/--system to None (per kraj)."""
+        args = create_parser().parse_args(["download", "X"])
+        assert args.resolution is None
+        assert args.vertical_crs is None
+        assert args.system is None
+
+    def test_new_choices_accepted(self):
+        args = create_parser().parse_args(
+            ["download", "X", "--resolution", "2m", "--vertical-crs", "Bpv"]
+        )
+        assert args.resolution == "2m"
+        assert args.vertical_crs == "Bpv"
+
+    def test_bbox_crs_extended_with_cz(self):
+        for value in ("EPSG:5514", "EPSG:3045"):
+            args = create_parser().parse_args(
+                ["download", "--bbox", "1,2,3,4", "--bbox-crs", value]
+            )
+            assert args.bbox_crs == value
+
+
 class TestProgressCallback:
     """Tests for create_progress_callback()."""
 
@@ -1570,11 +1617,11 @@ class TestParsePL2000Command:
 class TestCreateParserDownloadSystem:
     """Tests for --system argument on download subparser."""
 
-    def test_system_default_is_1992(self):
-        """--system defaults to 1992."""
+    def test_system_default_is_none(self):
+        """--system defaults to None (sentinel; resolved per country later)."""
         parser = create_parser()
         args = parser.parse_args(["download", "--bbox", "419000,230000,426000,237000"])
-        assert args.system == "1992"
+        assert args.system is None
 
     def test_system_2000_accepted(self):
         """--system 2000 is accepted."""

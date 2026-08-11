@@ -63,7 +63,9 @@ def create_parser() -> argparse.ArgumentParser:
         help="Download geospatial data from GUGiK",
         description=(
             "Download geospatial data from GUGiK: NMT (terrain), NMPT (surface), "
-            "or orthophoto"
+            "or orthophoto. Dla PL --bbox rozwija sie na arkusze zrodlowe; dla CZ "
+            "--bbox zwraca jeden wycinek serwerowy (exportImage) — dane zrodlowe "
+            "1:1 daje tryb godlowy (TM33/SM5)."
         ),
     )
     download_parser.add_argument(
@@ -86,9 +88,26 @@ def create_parser() -> argparse.ArgumentParser:
             "EPSG:2177",
             "EPSG:2178",
             "EPSG:2179",
+            "EPSG:5514",
+            "EPSG:3045",
         ],
         default="EPSG:2180",
         help="CRS for --bbox coordinates (default: EPSG:2180)",
+    )
+    download_parser.add_argument(
+        "--country",
+        choices=["pl", "cz", "auto"],
+        default="auto",
+        help="Kraj zrodla danych: pl (GUGiK), cz (CUZK) lub auto — wykrywany "
+        "z godla/bboxa; bbox przecinajacy oba kraje pobiera osobne pliki "
+        "per kraj (default: auto)",
+    )
+    download_parser.add_argument(
+        "--target-crs",
+        choices=["EPSG:2180", "EPSG:5514", "EPSG:3045"],
+        default=None,
+        help="Reprojekcja serwerowa wyniku (tylko CZ, tylko tryb --bbox/"
+        "--geometry; PL pobiera natywnie w EPSG:2180)",
     )
     download_parser.add_argument(
         "--scale",
@@ -115,16 +134,17 @@ def create_parser() -> argparse.ArgumentParser:
     )
     download_parser.add_argument(
         "--vertical-crs",
-        choices=["KRON86", "EVRF2007"],
-        default="EVRF2007",
-        help="Vertical CRS: EVRF2007 (default) or KRON86 (legacy Kronsztadt 86)",
+        choices=["KRON86", "EVRF2007", "Bpv"],
+        default=None,
+        help="Uklad pionowy: PL default EVRF2007 (lub KRON86); CZ default Bpv "
+        "(natywny) lub EVRF2007 (transformacja +0,12..0,14 m)",
     )
     download_parser.add_argument(
         "--resolution",
         "-r",
-        choices=["1m", "5m"],
-        default="1m",
-        help="Grid resolution: 1m or 5m (default: 1m). Note: 5m only for EVRF2007",
+        choices=["1m", "5m", "2m"],
+        default=None,
+        help="Rozdzielczosc siatki: PL 1m/5m (default 1m), CZ 2m/5m (default 2m)",
     )
     download_parser.add_argument(
         "--product",
@@ -159,8 +179,8 @@ def create_parser() -> argparse.ArgumentParser:
     download_parser.add_argument(
         "--system",
         choices=["1992", "2000"],
-        default="1992",
-        help="System godłowania dla --bbox/--geometry (domyślnie 1992)",
+        default=None,
+        help="System godlowania dla --bbox/--geometry — tylko PL (default: 1992)",
     )
     download_parser.add_argument(
         "--workers",
