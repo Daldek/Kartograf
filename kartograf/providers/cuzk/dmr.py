@@ -388,8 +388,22 @@ def _endpoint_for(
 
 
 def _assign_crs(path: Path, crs: str) -> None:
-    """Naprawa metadanych DMR4G-TIFF: wpisz CRS (georeferencja jest w .tfw)."""
-    with rasterio.open(path, "r+") as ds:
-        if ds.crs is None:
-            logger.debug(f"{path.name}: brak CRS w GeoTIFF — wpisuje {crs}")
-            ds.crs = CRS.from_string(crs)
+    """Naprawa metadanych DMR4G-TIFF: wpisz CRS (georeferencja jest w .tfw).
+
+    Lustro `_overwrite_crs` w client.py: cale cialo w try/except, bo
+    uszkodzony TIFF z poprawnie rozpakowanego ZIP-a moze sprawic, ze
+    rasterio zglosi niemapowany wyjatek (np. TypeError) zamiast
+    (DownloadError, ValidationError) — bez przechwycenia taki wyjatek
+    uciekalby poza `_cz_download_godlo`/`_run_cz` traceback'iem. Przy
+    bledzie usuwany jest zarowno plik docelowy, jak i towarzyszacy .tfw,
+    zeby `skip_existing` w kolejnym uruchomieniu nie utrwalil korupcji.
+    """
+    try:
+        with rasterio.open(path, "r+") as ds:
+            if ds.crs is None:
+                logger.debug(f"{path.name}: brak CRS w GeoTIFF — wpisuje {crs}")
+                ds.crs = CRS.from_string(crs)
+    except Exception as e:
+        path.unlink(missing_ok=True)
+        path.with_suffix(".tfw").unlink(missing_ok=True)
+        raise DownloadError(f"nie udalo sie wpisac CRS {crs} w {path}: {e}") from e

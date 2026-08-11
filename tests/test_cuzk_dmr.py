@@ -214,6 +214,32 @@ class TestDownloadDispatch:
             )
             assert src.nodata == CUZK_NODATA
 
+    def test_sm5_corrupted_tiff_raises_download_error_and_cleans_up(self, tmp_path):
+        """ZIP ma poprawna strukture, ale rozpakowany .tif jest uszkodzony
+        (np. urwane pobieranie) — rasterio.open zglasza niemapowany wyjatek
+        (tu: RasterioIOError), ktory _assign_crs musi zamienic na
+        DownloadError. Zarowno .tif jak i towarzyszacy .tfw musza zniknac,
+        inaczej kolejny --skip-existing utrwali korupcje (F1)."""
+        target = tmp_path / "CTES96.tif"
+        with patch(_CLIENT_PATCH) as client_cls, patch(_INDEX_PATCH) as index_cls:
+            index_cls.return_value.sm5_sheet.return_value = _ctes96_info()
+
+            def fake_fetch(url, output_path, *, unzip_single=None):
+                output_path = Path(output_path)
+                output_path.write_bytes(b"not a real tiff at all")
+                output_path.with_suffix(".tfw").write_text(
+                    "500.0\n0.0\n0.0\n-500.0\n-449750.0\n-1112250.0\n"
+                )
+                return output_path
+
+            client_cls.return_value.fetch_file.side_effect = fake_fetch
+            provider = CuzkDmrProvider(resolution="5m")
+            with pytest.raises(DownloadError):
+                provider.download("CTES96", target)
+
+        assert not target.exists()
+        assert not target.with_suffix(".tfw").exists()
+
     def test_sm5_with_2m_resolution_rejected(self, tmp_path):
         provider = CuzkDmrProvider(resolution="2m")
         with pytest.raises(ValidationError, match="5m"):
