@@ -17,14 +17,14 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
-| Pokrycie testami | ✅ Gotowy | ~89%, 1399 testow (etap 1 + fix ADR-024, galaz feature/etap1-cz-dmr) |
+| Pokrycie testami | ✅ Gotowy | ~89%, 1402 testy (develop po mergu etapu 1, 2026-08-12) |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0 |
 | Weryfikacja BBox PL-2000 | ✅ Gotowy | 67 testow, reference values + live WMS |
 | Walidacja warstw WMS | ✅ Gotowy | GetCapabilities, lazy, fallback; NMT+NMPT v0.6.1, Orto 2026-06-24 |
 | Etap 0 — zrodla wielokrajowe (sources/transform/transport/providers-pl/CLI split/sidecar) | ✅ Gotowy | zmergowane do develop 2026-08-11; E2E 12/12 na realnych danych |
-| Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | galaz `feature/etap1-cz-dmr` (niezmergowana do develop); 21 zadan TDD, E2E 11/11; wersja `0.7.0-dev` |
+| Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | ZMERGOWANY do develop 2026-08-12 (fast-forward do 0738ae0); 21 zadan TDD + fix ADR-024, E2E 11/11 + zywa weryfikacja tresci 3xPASS; wersja `0.7.0-dev` |
 
 <!-- Statusy: ✅ Gotowy | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
@@ -82,8 +82,13 @@
 
 ## Ostatnia sesja
 
-**Data:** 2026-08-10 — 2026-08-11 (sekcje datowane ponizej; najnowsza:
-"Fix po etapie 1: reprojekcja CZ lokalnie zamiast serwerowo (2026-08-11)")
+**Data:** 2026-08-10 — 2026-08-12 (sekcje datowane ponizej)
+
+### Merge etapu 1 do develop (2026-08-12)
+- `feature/etap1-cz-dmr` zmergowana do `develop` fast-forwardem do `0738ae0`
+  (36 commitow od 7e9c039); suita na zmergowanym develop: **1402 passed**;
+  galaz feature usunieta (rekord = git + ten dokument + ADR-023/024).
+- develop nadal NIE wypchniety na origin (67 commitow lokalnie, etapy 0+1).
 
 ### Co zrobiono
 - **Research: rozszerzenie o zrodla wielokrajowe (CZ, DE, SK)** — wszystkie
@@ -409,12 +414,8 @@ ukladu TIFF serwera przy zapisie, halo interpolatora bilinear ~1 px na
 krawedzi waznosci.
 
 ### Nastepne kroki
-1. **Decyzja uzytkownika: merge `feature/etap1-cz-dmr` do `develop`** —
-   galaz jest zielona (1399 testow, ruff/mypy czyste), E2E 11/11 PASS,
-   a luka odnotowana przy fixie ADR-024 (E2E weryfikowalo bounds/CRS, nie
-   georeferencje tresci) jest juz zamknieta — zywa weryfikacja tresci
-   3xPASS, patrz sekcja wyzej. Dokumentacja kompletna. Wymaga:
-   superpowers:finishing-a-development-branch albo recznego przegladu.
+1. ~~Merge `feature/etap1-cz-dmr` do `develop`~~ — **WYKONANE 2026-08-12**
+   (fast-forward do 0738ae0, suita 1402 passed na wyniku, galaz usunieta).
 2. **Etap 2** (DMP/Orto/LAZ CZ + wielokat granicy administracyjnej zamiast
    prostokatnej obwiedni + ujednolicenie `extra.parent_request.bbox_crs`
    miedzy trybami jawny/auto) — spec/plan do napisania po decyzji o mergu;
