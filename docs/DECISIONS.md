@@ -634,8 +634,9 @@ datum po stronie serwera CUZK w roznych czesciach kraju), nie stala
 globalna — silniejszy argument za Opcja C (reprojekcja lokalna takze dla
 sciezki godlowej TM33) niz sugerowalaby sama liczba 1,25 m. Zrodlo:
 `seam/verify/verify-report.md`, sekcja 2 ("Dodatkowo: bezposredni pomiar
-skutku fixu na tym samym kaflu") — plik niewersjonowany (scratchpad sesji
-weryfikacyjnej); kluczowe liczby zachowane w tym ADR i w PROGRESS.md.
+skutku fixu na tym samym kaflu") — raport odzyskany 2026-08-18 ze scratchpada
+sesji: kopia w `docs/research/2026-08-11-adr024-verify-report.md`, oryginal
+z pelnymi danymi w niewersjonowanym `seam/` w korzeniu repo.
 
 **Opcje:**
 - A) Naprawic tylko `--target-crs`, zostawic godlowa sciezke TM33 na serwerze.
@@ -731,7 +732,8 @@ Regula "nie ufaj reprojekcji serwerowej" jest wiazaca takze dla przyszlych
 zrodel DE/SK sterowanych serwerowym parametrem ukladu.
 
 **Zywa weryfikacja fixu (2026-08-11, dane CUZK+GUGiK,
-`seam/verify/verify-report.md` — plik niewersjonowany, jw.):** kontrola tresci (dopasowanie do
+`seam/verify/verify-report.md` — kopia:
+`docs/research/2026-08-11-adr024-verify-report.md`):** kontrola tresci (dopasowanie do
 referencji natywnej 5514 metoda minimum RMS w skanie przesuniec ±2 m/0,25 m)
 potwierdza fix na obu sciezkach, minimum dokladnie w (0,0) na obu:
 godlo TM33 (`302_5550`, EPSG:3045) — RMS(0,0) = **0,016 m**; bbox

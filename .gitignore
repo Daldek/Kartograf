@@ -65,3 +65,7 @@ data/
 .kartograf_cache.db
 .kartograf_cache.db-wal
 .kartograf_cache.db-shm
+
+# Odzyskane dane sesji E2E/weryfikacji ADR-024 (2026-08-18) — duze rastry, poza gitem
+seam/
+e2e-data/

@@ -434,10 +434,15 @@ plany superpowers), nastepnie naprawa wszystkich znalezisk. Najwazniejsze:
 - **Liczby commitow skorygowane**: develop jest 71 commitow przed origin
   (nie "67"/"36+"); merge etapu 1 = 34 commity od 7e9c039 (nie 36);
   delta testow etapu 1 = +239 wzgledem 1142 (nie +244)
-- **Utracone artefakty sesyjne udokumentowane**: ledger kontrolera
-  `.superpowers/sdd/.../progress.md` (lista ~140 minorow) oraz
-  `seam/verify/verify-report.md` nie istnieja (katalogi poza gitem) —
-  adnotacje w PROGRESS/DECISIONS/e2e; kluczowe liczby przetrwaly w docs
+- **Artefakty sesyjne**: ledger kontrolera `.superpowers/sdd/.../progress.md`
+  (lista ~140 minorow) UTRACONY bezpowrotnie (nigdy niecommitowany, brak
+  kopii). `seam/verify/verify-report.md` poczatkowo uznany za utracony,
+  ale tego samego dnia ODZYSKANY ze scratchpada sesji w /tmp (tmpfs —
+  przepadlby przy restarcie): trzy raporty skopiowane do
+  `docs/research/2026-08-11-adr024-{seam,bugfix,verify}-report.md`,
+  a pelne dane przeniesione do korzenia repo — `seam/` (588M; analiza szwu,
+  weryfikacja, `probe-gdal/` z diagnostyka pulapki osi GDAL) i `e2e-data/`
+  (58M; m.in. CTES96.tif, kafle dmr5g); oba katalogi dodane do .gitignore
 - **CHANGELOG**: 0.5.0 "849 testow" -> 835 (ADR-016 usunal 14 w tej samej
   wersji, +199 nie +213); Tests 0.7.0 -> 1402; wpis Added `--target-crs`
   "reprojekcja serwerowa" skorygowany na lokalna (ADR-024)
@@ -469,8 +474,8 @@ plany superpowers), nastepnie naprawa wszystkich znalezisk. Najwazniejsze:
    miedzy trybami jawny/auto) — spec/plan do napisania po decyzji o mergu;
    punkt wyjscia: ADR-023 (ustalenia dodatkowe 3-4) i `docs/SCOPE.md`
    (sekcje 2.2, 3.1, 3.2). Do backlogu etapu 2, z zywej weryfikacji
-   ADR-024 (`seam/verify/verify-report.md`, Zastrzezenia 1-3 — plik
-   niewersjonowany, scratchpad sesji; tresc zachowana ponizej): (a)
+   ADR-024 (`seam/verify/verify-report.md`, Zastrzezenia 1-3 — raport
+   odzyskany 2026-08-18: `docs/research/2026-08-11-adr024-verify-report.md`): (a)
    kompresja/`tiled=True` w profilu zapisu lokalnego warpu CZ (kafel
    brzegowy 93% nodata: 527 KB serwerowy → 4,0 MB lokalny, 7,6x); (b)
    maskowanie przed interpolacja bilinear na krawedzi waznosci (halo
