@@ -107,9 +107,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     auto przyciety do jego obwiedni), a opcje nierozwiazywalne dla ktoregos
     z krajow (np. `--resolution 1m` z CZ, `--system` z CZ, `--target-crs` z PL)
     sa odrzucane PRZED pobraniem, z podpowiedzia jawnego `--country`
-  - CLI `--target-crs {EPSG:2180,EPSG:5514,EPSG:3045}` — reprojekcja serwerowa
-    wyniku CZ w trybie `--bbox`/`--geometry` (godlo + `--target-crs` = blad,
-    patrz Changed); `--vertical-crs {Bpv,EVRF2007,KRON86}` rozszerzone o CZ
+  - CLI `--target-crs {EPSG:2180,EPSG:5514,EPSG:3045}` — reprojekcja wyniku CZ
+    w trybie `--bbox`/`--geometry`, wykonywana lokalnie przypieta operacja
+    (pierwotnie serwerowo przez `imageSR`; zmienione fixem ADR-024 — patrz
+    Changed/Fixed nizej); godlo + `--target-crs` = blad (patrz Changed);
+    `--vertical-crs {Bpv,EVRF2007,KRON86}` rozszerzone o CZ
   - `extra.parent_request` w sidecarach trybu bbox/geometry (oryginalny bbox
     zadania, jego uklad i **probowane** — niekoniecznie pobrane — kraje) —
     grupowanie plikow jednego zadania, takze po obu stronach granicy; tryb
@@ -248,8 +250,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   zaktualizowany `test_get_opendata_url_tries_all_layers` (9 → 4 warstwy)
 
 ### Tests
-- **1381 testow, pokrycie ~89%** (+244 wzgledem stanu po etapie 0/1142); ruff
-  i ruff format czyste, mypy bez nowych bledow wzgledem baseline (33/34
+- **1402 testy, pokrycie ~89%** (+260 wzgledem stanu po mergu etapu 0: 1142;
+  w tym +18 testow regresji fixu ADR-024 i +3 przypiecia sciezki godlowej);
+  ruff i ruff format czyste, mypy bez nowych bledow wzgledem baseline (33/34
   przedistniejacych, niezwiazanych z etapem 1)
 - E2E na zywych danych CUZK + regresja PL: **11/11 PASS**
   (`docs/research/2026-08-11-etap1-e2e.md`) — godlo TM33 (dmr5g, Bpv),
@@ -358,7 +361,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `format_children()` — "finest scale X" zamiast hardcoded "1:10000"
 
 ### Tests
-- **849 testow** (+213 nowych)
+- **835 testow** (+199 nowych; w trakcie prac bylo 849 — 14 testow
+  `--category` usunieto w tej samej wersji razem z flaga, ADR-016)
 
 ---
 

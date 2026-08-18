@@ -1,9 +1,13 @@
 # Standardy deweloperskie — Kartograf
 
-**Wersja:** 2.0
-**Data:** 2026-02-03
+**Wersja:** 2.1
+**Data:** 2026-08-18
 **Status:** Obowiazujacy
-**Zrodlo:** Zunifikowane standardy workspace (`shared/standards/DEVELOPMENT_STANDARDS.md`)
+**Zrodlo:** Zunifikowane standardy workspace (`shared/standards/DEVELOPMENT_STANDARDS.md` — repozytorium zewnetrzne, nieobecne w tym workspace)
+
+> **Nota 2.1 (2026-08-18):** aktualizacja do stanu po etapie 1 (v0.7.0-dev) —
+> struktura projektu (sekcja 7.1), komenda mypy bez `--strict` + baseline
+> (sekcja 8.3), przyklad nazewnictwa plikow (sekcja 4.1).
 
 ---
 
@@ -152,7 +156,7 @@ chore(deps): update requests to 2.32.0
 | Funkcje | snake_case + czasownik | `download_sheet()`, `parse_godlo()` |
 | Klasy | PascalCase | `SheetParser`, `GugikProvider` |
 | Stale | UPPER_SNAKE_CASE | `DEFAULT_FORMAT`, `MAX_RETRIES` |
-| Pliki .py | snake_case | `sheet_parser.py`, `landcover_base.py` |
+| Pliki .py | snake_case | `sheet_parser.py`, `gugik_nmpt.py` |
 | Protected | `_prefix` | `self._cache` |
 | Private | `__prefix` | `self.__internal_state` |
 
@@ -298,29 +302,25 @@ Kartograf/
 ├── kartograf/               # kod zrodlowy (flat layout)
 │   ├── __init__.py          # public API exports
 │   ├── exceptions.py        # hierarchia wyjatkow
-│   ├── core/                # parser godel, BBox
-│   ├── providers/           # providery danych (GUGiK NMT/NMPT/Orto, BDOT10k, CORINE, SoilGrids)
+│   ├── core/                # parsery godel (PL-1992, PL-2000, CZ TM33), rejestr systemow, BBox, geometry
+│   ├── sources/             # deskryptory zrodel danych (registry PL/CZ/EU/GLOBAL, sidecar metadata)
+│   ├── transform/           # transformacje CRS (przypiete operacje pyproj)
+│   ├── transport/           # wspolny transport (http: atomic download + retry; mosaic: merge kafli)
+│   ├── providers/           # providery danych
+│   │   ├── base.py          # BaseProvider, LandCoverProvider
+│   │   ├── pl/              # GUGiK: gugik.py, gugik_nmpt.py, gugik_orto.py, gugik_laz.py, bdot10k.py
+│   │   ├── cuzk/            # CUZK (Czechy): client.py, sheets.py, dmr.py
+│   │   ├── corine.py        # CORINE z Copernicus
+│   │   └── soilgrids.py     # SoilGrids z ISRIC
+│   ├── cache/               # MetadataCache (SQLite WAL)
 │   ├── download/            # download management (NMT/NMPT/Orto)
 │   ├── landcover/           # land cover management
 │   ├── hydrology/           # obliczenia hydrologiczne (HSG)
 │   ├── auth/                # autentykacja CLMS (Auth Proxy)
-│   └── cli/                 # interfejs CLI
-├── tests/                   # testy (636)
-│   ├── conftest.py
-│   ├── test_sheet_parser.py
-│   ├── test_gugik_provider.py
-│   ├── test_gugik_nmpt.py
-│   ├── test_gugik_orto.py
-│   ├── test_download_manager.py
-│   ├── test_storage.py
-│   ├── test_auth_client.py
-│   ├── test_auth_proxy.py
-│   ├── test_landcover.py
-│   ├── test_soilgrids.py
-│   ├── test_hsg.py
-│   ├── test_geometry.py
-│   ├── test_cli.py
-│   └── test_integration.py
+│   └── cli/                 # CLI podzielone per komenda: _parser.py (argparse),
+│                            # parse_cmd.py, download_cmd.py, landcover_cmd.py,
+│                            # soilgrids_cmd.py, cache_cmd.py + fasada commands.py
+├── tests/                   # 30 plikow testowych + conftest.py + fixtures/ (1402 testy)
 ├── docs/                    # dokumentacja
 ├── CLAUDE.md
 ├── README.md
@@ -328,6 +328,9 @@ Kartograf/
 ├── .editorconfig
 └── .gitignore
 ```
+
+Zrodlem prawdy dla aktualnej struktury modulow jest sekcja "Struktura modulow"
+w `CLAUDE.md` (korzen repo).
 
 ### 7.2 Konfiguracja w pyproject.toml
 
@@ -372,8 +375,11 @@ Type hints sa wymagane dla:
 ### 8.3 Type checking
 
 ```bash
-mypy kartograf/ --strict
+mypy kartograf/
 ```
+
+Projekt utrzymuje baseline mypy (33 przedistniejace bledy, bez `--strict`).
+Nowy kod nie moze dodawac nowych bledow do tego dlugu.
 
 ---
 
@@ -720,8 +726,8 @@ CorineProvider → localhost HTTP → AuthProxy (subprocess) → Keychain → CL
 
 ---
 
-**Wersja dokumentu:** 2.0
-**Data ostatniej aktualizacji:** 2026-02-03
-**Zrodlo:** `shared/standards/DEVELOPMENT_STANDARDS.md` v1.0
+**Wersja dokumentu:** 2.1
+**Data ostatniej aktualizacji:** 2026-08-18
+**Zrodlo:** `shared/standards/DEVELOPMENT_STANDARDS.md` v1.0 (repozytorium zewnetrzne, nieobecne w tym workspace)
 
 *Odstepstwa od tych standardow wymagaja uzasadnienia w `CLAUDE.md` projektu.*

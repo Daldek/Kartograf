@@ -11,6 +11,22 @@ dla trybu `--country auto`; decyzja EVRF2007 globalnie = EPSG:5621)
   weryfikowane na zywo)
 - ADR-022 (architektura zrodel wielokrajowych)
 
+**Errata (2026-08-18):**
+1. Reprojekcja serwerowa CUZK (`imageSR`, sidecar `server:EPSG:*` — dotyczy m.in.
+   faktow #1/#7, sekcji `download_bbox`, decyzji 13.2 dla TM33 i kryterium
+   akceptacji 3) zostala po implementacji ZASTAPIONA lokalna przypieta operacja:
+   serwer gubi transformacje datum S-JTSK->ETRS89 (przesuniecie tresci 135 m przy
+   `imageSR=2180`; takze `imageSR=3045` mial zmienny blad 1,25-4,92 m). Zadania do
+   serwera ida wylacznie w natywnym EPSG:5514, reprojekcje robi lokalnie
+   `rasterio.warp` z przypieta operacja; sidecar `transform.horizontal` =
+   `"pinned: ..."` zamiast `"server:EPSG:..."`. Patrz ADR-024.
+2. Fakt #2: przy `noData=-9999` serwer wypelnia obszar poza CZ wartoscia -9999
+   (zera pojawiaja sie tylko bez tego parametru); zmierzony udzial nodata kafla
+   przy Cieszynie to 48,3%, nie 49,3% — patrz rekonesans
+   (`docs/research/2026-08-11-etap1-rekonesans.md`).
+3. `tests/test_cache.py` wymieniony w sekcji 8 to faktycznie
+   `tests/test_metadata_cache.py` (skorygowane w planie implementacji).
+
 ---
 
 ## 1. Kontekst i cel
@@ -635,6 +651,9 @@ Pierwsze zadanie planu implementacji (rekonesans, bez kodu produkcyjnego):
 4. Zachowanie HTTP openzu: nagly 429/limit, naglowki, redirecty (research
    milczy — przyjeto standardowe retry z `transport/http.py`).
 5. `bboxSR=3045` + `imageSR=3045` dla kafla TM33 (research pokazal 5514 i 2180).
+
+Wszystkie 5 punktow potwierdzone live 2026-08-11 — patrz
+`docs/research/2026-08-11-etap1-rekonesans.md` (z odchyleniami tam opisanymi).
 
 ## 13. Decyzje doprecyzowane wzgledem specu etapu 0
 

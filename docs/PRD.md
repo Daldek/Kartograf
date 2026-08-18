@@ -1,10 +1,17 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.4
-**Data:** 2026-03-24
+**Wersja:** 3.5
+**Data:** 2026-08-18
 **Product Owner:** Piotr
 **Status:** Production (v0.6.1)
+
+> **Nota (3.5, 2026-08-18):** PRD pozostaje snapshotem zakresu wydania v0.6.1;
+> wersja 3.5 usuwa jedynie wewnętrzne sprzeczności (parallel downloads i metadata
+> cache odhaczone jako zaimplementowane, LAZ w Public API i diagramie, korekta
+> "resumable downloads" i pokrycia testowego). Zakres CZ/CUZK rozwijany na
+> develop (v0.7.0-dev: `--country {pl,cz,auto}`, DMR 5G/4G) jest celowo
+> nieopisany do czasu wydania 0.7.0 — patrz `docs/SCOPE.md` sekcja 2.2.
 
 ---
 
@@ -43,7 +50,7 @@ Kartograf to narzędzie CLI + biblioteka Python oferujące:
 
 | Cel | Target | Status |
 |-----|--------|--------|
-| Test coverage (core) | >= 80% | 84% (osiągnięty) |
+| Test coverage (core) | >= 80% | ~89% (osiągnięty) |
 | Reliability | >= 95% success rate | Osiągnięty |
 | Performance | Download < 60s | Osiągnięty |
 | Code quality | ruff | Osiągnięty |
@@ -441,18 +448,19 @@ kartograf soilgrids hsg --godlo N-34-130-D --keep-intermediate
 └──────────┬─────────────┴─────────────┬──────────────────────┘
            │                           │
            v                           v
-┌─────────────────────────────────────────────────────────────────┐
-│                         Providers                               │
-├─────────┬──────────┬──────────┬──────────┬──────────┬───────────┤
-│ Gugik   │ GugikNmpt│ GugikOrto│ Bdot10k  │ Corine   │ SoilGrids │
-│ (NMT)   │ (NMPT)   │ (Orto)   │ Provider │ Provider │ Provider  │
-└────┬────┴────┬─────┴────┬─────┴────┬─────┴────┬─────┴─────┬─────┘
-     │         │          │          │          │           │
-     v         v          v          v          v           v
-┌───────────────────────┐ ┌─────────┐ ┌──────────────┐ ┌─────────┐
-│ GUGiK WCS / OpenData  │ │ GUGiK   │ │ CLMS API     │ │ ISRIC   │
-│ (NMT, NMPT, Ortofoto) │ │ OpenData│ │ (Auth Proxy) │ │ WCS     │
-└───────────────────────┘ └─────────┘ └──────────────┘ └─────────┘
+┌───────────────────────────────────────────────────────────────────────────┐
+│                                 Providers                                 │
+├─────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┤
+│ Gugik   │ GugikNmpt│ GugikOrto│ GugikLaz │ Bdot10k  │ Corine   │ SoilGrids│
+│ (NMT)   │ (NMPT)   │ (Orto)   │ (LAZ)    │ Provider │ Provider │ Provider │
+└────┬────┴────┬─────┴────┬─────┴────┬─────┴────┬─────┴────┬─────┴────┬─────┘
+     │         │          │          │          │          │          │
+     v         v          v          v          v          v          v
+┌───────────────────────┐ ┌───────────┐ ┌──────────┐ ┌──────────────┐ ┌─────────┐
+│ GUGiK WCS / OpenData  │ │ GUGiK WFS │ │ GUGiK    │ │ CLMS API     │ │ ISRIC   │
+│ (NMT, NMPT, Ortofoto) │ │ + OpenData│ │ OpenData │ │ (Auth Proxy) │ │ WCS     │
+└───────────────────────┘ │ (LAZ)     │ │ (BDOT10k)│ └──────────────┘ └─────────┘
+                          └───────────┘ └──────────┘
 ```
 
 ### 4.2 Hydrology Module
@@ -486,6 +494,9 @@ kartograf soilgrids hsg --godlo N-34-130-D --keep-intermediate
 ```python
 # kartograf/__init__.py exports:
 from kartograf import (
+    # Cache
+    MetadataCache,
+
     # Core
     SheetParser,
     Parser2000,
@@ -497,6 +508,7 @@ from kartograf import (
     # Download (NMT/NMPT/Orto)
     DownloadManager,
     DownloadProgress,
+    DownloadResult,
     FileStorage,
 
     # Land Cover
@@ -507,6 +519,8 @@ from kartograf import (
     GugikProvider,
     GugikNmptProvider,
     GugikOrtoProvider,
+    GugikLazProvider,
+    LazTile,
     LandCoverProvider,
     Bdot10kProvider,
     CorineProvider,
@@ -569,7 +583,7 @@ mypy >= 1.13           # Type checking
 - Success rate >= 95%
 - Retry logic: 3 attempts, exponential backoff
 - Atomic writes (tmp → rename)
-- Resumable downloads
+- Skip-existing: already downloaded files are not re-fetched
 
 ### 7.3 Security
 
@@ -582,13 +596,12 @@ mypy >= 1.13           # Type checking
 ## 8. Future Enhancements
 
 ### Version 0.6+
-- [ ] Parallel downloads (multi-threading)
-- [ ] Metadata cache (SQLite)
+- [x] Parallel downloads (multi-threading) (implemented in v0.6.0)
+- [x] Metadata cache (SQLite) (implemented in v0.6.0)
 - [ ] Automatic mosaic creation
 
 ### Version 1.0+
 - [ ] GUI interface
-- [ ] Additional data sources (LIDAR)
 - [ ] PostGIS integration
 - [ ] REST API server
 
@@ -616,6 +629,6 @@ HYDROGRAF (główna aplikacja)
 
 ---
 
-**Wersja dokumentu:** 3.4
-**Data ostatniej aktualizacji:** 2026-03-24
-**Status:** Production - v0.6.1
+**Wersja dokumentu:** 3.5
+**Data ostatniej aktualizacji:** 2026-08-18
+**Status:** Production - v0.6.1 (snapshot; korekty spójności 3.5 — patrz nota na początku dokumentu)

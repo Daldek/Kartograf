@@ -1,9 +1,11 @@
 # Kartograf
 
-Narzędzie do automatycznego pobierania danych przestrzennych z zasobów GUGiK, Copernicus i ISRIC dla Polski:
-- **NMT** - Numeryczny Model Terenu (dane wysokościowe, 1m/5m)
+Narzędzie do automatycznego pobierania danych przestrzennych z zasobów GUGiK (Polska), CUZK (Czechy), Copernicus i ISRIC:
+- **NMT (PL)** - Numeryczny Model Terenu z GUGiK (dane wysokościowe, 1m/5m)
+- **NMT (CZ)** - DMR 5G/4G z CUZK (2m/5m, godło TM33/SM5 lub bbox, `--country {pl,cz,auto}`)
 - **NMPT** - Numeryczny Model Pokrycia Terenu / DSM (teren + obiekty, 1m)
 - **Ortofotomapa** - Zdjęcia lotnicze Standard Resolution (25cm, TIF)
+- **LAZ** - Chmury punktów LIDAR (dane pomiarowe ALS) z GUGiK przez WFS
 - **BDOT10k** - Baza Danych Obiektów Topograficznych (pokrycie terenu, wektory)
 - **CORINE Land Cover** - Europejska klasyfikacja pokrycia terenu (44 klasy)
 - **SoilGrids** - Globalne dane glebowe (tekstura, węgiel organiczny, pH)
@@ -32,138 +34,80 @@ pip install -e .
 #### Jako CLI
 
 ```bash
-# Informacje o godle
+# Informacje o godle (auto-detekcja PL-1992 / PL-2000)
 kartograf parse N-34-130-D-d-2-4
 
-# Pobieranie NMT (pojedynczy arkusz)
+# Pobieranie NMT: pojedynczy arkusz albo hierarchia, opcjonalnie 5m
 kartograf download N-34-130-D-d-2-4
+kartograf download N-34-130-D --scale 1:10000 --resolution 5m --output ./data
 
-# Pobieranie NMT (hierarchia)
-kartograf download N-34-130-D --scale 1:10000 --output ./data
-
-# Pobieranie NMT w rozdzielczości 5m (tylko EVRF2007)
-kartograf download N-34-130-D-d-2-4 --resolution 5m
-kartograf download N-34-130-D --scale 1:10000 -r 5m
-
-# Pobieranie NMPT (Digital Surface Model)
+# Inne produkty GUGiK: NMPT (DSM), ortofotomapa, chmury punktów LAZ
 kartograf download N-34-130-D-d-2-4 --product nmpt
+kartograf download N-34-130-D-d-2-4 --product laz
 
-# Pobieranie ortofotomapy
-kartograf download N-34-130-D-d-2-4 --product orto
+# Selekcja obszaru: bbox albo plik geometrii (SHP/GPKG)
 kartograf download --bbox 419000,230000,426000,237000 --product orto
+kartograf download --geometry zlewnia.gpkg --layer catchments
 
-# Pobieranie NMT z pliku geometrii (SHP/GPKG)
-kartograf download --geometry zlewnia.shp
-kartograf download --geometry zlewnia.gpkg --layer catchments --product nmpt
-
-# PL-2000: parsowanie i pobieranie (auto-detekcja systemu)
-kartograf parse 6.179.12.20
+# PL-2000: godło albo bbox w CRS strefy
 kartograf download 6.179.12.20
 kartograf download --bbox 6500000,5895000,6508000,5900000 --bbox-crs EPSG:2177 --system 2000
 
-# Pobieranie Land Cover (BDOT10k - powiat)
+# NMT Czechy (CUZK DMR 5G/4G); na pograniczu --country auto dzieli żądanie na PL i CZ
+kartograf download 302_5550 --country cz
+kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto
+
+# Pokrycie terenu i gleby: BDOT10k, CORINE, SoilGrids
 kartograf landcover download --source bdot10k --teryt 1465
-
-# Pobieranie Land Cover z pliku geometrii
-kartograf landcover download --source bdot10k --geometry zlewnia.shp
-
-# Pobieranie Land Cover (BDOT10k - godło)
-kartograf landcover download --source bdot10k --godlo N-34-130-D
-
-# Pobieranie Land Cover (CORINE)
 kartograf landcover download --source corine --year 2018 --godlo N-34-130-D
-
-# Pobieranie danych glebowych (SoilGrids)
-kartograf landcover download --source soilgrids --godlo N-34-130-D --property soc
 kartograf landcover download --source soilgrids --godlo N-34-130-D --property clay --depth 15-30cm
 
-# Obliczanie Hydrologic Soil Groups (HSG) dla metody SCS-CN
+# Hydrologic Soil Groups dla metody SCS-CN
 kartograf soilgrids hsg --godlo N-34-130-D --stats
-kartograf soilgrids hsg --godlo N-34-130-D --output /tmp/hsg.tif --keep-intermediate
 
-# Lista źródeł i warstw
+# Przegląd źródeł/warstw i cache metadanych
 kartograf landcover list-sources
-kartograf landcover list-layers --source bdot10k
 kartograf landcover list-layers --source soilgrids
+kartograf cache stats
 ```
 
 #### Jako biblioteka Python
 
 ```python
+from pathlib import Path
 from kartograf import SheetParser, DownloadManager, BBox
 
-# Parsowanie godła
+# Parsowanie godła i bounding box arkusza
 parser = SheetParser("N-34-130-D-d-2-4")
-print(parser.scale)      # "1:10000"
-print(parser.godlo)      # "N-34-130-D-d-2-4"
-print(parser.components) # {"pas": "N", "slup": "34", ...}
-
-# Bounding box arkusza
+print(parser.scale)                      # "1:10000"
 bbox = parser.get_bbox(crs="EPSG:2180")  # lub "EPSG:4326"
-print(f"x: [{bbox.min_x:.2f}, {bbox.max_x:.2f}]")
-print(f"y: [{bbox.min_y:.2f}, {bbox.max_y:.2f}]")
 
-# Pobieranie arkusza przez godło → ASC (OpenData)
+# Pobieranie przez godło → ASC (OpenData); hierarchia: download_hierarchy()
 manager = DownloadManager(output_dir="./data")
-path = manager.download_sheet("N-34-130-D-d-2-4")  # → .asc
+path = manager.download_sheet("N-34-130-D-d-2-4")
 
-# Pobieranie hierarchii arkuszy → ASC (OpenData)
-paths = manager.download_hierarchy(
-    godlo="N-34-130-D",
-    target_scale="1:10000"
-)  # → 64 plików .asc
+# Pobieranie przez bbox → GeoTIFF (WCS) - tylko dla NMT 1m
+area = BBox(min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180")
+path = manager.download_bbox(area, "my_area.tif")
 
-# Pobieranie NMT w rozdzielczości 5m (tylko EVRF2007)
-manager_5m = DownloadManager(output_dir="./data", resolution="5m")
-path = manager_5m.download_sheet("N-34-130-D-d-2-4")  # → .asc (5m)
-
-# Pobieranie przez bbox → GeoTIFF (WCS) - tylko dla 1m
-bbox = BBox(min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180")
-path = manager.download_bbox(bbox, "my_area.tif")  # → .tif
-
-# ===== NMPT (Digital Surface Model) =====
-from kartograf import GugikNmptProvider
-provider = GugikNmptProvider(vertical_crs="EVRF2007")
-provider.download("N-34-130-D-d-2-4", Path("./nmpt.asc"))
-
-# ===== Ortofotomapa =====
-from kartograf import GugikOrtoProvider
-orto = GugikOrtoProvider()
-orto.download("N-34-130-D-d-2-4", Path("./orto.tif"))
-orto.download_bbox(bbox, Path("./orto_area.tif"))
-
-# ===== Land Cover =====
+# Land Cover: BDOT10k / CORINE / SoilGrids
 from kartograf import LandCoverManager
-
 lc = LandCoverManager()
-
-# BDOT10k - przez godło
-lc.download(godlo="N-34-130-D")
-
-# BDOT10k - przez TERYT (powiat)
-lc.download(teryt="1465")
-
-# CORINE - przez godło
+lc.download(teryt="1465")                   # BDOT10k (powiat)
 lc.set_provider("corine")
-lc.download(godlo="N-34-130-D", year=2018)
+lc.download(godlo="N-34-130-D", year=2018)  # CORINE
 
-# SoilGrids - dane glebowe
-lc.set_provider("soilgrids")
-lc.download(godlo="N-34-130-D", property="soc", depth="0-5cm")
-
-# ===== Hydrologic Soil Groups =====
+# Hydrologic Soil Groups
 from kartograf import HSGCalculator
-
 calc = HSGCalculator()
-
-# Oblicz HSG dla godła
 calc.calculate_hsg_by_godlo("N-34-130-D", Path("./hsg.tif"))
-
-# Statystyki HSG
 stats = calc.get_hsg_statistics(Path("./hsg.tif"))
-for group, data in stats.items():
-    print(f"Grupa {group}: {data['percent']:.1f}%")
 ```
+
+Pozostałe elementy publicznego API (m.in. `GugikNmptProvider`, `GugikOrtoProvider`,
+`GugikLazProvider`, `CuzkDmrProvider`/`create_dmr_provider` dla Czech, `Parser2000`,
+`ParserTM33`, `MetadataCache`, `FileStorage`) — patrz eksporty w `kartograf/__init__.py`
+oraz [SCOPE.md](docs/SCOPE.md).
 
 ## Funkcjonalności
 
@@ -179,6 +123,11 @@ for group, data in stats.items():
   - `1m` (GRID1) - wysoka rozdzielczość, KRON86 i EVRF2007
   - `5m` (GRID5) - niższa rozdzielczość, tylko EVRF2007
 
+### NMT Czechy (CUZK, od 0.7.0-dev)
+- ✅ **DMR 5G** (2m, godło TM33 lub bbox) i **DMR 4G** (5m, godło SM5)
+- ✅ **CLI** - `--country {pl,cz,auto}`; `auto` na pograniczu dzieli żądanie na osobne pliki PL i CZ
+- ✅ **Układy** - natywnie S-JTSK/Bpv (EPSG:5514); opcjonalna reprojekcja lokalna `--target-crs` oraz `--vertical-crs EVRF2007`
+
 ### NMPT (Numeryczny Model Pokrycia Terenu)
 - ✅ **Digital Surface Model** - Teren + obiekty powierzchniowe (drzewa, budynki)
 - ✅ **Pobieranie przez godło** → ASC (OpenData)
@@ -190,8 +139,12 @@ for group, data in stats.items():
 - ✅ **Zdjęcia lotnicze** - 25cm, format TIF
 - ✅ **Pobieranie przez godło** → TIF (OpenData)
 - ✅ **Pobieranie przez bbox** → GeoTIFF (WCS), także PNG i JPEG
-- ✅ **9 warstw WMS** - od 2018 do 2025+starsze
+- ✅ **4 warstwy WMS** - 2026, 2025, 2024 + Starsze (roczniki 2018-2023 skonsolidowane)
 - ✅ **Organizacja** - `data/orto/`
+
+### LAZ (Chmury Punktów LIDAR)
+- ✅ **Dane pomiarowe ALS** (.laz) z GUGiK przez WFS, selekcja obszarem (godło/bbox/geometria)
+- ✅ **Filtry** - `--year`, `--min-density`; organizacja - `data/laz/`
 
 ### Land Cover (Pokrycie Terenu)
 - ✅ **BDOT10k** - Polska baza wektorowa (GUGiK), szczegółowość 1:10 000
@@ -234,7 +187,8 @@ potrzebujesz konta w Copernicus Land Monitoring Service:
 
 1. Zarejestruj się na https://land.copernicus.eu
 2. Wygeneruj API credentials (profil → API access)
-3. Zapisz credentials do macOS Keychain:
+3. Zapisz credentials w zmiennej środowiskowej `CLMS_CREDENTIALS` (JSON string
+   o polach jak niżej) albo — na macOS — w Keychain:
 
 ```bash
 security add-generic-password -a "$USER" -s "clms-token" -w '{
@@ -277,13 +231,17 @@ Główna aplikacja nigdy nie widzi kluczy prywatnych.
 Kartograf/
 ├── kartograf/           # Kod źródłowy
 │   ├── auth/            # Auth Proxy (bezpieczna autentykacja CLMS)
-│   ├── core/            # Parser godeł, BBox, geometria (SHP/GPKG)
-│   ├── providers/       # Providery danych (GUGiK NMT/NMPT/Orto, BDOT10k, CORINE, SoilGrids)
-│   ├── download/        # Download management (NMT/NMPT/Orto)
+│   ├── cache/           # Cache metadanych (SQLite)
+│   ├── core/            # Parsery godeł (PL-1992/PL-2000/TM33), BBox, geometria (SHP/GPKG)
+│   ├── sources/         # Deskryptory źródeł danych + sidecar metadanych
+│   ├── transform/       # Transformacje CRS (przypięte operacje)
+│   ├── transport/       # Wspólny transport HTTP + mozaikowanie rastrów
+│   ├── providers/       # Providery danych (pl/: GUGiK, BDOT10k; cuzk/: DMR CZ; CORINE, SoilGrids)
+│   ├── download/        # Download management (NMT/NMPT/Orto/LAZ)
 │   ├── landcover/       # Land Cover management
 │   ├── hydrology/       # Hydrologic Soil Groups (HSG)
-│   └── cli/             # CLI interface
-├── tests/               # Testy (835)
+│   └── cli/             # CLI interface (moduły per komenda)
+├── tests/               # Testy (1402)
 ├── docs/                # Dokumentacja
 └── README.md
 ```
@@ -326,4 +284,4 @@ Projekt udostępniony na licencji MIT. Szczegóły w pliku `LICENSE`.
 
 ## Status
 
-**Wersja 0.5.0** - PL-2000 sheet naming (Parser2000, auto-detekcja PL-1992/PL-2000, CLI `--system`), BDOT10k: pobieranie wszystkich 15 warstw (PT* + SW*). 835 testow, pokrycie ~84%. Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegolów.
+**Wersja 0.7.0-dev** - NMT Czechy (CUZK DMR 5G/4G, `--country {pl,cz,auto}`, parser godeł TM33/SM5, sidecary metadanych `.meta.json`). Wcześniej: v0.6.x (LAZ przez WFS, pobieranie równoległe `--workers`, cache metadanych SQLite, walidacja warstw WMS), v0.5.0 (PL-2000, 15 warstw BDOT10k). 1402 testy, pokrycie ~89%. Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegolów.

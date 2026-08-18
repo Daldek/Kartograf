@@ -23,10 +23,10 @@ Uzywaj srodowiska wirtualnego z `.venv`:
 - Wymagany Python: 3.12+
 
 Zmienne srodowiskowe (opcjonalne):
-- `CLMS_CLIENT_ID` — client ID dla Copernicus CLMS API (potrzebne do CORINE GeoTIFF)
-- `CLMS_CLIENT_SECRET` — client secret dla CLMS API
+- `CLMS_CREDENTIALS` — credentials dla Copernicus CLMS API jako JSON string
+  (potrzebne do CORINE GeoTIFF); fallback: macOS Keychain (service `clms-token`)
 
-Bez zmiennych CLMS: CORINE automatycznie pobiera podglad PNG przez WMS (fallback).
+Bez credentials CLMS: CORINE automatycznie pobiera podglad PNG przez WMS (fallback).
 
 ## Dokumentacja
 
@@ -196,12 +196,13 @@ kartograf cache path
 - Kartograf NIE zawiera danych obserwacyjnych — to zadanie IMGWTools
 
 ### Ograniczenia
-- Pobieranie rownolegle: ThreadPoolExecutor, domyslnie 4 workery (CLI: --workers)
+- Pobieranie rownolegle: ThreadPoolExecutor; domyslnie 4 workery w CLI
+  (--workers), 1 w bibliotece (`DownloadManager(max_workers=1)`)
 - NMT 5m (PL) dostepne tylko w ukladzie EVRF2007
 - WCS (download_bbox) niedostepne dla NMT 5m — tylko arkusze OpenData
 - CORINE GeoTIFF wymaga OAuth2 credentials w CLMS — bez nich fallback na PNG (WMS)
 - SoilGrids: tylko WGS84 bbox (transformacja z EPSG:2180 automatyczna)
-- Timeout: 30s dla GUGiK, 60s dla Land Cover
+- Timeout: 30s dla GUGiK, 60s dla Land Cover i CUZK
 - Max 3 proby retry (nie konfigurowalne)
 - Kazde udane pobranie tworzy sidecar `<plik>.meta.json` (metadane CRS/licencja/nodata)
 - **CZ (CUZK, etap 1):** produkt w etapie 1 to wylacznie `nmt` (DMR 5G/4G) —

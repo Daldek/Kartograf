@@ -1,9 +1,9 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.6
-**Data:** 2026-08-11
-**Status:** Rozwoj — v0.7.0 (Unreleased), etap 1 (CZ/CUZK) zaimplementowany na `feature/etap1-cz-dmr`; ostatni wydany tag: v0.6.1
+**Wersja:** 3.7
+**Data:** 2026-08-18
+**Status:** Rozwoj — v0.7.0 (Unreleased), etap 1 (CZ/CUZK) zmergowany do `develop` 2026-08-12; ostatni wydany tag: v0.6.1
 
 ---
 
@@ -37,7 +37,7 @@ Kartograf automatyzuje ten proces oferując:
 
 ---
 
-## 2. Zakres - Wersja 0.5.0
+## 2. Zakres - Wersja 0.7.0
 
 ### 2.1 NMT (Numeryczny Model Terenu) - IN SCOPE
 
@@ -214,6 +214,7 @@ kartograf landcover download --source soilgrids --property <param>
 kartograf landcover list-sources
 kartograf landcover list-layers --source <source>
 kartograf soilgrids hsg --godlo <godlo>    # oblicz HSG
+kartograf cache stats|clear|path           # cache metadanych (SQLite)
 ```
 
 ### 2.10 Python API - IN SCOPE
@@ -224,12 +225,15 @@ from kartograf import (
     # Core
     SheetParser, Parser2000, ParserTM33, BBox,
     find_sheets_for_bbox, find_sheets_2000_for_bbox, find_sheets_for_geometry,
-    # Download (NMT/NMPT/Orto)
-    DownloadManager, DownloadProgress, FileStorage,
+    # Download (NMT/NMPT/Orto/LAZ)
+    DownloadManager, DownloadProgress, DownloadResult, FileStorage,
+    # Cache
+    MetadataCache,
     # Land Cover
     LandCoverManager,
     # Providers
     BaseProvider, GugikProvider, GugikNmptProvider, GugikOrtoProvider,
+    GugikLazProvider, LazTile,
     LandCoverProvider, Bdot10kProvider, CorineProvider, SoilGridsProvider,
     # Providers — CZ (CUZK, etap 1)
     CuzkDmrProvider, create_dmr_provider,
@@ -411,7 +415,7 @@ pyshp >= 2.3.0         # Shapefile reading
 ### 6.2 Jakościowe
 
 ```
-- 1381 testów przechodzi
+- 1402 testy przechodzą
 - Pokrycie testami ~89% (cel 80% osiągnięty)
 - Kod zgodny z ruff (check + format)
 - mypy bez nowego długu względem baseline
@@ -436,9 +440,10 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-03-02 | 3.4 | PL-2000 support, bump to v0.5.0 |
 | 2026-03-24 | 3.5 | WMS layer validation, 5m bugfix, bump to v0.6.1 |
 | 2026-08-11 | 3.6 | Etap 0 (sources/transform/transport/providers-pl, CLI split, LAZ) + etap 1 (CZ/CUZK: DMR 5G/4G, --country/--target-crs, ADR-023); drzewo modułów i sekcje odświeżone |
+| 2026-08-18 | 3.7 | Przegląd spójności dokumentacji: status mergu etapu 1, nagłówek sekcji 2 (0.5.0→0.7.0), komenda `cache` w 2.9, brakujące eksporty w 2.10, liczba testów 1402 |
 
 ---
 
-**Wersja dokumentu:** 3.6
-**Data ostatniej aktualizacji:** 2026-08-11
-**Status:** Rozwoj — v0.7.0 (Unreleased), etap 1 zaimplementowany na `feature/etap1-cz-dmr`
+**Wersja dokumentu:** 3.7
+**Data ostatniej aktualizacji:** 2026-08-18
+**Status:** Rozwoj — v0.7.0 (Unreleased), etap 1 zmergowany do `develop` 2026-08-12

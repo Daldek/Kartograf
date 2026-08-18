@@ -4,6 +4,22 @@
 **Zakres:** rozszerzenie Kartografa o czeski odpowiednik NMT (DMR) i BDOT10k (ZABAGED)
 **Status:** research zakonczony, wszystkie endpointy zweryfikowane na zywo
 
+**Errata (2026-08-18):**
+1. Rekomendacja reprojekcji po stronie serwera (sekcja 4.2 "Reprojekcja po stronie
+   serwera dziala", sekcja 9 "Alternatywa o wyzszej dokladnosci — reprojekcja po
+   stronie serwera CUZK" i wniosek 3) zostala OBALONA pomiarem tresci: przy
+   `imageSR=2180` serwer NIE stosuje transformacji datum S-JTSK->ETRS89
+   (przesuniecie tresci 135 m), a przy `imageSR=3045` ma zmienny blad 1,25-4,92 m.
+   Od ADR-024 Kartograf pobiera wylacznie natywne EPSG:5514 i reprojektuje lokalnie
+   (`rasterio.warp` z przypieta operacja). Wniosek metodyczny: kontrola poprawnosci
+   reprojekcji musi mierzyc TRESC rastra (dopasowanie do referencji), nie
+   bounds/CRS z metadanych.
+2. Drobne korekty faktow wg rekonesansu (`docs/research/2026-08-11-etap1-rekonesans.md`,
+   sekcja "Blednie zalozone fakty"): arkuszy SM5 jest 16 299, nie 16 301; przy
+   parametrze `noData=-9999` serwer wypelnia -9999 (zera tylko bez parametru);
+   `CTES96` to "Cesky Tesin 9-6", nie 8-6; `crs=None` dotyczy takze rastrow
+   z ImageServera, nie tylko plikow DMR4G-TIFF.
+
 ---
 
 ## 1. Dostawca i podstawa prawna

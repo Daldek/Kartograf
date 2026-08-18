@@ -1,24 +1,31 @@
 # Prompt implementacyjny — Kartograf
 
-**Wersja:** 3.0
-**Data:** 2026-02-08
+**Wersja:** 4.0
+**Data:** 2026-08-18
 **Dla:** Claude Code i inni asystenci AI
+
+> **Nota 4.0 (2026-08-18):** aktualizacja do stanu po etapie 1 (v0.7.0-dev,
+> NMT Czechy/CUZK): architektura, Public API, przeplywy BDOT10k, zniesione
+> ograniczenia (parallel/cache/mozaikowanie). Tam gdzie CLAUDE.md pokrywa
+> temat, ten dokument odsyla do CLAUDE.md zamiast duplikowac tresc.
 
 ---
 
 ## 1. Kontekst projektu
 
-Pracujesz nad **Kartograf** — narzedziem do pobierania danych przestrzennych z zasobow GUGiK, Copernicus i ISRIC dla Polski.
+Pracujesz nad **Kartograf** — narzedziem do pobierania danych przestrzennych z zasobow GUGiK (Polska), CUZK (Czechy), Copernicus i ISRIC.
 
 **Funkcjonalnosci:**
-- **NMT** — Numeryczny Model Terenu (1m, 5m) z GUGiK
+- **NMT (PL)** — Numeryczny Model Terenu (1m, 5m) z GUGiK
+- **NMT (CZ)** — DMR 5G/4G z CUZK (2m i 5m), godlo TM33/SM5 lub bbox, `--country {pl,cz,auto}` (etap 1, v0.7.0-dev)
 - **NMPT** — Numeryczny Model Pokrycia Terenu / DSM (1m) z GUGiK
 - **Ortofotomapa** — zdjecia lotnicze Standard Resolution (25cm, TIF) z GUGiK
+- **LAZ** — chmury punktow LIDAR (dane pomiarowe ALS, .laz) z GUGiK przez WFS
 - **BDOT10k** — pokrycie terenu (15 warstw: 12 PT* + 3 SW*) z GUGiK
 - **CORINE Land Cover** — europejska klasyfikacja (44 klasy) z Copernicus
 - **SoilGrids** — dane glebowe (11 parametrow, 6 glebokosci) z ISRIC
 - **HSG** — grupy hydrologiczne SCS-CN z danych SoilGrids
-- **CLI** — 5 komend (parse, download, landcover, soilgrids, hsg) + --product, --geometry, --system
+- **CLI** — 5 komend top-level (parse, download, landcover, soilgrids, cache; `hsg` to subkomenda `soilgrids`) + --product, --geometry, --system, --country
 
 **Stack technologiczny:**
 - Python 3.12+
@@ -46,45 +53,37 @@ Pracujesz nad **Kartograf** — narzedziem do pobierania danych przestrzennych z
 
 ## 3. Architektura modulow
 
+Pelne, aktualne drzewo modulow (z opisami per plik) utrzymuje sekcja
+**"Struktura modulow" w CLAUDE.md** (korzen repo) — traktuj ja jako zrodlo
+prawdy. Skrot warstw:
+
 ```
 kartograf/
 ├── __init__.py              # Public API — eksporty wszystkich klas
 ├── exceptions.py            # KartografError → ParseError, ValidationError, DownloadError
-│
-├── core/                    # WARSTWA BAZOWA
-│   ├── sheet_parser.py      # SheetParser — parser godel PL-1992 (1:1M do 1:10k)
-│   │                        # BBox — bounding box z transformacja CRS
-│   ├── parser_2000.py       # Parser2000 — parser godel PL-2000 (1:10k do 1:500)
-│   │                        # find_sheets_2000_for_bbox
-│   └── geometry.py          # Czytanie SHP/GPKG, find_sheets_for_geometry
-│
-├── providers/               # WARSTWA DANYCH (abstrakcje nad API)
-│   ├── base.py              # BaseProvider — abstrakcja dla NMT; LandCoverProvider — abstrakcja dla pokrycia terenu (dawniej landcover_base.py)
-│   ├── pl/                  # Providery polskie
-│   │   ├── gugik.py             # GugikProvider — NMT z GUGiK (WCS + OpenData)
-│   │   ├── gugik_nmpt.py        # GugikNmptProvider — NMPT/DSM (dziedziczy z GugikProvider)
-│   │   ├── gugik_orto.py        # GugikOrtoProvider — Ortofotomapa (BaseProvider, TIF)
-│   │   ├── gugik_laz.py         # GugikLazProvider — chmury punktów LAZ (WFS)
-│   │   └── bdot10k.py           # Bdot10kProvider — BDOT10k z GUGiK
-│   ├── corine.py            # CorineProvider — CORINE z Copernicus (CLMS API + WMS)
-│   └── soilgrids.py         # SoilGridsProvider — dane glebowe z ISRIC (WCS)
-│
-├── download/                # WARSTWA POBIERANIA (NMT/NMPT/Orto)
-│   ├── manager.py           # DownloadManager — koordynacja pobierania arkuszy
-│   └── storage.py           # FileStorage — hierarchiczna struktura katalogow
-│
-├── landcover/               # WARSTWA POBIERANIA (Land Cover)
-│   └── manager.py           # LandCoverManager — dispatch do providerow
-│
-├── hydrology/               # WARSTWA OBLICZEN
-│   └── hsg.py               # HSGCalculator — klasyfikacja USDA, mapowanie HSG
-│
-├── auth/                    # WARSTWA AUTENTYKACJI
-│   ├── proxy.py             # Auth Proxy — serwer HTTP izolujacy credentials
-│   └── client.py            # Auth Proxy client — singleton, auto-start proxy
-│
-└── cli/                     # WARSTWA CLI
-    └── commands.py          # Komendy: parse, download, landcover, soilgrids, hsg
+├── core/                    # WARSTWA BAZOWA: sheet_parser.py (PL-1992, BBox),
+│                            # parser_2000.py (PL-2000), parser_tm33.py (CZ TM33),
+│                            # parser_registry.py (rejestr systemow godel), geometry.py (SHP/GPKG)
+├── sources/                 # DESKRYPTORY ZRODEL: descriptor.py, registry.py (PL/CZ/EU/GLOBAL),
+│                            # sidecar.py (metadane <plik>.meta.json)
+├── transform/               # TRANSFORMACJE CRS: crs.py (przypiete operacje pyproj)
+├── transport/               # TRANSPORT: http.py (atomic download + retry),
+│                            # mosaic.py (merge kafli + crop)
+├── providers/               # WARSTWA DANYCH: base.py (BaseProvider, LandCoverProvider),
+│   ├── pl/                  # GUGiK: gugik.py, gugik_nmpt.py, gugik_orto.py,
+│   │                        # gugik_laz.py (WFS), bdot10k.py; fabryka create_nmt_provider()
+│   ├── cuzk/                # CUZK (Czechy): client.py, sheets.py, dmr.py;
+│   │                        # fabryka create_dmr_provider()
+│   ├── corine.py            # CORINE z Copernicus (CLMS API + WMS)
+│   └── soilgrids.py         # SoilGrids z ISRIC (WCS)
+├── cache/                   # MetadataCache (SQLite WAL, TTL 7 dni)
+├── download/                # DownloadManager (parallel), FileStorage
+├── landcover/               # LandCoverManager (dispatch do providerow)
+├── hydrology/               # HSGCalculator
+├── auth/                    # Auth Proxy (CLMS): proxy.py, client.py
+└── cli/                     # CLI per komenda: _parser.py (argparse) + parse_cmd.py,
+                             # download_cmd.py, landcover_cmd.py, soilgrids_cmd.py,
+                             # cache_cmd.py; commands.py to fasada zgodnosci + entry point
 ```
 
 ### Przeplywy danych
@@ -93,7 +92,10 @@ kartograf/
 CLI → DownloadManager → GugikProvider → GUGiK API (WCS/OpenData) → FileStorage
 CLI → DownloadManager → GugikNmptProvider → GUGiK API (WCS/OpenData) → FileStorage
 CLI → DownloadManager → GugikOrtoProvider → GUGiK API (WCS/OpenData) → FileStorage
-CLI → LandCoverManager → Bdot10kProvider → GUGiK API (WFS) → FileStorage
+CLI → CuzkDmrProvider → CUZK ArcGIS REST (exportImage) / pliki openzu → FileStorage
+      (przeplyw CZ omija DownloadManager — precedens LAZ, ADR-023)
+CLI → GugikLazProvider → GUGiK WFS (discovery) → GUGiK OpenData (.laz) → pliki
+CLI → LandCoverManager → Bdot10kProvider → GUGiK OpenData (ZIP; TERYT przez WMS GetFeatureInfo) → FileStorage
 CLI → LandCoverManager → CorineProvider → AuthProxy → CLMS API → FileStorage
 CLI → LandCoverManager → SoilGridsProvider → ISRIC WCS → FileStorage
 CLI → HSGCalculator → SoilGridsProvider → rasterio → numpy → FileStorage
@@ -107,7 +109,9 @@ CLI → HSGCalculator → SoilGridsProvider → rasterio → numpy → FileStora
 |--------|-----------|-----|--------------|---------|
 | GUGiK | NMT/NMPT (ASC/GeoTIFF) | WCS, OpenData | Brak | 30s |
 | GUGiK | Ortofoto (TIF/GeoTIFF) | WCS, OpenData | Brak | 60s |
-| GUGiK | BDOT10k (GeoPackage) | WFS | Brak | 60s |
+| GUGiK | LAZ (chmury punktow) | WFS (discovery) + OpenData | Brak | 30s / 60s |
+| GUGiK | BDOT10k (GeoPackage) | OpenData (ZIP); TERYT przez WMS GetFeatureInfo | Brak | 60s |
+| CUZK | DMR 5G/4G (GeoTIFF/ZIP) | ArcGIS REST (query, exportImage) + pliki openzu | Brak | 60s |
 | Copernicus CLMS | CORINE (GeoTIFF) | REST API | OAuth2 RSA | 60s |
 | EEA Discomap | CORINE (PNG) | WMS | Brak | 60s |
 | ISRIC SoilGrids | Gleba (GeoTIFF) | WCS | Brak | 60s |
@@ -115,7 +119,7 @@ CLI → HSGCalculator → SoilGridsProvider → rasterio → numpy → FileStora
 ### Specyfika API
 
 **GUGiK NMT:**
-- OpenData: pobieranie przez godlo → ASC (1m) lub GeoTIFF (5m)
+- OpenData: pobieranie przez godlo → ASC (1m i 5m)
 - WCS: pobieranie przez bbox → GeoTIFF (tylko 1m)
 - NMT 5m wymaga ukladu EVRF2007
 
@@ -134,16 +138,20 @@ CLI → HSGCalculator → SoilGridsProvider → rasterio → numpy → FileStora
 
 ```python
 from kartograf import (
+    # Cache
+    MetadataCache,
     # Core
-    SheetParser, Parser2000, BBox,
+    SheetParser, Parser2000, ParserTM33, BBox,
     find_sheets_for_bbox, find_sheets_2000_for_bbox, find_sheets_for_geometry,
     # Download (NMT/NMPT/Orto)
-    DownloadManager, DownloadProgress, FileStorage,
+    DownloadManager, DownloadProgress, DownloadResult, FileStorage,
     # Land Cover
     LandCoverManager,
     # Providers
     BaseProvider, GugikProvider, GugikNmptProvider, GugikOrtoProvider,
+    GugikLazProvider, LazTile,
     LandCoverProvider, Bdot10kProvider, CorineProvider, SoilGridsProvider,
+    CuzkDmrProvider, create_dmr_provider,
     # Hydrology
     HSGCalculator,
     # Exceptions
@@ -218,10 +226,11 @@ from kartograf import (
 # 1. Stworz klase w kartograf/providers/nowy_provider.py
 # 2. Dziedzicz z LandCoverProvider (providers/base.py)
 # 3. Zaimplementuj metody: download_by_teryt, download_by_bbox, download_by_godlo
-# 4. Zarejestruj w LandCoverManager._init_providers()
+# 4. Zarejestruj w slowniku modulowym PROVIDERS w kartograf/landcover/manager.py
 # 5. Dodaj eksport do kartograf/__init__.py
 # 6. Napisz testy w tests/test_nowy_provider.py
-# 7. Dodaj komende CLI w commands.py
+# 7. Dodaj argumenty CLI w cli/_parser.py i logike w module per komenda
+#    (cli/*_cmd.py); cli/commands.py to tylko fasada zgodnosci
 ```
 
 ### 8.2 Rozszerzenie parsera godel
@@ -237,7 +246,8 @@ from kartograf import (
 ### 8.3 Naprawa bledu w pobieraniu
 
 ```python
-# 1. Zidentyfikuj provider (GugikProvider, Bdot10kProvider, CorineProvider, SoilGridsProvider)
+# 1. Zidentyfikuj provider (GugikProvider, GugikLazProvider, Bdot10kProvider,
+#    CorineProvider, SoilGridsProvider, CuzkDmrProvider)
 # 2. Sprawdz retry logic i timeout
 # 3. Dodaj test reprodukujacy blad
 # 4. Napraw i potwierdz testem
@@ -248,13 +258,14 @@ from kartograf import (
 
 ## 9. Ograniczenia techniczne
 
-- **Synchroniczne pobieranie** — brak async/parallel (zaplanowane na v0.6+)
+- **Pobieranie rownolegle** — ThreadPoolExecutor, domyslnie 4 workery (CLI: `--workers`)
 - **NMT 5m** — tylko OpenData (ASC), brak WCS; wymaga EVRF2007
 - **CORINE GeoTIFF** — wymaga OAuth2 credentials; bez nich fallback na PNG (WMS)
 - **SoilGrids** — tylko WGS84 bbox (transformacja automatyczna)
 - **Retry** — max 3 proby, exponential backoff (nie konfigurowalne)
-- **Brak cache** — kazde wywolanie pobiera dane od nowa (zaplanowane)
-- **Brak mozaikowania** — kazdy arkusz osobno (zaplanowane)
+- **Cache metadanych** — MetadataCache (SQLite WAL, TTL 7 dni); CLI: `kartograf cache stats|clear|path`
+- **Mozaikowanie** — `transport/mosaic.py` (merge kafli + crop), uzywane m.in. dla kafelkowanych bboxow CZ (exportImage)
+- **Pelna, aktualna lista ograniczen** (w tym CZ/CUZK etap 1) — CLAUDE.md, sekcja "Ograniczenia"
 
 ---
 
@@ -290,6 +301,6 @@ hsg_path = calc.calculate_hsg_by_godlo("N-34-130-D")
 
 ---
 
-**Wersja dokumentu:** 3.1
-**Data ostatniej aktualizacji:** 2026-03-02
+**Wersja dokumentu:** 4.0
+**Data ostatniej aktualizacji:** 2026-08-18
 **Status:** Aktywny dla wszystkich asystentow AI pracujacych nad projektem
