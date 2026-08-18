@@ -82,13 +82,14 @@
 
 ## Ostatnia sesja
 
-**Data:** 2026-08-10 — 2026-08-12 (sekcje datowane ponizej)
+**Data:** 2026-08-10 — 2026-08-18 (sekcje datowane ponizej)
 
 ### Merge etapu 1 do develop (2026-08-12)
 - `feature/etap1-cz-dmr` zmergowana do `develop` fast-forwardem do `0738ae0`
-  (36 commitow od 7e9c039); suita na zmergowanym develop: **1402 passed**;
+  (34 commity od 7e9c039); suita na zmergowanym develop: **1402 passed**;
   galaz feature usunieta (rekord = git + ten dokument + ADR-023/024).
-- develop nadal NIE wypchniety na origin (67 commitow lokalnie, etapy 0+1).
+- develop nadal NIE wypchniety na origin (71 commitow lokalnie: research +
+  spec/plan etapow + etapy 0+1; wczesniejsze "67" bylo blednym sumowaniem).
 
 ### Co zrobiono
 - **Research: rozszerzenie o zrodla wielokrajowe (CZ, DE, SK)** — wszystkie
@@ -268,7 +269,7 @@ EVRF2007→5621 + nowa `resolve_vertical_crs` rodzina→realizacja),
 `resolution`/`vertical-crs`/`system` per kraj, `_cmd_download_cz`,
 auto-split bbox/geometrii transgranicznej, `extra.parent_request`),
 eksporty publiczne + wersja `0.7.0-dev`. **1381 testow zielonych**
-(+244 wzgledem stanu po etapie 0/1142), pokrycie ~89%, ruff + ruff format
+(+239 wzgledem stanu po mergu etapu 0: 1142), pokrycie ~89%, ruff + ruff format
 czyste, mypy bez nowego dlugu wzgledem baseline (33/34 przedistniejacych
 bledow, niezwiazanych z etapem 1).
 
@@ -278,6 +279,9 @@ integracja wieloplikowa/diagnoza bugow; fable dla finalnego review calej
 galezi. **Pelny ledger kontrolera** (wszystkie rulingi K1-K9/R1-R9,
 ~140 minor findings odroczonych per zadanie, kontekst przekazywany miedzy
 zadaniami): `.superpowers/sdd/2026-08-11-etap1-cz-fundament-dmr/progress.md`.
+**UWAGA (2026-08-18): ledger utracony** — katalog `.superpowers/sdd/` jest
+poza gitem, na dysku zostaly tylko dwa diffy review; z listy ~140 minorow
+przetrwaly wylacznie pozycje cytowane w tym dokumencie i w ADR-023.
 
 **Odstepstwa proceduralne od planu** (za zgoda uzytkownika, precedens
 rulingow kontrolera K2-K4 "popraw wg intencji planu"):
@@ -413,6 +417,50 @@ backlog etapu 2 (patrz "Nastepne kroki" nizej): utrata rzadkiego/tiled
 ukladu TIFF serwera przy zapisie, halo interpolatora bilinear ~1 px na
 krawedzi waznosci.
 
+### Przeglad spojnosci calej dokumentacji + uproszczenie README (2026-08-18)
+
+Audyt aktualnosci i wewnetrznej spojnosci wszystkich .md (4 rownolegle agenty
+read-only: README+CLAUDE.md vs kod; SCOPE/PRD/DEVELOPMENT_STANDARDS/
+IMPLEMENTATION_PROMPT; PROGRESS/CHANGELOG/DECISIONS vs git; research+specy/
+plany superpowers), nastepnie naprawa wszystkich znalezisk. Najwazniejsze:
+- **README**: sekcja uzycia uproszczona (24 -> 16 przykladow CLI, sekcja
+  Python skrocona) i zaktualizowana o LAZ/CZ/cache; naglowek, Funkcjonalnosci
+  (nowe podsekcje NMT CZ i LAZ, orto 9->4 warstwy WMS), drzewo projektu,
+  Status (0.5.0/835 -> 0.7.0-dev/1402), CLMS_CREDENTIALS jako alternatywa
+  dla Keychain
+- **CLAUDE.md**: fikcyjne zmienne CLMS_CLIENT_ID/SECRET -> faktyczna
+  CLMS_CREDENTIALS (JSON, `corine.py`); workery CLI 4 vs biblioteka 1;
+  timeout CUZK 60s
+- **Liczby commitow skorygowane**: develop jest 71 commitow przed origin
+  (nie "67"/"36+"); merge etapu 1 = 34 commity od 7e9c039 (nie 36);
+  delta testow etapu 1 = +239 wzgledem 1142 (nie +244)
+- **Utracone artefakty sesyjne udokumentowane**: ledger kontrolera
+  `.superpowers/sdd/.../progress.md` (lista ~140 minorow) oraz
+  `seam/verify/verify-report.md` nie istnieja (katalogi poza gitem) —
+  adnotacje w PROGRESS/DECISIONS/e2e; kluczowe liczby przetrwaly w docs
+- **CHANGELOG**: 0.5.0 "849 testow" -> 835 (ADR-016 usunal 14 w tej samej
+  wersji, +199 nie +213); Tests 0.7.0 -> 1402; wpis Added `--target-crs`
+  "reprojekcja serwerowa" skorygowany na lokalna (ADR-024)
+- **DECISIONS**: adnotacja przy ADR-023(c) (exportImage w 3045 zastapione
+  przez ADR-024), separator ADR-023/024, oznaczenia niewersjonowanych zrodel
+- **SCOPE 3.7**: status mergu, naglowek sekcji 2 (0.5.0->0.7.0), `cache` w
+  CLI 2.9, brakujace eksporty w 2.10 (GugikLazProvider/LazTile/MetadataCache/
+  DownloadResult), 1402 testy
+- **PRD 3.5**: snapshot v0.6.1 bez wewnetrznych sprzecznosci (parallel/cache
+  odhaczone, LAZ w §5+diagramie, "resumable downloads" -> skip-existing,
+  coverage ~89%); zakres CZ celowo nieopisany do wydania 0.7.0 (nota)
+- **DEVELOPMENT_STANDARDS 2.1**: mypy bez `--strict` + baseline 33; struktura
+  7.1 odswiezona (30 plikow testowych, nie 15 z listy); przyklad
+  landcover_base.py -> gugik_nmpt.py
+- **IMPLEMENTATION_PROMPT 4.0**: usuniete twarde bledy (BDOT10k "WFS" ->
+  OpenData ZIP, nieistniejaca `_init_providers()` -> slownik PROVIDERS,
+  komendy CLI z `cache`, 5m OpenData = ASC), architektura i Public API
+  aktualne, zniesione fikcyjne ograniczenia (parallel/cache/mozaika)
+- **Erraty w dokumentach historycznych** (specy/plany etapow 0-1, research
+  CZ/SK, rekonesans, stary spec WMS): reprojekcja serwerowa -> ADR-024,
+  EVRF2007 9651 -> 5621 (ADR-023d), statusy "WYKONANY" na planach,
+  domkniecie sekcji 12 specu etapu 1
+
 ### Nastepne kroki
 1. ~~Merge `feature/etap1-cz-dmr` do `develop`~~ — **WYKONANE 2026-08-12**
    (fast-forward do 0738ae0, suita 1402 passed na wyniku, galaz usunieta).
@@ -421,7 +469,8 @@ krawedzi waznosci.
    miedzy trybami jawny/auto) — spec/plan do napisania po decyzji o mergu;
    punkt wyjscia: ADR-023 (ustalenia dodatkowe 3-4) i `docs/SCOPE.md`
    (sekcje 2.2, 3.1, 3.2). Do backlogu etapu 2, z zywej weryfikacji
-   ADR-024 (`seam/verify/verify-report.md`, Zastrzezenia 1-3): (a)
+   ADR-024 (`seam/verify/verify-report.md`, Zastrzezenia 1-3 — plik
+   niewersjonowany, scratchpad sesji; tresc zachowana ponizej): (a)
    kompresja/`tiled=True` w profilu zapisu lokalnego warpu CZ (kafel
    brzegowy 93% nodata: 527 KB serwerowy → 4,0 MB lokalny, 7,6x); (b)
    maskowanie przed interpolacja bilinear na krawedzi waznosci (halo
@@ -429,7 +478,7 @@ krawedzi waznosci.
    CUZK bywa zmienny przestrzennie (1,25 m kolo Cieszyna, 4,92 m w
    zachodnich Czechach) — nie zakladac stalego offsetu przy podobnych
    diagnozach w przyszlosci.
-3. **Push `develop` na origin** (36+ commitow lokalnie, decyzja z etapu 0
+3. **Push `develop` na origin** (71 commitow lokalnie, decyzja z etapu 0
    nadal nierozwiazana) — patrz wyzej
 4. **Zgloszenie/naprawa WCS EVRF2007 GUGiK** (male, przedistniejace, poza
    etapami 0/1): aktualizacja `WCS_ENDPOINTS`/`COVERAGE_IDS` w
@@ -439,7 +488,9 @@ krawedzi waznosci.
 5. Odziedziczone: (do weryfikacji) zgodnosc `get_bbox` z godlowaniem kafli
    LAZ (patrz [[gugik-laz-wfs]])
 6. **Minory odroczone z etapu 1** (nieblokujace; pelna lista ~140 pozycji
-   w ledgerze kontrolera, `.superpowers/sdd/2026-08-11-etap1-cz-fundament-dmr/progress.md`)
+   byla w ledgerze kontrolera — plik utracony, patrz adnotacja przy sekcji
+   implementacji etapu 1 wyzej; ponizsze wyliczenie to zachowany zapis
+   najwazniejszych)
    — najwazniejsze do rozwazenia przy etapie 2: eager import `rasterio`
    przy `import kartograf` (+55-65 ms, ADR-023 pkt 2 — naprawa: lazy import
    w `providers/cuzk/client.py`/`dmr.py`); `Sm5Sheet.get_bbox` traci
@@ -458,14 +509,16 @@ krawedzi waznosci.
 - [x] Weryfikacja BBox PL-2000 z realnymi danymi GUGiK (67 testow)
 - [x] Pobieranie rownolegle (ThreadPoolExecutor, --workers)
 - [x] Cache metadanych (SQLite WAL, TTL 7d, prune)
-- [ ] Mozaikowanie arkuszy NMT
+- [ ] Mozaikowanie arkuszy NMT (PL; mechanizm `transport/mosaic.py` istnieje
+      i skleja kafle CZ — brakuje spiecia dla arkuszy PL; scalanie
+      transgraniczne PL/CZ pozostaje poza zakresem — zadanie Hydrografa)
 - [x] Ujednolicenie interfejsow providerow (BaseProvider vs LandCoverProvider)
       (etap 0: DataSourceProvider)
 - [x] Etap 0 — architektura zrodel wielokrajowych (deskryptory, sidecar,
       transform/crs.py, transport/, providers/pl/, podzial CLI)
 - [x] Etap 1 — NMT Czechy: CUZK DMR 5G/4G (`providers/cuzk/`, `ParserTM33`,
-      `--country`/`--target-crs`/`--vertical-crs`), galaz `feature/etap1-cz-dmr`
-      (merge do develop: decyzja uzytkownika, patrz "Nastepne kroki")
+      `--country`/`--target-crs`/`--vertical-crs`) — zmergowany do develop
+      2026-08-12 (fast-forward do 0738ae0, galaz feature usunieta)
 - [ ] Etap 2 — DMP/Orto/LAZ CZ, wielokat granicy administracyjnej CZ
       (zamiast prostokatnej obwiedni), ujednolicenie
       `extra.parent_request.bbox_crs` miedzy trybami jawny/auto

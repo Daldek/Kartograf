@@ -440,8 +440,12 @@ addytywny parametr `sidecar_extra` (Zad. 13), uzywany przez CLI PL w trybie
 PL/CZ.** Siatka kafli TM33 (2x2 km, `{E_km}_{N_km}`) jest zdefiniowana w
 ETRS89/UTM33N (EPSG:3045, `ParserTM33` — obliczalna matematycznie, wzor jak
 `Parser2000`), mimo ze dane DMR 5G leza natywnie w S-JTSK/Krovak (EPSG:5514,
-`AccessChannel.horizontal_crs` kanalu `ARCGIS_IMAGE`). Pobranie godlem zada
-wiec `exportImage` z `bboxSR=imageSR=3045` — serwer reprojektuje w locie;
+`AccessChannel.horizontal_crs` kanalu `ARCGIS_IMAGE`). *(Mechanizm pobrania
+opisany dalej w tym punkcie ZASTAPIONY przez ADR-024: zadanie `exportImage`
+idzie w natywnym 5514, a reprojekcje kafla do 3045 wykonuje lokalny warp
+przypieta operacja; definicja siatki kafli w 3045 i asymetria bbox PL/CZ
+pozostaja aktualne.)* Pobranie godlem zadalo
+wiec `exportImage` z `bboxSR=imageSR=3045` — serwer reprojektowal w locie;
 "natywny" produkt trybu godlowego CZ to 3045 (definicja siatki kafli), nie
 5514 (katalog danych danych). To tworzy jawna asymetrie wzgledem PL: `--bbox` w PL
 zwraca **liste arkuszy** OpenData (wiele plikow po godle, `find_sheets_for_bbox`
@@ -506,7 +510,9 @@ obsluguje oba kraje bez duplikowania definicji flag i bez zgadywania kraju
 przed jego ustaleniem.
 
 **Ustalenia dodatkowe (domkniecie zobowiazan zebranych w trakcie
-implementacji — patrz `.superpowers/sdd/2026-08-11-etap1-cz-fundament-dmr/progress.md`):**
+implementacji — ledger kontrolera `.superpowers/sdd/2026-08-11-etap1-cz-fundament-dmr/progress.md`
+nie zostal zachowany: katalog jest poza gitem, plik utracony; jedyny
+przetrwaly zapis tych zobowiazan to ponizsze punkty i PROGRESS.md):**
 
 1. **Semantyka `transform.horizontal` w sidecarach** — **ZASTAPIONA przez
    ADR-024 (2026-08-11)**. Pierwotnie: "reprojekcja zamowiona przez
@@ -584,6 +590,8 @@ Etap 2 (DMP/Orto/LAZ CZ, wielokat granicy, ujednolicenie `parent_request`)
 buduje na tym samym `CuzkClient`/deskryptorach — kolejny konsument moze
 uzasadnic ekstrakcje silnika do `transport/` (punkt a).
 
+---
+
 ## ADR-024: Reprojekcja tresci CZ wylacznie lokalnie (zakaz `imageSR` != natywny)
 
 **Data:** 2026-08-11
@@ -626,7 +634,8 @@ datum po stronie serwera CUZK w roznych czesciach kraju), nie stala
 globalna — silniejszy argument za Opcja C (reprojekcja lokalna takze dla
 sciezki godlowej TM33) niz sugerowalaby sama liczba 1,25 m. Zrodlo:
 `seam/verify/verify-report.md`, sekcja 2 ("Dodatkowo: bezposredni pomiar
-skutku fixu na tym samym kaflu").
+skutku fixu na tym samym kaflu") — plik niewersjonowany (scratchpad sesji
+weryfikacyjnej); kluczowe liczby zachowane w tym ADR i w PROGRESS.md.
 
 **Opcje:**
 - A) Naprawic tylko `--target-crs`, zostawic godlowa sciezke TM33 na serwerze.
@@ -722,7 +731,7 @@ Regula "nie ufaj reprojekcji serwerowej" jest wiazaca takze dla przyszlych
 zrodel DE/SK sterowanych serwerowym parametrem ukladu.
 
 **Zywa weryfikacja fixu (2026-08-11, dane CUZK+GUGiK,
-`seam/verify/verify-report.md`):** kontrola tresci (dopasowanie do
+`seam/verify/verify-report.md` — plik niewersjonowany, jw.):** kontrola tresci (dopasowanie do
 referencji natywnej 5514 metoda minimum RMS w skanie przesuniec ±2 m/0,25 m)
 potwierdza fix na obu sciezkach, minimum dokladnie w (0,0) na obu:
 godlo TM33 (`302_5550`, EPSG:3045) — RMS(0,0) = **0,016 m**; bbox

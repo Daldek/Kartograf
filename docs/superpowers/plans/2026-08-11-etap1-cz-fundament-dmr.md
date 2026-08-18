@@ -1,5 +1,7 @@
 # Etap 1 — fundament CZ + DMR (CUZK): plan implementacji
 
+**Status: WYKONANY** — wszystkie 21 zadań zrealizowane; zmergowany do develop 2026-08-12 (ff do 0738ae0). Errata (2026-08-18): implementacja `server_crs`/sidecar `server:EPSG:*`/asercja E2E `transform.horizontal == "server:EPSG:2180"` z tego planu została następnie zastąpiona lokalną przypiętą operacją (ADR-024).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Cel:** Pierwszy zagraniczny kraj w Kartografie — Czechy (CUZK): DMR 5G (raster 2 m) i DMR 4G (GeoTIFF 5 m) przez `CuzkClient` (ArcGIS REST + pliki openzu), parsery godeł `cz_tm33`/`cz_sm5`, CLI `--country {pl,cz,auto}` z auto-podziałem bboxa transgranicznego, sidecary z `transform`/`extra.parent_request`.

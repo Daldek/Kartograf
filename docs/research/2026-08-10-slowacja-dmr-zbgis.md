@@ -5,6 +5,13 @@
 **Metoda:** weryfikacja na zywo (curl + rasterio + pyproj)
 **Legenda:** **[T]** = przetestowane na zywo 2026-08-10 | **[D]** = tylko dokumentacja
 
+**Errata (2026-08-18):** rekomendacja "preferuj `outputCrs=EPSG:2180` po stronie
+serwera (jak `imageSR=2180` w CUZK)" (sekcja 7.5 pkt 1, wnioski koncowe) jest
+niewazna — wzorcowy przyklad CUZK zostal obalony (ADR-024: serwer gubi
+transformacje datum S-JTSK->ETRS89, blad tresci 135 m). Przy implementacji SK
+zaufanie do reprojekcji serwerowej trzeba najpierw zweryfikowac pomiarem TRESCI
+rastra (dopasowanie do referencji natywnej), nie metadanych (bounds/CRS).
+
 ---
 
 ## 1. Produkty wysokosciowe

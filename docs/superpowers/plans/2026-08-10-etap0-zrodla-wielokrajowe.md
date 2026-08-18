@@ -1,5 +1,7 @@
 # Etap 0 — refaktor przygotowawczy pod zrodla wielokrajowe: plan implementacji
 
+**Status: WYKONANY** — zmergowany do develop 2026-08-11. Errata (2026-08-18): nota KNOWN_PATHS "preferowac reprojekcje serwerowa CUZK" odwrocona przez ADR-024; `vertical_crs_code("EVRF2007")` zmienione z 9651 na 5621 w etapie 1 (ADR-023d).
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Spec:** `docs/superpowers/specs/2026-08-10-etap0-zrodla-wielokrajowe-design.md` (zaakceptowany 2026-08-10)

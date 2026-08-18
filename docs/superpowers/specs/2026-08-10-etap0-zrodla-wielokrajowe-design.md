@@ -9,6 +9,19 @@ przenosiny providers/pl bez shimow)
 - `docs/research/2026-08-10-niemcy-dgm-atkis.md` (BKG + landy)
 - `docs/research/2026-08-10-slowacja-dmr-zbgis.md` (UGKK/GKU)
 
+**Errata (2026-08-18):**
+1. Zasada #7 ("reprojekcja pozioma po stronie serwera preferowana"; takze nota
+   "preferowac reprojekcje serwerowa CUZK" w tabeli `KNOWN_PATHS`) zostala
+   ODWROCONA przez ADR-024: serwer CUZK gubi transformacje datum S-JTSK->ETRS89
+   (przesuniecie tresci 135 m przy `imageSR=2180`) — reprojekcja rastrow CZ jest
+   wylacznie lokalna, przypieta operacja (`rasterio.warp`).
+2. Mapowanie `vertical_crs_code("EVRF2007")` zmienione w etapie 1 z EPSG:9651 na
+   EPSG:5621 (ADR-023d; model rodzina->realizacja przez `resolve_vertical_crs`,
+   realizacja polska `EVRF2007-PL` = 9651).
+3. Zasada #9: zmierzony udzial nodata kafla przy Cieszynie to 48,3%, nie 49,3%,
+   a przy parametrze `noData=-9999` serwer wypelnia -9999 (zera tylko bez
+   parametru).
+
 ---
 
 ## 1. Kontekst i cel

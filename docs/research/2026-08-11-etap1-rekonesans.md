@@ -243,6 +243,8 @@ dostaniemy zera (jak w researchu).
 
 ## Krok 5 — `exportImage` kafla TM33 w 3045
 
+> **Adnotacja (2026-08-18):** tresc odpowiedzi serwera przy `imageSR=3045` miala pozniej zmierzone przesuniecie 1,25-4,92 m wzgledem natywnej referencji 5514 (ADR-024); werdykty tego kroku pozostaja wazne w zakresie, ktory kontrolowaly (bounds/CRS/rozmiar).
+
 Koperta `302000,5550000,304000,5552000`, `bboxSR=3045`, `imageSR=3045`, `size=1000,1000`.
 
 - HTTP 200, `image/tiff`, 525 979 B.
