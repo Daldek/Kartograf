@@ -25,6 +25,21 @@ from kartograf.download.manager import DownloadProgress
 from kartograf.exceptions import DownloadError, ValidationError
 
 
+def _mock_provider_and_storage(extension):
+    """Para (provider, storage) dla patcha ``_create_provider_and_storage``."""
+    provider = Mock()
+    provider.default_extension = extension
+    return provider, Mock()
+
+
+def _mock_manager(path):
+    """Manager-mock zwracajacy ``path`` i BEZ porazek (``last_result=None``)."""
+    manager = Mock()
+    manager.last_result = None
+    manager.download_sheet.return_value = path
+    return manager
+
+
 class TestCreateParser:
     """Tests for create_parser()."""
 
@@ -764,6 +779,155 @@ class TestCmdDownloadProduct:
         mock_create.assert_called_once()
         call_args = mock_create.call_args
         assert call_args[0][0] == "orto"
+
+    # --- walidacja par product/resolution i product/vertical-crs (V2-N1) ---
+
+    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_nmpt_with_resolution_5m_rejected(
+        self, mock_manager_cls, mock_create, capsys, tmp_path
+    ):
+        """NMPT 5m nie istnieje — CLI odrzuca zamiast cicho pobrac 1m."""
+        mock_create.return_value = _mock_provider_and_storage(".asc")
+        mock_manager_cls.return_value = _mock_manager(tmp_path / "test.asc")
+
+        result = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--product",
+                "nmpt",
+                "--resolution",
+                "5m",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        err = capsys.readouterr().err
+        assert "nmpt" in err
+        assert "1m" in err
+        mock_create.assert_not_called()
+        mock_manager_cls.assert_not_called()
+
+    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_orto_with_vertical_crs_rejected(
+        self, mock_manager_cls, mock_create, capsys, tmp_path
+    ):
+        """Ortofotomapa nie ma ukladu pionowego — flaga jest bledem, nie no-opem."""
+        mock_create.return_value = _mock_provider_and_storage(".tif")
+        mock_manager_cls.return_value = _mock_manager(tmp_path / "test.tif")
+
+        result = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--product",
+                "orto",
+                "--vertical-crs",
+                "KRON86",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        err = capsys.readouterr().err
+        assert "orto" in err
+        mock_create.assert_not_called()
+        mock_manager_cls.assert_not_called()
+
+    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_orto_without_vertical_crs_still_works(
+        self, mock_manager_cls, mock_create, tmp_path
+    ):
+        """Regresja: orto bez --vertical-crs dziala jak dotad."""
+        mock_create.return_value = _mock_provider_and_storage(".tif")
+        mock_manager_cls.return_value = _mock_manager(tmp_path / "test.tif")
+
+        result = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--product",
+                "orto",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+
+    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_bbox_nmpt_with_resolution_5m_rejected(
+        self, mock_manager_cls, mock_create, capsys, tmp_path
+    ):
+        """Ta sama walidacja obowiazuje w trybie --bbox (sentinele PL)."""
+        mock_create.return_value = _mock_provider_and_storage(".asc")
+        mock_manager_cls.return_value = _mock_manager(tmp_path / "test.asc")
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "530000,382000,533000,386000",
+                "--country",
+                "pl",
+                "--product",
+                "nmpt",
+                "--resolution",
+                "5m",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        err = capsys.readouterr().err
+        assert "nmpt" in err
+        assert "1m" in err
+        mock_create.assert_not_called()
+        mock_manager_cls.assert_not_called()
+
+    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_bbox_orto_with_vertical_crs_rejected(
+        self, mock_manager_cls, mock_create, capsys, tmp_path
+    ):
+        """Ta sama walidacja obowiazuje w trybie --bbox (sentinele PL)."""
+        mock_create.return_value = _mock_provider_and_storage(".asc")
+        mock_manager_cls.return_value = _mock_manager(tmp_path / "test.asc")
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "530000,382000,533000,386000",
+                "--country",
+                "pl",
+                "--product",
+                "orto",
+                "--vertical-crs",
+                "KRON86",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        err = capsys.readouterr().err
+        assert "orto" in err
+        mock_create.assert_not_called()
+        mock_manager_cls.assert_not_called()
 
 
 class TestCreateProviderAndStorage:

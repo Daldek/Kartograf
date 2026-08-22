@@ -111,11 +111,31 @@ def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
     ``args``, wiec argumenty lecace do CZ musza zachowac wartosc ``None``
     (``_cmd_download_cz`` odroznia „nie podano" od wartosci polskiej).
 
+    Obejmuje walidacje par product/resolution i product/vertical_crs
+    (symetrycznie do twardych odrzucen galezi CZ) — sprawdzane PRZED
+    podstawieniem domyslnych, zeby „nie podano" nie udawalo wyboru
+    uzytkownika.
+
     Returns
     -------
     int
         0 = OK, 1 = blad (komunikat juz wypisany na stderr)
     """
+    product = getattr(args, "product", "nmt")
+    if product == "nmpt" and getattr(args, "resolution", None) == "5m":
+        print(
+            "Error: --product nmpt jest dostepny tylko w rozdzielczosci 1m (podano 5m)",
+            file=sys.stderr,
+        )
+        return 1
+    if product == "orto" and getattr(args, "vertical_crs", None) is not None:
+        print(
+            "Error: --vertical-crs nie dotyczy --product orto "
+            "(ortofotomapa nie ma ukladu pionowego)",
+            file=sys.stderr,
+        )
+        return 1
+
     args.resolution = getattr(args, "resolution", None) or "1m"
     args.vertical_crs = getattr(args, "vertical_crs", None) or "EVRF2007"
     args.system = getattr(args, "system", None) or "1992"
