@@ -7,6 +7,8 @@ uzywane przez testy oraz utrzymuje entry point `main`
 (pyproject: kartograf = "kartograf.cli.commands:main").
 """
 
+import argparse
+import os
 import sys
 
 from kartograf.cli._parser import create_parser
@@ -36,6 +38,7 @@ from kartograf.cli.parse_cmd import (
     format_sheet_info,
 )
 from kartograf.cli.soilgrids_cmd import cmd_soilgrids, cmd_soilgrids_hsg
+from kartograf.exceptions import KartografError
 
 __all__ = [
     "create_parser",
@@ -64,23 +67,8 @@ __all__ = [
 ]
 
 
-def main(args: list[str] | None = None) -> int:
-    """
-    Main entry point for the CLI.
-
-    Parameters
-    ----------
-    args : list[str], optional
-        Command-line arguments (defaults to sys.argv[1:])
-
-    Returns
-    -------
-    int
-        Exit code (0 for success, non-zero for error)
-    """
-    parser = create_parser()
-    parsed_args = parser.parse_args(args)
-
+def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) -> int:
+    """Rozeslij sparsowane argumenty do wlasciwej komendy."""
     if parsed_args.command is None:
         parser.print_help()
         return 0
@@ -103,6 +91,37 @@ def main(args: list[str] | None = None) -> int:
     # Unknown command (shouldn't happen with argparse)
     print(f"Unknown command: {parsed_args.command}", file=sys.stderr)
     return 1
+
+
+def main(args: list[str] | None = None) -> int:
+    """
+    Main entry point for the CLI.
+
+    Parameters
+    ----------
+    args : list[str], optional
+        Command-line arguments (defaults to sys.argv[1:])
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, non-zero for error)
+    """
+    parser = create_parser()
+    # argparse rzuca SystemExit dla --help/--version - ma przejsc bez zmian
+    parsed_args = parser.parse_args(args)
+
+    try:
+        return _dispatch(parser, parsed_args)
+    except KartografError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    except Exception as e:  # noqa: BLE001 - last-resort barrier for the CLI user
+        if os.environ.get("KARTOGRAF_DEBUG"):
+            raise
+        print(f"Error: {type(e).__name__}: {e}", file=sys.stderr)
+        print("Ustaw KARTOGRAF_DEBUG=1, aby zobaczyc pelny traceback.", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
