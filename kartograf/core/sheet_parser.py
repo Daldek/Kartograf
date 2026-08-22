@@ -59,6 +59,15 @@ class SheetParser:
     >>> parser.components
     {'pas': 'N', 'slup': '34', 'arkusz_200k': '130', 'arkusz_100k': 'D',
      'arkusz_50k': 'd', 'arkusz_25k': '2', 'arkusz_10k': '4'}
+
+    Notes
+    -----
+    Scale labels in Kartograf are one level finer than GUGiK nomenclature: a
+    7-part godlo (e.g. N-34-130-D-d-2-4) is labelled '1:10000' here, while
+    GUGiK calls the same sheet the 1:5000 archiving module; the 1-144 grid is
+    labelled '1:200000' but has the dimensions of the official 1:100000 sheet
+    (20' x 30'). Labels are kept for backward compatibility of the public API
+    and CLI `--scale`; aliases are planned for the next major release.
     """
 
     # Hierarchia skal (od największej do najmniejszej)
