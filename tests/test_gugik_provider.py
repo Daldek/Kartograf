@@ -551,6 +551,9 @@ class TestGugikProviderGetOpendataUrl:
         )
 
         provider = GugikProvider(session=session)
+        # call_count must measure the loop, not the number of layers GUGiK
+        # publishes — pin the layer list instead of taking it from WMS_LAYERS
+        provider._validated_layers[("1m", "EVRF2007")] = ["L1", "L2", "L3"]
         url = provider._get_opendata_url("N-34-130-D-d-2-4")
 
         assert "opendata.geoportal.gov.pl" in url

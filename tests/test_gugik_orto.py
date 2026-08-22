@@ -16,24 +16,6 @@ from kartograf.exceptions import DownloadError
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
 
-@pytest.fixture(autouse=True)
-def _stub_wms_getcapabilities():
-    """Keep WMS layer validation offline and deterministic.
-
-    `_get_opendata_url` calls `_get_validated_layers`, which performs a live
-    GetCapabilities request via a dedicated session. Stub `_fetch_wms_layers`
-    to return the hardcoded layers so unit tests never hit the network and the
-    validation reports a clean match (no warning). Tests that specifically
-    exercise validation live in tests/test_wms_layer_validation.py.
-    """
-    with patch.object(
-        GugikOrtoProvider,
-        "_fetch_wms_layers",
-        return_value=list(GugikOrtoProvider.WMS_LAYERS),
-    ):
-        yield
-
-
 class TestGugikOrtoProviderInit:
     """Testy inicjalizacji GugikOrtoProvider."""
 

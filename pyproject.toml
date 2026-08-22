@@ -69,6 +69,7 @@ python_functions = ["test_*"]
 addopts = "-v --tb=short"
 markers = [
     "live: marks tests that require network access to GUGiK WMS (deselect with '-m \"not live\"')",
+    "real_wms_layers: opt out of the offline GetCapabilities stub (tests that exercise _fetch_wms_layers itself)",
 ]
 
 [tool.coverage.run]

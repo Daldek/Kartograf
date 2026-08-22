@@ -136,6 +136,7 @@ def _make_provider(session=None) -> GugikProvider:
 # ===========================================================================
 
 
+@pytest.mark.real_wms_layers
 class TestFetchWmsLayers:
     """Tests for GugikProvider._fetch_wms_layers().
 
@@ -523,6 +524,7 @@ class TestOrtoLayerValidation:
             "SkorowidzeOrtofotomapyStarsze",
         ]
 
+    @pytest.mark.real_wms_layers
     def test_fetch_orto_layers_sorts_and_excludes_zasiegi(self):
         """Year layers sort descending, Starsze last, Zasiegi excluded."""
         mock_session = MagicMock()
@@ -539,6 +541,7 @@ class TestOrtoLayerValidation:
             "SkorowidzeOrtofotomapyStarsze",
         ]
 
+    @pytest.mark.real_wms_layers
     def test_fetch_orto_layers_empty_raises(self):
         """ValueError raised when no SkorowidzeOrtofotomapy layers found."""
         mock_session = MagicMock()
@@ -612,6 +615,7 @@ class TestOrtoLayerValidation:
         mock_fetch.assert_called_once()
 
 
+@pytest.mark.real_wms_layers
 class TestLayerSorting:
     """Tests for the layer sorting logic used in _fetch_wms_layers."""
 
