@@ -5,7 +5,11 @@ Tests cover singleton pattern, proxy lifecycle, token management,
 proxy requests, file downloads, and cleanup.
 """
 
+import io
+import logging
 import subprocess
+import threading
+import time
 from unittest.mock import Mock, patch
 
 import pytest
@@ -70,14 +74,57 @@ class TestStartProxy:
 
     @patch("kartograf.auth.client.atexit")
     @patch("kartograf.auth.client.subprocess.Popen")
-    def test_start_proxy_no_port(self, mock_popen, _atexit):
-        """If stdout gives empty line, return False."""
+    def test_start_proxy_no_port_terminates_process(self, mock_popen, _atexit):
+        """Empty port line -> False, and the failed child is cleaned up."""
         client = AuthProxyClient()
         mock_proc = Mock()
         mock_proc.stdout.readline.return_value = ""
+        mock_proc.stderr = io.StringIO("")
         mock_popen.return_value = mock_proc
 
         assert client._start_proxy() is False
+        mock_proc.terminate.assert_called_once()
+        assert client._proxy_process is None
+        assert AuthProxyClient._proxy_port is None
+
+    @patch("kartograf.auth.client.atexit")
+    @patch("kartograf.auth.client.subprocess.Popen")
+    def test_start_proxy_port_read_timeout(self, mock_popen, _atexit):
+        """A child that never prints the port must not hang the caller."""
+        client = AuthProxyClient()
+        mock_proc = Mock()
+        mock_proc.stdout.readline.side_effect = lambda: time.sleep(5) or ""
+        mock_proc.stderr = io.StringIO("")
+        mock_popen.return_value = mock_proc
+
+        with patch("kartograf.auth.client.PROXY_STARTUP_TIMEOUT", 0.2):
+            start = time.perf_counter()
+            result = client._start_proxy()
+            elapsed = time.perf_counter() - start
+
+        assert result is False
+        assert elapsed < 2.0
+        mock_proc.terminate.assert_called_once()
+        assert client._proxy_process is None
+
+    @patch("kartograf.auth.client.atexit")
+    @patch("kartograf.auth.client.subprocess.Popen")
+    def test_start_proxy_drains_stderr(self, mock_popen, _atexit, caplog):
+        """stderr of the child is drained by a daemon thread into DEBUG logs."""
+        client = AuthProxyClient()
+        mock_proc = Mock()
+        mock_proc.stdout.readline.return_value = "12345\n"
+        mock_proc.stderr = io.StringIO("line1\nline2\n")
+        mock_popen.return_value = mock_proc
+
+        with caplog.at_level(logging.DEBUG, logger="kartograf.auth.client"):
+            with patch.object(client, "_wait_for_proxy", return_value=True):
+                assert client._start_proxy() is True
+            client._stderr_thread.join(1)
+
+        assert client._stderr_thread.daemon is True
+        assert "line1" in caplog.text
+        assert "line2" in caplog.text
 
     @patch("kartograf.auth.client.atexit")
     @patch("kartograf.auth.client.subprocess.Popen", side_effect=OSError("fail"))
@@ -152,8 +199,9 @@ class TestIsAvailable:
     """Test is_available method."""
 
     @patch("kartograf.auth.client.atexit")
-    def test_is_available_true(self, _atexit):
+    def test_is_available_true(self, _atexit, monkeypatch):
         """Proxy running and credentials available -> True."""
+        monkeypatch.setenv("CLMS_CREDENTIALS", "{}")
         client = AuthProxyClient()
         AuthProxyClient._proxy_port = 9999
 
@@ -167,15 +215,17 @@ class TestIsAvailable:
             assert client.is_available() is True
 
     @patch("kartograf.auth.client.atexit")
-    def test_is_available_no_proxy(self, _atexit):
+    def test_is_available_no_proxy(self, _atexit, monkeypatch):
         """Proxy cannot start -> False."""
+        monkeypatch.setenv("CLMS_CREDENTIALS", "{}")
         client = AuthProxyClient()
         with patch.object(client, "_ensure_proxy", return_value=False):
             assert client.is_available() is False
 
     @patch("kartograf.auth.client.atexit")
-    def test_is_available_no_credentials(self, _atexit):
+    def test_is_available_no_credentials(self, _atexit, monkeypatch):
         """Proxy running but no credentials -> False."""
+        monkeypatch.setenv("CLMS_CREDENTIALS", "{}")
         client = AuthProxyClient()
         AuthProxyClient._proxy_port = 9999
 
@@ -189,8 +239,9 @@ class TestIsAvailable:
             assert client.is_available() is False
 
     @patch("kartograf.auth.client.atexit")
-    def test_is_available_request_error(self, _atexit):
+    def test_is_available_request_error(self, _atexit, monkeypatch):
         """Health check raises RequestException -> False."""
+        monkeypatch.setenv("CLMS_CREDENTIALS", "{}")
         client = AuthProxyClient()
         AuthProxyClient._proxy_port = 9999
 
@@ -199,6 +250,86 @@ class TestIsAvailable:
 
         with patch.object(client, "_ensure_proxy", return_value=True):
             assert client.is_available() is False
+
+    @patch("kartograf.auth.client.atexit")
+    def test_is_available_short_circuits_without_creds(self, _atexit, monkeypatch):
+        """No env credentials and no Keychain (non-macOS) -> no subprocess."""
+        monkeypatch.delenv("CLMS_CREDENTIALS", raising=False)
+        client = AuthProxyClient()
+
+        with (
+            patch("kartograf.auth.client.platform.system", return_value="Linux"),
+            patch("kartograf.auth.client.subprocess.Popen") as mock_popen,
+        ):
+            assert client.is_available() is False
+            mock_popen.assert_not_called()
+
+    @patch("kartograf.auth.client.atexit")
+    def test_is_available_with_env_creds_starts_proxy(self, _atexit, monkeypatch):
+        """CLMS_CREDENTIALS in env is a credentials source also outside macOS."""
+        monkeypatch.setenv("CLMS_CREDENTIALS", "{}")
+        client = AuthProxyClient()
+        AuthProxyClient._proxy_port = 9999
+
+        mock_resp = Mock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"credentials_available": True}
+        client._session = Mock()
+        client._session.get.return_value = mock_resp
+
+        with (
+            patch("kartograf.auth.client.platform.system", return_value="Linux"),
+            patch.object(client, "_ensure_proxy", return_value=True) as mock_ensure,
+        ):
+            assert client.is_available() is True
+            mock_ensure.assert_called_once()
+
+    @patch("kartograf.auth.client.atexit")
+    @patch("kartograf.auth.client.subprocess.Popen")
+    def test_concurrent_is_available_consistent(self, mock_popen, _atexit):
+        """Parallel callers must not observe a half-started proxy."""
+        client = AuthProxyClient()
+
+        def slow_readline():
+            time.sleep(0.3)
+            return "12345\n"
+
+        mock_proc = Mock()
+        mock_proc.stdout.readline.side_effect = slow_readline
+        mock_proc.stderr = io.StringIO("")
+        mock_proc.poll.return_value = None
+        mock_popen.return_value = mock_proc
+
+        mock_resp = Mock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"credentials_available": True}
+
+        def fake_get(url, timeout=None):
+            # A half-started proxy yields proxy_url None -> "None/health".
+            if not url.startswith("http://127.0.0.1:12345/"):
+                raise requests.RequestException(f"unreachable: {url}")
+            return mock_resp
+
+        client._session = Mock()
+        client._session.get.side_effect = fake_get
+
+        results = []
+
+        def worker():
+            results.append(client.is_available())
+
+        with (
+            patch("kartograf.auth.client.platform.system", return_value="Darwin"),
+            patch.object(client, "_wait_for_proxy", return_value=True),
+        ):
+            threads = [threading.Thread(target=worker) for _ in range(2)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(10)
+
+        assert results == [True, True]
+        mock_popen.assert_called_once()
 
 
 class TestProxyRequest:
