@@ -105,7 +105,6 @@ class Bdot10kProvider(LandCoverProvider):
     OPENDATA_PATTERNS = {
         "GPKG": "{base}/schemat2021/GPKG/{woj}/{teryt}_GPKG.zip",
         "SHP": "{base}/schemat2021/SHP/{woj}/{teryt}_SHP.zip",
-        "GML": "{base}/schemat2021/{woj}/{teryt}_GML.zip",
     }
 
     # WMS endpoint for BDOT10k downloads (used to get OpenData URLs)
@@ -216,7 +215,7 @@ class Bdot10kProvider(LandCoverProvider):
         teryt : str
             4-digit TERYT code
         format : str
-            Output format (GPKG, SHP, or GML)
+            Output format (GPKG or SHP)
 
         Returns
         -------
@@ -851,7 +850,7 @@ class Bdot10kProvider(LandCoverProvider):
 
     def get_supported_formats(self) -> list[str]:
         """Return list of supported output formats."""
-        return ["GPKG", "SHP", "GML"]
+        return ["GPKG", "SHP"]
 
     def get_layer_description(self, layer: str) -> str:
         """

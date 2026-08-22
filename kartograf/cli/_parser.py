@@ -249,7 +249,7 @@ def create_parser() -> argparse.ArgumentParser:
     lc_download.add_argument(
         "--format",
         "-f",
-        choices=["GPKG", "SHP", "GML"],
+        choices=["GPKG", "SHP"],
         default="GPKG",
         help="Output format for BDOT10k (default: GPKG)",
     )
