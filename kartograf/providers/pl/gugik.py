@@ -878,8 +878,10 @@ class GugikProvider(BaseProvider):
         """
         Check if WCS download is available for current configuration.
 
-        WCS is only available for 1m resolution in KRON86: the EVRF2007
-        endpoint has returned HTTP 404 since 2026-08 (docs/PROGRESS.md).
+        WCS is only available for 1m resolution and only for vertical CRS
+        whose endpoint is still served: the NMT EVRF2007 endpoint has
+        returned HTTP 404 since 2026-08 (docs/PROGRESS.md), so for NMT this
+        means KRON86 only.
 
         Returns
         -------
