@@ -27,6 +27,8 @@ def mosaic_and_crop(
     if not inputs:
         raise ValidationError("mosaic_and_crop: brak rastrow wejsciowych")
 
+    output_path = Path(output_path)
+
     with contextlib.ExitStack() as stack:
         sources = [stack.enter_context(rasterio.open(p)) for p in inputs]
 
@@ -41,24 +43,18 @@ def mosaic_and_crop(
                 f"mosaic_and_crop: niezgodne rozdzielczosci wejsc: {sorted(res_set)}"
             )
 
-        data, transform = merge(
+        # merge z dst_path sam otwiera plik do zapisu (stad mkdir PRZED
+        # wywolaniem) i liczy wynik kawalkami wg mem_limit; bez dst_path
+        # caly raster ladowalby do jednej tablicy w RAM — szczyt 2,63x
+        # rozmiaru danych, czyli ok. 2,4 GB dla zlewni 30x30 km przy DMR 5G.
+        # Profil wyjscia merge bierze z PIERWSZEGO zrodla, dokladnie jak
+        # wczesniejsza reczna kopia sources[0].profile.
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        merge(
             sources,
             bounds=(bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y),
             nodata=nodata,
+            dst_path=str(output_path),
+            dst_kwds={"nodata": nodata} if nodata is not None else None,
         )
-
-        profile = sources[0].profile.copy()
-        profile.update(
-            height=data.shape[1],
-            width=data.shape[2],
-            count=data.shape[0],
-            transform=transform,
-        )
-        if nodata is not None:
-            profile["nodata"] = nodata
-
-    output_path = Path(output_path)
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    with rasterio.open(output_path, "w", **profile) as dst:
-        dst.write(data)
     return output_path

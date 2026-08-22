@@ -1,10 +1,12 @@
 """Testy mozaikowania (kartograf.transport.mosaic) na syntetycznych rastrach."""
 
 from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 import rasterio
+from rasterio.merge import merge as rasterio_merge
 from rasterio.transform import from_origin
 
 from kartograf.core.sheet_parser import BBox
@@ -80,6 +82,22 @@ class TestMosaicAndCrop:
             data = src.read(1)
         # Obszar bez pokrycia (x 10..20) = nodata, NIE 0.
         assert data[0, -1] == -9999.0
+
+    def test_mosaic_passes_dst_path_to_merge(self, four_tiles, tmp_path):
+        """merge ma pisac wynik sam (kawalkami wg mem_limit).
+
+        Bez dst_path rasterio trzyma caly wynik w jednej tablicy — szczyt
+        RAM 2,63x rozmiaru danych, czyli ~2,4 GB dla zlewni 30x30 km przy
+        DMR 5G (A3-4).
+        """
+        out_path = tmp_path / "out.tif"
+        with patch(
+            "kartograf.transport.mosaic.merge", wraps=rasterio_merge
+        ) as merge_spy:
+            mosaic_and_crop(
+                four_tiles, BBox(5.0, 5.0, 15.0, 15.0, "EPSG:2180"), out_path
+            )
+        assert merge_spy.call_args.kwargs["dst_path"] == str(out_path)
 
     def test_empty_inputs_raise(self, tmp_path):
         with pytest.raises(ValidationError):
