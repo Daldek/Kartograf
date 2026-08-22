@@ -12,7 +12,7 @@ import pytest
 import requests
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.pl.gugik import GugikProvider
 
 
@@ -111,9 +111,14 @@ class TestGugikProviderResolution:
         assert "KRON86" not in crs_list
 
     def test_is_wcs_available_1m(self):
-        """Test dostępności WCS dla 1m."""
-        provider = GugikProvider(resolution="1m")
+        """Test dostępności WCS dla 1m (tylko KRON86 — EVRF2007 = 404)."""
+        provider = GugikProvider(resolution="1m", vertical_crs="KRON86")
         assert provider.is_wcs_available() is True
+
+    def test_is_wcs_available_1m_evrf2007_false(self):
+        """Test niedostępności WCS dla 1m/EVRF2007 (endpoint wycofany)."""
+        provider = GugikProvider(resolution="1m", vertical_crs="EVRF2007")
+        assert provider.is_wcs_available() is False
 
     def test_is_wcs_available_5m(self):
         """Test niedostępności WCS dla 5m."""
@@ -270,7 +275,7 @@ class TestGugikProviderDownloadBbox:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=mock_wcs_response)
 
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(session=session, vertical_crs="KRON86")
         output_path = tmp_path / "test.tif"
 
         result = provider.download_bbox(sample_bbox, output_path)
@@ -278,10 +283,10 @@ class TestGugikProviderDownloadBbox:
         assert result == output_path
         assert output_path.exists()
 
-        # Should use WCS endpoint (default is now EVRF2007)
+        # WCS bbox jest dostepne wylacznie w KRON86 (EVRF2007 = HTTP 404)
         call_url = session.get.call_args[0][0]
         assert "WCS" in call_url
-        assert "COVERAGEID=DTM_PL-EVRF2007-NH_TIFF" in call_url
+        assert "COVERAGEID=DTM_PL-KRON86-NH_TIFF" in call_url
         assert "SUBSET=x(" in call_url
         assert "SUBSET=y(" in call_url
 
@@ -290,7 +295,7 @@ class TestGugikProviderDownloadBbox:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=mock_wcs_response)
 
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(session=session, vertical_crs="KRON86")
         output_path = tmp_path / "test.tif"
 
         provider.download_bbox(sample_bbox, output_path, format="GTiff")
@@ -303,7 +308,7 @@ class TestGugikProviderDownloadBbox:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=mock_wcs_response)
 
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(session=session, vertical_crs="KRON86")
         output_path = tmp_path / "test.png"
 
         provider.download_bbox(sample_bbox, output_path, format="PNG")
@@ -338,7 +343,7 @@ class TestGugikProviderDownloadBbox:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=mock_wcs_response)
 
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(session=session, vertical_crs="KRON86")
         output_path = tmp_path / "test.tif"
 
         provider.download_bbox(sample_bbox, output_path)
@@ -348,6 +353,20 @@ class TestGugikProviderDownloadBbox:
         # URL should contain SUBSET parameters with bbox values
         assert "SUBSET=x(450000" in call_url
         assert "SUBSET=y(550000" in call_url
+
+    def test_download_bbox_evrf2007_raises_validation_error(
+        self, tmp_path, sample_bbox
+    ):
+        """WCS NMT 1m dla EVRF2007 zostal wycofany — blad walidacji, nie 404."""
+        session = Mock(spec=requests.Session)
+
+        provider = GugikProvider(session=session)  # domyslnie EVRF2007
+        output_path = tmp_path / "test.tif"
+
+        with pytest.raises(ValidationError, match="KRON86"):
+            provider.download_bbox(sample_bbox, output_path)
+
+        session.get.assert_not_called()
 
 
 class TestGugikProviderRetry:

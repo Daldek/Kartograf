@@ -26,7 +26,7 @@ from urllib.parse import urlencode
 import requests
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
@@ -54,12 +54,12 @@ class GugikProvider(BaseProvider):
     >>> # Download by godło → ASC from OpenData
     >>> provider.download("N-34-130-D-d-2-4", Path("./sheet.asc"))
     >>>
-    >>> # Download by bbox → GeoTIFF from WCS
+    >>> # Download by bbox → GeoTIFF from WCS (KRON86 only, see download_bbox)
     >>> from kartograf import BBox
     >>> bbox = BBox(
     ...     min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
     ... )
-    >>> provider.download_bbox(bbox, Path("./area.tif"))
+    >>> GugikProvider(vertical_crs="KRON86").download_bbox(bbox, Path("./area.tif"))
     >>>
     >>> # Download in legacy KRON86 vertical CRS
     >>> provider = GugikProvider(vertical_crs="KRON86")
@@ -81,6 +81,8 @@ class GugikProvider(BaseProvider):
     WCS_ENDPOINTS = {
         "KRON86": f"{BASE_URL}/wss/service/PZGIK/NMT/GRID1/WCS/"
         "DigitalTerrainModelFormatTIFF",
+        # Known service outage: HTTP 404 since 2026-08 (docs/PROGRESS.md);
+        # kept for when GUGiK restores it
         "EVRF2007": f"{BASE_URL}/wss/service/PZGIK/NMT/GRID1/WCS/"
         "DigitalTerrainModelFormatTIFFEVRF2007",
     }
@@ -127,6 +129,11 @@ class GugikProvider(BaseProvider):
             ],
         },
     }
+
+    # Vertical CRS whose WCS endpoint GUGiK withdrew (HTTP 404 since 2026-08,
+    # docs/PROGRESS.md). Applies to the NMT GRID1 endpoints declared above;
+    # subclasses serving their own endpoints (NMPT) override this.
+    WITHDRAWN_WCS_VERTICAL_CRS: tuple[str, ...] = ("EVRF2007",)
 
     # Coverage IDs for WCS (by vertical CRS) - only 1m resolution
     COVERAGE_IDS = {
@@ -604,10 +611,20 @@ class GugikProvider(BaseProvider):
         ValueError
             If format is not supported, bbox CRS is not EPSG:2180,
             or resolution is 5m (WCS not available for 5m)
+        ValidationError
+            If vertical_crs is EVRF2007 (WCS endpoint withdrawn by GUGiK)
+
+        Notes
+        -----
+        Known service outage: the EVRF2007 WCS endpoint
+        (DigitalTerrainModelFormatTIFFEVRF2007) has returned HTTP 404 since
+        2026-08 (docs/PROGRESS.md), so bbox downloads work only with
+        ``vertical_crs="KRON86"``. Use ``download()`` with a godło to get
+        EVRF2007 heights.
 
         Examples
         --------
-        >>> provider = GugikProvider()
+        >>> provider = GugikProvider(vertical_crs="KRON86")
         >>> bbox = BBox(
         ...     min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
         ... )
@@ -630,6 +647,15 @@ class GugikProvider(BaseProvider):
             raise ValueError(
                 f"Unsupported WCS format: '{format}'. "
                 f"Supported formats: {list(self.WCS_FORMATS.keys())}"
+            )
+
+        # GUGiK withdrew the EVRF2007 WCS endpoint (HTTP 404 since 2026-08):
+        # fail with a readable message instead of three retried 404s
+        if self._vertical_crs in self.WITHDRAWN_WCS_VERTICAL_CRS:
+            raise ValidationError(
+                "WCS NMT 1m for EVRF2007 is not available (GUGiK removed the "
+                "endpoint, HTTP 404). Use GugikProvider(vertical_crs='KRON86') "
+                "or download sheets by godlo."
             )
 
         output_path = Path(output_path)
@@ -835,11 +861,15 @@ class GugikProvider(BaseProvider):
         """
         Check if WCS download is available for current configuration.
 
-        WCS is only available for 1m resolution.
+        WCS is only available for 1m resolution in KRON86: the EVRF2007
+        endpoint has returned HTTP 404 since 2026-08 (docs/PROGRESS.md).
 
         Returns
         -------
         bool
             True if WCS is available, False otherwise.
         """
-        return self._resolution == "1m"
+        return (
+            self._resolution == "1m"
+            and self._vertical_crs not in self.WITHDRAWN_WCS_VERTICAL_CRS
+        )
