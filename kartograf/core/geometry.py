@@ -130,6 +130,11 @@ def _read_shp_bboxes(filepath: Path, target_crs: str) -> list[BBox]:
     -------
     list[BBox]
         Per-feature bboxes in target CRS
+
+    Notes
+    -----
+    Obiekty punktowe (POINT/POINTZ/POINTM) daja obwiednie zdegenerowana
+    ``(x, y, x, y)`` — pyshp nie wystawia dla nich atrybutu ``bbox``.
     """
     import shapefile
 
@@ -140,7 +145,14 @@ def _read_shp_bboxes(filepath: Path, target_crs: str) -> list[BBox]:
         for shape in sf.iterShapes():
             if shape.shapeType == 0:  # NULL shape
                 continue
-            bbox = shape.bbox  # (min_x, min_y, max_x, max_y)
+            # pyshp exposes `bbox` only for multi-vertex shapes; POINT/POINTZ/
+            # POINTM carry a single vertex, so build a degenerate bbox from it.
+            bbox = getattr(shape, "bbox", None)  # (min_x, min_y, max_x, max_y)
+            if bbox is None:
+                if not shape.points:
+                    continue
+                x, y = shape.points[0][0], shape.points[0][1]
+                bbox = (x, y, x, y)
             transformed = _transform_bbox(
                 bbox[0], bbox[1], bbox[2], bbox[3], source_crs, target_crs
             )
