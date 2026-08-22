@@ -258,6 +258,7 @@ class TestDownloadFile:
 
         mock_resp = Mock()
         mock_resp.status_code = 200
+        mock_resp.headers = {}
         mock_resp.iter_content.return_value = [b"data123"]
         client._session = Mock()
         client._session.post.return_value = mock_resp
@@ -281,6 +282,92 @@ class TestDownloadFile:
         output = tmp_path / "out.tif"
         with patch.object(client, "_ensure_proxy", return_value=True):
             assert client.download_file("https://example.com/file", output) is False
+        assert not output.exists()
+        assert list(tmp_path.glob("*.tmp")) == []
+
+    @patch("kartograf.auth.client.atexit")
+    def test_download_file_success_uses_temp_then_rename(self, _atexit, tmp_path):
+        """The body lands atomically: no .tmp leftovers, full content in place."""
+        client = AuthProxyClient()
+        AuthProxyClient._proxy_port = 9999
+
+        mock_resp = Mock()
+        mock_resp.status_code = 200
+        mock_resp.headers = {"Content-Length": "7"}
+        mock_resp.iter_content.return_value = [b"data", b"123"]
+        client._session = Mock()
+        client._session.post.return_value = mock_resp
+
+        output = tmp_path / "out.tif"
+        with patch.object(client, "_ensure_proxy", return_value=True):
+            assert client.download_file("https://example.com/file", output) is True
+        assert output.read_bytes() == b"data123"
+        assert list(tmp_path.glob("*.tmp")) == []
+
+    @patch("kartograf.auth.client.atexit")
+    def test_download_file_stream_broken_returns_false_and_leaves_no_file(
+        self, _atexit, tmp_path
+    ):
+        """A truncated stream must not be reported as a successful download."""
+        client = AuthProxyClient()
+        AuthProxyClient._proxy_port = 9999
+
+        def broken_stream(chunk_size=8192):
+            yield b"II*\x00"
+            raise requests.exceptions.ChunkedEncodingError("Response ended prematurely")
+
+        mock_resp = Mock()
+        mock_resp.status_code = 200
+        mock_resp.headers = {}
+        mock_resp.iter_content.side_effect = broken_stream
+        client._session = Mock()
+        client._session.post.return_value = mock_resp
+
+        output = tmp_path / "out.tif"
+        with patch.object(client, "_ensure_proxy", return_value=True):
+            assert client.download_file("https://example.com/file", output) is False
+        assert not output.exists()
+        assert list(tmp_path.glob("*.tmp")) == []
+
+    @patch("kartograf.auth.client.atexit")
+    def test_download_file_content_length_mismatch_returns_false(
+        self, _atexit, tmp_path
+    ):
+        """Fewer bytes than announced -> False and nothing left behind."""
+        client = AuthProxyClient()
+        AuthProxyClient._proxy_port = 9999
+
+        mock_resp = Mock()
+        mock_resp.status_code = 200
+        mock_resp.headers = {"Content-Length": "100"}
+        mock_resp.iter_content.return_value = [b"0123456789"]
+        client._session = Mock()
+        client._session.post.return_value = mock_resp
+
+        output = tmp_path / "out.tif"
+        with patch.object(client, "_ensure_proxy", return_value=True):
+            assert client.download_file("https://example.com/file", output) is False
+        assert not output.exists()
+        assert list(tmp_path.glob("*.tmp")) == []
+
+    @patch("kartograf.auth.client.atexit")
+    def test_download_file_compressed_body_is_not_a_mismatch(self, _atexit, tmp_path):
+        """Content-Length counts compressed bytes; iter_content yields decoded."""
+        client = AuthProxyClient()
+        AuthProxyClient._proxy_port = 9999
+
+        mock_resp = Mock()
+        mock_resp.status_code = 200
+        mock_resp.headers = {"Content-Length": "21", "Content-Encoding": "gzip"}
+        mock_resp.iter_content.return_value = [b"A" * 100]
+        client._session = Mock()
+        client._session.post.return_value = mock_resp
+
+        output = tmp_path / "out.tif"
+        with patch.object(client, "_ensure_proxy", return_value=True):
+            assert client.download_file("https://example.com/file", output) is True
+        assert output.read_bytes() == b"A" * 100
+        assert list(tmp_path.glob("*.tmp")) == []
 
     @patch("kartograf.auth.client.atexit")
     def test_download_file_proxy_down(self, _atexit, tmp_path):
