@@ -45,6 +45,72 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   | `EVRF2007-PL` | — (nie istniala) | `EPSG:9651` (nowa nazwa realizacji polskiej) |
   | `Bpv` | — (nie istniala, CZ) | `EPSG:8357` (Baltic 1957, CUZK) |
 
+- **`SoilGridsProvider.download_by_teryt()` rzuca `NotImplementedError`** —
+  dotad zwracal jako sukces dane dla stalego obszaru 60x60 km wokol srodka
+  WOJEWODZTWA (2-cyfrowy prefiks TERYT), identyczne dla kazdej gminy w tym
+  wojewodztwie. Uzyj `download_by_bbox()` albo `download_by_godlo()`.
+  (audyt 0.7.0: A4-3)
+- **`LandCoverManager.download_by_teryt/download_by_bbox/download_by_godlo`
+  bez `output_path` nazywaja pliki tak jak `download()`** — bylo
+  `CORINE Land Cover_N-34-130-D.gpkg` (spacje w nazwie, etykieta zrodla),
+  jest `corine_land_cover_godlo_N-34-130-D.gpkg`. Skrypty skladajace sciezke
+  wyniku z nazwy zrodla wymagaja poprawki. (audyt 0.7.0: A5-2)
+- **`GugikProvider.download_bbox(vertical_crs="EVRF2007")` konczy sie
+  `ValidationError`** z remedium — GUGiK wycofal endpoint WCS
+  `DigitalTerrainModelFormatTIFFEVRF2007` (404 takze dla GetCapabilities),
+  wiec WCS NMT 1m dziala wylacznie w KRON86; kanal WCS deskryptora
+  `pl.gugik.nmt_1m` deklaruje juz tylko `EPSG:9650`. Dotad zapytanie
+  wychodzilo w swiat i wracalo bledem transportu. (audyt 0.7.0: A1-4)
+- **`find_sheets_for_bbox()`/`find_sheets_for_geometry()`: stykajace sie
+  krawedzie nie sa przecieciem** — liczy sie dodatnie pole przeciecia, wiec
+  bbox rowny arkuszowi zwraca TYLKO jego arkusze:
+
+  | zapytanie | bylo | jest |
+  |---|---|---|
+  | bbox arkusza `N-34-130-D`, `--scale 1:50000` | 9 godel | 4 (`N-34-130-D-a..d`) |
+  | bbox arkusza `N-34-130-D-d-2-4` (1:10000) | 4 godla | 1 |
+  | bbox arkusza `6.179.12.20` (PL-2000, `--scale 1:2000`) | 9 godel | 1 |
+  | punkt / bbox zdegenerowany (<= ~2e-9 jednostki) | `[]` | 1 arkusz (ten na E/N od linii siatki) |
+
+  Dziala tak samo na linii siatki i na granicy stref PL-2000. Dodatkowo
+  nieznana wartosc `system=` konczy sie `ValidationError` zamiast cichego
+  fallbacku do PL-1992. (audyt 0.7.0: A1-7, A9-1)
+- **`get_parent()`/`get_children()`/`get_all_descendants()` i
+  `parse --hierarchy` dla 1:1000000 <-> 1:500000: poprawna geometria
+  cwiartek** — cwiartka jest liczona z pozycji arkusza 1:200000 w siatce
+  12x12 (bloki 6x6: A = NW, B = NE, C = SW, D = SE), a nie z pasow po 36
+  kolejnych numerow. 72 ze 144 arkuszy 1:200000 dostaje innego rodzica niz
+  w 0.6.x, a `get_all_descendants()` arkusza 1:500000 zwraca wlasciwa cwiartke
+  zamiast poziomego pasa. (audyt 0.7.0: A1-1)
+- **HSG: kanoniczne progi trojkata USDA** (ADR-025) — skosne granice normy
+  (`silt + 1.5*clay`, `silt + 2*clay`) zastapily przyblizenia liniami
+  pionowymi/poziomymi, a reguly stoja w jednym miejscu, wiec
+  `classify_usda_texture()` (skalar) i `classify_usda_texture_array()`
+  (tablica, uzywana przez `calculate_hsg_by_bbox`) daja identyczne wyniki
+  (rownowaznosc przypieta testem na calym symplexie co 1%). Skutek policzony
+  na 5151 punktach symplexu, format "bylo -> jest":
+
+  | zmiana HSG | punktow | udzial symplexu | zmiana tekstury |
+  |---|---|---|---|
+  | A -> B | 136 | 2,64% | `loamy_sand` -> `sandy_loam` |
+  | C -> B | 85 | 1,65% | `sandy_clay_loam` -> `loam` (36), `sandy_clay_loam` -> `sandy_loam` (28), `clay_loam` -> `loam` (21) |
+  | D -> C | 5 | 0,10% | `sandy_clay` -> `clay_loam` |
+  | **razem** | **226** | **4,39%** | (klasa tekstury zmienia sie dla 427 punktow = 8,29%) |
+
+  Kazda zmiana jest o dokladnie jedna grupe. `TEXTURE_TO_HSG` zostaje bez
+  zmian (swiadome, teraz udokumentowane odstepstwo od TR-55 — patrz ADR-025).
+  (audyt 0.7.0: A4-4, A4-8)
+- **Auth proxy: usuniety endpoint `/token` i
+  `AuthProxyClient.get_access_token()`** — oddawaly surowy token do procesu
+  klienta, co przeczy roli proxy (izolacja credentials, ADR-002). Dodatkowo
+  `/download` przyjmuje wylacznie hosty `*.copernicus.eu` i `*.eea.europa.eu`
+  (dotad proxy pobieralo z dowolnego URL-a podanego przez klienta).
+  (audyt 0.7.0: A4-10)
+- **Usuniety format `GML`** — `--format GML` (CLI), pozycja w
+  `landcover list-sources` i wpis w `get_supported_formats()`; format nigdy
+  nie byl zaimplementowany, zadanie i tak konczylo sie plikiem GPKG.
+  (audyt 0.7.0: A6-2)
+
 ### Added
 - **Etap 0 — architektura zrodel wielokrajowych (przygotowanie pod CZ/DE/SK)**
   - `kartograf/sources/` — deskryptory zrodel (SourceDescriptor, AccessChannel,
@@ -118,6 +184,50 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     godlowy sidecarow nie zmienia (nigdy nie dostaje `parent_request`)
   - `--product laz` w trybie obszarowym `--country auto`: obszar siegajacy CZ
     konczy sie bledem z podpowiedzia `--country pl` (bez cichego pomijania kraju)
+- **Nowy produkt: LAZ — chmury punktow LIDAR (dane pomiarowe ALS) z GUGiK**
+  - `GugikLazProvider` (`kartograf/providers/pl/gugik_laz.py`) — pobieranie plikow
+    `.laz` przez **WFS** (`DanePomiaroweLidarEVRF2007` / `DanePomiaroweLidarKRON86`)
+  - Discovery **area-based**: godlo (<=1:10000) / `--bbox` / `--geometry` → bbox
+    EPSG:2180 → `discover_tiles()` (WFS GetFeature) → pobranie wszystkich kafli
+  - Kafle LAZ sa drobniejsze niz 1:10000 (jedno godlo 1:10000 → wiele kafli);
+    godlo kafla jest **nieparsowalne** i traktowane jako etykieta — `url_do_pobrania`
+    bierzemy wprost z atrybutu WFS, bez konstruowania URL i bez `SheetParser`
+  - WFS zwraca metadane: rok (`akt_rok`), gestosc (`char_przestrz`), CRS, geometria
+  - Domyslnie: EVRF2007, **najnowszy rok per kafel** (dedup po godle); flagi
+    `--year`, `--vertical-crs`, `--min-density` do nadpisania
+  - CLI: `kartograf download <godlo|--bbox|--geometry> --product laz [...]`,
+    pobieranie rownolegle (`--workers`), pomijanie istniejacych plikow
+  - `GugikLazProvider._fetch_available_years()` / `_get_available_years()` —
+    lista lat z WFS GetCapabilities, in-memory cache, fallback na hardcoded
+  - `FileStorage.get_raw_path()` — sciezka dla nieparsowalnego (drobnego) godla
+    bez `SheetParser`; pliki w `laz/<hierarchia godla>/<oryginalna nazwa>.laz`
+  - Eksport: `GugikLazProvider`, `LazTile` w `kartograf/__init__.py`
+  - Weryfikacja: pobrano realne pliki LAZ (magic `LASF`) E2E; 41 nowych testow
+- **Walidacja warstw WMS przez GetCapabilities dla Ortofotomapy**
+  - `GugikOrtoProvider._fetch_wms_layers()` i `_get_validated_layers()` — analogicznie
+    do GugikProvider; dotad orto NIE mialo zadnego fallbacku (twarda lista)
+  - Lazy, in-memory cache per instancja; graceful fallback do `WMS_LAYERS` przy bledzie
+  - Filtruje prefiks `SkorowidzeOrtofotomapy`, wyklucza warianty `Zasiegi`,
+    sortuje malejaco po roczniku (warstwa `Starsze` na koncu)
+- **Audyt przedwydaniowy 0.7.0**
+  - `DownloadManager.last_result` — podsumowanie `DownloadResult` (succeeded /
+    failed / skipped) ostatniego `download_hierarchy()`; kasowane na wejsciu
+    do `download_sheet()` i `download_hierarchy()`, wiec nigdy nie oddaje
+    wyniku poprzedniego zadania. CLI ustala z niego kod wyjscia (A2-5)
+  - `CLMS_CREDENTIALS` jest wreszcie czytane: zmienna srodowiskowa trafia do
+    podprocesu auth proxy (env przed Keychain), wiec CORINE GeoTIFF dziala
+    takze na Linux i Windows — dotad jedynym dzialajacym zrodlem byl Keychain
+    macOS (A4-1)
+  - `KARTOGRAF_DEBUG=1` — pelny traceback zamiast skroconego komunikatu bledu
+    CLI (patrz Fixed: bariera w `main()`) (N1-1)
+  - `--country auto` rozstrzyga sie do `pl` z komunikatem `Info:` na stderr,
+    gdy obszar lezy w obwiedniach obu krajow, a podane opcje nie maja
+    odpowiednika czeskiego (`--product nmpt|orto`, `--system`,
+    `--vertical-crs KRON86`, `--resolution 1m`) — patrz Changed
+    (N6-2, ADR-023 pkt 5)
+  - `--bbox-crs` przyjmuje takze `EPSG:5514` (S-JTSK, natywny uklad CZ)
+    i `EPSG:3045` (ETRS89 / UTM 33N, siatka TM33) — dotad w CHANGELOG-u
+    wymienione byly tylko uklady polskie (A6-16)
 
 ### Changed
 - CLI: sentinele `None` dla `--resolution`/`--vertical-crs`/`--system`
@@ -160,7 +270,61 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`dynamic = ["version"]` + `[tool.setuptools.dynamic] version = {attr =
   "kartograf.__version__"}`); `[tool.setuptools.packages.find]` dostaje
   `include = ["kartograf*"]`, wiec `tests/` nie trafia do dystrybucji;
-  opis i keywords rozszerzone o CUZK/DMR/LAZ
+  opis i keywords rozszerzone o CUZK/DMR/LAZ; usuniete `requirements.txt`
+  i `requirements-dev.txt` — jedynym zrodlem zaleznosci jest `pyproject.toml`
+  (audyt 0.7.0: A6-4, A6-5, A6-6)
+- **Domyslnym krajem jest `--country auto`** — NOWA semantyka wzgledem 0.6.1,
+  gdzie opcji `--country` nie bylo i kazde zadanie szlo do GUGiK-a. Dla
+  `--bbox`/`--geometry` bez jawnego `--country` znaczy to:
+  - obszar przecinajacy obwiednie dwoch krajow jest pobierany z KAZDEGO z nich
+    (osobne pliki i sidecary, wspolny `extra.parent_request`);
+  - obwiednia CZ jest PROSTOKATNA (siega 18,86 E i 51,06 N), wiec zadanie
+    z poludniowej Polski dostaje dodatkowo plik i sidecar z CUZK; poza
+    faktyczna granica wyjdzie raster same-nodata, a nie blad — obejscie to
+    jawne `--country pl`;
+  - opcje bez odpowiednika czeskiego (`--product nmpt|orto`, `--system`,
+    `--vertical-crs KRON86`, `--resolution 1m`) ROZSTRZYGAJA kraj do `pl`
+    (`Info: --country auto -> pl (...)` na stderr, `-q` tego nie tlumi)
+    zamiast przewracac zadanie kodem 1 — dotychczasowe odrzucenie bylo
+    regresja wzgledem 0.6.1 w calej poludniowej Polsce.
+
+  (audyt 0.7.0: A6-3, N6-2; ADR-023 pkt 4-5)
+- Auto-split `--country auto`: porazka jednego kraju przy sukcesie drugiego
+  konczy sie kodem 0 i `Warning: brak danych w <kraj> ...` na stderr — bylo:
+  kod 1 mimo pobranych plikow. Kod 1 zostaje dla jawnego `--country` i dla
+  przypadku, w ktorym padly wszystkie kraje. (audyt 0.7.0: A3-2, ADR-023 pkt 4)
+- `mosaic_and_crop()` pisze wynik przez `merge(dst_path=...)` zamiast trzymac
+  scalona tablice w RAM — szczyt zuzycia pamieci spada z ~2,6x do ~1,06x
+  rozmiaru rastra wynikowego (istotne dla duzych bboxow CZ).
+  (audyt 0.7.0: A3-4)
+- Statystyki HSG (`soilgrids hsg --stats`) licza powierzchnie geodezyjnie dla
+  rastrow w EPSG:4326 — bylo: pole liczone w stopniach kwadratowych, wiec CLI
+  pokazywalo `0.00 ha`. (audyt 0.7.0: A4-6)
+- Listy godel rozwijanych do hierarchii w trybie `--bbox`/`--geometry` sa
+  pobierane sekwencyjnie (rownoleglosc zostaje wewnatrz kazdej hierarchii),
+  zeby dalo sie zebrac `last_result` kazdego godla; znika przy okazji
+  zwielokrotnienie watkow (dotad do `--workers`^2 rownoczesnych zadan do
+  GUGiK-a). (audyt 0.7.0: A2-3)
+- Teksty `--help` opisuja CZ/CUZK, warstwy SW w BDOT10k, SoilGrids, LAZ, HSG
+  i `sheet_cache` — dotad milczaly o czesci zaimplementowanych funkcji.
+  (audyt 0.7.0: A6-13)
+
+### Removed
+- Martwy kod wykryty w audycie przedwydaniowym: blok Keychain/CLMS
+  w `providers/corine.py` (`KEYCHAIN_SERVICE`, `get_credentials_from_keychain`,
+  `save_credentials_to_keychain`, `get_clms_credentials` — credentials
+  z `CLMS_CREDENTIALS` konsumuje wylacznie podproces auth proxy),
+  `CorineProvider.DLR_YEARS` oraz 9 nieuzywanych re-eksportow z fasady
+  `cli/commands.py` (`_cmd_download_bbox`, `_cmd_download_geometry`,
+  `_cmd_download_laz`, `_download_godlo_list`, `_write_laz_sidecar`,
+  `cmd_landcover_download`, `cmd_landcover_list_layers`,
+  `cmd_landcover_list_sources`, `cmd_soilgrids_hsg`); publiczne wejscia fasady
+  (`main`, `create_parser`, `cmd_*`) bez zmian. (audyt 0.7.0: A5-1)
+- Nieosiagalna galaz `--product laz` w dyspozycji obszarowej `download_cmd.py`
+  (LAZ ma wlasny przeplyw `_cmd_download_laz`) i martwe fallbacki
+  `getattr(args, "vertical_crs", "KRON86")`. (audyt 0.7.0: N5-1)
+- Format `GML` (`--format`, `landcover list-sources`, `get_supported_formats()`)
+  — patrz Breaking Changes. (audyt 0.7.0: A6-2)
 
 ### Fixed
 - **Reprojekcja tresci CZ szla przez serwer CUZK i gubila transformacje datum**
@@ -191,29 +355,6 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   CLMS; dochodzi `extra.fallback = "wms_png"` z adnotacja "podglad WMS, nie dane".
 - `FileStorage.delete()` usuwa takze sidecar `.meta.json` pliku danych
   (wczesniej zostawal osierocony).
-
-### Added
-- **Nowy produkt: LAZ — chmury punktów LIDAR (dane pomiarowe ALS) z GUGiK**
-  - `GugikLazProvider` (`kartograf/providers/gugik_laz.py`) — pobieranie plików
-    `.laz` przez **WFS** (`DanePomiaroweLidarEVRF2007` / `DanePomiaroweLidarKRON86`)
-  - Discovery **area-based**: godło (≤1:10000) / `--bbox` / `--geometry` → bbox
-    EPSG:2180 → `discover_tiles()` (WFS GetFeature) → pobranie wszystkich kafli
-  - Kafle LAZ są drobniejsze niż 1:10000 (jedno godło 1:10000 → wiele kafli);
-    godło kafla jest **nieparsowalne** i traktowane jako etykieta — `url_do_pobrania`
-    bierzemy wprost z atrybutu WFS, bez konstruowania URL i bez `SheetParser`
-  - WFS zwraca metadane: rok (`akt_rok`), gęstość (`char_przestrz`), CRS, geometria
-  - Domyślnie: EVRF2007, **najnowszy rok per kafel** (dedup po godle); flagi
-    `--year`, `--vertical-crs`, `--min-density` do nadpisania
-  - CLI: `kartograf download <godło|--bbox|--geometry> --product laz [...]`,
-    pobieranie równoległe (`--workers`), pomijanie istniejących plików
-  - `GugikLazProvider._fetch_available_years()` / `_get_available_years()` —
-    lista lat z WFS GetCapabilities, in-memory cache, fallback na hardcoded
-  - `FileStorage.get_raw_path()` — ścieżka dla nieparsowalnego (drobnego) godła
-    bez `SheetParser`; pliki w `laz/<hierarchia godła>/<oryginalna nazwa>.laz`
-  - Eksport: `GugikLazProvider`, `LazTile` w `kartograf/__init__.py`
-  - Weryfikacja: pobrano realne pliki LAZ (magic `LASF`) E2E; 41 nowych testów
-
-### Fixed
 - **NMT 1m/EVRF2007: zaktualizowane nazwy warstw WMS (nowe roczniki)**
   - `WMS_LAYERS["1m"]["EVRF2007"]`: `[2025, 2024, 2023, 2022iStarsze]` →
     `[2026, 2025, 2024, 2023iStarsze]`
@@ -235,39 +376,102 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     "Invalid layer(s) given in the LAYERS parameter"; brakowalo tez `2026`
   - Zweryfikowane przez GetCapabilities endpointu `SkorowidzeWgAktualnosci` (2026-06-24)
   - Warstwy `SkorowidzeOrtofotomapyZasiegi*` (zasiegi, bez URL OpenData) sa pomijane
-
-### Added
-- **Walidacja warstw WMS przez GetCapabilities dla Ortofotomapy**
-  - `GugikOrtoProvider._fetch_wms_layers()` i `_get_validated_layers()` — analogicznie
-    do GugikProvider; dotad orto NIE mialo zadnego fallbacku (twarda lista)
-  - Lazy, in-memory cache per instancja; graceful fallback do `WMS_LAYERS` przy bledzie
-  - Filtruje prefiks `SkorowidzeOrtofotomapy`, wyklucza warianty `Zasiegi`,
-    sortuje malejaco po roczniku (warstwa `Starsze` na koncu)
+- **Kafelkowanie `exportImage` (CZ) gubilo wiersz i przesuwalo tresc** —
+  kafle sa teraz kotwiczone w narozniku NW zadania, wiec ostatni wiersz
+  mozaiki nie jest juz wypelniony `-9999`, a przesuniecia tresci miedzy
+  kaflami (dotad -1,4 .. +0,6 m) mieszcza sie w 1 px. (audyt 0.7.0: A3-1)
+- Uszkodzony kafel `exportImage` konczy sie `DownloadError` (z posprzatanym
+  plikiem wynikowym) zamiast wyjatku rasterio wyciekajacego do uzytkownika.
+  (audyt 0.7.0: A3-3)
+- **Kazde pobranie CZ padalo na `inf`, jesli w systemie byla lokalna siatka
+  `sk_gku`** — polityki poziome CZ nie przekazywaly `probe_point`, wiec filtr
+  transformacji nie odrzucal operacji zwracajacej `inf` poza obszarem waznosci
+  siatki obcego kraju. (audyt 0.7.0: A1-2)
+- Transformacja pionowa odrzuca raster bez geotransformacji zamiast cicho
+  przesuwac wysokosci o wartosc policzona dla wspolrzednych pikselowych.
+  (audyt 0.7.0: A3-5)
+- `MetadataCache`: odczyty ida pod tym samym lockiem co zapisy — rownolegle
+  odczyty na wspoldzielonym polaczeniu SQLite potrafily oddac wiersz innego
+  klucza (URL innego godla). (audyt 0.7.0: A2-1)
+- `DownloadManager(provider=...)` bez jawnego `storage=` bierze podkatalog
+  z deskryptora providera; bylo: zawsze `nmt_1m`, wiec NMPT pisal do katalogu
+  NMT i przy `--force` nadpisywal jego pliki. (audyt 0.7.0: A2-2)
+- Pobranie hierarchii z porazkami konczy sie kodem 1 i komunikatem
+  `Error: N of M sheets failed` — bylo: kod 0 mimo brakujacych arkuszy; dotyczy
+  trybu godlowego oraz `--bbox`/`--geometry`. (audyt 0.7.0: A2-3)
+- `Bdot10kProvider` zwraca sciezke faktycznie zapisanego pliku `.gpkg`
+  (dotad deklarowana sciezka rozjezdzala sie z zapisana, wiec sidecar ladowal
+  obok nieistniejacego pliku). (audyt 0.7.0: A2-6)
+- Awaria wszystkich warstw WMS jest raportowana jako niedostepnosc uslugi,
+  a nie jako "brak pokrycia dla godla" — bledna diagnoza kierowala uzytkownika
+  w zla strone. (audyt 0.7.0: A2-9)
+- CLI odrzuca `--product nmpt --resolution 5m` oraz `--product orto
+  --vertical-crs ...` zamiast cicho je ignorowac (wynik nie odpowiadal
+  poleceniu). (audyt 0.7.0: V2-N1)
+- `--geometry`: punktowe SHP daja bbox zdegenerowany zamiast `AttributeError`;
+  GPKG bez obwiedni w naglowku czyta punkt z WKB (takze warianty Z/M i EWKB
+  z flaga SRID), pusta geometria jest pomijana, a nieobslugiwany typ konczy
+  sie `ValidationError` zamiast cichego pominiecia rekordu.
+  (audyt 0.7.0: A1-3, A1-5)
+- SoilGrids i CORINE: obwiednia bboxa liczona przez `transform_bounds()`
+  zamiast dwoch naroznikow — zamawiany obszar byl o ~10% za waski; CORINE
+  liczy tez proporcje obrazu WMS zawsze z obwiedni metrycznej (galaz DLR
+  dla roku 1990 tracila 1,7x rozdzielczosci pionowej). (audyt 0.7.0: A4-7)
+- HSG: piksele nodata (`-32768`, `NaN`, wartosc nodata rastra) dostaja 0
+  ("brak danych"), a nie grupe B — dziury w danych wygladaly dotad jak
+  poprawna klasyfikacja. (audyt 0.7.0: A4-5)
+- Auth proxy i klient: urwany strumien nie dokleja juz odpowiedzi 502 do ciala
+  pobieranego rastra (pobranie bez `Content-Length` jest ramkowane jako
+  chunked, bajty ida surowe), a `download_file()` pisze przez plik tymczasowy
+  i sprawdza `Content-Length`, wiec urwane pobranie nie udaje sukcesu — bylo:
+  `True` i uszkodzony GeoTIFF. (audyt 0.7.0: A4-2)
+- `AuthProxyClient`: start proxy pod lockiem (rownolegly CORINE mieszal
+  GeoTIFF z PNG), brak credentials nie uruchamia juz podprocesu, odczyt portu
+  ma timeout, a stderr podprocesu jest drenowany (pelny bufor blokowal proxy).
+  (audyt 0.7.0: N4-1, A4-11, A4-13, A4-14)
+- Deskryptory CZ maja `server_reprojection=False` — pole opisuje stan
+  faktyczny po ADR-024 (serwer CUZK dostaje wylacznie uklad natywny).
+  (audyt 0.7.0: A1-6)
+- `main()` ma bariere na wyjatki: blad spoza `KartografError` konczy sie
+  linia `Error: <Typ>: <komunikat>` z podpowiedzia `KARTOGRAF_DEBUG=1`
+  i kodem 1, zamiast tracebackiem Pythona. (audyt 0.7.0: N1-1)
 
 ### Tests
-- `tests/test_wms_layer_validation.py` — nowa klasa `TestHardcodedLayerNames`
-  (5 testow): regresyjne strazniki nazw warstw zweryfikowanych z GetCapabilities
-  (KRON86, 1m EVRF2007, 5m EVRF2007, divergencja 5m vs 1m, kolejnosc newest-first)
-- Zaktualizowany `test_returns_discovered_layers_on_mismatch` — uzywa hipotetycznego
-  przyszlego zestawu rocznikow, aby galaz mismatch byla niezalezna od hardcoded
-- `tests/test_wms_layer_validation.py` — nowa klasa `TestOrtoLayerValidation`
-  (7 testow): parsowanie/sortowanie GetCapabilities orto, wykluczanie `Zasiegi`,
-  mismatch/match/fallback/cache, straznik nazw warstw
-- `tests/test_gugik_orto.py` — autouse fixture stubujaca GetCapabilities (offline),
-  zaktualizowany `test_get_opendata_url_tries_all_layers` (9 → 4 warstwy)
-
-### Tests
-- **1402 testy, pokrycie ~89%** (+260 wzgledem stanu po mergu etapu 0: 1142;
-  w tym +18 testow regresji fixu ADR-024 i +3 przypiecia sciezki godlowej);
-  ruff i ruff format czyste, mypy bez nowych bledow wzgledem baseline (33/34
-  przedistniejacych, niezwiazanych z etapem 1)
-- E2E na zywych danych CUZK + regresja PL: **11/11 PASS**
-  (`docs/research/2026-08-11-etap1-e2e.md`) — godlo TM33 (dmr5g, Bpv),
-  godlo SM5 (dmr4g, kraj auto-wykryty), bbox przygraniczny `--country auto`
-  (osobne pliki PL/CZ, wspolny `parent_request`), `--target-crs EPSG:2180`,
-  transformacja pionowa `--vertical-crs EVRF2007` (offset zmierzony na zywo
-  +0,132366 m, zgodny z modelem), `--vertical-crs KRON86` (blad z remedium),
-  regresja PL (godlo, `landcover list-sources`, `cache stats`)
+- **1708 testow, pokrycie 93%** — 1142 po mergu etapu 0, 1402 po etapie 1,
+  1708 po audycie przedwydaniowym 0.7.0; ruff i `ruff format` czyste,
+  mypy 32 bledy (baseline sprzed etapu 0: 33)
+- **Etap 0 — walidacja warstw WMS**
+  - `tests/test_wms_layer_validation.py` — nowa klasa `TestHardcodedLayerNames`
+    (5 testow): regresyjne strazniki nazw warstw zweryfikowanych z GetCapabilities
+    (KRON86, 1m EVRF2007, 5m EVRF2007, divergencja 5m vs 1m, kolejnosc newest-first)
+  - Zaktualizowany `test_returns_discovered_layers_on_mismatch` — uzywa hipotetycznego
+    przyszlego zestawu rocznikow, aby galaz mismatch byla niezalezna od hardcoded
+  - `tests/test_wms_layer_validation.py` — nowa klasa `TestOrtoLayerValidation`
+    (7 testow): parsowanie/sortowanie GetCapabilities orto, wykluczanie `Zasiegi`,
+    mismatch/match/fallback/cache, straznik nazw warstw
+  - `tests/test_gugik_orto.py` — autouse fixture stubujaca GetCapabilities (offline),
+    zaktualizowany `test_get_opendata_url_tries_all_layers` (9 → 4 warstwy)
+- **Etap 1 — Czechy (CUZK)**
+  - +260 testow wzgledem stanu po mergu etapu 0 (1142 -> 1402), w tym +18
+    testow regresji fixu ADR-024 i +3 przypiecia sciezki godlowej
+  - E2E na zywych danych CUZK + regresja PL: **11/11 PASS**
+    (`docs/research/2026-08-11-etap1-e2e.md`) — godlo TM33 (dmr5g, Bpv),
+    godlo SM5 (dmr4g, kraj auto-wykryty), bbox przygraniczny `--country auto`
+    (osobne pliki PL/CZ, wspolny `parent_request`), `--target-crs EPSG:2180`,
+    transformacja pionowa `--vertical-crs EVRF2007` (offset zmierzony na zywo
+    +0,132366 m, zgodny z modelem), `--vertical-crs KRON86` (blad z remedium),
+    regresja PL (godlo, `landcover list-sources`, `cache stats`)
+- **Audyt przedwydaniowy 0.7.0**
+  - blokada sieci w `tests/conftest.py` i globalny stub GetCapabilities —
+    21 testow przestalo odpytywac serwery GUGiK; lokalny autouse fixture
+    w `tests/test_gugik_orto.py` zastapiony tym globalnym, a realnych nazw
+    warstw pilnuje osobny marker `real_wms_layers` (A8-1)
+  - `test_get_opendata_url_tries_all_layers` niezalezny od liczby warstw
+    GUGiK (A8-2)
+  - nowe testy `--workers 1` w trybie `--bbox`/`--geometry` (petla sekwencyjna
+    zbiera wszystkie sciezki, A8-5) i skrotu transformacji geometrii podanej
+    juz w ukladzie zadania CZ (A8-6)
+  - kazda naprawa bledu z audytu ma test przypinajacy (RED przed fixem, GREEN po)
 
 ## [0.6.1] - 2026-03-24
 
@@ -347,6 +551,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `--bbox-crs` rozszerzony o EPSG:2176-2179
 - **FileStorage: obsluga sciezek PL-2000**
   - Struktura katalogow: `nmt_2000_1m/6/179/12/20/6.179.12.20.asc`
+    (uwaga 2026-08-22: podkatalog `nmt_2000_1m` nie zostal zrealizowany —
+    arkusze PL-2000 laduja w `nmt_<res>/`, patrz ADR-017 i docstring
+    `FileStorage`; rozdzielenie katalogow odlozone)
 - **Public API: eksport Parser2000 i find_sheets_2000_for_bbox**
   - `from kartograf import Parser2000, find_sheets_2000_for_bbox`
 
