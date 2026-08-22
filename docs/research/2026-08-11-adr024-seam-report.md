@@ -5,6 +5,14 @@ Galaz `feature/etap1-cz-dmr`, wersja `0.7.0-dev`. **Zadnych zmian w kodzie ani c
 
 Katalog roboczy: `/tmp/claude-1001/-home-claude-agent-workspace-Kartograf/f27c5cce-cd98-44b3-80e9-a90c445a283f/scratchpad/seam`
 
+> **Errata (2026-08-22):** opisany tu blad zostal naprawiony w 0.7.0 (ADR-024):
+> serwer CUZK dostaje zadania wylacznie w natywnym EPSG:5514, reprojekcja tresci
+> jest lokalna przypieta operacja, a sidecar niesie transform.horizontal =
+> "pinned: <opis> (<dokladnosc> m)" zamiast "server:EPSG:2180". Wnioski 7.1
+> (reprojekcja lokalna) i 7.2 (dokladnosc w sidecarze) sa zrealizowane
+> (kartograf/cli/download_cmd.py, tests/test_cuzk_dmr.py::
+> TestHorizontalReprojection). Dokument zachowany jako diagnoza.
+
 ---
 
 ## 0. Wniosek nadrzedny (czytaj najpierw)

@@ -13,7 +13,12 @@
    Od ADR-024 Kartograf pobiera wylacznie natywne EPSG:5514 i reprojektuje lokalnie
    (`rasterio.warp` z przypieta operacja). Wniosek metodyczny: kontrola poprawnosci
    reprojekcji musi mierzyc TRESC rastra (dopasowanie do referencji), nie
-   bounds/CRS z metadanych.
+   bounds/CRS z metadanych. Dotyczy takze sekcji 5.2 B (outSR=2180 dla
+   ZABAGED/MapServer), zdania w sekcji 7 laczacego ImageServer i MapServer oraz
+   wiersza "Transformacja pozioma" w tabeli sekcji 8 ("lub reprojekcja
+   serwerowa"). Dla wektora ZABAGED efekt NIE byl mierzony - przed uzyciem outSR
+   w etapie 3 trzeba zmierzyc TRESC wzgledem referencji natywnej 5514, bo
+   siostrzana usluga exportImage gubila datum shift (ADR-024).
 2. Drobne korekty faktow wg rekonesansu (`docs/research/2026-08-11-etap1-rekonesans.md`,
    sekcja "Blednie zalozone fakty"): arkuszy SM5 jest 16 299, nie 16 301; przy
    parametrze `noData=-9999` serwer wypelnia -9999 (zera tylko bez parametru);

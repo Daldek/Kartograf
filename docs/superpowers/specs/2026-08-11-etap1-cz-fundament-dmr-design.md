@@ -26,6 +26,11 @@ dla trybu `--country auto`; decyzja EVRF2007 globalnie = EPSG:5621)
    (`docs/research/2026-08-11-etap1-rekonesans.md`).
 3. `tests/test_cache.py` wymieniony w sekcji 8 to faktycznie
    `tests/test_metadata_cache.py` (skorygowane w planie implementacji).
+4. (2026-08-22) extra.parent_request powstaje ZAWSZE w trybie --bbox/--geometry
+   (takze przy jawnym --country pl|cz), nigdy w trybie godlowym - sekcje 5.9 i 8
+   opisuja stan sprzed rozstrzygniecia z konsultacji 2026-08-11; obowiazuje
+   ADR-023 pkt (f)1 (przypiete: tests/test_cli.py::TestAutoSplitBBox::
+   test_explicit_cz_bbox_gets_parent_request).
 
 ---
 

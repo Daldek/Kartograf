@@ -1,7 +1,12 @@
 # Design: Wsparcie godlowania PL-2000 w Kartografie
 
 **Data:** 2026-02-24
-**Status:** Zatwierdzony
+**Status:** WYKONANY (v0.5.0), zrealizowany wg ADR-017
+
+> **Errata (2026-08-22):** zrealizowano wg ADR-017 - parser_1992.py nie powstal
+> (logika PL-1992 zostala w SheetParser), a klasa PL-2000 jest publiczna i
+> nazywa sie Parser2000 (kartograf/core/parser_2000.py); nazwy
+> _Parser1992/_Parser2000 z tego dokumentu nie istnieja.
 
 ## Kontekst
 

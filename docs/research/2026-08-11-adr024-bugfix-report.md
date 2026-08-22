@@ -1,7 +1,15 @@
 # Bugfix: reprojekcja tresci CZ szla przez serwer CUZK
 
 Galaz `feature/etap1-cz-dmr`, 2026-08-11. Commity: `6bf5e2b` (kod), `fd5c5b0` (docs).
-Zgloszenie: `seam-report.md` (analiza szwu PL/CZ na Olzie).
+Zgloszenie: `seam-report.md` (analiza szwu PL/CZ na Olzie)
+(kopia: docs/research/2026-08-11-adr024-seam-report.md).
+
+> **Errata (2026-08-22):** (a) liczba 1,25 m dotyczy wylacznie kafli kolo
+> Cieszyna - pomiar na 302_5550 dal 4,92 m; blad serwerowej sciezki 3045 byl
+> zmienny przestrzennie (docs/research/2026-08-11-adr024-verify-report.md
+> sekcja 2, ADR-024 "Korekta liczby"); (b) Zastrzezenie 1 ("fix nie
+> zweryfikowany na zywo") zostalo zamkniete - verify-report, punkty 1 i 4
+> macierzy E2E: PASS (ADR-024 "Zywa weryfikacja fixu").
 
 ---
 
