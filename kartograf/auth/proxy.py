@@ -3,7 +3,8 @@
 CLMS Authentication Proxy Server.
 
 This script runs as a separate subprocess to handle CLMS API authentication.
-It reads credentials from macOS Keychain and performs OAuth2 token exchange,
+It reads credentials from the CLMS_CREDENTIALS environment variable (JSON)
+or, as a fallback, from macOS Keychain, and performs OAuth2 token exchange,
 keeping credentials isolated from the main application process.
 
 Security model:
@@ -21,6 +22,7 @@ The server prints the actual port to stdout for the parent process.
 import argparse
 import json
 import logging
+import os
 import platform
 import re
 import subprocess
@@ -42,17 +44,50 @@ KEYCHAIN_SERVICE = "clms-token"
 
 
 class CLMSCredentials:
-    """Manages CLMS OAuth2 credentials from Keychain."""
+    """
+    Manages CLMS OAuth2 credentials.
+
+    Credentials come from the CLMS_CREDENTIALS environment variable (JSON)
+    or, as a fallback, macOS Keychain (service clms-token).
+    """
 
     def __init__(self):
         self._credentials: dict | None = None
         self._access_token: str | None = None
         self._token_expires: float = 0
 
+    def load_from_env(self) -> bool:
+        """Load credentials from the CLMS_CREDENTIALS environment variable."""
+        raw = os.environ.get("CLMS_CREDENTIALS")
+        if not raw:
+            return False
+
+        try:
+            creds = json.loads(raw)
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in CLMS_CREDENTIALS: {e}")
+            return False
+
+        if (
+            not isinstance(creds, dict)
+            or not creds.get("client_id")
+            or not creds.get("private_key")
+        ):
+            logger.error(
+                "CLMS_CREDENTIALS must be a JSON object with "
+                "'client_id' and 'private_key'"
+            )
+            return False
+
+        self._credentials = creds
+        logger.info("Credentials loaded from CLMS_CREDENTIALS")
+        return True
+
     def load_from_keychain(self) -> bool:
         """Load credentials from macOS Keychain."""
         if platform.system() != "Darwin":
-            logger.error("Keychain only available on macOS")
+            # Normal case once CLMS_CREDENTIALS is the primary source.
+            logger.debug("Keychain only available on macOS")
             return False
 
         try:
@@ -90,7 +125,9 @@ class CLMSCredentials:
 
     def get_access_token(self) -> str | None:
         """Get valid access token, refreshing if needed."""
-        if not self._credentials and not self.load_from_keychain():
+        if not self._credentials and not (
+            self.load_from_env() or self.load_from_keychain()
+        ):
             return None
 
         # Return cached token if still valid
@@ -149,7 +186,7 @@ class CLMSCredentials:
         """Check if credentials are available."""
         if self._credentials:
             return True
-        return self.load_from_keychain()
+        return self.load_from_env() or self.load_from_keychain()
 
 
 class ProxyHandler(BaseHTTPRequestHandler):
