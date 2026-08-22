@@ -144,6 +144,12 @@ class TestGugikNmptProviderEndpoints:
                 f"Coverage ID for {crs} should not contain 'DTM'"
             )
 
+    def test_wcs_available_for_both_vertical_crs(self):
+        """Awaria endpointu WCS NMT EVRF2007 nie dotyczy NMPT (inny endpoint)."""
+        assert GugikNmptProvider().WITHDRAWN_WCS_VERTICAL_CRS == ()
+        assert GugikNmptProvider(vertical_crs="EVRF2007").is_wcs_available() is True
+        assert GugikNmptProvider(vertical_crs="KRON86").is_wcs_available() is True
+
     def test_no_5m_wms_layers(self):
         """Test że WMS_LAYERS nie ma klucza '5m'."""
         provider = GugikNmptProvider()

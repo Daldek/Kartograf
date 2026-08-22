@@ -97,6 +97,11 @@ class GugikNmptProvider(GugikProvider):
     # Only 1m vertical CRS supported
     SUPPORTED_VERTICAL_CRS_5M: list[str] = []  # no 5m at all
 
+    # The 2026-08 GUGiK outage covers the NMT GRID1 EVRF2007 endpoint only;
+    # NMPT serves both vertical CRS from its own DigitalSurfaceModel endpoint,
+    # so nothing is withdrawn here.
+    WITHDRAWN_WCS_VERTICAL_CRS: tuple[str, ...] = ()
+
     # Product identifier for cache key (overrides GugikProvider's "nmt")
     _CACHE_PRODUCT = "nmpt"
 

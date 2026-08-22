@@ -80,8 +80,13 @@ _SOURCES: dict[str, SourceDescriptor] = {
                 AccessChannel(
                     transport=TransportKind.WCS,
                     horizontal_crs="EPSG:2180",
-                    vertical_crs_options=_PL_VERTICAL_BOTH,
+                    vertical_crs_options=("EPSG:9650",),
                     capabilities=frozenset({"bbox_raster"}),
+                    notes=(
+                        "WCS EVRF2007 (DigitalTerrainModelFormatTIFFEVRF2007) "
+                        "wycofany przez GUGiK - HTTP 404 od 2026-08-11 "
+                        "(docs/PROGRESS.md); bbox raster tylko KRON86"
+                    ),
                 ),
             ),
             tile_scheme=None,
@@ -237,7 +242,11 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     transport=TransportKind.ARCGIS_IMAGE,
                     horizontal_crs="EPSG:5514",
                     vertical_crs_options=("EPSG:8357",),
-                    server_reprojection=True,
+                    server_reprojection=False,
+                    notes=(
+                        "Serwer obsluguje imageSR, ale ADR-024 zabrania - "
+                        "reprojekcja tresci wylacznie lokalna, przypieta operacja"
+                    ),
                     capabilities=frozenset({"bbox_raster"}),
                     endpoint=(
                         "https://ags.cuzk.gov.cz/arcgis2/rest/services/"
@@ -278,7 +287,11 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     transport=TransportKind.ARCGIS_IMAGE,
                     horizontal_crs="EPSG:5514",
                     vertical_crs_options=("EPSG:8357",),
-                    server_reprojection=True,
+                    server_reprojection=False,
+                    notes=(
+                        "Serwer obsluguje imageSR, ale ADR-024 zabrania - "
+                        "reprojekcja tresci wylacznie lokalna, przypieta operacja"
+                    ),
                     capabilities=frozenset({"bbox_raster"}),
                     endpoint=(
                         "https://ags.cuzk.gov.cz/arcgis2/rest/services/"

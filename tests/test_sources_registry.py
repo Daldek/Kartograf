@@ -154,6 +154,14 @@ class TestRegistry:
         transports = {ch.transport for ch in d.channels}
         assert transports == {TransportKind.WMS_SHEET_INDEX, TransportKind.WCS}
 
+    def test_nmt_1m_wcs_channel_is_kron86_only(self):
+        """Kanal WCS opisuje tylko KRON86 — endpoint EVRF2007 to HTTP 404."""
+        d = get_source("pl.gugik.nmt_1m")
+        wcs = [ch for ch in d.channels if ch.transport == TransportKind.WCS]
+        assert len(wcs) == 1
+        assert wcs[0].vertical_crs_options == ("EPSG:9650",)
+        assert "404" in wcs[0].notes
+
     def test_no_vertical_for_orto_and_landcover(self):
         for key in (
             "pl.gugik.orto",
@@ -187,7 +195,9 @@ class TestRegistry:
         assert ch.transport == TransportKind.ARCGIS_IMAGE
         assert ch.horizontal_crs == "EPSG:5514"
         assert ch.vertical_crs_options == ("EPSG:8357",)
-        assert ch.server_reprojection is True
+        # ADR-024: exportImage tylko w natywnym 5514, reprojekcja lokalna
+        assert ch.server_reprojection is False
+        assert "ADR-024" in ch.notes
         assert ch.capabilities == frozenset({"bbox_raster"})
         assert ch.endpoint == (
             "https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr5g/ImageServer"
@@ -213,7 +223,9 @@ class TestRegistry:
         )
         image_ch = d.channels[1]
         assert image_ch.capabilities == frozenset({"bbox_raster"})
-        assert image_ch.server_reprojection is True
+        # ADR-024: serwerowemu imageSR nie ufamy — reprojekcja lokalna
+        assert image_ch.server_reprojection is False
+        assert "ADR-024" in image_ch.notes
         assert image_ch.endpoint == (
             "https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr4g/ImageServer"
         )
@@ -234,11 +246,28 @@ class TestDescriptorProviderConsistency:
         storage = FileStorage(tmp_path, resolution="1m")
         assert d.storage_subdir == storage._subdir
         supported = provider.get_supported_vertical_crs_for_resolution("1m")
-        for ch in d.channels:
-            codes = {
-                resolve_vertical_crs(n, ch.vertical_crs_options) for n in supported
-            }
-            assert set(ch.vertical_crs_options) == codes
+        # Porownanie per kanal: skorowidz WMS obsluguje oba uklady pionowe,
+        # a kanal WCS tylko te, dla ktorych provider ma dzialajacy endpoint.
+        sheets_ch = next(
+            ch for ch in d.channels if ch.transport == TransportKind.WMS_SHEET_INDEX
+        )
+        sheet_codes = {
+            resolve_vertical_crs(n, sheets_ch.vertical_crs_options) for n in supported
+        }
+        assert set(sheets_ch.vertical_crs_options) == sheet_codes
+        assert sheet_codes == {"EPSG:9650", "EPSG:9651"}
+
+        wcs_ch = next(ch for ch in d.channels if ch.transport == TransportKind.WCS)
+        wcs_supported = {
+            n
+            for n in supported
+            if GugikProvider(resolution="1m", vertical_crs=n).is_wcs_available()
+        }
+        wcs_codes = {
+            resolve_vertical_crs(n, wcs_ch.vertical_crs_options) for n in wcs_supported
+        }
+        assert set(wcs_ch.vertical_crs_options) == wcs_codes
+        assert wcs_codes == {"EPSG:9650"}
 
     def test_nmt_5m(self, tmp_path):
         from kartograf import FileStorage, GugikProvider
