@@ -21,7 +21,10 @@ def create_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(
         prog="kartograf",
-        description="Tool for parsing and downloading Polish topographic map sheets",
+        description=(
+            "Tool for downloading spatial data from GUGiK (PL) and CUZK (CZ): "
+            "DEM/NMT, NMPT, orthophoto, LAZ, BDOT10k, CORINE, SoilGrids"
+        ),
         epilog="Example: kartograf parse N-34-130-D --hierarchy",
     )
 
@@ -198,7 +201,7 @@ def create_parser() -> argparse.ArgumentParser:
     landcover_parser = subparsers.add_parser(
         "landcover",
         help="Download land cover data (BDOT10k, CORINE)",
-        description="Download land cover data from BDOT10k or CORINE",
+        description="Download land cover / soil data from BDOT10k, CORINE or SoilGrids",
     )
     landcover_subparsers = landcover_parser.add_subparsers(
         dest="landcover_command",
@@ -372,7 +375,10 @@ def create_parser() -> argparse.ArgumentParser:
     cache_parser = subparsers.add_parser(
         "cache",
         help="Manage metadata cache",
-        description="Manage the local SQLite metadata cache for WMS lookups",
+        description=(
+            "Manage the local SQLite metadata cache (WMS lookups, TERYT, "
+            "CUZK sheet index)"
+        ),
     )
     cache_subparsers = cache_parser.add_subparsers(
         dest="cache_command",

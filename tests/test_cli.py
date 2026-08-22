@@ -316,6 +316,23 @@ class TestMain:
         with pytest.raises(RuntimeError):
             main(["parse", "N-34"])
 
+    def test_top_level_help_mentions_cuzk_and_soilgrids(self, capsys):
+        """Teksty --help opisuja CZ/CUZK, SoilGrids i warstwy hydrografii."""
+        with pytest.raises(SystemExit):
+            main(["--help"])
+        captured = capsys.readouterr()
+        assert "CUZK" in captured.out
+
+        with pytest.raises(SystemExit):
+            main(["landcover", "download", "--help"])
+        captured = capsys.readouterr()
+        assert "SoilGrids" in captured.out
+
+        result = main(["landcover", "list-sources"])
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "SW" in captured.out
+
 
 class TestCLIIntegration:
     """Integration tests for CLI."""
