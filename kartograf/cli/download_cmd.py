@@ -438,8 +438,9 @@ def _dispatch_area(
     Przy ``filepath`` galaz PL pracuje dalej na pliku (arkusze per obiekt,
     a nie z obwiedni), a bbox sluzy rozpoznaniu krajow i ``parent_request``.
 
-    Komunikat ``Info:`` o rozstrzygnieciu kraju idzie na stderr, wiec ``-q``
-    (tlumiacy stdout) go NIE ukrywa — tak samo jak komunikatow ``Error:``.
+    Komunikaty ``Info:``/``Warning:`` o rozstrzygnieciu kraju i o czesciowym
+    sukcesie ida na stderr, wiec ``-q`` (tlumiacy stdout) ich NIE ukrywa —
+    tak samo jak komunikatow ``Error:``.
     """
     from kartograf.transform.crs import TransformError
 
@@ -481,24 +482,42 @@ def _dispatch_area(
     parent_request = _build_parent_request(bbox, countries)
     cz_crs = getattr(args, "target_crs", None) or "EPSG:5514"
 
-    exit_codes = []
+    results: list[tuple[str, int]] = []
     for code in countries:
         try:
             part = _country_bbox(bbox, code, auto=auto, cz_crs=cz_crs)
         except TransformError as e:
             return _print_transform_error(e)
         if code == "CZ":
-            exit_codes.append(_run_cz(args, bbox=part, parent_request=parent_request))
+            rc = _run_cz(args, bbox=part, parent_request=parent_request)
         else:
             # KOPIA args: _resolve_pl_sentinels mutuje Namespace (None->"1m"),
             # co zatrulo by galaz CZ; kopia uniezaleznia od kolejnosci krajow
             pl_args = argparse.Namespace(**vars(args))
             if filepath is not None:
-                exit_codes.append(
-                    _download_pl_geometry(pl_args, filepath, parent_request)
-                )
+                rc = _download_pl_geometry(pl_args, filepath, parent_request)
             else:
-                exit_codes.append(_download_pl_bbox(pl_args, part, parent_request))
+                rc = _download_pl_bbox(pl_args, part, parent_request)
+        results.append((code, rc))
+
+    exit_codes = [rc for _, rc in results]
+    # A3-2: pod `auto` kraje bierze sie z PROSTOKATNYCH obwiedni (ADR-023
+    # pkt 4), wiec zadanie w glebi jednego kraju rutynowo trafia takze do
+    # drugiego, ktory danych tam nie ma — to normalny wynik doboru krajow,
+    # a nie awaria zadania. Kod 0, ale z ostrzezeniem, zeby porazka jednego
+    # kraju na pasie przygranicznym nie zniknela po cichu. Jawny `--country`
+    # (uzytkownik sam wskazal zasieg) i porazka WSZYSTKICH krajow zostaja
+    # przy dotychczasowym `max(exit_codes)`.
+    if auto and len(results) > 1 and 0 in exit_codes and max(exit_codes) != 0:
+        failed = [code for code, rc in results if rc != 0]
+        ok = [code for code, rc in results if rc == 0]
+        print(
+            f"Warning: brak danych w {', '.join(failed)} dla tego obszaru - "
+            f"pobrano {', '.join(ok)} "
+            "(prostokatne obwiednie krajow, ADR-023 pkt 4-5)",
+            file=sys.stderr,
+        )
+        return 0
     return max(exit_codes)
 
 

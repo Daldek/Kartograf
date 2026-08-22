@@ -3803,10 +3803,10 @@ class TestAutoSplitBBox:
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_cz_failure_does_not_skip_pl_and_fails_request(
-        self, mock_manager_class, mock_find, mock_cz, tmp_path
+    def test_cz_failure_does_not_skip_pl_and_warns(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
-        """Porazka pierwszego kraju nie anuluje drugiego, ale psuje wynik."""
+        """Porazka pierwszego kraju nie anuluje drugiego ani calego zadania."""
         mock_find.return_value = ["M-34-86-D-d-4-3"]
         mock_manager = Mock()
         mock_manager.download_sheet.return_value = tmp_path / "x.asc"
@@ -3815,15 +3815,18 @@ class TestAutoSplitBBox:
 
         result = main(self._BORDER + ["-o", str(tmp_path)])
 
-        assert result == 1
+        assert result == 0
         assert mock_cz.called
         mock_manager.download_sheet.assert_called()
+        err = capsys.readouterr().err
+        assert "Warning:" in err
+        assert "brak danych w CZ" in err
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_pl_failure_fails_request_despite_cz_success(
-        self, mock_manager_class, mock_find, mock_cz, tmp_path
+    def test_pl_failure_with_cz_success_warns_and_returns_0(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
         mock_find.return_value = ["M-34-86-D-d-4-3"]
         mock_manager = Mock()
@@ -3833,8 +3836,81 @@ class TestAutoSplitBBox:
 
         result = main(self._BORDER + ["-o", str(tmp_path)])
 
-        assert result == 1
+        assert result == 0
         assert mock_cz.called
+        assert "brak danych w PL" in capsys.readouterr().err
+
+    # --- A3-2: prostokatne obwiednie krajow a kod wyjscia ---
+
+    # 14,40-14,45E / 50,05-50,10N — Praga, w glebi CZ, ale wewnatrz prostokata
+    # PL (od 14,07E): auto odpytuje tez GUGiK, ktory danych tam nie ma
+    _PRAGUE = [
+        "download",
+        "--bbox",
+        "14.40,50.05,14.45,50.10",
+        "--bbox-crs",
+        "EPSG:4326",
+        "-q",
+    ]
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_auto_one_country_failed_other_succeeded_returns_0(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
+    ):
+        """Kraj bez danych na obszarze drugiego kraju nie psuje calego zadania."""
+        mock_find.return_value = ["M-33-65-D-b-3-3"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.side_effect = DownloadError(
+            "No NMT 1m data available for M-33-65-D-b-3-3"
+        )
+        mock_manager_class.return_value = mock_manager
+        mock_cz.return_value = 0
+
+        result = main(self._PRAGUE + ["-o", str(tmp_path)])
+
+        assert result == 0
+        err = capsys.readouterr().err
+        assert "Warning:" in err
+        assert "PL" in err
+        assert "CZ" in err
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_auto_all_countries_failed_returns_1(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
+    ):
+        """Gdy padly wszystkie kraje, kod wyjscia zostaje bez zmian."""
+        mock_find.return_value = ["M-33-65-D-b-3-3"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.side_effect = DownloadError("serwer padl")
+        mock_manager_class.return_value = mock_manager
+        mock_cz.return_value = 1
+
+        result = main(self._PRAGUE + ["-o", str(tmp_path)])
+
+        assert result == 1
+        assert "Warning:" not in capsys.readouterr().err
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_explicit_country_failure_still_returns_1(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
+    ):
+        """Jawny --country: uzytkownik zna zasieg, wiec porazka to porazka."""
+        mock_find.return_value = ["M-33-65-D-b-3-3"]
+        mock_manager = Mock()
+        mock_manager.download_sheet.side_effect = DownloadError("serwer padl")
+        mock_manager_class.return_value = mock_manager
+
+        result = main(self._PRAGUE + ["--country", "pl", "-o", str(tmp_path)])
+
+        assert result == 1
+        mock_cz.assert_not_called()
+        assert "Warning:" not in capsys.readouterr().err
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_godlo_mode_has_no_parent_request(self, mock_manager_class, tmp_path):
