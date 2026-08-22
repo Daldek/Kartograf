@@ -4,9 +4,16 @@ Metadata cache using SQLite for Kartograf.
 This module provides the MetadataCache class that caches:
 - OpenData URL lookups (godlo -> URL) for NMT/NMPT/Ortofoto providers
 - TERYT code lookups (point -> TERYT) for BDOT10k provider
+- Sheet index lookups (system + godlo -> payload) for CUZK sheet providers
+  (sheet_cache, fixed TTL of 30 days)
 
-The cache uses SQLite with WAL mode for concurrent access support
-and supports time-based TTL for cache expiration.
+The cache uses SQLite with WAL mode for concurrent access support and
+supports time-based TTL for cache expiration. All reads and writes on the
+shared Connection are serialized through a single threading.Lock: WAL mode
+buys concurrency across separate processes/connections, not across threads
+sharing one Connection (CPython caches prepared statements per Connection,
+so unlocked concurrent reads on the same SQL text can return another key's
+row - see the comment in MetadataCache.get_url()).
 """
 
 from __future__ import annotations
@@ -46,6 +53,8 @@ class MetadataCache:
     ttl_seconds : int, optional
         Time-to-live for cache entries in seconds. Default is 7 days
         (604800 seconds). Entries older than TTL are considered stale.
+        Does not apply to sheet_cache, which uses a separate fixed TTL of
+        30 days (SHEET_TTL_SECONDS).
 
     Examples
     --------
@@ -148,22 +157,33 @@ class MetadataCache:
         str or None
             Cached URL if found and not expired, None otherwise
         """
-        cursor = self._conn.execute(
-            """
-            SELECT url, cached_at FROM url_cache
-            WHERE godlo=? AND resolution=? AND vertical_crs=? AND product=?
-            """,
-            (godlo, resolution, vertical_crs, product),
-        )
-        row = cursor.fetchone()
-        if row is None:
-            return None
+        # The lock also guards this read (not just writes): CPython caches a
+        # prepared statement per Connection, keyed by SQL text, and reuses it
+        # across threads. Two threads executing the same SQL text on this
+        # shared `check_same_thread=False` connection concurrently can step
+        # the same `sqlite3_stmt` and overwrite each other's bindings, which
+        # returns another key's row (or raises). WAL mode only buys
+        # concurrency across separate connections/processes, not across
+        # threads sharing one connection. So execute+fetchone (and the
+        # opportunistic DELETE below) must happen as a single critical
+        # section, not just the writes.
+        with self._write_lock:
+            cursor = self._conn.execute(
+                """
+                SELECT url, cached_at FROM url_cache
+                WHERE godlo=? AND resolution=? AND vertical_crs=? AND product=?
+                """,
+                (godlo, resolution, vertical_crs, product),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
 
-        url, cached_at = row
-        if time.time() - cached_at >= self._ttl_seconds:
-            logger.debug(f"URL cache expired for {godlo} ({product})")
-            # Opportunistically delete the expired entry
-            with self._write_lock:
+            url, cached_at = row
+            if time.time() - cached_at >= self._ttl_seconds:
+                logger.debug(f"URL cache expired for {godlo} ({product})")
+                # Opportunistically delete the expired entry (same critical
+                # section - threading.Lock is not reentrant).
                 self._conn.execute(
                     """
                     DELETE FROM url_cache
@@ -172,10 +192,10 @@ class MetadataCache:
                     (godlo, resolution, vertical_crs, product),
                 )
                 self._conn.commit()
-            return None
+                return None
 
-        logger.debug(f"URL cache hit for {godlo} ({product})")
-        return url
+            logger.debug(f"URL cache hit for {godlo} ({product})")
+            return url
 
     def set_url(
         self,
@@ -233,28 +253,30 @@ class MetadataCache:
         str or None
             Cached TERYT code if found and not expired, None otherwise
         """
-        cursor = self._conn.execute(
-            "SELECT teryt, cached_at FROM teryt_cache WHERE x=? AND y=?",
-            (x, y),
-        )
-        row = cursor.fetchone()
-        if row is None:
-            return None
+        # Lock guards the read too - see comment in get_url().
+        with self._write_lock:
+            cursor = self._conn.execute(
+                "SELECT teryt, cached_at FROM teryt_cache WHERE x=? AND y=?",
+                (x, y),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
 
-        teryt, cached_at = row
-        if time.time() - cached_at >= self._ttl_seconds:
-            logger.debug(f"TERYT cache expired for ({x}, {y})")
-            # Opportunistically delete the expired entry
-            with self._write_lock:
+            teryt, cached_at = row
+            if time.time() - cached_at >= self._ttl_seconds:
+                logger.debug(f"TERYT cache expired for ({x}, {y})")
+                # Opportunistically delete the expired entry (same critical
+                # section - threading.Lock is not reentrant).
                 self._conn.execute(
                     "DELETE FROM teryt_cache WHERE x=? AND y=?",
                     (x, y),
                 )
                 self._conn.commit()
-            return None
+                return None
 
-        logger.debug(f"TERYT cache hit for ({x}, {y}): {teryt}")
-        return teryt
+            logger.debug(f"TERYT cache hit for ({x}, {y}): {teryt}")
+            return teryt
 
     def set_teryt(self, x: float, y: float, teryt: str) -> None:
         """
@@ -285,26 +307,30 @@ class MetadataCache:
     # =========================================================================
 
     def get_sheet(self, system: str, godlo: str) -> dict | None:
-        """Zwroc zdekodowany payload arkusza albo None (brak/wygasly)."""
-        cursor = self._conn.execute(
-            "SELECT payload, cached_at FROM sheet_cache WHERE system=? AND godlo=?",
-            (system, godlo),
-        )
-        row = cursor.fetchone()
-        if row is None:
-            return None
-        payload, cached_at = row
-        if time.time() - cached_at >= SHEET_TTL_SECONDS:
-            logger.debug(f"Sheet cache expired for {system}/{godlo}")
-            with self._write_lock:
+        """Zwroc zdekodowany payload arkusza albo None (brak/wygasly).
+
+        Lock guards the read too - see comment in get_url().
+        """
+        with self._write_lock:
+            cursor = self._conn.execute(
+                "SELECT payload, cached_at FROM sheet_cache WHERE system=? AND godlo=?",
+                (system, godlo),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            payload, cached_at = row
+            if time.time() - cached_at >= SHEET_TTL_SECONDS:
+                logger.debug(f"Sheet cache expired for {system}/{godlo}")
+                # Same critical section - threading.Lock is not reentrant.
                 self._conn.execute(
                     "DELETE FROM sheet_cache WHERE system=? AND godlo=?",
                     (system, godlo),
                 )
                 self._conn.commit()
-            return None
-        logger.debug(f"Sheet cache hit for {system}/{godlo}")
-        return json.loads(payload)
+                return None
+            logger.debug(f"Sheet cache hit for {system}/{godlo}")
+            return json.loads(payload)
 
     def set_sheet(self, system: str, godlo: str, payload: dict) -> None:
         """Zapisz payload arkusza (JSON) pod kluczem (system, godlo)."""
@@ -352,13 +378,17 @@ class MetadataCache:
             - db_size_bytes: size of the database file in bytes
             - db_path: path to the database file
         """
-        url_count = self._conn.execute("SELECT COUNT(*) FROM url_cache").fetchone()[0]
-        teryt_count = self._conn.execute("SELECT COUNT(*) FROM teryt_cache").fetchone()[
-            0
-        ]
-        sheet_count = self._conn.execute("SELECT COUNT(*) FROM sheet_cache").fetchone()[
-            0
-        ]
+        # Lock guards these reads too - see comment in get_url().
+        with self._write_lock:
+            url_count = self._conn.execute("SELECT COUNT(*) FROM url_cache").fetchone()[
+                0
+            ]
+            teryt_count = self._conn.execute(
+                "SELECT COUNT(*) FROM teryt_cache"
+            ).fetchone()[0]
+            sheet_count = self._conn.execute(
+                "SELECT COUNT(*) FROM sheet_cache"
+            ).fetchone()[0]
 
         db_size = 0
         if self._db_path.exists():

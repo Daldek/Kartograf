@@ -793,6 +793,60 @@ class TestThreadSafety:
         cache.close()
         assert errors == [], f"Concurrent operations raised errors: {errors}"
 
+    def test_concurrent_get_url_returns_own_value(self, tmp_path):
+        """Parallel readers on one connection must never see another key's row."""
+        cache = MetadataCache(db_path=tmp_path / "c.db")
+        for i in range(300):
+            cache.set_url(
+                f"G{i}", "1m", "EVRF2007", "nmt", f"https://opendata/G{i}.asc"
+            )
+        errors: list[str] = []
+
+        def worker(seed: int) -> None:
+            for k in range(400):
+                i = (seed * 37 + k) % 300
+                try:
+                    got = cache.get_url(f"G{i}", "1m", "EVRF2007", "nmt")
+                except Exception as e:  # noqa: BLE001 - any exception is a failure here
+                    errors.append(f"{type(e).__name__}: {e}")
+                    continue
+                if got != f"https://opendata/G{i}.asc":
+                    errors.append(f"G{i} -> {got!r}")
+
+        threads = [threading.Thread(target=worker, args=(s,)) for s in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        cache.close()
+        assert errors == []
+
+    def test_concurrent_get_sheet_returns_own_payload(self, tmp_path):
+        """Parallel readers of sheet_cache must never see another key's payload."""
+        cache = MetadataCache(db_path=tmp_path / "c.db")
+        for i in range(300):
+            cache.set_sheet("cz_tm33", f"T{i}", {"i": i})
+        errors: list[str] = []
+
+        def worker(seed: int) -> None:
+            for k in range(200):
+                i = (seed * 37 + k) % 300
+                try:
+                    got = cache.get_sheet("cz_tm33", f"T{i}")
+                except Exception as e:  # noqa: BLE001 - any exception is a failure here
+                    errors.append(f"{type(e).__name__}: {e}")
+                    continue
+                if got != {"i": i}:
+                    errors.append(f"T{i} -> {got!r}")
+
+        threads = [threading.Thread(target=worker, args=(s,)) for s in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        cache.close()
+        assert errors == []
+
 
 # =========================================================================
 # TestWALVerification
