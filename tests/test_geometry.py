@@ -208,8 +208,9 @@ def _make_gpkg_blob(
     srs_id: int = 2180,
     envelope_type: int = 1,
     byte_order: int = 1,
+    wkb_type: int = 1,
 ) -> bytes:
-    """Create a minimal GeoPackage binary geometry blob with envelope."""
+    """Create a minimal GeoPackage binary geometry blob (WKB POINT by default)."""
     flags = (envelope_type << 1) | byte_order
     endian = "<" if byte_order == 1 else ">"
 
@@ -223,7 +224,7 @@ def _make_gpkg_blob(
         header += struct.pack(f"{endian}4d", min_x, max_x, min_y, max_y)
 
     # Add minimal WKB point after envelope (for completeness)
-    header += struct.pack(f"{endian}Bi2d", byte_order, 1, min_x, min_y)
+    header += struct.pack(f"{endian}Bi2d", byte_order, wkb_type, min_x, min_y)
 
     return header
 
@@ -445,6 +446,70 @@ def gpkg_no_envelope(tmp_path):
     return gpkg_path
 
 
+def _build_gpkg(gpkg_path: Path, blobs: list[bytes], geometry_type: str = "POLYGON"):
+    """Build a minimal EPSG:2180 GeoPackage holding the given geometry blobs."""
+    from pyproj import CRS
+
+    conn = sqlite3.connect(str(gpkg_path))
+    wkt = CRS.from_epsg(2180).to_wkt()
+
+    conn.execute(
+        "CREATE TABLE gpkg_spatial_ref_sys ("
+        "srs_name TEXT, srs_id INTEGER PRIMARY KEY, "
+        "organization TEXT, organization_coordsys_id INTEGER, "
+        "definition TEXT, description TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO gpkg_spatial_ref_sys VALUES (?, ?, ?, ?, ?, ?)",
+        ("EPSG:2180", 2180, "EPSG", 2180, wkt, "PL-1992"),
+    )
+
+    conn.execute(
+        "CREATE TABLE gpkg_contents ("
+        "table_name TEXT PRIMARY KEY, data_type TEXT, "
+        "identifier TEXT, description TEXT, "
+        "last_change TEXT, min_x REAL, min_y REAL, max_x REAL, max_y REAL, "
+        "srs_id INTEGER)"
+    )
+    conn.execute(
+        "INSERT INTO gpkg_contents VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("features", "features", "features", "", "", 0, 0, 0, 0, 2180),
+    )
+
+    conn.execute(
+        "CREATE TABLE gpkg_geometry_columns ("
+        "table_name TEXT, column_name TEXT, "
+        "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+    )
+    conn.execute(
+        "INSERT INTO gpkg_geometry_columns VALUES (?, ?, ?, ?, ?, ?)",
+        ("features", "geom", geometry_type, 2180, 0, 0),
+    )
+
+    conn.execute(
+        "CREATE TABLE features (fid INTEGER PRIMARY KEY, name TEXT, geom BLOB)"
+    )
+    for i, blob in enumerate(blobs):
+        conn.execute("INSERT INTO features (name, geom) VALUES (?, ?)", (f"f{i}", blob))
+
+    conn.commit()
+    conn.close()
+    return gpkg_path
+
+
+@pytest.fixture
+def gpkg_no_envelope_polygon(tmp_path):
+    """GPKG z envelope_type=0 i geometria inna niz punkt (WKB POLYGON)."""
+    blob = _make_gpkg_blob(420000, 230000, 421000, 231000, envelope_type=0, wkb_type=3)
+    return _build_gpkg(tmp_path / "no_env_poly.gpkg", [blob])
+
+
+@pytest.fixture
+def gpkg_no_features_geom(tmp_path):
+    """GPKG z warstwa obiektow, ale bez zadnego wiersza."""
+    return _build_gpkg(tmp_path / "empty_layer.gpkg", [])
+
+
 @pytest.fixture
 def gpkg_no_features(tmp_path):
     """Create a GPKG with no feature tables."""
@@ -501,11 +566,32 @@ class TestParseGpkgEnvelope:
         assert max_x == pytest.approx(300.0)
         assert max_y == pytest.approx(400.0)
 
-    def test_no_envelope_type_0(self):
-        """Envelope type 0 (no envelope) returns None."""
+    def test_no_envelope_point_read_from_wkb(self):
+        """Envelope type 0 + WKB POINT: coordinates come from the WKB itself."""
         blob = _make_gpkg_blob(100.0, 200.0, 300.0, 400.0, envelope_type=0)
         result = _parse_gpkg_envelope(blob)
-        assert result is None
+        assert result == (100.0, 200.0, 100.0, 200.0)
+
+    def test_no_envelope_pointz_ewkb_flag(self):
+        """Envelope type 0 + EWKB POINT Z (0x80000000 flag) is read as a point."""
+        header = b"GP" + struct.pack("B", 0) + struct.pack("B", 1)
+        header += struct.pack("<i", 2180)
+        blob = header + struct.pack("<BI2d", 1, 0x80000001, 5.0, 6.0)
+        blob += struct.pack("<d", 123.0)  # Z
+
+        assert _parse_gpkg_envelope(blob) == (5.0, 6.0, 5.0, 6.0)
+
+    def test_no_envelope_non_point_raises(self):
+        """Envelope type 0 + non-point WKB raises ValidationError."""
+        blob = _make_gpkg_blob(100.0, 200.0, 300.0, 400.0, envelope_type=0, wkb_type=3)
+        with pytest.raises(ValidationError, match="envelope"):
+            _parse_gpkg_envelope(blob)
+
+    def test_no_envelope_truncated_wkb_returns_none(self):
+        """Envelope type 0 with a truncated WKB returns None."""
+        header = b"GP" + struct.pack("B", 0) + struct.pack("B", 1)
+        header += struct.pack("<i", 2180)
+        assert _parse_gpkg_envelope(header + b"\x01\x01\x00") is None
 
     def test_empty_blob(self):
         """Empty blob returns None."""
@@ -637,10 +723,21 @@ class TestReadGpkgBboxes:
         with pytest.raises(ValidationError, match="No feature tables"):
             read_feature_bboxes(gpkg_no_features, target_crs="EPSG:2180")
 
-    def test_no_envelope_skipped(self, gpkg_no_envelope):
-        """Features without envelope are skipped."""
+    def test_no_envelope_point_feature_is_read(self, gpkg_no_envelope):
+        """Point features without envelope in header are read from WKB."""
         bboxes = read_feature_bboxes(gpkg_no_envelope, target_crs="EPSG:2180")
-        assert len(bboxes) == 0
+        assert len(bboxes) == 1
+        assert bboxes[0].min_x == pytest.approx(420000)
+        assert bboxes[0].max_x == pytest.approx(420000)
+        assert bboxes[0].min_y == pytest.approx(230000)
+        assert bboxes[0].max_y == pytest.approx(230000)
+
+    def test_read_gpkg_non_point_without_envelope_raises_validation_error(
+        self, gpkg_no_envelope_polygon
+    ):
+        """Non-point geometry without envelope raises instead of being skipped."""
+        with pytest.raises(ValidationError, match="envelope"):
+            read_feature_bboxes(gpkg_no_envelope_polygon, target_crs="EPSG:2180")
 
 
 # =========================================================================
@@ -694,10 +791,10 @@ class TestGetOverallBbox:
         assert bbox.min_x == pytest.approx(bboxes[0].min_x)
         assert bbox.min_y == pytest.approx(bboxes[0].min_y)
 
-    def test_no_features_raises_error(self, gpkg_no_envelope):
+    def test_no_features_raises_error(self, gpkg_no_features_geom):
         """No features with geometry raises ValidationError."""
         with pytest.raises(ValidationError, match="No features"):
-            get_overall_bbox(gpkg_no_envelope)
+            get_overall_bbox(gpkg_no_features_geom)
 
 
 # =========================================================================
@@ -864,9 +961,9 @@ class TestFindSheetsForGeometry:
             ]
             assert containing, f"no sheet in {result} contains ({x}, {y})"
 
-    def test_no_features_returns_empty(self, gpkg_no_envelope):
+    def test_no_features_returns_empty(self, gpkg_no_features_geom):
         """File with no valid features returns empty list."""
-        result = find_sheets_for_geometry(gpkg_no_envelope)
+        result = find_sheets_for_geometry(gpkg_no_features_geom)
         assert result == []
 
     def test_gpkg_layer_param(self, gpkg_multi_layer):

@@ -26,6 +26,56 @@ _SUPPORTED_EXTENSIONS = {".shp", ".gpkg"}
 # =========================================================================
 
 
+def _point_from_wkb(
+    blob: bytes, offset: int
+) -> tuple[float, float, float, float] | None:
+    """
+    Read a degenerate envelope from a WKB geometry that starts at ``offset``.
+
+    Used when the GeoPackage header carries no envelope (``envelope_type == 0``);
+    GDAL/QGIS write point layers exactly this way, and for a point the geometry
+    itself is the envelope.
+
+    Parameters
+    ----------
+    blob : bytes
+        Raw geometry blob from GPKG
+    offset : int
+        Index of the first WKB byte (byte order marker)
+
+    Returns
+    -------
+    tuple or None
+        (x, y, x, y) for a POINT, or None if the WKB is truncated
+
+    Raises
+    ------
+    ValidationError
+        If the WKB holds a non-point geometry (its extent cannot be derived
+        without a full WKB parser)
+    """
+    # WKB point: 1 B byte order + 4 B type + 2 x float64 = 21 B
+    if len(blob) < offset + 21:
+        return None
+
+    order = blob[offset]
+    endian = "<" if order == 1 else ">"
+    wkb_type = struct.unpack(f"{endian}I", blob[offset + 1 : offset + 5])[0]
+
+    # Strip EWKB flag bits (Z=0x80000000, M=0x40000000, SRID=0x20000000), then
+    # the ISO dimension prefix (1001 = POINT Z, 2001 = POINT M, 3001 = POINT ZM).
+    base_type = (wkb_type & 0x0FFFFFFF) % 1000
+    if base_type != 1:
+        raise ValidationError(
+            "GPKG geometry without envelope in header (envelope_type=0) "
+            f"for WKB type {wkb_type} - rebuild the file with envelopes "
+            "(e.g. ogr2ogr) or use SHP"
+        )
+
+    x, y = struct.unpack(f"{endian}2d", blob[offset + 5 : offset + 21])
+    return (x, y, x, y)
+
+
 def _parse_gpkg_envelope(blob: bytes) -> tuple[float, float, float, float] | None:
     """
     Parse GeoPackage Binary geometry header to extract envelope.
@@ -38,6 +88,12 @@ def _parse_gpkg_envelope(blob: bytes) -> tuple[float, float, float, float] | Non
       Offset 8: envelope (if type > 0):
         type 1 (2D): minx, maxx, miny, maxy (4 x float64)
 
+    Dwie sciezki:
+      * ``envelope_type > 0`` — obwiednia czytana wprost z naglowka;
+      * ``envelope_type == 0`` — obwiedni nie ma (tak GDAL/QGIS zapisuja warstwy
+        punktowe), wiec wspolrzedne pochodza z samego WKB (``_point_from_wkb``);
+        dla geometrii innej niz punkt konczy sie to ``ValidationError``.
+
     Parameters
     ----------
     blob : bytes
@@ -46,7 +102,12 @@ def _parse_gpkg_envelope(blob: bytes) -> tuple[float, float, float, float] | Non
     Returns
     -------
     tuple or None
-        (min_x, min_y, max_x, max_y) or None if no envelope
+        (min_x, min_y, max_x, max_y) or None if the header/WKB is unusable
+
+    Raises
+    ------
+    ValidationError
+        If the header has no envelope and the WKB is not a point
     """
     if blob is None or len(blob) < 8:
         return None
@@ -60,7 +121,8 @@ def _parse_gpkg_envelope(blob: bytes) -> tuple[float, float, float, float] | Non
     envelope_type = (flags >> 1) & 0x07
 
     if envelope_type == 0:
-        return None
+        # Brak obwiedni w naglowku — sprobuj odczytac punkt z WKB tuz za nim.
+        return _point_from_wkb(blob, offset=8)
 
     # Need at least 8 (header) + 32 (4 doubles) = 40 bytes for 2D envelope
     if len(blob) < 40:
