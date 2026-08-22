@@ -345,6 +345,35 @@ class TestDownloadHierarchyLastResult:
 
         assert manager.last_result is None
 
+    def test_last_result_reset_by_download_sheet_of_single_10k(
+        self, tmp_path, flaky_provider
+    ):
+        """download_sheet pojedynczego 1:10000 kasuje wynik poprzedniej hierarchii."""
+        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
+
+        manager.download_hierarchy("N-34-130-D-d-1", "1:10000", max_workers=1)
+        assert manager.last_result is not None
+        assert manager.last_result.failed == ["N-34-130-D-d-1-1"]
+
+        path = manager.download_sheet("N-34-130-D-d-2-4")
+
+        assert path.exists()
+        # Pojedynczy arkusz nie wypelnia last_result — ale tez nie zostawia starego.
+        assert manager.last_result is None
+
+    def test_last_result_set_when_download_sheet_expands_hierarchy(
+        self, tmp_path, flaky_provider
+    ):
+        """download_sheet z godlem grubszym niz 1:10000 nadal wypelnia last_result."""
+        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
+
+        paths = manager.download_sheet("N-34-130-D-d-2")
+
+        assert isinstance(paths, list)
+        assert manager.last_result is not None
+        assert manager.last_result.failed == ["N-34-130-D-d-2-1"]
+        assert len(manager.last_result.succeeded) == 3
+
 
 class TestProviderThreadSafety:
     """Tests for provider thread-safety during concurrent downloads."""
