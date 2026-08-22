@@ -116,11 +116,10 @@ class DownloadManager:
     Attributes
     ----------
     last_result : DownloadResult or None
-        Per-sheet outcome of the most recent hierarchy download.
-        None until the first `download_hierarchy` call completes; reset to
-        None at the start of each `download_hierarchy` call. Not touched by
-        `download_sheet` for a single 1:10000 sheet (that path raises
-        `DownloadError` on failure instead).
+        Per-sheet outcome of the most recent hierarchy download. Reset to None
+        at the start of each `download_sheet` / `download_hierarchy` call; set
+        only by `download_hierarchy` (a single 1:10000 sheet downloaded via
+        `download_sheet` leaves it None).
 
     Examples
     --------
@@ -274,7 +273,18 @@ class DownloadManager:
             If download fails
         ParseError
             If godlo is invalid
+
+        Notes
+        -----
+        `self.last_result` is reset to None at the start of each
+        `download_sheet` / `download_hierarchy` call and set only by
+        `download_hierarchy`, so a single 1:10000 sheet downloaded here leaves
+        it None and never exposes the previous run's result.
         """
+        # Wynik poprzedniego przebiegu nie moze przeciec do tego wywolania.
+        # Reset jest idempotentny — rozwiniecie do hierarchii zeruje go ponownie.
+        self.last_result = None
+
         parser = SheetParser(godlo)
 
         # PL-2000 godła are always downloaded directly (individual files on GUGiK)
@@ -341,8 +351,10 @@ class DownloadManager:
         Per-sheet download failures do not raise; they are collected in
         `self.last_result.failed` (see `DownloadResult`). The returned list
         contains downloaded AND skipped (pre-existing) files.
-        `self.last_result` is reset to None at the start of every call, so a
-        call that raises never leaves the previous run's result behind.
+        `self.last_result` is reset to None at the start of each
+        `download_sheet` / `download_hierarchy` call and set only by
+        `download_hierarchy`, so a call that raises never leaves the previous
+        run's result behind.
 
         Examples
         --------
