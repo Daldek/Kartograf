@@ -286,6 +286,25 @@ class TestGugikOrtoProviderGetOpendataUrl:
 
         assert "No orthophoto data available" in str(exc_info.value)
 
+    def test_get_opendata_url_all_layers_transport_error_reports_service_failure(
+        self,
+    ):
+        """Awaria WMS na wszystkich warstwach != brak pokrycia danymi."""
+        session = Mock(spec=requests.Session)
+        session.get = Mock(side_effect=requests.HTTPError("500 Server Error"))
+
+        provider = GugikOrtoProvider(session=session)
+        # Warstwy podane wprost — bez zapytania GetCapabilities do sieci
+        provider._validated_layers = ["L1", "L2", "L3"]
+
+        with pytest.raises(DownloadError, match="unavailable") as exc_info:
+            provider._get_opendata_url("N-34-130-D-d-2-4")
+
+        message = str(exc_info.value)
+        assert "500" in message
+        assert "all 3 layer queries failed" in message
+        assert session.get.call_count == 3
+
     def test_get_opendata_url_tries_all_layers(
         self, mock_wms_response_no_url, mock_wms_response_with_url
     ):
