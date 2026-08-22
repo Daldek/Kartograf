@@ -21,7 +21,7 @@ from kartograf.cli.commands import (
     main,
 )
 from kartograf.core.sheet_parser import BBox, SheetParser
-from kartograf.download.manager import DownloadProgress
+from kartograf.download.manager import DownloadProgress, DownloadResult
 from kartograf.exceptions import DownloadError, ValidationError
 
 
@@ -483,6 +483,7 @@ class TestCmdDownload:
     def test_download_single_sheet(self, mock_manager_class, capsys, tmp_path):
         """Test downloading a single sheet."""
         mock_manager = Mock()
+        mock_manager.last_result = None
         mock_manager.download_sheet.return_value = tmp_path / "test.tif"
         mock_manager_class.return_value = mock_manager
 
@@ -497,6 +498,7 @@ class TestCmdDownload:
     def test_download_hierarchy(self, mock_manager_class, capsys, tmp_path):
         """Test downloading a hierarchy."""
         mock_manager = Mock()
+        mock_manager.last_result = None
         mock_manager.count_sheets.return_value = 4
         mock_manager.download_hierarchy.return_value = [
             tmp_path / f"test{i}.tif" for i in range(4)
@@ -522,6 +524,7 @@ class TestCmdDownload:
     def test_download_with_force(self, mock_manager_class, tmp_path):
         """Test downloading with --force flag."""
         mock_manager = Mock()
+        mock_manager.last_result = None
         mock_manager.download_sheet.return_value = tmp_path / "test.tif"
         mock_manager_class.return_value = mock_manager
 
@@ -579,6 +582,7 @@ class TestCmdDownload:
     def test_download_shows_progress(self, mock_manager_class, capsys, tmp_path):
         """Test that download shows progress when not quiet."""
         mock_manager = Mock()
+        mock_manager.last_result = None
         mock_manager.download_sheet.return_value = tmp_path / "test.tif"
         mock_manager_class.return_value = mock_manager
 
@@ -588,6 +592,83 @@ class TestCmdDownload:
         captured = capsys.readouterr()
         assert "Downloading" in captured.out
         assert "Downloaded to" in captured.out
+
+    # --- kod wyjscia hierarchii (A2-3) ---
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_hierarchy_all_failed_returns_exit_1(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        """100% porazek w hierarchii to blad, a nie 'Downloaded 0 files' z exit 0."""
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = []
+        mock_manager.count_sheets.return_value = 4
+        mock_manager.last_result = DownloadResult(
+            succeeded=[], failed=["A", "B", "C", "D"], skipped=[]
+        )
+        mock_manager_class.return_value = mock_manager
+
+        result = main(["download", "N-34-130-D-d-2", "-o", str(tmp_path)])
+
+        assert result == 1
+        assert "4 of 4 sheets failed" in capsys.readouterr().err
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_hierarchy_partial_failure_returns_exit_1(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        """Czesciowy sukces tez konczy sie 1 — skrypt ma sie dowiedziec o brakach."""
+        paths = [tmp_path / f"test{i}.asc" for i in range(3)]
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = paths
+        mock_manager.count_sheets.return_value = 4
+        mock_manager.last_result = DownloadResult(
+            succeeded=paths, failed=["A"], skipped=[]
+        )
+        mock_manager_class.return_value = mock_manager
+
+        result = main(["download", "N-34-130-D-d-2", "-o", str(tmp_path)])
+
+        assert result == 1
+        assert "1 of 4 sheets failed" in capsys.readouterr().err
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_hierarchy_all_skipped_returns_exit_0(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        """Same pominiecia (pliki juz sa) to nadal sukces."""
+        mock_manager = Mock()
+        mock_manager.download_sheet.return_value = []
+        mock_manager.count_sheets.return_value = 4
+        mock_manager.last_result = DownloadResult(
+            succeeded=[], failed=[], skipped=["A", "B", "C", "D"]
+        )
+        mock_manager_class.return_value = mock_manager
+
+        result = main(["download", "N-34-130-D-d-2", "-o", str(tmp_path)])
+
+        assert result == 0
+        assert "failed" not in capsys.readouterr().err
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_hierarchy_scale_mode_failure_returns_exit_1(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        """Ta sama kontrola obowiazuje na galezi --scale."""
+        mock_manager = Mock()
+        mock_manager.count_sheets.return_value = 4
+        mock_manager.download_hierarchy.return_value = []
+        mock_manager.last_result = DownloadResult(
+            succeeded=[], failed=["A", "B", "C", "D"], skipped=[]
+        )
+        mock_manager_class.return_value = mock_manager
+
+        result = main(
+            ["download", "N-34-130-D-d-2", "--scale", "1:10000", "-o", str(tmp_path)]
+        )
+
+        assert result == 1
+        assert "4 of 4 sheets failed" in capsys.readouterr().err
 
 
 class TestDownloadCLIIntegration:
@@ -640,6 +721,7 @@ class TestCmdDownloadProduct:
         mock_create.return_value = (mock_provider, mock_storage)
 
         mock_manager = Mock()
+        mock_manager.last_result = None
         mock_manager.download_sheet.return_value = tmp_path / "test.asc"
         mock_manager_cls.return_value = mock_manager
 
@@ -672,6 +754,7 @@ class TestCmdDownloadProduct:
         mock_create.return_value = (mock_provider, mock_storage)
 
         mock_manager = Mock()
+        mock_manager.last_result = None
         mock_manager.download_sheet.return_value = tmp_path / "test.tif"
         mock_manager_cls.return_value = mock_manager
 
@@ -704,6 +787,7 @@ class TestCmdDownloadProduct:
         mock_create.return_value = (mock_provider, mock_storage)
 
         mock_manager = Mock()
+        mock_manager.last_result = None
         mock_manager.download_sheet.return_value = tmp_path / "test.asc"
         mock_manager_cls.return_value = mock_manager
 
@@ -2940,6 +3024,7 @@ class TestCountryDispatch:
     ):
         """Zachowanie obserwowalne PL bez zmian: None -> 1m/EVRF2007."""
         mock_manager = Mock()
+        mock_manager.last_result = None
         mock_manager.download_sheet.return_value = tmp_path / "x.asc"
         mock_manager_class.return_value = mock_manager
         result = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"])
@@ -3596,6 +3681,7 @@ class TestAutoSplitBBox:
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_godlo_mode_has_no_parent_request(self, mock_manager_class, tmp_path):
         mock_manager = Mock()
+        mock_manager.last_result = None
         mock_manager.download_sheet.return_value = tmp_path / "x.asc"
         mock_manager_class.return_value = mock_manager
         result = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"])

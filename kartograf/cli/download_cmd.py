@@ -636,6 +636,20 @@ def cmd_download(args: argparse.Namespace) -> int:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
+    # Hierarchia polyka porazki pojedynczych arkuszy (raportuje je przez
+    # `on_progress`), wiec kod wyjscia bierzemy z podsumowania managera.
+    # `getattr` z domyslnym None jest celowe: `last_result` zostaje None przy
+    # pojedynczym arkuszu 1:10000 (sukces = brak wyjatku), a mocki managera
+    # w testach CLI nie zawsze maja ten atrybut.
+    summary = getattr(manager, "last_result", None)
+    if summary is not None and summary.failed:
+        print(
+            f"\nError: {len(summary.failed)} of {summary.total} sheets failed "
+            f"to download (see messages above)",
+            file=sys.stderr,
+        )
+        return 1
+
     return 0
 
 
