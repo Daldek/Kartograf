@@ -416,8 +416,8 @@ class TestSheetParserGetParent:
         assert parent.scale == "1:500000"
 
     def test_get_parent_from_200k_section_b(self):
-        """Test get_parent() dla skali 1:200000 w sekcji B (37-72)."""
-        parser = SheetParser("N-34-37")  # Arkusz 37 → sekcja B
+        """Test get_parent() dla skali 1:200000 w sekcji B (kolumny 6-11 siatki)."""
+        parser = SheetParser("N-34-7")  # Arkusz 7 → wiersz 0, kolumna 6 → sekcja B
         parent = parser.get_parent()
 
         assert parent is not None
@@ -465,6 +465,16 @@ class TestSheetParserGetParent:
 
         assert parent.uklad == "1992"
 
+    @pytest.mark.parametrize("nr", range(1, 145))
+    def test_parent_bbox_contains_child_bbox_for_all_200k_numbers(self, nr):
+        """Parent bbox (1:500k) must fully contain child bbox (1:200k), all nr 1-144."""
+        child = SheetParser(f"N-34-{nr}")
+        parent = child.get_parent()
+        cb = child.get_bbox("EPSG:4326")
+        pb = parent.get_bbox("EPSG:4326")
+        assert pb.min_x <= cb.min_x and cb.max_x <= pb.max_x
+        assert pb.min_y <= cb.min_y and cb.max_y <= pb.max_y
+
 
 class TestSheetParserGetChildren:
     """Testy metody get_children()."""
@@ -482,22 +492,22 @@ class TestSheetParserGetChildren:
         assert all(c.scale == "1:500000" for c in children)
 
     def test_get_children_from_500k_section_a(self):
-        """Test get_children() dla skali 1:500000 sekcja A (36 dzieci)."""
+        """Test get_children() dla skali 1:500000 sekcja A (36 dzieci, blok 6x6)."""
         parser = SheetParser("N-34-A")
         children = parser.get_children()
 
         assert len(children) == 36
         assert children[0].godlo == "N-34-1"
-        assert children[35].godlo == "N-34-36"
+        assert children[35].godlo == "N-34-66"
         assert all(c.scale == "1:200000" for c in children)
 
     def test_get_children_from_500k_section_d(self):
-        """Test get_children() dla skali 1:500000 sekcja D (36 dzieci)."""
+        """Test get_children() dla skali 1:500000 sekcja D (36 dzieci, blok 6x6)."""
         parser = SheetParser("N-34-D")
         children = parser.get_children()
 
         assert len(children) == 36
-        assert children[0].godlo == "N-34-109"
+        assert children[0].godlo == "N-34-79"
         assert children[35].godlo == "N-34-144"
         assert all(c.scale == "1:200000" for c in children)
 
@@ -555,6 +565,21 @@ class TestSheetParserGetChildren:
         children = parser.get_children()
 
         assert children == []
+
+    @pytest.mark.parametrize("letter", "ABCD")
+    def test_children_of_500k_lie_inside_parent_bbox(self, letter):
+        """Every 1:200k child of a 1:500k section must lie inside the parent's bbox
+        and round-trip back to the same parent via get_parent()."""
+        parent = SheetParser(f"N-34-{letter}")
+        pb = parent.get_bbox("EPSG:4326")
+        children = parent.get_children()
+        assert len(children) == 36
+        assert len({c.godlo for c in children}) == 36
+        for c in children:
+            cb = c.get_bbox("EPSG:4326")
+            assert pb.min_x <= cb.min_x and cb.max_x <= pb.max_x
+            assert pb.min_y <= cb.min_y and cb.max_y <= pb.max_y
+            assert c.get_parent().godlo == parent.godlo
 
     def test_get_children_preserves_uklad(self):
         """Test że get_children() zachowuje układ."""
