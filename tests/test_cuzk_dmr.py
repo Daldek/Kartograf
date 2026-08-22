@@ -35,6 +35,7 @@ from kartograf.transform.crs import (
 _CLIENT_PATCH = "kartograf.providers.cuzk.dmr.CuzkClient"
 _INDEX_PATCH = "kartograf.providers.cuzk.dmr.SheetIndex"
 _PINNED_PATCH = "kartograf.providers.cuzk.dmr.build_pinned_transform"
+_GROUP_PATCH = "kartograf.transform.crs.TransformerGroup"
 _SOURCE_PATCH = "kartograf.providers.cuzk.dmr.get_source"
 
 
@@ -561,6 +562,96 @@ class TestHorizontalReprojection:
         ):
             CuzkDmrProvider(resolution="2m", target_crs="EPSG:2180")
         client_cls.return_value.export_image.assert_not_called()
+
+
+def _group_of(*transformers):
+    """Zamiennik TransformerGroup: podane operacje, bez ruchu sieciowego."""
+    group = MagicMock()
+    group.transformers = list(transformers)
+    group.unavailable_operations = []
+    return group
+
+
+def _fake_operation(accuracy, description, result):
+    t = MagicMock()
+    t.accuracy = accuracy
+    t.description = description
+    t.transform.return_value = result
+    return t
+
+
+class TestProbePoint:
+    """Punkt kontrolny w politykach POZIOMYCH CZ: siatka obcego kraju
+    (np. sk_gku, Slowacja) bywa dokladniejsza na papierze, a nad Czechami
+    zwraca inf — probe ma ja odrzucic, zanim popsuje pobranie (audyt A1-2).
+    """
+
+    def test_horizontal_policy_rejects_operation_returning_inf(self):
+        t_bad = _fake_operation(0.051, "sk_gku fake", (float("inf"), float("inf")))
+        t_good = _fake_operation(0.5, "Krovak good", (472887.5, 208337.5))
+        with patch(_GROUP_PATCH, return_value=_group_of(t_bad, t_good)):
+            provider = CuzkDmrProvider(
+                resolution="2m", target_crs="EPSG:2180", session=MagicMock()
+            )
+            pinned = provider.horizontal_transform("EPSG:2180")
+        assert pinned is not None
+        assert pinned.description == "Krovak good"
+        assert pinned.accuracy_m == 0.5
+
+    def test_envelope_policy_probe_is_bbox_center(self):
+        """Obwiednia: punkt kontrolny to srodek przeliczanego bboxa
+        (w ukladzie ZRODLOWYM, wiec bez dodatkowej transformacji)."""
+        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+        with patch(_PINNED_PATCH, wraps=build_pinned_transform) as pinned_mock:
+            provider = CuzkDmrProvider(resolution="2m", session=MagicMock())
+            provider._bbox_to_crs(bbox, "EPSG:4326")
+        assert pinned_mock.call_args.args[:2] == ("EPSG:5514", "EPSG:4326")
+        assert pinned_mock.call_args.args[2].probe_point == (-446500.0, -1113500.0)
+
+    def test_horizontal_policy_probe_is_cz_native_center(self):
+        from kartograf.providers.cuzk.dmr import CZ_PROBE_NATIVE
+
+        with patch(_PINNED_PATCH, wraps=build_pinned_transform) as pinned_mock:
+            provider = CuzkDmrProvider(resolution="2m", session=MagicMock())
+            provider.horizontal_transform("EPSG:2180")
+        assert pinned_mock.call_args.args[:2] == ("EPSG:5514", "EPSG:2180")
+        assert pinned_mock.call_args.args[2].probe_point == CZ_PROBE_NATIVE
+
+    def test_all_horizontal_pinned_calls_carry_probe(self, tmp_path):
+        """Zadna operacja POZIOMA nie jest budowana bez punktu kontrolnego —
+        ani reprojekcja tresci, ani obwiednia, ani lon/lat dla shiftu pionowego.
+        Wyjatek jest jeden: para czysto pionowa 8357->5621."""
+        calls: list = []
+        vertical = MagicMock()
+        vertical.description = "Baltic 1957 height to EVRF2007 height (1)"
+        vertical.accuracy_m = 0.1
+        vertical.transform.side_effect = lambda x, y, z: (x, y, np.asarray(z) + 0.13)
+
+        def recording(src_crs, dst_crs, policy):
+            calls.append((src_crs, dst_crs, policy))
+            if (src_crs, dst_crs) == ("EPSG:8357", "EPSG:5621"):
+                return vertical
+            return build_pinned_transform(src_crs, dst_crs, policy)
+
+        with (
+            patch(_CLIENT_PATCH) as client_cls,
+            patch(_PINNED_PATCH, side_effect=recording),
+        ):
+            client_cls.return_value.export_image.side_effect = _server_emulator(
+                flat=300.0
+            )
+            provider = CuzkDmrProvider(
+                resolution="2m", target_crs="EPSG:2180", vertical_crs="EVRF2007"
+            )
+            provider.download_bbox(_NATIVE_BBOX, tmp_path / "area.tif")
+
+        horizontal = [c for c in calls if (c[0], c[1]) != ("EPSG:8357", "EPSG:5621")]
+        assert {(c[0], c[1]) for c in horizontal} == {
+            ("EPSG:5514", "EPSG:2180"),  # reprojekcja tresci
+            ("EPSG:2180", "EPSG:5514"),  # obwiednia zadania natywnego
+            ("EPSG:2180", "EPSG:4326"),  # lon/lat dla operacji pionowej
+        }
+        assert all(policy.probe_point is not None for _, _, policy in horizontal)
 
 
 class TestDownloadBbox:

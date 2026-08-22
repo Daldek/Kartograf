@@ -10,6 +10,7 @@ Endpointy pochodza WYLACZNIE z deskryptorow (`get_source(...).channels[..].endpo
 — provider nie zna zadnego URL-a. Sidecary pisze warstwa CLI/managera.
 """
 
+import dataclasses
 import logging
 import os
 import shutil
@@ -60,7 +61,15 @@ _PIXEL_SIZES = {"2m": 2.0, "5m": 5.0}
 _SUPPORTED_VERTICAL = ("Bpv", "EVRF2007")
 _DEFAULT_TIMEOUT = 60
 
+# Punkt kontrolny dla operacji POZIOMYCH, ktorych zrodlem jest uklad natywny
+# — mniej wiecej srodek Czech (15,5E / 49,8N) w Krovaku. Siatka, ktora go nie
+# pokrywa (np. sk_gku, Slowacja), zwraca tam inf i zostaje odrzucona, zanim
+# zdazy popsuc pobranie (audyt 0.7.0, A1-2).
+CZ_PROBE_NATIVE: tuple[float, float] = (-670165.0, -1084718.0)
+
 # Operacja pionowa Bpv->EVRF2007 ma dokladnosc 0,1 m (rekonesans Zad. 1, krok 7).
+# Bez probe: para jest czysto pionowa, wiec transformer.transform(x, y) nie ma
+# tu sensu jako test pokrycia.
 _VERTICAL_POLICY = TransformPolicy(min_accuracy_m=0.2)
 # Pomocnicze przeliczenia poziome NIE dotykaja wartosci danych, wiec limit
 # jest luzniejszy niz dla operacji reprojektujacej tresc:
@@ -189,7 +198,9 @@ class CuzkDmrProvider(BaseProvider):
         """
         if wkid(target_crs) == wkid(NATIVE_CRS):
             return None
-        return self._pinned(NATIVE_CRS, target_crs, _HORIZONTAL_POLICY)
+        return self._pinned(
+            NATIVE_CRS, target_crs, _HORIZONTAL_POLICY, probe=CZ_PROBE_NATIVE
+        )
 
     @property
     def vertical_transform(self) -> PinnedTransform | None:
@@ -342,18 +353,40 @@ class CuzkDmrProvider(BaseProvider):
         return CuzkClient(session=self._session, timeout=timeout)
 
     def _pinned(
-        self, src_crs: str, dst_crs: str, policy: TransformPolicy
+        self,
+        src_crs: str,
+        dst_crs: str,
+        policy: TransformPolicy,
+        *,
+        probe: tuple[float, float] | None = None,
     ) -> PinnedTransform:
-        """Przypieta transformacja (jedna na pare ukladow w cyklu zycia providera)."""
+        """Przypieta transformacja (jedna na pare ukladow w cyklu zycia providera).
+
+        `probe` (w ukladzie ZRODLOWYM) doklada do polityki punkt kontrolny:
+        kandydat, ktory zwraca tam inf/NaN, odpada — tak wypada siatka obcego
+        kraju, formalnie dokladniejsza, ale nieobejmujaca naszych danych.
+        Klucz cache pozostaje sama para ukladow: probe wylacznie ODRZUCA
+        kandydatow (nie zmienia rankingu), wiec pierwsze zapytanie o pare
+        ustala operacje dla calego cyklu zycia providera.
+        """
         key = (src_crs, dst_crs)
         if key not in self._transforms:
+            if probe is not None:
+                policy = dataclasses.replace(policy, probe_point=probe)
             self._transforms[key] = build_pinned_transform(src_crs, dst_crs, policy)
         return self._transforms[key]
 
     def _bbox_to_crs(self, bbox: BBox, target_crs: str) -> BBox:
         """Obwiednia bboxa w ukladzie docelowym, z transformacja z cache providera."""
         return bbox_to_crs(
-            bbox, target_crs, self._pinned(bbox.crs, target_crs, _ENVELOPE_POLICY)
+            bbox,
+            target_crs,
+            self._pinned(
+                bbox.crs,
+                target_crs,
+                _ENVELOPE_POLICY,
+                probe=_center_of(bbox),
+            ),
         )
 
     def _apply_vertical_shift(self, path: Path) -> None:
@@ -400,7 +433,16 @@ class CuzkDmrProvider(BaseProvider):
                     f"Raster {label} nie ma CRS — nie da sie wyznaczyc "
                     f"(lon, lat) wymaganych przez operacje pionowa"
                 )
-            horizontal = self._pinned(str(ds.crs), "EPSG:4326", _LONLAT_POLICY)
+            bounds = ds.bounds
+            horizontal = self._pinned(
+                str(ds.crs),
+                "EPSG:4326",
+                _LONLAT_POLICY,
+                probe=(
+                    (bounds.left + bounds.right) / 2,
+                    (bounds.bottom + bounds.top) / 2,
+                ),
+            )
             nodata = ds.nodata if ds.nodata is not None else CUZK_NODATA
             logger.debug(
                 f"Transformacja pionowa {label}: {pinned.description} "
@@ -527,7 +569,11 @@ def bbox_to_crs(
     wycinka. Powtorna normalizacja w `download_bbox` jest wtedy strzezonym no-opem.
     """
     if pinned is None:
-        pinned = build_pinned_transform(bbox.crs, target_crs, _ENVELOPE_POLICY)
+        pinned = build_pinned_transform(
+            bbox.crs,
+            target_crs,
+            dataclasses.replace(_ENVELOPE_POLICY, probe_point=_center_of(bbox)),
+        )
     xs = np.linspace(bbox.min_x, bbox.max_x, _EDGE_SAMPLES)
     ys = np.linspace(bbox.min_y, bbox.max_y, _EDGE_SAMPLES)
     west = np.full(_EDGE_SAMPLES, bbox.min_x)
@@ -544,6 +590,11 @@ def bbox_to_crs(
         float(np.max(out_y)),
         target_crs,
     )
+
+
+def _center_of(bbox: BBox) -> tuple[float, float]:
+    """Srodek bboxa — punkt kontrolny operacji obwiedniowej (uklad zrodlowy)."""
+    return ((bbox.min_x + bbox.max_x) / 2, (bbox.min_y + bbox.max_y) / 2)
 
 
 def _endpoint_for(
