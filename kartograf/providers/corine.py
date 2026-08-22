@@ -541,11 +541,26 @@ class CorineProvider(LandCoverProvider):
         timeout: int,
     ) -> Path:
         """Download styled preview via WMS."""
-        # Calculate image dimensions based on bbox size and resolution
-        width_m = bbox.max_x - bbox.min_x
-        height_m = bbox.max_y - bbox.min_y
-        width_px = max(1, int(width_m / self.WMS_RESOLUTION))
-        height_px = max(1, int(height_m / self.WMS_RESOLUTION))
+        # Envelope of the requested rectangle in the CRS of the WMS request:
+        # EPSG:3857 for the EEA endpoint, EPSG:4326 for the DLR fallback
+        # (same branch as in _construct_wms_url).
+        if year in self.EEA_YEARS:
+            target_bounds = self._transform_bbox_to_epsg3857(bbox)
+        else:
+            target_bounds = self._transform_bbox_to_wgs84(bbox)
+
+        # Width follows the ground resolution along X; height follows the
+        # aspect ratio of the envelope actually sent as BBOX, so the image
+        # is not stretched.
+        width_px = max(1, int((bbox.max_x - bbox.min_x) / self.WMS_RESOLUTION))
+        height_px = max(
+            1,
+            round(
+                width_px
+                * (target_bounds[3] - target_bounds[1])
+                / (target_bounds[2] - target_bounds[0])
+            ),
+        )
 
         # Limit max size to prevent huge requests
         max_size = 4096
@@ -554,7 +569,7 @@ class CorineProvider(LandCoverProvider):
         if height_px > max_size:
             height_px = max_size
 
-        url = self._construct_wms_url(bbox, year, width_px, height_px)
+        url = self._construct_wms_url(target_bounds, year, width_px, height_px)
 
         logger.info(
             f"Downloading CLC {year} preview via WMS (no CLMS token - styled image)"
@@ -892,7 +907,7 @@ class CorineProvider(LandCoverProvider):
 
     def _construct_wms_url(
         self,
-        bbox: BBox,
+        bounds: tuple[float, float, float, float],
         year: int,
         width: int,
         height: int,
@@ -905,8 +920,10 @@ class CorineProvider(LandCoverProvider):
 
         Parameters
         ----------
-        bbox : BBox
-            Bounding box in EPSG:2180
+        bounds : tuple
+            Envelope of the requested area in the CRS of the request:
+            EPSG:3857 for EEA years, EPSG:4326 for the DLR fallback
+            (see _transform_bbox_to_epsg3857 / _transform_bbox_to_wgs84)
         year : int
             Reference year
         width : int
@@ -920,13 +937,13 @@ class CorineProvider(LandCoverProvider):
             Full WMS URL
         """
         if year in self.EEA_YEARS:
-            return self._construct_eea_wms_url(bbox, year, width, height)
+            return self._construct_eea_wms_url(bounds, year, width, height)
         else:
-            return self._construct_dlr_wms_url(bbox, year, width, height)
+            return self._construct_dlr_wms_url(bounds, year, width, height)
 
     def _construct_eea_wms_url(
         self,
-        bbox: BBox,
+        bbox_3857: tuple[float, float, float, float],
         year: int,
         width: int,
         height: int,
@@ -938,9 +955,6 @@ class CorineProvider(LandCoverProvider):
         """
         # EEA endpoint for this year
         endpoint = f"{self.EEA_WMS_BASE}/CLC{year}_WM/MapServer/WMSServer"
-
-        # Transform EPSG:2180 bbox to Web Mercator (EPSG:3857)
-        bbox_3857 = self._transform_bbox_to_epsg3857(bbox)
 
         params = {
             "SERVICE": "WMS",
@@ -960,7 +974,7 @@ class CorineProvider(LandCoverProvider):
 
     def _construct_dlr_wms_url(
         self,
-        bbox: BBox,
+        bbox_wgs84: tuple[float, float, float, float],
         year: int,
         width: int,
         height: int,
@@ -971,9 +985,6 @@ class CorineProvider(LandCoverProvider):
         DLR WMS uses WMS 1.1.1 with EPSG:4326.
         """
         layer = self.DLR_WMS_LAYERS[year]
-
-        # Transform EPSG:2180 bbox to WGS84 (EPSG:4326)
-        bbox_wgs84 = self._transform_bbox_to_wgs84(bbox)
 
         params = {
             "SERVICE": "WMS",
@@ -997,6 +1008,10 @@ class CorineProvider(LandCoverProvider):
         """
         Transform EPSG:2180 bounding box to Web Mercator (EPSG:3857).
 
+        Envelope of the whole rectangle (edges densified), not just two
+        corners: the EPSG:2180 grid is rotated against the meridians, so
+        the SW/NE pair alone cuts off the north and south strips.
+
         Returns
         -------
         tuple
@@ -1006,14 +1021,17 @@ class CorineProvider(LandCoverProvider):
 
         transformer = Transformer.from_crs("EPSG:2180", "EPSG:3857", always_xy=True)
 
-        min_x, min_y = transformer.transform(bbox.min_x, bbox.min_y)
-        max_x, max_y = transformer.transform(bbox.max_x, bbox.max_y)
-
-        return (min_x, min_y, max_x, max_y)
+        return transformer.transform_bounds(
+            bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y, densify_pts=21
+        )
 
     def _transform_bbox_to_wgs84(self, bbox: BBox) -> tuple[float, float, float, float]:
         """
         Transform EPSG:2180 bounding box to WGS84 (EPSG:4326).
+
+        Envelope of the whole rectangle (edges densified), not just two
+        corners: the EPSG:2180 grid is rotated against the meridians, so
+        the SW/NE pair alone cuts off the north and south strips.
 
         Returns
         -------
@@ -1024,10 +1042,9 @@ class CorineProvider(LandCoverProvider):
 
         transformer = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
 
-        min_lon, min_lat = transformer.transform(bbox.min_x, bbox.min_y)
-        max_lon, max_lat = transformer.transform(bbox.max_x, bbox.max_y)
-
-        return (min_lon, min_lat, max_lon, max_lat)
+        return transformer.transform_bounds(
+            bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y, densify_pts=21
+        )
 
     # =========================================================================
     # Common utilities

@@ -252,6 +252,10 @@ class SoilGridsProvider(LandCoverProvider):
         """
         Transform EPSG:2180 bounding box to WGS84 (EPSG:4326).
 
+        Envelope of the whole rectangle (edges densified), not just two
+        corners: the EPSG:2180 grid is rotated against the meridians, so
+        the SW/NE pair alone cuts off the north and south strips.
+
         Parameters
         ----------
         bbox : BBox
@@ -266,10 +270,9 @@ class SoilGridsProvider(LandCoverProvider):
 
         transformer = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
 
-        min_lon, min_lat = transformer.transform(bbox.min_x, bbox.min_y)
-        max_lon, max_lat = transformer.transform(bbox.max_x, bbox.max_y)
-
-        return (min_lon, min_lat, max_lon, max_lat)
+        return transformer.transform_bounds(
+            bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y, densify_pts=21
+        )
 
     def _download_via_wcs(
         self,

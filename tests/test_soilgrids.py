@@ -178,6 +178,30 @@ class TestSoilGridsCRSTransform:
         assert min_lon < max_lon
         assert min_lat < max_lat
 
+    def test_transform_bbox_to_wgs84_covers_all_corners(self):
+        """Envelope covers all four corners, not only SW and NE."""
+        from pyproj import Transformer
+
+        from kartograf.core.sheet_parser import SheetParser
+
+        provider = SoilGridsProvider()
+        bbox = SheetParser("N-34-130-D").get_bbox("EPSG:2180")
+        min_lon, min_lat, max_lon, max_lat = provider._transform_bbox_to_wgs84(bbox)
+
+        transformer = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
+        for x, y in (
+            (bbox.min_x, bbox.min_y),
+            (bbox.min_x, bbox.max_y),
+            (bbox.max_x, bbox.min_y),
+            (bbox.max_x, bbox.max_y),
+        ):
+            lon, lat = transformer.transform(x, y)
+            assert min_lon <= lon <= max_lon, f"corner {(x, y)}: lon outside envelope"
+            assert min_lat <= lat <= max_lat, f"corner {(x, y)}: lat outside envelope"
+
+        # Two corners span 0.1657 deg of latitude, the true envelope 0.1830 deg.
+        assert max_lat - min_lat > 0.18
+
 
 class TestSoilGridsTeryt:
     """Test TERYT-related functionality."""

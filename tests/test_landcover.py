@@ -174,7 +174,8 @@ class TestCorineProvider:
         """Test WMS URL construction for EEA endpoint."""
         provider = CorineProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        url = provider._construct_wms_url(bbox, 2018, 100, 100)
+        bounds = provider._transform_bbox_to_epsg3857(bbox)
+        url = provider._construct_wms_url(bounds, 2018, 100, 100)
         assert "WMS" in url
         assert "GetMap" in url
         assert "discomap.eea.europa.eu" in url  # EEA Discomap endpoint
@@ -184,7 +185,8 @@ class TestCorineProvider:
         """Test WMS URL construction for DLR fallback (1990)."""
         provider = CorineProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        url = provider._construct_wms_url(bbox, 1990, 100, 100)
+        bounds = provider._transform_bbox_to_wgs84(bbox)
+        url = provider._construct_wms_url(bounds, 1990, 100, 100)
         assert "WMS" in url
         assert "GetMap" in url
         assert "geoservice.dlr.de" in url  # DLR WMS endpoint
@@ -683,8 +685,10 @@ class TestCorineProviderDownload:
 
     def test_download_via_wms_calculates_dimensions(self, tmp_path):
         """WMS dimensions are calculated from bbox size."""
+        import re
+
         provider = CorineProvider(use_proxy=False)
-        # 10km x 10km bbox at 100m resolution -> 100 x 100 pixels
+        # 10km x 10km bbox at 100m resolution -> 100 x ~100 pixels
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         output = tmp_path / "test.png"
 
@@ -696,7 +700,9 @@ class TestCorineProviderDownload:
         call_args = mock_dl.call_args
         url = call_args.kwargs.get("url", call_args[1].get("url", ""))
         assert "WIDTH=100" in url
-        assert "HEIGHT=100" in url
+        # Height follows the EPSG:3857 envelope, which is not an exact square
+        height = int(re.search(r"HEIGHT=(\d+)", url).group(1))
+        assert 98 <= height <= 102
 
     def test_download_via_wms_max_size_limit(self, tmp_path):
         """Huge bbox dimensions capped at 4096."""
@@ -714,6 +720,33 @@ class TestCorineProviderDownload:
         url = call_args.kwargs.get("url", call_args[1].get("url", ""))
         assert "WIDTH=4096" in url
         assert "HEIGHT=4096" in url
+
+    def test_download_via_wms_aspect_matches_bbox_3857(self, tmp_path):
+        """Pixel aspect ratio matches the EPSG:3857 BBOX sent to the WMS."""
+        import re
+        from urllib.parse import unquote
+
+        from kartograf.core.sheet_parser import SheetParser
+
+        provider = CorineProvider(use_proxy=False)
+        bbox = SheetParser("N-34-130-D").get_bbox("EPSG:2180")
+        output = tmp_path / "test.png"
+
+        with patch.object(
+            provider, "_download_with_retry", return_value=output
+        ) as mock_dl:
+            provider._download_via_wms(bbox, output, 2018, 60)
+
+        url = mock_dl.call_args.kwargs["url"]
+        width = int(re.search(r"WIDTH=(\d+)", url).group(1))
+        height = int(re.search(r"HEIGHT=(\d+)", url).group(1))
+        bx_min, by_min, bx_max, by_max = (
+            float(v)
+            for v in unquote(re.search(r"BBOX=([^&]+)", url).group(1)).split(",")
+        )
+        aspect_px = width / height
+        aspect_bbox = (bx_max - bx_min) / (by_max - by_min)
+        assert abs(aspect_px - aspect_bbox) < 0.02
 
     @patch("kartograf.core.sheet_parser.SheetParser")
     def test_download_by_godlo_delegates_to_bbox(self, mock_parser_cls, tmp_path):
@@ -822,6 +855,54 @@ class TestCorineProviderDownload:
         assert result[0] > 1_000_000
         assert result[2] > result[0]
         assert result[3] > result[1]
+
+    def test_transform_bbox_to_wgs84_covers_all_corners(self):
+        """Envelope covers all four corners, not only SW and NE."""
+        from pyproj import Transformer
+
+        from kartograf.core.sheet_parser import SheetParser
+
+        provider = CorineProvider(use_proxy=False)
+        bbox = SheetParser("N-34-130-D").get_bbox("EPSG:2180")
+        min_lon, min_lat, max_lon, max_lat = provider._transform_bbox_to_wgs84(bbox)
+
+        transformer = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
+        for x, y in (
+            (bbox.min_x, bbox.min_y),
+            (bbox.min_x, bbox.max_y),
+            (bbox.max_x, bbox.min_y),
+            (bbox.max_x, bbox.max_y),
+        ):
+            lon, lat = transformer.transform(x, y)
+            assert min_lon <= lon <= max_lon, f"corner {(x, y)}: lon outside envelope"
+            assert min_lat <= lat <= max_lat, f"corner {(x, y)}: lat outside envelope"
+
+        # Two corners span 0.1657 deg of latitude, the true envelope 0.1830 deg.
+        assert max_lat - min_lat > 0.18
+
+    def test_transform_bbox_to_epsg3857_covers_all_corners(self):
+        """Envelope covers all four corners, not only SW and NE."""
+        from pyproj import Transformer
+
+        from kartograf.core.sheet_parser import SheetParser
+
+        provider = CorineProvider(use_proxy=False)
+        bbox = SheetParser("N-34-130-D").get_bbox("EPSG:2180")
+        min_x, min_y, max_x, max_y = provider._transform_bbox_to_epsg3857(bbox)
+
+        transformer = Transformer.from_crs("EPSG:2180", "EPSG:3857", always_xy=True)
+        for x, y in (
+            (bbox.min_x, bbox.min_y),
+            (bbox.min_x, bbox.max_y),
+            (bbox.max_x, bbox.min_y),
+            (bbox.max_x, bbox.max_y),
+        ):
+            merc_x, merc_y = transformer.transform(x, y)
+            assert min_x <= merc_x <= max_x, f"corner {(x, y)}: x outside envelope"
+            assert min_y <= merc_y <= max_y, f"corner {(x, y)}: y outside envelope"
+
+        # Two corners span 30244 m of northing, the true envelope 33406 m.
+        assert max_y - min_y > 33000
 
     def test_get_available_layers(self):
         """Returns CLC_year strings."""
