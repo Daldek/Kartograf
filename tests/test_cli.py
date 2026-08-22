@@ -1305,6 +1305,41 @@ class TestCmdDownloadBBox:
         assert args.godlo is None
         assert args.bbox == "419000,230000,426000,237000"
 
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_bbox_workers_1_sequential_collects_all_paths(
+        self, mock_manager_cls, mock_find, capsys, tmp_path
+    ):
+        """--workers 1 idzie petla sekwencyjna i zbiera WSZYSTKIE sciezki."""
+        mock_find.return_value = ["A", "B"]
+        mock_manager = Mock()
+        mock_manager.last_result = None
+        # drugi wynik to list[Path] — galaz splaszczania hierarchii
+        mock_manager.download_sheet.side_effect = [
+            tmp_path / "A.asc",
+            [tmp_path / "B1.asc", tmp_path / "B2.asc"],
+        ]
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "630000,480000,637000,487000",
+                "--country",
+                "pl",
+                "--workers",
+                "1",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+
+        assert result == 0
+        assert mock_manager.download_sheet.call_count == 2
+        captured = capsys.readouterr()
+        assert "Downloaded 3 files" in captured.out
+
 
 class TestAreaModeHierarchyExitCode:
     """Kod wyjscia trybow --bbox/--geometry, gdy godla rozwijaja sie do hierarchii."""
@@ -1892,6 +1927,48 @@ class TestCmdDownloadGeometry:
         assert result == 1
         captured = capsys.readouterr()
         assert "--geometry" in captured.err
+
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    def test_geometry_workers_1_sequential_collects_all_paths(
+        self, mock_overall, mock_manager_cls, mock_find, capsys, tmp_path
+    ):
+        """--workers 1 idzie petla sekwencyjna i zbiera WSZYSTKIE sciezki."""
+        shp_file = tmp_path / "area.shp"
+        shp_file.touch()
+
+        mock_overall.return_value = BBox(
+            630000.0, 480000.0, 640000.0, 490000.0, "EPSG:2180"
+        )  # Warszawa — glebia PL, auto-split nie dotknie CZ
+        mock_find.return_value = ["A", "B"]
+        mock_manager = Mock()
+        mock_manager.last_result = None
+        # drugi wynik to list[Path] — galaz splaszczania hierarchii
+        mock_manager.download_sheet.side_effect = [
+            tmp_path / "A.asc",
+            [tmp_path / "B1.asc", tmp_path / "B2.asc"],
+        ]
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "--geometry",
+                str(shp_file),
+                "--country",
+                "pl",
+                "--workers",
+                "1",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+
+        assert result == 0
+        assert mock_manager.download_sheet.call_count == 2
+        captured = capsys.readouterr()
+        assert "Downloaded 3 files" in captured.out
 
 
 # ===========================================================================
@@ -3162,6 +3239,32 @@ def _write_prague_shp(directory):
     return shp_path
 
 
+def _write_krovak_shp(directory):
+    """Shapefile w EPSG:5514 (uklad zadania CZ) o dokladnie znanej obwiedni."""
+    import shapefile
+    from pyproj import CRS
+
+    shp_path = directory / "area_krovak.shp"
+    with shapefile.Writer(str(shp_path)) as w:
+        w.field("name", "C", 40)
+        w.poly(
+            [
+                [
+                    (-447000.0, -1114000.0),
+                    (-446000.0, -1114000.0),
+                    (-446000.0, -1113000.0),
+                    (-447000.0, -1113000.0),
+                    (-447000.0, -1114000.0),
+                ]
+            ]
+        )
+        w.record("krovak")
+    shp_path.with_suffix(".prj").write_text(
+        CRS.from_epsg(5514).to_wkt(), encoding="utf-8"
+    )
+    return shp_path
+
+
 class TestCountryDispatch:
     """Dyspozycja per kraj w cmd_download (godlo -> rejestr systemow)."""
 
@@ -4324,6 +4427,64 @@ class TestAutoSplitGeometry:
             mock_cz.call_args.kwargs["bbox"].max_x,
             mock_cz.call_args.kwargs["bbox"].max_y,
         ]
+
+    @patch("kartograf.cli.download_cmd._run_cz")
+    def test_geometry_in_task_crs_skips_transform(self, mock_run_cz, tmp_path):
+        """Plik juz w EPSG:5514: obwiednia idzie do CUZK bit w bit, bez skoku."""
+        shp = _write_krovak_shp(tmp_path)
+        mock_run_cz.return_value = 0
+
+        result = main(
+            [
+                "download",
+                "--geometry",
+                str(shp),
+                "--country",
+                "cz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        bbox = mock_run_cz.call_args.kwargs["bbox"]
+        assert bbox.min_x == -447000.0
+        assert bbox.min_y == -1114000.0
+        assert bbox.max_x == -446000.0
+        assert bbox.max_y == -1113000.0
+        assert bbox.crs == "EPSG:5514"
+
+    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.core.geometry.read_source_crs")
+    def test_geometry_cz_transform_unavailable_reports_remedy(
+        self, mock_read_crs, mock_run_cz, tmp_path, capsys
+    ):
+        """Brak bezpiecznej operacji: kod 1 i Remedium na stderr, zero pobierania."""
+        from kartograf.transform.crs import TransformUnavailableError
+
+        shp = tmp_path / "area.shp"
+        shp.write_bytes(b"stub")
+        mock_read_crs.side_effect = TransformUnavailableError(
+            "brak operacji", rejected=[], remedy="zainstaluj siatki"
+        )
+
+        result = main(
+            [
+                "download",
+                "--geometry",
+                str(shp),
+                "--country",
+                "cz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        assert "Remedium: zainstaluj siatki" in capsys.readouterr().err
+        mock_run_cz.assert_not_called()
 
     @patch("kartograf.core.geometry.get_overall_bbox")
     def test_geometry_outside_known_countries(self, mock_overall, tmp_path, capsys):
