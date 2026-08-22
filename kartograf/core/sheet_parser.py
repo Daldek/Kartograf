@@ -979,8 +979,13 @@ def find_sheets_for_bbox(
     Raises
     ------
     ValidationError
-        Jeśli target_scale jest nieprawidłowa lub CRS nieobsługiwany
+        Jeśli system, target_scale lub CRS jest nieobsługiwany
     """
+    if system not in ("1992", "2000"):
+        raise ValidationError(
+            f"Nieobsługiwany system godeł: {system!r}. Dozwolone: '1992', '2000'"
+        )
+
     if system == "2000":
         from kartograf.core.parser_2000 import find_sheets_2000_for_bbox
 

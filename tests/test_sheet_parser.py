@@ -1161,6 +1161,14 @@ class TestFindSheetsForBBox:
         result = find_sheets_for_bbox(BBox(21.1, 52.1, 21.1, 52.1, "EPSG:4326"))
         assert len(result) == 1
 
+    def test_find_sheets_for_bbox_rejects_unknown_system(self):
+        """Nieznany system godeł → ValidationError zamiast cichego PL-1992 (A9-1)."""
+        bbox = BBox(19.0, 50.0, 19.1, 50.1, "EPSG:4326")
+        with pytest.raises(ValidationError, match="system"):
+            find_sheets_for_bbox(bbox, "1:100000", system="banana")
+        with pytest.raises(ValidationError, match="system"):
+            find_sheets_for_bbox(bbox, "1:100000", system=2000)  # type: ignore[arg-type]
+
     def test_roundtrip_single_sheet_all_scales(self):
         """Test roundtrip: get_bbox → find_sheets_for_bbox dla różnych skal."""
         test_cases = [
