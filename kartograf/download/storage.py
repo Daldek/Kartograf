@@ -29,8 +29,11 @@ class FileStorage:
         data/orto/N-34/130/D/d/2/4/N-34-130-D-d-2-4.tif
 
     Directory structure example (PL-2000):
-        data/nmt_2000_1m/6/179/12/6.179.12.asc
-        data/nmt_2000_1m/6/179/12/20/6.179.12.20.asc
+        data/nmt_1m/6/179/12/6.179.12.asc
+        data/nmt_1m/6/179/12/20/6.179.12.20.asc
+        (PL-2000 sheets share the resolution subdirectory with PL-1992;
+        the separate nmt_2000_<res> layout promised in ADR-017 is deferred.
+        File names do not collide: PL-2000 uses dots, PL-1992 dashes.)
 
     Attributes
     ----------
@@ -313,6 +316,8 @@ class FileStorage:
     def delete(self, godlo: str, ext: str = ".asc") -> bool:
         """
         Delete file for given godło.
+
+        Also deletes the companion `<file>.meta.json` sidecar, if present.
 
         Parameters
         ----------
