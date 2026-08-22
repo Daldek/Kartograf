@@ -408,6 +408,49 @@ class TestBdot10kProviderDownload:
         assert result == output
         mock_dl.assert_called_once()
 
+    def test_download_by_admin_unit_returns_existing_gpkg_path(self, tmp_path):
+        """download_by_admin_unit must return the path that was actually
+        written to disk (the merged .gpkg), not the .zip target path that
+        _extract_gpkg_from_zip never creates.
+        """
+        provider = Bdot10kProvider()
+
+        # Minimal single-table GPKG, same recipe as test_extract_gpkg_from_zip.
+        gpkg_path = tmp_path / "temp_PTLZ.gpkg"
+        conn = sqlite3.connect(str(gpkg_path))
+        c = conn.cursor()
+        c.execute(
+            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+            "identifier TEXT, description TEXT, last_change TEXT, "
+            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+        )
+        c.execute(
+            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+        )
+        c.execute("CREATE TABLE PTLZ (id INTEGER PRIMARY KEY, name TEXT)")
+        c.execute("INSERT INTO PTLZ VALUES (1, 'forest')")
+        conn.commit()
+        conn.close()
+
+        zip_buf = BytesIO()
+        with zipfile.ZipFile(zip_buf, "w") as zf, open(gpkg_path, "rb") as f:
+            zf.writestr("data/BDOT10k_PTLZ.gpkg", f.read())
+
+        mock_resp = Mock()
+        mock_resp.iter_content.return_value = [zip_buf.getvalue()]
+        mock_resp.raise_for_status = Mock()
+
+        mock_session = Mock()
+        mock_session.get.return_value = mock_resp
+        provider._session = mock_session
+
+        output_zip = tmp_path / "powiat_1465.zip"
+        result = provider.download_by_admin_unit("1465", output_zip)
+
+        assert result == tmp_path / "powiat_1465.gpkg"
+        assert result.exists()
+
     def test_get_teryt_for_point_gpkg_pattern(self):
         """Extract TERYT from GPKG URL pattern in WMS response."""
         provider = Bdot10kProvider()
