@@ -22,20 +22,19 @@ Authentication modes:
 
 To configure credentials:
 1. Register at https://land.copernicus.eu
-2. Generate API credentials (JSON with client_id, private_key, token_uri)
-3. Save to macOS Keychain:
-   security add-generic-password -a "$USER" -s "clms-token" -w '<json>'
+2. Generate API credentials (JSON with client_id, private_key, token_uri,
+   optionally user_id)
+3. Either set CLMS_CREDENTIALS as a JSON string in the environment
+   (read by the kartograf.auth.proxy subprocess), or pass
+   ``CorineProvider(clms_credentials={...})`` explicitly from library code.
 
-The auth proxy automatically reads credentials from Keychain,
-keeping them isolated from the main application process.
+The auth proxy isolates credentials in a separate subprocess, keeping
+them out of the main application process.
 """
 
 import json
 import logging
 import os
-import platform
-import re
-import subprocess
 import threading
 import time
 from pathlib import Path
@@ -61,169 +60,6 @@ def _get_auth_proxy():
 
         _auth_proxy_client = AuthProxyClient()
     return _auth_proxy_client
-
-
-# Keychain service name for CLMS credentials
-KEYCHAIN_SERVICE = "clms-token"
-
-
-def get_credentials_from_keychain() -> dict | None:
-    """
-    Retrieve CLMS OAuth2 credentials from macOS Keychain.
-
-    Note: This function is kept for backward compatibility.
-    Prefer using AuthProxyClient for secure credential handling.
-
-    Returns
-    -------
-    dict or None
-        Credentials dict with client_id, private_key, token_uri, etc.
-    """
-    if platform.system() != "Darwin":
-        return None
-
-    try:
-        # Try without account filter first (more flexible)
-        result = subprocess.run(
-            [
-                "security",
-                "find-generic-password",
-                "-s",
-                KEYCHAIN_SERVICE,
-                "-w",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode != 0:
-            return None
-
-        creds_data = result.stdout.strip()
-        if not creds_data:
-            return None
-
-        # Handle hex-encoded data (sometimes Keychain stores it this way)
-        if creds_data and not creds_data.startswith("{"):
-            try:
-                decoded = bytes.fromhex(creds_data).decode("utf-8")
-                # Remove terminal escape sequences like ESC[200~ and ESC[201~
-                # \x1b is ESC character, followed by [NNN~
-                decoded = re.sub(r"\x1b\[\d+~", "", decoded)
-                # Also remove lone ESC characters
-                decoded = decoded.lstrip("\x1b")
-                creds_data = decoded.strip()
-            except (ValueError, UnicodeDecodeError):
-                pass  # Not hex, use as-is
-
-        # Parse JSON
-        creds = json.loads(creds_data)
-        logger.debug("CLMS credentials loaded from macOS Keychain")
-        return creds
-
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
-        logger.debug(f"Could not read from Keychain: {e}")
-    except json.JSONDecodeError as e:
-        logger.warning(f"Invalid JSON in Keychain: {e}")
-
-    return None
-
-
-def save_credentials_to_keychain(credentials: dict) -> bool:
-    """
-    Save CLMS OAuth2 credentials to macOS Keychain.
-
-    Parameters
-    ----------
-    credentials : dict
-        The CLMS credentials dict to save.
-
-    Returns
-    -------
-    bool
-        True if saved successfully, False otherwise.
-    """
-    if platform.system() != "Darwin":
-        logger.warning("Keychain storage only available on macOS")
-        return False
-
-    try:
-        import json
-
-        creds_json = json.dumps(credentials)
-
-        # First try to delete existing entry (ignore errors)
-        subprocess.run(
-            [
-                "security",
-                "delete-generic-password",
-                "-a",
-                os.environ.get("USER", ""),
-                "-s",
-                KEYCHAIN_SERVICE,
-            ],
-            capture_output=True,
-            timeout=5,
-        )
-
-        # Add new entry
-        result = subprocess.run(
-            [
-                "security",
-                "add-generic-password",
-                "-a",
-                os.environ.get("USER", ""),
-                "-s",
-                KEYCHAIN_SERVICE,
-                "-w",
-                creds_json,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0:
-            logger.info("CLMS credentials saved to macOS Keychain")
-            return True
-        else:
-            logger.error(f"Failed to save credentials: {result.stderr}")
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
-        logger.error(f"Could not save to Keychain: {e}")
-
-    return False
-
-
-def get_clms_credentials() -> dict | None:
-    """
-    Get CLMS OAuth2 credentials from available sources.
-
-    Checks in order:
-    1. Environment variable CLMS_CREDENTIALS (JSON string)
-    2. macOS Keychain
-
-    Returns
-    -------
-    dict or None
-        Credentials dict if found, None otherwise.
-    """
-    import json
-
-    # Check environment variable first
-    creds_env = os.environ.get("CLMS_CREDENTIALS")
-    if creds_env:
-        try:
-            creds = json.loads(creds_env)
-            logger.debug("CLMS credentials loaded from environment variable")
-            return creds
-        except json.JSONDecodeError:
-            logger.warning("Invalid JSON in CLMS_CREDENTIALS env var")
-
-    # Try macOS Keychain
-    creds = get_credentials_from_keychain()
-    if creds:
-        return creds
-
-    return None
 
 
 class CLMSAuth:
@@ -384,7 +220,6 @@ class CorineProvider(LandCoverProvider):
     # Available years
     AVAILABLE_YEARS = [2018, 2012, 2006, 2000, 1990]
     EEA_YEARS = [2018, 2012, 2006, 2000]
-    DLR_YEARS = [1990]
     CLMS_YEARS = [2018, 2012, 2006, 2000]  # Years with CLMS API support
 
     # WMS layer names

@@ -704,6 +704,20 @@ class TestCorineProviderInit:
         provider = CorineProvider(use_proxy=False)
         assert provider._use_proxy is False
 
+    def test_env_var_does_not_enable_direct_mode(self, monkeypatch):
+        """CLMS_CREDENTIALS w env NIE wlacza trybu direct (ADR-002).
+
+        Credentials z env sa konsumowane wylacznie przez podproces auth
+        proxy (kartograf.auth.proxy) — nigdy przez CorineProvider.__init__
+        bezposrednio. Przypina to, ze usuniecie martwego bloku
+        get_clms_credentials()/Keychain w corine.py (zad. 20 audytu
+        0.7.0) nie zmienia tego zachowania.
+        """
+        monkeypatch.setenv("CLMS_CREDENTIALS", '{"client_id": "x"}')
+        provider = CorineProvider()
+        assert provider._use_proxy is True
+        assert provider._clms_auth is None
+
 
 class TestCorineProviderDownload:
     """Test CorineProvider download methods."""

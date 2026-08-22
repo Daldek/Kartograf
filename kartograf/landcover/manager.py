@@ -437,9 +437,11 @@ class LandCoverManager:
             is_png = data_path.suffix.lower() == ".png"
             if is_png and descriptor.key == "eu.clms.corine":
                 year = (kwargs or {}).get("year", 2018)
-                # 1990 musi odpowiadac CorineProvider.DLR_YEARS (WMS DLR, EPSG:4326);
-                # pozostale roczniki ida przez EEA Discomap (EPSG:3857).
-                meta.horizontal_crs = "EPSG:4326" if year == 1990 else "EPSG:3857"
+                # 1990 to jedyny rocznik DLR (WMS DLR, EPSG:4326); pozostale
+                # ida przez EEA Discomap (EPSG:3857) - patrz CorineProvider.EEA_YEARS.
+                meta.horizontal_crs = (
+                    "EPSG:4326" if year not in CorineProvider.EEA_YEARS else "EPSG:3857"
+                )
                 meta.extra.update(
                     {"fallback": "wms_png", "uwaga": "podglad WMS, nie dane"}
                 )
