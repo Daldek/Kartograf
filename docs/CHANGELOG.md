@@ -70,7 +70,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   | bbox arkusza `N-34-130-D`, `--scale 1:50000` | 9 godel | 4 (`N-34-130-D-a..d`) |
   | bbox arkusza `N-34-130-D-d-2-4` (1:10000) | 4 godla | 1 |
   | bbox arkusza `6.179.12.20` (PL-2000, `--scale 1:2000`) | 9 godel | 1 |
-  | punkt / bbox zdegenerowany (<= ~2e-9 jednostki) | `[]` | 1 arkusz (ten na E/N od linii siatki) |
+  | punkt / bbox zdegenerowany (<= ~2e-9 jednostki) | `[]` (PL-1992) / 4 godla (PL-2000) | 1 arkusz (ten na E/N od linii siatki) |
 
   Dziala tak samo na linii siatki i na granicy stref PL-2000. Dodatkowo
   nieznana wartosc `system=` konczy sie `ValidationError` zamiast cichego
@@ -110,6 +110,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `landcover list-sources` i wpis w `get_supported_formats()`; format nigdy
   nie byl zaimplementowany, zadanie i tak konczylo sie plikiem GPKG.
   (audyt 0.7.0: A6-2)
+- **Fasada `cli/commands.py` nie re-eksportuje juz 9 nazw** — m.in.
+  `cmd_landcover_download`, `cmd_landcover_list_layers`,
+  `cmd_landcover_list_sources`, `cmd_soilgrids_hsg`; import z fasady konczy sie
+  `ImportError`, kanoniczne sa moduly `cli/*_cmd.py` (szczegoly w Removed).
+  (audyt 0.7.0: A5-1)
+- **Zmiany zachowania widoczne dla skryptow** (tresc wpisow w Changed/Fixed):
+  - pobranie hierarchii z porazkami konczy sie kodem 1, nie 0 (Fixed, A2-3);
+  - `DownloadManager(provider=GugikNmptProvider())` bez `storage=` pisze do
+    `nmpt/`, nie do `nmt_1m/` (Fixed, A2-2);
+  - domyslne `--country auto` doklada dla zadan w poludniowej Polsce plik
+    i sidecar z CUZK (Changed, A6-3).
 
 ### Added
 - **Etap 0 — architektura zrodel wielokrajowych (przygotowanie pod CZ/DE/SK)**
@@ -318,8 +329,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `cli/commands.py` (`_cmd_download_bbox`, `_cmd_download_geometry`,
   `_cmd_download_laz`, `_download_godlo_list`, `_write_laz_sidecar`,
   `cmd_landcover_download`, `cmd_landcover_list_layers`,
-  `cmd_landcover_list_sources`, `cmd_soilgrids_hsg`); publiczne wejscia fasady
-  (`main`, `create_parser`, `cmd_*`) bez zmian. (audyt 0.7.0: A5-1)
+  `cmd_landcover_list_sources`, `cmd_soilgrids_hsg`) — cztery ostatnie sa
+  publiczne, wiec import z fasady konczy sie teraz `ImportError` (patrz
+  Breaking Changes). W fasadzie zostaja `main`, `create_parser` i piec
+  dispatcherow komend (`cmd_parse`, `cmd_download`, `cmd_landcover`,
+  `cmd_soilgrids`, `cmd_cache`) oraz dotychczasowe helpery formatujace.
+  (audyt 0.7.0: A5-1)
 - Nieosiagalna galaz `--product laz` w dyspozycji obszarowej `download_cmd.py`
   (LAZ ma wlasny przeplyw `_cmd_download_laz`) i martwe fallbacki
   `getattr(args, "vertical_crs", "KRON86")`. (audyt 0.7.0: N5-1)
@@ -463,7 +478,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     regresja PL (godlo, `landcover list-sources`, `cache stats`)
 - **Audyt przedwydaniowy 0.7.0**
   - blokada sieci w `tests/conftest.py` i globalny stub GetCapabilities —
-    21 testow przestalo odpytywac serwery GUGiK; lokalny autouse fixture
+    20 testow przestalo odpytywac serwery GUGiK; lokalny autouse fixture
     w `tests/test_gugik_orto.py` zastapiony tym globalnym, a realnych nazw
     warstw pilnuje osobny marker `real_wms_layers` (A8-1)
   - `test_get_opendata_url_tries_all_layers` niezalezny od liczby warstw
