@@ -58,7 +58,12 @@ def create_progress_callback(quiet: bool = False):
 
 
 def _create_provider_and_storage(product, output_dir, vertical_crs, resolution):
-    """Create provider and storage based on product type."""
+    """
+    Create provider and storage based on product type.
+
+    LAZ has a separate flow (`_cmd_download_laz`) and never reaches this
+    helper — `cmd_download` short-circuits it before any provider is built.
+    """
     from kartograf.download.storage import FileStorage
 
     if product == "nmpt":
@@ -71,16 +76,16 @@ def _create_provider_and_storage(product, output_dir, vertical_crs, resolution):
 
         provider = GugikOrtoProvider()
         storage = FileStorage(output_dir, product="orto")
-    elif product == "laz":
-        from kartograf.providers.pl.gugik_laz import GugikLazProvider
-
-        provider = GugikLazProvider(vertical_crs=vertical_crs)
-        storage = FileStorage(output_dir, product="laz")
-    else:
+    elif product == "nmt":
         from kartograf.providers.pl import create_nmt_provider
 
         provider = create_nmt_provider(vertical_crs=vertical_crs, resolution=resolution)
         storage = FileStorage(output_dir, resolution=resolution)
+    else:
+        raise ValidationError(
+            f"Unsupported product for DownloadManager flow: {product} "
+            "(LAZ uses _cmd_download_laz)"
+        )
 
     return provider, storage
 
@@ -567,8 +572,10 @@ def cmd_download(args: argparse.Namespace) -> int:
 
     # Create download manager with vertical CRS, resolution, and product
     output_dir = Path(args.output)
-    vertical_crs = getattr(args, "vertical_crs", "KRON86")
-    resolution = getattr(args, "resolution", "1m")
+    # sentinele PL sa juz rozwiazane (`_resolve_pl_sentinels`), a argparse
+    # zawsze tworzy oba atrybuty — czytamy je wprost
+    vertical_crs = args.vertical_crs
+    resolution = args.resolution
     product = getattr(args, "product", "nmt")
 
     workers = getattr(args, "workers", 4)
@@ -788,8 +795,10 @@ def _download_pl_bbox(
 
     # Create download manager
     output_dir = Path(args.output)
-    vertical_crs = getattr(args, "vertical_crs", "KRON86")
-    resolution = getattr(args, "resolution", "1m")
+    # sentinele PL sa juz rozwiazane (`_resolve_pl_sentinels`), a argparse
+    # zawsze tworzy oba atrybuty — czytamy je wprost
+    vertical_crs = args.vertical_crs
+    resolution = args.resolution
     product = getattr(args, "product", "nmt")
     workers = getattr(args, "workers", 4)
 
@@ -1412,8 +1421,10 @@ def _download_pl_geometry(
 
     # Create download manager
     output_dir = Path(args.output)
-    vertical_crs = getattr(args, "vertical_crs", "KRON86")
-    resolution = getattr(args, "resolution", "1m")
+    # sentinele PL sa juz rozwiazane (`_resolve_pl_sentinels`), a argparse
+    # zawsze tworzy oba atrybuty — czytamy je wprost
+    vertical_crs = args.vertical_crs
+    resolution = args.resolution
     product = getattr(args, "product", "nmt")
     workers = getattr(args, "workers", 4)
 

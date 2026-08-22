@@ -1051,6 +1051,20 @@ class TestCreateProviderAndStorage:
         assert isinstance(provider, GugikOrtoProvider)
         assert storage._product == "orto"
 
+    def test_laz_product_raises_validation_error(self, tmp_path):
+        """LAZ ma osobny przeplyw (_cmd_download_laz) — tu nie ma prawa dotrzec."""
+        from kartograf.cli.commands import _create_provider_and_storage
+
+        with pytest.raises(ValidationError, match="LAZ"):
+            _create_provider_and_storage("laz", tmp_path, "EVRF2007", "1m")
+
+    def test_unknown_product_raises_validation_error(self, tmp_path):
+        """Nieznany produkt nie moze po cichu spasc na fabryke NMT."""
+        from kartograf.cli.commands import _create_provider_and_storage
+
+        with pytest.raises(ValidationError, match="dmr5g"):
+            _create_provider_and_storage("dmr5g", tmp_path, "EVRF2007", "1m")
+
 
 class TestCmdDownloadBBox:
     """Tests for download command with --bbox option."""
