@@ -228,7 +228,8 @@ class LandCoverManager:
         teryt : str
             TERYT code (4-digit for powiat)
         output_path : Path, optional
-            Custom output path
+            Custom output path. Default path follows the same naming as
+            `download()` (see `_generate_output_path`).
         **kwargs
             Provider-specific options
 
@@ -238,7 +239,7 @@ class LandCoverManager:
             Path to downloaded file
         """
         if output_path is None:
-            output_path = self._output_dir / f"{self._provider.name}_{teryt}.gpkg"
+            output_path = self._generate_output_path(teryt, None, None)
         path = self._provider.download_by_teryt(teryt, output_path, **kwargs)
         self._write_sidecar(path, {"teryt": teryt}, kwargs)
         return path
@@ -257,7 +258,8 @@ class LandCoverManager:
         bbox : BBox
             Bounding box in EPSG:2180
         output_path : Path, optional
-            Custom output path
+            Custom output path. Default path follows the same naming as
+            `download()` (see `_generate_output_path`).
         **kwargs
             Provider-specific options
 
@@ -267,12 +269,7 @@ class LandCoverManager:
             Path to downloaded file
         """
         if output_path is None:
-            bbox_str = (
-                f"{bbox.min_x:.0f}_{bbox.min_y:.0f}_{bbox.max_x:.0f}_{bbox.max_y:.0f}"
-            )
-            output_path = (
-                self._output_dir / f"{self._provider.name}_bbox_{bbox_str}.gpkg"
-            )
+            output_path = self._generate_output_path(None, bbox, None)
         path = self._provider.download_by_bbox(bbox, output_path, **kwargs)
         self._write_sidecar(
             path,
@@ -298,7 +295,8 @@ class LandCoverManager:
         godlo : str
             Map sheet identifier (e.g., "N-34-130-D")
         output_path : Path, optional
-            Custom output path
+            Custom output path. Default path follows the same naming as
+            `download()` (see `_generate_output_path`).
         **kwargs
             Provider-specific options
 
@@ -308,7 +306,7 @@ class LandCoverManager:
             Path to downloaded file
         """
         if output_path is None:
-            output_path = self._output_dir / f"{self._provider.name}_{godlo}.gpkg"
+            output_path = self._generate_output_path(None, None, godlo)
         path = self._provider.download_by_godlo(godlo, output_path, **kwargs)
         self._write_sidecar(path, {"godlo": godlo}, kwargs)
         return path
