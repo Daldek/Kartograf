@@ -757,6 +757,129 @@ poprawne, GDAL renormalizuje wagi). Kierunek naprawy: maskowanie przed
 interpolacja na krawedzi, jesli konsument liczy dokladna powierzchnie
 pokrycia.
 
+---
+
+## ADR-025: Mapowanie tekstura -> HSG i kanoniczny trojkat USDA (audyt 0.7.0)
+
+**Data:** 2026-08-22
+**Status:** Przyjeta
+
+**Kontekst:** Audyt przedwydaniowy 0.7.0 (ustalenia A4-4, A4-8, A4-9) pokazal
+dwa niezalezne problemy w `kartograf/hydrology/hsg.py`. (1) Progi klasyfikacji
+tekstury byly przyblizeniem trojkata USDA, a nie trojkatem USDA: skosne
+granice normy (`silt + 1.5*clay`, `silt + 2*clay`, `sand > 52`, `sand > 45`,
+`silt < 28`) zastapiono liniami pionowymi/poziomymi (np. `clay <= 15 and
+sand >= 70` zamiast `silt + 2*clay < 30`), mimo ze docstring deklarowal
+"standard USDA soil texture triangle". Reguly istnialy dodatkowo w **dwoch
+kopiach** — lancuch `if/else` w wersji skalarnej i odwrocona kolejnosc masek
+w wersji tablicowej — wiec rozjezdzaly sie takze miedzy soba: normalizacja w
+float32 dawala na granicy `clay = 15%` inna klase w skalarze niz w tablicy
+(16 punktow symplexu, wszystkie zmieniajace HSG A/B), a lancuch skalarny mial
+galaz nieosiagalna (`clay >= 40 and silt >= 40` po wczesniejszym bloku
+`clay >= 40`). (2) Tablica `TEXTURE_TO_HSG` odbiega od klasycznej tabeli
+TR-55, a docstring modulu podawal liste grup zgodna z TR-55 — czyli sprzeczna
+z wlasnym kodem. Odstepstwo bylo swiadome (komentarze "Can be A/B depending on
+structure", "Can be C/D"), ale nigdzie nieudokumentowane. HSG jest deklarowanym
+wejsciem metody SCS-CN dla Hydrologa, wiec obie sprawy zmieniaja lub tlumacza
+wynik u konsumenta.
+
+**Opcje:**
+- A) Zostawic uproszczone progi i poprawic tylko docstring. Odrzucona: roznica
+  nie jest kosmetyczna (patrz liczby w "Konsekwencje"), a dotyczy gleb
+  piaszczystych, dominujacych w Polsce.
+- B) Poprawic progi osobno w kazdej z dwoch implementacji. Odrzucona: to wlasnie
+  duplikacja regul wyprodukowala rozjazd skalar-vs-wektor; dwie kopie znow by
+  sie rozjechaly.
+- C) Jedna lista regul, wersja wektorowa jako zrodlo prawdy, skalar jako
+  wrapper — wybrana.
+- D) Przy okazji dociagnac `TEXTURE_TO_HSG` do tabeli TR-55
+  (`sandy_loam` = A, `clay_loam`/`silty_clay_loam` = D). Odrzucona w 0.7.0:
+  to zmiana produktowa (inne CN u konsumenta), nie naprawa bledu — patrz
+  decyzja (b).
+
+**Decyzja:**
+
+(a) **Progi tekstur to kanoniczne reguly USDA** (Soil Survey Manual), trzymane
+w jednej liscie `_USDA_RULES` jako pary `(nazwa, predykat)`; predykat dostaje
+tablice float64 z udzialami w procentach (po normalizacji do sumy 100) i
+zwraca maske. Kolejnosc ma znaczenie — wygrywa pierwsza pasujaca regula:
+
+1. `sand`: `silt + 1.5*clay < 15`
+2. `loamy_sand`: `silt + 1.5*clay >= 15 and silt + 2*clay < 30`
+3. `sandy_loam`: `(7 <= clay <= 20 and sand > 52 and silt + 2*clay >= 30) or
+   (clay < 7 and silt < 50 and silt + 2*clay >= 30)`
+4. `silt`: `silt >= 80 and clay < 12`
+5. `silt_loam`: `(silt >= 50 and 12 <= clay < 27) or (50 <= silt < 80 and clay < 12)`
+6. `loam`: `7 <= clay <= 27 and 28 <= silt < 50 and sand <= 52`
+7. `sandy_clay_loam`: `20 <= clay < 35 and silt < 28 and sand > 45`
+8. `clay_loam`: `27 <= clay < 40 and 20 < sand <= 45`
+9. `silty_clay_loam`: `27 <= clay < 40 and sand <= 20`
+10. `sandy_clay`: `clay >= 35 and sand > 45`
+11. `silty_clay`: `clay >= 40 and silt >= 40`
+12. `clay`: `clay >= 40 and sand <= 45 and silt < 40`
+
+Wersja tablicowa (`classify_usda_texture_array`, ta uzywana przez
+`calculate_hsg_by_bbox`) jest zrodlem prawdy: liczy maski i wybiera pierwsza
+pasujaca przez `np.select`. Wersja skalarna (`classify_usda_texture`) to
+wrapper — te same reguly na tablicy jednoelementowej i `TEXTURE_NAMES[code]`.
+Rownowaznosc obu funkcji jest przypieta testem na **calym** symplexie co 1%
+(5151 punktow), ktory jednoczesnie dowodzi, ze reguly sa partycja: kazdy punkt
+dostaje klase 1-12, `default` w `np.select` nigdy nie jest uzywany.
+Normalizacja liczona **w float64** (`_normalize_pct`) — to usuwa rozjazd
+float32 na granicy `clay = 15%` (A4-8); `np.divide(..., where=)` usuwa przy
+okazji `RuntimeWarning: invalid value encountered in divide` dla pikseli bez
+danych. Punkty o sumie 0 dostaja **jawny guard** -> `loam`: po normalizacji
+`(0, 0, 0)` spelnia regule 1 (`silt + 1.5*clay = 0 < 15`), wiec bez guardu
+byloby to `sand`. Nie jest to fikcja: piksele nodata potoku rastrowego sa
+maskowane osobno, ale funkcja publiczna ma zwracac `loam` z decyzji, a nie
+przez przypadkowe trafienie reguly.
+
+(b) **`TEXTURE_TO_HSG` zostaje bez zmian** i jest swiadomie lagodniejsze niz
+tabela TR-55: `sandy_loam` = B (nie A), `clay_loam` i `silty_clay_loam` = C
+(nie D). Uzasadnienie: to klasy przejsciowe, ktorych faktyczna grupa zalezy od
+struktury gleby i warunkow odplywu, a nie od samego skladu granulometrycznego;
+wybor srodkowej grupy jest konserwatywny dla SCS-CN (nie zaniza odplywu tam,
+gdzie gleba jest gorsza niz sugeruje sam sklad, i nie zawyza go dla gleb
+piaszczysto-gliniastych). Zmiana tej tablicy zmienia CN u konsumenta
+(Hydrolog), wiec jest **decyzja produktowa, nie naprawa** — poza zakresem
+0.7.0. Docstring modulu nie powtarza juz listy grup wg TR-55 (byla sprzeczna z
+tablica), tylko odsyla tutaj.
+
+**Konsekwencje:** Klasyfikacja tekstury zmienia sie dla czesci obszaru
+trojkata, wiec HSG (a przez to CN u konsumenta) zmienia sie dla tych samych
+danych wejsciowych. Skutek policzony na siatce symplexu co 1% (5151 punktow,
+wersja **tablicowa**, ta uzywana przez `calculate_hsg_by_bbox`), format
+"bylo -> jest":
+
+| zmiana HSG | punktow | udzial symplexu | zmiana tekstury |
+|---|---|---|---|
+| A -> B | 136 | 2,64% | `loamy_sand` -> `sandy_loam` |
+| C -> B | 85 | 1,65% | `sandy_clay_loam` -> `loam` (36), `sandy_clay_loam` -> `sandy_loam` (28), `clay_loam` -> `loam` (21) |
+| D -> C | 5 | 0,10% | `sandy_clay` -> `clay_loam` |
+| **razem** | **226** | **4,39%** | (klasa tekstury zmienia sie dla 427 punktow = 8,29%) |
+
+Kazda zmiana jest o **dokladnie jedna grupe**, w obie strony: 136 punktow
+zaostrza sie (A -> B, wiekszy odplyw), 90 lagodnieje (C -> B, D -> C,
+mniejszy odplyw). Najwieksza pojedyncza pozycja to gleby piaszczyste, dotad
+awansowane z B na A przez pionowa granice `clay <= 15 and sand >= 70`
+postawiona w miejsce ukosnej `silt + 2*clay < 30`; sa to gleby dominujace w
+Polsce, wiec ta pozycja wazy w praktyce wiecej niz jej 2,64% powierzchni
+trojkata.
+
+Konsumenci (Hydrolog: HSG -> CN; Hydrograf: rastry HSG) dostana dla tych
+pikseli inny wynik niz w 0.6.x — zgodny z norma. Wpis "Changed" w
+`docs/CHANGELOG.md` niesie te sama tabele.
+
+Przypis: raport weryfikacyjny audytu (A4-4) podaje mniejsze liczby — "3,4%,
+136 B->A, 35 B->C, 5 C->D", zapisane w druga strone (referencja -> kod) i dla
+wersji skalarnej. Roznica 226 vs 176 punktow nie wynika z kierunku zapisu:
+tamta referencja byla osobna implementacja regul i inaczej domykala granice
+klas. Dwa remisy na granicy rozstrzyga u nas kolejnosc regul z punktu (a):
+`clay = 20%` przy `sand > 45` i `silt < 28` idzie do `sandy_loam`, nie do
+`sandy_clay_loam` (28 punktow), a `clay = 27%` przy `20 < sand <= 45` idzie do
+`loam`, nie do `clay_loam` (21 punktow). Wiazace dla konsumentow sa liczby z
+tabeli powyzej — policzone testem wprost na implementacji z punktu (a).
+
 <!-- Szablon nowej decyzji:
 
 ## ADR-XXX: Tytul
