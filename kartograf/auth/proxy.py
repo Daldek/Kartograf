@@ -42,6 +42,24 @@ logger = logging.getLogger(__name__)
 # Keychain service name
 KEYCHAIN_SERVICE = "clms-token"
 
+# Only these hosts may receive the CLMS access token. The proxy attaches
+# "Authorization: Bearer <token>" to every forwarded request, so an
+# unrestricted target URL would hand the token to an arbitrary server.
+ALLOWED_HOST_SUFFIXES = ("copernicus.eu", "eea.europa.eu")
+
+
+def _host_allowed(url: str) -> bool:
+    """Check whether the token may be forwarded to this URL (https + allowlist)."""
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        return False
+
+    hostname = (parsed.hostname or "").lower()
+    return any(
+        hostname == suffix or hostname.endswith("." + suffix)
+        for suffix in ALLOWED_HOST_SUFFIXES
+    )
+
 
 class CLMSCredentials:
     """
@@ -218,12 +236,6 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     "credentials_available": self.credentials.is_available,
                 }
             )
-        elif parsed.path == "/token":
-            token = self.credentials.get_access_token()
-            if token:
-                self.send_json({"access_token": token})
-            else:
-                self.send_json({"error": "Failed to get access token"}, 500)
         else:
             self.send_json({"error": "Not found"}, 404)
 
@@ -252,6 +264,13 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
             if not target_url:
                 self.send_json({"error": "Missing 'url' in request"}, 400)
+                return
+
+            if not _host_allowed(target_url):
+                self.send_json(
+                    {"error": f"Host not allowed: {urlparse(target_url).hostname}"},
+                    403,
+                )
                 return
 
             # Add authorization
@@ -306,6 +325,13 @@ class ProxyHandler(BaseHTTPRequestHandler):
             url = request_data.get("url")
             if not url:
                 self.send_json({"error": "Missing 'url'"}, 400)
+                return
+
+            if not _host_allowed(url):
+                self.send_json(
+                    {"error": f"Host not allowed: {urlparse(url).hostname}"},
+                    403,
+                )
                 return
 
             token = self.credentials.get_access_token()

@@ -201,47 +201,6 @@ class TestIsAvailable:
             assert client.is_available() is False
 
 
-class TestGetAccessToken:
-    """Test get_access_token method."""
-
-    @patch("kartograf.auth.client.atexit")
-    def test_get_token_success(self, _atexit):
-        """Token endpoint returns access_token."""
-        client = AuthProxyClient()
-        AuthProxyClient._proxy_port = 9999
-
-        mock_resp = Mock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {"access_token": "tok123"}
-        client._session = Mock()
-        client._session.get.return_value = mock_resp
-
-        with patch.object(client, "_ensure_proxy", return_value=True):
-            assert client.get_access_token() == "tok123"
-
-    @patch("kartograf.auth.client.atexit")
-    def test_get_token_failure(self, _atexit):
-        """Token endpoint returns 500 -> None."""
-        client = AuthProxyClient()
-        AuthProxyClient._proxy_port = 9999
-
-        mock_resp = Mock()
-        mock_resp.status_code = 500
-        mock_resp.text = "Internal Server Error"
-        client._session = Mock()
-        client._session.get.return_value = mock_resp
-
-        with patch.object(client, "_ensure_proxy", return_value=True):
-            assert client.get_access_token() is None
-
-    @patch("kartograf.auth.client.atexit")
-    def test_get_token_proxy_down(self, _atexit):
-        """Proxy cannot start -> None."""
-        client = AuthProxyClient()
-        with patch.object(client, "_ensure_proxy", return_value=False):
-            assert client.get_access_token() is None
-
-
 class TestProxyRequest:
     """Test proxy_request method."""
 

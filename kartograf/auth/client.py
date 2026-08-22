@@ -37,11 +37,14 @@ class AuthProxyClient:
     --------
     >>> client = AuthProxyClient()
     >>> if client.is_available():
-    ...     token = client.get_access_token()
     ...     response = client.proxy_request(
     ...         url="https://land.copernicus.eu/api/...",
     ...         method="POST",
     ...         payload={"key": "value"},
+    ...     )
+    ...     client.download_file(
+    ...         url="https://land.copernicus.eu/...",
+    ...         output_path=Path("clc.tif"),
     ...     )
     """
 
@@ -172,33 +175,6 @@ class AuthProxyClient:
             logger.debug(f"Health check failed: {e}")
 
         return False
-
-    def get_access_token(self) -> str | None:
-        """
-        Get CLMS access token from proxy.
-
-        Returns
-        -------
-        str or None
-            Access token if available, None otherwise.
-        """
-        if not self._ensure_proxy():
-            return None
-
-        try:
-            resp = self._session.get(
-                f"{self.proxy_url}/token",
-                timeout=30,
-            )
-            if resp.status_code == 200:
-                data = resp.json()
-                return data.get("access_token")
-            else:
-                logger.error(f"Token request failed: {resp.text}")
-        except requests.RequestException as e:
-            logger.error(f"Token request error: {e}")
-
-        return None
 
     def proxy_request(
         self,

@@ -267,6 +267,10 @@ class TestProxyHandlerEndpoints:
         handler.headers = {}
         handler.wfile = BytesIO()
 
+        if body is not None:
+            handler.rfile = BytesIO(body)
+            handler.headers = {"Content-Length": str(len(body))}
+
         if credentials is None:
             credentials = Mock()
         handler.credentials = credentials
@@ -296,8 +300,8 @@ class TestProxyHandlerEndpoints:
         assert handler._sent[0]["data"]["status"] == "ok"
         assert handler._sent[0]["data"]["credentials_available"] is True
 
-    def test_token_endpoint_success(self):
-        """GET /token returns access token."""
+    def test_token_endpoint_removed(self):
+        """GET /token no longer hands the access token to local processes."""
         creds = Mock()
         creds.get_access_token.return_value = "test_token"
         handler = self._make_handler("GET", "/token", credentials=creds)
@@ -305,19 +309,92 @@ class TestProxyHandlerEndpoints:
         ProxyHandler.do_GET(handler)
 
         assert len(handler._sent) == 1
-        assert handler._sent[0]["data"]["access_token"] == "test_token"
+        assert handler._sent[0]["status"] == 404
+        assert "access_token" not in handler._sent[0]["data"]
+        creds.get_access_token.assert_not_called()
 
-    def test_token_endpoint_failure(self):
-        """GET /token with no token -> 500."""
+    def test_proxy_rejects_foreign_host(self):
+        """POST /proxy to a host outside the allowlist -> 403, no token used."""
         creds = Mock()
-        creds.get_access_token.return_value = None
-        handler = self._make_handler("GET", "/token", credentials=creds)
+        creds.get_access_token.return_value = "SECRET-TOKEN"
+        body = json.dumps({"url": "https://attacker.invalid/steal"}).encode()
+        handler = self._make_handler("POST", "/proxy", body=body, credentials=creds)
 
-        ProxyHandler.do_GET(handler)
+        with patch("requests.get") as mock_get, patch("requests.post") as mock_post:
+            ProxyHandler.do_POST(handler)
 
-        assert len(handler._sent) == 1
-        assert handler._sent[0]["status"] == 500
-        assert "error" in handler._sent[0]["data"]
+        assert handler._sent[0]["status"] == 403
+        mock_get.assert_not_called()
+        mock_post.assert_not_called()
+        creds.get_access_token.assert_not_called()
+
+    def test_proxy_rejects_lookalike_host(self):
+        """Suffix match must not accept copernicus.eu.attacker.invalid."""
+        creds = Mock()
+        creds.get_access_token.return_value = "SECRET-TOKEN"
+        body = json.dumps(
+            {"url": "https://land.copernicus.eu.attacker.invalid/steal"}
+        ).encode()
+        handler = self._make_handler("POST", "/proxy", body=body, credentials=creds)
+
+        with patch("requests.get") as mock_get, patch("requests.post") as mock_post:
+            ProxyHandler.do_POST(handler)
+
+        assert handler._sent[0]["status"] == 403
+        mock_get.assert_not_called()
+        mock_post.assert_not_called()
+
+    def test_download_rejects_foreign_host(self):
+        """POST /download to a host outside the allowlist -> 403."""
+        creds = Mock()
+        creds.get_access_token.return_value = "SECRET-TOKEN"
+        body = json.dumps({"url": "https://attacker.invalid/steal.tif"}).encode()
+        handler = self._make_handler("POST", "/download", body=body, credentials=creds)
+
+        with patch("requests.get") as mock_get:
+            ProxyHandler.do_POST(handler)
+
+        assert handler._sent[0]["status"] == 403
+        mock_get.assert_not_called()
+        creds.get_access_token.assert_not_called()
+
+    def test_proxy_rejects_http_scheme(self):
+        """Plain http to an allowed host would leak the token -> 403."""
+        creds = Mock()
+        creds.get_access_token.return_value = "SECRET-TOKEN"
+        body = json.dumps({"url": "http://land.copernicus.eu/api/x"}).encode()
+        handler = self._make_handler("POST", "/proxy", body=body, credentials=creds)
+
+        with patch("requests.get") as mock_get:
+            ProxyHandler.do_POST(handler)
+
+        assert handler._sent[0]["status"] == 403
+        mock_get.assert_not_called()
+
+    def test_proxy_allows_copernicus_host(self):
+        """POST /proxy to land.copernicus.eu is forwarded with the token."""
+        creds = Mock()
+        creds.get_access_token.return_value = "tok123"
+        body = json.dumps(
+            {
+                "url": "https://land.copernicus.eu/api/@datarequest_post",
+                "method": "POST",
+            }
+        ).encode()
+        handler = self._make_handler("POST", "/proxy", body=body, credentials=creds)
+
+        upstream = Mock()
+        upstream.status_code = 200
+        upstream.headers = {}
+        upstream.text = "ok"
+
+        with patch("requests.post", return_value=upstream) as mock_post:
+            ProxyHandler.do_POST(handler)
+
+        assert handler._sent[0]["status"] == 200
+        assert handler._sent[0]["data"]["status_code"] == 200
+        sent_headers = mock_post.call_args.kwargs["headers"]
+        assert sent_headers["Authorization"] == "Bearer tok123"
 
     def test_unknown_get_endpoint(self):
         """GET /unknown -> 404."""
