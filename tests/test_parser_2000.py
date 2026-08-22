@@ -1572,6 +1572,25 @@ class TestFindSheets2000ForBBox:
         result = find_sheets_2000_for_bbox(bbox)
         assert result == ["6.179.12"]
 
+    def test_hairline_bbox_2000_across_grid_line_returns_single_sheet(self):
+        """Bbox wezszy niz 2*_EDGE_TOL okrakiem na linii siatki -> 1 arkusz."""
+        # Zachodnia krawedz 6.179.12: x = 6428000 (metry)
+        half_x = 0.75e-9
+        bbox = BBox(
+            min_x=6428000 - half_x,
+            min_y=5816000,
+            max_x=6428000 + half_x,
+            max_y=5816000 + 1.2e-9,
+            crs="EPSG:2177",
+        )
+        assert find_sheets_2000_for_bbox(bbox) == ["6.179.12"]
+
+    def test_point_on_zone_boundary_meridian_returns_single_sheet(self):
+        """Punkt dokladnie na poludniku granicy stref 6/7 -> 1 arkusz strefy 7."""
+        result = find_sheets_2000_for_bbox(BBox(19.5, 52.0, 19.5, 52.0, "EPSG:4326"))
+        assert len(result) == 1
+        assert result[0].startswith("7.")
+
     def test_point_bbox_2000_inside_sheet_returns_single_sheet(self):
         """Zdegenerowany bbox wewnatrz arkusza -> dokladnie 1 arkusz."""
         bbox = BBox(

@@ -1156,6 +1156,21 @@ class TestFindSheetsForBBox:
         assert sheet_bbox.min_x == pytest.approx(21.0, abs=1e-9)
         assert sheet_bbox.min_y == pytest.approx(52.0, abs=1e-9)
 
+    def test_hairline_bbox_across_grid_line_returns_single_sheet(self):
+        """Bbox wezszy niz 2*_EDGE_TOL okrakiem na linii siatki → 1 arkusz."""
+        sheet = SheetParser("N-34-139-C-c-3-3").get_bbox(crs="EPSG:4326")
+        half_x = 0.75e-9  # szerokość 1.5e-9° — mniej niż 2 * _EDGE_TOL
+        y0 = sheet.min_y + 1e-6  # w środku arkusza, z dala od linii siatki
+        bbox = BBox(
+            sheet.min_x - half_x,
+            y0,
+            sheet.min_x + half_x,
+            y0 + 1.2e-9,
+            "EPSG:4326",
+        )
+        # Nakładka po każdej stronie linii <= _EDGE_TOL → bez normalizacji: []
+        assert find_sheets_for_bbox(bbox) == ["N-34-139-C-c-3-3"]
+
     def test_point_bbox_inside_sheet_returns_single_sheet(self):
         """Zdegenerowany bbox wewnątrz arkusza → dokładnie 1 arkusz."""
         result = find_sheets_for_bbox(BBox(21.1, 52.1, 21.1, 52.1, "EPSG:4326"))
