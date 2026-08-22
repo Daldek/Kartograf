@@ -16,7 +16,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 import rasterio
-from rasterio.transform import from_bounds, from_origin
+from rasterio.transform import Affine, from_bounds, from_origin
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
@@ -904,6 +904,39 @@ class TestVerticalTransform:
             provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
             with pytest.raises(ValidationError, match="CRS"):
                 provider.download_bbox(_NATIVE_BBOX, tmp_path / "t.tif")
+
+    def test_vertical_shift_rejects_raster_without_geotransform(self, tmp_path):
+        """Raster z CRS, ale z jednostkowa geotransformacja (DMR4G-TIFF, ktory
+        zgubil .tfw): (lon, lat) wyszlyby z NUMEROW pikseli, a wysokosci
+        zostalyby cicho przesuniete o zly offset (rzedu 0,14 m). Ma byc jawny
+        blad i sprzatniecie, a nie po cichu zly plik."""
+        path = tmp_path / "CTES96.tif"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")  # NotGeoreferencedWarning — celowe
+            with rasterio.open(
+                path,
+                "w",
+                driver="GTiff",
+                dtype="float32",
+                count=1,
+                width=5,
+                height=4,
+                nodata=CUZK_NODATA,
+                crs="EPSG:5514",
+                transform=Affine.identity(),
+            ) as dst:
+                dst.write(np.full((4, 5), 300.0, dtype="float32"), 1)
+
+        factory, vertical = self._pinned_fakes()
+        with patch(_PINNED_PATCH, side_effect=factory):
+            provider = CuzkDmrProvider(resolution="5m", vertical_crs="EVRF2007")
+            with pytest.raises(ValidationError, match="geotransformacj"):
+                provider._apply_vertical_shift(path)
+
+        assert not vertical.transform.called  # nic nie zostalo przeliczone
+        assert not path.exists()
+        assert not path.with_suffix(".tfw").exists()
+        assert list(tmp_path.iterdir()) == []  # zero plikow tymczasowych
 
     def test_chunking_covers_whole_raster(self, tmp_path):
         """Raster wyzszy niz jeden pas: kazdy piksel danych przesuniety raz."""

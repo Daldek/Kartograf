@@ -433,6 +433,12 @@ class CuzkDmrProvider(BaseProvider):
                     f"Raster {label} nie ma CRS — nie da sie wyznaczyc "
                     f"(lon, lat) wymaganych przez operacje pionowa"
                 )
+            if ds.transform.is_identity or not ds.transform.is_rectilinear:
+                raise ValidationError(
+                    f"Raster {label} nie ma uzytecznej geotransformacji "
+                    f"(jednostkowa/nieprostokatna) — nie da sie wyznaczyc "
+                    f"(lon, lat) dla operacji pionowej"
+                )
             bounds = ds.bounds
             horizontal = self._pinned(
                 str(ds.crs),
