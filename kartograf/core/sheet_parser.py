@@ -874,10 +874,15 @@ def _axis_overlaps(a_min: float, a_max: float, b_min: float, b_max: float) -> bo
 
 def _expand_degenerate(bbox: BBox, eps: float) -> BBox:
     """
-    Rozszerza zdegenerowaną oś bboxa (punkt/linia) o ``eps`` po stronie MAX.
+    Rozszerza wyrodniałą oś bboxa (punkt/włos) o ``eps`` po stronie MAX.
 
     Dzięki temu punkt leżący dokładnie na linii siatki daje dokładnie jeden
     arkusz — ten na wschód/północ od linii (audyt 0.7.0, A1-7/A1-13).
+
+    Za wyrodniałą uznajemy oś o rozpiętości ``<= 2 * _EDGE_TOL``: taki bbox
+    położony okrakiem na linii siatki nie jest w stanie dać nakładki większej
+    niż ``_EDGE_TOL`` po żadnej ze stron, więc bez normalizacji zwracałby
+    pustą listę arkuszy (review 0.7.0, runda 1).
 
     Parameters
     ----------
@@ -889,10 +894,11 @@ def _expand_degenerate(bbox: BBox, eps: float) -> BBox:
     Returns
     -------
     BBox
-        Bbox o dodatniej rozpiętości na obu osiach
+        Bbox o rozpiętości pozwalającej na dodatnie pole przecięcia
     """
-    max_x = bbox.max_x if bbox.max_x - bbox.min_x > _EDGE_TOL else bbox.min_x + eps
-    max_y = bbox.max_y if bbox.max_y - bbox.min_y > _EDGE_TOL else bbox.min_y + eps
+    hairline = 2 * _EDGE_TOL
+    max_x = bbox.max_x if bbox.max_x - bbox.min_x > hairline else bbox.min_x + eps
+    max_y = bbox.max_y if bbox.max_y - bbox.min_y > hairline else bbox.min_y + eps
     return BBox(bbox.min_x, bbox.min_y, max_x, max_y, bbox.crs)
 
 
@@ -1013,7 +1019,7 @@ def find_sheets_for_bbox(
 
     # Normalizuj do WGS84
     wgs_bbox = _transform_bbox_to_wgs84(bbox) if bbox.crs == "EPSG:2180" else bbox
-    # Punkt/linia: rozszerz o eps po stronie MAX, żeby dać dokładnie jeden arkusz
+    # Punkt/włos: rozszerz o eps po stronie MAX, żeby dać dokładnie jeden arkusz
     wgs_bbox = _expand_degenerate(wgs_bbox, _DEGENERATE_EPS_DEG)
 
     target_idx = SheetParser.SCALE_HIERARCHY.index(target_scale)
