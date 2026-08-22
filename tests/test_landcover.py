@@ -1027,7 +1027,7 @@ class TestLandCoverManagerDownload:
         # Check auto-generated path contains provider name and TERYT
         call_args = mock_provider.download_by_teryt.call_args
         auto_path = call_args[0][1]
-        assert "TestProv" in str(auto_path)
+        assert "testprov" in str(auto_path).lower()
         assert "1465" in str(auto_path)
 
     def test_download_by_bbox(self, tmp_path):
@@ -1139,6 +1139,41 @@ class TestLandCoverManagerDownload:
         formats = manager.get_supported_formats()
 
         assert formats == ["GPKG"]
+
+    @pytest.mark.parametrize(
+        "call_kwargs,method_name",
+        [
+            ({"godlo": "N-34-130-D"}, "godlo"),
+            ({"teryt": "1465"}, "teryt"),
+            (
+                {"bbox": BBox(500000, 300000, 510000, 310000, "EPSG:2180")},
+                "bbox",
+            ),
+        ],
+    )
+    def test_download_and_download_by_x_generate_same_path(
+        self, tmp_path, call_kwargs, method_name
+    ):
+        """download() i download_by_* musza generowac identyczne sciezki bez spacji."""
+        mock_provider = Mock()
+        mock_provider.name = "CORINE Land Cover"
+        provider_method = getattr(mock_provider, f"download_by_{method_name}")
+        provider_method.return_value = tmp_path / "out.gpkg"
+
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+
+        with patch.object(manager, "_write_sidecar"):
+            manager.download(**call_kwargs)
+        path_via_download = provider_method.call_args[0][1]
+
+        provider_method.reset_mock()
+        manager_method = getattr(manager, f"download_by_{method_name}")
+        manager_method(**call_kwargs)
+        path_via_download_by = provider_method.call_args[0][1]
+
+        assert path_via_download == path_via_download_by
+        assert " " not in str(path_via_download)
+        assert " " not in str(path_via_download_by)
 
     def test_generate_output_path(self, tmp_path):
         """_generate_output_path creates correct paths."""
