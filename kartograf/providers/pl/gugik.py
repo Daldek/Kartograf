@@ -449,7 +449,8 @@ class GugikProvider(BaseProvider):
         Raises
         ------
         DownloadError
-            If no ASC file is found
+            If no ASC file is found, or if every skorowidz layer query
+            failed on transport (service unavailable)
         """
         # Check cache first
         if self._cache is not None:
@@ -499,6 +500,12 @@ class GugikProvider(BaseProvider):
                 godlo=godlo,
             )
 
+        # Transport failures are counted separately from "layer answered but
+        # has no data": all-failed means the service is down, not that the
+        # sheet has no coverage
+        transport_errors = 0
+        last_error: Exception | None = None
+
         # Try each layer from newest to oldest
         for layer in wms_layers:
             params = {
@@ -546,8 +553,18 @@ class GugikProvider(BaseProvider):
                     return urls[0]
 
             except requests.RequestException as e:
+                transport_errors += 1
+                last_error = e
                 logger.warning(f"WMS query failed for layer {layer}: {e}")
                 continue
+
+        if transport_errors == len(wms_layers):
+            raise DownloadError(
+                f"GUGiK WMS skorowidz unavailable for {godlo}: "
+                f"all {transport_errors} layer queries failed "
+                f"(last error: {last_error})",
+                godlo=godlo,
+            )
 
         raise DownloadError(
             f"No NMT {self._resolution} data available for {godlo} "
