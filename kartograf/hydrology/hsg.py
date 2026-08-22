@@ -6,11 +6,9 @@ This module provides functions to:
 2. Map texture classes to Hydrologic Soil Groups (A, B, C, D)
 3. Process SoilGrids raster data to produce HSG maps
 
-HSG Classification (USDA-NRCS):
-- Group A: High infiltration rate (sand, loamy sand, sandy loam)
-- Group B: Moderate infiltration rate (silt loam, loam)
-- Group C: Slow infiltration rate (sandy clay loam)
-- Group D: Very slow infiltration rate (clay loam, silty clay, clay)
+Texture -> HSG mapping (TEXTURE_TO_HSG) deliberately deviates from the TR-55
+table for sandy_loam (B, not A) and clay_loam / silty_clay_loam (C, not D) -
+see docs/DECISIONS.md ADR-025.
 
 Reference:
 - USDA-NRCS National Engineering Handbook, Part 630, Chapter 7
@@ -19,6 +17,7 @@ Reference:
 
 import logging
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -79,9 +78,72 @@ TEXTURE_TO_HSG = {
 }
 
 
+# Canonical USDA texture triangle (Soil Survey Manual) - the SINGLE source of
+# truth for both the scalar and the vectorised classifier.  Each predicate gets
+# float64 arrays with clay/sand/silt in percent (already normalised to sum 100)
+# and returns a boolean mask.  Order matters: first matching rule wins.
+_USDA_RULES: tuple[
+    tuple[str, Callable[[np.ndarray, np.ndarray, np.ndarray], np.ndarray]], ...
+] = (
+    ("sand", lambda c, s, si: si + 1.5 * c < 15),
+    ("loamy_sand", lambda c, s, si: (si + 1.5 * c >= 15) & (si + 2 * c < 30)),
+    (
+        "sandy_loam",
+        lambda c, s, si: (
+            ((c >= 7) & (c <= 20) & (s > 52) & (si + 2 * c >= 30))
+            | ((c < 7) & (si < 50) & (si + 2 * c >= 30))
+        ),
+    ),
+    ("silt", lambda c, s, si: (si >= 80) & (c < 12)),
+    (
+        "silt_loam",
+        lambda c, s, si: (
+            ((si >= 50) & (c >= 12) & (c < 27)) | ((si >= 50) & (si < 80) & (c < 12))
+        ),
+    ),
+    (
+        "loam",
+        lambda c, s, si: (c >= 7) & (c <= 27) & (si >= 28) & (si < 50) & (s <= 52),
+    ),
+    ("sandy_clay_loam", lambda c, s, si: (c >= 20) & (c < 35) & (si < 28) & (s > 45)),
+    ("clay_loam", lambda c, s, si: (c >= 27) & (c < 40) & (s > 20) & (s <= 45)),
+    ("silty_clay_loam", lambda c, s, si: (c >= 27) & (c < 40) & (s <= 20)),
+    ("sandy_clay", lambda c, s, si: (c >= 35) & (s > 45)),
+    ("silty_clay", lambda c, s, si: (c >= 40) & (si >= 40)),
+    ("clay", lambda c, s, si: (c >= 40) & (s <= 45) & (si < 40)),
+)
+
+
+def _normalize_pct(
+    clay, sand, silt
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Normalise clay/sand/silt to percentages summing to 100 (float64).
+
+    Returns the three normalised arrays plus the raw total, so callers can tell
+    apart real soil from the "no input at all" case (total == 0).
+    """
+    clay = np.asarray(clay, dtype=np.float64)
+    sand = np.asarray(sand, dtype=np.float64)
+    silt = np.asarray(silt, dtype=np.float64)
+
+    total = clay + sand + silt
+    valid = total > 0
+
+    normalised = tuple(
+        np.divide(part, total, out=np.zeros_like(part), where=valid) * 100
+        for part in (clay, sand, silt)
+    )
+
+    return normalised[0], normalised[1], normalised[2], total
+
+
 def classify_usda_texture(clay: float, sand: float, silt: float) -> str:
     """
-    Classify soil texture according to USDA texture triangle.
+    Classify soil texture according to the USDA texture triangle.
+
+    Canonical USDA texture triangle (Soil Survey Manual), single rule list
+    shared with the vectorised variant.
 
     Parameters
     ----------
@@ -99,74 +161,16 @@ def classify_usda_texture(clay: float, sand: float, silt: float) -> str:
 
     Notes
     -----
-    The classification follows the standard USDA soil texture triangle.
-    Input values should sum to approximately 100%.
+    Inputs are normalised to sum to 100% before classification, so any
+    consistent unit works (e.g. g/kg).  Inputs summing to 0 (no data) return
+    "loam".
     """
-    # Normalize to ensure sum = 100
-    total = clay + sand + silt
-    if total > 0:
-        clay = clay / total * 100
-        sand = sand / total * 100
-        silt = silt / total * 100
-
-    # USDA Texture Triangle Classification
-    # Order matters - check most restrictive classes first
-
-    # Sand: clay <= 10%, sand >= 85%
-    if clay <= 10 and sand >= 85:
-        return "sand"
-
-    # Loamy sand: clay <= 15%, sand 70-90%
-    if clay <= 15 and sand >= 70:
-        return "loamy_sand"
-
-    # Silt: silt >= 80%, clay < 12%
-    if silt >= 80 and clay < 12:
-        return "silt"
-
-    # Clay: clay >= 40%
-    if clay >= 40:
-        if silt >= 40:
-            return "silty_clay"
-        elif sand >= 45:
-            return "sandy_clay"
-        else:
-            return "clay"
-
-    # Sandy clay: clay 35-40%, sand >= 45%
-    if clay >= 35 and sand >= 45:
-        return "sandy_clay"
-
-    # Silty clay: clay 40-60%, silt >= 40%
-    if clay >= 40 and silt >= 40:
-        return "silty_clay"
-
-    # Sandy clay loam: clay 20-35%, sand >= 45%
-    if clay >= 20 and clay < 35 and sand >= 45:
-        return "sandy_clay_loam"
-
-    # Clay loam: clay 27-40%, sand 20-45%
-    if clay >= 27 and clay < 40 and sand >= 20 and sand <= 45:
-        return "clay_loam"
-
-    # Silty clay loam: clay 27-40%, sand < 20%
-    if clay >= 27 and clay < 40 and sand < 20:
-        return "silty_clay_loam"
-
-    # Silt loam: silt >= 50% and clay < 27% (but not silt)
-    if silt >= 50 and clay < 27:
-        return "silt_loam"
-
-    # Sandy loam: clay < 20%, sand >= 43%
-    if clay < 20 and sand >= 43:
-        return "sandy_loam"
-
-    # Loam: clay 7-27%, sand 23-52%, silt 28-50%
-    if clay >= 7 and clay < 27 and sand >= 23 and sand <= 52:
-        return "loam"
-
-    # Default to loam if classification is ambiguous
-    return "loam"
+    code = int(
+        classify_usda_texture_array(
+            np.array([clay]), np.array([sand]), np.array([silt])
+        )[0]
+    )
+    return TEXTURE_NAMES[code]
 
 
 def texture_to_hsg(texture_class: str) -> str:
@@ -192,6 +196,9 @@ def classify_usda_texture_array(
     """
     Classify soil texture for arrays (vectorized).
 
+    Uses the same canonical rule list (`_USDA_RULES`) as the scalar
+    `classify_usda_texture`, evaluated in float64.
+
     Parameters
     ----------
     clay : np.ndarray
@@ -204,70 +211,20 @@ def classify_usda_texture_array(
     Returns
     -------
     np.ndarray
-        Array of texture class codes (1-12)
+        Array of texture class codes (1-12); cells whose inputs sum to 0
+        (no data) get "loam".
     """
-    # Initialize with default (loam = 4)
-    result = np.full_like(clay, TEXTURE_CLASSES["loam"], dtype=np.uint8)
+    clay_n, sand_n, silt_n, total = _normalize_pct(clay, sand, silt)
 
-    # Normalize
-    total = clay + sand + silt
-    valid = total > 0
-    clay_n = np.where(valid, clay / total * 100, 0)
-    sand_n = np.where(valid, sand / total * 100, 0)
-    silt_n = np.where(valid, silt / total * 100, 0)
+    masks = [rule(clay_n, sand_n, silt_n) for _, rule in _USDA_RULES]
+    codes = [TEXTURE_CLASSES[name] for name, _ in _USDA_RULES]
 
-    # Classification rules - apply in reverse order (last overrides)
-    # This mimics the scalar if-else chain
+    selected = np.select(masks, codes, default=TEXTURE_CLASSES["loam"])
 
-    # Loam (default, already set)
-
-    # Sandy loam: clay < 20%, sand >= 43%
-    mask = (clay_n < 20) & (sand_n >= 43)
-    result[mask] = TEXTURE_CLASSES["sandy_loam"]
-
-    # Silt loam: silt >= 50% and clay < 27%
-    mask = (silt_n >= 50) & (clay_n < 27)
-    result[mask] = TEXTURE_CLASSES["silt_loam"]
-
-    # Silty clay loam: clay 27-40%, sand < 20%
-    mask = (clay_n >= 27) & (clay_n < 40) & (sand_n < 20)
-    result[mask] = TEXTURE_CLASSES["silty_clay_loam"]
-
-    # Clay loam: clay 27-40%, sand 20-45%
-    mask = (clay_n >= 27) & (clay_n < 40) & (sand_n >= 20) & (sand_n <= 45)
-    result[mask] = TEXTURE_CLASSES["clay_loam"]
-
-    # Sandy clay loam: clay 20-35%, sand >= 45%
-    mask = (clay_n >= 20) & (clay_n < 35) & (sand_n >= 45)
-    result[mask] = TEXTURE_CLASSES["sandy_clay_loam"]
-
-    # Sandy clay: clay 35-40%, sand >= 45%
-    mask = (clay_n >= 35) & (clay_n < 40) & (sand_n >= 45)
-    result[mask] = TEXTURE_CLASSES["sandy_clay"]
-
-    # Clay, silty clay, sandy clay for clay >= 40%
-    mask = (clay_n >= 40) & (silt_n < 40) & (sand_n < 45)
-    result[mask] = TEXTURE_CLASSES["clay"]
-
-    mask = (clay_n >= 40) & (sand_n >= 45)
-    result[mask] = TEXTURE_CLASSES["sandy_clay"]
-
-    mask = (clay_n >= 40) & (silt_n >= 40)
-    result[mask] = TEXTURE_CLASSES["silty_clay"]
-
-    # Silt: silt >= 80%, clay < 12% (overrides silt_loam)
-    mask = (silt_n >= 80) & (clay_n < 12)
-    result[mask] = TEXTURE_CLASSES["silt"]
-
-    # Loamy sand: clay <= 15%, sand >= 70% (overrides sandy_loam)
-    mask = (clay_n <= 15) & (sand_n >= 70)
-    result[mask] = TEXTURE_CLASSES["loamy_sand"]
-
-    # Sand: clay <= 10%, sand >= 85% (overrides loamy_sand)
-    mask = (clay_n <= 10) & (sand_n >= 85)
-    result[mask] = TEXTURE_CLASSES["sand"]
-
-    return result
+    # The rules partition the whole simplex, but cells with a zero total are
+    # not soil at all - pin them to "loam" explicitly instead of letting the
+    # normalised zeros fall into the "sand" rule.
+    return np.where(total > 0, selected, TEXTURE_CLASSES["loam"]).astype(np.uint8)
 
 
 def texture_to_hsg_array(texture: np.ndarray) -> np.ndarray:

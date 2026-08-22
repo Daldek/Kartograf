@@ -7,17 +7,50 @@ Tests cover USDA texture classification, HSG mapping, and HSGCalculator.
 from unittest.mock import Mock, patch
 
 import numpy as np
+import pytest
 
 from kartograf.hydrology.hsg import (
     HSG_DESCRIPTIONS,
     HSG_VALUES,
     TEXTURE_CLASSES,
+    TEXTURE_NAMES,
     HSGCalculator,
     classify_usda_texture,
     classify_usda_texture_array,
     texture_to_hsg,
     texture_to_hsg_array,
 )
+
+# Punkty kontrolne kanonicznego trojkata USDA (Soil Survey Manual):
+# 4 punkty z weryfikacji A4-4 + srodki wszystkich 12 klas.
+CANONICAL_CONTROL_POINTS = [
+    # (clay, sand, silt, expected)
+    (0, 70, 30, "sandy_loam"),  # silt + 2*clay = 30 >= 30
+    (20, 45, 35, "loam"),  # sand <= 52, silt 28-50
+    (35, 45, 20, "clay_loam"),  # sand <= 45 => nie sandy_clay
+    (12, 75, 13, "sandy_loam"),  # silt + 2*clay = 37 >= 30
+    (5, 90, 5, "sand"),
+    (5, 80, 15, "loamy_sand"),
+    (10, 65, 25, "sandy_loam"),
+    (20, 40, 40, "loam"),
+    (15, 20, 65, "silt_loam"),
+    (5, 5, 90, "silt"),
+    (27, 60, 13, "sandy_clay_loam"),
+    (33, 33, 34, "clay_loam"),
+    (33, 10, 57, "silty_clay_loam"),
+    (42, 52, 6, "sandy_clay"),
+    (47, 6, 47, "silty_clay"),
+    (60, 20, 20, "clay"),
+]
+
+
+def _simplex_points():
+    """Wszystkie punkty symplexu clay+sand+silt=100 co 1 procent (5151 pkt)."""
+    return [
+        (clay, sand, 100 - clay - sand)
+        for clay in range(0, 101)
+        for sand in range(0, 101 - clay)
+    ]
 
 
 class TestUSDATextureClassification:
@@ -26,17 +59,24 @@ class TestUSDATextureClassification:
     def test_sand(self):
         """Test sand classification."""
         assert classify_usda_texture(clay=5, sand=90, silt=5) == "sand"
-        assert classify_usda_texture(clay=8, sand=87, silt=5) == "sand"
+        # canonical USDA: silt + 1.5*clay = 14.0 < 15
+        assert classify_usda_texture(clay=8, sand=90, silt=2) == "sand"
 
     def test_loamy_sand(self):
         """Test loamy sand classification."""
-        assert classify_usda_texture(clay=10, sand=80, silt=10) == "loamy_sand"
-        assert classify_usda_texture(clay=12, sand=75, silt=13) == "loamy_sand"
+        assert classify_usda_texture(clay=5, sand=80, silt=15) == "loamy_sand"
+        # canonical USDA: silt + 1.5*clay = 17 >= 15, silt + 2*clay = 21 < 30
+        # (dawniej pinowane jako "sand")
+        assert classify_usda_texture(clay=8, sand=87, silt=5) == "loamy_sand"
 
     def test_sandy_loam(self):
         """Test sandy loam classification."""
         assert classify_usda_texture(clay=15, sand=60, silt=25) == "sandy_loam"
         assert classify_usda_texture(clay=10, sand=65, silt=25) == "sandy_loam"
+        # canonical USDA: silt + 2*clay = 30 >= 30 (dawniej "loamy_sand")
+        assert classify_usda_texture(clay=10, sand=80, silt=10) == "sandy_loam"
+        # canonical USDA: silt + 2*clay = 37 >= 30 (dawniej "loamy_sand")
+        assert classify_usda_texture(clay=12, sand=75, silt=13) == "sandy_loam"
 
     def test_loam(self):
         """Test loam classification."""
@@ -89,6 +129,19 @@ class TestUSDATextureClassification:
         result1 = classify_usda_texture(clay=10, sand=180, silt=10)
         result2 = classify_usda_texture(clay=5, sand=90, silt=5)
         assert result1 == result2
+
+    @pytest.mark.parametrize(
+        ("clay", "sand", "silt", "expected"), CANONICAL_CONTROL_POINTS
+    )
+    def test_classify_matches_canonical_usda_control_points(
+        self, clay, sand, silt, expected
+    ):
+        """Kanoniczne punkty kontrolne trojkata USDA (Soil Survey Manual)."""
+        assert classify_usda_texture(clay=clay, sand=sand, silt=silt) == expected
+
+    def test_zero_sum_returns_loam(self):
+        """Suma 0 (brak danych) -> jawnie loam, nie trafienie reguly `sand`."""
+        assert classify_usda_texture(clay=0, sand=0, silt=0) == "loam"
 
 
 class TestTextureToHSG:
@@ -163,6 +216,48 @@ class TestArrayClassification:
         assert result[0] == 0
         assert result[1] == HSG_VALUES["A"]
         assert result[2] == 0
+
+    def test_scalar_and_array_agree_on_whole_simplex(self):
+        """Skalar i wektor licza z jednej listy regul - zgodnosc 1:1."""
+        points = _simplex_points()
+        assert len(points) == 5151
+
+        clay = np.array([p[0] for p in points], dtype=np.float64)
+        sand = np.array([p[1] for p in points], dtype=np.float64)
+        silt = np.array([p[2] for p in points], dtype=np.float64)
+
+        codes = classify_usda_texture_array(clay, sand, silt)
+        expected = np.array(
+            [TEXTURE_CLASSES[classify_usda_texture(c, s, si)] for c, s, si in points],
+            dtype=np.uint8,
+        )
+
+        assert np.array_equal(codes, expected)
+        # reguly USDA sa partycja symplexu - kazdy punkt ma klase 1-12
+        assert (codes >= 1).all() and (codes <= 12).all()
+
+    def test_array_float32_input_boundary_clay_15(self):
+        """float32 na granicy clay=15% nie rozjezdza sie ze skalarem (A4-8)."""
+        # jak w potoku rastrowym: g/kg (float32) / 10 -> procent
+        clay = np.array([np.float32(150)], dtype=np.float32) / np.float32(10)
+        sand = np.array([np.float32(750)], dtype=np.float32) / np.float32(10)
+        silt = np.array([np.float32(100)], dtype=np.float32) / np.float32(10)
+
+        code = int(classify_usda_texture_array(clay, sand, silt)[0])
+        scalar = classify_usda_texture(15.0, 75.0, 10.0)
+
+        assert TEXTURE_NAMES[code] == scalar
+
+    def test_array_zero_sum_returns_loam(self):
+        """Suma 0 w tablicy -> loam (jawny guard, nie regula `sand`)."""
+        clay = np.array([0.0, 5.0])
+        sand = np.array([0.0, 90.0])
+        silt = np.array([0.0, 5.0])
+
+        result = classify_usda_texture_array(clay, sand, silt)
+
+        assert result[0] == TEXTURE_CLASSES["loam"]
+        assert result[1] == TEXTURE_CLASSES["sand"]
 
 
 class TestTextureClassesDict:
