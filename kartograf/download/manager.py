@@ -156,7 +156,9 @@ class DownloadManager:
         provider : BaseProvider, optional
             Data provider (default: GugikProvider with specified settings)
         storage : FileStorage, optional
-            Storage manager (default: FileStorage with output_dir)
+            Storage manager (default: FileStorage whose subdirectory comes
+            from the provider's source descriptor (`storage_subdir`), falling
+            back to `resolution` when the provider has no `descriptor_key`)
         vertical_crs : str, optional
             Vertical CRS: "EVRF2007" or "KRON86" (default: "EVRF2007").
             Note: 5m resolution only supports EVRF2007.
@@ -183,7 +185,17 @@ class DownloadManager:
         self._provider = provider or create_nmt_provider(
             vertical_crs=vertical_crs, resolution=resolution
         )
-        self._storage = storage or FileStorage(output_dir, resolution=resolution)
+        if storage is None:
+            subdir = None
+            key = getattr(self._provider, "descriptor_key", None)
+            # isinstance(str), nie `is not None`: dla Mock(spec=Provider)
+            # descriptor_key (atrybut klasy BaseProvider) zwraca Mock, nie None.
+            if isinstance(key, str):
+                from kartograf.sources.registry import get_source
+
+                subdir = get_source(key).storage_subdir
+            storage = FileStorage(output_dir, resolution=resolution, subdir=subdir)
+        self._storage = storage
         self._vertical_crs = vertical_crs
         self._resolution = resolution
         self._default_ext = self._provider.default_extension
