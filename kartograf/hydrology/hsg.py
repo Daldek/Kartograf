@@ -277,6 +277,41 @@ def texture_to_hsg_array(texture: np.ndarray) -> np.ndarray:
     return mapping[texture]
 
 
+def _geographic_row_cell_areas(src) -> np.ndarray:
+    """
+    Geodetic area (m2) of one cell in every row of a geographic raster.
+
+    For a CRS in degrees the affine determinant is square degrees, not square
+    metres.  Cell area on the ellipsoid depends on latitude only (all cells in
+    a row are congruent), so one polygon per row is enough.
+
+    Parameters
+    ----------
+    src : rasterio.DatasetReader
+        Open raster whose CRS is geographic.
+
+    Returns
+    -------
+    np.ndarray
+        Array of shape (height,) with the area in m2 of a single cell in
+        each row, top row first.
+    """
+    from pyproj import Geod
+
+    geod = Geod(ellps="WGS84")
+    areas = np.empty(src.height, dtype=np.float64)
+
+    for row in range(src.height):
+        lon0, top = src.transform * (0, row)
+        lon1, bottom = src.transform * (1, row + 1)
+        area, _ = geod.polygon_area_perimeter(
+            [lon0, lon1, lon1, lon0], [bottom, bottom, top, top]
+        )
+        areas[row] = abs(area)
+
+    return areas
+
+
 class HSGCalculator:
     """
     Calculator for Hydrologic Soil Groups from SoilGrids data.
@@ -526,21 +561,36 @@ class HSGCalculator:
         Returns
         -------
         dict
-            Dictionary with HSG statistics
+            Per-group dict with keys: count, area_m2, area_ha, percent,
+            description.
+
+        Notes
+        -----
+        Areas are in square metres / hectares regardless of the raster CRS:
+        for a geographic CRS (SoilGrids output is EPSG:4326) cell areas are
+        computed geodetically per raster row, not from the affine
+        determinant, which would give square degrees.
         """
         import rasterio
 
         with rasterio.open(hsg_path) as src:
             hsg = src.read(1)
-            pixel_area = abs(src.transform[0] * src.transform[4])  # m²
+            if src.crs is not None and src.crs.is_geographic:
+                # transform[0]*transform[4] would be square DEGREES here
+                row_area = _geographic_row_cell_areas(src)
+            else:
+                row_area = np.full(
+                    src.height, abs(src.transform[0] * src.transform[4])
+                )  # m²
 
         # Count pixels for each HSG
         total_valid = np.sum(hsg > 0)
         stats = {}
 
         for name, value in HSG_VALUES.items():
-            count = np.sum(hsg == value)
-            area_m2 = count * pixel_area
+            per_row = np.sum(hsg == value, axis=1)
+            count = np.sum(per_row)
+            area_m2 = float(np.sum(per_row * row_area))
             pct = (count / total_valid * 100) if total_valid > 0 else 0
 
             stats[name] = {
