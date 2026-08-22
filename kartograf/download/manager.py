@@ -113,6 +113,15 @@ class DownloadManager:
     - 1m (default) - high resolution, available for both EVRF2007 and KRON86
     - 5m - lower resolution, available only for EVRF2007
 
+    Attributes
+    ----------
+    last_result : DownloadResult or None
+        Per-sheet outcome of the most recent hierarchy download.
+        None until the first `download_hierarchy` call completes; reset to
+        None at the start of each `download_hierarchy` call. Not touched by
+        `download_sheet` for a single 1:10000 sheet (that path raises
+        `DownloadError` on failure instead).
+
     Examples
     --------
     >>> manager = DownloadManager(output_dir="./data")
@@ -332,6 +341,8 @@ class DownloadManager:
         Per-sheet download failures do not raise; they are collected in
         `self.last_result.failed` (see `DownloadResult`). The returned list
         contains downloaded AND skipped (pre-existing) files.
+        `self.last_result` is reset to None at the start of every call, so a
+        call that raises never leaves the previous run's result behind.
 
         Examples
         --------
@@ -340,6 +351,10 @@ class DownloadManager:
         >>> len(paths)  # 4 * 4 = 16 sheets
         16
         """
+        # Wynik poprzedniego przebiegu nie moze przeciec do tego wywolania —
+        # kasujemy go, zanim cokolwiek moze rzucic (ParseError/ValidationError).
+        self.last_result = None
+
         # Parse starting sheet and get all descendants
         parser = SheetParser(godlo)
         descendants = parser.get_all_descendants(target_scale)
