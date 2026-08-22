@@ -608,6 +608,17 @@ class TestProbePoint:
         assert pinned_mock.call_args.args[:2] == ("EPSG:5514", "EPSG:4326")
         assert pinned_mock.call_args.args[2].probe_point == (-446500.0, -1113500.0)
 
+    def test_module_level_bbox_to_crs_carries_probe(self):
+        """Galaz `pinned is None` modulowej `bbox_to_crs` — jedyna, ktorej
+        uzywa CLI (`_country_bbox`, normalizacja nazwy pliku, `--country auto`,
+        sciezka mozaiki). Provider jej nie dotyka, wiec bez tej asercji ciche
+        usuniecie probe w tej galezi przeszloby bez sladu."""
+        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+        with patch(_PINNED_PATCH, wraps=build_pinned_transform) as pinned_mock:
+            bbox_to_crs(bbox, "EPSG:4326")
+        assert pinned_mock.call_args.args[:2] == ("EPSG:5514", "EPSG:4326")
+        assert pinned_mock.call_args.args[2].probe_point == (-446500.0, -1113500.0)
+
     def test_horizontal_policy_probe_is_cz_native_center(self):
         from kartograf.providers.cuzk.dmr import CZ_PROBE_NATIVE
 
