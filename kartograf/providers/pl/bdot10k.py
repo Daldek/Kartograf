@@ -507,12 +507,13 @@ class Bdot10kProvider(LandCoverProvider):
                 response.raise_for_status()
 
                 if extract_from_zip:
-                    self._extract_gpkg_from_zip(response, output_path)
+                    saved = self._extract_gpkg_from_zip(response, output_path)
                 else:
                     self._save_response(response, output_path)
+                    saved = output_path
 
-                logger.info(f"Successfully downloaded {description} to {output_path}")
-                return output_path
+                logger.info(f"Successfully downloaded {description} to {saved}")
+                return saved
 
             except requests.RequestException as e:
                 last_error = e
@@ -555,7 +556,7 @@ class Bdot10kProvider(LandCoverProvider):
         self,
         response: requests.Response,
         output_path: Path,
-    ) -> None:
+    ) -> Path:
         """
         Extract and merge all layers from downloaded ZIP.
 
@@ -568,7 +569,14 @@ class Bdot10kProvider(LandCoverProvider):
         response : requests.Response
             HTTP response with ZIP content
         output_path : Path
-            Target path for merged GPKG
+            Target path for merged GPKG (the actual file is written to
+            ``output_path.with_suffix(".gpkg")``, which is also what is
+            returned)
+
+        Returns
+        -------
+        Path
+            Path to the merged GPKG file that was actually written to disk
         """
         import tempfile
 
@@ -608,6 +616,7 @@ class Bdot10kProvider(LandCoverProvider):
                     # Merge all layers into single GPKG
                     output_gpkg = output_path.with_suffix(".gpkg")
                     self._merge_gpkg_files(extracted_files, output_gpkg)
+                    return output_gpkg
 
         except zipfile.BadZipFile as e:
             raise DownloadError(f"Invalid ZIP file: {e}") from e
