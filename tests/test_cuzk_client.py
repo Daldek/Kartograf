@@ -517,6 +517,54 @@ class TestExportImage:
                 assert np.allclose(data[r, :], (src.transform * (0.5, r + 0.5))[1])
         assert list(tmp_path.glob("*.part*.tif")) == []
 
+    def test_tiling_corrupted_tile_raises_download_error_and_cleans_up(self, tmp_path):
+        """Kafel z poprawnym magic, ale urwanym cialem: blad mozaiki musi
+        wyjsc jako DownloadError (nie RasterioIOError) i nie zostawic
+        ani wyniku, ani plikow czastkowych — jak na sciezce SM5 (A3-3).
+        """
+        calls = []
+
+        def fake_download(session, url, output_path, *, timeout, **kwargs):
+            params = parse_qs(urlparse(url).query)
+            tile_bbox = [float(v) for v in params["bbox"][0].split(",")]
+            w, h = (int(v) for v in params["size"][0].split(","))
+            calls.append(url)
+            if len(calls) == 2:
+                # poprawny naglowek TIFF (przechodzi sniff magic), urwane cialo
+                Path(output_path).write_bytes(b"II*\x00" + b"\x00" * 64)
+                return Path(output_path)
+            _write_geotiff(
+                Path(output_path),
+                BBox(
+                    tile_bbox[0], tile_bbox[1], tile_bbox[2], tile_bbox[3], "EPSG:3045"
+                ),
+                w,
+                h,
+                value=float(len(calls)),
+                crs=_UNRESOLVABLE_CRS_WKT,
+            )
+            return Path(output_path)
+
+        target = tmp_path / "mosaic.tif"
+        bbox = BBox(0, 0, 16, 16, "EPSG:3045")  # 8x8 px przy pixel_size=2
+        client = CuzkClient(session=Mock())
+        with (
+            patch.object(CuzkClient, "MAX_EXPORT_WIDTH", 4),
+            patch.object(CuzkClient, "MAX_EXPORT_HEIGHT", 4),
+            patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
+            pytest.raises(DownloadError, match="mozaik"),
+        ):
+            client.export_image(
+                DMR5G,
+                bbox,
+                pixel_size=2.0,
+                image_sr="EPSG:3045",
+                output_path=target,
+            )
+
+        assert not target.exists()
+        assert list(tmp_path.glob("*.part*.tif")) == []
+
     def test_tiling_with_crs_mismatch_raises(self, tmp_path):
         bbox = BBox(0, 0, 16, 16, "EPSG:5514")
         client = CuzkClient(session=Mock())

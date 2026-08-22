@@ -178,7 +178,16 @@ class CuzkClient:
                     tile_path,
                 )
                 tile_paths.append(tile_path)
-            mosaic_and_crop(tile_paths, bbox, output_path, nodata=no_data)
+            try:
+                mosaic_and_crop(tile_paths, bbox, output_path, nodata=no_data)
+            except ValidationError:
+                raise
+            except Exception as e:  # noqa: BLE001 - rasterio/GDAL nie maja wspolnej bazy
+                output_path.unlink(missing_ok=True)
+                raise DownloadError(
+                    f"exportImage: nie udalo sie zszyc {len(tile_paths)} kafli "
+                    f"mozaiki w {output_path}: {e}"
+                ) from e
             _overwrite_crs(output_path, image_sr)
         finally:
             for p in tile_paths:
