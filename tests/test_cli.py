@@ -1017,6 +1017,24 @@ class TestCmdLandcoverDownload:
         call_kwargs = mock_mgr.download.call_args
         assert call_kwargs.kwargs.get("teryt") == "1465"
 
+    def test_landcover_download_soilgrids_teryt_unsupported(self, capsys, tmp_path):
+        """--source soilgrids --teryt -> exit 1, no data for a guessed area."""
+        result = main(
+            [
+                "landcover",
+                "download",
+                "--source",
+                "soilgrids",
+                "--teryt",
+                "1465",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Error: SoilGrids does not support TERYT" in captured.err
+
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
     def test_landcover_download_by_godlo(self, mock_mgr_cls, capsys, tmp_path):
         """landcover download --godlo calls manager.download with godlo."""

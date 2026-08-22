@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.exceptions import DownloadError
 from kartograf.providers.soilgrids import PROPERTY_DESCRIPTIONS, SoilGridsProvider
 
 
@@ -118,12 +118,6 @@ class TestSoilGridsValidation:
         with pytest.raises(ValueError, match="Invalid stat"):
             provider.download_by_bbox(bbox, Path("/tmp/test.tif"), stat="invalid_stat")
 
-    def test_download_by_teryt_invalid(self):
-        """Test download with invalid TERYT."""
-        provider = SoilGridsProvider()
-        with pytest.raises(ValidationError):
-            provider.download_by_teryt("invalid", Path("/tmp/test.tif"))
-
 
 class TestSoilGridsWCSUrl:
     """Test WCS URL construction."""
@@ -219,15 +213,18 @@ class TestSoilGridsTeryt:
         assert provider.validate_teryt("123") is False
         assert provider.validate_teryt("abc") is False
 
-    def test_get_bbox_for_teryt_returns_bbox(self):
-        """Test that _get_bbox_for_teryt returns a BBox."""
+    @pytest.mark.parametrize("code", ["1465", "invalid"])
+    def test_download_by_teryt_raises_not_implemented(self, code, tmp_path):
+        """TERYT selection is not supported - no data for a guessed area."""
         provider = SoilGridsProvider()
-        bbox = provider._get_bbox_for_teryt("1465", timeout=5)
+        with pytest.raises(NotImplementedError, match="TERYT"):
+            provider.download_by_teryt(code, tmp_path / "x.tif")
 
-        assert isinstance(bbox, BBox)
-        assert bbox.crs == "EPSG:2180"
-        assert bbox.min_x < bbox.max_x
-        assert bbox.min_y < bbox.max_y
+    def test_download_by_admin_unit_raises_not_implemented(self, tmp_path):
+        """Canonical name behaves like the deprecated alias."""
+        provider = SoilGridsProvider()
+        with pytest.raises(NotImplementedError, match="TERYT"):
+            provider.download_by_admin_unit("1465", tmp_path / "x.tif")
 
 
 class TestSoilGridsDownload:
