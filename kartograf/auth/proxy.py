@@ -339,6 +339,9 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "Failed to get access token"}, 500)
                 return
 
+            # Phase 1: connect and send the response headers. Nothing has
+            # been written to the client yet, so a failure is still reportable
+            # as JSON.
             try:
                 resp = requests.get(
                     url,
@@ -347,18 +350,27 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     stream=True,
                 )
 
-                # Stream the response
                 self.send_response(resp.status_code)
                 for key, value in resp.headers.items():
                     if key.lower() not in ("transfer-encoding", "connection"):
                         self.send_header(key, value)
                 self.end_headers()
 
-                for chunk in resp.iter_content(chunk_size=8192):
-                    self.wfile.write(chunk)
-
             except requests.RequestException as e:
                 self.send_json({"error": f"Download failed: {e}"}, 502)
+                return
+
+            # Phase 2: stream the body. The headers are already out, so an
+            # error MUST NOT be reported with send_json - that would append a
+            # whole HTTP response to the file the client is writing. Drop the
+            # connection instead: the client sees a short read against
+            # Content-Length (or a ChunkedEncodingError when chunked).
+            try:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    self.wfile.write(chunk)
+            except requests.RequestException as e:
+                logger.error("Download stream aborted: %s", e)
+                self.close_connection = True
 
         else:
             self.send_json({"error": "Not found"}, 404)

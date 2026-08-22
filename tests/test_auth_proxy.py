@@ -281,6 +281,8 @@ class TestProxyHandlerEndpoints:
 
         def fake_send_json(data, status=200):
             sent_responses.append({"data": data, "status": status})
+            # Mirror the real send_json: the body lands in wfile.
+            handler.wfile.write(json.dumps(data).encode("utf-8"))
 
         handler.send_json = fake_send_json
         handler._sent = sent_responses
@@ -395,6 +397,48 @@ class TestProxyHandlerEndpoints:
         assert handler._sent[0]["data"]["status_code"] == 200
         sent_headers = mock_post.call_args.kwargs["headers"]
         assert sent_headers["Authorization"] == "Bearer tok123"
+
+    def test_download_stream_error_after_headers_does_not_append_json(self):
+        """Aborted stream must not append an HTTP 502 body to the raster."""
+        import requests
+
+        creds = Mock()
+        creds.get_access_token.return_value = "tok123"
+        body = json.dumps(
+            {"url": "https://land.copernicus.eu/api/download/clc.tif"}
+        ).encode()
+        handler = self._make_handler("POST", "/download", body=body, credentials=creds)
+
+        def fake_send_response(status, message=None):
+            handler.wfile.write(f"HTTP/1.0 {status}\r\n".encode())
+
+        def fake_send_header(key, value):
+            handler.wfile.write(f"{key}: {value}\r\n".encode())
+
+        def fake_end_headers():
+            handler.wfile.write(b"\r\n")
+
+        handler.send_response = fake_send_response
+        handler.send_header = fake_send_header
+        handler.end_headers = fake_end_headers
+
+        def broken_stream(chunk_size=8192):
+            yield b"II*\x00AAAA"
+            raise requests.RequestException("Response ended prematurely")
+
+        upstream = Mock()
+        upstream.status_code = 200
+        upstream.headers = {"Content-Type": "image/tiff"}
+        upstream.iter_content = broken_stream
+
+        with patch("requests.get", return_value=upstream):
+            ProxyHandler.do_POST(handler)
+
+        written = handler.wfile.getvalue()
+        assert handler._sent == []
+        assert handler.close_connection is True
+        assert b'{"error"' not in written
+        assert written.endswith(b"AAAA")
 
     def test_unknown_get_endpoint(self):
         """GET /unknown -> 404."""
