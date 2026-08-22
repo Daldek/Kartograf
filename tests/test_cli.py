@@ -285,6 +285,37 @@ class TestMain:
         captured = capsys.readouterr()
         assert "N-34" in captured.out
 
+    @patch("kartograf.cli.commands.cmd_parse", side_effect=RuntimeError("boom"))
+    def test_unexpected_exception_is_reported_not_raised(self, mock_cmd_parse, capsys):
+        """Wyjatek spoza KartografError daje komunikat i kod 1, nie traceback."""
+        result = main(["parse", "N-34"])
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "RuntimeError: boom" in captured.err
+        assert "KARTOGRAF_DEBUG" in captured.err
+
+    @patch(
+        "kartograf.cli.commands.cmd_parse",
+        side_effect=ValidationError("zly godlo"),
+    )
+    def test_kartograf_error_is_reported_with_message(self, mock_cmd_parse, capsys):
+        """KartografError daje komunikat bez nazwy klasy."""
+        result = main(["parse", "N-34"])
+
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Error: zly godlo" in captured.err
+        assert "ValidationError" not in captured.err
+
+    @patch("kartograf.cli.commands.cmd_parse", side_effect=RuntimeError("boom"))
+    def test_debug_env_reraises(self, mock_cmd_parse, capsys, monkeypatch):
+        """KARTOGRAF_DEBUG=1 przepuszcza pelny traceback."""
+        monkeypatch.setenv("KARTOGRAF_DEBUG", "1")
+
+        with pytest.raises(RuntimeError):
+            main(["parse", "N-34"])
+
 
 class TestCLIIntegration:
     """Integration tests for CLI."""
