@@ -46,7 +46,8 @@ def _point_from_wkb(
     Returns
     -------
     tuple or None
-        (x, y, x, y) for a POINT, or None if the WKB is truncated
+        (x, y, x, y) for a POINT, or None if the WKB is truncated before the
+        geometry type or before the coordinates
 
     Raises
     ------
@@ -54,8 +55,8 @@ def _point_from_wkb(
         If the WKB holds a non-point geometry (its extent cannot be derived
         without a full WKB parser)
     """
-    # WKB point: 1 B byte order + 4 B type + 2 x float64 = 21 B
-    if len(blob) < offset + 21:
+    # WKB prefix: 1 B byte order + 4 B geometry type
+    if len(blob) < offset + 5:
         return None
 
     order = blob[offset]
@@ -72,7 +73,13 @@ def _point_from_wkb(
             "(e.g. ogr2ogr) or use SHP"
         )
 
-    x, y = struct.unpack(f"{endian}2d", blob[offset + 5 : offset + 21])
+    # EWKB z flaga SRID wstawia 4 B identyfikatora ukladu MIEDZY typ a
+    # wspolrzedne — bez tego przeskoku odczytalibysmy smieci.
+    coord_offset = offset + 9 if wkb_type & 0x20000000 else offset + 5
+    if len(blob) < coord_offset + 16:  # 2 x float64
+        return None
+
+    x, y = struct.unpack(f"{endian}2d", blob[coord_offset : coord_offset + 16])
     return (x, y, x, y)
 
 
@@ -83,12 +90,14 @@ def _parse_gpkg_envelope(blob: bytes) -> tuple[float, float, float, float] | Non
     GeoPackage spec binary header:
       Offset 0: "GP" magic (2 bytes)
       Offset 2: version (1 byte)
-      Offset 3: flags (1 byte) — envelope_type = (flags >> 1) & 0x07
+      Offset 3: flags (1 byte) — envelope_type = (flags >> 1) & 0x07,
+                empty geometry flag = (flags >> 4) & 0x01
       Offset 4: SRS ID (4 bytes, int32)
       Offset 8: envelope (if type > 0):
         type 1 (2D): minx, maxx, miny, maxy (4 x float64)
 
-    Dwie sciezki:
+    Sciezki:
+      * flaga pustej geometrii — obiekt pomijany (``None``), nie ma zasiegu;
       * ``envelope_type > 0`` — obwiednia czytana wprost z naglowka;
       * ``envelope_type == 0`` — obwiedni nie ma (tak GDAL/QGIS zapisuja warstwy
         punktowe), wiec wspolrzedne pochodza z samego WKB (``_point_from_wkb``);
@@ -102,7 +111,8 @@ def _parse_gpkg_envelope(blob: bytes) -> tuple[float, float, float, float] | Non
     Returns
     -------
     tuple or None
-        (min_x, min_y, max_x, max_y) or None if the header/WKB is unusable
+        (min_x, min_y, max_x, max_y), or None for an empty geometry or an
+        unusable header/WKB
 
     Raises
     ------
@@ -119,6 +129,12 @@ def _parse_gpkg_envelope(blob: bytes) -> tuple[float, float, float, float] | Non
     flags = blob[3]
     byte_order = flags & 0x01  # 0 = big-endian, 1 = little-endian
     envelope_type = (flags >> 1) & 0x07
+    is_empty = (flags >> 4) & 0x01
+
+    if is_empty:
+        # Pusta geometria nie ma zasiegu — GDAL zapisuje ja jako POINT(NaN NaN),
+        # wiec obiekt trzeba pominac, zanim NaN trafi do wyszukiwania arkuszy.
+        return None
 
     if envelope_type == 0:
         # Brak obwiedni w naglowku — sprobuj odczytac punkt z WKB tuz za nim.

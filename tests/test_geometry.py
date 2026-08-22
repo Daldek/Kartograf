@@ -209,9 +209,15 @@ def _make_gpkg_blob(
     envelope_type: int = 1,
     byte_order: int = 1,
     wkb_type: int = 1,
+    empty: bool = False,
 ) -> bytes:
     """Create a minimal GeoPackage binary geometry blob (WKB POINT by default)."""
     flags = (envelope_type << 1) | byte_order
+    if empty:
+        # Bit 4 = "empty geometry" wg specyfikacji GeoPackage; GDAL zapisuje
+        # wtedy pusty POINT jako WKB z NaN.
+        flags |= 1 << 4
+        min_x = min_y = float("nan")
     endian = "<" if byte_order == 1 else ">"
 
     header = b"GP"  # magic
@@ -505,6 +511,18 @@ def gpkg_no_envelope_polygon(tmp_path):
 
 
 @pytest.fixture
+def gpkg_empty_and_point(tmp_path):
+    """GPKG (envelope_type=0) z pusta geometria i prawdziwym punktem."""
+    empty_blob = _make_gpkg_blob(0, 0, 0, 0, envelope_type=0, empty=True)
+    point_blob = _make_gpkg_blob(420000, 230000, 420000, 230000, envelope_type=0)
+    return _build_gpkg(
+        tmp_path / "empty_and_point.gpkg",
+        [empty_blob, point_blob],
+        geometry_type="POINT",
+    )
+
+
+@pytest.fixture
 def gpkg_no_features_geom(tmp_path):
     """GPKG z warstwa obiektow, ale bez zadnego wiersza."""
     return _build_gpkg(tmp_path / "empty_layer.gpkg", [])
@@ -586,6 +604,27 @@ class TestParseGpkgEnvelope:
         blob = _make_gpkg_blob(100.0, 200.0, 300.0, 400.0, envelope_type=0, wkb_type=3)
         with pytest.raises(ValidationError, match="envelope"):
             _parse_gpkg_envelope(blob)
+
+    def test_empty_geometry_flag_returns_none(self):
+        """Empty geometry (flags bit 4) is skipped, not read as a NaN point."""
+        blob = _make_gpkg_blob(0, 0, 0, 0, envelope_type=0, empty=True)
+        assert _parse_gpkg_envelope(blob) is None
+
+    def test_no_envelope_ewkb_with_srid_skips_srid_field(self):
+        """EWKB SRID flag (0x20000000) inserts 4 bytes before the coordinates."""
+        header = b"GP" + struct.pack("B", 0) + struct.pack("B", 1)
+        header += struct.pack("<i", 2180)
+        blob = header + struct.pack("<BIi2d", 1, 0x20000001, 2180, 5.0, 6.0)
+
+        assert _parse_gpkg_envelope(blob) == (5.0, 6.0, 5.0, 6.0)
+
+    def test_no_envelope_truncated_srid_wkb_returns_none(self):
+        """EWKB with SRID but truncated coordinates returns None."""
+        header = b"GP" + struct.pack("B", 0) + struct.pack("B", 1)
+        header += struct.pack("<i", 2180)
+        blob = header + struct.pack("<BIid", 1, 0x20000001, 2180, 5.0)
+
+        assert _parse_gpkg_envelope(blob) is None
 
     def test_no_envelope_truncated_wkb_returns_none(self):
         """Envelope type 0 with a truncated WKB returns None."""
@@ -731,6 +770,13 @@ class TestReadGpkgBboxes:
         assert bboxes[0].max_x == pytest.approx(420000)
         assert bboxes[0].min_y == pytest.approx(230000)
         assert bboxes[0].max_y == pytest.approx(230000)
+
+    def test_empty_point_feature_is_skipped(self, gpkg_empty_and_point):
+        """Empty geometry is skipped; only the real point yields a bbox."""
+        bboxes = read_feature_bboxes(gpkg_empty_and_point, target_crs="EPSG:2180")
+        assert len(bboxes) == 1
+        assert bboxes[0].min_x == pytest.approx(420000)
+        assert bboxes[0].min_y == pytest.approx(230000)
 
     def test_read_gpkg_non_point_without_envelope_raises_validation_error(
         self, gpkg_no_envelope_polygon
@@ -960,6 +1006,11 @@ class TestFindSheetsForGeometry:
                 if _bbox_contains(SheetParser(godlo).get_bbox("EPSG:2180"), x, y)
             ]
             assert containing, f"no sheet in {result} contains ({x}, {y})"
+
+    def test_empty_point_feature_does_not_raise(self, gpkg_empty_and_point):
+        """Empty geometry does not blow up sheet lookup (no NaN reaches int())."""
+        result = find_sheets_for_geometry(gpkg_empty_and_point)
+        assert len(result) == 1
 
     def test_no_features_returns_empty(self, gpkg_no_features_geom):
         """File with no valid features returns empty list."""
