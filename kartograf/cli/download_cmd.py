@@ -645,10 +645,9 @@ def cmd_download(args: argparse.Namespace) -> int:
 
     # Hierarchia polyka porazki pojedynczych arkuszy (raportuje je przez
     # `on_progress`), wiec kod wyjscia bierzemy z podsumowania managera.
-    # `getattr` z domyslnym None jest celowe: `last_result` zostaje None przy
-    # pojedynczym arkuszu 1:10000 (sukces = brak wyjatku), a mocki managera
-    # w testach CLI nie zawsze maja ten atrybut.
-    summary = getattr(manager, "last_result", None)
+    # `None` znaczy „bez hierarchii" — pojedynczy arkusz 1:10000 nie wypelnia
+    # `last_result` i tam sukces = brak wyjatku.
+    summary = manager.last_result
     if summary is not None and summary.failed:
         print(
             f"\nError: {len(summary.failed)} of {summary.total} sheets failed "
@@ -660,15 +659,44 @@ def cmd_download(args: argparse.Namespace) -> int:
     return 0
 
 
+def _expands_to_hierarchy(godlo: str) -> bool:
+    """
+    True, gdy ``DownloadManager.download_sheet`` rozwinie godlo do hierarchii.
+
+    Lustro warunku z ``download_sheet`` (godla PL-2000 pobierane bezposrednio,
+    PL-1992 grubsze niz 1:10000 rozwijane do arkuszy 1:10000). CLI musi znac
+    ten warunek przed wywolaniem, bo tylko rozwiniecie wypelnia
+    ``manager.last_result`` — a zebranie go z puli watkow nie jest bezpieczne
+    (patrz ``_download_godlo_list``). Niepoprawne godlo zglosi
+    ``download_sheet`` — tu odpowiadamy False i nie dublujemy walidacji.
+    """
+    try:
+        parser = SheetParser(godlo)
+    except (ParseError, ValidationError):
+        return False
+    return parser.uklad != "2000" and parser.scale != "1:10000"
+
+
 def _download_godlo_list(
     manager: DownloadManager,
     godlo_list: list[str],
     skip_existing: bool,
     on_progress,
     max_workers: int,
-) -> list[Path]:
+) -> tuple[list[Path], list[str]]:
     """
     Download a list of godla, using parallel threads when max_workers > 1.
+
+    Godla grubsze niz 1:10000 rozwijaja sie w ``download_sheet`` do
+    ``download_hierarchy``, ktora polyka porazki pojedynczych arkuszy i zdaje
+    z nich sprawe wylacznie przez ``manager.last_result``. Ten atrybut jest
+    JEDEN na managera i kasowany na wejsciu do kazdego ``download_sheet``,
+    wiec z puli watkow nie da sie go przypisac do wlasciwego godla. Dlatego
+    lista, ktorej godla sie rozwijaja, idzie petla sekwencyjna — rownoleglosc
+    nie ginie, bo to ``download_hierarchy`` pobiera wtedy arkusze na
+    ``max_workers`` watkach (i znika zwielokrotnienie watkow: dotad bylo ich
+    ``max_workers`` razy ``max_workers``). Pula watkow zostaje dla list
+    arkuszy 1:10000, gdzie ``last_result`` i tak jest zawsze ``None``.
 
     Parameters
     ----------
@@ -685,12 +713,18 @@ def _download_godlo_list(
 
     Returns
     -------
-    list[Path]
-        List of downloaded file paths
+    tuple[list[Path], list[str]]
+        Downloaded file paths and godla arkuszy, ktorych nie udalo sie pobrac
+        (puste, gdy wszystko sie powiodlo). Niepusta druga pozycja jest juz
+        zgloszona na stderr — wywolujacy ma z niej zrobic kod wyjscia 1.
     """
-    if max_workers <= 1:
+    expands = any(_expands_to_hierarchy(godlo) for godlo in godlo_list)
+
+    if max_workers <= 1 or expands:
         # Sequential download
         all_paths: list[Path] = []
+        failed: list[str] = []
+        total = 0
         for godlo in godlo_list:
             result = manager.download_sheet(
                 godlo,
@@ -701,13 +735,24 @@ def _download_godlo_list(
                 all_paths.extend(result)
             else:
                 all_paths.append(result)
-        return all_paths
 
-    # Parallel download using ThreadPoolExecutor
+            summary = manager.last_result
+            if summary is None:
+                total += 1  # pojedynczy arkusz 1:10000 — sukces bez hierarchii
+            else:
+                total += summary.total
+                failed.extend(summary.failed)
+
+        _report_failed_sheets(failed, total)
+        return all_paths, failed
+
+    # Parallel download using ThreadPoolExecutor.
+    # Tu zaden godlo sie nie rozwija, wiec `last_result` zostaje None i nie ma
+    # czego zbierac — porazka pojedynczego arkusza leci wyjatkiem.
     import concurrent.futures
     import threading
 
-    all_paths: list[Path] = []
+    all_paths = []
     lock = threading.Lock()
 
     def _download_one(godlo: str) -> list[Path]:
@@ -733,7 +778,17 @@ def _download_godlo_list(
             except (DownloadError, ValidationError):
                 raise
 
-    return all_paths
+    return all_paths, []
+
+
+def _report_failed_sheets(failed: list[str], total: int) -> None:
+    """Wypisz na stderr arkusze, ktorych hierarchia nie zdolala pobrac."""
+    if not failed:
+        return
+    print(
+        f"Error: {len(failed)} of {total} sheets failed: {', '.join(failed)}",
+        file=sys.stderr,
+    )
 
 
 def _cmd_download_bbox(args: argparse.Namespace) -> int:
@@ -833,7 +888,7 @@ def _download_pl_bbox(
         print()
 
     try:
-        all_paths = _download_godlo_list(
+        all_paths, failed_sheets = _download_godlo_list(
             manager, godlo_list, skip_existing, on_progress, workers
         )
 
@@ -846,6 +901,10 @@ def _download_pl_bbox(
         return 1
     except ValidationError as e:
         print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    # komunikat wypisal juz `_download_godlo_list` — tu zostaje kod wyjscia
+    if failed_sheets:
         return 1
 
     return 0
@@ -1459,7 +1518,7 @@ def _download_pl_geometry(
         print()
 
     try:
-        all_paths = _download_godlo_list(
+        all_paths, failed_sheets = _download_godlo_list(
             manager, godlo_list, skip_existing, on_progress, workers
         )
 
@@ -1472,6 +1531,10 @@ def _download_pl_geometry(
         return 1
     except ValidationError as e:
         print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    # komunikat wypisal juz `_download_godlo_list` — tu zostaje kod wyjscia
+    if failed_sheets:
         return 1
 
     return 0
