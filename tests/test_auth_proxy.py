@@ -9,7 +9,59 @@ import json
 from io import BytesIO
 from unittest.mock import Mock, patch
 
+import pytest
+
 from kartograf.auth.proxy import CLMSCredentials, ProxyHandler, run_server
+
+
+@pytest.fixture(autouse=True)
+def _clean_clms_env(monkeypatch):
+    """CLMS_CREDENTIALS from the developer shell must not leak into tests."""
+    monkeypatch.delenv("CLMS_CREDENTIALS", raising=False)
+
+
+class TestCLMSCredentialsEnvLoad:
+    """Test CLMSCredentials.load_from_env (CLMS_CREDENTIALS)."""
+
+    def test_load_from_env_success(self, monkeypatch):
+        """Valid JSON in CLMS_CREDENTIALS -> True and credentials cached."""
+        monkeypatch.setenv(
+            "CLMS_CREDENTIALS",
+            json.dumps(
+                {
+                    "client_id": "x",
+                    "private_key": "k",
+                    "token_uri": "https://land.copernicus.eu/@@oauth2-token",
+                }
+            ),
+        )
+
+        creds = CLMSCredentials()
+        assert creds.load_from_env() is True
+        assert creds._credentials["client_id"] == "x"
+
+    def test_load_from_env_invalid_json(self, monkeypatch):
+        """Malformed JSON -> False, no exception, no credentials."""
+        monkeypatch.setenv("CLMS_CREDENTIALS", "{not json")
+
+        creds = CLMSCredentials()
+        assert creds.load_from_env() is False
+        assert creds._credentials is None
+
+    def test_load_from_env_missing(self, monkeypatch):
+        """CLMS_CREDENTIALS not set -> False."""
+        monkeypatch.delenv("CLMS_CREDENTIALS", raising=False)
+
+        creds = CLMSCredentials()
+        assert creds.load_from_env() is False
+
+    def test_load_from_env_missing_required_key(self, monkeypatch):
+        """JSON without private_key -> False (incomplete credentials)."""
+        monkeypatch.setenv("CLMS_CREDENTIALS", json.dumps({"client_id": "x"}))
+
+        creds = CLMSCredentials()
+        assert creds.load_from_env() is False
+        assert creds._credentials is None
 
 
 class TestCLMSCredentialsKeychainLoad:
@@ -111,6 +163,41 @@ class TestCLMSCredentialsToken:
             token = creds.get_access_token()
         assert token == "new_token"
 
+    def test_get_access_token_loads_env_first(self, monkeypatch):
+        """CLMS_CREDENTIALS set -> token exchanged without touching Keychain."""
+        import jwt as jwt_module
+
+        monkeypatch.setenv(
+            "CLMS_CREDENTIALS",
+            json.dumps(
+                {
+                    "client_id": "test_client",
+                    "user_id": "test_user",
+                    "token_uri": "https://land.copernicus.eu/@@oauth2-token",
+                    "private_key": "fake_key",
+                }
+            ),
+        )
+
+        creds = CLMSCredentials()
+
+        mock_resp = Mock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"access_token": "env_token"}
+        mock_resp.raise_for_status = Mock()
+
+        with (
+            patch.object(
+                creds, "load_from_keychain", return_value=False
+            ) as mock_keychain,
+            patch.object(jwt_module, "encode", return_value="fake_assertion"),
+            patch("requests.post", return_value=mock_resp),
+        ):
+            token = creds.get_access_token()
+
+        assert token == "env_token"
+        mock_keychain.assert_not_called()
+
     def test_get_access_token_no_creds(self):
         """No credentials and keychain fails -> None."""
         creds = CLMSCredentials()
@@ -149,6 +236,19 @@ class TestCLMSCredentialsAvailability:
         creds = CLMSCredentials()
         with patch.object(creds, "load_from_keychain", return_value=True):
             assert creds.is_available is True
+
+    def test_is_available_prefers_env_over_keychain(self, monkeypatch):
+        """CLMS_CREDENTIALS set -> available without querying Keychain."""
+        monkeypatch.setenv(
+            "CLMS_CREDENTIALS",
+            json.dumps({"client_id": "x", "private_key": "k"}),
+        )
+
+        creds = CLMSCredentials()
+        with patch.object(creds, "load_from_keychain") as mock_keychain:
+            assert creds.is_available is True
+
+        mock_keychain.assert_not_called()
 
     def test_is_available_no_keychain(self):
         """No cached credentials, keychain fails -> False."""

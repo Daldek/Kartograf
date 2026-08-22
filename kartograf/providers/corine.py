@@ -576,8 +576,10 @@ class CorineProvider(LandCoverProvider):
 
         url = self._construct_wms_url(target_bounds, year, width_px, height_px)
 
-        logger.info(
-            f"Downloading CLC {year} preview via WMS (no CLMS token - styled image)"
+        logger.warning(
+            "Downloading CLC %s preview via WMS "
+            "(no CLMS credentials - styled PNG, not class codes)",
+            year,
         )
 
         return self._download_with_retry(
