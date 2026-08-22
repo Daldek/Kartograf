@@ -69,6 +69,10 @@ class DownloadResult:
         Godlo identifiers that failed to download
     skipped : list[str]
         Godlo identifiers that were skipped (already existed)
+
+    Notes
+    -----
+    Populated by `download_hierarchy` and exposed as `DownloadManager.last_result`.
     """
 
     succeeded: list[Path] = field(default_factory=list)
@@ -201,6 +205,7 @@ class DownloadManager:
         self._default_ext = self._provider.default_extension
         self._max_workers = max(1, max_workers)
         self._sidecar_extra = sidecar_extra
+        self.last_result: DownloadResult | None = None
 
     @property
     def vertical_crs(self) -> str:
@@ -317,12 +322,16 @@ class DownloadManager:
 
         Raises
         ------
-        DownloadError
-            If any download fails
         ValidationError
             If target_scale is invalid
         ParseError
             If godlo is invalid
+
+        Notes
+        -----
+        Per-sheet download failures do not raise; they are collected in
+        `self.last_result.failed` (see `DownloadResult`). The returned list
+        contains downloaded AND skipped (pre-existing) files.
 
         Examples
         --------
@@ -398,7 +407,7 @@ class DownloadManager:
     ) -> list[Path]:
         """Execute sequential download of all descendants."""
         downloaded_paths = []
-        failed_count = 0
+        result = DownloadResult()
 
         for i, descendant in enumerate(descendants, 1):
             current_godlo = descendant.godlo
@@ -418,6 +427,7 @@ class DownloadManager:
                                 message="Already exists",
                             )
                         )
+                    result.skipped.append(current_godlo)
                     downloaded_paths.append(target_path)
                     continue
 
@@ -434,6 +444,7 @@ class DownloadManager:
 
                 path = self._provider.download(current_godlo, target_path)
                 self._write_sidecar(path, {"godlo": current_godlo})
+                result.succeeded.append(path)
                 downloaded_paths.append(path)
 
                 if on_progress:
@@ -447,7 +458,7 @@ class DownloadManager:
                     )
 
             except DownloadError as e:
-                failed_count += 1
+                result.failed.append(current_godlo)
                 logger.error(f"Failed to download {current_godlo}: {e}")
 
                 if on_progress:
@@ -461,9 +472,10 @@ class DownloadManager:
                         )
                     )
 
+        self.last_result = result
         logger.info(
-            f"Hierarchy download complete: {len(downloaded_paths)}/{total} successful, "
-            f"{failed_count} failed"
+            f"Hierarchy download complete: {len(result.succeeded)} downloaded, "
+            f"{len(result.skipped)} skipped, {len(result.failed)} failed (of {total})"
         )
 
         return downloaded_paths
@@ -478,7 +490,7 @@ class DownloadManager:
     ) -> list[Path]:
         """Execute parallel download of all descendants using ThreadPoolExecutor."""
         downloaded_paths: list[Path] = []
-        failed_count = 0
+        result = DownloadResult()
         lock = threading.Lock()
         counter = [0]  # mutable counter for progress tracking
 
@@ -500,7 +512,7 @@ class DownloadManager:
                     # Unexpected exception from the future
                     logger.error(f"Unexpected error downloading {godlo_id}: {e}")
                     with lock:
-                        failed_count += 1
+                        result.failed.append(godlo_id)
                         counter[0] += 1
                         current_count = counter[0]
                     if on_progress:
@@ -520,9 +532,13 @@ class DownloadManager:
                     current_count = counter[0]
 
                     if status in ("completed", "skipped") and path is not None:
+                        if status == "skipped":
+                            result.skipped.append(current_godlo)
+                        else:
+                            result.succeeded.append(path)
                         downloaded_paths.append(path)
                     elif status == "failed":
-                        failed_count += 1
+                        result.failed.append(current_godlo)
 
                 if on_progress:
                     if status == "skipped":
@@ -555,9 +571,10 @@ class DownloadManager:
                             )
                         )
 
+        self.last_result = result
         logger.info(
-            f"Hierarchy download complete: {len(downloaded_paths)}/{total} successful, "
-            f"{failed_count} failed"
+            f"Hierarchy download complete: {len(result.succeeded)} downloaded, "
+            f"{len(result.skipped)} skipped, {len(result.failed)} failed (of {total})"
         )
 
         return downloaded_paths

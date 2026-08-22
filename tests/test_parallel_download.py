@@ -8,6 +8,7 @@ This module tests:
 - CLI --workers flag
 """
 
+import logging
 import threading
 from pathlib import Path
 from unittest.mock import Mock, PropertyMock, patch
@@ -231,6 +232,83 @@ class TestParallelDownloadHierarchy:
 
         manager = DownloadManager(max_workers=-5)
         assert manager._max_workers == 1
+
+
+class TestDownloadHierarchyLastResult:
+    """Testy atrybutu DownloadManager.last_result wypelnianego przez hierarchie."""
+
+    @pytest.fixture
+    def flaky_provider(self):
+        """Provider: godlo konczace sie na '-1' pada, reszta pobiera sie poprawnie."""
+        provider = Mock(spec=GugikProvider)
+        type(provider).default_extension = PropertyMock(return_value=".asc")
+
+        def mock_download(godlo, path, timeout=30):
+            if godlo.endswith("-1"):
+                raise DownloadError("Network error", godlo=godlo)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"ASC data")
+            return path
+
+        provider.download = mock_download
+        return provider
+
+    def test_last_result_is_none_before_download(self, tmp_path, flaky_provider):
+        """Przed pierwsza hierarchia last_result jest None."""
+        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
+
+        assert manager.last_result is None
+
+    @pytest.mark.parametrize("workers", [1, 4])
+    def test_last_result_counts_succeeded_skipped_failed(
+        self, tmp_path, flaky_provider, caplog, workers
+    ):
+        """last_result rozdziela pobrane, pominiete i nieudane arkusze."""
+        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
+
+        existing_godlo = "N-34-130-D-d-2-2"
+        existing_path = manager.storage.get_path(existing_godlo, ".asc")
+        existing_path.parent.mkdir(parents=True, exist_ok=True)
+        existing_path.write_bytes(b"existing")
+
+        with caplog.at_level(logging.INFO, logger="kartograf.download.manager"):
+            paths = manager.download_hierarchy(
+                "N-34-130-D-d-2", "1:10000", max_workers=workers
+            )
+
+        assert manager.last_result is not None
+        assert manager.last_result.failed == ["N-34-130-D-d-2-1"]
+        assert set(manager.last_result.skipped) == {existing_godlo}
+        assert len(manager.last_result.succeeded) == 2
+        assert manager.last_result.total == 4
+
+        # Typ zwracany bez zmian: lista sciezek (2 pobrane + 1 pominiety)
+        assert len(paths) == 3
+        assert all(isinstance(p, Path) for p in paths)
+
+        assert "2 downloaded, 1 skipped, 1 failed" in caplog.text
+
+    def test_last_result_counts_unexpected_error_as_failed(self, tmp_path):
+        """Wyjatek spoza DownloadError w trybie rownoleglym trafia do failed."""
+        provider = Mock(spec=GugikProvider)
+        type(provider).default_extension = PropertyMock(return_value=".asc")
+
+        def mock_download(godlo, path, timeout=30):
+            if godlo.endswith("-1"):
+                raise RuntimeError("boom")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"ASC data")
+            return path
+
+        provider.download = mock_download
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+
+        paths = manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=4)
+
+        assert len(paths) == 3
+        assert manager.last_result is not None
+        assert manager.last_result.failed == ["N-34-130-D-d-2-1"]
+        assert len(manager.last_result.succeeded) == 3
 
 
 class TestProviderThreadSafety:
