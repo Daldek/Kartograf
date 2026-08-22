@@ -82,7 +82,7 @@
 
 ## Ostatnia sesja
 
-**Data:** 2026-08-10 — 2026-08-18 (sekcje datowane ponizej)
+**Data:** 2026-08-10 — 2026-08-23 (sekcje datowane ponizej)
 
 ### Merge etapu 1 do develop (2026-08-12)
 - `feature/etap1-cz-dmr` zmergowana do `develop` fast-forwardem do `0738ae0`
@@ -466,6 +466,41 @@ plany superpowers), nastepnie naprawa wszystkich znalezisk. Najwazniejsze:
   EVRF2007 9651 -> 5621 (ADR-023d), statusy "WYKONANY" na planach,
   domkniecie sekcji 12 specu etapu 1
 
+### Audyt przedwydaniowy 0.7.0 (2026-08-22 — 2026-08-23)
+
+**Faza A (audyt, 2026-08-22):** 9 rownoleglych agentow audytu (read-only,
+cala baza kodu + docs) + 7 agentow weryfikacyjnych (kontrprobka ustalen na
+zywym kodzie/testach) — wynik: **C=19 / I=59 / M=61** (Critical/Important/
+Minor), **0 ustalen obalonych** (REFUTED) przy weryfikacji. Plan napraw:
+`docs/superpowers/plans/2026-08-22-release-0.7.0-audit.md` — 26 zadan,
+tabela "Ustalenie -> Zadanie" jest trwalym sladem, ktore ustalenie trafilo
+do ktorego zadania albo zostalo swiadomie odlozone (ruling "odlozone":
+A2-4, A2-7, A4-12, A5-3, A5-4, A5-5, A5-6, A5-7, A8-3, A8-4, A4-10 —
+patrz nowa sekcja "Backlog po audycie 0.7.0" nizej).
+
+**Faza B (naprawa, 2026-08-22 — 2026-08-23):** wykonanie 26 zadan (TDD,
+subagent-driven) na galezi `fix/release-0.7.0-audit` (odgalezionej od
+`develop` @ `f432403`, tej samej co merge etapu 1 wyzej) — **62 commity**
+(`git log --oneline f432403..HEAD`), w tym zadanie 26 (ta aktualizacja
+`DEVELOPMENT_STANDARDS.md`/`PROGRESS.md`). Rozklad wg typu Conventional
+Commits: 37 `fix`, 15 `docs`, 3 `test`, 2 `refactor`, 2 `feat`, 2 `chore`,
+1 `perf`.
+
+**Wynik na koniec fazy B (kanoniczny przebieg kontrolera, po zad. 21,
+niezmieniony przez zad. 22-26 — docs-only):**
+`pytest tests/ --cov=kartograf --cov-report=term -q -p no:cacheprovider
+-m "not live"` → **1708 testow** (1708 collected), pokrycie **93%**
+(5349 stmts / 397 miss, 92.58% w mierze zaokraglonej), `ruff check` i
+`ruff format --check` czyste, `mypy kartograf/` **32 bledy w 9 plikach**
+(baseline byl 33 -> nowy baseline **32**, zero nowego dlugu).
+
+Pelne raporty per-zadanie (implementer + kontroler, TDD Evidence: RED/GREEN,
+self-review) sa w `.superpowers/sdd/2026-08-22-release-0.7.0-audit/` —
+katalog **git-ignored, NIE w repo** (jak ledger etapu 1, patrz adnotacja
+2026-08-18 wyzej — swiadoma decyzja tym razem, nie utrata). Trwaly slad w
+repo: tabela "Ustalenie -> Zadanie" w planie, ten wpis w PROGRESS.md,
+commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
+
 ### Nastepne kroki
 1. ~~Merge `feature/etap1-cz-dmr` do `develop`~~ — **WYKONANE 2026-08-12**
    (fast-forward do 0738ae0, suita 1402 passed na wyniku, galaz usunieta).
@@ -503,6 +538,25 @@ plany superpowers), nastepnie naprawa wszystkich znalezisk. Najwazniejsze:
    przy wielu wywolaniach); duplikacja regul walidacji sentineli miedzy
    galezia PL i CZ w CLI; brak separatora przed "Remedium:" w komunikacie
    bledu KRON86
+7. **Audyt przedwydaniowy 0.7.0 — finalny review calej galezi**
+   `fix/release-0.7.0-audit` (26 zadan wykonanych, patrz sekcja "Audyt
+   przedwydaniowy 0.7.0" wyzej) przed merge do `develop`.
+8. **Fala naprawcza minorow** z audytu — patrz nowa sekcja "Backlog po
+   audycie 0.7.0" nizej.
+9. **Merge `fix/release-0.7.0-audit` do `develop`.**
+10. **Zadanie licencyjne uzytkownika** — `authors` w `pyproject.toml` ma
+    dzis placeholder `"Piotr <piotr@example.com>"`; wymaga prawdziwych
+    danych uzytkownika (i decyzji o polu `license`) przed wydaniem.
+11. **Bump wersji + wydanie 0.7.0**: `kartograf.__version__`/
+    `pyproject.toml` `0.7.0-dev` -> `0.7.0`, data w CHANGELOG, tag
+    `v0.7.0`, push `develop` na origin (patrz pkt 3 wyzej — 71+ commitow
+    niewypchnietych, plus 62 z audytu 0.7.0 po zmergowaniu tej galezi).
+12. **Checklista release** (z planu audytu 0.7.0): build sdist/wheel
+    (`setuptools`); zywa weryfikacja CORINE GeoTIFF z prawdziwymi
+    credentials CLMS vs allowlista hostow (Auth Proxy); E2E kafelkowania
+    `exportImage` przy wyniku >16 Mpx (sciezka chunkowana
+    `mosaic_and_crop(dst_path=...)`) — nigdy nie uruchomione na zywo;
+    3 przebiegi pelnej suity testow pod rzad (kontrola stabilnosci/flakow).
 
 ## Backlog
 
@@ -528,3 +582,95 @@ plany superpowers), nastepnie naprawa wszystkich znalezisk. Najwazniejsze:
       (zamiast prostokatnej obwiedni), ujednolicenie
       `extra.parent_request.bbox_crs` miedzy trybami jawny/auto
 - [ ] Etap 3 — ZABAGED (wektorowa baza topograficzna CZ, 149 warstw)
+
+#### Backlog po audycie 0.7.0
+
+Wpisy swiadomie odlozone rulingiem audytu przedwydaniowego 0.7.0
+(2026-08-22/23, plan `docs/superpowers/plans/2026-08-22-release-0.7.0-audit.md`)
++ dodatkowe znaleziska zebrane przy review poszczegolnych zadan. Oznaczenia
+`A<n>-<m>` odsylaja do tabeli "Ustalenie -> Zadanie" w planie (slad decyzji,
+ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
+
+- [ ] A2-4 — rozjazd obslugi wyjatkow spoza `DownloadError` miedzy trybem
+      sekwencyjnym a rownoleglym `DownloadManager.download_hierarchy`
+      (sekwencyjny przerywa hierarchie, `last_result` wtedy `None`;
+      rownolegly izoluje blad do pojedynczego zadania) — wymaga ADR o
+      polityce wyjatkow; `OSError` (np. brak miejsca na dysku) POWINIEN
+      przerywac oba tryby.
+- [ ] A2-7 — fallback `urls[0]` w `_get_opendata_url` moze scache'owac URL
+      innej warstwy niz zamierzona (Minor) — podniesc log do `warning`,
+      rozwazyc weryfikacje zasiegu przy `FEATURE_COUNT>1`.
+- [ ] A5-4 — regula "5m => EVRF2007" zaimplementowana w 3 miejscach
+      (walidacja w `GugikProvider`, cicha korekta w `DownloadManager`,
+      fabryka `create_nmt_provider`) — swiadome warstwowanie z etapu 0;
+      sprzatanie razem z A5-5.
+- [ ] A5-5 — hierarchia wyjatkow: providery PL rzucaja `ValueError`/
+      `KeyError` zamiast `ValidationError` (37 miejsc w kodzie, 30 asercji
+      `pytest.raises(ValueError)` w 11 plikach testowych, CHANGELOG
+      dokumentuje `ValueError` jako kontrakt publiczny) — BREAKING, osobna
+      zmiana z przejsciowym `class ValidationError(KartografError, ValueError)`.
+- [ ] A5-7 — `GugikLazProvider.download(url, ...)` lamie LSP wzgledem
+      `BaseProvider.download(godlo, ...)` (Minor — LAZ ma i tak osobny
+      przeplyw CLI, omija ten kontrakt) — zmiana nazwy na `download_tile`
+      razem z etapem 2 (LAZ CZ).
+- [ ] A8-3 — testy toru CORINE GeoTIFF (CLMS/OAuth2): `_exchange_token`,
+      `_download_via_clms_direct`, `_poll_clms_task` (happy + blad) — dlug
+      sprzed 0.6.0, czesciowo pokryty e2e (zad. 9); `providers/corine.py`
+      dzis 54% pokrycia (patrz DEVELOPMENT_STANDARDS 10.1) — M.
+- [ ] A8-4 — testy `ProxyHandler.do_POST` (Bearer doklejony, 500 bez
+      tokenu, 400 zly JSON, 404) — dlug sprzed 0.6.0, czesciowo pokryty
+      e2e (zad. 9); `auth/proxy.py` jest juz >= 80% pokrycia calosciowo,
+      ale sam handler HTTP pozostaje bez testow jednostkowych — M.
+- [ ] A4-10 (reszta) — sekret wspoldzielony rodzic-dziecko (`X-Proxy-Auth`,
+      uwierzytelnienie klienta wobec proxy) + SIGKILL-safe lifecycle
+      podprocesu (dzis `atexit`); `AuthProxyClient.__new__` singletonu poza
+      lockiem i `_proxy_process` per-instancja (dwa watki moga wystartowac
+      dwa proxy); `kill()` bez `wait()` (ryzyko zombie) — zmiana protokolu
+      + ADR.
+- [ ] A5-3 — 6 providerow PL/EU ma wlasne kopie pobierania z retry zamiast
+      wspolnego `transport.download_to` (spec etapu 0 sekcja 6.5 swiadomie
+      odlozyl migracje); skutek uboczny przyszlej zmiany: backoff
+      2s/4s -> 1s/2s.
+- [ ] A5-6 — polityka zero-ballpark z `transform/crs.py` obowiazuje dzis
+      tylko na sciezce CZ — 9 miejsc (w tym `core/geometry.py:_transform_bbox`,
+      CRS z pliku uzytkownika) uzywa surowego `Transformer.from_crs`
+      (mozliwy cichy ballpark dla obcych datow typu DHDN/Stereo70) — spec
+      etapu 0 swiadomie odlozyl migracje na `build_pinned_transform`.
+- [ ] A1-9 — rozdzielenie katalogow PL-2000 (`nmt_2000_<res>` wg ADR-017)
+      odlozone — zmienilaby uklad katalogow istniejacych uzytkownikow
+      (`skip_existing` polega na dzisiejszych sciezkach); dzis wspolny
+      `nmt_2000_1m`.
+- [ ] A1-8 — aliasy etykiet skal PL-1992 zgodne z nomenklatura GUGiK
+      (1:5000 dla godla 7-czlonowego) — BREAKING, dopiero w nastepnej
+      wersji major.
+- [ ] Minor CLI (A3-8/A3-9/A3-11/A3-12/A3-13/A4-20, opcjonalne): ostrzezenie
+      o mieszanych ukladach pionowych w auto-splicie; `parent_request` w
+      sidecarach LAZ; CORINE WMS cap 4096 px bez korekty proporcji bboxa
+      (lamie proporcje per os); `--scale`/`--resolution 5m` z godlem TM33
+      bez walidacji; odwrocony bbox CZ.
+- [ ] A8-7 / CI — egzekwowanie progow warstwowych pokrycia (core >= 80%,
+      patrz DEVELOPMENT_STANDARDS 10.1) + pipeline CI (GitHub Actions)
+      uruchamiajacy testy z `-m "not live"`.
+- [ ] `_generate_output_path` w `LandCoverManager` nie roznicuje
+      year/property/depth/format parametrow pobrania — ryzyko kolizji
+      nazw plikow przy roznych parametrach tego samego zrodla/obszaru
+      (pre-existing, poza rulingiem audytu, zebrane przy review).
+- [ ] Deskryptor `pl.gugik.nmpt` nie deklaruje kanalu WCS mimo dzialajacego
+      `GugikNmptProvider.download_bbox` — rozjazd deskryptor/provider, do
+      wyrownania.
+- [ ] `LandCoverManager` wola zdeprecjonowany alias `download_by_teryt`
+      zamiast kanonicznego `download_by_admin_unit` — kosmetyka po A4-12
+      (ktory jako niespojnosc funkcjonalna jest juz zamkniety, patrz
+      raport zadania 26), ale nazwa wywolania w managerze wciaz wskazuje
+      na alias, nie kanoniczna metode.
+- [ ] `percent` w `get_hsg_statistics` liczony w pikselach, `area_ha`
+      geodezyjnie — niespojne dla rastrow w ukladach geograficznych
+      (rozny rozmiar piksela na siatce vs w metrach).
+- [ ] Blokada sieci w `tests/conftest.py` nie obejmuje `socket.getaddrinfo`
+      ani sieci PROJ (`pyproj.network`) — hartowanie izolacji offline.
+- [ ] `TransformError` w petli krajow `_dispatch_area` konczy caly proces
+      kodem 1 mimo czesciowego sukcesu (np. PL pobrane, CZ nie) — do
+      etapu 2 (auto-split wielokrajowy).
+- [ ] E2E kafelkowania `exportImage` (wynik >16 Mpx, sciezka chunkowana
+      `mosaic_and_crop(dst_path=...)`) nigdy nie uruchomione na zywo — do
+      checklisty release / etapu 2.
