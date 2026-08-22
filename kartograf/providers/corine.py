@@ -541,24 +541,29 @@ class CorineProvider(LandCoverProvider):
         timeout: int,
     ) -> Path:
         """Download styled preview via WMS."""
-        # Envelope of the requested rectangle in the CRS of the WMS request:
+        # Aspect ratio always comes from the metric (EPSG:3857) envelope, so
+        # the ground resolution along Y matches the one along X. Degrees would
+        # not do: plate carree is not conformal, a pixel square in degrees is
+        # 1/cos(lat) taller on the ground (~1.6x in Poland).
+        aspect_bounds = self._transform_bbox_to_epsg3857(bbox)
+
+        # Envelope actually sent as BBOX, in the CRS of the WMS request:
         # EPSG:3857 for the EEA endpoint, EPSG:4326 for the DLR fallback
         # (same branch as in _construct_wms_url).
         if year in self.EEA_YEARS:
-            target_bounds = self._transform_bbox_to_epsg3857(bbox)
+            target_bounds = aspect_bounds
         else:
             target_bounds = self._transform_bbox_to_wgs84(bbox)
 
-        # Width follows the ground resolution along X; height follows the
-        # aspect ratio of the envelope actually sent as BBOX, so the image
-        # is not stretched.
+        # Width follows the ground resolution along X, height follows the
+        # aspect ratio of the requested area on the ground.
         width_px = max(1, int((bbox.max_x - bbox.min_x) / self.WMS_RESOLUTION))
         height_px = max(
             1,
             round(
                 width_px
-                * (target_bounds[3] - target_bounds[1])
-                / (target_bounds[2] - target_bounds[0])
+                * (aspect_bounds[3] - aspect_bounds[1])
+                / (aspect_bounds[2] - aspect_bounds[0])
             ),
         )
 

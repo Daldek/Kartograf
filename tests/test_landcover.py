@@ -704,6 +704,31 @@ class TestCorineProviderDownload:
         height = int(re.search(r"HEIGHT=(\d+)", url).group(1))
         assert 98 <= height <= 102
 
+    def test_download_via_wms_dlr_height_from_metric_aspect(self, tmp_path):
+        """DLR (1990, EPSG:4326 BBOX): height keeps the ground resolution.
+
+        Plate carree is not conformal - a pixel that is square in degrees is
+        1/cos(lat) taller on the ground, so the aspect ratio must come from
+        the metric (EPSG:3857) envelope, not from the degrees sent as BBOX.
+        """
+        import re
+
+        provider = CorineProvider(use_proxy=False)
+        # 10km x 10km bbox at 100m resolution -> 100 x ~100 pixels
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        output = tmp_path / "test.png"
+
+        with patch.object(
+            provider, "_download_with_retry", return_value=output
+        ) as mock_dl:
+            provider._download_via_wms(bbox, output, 1990, 60)
+
+        url = mock_dl.call_args.kwargs["url"]
+        assert "geoservice.dlr.de" in url  # DLR branch, BBOX in degrees
+        assert "WIDTH=100" in url
+        height = int(re.search(r"HEIGHT=(\d+)", url).group(1))
+        assert 98 <= height <= 102
+
     def test_download_via_wms_max_size_limit(self, tmp_path):
         """Huge bbox dimensions capped at 4096."""
         provider = CorineProvider(use_proxy=False)
