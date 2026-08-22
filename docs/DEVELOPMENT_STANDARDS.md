@@ -482,6 +482,35 @@ timeout = 30
 pytest tests/ --cov=kartograf --cov-report=html --cov-fail-under=60
 ```
 
+Powyzsza komenda (oraz `[tool.coverage.report] fail_under = 60` w
+`pyproject.toml`) egzekwuje **wylacznie prog globalny** (60%). `pytest-cov`/
+`coverage.py` nie ma wbudowanego progu per-warstwa ani per-plik — prog
+**>= 80%** dla warstwy core (parser, providers, manager) jest dzis
+kontrolowany recznie, druga komenda liczaca pokrycie tylko dla tych
+katalogow (na tych samych danych `.coverage`, bez ponownego uruchamiania
+testow):
+
+```bash
+pytest tests/ --cov=kartograf --cov-report=term -q -p no:cacheprovider -m "not live"
+coverage report --include='kartograf/core/*,kartograf/providers/*,kartograf/download/*' --fail-under=80
+```
+
+**Znane odstepstwa (0.7.0)** — moduly warstwy core/providers ponizej progu
+80%, zidentyfikowane `pytest tests/ -q -p no:cacheprovider --cov=kartograf
+--cov-report=term-missing | grep -E '^kartograf/.* [0-7][0-9]%'` (kanoniczny
+przebieg audytu 0.7.0: 1708 testow, 93% pokrycia calosci pakietu):
+- `kartograf/providers/corine.py` — 54%: tor CLMS/OAuth2
+  (`_exchange_token`, `_download_via_clms_direct`, `_poll_clms_task`) bez
+  testow, dlug sprzed 0.6.0; backlog 0.7.1 (A8-3).
+- `kartograf/providers/base.py` — 73%: domyslne/abstrakcyjne metody `ABC`
+  (m.in. `download_by_admin_unit`, fallback `NotImplementedError`) sa
+  nadpisywane przez kazdego konkretnego providera — sciezka bazowa nie
+  jest cwiczona bezposrednio w testach warstwy bazowej.
+
+Progi warstwowe nie sa dzis egzekwowane automatycznie w CI (workflow CI
+nie istnieje w tym repo) — do wprowadzenia razem z zadaniem CI (backlog
+A8-7, patrz `docs/PROGRESS.md`).
+
 ### 10.2 Nazewnictwo testow
 
 ```python
@@ -534,6 +563,14 @@ def test_download_with_mock_http(sample_godlo):
         result = provider.download(sample_godlo, Path("/tmp/test.asc"))
         assert result.exists()
 ```
+
+**Izolacja sieci:** `tests/conftest.py` blokuje kazde polaczenie spoza
+loopback (`_block_network`, autouse) — testy jednostkowe MUSZA byc offline;
+siec realna wymaga jawnego markera `@pytest.mark.live` (domyslnie
+odfiltrowanego przez `-m "not live"`), a GetCapabilities WMS jest domyslnie
+serwowane offline przez stub (`_offline_wms_layers`, autouse), ktory testy
+cwiczace sam `_fetch_wms_layers` jawnie wylaczaja markerem
+`@pytest.mark.real_wms_layers`.
 
 ---
 
@@ -656,9 +693,17 @@ def download_large_file(url: str, filepath: Path) -> None:
 
 | Operacja | Timeout |
 |----------|---------|
-| GUGiK (NMT) | 30s |
-| Land Cover (BDOT10k, CORINE) | 60s |
-| SoilGrids (ISRIC WCS) | 60s |
+| GUGiK NMT / NMPT | 30s |
+| GUGiK Ortofoto | 60s |
+| GUGiK LAZ — discovery (WFS) | 30s |
+| GUGiK LAZ — pobieranie kafli | 60s |
+| BDOT10k (wszystkie `download_by_*`, w tym `_get_teryt_for_point`) | 120s |
+| CORINE — bbox/godlo | 60s |
+| CORINE — TERYT | 120s |
+| CUZK (DMR 5G/4G) | 60s |
+| SoilGrids — bbox/HSG | 120s |
+| SoilGrids — przez godlo | 60s |
+| HSG (kalkulacja) | 120s |
 | Retry: max 3 proby, exponential backoff | — |
 
 ---
