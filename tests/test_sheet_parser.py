@@ -939,11 +939,40 @@ class TestBBoxesIntersect:
         assert _bboxes_intersect(a, b) is False
 
     def test_touching_edge(self):
-        """Test boxów stykających się krawędzią — traktowane jako przecinające."""
+        """Test boxów stykających się krawędzią — NIE przecinają się (A1-7)."""
         a = BBox(0, 0, 5, 5, "EPSG:4326")
         b = BBox(5, 0, 10, 5, "EPSG:4326")
-        # Touching at edge (a.max_x == b.min_x) — considered intersecting
-        # (shared boundary counts as overlap)
+        # Styk krawędzią (a.max_x == b.min_x) — pole przecięcia = 0
+        assert _bboxes_intersect(a, b) is False
+
+    def test_touching_corner(self):
+        """Test boxów stykających się narożnikiem — NIE przecinają się."""
+        a = BBox(0, 0, 5, 5, "EPSG:4326")
+        b = BBox(5, 5, 10, 10, "EPSG:4326")
+        assert _bboxes_intersect(a, b) is False
+
+    def test_overlap_below_tolerance_is_not_intersection(self):
+        """Nakładka mniejsza niż tolerancja krawędzi — traktowana jak styk."""
+        a = BBox(0, 0, 5, 5, "EPSG:4326")
+        b = BBox(5 - 1e-12, 0, 10, 5, "EPSG:4326")
+        assert _bboxes_intersect(a, b) is False
+
+    def test_point_bbox_inside_box_intersects(self):
+        """Zdegenerowany bbox (punkt) wewnątrz boxa — przecina."""
+        a = BBox(2, 2, 2, 2, "EPSG:4326")
+        b = BBox(0, 0, 5, 5, "EPSG:4326")
+        assert _bboxes_intersect(a, b) is True
+
+    def test_point_bbox_on_max_edge_does_not_intersect(self):
+        """Punkt na krawędzi max boxa — nie przecina (półotwarty przedział)."""
+        a = BBox(5, 2, 5, 2, "EPSG:4326")
+        b = BBox(0, 0, 5, 5, "EPSG:4326")
+        assert _bboxes_intersect(a, b) is False
+
+    def test_point_bbox_on_min_edge_intersects(self):
+        """Punkt na krawędzi min boxa — przecina (półotwarty przedział)."""
+        a = BBox(0, 2, 0, 2, "EPSG:4326")
+        b = BBox(0, 0, 5, 5, "EPSG:4326")
         assert _bboxes_intersect(a, b) is True
 
     def test_contained_box(self):
@@ -1093,6 +1122,44 @@ class TestFindSheetsForBBox:
         for godlo in result:
             parser = SheetParser(godlo)
             assert parser.scale == "1:500000"
+
+    def test_bbox_equal_to_sheet_returns_only_its_children(self):
+        """Bbox równy arkuszowi 1:100k → tylko jego 4 arkusze 1:50k (A1-7)."""
+        bbox = SheetParser("N-34-130-D").get_bbox(crs="EPSG:4326")
+        result = find_sheets_for_bbox(bbox, "1:50000")
+        assert result == [
+            "N-34-130-D-a",
+            "N-34-130-D-b",
+            "N-34-130-D-c",
+            "N-34-130-D-d",
+        ]
+
+    def test_bbox_equal_to_10k_sheet_returns_itself(self):
+        """Bbox równy arkuszowi 1:10k → dokładnie ten jeden arkusz (A1-7)."""
+        godlo = "N-34-130-D-d-2-4"
+        bbox = SheetParser(godlo).get_bbox(crs="EPSG:4326")
+        assert find_sheets_for_bbox(bbox, "1:10000") == [godlo]
+
+    def test_bbox_equal_to_100k_sheet_on_1m_grid_returns_four(self):
+        """Bbox arkusza stykającego się z krawędzią 1:1M → 4 arkusze potomne."""
+        bbox = SheetParser("N-34-1").get_bbox(crs="EPSG:4326")
+        result = find_sheets_for_bbox(bbox, "1:100000")
+        assert result == ["N-34-1-A", "N-34-1-B", "N-34-1-C", "N-34-1-D"]
+
+    def test_point_bbox_on_grid_line_returns_single_sheet(self):
+        """Zdegenerowany bbox na przecięciu linii siatki → dokładnie 1 arkusz."""
+        bbox = BBox(21.0, 52.0, 21.0, 52.0, "EPSG:4326")
+        result = find_sheets_for_bbox(bbox)
+        assert len(result) == 1
+        sheet_bbox = SheetParser(result[0]).get_bbox(crs="EPSG:4326")
+        # Arkusz na NE od przecięcia linii siatki
+        assert sheet_bbox.min_x == pytest.approx(21.0, abs=1e-9)
+        assert sheet_bbox.min_y == pytest.approx(52.0, abs=1e-9)
+
+    def test_point_bbox_inside_sheet_returns_single_sheet(self):
+        """Zdegenerowany bbox wewnątrz arkusza → dokładnie 1 arkusz."""
+        result = find_sheets_for_bbox(BBox(21.1, 52.1, 21.1, 52.1, "EPSG:4326"))
+        assert len(result) == 1
 
     def test_roundtrip_single_sheet_all_scales(self):
         """Test roundtrip: get_bbox → find_sheets_for_bbox dla różnych skal."""

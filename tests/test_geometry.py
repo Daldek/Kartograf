@@ -992,7 +992,7 @@ class TestFindSheetsForGeometry:
         assert call_args[0][1] == "1:25000"
 
     def test_find_sheets_for_geometry_with_points(self, shp_points_epsg2180):
-        """Kazdy punkt daje arkusz 1:10000 zawierajacy ten punkt."""
+        """Kazdy punkt daje DOKLADNIE jeden arkusz 1:10000 zawierajacy ten punkt."""
         from kartograf.core.sheet_parser import SheetParser
 
         result = find_sheets_for_geometry(shp_points_epsg2180, target_scale="1:10000")
@@ -1005,7 +1005,10 @@ class TestFindSheetsForGeometry:
                 for godlo in result
                 if _bbox_contains(SheetParser(godlo).get_bbox("EPSG:2180"), x, y)
             ]
-            assert containing, f"no sheet in {result} contains ({x}, {y})"
+            assert len(containing) == 1, (
+                f"expected exactly one sheet in {result} for ({x}, {y}), "
+                f"got {containing}"
+            )
 
     def test_empty_point_feature_does_not_raise(self, gpkg_empty_and_point):
         """Empty geometry does not blow up sheet lookup (no NaN reaches int())."""
