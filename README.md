@@ -45,8 +45,13 @@ kartograf download N-34-130-D --scale 1:10000 --resolution 5m --output ./data
 kartograf download N-34-130-D-d-2-4 --product nmpt
 kartograf download N-34-130-D-d-2-4 --product laz
 
-# Selekcja obszaru: bbox albo plik geometrii (SHP/GPKG)
-kartograf download --bbox 419000,230000,426000,237000 --product orto
+# Selekcja obszaru: bbox albo plik geometrii (SHP/GPKG).
+# Domyślnie działa --country auto: obszar przecinający prostokątną obwiednię CZ
+# (na zachód od 18,86°E i na południe od 51,06°N) trafia także do CUZK - dla czystego
+# PL użyj --country pl. Flagi bez odpowiednika czeskiego (--product nmpt|orto,
+# --system, --vertical-crs KRON86, --resolution 1m) same przełączają auto na pl
+# (komunikat "Info:" na stderr).
+kartograf download --bbox 771000,509000,772000,510000 --product orto
 kartograf download --geometry zlewnia.gpkg --layer catchments
 
 # PL-2000: godło albo bbox w CRS strefy
@@ -54,6 +59,8 @@ kartograf download 6.179.12.20
 kartograf download --bbox 6500000,5895000,6508000,5900000 --bbox-crs EPSG:2177 --system 2000
 
 # NMT Czechy (CUZK DMR 5G/4G); na pograniczu --country auto dzieli żądanie na PL i CZ
+# (osobne pliki i sidecary, wspólny extra.parent_request). Brak danych w jednym kraju
+# przy sukcesie drugiego kończy się kodem 0 i ostrzeżeniem "Warning:" na stderr.
 kartograf download 302_5550 --country cz
 kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto
 
@@ -86,9 +93,13 @@ bbox = parser.get_bbox(crs="EPSG:2180")  # lub "EPSG:4326"
 manager = DownloadManager(output_dir="./data")
 path = manager.download_sheet("N-34-130-D-d-2-4")
 
-# Pobieranie przez bbox → GeoTIFF (WCS) - tylko dla NMT 1m
+# Pobieranie przez bbox → GeoTIFF (WCS) - tylko NMT 1m i tylko w układzie KRON86:
+# endpoint WCS dla EVRF2007 został wycofany przez GUGiK (HTTP 404 od 2026-08), więc
+# download_bbox pod EVRF2007 kończy się ValidationError. Wysokości EVRF2007
+# bierz z arkuszy: download_sheet() albo CLI `--bbox` (rozwijany na arkusze OpenData).
+kron = DownloadManager(output_dir="./data", vertical_crs="KRON86")
 area = BBox(min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180")
-path = manager.download_bbox(area, "my_area.tif")
+path = kron.download_bbox(area, "my_area.tif")
 
 # Land Cover: BDOT10k / CORINE / SoilGrids
 from kartograf import LandCoverManager
@@ -108,6 +119,33 @@ Pozostałe elementy publicznego API (m.in. `GugikNmptProvider`, `GugikOrtoProvid
 `GugikLazProvider`, `CuzkDmrProvider`/`create_dmr_provider` dla Czech, `Parser2000`,
 `ParserTM33`, `MetadataCache`, `FileStorage`) — patrz eksporty w `kartograf/__init__.py`
 oraz [SCOPE.md](docs/SCOPE.md).
+
+### Wynik pobrania
+
+`DownloadManager.download_sheet()` zwraca **`Path`** dla arkusza 1:10000 i dla godła
+PL-2000 (pobierane bezpośrednio), a **`list[Path]`** dla godła PL-1992 grubszego niż
+1:10000 - takie godło jest automatycznie rozwijane do arkuszy 1:10000 przez
+`download_hierarchy()` (ta zawsze zwraca `list[Path]`, a podsumowanie sukcesów/porażek
+zostawia w `DownloadManager.last_result`). CLI musi obsłużyć oba warianty.
+
+Każde udane pobranie zapisuje **dwa** pliki: dane (`.asc`, `.tif`, `.laz`, `.gpkg`)
+oraz sidecar `<plik>.meta.json` ze schematem `kartograf-meta/1`:
+
+| Pole | Znaczenie |
+|---|---|
+| `dataset`, `country`, `product`, `provider` | klucz deskryptora źródła i jego opis |
+| `horizontal_crs` | układ poziomy pliku (PL `EPSG:2180`, CZ `EPSG:5514`) |
+| `vertical_crs` | kod realizacji układu pionowego: `EPSG:9651` (EVRF2007-PL), `EPSG:9650` (KRON86), `EPSG:8357` (Bpv), `EPSG:5621` (EVRF2007) |
+| `vertical_source` | `native` / `ellipsoidal` / `server` |
+| `nodata` | wartość pustego piksela odczytana z pliku |
+| `resolution`, `request` | rozdzielczość i oryginalne żądanie (`godlo` albo `bbox` + `bbox_crs`) |
+| `license` | identyfikator, atrybucja i URL licencji źródła |
+| `downloaded_at`, `kartograf_version` | znacznik czasu UTC i wersja pakietu |
+| `transform` | użyta operacja przeliczenia, np. `pinned: <opis> (<dokładność> m)` - rastry CZ |
+| `extra.parent_request` | oryginalny bbox, jego układ i próbowane kraje - wspólny klucz grupowania plików jednego żądania `--bbox`/`--geometry`, także po obu stronach granicy |
+
+Sidecary pisze warstwa zarządzająca (`DownloadManager`, `LandCoverManager`, CLI),
+a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
 
 ## Funkcjonalności
 
@@ -178,7 +216,16 @@ oraz [SCOPE.md](docs/SCOPE.md).
   - C - wolna infiltracja (glina ilasta)
   - D - bardzo wolna infiltracja (ił)
 - ✅ **Automatyczne pobieranie** clay/sand/silt z SoilGrids
-- ✅ **Statystyki pokrycia** dla każdej grupy HSG
+- ✅ **Statystyki pokrycia** dla każdej grupy HSG - `--stats` podaje powierzchnie
+  w ha także dla rastrów w EPSG:4326 (pole liczone geodezyjnie na elipsoidzie,
+  nie w stopniach kwadratowych)
+
+Od 0.7.0 klasyfikacja tekstury używa **kanonicznych progów trójkąta USDA**
+(skośne granice `silt + 1.5*clay`, `silt + 2*clay`), wspólnych dla wersji skalarnej
+i tablicowej. Mapowanie tekstura → HSG jest świadomie łagodniejsze niż tabela TR-55:
+`sandy_loam` = **B** (nie A), `clay_loam` i `silty_clay_loam` = **C** (nie D) -
+to klasy przejściowe, których grupa zależy też od struktury gleby. Uzasadnienie
+i wpływ na wynik: [ADR-025](docs/DECISIONS.md).
 
 ## Konfiguracja CLMS API (opcjonalne)
 
@@ -186,12 +233,12 @@ Aby pobierać dane CORINE jako **GeoTIFF z kodami klas** (zamiast podglądu PNG)
 potrzebujesz konta w Copernicus Land Monitoring Service:
 
 1. Zarejestruj się na https://land.copernicus.eu
-2. Wygeneruj API credentials (profil → API access)
-3. Zapisz credentials w zmiennej środowiskowej `CLMS_CREDENTIALS` (JSON string
-   o polach jak niżej) albo — na macOS — w Keychain:
+2. Wygeneruj API credentials (JSON z polami `client_id`, `private_key`, `token_uri`,
+   opcjonalnie `key_id` i `user_id`)
+3. Ustaw je w zmiennej środowiskowej `CLMS_CREDENTIALS` - działa na każdym systemie:
 
 ```bash
-security add-generic-password -a "$USER" -s "clms-token" -w '{
+export CLMS_CREDENTIALS='{
   "client_id": "...",
   "private_key": "-----BEGIN RSA PRIVATE KEY-----\n...",
   "token_uri": "https://land.copernicus.eu/@@oauth2-token",
@@ -200,10 +247,22 @@ security add-generic-password -a "$USER" -s "clms-token" -w '{
 }'
 ```
 
-**Bezpieczeństwo:** Credentials są izolowane w osobnym procesie (Auth Proxy).
-Główna aplikacja nigdy nie widzi kluczy prywatnych.
+Na macOS alternatywą (fallback, gdy zmiennej nie ma) jest Keychain:
 
-**Bez konfiguracji:** CORINE automatycznie pobiera podgląd PNG przez WMS.
+```bash
+security add-generic-password -a "$USER" -s "clms-token" -w '{ ... ten sam JSON ... }'
+```
+
+**Bezpieczeństwo:** Credentials czyta wyłącznie podproces Auth Proxy
+(`python -m kartograf.auth.proxy`), który dziedziczy zmienne środowiskowe rodzica.
+Główna aplikacja nigdy nie widzi kluczy prywatnych ani tokenu - proxy pobiera dane
+samo, wyłącznie z hostów `*.copernicus.eu` i `*.eea.europa.eu`.
+
+**Bez konfiguracji:** CORINE automatycznie pobiera podgląd PNG przez WMS
+(sidecar dostaje wtedy `extra.fallback = "wms_png"`).
+
+**Z poziomu biblioteki** można też podać credentials wprost:
+`CorineProvider(clms_credentials={...})` (tryb bezpośredni, z pominięciem proxy).
 
 ## Dokumentacja
 
@@ -241,7 +300,7 @@ Kartograf/
 │   ├── landcover/       # Land Cover management
 │   ├── hydrology/       # Hydrologic Soil Groups (HSG)
 │   └── cli/             # CLI interface (moduły per komenda)
-├── tests/               # Testy (1402)
+├── tests/               # Testy (1708)
 ├── docs/                # Dokumentacja
 └── README.md
 ```
@@ -284,4 +343,4 @@ Projekt udostępniony na licencji MIT. Szczegóły w pliku `LICENSE`.
 
 ## Status
 
-**Wersja 0.7.0-dev** - NMT Czechy (CUZK DMR 5G/4G, `--country {pl,cz,auto}`, parser godeł TM33/SM5, sidecary metadanych `.meta.json`). Wcześniej: v0.6.x (LAZ przez WFS, pobieranie równoległe `--workers`, cache metadanych SQLite, walidacja warstw WMS), v0.5.0 (PL-2000, 15 warstw BDOT10k). 1402 testy, pokrycie ~89%. Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegolów.
+**Wersja 0.7.0-dev** - NMT Czechy (CUZK DMR 5G/4G, `--country {pl,cz,auto}`, parser godeł TM33/SM5, sidecary metadanych `.meta.json`). Wcześniej: v0.6.x (LAZ przez WFS, pobieranie równoległe `--workers`, cache metadanych SQLite, walidacja warstw WMS), v0.5.0 (PL-2000, 15 warstw BDOT10k). 1708 testów, pokrycie 93%. Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów.
