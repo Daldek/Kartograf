@@ -571,9 +571,11 @@ przetrwaly zapis tych zobowiazan to ponizsze punkty i PROGRESS.md):**
 4. **Prostokatne extenty krajow wysylaja zapytania CUZK takze poza faktyczna
    granica CZ.** `CountryProfile.extent_wgs84` dla CZ to prostokat
    `BBox(12.09, 48.55, 18.86, 51.06)` (obwiednia, nie wielokat granicy) —
-   kazde zadanie `--country auto` w poludniowej Polsce (lon < 18,86°E,
-   lat < 51,06°N — pas siegajacy np. okolic Krakowa/Rzeszowa) wysyla
-   zapytanie do CUZK, mimo ze bbox realnie lezy w calosci w Polsce. Skutek:
+   kazde zadanie `--country auto` w poludniowej Polsce (lon < 18,86°E, lat <
+   51,06°N — pas na zachod od 18,86E i na poludnie od 51,06N - m.in. Opole,
+   Walbrzych, Rybnik, poludniowe obrzeza Wroclawia; Krakow, Rzeszow i centrum
+   Wroclawia (51,11N) leza poza prostokatem) wysyla zapytanie do CUZK, mimo ze
+   bbox realnie lezy w calosci w Polsce. Skutek:
    dodatkowy raster wypelniony `nodata` (`-9999`) + dodatkowy sidecar CZ bez
    uzytecznych danych, a nie blad — ale zbedny ruch sieciowy i plik.
    Wlasciwa naprawa (wielokat granicy administracyjnej zamiast prostokata)
@@ -594,8 +596,10 @@ przetrwaly zapis tych zobowiazan to ponizsze punkty i PROGRESS.md):**
 5. **Addendum 2026-08-22 (audyt przedwydaniowy 0.7.0, ustalenie N6-2): opcje
    tylko-PL rozstrzygaja `--country auto`, zamiast przewracac zadanie.**
    Drugim skutkiem prostokatnych obwiedni (punkt 4) bylo, ze zadanie lezace
-   w CALOSCI w Polsce, ale wewnatrz prostokata CZ (cala poludniowa Polska,
-   lon < 18,86 E, lat < 51,06 N), konczylo sie kodem 1, gdy uzytkownik podal
+   w CALOSCI w Polsce, ale wewnatrz prostokata CZ (pas na zachod od 18,86E i na
+   poludnie od 51,06N - m.in. Opole, Walbrzych, Rybnik, poludniowe obrzeza
+   Wroclawia; nie cala poludniowa Polska, patrz pkt 4 (Krakow i Rzeszow poza
+   prostokatem)), konczylo sie kodem 1, gdy uzytkownik podal
    opcje bez odpowiednika czeskiego: `--product nmpt|orto`, `--system`,
    `--vertical-crs KRON86`, `--resolution 1m` (np. `kartograf download --bbox
    442802,248390,444802,250390 --system 2000` pod Raciborzem ->

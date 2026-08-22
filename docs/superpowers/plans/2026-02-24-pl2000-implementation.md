@@ -8,7 +8,7 @@
 
 **Tech Stack:** Python 3.12+, pyproj (CRS transforms), pytest (TDD)
 
-**Design doc:** `docs/plans/2026-02-24-pl2000-support-design.md`
+**Design doc:** `docs/superpowers/plans/2026-02-24-pl2000-support-design.md`
 
 **Delegation model:** Tasks 1-6 are delegated to subagents. Main agent supervises, reviews, and approves.
 

@@ -21,6 +21,10 @@ przenosiny providers/pl bez shimow)
 3. Zasada #9: zmierzony udzial nodata kafla przy Cieszynie to 48,3%, nie 49,3%,
    a przy parametrze `noData=-9999` serwer wypelnia -9999 (zera tylko bez
    parametru).
+4. (2026-08-22) Przyklad transform.horizontal = "server:EPSG:2180" w sekcji 6.3
+   jest nieaktualny - od ADR-024 pole niesie "pinned: <opis operacji>
+   (<dokladnosc> m)" i pojawia sie przy KAZDEJ reprojekcji lokalnej (BREAKING,
+   patrz CHANGELOG 0.7.0).
 
 ---
 
