@@ -1,13 +1,18 @@
 # Prompt implementacyjny — Kartograf
 
-**Wersja:** 4.0
-**Data:** 2026-08-18
+**Wersja:** 4.1
+**Data:** 2026-08-22
 **Dla:** Claude Code i inni asystenci AI
 
 > **Nota 4.0 (2026-08-18):** aktualizacja do stanu po etapie 1 (v0.7.0-dev,
 > NMT Czechy/CUZK): architektura, Public API, przeplywy BDOT10k, zniesione
 > ograniczenia (parallel/cache/mozaikowanie). Tam gdzie CLAUDE.md pokrywa
 > temat, ten dokument odsyla do CLAUDE.md zamiast duplikowac tresc.
+>
+> **Nota 4.1 (2026-08-22, audyt przedwydaniowy 0.7.0):** korekty zgodnosci
+> z kodem — timeouty BDOT10k/SoilGrids, WCS NMT tylko 1m i tylko KRON86,
+> kanoniczna `download_by_admin_unit` w 8.1 oraz przyklad HSG (brakowal
+> wymagany `output_path`, wiec rzucal `TypeError`).
 
 ---
 
@@ -110,17 +115,19 @@ CLI → HSGCalculator → SoilGridsProvider → rasterio → numpy → FileStora
 | GUGiK | NMT/NMPT (ASC/GeoTIFF) | WCS, OpenData | Brak | 30s |
 | GUGiK | Ortofoto (TIF/GeoTIFF) | WCS, OpenData | Brak | 60s |
 | GUGiK | LAZ (chmury punktow) | WFS (discovery) + OpenData | Brak | 30s / 60s |
-| GUGiK | BDOT10k (GeoPackage) | OpenData (ZIP); TERYT przez WMS GetFeatureInfo | Brak | 60s |
+| GUGiK | BDOT10k (GeoPackage) | OpenData (ZIP); TERYT przez WMS GetFeatureInfo | Brak | 120s / 30s (WMS TERYT) |
 | CUZK | DMR 5G/4G (GeoTIFF/ZIP) | ArcGIS REST (query, exportImage) + pliki openzu | Brak | 60s |
 | Copernicus CLMS | CORINE (GeoTIFF) | REST API | OAuth2 RSA | 60s |
 | EEA Discomap | CORINE (PNG) | WMS | Brak | 60s |
-| ISRIC SoilGrids | Gleba (GeoTIFF) | WCS | Brak | 60s |
+| ISRIC SoilGrids | Gleba (GeoTIFF) | WCS | Brak | 120s (przez godlo: 60s) |
 
 ### Specyfika API
 
 **GUGiK NMT:**
 - OpenData: pobieranie przez godlo → ASC (1m i 5m)
-- WCS: pobieranie przez bbox → GeoTIFF (tylko 1m)
+- WCS: pobieranie przez bbox → GeoTIFF (tylko 1m i tylko KRON86 — endpoint
+  EVRF2007 wycofany przez GUGiK, HTTP 404 od 2026-08; `download_bbox` pod
+  EVRF2007 konczy sie `ValidationError`)
 - NMT 5m wymaga ukladu EVRF2007
 
 **CORINE:**
@@ -143,7 +150,7 @@ from kartograf import (
     # Core
     SheetParser, Parser2000, ParserTM33, BBox,
     find_sheets_for_bbox, find_sheets_2000_for_bbox, find_sheets_for_geometry,
-    # Download (NMT/NMPT/Orto)
+    # Download (NMT/NMPT/Orto/LAZ)
     DownloadManager, DownloadProgress, DownloadResult, FileStorage,
     # Land Cover
     LandCoverManager,
@@ -225,7 +232,8 @@ from kartograf import (
 ```python
 # 1. Stworz klase w kartograf/providers/nowy_provider.py
 # 2. Dziedzicz z LandCoverProvider (providers/base.py)
-# 3. Zaimplementuj metody: download_by_teryt, download_by_bbox, download_by_godlo
+# 3. Zaimplementuj metody: download_by_admin_unit, download_by_bbox,
+#    download_by_godlo (download_by_teryt to zdeprecjonowany alias z bazy)
 # 4. Zarejestruj w slowniku modulowym PROVIDERS w kartograf/landcover/manager.py
 # 5. Dodaj eksport do kartograf/__init__.py
 # 6. Napisz testy w tests/test_nowy_provider.py
@@ -280,9 +288,11 @@ manager.download_hierarchy("N-34-130-D", target_scale="1:10000")
 
 ### Hydrolog (obliczenia)
 ```python
+from pathlib import Path
+
 from kartograf import HSGCalculator, SoilGridsProvider
 calc = HSGCalculator()
-hsg_path = calc.calculate_hsg_by_godlo("N-34-130-D")
+hsg_path = calc.calculate_hsg_by_godlo("N-34-130-D", Path("./hsg.tif"))
 ```
 
 ---
@@ -301,6 +311,6 @@ hsg_path = calc.calculate_hsg_by_godlo("N-34-130-D")
 
 ---
 
-**Wersja dokumentu:** 4.0
-**Data ostatniej aktualizacji:** 2026-08-18
+**Wersja dokumentu:** 4.1
+**Data ostatniej aktualizacji:** 2026-08-22
 **Status:** Aktywny dla wszystkich asystentow AI pracujacych nad projektem
