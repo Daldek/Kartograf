@@ -578,6 +578,42 @@ przetrwaly zapis tych zobowiazan to ponizsze punkty i PROGRESS.md):**
    uzytecznych danych, a nie blad — ale zbedny ruch sieciowy i plik.
    Wlasciwa naprawa (wielokat granicy administracyjnej zamiast prostokata)
    jest zaplanowana na etap 2 (patrz `docs/SCOPE.md`).
+   **Symetria (audyt 0.7.0, ustalenie A3-2):** to samo dzieje sie w druga
+   strone — prostokat PL to `BBox(14.07, 49.00, 24.20, 54.90)`, wiec pokrywa
+   niemal cale Czechy na wschod od Pilzna i `--country auto` w Pradze, Brnie
+   czy Ostrawie odpytuje takze GUGiK. Skutek jest jednak inny niz po stronie
+   CZ: brak danych GUGiK to twardy `DownloadError`, nie pusty raster, wiec
+   `max(exit_codes)` zamienial poprawnie pobrany raster CZ w kod 1 calego
+   polecenia. Od 0.7.0 porazka JEDNEGO kraju przy sukcesie drugiego (tylko
+   w trybie `auto` i tylko przy wiecej niz jednym kraju) konczy sie kodem
+   wyjscia **0** z ostrzezeniem `Warning:` na stderr; `max(exit_codes)`
+   zostaje dla jawnego `--country` (uzytkownik sam wskazal zasieg) i dla
+   przypadku, w ktorym padly wszystkie kraje. Informacja o niepelnym pokryciu
+   nie ginie: sidecary i tak niosa `parent_request.countries` = kraje
+   PROBOWANE (punkt 3).
+5. **Addendum 2026-08-22 (audyt przedwydaniowy 0.7.0, ustalenie N6-2): opcje
+   tylko-PL rozstrzygaja `--country auto`, zamiast przewracac zadanie.**
+   Drugim skutkiem prostokatnych obwiedni (punkt 4) bylo, ze zadanie lezace
+   w CALOSCI w Polsce, ale wewnatrz prostokata CZ (cala poludniowa Polska,
+   lon < 18,86 E, lat < 51,06 N), konczylo sie kodem 1, gdy uzytkownik podal
+   opcje bez odpowiednika czeskiego: `--product nmpt|orto`, `--system`,
+   `--vertical-crs KRON86`, `--resolution 1m` (np. `kartograf download --bbox
+   442802,248390,444802,250390 --system 2000` pod Raciborzem ->
+   `Error: --system dotyczy tylko PL`). Wzgledem 0.6.1, gdzie `--country`
+   w ogole nie istnialo, byla to twarda regresja komend udokumentowanych od
+   v0.4.0/v0.5.0. Od 0.7.0 taka opcja ROZSTRZYGA kraj: CLI wypisuje
+   `Info: --country auto -> pl (<opcje> dotyczy tylko PL)` na stderr i dalej
+   zachowuje sie dokladnie jak jawny `--country pl` — bez przycinania bboxa
+   do obwiedni kraju, z `parent_request.countries == ["PL"]`. Rozstrzygniecie
+   obejmuje wylacznie obszary FAKTYCZNIE sporne (tryb `auto`, wiecej niz jeden
+   kraj, PL wsrod nich): obszar lezacy w calosci w Czechach dostaje nadal
+   komunikat o etapie 2, bo tam wybor PL bylby bezsensem, a nie odczytaniem
+   intencji. `--product laz` NIE nalezy do tej listy mimo bycia PL-owym — ma
+   wlasny przeplyw (`_cmd_download_laz`) z wlasnym guardem transgranicznym
+   i nigdy nie dociera do dyspozycji obszarowej. Koszt: bbox przygraniczny
+   z `--system 2000` nie dostanie juz czesci czeskiej (dotad nie dostawal
+   niczego — kod 1, wiec zmiana jest scisle lepsza), a `-q` nie tlumi
+   komunikatu `Info:`, bo idzie on na stderr (jak `Error:`/`Warning:`).
 
 **Konsekwencje:** Pelna parytetowosc produktowa DMR miedzy PL i CZ (godlo,
 bbox, transformacja pozioma/pionowa opcjonalna). 1381 testow zielonych
