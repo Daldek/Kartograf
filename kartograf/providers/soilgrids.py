@@ -40,7 +40,7 @@ from urllib.parse import urlencode
 import requests
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.exceptions import DownloadError
 from kartograf.providers.base import LandCoverProvider
 
 logger = logging.getLogger(__name__)
@@ -70,10 +70,13 @@ class SoilGridsProvider(LandCoverProvider):
     predictions of soil properties at 250m resolution. Data is accessed
     via OGC Web Coverage Service (WCS).
 
-    Supports three download modes:
+    Supports two download modes:
     - By bbox: downloads data for specified bounding box
     - By godło: converts map sheet ID to bbox and downloads
-    - By TERYT: finds bbox for Polish administrative unit and downloads
+
+    TERYT (administrative unit) selection is not supported - SoilGrids is a
+    global raster service and has no notion of Polish administrative
+    boundaries.
 
     Examples
     --------
@@ -125,11 +128,6 @@ class SoilGridsProvider(LandCoverProvider):
     DEFAULT_PROPERTY = "soc"
     DEFAULT_DEPTH = "0-5cm"
     DEFAULT_STAT = "mean"
-
-    # WMS endpoint for TERYT lookup (from BDOT10k)
-    TERYT_WMS_ENDPOINT = (
-        "https://mapy.geoportal.gov.pl/wss/service/PZGIK/BDOT/WMS/PobieranieBDOT10k"
-    )
 
     def __init__(self, session: requests.Session | None = None, cache=None):
         """
@@ -386,152 +384,21 @@ class SoilGridsProvider(LandCoverProvider):
         **kwargs,
     ) -> Path:
         """
-        Download soil data for a Polish administrative unit (TERYT code).
+        SoilGrids does not support TERYT (administrative unit) selection.
 
-        Finds the bounding box for the given TERYT code using GUGiK WMS
-        and downloads data for that area.
-
-        Parameters
-        ----------
-        teryt : str
-            4-digit TERYT code for powiat (county)
-        output_path : Path
-            Path where the file should be saved
-        timeout : int, optional
-            Request timeout in seconds (default: 120)
-        **kwargs
-            Additional options (property, depth, stat)
-
-        Returns
-        -------
-        Path
-            Path to the downloaded file
+        Raises NotImplementedError always. Earlier versions silently returned
+        data for a fixed 60x60 km square around a hardcoded wojewodztwo
+        centre, which had nothing to do with the requested powiat.
 
         Raises
         ------
-        ValidationError
-            If TERYT code is invalid
-        DownloadError
-            If the download fails
+        NotImplementedError
+            Always - use download_by_bbox() or download_by_godlo() instead
         """
-        if not self.validate_teryt(teryt):
-            raise ValidationError(f"Invalid TERYT code: {teryt}")
-
-        # Get bbox for TERYT via WMS
-        bbox = self._get_bbox_for_teryt(teryt, timeout)
-
-        logger.info(f"TERYT {teryt} bbox: {bbox}")
-
-        return self.download_by_bbox(bbox, output_path, timeout, **kwargs)
-
-    def _get_bbox_for_teryt(self, teryt: str, timeout: int = 30) -> BBox:
-        """
-        Get bounding box for a TERYT code using GUGiK WMS.
-
-        Uses WMS GetFeatureInfo to find the powiat boundaries.
-
-        Parameters
-        ----------
-        teryt : str
-            4-digit TERYT code
-        timeout : int
-            Request timeout
-
-        Returns
-        -------
-        BBox
-            Bounding box in EPSG:2180
-
-        Raises
-        ------
-        DownloadError
-            If TERYT bbox cannot be determined
-        """
-        # TERYT to województwo center point mapping (approximate centers)
-        # This is a fallback - we use approximate bbox based on TERYT
-        woj_centers = {
-            "02": (490000, 330000),  # dolnośląskie
-            "04": (490000, 570000),  # kujawsko-pomorskie
-            "06": (740000, 380000),  # lubelskie
-            "08": (370000, 440000),  # lubuskie
-            "10": (540000, 430000),  # łódzkie
-            "12": (560000, 240000),  # małopolskie
-            "14": (620000, 480000),  # mazowieckie
-            "16": (450000, 340000),  # opolskie
-            "18": (680000, 260000),  # podkarpackie
-            "20": (720000, 590000),  # podlaskie
-            "22": (490000, 680000),  # pomorskie
-            "24": (500000, 280000),  # śląskie
-            "26": (590000, 340000),  # świętokrzyskie
-            "28": (620000, 680000),  # warmińsko-mazurskie
-            "30": (430000, 480000),  # wielkopolskie
-            "32": (380000, 610000),  # zachodniopomorskie
-        }
-
-        woj_code = teryt[:2]
-        if woj_code not in woj_centers:
-            raise ValidationError(
-                f"Unknown województwo code: {woj_code}. "
-                f"Valid codes: {list(woj_centers.keys())}"
-            )
-
-        # Try to get exact bbox from WMS GetFeatureInfo
-        center_x, center_y = woj_centers[woj_code]
-        session = self._session or requests.Session()
-
-        # Create query bbox around approximate center
-        buffer = 50000  # 50km buffer
-        query_bbox = (
-            f"{center_y - buffer},{center_x - buffer},"
-            f"{center_y + buffer},{center_x + buffer}"
+        raise NotImplementedError(
+            "SoilGrids does not support TERYT selection - use --bbox or "
+            "--godlo (download_by_bbox / download_by_godlo)"
         )
-
-        params = {
-            "SERVICE": "WMS",
-            "VERSION": "1.3.0",
-            "REQUEST": "GetFeatureInfo",
-            "LAYERS": "Powiaty",
-            "QUERY_LAYERS": "Powiaty",
-            "INFO_FORMAT": "text/html",
-            "CRS": "EPSG:2180",
-            "BBOX": query_bbox,
-            "WIDTH": 100,
-            "HEIGHT": 100,
-            "I": 50,
-            "J": 50,
-        }
-
-        url = f"{self.TERYT_WMS_ENDPOINT}?{urlencode(params)}"
-        logger.debug(f"Querying WMS for TERYT {teryt} bbox")
-
-        try:
-            response = session.get(url, timeout=timeout)
-            response.raise_for_status()
-
-            # For now, return approximate bbox based on województwo center
-            # A more accurate implementation would parse WMS response
-            # and extract exact powiat boundaries
-            powiat_size = 30000  # ~30km typical powiat size
-
-            return BBox(
-                min_x=center_x - powiat_size,
-                min_y=center_y - powiat_size,
-                max_x=center_x + powiat_size,
-                max_y=center_y + powiat_size,
-                crs="EPSG:2180",
-            )
-
-        except requests.RequestException as e:
-            logger.warning(f"WMS query failed, using approximate bbox: {e}")
-            # Fallback to approximate bbox
-            powiat_size = 30000
-            return BBox(
-                min_x=center_x - powiat_size,
-                min_y=center_y - powiat_size,
-                max_x=center_x + powiat_size,
-                max_y=center_y + powiat_size,
-                crs="EPSG:2180",
-            )
 
     # =========================================================================
     # Common utilities
