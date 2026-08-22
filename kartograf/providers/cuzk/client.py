@@ -253,7 +253,18 @@ def _tile_grid(
     max_w: int,
     max_h: int,
 ) -> list[tuple[BBox, int, int]]:
-    """Deterministyczna siatka kafli cieta po pelnych pikselach (S->N, W->E)."""
+    """Deterministyczna siatka kafli cieta po pelnych pikselach (N->S, W->E);
+    kotwica w narozniku NW — spojnie z rasterio.merge(bounds=...) i
+    _warp_to_grid (from_origin(min_x, max_y)).
+
+    Why NW: siatka wyniku mozaiki zawsze startuje w max_y i ma wysokosc
+    round((max_y-min_y)/res), wiec przy bboxie o ulamkowej wysokosci
+    kotwica SW rozjezdza sie z nia o 0<delta<res: dolny wiersz wyniku
+    wypada pod zasiegiem kafli (caly pas nodata), a tresc — przenoszona
+    przez merge blokami, bez resamplingu — jest przesunieta do 1 px.
+    To ten sam rzad bledu geolokalizacji, dla ktorego ADR-024 zakazal
+    reprojekcji serwerowej, i tak samo niewidoczny w metadanych (A3-1).
+    """
 
     def _splits(total_px: int, max_px: int) -> list[tuple[int, int]]:
         n = math.ceil(total_px / max_px)
@@ -269,9 +280,9 @@ def _tile_grid(
                 (
                     BBox(
                         bbox.min_x + col_off * pixel_size,
-                        bbox.min_y + row_off * pixel_size,
+                        bbox.max_y - (row_off + row_px) * pixel_size,
                         bbox.min_x + (col_off + col_px) * pixel_size,
-                        bbox.min_y + (row_off + row_px) * pixel_size,
+                        bbox.max_y - row_off * pixel_size,
                         bbox.crs,
                     ),
                     col_px,

@@ -451,6 +451,72 @@ class TestExportImage:
         # pliki czastkowe posprzatane
         assert list(tmp_path.glob("*.part*.tif")) == []
 
+    def test_tiling_fractional_height_keeps_content_aligned(self, tmp_path):
+        """Bbox o ulamkowej wysokosci (90,7 px -> 91): kafle musza byc
+        kotwiczone w narozniku NW, tak samo jak siatka wyniku
+        `merge(bounds=...)`.
+
+        Kotwica SW dawala caly dolny wiersz -9999 i przesuwala tresc pasami
+        do 1 px (A3-1). Kazdy piksel niesie tu northing swojego srodka, wiec
+        ewentualne przesuniecie jest mierzalne wprost wzgledem transformu
+        wyniku.
+        """
+        from rasterio.transform import from_origin
+
+        def fake_download(session, url, output_path, *, timeout, **kwargs):
+            params = parse_qs(urlparse(url).query)
+            min_x, _min_y, _max_x, max_y = (
+                float(v) for v in params["bbox"][0].split(",")
+            )
+            w, h = (int(v) for v in params["size"][0].split(","))
+            rows = np.arange(h, dtype="float64")
+            column = (max_y - (rows + 0.5) * 2.0).astype("float32")
+            data = np.repeat(column[:, None], w, axis=1)
+            with rasterio.open(
+                output_path,
+                "w",
+                driver="GTiff",
+                width=w,
+                height=h,
+                count=1,
+                dtype="float32",
+                crs=_UNRESOLVABLE_CRS_WKT,
+                transform=from_origin(min_x, max_y, 2.0, 2.0),
+                nodata=-9999.0,
+            ) as dst:
+                dst.write(data, 1)
+            return Path(output_path)
+
+        target = tmp_path / "frac.tif"
+        bbox = BBox(0.0, 0.0, 500.0, 181.4, "EPSG:3045")
+        client = CuzkClient(session=Mock())
+        with (
+            patch.object(CuzkClient, "MAX_EXPORT_WIDTH", 250),
+            patch.object(CuzkClient, "MAX_EXPORT_HEIGHT", 40),
+            patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
+        ):
+            client.export_image(
+                DMR5G,
+                bbox,
+                pixel_size=2.0,
+                image_sr="EPSG:3045",
+                output_path=target,
+            )
+
+        with rasterio.open(target) as src:
+            assert src.height == 91 and src.width == 250
+            data = src.read(1)
+            # Zaden wiersz nie moze byc w calosci nodata — serwer zwrocil
+            # dane dla calej wysokosci zadania.
+            assert not np.any(np.all(data == -9999.0, axis=1))
+            # Zasieg wyniku = zasieg kafli (kotwica NW).
+            assert src.bounds.top == 181.4
+            assert src.bounds.bottom == pytest.approx(181.4 - 91 * 2.0)
+            # Tresc zgodna z transformem wyniku — zero przesuniecia.
+            for r in range(src.height):
+                assert np.allclose(data[r, :], (src.transform * (0.5, r + 0.5))[1])
+        assert list(tmp_path.glob("*.part*.tif")) == []
+
     def test_tiling_with_crs_mismatch_raises(self, tmp_path):
         bbox = BBox(0, 0, 16, 16, "EPSG:5514")
         client = CuzkClient(session=Mock())
