@@ -1,8 +1,8 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.5
-**Data:** 2026-08-18
+**Wersja:** 3.6
+**Data:** 2026-08-22
 **Product Owner:** Piotr
 **Status:** Production (v0.6.1)
 
@@ -12,6 +12,16 @@
 > "resumable downloads" i pokrycia testowego). Zakres CZ/CUZK rozwijany na
 > develop (v0.7.0-dev: `--country {pl,cz,auto}`, DMR 5G/4G) jest celowo
 > nieopisany do czasu wydania 0.7.0 — patrz `docs/SCOPE.md` sekcja 2.2.
+>
+> **Nota (3.6, 2026-08-22, audyt przedwydaniowy 0.7.0):** dokument nadal jest
+> snapshotem v0.6.1, ale przykłady w sekcjach 3.x i lista eksportów w sekcji 5
+> zostały punktowo uzgodnione z kodem na `develop` (0.7.0-dev), bo były
+> nieprawdziwe niezależnie od wersji: przykładowy bbox leżał w Czechach,
+> `output_dir=` nie jest parametrem `LandCoverManager.download()`, a sekcja 5
+> gubiła trzy eksporty etapu 1. Liczby jakościowe (sekcja 2.1) pozostają z
+> v0.6.1 — aktualne dane wydania 0.7.0 są w `docs/SCOPE.md` 6.2 (1708 testów,
+> 93% pokrycia). Decyzja o pełnym podniesieniu PRD do 0.7.0 należy do Product
+> Ownera (pozycja w checkliście release).
 
 ---
 
@@ -88,7 +98,7 @@ descendants = parser.get_all_descendants("1:10000")
 
 # Reverse lookup: bbox → godła
 from kartograf import find_sheets_for_bbox
-bbox = BBox(419000, 230000, 426000, 237000, "EPSG:2180")
+bbox = BBox(771000, 509000, 772000, 510000, "EPSG:2180")
 sheets = find_sheets_for_bbox(bbox, "1:10000")
 
 # Reverse lookup: geometry file → godła
@@ -99,9 +109,13 @@ sheets = find_sheets_for_geometry(Path("area.shp"), "1:10000")
 manager = DownloadManager(output_dir="./data")
 path = manager.download_sheet("N-34-130-D-d-2-4")
 
-# Pobieranie przez bbox (GeoTIFF)
+# Pobieranie przez bbox (GeoTIFF, WCS) — tylko NMT 1m i tylko KRON86:
+# endpoint WCS dla EVRF2007 został wycofany przez GUGiK (HTTP 404 od 2026-08),
+# więc download_bbox pod EVRF2007 kończy się ValidationError. Wysokości
+# EVRF2007 bierz z arkuszy: download_sheet() albo CLI `--bbox`.
+kron = DownloadManager(output_dir="./data", vertical_crs="KRON86")
 bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-path = manager.download_bbox(bbox, "area.tif")
+path = kron.download_bbox(bbox, "area.tif")
 
 # Rozdzielczość 5m (tylko EVRF2007)
 manager_5m = DownloadManager(resolution="5m")
@@ -114,13 +128,13 @@ kartograf parse N-34-130-D-d-2-4
 kartograf parse N-34-130-D --hierarchy
 kartograf download N-34-130-D-d-2-4
 kartograf download N-34-130-D --scale 1:10000
-kartograf download --bbox 419000,230000,426000,237000
+kartograf download --bbox 771000,509000,772000,510000
 kartograf download --bbox 19.93,50.05,19.95,50.07 --bbox-crs EPSG:4326
 kartograf download N-34-130-D --resolution 5m
 kartograf download N-34-130-D-d-2-4 --product nmpt
 kartograf download N-34-130-D-d-2-4 --product orto
 kartograf download N-34-130-D-d-2-4 --product laz
-kartograf download --bbox 419000,230000,426000,237000 --product orto
+kartograf download --bbox 771000,509000,772000,510000 --product orto
 kartograf download --geometry area.shp
 kartograf download --geometry area.gpkg --layer catchments
 ```
@@ -151,7 +165,7 @@ provider.download_bbox(bbox, Path("./area.tif"))
 #### CLI Commands
 ```bash
 kartograf download N-34-130-D-d-2-4 --product nmpt
-kartograf download --bbox 419000,230000,426000,237000 --product nmpt
+kartograf download --bbox 771000,509000,772000,510000 --product nmpt
 ```
 
 ---
@@ -180,7 +194,7 @@ provider.download_bbox(bbox, Path("./area.tif"), format="GTiff")
 #### CLI Commands
 ```bash
 kartograf download N-34-130-D-d-2-4 --product orto
-kartograf download --bbox 419000,230000,426000,237000 --product orto
+kartograf download --bbox 771000,509000,772000,510000 --product orto
 ```
 
 ---
@@ -229,16 +243,19 @@ Pobieranie danych pokrycia terenu z polskiej bazy BDOT10k.
 
 #### Capabilities
 ```python
+from pathlib import Path
+
 from kartograf import LandCoverManager, Bdot10kProvider
 
-lc = LandCoverManager()
+# katalog wyjściowy ustawia KONSTRUKTOR; download() przyjmuje output_path=
+lc = LandCoverManager(output_dir="./data")
 lc.set_provider("bdot10k")
 
-# Pobieranie przez TERYT (powiat)
-lc.download(teryt="1465", output_dir="./data")
+# Pobieranie przez TERYT (powiat) — nazwa pliku generowana automatycznie
+lc.download(teryt="1465")
 
-# Pobieranie przez godło
-lc.download(godlo="N-34-130-D", output_dir="./data")
+# Pobieranie przez godło z jawną ścieżką pliku
+lc.download(godlo="N-34-130-D", output_path=Path("./data/bdot10k_N-34-130-D.gpkg"))
 ```
 
 #### Warstwy (15 warstw — pobierany caly plik)
@@ -285,13 +302,19 @@ Pobieranie europejskiej klasyfikacji pokrycia terenu CORINE (44 klasy).
 
 #### Capabilities
 ```python
+from pathlib import Path
+
 from kartograf import LandCoverManager, CorineProvider
 
-lc = LandCoverManager()
+lc = LandCoverManager(output_dir="./data")
 lc.set_provider("corine")
 
-# Pobieranie przez godło
-lc.download(godlo="N-34-130-D", year=2018, output_dir="./data")
+# Pobieranie przez godło (rozszerzenie wymusza provider: .tif, .png dla WMS)
+lc.download(
+    godlo="N-34-130-D",
+    year=2018,
+    output_path=Path("./data/corine_2018_N-34-130-D.tif"),
+)
 ```
 
 #### Dostępne lata
@@ -326,18 +349,21 @@ Pobieranie globalnych danych glebowych z ISRIC SoilGrids (rozdzielczość 250m).
 
 #### Capabilities
 ```python
+from pathlib import Path
+
 from kartograf import LandCoverManager, SoilGridsProvider
 
-lc = LandCoverManager()
+lc = LandCoverManager(output_dir="./data")
 lc.set_provider("soilgrids")
 
-# Pobieranie węgla organicznego
+# Pobieranie węgla organicznego (selekcja: godło albo bbox — TERYT
+# nie jest obsługiwany przez SoilGrids i kończy się NotImplementedError)
 lc.download(
     godlo="N-34-130-D",
     property="soc",
     depth="0-5cm",
     stat="mean",
-    output_dir="./data"
+    output_path=Path("./data/soilgrids_soc_0-5cm.tif"),
 )
 
 # Pobieranie zawartości gliny
@@ -491,6 +517,9 @@ kartograf soilgrids hsg --godlo N-34-130-D --keep-intermediate
 
 ## 5. Public API
 
+Lista odzwierciedla `kartograf/__init__.py::__all__` na `develop` (31 nazw);
+źródłem prawdy pozostaje sam moduł.
+
 ```python
 # kartograf/__init__.py exports:
 from kartograf import (
@@ -500,12 +529,13 @@ from kartograf import (
     # Core
     SheetParser,
     Parser2000,
+    ParserTM33,
     BBox,
     find_sheets_for_bbox,
     find_sheets_2000_for_bbox,
     find_sheets_for_geometry,
 
-    # Download (NMT/NMPT/Orto)
+    # Download (NMT/NMPT/Orto/LAZ)
     DownloadManager,
     DownloadProgress,
     DownloadResult,
@@ -526,6 +556,10 @@ from kartograf import (
     CorineProvider,
     SoilGridsProvider,
 
+    # Providers — CZ (CUZK, etap 1)
+    CuzkDmrProvider,
+    create_dmr_provider,
+
     # Hydrology
     HSGCalculator,
 
@@ -536,7 +570,7 @@ from kartograf import (
     DownloadError,
 
     # Version
-    __version__,  # "0.6.1"
+    __version__,  # "0.7.0-dev" (0.7.0 po wydaniu)
 )
 ```
 
@@ -629,6 +663,6 @@ HYDROGRAF (główna aplikacja)
 
 ---
 
-**Wersja dokumentu:** 3.5
-**Data ostatniej aktualizacji:** 2026-08-18
-**Status:** Production - v0.6.1 (snapshot; korekty spójności 3.5 — patrz nota na początku dokumentu)
+**Wersja dokumentu:** 3.6
+**Data ostatniej aktualizacji:** 2026-08-22
+**Status:** Production - v0.6.1 (snapshot; korekty spójności 3.5 i 3.6 — patrz noty na początku dokumentu)
