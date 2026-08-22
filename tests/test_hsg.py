@@ -634,6 +634,47 @@ class TestHSGCalculatorCalculateFull:
         assert abs(stats["A"]["percent"] - 50.0) < 0.1
         assert abs(stats["B"]["percent"] - 25.0) < 0.1
 
+    def test_get_hsg_statistics_geographic_crs_area_in_hectares(self, tmp_path):
+        """EPSG:4326 rasters get geodetic areas, not square degrees."""
+        from pyproj import Geod
+        from rasterio.transform import from_origin
+
+        calc = HSGCalculator()
+
+        res = 0.0022457  # ~250 m in latitude
+        transform = from_origin(22.7, 52.5, res, res)
+        data = np.full((100, 100), 2, dtype=np.uint8)
+        hsg_path = tmp_path / "hsg_4326.tif"
+        _create_test_raster(hsg_path, data, transform=transform, crs="EPSG:4326")
+
+        west, north = 22.7, 52.5
+        east, south = west + 100 * res, north - 100 * res
+        geod = Geod(ellps="WGS84")
+        area, _ = geod.polygon_area_perimeter(
+            [west, east, east, west], [south, south, north, north]
+        )
+        expected_ha = abs(area) / 10000
+
+        stats = calc.get_hsg_statistics(hsg_path)
+
+        assert stats["B"]["count"] == 10000
+        assert stats["B"]["area_ha"] == pytest.approx(expected_ha, rel=0.02)
+        assert stats["B"]["percent"] == 100.0
+
+    def test_get_hsg_statistics_projected_crs_unchanged(self, tmp_path):
+        """Metric CRS keeps the plain width*height cell area."""
+        calc = HSGCalculator()
+
+        # 2x2 raster over 10x10 km -> 5x5 km cells = 2500 ha each
+        data = np.array([[1, 1], [2, 3]], dtype=np.uint8)
+        hsg_path = tmp_path / "hsg_2180.tif"
+        _create_test_raster(hsg_path, data)
+
+        stats = calc.get_hsg_statistics(hsg_path)
+
+        assert stats["A"]["area_ha"] == pytest.approx(5000.0)
+        assert stats["B"]["area_ha"] == pytest.approx(2500.0)
+
     def test_get_hsg_statistics_structure(self, tmp_path):
         """Verify stats dict has required keys."""
         calc = HSGCalculator()
