@@ -405,7 +405,7 @@ class TestHSGCLI:
         assert args.stats is True
 
 
-def _create_test_raster(path, data, transform=None):
+def _create_test_raster(path, data, transform=None, crs="EPSG:2180", nodata=0):
     """Helper to create a minimal GeoTIFF for testing."""
     import rasterio
     from rasterio.transform import from_bounds
@@ -421,9 +421,9 @@ def _create_test_raster(path, data, transform=None):
         "width": data.shape[1],
         "height": data.shape[0],
         "count": 1,
-        "crs": "EPSG:2180",
+        "crs": crs,
         "transform": transform,
-        "nodata": 0,
+        "nodata": nodata,
     }
 
     with rasterio.open(path, "w", **profile) as dst:
@@ -531,6 +531,68 @@ class TestHSGCalculatorCalculateFull:
         with rasterio.open(output) as src:
             hsg = src.read(1)
         assert np.all(hsg == 0)
+
+    def test_calculate_hsg_masks_int16_nodata(self, tmp_path):
+        """Cells flagged as nodata in the source rasters -> HSG 0, not B."""
+        from kartograf.core.sheet_parser import BBox
+
+        mock_provider = Mock()
+        calc = HSGCalculator(provider=mock_provider)
+
+        # Valid soil everywhere: clay=300, sand=300, silt=400 g/kg -> clay_loam -> C
+        def fake_download(bbox, path, timeout, property, depth, stat):
+            fill = {"clay": 300, "sand": 300, "silt": 400}[property]
+            data = np.full((3, 3), fill, dtype=np.int16)
+            # [1, 1] is nodata in clay only, [2, 2] is nodata in all three
+            if property == "clay":
+                data[1, 1] = -32768
+            data[2, 2] = -32768
+            _create_test_raster(path, data, nodata=-32768)
+            return path
+
+        mock_provider.download_by_bbox.side_effect = fake_download
+
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        output = tmp_path / "hsg.tif"
+        calc.calculate_hsg_by_bbox(bbox, output)
+
+        import rasterio
+
+        with rasterio.open(output) as src:
+            hsg = src.read(1)
+
+        assert hsg[0, 0] == 3  # clay_loam -> C
+        assert hsg[1, 1] == 0  # nodata in clay alone is enough
+        assert hsg[2, 2] == 0  # nodata in all three bands
+
+    def test_calculate_hsg_masks_nan(self, tmp_path):
+        """NaN in a source raster -> HSG 0, even without a nodata tag."""
+        from kartograf.core.sheet_parser import BBox
+
+        mock_provider = Mock()
+        calc = HSGCalculator(provider=mock_provider)
+
+        def fake_download(bbox, path, timeout, property, depth, stat):
+            fill = {"clay": 300.0, "sand": 300.0, "silt": 400.0}[property]
+            data = np.full((3, 3), fill, dtype=np.float32)
+            if property == "sand":
+                data[1, 1] = np.nan
+            _create_test_raster(path, data, nodata=None)
+            return path
+
+        mock_provider.download_by_bbox.side_effect = fake_download
+
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        output = tmp_path / "hsg.tif"
+        calc.calculate_hsg_by_bbox(bbox, output)
+
+        import rasterio
+
+        with rasterio.open(output) as src:
+            hsg = src.read(1)
+
+        assert hsg[1, 1] == 0
+        assert np.all(np.delete(hsg.reshape(-1), 4) > 0)
 
     def test_calculate_hsg_keep_intermediate(self, tmp_path):
         """keep_intermediate=True copies clay/sand/silt files."""

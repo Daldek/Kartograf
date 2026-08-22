@@ -227,6 +227,19 @@ def classify_usda_texture_array(
     return np.where(total > 0, selected, TEXTURE_CLASSES["loam"]).astype(np.uint8)
 
 
+def _nodata_mask(arr: np.ndarray, nodata: float | None) -> np.ndarray:
+    """
+    Boolean mask of cells that carry no usable value.
+
+    Covers NaN/Inf (which survive any arithmetic and would otherwise be
+    classified as soil) plus the raster's own nodata tag, when it has one.
+    """
+    mask = ~np.isfinite(arr)
+    if nodata is not None:
+        mask |= arr == nodata
+    return mask
+
+
 def texture_to_hsg_array(texture: np.ndarray) -> np.ndarray:
     """
     Map texture class array to HSG array.
@@ -431,13 +444,16 @@ class HSGCalculator:
 
             with rasterio.open(clay_path) as clay_src:
                 clay = clay_src.read(1).astype(np.float32)
+                clay_nd = clay_src.nodata
                 profile = clay_src.profile.copy()
 
             with rasterio.open(sand_path) as sand_src:
                 sand = sand_src.read(1).astype(np.float32)
+                sand_nd = sand_src.nodata
 
             with rasterio.open(silt_path) as silt_src:
                 silt = silt_src.read(1).astype(np.float32)
+                silt_nd = silt_src.nodata
 
             # Convert from g/kg to percentage
             clay_pct = clay / self.CONVERSION_FACTOR
@@ -452,8 +468,17 @@ class HSGCalculator:
             logger.info("Mapping to Hydrologic Soil Groups...")
             hsg = texture_to_hsg_array(texture)
 
-            # Handle nodata
-            nodata_mask = (clay == 0) & (sand == 0) & (silt == 0)
+            # Handle nodata.  Computed from the RAW source values (before the
+            # g/kg -> % conversion), because the classifier falls back to
+            # "loam" for anything it cannot place - so the absence of data has
+            # to be detected here, not inferred from the result.
+            nodata_mask = (
+                _nodata_mask(clay, clay_nd)
+                | _nodata_mask(sand, sand_nd)
+                | _nodata_mask(silt, silt_nd)
+            )
+            # Legacy convention: SoilGrids leaves gaps as all-zero triplets.
+            nodata_mask |= (clay == 0) & (sand == 0) & (silt == 0)
             hsg[nodata_mask] = 0
 
             # Write output
