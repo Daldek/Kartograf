@@ -11,6 +11,10 @@ sekcja 6.4 i docs/research/2026-08-10-*):
    nastepnie probe na punkcie kontrolnym (inf/NaN => odrzut operacji — przypadek
    siatki obcego kraju). Z pozostalych wybierz najlepsza dokladnosc.
 4. Kazdy wynik transformacji przechodzi kontrole isfinite; inaczej TransformError.
+
+Polityka obowiazuje kod NOWY (etap 1+); migracja istniejacych wywolan pyproj w
+core/geometry.py, core/sheet_parser.py, core/parser_2000.py, providers/corine.py
+i providers/soilgrids.py jest odlozona (spec etapu 0, sekcja "Nie wchodzi").
 """
 
 from dataclasses import dataclass, field
