@@ -154,6 +154,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   psuje teraz sam `import kartograf`, nie dopiero pierwsze wywolanie funkcji
   rastrowej — istotne dla Hydrografu/Hydrologu, ktore importuja Kartograf
   jako zaleznosc (patrz ADR-023, "Ustalenia dodatkowe" pkt 2)
+- **`pyproject.toml`: wersja dynamiczna z `kartograf.__version__`** —
+  usuniety rozjazd `version = "0.6.1"` (pyproject) vs `__version__ =
+  "0.7.0-dev"` (`kartograf/__init__.py`); teraz jedno zrodlo prawdy
+  (`dynamic = ["version"]` + `[tool.setuptools.dynamic] version = {attr =
+  "kartograf.__version__"}`); `[tool.setuptools.packages.find]` dostaje
+  `include = ["kartograf*"]`, wiec `tests/` nie trafia do dystrybucji;
+  opis i keywords rozszerzone o CUZK/DMR/LAZ
 
 ### Fixed
 - **Reprojekcja tresci CZ szla przez serwer CUZK i gubila transformacje datum**

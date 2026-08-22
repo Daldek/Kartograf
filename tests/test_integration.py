@@ -331,3 +331,27 @@ class TestEdgeCases:
             current=4, total=4, godlo="N-34", status="completed"
         )
         assert progress.progress_percent == 100.0
+
+
+class TestPyprojectMetadata:
+    """Test that pyproject.toml has a dynamic version and correct metadata."""
+
+    def test_pyproject_metadata(self):
+        """Version is dynamic from kartograf.__version__; tests excluded from
+        package; description/keywords mention CUZK."""
+        import tomllib
+        from pathlib import Path
+
+        pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+        data = tomllib.loads(pyproject_path.read_text())
+
+        project = data["project"]
+        assert "version" in project["dynamic"]
+        assert "version" not in project
+
+        setuptools_cfg = data["tool"]["setuptools"]
+        assert setuptools_cfg["dynamic"]["version"]["attr"] == "kartograf.__version__"
+        assert setuptools_cfg["packages"]["find"]["include"] == ["kartograf*"]
+
+        assert "cuzk" in project["keywords"]
+        assert "CUZK" in project["description"]
