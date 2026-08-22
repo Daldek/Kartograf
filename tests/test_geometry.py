@@ -26,6 +26,11 @@ from kartograf.exceptions import ValidationError  # noqa: I001
 # =========================================================================
 
 
+def _bbox_contains(bbox, x: float, y: float) -> bool:
+    """True gdy punkt (x, y) lezy w obwiedni ``bbox`` (krawedzie wliczone)."""
+    return bbox.min_x <= x <= bbox.max_x and bbox.min_y <= y <= bbox.max_y
+
+
 def _write_prj(path: Path, epsg: int = 2180):
     """Write a .prj file for the given EPSG code."""
     from pyproj import CRS
@@ -151,6 +156,40 @@ def shp_with_null(tmp_path):
         # NULL shape
         w.null()
         w.record("null_area")
+
+    _write_prj(shp_path.with_suffix(".prj"), 2180)
+    return shp_path
+
+
+@pytest.fixture
+def shp_points_epsg2180(tmp_path):
+    """Create a shapefile with 2 POINT features in EPSG:2180."""
+    import shapefile
+
+    shp_path = tmp_path / "points_2180.shp"
+    with shapefile.Writer(str(shp_path), shapeType=shapefile.POINT) as w:
+        w.field("name", "C", 40)
+        # Punkt 1: Warszawa (przekroj hydrologiczny)
+        w.point(637000, 487000)
+        w.record("point1")
+        # Punkt 2: inny arkusz 1:10000
+        w.point(605000, 495000)
+        w.record("point2")
+
+    _write_prj(shp_path.with_suffix(".prj"), 2180)
+    return shp_path
+
+
+@pytest.fixture
+def shp_pointz_epsg2180(tmp_path):
+    """Create a shapefile with a single POINTZ feature in EPSG:2180."""
+    import shapefile
+
+    shp_path = tmp_path / "pointz_2180.shp"
+    with shapefile.Writer(str(shp_path), shapeType=shapefile.POINTZ) as w:
+        w.field("name", "C", 40)
+        w.pointz(637000, 487000, 110.5)
+        w.record("outlet")
 
     _write_prj(shp_path.with_suffix(".prj"), 2180)
     return shp_path
@@ -529,6 +568,31 @@ class TestReadShpBboxes:
         with pytest.raises(ValidationError, match="Missing .prj"):
             read_feature_bboxes(shp_no_prj, target_crs="EPSG:2180")
 
+    def test_point_shapes_yield_degenerate_bboxes(self, shp_points_epsg2180):
+        """POINT features produce degenerate bboxes (min == max)."""
+        bboxes = read_feature_bboxes(shp_points_epsg2180, target_crs="EPSG:2180")
+        assert len(bboxes) == 2
+
+        assert bboxes[0].min_x == pytest.approx(637000)
+        assert bboxes[0].max_x == pytest.approx(637000)
+        assert bboxes[0].min_y == pytest.approx(487000)
+        assert bboxes[0].max_y == pytest.approx(487000)
+        assert bboxes[0].crs == "EPSG:2180"
+
+        assert bboxes[1].min_x == pytest.approx(605000)
+        assert bboxes[1].max_x == pytest.approx(605000)
+        assert bboxes[1].min_y == pytest.approx(495000)
+        assert bboxes[1].max_y == pytest.approx(495000)
+
+    def test_pointz_shape_supported(self, shp_pointz_epsg2180):
+        """POINTZ features are read like POINT (Z ignored)."""
+        bboxes = read_feature_bboxes(shp_pointz_epsg2180, target_crs="EPSG:2180")
+        assert len(bboxes) == 1
+        assert bboxes[0].min_x == pytest.approx(637000)
+        assert bboxes[0].max_x == pytest.approx(637000)
+        assert bboxes[0].min_y == pytest.approx(487000)
+        assert bboxes[0].max_y == pytest.approx(487000)
+
 
 # =========================================================================
 # Tests — GPKG reading
@@ -783,6 +847,22 @@ class TestFindSheetsForGeometry:
 
         call_args = mock_find.call_args
         assert call_args[0][1] == "1:25000"
+
+    def test_find_sheets_for_geometry_with_points(self, shp_points_epsg2180):
+        """Kazdy punkt daje arkusz 1:10000 zawierajacy ten punkt."""
+        from kartograf.core.sheet_parser import SheetParser
+
+        result = find_sheets_for_geometry(shp_points_epsg2180, target_scale="1:10000")
+
+        assert len(result) == 2
+        points = [(637000.0, 487000.0), (605000.0, 495000.0)]
+        for x, y in points:
+            containing = [
+                godlo
+                for godlo in result
+                if _bbox_contains(SheetParser(godlo).get_bbox("EPSG:2180"), x, y)
+            ]
+            assert containing, f"no sheet in {result} contains ({x}, {y})"
 
     def test_no_features_returns_empty(self, gpkg_no_envelope):
         """File with no valid features returns empty list."""
