@@ -1,8 +1,8 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.7
-**Data:** 2026-08-18
+**Wersja:** 3.8
+**Data:** 2026-08-22
 **Status:** Rozwoj — v0.7.0 (Unreleased), etap 1 (CZ/CUZK) zmergowany do `develop` 2026-08-12; ostatni wydany tag: v0.6.1
 
 ---
@@ -52,13 +52,29 @@ Kartograf automatyzuje ten proces oferując:
 - Reverse lookup: geometry file → godła (find_sheets_for_geometry)
 - Selekcja obszaru: godło, bbox, plik geometrii (SHP/GPKG)
 - Pobieranie przez godło → ASC (OpenData)
-- Pobieranie przez bbox → GeoTIFF (WCS) lub automatyczne wykrywanie arkuszy
+- Pobieranie przez bbox → GeoTIFF (WCS): tylko NMT 1m i tylko KRON86
+  (endpoint EVRF2007 wycofany przez GUGiK, HTTP 404 od 2026-08 — download_bbox
+  pod EVRF2007 kończy się ValidationError) LUB automatyczne wykrywanie arkuszy
+  (CLI --bbox: arkusze OpenData, oba układy wysokościowe)
 - Rozdzielczości: 1m (GRID1), 5m (GRID5)
 - Układy wysokościowe: KRON86, EVRF2007
 
 # Źródło: GUGiK (Główny Urząd Geodezji i Kartografii)
 # API: WCS, WMS GetFeatureInfo, OpenData
 ```
+
+**Etykiety skal (PL-1992).** Etykiety skal Kartografu są o jeden poziom
+drobniejsze niż nomenklatura GUGiK: 7-członowe godło (N-34-130-D-d-2-4) ma tu
+etykietę `1:10000`, a u GUGiK jest modułem archiwizacji 1:5000; siatka 1-144
+(etykieta `1:200000`) ma wymiary oficjalnego arkusza 1:100000 (20' x 30').
+Etykiety zostają dla zgodności publicznego API i CLI `--scale`; aliasy
+planowane w następnej wersji major (patrz docstring `SheetParser`).
+
+**Konwencja krawędzi.** `find_sheets_for_bbox` / `find_sheets_for_geometry`
+wymagają dodatniego pola przecięcia — stykające się krawędzie NIE są
+przecięciem. Bbox równy arkuszowi zwraca więc tylko jego własne arkusze
+(`N-34-130-D` w skali 1:50000 → 4, nie 9), a bbox zdegenerowany do punktu →
+dokładnie jeden arkusz. Nieznana wartość `system=` to `ValidationError`.
 
 ### 2.2 NMT — Czechy (CUZK, etap 1, v0.7.0-dev) - IN SCOPE
 
@@ -115,7 +131,8 @@ patrz sekcja 3.2, znane ograniczenie.
 - Pobieranie przez godło → TIF (OpenData)
 - Pobieranie przez bbox → GeoTIFF (WCS)
 - Brak vertical CRS (2D RGB)
-- 9 warstw WMS (2018-2025+starsze)
+- 4 warstwy WMS (2026, 2025, 2024 + Starsze — roczniki 2018-2023
+  skonsolidowane przez GUGiK w jedną warstwę `SkorowidzeOrtofotomapyStarsze`)
 - Obsługa formatów WCS: GTiff, PNG, JPEG
 
 # Źródło: GUGiK
@@ -166,7 +183,7 @@ patrz sekcja 3.2, znane ograniczenie.
 - 6 głębokości (0-5cm do 100-200cm)
 - 5 statystyk (mean, Q0.05, Q0.5, Q0.95, uncertainty)
 - Rozdzielczość: 250m (globalne)
-- Pobieranie przez godło, bbox lub TERYT
+- Pobieranie przez godło lub bbox (BEZ TERYT — patrz 3.2)
 - Format: GeoTIFF
 
 # Źródło: ISRIC (International Soil Reference and Information Centre)
@@ -210,7 +227,7 @@ kartograf download --bbox ... --country cz --target-crs EPSG:2180   # reprojekcj
 kartograf download 302_5550 --country cz --vertical-crs EVRF2007    # Bpv -> EVRF2007 (EPSG:5621)
 kartograf landcover download --source bdot10k --teryt <kod>
 kartograf landcover download --source corine --godlo <godlo>
-kartograf landcover download --source soilgrids --property <param>
+kartograf landcover download --source soilgrids --property <param>  # --godlo/--bbox (bez --teryt)
 kartograf landcover list-sources
 kartograf landcover list-layers --source <source>
 kartograf soilgrids hsg --godlo <godlo>    # oblicz HSG
@@ -276,12 +293,23 @@ from kartograf import (
 
 ```
 - Brak weryfikacji integralności plików (checksums)
-- Timeout: 30s dla GUGiK, 60s dla Land Cover
+- Timeouty domyślne: 30 s dla NMT/NMPT (GUGiK) i dla discovery WFS w LAZ,
+  60 s dla Ortofoto, pobierania kafli LAZ, CORINE, CUZK oraz selekcji przez
+  godło w Land Cover, 120 s dla BDOT10k, SoilGrids (bbox) i HSG
 - Max 3 próby retry (nie konfigurowalne)
 - Synchroniczne pobieranie w obrębie jednego pliku (równoległość tylko
   między plikami, przez ThreadPoolExecutor/--workers)
 - NMT 5m (PL) wymaga EVRF2007
+- WCS (download_bbox) dla NMT działa tylko dla 1m i tylko w KRON86 —
+  endpoint EVRF2007 wycofany przez GUGiK (404 od 2026-08), pod EVRF2007 jest
+  ValidationError przed wyjściem w sieć; WCS NMPT i Ortofoto nie są tym objęte
 - SoilGrids: tylko WGS84 bbox (transformacja automatyczna)
+- SoilGrids: brak selekcji po TERYT — `--teryt` dotyczy wyłącznie bdot10k,
+  a `SoilGridsProvider.download_by_teryt` rzuca NotImplementedError (wcześniej
+  cicho zwracał kwadrat 60x60 km wokół środka województwa); użyj --bbox/--godlo
+- find_sheets_for_bbox/find_sheets_for_geometry: stykające się krawędzie NIE
+  są przecięciem (wymagane dodatnie pole) — bbox równy arkuszowi zwraca tylko
+  jego arkusze, a bbox zdegenerowany do punktu → dokładnie jeden arkusz
 
 # CZ (CUZK, etap 1) — dodatkowe ograniczenia:
 - Produkt CZ w etapie 1: wyłącznie nmt (DMR 5G/4G) — nmpt/orto/laz w etapie 2
@@ -294,10 +322,24 @@ from kartograf import (
   jeden plik (wycinek exportImage, pobierany natywnie w 5514 i reprojektowany
   lokalnie, gdy zażądano innego układu)
 - CountryProfile.extent_wgs84 dla CZ to PROSTOKĄT (obwiednia), nie wielokąt
-  granicy — --country auto w południowej Polsce (lon<18,86°E, lat<51,06°N)
-  wysyła zapytanie do CUZK także dla bboxów leżących w całości w Polsce
-  (wynik: dodatkowy raster/sidecar wypełniony nodata, nie błąd) — naprawa
-  planowana w etapie 2 (patrz ADR-023)
+  granicy — --country auto w pasie na zachód od 18,86°E i na południe od
+  51,06°N (m.in. Opole, Wałbrzych, Rybnik, południowe obrzeża Wrocławia;
+  Kraków, Rzeszów i centrum Wrocławia są już poza prostokątem) wysyła
+  zapytanie do CUZK także dla bboxów leżących w całości w Polsce (wynik:
+  dodatkowy raster/sidecar wypełniony nodata, nie błąd). Symetrycznie
+  prostokąt PL (14,07..24,20°E, 49,00..54,90°N) pokrywa większość Czech, więc
+  auto w Pradze, Brnie czy Ostrawie odpytuje także GUGiK — naprawa (wielokąt
+  granicy) planowana w etapie 2 (patrz ADR-023)
+- --country domyślnie = auto (nowość 0.7.0): na obszarze spornym flagi bez
+  odpowiednika czeskiego (--product nmpt|orto, --system, --vertical-crs
+  KRON86, --resolution 1m) ROZSTRZYGAJĄ kraj do pl z komunikatem Info: na
+  stderr, zamiast przewracać zadanie; wyjątkiem jest --product laz, który ma
+  własny przepływ i na obszarze sięgającym CZ nadal kończy się błędem
+  z podpowiedzią --country pl
+- Częściowy sukces w trybie auto (jeden kraj pobrany, drugi bez danych) to
+  kod wyjścia 0 + Warning: na stderr; kod 1 zostaje dla jawnego --country
+  i dla porażki wszystkich krajów (ADR-023 pkt 4-5). Info:/Warning: idą na
+  stderr, więc -q ich NIE tłumi
 - extra.parent_request.bbox_crs różni się per tryb dla tego samego pliku
   geometrii (jawny --country cz: CRS pliku; auto/pl: EPSG:2180) — znane
   ograniczenie klucza grupowania, do ujednolicenia w etapie 2
@@ -415,8 +457,8 @@ pyshp >= 2.3.0         # Shapefile reading
 ### 6.2 Jakościowe
 
 ```
-- 1402 testy przechodzą
-- Pokrycie testami ~89% (cel 80% osiągnięty)
+- 1708 testów przechodzi
+- Pokrycie testami 93% (cel 80% osiągnięty)
 - Kod zgodny z ruff (check + format)
 - mypy bez nowego długu względem baseline
 - Type hints wszędzie
@@ -441,9 +483,10 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-03-24 | 3.5 | WMS layer validation, 5m bugfix, bump to v0.6.1 |
 | 2026-08-11 | 3.6 | Etap 0 (sources/transform/transport/providers-pl, CLI split, LAZ) + etap 1 (CZ/CUZK: DMR 5G/4G, --country/--target-crs, ADR-023); drzewo modułów i sekcje odświeżone |
 | 2026-08-18 | 3.7 | Przegląd spójności dokumentacji: status mergu etapu 1, nagłówek sekcji 2 (0.5.0→0.7.0), komenda `cache` w 2.9, brakujące eksporty w 2.10, liczba testów 1402 |
+| 2026-08-22 | 3.8 | Korekty spójności po audycie przedwydaniowym 0.7.0: WCS NMT tylko 1m/KRON86, 4 warstwy WMS ortofoto, SoilGrids bez TERYT, timeouty per źródło, konwencja krawędzi i etykiety skal, semantyka `--country auto` (zasięg prostokąta CZ/PL, Info/Warning, częściowy sukces), liczby 1708/93% |
 
 ---
 
-**Wersja dokumentu:** 3.7
-**Data ostatniej aktualizacji:** 2026-08-18
+**Wersja dokumentu:** 3.8
+**Data ostatniej aktualizacji:** 2026-08-22
 **Status:** Rozwoj — v0.7.0 (Unreleased), etap 1 zmergowany do `develop` 2026-08-12
