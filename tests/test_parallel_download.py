@@ -621,6 +621,7 @@ class TestCLIWorkersFlag:
             mock_create.return_value = (mock_provider, mock_storage)
 
             mock_dm = Mock()
+            mock_dm.last_result = None
             mock_dm.download_sheet.return_value = Path("test.asc")
             mock_dm_class.return_value = mock_dm
 
