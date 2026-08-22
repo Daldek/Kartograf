@@ -14,22 +14,12 @@ import sys
 from kartograf.cli._parser import create_parser
 from kartograf.cli.cache_cmd import cmd_cache
 from kartograf.cli.download_cmd import (
-    _cmd_download_bbox,
-    _cmd_download_geometry,
-    _cmd_download_laz,
     _create_provider_and_storage,
-    _download_godlo_list,
     _resolve_laz_bbox,
-    _write_laz_sidecar,
     cmd_download,
     create_progress_callback,
 )
-from kartograf.cli.landcover_cmd import (
-    cmd_landcover,
-    cmd_landcover_download,
-    cmd_landcover_list_layers,
-    cmd_landcover_list_sources,
-)
+from kartograf.cli.landcover_cmd import cmd_landcover
 from kartograf.cli.parse_cmd import (
     cmd_parse,
     format_children,
@@ -37,7 +27,7 @@ from kartograf.cli.parse_cmd import (
     format_hierarchy,
     format_sheet_info,
 )
-from kartograf.cli.soilgrids_cmd import cmd_soilgrids, cmd_soilgrids_hsg
+from kartograf.cli.soilgrids_cmd import cmd_soilgrids
 from kartograf.exceptions import KartografError
 
 __all__ = [
@@ -46,11 +36,7 @@ __all__ = [
     "cmd_parse",
     "cmd_download",
     "cmd_landcover",
-    "cmd_landcover_download",
-    "cmd_landcover_list_layers",
-    "cmd_landcover_list_sources",
     "cmd_soilgrids",
-    "cmd_soilgrids_hsg",
     "cmd_cache",
     "create_progress_callback",
     "format_sheet_info",
@@ -58,12 +44,7 @@ __all__ = [
     "format_children",
     "format_descendants",
     "_create_provider_and_storage",
-    "_download_godlo_list",
-    "_cmd_download_bbox",
-    "_cmd_download_laz",
-    "_cmd_download_geometry",
     "_resolve_laz_bbox",
-    "_write_laz_sidecar",
 ]
 
 
