@@ -376,10 +376,14 @@ class SheetParser:
         """
         Zwraca arkusz nadrzędny 1:500k dla arkusza 1:200k.
 
-        Arkusze 1:200k są numerowane 1-144 w obrębie 1:1M.
-        Każdy arkusz 1:500k (A, B, C, D) zawiera 36 arkuszy 1:200k.
+        Arkusze 1:200k są numerowane 1-144 w siatce 12×12 w obrębie 1:1M
+        (wierszami, W->E, N->S — patrz `_apply_200k_subdivision`).
+        Każdy arkusz 1:500k (A, B, C, D) to blok 6×6 tej siatki:
 
-        A: 1-36, B: 37-72, C: 73-108, D: 109-144
+        A: wiersze 0-5, kolumny 0-5 (np. 1-6, 13-18, ..., 61-66)
+        B: wiersze 0-5, kolumny 6-11 (np. 7-12, 19-24, ..., 67-72)
+        C: wiersze 6-11, kolumny 0-5 (np. 73-78, 85-90, ..., 133-138)
+        D: wiersze 6-11, kolumny 6-11 (np. 79-84, 91-96, ..., 139-144)
 
         Returns
         -------
@@ -387,9 +391,10 @@ class SheetParser:
             Parser arkusza 1:500k
         """
         arkusz_num = int(self._components["arkusz_200k"])
-        # Oblicz sekcję: 1-36→A, 37-72→B, 73-108→C, 109-144→D
-        section_idx = (arkusz_num - 1) // 36
-        section_letter = ["A", "B", "C", "D"][section_idx]
+        # Quadrant = block of 6 rows x 6 columns of the 12x12 grid, NOT a band
+        # of 36 consecutive numbers - that was the bug: (nr-1)//36 = 3 full-width rows.
+        row, col = divmod(arkusz_num - 1, 12)
+        section_letter = "ABCD"[(row >= 6) * 2 + (col >= 6)]
 
         parent_godlo = (
             f"{self._components['pas']}-{self._components['slup']}-{section_letter}"
@@ -442,8 +447,15 @@ class SheetParser:
         """
         Zwraca 36 arkuszy 1:200k dla arkusza 1:500k.
 
-        Numeracja:
-        A: 1-36, B: 37-72, C: 73-108, D: 109-144
+        Numeracja arkuszy 1:200k to siatka 12x12 (wierszami, W->E, N->S).
+        Sekcja 1:500k to blok 6x6 tej siatki:
+
+        A: wiersze 0-5, kolumny 0-5 (np. 1-6, 13-18, ..., 61-66)
+        B: wiersze 0-5, kolumny 6-11 (np. 7-12, 19-24, ..., 67-72)
+        C: wiersze 6-11, kolumny 0-5 (np. 73-78, 85-90, ..., 133-138)
+        D: wiersze 6-11, kolumny 6-11 (np. 79-84, 91-96, ..., 139-144)
+
+        Kolejnosc dzieci: wierszami (N->S), w wierszu W->E.
 
         Returns
         -------
@@ -451,14 +463,18 @@ class SheetParser:
             Lista 36 parserów arkuszy 1:200k
         """
         section_letter = self._components["arkusz_200k"]  # A, B, C, or D
-        section_idx = ["A", "B", "C", "D"].index(section_letter)
-        start_num = section_idx * 36 + 1
-        end_num = start_num + 36
+        section_idx = "ABCD".index(section_letter)
+        row_start = 6 if section_idx >= 2 else 0
+        col_start = 6 if section_idx % 2 == 1 else 0
 
         children = []
-        for num in range(start_num, end_num):
-            child_godlo = f"{self._components['pas']}-{self._components['slup']}-{num}"
-            children.append(SheetParser(child_godlo, self._uklad))
+        pas = self._components["pas"]
+        slup = self._components["slup"]
+        for row in range(row_start, row_start + 6):
+            for col in range(col_start, col_start + 6):
+                num = row * 12 + col + 1
+                child_godlo = f"{pas}-{slup}-{num}"
+                children.append(SheetParser(child_godlo, self._uklad))
 
         return children
 
