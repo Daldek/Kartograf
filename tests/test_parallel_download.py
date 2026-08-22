@@ -21,7 +21,7 @@ from kartograf.download.manager import (
     DownloadResult,
 )
 from kartograf.download.storage import FileStorage
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.pl.gugik import GugikProvider
 
@@ -309,6 +309,41 @@ class TestDownloadHierarchyLastResult:
         assert manager.last_result is not None
         assert manager.last_result.failed == ["N-34-130-D-d-2-1"]
         assert len(manager.last_result.succeeded) == 3
+
+    def test_last_result_reset_when_next_hierarchy_fails_before_loop(
+        self, tmp_path, flaky_provider
+    ):
+        """Nowe wywolanie hierarchii kasuje wynik poprzedniego, nim wejdzie w petle."""
+        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
+
+        manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=1)
+        assert manager.last_result is not None
+        assert manager.last_result.failed == ["N-34-130-D-d-2-1"]
+
+        with pytest.raises(ValidationError):
+            manager.download_hierarchy("N-34-130-D-d-2", "1:5000")
+
+        # Wolajacy nie moze dostac wyniku POPRZEDNIEGO przebiegu.
+        assert manager.last_result is None
+
+    def test_last_result_reset_when_sequential_run_aborts(
+        self, tmp_path, flaky_provider
+    ):
+        """Wyjatek spoza DownloadError (sekwencyjnie) nie zostawia starego wyniku."""
+        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
+
+        manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=1)
+        assert manager.last_result is not None
+
+        def boom(godlo, path, timeout=30):
+            raise RuntimeError("boom")
+
+        flaky_provider.download = boom
+
+        with pytest.raises(RuntimeError):
+            manager.download_hierarchy("N-34-130-D-d-1", "1:10000", max_workers=1)
+
+        assert manager.last_result is None
 
 
 class TestProviderThreadSafety:
