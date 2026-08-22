@@ -7,8 +7,10 @@ The proxy is automatically started as a subprocess when needed.
 
 import atexit
 import logging
+import os
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Optional
@@ -243,10 +245,20 @@ class AuthProxyClient:
         Returns
         -------
         bool
-            True if download succeeded.
+            True only if the whole body was received and moved into place.
+            A truncated download returns False and leaves no file behind.
         """
         if not self._ensure_proxy():
             return False
+
+        # Write through a per-process/per-thread temp file so that a partial
+        # body never becomes the output: the proxy signals a truncated stream
+        # by dropping the connection (missing terminating chunk or a short
+        # read against Content-Length), which surfaces here as a
+        # RequestException in the middle of iter_content.
+        tmp_path = output_path.with_name(
+            f"{output_path.name}.{os.getpid()}_{threading.get_ident()}.tmp"
+        )
 
         try:
             resp = self._session.post(
@@ -256,19 +268,62 @@ class AuthProxyClient:
                 stream=True,
             )
 
-            if resp.status_code == 200:
-                output_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(output_path, "wb") as f:
-                    for chunk in resp.iter_content(chunk_size=8192):
-                        f.write(chunk)
-                return True
-            else:
+            if resp.status_code != 200:
                 logger.error(f"Download failed: {resp.status_code}")
+                return False
+
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            written = 0
+            with open(tmp_path, "wb") as f:
+                for chunk in resp.iter_content(chunk_size=8192):
+                    f.write(chunk)
+                    written += len(chunk)
+
+            if not self._body_complete(resp, written):
+                return False
+
+            os.replace(tmp_path, output_path)
+            return True
 
         except requests.RequestException as e:
             logger.error(f"Download error: {e}")
+        finally:
+            # No-op after a successful os.replace.
+            tmp_path.unlink(missing_ok=True)
 
         return False
+
+    @staticmethod
+    def _body_complete(resp, written: int) -> bool:
+        """
+        Check the received size against Content-Length where comparable.
+
+        The proxy forwards the upstream body verbatim (raw bytes plus the
+        original Content-Encoding), so Content-Length counts the *encoded*
+        bytes while iter_content yields decoded ones. The comparison is
+        therefore only meaningful when no content coding is in play.
+        """
+        expected = resp.headers.get("Content-Length")
+        if expected is None:
+            return True
+
+        encoding = resp.headers.get("Content-Encoding")
+        if encoding and encoding.lower() != "identity":
+            return True
+
+        try:
+            expected_bytes = int(expected)
+        except (TypeError, ValueError):
+            logger.debug(f"Unparsable Content-Length: {expected!r}")
+            return True
+
+        if written != expected_bytes:
+            logger.error(
+                f"Download truncated: got {written} B, expected {expected_bytes} B"
+            )
+            return False
+
+        return True
 
     def shutdown(self):
         """Explicitly shutdown the proxy."""
