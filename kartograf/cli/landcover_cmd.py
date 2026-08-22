@@ -50,7 +50,7 @@ def cmd_landcover_list_sources(args: argparse.Namespace) -> int:
     print("  bdot10k   - BDOT10k (GUGiK)")
     print("              Polish topographic database, land cover classes (PT)")
     print("              High resolution (1:10000), vector data")
-    print("              Formats: GPKG, SHP, GML")
+    print("              Formats: GPKG, SHP")
     print()
     print("  corine    - CORINE Land Cover (Copernicus/GIOŚ)")
     print("              European land cover classification (44 classes)")

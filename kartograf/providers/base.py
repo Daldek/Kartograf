@@ -361,7 +361,7 @@ class LandCoverProvider(DataSourceProvider):
         Returns
         -------
         list[str]
-            List of format identifiers (e.g., ["GPKG", "SHP", "GML"])
+            List of format identifiers (e.g., ["GPKG", "SHP"])
         """
         return ["GPKG"]
 
@@ -382,7 +382,6 @@ class LandCoverProvider(DataSourceProvider):
         extensions = {
             "GPKG": ".gpkg",
             "SHP": ".shp",
-            "GML": ".gml",
             "GEOJSON": ".geojson",
             "GTiff": ".tif",
         }

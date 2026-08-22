@@ -1132,6 +1132,32 @@ class TestCmdLandcoverDownload:
         assert "sand" in captured.out
         assert "silt" in captured.out
 
+    def test_landcover_format_gml_rejected_by_argparse(self, capsys):
+        """--format GML is not an implemented format; argparse rejects it."""
+        with pytest.raises(SystemExit) as exc_info:
+            main(
+                [
+                    "landcover",
+                    "download",
+                    "--source",
+                    "bdot10k",
+                    "--teryt",
+                    "1465",
+                    "--format",
+                    "GML",
+                ]
+            )
+        assert exc_info.value.code == 2
+        captured = capsys.readouterr()
+        assert "invalid choice" in captured.err
+
+    def test_landcover_list_sources_does_not_advertise_gml(self, capsys):
+        """list-sources must not advertise the unimplemented GML format."""
+        result = main(["landcover", "list-sources"])
+        assert result == 0
+        captured = capsys.readouterr()
+        assert "GML" not in captured.out
+
 
 # ===========================================================================
 # Soilgrids CLI tests

@@ -83,6 +83,13 @@ class TestBdot10kProvider:
         assert "GPKG" in formats
         assert "SHP" in formats
 
+    def test_supported_formats_excludes_gml(self):
+        """GML was advertised but never implemented (phantom format)."""
+        provider = Bdot10kProvider()
+        formats = provider.get_supported_formats()
+        assert formats == ["GPKG", "SHP"]
+        assert "GML" not in formats
+
     def test_construct_opendata_url_gpkg(self):
         """Test OpenData URL construction for GPKG."""
         provider = Bdot10kProvider()
@@ -301,6 +308,7 @@ class TestLandCoverCLI:
         captured = capsys.readouterr()
         assert "bdot10k" in captured.out
         assert "corine" in captured.out
+        assert "GML" not in captured.out
 
     def test_landcover_list_layers_bdot10k(self, capsys):
         """Test list-layers for BDOT10k."""
