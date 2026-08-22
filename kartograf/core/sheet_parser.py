@@ -844,22 +844,68 @@ class SheetParser:
 # =========================================================================
 
 
+# Tolerancja krawędzi — przecięcie musi mieć dodatnie pole (audyt 0.7.0, A1-7).
+_EDGE_TOL = 1e-9
+# degrees (~1 cm) - expands a point/line bbox on its max side (PL-1992, sheet_parser.py)
+_DEGENERATE_EPS_DEG = 1e-7
+
+
+def _axis_overlaps(a_min: float, a_max: float, b_min: float, b_max: float) -> bool:
+    """
+    Positive-length overlap of two ranges on a single axis.
+
+    A degenerate range ``a`` (a point/line, ``a_max - a_min <= _EDGE_TOL``) is
+    resolved by containment in the half-open interval ``[b_min, b_max)`` — a
+    point sitting on the MAX edge belongs to the next range, never to both.
+    """
+    if a_max - a_min <= _EDGE_TOL:  # degenerate axis: containment, half-open at max
+        return b_min - _EDGE_TOL <= a_min < b_max - _EDGE_TOL
+    return min(a_max, b_max) - max(a_min, b_min) > _EDGE_TOL
+
+
+def _expand_degenerate(bbox: BBox, eps: float) -> BBox:
+    """
+    Rozszerza zdegenerowaną oś bboxa (punkt/linia) o ``eps`` po stronie MAX.
+
+    Dzięki temu punkt leżący dokładnie na linii siatki daje dokładnie jeden
+    arkusz — ten na wschód/północ od linii (audyt 0.7.0, A1-7/A1-13).
+
+    Parameters
+    ----------
+    bbox : BBox
+        Bbox do znormalizowania
+    eps : float
+        Rozszerzenie w jednostkach CRS bboxa
+
+    Returns
+    -------
+    BBox
+        Bbox o dodatniej rozpiętości na obu osiach
+    """
+    max_x = bbox.max_x if bbox.max_x - bbox.min_x > _EDGE_TOL else bbox.min_x + eps
+    max_y = bbox.max_y if bbox.max_y - bbox.min_y > _EDGE_TOL else bbox.min_y + eps
+    return BBox(bbox.min_x, bbox.min_y, max_x, max_y, bbox.crs)
+
+
 def _bboxes_intersect(a: BBox, b: BBox) -> bool:
     """
-    Sprawdza czy dwa bounding boxy się przecinają.
+    Positive-area intersection; shared edges/corners do NOT count
+    (audit 0.7.0, A1-7).
 
     Parameters
     ----------
     a, b : BBox
-        Bounding boxy do sprawdzenia (powinny być w tym samym CRS)
+        Bounding boxy do sprawdzenia (powinny być w tym samym CRS).
+        ``a`` to bbox zapytania — jego zdegenerowana oś (punkt) jest
+        rozstrzygana przez zawieranie w półotwartym przedziale ``b``.
 
     Returns
     -------
     bool
-        True jeśli boxy się przecinają
+        True jeśli pole przecięcia jest dodatnie (> _EDGE_TOL na obu osiach)
     """
-    return not (
-        a.max_x < b.min_x or a.min_x > b.max_x or a.max_y < b.min_y or a.min_y > b.max_y
+    return _axis_overlaps(a.min_x, a.max_x, b.min_x, b.max_x) and _axis_overlaps(
+        a.min_y, a.max_y, b.min_y, b.max_y
     )
 
 
@@ -909,6 +955,12 @@ def find_sheets_for_bbox(
     Algorytm: hierarchiczne przycinanie — oblicza matematycznie arkusze 1:1M
     i 1:200k, potem rekurencyjnie zawęża do docelowej skali.
 
+    Konwencja krawędzi: zwracane są tylko arkusze o dodatnim polu przecięcia
+    z bboxem — stykanie się krawędzi/narożników nie wystarcza (audyt 0.7.0,
+    A1-7). Bbox równy dokładnie arkuszowi daje tylko ten arkusz i jego
+    potomków. Bbox zdegenerowany (punkt) daje dokładnie jeden arkusz — ten na
+    wschód/północ od linii siatki.
+
     Parameters
     ----------
     bbox : BBox
@@ -947,6 +999,8 @@ def find_sheets_for_bbox(
 
     # Normalizuj do WGS84
     wgs_bbox = _transform_bbox_to_wgs84(bbox) if bbox.crs == "EPSG:2180" else bbox
+    # Punkt/linia: rozszerz o eps po stronie MAX, żeby dać dokładnie jeden arkusz
+    wgs_bbox = _expand_degenerate(wgs_bbox, _DEGENERATE_EPS_DEG)
 
     target_idx = SheetParser.SCALE_HIERARCHY.index(target_scale)
 

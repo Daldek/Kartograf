@@ -12,7 +12,7 @@ import re
 
 from pyproj import Transformer
 
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.sheet_parser import _EDGE_TOL, BBox, _axis_overlaps
 from kartograf.exceptions import ParseError, ValidationError
 
 # Hierarchia skal PL-2000 (od najgrubszej do najdrobniejszej)
@@ -626,26 +626,57 @@ _ZONE_LON_RANGES = {
 }
 
 
+# metres (~1 mm) - PL-2000 zones are metric, not degrees
+_DEGENERATE_EPS_M = 1e-3
+
+
 def _bboxes_intersect_2000(a: BBox, b: BBox) -> bool:
     """
-    Sprawdza czy dwa bounding boxy sie przecinaja.
+    Positive-area intersection (same convention as PL-1992).
 
-    Uzywa `<` (nie `<=`) — stykajace sie krawedzie = intersect,
-    zgodnie z konwencja z PL-1992 (sheet_parser.py).
+    Styk krawedzia lub naroznikiem NIE liczy sie jako przeciecie
+    (audyt 0.7.0, A1-7). Wspoldzielony z `sheet_parser.py` jest wylacznie
+    helper `_axis_overlaps` (prog `_EDGE_TOL` w jednostkach bboxa); eps dla
+    bboxa zdegenerowanego jest osobny i metryczny (`_DEGENERATE_EPS_M`).
 
     Parameters
     ----------
     a, b : BBox
-        Bounding boxy do sprawdzenia (powinny byc w tym samym CRS)
+        Bounding boxy do sprawdzenia (powinny byc w tym samym CRS).
+        `a` to bbox zapytania — jego zdegenerowana os (punkt) jest
+        rozstrzygana przez zawieranie w polotwartym przedziale `b`.
 
     Returns
     -------
     bool
-        True jesli boxy sie przecinaja
+        True jesli pole przeciecia jest dodatnie
     """
-    return not (
-        a.max_x < b.min_x or a.min_x > b.max_x or a.max_y < b.min_y or a.min_y > b.max_y
+    return _axis_overlaps(a.min_x, a.max_x, b.min_x, b.max_x) and _axis_overlaps(
+        a.min_y, a.max_y, b.min_y, b.max_y
     )
+
+
+def _expand_degenerate_2000(bbox: BBox) -> BBox:
+    """
+    Rozszerza zdegenerowana os bboxa (punkt/linia) o `_DEGENERATE_EPS_M`.
+
+    Rozszerzenie idzie po stronie MAX, wiec punkt na linii siatki daje
+    dokladnie jeden arkusz — ten na wschod/polnoc od linii.
+
+    Parameters
+    ----------
+    bbox : BBox
+        Bbox w natywnym CRS strefy (metry)
+
+    Returns
+    -------
+    BBox
+        Bbox o dodatniej rozpietosci na obu osiach
+    """
+    eps = _DEGENERATE_EPS_M
+    max_x = bbox.max_x if bbox.max_x - bbox.min_x > _EDGE_TOL else bbox.min_x + eps
+    max_y = bbox.max_y if bbox.max_y - bbox.min_y > _EDGE_TOL else bbox.min_y + eps
+    return BBox(bbox.min_x, bbox.min_y, max_x, max_y, bbox.crs)
 
 
 def _determine_zones_for_bbox(bbox_wgs84: BBox) -> list[int]:
@@ -771,7 +802,10 @@ def find_sheets_2000_for_bbox(
     Returns
     -------
     list[str]
-        Posortowana lista godel arkuszy PL-2000 pokrywajacych bbox
+        Posortowana lista godel arkuszy PL-2000 pokrywajacych bbox.
+        Konwencja krawedzi jak w PL-1992: liczy sie tylko dodatnie pole
+        przeciecia (styk krawedzia to za malo), a bbox zdegenerowany (punkt)
+        daje dokladnie jeden arkusz — ten na wschod/polnoc od linii siatki.
 
     Raises
     ------
@@ -804,6 +838,9 @@ def find_sheets_2000_for_bbox(
             zone_bbox = bbox
         else:
             zone_bbox = _transform_bbox_to_zone_crs(bbox_wgs84, z)
+
+        # Punkt/linia: rozszerz o eps po stronie MAX (dokladnie jeden arkusz)
+        zone_bbox = _expand_degenerate_2000(zone_bbox)
 
         # Oblicz zakres row/col dla 1:10k
         min_row = math.floor((zone_bbox.min_y - 4_920_000) / 5000) - 1

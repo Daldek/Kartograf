@@ -11,6 +11,7 @@ from kartograf.core.parser_2000 import (
     SCALE_HIERARCHY_2000,
     SHEET_DIMENSIONS_2000,
     Parser2000,
+    _bboxes_intersect_2000,
     find_sheets_2000_for_bbox,
 )
 from kartograf.core.sheet_parser import BBox
@@ -1547,6 +1548,37 @@ class TestFindSheets2000ForBBox:
         assert has_zone_6
         assert has_zone_7
 
+    # --- Stykajace sie krawedzie (audyt 0.7.0, A1-7) ---
+
+    def test_bbox_equal_to_sheet_2000_returns_itself(self):
+        """Bbox rowny arkuszowi 1:2000 -> dokladnie ten jeden arkusz."""
+        godlo = "6.179.12.20"
+        bbox = Parser2000(godlo).get_bbox()
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:2000")
+        assert result == [godlo]
+
+    def test_bbox_equal_to_10k_sheet_2000_returns_itself(self):
+        """Bbox rowny arkuszowi 1:10000 -> dokladnie ten jeden arkusz."""
+        godlo = "6.179.12"
+        bbox = Parser2000(godlo).get_bbox()
+        assert find_sheets_2000_for_bbox(bbox) == [godlo]
+
+    def test_point_bbox_2000_on_grid_line_returns_single_sheet(self):
+        """Zdegenerowany bbox na linii siatki -> dokladnie 1 arkusz (NE od linii)."""
+        # Naroznik SW arkusza 6.179.12: west=6428000, south=5815000
+        bbox = BBox(
+            min_x=6428000, min_y=5815000, max_x=6428000, max_y=5815000, crs="EPSG:2177"
+        )
+        result = find_sheets_2000_for_bbox(bbox)
+        assert result == ["6.179.12"]
+
+    def test_point_bbox_2000_inside_sheet_returns_single_sheet(self):
+        """Zdegenerowany bbox wewnatrz arkusza -> dokladnie 1 arkusz."""
+        bbox = BBox(
+            min_x=6430000, min_y=5817000, max_x=6430000, max_y=5817000, crs="EPSG:2177"
+        )
+        assert find_sheets_2000_for_bbox(bbox) == ["6.179.12"]
+
     # --- Zwracane typy ---
 
     def test_returns_list_of_strings(self):
@@ -1580,3 +1612,48 @@ class TestFindSheets2000ForBBox:
         for godlo in result:
             p = Parser2000(godlo)
             assert p.scale == "1:10000"
+
+
+# =========================================================================
+# _bboxes_intersect_2000
+# =========================================================================
+
+
+class TestBBoxesIntersect2000:
+    """Testy funkcji _bboxes_intersect_2000() (konwencja jak w PL-1992)."""
+
+    def test_overlapping_boxes(self):
+        """Boxy z dodatnim polem przeciecia."""
+        a = BBox(0, 0, 10, 10, "EPSG:2177")
+        b = BBox(5, 5, 15, 15, "EPSG:2177")
+        assert _bboxes_intersect_2000(a, b) is True
+
+    def test_touching_edge(self):
+        """Styk krawedzia -> NIE przeciecie (audyt 0.7.0, A1-7)."""
+        a = BBox(0, 0, 5, 5, "EPSG:2177")
+        b = BBox(5, 0, 10, 5, "EPSG:2177")
+        assert _bboxes_intersect_2000(a, b) is False
+
+    def test_touching_corner(self):
+        """Styk naroznikiem -> NIE przeciecie."""
+        a = BBox(0, 0, 5, 5, "EPSG:2177")
+        b = BBox(5, 5, 10, 10, "EPSG:2177")
+        assert _bboxes_intersect_2000(a, b) is False
+
+    def test_point_bbox_inside_box_intersects(self):
+        """Punkt wewnatrz boxa -> przeciecie."""
+        a = BBox(2, 2, 2, 2, "EPSG:2177")
+        b = BBox(0, 0, 5, 5, "EPSG:2177")
+        assert _bboxes_intersect_2000(a, b) is True
+
+    def test_point_bbox_on_max_edge_does_not_intersect(self):
+        """Punkt na krawedzi max -> brak przeciecia (polotwarty przedzial)."""
+        a = BBox(5, 2, 5, 2, "EPSG:2177")
+        b = BBox(0, 0, 5, 5, "EPSG:2177")
+        assert _bboxes_intersect_2000(a, b) is False
+
+    def test_point_bbox_on_min_edge_intersects(self):
+        """Punkt na krawedzi min -> przeciecie (polotwarty przedzial)."""
+        a = BBox(0, 2, 0, 2, "EPSG:2177")
+        b = BBox(0, 0, 5, 5, "EPSG:2177")
+        assert _bboxes_intersect_2000(a, b) is True
