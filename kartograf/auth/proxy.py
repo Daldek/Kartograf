@@ -242,6 +242,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         """Handle POST requests - proxy to CLMS API."""
         import requests
+        import urllib3
 
         parsed = urlparse(self.path)
 
@@ -339,9 +340,8 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "Failed to get access token"}, 500)
                 return
 
-            # Phase 1: connect and send the response headers. Nothing has
-            # been written to the client yet, so a failure is still reportable
-            # as JSON.
+            # Phase 1: connect. Nothing has been written to the client yet,
+            # so a failure here is still reportable as JSON.
             try:
                 resp = requests.get(
                     url,
@@ -349,28 +349,55 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     timeout=120,
                     stream=True,
                 )
+            except requests.RequestException as e:
+                self.send_json({"error": f"Download failed: {e}"}, 502)
+                return
+
+            # The body is forwarded verbatim (decode_content=False), so the
+            # upstream Content-Encoding/Content-Length keep describing exactly
+            # the bytes the client receives. Without an upstream
+            # Content-Length the body would be delimited by closing the
+            # connection (protocol_version is HTTP/1.0), which makes a
+            # truncated download indistinguishable from a complete one -
+            # frame it as chunked instead and withhold the terminating chunk
+            # on failure.
+            use_chunked = "Content-Length" not in resp.headers
+
+            try:
+                if use_chunked:
+                    self.protocol_version = "HTTP/1.1"
 
                 self.send_response(resp.status_code)
                 for key, value in resp.headers.items():
                     if key.lower() not in ("transfer-encoding", "connection"):
                         self.send_header(key, value)
+                if use_chunked:
+                    self.send_header("Transfer-Encoding", "chunked")
+                self.send_header("Connection", "close")
                 self.end_headers()
 
-            except requests.RequestException as e:
-                self.send_json({"error": f"Download failed: {e}"}, 502)
-                return
+                # Phase 2: stream the body. The headers are already out, so an
+                # error MUST NOT be reported with send_json - that would append
+                # a whole HTTP response to the file the client is writing.
+                # Drop the connection instead: the client sees a short read
+                # against Content-Length, or a missing terminating chunk.
+                try:
+                    for chunk in resp.raw.stream(8192, decode_content=False):
+                        if use_chunked:
+                            self.wfile.write(b"%X\r\n" % len(chunk))
+                            self.wfile.write(chunk)
+                            self.wfile.write(b"\r\n")
+                        else:
+                            self.wfile.write(chunk)
 
-            # Phase 2: stream the body. The headers are already out, so an
-            # error MUST NOT be reported with send_json - that would append a
-            # whole HTTP response to the file the client is writing. Drop the
-            # connection instead: the client sees a short read against
-            # Content-Length (or a ChunkedEncodingError when chunked).
-            try:
-                for chunk in resp.iter_content(chunk_size=8192):
-                    self.wfile.write(chunk)
-            except requests.RequestException as e:
-                logger.error("Download stream aborted: %s", e)
-                self.close_connection = True
+                    if use_chunked:
+                        self.wfile.write(b"0\r\n\r\n")
+
+                except (requests.RequestException, urllib3.exceptions.HTTPError) as e:
+                    logger.error("Download stream aborted: %s", e)
+                    self.close_connection = True
+            finally:
+                resp.close()
 
         else:
             self.send_json({"error": "Not found"}, 404)

@@ -5,11 +5,17 @@ Tests cover CLMSCredentials (keychain loading, token exchange),
 ProxyHandler endpoints, and server startup.
 """
 
+import gzip
 import json
+import threading
+from contextlib import contextmanager
+from http.server import HTTPServer
 from io import BytesIO
 from unittest.mock import Mock, patch
 
 import pytest
+import requests
+import urllib3
 
 from kartograf.auth.proxy import CLMSCredentials, ProxyHandler, run_server
 
@@ -422,14 +428,14 @@ class TestProxyHandlerEndpoints:
         handler.send_header = fake_send_header
         handler.end_headers = fake_end_headers
 
-        def broken_stream(chunk_size=8192):
+        def broken_stream(chunk_size=8192, decode_content=False):
             yield b"II*\x00AAAA"
             raise requests.RequestException("Response ended prematurely")
 
         upstream = Mock()
         upstream.status_code = 200
         upstream.headers = {"Content-Type": "image/tiff"}
-        upstream.iter_content = broken_stream
+        upstream.raw.stream = broken_stream
 
         with patch("requests.get", return_value=upstream):
             ProxyHandler.do_POST(handler)
@@ -438,7 +444,11 @@ class TestProxyHandlerEndpoints:
         assert handler._sent == []
         assert handler.close_connection is True
         assert b'{"error"' not in written
-        assert written.endswith(b"AAAA")
+        # No Content-Length upstream -> chunked framing, and the terminating
+        # chunk must be missing so the client sees a truncated body.
+        assert written.endswith(b"8\r\nII*\x00AAAA\r\n")  # 8 bytes, hex length
+        assert not written.endswith(b"0\r\n\r\n")
+        upstream.close.assert_called_once()
 
     def test_unknown_get_endpoint(self):
         """GET /unknown -> 404."""
@@ -480,3 +490,129 @@ class TestRunServer:
         main()
 
         mock_run.assert_called_once_with(8080)
+
+
+class _FakeUpstream:
+    """Minimal stand-in for a streaming requests.Response."""
+
+    def __init__(self, chunks, headers, status_code=200, error=None):
+        self._chunks = chunks
+        self.headers = headers
+        self.status_code = status_code
+        self._error = error
+        self.closed = False
+
+    @property
+    def raw(self):
+        return self
+
+    def stream(self, chunk_size=8192, decode_content=False):
+        assert decode_content is False, "proxy must forward raw bytes"
+        yield from self._chunks
+        if self._error is not None:
+            raise self._error
+
+    def close(self):
+        self.closed = True
+
+
+class TestDownloadFramingEndToEnd:
+    """Real HTTPServer + real requests client - what the caller actually sees.
+
+    ``requests.get`` (used by the handler) is patched; the client talks to the
+    proxy through ``requests.Session``, which is not affected by that patch.
+    """
+
+    @contextmanager
+    def _proxy(self, upstream):
+        creds = Mock()
+        creds.get_access_token.return_value = "tok123"
+        ProxyHandler.credentials = creds
+
+        server = HTTPServer(("127.0.0.1", 0), ProxyHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with patch("requests.get", return_value=upstream):
+                yield f"http://127.0.0.1:{server.server_address[1]}/download"
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    @staticmethod
+    def _client():
+        session = requests.Session()
+        # 127.0.0.1 only: never route through an ambient HTTP(S)_PROXY.
+        session.trust_env = False
+        return session
+
+    @staticmethod
+    def _fetch(session, proxy_url):
+        return session.post(
+            proxy_url,
+            json={"url": "https://land.copernicus.eu/api/download/clc.tif"},
+            timeout=10,
+            stream=True,
+        )
+
+    def test_truncated_with_content_length_raises(self):
+        """Upstream declares Content-Length and dies -> client sees an error."""
+        upstream = _FakeUpstream(
+            chunks=[b"II*\x00" + b"A" * 100],
+            headers={"Content-Type": "image/tiff", "Content-Length": "100000"},
+            error=urllib3.exceptions.ProtocolError("Response ended prematurely"),
+        )
+
+        with self._proxy(upstream) as proxy_url:
+            resp = self._fetch(self._client(), proxy_url)
+            with pytest.raises(requests.exceptions.ChunkedEncodingError):
+                _ = resp.content
+
+    def test_truncated_without_content_length_raises(self):
+        """No Content-Length upstream: truncation must not look like success."""
+        upstream = _FakeUpstream(
+            chunks=[b"II*\x00" + b"A" * 100],
+            headers={"Content-Type": "image/tiff"},
+            error=urllib3.exceptions.ProtocolError("Response ended prematurely"),
+        )
+
+        with self._proxy(upstream) as proxy_url:
+            resp = self._fetch(self._client(), proxy_url)
+            assert resp.status_code == 200
+            with pytest.raises(requests.exceptions.ChunkedEncodingError):
+                _ = resp.content
+
+    def test_complete_without_content_length_delivers_body(self):
+        """Happy path without Content-Length: the client gets the whole body."""
+        payload = b"II*\x00" + b"B" * 5000
+        upstream = _FakeUpstream(
+            chunks=[payload[:2000], payload[2000:]],
+            headers={"Content-Type": "image/tiff"},
+        )
+
+        with self._proxy(upstream) as proxy_url:
+            resp = self._fetch(self._client(), proxy_url)
+            assert resp.status_code == 200
+            assert resp.content == payload
+
+    def test_gzip_body_is_forwarded_raw(self):
+        """Content-Encoding/Content-Length stay consistent with the bytes sent."""
+        plain = b"II*\x00" + b"C" * 4000
+        compressed = gzip.compress(plain)
+        upstream = _FakeUpstream(
+            chunks=[compressed],
+            headers={
+                "Content-Type": "image/tiff",
+                "Content-Encoding": "gzip",
+                "Content-Length": str(len(compressed)),
+            },
+        )
+
+        with self._proxy(upstream) as proxy_url:
+            resp = self._fetch(self._client(), proxy_url)
+            # requests decodes gzip: the caller gets the original raster...
+            assert resp.content == plain
+            # ...while Content-Length still describes the compressed bytes.
+            assert resp.headers["Content-Length"] == str(len(compressed))
+            assert resp.headers["Content-Encoding"] == "gzip"
