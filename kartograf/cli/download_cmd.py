@@ -355,6 +355,13 @@ def _validate_cross_country(
     (czesciowe wykonanie). Zamiast cicho pomijac kraj, CLI podpowiada jawny
     ``--country`` — ale tylko gdy obszar faktycznie przecina wiecej niz jeden
     kraj (przy jednym kraju wybor jest juz rozstrzygniety).
+
+    KOLEJNOSC: pod ``--country auto`` czesc opcji jest juz rozstrzygnieta
+    wczesniej (``_pl_only_flags`` w ``_dispatch_area``, ADR-023 pkt 5), wiec
+    ``countries`` jest wtedy jednoelementowe i te checki widza wylacznie
+    zadania faktycznie niejednoznaczne (np. ``--resolution 2m`` albo
+    ``--target-crs``, ktore nie maja odpowiednika po stronie PL) albo jawny
+    ``--country``, ktorego CLI nie nadpisuje.
     """
     product = getattr(args, "product", "nmt")
     resolution = getattr(args, "resolution", None)
@@ -394,6 +401,33 @@ def _validate_cross_country(
     return 0
 
 
+def _pl_only_flags(args: argparse.Namespace) -> list[str]:
+    """
+    Opcje zadania, ktore w etapie 1 nie maja zadnego odpowiednika po CZ.
+
+    Sluza rozstrzygnieciu ``--country auto`` (ADR-023 pkt 5): skoro wariant
+    istnieje wylacznie dla PL, intencja uzytkownika jest jednoznaczna i lepiej
+    wybrac kraj niz odrzucic cale zadanie. Lista jest CELOWO waska:
+
+    * ``--product laz`` nie nalezy do niej mimo bycia PL-owym — ma wlasny
+      przeplyw (``_cmd_download_laz``) i nigdy nie dociera do ``_dispatch_area``;
+    * ``--resolution 5m`` istnieje po obu stronach granicy (PL 5m, DMR 4G);
+    * ``--resolution 2m``, ``--vertical-crs Bpv`` i ``--target-crs`` sa czeskie,
+      wiec rozstrzygaja co najwyzej w druga strone (dzis: blad walidacji).
+    """
+    flags: list[str] = []
+    product = getattr(args, "product", "nmt")
+    if product in ("nmpt", "orto"):
+        flags.append(f"--product {product}")
+    if getattr(args, "system", None) is not None:
+        flags.append("--system")
+    if getattr(args, "vertical_crs", None) == "KRON86":
+        flags.append("--vertical-crs KRON86")
+    if getattr(args, "resolution", None) == "1m":
+        flags.append("--resolution 1m")
+    return flags
+
+
 def _dispatch_area(
     args: argparse.Namespace, bbox: BBox, filepath: Path | None = None
 ) -> int:
@@ -403,6 +437,9 @@ def _dispatch_area(
     ``bbox`` to zadanie uzytkownika: podany bbox albo obwiednia geometrii.
     Przy ``filepath`` galaz PL pracuje dalej na pliku (arkusze per obiekt,
     a nie z obwiedni), a bbox sluzy rozpoznaniu krajow i ``parent_request``.
+
+    Komunikat ``Info:`` o rozstrzygnieciu kraju idzie na stderr, wiec ``-q``
+    (tlumiacy stdout) go NIE ukrywa — tak samo jak komunikatow ``Error:``.
     """
     from kartograf.transform.crs import TransformError
 
@@ -415,6 +452,24 @@ def _dispatch_area(
             file=sys.stderr,
         )
         return 1
+    # ADR-023 pkt 5 (N6-2): obwiednie krajow sa prostokatami (pkt 4), wiec
+    # auto-split wciaga CZ takze do zadan lezacych w calosci w Polsce — a wtedy
+    # opcja bez odpowiednika czeskiego przewracala cale polecenie (`--system
+    # 2000` pod Raciborzem: kod 1, regresja wzgledem 0.6.1). Taka opcja
+    # rozstrzyga wiec kraj, zamiast psuc zadanie; dalej jest to dokladnie jawny
+    # `--country pl` (auto=False => bez przycinania do obwiedni). Warunek
+    # `len(countries) > 1 and "PL" in countries` zaweza to do obszarow
+    # faktycznie spornych: obszar w calosci czeski dostaje nadal komunikat
+    # o etapie 2 (nizej), a obszar w calosci polski niczego nie potrzebuje.
+    if auto and len(countries) > 1 and "PL" in countries:
+        pl_only = _pl_only_flags(args)
+        if pl_only:
+            print(
+                f"Info: --country auto -> pl ({', '.join(pl_only)} dotyczy tylko PL)",
+                file=sys.stderr,
+            )
+            auto = False
+            countries = ("PL",)
     product = getattr(args, "product", "nmt")
     # obszar w calosci czeski: komunikat o etapie 2 jest trafniejszy niz
     # podpowiedz "wybierz kraj" — kraj jest juz rozstrzygniety

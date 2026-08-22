@@ -3847,25 +3847,116 @@ class TestAutoSplitBBox:
         kwargs = mock_manager_class.call_args.kwargs
         assert kwargs.get("sidecar_extra") is None
 
-    def test_border_bbox_with_1m_unresolvable_for_cz(self, tmp_path, capsys):
-        result = main(self._BORDER + ["--resolution", "1m", "-o", str(tmp_path)])
-        assert result == 1
-        assert "--country" in capsys.readouterr().err  # podpowiedz jawnego kraju
+    # --- N6-2: flagi tylko-PL rozstrzygaja `auto`, zamiast przewracac zadanie ---
 
-    def test_border_bbox_with_kron86_unresolvable_for_cz(self, tmp_path, capsys):
+    def _pl_mocks(self, mock_manager_class, mock_find, tmp_path, godlo):
+        """Galaz PL: jeden arkusz, manager zwraca gotowy plik."""
+        mock_find.return_value = [godlo]
+        mock_manager = Mock()
+        mock_manager.last_result = None
+        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = mock_manager
+        return mock_manager
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_auto_with_resolution_1m_resolves_to_pl(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
+    ):
+        """1m nie istnieje w CZ (2m/5m): auto rozstrzyga kraj na PL."""
+        self._pl_mocks(mock_manager_class, mock_find, tmp_path, "M-34-86-D-d-4-3")
+
+        result = main(self._BORDER + ["--resolution", "1m", "-o", str(tmp_path)])
+
+        assert result == 0
+        mock_cz.assert_not_called()
+        err = capsys.readouterr().err
+        assert "--country auto -> pl" in err
+        assert "--resolution 1m" in err
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_auto_with_kron86_resolves_to_pl(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
+    ):
+        """KRON86 jest nieosiagalny dla CZ (ADR-023 e): kraj = PL."""
+        self._pl_mocks(mock_manager_class, mock_find, tmp_path, "M-34-86-D-d-4-3")
+
         result = main(self._BORDER + ["--vertical-crs", "KRON86", "-o", str(tmp_path)])
-        assert result == 1
-        assert "--country" in capsys.readouterr().err
+
+        assert result == 0
+        mock_cz.assert_not_called()
+        err = capsys.readouterr().err
+        assert "--country auto -> pl" in err
+        assert "KRON86" in err
 
     def test_border_bbox_with_2m_unresolvable_for_pl(self, tmp_path, capsys):
         result = main(self._BORDER + ["--resolution", "2m", "-o", str(tmp_path)])
         assert result == 1
         assert "--country" in capsys.readouterr().err
 
-    def test_border_bbox_with_system_rejected(self, tmp_path, capsys):
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_auto_with_system_2000_resolves_to_pl(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
+    ):
+        """--system nie dotyczy CZ: auto = pl, a sidecar niesie tylko PL."""
+        self._pl_mocks(mock_manager_class, mock_find, tmp_path, "6.179.12.20")
+
         result = main(self._BORDER + ["--system", "2000", "-o", str(tmp_path)])
+
+        assert result == 0
+        mock_cz.assert_not_called()
+        parent = mock_manager_class.call_args.kwargs["sidecar_extra"]["parent_request"]
+        assert parent["countries"] == ["PL"]
+        err = capsys.readouterr().err
+        assert "--country auto -> pl" in err
+        assert "--system" in err
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_auto_pl_only_flags_do_not_clip_bbox(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path
+    ):
+        """Rozstrzygniecie na PL dziala jak jawny --country pl: bez przyciecia.
+
+        Bbox 13,5-14,5E siega na zachod od obwiedni PL (14,07E), wiec w trybie
+        auto galaz PL dostalaby go przycietego — po rozstrzygnieciu flaga
+        tylko-PL ma dostac oryginal.
+        """
+        self._pl_mocks(mock_manager_class, mock_find, tmp_path, "6.179.12.20")
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "13.5,50.0,14.5,50.4",
+                "--bbox-crs",
+                "EPSG:4326",
+                "--system",
+                "2000",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        mock_cz.assert_not_called()
+        used_bbox = mock_find.call_args.args[0]
+        assert (used_bbox.min_x, used_bbox.max_x) == (13.5, 14.5)
+
+    def test_explicit_cz_with_system_still_rejected(self, tmp_path, capsys):
+        """Jawny --country cz: walidacja bez zmian (nie ma czego rozstrzygac)."""
+        result = main(
+            self._BORDER + ["--country", "cz", "--system", "2000", "-o", str(tmp_path)]
+        )
         assert result == 1
-        assert "--system" in capsys.readouterr().err
+        assert "--system dotyczy tylko PL" in capsys.readouterr().err
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     def test_border_bbox_with_target_crs_rejected_before_any_download(
@@ -3877,10 +3968,37 @@ class TestAutoSplitBBox:
         assert "--country" in capsys.readouterr().err
         mock_cz.assert_not_called()
 
-    def test_border_bbox_with_nmpt_rejected(self, tmp_path, capsys):
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_auto_with_product_nmpt_resolves_to_pl(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
+    ):
+        """NMPT dla CZ to etap 2: auto rozstrzyga kraj na PL."""
+        self._pl_mocks(mock_manager_class, mock_find, tmp_path, "M-34-86-D-d-4-3")
+
         result = main(self._BORDER + ["--product", "nmpt", "-o", str(tmp_path)])
-        assert result == 1
-        assert "--country" in capsys.readouterr().err
+
+        assert result == 0
+        mock_cz.assert_not_called()
+        err = capsys.readouterr().err
+        assert "--country auto -> pl" in err
+        assert "--product nmpt" in err
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_auto_with_product_orto_resolves_to_pl(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
+    ):
+        """Ortofotomapa dla CZ to etap 2: auto rozstrzyga kraj na PL."""
+        self._pl_mocks(mock_manager_class, mock_find, tmp_path, "M-34-86-D-d-4-3")
+
+        result = main(self._BORDER + ["--product", "orto", "-o", str(tmp_path)])
+
+        assert result == 0
+        mock_cz.assert_not_called()
+        assert "--product orto" in capsys.readouterr().err
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
