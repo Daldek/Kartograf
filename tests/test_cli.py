@@ -1172,6 +1172,7 @@ class TestCmdDownloadBBox:
     def test_download_bbox_with_scale(self, mock_manager_class, capsys, tmp_path):
         """Test --bbox z --scale 1:100000."""
         mock_manager = Mock()
+        mock_manager.last_result = None
         mock_manager.download_sheet.return_value = tmp_path / "test.asc"
         mock_manager_class.return_value = mock_manager
 
@@ -1255,6 +1256,149 @@ class TestCmdDownloadBBox:
         )
         assert args.godlo is None
         assert args.bbox == "419000,230000,426000,237000"
+
+
+class TestAreaModeHierarchyExitCode:
+    """Kod wyjscia trybow --bbox/--geometry, gdy godla rozwijaja sie do hierarchii."""
+
+    @staticmethod
+    def _manager_for(results):
+        """Manager-mock: kolejne `download_sheet` ustawiaja kolejne `last_result`."""
+        manager = Mock()
+        manager.last_result = None
+        pending = iter(results)
+
+        def _download_sheet(godlo, **kwargs):
+            manager.last_result = next(pending)
+            return list(manager.last_result.succeeded)
+
+        manager.download_sheet.side_effect = _download_sheet
+        return manager
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    def test_bbox_coarse_scale_failure_returns_exit_1(
+        self, mock_find, mock_manager_class, capsys, tmp_path
+    ):
+        """Porazki arkuszy wewnatrz hierarchii nie moga zginac w petli po godlach."""
+        mock_find.return_value = ["N-34-130-D-d-2", "N-34-130-D-d-4"]
+        mock_manager_class.return_value = self._manager_for(
+            [
+                DownloadResult(
+                    succeeded=[tmp_path / "a.asc"], failed=["N-34-130-D-d-2-3"]
+                ),
+                DownloadResult(succeeded=[tmp_path / "b.asc", tmp_path / "c.asc"]),
+            ]
+        )
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "630000,480000,637000,487000",
+                "--scale",
+                "1:25000",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        err = capsys.readouterr().err
+        assert "1 of 4 sheets failed" in err
+        assert "N-34-130-D-d-2-3" in err
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    def test_bbox_coarse_scale_all_succeeded_returns_exit_0(
+        self, mock_find, mock_manager_class, capsys, tmp_path
+    ):
+        """Regresja: hierarchie bez porazek nadal koncza sie zerem i cisza."""
+        mock_find.return_value = ["N-34-130-D-d-2", "N-34-130-D-d-4"]
+        mock_manager_class.return_value = self._manager_for(
+            [
+                DownloadResult(succeeded=[tmp_path / "a.asc"]),
+                DownloadResult(succeeded=[tmp_path / "b.asc"], skipped=["X"]),
+            ]
+        )
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "630000,480000,637000,487000",
+                "--scale",
+                "1:25000",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        assert capsys.readouterr().err == ""
+
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    def test_geometry_coarse_scale_failure_returns_exit_1(
+        self, mock_overall, mock_manager_class, mock_find, capsys, tmp_path
+    ):
+        """Ta sama kontrola obowiazuje w trybie --geometry."""
+        shp_file = tmp_path / "area.shp"
+        shp_file.touch()
+        mock_overall.return_value = BBox(
+            630000.0, 480000.0, 640000.0, 490000.0, "EPSG:2180"
+        )  # Warszawa — glebia PL, auto-split nie dotknie CZ
+        mock_find.return_value = ["N-34-130-D-d-2"]
+        mock_manager_class.return_value = self._manager_for(
+            [DownloadResult(succeeded=[], failed=["N-34-130-D-d-2-1"])]
+        )
+
+        result = main(
+            [
+                "download",
+                "--geometry",
+                str(shp_file),
+                "--scale",
+                "1:25000",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        err = capsys.readouterr().err
+        assert "1 of 1 sheets failed" in err
+        assert "N-34-130-D-d-2-1" in err
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    def test_bbox_leaf_scale_stays_parallel(
+        self, mock_find, mock_manager_class, tmp_path
+    ):
+        """Regresja: arkusze 1:10000 (bez rozwiniecia) ida nadal przez pule watkow."""
+        mock_find.return_value = ["N-34-130-D-d-2-4", "N-34-130-D-d-2-3"]
+        manager = Mock()
+        manager.last_result = None
+        manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = manager
+
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "630000,480000,637000,487000",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        assert manager.download_sheet.call_count == 2
 
 
 # ===========================================================================
@@ -3747,6 +3891,7 @@ class TestAutoSplitBBox:
         """5m istnieje po obu stronach — auto-split przechodzi."""
         mock_find.return_value = ["M-34-86-D"]
         mock_manager = Mock()
+        mock_manager.last_result = None
         mock_manager.download_sheet.return_value = tmp_path / "x.asc"
         mock_manager_class.return_value = mock_manager
         mock_cz.return_value = 0
