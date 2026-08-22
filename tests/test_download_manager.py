@@ -125,6 +125,69 @@ class TestDownloadManagerBasic:
         assert "resolution='5m'" in repr_str
 
 
+class TestDownloadManagerStorageFromDescriptor:
+    """Testy wyprowadzania podkatalogu storage z deskryptora providera."""
+
+    def test_manager_with_nmpt_provider_uses_nmpt_subdir(self, tmp_path):
+        """Manager z providerem NMPT uzywa podkatalogu 'nmpt', nie 'nmt_1m'."""
+        from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
+
+        manager = DownloadManager(output_dir=tmp_path, provider=GugikNmptProvider())
+
+        assert manager._storage._subdir == "nmpt"
+
+    def test_nmt_and_nmpt_managers_do_not_collide(self, tmp_path):
+        """Sciezki NMT i NMPT dla tego samego godla nie moga byc identyczne."""
+        from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
+
+        nmt = DownloadManager(output_dir=tmp_path, provider=GugikProvider())
+        nmpt = DownloadManager(output_dir=tmp_path, provider=GugikNmptProvider())
+        g = "N-34-130-D-d-2-4"
+
+        assert nmt._storage.get_path(g, ".asc") != nmpt._storage.get_path(g, ".asc")
+
+    def test_manager_with_orto_provider_uses_orto_subdir(self, tmp_path):
+        """Manager z providerem Orto uzywa podkatalogu 'orto'."""
+        from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
+
+        manager = DownloadManager(output_dir=tmp_path, provider=GugikOrtoProvider())
+
+        assert manager._storage._subdir == "orto"
+
+    def test_manager_without_descriptor_key_falls_back_to_resolution(self, tmp_path):
+        """Provider bez descriptor_key -> podkatalog wg resolution (jak dotychczas)."""
+        provider = Mock()
+        provider.descriptor_key = None
+        provider.default_extension = ".asc"
+
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=provider, resolution="5m"
+        )
+
+        assert manager._storage._subdir == "nmt_5m"
+
+    def test_manager_with_mock_spec_provider_falls_back_to_resolution(self, tmp_path):
+        """Mock(spec=GugikProvider).descriptor_key to Mock - traktowany jak brak."""
+        provider = Mock(spec=GugikProvider)
+        type(provider).default_extension = PropertyMock(return_value=".asc")
+
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+
+        assert manager._storage._subdir == "nmt_1m"
+
+    def test_explicit_storage_wins_over_descriptor(self, tmp_path):
+        """Jawny storage= ma pierwszenstwo przed deskryptorem providera."""
+        from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
+
+        storage = FileStorage(tmp_path, subdir="custom")
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=GugikNmptProvider(), storage=storage
+        )
+
+        assert manager._storage is storage
+        assert manager._storage._subdir == "custom"
+
+
 class TestDownloadManagerDownloadSheet:
     """Testy metody download_sheet() - pobiera ASC przez OpenData."""
 
