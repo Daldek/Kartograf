@@ -24,9 +24,18 @@ Uzywaj srodowiska wirtualnego z `.venv`:
 
 Zmienne srodowiskowe (opcjonalne):
 - `CLMS_CREDENTIALS` — credentials dla Copernicus CLMS API jako JSON string
-  (potrzebne do CORINE GeoTIFF); fallback: macOS Keychain (service `clms-token`)
+  (pola `client_id`, `private_key`, `token_uri`, opcjonalnie `key_id`/`user_id`);
+  potrzebne do CORINE GeoTIFF. Zmienna dziala na KAZDYM systemie: czyta ja
+  wylacznie **podproces auth proxy** (`python -m kartograf.auth.proxy`), ktory
+  dziedziczy srodowisko rodzica — glowny proces nie widzi kluczy ani tokenu.
+  Kolejnosc zrodel w proxy: `CLMS_CREDENTIALS`, potem (tylko macOS) Keychain
+  (service `clms-token`). Bez zadnego z nich `AuthProxyClient.is_available()`
+  na non-macOS zwraca False bez uruchamiania podprocesu.
+- `KARTOGRAF_DEBUG=1` — pelny traceback zamiast skroconego `Error: ...` z CLI
 
-Bez credentials CLMS: CORINE automatycznie pobiera podglad PNG przez WMS (fallback).
+Bez credentials CLMS: CORINE automatycznie pobiera podglad PNG przez WMS (fallback,
+sidecar dostaje `extra.fallback = "wms_png"`). Alternatywa z poziomu biblioteki:
+`CorineProvider(clms_credentials={...})` (tryb bezposredni, z pominieciem proxy).
 
 ## Dokumentacja
 
@@ -97,6 +106,9 @@ kartograf/
 ```
 
 ## Komendy
+
+Testy sa **offline**: `tests/conftest.py` przewraca kazdy test otwierajacy
+gniazdo spoza loopbacku; wyjatek maja tylko testy z markerem `live`.
 
 ```bash
 # Testy
@@ -200,11 +212,26 @@ kartograf cache path
   (--workers), 1 w bibliotece (`DownloadManager(max_workers=1)`)
 - NMT 5m (PL) dostepne tylko w ukladzie EVRF2007
 - WCS (download_bbox) niedostepne dla NMT 5m — tylko arkusze OpenData
+- WCS (download_bbox) NMT 1m dziala **wylacznie** z `vertical_crs="KRON86"` —
+  endpoint EVRF2007 (`DigitalTerrainModelFormatTIFFEVRF2007`) zwraca 404 od
+  2026-08, wiec deskryptor `pl.gugik.nmt_1m` deklaruje kanal WCS tylko dla
+  `EPSG:9650`, a `GugikProvider.download_bbox` pod EVRF2007 konczy sie
+  `ValidationError` przed wyjsciem w siec (WCS NMPT nie jest tym objety).
+  Wysokosci EVRF2007 z bboxa: `--bbox` w CLI (rozwijane na arkusze OpenData)
 - CORINE GeoTIFF wymaga OAuth2 credentials w CLMS — bez nich fallback na PNG (WMS)
 - SoilGrids: tylko WGS84 bbox (transformacja z EPSG:2180 automatyczna)
-- Timeout: 30s dla GUGiK, 60s dla Land Cover i CUZK
+- Timeout: 30 s dla NMT/NMPT (GUGiK), 60 s dla Ortofoto, LAZ, BDOT10k,
+  Land Cover i CUZK, 120 s dla SoilGrids
 - Max 3 proby retry (nie konfigurowalne)
 - Kazde udane pobranie tworzy sidecar `<plik>.meta.json` (metadane CRS/licencja/nodata)
+- `download_sheet()` zwraca `Path` (arkusz 1:10000 albo godlo PL-2000) albo
+  `list[Path]` (godlo PL-1992 grubsze niz 1:10000 — rozwijane do 1:10000);
+  `download_hierarchy()` zawsze `list[Path]` + podsumowanie w `last_result`
+- `find_sheets_for_bbox()`/`find_sheets_for_geometry()`: stykajace sie krawedzie
+  NIE sa przecieciem (liczy sie dodatnie pole), wiec bbox rowny arkuszowi zwraca
+  tylko jego arkusze; nieznana wartosc `system=` to `ValidationError`
+- HSG: progi tekstur to kanoniczny trojkat USDA, a `TEXTURE_TO_HSG` swiadomie
+  odbiega od TR-55 (`sandy_loam`=B, `clay_loam`/`silty_clay_loam`=C) — ADR-025
 - **CZ (CUZK, etap 1):** produkt w etapie 1 to wylacznie `nmt` (DMR 5G/4G) —
   `nmpt`/`orto`/`laz` dla CZ beda dostepne w etapie 2; `exportImage` ma limit
   **asymetryczny 15000x4100 px** — wieksze bboxy sa kafelkowane po stronie
@@ -220,6 +247,23 @@ kartograf cache path
   dziala tylko z `--bbox`/`--geometry`
   — z godlem CZ konczy sie `ValidationError` (godlo dostarcza produkt natywny
   1:1); obwiednia kraju CZ (`CountryProfile.extent_wgs84`) jest **prostokatna**,
-  nie wielokatem granicy — `--country auto` w poludniowej Polsce (lon<18,86°E,
-  lat<51,06°N) wysyla zapytanie do CUZK takze poza faktyczna granica (wynik:
-  raster/sidecar same-nodata, nie blad); patrz ADR-023 i `docs/SCOPE.md`
+  nie wielokatem granicy — `--country auto` w pasie na zachod od 18,86°E i na
+  poludnie od 51,06°N (m.in. Opole, Walbrzych, Rybnik, poludniowe obrzeza
+  Wroclawia; Krakow, Rzeszow i centrum Wroclawia sa juz poza prostokatem)
+  wysyla zapytanie do CUZK takze poza faktyczna granica (wynik: raster/sidecar
+  same-nodata, nie blad); symetrycznie prostokat PL (14,07..24,20°E) pokrywa
+  wiekszosc Czech, wiec `auto` w Pradze czy Brnie odpytuje takze GUGiK;
+  patrz ADR-023 i `docs/SCOPE.md`
+- **`--country` domyslnie = `auto`** (nowosc 0.7.0, nie bylo tej opcji w 0.6.1).
+  Dla `--bbox`/`--geometry` znaczy to: (1) obszar przecinajacy obwiednie obu
+  krajow pobiera sie z KAZDEGO z nich — osobne pliki i sidecary, wspolny
+  `extra.parent_request`; (2) na obszarze spornym (oba kraje) flagi bez
+  odpowiednika czeskiego (`--product nmpt|orto`, `--system`,
+  `--vertical-crs KRON86`, `--resolution 1m`) ROZSTRZYGAJA kraj do `pl`
+  z komunikatem `Info:` na stderr, zamiast przewracac zadanie — wyjatkiem jest
+  `--product laz`, ktore ma wlasny przeplyw (`_cmd_download_laz`) i na obszarze
+  siegajacym CZ nadal konczy sie bledem z podpowiedzia `--country pl`;
+  (3) porazka jednego kraju przy sukcesie drugiego konczy sie kodem 0
+  i `Warning:` na stderr — kod 1 zostaje dla jawnego `--country` i dla porazki
+  wszystkich krajow (ADR-023 pkt 4-5). Komunikaty `Info:`/`Warning:` ida na
+  stderr, wiec `-q` ich NIE tlumi
