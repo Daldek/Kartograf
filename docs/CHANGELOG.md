@@ -103,9 +103,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Auth proxy: usuniety endpoint `/token` i
   `AuthProxyClient.get_access_token()`** — oddawaly surowy token do procesu
   klienta, co przeczy roli proxy (izolacja credentials, ADR-002). Dodatkowo
-  `/download` przyjmuje wylacznie hosty `*.copernicus.eu` i `*.eea.europa.eu`
-  (dotad proxy pobieralo z dowolnego URL-a podanego przez klienta).
-  (audyt 0.7.0: A4-10)
+  token trafia wylacznie do hostow `*.copernicus.eu` i `*.eea.europa.eu`:
+  `/proxy` i `/download` przyjmuja tylko `https`, a `/proxy` odrzuca (403)
+  kazdy host spoza tej listy (dotad proxy pobieralo z dowolnego URL-a
+  podanego przez klienta). (audyt 0.7.0: A4-10)
 - **Usuniety format `GML`** — `--format GML` (CLI), pozycja w
   `landcover list-sources` i wpis w `get_supported_formats()`; format nigdy
   nie byl zaimplementowany, zadanie i tak konczylo sie plikiem GPKG.
@@ -448,6 +449,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   credentials nie uruchamia juz podprocesu, odczyt portu ma timeout, a stderr
   podprocesu jest drenowany (pelny bufor blokowal proxy).
   (audyt 0.7.0: N4-1, A4-10 czesciowo, A4-11, A4-13, A4-14)
+- Auth proxy `/download`: host `https` spoza allowlisty jest forwardowany
+  BEZ naglowka `Authorization`, zamiast konczyc sie 403 — presigned
+  `DownloadURL` z CLMS bywa na hoscie CDN poza `*.copernicus.eu`, a tokenu
+  tam nie potrzeba; token nadal nie opuszcza allowlisty, a schemat inny niz
+  `https` dalej konczy sie 403. (audyt 0.7.0: A4-10)
 - Deskryptory CZ maja `server_reprojection=False` — pole opisuje stan
   faktyczny po ADR-024 (serwer CUZK dostaje wylacznie uklad natywny).
   (audyt 0.7.0: A1-6)

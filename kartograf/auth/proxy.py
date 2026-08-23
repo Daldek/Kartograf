@@ -42,9 +42,10 @@ logger = logging.getLogger(__name__)
 # Keychain service name
 KEYCHAIN_SERVICE = "clms-token"
 
-# Only these hosts may receive the CLMS access token. The proxy attaches
-# "Authorization: Bearer <token>" to every forwarded request, so an
-# unrestricted target URL would hand the token to an arbitrary server.
+# Only these hosts may receive the CLMS access token. /proxy (the CLMS API)
+# refuses anything else outright; /download forwards to other https hosts as
+# well - a presigned DownloadURL may point at a CDN - but then WITHOUT the
+# Authorization header, so the token never leaves the allowlist.
 ALLOWED_HOST_SUFFIXES = ("copernicus.eu", "eea.europa.eu")
 
 
@@ -240,7 +241,15 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self.send_json({"error": "Not found"}, 404)
 
     def do_POST(self):
-        """Handle POST requests - proxy to CLMS API."""
+        """Handle POST requests - proxy to CLMS API.
+
+        ``/proxy`` forwards an API call with the Bearer token and answers
+        with JSON; the target host must be on ``ALLOWED_HOST_SUFFIXES``.
+        ``/download`` streams a file body back to the client: an allowlisted
+        host gets the token, any other **https** host is forwarded WITHOUT
+        the Authorization header (presigned CLMS DownloadURLs may live on a
+        CDN), and a non-https URL is refused with 403.
+        """
         import requests
         import urllib3
 
@@ -328,24 +337,39 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "Missing 'url'"}, 400)
                 return
 
-            if not _host_allowed(url):
+            # The last step of the CLMS GeoTIFF flow is a presigned
+            # DownloadURL, which the API may place on a host outside the
+            # allowlist (CDN/object storage). Refusing it would break the
+            # whole download, so forward it - but strip the token: a
+            # presigned link carries its own authorization. Plain http is
+            # still refused (the request itself, and any token, would go in
+            # clear text).
+            if urlparse(url).scheme != "https":
                 self.send_json(
-                    {"error": f"Host not allowed: {urlparse(url).hostname}"},
+                    {"error": f"Scheme not allowed: {urlparse(url).scheme}"},
                     403,
                 )
                 return
 
-            token = self.credentials.get_access_token()
-            if not token:
-                self.send_json({"error": "Failed to get access token"}, 500)
-                return
+            headers = {}
+            if _host_allowed(url):
+                token = self.credentials.get_access_token()
+                if not token:
+                    self.send_json({"error": "Failed to get access token"}, 500)
+                    return
+                headers["Authorization"] = f"Bearer {token}"
+            else:
+                logger.info(
+                    "Forwarding download without token (host outside allowlist): %s",
+                    urlparse(url).hostname,
+                )
 
             # Phase 1: connect. Nothing has been written to the client yet,
             # so a failure here is still reportable as JSON.
             try:
                 resp = requests.get(
                     url,
-                    headers={"Authorization": f"Bearer {token}"},
+                    headers=headers,
                     timeout=120,
                     stream=True,
                 )
