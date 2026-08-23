@@ -256,7 +256,9 @@ security add-generic-password -a "$USER" -s "clms-token" -w '{ ... ten sam JSON 
 **Bezpieczeństwo:** Credentials czyta wyłącznie podproces Auth Proxy
 (`python -m kartograf.auth.proxy`), który dziedziczy zmienne środowiskowe rodzica.
 Główna aplikacja nigdy nie widzi kluczy prywatnych ani tokenu - proxy pobiera dane
-samo, wyłącznie z hostów `*.copernicus.eu` i `*.eea.europa.eu`.
+samo, a token dostają wyłącznie hosty `*.copernicus.eu` i `*.eea.europa.eu`
+(presigned link pobrania na innym hoście `https` jest forwardowany bez tokenu,
+adres `http` odrzucany).
 
 **Bez konfiguracji:** CORINE automatycznie pobiera podgląd PNG przez WMS
 (sidecar dostaje wtedy `extra.fallback = "wms_png"`).

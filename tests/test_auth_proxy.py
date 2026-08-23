@@ -352,11 +352,71 @@ class TestProxyHandlerEndpoints:
         mock_get.assert_not_called()
         mock_post.assert_not_called()
 
-    def test_download_rejects_foreign_host(self):
-        """POST /download to a host outside the allowlist -> 403."""
+    def _download_upstream(self, payload=b"II*\x00PAYLOAD"):
+        """Upstream response mock for a successful /download forward."""
+        upstream = Mock()
+        upstream.status_code = 200
+        upstream.headers = {
+            "Content-Type": "image/tiff",
+            "Content-Length": str(len(payload)),
+        }
+        upstream.raw.stream = lambda chunk_size=8192, decode_content=False: iter(
+            [payload]
+        )
+        return upstream
+
+    def test_download_foreign_https_host_forwarded_without_token(self):
+        """A presigned DownloadURL off the allowlist is fetched WITHOUT the token."""
         creds = Mock()
         creds.get_access_token.return_value = "SECRET-TOKEN"
-        body = json.dumps({"url": "https://attacker.invalid/steal.tif"}).encode()
+        body = json.dumps({"url": "https://cdn.example.org/clc.tif"}).encode()
+        handler = self._make_handler("POST", "/download", body=body, credentials=creds)
+
+        upstream = self._download_upstream()
+        with patch("requests.get", return_value=upstream) as mock_get:
+            ProxyHandler.do_POST(handler)
+
+        assert handler._sent == []  # no JSON error, the body was forwarded
+        mock_get.assert_called_once()
+        assert "Authorization" not in mock_get.call_args.kwargs["headers"]
+        creds.get_access_token.assert_not_called()
+        assert b"II*\x00PAYLOAD" in handler.wfile.getvalue()
+
+    def test_download_allowed_host_gets_token(self):
+        """A host on the allowlist still receives the Bearer token."""
+        creds = Mock()
+        creds.get_access_token.return_value = "tok123"
+        body = json.dumps(
+            {"url": "https://land.copernicus.eu/api/download/clc.tif"}
+        ).encode()
+        handler = self._make_handler("POST", "/download", body=body, credentials=creds)
+
+        upstream = self._download_upstream()
+        with patch("requests.get", return_value=upstream) as mock_get:
+            ProxyHandler.do_POST(handler)
+
+        assert handler._sent == []
+        assert mock_get.call_args.kwargs["headers"]["Authorization"] == "Bearer tok123"
+
+    def test_download_rejects_http_scheme_foreign_host(self):
+        """Plain http is refused on /download regardless of the host."""
+        creds = Mock()
+        creds.get_access_token.return_value = "SECRET-TOKEN"
+        body = json.dumps({"url": "http://attacker.invalid/steal.tif"}).encode()
+        handler = self._make_handler("POST", "/download", body=body, credentials=creds)
+
+        with patch("requests.get") as mock_get:
+            ProxyHandler.do_POST(handler)
+
+        assert handler._sent[0]["status"] == 403
+        mock_get.assert_not_called()
+        creds.get_access_token.assert_not_called()
+
+    def test_download_rejects_http_scheme_allowed_host(self):
+        """http to an allowed host would leak the token in clear text -> 403."""
+        creds = Mock()
+        creds.get_access_token.return_value = "SECRET-TOKEN"
+        body = json.dumps({"url": "http://land.copernicus.eu/clc.tif"}).encode()
         handler = self._make_handler("POST", "/download", body=body, credentials=creds)
 
         with patch("requests.get") as mock_get:
