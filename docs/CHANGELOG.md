@@ -441,9 +441,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   i sprawdza `Content-Length`, wiec urwane pobranie nie udaje sukcesu — bylo:
   `True` i uszkodzony GeoTIFF. (audyt 0.7.0: A4-2)
 - `AuthProxyClient`: start proxy pod lockiem (rownolegly CORINE mieszal
-  GeoTIFF z PNG), brak credentials nie uruchamia juz podprocesu, odczyt portu
-  ma timeout, a stderr podprocesu jest drenowany (pelny bufor blokowal proxy).
-  (audyt 0.7.0: N4-1, A4-11, A4-13, A4-14)
+  GeoTIFF z PNG), pod tym samym lockiem powstaje tez sam singleton, a uchwyt
+  do podprocesu i watek drenujacy stderr sa stanem KLASOWYM — dwa watki nie
+  wystartuja juz dwoch proxy; po `kill()` podproces jest odbierany (`wait`,
+  bez zombie), a strumieniowana odpowiedz `/download` zamykana; brak
+  credentials nie uruchamia juz podprocesu, odczyt portu ma timeout, a stderr
+  podprocesu jest drenowany (pelny bufor blokowal proxy).
+  (audyt 0.7.0: N4-1, A4-10 czesciowo, A4-11, A4-13, A4-14)
 - Deskryptory CZ maja `server_reprojection=False` — pole opisuje stan
   faktyczny po ADR-024 (serwer CUZK dostaje wylacznie uklad natywny).
   (audyt 0.7.0: A1-6)

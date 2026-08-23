@@ -6,6 +6,7 @@ The proxy is automatically started as a subprocess when needed.
 """
 
 import atexit
+import contextlib
 import logging
 import os
 import platform
@@ -52,6 +53,9 @@ class AuthProxyClient:
     """
 
     _instance: Optional["AuthProxyClient"] = None
+    # Subprocess state is CLASS state, like _proxy_port: a second object
+    # (a lost __new__ race, or an explicitly reset singleton) must see the
+    # already running child instead of starting a second proxy.
     _proxy_process: subprocess.Popen | None = None
     _proxy_port: int | None = None
     _stderr_thread: threading.Thread | None = None
@@ -60,9 +64,18 @@ class AuthProxyClient:
     _lock = threading.Lock()
 
     def __new__(cls):
-        """Singleton pattern - only one proxy instance."""
+        """Singleton pattern - only one proxy instance.
+
+        Double-checked under ``_lock``: the first client is routinely built
+        from several threads at once (``LandCoverManager.download_batch``
+        runs 4 workers by default), and two instances would mean two proxy
+        subprocesses. ``__new__`` never runs under ``_ensure_proxy``, so the
+        non-reentrant lock is never taken twice.
+        """
         if cls._instance is None:
-            cls._instance = super().__new__(cls)
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
         return cls._instance
 
     def __init__(self):
@@ -74,14 +87,19 @@ class AuthProxyClient:
 
     def _cleanup(self):
         """Cleanup proxy process on exit."""
-        if self._proxy_process:
+        proc = AuthProxyClient._proxy_process
+        if proc:
             logger.debug("Shutting down auth proxy...")
-            self._proxy_process.terminate()
+            proc.terminate()
             try:
-                self._proxy_process.wait(timeout=5)
+                proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                self._proxy_process.kill()
-            self._proxy_process = None
+                proc.kill()
+                # kill() only delivers the signal - reap the child so it
+                # does not linger as a zombie for the rest of the session.
+                with contextlib.suppress(subprocess.TimeoutExpired):
+                    proc.wait(timeout=5)
+            AuthProxyClient._proxy_process = None
             AuthProxyClient._proxy_port = None
 
     def _start_proxy(self) -> bool:
@@ -90,7 +108,8 @@ class AuthProxyClient:
         Called under ``_lock`` from :meth:`_ensure_proxy` (the lock is not
         reentrant, so it is never taken again here).
         """
-        if self._proxy_process and self._proxy_process.poll() is None:
+        proc_running = AuthProxyClient._proxy_process
+        if proc_running and proc_running.poll() is None:
             return True  # Already running
 
         logger.info("Starting CLMS auth proxy...")
@@ -109,17 +128,17 @@ class AuthProxyClient:
                 stderr=subprocess.PIPE,
                 text=True,
             )
-            self._proxy_process = proc
+            AuthProxyClient._proxy_process = proc
 
             # The child logs one line per request to stderr. Nobody reading
             # that pipe means the child blocks on write() once the ~64 kB
             # pipe buffer fills (a few dozen downloads) - drain it.
-            self._stderr_thread = threading.Thread(
+            AuthProxyClient._stderr_thread = threading.Thread(
                 target=self._drain_stderr,
                 args=(proc.stderr,),
                 daemon=True,
             )
-            self._stderr_thread.start()
+            AuthProxyClient._stderr_thread.start()
 
             # Read the port in a thread: a child that never prints it (and
             # never exits) would otherwise block this call forever.
@@ -162,7 +181,7 @@ class AuthProxyClient:
         """Log a startup failure and leave no half-started child behind."""
         logger.error(message)
 
-        proc = self._proxy_process
+        proc = AuthProxyClient._proxy_process
         if proc is not None:
             try:
                 proc.terminate()
@@ -170,10 +189,13 @@ class AuthProxyClient:
                     proc.wait(timeout=5)
                 except subprocess.TimeoutExpired:
                     proc.kill()
+                    # kill() only delivers the signal - reap the child.
+                    with contextlib.suppress(subprocess.TimeoutExpired):
+                        proc.wait(timeout=5)
             except Exception as e:  # pragma: no cover - already dead
                 logger.debug(f"Failed to terminate proxy: {e}")
 
-        self._proxy_process = None
+        AuthProxyClient._proxy_process = None
         AuthProxyClient._proxy_port = None
 
     def _wait_for_proxy(self) -> bool:
@@ -202,9 +224,10 @@ class AuthProxyClient:
         never a live process with ``_proxy_port`` still unset.
         """
         with AuthProxyClient._lock:
-            if self._proxy_port and self._proxy_process:
+            proc = AuthProxyClient._proxy_process
+            if AuthProxyClient._proxy_port and proc:
                 # Check if still running
-                if self._proxy_process.poll() is None:
+                if proc.poll() is None:
                     return True
                 # Process died, restart
                 logger.warning("Proxy process died, restarting...")
@@ -332,6 +355,7 @@ class AuthProxyClient:
             f"{output_path.name}.{os.getpid()}_{threading.get_ident()}.tmp"
         )
 
+        resp = None
         try:
             resp = self._session.post(
                 f"{self.proxy_url}/download",
@@ -360,6 +384,10 @@ class AuthProxyClient:
         except requests.RequestException as e:
             logger.error(f"Download error: {e}")
         finally:
+            # stream=True keeps the connection open until the body is read to
+            # the end; a truncated read would otherwise leak the socket.
+            if resp is not None:
+                resp.close()
             # No-op after a successful os.replace.
             tmp_path.unlink(missing_ok=True)
 
