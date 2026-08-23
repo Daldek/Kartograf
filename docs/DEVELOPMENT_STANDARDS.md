@@ -378,7 +378,9 @@ Type hints sa wymagane dla:
 mypy kartograf/
 ```
 
-Projekt utrzymuje baseline mypy (33 przedistniejace bledy, bez `--strict`).
+Projekt utrzymuje baseline mypy (32 przedistniejace bledy, bez `--strict`;
+stan po audycie 0.7.0 — baseline spadl z 33 do 32 po usunieciu jednego
+bledu `no-redef` w `cli/download_cmd.py`, zadanie 16 planu audytu).
 Nowy kod nie moze dodawac nowych bledow do tego dlugu.
 
 ---
