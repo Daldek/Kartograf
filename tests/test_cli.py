@@ -3971,7 +3971,7 @@ class TestAutoSplitBBox:
         mock_manager.download_sheet.assert_called()
         err = capsys.readouterr().err
         assert "Warning:" in err
-        assert "brak danych w CZ" in err
+        assert "nie pobrano danych z CZ" in err
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
@@ -3989,7 +3989,7 @@ class TestAutoSplitBBox:
 
         assert result == 0
         assert mock_cz.called
-        assert "brak danych w PL" in capsys.readouterr().err
+        assert "nie pobrano danych z PL" in capsys.readouterr().err
 
     # --- A3-2: prostokatne obwiednie krajow a kod wyjscia ---
 

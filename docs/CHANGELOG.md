@@ -302,7 +302,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
   (audyt 0.7.0: A6-3, N6-2; ADR-023 pkt 4-5)
 - Auto-split `--country auto`: porazka jednego kraju przy sukcesie drugiego
-  konczy sie kodem 0 i `Warning: brak danych w <kraj> ...` na stderr — bylo:
+  konczy sie kodem 0 i `Warning: nie pobrano danych z <kraj> ...` na stderr
+  (tresc neutralna: brak pokrycia albo awaria zrodla) — bylo:
   kod 1 mimo pobranych plikow. Kod 1 zostaje dla jawnego `--country` i dla
   przypadku, w ktorym padly wszystkie kraje. (audyt 0.7.0: A3-2, ADR-023 pkt 4)
 - `mosaic_and_crop()` pisze wynik przez `merge(dst_path=...)` zamiast trzymac
