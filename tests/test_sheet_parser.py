@@ -407,7 +407,7 @@ class TestSheetParserGetParent:
         assert parent.scale == "1:200000"
 
     def test_get_parent_from_200k_section_a(self):
-        """Test get_parent() dla skali 1:200000 w sekcji A (1-36)."""
+        """Test get_parent() 1:200000, sekcja A (wiersze 0-5, kolumny 0-5)."""
         parser = SheetParser("N-34-1")  # Arkusz 1 → sekcja A
         parent = parser.get_parent()
 
@@ -425,7 +425,7 @@ class TestSheetParserGetParent:
         assert parent.scale == "1:500000"
 
     def test_get_parent_from_200k_section_c(self):
-        """Test get_parent() dla skali 1:200000 w sekcji C (73-108)."""
+        """Test get_parent() 1:200000, sekcja C (wiersze 6-11, kolumny 0-5)."""
         parser = SheetParser("N-34-73")  # Arkusz 73 → sekcja C
         parent = parser.get_parent()
 
@@ -434,7 +434,7 @@ class TestSheetParserGetParent:
         assert parent.scale == "1:500000"
 
     def test_get_parent_from_200k_section_d(self):
-        """Test get_parent() dla skali 1:200000 w sekcji D (109-144)."""
+        """Test get_parent() 1:200000, sekcja D (wiersze 6-11, kolumny 6-11)."""
         parser = SheetParser("N-34-130")  # Arkusz 130 → sekcja D
         parent = parser.get_parent()
 

@@ -320,7 +320,7 @@ Kartograf/
 │   └── cli/                 # CLI podzielone per komenda: _parser.py (argparse),
 │                            # parse_cmd.py, download_cmd.py, landcover_cmd.py,
 │                            # soilgrids_cmd.py, cache_cmd.py + fasada commands.py
-├── tests/                   # 30 plikow testowych + conftest.py + fixtures/ (1402 testy)
+├── tests/                   # 30 plikow testowych + conftest.py + fixtures/ (1708 testow)
 ├── docs/                    # dokumentacja
 ├── CLAUDE.md
 ├── README.md

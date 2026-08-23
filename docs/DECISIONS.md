@@ -917,7 +917,7 @@ tamta referencja byla osobna implementacja regul i inaczej domykala granice
 klas. Dwa remisy na granicy rozstrzyga u nas kolejnosc regul z punktu (a):
 `clay = 20%` przy `sand > 45` i `silt < 28` idzie do `sandy_loam`, nie do
 `sandy_clay_loam` (28 punktow), a `clay = 27%` przy `20 < sand <= 45` idzie do
-`loam`, nie do `clay_loam` (21 punktow). Wiazace dla konsumentow sa liczby z
+`loam`, nie do `clay_loam` (22 punkty). Wiazace dla konsumentow sa liczby z
 tabeli powyzej — policzone testem wprost na implementacji z punktu (a).
 
 <!-- Szablon nowej decyzji:

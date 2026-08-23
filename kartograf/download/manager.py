@@ -645,6 +645,10 @@ class DownloadManager:
             If download fails
         ValueError
             If format is not supported, bbox CRS is wrong, or resolution is 5m
+        ValidationError
+            If the provider refuses the request before going out to the
+            network - today: EVRF2007 heights, whose WCS endpoint GUGiK
+            withdrew (see ``GugikProvider.download_bbox``)
 
         Examples
         --------
