@@ -17,7 +17,7 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
-| Pokrycie testami | ✅ Gotowy | ~89%, 1402 testy (develop po mergu etapu 1, 2026-08-12) |
+| Pokrycie testami | ✅ Gotowy | 93%, 1708 testow (galaz fix/release-0.7.0-audit po zad. 26, 2026-08-23) |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0 |
@@ -480,11 +480,14 @@ patrz nowa sekcja "Backlog po audycie 0.7.0" nizej).
 
 **Faza B (naprawa, 2026-08-22 — 2026-08-23):** wykonanie 26 zadan (TDD,
 subagent-driven) na galezi `fix/release-0.7.0-audit` (odgalezionej od
-`develop` @ `f432403`, tej samej co merge etapu 1 wyzej) — **62 commity**
-(`git log --oneline f432403..HEAD`), w tym zadanie 26 (ta aktualizacja
+`develop` @ `f432403`, tej samej co merge etapu 1 wyzej) — **64 commity
+na moment zamkniecia zadania 26** (stan koncowy galezi:
+`git log --oneline f432403..HEAD`), w tym zadanie 26 (ta aktualizacja
 `DEVELOPMENT_STANDARDS.md`/`PROGRESS.md`). Rozklad wg typu Conventional
-Commits: 37 `fix`, 15 `docs`, 3 `test`, 2 `refactor`, 2 `feat`, 2 `chore`,
-1 `perf`.
+Commits: 37 `fix`, 17 `docs`, 3 `test`, 2 `refactor`, 2 `feat`, 2 `chore`,
+1 `perf`. Uwaga: po tym zadaniu nastapi jeszcze fala naprawcza po
+finalnym review calej galezi (patrz "Nastepne kroki" nizej), wiec ta
+liczba ponownie sie zmieni przed mergem do `develop`.
 
 **Wynik na koniec fazy B (kanoniczny przebieg kontrolera, po zad. 21,
 niezmieniony przez zad. 22-26 — docs-only):**
