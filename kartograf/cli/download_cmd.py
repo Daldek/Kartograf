@@ -512,8 +512,9 @@ def _dispatch_area(
         failed = [code for code, rc in results if rc != 0]
         ok = [code for code, rc in results if rc == 0]
         print(
-            f"Warning: brak danych w {', '.join(failed)} dla tego obszaru - "
-            f"pobrano {', '.join(ok)} "
+            f"Warning: nie pobrano danych z {', '.join(failed)} dla tego "
+            "obszaru (brak pokrycia albo awaria zrodla — patrz Error wyzej) "
+            f"— pobrano {', '.join(ok)} "
             "(prostokatne obwiednie krajow, ADR-023 pkt 4-5)",
             file=sys.stderr,
         )
