@@ -220,8 +220,10 @@ kartograf cache path
   Wysokosci EVRF2007 z bboxa: `--bbox` w CLI (rozwijane na arkusze OpenData)
 - CORINE GeoTIFF wymaga OAuth2 credentials w CLMS — bez nich fallback na PNG (WMS)
 - SoilGrids: tylko WGS84 bbox (transformacja z EPSG:2180 automatyczna)
-- Timeout: 30 s dla NMT/NMPT (GUGiK), 60 s dla Ortofoto, LAZ, BDOT10k,
-  Land Cover i CUZK, 120 s dla SoilGrids
+- Timeouty domyslne: 30 s dla NMT/NMPT (GUGiK) i discovery WFS w LAZ;
+  60 s dla Ortofoto, kafli LAZ, CORINE (bbox/godlo), CUZK i SoilGrids przez
+  godlo; 120 s dla BDOT10k (wszystkie tryby), CORINE przez TERYT oraz
+  SoilGrids przez bbox i HSG
 - Max 3 proby retry (nie konfigurowalne)
 - Kazde udane pobranie tworzy sidecar `<plik>.meta.json` (metadane CRS/licencja/nodata)
 - `download_sheet()` zwraca `Path` (arkusz 1:10000 albo godlo PL-2000) albo

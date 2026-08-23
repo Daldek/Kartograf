@@ -50,7 +50,9 @@ kartograf download N-34-130-D-d-2-4 --product laz
 # (na zachód od 18,86°E i na południe od 51,06°N) trafia także do CUZK - dla czystego
 # PL użyj --country pl. Flagi bez odpowiednika czeskiego (--product nmpt|orto,
 # --system, --vertical-crs KRON86, --resolution 1m) same przełączają auto na pl
-# (komunikat "Info:" na stderr).
+# (komunikat "Info:" na stderr) - ale tylko na obszarze objętym obwiedniami OBU
+# krajów; obszar leżący w całości po stronie czeskiej kończy się błędem
+# (produkty PL nie mają dziś czeskiego odpowiednika - etap 2).
 kartograf download --bbox 771000,509000,772000,510000 --product orto
 kartograf download --geometry zlewnia.gpkg --layer catchments
 
@@ -134,14 +136,14 @@ oraz sidecar `<plik>.meta.json` ze schematem `kartograf-meta/1`:
 | Pole | Znaczenie |
 |---|---|
 | `dataset`, `country`, `product`, `provider` | klucz deskryptora źródła i jego opis |
-| `horizontal_crs` | układ poziomy pliku (PL `EPSG:2180`, CZ `EPSG:5514`) |
+| `horizontal_crs` | układ poziomy pliku: PL `EPSG:2180`; CZ natywnie `EPSG:5514`, kafel TM33 pobrany godłem `EPSG:3045`, a po `--target-crs` układ docelowy |
 | `vertical_crs` | kod realizacji układu pionowego: `EPSG:9651` (EVRF2007-PL), `EPSG:9650` (KRON86), `EPSG:8357` (Bpv), `EPSG:5621` (EVRF2007) |
 | `vertical_source` | `native` / `ellipsoidal` / `server` |
 | `nodata` | wartość pustego piksela odczytana z pliku |
 | `resolution`, `request` | rozdzielczość i oryginalne żądanie (`godlo` albo `bbox` + `bbox_crs`) |
 | `license` | identyfikator, atrybucja i URL licencji źródła |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC i wersja pakietu |
-| `transform` | użyta operacja przeliczenia, np. `pinned: <opis> (<dokładność> m)` - rastry CZ |
+| `transform` | słownik osi (klucze `horizontal`/`vertical`) z opisem użytej operacji: `pinned: <opis> (<dokładność> m)`; oś bez przeliczenia nie ma klucza, a bez żadnego przeliczenia (pliki PL) całe pole to `null` |
 | `extra.parent_request` | oryginalny bbox, jego układ i próbowane kraje - wspólny klucz grupowania plików jednego żądania `--bbox`/`--geometry`, także po obu stronach granicy |
 
 Sidecary pisze warstwa zarządzająca (`DownloadManager`, `LandCoverManager`, CLI),
@@ -157,6 +159,9 @@ a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
 - ✅ **Pobieranie NMT** - Z retry logic i progress tracking
 - ✅ **Organizacja plików** - Automatyczna struktura katalogów (`data/nmt_1m/`, `data/nmt_5m/`)
 - ✅ **Formaty** - GeoTIFF, PNG, JPEG (WCS), ASC (OpenData)
+- ⚠️ **Pobieranie przez bbox jako GeoTIFF (WCS)** - tylko 1m i tylko KRON86
+  (endpoint EVRF2007 zwraca 404 od 2026-08); wysokości EVRF2007 z obszaru
+  pobiera CLI, rozwijając bbox na arkusze OpenData
 - ✅ **Rozdzielczości:**
   - `1m` (GRID1) - wysoka rozdzielczość, KRON86 i EVRF2007
   - `5m` (GRID5) - niższa rozdzielczość, tylko EVRF2007

@@ -294,8 +294,9 @@ from kartograf import (
 ```
 - Brak weryfikacji integralności plików (checksums)
 - Timeouty domyślne: 30 s dla NMT/NMPT (GUGiK) i dla discovery WFS w LAZ,
-  60 s dla Ortofoto, pobierania kafli LAZ, CORINE, CUZK oraz selekcji przez
-  godło w Land Cover, 120 s dla BDOT10k, SoilGrids (bbox) i HSG
+  60 s dla Ortofoto, pobierania kafli LAZ, CORINE (bbox/godło), CUZK oraz
+  SoilGrids przez godło, 120 s dla BDOT10k (wszystkie tryby), CORINE przez
+  TERYT oraz SoilGrids przez bbox i HSG
 - Max 3 próby retry (nie konfigurowalne)
 - Synchroniczne pobieranie w obrębie jednego pliku (równoległość tylko
   między plikami, przez ThreadPoolExecutor/--workers)

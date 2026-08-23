@@ -115,9 +115,9 @@ CLI → HSGCalculator → SoilGridsProvider → rasterio → numpy → FileStora
 | GUGiK | NMT/NMPT (ASC/GeoTIFF) | WCS, OpenData | Brak | 30s |
 | GUGiK | Ortofoto (TIF/GeoTIFF) | WCS, OpenData | Brak | 60s |
 | GUGiK | LAZ (chmury punktow) | WFS (discovery) + OpenData | Brak | 30s / 60s |
-| GUGiK | BDOT10k (GeoPackage) | OpenData (ZIP); TERYT przez WMS GetFeatureInfo | Brak | 120s / 30s (WMS TERYT) |
+| GUGiK | BDOT10k (GeoPackage) | OpenData (ZIP); TERYT przez WMS GetFeatureInfo | Brak | 120s |
 | CUZK | DMR 5G/4G (GeoTIFF/ZIP) | ArcGIS REST (query, exportImage) + pliki openzu | Brak | 60s |
-| Copernicus CLMS | CORINE (GeoTIFF) | REST API | OAuth2 RSA | 60s |
+| Copernicus CLMS | CORINE (GeoTIFF) | REST API | OAuth2 RSA | 60s (przez TERYT: 120s) |
 | EEA Discomap | CORINE (PNG) | WMS | Brak | 60s |
 | ISRIC SoilGrids | Gleba (GeoTIFF) | WCS | Brak | 120s (przez godlo: 60s) |
 
