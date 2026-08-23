@@ -17,7 +17,7 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
-| Pokrycie testami | ✅ Gotowy | 93%, 1708 testow (galaz fix/release-0.7.0-audit po zad. 26, 2026-08-23) |
+| Pokrycie testami | ✅ Gotowy | 93%, 1716 testow (galaz fix/release-0.7.0-audit po fali naprawczej F-1..F-7, 2026-08-23) |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0 |
@@ -480,22 +480,50 @@ patrz nowa sekcja "Backlog po audycie 0.7.0" nizej).
 
 **Faza B (naprawa, 2026-08-22 — 2026-08-23):** wykonanie 26 zadan (TDD,
 subagent-driven) na galezi `fix/release-0.7.0-audit` (odgalezionej od
-`develop` @ `f432403`, tej samej co merge etapu 1 wyzej) — **64 commity
-na moment zamkniecia zadania 26** (stan koncowy galezi:
-`git log --oneline f432403..HEAD`), w tym zadanie 26 (ta aktualizacja
-`DEVELOPMENT_STANDARDS.md`/`PROGRESS.md`). Rozklad wg typu Conventional
-Commits: 37 `fix`, 17 `docs`, 3 `test`, 2 `refactor`, 2 `feat`, 2 `chore`,
-1 `perf`. Uwaga: po tym zadaniu nastapi jeszcze fala naprawcza po
-finalnym review calej galezi (patrz "Nastepne kroki" nizej), wiec ta
-liczba ponownie sie zmieni przed mergem do `develop`.
+`develop` @ `f432403`, tej samej co merge etapu 1 wyzej) plus fala
+naprawcza po finalnym review calej galezi (nizej) — **71 commitow na
+moment zamkniecia fali** (stan koncowy galezi:
+`git log --oneline f432403..HEAD`), w tym ta aktualizacja
+`PROGRESS.md`. Rozklad wg typu Conventional Commits: 40 `fix`,
+21 `docs`, 3 `test`, 2 `refactor`, 2 `feat`, 2 `chore`, 1 `perf`.
 
-**Wynik na koniec fazy B (kanoniczny przebieg kontrolera, po zad. 21,
-niezmieniony przez zad. 22-26 — docs-only):**
-`pytest tests/ --cov=kartograf --cov-report=term -q -p no:cacheprovider
--m "not live"` → **1708 testow** (1708 collected), pokrycie **93%**
-(5349 stmts / 397 miss, 92.58% w mierze zaokraglonej), `ruff check` i
+**Wynik na koniec fazy B (kanoniczny przebieg, po fali naprawczej
+F-1..F-7):** `pytest tests/ --cov=kartograf --cov-report=term -q
+-p no:cacheprovider -m "not live"` → **1716 testow** (1716 collected,
+1708 passed + 8 deselected `live`), pokrycie **93%** (5366 stmts /
+395 miss, 92,64% w mierze zaokraglonej), `ruff check` i
 `ruff format --check` czyste, `mypy kartograf/` **32 bledy w 9 plikach**
-(baseline byl 33 -> nowy baseline **32**, zero nowego dlugu).
+(baseline byl 33 -> nowy baseline **32**, zero nowego dlugu). Przed fala
+bylo 1708 testow (5349 stmts / 397 miss, 92,58%) — fala dolozyla 8 testow
+(auth proxy: singleton, reap podprocesu, zamkniecie strumienia, polityka
+tokena na `/download`).
+
+**Finalny review calej galezi (fable, 2026-08-23, `f432403..f10388c`):**
+werdykt "NEEDS ONE FIX WAVE" — 0 ustalen Critical, kontrakty
+ADR-022/023/024 nienaruszone, Global Constraints (a)-(l) spelnione, suita
+deterministyczna w 3 przebiegach (0 prob DNS). Jedna fala naprawcza
+F-1..F-7 (5 commitow, 2026-08-23):
+- **F-1** (kod) — domkniecie N4-1: `AuthProxyClient.__new__` pod lockiem,
+  `_proxy_process`/`_stderr_thread` jako stan klasowy (dwa watki startowaly
+  dwa podprocesy proxy), `wait()` po `kill()`, zamykanie strumienia
+  `/download`.
+- **F-2** (kod, ruling kontrolera zmieniajacy Decyzje 13 planu) — `/download`
+  forwarduje host `https` spoza allowlisty BEZ naglowka `Authorization`
+  zamiast konczyc 403: presigned `DownloadURL` z CLMS bywa na hoscie CDN, a
+  403 blokowalo caly tor CORINE GeoTIFF (`http` nadal 403, `/proxy` bez
+  zmian).
+- **F-6** (kod) — neutralna tresc `Warning` auto-splitu (awaria zrodla nie
+  jest juz opisywana jako "brak danych").
+- **F-3/F-4/F-5** (docs) — timeouty w CLAUDE.md/SCOPE/IMPLEMENTATION_PROMPT
+  zgodne z tabela DEVELOPMENT_STANDARDS 13.4, tabela sidecara w README
+  (`horizontal_crs` z kaflem TM33/`--target-crs`, `transform` jako slownik
+  osi), kwalifikator przy `auto -> pl`, WCS tylko KRON86, liczby (1708 ->
+  1716 testow, przypis ADR-025 "22 punkty") i 3 docstringi testow
+  `get_parent()`.
+- **F-7** — ten wpis + backlog nizej.
+
+Raport review i raport fali sa w `.superpowers/sdd/2026-08-22-release-0.7.0-audit/`
+(katalog git-ignored, jak reszta materialow audytu).
 
 Pelne raporty per-zadanie (implementer + kontroler, TDD Evidence: RED/GREEN,
 self-review) sa w `.superpowers/sdd/2026-08-22-release-0.7.0-audit/` —
@@ -553,7 +581,7 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
 11. **Bump wersji + wydanie 0.7.0**: `kartograf.__version__`/
     `pyproject.toml` `0.7.0-dev` -> `0.7.0`, data w CHANGELOG, tag
     `v0.7.0`, push `develop` na origin (patrz pkt 3 wyzej — 71+ commitow
-    niewypchnietych, plus 62 z audytu 0.7.0 po zmergowaniu tej galezi).
+    niewypchnietych, plus 71 z audytu 0.7.0 po zmergowaniu tej galezi).
 12. **Checklista release** (z planu audytu 0.7.0): build sdist/wheel
     (`setuptools`); zywa weryfikacja CORINE GeoTIFF z prawdziwymi
     credentials CLMS vs allowlista hostow (Auth Proxy); E2E kafelkowania
@@ -599,7 +627,10 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
       (sekwencyjny przerywa hierarchie, `last_result` wtedy `None`;
       rownolegly izoluje blad do pojedynczego zadania) — wymaga ADR o
       polityce wyjatkow; `OSError` (np. brak miejsca na dysku) POWINIEN
-      przerywac oba tryby.
+      przerywac oba tryby. Razem z tym: wynik `completed`/`skipped` bez
+      sciezki (`path is None`) nie trafia do licznika (dzis nieosiagalne —
+      `_download_single` zawsze oddaje sciezke) i zliczanie jest
+      zduplikowane w dwoch petlach (sekwencyjnej i rownoleglej).
 - [ ] A2-7 — fallback `urls[0]` w `_get_opendata_url` moze scache'owac URL
       innej warstwy niz zamierzona (Minor) — podniesc log do `warning`,
       rozwazyc weryfikacje zasiegu przy `FEATURE_COUNT>1`.
@@ -626,10 +657,9 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
       ale sam handler HTTP pozostaje bez testow jednostkowych — M.
 - [ ] A4-10 (reszta) — sekret wspoldzielony rodzic-dziecko (`X-Proxy-Auth`,
       uwierzytelnienie klienta wobec proxy) + SIGKILL-safe lifecycle
-      podprocesu (dzis `atexit`); `AuthProxyClient.__new__` singletonu poza
-      lockiem i `_proxy_process` per-instancja (dwa watki moga wystartowac
-      dwa proxy); `kill()` bez `wait()` (ryzyko zombie) — zmiana protokolu
-      + ADR.
+      podprocesu (dzis `atexit`) — zmiana protokolu + ADR. (Wyscig
+      `__new__`/`_proxy_process` per-instancja i `kill()` bez `wait()`
+      naprawione w fali F-1, 2026-08-23.)
 - [ ] A5-3 — 6 providerow PL/EU ma wlasne kopie pobierania z retry zamiast
       wspolnego `transport.download_to` (spec etapu 0 sekcja 6.5 swiadomie
       odlozyl migracje); skutek uboczny przyszlej zmiany: backoff
@@ -649,8 +679,12 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
 - [ ] Minor CLI (A3-8/A3-9/A3-11/A3-12/A3-13/A4-20, opcjonalne): ostrzezenie
       o mieszanych ukladach pionowych w auto-splicie; `parent_request` w
       sidecarach LAZ; CORINE WMS cap 4096 px bez korekty proporcji bboxa
-      (lamie proporcje per os); `--scale`/`--resolution 5m` z godlem TM33
-      bez walidacji; odwrocony bbox CZ.
+      (lamie proporcje per os) — dodatkowo `width_px` liczone z bboxa
+      ZRODLOWEGO, nie z obwiedni w EPSG:3857 (docelowo oba wymiary z
+      obwiedni); `--scale`/`--resolution 5m` z godlem TM33 bez walidacji;
+      `--product orto --resolution 5m` przechodzi cicho, a CLI wypisuje
+      "(resolution: 5m)" (bez skutku dla danych — sidecar bierze
+      rozdzielczosc z deskryptora); odwrocony bbox CZ.
 - [ ] A8-7 / CI — egzekwowanie progow warstwowych pokrycia (core >= 80%,
       patrz DEVELOPMENT_STANDARDS 10.1) + pipeline CI (GitHub Actions)
       uruchamiajacy testy z `-m "not live"`.
@@ -670,10 +704,20 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
       geodezyjnie — niespojne dla rastrow w ukladach geograficznych
       (rozny rozmiar piksela na siatce vs w metrach).
 - [ ] Blokada sieci w `tests/conftest.py` nie obejmuje `socket.getaddrinfo`
-      ani sieci PROJ (`pyproj.network`) — hartowanie izolacji offline.
+      ani sieci PROJ (`pyproj.network`) — hartowanie izolacji offline
+      (~10 linii w `conftest.py`, do zrobienia razem z A8-7/CI; dzis brak
+      ekspozycji: zmierzone 0 prob DNS w calej suicie, siec PROJ domyslnie
+      wylaczona).
 - [ ] `TransformError` w petli krajow `_dispatch_area` konczy caly proces
       kodem 1 mimo czesciowego sukcesu (np. PL pobrane, CZ nie) — do
       etapu 2 (auto-split wielokrajowy).
 - [ ] E2E kafelkowania `exportImage` (wynik >16 Mpx, sciezka chunkowana
       `mosaic_and_crop(dst_path=...)`) nigdy nie uruchomione na zywo — do
       checklisty release / etapu 2.
+- [ ] `mosaic_and_crop(dst_path=...)` moze zostawic obciety plik wynikowy,
+      gdy `merge` padnie w trakcie zapisu (brak `unlink` w obsludze bledu) —
+      jedyne wywolanie produkcyjne (`export_image`) sprzata po sobie samo,
+      wiec dotyczy to tylko bezposrednich konsumentow biblioteki.
+- [ ] `core/geometry.py`: bajt kolejnosci WKB spoza `{0, 1}` nie jest
+      walidowany — zamiast `None` (odrzucenie geometrii) daje smieciowe
+      wspolrzedne z blednym rozpakowaniem struct.

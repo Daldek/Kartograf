@@ -320,7 +320,7 @@ Kartograf/
 │   └── cli/                 # CLI podzielone per komenda: _parser.py (argparse),
 │                            # parse_cmd.py, download_cmd.py, landcover_cmd.py,
 │                            # soilgrids_cmd.py, cache_cmd.py + fasada commands.py
-├── tests/                   # 30 plikow testowych + conftest.py + fixtures/ (1708 testow)
+├── tests/                   # 30 plikow testowych + conftest.py + fixtures/ (1716 testow)
 ├── docs/                    # dokumentacja
 ├── CLAUDE.md
 ├── README.md
@@ -500,7 +500,7 @@ coverage report --include='kartograf/core/*,kartograf/providers/*,kartograf/down
 **Znane odstepstwa (0.7.0)** — moduly warstwy core/providers ponizej progu
 80%, zidentyfikowane `pytest tests/ -q -p no:cacheprovider --cov=kartograf
 --cov-report=term-missing | grep -E '^kartograf/.* [0-7][0-9]%'` (kanoniczny
-przebieg audytu 0.7.0: 1708 testow, 93% pokrycia calosci pakietu):
+przebieg audytu 0.7.0: 1716 testow, 93% pokrycia calosci pakietu):
 - `kartograf/providers/corine.py` — 54%: tor CLMS/OAuth2
   (`_exchange_token`, `_download_via_clms_direct`, `_poll_clms_task`) bez
   testow, dlug sprzed 0.6.0; backlog 0.7.1 (A8-3).
