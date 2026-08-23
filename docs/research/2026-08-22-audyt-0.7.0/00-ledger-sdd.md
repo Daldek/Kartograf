@@ -187,3 +187,4 @@ Ruling (F-2): IMPLEMENTOWAC — /download na host https spoza allowlisty forward
 Ruling (F-6): dolaczyc (neutralna tresc Warning).
 Fala naprawcza: 1 implementer (opus), FIX_BASE f10388c.
 Fala naprawcza: DONE_WITH_CONCERNS (3ee4315, 9c83390, a60053a, 2efcefc, 5dbd99c; 1716 testow (1708 + 8 live deselected -> lacznie 1716 collected), ruff OK, mypy 32). Ruling: liczba testow 1716 w docs OK. Re-review dispatched (opus).
+Fala naprawcza: re-review all addressed (0 nowych bledow). Kontroler: errata Decyzji 13 w planie (d4196ec), artefakty audytu skopiowane do docs/research/2026-08-22-audyt-0.7.0/ (5780d49). HEAD d4196ec, 73 commity od f432403. Galaz NIE zmergowana do develop — decyzja usera.
