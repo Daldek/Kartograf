@@ -463,8 +463,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   i kodem 1, zamiast tracebackiem Pythona. (audyt 0.7.0: N1-1)
 
 ### Tests
-- **1708 testow, pokrycie 93%** — 1142 po mergu etapu 0, 1402 po etapie 1,
-  1708 po audycie przedwydaniowym 0.7.0; ruff i `ruff format` czyste,
+- **1716 testow, pokrycie 93%** — 1142 po mergu etapu 0, 1402 po etapie 1,
+  1716 po audycie przedwydaniowym 0.7.0 (1708 po 26 zadaniach + 8 w fali
+  naprawczej po finalnym review); ruff i `ruff format` czyste,
   mypy 32 bledy (baseline sprzed etapu 0: 33)
 - **Etap 0 — walidacja warstw WMS**
   - `tests/test_wms_layer_validation.py` — nowa klasa `TestHardcodedLayerNames`
