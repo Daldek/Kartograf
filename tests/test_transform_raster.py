@@ -189,14 +189,20 @@ class TestWarpToGrid:
         assert not dst.exists()
         assert list(tmp_path.glob("*.warp.tif")) == []  # sprzatanie po awarii
 
-    def test_failed_warp_removes_stale_destination(self, tmp_path):
-        """Semantyka toru CZ: nieudany warp nie zostawia STAREGO wyniku."""
+    def test_failed_warp_keeps_previous_destination(self, tmp_path):
+        """Nieudany warp ZOSTAWIA poprzedni wynik nietkniety.
+
+        Zapis idzie przez plik tymczasowy i `os.replace`, wiec kasowanie celu
+        nie chronilo przed polzapisanym plikiem — niszczylo tylko stary,
+        poprawny wynik. Sam `exists()` tego nie dowodzi: sprawdzamy TRESC.
+        """
         src = _write_cone_tif(tmp_path / "src.tif", _APEX_2180)
         pinned = _pinned_2180_to("EPSG:5514")
         ax, ay = (float(v) for v in pinned.transform(*_APEX_2180))
         bbox = BBox(ax - 50, ay - 50, ax + 50, ay + 50, "EPSG:5514")
         dst = tmp_path / "dst.tif"
-        dst.write_bytes(b"II*\x00stary wynik")
+        previous = b"II*\x00stary wynik"
+        dst.write_bytes(previous)
 
         with (
             patch(
@@ -209,7 +215,9 @@ class TestWarpToGrid:
                 src, dst, bbox, 1.0, pinned, src_crs="EPSG:2180", nodata=_NODATA
             )
 
-        assert not dst.exists()
+        assert dst.exists(), "awaria warpu skasowala poprzedni wynik"
+        assert dst.read_bytes() == previous, "poprzedni wynik zostal nadpisany"
+        assert list(tmp_path.glob("*.warp.tif")) == []  # sprzatanie po awarii
 
     def test_lowercase_crs_is_the_same_pair(self, tmp_path):
         """`epsg:2180` to ten sam uklad co `EPSG:2180` — porownanie semantyczne.

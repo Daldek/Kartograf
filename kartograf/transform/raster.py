@@ -76,7 +76,9 @@ def warp_to_grid(
     ja sam, poza polityka `transform/crs.py` (zakaz ballparku, limit
     dokladnosci, probe). `src_nodata`/`dst_nodata` maskuja piksele puste,
     zeby nodata nie weszlo do interpolacji. Zapis atomowy: plik docelowy
-    powstaje dopiero z gotowej kopii tymczasowej.
+    powstaje dopiero z gotowej kopii tymczasowej — a skoro tak, awaria NIE
+    kasuje ``dst_path``: jesli lezal tam poprzedni wynik, przezywa on
+    nietkniety (sprzatany jest tylko plik tymczasowy).
 
     Para ukladow musi zgadzac sie z ``pinned`` (o ile ten ja zna) — inaczej
     ``TransformError``. Wymuszona operacja czyni bowiem ``src_crs`` martwym
@@ -129,8 +131,7 @@ def warp_to_grid(
                     COORDINATE_OPERATION=pinned.gdal_operation(),
                 )
         os.replace(tmp_path, dst_path)
-    except BaseException:
-        dst_path.unlink(missing_ok=True)
-        raise
     finally:
+        # Sprzatamy WYLACZNIE plik tymczasowy. Pliku docelowego nie ruszamy:
+        # przy awarii jest to nadal poprzedni, poprawny wynik.
         tmp_path.unlink(missing_ok=True)
