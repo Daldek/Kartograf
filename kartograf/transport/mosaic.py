@@ -22,8 +22,13 @@ def mosaic_and_crop(
     output_path: Path,
     *,
     nodata: float | None = None,
+    dst_kwds: dict | None = None,
 ) -> Path:
-    """Zszyj rastry wejsciowe i przytnij do bbox; zwroc output_path."""
+    """Zszyj rastry wejsciowe i przytnij do bbox; zwroc output_path.
+
+    ``dst_kwds`` nadpisuje profil wyjscia (np. driver/CRS, gdy zrodla ASC
+    ich nie maja).
+    """
     if not inputs:
         raise ValidationError("mosaic_and_crop: brak rastrow wejsciowych")
 
@@ -50,11 +55,16 @@ def mosaic_and_crop(
         # Profil wyjscia merge bierze z PIERWSZEGO zrodla, dokladnie jak
         # wczesniejsza reczna kopia sources[0].profile.
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        kwds: dict = {}
+        if nodata is not None:
+            kwds["nodata"] = nodata
+        if dst_kwds:
+            kwds.update(dst_kwds)
         merge(
             sources,
             bounds=(bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y),
             nodata=nodata,
             dst_path=str(output_path),
-            dst_kwds={"nodata": nodata} if nodata is not None else None,
+            dst_kwds=kwds or None,
         )
     return output_path
