@@ -2889,7 +2889,7 @@ class TestCmdDownloadCz:
         )
         assert "podil" not in payload["extra"]
 
-    def test_bbox_mode_flat_file_and_parent_request(self, tmp_path):
+    def test_bbox_mode_file_in_bbox_subdir_and_parent_request(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
@@ -2905,10 +2905,12 @@ class TestCmdDownloadCz:
             )
 
         assert result == 0
-        target = tmp_path / "cz_dmr5g_-447000_-1114000_-446000_-1113000.tif"
+        target = (
+            tmp_path / "cz_dmr5g" / "bbox" / "-447000_-1114000_-446000_-1113000.tif"
+        )
         assert provider.download_bbox.call_args.args[1] == target
         payload = json.loads(
-            (tmp_path / f"{target.name}.meta.json").read_text(encoding="utf-8")
+            (target.parent / f"{target.name}.meta.json").read_text(encoding="utf-8")
         )
         assert payload["extra"]["parent_request"] == parent
         assert payload["horizontal_crs"] == "EPSG:5514"
@@ -2934,8 +2936,9 @@ class TestCmdDownloadCz:
         sent_bbox, target = provider.download_bbox.call_args.args[:2]
         assert sent_bbox.crs == "EPSG:5514"
         assert -450000 < sent_bbox.min_x < -440000  # Krovak: wartosci ujemne
+        assert target.parent == tmp_path / "cz_dmr5g" / "bbox"
         assert target.name == (
-            f"cz_dmr5g_{format(sent_bbox.min_x, '.10g')}"
+            f"{format(sent_bbox.min_x, '.10g')}"
             f"_{format(sent_bbox.min_y, '.10g')}"
             f"_{format(sent_bbox.max_x, '.10g')}"
             f"_{format(sent_bbox.max_y, '.10g')}.tif"

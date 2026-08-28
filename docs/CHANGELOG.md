@@ -242,6 +242,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     wymienione byly tylko uklady polskie (A6-16)
 
 ### Changed
+- Wycinki `--bbox` CZ trafiaja do `<output>/<subdir>/bbox/<coords>.tif`
+  (np. `data/cz_dmr5g/bbox/-447000_-1114000_-446000_-1113000.tif`) zamiast
+  plasko do korzenia katalogu wyjsciowego z podkatalogiem w nazwie pliku
+  (`cz_dmr5g_<coords>.tif`) — kazdy inny bbox to nowy plik, wiec plaski
+  uklad zasmiecal korzen `data/`; uklad plaski nigdy nie zostal wydany
+  (oba warianty tylko w 0.7.0-dev)
 - CLI: sentinele `None` dla `--resolution`/`--vertical-crs`/`--system`
   rozwiazywane dopiero po ustaleniu kraju docelowego (PL: 1m/EVRF2007/1992
   bez zmian; CZ: 2m/Bpv, `--system` nie dotyczy) — zamiast twardo zakodowanych
