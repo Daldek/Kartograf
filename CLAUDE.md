@@ -42,9 +42,10 @@ sidecar dostaje `extra.fallback = "wms_png"`). Alternatywa z poziomu biblioteki:
 **Przeczytaj w kolejnosci:**
 1. `docs/PROGRESS.md` — aktualny stan projektu i zadania
 2. `docs/SCOPE.md` — zakres projektu (co jest, czego nie ma)
-3. `docs/PRD.md` — wymagania produktowe
-4. `docs/CHANGELOG.md` — historia zmian per-release
-5. `docs/DECISIONS.md` — rejestr decyzji architektonicznych (co i dlaczego)
+3. `docs/ARCHITECTURE.md` — architektura, kontrakty danych, kanoniczny uklad `data/`
+4. `docs/PRD.md` — wymagania produktowe
+5. `docs/CHANGELOG.md` — historia zmian per-release
+6. `docs/DECISIONS.md` — rejestr decyzji architektonicznych (co i dlaczego)
 
 ## Struktura modulow
 
@@ -59,11 +60,12 @@ kartograf/
 │   ├── parser_registry.py  # Rejestr systemow godel (pl1992, pl2000, cz_tm33, cz_sm5); SheetParser/FileStorage delegowane
 │   └── geometry.py         # Czytanie SHP/GPKG, find_sheets_for_geometry, get_overall_bbox
 ├── sources/             # Deskryptory zrodel jako dane (zero IO przy imporcie)
-│   ├── descriptor.py    # SourceDescriptor, AccessChannel (+endpoint dla silnikow sterowanych deskryptorem), TransportKind, LicenseInfo, CountryProfile
+│   ├── descriptor.py    # SourceDescriptor + resolve_subdir (szablony {uklad}/{vcrs}, ADR-026), AccessChannel (+endpoint dla silnikow sterowanych deskryptorem), TransportKind, LicenseInfo, CountryProfile
 │   ├── registry.py      # Rejestr PL/CZ/EU/GLOBAL — get_source, sources_for, get_country, all_countries, vertical_crs_code, resolve_vertical_crs (rodzina->realizacja)
 │   └── sidecar.py       # ResultMetadata, build_metadata (capability=, nodata=), write_sidecar (<plik>.meta.json), read_asc_nodata
-├── transform/           # Transformacje CRS
-│   └── crs.py           # TransformerGroup (allow_ballpark=False, filtr dokladnosci, probe pod polityka sieci, isfinite); PinnedTransform.transform polimorficzne (skalar/numpy)
+├── transform/           # Transformacje CRS i rastrow
+│   ├── crs.py           # TransformerGroup (allow_ballpark=False, filtr dokladnosci, probe pod polityka sieci, isfinite); PinnedTransform.transform polimorficzne (skalar/numpy)
+│   └── raster.py        # warp_to_grid — wymuszona operacja przypieta (ADR-027)
 ├── transport/           # Wspolny transport pobierania
 │   ├── http.py          # download_to — atomic write + retry z backoffem
 │   └── mosaic.py        # mosaic_and_crop — merge kafli (rasterio) + przyciecie, propagacja nodata
@@ -87,7 +89,7 @@ kartograf/
 │   └── metadata.py      # MetadataCache — SQLite WAL, TTL 7d (sheet_cache: 30d), thread-safe
 ├── download/            # Zarzadzanie pobieraniem NMT/NMPT/Orto
 │   ├── manager.py       # DownloadManager — koordynacja pobierania arkuszy (parallel)
-│   └── storage.py       # FileStorage — hierarchiczna struktura katalogow (subdir sterowany deskryptorem)
+│   └── storage.py       # FileStorage(vertical_crs=) — segmenty <produkt>/<kraj>_<uklad>_<vcrs> z szablonow deskryptora (ADR-026)
 ├── landcover/           # Zarzadzanie pobieraniem pokrycia terenu
 │   └── manager.py       # LandCoverManager — dispatch do providerow
 ├── hydrology/           # Obliczenia hydrologiczne
@@ -104,6 +106,14 @@ kartograf/
     ├── cache_cmd.py      # `kartograf cache` (stats / clear / path)
     └── commands.py       # Fasada zgodnosci — re-eksport + entry point `main`
 ```
+
+## Uklad data/ (0.7.0, ADR-026)
+
+`data/<produkt>/<kraj>_<uklad>[_<wariant>][_<vcrs>]/...` — np.
+`nmt/pl_1992_1m_evrf2007/`, `nmt/pl_2000_1m_evrf2007/`, `nmpt/pl_1992_1m_kron86/`,
+`orto/pl_1992/`, `laz/pl_2000_evrf2007/`, `nmt/cz_dmr5g_bpv/`; wycinki
+`--bbox`/`--target-crs` w `<segment>/bbox/<coords>.tif`. Kanoniczna tabela
+i migracja: `docs/ARCHITECTURE.md` sekcja 3. `landcover/` bez zmian.
 
 ## Komendy
 
@@ -151,6 +161,10 @@ kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --count
 # reprojekcja CZ -> EPSG:2180, lokalna przypieta operacja (tylko --bbox/--geometry, nie godlo)
 kartograf download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --target-crs EPSG:2180
 kartograf download 302_5550 --country cz --vertical-crs EVRF2007  # Bpv -> EPSG:5621 (przypieta operacja)
+# wycinek PL: jeden scalony GeoTIFF (mozaika arkuszy + pinned warp)
+kartograf download --bbox 530000,382000,533000,386000 --country pl --target-crs EPSG:5514
+# pogranicze jedna komenda: dwa wycinki (PL+CZ) w tym samym ukladzie, wspolny parent_request
+kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --target-crs EPSG:2180 --vertical-crs EVRF2007
 # Bboxy w EPSG:5514 (Krovak) sa ujemne na terytorium CZ — uzyj `--bbox=...` (bez spacji),
 # inaczej argparse odczyta wartosc jako nieznana flage:
 kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:5514 --country cz --resolution 5m
@@ -246,8 +260,8 @@ kartograf cache path
   rastry CZ sa ZAWSZE pobierane w ukladzie natywnym EPSG:5514, a reprojekcje
   (`--target-crs`, kafel TM33 w 3045) robi lokalnie `rasterio.warp` przypieta
   operacja — serwerowemu `imageSR` nie ufamy (ADR-024); `--target-crs`
-  dziala tylko z `--bbox`/`--geometry`
-  — z godlem CZ konczy sie `ValidationError` (godlo dostarcza produkt natywny
+  dziala tylko z `--bbox`/`--geometry` (PL i CZ)
+  — z godlem konczy sie bledem (godlo dostarcza produkt natywny
   1:1); obwiednia kraju CZ (`CountryProfile.extent_wgs84`) jest **prostokatna**,
   nie wielokatem granicy — `--country auto` w pasie na zachod od 18,86°E i na
   poludnie od 51,06°N (m.in. Opole, Walbrzych, Rybnik, poludniowe obrzeza
@@ -268,4 +282,13 @@ kartograf cache path
   (3) porazka jednego kraju przy sukcesie drugiego konczy sie kodem 0
   i `Warning:` na stderr — kod 1 zostaje dla jawnego `--country` i dla porazki
   wszystkich krajow (ADR-023 pkt 4-5). Komunikaty `Info:`/`Warning:` ida na
-  stderr, wiec `-q` ich NIE tlumi
+  stderr, wiec `-q` ich NIE tlumi. `--target-crs` NIE rozstrzyga kraju —
+  od ADR-027 dziala po obu stronach granicy
+- **`--target-crs` dla PL (ADR-027):** tylko `--product nmt` i system 1992
+  (nmpt/orto — etap 2; laz to chmura punktow; mozaika miedzystrefowa 2000 —
+  etap 2); wynik to JEDEN GeoTIFF `nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif`,
+  failed arkusz = kod 1; `EPSG:2180` = sam crop (`transform: null`).
+  W trybie `--geometry` wycinek obejmuje CALA obwiednie geometrii (bez
+  maskowania do obiektow); `nodata` tylko tam, gdzie nie siega zaden pobrany
+  arkusz. Przy `--force` nieudana budowa wycinka kasuje TAKZE poprzedni plik
+  wyniku ("odswiez albo nic", jak w torze CZ)

@@ -227,6 +227,9 @@ Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja
 
 **Konsekwencje:** Breaking change — stare sciezki `data/1m/` i `data/5m/` nie sa kompatybilne. Jednoznaczna struktura. Parametr `product` w FileStorage pozwala na latwe dodawanie nowych produktow.
 
+**Korekta (2026-08-28):** uklad `nmt_1m`/`nmt_5m` zastapiony segmentami
+`nmt/pl_<uklad>_<res>_<vcrs>` — patrz ADR-026.
+
 ---
 
 ## ADR-014: BDOT10k category-based extraction (pt vs hydro)
@@ -297,6 +300,11 @@ Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja
 **Decyzja:** Opcja B. Composition pattern: `SheetParser` wykrywa format godla przez regex `^[5-8]\.\d` i deleguje do `Parser2000` (lazy import). Auto-detekcja jest przezroczysta — uzytkownik uzywa `SheetParser("6.179.12")` i nie musi wiedziec o Parser2000. BBox w natywnym CRS strefy (EPSG:2176-2179), nie EPSG:2180. `find_sheets_for_bbox(bbox, system="2000")` dispatuje do `find_sheets_2000_for_bbox()`.
 
 **Konsekwencje:** Czysta separacja logiki PL-1992 i PL-2000. Auto-detekcja w SheetParser zachowuje unified API. Nowe eksporty: `Parser2000`, `find_sheets_2000_for_bbox`. CLI: `--system {1992,2000}` pozwala wymusic system. FileStorage: podkatalog `nmt_2000_1m` dla PL-2000 arkuszy.
+
+**Korekta (2026-08-28, ADR-026):** zapowiedziany tu podkatalog `nmt_2000_1m`
+nigdy nie powstal (arkusze PL-2000 ladowaly w `nmt_<res>/` obok PL-1992 —
+patrz uwaga w CHANGELOG 0.5.0). Odroczenie domkniete w ADR-026: PL-2000 ma
+wlasne segmenty `pl_2000_*`.
 
 ---
 
@@ -618,6 +626,13 @@ przetrwaly zapis tych zobowiazan to ponizsze punkty i PROGRESS.md):**
    z `--system 2000` nie dostanie juz czesci czeskiej (dotad nie dostawal
    niczego — kod 1, wiec zmiana jest scisle lepsza), a `-q` nie tlumi
    komunikatu `Info:`, bo idzie on na stderr (jak `Error:`/`Warning:`).
+6. **Addendum 2026-08-28 (ADR-027): `--target-crs` przestaje byc flaga
+   wylacznie czeska.** W trybie `--bbox`/`--geometry` dziala tez dla PL
+   (jeden scalony wycinek), a na pograniczu `--country auto --target-crs`
+   daje dwa wycinki w tym samym ukladzie ze wspolnym
+   `extra.parent_request`. `--target-crs` NIE dolacza wiec do listy opcji
+   rozstrzygajacych kraj z pkt 5 (`_pl_only_flags`) — dziala po obu
+   stronach granicy, wiec nie rozstrzyga w zadna strone.
 
 **Konsekwencje:** Pelna parytetowosc produktowa DMR miedzy PL i CZ (godlo,
 bbox, transformacja pozioma/pionowa opcjonalna). 1381 testow zielonych
@@ -919,6 +934,88 @@ klas. Dwa remisy na granicy rozstrzyga u nas kolejnosc regul z punktu (a):
 `sandy_clay_loam` (28 punktow), a `clay = 27%` przy `20 < sand <= 45` idzie do
 `loam`, nie do `clay_loam` (22 punkty). Wiazace dla konsumentow sa liczby z
 tabeli powyzej — policzone testem wprost na implementacji z punktu (a).
+
+---
+
+## ADR-026: Uklad data/ per produkt — segmenty i szablony w deskryptorach
+
+**Data:** 2026-08-28
+**Status:** Przyjeta (domyka odroczenie z ADR-017; zastepuje uklad ADR-013)
+
+**Kontekst:** Plaski uklad `data/` nie kodowal kraju ani ukladow (`nmt_1m/`
+obok `cz_dmr5g/`; PL-2000 dzielil katalog z PL-1992; ten sam arkusz w KRON86
+i EVRF2007 mial JEDNA sciezke — drugie pobranie: skip albo nadpisanie).
+Federacja niemiecka (kilkanascie zrodel DEM, research 2026-08-10) rozsadzilaby
+korzen katalogu.
+
+**Decyzja (D1-D8 zatwierdzone przez uzytkownika 2026-08-28):**
+`data/<produkt>/<segment>/...`, segment = `<kraj>_<uklad>[_<wariant>][_<vcrs>]`
+lowercase. Uklad poziomy PL zawsze jawnie (`pl_1992`/`pl_2000`); pionowy
+zawsze jawnie (`kron86`/`evrf2007`/`bpv`; jedynym produktem bez pionowego
+jest orto); CZ bez dopisku poziomego (nazwa datasetu wyznacza uklad 1:1,
+natywnie 5514); rozdzielczosc tylko tam, gdzie jest parametrem API
+(NMT/NMPT). `SourceDescriptor.storage_subdir` staje sie SZABLONEM
+z placeholderami `{uklad}`/`{vcrs}`; `resolve_subdir()` wypelnia przez
+`str.replace` (czesciowe wypelnienie legalne, vcrs lowercased), FileStorage
+rozwiazuje `{uklad}` per godlo (regula `path_parts`: kropki=2000, inaczej
+1992) i waliduje zero klamer (`ValidationError` z nazwa wymiaru). Wycinki
+`--bbox` lada w `<segment>/bbox/<coords><ext>` (konwencja d68be23, wspolna
+PL/CZ). `landcover/` bez zmian.
+
+**Konsekwencje:** BREAKING na dysku (tabela migracji: CHANGELOG 0.7.0
+i ARCHITECTURE.md sekcja 3). Nowe zrodlo (np. DE) = nowy wpis deskryptora,
+zero zmian w kodzie sciezek. Konsument czytajacy `storage_subdir` wprost
+dostaje szablon — pole bylo de facto wewnetrzne; uzyj `resolve_subdir()`.
+FileStorage: nowy parametr `vertical_crs` (default "EVRF2007"); nieznany
+`product` nadal passthrough (np. testowe `nmt_2000_1m`).
+
+---
+
+## ADR-027: --target-crs dla PL — scalony wycinek bbox (mozaika + pinned warp)
+
+**Data:** 2026-08-28
+**Status:** Przyjeta (errata do ADR-023: target-crs przestaje byc flaga czeska)
+
+**Kontekst:** `--target-crs` istnial tylko dla CZ; scenariusz "obszar
+zainteresowania w jednym kraju + dociagniecie danych z drugiego" wymagal
+warpa PL po stronie konsumenta — asymetria bez powodu innego niz historia
+implementacji.
+
+**Decyzja:** `--bbox`/`--geometry` + `--country pl` + `--target-crs`
+(produkt nmt) zwraca JEDEN plik `nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif`:
+arkusze pobieraja sie normalnie do swoich segmentow (dzialaja jako cache,
+skip-existing standardowo), potem `mosaic_and_crop` (GTiff+CRS wymuszone —
+ASC ich nie niesie) + lokalny warp `warp_to_grid` z WYMUSZONA operacja
+`PinnedTransform.gdal_operation()` (maszyneria i pulapki ADR-024, w tym
+axisswap dla celow northing-first). `EPSG:2180` = sam crop
+(`transform: null`). Fail-fast operacji przed siecia; kazdy failed arkusz =
+blad calosci (kod 1). Nazwa pliku niesie wspolrzedne w ukladzie WYNIKU.
+Sidecar pisze CLI: `horizontal_crs=target`, `transform.horizontal=
+"pinned: ..."`, `nodata=-9999`, `extra.parent_request`; kanal
+`sheet_files` (fakt: dane z arkuszy OpenData — kanal `bbox_raster` nie
+istnieje dla 5m, a dla 1m deklaruje wylacznie KRON86). Wylaczenia 0.7.0:
+godlo (produkt natywny 1:1), `--product nmpt|orto` (etap 2), `laz` (chmura
+punktow), `--system 2000` (mozaika miedzystrefowa — etap 2). Na obszarze
+transgranicznym `--country auto --target-crs` daje DWA wycinki (PL+CZ)
+w tym samym ukladzie, wspolny `extra.parent_request`.
+
+Obwiednia zrodla dostaje zapas: obwiednia celu wraca do EPSG:2180 i rosnie
+o `_PL_WARP_MARGIN_PX = 4` piksele (halo interpolatora, obrot ukladu
+docelowego). W trybie `--bbox` ten powiekszony bbox steruje TAKZE selekcja
+arkuszy; w trybie `--geometry` arkusze dalej wyznacza sama geometria per
+obiekt, a zapas wplywa wylacznie na crop i siatke. Wycinek z `--geometry`
+obejmuje CALA obwiednie geometrii — nie ma maskowania do obiektow, a `nodata`
+oznacza wylacznie brak pobranego arkusza.
+
+**Konsekwencje:** Symetria PL/CZ w trybie bbox; domkniety zalegly punkt
+backlogu "Mozaikowanie arkuszy NMT PL". Warp PL to osobna funkcja
+`transform/raster.warp_to_grid` — sparametryzowana kopia wzorca CZ, celowo
+niewspoldzielona (testy ADR-024 patchuja `providers.cuzk.dmr.reproject`,
+tor CZ zweryfikowany live tuz przed wydaniem). Przy `--force` nieudana
+budowa wycinka kasuje TAKZE poprzedni plik wyniku (semantyka "odswiez albo
+nic", ta sama co w torze CZ).
+
+---
 
 <!-- Szablon nowej decyzji:
 

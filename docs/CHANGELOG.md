@@ -8,6 +8,30 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.7.0] - Unreleased
 
 ### Breaking Changes
+- **Nowy uklad `data/` — segmenty `<produkt>/<kraj>_<uklad>[_<wariant>][_<vcrs>]`**
+  (ADR-026, decyzje D1-D8; kanoniczny opis: `docs/ARCHITECTURE.md` sekcja 3).
+  Kazdy segment koduje jawnie kraj, uklad poziomy (PL: 1992/2000 — domkniecie
+  odroczonego ADR-017) i pionowy (kron86/evrf2007/bpv; orto bez pionowego).
+  Tabela migracji:
+
+  | Stara sciezka | Nowa sciezka |
+  |---|---|
+  | `nmt_1m/` (godla 1992) | `nmt/pl_1992_1m_<vcrs>/` |
+  | `nmt_1m/` (godla kropkowe 2000) | `nmt/pl_2000_1m_<vcrs>/` |
+  | `nmt_5m/` | `nmt/pl_1992_5m_evrf2007/` |
+  | `nmpt/` | `nmpt/pl_<uklad>_1m_<vcrs>/` |
+  | `orto/` | `orto/pl_1992/` |
+  | `laz/` | `laz/pl_<uklad>_<vcrs>/` |
+  | `cz_dmr5g/` (tylko 0.7.0-dev) | `nmt/cz_dmr5g_<vcrs>/` |
+  | `cz_dmr4g/` (tylko 0.7.0-dev) | `nmt/cz_dmr4g_<vcrs>/` |
+
+  `<vcrs>` przy migracji recznej odczytaj z sidecara (`vertical_crs`);
+  pliki sprzed etapu 0 nie maja sidecarow — wtedy re-download albo wiedza
+  wlasna uzytkownika. Kartograf nie migruje `data/` automatycznie: pliki
+  w starym ukladzie przestaja byc widziane jako pobrane. `landcover/` bez zmian.
+- **`SourceDescriptor.storage_subdir` zmienia semantyke: literal -> szablon**
+  z placeholderami `{uklad}`/`{vcrs}` (ADR-026). Konsument czytajacy pole
+  wprost dostanie szablon — uzywaj `resolve_subdir()`.
 - **Glebokie sciezki importu providerow** (bez shimow — decyzja z review
   specu etapu 0; publiczne API `from kartograf import ...` BEZ zmian):
 
@@ -119,11 +143,33 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Zmiany zachowania widoczne dla skryptow** (tresc wpisow w Changed/Fixed):
   - pobranie hierarchii z porazkami konczy sie kodem 1, nie 0 (Fixed, A2-3);
   - `DownloadManager(provider=GugikNmptProvider())` bez `storage=` pisze do
-    `nmpt/`, nie do `nmt_1m/` (Fixed, A2-2);
+    `nmpt/pl_<uklad>_1m_<vcrs>/`, nie do segmentu NMT (Fixed, A2-2);
   - domyslne `--country auto` doklada dla zadan w poludniowej Polsce plik
     i sidecar z CUZK (Changed, A6-3).
 
 ### Added
+- **`--target-crs` dla PL w trybie `--bbox`/`--geometry`** (ADR-027): jeden
+  scalony wycinek `nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif` (mozaika
+  arkuszy + crop + lokalny warp przypieta operacja; `EPSG:2180` = sam crop,
+  `transform: null`; failed arkusz = kod 1). W trybie `--geometry` wycinek
+  obejmuje CALA obwiednie geometrii (bez maskowania do obiektow) — `nodata`
+  tylko tam, gdzie nie siega zaden pobrany arkusz. Na pograniczu
+  `--country auto --target-crs` daje dwa wycinki PL+CZ ze wspolnym
+  `extra.parent_request`. Wylaczenia (czytelne bledy): godlo,
+  `--product nmpt|orto|laz`, `--system 2000`. Semantyka `--force` to
+  "odswiez albo nic": nieudana budowa wycinka kasuje TAKZE poprzedni plik
+  wyniku (tak samo jak w torze CZ).
+- `SourceDescriptor.resolve_subdir(uklad=, vertical_crs=)` — wypelnianie
+  szablonu segmentu (czesciowe legalne; vcrs lowercased)
+- `FileStorage(vertical_crs=)` — nowy parametr (default `"EVRF2007"`);
+  `{uklad}` rozwiazywany per godlo (kropki=2000, myslniki=1992),
+  nierozwiazany placeholder = `ValidationError`
+- `kartograf.transform.raster.warp_to_grid` — lokalna reprojekcja rastra
+  z wymuszona operacja przypieta (wzorzec ADR-024 dla torow PL)
+- `mosaic_and_crop(dst_kwds=)` — wymuszenie sterownika/CRS wyniku
+  (wejscia ASC bez CRS -> GeoTIFF z EPSG:2180)
+- `docs/ARCHITECTURE.md` — kanoniczny opis architektury, kontraktow
+  i ukladu `data/`
 - **Etap 0 — architektura zrodel wielokrajowych (przygotowanie pod CZ/DE/SK)**
   - `kartograf/sources/` — deskryptory zrodel (SourceDescriptor, AccessChannel,
     TransportKind, LicenseInfo, CountryProfile) + rejestr (`get_source`,
@@ -212,7 +258,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `GugikLazProvider._fetch_available_years()` / `_get_available_years()` —
     lista lat z WFS GetCapabilities, in-memory cache, fallback na hardcoded
   - `FileStorage.get_raw_path()` — sciezka dla nieparsowalnego (drobnego) godla
-    bez `SheetParser`; pliki w `laz/<hierarchia godla>/<oryginalna nazwa>.laz`
+    bez `SheetParser`; pliki w
+    `laz/pl_<uklad>_<vcrs>/<hierarchia godla>/<oryginalna nazwa>.laz`
   - Eksport: `GugikLazProvider`, `LazTile` w `kartograf/__init__.py`
   - Weryfikacja: pobrano realne pliki LAZ (magic `LASF`) E2E; 41 nowych testow
 - **Walidacja warstw WMS przez GetCapabilities dla Ortofotomapy**
@@ -243,11 +290,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 - Wycinki `--bbox` CZ trafiaja do `<output>/<subdir>/bbox/<coords>.tif`
-  (np. `data/cz_dmr5g/bbox/-447000_-1114000_-446000_-1113000.tif`) zamiast
-  plasko do korzenia katalogu wyjsciowego z podkatalogiem w nazwie pliku
-  (`cz_dmr5g_<coords>.tif`) — kazdy inny bbox to nowy plik, wiec plaski
+  (np. `data/nmt/cz_dmr5g_bpv/bbox/-447000_-1114000_-446000_-1113000.tif`)
+  zamiast plasko do korzenia katalogu wyjsciowego z podkatalogiem w nazwie
+  pliku (`cz_dmr5g_<coords>.tif`) — kazdy inny bbox to nowy plik, wiec plaski
   uklad zasmiecal korzen `data/`; uklad plaski nigdy nie zostal wydany
-  (oba warianty tylko w 0.7.0-dev)
+  (oba warianty tylko w 0.7.0-dev) (segment wg ADR-026)
+- LAZ: segment storage wyznaczany per kafel z `uklad_xy`
+  (`laz/pl_<uklad>_<vcrs>/`); fallback: format godla, ostatecznie `2000`
+  z ostrzezeniem w logu
 - CLI: sentinele `None` dla `--resolution`/`--vertical-crs`/`--system`
   rozwiazywane dopiero po ustaleniu kraju docelowego (PL: 1m/EVRF2007/1992
   bez zmian; CZ: 2m/Bpv, `--system` nie dotyczy) — zamiast twardo zakodowanych
@@ -427,8 +477,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   odczyty na wspoldzielonym polaczeniu SQLite potrafily oddac wiersz innego
   klucza (URL innego godla). (audyt 0.7.0: A2-1)
 - `DownloadManager(provider=...)` bez jawnego `storage=` bierze podkatalog
-  z deskryptora providera; bylo: zawsze `nmt_1m`, wiec NMPT pisal do katalogu
-  NMT i przy `--force` nadpisywal jego pliki. (audyt 0.7.0: A2-2)
+  z deskryptora providera; bylo: zawsze segment NMT 1m, wiec NMPT pisal do
+  katalogu NMT i przy `--force` nadpisywal jego pliki. (audyt 0.7.0: A2-2)
 - Pobranie hierarchii z porazkami konczy sie kodem 1 i komunikatem
   `Error: N of M sheets failed` — bylo: kod 0 mimo brakujacych arkuszy; dotyczy
   trybu godlowego oraz `--bbox`/`--geometry`. (audyt 0.7.0: A2-3)

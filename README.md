@@ -136,15 +136,15 @@ oraz sidecar `<plik>.meta.json` ze schematem `kartograf-meta/1`:
 | Pole | Znaczenie |
 |---|---|
 | `dataset`, `country`, `product`, `provider` | klucz deskryptora źródła i jego opis |
-| `horizontal_crs` | układ poziomy pliku: PL `EPSG:2180`; CZ natywnie `EPSG:5514`, kafel TM33 pobrany godłem `EPSG:3045`, a po `--target-crs` układ docelowy |
+| `horizontal_crs` | układ poziomy pliku: PL `EPSG:2180`; CZ natywnie `EPSG:5514`, kafel TM33 pobrany godłem `EPSG:3045`, a po `--target-crs` układ docelowy (PL i CZ) |
 | `vertical_crs` | kod realizacji układu pionowego: `EPSG:9651` (EVRF2007-PL), `EPSG:9650` (KRON86), `EPSG:8357` (Bpv), `EPSG:5621` (EVRF2007) |
 | `vertical_source` | `native` / `ellipsoidal` / `server` |
 | `nodata` | wartość pustego piksela odczytana z pliku |
 | `resolution`, `request` | rozdzielczość i oryginalne żądanie (`godlo` albo `bbox` + `bbox_crs`) |
 | `license` | identyfikator, atrybucja i URL licencji źródła |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC i wersja pakietu |
-| `transform` | słownik osi (klucze `horizontal`/`vertical`) z opisem użytej operacji: `pinned: <opis> (<dokładność> m)`; oś bez przeliczenia nie ma klucza, a bez żadnego przeliczenia (pliki PL) całe pole to `null` |
-| `extra.parent_request` | oryginalny bbox, jego układ i próbowane kraje - wspólny klucz grupowania plików jednego żądania `--bbox`/`--geometry`, także po obu stronach granicy |
+| `transform` | słownik osi (klucze `horizontal`/`vertical`) z opisem użytej operacji: `pinned: <opis> (<dokładność> m)`; oś bez przeliczenia nie ma klucza, a bez żadnego przeliczenia (pliki PL pobierane godłem/arkuszami oraz wycinek `--target-crs EPSG:2180`) całe pole to `null`; wycinek PL w innym układzie niesie `pinned: ...` w osi poziomej ([ADR-027](docs/DECISIONS.md)) |
+| `extra.parent_request` | oryginalny bbox, jego układ i próbowane kraje - wspólny klucz grupowania plików jednego żądania `--bbox`/`--geometry`, także po obu stronach granicy. **Wyjątek: kafle LAZ** - mają własny przepływ i tego klucza nie niosą (ich `extra` to `godlo_kafla`/`rok`/`gestosc`/`url`) |
 
 Sidecary pisze warstwa zarządzająca (`DownloadManager`, `LandCoverManager`, CLI),
 a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
@@ -157,7 +157,11 @@ a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
 - ✅ **Hierarchia arkuszy** - Automatyczne określanie arkuszy nadrzędnych i podrzędnych
 - ✅ **Selekcja obszaru** - Godło, bbox, plik geometrii (SHP/GPKG)
 - ✅ **Pobieranie NMT** - Z retry logic i progress tracking
-- ✅ **Organizacja plików** - Automatyczna struktura katalogów (`data/nmt_1m/`, `data/nmt_5m/`)
+- ✅ **Organizacja plików** - Automatyczna struktura katalogów
+  (`data/nmt/pl_1992_1m_evrf2007/`, `data/nmt/pl_1992_5m_evrf2007/`;
+  pełny układ: [ARCHITECTURE.md](docs/ARCHITECTURE.md) sekcja 3)
+- ✅ **Wycinek bbox** - `--target-crs` skleja arkusze i reprojektuje lokalnie
+  (przypięta operacja) do jednego GeoTIFF
 - ✅ **Formaty** - GeoTIFF, PNG, JPEG (WCS), ASC (OpenData)
 - ⚠️ **Pobieranie przez bbox jako GeoTIFF (WCS)** - tylko 1m i tylko KRON86
   (endpoint EVRF2007 zwraca 404 od 2026-08); wysokości EVRF2007 z obszaru
@@ -176,18 +180,19 @@ a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
 - ✅ **Pobieranie przez godło** → ASC (OpenData)
 - ✅ **Pobieranie przez bbox** → GeoTIFF (WCS)
 - ✅ **Rozdzielczość** - Tylko 1m, układy KRON86 i EVRF2007
-- ✅ **Organizacja** - `data/nmpt/`
+- ✅ **Organizacja** - `data/nmpt/pl_1992_1m_evrf2007/`
 
 ### Ortofotomapa (Standard Resolution)
 - ✅ **Zdjęcia lotnicze** - 25cm, format TIF
 - ✅ **Pobieranie przez godło** → TIF (OpenData)
 - ✅ **Pobieranie przez bbox** → GeoTIFF (WCS), także PNG i JPEG
 - ✅ **4 warstwy WMS** - 2026, 2025, 2024 + Starsze (roczniki 2018-2023 skonsolidowane)
-- ✅ **Organizacja** - `data/orto/`
+- ✅ **Organizacja** - `data/orto/pl_1992/`
 
 ### LAZ (Chmury Punktów LIDAR)
 - ✅ **Dane pomiarowe ALS** (.laz) z GUGiK przez WFS, selekcja obszarem (godło/bbox/geometria)
-- ✅ **Filtry** - `--year`, `--min-density`; organizacja - `data/laz/`
+- ✅ **Filtry** - `--year`, `--min-density`; organizacja - `data/laz/pl_<układ>_<vcrs>/`
+  (układ poziomy ustalany per kafel)
 
 ### Land Cover (Pokrycie Terenu)
 - ✅ **BDOT10k** - Polska baza wektorowa (GUGiK), szczegółowość 1:10 000
@@ -274,6 +279,7 @@ adres `http` odrzucany).
 ## Dokumentacja
 
 - [SCOPE.md](docs/SCOPE.md) - Zakres projektu (co JEST i czego NIE MA)
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - Architektura, kontrakty danych, kanoniczny układ `data/`
 - [PRD.md](docs/PRD.md) - Product Requirements Document
 - [PROGRESS.md](docs/PROGRESS.md) - Status implementacji i checkpointy
 - [CHANGELOG.md](docs/CHANGELOG.md) - Historia zmian
@@ -300,7 +306,7 @@ Kartograf/
 │   ├── cache/           # Cache metadanych (SQLite)
 │   ├── core/            # Parsery godeł (PL-1992/PL-2000/TM33), BBox, geometria (SHP/GPKG)
 │   ├── sources/         # Deskryptory źródeł danych + sidecar metadanych
-│   ├── transform/       # Transformacje CRS (przypięte operacje)
+│   ├── transform/       # Transformacje CRS (crs.py) i rastrów (raster.py - warp_to_grid)
 │   ├── transport/       # Wspólny transport HTTP + mozaikowanie rastrów
 │   ├── providers/       # Providery danych (pl/: GUGiK, BDOT10k; cuzk/: DMR CZ; CORINE, SoilGrids)
 │   ├── download/        # Download management (NMT/NMPT/Orto/LAZ)
@@ -308,7 +314,7 @@ Kartograf/
 │   ├── hydrology/       # Hydrologic Soil Groups (HSG)
 │   └── cli/             # CLI interface (moduły per komenda)
 ├── tests/               # Testy (1716)
-├── docs/                # Dokumentacja
+├── docs/                # Dokumentacja (ARCHITECTURE.md - kanoniczny opis architektury i układu data/)
 └── README.md
 ```
 

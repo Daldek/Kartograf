@@ -84,10 +84,31 @@
 
 **Data:** 2026-08-10 — 2026-08-28 (sekcje datowane ponizej)
 
+### Uklad data/ per produkt + --target-crs PL (2026-08-28)
+
+- Spec: `docs/superpowers/specs/2026-08-28-uklad-data-i-target-crs-pl-design.md`
+  (D1-D8); plan: `docs/superpowers/plans/2026-08-28-uklad-data-i-target-crs-pl.md`
+- Segmenty `<produkt>/<kraj>_<uklad>[_<wariant>][_<vcrs>]` (ADR-026):
+  szablony w deskryptorach (`resolve_subdir`), FileStorage(vertical_crs=),
+  manager/CLI PL/CZ/LAZ na resolve_subdir; ADR-017 domkniety
+- `--target-crs` dla PL (ADR-027): wycinek `nmt/pl_1992_<res>_<vcrs>/bbox/`,
+  mozaika (`mosaic_and_crop(dst_kwds=)`) + `transform/raster.warp_to_grid`
+  (wymuszona operacja przypieta); pogranicze `--country auto` = dwa wycinki,
+  wspolny `parent_request`; errata ADR-023
+- Wycinek w trybie `--geometry` obejmuje CALA obwiednie geometrii (bez
+  maskowania do obiektow); `nodata` tylko tam, gdzie nie siega zaden pobrany
+  arkusz. Selekcja arkuszy: w `--bbox` z bboxa z zapasem
+  (`_PL_WARP_MARGIN_PX = 4` px), w `--geometry` dalej per obiekt
+- Dokumentacja: NOWY `docs/ARCHITECTURE.md` (kanoniczny uklad data/),
+  CHANGELOG Breaking z tabela migracji, ADR-026/027 + korekty 013/017/023
+- Stan po zadaniu dokumentacyjnym (pomiar 2026-08-28): **1775 testow PASS**,
+  ruff check/format czyste, **mypy 32** (brama `<= 32` z weryfikacji planu
+  spelniona — 33. blad znikl razem z `descriptor.storage_subdir`)
+
 ### Plan: uklad data/ per produkt + --target-crs dla PL (2026-08-28)
 
-**Stan: SPEC + PLAN gotowe, implementacja NIE rozpoczeta** (decyzja
-uzytkownika: przerwa przed wdrozeniem).
+**Stan: SPEC + PLAN gotowe** (zapis sprzed wdrozenia; implementacja opisana
+w sekcji wyzej).
 
 - Spec (commit 635c6e1): `docs/superpowers/specs/2026-08-28-uklad-data-i-target-crs-pl-design.md`
   — decyzje D1-D8 zatwierdzone w rozmowie 2026-08-28.
@@ -103,7 +124,8 @@ uzytkownika: przerwa przed wdrozeniem).
   `mosaic_and_crop` -> lokalny warp przypieta operacja); (3) nowy
   `docs/ARCHITECTURE.md` + aktualizacja calego `docs/` (ADR-026, ADR-027,
   korekty ADR-013/017, addendum ADR-023).
-- **Wchodzi do 0.7.0 PRZED tagiem** (D7) — blokuje pkt 11 "Nastepne kroki".
+- **Wchodzi do 0.7.0 PRZED tagiem** (D7) — poprzedza bump 0.7.0
+  ("Nastepne kroki" pkt 13).
 
 **Weryfikacja planu przed implementacja** (3 niezaleznych recenzentow
 adwersarialnych: kotwice kodu / pokrycie specu / wykonalnosc techniczna):
@@ -641,17 +663,18 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
     zweryfikowane buildem sdist+wheel: `Metadata-Version: 2.4`,
     `License-Expression: MIT`, LICENSE w `dist-info/licenses/`;
     szczegoly i konsekwencje w CHANGELOG [0.7.0] Changed.
-11. **Uklad data/ per produkt + `--target-crs` dla PL** (ADR-026/027) —
-    NASTEPNY KROK ROBOCZY. Spec i plan gotowe i zweryfikowane
-    (`docs/superpowers/plans/2026-08-28-uklad-data-i-target-crs-pl.md`,
-    12 zadan TDD); implementacja nie rozpoczeta. Wchodzi do 0.7.0 przed
-    tagiem, wiec **poprzedza pkt 12**. Tryb wykonania (subagent-driven vs
-    inline) do wyboru przy wznowieniu.
-12. **Bump wersji + wydanie 0.7.0**: `kartograf.__version__`/
+11. ~~**Uklad data/ per produkt + `--target-crs` dla PL** (ADR-026/027)~~ —
+    **WYKONANE 2026-08-28** (12 zadan TDD z
+    `docs/superpowers/plans/2026-08-28-uklad-data-i-target-crs-pl.md`;
+    segmenty ADR-026, wycinek PL ADR-027, `docs/ARCHITECTURE.md`).
+12. **E2E live sciezek nowego ukladu `data/` + wycinka `--target-crs` PL**
+    — pozycja checklisty release (spec 12); suita jest offline, wiec
+    zadna sciezka nowego ukladu nie byla dotad sprawdzona na zywych danych.
+13. **Bump wersji + wydanie 0.7.0**: `kartograf.__version__`/
     `pyproject.toml` `0.7.0-dev` -> `0.7.0`, data w CHANGELOG, tag
     `v0.7.0`, push `develop` na origin (patrz pkt 3 wyzej — 148 commitow
     niewypchnietych po zmergowaniu galezi audytu 0.7.0, +1 commit planu).
-13. **Checklista release** (z planu audytu 0.7.0): build sdist/wheel
+14. **Checklista release** (z planu audytu 0.7.0): build sdist/wheel
     (`setuptools`); zywa weryfikacja CORINE GeoTIFF z prawdziwymi
     credentials CLMS vs allowlista hostow (Auth Proxy); E2E kafelkowania
     `exportImage` przy wyniku >16 Mpx (sciezka chunkowana
@@ -668,9 +691,9 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
 - [x] Weryfikacja BBox PL-2000 z realnymi danymi GUGiK (67 testow)
 - [x] Pobieranie rownolegle (ThreadPoolExecutor, --workers)
 - [x] Cache metadanych (SQLite WAL, TTL 7d, prune)
-- [ ] Mozaikowanie arkuszy NMT (PL; mechanizm `transport/mosaic.py` istnieje
-      i skleja kafle CZ — brakuje spiecia dla arkuszy PL; scalanie
-      transgraniczne PL/CZ pozostaje poza zakresem — zadanie Hydrografa)
+- [x] Mozaikowanie arkuszy NMT (PL) — WYKONANE 2026-08-28 (ADR-027: wycinek
+      `--bbox`/`--geometry` z `--target-crs`; scalanie transgraniczne PL/CZ
+      pozostaje poza zakresem — zadanie Hydrografa)
 - [x] Ujednolicenie interfejsow providerow (BaseProvider vs LandCoverProvider)
       (etap 0: DataSourceProvider)
 - [x] Etap 0 — architektura zrodel wielokrajowych (deskryptory, sidecar,
@@ -738,10 +761,11 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
       CRS z pliku uzytkownika) uzywa surowego `Transformer.from_crs`
       (mozliwy cichy ballpark dla obcych datow typu DHDN/Stereo70) — spec
       etapu 0 swiadomie odlozyl migracje na `build_pinned_transform`.
-- [ ] A1-9 — rozdzielenie katalogow PL-2000 (`nmt_2000_<res>` wg ADR-017)
-      odlozone — zmienilaby uklad katalogow istniejacych uzytkownikow
-      (`skip_existing` polega na dzisiejszych sciezkach); dzis wspolny
-      `nmt_2000_1m`.
+- [x] A1-9 — rozdzielenie katalogow PL-2000 — WYKONANE 2026-08-28 (ADR-026,
+      segmenty `pl_2000_*`); zmiana ukladu katalogow istniejacych uzytkownikow
+      przyjeta swiadomie jako BREAKING 0.7.0 (`skip_existing` polega na
+      sciezkach, wiec stare pliki przestaja byc widziane jako pobrane;
+      historycznie: wspolny `nmt_<res>/`).
 - [ ] A1-8 — aliasy etykiet skal PL-1992 zgodne z nomenklatura GUGiK
       (1:5000 dla godla 7-czlonowego) — BREAKING, dopiero w nastepnej
       wersji major.
@@ -790,3 +814,16 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
 - [ ] `core/geometry.py`: bajt kolejnosci WKB spoza `{0, 1}` nie jest
       walidowany — zamiast `None` (odrzucenie geometrii) daje smieciowe
       wspolrzedne z blednym rozpakowaniem struct.
+
+#### Backlog etapu 2 — dopisany przy ukladzie data/ i target-crs PL (2026-08-28)
+
+- [ ] `find_downloaded(product=, bbox=, vertical_crs=)` — inwentarz pobran
+      po sidecarach (klucz: `parent_request` / przeciecie bbox)
+- [ ] `--target-crs` dla `nmpt`/`orto` (razem z odpowiednikami CZ etapu 2)
+- [ ] Wycinek PL dla `--system 2000` (mozaika miedzystrefowa: warp per
+      strefa 2176-2179 przed sklejeniem)
+- [ ] Ujednolicenie `parent_request.bbox_crs` miedzy trybami jawny/auto
+      (pozycja istniejaca — powiazac z `find_downloaded`)
+- [ ] Nota dla Hydrografa: `harmonize_dem(files, target_crs, resolution)`
+      na bazie `kartograf.transform.crs.PinnedTransform` (NIE golego pyproj
+      — lekcja ADR-024); wejscie z sidecarow
