@@ -112,8 +112,8 @@ def create_parser() -> argparse.ArgumentParser:
         choices=["EPSG:2180", "EPSG:5514", "EPSG:3045"],
         default=None,
         help="Reprojekcja wyniku, wykonywana lokalnie przypieta operacja "
-        "(tylko CZ, tylko tryb --bbox/--geometry; PL pobiera natywnie "
-        "w EPSG:2180)",
+        "(tylko tryb --bbox/--geometry, tylko --product nmt; PL: jeden "
+        "scalony wycinek GeoTIFF, CZ: wycinek exportImage)",
     )
     download_parser.add_argument(
         "--scale",
