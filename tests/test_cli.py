@@ -3539,25 +3539,10 @@ class TestCountryDispatch:
             ]
         )
         assert result == 1
-        assert "natywnie" in capsys.readouterr().err
+        assert "--bbox/--geometry" in capsys.readouterr().err
 
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    def test_pl_bbox_with_target_crs_rejected(self, mock_find, tmp_path, capsys):
-        """Sentinele PL dzialaja tez w trybie obszarowym (przed szukaniem arkuszy)."""
-        result = main(
-            [
-                "download",
-                "--bbox",
-                "419000,230000,426000,237000",
-                "--target-crs",
-                "EPSG:2180",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-        assert result == 1
-        assert "natywnie" in capsys.readouterr().err
-        mock_find.assert_not_called()
+    # PL bbox + --target-crs to od ADR-027 legalny przeplyw wycinka —
+    # pokrycie przejmuje tests/test_pl_cutout.py (TestDownloadPlBboxCutout).
 
     # --- ValidationError z przeplywu CZ nie wychodzi jako traceback ---
 
@@ -4350,14 +4335,32 @@ class TestAutoSplitBBox:
         assert "--system dotyczy tylko PL" in capsys.readouterr().err
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    def test_border_bbox_with_target_crs_rejected_before_any_download(
-        self, mock_cz, tmp_path, capsys
-    ):
-        """Walidacja PRZED pobraniem — inaczej CZ pobralby sie, a PL odrzucil."""
-        result = main(self._BORDER + ["--target-crs", "EPSG:3045", "-o", str(tmp_path)])
-        assert result == 1
-        assert "--country" in capsys.readouterr().err
-        mock_cz.assert_not_called()
+    def test_border_bbox_with_target_crs_runs_both_countries(self, mock_cz, tmp_path):
+        """ADR-027/errata ADR-023: target-crs nie jest juz flaga czeska —
+        pogranicze jedna komenda daje dwa wycinki ze wspolnym parent_request."""
+        mock_cz.return_value = 0
+        with patch(
+            "kartograf.cli.download_cmd._download_pl_bbox", return_value=0
+        ) as mock_pl:
+            result = main(
+                self._BORDER
+                + [
+                    "--target-crs",
+                    "EPSG:2180",
+                    "--vertical-crs",
+                    "EVRF2007",
+                    "-o",
+                    str(tmp_path),
+                ]
+            )
+
+        assert result == 0
+        mock_cz.assert_called_once()
+        mock_pl.assert_called_once()
+        parent = mock_cz.call_args.kwargs["parent_request"]
+        assert parent == mock_pl.call_args.args[2]
+        # czesc CZ jedzie w ukladzie WYNIKU (cz_crs = target), nie w Krovaku
+        assert mock_cz.call_args.kwargs["bbox"].crs == "EPSG:2180"
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
