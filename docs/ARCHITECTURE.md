@@ -20,8 +20,9 @@ licencja, schemat kafli, szablon katalogu, domyslne rozszerzenie pliku. Modul
 `sources/` nie robi zadnego IO przy imporcie — to czyste dane i kilka funkcji
 wyszukujacych. Rejestr jest zrodlem prawdy dla podkatalogu skladowania
 (`storage_subdir`), rozszerzenia (`default_extension`), licencji w sidecarze
-oraz deklarowanych capabilities (`sheet_files`, `bbox_raster`, `area_files`,
-`admin_unit_files`, `bbox_vector`). Logika wykonawcza zostaje w providerach —
+oraz capabilities kanalu — slownik nazw to `sheet_files`, `bbox_raster`,
+`area_files`, `admin_unit_files`, `bbox_vector`, z czego rejestr deklaruje
+dzis pierwsze cztery. Logika wykonawcza zostaje w providerach —
 deskryptor mowi CO zrodlo potrafi i gdzie ma wyladowac wynik, nie JAK je pobrac.
 
 **Sidecar przy kazdym udanym pobraniu.** Obok kazdego pliku danych powstaje
@@ -128,7 +129,7 @@ kartograf/
 │   │                    # sheets.py (indeks SM5/TM33), dmr.py, __init__.py (create_dmr_provider)
 │   ├── corine.py        # CORINE z Copernicus CLMS (+ fallback WMS PNG)
 │   └── soilgrids.py     # SoilGrids z ISRIC (WCS)
-├── cache/metadata.py    # MetadataCache — SQLite WAL, TTL 7 dni, thread-safe
+├── cache/metadata.py    # MetadataCache — SQLite WAL, TTL 7 dni (sheet_cache 30 dni), thread-safe
 ├── download/            # Pobieranie NMT/NMPT/Orto po godle
 │   ├── manager.py       # DownloadManager — koordynacja arkuszy (ThreadPoolExecutor), sidecary
 │   └── storage.py       # FileStorage — segmenty katalogow z szablonow (ADR-026)
@@ -168,7 +169,7 @@ to `resolve_subdir()`.
 | `global.isric.soilgrids` | `None` | `.tif` |
 
 `None` oznacza zrodlo obslugiwane przez `LandCoverManager`, ktory ma wlasna
-konwencje nazw i wlasny domyslny `--output` (sekcja 4.7).
+konwencje nazw i wlasny domyslny `--output` (sekcja 4.8).
 
 **`SourceDescriptor.resolve_subdir(*, uklad=None, vertical_crs=None) -> str`**
 wypelnia szablon przez `str.replace`, a nie `str.format` — czesciowe
@@ -201,7 +202,7 @@ Kazde udane pobranie zapisuje **dwa** pliki: dane i `<plik>.meta.json`.
 | `vertical_source` | `native` / `ellipsoidal` / `server` (z `AccessChannel`) |
 | `resolution` | rozdzielczosc z deskryptora (`1m`/`5m`/`2m`) albo `null` |
 | `nodata` | wartosc pustego piksela: dla `.asc` czytana automatycznie z naglowka (`read_asc_nodata`), w torze CZ podawana przez CLI z tagu GeoTIFF (`_read_tif_nodata`, fallback `CUZK_NODATA`), dla wycinka PL stala `-9999.0`; `null` gdy zadna z tych drog nie ma zastosowania (np. orto) |
-| `request` | oryginalne zadanie: `{"godlo": ...}` albo `{"bbox": [...], "bbox_crs": ...}` |
+| `request` | oryginalne zadanie: `{"godlo": ...}`, `{"bbox": [...], "bbox_crs": ...}` albo `{"teryt": ...}` (BDOT10k/landcover) |
 | `license` | `{id, attribution, url}` z deskryptora |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, sekundy) i wersja pakietu |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
@@ -288,8 +289,11 @@ segmentu).
 
 ### 3.4 `extra.parent_request`
 
-W trybie `--bbox`/`--geometry` kazdy sidecar zadania dostaje
-`extra.parent_request`:
+W trybie `--bbox`/`--geometry` sidecary zadania dostaja `extra.parent_request`
+— **poza torem LAZ**, ktory ma wlasny przeplyw (`_cmd_download_laz`) i dzis
+tego klucza nie niesie wcale (`_write_laz_sidecar` wypelnia `extra` tylko
+polami kafla; `_build_parent_request` nie jest stamtad wolane). Konsument
+grupujacy po tym kluczu zgubi wiec kafle LAZ:
 
 ```json
 {"bbox": [min_x, min_y, max_x, max_y], "bbox_crs": "EPSG:2180", "countries": ["CZ", "PL"]}
@@ -351,8 +355,13 @@ w `_prepare_pl_cutout` -> `_download_pl_bbox`/`_download_pl_geometry` ->
 2. **Zapas po stronie zrodla.** Obwiednia celu wraca do EPSG:2180 (obrot
    ukladu docelowego robi ja wieksza niz samo zadanie) i dostaje jeszcze
    `_PL_WARP_MARGIN_PX = 4` piksele marginesu na halo interpolatora bilinear.
-   Ten powiekszony bbox — nie zadanie uzytkownika — steruje SELEKCJA ARKUSZY
-   i cropem mozaiki. Lustro `_native_request_bbox` toru CZ. Zapas nie jest
+   Ten powiekszony bbox — nie zadanie uzytkownika — steruje cropem mozaiki
+   i siatka wyniku. **Selekcja arkuszy zalezy od trybu:** w `--bbox` idzie
+   z tego samego powiekszonego bboxa (`sheet_bbox = cutout.bbox_source_2180`),
+   a w `--geometry` NIE — tam arkusze wyznacza dalej sama geometria per obiekt
+   (`find_sheets_for_geometry` wola sie przed zbudowaniem `cutout`), wiec zapas
+   wplywa wylacznie na crop i siatke. Lustro `_native_request_bbox` toru CZ.
+   Zapas nie jest
    ostroznoscia na wyrost: bez niego zmierzony wycinek do EPSG:5514 mial
    **17,4 % pikseli nodata** (3034 z 17484) na krawedziach.
 3. **Arkusze jako cache.** Arkusze pobieraja sie normalnie do swoich
@@ -383,9 +392,16 @@ bo skrot "plik juz istnieje" wraca wczesniej.
 
 W trybie `--geometry` wycinek obejmuje **CALA obwiednie geometrii, bez
 maskowania do jej obiektow** — do warstwy rastrowej ida same sciezki arkuszy
-i bbox. `nodata` pojawia sie wylacznie tam, gdzie nie siega zaden pobrany
-arkusz; obszar miedzy dwoma rozlacznymi obiektami odleglymi o setki metrow to
-REALNA WYSOKOSC TERENU, bo oba leza w tym samym arkuszu 1:10000 (~5,5 x 4,6 km).
+i bbox. `nodata` pojawia sie wylacznie tam, gdzie nie siega zaden POBRANY
+arkusz, i nigdy nie oznacza maskowania. Dwa rozlaczne obiekty lezace w tym
+samym arkuszu albo w arkuszach sasiednich (a wiec obu pobranych) maja miedzy
+soba REALNA WYSOKOSC TERENU. Ale arkusz jest mniejszy, niz sugeruje etykieta:
+godlo 7-czlonowe nazywane w Kartografie "1:10000" ma w EPSG:2180 **~2,25 x
+2,43 km** (zmierzone: `N-34-130-D-d-2-4` -> 2252,6 x 2432,4 m; GUGiK nazywa ten
+sam arkusz modulem archiwizacji 1:5000 — patrz Notes w
+`core/sheet_parser.py`). Przy obiektach oddalonych o wiecej niz jeden arkusz
+miedzy nimi moze wiec lezec arkusz, ktorego `find_sheets_for_geometry` nie
+wybral (nie przecina zadnego obiektu) — i wtedy w wycinku bedzie pas `nodata`.
 
 Wylaczenia (walidacja w `_resolve_pl_sentinels`, kod 1 z komunikatem):
 `--target-crs` z godlem, z `--product nmpt|orto|laz`, oraz z `--system 2000`
@@ -521,7 +537,7 @@ Pelne uzasadnienia: `docs/DECISIONS.md`.
 |---|---|---|
 | ADR-001 | Flat layout zamiast src layout | Pakiet `kartograf/` lezy w korzeniu repo, bez warstwy `src/`. |
 | ADR-002 | Auth Proxy do izolacji credentials CLMS | Klucze OAuth2 czyta wylacznie podproces `auth/proxy.py`; glowny proces rozmawia z nim po localhost HTTP. |
-| ADR-003 | OpenData (ASC) vs WCS (GeoTIFF) — rozdzielenie sciezek pobierania NMT | Godlo zawsze daje ASC z OpenData, bbox GeoTIFF z WCS — sciezki rozdzielone, nie ujednolicane. |
+| ADR-003 | OpenData (ASC) vs WCS (GeoTIFF) — rozdzielenie sciezek pobierania NMT | Godlo zawsze daje ASC z OpenData, bbox GeoTIFF z WCS — sciezki rozdzielone, nie ujednolicane. **Czesc "bbox = WCS" juz nie obowiazuje:** CLI rozwija bbox PL na arkusze OpenData (sekcja 4.2) albo buduje z nich wycinek (ADR-027), a WCS zostal przy `DownloadManager.download_bbox` i tylko dla KRON86. |
 | ADR-004 | EVRF2007 jako domyslny uklad wysokosciowy | EVRF2007 domyslnie (aktualny standard PL), KRON86 pod `--vertical-crs`. |
 | ADR-005 | Struktura katalogow NMT rozdzielona wg rozdzielczosci | Rozdzielono `data/1m` i `data/5m`, zeby ten sam arkusz w dwoch rozdzielczosciach nie nadpisywal sie — uklad zastapiony przez ADR-013, a nastepnie przez ADR-026. |
 | ADR-006 | LandCoverProvider jako osobna hierarchia od BaseProvider | Pokrycie terenu ma inny interfejs niz NMT (dochodzi jednostka administracyjna), wiec dostaje wlasna klase bazowa. |
