@@ -377,3 +377,59 @@ class TestDescriptorProviderConsistency:
         for provider, key in expected.items():
             assert provider.descriptor_key == key
             get_source(key)  # klucz istnieje w rejestrze
+
+
+class TestResolveSubdir:
+    """ADR-026: storage_subdir jest szablonem; resolve_subdir wypelnia go."""
+
+    def _descriptor(self, subdir):
+        from kartograf.sources.descriptor import (
+            AccessChannel,
+            LicenseInfo,
+            SourceDescriptor,
+            TransportKind,
+        )
+
+        return SourceDescriptor(
+            key="test.key",
+            country="PL",
+            product="nmt",
+            name="Test",
+            provider_name="Test",
+            channels=(
+                AccessChannel(transport=TransportKind.WCS, horizontal_crs="EPSG:2180"),
+            ),
+            tile_scheme=None,
+            storage_subdir=subdir,
+            default_extension=".asc",
+            license=LicenseInfo(id="X", attribution="X"),
+        )
+
+    def test_full_fill(self):
+        d = self._descriptor("nmt/pl_{uklad}_1m_{vcrs}")
+        assert (
+            d.resolve_subdir(uklad="1992", vertical_crs="EVRF2007")
+            == "nmt/pl_1992_1m_evrf2007"
+        )
+
+    def test_partial_fill_leaves_uklad(self):
+        d = self._descriptor("nmt/pl_{uklad}_1m_{vcrs}")
+        assert d.resolve_subdir(vertical_crs="KRON86") == "nmt/pl_{uklad}_1m_kron86"
+
+    def test_vcrs_lowercased(self):
+        d = self._descriptor("nmt/cz_dmr5g_{vcrs}")
+        assert d.resolve_subdir(vertical_crs="Bpv") == "nmt/cz_dmr5g_bpv"
+
+    def test_unknown_dimension_is_noop(self):
+        """Orto nie ma {vcrs} — podanie vertical_crs niczego nie psuje."""
+        d = self._descriptor("orto/pl_{uklad}")
+        assert d.resolve_subdir(uklad="1992", vertical_crs="EVRF2007") == "orto/pl_1992"
+
+    def test_no_args_returns_template(self):
+        d = self._descriptor("laz/pl_{uklad}_{vcrs}")
+        assert d.resolve_subdir() == "laz/pl_{uklad}_{vcrs}"
+
+    def test_none_subdir_raises(self):
+        d = self._descriptor(None)
+        with pytest.raises(ValueError, match="test.key"):
+            d.resolve_subdir()
