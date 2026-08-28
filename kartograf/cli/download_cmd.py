@@ -1312,7 +1312,7 @@ def _cz_download_bbox(
     quiet: bool,
     skip_existing: bool,
 ) -> int:
-    """Bbox CZ: jeden wycinek `exportImage` plasko w katalogu wyjsciowym.
+    """Bbox CZ: jeden wycinek `exportImage` w `<subdir>/bbox/<coords>.tif`.
 
     Bbox jest normalizowany do ukladu WYNIKU (`--target-crs` albo natywny
     5514) — nazwa pliku niesie wspolrzedne faktycznie zadanego wycinka.
@@ -1343,8 +1343,11 @@ def _cz_download_bbox(
     coords = "_".join(
         format(v, ".10g") for v in (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
     )
-    target = Path(args.output) / (
-        f"{descriptor.storage_subdir}_{coords}{descriptor.default_extension}"
+    target = (
+        Path(args.output)
+        / descriptor.storage_subdir
+        / "bbox"
+        / f"{coords}{descriptor.default_extension}"
     )
 
     if skip_existing and target.exists():
@@ -1354,6 +1357,8 @@ def _cz_download_bbox(
 
     if not quiet:
         print(f"Downloading CZ bbox ({provider.resolution}, {image_sr})...")
+    # provider tworzy katalogi dopiero przy fetchu — sidecar wymaga ich zawsze
+    target.parent.mkdir(parents=True, exist_ok=True)
     try:
         provider.download_bbox(bbox, target)
     except (DownloadError, ValidationError) as e:
