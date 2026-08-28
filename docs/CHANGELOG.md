@@ -18,14 +18,18 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   |---|---|
   | `nmt_1m/` (godla 1992) | `nmt/pl_1992_1m_<vcrs>/` |
   | `nmt_1m/` (godla kropkowe 2000) | `nmt/pl_2000_1m_<vcrs>/` |
-  | `nmt_5m/` | `nmt/pl_1992_5m_evrf2007/` |
+  | `nmt_5m/` | `nmt/pl_<uklad>_5m_evrf2007/` |
   | `nmpt/` | `nmpt/pl_<uklad>_1m_<vcrs>/` |
-  | `orto/` | `orto/pl_1992/` |
+  | `orto/` | `orto/pl_<uklad>/` |
   | `laz/` | `laz/pl_<uklad>_<vcrs>/` |
   | `cz_dmr5g/` (tylko 0.7.0-dev) | `nmt/cz_dmr5g_<vcrs>/` |
   | `cz_dmr4g/` (tylko 0.7.0-dev) | `nmt/cz_dmr4g_<vcrs>/` |
 
-  `<vcrs>` przy migracji recznej odczytaj z sidecara (`vertical_crs`);
+  `<uklad>` bierze sie z formatu godla KAZDEGO pliku z osobna (kropki ->
+  `2000`, myslniki -> `1992`) — stary `nmt_5m/`, `nmpt/`, `orto/` i `laz/`
+  trzymaly oba systemy razem, wiec jeden stary katalog rozchodzi sie przy
+  migracji na dwa segmenty. `<vcrs>` przy migracji recznej odczytaj
+  z sidecara (`vertical_crs`);
   pliki sprzed etapu 0 nie maja sidecarow — wtedy re-download albo wiedza
   wlasna uzytkownika. Kartograf nie migruje `data/` automatycznie: pliki
   w starym ukladzie przestaja byc widziane jako pobrane. `landcover/` bez zmian.
