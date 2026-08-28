@@ -17,7 +17,7 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
-| Pokrycie testami | ✅ Gotowy | 93%, 1775 testow (brama jakosci po ukladzie data/ + --target-crs PL, develop, 2026-08-28; poprzedni pomiar 1716 na fix/release-0.7.0-audit 2026-08-23) |
+| Pokrycie testami | ✅ Gotowy | 92,7%, 1787 testow (po fali naprawczej finalnego review, develop, 2026-08-28; brama jakosci Zad. 12 dala 1775, poprzedni pomiar 1716 na fix/release-0.7.0-audit 2026-08-23) |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0 |
@@ -97,8 +97,10 @@
   wspolny `parent_request`; errata ADR-023
 - Wycinek w trybie `--geometry` obejmuje CALA obwiednie geometrii (bez
   maskowania do obiektow); `nodata` tylko tam, gdzie nie siega zaden pobrany
-  arkusz. Selekcja arkuszy: w `--bbox` z bboxa z zapasem
-  (`_PL_WARP_MARGIN_PX = 4` px), w `--geometry` dalej per obiekt
+  arkusz. Selekcja arkuszy z zapasem (`_PL_WARP_MARGIN_PX = 4` px):
+  w `--bbox` zawsze, w `--geometry` z warpem jako suma godel z geometrii
+  i z bboxa z zapasem (dla celu `EPSG:2180` zapas jest zerowy, wiec sumy
+  nie ma — arkusze wyznacza sama geometria)
 - Dokumentacja: NOWY `docs/ARCHITECTURE.md` (kanoniczny uklad data/),
   CHANGELOG Breaking z tabela migracji, ADR-026/027 + korekty 013/017/023
 - Stan po zadaniu dokumentacyjnym (pomiar 2026-08-28): **1775 testow PASS**,
@@ -115,6 +117,32 @@
   test_target_5514_content_lt_1px`, `test_transform_raster.py::TestWarpToGrid`),
   a **weryfikacja na zywych danych GUGiK zostaje pozycja checklisty release**
   (pkt 12 „Nastepne kroki") — offline nie da sie jej odhaczyc.
+- **Finalny review calej galezi + fala naprawcza (2026-08-28) — ZAMKNIETE.**
+  Review 23 commitow wykryl defekt MIEDZYZADANIOWY, niewidoczny per zadanie:
+  zapas zrodla (`_PL_WARP_MARGIN_PX`) nie wplywal na selekcje arkuszy
+  w trybie `--geometry` (8,4 % pikseli `nodata` przy 0 % w torze `--bbox`;
+  powrot obwiedni celu do 2180 rosnie o ~7,5 % boku na strone, dla 20 km
+  = 1512 m), a w torze `--bbox` nie bronil go zaden test — mutacja usuwajaca
+  poszerzony bbox z selekcji przechodzila 1775/1775. Jedna fala zamknela
+  11 pozycji (21 dowodow mutacyjnych), m.in.: `DownloadManager` budowal
+  segment z wlasnego pionu zamiast z providera (KRON86 i EVRF2007 tego
+  samego arkusza znow w jednym katalogu — osiagalne z API biblioteki);
+  `FileStorage(vertical_crs="")` dawal cichy segment `nmt/pl_1992_1m_`;
+  brak wpisow `KNOWN_PATHS` dla dwoch nowych par (2180→5514 acc 0,5,
+  2180→3045 acc 0,0 — zmierzone); caly przeplyw 5 m byl niebroniony
+  (4 mutacje przechodzily); atomowosc zapisu i sprzatanie po awarii
+  nieprzetestowane (3 mutacje przechodzily).
+- **Nieudana budowa wycinka nie niszczy poprzedniego wyniku** — zbedne
+  kasowanie pliku docelowego zdjete z `_build_pl_cutout` ORAZ
+  z `transform/raster.py::warp_to_grid` (zapis jest atomowy przez
+  `os.replace`, wiec `unlink` chronil przed niczym, a kasowal stary,
+  poprawny raster). Gwarancja obowiazuje caly tor PL, takze
+  `--target-crs EPSG:5514`/`EPSG:3045`; tor CZ ma wlasne `unlink` jako
+  udokumentowany wyjatek (ADR-024).
+- **Stan koncowy sesji: 1787 testow PASS** (start planu 1716), pokrycie
+  92,7 %, **mypy 32** (start 33), ruff check + format czyste, drzewo czyste.
+  23 commity na `develop`; galaz swiadomie NIE pushowana ani nie mergowana
+  do `main` — wydanie (bump 0.7.0, tag, push) czeka na checkliste live.
 
 ### Plan: uklad data/ per produkt + --target-crs dla PL (2026-08-28)
 
