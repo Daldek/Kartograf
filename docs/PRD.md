@@ -19,7 +19,7 @@
 > nieprawdziwe niezależnie od wersji: przykładowy bbox leżał w Czechach,
 > `output_dir=` nie jest parametrem `LandCoverManager.download()`, a sekcja 5
 > gubiła trzy eksporty etapu 1. Liczby jakościowe (sekcja 2.1) pozostają z
-> v0.6.1 — aktualne dane wydania 0.7.0 są w `docs/SCOPE.md` 6.2 (1716 testów,
+> v0.6.1 — aktualne dane wydania 0.7.0 są w `docs/SCOPE.md` 6.2 (1775 testów,
 > 93% pokrycia). Decyzja o pełnym podniesieniu PRD do 0.7.0 należy do Product
 > Ownera (pozycja w checkliście release).
 

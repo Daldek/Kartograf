@@ -77,7 +77,7 @@ Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja
 ## ADR-005: Struktura katalogow NMT rozdzielona wg rozdzielczosci
 
 **Data:** 2026-01-21
-**Status:** Przyjeta
+**Status:** Przyjeta (uklad katalogow zastapiony przez ADR-013, a nastepnie przez ADR-026)
 
 **Kontekst:** Po dodaniu obslugi NMT 5m, pliki 1m i 5m dla tego samego godla mialy te sama sciezke. Grozi nadpisaniem.
 
@@ -88,6 +88,12 @@ Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja
 **Decyzja:** Podkatalog rozdzielczosci (opcja B). Struktura: `data/1m/N-34/130/.../plik.asc` i `data/5m/N-34/130/.../plik.asc`.
 
 **Konsekwencje:** Breaking change — stare sciezki bez `1m/`/`5m/` nie sa kompatybilne. Czyste rozdzielenie, latwe do zrozumienia. FileStorage przyjmuje parametr `resolution`.
+
+**Korekta (2026-08-28):** decyzja "rozdzielczosc jest wymiarem sciezki"
+obowiazuje nadal, ale jej realizacja zmieniala sie dwa razy: `1m`/`5m` ->
+`nmt_1m`/`nmt_5m` (ADR-013) -> segmenty `nmt/pl_<uklad>_<res>_<vcrs>`
+(ADR-026). Parametr `resolution` w `FileStorage` zostal, tyle ze mapuje
+dzis na SZABLON segmentu, nie na nazwe katalogu.
 
 ---
 
