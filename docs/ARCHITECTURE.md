@@ -400,16 +400,18 @@ w `_prepare_pl_cutout` -> `_download_pl_bbox`/`_download_pl_geometry` ->
 **Nieudana budowa a poprzedni wynik.** Obie sciezki zapisu sa atomowe
 (`os.replace` przy samym cropie, wewnetrzny `os.replace` w `warp_to_grid`),
 wiec przerwana budowa nie zostawia pod finalna sciezka polzapisanego pliku.
-Skoro tak, `_build_pl_cutout` nie kasuje tez poprzedniego wyniku: stary plik
+Skoro tak, ZADNE ogniwo toru PL nie kasuje poprzedniego wyniku: ani
+`_build_pl_cutout`, ani `transform/raster.py::warp_to_grid` — stary plik
 przezywa awarie, a sciezka sukcesu jest identyczna. Kasowanie bylo tu czysta
 utrata danych — pod `--country auto` cale zadanie moglo skonczyc sie kodem 0
 (bo drugi kraj sie udal), zostawiajac uzytkownika bez pliku, ktory mial
-wczesniej. `transform/raster.py::warp_to_grid` i tor CZ
-(`providers/cuzk/dmr.py::_warp_to_grid`) maja `except BaseException:
-dst.unlink(missing_ok=True)` dalej — tam jest ono rownie zbedne
-(zapis idzie przez plik tymczasowy), ale to kod zweryfikowany na zywo,
-ktorego tuz przed wydaniem nie ruszamy (ADR-024). Bez `--force` sytuacja i tak
-nie wystepuje, bo skrot "plik juz istnieje" wraca wczesniej.
+wczesniej. Obietnica obejmuje wiec takze `--target-crs EPSG:5514`/`EPSG:3045`,
+czyli glowne zastosowanie flagi. Wlasne `except BaseException:
+dst.unlink(missing_ok=True)` ma dalej wylacznie tor CZ
+(`providers/cuzk/dmr.py::_warp_to_grid`, niezalezna kopia funkcji) — tam jest
+ono rownie zbedne (zapis idzie przez plik tymczasowy), ale to kod zweryfikowany
+na zywo, ktorego tuz przed wydaniem nie ruszamy (ADR-024). Bez `--force`
+sytuacja i tak nie wystepuje, bo skrot "plik juz istnieje" wraca wczesniej.
 
 W trybie `--geometry` wycinek obejmuje **CALA obwiednie geometrii, bez
 maskowania do jej obiektow** — do warstwy rastrowej ida same sciezki arkuszy
