@@ -82,7 +82,59 @@
 
 ## Ostatnia sesja
 
-**Data:** 2026-08-10 — 2026-08-23 (sekcje datowane ponizej)
+**Data:** 2026-08-10 — 2026-08-28 (sekcje datowane ponizej)
+
+### Plan: uklad data/ per produkt + --target-crs dla PL (2026-08-28)
+
+**Stan: SPEC + PLAN gotowe, implementacja NIE rozpoczeta** (decyzja
+uzytkownika: przerwa przed wdrozeniem).
+
+- Spec (commit 635c6e1): `docs/superpowers/specs/2026-08-28-uklad-data-i-target-crs-pl-design.md`
+  — decyzje D1-D8 zatwierdzone w rozmowie 2026-08-28.
+- Plan (commit 6cb662d): `docs/superpowers/plans/2026-08-28-uklad-data-i-target-crs-pl.md`
+  — 12 zadan TDD / 74 kroki, kolejnosc dobrana tak, by suita byla zielona
+  po KAZDYM commicie (stad Zad. 2 laczy rejestr + FileStorage + CZ CLI:
+  dziela te same wartosci `storage_subdir`).
+- Zakres: (1) `data/<produkt>/<kraj>_<uklad>[_<wariant>][_<vcrs>]/` —
+  szablony `{uklad}`/`{vcrs}` w deskryptorach + `resolve_subdir()`,
+  `FileStorage(vertical_crs=)`; domkniecie odroczonego ADR-017 (PL-2000
+  dostaje wlasne segmenty, backlog A1-9); (2) `--target-crs` dla PL
+  w bbox/geometry = jeden scalony wycinek (arkusze jako cache ->
+  `mosaic_and_crop` -> lokalny warp przypieta operacja); (3) nowy
+  `docs/ARCHITECTURE.md` + aktualizacja calego `docs/` (ADR-026, ADR-027,
+  korekty ADR-013/017, addendum ADR-023).
+- **Wchodzi do 0.7.0 PRZED tagiem** (D7) — blokuje pkt 11 "Nastepne kroki".
+
+**Weryfikacja planu przed implementacja** (3 niezaleznych recenzentow
+adwersarialnych: kotwice kodu / pokrycie specu / wykonalnosc techniczna):
+17 defektow, wszystkie naprawione w commicie planu. Najpowazniejszy: bledna
+kotwica wstawienia walidacji `--target-crs` trafiala w galaz `if
+has_geometry:` zamiast godlowej, co odrzucaloby flage dla KAZDEGO zadania
+`--geometry` (takze CZ). Pozostale: niekompletne listy asercji do poprawy
+(8 miejsc), jedna instrukcja odwrotna do prawdy (slice'y `parts[-8:-1]`
+liczone od konca NIE zmieniaja sie po wstawieniu segmentu), brak lokalnego
+importu w nowych testach, ADR-y ladujace wewnatrz komentarza HTML
+(`DECISIONS.md:923`), kolizja wersji SCOPE 3.8.
+
+**Pomiary wykonane przy weryfikacji (offline, do wykorzystania przy wdrozeniu):**
+- `mypy kartograf/` na develop = **33 bledy**, nie 32 jak podaja ten dokument
+  i CLAUDE.md (stan z audytu). Trzydziesty trzeci to
+  `cli/download_cmd.py:1347` (`Path / (str | None)` z `descriptor.storage_subdir`)
+  i znika sam po ADR-026 — brama po wdrozeniu: `<= 32`.
+- `rasterio.merge.merge(dst_kwds={"driver":"GTiff","crs":...})` nadpisuje
+  profil wyjscia takze dla wejsc AAIGrid bez CRS (rasterio 1.5.0) — to
+  przesadza o wykonalnosci wycinka PL z arkuszy `.asc`.
+- `build_pinned_transform` offline: 2180->5514 = 0,5 m, 2180->3045 = 0,0 m;
+  `gdal_operation()` dla 2180->5514 zaczyna sie od `axisswap` (2180 jest
+  northing-first) i niesie `molobadekas`.
+- Prototyp mozaika+warp postawil wierzcholek **0,496 m** od wzorca pyproj
+  (< 1 px) — najbardziej ryzykowna czesc planu sprawdzona przed kodowaniem.
+
+**Ograniczenie do zapamietania:** warp PL ma byc OSOBNA funkcja
+(`kartograf/transform/raster.py::warp_to_grid`), nie refaktorem
+wspoldzielonym z `providers/cuzk/dmr.py::_warp_to_grid` — testy ADR-024
+patchuja `kartograf.providers.cuzk.dmr.reproject`
+(`tests/test_cuzk_dmr.py:496,527`), a tor CZ jest zweryfikowany live.
 
 ### Merge etapu 1 do develop (2026-08-12)
 - `feature/etap1-cz-dmr` zmergowana do `develop` fast-forwardem do `0738ae0`
@@ -589,11 +641,17 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
     zweryfikowane buildem sdist+wheel: `Metadata-Version: 2.4`,
     `License-Expression: MIT`, LICENSE w `dist-info/licenses/`;
     szczegoly i konsekwencje w CHANGELOG [0.7.0] Changed.
-11. **Bump wersji + wydanie 0.7.0**: `kartograf.__version__`/
+11. **Uklad data/ per produkt + `--target-crs` dla PL** (ADR-026/027) —
+    NASTEPNY KROK ROBOCZY. Spec i plan gotowe i zweryfikowane
+    (`docs/superpowers/plans/2026-08-28-uklad-data-i-target-crs-pl.md`,
+    12 zadan TDD); implementacja nie rozpoczeta. Wchodzi do 0.7.0 przed
+    tagiem, wiec **poprzedza pkt 12**. Tryb wykonania (subagent-driven vs
+    inline) do wyboru przy wznowieniu.
+12. **Bump wersji + wydanie 0.7.0**: `kartograf.__version__`/
     `pyproject.toml` `0.7.0-dev` -> `0.7.0`, data w CHANGELOG, tag
     `v0.7.0`, push `develop` na origin (patrz pkt 3 wyzej — 148 commitow
-    niewypchnietych po zmergowaniu galezi audytu 0.7.0).
-12. **Checklista release** (z planu audytu 0.7.0): build sdist/wheel
+    niewypchnietych po zmergowaniu galezi audytu 0.7.0, +1 commit planu).
+13. **Checklista release** (z planu audytu 0.7.0): build sdist/wheel
     (`setuptools`); zywa weryfikacja CORINE GeoTIFF z prawdziwymi
     credentials CLMS vs allowlista hostow (Auth Proxy); E2E kafelkowania
     `exportImage` przy wyniku >16 Mpx (sciezka chunkowana
