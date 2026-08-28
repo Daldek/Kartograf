@@ -1899,8 +1899,9 @@ def _download_pl_geometry(
     ``args`` to KOPIA namespace'u zadania — patrz ``_dispatch_area``.
 
     ``bbox`` — obwiednia zadania PL (przycieta pod auto); potrzebna wylacznie
-    dla wycinka ``--target-crs``: crop idzie po tej obwiedni, a obszary miedzy
-    rozlacznymi obiektami wypelnia nodata.
+    dla wycinka ``--target-crs``: crop idzie po tej obwiedni, wiec wynik
+    obejmuje CALA obwiednie geometrii, bez maskowania do jej obiektow.
+    Nodata tam, gdzie nie siega zaden pobrany arkusz.
     """
     from kartograf.core.geometry import find_sheets_for_geometry
 
@@ -1938,8 +1939,12 @@ def _download_pl_geometry(
 
     # Wycinek (ADR-027) jak w trybie bbox, z jedna roznica: arkusze wyznacza
     # dalej sama geometria (per obiekt), a `bbox` sluzy wylacznie siatce
-    # wyniku i cropowi mozaiki — obszary miedzy rozlacznymi obiektami
-    # wypelnia nodata (spec 6.2).
+    # wyniku i cropowi mozaiki. Wynik obejmuje CALA obwiednie geometrii —
+    # maskowania do obiektow NIE MA (do warstwy rastrowej ida same sciezki
+    # arkuszy, patrz `_build_pl_cutout`). Nodata pojawia sie wylacznie tam,
+    # gdzie nie siega zaden pobrany arkusz, a nie miedzy obiektami: dwa
+    # rozlaczne obiekty odlegle o setki metrow leza w tym samym arkuszu
+    # 1:10000 (~5,5 x 4,6 km), wiec obszar miedzy nimi to realny teren.
     cutout: _PlCutout | None = None
     if args.target_crs is not None:
         from kartograf.transform.crs import TransformError

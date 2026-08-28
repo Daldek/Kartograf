@@ -352,6 +352,13 @@ class TestDownloadPlBboxCutout:
 
 
 class TestGeometryCutout:
+    @pytest.fixture(autouse=True)
+    def _isolate_cache(self, tmp_path, monkeypatch):
+        """MetadataCache laduje w cwd — poza repo i katalogiem wyjsciowym."""
+        cwd = tmp_path / "cwd"
+        cwd.mkdir()
+        monkeypatch.chdir(cwd)
+
     def test_geometry_mode_builds_cutout(self, tmp_path):
         from kartograf.cli.download_cmd import _download_pl_geometry
 
@@ -389,6 +396,69 @@ class TestGeometryCutout:
             / "bbox"
             / "530010_382010_530190_382090.tif"
         ).exists()
+
+    def test_cli_geometry_target_crs_reaches_worker(self, tmp_path):
+        """Cala sciezka przez main(): dyspozycja MUSI podac obwiednie workerowi.
+
+        Broni `bbox=part` w `_dispatch_area` — jedynej linii, dzieki ktorej
+        wycinek geometry jest osiagalny z CLI. Bez niej worker dostaje
+        ``bbox=None``, wpada w guard R-12 i komenda konczy sie kodem 1.
+        """
+        sheets = [
+            _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000),
+            _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000),
+        ]
+        geom = tmp_path / "area.gpkg"
+        geom.write_bytes(b"stub")  # tresc nieuzywana: discovery zamockowane
+        provider = SimpleNamespace(vertical_crs="EVRF2007")
+        overall = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+
+        with (
+            # oba importy lokalne w cli.download_cmd -> patch u zrodla
+            patch("kartograf.core.geometry.get_overall_bbox", return_value=overall),
+            patch(
+                "kartograf.core.geometry.find_sheets_for_geometry",
+                return_value=["N-1", "N-2"],
+            ),
+            patch(
+                f"{_DL}._create_provider_and_storage",
+                return_value=(provider, Mock()),
+            ),
+            patch(f"{_DL}.DownloadManager"),
+            patch(f"{_DL}._download_godlo_list", return_value=(sheets, [])),
+        ):
+            rc = main(
+                [
+                    "download",
+                    "--geometry",
+                    str(geom),
+                    "--country",
+                    "pl",
+                    "--target-crs",
+                    "EPSG:2180",
+                    "-o",
+                    str(tmp_path),
+                    "-q",
+                ]
+            )
+
+        assert rc == 0
+        target = (
+            tmp_path
+            / "nmt"
+            / "pl_1992_1m_evrf2007"
+            / "bbox"
+            / "530010_382010_530190_382090.tif"
+        )
+        assert target.exists()
+        # parent_request powstaje WYLACZNIE w warstwie dyspozycji — dowod,
+        # ze wycinek przyszedl przez `_dispatch_area`, a nie obok niej
+        payload = json.loads(
+            (target.parent / f"{target.name}.meta.json").read_text("utf-8")
+        )
+        assert payload["horizontal_crs"] == "EPSG:2180"
+        assert payload["nodata"] == _NODATA
+        assert payload["extra"]["parent_request"]["countries"] == ["PL"]
 
 
 class TestBorderTwoCutouts:

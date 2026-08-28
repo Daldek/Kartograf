@@ -113,9 +113,9 @@ def create_parser() -> argparse.ArgumentParser:
         default=None,
         help="Reprojekcja wyniku, wykonywana lokalnie przypieta operacja "
         "(tylko tryb --bbox/--geometry, tylko --product nmt; PL: jeden "
-        "scalony wycinek GeoTIFF — w trybie --geometry po OBWIEDNI "
-        "geometrii, z nodata miedzy rozlacznymi obiektami; "
-        "CZ: wycinek exportImage)",
+        "scalony wycinek GeoTIFF — w trybie --geometry obejmuje CALA "
+        "obwiednie geometrii, bez maskowania do obiektow; nodata tam, "
+        "gdzie nie siega zaden pobrany arkusz; CZ: wycinek exportImage)",
     )
     download_parser.add_argument(
         "--scale",
