@@ -41,6 +41,17 @@ def _write_tile(
     return path
 
 
+def _write_asc(path, xll, yll, ncols=4, nrows=4, cellsize=1.0, value=1.0):
+    """Syntetyczny Arc/Info ASCII Grid (bez CRS — jak arkusze GUGiK)."""
+    header = (
+        f"ncols {ncols}\nnrows {nrows}\nxllcorner {xll}\nyllcorner {yll}\n"
+        f"cellsize {cellsize}\nNODATA_value -9999\n"
+    )
+    rows = "\n".join(" ".join(str(value) for _ in range(ncols)) for _ in range(nrows))
+    path.write_text(header + rows + "\n", encoding="ascii")
+    return path
+
+
 @pytest.fixture
 def four_tiles(tmp_path):
     # Kafle 2x2 (kazdy 10x10 m, res 1 m): wspolny naroznik w (10, 10).
@@ -122,3 +133,24 @@ class TestMosaicAndCrop:
             mosaic_and_crop(
                 tiles, BBox(0, 0, 20, 10, "EPSG:2180"), tmp_path / "out.tif"
             )
+
+
+def test_dst_kwds_forces_gtiff_and_crs(tmp_path):
+    """Wejscia ASC (AAIGrid, brak CRS) -> wynik GTiff z wpisanym CRS."""
+    a = _write_asc(tmp_path / "a.asc", 0, 0)
+    b = _write_asc(tmp_path / "b.asc", 4, 0)
+    out = tmp_path / "out.tif"
+
+    mosaic_and_crop(
+        [a, b],
+        BBox(1, 1, 7, 3, "EPSG:2180"),
+        out,
+        nodata=-9999.0,
+        dst_kwds={"driver": "GTiff", "crs": "EPSG:2180"},
+    )
+
+    with rasterio.open(out) as ds:
+        assert ds.driver == "GTiff"
+        assert ds.crs is not None and ds.crs.to_epsg() == 2180
+        assert ds.nodata == -9999.0
+        assert ds.bounds == (1.0, 1.0, 7.0, 3.0)
