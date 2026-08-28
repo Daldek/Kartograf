@@ -169,8 +169,10 @@ class DownloadManager:
             Data provider (default: GugikProvider with specified settings)
         storage : FileStorage, optional
             Storage manager (default: FileStorage whose subdirectory comes
-            from the provider's source descriptor (`storage_subdir`), falling
-            back to `resolution` when the provider has no `descriptor_key`)
+            from the provider's source descriptor
+            (`resolve_subdir(vertical_crs=...)`, `{uklad}` resolved per godlo),
+            falling back to `resolution` when the provider has no
+            `descriptor_key`)
         vertical_crs : str, optional
             Vertical CRS: "EVRF2007" or "KRON86" (default: "EVRF2007").
             Note: 5m resolution only supports EVRF2007.
@@ -205,8 +207,13 @@ class DownloadManager:
             if isinstance(key, str):
                 from kartograf.sources.registry import get_source
 
-                subdir = get_source(key).storage_subdir
-            storage = FileStorage(output_dir, resolution=resolution, subdir=subdir)
+                subdir = get_source(key).resolve_subdir(vertical_crs=vertical_crs)
+            storage = FileStorage(
+                output_dir,
+                resolution=resolution,
+                subdir=subdir,
+                vertical_crs=vertical_crs,
+            )
         self._storage = storage
         self._vertical_crs = vertical_crs
         self._resolution = resolution

@@ -187,6 +187,28 @@ class TestDownloadManagerStorageFromDescriptor:
         assert manager._storage is storage
         assert manager._storage._subdir == "custom"
 
+    def test_default_storage_respects_kron86(self, tmp_path):
+        provider = Mock(spec=GugikProvider)
+        provider.descriptor_key = "pl.gugik.nmt_1m"
+        type(provider).default_extension = PropertyMock(return_value=".asc")
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=provider, vertical_crs="KRON86"
+        )
+        assert manager._storage._subdir == "nmt/pl_{uklad}_1m_kron86"
+
+    def test_default_storage_5m_kron86_corrected_to_evrf(self, tmp_path):
+        """Regula 5m=>EVRF2007 dziala PRZED budowa segmentu."""
+        provider = Mock(spec=GugikProvider)
+        provider.descriptor_key = "pl.gugik.nmt_5m"
+        type(provider).default_extension = PropertyMock(return_value=".asc")
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=provider,
+            vertical_crs="KRON86",
+            resolution="5m",
+        )
+        assert manager._storage._subdir == "nmt/pl_{uklad}_5m_evrf2007"
+
 
 class TestDownloadManagerDownloadSheet:
     """Testy metody download_sheet() - pobiera ASC przez OpenData."""
