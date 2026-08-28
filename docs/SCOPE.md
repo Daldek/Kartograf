@@ -56,6 +56,9 @@ Kartograf automatyzuje ten proces oferując:
   (endpoint EVRF2007 wycofany przez GUGiK, HTTP 404 od 2026-08 — download_bbox
   pod EVRF2007 kończy się ValidationError) LUB automatyczne wykrywanie arkuszy
   (CLI --bbox: arkusze OpenData, oba układy wysokościowe)
+- Wycinek bbox z reprojekcją lokalną: `--target-crs {EPSG:2180,EPSG:5514,
+  EPSG:3045}` w trybie `--bbox`/`--geometry` — jeden scalony GeoTIFF
+  (mozaika arkuszy + pinned warp, ADR-027)
 - Rozdzielczości: 1m (GRID1), 5m (GRID5)
 - Układy wysokościowe: KRON86, EVRF2007
 
@@ -90,7 +93,7 @@ dokładnie jeden arkusz. Nieznana wartość `system=` to `ValidationError`.
 - Reprojekcja pozioma **lokalna** (rasterio.warp + przypięta operacja; serwer
   dostaje żądania wyłącznie w natywnym EPSG:5514 — ADR-024):
   `--target-crs {EPSG:2180,EPSG:5514,EPSG:3045}` — tylko w trybie
-  `--bbox`/`--geometry` (z godłem = błąd)
+  `--bbox`/`--geometry` (z godłem = błąd; symetrycznie do PL od 0.7.0)
 - Układ wysokościowy natywny: Bpv (Baltic 1957, EPSG:8357); opcjonalna
   transformacja do EVRF2007 (EPSG:5621, przypięta operacja 0,1 m); KRON86
   nieosiągalny (brak publicznych siatek Bpv→KRON86)
@@ -261,6 +264,14 @@ from kartograf import (
 )
 ```
 
+### 2.11 Układ danych na dysku - IN SCOPE
+
+- `data/<produkt>/<kraj>_<układ>[_<wariant>][_<vcrs>]/...` (ADR-026);
+  kanoniczna tabela segmentów i migracja 0.6.x→0.7.0:
+  `docs/ARCHITECTURE.md` sekcja 3
+- Wycinki `--bbox` w `<segment>/bbox/<coords><ext>` (PL i CZ)
+- `landcover/` bez zmian (własny default `--output`)
+
 ---
 
 ## 3. Out of Scope - Wersja 0.7.0
@@ -319,6 +330,8 @@ from kartograf import (
 - KRON86 nieosiągalny dla CZ (brak publicznych siatek Bpv→KRON86) — jedyna
   transformacja pionowa to Bpv→EVRF2007 (EPSG:5621)
 - --target-crs działa tylko z --bbox/--geometry; z godłem CZ = ValidationError
+- --target-crs dla PL: tylko nmt i system 1992 (nmpt/orto — etap 2; mozaika
+  międzystrefowa PL-2000 — etap 2); failed arkusz = kod 1
 - Asymetria trybu --bbox: PL zwraca listę arkuszy (wiele plików), CZ zwraca
   jeden plik (wycinek exportImage, pobierany natywnie w 5514 i reprojektowany
   lokalnie, gdy zażądano innego układu)
@@ -368,8 +381,9 @@ kartograf/
 │   ├── descriptor.py        # SourceDescriptor, AccessChannel (+endpoint), TransportKind, LicenseInfo, CountryProfile
 │   ├── registry.py          # Rejestr PL/CZ/EU/GLOBAL — get_source, sources_for, get_country, all_countries, vertical_crs_code, resolve_vertical_crs
 │   └── sidecar.py           # ResultMetadata, build_metadata (capability=, nodata=), write_sidecar (<plik>.meta.json)
-├── transform/             # Transformacje CRS
-│   └── crs.py                # TransformerGroup (allow_ballpark=False, probe pod polityką sieci); PinnedTransform.transform polimorficzne
+├── transform/             # Transformacje CRS i rastrów
+│   ├── crs.py                # TransformerGroup (allow_ballpark=False, probe pod polityką sieci); PinnedTransform.transform polimorficzne
+│   └── raster.py             # warp_to_grid — lokalny warp na siatkę, operacja WYMUSZONA (ADR-027)
 ├── transport/             # Wspólny transport pobierania
 │   ├── http.py               # download_to — atomic write + retry
 │   └── mosaic.py             # mosaic_and_crop — merge kafli (rasterio) + przycięcie
@@ -393,7 +407,7 @@ kartograf/
 │   └── metadata.py           # MetadataCache — SQLite WAL (URL/TERYT TTL 7d, Sheet TTL 30d)
 ├── download/              # Download management (NMT/NMPT/Orto; CZ ma własny przepływ w CLI)
 │   ├── manager.py            # DownloadManager (sidecar_extra=...)
-│   └── storage.py            # FileStorage (subdir sterowany deskryptorem)
+│   └── storage.py            # FileStorage(vertical_crs=) — segmenty z szablonów deskryptora (ADR-026)
 ├── landcover/             # Land Cover management
 │   └── manager.py
 ├── hydrology/             # Obliczenia hydrologiczne
@@ -402,7 +416,7 @@ kartograf/
 │   ├── proxy.py               # Auth Proxy server
 │   └── client.py               # Auth Proxy client
 └── cli/                   # CLI interface (podzielony na moduły per komenda)
-    ├── _parser.py             # argparse — top-level + subkomendy (--country, --target-crs)
+    ├── _parser.py             # argparse — top-level + subkomendy (--country, --target-crs PL/CZ)
     ├── parse_cmd.py           # `kartograf parse`
     ├── download_cmd.py        # `kartograf download` (godło / bbox / geometry / LAZ / CZ)
     ├── landcover_cmd.py       # `kartograf landcover`
@@ -485,9 +499,10 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-08-11 | 3.6 | Etap 0 (sources/transform/transport/providers-pl, CLI split, LAZ) + etap 1 (CZ/CUZK: DMR 5G/4G, --country/--target-crs, ADR-023); drzewo modułów i sekcje odświeżone |
 | 2026-08-18 | 3.7 | Przegląd spójności dokumentacji: status mergu etapu 1, nagłówek sekcji 2 (0.5.0→0.7.0), komenda `cache` w 2.9, brakujące eksporty w 2.10, liczba testów 1402 |
 | 2026-08-22 | 3.8 | Korekty spójności po audycie przedwydaniowym 0.7.0: WCS NMT tylko 1m/KRON86, 4 warstwy WMS ortofoto, SoilGrids bez TERYT, timeouty per źródło, konwencja krawędzi i etykiety skal, semantyka `--country auto` (zasięg prostokąta CZ/PL, Info/Warning, częściowy sukces), liczby 1716/93% |
+| 2026-08-28 | 3.9 | Układ data/ per produkt (ADR-026), --target-crs dla PL (ADR-027), sekcja 2.11 |
 
 ---
 
-**Wersja dokumentu:** 3.8
-**Data ostatniej aktualizacji:** 2026-08-22
+**Wersja dokumentu:** 3.9
+**Data ostatniej aktualizacji:** 2026-08-28
 **Status:** Rozwoj — v0.7.0 (Unreleased), etap 1 zmergowany do `develop` 2026-08-12

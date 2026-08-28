@@ -206,7 +206,7 @@ Kazde udane pobranie zapisuje **dwa** pliki: dane i `<plik>.meta.json`.
 | `license` | `{id, attribution, url}` z deskryptora |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, sekundy) i wersja pakietu |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
-| `extra` | slownik dodatkowy: `parent_request`, a dla LAZ takze `godlo_kafla`/`rok`/`gestosc`/`url`, dla SM5 `mapname`/`podil` |
+| `extra` | slownik dodatkowy: `parent_request` w trybie obszarowym (ale NIE w torze LAZ — sekcja 3.4); w torze LAZ zamiast niego `godlo_kafla`/`rok`/`gestosc`/`url`; dla SM5 dodatkowo `mapname`/`podil` |
 | `schema` | stale `kartograf-meta/1` |
 
 Kanal, z ktorego brany jest `horizontal_crs`/`vertical_crs_options`/
@@ -563,5 +563,5 @@ Pelne uzasadnienia: `docs/DECISIONS.md`.
 | ADR-026 | Uklad `data/` per produkt + szablony `storage_subdir` | `data/<produkt>/<kraj>_<uklad>[_<wariant>][_<vcrs>]/...`; `storage_subdir` staje sie szablonem z `{uklad}`/`{vcrs}`, a `FileStorage` odrzuca segment z nierozwiazana klamra. |
 | ADR-027 | `--target-crs` dla PL jako scalony wycinek | Bbox/geometria PL z `--target-crs` daje jeden GeoTIFF: arkusze jako cache, `mosaic_and_crop`, lokalny warp przypieta operacja, sidecar z `transform.horizontal`. |
 
-ADR-026 i ADR-027 sa spisywane w `docs/DECISIONS.md` w ramach tego samego
-wydania 0.7.0 — ten indeks wyprzedza je o jeden commit.
+ADR-026 i ADR-027 sa spisane w `docs/DECISIONS.md` w ramach tego samego
+wydania 0.7.0.
