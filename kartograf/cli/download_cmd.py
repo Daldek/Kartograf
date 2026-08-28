@@ -520,7 +520,7 @@ def _dispatch_area(
             # co zatrulo by galaz CZ; kopia uniezaleznia od kolejnosci krajow
             pl_args = argparse.Namespace(**vars(args))
             if filepath is not None:
-                rc = _download_pl_geometry(pl_args, filepath, parent_request)
+                rc = _download_pl_geometry(pl_args, filepath, parent_request, bbox=part)
             else:
                 rc = _download_pl_bbox(pl_args, part, parent_request)
         results.append((code, rc))
@@ -1888,12 +1888,19 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
 
 
 def _download_pl_geometry(
-    args: argparse.Namespace, filepath: Path, parent_request: dict
+    args: argparse.Namespace,
+    filepath: Path,
+    parent_request: dict,
+    bbox: BBox | None = None,
 ) -> int:
     """
     Polska czesc zadania geometrycznego (arkusze per obiekt, nie z obwiedni).
 
     ``args`` to KOPIA namespace'u zadania — patrz ``_dispatch_area``.
+
+    ``bbox`` — obwiednia zadania PL (przycieta pod auto); potrzebna wylacznie
+    dla wycinka ``--target-crs``: crop idzie po tej obwiedni, a obszary miedzy
+    rozlacznymi obiektami wypelnia nodata.
     """
     from kartograf.core.geometry import find_sheets_for_geometry
 
@@ -1923,10 +1930,39 @@ def _download_pl_geometry(
     resolution = args.resolution
     product = getattr(args, "product", "nmt")
     workers = getattr(args, "workers", 4)
+    skip_existing = not args.force
 
     provider, storage = _create_provider_and_storage(
         product, output_dir, vertical_crs, resolution
     )
+
+    # Wycinek (ADR-027) jak w trybie bbox, z jedna roznica: arkusze wyznacza
+    # dalej sama geometria (per obiekt), a `bbox` sluzy wylacznie siatce
+    # wyniku i cropowi mozaiki — obszary miedzy rozlacznymi obiektami
+    # wypelnia nodata (spec 6.2).
+    cutout: _PlCutout | None = None
+    if args.target_crs is not None:
+        from kartograf.transform.crs import TransformError
+
+        if bbox is None:
+            # dzis nieosiagalne (_dispatch_area zawsze podaje obwiednie),
+            # ale jawny blad jest lepszy niz AttributeError w srodku
+            raise ValidationError(
+                "--target-crs w trybie --geometry wymaga obwiedni geometrii "
+                "(wywolanie wewnetrzne bez bbox)"
+            )
+        try:
+            # fail-fast: operacja przypieta budowana PRZED jakakolwiek siecia
+            cutout = _prepare_pl_cutout(
+                args, bbox, getattr(provider, "vertical_crs", vertical_crs)
+            )
+        except TransformError as e:
+            return _print_transform_error(e)
+        if skip_existing and cutout.target_path.exists():
+            if not args.quiet:
+                print(f"Skipped - already exists at {cutout.target_path}")
+            return 0
+
     manager = DownloadManager(
         output_dir=output_dir,
         provider=provider,
@@ -1939,7 +1975,6 @@ def _download_pl_geometry(
         sidecar_extra={"parent_request": parent_request},
     )
 
-    skip_existing = not args.force
     on_progress = create_progress_callback(args.quiet)
 
     if not args.quiet:
@@ -1972,6 +2007,11 @@ def _download_pl_geometry(
 
     # komunikat wypisal juz `_download_godlo_list` — tu zostaje kod wyjscia
     if failed_sheets:
+        # nieudany arkusz = blad calosci takze bez --target-crs; dla wycinka
+        # dodatkowo wymog kompletu pokrycia (spec 6.1 pkt 1)
         return 1
+
+    if cutout is not None:
+        return _finalize_pl_cutout(args, cutout, all_paths, parent_request, provider)
 
     return 0
