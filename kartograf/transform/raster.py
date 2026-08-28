@@ -20,9 +20,24 @@ from rasterio.transform import from_origin
 from rasterio.warp import reproject
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.transform.crs import PinnedTransform
+from kartograf.transform.crs import PinnedTransform, TransformError
 
 logger = logging.getLogger(__name__)
+
+
+def _same_crs(a: str, b: str) -> bool:
+    """Czy to ten sam uklad? Porownanie semantyczne, nie tekstowe.
+
+    `EPSG:2180` i `epsg:2180` to ten sam uklad — samo porownanie stringow
+    dawaloby falszywe odrzuty, a odrzut zdrowego wywolania jest gorszy niz
+    przepuszczenie dziwnie zapisanego ukladu.
+    """
+    if a == b:
+        return True
+    try:
+        return bool(CRS.from_user_input(a) == CRS.from_user_input(b))
+    except Exception:  # noqa: BLE001 — nieparsowalny uklad = nie ta sama para
+        return False
 
 
 @contextlib.contextmanager
@@ -62,7 +77,21 @@ def warp_to_grid(
     dokladnosci, probe). `src_nodata`/`dst_nodata` maskuja piksele puste,
     zeby nodata nie weszlo do interpolacji. Zapis atomowy: plik docelowy
     powstaje dopiero z gotowej kopii tymczasowej.
+
+    Para ukladow musi zgadzac sie z ``pinned`` (o ile ten ja zna) — inaczej
+    ``TransformError``. Wymuszona operacja czyni bowiem ``src_crs`` martwym
+    dla GDAL-a (zmierzone: dla tego samego pipeline'u 2180/4326/3857/32633/5514
+    daja identyczny wynik), wiec sama sygnatura nie chroni przed podaniem
+    ``pinned`` zbudowanego dla innej pary niz faktycznie zadana.
     """
+    if (pinned.src_crs is not None and not _same_crs(pinned.src_crs, src_crs)) or (
+        pinned.dst_crs is not None and not _same_crs(pinned.dst_crs, bbox.crs)
+    ):
+        raise TransformError(
+            f"Niespojna para ukladow: operacja przypieta to "
+            f"{pinned.src_crs} -> {pinned.dst_crs}, a zadana reprojekcja "
+            f"{src_crs} -> {bbox.crs} [{pinned.description}]"
+        )
     width = max(1, round((bbox.max_x - bbox.min_x) / pixel_size))
     height = max(1, round((bbox.max_y - bbox.min_y) / pixel_size))
     dst_transform = from_origin(bbox.min_x, bbox.max_y, pixel_size, pixel_size)
