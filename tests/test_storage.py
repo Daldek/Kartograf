@@ -723,6 +723,16 @@ class TestFileStorageSegments:
         with pytest.raises(ValidationError, match="vcrs"):
             storage.get_path("N-34-130-D-d-2-4", ".asc")
 
+    def test_empty_vcrs_raises_instead_of_dangling_segment(self, tmp_path):
+        """Pusty ``vertical_crs`` to brak wymiaru, nie wymiar pusty.
+
+        Dotad dawal cichy segment ``nmt/pl_1992_1m_`` — mniej czytelny niz
+        nierozwiazana klamra i niewidoczny dla ``_ensure_resolved``.
+        """
+        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="")
+        with pytest.raises(ValidationError, match="vcrs"):
+            storage.get_path("N-34-130-D-d-2-4", ".asc")
+
     def test_unknown_product_passthrough(self, tmp_path):
         storage = FileStorage(tmp_path, product="nmt_2000_1m")
         assert storage.get_path("6.179.12.20", ".asc") == (
