@@ -136,6 +136,21 @@ KNOWN_PATHS: tuple[KnownPath, ...] = (
         "probe odrzuca sk_gku (inf w CZ); reprojekcja tresci LOKALNA — "
         "serwerowej CUZK nie uzywamy, gubi datum shift (ADR-024)",
     ),
+    KnownPath(
+        "EPSG:2180",
+        "EPSG:5514",
+        0.5,
+        "wycinek PL --target-crs (ADR-027); zmierzone: Inverse of Poland CS92 "
+        "+ ETRF2000-PL to ETRS89 (1) + Inverse of S-JTSK to ETRS89 (3) "
+        "+ Krovak East North",
+    ),
+    KnownPath(
+        "EPSG:2180",
+        "EPSG:3045",
+        0.0,
+        "wycinek PL --target-crs (ADR-027) na siatke kafla TM33; zmierzone: "
+        "Inverse of Poland CS92 + ETRF2000-PL to ETRS89 (1) + UTM zone 33N",
+    ),
     KnownPath("EPSG:8353", "EPSG:2180", 0.001, "SK, bez siatek"),
     KnownPath("EPSG:25833", "EPSG:2180", 0.0, "DE, jedyna operacja, bez siatek"),
     KnownPath("EPSG:8357", "EPSG:5621", 0.1, "Bpv->EVRF2007; +0,12..+0,14 m"),

@@ -149,6 +149,28 @@ class TestKnownPaths:
         assert ("EPSG:7837", "EPSG:5621") in pairs
         assert ("EPSG:4937", "EPSG:8357") in pairs
 
+    def test_pl_cutout_pairs_documented_with_measured_accuracy(self):
+        """Tor PL (`--target-crs`, ADR-027) tez ma wpis — z ZMIERZONA dokladnoscia.
+
+        `KNOWN_PATHS` jest jedynym mechanizmem, ktory wychwytuje regresje
+        doboru operacji (docs/ARCHITECTURE.md sekcja 5 pkt 6), wiec kazda
+        uzywana para ukladow musi tu byc, a deklarowana dokladnosc musi zgadzac
+        sie z ta, ktora naprawde wybiera polityka.
+        """
+        by_pair = {(p.src, p.dst): p for p in KNOWN_PATHS}
+        probe = (530050.0, 382050.0)  # EPSG:2180, srodkowa Polska
+        for dst, expected in (("EPSG:5514", 0.5), ("EPSG:3045", 0.0)):
+            entry = by_pair[("EPSG:2180", dst)]  # KeyError = brak wpisu
+            pinned = build_pinned_transform(
+                "EPSG:2180",
+                dst,
+                TransformPolicy(
+                    min_accuracy_m=1.0, probe_point=probe, allow_network_grids=False
+                ),
+            )
+            assert entry.expected_accuracy_m == expected
+            assert pinned.accuracy_m == expected
+
     def test_remedies_for_polish_vertical(self):
         assert "EPSG:9650" in REMEDIES and "EPSG:9651" in REMEDIES
 
