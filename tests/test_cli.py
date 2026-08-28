@@ -2706,6 +2706,60 @@ class TestCmdDownloadLaz:
         assert payload["extra"]["rok"] == tile.year
         assert payload["request"]["bbox_crs"] == "EPSG:2180"
 
+    @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
+    def test_laz_segment_carries_vertical_crs_from_flag(
+        self, mock_provider_cls, tmp_path
+    ):
+        """Segment {vcrs} niesie --vertical-crs, nie default FileStorage.
+
+        Bez ta asercja test przeszedlby takze wtedy, gdyby ktos usunal
+        ``vertical_crs=vertical_crs`` z wywolania ``resolve_subdir`` w
+        ``_storage_for`` — default FileStorage ("EVRF2007") maskowalby
+        blad dokladnie tak, jak maskowal efekt uboczny Zad. 2 (segment
+        LAZ zawsze "evrf2007" niezaleznie od flagi). Ten test wymusza
+        KRON86 (rozny od defaultu) i sprawdza, ze trafil do segmentu
+        zarowno kafla, jak i sidecara.
+        """
+        import json
+
+        tile = self._fake_tiles()[0]
+        instance = Mock()
+        instance.vertical_crs = "KRON86"
+        instance.discover_tiles.return_value = [tile]
+
+        def fake_download(url, target, **kwargs):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"LASF")
+            return target
+
+        instance.download.side_effect = fake_download
+        mock_provider_cls.return_value = instance
+
+        result = main(
+            [
+                "download",
+                "M-34-27-B-b-2-1",
+                "--product",
+                "laz",
+                "--vertical-crs",
+                "KRON86",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        sidecars = list(tmp_path.rglob("*.meta.json"))
+        assert len(sidecars) == 1
+        sidecar = sidecars[0]
+        assert "pl_2000_kron86" in str(sidecar.parent)
+        kafel = sidecar.parent / tile.filename
+        assert kafel.exists()
+        assert "pl_2000_kron86" in str(kafel.parent)
+        payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        assert payload["vertical_crs"] == "EPSG:9650"
+
     def test_laz_invalid_godlo_errors(self, capsys, tmp_path):
         result = main(
             ["download", "NOT-A-GODLO!!", "--product", "laz", "-o", str(tmp_path), "-q"]
