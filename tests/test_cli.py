@@ -2458,6 +2458,60 @@ class TestDownloadGeometrySystem:
         assert call_kwargs.kwargs.get("system") == "1992"
 
 
+class TestLazUklad:
+    """Kaskada ukladu kafla LAZ: uklad_xy -> format godla -> 2000 (spec 5.5)."""
+
+    def _tile(self, godlo="N-33-131-B-a-1-1-4", crs="PL-2000:S6"):
+        from kartograf.providers.pl.gugik_laz import LazTile
+
+        return LazTile(
+            godlo=godlo,
+            url="u/f.laz",
+            year=2024,
+            density=25,
+            crs=crs,
+            min_x=0.0,
+            min_y=0.0,
+            max_x=1.0,
+            max_y=1.0,
+        )
+
+    def test_crs_pl2000_wins_over_dash_godlo(self):
+        from kartograf.cli.download_cmd import _laz_uklad
+
+        # godlo myslnikowe, ale uklad_xy mowi PL-2000 — crs wygrywa
+        assert _laz_uklad(self._tile()) == "2000"
+
+    def test_crs_pl1992(self):
+        from kartograf.cli.download_cmd import _laz_uklad
+
+        assert _laz_uklad(self._tile(crs="PL-1992")) == "1992"
+
+    def test_none_crs_falls_back_to_dot_godlo(self):
+        from kartograf.cli.download_cmd import _laz_uklad
+
+        assert _laz_uklad(self._tile(godlo="6.162.34.02.3", crs=None)) == "2000"
+
+    def test_none_crs_falls_back_to_dash_godlo(self):
+        from kartograf.cli.download_cmd import _laz_uklad
+
+        assert _laz_uklad(self._tile(crs=None)) == "1992"
+
+    def test_unrecognized_crs_falls_back_to_godlo(self):
+        from kartograf.cli.download_cmd import _laz_uklad
+
+        assert _laz_uklad(self._tile(crs="EPSG:2180")) == "1992"
+
+    def test_everything_fails_defaults_2000_with_warning(self, caplog):
+        import logging
+
+        from kartograf.cli.download_cmd import _laz_uklad
+
+        with caplog.at_level(logging.WARNING):
+            assert _laz_uklad(self._tile(godlo="XYZ99", crs=None)) == "2000"
+        assert "XYZ99" in caplog.text
+
+
 class TestCmdDownloadLaz:
     """Tests for the LAZ product flow in the download command."""
 
@@ -2644,6 +2698,7 @@ class TestCmdDownloadLaz:
         sidecar = sidecars[0]
         assert sidecar.name == f"{tile.filename}.meta.json"
         assert (sidecar.parent / tile.filename).exists()
+        assert "pl_2000_evrf2007" in str(sidecar.parent)
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
         assert payload["dataset"] == "pl.gugik.laz"
         assert payload["vertical_crs"] == "EPSG:9651"
