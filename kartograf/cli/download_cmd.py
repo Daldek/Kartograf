@@ -1942,9 +1942,13 @@ def _download_pl_geometry(
     # wyniku i cropowi mozaiki. Wynik obejmuje CALA obwiednie geometrii —
     # maskowania do obiektow NIE MA (do warstwy rastrowej ida same sciezki
     # arkuszy, patrz `_build_pl_cutout`). Nodata pojawia sie wylacznie tam,
-    # gdzie nie siega zaden pobrany arkusz, a nie miedzy obiektami: dwa
-    # rozlaczne obiekty odlegle o setki metrow leza w tym samym arkuszu
-    # 1:10000 (~5,5 x 4,6 km), wiec obszar miedzy nimi to realny teren.
+    # gdzie nie siega zaden POBRANY arkusz — nigdy jako maskowanie. Dwa
+    # rozlaczne obiekty w tym samym albo w sasiednich arkuszach maja miedzy
+    # soba realny teren, ale arkusz "1:10000" ma tylko ~2,25 x 2,43 km
+    # (zmierzone; GUGiK nazywa go modulem 1:5000 — patrz Notes w
+    # core/sheet_parser.py), wiec przy obiektach oddalonych o wiecej niz
+    # arkusz miedzy nimi moze lezec arkusz niewybrany przez
+    # find_sheets_for_geometry — i wtedy bedzie tam pas nodata.
     cutout: _PlCutout | None = None
     if args.target_crs is not None:
         from kartograf.transform.crs import TransformError
