@@ -87,10 +87,13 @@ class PinnedTransform:
 
         Korekta osi jest konieczna: pipeline pochodzi z transformera
         ``always_xy=True`` (kolejnosc E-N), a GDAL podaje operacji wspolrzedne
-        w kolejnosci osi AUTORYTATYWNEJ obu ukladow. Dla celu northing-first
-        (EPSG:2180, EPSG:3045) brak ``axisswap`` daje raster w calosci nodata
-        — cichy, latwy do przeoczenia tryb awarii, dlatego korekta jest
-        wyliczana z ``axis_info``, a nie zakladana.
+        w kolejnosci osi AUTORYTATYWNEJ obu ukladow. Dlatego ``axisswap``
+        dokladany jest NIEZALEZNIE dla zrodla (na czele) i dla celu (na koncu)
+        — za kazdym razem, gdy dany uklad jest northing-first (EPSG:2180,
+        EPSG:3045; EPSG:5514 nie jest). Brak korekty daje raster w calosci
+        nodata — cichy, latwy do przeoczenia tryb awarii (zmierzone dla toru
+        PL 2180 -> 5514 bez czolowego ``axisswap``: 0 z 46225 waznych
+        pikseli) — dlatego jest wyliczana z ``axis_info``, a nie zakladana.
         """
         if self.src_crs is None or self.dst_crs is None:
             raise TransformError(

@@ -156,18 +156,21 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   scalony wycinek `nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif` (mozaika
   arkuszy + crop + lokalny warp przypieta operacja; `EPSG:2180` = sam crop,
   `transform: null`; failed arkusz = kod 1). W trybie `--geometry` wycinek
-  obejmuje CALA obwiednie geometrii (bez maskowania do obiektow) — `nodata`
-  tylko tam, gdzie nie siega zaden pobrany arkusz. Na pograniczu
-  `--country auto --target-crs` daje dwa wycinki PL+CZ ze wspolnym
-  `extra.parent_request`. Wylaczenia (czytelne bledy): godlo,
-  `--product nmpt|orto|laz`, `--system 2000`. Semantyka `--force` to
-  "odswiez albo nic": nieudana budowa wycinka kasuje TAKZE poprzedni plik
-  wyniku (tak samo jak w torze CZ).
+  obejmuje CALA obwiednie geometrii (bez maskowania do obiektow), a przy
+  reprojekcji arkusze to SUMA godel geometrii i godel obwiedni z zapasem —
+  obwiednia jest wiec wypelniona danymi, nie ramka `nodata` (koszt: przy
+  rzadkiej geometrii wieloobiektowej pobieraja sie arkusze calej obwiedni).
+  Na pograniczu `--country auto --target-crs` daje dwa wycinki PL+CZ ze
+  wspolnym `extra.parent_request`. Wylaczenia (czytelne bledy): godlo,
+  `--product nmpt|orto|laz`, `--system 2000`. Nieudana budowa wycinka NIE
+  niszczy poprzedniego pliku wyniku — obie sciezki zapisu sa atomowe.
 - `SourceDescriptor.resolve_subdir(uklad=, vertical_crs=)` — wypelnianie
   szablonu segmentu (czesciowe legalne; vcrs lowercased)
 - `FileStorage(vertical_crs=)` — nowy parametr (default `"EVRF2007"`);
   `{uklad}` rozwiazywany per godlo (kropki=2000, myslniki=1992),
-  nierozwiazany placeholder = `ValidationError`
+  nierozwiazany placeholder = `ValidationError` (pusty string liczy sie jako
+  brak wymiaru, wiec tez konczy sie `ValidationError`, a nie segmentem
+  `pl_1992_1m_`)
 - `kartograf.transform.raster.warp_to_grid` — lokalna reprojekcja rastra
   z wymuszona operacja przypieta (wzorzec ADR-024 dla torow PL)
 - `mosaic_and_crop(dst_kwds=)` — wymuszenie sterownika/CRS wyniku
@@ -293,6 +296,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     wymienione byly tylko uklady polskie (A6-16)
 
 ### Changed
+- `DownloadManager` bierze uklad pionowy segmentu z PROVIDERA, nie z wlasnej
+  flagi `vertical_crs=` — `DownloadManager(provider=GugikProvider(
+  vertical_crs="KRON86"))` pisal dotad do `nmt/pl_1992_1m_evrf2007/` obok
+  sidecara deklarujacego `EPSG:9650` (dotyczy API biblioteki, nie CLI)
 - Wycinki `--bbox` CZ trafiaja do `<output>/<subdir>/bbox/<coords>.tif`
   (np. `data/nmt/cz_dmr5g_bpv/bbox/-447000_-1114000_-446000_-1113000.tif`)
   zamiast plasko do korzenia katalogu wyjsciowego z podkatalogiem w nazwie

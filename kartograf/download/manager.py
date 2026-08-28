@@ -127,7 +127,7 @@ class DownloadManager:
     >>>
     >>> # Download single sheet (ASC)
     >>> manager.download_sheet("N-34-130-D-d-2-4")
-    PosixPath('data/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc')
+    PosixPath('data/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc')
     >>>
     >>> # Download hierarchy (ASC)
     >>> manager.download_hierarchy("N-34-130-D", "1:10000")
