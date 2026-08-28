@@ -39,7 +39,8 @@ class FileStorage:
     output_dir : Path
         Base directory for storing downloaded files
     resolution : str
-        Resolution subdirectory ("1m" or "5m")
+        Resolution dimension of the segment template ("1m" or "5m"); empty
+        when the segment comes from `product` or an explicit `subdir`
 
     Examples
     --------
@@ -73,15 +74,18 @@ class FileStorage:
             Base directory for storing downloaded files.
             Will be created if it doesn't exist.
         resolution : str, optional
-            Resolution for subdirectory: "1m" or "5m" (default: "1m").
-            Files will be stored in output_dir/resolution/...
+            Resolution picking the NMT segment template: "1m" or "5m"
+            (default: "1m"). Files land in
+            `output_dir/nmt/pl_<uklad>_<resolution>_<vcrs>/...`.
             Ignored when product is set.
         product : str, optional
-            Product name for subdirectory (e.g. "nmpt", "orto").
-            When set, uses product instead of resolution as subdirectory.
+            Product name picking the segment template (e.g. "nmpt", "orto",
+            "laz"). When set, the product template replaces the resolution one
+            (`output_dir/nmpt/pl_<uklad>_1m_<vcrs>/...`).
         subdir : str, optional
-            Explicit subdirectory name sterowany deskryptorem zrodla
-            (np. "cz_dmr5g"). Ma pierwszenstwo przed product i resolution.
+            Explicit segment template sterowany deskryptorem zrodla
+            (np. "nmt/cz_dmr5g_{vcrs}"). Ma pierwszenstwo przed product
+            i resolution.
         vertical_crs : str, optional
             Vertical CRS filling the ``{vcrs}`` placeholder of the segment
             template (lowercased; default "EVRF2007"). ``None`` leaves the
@@ -122,7 +126,7 @@ class FileStorage:
 
     @property
     def resolution(self) -> str:
-        """Return the resolution subdirectory."""
+        """Return the resolution dimension of the segment ("" when unused)."""
         return self._resolution
 
     @property
@@ -393,7 +397,9 @@ class FileStorage:
         """
         List all files matching pattern in storage directory.
 
-        Searches within the resolution subdirectory.
+        Searches within the segment (ADR-026). A segment template carrying
+        `{uklad}` spans BOTH systems, so PL-1992 and PL-2000 files are listed
+        together even though they live in separate directories.
 
         Parameters
         ----------

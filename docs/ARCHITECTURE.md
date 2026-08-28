@@ -50,9 +50,13 @@ Wybrana operacja jest **przypieta** (`PinnedTransform`) i przy reprojekcji
 rastra WYMUSZANA na GDAL-u przez `COORDINATE_OPERATION` — bez tego GDAL
 wybiera operacje sam, poza polityka. Pulapka osi jest tu realna, nie
 teoretyczna: pipeline pochodzi z transformera `always_xy=True`, a GDAL podaje
-wspolrzedne w kolejnosci osi autorytatywnej, wiec dla celow northing-first
-(EPSG:2180, EPSG:3045) brak `proj=axisswap order=2,1` daje raster w calosci
-nodata. Korekta jest liczona z `axis_info`, nie zakladana.
+wspolrzedne w kolejnosci osi autorytatywnej, wiec `proj=axisswap order=2,1`
+dokladane jest NIEZALEZNIE dla zrodla (na czele pipeline'u) i dla celu (na
+koncu) — za kazdym razem, gdy dany uklad jest northing-first (EPSG:2180,
+EPSG:3045; EPSG:5514 nie jest). Brak korekty daje raster w calosci nodata,
+takze po stronie zrodla: zmierzone dla toru PL 2180 -> 5514 bez czolowego
+`axisswap` — **0 z 46225 waznych pikseli**. Korekta jest liczona
+z `axis_info`, nie zakladana.
 
 **Brak scalania miedzykrajowego.** Zadanie obszarowe przecinajace wiecej niz
 jeden kraj daje **osobne pliki i osobne sidecary per kraj**, powiazane wspolnym
@@ -365,14 +369,17 @@ w `_prepare_pl_cutout` -> `_download_pl_bbox`/`_download_pl_geometry` ->
    ukladu docelowego robi ja wieksza niz samo zadanie) i dostaje jeszcze
    `_PL_WARP_MARGIN_PX = 4` piksele marginesu na halo interpolatora bilinear.
    Ten powiekszony bbox — nie zadanie uzytkownika — steruje cropem mozaiki
-   i siatka wyniku. **Selekcja arkuszy zalezy od trybu:** w `--bbox` idzie
-   z tego samego powiekszonego bboxa (`sheet_bbox = cutout.bbox_source_2180`),
-   a w `--geometry` NIE — tam arkusze wyznacza dalej sama geometria per obiekt
-   (`find_sheets_for_geometry` wola sie przed zbudowaniem `cutout`), wiec zapas
-   wplywa wylacznie na crop i siatke. Lustro `_native_request_bbox` toru CZ.
-   Zapas nie jest
+   ORAZ selekcja arkuszy, i to w OBU trybach: `--bbox` podaje go wprost
+   (`sheet_bbox = cutout.bbox_source_2180`), a `--geometry` dorzuca wynik
+   `find_sheets_for_bbox(cutout.bbox_source_2180, ...)` do godel geometrii
+   (suma mnogosciowa). Siatki wyniku zapas NIE dotyczy: `warp_to_grid` liczy
+   `width`/`height`/`dst_transform` wylacznie z `bbox_target`, wiec zasieg
+   pliku rowna sie obwiedni zadania w ukladzie docelowym (zmierzone: 186 x 94
+   px, `bounds == bbox_target`) — zgodnie z nazwa pliku, ktora tez pochodzi
+   z `bbox_target`. Lustro `_native_request_bbox` toru CZ. Zapas nie jest
    ostroznoscia na wyrost: bez niego zmierzony wycinek do EPSG:5514 mial
-   **17,4 % pikseli nodata** (3034 z 17484) na krawedziach.
+   **17,4 % pikseli nodata** (3034 z 17484) na krawedziach, a w trybie
+   `--geometry` bez sumy godel — **50,1 %** (8756 z 17484).
 3. **Arkusze jako cache.** Arkusze pobieraja sie normalnie do swoich
    segmentow (`skip_existing` dziala standardowo) i zostaja na dysku wraz
    z wlasnymi sidecarami. Kazdy nieudany arkusz konczy polska czesc zadania
@@ -390,32 +397,43 @@ w `_prepare_pl_cutout` -> `_download_pl_bbox`/`_download_pl_geometry` ->
    (`os.replace`), a sidecar ma `transform: null`.
 6. **Sidecar** wg 3.2, z `parent_request`.
 
-**Semantyka "odswiez albo nic" przy `--force`.** Nieudana budowa wycinka
-kasuje TAKZE poprzedni plik wyniku — nawet gdy porazka nastapila przed
-dotknieciem celu (np. blad w `mosaic_and_crop`, ktory pisze tylko do pliku
-tymczasowego): `_build_pl_cutout` i `warp_to_grid` maja `except BaseException:
-target_path.unlink(missing_ok=True)`. Ta sama semantyka jest w torze CZ
-(`providers/cuzk/dmr.py::_warp_to_grid`) i zostala przyjeta swiadomie — rozjazd
-PL vs CZ bylby gorszy niz nadmiarowosc. Bez `--force` sytuacja nie wystepuje,
-bo skrot "plik juz istnieje" wraca wczesniej.
+**Nieudana budowa a poprzedni wynik.** Obie sciezki zapisu sa atomowe
+(`os.replace` przy samym cropie, wewnetrzny `os.replace` w `warp_to_grid`),
+wiec przerwana budowa nie zostawia pod finalna sciezka polzapisanego pliku.
+Skoro tak, `_build_pl_cutout` nie kasuje tez poprzedniego wyniku: stary plik
+przezywa awarie, a sciezka sukcesu jest identyczna. Kasowanie bylo tu czysta
+utrata danych — pod `--country auto` cale zadanie moglo skonczyc sie kodem 0
+(bo drugi kraj sie udal), zostawiajac uzytkownika bez pliku, ktory mial
+wczesniej. `transform/raster.py::warp_to_grid` i tor CZ
+(`providers/cuzk/dmr.py::_warp_to_grid`) maja `except BaseException:
+dst.unlink(missing_ok=True)` dalej — tam jest ono rownie zbedne
+(zapis idzie przez plik tymczasowy), ale to kod zweryfikowany na zywo,
+ktorego tuz przed wydaniem nie ruszamy (ADR-024). Bez `--force` sytuacja i tak
+nie wystepuje, bo skrot "plik juz istnieje" wraca wczesniej.
 
 W trybie `--geometry` wycinek obejmuje **CALA obwiednie geometrii, bez
 maskowania do jej obiektow** — do warstwy rastrowej ida same sciezki arkuszy
 i bbox. `nodata` pojawia sie wylacznie tam, gdzie nie siega zaden POBRANY
-arkusz, i nigdy nie oznacza maskowania. Dwa rozlaczne obiekty lezace w tym
-samym arkuszu albo w arkuszach sasiednich (a wiec obu pobranych) maja miedzy
-soba REALNA WYSOKOSC TERENU. Ale arkusz jest mniejszy, niz sugeruje etykieta:
-godlo 7-czlonowe nazywane w Kartografie "1:10000" ma w EPSG:2180 **~2,25 x
-2,43 km** (zmierzone: `N-34-130-D-d-2-4` -> 2252,6 x 2432,4 m; GUGiK nazywa ten
-sam arkusz modulem archiwizacji 1:5000 — patrz Notes w
-`core/sheet_parser.py`). Przy obiektach oddalonych o wiecej niz jeden arkusz
-miedzy nimi moze wiec lezec arkusz, ktorego `find_sheets_for_geometry` nie
-wybral (nie przecina zadnego obiektu) — i wtedy w wycinku bedzie pas `nodata`.
+arkusz, i nigdy nie oznacza maskowania. Dlatego przy `--target-crs` innym niz
+EPSG:2180 arkusze to SUMA godel geometrii i godel obwiedni z zapasem —
+obietnice "cala obwiednia" wypelniaja dane, a nie ramka dziur. **Swiadomy
+koszt:** przy rzadkiej geometrii wieloobiektowej suma obejmuje arkusze CALEJ
+obwiedni, takze te, ktorych nie przecina zaden obiekt — a arkusz jest mniejszy,
+niz sugeruje etykieta: godlo 7-czlonowe nazywane w Kartografie "1:10000" ma
+w EPSG:2180 **~2,25 x 2,43 km** (zmierzone: `N-34-130-D-d-2-4` -> 2252,6 x
+2432,4 m; GUGiK nazywa ten sam arkusz modulem archiwizacji 1:5000 — patrz
+Notes w `core/sheet_parser.py`), wiec obwiednia rzedu kilkudziesieciu
+kilometrow to juz setki arkuszy. Dla `--target-crs EPSG:2180` (sam crop, bez
+warpa) sumy nie ma: arkusze wyznacza sama geometria, wiec miedzy odleglymi
+obiektami moze zostac pas `nodata`.
 
-Wylaczenia (walidacja w `_resolve_pl_sentinels`, kod 1 z komunikatem):
-`--target-crs` z godlem, z `--product nmpt|orto|laz`, oraz z `--system 2000`
-(bbox wielostrefowy dalby arkusze w EPSG:2176-2179; mozaika miedzystrefowa to
-etap 2). Dopuszczalne wartosci flagi to `EPSG:2180`, `EPSG:5514`, `EPSG:3045`.
+Wylaczenia (kod 1 z komunikatem): `--target-crs` z `--product nmpt|orto|laz`
+oraz z `--system 2000` (bbox wielostrefowy dalby arkusze w EPSG:2176-2179;
+mozaika miedzystrefowa to etap 2) — walidacja w `_resolve_pl_sentinels`;
+`--target-crs` z godlem odrzuca warstwa wyzej, `cmd_download` (dla CZ
+`_cmd_download_cz`, wyjatkiem tlumaczonym przez `_run_cz`), bo tryb godlowy
+rozstrzyga sie przed wejsciem w sentinele PL. Dopuszczalne wartosci flagi to
+`EPSG:2180`, `EPSG:5514`, `EPSG:3045`.
 
 Wynik: **jeden plik** `data/nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif`
 (+ `.meta.json`), np. dla bboxa 419000,230000,421000,232000 w EPSG:2180

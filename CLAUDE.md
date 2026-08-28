@@ -113,8 +113,8 @@ kartograf/
 `nmt/pl_1992_1m_evrf2007/`, `nmt/pl_2000_1m_evrf2007/`, `nmpt/pl_1992_1m_kron86/`,
 `orto/pl_1992/`, `laz/pl_2000_evrf2007/`, `nmt/cz_dmr5g_bpv/` (`pl_1992` vs
 `pl_2000` rozstrzyga format godla KAZDEGO pliku). Podkatalog
-`<segment>/bbox/<coords>.tif` dostaja wycinki: KAZDY `--bbox` CZ oraz
-`--bbox`/`--geometry` PL **tylko z `--target-crs`** — bez tej flagi PL
+`<segment>/bbox/<coords>.tif` dostaja wycinki: KAZDE `--bbox`/`--geometry` CZ
+oraz `--bbox`/`--geometry` PL **tylko z `--target-crs`** — bez tej flagi PL
 zapisuje arkusze w hierarchii godel. Kanoniczna tabela i migracja:
 `docs/ARCHITECTURE.md` sekcja 3. `landcover/` bez zmian.
 

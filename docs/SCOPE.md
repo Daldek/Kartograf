@@ -269,8 +269,8 @@ from kartograf import (
 - `data/<produkt>/<kraj>_<układ>[_<wariant>][_<vcrs>]/...` (ADR-026);
   kanoniczna tabela segmentów i migracja 0.6.x→0.7.0:
   `docs/ARCHITECTURE.md` sekcja 3
-- Wycinki w `<segment>/bbox/<coords><ext>`: każdy `--bbox` CZ oraz
-  `--bbox`/`--geometry` PL **tylko z `--target-crs`** (bez tej flagi PL
+- Wycinki w `<segment>/bbox/<coords><ext>`: każde `--bbox`/`--geometry` CZ
+  oraz `--bbox`/`--geometry` PL **tylko z `--target-crs`** (bez tej flagi PL
   zapisuje arkusze w hierarchii godeł)
 - `<układ>` w segmencie (`pl_1992` vs `pl_2000`) rozstrzyga format godła
   każdego pliku z osobna — jeden stary katalog (np. `orto/`) rozchodzi się

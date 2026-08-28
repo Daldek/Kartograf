@@ -68,9 +68,11 @@ def create_parser() -> argparse.ArgumentParser:
         help="Download geospatial data from GUGiK",
         description=(
             "Download geospatial data from GUGiK: NMT (terrain), NMPT (surface), "
-            "or orthophoto. Dla PL --bbox rozwija sie na arkusze zrodlowe; dla CZ "
-            "--bbox zwraca jeden wycinek (exportImage w ukladzie natywnym "
-            "EPSG:5514) — dane zrodlowe 1:1 daje tryb godlowy (TM33/SM5)."
+            "or orthophoto. Dla PL --bbox/--geometry rozwija sie na arkusze "
+            "zrodlowe, a z --target-crs daje JEDEN scalony wycinek (ADR-027); "
+            "dla CZ --bbox/--geometry zawsze zwraca jeden wycinek (exportImage "
+            "w ukladzie natywnym EPSG:5514) — dane zrodlowe 1:1 daje tryb "
+            "godlowy (TM33/SM5)."
         ),
     )
     download_parser.add_argument(
