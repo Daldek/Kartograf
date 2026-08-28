@@ -79,6 +79,26 @@ class SourceDescriptor:
     resolution: str | None = None
     auth: str = "none"  # "none" | "clms_oauth"
 
+    def resolve_subdir(
+        self, *, uklad: str | None = None, vertical_crs: str | None = None
+    ) -> str:
+        """Wypelnij szablon ``storage_subdir`` (placeholdery {uklad}, {vcrs}).
+
+        ``str.replace``, nie ``str.format`` — czesciowe wypelnienie jest
+        legalne ({uklad} moze zostac do rozwiazania pozniej, per godlo,
+        w FileStorage). Wymiar nieobecny w szablonie = no-op (orto ignoruje
+        vcrs). Walidacje "zero klamer w segmencie" robi wolajacy koncowy
+        (FileStorage) — ADR-026.
+        """
+        if self.storage_subdir is None:
+            raise ValueError(f"Zrodlo '{self.key}' nie ma storage_subdir")
+        subdir = self.storage_subdir
+        if uklad is not None:
+            subdir = subdir.replace("{uklad}", uklad)
+        if vertical_crs is not None:
+            subdir = subdir.replace("{vcrs}", vertical_crs.lower())
+        return subdir
+
 
 @dataclass(frozen=True)
 class CountryProfile:
