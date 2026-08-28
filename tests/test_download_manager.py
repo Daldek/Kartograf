@@ -134,7 +134,7 @@ class TestDownloadManagerStorageFromDescriptor:
 
         manager = DownloadManager(output_dir=tmp_path, provider=GugikNmptProvider())
 
-        assert manager._storage._subdir == "nmpt"
+        assert manager._storage._subdir == "nmpt/pl_{uklad}_1m_evrf2007"
 
     def test_nmt_and_nmpt_managers_do_not_collide(self, tmp_path):
         """Sciezki NMT i NMPT dla tego samego godla nie moga byc identyczne."""
@@ -152,7 +152,7 @@ class TestDownloadManagerStorageFromDescriptor:
 
         manager = DownloadManager(output_dir=tmp_path, provider=GugikOrtoProvider())
 
-        assert manager._storage._subdir == "orto"
+        assert manager._storage._subdir == "orto/pl_{uklad}"
 
     def test_manager_without_descriptor_key_falls_back_to_resolution(self, tmp_path):
         """Provider bez descriptor_key -> podkatalog wg resolution (jak dotychczas)."""
@@ -164,7 +164,7 @@ class TestDownloadManagerStorageFromDescriptor:
             output_dir=tmp_path, provider=provider, resolution="5m"
         )
 
-        assert manager._storage._subdir == "nmt_5m"
+        assert manager._storage._subdir == "nmt/pl_{uklad}_5m_evrf2007"
 
     def test_manager_with_mock_spec_provider_falls_back_to_resolution(self, tmp_path):
         """Mock(spec=GugikProvider).descriptor_key to Mock - traktowany jak brak."""
@@ -173,7 +173,7 @@ class TestDownloadManagerStorageFromDescriptor:
 
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
 
-        assert manager._storage._subdir == "nmt_1m"
+        assert manager._storage._subdir == "nmt/pl_{uklad}_1m_evrf2007"
 
     def test_explicit_storage_wins_over_descriptor(self, tmp_path):
         """Jawny storage= ma pierwszenstwo przed deskryptorem providera."""

@@ -1013,8 +1013,8 @@ class TestDescriptorProviderConsistency:
         provider = create_dmr_provider(resolution="2m")
         assert provider.descriptor_key == d.key
         assert provider.default_extension == d.default_extension
-        storage = FileStorage(tmp_path, subdir=d.storage_subdir)
-        assert storage._subdir == d.storage_subdir
+        storage = FileStorage(tmp_path, subdir=d.resolve_subdir(vertical_crs="Bpv"))
+        assert storage._subdir == "nmt/cz_dmr5g_bpv"
         for ch in d.channels:
             assert ch.vertical_crs_options == ("EPSG:8357",)
             assert ch.endpoint  # silnik jest sterowany deskryptorem

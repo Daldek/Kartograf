@@ -73,7 +73,8 @@ class SourceDescriptor:
     provider_name: str  # "GUGiK", "CUZK", ...
     channels: tuple[AccessChannel, ...]
     tile_scheme: TileScheme | None
-    storage_subdir: str | None  # None dla zrodel LandCoverManagera
+    # Szablon segmentu {uklad}/{vcrs} (ADR-026); None dla zrodel LandCoverManagera
+    storage_subdir: str | None
     default_extension: str
     license: LicenseInfo
     resolution: str | None = None

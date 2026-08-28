@@ -1259,7 +1259,10 @@ def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> i
     godlo = args.godlo
     system = detect_system(godlo)
     descriptor = get_source(provider.descriptor_key)
-    storage = FileStorage(args.output, subdir=descriptor.storage_subdir)
+    storage = FileStorage(
+        args.output,
+        subdir=descriptor.resolve_subdir(vertical_crs=provider.vertical_crs),
+    )
     target = storage.get_raw_path(godlo, f"{godlo}{descriptor.default_extension}")
 
     if skip_existing and target.exists():
@@ -1345,7 +1348,7 @@ def _cz_download_bbox(
     )
     target = (
         Path(args.output)
-        / descriptor.storage_subdir
+        / descriptor.resolve_subdir(vertical_crs=provider.vertical_crs)
         / "bbox"
         / f"{coords}{descriptor.default_extension}"
     )

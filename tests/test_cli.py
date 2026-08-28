@@ -2822,7 +2822,9 @@ class TestCmdDownloadCz:
         assert factory.call_args.kwargs["resolution"] == "2m"
         assert factory.call_args.kwargs["vertical_crs"] == "Bpv"
         target = provider.download.call_args.args[1]
-        assert target == tmp_path / "cz_dmr5g" / "302" / "5550" / "302_5550.tif"
+        assert target == (
+            tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
+        )
 
     def test_tm33_godlo_writes_sidecar(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
@@ -2830,7 +2832,14 @@ class TestCmdDownloadCz:
         with patch(_CZ_FACTORY_PATCH, return_value=_cz_provider_mock()):
             _cmd_download_cz(_cz_args(tmp_path))
 
-        sidecar = tmp_path / "cz_dmr5g" / "302" / "5550" / "302_5550.tif.meta.json"
+        sidecar = (
+            tmp_path
+            / "nmt"
+            / "cz_dmr5g_bpv"
+            / "302"
+            / "5550"
+            / "302_5550.tif.meta.json"
+        )
         assert sidecar.exists()
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
         assert payload["dataset"] == "cz.cuzk.dmr5g"
@@ -2864,7 +2873,9 @@ class TestCmdDownloadCz:
             )
 
         assert result == 0
-        sidecar = tmp_path / "cz_dmr4g" / "CTES" / "96" / "CTES96.tif.meta.json"
+        sidecar = (
+            tmp_path / "nmt" / "cz_dmr4g_bpv" / "CTES" / "96" / "CTES96.tif.meta.json"
+        )
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
         assert payload["horizontal_crs"] == "EPSG:5514"
         assert payload["extra"]["mapname"] == "Český Těšín 9-6"
@@ -2882,7 +2893,7 @@ class TestCmdDownloadCz:
             )
 
         assert result == 0
-        target = tmp_path / "cz_dmr4g" / "CTES" / "96" / "CTES96.tif"
+        target = tmp_path / "nmt" / "cz_dmr4g_bpv" / "CTES" / "96" / "CTES96.tif"
         assert target.exists()
         payload = json.loads(
             (target.parent / "CTES96.tif.meta.json").read_text(encoding="utf-8")
@@ -2906,7 +2917,11 @@ class TestCmdDownloadCz:
 
         assert result == 0
         target = (
-            tmp_path / "cz_dmr5g" / "bbox" / "-447000_-1114000_-446000_-1113000.tif"
+            tmp_path
+            / "nmt"
+            / "cz_dmr5g_bpv"
+            / "bbox"
+            / "-447000_-1114000_-446000_-1113000.tif"
         )
         assert provider.download_bbox.call_args.args[1] == target
         payload = json.loads(
@@ -2936,7 +2951,7 @@ class TestCmdDownloadCz:
         sent_bbox, target = provider.download_bbox.call_args.args[:2]
         assert sent_bbox.crs == "EPSG:5514"
         assert -450000 < sent_bbox.min_x < -440000  # Krovak: wartosci ujemne
-        assert target.parent == tmp_path / "cz_dmr5g" / "bbox"
+        assert target.parent == tmp_path / "nmt" / "cz_dmr5g_bpv" / "bbox"
         assert target.name == (
             f"{format(sent_bbox.min_x, '.10g')}"
             f"_{format(sent_bbox.min_y, '.10g')}"
@@ -3054,12 +3069,12 @@ class TestCmdDownloadCz:
 
         assert result == 1
         assert "404 openzu" in capsys.readouterr().err
-        assert not (tmp_path / "cz_dmr5g").exists()
+        assert not (tmp_path / "nmt" / "cz_dmr5g_bpv").exists()
 
     def test_skip_existing(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
-        target = tmp_path / "cz_dmr5g" / "302" / "5550" / "302_5550.tif"
+        target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
         target.parent.mkdir(parents=True)
         target.write_bytes(b"stare")
         provider = _cz_provider_mock()
@@ -3071,7 +3086,7 @@ class TestCmdDownloadCz:
     def test_force_overwrites_existing(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
-        target = tmp_path / "cz_dmr5g" / "302" / "5550" / "302_5550.tif"
+        target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
         target.parent.mkdir(parents=True)
         target.write_bytes(b"stare")
         provider = _cz_provider_mock()
@@ -3081,6 +3096,8 @@ class TestCmdDownloadCz:
         provider.download.assert_called_once()
 
     def test_evrf2007_transform_lands_in_sidecar(self, tmp_path):
+        """Transformacja pionowa Bpv->EVRF2007 w sidecarze; segment niesie
+        pion providera (ADR-026)."""
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
@@ -3094,7 +3111,12 @@ class TestCmdDownloadCz:
 
         payload = json.loads(
             (
-                tmp_path / "cz_dmr5g" / "302" / "5550" / "302_5550.tif.meta.json"
+                tmp_path
+                / "nmt"
+                / "cz_dmr5g_evrf2007"
+                / "302"
+                / "5550"
+                / "302_5550.tif.meta.json"
             ).read_text(encoding="utf-8")
         )
         assert payload["vertical_crs"] == "EPSG:5621"
@@ -3117,7 +3139,7 @@ class TestCmdDownloadCz:
             result = _cmd_download_cz(_cz_args(tmp_path))
 
         assert result == 0
-        target = tmp_path / "cz_dmr5g" / "302" / "5550" / "302_5550.tif"
+        target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
         assert target.exists()
         assert not (target.parent / "302_5550.tif.meta.json").exists()
 
@@ -3210,7 +3232,12 @@ class TestCmdDownloadCz:
 
         payload = json.loads(
             (
-                tmp_path / "cz_dmr5g" / "302" / "5550" / "302_5550.tif.meta.json"
+                tmp_path
+                / "nmt"
+                / "cz_dmr5g_bpv"
+                / "302"
+                / "5550"
+                / "302_5550.tif.meta.json"
             ).read_text(encoding="utf-8")
         )
         assert payload["nodata"] == -32767.0
