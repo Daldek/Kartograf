@@ -70,7 +70,11 @@ def _create_provider_and_storage(product, output_dir, vertical_crs, resolution):
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
         provider = GugikNmptProvider(vertical_crs=vertical_crs)
-        storage = FileStorage(output_dir, product="nmpt")
+        storage = FileStorage(
+            output_dir,
+            product="nmpt",
+            vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
+        )
     elif product == "orto":
         from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
@@ -80,7 +84,11 @@ def _create_provider_and_storage(product, output_dir, vertical_crs, resolution):
         from kartograf.providers.pl import create_nmt_provider
 
         provider = create_nmt_provider(vertical_crs=vertical_crs, resolution=resolution)
-        storage = FileStorage(output_dir, resolution=resolution)
+        storage = FileStorage(
+            output_dir,
+            resolution=resolution,
+            vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
+        )
     else:
         raise ValidationError(
             f"Unsupported product for DownloadManager flow: {product} "

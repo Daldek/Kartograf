@@ -1113,6 +1113,31 @@ class TestCreateProviderAndStorage:
         with pytest.raises(ValidationError, match="dmr5g"):
             _create_provider_and_storage("dmr5g", tmp_path, "EVRF2007", "1m")
 
+    def test_nmt_kron86_storage_segment(self, tmp_path):
+        from kartograf.cli.commands import _create_provider_and_storage
+
+        provider, storage = _create_provider_and_storage(
+            "nmt", tmp_path, "KRON86", "1m"
+        )
+        assert storage._subdir == "nmt/pl_{uklad}_1m_kron86"
+
+    def test_nmt_5m_kron86_storage_follows_provider_correction(self, tmp_path):
+        """Fabryka koryguje 5m=>EVRF2007 — segment ma niesc fakt, nie flage."""
+        from kartograf.cli.commands import _create_provider_and_storage
+
+        provider, storage = _create_provider_and_storage(
+            "nmt", tmp_path, "KRON86", "5m"
+        )
+        assert storage._subdir == "nmt/pl_{uklad}_5m_evrf2007"
+
+    def test_nmpt_storage_segment(self, tmp_path):
+        from kartograf.cli.commands import _create_provider_and_storage
+
+        provider, storage = _create_provider_and_storage(
+            "nmpt", tmp_path, "KRON86", "1m"
+        )
+        assert storage._subdir == "nmpt/pl_{uklad}_1m_kron86"
+
 
 class TestCmdDownloadBBox:
     """Tests for download command with --bbox option."""
