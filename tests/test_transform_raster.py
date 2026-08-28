@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 import rasterio
 from pyproj import CRS
+from rasterio.enums import Resampling
 from rasterio.transform import from_origin
 
 from kartograf.core.sheet_parser import BBox
@@ -127,6 +128,9 @@ class TestWarpToGrid:
 
         warp.assert_called_once()
         assert warp.call_args.kwargs["COORDINATE_OPERATION"] == pinned.gdal_operation()
+        # bilinear, nie nearest: NMT jest polem ciaglym, a `nearest` cofnalby
+        # tez sens testu o nodata (bez interpolacji nie ma czego zatruc)
+        assert warp.call_args.kwargs["resampling"] == Resampling.bilinear
 
     def test_nodata_does_not_bleed_into_interpolation(self, tmp_path):
         """Zrodlo BEZ zadeklarowanego nodata: maskowanie robia src/dst_nodata.
@@ -152,6 +156,76 @@ class TestWarpToGrid:
             valid = ds.read(1, masked=True).compressed()
         assert valid.size > 0, "caly wynik zamaskowany — warp nie przeniosl tresci"
         assert valid.min() > 0.0, f"nodata weszlo do interpolacji: min {valid.min()}"
+
+    def test_failed_warp_writes_only_to_temp_file(self, tmp_path):
+        """Zapis jest atomowy: sciezka docelowa nie powstaje w trakcie warpu.
+
+        Sam brak `*.warp.tif` po udanym przebiegu tego nie dowodzi (bez pliku
+        tymczasowego tez go nie ma). Dowodem jest STAN W CHWILI AWARII: cel
+        jeszcze nie istnieje, a plik tymczasowy juz tak.
+        """
+        src = _write_cone_tif(tmp_path / "src.tif", _APEX_2180)
+        pinned = _pinned_2180_to("EPSG:5514")
+        ax, ay = (float(v) for v in pinned.transform(*_APEX_2180))
+        bbox = BBox(ax - 50, ay - 50, ax + 50, ay + 50, "EPSG:5514")
+        dst = tmp_path / "dst.tif"
+        seen = {}
+
+        def boom(*args, **kwargs):
+            seen["dst_exists"] = dst.exists()
+            seen["tmp"] = [p.name for p in tmp_path.glob("*.warp.tif")]
+            raise RuntimeError("warp przerwany")
+
+        with (
+            patch("kartograf.transform.raster.reproject", side_effect=boom),
+            pytest.raises(RuntimeError, match="warp przerwany"),
+        ):
+            warp_to_grid(
+                src, dst, bbox, 1.0, pinned, src_crs="EPSG:2180", nodata=_NODATA
+            )
+
+        assert seen["dst_exists"] is False, "polzapisany raster pod finalna sciezka"
+        assert seen["tmp"], "warp nie uzyl pliku tymczasowego"
+        assert not dst.exists()
+        assert list(tmp_path.glob("*.warp.tif")) == []  # sprzatanie po awarii
+
+    def test_failed_warp_removes_stale_destination(self, tmp_path):
+        """Semantyka toru CZ: nieudany warp nie zostawia STAREGO wyniku."""
+        src = _write_cone_tif(tmp_path / "src.tif", _APEX_2180)
+        pinned = _pinned_2180_to("EPSG:5514")
+        ax, ay = (float(v) for v in pinned.transform(*_APEX_2180))
+        bbox = BBox(ax - 50, ay - 50, ax + 50, ay + 50, "EPSG:5514")
+        dst = tmp_path / "dst.tif"
+        dst.write_bytes(b"II*\x00stary wynik")
+
+        with (
+            patch(
+                "kartograf.transform.raster.reproject",
+                side_effect=RuntimeError("warp przerwany"),
+            ),
+            pytest.raises(RuntimeError),
+        ):
+            warp_to_grid(
+                src, dst, bbox, 1.0, pinned, src_crs="EPSG:2180", nodata=_NODATA
+            )
+
+        assert not dst.exists()
+
+    def test_lowercase_crs_is_the_same_pair(self, tmp_path):
+        """`epsg:2180` to ten sam uklad co `EPSG:2180` — porownanie semantyczne.
+
+        Guard pary ukladow porownuje CRS-y, nie stringi; samo `a == b`
+        odrzucaloby zdrowe wywolanie z inaczej zapisanym kodem.
+        """
+        src = _write_cone_tif(tmp_path / "src.tif", _APEX_2180)
+        pinned = _pinned_2180_to("EPSG:5514")
+        ax, ay = (float(v) for v in pinned.transform(*_APEX_2180))
+        bbox = BBox(ax - 50, ay - 50, ax + 50, ay + 50, "epsg:5514")
+        dst = tmp_path / "dst.tif"
+
+        warp_to_grid(src, dst, bbox, 1.0, pinned, src_crs="epsg:2180", nodata=_NODATA)
+
+        assert dst.exists()
 
     def test_pinned_pair_must_match_src_crs(self, tmp_path):
         """Niespojna para zrodlowa = blad, nie cichy zly wynik.

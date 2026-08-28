@@ -142,6 +142,38 @@ class TestBuildPlCutout:
             assert ds.crs is not None and ds.crs.to_epsg() == 2180
             assert ds.bounds == (530010.0, 382010.0, 530090.0, 382090.0)
 
+    def test_failed_build_keeps_previous_result(self, tmp_path):
+        """Przerwana budowa NIE niszczy poprzedniego wyniku ani nie zostawia tmp.
+
+        Obie sciezki zapisu sa atomowe (``os.replace`` przy samym cropie,
+        wewnetrzny ``os.replace`` w ``warp_to_grid``), wiec pod finalna sciezka
+        nie da sie zostawic polzapisanego pliku — a skoro tak, to kasowanie
+        starego wyniku bylo czysta utrata danych (kod 0 calego zadania na
+        pograniczu pod ``--country auto``).
+        """
+        from kartograf.providers.cuzk.dmr import bbox_to_crs
+
+        a = _write_sheet_asc(tmp_path / "a.asc", 530000, 382000)
+        bbox = BBox(530010, 382010, 530090, 382090, "EPSG:2180")
+        pinned = _pinned_2180_to("EPSG:5514")
+        target = tmp_path / "out" / "cut.tif"
+        target.parent.mkdir()
+        target.write_bytes(b"II*\x00poprzedni wynik")
+
+        with (
+            patch(
+                "kartograf.transform.raster.warp_to_grid",
+                side_effect=RuntimeError("warp przerwany"),
+            ),
+            pytest.raises(RuntimeError, match="warp przerwany"),
+        ):
+            _build_pl_cutout(
+                [a], bbox, bbox_to_crs(bbox, "EPSG:5514"), 1.0, pinned, target
+            )
+
+        assert target.read_bytes() == b"II*\x00poprzedni wynik"
+        assert list(target.parent.glob("*.mosaic.tif")) == []
+
 
 class TestPreparePlCutout:
     def _args(self, tmp_path, **overrides):
@@ -188,6 +220,25 @@ class TestPreparePlCutout:
         assert cut.target_path.parent == (
             tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox"
         )
+
+    def test_probe_point_is_center_of_request(self, tmp_path):
+        """Operacje wybiera polityka Z PROBE w srodku zadania, nie sama polityka.
+
+        Bez probe przeszlaby operacja, ktorej siatka nie pokrywa obszaru
+        (inf/NaN dla zadania) — regula 3 polityki, lustro toru CZ.
+        """
+        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+        real = _pinned_2180_to("EPSG:5514")
+
+        with patch(
+            "kartograf.transform.crs.build_pinned_transform", return_value=real
+        ) as build:
+            _prepare_pl_cutout(self._args(tmp_path), bbox, "EVRF2007")
+
+        policy = build.call_args.args[2]
+        assert policy.probe_point == (530100.0, 382050.0)
+        assert policy.min_accuracy_m == 1.0
+        assert policy.allow_network_grids is False
 
     def test_vertical_kron86_lands_in_kron86_segment(self, tmp_path):
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
@@ -330,6 +381,54 @@ class TestDownloadPlBboxCutout:
         assert sent.max_x > _BBOX_2180.max_x
         assert sent.min_y < _BBOX_2180.min_y
         assert sent.max_y > _BBOX_2180.max_y
+
+    def test_5m_kron86_grid_dataset_vertical_and_segment(self, tmp_path):
+        """Caly przeplyw 5m w jednym tescie: siatka, deskryptor, pion, segment.
+
+        ``--resolution 5m`` z ``--vertical-crs KRON86`` jest korygowane do
+        EVRF2007 w fabryce providera (5m nie istnieje w KRON86), wiec wycinek
+        musi isc za PROVIDEREM, nie za surowa flaga CLI. Dla arkuszy ta klasa
+        bledu jest broniona od dawna — tor wycinka byl w niej luka: piksel 1 m
+        z danych 5 m (25x rozmiar pliku) albo segment ``pl_1992_5m_kron86``
+        z sidecarem EPSG:9650 przechodzily cala suite.
+        """
+        sheets = [
+            _write_sheet_asc(tmp_path / "s1.asc", 529900, 381950, size=40, pixel=5.0),
+            _write_sheet_asc(tmp_path / "s2.asc", 530100, 381950, size=40, pixel=5.0),
+        ]
+        args = _pl_args(
+            tmp_path, resolution="5m", vertical_crs="KRON86", target_crs="EPSG:5514"
+        )
+        rc, *_ = self._run(tmp_path, args, sheets)
+
+        assert rc == 0
+        cut_dir = tmp_path / "nmt" / "pl_1992_5m_evrf2007" / "bbox"
+        tifs = list(cut_dir.glob("*.tif"))
+        assert len(tifs) == 1
+        with rasterio.open(tifs[0]) as ds:
+            assert ds.res == (5.0, 5.0)
+        payload = json.loads((cut_dir / f"{tifs[0].name}.meta.json").read_text("utf-8"))
+        assert payload["dataset"] == "pl.gugik.nmt_5m"
+        assert payload["vertical_crs"] == "EPSG:9651"
+
+    def test_unexpected_raster_error_returns_1(self, tmp_path, capsys):
+        """Blad spoza (ValidationError, TransformError) tez konczy sie kodem 1.
+
+        ``mosaic_and_crop``/``warp_to_grid`` moga rzucic ``RasterioIOError``
+        (uszkodzony arkusz z cache). Przeciek takiego wyjatku poza petle krajow
+        ``_dispatch_area`` lamie kontrakt czesciowego sukcesu ADR-023.
+        """
+        from rasterio.errors import RasterioIOError
+
+        sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
+        with patch(
+            f"{_DL}._build_pl_cutout",
+            side_effect=RasterioIOError("uszkodzony arkusz"),
+        ):
+            rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
+
+        assert rc == 1
+        assert "uszkodzony arkusz" in capsys.readouterr().err
 
     def test_failed_sheet_returns_1_and_no_cutout(self, tmp_path):
         """Spec 6.1: wycinek wymaga kompletu pokrycia."""
