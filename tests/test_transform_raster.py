@@ -1,14 +1,20 @@
 """Testy warp_to_grid — lokalna reprojekcja przypieta operacja (wzorzec ADR-024)."""
 
+import dataclasses
 from unittest.mock import patch
 
 import numpy as np
+import pytest
 import rasterio
 from pyproj import CRS
 from rasterio.transform import from_origin
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.transform.crs import TransformPolicy, build_pinned_transform
+from kartograf.transform.crs import (
+    TransformError,
+    TransformPolicy,
+    build_pinned_transform,
+)
 from kartograf.transform.raster import warp_to_grid
 
 _NODATA = -9999.0
@@ -26,14 +32,24 @@ def _pinned_2180_to(target_crs):
     )
 
 
-def _write_cone_tif(path, apex, size=300, pixel=1.0):
-    """Stozek wokol apex w EPSG:2180 (wzorzec _server_emulator z test_cuzk_dmr)."""
+def _write_cone_tif(path, apex, size=300, pixel=1.0, *, hole=None, declare_nodata=True):
+    """Stozek wokol apex w EPSG:2180 (wzorzec _server_emulator z test_cuzk_dmr).
+
+    ``hole`` to zakres (start, stop) wierszy i kolumn wypelniony wartoscia
+    nodata; ``declare_nodata=False`` daje raster, ktory dziury NIE deklaruje
+    w profilu — tylko taki obnaza brak ``src_nodata``/``dst_nodata`` w warpie
+    (przy zadeklarowanym nodata rasterio domysla sie go z pasma i test bylby
+    atrapa).
+    """
     west = apex[0] - size / 2 * pixel
     north = apex[1] + size / 2 * pixel
     cols, rows = np.meshgrid(np.arange(size), np.arange(size))
     xs = west + (cols + 0.5) * pixel
     ys = north - (rows + 0.5) * pixel
     data = (1000.0 - np.hypot(xs - apex[0], ys - apex[1])).astype("float32")
+    if hole is not None:
+        start, stop = hole
+        data[start:stop, start:stop] = _NODATA
     profile = {
         "driver": "GTiff",
         "dtype": "float32",
@@ -42,7 +58,7 @@ def _write_cone_tif(path, apex, size=300, pixel=1.0):
         "height": size,
         "crs": CRS.from_string("EPSG:2180"),
         "transform": from_origin(west, north, pixel, pixel),
-        "nodata": _NODATA,
+        "nodata": _NODATA if declare_nodata else None,
     }
     with rasterio.open(path, "w", **profile) as dst:
         dst.write(data, 1)
@@ -111,3 +127,92 @@ class TestWarpToGrid:
 
         warp.assert_called_once()
         assert warp.call_args.kwargs["COORDINATE_OPERATION"] == pinned.gdal_operation()
+
+    def test_nodata_does_not_bleed_into_interpolation(self, tmp_path):
+        """Zrodlo BEZ zadeklarowanego nodata: maskowanie robia src/dst_nodata.
+
+        Fixtura deklarujaca nodata NIE strzeglaby tego — rasterio domysla sie
+        wtedy `src_nodata` z pasma i wynik jest ten sam z argumentami i bez.
+        Taki raster jest osiagalny na torze PL: `transport/mosaic.py` wpisuje
+        `nodata` do profilu tylko wtedy, gdy wolajacy poda wartosc.
+        """
+        src = _write_cone_tif(
+            tmp_path / "src.tif", _APEX_2180, hole=(100, 140), declare_nodata=False
+        )
+        with rasterio.open(src) as ds:
+            assert ds.nodata is None, "fixtura deklaruje nodata — test bylby atrapa"
+        pinned = _pinned_2180_to("EPSG:5514")
+        ax, ay = (float(v) for v in pinned.transform(*_APEX_2180))
+        bbox = BBox(ax - 100, ay - 100, ax + 100, ay + 100, "EPSG:5514")
+        dst = tmp_path / "dst.tif"
+
+        warp_to_grid(src, dst, bbox, 1.0, pinned, src_crs="EPSG:2180", nodata=_NODATA)
+
+        with rasterio.open(dst) as ds:
+            valid = ds.read(1, masked=True).compressed()
+        assert valid.size > 0, "caly wynik zamaskowany — warp nie przeniosl tresci"
+        assert valid.min() > 0.0, f"nodata weszlo do interpolacji: min {valid.min()}"
+
+    def test_pinned_pair_must_match_src_crs(self, tmp_path):
+        """Niespojna para zrodlowa = blad, nie cichy zly wynik.
+
+        Przy wymuszonym `COORDINATE_OPERATION` GDAL ignoruje zadeklarowany
+        `src_crs` (zmierzone: 2180/4326/3857/32633/5514 daja ten sam wynik),
+        wiec bez tego guardu parametr bylby martwy i dawal falszywa asekuracje.
+        """
+        src = _write_cone_tif(tmp_path / "src.tif", _APEX_2180)
+        pinned = _pinned_2180_to("EPSG:5514")
+        ax, ay = (float(v) for v in pinned.transform(*_APEX_2180))
+        bbox = BBox(ax - 50, ay - 50, ax + 50, ay + 50, "EPSG:5514")
+        dst = tmp_path / "dst.tif"
+
+        with pytest.raises(TransformError, match="Niespojna para ukladow"):
+            warp_to_grid(
+                src, dst, bbox, 1.0, pinned, src_crs="EPSG:4326", nodata=_NODATA
+            )
+
+        assert not dst.exists()
+
+    def test_pinned_pair_must_match_bbox_crs(self, tmp_path):
+        """Niespojna para docelowa (bbox.crs != pinned.dst_crs) = blad."""
+        src = _write_cone_tif(tmp_path / "src.tif", _APEX_2180)
+        pinned = _pinned_2180_to("EPSG:5514")
+        bbox = BBox(
+            _APEX_2180[0] - 50,
+            _APEX_2180[1] - 50,
+            _APEX_2180[0] + 50,
+            _APEX_2180[1] + 50,
+            "EPSG:2180",
+        )
+        dst = tmp_path / "dst.tif"
+
+        with pytest.raises(TransformError, match="Niespojna para ukladow"):
+            warp_to_grid(
+                src, dst, bbox, 1.0, pinned, src_crs="EPSG:2180", nodata=_NODATA
+            )
+
+        assert not dst.exists()
+
+    def test_guard_skips_unknown_pinned_pair(self, tmp_path):
+        """Pola `src_crs`/`dst_crs` sa opcjonalne — guard nie moze na nich padac.
+
+        Gdy `pinned` nie zna swojej pary, o braku decyduje `gdal_operation()`
+        (jego wlasny komunikat), a nie guard — nawet jesli podany `src_crs`
+        rozni sie od faktycznego zrodla operacji.
+        """
+        src = _write_cone_tif(tmp_path / "src.tif", _APEX_2180)
+        pinned = dataclasses.replace(
+            _pinned_2180_to("EPSG:5514"), src_crs=None, dst_crs=None
+        )
+        bbox = BBox(0.0, 0.0, 100.0, 100.0, "EPSG:5514")
+
+        with pytest.raises(TransformError, match="wymaga znanej pary ukladow"):
+            warp_to_grid(
+                src,
+                tmp_path / "dst.tif",
+                bbox,
+                1.0,
+                pinned,
+                src_crs="EPSG:4326",
+                nodata=_NODATA,
+            )
