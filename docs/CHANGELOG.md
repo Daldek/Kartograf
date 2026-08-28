@@ -285,6 +285,16 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   opis i keywords rozszerzone o CUZK/DMR/LAZ; usuniete `requirements.txt`
   i `requirements-dev.txt` — jedynym zrodlem zaleznosci jest `pyproject.toml`
   (audyt 0.7.0: A6-4, A6-5, A6-6)
+- **`pyproject.toml`: licencja jako wyrazenie SPDX (PEP 639)** — `license =
+  "MIT"` + `license-files = ["LICENSE"]` zamiast tabeli `{text = "MIT"}`;
+  klasyfikator `License :: OSI Approved :: MIT License` usuniety (przestarzaly
+  przy SPDX); `authors` z prawdziwymi danymi zamiast placeholdera. Floor
+  build-systemu podniesiony do `setuptools>=77.0.3` (pierwsza wersja
+  poprawnie obslugujaca PEP 639; `wheel` usuniety z `requires` — zbedny od
+  setuptools 70). Konsekwencje: build bez izolacji wymaga setuptools >= 77;
+  dystrybucje maja teraz `Metadata-Version: 2.4` z `License-Expression: MIT`
+  i plikiem LICENSE w `dist-info/licenses/` — upload na PyPI wymaga
+  twine >= 6.x. Zweryfikowane buildem sdist+wheel
 - **Domyslnym krajem jest `--country auto`** — NOWA semantyka wzgledem 0.6.1,
   gdzie opcji `--country` nie bylo i kazde zadanie szlo do GUGiK-a. Dla
   `--bbox`/`--geometry` bez jawnego `--country` znaczy to:

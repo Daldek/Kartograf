@@ -583,10 +583,12 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
    92,64%, ruff/format czyste, mypy 32 = baseline; galaz usunieta).
 10. ~~Zadanie licencyjne uzytkownika~~ — **WYKONANE 2026-08-28**: `authors`
     w `pyproject.toml` = `Piotr de Bever <git@debever.pl>` (konwencja
-    z IMGWTools); pole `license = {text = "MIT"}` zostaje w formacie
-    tabelowym PEP 621 — zgodne z LICENSE (MIT, Copyright (c) 2026
-    Piotr de Bever) i z zadeklarowanym minimum `setuptools>=61.0`
-    (format SPDX z PEP 639 wymagalby podbicia do >=77).
+    z IMGWTools); na decyzje uzytkownika licencja zmigrowana na wyrazenie
+    SPDX wg PEP 639 (`license = "MIT"` + `license-files`, klasyfikator
+    licencyjny usuniety, floor `setuptools>=77.0.3` bez `wheel`) —
+    zweryfikowane buildem sdist+wheel: `Metadata-Version: 2.4`,
+    `License-Expression: MIT`, LICENSE w `dist-info/licenses/`;
+    szczegoly i konsekwencje w CHANGELOG [0.7.0] Changed.
 11. **Bump wersji + wydanie 0.7.0**: `kartograf.__version__`/
     `pyproject.toml` `0.7.0-dev` -> `0.7.0`, data w CHANGELOG, tag
     `v0.7.0`, push `develop` na origin (patrz pkt 3 wyzej — 148 commitow
