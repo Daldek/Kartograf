@@ -17,7 +17,7 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
-| Pokrycie testami | ✅ Gotowy | 93%, 1716 testow (galaz fix/release-0.7.0-audit po fali naprawczej F-1..F-7, 2026-08-23) |
+| Pokrycie testami | ✅ Gotowy | 93%, 1775 testow (brama jakosci po ukladzie data/ + --target-crs PL, develop, 2026-08-28; poprzedni pomiar 1716 na fix/release-0.7.0-audit 2026-08-23) |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0 |
@@ -104,6 +104,17 @@
 - Stan po zadaniu dokumentacyjnym (pomiar 2026-08-28): **1775 testow PASS**,
   ruff check/format czyste, **mypy 32** (brama `<= 32` z weryfikacji planu
   spelniona — 33. blad znikl razem z `descriptor.storage_subdir`)
+- **Brama jakosci (Zad. 12, 2026-08-28) — ZAMKNIETA:** powtorzony pomiar na
+  develop daje **1775 passed**, pokrycie **93%** (92,63% total), ruff
+  check + format czyste, **mypy 32 bledy w 9 plikach** (baseline 33 → 32,
+  zero nowych). Kryteria akceptacji specu 13.1-13.8: **siedem SPELNIONYCH
+  offline** (sciezki 13.2-13.5 sprawdzone realnym `FileStorage`
+  i uruchomieniem `main()` z zamockowana warstwa pobierania, nie odczytem
+  z dokumentacji), 13.5 z jednym zastrzezeniem: zgodnosc tresci wycinka
+  potwierdzona syntetycznie (`test_pl_cutout.py::TestBuildPlCutout::
+  test_target_5514_content_lt_1px`, `test_transform_raster.py::TestWarpToGrid`),
+  a **weryfikacja na zywych danych GUGiK zostaje pozycja checklisty release**
+  (pkt 12 „Nastepne kroki") — offline nie da sie jej odhaczyc.
 
 ### Plan: uklad data/ per produkt + --target-crs dla PL (2026-08-28)
 
@@ -670,6 +681,17 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
 12. **E2E live sciezek nowego ukladu `data/` + wycinka `--target-crs` PL**
     — pozycja checklisty release (spec 12); suita jest offline, wiec
     zadna sciezka nowego ukladu nie byla dotad sprawdzona na zywych danych.
+    Brama jakosci (Zad. 12) potwierdzila offline SAME SCIEZKI (realny
+    `FileStorage` + `main()` z zamockowana warstwa pobierania) — do
+    sprawdzenia na zywo zostaje TRESC i kompletnosc pobrania:
+    (a) godlo PL 1992/2000 x KRON86/EVRF2007 -> `nmt/pl_<uklad>_<res>_<vcrs>/`;
+    (b) `--product nmpt|orto|laz` -> `nmpt/`, `orto/pl_<uklad>/`,
+    `laz/pl_<uklad>_<vcrs>/` (LAZ: kafle z obu ukladow w jednym zadaniu);
+    (c) CZ godlo TM33/SM5 i bbox -> `nmt/cz_dmr{5g,4g}_<vcrs>/[bbox/]`;
+    (d) wycinek PL `--target-crs EPSG:5514` na realnych arkuszach GUGiK —
+    porownanie tresci z niezaleznym warpem (offline sprawdzone tylko
+    na siatce syntetycznej, `< 1 px`); (e) pogranicze `--country auto
+    --target-crs EPSG:2180` na realnych danych obu krajow.
 13. **Bump wersji + wydanie 0.7.0**: `kartograf.__version__`/
     `pyproject.toml` `0.7.0-dev` -> `0.7.0`, data w CHANGELOG, tag
     `v0.7.0`, push `develop` na origin (patrz pkt 3 wyzej — 148 commitow

@@ -649,8 +649,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **FileStorage: obsluga sciezek PL-2000**
   - Struktura katalogow: `nmt_2000_1m/6/179/12/20/6.179.12.20.asc`
     (uwaga 2026-08-22: podkatalog `nmt_2000_1m` nie zostal zrealizowany —
-    arkusze PL-2000 laduja w `nmt_<res>/`, patrz ADR-017 i docstring
-    `FileStorage`; rozdzielenie katalogow odlozone)
+    arkusze PL-2000 ladowaly w `nmt_<res>/` obok PL-1992, patrz ADR-017
+    i docstring `FileStorage`; rozdzielenie katalogow odlozone.
+    **Domkniete w 0.7.0** — ADR-026 dal PL-2000 wlasne segmenty
+    `nmt/pl_2000_<res>_<vcrs>/`; patrz Breaking Changes 0.7.0)
 - **Public API: eksport Parser2000 i find_sheets_2000_for_bbox**
   - `from kartograf import Parser2000, find_sheets_2000_for_bbox`
 
