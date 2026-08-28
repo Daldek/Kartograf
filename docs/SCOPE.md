@@ -269,7 +269,12 @@ from kartograf import (
 - `data/<produkt>/<kraj>_<układ>[_<wariant>][_<vcrs>]/...` (ADR-026);
   kanoniczna tabela segmentów i migracja 0.6.x→0.7.0:
   `docs/ARCHITECTURE.md` sekcja 3
-- Wycinki `--bbox` w `<segment>/bbox/<coords><ext>` (PL i CZ)
+- Wycinki w `<segment>/bbox/<coords><ext>`: każdy `--bbox` CZ oraz
+  `--bbox`/`--geometry` PL **tylko z `--target-crs`** (bez tej flagi PL
+  zapisuje arkusze w hierarchii godeł)
+- `<układ>` w segmencie (`pl_1992` vs `pl_2000`) rozstrzyga format godła
+  każdego pliku z osobna — jeden stary katalog (np. `orto/`) rozchodzi się
+  przy migracji na dwa segmenty
 - `landcover/` bez zmian (własny default `--output`)
 
 ---
@@ -332,9 +337,10 @@ from kartograf import (
 - --target-crs działa tylko z --bbox/--geometry; z godłem CZ = ValidationError
 - --target-crs dla PL: tylko nmt i system 1992 (nmpt/orto — etap 2; mozaika
   międzystrefowa PL-2000 — etap 2); failed arkusz = kod 1
-- Asymetria trybu --bbox: PL zwraca listę arkuszy (wiele plików), CZ zwraca
-  jeden plik (wycinek exportImage, pobierany natywnie w 5514 i reprojektowany
-  lokalnie, gdy zażądano innego układu)
+- Asymetria trybu --bbox: PL bez --target-crs zwraca listę arkuszy (wiele
+  plików), CZ zawsze jeden plik (wycinek exportImage, pobierany natywnie
+  w 5514 i reprojektowany lokalnie, gdy zażądano innego układu); z
+  --target-crs PL także daje jeden plik (ADR-027)
 - CountryProfile.extent_wgs84 dla CZ to PROSTOKĄT (obwiednia), nie wielokąt
   granicy — --country auto w pasie na zachód od 18,86°E i na południe od
   51,06°N (m.in. Opole, Wałbrzych, Rybnik, południowe obrzeża Wrocławia;

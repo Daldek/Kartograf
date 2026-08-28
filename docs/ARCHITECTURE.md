@@ -258,7 +258,10 @@ data/
 3. Podkatalog `bbox/` wewnatrz segmentu trzyma wycinki z trybu
    `--bbox`/`--geometry`: `<coords><ext>`, gdzie wspolrzedne sa **w ukladzie
    WYNIKU** (po `--target-crs`), formatowane `%.10g` i sklejane `_`.
-   Konwencja wspolna dla PL i CZ.
+   Konwencja wspolna dla PL i CZ, ale nie kazde zadanie obszarowe daje
+   wycinek: CZ zawsze (`exportImage`), PL **tylko z `--target-crs`** —
+   bez tej flagi zadanie PL zapisuje arkusze w hierarchii godel
+   (sekcja 4.2 vs 4.3).
 4. Rozdzielczosc wchodzi do segmentu tylko tam, gdzie jest parametrem API
    (NMT/NMPT). Nie ma jej dla CZ (`dmr5g` to z definicji 2 m, `dmr4g` 5 m)
    ani dla orto/LAZ (brak takiego parametru).
@@ -272,12 +275,18 @@ Nowe zrodlo dodaje sie samym wpisem deskryptora — np.
 |---|---|
 | `nmt_1m/` (godla 1992) | `nmt/pl_1992_1m_<vcrs>/` |
 | `nmt_1m/` (godla kropkowe 2000) | `nmt/pl_2000_1m_<vcrs>/` |
-| `nmt_5m/` | `nmt/pl_1992_5m_evrf2007/` |
+| `nmt_5m/` | `nmt/pl_<uklad>_5m_evrf2007/` |
 | `nmpt/` | `nmpt/pl_<uklad>_1m_<vcrs>/` |
-| `orto/` | `orto/pl_1992/` |
+| `orto/` | `orto/pl_<uklad>/` |
 | `laz/` | `laz/pl_<uklad>_<vcrs>/` |
 | `cz_dmr5g/` (0.7.0-dev) | `nmt/cz_dmr5g_<vcrs>/` |
 | `cz_dmr4g/` (0.7.0-dev) | `nmt/cz_dmr4g_<vcrs>/` |
+
+`<uklad>` bierze sie z formatu godla KAZDEGO pliku z osobna (kropki -> `2000`,
+myslniki -> `1992`, regula `path_parts` z sekcji 3.1) — stary `nmt_5m/`,
+`nmpt/`, `orto/` i `laz/` trzymaly oba systemy razem, wiec jeden stary katalog
+rozchodzi sie przy migracji na dwa segmenty (`orto/` -> `orto/pl_1992/`
+i `orto/pl_2000/`).
 
 `<vcrs>` przy recznej migracji odczytaj z sidecara (pole `vertical_crs`:
 `EPSG:9650` -> `kron86`, `EPSG:9651`/`EPSG:5621` -> `evrf2007`, `EPSG:8357`

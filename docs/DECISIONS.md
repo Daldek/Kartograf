@@ -215,7 +215,7 @@ Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja
 ## ADR-013: Zmiana nazw podkatalogow storage z 1m/5m na nmt_1m/nmt_5m
 
 **Data:** 2026-02-07
-**Status:** Przyjeta
+**Status:** Przyjeta (uklad katalogow zastapiony przez ADR-026)
 
 **Kontekst:** Po dodaniu NMPT i Ortofoto, podkatalogi `1m` i `5m` w FileStorage staly sie niejednoznaczne — moglyby oznaczac rozdzielczosc dowolnego produktu. Nowe produkty uzywaja podkatalogow `nmpt` i `orto`.
 
@@ -948,6 +948,19 @@ i EVRF2007 mial JEDNA sciezke — drugie pobranie: skip albo nadpisanie).
 Federacja niemiecka (kilkanascie zrodel DEM, research 2026-08-10) rozsadzilaby
 korzen katalogu.
 
+**Opcje** (rozstrzygniecia D1-D8 w sekcji 2 specu
+`docs/superpowers/specs/2026-08-28-uklad-data-i-target-crs-pl-design.md`;
+ponizej tylko warianty tam nazwane):
+- A) Utrzymanie plaskiego ukladu ADR-013 (`nmt_1m/`, `nmpt/`, `orto/`,
+  `cz_dmr5g/`) — stan sprzed 0.7.0 opisany w Kontekscie
+- B) **Wariant A z D1**: `data/<produkt>/<segment>/...`, `landcover/` bez zmian
+  — przyjety
+- W obrebie B odrzucono trzy zwezenia: uklad poziomy tylko dla NMT (zakres
+  odroczenia z ADR-017) — D2 rozciaga go na WSZYSTKIE produkty PL; dopisek
+  ukladu poziomego takze dla CZ — D4 odrzuca jako redundancje (nazwa
+  datasetu wyznacza uklad 1:1); rozdzielczosc w kazdym segmencie — D5
+  zostawia ja tylko tam, gdzie jest parametrem API (NMT/NMPT)
+
 **Decyzja (D1-D8 zatwierdzone przez uzytkownika 2026-08-28):**
 `data/<produkt>/<segment>/...`, segment = `<kraj>_<uklad>[_<wariant>][_<vcrs>]`
 lowercase. Uklad poziomy PL zawsze jawnie (`pl_1992`/`pl_2000`); pionowy
@@ -980,6 +993,19 @@ FileStorage: nowy parametr `vertical_crs` (default "EVRF2007"); nieznany
 zainteresowania w jednym kraju + dociagniecie danych z drugiego" wymagal
 warpa PL po stronie konsumenta — asymetria bez powodu innego niz historia
 implementacji.
+
+**Opcje** (D6 specu i jego sekcja 6; ponizej tylko warianty tam nazwane):
+- A) Zostawic `--target-crs` flaga wylacznie czeska — stan sprzed 0.7.0
+  opisany w Kontekscie
+- B) **D6: "TAK, wchodzi w zakres; semantyka »jeden wycinek«"** (spec sekcja
+  6) — przyjete
+- W obrebie B odrzucono trzy warianty: wspoldzielenie warpa z torem CZ
+  (refaktor `providers/cuzk/dmr.py::_warp_to_grid` zamiast osobnego
+  `transform/raster.py`) — patrz Konsekwencje; scalanie takze BEZ
+  `--target-crs` (spec 6.1: "Bez `--target-crs` zachowanie PL bbox bez
+  zmian — lista arkuszy natywnie"); `capability="bbox_raster"` w sidecarze
+  z litery spec 6.1 pkt 5 — zastapione przez `sheet_files`, bo kanal
+  `bbox_raster` nie opisuje drogi, ktora te dane przyszly
 
 **Decyzja:** `--bbox`/`--geometry` + `--country pl` + `--target-crs`
 (produkt nmt) zwraca JEDEN plik `nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif`:

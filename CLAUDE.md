@@ -111,9 +111,12 @@ kartograf/
 
 `data/<produkt>/<kraj>_<uklad>[_<wariant>][_<vcrs>]/...` — np.
 `nmt/pl_1992_1m_evrf2007/`, `nmt/pl_2000_1m_evrf2007/`, `nmpt/pl_1992_1m_kron86/`,
-`orto/pl_1992/`, `laz/pl_2000_evrf2007/`, `nmt/cz_dmr5g_bpv/`; wycinki
-`--bbox`/`--target-crs` w `<segment>/bbox/<coords>.tif`. Kanoniczna tabela
-i migracja: `docs/ARCHITECTURE.md` sekcja 3. `landcover/` bez zmian.
+`orto/pl_1992/`, `laz/pl_2000_evrf2007/`, `nmt/cz_dmr5g_bpv/` (`pl_1992` vs
+`pl_2000` rozstrzyga format godla KAZDEGO pliku). Podkatalog
+`<segment>/bbox/<coords>.tif` dostaja wycinki: KAZDY `--bbox` CZ oraz
+`--bbox`/`--geometry` PL **tylko z `--target-crs`** — bez tej flagi PL
+zapisuje arkusze w hierarchii godel. Kanoniczna tabela i migracja:
+`docs/ARCHITECTURE.md` sekcja 3. `landcover/` bez zmian.
 
 ## Komendy
 
@@ -255,8 +258,9 @@ kartograf cache path
   DMR 4G (godlo SM5) to zawsze 5m — `--resolution` wybiera miedzy nimi, nie
   jest niezalezna flaga jak w PL; `KRON86` jest **nieosiagalny** dla CZ (brak
   publicznych siatek Bpv->KRON86) — uzyj `--vertical-crs EVRF2007`; tryb
-  `--bbox` jest **asymetryczny wzgledem PL** — PL zwraca liste arkuszy
-  OpenData (wiele plikow), CZ zwraca jeden plik (wycinek `exportImage`);
+  `--bbox` jest **asymetryczny wzgledem PL** — PL bez `--target-crs` zwraca
+  liste arkuszy OpenData (wiele plikow), CZ zawsze jeden plik (wycinek
+  `exportImage`); z `--target-crs` PL tez daje jeden plik (ADR-027);
   rastry CZ sa ZAWSZE pobierane w ukladzie natywnym EPSG:5514, a reprojekcje
   (`--target-crs`, kafel TM33 w 3045) robi lokalnie `rasterio.warp` przypieta
   operacja — serwerowemu `imageSR` nie ufamy (ADR-024); `--target-crs`
