@@ -199,6 +199,15 @@ class DownloadManager:
         self._provider = provider or create_nmt_provider(
             vertical_crs=vertical_crs, resolution=resolution
         )
+        # The provider is the authority on the vertical CRS actually delivered:
+        # `DownloadManager(provider=GugikProvider(vertical_crs="KRON86"))` used
+        # to write into a `..._evrf2007` segment next to a sidecar declaring
+        # EPSG:9650 (sidecars already read the provider, see `_write_sidecar`).
+        # isinstance(str), not `is not None`: for Mock(spec=Provider) the
+        # attribute yields a Mock, which must not reach the segment template.
+        provider_vertical_crs = getattr(self._provider, "vertical_crs", None)
+        if isinstance(provider_vertical_crs, str):
+            vertical_crs = provider_vertical_crs
         if storage is None:
             subdir = None
             key = getattr(self._provider, "descriptor_key", None)

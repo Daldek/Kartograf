@@ -138,7 +138,10 @@ class FileStorage:
             template = self._PRODUCT_SUBDIRS.get(self._product, self._product)
         else:
             template = self._RESOLUTION_SUBDIRS.get(self._resolution, self._resolution)
-        if self._vertical_crs is not None:
+        # Falsy, not `is not None`: an empty string carries no dimension, so it
+        # must leave `{vcrs}` unresolved for `_ensure_resolved` to report —
+        # substituting it produced the silent segment `nmt/pl_1992_1m_`.
+        if self._vertical_crs:
             template = template.replace("{vcrs}", self._vertical_crs.lower())
         return template
 

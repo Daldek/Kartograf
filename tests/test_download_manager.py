@@ -196,6 +196,38 @@ class TestDownloadManagerStorageFromDescriptor:
         )
         assert manager._storage._subdir == "nmt/pl_{uklad}_1m_kron86"
 
+    def test_manager_without_descriptor_key_keeps_kron86_in_segment(self, tmp_path):
+        """Blizniak testu wyzej: bez deskryptora {vcrs} wypelnia FileStorage.
+
+        Sciezka deskryptorowa wypelnia {vcrs} juz w `resolve_subdir`, wiec
+        argument `vertical_crs=` konstruktora `FileStorage` broni WYLACZNIE
+        tego fallbacku — bez niego zostaje nierozwiazana klamra.
+        """
+        provider = Mock()
+        provider.descriptor_key = None
+        provider.default_extension = ".asc"
+
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=provider, vertical_crs="KRON86"
+        )
+
+        assert manager._storage._subdir == "nmt/pl_{uklad}_1m_kron86"
+
+    def test_default_storage_follows_provider_vertical_crs(self, tmp_path):
+        """Segment bierze pion z PROVIDERA, nie z domyslu managera (ADR-026).
+
+        Wywolanie z biblioteki (uzywa go Hydrograf) podaje provider, a nie
+        flage: bez tego dane KRON86 ladowaly w segmencie ...evrf2007, obok
+        sidecara deklarujacego EPSG:9650 — dokladnie to zderzenie ukladow,
+        ktore ADR-026 mial usunac.
+        """
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=GugikProvider(vertical_crs="KRON86")
+        )
+
+        assert manager._storage._subdir == "nmt/pl_{uklad}_1m_kron86"
+        assert manager.vertical_crs == "KRON86"
+
     def test_default_storage_5m_kron86_corrected_to_evrf(self, tmp_path):
         """Regula 5m=>EVRF2007 dziala PRZED budowa segmentu."""
         provider = Mock(spec=GugikProvider)
