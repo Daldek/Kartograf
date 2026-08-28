@@ -71,7 +71,7 @@ class TestDescriptorDataclasses:
             provider_name="GUGiK",
             channels=(self._channel(),),
             tile_scheme=None,
-            storage_subdir="nmt_1m",
+            storage_subdir="nmt/pl_{uklad}_1m_{vcrs}",
             default_extension=".asc",
             license=LicenseInfo(id="PL-PGiK-40a", attribution="GUGiK"),
         )
@@ -148,7 +148,7 @@ class TestRegistry:
 
     def test_nmt_1m_entry_values(self):
         d = get_source("pl.gugik.nmt_1m")
-        assert d.storage_subdir == "nmt_1m"
+        assert d.storage_subdir == "nmt/pl_{uklad}_1m_{vcrs}"
         assert d.default_extension == ".asc"
         assert d.resolution == "1m"
         transports = {ch.transport for ch in d.channels}
@@ -187,7 +187,7 @@ class TestRegistry:
         assert d.country == "CZ"
         assert d.product == "nmt"
         assert d.resolution == "2m"
-        assert d.storage_subdir == "cz_dmr5g"
+        assert d.storage_subdir == "nmt/cz_dmr5g_{vcrs}"
         assert d.default_extension == ".tif"
         assert d.license.id == "CC-BY-4.0"
         assert len(d.channels) == 1
@@ -209,7 +209,7 @@ class TestRegistry:
     def test_cz_dmr4g_entry_values(self):
         d = get_source("cz.cuzk.dmr4g")
         assert d.resolution == "5m"
-        assert d.storage_subdir == "cz_dmr4g"
+        assert d.storage_subdir == "nmt/cz_dmr4g_{vcrs}"
         transports = [ch.transport for ch in d.channels]
         assert transports == [TransportKind.DIRECT_FILES, TransportKind.ARCGIS_IMAGE]
         for ch in d.channels:
@@ -244,7 +244,7 @@ class TestDescriptorProviderConsistency:
         provider = GugikProvider(resolution="1m")
         assert d.default_extension == provider.default_extension
         storage = FileStorage(tmp_path, resolution="1m")
-        assert d.storage_subdir == storage._subdir
+        assert d.resolve_subdir(vertical_crs="EVRF2007") == storage._subdir
         supported = provider.get_supported_vertical_crs_for_resolution("1m")
         # Porownanie per kanal: skorowidz WMS obsluguje oba uklady pionowe,
         # a kanal WCS tylko te, dla ktorych provider ma dzialajacy endpoint.
@@ -276,7 +276,7 @@ class TestDescriptorProviderConsistency:
         provider = GugikProvider(resolution="5m")
         assert d.default_extension == provider.default_extension
         storage = FileStorage(tmp_path, resolution="5m")
-        assert d.storage_subdir == storage._subdir
+        assert d.resolve_subdir(vertical_crs="EVRF2007") == storage._subdir
         supported = provider.get_supported_vertical_crs_for_resolution("5m")
         assert {
             resolve_vertical_crs(n, d.channels[0].vertical_crs_options)
@@ -289,7 +289,8 @@ class TestDescriptorProviderConsistency:
         d = get_source("pl.gugik.nmpt")
         provider = GugikNmptProvider()
         assert d.default_extension == provider.default_extension
-        assert d.storage_subdir == FileStorage(tmp_path, product="nmpt")._subdir
+        storage = FileStorage(tmp_path, product="nmpt")
+        assert d.resolve_subdir(vertical_crs="EVRF2007") == storage._subdir
         codes = {
             resolve_vertical_crs(n, d.channels[0].vertical_crs_options)
             for n in provider.SUPPORTED_VERTICAL_CRS
@@ -302,7 +303,7 @@ class TestDescriptorProviderConsistency:
         d = get_source("pl.gugik.orto")
         provider = GugikOrtoProvider()
         assert d.default_extension == provider.default_extension
-        assert d.storage_subdir == FileStorage(tmp_path, product="orto")._subdir
+        assert d.resolve_subdir() == FileStorage(tmp_path, product="orto")._subdir
         assert d.channels[0].vertical_crs_options == ()
 
     def test_laz(self, tmp_path):
@@ -311,7 +312,8 @@ class TestDescriptorProviderConsistency:
         d = get_source("pl.gugik.laz")
         provider = GugikLazProvider()
         assert d.default_extension == provider.default_extension
-        assert d.storage_subdir == FileStorage(tmp_path, product="laz")._subdir
+        storage = FileStorage(tmp_path, product="laz")
+        assert d.resolve_subdir(vertical_crs="EVRF2007") == storage._subdir
         codes = {
             resolve_vertical_crs(n, d.channels[0].vertical_crs_options)
             for n in provider.SUPPORTED_VERTICAL_CRS

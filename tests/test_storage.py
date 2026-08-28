@@ -10,6 +10,7 @@ import io
 import pytest  # noqa: F401 - required for fixtures
 
 from kartograf.download.storage import FileStorage
+from kartograf.exceptions import ValidationError
 
 
 class TestFileStorageBasic:
@@ -323,7 +324,16 @@ class TestFileStorageDirectoryStructure:
         storage.write_atomic("N-34-130-D-d-2-4", b"data")
 
         # Verify directory structure (includes resolution subfolder)
-        expected_parts = ["nmt_1m", "N-34", "130", "D", "d", "2", "4"]
+        expected_parts = [
+            "nmt",
+            "pl_1992_1m_evrf2007",
+            "N-34",
+            "130",
+            "D",
+            "d",
+            "2",
+            "4",
+        ]
         current_dir = tmp_path
 
         for part in expected_parts:
@@ -346,8 +356,10 @@ class TestFileStorageDirectoryStructure:
         storage.write_atomic("N-34-130-D-d-2-4", b"data4")
 
         # Each file goes in its own final directory, but they share parent dirs
-        # Check the common parent directory (1:25k level = nmt_1m/N-34/130/D/d/2)
-        common_parent = tmp_path / "nmt_1m" / "N-34" / "130" / "D" / "d" / "2"
+        # Check the common parent directory (1:25k level)
+        common_parent = (
+            tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "N-34" / "130" / "D" / "d" / "2"
+        )
         assert common_parent.exists()
 
         # Should have 4 subdirectories (1, 2, 3, 4)
@@ -387,7 +399,7 @@ class TestFileStorageProduct:
         path = storage.get_path("N-34-130-D", ".asc")
 
         parts = str(path).split("/")
-        assert "nmt_1m" in parts
+        assert "pl_1992_1m_evrf2007" in parts
 
     def test_product_subdir_structure(self, tmp_path):
         """Test full directory structure with product."""
@@ -395,7 +407,16 @@ class TestFileStorageProduct:
         storage.write_atomic("N-34-130-D-d-2-4", b"TIF data", ".tif")
 
         # Verify directory structure
-        expected_parts = ["orto", "N-34", "130", "D", "d", "2", "4"]
+        expected_parts = [
+            "orto",
+            "pl_1992",
+            "N-34",
+            "130",
+            "D",
+            "d",
+            "2",
+            "4",
+        ]
         current_dir = tmp_path
 
         for part in expected_parts:
@@ -420,18 +441,18 @@ class TestFileStorageProduct:
         assert "product='nmpt'" in repr_str
 
     def test_resolution_subdir_nmt_1m(self, tmp_path):
-        """Test that resolution='1m' maps to 'nmt_1m' subdirectory."""
+        """Test that resolution='1m' maps to 'nmt/pl_1992_1m_evrf2007' subdirectory."""
         storage = FileStorage(tmp_path, resolution="1m")
         path = storage.get_path("N-34-130-D", ".asc")
 
-        assert "/nmt_1m/" in str(path)
+        assert "/nmt/pl_1992_1m_evrf2007/" in str(path)
 
     def test_resolution_subdir_nmt_5m(self, tmp_path):
-        """Test that resolution='5m' maps to 'nmt_5m' subdirectory."""
+        """Test that resolution='5m' maps to 'nmt/pl_1992_5m_evrf2007' subdirectory."""
         storage = FileStorage(tmp_path, resolution="5m")
         path = storage.get_path("N-34-130-D", ".asc")
 
-        assert "/nmt_5m/" in str(path)
+        assert "/nmt/pl_1992_5m_evrf2007/" in str(path)
 
 
 class TestFileStoragePL2000:
@@ -601,10 +622,10 @@ class TestSubdirOverride:
 
     def test_none_keeps_legacy_behavior(self, tmp_path):
         assert FileStorage(tmp_path, resolution="1m").get_path("N-34", ".asc") == (
-            tmp_path / "nmt_1m" / "N-34" / "N-34.asc"
+            tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "N-34" / "N-34.asc"
         )
         assert FileStorage(tmp_path, product="nmpt").get_path("N-34", ".asc") == (
-            tmp_path / "nmpt" / "N-34" / "N-34.asc"
+            tmp_path / "nmpt" / "pl_1992_1m_evrf2007" / "N-34" / "N-34.asc"
         )
 
     def test_repr_with_subdir(self, tmp_path):
@@ -634,3 +655,98 @@ class TestDeleteRemovesSidecar:
 
         assert storage.delete("N-34-130-D-d-2-4") is True
         assert not path.exists()
+
+
+class TestFileStorageSegments:
+    """Uklad data/ 0.7.0: <produkt>/<kraj>_<uklad>[_<wariant>][_<vcrs>] (ADR-026)."""
+
+    def test_default_pl1992_evrf2007(self, tmp_path):
+        storage = FileStorage(tmp_path, resolution="1m")
+        assert storage.get_path("N-34-130-D-d-2-4", ".asc") == (
+            tmp_path
+            / "nmt"
+            / "pl_1992_1m_evrf2007"
+            / "N-34"
+            / "130"
+            / "D"
+            / "d"
+            / "2"
+            / "4"
+            / "N-34-130-D-d-2-4.asc"
+        )
+
+    def test_kron86_segment(self, tmp_path):
+        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="KRON86")
+        path = storage.get_path("N-34-130-D-d-2-4", ".asc")
+        assert "pl_1992_1m_kron86" in path.parts
+
+    def test_pl2000_gets_own_segment(self, tmp_path):
+        """ADR-017 domkniety: PL-2000 nie dzieli juz katalogu z PL-1992."""
+        storage = FileStorage(tmp_path, resolution="1m")
+        assert storage.get_path("6.179.12.20", ".asc") == (
+            tmp_path
+            / "nmt"
+            / "pl_2000_1m_evrf2007"
+            / "6"
+            / "179"
+            / "12"
+            / "20"
+            / "6.179.12.20.asc"
+        )
+
+    def test_nmt_5m_segment(self, tmp_path):
+        storage = FileStorage(tmp_path, resolution="5m")
+        path = storage.get_path("N-34-130-D-d-2-4", ".asc")
+        assert "pl_1992_5m_evrf2007" in path.parts
+
+    def test_nmpt_segment(self, tmp_path):
+        storage = FileStorage(tmp_path, product="nmpt")
+        path = storage.get_path("N-34", ".asc")
+        assert path == (tmp_path / "nmpt" / "pl_1992_1m_evrf2007" / "N-34" / "N-34.asc")
+
+    def test_orto_segment_no_vcrs(self, tmp_path):
+        """Orto nie ma pionowego — segment bez {vcrs} takze przy None."""
+        storage = FileStorage(tmp_path, product="orto", vertical_crs=None)
+        assert storage.get_path("N-34", ".tif") == (
+            tmp_path / "orto" / "pl_1992" / "N-34" / "N-34.tif"
+        )
+
+    def test_laz_segment_by_identifier(self, tmp_path):
+        storage = FileStorage(tmp_path, product="laz")
+        p1992 = storage.get_raw_path("N-33-131-B-a-1-1-4", "a.laz")
+        p2000 = storage.get_raw_path("6.162.34.02.3", "b.laz")
+        assert tuple(p1992.parts[-10:-8]) == ("laz", "pl_1992_evrf2007")
+        assert tuple(p2000.parts[-8:-6]) == ("laz", "pl_2000_evrf2007")
+
+    def test_unresolved_vcrs_raises(self, tmp_path):
+        storage = FileStorage(tmp_path, resolution="1m", vertical_crs=None)
+        with pytest.raises(ValidationError, match="vcrs"):
+            storage.get_path("N-34-130-D-d-2-4", ".asc")
+
+    def test_unknown_product_passthrough(self, tmp_path):
+        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        assert storage.get_path("6.179.12.20", ".asc") == (
+            tmp_path / "nmt_2000_1m" / "6" / "179" / "12" / "20" / "6.179.12.20.asc"
+        )
+
+    def test_subdir_override_fills_vcrs(self, tmp_path):
+        storage = FileStorage(
+            tmp_path, subdir="nmt/cz_dmr5g_{vcrs}", vertical_crs="Bpv"
+        )
+        assert storage.get_raw_path("302_5550", "302_5550.tif") == (
+            tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
+        )
+
+    def test_list_files_spans_both_uklady(self, tmp_path):
+        storage = FileStorage(tmp_path, resolution="1m")
+        storage.write_atomic("N-34-130-D-d-2-4", b"x", ".asc")
+        storage.write_atomic("6.179.12.20", b"y", ".asc")
+        assert len(storage.list_files()) == 2
+
+    def test_delete_with_sidecar_in_new_layout(self, tmp_path):
+        storage = FileStorage(tmp_path, resolution="1m")
+        path = storage.write_atomic("6.179.12.20", b"x", ".asc")
+        sidecar = path.with_name(path.name + ".meta.json")
+        sidecar.write_text("{}\n", encoding="utf-8")
+        assert storage.delete("6.179.12.20") is True
+        assert not path.exists() and not sidecar.exists()

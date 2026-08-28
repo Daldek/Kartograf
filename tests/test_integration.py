@@ -89,7 +89,16 @@ class TestParserStorageIntegration:
             assert storage.exists(child.godlo)
 
         # Verify common parent directory (includes resolution subfolder)
-        common_parent = test_data_dir / "nmt_1m" / "N-34" / "130" / "D" / "d" / "2"
+        common_parent = (
+            test_data_dir
+            / "nmt"
+            / "pl_1992_1m_evrf2007"
+            / "N-34"
+            / "130"
+            / "D"
+            / "d"
+            / "2"
+        )
         assert common_parent.exists()
 
     def test_all_scales_storage(self, test_data_dir, sample_godlos, mock_tif_data):

@@ -6,12 +6,14 @@ and storage operations for downloaded data.
 """
 
 import os
+import re
 import threading
 from pathlib import Path
 from typing import BinaryIO
 
 from kartograf.core import parser_registry
 from kartograf.core.sheet_parser import SheetParser
+from kartograf.exceptions import ValidationError
 
 
 class FileStorage:
@@ -23,17 +25,14 @@ class FileStorage:
     specific sheets while keeping different resolutions separate.
 
     Directory structure example (PL-1992):
-        data/nmt_1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
-        data/nmt_5m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
-        data/nmpt/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
-        data/orto/N-34/130/D/d/2/4/N-34-130-D-d-2-4.tif
+        data/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
+        data/nmt/pl_1992_5m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
+        data/nmpt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
+        data/orto/pl_1992/N-34/130/D/d/2/4/N-34-130-D-d-2-4.tif
 
-    Directory structure example (PL-2000):
-        data/nmt_1m/6/179/12/6.179.12.asc
-        data/nmt_1m/6/179/12/20/6.179.12.20.asc
-        (PL-2000 sheets share the resolution subdirectory with PL-1992;
-        the separate nmt_2000_<res> layout promised in ADR-017 is deferred.
-        File names do not collide: PL-2000 uses dots, PL-1992 dashes.)
+    Directory structure example (PL-2000, own segment since 0.7.0/ADR-026 —
+    the ADR-017 deferral is closed):
+        data/nmt/pl_2000_1m_evrf2007/6/179/12/20/6.179.12.20.asc
 
     Attributes
     ----------
@@ -47,7 +46,7 @@ class FileStorage:
     >>> storage = FileStorage("./data", resolution="1m")
     >>> path = storage.get_path("N-34-130-D-d-2-4", ".asc")
     >>> print(path)
-    data/nmt_1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
+    data/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
 
     Notes
     -----
@@ -63,6 +62,7 @@ class FileStorage:
         resolution: str = "1m",
         product: str | None = None,
         subdir: str | None = None,
+        vertical_crs: str | None = "EVRF2007",
     ):
         """
         Initialize file storage.
@@ -82,6 +82,11 @@ class FileStorage:
         subdir : str, optional
             Explicit subdirectory name sterowany deskryptorem zrodla
             (np. "cz_dmr5g"). Ma pierwszenstwo przed product i resolution.
+        vertical_crs : str, optional
+            Vertical CRS filling the ``{vcrs}`` placeholder of the segment
+            template (lowercased; default "EVRF2007"). ``None`` leaves the
+            placeholder unresolved — path methods then raise
+            ``ValidationError`` for templates that require it.
         """
         self._subdir_override = subdir
         if product:
@@ -96,11 +101,18 @@ class FileStorage:
             self._product = None
             self._resolution = resolution
         self._output_dir = Path(output_dir)
+        self._vertical_crs = vertical_crs
 
-    # Mapping from resolution to subdirectory name
+    # Segment templates (ADR-026): {uklad} resolved per godlo, {vcrs} from
+    # the constructor's vertical_crs.
     _RESOLUTION_SUBDIRS = {
-        "1m": "nmt_1m",
-        "5m": "nmt_5m",
+        "1m": "nmt/pl_{uklad}_1m_{vcrs}",
+        "5m": "nmt/pl_{uklad}_5m_{vcrs}",
+    }
+    _PRODUCT_SUBDIRS = {
+        "nmpt": "nmpt/pl_{uklad}_1m_{vcrs}",
+        "orto": "orto/pl_{uklad}",
+        "laz": "laz/pl_{uklad}_{vcrs}",
     }
 
     @property
@@ -115,12 +127,46 @@ class FileStorage:
 
     @property
     def _subdir(self) -> str:
-        """Return subdirectory name (override, product or nmt_<resolution>)."""
+        """Return the segment template (override, product or resolution).
+
+        ``{vcrs}`` is already filled from ``vertical_crs``; ``{uklad}`` may
+        remain — path methods resolve it per identifier.
+        """
         if self._subdir_override:
-            return self._subdir_override
-        if self._product:
-            return self._product
-        return self._RESOLUTION_SUBDIRS.get(self._resolution, self._resolution)
+            template = self._subdir_override
+        elif self._product:
+            template = self._PRODUCT_SUBDIRS.get(self._product, self._product)
+        else:
+            template = self._RESOLUTION_SUBDIRS.get(self._resolution, self._resolution)
+        if self._vertical_crs is not None:
+            template = template.replace("{vcrs}", self._vertical_crs.lower())
+        return template
+
+    @staticmethod
+    def _ensure_resolved(subdir: str) -> str:
+        """Reject a segment that still contains an unresolved placeholder."""
+        if "{" in subdir:
+            missing = ", ".join(re.findall(r"\{(\w+)\}", subdir))
+            raise ValidationError(
+                f"Nierozwiazany wymiar segmentu storage: {missing} (subdir '{subdir}')"
+            )
+        return subdir
+
+    def _resolved_subdir(self, identifier: str) -> str:
+        """Segment for the identifier: {uklad} from the sheet system.
+
+        Same rule as ``parser_registry.path_parts``: dots (system ``pl2000``)
+        -> "2000", anything else (incl. the pl1992 fallback) -> "1992".
+        """
+        subdir = self._subdir
+        if "{uklad}" in subdir:
+            system = parser_registry.detect_system(identifier)
+            # None tylko gdyby rejestr byl pusty (nie zdarza sie w praktyce —
+            # pl1992 jest fallbackiem z detect=lambda godlo: True); warunek
+            # zostaje, zeby mypy nie zglosil union-attr.
+            uklad = "2000" if system is not None and system.id == "pl2000" else "1992"
+            subdir = subdir.replace("{uklad}", uklad)
+        return self._ensure_resolved(subdir)
 
     def get_path(self, godlo: str, ext: str = ".asc") -> Path:
         """
@@ -128,8 +174,9 @@ class FileStorage:
 
         The path follows a hierarchical structure based on resolution
         and godło components:
-        - 1:1M (N-34) → nmt_1m/N-34/N-34.asc
-        - 1:10k (N-34-130-D-d-2-4) → nmt_1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
+        - 1:1M (N-34) → nmt/pl_1992_1m_evrf2007/N-34/N-34.asc
+        - 1:10k (N-34-130-D-d-2-4) →
+          nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
 
         Parameters
         ----------
@@ -147,7 +194,7 @@ class FileStorage:
         --------
         >>> storage = FileStorage("./data", resolution="1m")
         >>> storage.get_path("N-34-130-D-d-2-4", ".asc")
-        PosixPath('data/nmt_1m/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc')
+        PosixPath('data/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc')
         """
         # Normalize godło using SheetParser
         parser = SheetParser(godlo)
@@ -156,8 +203,8 @@ class FileStorage:
         # Build directory path from godło components
         dir_parts = self._get_directory_parts(normalized_godlo)
 
-        # Construct full path with subdirectory (product or resolution)
-        dir_path = self._output_dir / self._subdir
+        # Construct full path with resolved segment (product or resolution)
+        dir_path = self._output_dir / self._resolved_subdir(normalized_godlo)
         for part in dir_parts:
             dir_path = dir_path / part
 
@@ -189,11 +236,11 @@ class FileStorage:
         Examples
         --------
         >>> storage = FileStorage("./data", product="laz")
-        >>> storage.get_raw_path("N-33-131-B-a-1-1-4", "81121_x_N-33-131-B-a-1-1-4.laz")
-        PosixPath('data/laz/N-33/131/B/a/1/1/4/81121_x_N-33-131-B-a-1-1-4.laz')
+        >>> storage.get_raw_path("N-33-131-B-a-1-1-4", "81121_x.laz")
+        PosixPath('data/laz/pl_1992_evrf2007/N-33/131/B/a/1/1/4/81121_x.laz')
         """
         dir_parts = self._get_directory_parts(identifier)
-        dir_path = self._output_dir / self._subdir
+        dir_path = self._output_dir / self._resolved_subdir(identifier)
         for part in dir_parts:
             dir_path = dir_path / part
         return dir_path / filename
@@ -355,10 +402,17 @@ class FileStorage:
         list[Path]
             List of matching file paths
         """
-        subdir = self._output_dir / self._subdir
-        if not subdir.exists():
-            return []
-        return list(subdir.glob(pattern))
+        template = self._subdir
+        if "{uklad}" in template:
+            subdirs = [template.replace("{uklad}", u) for u in ("1992", "2000")]
+        else:
+            subdirs = [template]
+        files: list[Path] = []
+        for name in subdirs:
+            root = self._output_dir / self._ensure_resolved(name)
+            if root.exists():
+                files.extend(root.glob(pattern))
+        return files
 
     def get_size(self, godlo: str, ext: str = ".asc") -> int | None:
         """
