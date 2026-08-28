@@ -1051,6 +1051,10 @@ def _build_pl_cutout(
 
     Mozaika wymusza GTiff + EPSG:2180 (arkusze ASC nie niosa CRS).
     ``pinned is None`` = cel EPSG:2180: sam crop (atomowy ``os.replace``).
+
+    Obie sciezki zapisu sa atomowe (druga domyka wewnetrzny ``os.replace``
+    w ``warp_to_grid``), wiec przerwana budowa NIE zostawia polzapisanego
+    pliku pod ``target_path`` — i dlatego nie kasuje tez poprzedniego wyniku.
     """
     import os
     import threading
@@ -1083,9 +1087,6 @@ def _build_pl_cutout(
                 src_crs="EPSG:2180",
                 nodata=_PL_NODATA,
             )
-    except BaseException:
-        target_path.unlink(missing_ok=True)
-        raise
     finally:
         tmp.unlink(missing_ok=True)
 
@@ -1149,9 +1150,13 @@ def _finalize_pl_cutout(
     parent_request: dict | None,
     provider,
 ) -> int:
-    """Zbuduj wycinek z pobranych arkuszy i zapisz sidecar (ADR-027)."""
-    from kartograf.transform.crs import TransformError
+    """Zbuduj wycinek z pobranych arkuszy i zapisz sidecar (ADR-027).
 
+    Kazdy blad budowy jest tlumaczony na kod 1: poza ``ValidationError``
+    i ``TransformError`` mozliwy jest tu takze ``rasterio.errors.RasterioIOError``
+    (uszkodzony arkusz z cache), a taki przeciek wyszedlby poza petle krajow
+    ``_dispatch_area`` i zlamal kontrakt czesciowego sukcesu (ADR-023 pkt 4-5).
+    """
     if not args.quiet:
         print(f"Building cutout from {len(sheet_paths)} sheets ({args.target_crs})...")
     try:
@@ -1163,7 +1168,7 @@ def _finalize_pl_cutout(
             cutout.pinned,
             cutout.target_path,
         )
-    except (ValidationError, TransformError) as e:
+    except Exception as e:  # noqa: BLE001 — kod 1 zamiast tracebacku (ADR-023)
         print(f"Error: {e}", file=sys.stderr)
         return 1
     _write_pl_cutout_sidecar(
