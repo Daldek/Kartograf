@@ -260,7 +260,7 @@ class TestDownloadPlBboxCutout:
         provider = SimpleNamespace(vertical_crs="EVRF2007")
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         with (
-            patch(f"{_DL}.find_sheets_for_bbox", return_value=["N-1", "N-2"]),
+            patch(f"{_DL}.find_sheets_for_bbox", return_value=["N-1", "N-2"]) as find,
             patch(
                 f"{_DL}._create_provider_and_storage",
                 return_value=(provider, Mock()),
@@ -272,14 +272,14 @@ class TestDownloadPlBboxCutout:
             ) as dl,
         ):
             rc = _download_pl_bbox(args, bbox, _PARENT)
-        return rc, dl
+        return rc, dl, find
 
     def test_creates_cutout_and_sidecar(self, tmp_path):
         sheets = [
             _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000),
             _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000),
         ]
-        rc, _ = self._run(tmp_path, _pl_args(tmp_path), sheets)
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
 
         assert rc == 0
         target = (
@@ -306,7 +306,7 @@ class TestDownloadPlBboxCutout:
             _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000),
             _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000),
         ]
-        rc, _ = self._run(tmp_path, _pl_args(tmp_path, target_crs="EPSG:5514"), sheets)
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path, target_crs="EPSG:5514"), sheets)
 
         assert rc == 0
         cut_dir = tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox"
@@ -320,7 +320,7 @@ class TestDownloadPlBboxCutout:
     def test_failed_sheet_returns_1_and_no_cutout(self, tmp_path):
         """Spec 6.1: wycinek wymaga kompletu pokrycia."""
         sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
-        rc, _ = self._run(tmp_path, _pl_args(tmp_path), sheets, failed=["N-2"])
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets, failed=["N-2"])
 
         assert rc == 1
         assert not (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").exists()
@@ -335,18 +335,165 @@ class TestDownloadPlBboxCutout:
         )
         target.parent.mkdir(parents=True)
         target.write_bytes(b"II*\x00")
-        rc, dl = self._run(tmp_path, _pl_args(tmp_path), sheets=[])
+        rc, dl, find = self._run(tmp_path, _pl_args(tmp_path), sheets=[])
 
         assert rc == 0
         dl.assert_not_called()
+        # skrot dziala PRZED selekcja arkuszy — zero pracy na godlach
+        find.assert_not_called()
 
     def test_without_target_crs_behaviour_unchanged(self, tmp_path):
         """Bez flagi: lista arkuszy jak dotad, zero wycinka (spec 6.1)."""
         sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
-        rc, _ = self._run(tmp_path, _pl_args(tmp_path, target_crs=None), sheets)
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path, target_crs=None), sheets)
 
         assert rc == 0
         assert not (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").exists()
+
+
+class TestGeometryCutout:
+    def test_geometry_mode_builds_cutout(self, tmp_path):
+        from kartograf.cli.download_cmd import _download_pl_geometry
+
+        sheets = [
+            _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000),
+            _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000),
+        ]
+        geom = tmp_path / "area.gpkg"
+        geom.write_bytes(b"stub")  # sciezka nieuzywana: discovery zamockowane
+        provider = SimpleNamespace(vertical_crs="EVRF2007")
+        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+        args = _pl_args(tmp_path, bbox=None, geometry=str(geom))
+
+        with (
+            # import lokalny w _download_pl_geometry -> patch u zrodla
+            # (ta sama konwencja co testy geometry w test_cli.py)
+            patch(
+                "kartograf.core.geometry.find_sheets_for_geometry",
+                return_value=["N-1", "N-2"],
+            ),
+            patch(
+                f"{_DL}._create_provider_and_storage",
+                return_value=(provider, Mock()),
+            ),
+            patch(f"{_DL}.DownloadManager"),
+            patch(f"{_DL}._download_godlo_list", return_value=(sheets, [])),
+        ):
+            rc = _download_pl_geometry(args, geom, _PARENT, bbox=bbox)
+
+        assert rc == 0
+        assert (
+            tmp_path
+            / "nmt"
+            / "pl_1992_1m_evrf2007"
+            / "bbox"
+            / "530010_382010_530190_382090.tif"
+        ).exists()
+
+
+class TestBorderTwoCutouts:
+    """Spec 13.6 / 8(e): jedna komenda -> dwa wycinki w tym samym ukladzie."""
+
+    # maly prostokat przecinajacy PROSTOKATNE obwiednie obu krajow
+    # (CZ: 12.09..18.86E / 48.55..51.06N, PL: 14.07..24.20E / 49.00..54.90N)
+    _BBOX = "18.80,49.70,18.801,49.7005"
+
+    @pytest.fixture(autouse=True)
+    def _isolate_cache(self, tmp_path, monkeypatch):
+        """MetadataCache laduje w cwd — poza repo i katalogiem wyjsciowym."""
+        cwd = tmp_path / "cwd"
+        cwd.mkdir()
+        monkeypatch.chdir(cwd)
+
+    def _cz_provider(self):
+        """Stub CuzkDmrProvider: zapisuje plik i udaje operacje przypieta."""
+        provider = Mock()
+        provider.descriptor_key = "cz.cuzk.dmr4g"
+        provider.resolution = "5m"
+        provider.vertical_crs = "EVRF2007"
+        provider.vertical_transform = None
+
+        def fake_horizontal(target_crs):
+            pinned = Mock()
+            pinned.description = f"S-JTSK to ETRS89 (3) -> {target_crs}"
+            pinned.accuracy_m = 0.5
+            return pinned
+
+        provider.horizontal_transform.side_effect = fake_horizontal
+
+        def fake_bbox(bbox, target, **kw):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"II*\x00dane")
+            return target
+
+        provider.download_bbox.side_effect = fake_bbox
+        return provider
+
+    def test_two_cutouts_share_parent_request(self, tmp_path):
+        from pyproj import CRS
+
+        from kartograf.core.geometry import _transform_bbox
+
+        # jeden syntetyczny arkusz pokrywajacy polska czesc zadania
+        b = _transform_bbox(
+            18.80,
+            49.70,
+            18.801,
+            49.7005,
+            CRS.from_user_input("EPSG:4326"),
+            "EPSG:2180",
+        )
+        sheet = _write_sheet_asc(
+            tmp_path / "sheet.asc",
+            b.min_x - 100,
+            b.min_y - 100,
+            size=60,
+            pixel=5.0,
+        )
+        provider = SimpleNamespace(vertical_crs="EVRF2007")
+
+        with (
+            patch(
+                "kartograf.providers.cuzk.create_dmr_provider",
+                return_value=self._cz_provider(),
+            ),
+            patch(f"{_DL}.find_sheets_for_bbox", return_value=["N-34-130-D"]),
+            patch(
+                f"{_DL}._create_provider_and_storage",
+                return_value=(provider, Mock()),
+            ),
+            patch(f"{_DL}.DownloadManager"),
+            patch(f"{_DL}._download_godlo_list", return_value=([sheet], [])),
+        ):
+            rc = main(
+                [
+                    "download",
+                    "--bbox",
+                    self._BBOX,
+                    "--bbox-crs",
+                    "EPSG:4326",
+                    "--resolution",
+                    "5m",
+                    "--target-crs",
+                    "EPSG:2180",
+                    "--vertical-crs",
+                    "EVRF2007",
+                    "-o",
+                    str(tmp_path),
+                ]
+            )
+
+        assert rc == 0
+        pl = list((tmp_path / "nmt" / "pl_1992_5m_evrf2007" / "bbox").glob("*.tif"))
+        cz = list((tmp_path / "nmt" / "cz_dmr4g_evrf2007" / "bbox").glob("*.tif"))
+        assert len(pl) == 1 and len(cz) == 1
+        parents = []
+        for f in (*pl, *cz):
+            payload = json.loads((f.parent / f"{f.name}.meta.json").read_text("utf-8"))
+            assert payload["horizontal_crs"] == "EPSG:2180"
+            parents.append(payload["extra"]["parent_request"])
+        assert parents[0] == parents[1]
+        assert parents[0]["countries"] == ["CZ", "PL"]
 
 
 class TestTargetCrsValidations:
