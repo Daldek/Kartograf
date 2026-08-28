@@ -549,8 +549,11 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
    CUZK bywa zmienny przestrzennie (1,25 m kolo Cieszyna, 4,92 m w
    zachodnich Czechach) — nie zakladac stalego offsetu przy podobnych
    diagnozach w przyszlosci.
-3. **Push `develop` na origin** (71 commitow lokalnie, decyzja z etapu 0
-   nadal nierozwiazana) — patrz wyzej
+3. **Push `develop` na origin** (148 commitow lokalnie po mergu audytu
+   0.7.0: 73 sprzed audytu — wczesniejsze "71" nie liczylo 2 doc-commitow
+   z 2026-08-18 — plus 75 z galezi audytu; pomiar
+   `git rev-list --count origin/develop..develop` 2026-08-28; decyzja
+   z etapu 0 nadal nierozwiazana) — patrz wyzej
 4. **Zgloszenie/naprawa WCS EVRF2007 GUGiK** (male, przedistniejace, poza
    etapami 0/1): aktualizacja `WCS_ENDPOINTS`/`COVERAGE_IDS` w
    `providers/pl/gugik.py` po usunieciu endpointu przez GUGiK (patrz "Znany
@@ -569,12 +572,15 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
    przy wielu wywolaniach); duplikacja regul walidacji sentineli miedzy
    galezia PL i CZ w CLI; brak separatora przed "Remedium:" w komunikacie
    bledu KRON86
-7. **Audyt przedwydaniowy 0.7.0 — finalny review calej galezi**
-   `fix/release-0.7.0-audit` (26 zadan wykonanych, patrz sekcja "Audyt
-   przedwydaniowy 0.7.0" wyzej) przed merge do `develop`.
+7. ~~Audyt przedwydaniowy 0.7.0 — finalny review calej galezi~~ —
+   **WYKONANY 2026-08-23** (fable, werdykt "NEEDS ONE FIX WAVE" + fala
+   F-1..F-7 zamknieta; patrz sekcja "Audyt przedwydaniowy 0.7.0" wyzej).
 8. **Fala naprawcza minorow** z audytu — patrz nowa sekcja "Backlog po
    audycie 0.7.0" nizej.
-9. **Merge `fix/release-0.7.0-audit` do `develop`.**
+9. ~~Merge `fix/release-0.7.0-audit` do `develop`~~ — **WYKONANY
+   2026-08-28** (fast-forward `f432403..d327f0c`, 75 commitow; suita na
+   zmergowanym develop: 1708 passed + 8 deselected `live`, pokrycie
+   92,64%, ruff/format czyste, mypy 32 = baseline; galaz usunieta).
 10. ~~Zadanie licencyjne uzytkownika~~ — **WYKONANE 2026-08-28**: `authors`
     w `pyproject.toml` = `Piotr de Bever <git@debever.pl>` (konwencja
     z IMGWTools); pole `license = {text = "MIT"}` zostaje w formacie
@@ -583,8 +589,8 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
     (format SPDX z PEP 639 wymagalby podbicia do >=77).
 11. **Bump wersji + wydanie 0.7.0**: `kartograf.__version__`/
     `pyproject.toml` `0.7.0-dev` -> `0.7.0`, data w CHANGELOG, tag
-    `v0.7.0`, push `develop` na origin (patrz pkt 3 wyzej — 71+ commitow
-    niewypchnietych, plus 71 z audytu 0.7.0 po zmergowaniu tej galezi).
+    `v0.7.0`, push `develop` na origin (patrz pkt 3 wyzej — 148 commitow
+    niewypchnietych po zmergowaniu galezi audytu 0.7.0).
 12. **Checklista release** (z planu audytu 0.7.0): build sdist/wheel
     (`setuptools`); zywa weryfikacja CORINE GeoTIFF z prawdziwymi
     credentials CLMS vs allowlista hostow (Auth Proxy); E2E kafelkowania
