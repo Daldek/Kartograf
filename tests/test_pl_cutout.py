@@ -252,13 +252,18 @@ _PARENT = {
     "countries": ["PL"],
 }
 
+# Bbox zadania wspolny dla przeplywow ponizej. Stala, a nie obiekt budowany
+# w helperze — testy sprawdzaja TOZSAMOSC obiektu podanego do selekcji arkuszy
+# (dowod, ze bez --target-crs zapas NIE wchodzi do selekcji).
+_BBOX_2180 = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+
 
 class TestDownloadPlBboxCutout:
     """Spec 8: przeplyw wycinka na poziomie workera PL (mockowane pobranie)."""
 
-    def _run(self, tmp_path, args, sheets, failed=()):
-        provider = SimpleNamespace(vertical_crs="EVRF2007")
-        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+    def _run(self, tmp_path, args, sheets, failed=(), provider=None):
+        provider = provider or SimpleNamespace(vertical_crs="EVRF2007")
+        bbox = _BBOX_2180
         with (
             patch(f"{_DL}.find_sheets_for_bbox", return_value=["N-1", "N-2"]) as find,
             patch(
@@ -306,7 +311,9 @@ class TestDownloadPlBboxCutout:
             _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000),
             _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000),
         ]
-        rc, *_ = self._run(tmp_path, _pl_args(tmp_path, target_crs="EPSG:5514"), sheets)
+        rc, _dl, find = self._run(
+            tmp_path, _pl_args(tmp_path, target_crs="EPSG:5514"), sheets
+        )
 
         assert rc == 0
         cut_dir = tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox"
@@ -316,6 +323,13 @@ class TestDownloadPlBboxCutout:
         assert payload["horizontal_crs"] == "EPSG:5514"
         assert payload["transform"]["horizontal"].startswith("pinned: ")
         assert payload["request"]["bbox_crs"] == "EPSG:5514"
+        # R-01: do SELEKCJI arkuszy idzie bbox Z ZAPASEM, nie samo zadanie —
+        # inaczej rogi obroconej siatki wyniku wypadaja poza pobrane arkusze
+        sent = find.call_args.args[0]
+        assert sent.min_x < _BBOX_2180.min_x
+        assert sent.max_x > _BBOX_2180.max_x
+        assert sent.min_y < _BBOX_2180.min_y
+        assert sent.max_y > _BBOX_2180.max_y
 
     def test_failed_sheet_returns_1_and_no_cutout(self, tmp_path):
         """Spec 6.1: wycinek wymaga kompletu pokrycia."""
@@ -345,10 +359,13 @@ class TestDownloadPlBboxCutout:
     def test_without_target_crs_behaviour_unchanged(self, tmp_path):
         """Bez flagi: lista arkuszy jak dotad, zero wycinka (spec 6.1)."""
         sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
-        rc, *_ = self._run(tmp_path, _pl_args(tmp_path, target_crs=None), sheets)
+        rc, _dl, find = self._run(tmp_path, _pl_args(tmp_path, target_crs=None), sheets)
 
         assert rc == 0
         assert not (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").exists()
+        # bez wycinka zapas NIE wchodzi do selekcji — arkusze wyznacza
+        # dokladnie zadanie uzytkownika (ten sam obiekt, nie kopia z marginesem)
+        assert find.call_args.args[0] is _BBOX_2180
 
 
 class TestGeometryCutout:
@@ -396,6 +413,56 @@ class TestGeometryCutout:
             / "bbox"
             / "530010_382010_530190_382090.tif"
         ).exists()
+
+    def test_geometry_target_5514_covers_whole_envelope(self, tmp_path):
+        """R-01 obowiazuje takze w `--geometry`: zapas wchodzi do SELEKCJI.
+
+        Geometria wskazuje sam arkusz zachodni, ale obwiednia celu wraca do
+        EPSG:2180 wieksza niz zadanie (obrot Krovaka) i siega juz na arkusz
+        wschodni. Bez sumy z ``find_sheets_for_bbox`` wycinek ma na wschodniej
+        krawedzi ramke nodata — przy tej samej fladze, ktora w trybie ``--bbox``
+        daje komplet.
+        """
+        from kartograf.cli.download_cmd import _download_pl_geometry
+
+        sheets = {
+            "N-1": _write_sheet_asc(tmp_path / "s1.asc", 529900, 381950, size=200),
+            "N-2": _write_sheet_asc(tmp_path / "s2.asc", 530100, 381950, size=200),
+        }
+        geom = tmp_path / "area.gpkg"
+        geom.write_bytes(b"stub")  # sciezka nieuzywana: discovery zamockowane
+        provider = SimpleNamespace(vertical_crs="EVRF2007")
+        args = _pl_args(tmp_path, bbox=None, geometry=str(geom), target_crs="EPSG:5514")
+
+        with (
+            patch(
+                "kartograf.core.geometry.find_sheets_for_geometry",
+                return_value=["N-1"],
+            ),
+            patch(f"{_DL}.find_sheets_for_bbox", return_value=["N-1", "N-2"]) as find,
+            patch(
+                f"{_DL}._create_provider_and_storage",
+                return_value=(provider, Mock()),
+            ),
+            patch(f"{_DL}.DownloadManager"),
+            patch(
+                f"{_DL}._download_godlo_list",
+                side_effect=lambda _m, godla, *a: ([sheets[g] for g in godla], []),
+            ),
+        ):
+            rc = _download_pl_geometry(args, geom, _PARENT, bbox=_BBOX_2180)
+
+        assert rc == 0
+        cut = next(
+            iter((tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif"))
+        )
+        with rasterio.open(cut) as ds:
+            data = ds.read(1)
+        assert not (data == _NODATA).any(), (
+            f"ramka nodata: {(data == _NODATA).sum()} z {data.size} pikseli"
+        )
+        sent = find.call_args.args[0]
+        assert sent.min_x < _BBOX_2180.min_x and sent.max_x > _BBOX_2180.max_x
 
     def test_cli_geometry_target_crs_reaches_worker(self, tmp_path):
         """Cala sciezka przez main(): dyspozycja MUSI podac obwiednie workerowi.

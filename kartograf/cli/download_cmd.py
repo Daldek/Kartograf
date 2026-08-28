@@ -1901,7 +1901,9 @@ def _download_pl_geometry(
     ``bbox`` — obwiednia zadania PL (przycieta pod auto); potrzebna wylacznie
     dla wycinka ``--target-crs``: crop idzie po tej obwiedni, wiec wynik
     obejmuje CALA obwiednie geometrii, bez maskowania do jej obiektow.
-    Nodata tam, gdzie nie siega zaden pobrany arkusz.
+    Przy warpie (``--target-crs`` inny niz EPSG:2180) do godel geometrii
+    dochodza godla obwiedni z zapasem, zeby ta obwiednia byla wypelniona
+    danymi, a nie ramka nodata (R-01).
     """
     from kartograf.core.geometry import find_sheets_for_geometry
 
@@ -1937,18 +1939,17 @@ def _download_pl_geometry(
         product, output_dir, vertical_crs, resolution
     )
 
-    # Wycinek (ADR-027) jak w trybie bbox, z jedna roznica: arkusze wyznacza
-    # dalej sama geometria (per obiekt), a `bbox` sluzy wylacznie siatce
-    # wyniku i cropowi mozaiki. Wynik obejmuje CALA obwiednie geometrii —
-    # maskowania do obiektow NIE MA (do warstwy rastrowej ida same sciezki
-    # arkuszy, patrz `_build_pl_cutout`). Nodata pojawia sie wylacznie tam,
-    # gdzie nie siega zaden POBRANY arkusz — nigdy jako maskowanie. Dwa
-    # rozlaczne obiekty w tym samym albo w sasiednich arkuszach maja miedzy
-    # soba realny teren, ale arkusz "1:10000" ma tylko ~2,25 x 2,43 km
-    # (zmierzone; GUGiK nazywa go modulem 1:5000 — patrz Notes w
-    # core/sheet_parser.py), wiec przy obiektach oddalonych o wiecej niz
-    # arkusz miedzy nimi moze lezec arkusz niewybrany przez
-    # find_sheets_for_geometry — i wtedy bedzie tam pas nodata.
+    # Wycinek (ADR-027) jak w trybie bbox: `bbox` steruje siatka wyniku
+    # i cropem mozaiki. Wynik obejmuje CALA obwiednie geometrii — maskowania
+    # do obiektow NIE MA (do warstwy rastrowej ida same sciezki arkuszy, patrz
+    # `_build_pl_cutout`), a nodata oznacza wylacznie brak POBRANEGO arkusza.
+    # Dlatego przy warpie (R-01, nizej) arkusze to SUMA godel geometrii
+    # i godel obwiedni z zapasem: obietnice "cala obwiednia" domykaja dane,
+    # a nie ramka dziur. Koszt jest swiadomy — dla rzadkiej geometrii
+    # wieloobiektowej suma obejmuje arkusze calej obwiedni, takze tam, gdzie
+    # nie ma zadnego obiektu (arkusz "1:10000" ma zaledwie ~2,25 x 2,43 km,
+    # zmierzone; GUGiK nazywa go modulem 1:5000 — patrz Notes w
+    # core/sheet_parser.py).
     cutout: _PlCutout | None = None
     if args.target_crs is not None:
         from kartograf.transform.crs import TransformError
@@ -1971,6 +1972,20 @@ def _download_pl_geometry(
             if not args.quiet:
                 print(f"Skipped - already exists at {cutout.target_path}")
             return 0
+        if cutout.pinned is not None:
+            # R-01 takze tutaj: siatka wyniku obejmuje CALA obwiednie zadania,
+            # wiec arkusze musza pokryc obwiednie Z ZAPASEM — same arkusze
+            # geometrii zostawialyby na krawedziach ramke nodata. Koszt jest
+            # swiadomy: dla rzadkiej geometrii wieloobiektowej suma obejmuje
+            # arkusze calej obwiedni (patrz docs/ARCHITECTURE.md sekcja 4.3).
+            godlo_list = sorted(
+                set(godlo_list)
+                | set(
+                    find_sheets_for_bbox(
+                        cutout.bbox_source_2180, target_scale, system=args.system
+                    )
+                )
+            )
 
     manager = DownloadManager(
         output_dir=output_dir,
