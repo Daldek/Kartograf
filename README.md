@@ -331,7 +331,7 @@ Kartograf/
 │   ├── landcover/       # Land Cover management
 │   ├── hydrology/       # Hydrologic Soil Groups (HSG)
 │   └── cli/             # CLI interface (moduły per komenda)
-├── tests/               # Testy (1854 offline + 8 live)
+├── tests/               # Testy (1861 offline + 8 live)
 ├── docs/                # Dokumentacja (ARCHITECTURE.md - kanoniczny opis architektury i układu data/)
 └── README.md
 ```
@@ -377,4 +377,4 @@ Projekt udostępniony na licencji MIT. Szczegóły w pliku `LICENSE`.
 
 ## Status
 
-**Wersja 0.7.0-dev** - NMT Czechy (CUZK DMR 5G/4G, `--country {pl,cz,auto}`, parser godeł TM33/SM5, sidecary metadanych `.meta.json`), układ `data/` per produkt ([ADR-026](docs/DECISIONS.md)) i `--target-crs` dla Polski w trybie `--bbox`/`--geometry` ([ADR-027](docs/DECISIONS.md)) - takze jako API biblioteki `download_pl_cutout`. Wcześniej: v0.6.x (LAZ przez WFS, pobieranie równoległe `--workers`, cache metadanych SQLite, walidacja warstw WMS), v0.5.0 (PL-2000, 15 warstw BDOT10k). 1854 testy offline (+8 `live` z siecia), pokrycie 92,9%. Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów.
+**Wersja 0.7.0-dev** - NMT Czechy (CUZK DMR 5G/4G, `--country {pl,cz,auto}`, parser godeł TM33/SM5, sidecary metadanych `.meta.json`), układ `data/` per produkt ([ADR-026](docs/DECISIONS.md)) i `--target-crs` dla Polski w trybie `--bbox`/`--geometry` ([ADR-027](docs/DECISIONS.md)) - takze jako API biblioteki `download_pl_cutout`. Wcześniej: v0.6.x (LAZ przez WFS, pobieranie równoległe `--workers`, cache metadanych SQLite, walidacja warstw WMS), v0.5.0 (PL-2000, 15 warstw BDOT10k). 1861 testów offline (+8 `live` z siecia), pokrycie 92,9%. Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów.

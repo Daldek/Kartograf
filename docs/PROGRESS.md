@@ -17,7 +17,7 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
-| Pokrycie testami | ✅ Gotowy | 92,7%, 1787 testow (po fali naprawczej finalnego review, develop, 2026-08-28; brama jakosci Zad. 12 dala 1775, poprzedni pomiar 1716 na fix/release-0.7.0-audit 2026-08-23) |
+| Pokrycie testami | ✅ Gotowy | 92,9%, 1861 testow offline + 8 `live` (po fali review max, develop, 2026-09-28; wczesniej 1787 lacznie z `live` 2026-08-28, 1716 na fix/release-0.7.0-audit 2026-08-23) |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0 |
@@ -25,6 +25,7 @@
 | Walidacja warstw WMS | ✅ Gotowy | GetCapabilities, lazy, fallback; NMT+NMPT v0.6.1, Orto 2026-06-24 |
 | Etap 0 — zrodla wielokrajowe (sources/transform/transport/providers-pl/CLI split/sidecar) | ✅ Gotowy | zmergowane do develop 2026-08-11; E2E 12/12 na realnych danych |
 | Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | ZMERGOWANY do develop 2026-08-12 (fast-forward do 0738ae0); 21 zadan TDD + fix ADR-024, E2E 11/11 + zywa weryfikacja tresci 3xPASS; wersja `0.7.0-dev` |
+| Wycinek NMT PL `--target-crs` (ADR-027) + API biblioteki `download_pl_cutout` | ✅ Gotowy (offline) | fala review max 2026-09-28: siatka arkuszy, R5 (`missing_sheets`), VRT, E2E offline na realnych arkuszach 5 m; zywa weryfikacja — checklista, "Nastepne kroki" pkt 12 |
 
 <!-- Statusy: ✅ Gotowy | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
@@ -82,7 +83,79 @@
 
 ## Ostatnia sesja
 
-**Data:** 2026-08-10 — 2026-08-28 (sekcje datowane ponizej)
+**Data:** 2026-08-10 — 2026-09-28 (sekcje datowane ponizej)
+
+### Fala naprawcza po review max + wycinek PL w bibliotece (2026-09-28)
+
+- Plan: `docs/superpowers/plans/2026-09-28-fala-review-max-i-wycinek-biblioteczny.md`
+  (18 zadan, team-driven SDD: pre-flight planu, review per zadanie z dowodami
+  mutacyjnymi, finalny review calej fali, fala finalna + re-review); spec:
+  raport review max
+  `docs/research/2026-08-28-uklad-data-target-crs-pl/2026-08-30-code-review-max.md`
+  (15 znalezisk). Artefakty procesu (ledger ze WSZYSTKIMI rulingami kontrolera,
+  pre-flight, raporty zadan, finalny review i fala finalna, skrypty E2E):
+  `docs/research/2026-09-28-fala-review-max/`.
+- **Rozstrzygniecia uzytkownika (wiazace):** R1 wycinek `--target-crs EPSG:2180`
+  lezy na SIATCE ARKUSZY GUGiK (obszar rozszerzony na zewnatrz do pelnych
+  pikseli arkuszy, wartosci 1:1, `transform: null`, nazwa pliku = wspolrzedne
+  zadania); R2 zn. 15 (rzadka geometria wieloobiektowa) poza zakresem, bez
+  zmian; R3 wycinek PL jako API biblioteki juz w 0.7.0 (Hydrograf); R4
+  wykonanie team-driven; R5 arkusz bez danych GUGiK (`NoCoverageError`) =
+  nodata + `Warning:` + `extra.missing_sheets`, kazda inna porazka pobrania =
+  kod 1 (chwilowy blad nie zostawia trwalej dziury); R6 scalanie PL+CZ w jedna
+  powierzchnie przygraniczna = backlog / etap 2.
+- **Zamkniete: 14 z 15 znalezisk** (zn. 15 — R2), w tym trzy krytyczne
+  (przesuniecie tresci o ulamek piksela, arkusz bez danych wetujacy caly
+  wycinek, wyczerpanie deskryptorow > 1024 arkuszy), **+ 5 defektow wykrytych
+  przy planowaniu pomiarem realnych arkuszy**: przesuniecie o 0,5 px takze dla
+  bboxow CALKOWITYCH (realne arkusze GUGiK 5 m maja narozniki pikseli na
+  5k + 2,5 m — 1977 arkuszy zmierzonych); mozaika Int32, gdy pierwszy arkusz
+  ASC ma same liczby calkowite; `CRS mismatch` przy arkuszach z `.prj`
+  Hydrografu obok arkuszy bez niego; selekcja gubiaca pas przy gornej krawedzi
+  bboxa na poludniku 19°E (6 arkuszy dla bboxa szerokiego na 20 km); cicha
+  dziura nodata dla arkuszy 1 m wydanych przez GUGiK w ukladzie PL-2000 pod
+  godlem PL-1992 (teraz glosny blad; reprojekcja takich arkuszy = etap 2).
+- Kod: `transport/mosaic.py` (leniwe zrodla; `snap_to_source_grid=` — siatka
+  wiekszosci + ostrzezenie; `assign_crs=`/`dtype=` — zrodla w VRT w `/vsimem/`);
+  `NoCoverageError(DownloadError)` + `DownloadResult.no_coverage` +
+  `DownloadManager.download_sheets()/expand_sheets()`; NOWY
+  `kartograf/download/cutout.py` (`download_pl_cutout`; kroki
+  `prepare_pl_cutout` -> `select_pl_cutout_sheets` -> `run_pl_cutout`; kontrola
+  dysku, `Info:` >= 1 GiB, kompresja pliku posredniego, sprzatanie pustych
+  `bbox/`); CLI `--target-crs` PL jako cienka nakladka; obwiednia geometrii
+  w ukladzie czeskim przez operacje przypieta; `LazTile.uklad` +
+  `FileStorage.get_raw_path(uklad=)`; szablony segmentow z rejestru;
+  `resolve_subdir` odrzuca pusty wymiar. Tor CZ (`providers/cuzk/*`)
+  i `transform/raster.py` bez zmian.
+- **E2E offline na realnych arkuszach 5 m** (cache Hydrografu tylko do odczytu,
+  provider kopiujacy pliki, zero patchy poza straznikiem sieci): EPSG:2180 —
+  faza siatki 2,5, **0 / 80 601** (bbox calkowity) i **0 / 79 799** (ulamkowy)
+  pikseli rozbieznych z arkuszem zawierajacym srodek piksela, mieszany `.prj`
+  = bez `.prj`; EPSG:5514 — bit w bit = mozaika + `warp_to_grid`, wobec
+  niezaleznego warpu GDAL per arkusz srednio 2,7 mm / maks. 0,15 m poza szwem
+  (z `XSCALE=YSCALE=1`: 0,03 mm / 3,2 mm — wlasnosc zamrozonego warpu,
+  backlog); brak arkusza -> `missing_sheets` + 33 775 px nodata wylacznie
+  w jego miejscu; ponowne uzycie cache = 0 wywolan providera; kompresja pliku
+  posredniego 2,12x.
+- **Finalny review calej fali (fable) + fala finalna (opus) + re-review
+  (opus) — ZAMKNIETE.** 0 Critical / 2 Important / 11 Minor, oba Important
+  niewidoczne per zadanie: (1) wiazanie `--force`/`--workers` z CLI do
+  biblioteki bez testu — mutacja `force=False` przechodzila 312/312, a
+  `--force` na istniejacym wycinku bylby cichym no-opem akurat tam, gdzie
+  CHANGELOG kaze go uzyc; (2) odpowiedz 2xx skorowidza z raportem wyjatku OGC
+  (np. "Invalid layer(s)" przy nieaktualnej nazwie warstwy, gdy GetCapabilities
+  sie nie udal) liczona jako brak pokrycia -> pod R5 trwala dziura nodata;
+  teraz blad warstwy (straz WYLACZNIE negatywna — URL w odpowiedzi zawsze
+  wygrywa). Plus: uklad czeski bboxa w API bez wzgledu na wielkosc liter,
+  docstringi `last_result`/`NoCoverageError`, komendy testow offline
+  (`-m "not live"`) w CLAUDE.md/README, precyzja ARCHITECTURE 4.3. Re-review:
+  6/6 naprawione, 4 drobiazgi zaparkowane z rulingami (backlog nizej).
+- **Stan koncowy (pomiar 2026-09-28, HEAD bbd1cd4 + commit zamykajacy): 1861
+  testow offline PASS** (+8 `live` deselected), pokrycie **92,92 %**, ruff
+  check + format czyste, **mypy 32 = baseline** (lista identyczna), drzewo
+  czyste. 30 commitow fali na `develop` (od 8cf1e5a, razem z raportem, planem
+  i commitem zamykajacym); galaz swiadomie NIE pushowana ani nie mergowana do
+  `main` — wydanie czeka na checkliste live (pkt 12-14 nizej).
 
 ### Uklad data/ per produkt + --target-crs PL (2026-08-28)
 
@@ -650,7 +723,10 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
    (fast-forward do 0738ae0, suita 1402 passed na wyniku, galaz usunieta).
 2. **Etap 2** (DMP/Orto/LAZ CZ + wielokat granicy administracyjnej zamiast
    prostokatnej obwiedni + ujednolicenie `extra.parent_request.bbox_crs`
-   miedzy trybami jawny/auto) — spec/plan do napisania po decyzji o mergu;
+   miedzy trybami jawny/auto; od 2026-09-28 takze: scalanie PL+CZ w jedna
+   ciagla powierzchnie przygraniczna — R6, po checkliscie live pkt 12 (h) —
+   i wycinek PL z arkuszy wydanych przez GUGiK w ukladzie PL-2000) —
+   spec/plan do napisania po decyzji o mergu;
    punkt wyjscia: ADR-023 (ustalenia dodatkowe 3-4) i `docs/SCOPE.md`
    (sekcje 2.2, 3.1, 3.2). Do backlogu etapu 2, z zywej weryfikacji
    ADR-024 (`seam/verify/verify-report.md`, Zastrzezenia 1-3 — raport
@@ -662,11 +738,10 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
    CUZK bywa zmienny przestrzennie (1,25 m kolo Cieszyna, 4,92 m w
    zachodnich Czechach) — nie zakladac stalego offsetu przy podobnych
    diagnozach w przyszlosci.
-3. **Push `develop` na origin** (148 commitow lokalnie po mergu audytu
-   0.7.0: 73 sprzed audytu — wczesniejsze "71" nie liczylo 2 doc-commitow
-   z 2026-08-18 — plus 75 z galezi audytu; pomiar
-   `git rev-list --count origin/develop..develop` 2026-08-28; decyzja
-   z etapu 0 nadal nierozwiazana) — patrz wyzej
+3. **Push `develop` na origin** (**208 commitow** lokalnie — pomiar
+   `git rev-list --count origin/develop..develop` 2026-09-28 po commicie
+   zamykajacym fale review max; wczesniej 148 po mergu audytu 0.7.0
+   2026-08-28; decyzja z etapu 0 nadal nierozwiazana) — patrz wyzej
 4. **Zgloszenie/naprawa WCS EVRF2007 GUGiK** (male, przedistniejace, poza
    etapami 0/1): aktualizacja `WCS_ENDPOINTS`/`COVERAGE_IDS` w
    `providers/pl/gugik.py` po usunieciu endpointu przez GUGiK (patrz "Znany
@@ -717,13 +792,34 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
     `laz/pl_<uklad>_<vcrs>/` (LAZ: kafle z obu ukladow w jednym zadaniu);
     (c) CZ godlo TM33/SM5 i bbox -> `nmt/cz_dmr{5g,4g}_<vcrs>/[bbox/]`;
     (d) wycinek PL `--target-crs EPSG:5514` na realnych arkuszach GUGiK —
-    porownanie tresci z niezaleznym warpem (offline sprawdzone tylko
-    na siatce syntetycznej, `< 1 px`); (e) pogranicze `--country auto
-    --target-crs EPSG:2180` na realnych danych obu krajow.
+    porownanie tresci z niezaleznym warpem (offline WYKONANE 2026-09-28 na
+    realnych arkuszach 5 m z cache Hydrografu — liczby w sekcji fali review
+    max; na zywo zostaje realne pobranie z GUGiK i arkusze 1 m); (e)
+    pogranicze `--country auto --target-crs EPSG:2180` na realnych danych
+    obu krajow. Dopisane po fali review max (2026-09-28):
+    (f) siatka pikseli arkuszy **1 m** EVRF2007 i KRON86 — jedna faza dla
+    wszystkich kampanii? (skrypt faz jak w fakcie 1 planu fali: 5 m ma
+    narozniki na 5k + 2,5 m); przy mieszanych fazach -> backlog
+    `extra.off_grid_sheets` + `Warning:`;
+    (g) arkusze 1 m wydawane przez GUGiK w ukladzie PL-2000 pod godlami
+    PL-1992 — jak czesto (ostrzezenia fallbacku skorowidza, bledy PL-2000
+    wycinka); fallback "URL innego arkusza" TEGO SAMEGO ukladu daje dziure
+    nodata BEZ wpisu w `missing_sheets` (ARCHITECTURE 4.3 krok 4);
+    (h) pogranicze `--country auto --target-crs` na zywo: wycinek PL z nodata
+    po stronie CZ + wycinek CZ; jak GUGiK i CUZK przycinaja dane na granicy
+    i jak wyglada styk (dane wejsciowe do R6);
+    (i) duzy wycinek (>= 1000 arkuszy): czas, pamiec, deskryptory;
+    (j) bbox nad morzem (np. Leba): `missing_sheets`; przy okazji ZAPISAC
+    realne body i `Content-Type` pustej odpowiedzi GetFeatureInfo (morze
+    i strona czeska) oraz raportu wyjatku przy zlej warstwie — w OBIE strony
+    strazy I-2: pusta odpowiedz nie moze zawierac `ServiceException`/
+    `ExceptionReport` (inaczej R5 nigdy nie zadziala i wycinki przy
+    wybrzezu/granicy koncza sie kodem 1), a dopiero z zapisana probka mozna
+    rozwazyc kontrole pozytywna.
 13. **Bump wersji + wydanie 0.7.0**: `kartograf.__version__`/
     `pyproject.toml` `0.7.0-dev` -> `0.7.0`, data w CHANGELOG, tag
-    `v0.7.0`, push `develop` na origin (patrz pkt 3 wyzej — 148 commitow
-    niewypchnietych po zmergowaniu galezi audytu 0.7.0, +1 commit planu).
+    `v0.7.0`, push `develop` na origin (patrz pkt 3 wyzej — 208 commitow
+    niewypchnietych, pomiar 2026-09-28).
 14. **Checklista release** (z planu audytu 0.7.0): build sdist/wheel
     (`setuptools`); zywa weryfikacja CORINE GeoTIFF z prawdziwymi
     credentials CLMS vs allowlista hostow (Auth Proxy); E2E kafelkowania
@@ -742,8 +838,11 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
 - [x] Pobieranie rownolegle (ThreadPoolExecutor, --workers)
 - [x] Cache metadanych (SQLite WAL, TTL 7d, prune)
 - [x] Mozaikowanie arkuszy NMT (PL) — WYKONANE 2026-08-28 (ADR-027: wycinek
-      `--bbox`/`--geometry` z `--target-crs`; scalanie transgraniczne PL/CZ
-      pozostaje poza zakresem — zadanie Hydrografa)
+      `--bbox`/`--geometry` z `--target-crs`), poprawione 2026-09-28 (fala
+      review max: siatka arkuszy, R5, API biblioteki `download_pl_cutout`);
+      scalanie transgraniczne PL+CZ w jedna powierzchnie — decyzja
+      uzytkownika R6 (2026-09-28): backlog etapu 2 Kartografa (wczesniej
+      zapisane jako "zadanie Hydrografa")
 - [x] Ujednolicenie interfejsow providerow (BaseProvider vs LandCoverProvider)
       (etap 0: DataSourceProvider)
 - [x] Etap 0 — architektura zrodel wielokrajowych (deskryptory, sidecar,
@@ -753,7 +852,8 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
       2026-08-12 (fast-forward do 0738ae0, galaz feature usunieta)
 - [ ] Etap 2 — DMP/Orto/LAZ CZ, wielokat granicy administracyjnej CZ
       (zamiast prostokatnej obwiedni), ujednolicenie
-      `extra.parent_request.bbox_crs` miedzy trybami jawny/auto
+      `extra.parent_request.bbox_crs` miedzy trybami jawny/auto, scalanie
+      PL+CZ w jedna powierzchnie przygraniczna (R6, 2026-09-28)
 - [ ] Etap 3 — ZABAGED (wektorowa baza topograficzna CZ, 149 warstw)
 
 #### Backlog po audycie 0.7.0
@@ -877,3 +977,58 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
 - [ ] Nota dla Hydrografa: `harmonize_dem(files, target_crs, resolution)`
       na bazie `kartograf.transform.crs.PinnedTransform` (NIE golego pyproj
       — lekcja ADR-024); wejscie z sidecarow
+
+#### Backlog po fali review max (2026-09-28)
+
+Rulingi i pelne uzasadnienia: `docs/research/2026-09-28-fala-review-max/`
+(`sdd-ledger.md`, `final-review-report.md` sekcja "Triaz ledgera",
+`final-rereview-report.md`).
+
+- [ ] **R6 — scalanie PL+CZ** w jedna ciagla powierzchnie przygraniczna
+      (wspolna siatka, EVRF2007 po obu stronach, regula zakladki) — etap 2,
+      po checkliscie live pkt 12 (h). Razem z tym: podwojna obwiednia, gdy
+      uklad zadania = `--target-crs` (bbox i cel EPSG:5514: siatka
+      11,51 x 11,51 km zamiast 10 x 10 km).
+- [ ] Wycinek PL z arkuszy wydanych przez GUGiK w ukladzie PL-2000 pod
+      godlem PL-1992 (reprojekcja per arkusz) — dzis glosny `ValidationError`.
+- [ ] Tryby CLI bez `--target-crs` na `DownloadManager.download_sheets`
+      (dzis `_download_godlo_list` w trybie rownoleglym rzuca pierwsza
+      porazka, pozostale gina) + tolerancja braku pokrycia (`NoCoverageError`)
+      poza wycinkiem.
+- [ ] Warp (`warp_to_grid` PL i `_warp_to_grid` CZ): wymiary siatki
+      `max(1, round(...))` od naroznika NW — krawedz E/S do 0,5 px od obwiedni
+      (E2E: 1,61 m / 0,76 m przy 5 m); skala resamplingu GDAL `XSCALE`/`YSCALE`
+      liczona per kawalek — piksele zaleza lekko od zasiegu mozaiki (E2E:
+      srednio 2,7 mm, maks. 0,15 m poza szwem; z `XSCALE=YSCALE=1` < 3,2 mm).
+      Oba zamrozone do wydania; test porownawczy + checklista live.
+- [ ] Obwiednia WGS84 z 4 naroznikow takze w
+      `core/parser_2000._transform_bbox_to_wgs84` (poludniki osiowe stref)
+      i w providerach landcover (`corine`/`soilgrids`) — sprawdzic pod katem
+      faktu 8 (pas przy gornej krawedzi na poludniku osiowym).
+- [ ] API wycinka: `download_pl_cutout(provider=, storage=)` addytywnie
+      (Hydrograf wstrzyknie wlasny provider/cache; dzis przez trzy kroki),
+      walidacja wstrzyknietej `storage` w `run_pl_cutout`,
+      `estimate_pl_cutout_bytes` z rozszerzeniem providera zamiast stalego
+      `.asc`.
+- [ ] Arkusze spoza siatki wiekszosci: dzis tylko `logger.warning` — dodac
+      `extra.off_grid_sheets` + `Warning:` w CLI, jesli pkt 12 (f) pokaze
+      mieszane fazy kampanii 1 m.
+- [ ] Z odmrozeniem toru CZ: `bbox_to_crs` z `providers/cuzk/dmr.py` do
+      `transform/` (tor PL go importuje) i wspolny helper obwiedni geometrii
+      w ukladzie pliku (`_geometry_envelope` / `_resolve_cz_geometry_bbox`).
+- [ ] Pobranie ASC bez kontroli `Content-Type`: strona bledu HTML z HTTP 200
+      zapisana jako `.asc` zostaje w cache — mozaika pada kodem 1, ale kolejne
+      przebiegi pomijaja plik jako istniejacy az do recznego usuniecia.
+- [ ] Walidacja `--bbox`: NaN/inf przechodza `float()` (wycinek konczy sie
+      `ValueError` w barierze `main()` albo mylacym `TransformError`),
+      min > max przechodzi prepare/select wycinka.
+- [ ] Straz I-2 (raport wyjatku OGC w odpowiedzi 2xx): test "URL wygrywa"
+      takze dla odpowiedzi fallbackowej (URL innego arkusza + znacznik OGC);
+      ograniczyc regex wyciagu komunikatu (`(.{0,2000}?)</` albo prefiks
+      body — patologiczne body 360 KB bez `</` = 49 s).
+- [ ] Drobne: komentarz testu "Cieszyn (PL)" w `tests/test_pl_cutout.py`
+      (bbox lezy po stronie CZ); `_same_projection` ~25 ms/zrodlo dla `.prj`
+      WKT1_ESRI (`lru_cache` po tekscie WKT); WKT1 z `TOWGS84[0,...]`
+      odrzucany; testy lustrzane tolerancji przyciagania i remisu siatki;
+      podwojne parsowanie lisci w `download_sheets`; komunikat bledu PL-2000
+      w bibliotece wspomina flagi CLI.

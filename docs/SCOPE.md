@@ -494,7 +494,7 @@ pyshp >= 2.3.0         # Shapefile reading
 ### 6.2 Jakościowe
 
 ```
-- 1854 testy offline przechodza (pytest -m "not live"; 8 testow live
+- 1861 testow offline przechodzi (pytest -m "not live"; 8 testow live
   wymaga sieci i nie nalezy do bramki)
 - Pokrycie testami 92,9% (cel 80% osiągnięty)
 - Kod zgodny z ruff (check + format)
@@ -523,7 +523,7 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-08-18 | 3.7 | Przegląd spójności dokumentacji: status mergu etapu 1, nagłówek sekcji 2 (0.5.0→0.7.0), komenda `cache` w 2.9, brakujące eksporty w 2.10, liczba testów 1402 |
 | 2026-08-22 | 3.8 | Korekty spójności po audycie przedwydaniowym 0.7.0: WCS NMT tylko 1m/KRON86, 4 warstwy WMS ortofoto, SoilGrids bez TERYT, timeouty per źródło, konwencja krawędzi i etykiety skal, semantyka `--country auto` (zasięg prostokąta CZ/PL, Info/Warning, częściowy sukces), liczby 1716/93% |
 | 2026-08-28 | 3.9 | Układ data/ per produkt (ADR-026), --target-crs dla PL (ADR-027), sekcja 2.11, liczby 1775/93% (brama jakosci) |
-| 2026-09-28 | 3.10 | Fala review max: wycinek PL jako API biblioteki (download_pl_cutout), siatka arkuszy, R5 (NoCoverageError -> nodata + extra.missing_sheets), eksporty w 2.10, drzewo modulow, etap 2: scalanie PL+CZ i wycinek z arkuszy PL-2000; liczby 1854/92,9% (brama jakosci) |
+| 2026-09-28 | 3.10 | Fala review max: wycinek PL jako API biblioteki (download_pl_cutout), siatka arkuszy, R5 (NoCoverageError -> nodata + extra.missing_sheets), eksporty w 2.10, drzewo modulow, etap 2: scalanie PL+CZ i wycinek z arkuszy PL-2000; liczby 1861/92,9% (po fali naprawczej finalnego review) |
 
 ---
 
