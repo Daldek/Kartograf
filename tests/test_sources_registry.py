@@ -435,3 +435,16 @@ class TestResolveSubdir:
         d = self._descriptor(None)
         with pytest.raises(ValueError, match="test.key"):
             d.resolve_subdir()
+
+    @pytest.mark.parametrize(
+        "kwargs", [{"vertical_crs": ""}, {"vertical_crs": "  "}, {"uklad": ""}]
+    )
+    def test_empty_dimension_raises(self, kwargs):
+        """Zn. 7: pusty string to blad wolajacego, nie brak wymiaru — dotad
+        dawal cichy segment `nmt/pl_{uklad}_1m_` (FileStorage zamyka te sama
+        pulapke falsy-checkiem)."""
+        from kartograf.exceptions import ValidationError
+
+        d = self._descriptor("nmt/pl_{uklad}_1m_{vcrs}")
+        with pytest.raises(ValidationError, match="Pusty wymiar"):
+            d.resolve_subdir(**kwargs)

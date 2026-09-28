@@ -241,6 +241,17 @@ class TestDownloadManagerStorageFromDescriptor:
         )
         assert manager._storage._subdir == "nmt/pl_{uklad}_5m_evrf2007"
 
+    def test_provider_with_empty_vertical_crs_raises(self, tmp_path):
+        """Zn. 7 przez publiczne API: wlasny provider z vertical_crs=''."""
+        from kartograf.exceptions import ValidationError
+
+        provider = Mock(spec=GugikProvider)
+        type(provider).default_extension = PropertyMock(return_value=".asc")
+        provider.vertical_crs = ""
+        provider.descriptor_key = "pl.gugik.nmt_1m"
+        with pytest.raises(ValidationError, match="Pusty wymiar"):
+            DownloadManager(output_dir=tmp_path, provider=provider)
+
 
 class TestDownloadManagerDownloadSheet:
     """Testy metody download_sheet() - pobiera ASC przez OpenData."""

@@ -618,6 +618,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pliku.
 - Nieudany wycinek CZ (bbox) i nieudana budowa wycinka PL nie zostawiaja
   pustych katalogow `<segment>/bbox/` (review max, zn. 10).
+- `SourceDescriptor.resolve_subdir(vertical_crs='')` (takze przez
+  `DownloadManager` z providerem o pustym `vertical_crs`) konczy sie
+  `ValidationError` zamiast cichego segmentu `nmt/pl_1992_1m_` (review max,
+  zn. 7).
 
 ### Tests
 - **1716 testow, pokrycie 93%** — 1142 po mergu etapu 0, 1402 po etapie 1,
