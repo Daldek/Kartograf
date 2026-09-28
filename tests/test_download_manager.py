@@ -467,6 +467,40 @@ class TestDownloadManagerDownloadHierarchy:
         assert count == 64
 
 
+class TestDownloadResultNoCoverage:
+    """R5: brak danych u zrodla odrozniony od awarii pobrania."""
+
+    @pytest.fixture
+    def provider(self):
+        from kartograf.exceptions import NoCoverageError
+
+        provider = Mock(spec=GugikProvider)
+        type(provider).default_extension = PropertyMock(return_value=".asc")
+
+        def download(godlo, path, timeout=30):
+            if godlo.endswith("-1"):
+                raise NoCoverageError(
+                    f"No NMT 1m data available for {godlo}", godlo=godlo
+                )
+            if godlo.endswith("-2"):
+                raise DownloadError(f"timeout {godlo}", godlo=godlo)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"data")
+            return path
+
+        provider.download = download
+        return provider
+
+    @pytest.mark.parametrize("workers", [1, 4])
+    def test_no_coverage_is_subset_of_failed(self, tmp_path, provider, workers):
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+        manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=workers)
+        result = manager.last_result
+        assert sorted(result.failed) == ["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"]
+        assert result.no_coverage == ["N-34-130-D-d-2-1"]
+        assert len(result.succeeded) == 2
+
+
 class TestDownloadManagerDownloadBbox:
     """Testy metody download_bbox() - pobiera GeoTIFF przez WCS."""
 

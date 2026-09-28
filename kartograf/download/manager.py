@@ -16,7 +16,7 @@ from pathlib import Path
 
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.storage import FileStorage
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, NoCoverageError
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl import create_nmt_provider
 
@@ -69,6 +69,9 @@ class DownloadResult:
         Godlo identifiers that failed to download
     skipped : list[str]
         Godlo identifiers that were skipped (already existed)
+    no_coverage : list[str]
+        Subset of ``failed``: sheets the source has no data for
+        (``NoCoverageError``) — as opposed to a transport/service failure.
 
     Notes
     -----
@@ -78,6 +81,7 @@ class DownloadResult:
     succeeded: list[Path] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
+    no_coverage: list[str] = field(default_factory=list)
 
     @property
     def total(self) -> int:
@@ -425,7 +429,7 @@ class DownloadManager:
         -------
         tuple[str, Path | None, str, str]
             (godlo, path_or_none, status, message)
-            status is one of: "skipped", "completed", "failed"
+            status is one of: "skipped", "completed", "failed", "no_coverage"
         """
         try:
             target_path = self._storage.get_path(descendant_godlo, self._default_ext)
@@ -436,6 +440,10 @@ class DownloadManager:
             path = self._provider.download(descendant_godlo, target_path)
             self._write_sidecar(path, {"godlo": descendant_godlo})
             return (descendant_godlo, path, "completed", "")
+
+        except NoCoverageError as e:
+            logger.warning(f"No data for {descendant_godlo}: {e}")
+            return (descendant_godlo, None, "no_coverage", str(e))
 
         except DownloadError as e:
             logger.error(f"Failed to download {descendant_godlo}: {e}")
@@ -497,6 +505,23 @@ class DownloadManager:
                             total=total,
                             godlo=current_godlo,
                             status="completed",
+                        )
+                    )
+
+            except NoCoverageError as e:
+                # R5: brak danych u zrodla — porazka listy, ale rozpoznawalna
+                result.failed.append(current_godlo)
+                result.no_coverage.append(current_godlo)
+                logger.warning(f"No data for {current_godlo}: {e}")
+
+                if on_progress:
+                    on_progress(
+                        DownloadProgress(
+                            current=i,
+                            total=total,
+                            godlo=current_godlo,
+                            status="failed",
+                            message=str(e),
                         )
                     )
 
@@ -580,8 +605,10 @@ class DownloadManager:
                         else:
                             result.succeeded.append(path)
                         downloaded_paths.append(path)
-                    elif status == "failed":
+                    elif status in ("failed", "no_coverage"):
                         result.failed.append(current_godlo)
+                        if status == "no_coverage":
+                            result.no_coverage.append(current_godlo)
 
                 if on_progress:
                     if status == "skipped":
@@ -603,7 +630,7 @@ class DownloadManager:
                                 status="completed",
                             )
                         )
-                    elif status == "failed":
+                    elif status in ("failed", "no_coverage"):
                         on_progress(
                             DownloadProgress(
                                 current=current_count,

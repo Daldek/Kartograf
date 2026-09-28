@@ -487,6 +487,8 @@ class TestGugikProviderGetOpendataUrl:
 
     def test_get_opendata_url_not_found(self, mock_wms_response_no_url):
         """Test błędu gdy nie znaleziono URL."""
+        from kartograf.exceptions import NoCoverageError
+
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=mock_wms_response_no_url)
 
@@ -496,6 +498,7 @@ class TestGugikProviderGetOpendataUrl:
             provider._get_opendata_url("N-34-130-D-d-2-4")
 
         assert "No NMT 1m data available" in str(exc_info.value)
+        assert isinstance(exc_info.value, NoCoverageError)
 
     def test_get_opendata_url_all_layers_transport_error_reports_service_failure(
         self,
@@ -516,10 +519,13 @@ class TestGugikProviderGetOpendataUrl:
         assert "all 3 layer queries failed" in message
         assert session.get.call_count == 3
 
-    def test_get_opendata_url_partial_transport_error_keeps_no_coverage_message(
+    def test_get_opendata_url_partial_transport_error_is_not_no_coverage(
         self, mock_wms_response_no_url
     ):
-        """Gdy czesc warstw odpowiedziala — komunikat o braku pokrycia zostaje."""
+        """Czesc warstw padla, reszta bez arkusza: brak pokrycia jest NIEPEWNY
+        — to zwykly DownloadError, nie NoCoverageError (R5, plan 2026-09-28)."""
+        from kartograf.exceptions import NoCoverageError
+
         session = Mock(spec=requests.Session)
         session.get = Mock(
             side_effect=[
@@ -528,14 +534,15 @@ class TestGugikProviderGetOpendataUrl:
                 mock_wms_response_no_url,
             ]
         )
-
         provider = GugikProvider(session=session)
         provider._validated_layers[("1m", "EVRF2007")] = ["L1", "L2", "L3"]
 
         with pytest.raises(DownloadError) as exc_info:
             provider._get_opendata_url("N-34-130-D-d-2-4")
 
-        assert "No NMT 1m data available" in str(exc_info.value)
+        assert not isinstance(exc_info.value, NoCoverageError)
+        assert "niepewny" in str(exc_info.value)
+        assert "500" in str(exc_info.value)
 
     def test_get_opendata_url_tries_all_layers(
         self, mock_wms_response_no_url, mock_wms_response_with_url
@@ -558,6 +565,26 @@ class TestGugikProviderGetOpendataUrl:
 
         assert "opendata.geoportal.gov.pl" in url
         assert session.get.call_count == 3
+
+    def test_fallback_url_of_other_sheet_warns(self, caplog):
+        """Skorowidz zwrocil URL bez tego godla (np. arkusz PL-2000 nowszej
+        kampanii) — plik trafi pod godlo PL-1992, wiec to musi byc widac."""
+        response = Mock(spec=requests.Response)
+        response.status_code = 200
+        response.text = (
+            '<html><script>var data = {url:"https://opendata.geoportal.gov.pl'
+            '/NumDaneWys/NMT/99999/99999_1_6.179.12.20.asc"};</script></html>'
+        )
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=response)
+        provider = GugikProvider(session=session)
+        provider._validated_layers[("1m", "EVRF2007")] = ["L1"]
+
+        with caplog.at_level("WARNING"):
+            url = provider._get_opendata_url("N-34-130-D-d-2-4")
+
+        assert url.endswith("6.179.12.20.asc")
+        assert "N-34-130-D-d-2-4" in caplog.text and "6.179.12.20" in caplog.text
 
     def test_get_opendata_url_uses_correct_endpoint_for_1m(
         self, mock_wms_response_with_url
