@@ -1,4 +1,5 @@
-"""Testy wycinka PL --target-crs (ADR-027): tresc, walidacje, sidecar, przeplyw."""
+"""Testy wycinka PL --target-crs (ADR-027): API biblioteki, tresc, walidacje,
+sidecar, przeplyw CLI."""
 
 import argparse
 import json
@@ -10,12 +11,9 @@ import pytest
 import rasterio
 
 from kartograf.cli.commands import main
-from kartograf.cli.download_cmd import (
-    _build_pl_cutout,
-    _download_pl_bbox,
-    _prepare_pl_cutout,
-)
+from kartograf.cli.download_cmd import _download_pl_bbox
 from kartograf.core.sheet_parser import BBox
+from kartograf.download.cutout import build_pl_cutout, prepare_pl_cutout
 from kartograf.transform.crs import (
     TransformPolicy,
     TransformUnavailableError,
@@ -70,7 +68,7 @@ class TestBuildPlCutout:
         bbox_target = bbox_to_crs(bbox_2180, "EPSG:5514")
         target = tmp_path / "out" / "cut.tif"
 
-        _build_pl_cutout([west, east], bbox_2180, bbox_target, 1.0, pinned, target)
+        build_pl_cutout([west, east], bbox_2180, bbox_target, 1.0, pinned, target)
 
         with rasterio.open(target) as ds:
             assert ds.crs.to_epsg() == 5514
@@ -88,20 +86,20 @@ class TestBuildPlCutout:
         obwiednia celu wystaje poza zadanie — bez zapasu po stronie zrodla
         rogi wyniku byly by nodata.
         """
-        args = argparse.Namespace(
-            output=str(tmp_path),
-            target_crs="EPSG:5514",
+        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+        cut = prepare_pl_cutout(
+            bbox,
+            "EPSG:5514",
+            output_dir=str(tmp_path),
             resolution="1m",
             vertical_crs="EVRF2007",
         )
-        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
-        cut = _prepare_pl_cutout(args, bbox, "EVRF2007")
         sheets = [
             _write_sheet_asc(tmp_path / "a.asc", 529900, 381950, size=200),
             _write_sheet_asc(tmp_path / "b.asc", 530100, 381950, size=200),
         ]
 
-        _build_pl_cutout(
+        build_pl_cutout(
             sheets,
             cut.bbox_source_2180,
             cut.bbox_target,
@@ -121,7 +119,7 @@ class TestBuildPlCutout:
         bbox = BBox(530010, 382010, 530210, 382090, "EPSG:2180")
         target = tmp_path / "cut.tif"
 
-        _build_pl_cutout([a, b], bbox, bbox, 1.0, None, target)
+        build_pl_cutout([a, b], bbox, bbox, 1.0, None, target)
 
         with rasterio.open(target) as ds:
             assert ds.nodata == _NODATA
@@ -136,7 +134,7 @@ class TestBuildPlCutout:
         bbox = BBox(530010, 382010, 530090, 382090, "EPSG:2180")
         target = tmp_path / "cut.tif"
 
-        _build_pl_cutout([a], bbox, bbox, 1.0, None, target)
+        build_pl_cutout([a], bbox, bbox, 1.0, None, target)
 
         with rasterio.open(target) as ds:
             assert ds.crs is not None and ds.crs.to_epsg() == 2180
@@ -167,7 +165,7 @@ class TestBuildPlCutout:
             ),
             pytest.raises(RuntimeError, match="warp przerwany"),
         ):
-            _build_pl_cutout(
+            build_pl_cutout(
                 [a], bbox, bbox_to_crs(bbox, "EPSG:5514"), 1.0, pinned, target
             )
 
@@ -176,20 +174,10 @@ class TestBuildPlCutout:
 
 
 class TestPreparePlCutout:
-    def _args(self, tmp_path, **overrides):
-        base = dict(
-            output=str(tmp_path),
-            target_crs="EPSG:5514",
-            resolution="1m",
-            vertical_crs="EVRF2007",
-        )
-        base.update(overrides)
-        return argparse.Namespace(**base)
-
     def test_target_2180_no_pinned_and_native_name(self, tmp_path):
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
-        cut = _prepare_pl_cutout(
-            self._args(tmp_path, target_crs="EPSG:2180"), bbox, "EVRF2007"
+        cut = prepare_pl_cutout(
+            bbox, "EPSG:2180", output_dir=str(tmp_path), vertical_crs="EVRF2007"
         )
         assert cut.pinned is None
         assert cut.bbox_target is cut.bbox_2180
@@ -205,7 +193,9 @@ class TestPreparePlCutout:
 
     def test_target_5514_builds_pinned_and_names_in_target(self, tmp_path):
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
-        cut = _prepare_pl_cutout(self._args(tmp_path), bbox, "EVRF2007")
+        cut = prepare_pl_cutout(
+            bbox, "EPSG:5514", output_dir=str(tmp_path), vertical_crs="EVRF2007"
+        )
         assert cut.pinned is not None and cut.pinned.accuracy_m <= 1.0
         assert cut.bbox_target.crs == "EPSG:5514"
         # zrodlo szersze z KAZDEJ strony niz zadanie (R-01: pokrycie siatki)
@@ -233,7 +223,9 @@ class TestPreparePlCutout:
         with patch(
             "kartograf.transform.crs.build_pinned_transform", return_value=real
         ) as build:
-            _prepare_pl_cutout(self._args(tmp_path), bbox, "EVRF2007")
+            prepare_pl_cutout(
+                bbox, "EPSG:5514", output_dir=str(tmp_path), vertical_crs="EVRF2007"
+            )
 
         policy = build.call_args.args[2]
         assert policy.probe_point == (530100.0, 382050.0)
@@ -242,15 +234,15 @@ class TestPreparePlCutout:
 
     def test_vertical_kron86_lands_in_kron86_segment(self, tmp_path):
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
-        cut = _prepare_pl_cutout(
-            self._args(tmp_path, target_crs="EPSG:2180"), bbox, "KRON86"
+        cut = prepare_pl_cutout(
+            bbox, "EPSG:2180", output_dir=str(tmp_path), vertical_crs="KRON86"
         )
         assert "pl_1992_1m_kron86" in cut.target_path.parts
 
     def test_wgs84_bbox_normalized_to_2180(self, tmp_path):
         bbox = BBox(18.60, 49.75, 18.65, 49.77, "EPSG:4326")
-        cut = _prepare_pl_cutout(
-            self._args(tmp_path, target_crs="EPSG:2180"), bbox, "EVRF2007"
+        cut = prepare_pl_cutout(
+            bbox, "EPSG:2180", output_dir=str(tmp_path), vertical_crs="EVRF2007"
         )
         assert cut.bbox_2180.crs == "EPSG:2180"
         assert 400000 < cut.bbox_2180.min_x < 700000  # rzad wielkosci 2180
@@ -265,10 +257,14 @@ class TestPreparePlCutout:
             ),
             pytest.raises(TransformUnavailableError),
         ):
-            _prepare_pl_cutout(self._args(tmp_path), bbox, "EVRF2007")
+            prepare_pl_cutout(
+                bbox, "EPSG:5514", output_dir=str(tmp_path), vertical_crs="EVRF2007"
+            )
 
 
 _DL = "kartograf.cli.download_cmd"
+# warstwa biblioteczna wycinka (R3) — tu zyja selekcja arkuszy i manager
+_CUT = "kartograf.download.cutout"
 
 
 def _pl_args(tmp_path, **overrides):
@@ -313,22 +309,22 @@ class TestDownloadPlBboxCutout:
     """Spec 8: przeplyw wycinka na poziomie workera PL (mockowane pobranie)."""
 
     def _run(self, tmp_path, args, sheets, failed=(), provider=None):
+        from kartograf.download.manager import DownloadResult
+
         provider = provider or SimpleNamespace(vertical_crs="EVRF2007")
-        bbox = _BBOX_2180
+        manager = Mock()
+        manager.download_sheets.return_value = list(sheets)
+        manager.last_result = DownloadResult(failed=list(failed))
         with (
-            patch(f"{_DL}.find_sheets_for_bbox", return_value=["N-1", "N-2"]) as find,
+            patch(f"{_CUT}.find_sheets_for_bbox", return_value=["N-1", "N-2"]) as find,
             patch(
                 f"{_DL}._create_provider_and_storage",
                 return_value=(provider, Mock()),
             ),
-            patch(f"{_DL}.DownloadManager"),
-            patch(
-                f"{_DL}._download_godlo_list",
-                return_value=(list(sheets), list(failed)),
-            ) as dl,
+            patch(f"{_CUT}.DownloadManager", return_value=manager),
         ):
-            rc = _download_pl_bbox(args, bbox, _PARENT)
-        return rc, dl, find
+            rc = _download_pl_bbox(args, _BBOX_2180, _PARENT)
+        return rc, manager, find
 
     def test_creates_cutout_and_sidecar(self, tmp_path):
         sheets = [
@@ -362,7 +358,7 @@ class TestDownloadPlBboxCutout:
             _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000),
             _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000),
         ]
-        rc, _dl, find = self._run(
+        rc, _manager, find = self._run(
             tmp_path, _pl_args(tmp_path, target_crs="EPSG:5514"), sheets
         )
 
@@ -422,7 +418,7 @@ class TestDownloadPlBboxCutout:
 
         sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
         with patch(
-            f"{_DL}._build_pl_cutout",
+            f"{_CUT}.build_pl_cutout",
             side_effect=RasterioIOError("uszkodzony arkusz"),
         ):
             rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
@@ -448,17 +444,32 @@ class TestDownloadPlBboxCutout:
         )
         target.parent.mkdir(parents=True)
         target.write_bytes(b"II*\x00")
-        rc, dl, find = self._run(tmp_path, _pl_args(tmp_path), sheets=[])
+        rc, manager, find = self._run(tmp_path, _pl_args(tmp_path), sheets=[])
 
         assert rc == 0
-        dl.assert_not_called()
+        manager.download_sheets.assert_not_called()
         # skrot dziala PRZED selekcja arkuszy — zero pracy na godlach
         find.assert_not_called()
 
     def test_without_target_crs_behaviour_unchanged(self, tmp_path):
-        """Bez flagi: lista arkuszy jak dotad, zero wycinka (spec 6.1)."""
+        """Bez flagi: lista arkuszy jak dotad, zero wycinka (spec 6.1).
+
+        Tor BEZ wycinka zostaje w ``cli.download_cmd`` — dlatego wlasne patche
+        ``_DL``, a nie harness ``_run`` (ten patchuje ``download.cutout``).
+        """
         sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
-        rc, _dl, find = self._run(tmp_path, _pl_args(tmp_path, target_crs=None), sheets)
+        with (
+            patch(f"{_DL}.find_sheets_for_bbox", return_value=["N-1"]) as find,
+            patch(
+                f"{_DL}._create_provider_and_storage",
+                return_value=(SimpleNamespace(vertical_crs="EVRF2007"), Mock()),
+            ),
+            patch(f"{_DL}.DownloadManager"),
+            patch(f"{_DL}._download_godlo_list", return_value=(sheets, [])),
+        ):
+            rc = _download_pl_bbox(
+                _pl_args(tmp_path, target_crs=None), _BBOX_2180, _PARENT
+            )
 
         assert rc == 0
         assert not (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").exists()
@@ -477,6 +488,7 @@ class TestGeometryCutout:
 
     def test_geometry_mode_builds_cutout(self, tmp_path):
         from kartograf.cli.download_cmd import _download_pl_geometry
+        from kartograf.download.manager import DownloadResult
 
         sheets = [
             _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000),
@@ -487,9 +499,12 @@ class TestGeometryCutout:
         provider = SimpleNamespace(vertical_crs="EVRF2007")
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         args = _pl_args(tmp_path, bbox=None, geometry=str(geom))
+        manager = Mock()
+        manager.download_sheets.return_value = sheets
+        manager.last_result = DownloadResult()
 
         with (
-            # import lokalny w _download_pl_geometry -> patch u zrodla
+            # import lokalny w select_pl_cutout_sheets -> patch u zrodla
             # (ta sama konwencja co testy geometry w test_cli.py)
             patch(
                 "kartograf.core.geometry.find_sheets_for_geometry",
@@ -499,8 +514,7 @@ class TestGeometryCutout:
                 f"{_DL}._create_provider_and_storage",
                 return_value=(provider, Mock()),
             ),
-            patch(f"{_DL}.DownloadManager"),
-            patch(f"{_DL}._download_godlo_list", return_value=(sheets, [])),
+            patch(f"{_CUT}.DownloadManager", return_value=manager),
         ):
             rc = _download_pl_geometry(args, geom, _PARENT, bbox=bbox)
 
@@ -523,6 +537,7 @@ class TestGeometryCutout:
         daje komplet.
         """
         from kartograf.cli.download_cmd import _download_pl_geometry
+        from kartograf.download.manager import DownloadResult
 
         sheets = {
             "N-1": _write_sheet_asc(tmp_path / "s1.asc", 529900, 381950, size=200),
@@ -532,22 +547,24 @@ class TestGeometryCutout:
         geom.write_bytes(b"stub")  # sciezka nieuzywana: discovery zamockowane
         provider = SimpleNamespace(vertical_crs="EVRF2007")
         args = _pl_args(tmp_path, bbox=None, geometry=str(geom), target_crs="EPSG:5514")
+        manager = Mock()
+        # godla -> arkusze: do mozaiki trafiaja DOKLADNIE wybrane arkusze
+        manager.download_sheets.side_effect = lambda godla, **kw: [
+            sheets[g] for g in godla
+        ]
+        manager.last_result = DownloadResult()
 
         with (
             patch(
                 "kartograf.core.geometry.find_sheets_for_geometry",
                 return_value=["N-1"],
             ),
-            patch(f"{_DL}.find_sheets_for_bbox", return_value=["N-1", "N-2"]) as find,
+            patch(f"{_CUT}.find_sheets_for_bbox", return_value=["N-1", "N-2"]) as find,
             patch(
                 f"{_DL}._create_provider_and_storage",
                 return_value=(provider, Mock()),
             ),
-            patch(f"{_DL}.DownloadManager"),
-            patch(
-                f"{_DL}._download_godlo_list",
-                side_effect=lambda _m, godla, *a: ([sheets[g] for g in godla], []),
-            ),
+            patch(f"{_CUT}.DownloadManager", return_value=manager),
         ):
             rc = _download_pl_geometry(args, geom, _PARENT, bbox=_BBOX_2180)
 
@@ -567,9 +584,13 @@ class TestGeometryCutout:
         """Cala sciezka przez main(): dyspozycja MUSI podac obwiednie workerowi.
 
         Broni `bbox=part` w `_dispatch_area` — jedynej linii, dzieki ktorej
-        wycinek geometry jest osiagalny z CLI. Bez niej worker dostaje
-        ``bbox=None``, wpada w guard R-12 i komenda konczy sie kodem 1.
+        wycinek geometry jest osiagalny z CLI: obwiednia wyznacza siatke
+        i crop wycinka, a ``bbox`` jest w ``_download_pl_geometry`` argumentem
+        WYMAGANYM. Bez tej linii worker nie dostaje obwiedni i wycinek nie
+        powstaje (komenda konczy sie kodem 1).
         """
+        from kartograf.download.manager import DownloadResult
+
         sheets = [
             _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000),
             _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000),
@@ -578,9 +599,13 @@ class TestGeometryCutout:
         geom.write_bytes(b"stub")  # tresc nieuzywana: discovery zamockowane
         provider = SimpleNamespace(vertical_crs="EVRF2007")
         overall = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+        manager = Mock()
+        manager.download_sheets.return_value = sheets
+        manager.last_result = DownloadResult()
 
         with (
-            # oba importy lokalne w cli.download_cmd -> patch u zrodla
+            # oba importy lokalne (cli.download_cmd, download.cutout) ->
+            # patch u zrodla
             patch("kartograf.core.geometry.get_overall_bbox", return_value=overall),
             patch(
                 "kartograf.core.geometry.find_sheets_for_geometry",
@@ -590,8 +615,7 @@ class TestGeometryCutout:
                 f"{_DL}._create_provider_and_storage",
                 return_value=(provider, Mock()),
             ),
-            patch(f"{_DL}.DownloadManager"),
-            patch(f"{_DL}._download_godlo_list", return_value=(sheets, [])),
+            patch(f"{_CUT}.DownloadManager", return_value=manager),
         ):
             rc = main(
                 [
@@ -669,6 +693,7 @@ class TestBorderTwoCutouts:
         from pyproj import CRS
 
         from kartograf.core.geometry import _transform_bbox
+        from kartograf.download.manager import DownloadResult
 
         # jeden syntetyczny arkusz pokrywajacy polska czesc zadania
         b = _transform_bbox(
@@ -687,19 +712,21 @@ class TestBorderTwoCutouts:
             pixel=5.0,
         )
         provider = SimpleNamespace(vertical_crs="EVRF2007")
+        manager = Mock()
+        manager.download_sheets.return_value = [sheet]
+        manager.last_result = DownloadResult()
 
         with (
             patch(
                 "kartograf.providers.cuzk.create_dmr_provider",
                 return_value=self._cz_provider(),
             ),
-            patch(f"{_DL}.find_sheets_for_bbox", return_value=["N-34-130-D"]),
+            patch(f"{_CUT}.find_sheets_for_bbox", return_value=["N-34-130-D"]),
             patch(
                 f"{_DL}._create_provider_and_storage",
                 return_value=(provider, Mock()),
             ),
-            patch(f"{_DL}.DownloadManager"),
-            patch(f"{_DL}._download_godlo_list", return_value=([sheet], [])),
+            patch(f"{_CUT}.DownloadManager", return_value=manager),
         ):
             rc = main(
                 [
@@ -783,3 +810,84 @@ class TestTargetCrsValidations:
         )
         assert rc == 1
         assert "1992" in capsys.readouterr().err
+
+
+class TestLibraryApi:
+    """R3: wycinek PL jako API biblioteki (bez argparse)."""
+
+    _SHEETS = {
+        "N-34-130-D-d-2-3": (530000, 382000),
+        "N-34-130-D-d-2-4": (530100, 382000),
+    }
+
+    def _provider(self):
+        provider = Mock()
+        provider.vertical_crs = "EVRF2007"
+        provider.resolution = "1m"
+        provider.descriptor_key = "pl.gugik.nmt_1m"
+        provider.default_extension = ".asc"
+        provider.calls = []
+
+        def download(godlo, path, timeout=30):
+            provider.calls.append(godlo)
+            west, south = self._SHEETS[godlo]
+            return _write_sheet_asc(path, west, south)
+
+        provider.download = download
+        return provider
+
+    def test_download_pl_cutout_end_to_end_skip_and_force(self, tmp_path):
+        from kartograf import download_pl_cutout
+
+        provider = self._provider()
+        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+        with (
+            patch("kartograf.providers.pl.create_nmt_provider", return_value=provider),
+            patch(
+                "kartograf.download.cutout.find_sheets_for_bbox",
+                return_value=list(self._SHEETS),
+            ),
+        ):
+            first = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
+            second = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
+            third = download_pl_cutout(
+                bbox, "EPSG:2180", output_dir=tmp_path, force=True
+            )
+
+        assert first.path.exists() and not first.skipped
+        assert first.path.with_name(first.path.name + ".meta.json").exists()
+        assert second.skipped and second.path == first.path
+        assert not third.skipped
+        assert sorted(provider.calls) == sorted(list(self._SHEETS) * 2)
+
+    def test_public_exports(self):
+        import kartograf
+
+        for name in (
+            "PlCutout",
+            "PlCutoutResult",
+            "PlCutoutSheets",
+            "download_pl_cutout",
+            "prepare_pl_cutout",
+            "run_pl_cutout",
+            "select_pl_cutout_sheets",
+        ):
+            assert name in kartograf.__all__ and hasattr(kartograf, name)
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {"target_crs": "EPSG:4326"},
+            {"resolution": "2m"},
+            {"resolution": "5m", "vertical_crs": "KRON86"},
+            {"vertical_crs": "Bpv"},
+        ],
+    )
+    def test_prepare_rejects_bad_params(self, tmp_path, kwargs):
+        from kartograf.download.cutout import prepare_pl_cutout
+        from kartograf.exceptions import ValidationError
+
+        params = {"target_crs": "EPSG:2180", **kwargs}
+        target = params.pop("target_crs")
+        with pytest.raises(ValidationError):
+            prepare_pl_cutout(_BBOX_2180, target, output_dir=tmp_path, **params)

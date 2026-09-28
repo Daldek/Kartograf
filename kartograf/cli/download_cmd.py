@@ -4,13 +4,11 @@
 
 import argparse
 import sys
-from dataclasses import dataclass, replace
 from pathlib import Path
 
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
 from kartograf.download.manager import DownloadManager, DownloadProgress
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
-from kartograf.transform.crs import PinnedTransform, TransformPolicy
 
 
 def create_progress_callback(quiet: bool = False):
@@ -926,262 +924,95 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
     return _dispatch_area(args, bbox)
 
 
-# Wycinek PL --target-crs (ADR-027): nodata arkuszy ASC GUGiK i piksel siatki.
-_PL_NODATA = -9999.0
-_PL_PIXEL_SIZES = {"1m": 1.0, "5m": 5.0}
-# Zapas obwiedni zrodla w pikselach — lustro _WARP_MARGIN_PX toru CZ
-# (providers/cuzk/dmr.py): pokrywa niepewnosc operacji obwiedniowej
-# i halo interpolatora bilinear (1 px) na krawedziach siatki wyniku.
-_PL_WARP_MARGIN_PX = 4
-# Polityka operacji reprojektujacej TRESC wycinka PL — lustro
-# _HORIZONTAL_POLICY toru CZ (providers/cuzk/dmr.py). probe_point dokladany
-# per zadanie (srodek bboxa); siatki z CDN sa tu zbedne i kosztowne.
-_PL_HORIZONTAL_POLICY = TransformPolicy(min_accuracy_m=1.0, allow_network_grids=False)
-
-
-@dataclass(frozen=True)
-class _PlCutout:
-    """Przygotowany (fail-fast) kontekst wycinka PL --target-crs."""
-
-    bbox_2180: BBox  # dokladne zadanie uzytkownika w EPSG:2180
-    bbox_source_2180: BBox  # zadanie + zapas na warp: arkusze i crop mozaiki
-    bbox_target: BBox
-    pinned: PinnedTransform | None  # None dla EPSG:2180 (sam crop)
-    target_path: Path
-
-
-def _prepare_pl_cutout(
-    args: argparse.Namespace, bbox: BBox, vertical_crs: str
-) -> _PlCutout:
-    """Fail-fast przygotowanie wycinka: operacja, bbox-y i sciezka wyniku.
-
-    Rzuca ``TransformError``, gdy dla pary EPSG:2180 -> ``--target-crs``
-    nie ma przypietej operacji — PRZED jakimkolwiek ruchem sieciowym
-    (ADR-024/ADR-027). ``vertical_crs`` to wartosc FAKTYCZNA providera
-    (po korekcie 5m=>EVRF2007 w fabryce), nie surowa flaga CLI.
-
-    Wycinek jest zawsze GeoTIFF (``.tif``) — ``default_extension``
-    deskryptora (``.asc``) dotyczy arkuszy, nie wycinka.
-    """
-    from pyproj import CRS
-
-    from kartograf.core.geometry import _transform_bbox
-    from kartograf.providers.cuzk.dmr import bbox_to_crs
-    from kartograf.sources.registry import get_source
-
-    # import lokalny: testy podmieniaja operacje w module transform.crs
-    from kartograf.transform.crs import build_pinned_transform
-
-    if bbox.crs == "EPSG:2180":
-        bbox_2180 = bbox
-    else:
-        # uklady czeskie opuszczaja Krovaka wczesniej, przypieta operacja
-        # (_country_bbox/_dispatch_area); tu zostaja PL/WGS84 — swiadomie
-        # domyslny transformer, jak w reszcie przeplywu PL
-        bbox_2180 = _transform_bbox(
-            bbox.min_x,
-            bbox.min_y,
-            bbox.max_x,
-            bbox.max_y,
-            CRS.from_user_input(bbox.crs),
-            "EPSG:2180",
-        )
-
-    pinned = None
-    bbox_target = bbox_2180
-    bbox_source_2180 = bbox_2180
-    if args.target_crs != "EPSG:2180":
-        center = (
-            (bbox_2180.min_x + bbox_2180.max_x) / 2,
-            (bbox_2180.min_y + bbox_2180.max_y) / 2,
-        )
-        # polityka jak _HORIZONTAL_POLICY toru CZ + probe w srodku zadania
-        # (siatka nie pokrywajaca obszaru danych odpada od razu)
-        pinned = build_pinned_transform(
-            "EPSG:2180",
-            args.target_crs,
-            replace(_PL_HORIZONTAL_POLICY, probe_point=center),
-        )
-        bbox_target = bbox_to_crs(bbox_2180, args.target_crs, pinned)
-        # Zrodlo musi pokryc CALA siatke wyniku: obwiednia celu wraca do 2180
-        # wieksza niz zadanie (obrot Krovaka), a interpolator potrzebuje halo.
-        # Lustro _native_request_bbox toru CZ (providers/cuzk/dmr.py).
-        # Bez `pinned` — operacja przypieta jest KIERUNKOWA (2180 -> target),
-        # a tu przeliczamy w druga strone; tak samo robi CZ.
-        back = bbox_to_crs(bbox_target, "EPSG:2180")
-        margin = _PL_WARP_MARGIN_PX * _PL_PIXEL_SIZES[args.resolution]
-        bbox_source_2180 = BBox(
-            back.min_x - margin,
-            back.min_y - margin,
-            back.max_x + margin,
-            back.max_y + margin,
-            "EPSG:2180",
-        )
-
-    key = "pl.gugik.nmt_5m" if args.resolution == "5m" else "pl.gugik.nmt_1m"
-    subdir = get_source(key).resolve_subdir(uklad="1992", vertical_crs=vertical_crs)
-    coords = "_".join(
-        format(v, ".10g")
-        for v in (
-            bbox_target.min_x,
-            bbox_target.min_y,
-            bbox_target.max_x,
-            bbox_target.max_y,
-        )
-    )
-    target_path = Path(args.output) / subdir / "bbox" / f"{coords}.tif"
-    return _PlCutout(
-        bbox_2180=bbox_2180,
-        bbox_source_2180=bbox_source_2180,
-        bbox_target=bbox_target,
-        pinned=pinned,
-        target_path=target_path,
-    )
-
-
-def _build_pl_cutout(
-    sheet_paths: list[Path],
-    bbox_2180: BBox,
-    bbox_target: BBox,
-    pixel_size: float,
-    pinned: PinnedTransform | None,
-    target_path: Path,
-) -> None:
-    """Zszyj arkusze, przytnij do ``bbox_2180``; opcjonalny lokalny warp.
-
-    Mozaika wymusza GTiff + EPSG:2180 (arkusze ASC nie niosa CRS).
-    ``pinned is None`` = cel EPSG:2180: sam crop (atomowy ``os.replace``).
-
-    Obie sciezki zapisu sa atomowe (druga domyka wewnetrzny ``os.replace``
-    w ``warp_to_grid``), wiec przerwana budowa NIE zostawia polzapisanego
-    pliku pod ``target_path`` — i dlatego nie kasuje tez poprzedniego wyniku.
-    """
-    import os
-    import threading
-
-    from kartograf.transport.mosaic import mosaic_and_crop
-
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target_path.with_name(
-        f"{target_path.name}.{os.getpid()}_{threading.get_ident()}.mosaic.tif"
-    )
-    try:
-        mosaic_and_crop(
-            sheet_paths,
-            bbox_2180,
-            tmp,
-            nodata=_PL_NODATA,
-            dst_kwds={"driver": "GTiff", "crs": "EPSG:2180"},
-        )
-        if pinned is None:
-            os.replace(tmp, target_path)
-        else:
-            from kartograf.transform.raster import warp_to_grid
-
-            warp_to_grid(
-                tmp,
-                target_path,
-                bbox_target,
-                pixel_size,
-                pinned,
-                src_crs="EPSG:2180",
-                nodata=_PL_NODATA,
-            )
-    finally:
-        tmp.unlink(missing_ok=True)
-
-
-def _write_pl_cutout_sidecar(
-    target: Path,
-    *,
-    resolution: str,
-    vertical_crs: str,
-    bbox_target: BBox,
-    target_crs: str,
-    pinned: PinnedTransform | None,
-    parent_request: dict | None,
-) -> None:
-    """Best-effort sidecar wycinka PL (blad nie przerywa pobrania).
-
-    ``capability="sheet_files"``: dane pochodza z arkuszy OpenData — kanal
-    ``bbox_raster`` nie istnieje dla 5m, a dla 1m deklaruje wylacznie KRON86
-    (ADR-027, odstepstwo od litery spec 6.1 pkt 5).
-    """
-    import logging
-
-    try:
-        from kartograf.sources.registry import get_source
-        from kartograf.sources.sidecar import build_metadata, write_sidecar
-
-        key = "pl.gugik.nmt_5m" if resolution == "5m" else "pl.gugik.nmt_1m"
-        meta = build_metadata(
-            get_source(key),
-            request={
-                "bbox": [
-                    bbox_target.min_x,
-                    bbox_target.min_y,
-                    bbox_target.max_x,
-                    bbox_target.max_y,
-                ],
-                "bbox_crs": target_crs,
-            },
-            vertical_crs=vertical_crs,
-            capability="sheet_files",
-            nodata=_PL_NODATA,
-            extra={"parent_request": parent_request} if parent_request else None,
-        )
-        meta.horizontal_crs = target_crs
-        meta.transform = (
-            {"horizontal": f"pinned: {pinned.description} ({pinned.accuracy_m} m)"}
-            if pinned is not None
-            else None
-        )
-        write_sidecar(target, meta)
-    except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
-        logging.getLogger(__name__).warning(
-            f"Nie udalo sie zapisac sidecara dla {target}: {e}"
-        )
-
-
-def _finalize_pl_cutout(
+def _download_pl_cutout(
     args: argparse.Namespace,
-    cutout: _PlCutout,
-    sheet_paths: list[Path],
-    parent_request: dict | None,
-    provider,
+    bbox: BBox,
+    parent_request: dict,
+    geometry: Path | None = None,
 ) -> int:
-    """Zbuduj wycinek z pobranych arkuszy i zapisz sidecar (ADR-027).
+    """Polski wycinek --target-crs (ADR-027): nakladka CLI na download/cutout.py.
 
-    Kazdy blad budowy jest tlumaczony na kod 1: poza ``ValidationError``
-    i ``TransformError`` mozliwy jest tu takze ``rasterio.errors.RasterioIOError``
-    (uszkodzony arkusz z cache), a taki przeciek wyszedlby poza petle krajow
-    ``_dispatch_area`` i zlamal kontrakt czesciowego sukcesu (ADR-023 pkt 4-5).
+    Wolane po ``_resolve_pl_sentinels``. Bledy przygotowania
+    (``TransformError``/``ValidationError``), selekcji arkuszy
+    (``ValidationError``) i KAZDY blad pobrania lub budowy wycinka koncza sie
+    kodem 1 z komunikatem, nie tracebackiem: wyjatek wyciekajacy poza petle
+    krajow ``_dispatch_area`` zlamalby kontrakt czesciowego sukcesu
+    (ADR-023 pkt 4-5).
     """
-    if not args.quiet:
-        print(f"Building cutout from {len(sheet_paths)} sheets ({args.target_crs})...")
+    from kartograf.download.cutout import (
+        prepare_pl_cutout,
+        run_pl_cutout,
+        select_pl_cutout_sheets,
+    )
+    from kartograf.transform.crs import TransformError
+
+    output_dir = Path(args.output)
+    provider, storage = _create_provider_and_storage(
+        getattr(args, "product", "nmt"), output_dir, args.vertical_crs, args.resolution
+    )
     try:
-        _build_pl_cutout(
-            sheet_paths,
-            cutout.bbox_source_2180,
-            cutout.bbox_target,
-            _PL_PIXEL_SIZES[args.resolution],
-            cutout.pinned,
-            cutout.target_path,
+        # fail-fast: operacja przypieta budowana PRZED jakakolwiek siecia
+        cutout = prepare_pl_cutout(
+            bbox,
+            args.target_crs,
+            output_dir=output_dir,
+            resolution=args.resolution,
+            vertical_crs=getattr(provider, "vertical_crs", args.vertical_crs),
+        )
+    except TransformError as e:
+        return _print_transform_error(e)
+    except ValidationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    if not args.force and cutout.target_path.exists():
+        if not args.quiet:
+            print(f"Skipped - already exists at {cutout.target_path}")
+        return 0
+
+    target_scale = args.scale or "1:10000"
+    try:
+        sheets = select_pl_cutout_sheets(
+            cutout,
+            geometry=geometry,
+            layer=getattr(args, "layer", None),
+            scale=target_scale,
+        )
+    except ValidationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    if not args.quiet:
+        what = "bbox" if geometry is None else f"geometry {geometry.name}"
+        godla = list(sheets.godla)
+        print(
+            f"Found {len(godla)} sheets at {target_scale} "
+            f"for {what} (resolution: {args.resolution})"
+        )
+        if len(godla) <= 10:
+            print(f"  Sheets: {', '.join(godla)}")
+        else:
+            print(f"  Sheets: {', '.join(godla[:3] + ['...'] + godla[-2:])}")
+        print()
+
+    try:
+        result = run_pl_cutout(
+            cutout,
+            sheets,
+            provider=provider,
+            storage=storage,
+            max_workers=getattr(args, "workers", 4),
+            force=args.force,
+            on_progress=create_progress_callback(args.quiet),
+            parent_request=parent_request,
         )
     except Exception as e:  # noqa: BLE001 — kod 1 zamiast tracebacku (ADR-023)
         print(f"Error: {e}", file=sys.stderr)
         return 1
-    _write_pl_cutout_sidecar(
-        cutout.target_path,
-        resolution=args.resolution,
-        vertical_crs=getattr(provider, "vertical_crs", args.vertical_crs),
-        bbox_target=cutout.bbox_target,
-        target_crs=args.target_crs,
-        pinned=cutout.pinned,
-        parent_request=parent_request,
-    )
     if not args.quiet:
-        print(f"Downloaded to {cutout.target_path}")
+        # pasek postepu konczy "skipped" bez nowej linii — jak dotad pusta
+        # linia przed podsumowaniem
+        print()
+        print(f"Downloaded to {result.path}")
     return 0
 
 
@@ -1198,12 +1029,13 @@ def _download_pl_bbox(
     normalizuje ``_country_bbox`` przypieta operacja (tu drugi, niepinowany
     skok Krovaka bylby wlasnie tym, czego etap zabrania).
 
-    Z ``--target-crs`` (ADR-027) arkusze pobieraja sie normalnie do swoich
-    segmentow (dzialaja jako cache), a wynikiem jest JEDEN scalony wycinek
-    ``nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif``.
+    Z ``--target-crs`` (ADR-027) — ``_download_pl_cutout`` (biblioteka
+    ``download/cutout.py``): jeden scalony wycinek zamiast listy arkuszy.
     """
     if _resolve_pl_sentinels(args):
         return 1
+    if args.target_crs is not None:
+        return _download_pl_cutout(args, bbox, parent_request)
 
     target_scale = args.scale or "1:10000"
 
@@ -1221,28 +1053,9 @@ def _download_pl_bbox(
         product, output_dir, vertical_crs, resolution
     )
 
-    # Wycinek (ADR-027) przygotowywany PRZED selekcja arkuszy: siatka wyniku
-    # rozstrzyga, z jakiego obszaru zrodlowego biora sie arkusze.
-    cutout: _PlCutout | None = None
-    if args.target_crs is not None:
-        from kartograf.transform.crs import TransformError
-
-        try:
-            # fail-fast: operacja przypieta budowana PRZED jakakolwiek siecia
-            cutout = _prepare_pl_cutout(
-                args, bbox, getattr(provider, "vertical_crs", vertical_crs)
-            )
-        except TransformError as e:
-            return _print_transform_error(e)
-        if skip_existing and cutout.target_path.exists():
-            if not args.quiet:
-                print(f"Skipped - already exists at {cutout.target_path}")
-            return 0
-
-    # Find sheets covering the bbox (z wycinkiem: bbox z zapasem na warp)
-    sheet_bbox = bbox if cutout is None else cutout.bbox_source_2180
+    # Find sheets covering the bbox
     try:
-        godlo_list = find_sheets_for_bbox(sheet_bbox, target_scale, system=args.system)
+        godlo_list = find_sheets_for_bbox(bbox, target_scale, system=args.system)
     except ValidationError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
@@ -1293,14 +1106,10 @@ def _download_pl_bbox(
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    # komunikat wypisal juz `_download_godlo_list` — tu zostaje kod wyjscia
+    # komunikat wypisal juz `_download_godlo_list` — tu zostaje kod wyjscia:
+    # nieudany arkusz = blad calosci (tryb listy arkuszy, bez --target-crs)
     if failed_sheets:
-        # nieudany arkusz = blad calosci takze bez --target-crs; dla wycinka
-        # dodatkowo wymog kompletu pokrycia (spec 6.1 pkt 1)
         return 1
-
-    if cutout is not None:
-        return _finalize_pl_cutout(args, cutout, all_paths, parent_request, provider)
 
     return 0
 
@@ -1896,24 +1705,27 @@ def _download_pl_geometry(
     args: argparse.Namespace,
     filepath: Path,
     parent_request: dict,
-    bbox: BBox | None = None,
+    bbox: BBox,
 ) -> int:
     """
     Polska czesc zadania geometrycznego (arkusze per obiekt, nie z obwiedni).
 
     ``args`` to KOPIA namespace'u zadania — patrz ``_dispatch_area``.
 
-    ``bbox`` — obwiednia zadania PL (przycieta pod auto); potrzebna wylacznie
-    dla wycinka ``--target-crs``: crop idzie po tej obwiedni, wiec wynik
-    obejmuje CALA obwiednie geometrii, bez maskowania do jej obiektow.
-    Przy warpie (``--target-crs`` inny niz EPSG:2180) do godel geometrii
-    dochodza godla obwiedni z zapasem, zeby ta obwiednia byla wypelniona
-    danymi, a nie ramka nodata (R-01).
+    ``bbox`` — obwiednia zadania PL (przycieta pod auto), wymagana. Z
+    ``--target-crs`` (ADR-027) — ``_download_pl_cutout`` (biblioteka
+    ``download/cutout.py``): obwiednia wyznacza siatke i crop wycinka, wiec
+    wynik obejmuje CALA obwiednie geometrii, bez maskowania do jej obiektow
+    (przy warpie arkusze to suma godel geometrii i obwiedni z zapasem, R-01 —
+    ``select_pl_cutout_sheets``). Bez ``--target-crs`` arkusze wyznacza sama
+    geometria, a ``bbox`` nie jest uzywany.
     """
     from kartograf.core.geometry import find_sheets_for_geometry
 
     if _resolve_pl_sentinels(args):
         return 1
+    if args.target_crs is not None:
+        return _download_pl_cutout(args, bbox, parent_request, geometry=filepath)
 
     target_scale = args.scale or "1:10000"
     layer = getattr(args, "layer", None)
@@ -1943,54 +1755,6 @@ def _download_pl_geometry(
     provider, storage = _create_provider_and_storage(
         product, output_dir, vertical_crs, resolution
     )
-
-    # Wycinek (ADR-027) jak w trybie bbox: `bbox` steruje siatka wyniku
-    # i cropem mozaiki. Wynik obejmuje CALA obwiednie geometrii — maskowania
-    # do obiektow NIE MA (do warstwy rastrowej ida same sciezki arkuszy, patrz
-    # `_build_pl_cutout`), a nodata oznacza wylacznie brak POBRANEGO arkusza.
-    # Dlatego przy warpie (R-01, nizej) arkusze to SUMA godel geometrii
-    # i godel obwiedni z zapasem: obietnice "cala obwiednia" domykaja dane,
-    # a nie ramka dziur. Koszt jest swiadomy — dla rzadkiej geometrii
-    # wieloobiektowej suma obejmuje arkusze calej obwiedni, takze tam, gdzie
-    # nie ma zadnego obiektu (arkusz "1:10000" ma zaledwie ~2,25 x 2,43 km,
-    # zmierzone; GUGiK nazywa go modulem 1:5000 — patrz Notes w
-    # core/sheet_parser.py).
-    cutout: _PlCutout | None = None
-    if args.target_crs is not None:
-        from kartograf.transform.crs import TransformError
-
-        if bbox is None:
-            # dzis nieosiagalne (_dispatch_area zawsze podaje obwiednie),
-            # ale jawny blad jest lepszy niz AttributeError w srodku
-            raise ValidationError(
-                "--target-crs w trybie --geometry wymaga obwiedni geometrii "
-                "(wywolanie wewnetrzne bez bbox)"
-            )
-        try:
-            # fail-fast: operacja przypieta budowana PRZED jakakolwiek siecia
-            cutout = _prepare_pl_cutout(
-                args, bbox, getattr(provider, "vertical_crs", vertical_crs)
-            )
-        except TransformError as e:
-            return _print_transform_error(e)
-        if skip_existing and cutout.target_path.exists():
-            if not args.quiet:
-                print(f"Skipped - already exists at {cutout.target_path}")
-            return 0
-        if cutout.pinned is not None:
-            # R-01 takze tutaj: siatka wyniku obejmuje CALA obwiednie zadania,
-            # wiec arkusze musza pokryc obwiednie Z ZAPASEM — same arkusze
-            # geometrii zostawialyby na krawedziach ramke nodata. Koszt jest
-            # swiadomy: dla rzadkiej geometrii wieloobiektowej suma obejmuje
-            # arkusze calej obwiedni (patrz docs/ARCHITECTURE.md sekcja 4.3).
-            godlo_list = sorted(
-                set(godlo_list)
-                | set(
-                    find_sheets_for_bbox(
-                        cutout.bbox_source_2180, target_scale, system=args.system
-                    )
-                )
-            )
 
     manager = DownloadManager(
         output_dir=output_dir,
@@ -2034,13 +1798,9 @@ def _download_pl_geometry(
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    # komunikat wypisal juz `_download_godlo_list` — tu zostaje kod wyjscia
+    # komunikat wypisal juz `_download_godlo_list` — tu zostaje kod wyjscia:
+    # nieudany arkusz = blad calosci (tryb listy arkuszy, bez --target-crs)
     if failed_sheets:
-        # nieudany arkusz = blad calosci takze bez --target-crs; dla wycinka
-        # dodatkowo wymog kompletu pokrycia (spec 6.1 pkt 1)
         return 1
-
-    if cutout is not None:
-        return _finalize_pl_cutout(args, cutout, all_paths, parent_request, provider)
 
     return 0

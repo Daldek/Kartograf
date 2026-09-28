@@ -88,6 +88,7 @@ kartograf/
 ├── cache/               # Cache metadanych
 │   └── metadata.py      # MetadataCache — SQLite WAL, TTL 7d (sheet_cache: 30d), thread-safe
 ├── download/            # Zarzadzanie pobieraniem NMT/NMPT/Orto
+│   ├── cutout.py        # Wycinek PL --target-crs jako API (ADR-027): prepare/select/run/download_pl_cutout
 │   ├── manager.py       # DownloadManager — koordynacja pobierania arkuszy (parallel)
 │   └── storage.py       # FileStorage(vertical_crs=) — segmenty <produkt>/<kraj>_<uklad>_<vcrs> z szablonow deskryptora (ADR-026)
 ├── landcover/           # Zarzadzanie pobieraniem pokrycia terenu

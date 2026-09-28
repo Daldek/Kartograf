@@ -8,6 +8,7 @@ subcommand parsers (parse, download, landcover, soilgrids, cache).
 import argparse
 
 from kartograf import __version__
+from kartograf.download.cutout import SUPPORTED_TARGET_CRS
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -111,7 +112,9 @@ def create_parser() -> argparse.ArgumentParser:
     )
     download_parser.add_argument(
         "--target-crs",
-        choices=["EPSG:2180", "EPSG:5514", "EPSG:3045"],
+        # zestaw wycinka PL (download/cutout.py) ogranicza takze tor CZ —
+        # rozszerzenie tylko po jednej stronie wymaga walidacji per kraj
+        choices=list(SUPPORTED_TARGET_CRS),
         default=None,
         help="Reprojekcja wyniku, wykonywana lokalnie przypieta operacja "
         "(tylko tryb --bbox/--geometry, tylko --product nmt; PL: jeden "
