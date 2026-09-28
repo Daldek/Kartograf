@@ -335,6 +335,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   kafle 512 px, BigTIFF gdy trzeba); przed pobraniem kontrola miejsca na
   dysku (dolne oszacowanie: wynik + arkusze do pobrania) i `Info:` dla
   wycinkow >= 1 GiB. Twardego limitu rozmiaru nie ma.
+- `FileStorage` bierze szablony segmentow z deskryptorow rejestru zamiast
+  wlasnych kopii (jedno zrodlo prawdy, ADR-026; review max, zn. 11).
 - Czesciowa awaria warstw skorowidza GUGiK przy braku arkusza w pozostalych
   to teraz "brak pokrycia niepewny" (`DownloadError`), nie brak pokrycia;
   URL innego arkusza z fallbacku skorowidza loguje ostrzezenie (arkusze
