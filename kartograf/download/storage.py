@@ -460,3 +460,22 @@ class FileStorage:
             f"FileStorage(output_dir='{self._output_dir}', "
             f"resolution='{self._resolution}')"
         )
+
+
+def prune_empty_dirs(start: Path, stop: Path) -> None:
+    """
+    Remove ``start`` and its parents while they are empty — never ``stop``.
+
+    Used after a failed download/build: the target directory is created before
+    writing, and a failure must not leave empty ``<segment>/bbox/`` trees behind
+    (review max 2026-08-30, finding 10). Directories outside ``stop`` are never
+    touched.
+    """
+    stop = Path(stop).resolve()
+    current = Path(start).resolve()
+    while current != stop and stop in current.parents:
+        try:
+            current.rmdir()  # succeeds only when empty
+        except OSError:
+            return
+        current = current.parent

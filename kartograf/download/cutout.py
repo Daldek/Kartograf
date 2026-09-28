@@ -33,7 +33,7 @@ from pathlib import Path
 
 from kartograf.core.sheet_parser import BBox, find_sheets_for_bbox
 from kartograf.download.manager import DownloadManager, ProgressCallback
-from kartograf.download.storage import FileStorage
+from kartograf.download.storage import FileStorage, prune_empty_dirs
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.transform.crs import PinnedTransform, TransformPolicy
 
@@ -605,14 +605,20 @@ def run_pl_cutout(
             f"Brak danych GUGiK dla {len(missing)} arkuszy wycinka: "
             f"{', '.join(missing)}"
         )
-    build_pl_cutout(
-        list(sheet_paths),
-        cutout.bbox_source_2180,
-        cutout.bbox_target,
-        cutout.pixel_size,
-        cutout.pinned,
-        cutout.target_path,
-    )
+    try:
+        build_pl_cutout(
+            list(sheet_paths),
+            cutout.bbox_source_2180,
+            cutout.bbox_target,
+            cutout.pixel_size,
+            cutout.pinned,
+            cutout.target_path,
+        )
+    except BaseException:
+        # zn. 10: nieudana budowa nie zostawia pustego drzewa <segment>/bbox/
+        # (katalog z poprzednim wynikiem nie jest pusty — zostaje)
+        prune_empty_dirs(cutout.target_path.parent, cutout.output_dir)
+        raise
     write_pl_cutout_sidecar(
         cutout, parent_request=parent_request, missing_sheets=missing
     )

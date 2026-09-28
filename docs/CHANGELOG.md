@@ -616,6 +616,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   domyslnym transformerem — dotad siatka i nazwa wycinka PL byly przesuniete
   o ~1,2 m (review max, zn. 4). `parent_request.bbox_crs` niesie wtedy uklad
   pliku.
+- Nieudany wycinek CZ (bbox) i nieudana budowa wycinka PL nie zostawiaja
+  pustych katalogow `<segment>/bbox/` (review max, zn. 10).
 
 ### Tests
 - **1716 testow, pokrycie 93%** — 1142 po mergu etapu 0, 1402 po etapie 1,

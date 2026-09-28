@@ -3346,6 +3346,7 @@ class TestCmdDownloadCz:
 
         assert result == 1
         assert "exportImage 500" in capsys.readouterr().err
+        assert not (tmp_path / "nmt").exists()
 
     def test_sidecar_nodata_comes_from_geotiff_tag(self, tmp_path):
         """Nodata w sidecarze pochodzi z tagu pobranego rastra, nie ze stalej."""

@@ -1533,6 +1533,7 @@ def _cz_download_bbox(
     Do serwera idzie potem zadanie w ukladzie natywnym, a na siatke wyniku
     przenosi je lokalny warp w providerze (ADR-024).
     """
+    from kartograf.download.storage import prune_empty_dirs
     from kartograf.providers.cuzk.client import wkid
     from kartograf.providers.cuzk.dmr import CUZK_NODATA, bbox_to_crs
     from kartograf.sources.registry import get_source
@@ -1576,8 +1577,13 @@ def _cz_download_bbox(
     try:
         provider.download_bbox(bbox, target)
     except (DownloadError, ValidationError) as e:
+        # zn. 10: porazka nie zostawia pustego drzewa <segment>/bbox/
+        prune_empty_dirs(target.parent, Path(args.output))
         print(f"Error: {e}", file=sys.stderr)
         return 1
+    except BaseException:
+        prune_empty_dirs(target.parent, Path(args.output))
+        raise
 
     nodata = _read_tif_nodata(target)
     _write_cz_sidecar(
