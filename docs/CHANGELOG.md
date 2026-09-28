@@ -152,6 +152,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     i sidecar z CUZK (Changed, A6-3).
 
 ### Added
+- **Wycinek PL jako API biblioteki** (`kartograf.download.cutout`, eksport
+  w `kartograf`): `download_pl_cutout(bbox, target_crs, ...)` — jeden scalony
+  GeoTIFF NMT PL (arkusze GUGiK -> mozaika -> lokalny warp przypieta
+  operacja), oraz kroki `prepare_pl_cutout` (fail-fast, bez sieci) /
+  `select_pl_cutout_sheets` / `run_pl_cutout` i typy `PlCutout`,
+  `PlCutoutSheets`, `PlCutoutResult`. CLI `--target-crs` dla PL jest nakladka
+  na te funkcje.
 - `DownloadManager.download_sheets(godla, ...)` i `DownloadManager.expand_sheets(godla)`
   — pobranie listy godel (grubsze PL-1992 rozwijane do 1:10000, duplikaty raz);
   porazki pojedynczych arkuszy zbierane w `last_result` (`failed`, `no_coverage`)

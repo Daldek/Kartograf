@@ -115,6 +115,17 @@ from kartograf import HSGCalculator
 calc = HSGCalculator()
 calc.calculate_hsg_by_godlo("N-34-130-D", Path("./hsg.tif"))
 stats = calc.get_hsg_statistics(Path("./hsg.tif"))
+
+# Scalony wycinek NMT PL w zadanym ukladzie (jeden GeoTIFF + sidecar)
+from kartograf import BBox, download_pl_cutout
+
+result = download_pl_cutout(
+    BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
+    "EPSG:5514",
+    output_dir="./data",
+    max_workers=4,
+)
+print(result.path)
 ```
 
 Pozostałe elementy publicznego API (m.in. `GugikNmptProvider`, `GugikOrtoProvider`,

@@ -28,6 +28,15 @@ from kartograf.core.geometry import find_sheets_for_geometry
 from kartograf.core.parser_2000 import Parser2000, find_sheets_2000_for_bbox
 from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
+from kartograf.download.cutout import (
+    PlCutout,
+    PlCutoutResult,
+    PlCutoutSheets,
+    download_pl_cutout,
+    prepare_pl_cutout,
+    run_pl_cutout,
+    select_pl_cutout_sheets,
+)
 from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
 from kartograf.download.storage import FileStorage
 from kartograf.exceptions import (
@@ -67,6 +76,14 @@ __all__ = [
     "DownloadProgress",
     "DownloadResult",
     "FileStorage",
+    # Download (wycinek PL, ADR-027)
+    "PlCutout",
+    "PlCutoutResult",
+    "PlCutoutSheets",
+    "download_pl_cutout",
+    "prepare_pl_cutout",
+    "run_pl_cutout",
+    "select_pl_cutout_sheets",
     # Land Cover
     "LandCoverManager",
     # Providers
