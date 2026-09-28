@@ -46,8 +46,9 @@ Decyzja kontrolera (bez pytania, w duchu raportu): zn. 9 — bez twardego limitu
 ## Global Constraints
 
 - Galaz: **develop** (praca bezposrednio, nic nie pushujemy). Conventional Commits, commit po kazdym zadaniu. Stopka commita: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
-- Komendy zawsze przez venv: `.venv/bin/python -m pytest tests/ -q` (testy OFFLINE — `tests/conftest.py` przewraca kazdy test otwierajacy gniazdo poza loopbackiem; zadnych testow z siecia), `.venv/bin/python -m ruff check kartograf/ tests/`, `.venv/bin/python -m ruff format --check kartograf/ tests/`, `.venv/bin/python -m mypy kartograf/`.
-- Punkt startowy: **1787 testow** (2026-08-28) — zmierz w Zad. 0 i zapisz w ledgerze; mypy 32 (fakt 11). Po kazdym zadaniu: pelna suita zielona, ruff check + format czyste, mypy bez NOWYCH bledow (porownuj liste `plik: komunikat` z baseline — przesuniecia linii udaja nowe bledy).
+- Komendy zawsze przez venv: `.venv/bin/python -m pytest tests/ -q -m "not live"` (testy OFFLINE — `tests/conftest.py` przewraca kazdy test otwierajacy gniazdo poza loopbackiem; `pyproject.toml` NIE ma `addopts -m`, wiec bez `-m "not live"` `pytest tests/ -q` odpala takze 8 testow `live` z siecia — pre-flight P-16), `.venv/bin/python -m ruff check kartograf/ tests/`, `.venv/bin/python -m ruff format --check kartograf/ tests/`, `.venv/bin/python -m mypy kartograf/`.
+- Punkt startowy: **1779 testow offline** (`-m "not live"`; 1787 z 8 testami sieciowymi `live`) (2026-08-28) — zmierz w Zad. 0 i zapisz w ledgerze; mypy 32 (fakt 11). Po kazdym zadaniu: pelna suita zielona, ruff check + format czyste, mypy bez NOWYCH bledow (porownuj liste `plik: komunikat` z baseline — przesuniecia linii udaja nowe bledy).
+- Kod z planu przed commitem musi przejsc `ruff check` (B905 zip strict, SIM117, E501 — zawijaj dlugie linie; pre-flight P-11).
 - **Dowod mutacyjny obowiazkowy** dla kazdego nowego/zmienionego testu zachowania: zepsuj kod produkcyjny w miejscu, ktorego test broni -> pokaz FAIL -> przywroc -> pokaz PASS -> `git status` czysty poza zmianami zadania. Mutacje wymienione w zadaniach sa MINIMUM. Wynik (mutacja + fragment FAIL) idzie do raportu zadania; re-reviewer powtarza co najmniej jedna mutacje samodzielnie.
 - **Dokumentacja klamie czesciej niz kod**: kazde twierdzenie o zachowaniu w docs/komentarzach/docstringach weryfikuj na zywym kodzie; gotowe teksty z tego planu tez nie sa nieomylne. Liczby wpisuj tylko zmierzone.
 - Dokumentacja i komentarze: polski bez znakow diakrytycznych (ASCII). Docstringi w istniejacych plikach: jezyk pliku (`download/storage.py`, `download/manager.py` — angielski; `cli/*`, `transform/*`, `transport/*`, `core/sheet_parser.py`, nowy `download/cutout.py` — polski ASCII).
@@ -67,6 +68,38 @@ superpowers:subagent-driven-development w wariancie "team-driven" z pamieci proj
 - Ledger i artefakty: `docs/research/2026-09-28-fala-review-max/` (skopiowac z workspace SDD przed jego usunieciem — w etapie 1 ledger przepadl).
 - Subagenci w worktree: po skopiowaniu wynikow ZAWSZE `git diff` pliku wobec develop (subagent potrafi skasowac kod poza zakresem).
 
+## Poprawki pre-flight (2026-09-28)
+
+Pre-flight audyt tego planu (21 znalezisk: 2 BLOCKING, 5 IMPORTANT, 14 MINOR) zostal w calosci
+zaakceptowany przez kontrolera i wniesiony do tresci zadan ponizej. Skrot (ID, waga, zadanie, co
+sie zmienilo):
+
+| ID | Waga | Zadanie | Co zmieniono |
+|---|---|---|---|
+| P-01 | BLOCKING | 4, 9, 17 | `_same_projection` zamiast samego `CRS.equals(...)` — kazdy WKT1 EPSG:2180 (GDAL/ESRI/`.prj` Hydrografu) byl inaczej odrzucany jako "niezgodny CRS"; test sparametryzowany na 3 warianty WKT. |
+| P-02 | BLOCKING | 9, 17 | Test rampy 5514 porownuje teraz z niezaleznym `warp_to_grid` (bit-w-bit), nie z progami 0,02/0,05 m (nieosiagalnymi po naprawie — rezydualna rozbieznosc GDAL/pyproj); `_erode` i Step 1a usuniete. |
+| P-03 | IMPORTANT | 12 | Nowy krok wymienia 10 istniejacych testow zepsutych przez `read_source_crs` na plikach-atrapach + dokladny patch per test. |
+| P-04 | IMPORTANT | 8 | `test_without_target_crs_behaviour_unchanged` zostaje przy wlasnych patchach `_DL` (tor bez wycinka) — dopisany kod. |
+| P-05 | IMPORTANT | 4 | Zapas testu deskryptorow VRT: `in_use + 160` -> `in_use + 64` (160 maskowalo mutacje); usuniety nakaz STOP. |
+| P-06 | IMPORTANT | 7 | Mutacja (3) przeniesiona z `_download_single_sheet_task` (nie failuje) na `_download_hierarchy_sequential`. |
+| P-07 | IMPORTANT | 9 | `test_integer_first_sheet_keeps_decimals` sparametryzowany na obie kolejnosci wejscia — oryginalna kolejnosc `[b, a]` nie dawala RED. |
+| P-08 | MINOR | 5 | Step 4 i CHANGELOG opisuja tez znana nadmiarowa selekcje (+4 arkusze dla bboxa testu). |
+| P-09 | MINOR | 15 | Asercja spojnosci CLI sprawdza tez literalny segment sciezki, nie tylko rownosc z ta sama funkcja; poprawiona atrybucja mutacji (1). |
+| P-10 | MINOR | 6 | Mutacja (1): usunieto falszywe "i test managera FAIL". |
+| P-11 | MINOR | 3, 4, 13, global | `zip(..., strict=True)` we wszystkich blokach kodu; zagniezdzone `with` w Zad. 13 polaczone; nowa regula globalna o `ruff check`. |
+| P-12 | MINOR | 8 | Doprecyzowane przepiecie testow: trzeci argument `vertical_crs` NIE jest zawsze `"EVRF2007"`; `TestGeometryCutout`/`TestBorderTwoCutouts` nie maja `_run`; stary docstring "guard R-12". |
+| P-13 | MINOR | mapa plikow | Tabela "Mapa plikow" poprawiona: CLAUDE.md (1,8,9,10,15,17), DECISIONS.md (1,10,17), README.md (8,17), ARCHITECTURE.md (15,17). |
+| P-14 | MINOR | 10 | Dopisano odswiezenie docstringu `run_pl_cutout` z Zad. 8 (falszywe po R5) + uwaga o tescie-strazniku. |
+| P-15 | MINOR | 5 | Docstring i CHANGELOG doprecyzowane (ekstremum tylko na gornej krawedzi); `parser_2000._transform_bbox_to_wgs84` dopisany do backlogu. |
+| P-16 | MINOR | global, 0, 17 | Wszystkie bramki testowe dostaja `-m "not live"`; baseline 1787 -> 1779 offline (+8 `live`). |
+| P-17 | MINOR | 4 | Mutacja (5): sprecyzowano, ze FAIL nastepuje przy zapisie (sterownik VRT), nie na asercji drivera. |
+| P-18 | MINOR | 13 | Test bez klasy przeniesiony do `TestMissingSheets`, uzywa `self._cutout`/`self._provider`. |
+| P-19 | MINOR | 11 | Przywrocona mutacja (5) usuniecia blokow 512 -> `RasterBlockError`; usuniety parenthetical "moze sie nie pojawic". |
+| P-20 | MINOR | 4 | Step 3(b): `transforms` liczone z `metas` — `_snap_outward` z Zad. 3 dalej ich potrzebuje. |
+| P-21 | MINOR | 17 | E2E kopiuje tez `.prj` dla co najmniej jednego arkusza (realny WKT Hydrografu). |
+
+Pelny raport: `.superpowers/sdd/2026-09-28-fala-review-max-i-wycinek-biblioteczny/preflight-report.md`.
+
 ## Review Focus (wejscia, ktore najpewniej ugryza uzytkownika; testy w zadaniach-wlascicielach)
 
 1. **Realna siatka GUGiK** (narozniki pikseli pol piksela od liczb calkowitych, arkusze nachodzace) i **bbox o calkowitych wspolrzednych** — dotychczasowe fixtury maja calkowite, stykajace sie arkusze i nie widza bledu nr 1. Wlasciciele: Zad. 3, 9.
@@ -79,7 +112,8 @@ superpowers:subagent-driven-development w wariancie "team-driven" z pamieci proj
 
 | Plik | Zmiana | Zadania |
 |---|---|---|
-| `CLAUDE.md`, `docs/DECISIONS.md` | prawda o `--force`, zdanie R-01 w ADR-027, uzupelnienie ADR-027 | 1, 17 |
+| `CLAUDE.md` | prawda o `--force` i selekcji R-01 (1); drzewo modulow — `cutout.py` (8); `--target-crs` PL: siatka arkuszy, blad PL-2000 (9); R5 — `NoCoverageError`/`Warning:` (10); uklad kafla LAZ (15); przeglad koncowy (17) | 1, 8, 9, 10, 15, 17 |
+| `docs/DECISIONS.md` | ADR-027: prawda o `--force`, zdanie R-01 (1); uzupelnienie R5 (10); drugie uzupelnienie koncowe (17) | 1, 10, 17 |
 | `kartograf/transport/mosaic.py` | leniwe zrodla, `snap_to_source_grid=`, `assign_crs=`/`dtype=` (VRT) | 2, 3, 4 |
 | `kartograf/core/sheet_parser.py` | obwiednia WGS84 z poludnikiem osiowym | 5 |
 | `kartograf/exceptions.py`, `kartograf/providers/pl/gugik.py` | `NoCoverageError`; niepewne pokrycie; ostrzezenie przy URL innego arkusza | 6 |
@@ -91,7 +125,10 @@ superpowers:subagent-driven-development w wariancie "team-driven" z pamieci proj
 | `kartograf/sources/descriptor.py` | pusty wymiar -> `ValidationError` | 14 |
 | `kartograf/providers/pl/gugik_laz.py` | `LazTile.uklad` | 15 |
 | `tests/test_transport_mosaic.py`, `tests/test_sheet_parser.py`, `tests/test_gugik_provider.py`, `tests/test_download_manager.py`, `tests/test_pl_cutout.py`, `tests/test_cli.py`, `tests/test_storage.py`, `tests/test_sources_registry.py`, `tests/test_gugik_laz.py` | testy + dowody mutacyjne | 2-16 |
-| `docs/ARCHITECTURE.md`, `docs/CHANGELOG.md`, `README.md`, `docs/PROGRESS.md` | synchronizacja (CHANGELOG w kazdym zadaniu, reszta w 17) | 2-17 |
+| `docs/CHANGELOG.md` | wpis w kazdym zadaniu (0.7.0: Added/Changed/Fixed/Tests) | 2-17 |
+| `docs/ARCHITECTURE.md` | sekcja 3.1, wiersz `{uklad}` (15); sekcja 4.3 przepisana calosc, koncowa synchronizacja (17) | 15, 17 |
+| `README.md` | przyklad `download_pl_cutout` w bibliotece (8); koncowa synchronizacja (17) | 8, 17 |
+| `docs/PROGRESS.md` | "Ostatnia sesja" po zamknieciu fali (kontroler, po 17) | 17 |
 
 **Poza zakresem** (zapisac w PROGRESS/backlogu w Zad. 17): zn. 15 (R2); scalanie PL+CZ (R6); obsluga arkuszy PL-2000 w wycinku (w tej fali tylko glosny blad — fakt 7); podwojna obwiednia, gdy uklad zadania = `--target-crs` (np. bbox i cel EPSG:5514: siatka 11,51 x 11,51 km zamiast 10 x 10 km — do rozwiazania razem z R6, bo tez dotyczy wspolnej siatki); przejscie trybow CLI bez `--target-crs` na `download_sheets` (dzis `_download_godlo_list` rzuca pierwsza porazka); tolerancja braku pokrycia w trybach bez wycinka; `warp_to_grid` zaokragla wymiary siatki (`round`), wiec moze uciac < 0,5 px na krawedzi wschodniej/poludniowej obwiedni. Znaleziska 13 i 14 zamykaja sie w Zad. 8 (duplikacja i mylace nazwy znikaja z przeniesieniem potoku do biblioteki).
 
@@ -133,10 +170,10 @@ superpowers:subagent-driven-development w wariancie "team-driven" z pamieci proj
 
 ```bash
 git status --short && git log --oneline -1
-.venv/bin/python -m pytest tests/ -q 2>&1 | tail -2
+.venv/bin/python -m pytest tests/ -q -m "not live" 2>&1 | tail -2
 .venv/bin/python -m mypy kartograf/ 2>&1 | grep -E "error:" | sed -E 's/:[0-9]+: /: /' | sort > "$SDD_WS/mypy-baseline.txt"; wc -l < "$SDD_WS/mypy-baseline.txt"
 ```
-Expected: HEAD `8cf1e5a`, jedyny nieskomitowany plik to raport review; `1787 passed` (+ deselected `live`); 32 linie bledow mypy.
+Expected: HEAD `8cf1e5a`, jedyny nieskomitowany plik to raport review; `1779 passed, 8 deselected` (bez `-m "not live"`: `1787 passed`, w tym 8 testow `live` z siecia — pre-flight P-16); 32 linie bledow mypy.
 
 - [ ] **Step 2: Wiersz w README folderu research** — dopisz do tabeli:
 
@@ -355,7 +392,7 @@ def mosaic_and_crop(
 
 - [ ] **Step 4: Zielono + tor CZ + pelna suita**
 
-Run: `.venv/bin/python -m pytest tests/test_transport_mosaic.py tests/test_cuzk_client.py tests/test_cuzk_dmr.py tests/test_pl_cutout.py -q` -> PASS; `.venv/bin/python -m pytest tests/ -q` -> PASS.
+Run: `.venv/bin/python -m pytest tests/test_transport_mosaic.py tests/test_cuzk_client.py tests/test_cuzk_dmr.py tests/test_pl_cutout.py -q` -> PASS; `.venv/bin/python -m pytest tests/ -q -m "not live"` -> PASS.
 
 - [ ] **Step 5: Dowod mutacyjny** — przywroc tymczasowo `contextlib.ExitStack()` z `sources = [stack.enter_context(rasterio.open(p)) for p in paths]` i `merge(sources, ...)`: nowy test FAIL (`Too many open files`); przywroc -> PASS; `git status` czysty poza zmianami zadania.
 
@@ -525,7 +562,7 @@ def _snap_outward(
     trwaly): wraca na liscie z przesunieciem w pikselach, a jego tresc merge
     przepisze metoda najblizszego sasiada.
     """
-    for path, t in zip(paths, transforms):
+    for path, t in zip(paths, transforms, strict=True):
         if t.b != 0 or t.d != 0:
             raise ValidationError(f"mosaic_and_crop: obrocona siatka zrodla {path.name}")
     rx, ry = transforms[0].a, -transforms[0].e
@@ -539,7 +576,7 @@ def _snap_outward(
             ((t.c - x0) / rx + 0.5) % 1.0 - 0.5,
             ((t.f - y0) / ry + 0.5) % 1.0 - 0.5,
         )
-        for path, t, key in zip(paths, transforms, keys)
+        for path, t, key in zip(paths, transforms, keys, strict=True)
         if key != majority
     ]
     min_x, min_y, max_x, max_y = bounds
@@ -600,9 +637,9 @@ Model: **opus** (review: opus) — XML VRT, `/vsimem/`, deskryptory. Parametry d
 - Test: `tests/test_transport_mosaic.py`
 
 **Interfaces:**
-- Produces: `mosaic_and_crop(..., assign_crs: str | None = None, dtype: str | None = None) -> Path`. Gdy ktorys podany: kazde zrodlo (jednopasmowe) owijane jest w VRT 1:1 w `/vsimem/` (`rasterio.io.MemoryFile`) z `SRS` = `assign_crs` (albo wlasny CRS zrodla) i typem pasma = `dtype` (albo wlasny); `merge` dostaje nazwy VRT. Zrodlo z WLASNYM CRS roznym od `assign_crs` (porownanie `pyproj.CRS.equals(..., ignore_axis_order=True)`) -> `ValidationError` ("wymuszany"); zrodlo bez CRS (ASC bez `.prj`) — dozwolone. Zrodlo wielopasmowe przy owijaniu -> `ValidationError`.
+- Produces: `mosaic_and_crop(..., assign_crs: str | None = None, dtype: str | None = None) -> Path`. Gdy ktorys podany: kazde zrodlo (jednopasmowe) owijane jest w VRT 1:1 w `/vsimem/` (`rasterio.io.MemoryFile`) z `SRS` = `assign_crs` (albo wlasny CRS zrodla) i typem pasma = `dtype` (albo wlasny); `merge` dostaje nazwy VRT. Zrodlo z WLASNYM CRS roznym od `assign_crs` (porownanie `_same_projection(meta["crs"], target)` — NIE samo `pyproj.CRS.equals(..., ignore_axis_order=True)`: kazdy WKT1 EPSG:2180 z tym porownaniem daje False, zmierzone 2026-09-28 w pre-flight, patrz Step 3) -> `ValidationError` ("wymuszany"); zrodlo bez CRS (ASC bez `.prj`) — dozwolone. Zrodlo wielopasmowe przy owijaniu -> `ValidationError`.
 
-- [ ] **Step 1: Testy padajace** — w `tests/test_transport_mosaic.py`:
+- [ ] **Step 1: Testy padajace** — w `tests/test_transport_mosaic.py` (dodaj `from pyproj import CRS` na gorze pliku, jesli brak — potrzebne przy imporcie, na poziomie modulu, do parametrize nizej):
 
 ```python
 def _write_asc_text(path, xll, yll, rows, *, cellsize=1.0, nodata_header="-9999"):
@@ -615,18 +652,40 @@ def _write_asc_text(path, xll, yll, rows, *, cellsize=1.0, nodata_header="-9999"
     return path
 
 
-def _write_prj(asc_path, epsg):
-    from pyproj import CRS
-
-    asc_path.with_suffix(".prj").write_text(CRS.from_epsg(epsg).to_wkt("WKT1_GDAL"))
+def _write_prj(asc_path, wkt_text):
+    asc_path.with_suffix(".prj").write_text(wkt_text)
 
 
-def test_assign_crs_merges_sources_with_and_without_prj(tmp_path):
+_HYDROGRAF_2180_WKT = (  # tresc .prj z cache Hydrografu (gdalsrsinfo -o wkt_simple)
+    'PROJCS["ETRF2000-PL / CS92",GEOGCS["ETRF2000-PL",DATUM["ETRF2000_Poland",'
+    'SPHEROID["GRS 1980",6378137,298.257222101]],PRIMEM["Greenwich",0],'
+    'UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],'
+    'PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",19],'
+    'PARAMETER["scale_factor",0.9993],PARAMETER["false_easting",500000],'
+    'PARAMETER["false_northing",-5300000],UNIT["metre",1]]'
+)
+
+# P-01: kazdy z tych trzech WKT1 opisuje EPSG:2180, ale samo CRS.equals(...,
+# ignore_axis_order=True) zwraca dla wszystkich False (pyproj 3.7.2 / PROJ 9.5.1,
+# zmierzone 2026-09-28) — stad _same_projection w Step 3.
+_2180_WKT_VARIANTS = [
+    CRS.from_epsg(2180).to_wkt("WKT1_GDAL"),
+    CRS.from_epsg(2180).to_wkt("WKT1_ESRI"),
+    _HYDROGRAF_2180_WKT,
+]
+
+
+@pytest.mark.parametrize(
+    "prj_text", _2180_WKT_VARIANTS, ids=["wkt1_gdal", "wkt1_esri", "hydrograf"]
+)
+def test_assign_crs_merges_sources_with_and_without_prj(tmp_path, prj_text):
     """Fakt 6: Hydrograf dopisuje .prj do czesci arkuszy; merge rzucal
-    'CRS mismatch'. Z assign_crs zrodla dostaja jawny SRS przez VRT."""
+    'CRS mismatch'. Z assign_crs zrodla dostaja jawny SRS przez VRT.
+    Wszystkie trzy warianty WKT1 EPSG:2180 (pyproj GDAL/ESRI, .prj Hydrografu)
+    musza zostac uznane za "ten sam" uklad (P-01)."""
     a = _write_asc_text(tmp_path / "a.asc", 0.5, 0.5, [["1.5"] * 4] * 4)
     b = _write_asc_text(tmp_path / "b.asc", 4.5, 0.5, [["2.5"] * 4] * 4)
-    _write_prj(a, 2180)
+    _write_prj(a, prj_text)
     with rasterio.open(a) as sa, rasterio.open(b) as sb:
         assert sa.crs is not None and sb.crs is None  # warunek sensownosci testu
     bbox = BBox(0.5, 0.5, 8.5, 4.5, "EPSG:2180")
@@ -642,7 +701,7 @@ def test_assign_crs_merges_sources_with_and_without_prj(tmp_path):
 
 def test_assign_crs_rejects_source_with_other_crs(tmp_path):
     a = _write_asc_text(tmp_path / "a.asc", 0.5, 0.5, [["1.5"] * 4] * 4)
-    _write_prj(a, 2177)
+    _write_prj(a, CRS.from_epsg(2177).to_wkt("WKT1_GDAL"))
     with pytest.raises(ValidationError, match="wymuszany"):
         mosaic_and_crop(
             [a], BBox(0.5, 0.5, 4.5, 4.5, "EPSG:2180"), tmp_path / "o.tif",
@@ -682,9 +741,10 @@ def test_vrt_wrapping_does_not_exhaust_file_descriptors(tmp_path):
         _ = src.crs
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
     in_use = len(os.listdir("/proc/self/fd"))
-    # zapas 160: pula zbiorow GDAL (GDAL_MAX_DATASET_POOL_SIZE, domyslnie 100)
-    # moze trzymac otwarte zrodla VRT — zmierz faktyczne zuzycie i wpisz do raportu
-    resource.setrlimit(resource.RLIMIT_NOFILE, (in_use + 160, hard))
+    # poprawny kod potrzebuje < 6 deskryptorow; pula GDAL (GDAL_MAX_DATASET_POOL_SIZE,
+    # domyslnie 100) maskowalaby "wszystkie VRT naraz" przy zapasie > ~110 (P-05,
+    # zmierzone w pre-flight 2026-09-28: mutacja przechodzi przy 160, pada przy 64)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (in_use + 64, hard))
     try:
         out = mosaic_and_crop(
             paths, BBox(0, 0, 2 * n, 2, "EPSG:2180"), tmp_path / "out.tif",
@@ -699,7 +759,7 @@ def test_vrt_wrapping_does_not_exhaust_file_descriptors(tmp_path):
 - [ ] **Step 2: Uruchom — musza padac** (`unexpected keyword argument 'assign_crs'`).
 
 - [ ] **Step 3: Implementacja** w `kartograf/transport/mosaic.py`:
-  (a) importy: `import os`, `from xml.sax.saxutils import escape`, `from pyproj import CRS`, `from rasterio.io import MemoryFile`; stale i helper:
+  (a) importy: `import os`, `import warnings`, `from xml.sax.saxutils import escape`, `from pyproj import CRS`, `from rasterio.io import MemoryFile`; stale i helper:
 
 ```python
 # typ numpy/rasterio -> nazwa typu GDAL w XML VRT
@@ -727,11 +787,27 @@ def _vrt_xml(path: Path, meta: dict, *, crs_wkt: str | None, dtype: str, nodata)
         "</SourceFilename><SourceBand>1</SourceBand></SimpleSource>"
         "</VRTRasterBand></VRTDataset>"
     )
+
+
+def _same_projection(src_crs, target: CRS) -> bool:
+    """Czy CRS zrodla to uklad wymuszany?
+
+    Samo ``CRS.equals(..., ignore_axis_order=True)`` NIE wystarcza: kazdy WKT1
+    EPSG:2180 (WKT1_GDAL z pyproj, ESRI, ``gdalsrsinfo -o wkt_simple`` z .prj
+    Hydrografu) daje False (zmierzone 2026-09-28, pyproj 3.7.2 / PROJ 9.5.1),
+    wiec porownujemy takze parametry odwzorowania (slownik PROJ.4).
+    """
+    candidate = CRS.from_user_input(src_crs.to_wkt())
+    if candidate.equals(target, ignore_axis_order=True):
+        return True
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", UserWarning)  # to_dict() ostrzega o PROJ.4
+        return candidate.to_dict() == target.to_dict()
 ```
 
-  (b) w `mosaic_and_crop`: parametry `assign_crs: str | None = None, dtype: str | None = None` (keyword-only). Petla metadanych zbiera per zrodlo slownik `meta = {"crs", "transform", "width", "height", "count", "dtype", "nodata"}` (plus `res` do `res_set`). Walidacja:
+  (b) w `mosaic_and_crop`: parametry `assign_crs: str | None = None, dtype: str | None = None` (keyword-only). Petla metadanych zbiera per zrodlo slownik `meta = {"crs", "transform", "width", "height", "count", "dtype", "nodata"}` (plus `res` do `res_set`) do listy `metas`; `transforms = [m["transform"] for m in metas]` — `_snap_outward` z Zad. 3 dalej konsumuje `transforms`, wiec ta zmienna zostaje WYPROWADZONA z `metas`, nie liczona osobna petla (P-20). Walidacja:
   - bez `assign_crs`: kontrola `crs_set` jak dotad;
-  - z `assign_crs`: `target = CRS.from_user_input(assign_crs)`; kazde zrodlo z `meta["crs"] is not None` i `not CRS.from_user_input(meta["crs"].to_wkt()).equals(target, ignore_axis_order=True)` -> `ValidationError(f"mosaic_and_crop: zrodlo {path.name} ma CRS {meta['crs']}, a wymuszany jest {assign_crs}")`; kontroli `crs_set` nie ma (CRS `None` obok EPSG:2180 jest dozwolony);
+  - z `assign_crs`: `target = CRS.from_user_input(assign_crs)`; kazde zrodlo z `meta["crs"] is not None` i `not _same_projection(meta["crs"], target)` -> `ValidationError(f"mosaic_and_crop: zrodlo {path.name} ma CRS {meta['crs']}, a wymuszany jest {assign_crs}")` (patrz `_same_projection` w (a) — samo `CRS.equals(..., ignore_axis_order=True)` odrzucaloby kazdy WKT1 EPSG:2180, wlacznie z `.prj` Hydrografu — P-01); kontroli `crs_set` nie ma (CRS `None` obok EPSG:2180 jest dozwolony);
   - przy owijaniu (`assign_crs or dtype`): `meta["count"] != 1` -> `ValidationError`; typ spoza `_VRT_TYPES` -> `ValidationError`.
   Przy owijaniu `kwds.setdefault("driver", "GTiff")` — `merge` bierze profil wyjscia z PIERWSZEGO zrodla, a to bylby VRT (bez tego wynik bez `dst_kwds` zapisalby sie sterownikiem VRT). Owijanie (tuz przed `merge`, po przyciaganiu z Zad. 3 — transformacje VRT = transformacje zrodel, wiec przyciaganie liczone na oryginalach jest wazne):
 
@@ -741,7 +817,7 @@ def _vrt_xml(path: Path, meta: dict, *, crs_wkt: str | None, dtype: str, nodata)
         if assign_crs is not None or dtype is not None:
             forced_wkt = CRS.from_user_input(assign_crs).to_wkt() if assign_crs else None
             sources: list = []
-            for path, meta in zip(paths, metas):
+            for path, meta in zip(paths, metas, strict=True):
                 wkt = forced_wkt or (meta["crs"].to_wkt() if meta["crs"] else None)
                 xml = _vrt_xml(
                     path, meta, crs_wkt=wkt, dtype=dtype or meta["dtype"],
@@ -759,14 +835,15 @@ def _vrt_xml(path: Path, meta: dict, *, crs_wkt: str | None, dtype: str, nodata)
 ```
   Docstring: akapit o `assign_crs`/`dtype` (po co: `.prj` od Hydrografu, Int32; co odrzuca).
 
-- [ ] **Step 4: Zielono + CZ + pelna suita.** Do raportu: faktyczne zuzycie deskryptorow w `test_vrt_wrapping_does_not_exhaust_file_descriptors` (np. obnizaj zapas, az padnie) — jesli VRT trzyma > 100 zrodel otwartych, STOP i zglos kontrolerowi (ruling przed dalsza praca).
+- [ ] **Step 4: Zielono + CZ + pelna suita.** Do raportu: faktyczne zuzycie deskryptorow w `test_vrt_wrapping_does_not_exhaust_file_descriptors` (np. obnizaj zapas, az padnie) — zapisz faktyczne zuzycie w raporcie (zmierzone w pre-flight 2026-09-28: poprawny kod < 6 deskryptorow, pula GDAL ~100 — nie jest to STOP, P-05).
 
 - [ ] **Step 5: Dowody mutacyjne:**
   1. Zamiast `sources.append(memfile.name)` podawaj `path` (bez VRT), zostawiajac pominieta kontrole `crs_set` — `test_assign_crs_merges_sources_with_and_without_prj` FAIL (`CRS mismatch`).
   2. `dtype=dtype or meta["dtype"]` -> `dtype=meta["dtype"]` — test Int32 FAIL (100.0).
   3. Usun kontrole "wymuszany" — `test_assign_crs_rejects_source_with_other_crs` FAIL.
   4. Otwieraj wszystkie VRT naraz przed `merge` (lista `rasterio.open(mf.name)` w `ExitStack`) — test deskryptorow FAIL.
-  5. Usun `kwds.setdefault("driver", "GTiff")` — asercja `src.driver == "GTiff"` FAIL.
+  5. Usun `kwds.setdefault("driver", "GTiff")` — zapis pada sterownikiem VRT (`RasterioIOError: Write failed`), ZANIM asercja `src.driver == "GTiff"` jest w ogole sprawdzona: FAIL (zapis przez sterownik VRT), nie asercja drivera (P-17).
+  6. `_same_projection` -> samo `candidate.equals(target, ignore_axis_order=True)` (usun fallback `to_dict()`) — `test_assign_crs_merges_sources_with_and_without_prj` FAIL dla wszystkich trzech wariantow (`wkt1_gdal`, `wkt1_esri`, `hydrograf`) (P-01).
 
 - [ ] **Step 6: Commit** (CHANGELOG w Zad. 9)
 
@@ -831,9 +908,11 @@ def _transform_bbox_to_wgs84(bbox: BBox) -> BBox:
     niego. Dla bboxa przecinajacego ten poludnik obwiednia z 4 naroznikow
     gubila pas przy gornej krawedzi (zmierzone 2026-09-28: 6 arkuszy 1:10000
     dla bboxa szerokiego na 20 km; pas rosnie z kwadratem szerokosci, ~63 m
-    przy 50 km). Punkt na poludniku osiowym na obu krawedziach poziomych
-    daje ekstrema dokladnie; dlugosc geograficzna i krawedzie pionowe maja
-    ekstrema w naroznikach.
+    przy 50 km). Punkt na poludniku osiowym na GORNEJ krawedzi daje maksimum
+    szerokosci dokladnie (to on gubil arkusze); na DOLNEJ krawedzi minimum
+    szerokosci i tak wypada w naroznikach — dodatkowy punkt tam jest
+    niegrozny, ale nie zmienia wyniku (P-15). Dlugosc geograficzna i
+    krawedzie pionowe maja ekstrema w naroznikach.
 
     Parameters
     ----------
@@ -870,19 +949,24 @@ def _transform_bbox_to_wgs84(bbox: BBox) -> BBox:
     )
 ```
 
-- [ ] **Step 4: Zielono + pelna suita.** Jesli padaja istniejace testy z bboxem przecinajacym x = 500 000 (nowe arkusze na liscie), przeanalizuj kazdy przypadek: nowy arkusz musi faktycznie przecinac bbox (ta sama kontrola co w warunku sensownosci); zaktualizuj oczekiwania i opisz w raporcie.
+- [ ] **Step 4: Zielono + pelna suita.** Jesli padaja istniejace testy z bboxem przecinajacym x = 500 000 (nowe arkusze na liscie), przeanalizuj kazdy przypadek: nowy arkusz musi przecinac OBWIEDNIE WGS84 bboxa (nie sam bbox w 2180 — po dodaniu punktu na poludniku obwiednia jest SZERSZA niz przeciecie z bboxem, wiec pojawiaja sie arkusze POZA bboxem w 2180: to znana nadmiarowa selekcja obwiedni, zmierzone w pre-flight +4 arkusze dla bboxa uzytego w testach tego zadania — nie traktuj tego jako regresji do naprawienia w tym zadaniu); zaktualizuj oczekiwania i opisz w raporcie (P-08).
 
 - [ ] **Step 5: Dowod mutacyjny** — usun dopisywanie punktow poludnika: test FAIL; przywroc -> PASS.
 
 - [ ] **Step 6: CHANGELOG** (`### Fixed`):
 
 ```markdown
-- **Selekcja arkuszy gubila pas przy gornej krawedzi bboxa na poludniku 19°E.**
-  Obwiednia WGS84 liczona z 4 naroznikow pomijala maksimum szerokosci
-  geograficznej lezace na poludniku osiowym PUWG 1992; dla bboxa szerokiego na
-  20 km pomijanych bylo 6 arkuszy przecinajacych bbox (pas ~63 m przy 50 km).
-  Dotyczy `find_sheets_for_bbox`/`find_sheets_for_geometry` i wszystkich
-  trybow `--bbox`/`--geometry`.
+- **Selekcja arkuszy PL-1992 z bboxa EPSG:2180 gubila pas przy gornej
+  krawedzi bboxa na poludniku 19°E.** Obwiednia WGS84 liczona z 4 naroznikow
+  pomijala maksimum szerokosci geograficznej lezace na poludniku osiowym
+  PUWG 1992; dla bboxa szerokiego na 20 km pomijanych bylo 6 arkuszy
+  przecinajacych bbox (pas ~63 m przy 50 km). Naprawa wprowadza tez znana
+  nadmiarowa selekcje: obwiednia WGS84 jest SZERSZA niz przeciecie bboxa
+  w EPSG:2180, wiec moga pojawic sie arkusze spoza bboxa (zmierzone: +4
+  arkusze dla bboxa uzytego w testach tego zadania). Dotyczy
+  `find_sheets_for_bbox`/`find_sheets_for_geometry` z bboxem w EPSG:2180
+  (`--system 2000` uzywa osobnej obwiedni w `parser_2000` — nie objete tu,
+  patrz backlog).
 ```
 
 - [ ] **Step 7: Commit**
@@ -1095,7 +1179,7 @@ class NoCoverageError(DownloadError):
 
 - [ ] **Step 4: Zielono + pelna suita** (sprawdz testy CLI z komunikatem "may not have coverage" — tryby bez wycinka musza miec te same kody wyjscia).
 
-- [ ] **Step 5: Dowody mutacyjne:** (1) koncowe `raise NoCoverageError` -> `raise DownloadError` — test (a) i test managera FAIL; (2) usun galaz `if transport_errors:` — test (b) FAIL; (3) w `_download_hierarchy_parallel` nie dopisuj do `no_coverage` — wariant `[4]` FAIL, a w sekwencyjnym — `[1]` FAIL (dwie osobne mutacje, bo to dwie sciezki); (4) przywroc `logger.debug` przy fallbacku — test (c) FAIL.
+- [ ] **Step 5: Dowody mutacyjne:** (1) koncowe `raise NoCoverageError` -> `raise DownloadError` — test (a) FAIL (test managera NIE jest tym dotkniety: jego mock providera sam rzuca `NoCoverageError` wprost, wiec zmiana w `gugik.py` na niego nie wplywa — P-10); (2) usun galaz `if transport_errors:` — test (b) FAIL; (3) w `_download_hierarchy_parallel` nie dopisuj do `no_coverage` — wariant `[4]` FAIL, a w sekwencyjnym — `[1]` FAIL (dwie osobne mutacje, bo to dwie sciezki); (4) przywroc `logger.debug` przy fallbacku — test (c) FAIL.
 
 - [ ] **Step 6: CHANGELOG** — `### Added`: "`NoCoverageError(DownloadError)` — zrodlo nie ma danych dla arkusza (wszystkie warstwy skorowidza odpowiedzialy); `DownloadResult.no_coverage` — podzbior `failed`." `### Changed`: "Czesciowa awaria warstw skorowidza GUGiK przy braku arkusza w pozostalych to teraz 'brak pokrycia niepewny' (`DownloadError`), nie brak pokrycia; URL innego arkusza z fallbacku skorowidza loguje ostrzezenie (arkusze PL-2000 pod godlem PL-1992)."
 
@@ -1264,7 +1348,7 @@ class TestDownloadManagerDownloadSheets:
 
 - [ ] **Step 4: Zielono + pelna suita.**
 
-- [ ] **Step 5: Dowody mutacyjne:** (1) w `expand_sheets` dodawaj zawsze (bez `seen`) — dwa testy FAIL; (2) wywoluj `self.expand_sheets` dopiero po `self.last_result = None` ale leniwie w petli pobierania (tak, by `ParseError` padal po pierwszym pobraniu) — `test_invalid_godlo_raises_before_any_download` FAIL; (3) `_download_single_sheet_task`: `except DownloadError` -> `raise` — `test_failures_collected_not_raised[4]` FAIL.
+- [ ] **Step 5: Dowody mutacyjne:** (1) w `expand_sheets` dodawaj zawsze (bez `seen`) — dwa testy FAIL; (2) wywoluj `self.expand_sheets` dopiero po `self.last_result = None` ale leniwie w petli pobierania (tak, by `ParseError` padal po pierwszym pobraniu) — `test_invalid_godlo_raises_before_any_download` FAIL; (3) `_download_hierarchy_sequential`: cialo `except DownloadError as e:` -> `raise` — `test_failures_collected_not_raised[1]` FAIL (P-06: `_download_single_sheet_task` nie dziala jako cel tej mutacji — wyjatek i tak trafia do ogolnego `except Exception` w `_download_hierarchy_parallel`, wiec test tam PRZECHODZI mimo mutacji).
 
 - [ ] **Step 6: CHANGELOG** (`### Added`):
 
@@ -1811,9 +1895,9 @@ def _download_pl_cutout(
   (e) `kartograf/__init__.py`: import z `kartograf.download.cutout` i `__all__` (nowa sekcja `# Download (wycinek PL, ADR-027)`): `PlCutout`, `PlCutoutResult`, `PlCutoutSheets`, `download_pl_cutout`, `prepare_pl_cutout`, `run_pl_cutout`, `select_pl_cutout_sheets`.
 
 - [ ] **Step 3: Przepiecie testow** (zachowaj WSZYSTKIE asercje; zmieniaja sie tylko cele patchy/importy):
-  - `tests/test_pl_cutout.py`: importy `_build_pl_cutout`, `_prepare_pl_cutout` -> `build_pl_cutout`, `prepare_pl_cutout` z `kartograf.download.cutout`; `_build_pl_cutout(` -> `build_pl_cutout(` (te same argumenty pozycyjne); `_prepare_pl_cutout(args, bbox, "EVRF2007")` -> `prepare_pl_cutout(bbox, args.target_crs, output_dir=args.output, resolution=args.resolution or "1m", vertical_crs="EVRF2007")`.
+  - `tests/test_pl_cutout.py`: importy `_build_pl_cutout`, `_prepare_pl_cutout` -> `build_pl_cutout`, `prepare_pl_cutout` z `kartograf.download.cutout`; `_build_pl_cutout(` -> `build_pl_cutout(` (te same argumenty pozycyjne); `_prepare_pl_cutout(args, bbox, vcrs)` -> `prepare_pl_cutout(bbox, args.target_crs, output_dir=args.output, resolution=args.resolution or "1m", vertical_crs=vcrs)` — PRZEPISZ TRZECI ARGUMENT WPROST, NIE hardcoduj `"EVRF2007"`: `test_vertical_kron86_lands_in_kron86_segment` wola dzis `_prepare_pl_cutout(args, bbox, "KRON86")`, wiec repiete wywolanie musi dostac `vertical_crs="KRON86"` (P-12); w testach korzystajacych z helpera `_args` (bez gotowego `args.output`) podaj `output_dir=str(tmp_path)`.
   - Na poziomie modulu, obok `_DL = "kartograf.cli.download_cmd"` (`tests/test_pl_cutout.py:271`), dodaj `_CUT = "kartograf.download.cutout"` — uzywaja go takze Zad. 9-11.
-  - Harness `TestDownloadPlBboxCutout._run` (i analogiczne w `TestGeometryCutout`, `TestBorderTwoCutouts`): zamiast patchy `f"{_DL}.find_sheets_for_bbox"`, `f"{_DL}.DownloadManager"`, `f"{_DL}._download_godlo_list"`:
+  - Harness `TestDownloadPlBboxCutout._run`: zamiast patchy `f"{_DL}.find_sheets_for_bbox"`, `f"{_DL}.DownloadManager"`, `f"{_DL}._download_godlo_list"`:
 
 ```python
     def _run(self, tmp_path, args, sheets, failed=(), provider=None):
@@ -1832,7 +1916,22 @@ def _download_pl_cutout(
         return rc, manager, find
 ```
     Asercje na starym `dl` (mock `_download_godlo_list`) tlumacz na `manager.download_sheets` (np. `dl.assert_not_called()` -> `manager.download_sheets.assert_not_called()`; lista godel z `call_args.args[1]` -> `call_args.args[0]`).
+  - `test_without_target_crs_behaviour_unchanged` (ta sama klasa) NIE przechodzi na `_run`/`_CUT`: wywoluje `_download_pl_bbox(..., target_crs=None)`, czyli tor BEZ wycinka, ktory nadal uzywa `_DL.find_sheets_for_bbox`/`DownloadManager`/`_download_godlo_list` — zostaw jej WLASNE patche `_DL`, bez zmian w asercjach (P-04):
+
+```python
+        sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
+        with (
+            patch(f"{_DL}.find_sheets_for_bbox", return_value=["N-1"]) as find,
+            patch(f"{_DL}._create_provider_and_storage",
+                  return_value=(SimpleNamespace(vertical_crs="EVRF2007"), Mock())),
+            patch(f"{_DL}.DownloadManager"),
+            patch(f"{_DL}._download_godlo_list", return_value=(sheets, [])),
+        ):
+            rc = _download_pl_bbox(_pl_args(tmp_path, target_crs=None), _BBOX_2180, _PARENT)
+```
+  - `TestGeometryCutout` i `TestBorderTwoCutouts` NIE MAJA `_run` — kazdy test tam patchuje inline (P-12). Zmien `f"{_DL}.find_sheets_for_bbox"` -> `f"{_CUT}.find_sheets_for_bbox"` i `f"{_DL}.DownloadManager"` -> `f"{_CUT}.DownloadManager"` (`return_value=<mock managera z .download_sheets i .last_result>`) zamiast `f"{_DL}._download_godlo_list"`; `f"{_DL}._create_provider_and_storage"` zostaje bez zmian (provider/storage nadal tworzy CLI). `test_geometry_target_5514_covers_whole_envelope` mapowal dotad godla -> arkusze przez `_download_godlo_list(side_effect=...)`; teraz to `manager.download_sheets.side_effect = lambda godla, **kw: [sheets[g] for g in godla]` (zweryfikowane dzialajace w pre-flight).
   - `test_unexpected_raster_error_returns_1`: patch `_build_pl_cutout` -> `f"{_CUT}.build_pl_cutout"`.
+  - Docstring `test_cli_geometry_target_crs_reaches_worker` wspomina "guard R-12", ktory to zadanie usuwa (martwy guard `bbox is None`) — odswiez tresc (P-12).
   - `tests/test_cli.py`: `grep -n "_build_pl_cutout\|_finalize_pl_cutout\|_prepare_pl_cutout\|_PlCutout\|_PL_NODATA\|_PL_PIXEL" tests/` — kazde trafienie przepnij analogicznie; testy trybow BEZ `--target-crs` zostaja bez zmian.
 
 - [ ] **Step 4: Nowe testy API** — w `tests/test_pl_cutout.py`:
@@ -1994,21 +2093,14 @@ def _ids(gx, gy):
     return 1000.0 * np.floor(382150.5 - gy) + np.floor(gx - 529950.5)
 
 
-def _erode(mask, n):
-    """Erozja maski o n pikseli (4-sasiedztwo), bez scipy; brzegi rastra = False."""
-    out = mask.copy()
-    for _ in range(n):
-        shrunk = out.copy()
-        shrunk[1:, :] &= out[:-1, :]
-        shrunk[:-1, :] &= out[1:, :]
-        shrunk[:, 1:] &= out[:, :-1]
-        shrunk[:, :-1] &= out[:, 1:]
-        shrunk[0, :] = False
-        shrunk[-1, :] = False
-        shrunk[:, 0] = False
-        shrunk[:, -1] = False
-        out = shrunk
-    return out
+_HYDROGRAF_2180_WKT = (  # tresc .prj z cache Hydrografu (gdalsrsinfo -o wkt_simple) — P-01
+    'PROJCS["ETRF2000-PL / CS92",GEOGCS["ETRF2000-PL",DATUM["ETRF2000_Poland",'
+    'SPHEROID["GRS 1980",6378137,298.257222101]],PRIMEM["Greenwich",0],'
+    'UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],'
+    'PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",19],'
+    'PARAMETER["scale_factor",0.9993],PARAMETER["false_easting",500000],'
+    'PARAMETER["false_northing",-5300000],UNIT["metre",1]]'
+)
 
 
 class TestSheetGrid:
@@ -2044,11 +2136,14 @@ class TestSheetGrid:
         np.testing.assert_array_equal(data, _ids(gx, gy).astype("float32"))
 
     def test_target_5514_warp_has_no_subpixel_shift(self, tmp_path):
-        """Rampa liniowa: bilinear odtwarza ja dokladnie, wiec kazde przesuniecie
-        tresci wychodzi jako blad wartosci (nachylenia 0,3 i 0,7 m/m)."""
-        from pyproj.enums import TransformDirection
+        """Rampa liniowa: wycinek z arkuszy == warp idealnego rastra na siatce
+        arkuszy (ta sama operacja przypieta, ta sama siatka wyniku). Kazde
+        przesuniecie tresci w mozaice wychodzi jako rozbieznosc (bez naprawy:
+        srednio 0,35 m, maks. 0,64 m; po naprawie: 0)."""
+        from rasterio.transform import from_origin
 
         from kartograf.download.cutout import build_pl_cutout, prepare_pl_cutout
+        from kartograf.transform.raster import warp_to_grid
 
         def ramp(gx, gy):
             return 0.3 * (gx - 529950.0) + 0.7 * (gy - 381950.0)
@@ -2058,36 +2153,46 @@ class TestSheetGrid:
             BBox(530010.37, 382010.61, 530150.29, 382085.43, "EPSG:2180"),
             "EPSG:5514", output_dir=tmp_path, resolution="1m", vertical_crs="EVRF2007",
         )
-        build_pl_cutout(sheets, cut.bbox_source_2180, cut.bbox_target, 1.0, cut.pinned, cut.target_path)
-        with rasterio.open(cut.target_path) as ds:
-            t, data = ds.transform, ds.read(1)
-        valid = data != _NODATA
-        # pomin 2 px przy granicy danych (halo interpolatora)
-        core = _erode(valid, 2)
-        rows, cols = np.nonzero(core)
-        xs, ys = t * (cols + 0.5, rows + 0.5)
-        x2180, y2180 = cut.pinned._transformer.transform(xs, ys, direction=TransformDirection.INVERSE)
-        err = np.abs(data[rows, cols] - ramp(np.asarray(x2180), np.asarray(y2180)))
-        assert err.mean() < 0.02 and err.max() < 0.05, (err.mean(), err.max())
+        build_pl_cutout(sheets, cut.bbox_source_2180, cut.bbox_target, 1.0,
+                        cut.pinned, cut.target_path)
+        cols, rows = np.meshgrid(np.arange(310), np.arange(200))  # suma obu arkuszy
+        ideal = tmp_path / "ideal.tif"
+        with rasterio.open(ideal, "w", driver="GTiff", width=310, height=200, count=1,
+                           dtype="float32", crs="EPSG:2180", nodata=_NODATA,
+                           transform=from_origin(529950.5, 382150.5, 1.0, 1.0)) as dst:
+            dst.write(ramp(529950.5 + cols + 0.5, 382150.5 - rows - 0.5).astype("float32"), 1)
+        ref = tmp_path / "ref.tif"
+        warp_to_grid(ideal, ref, cut.bbox_target, 1.0, cut.pinned,
+                     src_crs="EPSG:2180", nodata=_NODATA)
+        with rasterio.open(cut.target_path) as got, rasterio.open(ref) as exp:
+            assert got.transform == exp.transform
+            np.testing.assert_array_equal(got.read(1), exp.read(1))
 ```
-  **Step 1a — progi rampy:** `0.02`/`0.05` m: ZMIERZ blad przed naprawa (mutacja `snap_to_source_grid=False`) i po; oczekiwane przed ~0,1-0,5 m, po < 0,001 m. Jesli blad przed naprawa < 5x prog — zmien ulamkowe czesci bboxa tak, by przesuniecie cropu wzgledem siatki bylo bliskie 0,4 px (opisz w raporcie); jesli po naprawie blad > prog — STOP, zglos kontrolerowi.
+  **Step 1a:** Zmierzone w pre-flight 2026-09-28: przed naprawa srednio 0,35 m / maks. 0,64 m roznicy wobec warpu idealnego rastra, po naprawie 0 (bit-w-bit) — P-02 (pierwotny wariant testu, oparty o progi 0,02/0,05 m i INVERSE pyproj, nie schodzil ponizej ~0,03/0,05 m po naprawie: rezydualna rozbieznosc GDAL-vs-pyproj wlasciwa warpowi, nie mozaice).
 
 ```python
     def test_mixed_prj_cache_builds(self, tmp_path):
-        """Fakt 6: arkusz z .prj (Hydrograf) obok arkusza bez .prj."""
-        from pyproj import CRS
-
+        """Fakt 6: arkusz z .prj (Hydrograf) obok arkusza bez .prj. Uzywa
+        prawdziwej tresci .prj z cache Hydrografu (P-01) — WKT1_GDAL z pyproj
+        rozniloby sie od tego, co naprawde stoi w .prj na dysku Hydrografu."""
         from kartograf.download.cutout import build_pl_cutout
 
         sheets = self._sheets(tmp_path, _ids)
-        sheets[0].with_suffix(".prj").write_text(CRS.from_epsg(2180).to_wkt("WKT1_GDAL"))
+        sheets[0].with_suffix(".prj").write_text(_HYDROGRAF_2180_WKT)
         bbox = BBox(530010, 382010, 530150, 382086, "EPSG:2180")
         build_pl_cutout(sheets, bbox, bbox, 1.0, None, tmp_path / "o.tif")
         with rasterio.open(tmp_path / "o.tif") as ds:
             assert not (ds.read(1) == _NODATA).any()
 
-    def test_integer_first_sheet_keeps_decimals(self, tmp_path):
-        """Fakt 5: pierwszy (po sortowaniu) arkusz z samymi liczbami calkowitymi."""
+    @pytest.mark.parametrize("reverse", [False, True], ids=["a_first", "b_first"])
+    def test_integer_first_sheet_keeps_decimals(self, tmp_path, reverse):
+        """Fakt 5: arkusz z samymi liczbami calkowitymi nie moze obcinac
+        wysokosci pozostalych arkuszy, NIEZALEZNIE OD KOLEJNOSCI WEJSCIA
+        (P-07). RED oczekiwany dla kolejnosci [a, b]: przed naprawa
+        (`sorted()`/`dtype="float32"` w Step 3) merge bierze dtype z
+        PIERWSZEGO zrodla na wejsciowej liscie, a `a` (int) jest wtedy
+        pierwsze; kolejnosc [b, a] nie jest RED (float juz jest pierwszy),
+        ale zostaje jako ochrona przed regresja."""
         from kartograf.download.cutout import build_pl_cutout
 
         a = _write_grid_sheet(tmp_path / "a.asc", 0, 160, 200, lambda gx, gy: gx * 0 + 100,
@@ -2097,7 +2202,8 @@ class TestSheetGrid:
         with rasterio.open(a) as ds:
             assert ds.dtypes[0] == "int32"  # warunek sensownosci
         bbox = BBox(530010, 382010, 530250, 382086, "EPSG:2180")
-        build_pl_cutout([b, a], bbox, bbox, 1.0, None, tmp_path / "o.tif")
+        order = [b, a] if reverse else [a, b]
+        build_pl_cutout(order, bbox, bbox, 1.0, None, tmp_path / "o.tif")
         with rasterio.open(tmp_path / "o.tif") as ds:
             assert ds.read(1)[0, -1] == pytest.approx(100.25)
 
@@ -2205,7 +2311,7 @@ def _reject_pl2000_sheets(sheet_paths: list[Path]) -> None:
 
 - [ ] **Step 4: Zielono + pelna suita** (istniejace testy z arkuszami na siatce calkowitej i bboxem calkowitym musza przejsc bez zmian — tam przyciaganie jest no-opem).
 
-- [ ] **Step 5: Dowody mutacyjne:** (1) `snap_to_source_grid=False` — oba warianty `test_target_2180_on_sheet_grid_exact_values` i `test_target_5514_warp_has_no_subpixel_shift` FAIL (zapisz zmierzony blad rampy przed/po); (2) `assign_crs=None` — `test_mixed_prj_cache_builds` FAIL; (3) `dtype=None` — `test_integer_first_sheet_keeps_decimals` FAIL; (4) usun wywolanie `_reject_pl2000_sheets` — oba testy PL-2000 FAIL; (5) selekcja z `cutout.bbox_source_2180` bez zapasu — `test_selection_expanded_by_one_pixel` FAIL.
+- [ ] **Step 5: Dowody mutacyjne:** (1) `snap_to_source_grid=False` — oba warianty `test_target_2180_on_sheet_grid_exact_values` i `test_target_5514_warp_has_no_subpixel_shift` FAIL (zmierzone: bez naprawy srednio 0,35 m / maks. 0,64 m roznicy wobec idealnego warpu, z naprawa 0 — bit-w-bit; P-02); (2) `assign_crs=None` — `test_mixed_prj_cache_builds` FAIL; (3) `dtype=None` — `test_integer_first_sheet_keeps_decimals` FAIL dla OBU wariantow kolejnosci (P-07: `sorted()` z Step 3 zawsze stawia `a.asc` przed `b.asc`, wiec kolejnosc wejscia przestaje miec znaczenie, gdy `dtype` nie jest juz wymuszany); (4) usun wywolanie `_reject_pl2000_sheets` — oba testy PL-2000 FAIL; (5) selekcja z `cutout.bbox_source_2180` bez zapasu — `test_selection_expanded_by_one_pixel` FAIL.
 
 - [ ] **Step 6: Dokumentacja**
   - `CHANGELOG` `### Fixed`:
@@ -2382,7 +2488,7 @@ class TestMissingSheets:
         assert "Warning:" in err and "N-34-130-D-d-2-1" in err
 ```
 
-- [ ] **Step 2: Uruchom — musza padac** (brak `missing_sheets`; `no_coverage` traktowane jak blad).
+- [ ] **Step 2: Uruchom — musza padac** (brak `missing_sheets`; `no_coverage` traktowane jak blad). Uwaga: `test_transport_failure_stays_fatal` jest testem-straznikiem — juz PRZED tym zadaniem jest zielony (Zad. 8 rzuca `DownloadError` dla kazdej porazki arkusza), wiec tu tylko pilnuje, zeby zostal zielony PO wprowadzeniu rozroznienia no_coverage/fatal (P-14).
 
 - [ ] **Step 3: Implementacja** w `kartograf/download/cutout.py`:
   (a) `PlCutoutResult`: pole `missing_sheets: tuple[str, ...] = ()  # arkusze bez danych GUGiK (R5) -> nodata`.
@@ -2425,7 +2531,7 @@ class TestMissingSheets:
         # niesie wynik (missing_sheets) i sidecar
         logger.info(f"Brak danych GUGiK dla {len(missing)} arkuszy wycinka: {', '.join(missing)}")
 ```
-    dalej `build_pl_cutout(...)`, `write_pl_cutout_sidecar(cutout, parent_request=parent_request, missing_sheets=missing)` i `return PlCutoutResult(path=..., sheet_paths=tuple(sheet_paths), missing_sheets=missing)`.
+    dalej `build_pl_cutout(...)`, `write_pl_cutout_sidecar(cutout, parent_request=parent_request, missing_sheets=missing)` i `return PlCutoutResult(path=..., sheet_paths=tuple(sheet_paths), missing_sheets=missing)`. Docstring `run_pl_cutout` z Zad. 8 ("Kazdy nieudany arkusz -> ``DownloadError`` z lista") jest po tej zmianie falszywy — zastap zdaniem: "Brak danych u zrodla (``NoCoverageError``) -> nodata + ``missing_sheets``; kazda inna porazka arkusza -> ``DownloadError``; gdy ZADEN arkusz nie ma danych -> ``ValidationError``." (P-14).
   (d) `kartograf/cli/download_cmd.py::_download_pl_cutout` — po udanym `run_pl_cutout`, przed "Downloaded to":
 
 ```python
@@ -2667,7 +2773,7 @@ def check_pl_cutout_disk_space(
 
 - [ ] **Step 4: Zielono + pelna suita.** Uwaga: w harnessie CLI `DownloadManager` jest MagicMockiem, wiec `DownloadManager.expand_sheets(...)` zwraca pusty iterator — kontrola liczy wtedy sam wynik; to zamierzone (testy CLI nie parsuja fikcyjnych godel "N-1").
 
-- [ ] **Step 5: Dowody mutacyjne:** (1) usun wywolanie `check_pl_cutout_disk_space` — `test_disk_check_blocks_before_download` FAIL; (2) licz takze arkusze z cache — `test_estimate_counts_only_pending_sheets` FAIL; (3) usun `dst_kwds.update(...)` — `test_warp_mosaic_tmp_is_compressed_and_bigtiff_safe` FAIL; (4) usun `Info:` — `test_large_grid_prints_info` FAIL. (Bloki 512 zostaja jawnie: po Zad. 9 profil pierwszego zrodla to VRT, wiec `RasterBlockError` z faktu 10 moze sie juz nie pojawic — zmierz i zapisz w raporcie, ale nie jest to wymagany dowod.)
+- [ ] **Step 5: Dowody mutacyjne:** (1) usun wywolanie `check_pl_cutout_disk_space` — `test_disk_check_blocks_before_download` FAIL; (2) licz takze arkusze z cache — `test_estimate_counts_only_pending_sheets` FAIL; (3) usun `dst_kwds.update(...)` — `test_warp_mosaic_tmp_is_compressed_and_bigtiff_safe` FAIL; (4) usun `Info:` — `test_large_grid_prints_info` FAIL; (5) z `dst_kwds.update(...)` usun `blockxsize`/`blockysize` zostawiajac `tiled=True` — zapis konczy sie `RasterBlockError: The height and width of TIFF dataset blocks must be multiples of 16` (bloki 512 sa WYMAGANE, nie tylko jawne — zmierzone w pre-flight 2026-09-28, P-19).
 
 - [ ] **Step 6: CHANGELOG** (`### Changed`): "Wycinek PL: plik posredni mozaiki przy warpie jest kompresowany (deflate, kafle 512 px, BigTIFF gdy trzeba); przed pobraniem kontrola miejsca na dysku (dolne oszacowanie: wynik + arkusze do pobrania) i `Info:` dla wycinkow >= 1 GiB. Twardego limitu rozmiaru nie ma."
 
@@ -2686,7 +2792,7 @@ Model: sonnet (review: sonnet).
 
 **Files:**
 - Modify: `kartograf/cli/download_cmd.py` (`_cmd_download_geometry`, nowy `_geometry_envelope` obok `_resolve_cz_geometry_bbox`)
-- Test: `tests/test_cli.py` (obok testow geometrii CZ, ok. l. 3650-3760; helper `_write_krovak_shp` z l. ~3406)
+- Test: `tests/test_cli.py` (obok testow geometrii CZ, ok. l. 3650-3760; helper `_write_krovak_shp` z l. ~3406), `tests/test_pl_cutout.py` (P-03: `read_source_crs` na plikach-atrapach)
 
 **Interfaces:**
 - Produces: `_geometry_envelope(filepath: Path, layer: str | None) -> BBox` — plik w EPSG:5514/3045: obwiednia w ukladzie PLIKU z etykieta `"EPSG:5514"`/`"EPSG:3045"` (skok do 2180 zrobi przypieta operacja w `_country_bbox:311`); inny uklad — jak dotad `get_overall_bbox(..., target_crs="EPSG:2180")`.
@@ -2730,7 +2836,24 @@ Model: sonnet (review: sonnet).
 
 - [ ] **Step 2: Uruchom — musi padac.**
 
-- [ ] **Step 3: Implementacja** — w `kartograf/cli/download_cmd.py` obok `_resolve_cz_geometry_bbox`:
+- [ ] **Step 3: Testy zepsute przez `read_source_crs` na plikach-atrapach (P-03)** — PRZED implementacja zanotuj (i przygotuj patch dla) tych dziesieciu istniejacych testow. `_geometry_envelope` (Step 4) wola `read_source_crs(filepath, layer=layer)` PRZED `get_overall_bbox`; te testy patchuja `kartograf.core.geometry.get_overall_bbox`, ale podaja plik-atrape (`touch()` / `b"stub"`), na ktorym prawdziwy `read_source_crs` wywala sie NAPRAWDE (`ValidationError: Missing .prj ...` dla `.shp`, `sqlite3.DatabaseError` dla `.gpkg`) zanim atrapa `get_overall_bbox` zostanie w ogole wywolana. Do KAZDEGO z ponizszych testow dodaj (per test, NIE class-level autouse — `TestAutoSplitGeometry` ma tez testy, ktore potrzebuja prawdziwego czytnika, w tym nowy test z Step 1 tej samej klasy):
+
+  `patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))`
+
+  (dodaj `from pyproj import CRS` na gorze `tests/test_cli.py`, jesli brak.)
+
+  - `tests/test_cli.py::TestAreaModeHierarchyExitCode::test_geometry_coarse_scale_failure_returns_exit_1`
+  - `tests/test_cli.py::TestCmdDownloadGeometry::test_download_geometry_basic`
+  - `tests/test_cli.py::TestCmdDownloadGeometry::test_download_geometry_with_layer`
+  - `tests/test_cli.py::TestCmdDownloadGeometry::test_geometry_workers_1_sequential_collects_all_paths`
+  - `tests/test_cli.py::TestDownloadGeometrySystem::test_download_geometry_system_2000`
+  - `tests/test_cli.py::TestDownloadGeometrySystem::test_download_geometry_default_system_1992`
+  - `tests/test_cli.py::TestAutoSplitGeometry::test_geometry_border_splits`
+  - `tests/test_cli.py::TestAutoSplitGeometry::test_geometry_pl_only_skips_cz`
+  - `tests/test_cli.py::TestAutoSplitGeometry::test_geometry_outside_known_countries`
+  - `tests/test_pl_cutout.py::TestGeometryCutout::test_cli_geometry_target_crs_reaches_worker`
+
+- [ ] **Step 4: Implementacja** — w `kartograf/cli/download_cmd.py` obok `_resolve_cz_geometry_bbox`:
 
 ```python
 def _geometry_envelope(filepath: Path, layer: str | None) -> BBox:
@@ -2753,18 +2876,18 @@ def _geometry_envelope(filepath: Path, layer: str | None) -> BBox:
         return BBox(env.min_x, env.min_y, env.max_x, env.max_y, f"EPSG:{epsg}")
     return get_overall_bbox(filepath, layer=layer, target_crs="EPSG:2180")
 ```
-  W `_cmd_download_geometry` zamien `overall = get_overall_bbox(filepath, layer=..., target_crs="EPSG:2180")` na `overall = _geometry_envelope(filepath, getattr(args, "layer", None))` (ten sam `try/except ValidationError`); docstring funkcji: zdanie o obwiedni w ukladzie pliku dla CRS czeskich. Nieuzywany import `get_overall_bbox` w tej funkcji usun.
+  W `_cmd_download_geometry` zamien `overall = get_overall_bbox(filepath, layer=..., target_crs="EPSG:2180")` na `overall = _geometry_envelope(filepath, getattr(args, "layer", None))` (ten sam `try/except ValidationError`); docstring funkcji: zdanie o obwiedni w ukladzie pliku dla CRS czeskich. Nieuzywany import `get_overall_bbox` w tej funkcji usun. Rownolegle dodaj do dziesieciu testow wymienionych w Step 3 (`test_geometry_coarse_scale_failure_returns_exit_1`, `test_download_geometry_basic`, `test_download_geometry_with_layer`, `test_geometry_workers_1_sequential_collects_all_paths`, `test_download_geometry_system_2000`, `test_download_geometry_default_system_1992`, `test_geometry_border_splits`, `test_geometry_pl_only_skips_cz`, `test_geometry_outside_known_countries`, `test_cli_geometry_target_crs_reaches_worker`) patch `read_source_crs` z Step 3.
 
-- [ ] **Step 4: Zielono + pelna suita** (szczegolnie testy `--country auto` z geometria i testy `parent_request`: dla pliku w ukladzie czeskim `parent_request.bbox_crs` to teraz uklad pliku — jesli jakis test zakladal EPSG:2180, oceń, czy to zalozenie bylo zamierzone, i opisz w raporcie).
+- [ ] **Step 5: Zielono + pelna suita** (szczegolnie testy `--country auto` z geometria i testy `parent_request`: dla pliku w ukladzie czeskim `parent_request.bbox_crs` to teraz uklad pliku — jesli jakis test zakladal EPSG:2180, oceń, czy to zalozenie bylo zamierzone, i opisz w raporcie; sprawdz, ze wszystkie dziesiec testow ze Step 3 sa zielone).
 
-- [ ] **Step 5: Dowod mutacyjny** — `_geometry_envelope` zawsze zwraca `get_overall_bbox(..., "EPSG:2180")`: test FAIL; przywroc -> PASS.
+- [ ] **Step 6: Dowod mutacyjny** — `_geometry_envelope` zawsze zwraca `get_overall_bbox(..., "EPSG:2180")`: test FAIL; przywroc -> PASS.
 
-- [ ] **Step 6: CHANGELOG** (`### Fixed`): "Plik geometrii w ukladzie czeskim (EPSG:5514/3045) z `--country pl|auto`: obwiednia opuszcza Krovaka przypieta operacja (jak `--bbox`), nie domyslnym transformerem — dotad siatka i nazwa wycinka PL byly przesuniete o ~1,2 m (review max, zn. 4). `parent_request.bbox_crs` niesie wtedy uklad pliku."
+- [ ] **Step 7: CHANGELOG** (`### Fixed`): "Plik geometrii w ukladzie czeskim (EPSG:5514/3045) z `--country pl|auto`: obwiednia opuszcza Krovaka przypieta operacja (jak `--bbox`), nie domyslnym transformerem — dotad siatka i nazwa wycinka PL byly przesuniete o ~1,2 m (review max, zn. 4). `parent_request.bbox_crs` niesie wtedy uklad pliku."
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add kartograf/cli/download_cmd.py tests/test_cli.py docs/CHANGELOG.md
+git add kartograf/cli/download_cmd.py tests/test_cli.py tests/test_pl_cutout.py docs/CHANGELOG.md
 git commit -m "fix(cli): obwiednia geometrii w ukladzie czeskim opuszcza Krovaka przypieta operacja"
 ```
 
@@ -2812,17 +2935,19 @@ class TestPruneEmptyDirs:
         prune_empty_dirs(outside, tmp_path / "other")
         assert outside.exists()
 ```
-  `tests/test_cli.py::test_bbox_download_error_returns_1` — dopisz `assert not (tmp_path / "nmt").exists()` (lustro testu godlowego z l. ~3206). `tests/test_pl_cutout.py`:
+  `tests/test_cli.py::test_bbox_download_error_returns_1` — dopisz `assert not (tmp_path / "nmt").exists()` (lustro testu godlowego z l. ~3206). `tests/test_pl_cutout.py` — dopisz DO KLASY `TestMissingSheets` (Zad. 10): korzysta z jej `self._cutout`/`self._provider`, NIE osobna funkcja modulu (P-18); jeden `with (...)` zamiast zagniezdzonych (ruff SIM117 — P-11):
 
 ```python
     def test_failed_build_leaves_no_empty_bbox_dir(self, tmp_path):
         """Zn. 10: nieudana budowa bez poprzedniego wyniku nie zostawia pustego bbox/."""
         from kartograf.download.cutout import run_pl_cutout
 
-        cut, sheets = TestMissingSheets()._cutout(tmp_path)
-        with patch("kartograf.transport.mosaic.mosaic_and_crop", side_effect=RuntimeError("zepsuty arkusz")):
-            with pytest.raises(RuntimeError):
-                run_pl_cutout(cut, sheets, provider=TestMissingSheets()._provider())
+        cut, sheets = self._cutout(tmp_path)
+        with (
+            patch("kartograf.transport.mosaic.mosaic_and_crop", side_effect=RuntimeError("zepsuty arkusz")),
+            pytest.raises(RuntimeError),
+        ):
+            run_pl_cutout(cut, sheets, provider=self._provider())
         assert not cut.target_path.parent.exists()
         assert cut.target_path.parent.parent.exists()  # segment z arkuszami zostaje
 ```
@@ -2995,7 +3120,13 @@ Model: sonnet (review: sonnet).
         with pytest.raises(ValidationError):
             FileStorage(tmp_path, product="laz").get_raw_path("N-33-131-B-a-1-1-4", "a.laz", uklad="1965")
 ```
-  `tests/test_cli.py` — w testach sciezek LAZ (`TestCmdDownloadLaz`) dodaj asercje spojnosci: dla kafla z fixtury (`uklad_xy` `PL-2000:S6`, godlo myslnikowe) plik trafia DOKLADNIE tam, gdzie `FileStorage(out, product="laz", vertical_crs=...).get_raw_path(tile.godlo, tile.filename, uklad=tile.uklad)`.
+  `tests/test_cli.py` — w testach sciezek LAZ (`TestCmdDownloadLaz`) dodaj asercje spojnosci: dla kafla z fixtury (`uklad_xy` `PL-2000:S6`, godlo myslnikowe) plik trafia DOKLADNIE tam, gdzie `FileStorage(out, product="laz", vertical_crs=...).get_raw_path(tile.godlo, tile.filename, uklad=tile.uklad)` — I SPRAWDZ WPROST literalny segment sciezki, nie tylko rownosc z ta sama (potencjalnie zmutowana) funkcja (P-09):
+
+```python
+        expected_storage = FileStorage(out, product="laz", vertical_crs=vertical_crs)
+        assert target == expected_storage.get_raw_path(tile.godlo, tile.filename, uklad=tile.uklad)
+        assert target.parts[-10:-8] == ("laz", "pl_2000_evrf2007")  # dopasuj indeksy do realnej glebokosci sciezki w fixturze
+```
 
 - [ ] **Step 2: Uruchom — musza padac.**
 
@@ -3042,11 +3173,11 @@ Model: sonnet (review: sonnet).
         return self._ensure_resolved(subdir)
 ```
     `get_raw_path(self, identifier, filename, *, uklad=None)`: `if uklad is not None and uklad not in ("1992", "2000"): raise ValidationError(...)`; `self._resolved_subdir(identifier, uklad)`. Docstring: parametr `uklad` ("for LAZ tiles pass ``tile.uklad`` — the tile's ``uklad_xy`` decides, not the godlo format") i przyklad `storage.get_raw_path(tile.godlo, tile.filename, uklad=tile.uklad)`.
-  (c) `_cmd_download_laz`: zamiast slownika `storages` i `_storage_for` — jeden `storage = FileStorage(output_dir, product="laz", vertical_crs=vertical_crs)` i `target = storage.get_raw_path(tile.godlo, tile.filename, uklad=tile.uklad)`; usun `_laz_uklad`.
+  (c) `_cmd_download_laz`: zamiast slownika `storages` i `_storage_for` — jeden `storage = FileStorage(output_dir, product="laz", vertical_crs=vertical_crs)` i `target = storage.get_raw_path(tile.godlo, tile.filename, uklad=tile.uklad)`; usun `_laz_uklad`. Odswiez tez docstring istniejacego `tests/test_cli.py::test_laz_segment_carries_vertical_crs_from_flag` (l. ~2717) — nazywa usuwany `_storage_for` (P-09).
 
 - [ ] **Step 4: Zielono + pelna suita.**
 
-- [ ] **Step 5: Dowody mutacyjne:** (1) `get_raw_path` ignoruje `uklad` — `test_laz_uklad_from_tile_overrides_identifier` i asercja spojnosci CLI FAIL; (2) CLI bez `uklad=tile.uklad` — asercja spojnosci FAIL; (3) w `LazTile.uklad` sprawdzaj format godla PRZED `crs` — `TestLazTileUklad` FAIL.
+- [ ] **Step 5: Dowody mutacyjne:** (1) `get_raw_path` ignoruje `uklad` — `test_laz_uklad_from_tile_overrides_identifier` FAIL; w CLI to lapia istniejace asercje `"pl_2000_evrf2007" in str(...)`/`"pl_2000_kron86"` ORAZ nowa asercja segmentu literalnego ze Step 1 (sama asercja rownosci z `FileStorage(...).get_raw_path(...)` zostalaby zielona, bo liczy oczekiwanie ta sama, zmutowana funkcja — P-09); (2) CLI bez `uklad=tile.uklad` — asercja spojnosci FAIL; (3) w `LazTile.uklad` sprawdzaj format godla PRZED `crs` — `TestLazTileUklad` FAIL.
 
 - [ ] **Step 6: Dokumentacja** — `CLAUDE.md:112-114`: po "(`pl_1992` vs `pl_2000` rozstrzyga format godla KAZDEGO pliku" dopisz "; wyjatek: kafle LAZ — `uklad_xy` kafla (`LazTile.uklad`)"; `docs/ARCHITECTURE.md` 3.1, wiersz `{uklad}` (jawnie): `_laz_uklad(tile)` -> `LazTile.uklad` przez `FileStorage.get_raw_path(..., uklad=)`; `CHANGELOG` `### Added`: "`LazTile.uklad` i `FileStorage.get_raw_path(..., uklad=)` — biblioteka zapisuje kafle LAZ w tym samym segmencie co CLI (dotad kafel `PL-2000:*` z godlem myslnikowym trafial przez API do `laz/pl_1992_*`; review max, zn. 8)".
 
@@ -3161,12 +3292,12 @@ Model: **opus** (review: opus). Kazde twierdzenie w dokumentach weryfikuj na zyw
 - [ ] **Step 1: `docs/ARCHITECTURE.md` 4.3** — przepisz na stan po fali: (1) API biblioteki `kartograf.download.cutout` (`download_pl_cutout`; kroki `prepare_pl_cutout` -> `select_pl_cutout_sheets` -> `run_pl_cutout`) i CLI jako nakladka; (2) fail-fast przed siecia; (3) zapas zrodla + selekcja z dodatkowym 1 px; R-01 bez zmian (R2 — z krotkim uzasadnieniem: dla jednego obiektu i bboxa "cala obwiednia" = "pierscien"); (4) arkusze jako cache; R5: `NoCoverageError` = nodata + `Warning:` + `extra.missing_sheets`, inne porazki = kod 1; (5) mozaika: siatka arkuszy (siatka wiekszosci, ostrzezenie dla odstajacych), VRT z EPSG:2180/Float32, sortowanie, odrzucenie arkuszy PL-2000; (6) warp bez zmian; dla EPSG:2180 wynik = obszar rozszerzony < 1 px na siatce arkuszy; (7) kompresja pliku posredniego, kontrola dysku, `Info:`; (8) "Nieudana budowa a poprzedni wynik" (zachowaj) + sprzatanie pustych `bbox/`. Liczby tylko zmierzone (fakty planu, pomiary z raportow zadan).
 - [ ] **Step 2: ADR-027** — akapit "Uzupelnienie 2026-09-28 (R1, R3, fakty 5-8)": siatka arkuszy dla EPSG:2180 (i crop mozaiki przy warpie), normalizacja VRT, glosny blad dla arkuszy PL-2000 (reprojekcja = etap 2), API biblioteki, R-01 bez zmian (R2), scalanie PL+CZ = etap 2 (R6).
 - [ ] **Step 3: `CLAUDE.md`, `README.md`, `docs/SCOPE.md`** — przeglad pod katem sprzecznosci z kodem po falach 1-16 (grep: `failed arkusz`, `sam crop`, `_laz_uklad`, `_prepare_pl_cutout`, `_build_pl_cutout`, `_finalize_pl_cutout`, `odswiez albo nic`); kazde trafienie popraw albo uzasadnij w raporcie.
-- [ ] **Step 4: Weryfikacja E2E offline na realnych arkuszach 5 m** (skrypt w katalogu roboczym SDD, NIE w repo; cache Hydrografu wylacznie do odczytu): `download_pl_cutout` z providerem, ktorego `download(godlo, path)` KOPIUJE `.../Hydrograf/cache/nmt/nmt_5m/<hierarchia godla>/<godlo>.asc` do `path`, dla bboxa w obszarze arkuszy `N-34-139-A-c-4-*` (obejmujacego szew arkuszy): (a) cel EPSG:2180 — poczatek siatki `mod 5 == 2,5`, wartosci wyniku rowne wartosciom arkusza zawierajacego srodek piksela (0 rozbieznosci), brak nodata wewnatrz zasiegu danych; (b) cel EPSG:5514 — porownanie z niezaleznym warpem (`rasterio.warp.reproject` kazdego arkusza z ta sama operacja przypieta na te sama siatke) — sredni i maks. |roznica| na pikselach waznych w obu; (c) arkusz bez pliku w cache -> provider rzuca `NoCoverageError` -> `missing_sheets` i nodata w jego miejscu. Wyniki (liczby) do ledgera i do PROGRESS.
+- [ ] **Step 4: Weryfikacja E2E offline na realnych arkuszach 5 m** (skrypt w katalogu roboczym SDD, NIE w repo; cache Hydrografu wylacznie do odczytu): `download_pl_cutout` z providerem, ktorego `download(godlo, path)` KOPIUJE `.../Hydrograf/cache/nmt/nmt_5m/<hierarchia godla>/<godlo>.asc` do `path` ORAZ (dla co najmniej jednego arkusza wycinka — kazdy z 1977 arkuszy w cache ma `.prj`) KOPIUJE TAKZE `<godlo>.prj` obok `.asc`, zeby fakt 6 (`_same_projection`, P-01) byl sprawdzony na PRAWDZIWYM WKT Hydrografu, nie tylko na syntetycznym z testow jednostkowych (P-21), dla bboxa w obszarze arkuszy `N-34-139-A-c-4-*` (obejmujacego szew arkuszy): (a) cel EPSG:2180 — poczatek siatki `mod 5 == 2,5`, wartosci wyniku rowne wartosciom arkusza zawierajacego srodek piksela (0 rozbieznosci), brak nodata wewnatrz zasiegu danych; (b) cel EPSG:5514 — porownanie z niezaleznym warpem (`rasterio.warp.reproject` kazdego arkusza z ta sama operacja przypieta na te sama siatke, czyli GDAL-vs-GDAL) — sredni i maks. |roznica| na pikselach waznych w obu; rozbieznosci rzedu cm miedzy GDAL a pyproj (P-02) SA tu oczekiwane i nieistotne, liczy sie zgodnosc dwoch niezaleznych warpow GDAL na ta sama siatke; (c) arkusz bez pliku w cache -> provider rzuca `NoCoverageError` -> `missing_sheets` i nodata w jego miejscu. Wyniki (liczby) do ledgera i do PROGRESS.
 - [ ] **Step 5: Brama jakosci**
 
 ```bash
-.venv/bin/python -m pytest tests/ -q
-.venv/bin/python -m pytest tests/ --cov=kartograf -q 2>&1 | tail -3
+.venv/bin/python -m pytest tests/ -q -m "not live"
+.venv/bin/python -m pytest tests/ --cov=kartograf -q -m "not live" 2>&1 | tail -3
 .venv/bin/python -m ruff check kartograf/ tests/ && .venv/bin/python -m ruff format --check kartograf/ tests/
 .venv/bin/python -m mypy kartograf/ 2>&1 | grep -E "error:" | sed -E 's/:[0-9]+: /: /' | sort > "$SDD_WS/mypy-after.txt"; diff "$SDD_WS/mypy-baseline.txt" "$SDD_WS/mypy-after.txt"
 ```
@@ -3183,14 +3314,14 @@ git commit -m "docs: synchronizacja po fali review max — wycinek PL (siatka ar
 ## Zakonczenie (kontroler, po Zad. 17)
 
 1. **Finalny review calej galezi** (fable; gdy niedostepny — opus) od commitu po Zad. 0 do HEAD: defekty miedzyzadaniowe, zgodnosc z R1-R6, kod vs dokumentacja. Fala naprawcza z dowodami mutacyjnymi + scoped re-review (re-reviewer powtarza mutacje).
-2. **`docs/PROGRESS.md`**: nowa podsekcja "Ostatnia sesja" (co zrobiono, decyzje R1-R6, fakty 1-11, stan: testy/pokrycie/mypy); "Nastepne kroki": pkt 12 (checklista live) uzupelnic o: (f) siatka pikseli arkuszy 1 m EVRF2007 i KRON86 — jedna siatka? (skrypt faz jak w fakcie 1); (g) arkusze 1 m w ukladzie PL-2000 pod godlami PL-1992 — czestosc (ostrzezenia fallbacku skorowidza, bledy PL-2000 wycinka); (h) pogranicze `--country auto --target-crs` na zywo: wycinek PL z nodata po stronie CZ + wycinek CZ, jak wyglada styk na granicy (dane wejsciowe do R6); (i) duzy wycinek (>= 1000 arkuszy): czas, pamiec, deskryptory; (j) bbox nad morzem (np. Leba): `missing_sheets`. Backlog: R6 (scalanie PL+CZ, etap 2), reprojekcja arkuszy PL-2000 w wycinku, podwojna obwiednia przy ukladzie zadania = `--target-crs`, tryby CLI bez wycinka na `download_sheets`, tolerancja braku pokrycia poza wycinkiem, `round` w `warp_to_grid`, obwiednia WGS84 z 4 naroznikow takze w providerach landcover (`corine`/`soilgrids` `_transform_bbox_to_wgs84`) — do sprawdzenia.
+2. **`docs/PROGRESS.md`**: nowa podsekcja "Ostatnia sesja" (co zrobiono, decyzje R1-R6, fakty 1-11, stan: testy/pokrycie/mypy); "Nastepne kroki": pkt 12 (checklista live) uzupelnic o: (f) siatka pikseli arkuszy 1 m EVRF2007 i KRON86 — jedna siatka? (skrypt faz jak w fakcie 1); (g) arkusze 1 m w ukladzie PL-2000 pod godlami PL-1992 — czestosc (ostrzezenia fallbacku skorowidza, bledy PL-2000 wycinka); (h) pogranicze `--country auto --target-crs` na zywo: wycinek PL z nodata po stronie CZ + wycinek CZ, jak wyglada styk na granicy (dane wejsciowe do R6); (i) duzy wycinek (>= 1000 arkuszy): czas, pamiec, deskryptory; (j) bbox nad morzem (np. Leba): `missing_sheets`. Backlog: R6 (scalanie PL+CZ, etap 2), reprojekcja arkuszy PL-2000 w wycinku, podwojna obwiednia przy ukladzie zadania = `--target-crs`, tryby CLI bez wycinka na `download_sheets`, tolerancja braku pokrycia poza wycinkiem, `round` w `warp_to_grid`, obwiednia WGS84 z 4 naroznikow takze w providerach landcover (`corine`/`soilgrids` `_transform_bbox_to_wgs84`) i w `parser_2000._transform_bbox_to_wgs84` (ta sama luka 4-naroznikowa, uzywana przez `--system 2000` — P-15) — do sprawdzenia.
 3. **Artefakty**: ledger, raport pre-flight, raporty review i fali naprawczej -> `docs/research/2026-09-28-fala-review-max/` + `README.md` (wzor: `docs/research/2026-08-28-uklad-data-target-crs-pl/README.md`).
 4. **Pamiec**: aktualizacja `project_uklad_data_target_crs_pl.md` (stan po fali, R1-R6, fakty 1, 5-8 jako drogie do odtworzenia), indeks `MEMORY.md`.
 5. Commit zamykajacy: `docs(progress): domkniecie fali review max + wycinek PL w bibliotece`. Bez push (decyzja uzytkownika).
 
 ## Weryfikacja koncowa (jak sprawdzic calosc)
 
-- `.venv/bin/python -m pytest tests/ -q` — zielono; `ruff check`/`format --check` czyste; mypy bez nowych bledow (diff listy).
+- `.venv/bin/python -m pytest tests/ -q -m "not live"` — zielono (1779+); `ruff check`/`format --check` czyste; mypy bez nowych bledow (diff listy).
 - Zad. 17 Step 4 — E2E offline na realnych arkuszach 5 m: siatka `mod 5 = 2,5`, 0 rozbieznosci wartosci dla EPSG:2180, zgodnosc z niezaleznym warpem dla EPSG:5514, `missing_sheets` dla arkusza bez danych.
 - Reczny smoke CLI (offline, bez sieci): `kartograf download --help` pokazuje `--target-crs {EPSG:2180,EPSG:5514,EPSG:3045}`; `python -c "from kartograf import download_pl_cutout, NoCoverageError"`.
 - Zywe sprawdzenie (poza ta fala): checklista live w PROGRESS pkt 12 (a)-(j).
