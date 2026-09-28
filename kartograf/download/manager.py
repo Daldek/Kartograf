@@ -75,7 +75,9 @@ class DownloadResult:
 
     Notes
     -----
-    Populated by `download_hierarchy` and exposed as `DownloadManager.last_result`.
+    Populated by `download_hierarchy` and `download_sheets` (and so by
+    `download_sheet` when it expands a coarser PL-1992 godlo) and exposed as
+    `DownloadManager.last_result`.
     """
 
     succeeded: list[Path] = field(default_factory=list)
@@ -120,10 +122,13 @@ class DownloadManager:
     Attributes
     ----------
     last_result : DownloadResult or None
-        Per-sheet outcome of the most recent hierarchy download. Reset to None
-        at the start of each `download_sheet` / `download_hierarchy` call; set
-        only by `download_hierarchy` (a single 1:10000 sheet downloaded via
-        `download_sheet` leaves it None).
+        Per-sheet outcome of the most recent multi-sheet download. Reset to
+        None at the start of each `download_sheet` / `download_hierarchy` /
+        `download_sheets` call; set by `download_hierarchy` and
+        `download_sheets` (and so by `download_sheet` when it expands a
+        coarser PL-1992 godlo). A single sheet downloaded directly via
+        `download_sheet` (a 1:10000 or PL-2000 godlo) leaves it None;
+        `download_bbox` does not touch it.
 
     Examples
     --------
@@ -296,10 +301,10 @@ class DownloadManager:
 
         Notes
         -----
-        `self.last_result` is reset to None at the start of each
-        `download_sheet` / `download_hierarchy` call and set only by
-        `download_hierarchy`, so a single 1:10000 sheet downloaded here leaves
-        it None and never exposes the previous run's result.
+        `self.last_result` is reset to None at the start of the call and set
+        only by the expansion to 1:10000 (via `download_hierarchy`), so a
+        single sheet downloaded here directly (a 1:10000 or PL-2000 godlo)
+        leaves it None and never exposes the previous run's result.
         """
         # Wynik poprzedniego przebiegu nie moze przeciec do tego wywolania.
         # Reset jest idempotentny — rozwiniecie do hierarchii zeruje go ponownie.
@@ -368,13 +373,16 @@ class DownloadManager:
 
         Notes
         -----
-        Per-sheet download failures do not raise; they are collected in
-        `self.last_result.failed` (see `DownloadResult`). The returned list
+        Per-sheet `DownloadError` failures (incl. `NoCoverageError`) do not
+        raise; they are collected in `self.last_result.failed` (see
+        `DownloadResult`). Any other exception from a sheet (e.g. `OSError`
+        while writing it) propagates and stops the download when running
+        sequentially (`max_workers <= 1`); with parallel workers it is
+        collected in `failed` like a download error. The returned list
         contains downloaded AND skipped (pre-existing) files.
-        `self.last_result` is reset to None at the start of each
-        `download_sheet` / `download_hierarchy` call and set only by
-        `download_hierarchy`, so a call that raises never leaves the previous
-        run's result behind.
+        `self.last_result` is reset to None at the start of the call and set
+        when the download completes (`download_sheets` works the same way),
+        so a call that raises never leaves the previous run's result behind.
 
         Examples
         --------
@@ -447,12 +455,13 @@ class DownloadManager:
         max_workers: int | None = None,
     ) -> list[Path]:
         """
-        Download a list of sheets (see :meth:`expand_sheets`) without raising.
+        Download a list of sheets (see :meth:`expand_sheets`).
 
-        Unlike calling :meth:`download_sheet` in a loop, per-sheet failures
-        never raise: they are collected in ``self.last_result`` exactly like
-        in :meth:`download_hierarchy` (``failed``; ``no_coverage`` for sheets
-        the source has no data for).
+        Unlike calling :meth:`download_sheet` in a loop, per-sheet download
+        failures (``DownloadError``) do not raise: they are collected in
+        ``self.last_result`` exactly like in :meth:`download_hierarchy`
+        (``failed``; ``no_coverage`` for sheets the source has no data for;
+        other exceptions as described in its Notes).
 
         Returns
         -------

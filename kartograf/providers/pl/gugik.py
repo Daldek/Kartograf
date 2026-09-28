@@ -425,8 +425,19 @@ class GugikProvider(BaseProvider):
 
         Raises
         ------
+        NoCoverageError
+            Subclass of ``DownloadError``: every skorowidz layer answered and
+            none of them has the sheet, i.e. the source has no data for this
+            godlo (sea, the Czech side of a border bbox, gaps in 1m coverage).
+            An OGC exception report in a response is not an answer (see
+            ``_get_opendata_url``). ``DownloadManager`` records such sheets in
+            ``DownloadResult.no_coverage`` and the PL cutout fills them with
+            nodata (ADR-027).
         DownloadError
-            If the download fails or no ASC file is found
+            If the skorowidz lookup fails (every layer query failed: service
+            unavailable; or some failed and the rest have no sheet: coverage
+            uncertain, not absent) or the ASC download still fails after all
+            retries
 
         Examples
         --------
