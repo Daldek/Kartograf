@@ -545,14 +545,17 @@ def run_pl_cutout(
     ``force=False`` + istniejacy plik wyniku -> ``skipped=True`` bez sieci.
     Arkusze z cache sa uzywane ponownie (``skip_existing = not force``).
     Brak danych u zrodla (``NoCoverageError``) -> nodata + ``missing_sheets``;
-    kazda inna porazka arkusza -> ``DownloadError``; gdy ZADEN arkusz nie ma
-    danych -> ``ValidationError``. Oba bledy padaja, zanim cokolwiek zostanie
-    zbudowane. ``provider``/``storage`` domyslnie z fabryki NMT
-    i ``FileStorage`` segmentu arkuszy (CLI wstrzykuje wlasne). Wstrzykniety
-    ``provider`` musi dostarczac pion i rozdzielczosc wycinka — inaczej
-    ``ValidationError`` przed jakimkolwiek pobraniem. Kontrola miejsca na
-    dysku (``check_pl_cutout_disk_space``) biegnie PRZED ``DownloadManager``
-    — dolne oszacowanie, nie gwarancja (zn. 9 fali review max).
+    kazda inna porazka pobrania arkusza (``DownloadError``) -> ``DownloadError``;
+    gdy ZADEN arkusz nie ma danych -> ``ValidationError``. Oba bledy padaja,
+    zanim cokolwiek zostanie zbudowane. Inny wyjatek arkusza (np. ``OSError``
+    zapisu) przy ``max_workers=1`` wylatuje stad bez zmian, a w puli watkow
+    liczy sie jak porazka pobrania (``DownloadError``). ``provider`` i
+    ``storage`` domyslnie z fabryki NMT i ``FileStorage`` segmentu arkuszy
+    (CLI wstrzykuje wlasne). Wstrzykniety ``provider`` musi dostarczac pion
+    i rozdzielczosc wycinka — inaczej ``ValidationError`` przed jakimkolwiek
+    pobraniem. Kontrola miejsca na dysku (``check_pl_cutout_disk_space``)
+    biegnie PRZED ``DownloadManager`` — dolne oszacowanie, nie gwarancja
+    (zn. 9 fali review max).
     """
     if provider is not None:
         _require_matching_provider(cutout, provider)
