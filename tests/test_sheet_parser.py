@@ -1211,6 +1211,36 @@ class TestFindSheetsForBBox:
             result = find_sheets_for_bbox(inner_bbox, scale)
             assert godlo in result, f"Expected {godlo} in result for scale {scale}"
 
+    def test_top_edge_across_central_meridian_keeps_sheets(self):
+        """Fakt 8 planu 2026-09-28: w PUWG 1992 najwieksza szerokosc gornej
+        krawedzi wypada na poludniku osiowym (x = 500 000), nie w naroznikach.
+        Obwiednia z 4 naroznikow gubila 6 arkuszy, ktore faktycznie przecinaja
+        ponizszy bbox waskim pasem przy gornej krawedzi."""
+        import numpy as np
+        from pyproj import Transformer
+
+        bbox = BBox(490000, 470000, 510000, 480161, "EPSG:2180")
+        expected = {
+            "N-34-134-B-d-3-2",
+            "N-34-134-B-d-4-1",
+            "N-34-134-B-d-4-2",
+            "N-34-135-A-c-3-1",
+            "N-34-135-A-c-3-2",
+            "N-34-135-A-c-4-1",
+        }
+        # warunek sensownosci: kazdy z arkuszy zawiera punkt z wnetrza bboxa
+        to_wgs = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
+        xs = np.linspace(bbox.min_x + 1, bbox.max_x - 1, 4001)
+        lon, lat = to_wgs.transform(xs, np.full_like(xs, bbox.max_y - 0.01))
+        for godlo in expected:
+            s = SheetParser(godlo).get_bbox("EPSG:4326")
+            inside = (
+                (lon > s.min_x) & (lon < s.max_x) & (lat > s.min_y) & (lat < s.max_y)
+            )
+            assert inside.any(), godlo
+
+        assert expected <= set(find_sheets_for_bbox(bbox, "1:10000"))
+
 
 # =============================================================================
 # Testy auto-detekcji PL-1992 vs PL-2000

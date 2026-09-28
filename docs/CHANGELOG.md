@@ -542,6 +542,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pobraniu** (review max, zn. 3). `mosaic_and_crop` otwieral wszystkie zrodla
   naraz; teraz metadane czyta po jednym pliku, a `merge` dostaje sciezki
   i otwiera zrodla leniwie (limit deskryptorow: Linux 1024, macOS 256).
+- **Selekcja arkuszy PL-1992 z bboxa EPSG:2180 gubila pas przy gornej
+  krawedzi bboxa na poludniku 19°E.** Obwiednia WGS84 liczona z 4 naroznikow
+  pomijala maksimum szerokosci geograficznej lezace na poludniku osiowym
+  PUWG 1992; dla bboxa szerokiego na 20 km pomijanych bylo 6 arkuszy
+  przecinajacych bbox (pas ~63 m przy 50 km). Naprawa wprowadza tez znana
+  nadmiarowa selekcje: obwiednia WGS84 jest SZERSZA niz przeciecie bboxa
+  w EPSG:2180, wiec moga pojawic sie arkusze spoza bboxa (zmierzone: +4
+  arkusze dla bboxa uzytego w testach tego zadania). Dotyczy
+  `find_sheets_for_bbox`/`find_sheets_for_geometry` z bboxem w EPSG:2180
+  (`--system 2000` uzywa osobnej obwiedni w `parser_2000` — nie objete tu,
+  patrz backlog).
 
 ### Tests
 - **1716 testow, pokrycie 93%** — 1142 po mergu etapu 0, 1402 po etapie 1,
