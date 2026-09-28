@@ -294,5 +294,7 @@ kartograf cache path
   failed arkusz = kod 1; `EPSG:2180` = sam crop (`transform: null`).
   W trybie `--geometry` wycinek obejmuje CALA obwiednie geometrii (bez
   maskowania do obiektow); `nodata` tylko tam, gdzie nie siega zaden pobrany
-  arkusz. Przy `--force` nieudana budowa wycinka kasuje TAKZE poprzedni plik
-  wyniku ("odswiez albo nic", jak w torze CZ)
+  arkusz. Nieudana budowa wycinka (takze z `--force`) NIE kasuje poprzedniego
+  pliku wyniku — zapis jest atomowy (`os.replace`), poprzedni plik przezywa
+  awarie; inaczej tor CZ, ktory przy awarii warpu/mozaiki kasuje plik docelowy
+  (kod zweryfikowany live, ADR-024 — nie ruszamy go przed wydaniem)

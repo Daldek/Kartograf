@@ -1033,9 +1033,11 @@ w tym samym ukladzie, wspolny `extra.parent_request`.
 
 Obwiednia zrodla dostaje zapas: obwiednia celu wraca do EPSG:2180 i rosnie
 o `_PL_WARP_MARGIN_PX = 4` piksele (halo interpolatora, obrot ukladu
-docelowego). W trybie `--bbox` ten powiekszony bbox steruje TAKZE selekcja
-arkuszy; w trybie `--geometry` arkusze dalej wyznacza sama geometria per
-obiekt, a zapas wplywa wylacznie na crop i siatke. Wycinek z `--geometry`
+docelowego). Ten powiekszony bbox steruje TAKZE selekcja arkuszy w OBU
+trybach: `--bbox` wybiera arkusze wprost z niego, a `--geometry` przy warpie
+bierze SUME godel geometrii (per obiekt) i godel powiekszonego bboxa (R-01;
+dla celu EPSG:2180 zapasu nie ma, wiec arkusze wyznacza sama geometria).
+Wycinek z `--geometry`
 obejmuje CALA obwiednie geometrii — nie ma maskowania do obiektow, a `nodata`
 oznacza wylacznie brak pobranego arkusza.
 
@@ -1043,9 +1045,12 @@ oznacza wylacznie brak pobranego arkusza.
 backlogu "Mozaikowanie arkuszy NMT PL". Warp PL to osobna funkcja
 `transform/raster.warp_to_grid` — sparametryzowana kopia wzorca CZ, celowo
 niewspoldzielona (testy ADR-024 patchuja `providers.cuzk.dmr.reproject`,
-tor CZ zweryfikowany live tuz przed wydaniem). Przy `--force` nieudana
-budowa wycinka kasuje TAKZE poprzedni plik wyniku (semantyka "odswiez albo
-nic", ta sama co w torze CZ).
+tor CZ zweryfikowany live tuz przed wydaniem). Nieudana budowa wycinka NIE
+kasuje poprzedniego pliku wyniku (zapis atomowy przez `os.replace`, takze
+z `--force`); tor CZ jest tu wyjatkiem i przy awarii kasuje plik docelowy.
+(Korekta 2026-09-28: wczesniejsze brzmienie tego akapitu i zdania o selekcji
+arkuszy w `--geometry` opisywalo odwrotnosc zachowania kodu — review max
+2026-08-30, znaleziska 5-6.)
 
 ---
 
