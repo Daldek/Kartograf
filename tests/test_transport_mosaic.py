@@ -511,3 +511,39 @@ def test_wrapping_keeps_each_source_own_nodata(tmp_path):
         assert w.nodata == -32768.0  # nodata WYNIKU nadal ustawia merge
     assert expected[0].tolist() == [1.5, 1.5, 2.5, 2.5, 2.5, 2.5]
     np.testing.assert_array_equal(data, expected)
+
+
+@pytest.mark.parametrize(("cols", "rows"), [(200, 100), (460, 50)])
+def test_wrapping_writes_short_wide_first_source(tmp_path, cols, rows):
+    """Profil wyniku ``merge`` bierze z PIERWSZEGO zrodla, czyli z VRT: bloki
+    min(128, szerokosc) x min(128, wysokosc), tiled dla zrodla szerszego niz
+    128 px. Wysokosc < 128 niepodzielna przez 16 konczyla zapis GTiff
+    ``RasterBlockError`` — np. arkusz przyciety na granicy albo wybrzezu
+    (ksztaltow arkuszy 1 m i przygranicznych offline nie znamy)."""
+    a = _write_asc_text(tmp_path / "a.asc", 0.5, 0.5, [["1.5"] * cols] * rows)
+    out = mosaic_and_crop(
+        [a],
+        BBox(0.5, 0.5, cols + 0.5, rows + 0.5, "EPSG:2180"),
+        tmp_path / "o.tif",
+        nodata=-9999.0,
+        assign_crs="EPSG:2180",
+        dtype="float32",
+    )
+    with rasterio.open(out) as src:
+        assert src.shape == (rows, cols)
+        assert (src.read(1) == 1.5).all()
+
+
+def test_wrapping_keeps_explicit_tiling_from_dst_kwds(tmp_path):
+    """Domyslny zapis bez kafli nie nadpisuje jawnych kafli wolajacego."""
+    a = _write_asc_text(tmp_path / "a.asc", 0.5, 0.5, [["1.5"] * 200] * 100)
+    out = mosaic_and_crop(
+        [a],
+        BBox(0.5, 0.5, 200.5, 100.5, "EPSG:2180"),
+        tmp_path / "o.tif",
+        dst_kwds={"tiled": True, "blockxsize": 512, "blockysize": 512},
+        assign_crs="EPSG:2180",
+        dtype="float32",
+    )
+    with rasterio.open(out) as src:
+        assert src.block_shapes == [(512, 512)]

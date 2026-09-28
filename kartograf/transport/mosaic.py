@@ -180,8 +180,9 @@ def mosaic_and_crop(
     jest dozwolone, a zrodlo z WLASNYM CRS innym niz wymuszany konczy sie
     ``ValidationError`` (wymuszenie nie przelicza wspolrzednych). Przy
     owijaniu ``ValidationError`` daje tez zrodlo wielopasmowe i typ pasma
-    spoza ``_VRT_TYPES``; domyslny sterownik wyniku to GTiff (profil
-    wyjscia ``merge`` bierze z pierwszego zrodla, czyli z VRT).
+    spoza ``_VRT_TYPES``; domyslny sterownik wyniku to GTiff, domyslnie bez
+    kafli (``tiled=False``; jawne kafle w ``dst_kwds`` wygrywaja) — profil
+    wyjscia ``merge`` bierze z pierwszego zrodla, czyli z VRT.
     """
     if not inputs:
         raise ValidationError("mosaic_and_crop: brak rastrow wejsciowych")
@@ -278,6 +279,11 @@ def mosaic_and_crop(
         # sterownikiem VRT ("Writing through VRTSourcedRasterBand is not
         # supported").
         kwds.setdefault("driver", "GTiff")
+        # ...i dziedziczylby kafle VRT min(128, w) x min(128, h) (tiled dla
+        # zrodla szerszego niz 128 px): wysokosc < 128 niepodzielna przez 16
+        # konczyla zapis GTiff RasterBlockError. Jawne kafle z dst_kwds
+        # wygrywaja (setdefault).
+        kwds.setdefault("tiled", False)
 
     # Owijanie PO przyciaganiu: transformacje VRT = transformacje zrodel, wiec
     # siatka policzona na oryginalach jest wazna. VRT w /vsimem/ nie trzyma
