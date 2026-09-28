@@ -12,6 +12,7 @@ w etapie 1 ledger zaginal razem z workspace'em.
 | `preflight-report.md` | Audyt planu PRZED implementacja (~90 konkretow sprawdzonych na zywym repo; 1 blokujacy, 4 wazne, 12 drobnych) |
 | `final-review-fix-brief.md` | Lista N-01..N-11 z finalnego review calej galezi, z dowodami i rulingami |
 | `final-review-fix-report.md` | Raport fali naprawczej: 11/11 zamkniete, 21 dowodow mutacyjnych |
+| `2026-08-30-code-review-max.md` | Review max galezi (10 katow + 9 weryfikatorow): 15 potwierdzonych znalezisk z file:line i pomiarami; naprawy: `docs/superpowers/plans/2026-09-28-fala-review-max-i-wycinek-biblioteczny.md` |
 
 ## Co warto stad zapamietac
 
