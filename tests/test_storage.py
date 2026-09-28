@@ -774,6 +774,45 @@ class TestFileStorageSegments:
         assert storage.delete("6.179.12.20") is True
         assert not path.exists() and not sidecar.exists()
 
+    @pytest.mark.parametrize(
+        ("kwargs", "key", "godlo", "expected"),
+        [
+            (
+                {"resolution": "1m"},
+                "pl.gugik.nmt_1m",
+                "N-34-130-D-d-2-4",
+                "nmt/test_1992_evrf2007",
+            ),
+            (
+                {"product": "nmpt"},
+                "pl.gugik.nmpt",
+                "N-34-130-D-d-2-4",
+                "nmpt/test_1992_evrf2007",
+            ),
+        ],
+    )
+    def test_segment_templates_come_from_registry(
+        self, tmp_path, monkeypatch, kwargs, key, godlo, expected
+    ):
+        """Zn. 11: jedno zrodlo prawdy — szablon z deskryptora, nie kopia w FileStorage
+        (ADR-026: nowe zrodlo = nowy wpis deskryptora, zero zmian w kodzie sciezek)."""
+        from dataclasses import replace
+
+        from kartograf.download import storage as storage_mod
+        from kartograf.sources.registry import get_source as real_get_source
+
+        def fake_get_source(k):
+            d = real_get_source(k)
+            if k == key:
+                return replace(
+                    d, storage_subdir=expected.split("/")[0] + "/test_{uklad}_{vcrs}"
+                )
+            return d
+
+        monkeypatch.setattr(storage_mod, "get_source", fake_get_source)
+        path = FileStorage(tmp_path, **kwargs).get_path(godlo, ".asc")
+        assert expected in path.as_posix()
+
 
 class TestPruneEmptyDirs:
     """Zn. 10: porazka nie zostawia pustego drzewa <segment>/bbox/."""

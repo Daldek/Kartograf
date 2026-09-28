@@ -14,6 +14,7 @@ from typing import BinaryIO
 from kartograf.core import parser_registry
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import ValidationError
+from kartograf.sources.registry import get_source
 
 
 class FileStorage:
@@ -40,7 +41,8 @@ class FileStorage:
         Base directory for storing downloaded files
     resolution : str
         Resolution dimension of the segment template ("1m" or "5m"); empty
-        when the segment comes from `product` or an explicit `subdir`
+        only when the segment comes from `product` (an explicit `subdir`
+        alone leaves the constructor's `resolution` value untouched)
 
     Examples
     --------
@@ -107,17 +109,23 @@ class FileStorage:
         self._output_dir = Path(output_dir)
         self._vertical_crs = vertical_crs
 
-    # Segment templates (ADR-026): {uklad} resolved per godlo, {vcrs} from
-    # the constructor's vertical_crs.
-    _RESOLUTION_SUBDIRS = {
-        "1m": "nmt/pl_{uklad}_1m_{vcrs}",
-        "5m": "nmt/pl_{uklad}_5m_{vcrs}",
+    # Segment templates come from the source descriptors (ADR-026: a new
+    # source is a new descriptor entry, no path code) — resolution/product
+    # map to the descriptor KEY, not to a copy of its template.
+    _RESOLUTION_SOURCES = {"1m": "pl.gugik.nmt_1m", "5m": "pl.gugik.nmt_5m"}
+    _PRODUCT_SOURCES = {
+        "nmpt": "pl.gugik.nmpt",
+        "orto": "pl.gugik.orto",
+        "laz": "pl.gugik.laz",
     }
-    _PRODUCT_SUBDIRS = {
-        "nmpt": "nmpt/pl_{uklad}_1m_{vcrs}",
-        "orto": "orto/pl_{uklad}",
-        "laz": "laz/pl_{uklad}_{vcrs}",
-    }
+
+    @staticmethod
+    def _descriptor_template(key: str) -> str:
+        """Segment template of a registered source."""
+        template = get_source(key).storage_subdir
+        if template is None:
+            raise ValueError(f"Source '{key}' has no storage_subdir")
+        return template
 
     @property
     def output_dir(self) -> Path:
@@ -126,7 +134,11 @@ class FileStorage:
 
     @property
     def resolution(self) -> str:
-        """Return the resolution dimension of the segment ("" when unused)."""
+        """Return the resolution dimension of the segment.
+
+        "" only when the segment comes from `product` — an explicit `subdir`
+        alone leaves the constructor's `resolution` value untouched.
+        """
         return self._resolution
 
     @property
@@ -139,9 +151,11 @@ class FileStorage:
         if self._subdir_override:
             template = self._subdir_override
         elif self._product:
-            template = self._PRODUCT_SUBDIRS.get(self._product, self._product)
+            key = self._PRODUCT_SOURCES.get(self._product)
+            template = self._descriptor_template(key) if key else self._product
         else:
-            template = self._RESOLUTION_SUBDIRS.get(self._resolution, self._resolution)
+            key = self._RESOLUTION_SOURCES.get(self._resolution)
+            template = self._descriptor_template(key) if key else self._resolution
         # Falsy, not `is not None`: an empty string carries no dimension, so it
         # must leave `{vcrs}` unresolved for `_ensure_resolved` to report —
         # substituting it produced the silent segment `nmt/pl_1992_1m_`.
