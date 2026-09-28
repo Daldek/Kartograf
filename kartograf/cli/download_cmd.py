@@ -996,6 +996,15 @@ def _download_pl_cutout(
             print(f"  Sheets: {', '.join(godla[:3] + ['...'] + godla[-2:])}")
         print()
 
+    if cutout.estimated_bytes >= 2**30:
+        # stderr, nie stdout: -q NIE tlumi Info:/Warning: (jak wyzej)
+        height, width = cutout.grid_shape
+        print(
+            f"Info: wycinek ~{cutout.estimated_bytes / 2**30:.1f} GiB "
+            f"({width} x {height} px float32)",
+            file=sys.stderr,
+        )
+
     try:
         result = run_pl_cutout(
             cutout,

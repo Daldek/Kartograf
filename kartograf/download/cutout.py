@@ -55,6 +55,10 @@ _HORIZONTAL_POLICY = TransformPolicy(min_accuracy_m=1.0, allow_network_grids=Fal
 # uklady czeskie opuszczamy wylacznie przypieta operacja (ADR-024)
 _CZ_CRS = frozenset({"EPSG:5514", "EPSG:3045"})
 _VERTICAL_CRS = ("EVRF2007", "KRON86")
+# Dolne oszacowanie rozmiaru arkusza ASC na dysku: 5,74-7,95 B na wartosc
+# w realnych plikach GUGiK 5 m (fakt 9 planu 2026-09-28) — bierzemy mniej,
+# zeby kontrola nie odrzucala zadan, ktore sie zmieszcza.
+_ASC_BYTES_PER_VALUE = 5.5
 
 
 @dataclass(frozen=True)
@@ -75,6 +79,21 @@ class PlCutout:
     def pixel_size(self) -> float:
         """Piksel siatki wyniku (m)."""
         return PIXEL_SIZES[self.resolution]
+
+    @property
+    def grid_shape(self) -> tuple[int, int]:
+        """(wysokosc, szerokosc) siatki wyniku w pikselach — jak w ``warp_to_grid``."""
+        b, px = self.bbox_target, self.pixel_size
+        return (
+            max(1, round((b.max_y - b.min_y) / px)),
+            max(1, round((b.max_x - b.min_x) / px)),
+        )
+
+    @property
+    def estimated_bytes(self) -> int:
+        """Rozmiar wyniku float32 bez kompresji (bajty)."""
+        height, width = self.grid_shape
+        return height * width * 4
 
 
 @dataclass(frozen=True)
@@ -323,6 +342,13 @@ def build_pl_cutout(
     Arkusz we wspolrzednych PL-2000 (``x >= 1 000 000``) konczy sie
     ``ValidationError`` PRZED mozaika (``_reject_pl2000_sheets``) — inaczej
     ``merge`` pominalby go po cichu i w wyniku zostalaby dziura nodata.
+
+    Plik POSREDNI mozaiki (``tmp``) jest kompresowany (deflate, predyktor 3,
+    kafle 512 px, BIGTIFF=IF_SAFER) WYLACZNIE gdy ``pinned is not None``: warp
+    go potem czyta raz i kasuje, wiec kompresja placi sie miejscem na dysku
+    bez kosztu czytelnosci. Przy celu EPSG:2180 ten sam plik JEST wynikiem
+    (``os.replace`` na ``target_path``), wiec zostaje bez kompresji — jak
+    dotad (zn. 9 fali review max).
     """
     _reject_pl2000_sheets(sheet_paths)
     from kartograf.transport.mosaic import mosaic_and_crop
@@ -331,13 +357,28 @@ def build_pl_cutout(
     tmp = target_path.with_name(
         f"{target_path.name}.{os.getpid()}_{threading.get_ident()}.mosaic.tif"
     )
+    dst_kwds: dict = {"driver": "GTiff", "crs": "EPSG:2180"}
+    if pinned is not None:
+        # Plik POSREDNI (warp czyta go raz i kasuje): deflate + predyktor
+        # zmiennoprzecinkowy daje 2-3x mniej dla NMT. Kafle 512 px — profil
+        # AAIGrid ma blockysize=1, a tiled bez rozmiarow konczy sie
+        # RasterBlockError; BIGTIFF=IF_SAFER, bo przy kompresji GDAL nie zna
+        # rozmiaru z gory (fakt 10 planu 2026-09-28).
+        dst_kwds.update(
+            compress="deflate",
+            predictor=3,
+            tiled=True,
+            blockxsize=512,
+            blockysize=512,
+            bigtiff="IF_SAFER",
+        )
     try:
         mosaic_and_crop(
             sorted(Path(p) for p in sheet_paths),
             crop_bbox_2180,
             tmp,
             nodata=PL_NODATA,
-            dst_kwds={"driver": "GTiff", "crs": "EPSG:2180"},
+            dst_kwds=dst_kwds,
             # siatka arkuszy (R1), arkusze w VRT: EPSG:2180 + Float32 — fakty 1-2, 5-6
             snap_to_source_grid=True,
             assign_crs="EPSG:2180",
@@ -430,6 +471,59 @@ def _require_matching_provider(cutout: PlCutout, provider) -> None:
             )
 
 
+def estimate_pl_cutout_bytes(
+    cutout: PlCutout, sheets: PlCutoutSheets, *, storage: FileStorage | None = None
+) -> tuple[int, int]:
+    """(bajty, liczba arkuszy do pobrania) — DOLNE oszacowanie potrzeb dysku.
+
+    Wynik float32 bez kompresji + arkusze jeszcze nie pobrane po 5,5 B na
+    wartosc. Plik posredni mozaiki (skompresowany) i narzut systemu plikow NIE
+    sa liczone: to kontrola "na pewno nie wystarczy", nie gwarancja.
+    """
+    from kartograf.core.sheet_parser import SheetParser
+
+    storage = storage or FileStorage(
+        cutout.output_dir,
+        resolution=cutout.resolution,
+        vertical_crs=cutout.vertical_crs,
+    )
+    px = cutout.pixel_size
+    need = cutout.estimated_bytes
+    pending = 0
+    for leaf in DownloadManager.expand_sheets(list(sheets.godla)):
+        if storage.get_path(leaf, ".asc").exists():
+            continue
+        pending += 1
+        frame = SheetParser(leaf).get_bbox("EPSG:2180")
+        need += int(
+            (frame.max_x - frame.min_x)
+            * (frame.max_y - frame.min_y)
+            / (px * px)
+            * _ASC_BYTES_PER_VALUE
+        )
+    return need, pending
+
+
+def check_pl_cutout_disk_space(
+    cutout: PlCutout, sheets: PlCutoutSheets, *, storage: FileStorage | None = None
+) -> None:
+    """``ValidationError``, gdy na dysku NA PEWNO zabraknie miejsca (przed siecia)."""
+    import shutil
+
+    need, pending = estimate_pl_cutout_bytes(cutout, sheets, storage=storage)
+    probe = cutout.target_path.parent
+    while not probe.exists():
+        probe = probe.parent
+    free = shutil.disk_usage(probe).free
+    if free < need:
+        height, width = cutout.grid_shape
+        raise ValidationError(
+            f"Za malo miejsca na dysku dla wycinka: potrzeba co najmniej "
+            f"~{need / 2**30:.1f} GiB (siatka {width} x {height} px float32 + "
+            f"{pending} arkuszy do pobrania), wolne ~{free / 2**30:.1f} GiB w {probe}"
+        )
+
+
 def run_pl_cutout(
     cutout: PlCutout,
     sheets: PlCutoutSheets,
@@ -451,7 +545,9 @@ def run_pl_cutout(
     zbudowane. ``provider``/``storage`` domyslnie z fabryki NMT
     i ``FileStorage`` segmentu arkuszy (CLI wstrzykuje wlasne). Wstrzykniety
     ``provider`` musi dostarczac pion i rozdzielczosc wycinka — inaczej
-    ``ValidationError`` przed jakimkolwiek pobraniem.
+    ``ValidationError`` przed jakimkolwiek pobraniem. Kontrola miejsca na
+    dysku (``check_pl_cutout_disk_space``) biegnie PRZED ``DownloadManager``
+    — dolne oszacowanie, nie gwarancja (zn. 9 fali review max).
     """
     if provider is not None:
         _require_matching_provider(cutout, provider)
@@ -469,6 +565,7 @@ def run_pl_cutout(
             resolution=cutout.resolution,
             vertical_crs=cutout.vertical_crs,
         )
+    check_pl_cutout_disk_space(cutout, sheets, storage=storage)
     manager = DownloadManager(
         output_dir=cutout.output_dir,
         provider=provider,
