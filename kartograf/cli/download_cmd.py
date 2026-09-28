@@ -937,7 +937,9 @@ def _download_pl_cutout(
     (``ValidationError``) i KAZDY blad pobrania lub budowy wycinka koncza sie
     kodem 1 z komunikatem, nie tracebackiem: wyjatek wyciekajacy poza petle
     krajow ``_dispatch_area`` zlamalby kontrakt czesciowego sukcesu
-    (ADR-023 pkt 4-5).
+    (ADR-023 pkt 4-5). Arkusz bez danych GUGiK nie jest bledem (R5): wycinek
+    powstaje z nodata w jego miejscu, a ``Warning:`` na stderr wymienia takie
+    arkusze (do 10; pelna lista w sidecarze, ``extra.missing_sheets``).
     """
     from kartograf.download.cutout import (
         prepare_pl_cutout,
@@ -1010,8 +1012,19 @@ def _download_pl_cutout(
         return 1
     if not args.quiet:
         # pasek postepu konczy "skipped" bez nowej linii — jak dotad pusta
-        # linia przed podsumowaniem
+        # linia przed podsumowaniem (i przed ostrzezeniem na stderr ponizej)
         print()
+    if result.missing_sheets:
+        # R5: stderr, wiec -q tego NIE tlumi; pelna lista jest w sidecarze
+        shown = ", ".join(result.missing_sheets[:10])
+        more = " ..." if len(result.missing_sheets) > 10 else ""
+        print(
+            f"Warning: GUGiK nie ma danych dla {len(result.missing_sheets)} arkuszy "
+            f"wycinka ({shown}{more}) — w tych miejscach wycinek ma nodata "
+            "(lista w sidecarze: extra.missing_sheets)",
+            file=sys.stderr,
+        )
+    if not args.quiet:
         print(f"Downloaded to {result.path}")
     return 0
 
