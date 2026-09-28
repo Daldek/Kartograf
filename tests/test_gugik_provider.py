@@ -451,8 +451,35 @@ class TestGugikProviderRetry:
         assert sleep_times == [2, 4]
 
 
+# Raport wyjatku OGC w ksztalcie MapServera (WMS 1.3.0), ktory odpowiada nim
+# z HTTP 200. Tresc "Invalid layer(s) given in the LAYERS parameter" GUGiK
+# zwracal naprawde na GetFeatureInfo o nieaktualna warstwe (CHANGELOG 0.7.0,
+# nazwy warstw WMS); kodu HTTP i Content-Type realnej odpowiedzi nikt nie
+# zapisal (checklista live).
+_OGC_EXCEPTION_REPORT = (
+    '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>\n'
+    '<ServiceExceptionReport version="1.3.0" xmlns="http://www.opengis.net/ogc" '
+    'xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" '
+    'xsi:schemaLocation="http://www.opengis.net/ogc '
+    'http://schemas.opengis.net/wms/1.3.0/exceptions_1_3_0.xsd">\n'
+    '<ServiceException code="LayerNotDefined">\n'
+    "msWMSLoadGetMapParams(): WMS server error. Invalid layer(s) given in the "
+    "LAYERS parameter. A layer might be disabled for this request.\n"
+    "</ServiceException>\n"
+    "</ServiceExceptionReport>\n"
+)
+
+
 class TestGugikProviderGetOpendataUrl:
     """Testy dla _get_opendata_url."""
+
+    @pytest.fixture
+    def mock_wms_ogc_exception(self):
+        """Mock odpowiedzi 200 z raportem wyjatku OGC zamiast wyniku zapytania."""
+        response = Mock(spec=requests.Response)
+        response.status_code = 200
+        response.text = _OGC_EXCEPTION_REPORT
+        return response
 
     @pytest.fixture
     def mock_wms_response_with_url(self):
@@ -543,6 +570,80 @@ class TestGugikProviderGetOpendataUrl:
         assert not isinstance(exc_info.value, NoCoverageError)
         assert "niepewny" in str(exc_info.value)
         assert "500" in str(exc_info.value)
+
+    def test_ogc_exception_report_on_all_layers_is_service_failure(
+        self, mock_wms_ogc_exception, caplog
+    ):
+        """I-2: raport wyjatku OGC z HTTP 200 to porazka zapytania, nie brak arkusza.
+
+        Liczony jako "warstwa odpowiedziala, arkusza brak" dawal
+        ``NoCoverageError``, a pod R5 — nodata i ``missing_sheets`` w wycinku,
+        ktory kolejne przebiegi pomijaja jako istniejacy (trwala dziura po
+        chwilowym bledzie uslugi albo po nieaktualnej nazwie warstwy).
+        """
+        from kartograf.exceptions import NoCoverageError
+
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=mock_wms_ogc_exception)
+        provider = GugikProvider(session=session)
+        provider._validated_layers[("1m", "EVRF2007")] = ["L1", "L2", "L3"]
+
+        with (
+            caplog.at_level("WARNING"),
+            pytest.raises(DownloadError, match="unavailable") as exc_info,
+        ):
+            provider._get_opendata_url("N-34-130-D-d-2-4")
+
+        assert not isinstance(exc_info.value, NoCoverageError)
+        message = str(exc_info.value)
+        assert "all 3 layer queries failed" in message
+        # ostatni blad: nazwa warstwy + tresc raportu, nie naglowek XML
+        assert "L3" in message and "Invalid layer(s)" in message
+        assert session.get.call_count == 3
+        assert "L1" in caplog.text  # kazda warstwa ostrzega na biezaco
+
+    def test_ogc_exception_on_one_layer_is_uncertain_not_no_coverage(
+        self, mock_wms_ogc_exception, mock_wms_response_no_url
+    ):
+        """I-2: raport wyjatku na jednej warstwie + brak arkusza na reszcie =
+        brak pokrycia NIEPEWNY (arkusz moze lezec wlasnie w tej warstwie)."""
+        from kartograf.exceptions import NoCoverageError
+
+        session = Mock(spec=requests.Session)
+        session.get = Mock(
+            side_effect=[
+                mock_wms_ogc_exception,
+                mock_wms_response_no_url,
+                mock_wms_response_no_url,
+            ]
+        )
+        provider = GugikProvider(session=session)
+        provider._validated_layers[("1m", "EVRF2007")] = ["L1", "L2", "L3"]
+
+        with pytest.raises(DownloadError) as exc_info:
+            provider._get_opendata_url("N-34-130-D-d-2-4")
+
+        assert not isinstance(exc_info.value, NoCoverageError)
+        assert "niepewny" in str(exc_info.value)
+
+    def test_url_in_response_wins_over_exception_marker(
+        self, mock_wms_response_with_url
+    ):
+        """Ruling I-2: URL w odpowiedzi zawsze wygrywa — straz raportu wyjatku
+        dotyczy wylacznie odpowiedzi BEZ URL."""
+        response = Mock(spec=requests.Response)
+        response.status_code = 200
+        response.text = (
+            mock_wms_response_with_url.text + "<!-- ServiceExceptionReport -->"
+        )
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=response)
+        provider = GugikProvider(session=session)
+        provider._validated_layers[("1m", "EVRF2007")] = ["L1"]
+
+        url = provider._get_opendata_url("N-34-130-D-d-2-4")
+
+        assert url.endswith("N-34-130-D-d-2-4.asc")
 
     def test_get_opendata_url_tries_all_layers(
         self, mock_wms_response_no_url, mock_wms_response_with_url
