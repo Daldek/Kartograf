@@ -924,9 +924,25 @@ def _bboxes_intersect(a: BBox, b: BBox) -> bool:
     )
 
 
+# Poludnik osiowy PUWG 1992 (EPSG:2180): false easting 500 000 m <=> 19°E.
+_PL1992_CENTRAL_X = 500_000.0
+
+
 def _transform_bbox_to_wgs84(bbox: BBox) -> BBox:
     """
     Transformuje BBox z EPSG:2180 do EPSG:4326.
+
+    Narozniki NIE wystarczaja: w PUWG 1992 rownolezniki sa lukami i wzdluz
+    linii stalego y szerokosc geograficzna jest NAJWIEKSZA na poludniku
+    osiowym (x = 500 000 m, 19°E), malejac monotonicznie z odlegloscia od
+    niego. Dla bboxa przecinajacego ten poludnik obwiednia z 4 naroznikow
+    gubila pas przy gornej krawedzi (zmierzone 2026-09-28: 6 arkuszy 1:10000
+    dla bboxa szerokiego na 20 km; pas rosnie z kwadratem szerokosci, ~63 m
+    przy 50 km). Punkt na poludniku osiowym na GORNEJ krawedzi daje maksimum
+    szerokosci dokladnie (to on gubil arkusze); na DOLNEJ krawedzi minimum
+    szerokosci i tak wypada w naroznikach — dodatkowy punkt tam jest
+    niegrozny, ale nie zmienia wyniku (P-15). Dlugosc geograficzna i
+    krawedzie pionowe maja ekstrema w naroznikach.
 
     Parameters
     ----------
@@ -940,22 +956,26 @@ def _transform_bbox_to_wgs84(bbox: BBox) -> BBox:
     """
     transformer = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
 
-    corners_2180 = [
+    points_2180 = [
         (bbox.min_x, bbox.min_y),  # SW
         (bbox.min_x, bbox.max_y),  # NW
         (bbox.max_x, bbox.min_y),  # SE
         (bbox.max_x, bbox.max_y),  # NE
     ]
+    if bbox.min_x < _PL1992_CENTRAL_X < bbox.max_x:
+        points_2180 += [
+            (_PL1992_CENTRAL_X, bbox.min_y),
+            (_PL1992_CENTRAL_X, bbox.max_y),
+        ]
 
-    corners_4326 = [transformer.transform(x, y) for x, y in corners_2180]
-
-    min_lon = min(c[0] for c in corners_4326)
-    max_lon = max(c[0] for c in corners_4326)
-    min_lat = min(c[1] for c in corners_4326)
-    max_lat = max(c[1] for c in corners_4326)
+    points_4326 = [transformer.transform(x, y) for x, y in points_2180]
 
     return BBox(
-        min_x=min_lon, min_y=min_lat, max_x=max_lon, max_y=max_lat, crs="EPSG:4326"
+        min_x=min(p[0] for p in points_4326),
+        min_y=min(p[1] for p in points_4326),
+        max_x=max(p[0] for p in points_4326),
+        max_y=max(p[1] for p in points_4326),
+        crs="EPSG:4326",
     )
 
 
