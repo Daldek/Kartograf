@@ -2471,60 +2471,6 @@ class TestDownloadGeometrySystem:
         assert call_kwargs.kwargs.get("system") == "1992"
 
 
-class TestLazUklad:
-    """Kaskada ukladu kafla LAZ: uklad_xy -> format godla -> 2000 (spec 5.5)."""
-
-    def _tile(self, godlo="N-33-131-B-a-1-1-4", crs="PL-2000:S6"):
-        from kartograf.providers.pl.gugik_laz import LazTile
-
-        return LazTile(
-            godlo=godlo,
-            url="u/f.laz",
-            year=2024,
-            density=25,
-            crs=crs,
-            min_x=0.0,
-            min_y=0.0,
-            max_x=1.0,
-            max_y=1.0,
-        )
-
-    def test_crs_pl2000_wins_over_dash_godlo(self):
-        from kartograf.cli.download_cmd import _laz_uklad
-
-        # godlo myslnikowe, ale uklad_xy mowi PL-2000 — crs wygrywa
-        assert _laz_uklad(self._tile()) == "2000"
-
-    def test_crs_pl1992(self):
-        from kartograf.cli.download_cmd import _laz_uklad
-
-        assert _laz_uklad(self._tile(crs="PL-1992")) == "1992"
-
-    def test_none_crs_falls_back_to_dot_godlo(self):
-        from kartograf.cli.download_cmd import _laz_uklad
-
-        assert _laz_uklad(self._tile(godlo="6.162.34.02.3", crs=None)) == "2000"
-
-    def test_none_crs_falls_back_to_dash_godlo(self):
-        from kartograf.cli.download_cmd import _laz_uklad
-
-        assert _laz_uklad(self._tile(crs=None)) == "1992"
-
-    def test_unrecognized_crs_falls_back_to_godlo(self):
-        from kartograf.cli.download_cmd import _laz_uklad
-
-        assert _laz_uklad(self._tile(crs="EPSG:2180")) == "1992"
-
-    def test_everything_fails_defaults_2000_with_warning(self, caplog):
-        import logging
-
-        from kartograf.cli.download_cmd import _laz_uklad
-
-        with caplog.at_level(logging.WARNING):
-            assert _laz_uklad(self._tile(godlo="XYZ99", crs=None)) == "2000"
-        assert "XYZ99" in caplog.text
-
-
 class TestCmdDownloadLaz:
     """Tests for the LAZ product flow in the download command."""
 
@@ -2680,6 +2626,8 @@ class TestCmdDownloadLaz:
         """Kazdy pobrany kafel dostaje sidecar <nazwa>.laz.meta.json."""
         import json
 
+        from kartograf.download.storage import FileStorage
+
         tile = self._fake_tiles()[0]
         instance = Mock()
         instance.vertical_crs = "EVRF2007"
@@ -2710,8 +2658,21 @@ class TestCmdDownloadLaz:
         assert len(sidecars) == 1
         sidecar = sidecars[0]
         assert sidecar.name == f"{tile.filename}.meta.json"
-        assert (sidecar.parent / tile.filename).exists()
+        target = sidecar.parent / tile.filename
+        assert target.exists()
         assert "pl_2000_evrf2007" in str(sidecar.parent)
+        # Zn. 8 (P-09): plik laduje DOKLADNIE tam, gdzie wskazuje API
+        # biblioteki dla tego samego kafla (uklad_xy PL-2000:S6, godlo
+        # myslnikowe) — nie tylko substring segmentu (jak wyzej), ale takze
+        # rownosc sciezek ORAZ literalny segment. Sama rownosc z
+        # ``FileStorage(...).get_raw_path(...)`` nie wystarczy: gdyby ta sama
+        # (potencjalnie zmutowana) funkcja liczyla obie strony, asercja
+        # zostalaby zielona takze przy zepsutym kodzie produkcyjnym.
+        expected_storage = FileStorage(tmp_path, product="laz", vertical_crs="EVRF2007")
+        assert target == expected_storage.get_raw_path(
+            tile.godlo, tile.filename, uklad=tile.uklad
+        )
+        assert target.parts[-10:-8] == ("laz", "pl_2000_evrf2007")
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
         assert payload["dataset"] == "pl.gugik.laz"
         assert payload["vertical_crs"] == "EPSG:9651"
@@ -2725,9 +2686,9 @@ class TestCmdDownloadLaz:
     ):
         """Segment {vcrs} niesie --vertical-crs, nie default FileStorage.
 
-        Bez ta asercja test przeszedlby takze wtedy, gdyby ktos usunal
-        ``vertical_crs=vertical_crs`` z wywolania ``resolve_subdir`` w
-        ``_storage_for`` — default FileStorage ("EVRF2007") maskowalby
+        Bez tej asercji test przeszedlby takze wtedy, gdyby ktos usunal
+        ``vertical_crs=vertical_crs`` z konstruktora ``FileStorage`` w
+        ``_cmd_download_laz`` — default FileStorage ("EVRF2007") maskowalby
         blad dokladnie tak, jak maskowal efekt uboczny Zad. 2 (segment
         LAZ zawsze "evrf2007" niezaleznie od flagi). Ten test wymusza
         KRON86 (rozny od defaultu) i sprawdza, ze trafil do segmentu

@@ -188,6 +188,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   nierozwiazany placeholder = `ValidationError` (pusty string liczy sie jako
   brak wymiaru, wiec tez konczy sie `ValidationError`, a nie segmentem
   `pl_1992_1m_`)
+- `LazTile.uklad` i `FileStorage.get_raw_path(..., uklad=)` — biblioteka
+  zapisuje kafle LAZ w tym samym segmencie co CLI (dotad kafel `PL-2000:*`
+  z godlem myslnikowym trafial przez API do `laz/pl_1992_*`; review max,
+  zn. 8)
 - `kartograf.transform.raster.warp_to_grid` — lokalna reprojekcja rastra
   z wymuszona operacja przypieta (wzorzec ADR-024 dla torow PL)
 - `mosaic_and_crop(dst_kwds=)` — wymuszenie sterownika/CRS wyniku

@@ -187,7 +187,7 @@ Kto wypelnia ktory placeholder:
 |---|---|---|
 | `{vcrs}` | konstruktor `FileStorage(vertical_crs=)` albo jawne `resolve_subdir(vertical_crs=)` | raz, na starcie zadania — uklad pionowy jest wlasnoscia zadania, nie arkusza |
 | `{uklad}` | `FileStorage` per identyfikator (`get_path`/`get_raw_path`/`exists`/`delete`/`ensure_directory`), regula ta sama co `parser_registry.path_parts`: kropki -> `2000`, reszta -> `1992` | przy budowie kazdej sciezki |
-| `{uklad}` (jawnie) | CLI: tor LAZ (`_laz_uklad(tile)` z `uklad_xy` kafla) i wycinek PL (`uklad="1992"` na stale — `--target-crs` z `--system 2000` jest odrzucane) | przed utworzeniem `FileStorage` / sciezki wycinka |
+| `{uklad}` (jawnie) | tor LAZ: `LazTile.uklad` (kaskada `uklad_xy` kafla -> format godla -> "2000") przez `FileStorage.get_raw_path(..., uklad=)` — jedno zrodlo prawdy dla CLI i biblioteki (zn. 8, review max); wycinek PL (`uklad="1992"` na stale — `--target-crs` z `--system 2000` jest odrzucane) | przed utworzeniem `FileStorage` / sciezki wycinka |
 
 `FileStorage` waliduje wynik koncowy: segment, w ktorym po wypelnieniu zostala
 klamra `{`, konczy sie `ValidationError` z nazwa brakujacego wymiaru
@@ -492,12 +492,15 @@ zadanie obszarowe daje wiele kafli. Wejscie (godlo do 1:10000, `--bbox`,
 `--geometry`) sprowadzane jest do bboxa EPSG:2180, discovery idzie przez
 **WFS** `GetFeature` (WMS skorowidzy LAZ zwraca 401 — ADR-021), a kafle
 pobierane sa rownolegle. Godlo kafla jest drobniejsze niz 1:10000 i NIE jest
-parsowane — `FileStorage.get_raw_path` buduje z niego sama hierarchie
-katalogow. Uklad poziomy jest ustalany **per kafel** kaskada: `uklad_xy`
-kafla (`PL-2000:*` -> `2000`, `PL-1992*` -> `1992`), potem format godla
-(kropki/myslniki), a na koncu fallback `2000` z ostrzezeniem. Uklad pionowy
-bierze sie z flagi CLI. Jedno zadanie moze wiec zapisac kafle do dwoch
-segmentow naraz (`FileStorage` cache'owany per uklad). W trybie obszarowym
+parsowane — `FileStorage.get_raw_path(..., uklad=tile.uklad)` buduje z niego
+sama hierarchie katalogow. Uklad poziomy jest ustalany **per kafel**
+wlasnoscia `LazTile.uklad` (jedno zrodlo prawdy dla CLI i biblioteki, zn. 8
+review max), kaskada: `uklad_xy` kafla (`PL-2000:*` -> `2000`, `PL-1992*` ->
+`1992`), potem format godla (kropki/myslniki), a na koncu fallback `2000`
+z ostrzezeniem. Uklad pionowy bierze sie z flagi CLI (biblioteka:
+`FileStorage(vertical_crs=)`). Jedno zadanie moze wiec zapisac kafle do dwoch
+segmentow naraz — `{uklad}` rozwiazuje sie per wywolanie `get_raw_path`,
+jeden `FileStorage` wystarcza na cale zadanie. W trybie obszarowym
 `--country auto` obszar siegajacy CZ konczy sie bledem z podpowiedzia
 `--country pl` (LAZ dla CZ to etap 2).
 
