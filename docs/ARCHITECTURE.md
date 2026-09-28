@@ -91,7 +91,7 @@ core ──> (nic wewnetrznego przy imporcie)
 exceptions ──> (lisc; importowany przez wszystkie warstwy)
 ```
 
-Dwie uwagi, ktore latwo przeoczyc:
+Trzy uwagi, ktore latwo przeoczyc:
 
 - `core` ma **jeden leniwy** import w druga strone:
   `parser_registry._make_parser_cz_sm5` siega po
@@ -107,6 +107,10 @@ Dwie uwagi, ktore latwo przeoczyc:
   warstwa koordynacji arkuszy. CLI od 2026-09-28 nie importuje juz
   `transport` wcale (mozaika i warp wycinka przeszly do biblioteki, R3),
   a z `transform` bierze tylko `TransformError`.
+- Krawedz `download ──> providers` siega tez do zamrozonego toru CZ:
+  `download/cutout.py` (tor PL) importuje leniwie generyczny `bbox_to_crs`
+  z `providers/cuzk/dmr.py` (ADR-024); przeniesienie go do `transform/` to
+  etap 2, razem z odmrozeniem toru CZ.
 
 ### Moduly
 
@@ -280,7 +284,7 @@ data/
    Nazwa niesie ZADANIE, nie dokladny zasieg rastra: wycinek PL w EPSG:2180
    lezy na siatce arkuszy i siega do < 1 px dalej, a siatka warpa
    (`warp_to_grid` PL, `_warp_to_grid` CZ) ma calkowita liczbe pikseli
-   liczona od naroznika NW, wiec jej krawedz E i S moze odbiegac o < 0,5 px
+   liczona od naroznika NW, wiec jej krawedz E i S moze odbiegac o do 0,5 px
    (sekcja 4.3).
    Konwencja wspolna dla PL i CZ, ale nie kazde zadanie obszarowe daje
    wycinek: CZ zawsze (`exportImage`), PL **tylko z `--target-crs`** —
@@ -397,11 +401,19 @@ GeoTIFF zamiast listy arkuszy. Od 2026-09-28 (R3) caly tor zyje w bibliotece
 CLI jest nakladka: `_download_pl_bbox`/`_download_pl_geometry` wolaja
 `_download_pl_cutout` (`cli/download_cmd.py`), ktore wstrzykuje providera
 i `FileStorage` z `_create_provider_and_storage`, wypisuje komunikaty
-(`Found N sheets`, `Info:`, `Warning:`, `Downloaded to`) i zamienia KAZDY
-wyjatek przygotowania, selekcji, pobrania i budowy na kod 1 z komunikatem,
-nigdy traceback — wyjatek wyciekajacy poza petle krajow `_dispatch_area`
-zlamalby kontrakt czesciowego sukcesu (ADR-023 pkt 4-5). Biblioteka nie ma
-`print` ani argparse.
+(`Found N sheets`, `Info:`, `Warning:`, `Downloaded to`) i tlumaczy wyjatki
+na kod 1 z komunikatem, bez tracebacku: z `prepare_pl_cutout` —
+`TransformError` (z remedium, gdy jest) i `ValidationError`, z
+`select_pl_cutout_sheets` — `ValidationError`, a wokol `run_pl_cutout`
+(pobranie i budowa) — KAZDY `Exception`. Wyjatek wyciekajacy poza petle
+krajow `_dispatch_area` zlamalby kontrakt czesciowego sukcesu (ADR-023
+pkt 4-5). Inny wyjatek przygotowania albo selekcji (przy wejsciu
+zwalidowanym przez CLI nie wystepuje — tylko przy bledzie w kodzie) trafia
+do bariery `main()` (`cli/commands.py`): `KartografError` -> `Error:
+<komunikat>`, kazdy inny -> `Error: <Typ>: <komunikat>` z podpowiedzia
+`KARTOGRAF_DEBUG=1` (z ta zmienna — pelny traceback); zawsze kod 1, ale
+petla krajow jest wtedy przerwana, wiec pod `--country auto` sukces
+drugiego kraju nie daje juz kodu 0. Biblioteka nie ma `print` ani argparse.
 
 1. **Fail-fast przed siecia** (`prepare_pl_cutout`). `ValidationError` na
    uklad docelowy spoza `SUPPORTED_TARGET_CRS` (`EPSG:2180`, `EPSG:5514`,
@@ -455,9 +467,16 @@ zlamalby kontrakt czesciowego sukcesu (ADR-023 pkt 4-5). Biblioteka nie ma
    z wlasnymi sidecarami (z `parent_request`, gdy podany), rownolegle wg
    `max_workers`; `skip_existing = not force`, wiec arkusze z dysku sa
    uzywane ponownie (E2E 2026-09-28: po usunieciu wyniku przebieg bez
-   `force` — zero wywolan providera, wynik bajt w bajt). Porazka arkusza nie
-   przerywa listy: trafia do `last_result.failed`, a brak danych u zrodla —
-   takze do `last_result.no_coverage`. `NoCoverageError` rzuca
+   `force` — zero wywolan providera, wynik bajt w bajt). Porazka arkusza
+   z rodziny `DownloadError` nie przerywa listy: trafia do
+   `last_result.failed`, a brak danych u zrodla — takze do
+   `last_result.no_coverage`. Inny wyjatek arkusza (np. `OSError` zapisu)
+   przy `max_workers=1` (domyslne w bibliotece) wylatuje z `download_sheets`
+   i `run_pl_cutout` bez zmian, przerywajac liste; w puli watkow
+   (`max_workers > 1`, w CLI domyslnie 4) pula zapisuje go w `failed` (bez
+   `no_coverage`), wiec konczy sie `DownloadError` jak awaria pobrania
+   ponizej. W CLI oba warianty lapie `except Exception` wokol
+   `run_pl_cutout`, tak samo jak bledy ponizej. `NoCoverageError` rzuca
    `GugikProvider`, gdy WSZYSTKIE warstwy skorowidza odpowiedzialy i zadna
    nie ma arkusza (morze, strona czeska bboxa przygranicznego, dziury
    pokrycia 1 m); czesciowa awaria warstw to zwykly `DownloadError` ("brak
@@ -476,7 +495,7 @@ zlamalby kontrakt czesciowego sukcesu (ADR-023 pkt 4-5). Biblioteka nie ma
      nieobecny w cache -> `missing_sheets` = ten arkusz, 33 775 z 80 601
      pikseli nodata — wylacznie tam, gdzie zaden pobrany arkusz nie ma
      danych;
-   - kazda inna porazka arkusza -> `DownloadError` ("N z M arkuszy nie
+   - kazdy inny arkusz w `failed` -> `DownloadError` ("N z M arkuszy nie
      pobrano (blad pobrania, nie brak danych)"): chwilowy blad nie moze
      zostawic trwalej dziury w pliku, ktory potem jest pomijany jako
      istniejacy;
@@ -546,9 +565,9 @@ zlamalby kontrakt czesciowego sukcesu (ADR-023 pkt 4-5). Biblioteka nie ma
    arkuszach 5 m z cache Hydrografu (bbox przez szew `N-34-139-A-c-4-3` /
    `-4-4`, mieszany cache z `.prj` przy jednym arkuszu): poczatek siatki
    `mod 5 = 2,5 m`, rozszerzenie 2,5 m na strone (bbox calkowity) albo
-   0,2-3,8 m (ulamkowy), **0 z 80 601** pikseli rozbieznych z arkuszem
-   zawierajacym srodek piksela, zero nodata, piksele identyczne jak z cache
-   bez `.prj`.
+   0,2-3,8 m (ulamkowy), pikseli rozbieznych z arkuszem zawierajacym srodek
+   piksela **0 z 80 601** (bbox calkowity) i **0 z 79 799** (ulamkowy), zero
+   nodata, piksele identyczne jak z cache bez `.prj`.
    Dla `EPSG:5514`/`EPSG:3045` `transform/raster.py::warp_to_grid` (bez
    zmian w tej fali) reprojektuje mozaike — juz na siatce arkuszy, wiec bez
    przesuniecia o ulamek piksela — na siatke wyniku z WYMUSZONA operacja
@@ -558,15 +577,18 @@ zlamalby kontrakt czesciowego sukcesu (ADR-023 pkt 4-5). Biblioteka nie ma
    sprawdza tez, czy para ukladow zgadza sie z `pinned` — wymuszona
    operacja czyni `src_crs` martwym dla GDAL-a. Siatke wyniku wyznacza
    wylacznie `bbox_target` (zapas zrodla z kroku 2 jej nie dotyczy):
-   naroznik NW = (`min_x`, `max_y`), liczba pikseli = `round(rozpietosc /
-   piksel)`, wiec krawedz E i S moze odbiegac od `bbox_target` o < 0,5 px
-   (E2E: 1,61 m i 0,76 m przy 5 m; te sama regule ma `_warp_to_grid` toru
-   CZ), a nazwa pliku niesie `bbox_target`. E2E (ten sam bbox, cel
-   EPSG:5514): piksele wyniku sa bit w bit rowne odtworzeniu "mozaika na
-   siatce arkuszy + `warp_to_grid`"; wzgledem niezaleznego warpu GDAL kazdego
-   arkusza z ta sama operacja na te sama siatke — srednio **2,7 mm**, maks.
-   0,15 m dalej niz 1 px od szwu arkuszy (przy szwie do 0,67 m, bo tam warp
-   pojedynczego arkusza widzi tylko czesc sasiadow bilinear). Roznice poza
+   naroznik NW = (`min_x`, `max_y`), liczba pikseli = `max(1,
+   round(rozpietosc / piksel))`, wiec krawedz E i S moze odbiegac od
+   `bbox_target` o do 0,5 px — `round` rozstrzyga remis do parzystej, wiec
+   dokladnie 0,5 px jest mozliwe, a bbox wezszy niz pol piksela dostaje
+   i tak 1 px i odbiega bardziej (E2E: 1,61 m i 0,76 m przy 5 m; te sama
+   regule ma `_warp_to_grid` toru CZ). Nazwa pliku niesie `bbox_target`.
+   E2E (ten sam bbox, cel EPSG:5514): piksele wyniku sa bit w bit rowne
+   odtworzeniu "mozaika na siatce arkuszy + `warp_to_grid`"; wzgledem
+   niezaleznego warpu GDAL kazdego arkusza z ta sama operacja na te sama
+   siatke — srednio **2,7 mm**, maks. 0,15 m dalej niz 1 px od szwu
+   arkuszy (przy szwie do 0,67 m, bo tam warp pojedynczego arkusza widzi
+   tylko czesc sasiadow bilinear). Roznice poza
    szwem robi GDAL: skale resamplingu (opcje warpu `XSCALE`/`YSCALE`; od
    nich zalezy, ile pikseli zrodla bierze interpolator) liczy per kawalek
    z proporcji okna celu do okna zrodla, a ta zalezy od zasiegu zrodla —
@@ -600,17 +622,20 @@ w `warp_to_grid`), a plik posredni sprzata `finally` — przerwana budowa nie
 zostawia pod finalna sciezka polzapisanego pliku. Skoro tak, ZADNE ogniwo
 toru PL nie kasuje poprzedniego wyniku: ani `build_pl_cutout`, ani
 `transform/raster.py::warp_to_grid` — stary plik przezywa awarie, takze
-z `force=True` (E2E: nieudany przebieg z `force=True` — porazka pobrania —
-zostawil poprzedni wynik bajt w bajt, bez plikow tymczasowych), a sciezka
-sukcesu jest identyczna. Kasowanie bylo tu czysta utrata danych — pod
-`--country auto` cale zadanie moglo skonczyc sie kodem 0 (bo drugi kraj sie
-udal), zostawiajac uzytkownika bez pliku, ktory mial wczesniej. Obietnica
-obejmuje wiec takze `--target-crs EPSG:5514`/`EPSG:3045`, czyli glowne
-zastosowanie flagi. Wlasne `except BaseException:
-dst.unlink(missing_ok=True)` ma dalej wylacznie tor CZ
-(`providers/cuzk/dmr.py::_warp_to_grid`, niezalezna kopia funkcji) — tam
-jest ono rownie zbedne (zapis idzie przez plik tymczasowy), ale to kod
-zweryfikowany na zywo, ktorego tuz przed wydaniem nie ruszamy (ADR-024). Bez
+z `force=True` (testy:
+`tests/test_pl_cutout.py::TestBuildPlCutout::test_failed_build_keeps_previous_result`
+— przerwany warp w `build_pl_cutout` — i
+`tests/test_transform_raster.py::TestWarpToGrid::test_failed_warp_keeps_previous_destination`
+— sam `warp_to_grid`), a sciezka sukcesu jest identyczna. Kasowanie bylo
+tu czysta utrata danych — pod `--country auto` cale zadanie moglo skonczyc
+sie kodem 0 (bo drugi kraj sie udal), zostawiajac uzytkownika bez pliku,
+ktory mial wczesniej. Obietnica obejmuje wiec takze
+`--target-crs EPSG:5514`/`EPSG:3045`, czyli glowne zastosowanie flagi.
+Wlasne `except BaseException: dst.unlink(missing_ok=True)` ma dalej
+wylacznie tor CZ (`providers/cuzk/dmr.py::_warp_to_grid`, niezalezna
+kopia funkcji) — tam jest ono rownie zbedne (zapis idzie przez plik
+tymczasowy), ale to kod zweryfikowany na zywo, ktorego tuz przed wydaniem
+nie ruszamy (ADR-024). Bez
 `--force` sytuacja i tak nie wystepuje, bo skrot "plik juz istnieje" wraca
 wczesniej. Nieudana budowa nie zostawia tez pustego drzewa
 `<segment>/bbox/` (review max zn. 10): `run_pl_cutout` przy wyjatku
