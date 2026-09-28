@@ -1033,6 +1033,8 @@ class TestGeometryCutout:
         WYMAGANYM. Bez tej linii worker nie dostaje obwiedni i wycinek nie
         powstaje (komenda konczy sie kodem 1).
         """
+        from pyproj import CRS
+
         from kartograf.download.manager import DownloadResult
 
         sheets = [
@@ -1050,6 +1052,11 @@ class TestGeometryCutout:
         with (
             # oba importy lokalne (cli.download_cmd, download.cutout) ->
             # patch u zrodla
+            # plik-atrapa (P-03): _geometry_envelope czyta CRS PRZED obwiednia
+            patch(
+                "kartograf.core.geometry.read_source_crs",
+                return_value=CRS.from_epsg(2180),
+            ),
             patch("kartograf.core.geometry.get_overall_bbox", return_value=overall),
             patch(
                 "kartograf.core.geometry.find_sheets_for_geometry",

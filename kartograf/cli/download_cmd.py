@@ -589,6 +589,27 @@ def _resolve_cz_geometry_bbox(args: argparse.Namespace) -> BBox | None:
         return None
 
 
+def _geometry_envelope(filepath: Path, layer: str | None) -> BBox:
+    """Obwiednia geometrii dla dyspozycji krajow (``--country auto``/``pl``).
+
+    Plik w ukladzie czeskim (EPSG:5514/3045): obwiednia W UKLADZIE PLIKU
+    z etykieta KODU EPSG — skok do EPSG:2180 wykona przypieta operacja
+    w ``_country_bbox`` (review max 2026-08-30, zn. 4: domyslny transformer
+    z ``core/geometry`` przesuwal siatke wyniku o ~1,2 m). Etykieta WKT by nie
+    wystarczyla: ``wkid()`` jej nie rozpoznaje i skok przypiety zostalby
+    pominiety. Pozostale uklady — jak dotad, wprost do EPSG:2180.
+    """
+    from kartograf.core.geometry import get_overall_bbox, read_source_crs
+
+    source_crs = read_source_crs(filepath, layer=layer)
+    epsg = source_crs.to_epsg()
+    if epsg is not None and str(epsg) in _CZ_CRS_WKIDS:
+        # obwiednia w ukladzie pliku (tozsamosc — zero transformacji)
+        env = get_overall_bbox(filepath, layer=layer, target_crs=source_crs.to_wkt())
+        return BBox(env.min_x, env.min_y, env.max_x, env.max_y, f"EPSG:{epsg}")
+    return get_overall_bbox(filepath, layer=layer, target_crs="EPSG:2180")
+
+
 def cmd_download(args: argparse.Namespace) -> int:
     """
     Execute the download command.
@@ -1680,9 +1701,12 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
 
     Jawny ``--country cz`` idzie sciezka ``_resolve_cz_geometry_bbox``
     (obwiednia w ukladzie PLIKU + jeden skok przypieta operacja). Tryb auto
-    i ``--country pl`` licza obwiednie w EPSG:2180: rozstrzyga ona kraje
-    i trafia do ``parent_request``, a arkusze PL dalej wyznacza sama geometria
-    (per obiekt), nie jej obwiednia.
+    i ``--country pl`` licza obwiednie przez ``_geometry_envelope``: plik
+    w ukladzie czeskim (EPSG:5514/3045) zostaje w ukladzie PLIKU (etykieta
+    EPSG) i opuszcza Krovaka dopiero w ``_country_bbox`` przypieta operacja,
+    pozostale uklady licza obwiednie wprost w EPSG:2180 jak dotad. Wynik
+    rozstrzyga kraje i trafia do ``parent_request``, a arkusze PL dalej
+    wyznacza sama geometria (per obiekt), nie jej obwiednia.
 
     Parameters
     ----------
@@ -1694,8 +1718,6 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
     int
         Exit code (0 for success, 1 for error)
     """
-    from kartograf.core.geometry import get_overall_bbox
-
     country_flag = getattr(args, "country", "auto")
     if country_flag == "cz":
         if _reject_non_nmt_for_cz(getattr(args, "product", "nmt")):
@@ -1713,9 +1735,7 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
         return 1
 
     try:
-        overall = get_overall_bbox(
-            filepath, layer=getattr(args, "layer", None), target_crs="EPSG:2180"
-        )
+        overall = _geometry_envelope(filepath, getattr(args, "layer", None))
     except ValidationError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1

@@ -10,6 +10,7 @@ import json
 from unittest.mock import Mock, patch
 
 import pytest  # noqa: F401 - required for fixtures
+from pyproj import CRS
 
 from kartograf.cli.commands import (
     create_parser,
@@ -1447,11 +1448,18 @@ class TestAreaModeHierarchyExitCode:
         assert result == 0
         assert capsys.readouterr().err == ""
 
+    @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
     @patch("kartograf.cli.download_cmd.DownloadManager")
     @patch("kartograf.core.geometry.get_overall_bbox")
     def test_geometry_coarse_scale_failure_returns_exit_1(
-        self, mock_overall, mock_manager_class, mock_find, capsys, tmp_path
+        self,
+        mock_overall,
+        mock_manager_class,
+        mock_find,
+        mock_read_crs,
+        capsys,
+        tmp_path,
     ):
         """Ta sama kontrola obowiazuje w trybie --geometry."""
         shp_file = tmp_path / "area.shp"
@@ -1829,11 +1837,12 @@ def test_landcover_download_no_selection(capsys):
 class TestCmdDownloadGeometry:
     """Tests for download command with --geometry option."""
 
+    @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
     @patch("kartograf.cli.download_cmd.DownloadManager")
     @patch("kartograf.core.geometry.get_overall_bbox")
     def test_download_geometry_basic(
-        self, mock_overall, mock_manager_cls, mock_find, capsys, tmp_path
+        self, mock_overall, mock_manager_cls, mock_find, mock_read_crs, capsys, tmp_path
     ):
         """--geometry calls find_sheets_for_geometry and downloads."""
         # Create a fake SHP file
@@ -1856,11 +1865,12 @@ class TestCmdDownloadGeometry:
         mock_find.assert_called_once()
         mock_manager.download_sheet.assert_called_once()
 
+    @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
     @patch("kartograf.cli.download_cmd.DownloadManager")
     @patch("kartograf.core.geometry.get_overall_bbox")
     def test_download_geometry_with_layer(
-        self, mock_overall, mock_manager_cls, mock_find, capsys, tmp_path
+        self, mock_overall, mock_manager_cls, mock_find, mock_read_crs, capsys, tmp_path
     ):
         """--geometry --layer passes layer parameter."""
         gpkg_file = tmp_path / "area.gpkg"
@@ -1953,11 +1963,12 @@ class TestCmdDownloadGeometry:
         captured = capsys.readouterr()
         assert "--geometry" in captured.err
 
+    @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
     @patch("kartograf.cli.download_cmd.DownloadManager")
     @patch("kartograf.core.geometry.get_overall_bbox")
     def test_geometry_workers_1_sequential_collects_all_paths(
-        self, mock_overall, mock_manager_cls, mock_find, capsys, tmp_path
+        self, mock_overall, mock_manager_cls, mock_find, mock_read_crs, capsys, tmp_path
     ):
         """--workers 1 idzie petla sekwencyjna i zbiera WSZYSTKIE sciezki."""
         shp_file = tmp_path / "area.shp"
@@ -2387,11 +2398,12 @@ class TestDownloadBBoxSystem:
 class TestDownloadGeometrySystem:
     """Tests for download --geometry --system integration."""
 
+    @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
     @patch("kartograf.cli.download_cmd.DownloadManager")
     @patch("kartograf.core.geometry.get_overall_bbox")
     def test_download_geometry_system_2000(
-        self, mock_overall, mock_manager_cls, mock_find, capsys, tmp_path
+        self, mock_overall, mock_manager_cls, mock_find, mock_read_crs, capsys, tmp_path
     ):
         """--geometry --system 2000 passes system='2000' to find_sheets_for_geometry."""
         shp_file = tmp_path / "area.shp"
@@ -2423,11 +2435,12 @@ class TestDownloadGeometrySystem:
         call_kwargs = mock_find.call_args
         assert call_kwargs.kwargs.get("system") == "2000"
 
+    @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
     @patch("kartograf.cli.download_cmd.DownloadManager")
     @patch("kartograf.core.geometry.get_overall_bbox")
     def test_download_geometry_default_system_1992(
-        self, mock_overall, mock_manager_cls, mock_find, capsys, tmp_path
+        self, mock_overall, mock_manager_cls, mock_find, mock_read_crs, capsys, tmp_path
     ):
         """Default system='1992' for geometry download."""
         shp_file = tmp_path / "area.shp"
@@ -3803,6 +3816,48 @@ class TestCountryDispatch:
         mock_cz.assert_not_called()
         assert mock_find.call_args.kwargs.get("system") == "1992"
 
+    def test_geometry_in_czech_crs_leaves_krovak_by_pinned_operation_for_pl(
+        self, tmp_path
+    ):
+        """Zn. 4 review max: plik geometrii w EPSG:5514 z --country pl — obwiednia
+        PL powstaje przypieta operacja (jak --bbox w ukladzie czeskim), nie
+        domyslnym transformerem z core/geometry (~1,2 m roznicy)."""
+        from kartograf.providers.cuzk.dmr import bbox_to_crs
+
+        shp = _write_krovak_shp(tmp_path)
+        captured = {}
+
+        def fake_pl_geometry(args, filepath, parent_request, bbox):
+            captured.update(bbox=bbox, parent=parent_request)
+            return 0
+
+        with patch(
+            "kartograf.cli.download_cmd._download_pl_geometry",
+            side_effect=fake_pl_geometry,
+        ):
+            rc = main(
+                [
+                    "download",
+                    "--geometry",
+                    str(shp),
+                    "--country",
+                    "pl",
+                    "-o",
+                    str(tmp_path / "out"),
+                ]
+            )
+
+        assert rc == 0
+        expected = bbox_to_crs(
+            BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514"), "EPSG:2180"
+        )
+        got = captured["bbox"]
+        assert got.crs == "EPSG:2180"
+        assert (got.min_x, got.min_y, got.max_x, got.max_y) == pytest.approx(
+            (expected.min_x, expected.min_y, expected.max_x, expected.max_y), abs=1e-6
+        )
+        assert captured["parent"]["bbox_crs"] == "EPSG:5514"
+
 
 # ===========================================================================
 # Auto-split bbox/geometrii per kraj + extra.parent_request (Zad. 17)
@@ -4505,12 +4560,19 @@ class TestAutoSplitGeometry:
         cwd.mkdir()
         monkeypatch.chdir(cwd)
 
+    @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     @patch("kartograf.core.geometry.get_overall_bbox")
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_geometry_border_splits(
-        self, mock_manager_class, mock_find, mock_overall, mock_cz, tmp_path
+        self,
+        mock_manager_class,
+        mock_find,
+        mock_overall,
+        mock_cz,
+        mock_read_crs,
+        tmp_path,
     ):
         geometry_file = tmp_path / "area.shp"
         geometry_file.write_bytes(b"stub")
@@ -4539,12 +4601,19 @@ class TestAutoSplitGeometry:
             "parent_request": parent
         }
 
+    @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     @patch("kartograf.core.geometry.get_overall_bbox")
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_geometry_pl_only_skips_cz(
-        self, mock_manager_class, mock_find, mock_overall, mock_cz, tmp_path
+        self,
+        mock_manager_class,
+        mock_find,
+        mock_overall,
+        mock_cz,
+        mock_read_crs,
+        tmp_path,
     ):
         geometry_file = tmp_path / "area.shp"
         geometry_file.write_bytes(b"stub")
@@ -4653,8 +4722,11 @@ class TestAutoSplitGeometry:
         assert "Remedium: zainstaluj siatki" in capsys.readouterr().err
         mock_run_cz.assert_not_called()
 
+    @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.core.geometry.get_overall_bbox")
-    def test_geometry_outside_known_countries(self, mock_overall, tmp_path, capsys):
+    def test_geometry_outside_known_countries(
+        self, mock_overall, mock_read_crs, tmp_path, capsys
+    ):
         geometry_file = tmp_path / "area.shp"
         geometry_file.write_bytes(b"stub")
         mock_overall.return_value = BBox(2.0, 40.0, 2.5, 40.5, "EPSG:4326")

@@ -611,6 +611,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   arkuszy bez niego konczyly sie bledem `niezgodne CRS wejsc`. Arkusze sa
   teraz owijane w VRT z jawnym EPSG:2180 i Float32, a lista zrodel jest
   sortowana.
+- Plik geometrii w ukladzie czeskim (EPSG:5514/3045) z `--country pl|auto`:
+  obwiednia opuszcza Krovaka przypieta operacja (jak `--bbox`), nie
+  domyslnym transformerem — dotad siatka i nazwa wycinka PL byly przesuniete
+  o ~1,2 m (review max, zn. 4). `parent_request.bbox_crs` niesie wtedy uklad
+  pliku.
 
 ### Tests
 - **1716 testow, pokrycie 93%** — 1142 po mergu etapu 0, 1402 po etapie 1,
