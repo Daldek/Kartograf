@@ -26,7 +26,7 @@ from urllib.parse import urlencode
 import requests
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
@@ -448,9 +448,13 @@ class GugikProvider(BaseProvider):
 
         Raises
         ------
+        NoCoverageError
+            If every skorowidz layer answered and none of them has the sheet
+            (the source has no data for this godlo)
         DownloadError
-            If no ASC file is found, or if every skorowidz layer query
-            failed on transport (service unavailable)
+            If every skorowidz layer query failed on transport (service
+            unavailable), or if only some layers answered and the rest have
+            no data for the sheet (coverage is then uncertain, not absent)
         """
         # Check cache first
         if self._cache is not None:
@@ -547,8 +551,14 @@ class GugikProvider(BaseProvider):
                             self._cache_url(godlo, found_url)
                             return found_url
 
-                    # Fallback to first found URL
-                    logger.debug(f"Found OpenData URL (no exact match): {urls[0]}")
+                    # Fallback: URL bez tego godla. Dla nowszych kampanii bywa to
+                    # arkusz PL-2000 (inny zasieg i uklad), zapisywany pod godlem
+                    # PL-1992 — wycinek --target-crs odrzuca taki arkusz glosno
+                    # (plan 2026-09-28, fakt 7), lista arkuszy przyjmuje go bez zmian.
+                    logger.warning(
+                        f"{godlo}: skorowidz zwrocil URL innego arkusza ({urls[0]}) "
+                        "— plik moze byc innym arkuszem, np. w ukladzie PL-2000"
+                    )
                     self._cache_url(godlo, urls[0])
                     return urls[0]
 
@@ -559,14 +569,25 @@ class GugikProvider(BaseProvider):
                 continue
 
         if transport_errors == len(wms_layers):
-            raise DownloadError(
+            raise DownloadError(  # bez zmian: cala usluga niedostepna
                 f"GUGiK WMS skorowidz unavailable for {godlo}: "
                 f"all {transport_errors} layer queries failed "
                 f"(last error: {last_error})",
                 godlo=godlo,
             )
 
-        raise DownloadError(
+        if transport_errors:
+            # Czesc warstw nie odpowiedziala — arkusz moze lezec wlasnie w nich.
+            # To NIE jest brak pokrycia: wycinek potraktowalby go jako nodata
+            # i chwilowa awaria zostawilaby trwala dziure (R5).
+            raise DownloadError(
+                f"GUGiK WMS skorowidz: {transport_errors} z {len(wms_layers)} "
+                f"warstw nie odpowiedzialo dla {godlo}, pozostale nie maja "
+                f"arkusza — brak pokrycia niepewny (ostatni blad: {last_error})",
+                godlo=godlo,
+            )
+
+        raise NoCoverageError(
             f"No NMT {self._resolution} data available for {godlo} "
             f"(vertical_crs={self._vertical_crs}). "
             f"This area may not have {self._resolution} coverage in GUGiK. "

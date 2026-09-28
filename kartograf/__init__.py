@@ -33,6 +33,7 @@ from kartograf.download.storage import FileStorage
 from kartograf.exceptions import (
     DownloadError,
     KartografError,
+    NoCoverageError,
     ParseError,
     ValidationError,
 )
@@ -88,6 +89,7 @@ __all__ = [
     "ParseError",
     "ValidationError",
     "DownloadError",
+    "NoCoverageError",
     # Version
     "__version__",
 ]

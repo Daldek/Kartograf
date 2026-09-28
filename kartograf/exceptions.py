@@ -70,6 +70,17 @@ class DownloadError(KartografError):
         self.status_code = status_code
 
 
+class NoCoverageError(DownloadError):
+    """
+    The source has no data for the requested sheet.
+
+    Raised when every index (skorowidz) layer answered and none of them
+    contains the sheet — a state of the data, not a transport failure:
+    retrying will not help. Raster builders (PL cutout, ADR-027 addendum
+    2026-09-28) treat it as nodata; every other DownloadError stays fatal.
+    """
+
+
 class ValidationError(KartografError):
     """
     Error validating input data.

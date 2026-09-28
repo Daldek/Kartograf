@@ -152,6 +152,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     i sidecar z CUZK (Changed, A6-3).
 
 ### Added
+- `NoCoverageError(DownloadError)` — zrodlo nie ma danych dla arkusza
+  (wszystkie warstwy skorowidza odpowiedzialy); `DownloadResult.no_coverage`
+  — podzbior `failed`.
 - **`--target-crs` dla PL w trybie `--bbox`/`--geometry`** (ADR-027): jeden
   scalony wycinek `nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif` (mozaika
   arkuszy + crop + lokalny warp przypieta operacja; `EPSG:2180` = sam crop,
@@ -296,6 +299,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     wymienione byly tylko uklady polskie (A6-16)
 
 ### Changed
+- Czesciowa awaria warstw skorowidza GUGiK przy braku arkusza w pozostalych
+  to teraz "brak pokrycia niepewny" (`DownloadError`), nie brak pokrycia;
+  URL innego arkusza z fallbacku skorowidza loguje ostrzezenie (arkusze
+  PL-2000 pod godlem PL-1992).
 - `DownloadManager` bierze uklad pionowy segmentu z PROVIDERA, nie z wlasnej
   flagi `vertical_crs=` — `DownloadManager(provider=GugikProvider(
   vertical_crs="KRON86"))` pisal dotad do `nmt/pl_1992_1m_evrf2007/` obok
