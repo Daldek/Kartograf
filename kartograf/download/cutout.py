@@ -334,6 +334,27 @@ def write_pl_cutout_sidecar(
         logger.warning(f"Nie udalo sie zapisac sidecara dla {cutout.target_path}: {e}")
 
 
+def _require_matching_provider(cutout: PlCutout, provider) -> None:
+    """Wstrzykniety provider musi dostarczac pion i rozdzielczosc wycinka.
+
+    Segment arkuszy (wspolny cache) i sidecar wycinka biora pion
+    i rozdzielczosc z ``cutout``, a dane z providera — rozjazd zapisalby np.
+    wysokosci KRON86 do segmentu ``..._evrf2007`` (albo arkusze 5 m do
+    segmentu 1 m), a kolejne przebiegi ze ``skip_existing`` uzylyby ich bez
+    ostrzezenia. ``isinstance(str)`` jak w ``DownloadManager``: atrybut
+    nieobecny albo niebedacy napisem (np. Mock) nie jest porownywany.
+    """
+    for attr in ("vertical_crs", "resolution"):
+        actual = getattr(provider, attr, None)
+        expected = getattr(cutout, attr)
+        if isinstance(actual, str) and actual != expected:
+            raise ValidationError(
+                f"Provider niezgodny z wycinkiem: {attr} providera {actual}, "
+                f"wycinka {expected} — przygotuj wycinek (prepare_pl_cutout) "
+                "z pionem i rozdzielczoscia providera"
+            )
+
+
 def run_pl_cutout(
     cutout: PlCutout,
     sheets: PlCutoutSheets,
@@ -351,8 +372,12 @@ def run_pl_cutout(
     Arkusze z cache sa uzywane ponownie (``skip_existing = not force``).
     Kazdy nieudany arkusz -> ``DownloadError`` z lista, zanim cokolwiek
     zostanie zbudowane. ``provider``/``storage`` domyslnie z fabryki NMT
-    i ``FileStorage`` segmentu arkuszy (CLI wstrzykuje wlasne).
+    i ``FileStorage`` segmentu arkuszy (CLI wstrzykuje wlasne). Wstrzykniety
+    ``provider`` musi dostarczac pion i rozdzielczosc wycinka — inaczej
+    ``ValidationError`` przed jakimkolwiek pobraniem.
     """
+    if provider is not None:
+        _require_matching_provider(cutout, provider)
     if not force and cutout.target_path.exists():
         return PlCutoutResult(path=cutout.target_path, skipped=True)
     if provider is None:

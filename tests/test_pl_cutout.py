@@ -309,6 +309,12 @@ class TestDownloadPlBboxCutout:
     """Spec 8: przeplyw wycinka na poziomie workera PL (mockowane pobranie)."""
 
     def _run(self, tmp_path, args, sheets, failed=(), provider=None):
+        """Worker PL z mockowanym pobraniem; zwraca ``(rc, manager, find)``.
+
+        Mock KLASY ``DownloadManager`` (kwargs konstruktora, np.
+        ``sidecar_extra``) zostaje w ``self.dm`` — zwrot zostaje trojka, bo
+        rozpakowuja go kolejne testy.
+        """
         from kartograf.download.manager import DownloadResult
 
         provider = provider or SimpleNamespace(vertical_crs="EVRF2007")
@@ -321,9 +327,10 @@ class TestDownloadPlBboxCutout:
                 f"{_DL}._create_provider_and_storage",
                 return_value=(provider, Mock()),
             ),
-            patch(f"{_CUT}.DownloadManager", return_value=manager),
+            patch(f"{_CUT}.DownloadManager", return_value=manager) as dm,
         ):
             rc = _download_pl_bbox(args, _BBOX_2180, _PARENT)
+        self.dm = dm
         return rc, manager, find
 
     def test_creates_cutout_and_sidecar(self, tmp_path):
@@ -352,6 +359,8 @@ class TestDownloadPlBboxCutout:
         assert payload["vertical_crs"] == "EPSG:9651"  # EVRF2007-PL, kanal arkuszy
         assert payload["request"]["bbox_crs"] == "EPSG:2180"
         assert payload["extra"]["parent_request"] == _PARENT
+        # sidecary ARKUSZY (cache) tez niosa rodzica zadania — jak bez wycinka
+        assert self.dm.call_args.kwargs["sidecar_extra"] == {"parent_request": _PARENT}
 
     def test_target_5514_sidecar_has_pinned_transform(self, tmp_path):
         sheets = [
@@ -432,6 +441,19 @@ class TestDownloadPlBboxCutout:
         rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets, failed=["N-2"])
 
         assert rc == 1
+        assert not (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").exists()
+
+    def test_error_lists_all_failed_sheets(self, tmp_path, capsys):
+        """Komunikat wymienia WSZYSTKIE nieudane arkusze (``download_sheets``).
+
+        Dotad pula watkow konczyla sie pierwszym wyjatkiem — uzytkownik
+        poznawal jeden brakujacy arkusz na przebieg.
+        """
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), [], failed=["N-1", "N-2"])
+
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "N-1" in err and "N-2" in err, err
         assert not (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").exists()
 
     def test_skip_existing_short_circuits_before_download(self, tmp_path):
@@ -859,6 +881,101 @@ class TestLibraryApi:
         assert second.skipped and second.path == first.path
         assert not third.skipped
         assert sorted(provider.calls) == sorted(list(self._SHEETS) * 2)
+
+    def test_rebuild_reuses_cached_sheets(self, tmp_path):
+        """Brak wycinka, arkusze w cache: przebudowa BEZ pobierania (force=False).
+
+        Arkusze dzialaja jako cache (``skip_existing = not force``) — skasowany
+        albo nigdy niezbudowany wycinek nie moze kosztowac ponownego pobrania
+        arkuszy, ktore juz leza w swoim segmencie.
+        """
+        from kartograf import download_pl_cutout
+
+        provider = self._provider()
+        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+        with (
+            patch("kartograf.providers.pl.create_nmt_provider", return_value=provider),
+            patch(
+                "kartograf.download.cutout.find_sheets_for_bbox",
+                return_value=list(self._SHEETS),
+            ),
+        ):
+            first = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
+            first.path.unlink()  # wycinek znika, arkusze zostaja w segmencie
+            rebuilt = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
+
+        assert sorted(provider.calls) == sorted(self._SHEETS)  # tylko 1. przebieg
+        assert not rebuilt.skipped and rebuilt.path == first.path
+        assert rebuilt.path.exists()
+        assert len(rebuilt.sheet_paths) == len(self._SHEETS)
+
+    def test_5m_request_follows_factory_vertical_rule(self, tmp_path):
+        """Regula fabryki NMT (5m => EVRF2007): wycinek idzie za PROVIDEREM.
+
+        ``download_pl_cutout`` podaje fabryce surowe parametry, a pion wycinka
+        bierze z providera — z surowa flaga KRON86 wycinek 5m nie powstalby
+        (5m istnieje wylacznie w EVRF2007).
+        """
+        from kartograf import download_pl_cutout
+
+        provider = self._provider()
+        # to, co zwraca prawdziwa fabryka dla 5m + KRON86 (korekta pionu)
+        provider.vertical_crs = "EVRF2007"
+        provider.resolution = "5m"
+        provider.descriptor_key = "pl.gugik.nmt_5m"
+
+        def download(godlo, path, timeout=30):
+            provider.calls.append(godlo)
+            west, south = self._SHEETS[godlo]
+            return _write_sheet_asc(path, west, south, size=40, pixel=5.0)
+
+        provider.download = download
+        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+        with (
+            patch(
+                "kartograf.providers.pl.create_nmt_provider", return_value=provider
+            ) as factory,
+            patch(
+                "kartograf.download.cutout.find_sheets_for_bbox",
+                return_value=list(self._SHEETS),
+            ),
+        ):
+            result = download_pl_cutout(
+                bbox,
+                "EPSG:2180",
+                output_dir=tmp_path,
+                resolution="5m",
+                vertical_crs="KRON86",
+            )
+
+        factory.assert_called_once_with(vertical_crs="KRON86", resolution="5m")
+        assert result.path.parent == tmp_path / "nmt" / "pl_1992_5m_evrf2007" / "bbox"
+        assert result.path.exists()
+
+    @pytest.mark.parametrize(
+        ("attr", "value"), [("vertical_crs", "KRON86"), ("resolution", "5m")]
+    )
+    def test_run_rejects_provider_not_matching_cutout(self, tmp_path, attr, value):
+        """Provider niezgodny z wycinkiem zatrulby wspolny cache arkuszy.
+
+        Segment arkuszy i sidecar wycinka biora pion/rozdzielczosc z wycinka,
+        a dane z providera: arkusze KRON86 (albo 5 m) trafilyby do segmentu
+        ``pl_1992_1m_evrf2007`` i kolejne przebiegi EVRF2007 1m uzylyby ich
+        ponownie bez ostrzezenia. Blad PRZED pobraniem i przed katalogami.
+        """
+        from kartograf.download.cutout import PlCutoutSheets, run_pl_cutout
+        from kartograf.exceptions import ValidationError
+
+        provider = self._provider()
+        setattr(provider, attr, value)
+        cut = prepare_pl_cutout(_BBOX_2180, "EPSG:2180", output_dir=tmp_path)
+        sheets = PlCutoutSheets(godla=tuple(self._SHEETS))
+
+        with pytest.raises(ValidationError, match=value):
+            run_pl_cutout(cut, sheets, provider=provider)
+
+        assert provider.calls == []
+        assert not (tmp_path / "nmt").exists()
 
     def test_public_exports(self):
         import kartograf
