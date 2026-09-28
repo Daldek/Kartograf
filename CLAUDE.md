@@ -124,13 +124,18 @@ zapisuje arkusze w hierarchii godel. Kanoniczna tabela i migracja:
 
 Testy sa **offline**: `tests/conftest.py` przewraca kazdy test otwierajacy
 gniazdo spoza loopbacku; wyjatek maja tylko testy z markerem `live`.
+`pyproject.toml` ich nie odfiltrowuje (`addopts` bez `-m`), wiec domyslne
+komendy ponizej podaja `-m "not live"` jawnie.
 
 ```bash
-# Testy
-.venv/bin/python -m pytest tests/ -v
+# Testy (offline)
+.venv/bin/python -m pytest tests/ -v -m "not live"
 
-# Testy z pokryciem
-.venv/bin/python -m pytest tests/ --cov=kartograf --cov-report=html
+# Testy z pokryciem (offline)
+.venv/bin/python -m pytest tests/ -m "not live" --cov=kartograf --cov-report=html
+
+# Testy sieciowe (live)
+.venv/bin/python -m pytest tests/ -m live   # 8 testow sieciowych (WMS GUGiK) — tylko swiadomie
 
 # Linter
 .venv/bin/python -m ruff check kartograf/ tests/
