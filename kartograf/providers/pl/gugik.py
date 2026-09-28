@@ -31,6 +31,26 @@ from kartograf.providers.base import BaseProvider
 
 logger = logging.getLogger(__name__)
 
+# Znaczniki raportu wyjatku OGC: WMS (<ServiceExceptionReport>) i OWS
+# (<ows:ExceptionReport>) — wielkosc liter jak w schematach OGC.
+_OGC_EXCEPTION_MARKERS = ("ServiceException", "ExceptionReport")
+# Tresc pierwszego elementu z komunikatem: <ServiceException code="..."> (WMS)
+# albo <ows:ExceptionText> (OWS); \b odrzuca korzen <ServiceExceptionReport>.
+_OGC_EXCEPTION_TEXT = re.compile(
+    r"<(?:\w+:)?(?:ServiceException|ExceptionText)\b[^>]*>(.*?)</", re.DOTALL
+)
+
+
+def _ogc_exception_excerpt(text: str, limit: int = 200) -> str:
+    """Krotki, jednoliniowy wyciag raportu wyjatku OGC do komunikatu bledu.
+
+    Komunikat elementu wyjatku, a nie poczatek dokumentu: pierwsze ~200 znakow
+    raportu MapServera to sama deklaracja XML i przestrzenie nazw.
+    """
+    match = _OGC_EXCEPTION_TEXT.search(text)
+    excerpt = match.group(1) if match and match.group(1).strip() else text
+    return " ".join(excerpt.split())[:limit]
+
 
 class GugikProvider(BaseProvider):
     """
@@ -450,11 +470,15 @@ class GugikProvider(BaseProvider):
         ------
         NoCoverageError
             If every skorowidz layer answered and none of them has the sheet
-            (the source has no data for this godlo)
+            (the source has no data for this godlo). A response without an
+            OpenData URL whose body carries an OGC exception report
+            (``ServiceException``/``ExceptionReport``) is not an answer: it
+            counts as a failed query of that layer, like a transport error.
         DownloadError
-            If every skorowidz layer query failed on transport (service
-            unavailable), or if only some layers answered and the rest have
-            no data for the sheet (coverage is then uncertain, not absent)
+            If every skorowidz layer query failed (transport error or OGC
+            exception report: service unavailable), or if only some layers
+            answered and the rest have no data for the sheet (coverage is
+            then uncertain, not absent)
         """
         # Check cache first
         if self._cache is not None:
@@ -536,11 +560,12 @@ class GugikProvider(BaseProvider):
 
                 response = session.get(url, timeout=timeout)
                 response.raise_for_status()
+                text = response.text
 
                 # Parse HTML for OpenData URL pattern
                 urls = re.findall(
                     r'url:"(https://opendata[^"]+\.asc)"',
-                    response.text,
+                    text,
                 )
 
                 if urls:
@@ -561,6 +586,23 @@ class GugikProvider(BaseProvider):
                     )
                     self._cache_url(godlo, urls[0])
                     return urls[0]
+
+                # Brak URL + raport wyjatku OGC (MapServer odpowiada nim z HTTP
+                # 200, np. LayerNotDefined dla nieaktualnej nazwy warstwy, gdy
+                # GetCapabilities sie nie udal) to porazka zapytania tej warstwy,
+                # nie "warstwa odpowiedziala i nie ma arkusza": pod R5 chwilowy
+                # blad albo zla nazwa warstwy zostawilyby trwala dziure nodata.
+                # Straz tylko negatywna — strona bledu z 200 BEZ znacznikow OGC
+                # liczy sie dalej jako brak arkusza (checklista live).
+                if any(marker in text for marker in _OGC_EXCEPTION_MARKERS):
+                    transport_errors += 1
+                    last_error = DownloadError(
+                        f"warstwa {layer}: raport wyjatku OGC w odpowiedzi "
+                        f"HTTP {response.status_code}: {_ogc_exception_excerpt(text)}",
+                        godlo=godlo,
+                    )
+                    logger.warning(f"WMS query failed for layer {layer}: {last_error}")
+                    continue
 
             except requests.RequestException as e:
                 transport_errors += 1

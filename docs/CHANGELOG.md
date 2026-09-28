@@ -636,6 +636,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `DownloadManager` z providerem o pustym `vertical_crs`) konczy sie
   `ValidationError` zamiast cichego segmentu `nmt/pl_1992_1m_` (review max,
   zn. 7).
+- Skorowidz GUGiK: odpowiedz bez URL arkusza, ktorej tresc to raport wyjatku
+  OGC (`ServiceExceptionReport`, `ows:ExceptionReport` — serwery WMS, np.
+  MapServer, zwracaja go z HTTP 200, np. `LayerNotDefined` dla nieaktualnej
+  nazwy warstwy, gdy GetCapabilities sie nie udal), liczy sie jako nieudane
+  zapytanie tej warstwy, a nie jako brak arkusza. Dotad, gdy tak
+  odpowiedzialy wszystkie warstwy, powstawal `NoCoverageError`, czyli pod R5
+  nodata + `extra.missing_sheets` w wycinku, ktory kolejne przebiegi pomijaja
+  jako istniejacy; teraz wszystkie warstwy -> "unavailable", czesc -> "brak
+  pokrycia niepewny" (`DownloadError`, kod 1). URL w odpowiedzi nadal wygrywa;
+  strona bledu z HTTP 200 bez znacznikow OGC nadal liczy sie jako brak arkusza
+  (do sprawdzenia na zywych danych). (finalny review fali review max, I-2)
 
 ### Tests
 - **1854 testy offline, pokrycie 92,9%** (pomiar 2026-09-28:

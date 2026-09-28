@@ -461,7 +461,13 @@ zlamalby kontrakt czesciowego sukcesu (ADR-023 pkt 4-5). Biblioteka nie ma
    `GugikProvider`, gdy WSZYSTKIE warstwy skorowidza odpowiedzialy i zadna
    nie ma arkusza (morze, strona czeska bboxa przygranicznego, dziury
    pokrycia 1 m); czesciowa awaria warstw to zwykly `DownloadError` ("brak
-   pokrycia niepewny"). Po pobraniu `run_pl_cutout` rozstrzyga:
+   pokrycia niepewny"). Odpowiedz bez URL arkusza z raportem wyjatku OGC
+   w tresci (`ServiceException`/`ExceptionReport`; serwery WMS, np.
+   MapServer, zwracaja go z HTTP 200 — np. `LayerNotDefined` dla
+   nieaktualnej nazwy warstwy) nie jest odpowiedzia warstwy, tylko awaria
+   jej zapytania; URL w odpowiedzi zawsze wygrywa. Granica tej strazy:
+   strona bledu z HTTP 200 BEZ znacznikow OGC nadal liczy sie jako brak
+   pokrycia (checklista live). Po pobraniu `run_pl_cutout` rozstrzyga:
    - arkusz z `NoCoverageError` -> nodata w jego miejscu,
      `PlCutoutResult.missing_sheets` i sidecar `extra.missing_sheets`;
      biblioteka loguje liste zbiorczo na INFO (a `DownloadManager` kazdy
