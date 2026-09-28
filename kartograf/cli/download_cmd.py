@@ -1240,30 +1240,6 @@ def _write_laz_sidecar(provider, tile, target: Path, bbox: BBox) -> None:
         )
 
 
-def _laz_uklad(tile) -> str:
-    """Uklad poziomy kafla LAZ dla segmentu storage (spec 5.5).
-
-    Kaskada: (1) ``uklad_xy`` kafla (``"PL-2000:*"``/``"PL-1992*"``);
-    (2) format godla (kropki=2000, myslniki=1992); (3) fallback ``"2000"``
-    z ostrzezeniem — wspolczesne kafle GUGiK sa ciete w ukladzie 2000.
-    """
-    crs = (tile.crs or "").strip()
-    if crs.startswith("PL-2000"):
-        return "2000"
-    if crs.startswith("PL-1992"):
-        return "1992"
-    if "." in tile.godlo:
-        return "2000"
-    if "-" in tile.godlo:
-        return "1992"
-    import logging
-
-    logging.getLogger(__name__).warning(
-        f"Kafel {tile.godlo}: nierozpoznany uklad_xy '{tile.crs}' — przyjmuje 2000"
-    )
-    return "2000"
-
-
 def _cmd_download_laz(args: argparse.Namespace) -> int:
     """
     Handle the download command for the LAZ product (area-based via WFS).
@@ -1318,23 +1294,10 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     quiet = args.quiet
     skip_existing = not args.force
 
-    from kartograf.sources.registry import get_source
-
     provider = GugikLazProvider(vertical_crs=vertical_crs)
-    descriptor = get_source("pl.gugik.laz")
-    # cache per uklad: jedno zadanie moze zwrocic kafle z obu ukladow
-    storages: dict[str, FileStorage] = {}
-
-    def _storage_for(tile) -> FileStorage:
-        uklad = _laz_uklad(tile)
-        if uklad not in storages:
-            storages[uklad] = FileStorage(
-                output_dir,
-                subdir=descriptor.resolve_subdir(
-                    uklad=uklad, vertical_crs=vertical_crs
-                ),
-            )
-        return storages[uklad]
+    # jeden storage: {uklad} rozwiazuje sie per kafel (LazTile.uklad), nie
+    # per zadanie — jedno zadanie moze zwrocic kafle z obu ukladow (zn. 8)
+    storage = FileStorage(output_dir, product="laz", vertical_crs=vertical_crs)
 
     if not quiet:
         print(f"Querying GUGiK WFS for LAZ tiles ({vertical_crs})...")
@@ -1353,7 +1316,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         print()
 
     def _fetch(tile):
-        target = _storage_for(tile).get_raw_path(tile.godlo, tile.filename)
+        target = storage.get_raw_path(tile.godlo, tile.filename, uklad=tile.uklad)
         if skip_existing and target.exists():
             return "skip", target, None
         try:

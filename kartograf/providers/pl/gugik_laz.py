@@ -93,6 +93,30 @@ class LazTile:
         """Return the original OpenData file name (preserves density/seq id)."""
         return self.url.rstrip("/").rsplit("/", 1)[-1]
 
+    @property
+    def uklad(self) -> str:
+        """Horizontal system of the tile for the storage segment: "1992" or "2000".
+
+        Single source of truth for the CLI and the library (review max
+        2026-08-30, finding 8). Cascade: (1) ``crs`` (``uklad_xy``:
+        ``"PL-2000:*"`` / ``"PL-1992*"``); (2) godlo format (dots = 2000,
+        dashes = 1992); (3) ``"2000"`` with a warning — current GUGiK tiles are
+        cut in PL-2000.
+        """
+        crs = (self.crs or "").strip()
+        if crs.startswith("PL-2000"):
+            return "2000"
+        if crs.startswith("PL-1992"):
+            return "1992"
+        if "." in self.godlo:
+            return "2000"
+        if "-" in self.godlo:
+            return "1992"
+        logger.warning(
+            f"Kafel {self.godlo}: nierozpoznany uklad_xy '{self.crs}' — przyjmuje 2000"
+        )
+        return "2000"
+
 
 class GugikLazProvider(BaseProvider):
     """

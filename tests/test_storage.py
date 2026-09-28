@@ -718,6 +718,19 @@ class TestFileStorageSegments:
         assert tuple(p1992.parts[-10:-8]) == ("laz", "pl_1992_evrf2007")
         assert tuple(p2000.parts[-8:-6]) == ("laz", "pl_2000_evrf2007")
 
+    def test_laz_uklad_from_tile_overrides_identifier(self, tmp_path):
+        """Zn. 8: kafel PL-2000:S6 z godlem myslnikowym laduje w pl_2000 takze
+        przez API biblioteki (dotad biblioteka dawala pl_1992, a CLI pl_2000)."""
+        storage = FileStorage(tmp_path, product="laz")
+        path = storage.get_raw_path("N-33-131-B-a-1-1-4", "a.laz", uklad="2000")
+        assert tuple(path.parts[-10:-8]) == ("laz", "pl_2000_evrf2007")
+
+    def test_laz_unknown_uklad_rejected(self, tmp_path):
+        with pytest.raises(ValidationError):
+            FileStorage(tmp_path, product="laz").get_raw_path(
+                "N-33-131-B-a-1-1-4", "a.laz", uklad="1965"
+            )
+
     def test_unresolved_vcrs_raises(self, tmp_path):
         storage = FileStorage(tmp_path, resolution="1m", vertical_crs=None)
         with pytest.raises(ValidationError, match="vcrs"):

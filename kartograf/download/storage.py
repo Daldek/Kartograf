@@ -159,19 +159,27 @@ class FileStorage:
             )
         return subdir
 
-    def _resolved_subdir(self, identifier: str) -> str:
-        """Segment for the identifier: {uklad} from the sheet system.
+    def _resolved_subdir(self, identifier: str, uklad: str | None = None) -> str:
+        """Segment for the identifier: {uklad} given explicitly or from the
+        sheet system.
 
-        Same rule as ``parser_registry.path_parts``: dots (system ``pl2000``)
-        -> "2000", anything else (incl. the pl1992 fallback) -> "1992".
+        Same rule as ``parser_registry.path_parts`` when ``uklad`` is not
+        given explicitly: dots (system ``pl2000``) -> "2000", anything else
+        (incl. the pl1992 fallback) -> "1992". An explicit ``uklad`` overrides
+        this detection — required for LAZ tiles, whose true horizontal system
+        comes from ``uklad_xy`` (``LazTile.uklad``), not necessarily from the
+        godlo format.
         """
         subdir = self._subdir
         if "{uklad}" in subdir:
-            system = parser_registry.detect_system(identifier)
-            # None tylko gdyby rejestr byl pusty (nie zdarza sie w praktyce —
-            # pl1992 jest fallbackiem z detect=lambda godlo: True); warunek
-            # zostaje, zeby mypy nie zglosil union-attr.
-            uklad = "2000" if system is not None and system.id == "pl2000" else "1992"
+            if uklad is None:
+                system = parser_registry.detect_system(identifier)
+                # None tylko gdyby rejestr byl pusty (nie zdarza sie w
+                # praktyce — pl1992 jest fallbackiem z detect=lambda godlo:
+                # True); warunek zostaje, zeby mypy nie zglosil union-attr.
+                uklad = (
+                    "2000" if system is not None and system.id == "pl2000" else "1992"
+                )
             subdir = subdir.replace("{uklad}", uklad)
         return self._ensure_resolved(subdir)
 
@@ -218,7 +226,9 @@ class FileStorage:
         filename = f"{normalized_godlo}{ext}"
         return dir_path / filename
 
-    def get_raw_path(self, identifier: str, filename: str) -> Path:
+    def get_raw_path(
+        self, identifier: str, filename: str, *, uklad: str | None = None
+    ) -> Path:
         """
         Generate a file path for an opaque identifier WITHOUT parsing it.
 
@@ -234,20 +244,41 @@ class FileStorage:
             (e.g. ``"N-33-131-B-a-1-1-4"`` or ``"6.162.34.02.3"``).
         filename : str
             File name to use as-is (e.g. the original OpenData ``.laz`` name).
+        uklad : str, optional
+            Explicit horizontal system (``"1992"`` or ``"2000"``) filling the
+            ``{uklad}`` segment placeholder. For LAZ tiles pass ``tile.uklad``
+            — the tile's ``uklad_xy`` decides, not the godlo format (a
+            ``"PL-2000:*"`` tile can still carry a dash-form godło). ``None``
+            (default) keeps the previous behaviour: detect the system from
+            ``identifier``'s format.
 
         Returns
         -------
         Path
             ``output_dir / <subdir> / <hierarchy from identifier> / filename``
 
+        Raises
+        ------
+        ValidationError
+            If ``uklad`` is given but is neither ``"1992"`` nor ``"2000"``.
+
         Examples
         --------
         >>> storage = FileStorage("./data", product="laz")
         >>> storage.get_raw_path("N-33-131-B-a-1-1-4", "81121_x.laz")
         PosixPath('data/laz/pl_1992_evrf2007/N-33/131/B/a/1/1/4/81121_x.laz')
+
+        For LAZ tiles, prefer the explicit ``uklad`` (the tile's ``uklad_xy``
+        decides, not the godlo format)::
+
+            storage.get_raw_path(tile.godlo, tile.filename, uklad=tile.uklad)
         """
+        if uklad is not None and uklad not in ("1992", "2000"):
+            raise ValidationError(
+                f"Nieznany uklad '{uklad}' (oczekiwano '1992' albo '2000')"
+            )
         dir_parts = self._get_directory_parts(identifier)
-        dir_path = self._output_dir / self._resolved_subdir(identifier)
+        dir_path = self._output_dir / self._resolved_subdir(identifier, uklad)
         for part in dir_parts:
             dir_path = dir_path / part
         return dir_path / filename

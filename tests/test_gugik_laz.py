@@ -5,6 +5,7 @@ All tests run offline: WFS GetCapabilities / GetFeature responses are provided
 as GML/XML fixtures through mocked sessions. Network is never touched.
 """
 
+import logging
 import math
 from unittest.mock import MagicMock, patch
 
@@ -181,6 +182,49 @@ class TestLazTile:
             max_y=1,
         )
         assert tile.filename == "81121_1573132_N-33-131-B-a-1-1-4.laz"
+
+
+class TestLazTileUklad:
+    """Kaskada ukladu kafla LAZ: uklad_xy -> format godla -> 2000.
+
+    Przeniesione z tests/test_cli.py::TestLazUklad (zn. 8, review max
+    2026-08-30) — ``LazTile.uklad`` jest teraz jedynym zrodlem prawdy, uzywanym
+    zarowno przez CLI, jak i przez biblioteke (``FileStorage.get_raw_path``).
+    """
+
+    def _tile(self, godlo="N-33-131-B-a-1-1-4", crs="PL-2000:S6"):
+        return LazTile(
+            godlo=godlo,
+            url="u/f.laz",
+            year=2024,
+            density=25,
+            crs=crs,
+            min_x=0.0,
+            min_y=0.0,
+            max_x=1.0,
+            max_y=1.0,
+        )
+
+    def test_crs_pl2000_wins_over_dash_godlo(self):
+        # godlo myslnikowe, ale uklad_xy mowi PL-2000 — crs wygrywa
+        assert self._tile().uklad == "2000"
+
+    def test_crs_pl1992(self):
+        assert self._tile(crs="PL-1992").uklad == "1992"
+
+    def test_none_crs_falls_back_to_dot_godlo(self):
+        assert self._tile(godlo="6.162.34.02.3", crs=None).uklad == "2000"
+
+    def test_none_crs_falls_back_to_dash_godlo(self):
+        assert self._tile(crs=None).uklad == "1992"
+
+    def test_unrecognized_crs_falls_back_to_godlo(self):
+        assert self._tile(crs="EPSG:2180").uklad == "1992"
+
+    def test_everything_fails_defaults_2000_with_warning(self, caplog):
+        with caplog.at_level(logging.WARNING):
+            assert self._tile(godlo="XYZ99", crs=None).uklad == "2000"
+        assert "XYZ99" in caplog.text
 
 
 # ===========================================================================
