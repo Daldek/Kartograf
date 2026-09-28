@@ -152,6 +152,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     i sidecar z CUZK (Changed, A6-3).
 
 ### Added
+- `DownloadManager.download_sheets(godla, ...)` i `DownloadManager.expand_sheets(godla)`
+  — pobranie listy godel (grubsze PL-1992 rozwijane do 1:10000, duplikaty raz);
+  porazki pojedynczych arkuszy zbierane w `last_result` (`failed`, `no_coverage`)
+  zamiast przerywac cala liste.
 - `NoCoverageError(DownloadError)` — zrodlo nie ma danych dla arkusza
   (wszystkie warstwy skorowidza odpowiedzialy); `DownloadResult.no_coverage`
   — podzbior `failed`.

@@ -410,6 +410,73 @@ class DownloadManager:
                 descendants, total, skip_existing, on_progress, workers
             )
 
+    @staticmethod
+    def expand_sheets(godla: list[str]) -> list[str]:
+        """
+        Leaf sheets actually requested from the provider for a list of godla.
+
+        PL-1992 godla coarser than 1:10000 expand to their 1:10000
+        descendants (like :meth:`download_sheet`); 1:10000 and PL-2000 godla
+        stay as they are. Identifiers are normalized, duplicates dropped,
+        first-seen order kept.
+
+        Raises
+        ------
+        ParseError
+            If any godlo is invalid
+        """
+        leaves: list[str] = []
+        seen: set[str] = set()
+        for godlo in godla:
+            parser = SheetParser(godlo)
+            if parser.uklad != "2000" and parser.scale != "1:10000":
+                expanded = [d.godlo for d in parser.get_all_descendants("1:10000")]
+            else:
+                expanded = [parser.godlo]
+            for leaf in expanded:
+                if leaf not in seen:
+                    seen.add(leaf)
+                    leaves.append(leaf)
+        return leaves
+
+    def download_sheets(
+        self,
+        godla: list[str],
+        skip_existing: bool = True,
+        on_progress: ProgressCallback | None = None,
+        max_workers: int | None = None,
+    ) -> list[Path]:
+        """
+        Download a list of sheets (see :meth:`expand_sheets`) without raising.
+
+        Unlike calling :meth:`download_sheet` in a loop, per-sheet failures
+        never raise: they are collected in ``self.last_result`` exactly like
+        in :meth:`download_hierarchy` (``failed``; ``no_coverage`` for sheets
+        the source has no data for).
+
+        Returns
+        -------
+        list[Path]
+            Downloaded AND skipped (pre-existing) files
+
+        Raises
+        ------
+        ParseError
+            If any godlo is invalid — raised before any download starts
+        """
+        self.last_result = None
+        leaves = [SheetParser(g) for g in self.expand_sheets(godla)]
+        total = len(leaves)
+        workers = max_workers if max_workers is not None else self._max_workers
+        logger.info(f"Starting sheet list download: {total} sheets, workers={workers}")
+        if workers <= 1:
+            return self._download_hierarchy_sequential(
+                leaves, total, skip_existing, on_progress
+            )
+        return self._download_hierarchy_parallel(
+            leaves, total, skip_existing, on_progress, workers
+        )
+
     def _download_single_sheet_task(
         self,
         descendant_godlo: str,
