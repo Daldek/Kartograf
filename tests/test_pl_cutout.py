@@ -537,6 +537,62 @@ class TestSheetGrid:
             src.max_y + 5.0,
         )
 
+    def test_geometry_sum_selection_expanded_by_one_pixel(self, tmp_path):
+        """Suma R-01 (geometria + warp) bierze arkusze z tej samej obwiedni
+        z zapasem 1 px co tryb bbox — crop przyciagany na zewnatrz dotyczy
+        obu trybow."""
+        from kartograf.download.cutout import prepare_pl_cutout, select_pl_cutout_sheets
+
+        cut = prepare_pl_cutout(
+            _BBOX_2180,
+            "EPSG:5514",
+            output_dir=tmp_path,
+            resolution="5m",
+            vertical_crs="EVRF2007",
+        )
+        with (
+            # import lokalny w select_pl_cutout_sheets -> patch u zrodla
+            patch(
+                "kartograf.core.geometry.find_sheets_for_geometry",
+                return_value=["N-1"],
+            ),
+            patch(f"{_CUT}.find_sheets_for_bbox", return_value=["N-2"]) as find,
+        ):
+            sheets = select_pl_cutout_sheets(cut, geometry=tmp_path / "area.gpkg")
+        assert sheets.godla == ("N-1", "N-2")
+        sent = find.call_args.args[0]
+        src = cut.bbox_source_2180
+        assert (sent.min_x, sent.min_y, sent.max_x, sent.max_y) == (
+            src.min_x - 5.0,
+            src.min_y - 5.0,
+            src.max_x + 5.0,
+            src.max_y + 5.0,
+        )
+
+    def test_input_order_does_not_change_result(self, tmp_path):
+        """Wejscia sortowane: wynik nie zalezy od kolejnosci listy (pobieranie
+        rownolegle zwraca arkusze w kolejnosci ukonczenia). ``merge`` oddaje
+        zakladke PIERWSZEMU zrodlu, wiec bez sortowania ta sama lista arkuszy
+        w innej kolejnosci dawalaby inny raster."""
+        from kartograf.download.cutout import build_pl_cutout
+
+        a = _write_grid_sheet(
+            tmp_path / "a.asc", 0, 160, 200, lambda gx, gy: gx * 0 + 1.0
+        )
+        b = _write_grid_sheet(
+            tmp_path / "b.asc", 150, 160, 200, lambda gx, gy: gx * 0 + 2.0
+        )
+        bbox = BBox(530010, 382010, 530250, 382086, "EPSG:2180")
+        results = []
+        for name, order in (("ab.tif", [a, b]), ("ba.tif", [b, a])):
+            build_pl_cutout(order, bbox, bbox, 1.0, None, tmp_path / name)
+            with rasterio.open(tmp_path / name) as ds:
+                results.append(ds.read(1))
+        # warunek sensownosci: w wyniku sa oba arkusze, a ich zakladka
+        # (x 530100,5-530110,5) lezy w bboxie
+        assert {1.0, 2.0} <= set(np.unique(results[0]).tolist())
+        np.testing.assert_array_equal(results[0], results[1])
+
 
 class TestDownloadPlBboxCutout:
     """Spec 8: przeplyw wycinka na poziomie workera PL (mockowane pobranie)."""
