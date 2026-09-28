@@ -835,6 +835,93 @@ class TestDownloadPlBboxCutout:
         assert find.call_args.args[0] is _BBOX_2180
 
 
+class TestCutoutSize:
+    """Zn. 9: bez twardego limitu, ale bez odkrywania pelnego dysku po godzinach."""
+
+    def test_disk_check_blocks_before_download(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setattr(
+            "shutil.disk_usage", lambda path: SimpleNamespace(total=0, used=0, free=0)
+        )
+        sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
+        rc, manager, _ = TestDownloadPlBboxCutout()._run(
+            tmp_path, _pl_args(tmp_path), sheets
+        )
+        assert rc == 1
+        assert "Za malo miejsca" in capsys.readouterr().err
+        manager.download_sheets.assert_not_called()
+
+    def test_estimate_counts_only_pending_sheets(self, tmp_path):
+        from kartograf.download.cutout import (
+            PlCutoutSheets,
+            estimate_pl_cutout_bytes,
+            prepare_pl_cutout,
+        )
+        from kartograf.download.storage import FileStorage
+
+        cut = prepare_pl_cutout(_BBOX_2180, "EPSG:2180", output_dir=tmp_path)
+        sheets = PlCutoutSheets(godla=("N-34-130-D-d-2-3", "N-34-130-D-d-2-4"))
+        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
+        both, pending_both = estimate_pl_cutout_bytes(cut, sheets, storage=storage)
+        cached = storage.get_path("N-34-130-D-d-2-3", ".asc")
+        cached.parent.mkdir(parents=True, exist_ok=True)
+        cached.write_bytes(b"x")
+        one, pending_one = estimate_pl_cutout_bytes(cut, sheets, storage=storage)
+        assert (pending_both, pending_one) == (2, 1)
+        assert cut.estimated_bytes < one < both
+
+    def test_warp_mosaic_tmp_is_compressed_and_bigtiff_safe(self, tmp_path):
+        from kartograf.download.cutout import build_pl_cutout
+        from kartograf.transport import mosaic as mosaic_mod
+
+        west = _write_sheet_asc(tmp_path / "w.asc", 530000, 382000, apex=_APEX)
+        east = _write_sheet_asc(tmp_path / "e.asc", 530100, 382000, apex=_APEX)
+        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+        pinned = _pinned_2180_to("EPSG:5514")
+        from kartograf.providers.cuzk.dmr import bbox_to_crs
+
+        with patch.object(
+            mosaic_mod, "mosaic_and_crop", wraps=mosaic_mod.mosaic_and_crop
+        ) as spy:
+            build_pl_cutout(
+                [west, east],
+                bbox,
+                bbox_to_crs(bbox, "EPSG:5514", pinned),
+                1.0,
+                pinned,
+                tmp_path / "w.tif",
+            )
+            build_pl_cutout([west, east], bbox, bbox, 1.0, None, tmp_path / "c.tif")
+        warp_kwds = spy.call_args_list[0].kwargs["dst_kwds"]
+        crop_kwds = spy.call_args_list[1].kwargs["dst_kwds"]
+        assert warp_kwds["compress"] == "deflate" and warp_kwds["predictor"] == 3
+        assert warp_kwds["tiled"] is True and warp_kwds["blockxsize"] == 512
+        assert warp_kwds["bigtiff"] == "IF_SAFER"
+        assert "compress" not in crop_kwds  # EPSG:2180: plik posredni JEST wynikiem
+
+    def test_large_grid_prints_info(self, tmp_path, capsys):
+        from kartograf.download.cutout import PlCutoutResult
+
+        args = _pl_args(
+            tmp_path, bbox="400000,300000,440000,330000"
+        )  # 40 x 30 km @ 1 m
+        big = BBox(400000, 300000, 440000, 330000, "EPSG:2180")
+        with (
+            patch(f"{_CUT}.find_sheets_for_bbox", return_value=["N-1"]),
+            patch(
+                f"{_DL}._create_provider_and_storage",
+                return_value=(SimpleNamespace(vertical_crs="EVRF2007"), Mock()),
+            ),
+            patch(
+                f"{_CUT}.run_pl_cutout",
+                return_value=PlCutoutResult(path=tmp_path / "x.tif"),
+            ),
+        ):
+            rc = _download_pl_bbox(args, big, _PARENT)
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "Info:" in err and "GiB" in err
+
+
 class TestGeometryCutout:
     @pytest.fixture(autouse=True)
     def _isolate_cache(self, tmp_path, monkeypatch):

@@ -327,6 +327,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   --target-crs` powstaje teraz takze wycinek PL. API biblioteki: lista
   w `PlCutoutResult.missing_sheets`; obszar, dla ktorego danych nie ma zaden
   arkusz, konczy sie `ValidationError` (ADR-027, uzupelnienie R5).
+- Wycinek PL: plik posredni mozaiki przy warpie jest kompresowany (deflate,
+  kafle 512 px, BigTIFF gdy trzeba); przed pobraniem kontrola miejsca na
+  dysku (dolne oszacowanie: wynik + arkusze do pobrania) i `Info:` dla
+  wycinkow >= 1 GiB. Twardego limitu rozmiaru nie ma.
 - Czesciowa awaria warstw skorowidza GUGiK przy braku arkusza w pozostalych
   to teraz "brak pokrycia niepewny" (`DownloadError`), nie brak pokrycia;
   URL innego arkusza z fallbacku skorowidza loguje ostrzezenie (arkusze
