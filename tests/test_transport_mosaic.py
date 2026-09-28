@@ -1,5 +1,7 @@
 """Testy mozaikowania (kartograf.transport.mosaic) na syntetycznych rastrach."""
 
+import os
+import sys
 from pathlib import Path
 from unittest.mock import patch
 
@@ -154,3 +156,35 @@ def test_dst_kwds_forces_gtiff_and_crs(tmp_path):
         assert ds.crs is not None and ds.crs.to_epsg() == 2180
         assert ds.nodata == -9999.0
         assert ds.bounds == (1.0, 1.0, 7.0, 3.0)
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="/proc/self/fd")
+def test_many_inputs_do_not_exhaust_file_descriptors(tmp_path):
+    """Zn. 3 review max: wycinek 75 x 75 km to >1200 arkuszy, a limit
+    deskryptorow to 1024 (Linux) / 256 (macOS). Mozaika nie moze trzymac
+    otwartych wszystkich zrodel naraz."""
+    import resource
+
+    n = 300
+    paths = [
+        _write_tile(tmp_path / f"t{i:03d}.tif", 2 * i, 2, float(i), size=2)
+        for i in range(n)
+    ]
+    # rozgrzewka: pierwsze otwarcie rastra otwiera na stale proj.db (+1 fd)
+    with rasterio.open(paths[0]) as src:
+        _ = src.crs
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    in_use = len(os.listdir("/proc/self/fd"))
+    resource.setrlimit(resource.RLIMIT_NOFILE, (in_use + 64, hard))
+    try:
+        out = mosaic_and_crop(
+            paths, BBox(0, 0, 2 * n, 2, "EPSG:2180"), tmp_path / "out.tif"
+        )
+    finally:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
+
+    with rasterio.open(out) as src:
+        data = src.read(1)
+    assert data.shape == (2, 2 * n)
+    assert data[0, 0] == 0.0
+    assert data[0, 2 * n - 1] == float(n - 1)

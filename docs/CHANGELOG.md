@@ -538,6 +538,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `main()` ma bariere na wyjatki: blad spoza `KartografError` konczy sie
   linia `Error: <Typ>: <komunikat>` z podpowiedzia `KARTOGRAF_DEBUG=1`
   i kodem 1, zamiast tracebackiem Pythona. (audyt 0.7.0: N1-1)
+- **Wycinek PL z >1024 arkuszy konczyl sie "Too many open files" dopiero po
+  pobraniu** (review max, zn. 3). `mosaic_and_crop` otwieral wszystkie zrodla
+  naraz; teraz metadane czyta po jednym pliku, a `merge` dostaje sciezki
+  i otwiera zrodla leniwie (limit deskryptorow: Linux 1024, macOS 256).
 
 ### Tests
 - **1716 testow, pokrycie 93%** — 1142 po mergu etapu 0, 1402 po etapie 1,
