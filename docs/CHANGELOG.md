@@ -655,13 +655,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   wielkimi literami). (finalny review fali review max, m-2)
 
 ### Tests
-- **1854 testy offline, pokrycie 92,9%** (pomiar 2026-09-28:
-  `pytest tests/ -m "not live"` — 1854 passed, 8 deselected; 8 testow `live`
+- **1861 testow offline, pokrycie 92,9%** (pomiar 2026-09-28:
+  `pytest tests/ -m "not live"` — 1861 passed, 8 deselected; 8 testow `live`
   wymaga sieci i nie nalezy do bramki). Historia: 1142 po mergu etapu 0,
   1402 po etapie 1, 1716 po audycie przedwydaniowym 0.7.0 (1708 po 26
   zadaniach + 8 w fali naprawczej po finalnym review), 1787 lacznie z 8
-  `live` (1779 offline) po ukladzie `data/` i `--target-crs` PL, 1854
-  offline po fali review max (+75). ruff i `ruff format` czyste, mypy 32
+  `live` (1779 offline) po ukladzie `data/` i `--target-crs` PL, 1861
+  offline po fali review max (1854 po 18 zadaniach + 7 w fali naprawczej
+  po finalnym review; lacznie +82). ruff i `ruff format` czyste, mypy 32
   bledy (baseline sprzed etapu 0: 33; fala review max bez nowych bledow)
 - **Fala review max (2026-09-28)** — nowe i zmienione testy m.in.
   w `tests/test_pl_cutout.py` (API biblioteki, siatka arkuszy, VRT, R5,
