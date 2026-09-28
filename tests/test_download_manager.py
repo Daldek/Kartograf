@@ -501,6 +501,79 @@ class TestDownloadResultNoCoverage:
         assert len(result.succeeded) == 2
 
 
+class TestDownloadManagerDownloadSheets:
+    """download_sheets(): lista godel -> liscie 1:10000, porazki w last_result."""
+
+    @pytest.fixture
+    def provider(self):
+        provider = Mock(spec=GugikProvider)
+        type(provider).default_extension = PropertyMock(return_value=".asc")
+        provider.calls = []
+        provider.fail = set()
+
+        def download(godlo, path, timeout=30):
+            provider.calls.append(godlo)
+            if godlo in provider.fail:
+                raise DownloadError(f"blad {godlo}", godlo=godlo)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"data")
+            return path
+
+        provider.download = download
+        return provider
+
+    def test_expand_sheets_leaves_dedup_order(self):
+        assert DownloadManager.expand_sheets(
+            ["N-34-130-D-d-2-4", "N-34-130-D-d-2", "6.179.12.20"]
+        ) == [
+            "N-34-130-D-d-2-4",
+            "N-34-130-D-d-2-1",
+            "N-34-130-D-d-2-2",
+            "N-34-130-D-d-2-3",
+            "6.179.12.20",
+        ]
+
+    @pytest.mark.parametrize("workers", [1, 4])
+    def test_expands_coarse_and_dedupes(self, tmp_path, provider, workers):
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+        paths = manager.download_sheets(
+            ["N-34-130-D-d-2", "N-34-130-D-d-2-4", "N-34-130-D-d-2-4"],
+            max_workers=workers,
+        )
+        assert len(paths) == 4
+        assert sorted(provider.calls) == [f"N-34-130-D-d-2-{i}" for i in (1, 2, 3, 4)]
+        assert manager.last_result.total == 4 and manager.last_result.failed == []
+
+    @pytest.mark.parametrize("workers", [1, 4])
+    def test_failures_collected_not_raised(self, tmp_path, provider, workers):
+        provider.fail = {"N-34-130-D-d-2-1", "N-34-130-D-d-2-3"}
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+        paths = manager.download_sheets(["N-34-130-D-d-2"], max_workers=workers)
+        assert len(paths) == 2
+        assert sorted(manager.last_result.failed) == [
+            "N-34-130-D-d-2-1",
+            "N-34-130-D-d-2-3",
+        ]
+        assert manager.last_result.total == 4
+
+    def test_skip_existing(self, tmp_path, provider):
+        existing = FileStorage(tmp_path).get_path("N-34-130-D-d-2-1", ".asc")
+        existing.parent.mkdir(parents=True, exist_ok=True)
+        existing.write_bytes(b"old")
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+        manager.download_sheets(["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"])
+        assert provider.calls == ["N-34-130-D-d-2-2"]
+        assert manager.last_result.skipped == ["N-34-130-D-d-2-1"]
+
+    def test_invalid_godlo_raises_before_any_download(self, tmp_path, provider):
+        from kartograf.exceptions import ParseError
+
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+        with pytest.raises(ParseError):
+            manager.download_sheets(["N-34-130-D-d-2-1", "XYZ"])
+        assert provider.calls == []
+
+
 class TestDownloadManagerDownloadBbox:
     """Testy metody download_bbox() - pobiera GeoTIFF przez WCS."""
 
