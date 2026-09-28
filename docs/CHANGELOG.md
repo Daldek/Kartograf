@@ -312,6 +312,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     wymienione byly tylko uklady polskie (A6-16)
 
 ### Changed
+- Wycinek `--target-crs EPSG:2180` lezy na siatce pikseli arkuszy GUGiK:
+  obszar zadania rozszerzony na zewnatrz o < 1 px, wartosci 1:1 z arkuszy
+  (bez przeprobkowania, `transform: null`); nazwa pliku niesie wspolrzedne
+  zadania. Selekcja arkuszy wycinka (`select_pl_cutout_sheets`) ma zapas
+  1 piksela, zeby crop przyciagniety na zewnatrz nie siegal arkusza spoza
+  listy. Arkusz wydany przez skorowidz GUGiK w ukladzie PL-2000 pod godlem
+  PL-1992 konczy budowe wycinka (kazdego `--target-crs`) bledem z opisem
+  (dotad: cicha dziura nodata).
 - Czesciowa awaria warstw skorowidza GUGiK przy braku arkusza w pozostalych
   to teraz "brak pokrycia niepewny" (`DownloadError`), nie brak pokrycia;
   URL innego arkusza z fallbacku skorowidza loguje ostrzezenie (arkusze
@@ -573,6 +581,25 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `find_sheets_for_bbox`/`find_sheets_for_geometry` z bboxem w EPSG:2180
   (`--system 2000` uzywa osobnej obwiedni w `parser_2000` — nie objete tu,
   patrz backlog).
+- **Wycinek PL przesuwal tresc o ulamek piksela** (review max, zn. 1): crop
+  mozaiki kotwiczony w rogu zadania + kopiowanie najblizszym sasiadem. Arkusze
+  GUGiK maja narozniki pikseli w polowie miedzy wielokrotnosciami piksela
+  (5 m: na 5k + 2,5 m, zmierzone na 1977 arkuszach; siatka 1 m — do
+  potwierdzenia na zywych danych), wiec problem dotyczyl takze bboxow
+  o CALKOWITYCH wspolrzednych (np. wielokrotnosci 5 m przy 5 m: 0,5 px =
+  2,5 m, z mieszaniem sasiednich kolumn). Crop jest teraz przyciagany do
+  siatki arkuszy. **Wycinki zbudowane wczesniejsza wersja 0.7.0-dev przebuduj
+  z `--force`** (maja te same nazwy plikow, wiec bez tego zostalyby pominiete
+  jako istniejace). `--force` pobiera ponownie takze arkusze; tanszy wariant:
+  usun stary plik wycinka i uruchom komende bez `--force` — arkusze z cache
+  zostana uzyte ponownie.
+- Mozaika wycinka PL: arkusz ASC z samymi liczbami calkowitymi, gdy trafil na
+  poczatek listy zrodel (przy pobieraniu rownoleglym: kolejnosc ukonczenia
+  pobran), zamienial cala mozaike w Int32 (obcinajac wysokosci pozostalych
+  arkuszy), a arkusze z plikiem `.prj` (np. dopisanym przez Hydrograf) obok
+  arkuszy bez niego konczyly sie bledem `niezgodne CRS wejsc`. Arkusze sa
+  teraz owijane w VRT z jawnym EPSG:2180 i Float32, a lista zrodel jest
+  sortowana.
 
 ### Tests
 - **1716 testow, pokrycie 93%** — 1142 po mergu etapu 0, 1402 po etapie 1,

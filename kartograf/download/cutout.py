@@ -2,10 +2,11 @@
 Scalony wycinek NMT PL w zadanym ukladzie (ADR-027) — warstwa biblioteczna.
 
 Arkusze GUGiK pobierane sa normalnie do swoich segmentow (dzialaja jako
-cache), mozaika jest przycinana do obszaru zadania (przy reprojekcji — z
-zapasem), a dla ukladu innego niz EPSG:2180 tresc trafia na siatke wyniku
-lokalnym warpem z WYMUSZONA operacja przypieta (ADR-024/027). Wynik to JEDEN
-GeoTIFF ``<output_dir>/nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif`` + sidecar.
+cache), mozaika jest przycinana do obszaru zadania rozszerzonego na zewnatrz
+do siatki pikseli arkuszy (< 1 px; przy reprojekcji — z zapasem), a dla
+ukladu innego niz EPSG:2180 tresc trafia na siatke wyniku lokalnym warpem
+z WYMUSZONA operacja przypieta (ADR-024/027). Wynik to JEDEN GeoTIFF
+``<output_dir>/nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif`` + sidecar.
 
 CLI (``kartograf download --bbox/--geometry --target-crs``) jest nakladka na
 ten modul: wypisuje komunikaty i tlumaczy wyjatki na kody wyjscia. Tu nie ma
@@ -218,15 +219,24 @@ def select_pl_cutout_sheets(
 ) -> PlCutoutSheets:
     """Arkusze wycinka (zero sieci).
 
-    Tryb bbox: arkusze obwiedni zrodla (zadanie + zapas). Tryb geometrii:
-    arkusze per obiekt, a przy warpie SUMA z arkuszami obwiedni zrodla (R-01:
+    Tryb bbox: arkusze obwiedni zrodla (zadanie + zapas) powiekszonej o 1
+    piksel — crop mozaiki jest przyciagany NA ZEWNATRZ do siatki arkuszy
+    (< 1 px, ``build_pl_cutout``). Tryb geometrii: arkusze per obiekt, a przy
+    warpie SUMA z arkuszami tej samej powiekszonej obwiedni zrodla (R-01:
     wynik obejmuje CALA obwiednie, bez maskowania do obiektow — bez sumy na
     krawedziach zostawalaby ramka nodata; ARCHITECTURE 4.3). Koszt jest
     swiadomy: dla rzadkiej geometrii wieloobiektowej suma obejmuje arkusze
     calej obwiedni, takze tam, gdzie nie ma zadnego obiektu.
     """
+    px = cutout.pixel_size
+    src = cutout.bbox_source_2180
+    # Crop przyciagany jest NA ZEWNATRZ do siatki arkuszy (< 1 px): selekcja
+    # z zapasem 1 px, zeby brzegowy piksel nie wpadl w arkusz spoza listy.
+    selection = BBox(
+        src.min_x - px, src.min_y - px, src.max_x + px, src.max_y + px, "EPSG:2180"
+    )
     if geometry is None:
-        godla = find_sheets_for_bbox(cutout.bbox_source_2180, scale, system="1992")
+        godla = find_sheets_for_bbox(selection, scale, system="1992")
         what = "bbox"
     else:
         from kartograf.core.geometry import find_sheets_for_geometry
@@ -236,15 +246,45 @@ def select_pl_cutout_sheets(
         )
         if cutout.pinned is not None:
             godla = sorted(
-                set(godla)
-                | set(
-                    find_sheets_for_bbox(cutout.bbox_source_2180, scale, system="1992")
-                )
+                set(godla) | set(find_sheets_for_bbox(selection, scale, system="1992"))
             )
         what = "geometry"
     if not godla:
         raise ValidationError(f"No sheets found for the given {what}")
     return PlCutoutSheets(godla=tuple(godla))
+
+
+# x >= 1 000 000 m to wspolrzedne strefowe PL-2000 (strefa = cyfra milionow,
+# EPSG:2176-2179 dla stref 5-8); PUWG 1992 miesci sie ponizej.
+_PL2000_MIN_X = 1_000_000.0
+
+
+def _reject_pl2000_sheets(sheet_paths: list[Path]) -> None:
+    """Glosny blad zamiast cichej dziury (fakt 7 planu 2026-09-28).
+
+    Skorowidz GUGiK potrafi zwrocic dla godla PL-1992 arkusz nowszej kampanii
+    w ukladzie PL-2000 (fallback URL w ``GugikProvider._get_opendata_url``).
+    Mozaika wymusza EPSG:2180, wiec taki arkusz wyladowalby poza obszarem
+    i ``merge`` pominalby go bez slowa. Reprojekcja takich arkuszy to etap 2.
+    """
+    import rasterio
+
+    foreign: list[tuple[Path, int]] = []
+    for path in sheet_paths:
+        with rasterio.open(path) as src:
+            if src.bounds.left >= _PL2000_MIN_X:
+                foreign.append((Path(path), int(src.bounds.left // 1_000_000)))
+    if foreign:
+        listing = ", ".join(
+            f"{p.name} (strefa {zone}, EPSG:{2171 + zone})" for p, zone in foreign[:5]
+        )
+        raise ValidationError(
+            f"{len(foreign)} arkusz(y) ma wspolrzedne PL-2000 zamiast PL-1992: "
+            f"{listing}{' ...' if len(foreign) > 5 else ''} — skorowidz GUGiK "
+            "wydal dla godla PL-1992 arkusz ukladu 2000 i wycinek pominalby go po "
+            "cichu (dziura nodata). Wycinek z takich arkuszy to etap 2; pobierz "
+            "obszar jako arkusze (bez --target-crs), np. z --system 2000."
+        )
 
 
 def build_pl_cutout(
@@ -258,12 +298,32 @@ def build_pl_cutout(
     """Zszyj arkusze, przytnij do ``crop_bbox_2180``; opcjonalny lokalny warp.
 
     ``crop_bbox_2180`` to obwiednia ZRODLA (przy warpie: zadanie + zapas),
-    nie dokladne zadanie. Mozaika wymusza GTiff + EPSG:2180 (arkusze ASC nie
-    niosa CRS). ``pinned is None`` = cel EPSG:2180: sam crop (atomowy
-    ``os.replace``). Obie sciezki zapisu sa atomowe (druga domyka wewnetrzny
-    ``os.replace`` w ``warp_to_grid``), wiec przerwana budowa NIE zostawia
-    polzapisanego pliku pod ``target_path`` — i nie kasuje poprzedniego wyniku.
+    nie dokladne zadanie. ``pinned is None`` = cel EPSG:2180: sam crop
+    (atomowy ``os.replace``). Obie sciezki zapisu sa atomowe (druga domyka
+    wewnetrzny ``os.replace`` w ``warp_to_grid``), wiec przerwana budowa NIE
+    zostawia polzapisanego pliku pod ``target_path`` — i nie kasuje
+    poprzedniego wyniku.
+
+    Siatka arkuszy (R1): crop jest rozszerzany NA ZEWNATRZ do pelnych pikseli
+    siatki arkuszy (wiekszosci; < 1 px na strone), wiec przy celu EPSG:2180
+    wartosci przechodza 1:1, bez przeprobkowania, a warp dostaje tresc bez
+    przesuniecia o ulamek piksela. Arkusz spoza siatki wiekszosci nie
+    przerywa budowy — ostrzezenie w logu, jego tresc idzie najblizszym
+    sasiadem (``mosaic_and_crop``). Kazdy arkusz jest owijany w VRT z jawnym
+    EPSG:2180 i pasmem Float32: arkusz z ``.prj`` (np. dopisanym przez
+    Hydrograf) scala sie z arkuszem bez niego (dotad blad ``niezgodne CRS
+    wejsc``), a arkusz z samymi liczbami calkowitymi (GDAL czyta go jako
+    Int32) nie obcina wysokosci pozostalych. Wejscia sa sortowane: ``merge``
+    bierze profil wyniku z pierwszego zrodla, a pierwsze zrodlo wygrywa
+    w zakladce, wiec wynik nie zalezy od kolejnosci listy (pobieranie
+    rownolegle zwraca arkusze w kolejnosci ukonczenia). Wynik mozaiki to
+    GTiff z EPSG:2180.
+
+    Arkusz we wspolrzednych PL-2000 (``x >= 1 000 000``) konczy sie
+    ``ValidationError`` PRZED mozaika (``_reject_pl2000_sheets``) — inaczej
+    ``merge`` pominalby go po cichu i w wyniku zostalaby dziura nodata.
     """
+    _reject_pl2000_sheets(sheet_paths)
     from kartograf.transport.mosaic import mosaic_and_crop
 
     target_path.parent.mkdir(parents=True, exist_ok=True)
@@ -272,11 +332,15 @@ def build_pl_cutout(
     )
     try:
         mosaic_and_crop(
-            sheet_paths,
+            sorted(Path(p) for p in sheet_paths),
             crop_bbox_2180,
             tmp,
             nodata=PL_NODATA,
             dst_kwds={"driver": "GTiff", "crs": "EPSG:2180"},
+            # siatka arkuszy (R1), arkusze w VRT: EPSG:2180 + Float32 — fakty 1-2, 5-6
+            snap_to_source_grid=True,
+            assign_crs="EPSG:2180",
+            dtype="float32",
         )
         if pinned is None:
             os.replace(tmp, target_path)

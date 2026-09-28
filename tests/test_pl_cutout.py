@@ -53,6 +53,54 @@ def _pinned_2180_to(target_crs):
     )
 
 
+def _write_grid_sheet(
+    path,
+    col0,
+    cols,
+    rows,
+    value,
+    *,
+    x0=529950.5,
+    y_top=382150.5,
+    pixel=1.0,
+    nodata_header="-9999.0",
+    fmt="{:.4f}",
+):
+    """Arkusz ASC na siatce jak u GUGiK: narozniki pikseli pol piksela od liczb
+    calkowitych (fakt 1 planu 2026-09-28). value(xs, ys) -> wartosci (srodki
+    pikseli)."""
+    xs = x0 + (np.arange(cols) + col0 + 0.5) * pixel
+    ys = y_top - (np.arange(rows) + 0.5) * pixel
+    gx, gy = np.meshgrid(xs, ys)
+    data = value(gx, gy)
+    header = (
+        f"ncols {cols}\nnrows {rows}\nxllcorner {x0 + col0 * pixel}\n"
+        f"yllcorner {y_top - rows * pixel}\ncellsize {pixel}\n"
+        f"nodata_value {nodata_header}\n"
+    )
+    body = "\n".join(" ".join(fmt.format(v) for v in row) for row in data)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(header + body + "\n", encoding="ascii")
+    return path
+
+
+def _ids(gx, gy):
+    """Jednoznaczna wartosc per piksel globalnej siatki
+    (x0 = 529950.5, y_top = 382150.5)."""
+    return 1000.0 * np.floor(382150.5 - gy) + np.floor(gx - 529950.5)
+
+
+# P-01: prawdziwa tresc .prj, nie WKT1_GDAL z pyproj
+_HYDROGRAF_2180_WKT = (  # tresc .prj z cache Hydrografu (gdalsrsinfo -o wkt_simple)
+    'PROJCS["ETRF2000-PL / CS92",GEOGCS["ETRF2000-PL",DATUM["ETRF2000_Poland",'
+    'SPHEROID["GRS 1980",6378137,298.257222101]],PRIMEM["Greenwich",0],'
+    'UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],'
+    'PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",19],'
+    'PARAMETER["scale_factor",0.9993],PARAMETER["false_easting",500000],'
+    'PARAMETER["false_northing",-5300000],UNIT["metre",1]]'
+)
+
+
 class TestBuildPlCutout:
     """Spec 8a-c: regresja tresci, mozaika z nodata, crop bez warpa."""
 
@@ -305,6 +353,191 @@ _PARENT = {
 _BBOX_2180 = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
 
 
+class TestSheetGrid:
+    """Zn. 1 / R1: wycinek na siatce arkuszy, bez przesuniecia tresci."""
+
+    def _sheets(self, tmp_path, value):
+        a = _write_grid_sheet(tmp_path / "a.asc", 0, 160, 200, value)
+        b = _write_grid_sheet(
+            tmp_path / "b.asc", 150, 160, 200, value
+        )  # zakladka 10 px
+        return [a, b]
+
+    @pytest.mark.parametrize(
+        "bbox",
+        [
+            BBox(530010.37, 382010.61, 530150.29, 382085.43, "EPSG:2180"),
+            BBox(530010, 382010, 530150, 382086, "EPSG:2180"),
+        ],
+        ids=["ulamkowy", "calkowity"],
+    )
+    def test_target_2180_on_sheet_grid_exact_values(self, tmp_path, bbox):
+        from kartograf.download.cutout import build_pl_cutout
+
+        sheets = self._sheets(tmp_path, _ids)
+        target = tmp_path / "out.tif"
+        build_pl_cutout(sheets, bbox, bbox, 1.0, None, target)
+        with rasterio.open(target) as ds:
+            t, data = ds.transform, ds.read(1)
+            left, bottom, right, top = ds.bounds
+        assert (t.c - 0.5) == pytest.approx(round(t.c - 0.5), abs=1e-6)
+        assert (t.f - 0.5) == pytest.approx(round(t.f - 0.5), abs=1e-6)
+        assert left <= bbox.min_x < left + 1 and right - 1 < bbox.max_x <= right
+        assert bottom <= bbox.min_y < bottom + 1 and top - 1 < bbox.max_y <= top
+        gx, gy = np.meshgrid(
+            t.c + (np.arange(data.shape[1]) + 0.5),
+            t.f - (np.arange(data.shape[0]) + 0.5),
+        )
+        np.testing.assert_array_equal(data, _ids(gx, gy).astype("float32"))
+
+    def test_target_5514_warp_has_no_subpixel_shift(self, tmp_path):
+        """Rampa liniowa: wycinek z arkuszy == warp idealnego rastra na siatce
+        arkuszy (ta sama operacja przypieta, ta sama siatka wyniku). Kazde
+        przesuniecie tresci w mozaice wychodzi jako rozbieznosc (bez naprawy:
+        srednio 0,35 m, maks. 0,64 m; po naprawie: 0)."""
+        from rasterio.transform import from_origin
+
+        from kartograf.download.cutout import build_pl_cutout, prepare_pl_cutout
+        from kartograf.transform.raster import warp_to_grid
+
+        def ramp(gx, gy):
+            return 0.3 * (gx - 529950.0) + 0.7 * (gy - 381950.0)
+
+        sheets = self._sheets(tmp_path, ramp)
+        cut = prepare_pl_cutout(
+            BBox(530010.37, 382010.61, 530150.29, 382085.43, "EPSG:2180"),
+            "EPSG:5514",
+            output_dir=tmp_path,
+            resolution="1m",
+            vertical_crs="EVRF2007",
+        )
+        build_pl_cutout(
+            sheets,
+            cut.bbox_source_2180,
+            cut.bbox_target,
+            1.0,
+            cut.pinned,
+            cut.target_path,
+        )
+        cols, rows = np.meshgrid(np.arange(310), np.arange(200))  # suma obu arkuszy
+        ideal = tmp_path / "ideal.tif"
+        with rasterio.open(
+            ideal,
+            "w",
+            driver="GTiff",
+            width=310,
+            height=200,
+            count=1,
+            dtype="float32",
+            crs="EPSG:2180",
+            nodata=_NODATA,
+            transform=from_origin(529950.5, 382150.5, 1.0, 1.0),
+        ) as dst:
+            dst.write(
+                ramp(529950.5 + cols + 0.5, 382150.5 - rows - 0.5).astype("float32"), 1
+            )
+        ref = tmp_path / "ref.tif"
+        warp_to_grid(
+            ideal,
+            ref,
+            cut.bbox_target,
+            1.0,
+            cut.pinned,
+            src_crs="EPSG:2180",
+            nodata=_NODATA,
+        )
+        with rasterio.open(cut.target_path) as got, rasterio.open(ref) as exp:
+            assert got.transform == exp.transform
+            np.testing.assert_array_equal(got.read(1), exp.read(1))
+
+    def test_mixed_prj_cache_builds(self, tmp_path):
+        """Fakt 6: arkusz z .prj (Hydrograf) obok arkusza bez .prj. Uzywa
+        prawdziwej tresci .prj z cache Hydrografu (P-01) — WKT1_GDAL z pyproj
+        rozniloby sie od tego, co naprawde stoi w .prj na dysku Hydrografu."""
+        from kartograf.download.cutout import build_pl_cutout
+
+        sheets = self._sheets(tmp_path, _ids)
+        sheets[0].with_suffix(".prj").write_text(_HYDROGRAF_2180_WKT)
+        bbox = BBox(530010, 382010, 530150, 382086, "EPSG:2180")
+        build_pl_cutout(sheets, bbox, bbox, 1.0, None, tmp_path / "o.tif")
+        with rasterio.open(tmp_path / "o.tif") as ds:
+            assert not (ds.read(1) == _NODATA).any()
+
+    @pytest.mark.parametrize("reverse", [False, True], ids=["a_first", "b_first"])
+    def test_integer_first_sheet_keeps_decimals(self, tmp_path, reverse):
+        """Fakt 5: arkusz z samymi liczbami calkowitymi nie moze obcinac
+        wysokosci pozostalych arkuszy, NIEZALEZNIE OD KOLEJNOSCI WEJSCIA
+        (P-07). RED oczekiwany dla kolejnosci [a, b]: przed naprawa
+        (`sorted()`/`dtype="float32"` w Step 3) merge bierze dtype z
+        PIERWSZEGO zrodla na wejsciowej liscie, a `a` (int) jest wtedy
+        pierwsze; kolejnosc [b, a] nie jest RED (float juz jest pierwszy),
+        ale zostaje jako ochrona przed regresja."""
+        from kartograf.download.cutout import build_pl_cutout
+
+        a = _write_grid_sheet(
+            tmp_path / "a.asc",
+            0,
+            160,
+            200,
+            lambda gx, gy: gx * 0 + 100,
+            nodata_header="-9999",
+            fmt="{:.0f}",
+        )
+        b = _write_grid_sheet(
+            tmp_path / "b.asc",
+            150,
+            160,
+            200,
+            lambda gx, gy: gx * 0 + 100.25,
+            nodata_header="-9999",
+        )
+        with rasterio.open(a) as ds:
+            assert ds.dtypes[0] == "int32"  # warunek sensownosci
+        bbox = BBox(530010, 382010, 530250, 382086, "EPSG:2180")
+        order = [b, a] if reverse else [a, b]
+        build_pl_cutout(order, bbox, bbox, 1.0, None, tmp_path / "o.tif")
+        with rasterio.open(tmp_path / "o.tif") as ds:
+            assert ds.read(1)[0, -1] == pytest.approx(100.25)
+
+    def test_pl2000_sheet_rejected_loudly(self, tmp_path):
+        """Fakt 7: arkusz we wspolrzednych PL-2000 pod godlem PL-1992 — blad
+        z opisem zamiast cichej dziury nodata."""
+        from kartograf.download.cutout import build_pl_cutout
+        from kartograf.exceptions import ValidationError
+
+        good = _write_grid_sheet(tmp_path / "a.asc", 0, 160, 200, _ids)
+        foreign = _write_grid_sheet(tmp_path / "b.asc", 0, 160, 200, _ids, x0=6500000.5)
+        bbox = BBox(530010, 382010, 530150, 382086, "EPSG:2180")
+        with pytest.raises(ValidationError, match="PL-2000"):
+            build_pl_cutout([good, foreign], bbox, bbox, 1.0, None, tmp_path / "o.tif")
+        assert not (tmp_path / "o.tif").exists()
+
+    def test_selection_expanded_by_one_pixel(self, tmp_path):
+        """Crop przyciagany na zewnatrz (< 1 px) — selekcja z zapasem 1 px,
+        zeby brzegowy piksel nie wpadl w arkusz spoza listy."""
+        from kartograf.download.cutout import prepare_pl_cutout, select_pl_cutout_sheets
+
+        cut = prepare_pl_cutout(
+            _BBOX_2180,
+            "EPSG:2180",
+            output_dir=tmp_path,
+            resolution="5m",
+            vertical_crs="EVRF2007",
+        )
+        with patch(
+            f"{_CUT}.find_sheets_for_bbox", return_value=["N-34-130-D-d-2-4"]
+        ) as find:
+            select_pl_cutout_sheets(cut)
+        sent = find.call_args.args[0]
+        src = cut.bbox_source_2180
+        assert (sent.min_x, sent.min_y, sent.max_x, sent.max_y) == (
+            src.min_x - 5.0,
+            src.min_y - 5.0,
+            src.max_x + 5.0,
+            src.max_y + 5.0,
+        )
+
+
 class TestDownloadPlBboxCutout:
     """Spec 8: przeplyw wycinka na poziomie workera PL (mockowane pobranie)."""
 
@@ -434,6 +667,12 @@ class TestDownloadPlBboxCutout:
 
         assert rc == 1
         assert "uszkodzony arkusz" in capsys.readouterr().err
+
+    def test_pl2000_sheet_returns_1_with_reason(self, tmp_path, capsys):
+        foreign = _write_grid_sheet(tmp_path / "b.asc", 0, 160, 200, _ids, x0=6500000.5)
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), [foreign])
+        assert rc == 1
+        assert "PL-2000" in capsys.readouterr().err
 
     def test_failed_sheet_returns_1_and_no_cutout(self, tmp_path):
         """Spec 6.1: wycinek wymaga kompletu pokrycia."""
