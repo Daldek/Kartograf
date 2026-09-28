@@ -351,11 +351,14 @@ cat CLAUDE.md
 ### Testy
 
 ```bash
-# Uruchom wszystkie testy
-pytest tests/
+# Uruchom testy (offline)
+pytest tests/ -m "not live"
 
 # Z pokryciem kodu
-pytest tests/ --cov=kartograf --cov-report=html
+pytest tests/ -m "not live" --cov=kartograf --cov-report=html
+
+# Testy sieciowe (live)
+pytest tests/ -m live   # 8 testow sieciowych (WMS GUGiK) - tylko swiadomie
 
 # Formatowanie
 ruff format kartograf/ tests/
