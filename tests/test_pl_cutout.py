@@ -1572,3 +1572,20 @@ class TestMissingSheets:
                 provider=self._provider(no_coverage=set(TestLibraryApi._SHEETS)),
             )
         assert not cut.target_path.exists()
+
+    def test_failed_build_leaves_no_empty_bbox_dir(self, tmp_path):
+        """Zn. 10: nieudana budowa bez poprzedniego wyniku nie zostawia
+        pustego bbox/."""
+        from kartograf.download.cutout import run_pl_cutout
+
+        cut, sheets = self._cutout(tmp_path)
+        with (
+            patch(
+                "kartograf.transport.mosaic.mosaic_and_crop",
+                side_effect=RuntimeError("zepsuty arkusz"),
+            ),
+            pytest.raises(RuntimeError),
+        ):
+            run_pl_cutout(cut, sheets, provider=self._provider())
+        assert not cut.target_path.parent.exists()
+        assert cut.target_path.parent.parent.exists()  # segment z arkuszami zostaje
