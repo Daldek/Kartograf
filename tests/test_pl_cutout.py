@@ -287,6 +287,56 @@ class TestPreparePlCutout:
         )
         assert "pl_1992_1m_kron86" in cut.target_path.parts
 
+    @pytest.mark.parametrize("label", ["epsg:5514", " EPSG:5514 "])
+    def test_czech_crs_label_leaves_krovak_by_pinned_operation(self, tmp_path, label):
+        """m-2: etykieta ukladu czeskiego niezalezna od wielkosci liter i spacji.
+
+        Porownanie bylo doslowne: wywolanie biblioteczne z ``"epsg:5514"``
+        szlo po cichu domyslnym transformerem ``core/geometry`` zamiast
+        przypieta operacja (obejscie ADR-024 w publicznym API).
+        """
+        from pyproj import CRS
+
+        from kartograf.core.geometry import _transform_bbox
+
+        coords = (-455000.0, -1117000.0, -454000.0, -1116000.0)  # Cieszyn (PL)
+        pinned = prepare_pl_cutout(
+            BBox(*coords, "EPSG:5514"),
+            "EPSG:2180",
+            output_dir=str(tmp_path),
+            vertical_crs="EVRF2007",
+        ).bbox_2180
+        # warunek sensownosci: sciezka niepinowana daje tu INNY bbox (zmierzone
+        # 1,06 m na max_y) — inaczej test nie odroznilby obu sciezek
+        unpinned = _transform_bbox(
+            *coords, CRS.from_user_input("EPSG:5514"), "EPSG:2180"
+        )
+        shift = max(abs(a - b) for a, b in zip(pinned[:4], unpinned[:4], strict=True))
+        assert shift > 0.01
+
+        cut = prepare_pl_cutout(
+            BBox(*coords, label),
+            "EPSG:2180",
+            output_dir=str(tmp_path),
+            vertical_crs="EVRF2007",
+        )
+
+        assert cut.bbox_2180 == pinned
+
+    def test_lowercase_2180_label_is_canonical(self, tmp_path):
+        """m-2: ``"epsg:2180"`` to uklad wycinka bez transformacji, a pola
+        ``PlCutout`` niosa kanoniczna etykiete — jak przed normalizacja, gdy
+        taki bbox szedl transformacja tozsamosciowa."""
+        cut = prepare_pl_cutout(
+            BBox(530010, 382010, 530190, 382090, "epsg:2180"),
+            "EPSG:2180",
+            output_dir=str(tmp_path),
+            vertical_crs="EVRF2007",
+        )
+
+        assert cut.bbox_2180 == BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+        assert cut.target_path.name == "530010_382010_530190_382090.tif"
+
     def test_wgs84_bbox_normalized_to_2180(self, tmp_path):
         bbox = BBox(18.60, 49.75, 18.65, 49.77, "EPSG:4326")
         cut = prepare_pl_cutout(

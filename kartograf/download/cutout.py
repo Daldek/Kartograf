@@ -119,10 +119,15 @@ def _bbox_to_2180(bbox: BBox) -> BBox:
     Uklady PL/WGS84 — swiadomie domyslny transformer, jak w calym przeplywie PL.
     CLI podaje tu bbox juz po ``_country_bbox``, ktory opuszcza uklady czeskie
     przypieta operacja; galaz czeska dotyczy wiec wywolan bibliotecznych.
+    Etykieta ukladu jest porownywana bez wielkosci liter i spacji: doslowne
+    porownanie puszczalo ``"epsg:5514"`` domyslnym transformerem (obok
+    ADR-024, finalny review fali, m-2).
     """
-    if bbox.crs == "EPSG:2180":
-        return bbox
-    if bbox.crs in _CZ_CRS:
+    crs = bbox.crs.strip().upper()
+    if crs == "EPSG:2180":
+        # etykieta kanoniczna, jak dotad z transformacji tozsamosciowej
+        return bbox._replace(crs=crs)
+    if crs in _CZ_CRS:
         from kartograf.providers.cuzk.dmr import bbox_to_crs
 
         return bbox_to_crs(bbox, "EPSG:2180")
