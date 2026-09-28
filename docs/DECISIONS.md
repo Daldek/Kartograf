@@ -1052,6 +1052,23 @@ z `--force`); tor CZ jest tu wyjatkiem i przy awarii kasuje plik docelowy.
 arkuszy w `--geometry` opisywalo odwrotnosc zachowania kodu — review max
 2026-08-30, znaleziska 5-6.)
 
+**Uzupelnienie 2026-09-28 (R5, review max zn. 2):** arkusz, dla ktorego GUGiK
+nie ma danych (`NoCoverageError` — wszystkie warstwy skorowidza odpowiedzialy
+i zadna nie ma arkusza), nie wetuje wycinka: w jego miejscu jest nodata,
+CLI wypisuje `Warning:`, a sidecar niesie `extra.missing_sheets` (API
+biblioteki: `PlCutoutResult.missing_sheets`). Kazda inna porazka pobrania
+(siec, serwer, czesciowa awaria skorowidza) nadal przerywa wycinek przed
+budowa, kodem 1 — chwilowy blad nie moze zostawic trwalej dziury w pliku,
+ktory potem jest pomijany jako istniejacy. Kodem 1 konczy sie tez obszar,
+dla ktorego danych nie ma ZADEN arkusz (`ValidationError`, wycinek nie
+powstaje). Pod `--country auto` porazka toru PL przy sukcesie CZ to nadal
+kod 0 i `Warning:` (ADR-023 pkt 4-5). Zastepuje "kazdy failed arkusz = blad
+calosci" (Decyzja wyzej, spec 6.1 pkt 1). Powod: selekcja arkuszy to czysta
+matematyka siatki godel, wiec obszar zadania (z zapasem) siega arkuszy spoza
+pokrycia GUGiK — na morzu, w dziurach pokrycia 1 m, po czeskiej stronie
+bboxa przygranicznego; jeden taki arkusz wetowal dotad caly wycinek, wiec
+`--country auto --target-crs` na granicy dawal wtedy sam wycinek CZ.
+
 ---
 
 <!-- Szablon nowej decyzji:

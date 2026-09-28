@@ -597,19 +597,22 @@ class TestSheetGrid:
 class TestDownloadPlBboxCutout:
     """Spec 8: przeplyw wycinka na poziomie workera PL (mockowane pobranie)."""
 
-    def _run(self, tmp_path, args, sheets, failed=(), provider=None):
+    def _run(self, tmp_path, args, sheets, failed=(), no_coverage=(), provider=None):
         """Worker PL z mockowanym pobraniem; zwraca ``(rc, manager, find)``.
 
         Mock KLASY ``DownloadManager`` (kwargs konstruktora, np.
         ``sidecar_extra``) zostaje w ``self.dm`` — zwrot zostaje trojka, bo
-        rozpakowuja go kolejne testy.
+        rozpakowuja go kolejne testy. ``no_coverage`` to podzbior ``failed``
+        (arkusze bez danych GUGiK, R5) — jak w ``DownloadResult``.
         """
         from kartograf.download.manager import DownloadResult
 
         provider = provider or SimpleNamespace(vertical_crs="EVRF2007")
         manager = Mock()
         manager.download_sheets.return_value = list(sheets)
-        manager.last_result = DownloadResult(failed=list(failed))
+        manager.last_result = DownloadResult(
+            failed=list(failed), no_coverage=list(no_coverage)
+        )
         with (
             patch(f"{_CUT}.find_sheets_for_bbox", return_value=["N-1", "N-2"]) as find,
             patch(
@@ -731,12 +734,49 @@ class TestDownloadPlBboxCutout:
         assert "PL-2000" in capsys.readouterr().err
 
     def test_failed_sheet_returns_1_and_no_cutout(self, tmp_path):
-        """Spec 6.1: wycinek wymaga kompletu pokrycia."""
+        """R5: awaria pobrania arkusza (nie brak danych GUGiK) = kod 1, bez wycinka."""
         sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
         rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets, failed=["N-2"])
 
         assert rc == 1
         assert not (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").exists()
+
+    def test_missing_sheet_warns_and_returns_0(self, tmp_path, capsys):
+        sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
+        rc, *_ = self._run(
+            tmp_path, _pl_args(tmp_path), sheets, failed=["N-2"], no_coverage=["N-2"]
+        )
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "Warning:" in err and "N-2" in err
+
+    def test_missing_sheets_warning_shows_10_sidecar_lists_all(self, tmp_path, capsys):
+        """Stderr pokazuje do 10 godel; pelna, posortowana lista jest w sidecarze.
+
+        Wybrzeze albo pas przygraniczny to dziesiatki arkuszy bez danych —
+        stderr zostaje czytelny, a konsument dostaje komplet z sidecara.
+        Wejscie w odwroconej kolejnosci: pobieranie rownolegle oddaje arkusze
+        w kolejnosci ukonczenia, a lista ma byc stabilna.
+        """
+        names = [f"N-{i:02d}" for i in range(12)]
+        sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
+        rc, *_ = self._run(
+            tmp_path,
+            _pl_args(tmp_path),
+            sheets,
+            failed=names[::-1],
+            no_coverage=names[::-1],
+        )
+
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "12 arkuszy" in err
+        # 10 pierwszych po sortowaniu, reszta jako " ..."
+        assert "N-00, N-01" in err and "N-09 ..." in err and "N-10" not in err
+        cut_dir = tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox"
+        (tif,) = cut_dir.glob("*.tif")
+        payload = json.loads((cut_dir / f"{tif.name}.meta.json").read_text("utf-8"))
+        assert payload["extra"]["missing_sheets"] == names
 
     def test_error_lists_all_failed_sheets(self, tmp_path, capsys):
         """Komunikat wymienia WSZYSTKIE nieudane arkusze (``download_sheets``).
@@ -1075,6 +1115,65 @@ class TestBorderTwoCutouts:
         assert parents[0] == parents[1]
         assert parents[0]["countries"] == ["CZ", "PL"]
 
+    def test_border_pl_sheet_without_data_still_gives_both_cutouts(
+        self, tmp_path, capsys
+    ):
+        """R5: strona czeska bboxa przygranicznego nie ma danych GUGiK —
+        wycinek PL powstaje (nodata tam), wycinek CZ tez, kod 0."""
+        from pyproj import CRS
+
+        from kartograf.core.geometry import _transform_bbox
+        from kartograf.download.manager import DownloadResult
+
+        b = _transform_bbox(
+            18.80, 49.70, 18.801, 49.7005, CRS.from_user_input("EPSG:4326"), "EPSG:2180"
+        )
+        sheet = _write_sheet_asc(
+            tmp_path / "sheet.asc", b.min_x - 100, b.min_y - 100, size=60, pixel=5.0
+        )
+        manager = Mock()
+        manager.download_sheets.return_value = [sheet]
+        manager.last_result = DownloadResult(
+            failed=["N-34-130-D-d-2-1"], no_coverage=["N-34-130-D-d-2-1"]
+        )
+        with (
+            patch(
+                "kartograf.providers.cuzk.create_dmr_provider",
+                return_value=self._cz_provider(),
+            ),
+            patch(f"{_CUT}.find_sheets_for_bbox", return_value=["N-34-130-D"]),
+            patch(
+                f"{_DL}._create_provider_and_storage",
+                return_value=(SimpleNamespace(vertical_crs="EVRF2007"), Mock()),
+            ),
+            patch(f"{_CUT}.DownloadManager", return_value=manager),
+        ):
+            rc = main(
+                [
+                    "download",
+                    "--bbox",
+                    self._BBOX,
+                    "--bbox-crs",
+                    "EPSG:4326",
+                    "--resolution",
+                    "5m",
+                    "--target-crs",
+                    "EPSG:2180",
+                    "--vertical-crs",
+                    "EVRF2007",
+                    "-o",
+                    str(tmp_path),
+                ]
+            )
+
+        assert rc == 0
+        pl_dir = tmp_path / "nmt" / "pl_1992_5m_evrf2007" / "bbox"
+        assert len(list(pl_dir.glob("*.tif"))) == 1
+        cz_dir = tmp_path / "nmt" / "cz_dmr4g_evrf2007" / "bbox"
+        assert len(list(cz_dir.glob("*.tif"))) == 1
+        err = capsys.readouterr().err
+        assert "Warning:" in err and "N-34-130-D-d-2-1" in err
+
 
 class TestTargetCrsValidations:
     """Spec 6.3 przez main() — czytelne bledy, kod 1."""
@@ -1303,3 +1402,79 @@ class TestLibraryApi:
         target = params.pop("target_crs")
         with pytest.raises(ValidationError):
             prepare_pl_cutout(_BBOX_2180, target, output_dir=tmp_path, **params)
+
+
+class TestMissingSheets:
+    """R5: brak danych GUGiK = nodata + ostrzezenie; awaria pobrania = blad."""
+
+    def _provider(self, *, no_coverage=(), broken=()):
+        from kartograf.exceptions import DownloadError, NoCoverageError
+
+        provider = Mock()
+        provider.vertical_crs = "EVRF2007"
+        provider.resolution = "1m"
+        provider.descriptor_key = "pl.gugik.nmt_1m"
+        provider.default_extension = ".asc"
+
+        def download(godlo, path, timeout=30):
+            if godlo in no_coverage:
+                raise NoCoverageError(
+                    f"No NMT 1m data available for {godlo}", godlo=godlo
+                )
+            if godlo in broken:
+                raise DownloadError(f"timeout {godlo}", godlo=godlo)
+            west, south = TestLibraryApi._SHEETS[godlo]
+            return _write_sheet_asc(path, west, south)
+
+        provider.download = download
+        return provider
+
+    def _cutout(self, tmp_path):
+        from kartograf.download.cutout import PlCutoutSheets, prepare_pl_cutout
+
+        cut = prepare_pl_cutout(
+            BBox(530010, 382010, 530190, 382090, "EPSG:2180"),
+            "EPSG:2180",
+            output_dir=tmp_path,
+        )
+        return cut, PlCutoutSheets(godla=tuple(TestLibraryApi._SHEETS))
+
+    def test_no_coverage_sheet_becomes_nodata_with_record(self, tmp_path):
+        from kartograf.download.cutout import run_pl_cutout
+
+        cut, sheets = self._cutout(tmp_path)
+        result = run_pl_cutout(
+            cut, sheets, provider=self._provider(no_coverage={"N-34-130-D-d-2-4"})
+        )
+        assert result.missing_sheets == ("N-34-130-D-d-2-4",)
+        with rasterio.open(result.path) as ds:
+            data = ds.read(1)
+        assert (data[:, -50:] == _NODATA).all() and (data[:, :50] != _NODATA).all()
+        meta = json.loads(
+            result.path.with_name(result.path.name + ".meta.json").read_text()
+        )
+        assert meta["extra"]["missing_sheets"] == ["N-34-130-D-d-2-4"]
+
+    def test_transport_failure_stays_fatal(self, tmp_path):
+        from kartograf.download.cutout import run_pl_cutout
+        from kartograf.exceptions import DownloadError
+
+        cut, sheets = self._cutout(tmp_path)
+        with pytest.raises(DownloadError, match="N-34-130-D-d-2-4"):
+            run_pl_cutout(
+                cut, sheets, provider=self._provider(broken={"N-34-130-D-d-2-4"})
+            )
+        assert not cut.target_path.exists()
+
+    def test_all_sheets_without_data_is_an_error(self, tmp_path):
+        from kartograf.download.cutout import run_pl_cutout
+        from kartograf.exceptions import ValidationError
+
+        cut, sheets = self._cutout(tmp_path)
+        with pytest.raises(ValidationError, match="nie ma danych"):
+            run_pl_cutout(
+                cut,
+                sheets,
+                provider=self._provider(no_coverage=set(TestLibraryApi._SHEETS)),
+            )
+        assert not cut.target_path.exists()

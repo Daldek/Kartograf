@@ -91,6 +91,7 @@ class PlCutoutResult:
     path: Path
     skipped: bool = False  # plik juz istnial (force=False) — bez sieci
     sheet_paths: tuple[Path, ...] = ()  # arkusze uzyte do mozaiki
+    missing_sheets: tuple[str, ...] = ()  # arkusze bez danych GUGiK (R5) -> nodata
 
 
 def _bbox_to_2180(bbox: BBox) -> BBox:
@@ -361,13 +362,17 @@ def build_pl_cutout(
 
 
 def write_pl_cutout_sidecar(
-    cutout: PlCutout, *, parent_request: dict | None = None
+    cutout: PlCutout,
+    *,
+    parent_request: dict | None = None,
+    missing_sheets: tuple[str, ...] = (),
 ) -> None:
     """Best-effort sidecar wycinka (blad nie przerywa pobrania).
 
     ``capability="sheet_files"``: dane pochodza z arkuszy OpenData — kanal
     ``bbox_raster`` nie istnieje dla 5m, a dla 1m deklaruje wylacznie KRON86
-    (ADR-027, odstepstwo od litery spec 6.1 pkt 5).
+    (ADR-027, odstepstwo od litery spec 6.1 pkt 5). ``missing_sheets``
+    (niepuste) -> ``extra.missing_sheets``: arkusze bez danych GUGiK (R5).
     """
     try:
         from kartograf.sources.registry import get_source
@@ -375,6 +380,12 @@ def write_pl_cutout_sidecar(
 
         key = "pl.gugik.nmt_5m" if cutout.resolution == "5m" else "pl.gugik.nmt_1m"
         b = cutout.bbox_target
+        extra: dict = {}
+        if parent_request:
+            extra["parent_request"] = parent_request
+        if missing_sheets:
+            # R5: arkusze, dla ktorych GUGiK nie ma danych — tam wycinek ma nodata
+            extra["missing_sheets"] = list(missing_sheets)
         meta = build_metadata(
             get_source(key),
             request={
@@ -384,7 +395,7 @@ def write_pl_cutout_sidecar(
             vertical_crs=cutout.vertical_crs,
             capability="sheet_files",
             nodata=PL_NODATA,
-            extra={"parent_request": parent_request} if parent_request else None,
+            extra=extra or None,
         )
         meta.horizontal_crs = cutout.target_crs
         pinned = cutout.pinned
@@ -434,8 +445,10 @@ def run_pl_cutout(
 
     ``force=False`` + istniejacy plik wyniku -> ``skipped=True`` bez sieci.
     Arkusze z cache sa uzywane ponownie (``skip_existing = not force``).
-    Kazdy nieudany arkusz -> ``DownloadError`` z lista, zanim cokolwiek
-    zostanie zbudowane. ``provider``/``storage`` domyslnie z fabryki NMT
+    Brak danych u zrodla (``NoCoverageError``) -> nodata + ``missing_sheets``;
+    kazda inna porazka arkusza -> ``DownloadError``; gdy ZADEN arkusz nie ma
+    danych -> ``ValidationError``. Oba bledy padaja, zanim cokolwiek zostanie
+    zbudowane. ``provider``/``storage`` domyslnie z fabryki NMT
     i ``FileStorage`` segmentu arkuszy (CLI wstrzykuje wlasne). Wstrzykniety
     ``provider`` musi dostarczac pion i rozdzielczosc wycinka — inaczej
     ``ValidationError`` przed jakimkolwiek pobraniem.
@@ -470,11 +483,30 @@ def run_pl_cutout(
     )
     summary = manager.last_result
     failed = list(summary.failed) if summary is not None else []
-    if failed:
+    no_data = set(summary.no_coverage) if summary is not None else set()
+    fatal = [g for g in failed if g not in no_data]
+    missing = tuple(sorted(g for g in failed if g in no_data))
+    if fatal:
+        # R5: tylko brak danych u zrodla bywa nodata. Kazda inna porazka
+        # (siec, serwer, niepelna odpowiedz skorowidza) konczy zadanie — chwilowy
+        # blad nie moze zostawic trwalej dziury w pliku, ktory potem jest
+        # pomijany jako istniejacy.
         total = summary.total if summary is not None else len(failed)
         raise DownloadError(
-            f"{len(failed)} of {total} sheets failed: {', '.join(failed)} "
-            "(wycinek wymaga kompletu arkuszy)"
+            f"{len(fatal)} z {total} arkuszy nie pobrano (blad pobrania, nie brak "
+            f"danych): {', '.join(fatal)} — wycinek nie powstal; ponow pobranie"
+        )
+    if not sheet_paths:
+        raise ValidationError(
+            f"GUGiK nie ma danych dla zadnego z {len(missing)} arkuszy obszaru "
+            "— wycinek nie powstal"
+        )
+    if missing:
+        # info, nie warning: komunikat dla uzytkownika wypisuje CLI, a dane
+        # niesie wynik (missing_sheets) i sidecar
+        logger.info(
+            f"Brak danych GUGiK dla {len(missing)} arkuszy wycinka: "
+            f"{', '.join(missing)}"
         )
     build_pl_cutout(
         list(sheet_paths),
@@ -484,8 +516,14 @@ def run_pl_cutout(
         cutout.pinned,
         cutout.target_path,
     )
-    write_pl_cutout_sidecar(cutout, parent_request=parent_request)
-    return PlCutoutResult(path=cutout.target_path, sheet_paths=tuple(sheet_paths))
+    write_pl_cutout_sidecar(
+        cutout, parent_request=parent_request, missing_sheets=missing
+    )
+    return PlCutoutResult(
+        path=cutout.target_path,
+        sheet_paths=tuple(sheet_paths),
+        missing_sheets=missing,
+    )
 
 
 def download_pl_cutout(

@@ -171,7 +171,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`--target-crs` dla PL w trybie `--bbox`/`--geometry`** (ADR-027): jeden
   scalony wycinek `nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif` (mozaika
   arkuszy + crop + lokalny warp przypieta operacja; `EPSG:2180` = sam crop,
-  `transform: null`; failed arkusz = kod 1). W trybie `--geometry` wycinek
+  `transform: null`; awaria pobrania arkusza = kod 1, arkusz bez danych
+  GUGiK = nodata — patrz Changed). W trybie `--geometry` wycinek
   obejmuje CALA obwiednie geometrii (bez maskowania do obiektow), a przy
   reprojekcji arkusze to SUMA godel geometrii i godel obwiedni z zapasem —
   obwiednia jest wiec wypelniona danymi, nie ramka `nodata` (koszt: przy
@@ -320,6 +321,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   listy. Arkusz wydany przez skorowidz GUGiK w ukladzie PL-2000 pod godlem
   PL-1992 konczy budowe wycinka (kazdego `--target-crs`) bledem z opisem
   (dotad: cicha dziura nodata).
+- Wycinek PL: arkusz bez danych GUGiK (`NoCoverageError`) daje nodata +
+  `Warning:` + `extra.missing_sheets` w sidecarze zamiast kodu 1; awarie
+  pobrania nadal koncza sie kodem 1. Na pograniczu `--country auto
+  --target-crs` powstaje teraz takze wycinek PL. API biblioteki: lista
+  w `PlCutoutResult.missing_sheets`; obszar, dla ktorego danych nie ma zaden
+  arkusz, konczy sie `ValidationError` (ADR-027, uzupelnienie R5).
 - Czesciowa awaria warstw skorowidza GUGiK przy braku arkusza w pozostalych
   to teraz "brak pokrycia niepewny" (`DownloadError`), nie brak pokrycia;
   URL innego arkusza z fallbacku skorowidza loguje ostrzezenie (arkusze
