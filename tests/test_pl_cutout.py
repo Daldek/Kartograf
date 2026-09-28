@@ -808,6 +808,43 @@ class TestDownloadPlBboxCutout:
         # skrot dziala PRZED selekcja arkuszy — zero pracy na godlach
         find.assert_not_called()
 
+    def test_force_rebuilds_existing_cutout_and_passes_workers(self, tmp_path):
+        """I-1/m-1: ``--force`` i ``--workers`` z CLI docieraja do biblioteki.
+
+        ``run_pl_cutout`` ma WLASNY skrot "plik istnieje": gdyby CLI przestalo
+        przekazywac ``force``, ``--force`` na istniejacym wycinku bylby cichym
+        no-opem (kod 0, ``Downloaded to <stary plik>``) — a CHANGELOG kaze
+        wycinki sprzed poprawki siatki przebudowac wlasnie z ``--force``.
+        """
+        target = (
+            tmp_path
+            / "nmt"
+            / "pl_1992_1m_evrf2007"
+            / "bbox"
+            / "530010_382010_530190_382090.tif"
+        )
+        target.parent.mkdir(parents=True)
+        stale = b"II*\x00stary wycinek"
+        target.write_bytes(stale)
+        sheets = [
+            _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000),
+            _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000),
+        ]
+
+        rc, manager, _ = self._run(
+            tmp_path, _pl_args(tmp_path, force=True, workers=3), sheets
+        )
+
+        assert rc == 0
+        assert target.read_bytes() != stale, "--force nie przebudowal wycinka"
+        with rasterio.open(target) as ds:
+            # oba arkusze plaskie 100.0 pokrywaja caly bbox — zero nodata
+            assert (ds.read(1) == 100.0).all()
+        # --force pobiera ponownie takze arkusze (CHANGELOG), nie tylko wycinek
+        assert manager.download_sheets.call_args.kwargs["skip_existing"] is False
+        # --workers dociera do managera toru wycinka (m-1)
+        assert self.dm.call_args.kwargs["max_workers"] == 3
+
     def test_without_target_crs_behaviour_unchanged(self, tmp_path):
         """Bez flagi: lista arkuszy jak dotad, zero wycinka (spec 6.1).
 
