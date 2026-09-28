@@ -158,7 +158,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   operacja), oraz kroki `prepare_pl_cutout` (fail-fast, bez sieci) /
   `select_pl_cutout_sheets` / `run_pl_cutout` i typy `PlCutout`,
   `PlCutoutSheets`, `PlCutoutResult`. CLI `--target-crs` dla PL jest nakladka
-  na te funkcje.
+  na te funkcje. `run_pl_cutout` z wstrzyknietym providerem o innym pionie
+  albo rozdzielczosci niz wycinek konczy sie `ValidationError` przed
+  pobraniem (arkusze trafilyby do cudzego segmentu wspolnego cache).
 - `DownloadManager.download_sheets(godla, ...)` i `DownloadManager.expand_sheets(godla)`
   — pobranie listy godel (grubsze PL-1992 rozwijane do 1:10000, duplikaty raz);
   porazki pojedynczych arkuszy zbierane w `last_result` (`failed`, `no_coverage`)
