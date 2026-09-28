@@ -292,7 +292,10 @@ kartograf cache path
 - **`--target-crs` dla PL (ADR-027):** tylko `--product nmt` i system 1992
   (nmpt/orto — etap 2; laz to chmura punktow; mozaika miedzystrefowa 2000 —
   etap 2); wynik to JEDEN GeoTIFF `nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif`,
-  failed arkusz = kod 1; `EPSG:2180` = sam crop (`transform: null`).
+  failed arkusz = kod 1; `EPSG:2180` = sam crop na siatce arkuszy GUGiK
+  (obszar rozszerzony na zewnatrz < 1 px, wartosci 1:1, `transform: null`);
+  arkusz GUGiK we wspolrzednych PL-2000 (fallback skorowidza) = blad
+  z opisem; wycinek z takich arkuszy to etap 2.
   W trybie `--geometry` wycinek obejmuje CALA obwiednie geometrii (bez
   maskowania do obiektow); `nodata` tylko tam, gdzie nie siega zaden pobrany
   arkusz. Nieudana budowa wycinka (takze z `--force`) NIE kasuje poprzedniego
