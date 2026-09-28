@@ -9,6 +9,7 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 import rasterio
+from pyproj import CRS
 from rasterio.merge import merge as rasterio_merge
 from rasterio.transform import from_origin
 
@@ -307,3 +308,206 @@ def test_snap_rejects_rotated_source(tmp_path):
             tmp_path / "o.tif",
             snap_to_source_grid=True,
         )
+
+
+def _write_asc_text(path, xll, yll, rows, *, cellsize=1.0, nodata_header="-9999"):
+    """ASC jak u GUGiK: naglowek z `nodata_value -9999` BEZ kropki (fakt 5)."""
+    header = (
+        f"ncols {len(rows[0])}\nnrows {len(rows)}\nxllcorner {xll}\n"
+        f"yllcorner {yll}\ncellsize {cellsize}\nnodata_value {nodata_header}\n"
+    )
+    path.write_text(header + "\n".join(" ".join(r) for r in rows) + "\n")
+    return path
+
+
+def _write_prj(asc_path, wkt_text):
+    asc_path.with_suffix(".prj").write_text(wkt_text)
+
+
+_HYDROGRAF_2180_WKT = (  # tresc .prj z cache Hydrografu (gdalsrsinfo -o wkt_simple)
+    'PROJCS["ETRF2000-PL / CS92",GEOGCS["ETRF2000-PL",DATUM["ETRF2000_Poland",'
+    'SPHEROID["GRS 1980",6378137,298.257222101]],PRIMEM["Greenwich",0],'
+    'UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],'
+    'PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",19],'
+    'PARAMETER["scale_factor",0.9993],PARAMETER["false_easting",500000],'
+    'PARAMETER["false_northing",-5300000],UNIT["metre",1]]'
+)
+
+# P-01: kazdy z tych trzech WKT1 opisuje EPSG:2180, ale samo CRS.equals(...,
+# ignore_axis_order=True) zwraca dla wszystkich False (pyproj 3.7.2 / PROJ 9.5.1,
+# zmierzone 2026-09-28) — stad _same_projection w Step 3.
+_2180_WKT_VARIANTS = [
+    CRS.from_epsg(2180).to_wkt("WKT1_GDAL"),
+    CRS.from_epsg(2180).to_wkt("WKT1_ESRI"),
+    _HYDROGRAF_2180_WKT,
+]
+
+
+@pytest.mark.parametrize(
+    "prj_text", _2180_WKT_VARIANTS, ids=["wkt1_gdal", "wkt1_esri", "hydrograf"]
+)
+def test_assign_crs_merges_sources_with_and_without_prj(tmp_path, prj_text):
+    """Fakt 6: Hydrograf dopisuje .prj do czesci arkuszy; merge rzucal
+    'CRS mismatch'. Z assign_crs zrodla dostaja jawny SRS przez VRT.
+    Wszystkie trzy warianty WKT1 EPSG:2180 (pyproj GDAL/ESRI, .prj Hydrografu)
+    musza zostac uznane za "ten sam" uklad (P-01)."""
+    a = _write_asc_text(tmp_path / "a.asc", 0.5, 0.5, [["1.5"] * 4] * 4)
+    b = _write_asc_text(tmp_path / "b.asc", 4.5, 0.5, [["2.5"] * 4] * 4)
+    _write_prj(a, prj_text)
+    with rasterio.open(a) as sa, rasterio.open(b) as sb:
+        assert sa.crs is not None and sb.crs is None  # warunek sensownosci testu
+    bbox = BBox(0.5, 0.5, 8.5, 4.5, "EPSG:2180")
+    with pytest.raises(ValidationError, match="niezgodne CRS"):
+        mosaic_and_crop([a, b], bbox, tmp_path / "x.tif")
+    out = mosaic_and_crop([a, b], bbox, tmp_path / "o.tif", assign_crs="EPSG:2180")
+    with rasterio.open(out) as src:
+        data = src.read(1)
+        assert src.crs.to_epsg() == 2180
+        assert src.driver == "GTiff"  # profil z pierwszego zrodla to VRT
+    assert data[0, 0] == 1.5 and data[0, -1] == 2.5
+
+
+def test_assign_crs_rejects_source_with_other_crs(tmp_path):
+    a = _write_asc_text(tmp_path / "a.asc", 0.5, 0.5, [["1.5"] * 4] * 4)
+    _write_prj(a, CRS.from_epsg(2177).to_wkt("WKT1_GDAL"))
+    with pytest.raises(ValidationError, match="wymuszany"):
+        mosaic_and_crop(
+            [a],
+            BBox(0.5, 0.5, 4.5, 4.5, "EPSG:2180"),
+            tmp_path / "o.tif",
+            assign_crs="EPSG:2180",
+        )
+
+
+def test_dtype_float32_keeps_decimals_when_first_source_is_integer(tmp_path):
+    """Fakt 5: ASC z samymi liczbami calkowitymi GDAL czyta jako Int32,
+    a merge bierze dtype z PIERWSZEGO zrodla — wysokosci innych arkuszy
+    bylyby obciete."""
+    a = _write_asc_text(tmp_path / "a.asc", 0.5, 0.5, [["100"] * 4] * 4)
+    b = _write_asc_text(tmp_path / "b.asc", 4.5, 0.5, [["100.25"] * 4] * 4)
+    with rasterio.open(a) as sa:
+        assert sa.dtypes[0] == "int32"  # warunek sensownosci testu
+    out = mosaic_and_crop(
+        [a, b],
+        BBox(0.5, 0.5, 8.5, 4.5, "EPSG:2180"),
+        tmp_path / "o.tif",
+        assign_crs="EPSG:2180",
+        dtype="float32",
+    )
+    with rasterio.open(out) as src:
+        data = src.read(1)
+        assert src.dtypes[0] == "float32"
+    assert data[0, -1] == pytest.approx(100.25)
+
+
+@pytest.mark.skipif(not sys.platform.startswith("linux"), reason="/proc/self/fd")
+def test_vrt_wrapping_does_not_exhaust_file_descriptors(tmp_path):
+    """Owijanie w VRT tez nie moze trzymac otwartych wszystkich zrodel."""
+    import resource
+
+    n = 300
+    paths = [
+        _write_tile(tmp_path / f"t{i:03d}.tif", 2 * i, 2, float(i), size=2)
+        for i in range(n)
+    ]
+    with rasterio.open(paths[0]) as src:
+        _ = src.crs
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    in_use = len(os.listdir("/proc/self/fd"))
+    # poprawny kod potrzebuje < 6 deskryptorow; pula GDAL (GDAL_MAX_DATASET_POOL_SIZE,
+    # domyslnie 100) maskowalaby "wszystkie VRT naraz" przy zapasie > ~110 (P-05,
+    # zmierzone w pre-flight 2026-09-28: mutacja przechodzi przy 160, pada przy 64)
+    resource.setrlimit(resource.RLIMIT_NOFILE, (in_use + 64, hard))
+    try:
+        out = mosaic_and_crop(
+            paths,
+            BBox(0, 0, 2 * n, 2, "EPSG:2180"),
+            tmp_path / "out.tif",
+            assign_crs="EPSG:2180",
+            dtype="float32",
+        )
+    finally:
+        resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
+    with rasterio.open(out) as src:
+        assert src.read(1)[0, 2 * n - 1] == float(n - 1)
+
+
+def test_wrapping_rejects_multiband_source(tmp_path):
+    """VRT owija tylko pasmo 1 — zrodlo wielopasmowe to blad, nie cicha
+    utrata pozostalych pasm."""
+    path = tmp_path / "rgb.tif"
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=4,
+        width=4,
+        count=2,
+        dtype="float32",
+        crs="EPSG:2180",
+        transform=from_origin(0, 4, 1, 1),
+    ) as dst:
+        dst.write(np.ones((2, 4, 4), dtype="float32"))
+    with pytest.raises(ValidationError, match="pasm"):
+        mosaic_and_crop(
+            [path], BBox(0, 0, 4, 4, "EPSG:2180"), tmp_path / "o.tif", dtype="float32"
+        )
+
+
+@pytest.mark.parametrize(
+    ("source_dtype", "dtype"),
+    [("float32", "float16"), ("int8", None)],
+    ids=["zadany_typ", "typ_zrodla"],
+)
+def test_wrapping_rejects_type_without_vrt_name(tmp_path, source_dtype, dtype):
+    """Typ spoza mapy typow VRT: ValidationError, nie KeyError."""
+    path = tmp_path / "t.tif"
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=4,
+        width=4,
+        count=1,
+        dtype=source_dtype,
+        crs="EPSG:2180",
+        transform=from_origin(0, 4, 1, 1),
+    ) as dst:
+        dst.write(np.ones((1, 4, 4), dtype=source_dtype))
+    with rasterio.open(path) as src:
+        assert src.dtypes[0] == source_dtype  # warunek sensownosci testu
+    with pytest.raises(ValidationError, match="typ pasma"):
+        mosaic_and_crop(
+            [path],
+            BBox(0, 0, 4, 4, "EPSG:2180"),
+            tmp_path / "o.tif",
+            assign_crs="EPSG:2180",
+            dtype=dtype,
+        )
+
+
+def test_wrapping_keeps_each_source_own_nodata(tmp_path):
+    """VRT to widok 1:1 — NoDataValue = nodata ZRODLA, nie mozaiki.
+
+    SimpleSource kopiuje piksele doslownie: przy nodata mozaiki innym niz
+    nodata zrodla -9999 pierwszego arkusza przestaloby byc maskowane i w
+    zakladce (sasiednie arkusze GUGiK zachodza na siebie, fakt 1) przykryloby
+    wazne dane drugiego. Owijanie nie moze zmienic wyniku wzgledem mozaiki
+    bez owijania.
+    """
+    a = _write_asc_text(
+        tmp_path / "a.asc", 0.5, 0.5, [["1.5", "1.5", "-9999", "-9999"]] * 4
+    )
+    b = _write_asc_text(tmp_path / "b.asc", 2.5, 0.5, [["2.5"] * 4] * 4)
+    bbox = BBox(0.5, 0.5, 6.5, 4.5, "EPSG:2180")
+    kwargs = {"nodata": -32768.0, "dst_kwds": {"driver": "GTiff"}}
+    plain = mosaic_and_crop([a, b], bbox, tmp_path / "p.tif", **kwargs)
+    wrapped = mosaic_and_crop(
+        [a, b], bbox, tmp_path / "w.tif", dtype="float32", **kwargs
+    )
+    with rasterio.open(plain) as p, rasterio.open(wrapped) as w:
+        expected = p.read(1)
+        data = w.read(1)
+        assert w.nodata == -32768.0  # nodata WYNIKU nadal ustawia merge
+    assert expected[0].tolist() == [1.5, 1.5, 2.5, 2.5, 2.5, 2.5]
+    np.testing.assert_array_equal(data, expected)
