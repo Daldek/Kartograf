@@ -1,5 +1,6 @@
 """Testy mozaikowania (kartograf.transport.mosaic) na syntetycznych rastrach."""
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -51,6 +52,31 @@ def _write_asc(path, xll, yll, ncols=4, nrows=4, cellsize=1.0, value=1.0):
     )
     rows = "\n".join(" ".join(str(value) for _ in range(ncols)) for _ in range(nrows))
     path.write_text(header + rows + "\n", encoding="ascii")
+    return path
+
+
+def _write_lattice_tile(path, col0, row0, cols, rows, *, x0=0.5, y_top=100.5, res=1.0):
+    """Kafel na siatce z narozami w x0 + k*res — jak arkusze GUGiK, ktorych
+    narozniki leza pol piksela od liczb calkowitych (fakt 1 planu).
+    Wartosc = 1000 * globalny_wiersz + globalna_kolumna: jednoznaczna, wiec
+    kazde przesuniecie tresci widac jako rozbieznosc wartosci."""
+    transform = rasterio.transform.from_origin(
+        x0 + col0 * res, y_top - row0 * res, res, res
+    )
+    r, c = np.meshgrid(np.arange(rows) + row0, np.arange(cols) + col0, indexing="ij")
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=rows,
+        width=cols,
+        count=1,
+        dtype="float32",
+        crs="EPSG:2180",
+        transform=transform,
+        nodata=-9999.0,
+    ) as dst:
+        dst.write((1000.0 * r + c).astype("float32"), 1)
     return path
 
 
@@ -188,3 +214,96 @@ def test_many_inputs_do_not_exhaust_file_descriptors(tmp_path):
     assert data.shape == (2, 2 * n)
     assert data[0, 0] == 0.0
     assert data[0, 2 * n - 1] == float(n - 1)
+
+
+@pytest.mark.parametrize(
+    "bbox",
+    [
+        BBox(3.37, 92.13, 17.61, 97.9, "EPSG:2180"),
+        BBox(3.0, 92.0, 17.0, 98.0, "EPSG:2180"),  # calkowity = remis 0,5 px
+    ],
+    ids=["ulamkowy", "calkowity"],
+)
+def test_snap_copies_source_pixels_exactly(tmp_path, bbox):
+    """Zn. 1: piksele wyniku = piksele zrodel (bez przesuniecia i bez
+    mieszania kolumn przy remisie); zasieg = zadanie + < 1 px na strone."""
+    a = _write_lattice_tile(tmp_path / "a.tif", 0, 0, 12, 10)
+    b = _write_lattice_tile(tmp_path / "b.tif", 10, 0, 12, 10)  # zakladka 2 px
+    out = mosaic_and_crop(
+        [a, b], bbox, tmp_path / "out.tif", nodata=-9999.0, snap_to_source_grid=True
+    )
+    with rasterio.open(out) as src:
+        t, data = src.transform, src.read(1)
+        left, bottom, right, top = src.bounds
+
+    col0, row0 = t.c - 0.5, 100.5 - t.f
+    assert col0 == pytest.approx(round(col0), abs=1e-9)
+    assert row0 == pytest.approx(round(row0), abs=1e-9)
+    assert left <= bbox.min_x < left + 1.0 and right - 1.0 < bbox.max_x <= right
+    assert bottom <= bbox.min_y < bottom + 1.0 and top - 1.0 < bbox.max_y <= top
+    r, c = np.meshgrid(
+        np.arange(data.shape[0]) + round(row0),
+        np.arange(data.shape[1]) + round(col0),
+        indexing="ij",
+    )
+    np.testing.assert_array_equal(data, (1000.0 * r + c).astype("float32"))
+
+
+def test_snap_uses_majority_grid_and_warns(tmp_path, caplog):
+    """Zrodlo poza siatka nie wetuje mozaiki (arkusze sa w cache — blad
+    bylby trwaly); siatka = wiekszosc, nie 'pierwsze na liscie'."""
+    odd = _write_lattice_tile(tmp_path / "odd.tif", 20, 0, 4, 10, x0=0.75)
+    a = _write_lattice_tile(tmp_path / "a.tif", 0, 0, 12, 10)
+    b = _write_lattice_tile(tmp_path / "b.tif", 10, 0, 12, 10)
+    with caplog.at_level(logging.WARNING, logger="kartograf.transport.mosaic"):
+        out = mosaic_and_crop(
+            [odd, a, b],
+            BBox(3.37, 92.13, 17.61, 97.9, "EPSG:2180"),
+            tmp_path / "o.tif",
+            snap_to_source_grid=True,
+        )
+    with rasterio.open(out) as src:
+        phase = src.transform.c - 0.5
+        assert phase == pytest.approx(round(phase), abs=1e-9)
+    assert "odd.tif" in caplog.text and "0.250" in caplog.text
+
+
+def test_snap_keeps_bbox_already_on_grid(tmp_path):
+    """3 * 0.1 == 0.30000000000000004: iloraz 3.0000000000000004 nie moze
+    dolozyc czwartej kolumny (tolerancja bledu zmiennoprzecinkowego)."""
+    a = _write_lattice_tile(
+        tmp_path / "a.tif", 0, 0, 10, 10, x0=0.0, y_top=1.0, res=0.1
+    )
+    out = mosaic_and_crop(
+        [a],
+        BBox(0.0, 0.5, 3 * 0.1, 1.0, "EPSG:2180"),
+        tmp_path / "o.tif",
+        snap_to_source_grid=True,
+    )
+    with rasterio.open(out) as src:
+        assert (src.width, src.height) == (3, 5)
+
+
+def test_snap_rejects_rotated_source(tmp_path):
+    from affine import Affine
+
+    path = tmp_path / "rot.tif"
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=4,
+        width=4,
+        count=1,
+        dtype="float32",
+        crs="EPSG:2180",
+        transform=Affine(1.0, 0.1, 0.0, 0.1, -1.0, 4.0),
+    ) as dst:
+        dst.write(np.ones((4, 4), dtype="float32"), 1)
+    with pytest.raises(ValidationError, match="obrocona"):
+        mosaic_and_crop(
+            [path],
+            BBox(0, 0, 4, 4, "EPSG:2180"),
+            tmp_path / "o.tif",
+            snap_to_source_grid=True,
+        )
