@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from kartograf.core.sheet_parser import BBox
+from kartograf.exceptions import ValidationError
 
 
 class TransportKind(StrEnum):
@@ -90,9 +91,20 @@ class SourceDescriptor:
         w FileStorage). Wymiar nieobecny w szablonie = no-op (orto ignoruje
         vcrs). Walidacje "zero klamer w segmencie" robi wolajacy koncowy
         (FileStorage) — ADR-026.
+
+        ``None`` nadal znaczy "wypelnij pozniej" (dozwolone), ale pusty string
+        (lub sam whitespace) to blad wolajacego, nie brak wymiaru — bez tej
+        kontroli dawal cichy, dangling segment storage (np. `nmt/pl_1992_1m_`,
+        review max 2026-08-30, zn. 7).
         """
         if self.storage_subdir is None:
             raise ValueError(f"Zrodlo '{self.key}' nie ma storage_subdir")
+        for name, value in (("uklad", uklad), ("vcrs", vertical_crs)):
+            if value is not None and not value.strip():
+                raise ValidationError(
+                    f"Pusty wymiar segmentu storage '{name}' (zrodlo '{self.key}') "
+                    "— podaj wartosc albo None"
+                )
         subdir = self.storage_subdir
         if uklad is not None:
             subdir = subdir.replace("{uklad}", uklad)
