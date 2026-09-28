@@ -647,6 +647,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pokrycia niepewny" (`DownloadError`, kod 1). URL w odpowiedzi nadal wygrywa;
   strona bledu z HTTP 200 bez znacznikow OGC nadal liczy sie jako brak arkusza
   (do sprawdzenia na zywych danych). (finalny review fali review max, I-2)
+- API wycinka PL (`prepare_pl_cutout`, `download_pl_cutout`): bbox w ukladzie
+  czeskim z etykieta malymi literami albo ze spacjami (`"epsg:5514"`) opuszcza
+  Krovaka przypieta operacja, jak `"EPSG:5514"` — dotad szedl po cichu
+  domyslnym transformerem (bbox 1 x 1 km pod Cieszynem: obwiednia przesunieta
+  o 1,06 m). CLI nie bylo dotkniete (`--bbox-crs` przyjmuje tylko kody
+  wielkimi literami). (finalny review fali review max, m-2)
 
 ### Tests
 - **1854 testy offline, pokrycie 92,9%** (pomiar 2026-09-28:
