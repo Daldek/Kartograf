@@ -993,7 +993,8 @@ FileStorage: nowy parametr `vertical_crs` (default "EVRF2007"); nieznany
 ## ADR-027: --target-crs dla PL — scalony wycinek bbox (mozaika + pinned warp)
 
 **Data:** 2026-08-28
-**Status:** Przyjeta (errata do ADR-023: target-crs przestaje byc flaga czeska)
+**Status:** Przyjeta (errata do ADR-023: target-crs przestaje byc flaga czeska;
+uzupelnienia 2026-09-28 na koncu wpisu)
 
 **Kontekst:** `--target-crs` istnial tylko dla CZ; scenariusz "obszar
 zainteresowania w jednym kraju + dociagniecie danych z drugiego" wymagal
@@ -1020,9 +1021,12 @@ skip-existing standardowo), potem `mosaic_and_crop` (GTiff+CRS wymuszone —
 ASC ich nie niesie) + lokalny warp `warp_to_grid` z WYMUSZONA operacja
 `PinnedTransform.gdal_operation()` (maszyneria i pulapki ADR-024, w tym
 axisswap dla celow northing-first). `EPSG:2180` = sam crop
-(`transform: null`). Fail-fast operacji przed siecia; kazdy failed arkusz =
-blad calosci (kod 1). Nazwa pliku niesie wspolrzedne w ukladzie WYNIKU.
-Sidecar pisze CLI: `horizontal_crs=target`, `transform.horizontal=
+(`transform: null`; od 2026-09-28 crop na siatce arkuszy — drugie
+uzupelnienie nizej). Fail-fast operacji przed siecia; kazdy failed arkusz =
+blad calosci (kod 1; zmienione 2026-09-28 dla arkusza bez danych GUGiK —
+uzupelnienie R5 nizej). Nazwa pliku niesie wspolrzedne w ukladzie WYNIKU.
+Sidecar pisze CLI (od 2026-09-28 biblioteka, `write_pl_cutout_sidecar` —
+drugie uzupelnienie nizej): `horizontal_crs=target`, `transform.horizontal=
 "pinned: ..."`, `nodata=-9999`, `extra.parent_request`; kanal
 `sheet_files` (fakt: dane z arkuszy OpenData — kanal `bbox_raster` nie
 istnieje dla 5m, a dla 1m deklaruje wylacznie KRON86). Wylaczenia 0.7.0:
@@ -1032,14 +1036,16 @@ transgranicznym `--country auto --target-crs` daje DWA wycinki (PL+CZ)
 w tym samym ukladzie, wspolny `extra.parent_request`.
 
 Obwiednia zrodla dostaje zapas: obwiednia celu wraca do EPSG:2180 i rosnie
-o `_PL_WARP_MARGIN_PX = 4` piksele (halo interpolatora, obrot ukladu
-docelowego). Ten powiekszony bbox steruje TAKZE selekcja arkuszy w OBU
-trybach: `--bbox` wybiera arkusze wprost z niego, a `--geometry` przy warpie
-bierze SUME godel geometrii (per obiekt) i godel powiekszonego bboxa (R-01;
-dla celu EPSG:2180 zapasu nie ma, wiec arkusze wyznacza sama geometria).
-Wycinek z `--geometry`
-obejmuje CALA obwiednie geometrii — nie ma maskowania do obiektow, a `nodata`
-oznacza wylacznie brak pobranego arkusza.
+o `WARP_MARGIN_PX = 4` piksele (`download/cutout.py`; do 2026-09-28 stala
+CLI `_PL_WARP_MARGIN_PX`) — halo interpolatora, obrot ukladu docelowego.
+Ten powiekszony bbox steruje TAKZE selekcja arkuszy w OBU trybach: `--bbox`
+wybiera arkusze wprost z niego, a `--geometry` przy warpie bierze SUME godel
+geometrii (per obiekt) i godel powiekszonego bboxa (R-01; dla celu EPSG:2180
+zapasu nie ma, wiec arkusze wyznacza sama geometria). Od 2026-09-28 selekcja
+w trybie bbox i w sumie R-01 ma jeszcze zapas 1 piksela (drugie
+uzupelnienie nizej). Wycinek z `--geometry` obejmuje CALA obwiednie
+geometrii — nie ma maskowania do obiektow, a `nodata` oznacza wylacznie
+brak pobranego arkusza.
 
 **Konsekwencje:** Symetria PL/CZ w trybie bbox; domkniety zalegly punkt
 backlogu "Mozaikowanie arkuszy NMT PL". Warp PL to osobna funkcja
@@ -1068,6 +1074,53 @@ matematyka siatki godel, wiec obszar zadania (z zapasem) siega arkuszy spoza
 pokrycia GUGiK — na morzu, w dziurach pokrycia 1 m, po czeskiej stronie
 bboxa przygranicznego; jeden taki arkusz wetowal dotad caly wycinek, wiec
 `--country auto --target-crs` na granicy dawal wtedy sam wycinek CZ.
+
+**Uzupelnienie 2026-09-28 (R1, R3, fakty 5-8 planu fali review max):**
+- **Siatka arkuszy (R1, review max zn. 1).** Crop mozaiki jest rozszerzany
+  NA ZEWNATRZ do siatki pikseli arkuszy (siatka wiekszosci zrodel, < 1 px na
+  strone). Dla `EPSG:2180` wycinek to wiec obszar zadania rozszerzony
+  o < 1 px, z wartosciami 1:1 z arkuszy — `transform: null` pozostaje
+  prawda, a nazwa pliku niesie wspolrzedne ZADANIA. Przy warpie ten sam
+  snap dostaje crop mozaiki (obwiednia zrodla), wiec warp nie dziedziczy
+  przesuniecia o ulamek piksela. Powod: arkusze GUGiK 5 m maja narozniki
+  pikseli na `5k + 2,5 m` (zmierzone na 1977 arkuszach), a crop kotwiczony
+  w rogu zadania przesuwal tresc — dla bboxa na wielokrotnosciach 5 m
+  o 0,5 px, z mieszaniem sasiednich kolumn. Selekcja arkuszy (tryb bbox
+  i suma R-01) dostaje zapas 1 piksela, zeby przyciagniety crop nie siegal
+  arkusza spoza listy. E2E na realnych arkuszach 5 m: 0 z 80 601 pikseli
+  rozbieznych z arkuszem zawierajacym srodek piksela. Wycinki zbudowane
+  wczesniej maja te same nazwy plikow — przebudowa z `--force` (CHANGELOG).
+- **Normalizacja w VRT (fakty 5-6).** Kazdy arkusz trafia do `merge` przez
+  VRT z jawnym EPSG:2180 i pasmem Float32, a wejscia sa sortowane: arkusz
+  z `.prj` dopisanym przez Hydrograf scala sie z arkuszem bez niego (dotad
+  `niezgodne CRS wejsc`), a arkusz z samymi liczbami calkowitymi (GDAL: Int32)
+  nie obcina calej mozaiki do liczb calkowitych.
+- **Arkusze PL-2000 = glosny blad (fakt 7).** Arkusz we wspolrzednych PL-2000
+  (fallback skorowidza GUGiK pod godlem PL-1992) konczy budowe wycinka
+  `ValidationError` zamiast cichej dziury nodata; reprojekcja takich arkuszy
+  to etap 2.
+- **Selekcja przy gornej krawedzi (fakt 8).** `find_sheets_for_bbox`
+  z bboxem EPSG:2180 uwzglednia maksimum szerokosci na poludniku osiowym
+  19°E — dotad gubila pas przy gornej krawedzi bboxa (6 arkuszy dla bboxa
+  szerokiego na 20 km).
+- **API biblioteki (R3, review max zn. 12).** Tor zyje w
+  `kartograf.download.cutout`: `download_pl_cutout` albo kroki
+  `prepare_pl_cutout` -> `select_pl_cutout_sheets` -> `run_pl_cutout`,
+  eksport w `kartograf`. CLI jest nakladka (komunikaty, kody wyjscia),
+  a sidecar sklada biblioteka (`write_pl_cutout_sidecar`). `run_pl_cutout`
+  odrzuca wstrzyknietego providera o innym pionie albo rozdzielczosci niz
+  wycinek — segment arkuszy niesie pion FAKTYCZNY (ADR-026).
+- **Bez zmian (R2):** R-01 zostaje — dla jednego obiektu i dla bboxa "cala
+  obwiednia" i "pierscien" (sam pas zapasu) daja ten sam zbior arkuszy,
+  a rzadka geometria wieloobiektowa nie wystepuje w praktyce. **Etap 2
+  (R6):** scalanie PL+CZ w jedna ciagla powierzchnie przygraniczna
+  (wspolna siatka, EVRF2007 po obu stronach) — po zywym sprawdzeniu, jak
+  GUGiK i CUZK przycinaja dane na granicy.
+- Rozmiar (zn. 9): bez twardego limitu — plik posredni mozaiki przy warpie
+  jest kompresowany, miejsce na dysku sprawdzane przed siecia (dolne
+  oszacowanie), a CLI wypisuje `Info:` dla wycinkow >= 1 GiB.
+
+Opis przeplywu po tych zmianach: `docs/ARCHITECTURE.md` sekcja 4.3.
 
 ---
 

@@ -1,8 +1,8 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.8
-**Data:** 2026-08-22
+**Wersja:** 3.10
+**Data:** 2026-09-28
 **Status:** Rozwoj — v0.7.0 (Unreleased), etap 1 (CZ/CUZK) zmergowany do `develop` 2026-08-12; ostatni wydany tag: v0.6.1
 
 ---
@@ -58,7 +58,10 @@ Kartograf automatyzuje ten proces oferując:
   (CLI --bbox: arkusze OpenData, oba układy wysokościowe)
 - Wycinek bbox z reprojekcją lokalną: `--target-crs {EPSG:2180,EPSG:5514,
   EPSG:3045}` w trybie `--bbox`/`--geometry` — jeden scalony GeoTIFF
-  (mozaika arkuszy + pinned warp, ADR-027)
+  (mozaika arkuszy + pinned warp, ADR-027); takze jako API biblioteki
+  (download_pl_cutout, kroki prepare/select/run_pl_cutout); EPSG:2180 = crop
+  na siatce arkuszy (wartosci 1:1); arkusz bez danych GUGiK = nodata
+  + extra.missing_sheets (R5)
 - Rozdzielczości: 1m (GRID1), 5m (GRID5)
 - Układy wysokościowe: KRON86, EVRF2007
 
@@ -247,6 +250,9 @@ from kartograf import (
     find_sheets_for_bbox, find_sheets_2000_for_bbox, find_sheets_for_geometry,
     # Download (NMT/NMPT/Orto/LAZ)
     DownloadManager, DownloadProgress, DownloadResult, FileStorage,
+    # Download — wycinek PL (ADR-027)
+    PlCutout, PlCutoutResult, PlCutoutSheets,
+    download_pl_cutout, prepare_pl_cutout, run_pl_cutout, select_pl_cutout_sheets,
     # Cache
     MetadataCache,
     # Land Cover
@@ -260,7 +266,7 @@ from kartograf import (
     # Hydrology
     HSGCalculator,
     # Exceptions
-    KartografError, ParseError, ValidationError, DownloadError,
+    KartografError, ParseError, ValidationError, DownloadError, NoCoverageError,
 )
 ```
 
@@ -291,6 +297,11 @@ from kartograf import (
   (CountryProfile.extent_wgs84) — usuwa fałszywe zapytania do CUZK dla
   bboxów leżących w całości w Polsce (patrz 3.2)
 - Ujednolicenie extra.parent_request.bbox_crs między trybami jawny/auto
+- Scalanie wycinkow PL+CZ w jedna ciagla powierzchnie przygraniczna
+  (wspolna siatka, EVRF2007 po obu stronach) — po zywym sprawdzeniu, jak
+  GUGiK i CUZK przycinaja dane na granicy (R6)
+- Wycinek PL --target-crs z arkuszy PL-2000 (reprojekcja arkuszy,
+  mozaika miedzystrefowa; dzis blad z opisem)
 
 # Etap 3 (CZ):
 - ZABAGED — wektorowa baza topograficzna (149 warstw), odpowiednik BDOT10k
@@ -336,7 +347,11 @@ from kartograf import (
   transformacja pionowa to Bpv→EVRF2007 (EPSG:5621)
 - --target-crs działa tylko z --bbox/--geometry; z godłem CZ = ValidationError
 - --target-crs dla PL: tylko nmt i system 1992 (nmpt/orto — etap 2; mozaika
-  międzystrefowa PL-2000 — etap 2); failed arkusz = kod 1
+  międzystrefowa PL-2000 — etap 2); arkusz bez danych GUGiK (NoCoverageError)
+  = nodata + Warning: + extra.missing_sheets, kazda inna porazka pobrania
+  arkusza i brak danych we WSZYSTKICH arkuszach = kod 1 (R5, 2026-09-28);
+  arkusz we wspolrzednych PL-2000 = blad; scalanie PL+CZ w jedna
+  powierzchnie przygraniczna — etap 2 (R6)
 - Asymetria trybu --bbox: PL bez --target-crs zwraca listę arkuszy (wiele
   plików), CZ zawsze jeden plik (wycinek exportImage, pobierany natywnie
   w 5514 i reprojektowany lokalnie, gdy zażądano innego układu); z
@@ -376,7 +391,7 @@ from kartograf import (
 ```
 kartograf/
 ├── __init__.py           # Public API exports
-├── exceptions.py         # KartografError, ParseError, ValidationError, DownloadError
+├── exceptions.py         # KartografError, ParseError, ValidationError, DownloadError, NoCoverageError
 ├── core/                 # Logika bazowa
 │   ├── sheet_parser.py      # SheetParser — parser godeł map topograficznych, BBox
 │   ├── parser_2000.py       # Parser2000 — parser godeł PL-2000
@@ -392,7 +407,7 @@ kartograf/
 │   └── raster.py             # warp_to_grid — lokalny warp na siatkę, operacja WYMUSZONA (ADR-027)
 ├── transport/             # Wspólny transport pobierania
 │   ├── http.py               # download_to — atomic write + retry
-│   └── mosaic.py             # mosaic_and_crop — merge kafli (rasterio) + przycięcie
+│   └── mosaic.py             # mosaic_and_crop — merge kafli (rasterio) + przycięcie (opcjonalnie na siatce zrodel, zrodla w VRT)
 ├── providers/             # Providery danych
 │   ├── base.py               # DataSourceProvider (ABC), BaseProvider (NMT), LandCoverProvider
 │   ├── pl/                   # Providery polskie
@@ -412,7 +427,8 @@ kartograf/
 ├── cache/                 # Cache metadanych
 │   └── metadata.py           # MetadataCache — SQLite WAL (URL/TERYT TTL 7d, Sheet TTL 30d)
 ├── download/              # Download management (NMT/NMPT/Orto; CZ ma własny przepływ w CLI)
-│   ├── manager.py            # DownloadManager (sidecar_extra=...)
+│   ├── cutout.py             # Wycinek PL --target-crs jako API (download_pl_cutout; prepare/select/run)
+│   ├── manager.py            # DownloadManager (sidecar_extra=..., download_sheets/expand_sheets)
 │   └── storage.py            # FileStorage(vertical_crs=) — segmenty z szablonów deskryptora (ADR-026)
 ├── landcover/             # Land Cover management
 │   └── manager.py
@@ -478,8 +494,9 @@ pyshp >= 2.3.0         # Shapefile reading
 ### 6.2 Jakościowe
 
 ```
-- 1775 testów przechodzi
-- Pokrycie testami 93% (cel 80% osiągnięty)
+- 1854 testy offline przechodza (pytest -m "not live"; 8 testow live
+  wymaga sieci i nie nalezy do bramki)
+- Pokrycie testami 92,9% (cel 80% osiągnięty)
 - Kod zgodny z ruff (check + format)
 - mypy bez nowego długu względem baseline
 - Type hints wszędzie
@@ -506,9 +523,10 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-08-18 | 3.7 | Przegląd spójności dokumentacji: status mergu etapu 1, nagłówek sekcji 2 (0.5.0→0.7.0), komenda `cache` w 2.9, brakujące eksporty w 2.10, liczba testów 1402 |
 | 2026-08-22 | 3.8 | Korekty spójności po audycie przedwydaniowym 0.7.0: WCS NMT tylko 1m/KRON86, 4 warstwy WMS ortofoto, SoilGrids bez TERYT, timeouty per źródło, konwencja krawędzi i etykiety skal, semantyka `--country auto` (zasięg prostokąta CZ/PL, Info/Warning, częściowy sukces), liczby 1716/93% |
 | 2026-08-28 | 3.9 | Układ data/ per produkt (ADR-026), --target-crs dla PL (ADR-027), sekcja 2.11, liczby 1775/93% (brama jakosci) |
+| 2026-09-28 | 3.10 | Fala review max: wycinek PL jako API biblioteki (download_pl_cutout), siatka arkuszy, R5 (NoCoverageError -> nodata + extra.missing_sheets), eksporty w 2.10, drzewo modulow, etap 2: scalanie PL+CZ i wycinek z arkuszy PL-2000; liczby 1854/92,9% (brama jakosci) |
 
 ---
 
-**Wersja dokumentu:** 3.9
-**Data ostatniej aktualizacji:** 2026-08-28
+**Wersja dokumentu:** 3.10
+**Data ostatniej aktualizacji:** 2026-09-28
 **Status:** Rozwoj — v0.7.0 (Unreleased), etap 1 zmergowany do `develop` 2026-08-12

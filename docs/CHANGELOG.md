@@ -170,10 +170,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   — podzbior `failed`.
 - **`--target-crs` dla PL w trybie `--bbox`/`--geometry`** (ADR-027): jeden
   scalony wycinek `nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif` (mozaika
-  arkuszy + crop + lokalny warp przypieta operacja; `EPSG:2180` = sam crop,
-  `transform: null`; awaria pobrania arkusza = kod 1, arkusz bez danych
-  GUGiK = nodata — patrz Changed). W trybie `--geometry` wycinek
-  obejmuje CALA obwiednie geometrii (bez maskowania do obiektow), a przy
+  arkuszy + crop + lokalny warp przypieta operacja; `EPSG:2180` = sam crop
+  na siatce arkuszy, `transform: null`; awaria pobrania arkusza = kod 1,
+  arkusz bez danych GUGiK = nodata — patrz Changed). W trybie `--geometry`
+  wycinek obejmuje CALA obwiednie geometrii (bez maskowania do obiektow), a przy
   reprojekcji arkusze to SUMA godel geometrii i godel obwiedni z zapasem —
   obwiednia jest wiec wypelniona danymi, nie ramka `nodata` (koszt: przy
   rzadkiej geometrii wieloobiektowej pobieraja sie arkusze calej obwiedni).
@@ -196,6 +196,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   z wymuszona operacja przypieta (wzorzec ADR-024 dla torow PL)
 - `mosaic_and_crop(dst_kwds=)` — wymuszenie sterownika/CRS wyniku
   (wejscia ASC bez CRS -> GeoTIFF z EPSG:2180)
+- `mosaic_and_crop(snap_to_source_grid=, assign_crs=, dtype=)` — crop
+  rozszerzany na zewnatrz do siatki pikseli zrodel (siatka wiekszosci; zrodlo
+  spoza niej = ostrzezenie w logu) oraz owijanie kazdego zrodla w VRT
+  z wymuszonym SRS i typem pasma (nodata wlasne zrodla; wynik domyslnie
+  GTiff bez kafli). Domyslnie wylaczone — tor CZ bez zmian; uzywa ich wycinek
+  PL (patrz Changed/Fixed)
 - `docs/ARCHITECTURE.md` — kanoniczny opis architektury, kontraktow
   i ukladu `data/`
 - **Etap 0 — architektura zrodel wielokrajowych (przygotowanie pod CZ/DE/SK)**
@@ -321,10 +327,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   obszar zadania rozszerzony na zewnatrz o < 1 px, wartosci 1:1 z arkuszy
   (bez przeprobkowania, `transform: null`); nazwa pliku niesie wspolrzedne
   zadania. Selekcja arkuszy wycinka (`select_pl_cutout_sheets`) ma zapas
-  1 piksela, zeby crop przyciagniety na zewnatrz nie siegal arkusza spoza
-  listy. Arkusz wydany przez skorowidz GUGiK w ukladzie PL-2000 pod godlem
-  PL-1992 konczy budowe wycinka (kazdego `--target-crs`) bledem z opisem
-  (dotad: cicha dziura nodata).
+  1 piksela (tryb bbox i suma R-01), zeby crop przyciagniety na zewnatrz nie
+  siegal arkusza spoza listy; `--geometry` z `EPSG:2180` (bez sumy R-01) tego
+  zapasu nie ma — skrajna kolumna albo wiersz wyniku moze tam byc nodata
+  (`docs/ARCHITECTURE.md` 4.3). Arkusz wydany przez skorowidz GUGiK
+  w ukladzie PL-2000 pod godlem PL-1992 konczy budowe wycinka (kazdego
+  `--target-crs`) bledem z opisem (dotad: cicha dziura nodata).
 - Wycinek PL: arkusz bez danych GUGiK (`NoCoverageError`) daje nodata +
   `Warning:` + `extra.missing_sheets` w sidecarze zamiast kodu 1; awarie
   pobrania nadal koncza sie kodem 1. Na pograniczu `--country auto
@@ -630,10 +638,27 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   zn. 7).
 
 ### Tests
-- **1716 testow, pokrycie 93%** — 1142 po mergu etapu 0, 1402 po etapie 1,
-  1716 po audycie przedwydaniowym 0.7.0 (1708 po 26 zadaniach + 8 w fali
-  naprawczej po finalnym review); ruff i `ruff format` czyste,
-  mypy 32 bledy (baseline sprzed etapu 0: 33)
+- **1854 testy offline, pokrycie 92,9%** (pomiar 2026-09-28:
+  `pytest tests/ -m "not live"` — 1854 passed, 8 deselected; 8 testow `live`
+  wymaga sieci i nie nalezy do bramki). Historia: 1142 po mergu etapu 0,
+  1402 po etapie 1, 1716 po audycie przedwydaniowym 0.7.0 (1708 po 26
+  zadaniach + 8 w fali naprawczej po finalnym review), 1787 lacznie z 8
+  `live` (1779 offline) po ukladzie `data/` i `--target-crs` PL, 1854
+  offline po fali review max (+75). ruff i `ruff format` czyste, mypy 32
+  bledy (baseline sprzed etapu 0: 33; fala review max bez nowych bledow)
+- **Fala review max (2026-09-28)** — nowe i zmienione testy m.in.
+  w `tests/test_pl_cutout.py` (API biblioteki, siatka arkuszy, VRT, R5,
+  rozmiar i dysk), `tests/test_transport_mosaic.py` (leniwe otwieranie
+  zrodel, crop na siatce zrodel, owijanie w VRT), `test_download_manager.py`
+  (`download_sheets`/`expand_sheets`, `no_coverage`), `test_storage.py`,
+  `test_sheet_parser.py`, `test_cli.py`; kazdy test zachowania z dowodem
+  mutacyjnym. E2E offline na realnych arkuszach 5 m z cache Hydrografu
+  (provider kopiujacy arkusze, poza tym zero podmian): cel EPSG:2180 —
+  0 z 80 601 pikseli rozbieznych z arkuszem zawierajacym srodek piksela,
+  siatka `mod 5 = 2,5 m`; cel EPSG:5514 — wzgledem niezaleznego warpu GDAL
+  kazdego arkusza srednio 2,7 mm (maks. 0,15 m poza szwem arkuszy, patrz
+  `docs/ARCHITECTURE.md` 4.3); arkusz nieobecny w cache -> `missing_sheets`
+  i nodata wylacznie w jego miejscu
 - **Etap 0 — walidacja warstw WMS**
   - `tests/test_wms_layer_validation.py` — nowa klasa `TestHardcodedLayerNames`
     (5 testow): regresyjne strazniki nazw warstw zweryfikowanych z GetCapabilities

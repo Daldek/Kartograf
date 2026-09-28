@@ -98,7 +98,8 @@ path = manager.download_sheet("N-34-130-D-d-2-4")
 # Pobieranie przez bbox → GeoTIFF (WCS) - tylko NMT 1m i tylko w układzie KRON86:
 # endpoint WCS dla EVRF2007 został wycofany przez GUGiK (HTTP 404 od 2026-08), więc
 # download_bbox pod EVRF2007 kończy się ValidationError. Wysokości EVRF2007
-# bierz z arkuszy: download_sheet() albo CLI `--bbox` (rozwijany na arkusze OpenData).
+# bierz z arkuszy: download_sheet() albo CLI `--bbox` (rozwijany na arkusze OpenData),
+# a jako jeden GeoTIFF z arkuszy: download_pl_cutout() (nizej).
 kron = DownloadManager(output_dir="./data", vertical_crs="KRON86")
 area = BBox(min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180")
 path = kron.download_bbox(area, "my_area.tif")
@@ -126,6 +127,7 @@ result = download_pl_cutout(
     max_workers=4,
 )
 print(result.path)
+print(result.missing_sheets)  # arkusze bez danych GUGiK - w ich miejscu nodata
 ```
 
 Pozostałe elementy publicznego API (m.in. `GugikNmptProvider`, `GugikOrtoProvider`,
@@ -156,8 +158,10 @@ oraz sidecar `<plik>.meta.json` ze schematem `kartograf-meta/1`:
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC i wersja pakietu |
 | `transform` | słownik osi (klucze `horizontal`/`vertical`) z opisem użytej operacji: `pinned: <opis> (<dokładność> m)`; oś bez przeliczenia nie ma klucza, a bez żadnego przeliczenia (pliki PL pobierane godłem/arkuszami oraz wycinek `--target-crs EPSG:2180`) całe pole to `null`; wycinek PL w innym układzie niesie `pinned: ...` w osi poziomej ([ADR-027](docs/DECISIONS.md)) |
 | `extra.parent_request` | oryginalny bbox, jego układ i próbowane kraje - wspólny klucz grupowania plików jednego żądania `--bbox`/`--geometry`, także po obu stronach granicy. **Wyjątek: kafle LAZ** - mają własny przepływ i tego klucza nie niosą (ich `extra` to `godlo_kafla`/`rok`/`gestosc`/`url`) |
+| `extra.missing_sheets` | tylko wycinek PL (`--target-crs`, `download_pl_cutout`): posortowana lista godel, dla ktorych GUGiK nie ma danych - w ich miejscu wycinek ma nodata (pole jest tylko wtedy, gdy lista jest niepusta) |
 
-Sidecary pisze warstwa zarządzająca (`DownloadManager`, `LandCoverManager`, CLI),
+Sidecary pisze warstwa zarządzająca (`DownloadManager`, `LandCoverManager`,
+wycinek PL w bibliotece - `download/cutout.py`, CLI dla LAZ i CZ),
 a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
 
 ## Funkcjonalności
@@ -172,7 +176,10 @@ a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
   (`data/nmt/pl_1992_1m_evrf2007/`, `data/nmt/pl_1992_5m_evrf2007/`;
   pełny układ: [ARCHITECTURE.md](docs/ARCHITECTURE.md) sekcja 3)
 - ✅ **Wycinek bbox** - `--target-crs` skleja arkusze i reprojektuje lokalnie
-  (przypięta operacja) do jednego GeoTIFF
+  (przypięta operacja) do jednego GeoTIFF; takze z biblioteki
+  (`download_pl_cutout`); arkusz bez danych GUGiK = nodata + lista w sidecarze
+  (`extra.missing_sheets`); przy `EPSG:2180` wynik lezy na siatce arkuszy
+  (wartosci 1:1)
 - ✅ **Formaty** - GeoTIFF, PNG, JPEG (WCS), ASC (OpenData)
 - ⚠️ **Pobieranie przez bbox jako GeoTIFF (WCS)** - tylko 1m i tylko KRON86
   (endpoint EVRF2007 zwraca 404 od 2026-08); wysokości EVRF2007 z obszaru
@@ -320,11 +327,11 @@ Kartograf/
 │   ├── transform/       # Transformacje CRS (crs.py) i rastrów (raster.py - warp_to_grid)
 │   ├── transport/       # Wspólny transport HTTP + mozaikowanie rastrów
 │   ├── providers/       # Providery danych (pl/: GUGiK, BDOT10k; cuzk/: DMR CZ; CORINE, SoilGrids)
-│   ├── download/        # Download management (NMT/NMPT/Orto/LAZ)
+│   ├── download/        # Download management (NMT/NMPT/Orto/LAZ) + wycinek PL (cutout.py)
 │   ├── landcover/       # Land Cover management
 │   ├── hydrology/       # Hydrologic Soil Groups (HSG)
 │   └── cli/             # CLI interface (moduły per komenda)
-├── tests/               # Testy (1775)
+├── tests/               # Testy (1854 offline + 8 live)
 ├── docs/                # Dokumentacja (ARCHITECTURE.md - kanoniczny opis architektury i układu data/)
 └── README.md
 ```
@@ -367,4 +374,4 @@ Projekt udostępniony na licencji MIT. Szczegóły w pliku `LICENSE`.
 
 ## Status
 
-**Wersja 0.7.0-dev** - NMT Czechy (CUZK DMR 5G/4G, `--country {pl,cz,auto}`, parser godeł TM33/SM5, sidecary metadanych `.meta.json`), układ `data/` per produkt ([ADR-026](docs/DECISIONS.md)) i `--target-crs` dla Polski w trybie `--bbox`/`--geometry` ([ADR-027](docs/DECISIONS.md)). Wcześniej: v0.6.x (LAZ przez WFS, pobieranie równoległe `--workers`, cache metadanych SQLite, walidacja warstw WMS), v0.5.0 (PL-2000, 15 warstw BDOT10k). 1775 testów, pokrycie 93%. Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów.
+**Wersja 0.7.0-dev** - NMT Czechy (CUZK DMR 5G/4G, `--country {pl,cz,auto}`, parser godeł TM33/SM5, sidecary metadanych `.meta.json`), układ `data/` per produkt ([ADR-026](docs/DECISIONS.md)) i `--target-crs` dla Polski w trybie `--bbox`/`--geometry` ([ADR-027](docs/DECISIONS.md)) - takze jako API biblioteki `download_pl_cutout`. Wcześniej: v0.6.x (LAZ przez WFS, pobieranie równoległe `--workers`, cache metadanych SQLite, walidacja warstw WMS), v0.5.0 (PL-2000, 15 warstw BDOT10k). 1854 testy offline (+8 `live` z siecia), pokrycie 92,9%. Zobacz [CHANGELOG.md](docs/CHANGELOG.md) dla szczegółów.

@@ -52,7 +52,7 @@ sidecar dostaje `extra.fallback = "wms_png"`). Alternatywa z poziomu biblioteki:
 ```
 kartograf/
 ├── __init__.py          # Public API exports
-├── exceptions.py        # KartografError, ParseError, ValidationError, DownloadError
+├── exceptions.py        # KartografError, ParseError, ValidationError, DownloadError, NoCoverageError(DownloadError)
 ├── core/                # Logika bazowa
 │   ├── sheet_parser.py     # SheetParser — parser godel map topograficznych, BBox
 │   ├── parser_2000.py      # Parser2000 — parser godal PL-2000, find_sheets_2000_for_bbox
@@ -68,7 +68,7 @@ kartograf/
 │   └── raster.py        # warp_to_grid — wymuszona operacja przypieta (ADR-027)
 ├── transport/           # Wspolny transport pobierania
 │   ├── http.py          # download_to — atomic write + retry z backoffem
-│   └── mosaic.py        # mosaic_and_crop — merge kafli (rasterio) + przyciecie, propagacja nodata
+│   └── mosaic.py        # mosaic_and_crop — merge kafli (rasterio) + przyciecie, propagacja nodata; snap_to_source_grid= (crop na siatce zrodel), assign_crs=/dtype= (zrodla w VRT)
 ├── providers/           # Providery danych (abstrakcje nad API)
 │   ├── base.py          # DataSourceProvider (ABC), BaseProvider (NMT), LandCoverProvider (pokrycie terenu)
 │   ├── pl/               # Providery polskie (GUGiK, BDOT10k) — landcover_base.py USUNIETY (patrz base.py)
@@ -88,8 +88,8 @@ kartograf/
 ├── cache/               # Cache metadanych
 │   └── metadata.py      # MetadataCache — SQLite WAL, TTL 7d (sheet_cache: 30d), thread-safe
 ├── download/            # Zarzadzanie pobieraniem NMT/NMPT/Orto
-│   ├── cutout.py        # Wycinek PL --target-crs jako API (ADR-027): prepare/select/run/download_pl_cutout
-│   ├── manager.py       # DownloadManager — koordynacja pobierania arkuszy (parallel)
+│   ├── cutout.py        # Wycinek PL --target-crs jako API (ADR-027): prepare/select/run/download_pl_cutout — mozaika na siatce arkuszy + warp, R5 (missing_sheets)
+│   ├── manager.py       # DownloadManager — koordynacja pobierania arkuszy (parallel); download_sheets/expand_sheets (porazki w last_result)
 │   └── storage.py       # FileStorage(vertical_crs=) — segmenty <produkt>/<kraj>_<uklad>_<vcrs> z szablonow deskryptora (ADR-026)
 ├── landcover/           # Zarzadzanie pobieraniem pokrycia terenu
 │   └── manager.py       # LandCoverManager — dispatch do providerow
@@ -237,6 +237,7 @@ kartograf cache path
   `EPSG:9650`, a `GugikProvider.download_bbox` pod EVRF2007 konczy sie
   `ValidationError` przed wyjsciem w siec (WCS NMPT nie jest tym objety).
   Wysokosci EVRF2007 z bboxa: `--bbox` w CLI (rozwijane na arkusze OpenData)
+  albo jeden GeoTIFF z arkuszy: `--target-crs` / `download_pl_cutout`
 - CORINE GeoTIFF wymaga OAuth2 credentials w CLMS — bez nich fallback na PNG (WMS)
 - SoilGrids: tylko WGS84 bbox (transformacja z EPSG:2180 automatyczna)
 - Timeouty domyslne: 30 s dla NMT/NMPT (GUGiK) i discovery WFS w LAZ;
@@ -292,17 +293,26 @@ kartograf cache path
   od ADR-027 dziala po obu stronach granicy
 - **`--target-crs` dla PL (ADR-027):** tylko `--product nmt` i system 1992
   (nmpt/orto — etap 2; laz to chmura punktow; mozaika miedzystrefowa 2000 —
-  etap 2); wynik to JEDEN GeoTIFF `nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif`;
-  arkusz bez danych GUGiK (`NoCoverageError`: morze, strona czeska bboxa
+  etap 2); wynik to JEDEN GeoTIFF `nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif`.
+  Tor zyje w bibliotece (`kartograf.download.cutout`: `download_pl_cutout`
+  albo kroki `prepare_pl_cutout` -> `select_pl_cutout_sheets` ->
+  `run_pl_cutout`), CLI jest nakladka (komunikaty, kody wyjscia).
+  Arkusz bez danych GUGiK (`NoCoverageError`: morze, strona czeska bboxa
   przygranicznego, dziury pokrycia) = nodata + `Warning:` +
-  `extra.missing_sheets` w sidecarze; kazda inna porazka pobrania = kod 1
-  (R5, 2026-09-28); `EPSG:2180` = sam crop na siatce arkuszy GUGiK
-  (obszar rozszerzony na zewnatrz < 1 px, wartosci 1:1, `transform: null`);
+  `extra.missing_sheets` w sidecarze (`PlCutoutResult.missing_sheets`);
+  kazda inna porazka pobrania = kod 1 (R5, 2026-09-28); `EPSG:2180` = crop
+  bez warpa na siatce arkuszy GUGiK (obszar rozszerzony na zewnatrz < 1 px,
+  wartosci 1:1, `transform: null`); arkusze trafiaja do mozaiki przez VRT
+  (EPSG:2180, Float32), wiec mieszany cache z `.prj` Hydrografu dziala;
   arkusz GUGiK we wspolrzednych PL-2000 (fallback skorowidza) = blad
-  z opisem; wycinek z takich arkuszy to etap 2.
+  z opisem; wycinek z takich arkuszy to etap 2. Przed pobraniem kontrola
+  miejsca na dysku (dolne oszacowanie), `Info:` dla wycinka >= 1 GiB.
   W trybie `--geometry` wycinek obejmuje CALA obwiednie geometrii (bez
   maskowania do obiektow); `nodata` tylko tam, gdzie nie siega zaden pobrany
-  arkusz. Nieudana budowa wycinka (takze z `--force`) NIE kasuje poprzedniego
-  pliku wyniku — zapis jest atomowy (`os.replace`), poprzedni plik przezywa
-  awarie; inaczej tor CZ, ktory przy awarii warpu/mozaiki kasuje plik docelowy
-  (kod zweryfikowany live, ADR-024 — nie ruszamy go przed wydaniem)
+  arkusz (`--geometry` + `EPSG:2180` nie ma sumy R-01 ani zapasu 1 px
+  selekcji, wiec skrajna kolumna/wiersz moze byc nodata). Nieudana budowa
+  wycinka (takze z `--force`) NIE kasuje poprzedniego pliku wyniku — zapis
+  jest atomowy (`os.replace`), poprzedni plik przezywa awarie; inaczej tor CZ,
+  ktory przy awarii warpu/mozaiki kasuje plik docelowy (kod zweryfikowany
+  live, ADR-024 — nie ruszamy go przed wydaniem). Opis: `docs/ARCHITECTURE.md`
+  sekcja 4.3
