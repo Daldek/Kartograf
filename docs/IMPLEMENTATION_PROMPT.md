@@ -1,7 +1,7 @@
 # Prompt implementacyjny — Kartograf
 
-**Wersja:** 4.1
-**Data:** 2026-08-22
+**Wersja:** 4.2
+**Data:** 2026-09-29
 **Dla:** Claude Code i inni asystenci AI
 
 > **Nota 4.0 (2026-08-18):** aktualizacja do stanu po etapie 1 (v0.7.0-dev,
@@ -13,6 +13,10 @@
 > z kodem — timeouty BDOT10k/SoilGrids, WCS NMT tylko 1m i tylko KRON86,
 > kanoniczna `download_by_admin_unit` w 8.1 oraz przyklad HSG (brakowal
 > wymagany `output_path`, wiec rzucal `TypeError`).
+>
+> **Nota 4.2 (2026-09-29, audyt dokumentacji):** Public API z wycinkiem PL
+> i `NoCoverageError`, komendy testow z `-m "not live"`, workery 4/1,
+> mozaikowanie wycinka PL, odsylacz do znanych bledow z testow na zywo.
 
 ---
 
@@ -152,6 +156,9 @@ from kartograf import (
     find_sheets_for_bbox, find_sheets_2000_for_bbox, find_sheets_for_geometry,
     # Download (NMT/NMPT/Orto/LAZ)
     DownloadManager, DownloadProgress, DownloadResult, FileStorage,
+    # Download — wycinek PL (ADR-027)
+    PlCutout, PlCutoutResult, PlCutoutSheets,
+    download_pl_cutout, prepare_pl_cutout, run_pl_cutout, select_pl_cutout_sheets,
     # Land Cover
     LandCoverManager,
     # Providers
@@ -162,7 +169,7 @@ from kartograf import (
     # Hydrology
     HSGCalculator,
     # Exceptions
-    KartografError, ParseError, ValidationError, DownloadError,
+    KartografError, ParseError, ValidationError, DownloadError, NoCoverageError,
 )
 ```
 
@@ -197,7 +204,7 @@ from kartograf import (
 1. Napisz testy (pytest, AAA pattern)
 2. Uzyj fixtures i mocking (nie wywoluj prawdziwych API)
 3. Pokrycie: 80% core / 60% utility
-4. Uruchom: pytest tests/ -v --tb=short
+4. Uruchom: pytest tests/ -v --tb=short -m "not live"
 5. Sprawdz linting: ruff check kartograf/ tests/
 ```
 
@@ -266,13 +273,14 @@ from kartograf import (
 
 ## 9. Ograniczenia techniczne
 
-- **Pobieranie rownolegle** — ThreadPoolExecutor, domyslnie 4 workery (CLI: `--workers`)
+- **Pobieranie rownolegle** — ThreadPoolExecutor, domyslnie 4 workery w CLI (`--workers`), 1 w bibliotece
 - **NMT 5m** — tylko OpenData (ASC), brak WCS; wymaga EVRF2007
 - **CORINE GeoTIFF** — wymaga OAuth2 credentials; bez nich fallback na PNG (WMS)
 - **SoilGrids** — tylko WGS84 bbox (transformacja automatyczna)
 - **Retry** — max 3 proby, exponential backoff (nie konfigurowalne)
-- **Cache metadanych** — MetadataCache (SQLite WAL, TTL 7 dni); CLI: `kartograf cache stats|clear|path`
-- **Mozaikowanie** — `transport/mosaic.py` (merge kafli + crop), uzywane m.in. dla kafelkowanych bboxow CZ (exportImage)
+- **Cache metadanych** — MetadataCache (SQLite WAL, TTL 7 dni); CLI: `kartograf cache stats|clear|path`; tory PL go nie podlaczaja (znany blad N6 — `docs/PROGRESS.md`, "Znane bledy")
+- **Mozaikowanie** — `transport/mosaic.py` (merge kafli + crop), uzywane dla kafelkowanych bboxow CZ (exportImage) i wycinka PL `--target-crs` / `download_pl_cutout` (ADR-027)
+- **Znane bledy z testow na zywo 2026-09-29** (K1-K6, S1-S5, N1-N9) — `docs/PROGRESS.md`, "Znane bledy"; m.in. `--product laz` pobiera kafle z innego miejsca (K1)
 - **Pelna, aktualna lista ograniczen** (w tym CZ/CUZK etap 1) — CLAUDE.md, sekcja "Ograniczenia"
 
 ---
@@ -302,7 +310,7 @@ hsg_path = calc.calculate_hsg_by_godlo("N-34-130-D", Path("./hsg.tif"))
 ```markdown
 - [ ] Kod sformatowany (`ruff format kartograf/ tests/`)
 - [ ] Linting OK (`ruff check kartograf/ tests/`)
-- [ ] Testy przechodza (`pytest tests/ -v`)
+- [ ] Testy przechodza (`pytest tests/ -v -m "not live"`)
 - [ ] CHANGELOG.md zaktualizowany (sekcja [Unreleased])
 - [ ] PROGRESS.md zaktualizowany (sekcja "Ostatnia sesja")
 - [ ] Commity zgodne z Conventional Commits
@@ -311,6 +319,6 @@ hsg_path = calc.calculate_hsg_by_godlo("N-34-130-D", Path("./hsg.tif"))
 
 ---
 
-**Wersja dokumentu:** 4.1
-**Data ostatniej aktualizacji:** 2026-08-22
+**Wersja dokumentu:** 4.2
+**Data ostatniej aktualizacji:** 2026-09-29
 **Status:** Aktywny dla wszystkich asystentow AI pracujacych nad projektem

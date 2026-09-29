@@ -1,13 +1,18 @@
 # Standardy deweloperskie — Kartograf
 
-**Wersja:** 2.1
-**Data:** 2026-08-18
+**Wersja:** 2.2
+**Data:** 2026-09-29
 **Status:** Obowiazujacy
 **Zrodlo:** Zunifikowane standardy workspace (`shared/standards/DEVELOPMENT_STANDARDS.md` — repozytorium zewnetrzne, nieobecne w tym workspace)
 
 > **Nota 2.1 (2026-08-18):** aktualizacja do stanu po etapie 1 (v0.7.0-dev) —
 > struktura projektu (sekcja 7.1), komenda mypy bez `--strict` + baseline
 > (sekcja 8.3), przyklad nazewnictwa plikow (sekcja 4.1).
+>
+> **Nota 2.2 (2026-09-29, audyt dokumentacji):** komendy testow offline
+> z `-m "not live"` (sekcje 6.3, 10.1, 15), liczba testow i `download/`
+> w strukturze (7.1), `NoCoverageError` i wyjatki transformacji w hierarchii
+> (11.1), odnotowany rozjazd jezyka docstringow/commitow z praktyka (9.4).
 
 ---
 
@@ -284,12 +289,18 @@ pip install -e ".[dev]"
 ### 6.3 Uruchamianie testow
 
 ```bash
-# Z aktywnym venv
-pytest tests/ -v --tb=short
+# Z aktywnym venv (offline — domyslna brama)
+pytest tests/ -v --tb=short -m "not live"
 
 # Jawne wskazanie interpretera (bez aktywacji)
-.venv/bin/python -m pytest tests/ -v
+.venv/bin/python -m pytest tests/ -v -m "not live"
+
+# Testy sieciowe (8, WMS GUGiK) — tylko swiadomie
+.venv/bin/python -m pytest tests/ -m live
 ```
+
+`pyproject.toml` nie odfiltrowuje testow `live` (`addopts` bez `-m`), wiec
+komenda bez `-m "not live"` wychodzi w siec.
 
 ---
 
@@ -313,14 +324,14 @@ Kartograf/
 │   │   ├── corine.py        # CORINE z Copernicus
 │   │   └── soilgrids.py     # SoilGrids z ISRIC
 │   ├── cache/               # MetadataCache (SQLite WAL)
-│   ├── download/            # download management (NMT/NMPT/Orto)
+│   ├── download/            # DownloadManager (NMT/NMPT/Orto), FileStorage, wycinek PL (cutout.py, ADR-027)
 │   ├── landcover/           # land cover management
 │   ├── hydrology/           # obliczenia hydrologiczne (HSG)
 │   ├── auth/                # autentykacja CLMS (Auth Proxy)
 │   └── cli/                 # CLI podzielone per komenda: _parser.py (argparse),
 │                            # parse_cmd.py, download_cmd.py, landcover_cmd.py,
 │                            # soilgrids_cmd.py, cache_cmd.py + fasada commands.py
-├── tests/                   # 32 pliki testowe + conftest.py + fixtures/ (1775 testow)
+├── tests/                   # 32 pliki testowe + conftest.py + fixtures/ (1861 testow offline + 8 `live`, stan 2026-09-28)
 ├── docs/                    # dokumentacja
 ├── CLAUDE.md
 ├── README.md
@@ -469,6 +480,14 @@ timeout = 30
 - **Docstrings i komentarze w kodzie** — po angielsku
 - **Commit messages** — po angielsku
 
+**Odstepstwo praktyki (stan 2026-09-29, do rozstrzygniecia przez wlasciciela
+projektu):** kod od etapu 0 ma docstringi i komentarze takze po polsku bez
+polskich znakow (w calosci m.in. `download/cutout.py`, `transport/mosaic.py`,
+wiekszosc `cli/download_cmd.py`), a commity sa po polsku (Conventional
+Commits). Nowe publiczne API wycinka (`download_pl_cutout` i kroki) ma
+docstringi bez pelnego kompletu sekcji NumPy. Do decyzji: ujednolicic
+standard z praktyka albo praktyke ze standardem.
+
 ---
 
 ## 10. Python — testowanie
@@ -481,7 +500,7 @@ timeout = 30
 | CLI, utility, formatowanie | **>= 60%** |
 
 ```bash
-pytest tests/ --cov=kartograf --cov-report=html --cov-fail-under=60
+pytest tests/ -m "not live" --cov=kartograf --cov-report=html --cov-fail-under=60
 ```
 
 Powyzsza komenda (oraz `[tool.coverage.report] fail_under = 60` w
@@ -598,6 +617,14 @@ class ValidationError(KartografError):
 class DownloadError(KartografError):
     """Download or network error."""
     pass
+
+class NoCoverageError(DownloadError):
+    """Source has no data for the sheet (all index layers answered);
+    the PL cutout maps it to nodata (R5)."""
+    pass
+
+# kartograf/transform/crs.py: TransformError(KartografError),
+# TransformUnavailableError(TransformError) — z polem remedy
 ```
 
 ### 11.2 Walidacja na wejsciu
@@ -758,7 +785,8 @@ CorineProvider → localhost HTTP → AuthProxy (subprocess) → Keychain → CL
 ## 15. Pre-merge checklist
 
 ```markdown
-- [ ] Testy przechodza (`pytest tests/ -v`)
+- [ ] Testy przechodza (`pytest tests/ -v -m "not live"`; testy `live` — 8
+      testow sieciowych WMS GUGiK — tylko swiadomie: `pytest tests/ -m live`)
 - [ ] Pokrycie kodu w normie (80% core / 60% utility)
 - [ ] Formatowanie OK (`ruff format --check kartograf/ tests/`)
 - [ ] Linting OK (`ruff check kartograf/ tests/`)
@@ -773,8 +801,8 @@ CorineProvider → localhost HTTP → AuthProxy (subprocess) → Keychain → CL
 
 ---
 
-**Wersja dokumentu:** 2.1
-**Data ostatniej aktualizacji:** 2026-08-18
+**Wersja dokumentu:** 2.2
+**Data ostatniej aktualizacji:** 2026-09-29
 **Zrodlo:** `shared/standards/DEVELOPMENT_STANDARDS.md` v1.0 (repozytorium zewnetrzne, nieobecne w tym workspace)
 
 *Odstepstwa od tych standardow wymagaja uzasadnienia w `CLAUDE.md` projektu.*
