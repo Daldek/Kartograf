@@ -547,3 +547,50 @@ def test_wrapping_keeps_explicit_tiling_from_dst_kwds(tmp_path):
     )
     with rasterio.open(out) as src:
         assert src.block_shapes == [(512, 512)]
+
+
+@pytest.mark.parametrize(
+    ("value", "nodata", "expected"),
+    [
+        (-9999.0, -9999.0, False),
+        (np.nan, -9999.0, False),
+        (np.nan, np.nan, False),
+        (np.inf, None, False),
+        (np.nan, None, False),
+        (0.0, None, True),
+        (-9999.0, None, True),
+    ],
+)
+def test_has_valid_pixels_distinguishes_nodata_and_nonfinite(
+    tmp_path, value, nodata, expected
+):
+    from kartograf.transport.mosaic import has_valid_pixels
+
+    path = _write_tile(tmp_path / "data.tif", 0, 32, value, size=32, nodata=nodata)
+    assert has_valid_pixels(path, nodata) is expected
+
+
+def test_has_valid_pixels_finds_only_valid_pixel_in_last_block(tmp_path):
+    from kartograf.transport.mosaic import has_valid_pixels
+
+    path = tmp_path / "last-block.tif"
+    data = np.full((32, 32), -9999.0, dtype="float32")
+    data[0, 0] = np.nan
+    data[-1, -1] = 0.0
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        count=1,
+        width=32,
+        height=32,
+        dtype="float32",
+        crs="EPSG:2180",
+        transform=from_origin(0, 32, 1, 1),
+        nodata=-9999.0,
+        tiled=True,
+        blockxsize=16,
+        blockysize=16,
+    ) as dst:
+        dst.write(data, 1)
+    assert has_valid_pixels(path, -9999.0) is True

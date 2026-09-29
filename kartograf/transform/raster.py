@@ -1,10 +1,9 @@
 """
 Lokalna reprojekcja rastra na zadana siatke, WYMUSZONA operacja przypieta.
 
-Sparametryzowana kopia wzorca `providers/cuzk/dmr.py::_warp_to_grid`
-(ADR-024) dla torow PL. Celowo NIE wspoldzielona z CZ: testy regresyjne
-ADR-024 patchuja `kartograf.providers.cuzk.dmr.reproject`, a tor CZ jest
-zweryfikowany na zywo — nie ruszamy go tuz przed wydaniem (ADR-027).
+Sparametryzowany wzorzec `providers/cuzk/dmr.py::_warp_to_grid`
+(ADR-024) dla torow PL (ADR-027). Oba tory wymuszaja operacje wybrana przez
+`transform/crs.py`, wlacznie z przypietym czeskim krokiem datum S-JTSK.
 """
 
 import contextlib

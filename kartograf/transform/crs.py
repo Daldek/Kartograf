@@ -8,8 +8,9 @@ sekcja 6.4 i docs/research/2026-08-10-*):
 2. Pusta lista operacji = TransformUnavailableError, nigdy fallback.
 3. Filtr: odrzuc accuracy < 0 (nieznana; pyproj koduje jako -1 — 0.0 oznacza
    operacje DOKLADNA i jest akceptowane) oraz accuracy > policy.min_accuracy_m;
-   nastepnie probe na punkcie kontrolnym (inf/NaN => odrzut operacji — przypadek
-   siatki obcego kraju). Z pozostalych wybierz najlepsza dokladnosc.
+   nastepnie pin kroku datum dla ukladow wspoldzielonych przez kraje i probe
+   na punkcie kontrolnym (inf/NaN => odrzut operacji — przypadek siatki obcego
+   kraju). Z pozostalych wybierz najlepsza dokladnosc.
 4. Kazdy wynik transformacji przechodzi kontrole isfinite; inaczej TransformError.
 
 Polityka obowiazuje kod NOWY (etap 1+); migracja istniejacych wywolan pyproj w
@@ -135,17 +136,31 @@ KNOWN_PATHS: tuple[KnownPath, ...] = (
     KnownPath(
         "EPSG:5514",
         "EPSG:2180",
-        0.5,
-        "probe odrzuca sk_gku (inf w CZ); reprojekcja tresci LOKALNA — "
-        "serwerowej CUZK nie uzywamy, gubi datum shift (ADR-024)",
+        1.0,
+        "EPSG:1622 S-JTSK to ETRS89 (1), Czechy; pin DATUM_STEP_PINS — "
+        "EPSG:4829 (0,5 m) to operacja slowacka; reprojekcja tresci LOKALNA, "
+        "serwer CUZK gubi datum shift dla imageSR=2180 (ADR-024)",
     ),
     KnownPath(
         "EPSG:2180",
         "EPSG:5514",
-        0.5,
-        "wycinek PL --target-crs (ADR-027); zmierzone: Inverse of Poland CS92 "
-        "+ ETRF2000-PL to ETRS89 (1) + Inverse of S-JTSK to ETRS89 (3) "
-        "+ Krovak East North",
+        1.0,
+        "wycinek PL --target-crs (ADR-027); pin odwrotnej EPSG:1622: "
+        "Inverse of Poland CS92 + ETRF2000-PL to ETRS89 (1) "
+        "+ Inverse of S-JTSK to ETRS89 (1) + Krovak East North",
+    ),
+    KnownPath(
+        "EPSG:5514",
+        "EPSG:3045",
+        1.0,
+        "kafel TM33; pin EPSG:1622 S-JTSK to ETRS89 (1), Czechy",
+    ),
+    KnownPath(
+        "EPSG:5514",
+        "EPSG:4326",
+        1.0,
+        "lon/lat i obwiednie; pin EPSG:1623 S-JTSK to WGS 84 (1), Czechy; "
+        "te same parametry Helmerta co EPSG:1622",
     ),
     KnownPath(
         "EPSG:2180",
@@ -156,7 +171,7 @@ KNOWN_PATHS: tuple[KnownPath, ...] = (
     ),
     KnownPath("EPSG:8353", "EPSG:2180", 0.001, "SK, bez siatek"),
     KnownPath("EPSG:25833", "EPSG:2180", 0.0, "DE, jedyna operacja, bez siatek"),
-    KnownPath("EPSG:8357", "EPSG:5621", 0.1, "Bpv->EVRF2007; +0,12..+0,14 m"),
+    KnownPath("EPSG:8357", "EPSG:5621", 0.1, "Bpv->EVRF2007; +0,11..+0,15 m"),
     KnownPath("EPSG:7837", "EPSG:5621", 0.1, "DHHN2016; realnie 1-14 mm"),
     KnownPath(
         "EPSG:4937",
@@ -166,6 +181,14 @@ KNOWN_PATHS: tuple[KnownPath, ...] = (
         "(pierwsza operacja PROJ to siatka CZ)",
     ),
 )
+
+# Obszary uzycia EPSG sa prostokatami: slowacki obejmuje takze Zlin
+# i Jaworzynke, wiec AOI ani ranking PROJ nie rozstrzygaja kraju danych.
+# S-JTSK CUZK wymaga czeskiego kroku datum, nie dokladniejszej na papierze
+# operacji slowackiej (EPSG:4829). Oba piny maja te same parametry Helmerta.
+DATUM_STEP_PINS: dict[int, frozenset[str]] = {
+    5514: frozenset({"EPSG:1622", "EPSG:1623"}),
+}
 
 _KRON86_EVRF_REMEDY = (
     "Siatki pl86_2019/pl07_2019 nie sa publiczne — zainstaluj je recznie do "
@@ -179,6 +202,28 @@ REMEDIES: dict[str, str] = {
 }
 
 
+def _epsg_code(crs: str) -> int | None:
+    """Kod EPSG ukladu (None dla WKT/proj-string bez autorytetu)."""
+    try:
+        return CRS.from_user_input(crs).to_epsg()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _operation_codes(transformer: Any) -> frozenset[str]:
+    """Kody krokow operacji, takze odwroconych: INVERSE(EPSG) -> EPSG."""
+    doc = transformer.to_json_dict()
+    steps = doc.get("steps") or [doc]
+    codes = set()
+    for step in steps:
+        ident = step.get("id") or {}
+        authority = str(ident.get("authority", ""))
+        authority = authority.removeprefix("INVERSE(").removesuffix(")")
+        if authority and "code" in ident:
+            codes.add(f"{authority}:{ident['code']}")
+    return frozenset(codes)
+
+
 def build_pinned_transform(
     src_crs: str, dst_crs: str, policy: TransformPolicy
 ) -> PinnedTransform:
@@ -186,6 +231,11 @@ def build_pinned_transform(
 
     Rzuca ``TransformUnavailableError`` gdy brak bezpiecznej operacji.
     """
+    required: frozenset[str] = frozenset()
+    for crs in (src_crs, dst_crs):
+        epsg = _epsg_code(crs)
+        if epsg is not None:
+            required |= DATUM_STEP_PINS.get(epsg, frozenset())
     previous_network_enabled = network.is_network_enabled()
     network.set_network_enabled(policy.allow_network_grids)
     try:
@@ -203,6 +253,15 @@ def build_pinned_transform(
                     (
                         description,
                         f"dokladnosc {accuracy} m > limit {policy.min_accuracy_m} m",
+                    )
+                )
+                continue
+            if required and not (_operation_codes(transformer) & required):
+                rejected.append(
+                    (
+                        description,
+                        f"krok datum spoza przypietych {sorted(required)} "
+                        "(operacja innego kraju dla tego samego datum)",
                     )
                 )
                 continue

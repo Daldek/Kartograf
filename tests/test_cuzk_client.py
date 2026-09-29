@@ -13,7 +13,7 @@ import rasterio
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
-from kartograf.providers.cuzk.client import CuzkClient, wkid
+from kartograf.providers.cuzk.client import CuzkClient, _tile_grid, wkid
 
 _CUZK_SESSION_PATCH = "kartograf.providers.cuzk.client.requests.Session"
 _DOWNLOAD_TO_PATCH = "kartograf.providers.cuzk.client.download_to"
@@ -428,6 +428,7 @@ class TestExportImage:
         with (
             patch.object(CuzkClient, "MAX_EXPORT_WIDTH", 4),
             patch.object(CuzkClient, "MAX_EXPORT_HEIGHT", 4),
+            patch.object(CuzkClient, "MAX_EXPORT_PIXELS", 4_000_000),
             patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
         ):
             client.export_image(
@@ -493,6 +494,7 @@ class TestExportImage:
         with (
             patch.object(CuzkClient, "MAX_EXPORT_WIDTH", 250),
             patch.object(CuzkClient, "MAX_EXPORT_HEIGHT", 40),
+            patch.object(CuzkClient, "MAX_EXPORT_PIXELS", 4_000_000),
             patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
         ):
             client.export_image(
@@ -551,6 +553,7 @@ class TestExportImage:
         with (
             patch.object(CuzkClient, "MAX_EXPORT_WIDTH", 4),
             patch.object(CuzkClient, "MAX_EXPORT_HEIGHT", 4),
+            patch.object(CuzkClient, "MAX_EXPORT_PIXELS", 4_000_000),
             patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
             pytest.raises(DownloadError, match="mozaik"),
         ):
@@ -571,6 +574,7 @@ class TestExportImage:
         with (
             patch.object(CuzkClient, "MAX_EXPORT_WIDTH", 4),
             patch.object(CuzkClient, "MAX_EXPORT_HEIGHT", 4),
+            patch.object(CuzkClient, "MAX_EXPORT_PIXELS", 4_000_000),
             pytest.raises(ValidationError, match="image_sr"),
         ):
             client.export_image(
@@ -580,3 +584,145 @@ class TestExportImage:
                 image_sr="EPSG:2180",
                 output_path=tmp_path / "x.tif",
             )
+
+
+class TestExportPixelGrid:
+    def test_pixel_budget_tiles_below_dimension_limits(self, tmp_path):
+        requested = []
+
+        def fake_download(session, url, output_path, *, timeout, **kwargs):
+            params = parse_qs(urlparse(url).query)
+            bounds = tuple(float(v) for v in params["bbox"][0].split(","))
+            width, height = (int(v) for v in params["size"][0].split(","))
+            requested.append((bounds, width, height))
+            _write_geotiff(
+                Path(output_path),
+                BBox(*bounds, "EPSG:5514"),
+                width,
+                height,
+                value=float(len(requested)),
+                crs="EPSG:5514",
+            )
+            return Path(output_path)
+
+        bbox = BBox(0, 0, 6000, 6000, "EPSG:5514")  # 3000 x 3000 px
+        target = tmp_path / "budget.tif"
+        with patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download):
+            CuzkClient(session=Mock()).export_image(
+                DMR5G, bbox, pixel_size=2.0, image_sr=bbox.crs, output_path=target
+            )
+
+        assert len(requested) > 1, requested
+        assert all(w * h <= 4_000_000 for _, w, h in requested)
+        assert sum(w * h for _, w, h in requested) == 9_000_000
+        with rasterio.open(target) as src:
+            assert src.shape == (3000, 3000)
+            assert src.bounds == (0, 0, 6000, 6000)
+            assert src.res == (2.0, 2.0)
+            data = src.read(1)
+            for value, (bounds, width, height) in enumerate(requested, start=1):
+                col = round(bounds[0] / 2)
+                row = round((6000 - bounds[3]) / 2)
+                np.testing.assert_array_equal(
+                    data[row : row + height, col : col + width],
+                    np.full((height, width), value, dtype="float32"),
+                )
+        assert list(tmp_path.glob("*.part*.tif")) == []
+
+    def test_single_shot_snaps_bbox_to_pixel_grid_nw(self, tmp_path):
+        requested = []
+
+        def fake_download(session, url, output_path, *, timeout, **kwargs):
+            params = parse_qs(urlparse(url).query)
+            requested.append(params)
+            bounds = tuple(float(v) for v in params["bbox"][0].split(","))
+            width, height = (int(v) for v in params["size"][0].split(","))
+            _write_geotiff(
+                Path(output_path),
+                BBox(*bounds, "EPSG:5514"),
+                width,
+                height,
+                crs="EPSG:5514",
+            )
+            return Path(output_path)
+
+        target = tmp_path / "snap.tif"
+        with patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download):
+            CuzkClient(session=Mock()).export_image(
+                DMR5G,
+                BBox(0, 0, 1000.7, 181.4, "EPSG:5514"),
+                pixel_size=2.0,
+                image_sr="EPSG:5514",
+                output_path=target,
+            )
+        assert len(requested) == 1
+        assert requested[0]["bbox"] == ["0,-0.6,1000,181.4"]
+        assert requested[0]["size"] == ["500,91"]
+        with rasterio.open(target) as src:
+            assert src.res == (2.0, 2.0)
+            assert src.bounds.top == 181.4
+            assert src.bounds.left == 0
+
+    def test_tiled_and_single_paths_share_the_grid(self, tmp_path):
+        def fake_download(session, url, output_path, *, timeout, **kwargs):
+            params = parse_qs(urlparse(url).query)
+            bounds = tuple(float(v) for v in params["bbox"][0].split(","))
+            width, height = (int(v) for v in params["size"][0].split(","))
+            _write_geotiff(
+                Path(output_path),
+                BBox(*bounds, "EPSG:5514"),
+                width,
+                height,
+                crs="EPSG:5514",
+            )
+            return Path(output_path)
+
+        client = CuzkClient(session=Mock())
+        outputs = []
+        for budget in (4_000_000, 10_000):
+            target = tmp_path / f"grid-{budget}.tif"
+            with (
+                patch.object(CuzkClient, "MAX_EXPORT_PIXELS", budget),
+                patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
+            ):
+                client.export_image(
+                    DMR5G,
+                    BBox(0, 0, 1000.7, 181.4, "EPSG:5514"),
+                    pixel_size=2.0,
+                    image_sr="EPSG:5514",
+                    output_path=target,
+                )
+            outputs.append(target)
+        with rasterio.open(outputs[0]) as single, rasterio.open(outputs[1]) as tiled:
+            assert single.transform == tiled.transform
+            assert single.shape == tiled.shape == (91, 500)
+            np.testing.assert_array_equal(single.read(1), tiled.read(1))
+
+
+@pytest.mark.parametrize(
+    ("width", "height"), [(5000, 5000), (1800, 12300), (50000, 50), (8, 8)]
+)
+def test_tile_grid_respects_budget_and_covers_request(width, height):
+    bbox = BBox(0.3, 100.7 - height * 2, 0.3 + width * 2, 100.7, "EPSG:5514")
+    tiles = _tile_grid(bbox, 2.0, width, height, 15000, 4100, 4_000_000)
+    assert sum(w * h for _, w, h in tiles) == width * height
+    assert tiles[0][0].min_x == bbox.min_x
+    assert tiles[0][0].max_y == bbox.max_y
+    for index, (tile, w, h) in enumerate(tiles):
+        assert 0 < w <= 15000 and 0 < h <= 4100
+        assert w * h <= 4_000_000
+        assert tile.max_x - tile.min_x == pytest.approx(w * 2)
+        assert tile.max_y - tile.min_y == pytest.approx(h * 2)
+        assert bbox.min_x <= tile.min_x < tile.max_x <= bbox.max_x
+        assert bbox.min_y <= tile.min_y < tile.max_y <= bbox.max_y
+        for other, _, _ in tiles[index + 1 :]:
+            assert (
+                tile.max_x <= other.min_x
+                or other.max_x <= tile.min_x
+                or tile.max_y <= other.min_y
+                or other.max_y <= tile.min_y
+            )
+
+
+def test_default_budget_is_below_measured_server_limit():
+    assert 0 < CuzkClient.MAX_EXPORT_PIXELS <= 6_000_000

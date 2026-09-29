@@ -51,9 +51,9 @@ logger = logging.getLogger(__name__)
 CUZK_NODATA = -9999.0
 
 # Uklad, w ktorym CUZK TRZYMA dane rastrowe. Serwer dostaje zadania wylacznie
-# w nim: reprojekcja serwerowa (`imageSR` != natywny) jest niewiarygodna —
-# 5514->2180 gubi transformacje datum (blad 135 m), a 5514->3045 przesuwa
-# tresc o 1,25 m na poludnie (pomiary 2026-08-11, ADR-024).
+# w nim: imageSR=2180 gubi transformacje datum (blad 135 m, ADR-024).
+# Dawne 1,25 m dla 3045 wynikalo z roznicy operacji czeskiej EPSG:1622
+# i slowackiej EPSG:4829 w lokalnej referencji, nie bledu serwera (errata).
 NATIVE_CRS = "EPSG:5514"
 
 _RESOLUTION_KEYS = {"2m": "cz.cuzk.dmr5g", "5m": "cz.cuzk.dmr4g"}
@@ -84,8 +84,8 @@ _VERTICAL_POLICY = TransformPolicy(min_accuracy_m=0.2)
 _LONLAT_POLICY = TransformPolicy(min_accuracy_m=2.0, allow_network_grids=False)
 _ENVELOPE_POLICY = TransformPolicy(min_accuracy_m=2.0, allow_network_grids=False)
 # Operacja reprojektujaca TRESC rastra — jedyna, ktora przesuwa piksele, wiec
-# limit dokladnosci jest ostrzejszy niz dla obwiedni. Znane operacje z Krovaka
-# do ukladow docelowych (2180, 3045) maja 0,5 m (KNOWN_PATHS).
+# limit dokladnosci jest ostrzejszy niz dla obwiedni. Krok datum do ukladow
+# 2180/3045 jest przypiety do czeskiej EPSG:1622 (1,0 m, KNOWN_PATHS).
 _HORIZONTAL_POLICY = TransformPolicy(min_accuracy_m=1.0, allow_network_grids=False)
 # Zapas obwiedni zadania natywnego w pikselach: pokrywa niepewnosc operacji
 # obwiedniowej (<= 2 m) i halo interpolatora bilinear (1 px) na krawedziach.
@@ -266,11 +266,11 @@ class CuzkDmrProvider(BaseProvider):
 
         Serwer dostaje zadanie WYLACZNIE w ukladzie natywnym (``NATIVE_CRS``);
         gdy cel jest inny, tresc jest reprojektowana lokalnie przypieta
-        operacja. Powod jest empiryczny (pomiary 2026-08-11, ADR-024):
+        operacja z czeskim krokiem datum EPSG:1622 (1,0 m).
         ``exportImage&imageSR=2180`` gubi transformacje datum S-JTSK->ETRS89
-        (tresc przesunieta o 135 m), a ``imageSR=3045`` przesuwa ja o 1,25 m —
-        oba bledy sa niewidoczne w metadanych pliku, wiec jedyna obrona jest
-        nieuzywanie tej sciezki.
+        (tresc przesunieta o 135 m; ADR-024). Dawne 1,25 m dla 3045 to roznica
+        EPSG:1622/4829 w referencji lokalnej, nie blad serwera (errata ADR-024).
+        Lokalny warp pozwala wymusic i zapisac operacje niezaleznie od serwera.
 
         Kafelkowanie (limity ``exportImage``) i mozaikowanie dzieja sie po
         stronie ukladu natywnego, czyli PRZED warpem — szew kafli nie moze

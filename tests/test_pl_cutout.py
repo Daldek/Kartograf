@@ -1213,8 +1213,8 @@ class TestBorderTwoCutouts:
 
         def fake_horizontal(target_crs):
             pinned = Mock()
-            pinned.description = f"S-JTSK to ETRS89 (3) -> {target_crs}"
-            pinned.accuracy_m = 0.5
+            pinned.description = f"S-JTSK to ETRS89 (1) -> {target_crs}"
+            pinned.accuracy_m = 1.0
             return pinned
 
         provider.horizontal_transform.side_effect = fake_horizontal
