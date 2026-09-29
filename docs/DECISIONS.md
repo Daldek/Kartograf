@@ -376,7 +376,8 @@ trafia do `DownloadManager.last_result`.
 **Uzupelnienie (2026-09-29, testy na zywo i audyt):** zaden tor PL (CLI:
 godlo/bbox/geometria/wycinek, `DownloadManager`, `download_pl_cutout`) nie
 przekazuje providerowi `cache=` — URL-e arkuszy PL nie sa cache'owane miedzy
-przebiegami, a `.kartograf_cache.db` tworzy w CLI tylko tor CZ (indeks SM5).
+przebiegami, a z torow pobierania `.kartograf_cache.db` tworzy w CLI tylko
+tor CZ (indeks SM5; plik zaklada tez `kartograf cache stats|clear|path`).
 Znany blad N6 (`docs/PROGRESS.md`, "Znane bledy"); cache dziala, gdy
 wolajacy sam przekaze `cache=MetadataCache()` do providera.
 
@@ -411,7 +412,11 @@ odpowiedz to szablon HTML MapServera (HTTP 200, `text/html`, bez znacznikow
 OGC), zla warstwa — HTTP 200 `text/xml` z `LayerNotDefined`. Fallback na
 warstwy zaszyte w kodzie jest dzis nieaktualny dla NMPT EVRF2007 (kod:
 2025..2022iStarsze, GetCapabilities: 2026..2023iStarsze) — gdy
-GetCapabilities zawiedzie, NMPT nie pobiera sie wcale (znany blad S4).
+GetCapabilities zawiedzie, dwie zaszyte warstwy daja `LayerNotDefined`
+(awaria warstwy): arkusze z edycja w 2025/2024 nadal sie pobieraja (majace
+takze edycje 2026 — po cichu te starsza), a arkusz spoza nich (tylko w 2026
+i/lub 2023iStarsze, a takze arkusz bez danych) konczy sie "brak pokrycia
+niepewny" (znany blad S4).
 
 ---
 
@@ -725,7 +730,9 @@ przetrwaly zapis tych zobowiazan to ponizsze punkty i PROGRESS.md):**
      w prostokacie CZ nadal nie daje zadnego komunikatu (N2);
    - przycinanie do prostokata kraju pod `auto` jest ciche: czesc zadania poza
      wszystkimi prostokatami znika, a nazwa pliku i `request.bbox` niosa bbox
-     przyciety (znany blad S3);
+     przyciety (znany blad S3); w trybie `--geometry` bez `--target-crs`
+     arkusze PL wyznacza sama geometria, wiec przyciecie dotyczy tam tylko
+     czesci CZ;
    - Kontekst ("limit `exportImage` asymetryczny 15000x4100 px"): to limit
      deklarowany przez usluge; realnie serwer odrzuca (HTTP 500) zapytania
      wieksze niz ~8 Mpx, takze kafle mieszczace sie w deklaracji (znany
@@ -1264,7 +1271,8 @@ bboxa przygranicznego; jeden taki arkusz wetowal dotad caly wycinek, wiec
 `docs/research/2026-09-29-live-e2e-i-audyt-docs/` L1-L7):**
 - **Mechanika potwierdzona.** Cel EPSG:2180: 0 pikseli rozbieznych
   z arkuszem zawierajacym srodek piksela (1 m i 5 m, bbox calkowity
-  i ulamkowy, morze i pogranicza); cele 5514/3045: bit w bit z mozaika
+  i ulamkowy, morze i pogranicza) — poza arkuszami spoza siatki wiekszosci
+  (S5: Krakow 2022, Cieszyn 2 z 12); cele 5514/3045: bit w bit z mozaika
   + warpem ta sama operacja; `Skipped` bez sieci, nieudany `--force`
   zostawia stary plik, biblioteka == CLI przy tych samych arkuszach; duzy
   wycinek (1836/2394 arkuszy) — ~1 GiB RSS, maks. 9 deskryptorow,

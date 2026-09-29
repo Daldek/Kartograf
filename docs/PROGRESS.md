@@ -143,7 +143,8 @@
     identyczny dla 1 m/5 m i wszystkich warstw, BEZ znacznikow OGC ->
     `NoCoverageError`; zla warstwa = HTTP 200 `text/xml` (554 B)
     `ServiceExceptionReport`/`LayerNotDefined` -> `DownloadError` — straz
-    I-2 potwierdzona w obie strony (surowe body w raportach L3, L4, L5);
+    I-2 potwierdzona w obie strony (surowe body: `gfi/` w katalogu raportow —
+    probki L3; opis odpowiedzi strony CZ i DE: L4 U12, L5 pkt (j));
   - duzy wycinek (L7, offline): 1836 (cel 2180) / 2394 (cel 5514) arkuszy
     w selekcji, 688/732 z danymi (reszta R5 = nodata): 36 s / 109 s, szczyt
     RSS ~1 GiB (1037-1039 MiB), maks. 9 otwartych deskryptorow, `ulimit -n
@@ -176,11 +177,11 @@ Raporty w `docs/research/2026-09-29-live-e2e-i-audyt-docs/`.
 | K3 | WYSOKI | Zerwane zapytanie nowszej warstwy skorowidza -> po cichu starsza kampania w cache (dwa `--force`: 21 % pikseli, do 4,2 m) | L2, L3, L5, L1 |
 | K4 | WYSOKI | Wybor pliku arkusza: pierwszy URL z godlem — 0,5 m zamiast 1 m, najstarsza kampania, arkusz PL-1992 pod godlem PL-2000 | L2, L1 |
 | K5 | WYSOKI | `--product orto` pobiera CIR zamiast RGB | L1 |
-| K6 | WYSOKI | Realny limit `exportImage` ~8 Mpx — bbox CZ 2 m > ~5,5 x 5,5 km = HTTP 500 | L4 |
+| K6 | WYSOKI | Realny limit `exportImage` ~8 Mpx na zapytanie (kafle ciete dopiero powyzej 15000 x 4100 px) — obszar CZ 2 m zblizony do kwadratu > ~5,5 x 5,5 km (albo 10 x 5 km W-E) = HTTP 500 | L4 |
 | S1 | SREDNI | Skorowidz bez ponowien i bez wspolnej sesji — wycinki padaja przy zrywanych polaczeniach | L3, L5, L4 |
 | S2 | SREDNI | Tryb listy bez tolerancji R5 — morze/granica = kod 1, `--workers 1` przerywa na pierwszym arkuszu bez danych | L3, L5, L6, L4 |
 | S3 | SREDNI | `--country auto` po cichu przycina bbox do prostokata kraju | L5, L3 |
-| S4 | SREDNI | NMPT EVRF2007: nieaktualna lista warstw w kodzie — bez GetCapabilities NMPT sie nie pobiera | L1 |
+| S4 | SREDNI | NMPT EVRF2007: nieaktualna lista warstw w kodzie — bez GetCapabilities nie pobieraja sie arkusze spoza warstw 2025/2024 | L1 |
 | S5 | SREDNI | Arkusze 5 m o roznych fazach siatki — wycinek 2180 z wartosciami z sasiedniego piksela | L1, L2 |
 | N1 | NISKI | Puste katalogi po arkuszach bez danych | L3, L5, L4 |
 | N2 | NISKI | Wynik w 100 % nodata jako sukces bez komunikatu | L4, L5 |
@@ -963,7 +964,8 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
     (S2), ciche przyciecie `auto` na zachod od 14,07°E (S3), plik CZ 100 %
     nodata nad Saksonia (N2) (L5);
     (l) **dopisane i WYKONANE:** granice PL-SK, PL-UA, PL-BY, PL-LT, PL-RU —
-    wycinek PASS (R5, `auto` == `pl`, CUZK nieodpytany), PL-LT niedokonczony
+    wycinek PASS (R5; `auto` odpytal tylko PL — bboxy testu nie siegaly za
+    krawedzie prostokata PL, CUZK nieodpytany), PL-LT niedokonczony
     przez niestabilnosc GUGiK (poprawnie kod 1 "ponow"); tryb listy kod 1
     i jeden zgloszony arkusz (S2); PL-SK: nodata wewnatrz opublikowanych
     arkuszy (do 82 %) bez `missing_sheets`; 5 m brak w rejonie Sejn (L6).
@@ -1001,24 +1003,39 @@ N = niski, H = hipoteza.
       wysyla `BBOX` w kolejnosci (E, N), a `urn:ogc:def:crs:EPSG::2180`
       wymaga (N, E); envelope kafla jest czytany tak samo odwrotnie, wiec
       filtr przeciecia przechodzi, a kafle pochodza z miejsca o zamienionych
-      wspolrzednych (Spytkowice -> Lubuskie, 426 km; przyklady LAZ
-      z dokumentacji szukaja ~209 km dalej). Kod:
+      wspolrzednych (Spytkowice -> Lubuskie, 426 km; przyklad LAZ
+      z dokumentacji z bboxem `530000,382000,...` szuka ~209 km dalej,
+      a z godlem `N-34-130-D-d-2-4` — ~370 km). Kod:
       `providers/pl/gugik_laz.py:363-369` (zapytanie), `:464-465`
       (envelope), `:482-497` (`_intersects`). Raport:
       `L1-centrum-produkty-report.md` (BUG-L1-1); errata ADR-021.
+      Przy naprawie: komentarz `gugik_laz.py:363-365` ("... Verified live.")
+      jest falszywy; usunac ostrzezenie K1 z pomocy `--product`
+      (`cli/_parser.py:176-177`) i noty "znany blad K1" z dokumentacji.
 - [ ] **K2** (WYSOKI, etap 1 + ADR-027) — przypieta operacja S-JTSK ->
       ETRS89 to EPSG:4829 (obszar uzycia: Slowacja, 0,5 m), a w Czechach
       wlasciwa jest EPSG:1622 (1,0 m): tresc CZ po reprojekcji przesunieta
-      o 1,1-4,9 m (Karkonosze: 2,3 m wobec NMT GUGiK 1 m, z EPSG:1622 —
-      0,38 m), sidecar deklaruje 0,5 m; dotyczy kafli TM33, `--target-crs`
-      CZ, wycinka PL -> EPSG:5514 i `bbox_to_crs`; diagnoza ADR-024
-      (1,25/4,92 m "bledu serwera") najpewniej bledna. Kod:
+      o ok. 1-5 m (roznica EPSG:1622 - EPSG:4829 policzona pyproj: ~1,0 m
+      na wschodzie CZ — Ostrawa, Brno — do ~5,0 m na zachodzie — kafel
+      `302_5550`; wzdluz granicy PL-CZ 1,1-3,4 m; na zywo Karkonosze: 2,3 m
+      wobec NMT GUGiK 1 m, z EPSG:1622 — 0,38 m), sidecar deklaruje 0,5 m;
+      dotyczy kafli TM33, `--target-crs` CZ, wycinka PL -> EPSG:5514
+      i `bbox_to_crs`; diagnoza ADR-024 (1,25/4,92 m "bledu serwera")
+      najpewniej bledna. Kod:
       `transform/crs.py:192` (`TransformerGroup` bez `area_of_interest`),
       `:236` (`min` po dokladnosci), `KNOWN_PATHS`;
       `providers/cuzk/dmr.py` (`_HORIZONTAL_POLICY`, `bbox_to_crs`).
       **Wymaga odmrozenia toru CZ (ADR-024) — decyzja uzytkownika.** Raport:
       `L4-pogranicze-cz-report.md` (BUG-L4-1), `L2-wycinki-siatka-report.md`
-      (BUG-L2-4); errata ADR-024.
+      (BUG-L2-4); errata ADR-024. Przy naprawie: komunikat
+      `cli/download_cmd.py:1643-1644` ("tryb godlowy dostarcza dane natywne
+      1:1" przy godle CZ z `--target-crs`) jest falszywy dla TM33 (warp
+      5514 -> 3045); nieaktualne komentarze `providers/cuzk/dmr.py:86-88`
+      ("Znane operacje z Krovaka ... maja 0,5 m"), `transform/crs.py:134-140`
+      (`KNOWN_PATHS`: "serwerowej CUZK nie uzywamy, gubi datum shift")
+      i `:159` (Bpv->EVRF2007 "+0,12..+0,14 m"; zmierzone 0,11-0,15 m);
+      "5514->3045 przesuwa tresc o 1,25 m" w `providers/cuzk/dmr.py:54-55`
+      i `:270-271` — diagnoza ADR-024 do weryfikacji razem z K2.
 - [ ] **K3** (WYSOKI, sprzed fal) — zerwane zapytanie o nowsza warstwe
       skorowidza -> po cichu URL starszej kampanii (NMT/NMPT/orto; LAZ
       pomija caly rocznik); arkusz zostaje w cache (`skip_existing`) i trafia
@@ -1043,17 +1060,25 @@ N = niski, H = hipoteza.
       kolejne wycinki. Kod: `providers/pl/gugik.py:599-622` (regex, podciag
       `:607`, fallback `:612-622`), orto `providers/pl/gugik_orto.py:376-384`.
       Raport: `L2-wycinki-siatka-report.md` (BUG-L2-2, BUG-L2-3),
-      `L1-centrum-produkty-report.md` (BUG-L1-3, BUG-L1-4).
+      `L1-centrum-produkty-report.md` (BUG-L1-3, BUG-L1-4). Przy naprawie:
+      remedium w komunikacie `download/cutout.py:306-311` ("pobierz obszar
+      jako arkusze ..., np. z --system 2000") prowadzi dzis do arkusza-dziecka
+      — poprawic razem z wyborem pliku.
 - [ ] **K5** (WYSOKI, sprzed fal) — `--product orto` pobiera wariant CIR
       zamiast RGB (w kampaniach 2024/2025 wpis CIR poprzedza RGB); sidecar
       nie ma koloru ani URL-a. Kod: `providers/pl/gugik_orto.py:376-384`
       (brak wyboru po `kolor`/`aktualnosc`). Raport:
-      `L1-centrum-produkty-report.md` (BUG-L1-2).
+      `L1-centrum-produkty-report.md` (BUG-L1-2). Przy naprawie: usunac
+      ostrzezenie K5 z pomocy `--product` (`cli/_parser.py:176-177`).
 - [ ] **K6** (WYSOKI dla bbox CZ, etap 1) — realny limit `exportImage` CUZK
-      to ~8 Mpx (deklarowane 15000 x 4100): bbox CZ 2 m wiekszy niz ~5,5 x
-      5,5 km konczy sie HTTP 500 takze po kafelkowaniu (sam mechanizm kafli
-      dziala: 22 Mpx, szwy bit w bit). Kod: `providers/cuzk/client.py:37-38`
-      (`MAX_EXPORT_WIDTH/HEIGHT`), `:142` (warunek tylko per wymiar),
+      to ~8 Mpx na zapytanie (deklarowane 15000 x 4100), a klient tnie kafle
+      dopiero, gdy wymiar przekroczy 15000 x 4100 px: obszar CZ 2 m zblizony
+      do kwadratu wiekszy niz ~5,5 x 5,5 km (albo np. 10 x 5 km wydluzony
+      W-E) konczy sie HTTP 500; pas N-S szerokosci do ~3,6 km przechodzi
+      (kafle maja najwyzej 4100 px wysokosci; 3,6 x 24,6 km = 3 kafle po
+      7,4 Mpx; mechanizm kafli dziala: 22 Mpx, szwy bit w bit). Kod:
+      `providers/cuzk/client.py:36-37` (`MAX_EXPORT_WIDTH/HEIGHT`), `:142`
+      (warunek tylko per wymiar),
       `_tile_grid` (brak budzetu pikseli). **Wymaga odmrozenia toru CZ
       (ADR-024) — decyzja uzytkownika.** Raport: `L4-pogranicze-cz-report.md`
       (BUG-L4-2).
@@ -1087,9 +1112,14 @@ N = niski, H = hipoteza.
       `:517`. Raport: `L5-pogranicze-de-report.md` (B4),
       `L3-morze-report.md` (B5).
 - [ ] **S4** (SREDNI, sprzed fal) — NMPT EVRF2007: lista warstw w kodzie
-      nieaktualna (2025..2022iStarsze wobec 2026..2023iStarsze) — gdy
-      GetCapabilities zawiedzie, NMPT nie pobiera sie wcale ("brak pokrycia
-      niepewny"), a kazde pobranie drukuje ostrzezenie. Kod:
+      nieaktualna (2025..2022iStarsze wobec 2026..2023iStarsze), a kazde
+      pobranie drukuje ostrzezenie. Gdy GetCapabilities zawiedzie, dwie
+      zaszyte warstwy nie istnieja (`LayerNotDefined` = awaria warstwy):
+      arkusze z edycja w 2025/2024 nadal sie pobieraja (majace takze edycje
+      2026 — po cichu te starsza), a arkusz spoza nich (tylko w 2026 i/lub
+      2023iStarsze, np. `M-34-76-A-a-1-1`, a takze arkusz bez danych — morze,
+      granica) konczy sie "brak pokrycia niepewny" (symulacja offline
+      2026-09-29, przeglad fali dokumentacji). Kod:
       `providers/pl/gugik_nmpt.py:83-86`. Raport:
       `L1-centrum-produkty-report.md` (BUG-L1-9).
 - [ ] **S5** (SREDNI, fala review max — R1) — arkusze 5 m kampanii 2022
@@ -1098,7 +1128,8 @@ N = niski, H = hipoteza.
       dane sa; komunikat "najblizszym sasiadem" nieprawdziwy (1 m: jedna
       faza k + 0,5 w 84 arkuszach; 5 m w cache Hydrografu i w Lebie:
       5k + 2,5). Kod: `transport/mosaic.py:324` (`merge` przy zrodlach poza
-      siatka), `:265-271` (komunikat). Raport:
+      siatka), `:265-271` (komunikat `logger.warning` "... przepisana
+      najblizszym sasiadem" — poprawic razem z naprawa). Raport:
       `L1-centrum-produkty-report.md` (BUG-L1-7), `L2-wycinki-siatka-report.md`
       (S24).
 - [ ] **N1** (NISKI, sprzed fal) — puste katalogi po arkuszach bez danych

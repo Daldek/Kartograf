@@ -267,9 +267,10 @@ kartograf cache path
   `nmpt`/`orto`/`laz` dla CZ beda dostepne w etapie 2; `exportImage` ma limit
   deklarowany **15000x4100 px** — wieksze bboxy sa kafelkowane po stronie
   klienta i scalane (`mosaic_and_crop`); realnie serwer odrzuca (HTTP 500)
-  zadania > ~8 Mpx, wiec bbox CZ 2 m wiekszy niz ~5,5 x 5,5 km nie przechodzi
-  takze po kafelkowaniu (znany blad K6); DMR 5G (godlo TM33) to zawsze 2m,
-  DMR 4G (godlo SM5) to zawsze 5m — `--resolution` wybiera miedzy nimi, nie
+  zapytania > ~8 Mpx, a kafle tnie dopiero powyzej 15000x4100 px, wiec obszar
+  CZ 2 m zblizony do kwadratu wiekszy niz ~5,5 x 5,5 km (albo np. 10 x 5 km
+  wydluzony W-E) nie przechodzi (znany blad K6); DMR 5G (godlo TM33) to zawsze
+  2m, DMR 4G (godlo SM5) to zawsze 5m — `--resolution` wybiera miedzy nimi, nie
   jest niezalezna flaga jak w PL; `KRON86` jest **nieosiagalny** dla CZ (brak
   publicznych siatek Bpv->KRON86) — uzyj `--vertical-crs EVRF2007`; tryb
   `--bbox` jest **asymetryczny wzgledem PL** — PL bez `--target-crs` zwraca
@@ -307,12 +308,18 @@ kartograf cache path
   przycinana do jego prostokata — obszar poza WSZYSTKIMI prostokatami (np. na
   zachod od 14,07°E, na polnoc od 54,90°N) znika bez komunikatu, a nazwa pliku
   i `request.bbox` niosa bbox przyciety (znany blad S3; `--country pl` nie
-  przycina); bbox w calosci poza prostokatami = `Error:`, kod 1, bez sieci.
-  Na granicach z krajami spoza rejestru (DE, SK, UA, BY, LT, RU) `auto` ==
-  `pl` bez komunikatu (poza pasem wewnatrz prostokata CZ, np. Nysa ponizej
-  51,06°N). Komunikaty `Info:`/`Warning:` ida na stderr, wiec `-q` ich NIE
-  tlumi. `--target-crs` NIE rozstrzyga kraju — od ADR-027 dziala po obu
-  stronach granicy
+  przycina; w trybie `--geometry` bez `--target-crs` arkusze PL wyznacza sama
+  geometria, wiec przyciecie dotyczy tam tylko czesci CZ); bbox w calosci poza
+  prostokatami = `Error:`, kod 1, bez sieci. Na granicach z krajami spoza
+  rejestru (DE, SK, UA, BY, LT, RU) `auto` odpytuje tylko PL, bez
+  komunikatu, ale z przycieciem z pkt (4), wiec nie zawsze jak `--country pl`
+  (np. Osinow Dolny, na zachod od 14,07°E: pod `auto` wycinek szerokosci
+  6,2 km i 4 arkusze listy, z `--country pl` 8,9 km i 6 arkuszy); wyjatek:
+  pas wewnatrz prostokata CZ (Nysa Luzycka ponizej 51,06°N, pas Bogatyni),
+  gdzie dochodzi zapytanie do CUZK (N2).
+  Komunikaty `Info:`/`Warning:` ida na stderr, wiec `-q` ich NIE tlumi.
+  `--target-crs` NIE rozstrzyga kraju — od ADR-027 dziala po obu stronach
+  granicy
 - **`--target-crs` dla PL (ADR-027):** tylko `--product nmt` i system 1992
   (nmpt/orto — etap 2; laz to chmura punktow; mozaika miedzystrefowa 2000 —
   etap 2); wynik to JEDEN GeoTIFF `nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif`.
@@ -358,7 +365,7 @@ kartograf cache path
   (gdy jest pierwszy na liscie — 0 plikow), `--workers > 1` pobiera reszte,
   ale zglasza tylko pierwsza porazke; pod `auto` z sukcesem CZ — mylace
   "nie pobrano danych z PL" (znany blad S2). Przy morzu i na granicach
-  uzywaj `--target-crs EPSG:2180`
+  uzywaj `--target-crs EPSG:2180` (tylko `--product nmt`, system 1992)
 - **Znane bledy kodu (testy na zywo 2026-09-29) — tabela i decyzja o naprawie:
   `docs/PROGRESS.md` "Znane bledy".** Najwazniejsze: K1 LAZ (wyzej); K2
   operacja S-JTSK (wyzej); K3/K4 skorowidz GUGiK po cichu daje starsza

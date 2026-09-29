@@ -221,14 +221,16 @@ kodu, które czekają na decyzję o naprawie przed wydaniem 0.7.0. Pełna lista
   kampanii.
 - **K5 - `--product orto` pobiera wariant CIR (podczerwień) zamiast RGB.**
 - **K6 - duży bbox CZ w 2 m kończy się HTTP 500.** Serwer CUZK przyjmuje
-  realnie ok. 8 Mpx na zapytanie (nie deklarowane 15000 × 4100 px), więc
-  obszar większy niż ok. 5,5 × 5,5 km nie przechodzi, także po kafelkowaniu.
+  realnie ok. 8 Mpx na zapytanie (nie deklarowane 15000 × 4100 px), a klient
+  tnie kafle dopiero powyżej 15000 × 4100 px, więc obszar zbliżony do kwadratu
+  większy niż ok. 5,5 × 5,5 km (albo np. 10 × 5 km wydłużony W-E) nie
+  przechodzi; pas N-S o szerokości do ok. 3,6 km przechodzi
+  (np. 3,6 × 24,6 km).
 - **S2 - tryb listy arkuszy na morzu i na granicy kończy się kodem 1.** Bez
   `--target-crs` arkusz bez danych (morze, arkusz za granicą) to błąd całego
   polecenia, a przy `--workers 1` pobieranie staje na pierwszym takim arkuszu.
-  Obejście:
-  `--target-crs EPSG:2180` (arkusze bez danych stają się nodata
-  z ostrzeżeniem `Warning:`).
+  Obejście (tylko `--product nmt`, system 1992): `--target-crs EPSG:2180`
+  (arkusze bez danych stają się nodata z ostrzeżeniem `Warning:`).
 - **S1 - zapytania skorowidza GUGiK nie są ponawiane.** Przy zrywanych
   połączeniach wycinek (zwłaszcza z wieloma arkuszami bez danych - morze,
   granica) kończy się kodem 1 („ponów pobranie”); ponowne uruchomienie używa
@@ -270,7 +272,7 @@ kodu, które czekają na decyzję o naprawie przed wydaniem 0.7.0. Pełna lista
 - ✅ **DMR 5G** (2m, godło TM33 lub bbox) i **DMR 4G** (5m, godło SM5 lub bbox)
 - ✅ **CLI** - `--country {pl,cz,auto}`; `auto` na pograniczu dzieli żądanie na osobne pliki PL i CZ
 - ✅ **Układy** - natywnie S-JTSK/Bpv (EPSG:5514); opcjonalna reprojekcja lokalna `--target-crs` oraz `--vertical-crs EVRF2007`
-- ⚠️ **Znane błędy** - reprojekcja przesuwa treść o 1-5 m (K2); bbox 2 m większy niż ok. 5,5 × 5,5 km kończy się HTTP 500 (K6) - patrz [Znane problemy](#znane-problemy-070-dev)
+- ⚠️ **Znane błędy** - reprojekcja przesuwa treść o 1-5 m (K2); obszar 2 m zbliżony do kwadratu większy niż ok. 5,5 × 5,5 km kończy się HTTP 500 (K6) - patrz [Znane problemy](#znane-problemy-070-dev)
 
 ### NMPT (Numeryczny Model Pokrycia Terenu)
 - ✅ **Digital Surface Model** - Teren + obiekty powierzchniowe (drzewa, budynki)
