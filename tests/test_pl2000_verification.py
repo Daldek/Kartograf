@@ -4,12 +4,13 @@ Testy weryfikacyjne dla modulu parser_2000.
 Ten modul zawiera testy weryfikacyjne dla PL-2000 BBox:
 - Wartosci referencyjne BBox dla wszystkich 4 stref
 - Spojnosc hierarchii (children tiling)
-- Testy live WMS z GUGiK
+- Testy live skorowidza GUGiK (marker ``live`` — tylko swiadomie, ``-m live``)
 - Edge cases: multi-zone, round-trip, drill-down
 """
 
+import datetime
+
 import pytest
-import requests
 
 from kartograf.core.parser_2000 import (
     SHEET_DIMENSIONS_2000,
@@ -17,7 +18,12 @@ from kartograf.core.parser_2000 import (
     Parser2000,
     find_sheets_2000_for_bbox,
 )
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.exceptions import DownloadError, NoCoverageError
+from kartograf.providers.pl.gugik import GugikProvider
+from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
+from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
+from kartograf.providers.pl.skorowidz import query_skorowidz_layer
 
 # =========================================================================
 # 1. TestPL2000BBoxReferenceValues
@@ -398,14 +404,11 @@ class TestPL2000HierarchyConsistency:
 
 
 # =========================================================================
-# 3. TestPL2000LiveWMS
+# 3. TestLiveGugikIndex
 # =========================================================================
 
-# WMS endpoint for NMT skorowidze
-WMS_NMT_ENDPOINT = (
-    "https://mapy.geoportal.gov.pl/wss/service/PZGIK/NMT/WMS/SkorowidzeUkladEVRF2007"
-)
-
+# Godla PL-2000 1:10000 (interior PL, pokrycie NMT 1 m): zapytanie w srodku
+# arkusza sprawdza geometrie Parser2000 wzgledem poligonow skorowidza GUGiK.
 LIVE_WMS_SHEETS = [
     # Zone 5 — western Poland
     ("5.176.14", 5),  # near Szczecin area
@@ -421,65 +424,157 @@ LIVE_WMS_SHEETS = [
     ("8.170.10", 8),  # far east
 ]
 
+LIVE_TIMEOUT = 15
+
+# (provider, endpoint, rotacja roczna) — kazdy publiczny skorowidz PL; KRON86
+# to produkt zamrozony (2019..2017iStarsze), bez nowych warstw rocznych
+LIVE_INDEX_ENDPOINTS = [
+    pytest.param(
+        GugikProvider(resolution="1m", vertical_crs="EVRF2007"),
+        GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"],
+        True,
+        id="nmt-1m-evrf2007",
+    ),
+    pytest.param(
+        GugikProvider(resolution="1m", vertical_crs="KRON86"),
+        GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["KRON86"],
+        False,
+        id="nmt-1m-kron86",
+    ),
+    pytest.param(
+        GugikProvider(resolution="5m"),
+        GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["5m"]["EVRF2007"],
+        True,
+        id="nmt-5m-evrf2007",
+    ),
+    pytest.param(
+        GugikNmptProvider(vertical_crs="EVRF2007"),
+        GugikNmptProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"],
+        True,
+        id="nmpt-1m-evrf2007",
+    ),
+    pytest.param(
+        GugikOrtoProvider(),
+        GugikOrtoProvider.WMS_SKOROWIDZE_ENDPOINT,
+        True,
+        id="orto",
+    ),
+]
+
+
+def _center_query_bbox(godlo: str) -> tuple[float, float, str]:
+    """Punkt w srodku arkusza (EPSG:2180) i BBOX GetFeatureInfo jak w providerach."""
+    bbox = SheetParser(godlo).get_bbox(crs="EPSG:2180")
+    x = (bbox.min_x + bbox.max_x) / 2
+    y = (bbox.min_y + bbox.max_y) / 2
+    return x, y, f"{y - 10},{x - 10},{y + 10},{x + 10}"
+
 
 @pytest.mark.live
-class TestPL2000LiveWMS:
-    """Testy live WMS — sprawdzenie ze zapytanie WMS dziala dla centrum BBox.
+@pytest.mark.real_wms_layers
+class TestLiveGugikIndex:
+    """Skorowidz GUGiK na zywo: warstwy, wybor arkusza, brak pokrycia, geometria.
 
-    Te testy wymagaja polaczenia z internetem i dostepnosci GUGiK WMS.
-    Uruchomienie: pytest -m live
+    Zadnych ``skip`` na bledach: awaria uslugi po 3 probach = porazka testu
+    (to jedyny sygnal, ze S1/S4/K3 wrocily). Uruchomienie: ``pytest -m live``.
     """
 
-    @pytest.mark.parametrize(
-        "godlo, zone",
-        LIVE_WMS_SHEETS,
-        ids=[s[0] for s in LIVE_WMS_SHEETS],
-    )
-    def test_wms_query_at_bbox_center(self, godlo, zone):
-        """Zapytanie WMS GetFeatureInfo w centrum BBox PL-2000."""
-        p = Parser2000(godlo)
-        bbox = p.get_bbox(crs="EPSG:2180")
+    @pytest.mark.parametrize(("provider", "endpoint", "rotates"), LIVE_INDEX_ENDPOINTS)
+    def test_getcapabilities_layers_match_pattern_and_rotate(
+        self, provider, endpoint, rotates
+    ):
+        """Warstwy z LAYER_PATTERN: roczne malejaco, JEDNA warstwa zbiorcza na
+        koncu, produkt aktualizowany ma warstwe biezacego/zeszlego roku —
+        coroczna rotacja i zmiana nazw (S4) sa widoczne tylko tutaj."""
+        layers = provider._layers(endpoint)
 
-        center_x = (bbox.min_x + bbox.max_x) / 2
-        center_y = (bbox.min_y + bbox.max_y) / 2
+        assert layers, endpoint
+        matches = [provider.LAYER_PATTERN.fullmatch(name) for name in layers]
+        assert all(matches), layers
+        years = [int(m.group(1)) for m in matches if m.group(1)]
+        cumulative = [n for n, m in zip(layers, matches, strict=True) if m.group(2)]
+        assert years == sorted(years, reverse=True), layers
+        assert len(set(years)) == len(years), layers
+        assert len(cumulative) == 1 and layers[-1] == cumulative[0], layers
+        if rotates:
+            assert years[0] >= datetime.date.today().year - 1, layers
 
-        buffer = 10
-        query_bbox = (
-            f"{center_y - buffer},{center_x - buffer},"
-            f"{center_y + buffer},{center_x + buffer}"
+    def test_land_sheet_resolves_to_matching_asc(self):
+        """D4 na zywo: URL z godlem jako CALYM tokenem i rozdzielczoscia 5 m."""
+        provider = GugikProvider(resolution="5m")
+
+        url = provider._get_opendata_url("N-33-48-C-a-3-4", timeout=LIVE_TIMEOUT)
+
+        assert url.startswith("https://opendata.geoportal.gov.pl/")
+        assert url.lower().endswith("_n-33-48-c-a-3-4.asc"), url
+        source = provider.source_info("N-33-48-C-a-3-4")
+        assert source is not None
+        assert source["resolution_m"] == 5.0
+        assert source["uklad"] == "PL-1992"
+        assert source["layer"] in provider._layers(
+            GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["5m"]["EVRF2007"]
         )
 
-        params = {
-            "SERVICE": "WMS",
-            "VERSION": "1.3.0",
-            "REQUEST": "GetFeatureInfo",
-            "LAYERS": "SkorowidzeNMT2022iStarsze",
-            "QUERY_LAYERS": "SkorowidzeNMT2022iStarsze",
-            "INFO_FORMAT": "text/html",
-            "CRS": "EPSG:2180",
-            "BBOX": query_bbox,
-            "WIDTH": 100,
-            "HEIGHT": 100,
-            "I": 50,
-            "J": 50,
-        }
+    def test_sea_sheet_is_no_coverage(self):
+        """Morze (N-33-48-C-a-1-3): wszystkie warstwy puste = NoCoverageError (R5)."""
+        provider = GugikProvider(resolution="5m")
 
-        try:
-            from urllib.parse import urlencode
+        with pytest.raises(NoCoverageError) as exc:
+            provider._get_opendata_url("N-33-48-C-a-1-3", timeout=LIVE_TIMEOUT)
 
-            url = f"{WMS_NMT_ENDPOINT}?{urlencode(params)}"
-            response = requests.get(url, timeout=15)
-            # We only verify that the WMS service responds (status 200)
-            # We do NOT assert data presence because coverage varies
-            assert response.status_code == 200, (
-                f"WMS returned status {response.status_code} for {godlo}"
+        assert exc.value.godlo == "N-33-48-C-a-1-3"
+
+    def test_unknown_layer_is_service_exception_not_no_coverage(self):
+        """Nieistniejaca warstwa: raport OGC = DownloadError, nigdy brak pokrycia."""
+        provider = GugikProvider()
+        _, _, query_bbox = _center_query_bbox("N-33-48-C-a-3-4")
+
+        with pytest.raises(DownloadError, match="OGC") as exc:
+            query_skorowidz_layer(
+                provider._session_for_thread(),
+                GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"],
+                "SkorowidzeNMT1999NieIstnieje",
+                query_bbox=query_bbox,
+                godlo="N-33-48-C-a-3-4",
+                timeout=LIVE_TIMEOUT,
             )
-        except (
-            requests.ConnectionError,
-            requests.Timeout,
-            requests.RequestException,
-        ) as e:
-            pytest.skip(f"WMS not reachable: {e}")
+
+        assert not isinstance(exc.value, NoCoverageError)
+
+    @pytest.mark.parametrize(
+        ("godlo", "zone"), LIVE_WMS_SHEETS, ids=[s[0] for s in LIVE_WMS_SHEETS]
+    )
+    def test_pl2000_center_query_returns_sheets_containing_the_point(self, godlo, zone):
+        """Geometria PL-2000 vs skorowidz GUGiK: srodek arkusza trafia w rekordy
+        NMT 1 m, a bbox KAZDEGO zwroconego godla (PL-1992 albo PL-2000 wlasciwej
+        strefy) zawiera punkt zapytania."""
+        provider = GugikProvider(resolution="1m", vertical_crs="EVRF2007")
+        endpoint = GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"]
+        x, y, query_bbox = _center_query_bbox(godlo)
+
+        records = []
+        for layer in provider._layers(endpoint):
+            records.extend(
+                query_skorowidz_layer(
+                    provider._session_for_thread(),
+                    endpoint,
+                    layer,
+                    query_bbox=query_bbox,
+                    godlo=godlo,
+                    timeout=LIVE_TIMEOUT,
+                )
+            )
+
+        assert records, f"{godlo}: zaden rekord NMT 1 m w srodku arkusza"
+        for record in records:
+            sheet = SheetParser(record.godlo).get_bbox(crs="EPSG:2180")
+            assert sheet.min_x - 1 <= x <= sheet.max_x + 1, (godlo, record.godlo)
+            assert sheet.min_y - 1 <= y <= sheet.max_y + 1, (godlo, record.godlo)
+            assert record.uklad in {"1992", "2000"}, record
+            if record.uklad == "2000":
+                assert record.zone == zone, record
+                assert record.godlo.startswith(f"{zone}."), record
+                assert record.raw["ukladWspolrzednychPoziomych"] == (f"PL-2000:S{zone}")
 
 
 # =========================================================================
