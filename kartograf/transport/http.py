@@ -22,6 +22,53 @@ logger = logging.getLogger(__name__)
 RETRY_BACKOFF_BASE = 2
 
 
+def make_gugik_session() -> requests.Session:
+    """Utworz sesje keep-alive GUGiK; ponowienia obsluguje aplikacja."""
+    from kartograf import __version__
+
+    session = requests.Session()
+    session.headers["User-Agent"] = f"kartograf/{__version__}"
+    for scheme in ("http://", "https://"):
+        session.mount(
+            scheme, requests.adapters.HTTPAdapter(pool_connections=4, pool_maxsize=8)
+        )
+    return session
+
+
+def get_with_retry(
+    session: requests.Session,
+    url: str,
+    *,
+    timeout: float,
+    retries: int = 3,
+    description: str = "",
+) -> requests.Response:
+    """Pobierz odpowiedz HTTP; kazda nieudana proba zachowuje ten sam URL."""
+    context = description or url
+    last_error: requests.RequestException | None = None
+    for attempt in range(retries):
+        try:
+            response = session.get(url, timeout=timeout)
+            response.raise_for_status()
+            return response
+        except requests.RequestException as exc:
+            last_error = exc
+            if attempt < retries - 1:
+                delay = RETRY_BACKOFF_BASE**attempt
+                logger.warning(
+                    "%s: proba %s/%s nieudana: %s; ponowienie za %ss",
+                    context,
+                    attempt + 1,
+                    retries,
+                    exc,
+                    delay,
+                )
+                time.sleep(delay)
+    raise DownloadError(
+        f"{context}: pobranie nieudane po {retries} probach: {last_error}"
+    ) from last_error
+
+
 def download_to(
     session: requests.Session,
     url: str,
