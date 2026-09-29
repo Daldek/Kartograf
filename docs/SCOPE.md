@@ -1,9 +1,9 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.10
-**Data:** 2026-09-28
-**Status:** Rozwoj — v0.7.0 (Unreleased), etap 1 (CZ/CUZK) zmergowany do `develop` 2026-08-12; ostatni wydany tag: v0.6.1
+**Wersja:** 3.11
+**Data:** 2026-09-29
+**Status:** Rozwoj — v0.7.0 (Unreleased), etap 1 (CZ/CUZK) zmergowany do `develop` 2026-08-12; ostatni wydany tag: v0.6.1; wydanie 0.7.0 czeka na decyzję o naprawie znanych błędów z testów na żywo 2026-09-29 (`docs/PROGRESS.md`, „Znane bledy”)
 
 ---
 
@@ -58,10 +58,10 @@ Kartograf automatyzuje ten proces oferując:
   (CLI --bbox: arkusze OpenData, oba układy wysokościowe)
 - Wycinek bbox z reprojekcją lokalną: `--target-crs {EPSG:2180,EPSG:5514,
   EPSG:3045}` w trybie `--bbox`/`--geometry` — jeden scalony GeoTIFF
-  (mozaika arkuszy + pinned warp, ADR-027); takze jako API biblioteki
+  (mozaika arkuszy + pinned warp, ADR-027); także jako API biblioteki
   (download_pl_cutout, kroki prepare/select/run_pl_cutout); EPSG:2180 = crop
-  na siatce arkuszy (wartosci 1:1); arkusz bez danych GUGiK = nodata
-  + extra.missing_sheets (R5)
+  na siatce arkuszy (wartości 1:1; arkusze 5 m o niezgodnej fazie siatki —
+  znany błąd S5); arkusz bez danych GUGiK = nodata + extra.missing_sheets (R5)
 - Rozdzielczości: 1m (GRID1), 5m (GRID5)
 - Układy wysokościowe: KRON86, EVRF2007
 
@@ -78,8 +78,10 @@ planowane w następnej wersji major (patrz docstring `SheetParser`).
 
 **Konwencja krawędzi.** `find_sheets_for_bbox` / `find_sheets_for_geometry`
 wymagają dodatniego pola przecięcia — stykające się krawędzie NIE są
-przecięciem. Bbox równy arkuszowi zwraca więc tylko jego własne arkusze
-(`N-34-130-D` w skali 1:50000 → 4, nie 9), a bbox zdegenerowany do punktu →
+przecięciem. Bbox równy arkuszowi w EPSG:4326 zwraca więc tylko jego własne
+arkusze (`N-34-130-D` w skali 1:50000 → 4, nie 9); w EPSG:2180 (domyślny
+`--bbox-crs`) obwiednia arkusza przechodzi przez szerszą obwiednię WGS84
+i obejmuje fragmenty sąsiadów (16 zamiast 4). Bbox zdegenerowany do punktu →
 dokładnie jeden arkusz. Nieznana wartość `system=` to `ValidationError`.
 
 ### 2.2 NMT — Czechy (CUZK, etap 1, v0.7.0-dev) - IN SCOPE
@@ -92,11 +94,15 @@ dokładnie jeden arkusz. Nieznana wartość `system=` to `ValidationError`.
   KladyMapovychListu, EPSG:5514) LUB po bbox przez exportImage
 - Selekcja obszaru: godło (TM33/SM5), bbox, plik geometrii — `--country
   {pl,cz,auto}`; `auto` wykrywa kraj z godła/bboxa, dzieli bbox/geometrię
-  transgraniczną na osobne pliki per kraj (bez scalania — zadanie Hydrografu)
+  transgraniczną na osobne pliki per kraj (bez scalania — dziś scala
+  konsument, np. Hydrograf; scalanie PL+CZ w jedną powierzchnię to etap 2,
+  R6 — sekcja 3.1)
 - Reprojekcja pozioma **lokalna** (rasterio.warp + przypięta operacja; serwer
   dostaje żądania wyłącznie w natywnym EPSG:5514 — ADR-024):
   `--target-crs {EPSG:2180,EPSG:5514,EPSG:3045}` — tylko w trybie
-  `--bbox`/`--geometry` (z godłem = błąd; symetrycznie do PL od 0.7.0)
+  `--bbox`/`--geometry` (z godłem = błąd; symetrycznie do PL od 0.7.0);
+  przypięta operacja S-JTSK → ETRS89 to dziś EPSG:4829 (obszar użycia:
+  Słowacja) — treść CZ po reprojekcji przesunięta o 1-5 m (znany błąd K2)
 - Układ wysokościowy natywny: Bpv (Baltic 1957, EPSG:8357); opcjonalna
   transformacja do EVRF2007 (EPSG:5621, przypięta operacja 0,1 m); KRON86
   nieosiągalny (brak publicznych siatek Bpv→KRON86)
@@ -120,7 +126,8 @@ patrz sekcja 3.2, znane ograniczenie.
 # Funkcjonalności:
 - Digital Surface Model (DSM) — teren + obiekty (drzewa, budynki)
 - Pobieranie przez godło → ASC (OpenData)
-- Pobieranie przez bbox → GeoTIFF (WCS)
+- Pobieranie przez bbox → GeoTIFF (WCS) — z biblioteki (`download_bbox`);
+  CLI `--bbox` pobiera arkusze OpenData
 - Rozdzielczość: tylko 1m
 - Układy wysokościowe: KRON86, EVRF2007
 - Dziedziczenie z GugikProvider (wspólna logika pobierania)
@@ -135,8 +142,10 @@ patrz sekcja 3.2, znane ograniczenie.
 # Funkcjonalności:
 - Zdjęcia lotnicze Standard Resolution (25cm)
 - Pobieranie przez godło → TIF (OpenData)
-- Pobieranie przez bbox → GeoTIFF (WCS)
-- Brak vertical CRS (2D RGB)
+- Pobieranie przez bbox → GeoTIFF (WCS) — z biblioteki (`download_bbox`);
+  CLI `--bbox` pobiera arkusze OpenData
+- Brak vertical CRS (2D RGB); znany błąd K5: pobierany jest wariant CIR
+  zamiast RGB, a z warstwy „Starsze” — najstarsze zdjęcie (K4)
 - 4 warstwy WMS (2026, 2025, 2024 + Starsze — roczniki 2018-2023
   skonsolidowane przez GUGiK w jedną warstwę `SkorowidzeOrtofotomapyStarsze`)
 - Obsługa formatów WCS: GTiff, PNG, JPEG
@@ -151,6 +160,8 @@ patrz sekcja 3.2, znane ograniczenie.
 # Funkcjonalności:
 - Chmury punktów ALS (dane pomiarowe LIDAR), format .laz
 - Discovery area-based przez godło (≤1:10000) / bbox / geometry → WFS GetFeature
+  (znany błąd K1: zapytanie i odczyt envelope z zamienionymi osiami — kafle
+  z innego miejsca, setki km od obszaru; nie używać do czasu naprawy)
 - Kafle drobniejsze niż 1:10000 (jedno godło 1:10000 → wiele kafli .laz)
 - url_do_pobrania brany wprost z atrybutu WFS (godło kafla nieparsowane)
 - Domyślnie newest-per-tile; flagi --year, --vertical-crs, --min-density
@@ -230,6 +241,7 @@ kartograf download 302_5550 --country cz               # DMR 5G (CZ), godlo TM33
 kartograf download CTES96 --resolution 5m               # DMR 4G (CZ), godlo SM5, kraj auto
 kartograf download --bbox ... --bbox-crs EPSG:4326 --country auto   # bbox transgraniczny -> pliki per kraj
 kartograf download --bbox ... --country cz --target-crs EPSG:2180   # reprojekcja lokalna (pinned)
+kartograf download --bbox ... --country pl --target-crs EPSG:2180   # wycinek PL: jeden GeoTIFF (ADR-027)
 kartograf download 302_5550 --country cz --vertical-crs EVRF2007    # Bpv -> EVRF2007 (EPSG:5621)
 kartograf landcover download --source bdot10k --teryt <kod>
 kartograf landcover download --source corine --godlo <godlo>
@@ -280,7 +292,8 @@ from kartograf import (
   zapisuje arkusze w hierarchii godeł)
 - `<układ>` w segmencie (`pl_1992` vs `pl_2000`) rozstrzyga format godła
   każdego pliku z osobna — jeden stary katalog (np. `orto/`) rozchodzi się
-  przy migracji na dwa segmenty
+  przy migracji na dwa segmenty; wyjątek: kafle LAZ — układ z `uklad_xy`
+  kafla (`LazTile.uklad`), dopiero w drugiej kolejności z formatu godła
 - `landcover/` bez zmian (własny default `--output`)
 
 ---
@@ -297,11 +310,14 @@ from kartograf import (
   (CountryProfile.extent_wgs84) — usuwa fałszywe zapytania do CUZK dla
   bboxów leżących w całości w Polsce (patrz 3.2)
 - Ujednolicenie extra.parent_request.bbox_crs między trybami jawny/auto
-- Scalanie wycinkow PL+CZ w jedna ciagla powierzchnie przygraniczna
-  (wspolna siatka, EVRF2007 po obu stronach) — po zywym sprawdzeniu, jak
-  GUGiK i CUZK przycinaja dane na granicy (R6)
+- Scalanie wycinków PL+CZ w jedną ciągłą powierzchnię przygraniczną
+  (wspólna siatka, EVRF2007 po obu stronach, reguła zakładki) — R6; dane
+  wejściowe zmierzone na żywo 2026-09-29: GUGiK wydaje dane ~200 m w głąb CZ,
+  CUZK ~118 m w głąb PL, pas wspólny ~310-350 m bez szczeliny (poza dziurami
+  pokrycia GUGiK), różnice wysokości PL−CZ w pasie −0,19..+0,14 m (mediany
+  zależne od zbioru), siatki PL i CZ niewspólne
 - Wycinek PL --target-crs z arkuszy PL-2000 (reprojekcja arkuszy,
-  mozaika miedzystrefowa; dzis blad z opisem)
+  mozaika międzystrefowa; dziś błąd z opisem)
 
 # Etap 3 (CZ):
 - ZABAGED — wektorowa baza topograficzna (149 warstw), odpowiednik BDOT10k
@@ -336,22 +352,49 @@ from kartograf import (
   a `SoilGridsProvider.download_by_teryt` rzuca NotImplementedError (wcześniej
   cicho zwracał kwadrat 60x60 km wokół środka województwa); użyj --bbox/--godlo
 - find_sheets_for_bbox/find_sheets_for_geometry: stykające się krawędzie NIE
-  są przecięciem (wymagane dodatnie pole) — bbox równy arkuszowi zwraca tylko
-  jego arkusze, a bbox zdegenerowany do punktu → dokładnie jeden arkusz
+  są przecięciem (wymagane dodatnie pole) — bbox równy arkuszowi w EPSG:4326
+  zwraca tylko jego arkusze (w EPSG:2180 także fragmenty sąsiadów), a bbox
+  zdegenerowany do punktu → dokładnie jeden arkusz
+- Skorowidz GUGiK (wybór pliku arkusza) — znane błędy K3/K4 (testy na żywo
+  2026-09-29): chwilowy błąd nowszej warstwy daje po cichu starszą kampanię,
+  a wybór bierze pierwszy URL zawierający godło (plik 0,5 m w skorowidzu 1 m,
+  arkusz PL-1992 pod godłem PL-2000); zapytania skorowidza bez ponowień (S1);
+  sidecar arkusza nie zapisuje URL-a ani daty kampanii
 
 # CZ (CUZK, etap 1) — dodatkowe ograniczenia:
 - Produkt CZ w etapie 1: wyłącznie nmt (DMR 5G/4G) — nmpt/orto/laz w etapie 2
-- exportImage: limit ASYMETRYCZNY 15000x4100 px — większe bboxy kafelkowane
-  po stronie klienta (mosaic_and_crop)
+- exportImage: limit deklarowany 15000x4100 px — większe bboxy kafelkowane
+  po stronie klienta (mosaic_and_crop); realnie serwer odrzuca (HTTP 500)
+  zapytania > ~8 Mpx, więc bbox CZ 2 m większy niż ~5,5 x 5,5 km nie
+  przechodzi także po kafelkowaniu (znany błąd K6); natywny wycinek 5514 ma
+  piksel ~2,0004 m zamiast 2 m (N3)
 - KRON86 nieosiągalny dla CZ (brak publicznych siatek Bpv→KRON86) — jedyna
   transformacja pionowa to Bpv→EVRF2007 (EPSG:5621)
 - --target-crs działa tylko z --bbox/--geometry; z godłem CZ = ValidationError
 - --target-crs dla PL: tylko nmt i system 1992 (nmpt/orto — etap 2; mozaika
-  międzystrefowa PL-2000 — etap 2); arkusz bez danych GUGiK (NoCoverageError)
-  = nodata + Warning: + extra.missing_sheets, kazda inna porazka pobrania
-  arkusza i brak danych we WSZYSTKICH arkuszach = kod 1 (R5, 2026-09-28);
-  arkusz we wspolrzednych PL-2000 = blad; scalanie PL+CZ w jedna
-  powierzchnie przygraniczna — etap 2 (R6)
+  międzystrefowa PL-2000 — etap 2); arkusz bez danych GUGiK (NoCoverageError:
+  morze, zagraniczna strona bboxa — CZ, DE, SK/UA/BY/LT/RU) = nodata +
+  Warning: + extra.missing_sheets, każda inna porażka pobrania arkusza i brak
+  danych we WSZYSTKICH arkuszach = kod 1 dla części PL (pod --country auto
+  przy sukcesie CZ: kod 0 + Warning:, patrz niżej) — R5, 2026-09-28,
+  potwierdzone na żywo 2026-09-29; missing_sheets wymienia tylko arkusze bez
+  pliku — nodata bywa też wewnątrz pobranych arkuszy przybrzeżnych
+  i przygranicznych (PL-SK: do 82 % arkusza); arkusz we współrzędnych PL-2000
+  = błąd; scalanie PL+CZ w jedną powierzchnię przygraniczną — etap 2 (R6)
+- Istniejący wycinek (ta sama nazwa = te same współrzędne żądania) jest
+  pomijany bez sieci (Skipped - already exists; biblioteka:
+  PlCutoutResult(skipped=True) z pustym missing_sheets — lista zostaje
+  w sidecarze, znany błąd N4); --force przebudowuje wycinek i pobiera
+  ponownie także wszystkie arkusze (tańszy rebuild: usunięcie pliku
+  wycinka); nieudana przebudowa nie kasuje poprzedniego pliku. Przed
+  pobraniem kontrola miejsca na dysku (dolne oszacowanie; brak miejsca =
+  błąd przed siecią), Info: dla wycinka >= 1 GiB; twardego limitu rozmiaru
+  nie ma
+- Tryb listy arkuszy PL (--bbox/--geometry bez --target-crs) nie ma
+  tolerancji R5: arkusz bez danych (morze, arkusz za granicą) = kod 1
+  i Error: o jednym arkuszu; --workers 1 przerywa na pierwszym takim arkuszu,
+  --workers > 1 pobiera resztę, ale zgłasza tylko pierwszą porażkę — znany
+  błąd S2; na morzu i na granicach: --target-crs EPSG:2180
 - Asymetria trybu --bbox: PL bez --target-crs zwraca listę arkuszy (wiele
   plików), CZ zawsze jeden plik (wycinek exportImage, pobierany natywnie
   w 5514 i reprojektowany lokalnie, gdy zażądano innego układu); z
@@ -360,8 +403,10 @@ from kartograf import (
   granicy — --country auto w pasie na zachód od 18,86°E i na południe od
   51,06°N (m.in. Opole, Wałbrzych, Rybnik, południowe obrzeża Wrocławia;
   Kraków, Rzeszów i centrum Wrocławia są już poza prostokątem) wysyła
-  zapytanie do CUZK także dla bboxów leżących w całości w Polsce (wynik:
-  dodatkowy raster/sidecar wypełniony nodata, nie błąd). Symetrycznie
+  zapytanie do CUZK także dla bboxów leżących w całości w Polsce, a także
+  w Saksonii poniżej 51,06°N i w pasie Bogatyni (wynik: dodatkowy
+  raster/sidecar wypełniony nodata z kodem 0, bez komunikatu — znany błąd
+  N2). Symetrycznie
   prostokąt PL (14,07..24,20°E, 49,00..54,90°N) pokrywa większość Czech, więc
   auto w Pradze, Brnie czy Ostrawie odpytuje także GUGiK — naprawa (wielokąt
   granicy) planowana w etapie 2 (patrz ADR-023)
@@ -371,13 +416,26 @@ from kartograf import (
   stderr, zamiast przewracać zadanie; wyjątkiem jest --product laz, który ma
   własny przepływ i na obszarze sięgającym CZ nadal kończy się błędem
   z podpowiedzią --country pl
-- Częściowy sukces w trybie auto (jeden kraj pobrany, drugi bez danych) to
-  kod wyjścia 0 + Warning: na stderr; kod 1 zostaje dla jawnego --country
-  i dla porażki wszystkich krajów (ADR-023 pkt 4-5). Info:/Warning: idą na
-  stderr, więc -q ich NIE tłumi
-- extra.parent_request.bbox_crs różni się per tryb dla tego samego pliku
-  geometrii (jawny --country cz: CRS pliku; auto/pl: EPSG:2180) — znane
-  ograniczenie klucza grupowania, do ujednolicenia w etapie 2
+- --country auto przycina część zadania każdego kraju do jego prostokąta:
+  obszar poza wszystkimi prostokątami (np. na zachód od 14,07°E przy Osinowie
+  Dolnym, na północ od 54,90°N nad Bałtykiem) znika bez komunikatu, a nazwa
+  pliku i request.bbox niosą bbox przycięty, poszerzony na pozostałych
+  krawędziach o dziesiątki metrów (znany błąd S3); jawne --country pl nie
+  przycina; bbox w całości poza prostokątami = błąd przed siecią. Na
+  granicach z krajami spoza rejestru (DE, SK, UA, BY, LT, RU) auto działa
+  jak --country pl, bez komunikatu (poza pasem wewnątrz prostokąta CZ)
+- Częściowy sukces w trybie auto (jeden kraj pobrany, drugi nieudany — brak
+  danych albo awaria źródła) to kod wyjścia 0 + Warning: na stderr; kod 1
+  zostaje dla jawnego --country i dla porażki wszystkich krajów (ADR-023 pkt
+  4-5). Kod 0 nie gwarantuje więc pliku z każdego kraju. Info:/Warning: idą
+  na stderr, więc -q ich NIE tłumi
+- extra.parent_request.bbox_crs zależy od trybu, gdy plik geometrii nie jest
+  w układzie żądania CZ: jawne --country cz niesie układ żądania CZ
+  (EPSG:5514 albo --target-crs), auto/pl — EPSG:2180, a plik w EPSG:5514/3045
+  — układ pliku (od 2026-09-28: obwiednia opuszcza Krovaka przypiętą
+  operacją); plik w EPSG:5514 bez --target-crs daje więc ten sam bbox_crs we
+  wszystkich trybach — znane ograniczenie klucza grupowania, do ujednolicenia
+  w etapie 2
 - extra.parent_request.countries = kraje PRÓBOWANE, nie pobrane (przy
   awarii jednego kraju w trybie auto sidecary drugiego nadal niosą oba kody)
 ```
@@ -488,20 +546,26 @@ pyshp >= 2.3.0         # Shapefile reading
   z opcjonalną reprojekcją poziomą (--target-crs) i pionową (--vertical-crs)
 - Bbox/geometria transgraniczna PL/CZ dzieli się na osobne pliki per kraj
   (--country auto), bez scalania, ze wspólnym extra.parent_request
+- Wycinek NMT PL (--target-crs / download_pl_cutout): jeden GeoTIFF na
+  siatce arkuszy (EPSG:2180) albo w EPSG:5514/3045; arkusz bez danych =
+  nodata + extra.missing_sheets
 - Integracja z Hydrograf/Hydrolog działa
 ```
 
 ### 6.2 Jakościowe
 
 ```
-- 1861 testow offline przechodzi (pytest -m "not live"; 8 testow live
-  wymaga sieci i nie nalezy do bramki)
+- 1861 testów offline przechodzi (pytest -m "not live"; 8 testów live
+  wymaga sieci i nie należy do bramki)
 - Pokrycie testami 92,9% (cel 80% osiągnięty)
 - Kod zgodny z ruff (check + format)
 - mypy bez nowego długu względem baseline
 - Type hints wszędzie
 - Dokumentacja aktualna
-- E2E na żywych danych: 11/11 PASS (etap 1, CZ+PL)
+- E2E na żywych danych: 11/11 PASS (etap 1, CZ+PL); 2026-09-29 — 7 raportów
+  live (centrum, morze, pogranicza PL-CZ, PL-DE, PL-SK/UA/BY/LT/RU, duży
+  wycinek offline): mechanika wycinka, układu data/ i sidecarów potwierdzona,
+  znane błędy K1-K6/S1-S5 czekają na decyzję o naprawie (PROGRESS)
 ```
 
 ---
@@ -524,9 +588,10 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-08-22 | 3.8 | Korekty spójności po audycie przedwydaniowym 0.7.0: WCS NMT tylko 1m/KRON86, 4 warstwy WMS ortofoto, SoilGrids bez TERYT, timeouty per źródło, konwencja krawędzi i etykiety skal, semantyka `--country auto` (zasięg prostokąta CZ/PL, Info/Warning, częściowy sukces), liczby 1716/93% |
 | 2026-08-28 | 3.9 | Układ data/ per produkt (ADR-026), --target-crs dla PL (ADR-027), sekcja 2.11, liczby 1775/93% (brama jakosci) |
 | 2026-09-28 | 3.10 | Fala review max: wycinek PL jako API biblioteki (download_pl_cutout), siatka arkuszy, R5 (NoCoverageError -> nodata + extra.missing_sheets), eksporty w 2.10, drzewo modulow, etap 2: scalanie PL+CZ i wycinek z arkuszy PL-2000; liczby 1861/92,9% (po fali naprawczej finalnego review) |
+| 2026-09-29 | 3.11 | Testy na żywo + audyt dokumentacji: znane błędy (K1 LAZ, K2 operacja S-JTSK, K3/K4 skorowidz, K5 orto CIR, K6 limit exportImage, S2 tryb listy, S3 przycięcie auto, N2-N4), zachowanie na morzu i pograniczach, --force/skip, kontrola dysku, parent_request.bbox_crs per tryb, wyjątek LAZ w segmentach, kryterium wycinka PL w 6.1, dane styku PL/CZ do R6 |
 
 ---
 
-**Wersja dokumentu:** 3.10
-**Data ostatniej aktualizacji:** 2026-09-28
+**Wersja dokumentu:** 3.11
+**Data ostatniej aktualizacji:** 2026-09-29
 **Status:** Rozwoj — v0.7.0 (Unreleased), etap 1 zmergowany do `develop` 2026-08-12
