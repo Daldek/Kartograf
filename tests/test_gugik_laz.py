@@ -16,8 +16,8 @@ from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError
 from kartograf.providers.pl.gugik_laz import GugikLazProvider, LazTile
 
-# Patch target for the dedicated session created in _fetch_available_years
-_LAZ_SESSION_PATCH = "kartograf.providers.pl.gugik_laz.requests.Session"
+# Patch the shared GUGiK session factory at provider construction.
+_LAZ_SESSION_PATCH = "kartograf.providers.pl.gugik_laz.make_gugik_session"
 
 
 # ---------------------------------------------------------------------------
@@ -66,7 +66,7 @@ EXCEPTION_XML = """\
 def _feature(
     godlo, year, lower, upper, density="25 p/m2", seq="100", dens_code="81121"
 ):
-    """Build one WFS member element string."""
+    """Build a member with (E, N) inputs serialized in URN axis order (N, E)."""
     url = (
         "https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/"
         f"{dens_code}/{dens_code}_{seq}_{godlo}.laz"
@@ -76,8 +76,8 @@ def _feature(
     <gugik:SkorowidzDanychPomiarowychLIDAR{year} gml:id="f.{seq}">
       <gml:boundedBy>
         <gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
-          <gml:lowerCorner>{lower[0]} {lower[1]}</gml:lowerCorner>
-          <gml:upperCorner>{upper[0]} {upper[1]}</gml:upperCorner>
+          <gml:lowerCorner>{lower[1]} {lower[0]}</gml:lowerCorner>
+          <gml:upperCorner>{upper[1]} {upper[0]}</gml:upperCorner>
         </gml:Envelope>
       </gml:boundedBy>
       <gugik:godlo>{godlo}</gugik:godlo>
@@ -123,6 +123,41 @@ _TILE_OUTSIDE = _feature(
 COLLECTION_2024 = _collection([_TILE_A, _TILE_B, _TILE_OUTSIDE])
 
 QUERY_BBOX = BBox(530000.0, 382000.0, 533000.0, 386000.0, "EPSG:2180")
+
+# Envelopes and attributes recorded in the live L1 B3_wfs_axis_test.log
+# (2026-09-29). Keep these server coordinates literal, independent of _feature.
+SPYTKOWICE_BBOX = BBox(536400, 235100, 536600, 235300, "EPSG:2180")
+SPYTKOWICE_MEMBER = """\
+<wfs:member>
+  <gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    <gml:boundedBy>
+      <gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        <gml:lowerCorner>234772 535830</gml:lowerCorner>
+        <gml:upperCorner>235938 536958</gml:upperCorner>
+      </gml:Envelope>
+    </gml:boundedBy>
+    <gugik:godlo>M-34-76-A-a-1-1-3</gugik:godlo>
+    <gugik:akt_rok>2023</gugik:akt_rok>
+    <gugik:char_przestrz>4 p/m2</gugik:char_przestrz>
+    <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+    <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/77518/77518_1352498_M-34-76-A-a-1-1-3.laz</gugik:url_do_pobrania>
+  </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+</wfs:member>"""
+LUBUSKIE_MEMBER = """\
+<wfs:member>
+  <gugik:SkorowidzDanychPomiarowychLIDAR2024>
+    <gml:boundedBy>
+      <gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        <gml:lowerCorner>535970.420000 234660.930000</gml:lowerCorner>
+        <gml:upperCorner>537185.430000 235780.440000</gml:upperCorner>
+      </gml:Envelope>
+    </gml:boundedBy>
+    <gugik:godlo>N-33-127-A-a-2-3-4</gugik:godlo>
+    <gugik:akt_rok>2024</gugik:akt_rok>
+    <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+    <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/test_N-33-127-A-a-2-3-4.laz</gugik:url_do_pobrania>
+  </gugik:SkorowidzDanychPomiarowychLIDAR2024>
+</wfs:member>"""
 
 
 def _make_response(text):
@@ -236,17 +271,26 @@ class TestAvailableYears:
     def test_fetch_years_descending(self):
         session = MagicMock()
         session.get.return_value = _make_response(CAPABILITIES_XML)
-        p = GugikLazProvider()
         with patch(_LAZ_SESSION_PATCH, return_value=session):
-            years = p._fetch_available_years("EVRF2007")
+            p = GugikLazProvider()
+        years = p._fetch_available_years("EVRF2007")
         assert years == [2025, 2024, 2018]
 
-    def test_fetch_years_no_lidar_raises(self):
-        session = MagicMock()
-        session.get.return_value = _make_response(CAPABILITIES_NO_LIDAR)
+    @pytest.mark.parametrize(
+        ("text", "message"),
+        [
+            (CAPABILITIES_NO_LIDAR, "LIDAR"),
+            ("<wfs:WFS_Capabilities", "nieczytelna"),
+            (EXCEPTION_XML, "Unknown type name"),
+        ],
+    )
+    def test_invalid_capabilities_abort_discovery(self, text, message):
         p = GugikLazProvider()
-        with patch(_LAZ_SESSION_PATCH, return_value=session), pytest.raises(ValueError):
-            p._fetch_available_years("EVRF2007")
+        with (
+            patch("requests.Session.get", return_value=_make_response(text)),
+            pytest.raises(DownloadError, match=message),
+        ):
+            p.discover_tiles(QUERY_BBOX)
 
     def test_get_years_caches(self):
         p = GugikLazProvider()
@@ -257,20 +301,34 @@ class TestAvailableYears:
             p._get_available_years("EVRF2007")
         mock_fetch.assert_called_once()
 
-    def test_get_years_fallback_on_error(self):
+    def test_capabilities_network_failure_raises_without_caching(self):
         p = GugikLazProvider()
-        with patch.object(
-            p, "_fetch_available_years", side_effect=requests.ConnectionError("x")
+        with (
+            patch(
+                "requests.Session.get", side_effect=requests.ConnectionError("reset")
+            ) as get,
+            patch("kartograf.transport.http.time.sleep"),
+            pytest.raises(DownloadError, match="GetCapabilities.*EVRF2007"),
         ):
-            years = p._get_available_years("EVRF2007")
-        assert years == GugikLazProvider.FALLBACK_YEARS["EVRF2007"]
+            p.discover_tiles(QUERY_BBOX)
+        assert get.call_count == 3
+        assert "EVRF2007" not in p._available_years
 
-    def test_fallback_years_distinct_per_crs(self):
-        assert (
-            GugikLazProvider.FALLBACK_YEARS["KRON86"]
-            != GugikLazProvider.FALLBACK_YEARS["EVRF2007"]
-        )
-        assert 2010 in GugikLazProvider.FALLBACK_YEARS["KRON86"]
+        with patch(
+            "requests.Session.get", return_value=_make_response(CAPABILITIES_XML)
+        ):
+            assert p._get_available_years("EVRF2007") == [2025, 2024, 2018]
+
+    def test_capabilities_recovers_after_connection_reset(self):
+        session = MagicMock()
+        session.get.side_effect = [
+            requests.ConnectionError("reset"),
+            _make_response(CAPABILITIES_XML),
+        ]
+        p = GugikLazProvider(session=session)
+        with patch("kartograf.transport.http.time.sleep"):
+            assert p._get_available_years("EVRF2007") == [2025, 2024, 2018]
+        assert session.get.call_count == 2
 
 
 # ===========================================================================
@@ -303,12 +361,65 @@ class TestDiscoverTiles:
         assert a.crs == "PL-2000:S6"
         assert a.min_x == 530500 and a.max_y == 383000
 
-    def test_bbox_param_uses_native_axis_order(self):
+    def test_bbox_param_epsg_axis_order_north_east(self):
         p, session = _provider_with_getfeature(COLLECTION_2024)
         p.discover_tiles(QUERY_BBOX, year=2024)
         called_url = session.get.call_args[0][0]
-        # min_x,min_y,max_x,max_y order with urn CRS appended
-        assert "BBOX=530000.0%2C382000.0%2C533000.0%2C386000.0%2Curn" in called_url
+        assert "BBOX=382000.0%2C530000.0%2C386000.0%2C533000.0%2Curn" in called_url
+
+    def test_spytkowice_tile_keeps_easting_northing(self):
+        p, _ = _provider_with_getfeature(_collection([SPYTKOWICE_MEMBER]))
+        tiles = p.discover_tiles(SPYTKOWICE_BBOX, year=2023)
+
+        assert [tile.godlo for tile in tiles] == ["M-34-76-A-a-1-1-3"]
+        tile = tiles[0]
+        assert (tile.min_x, tile.min_y, tile.max_x, tile.max_y) == (
+            535830,
+            234772,
+            536958,
+            235938,
+        )
+        assert tile.filename == "77518_1352498_M-34-76-A-a-1-1-3.laz"
+        assert tile.year == 2023
+        assert tile.density == 4
+        assert tile.crs == "PL-1992"
+
+    def test_transposed_lubuskie_tile_is_filtered(self):
+        p, _ = _provider_with_getfeature(
+            _collection([SPYTKOWICE_MEMBER, LUBUSKIE_MEMBER])
+        )
+        tiles = p.discover_tiles(SPYTKOWICE_BBOX, year=2023)
+        assert [tile.godlo for tile in tiles] == ["M-34-76-A-a-1-1-3"]
+
+    def test_only_transposed_tiles_raise_axis_error(self):
+        p, _ = _provider_with_getfeature(_collection([LUBUSKIE_MEMBER]))
+        with pytest.raises(DownloadError, match="kolejnosci osi"):
+            p.discover_tiles(SPYTKOWICE_BBOX, year=2024)
+
+    @pytest.mark.parametrize(
+        "srs_name",
+        [
+            "urn:ogc:def:crs:EPSG::2180",
+            "http://www.opengis.net/def/crs/EPSG/0/2180",
+            "https://www.opengis.net/def/crs/EPSG/0/2180",
+            "EPSG:2180",
+            None,
+        ],
+    )
+    def test_envelope_axis_order_follows_srs_name(self, srs_name):
+        member = SPYTKOWICE_MEMBER
+        original = 'srsName="urn:ogc:def:crs:EPSG::2180"'
+        replacement = f'srsName="{srs_name}"' if srs_name else ""
+        member = member.replace(original, replacement)
+        if srs_name == "EPSG:2180":
+            member = member.replace("234772 535830", "535830 234772").replace(
+                "235938 536958", "536958 235938"
+            )
+        p, _ = _provider_with_getfeature(_collection([member]))
+        tiles = p.discover_tiles(SPYTKOWICE_BBOX, year=2023)
+        assert [(t.godlo, t.min_x, t.min_y, t.max_x, t.max_y) for t in tiles] == [
+            ("M-34-76-A-a-1-1-3", 535830, 234772, 536958, 235938)
+        ]
 
     def test_min_density_filter(self):
         members = [
@@ -371,17 +482,76 @@ class TestDiscoverTiles:
         assert {t.godlo for t in tiles} == {"P1", "P2", "P3"}
         assert session.get.call_count == 2
 
-    def test_exception_report_skipped(self):
+    def test_exception_report_raises_with_server_text(self):
         p, _ = _provider_with_getfeature(EXCEPTION_XML)
-        tiles = p.discover_tiles(QUERY_BBOX, year=2099)
-        assert tiles == []
+        with pytest.raises(DownloadError, match="2099.*Unknown type name"):
+            p.discover_tiles(QUERY_BBOX, year=2099)
 
-    def test_network_error_returns_empty(self):
+    def test_unreadable_response_raises_download_error(self):
+        p, _ = _provider_with_getfeature("<wfs:FeatureCollection")
+        with pytest.raises(DownloadError, match="2024.*nieczytelna"):
+            p.discover_tiles(QUERY_BBOX, year=2024)
+
+    def test_network_error_raises_download_error(self):
         session = MagicMock()
-        session.get.side_effect = requests.ConnectionError("boom")
+        session.get.side_effect = requests.ConnectionError("reset")
         p = GugikLazProvider(session=session)
-        tiles = p.discover_tiles(QUERY_BBOX, year=2024)
-        assert tiles == []
+        with (
+            patch("kartograf.transport.http.time.sleep"),
+            pytest.raises(DownloadError, match="2024.*reset.*wynik bylby niepelny"),
+        ):
+            p.discover_tiles(QUERY_BBOX, year=2024)
+        assert session.get.call_count == 3
+
+    def test_partial_year_failure_raises_instead_of_partial_result(self):
+        session = MagicMock()
+        session.get.side_effect = [
+            _make_response(COLLECTION_2024),
+            *(requests.ConnectionError("reset") for _ in range(3)),
+        ]
+        p = GugikLazProvider(session=session)
+        p._available_years["EVRF2007"] = [2024, 2023]
+        with (
+            patch("kartograf.transport.http.time.sleep"),
+            pytest.raises(DownloadError, match="2023.*wynik bylby niepelny"),
+        ):
+            p.discover_tiles(QUERY_BBOX)
+        assert session.get.call_count == 4
+
+    def test_page_failure_raises_instead_of_partial_result(self):
+        session = MagicMock()
+        session.get.side_effect = [
+            _make_response(_collection([_TILE_A])),
+            *(requests.ConnectionError("reset") for _ in range(3)),
+        ]
+        p = GugikLazProvider(session=session)
+        with (
+            patch.object(p, "PAGE_SIZE", 1),
+            patch("kartograf.transport.http.time.sleep"),
+            pytest.raises(DownloadError, match="2024.*wynik bylby niepelny"),
+        ):
+            p.discover_tiles(QUERY_BBOX, year=2024)
+        assert session.get.call_count == 4
+
+    def test_page_retry_keeps_all_tiles(self):
+        session = MagicMock()
+        session.get.side_effect = [
+            _make_response(_collection([_TILE_A])),
+            requests.ConnectionError("reset"),
+            _make_response(_collection([_TILE_B])),
+            _make_response(_collection([])),
+        ]
+        p = GugikLazProvider(session=session)
+        with (
+            patch.object(p, "PAGE_SIZE", 1),
+            patch("kartograf.transport.http.time.sleep"),
+        ):
+            tiles = p.discover_tiles(QUERY_BBOX, year=2024)
+        assert [tile.godlo for tile in tiles] == [
+            "N-33-131-B-a-1-1-4",
+            "N-33-131-B-a-1-2-3",
+        ]
+        assert session.get.call_count == 4
 
 
 # ===========================================================================

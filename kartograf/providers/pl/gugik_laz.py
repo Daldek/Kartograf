@@ -48,6 +48,7 @@ import requests
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError
 from kartograf.providers.base import BaseProvider
+from kartograf.transport.http import get_with_retry, make_gugik_session
 
 logger = logging.getLogger(__name__)
 
@@ -130,9 +131,8 @@ class GugikLazProvider(BaseProvider):
     Parameters
     ----------
     session : requests.Session, optional
-        HTTP session for downloads. A dedicated session is always used for
-        WFS metadata requests so it cannot interfere with mocked download
-        sessions in tests.
+        HTTP session for WFS metadata requests and tile downloads. Defaults
+        to a shared-connection GUGiK session.
     vertical_crs : str, optional
         Default height system: ``"EVRF2007"`` (current, default) or
         ``"KRON86"`` (legacy). Selects which WFS service is queried.
@@ -153,13 +153,6 @@ class GugikLazProvider(BaseProvider):
 
     # Per-year feature types are named "<prefix><year>"
     LAYER_PREFIX = "SkorowidzDanychPomiarowychLIDAR"
-
-    # Fallback year lists if WFS GetCapabilities is unreachable (newest first).
-    # Verified via GetCapabilities 2026-06-24.
-    FALLBACK_YEARS = {
-        "EVRF2007": [2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018],
-        "KRON86": [2019, 2018, 2017, 2016, 2015, 2014, 2013, 2012, 2011, 2010],
-    }
 
     SUPPORTED_VERTICAL_CRS = ["EVRF2007", "KRON86"]
 
@@ -182,11 +175,12 @@ class GugikLazProvider(BaseProvider):
                 f"Unsupported vertical_crs: '{vertical_crs}'. "
                 f"Supported: {self.SUPPORTED_VERTICAL_CRS}"
             )
-        self._session = session
+        self._session = session or make_gugik_session()
         self._vertical_crs = vertical_crs
         self._cache = cache
         # In-memory cache of available years per height system
         self._available_years: dict[str, list[int]] = {}
+        self._years_lock = threading.Lock()
         self.descriptor_key = "pl.gugik.laz"
 
     @property
@@ -209,6 +203,39 @@ class GugikLazProvider(BaseProvider):
         """Return the default height system used for discovery."""
         return self._vertical_crs
 
+    def _get_wfs_xml(self, url: str, timeout: int, description: str) -> ET.Element:
+        """Fetch WFS XML without turning a failed request into missing coverage."""
+        try:
+            response = get_with_retry(
+                self._session,
+                url,
+                timeout=timeout,
+                retries=3,
+                description=description,
+            )
+        except DownloadError as e:
+            raise DownloadError(f"{e} — wynik bylby niepelny, ponow pobranie") from e
+
+        try:
+            root = ET.fromstring(response.text)
+        except ET.ParseError as e:
+            raise DownloadError(
+                f"{description}: odpowiedz WFS nieczytelna: {e} — "
+                "wynik bylby niepelny, ponow pobranie"
+            ) from e
+
+        if _localname(root.tag) == "ExceptionReport":
+            details = "; ".join(
+                elem.text.strip()
+                for elem in root.iter()
+                if _localname(elem.tag) == "ExceptionText" and elem.text
+            )
+            raise DownloadError(
+                f"{description}: ExceptionReport: {details} — "
+                "wynik bylby niepelny, ponow pobranie"
+            )
+        return root
+
     # =========================================================================
     # Year discovery (WFS GetCapabilities)
     # =========================================================================
@@ -224,23 +251,19 @@ class GugikLazProvider(BaseProvider):
 
         Raises
         ------
-        ValueError
-            If no LIDAR feature types are found.
-        requests.RequestException
-            On network errors.
+        DownloadError
+            If the request fails or no LIDAR feature types are found.
         """
         endpoint = self.WFS_ENDPOINTS[vertical_crs]
-        # Dedicated session to avoid interfering with the download session
-        session = requests.Session()
         params = {
             "SERVICE": "WFS",
             "VERSION": "2.0.0",
             "REQUEST": "GetCapabilities",
         }
-        response = session.get(endpoint, params=params, timeout=timeout)
-        response.raise_for_status()
-
-        root = ET.fromstring(response.text)
+        description = f"WFS GetCapabilities ({vertical_crs})"
+        root = self._get_wfs_xml(
+            f"{endpoint}?{urlencode(params)}", timeout, description
+        )
         years: set[int] = set()
         for elem in root.iter():
             if _localname(elem.tag) == "Name" and elem.text:
@@ -249,35 +272,25 @@ class GugikLazProvider(BaseProvider):
                     years.add(int(match.group(1)))
 
         if not years:
-            raise ValueError("No LIDAR feature types found in GetCapabilities")
+            raise DownloadError(
+                f"{description}: brak typow obiektow LIDAR — "
+                "wynik bylby niepelny, ponow pobranie"
+            )
 
         return sorted(years, reverse=True)
 
     def _get_available_years(
         self, vertical_crs: str, timeout: int = WFS_TIMEOUT
     ) -> list[int]:
-        """
-        Get available years, fetched once per height system and cached.
+        """Get years cached per height system, caching only successful responses."""
+        with self._years_lock:
+            cached = self._available_years.get(vertical_crs)
+            if cached is not None:
+                return cached
 
-        Falls back to :data:`FALLBACK_YEARS` on any error so discovery keeps
-        working offline.
-        """
-        cached = self._available_years.get(vertical_crs)
-        if cached is not None:
-            return cached
-
-        try:
             years = self._fetch_available_years(vertical_crs, timeout)
-        except (requests.RequestException, ValueError, ET.ParseError) as e:
-            logger.warning(
-                "WFS GetCapabilities failed for %s (%s); using fallback years.",
-                vertical_crs,
-                e,
-            )
-            years = list(self.FALLBACK_YEARS[vertical_crs])
-
-        self._available_years[vertical_crs] = years
-        return years
+            self._available_years[vertical_crs] = years
+            return years
 
     # =========================================================================
     # Tile discovery (WFS GetFeature)
@@ -318,6 +331,10 @@ class GugikLazProvider(BaseProvider):
         ------
         ValueError
             If ``bbox`` is not in EPSG:2180.
+        DownloadError
+            If WFS discovery fails, returns unreadable XML or an exception,
+            or all returned tiles miss the requested bbox. Partial results
+            are never returned.
         """
         if bbox.crs != "EPSG:2180":
             raise ValueError(
@@ -334,12 +351,11 @@ class GugikLazProvider(BaseProvider):
 
         years = [year] if year is not None else self._get_available_years(vcrs, timeout)
         endpoint = self.WFS_ENDPOINTS[vcrs]
-        session = self._session or requests.Session()
 
         # Deduplicate by godło, keeping the newest acquisition year
         best: dict[str, LazTile] = {}
         for yr in years:
-            for tile in self._query_layer(session, endpoint, yr, bbox, timeout):
+            for tile in self._query_layer(endpoint, yr, bbox, timeout):
                 if min_density is not None and (
                     tile.density is None or tile.density < min_density
                 ):
@@ -352,7 +368,6 @@ class GugikLazProvider(BaseProvider):
 
     def _query_layer(
         self,
-        session: requests.Session,
         endpoint: str,
         year: int,
         bbox: BBox,
@@ -360,11 +375,10 @@ class GugikLazProvider(BaseProvider):
     ):
         """Yield tiles from one year-layer, following WFS pagination."""
         layer = f"{self.LAYER_PREFIX}{year}"
-        # WFS expects the bbox in the same axis order as Kartograf's BBox
-        # (min_x, min_y, max_x, max_y) with the urn CRS appended; the returned
-        # gml:Envelope corners are in that same (x, y) frame. Verified live.
+        # The URN uses EPSG:2180 axis order (Northing, Easting), while BBox
+        # stores (Easting, Northing).
         bbox_param = (
-            f"{bbox.min_x},{bbox.min_y},{bbox.max_x},{bbox.max_y},"
+            f"{bbox.min_y},{bbox.min_x},{bbox.max_y},{bbox.max_x},"
             "urn:ogc:def:crs:EPSG::2180"
         )
         start = 0
@@ -380,29 +394,22 @@ class GugikLazProvider(BaseProvider):
                 "BBOX": bbox_param,
             }
             url = f"{endpoint}?{urlencode(params)}"
-            try:
-                response = session.get(url, timeout=timeout)
-                response.raise_for_status()
-            except requests.RequestException as e:
-                logger.warning("WFS GetFeature failed for %s: %s", layer, e)
-                return
+            root = self._get_wfs_xml(
+                url, timeout, f"WFS GetFeature dla rocznika {year} ({layer})"
+            )
 
-            try:
-                root = ET.fromstring(response.text)
-            except ET.ParseError as e:
-                logger.warning("WFS response parse error for %s: %s", layer, e)
-                return
-
-            if _localname(root.tag) == "ExceptionReport":
-                # Layer likely not present for this service/year — skip quietly
-                logger.debug("WFS exception for %s (skipping)", layer)
-                return
-
-            returned = 0
+            returned = kept = 0
             for tile in self._parse_features(root):
                 returned += 1
                 if self._intersects(tile, bbox):
+                    kept += 1
                     yield tile
+            if returned and not kept:
+                raise DownloadError(
+                    f"WFS {layer}: serwer zwrocil {returned} kafli, zaden nie "
+                    "przecina zadanego bboxa — niezgodnosc kolejnosci osi "
+                    "(zglos blad)"
+                )
 
             # numberReturned is reliable; fall back to the counted features
             number_returned = root.get("numberReturned")
@@ -452,15 +459,16 @@ class GugikLazProvider(BaseProvider):
 
         lower = upper = None
         for env in elem.iter(f"{{{_GML_NS}}}Envelope"):
+            srs_name = env.get("srsName")
             lc = env.find(f"{{{_GML_NS}}}lowerCorner")
             uc = env.find(f"{{{_GML_NS}}}upperCorner")
             if lc is not None and lc.text:
-                lower = tuple(float(v) for v in lc.text.split())
+                lower = _corner_xy(lc.text, srs_name)
             if uc is not None and uc.text:
-                upper = tuple(float(v) for v in uc.text.split())
+                upper = _corner_xy(uc.text, srs_name)
             break
 
-        if lower and upper and len(lower) == 2 and len(upper) == 2:
+        if lower is not None and upper is not None:
             min_x, min_y = lower
             max_x, max_y = upper
         else:
@@ -483,8 +491,7 @@ class GugikLazProvider(BaseProvider):
         """
         Return True if the tile envelope intersects the query bbox.
 
-        Acts as a client-side safety net against WFS axis-order quirks. Tiles
-        without geometry (NaN extent) are kept rather than dropped.
+        Tiles without geometry (NaN extent) are kept rather than dropped.
         """
         if any(math.isnan(v) for v in (tile.min_x, tile.min_y, tile.max_x, tile.max_y)):
             return True
@@ -583,8 +590,7 @@ class GugikLazProvider(BaseProvider):
 
     def _make_request(self, url: str, timeout: int) -> requests.Response:
         """Make a streaming HTTP GET request."""
-        session = self._session or requests.Session()
-        response = session.get(url, timeout=timeout, stream=True)
+        response = self._session.get(url, timeout=timeout, stream=True)
         response.raise_for_status()
         return response
 
@@ -613,3 +619,13 @@ class GugikLazProvider(BaseProvider):
 def _localname(tag: str) -> str:
     """Return the local name of a possibly namespaced XML tag."""
     return tag.rsplit("}", 1)[-1]
+
+
+def _corner_xy(text: str, srs_name: str | None) -> tuple[float, float]:
+    """Convert an EPSG:2180 envelope corner to (Easting, Northing)."""
+    first, second = (float(value) for value in text.split()[:2])
+    if srs_name == "EPSG:2180":
+        return first, second
+    # URN/URI identifiers use EPSG axis order; missing srsName inherits the
+    # requested URN. Only the legacy short identifier uses (E, N).
+    return second, first
