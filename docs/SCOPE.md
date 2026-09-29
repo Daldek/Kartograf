@@ -365,9 +365,11 @@ from kartograf import (
 - Produkt CZ w etapie 1: wyłącznie nmt (DMR 5G/4G) — nmpt/orto/laz w etapie 2
 - exportImage: limit deklarowany 15000x4100 px — większe bboxy kafelkowane
   po stronie klienta (mosaic_and_crop); realnie serwer odrzuca (HTTP 500)
-  zapytania > ~8 Mpx, więc bbox CZ 2 m większy niż ~5,5 x 5,5 km nie
-  przechodzi także po kafelkowaniu (znany błąd K6); natywny wycinek 5514 ma
-  piksel ~2,0004 m zamiast 2 m (N3)
+  zapytania > ~8 Mpx, a kafle są cięte dopiero powyżej 15000x4100 px, więc
+  obszar CZ 2 m zbliżony do kwadratu większy niż ~5,5 x 5,5 km (albo np.
+  10 x 5 km wydłużony W-E) nie przechodzi, a pas N-S szerokości do ~3,6 km
+  przechodzi (znany błąd K6); natywny wycinek 5514 ma piksel ~2,0004 m
+  zamiast 2 m (N3)
 - KRON86 nieosiągalny dla CZ (brak publicznych siatek Bpv→KRON86) — jedyna
   transformacja pionowa to Bpv→EVRF2007 (EPSG:5621)
 - --target-crs działa tylko z --bbox/--geometry; z godłem CZ = ValidationError
@@ -394,7 +396,8 @@ from kartograf import (
   tolerancji R5: arkusz bez danych (morze, arkusz za granicą) = kod 1
   i Error: o jednym arkuszu; --workers 1 przerywa na pierwszym takim arkuszu,
   --workers > 1 pobiera resztę, ale zgłasza tylko pierwszą porażkę — znany
-  błąd S2; na morzu i na granicach: --target-crs EPSG:2180
+  błąd S2; na morzu i na granicach: --target-crs EPSG:2180 (tylko --product
+  nmt, system 1992)
 - Asymetria trybu --bbox: PL bez --target-crs zwraca listę arkuszy (wiele
   plików), CZ zawsze jeden plik (wycinek exportImage, pobierany natywnie
   w 5514 i reprojektowany lokalnie, gdy zażądano innego układu); z
@@ -420,9 +423,14 @@ from kartograf import (
   Dolnym, na północ od 54,90°N nad Bałtykiem) znika bez komunikatu, a nazwa
   pliku i request.bbox niosą bbox przycięty, poszerzony na pozostałych
   krawędziach o dziesiątki metrów (znany błąd S3); jawne --country pl nie
-  przycina; bbox w całości poza prostokątami = błąd przed siecią. Na
-  granicach z krajami spoza rejestru (DE, SK, UA, BY, LT, RU) auto działa
-  jak --country pl, bez komunikatu (poza pasem wewnątrz prostokąta CZ)
+  przycina; w trybie --geometry bez --target-crs arkusze PL wyznacza sama
+  geometria, więc przycięcie dotyczy tam tylko części CZ; bbox w całości
+  poza prostokątami = błąd przed siecią. Na granicach z krajami spoza
+  rejestru (DE, SK, UA, BY, LT, RU) auto odpytuje tylko PL, bez komunikatu
+  (z przycięciem jak wyżej, więc nie zawsze jak --country pl — np. Osinów
+  Dolny: pod auto wycinek szerokości 6,2 km i 4 arkusze listy, z --country pl
+  8,9 km i 6 arkuszy; poza pasem wewnątrz prostokąta CZ — Nysa Łużycka
+  poniżej 51,06°N, pas Bogatyni — gdzie dochodzi zapytanie do CUZK, N2)
 - Częściowy sukces w trybie auto (jeden kraj pobrany, drugi nieudany — brak
   danych albo awaria źródła) to kod wyjścia 0 + Warning: na stderr; kod 1
   zostaje dla jawnego --country i dla porażki wszystkich krajów (ADR-023 pkt

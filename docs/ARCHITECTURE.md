@@ -49,11 +49,15 @@ jako juz pobrany zachowuje swoj poprzedni sidecar — takze bez
 `extra.parent_request` nowego zadania (znany blad N4).
 
 **Polityka transformacji (ADR-024).** Transformacje, ktore przesuwaja TRESC
-rastra albo opuszczaja uklady czeskie (EPSG:5514/3045), przechodza wylacznie
-przez `kartograf/transform/crs.py`. Przeliczenia obwiedni miedzy ukladami PL
-i WGS84 (selekcja arkuszy w `core/sheet_parser.py` i `core/geometry.py`,
-`_bbox_to_2180` wycinka dla ukladow nieczeskich, dyspozycja krajow w CLI)
-swiadomie uzywaja domyslnego transformera pyproj — migracja to backlog A5-6.
+rastra albo opuszczaja uklady czeskie (EPSG:5514/3045), przechodza przez
+`kartograf/transform/crs.py` — poza obwiednia w WGS84 do rozpoznania kraju
+i przyciecia pod `auto` (`_bbox_to_wgs84` w `cli/download_cmd.py`, takze dla
+bboxa podanego w ukladzie czeskim) i obwiednia pliku geometrii w torze LAZ
+(`_resolve_laz_bbox`: `get_overall_bbox(..., target_crs="EPSG:2180")`).
+Przeliczenia obwiedni miedzy ukladami PL i WGS84 (selekcja arkuszy
+w `core/sheet_parser.py` i `core/geometry.py`, `_bbox_to_2180` wycinka dla
+ukladow nieczeskich, dyspozycja krajow w CLI) swiadomie uzywaja domyslnego
+transformera pyproj — migracja to backlog A5-6.
 `transform/crs.py` ma cztery twarde reguly: (1) transformer budowany tylko przez
 `TransformerGroup(..., always_xy=True, allow_ballpark=False)` — `Transformer.
 from_crs` potrafi cicho zwrocic identycznosc; (2) pusta lista operacji to
@@ -71,8 +75,9 @@ koncu) — za kazdym razem, gdy dany uklad jest northing-first (EPSG:2180,
 EPSG:3045; EPSG:5514 nie jest). Brak korekty daje raster w calosci nodata,
 takze po stronie zrodla: zmierzone dla toru PL 2180 -> 5514 bez czolowego
 `axisswap` — **0 z 46225 waznych pikseli**. Korekta jest liczona
-z `axis_info`, nie zakladana. Regula (3) wybiera najdokladniejsza operacje
-bez sprawdzenia jej obszaru uzycia: dla S-JTSK -> ETRS89 jest to dzis
+z `axis_info`, nie zakladana. Sposrod operacji, ktore przeszly reguly
+(1)-(3), wybierana jest najdokladniejsza (`min` po `accuracy`), bez
+sprawdzenia jej obszaru uzycia: dla S-JTSK -> ETRS89 jest to dzis
 EPSG:4829 (Slowacja, 0,5 m), a nie EPSG:1622 (Czechy, 1,0 m) — tresc CZ po
 reprojekcji i wycinek PL -> EPSG:5514 sa przesuniete o 1-5 m, a sidecar
 deklaruje 0,5 m (znany blad K2; errata ADR-024).
@@ -391,8 +396,9 @@ PL-1992 grubsze niz 1:10000 rozwija sie do arkuszy 1:10000
 kazdego arkusza `GugikProvider` pyta WMS skorowidz (`GetFeatureInfo`, warstwy
 walidowane przez `GetCapabilities` — ADR-020) o URL pliku OpenData, po czym
 plik jest pobierany z retry (3 proby) i zapisany atomowo. Zapytania
-skorowidza nie maja ponowien, a bez wstrzyknietej sesji kazde idzie nowym
-polaczeniem (znany blad S1). URL moze byc cache'owany w SQLite
+skorowidza nie maja ponowien, a bez wstrzyknietej sesji kazdy arkusz dostaje
+nowa `requests.Session` (nowe polaczenie; zapytania warstw jednego arkusza
+dziela ja) — znany blad S1. URL moze byc cache'owany w SQLite
 (`MetadataCache`, TTL 7 dni), ale tylko gdy wolajacy przekaze `cache=` do
 providera (np. `create_nmt_provider(cache=MetadataCache())`) — CLI
 i domyslne sciezki biblioteki (`DownloadManager`, `download_pl_cutout`)
@@ -578,8 +584,9 @@ drugiego kraju nie daje juz kodu 0. Biblioteka nie ma `print` ani argparse.
      pikseli nodata — wylacznie tam, gdzie zaden pobrany arkusz nie ma
      danych. Na zywo 2026-09-29: Leba, Hel, Slubice, Zgorzelec, trojstyk
      PL-CZ-DE, Osinow, PL-UA/BY/RU — arkusze morskie i zagraniczne
-     w `missing_sheets`, nodata wylacznie nad morzem/za granica, 0 pikseli
-     rozbieznych z arkuszami. `missing_sheets` NIE jest pelnym obrazem
+     w `missing_sheets`, nodata wylacznie nad morzem/za granica (0 pikseli
+     rozbieznych z arkuszami: Leba, Hel, pogranicze PL-DE; PL-UA/BY/RU —
+     sprawdzone polozenie nodata). `missing_sheets` NIE jest pelnym obrazem
      nodata: nodata bywa tez wewnatrz pobranych arkuszy przybrzeznych
      (kampania 5 m 2025 przycina rastry do zasiegu danych) i przygranicznych
      (PL-SK: do 82 % arkusza), a przy brzegu woda ma wartosci ~0 m (5 m: pas
@@ -623,7 +630,8 @@ drugiego kraju nie daje juz kodu 0. Biblioteka nie ma `print` ani argparse.
      wejscia), wzieta z transformacji arkuszy, a nie z wielokrotnosci
      piksela: arkusze GUGiK 5 m maja zwykle narozniki pikseli na
      `5k + 2,5 m` (1977 arkuszy z cache Hydrografu; na zywo 2026-09-29 takze
-     48 arkuszy kampanii 2022/2024/2025 pod Wegrowem i Leba), a arkusze 1 m
+     48 arkuszy kampanii 2022/2024/2025 pod Wegrowem (L2) oraz arkusze
+     w Lebie (L3)), a arkusze 1 m
      — na `k + 0,5 m` (na zywo: 84 pliki PL-1992, EVRF2007 2019-2025
      i KRON86 2011-2018, jedna faza; kampanie roznia sie zasiegiem o 1 px,
      nie faza). Bez tego crop kotwiczony w rogu zadania przesuwal tresc
@@ -719,10 +727,13 @@ drugiego kraju nie daje juz kodu 0. Biblioteka nie ma `print` ani argparse.
    a wobec niezaleznej interpolacji roznily sie srednio o 0,13-3,3 mm
    (raport L2) i 2,97 mm (Leba, maks. 0,15 m na stokach wydm). Operacja
    2180 -> 5514 zawiera slowacka transformacje S-JTSK (EPSG:4829) — tresc
-   wycinka w EPSG:5514 jest przesunieta wzgledem czeskiej o ok. 1,1-2,3 m
-   przy granicy (znany blad K2); 2180 -> 3045 go nie dotyczy. Uklad docelowy
-   spoza obszaru uzycia operacji (5514/3045 w NE Polsce) jest przyjmowany bez
-   uwag, a dokladnosc w `transform` sidecara jest nominalna.
+   wycinka w EPSG:5514 jest przesunieta wzgledem czeskiej o ok. 1,1-3,4 m
+   wzdluz granicy PL-CZ (roznica EPSG:1622 - EPSG:4829 policzona pyproj:
+   Cieszyn 1,15 m, Kudowa 2,15 m, Karkonosze 2,73 m — na zywo 2,3 m wzgledem
+   DMR 5G, rejon Bogatyni ~3,4 m; znany blad K2); 2180 -> 3045 go nie
+   dotyczy. Uklad docelowy spoza obszaru uzycia operacji (5514/3045 w NE
+   Polsce) jest przyjmowany bez uwag, a dokladnosc w `transform` sidecara
+   jest nominalna.
 7. **Rozmiar i dysk** (review max zn. 9; bez twardego limitu rozmiaru).
    Przy warpie plik POSREDNI mozaiki (`<nazwa>.<pid>_<tid>.mosaic.tif`) jest
    kompresowany: deflate, predyktor 3, kafle 512 x 512 px,
@@ -844,10 +855,13 @@ natywnym, wiec szew nie zostaje utrwalony przez interpolacje. Na zywo
 2026-09-29 mechanizm dziala (pas 1800 x 12300 px = 22 Mpx z 3 kafli, szwy bit
 w bit z niezaleznymi paskami, szczyt RSS 293 MiB), ale realny limit serwera
 to ~8 Mpx na zapytanie: kafel 5000 x 2500 i pojedyncze zadanie 3000 x 3000
-koncza sie HTTP 500, wiec bbox 2 m wiekszy niz ~5,5 x 5,5 km nie przechodzi
-(znany blad K6). Pojedynczy (niekafelkowany) wycinek natywny ma piksel
-~2,0004 m zamiast 2 m, bo bbox idzie do serwera bez dociagniecia do
-calkowitej liczby pikseli (N3).
+koncza sie HTTP 500. Klient tnie kafle dopiero, gdy wymiar przekroczy
+15000 x 4100 px, wiec obszar 2 m zblizony do kwadratu wiekszy niz
+~5,5 x 5,5 km (albo np. 10 x 5 km wydluzony W-E) nie przechodzi, a pas N-S
+szerokosci do ~3,6 km przechodzi (kafle maja najwyzej 4100 px wysokosci;
+3,6 x 24,6 km = 3 kafle po 7,4 Mpx) — znany blad K6. Pojedynczy
+(niekafelkowany) wycinek natywny ma piksel ~2,0004 m zamiast 2 m, bo bbox
+idzie do serwera bez dociagniecia do calkowitej liczby pikseli (N3).
 
 Wynik: `data/nmt/cz_dmr5g_<vcrs>/bbox/<coords>.tif` (+ `.meta.json`).
 
@@ -872,13 +886,20 @@ WSZYSTKIMI prostokatami (np. na zachod od 14,07°E przy Osinowie Dolnym — 2,7 
 z 8,9 km zadania; na polnoc od 54,90°N nad Baltykiem) znika bez komunikatu,
 pozostale krawedzie rosna o dziesiatki metrow (powrot przez WGS84), a nazwa
 pliku i `request.bbox` niosa bbox przyciety — oryginal jest tylko
-w `parent_request` (znany blad S3). Jawny `--country pl` nie przycina; bbox
-w calosci poza prostokatami to `Error: obszar nie przecina zasiegu zadnego
-znanego kraju (PL, CZ)`, kod 1, bez zapytan sieciowych. Rejestr zna tylko PL
-i CZ, wiec na granicach z DE, SK, UA, BY, LT i RU `auto` dziala jak `pl`, bez
-komunikatu — poza pasem wewnatrz prostokata CZ (Saksonia ponizej 51,06°N,
-pas Bogatyni, Opolszczyzna), gdzie CUZK dostaje zapytanie i oddaje raster
-w 100 % nodata z kodem 0, bez komunikatu (N2). Kod 0 pod `auto` nie
+w `parent_request` (znany blad S3). Przyciecie dotyczy czesci CZ, czesci PL
+w trybie `--bbox` (lista arkuszy i wycinek) i wycinka z `--geometry`; w trybie
+`--geometry` bez `--target-crs` arkusze PL wyznacza sama geometria
+(`_download_pl_geometry`), wiec tam czesc PL nie traci niczego. Jawny
+`--country pl` nie przycina; bbox w calosci poza prostokatami to `Error:
+obszar nie przecina zasiegu zadnego znanego kraju (PL, CZ)`, kod 1, bez
+zapytan sieciowych. Rejestr zna tylko PL i CZ, wiec na granicach z DE, SK,
+UA, BY, LT i RU `auto` odpytuje tylko PL, bez komunikatu (z przycieciem
+opisanym wyzej, wiec nie zawsze jak `--country pl`: Osinow Dolny — pod `auto`
+wycinek szerokosci 6,2 km i 4 arkusze listy, z `--country pl` 8,9 km
+i 6 arkuszy) — poza pasem wewnatrz prostokata CZ (Saksonia i Nysa Luzycka
+ponizej 51,06°N, pas Bogatyni), gdzie CUZK dostaje zapytanie i oddaje raster
+w 100 % nodata z kodem 0, bez komunikatu (N2; tak samo dla obszarow PL
+w prostokacie CZ, np. Opolszczyzny). Kod 0 pod `auto` nie
 gwarantuje pliku z kazdego kraju: awaria jednego kraju (takze chwilowy blad
 GUGiK, S1) przy sukcesie drugiego to kod 0 + `Warning:` — skrypt powinien
 sprawdzac pliki albo stderr. `--resolution 1m` pod `auto` zawsze rozstrzyga do

@@ -236,7 +236,8 @@ kartograf download --geometry area.shp --product laz
 #### Notes
 - **Znany błąd K1 (testy na żywo 2026-09-29, sprzed 0.7.0):** discovery WFS
   wysyła bbox i czyta envelope kafli z zamienionymi osiami, więc kafle
-  pochodzą z innego miejsca (przykład wyżej szuka ok. 209 km od podanego
+  pochodzą z innego miejsca (przykład z bboxem `530000,382000,...` szuka
+  ok. 209 km, a z godłem `N-34-130-D-d-2-4` — ok. 370 km od podanego
   obszaru); nie używać do czasu naprawy
 - Źródło: GUGiK WFS (`DanePomiaroweLidarEVRF2007` / `DanePomiaroweLidarKRON86`)
 - Domyślnie newest-per-tile (dedup po godle, najnowszy `akt_rok`)
