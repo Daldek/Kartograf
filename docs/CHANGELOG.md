@@ -8,6 +8,39 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.7.0] - Unreleased
 
 ### Breaking Changes
+- **Przejscie z 0.6.1 — co zrobic (m.in. Hydrograf):**
+  - **Istniejacy cache `data/`** — Kartograf nie migruje go sam, a sciezki
+    z 0.6.1 przestaja byc widziane jako pobrane (`skip_existing` pobierze
+    wszystko ponownie). Przed upgradem przenies katalogi: z `nmt_5m/`
+    hierarchie godel PL-1992 (`N-34/...`, `M-33/...`) do
+    `nmt/pl_1992_5m_evrf2007/`, a hierarchie PL-2000 (`5/`..`8/`) do
+    `nmt/pl_2000_5m_evrf2007/`; z `nmt_1m/` analogicznie do
+    `nmt/pl_<uklad>_1m_<vcrs>/`, gdzie `<vcrs>` trzeba znac z wlasnej
+    konfiguracji (0.6.1 nie pisal sidecarow, a arkusze KRON86 i EVRF2007
+    dzielily w nim jeden katalog; domyslny byl EVRF2007) — przed
+    przeniesieniem sprawdz `cellsize` w naglowku ASC (w cache Hydrografu
+    katalog `nmt_1m/` zawiera pliki 5 m). Analogicznie `nmpt/`, `orto/`, `laz/`
+    (tabela nizej). Pliki przeniesione nie dostaja sidecarow (pobranie
+    pominiete jako istniejace nie pisze sidecara).
+  - **Importy** — przeniesione moduly providerow nie maja shimow:
+    `from kartograf.providers.bdot10k import Bdot10kProvider` konczy sie
+    `ModuleNotFoundError`; uzyj `from kartograf import Bdot10kProvider` albo
+    `kartograf.providers.pl.bdot10k` (pelna tabela nizej: `gugik`,
+    `gugik_nmpt`, `gugik_orto`, `gugik_laz`, `bdot10k`, `landcover_base`).
+    Prywatne `Bdot10kProvider._get_teryt_for_point()` nadal istnieje.
+  - **Jeden raster NMT dla obszaru** — zamiast skladac mozaike samemu
+    (albo z `kartograf.transport.mosaic.mosaic_and_crop`, ktore NIE jest
+    eksportowane w `kartograf` i jest wewnetrznym krokiem) uzyj publicznego
+    `kartograf.download_pl_cutout` (EVRF2007/KRON86, 1 m/5 m, cel
+    EPSG:2180/5514/3045; arkusz bez danych = nodata + `missing_sheets`);
+    z wlasnym providerem, sesja albo `MetadataCache` — kroki
+    `prepare_pl_cutout` -> `select_pl_cutout_sheets` ->
+    `run_pl_cutout(provider=...)`.
+  - **Pozostale zmiany widoczne dla konsumenta:** sidecar `<plik>.meta.json`
+    obok kazdego pobranego pliku; `NoCoverageError` jest podklasa
+    `DownloadError` (`except DownloadError` lapie oba);
+    `vertical_crs_code("EVRF2007")` = `EPSG:5621`; `import kartograf` laduje
+    `rasterio`; w CLI domyslne `--country auto` (tabele i opisy nizej).
 - **Nowy uklad `data/` — segmenty `<produkt>/<kraj>_<uklad>[_<wariant>][_<vcrs>]`**
   (ADR-026, decyzje D1-D8; kanoniczny opis: `docs/ARCHITECTURE.md` sekcja 3).
   Kazdy segment koduje jawnie kraj, uklad poziomy (PL: 1992/2000 — domkniecie
@@ -91,7 +124,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   wychodzilo w swiat i wracalo bledem transportu. (audyt 0.7.0: A1-4)
 - **`find_sheets_for_bbox()`/`find_sheets_for_geometry()`: stykajace sie
   krawedzie nie sa przecieciem** — liczy sie dodatnie pole przeciecia, wiec
-  bbox rowny arkuszowi zwraca TYLKO jego arkusze:
+  bbox rowny arkuszowi w jego ukladzie (EPSG:4326 dla PL-1992, strefa
+  2176-2179 dla PL-2000) zwraca TYLKO jego arkusze (bbox w EPSG:2180
+  przechodzi przez szersza obwiednie WGS84 i zwraca takze sasiadow — np.
+  9 godel dla `N-34-130-D-d-2-4`):
 
   | zapytanie | bylo | jest |
   |---|---|---|
@@ -149,7 +185,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `DownloadManager(provider=GugikNmptProvider())` bez `storage=` pisze do
     `nmpt/pl_<uklad>_1m_<vcrs>/`, nie do segmentu NMT (Fixed, A2-2);
   - domyslne `--country auto` doklada dla zadan w poludniowej Polsce plik
-    i sidecar z CUZK (Changed, A6-3).
+    i sidecar z CUZK (Changed, A6-3);
+  - selekcja arkuszy z bboxa EPSG:2180 przecinajacego 19°E zwraca wiecej
+    arkuszy (Fixed, poludnik osiowy).
 
 ### Added
 - **Wycinek PL jako API biblioteki** (`kartograf.download.cutout`, eksport
@@ -188,10 +226,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   nierozwiazany placeholder = `ValidationError` (pusty string liczy sie jako
   brak wymiaru, wiec tez konczy sie `ValidationError`, a nie segmentem
   `pl_1992_1m_`)
-- `LazTile.uklad` i `FileStorage.get_raw_path(..., uklad=)` — biblioteka
-  zapisuje kafle LAZ w tym samym segmencie co CLI (dotad kafel `PL-2000:*`
-  z godlem myslnikowym trafial przez API do `laz/pl_1992_*`; review max,
-  zn. 8)
+- `LazTile.uklad` i `FileStorage.get_raw_path(..., uklad=)` — API biblioteki
+  daje ten sam segment co CLI, gdy wolajacy przekaze `uklad=tile.uklad`; bez
+  tego (dotychczasowe wywolanie) uklad wynika z formatu godla, wiec kafel
+  `PL-2000:*` z godlem myslnikowym nadal trafia do `laz/pl_1992_*` (review
+  max, zn. 8)
 - `kartograf.transform.raster.warp_to_grid` — lokalna reprojekcja rastra
   z wymuszona operacja przypieta (wzorzec ADR-024 dla torow PL)
 - `mosaic_and_crop(dst_kwds=)` — wymuszenie sterownika/CRS wyniku
@@ -263,17 +302,24 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - CLI `--country {pl,cz,auto}` z auto-podzialem bboxa/geometrii
     transgranicznej: obszar trafia do zrodel KAZDEGO przecietego kraju (w trybie
     auto przyciety do jego obwiedni), a opcje nierozwiazywalne dla ktoregos
-    z krajow (np. `--resolution 1m` z CZ, `--system` z CZ, `--target-crs` z PL)
-    sa odrzucane PRZED pobraniem, z podpowiedzia jawnego `--country`
+    z krajow (dzis np. `--resolution 2m` albo `--vertical-crs Bpv` na obszarze
+    siegajacym PL) sa odrzucane PRZED pobraniem, z podpowiedzia jawnego
+    `--country`. Pierwotne odrzucanie opcji tylko-PL (`--resolution 1m`,
+    `--system`) i `--target-crs` z PL jest ZASTAPIONE: opcje tylko-PL
+    rozstrzygaja `auto` do `pl` (audyt 0.7.0, ADR-023 pkt 5), a `--target-crs`
+    dziala po obu stronach granicy (ADR-027)
   - CLI `--target-crs {EPSG:2180,EPSG:5514,EPSG:3045}` — reprojekcja wyniku CZ
     w trybie `--bbox`/`--geometry`, wykonywana lokalnie przypieta operacja
     (pierwotnie serwerowo przez `imageSR`; zmienione fixem ADR-024 — patrz
-    Changed/Fixed nizej); godlo + `--target-crs` = blad (patrz Changed);
+    Changed/Fixed nizej); godlo + `--target-crs` = blad (ADR-023 (f) pkt 2;
+    dla PL — wylaczenia w pozycji `--target-crs` dla PL wyzej);
     `--vertical-crs {Bpv,EVRF2007,KRON86}` rozszerzone o CZ
   - `extra.parent_request` w sidecarach trybu bbox/geometry (oryginalny bbox
     zadania, jego uklad i **probowane** — niekoniecznie pobrane — kraje) —
     grupowanie plikow jednego zadania, takze po obu stronach granicy; tryb
-    godlowy sidecarow nie zmienia (nigdy nie dostaje `parent_request`)
+    godlowy sidecarow nie zmienia (nigdy nie dostaje `parent_request`), a tor
+    `--product laz` ma wlasny przeplyw i niesie w `extra` pola kafla
+    (backlog)
   - `--product laz` w trybie obszarowym `--country auto`: obszar siegajacy CZ
     konczy sie bledem z podpowiedzia `--country pl` (bez cichego pomijania kraju)
 - **Nowy produkt: LAZ — chmury punktow LIDAR (dane pomiarowe ALS) z GUGiK**
@@ -304,8 +350,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     sortuje malejaco po roczniku (warstwa `Starsze` na koncu)
 - **Audyt przedwydaniowy 0.7.0**
   - `DownloadManager.last_result` — podsumowanie `DownloadResult` (succeeded /
-    failed / skipped) ostatniego `download_hierarchy()`; kasowane na wejsciu
-    do `download_sheet()` i `download_hierarchy()`, wiec nigdy nie oddaje
+    failed / skipped / no_coverage) ostatniego `download_hierarchy()` /
+    `download_sheets()`; kasowane na wejsciu do `download_sheet()`,
+    `download_hierarchy()` i `download_sheets()`, wiec nigdy nie oddaje
     wyniku poprzedniego zadania. CLI ustala z niego kod wyjscia (A2-5)
   - `CLMS_CREDENTIALS` jest wreszcie czytane: zmienna srodowiskowa trafia do
     podprocesu auth proxy (env przed Keychain), wiec CORINE GeoTIFF dziala
@@ -377,7 +424,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Sidecary PL w trybie `--bbox`/`--geometry` (takze `--country pl`/`auto`)
   dostaja teraz dodatkowo `extra.parent_request` — nowe pole, tresc
   pozostalych pol bez zmian; wspolny klucz grupowania z sidecarami CZ dla
-  tego samego zadania
+  tego samego zadania (poza `--product laz`, ktory ma wlasny przeplyw
+  i niesie w `extra` pola kafla — backlog)
 - **Sidecary CZ: `transform.horizontal` niesie operacje przypieta zamiast
   serwerowej** (ADR-024) — `"pinned: <opis operacji> (<dokladnosc> m)"`,
   symetrycznie do `transform.vertical`, zamiast `"server:EPSG:<kod>"` bez pola
@@ -477,7 +525,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Reprojekcja tresci CZ szla przez serwer CUZK i gubila transformacje datum**
   (ADR-024). `--target-crs EPSG:2180` zwracal raster przesuniety o **135 m**
   (dE 119, dN 64,5 — `exportImage&imageSR=2180` traktowal S-JTSK jak ETRS89),
-  a domyslna sciezka godlowa TM33 (`imageSR=3045`) — o **1,25 m** na poludnie.
+  a domyslna sciezka godlowa TM33 (`imageSR=3045`) — o **1,25 m** na poludnie
+  (errata 2026-09-29: te 1,25 m — i 4,92 m w zachodnich Czechach —
+  odpowiadaja roznicy operacji EPSG:1622 - EPSG:4829, wiec najpewniej to
+  lokalna, slowacka operacja przypieta przesuwa tresc CZ; ADR-024, errata).
   Zaden z tych bledow nie byl widoczny w metadanych: zasieg, CRS, rozdzielczosc
   i nodata byly poprawne, a sidecar niosl tylko `transform.horizontal =
   "server:EPSG:<kod>"` bez dokladnosci. Kontrola przypietych transformow
@@ -609,8 +660,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Wycinek PL przesuwal tresc o ulamek piksela** (review max, zn. 1): crop
   mozaiki kotwiczony w rogu zadania + kopiowanie najblizszym sasiadem. Arkusze
   GUGiK maja narozniki pikseli w polowie miedzy wielokrotnosciami piksela
-  (5 m: na 5k + 2,5 m, zmierzone na 1977 arkuszach; siatka 1 m — do
-  potwierdzenia na zywych danych), wiec problem dotyczyl takze bboxow
+  (5 m: na 5k + 2,5 m, zmierzone na 1977 arkuszach; 1 m: na k + 0,5 m —
+  potwierdzone na zywo 2026-09-29 na 84 arkuszach; czesc arkuszy 5 m
+  kampanii 2022 ma inna faze, patrz ADR-027), wiec problem dotyczyl takze bboxow
   o CALKOWITYCH wspolrzednych (np. wielokrotnosci 5 m przy 5 m: 0,5 px =
   2,5 m, z mieszaniem sasiednich kolumn). Crop jest teraz przyciagany do
   siatki arkuszy. **Wycinki zbudowane wczesniejsza wersja 0.7.0-dev przebuduj
@@ -646,7 +698,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   jako istniejacy; teraz wszystkie warstwy -> "unavailable", czesc -> "brak
   pokrycia niepewny" (`DownloadError`, kod 1). URL w odpowiedzi nadal wygrywa;
   strona bledu z HTTP 200 bez znacznikow OGC nadal liczy sie jako brak arkusza
-  (do sprawdzenia na zywych danych). (finalny review fali review max, I-2)
+  (sprawdzone na zywo 2026-09-29: pusta odpowiedz skorowidza to szablon HTML
+  MapServera bez znacznikow OGC, a zla warstwa — HTTP 200 `text/xml`
+  z `LayerNotDefined`). (finalny review fali review max, I-2)
 - API wycinka PL (`prepare_pl_cutout`, `download_pl_cutout`): bbox w ukladzie
   czeskim z etykieta malymi literami albo ze spacjami (`"epsg:5514"`) opuszcza
   Krovaka przypieta operacja, jak `"EPSG:5514"` — dotad szedl po cichu
@@ -664,6 +718,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   offline po fali review max (1854 po 18 zadaniach + 7 w fali naprawczej
   po finalnym review; lacznie +82). ruff i `ruff format` czyste, mypy 32
   bledy (baseline sprzed etapu 0: 33; fala review max bez nowych bledow)
+- **Testy na zywych danych (2026-09-29)** — centrum kraju, pas morski,
+  pogranicza PL-CZ, PL-DE, PL-SK/UA/BY/LT/RU, duzy wycinek (offline) — 7
+  raportow w `docs/research/2026-09-29-live-e2e-i-audyt-docs/`; wyniki
+  i bledy wykryte na zywo: `docs/PROGRESS.md`.
 - **Fala review max (2026-09-28)** — nowe i zmienione testy m.in.
   w `tests/test_pl_cutout.py` (API biblioteki, siatka arkuszy, VRT, R5,
   rozmiar i dysk), `tests/test_transport_mosaic.py` (leniwe otwieranie
