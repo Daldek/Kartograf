@@ -406,10 +406,9 @@ from kartograf import (
   zapytanie do CUZK także dla bboxów leżących w całości w Polsce, a także
   w Saksonii poniżej 51,06°N i w pasie Bogatyni (wynik: dodatkowy
   raster/sidecar wypełniony nodata z kodem 0, bez komunikatu — znany błąd
-  N2). Symetrycznie
-  prostokąt PL (14,07..24,20°E, 49,00..54,90°N) pokrywa większość Czech, więc
-  auto w Pradze, Brnie czy Ostrawie odpytuje także GUGiK — naprawa (wielokąt
-  granicy) planowana w etapie 2 (patrz ADR-023)
+  N2). Symetrycznie prostokąt PL (14,07..24,20°E, 49,00..54,90°N) pokrywa
+  większość Czech, więc auto w Pradze, Brnie czy Ostrawie odpytuje także
+  GUGiK — naprawa (wielokąt granicy) planowana w etapie 2 (patrz ADR-023)
 - --country domyślnie = auto (nowość 0.7.0): na obszarze spornym flagi bez
   odpowiednika czeskiego (--product nmpt|orto, --system, --vertical-crs
   KRON86, --resolution 1m) ROZSTRZYGAJĄ kraj do pl z komunikatem Info: na
