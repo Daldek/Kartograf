@@ -43,7 +43,7 @@ Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja
 ## ADR-003: OpenData (ASC) vs WCS (GeoTIFF) — rozdzielenie sciezek pobierania NMT
 
 **Data:** 2026-01-18
-**Status:** Przyjeta
+**Status:** Przyjeta (czesc "bbox = WCS" nieaktualna — patrz korekta 2026-09-29)
 
 **Kontekst:** GUGiK oferuje dwa sposoby pobierania NMT: OpenData (pliki ASC po godle) i WCS (GeoTIFF po bbox). Poczatkowo probowano ujednolicic oba w jednym flow.
 
@@ -54,6 +54,14 @@ Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja
 **Decyzja:** Rozdzielenie (opcja B). Godlo zawsze daje ASC przez OpenData, bbox zawsze daje GeoTIFF przez WCS. Roznne formaty, rozne API, rozne ograniczenia — nie ma sensu ich laczyc.
 
 **Konsekwencje:** Czytelniejszy kod. Uzytkownik jawnie wybiera metode. NMT 5m dziala tylko przez OpenData (WCS niedostepne).
+
+**Korekta (2026-09-29, audyt dokumentacji):** czesc "bbox zawsze daje GeoTIFF
+przez WCS" juz nie obowiazuje: CLI rozwija bbox PL na arkusze OpenData,
+a jeden GeoTIFF dla bboxa/geometrii buduje z arkuszy wycinek `--target-crs` /
+`download_pl_cutout` (ADR-027). WCS zostal tylko w
+`DownloadManager.download_bbox` / `GugikProvider.download_bbox` i tylko dla
+KRON86 — endpoint EVRF2007 GUGiK wycofal (HTTP 404 od 2026-08), a
+`download_bbox` z EVRF2007 konczy sie `ValidationError` przed siecia.
 
 ---
 
@@ -181,6 +189,17 @@ dzis na SZABLON segmentu, nie na nazwe katalogu.
 **Decyzja:** Opcja C. Algorytm: (1) floor division dla 1:1M (pas/slup), (2) siatka 12x12 dla 1:200k z clamped row/col, (3) rekurencyjne get_children() + _bboxes_intersect() do docelowej skali. Bez zadnego zapytania sieciowego.
 
 **Konsekwencje:** Dziala offline. Szybkie (~1s dla 1:10k). Zalezy od poprawnosci _calculate_wgs84_bbox() — jesli zmieni sie logika bbox, find_sheets_for_bbox tez sie zmieni. CLI download godlo staje sie opcjonalne (nargs="?").
+
+**Korekta (2026-09-29, audyt dokumentacji; stan kodu po audycie 0.7.0
+i fali review max 2026-09-28):** (a) od audytu 0.7.0 (A1-7) liczy sie
+dodatnie pole przeciecia — stykajace sie krawedzie nie sa przecieciem;
+(b) bbox w EPSG:2180 jest zamieniany na obwiednie WGS84 z 4 naroznikow i 2
+punktow na poludniku osiowym 19°E (tam lezy maksimum szerokosci gornej
+krawedzi — fakt 8 fali review max); obwiednia jest szersza niz bbox, wiec
+selekcja obejmuje arkusze sasiednie (obwiednia EPSG:2180 arkusza
+`N-34-130-D-d-2-4` daje 9 godel, `N-34-130-D` w skali 1:50000 — 16 zamiast
+4; w duzym wycinku do ~3,7 km poza zadaniem); (c) `--system 2000` liczy
+obwiednie z 4 naroznikow (`core/parser_2000`, backlog).
 
 ---
 
@@ -330,6 +349,12 @@ wlasne segmenty `pl_2000_*`.
 
 **Konsekwencje:** Wymagane thread-safe temp filenames we wszystkich providerach (pattern `pid_threadid.tmp`). DownloadResult zamiast list[Path] dla structured results. Backward-compatible: `max_workers=1` daje sekwencyjne pobieranie.
 
+**Korekta (2026-09-29, audyt dokumentacji):** `max_workers=4` jest domyslne
+w CLI (`--workers`), a w bibliotece — 1 (`DownloadManager`,
+`download_pl_cutout`, `run_pl_cutout`). Metody zwracaja `list[Path]`,
+a strukturalny wynik (`DownloadResult`: succeeded/failed/skipped/no_coverage)
+trafia do `DownloadManager.last_result`.
+
 ---
 
 ## ADR-019: SQLite WAL jako metadata cache
@@ -347,6 +372,13 @@ wlasne segmenty `pl_2000_*`.
 **Decyzja:** SQLite WAL (A). Zero dodatkowych zaleznosci (sqlite3 w stdlib), WAL mode umozliwia rownoczesne odczyty z ThreadPoolExecutor, TTL 7 dni zapobiega stalym danym, threading.Lock chroni zapisy.
 
 **Konsekwencje:** Nowy modul `kartograf/cache/metadata.py`, `.kartograf_cache.db` w katalogu roboczym, CLI `kartograf cache` do zarzadzania. `prune_expired()` czysci stale wpisy. Optional — providery dzialaja bez cache.
+
+**Uzupelnienie (2026-09-29, testy na zywo i audyt):** zaden tor PL (CLI:
+godlo/bbox/geometria/wycinek, `DownloadManager`, `download_pl_cutout`) nie
+przekazuje providerowi `cache=` — URL-e arkuszy PL nie sa cache'owane miedzy
+przebiegami, a `.kartograf_cache.db` tworzy w CLI tylko tor CZ (indeks SM5).
+Znany blad N6 (`docs/PROGRESS.md`, "Znane bledy"); cache dziala, gdy
+wolajacy sam przekaze `cache=MetadataCache()` do providera.
 
 ---
 
@@ -369,6 +401,18 @@ wlasne segmenty `pl_2000_*`.
 
 **Aktualizacja (2026-06-24):** GugikOrtoProvider otrzymal wlasna walidacje (`_fetch_wms_layers`/`_get_validated_layers`, wyklucza warianty `Zasiegi`). Nazwy warstw NMT 1m/EVRF2007 i Orto odswiezone (nowe roczniki 2026).
 
+**Aktualizacja (2026-09-29; zmiana kodu z fali review max 2026-09-28):**
+odpowiedz GetFeatureInfo bez URL z raportem wyjatku OGC
+(`ServiceException`/`ExceptionReport`, np. `LayerNotDefined` dla nieaktualnej
+nazwy warstwy przy nieudanym GetCapabilities) liczy sie jako nieudane
+zapytanie warstwy, nie jako brak arkusza — nie daje `NoCoverageError`
+(ADR-027, R5). Na zywo 2026-09-29 potwierdzone w obie strony: pusta
+odpowiedz to szablon HTML MapServera (HTTP 200, `text/html`, bez znacznikow
+OGC), zla warstwa — HTTP 200 `text/xml` z `LayerNotDefined`. Fallback na
+warstwy zaszyte w kodzie jest dzis nieaktualny dla NMPT EVRF2007 (kod:
+2025..2022iStarsze, GetCapabilities: 2026..2023iStarsze) — gdy
+GetCapabilities zawiedzie, NMPT nie pobiera sie wcale (znany blad S4).
+
 ---
 
 ## ADR-021: LAZ (chmury punktów LIDAR) — discovery przez WFS, area-based
@@ -387,6 +431,22 @@ wlasne segmenty `pl_2000_*`.
 **Decyzja:** Opcja B. `GugikLazProvider` z discovery area-based: godło (≤1:10000) / `--bbox` / `--geometry` → bbox EPSG:2180 → WFS GetFeature (`gugik:SkorowidzDanychPomiarowychLIDAR{rok}`) → kafle z `url_do_pobrania`. Spojny schemat wejscia z NMT/NMPT/orto (te same tryby, finest = 1:10000); jedyna roznica wynika z danych GUGiK — jedno godło 1:10000 = wiele kafli LAZ. Godło kafla **nie jest parsowane** (opaque label) → `FileStorage.get_raw_path()` buduje sciezke bez `SheetParser`. Dwie usługi WFS wg ukladu wysokosciowego (EVRF2007 domyslnie, KRON86 legacy). Domyslnie newest-per-tile (dedup po godle), flagi `--year`/`--vertical-crs`/`--min-density`. Os EPSG:2180 dla WFS (`BBOX=min_x,min_y,max_x,max_y,urn:...EPSG::2180`) zweryfikowana live; dodatkowo client-side post-filter przeciecia kafla z bbox.
 
 **Konsekwencje:** Brak zmian w `SheetParser` (parser pozostaje przy 1:10000, spojnie z NMT/orto). LAZ omija `DownloadManager.download_sheet` — wlasny przeplyw `_cmd_download_laz` (area→WFS→tiles→parallel download). WFS daje metadane (rok/gestosc/CRS) za darmo. Zaleznosc od nazw feature-type `LIDAR{rok}` zlagodzona przez GetCapabilities + fallback `FALLBACK_YEARS`. 41 nowych testow; E2E zweryfikowane (pliki z magic `LASF`).
+
+**Errata (2026-09-29, testy na zywo — znany blad K1):** zdanie "Os EPSG:2180
+dla WFS (`BBOX=min_x,min_y,max_x,max_y,urn:...EPSG::2180`) zweryfikowana
+live" jest bledne. Dla `urn:ogc:def:crs:EPSG::2180` serwer stosuje kolejnosc
+osi EPSG (polnoc, wschod), a Kartograf wysyla (wschod, polnoc) i tak samo
+odwrotnie czyta `gml:Envelope` kafla — filtr po stronie klienta przechodzi, bo
+obie strony sa zamienione spojnie. Weryfikacja z 2026-06-24 byla kolowa
+(sprawdzala zgodnosc kafla z tym samym zamienionym zapytaniem; obserwacja
+`M-34-27-B-b-2-1` -> kafle `N-33-131-B-a-1-*` byla objawem bledu). Test A/B
+na WFS: bbox pod Spytkowicami w (N, E) zwraca kafel `M-34-76-A-a-1-1-3`
+(poprawny), w kolejnosci Kartografa (E, N) — `N-33-127-A-a-2-3-4` (Lubuskie,
+426 km dalej); punkty tego kafla zgadzaja sie z NMT miejsca transponowanego
+(mediana 0,000 m), "E2E zweryfikowane" potwierdzilo wiec tylko format pliku.
+Dotyczy wszystkich trybow LAZ; naprawa czeka na decyzje uzytkownika
+(`docs/PROGRESS.md`, "Znane bledy"). Raport:
+`docs/research/2026-09-29-live-e2e-i-audyt-docs/L1-centrum-produkty-report.md`.
 
 ---
 
@@ -638,7 +698,38 @@ przetrwaly zapis tych zobowiazan to ponizsze punkty i PROGRESS.md):**
    daje dwa wycinki w tym samym ukladzie ze wspolnym
    `extra.parent_request`. `--target-crs` NIE dolacza wiec do listy opcji
    rozstrzygajacych kraj z pkt 5 (`_pl_only_flags`) — dziala po obu
-   stronach granicy, wiec nie rozstrzyga w zadna strone.
+   stronach granicy, wiec nie rozstrzyga w zadna strone. Asymetria z punktu
+   (c) obowiazuje odtad tylko bez `--target-crs`: z ta flaga bbox PL daje
+   jeden scalony wycinek.
+7. **Errata 2026-09-29 (audyt dokumentacji i testy na zywo;
+   `docs/research/2026-09-29-live-e2e-i-audyt-docs/`):**
+   - pkt (f).2: "pojedynczy kafel pobrany godlem jest z definicji
+     juz-natywnym produktem 1:1" — od ADR-024 nieaktualne dla TM33: kafel
+     TM33 to lokalny warp z EPSG:5514 na siatke EPSG:3045; 1:1 daja arkusz
+     SM5 i arkusze PL. Odrzucenie `--target-crs` z godlem zostaje (godlo
+     wyznacza zasieg i uklad produktu);
+   - pkt 3 ("jawny `--country cz` zapisuje CRS pliku geometrii, a `auto`/
+     `--country pl` — EPSG:2180"): jawny `--country cz` zapisuje obwiednie
+     w ukladzie zadania CZ (EPSG:5514 albo `--target-crs`), a `auto`/`pl` —
+     w ukladzie pliku, gdy plik jest w EPSG:5514/3045 (od 2026-09-28, review
+     max zn. 4), inaczej w EPSG:2180. Klucze sa zgodne tylko wtedy, gdy oba
+     uklady sie pokrywaja (np. plik w EPSG:5514 bez `--target-crs`);
+     ograniczenie do ujednolicenia w etapie 2 bez zmian;
+   - pkt 4 ("brak danych GUGiK to twardy `DownloadError`, nie pusty raster"):
+     od 2026-09-28 brak danych to `NoCoverageError(DownloadError)`;
+     w wycinku `--target-crs` arkusz bez danych daje nodata +
+     `extra.missing_sheets`, a obszar w calosci bez danych —
+     `ValidationError`; kod wyjscia jak w pkt 4-5. Tryb listy arkuszy (bez
+     `--target-crs`) nadal konczy sie kodem 1 na pierwszym arkuszu bez danych
+     (znany blad S2). Raster CZ w 100 % nodata nad Polska/Saksonia
+     w prostokacie CZ nadal nie daje zadnego komunikatu (N2);
+   - przycinanie do prostokata kraju pod `auto` jest ciche: czesc zadania poza
+     wszystkimi prostokatami znika, a nazwa pliku i `request.bbox` niosa bbox
+     przyciety (znany blad S3);
+   - Kontekst ("limit `exportImage` asymetryczny 15000x4100 px"): to limit
+     deklarowany przez usluge; realnie serwer odrzuca (HTTP 500) zapytania
+     wieksze niz ~8 Mpx, takze kafle mieszczace sie w deklaracji (znany
+     blad K6).
 
 **Konsekwencje:** Pelna parytetowosc produktowa DMR miedzy PL i CZ (godlo,
 bbox, transformacja pozioma/pionowa opcjonalna). 1381 testow zielonych
@@ -818,6 +909,43 @@ poprawne, GDAL renormalizuje wagi). Kierunek naprawy: maskowanie przed
 interpolacja na krawedzi, jesli konsument liczy dokladna powierzchnie
 pokrycia.
 
+**Errata (2026-09-29, testy na zywo — znany blad K2; raport
+`docs/research/2026-09-29-live-e2e-i-audyt-docs/L4-pogranicze-cz-report.md`):**
+- **Diagnoza 1,25 m / 4,92 m jest najpewniej bledna.** Przypieta operacja
+  S-JTSK -> ETRS89 wybrana przez `build_pinned_transform` (najlepsza
+  dokladnosc, bez sprawdzenia obszaru uzycia) to EPSG:4829 "S-JTSK to ETRS89
+  (3)" — obszar uzycia: Slowacja, 0,5 m. Dla Czech wlasciwa jest EPSG:1622
+  "S-JTSK to ETRS89 (1)" (Czechy, 1,0 m; wybiera ja PROJ z obszarem
+  zainteresowania). Roznica 1622 - 4829 w Czechach: Cheb (`302_5550`) 5,00 m
+  (dE +4,56, dN +2,04), Cieszyn 1,15 m (dN -1,15), Praga 3,15, Karkonosze
+  2,72, Brno 0,98 m — co do wielkosci i kierunku to wlasnie "bledy serwera
+  dla `imageSR=3045`" z tabeli wyzej (1,25 m na poludnie kolo Cieszyna;
+  4,92 m, dE -4,50 / dN -2,00, w zachodnich Czechach). Referencja tamtych
+  pomiarow (dane natywne 5514 zreprojektowane lokalnie) uzywala tej samej
+  slowackiej operacji, wiec serwer najpewniej liczyl poprawnie, a "fix"
+  wprowadzil przesuniecie tresci CZ o 1-5 m. Pomiar niezalezny (NMT GUGiK
+  1 m jako wzorzec polozenia, Karkonosze): tresc CZ po warpie Kartografa
+  przesunieta o (-2,26; +0,61) m, z operacja EPSG:1622 — o (+0,38; -0,03) m.
+  "Zywa weryfikacja fixu" nizej mierzyla zgodnosc z referencja zbudowana ta
+  sama operacja (0,016/0,031 m), a mediana szwu Olzy (-0,086 m) opisuje
+  roznice wysokosci na plaskim terenie — zadna z nich nie mogla wykryc
+  zlej operacji.
+- **Blad 135 m dla `imageSR=2180` (brak transformacji datum) pozostaje realnym
+  bledem serwera**, wiec decyzja (a) — zadania rastrowe tylko w ukladzie
+  natywnym, reprojekcja lokalna z wymuszona operacja — zostaje; do rewizji
+  jest WYBOR operacji S-JTSK -> ETRS89 (Polityka: "znane operacje z Krovaka
+  do 2180/3045 maja 0,5 m" to dokladnosc operacji slowackiej) i deklarowana
+  w sidecarze dokladnosc "(0.5 m)". Dotyczy kafli TM33, `--target-crs` CZ,
+  wycinka PL -> EPSG:5514 (ADR-027) i `bbox_to_crs`. Naprawa czeka na
+  decyzje uzytkownika (tor CZ zamrozony do wydania — `docs/PROGRESS.md`,
+  "Znane bledy").
+- **Kotwica siatki (Konsekwencje wyzej):** zasieg jest przyklejony do
+  wielokrotnosci `pixel_size` liczonej od POLNOCNO-zachodniego naroza
+  zadania (`from_origin(min_x, max_y)`, `round()` na liczbie pikseli — jak
+  w `CuzkClient.export_image` od audytu A3-1), nie od poludniowo-zachodniego;
+  krawedz E i S moze roznic sie od zadanej o do ½ piksela (bbox wezszy niz
+  pol piksela dostaje 1 px i odbiega bardziej).
+
 ---
 
 ## ADR-025: Mapowanie tekstura -> HSG i kanoniczny trojkat USDA (audyt 0.7.0)
@@ -988,6 +1116,17 @@ dostaje szablon — pole bylo de facto wewnetrzne; uzyj `resolve_subdir()`.
 FileStorage: nowy parametr `vertical_crs` (default "EVRF2007"); nieznany
 `product` nadal passthrough (np. testowe `nmt_2000_1m`).
 
+**Uzupelnienie (2026-09-29, audyt dokumentacji; zmiany kodu z fali review max
+2026-09-28, zn. 7, 8, 11):** `resolve_subdir` odrzuca pusty/bialy wymiar
+(`ValidationError`); dla kafli LAZ `{uklad}` wyznacza `LazTile.uklad`
+(kaskada `uklad_xy` -> format godla -> "2000"), przekazywany jawnie
+w `FileStorage.get_raw_path(..., uklad=)` — bez `uklad=` obowiazuje regula
+formatu godla; `FileStorage(resolution=/product=)` mapuje na KLUCZ
+deskryptora zamiast kopii szablonu (jedno zrodlo prawdy). Na zywo
+2026-09-29 wszystkie segmenty powstaly zgodnie z tabela (NMT 1 m/5 m,
+EVRF2007/KRON86, PL-1992/PL-2000, NMPT, orto, LAZ, CZ dmr5g/dmr4g bpv/evrf2007,
+`bbox/`); tresc plikow PL-2000 i LAZ obciazaja znane bledy K4 i K1.
+
 ---
 
 ## ADR-027: --target-crs dla PL — scalony wycinek bbox (mozaika + pinned warp)
@@ -1063,7 +1202,8 @@ nie ma danych (`NoCoverageError` — wszystkie warstwy skorowidza odpowiedzialy
 i zadna nie ma arkusza), nie wetuje wycinka: w jego miejscu jest nodata,
 CLI wypisuje `Warning:`, a sidecar niesie `extra.missing_sheets` (API
 biblioteki: `PlCutoutResult.missing_sheets`). Kazda inna porazka pobrania
-(siec, serwer, czesciowa awaria skorowidza) nadal przerywa wycinek przed
+(siec, serwer, czesciowa awaria skorowidza — takze odpowiedz 2xx z raportem
+wyjatku OGC) nadal przerywa wycinek przed
 budowa, kodem 1 — chwilowy blad nie moze zostawic trwalej dziury w pliku,
 ktory potem jest pomijany jako istniejacy. Kodem 1 konczy sie tez obszar,
 dla ktorego danych nie ma ZADEN arkusz (`ValidationError`, wycinek nie
@@ -1119,6 +1259,38 @@ bboxa przygranicznego; jeden taki arkusz wetowal dotad caly wycinek, wiec
 - Rozmiar (zn. 9): bez twardego limitu — plik posredni mozaiki przy warpie
   jest kompresowany, miejsce na dysku sprawdzane przed siecia (dolne
   oszacowanie), a CLI wypisuje `Info:` dla wycinkow >= 1 GiB.
+
+**Uzupelnienie 2026-09-29 (testy na zywych danych; raporty
+`docs/research/2026-09-29-live-e2e-i-audyt-docs/` L1-L7):**
+- **Mechanika potwierdzona.** Cel EPSG:2180: 0 pikseli rozbieznych
+  z arkuszem zawierajacym srodek piksela (1 m i 5 m, bbox calkowity
+  i ulamkowy, morze i pogranicza); cele 5514/3045: bit w bit z mozaika
+  + warpem ta sama operacja; `Skipped` bez sieci, nieudany `--force`
+  zostawia stary plik, biblioteka == CLI przy tych samych arkuszach; duzy
+  wycinek (1836/2394 arkuszy) — ~1 GiB RSS, maks. 9 deskryptorow,
+  `ulimit -n 256` bit w bit.
+- **R5 na morzu i granicach.** Arkusze morskie i zagraniczne (CZ, DE, UA, BY,
+  RU) trafiaja do `missing_sheets`, nodata tylko po stronie morza/granicy;
+  straz I-2 odroznia pusta odpowiedz (szablon MapServera bez znacznikow OGC)
+  od raportu wyjatku. `missing_sheets` nie jest pelnym obrazem nodata
+  (dziury wewnatrz pobranych arkuszy przygranicznych i przybrzeznych). Tryb
+  listy bez `--target-crs` nie ma tolerancji R5 (znany blad S2). Zapytania
+  skorowidza bez ponowien (S1) sprawiaja, ze przy zrywanych polaczeniach
+  GUGiK wycinek z wieloma arkuszami bez danych konczy sie kodem 1.
+- **Siatka (R1).** Arkusze 1 m maja jedna faze — narozniki na k + 0,5 m (84
+  pliki, EVRF2007 2019-2025, KRON86 2011-2018); `extra.off_grid_sheets` dla
+  1 m jest zbedne. Uzasadnienie "arkusze 5 m na `5k + 2,5 m`" nie jest
+  uniwersalne: arkusze 5 m kampanii 2022 pod Krakowem maja kazdy inna faze,
+  a mozaika bierze wtedy wartosci z sasiedniego piksela i zostawia nodata na
+  szwach (znany blad S5).
+- **Tresc zalezy od wyboru pliku arkusza** (znane bledy K3/K4): dwa przebiegi
+  `--force` tego samego wycinka 5 m roznily sie w 21 % pikseli (inne
+  kampanie po chwilowych bledach skorowidza); plik 0,5 m w skorowidzu 1 m
+  daje wycinek "1m" w 0,5 m albo 100 % nodata z kodem 0. Cel EPSG:5514
+  obciaza znany blad K2 (ADR-024, errata).
+- **Styk PL/CZ (wejscie R6):** GUGiK ~200 m w glab CZ, CUZK ~118 m w glab
+  PL, pas wspolny ~310-350 m bez szczeliny, roznice wysokosci -0,19..+0,14 m
+  (mediany; trojstyk 0,17 m) — `docs/ARCHITECTURE.md` sekcja 4.6.
 
 Opis przeplywu po tych zmianach: `docs/ARCHITECTURE.md` sekcja 4.3.
 
