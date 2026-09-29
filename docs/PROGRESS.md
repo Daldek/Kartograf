@@ -193,10 +193,10 @@ Raporty w `docs/research/2026-09-29-live-e2e-i-audyt-docs/`.
 | N9 | NISKI | Oszacowanie miejsca na dysku liczone dwa razy przy jawnym `estimate_pl_cutout_bytes` | L7 |
 | H1 | hipoteza | Regex URL skorowidza pomija `.ASC` wielkimi literami | L5 |
 
-- **Fala poprawek dokumentacji (ta sesja, brief
-  `.superpowers/sdd/2026-09-29-live-e2e-i-docs/DOCS-FIX-BRIEF.md`):** kazde
-  znalezisko D1/D2 zweryfikowane na kodzie; wynik (tabela per znalezisko:
-  `DOCS-FIX-REPORT.md`): D1 — 33 naprawione, 2 oznaczone jako znany blad
+- **Fala poprawek dokumentacji (ta sesja):** kazde znalezisko D1/D2
+  zweryfikowane na kodzie; wynik (tabela per znalezisko:
+  `DOCS-FIX-REPORT.md` w katalogu raportow wyzej): D1 — 33 naprawione,
+  2 oznaczone jako znany blad
   (N4); D2 — 50 naprawionych, 4 oznaczone (N6, K3 x2, S2), 1 pominiete
   (docstring `gugik_laz.py` — plik K1 nietykany do naprawy); 0 odrzuconych;
   11 uwag dla Hydrografa w `hydrograf-uwagi-migracyjne.md` (repo Hydrografu
