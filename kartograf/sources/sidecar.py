@@ -1,8 +1,9 @@
 """
 Sidecar metadanych wyniku pobrania: `<pelna_nazwa_pliku>.meta.json`.
 
-Kontrakt dla Hydrografa (scalanie danych transgranicznych poza Kartografem):
-CRS-y, nodata, zrodlo, licencja. Format wersjonowany polem `schema`;
+Kontrakt dla konsumentow (Hydrograf): CRS-y, nodata, zrodlo, licencja.
+W 0.7.0 dane transgraniczne scala konsument; scalanie PL+CZ w jedna
+powierzchnie to etap 2 Kartografa (R6). Format wersjonowany polem `schema`;
 pola dokladane addytywnie.
 """
 

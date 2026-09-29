@@ -109,7 +109,9 @@ class DownloadManager:
 
     Two download modes:
     - By godło: downloads ASC files from OpenData
-    - By bbox: downloads GeoTIFF from WCS (only 1m resolution)
+    - By bbox: downloads GeoTIFF from WCS (1m and KRON86 only — GUGiK withdrew
+      the EVRF2007 WCS endpoint; for EVRF2007 heights of an area use sheets or
+      ``kartograf.download_pl_cutout``)
 
     Supports vertical CRS:
     - EVRF2007 (default) - European Vertical Reference Frame 2007
@@ -141,12 +143,13 @@ class DownloadManager:
     >>> # Download hierarchy (ASC)
     >>> manager.download_hierarchy("N-34-130-D", "1:10000")
     >>>
-    >>> # Download by bounding box (GeoTIFF) - only 1m resolution
+    >>> # Download by bounding box (GeoTIFF, WCS) - only 1m and KRON86
     >>> from kartograf import BBox
     >>> bbox = BBox(
     ...     min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
     ... )
-    >>> manager.download_bbox(bbox, "area.tif")
+    >>> kron = DownloadManager(output_dir="./data", vertical_crs="KRON86")
+    >>> kron.download_bbox(bbox, "area.tif")
     >>>
     >>> # Download in legacy KRON86 vertical CRS
     >>> manager = DownloadManager(vertical_crs="KRON86")
@@ -741,8 +744,10 @@ class DownloadManager:
         Use this method when you need data for an arbitrary area
         (not aligned to standard map sheets).
 
-        Note: WCS download is only available for 1m resolution.
-        For 5m resolution, use download_sheet() with a godło instead.
+        Note: WCS download is only available for 1m resolution and KRON86
+        heights (GUGiK withdrew the EVRF2007 WCS endpoint). For 5m, or for
+        EVRF2007 heights, use download_sheet() with a godło instead, or
+        ``kartograf.download_pl_cutout`` for one GeoTIFF built from sheets.
 
         Parameters
         ----------
@@ -771,7 +776,7 @@ class DownloadManager:
 
         Examples
         --------
-        >>> manager = DownloadManager(output_dir="./data")
+        >>> manager = DownloadManager(output_dir="./data", vertical_crs="KRON86")
         >>> bbox = BBox(
         ...     min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
         ... )

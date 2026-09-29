@@ -1,9 +1,10 @@
 """
 Rejestr zrodel danych i krajow.
 
-Etap 0: deskryptory sa zrodlem prawdy dla storage_subdir, default_extension,
-licencji, opcji pionowych i capabilities (konsumpcja: sidecar + testy
-spojnosci). Egzekwowanie capabilities w managerach zaczyna sie w etapie 1.
+Deskryptory sa zrodlem prawdy dla storage_subdir (szablony segmentow,
+ADR-026), default_extension, licencji, opcji pionowych i capabilities
+(konsumpcja: sidecar + testy spojnosci). Capabilities wybieraja kanal
+w sidecarze; managery ich nie egzekwuja.
 """
 
 from kartograf.core.sheet_parser import BBox

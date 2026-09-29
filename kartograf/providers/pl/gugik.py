@@ -7,7 +7,8 @@ Digital Terrain Model (NMT) data from the Polish GUGiK
 
 Two download methods based on input type:
 - Godło (map sheet ID) → OpenData (ASC format)
-- BBox (bounding box) → WCS (GeoTIFF/PNG/JPEG formats)
+- BBox (bounding box) → WCS (GeoTIFF/PNG/JPEG formats; 1m and KRON86 only —
+  the EVRF2007 WCS endpoint was withdrawn by GUGiK, see ``download_bbox``)
 
 Supported resolutions:
 - 1m (GRID1) - available for EVRF2007 and KRON86
@@ -59,6 +60,7 @@ class GugikProvider(BaseProvider):
     Supports two download modes:
     - By godło (map sheet ID): downloads from OpenData as ASC
     - By bbox (bounding box): downloads from WCS as GeoTIFF/PNG/JPEG
+      (1m and KRON86 only, see ``download_bbox``)
 
     Supports two vertical coordinate systems:
     - EVRF2007 (PL-EVRF2007-NH) - default, European Vertical Reference Frame 2007
@@ -439,6 +441,11 @@ class GugikProvider(BaseProvider):
             uncertain, not absent) or the ASC download still fails after all
             retries
 
+        Notes
+        -----
+        Which file lands under ``godlo`` is decided by ``_get_opendata_url`` —
+        see its Notes for the known bugs of that choice (K3, K4, S1).
+
         Examples
         --------
         >>> provider = GugikProvider()
@@ -490,6 +497,21 @@ class GugikProvider(BaseProvider):
             exception report: service unavailable), or if only some layers
             answered and the rest have no data for the sheet (coverage is
             then uncertain, not absent)
+
+        Notes
+        -----
+        Layers are queried newest first, one request per layer, without
+        retries and — unless a ``session`` was injected — on a fresh
+        ``requests.Session`` per call. Known bugs (live tests 2026-09-29,
+        docs/PROGRESS.md "Znane bledy"; not intended behaviour):
+
+        - K3: if a newer layer query fails and an older layer has the sheet,
+          the older edition's URL is returned (only a log warning);
+        - K4: the first URL containing ``godlo`` as a substring wins,
+          regardless of resolution (0.5 m files sit in the 1 m index),
+          campaign date or coverage, and a URL without ``godlo`` is accepted
+          as a fallback (e.g. a PL-2000 sheet under a PL-1992 godlo);
+        - S1: no per-layer retry and no shared session.
         """
         # Check cache first
         if self._cache is not None:
@@ -590,7 +612,8 @@ class GugikProvider(BaseProvider):
                     # Fallback: URL bez tego godla. Dla nowszych kampanii bywa to
                     # arkusz PL-2000 (inny zasieg i uklad), zapisywany pod godlem
                     # PL-1992 — wycinek --target-crs odrzuca taki arkusz glosno
-                    # (plan 2026-09-28, fakt 7), lista arkuszy przyjmuje go bez zmian.
+                    # (plan 2026-09-28, fakt 7), lista arkuszy przyjmuje go bez zmian
+                    # (znany blad K4, testy na zywo 2026-09-29).
                     logger.warning(
                         f"{godlo}: skorowidz zwrocil URL innego arkusza ({urls[0]}) "
                         "— plik moze byc innym arkuszem, np. w ukladzie PL-2000"
@@ -604,7 +627,9 @@ class GugikProvider(BaseProvider):
                 # nie "warstwa odpowiedziala i nie ma arkusza": pod R5 chwilowy
                 # blad albo zla nazwa warstwy zostawilyby trwala dziure nodata.
                 # Straz tylko negatywna — strona bledu z 200 BEZ znacznikow OGC
-                # liczy sie dalej jako brak arkusza (checklista live).
+                # liczy sie dalej jako brak arkusza. Na zywo (2026-09-29):
+                # pusta odpowiedz = szablon HTML MapServera (200, text/html) bez
+                # znacznikow OGC, zla warstwa = 200 text/xml z LayerNotDefined.
                 if any(marker in text for marker in _OGC_EXCEPTION_MARKERS):
                     transport_errors += 1
                     last_error = DownloadError(

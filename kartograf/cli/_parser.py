@@ -66,14 +66,16 @@ def create_parser() -> argparse.ArgumentParser:
     # Download command
     download_parser = subparsers.add_parser(
         "download",
-        help="Download geospatial data from GUGiK",
+        help="Download geospatial data from GUGiK (PL) and CUZK (CZ)",
         description=(
-            "Download geospatial data from GUGiK: NMT (terrain), NMPT (surface), "
-            "or orthophoto. Dla PL --bbox/--geometry rozwija sie na arkusze "
-            "zrodlowe, a z --target-crs daje JEDEN scalony wycinek (ADR-027); "
-            "dla CZ --bbox/--geometry zawsze zwraca jeden wycinek (exportImage "
-            "w ukladzie natywnym EPSG:5514) — dane zrodlowe 1:1 daje tryb "
-            "godlowy (TM33/SM5)."
+            "Download geospatial data from GUGiK (PL: NMT, NMPT, orthophoto, LAZ) "
+            "and CUZK (CZ: DMR 5G/4G). Dla PL --bbox/--geometry rozwija sie na "
+            "arkusze zrodlowe, a z --target-crs daje JEDEN scalony wycinek "
+            "(ADR-027); dla CZ --bbox/--geometry zawsze zwraca jeden wycinek "
+            "(exportImage pobierany natywnie w EPSG:5514, z --target-crs "
+            "reprojektowany lokalnie). Dane zrodlowe 1:1 daja arkusze PL "
+            "i arkusz SM5; kafel TM33 to lokalny warp z EPSG:5514 na siatke "
+            "EPSG:3045 (ADR-024). Znane bledy 0.7.0-dev: README, 'Znane problemy'."
         ),
     )
     download_parser.add_argument(
@@ -85,7 +87,8 @@ def create_parser() -> argparse.ArgumentParser:
     download_parser.add_argument(
         "--bbox",
         metavar="BBOX",
-        help="Bounding box: min_x,min_y,max_x,max_y (default CRS: EPSG:2180)",
+        help="Bounding box: min_x,min_y,max_x,max_y (default CRS: EPSG:2180; "
+        "ujemne wspolrzedne, np. EPSG:5514, podaj bez spacji: --bbox=-447000,...)",
     )
     download_parser.add_argument(
         "--bbox-crs",
@@ -118,14 +121,17 @@ def create_parser() -> argparse.ArgumentParser:
         default=None,
         help="Reprojekcja wyniku, wykonywana lokalnie przypieta operacja "
         "(tylko tryb --bbox/--geometry, tylko --product nmt; PL: jeden "
-        "scalony wycinek GeoTIFF — w trybie --geometry obejmuje CALA "
-        "obwiednie geometrii, bez maskowania do obiektow; nodata tam, "
-        "gdzie nie siega zaden pobrany arkusz; CZ: wycinek exportImage)",
+        "scalony wycinek GeoTIFF, tylko z --system 1992 — w trybie --geometry "
+        "obejmuje CALA obwiednie geometrii, bez maskowania do obiektow; nodata "
+        "tam, gdzie nie siega zaden pobrany arkusz; arkusz bez danych GUGiK = "
+        "nodata + Warning (lista w sidecarze), inna porazka pobrania = kod 1; "
+        "CZ: wycinek exportImage)",
     )
     download_parser.add_argument(
         "--scale",
         metavar="SCALE",
-        help="Download all descendants to target scale (e.g., 1:10000)",
+        help="Download all descendants to target scale (e.g., 1:10000; "
+        "etykiety Kartografu: godlo 7-czlonowe = 1:10000, u GUGiK modul 1:5000)",
     )
     download_parser.add_argument(
         "--output",
@@ -137,7 +143,9 @@ def create_parser() -> argparse.ArgumentParser:
     download_parser.add_argument(
         "--force",
         action="store_true",
-        help="Overwrite existing files",
+        help="Overwrite existing files (z --target-crs PL: przebudowuje wycinek "
+        "i pobiera ponownie wszystkie jego arkusze; nieudana przebudowa "
+        "zostawia poprzedni plik)",
     )
     download_parser.add_argument(
         "--quiet",
@@ -150,7 +158,7 @@ def create_parser() -> argparse.ArgumentParser:
         choices=["KRON86", "EVRF2007", "Bpv"],
         default=None,
         help="Uklad pionowy: PL default EVRF2007 (lub KRON86); CZ default Bpv "
-        "(natywny) lub EVRF2007 (transformacja +0,12..0,14 m)",
+        "(natywny) lub EVRF2007 (transformacja ok. +0,11..+0,15 m, rosnaco S->N)",
     )
     download_parser.add_argument(
         "--resolution",
@@ -164,7 +172,9 @@ def create_parser() -> argparse.ArgumentParser:
         choices=["nmt", "nmpt", "orto", "laz"],
         default="nmt",
         help="Data product: nmt (terrain), nmpt (surface), "
-        "orto (orthophoto), laz (LIDAR point cloud). Default: nmt",
+        "orto (orthophoto), laz (LIDAR point cloud). Default: nmt. "
+        "0.7.0-dev: laz pobiera kafle z innego miejsca (znany blad K1), "
+        "orto — wariant CIR zamiast RGB (K5); README, 'Znane problemy'",
     )
     download_parser.add_argument(
         "--year",
@@ -207,7 +217,7 @@ def create_parser() -> argparse.ArgumentParser:
     # Landcover command group
     landcover_parser = subparsers.add_parser(
         "landcover",
-        help="Download land cover data (BDOT10k, CORINE)",
+        help="Download land cover and soil data (BDOT10k, CORINE, SoilGrids)",
         description="Download land cover / soil data from BDOT10k, CORINE or SoilGrids",
     )
     landcover_subparsers = landcover_parser.add_subparsers(

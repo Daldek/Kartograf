@@ -1,8 +1,10 @@
 """
 Custom exceptions for Kartograf.
 
-This module defines all custom exceptions used throughout the Kartograf package.
-All exceptions inherit from KartografError for easy catching of package-specific errors.
+This module defines the core custom exceptions of the Kartograf package
+(coordinate transformation errors live in ``kartograf.transform.crs``:
+``TransformError``, ``TransformUnavailableError``). All of them inherit from
+KartografError for easy catching of package-specific errors.
 """
 
 
