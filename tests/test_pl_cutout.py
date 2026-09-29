@@ -961,6 +961,37 @@ class TestCutoutSize:
         assert (pending_both, pending_one) == (2, 1)
         assert cut.estimated_bytes < one < both
 
+    def test_estimate_builds_one_transformer_for_all_sheets(self, tmp_path):
+        """N9: ``Transformer.from_crs`` (~7 ms, pyproj go nie cache'uje) raz na
+        proces, nie raz na arkusz — estymacja dla 1221 arkuszy spadla z ~9 s
+        do < 0,2 s, wiec wolajacy liczacy ja sam przed ``run_pl_cutout`` nie
+        placi podwojnie. Bajty identyczne z obwiednia ``SheetParser``."""
+        from pyproj import Transformer
+
+        from kartograf.core.sheet_parser import SheetParser
+        from kartograf.download import cutout as cutout_mod
+        from kartograf.download.cutout import (
+            PlCutoutSheets,
+            estimate_pl_cutout_bytes,
+            prepare_pl_cutout,
+        )
+
+        cut = prepare_pl_cutout(_BBOX_2180, "EPSG:2180", output_dir=tmp_path)
+        godla = ("N-34-130-D-d-2-3", "N-34-130-D-d-2-4", "N-34-130-D-d-4-1")
+        sheets = PlCutoutSheets(godla=godla)
+        cutout_mod._sheet_frame_transformer.cache_clear()
+        with patch.object(Transformer, "from_crs", wraps=Transformer.from_crs) as made:
+            first, pending = estimate_pl_cutout_bytes(cut, sheets)
+            second, _ = estimate_pl_cutout_bytes(cut, sheets)
+        assert pending == 3 and made.call_count == 1
+        expected = cut.estimated_bytes
+        for godlo in godla:
+            frame = SheetParser(godlo).get_bbox("EPSG:2180")
+            expected += int(
+                (frame.max_x - frame.min_x) * (frame.max_y - frame.min_y) * 5.5
+            )
+        assert first == second == expected
+
     def test_warp_mosaic_tmp_is_compressed_and_bigtiff_safe(self, tmp_path):
         from kartograf.download.cutout import build_pl_cutout
         from kartograf.transport import mosaic as mosaic_mod
@@ -1554,6 +1585,39 @@ class TestLibraryApi:
             download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path, cache=cache)
         assert factory.call_args.kwargs["cache"] is cache
 
+    def test_skipped_download_reads_sheet_lists_from_sidecar(self, tmp_path):
+        """N4: istniejacy wycinek (``force=False``) oddaje ``missing_sheets``
+        i ``off_grid_sheets`` z WLASNEGO sidecara, nie puste krotki — bez
+        sieci i bez selekcji arkuszy."""
+        from kartograf import download_pl_cutout
+
+        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+        cut = prepare_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
+        cut.target_path.parent.mkdir(parents=True)
+        cut.target_path.write_bytes(b"II*\x00")
+        cut.target_path.with_name(cut.target_path.name + ".meta.json").write_text(
+            json.dumps(
+                {
+                    "extra": {
+                        "missing_sheets": ["N-34-130-D-d-2-4"],
+                        "off_grid_sheets": ["N-34-130-D-d-2-3"],
+                    }
+                }
+            )
+        )
+        provider = self._provider()
+        with (
+            patch("kartograf.providers.pl.create_nmt_provider", return_value=provider),
+            patch("kartograf.download.cutout.find_sheets_for_bbox") as find,
+        ):
+            result = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
+
+        assert result.skipped and result.path == cut.target_path
+        assert result.missing_sheets == ("N-34-130-D-d-2-4",)
+        assert result.off_grid_sheets == ("N-34-130-D-d-2-3",)
+        assert result.sheet_paths == ()
+        assert provider.calls == [] and not find.called
+
     @pytest.mark.parametrize(
         ("attr", "value"), [("vertical_crs", "KRON86"), ("resolution", "5m")]
     )
@@ -1586,6 +1650,7 @@ class TestLibraryApi:
             "PlCutout",
             "PlCutoutResult",
             "PlCutoutSheets",
+            "GridMismatchError",
             "download_pl_cutout",
             "prepare_pl_cutout",
             "run_pl_cutout",
@@ -1662,6 +1727,28 @@ class TestMissingSheets:
             result.path.with_name(result.path.name + ".meta.json").read_text()
         )
         assert meta["extra"]["missing_sheets"] == ["N-34-130-D-d-2-4"]
+
+    def test_skipped_run_reads_missing_sheets_from_sidecar(self, tmp_path):
+        """N4: drugi przebieg bez ``force`` -> ``skipped`` z lista brakujacych
+        arkuszy z sidecara (dotad puste ``()``); bez sidecara — puste."""
+        from kartograf.download.cutout import run_pl_cutout
+
+        cut, sheets = self._cutout(tmp_path)
+        first = run_pl_cutout(
+            cut, sheets, provider=self._provider(no_coverage={"N-34-130-D-d-2-4"})
+        )
+        assert first.missing_sheets == ("N-34-130-D-d-2-4",)
+
+        untouched = self._provider()
+        untouched.download = Mock(side_effect=AssertionError("pobranie przy skipie"))
+        again = run_pl_cutout(cut, sheets, provider=untouched)
+        assert again.skipped and again.path == first.path
+        assert again.missing_sheets == ("N-34-130-D-d-2-4",)
+        assert again.off_grid_sheets == () and again.sheet_paths == ()
+
+        first.path.with_name(first.path.name + ".meta.json").unlink()
+        without_sidecar = run_pl_cutout(cut, sheets, provider=untouched)
+        assert without_sidecar.skipped and without_sidecar.missing_sheets == ()
 
     def test_sidecar_lists_sheet_sources_from_sheet_sidecars(self, tmp_path):
         """P5/D5: ``extra.sheet_sources`` = pochodzenie kazdego arkusza mozaiki
@@ -1777,3 +1864,158 @@ class TestMissingSheets:
             run_pl_cutout(cut, sheets, provider=self._provider())
         assert not cut.target_path.parent.exists()
         assert cut.target_path.parent.parent.exists()  # segment z arkuszami zostaje
+
+
+class TestOffGridSheets:
+    """S5 (D3/D8): arkusze o roznych fazach siatki pikseli.
+
+    Naglowki jak w L1 (5 m, kampania 2022): ``xllcorner 535807.22`` (faza
+    0,444) i ``538045.16`` (faza 0,032) -> arkusz wschodni lezy 0,412 px
+    na zachod od siatki zachodniego; wspolny ``yllcorner`` (rozjazd tylko w x).
+    """
+
+    _GODLA = ("M-34-76-A-a-1-1", "M-34-76-A-a-1-2")
+    # zadanie na szwie (arkusze: 535807..538107 i 538045..538545 x 232508..233008)
+    _BBOX = BBox(537800, 232600, 538300, 232900, "EPSG:2180")
+
+    @staticmethod
+    def _write_asc_5m(path, xll, ncols, value, fmt="{:.3f}"):
+        header = (
+            f"ncols {ncols}\nnrows 100\nxllcorner {xll}\nyllcorner 232508.63\n"
+            "cellsize 5\nNODATA_value -9999\n"
+        )
+        row = " ".join(fmt.format(value) for _ in range(ncols))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(header + "\n".join([row] * 100) + "\n", encoding="ascii")
+        return path
+
+    def _provider(self, tmp_path, *, east_xll=538045.16, east_fmt="{:.3f}"):
+        """Provider 5 m piszacy arkusz zachodni (100,25) i wschodni (200)."""
+        provider = Mock()
+        provider.vertical_crs = "EVRF2007"
+        provider.resolution = "5m"
+        provider.descriptor_key = "pl.gugik.nmt_5m"
+        provider.default_extension = ".asc"
+
+        def download(godlo, path, timeout=30):
+            if godlo == self._GODLA[0]:
+                return self._write_asc_5m(path, 535807.22, 460, 100.25)
+            return self._write_asc_5m(path, east_xll, 100, 200.0, east_fmt)
+
+        provider.download = download
+        return provider
+
+    def _cutout(self, tmp_path, target_crs):
+        from kartograf.download.cutout import PlCutoutSheets
+
+        cut = prepare_pl_cutout(
+            self._BBOX,
+            target_crs,
+            output_dir=tmp_path,
+            resolution="5m",
+            vertical_crs="EVRF2007",
+        )
+        return cut, PlCutoutSheets(godla=self._GODLA)
+
+    def test_target_2180_off_grid_sheets_is_an_error(self, tmp_path):
+        """D3: EPSG:2180 (wartosci 1:1) z arkuszy o roznych fazach = blad
+        z podpowiedzia innego --target-crs; bez pliku wyniku, bez ``bbox/``,
+        arkusze zostaja w cache."""
+        from kartograf.download.cutout import run_pl_cutout
+        from kartograf.download.storage import FileStorage
+        from kartograf.exceptions import GridMismatchError, ValidationError
+
+        cut, sheets = self._cutout(tmp_path, "EPSG:2180")
+        with pytest.raises(GridMismatchError, match=r"--target-crs EPSG:5514") as e:
+            run_pl_cutout(cut, sheets, provider=self._provider(tmp_path))
+
+        message = str(e.value)
+        assert "1 z 2 arkuszy" in message and "0.412 px" in message
+        assert "M-34-76-A-a-1-2.asc" in message and "EPSG:3045" in message
+        assert isinstance(e.value, ValidationError)
+        assert [s.path.stem for s in e.value.off_grid] == ["M-34-76-A-a-1-2"]
+        assert e.value.off_grid[0].dx_px == pytest.approx(-0.412)
+        assert not cut.target_path.exists()
+        assert not cut.target_path.parent.exists()  # bbox/ sprzatniete
+        storage = FileStorage(tmp_path, resolution="5m", vertical_crs="EVRF2007")
+        assert all(storage.get_path(g, ".asc").exists() for g in self._GODLA)
+
+    def test_cli_target_2180_off_grid_returns_1_with_hint(self, tmp_path, capsys):
+        west = self._write_asc_5m(tmp_path / "M-34-76-A-a-1-1.asc", 535807.22, 460, 100)
+        east = self._write_asc_5m(tmp_path / "M-34-76-A-a-1-2.asc", 538045.16, 100, 200)
+        rc, *_ = TestDownloadPlBboxCutout()._run(
+            tmp_path, _pl_args(tmp_path), [west, east]
+        )
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert err.startswith("Error: 1 z 2 arkuszy")
+        assert "--target-crs EPSG:5514" in err and "Arkusze zostaja w cache" in err
+
+    def test_target_5514_warps_each_off_grid_sheet_separately(self, tmp_path):
+        """D8 (W1): warp z arkuszy o roznych fazach — kazdy arkusz ze swojej
+        siatki prosto na siatke wyniku. Wynik ma DOKLADNIE dwa poziomy (100,25
+        i 200): zadnej mieszanki na szwie, zadnego nodata; w zakladce wygrywa
+        pierwszy w sortowaniu (zachodni, do 538107); arkusz wschodni z samymi
+        liczbami calkowitymi (Int32) nie obcina zachodniego. Bez naprawy
+        mozaika posrednia ``merge`` zostawiala kolumne nodata na szwie,
+        a bilinear rozmywal ja na ~70 wartosci posrednich."""
+        from kartograf.download.cutout import run_pl_cutout
+
+        cut, sheets = self._cutout(tmp_path, "EPSG:5514")
+        result = run_pl_cutout(
+            cut, sheets, provider=self._provider(tmp_path, east_fmt="{:.0f}")
+        )
+
+        assert result.off_grid_sheets == ("M-34-76-A-a-1-2",)
+        with rasterio.open(result.path) as ds:
+            assert ds.crs.to_epsg() == 5514
+            data = ds.read(1)
+            west_px = ds.index(
+                *(float(v) for v in cut.pinned.transform(538100, 232750))
+            )
+            east_px = ds.index(
+                *(float(v) for v in cut.pinned.transform(538115, 232750))
+            )
+        assert not (data == _NODATA).any()
+        assert set(np.unique(np.round(data, 3)).tolist()) == {100.25, 200.0}
+        assert data[west_px] == pytest.approx(100.25) and data[east_px] == 200.0
+        meta = json.loads(
+            result.path.with_name(result.path.name + ".meta.json").read_text()
+        )
+        assert meta["extra"]["off_grid_sheets"] == ["M-34-76-A-a-1-2"]
+        assert list(result.path.parent.glob("*.mosaic.tif")) == []
+
+    def test_single_phase_sheets_keep_mosaic_path(self, tmp_path):
+        """Arkusze na jednej fazie: dotychczasowa sciezka (mozaika 1:1 + warp
+        z pliku posredniego), bez ``off_grid_sheets`` w wyniku i sidecarze."""
+        from kartograf.download.cutout import run_pl_cutout
+        from kartograf.transform import raster as raster_mod
+        from kartograf.transport import mosaic as mosaic_mod
+
+        cut, sheets = self._cutout(tmp_path, "EPSG:5514")
+        with (
+            patch.object(
+                mosaic_mod, "mosaic_and_crop", wraps=mosaic_mod.mosaic_and_crop
+            ) as mosaic,
+            patch.object(
+                raster_mod, "warp_to_grid", wraps=raster_mod.warp_to_grid
+            ) as warp,
+        ):
+            # wschodni 10 px na zachod od konca zachodniego, ta sama faza (0,444)
+            result = run_pl_cutout(
+                cut, sheets, provider=self._provider(tmp_path, east_xll=538057.22)
+            )
+
+        assert result.off_grid_sheets == ()
+        mosaic.assert_called_once()
+        assert warp.call_args.args[0].name.endswith(".mosaic.tif")
+        meta = json.loads(
+            result.path.with_name(result.path.name + ".meta.json").read_text()
+        )
+        assert "off_grid_sheets" not in meta["extra"]
+        with rasterio.open(result.path) as ds:
+            data = ds.read(1)
+        assert not (data == _NODATA).any()
+        # mozaika + warp: interpolator widzi sasiada zza szwu, wiec na szwie
+        # sa wartosci posrednie — ale tylko miedzy oboma poziomami
+        assert data.min() == pytest.approx(100.25) and data.max() == 200.0

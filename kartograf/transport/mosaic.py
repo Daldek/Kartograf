@@ -7,60 +7,31 @@ K6); kolejny: wycinek PL (ADR-027); planowany: Saksonia (brak WCS, etap DE).
 Nodata jest propagowane do wyniku — NIGDY nie zamieniane na 0.
 """
 
-import logging
 import math
-import os
 import warnings
 from collections import Counter
+from collections.abc import Sequence
+from dataclasses import dataclass
 from pathlib import Path
-from xml.sax.saxutils import escape
 
 import numpy as np
 import rasterio
 from pyproj import CRS
 from rasterio.io import MemoryFile
 from rasterio.merge import merge
+from rasterio.transform import Affine
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import ValidationError
-
-logger = logging.getLogger(__name__)
+from kartograf.exceptions import GridMismatchError, ValidationError
+from kartograf.transform.raster import VRT_TYPES, vrt_xml
 
 # Tolerancja w pikselach: siatki zgodne i bboxy lezace na linii siatki
 # z dokladnoscia bledu zmiennoprzecinkowego nie moga ani dokladac kolumny,
-# ani rozdzielac zrodel na rozne siatki.
+# ani rozdzielac zrodel na rozne siatki. Szum zmiennoprzecinkowy wspolrzednych
+# ~5e5..7e5 m to ~2e-11 px (5 m); realne rozjazdy arkuszy GUGiK (naglowki
+# z 2-3 miejscami) to >= 2e-3 px — 1e-6 lezy 5 rzedow nad szumem i 3 pod
+# najmniejszym realnym rozjazdem.
 _GRID_TOL_PX = 1e-6
-
-# typ numpy/rasterio -> nazwa typu GDAL w XML VRT
-_VRT_TYPES = {
-    "uint8": "Byte",
-    "int16": "Int16",
-    "uint16": "UInt16",
-    "int32": "Int32",
-    "uint32": "UInt32",
-    "float32": "Float32",
-    "float64": "Float64",
-}
-
-
-def _vrt_xml(path: Path, meta: dict, *, crs_wkt: str | None, dtype: str, nodata) -> str:
-    """Jednopasmowy VRT 1:1 nad zrodlem: wymuszony SRS i typ pasma.
-
-    Sciezka zrodla absolutna (``relativeToVRT="0"``) — VRT zyje w
-    ``/vsimem/``, wzgledna nie mialaby do czego sie odnosic.
-    """
-    t = meta["transform"]
-    srs = f"<SRS>{escape(crs_wkt)}</SRS>" if crs_wkt else ""
-    nodata_xml = f"<NoDataValue>{nodata!r}</NoDataValue>" if nodata is not None else ""
-    source = escape(os.path.abspath(path))
-    return (
-        f'<VRTDataset rasterXSize="{meta["width"]}" rasterYSize="{meta["height"]}">'
-        f"{srs}<GeoTransform>{t.c!r}, {t.a!r}, {t.b!r}, {t.f!r}, {t.d!r}, {t.e!r}"
-        f'</GeoTransform><VRTRasterBand dataType="{_VRT_TYPES[dtype]}" band="1">'
-        f'{nodata_xml}<SimpleSource><SourceFilename relativeToVRT="0">{source}'
-        "</SourceFilename><SourceBand>1</SourceBand></SimpleSource>"
-        "</VRTRasterBand></VRTDataset>"
-    )
 
 
 def _same_projection(src_crs, target: CRS) -> bool:
@@ -79,65 +50,124 @@ def _same_projection(src_crs, target: CRS) -> bool:
         return candidate.to_dict() == target.to_dict()
 
 
-def _phase(value: float, step: float) -> int:
-    """Polozenie linii siatki w obrebie piksela (w jednostkach tolerancji).
+@dataclass(frozen=True)
+class OffGridSource:
+    """Zrodlo poza siatka odniesienia.
 
-    Dwie siatki o tym samym kroku sa zgodne, gdy fazy sa rowne; faza tuz
-    ponizej 1 to ta sama siatka co faza 0.
+    ``dx_px``/``dy_px``: przesuniecie linii siatki zrodla wzgledem linii
+    siatki odniesienia, w pikselach, w przedziale [-0,5; 0,5).
     """
+
+    path: Path
+    dx_px: float
+    dy_px: float
+
+
+@dataclass(frozen=True)
+class SourceGrid:
+    """Siatka pikseli zrodel mozaiki (``check_source_grid``).
+
+    ``reference``: transformacja zrodla odniesienia — siatka WIEKSZOSCI zrodel
+    (remis rozstrzyga kolejnosc wejscia). ``off_grid``: zrodla, ktorych linie
+    siatki leza dalej niz ``_GRID_TOL_PX`` od linii odniesienia; puste = wszystkie
+    zrodla na jednej siatce.
+    """
+
+    reference: Affine
+    off_grid: tuple[OffGridSource, ...]
+
+    def describe_off_grid(self, total: int, noun: str = "zrodel") -> str:
+        """Tresc ``GridMismatchError``: liczba, najwieksze przesuniecie, do 10 nazw."""
+        worst = max(max(abs(s.dx_px), abs(s.dy_px)) for s in self.off_grid)
+        names = ", ".join(s.path.name for s in self.off_grid[:10])
+        more = " ..." if len(self.off_grid) > 10 else ""
+        return (
+            f"{len(self.off_grid)} z {total} {noun} lezy na innej siatce pikseli "
+            f"niz pozostale (maks. przesuniecie {worst:.3f} px): {names}{more}"
+        )
+
+
+def _phase_key(value: float, step: float) -> int:
+    """Kubelek fazy linii siatki (w jednostkach tolerancji) — do wyboru siatki
+    wiekszosci; faza tuz ponizej 1 to ta sama siatka co faza 0."""
     p = (value / step) % 1.0
     if p > 1.0 - _GRID_TOL_PX:
         p = 0.0
     return round(p / _GRID_TOL_PX)
 
 
-def _snap_outward(
-    bounds: tuple[float, float, float, float],
-    paths: list[Path],
-    transforms: list,
-) -> tuple[tuple[float, float, float, float], list[tuple[Path, float, float]]]:
-    """Bounds rozszerzone na zewnatrz do siatki zrodel + zrodla spoza niej.
+def _shift_px(value: float, origin: float, step: float) -> float:
+    """Przesuniecie linii siatki ``value`` wzgledem siatki ``origin + k * step``
+    w pikselach, w przedziale [-0,5; 0,5) — owiniecie przez 1 jest w modulo."""
+    return ((value - origin) / step + 0.5) % 1.0 - 0.5
 
-    Siatka odniesienia = siatka WIEKSZOSCI zrodel (remis: pierwszej w
-    kolejnosci wejscia). Linie pionowe ``x0 + k * rx``, poziome ``y0 + k * ry``
-    (``y0`` to GORNA krawedz, ``transform.f``). Arkusze GUGiK zwykle leza na
-    jednej siatce, ale NIE na wielokrotnosciach piksela (1977 arkuszy 5 m
-    z cache Hydrografu: narozniki na 5k + 2,5 m; 84 arkusze 1 m na zywo
-    2026-09-29: k + 0,5 m) — stad siatka z transformacji. Nie zawsze: arkusze
-    5 m kampanii 2022 pod Krakowem maja kazdy inna faze (znany blad S5).
-    Zrodlo spoza siatki nie jest bledem (arkusze sa juz w cache, blad bylby
-    trwaly): wraca na liscie z przesunieciem w pikselach, a jego tresc merge
-    przepisuje bez interpolacji — ale nie zawsze z najblizszego piksela
-    (przesuniecie w strone W: piksel oddalony do ~0,9 px) i z kolumna/wierszem
-    nodata na szwie (S5).
+
+def _source_grid(paths: list[Path], transforms: list[Affine]) -> SourceGrid:
+    """``check_source_grid`` na gotowych transformacjach (bez otwierania plikow).
+
+    Linie pionowe ``x0 + k * rx``, poziome ``y0 + k * ry`` (``y0`` to GORNA
+    krawedz, ``transform.f``). Arkusze GUGiK zwykle leza na jednej siatce, ale
+    NIE na wielokrotnosciach piksela (1977 arkuszy 5 m z cache Hydrografu:
+    narozniki na 5k + 2,5 m; 84 arkusze 1 m na zywo 2026-09-29: k + 0,5 m) —
+    stad siatka z transformacji. Nie zawsze: arkusze 5 m kampanii 2022 pod
+    Krakowem maja kazdy inna faze (19 arkuszy, 19 faz; S5). Siatke wiekszosci
+    wybieraja kubelki faz (``_phase_key``), ale o przynaleznosci KAZDEGO zrodla
+    rozstrzyga odleglosc jego linii od linii odniesienia (``<= _GRID_TOL_PX``,
+    z owinieciem przez 1) — dwa szumy po dwu stronach granicy kubelka nie moga
+    dac falszywego bledu twardego.
     """
     for path, t in zip(paths, transforms, strict=True):
         if t.b != 0 or t.d != 0:
-            raise ValidationError(
-                f"mosaic_and_crop: obrocona siatka zrodla {path.name}"
-            )
+            raise ValidationError(f"obrocona siatka zrodla {path.name}")
+    res_set = {(t.a, -t.e) for t in transforms}
+    if len(res_set) > 1:
+        raise ValidationError(f"niezgodne rozdzielczosci zrodel: {sorted(res_set)}")
     rx, ry = transforms[0].a, -transforms[0].e
-    keys = [(_phase(t.c, rx), _phase(t.f, ry)) for t in transforms]
+    keys = [(_phase_key(t.c, rx), _phase_key(t.f, ry)) for t in transforms]
     majority = Counter(keys).most_common(1)[0][0]
     ref = transforms[keys.index(majority)]
+    off_grid = []
+    for path, t in zip(paths, transforms, strict=True):
+        dx, dy = _shift_px(t.c, ref.c, rx), _shift_px(t.f, ref.f, ry)
+        if abs(dx) > _GRID_TOL_PX or abs(dy) > _GRID_TOL_PX:
+            off_grid.append(OffGridSource(path, dx, dy))
+    return SourceGrid(reference=ref, off_grid=tuple(off_grid))
+
+
+def check_source_grid(paths: Sequence[Path]) -> SourceGrid:
+    """Siatka pikseli zrodel: odniesienie (wiekszosc) + zrodla spoza niej.
+
+    Sama detekcja, bez decyzji — co zrobic ze zrodlami ``off_grid``, wybiera
+    wolajacy: ``mosaic_and_crop(snap_to_source_grid=True)`` rzuca
+    ``GridMismatchError`` (kopia pikseli 1:1 jest wtedy niemozliwa), a wycinek
+    PL z warpem reprojektuje kazdy arkusz osobno na siatke wyniku
+    (``download/cutout.py``, W1). Zrodla otwierane sa po jednym (tylko
+    metadane). ``ValidationError``: brak zrodel, obrocona siatka (rotacja/skos
+    w transformacji), rozne rozdzielczosci.
+    """
+    if not paths:
+        raise ValidationError("check_source_grid: brak rastrow wejsciowych")
+    resolved = [Path(p) for p in paths]
+    transforms = []
+    for path in resolved:
+        with rasterio.open(path) as src:
+            transforms.append(src.transform)
+    return _source_grid(resolved, transforms)
+
+
+def _snap_outward(
+    bounds: tuple[float, float, float, float], ref: Affine
+) -> tuple[float, float, float, float]:
+    """Bounds rozszerzone NA ZEWNATRZ do linii siatki odniesienia (< 1 px)."""
+    rx, ry = ref.a, -ref.e
     x0, y0 = ref.c, ref.f
-    off_grid = [
-        (
-            path,
-            ((t.c - x0) / rx + 0.5) % 1.0 - 0.5,
-            ((t.f - y0) / ry + 0.5) % 1.0 - 0.5,
-        )
-        for path, t, key in zip(paths, transforms, keys, strict=True)
-        if key != majority
-    ]
     min_x, min_y, max_x, max_y = bounds
-    snapped = (
+    return (
         x0 + math.floor((min_x - x0) / rx + _GRID_TOL_PX) * rx,
         y0 + math.floor((min_y - y0) / ry + _GRID_TOL_PX) * ry,
         x0 + math.ceil((max_x - x0) / rx - _GRID_TOL_PX) * rx,
         y0 + math.ceil((max_y - y0) / ry - _GRID_TOL_PX) * ry,
     )
-    return snapped, off_grid
 
 
 def mosaic_and_crop(
@@ -167,13 +197,13 @@ def mosaic_and_crop(
     przycieciem rozszerza bbox NA ZEWNATRZ do linii siatki pikseli zrodel
     (siatka WIEKSZOSCI zrodel; remis rozstrzyga kolejnosc wejscia), wiec
     wynik kopiuje piksele zrodel 1:1 zamiast przesuwac tresc o ulamek piksela
-    (review max 2026-08-30, zn. 1). Zrodlo spoza tej siatki NIE przerywa
-    mozaikowania (arkusze sa juz w cache — blad bylby trwaly): idzie do
-    ``logger.warning`` z przesunieciem w px, a jego tresc ``merge`` przepisuje
-    bez interpolacji, ale nie zawsze z najblizszego piksela i z kolumna/
-    wierszem nodata na szwie — znany blad S5 (testy na zywo 2026-09-29).
-    Zrodlo z obrocona siatka (rotacja/skos w transformie) konczy sie
-    ``ValidationError``.
+    (review max 2026-08-30, zn. 1). Zrodlo spoza tej siatki (dalej niz
+    ``_GRID_TOL_PX`` od jej linii) konczy sie ``GridMismatchError`` z lista
+    przesuniec (``.off_grid``): ``merge`` przepisalby je "przez okno" —
+    nie zawsze z najblizszego piksela i z kolumna/wierszem nodata na szwie
+    (S5, testy na zywo 2026-09-29) — a wolajacy, ktory chce warpu, ma
+    ``check_source_grid`` i reprojekcje per zrodlo. Zrodlo z obrocona siatka
+    (rotacja/skos w transformie) konczy sie ``ValidationError``.
 
     ``assign_crs`` / ``dtype`` (domyslnie ``None``, tor CZ bez zmian): gdy
     ktorys jest podany, kazde zrodlo owijane jest w jednopasmowy VRT 1:1 w
@@ -188,7 +218,7 @@ def mosaic_and_crop(
     jest dozwolone, a zrodlo z WLASNYM CRS innym niz wymuszany konczy sie
     ``ValidationError`` (wymuszenie nie przelicza wspolrzednych). Przy
     owijaniu ``ValidationError`` daje tez zrodlo wielopasmowe i typ pasma
-    spoza ``_VRT_TYPES``; domyslny sterownik wyniku to GTiff, domyslnie bez
+    spoza ``VRT_TYPES``; domyslny sterownik wyniku to GTiff, domyslnie bez
     kafli (``tiled=False``; jawne kafle w ``dst_kwds`` wygrywaja) — profil
     wyjscia ``merge`` bierze z pierwszego zrodla, czyli z VRT.
     """
@@ -215,7 +245,7 @@ def mosaic_and_crop(
                     "nodata": src.nodata,
                 }
             )
-    # _snap_outward konsumuje transformacje zrodel — wyprowadzone z metas,
+    # _source_grid konsumuje transformacje zrodel — wyprowadzone z metas,
     # bez drugiej petli otwierajacej pliki.
     transforms = [m["transform"] for m in metas]
 
@@ -248,10 +278,10 @@ def mosaic_and_crop(
                     "rastry jednopasmowe"
                 )
             band_type = dtype or meta["dtype"]
-            if band_type not in _VRT_TYPES:
+            if band_type not in VRT_TYPES:
                 raise ValidationError(
                     f"mosaic_and_crop: typ pasma {band_type!r} (zrodlo "
-                    f"{path.name}) spoza obslugiwanych: {sorted(_VRT_TYPES)}"
+                    f"{path.name}) spoza obslugiwanych: {sorted(VRT_TYPES)}"
                 )
 
     bounds = (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
@@ -260,16 +290,10 @@ def mosaic_and_crop(
         # najblizszym sasiadem: tresc przesuwa sie o ulamek piksela, a przy
         # remisie (bbox calkowity na siatce GUGiK z narozami w k + 0,5) sasiednie
         # kolumny mieszaja sie (review max 2026-08-30, zn. 1; fakt 2 planu).
-        bounds, off_grid = _snap_outward(bounds, paths, transforms)
-        if off_grid:
-            worst = max(max(abs(dx), abs(dy)) for _, dx, dy in off_grid)
-            names = ", ".join(p.name for p, _, _ in off_grid[:10])
-            logger.warning(
-                f"mosaic_and_crop: {len(off_grid)} z {len(paths)} zrodel poza "
-                f"siatka pikseli wiekszosci (maks. przesuniecie {worst:.3f} px) "
-                f"— ich tresc przepisana najblizszym sasiadem: {names}"
-                + (" ..." if len(off_grid) > 10 else "")
-            )
+        grid = _source_grid(paths, transforms)
+        if grid.off_grid:
+            raise GridMismatchError(grid.describe_off_grid(len(paths)), grid.off_grid)
+        bounds = _snap_outward(bounds, grid.reference)
 
     # merge z dst_path sam otwiera plik do zapisu (stad mkdir PRZED
     # wywolaniem) i liczy wynik kawalkami wg mem_limit; bez dst_path
@@ -305,7 +329,7 @@ def mosaic_and_crop(
             sources: list = []
             for path, meta in zip(paths, metas, strict=True):
                 wkt = forced_wkt or (meta["crs"].to_wkt() if meta["crs"] else None)
-                xml = _vrt_xml(
+                xml = vrt_xml(
                     path,
                     meta,
                     crs_wkt=wkt,

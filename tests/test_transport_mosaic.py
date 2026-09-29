@@ -1,6 +1,6 @@
 """Testy mozaikowania (kartograf.transport.mosaic) na syntetycznych rastrach."""
 
-import logging
+import math
 import os
 import sys
 from pathlib import Path
@@ -14,8 +14,8 @@ from rasterio.merge import merge as rasterio_merge
 from rasterio.transform import from_origin
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import ValidationError
-from kartograf.transport.mosaic import mosaic_and_crop
+from kartograf.exceptions import GridMismatchError, ValidationError
+from kartograf.transport.mosaic import check_source_grid, mosaic_and_crop
 
 
 def _write_tile(
@@ -250,23 +250,77 @@ def test_snap_copies_source_pixels_exactly(tmp_path, bbox):
     np.testing.assert_array_equal(data, (1000.0 * r + c).astype("float32"))
 
 
-def test_snap_uses_majority_grid_and_warns(tmp_path, caplog):
-    """Zrodlo poza siatka nie wetuje mozaiki (arkusze sa w cache — blad
-    bylby trwaly); siatka = wiekszosc, nie 'pierwsze na liscie'."""
+def test_snap_rejects_off_grid_source(tmp_path):
+    """S5 (D3): zrodlo poza siatka wiekszosci = GridMismatchError z lista
+    przesuniec, nie ostrzezenie — ``merge`` przepisywalby je "przez okno"
+    (nie zawsze z najblizszego piksela, kolumna nodata na szwie); siatka
+    odniesienia to wiekszosc, nie 'pierwsze na liscie'. Bez pliku wyniku."""
     odd = _write_lattice_tile(tmp_path / "odd.tif", 20, 0, 4, 10, x0=0.75)
     a = _write_lattice_tile(tmp_path / "a.tif", 0, 0, 12, 10)
     b = _write_lattice_tile(tmp_path / "b.tif", 10, 0, 12, 10)
-    with caplog.at_level(logging.WARNING, logger="kartograf.transport.mosaic"):
-        out = mosaic_and_crop(
+    expected = r"1 z 3 zrodel .*0\.250 px.*odd\.tif"
+    with pytest.raises(GridMismatchError, match=expected) as e:
+        mosaic_and_crop(
             [odd, a, b],
             BBox(3.37, 92.13, 17.61, 97.9, "EPSG:2180"),
             tmp_path / "o.tif",
             snap_to_source_grid=True,
         )
+    assert isinstance(e.value, ValidationError)
+    (source,) = e.value.off_grid
+    assert source.path == odd
+    assert (source.dx_px, source.dy_px) == pytest.approx((0.25, 0.0))
+    assert not (tmp_path / "o.tif").exists()
+
+
+def test_snap_tolerates_float_noise(tmp_path):
+    """Dwa kafle rozniace sie o 1e-9 px to JEDNA siatka: porownanie faz
+    z tolerancja, nie rownosc kubelkow (szumy po dwu stronach granicy kubelka
+    nie moga dac falszywego bledu twardego)."""
+    a = _write_lattice_tile(tmp_path / "a.tif", 0, 0, 12, 10, x0=0.0)
+    b = _write_lattice_tile(tmp_path / "b.tif", 10, 0, 12, 10, x0=1e-9)
+    assert check_source_grid([a, b]).off_grid == ()
+    out = mosaic_and_crop(
+        [a, b],
+        BBox(3.37, 92.13, 17.61, 97.9, "EPSG:2180"),
+        tmp_path / "o.tif",
+        snap_to_source_grid=True,
+    )
     with rasterio.open(out) as src:
-        phase = src.transform.c - 0.5
-        assert phase == pytest.approx(round(phase), abs=1e-9)
-    assert "odd.tif" in caplog.text and "0.250" in caplog.text
+        assert src.transform.c == pytest.approx(3.0, abs=1e-9)
+
+
+def test_check_source_grid_wraps_phase_through_one(tmp_path):
+    """Faza 0,9999999 i faza 0 to ta sama siatka (owiniecie przez 1) —
+    takze wtedy, gdy zrodlo odniesienia ma faze 0."""
+    a = _write_lattice_tile(tmp_path / "a.tif", 0, 0, 12, 10, x0=0.0)
+    b = _write_lattice_tile(tmp_path / "b.tif", 10, 0, 12, 10, x0=-1e-8)
+    c = _write_lattice_tile(tmp_path / "c.tif", 20, 0, 12, 10, x0=0.0)
+    grid = check_source_grid([a, b, c])
+    assert grid.off_grid == ()
+    assert grid.reference.c == 0.0
+
+
+def test_check_source_grid_reports_shift_of_every_off_grid_source(tmp_path):
+    """Przesuniecia w [-0,5; 0,5) wzgledem siatki WIEKSZOSCI, w obu osiach."""
+    on1 = _write_lattice_tile(tmp_path / "on1.tif", 0, 0, 12, 10)
+    on2 = _write_lattice_tile(tmp_path / "on2.tif", 10, 0, 12, 10)
+    west = _write_lattice_tile(tmp_path / "west.tif", 20, 0, 4, 10, x0=0.5 - 0.3)
+    south = _write_lattice_tile(tmp_path / "south.tif", 0, 10, 4, 4, y_top=100.5 + 0.4)
+    grid = check_source_grid([west, on1, south, on2])
+    assert grid.reference.c == 0.5
+    shifts = {s.path.name: (s.dx_px, s.dy_px) for s in grid.off_grid}
+    assert shifts.keys() == {"west.tif", "south.tif"}
+    assert shifts["west.tif"] == pytest.approx((-0.3, 0.0))
+    assert shifts["south.tif"] == pytest.approx((0.0, 0.4))
+    assert math.isclose(max(max(abs(dx), abs(dy)) for dx, dy in shifts.values()), 0.4)
+
+
+def test_check_source_grid_rejects_mixed_resolution(tmp_path):
+    a = _write_lattice_tile(tmp_path / "a.tif", 0, 0, 12, 10)
+    b = _write_lattice_tile(tmp_path / "b.tif", 0, 0, 12, 10, res=0.5)
+    with pytest.raises(ValidationError, match="rozdzielczosci"):
+        check_source_grid([a, b])
 
 
 def test_snap_keeps_bbox_already_on_grid(tmp_path):

@@ -96,3 +96,25 @@ class ValidationError(KartografError):
     """
 
     pass
+
+
+class GridMismatchError(ValidationError):
+    """
+    Mosaic sources lie on different pixel grids (S5).
+
+    Raised by ``transport.mosaic.mosaic_and_crop(snap_to_source_grid=True)``
+    and by the PL cutout for ``EPSG:2180`` when at least one source raster
+    is shifted by a fraction of a pixel against the reference grid: copying
+    pixels 1:1 (R1) is impossible without resampling. Sources on the same
+    grid within float noise (1e-6 px) are not a mismatch.
+
+    Attributes
+    ----------
+    off_grid : tuple[OffGridSource, ...]
+        Every off-grid source with its shift in pixels
+        (``transport.mosaic.OffGridSource``: ``path``, ``dx_px``, ``dy_px``).
+    """
+
+    def __init__(self, message: str, off_grid: tuple = ()):
+        super().__init__(message)
+        self.off_grid = off_grid

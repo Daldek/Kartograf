@@ -43,6 +43,7 @@ from kartograf.download.manager import DownloadManager, DownloadProgress, Downlo
 from kartograf.download.storage import FileStorage
 from kartograf.exceptions import (
     DownloadError,
+    GridMismatchError,
     KartografError,
     NoCoverageError,
     ParseError,
@@ -109,6 +110,7 @@ __all__ = [
     "ValidationError",
     "DownloadError",
     "NoCoverageError",
+    "GridMismatchError",
     # Version
     "__version__",
 ]

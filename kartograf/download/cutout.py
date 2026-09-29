@@ -25,6 +25,7 @@ Przyklad::
     print(result.path)
 """
 
+import functools
 import json
 import logging
 import os
@@ -35,7 +36,7 @@ from pathlib import Path
 from kartograf.core.sheet_parser import BBox, find_sheets_for_bbox
 from kartograf.download.manager import DownloadManager, ProgressCallback
 from kartograf.download.storage import FileStorage, prune_empty_dirs
-from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.exceptions import DownloadError, GridMismatchError, ValidationError
 from kartograf.transform.crs import PinnedTransform, TransformPolicy
 
 logger = logging.getLogger(__name__)
@@ -106,12 +107,20 @@ class PlCutoutSheets:
 
 @dataclass(frozen=True)
 class PlCutoutResult:
-    """Wynik ``run_pl_cutout`` / ``download_pl_cutout``."""
+    """Wynik ``run_pl_cutout`` / ``download_pl_cutout``.
+
+    Przy ``skipped=True`` (plik istnial, ``force=False``) ``missing_sheets``
+    i ``off_grid_sheets`` pochodza z sidecara istniejacego wycinka
+    (``skipped_pl_cutout``), a ``sheet_paths`` jest puste — arkuszy nikt nie
+    dotykal.
+    """
 
     path: Path
     skipped: bool = False  # plik juz istnial (force=False) — bez sieci
     sheet_paths: tuple[Path, ...] = ()  # arkusze uzyte do mozaiki
     missing_sheets: tuple[str, ...] = ()  # arkusze bez danych GUGiK (R5) -> nodata
+    # arkusze o innej fazie siatki niz reszta, reprojektowane osobno (W1, S5)
+    off_grid_sheets: tuple[str, ...] = ()
 
 
 def _bbox_to_2180(bbox: BBox) -> BBox:
@@ -323,7 +332,7 @@ def build_pl_cutout(
     pixel_size: float,
     pinned: PinnedTransform | None,
     target_path: Path,
-) -> None:
+) -> tuple[str, ...]:
     """Zszyj arkusze, przytnij do ``crop_bbox_2180``; opcjonalny lokalny warp.
 
     ``crop_bbox_2180`` to obwiednia ZRODLA (przy warpie: zadanie + zapas),
@@ -331,25 +340,38 @@ def build_pl_cutout(
     (atomowy ``os.replace``). Obie sciezki zapisu sa atomowe (druga domyka
     wewnetrzny ``os.replace`` w ``warp_to_grid``), wiec przerwana budowa NIE
     zostawia polzapisanego pliku pod ``target_path`` — i nie kasuje
-    poprzedniego wyniku.
+    poprzedniego wyniku. Zwraca godla arkuszy reprojektowanych osobno (W1,
+    nizej) — pusta krotke na sciezce mozaiki.
 
     Siatka arkuszy (R1): crop jest rozszerzany NA ZEWNATRZ do pelnych pikseli
     siatki arkuszy (wiekszosci; < 1 px na strone), wiec przy celu EPSG:2180
     wartosci przechodza 1:1, bez przeprobkowania, a warp dostaje tresc bez
-    przesuniecia o ulamek piksela. Arkusz spoza siatki wiekszosci nie
-    przerywa budowy — ostrzezenie w logu, a jego tresc ``merge`` przepisuje
-    bez interpolacji, ale NIE zawsze z najblizszego piksela (przy przesunieciu
-    w strone W do ~0,9 px) i z kolumna/wierszem nodata na szwie — znany blad
-    S5 (testy na zywo 2026-09-29: arkusze 5 m kampanii 2022 pod Krakowem maja
-    rozne fazy siatki; 1 m — jedna faza). Kazdy arkusz jest owijany w VRT
-    z jawnym EPSG:2180 i pasmem Float32: arkusz z ``.prj`` (np. dopisanym przez
-    Hydrograf) scala sie z arkuszem bez niego (dotad blad ``niezgodne CRS
-    wejsc``), a arkusz z samymi liczbami calkowitymi (GDAL czyta go jako
-    Int32) nie obcina wysokosci pozostalych. Wejscia sa sortowane: ``merge``
-    bierze profil wyniku z pierwszego zrodla, a pierwsze zrodlo wygrywa
-    w zakladce, wiec wynik nie zalezy od kolejnosci listy (pobieranie
-    rownolegle zwraca arkusze w kolejnosci ukonczenia). Wynik mozaiki to
-    GTiff z EPSG:2180.
+    przesuniecia o ulamek piksela. Fazy siatki sprawdza ``check_source_grid``
+    PRZED mozaika (S5: arkusze 5 m kampanii 2022 pod Krakowem maja kazdy inna
+    faze; 1 m — jedna faza), bo ``merge`` przepisuje arkusz spoza siatki
+    "przez okno" — nie zawsze z najblizszego piksela i z kolumna/wierszem
+    nodata na szwie:
+
+    - cel EPSG:2180 (``pinned is None``) i arkusz spoza siatki ->
+      ``GridMismatchError`` (D3): wartosci 1:1 sa niemozliwe, a wycinek
+      z warpem albo same arkusze sa dostepne bez sieci (arkusze zostaja
+      w cache);
+    - warp (``pinned``) i arkusz spoza siatki -> **W1** (D8):
+      ``warp_to_grid`` dostaje LISTE arkuszy i reprojektuje kazdy RAZ, z jego
+      wlasnej siatki na siatke wyniku (bez mozaiki posredniej); szwy to
+      niezalezne warpy (interpolator nie widzi sasiada zza szwu), w zakladce
+      wygrywa pierwszy w sortowaniu — jak w ``merge``;
+    - jedna faza -> mozaika 1:1 (+ warp) jak dotad (zweryfikowana na zywo
+      bit w bit; ARCHITECTURE 4.3).
+
+    Na sciezce mozaiki kazdy arkusz jest owijany w VRT z jawnym EPSG:2180
+    i pasmem Float32: arkusz z ``.prj`` (np. dopisanym przez Hydrograf) scala
+    sie z arkuszem bez niego (dotad blad ``niezgodne CRS wejsc``), a arkusz
+    z samymi liczbami calkowitymi (GDAL czyta go jako Int32) nie obcina
+    wysokosci pozostalych. Wejscia sa sortowane: ``merge`` bierze profil
+    wyniku z pierwszego zrodla, a pierwsze zrodlo wygrywa w zakladce, wiec
+    wynik nie zalezy od kolejnosci listy (pobieranie rownolegle zwraca
+    arkusze w kolejnosci ukonczenia). Wynik mozaiki to GTiff z EPSG:2180.
 
     Arkusz we wspolrzednych PL-2000 (``x >= 1 000 000``) konczy sie
     ``ValidationError`` PRZED mozaika (``_reject_pl2000_sheets``) — inaczej
@@ -363,7 +385,34 @@ def build_pl_cutout(
     dotad (zn. 9 fali review max).
     """
     _reject_pl2000_sheets(sheet_paths)
-    from kartograf.transport.mosaic import mosaic_and_crop
+    from kartograf.transport.mosaic import check_source_grid, mosaic_and_crop
+
+    paths = sorted(Path(p) for p in sheet_paths)
+    grid = check_source_grid(paths)
+    if grid.off_grid:
+        if pinned is None:
+            raise GridMismatchError(
+                grid.describe_off_grid(len(paths), "arkuszy")
+                + " — wycinek EPSG:2180 wymaga wspolnej siatki (wartosci 1:1). "
+                "Zadaj wycinek w ukladzie z pelnym warpem (--target-crs "
+                "EPSG:5514 albo EPSG:3045) albo pobierz obszar jako arkusze "
+                "(bez --target-crs). Arkusze zostaja w cache.",
+                grid.off_grid,
+            )
+        from kartograf.transform.raster import warp_to_grid
+
+        # W1: kazdy arkusz ze swojej siatki prosto na siatke wyniku.
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        warp_to_grid(
+            paths,
+            target_path,
+            bbox_target,
+            pixel_size,
+            pinned,
+            src_crs="EPSG:2180",
+            nodata=PL_NODATA,
+        )
+        return tuple(sorted(s.path.stem for s in grid.off_grid))
 
     target_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = target_path.with_name(
@@ -386,7 +435,7 @@ def build_pl_cutout(
         )
     try:
         mosaic_and_crop(
-            sorted(Path(p) for p in sheet_paths),
+            paths,
             crop_bbox_2180,
             tmp,
             nodata=PL_NODATA,
@@ -412,6 +461,7 @@ def build_pl_cutout(
             )
     finally:
         tmp.unlink(missing_ok=True)
+    return ()
 
 
 def _sheet_source(sheet_path: Path) -> dict:
@@ -442,6 +492,7 @@ def write_pl_cutout_sidecar(
     parent_request: dict | None = None,
     missing_sheets: tuple[str, ...] = (),
     sheet_paths: tuple[Path, ...] = (),
+    off_grid_sheets: tuple[str, ...] = (),
 ) -> None:
     """Best-effort sidecar wycinka (blad nie przerywa pobrania).
 
@@ -453,6 +504,9 @@ def write_pl_cutout_sidecar(
     kazdego arkusza mozaiki ``{godlo, url, layer, aktualnosc}`` czytane
     z sidecarow arkuszy (``extra.source``, D5); arkusz bez sidecara albo bez
     ``source`` (cache sprzed 0.7.0) ma ``null`` w polach poza ``godlo``.
+    ``off_grid_sheets`` (niepuste) -> ``extra.off_grid_sheets``: arkusze
+    o innej fazie siatki niz reszta, reprojektowane osobno (W1, S5) —
+    konsument widzi, ze szwy wycinka powstaly z niezaleznych warpow.
     """
     try:
         from kartograf.sources.registry import get_source
@@ -468,6 +522,8 @@ def write_pl_cutout_sidecar(
             extra["missing_sheets"] = list(missing_sheets)
         if sheet_paths:
             extra["sheet_sources"] = [_sheet_source(Path(p)) for p in sheet_paths]
+        if off_grid_sheets:
+            extra["off_grid_sheets"] = list(off_grid_sheets)
         meta = build_metadata(
             get_source(key),
             request={
@@ -512,6 +568,44 @@ def _require_matching_provider(cutout: PlCutout, provider) -> None:
             )
 
 
+@functools.cache
+def _sheet_frame_transformer():
+    """Jeden transformer WGS84 -> EPSG:2180 na proces (N9).
+
+    ``SheetParser.get_bbox("EPSG:2180")`` buduje ``Transformer.from_crs`` przy
+    KAZDYM wywolaniu (~7 ms; pyproj nie cache'uje ``from_crs``), a estymacja
+    liczy obwiednie kazdego arkusza spoza cache — 1221 arkuszy to ~9 s, i tyle
+    samo drugi raz, gdy wolajacy sam sprawdza miejsce przed ``run_pl_cutout``.
+    Z jednym transformerem (bezpieczny miedzy watkami od pyproj 3.1) ta sama
+    petla schodzi ponizej 0,2 s.
+    """
+    from pyproj import Transformer
+
+    return Transformer.from_crs("EPSG:4326", "EPSG:2180", always_xy=True)
+
+
+def _sheet_frame_2180(godlo: str) -> BBox:
+    """Obwiednia arkusza w EPSG:2180 — jak ``SheetParser.get_bbox("EPSG:2180")``
+    (obwiednia 4 przetransformowanych naroznikow), ze wspolnym transformerem."""
+    from kartograf.core.sheet_parser import SheetParser
+
+    wgs = SheetParser(godlo).get_bbox("EPSG:4326")
+    transformer = _sheet_frame_transformer()
+    xs, ys = zip(
+        *(
+            transformer.transform(lon, lat)
+            for lon, lat in (
+                (wgs.min_x, wgs.min_y),
+                (wgs.min_x, wgs.max_y),
+                (wgs.max_x, wgs.min_y),
+                (wgs.max_x, wgs.max_y),
+            )
+        ),
+        strict=True,
+    )
+    return BBox(min(xs), min(ys), max(xs), max(ys), "EPSG:2180")
+
+
 def estimate_pl_cutout_bytes(
     cutout: PlCutout, sheets: PlCutoutSheets, *, storage: FileStorage | None = None
 ) -> tuple[int, int]:
@@ -519,10 +613,10 @@ def estimate_pl_cutout_bytes(
 
     Wynik float32 bez kompresji + arkusze jeszcze nie pobrane po 5,5 B na
     wartosc. Plik posredni mozaiki (skompresowany) i narzut systemu plikow NIE
-    sa liczone: to kontrola "na pewno nie wystarczy", nie gwarancja.
+    sa liczone: to kontrola "na pewno nie wystarczy", nie gwarancja. Tania
+    (jeden transformer na proces, ``_sheet_frame_transformer``), wiec
+    wolajacy, ktory liczy ja sam przed ``run_pl_cutout``, nie placi podwojnie.
     """
-    from kartograf.core.sheet_parser import SheetParser
-
     storage = storage or FileStorage(
         cutout.output_dir,
         resolution=cutout.resolution,
@@ -535,7 +629,7 @@ def estimate_pl_cutout_bytes(
         if storage.get_path(leaf, ".asc").exists():
             continue
         pending += 1
-        frame = SheetParser(leaf).get_bbox("EPSG:2180")
+        frame = _sheet_frame_2180(leaf)
         need += int(
             (frame.max_x - frame.min_x)
             * (frame.max_y - frame.min_y)
@@ -565,6 +659,41 @@ def check_pl_cutout_disk_space(
         )
 
 
+def _sidecar_sheet_list(extra: dict, key: str) -> tuple[str, ...]:
+    """Lista godel z ``extra[key]`` sidecara — pusta, gdy pola nie ma albo
+    ma inny ksztalt (sidecar z reki albo sprzed pola)."""
+    value = extra.get(key)
+    if not isinstance(value, list):
+        return ()
+    return tuple(v for v in value if isinstance(v, str))
+
+
+def skipped_pl_cutout(cutout: PlCutout) -> PlCutoutResult:
+    """Wynik dla wycinka, ktory JUZ istnieje (``force=False``): zero sieci.
+
+    Dziury nodata sa takie, jakie zapisala budowa pliku, wiec
+    ``missing_sheets`` (arkusze bez danych GUGiK, R5) i ``off_grid_sheets``
+    (W1) wracaja z sidecara istniejacego wycinka (``extra.missing_sheets``,
+    ``extra.off_grid_sheets``), a nie jako puste krotki — konsument widzi to
+    samo, co przy budowie. Bez sidecara, z sidecarem nieczytelnym albo bez
+    tych pol (wycinek sprzed 0.7.0, bez dziur): puste. ``sheet_paths`` jest
+    puste — arkuszy nikt tu nie dotyka.
+    """
+    sidecar = cutout.target_path.with_name(f"{cutout.target_path.name}.meta.json")
+    try:
+        extra = json.loads(sidecar.read_text(encoding="utf-8")).get("extra") or {}
+    except (OSError, ValueError, AttributeError):
+        extra = {}
+    if not isinstance(extra, dict):
+        extra = {}
+    return PlCutoutResult(
+        path=cutout.target_path,
+        skipped=True,
+        missing_sheets=_sidecar_sheet_list(extra, "missing_sheets"),
+        off_grid_sheets=_sidecar_sheet_list(extra, "off_grid_sheets"),
+    )
+
+
 def run_pl_cutout(
     cutout: PlCutout,
     sheets: PlCutoutSheets,
@@ -579,9 +708,9 @@ def run_pl_cutout(
     """Pobierz arkusze, zbuduj wycinek, zapisz sidecar.
 
     ``force=False`` + istniejacy plik wyniku -> ``skipped=True`` bez sieci
-    (``missing_sheets`` jest wtedy puste mimo ewentualnych dziur w rastrze —
-    lista zostaje w sidecarze, ``extra.missing_sheets``; znany blad N4).
-    Arkusze z cache sa uzywane ponownie (``skip_existing = not force``).
+    (``missing_sheets``/``off_grid_sheets`` z sidecara istniejacego wycinka,
+    ``skipped_pl_cutout``). Arkusze z cache sa uzywane ponownie
+    (``skip_existing = not force``).
     Brak danych u zrodla (``NoCoverageError``) -> nodata + ``missing_sheets``;
     kazda inna porazka pobrania arkusza (``DownloadError``) -> ``DownloadError``;
     gdy ZADEN arkusz nie ma danych -> ``ValidationError``. Oba bledy padaja,
@@ -598,7 +727,7 @@ def run_pl_cutout(
     if provider is not None:
         _require_matching_provider(cutout, provider)
     if not force and cutout.target_path.exists():
-        return PlCutoutResult(path=cutout.target_path, skipped=True)
+        return skipped_pl_cutout(cutout)
     if provider is None:
         from kartograf.providers.pl import create_nmt_provider
 
@@ -652,7 +781,7 @@ def run_pl_cutout(
             f"{', '.join(missing)}"
         )
     try:
-        build_pl_cutout(
+        off_grid = build_pl_cutout(
             list(sheet_paths),
             cutout.bbox_source_2180,
             cutout.bbox_target,
@@ -670,11 +799,13 @@ def run_pl_cutout(
         parent_request=parent_request,
         missing_sheets=missing,
         sheet_paths=tuple(sheet_paths),
+        off_grid_sheets=off_grid,
     )
     return PlCutoutResult(
         path=cutout.target_path,
         sheet_paths=tuple(sheet_paths),
         missing_sheets=missing,
+        off_grid_sheets=off_grid,
     )
 
 
@@ -709,16 +840,23 @@ def download_pl_cutout(
     -------
     PlCutoutResult
         ``path`` — plik wyniku; ``skipped=True`` (bez sieci), gdy plik juz
-        istnial i ``force=False`` (``missing_sheets`` jest wtedy puste —
-        lista zostaje w sidecarze, znany blad N4); ``missing_sheets`` —
-        arkusze bez danych GUGiK (w ich miejscu nodata); ``sheet_paths`` —
-        arkusze uzyte do mozaiki (kolejnosc ukonczenia pobran).
+        istnial i ``force=False`` (``missing_sheets``/``off_grid_sheets``
+        wtedy z sidecara istniejacego wycinka); ``missing_sheets`` — arkusze
+        bez danych GUGiK (w ich miejscu nodata); ``off_grid_sheets`` — arkusze
+        o innej fazie siatki, reprojektowane osobno (W1; tylko przy warpie);
+        ``sheet_paths`` — arkusze uzyte do mozaiki (kolejnosc ukonczenia
+        pobran).
 
     Raises
     ------
     ValidationError
         Zle parametry, brak arkuszy dla obszaru, zaden arkusz nie ma danych
         GUGiK, za malo miejsca na dysku albo arkusz we wspolrzednych PL-2000.
+    GridMismatchError
+        (podklasa ``ValidationError``) ``target_crs="EPSG:2180"``, a arkusze
+        leza na roznych siatkach pikseli (S5): wartosci 1:1 sa niemozliwe —
+        ``.off_grid`` wymienia arkusze z przesunieciem; arkusze zostaja
+        w cache, wycinek z warpem (5514/3045) z nich powstanie.
     TransformError
         Brak bezpiecznej przypietej operacji EPSG:2180 -> ``target_crs``
         (przed jakakolwiek siecia).
@@ -751,7 +889,7 @@ def download_pl_cutout(
         vertical_crs=provider.vertical_crs,
     )
     if not force and cutout.target_path.exists():
-        return PlCutoutResult(path=cutout.target_path, skipped=True)
+        return skipped_pl_cutout(cutout)
     sheets = select_pl_cutout_sheets(
         cutout, geometry=geometry, layer=layer, scale=scale
     )
