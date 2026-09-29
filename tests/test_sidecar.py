@@ -6,14 +6,142 @@ import logging
 import pytest
 
 from kartograf.sources.descriptor import TransportKind
-from kartograf.sources.registry import get_source
+from kartograf.sources.registry import get_source, horizontal_crs_for_uklad
 from kartograf.sources.sidecar import (
     ResultMetadata,
     _select_channel_by_capability,
     build_metadata,
+    pl_sheet_horizontal_crs,
     read_asc_nodata,
     write_sidecar,
 )
+
+
+def _asc(path, xllcorner: float, key: str = "xllcorner") -> None:
+    path.write_text(
+        f"ncols 10\nnrows 10\n{key} {xllcorner}\nyllcorner 500000\n"
+        "cellsize 1\nNODATA_value -9999\n"
+    )
+
+
+class TestPlSheetHorizontalCrs:
+    """N8: sidecar arkusza PL-2000 opisuje strefe (EPSG:2176-2179), nie 2180."""
+
+    def test_pl2000_sheet_sidecar_carries_zone_crs(self, tmp_path):
+        asc = tmp_path / "6.179.12.20.asc"
+        _asc(asc, 6_500_000.0)
+        meta = build_metadata(
+            get_source("pl.gugik.nmt_1m"),
+            request={"godlo": "6.179.12.20"},
+            vertical_crs="EVRF2007",
+            data_path=asc,
+        )
+        assert meta.horizontal_crs == "EPSG:2177"
+        assert meta.nodata == -9999.0
+
+    @pytest.mark.parametrize(
+        ("godlo", "expected"),
+        [
+            ("5.176.14", "EPSG:2176"),
+            ("7.124.07.24", "EPSG:2178"),
+            ("8.170.10", "EPSG:2179"),
+            ("N-34-130-D-d-2-4", "EPSG:2180"),
+        ],
+    )
+    def test_without_file_zone_comes_from_godlo(self, godlo, expected):
+        meta = build_metadata(get_source("pl.gugik.orto"), request={"godlo": godlo})
+        assert meta.horizontal_crs == expected
+        assert pl_sheet_horizontal_crs(None, godlo) == expected
+
+    def test_pl1992_sheet_with_pl1992_coordinates_stays_2180(self, tmp_path, caplog):
+        asc = tmp_path / "M-34-76-A-a-2-4.asc"
+        _asc(asc, 542_560.30, key="xllcenter")
+        with caplog.at_level(logging.WARNING):
+            assert pl_sheet_horizontal_crs(asc, "M-34-76-A-a-2-4") == "EPSG:2180"
+        assert "zapisano uklad pliku" not in caplog.text
+
+    def test_file_in_other_system_wins_with_warning(self, tmp_path, caplog):
+        """K4: plik PL-1992 pod godlem PL-2000 (cache sprzed 0.7.0) — uklad pliku."""
+        asc = tmp_path / "7.123.8.asc"
+        _asc(asc, 542_560.30)
+        with caplog.at_level(logging.WARNING):
+            meta = build_metadata(
+                get_source("pl.gugik.nmt_1m"),
+                request={"godlo": "7.123.8"},
+                vertical_crs="EVRF2007",
+                data_path=asc,
+            )
+        assert meta.horizontal_crs == "EPSG:2180"
+        assert "7.123.8" in caplog.text
+        assert "EPSG:2178" in caplog.text
+        assert "EPSG:2180" in caplog.text
+
+    def test_unreadable_file_falls_back_to_godlo(self, tmp_path):
+        missing = tmp_path / "6.179.12.20.asc"
+        assert pl_sheet_horizontal_crs(missing, "6.179.12.20") == "EPSG:2177"
+
+    def test_pl2000_tif_is_checked_with_rasterio(self, tmp_path, caplog):
+        import rasterio
+        from rasterio.transform import from_origin
+
+        tif = tmp_path / "7.124.07.24.tif"
+        with rasterio.open(
+            tif,
+            "w",
+            driver="GTiff",
+            width=2,
+            height=2,
+            count=1,
+            dtype="uint8",
+            transform=from_origin(7_540_000.0, 5_530_000.0, 0.25, 0.25),
+        ):
+            pass  # pusty raster: liczy sie tylko georeferencja
+        with caplog.at_level(logging.WARNING):
+            meta = build_metadata(
+                get_source("pl.gugik.orto"),
+                request={"godlo": "7.124.07.24"},
+                data_path=tif,
+            )
+        assert meta.horizontal_crs == "EPSG:2178"
+        assert "zapisano uklad pliku" not in caplog.text
+
+        # ten sam TIF pod godlem PL-1992 = rozjazd: uklad pliku + ostrzezenie
+        with caplog.at_level(logging.WARNING):
+            assert pl_sheet_horizontal_crs(tif, "M-34-76-A-a-1-1") == "EPSG:2178"
+        assert "zapisano uklad pliku" in caplog.text
+
+    def test_explicit_horizontal_crs_overrides_channel_and_godlo(self, tmp_path):
+        asc = tmp_path / "6.179.12.20.asc"
+        _asc(asc, 6_500_000.0)
+        meta = build_metadata(
+            get_source("pl.gugik.nmt_1m"),
+            request={"godlo": "6.179.12.20"},
+            data_path=asc,
+            horizontal_crs="EPSG:5514",
+        )
+        assert meta.horizontal_crs == "EPSG:5514"
+
+    def test_laz_tile_crs_from_uklad_xy(self):
+        """Kafel LAZ: godlo myslnikowe, dane w PL-2000:S6 — uklad z uklad_xy."""
+        meta = build_metadata(
+            get_source("pl.gugik.laz"),
+            request={"bbox": [530500, 382500, 531000, 383000], "bbox_crs": "EPSG:2180"},
+            vertical_crs="EVRF2007",
+            extra={"godlo_kafla": "N-33-131-B-a-1-1-4"},
+            horizontal_crs=horizontal_crs_for_uklad("PL-2000:S6"),
+        )
+        assert meta.horizontal_crs == "EPSG:2177"
+
+    def test_non_sheet_pl_product_keeps_channel_crs(self):
+        """BDOT10k po godle PL-2000 to GPKG w EPSG:2180 — godlo tylko wybiera obszar."""
+        meta = build_metadata(
+            get_source("pl.gugik.bdot10k"), request={"godlo": "6.179.12"}
+        )
+        assert meta.horizontal_crs == "EPSG:2180"
+
+    def test_cz_sheet_request_keeps_channel_crs(self):
+        meta = build_metadata(get_source("cz.cuzk.dmr4g"), request={"godlo": "CTES96"})
+        assert meta.horizontal_crs == "EPSG:5514"
 
 
 class TestBuildMetadata:

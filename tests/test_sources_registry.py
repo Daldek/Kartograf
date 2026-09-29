@@ -17,6 +17,8 @@ from kartograf.sources.registry import (
     all_countries,
     get_country,
     get_source,
+    horizontal_crs_for_godlo,
+    horizontal_crs_for_uklad,
     resolve_vertical_crs,
     sources_for,
     vertical_crs_code,
@@ -145,6 +147,23 @@ class TestRegistry:
             resolve_vertical_crs("EVRF2007-PL", ("EPSG:9650", "EPSG:9651"))
             == "EPSG:9651"
         )
+
+    def test_horizontal_crs_for_godlo(self):
+        """N8: strefa PL-2000 z godla; PL-1992 = EPSG:2180."""
+        assert horizontal_crs_for_godlo("5.176.14") == "EPSG:2176"
+        assert horizontal_crs_for_godlo("6.179.12.20") == "EPSG:2177"
+        assert horizontal_crs_for_godlo("7.124.07.24") == "EPSG:2178"
+        assert horizontal_crs_for_godlo("8.170.10") == "EPSG:2179"
+        assert horizontal_crs_for_godlo("N-34-130-D-d-2-4") == "EPSG:2180"
+
+    def test_horizontal_crs_for_uklad(self):
+        """Nazwy ukladu GUGiK (uklad_xy kafla LAZ, skorowidz) -> kod EPSG."""
+        assert horizontal_crs_for_uklad("PL-2000:S6") == "EPSG:2177"
+        assert horizontal_crs_for_uklad(" PL-2000:S8 ") == "EPSG:2179"
+        assert horizontal_crs_for_uklad("PL-1992") == "EPSG:2180"
+        assert horizontal_crs_for_uklad("PL-2000:S9") is None
+        assert horizontal_crs_for_uklad("") is None
+        assert horizontal_crs_for_uklad(None) is None
 
     def test_nmt_1m_entry_values(self):
         d = get_source("pl.gugik.nmt_1m")

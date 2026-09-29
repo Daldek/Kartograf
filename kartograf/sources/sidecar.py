@@ -13,8 +13,13 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from kartograf.core.parser_2000 import ZONE_EPSG
 from kartograf.sources.descriptor import AccessChannel, SourceDescriptor
-from kartograf.sources.registry import resolve_vertical_crs
+from kartograf.sources.registry import (
+    PL_1992_CRS,
+    horizontal_crs_for_godlo,
+    resolve_vertical_crs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -43,17 +48,73 @@ class ResultMetadata:
     schema: str = "kartograf-meta/1"
 
 
-def read_asc_nodata(path: Path) -> float | None:
-    """Odczytaj NODATA_value z naglowka Arc/Info ASCII Grid (None gdy brak)."""
+def _read_asc_header(path: Path) -> dict[str, float]:
+    """Naglowek Arc/Info ASCII Grid: {klucz malymi literami: wartosc}; {} gdy brak."""
+    header: dict[str, float] = {}
     try:
         with open(path, encoding="ascii", errors="replace") as f:
             for _ in range(6):
                 parts = f.readline().split()
-                if len(parts) == 2 and parts[0].lower() == "nodata_value":
-                    return float(parts[1])
-    except (OSError, ValueError):
-        return None
+                if len(parts) != 2:
+                    continue
+                try:
+                    header[parts[0].lower()] = float(parts[1])
+                except ValueError:
+                    continue
+    except OSError:
+        return {}
+    return header
+
+
+def read_asc_nodata(path: Path) -> float | None:
+    """Odczytaj NODATA_value z naglowka Arc/Info ASCII Grid (None gdy brak)."""
+    return _read_asc_header(path).get("nodata_value")
+
+
+def _file_min_x(path: Path) -> float | None:
+    """Lewa krawedz rastra (x) z naglowka ASC albo z rasterio; None gdy nieczytelna."""
+    suffix = path.suffix.lower()
+    if suffix == ".asc":
+        header = _read_asc_header(path)
+        return header.get("xllcorner", header.get("xllcenter"))
+    if suffix in {".tif", ".tiff"}:
+        import rasterio  # lazy: sidecar arkusza ASC nie potrzebuje GDAL
+
+        try:
+            with rasterio.open(path) as dataset:
+                return float(dataset.bounds.left)
+        except (OSError, ValueError):
+            return None
     return None
+
+
+def _crs_from_pl_coordinate(x: float) -> str | None:
+    """PL-2000 ma x = strefa * 1e6 + easting (5..8 mln); PL-1992 x < 1e6."""
+    if x < 1e6:
+        return PL_1992_CRS
+    return ZONE_EPSG.get(int(x // 1e6))
+
+
+def pl_sheet_horizontal_crs(data_path: Path | None, godlo: str) -> str:
+    """Uklad FAKTYCZNY pliku arkusza PL: strefa z godla, sprawdzona wspolrzednymi.
+
+    Godlo PL-2000 wyznacza strefe (EPSG:2176..2179), PL-1992 -> EPSG:2180.
+    Gdy plik da sie odczytac, a jego lewa krawedz wskazuje inny uklad (arkusz
+    PL-1992 podstawiony pod godlo PL-2000 przez cache sprzed 0.7.0 — K4),
+    sidecar opisuje PLIK: zwracany jest uklad z pliku, z ostrzezeniem.
+    """
+    expected = horizontal_crs_for_godlo(godlo)
+    if data_path is None:
+        return expected
+    x = _file_min_x(Path(data_path))
+    actual = _crs_from_pl_coordinate(x) if x is not None else None
+    if actual is None or actual == expected:
+        return expected
+    logger.warning(
+        f"Sidecar {data_path}: godlo {godlo} wskazuje {expected}, ale wspolrzedne "
+        f"pliku (x = {x:.0f}) sa w {actual} — zapisano uklad pliku"
+    )
+    return actual
 
 
 def _select_channel(descriptor: SourceDescriptor, request: dict) -> AccessChannel:
@@ -64,6 +125,23 @@ def _select_channel(descriptor: SourceDescriptor, request: dict) -> AccessChanne
         if want_bbox == has_bbox:
             return ch
     return descriptor.channels[0]
+
+
+def _default_horizontal_crs(
+    descriptor: SourceDescriptor,
+    channel: AccessChannel,
+    request: dict,
+    data_path: Path | None,
+) -> str:
+    """Uklad kanalu; dla arkusza PL po godle — uklad pliku (strefa PL-2000, N8)."""
+    godlo = request.get("godlo")
+    if (
+        descriptor.country == "PL"
+        and "sheet_files" in channel.capabilities
+        and isinstance(godlo, str)
+    ):
+        return pl_sheet_horizontal_crs(data_path, godlo)
+    return channel.horizontal_crs
 
 
 def _select_channel_by_capability(
@@ -88,8 +166,16 @@ def build_metadata(
     extra: dict | None = None,
     capability: str | None = None,
     nodata: float | None = None,
+    horizontal_crs: str | None = None,
 ) -> ResultMetadata:
-    """Zbuduj metadane z deskryptora + kontekstu wywolania."""
+    """Zbuduj metadane z deskryptora + kontekstu wywolania.
+
+    ``horizontal_crs`` (jawny) opisuje uklad FAKTYCZNEGO wyniku i ma
+    pierwszenstwo przed kanalem. Bez niego arkusz PL pobrany przez godlo
+    (kanal ``sheet_files``) dostaje uklad z ``pl_sheet_horizontal_crs``
+    — strefe PL-2000 z godla sprawdzona wspolrzednymi pliku; pozostale
+    wyniki dziedzicza ``horizontal_crs`` kanalu.
+    """
     from kartograf import __version__  # lazy: unika cyklu importow
 
     if capability is not None:
@@ -109,7 +195,8 @@ def build_metadata(
         country=descriptor.country,
         product=descriptor.product,
         provider=descriptor.provider_name,
-        horizontal_crs=channel.horizontal_crs,
+        horizontal_crs=horizontal_crs
+        or _default_horizontal_crs(descriptor, channel, request, data_path),
         vertical_crs=vertical,
         vertical_source=channel.vertical_source,
         resolution=descriptor.resolution,

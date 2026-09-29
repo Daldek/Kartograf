@@ -7,7 +7,10 @@ ADR-026), default_extension, licencji, opcji pionowych i capabilities
 w sidecarze; managery ich nie egzekwuja.
 """
 
-from kartograf.core.sheet_parser import BBox
+import re
+
+from kartograf.core.parser_2000 import ZONE_EPSG
+from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.sources.descriptor import (
     AccessChannel,
     CountryProfile,
@@ -29,6 +32,12 @@ _VERTICAL_CRS_CODES = {
 # jesli kod rodziny nie wystepuje w vertical_crs_options kanalu, ale wystepuje
 # jego realizacja — sidecar zapisuje kod realizacji (fakt, nie zyczenie).
 _VERTICAL_FAMILY: dict[str, tuple[str, ...]] = {"EPSG:5621": ("EPSG:9651",)}
+
+# Uklad poziomy zrodel PL. Kanaly deklaruja EPSG:2180 (uklad zapytan bbox/WCS
+# i arkuszy PL-1992); plik arkusza albo kafla PL-2000 jest w ukladzie SWOJEJ
+# strefy (5..8 -> EPSG:2176..2179) — sidecar bierze go z horizontal_crs_for_*
+# ponizej, nie z kanalu (N8).
+PL_1992_CRS = "EPSG:2180"
 
 _GUGIK_LICENSE = LicenseInfo(
     id="PL-PGiK-40a",
@@ -74,7 +83,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             channels=(
                 AccessChannel(
                     transport=TransportKind.WMS_SHEET_INDEX,
-                    horizontal_crs="EPSG:2180",
+                    horizontal_crs=PL_1992_CRS,  # PL-2000: strefa z godla (N8)
                     vertical_crs_options=_PL_VERTICAL_BOTH,
                     capabilities=frozenset({"sheet_files"}),
                 ),
@@ -390,3 +399,20 @@ def resolve_vertical_crs(name: str, options: tuple[str, ...]) -> str:
         if realization in options:
             return realization
     return code
+
+
+def horizontal_crs_for_godlo(godlo: str) -> str:
+    """Uklad poziomy arkusza PL z formatu godla: PL-1992 -> 2180, PL-2000 -> strefa."""
+    parser = SheetParser(godlo)
+    if parser.uklad == "2000":
+        return ZONE_EPSG[int(parser.godlo.split(".")[0])]
+    return PL_1992_CRS
+
+
+def horizontal_crs_for_uklad(uklad: str | None) -> str | None:
+    """Kod EPSG z nazwy ukladu GUGiK ("PL-1992", "PL-2000:S6"); None gdy nieznana."""
+    value = (uklad or "").strip()
+    if value == "PL-1992":
+        return PL_1992_CRS
+    match = re.fullmatch(r"PL-2000:S([5-8])", value)
+    return ZONE_EPSG[int(match[1])] if match else None
