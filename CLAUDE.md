@@ -355,9 +355,10 @@ kartograf cache path
 - **Tryb listy arkuszy (PL `--bbox`/`--geometry` BEZ `--target-crs`) nie ma
   tolerancji R5:** arkusz bez danych (morze, arkusz za granica) = kod 1
   i `Error:` o JEDNYM arkuszu; `--workers 1` staje na pierwszym takim arkuszu
-  (0 plikow), `--workers > 1` pobiera reszte, ale zglasza tylko pierwsza
-  porazke; pod `auto` z sukcesem CZ — mylace "nie pobrano danych z PL" (znany
-  blad S2). Przy morzu i na granicach uzywaj `--target-crs EPSG:2180`
+  (gdy jest pierwszy na liscie — 0 plikow), `--workers > 1` pobiera reszte,
+  ale zglasza tylko pierwsza porazke; pod `auto` z sukcesem CZ — mylace
+  "nie pobrano danych z PL" (znany blad S2). Przy morzu i na granicach
+  uzywaj `--target-crs EPSG:2180`
 - **Znane bledy kodu (testy na zywo 2026-09-29) — tabela i decyzja o naprawie:
   `docs/PROGRESS.md` "Znane bledy".** Najwazniejsze: K1 LAZ (wyzej); K2
   operacja S-JTSK (wyzej); K3/K4 skorowidz GUGiK po cichu daje starsza

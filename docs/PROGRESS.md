@@ -178,7 +178,7 @@ Raporty w `docs/research/2026-09-29-live-e2e-i-audyt-docs/`.
 | K5 | WYSOKI | `--product orto` pobiera CIR zamiast RGB | L1 |
 | K6 | WYSOKI | Realny limit `exportImage` ~8 Mpx — bbox CZ 2 m > ~5,5 x 5,5 km = HTTP 500 | L4 |
 | S1 | SREDNI | Skorowidz bez ponowien i bez wspolnej sesji — wycinki padaja przy zrywanych polaczeniach | L3, L5, L4 |
-| S2 | SREDNI | Tryb listy bez tolerancji R5 — morze/granica = kod 1, `--workers 1` = 0 plikow | L3, L5, L6, L4 |
+| S2 | SREDNI | Tryb listy bez tolerancji R5 — morze/granica = kod 1, `--workers 1` przerywa na pierwszym arkuszu bez danych | L3, L5, L6, L4 |
 | S3 | SREDNI | `--country auto` po cichu przycina bbox do prostokata kraju | L5, L3 |
 | S4 | SREDNI | NMPT EVRF2007: nieaktualna lista warstw w kodzie — bez GetCapabilities NMPT sie nie pobiera | L1 |
 | S5 | SREDNI | Arkusze 5 m o roznych fazach siatki — wycinek 2180 z wartosciami z sasiedniego piksela | L1, L2 |
@@ -1069,7 +1069,8 @@ N = niski, H = hipoteza.
       (BUG-L4-4).
 - [ ] **S2** (SREDNI, sprzed fal) — tryb listy arkuszy (bez `--target-crs`)
       bez tolerancji R5: morze/granica = kod 1; `--workers 1` przerywa na
-      pierwszym arkuszu bez danych (0 plikow); `--workers > 1` zglasza tylko
+      pierwszym arkuszu bez danych (zmierzone: 0 plikow, gdy byl pierwszy na
+      liscie); `--workers > 1` zglasza tylko
       pierwszy blad (moze zgubic sygnal "niepewny, ponow"); pod `auto`
       mylace "nie pobrano danych z PL", choc arkusze sa na dysku. Kod:
       `cli/download_cmd.py:863-919` (`_download_godlo_list`: petla

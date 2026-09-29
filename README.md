@@ -225,12 +225,14 @@ kodu, które czekają na decyzję o naprawie przed wydaniem 0.7.0. Pełna lista
   obszar większy niż ok. 5,5 × 5,5 km nie przechodzi, także po kafelkowaniu.
 - **S2 - tryb listy arkuszy na morzu i na granicy kończy się kodem 1.** Bez
   `--target-crs` arkusz bez danych (morze, arkusz za granicą) to błąd całego
-  polecenia, a przy `--workers 1` nic się nie pobiera. Obejście:
+  polecenia, a przy `--workers 1` pobieranie staje na pierwszym takim arkuszu.
+  Obejście:
   `--target-crs EPSG:2180` (arkusze bez danych stają się nodata
   z ostrzeżeniem `Warning:`).
 - **S1 - zapytania skorowidza GUGiK nie są ponawiane.** Przy zrywanych
-  połączeniach wycinek z wieloma arkuszami bez danych kończy się kodem 1
-  („ponów pobranie”); ponowne uruchomienie używa arkuszy już pobranych.
+  połączeniach wycinek (zwłaszcza z wieloma arkuszami bez danych - morze,
+  granica) kończy się kodem 1 („ponów pobranie”); ponowne uruchomienie używa
+  arkuszy już pobranych.
 
 ## Funkcjonalności
 
