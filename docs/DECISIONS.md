@@ -930,7 +930,7 @@ pokrycia.
   4,92 m, dE -4,50 / dN -2,00, w zachodnich Czechach). Referencja tamtych
   pomiarow (dane natywne 5514 zreprojektowane lokalnie) uzywala tej samej
   slowackiej operacji, wiec serwer najpewniej liczyl poprawnie, a "fix"
-  wprowadzil przesuniecie tresci CZ o 1-5 m. Pomiar niezalezny (NMT GUGiK
+  wprowadzil przesuniecie tresci CZ do ~5 m. Pomiar niezalezny (NMT GUGiK
   1 m jako wzorzec polozenia, Karkonosze): tresc CZ po warpie Kartografa
   przesunieta o (-2,26; +0,61) m, z operacja EPSG:1622 — o (+0,38; -0,03) m.
   "Zywa weryfikacja fixu" nizej mierzyla zgodnosc z referencja zbudowana ta

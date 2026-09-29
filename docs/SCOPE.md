@@ -102,7 +102,7 @@ dokładnie jeden arkusz. Nieznana wartość `system=` to `ValidationError`.
   `--target-crs {EPSG:2180,EPSG:5514,EPSG:3045}` — tylko w trybie
   `--bbox`/`--geometry` (z godłem = błąd; symetrycznie do PL od 0.7.0);
   przypięta operacja S-JTSK → ETRS89 to dziś EPSG:4829 (obszar użycia:
-  Słowacja) — treść CZ po reprojekcji przesunięta o 1-5 m (znany błąd K2)
+  Słowacja) — treść CZ po reprojekcji przesunięta do ~5 m (znany błąd K2)
 - Układ wysokościowy natywny: Bpv (Baltic 1957, EPSG:8357); opcjonalna
   transformacja do EVRF2007 (EPSG:5621, przypięta operacja 0,1 m); KRON86
   nieosiągalny (brak publicznych siatek Bpv→KRON86)

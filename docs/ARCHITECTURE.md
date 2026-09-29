@@ -79,8 +79,9 @@ z `axis_info`, nie zakladana. Sposrod operacji, ktore przeszly reguly
 (1)-(3), wybierana jest najdokladniejsza (`min` po `accuracy`), bez
 sprawdzenia jej obszaru uzycia: dla S-JTSK -> ETRS89 jest to dzis
 EPSG:4829 (Slowacja, 0,5 m), a nie EPSG:1622 (Czechy, 1,0 m) — tresc CZ po
-reprojekcji i wycinek PL -> EPSG:5514 sa przesuniete o 1-5 m, a sidecar
-deklaruje 0,5 m (znany blad K2; errata ADR-024).
+reprojekcji i wycinek PL -> EPSG:5514 sa przesuniete do ~5 m (wzdluz granicy
+PL-CZ 1,1-3,4 m), a sidecar deklaruje 0,5 m (znany blad K2; errata
+ADR-024).
 
 **Brak scalania miedzykrajowego (w 0.7.0).** Zadanie obszarowe przecinajace
 wiecej niz jeden kraj daje **osobne pliki i osobne sidecary per kraj**,
@@ -829,7 +830,7 @@ CUZK idzie zadanie `exportImage` **wylacznie w ukladzie natywnym EPSG:5514**
 operacja (ADR-024 — serwerowa reprojekcja gubila datum shift). Kafel TM33
 nie jest wiec produktem 1:1: to warp z EPSG:5514 na siatke EPSG:3045,
 przypieta operacja zawierajaca dzis slowacka transformacje S-JTSK
-(EPSG:4829) — tresc przesunieta o 1-5 m (znany blad K2; Karkonosze na zywo
+(EPSG:4829) — tresc przesunieta do ~5 m (znany blad K2; Karkonosze na zywo
 2,3 m wzgledem NMT GUGiK 1 m, z operacja czeska EPSG:1622 — 0,38 m).
 Odpowiedzi `exportImage` sa zawsze pochodna serwera (bilinear; siatka uslugi
 DMR 5G ma faze (0,4; 1,88) m mod 2), wiec 1:1 daje tylko arkusz SM5.
