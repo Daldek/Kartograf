@@ -6,6 +6,7 @@ across all test modules.
 """
 
 import ipaddress
+import json
 import socket
 from pathlib import Path
 from unittest.mock import patch
@@ -94,54 +95,43 @@ def _block_network(request, monkeypatch):
 # =============================================================================
 
 
-def _nmt_endpoint_layers() -> dict[str, list[str]]:
-    """
-    Map every NMT/NMPT skorowidze endpoint to its hardcoded layer list.
-
-    Returns
-    -------
-    dict[str, list[str]]
-        WMS endpoint URL -> layers declared in ``WMS_LAYERS`` for the
-        (resolution, vertical CRS) pair that endpoint serves.
-    """
-    from kartograf.providers.pl.gugik import GugikProvider
-    from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
-
-    mapping: dict[str, list[str]] = {}
-    for provider_cls in (GugikProvider, GugikNmptProvider):
-        for (
-            resolution,
-            per_vertical_crs,
-        ) in provider_cls.WMS_SKOROWIDZE_ENDPOINTS.items():
-            for vertical_crs, endpoint in per_vertical_crs.items():
-                layers = provider_cls.WMS_LAYERS.get(resolution, {}).get(
-                    vertical_crs, []
-                )
-                if layers:
-                    mapping[endpoint] = list(layers)
-    return mapping
+_STUB_LAYERS = {
+    "NMT/WMS/SkorowidzeUkladKRON86": [
+        "SkorowidzeNMT2019",
+        "SkorowidzeNMT2018",
+        "SkorowidzeNMT2017iStarsze",
+    ],
+    "NMT/WMS/SkorowidzeUkladEVRF2007": [
+        "SkorowidzeNMT2026",
+        "SkorowidzeNMT2025",
+        "SkorowidzeNMT2024",
+        "SkorowidzeNMT2023iStarsze",
+    ],
+    "NMT/WMS/SheetsGrid5mEVRF2007": [
+        "SkorowidzeNMT2025",
+        "SkorowidzeNMT2024",
+        "SkorowidzeNMT2023",
+        "SkorowidzeNMT2022iStarsze",
+    ],
+    "NMPT/WMS/SkorowidzeUkladKRON86": [
+        "SkorowidzeNMPT2019",
+        "SkorowidzeNMPT2018",
+        "SkorowidzeNMPT2017iStarsze",
+    ],
+    "NMPT/WMS/SkorowidzeUkladEVRF2007": [
+        "SkorowidzeNMPT2026",
+        "SkorowidzeNMPT2025",
+        "SkorowidzeNMPT2024",
+        "SkorowidzeNMPT2023iStarsze",
+    ],
+}
 
 
 @pytest.fixture(autouse=True)
 def _offline_wms_layers(request):
-    """
-    Serve WMS GetCapabilities from the hardcoded layer lists, offline.
+    """Stub GetCapabilities bez sieci, niezalezny od konfiguracji produkcyjnej.
 
-    ``_get_validated_layers`` calls ``_fetch_wms_layers``, which opens its own
-    ``requests.Session`` — a session injected into the provider does not
-    intercept it, so unit tests used to query the live GUGiK service. The stub
-    returns exactly the hardcoded layers, so validation reports a clean match
-    (no warning) and no test result depends on what GUGiK publishes today.
-
-    Two policies, because the signatures differ: ``GugikProvider`` takes the
-    endpoint (``side_effect``, dispatching on it), ``GugikOrtoProvider`` has a
-    single flat endpoint (``return_value``). ``patch.object`` without
-    ``autospec`` installs a ``MagicMock``, which is not a descriptor, so
-    ``self`` never reaches the ``side_effect`` — hence the endpoint-only
-    lambda signature.
-
-    Opt out with ``@pytest.mark.real_wms_layers`` in tests that exercise
-    ``_fetch_wms_layers`` itself.
+    Testy odkrywania warstw uzywaja markera ``real_wms_layers``.
     """
     if request.node.get_closest_marker("real_wms_layers"):
         yield
@@ -150,16 +140,18 @@ def _offline_wms_layers(request):
     from kartograf.providers.pl.gugik import GugikProvider
     from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
-    endpoint_layers = _nmt_endpoint_layers()
+    endpoint_layers = {
+        f"https://mapy.geoportal.gov.pl/wss/service/PZGIK/{path}": layers
+        for path, layers in _STUB_LAYERS.items()
+    }
 
     def fake_fetch(endpoint, timeout=10):
         layers = endpoint_layers.get(endpoint)
         if layers is None:
-            # AssertionError on purpose: _get_validated_layers swallows
-            # ValueError/RequestException, so those would hide the gap.
+            # Nie zamieniaj brakujacej atrapy na blad uslugi.
             raise AssertionError(
                 f"No offline GetCapabilities stub for WMS endpoint {endpoint!r}. "
-                f"Add it to tests/conftest.py::_nmt_endpoint_layers."
+                f"Add it to tests/conftest.py::_STUB_LAYERS."
             )
         return list(layers)
 
@@ -168,7 +160,12 @@ def _offline_wms_layers(request):
         patch.object(
             GugikOrtoProvider,
             "_fetch_wms_layers",
-            return_value=list(GugikOrtoProvider.WMS_LAYERS),
+            return_value=[
+                "SkorowidzeOrtofotomapy2026",
+                "SkorowidzeOrtofotomapy2025",
+                "SkorowidzeOrtofotomapy2024",
+                "SkorowidzeOrtofotomapyStarsze",
+            ],
         ),
     ):
         yield
@@ -177,6 +174,51 @@ def _offline_wms_layers(request):
 # =============================================================================
 # Shared data fixtures
 # =============================================================================
+
+
+def render_gfi_body(records: list[dict], var: str = "skor_NMT_wg_akt") -> str:
+    """Renderuj szablon MapServera jak GUGiK: pusta odpowiedz ma tylko naglowek
+    z ``createTable`` (gfi/01), deklaracja tablicy pojawia sie z rekordami."""
+    header = "<script>function createTable (rows) { return rows; }</script>\n"
+    if not records:
+        return header
+    pushes = [
+        f"{var}.push({{"
+        + ",".join(
+            f"{key}:{json.dumps(value, ensure_ascii=False)}"
+            for key, value in record.items()
+        )
+        + "});"
+        for record in records
+    ]
+    return header + f"<script>var {var} = [];\n" + "\n".join(pushes) + "</script>"
+
+
+def gfi_record(
+    godlo: str,
+    *,
+    resolution: str = "1.00 m",
+    uklad: str = "PL-1992",
+    aktualnosc: str = "2024-09-03",
+    url: str | None = None,
+    **fields: str,
+) -> dict:
+    """Rekord NMT/NMPT skorowidza o polach jak w odpowiedzi GUGiK (2026-09-29)."""
+    record = {
+        "url": url
+        or f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/78955/78955_1_{godlo}.asc",
+        "godlo": godlo,
+        "aktualnosc": aktualnosc,
+        "format": "ARC/INFO ASCII GRID",
+        "charakterystykaPrzestrzenna": resolution,
+        "ukladWspolrzednychPoziomych": uklad,
+        "ukladWspolrzednychPionowych": "PL-EVRF2007-NH",
+        "calyArkuszWypelnionyTrescia": "TAK",
+        "aktualnoscRok": aktualnosc[:4],
+        "dt_pzgik": aktualnosc,
+    }
+    record.update(fields)
+    return record
 
 
 @pytest.fixture

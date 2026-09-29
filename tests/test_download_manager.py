@@ -990,3 +990,53 @@ class TestSidecarWritten:
             (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
         )
         assert payload["extra"] == {}
+
+    def test_sidecar_carries_provider_source(self, tmp_path):
+        """D5: ``extra.source`` = pochodzenie arkusza wg ``provider.source_info``."""
+        import json
+
+        source = {
+            "url": "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/1/1_N.asc",
+            "skorowidz": "https://mapy.geoportal.gov.pl/.../SkorowidzeUkladEVRF2007",
+            "layer": "SkorowidzeNMT2026",
+            "godlo": "N-34-130-D-d-2-4",
+            "aktualnosc": "2026-03-01",
+            "resolution_m": 1.0,
+        }
+        provider = self._mock_provider()
+        provider.source_info = lambda godlo: (
+            source if godlo == "N-34-130-D-d-2-4" else None
+        )
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=provider,
+            sidecar_extra={"parent_request": {"bbox_crs": "EPSG:2180"}},
+        )
+        result = manager.download_sheet("N-34-130-D-d-2-4")
+        payload = json.loads(
+            (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
+        )
+        assert payload["extra"]["source"] == source
+        assert payload["extra"]["parent_request"] == {"bbox_crs": "EPSG:2180"}
+        assert payload["schema"] == "kartograf-meta/1"
+
+    def test_sidecar_without_provider_source_has_no_source_key(self, tmp_path):
+        """``source_info`` zwracajace None (provider bez pochodzenia) albo Mock
+        (``Mock(spec=GugikProvider)``) nie trafia do sidecara."""
+        import json
+
+        provider = self._mock_provider()  # MagicMock: source_info(...) -> MagicMock
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+        result = manager.download_sheet("N-34-130-D-d-2-4")
+        payload = json.loads(
+            (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
+        )
+        assert "source" not in payload["extra"]
+
+        provider.source_info = lambda godlo: None
+        result.unlink()
+        result = manager.download_sheet("N-34-130-D-d-2-4")
+        payload = json.loads(
+            (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
+        )
+        assert payload["extra"] == {}

@@ -1,0 +1,7 @@
+<script>
+var skor_NMT_wg_akt = [];
+skor_NMT_wg_akt.push({url:"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/73021/73021_914857_N-34-139-A-c-1-1.asc",godlo:"N-34-139-A-c-1-1",aktualnosc:"2019-04-18",ukladWspolrzednychPoziomych:"PL-1992",ukladWspolrzednychPionowych:"PL-EVRF2007-NH",charakterystykaPrzestrzenna:"1.00 m",aktualnoscRok:"2019"});
+skor_NMT_wg_akt.push({url:"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/75064/75064_1108345_7.173.21.06.asc",godlo:"7.173.21.06",aktualnosc:"2021-04-28",ukladWspolrzednychPoziomych:"PL-2000:S7",ukladWspolrzednychPionowych:"PL-EVRF2007-NH",charakterystykaPrzestrzenna:"1.00 m",aktualnoscRok:"2021"});
+skor_NMT_wg_akt.push({url:"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/77944/77944_1399379_7.173.21.06.3.asc",godlo:"7.173.21.06.3",aktualnosc:"2022-05-09",ukladWspolrzednychPoziomych:"PL-2000:S7",ukladWspolrzednychPionowych:"PL-EVRF2007-NH",charakterystykaPrzestrzenna:"0.50 m",aktualnoscRok:"2022"});
+skor_NMT_wg_akt.push({url:"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/78047/78047_1404533_N-34-139-A-c-1-1.asc",godlo:"N-34-139-A-c-1-1",aktualnosc:"2023-09-05",ukladWspolrzednychPoziomych:"PL-1992",ukladWspolrzednychPionowych:"PL-EVRF2007-NH",charakterystykaPrzestrzenna:"1.00 m",aktualnoscRok:"2023"});
+</script>

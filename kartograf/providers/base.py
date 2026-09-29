@@ -70,6 +70,10 @@ class BaseProvider(DataSourceProvider):
         """Default file extension for this provider (e.g. '.asc', '.tif')."""
         return ".asc"
 
+    def source_info(self, godlo: str) -> dict | None:
+        """Pochodzenie pobranego arkusza, jesli provider je udostepnia."""
+        return None
+
     @abstractmethod
     def download(
         self,

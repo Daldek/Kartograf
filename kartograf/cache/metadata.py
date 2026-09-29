@@ -2,7 +2,7 @@
 Metadata cache using SQLite for Kartograf.
 
 This module provides the MetadataCache class that caches:
-- OpenData URL lookups (godlo -> URL) for NMT/NMPT/Ortofoto providers
+- Skorowidz records (product/resolution/vertical CRS/godlo -> metadata or no coverage)
 - TERYT code lookups (point -> TERYT) for BDOT10k provider
 - Sheet index lookups (system + godlo -> payload) for CUZK sheet providers
   (sheet_cache, fixed TTL of 30 days)
@@ -13,7 +13,7 @@ shared Connection are serialized through a single threading.Lock: WAL mode
 buys concurrency across separate processes/connections, not across threads
 sharing one Connection (CPython caches prepared statements per Connection,
 so unlocked concurrent reads on the same SQL text can return another key's
-row - see the comment in MetadataCache.get_url()).
+row - see the comment in MetadataCache.get_record()).
 """
 
 from __future__ import annotations
@@ -42,7 +42,7 @@ class MetadataCache:
     """
     SQLite-based metadata cache for Kartograf.
 
-    Caches WMS lookup results (OpenData URLs and TERYT codes) to avoid
+    Caches WMS lookup results (skorowidz records and TERYT codes) to avoid
     repeated network requests for the same data.
 
     Parameters
@@ -59,9 +59,9 @@ class MetadataCache:
     Examples
     --------
     >>> cache = MetadataCache()
-    >>> cache.set_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt",
-    ...              "https://opendata.../file.asc")
-    >>> url = cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt")
+    >>> cache.set_record("nmt", "1m", "EVRF2007", "N-34-130-D-d-2-4",
+    ...                  {"no_coverage": True})
+    >>> record = cache.get_record("nmt", "1m", "EVRF2007", "N-34-130-D-d-2-4")
     >>> cache.close()
     """
 
@@ -90,14 +90,15 @@ class MetadataCache:
     def _create_tables(self) -> None:
         """Create cache tables if they don't exist."""
         with self._write_lock:
+            self._conn.execute("DROP TABLE IF EXISTS url_cache")
             self._conn.execute(
                 """
-                CREATE TABLE IF NOT EXISTS url_cache (
+                CREATE TABLE IF NOT EXISTS record_cache (
                     godlo TEXT NOT NULL,
                     resolution TEXT NOT NULL,
                     vertical_crs TEXT NOT NULL,
                     product TEXT NOT NULL,
-                    url TEXT NOT NULL,
+                    payload TEXT NOT NULL,
                     cached_at REAL NOT NULL,
                     PRIMARY KEY (godlo, resolution, vertical_crs, product)
                 )
@@ -128,35 +129,17 @@ class MetadataCache:
             self._conn.commit()
 
     # =========================================================================
-    # URL cache (for GugikProvider, GugikNmptProvider, GugikOrtoProvider)
+    # Record cache (for GugikProvider, GugikNmptProvider, GugikOrtoProvider)
     # =========================================================================
 
-    def get_url(
+    def get_record(
         self,
-        godlo: str,
+        product: str,
         resolution: str,
         vertical_crs: str,
-        product: str,
-    ) -> str | None:
-        """
-        Get cached OpenData URL for a map sheet.
-
-        Parameters
-        ----------
-        godlo : str
-            Map sheet identifier
-        resolution : str
-            Grid resolution (e.g., "1m", "5m")
-        vertical_crs : str
-            Vertical CRS (e.g., "EVRF2007", "KRON86")
-        product : str
-            Product type (e.g., "nmt", "nmpt", "orto")
-
-        Returns
-        -------
-        str or None
-            Cached URL if found and not expired, None otherwise
-        """
+        godlo: str,
+    ) -> dict | None:
+        """Zwroc rekord skorowidza albo None (brak/wygasly), TTL 7 dni."""
         # The lock also guards this read (not just writes): CPython caches a
         # prepared statement per Connection, keyed by SQL text, and reuses it
         # across threads. Two threads executing the same SQL text on this
@@ -170,7 +153,7 @@ class MetadataCache:
         with self._write_lock:
             cursor = self._conn.execute(
                 """
-                SELECT url, cached_at FROM url_cache
+                SELECT payload, cached_at FROM record_cache
                 WHERE godlo=? AND resolution=? AND vertical_crs=? AND product=?
                 """,
                 (godlo, resolution, vertical_crs, product),
@@ -179,14 +162,14 @@ class MetadataCache:
             if row is None:
                 return None
 
-            url, cached_at = row
+            payload, cached_at = row
             if time.time() - cached_at >= self._ttl_seconds:
-                logger.debug(f"URL cache expired for {godlo} ({product})")
+                logger.debug(f"Record cache expired for {godlo} ({product})")
                 # Opportunistically delete the expired entry (same critical
                 # section - threading.Lock is not reentrant).
                 self._conn.execute(
                     """
-                    DELETE FROM url_cache
+                    DELETE FROM record_cache
                     WHERE godlo=? AND resolution=? AND vertical_crs=? AND product=?
                     """,
                     (godlo, resolution, vertical_crs, product),
@@ -194,44 +177,36 @@ class MetadataCache:
                 self._conn.commit()
                 return None
 
-            logger.debug(f"URL cache hit for {godlo} ({product})")
-            return url
+            logger.debug(f"Record cache hit for {godlo} ({product})")
+            return json.loads(payload)
 
-    def set_url(
+    def set_record(
         self,
-        godlo: str,
+        product: str,
         resolution: str,
         vertical_crs: str,
-        product: str,
-        url: str,
+        godlo: str,
+        payload: dict,
     ) -> None:
-        """
-        Cache an OpenData URL for a map sheet.
-
-        Parameters
-        ----------
-        godlo : str
-            Map sheet identifier
-        resolution : str
-            Grid resolution
-        vertical_crs : str
-            Vertical CRS
-        product : str
-            Product type
-        url : str
-            OpenData URL to cache
-        """
+        """Zapisz wybrany rekord lub pewny brak pokrycia po udanych zapytaniach."""
         with self._write_lock:
             self._conn.execute(
                 """
-                INSERT OR REPLACE INTO url_cache
-                (godlo, resolution, vertical_crs, product, url, cached_at)
+                INSERT OR REPLACE INTO record_cache
+                (godlo, resolution, vertical_crs, product, payload, cached_at)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (godlo, resolution, vertical_crs, product, url, time.time()),
+                (
+                    godlo,
+                    resolution,
+                    vertical_crs,
+                    product,
+                    json.dumps(payload, ensure_ascii=False),
+                    time.time(),
+                ),
             )
             self._conn.commit()
-        logger.debug(f"Cached URL for {godlo} ({product})")
+        logger.debug(f"Cached record for {godlo} ({product})")
 
     # =========================================================================
     # TERYT cache (for Bdot10kProvider)
@@ -253,7 +228,7 @@ class MetadataCache:
         str or None
             Cached TERYT code if found and not expired, None otherwise
         """
-        # Lock guards the read too - see comment in get_url().
+        # Lock guards the read too - see comment in get_record().
         with self._write_lock:
             cursor = self._conn.execute(
                 "SELECT teryt, cached_at FROM teryt_cache WHERE x=? AND y=?",
@@ -309,7 +284,7 @@ class MetadataCache:
     def get_sheet(self, system: str, godlo: str) -> dict | None:
         """Zwroc zdekodowany payload arkusza albo None (brak/wygasly).
 
-        Lock guards the read too - see comment in get_url().
+        Lock guards the read too - see comment in get_record().
         """
         with self._write_lock:
             cursor = self._conn.execute(
@@ -352,7 +327,7 @@ class MetadataCache:
     def clear(self) -> None:
         """Delete all cached entries from all tables."""
         with self._write_lock:
-            self._conn.execute("DELETE FROM url_cache")
+            self._conn.execute("DELETE FROM record_cache")
             self._conn.execute("DELETE FROM teryt_cache")
             self._conn.execute("DELETE FROM sheet_cache")
             self._conn.commit()
@@ -372,17 +347,17 @@ class MetadataCache:
         -------
         dict
             Dictionary with keys:
-            - url_count: number of cached URL entries
+            - record_count: number of cached skorowidz entries
             - teryt_count: number of cached TERYT entries
             - sheet_count: number of cached sheet entries
             - db_size_bytes: size of the database file in bytes
             - db_path: path to the database file
         """
-        # Lock guards these reads too - see comment in get_url().
+        # Lock guards these reads too - see comment in get_record().
         with self._write_lock:
-            url_count = self._conn.execute("SELECT COUNT(*) FROM url_cache").fetchone()[
-                0
-            ]
+            record_count = self._conn.execute(
+                "SELECT COUNT(*) FROM record_cache"
+            ).fetchone()[0]
             teryt_count = self._conn.execute(
                 "SELECT COUNT(*) FROM teryt_cache"
             ).fetchone()[0]
@@ -395,7 +370,7 @@ class MetadataCache:
             db_size = self._db_path.stat().st_size
 
         return {
-            "url_count": url_count,
+            "record_count": record_count,
             "teryt_count": teryt_count,
             "sheet_count": sheet_count,
             "db_size_bytes": db_size,
@@ -404,7 +379,7 @@ class MetadataCache:
 
     def prune_expired(self) -> int:
         """
-        Delete all expired cache entries from both tables.
+        Delete all expired cache entries from all tables.
 
         Returns
         -------
@@ -414,8 +389,10 @@ class MetadataCache:
         now = time.time()
         cutoff = now - self._ttl_seconds
         with self._write_lock:
-            self._conn.execute("DELETE FROM url_cache WHERE cached_at < ?", (cutoff,))
-            url_deleted = self._conn.execute("SELECT changes()").fetchone()[0]
+            self._conn.execute(
+                "DELETE FROM record_cache WHERE cached_at < ?", (cutoff,)
+            )
+            record_deleted = self._conn.execute("SELECT changes()").fetchone()[0]
             self._conn.execute("DELETE FROM teryt_cache WHERE cached_at < ?", (cutoff,))
             teryt_deleted = self._conn.execute("SELECT changes()").fetchone()[0]
             sheet_cutoff = now - SHEET_TTL_SECONDS
@@ -424,11 +401,11 @@ class MetadataCache:
             )
             sheet_deleted = self._conn.execute("SELECT changes()").fetchone()[0]
             self._conn.commit()
-        total = url_deleted + teryt_deleted + sheet_deleted
+        total = record_deleted + teryt_deleted + sheet_deleted
         if total > 0:
             logger.debug(
-                f"Pruned {total} expired entries "
-                f"({url_deleted} URL, {teryt_deleted} TERYT, {sheet_deleted} Sheet)"
+                f"Pruned {total} expired entries ({record_deleted} Record, "
+                f"{teryt_deleted} TERYT, {sheet_deleted} Sheet)"
             )
         return total
 

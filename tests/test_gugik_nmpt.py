@@ -10,6 +10,7 @@ Endpoints i coverage IDs są inne niż NMT (DTM), ale mechanizm pobierania
 """
 
 from unittest.mock import Mock
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 import requests
@@ -18,6 +19,14 @@ from kartograf.core.sheet_parser import BBox
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
+from tests.conftest import gfi_record, render_gfi_body
+
+NMPT_OPENDATA_URL = "https://opendata.geoportal.gov.pl/NumDaneWys/NMPT/78955/78955_1467030_N-34-130-D.asc"
+
+
+def _layer_of(url: str) -> str:
+    return parse_qs(urlparse(url).query)["LAYERS"][0]
+
 
 # =========================================================================
 # TestGugikNmptProviderInit
@@ -122,15 +131,13 @@ class TestGugikNmptProviderEndpoints:
                     f"WMS endpoint for {resolution}/{crs} should contain 'NMPT'"
                 )
 
-    def test_wms_layers_are_nmpt(self):
-        """Test że nazwy warstw WMS zawierają 'NMPT'."""
-        provider = GugikNmptProvider()
-        for resolution, crs_layers in provider.WMS_LAYERS.items():
-            for crs, layers in crs_layers.items():
-                for layer in layers:
-                    assert "NMPT" in layer, (
-                        f"Layer {layer} for {resolution}/{crs} should contain 'NMPT'"
-                    )
+    def test_layer_pattern_is_nmpt(self):
+        """Wzorzec odkrywania warstw przyjmuje tylko nazwy SkorowidzeNMPT*."""
+        pattern = GugikNmptProvider.LAYER_PATTERN
+        assert pattern.fullmatch("SkorowidzeNMPT2026")
+        assert pattern.fullmatch("SkorowidzeNMPT2023iStarsze")
+        assert pattern.fullmatch("SkorowidzeNMT2023iStarsze") is None
+        assert pattern.fullmatch("SkorowidzeNMPTNajnowsze") is None
 
     def test_coverage_ids_are_dsm(self):
         """Test że coverage IDs to DSM_PL-* (nie DTM)."""
@@ -150,13 +157,6 @@ class TestGugikNmptProviderEndpoints:
         assert GugikNmptProvider(vertical_crs="EVRF2007").is_wcs_available() is True
         assert GugikNmptProvider(vertical_crs="KRON86").is_wcs_available() is True
 
-    def test_no_5m_wms_layers(self):
-        """Test że WMS_LAYERS nie ma klucza '5m'."""
-        provider = GugikNmptProvider()
-        assert "5m" not in provider.WMS_LAYERS, (
-            "NMPT WMS_LAYERS should not have a '5m' key"
-        )
-
 
 # =========================================================================
 # TestGugikNmptProviderDownload
@@ -171,9 +171,8 @@ class TestGugikNmptProviderDownload:
         """Mock odpowiedzi WMS GetFeatureInfo z URL OpenData NMPT."""
         response = Mock(spec=requests.Response)
         response.status_code = 200
-        response.text = (
-            '<html><script>var data = {url:"https://opendata.geoportal.gov.pl'
-            '/NumDaneWys/NMPT/78955/78955_1467030_N-34-130-D.asc"};</script></html>'
+        response.text = render_gfi_body(
+            [gfi_record("N-34-130-D", url=NMPT_OPENDATA_URL)]
         )
         return response
 
@@ -217,13 +216,16 @@ class TestGugikNmptProviderDownload:
         assert result == output_path
         assert output_path.exists()
 
-        # First call should be WMS GetFeatureInfo
+        # First call should be WMS GetFeatureInfo on the NMPT endpoint,
+        # newest skorowidz layer first
         first_call_url = session.get.call_args_list[0][0][0]
         assert "GetFeatureInfo" in first_call_url
+        assert "NMPT" in first_call_url
+        assert _layer_of(first_call_url) == "SkorowidzeNMPT2026"
 
-        # Second call should be OpenData URL
+        # Second call should be the OpenData URL from the skorowidz record
         second_call_url = session.get.call_args_list[1][0][0]
-        assert "opendata.geoportal.gov.pl" in second_call_url
+        assert second_call_url == NMPT_OPENDATA_URL
 
     def test_download_bbox_uses_wcs(self, tmp_path, mock_wcs_response, sample_bbox):
         """Test że download_bbox używa WCS z endpointem NMPT."""
@@ -252,13 +254,15 @@ class TestGugikNmptProviderDownload:
         session.get = Mock(return_value=mock_wms_response)
 
         provider = GugikNmptProvider(session=session)
-        provider._get_opendata_url("N-34-130-D")
+        url = provider._get_opendata_url("N-34-130-D")
 
+        assert url == NMPT_OPENDATA_URL
+        session.get.assert_called_once()
         call_url = session.get.call_args[0][0]
         # Endpoint should contain NMPT
         assert "NMPT" in call_url
-        # Layer names in the query should contain NMPT
-        assert "SkorowidzeNMPT" in call_url
+        # Newest NMPT layer answers first, so it is the only one queried
+        assert _layer_of(call_url) == "SkorowidzeNMPT2026"
 
 
 # =========================================================================

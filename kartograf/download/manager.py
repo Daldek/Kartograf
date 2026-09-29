@@ -850,7 +850,13 @@ class DownloadManager:
         return len(descendants)
 
     def _write_sidecar(self, data_path: Path, request: dict) -> None:
-        """Best-effort zapis sidecara .meta.json (blad nie przerywa pobrania)."""
+        """Best-effort zapis sidecara .meta.json (blad nie przerywa pobrania).
+
+        Dla zadania z ``godlo`` dopisuje ``extra.source`` — pochodzenie pliku
+        wg ``provider.source_info(godlo)`` (rekord skorowidza GUGiK: URL,
+        warstwa, aktualnosc; D5). Tylko ``dict`` trafia do sidecara: provider
+        bez pochodzenia zwraca ``None``, a ``Mock(spec=...)`` — ``Mock``.
+        """
         try:
             from kartograf.sources.registry import get_source
             from kartograf.sources.sidecar import build_metadata, write_sidecar
@@ -858,12 +864,19 @@ class DownloadManager:
             key = getattr(self._provider, "descriptor_key", None)
             if not isinstance(key, str):
                 return
+            extra = dict(self._sidecar_extra) if self._sidecar_extra else {}
+            godlo = request.get("godlo")
+            source_info = getattr(self._provider, "source_info", None)
+            if godlo is not None and callable(source_info):
+                source = source_info(godlo)
+                if isinstance(source, dict):
+                    extra["source"] = source
             meta = build_metadata(
                 get_source(key),
                 request=request,
                 vertical_crs=getattr(self._provider, "vertical_crs", None),
                 data_path=data_path,
-                extra=dict(self._sidecar_extra) if self._sidecar_extra else None,
+                extra=extra or None,
             )
             write_sidecar(data_path, meta)
         except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
