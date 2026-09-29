@@ -2601,25 +2601,73 @@ class TestCmdDownloadLaz:
         assert kwargs.get("year") == 2023
         assert kwargs.get("min_density") == 12
 
-    @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
-    def test_laz_no_tiles_found_errors(self, mock_provider_cls, capsys, tmp_path):
-        instance = Mock()
-        instance.discover_tiles.return_value = []
-        mock_provider_cls.return_value = instance
-
-        result = main(
-            [
-                "download",
-                "M-34-27-B-b-2-1",
-                "--product",
-                "laz",
-                "-o",
-                str(tmp_path),
-                "-q",
-            ]
+    def test_laz_no_tiles_found_errors(self, capsys, tmp_path):
+        capabilities = Mock(
+            text="""\
+<wfs:WFS_Capabilities xmlns:wfs="http://www.opengis.net/wfs/2.0">
+  <wfs:FeatureTypeList>
+    <wfs:FeatureType>
+      <wfs:Name>gugik:SkorowidzDanychPomiarowychLIDAR2024</wfs:Name>
+    </wfs:FeatureType>
+    <wfs:FeatureType>
+      <wfs:Name>gugik:SkorowidzDanychPomiarowychLIDAR2023</wfs:Name>
+    </wfs:FeatureType>
+  </wfs:FeatureTypeList>
+</wfs:WFS_Capabilities>"""
         )
+        empty_page = Mock(
+            text='<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0" '
+            'numberReturned="0"/>'
+        )
+
+        with patch(
+            "requests.Session.get", side_effect=[capabilities, empty_page, empty_page]
+        ) as get:
+            result = main(
+                [
+                    "download",
+                    "M-34-27-B-b-2-1",
+                    "--product",
+                    "laz",
+                    "-o",
+                    str(tmp_path),
+                    "-q",
+                ]
+            )
         assert result == 1
         assert "No LAZ tiles" in capsys.readouterr().err
+        assert get.call_count == 3  # Capabilities and both available years completed.
+
+    @pytest.mark.parametrize("year_args", [[], ["--year", "2024"]])
+    def test_laz_wfs_failure_reports_network_error(self, year_args, capsys, tmp_path):
+        import requests
+
+        with (
+            patch(
+                "requests.Session.get",
+                side_effect=requests.ConnectionError("connection reset by peer"),
+            ) as get,
+            patch("kartograf.transport.http.time.sleep"),
+        ):
+            result = main(
+                [
+                    "download",
+                    "M-34-27-B-b-2-1",
+                    "--product",
+                    "laz",
+                    *year_args,
+                    "-o",
+                    str(tmp_path),
+                    "-q",
+                ]
+            )
+
+        assert result == 1
+        err = capsys.readouterr().err
+        assert "Error: WFS" in err
+        assert "connection reset by peer" in err
+        assert "No LAZ tiles" not in err
+        assert get.call_count == 3
 
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
     def test_laz_writes_sidecar_next_to_tile(self, mock_provider_cls, tmp_path):
@@ -2888,8 +2936,8 @@ def _cz_provider_mock(resolution="2m"):
         if target_crs.endswith("5514"):
             return None
         pinned = Mock()
-        pinned.description = f"S-JTSK to ETRS89 (3) -> {target_crs}"
-        pinned.accuracy_m = 0.5
+        pinned.description = f"S-JTSK to ETRS89 (1) -> {target_crs}"
+        pinned.accuracy_m = 1.0
         return pinned
 
     provider.horizontal_transform.side_effect = fake_horizontal
@@ -2959,7 +3007,7 @@ class TestCmdDownloadCz:
         # kafel TM33 lezy w 3045, a dane CUZK w 5514 — reprojekcja jest LOKALNA
         # i sidecar niesie jej dokladnosc (ADR-024)
         assert payload["transform"] == {
-            "horizontal": "pinned: S-JTSK to ETRS89 (3) -> EPSG:3045 (0.5 m)"
+            "horizontal": "pinned: S-JTSK to ETRS89 (1) -> EPSG:3045 (1.0 m)"
         }
         assert "parent_request" not in payload["extra"]  # tryb godlowy bez pola
 
@@ -3086,7 +3134,7 @@ class TestCmdDownloadCz:
         )
         assert payload["horizontal_crs"] == "EPSG:3045"
         assert payload["transform"] == {
-            "horizontal": "pinned: S-JTSK to ETRS89 (3) -> EPSG:3045 (0.5 m)"
+            "horizontal": "pinned: S-JTSK to ETRS89 (1) -> EPSG:3045 (1.0 m)"
         }
 
     def test_godlo_without_safe_horizontal_operation_exits_cleanly(
