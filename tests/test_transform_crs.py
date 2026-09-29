@@ -6,6 +6,8 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import pytest
 from pyproj import network
+from pyproj.enums import TransformDirection
+from pyproj.transformer import TransformerGroup
 
 from kartograf.exceptions import KartografError
 from kartograf.transform.crs import (
@@ -20,11 +22,19 @@ from kartograf.transform.crs import (
 _GROUP_PATCH = "kartograf.transform.crs.TransformerGroup"
 
 
-def _mock_transformer(accuracy, description, result=(100.0, 200.0)):
+def _mock_transformer(
+    accuracy, description, result=(100.0, 200.0), codes=("EPSG:1622",)
+):
     t = MagicMock()
     t.accuracy = accuracy
     t.description = description
     t.transform.return_value = result
+    t.to_json_dict.return_value = {
+        "steps": [
+            {"id": {"authority": authority, "code": int(code)}}
+            for authority, code in (value.split(":") for value in codes)
+        ]
+    }
     return t
 
 
@@ -139,6 +149,99 @@ class TestBuildPinnedTransform:
         assert y == pytest.approx(511326.23, abs=0.1)
 
 
+class TestDatumStepPins:
+    _POLICY = TransformPolicy(min_accuracy_m=1.0, allow_network_grids=False)
+
+    @pytest.mark.parametrize(
+        ("src", "dst"),
+        [
+            (5514, 2180),
+            (5514, 3045),
+            (5514, 4258),
+            (2180, 5514),
+            (3045, 5514),
+            (4258, 5514),
+        ],
+    )
+    def test_5514_pairs_pin_czech_operation(self, src, dst):
+        probes = {
+            5514: (-670165.0, -1084718.0),
+            2180: (300000.0, 250000.0),
+            3045: (550000.0, 5600000.0),
+            4258: (15.5, 49.8),
+        }
+        pinned = build_pinned_transform(
+            f"EPSG:{src}",
+            f"EPSG:{dst}",
+            TransformPolicy(
+                min_accuracy_m=1.0,
+                allow_network_grids=False,
+                probe_point=probes[src],
+            ),
+        )
+        assert "S-JTSK to ETRS89 (1)" in pinned.description
+        assert pinned.accuracy_m == 1.0
+        assert "molobadekas" not in pinned.gdal_operation()
+
+    @pytest.mark.parametrize(("src", "dst"), [(5514, 4326), (4326, 5514)])
+    def test_5514_wgs84_pairs_pin_twin_operation(self, src, dst):
+        pinned = build_pinned_transform(f"EPSG:{src}", f"EPSG:{dst}", self._POLICY)
+        assert "S-JTSK to WGS 84 (1)" in pinned.description
+        assert pinned.accuracy_m == 1.0
+
+    def test_pin_reports_rejected_datum_step(self):
+        wrong_country = _mock_transformer(
+            0.5, "operacja slowacka", codes=("EPSG:4829",)
+        )
+        with (
+            patch(_GROUP_PATCH, return_value=_mock_group([wrong_country])),
+            pytest.raises(TransformUnavailableError) as exc,
+        ):
+            build_pinned_transform("EPSG:5514", "EPSG:2180", self._POLICY)
+        reasons = dict(exc.value.rejected)
+        assert "EPSG:1622" in reasons["operacja slowacka"]
+
+    @pytest.mark.parametrize(
+        ("src", "dst", "accuracy"),
+        [(25833, 2180, 0.0), (2180, 3045, 0.0), (8357, 5621, 0.1)],
+    )
+    def test_pin_ignores_pairs_without_pinned_crs(self, src, dst, accuracy):
+        pinned = build_pinned_transform(f"EPSG:{src}", f"EPSG:{dst}", self._POLICY)
+        assert pinned.accuracy_m == accuracy
+        if src == 8357:
+            assert pinned.transform(15.5, 49.8, 300.0)[2] == pytest.approx(
+                300.13, abs=0.02
+            )
+
+    def test_pinned_operation_moves_content_by_known_offset(self):
+        group = TransformerGroup(
+            "EPSG:5514", "EPSG:4258", always_xy=True, allow_ballpark=False
+        )
+        czech = next(
+            t for t in group.transformers if "S-JTSK to ETRS89 (1)" in t.description
+        )
+        point = czech.transform(15.74, 50.735, direction=TransformDirection.INVERSE)
+        group_pl = TransformerGroup(
+            "EPSG:5514", "EPSG:2180", always_xy=True, allow_ballpark=False
+        )
+        slovak = next(
+            t for t in group_pl.transformers if "S-JTSK to ETRS89 (3)" in t.description
+        )
+        pinned = build_pinned_transform("EPSG:5514", "EPSG:2180", self._POLICY)
+        fixed = pinned.transform(*point)
+        previous = slovak.transform(*point)
+        assert math.dist(fixed, previous) == pytest.approx(2.73, abs=0.05)
+
+    def test_pin_accepts_single_inverse_operation(self):
+        czech = _mock_transformer(1.0, "odwrotna operacja czeska")
+        czech.to_json_dict.return_value = {
+            "id": {"authority": "INVERSE(EPSG)", "code": 1622}
+        }
+        with patch(_GROUP_PATCH, return_value=_mock_group([czech])):
+            pinned = build_pinned_transform("EPSG:2180", "epsg:5514", self._POLICY)
+        assert pinned.transform(1.0, 2.0) == (100.0, 200.0)
+
+
 class TestKnownPaths:
     def test_documented_pairs_present(self):
         pairs = {(p.src, p.dst) for p in KNOWN_PATHS}
@@ -150,16 +253,10 @@ class TestKnownPaths:
         assert ("EPSG:4937", "EPSG:8357") in pairs
 
     def test_pl_cutout_pairs_documented_with_measured_accuracy(self):
-        """Tor PL (`--target-crs`, ADR-027) tez ma wpis — z ZMIERZONA dokladnoscia.
-
-        `KNOWN_PATHS` jest jedynym mechanizmem, ktory wychwytuje regresje
-        doboru operacji (docs/ARCHITECTURE.md sekcja 5 pkt 6), wiec kazda
-        uzywana para ukladow musi tu byc, a deklarowana dokladnosc musi zgadzac
-        sie z ta, ktora naprawde wybiera polityka.
-        """
+        """Dokladnosc udokumentowanych par PL zgadza sie z realna operacja."""
         by_pair = {(p.src, p.dst): p for p in KNOWN_PATHS}
         probe = (530050.0, 382050.0)  # EPSG:2180, srodkowa Polska
-        for dst, expected in (("EPSG:5514", 0.5), ("EPSG:3045", 0.0)):
+        for dst, expected in (("EPSG:5514", 1.0), ("EPSG:3045", 0.0)):
             entry = by_pair[("EPSG:2180", dst)]  # KeyError = brak wpisu
             pinned = build_pinned_transform(
                 "EPSG:2180",
@@ -229,7 +326,8 @@ class TestGdalOperation:
     def test_operation_carries_datum_step(self):
         """Sedno: operacja MUSI niesc transformacje datum S-JTSK->ETRS89."""
         pinned = build_pinned_transform("EPSG:5514", "EPSG:2180", self._POLICY)
-        assert "molobadekas" in pinned.gdal_operation()
+        operation = pinned.gdal_operation()
+        assert "helmert" in operation and "x=570.8" in operation
 
     def test_crs_pair_is_recorded(self):
         pinned = build_pinned_transform("EPSG:5514", "EPSG:2180", self._POLICY)

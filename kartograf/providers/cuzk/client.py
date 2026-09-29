@@ -35,6 +35,9 @@ class CuzkClient:
 
     MAX_EXPORT_WIDTH = 15000
     MAX_EXPORT_HEIGHT = 4100
+    # Sondy 2026-09-29: 7,5 Mpx OK, 8,38 Mpx HTTP 500 niezaleznie od
+    # ksztaltu. Budzet z zapasem wobec tego limitu i timeoutu 60 s.
+    MAX_EXPORT_PIXELS = 4_000_000
     QUERY_PAGE_SIZE = 2000  # maxRecordCount uslug CUZK (potwierdzone w Zad. 1)
 
     def __init__(self, session: requests.Session | None = None, timeout: int = 60):
@@ -138,8 +141,21 @@ class CuzkClient:
         output_path = Path(output_path)
         width_px = max(1, round((bbox.max_x - bbox.min_x) / pixel_size))
         height_px = max(1, round((bbox.max_y - bbox.min_y) / pixel_size))
+        # Kotwica NW i calkowita liczba pikseli, wspolne dla pojedynczego
+        # eksportu, kafli i mozaiki. Niezrownany bbox zmienial rozmiar piksela.
+        bbox = BBox(
+            bbox.min_x,
+            bbox.max_y - height_px * pixel_size,
+            bbox.min_x + width_px * pixel_size,
+            bbox.max_y,
+            bbox.crs,
+        )
 
-        if width_px <= self.MAX_EXPORT_WIDTH and height_px <= self.MAX_EXPORT_HEIGHT:
+        if (
+            width_px <= self.MAX_EXPORT_WIDTH
+            and height_px <= self.MAX_EXPORT_HEIGHT
+            and width_px * height_px <= self.MAX_EXPORT_PIXELS
+        ):
             self._export_single(
                 endpoint, bbox, width_px, height_px, image_sr, no_data, output_path
             )
@@ -160,6 +176,7 @@ class CuzkClient:
             height_px,
             self.MAX_EXPORT_WIDTH,
             self.MAX_EXPORT_HEIGHT,
+            self.MAX_EXPORT_PIXELS,
         )
         tile_paths: list[Path] = []
         try:
@@ -261,6 +278,7 @@ def _tile_grid(
     height_px: int,
     max_w: int,
     max_h: int,
+    max_px: int,
 ) -> list[tuple[BBox, int, int]]:
     """Deterministyczna siatka kafli cieta po pelnych pikselach (N->S, W->E);
     kotwica w narozniku NW — spojnie z rasterio.merge(bounds=...) i
@@ -275,16 +293,24 @@ def _tile_grid(
     reprojekcji serwerowej, i tak samo niewidoczny w metadanych (A3-1).
     """
 
-    def _splits(total_px: int, max_px: int) -> list[tuple[int, int]]:
-        n = math.ceil(total_px / max_px)
-        base, extra = divmod(total_px, n)
-        sizes = [base + (1 if i < extra else 0) for i in range(n)]
-        offsets = [sum(sizes[:i]) for i in range(n)]
-        return list(zip(offsets, sizes, strict=True))
+    def _splits(total_px: int, parts: int) -> list[tuple[int, int]]:
+        base, extra = divmod(total_px, parts)
+        return [
+            (i * base + min(i, extra), base + (1 if i < extra else 0))
+            for i in range(parts)
+        ]
+
+    # Kwadratowawe kafle zamiast waskich pasow 15000 x 260 px:
+    # sondy serwera potwierdzily te klase ksztaltow, nie dlugie pasy.
+    col_cap = max(1, min(max_w, math.isqrt(max_px)))
+    cols = _splits(width_px, math.ceil(width_px / col_cap))
+    tile_w = max(size for _, size in cols)
+    row_cap = max(1, min(max_h, max_px // tile_w))
+    rows = _splits(height_px, math.ceil(height_px / row_cap))
 
     tiles: list[tuple[BBox, int, int]] = []
-    for row_off, row_px in _splits(height_px, max_h):
-        for col_off, col_px in _splits(width_px, max_w):
+    for row_off, row_px in rows:
+        for col_off, col_px in cols:
             tiles.append(
                 (
                     BBox(

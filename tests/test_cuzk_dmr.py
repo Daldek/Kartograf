@@ -541,7 +541,22 @@ class TestHorizontalReprojection:
         assert warp.call_args.kwargs["COORDINATE_OPERATION"] == expected
         # sanity: wymuszona operacja niesie transformacje datum S-JTSK->ETRS89
         # (jej brak to wlasnie zmierzony blad 135 m serwera CUZK)
-        assert "molobadekas" in expected
+        assert "helmert" in expected and "x=570.8" in expected
+
+    def test_tm33_tile_uses_czech_datum_operation(self, tmp_path):
+        target = tmp_path / "302_5550.tif"
+        with patch(_CLIENT_PATCH) as client_cls:
+            client_cls.return_value.export_image.side_effect = _server_emulator()
+            provider = CuzkDmrProvider(resolution="2m", session=MagicMock())
+            provider.download("302_5550", target)
+        pinned = provider.horizontal_transform("EPSG:3045")
+        assert pinned is not None
+        assert "S-JTSK to ETRS89 (1)" in pinned.description
+        assert pinned.accuracy_m == 1.0
+        with rasterio.open(target) as src:
+            assert src.crs.to_epsg() == 3045
+            assert src.res == (2.0, 2.0)
+            assert src.bounds == (302000, 5550000, 304000, 5552000)
 
     def test_horizontal_transform_is_none_for_native(self):
         provider = CuzkDmrProvider(resolution="2m")
@@ -572,11 +587,17 @@ def _group_of(*transformers):
     return group
 
 
-def _fake_operation(accuracy, description, result):
+def _fake_operation(accuracy, description, result, codes=("EPSG:1622",)):
     t = MagicMock()
     t.accuracy = accuracy
     t.description = description
     t.transform.return_value = result
+    t.to_json_dict.return_value = {
+        "steps": [
+            {"id": {"authority": authority, "code": int(code)}}
+            for authority, code in (value.split(":") for value in codes)
+        ]
+    }
     return t
 
 

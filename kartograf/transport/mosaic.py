@@ -15,6 +15,7 @@ from collections import Counter
 from pathlib import Path
 from xml.sax.saxutils import escape
 
+import numpy as np
 import rasterio
 from pyproj import CRS
 from rasterio.io import MemoryFile
@@ -332,3 +333,16 @@ def mosaic_and_crop(
         for memfile in memfiles:
             memfile.close()
     return output_path
+
+
+def has_valid_pixels(path: Path, nodata: float | None) -> bool:
+    """Czy raster ma choc jeden piksel spoza nodata/NaN (wczesne wyjscie)."""
+    with rasterio.open(path) as src:
+        for _, window in src.block_windows(1):
+            data = src.read(1, window=window)
+            mask = np.isfinite(data)
+            if nodata is not None:
+                mask &= data != nodata
+            if mask.any():
+                return True
+    return False
