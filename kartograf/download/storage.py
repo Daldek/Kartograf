@@ -225,7 +225,8 @@ class FileStorage:
         >>> storage.get_path("N-34-130-D-d-2-4", ".asc")
         PosixPath('data/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc')
         """
-        # Normalize godło using SheetParser
+        # Normalize godło case via SheetParser (leading zeros are NOT stripped:
+        # 'M-33-036-...' and 'M-33-36-...' map to different paths)
         parser = SheetParser(godlo)
         normalized_godlo = parser.godlo
 

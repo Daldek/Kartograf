@@ -992,9 +992,11 @@ def find_sheets_for_bbox(
 
     Konwencja krawędzi: zwracane są tylko arkusze o dodatnim polu przecięcia
     z bboxem — stykanie się krawędzi/narożników nie wystarcza (audyt 0.7.0,
-    A1-7). Bbox równy dokładnie arkuszowi daje tylko ten arkusz i jego
-    potomków. Bbox zdegenerowany (punkt) daje dokładnie jeden arkusz — ten na
-    wschód/północ od linii siatki.
+    A1-7). Bbox równy dokładnie arkuszowi W EPSG:4326 daje tylko ten arkusz
+    i jego potomków; bbox w EPSG:2180 jest najpierw zamieniany na obwiednię
+    WGS84 (szerszą), więc selekcja może objąć arkusze sąsiednie (obwiednia
+    EPSG:2180 arkusza N-34-130-D-d-2-4 daje 9 godeł). Bbox zdegenerowany
+    (punkt) daje dokładnie jeden arkusz — ten na wschód/północ od linii siatki.
 
     Parameters
     ----------

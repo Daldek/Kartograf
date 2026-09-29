@@ -1,21 +1,23 @@
 """
-Kartograf - Tool for downloading spatial data from GUGiK.
-
-This package provides tools for downloading Digital Terrain Model (NMT)
-and Land Cover data from Polish GUGiK (Główny Urząd Geodezji i Kartografii)
-and European Copernicus services.
+Kartograf - download spatial data: NMT/NMPT/orthophoto/LAZ from GUGiK (PL),
+DMR 5G/4G from CUZK (CZ), BDOT10k, CORINE (Copernicus) and SoilGrids (ISRIC).
 
 Example usage::
 
-    from kartograf import SheetParser, DownloadManager
+    from kartograf import BBox, DownloadManager, SheetParser, download_pl_cutout
 
     # Parse a map sheet identifier
     parser = SheetParser("N-34-130-D-d-2-4")
     print(f"Scale: {parser.scale}")
 
-    # Download NMT data
+    # Download NMT data (one sheet from GUGiK OpenData)
     manager = DownloadManager(output_dir="./data")
     path = manager.download_sheet("N-34-130-D-d-2-4")
+
+    # One merged NMT GeoTIFF for an area (PL cutout, ADR-027)
+    result = download_pl_cutout(
+        BBox(530000, 382000, 533000, 386000, "EPSG:2180"), "EPSG:2180"
+    )
 
     # Download Land Cover data
     from kartograf import LandCoverManager

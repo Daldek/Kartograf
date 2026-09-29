@@ -333,9 +333,12 @@ def build_pl_cutout(
     siatki arkuszy (wiekszosci; < 1 px na strone), wiec przy celu EPSG:2180
     wartosci przechodza 1:1, bez przeprobkowania, a warp dostaje tresc bez
     przesuniecia o ulamek piksela. Arkusz spoza siatki wiekszosci nie
-    przerywa budowy — ostrzezenie w logu, jego tresc idzie najblizszym
-    sasiadem (``mosaic_and_crop``). Kazdy arkusz jest owijany w VRT z jawnym
-    EPSG:2180 i pasmem Float32: arkusz z ``.prj`` (np. dopisanym przez
+    przerywa budowy — ostrzezenie w logu, a jego tresc ``merge`` przepisuje
+    bez interpolacji, ale NIE zawsze z najblizszego piksela (przy przesunieciu
+    w strone W do ~0,9 px) i z kolumna/wierszem nodata na szwie — znany blad
+    S5 (testy na zywo 2026-09-29: arkusze 5 m kampanii 2022 pod Krakowem maja
+    rozne fazy siatki; 1 m — jedna faza). Kazdy arkusz jest owijany w VRT
+    z jawnym EPSG:2180 i pasmem Float32: arkusz z ``.prj`` (np. dopisanym przez
     Hydrograf) scala sie z arkuszem bez niego (dotad blad ``niezgodne CRS
     wejsc``), a arkusz z samymi liczbami calkowitymi (GDAL czyta go jako
     Int32) nie obcina wysokosci pozostalych. Wejscia sa sortowane: ``merge``
@@ -542,7 +545,9 @@ def run_pl_cutout(
 ) -> PlCutoutResult:
     """Pobierz arkusze, zbuduj wycinek, zapisz sidecar.
 
-    ``force=False`` + istniejacy plik wyniku -> ``skipped=True`` bez sieci.
+    ``force=False`` + istniejacy plik wyniku -> ``skipped=True`` bez sieci
+    (``missing_sheets`` jest wtedy puste mimo ewentualnych dziur w rastrze —
+    lista zostaje w sidecarze, ``extra.missing_sheets``; znany blad N4).
     Arkusze z cache sa uzywane ponownie (``skip_existing = not force``).
     Brak danych u zrodla (``NoCoverageError``) -> nodata + ``missing_sheets``;
     kazda inna porazka pobrania arkusza (``DownloadError``) -> ``DownloadError``;
@@ -657,7 +662,37 @@ def download_pl_cutout(
     Tryb geometrii: ``bbox`` to obwiednia geometrii (np.
     ``get_overall_bbox(path, target_crs="EPSG:2180")``), ``geometry`` — plik
     SHP/GPKG wyznaczajacy arkusze per obiekt (R-01 przy warpie). Regula
-    fabryki NMT: 5m => EVRF2007 (z ostrzezeniem w logu).
+    fabryki NMT: 5m => EVRF2007 (z ostrzezeniem w logu). Provider i sesja
+    pochodza z fabryki — wlasny provider/sesja/cache: kroki
+    ``prepare_pl_cutout`` -> ``select_pl_cutout_sheets`` ->
+    ``run_pl_cutout(provider=...)``.
+
+    Returns
+    -------
+    PlCutoutResult
+        ``path`` — plik wyniku; ``skipped=True`` (bez sieci), gdy plik juz
+        istnial i ``force=False`` (``missing_sheets`` jest wtedy puste —
+        lista zostaje w sidecarze, znany blad N4); ``missing_sheets`` —
+        arkusze bez danych GUGiK (w ich miejscu nodata); ``sheet_paths`` —
+        arkusze uzyte do mozaiki (kolejnosc ukonczenia pobran).
+
+    Raises
+    ------
+    ValidationError
+        Zle parametry, brak arkuszy dla obszaru, zaden arkusz nie ma danych
+        GUGiK, za malo miejsca na dysku albo arkusz we wspolrzednych PL-2000.
+    TransformError
+        Brak bezpiecznej przypietej operacji EPSG:2180 -> ``target_crs``
+        (przed jakakolwiek siecia).
+    DownloadError
+        Awaria pobrania arkusza (siec, serwer, niepewna odpowiedz
+        skorowidza — nie brak danych); wycinek nie powstaje.
+    OSError
+        Blad zapisu arkusza przy ``max_workers=1`` (w puli watkow liczy sie
+        jak awaria pobrania).
+
+    ``parent_request`` trafia do sidecara wycinka i sidecarow arkuszy
+    pobranych w tym wywolaniu tylko wtedy, gdy zostal podany.
     """
     if resolution not in PIXEL_SIZES:
         raise ValidationError(f"Rozdzielczosc NMT PL: 1m albo 5m (podano {resolution})")

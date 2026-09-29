@@ -194,13 +194,15 @@ def _run_cz(
     """
     Wywolaj przeplyw CZ, tlumaczac wyjatek zadania na komunikat CLI.
 
-    ``main`` nie lapi wyjatkow, a przeplyw CZ sygnalizuje zle zadanie
-    wyjatkiem: ``ValidationError`` (np. ``--target-crs`` z godlem),
-    ``ParseError`` (godlo pasujace wzorcem do TM33/SM5, ale niepoprawne —
-    np. nieparzyste kilometry) albo ``TransformError`` (normalizacja bboxa
-    do ukladu zadania nie ma bezpiecznej operacji). Dyspozycja jest ostatnim
-    miejscem, w ktorym moga one zostac zamienione na kod wyjscia zamiast
-    tracebacku; galaz PL lapie te same wyjatki w ``cmd_download``.
+    Przeplyw CZ sygnalizuje zle zadanie wyjatkiem: ``ValidationError`` (np.
+    ``--target-crs`` z godlem), ``ParseError`` (godlo pasujace wzorcem do
+    TM33/SM5, ale niepoprawne — np. nieparzyste kilometry) albo
+    ``TransformError`` (normalizacja bboxa do ukladu zadania nie ma
+    bezpiecznej operacji). ``main`` ma bariere (``KartografError`` ->
+    ``Error: ...``, kod 1), ale wyjatek wyciekajacy stad przerwalby petle
+    krajow ``_dispatch_area`` — pod ``--country auto`` sukces drugiego kraju
+    nie dalby juz kodu 0 (ADR-023 pkt 4-5). Dlatego sa tlumaczone tutaj;
+    galaz PL lapie te same wyjatki w ``cmd_download``.
     """
     from kartograf.transform.crs import TransformError
 
@@ -289,6 +291,9 @@ def _country_bbox(
     w ukladzie roboczym: CZ — ``cz_crs`` (Krovak albo ``--target-crs``), PL —
     uklad zadania bez zmian (zachowuje strefe PL-2000 i zerowy dryf). Jawny
     ``--country`` NIE przycina niczego (uzytkownik zna zasieg swojego zadania).
+    Przyciecie jest dzis ciche (bez ``Info:``), a powrot z WGS84 poszerza
+    pozostale krawedzie o dziesiatki metrow — znany blad S3 (testy na zywo
+    2026-09-29, docs/PROGRESS.md "Znane bledy").
 
     Gdy przyciecie nic nie zmienia, transformowany jest ORYGINALNY bbox —
     jeden skok z ukladu zadania zamiast dwoch (przez WGS84).
@@ -348,7 +353,8 @@ def _build_parent_request(bbox: BBox, countries: tuple[str, ...]) -> dict:
 
     Grupuje pliki jednego zadania bbox/geometry (takze te lezace po roznych
     stronach granicy): niesie ORYGINALNY bbox zadania — przed przycieciem per
-    kraj — jego uklad i kraje faktycznie pobrane w tym wywolaniu.
+    kraj — jego uklad i kraje ODPYTANE w tym wywolaniu (probowane, nie
+    pobrane — ADR-023 pkt 3).
 
     Zwrocony slownik NIE moze byc pozniej mutowany: konsumenci (sidecary CZ,
     ``DownloadManager(sidecar_extra=)``) trzymaja go przez referencje, a plytka
@@ -843,6 +849,14 @@ def _download_godlo_list(
         Downloaded file paths and godla arkuszy, ktorych nie udalo sie pobrac
         (puste, gdy wszystko sie powiodlo). Niepusta druga pozycja jest juz
         zgloszona na stderr — wywolujacy ma z niej zrobic kod wyjscia 1.
+        Zbiera ja tylko rozwiniecie hierarchii: porazka arkusza 1:10000
+        (takze ``NoCoverageError`` — morze, arkusz za granica) wylatuje
+        wyjatkiem. W petli sekwencyjnej (``max_workers=1``) przerywa liste
+        (dalsze arkusze nie sa pobierane); w puli watkow wylatuje pierwsza
+        porazka wg kolejnosci ukonczenia, pozostale arkusze pobieraja sie do
+        konca, ale ich porazki nie sa zbierane. Tryb listy nie ma tolerancji
+        R5 wycinka — znany blad S2 (testy na zywo 2026-09-29, backlog:
+        ``DownloadManager.download_sheets``).
     """
     expands = any(_expands_to_hierarchy(godlo) for godlo in godlo_list)
 
@@ -1584,7 +1598,7 @@ def _cmd_download_cz(
         Sparsowane argumenty (godlo / --bbox / --target-crs / --resolution ...).
     bbox : BBox, optional
         Gotowy bbox — pomija parsowanie ``args.bbox`` (uzywane przez auto-split
-        wieloknajowy, Zad. 17).
+        wielokrajowy, Zad. 17).
     parent_request : dict, optional
         Oryginalne zadanie uzytkownika przed podzialem per kraj; trafia do
         ``extra.parent_request`` sidecara.
@@ -1597,9 +1611,11 @@ def _cmd_download_cz(
     Raises
     ------
     ValidationError
-        Gdy ``--target-crs`` towarzyszy godlu (tryb godlowy jest natywny 1:1).
-        Warstwa dyspozycji (``cmd_download``) tlumaczy ten wyjatek na komunikat
-        CLI — tak jak inne przeplywy traktuja ValidationError.
+        Gdy ``--target-crs`` towarzyszy godlu (godlo wyznacza zasieg i uklad
+        produktu: arkusz SM5 1:1 w EPSG:5514, kafel TM33 lokalnym warpem na
+        siatce EPSG:3045). Tlumaczy go ``_run_cz`` (wolany z ``cmd_download``
+        i ``_dispatch_area``) — tak jak inne przeplywy traktuja
+        ValidationError.
     """
     from kartograf.cache import MetadataCache
     from kartograf.providers.cuzk import create_dmr_provider

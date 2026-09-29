@@ -3,7 +3,8 @@ Deskryptory zrodel danych — czyste dane, zero IO, zero zachowan.
 
 Deskryptor opisuje JEDEN zbior danych (np. NMT 1m z GUGiK): kanaly dostepu,
 uklady, licencje, schemat kafli. Zrodlem prawdy dla logiki wykonawczej
-pozostaja providery (etap 0); egzekwowanie capabilities zaczyna sie w etapie 1.
+pozostaja providery; capabilities sluza dzis wyborowi kanalu w sidecarze
+(``build_metadata(capability=)``), nie sa egzekwowane w managerach.
 """
 
 from dataclasses import dataclass
@@ -19,7 +20,7 @@ class TransportKind(StrEnum):
     WCS = "wcs"  # PL nmt_1m bbox, SoilGrids; pozniej DE/SK
     WMS_SHEET_INDEX = "wms_sheet_index"  # PL: skorowidz WMS -> URL pliku
     WFS = "wfs"  # PL LAZ
-    DIRECT_FILES = "direct_files"  # PL BDOT10k; pozniej CZ openzu
+    DIRECT_FILES = "direct_files"  # PL BDOT10k, CZ openzu (DMR 4G)
     CLMS_API = "clms_api"  # CORINE
     ARCGIS_IMAGE = "arcgis_image"  # etap 1 (CZ exportImage)
     ARCGIS_QUERY = "arcgis_query"  # etap 3 (ZABAGED), SK
@@ -68,7 +69,7 @@ class SourceDescriptor:
     """Pelny opis jednego zbioru danych."""
 
     key: str  # "pl.gugik.nmt_1m"
-    country: str  # "PL" | "EU" | "GLOBAL" (pozniej "CZ","DE","SK")
+    country: str  # "PL" | "CZ" | "EU" | "GLOBAL" (pozniej "DE","SK")
     product: str  # "nmt" | "nmpt" | "orto" | "laz" | "landcover" | "soil"
     name: str  # czytelna nazwa zbioru
     provider_name: str  # "GUGiK", "CUZK", ...

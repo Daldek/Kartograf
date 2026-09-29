@@ -2,8 +2,9 @@
 Generyczny fallback kaflowy: pobierz kafle -> zszyj -> przytnij do bbox.
 
 Pierwszy konsument: etap 1 (kafelkowanie CZ exportImage powyzej limitu
-15000x4100 px); kolejni: Saksonia (brak WCS), wycinek PL (ADR-027). Nodata
-jest propagowane do wyniku — NIGDY nie zamieniane na 0.
+15000x4100 px — deklarowanego przez usluge; realny limit ~8 Mpx, znany blad
+K6); kolejny: wycinek PL (ADR-027); planowany: Saksonia (brak WCS, etap DE).
+Nodata jest propagowane do wyniku — NIGDY nie zamieniane na 0.
 """
 
 import logging
@@ -98,12 +99,16 @@ def _snap_outward(
 
     Siatka odniesienia = siatka WIEKSZOSCI zrodel (remis: pierwszej w
     kolejnosci wejscia). Linie pionowe ``x0 + k * rx``, poziome ``y0 + k * ry``
-    (``y0`` to GORNA krawedz, ``transform.f``). Arkusze GUGiK jednego produktu
-    leza na jednej siatce, ale NIE na wielokrotnosciach piksela (zmierzone na
-    1977 arkuszach 5 m: narozniki na 5k + 2,5 m) — stad siatka z transformacji.
+    (``y0`` to GORNA krawedz, ``transform.f``). Arkusze GUGiK zwykle leza na
+    jednej siatce, ale NIE na wielokrotnosciach piksela (1977 arkuszy 5 m
+    z cache Hydrografu: narozniki na 5k + 2,5 m; 84 arkusze 1 m na zywo
+    2026-09-29: k + 0,5 m) — stad siatka z transformacji. Nie zawsze: arkusze
+    5 m kampanii 2022 pod Krakowem maja kazdy inna faze (znany blad S5).
     Zrodlo spoza siatki nie jest bledem (arkusze sa juz w cache, blad bylby
     trwaly): wraca na liscie z przesunieciem w pikselach, a jego tresc merge
-    przepisze metoda najblizszego sasiada.
+    przepisuje bez interpolacji — ale nie zawsze z najblizszego piksela
+    (przesuniecie w strone W: piksel oddalony do ~0,9 px) i z kolumna/wierszem
+    nodata na szwie (S5).
     """
     for path, t in zip(paths, transforms, strict=True):
         if t.b != 0 or t.d != 0:
@@ -163,9 +168,11 @@ def mosaic_and_crop(
     wynik kopiuje piksele zrodel 1:1 zamiast przesuwac tresc o ulamek piksela
     (review max 2026-08-30, zn. 1). Zrodlo spoza tej siatki NIE przerywa
     mozaikowania (arkusze sa juz w cache — blad bylby trwaly): idzie do
-    ``logger.warning`` z przesunieciem w px, a jego tresc ``merge`` przepisze
-    najblizszym sasiadem. Zrodlo z obrocona siatka (rotacja/skos w transformie)
-    konczy sie ``ValidationError``.
+    ``logger.warning`` z przesunieciem w px, a jego tresc ``merge`` przepisuje
+    bez interpolacji, ale nie zawsze z najblizszego piksela i z kolumna/
+    wierszem nodata na szwie — znany blad S5 (testy na zywo 2026-09-29).
+    Zrodlo z obrocona siatka (rotacja/skos w transformie) konczy sie
+    ``ValidationError``.
 
     ``assign_crs`` / ``dtype`` (domyslnie ``None``, tor CZ bez zmian): gdy
     ktorys jest podany, kazde zrodlo owijane jest w jednopasmowy VRT 1:1 w
