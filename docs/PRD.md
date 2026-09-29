@@ -1,8 +1,8 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.6
-**Data:** 2026-08-22
+**Wersja:** 3.7
+**Data:** 2026-09-29
 **Product Owner:** Piotr
 **Status:** Production (v0.6.1)
 
@@ -19,9 +19,15 @@
 > nieprawdziwe niezależnie od wersji: przykładowy bbox leżał w Czechach,
 > `output_dir=` nie jest parametrem `LandCoverManager.download()`, a sekcja 5
 > gubiła trzy eksporty etapu 1. Liczby jakościowe (sekcja 2.1) pozostają z
-> v0.6.1 — aktualne dane wydania 0.7.0 są w `docs/SCOPE.md` 6.2 (1775 testów,
-> 93% pokrycia). Decyzja o pełnym podniesieniu PRD do 0.7.0 należy do Product
-> Ownera (pozycja w checkliście release).
+> v0.6.1 — aktualne dane wydania 0.7.0 są w `docs/SCOPE.md` 6.2. Decyzja
+> o pełnym podniesieniu PRD do 0.7.0 należy do Product Ownera (pozycja
+> w checkliście release).
+>
+> **Nota (3.7, 2026-09-29, audyt dokumentacji po testach na żywo):** punktowo
+> uzgodnione z kodem na `develop`: lista eksportów w sekcji 5 (39 nazw — API
+> wycinka PL i `NoCoverageError`), odsyłacz do wycinka `download_pl_cutout`
+> przy WCS, mozaika w sekcji 8, uwaga o znanym błędzie K1 przy LAZ (sekcja 3.4;
+> lista znanych błędów: `docs/PROGRESS.md`, „Znane bledy”).
 
 ---
 
@@ -112,7 +118,8 @@ path = manager.download_sheet("N-34-130-D-d-2-4")
 # Pobieranie przez bbox (GeoTIFF, WCS) — tylko NMT 1m i tylko KRON86:
 # endpoint WCS dla EVRF2007 został wycofany przez GUGiK (HTTP 404 od 2026-08),
 # więc download_bbox pod EVRF2007 kończy się ValidationError. Wysokości
-# EVRF2007 bierz z arkuszy: download_sheet() albo CLI `--bbox`.
+# EVRF2007 bierz z arkuszy: download_sheet() albo CLI `--bbox`, a jako jeden
+# GeoTIFF: download_pl_cutout() / CLI `--target-crs` (0.7.0).
 kron = DownloadManager(output_dir="./data", vertical_crs="KRON86")
 bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
 path = kron.download_bbox(bbox, "area.tif")
@@ -227,6 +234,10 @@ kartograf download --geometry area.shp --product laz
 ```
 
 #### Notes
+- **Znany błąd K1 (testy na żywo 2026-09-29, sprzed 0.7.0):** discovery WFS
+  wysyła bbox i czyta envelope kafli z zamienionymi osiami, więc kafle
+  pochodzą z innego miejsca (przykład wyżej szuka ok. 209 km od podanego
+  obszaru); nie używać do czasu naprawy
 - Źródło: GUGiK WFS (`DanePomiaroweLidarEVRF2007` / `DanePomiaroweLidarKRON86`)
 - Domyślnie newest-per-tile (dedup po godle, najnowszy `akt_rok`)
 - Pobieranie równoległe (`--workers`), pomijanie istniejących plików
@@ -517,7 +528,7 @@ kartograf soilgrids hsg --godlo N-34-130-D --keep-intermediate
 
 ## 5. Public API
 
-Lista odzwierciedla `kartograf/__init__.py::__all__` na `develop` (31 nazw);
+Lista odzwierciedla `kartograf/__init__.py::__all__` na `develop` (39 nazw);
 źródłem prawdy pozostaje sam moduł.
 
 ```python
@@ -540,6 +551,15 @@ from kartograf import (
     DownloadProgress,
     DownloadResult,
     FileStorage,
+
+    # Download — wycinek PL (ADR-027)
+    PlCutout,
+    PlCutoutResult,
+    PlCutoutSheets,
+    download_pl_cutout,
+    prepare_pl_cutout,
+    run_pl_cutout,
+    select_pl_cutout_sheets,
 
     # Land Cover
     LandCoverManager,
@@ -568,6 +588,7 @@ from kartograf import (
     ParseError,
     ValidationError,
     DownloadError,
+    NoCoverageError,
 
     # Version
     __version__,  # "0.7.0-dev" (0.7.0 po wydaniu)
@@ -632,7 +653,8 @@ mypy >= 1.13           # Type checking
 ### Version 0.6+
 - [x] Parallel downloads (multi-threading) (implemented in v0.6.0)
 - [x] Metadata cache (SQLite) (implemented in v0.6.0)
-- [ ] Automatic mosaic creation
+- [x] Automatic mosaic creation — NMT PL: wycinek `--target-crs` /
+      `download_pl_cutout` (0.7.0); pozostałe produkty — etap 2
 
 ### Version 1.0+
 - [ ] GUI interface
@@ -663,6 +685,6 @@ HYDROGRAF (główna aplikacja)
 
 ---
 
-**Wersja dokumentu:** 3.6
-**Data ostatniej aktualizacji:** 2026-08-22
-**Status:** Production - v0.6.1 (snapshot; korekty spójności 3.5 i 3.6 — patrz noty na początku dokumentu)
+**Wersja dokumentu:** 3.7
+**Data ostatniej aktualizacji:** 2026-09-29
+**Status:** Production - v0.6.1 (snapshot; korekty spójności 3.5, 3.6 i 3.7 — patrz noty na początku dokumentu)
