@@ -85,6 +85,30 @@
 
 **Data:** 2026-08-10 — 2026-09-29 (sekcje datowane ponizej)
 
+> **START NASTEPNEJ SESJI** (stan na koniec sesji 2026-09-29): **fala
+> naprawcza bledow kodu z testow na zywo** — uzytkownik 2026-09-29:
+> "przejdziemy do wdrozenia". Co naprawiac (waga, skutek, `plik:linia`,
+> raport): Backlog -> "Do naprawy — testy na zywych danych 2026-09-29"
+> (K1-K6, S1-S5, N1-N9, H1); dowody:
+> `docs/research/2026-09-29-live-e2e-i-audyt-docs/` (`KNOWN-BUGS.md`,
+> raporty L1-L7, surowe odpowiedzi skorowidza `gfi/`). Kolejnosc:
+> (1) pytania projektowe do uzytkownika, po jednym watku — odmrozenie toru
+> CZ dla K2/K6 (ADR-024), zachowanie trybu listy arkuszy przy morzu
+> i granicy (S2), arkusze 5 m o roznych fazach siatki (S5), zasada wyboru
+> pliku arkusza, gdy skorowidz daje kilka (K4), zakres S3-S5 i N1-N9;
+> (2) research przyczyn per klaster kodu: skorowidz GUGiK (K3, K4, S1, S4,
+> H1, N1), orto (K5), LAZ (K1, N7), CZ (K2, K6, N2, N3), CLI (S2, S3, S5,
+> N4, N6, N8, N9, N5) — przy zywych zapytaniach malo rownoleglosci (GUGiK
+> zrywa polaczenia); (3) plan -> pre-flight -> wdrozenie team-driven
+> z dowodami mutacyjnymi; (4) ponowne testy na zywo dotknietych
+> scenariuszy i usuniecie not "znany blad" (README "Znane problemy",
+> CLAUDE.md, ARCHITECTURE, SCOPE, erraty ADR, ostrzezenie K1/K5
+> w `--help`); (5) wydanie 0.7.0 (pkt 13-14). Stan repo: `develop`,
+> 1861 testow offline (+8 `live`), mypy 32, 223 commity przed origin (bez
+> push i bez merge do `main` — tylko na polecenie uzytkownika);
+> `e2e-data/2026-09-29-live/` (8,6 GB, gitignorowane) czeka na decyzje
+> uzytkownika o usunieciu.
+
 ### Testy na zywych danych + audyt dokumentacji (2026-09-29)
 
 - **Zlecenie uzytkownika:** czy pobieranie przetestowano na realnych danych
@@ -210,6 +234,16 @@ Raporty w `docs/research/2026-09-29-live-e2e-i-audyt-docs/`.
   Brama: 1861 testow offline PASS (+8 `live` deselected), ruff check
   + format czyste, mypy 32 = baseline (lista identyczna). Galaz nie
   pushowana.
+- **Niezalezny przeglad fali dokumentacji (opus, ta sesja):** kod bez
+  zmian zachowania potwierdzony (AST bez docstringow identyczne,
+  w `_parser.py` tylko teksty pomocy), pliki K1/K2/K6 nietkniete, 21 ID
+  w backlogu "Do naprawy" dokladnie raz; 15 usterek (1 blokujaca:
+  "`auto` == `pl`" na granicach z krajami spoza rejestru przeczylo
+  przycinaniu S3; 2 wazne: zakres K2 w ARCHITECTURE, S4 "NMPT nie
+  pobiera sie wcale") naprawione w f52593a; re-review rundy: 2 resztki
+  (dolna granica K2 — na Morawach roznica operacji to 0,1-1,0 m;
+  odsylacze w notce K2) poprawione w fb3cede. Raporty:
+  `DOCS-REREVIEW-REPORT.md` i `sdd-ledger.md` w katalogu raportow wyzej.
 
 ### Fala naprawcza po review max + wycinek PL w bibliotece (2026-09-28)
 
@@ -867,10 +901,10 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
    najpewniej roznica operacji EPSG:1622 - EPSG:4829, czyli blad lokalnej,
    slowackiej operacji przypietej, nie serwera (znany blad K2, errata
    ADR-024).
-3. **Push `develop` na origin** (**208 commitow** lokalnie — pomiar
-   `git rev-list --count origin/develop..develop` 2026-09-28 po commicie
-   zamykajacym fale review max, plus commity fali dokumentacji 2026-09-29;
-   wczesniej 148 po mergu audytu 0.7.0 2026-08-28; decyzja z etapu 0 nadal
+3. **Push `develop` na origin** (**223 commity** lokalnie — pomiar
+   `git rev-list --count origin/develop..develop` 2026-09-29 po commicie
+   zamykajacym sesje testow na zywo; wczesniej 208 po fali review max
+   2026-09-28 i 148 po mergu audytu 0.7.0 2026-08-28; decyzja z etapu 0 nadal
    nierozwiazana) — patrz wyzej
 4. **Zgloszenie/naprawa WCS EVRF2007 GUGiK** (male, przedistniejace, poza
    etapami 0/1): aktualizacja `WCS_ENDPOINTS`/`COVERAGE_IDS` w
@@ -969,7 +1003,7 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
     przez niestabilnosc GUGiK (poprawnie kod 1 "ponow"); tryb listy kod 1
     i jeden zgloszony arkusz (S2); PL-SK: nodata wewnatrz opublikowanych
     arkuszy (do 82 %) bez `missing_sheets`; 5 m brak w rejonie Sejn (L6).
-13. **Bump wersji + wydanie 0.7.0** — **czeka na decyzje z pkt 15**:
+13. **Bump wersji + wydanie 0.7.0** — **czeka na fale naprawcza (pkt 15)**:
     `kartograf.__version__` `0.7.0-dev` -> `0.7.0` (pyproject czyta wersje
     dynamicznie), data w CHANGELOG, tag `v0.7.0`, push `develop` na origin
     (patrz pkt 3 wyzej).
@@ -980,10 +1014,16 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
     22 Mpx z 3 kafli, szwy bit w bit, chunked merge dziala), ale realny limit
     serwera ~8 Mpx (K6); 3 przebiegi pelnej suity testow pod rzad (kontrola
     stabilnosci/flakow).
-15. **Decyzja uzytkownika o naprawie K1-K6/S1-S5 przed wydaniem 0.7.0**
-    (NOWE 2026-09-29; blokuje pkt 13). Lista i miejsca w kodzie: Backlog ->
-    "Do naprawy — testy na zywych danych 2026-09-29". K2 i K6 wymagaja
-    odmrozenia toru CZ (ADR-024); K1 (LAZ) jest krytyczny i sprzed fal.
+15. **Fala naprawcza bledow z testow na zywo przed wydaniem 0.7.0** —
+    **NASTEPNA SESJA** (blokuje pkt 13). Uzytkownik 2026-09-29:
+    "przejdziemy do wdrozenia" — proponowany zakres K1-K6 + S1-S2,
+    S3-S5 i N1-N9 do ustalenia; otwarte pytania projektowe (zadawac po
+    jednym): odmrozenie toru CZ dla K2/K6 (ADR-024), tryb listy przy morzu
+    i granicy (S2), fazy siatki 5 m (S5), zasada wyboru pliku arkusza
+    (K4). Lista i miejsca w kodzie: Backlog -> "Do naprawy — testy na
+    zywych danych 2026-09-29"; kolejnosc pracy: blok "START NASTEPNEJ
+    SESJI" na poczatku "Ostatnia sesja". K1 (LAZ) jest krytyczny i sprzed
+    fal.
     Po naprawach: ponowne testy na zywo dotknietych scenariuszy i usuniecie
     not "znany blad" z dokumentacji (README "Znane problemy", CLAUDE.md,
     ARCHITECTURE, SCOPE, erraty ADR).
@@ -993,8 +1033,8 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
 #### Do naprawy — testy na zywych danych 2026-09-29 (przed wydaniem 0.7.0)
 
 Bledy kodu wykryte testami na zywo (sesja 2026-09-29, tabela "Znane bledy"
-wyzej); kazdy czeka na decyzje uzytkownika o naprawie ("Nastepne kroki"
-pkt 15). Linie kodu wg HEAD po fali dokumentacji 2026-09-29. Raporty:
+wyzej); naprawa w nastepnej fali ("Nastepne kroki" pkt 15; uzytkownik
+2026-09-29: "przejdziemy do wdrozenia"). Linie kodu wg HEAD po fali dokumentacji 2026-09-29. Raporty:
 `docs/research/2026-09-29-live-e2e-i-audyt-docs/<raport>`. Oznaczenia wag:
 K = wysoki/krytyczny (zle dane po cichu), S = sredni (odpornosc/UX),
 N = niski, H = hipoteza.
