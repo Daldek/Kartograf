@@ -1,5 +1,5 @@
 """
-Testy odkrywania warstw skorowidza WMS w GugikProvider.
+Testy odkrywania warstw skorowidza WMS (SkorowidzLayersMixin w GugikProvider).
 
 GugikProvider nie ma juz zaszytych list warstw ani cichego fallbacku:
 - _fetch_wms_layers(endpoint): GetCapabilities przez get_with_retry (3 proby,
@@ -10,12 +10,13 @@ GugikProvider nie ma juz zaszytych list warstw ani cichego fallbacku:
   nie jest zapamietywana, kolejne wywolanie probuje ponownie
 - GugikNmptProvider dziedziczy mechanizm z wlasnym wzorcem SkorowidzeNMPT*
 
-GugikOrtoProvider zachowuje wlasna walidacje zaszytej listy WMS_LAYERS.
+GugikOrtoProvider dzieli ten sam mixin (wzorzec SkorowidzeOrtofotomapy*,
+warstwa "Starsze" bez roku) — testy w tests/test_gugik_orto.py.
 """
 
 import time
 from concurrent.futures import ThreadPoolExecutor
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 from urllib.parse import parse_qs, urlparse
 
 import pytest
@@ -24,7 +25,6 @@ import requests
 from kartograf.exceptions import DownloadError, NoCoverageError
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
-from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from tests.conftest import render_gfi_body
 
 # ---------------------------------------------------------------------------
@@ -392,133 +392,3 @@ class TestNmptLayerPattern:
             "SkorowidzeNMPT2025",
             "SkorowidzeNMPT2024iStarsze",
         ]
-
-
-# ===========================================================================
-# TestOrtoLayerValidation
-# ===========================================================================
-
-
-_ORTO_SESSION_PATCH = "kartograf.providers.pl.gugik_orto.requests.Session"
-
-ORTO_WMS_XML = """\
-<?xml version="1.0" encoding="UTF-8"?>
-<WMS_Capabilities xmlns="http://www.opengis.net/wms" version="1.3.0">
-  <Capability><Layer><Layer>
-    <Name>SkorowidzeOrtofotomapy2024</Name>
-  </Layer><Layer>
-    <Name>SkorowidzeOrtofotomapyStarsze</Name>
-  </Layer><Layer>
-    <Name>SkorowidzeOrtofotomapy2026</Name>
-  </Layer><Layer>
-    <Name>SkorowidzeOrtofotomapy2025</Name>
-  </Layer><Layer>
-    <Name>SkorowidzeOrtofotomapyZasiegi2026</Name>
-  </Layer><Layer>
-    <Name>SkorowidzeOrtofotomapyZasiegiStarsze</Name>
-  </Layer></Layer></Capability>
-</WMS_Capabilities>
-"""
-
-
-class TestOrtoLayerValidation:
-    """Tests for GugikOrtoProvider WMS GetCapabilities validation."""
-
-    def test_hardcoded_orto_layers(self):
-        """Hardcoded orto layers match the verified GetCapabilities set."""
-        assert GugikOrtoProvider.WMS_LAYERS == [
-            "SkorowidzeOrtofotomapy2026",
-            "SkorowidzeOrtofotomapy2025",
-            "SkorowidzeOrtofotomapy2024",
-            "SkorowidzeOrtofotomapyStarsze",
-        ]
-
-    @pytest.mark.real_wms_layers
-    def test_fetch_orto_layers_sorts_and_excludes_zasiegi(self):
-        """Year layers sort descending, Starsze last, Zasiegi excluded."""
-        mock_session = MagicMock()
-        mock_session.get.return_value = _make_mock_response(ORTO_WMS_XML)
-        provider = GugikOrtoProvider()
-
-        with patch(_ORTO_SESSION_PATCH, return_value=mock_session):
-            result = provider._fetch_wms_layers(timeout=10)
-
-        assert result == [
-            "SkorowidzeOrtofotomapy2026",
-            "SkorowidzeOrtofotomapy2025",
-            "SkorowidzeOrtofotomapy2024",
-            "SkorowidzeOrtofotomapyStarsze",
-        ]
-
-    @pytest.mark.real_wms_layers
-    def test_fetch_orto_layers_empty_raises(self):
-        """ValueError raised when no SkorowidzeOrtofotomapy layers found."""
-        mock_session = MagicMock()
-        mock_session.get.return_value = _make_mock_response(WMS_XML_NO_SKOROWIDZE)
-        provider = GugikOrtoProvider()
-
-        with (
-            patch(_ORTO_SESSION_PATCH, return_value=mock_session),
-            pytest.raises(ValueError),
-        ):
-            provider._fetch_wms_layers(timeout=10)
-
-    def test_get_validated_orto_returns_discovered_on_mismatch(self):
-        """Discovered layers used (with warning) when they differ from hardcoded."""
-        provider = GugikOrtoProvider()
-        discovered = ["SkorowidzeOrtofotomapy2027", "SkorowidzeOrtofotomapyStarsze"]
-        assert set(discovered) != set(GugikOrtoProvider.WMS_LAYERS)
-
-        with (
-            patch.object(provider, "_fetch_wms_layers", return_value=discovered),
-            patch("kartograf.providers.pl.gugik_orto.logger") as mock_logger,
-        ):
-            result = provider._get_validated_layers()
-
-        assert result == discovered
-        mock_logger.warning.assert_called_once()
-
-    def test_get_validated_orto_returns_hardcoded_on_match(self):
-        """Hardcoded layers used (no warning) when GetCapabilities matches."""
-        provider = GugikOrtoProvider()
-        hardcoded = list(GugikOrtoProvider.WMS_LAYERS)
-
-        with (
-            patch.object(provider, "_fetch_wms_layers", return_value=hardcoded),
-            patch("kartograf.providers.pl.gugik_orto.logger") as mock_logger,
-        ):
-            result = provider._get_validated_layers()
-
-        assert result == hardcoded
-        mock_logger.warning.assert_not_called()
-
-    def test_get_validated_orto_falls_back_on_network_error(self):
-        """On network error, hardcoded layers returned with a warning."""
-        provider = GugikOrtoProvider()
-        hardcoded = list(GugikOrtoProvider.WMS_LAYERS)
-
-        with (
-            patch.object(
-                provider,
-                "_fetch_wms_layers",
-                side_effect=requests.ConnectionError("timeout"),
-            ),
-            patch("kartograf.providers.pl.gugik_orto.logger") as mock_logger,
-        ):
-            result = provider._get_validated_layers()
-
-        assert result == hardcoded
-        mock_logger.warning.assert_called_once()
-
-    def test_get_validated_orto_caches_result(self):
-        """Second call uses cache; _fetch_wms_layers called once."""
-        provider = GugikOrtoProvider()
-        hardcoded = list(GugikOrtoProvider.WMS_LAYERS)
-
-        with patch.object(
-            provider, "_fetch_wms_layers", return_value=hardcoded
-        ) as mock_fetch:
-            provider._get_validated_layers()
-            provider._get_validated_layers()
-
-        mock_fetch.assert_called_once()

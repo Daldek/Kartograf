@@ -20,7 +20,6 @@ import os
 import re
 import threading
 import time
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -35,17 +34,17 @@ from kartograf.exceptions import (
 )
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import (
+    SkorowidzLayersMixin,
     SkorowidzRecord,
     SourceInfoMixin,
     query_skorowidz_layer,
     select_sheet_record,
 )
-from kartograf.transport.http import get_with_retry, make_gugik_session
 
 logger = logging.getLogger(__name__)
 
 
-class GugikProvider(SourceInfoMixin, BaseProvider):
+class GugikProvider(SkorowidzLayersMixin, SourceInfoMixin, BaseProvider):
     """
     Provider for downloading NMT data from GUGiK.
 
@@ -201,13 +200,10 @@ class GugikProvider(SourceInfoMixin, BaseProvider):
                 )
 
         super().__init__()
-        self._local = threading.local()
-        self._layers_lock = threading.Lock()
         self._session = session
         self._vertical_crs = vertical_crs
         self._resolution = resolution
         self._cache = cache
-        self._validated_layers: dict[str, list[str]] = {}
         self.descriptor_key = f"pl.gugik.nmt_{resolution}"
 
     @property
@@ -234,55 +230,6 @@ class GugikProvider(SourceInfoMixin, BaseProvider):
     def base_url(self) -> str:
         """Return base URL for GUGiK service."""
         return self.BASE_URL
-
-    # =========================================================================
-    # WMS layer validation
-    # =========================================================================
-
-    def _session_for_thread(self) -> requests.Session:
-        """Jedna sesja na watek albo sesja powierzona przez wolajacego."""
-        if self._session is not None:
-            return self._session
-        if not hasattr(self._local, "session"):
-            self._local.session = make_gugik_session()
-        return self._local.session
-
-    def _fetch_wms_layers(self, wms_endpoint: str, timeout: int = 10) -> list[str]:
-        """Odkryj warstwy produktu; blad uslugi nie ma zaszytego fallbacku."""
-        params = {"SERVICE": "WMS", "VERSION": "1.3.0", "REQUEST": "GetCapabilities"}
-        response = get_with_retry(
-            self._session_for_thread(),
-            f"{wms_endpoint}?{urlencode(params)}",
-            timeout=timeout,
-            description=f"GUGiK WMS GetCapabilities {wms_endpoint}",
-        )
-        try:
-            root = ET.fromstring(response.text)
-        except ET.ParseError as exc:
-            raise DownloadError(
-                f"GUGiK WMS GetCapabilities {wms_endpoint}: nieprawidlowy XML: {exc}"
-            ) from exc
-        # {nazwa: (rok, zbiorcza "iStarsze")} — od najnowszej, zbiorcza na koncu
-        layers: dict[str, tuple[int, bool]] = {}
-        for elem in root.iter():
-            if elem.tag.rsplit("}", 1)[-1] != "Name" or not elem.text:
-                continue
-            match = self.LAYER_PATTERN.fullmatch(elem.text)
-            if match:
-                layers[elem.text] = (int(match[1]), match[2] is not None)
-        if not layers:
-            raise DownloadError(
-                f"GUGiK WMS GetCapabilities {wms_endpoint}: "
-                "endpoint nie publikuje warstw skorowidza dla tego produktu"
-            )
-        return sorted(layers, key=lambda name: (layers[name][1], -layers[name][0]))
-
-    def _layers(self, endpoint: str) -> list[str]:
-        """Memoizuj tylko sukces, raz na endpoint; zapytania chroni lock."""
-        with self._layers_lock:
-            if endpoint not in self._validated_layers:
-                self._validated_layers[endpoint] = self._fetch_wms_layers(endpoint)
-            return self._validated_layers[endpoint]
 
     # =========================================================================
     # Download by godło → OpenData (ASC)

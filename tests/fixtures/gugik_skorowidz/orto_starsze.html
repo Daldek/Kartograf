@@ -1,0 +1,43 @@
+<!-- GetFeatureInfo SkorowidzeOrtofotomapyStarsze @ (536950.4,235938.1), M-34-76-A-a-1-1,
+     testy na zywo 2026-09-29 (e2e-data/2026-09-29-live/L1-centrum-produkty/logs/
+     02_orto_entries_M-34-76-A-a-1-1.log). Rekordy w kolejnosci serwera (rosnaco po
+     dacie); pola dt_pzgik/numerZgloszeniaPracy/zrodloDanych nie zostaly zapisane
+     w logu i sa pominiete. -->
+<head><meta charset="UTF-8"/>
+<script>
+function createTable (skorDo5cm) {
+	skorDo5cm.sort( compare );
+	return "";
+}
+</script>
+</head>
+<body>
+<p>Aktualność Starsze</p>
+<div id="listOfObjects2" style="width: 236px; margin-bottom: 3px;"></div>
+
+<script>
+var skorDo5cm = [];
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/77300/77300_1185016_M-34-76-A-a-1.tif",godlo:"M-34-76-A-a-1", aktualnosc:"1997-01-01", wielkoscPiksela:"0.75", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:10000", rozmiarPlikuMB:"127", kolor:"RGB", aktualnoscRok:"1997"});
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/17/17_21794_M-34-76-A-a-1-1.tif",godlo:"M-34-76-A-a-1-1", aktualnosc:"2003-01-01", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:5000", rozmiarPlikuMB:"30", kolor:"B/W", aktualnoscRok:"2003"});
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/64/64_85305_M-34-76-A-a-1-1.tif",godlo:"M-34-76-A-a-1-1", aktualnosc:"2009-01-01", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:5000", rozmiarPlikuMB:"62", kolor:"RGB", aktualnoscRok:"2009"});
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/69791/69791_217852_M-34-76-A-a-1-1.tif",godlo:"M-34-76-A-a-1-1", aktualnosc:"2015-04-23", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:5000", rozmiarPlikuMB:"38", kolor:"CIR", aktualnoscRok:"2015"});
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/69792/69792_217851_M-34-76-A-a-1-1.tif",godlo:"M-34-76-A-a-1-1", aktualnosc:"2015-04-23", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:5000", rozmiarPlikuMB:"37", kolor:"RGB", aktualnoscRok:"2015"});
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/64878/64878_364829_7.124.07.24.tif",godlo:"7.124.07.24", aktualnosc:"2015-04-23", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-2000:S7", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:2000", rozmiarPlikuMB:"10", kolor:"RGB", aktualnoscRok:"2015"});
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/70949/70949_801534_M-34-76-A-a-1-1.tif",godlo:"M-34-76-A-a-1-1", aktualnosc:"2018-04-21", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:5000", rozmiarPlikuMB:"43", kolor:"RGB", aktualnoscRok:"2018"});
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/72961/72961_840947_M-34-76-A-a-1-1.tif",godlo:"M-34-76-A-a-1-1", aktualnosc:"2019-06-03", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:5000", rozmiarPlikuMB:"30", kolor:"RGB", aktualnoscRok:"2019"});
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/76530/76530_1087101_M-34-76-A-a-1-1.tif",godlo:"M-34-76-A-a-1-1", aktualnosc:"2022-06-03", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:5000", rozmiarPlikuMB:"40", kolor:"RGB", aktualnoscRok:"2022"});
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/76529/76529_1087102_M-34-76-A-a-1-1.tif",godlo:"M-34-76-A-a-1-1", aktualnosc:"2022-06-03", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:5000", rozmiarPlikuMB:"41", kolor:"CIR", aktualnoscRok:"2022"});
+
+document.getElementById("listOfObjects2").innerHTML = createTable(skorDo5cm);
+</script>
+</body>

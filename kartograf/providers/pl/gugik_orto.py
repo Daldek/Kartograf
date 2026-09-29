@@ -11,6 +11,8 @@ Unlike NMT/NMPT, orthophotos:
 - Have no vertical CRS (2D RGB imagery)
 - Use a single WMS endpoint (no KRON86/EVRF2007 split)
 - Download as TIF (not ASC)
+- Come in colour variants (RGB, CIR, B/W) published under the same godlo;
+  the provider downloads exactly one variant (``color``, default RGB)
 """
 
 import logging
@@ -18,20 +20,26 @@ import os
 import re
 import threading
 import time
-import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import urlencode
 
 import requests
 
-from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError
+from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.exceptions import DownloadError, NoCoverageError, ParseError
 from kartograf.providers.base import BaseProvider
+from kartograf.providers.pl.skorowidz import (
+    SkorowidzLayersMixin,
+    SkorowidzRecord,
+    SourceInfoMixin,
+    query_skorowidz_layer,
+    select_sheet_record,
+)
 
 logger = logging.getLogger(__name__)
 
 
-class GugikOrtoProvider(BaseProvider):
+class GugikOrtoProvider(SkorowidzLayersMixin, SourceInfoMixin, BaseProvider):
     """
     Provider for downloading Orthophotomap data from GUGiK.
 
@@ -60,27 +68,17 @@ class GugikOrtoProvider(BaseProvider):
         f"{BASE_URL}/wss/service/PZGIK/ORTO/WMS/SkorowidzeWgAktualnosci"
     )
 
-    # Layers to query for OpenData URLs, ordered newest to oldest.
-    # Verified against GetCapabilities of SkorowidzeWgAktualnosci (2026-06-24).
-    # GUGiK consolidated the older per-year layers (2023..2018) into the single
-    # "SkorowidzeOrtofotomapyStarsze" layer — querying the removed year layers
-    # returns "Invalid layer(s) given in the LAYERS parameter".
-    # Note: the endpoint also exposes "SkorowidzeOrtofotomapyZasiegi*" layers
-    # (coverage extents, no OpenData URLs) which are intentionally excluded.
-    WMS_LAYERS = [
-        "SkorowidzeOrtofotomapy2026",
-        "SkorowidzeOrtofotomapy2025",
-        "SkorowidzeOrtofotomapy2024",
-        "SkorowidzeOrtofotomapyStarsze",
-    ]
+    # Nazwy warstw skorowidza: grupa 1 = rok, grupa 2 = warstwa zbiorcza bez
+    # roku ("Starsze" — GUGiK scalil warstwy 2023..2018 w jedna). Warstwy
+    # "SkorowidzeOrtofotomapyZasiegi*" (zasiegi, bez URL-i) nie pasuja do wzorca.
+    LAYER_PATTERN = re.compile(r"^SkorowidzeOrtofotomapy(?:(\d{4})|(Starsze))$")
 
-    # Prefix used to identify orthophoto skorowidze layers in GetCapabilities
-    _SKOROWIDZE_PREFIX = "SkorowidzeOrtofotomapy"
-    # Substring marking the extent ("Zasiegi") variants that must be excluded
-    _EXCLUDE_SUBSTRING = "Zasiegi"
+    # Wariant koloru pobierany domyslnie; CIR/B-W tylko przez kwarg `color`
+    DEFAULT_COLOR = "RGB"
 
-    # OpenData URL pattern in WMS GetFeatureInfo response
-    OPENDATA_URL_PATTERN = re.compile(r'url:"(https://[^"]+)"')
+    # Klucz record_cache: slot rozdzielczosci niesie wariant koloru (orto nie
+    # ma flagi rozdzielczosci, a RGB i CIR tego samego arkusza to inne pliki)
+    _CACHE_PRODUCT = "orto"
 
     # WCS formats
     WCS_FORMATS = {
@@ -94,7 +92,12 @@ class GugikOrtoProvider(BaseProvider):
     MAX_RETRIES = 3
     RETRY_BACKOFF_BASE = 2
 
-    def __init__(self, session: requests.Session | None = None, cache=None):
+    def __init__(
+        self,
+        session: requests.Session | None = None,
+        cache=None,
+        color: str = DEFAULT_COLOR,
+    ):
         """
         Initialize GUGiK Ortofotomapa provider.
 
@@ -103,13 +106,17 @@ class GugikOrtoProvider(BaseProvider):
         session : requests.Session, optional
             HTTP session to use for requests.
         cache : MetadataCache, optional
-            Metadata cache instance for caching WMS lookup results.
+            Metadata cache instance for caching skorowidz lookups.
             If None, no caching is performed (default behavior).
+        color : str, optional
+            Colour variant to download as published by GUGiK: "RGB"
+            (default), "CIR" or "B/W". A sheet without this variant is
+            ``NoCoverageError`` — other variants are never substituted.
         """
+        super().__init__()
         self._session = session
         self._cache = cache
-        # In-memory cache of validated WMS layers (None until first lookup)
-        self._validated_layers: list[str] | None = None
+        self._color = color
         self.descriptor_key = "pl.gugik.orto"
 
     @property
@@ -127,124 +134,10 @@ class GugikOrtoProvider(BaseProvider):
         """Return default file extension for orthophoto data."""
         return ".tif"
 
-    # =========================================================================
-    # WMS layer validation (GetCapabilities)
-    # =========================================================================
-
-    def _fetch_wms_layers(self, timeout: int = 10) -> list[str]:
-        """
-        Fetch available SkorowidzeOrtofotomapy layers from WMS GetCapabilities.
-
-        Parameters
-        ----------
-        timeout : int, optional
-            Request timeout in seconds (default: 10)
-
-        Returns
-        -------
-        list[str]
-            Skorowidze layer names ordered newest first, the year-less
-            "Starsze" layer last. Excludes the "Zasiegi" extent variants.
-
-        Raises
-        ------
-        ValueError
-            If no SkorowidzeOrtofotomapy layers are found in the response
-        requests.RequestException
-            On network errors
-        """
-        # Dedicated session to avoid interfering with the main (possibly
-        # mocked) download session — mirrors GugikProvider._fetch_wms_layers.
-        session = requests.Session()
-        params = {
-            "SERVICE": "WMS",
-            "VERSION": "1.3.0",
-            "REQUEST": "GetCapabilities",
-        }
-        response = session.get(
-            self.WMS_SKOROWIDZE_ENDPOINT, params=params, timeout=timeout
-        )
-        response.raise_for_status()
-
-        root = ET.fromstring(response.text)
-
-        wms_ns = "{http://www.opengis.net/wms}"
-        names = [elem.text for elem in root.iter(f"{wms_ns}Name") if elem.text]
-        if not names:
-            names = [elem.text for elem in root.iter("Name") if elem.text]
-
-        layers = [
-            n
-            for n in names
-            if n.startswith(self._SKOROWIDZE_PREFIX)
-            and self._EXCLUDE_SUBSTRING not in n
-        ]
-
-        if not layers:
-            raise ValueError(
-                "No SkorowidzeOrtofotomapy layers found in GetCapabilities response"
-            )
-
-        # Sort: year-bearing layers descending, "Starsze" (no year) last
-        def sort_key(name: str) -> tuple[int, int]:
-            year_match = re.search(r"(\d{4})", name)
-            if not year_match:
-                return (1, 0)
-            return (0, -int(year_match.group(1)))
-
-        layers.sort(key=sort_key)
-
-        return layers
-
-    def _get_validated_layers(self, timeout: int = 10) -> list[str]:
-        """
-        Get validated WMS layers, checking GetCapabilities against hardcoded.
-
-        The result is cached for the lifetime of this provider instance.
-        On any error (network, parse, empty) the hardcoded WMS_LAYERS are
-        used as a fallback so downloads keep working offline.
-
-        Parameters
-        ----------
-        timeout : int, optional
-            Request timeout for GetCapabilities (default: 10)
-
-        Returns
-        -------
-        list[str]
-            List of WMS layer names to query
-        """
-        if self._validated_layers is not None:
-            return self._validated_layers
-
-        hardcoded = list(self.WMS_LAYERS)
-
-        try:
-            discovered = self._fetch_wms_layers(timeout)
-
-            if set(discovered) != set(hardcoded):
-                logger.warning(
-                    "WMS GetCapabilities returned different ortofoto layers than "
-                    "hardcoded. Hardcoded: %s. Discovered: %s. Using discovered "
-                    "layers. Consider updating WMS_LAYERS in code.",
-                    hardcoded,
-                    discovered,
-                )
-                self._validated_layers = discovered
-                return discovered
-
-            self._validated_layers = hardcoded
-            return hardcoded
-
-        except (requests.RequestException, ValueError, ET.ParseError) as e:
-            logger.warning(
-                "Failed to fetch ortofoto WMS GetCapabilities from %s: %s. "
-                "Using hardcoded WMS_LAYERS as fallback.",
-                self.WMS_SKOROWIDZE_ENDPOINT,
-                e,
-            )
-            self._validated_layers = hardcoded
-            return hardcoded
+    @property
+    def color(self) -> str:
+        """Colour variant this provider downloads (RGB by default)."""
+        return self._color
 
     # =========================================================================
     # Download by godło → OpenData (TIF)
@@ -275,139 +168,116 @@ class GugikOrtoProvider(BaseProvider):
 
         Raises
         ------
+        NoCoverageError
+            Subclass of ``DownloadError``: every skorowidz layer answered and
+            none has this sheet in the requested colour variant and the
+            godlo's coordinate system (other variants are listed in the
+            message, never substituted).
         DownloadError
-            If the download fails or no file is found
+            If any skorowidz layer query fails after retries, its answer is
+            invalid, or the TIF download fails after retries. An older
+            campaign is never substituted after a failed query.
         """
         output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        opendata_url = self._get_opendata_url(godlo, timeout)
+        record = self._resolve_sheet(godlo, timeout)
 
         return self._download_with_retry(
-            url=opendata_url,
+            url=record.url,
             output_path=output_path,
             timeout=timeout,
             description=f"{godlo} (Ortofoto OpenData)",
         )
 
-    def _get_opendata_url(
-        self,
-        godlo: str,
-        timeout: int = DEFAULT_TIMEOUT,
-    ) -> str:
-        """
-        Get OpenData URL for orthophoto file using WMS GetFeatureInfo.
+    def _get_opendata_url(self, godlo: str, timeout: int = DEFAULT_TIMEOUT) -> str:
+        """Zwroc URL najnowszego rekordu skorowidza w zadanym wariancie koloru."""
+        return self._resolve_sheet(godlo, timeout).url
 
-        Parameters
-        ----------
-        godlo : str
-            Map sheet identifier
-        timeout : int, optional
-            Request timeout in seconds
-
-        Returns
-        -------
-        str
-            OpenData URL for the file
-
-        Raises
-        ------
-        DownloadError
-            If no file is found, or if every skorowidz layer query failed
-            on transport (service unavailable)
-        """
-        # Check cache first
-        if self._cache is not None:
-            cached_url = self._cache.get_url(godlo, "orto", "none", "orto")
-            if cached_url is not None:
-                logger.debug(f"Using cached URL for ortofoto {godlo}")
-                return cached_url
-
-        from kartograf.core.sheet_parser import SheetParser
-
+    def _resolve_sheet(
+        self, godlo: str, timeout: int = DEFAULT_TIMEOUT
+    ) -> SkorowidzRecord:
+        """Cache -> warstwy od najnowszej -> twardy filtr uklad+kolor -> najnowsza."""
         parser = SheetParser(godlo)
-        bbox = parser.get_bbox(crs="EPSG:2180")
-
-        center_x = (bbox.min_x + bbox.max_x) / 2
-        center_y = (bbox.min_y + bbox.max_y) / 2
-
-        buffer = 10
-        query_bbox = (
-            f"{center_y - buffer},{center_x - buffer},"
-            f"{center_y + buffer},{center_x + buffer}"
-        )
-
-        session = self._session or requests.Session()
-
-        wms_layers = self._get_validated_layers()
-
-        # Transport failures are counted separately from "layer answered but
-        # has no data": all-failed means the service is down, not that the
-        # sheet has no coverage
-        transport_errors = 0
-        last_error: Exception | None = None
-
-        for layer in wms_layers:
-            params = {
-                "SERVICE": "WMS",
-                "VERSION": "1.3.0",
-                "REQUEST": "GetFeatureInfo",
-                "LAYERS": layer,
-                "QUERY_LAYERS": layer,
-                "INFO_FORMAT": "text/html",
-                "CRS": "EPSG:2180",
-                "BBOX": query_bbox,
-                "WIDTH": 100,
-                "HEIGHT": 100,
-                "I": 50,
-                "J": 50,
-            }
-
-            try:
-                url = f"{self.WMS_SKOROWIDZE_ENDPOINT}?{urlencode(params)}"
-                logger.debug(f"Querying WMS for ortofoto {godlo} on layer {layer}")
-
-                response = session.get(url, timeout=timeout)
-                response.raise_for_status()
-
-                urls = self.OPENDATA_URL_PATTERN.findall(response.text)
-
-                if urls:
-                    for found_url in urls:
-                        if godlo in found_url:
-                            logger.debug(f"Found OpenData URL: {found_url}")
-                            self._cache_url(godlo, found_url)
-                            return found_url
-
-                    logger.debug(f"Found OpenData URL (no exact match): {urls[0]}")
-                    self._cache_url(godlo, urls[0])
-                    return urls[0]
-
-            except requests.RequestException as e:
-                transport_errors += 1
-                last_error = e
-                logger.warning(f"WMS query failed for layer {layer}: {e}")
-                continue
-
-        if transport_errors == len(wms_layers):
-            raise DownloadError(
-                f"GUGiK WMS skorowidz unavailable for {godlo}: "
-                f"all {transport_errors} layer queries failed "
-                f"(last error: {last_error})",
-                godlo=godlo,
-            )
-
-        raise DownloadError(
-            f"No orthophoto data available for {godlo}. "
-            f"This area may not have orthophoto coverage in GUGiK. "
-            f"Check https://mapy.geoportal.gov.pl for data availability.",
-            godlo=godlo,
-        )
-
-    def _cache_url(self, godlo: str, url: str) -> None:
-        """Store URL in cache if cache is available."""
+        godlo = parser.godlo
+        cache_key = (self._CACHE_PRODUCT, self._color, "none", godlo)
         if self._cache is not None:
-            self._cache.set_url(godlo, "orto", "none", "orto", url)
+            cached = self._cache.get_record(*cache_key)
+            if cached is not None:
+                if cached.get("no_coverage"):
+                    raise self._no_coverage(parser, [])
+                source = cached["source"]
+                self._remember_source(godlo, source)
+                return SkorowidzRecord.from_source(source)
+
+        endpoint = self.WMS_SKOROWIDZE_ENDPOINT
+        layers = self._layers(endpoint)
+        bbox = parser.get_bbox(crs="EPSG:2180")
+        x = (bbox.min_x + bbox.max_x) / 2
+        y = (bbox.min_y + bbox.max_y) / 2
+        query_bbox = f"{y - 10},{x - 10},{y + 10},{x + 10}"
+        rejected = []
+        for layer in layers:
+            records = query_skorowidz_layer(
+                self._session_for_thread(),
+                endpoint,
+                layer,
+                query_bbox=query_bbox,
+                godlo=godlo,
+                timeout=timeout,
+                retries=self.MAX_RETRIES,
+            )
+            # Piksel (wielkoscPiksela) nie jest filtrem: produkt nie ma flagi
+            # rozdzielczosci, nowsze zdjecie pod tym samym godlem jest lepsze
+            chosen = select_sheet_record(
+                records,
+                godlo=godlo,
+                uklad=parser.uklad,
+                zone=int(godlo.split(".")[0]) if parser.uklad == "2000" else None,
+                predicate=lambda r: r.raw.get("kolor") == self._color,
+            )
+            if chosen is not None:
+                source = chosen.to_source(endpoint) | {"kolor": chosen.raw["kolor"]}
+                self._remember_source(godlo, source)
+                if self._cache is not None:
+                    self._cache.set_record(*cache_key, {"source": source})
+                return chosen
+            rejected.extend(records)
+        if self._cache is not None:
+            self._cache.set_record(*cache_key, {"no_coverage": True})
+        raise self._no_coverage(parser, rejected)
+
+    def _no_coverage(
+        self, parser: SheetParser, records: list[SkorowidzRecord]
+    ) -> NoCoverageError:
+        zone = int(parser.godlo.split(".")[0]) if parser.uklad == "2000" else None
+        variants = sorted(
+            (record.aktualnosc, record.raw.get("kolor") or "?")
+            for record in records
+            if record.godlo == parser.godlo
+            and record.uklad == parser.uklad
+            and record.zone == zone
+        )
+        hints = set()
+        for record in records:
+            if parser.uklad == "2000" and record.godlo.startswith(parser.godlo + "."):
+                scale = SheetParser(record.godlo).scale
+                hints.add(f"Dostepny potomek {record.godlo} — uzyj --scale {scale}")
+            elif record.uklad is not None and record.uklad != parser.uklad:
+                hints.add(
+                    f"Skorowidz ma ten obszar w PL-{record.uklad}: "
+                    f"{record.godlo} — uzyj tego godla"
+                )
+        message = (
+            f"Brak ortofotomapy {self._color} dla {parser.godlo} "
+            f"(uklad PL-{parser.uklad})"
+        )
+        if variants:
+            message += ". Dostepne warianty tego arkusza: " + ", ".join(
+                f"{kolor} {aktualnosc}" for aktualnosc, kolor in variants
+            )
+        if hints:
+            message += ". " + "; ".join(sorted(hints))
+        return NoCoverageError(message, godlo=parser.godlo)
 
     # =========================================================================
     # Download by bbox → WCS (GeoTIFF)
@@ -459,7 +329,6 @@ class GugikOrtoProvider(BaseProvider):
             )
 
         output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         url = self._construct_wcs_url(bbox, format)
 
@@ -532,9 +401,8 @@ class GugikOrtoProvider(BaseProvider):
         )
 
     def _make_request(self, url: str, timeout: int) -> requests.Response:
-        """Make HTTP GET request."""
-        session = self._session or requests.Session()
-        response = session.get(url, timeout=timeout, stream=True)
+        """Pobierz strumien na sesji watku (sesja wstrzyknieta: dba wolajacy)."""
+        response = self._session_for_thread().get(url, timeout=timeout, stream=True)
         response.raise_for_status()
         return response
 
@@ -542,9 +410,12 @@ class GugikOrtoProvider(BaseProvider):
         """
         Save HTTP response to file atomically.
 
+        The target directory is created here, after the skorowidz has
+        answered — a sheet without data leaves no empty directory behind.
         Uses a unique temp filename per process/thread to prevent
         collisions when multiple threads download concurrently.
         """
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         thread_id = threading.current_thread().ident
         temp_suffix = f"{output_path.suffix}.{os.getpid()}_{thread_id}.tmp"
         temp_path = output_path.with_suffix(temp_suffix)
@@ -569,9 +440,6 @@ class GugikOrtoProvider(BaseProvider):
 
     def validate_godlo(self, godlo: str) -> bool:
         """Validate godło format."""
-        from kartograf.core.sheet_parser import SheetParser
-        from kartograf.exceptions import ParseError
-
         try:
             SheetParser(godlo)
             return True
