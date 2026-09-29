@@ -4,6 +4,7 @@ import json
 import logging
 import re
 import threading
+import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from urllib.parse import urlencode
@@ -12,7 +13,7 @@ import requests
 
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
-from kartograf.transport.http import get_with_retry
+from kartograf.transport.http import get_with_retry, make_gugik_session
 
 logger = logging.getLogger(__name__)
 
@@ -266,3 +267,73 @@ class SourceInfoMixin:
         with self._sources_lock:
             source = self._sources.get(SheetParser(godlo).godlo)
             return dict(source) if source is not None else None
+
+
+class SkorowidzLayersMixin:
+    """Sesja HTTP na watek i warstwy skorowidza WMS odkrywane per endpoint.
+
+    Klasa pochodna deklaruje ``LAYER_PATTERN`` o dwoch grupach: grupa 1 = rok
+    warstwy (pusta dla warstwy bez roku), grupa 2 = znacznik warstwy zbiorczej
+    (``iStarsze``/``Starsze``, pusta dla warstwy rocznej) — oraz ustawia
+    ``self._session`` (sesja powierzona przez wolajacego albo ``None``).
+    """
+
+    LAYER_PATTERN: re.Pattern[str]
+    _session: requests.Session | None
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._local = threading.local()
+        self._layers_lock = threading.Lock()
+        self._validated_layers: dict[str, list[str]] = {}
+
+    def _session_for_thread(self) -> requests.Session:
+        """Jedna sesja na watek albo sesja powierzona przez wolajacego."""
+        if self._session is not None:
+            return self._session
+        if not hasattr(self._local, "session"):
+            self._local.session = make_gugik_session()
+        return self._local.session
+
+    def _fetch_wms_layers(self, wms_endpoint: str, timeout: int = 10) -> list[str]:
+        """Odkryj warstwy produktu; blad uslugi nie ma zaszytego fallbacku."""
+        params = {"SERVICE": "WMS", "VERSION": "1.3.0", "REQUEST": "GetCapabilities"}
+        response = get_with_retry(
+            self._session_for_thread(),
+            f"{wms_endpoint}?{urlencode(params)}",
+            timeout=timeout,
+            description=f"GUGiK WMS GetCapabilities {wms_endpoint}",
+        )
+        try:
+            root = ET.fromstring(response.text)
+        except ET.ParseError as exc:
+            raise DownloadError(
+                f"GUGiK WMS GetCapabilities {wms_endpoint}: nieprawidlowy XML: {exc}"
+            ) from exc
+        # {nazwa: (bez roku, zbiorcza, -rok)} — roczne od najnowszej, zbiorcza
+        # na koncu, warstwa bez roku ("Starsze") za wszystkimi rocznymi
+        layers: dict[str, tuple[bool, bool, int]] = {}
+        for elem in root.iter():
+            if elem.tag.rsplit("}", 1)[-1] != "Name" or not elem.text:
+                continue
+            match = self.LAYER_PATTERN.fullmatch(elem.text)
+            if match:
+                year, cumulative = match.group(1), match.group(2)
+                layers[elem.text] = (
+                    year is None,
+                    cumulative is not None,
+                    -int(year) if year else 0,
+                )
+        if not layers:
+            raise DownloadError(
+                f"GUGiK WMS GetCapabilities {wms_endpoint}: "
+                "endpoint nie publikuje warstw skorowidza dla tego produktu"
+            )
+        return sorted(layers, key=layers.__getitem__)
+
+    def _layers(self, endpoint: str) -> list[str]:
+        """Memoizuj tylko sukces, raz na endpoint; zapytania chroni lock."""
+        with self._layers_lock:
+            if endpoint not in self._validated_layers:
+                self._validated_layers[endpoint] = self._fetch_wms_layers(endpoint)
+            return self._validated_layers[endpoint]

@@ -172,9 +172,7 @@ def create_parser() -> argparse.ArgumentParser:
         choices=["nmt", "nmpt", "orto", "laz"],
         default="nmt",
         help="Data product: nmt (terrain), nmpt (surface), "
-        "orto (orthophoto), laz (LIDAR point cloud). Default: nmt. "
-        "0.7.0-dev: laz pobiera kafle z innego miejsca (znany blad K1), "
-        "orto — wariant CIR zamiast RGB (K5); README, 'Znane problemy'",
+        "orto (orthophoto, RGB), laz (LIDAR point cloud). Default: nmt.",
     )
     download_parser.add_argument(
         "--year",

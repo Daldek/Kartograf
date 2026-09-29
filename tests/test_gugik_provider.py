@@ -20,6 +20,8 @@ from kartograf.providers.pl.gugik import GugikProvider
 from tests.conftest import _STUB_LAYERS, gfi_record, render_gfi_body
 
 _EVRF2007_LAYERS = _STUB_LAYERS["NMT/WMS/SkorowidzeUkladEVRF2007"]
+# Fabryka sesji na watek zyje w SkorowidzLayersMixin (skorowidz.py)
+SESSION_FACTORY = "kartograf.providers.pl.skorowidz.make_gugik_session"
 
 
 def _wms_response(body: str) -> Mock:
@@ -743,7 +745,7 @@ class TestGugikProviderSession:
             side_effect=[_wms_response(record_body), self.file_response()]
         )
 
-        with patch("kartograf.providers.pl.gugik.make_gugik_session") as factory:
+        with patch(SESSION_FACTORY) as factory:
             GugikProvider(session=session).download(self.GODLO, tmp_path / "test.asc")
 
         factory.assert_not_called()
@@ -754,9 +756,7 @@ class TestGugikProviderSession:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=_wms_response(record_body))
 
-        with patch(
-            "kartograf.providers.pl.gugik.make_gugik_session", return_value=session
-        ) as factory:
+        with patch(SESSION_FACTORY, return_value=session) as factory:
             provider = GugikProvider()
             provider._get_opendata_url(self.GODLO)
             provider._get_opendata_url(self.GODLO)
@@ -776,9 +776,7 @@ class TestGugikProviderSession:
             sessions.append(session)
             return session
 
-        with patch(
-            "kartograf.providers.pl.gugik.make_gugik_session", side_effect=new_session
-        ) as factory:
+        with patch(SESSION_FACTORY, side_effect=new_session) as factory:
             provider = GugikProvider()
 
             def worker():
@@ -812,7 +810,7 @@ class TestGugikProviderSession:
         )
         output_path = tmp_path / "test.asc"
 
-        with patch("kartograf.providers.pl.gugik.make_gugik_session") as factory:
+        with patch(SESSION_FACTORY) as factory:
             result = GugikProvider(session=session).download(self.GODLO, output_path)
 
         factory.assert_not_called()
