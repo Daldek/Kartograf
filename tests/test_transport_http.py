@@ -8,7 +8,7 @@ import pytest
 import requests
 
 from kartograf.exceptions import DownloadError
-from kartograf.transport.http import download_to
+from kartograf.transport.http import download_to, get_with_retry, make_gugik_session
 
 
 def _mock_response(chunks=(b"abc", b"def")):
@@ -87,3 +87,40 @@ class TestDownloadTo:
         ):
             download_to(session, "https://example.test/p", out, timeout=5, retries=1)
         assert list(tmp_path.iterdir()) == []
+
+
+class TestGetWithRetry:
+    def test_connection_failure_retries_same_request(self):
+        session = MagicMock(spec=requests.Session)
+        response = requests.Response()
+        response.status_code = 200
+        response._content = b"recovered"
+        session.get.side_effect = [requests.ConnectionError("reset"), response]
+        with patch("kartograf.transport.http.time.sleep") as sleep:
+            result = get_with_retry(session, "https://example.test/gfi", timeout=4)
+        assert result.content == b"recovered"
+        assert session.get.call_args_list[0] == session.get.call_args_list[1]
+        sleep.assert_called_once_with(1)
+
+    def test_http_failure_exhausts_retries(self):
+        session = MagicMock(spec=requests.Session)
+        response = requests.Response()
+        response.status_code = 503
+        session.get.return_value = response
+        with (
+            patch("kartograf.transport.http.time.sleep") as sleep,
+            pytest.raises(DownloadError, match="warstwa 2026.*po 3 probach"),
+        ):
+            get_with_retry(
+                session,
+                "https://example.test/gfi",
+                timeout=4,
+                description="warstwa 2026",
+            )
+        assert session.get.call_count == 3
+        assert [call.args for call in sleep.call_args_list] == [(1,), (2,)]
+
+    def test_gugik_session_does_not_multiply_retries(self):
+        with make_gugik_session() as session:
+            assert session.headers["User-Agent"].startswith("kartograf/")
+            assert session.get_adapter("https://").max_retries.total == 0
