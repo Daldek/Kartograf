@@ -2,12 +2,12 @@
 Tests for the MetadataCache module and its provider integrations.
 
 Tests cover:
-- MetadataCache URL caching (set, get, TTL expiry, overwrite)
+- MetadataCache record caching (set, get, TTL expiry, overwrite, key parts)
 - MetadataCache TERYT caching (set, get, TTL expiry)
 - MetadataCache management (clear, stats, vacuum, close)
-- GugikProvider cache integration (cache hit, miss, backward compat)
+- Migration of a legacy database (url_cache table dropped)
+- GugikProvider cache integration (hit, no-coverage hit, miss, K3-safe failure)
 - GugikNmptProvider cache integration (product key "nmpt")
-- GugikOrtoProvider cache integration (cache hit, miss)
 - Bdot10kProvider TERYT cache integration (cache hit, miss)
 - SoilGridsProvider cache parameter acceptance
 - CLI cache commands (stats, clear, path)
@@ -26,11 +26,45 @@ import requests
 
 from kartograf.cache.metadata import MetadataCache
 from kartograf.cli.commands import create_parser, main
+from kartograf.exceptions import DownloadError, NoCoverageError
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
-from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
+from tests.conftest import gfi_record, render_gfi_body
+
+GODLO = "N-34-130-D-d-2-4"
+
+# Payload `source` o kluczach z SkorowidzRecord.to_source (kontrakt cache).
+SOURCE = {
+    "url": (
+        f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/78955/78955_1_{GODLO}.asc"
+    ),
+    "skorowidz": (
+        "https://mapy.geoportal.gov.pl/wss/service/PZGIK/NMT/WMS/"
+        "SkorowidzeUkladEVRF2007"
+    ),
+    "layer": "SkorowidzeNMT2024",
+    "godlo": GODLO,
+    "aktualnosc": "2024-09-03",
+    "aktualnosc_rok": "2024",
+    "dt_pzgik": "2024-09-03",
+    "resolution_m": 1.0,
+    "uklad": "PL-1992",
+    "full_sheet": True,
+    "numer_zgloszenia": None,
+    "zrodlo_danych": None,
+}
+
+
+def _gfi_response(body: str) -> Mock:
+    """Atrapa odpowiedzi GetFeatureInfo z szablonem skorowidza GUGiK."""
+    resp = Mock(spec=requests.Response)
+    resp.status_code = 200
+    resp.text = body
+    resp.raise_for_status = Mock()
+    return resp
+
 
 # =========================================================================
 # Fixtures
@@ -60,136 +94,63 @@ def short_ttl_cache(cache_path):
 
 
 # =========================================================================
-# TestMetadataCacheURL
+# TestMetadataCacheRecord
 # =========================================================================
 
 
-class TestMetadataCacheURL:
-    """Tests for URL caching operations."""
+class TestMetadataCacheRecord:
+    """Tabela record_cache: payload JSON pod kluczem (product, res, vcrs, godlo)."""
 
-    def test_set_and_get(self, cache):
-        """Test that set_url followed by get_url returns the same URL."""
-        cache.set_url(
-            "N-34-130-D-d-2-4",
-            "1m",
-            "EVRF2007",
-            "nmt",
-            "https://opendata.example.com/file.asc",
-        )
-        result = cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt")
-        assert result == "https://opendata.example.com/file.asc"
+    def test_set_and_get_round_trip(self, cache):
+        """Zagniezdzony payload wraca 1:1 (JSON round-trip, takze None/float)."""
+        cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
+        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) == {"source": SOURCE}
+
+    def test_no_coverage_payload_round_trip(self, cache):
+        cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"no_coverage": True})
+        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) == {"no_coverage": True}
 
     def test_get_returns_none_when_missing(self, cache):
-        """Test that get_url returns None for uncached entries."""
-        result = cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt")
-        assert result is None
+        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) is None
 
     def test_ttl_expiry(self, short_ttl_cache):
-        """Test that entries expire after TTL."""
-        short_ttl_cache.set_url(
-            "N-34-130-D-d-2-4",
-            "1m",
-            "EVRF2007",
-            "nmt",
-            "https://opendata.example.com/file.asc",
-        )
-        # Immediately should return the URL
-        assert (
-            short_ttl_cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt")
-            is not None
-        )
+        """Wpis wygasa po ttl_seconds i jest usuwany oportunistycznie."""
+        short_ttl_cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
+        assert short_ttl_cache.get_record("nmt", "1m", "EVRF2007", GODLO) is not None
 
-        # Wait for TTL to expire
         time.sleep(1.1)
 
-        result = short_ttl_cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt")
-        assert result is None
+        assert short_ttl_cache.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+        count = short_ttl_cache._conn.execute(
+            "SELECT COUNT(*) FROM record_cache"
+        ).fetchone()[0]
+        assert count == 0
 
-    def test_overwrite(self, cache):
-        """Test that setting the same key overwrites the value."""
-        cache.set_url(
-            "N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt", "https://old-url.com/file.asc"
-        )
-        cache.set_url(
-            "N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt", "https://new-url.com/file.asc"
-        )
-        result = cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt")
-        assert result == "https://new-url.com/file.asc"
+    def test_overwrite_same_key(self, cache):
+        """Ten sam klucz: nowy payload zastepuje stary (np. no_coverage -> source)."""
+        cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"no_coverage": True})
+        cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
+        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) == {"source": SOURCE}
+        assert cache.stats()["record_count"] == 1
 
-    def test_different_products_are_separate(self, cache):
-        """Test that different products have separate cache entries."""
-        cache.set_url(
-            "N-34-130-D-d-2-4",
-            "1m",
-            "EVRF2007",
-            "nmt",
-            "https://nmt.example.com/file.asc",
-        )
-        cache.set_url(
-            "N-34-130-D-d-2-4",
-            "1m",
-            "EVRF2007",
-            "nmpt",
-            "https://nmpt.example.com/file.asc",
-        )
-        assert (
-            cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt")
-            == "https://nmt.example.com/file.asc"
-        )
-        assert (
-            cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmpt")
-            == "https://nmpt.example.com/file.asc"
-        )
-
-    def test_different_resolutions_are_separate(self, cache):
-        """Test that different resolutions have separate cache entries."""
-        cache.set_url(
-            "N-34-130-D-d-2-4",
-            "1m",
-            "EVRF2007",
-            "nmt",
-            "https://1m.example.com/file.asc",
-        )
-        cache.set_url(
-            "N-34-130-D-d-2-4",
-            "5m",
-            "EVRF2007",
-            "nmt",
-            "https://5m.example.com/file.asc",
-        )
-        assert (
-            cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt")
-            == "https://1m.example.com/file.asc"
-        )
-        assert (
-            cache.get_url("N-34-130-D-d-2-4", "5m", "EVRF2007", "nmt")
-            == "https://5m.example.com/file.asc"
-        )
-
-    def test_different_vertical_crs_are_separate(self, cache):
-        """Test that different vertical CRS have separate cache entries."""
-        cache.set_url(
-            "N-34-130-D-d-2-4",
-            "1m",
-            "EVRF2007",
-            "nmt",
-            "https://evrf.example.com/file.asc",
-        )
-        cache.set_url(
-            "N-34-130-D-d-2-4",
-            "1m",
-            "KRON86",
-            "nmt",
-            "https://kron.example.com/file.asc",
-        )
-        assert (
-            cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt")
-            == "https://evrf.example.com/file.asc"
-        )
-        assert (
-            cache.get_url("N-34-130-D-d-2-4", "1m", "KRON86", "nmt")
-            == "https://kron.example.com/file.asc"
-        )
+    @pytest.mark.parametrize(
+        "other_key",
+        [
+            ("nmpt", "1m", "EVRF2007", GODLO),
+            ("nmt", "5m", "EVRF2007", GODLO),
+            ("nmt", "1m", "KRON86", GODLO),
+            ("nmt", "1m", "EVRF2007", "N-34-130-D-d-2-3"),
+        ],
+        ids=["product", "resolution", "vertical_crs", "godlo"],
+    )
+    def test_each_key_part_separates_entries(self, cache, other_key):
+        """Kazde z 4 pol klucza rozdziela wpisy — brak przeciekow miedzy nimi."""
+        other_payload = {"source": {**SOURCE, "url": "https://other/file.asc"}}
+        cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
+        assert cache.get_record(*other_key) is None
+        cache.set_record(*other_key, other_payload)
+        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) == {"source": SOURCE}
+        assert cache.get_record(*other_key) == other_payload
 
 
 # =========================================================================
@@ -270,8 +231,8 @@ class TestMetadataCacheSheet:
         row = cache._conn.execute("SELECT COUNT(*) FROM sheet_cache").fetchone()
         assert row[0] == 0
 
-    def test_sheet_ttl_independent_from_url_ttl(self, cache_path):
-        """ttl_seconds=1 (url/teryt) nie dotyczy sheet_cache (TTL 30 dni)."""
+    def test_sheet_ttl_independent_from_record_ttl(self, cache_path):
+        """ttl_seconds=1 (record/teryt) nie dotyczy sheet_cache (TTL 30 dni)."""
         c = MetadataCache(db_path=cache_path, ttl_seconds=1)
         c.set_sheet("cz_sm5", "CTES96", self._PAYLOAD)
         time.sleep(1.1)
@@ -296,6 +257,52 @@ class TestMetadataCacheSheet:
 
 
 # =========================================================================
+# TestMetadataCacheMigration
+# =========================================================================
+
+
+class TestMetadataCacheMigration:
+    """Stary plik cache (0.6.x, tabela url_cache) migruje przy otwarciu."""
+
+    def test_legacy_url_cache_table_is_dropped(self, cache_path):
+        conn = sqlite3.connect(str(cache_path))
+        conn.execute(
+            """
+            CREATE TABLE url_cache (
+                godlo TEXT NOT NULL,
+                resolution TEXT NOT NULL,
+                vertical_crs TEXT NOT NULL,
+                product TEXT NOT NULL,
+                url TEXT NOT NULL,
+                cached_at REAL NOT NULL,
+                PRIMARY KEY (godlo, resolution, vertical_crs, product)
+            )
+            """
+        )
+        conn.execute(
+            "INSERT INTO url_cache VALUES (?, ?, ?, ?, ?, ?)",
+            (GODLO, "1m", "EVRF2007", "nmt", "https://old/file.asc", time.time()),
+        )
+        conn.commit()
+        conn.close()
+
+        c = MetadataCache(db_path=cache_path)
+        try:
+            tables = {
+                row[0]
+                for row in c._conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table'"
+                )
+            }
+            assert "url_cache" not in tables
+            assert "record_cache" in tables
+            assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+            assert c.stats()["record_count"] == 0
+        finally:
+            c.close()
+
+
+# =========================================================================
 # TestMetadataCacheManagement
 # =========================================================================
 
@@ -305,28 +312,28 @@ class TestMetadataCacheManagement:
 
     def test_clear(self, cache):
         """Test that clear removes all entries."""
-        cache.set_url("A", "1m", "EVRF2007", "nmt", "https://a.com")
+        cache.set_record("nmt", "1m", "EVRF2007", "A", {"no_coverage": True})
         cache.set_teryt(1.0, 2.0, "1234")
         cache.set_sheet("cz_sm5", "CTES96", {"podil": 0.5})
         cache.clear()
-        assert cache.get_url("A", "1m", "EVRF2007", "nmt") is None
+        assert cache.get_record("nmt", "1m", "EVRF2007", "A") is None
         assert cache.get_teryt(1.0, 2.0) is None
         assert cache.get_sheet("cz_sm5", "CTES96") is None
 
     def test_stats(self, cache):
         """Test that stats returns correct counts."""
         st = cache.stats()
-        assert st["url_count"] == 0
+        assert st["record_count"] == 0
         assert st["teryt_count"] == 0
         assert st["sheet_count"] == 0
 
-        cache.set_url("A", "1m", "EVRF2007", "nmt", "https://a.com")
-        cache.set_url("B", "1m", "EVRF2007", "nmt", "https://b.com")
+        cache.set_record("nmt", "1m", "EVRF2007", "A", {"source": SOURCE})
+        cache.set_record("nmt", "1m", "EVRF2007", "B", {"no_coverage": True})
         cache.set_teryt(1.0, 2.0, "1234")
         cache.set_sheet("cz_sm5", "CTES96", {"podil": 0.5})
 
         st = cache.stats()
-        assert st["url_count"] == 2
+        assert st["record_count"] == 2
         assert st["teryt_count"] == 1
         assert st["sheet_count"] == 1
         assert st["db_size_bytes"] > 0
@@ -334,14 +341,14 @@ class TestMetadataCacheManagement:
 
     def test_vacuum(self, cache):
         """Test that vacuum runs without error."""
-        cache.set_url("A", "1m", "EVRF2007", "nmt", "https://a.com")
+        cache.set_record("nmt", "1m", "EVRF2007", "A", {"source": SOURCE})
         cache.clear()
         cache.vacuum()  # Should not raise
 
     def test_close(self, cache_path):
         """Test that close properly closes the connection."""
         c = MetadataCache(db_path=cache_path)
-        c.set_url("A", "1m", "EVRF2007", "nmt", "https://a.com")
+        c.set_record("nmt", "1m", "EVRF2007", "A", {"source": SOURCE})
         c.close()
         # After close, the internal conn should be None
         assert c._conn is None
@@ -368,83 +375,104 @@ class TestMetadataCacheManagement:
 
 
 class TestGugikProviderCacheIntegration:
-    """Tests for GugikProvider cache integration."""
+    """GugikProvider._resolve_sheet: cache -> warstwy skorowidza -> cache."""
 
-    def _make_wms_response(
-        self, url="https://opendata.example.com/N-34-130-D-d-2-4.asc"
-    ):
-        """Create a mock WMS response containing an OpenData URL."""
-        mock_resp = Mock(spec=requests.Response)
-        mock_resp.status_code = 200
-        mock_resp.text = f'<html>url:"{url}"</html>'
-        mock_resp.raise_for_status = Mock()
-        return mock_resp
-
-    def test_cache_hit_skips_wms(self, cache):
-        """Test that a cache hit skips the WMS GetFeatureInfo query."""
-        # Pre-populate cache
-        cache.set_url(
-            "N-34-130-D-d-2-4",
-            "1m",
-            "EVRF2007",
-            "nmt",
-            "https://opendata.cached.com/file.asc",
-        )
+    def test_cache_hit_source_skips_network(self, cache):
+        """Trafienie `source` = zero sieci; URL i source_info z payloadu."""
+        cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
 
         mock_session = Mock(spec=requests.Session)
         provider = GugikProvider(session=mock_session, cache=cache)
 
-        result = provider._get_opendata_url("N-34-130-D-d-2-4")
+        assert provider._get_opendata_url(GODLO) == SOURCE["url"]
+        mock_session.get.assert_not_called()
+        assert provider.source_info(GODLO) == SOURCE
 
-        assert result == "https://opendata.cached.com/file.asc"
-        # WMS should NOT have been called
+    def test_cache_hit_no_coverage_raises_without_network(self, cache):
+        cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"no_coverage": True})
+
+        mock_session = Mock(spec=requests.Session)
+        provider = GugikProvider(session=mock_session, cache=cache)
+
+        with pytest.raises(NoCoverageError, match=GODLO):
+            provider._get_opendata_url(GODLO)
         mock_session.get.assert_not_called()
 
-    def test_cache_miss_queries_wms_and_stores(self, cache):
-        """Test that a cache miss queries WMS and stores the result."""
+    def test_cache_miss_queries_wms_and_stores_source(self, cache):
+        """Miss: pierwsza warstwa z rekordem konczy petle, cache dostaje `source`."""
         mock_session = Mock(spec=requests.Session)
-        mock_session.get.return_value = self._make_wms_response()
+        mock_session.get.return_value = _gfi_response(
+            render_gfi_body([gfi_record(GODLO)])
+        )
 
         provider = GugikProvider(session=mock_session, cache=cache)
-        result = provider._get_opendata_url("N-34-130-D-d-2-4")
+        result = provider._get_opendata_url(GODLO)
 
-        assert result == "https://opendata.example.com/N-34-130-D-d-2-4.asc"
-        # Should have been stored in cache
-        cached = cache.get_url("N-34-130-D-d-2-4", "1m", "EVRF2007", "nmt")
-        assert cached == "https://opendata.example.com/N-34-130-D-d-2-4.asc"
-        # WMS was called
-        assert mock_session.get.call_count >= 1
+        expected_url = gfi_record(GODLO)["url"]
+        assert result == expected_url
+        assert mock_session.get.call_count == 1
+        cached = cache.get_record("nmt", "1m", "EVRF2007", GODLO)
+        assert cached["source"]["url"] == expected_url
+        assert cached["source"]["layer"] == "SkorowidzeNMT2026"
+        assert provider.source_info(GODLO) == cached["source"]
+
+    def test_cache_miss_all_layers_empty_stores_no_coverage(self, cache):
+        """Puste odpowiedzi WSZYSTKICH warstw = pewny brak pokrycia w cache."""
+        mock_session = Mock(spec=requests.Session)
+        mock_session.get.return_value = _gfi_response(render_gfi_body([]))
+
+        provider = GugikProvider(session=mock_session, cache=cache)
+        with pytest.raises(NoCoverageError, match=GODLO):
+            provider._get_opendata_url(GODLO)
+
+        assert mock_session.get.call_count == 4
+        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) == {"no_coverage": True}
+
+    def test_query_failure_is_not_cached_as_no_coverage(self, cache):
+        """K3-safe: awaria sieci = DownloadError, cache zostaje pusty."""
+        mock_session = Mock(spec=requests.Session)
+        mock_session.get.side_effect = [requests.ConnectionError("boom")] * 3
+
+        provider = GugikProvider(session=mock_session, cache=cache)
+        with patch("time.sleep") as sleep, pytest.raises(DownloadError) as excinfo:
+            provider._get_opendata_url(GODLO)
+
+        assert not isinstance(excinfo.value, NoCoverageError)
+        assert "SkorowidzeNMT2026" in str(excinfo.value)
+        assert mock_session.get.call_count == 3
+        assert sleep.call_count == 2
+        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) is None
 
     def test_no_cache_backward_compat(self):
-        """Test that cache=None preserves default behavior."""
+        """cache=None: to samo rozstrzygniecie, bez zapisu."""
         mock_session = Mock(spec=requests.Session)
-        mock_session.get.return_value = self._make_wms_response()
-
-        provider = GugikProvider(session=mock_session)
-        # Should not raise any errors about cache
-        result = provider._get_opendata_url("N-34-130-D-d-2-4")
-        assert result == "https://opendata.example.com/N-34-130-D-d-2-4.asc"
-
-    def test_cache_product_key_is_nmt(self):
-        """Test that GugikProvider uses 'nmt' as cache product key."""
-        assert GugikProvider._CACHE_PRODUCT == "nmt"
-
-    def test_5m_resolution_with_cache(self, cache):
-        """Test cache integration with 5m resolution."""
-        cache.set_url(
-            "N-34-130-D-d-2-4",
-            "5m",
-            "EVRF2007",
-            "nmt",
-            "https://opendata.cached.com/5m.asc",
+        mock_session.get.return_value = _gfi_response(
+            render_gfi_body([gfi_record(GODLO)])
         )
 
+        provider = GugikProvider(session=mock_session)
+        assert provider._get_opendata_url(GODLO) == gfi_record(GODLO)["url"]
+
+    def test_5m_resolution_with_cache(self, cache):
+        """Klucz 5m: trafienie bez sieci, miss zapisuje pod ("nmt","5m",...)."""
+        cache.set_record(
+            "nmt", "5m", "EVRF2007", GODLO, {"source": {**SOURCE, "resolution_m": 5.0}}
+        )
         mock_session = Mock(spec=requests.Session)
         provider = GugikProvider(session=mock_session, resolution="5m", cache=cache)
-
-        result = provider._get_opendata_url("N-34-130-D-d-2-4")
-        assert result == "https://opendata.cached.com/5m.asc"
+        assert provider._get_opendata_url(GODLO) == SOURCE["url"]
         mock_session.get.assert_not_called()
+
+        cache.clear()
+        url_5m = "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/5m/x.asc"
+        mock_session.get.return_value = _gfi_response(
+            render_gfi_body([gfi_record(GODLO, resolution="5.00 m", url=url_5m)])
+        )
+        assert provider._get_opendata_url(GODLO) == url_5m
+        cached = cache.get_record("nmt", "5m", "EVRF2007", GODLO)
+        assert cached["source"]["url"] == url_5m
+        assert cached["source"]["resolution_m"] == 5.0
+        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) is None
 
 
 # =========================================================================
@@ -453,93 +481,35 @@ class TestGugikProviderCacheIntegration:
 
 
 class TestGugikNmptProviderCacheIntegration:
-    """Tests for GugikNmptProvider cache integration."""
+    """GugikNmptProvider uzywa klucza product="nmpt" (nie "nmt")."""
 
-    def test_cache_product_key_is_nmpt(self):
-        """Test that GugikNmptProvider uses 'nmpt' as cache product key."""
-        assert GugikNmptProvider._CACHE_PRODUCT == "nmpt"
-
-    def test_cache_hit(self, cache):
-        """Test that NMPT provider uses cache correctly."""
-        cache.set_url(
-            "N-34-130-D-d-2-4",
-            "1m",
-            "EVRF2007",
-            "nmpt",
-            "https://opendata.cached.com/nmpt.asc",
-        )
+    def test_cache_hit_source_skips_network(self, cache):
+        nmpt_source = {**SOURCE, "url": "https://opendata.cached.com/nmpt.asc"}
+        cache.set_record("nmpt", "1m", "EVRF2007", GODLO, {"source": nmpt_source})
 
         mock_session = Mock(spec=requests.Session)
         provider = GugikNmptProvider(session=mock_session, cache=cache)
 
-        result = provider._get_opendata_url("N-34-130-D-d-2-4")
-        assert result == "https://opendata.cached.com/nmpt.asc"
+        assert provider._get_opendata_url(GODLO) == nmpt_source["url"]
         mock_session.get.assert_not_called()
 
-    def test_no_cache_backward_compat(self):
-        """Test that GugikNmptProvider works without cache."""
+    def test_nmt_entry_does_not_serve_nmpt(self, cache):
+        """Wpis "nmt" nie jest trafieniem dla NMPT — miss idzie w siec pod "nmpt"."""
+        cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
+        nmpt_url = "https://opendata.geoportal.gov.pl/NumDaneWys/NMPT/1/x.asc"
         mock_session = Mock(spec=requests.Session)
-        mock_resp = Mock(spec=requests.Response)
-        mock_resp.text = 'url:"https://opendata.example.com/nmpt.asc"'
-        mock_resp.raise_for_status = Mock()
-        mock_session.get.return_value = mock_resp
-
-        provider = GugikNmptProvider(session=mock_session)
-        result = provider._get_opendata_url("N-34-130-D-d-2-4")
-        assert "nmpt.asc" in result
-
-
-# =========================================================================
-# TestGugikOrtoProviderCacheIntegration
-# =========================================================================
-
-
-class TestGugikOrtoProviderCacheIntegration:
-    """Tests for GugikOrtoProvider cache integration."""
-
-    def test_cache_hit_skips_wms(self, cache):
-        """Test that a cache hit skips the WMS query for ortofoto."""
-        cache.set_url(
-            "N-34-130-D-d-2-4",
-            "orto",
-            "none",
-            "orto",
-            "https://opendata.cached.com/orto.tif",
+        mock_session.get.return_value = _gfi_response(
+            render_gfi_body([gfi_record(GODLO, url=nmpt_url)])
         )
 
-        mock_session = Mock(spec=requests.Session)
-        provider = GugikOrtoProvider(session=mock_session, cache=cache)
+        provider = GugikNmptProvider(session=mock_session, cache=cache)
+        assert provider._get_opendata_url(GODLO) == nmpt_url
 
-        result = provider._get_opendata_url("N-34-130-D-d-2-4")
-        assert result == "https://opendata.cached.com/orto.tif"
-        mock_session.get.assert_not_called()
-
-    def test_cache_miss_stores_result(self, cache):
-        """Test that a cache miss stores the WMS result."""
-        mock_session = Mock(spec=requests.Session)
-        mock_resp = Mock(spec=requests.Response)
-        mock_resp.text = 'url:"https://opendata.example.com/N-34-130-D-d-2-4.tif"'
-        mock_resp.raise_for_status = Mock()
-        mock_session.get.return_value = mock_resp
-
-        provider = GugikOrtoProvider(session=mock_session, cache=cache)
-        result = provider._get_opendata_url("N-34-130-D-d-2-4")
-
-        assert "N-34-130-D-d-2-4.tif" in result
-        cached = cache.get_url("N-34-130-D-d-2-4", "orto", "none", "orto")
-        assert cached is not None
-
-    def test_no_cache_backward_compat(self):
-        """Test that GugikOrtoProvider works without cache."""
-        mock_session = Mock(spec=requests.Session)
-        mock_resp = Mock(spec=requests.Response)
-        mock_resp.text = 'url:"https://opendata.example.com/orto.tif"'
-        mock_resp.raise_for_status = Mock()
-        mock_session.get.return_value = mock_resp
-
-        provider = GugikOrtoProvider(session=mock_session)
-        result = provider._get_opendata_url("N-34-130-D-d-2-4")
-        assert "orto.tif" in result
+        assert mock_session.get.call_count == 1
+        cached = cache.get_record("nmpt", "1m", "EVRF2007", GODLO)
+        assert cached["source"]["url"] == nmpt_url
+        assert cached["source"]["layer"] == "SkorowidzeNMPT2026"
+        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) == {"source": SOURCE}
 
 
 # =========================================================================
@@ -657,10 +627,14 @@ class TestCLICacheCommands:
     def test_cmd_cache_stats(self, tmp_path, monkeypatch, capsys):
         """Test that 'cache stats' prints statistics."""
         monkeypatch.chdir(tmp_path)
+        c = MetadataCache(db_path=tmp_path / ".kartograf_cache.db")
+        c.set_record("nmt", "1m", "EVRF2007", "A", {"source": SOURCE})
+        c.close()
+
         result = main(["cache", "stats"])
         assert result == 0
         captured = capsys.readouterr()
-        assert "URL entries" in captured.out
+        assert "Record entries: 1" in captured.out
         assert "TERYT entries" in captured.out
         assert "Sheet entries:" in captured.out
 
@@ -669,13 +643,19 @@ class TestCLICacheCommands:
         monkeypatch.chdir(tmp_path)
         # First populate some data
         c = MetadataCache(db_path=tmp_path / ".kartograf_cache.db")
-        c.set_url("A", "1m", "EVRF2007", "nmt", "https://a.com")
+        c.set_record("nmt", "1m", "EVRF2007", "A", {"source": SOURCE})
         c.close()
 
         result = main(["cache", "clear"])
         assert result == 0
         captured = capsys.readouterr()
         assert "cleared" in captured.out.lower()
+
+        c = MetadataCache(db_path=tmp_path / ".kartograf_cache.db")
+        try:
+            assert c.stats()["record_count"] == 0
+        finally:
+            c.close()
 
     def test_cmd_cache_path(self, tmp_path, monkeypatch, capsys):
         """Test that 'cache path' prints the database path."""
@@ -706,20 +686,20 @@ class TestThreadSafety:
         assert hasattr(cache, "_write_lock")
         assert isinstance(cache._write_lock, type(threading.Lock()))
 
-    def test_concurrent_set_url_no_errors(self, cache_path):
-        """Test that concurrent set_url calls don't raise errors."""
+    def test_concurrent_set_record_no_errors(self, cache_path):
+        """Test that concurrent set_record calls don't raise errors."""
         cache = MetadataCache(db_path=cache_path)
         errors = []
 
         def writer(thread_id):
             try:
                 for i in range(20):
-                    cache.set_url(
-                        f"sheet-{thread_id}-{i}",
+                    cache.set_record(
+                        "nmt",
                         "1m",
                         "EVRF2007",
-                        "nmt",
-                        f"https://example.com/{thread_id}/{i}.asc",
+                        f"sheet-{thread_id}-{i}",
+                        {"source": {**SOURCE, "url": f"https://e/{thread_id}/{i}"}},
                     )
             except Exception as e:
                 errors.append(e)
@@ -730,6 +710,7 @@ class TestThreadSafety:
         for t in threads:
             t.join()
 
+        assert cache.stats()["record_count"] == 100
         cache.close()
         assert errors == [], f"Concurrent writes raised errors: {errors}"
 
@@ -766,12 +747,12 @@ class TestThreadSafety:
         def writer(thread_id):
             try:
                 for i in range(10):
-                    cache.set_url(
-                        f"sheet-{thread_id}-{i}",
+                    cache.set_record(
+                        "nmt",
                         "1m",
                         "EVRF2007",
-                        "nmt",
-                        f"https://example.com/{thread_id}/{i}.asc",
+                        f"sheet-{thread_id}-{i}",
+                        {"no_coverage": True},
                     )
             except Exception as e:
                 errors.append(e)
@@ -793,12 +774,12 @@ class TestThreadSafety:
         cache.close()
         assert errors == [], f"Concurrent operations raised errors: {errors}"
 
-    def test_concurrent_get_url_returns_own_value(self, tmp_path):
+    def test_concurrent_get_record_returns_own_value(self, tmp_path):
         """Parallel readers on one connection must never see another key's row."""
         cache = MetadataCache(db_path=tmp_path / "c.db")
         for i in range(300):
-            cache.set_url(
-                f"G{i}", "1m", "EVRF2007", "nmt", f"https://opendata/G{i}.asc"
+            cache.set_record(
+                "nmt", "1m", "EVRF2007", f"G{i}", {"source": {"url": f"u://G{i}"}}
             )
         errors: list[str] = []
 
@@ -806,11 +787,11 @@ class TestThreadSafety:
             for k in range(400):
                 i = (seed * 37 + k) % 300
                 try:
-                    got = cache.get_url(f"G{i}", "1m", "EVRF2007", "nmt")
+                    got = cache.get_record("nmt", "1m", "EVRF2007", f"G{i}")
                 except Exception as e:  # noqa: BLE001 - any exception is a failure here
                     errors.append(f"{type(e).__name__}: {e}")
                     continue
-                if got != f"https://opendata/G{i}.asc":
+                if got != {"source": {"url": f"u://G{i}"}}:
                     errors.append(f"G{i} -> {got!r}")
 
         threads = [threading.Thread(target=worker, args=(s,)) for s in range(8)]
@@ -918,24 +899,25 @@ class TestWALVerification:
 class TestPruneExpired:
     """Tests for expired entry cleanup."""
 
-    def test_prune_expired_removes_old_url_entries(self, cache_path):
-        """Test that prune_expired deletes expired URL entries."""
+    def test_prune_expired_removes_old_record_entries(self, cache_path):
+        """Test that prune_expired deletes expired record entries."""
         cache = MetadataCache(db_path=cache_path, ttl_seconds=1)
-        cache.set_url("A", "1m", "EVRF2007", "nmt", "https://a.com")
-        cache.set_url("B", "1m", "EVRF2007", "nmt", "https://b.com")
+        cache.set_record("nmt", "1m", "EVRF2007", "A", {"source": SOURCE})
+        cache.set_record("nmt", "1m", "EVRF2007", "B", {"no_coverage": True})
 
         # Wait for TTL to expire
         time.sleep(1.1)
 
         # Add a fresh entry that should NOT be pruned
-        cache.set_url("C", "1m", "EVRF2007", "nmt", "https://c.com")
+        cache.set_record("nmt", "1m", "EVRF2007", "C", {"no_coverage": True})
 
         deleted = cache.prune_expired()
         assert deleted == 2
 
         # Verify: A and B gone, C still there
-        assert cache._conn.execute("SELECT COUNT(*) FROM url_cache").fetchone()[0] == 1
-        assert cache.get_url("C", "1m", "EVRF2007", "nmt") == "https://c.com"
+        count = cache._conn.execute("SELECT COUNT(*) FROM record_cache").fetchone()[0]
+        assert count == 1
+        assert cache.get_record("nmt", "1m", "EVRF2007", "C") == {"no_coverage": True}
         cache.close()
 
     def test_prune_expired_removes_old_teryt_entries(self, cache_path):
@@ -960,7 +942,7 @@ class TestPruneExpired:
 
     def test_prune_expired_returns_zero_when_nothing_expired(self, cache):
         """Test that prune_expired returns 0 when no entries are expired."""
-        cache.set_url("A", "1m", "EVRF2007", "nmt", "https://a.com")
+        cache.set_record("nmt", "1m", "EVRF2007", "A", {"source": SOURCE})
         cache.set_teryt(1.0, 2.0, "1234")
         deleted = cache.prune_expired()
         assert deleted == 0
@@ -973,7 +955,7 @@ class TestPruneExpired:
     def test_close_prunes_expired(self, cache_path):
         """Test that close() calls prune_expired before closing."""
         cache = MetadataCache(db_path=cache_path, ttl_seconds=1)
-        cache.set_url("A", "1m", "EVRF2007", "nmt", "https://a.com")
+        cache.set_record("nmt", "1m", "EVRF2007", "A", {"source": SOURCE})
         cache.set_teryt(1.0, 2.0, "1234")
 
         time.sleep(1.1)
@@ -983,23 +965,23 @@ class TestPruneExpired:
 
         # Re-open and verify entries were pruned
         cache2 = MetadataCache(db_path=cache_path)
-        assert cache2.stats()["url_count"] == 0
+        assert cache2.stats()["record_count"] == 0
         assert cache2.stats()["teryt_count"] == 0
         cache2.close()
 
-    def test_get_url_deletes_expired_entry(self, cache_path):
-        """Test that get_url opportunistically deletes an expired entry."""
+    def test_get_record_deletes_expired_entry(self, cache_path):
+        """Test that get_record opportunistically deletes an expired entry."""
         cache = MetadataCache(db_path=cache_path, ttl_seconds=1)
-        cache.set_url("A", "1m", "EVRF2007", "nmt", "https://a.com")
+        cache.set_record("nmt", "1m", "EVRF2007", "A", {"source": SOURCE})
 
         time.sleep(1.1)
 
-        # get_url returns None and deletes the entry
-        result = cache.get_url("A", "1m", "EVRF2007", "nmt")
+        # get_record returns None and deletes the entry
+        result = cache.get_record("nmt", "1m", "EVRF2007", "A")
         assert result is None
 
         # Verify entry is actually deleted from the database
-        count = cache._conn.execute("SELECT COUNT(*) FROM url_cache").fetchone()[0]
+        count = cache._conn.execute("SELECT COUNT(*) FROM record_cache").fetchone()[0]
         assert count == 0
         cache.close()
 

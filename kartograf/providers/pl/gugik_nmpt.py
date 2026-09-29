@@ -14,6 +14,8 @@ Supported resolutions:
 - 1m only (no 5m for NMPT)
 """
 
+import re
+
 from kartograf.providers.pl.gugik import GugikProvider
 
 
@@ -71,22 +73,7 @@ class GugikNmptProvider(GugikProvider):
         },
     }
 
-    # NMPT layers (ordered newest to oldest)
-    WMS_LAYERS = {
-        "1m": {
-            "KRON86": [
-                "SkorowidzeNMPT2019",
-                "SkorowidzeNMPT2018",
-                "SkorowidzeNMPT2017iStarsze",
-            ],
-            "EVRF2007": [
-                "SkorowidzeNMPT2025",
-                "SkorowidzeNMPT2024",
-                "SkorowidzeNMPT2023",
-                "SkorowidzeNMPT2022iStarsze",
-            ],
-        },
-    }
+    LAYER_PATTERN = re.compile(r"^SkorowidzeNMPT(\d{4})(iStarsze)?$")
 
     # NMPT coverage IDs for WCS
     COVERAGE_IDS = {

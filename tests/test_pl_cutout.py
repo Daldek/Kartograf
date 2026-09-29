@@ -550,17 +550,22 @@ class TestSheetGrid:
             assert ds.read(1)[0, -1] == pytest.approx(100.25)
 
     def test_pl2000_sheet_rejected_loudly(self, tmp_path):
-        """Fakt 7: arkusz we wspolrzednych PL-2000 pod godlem PL-1992 — blad
-        z opisem zamiast cichej dziury nodata."""
+        """Fakt 7: arkusz we wspolrzednych PL-2000 pod godlem PL-1992 (cache
+        sprzed 0.7.0) — blad z opisem i sciezka do usuniecia zamiast cichej
+        dziury nodata."""
         from kartograf.download.cutout import build_pl_cutout
         from kartograf.exceptions import ValidationError
 
         good = _write_grid_sheet(tmp_path / "a.asc", 0, 160, 200, _ids)
         foreign = _write_grid_sheet(tmp_path / "b.asc", 0, 160, 200, _ids, x0=6500000.5)
         bbox = BBox(530010, 382010, 530150, 382086, "EPSG:2180")
-        with pytest.raises(ValidationError, match="PL-2000"):
+        with pytest.raises(ValidationError, match="PL-2000") as exc:
             build_pl_cutout([good, foreign], bbox, bbox, 1.0, None, tmp_path / "o.tif")
         assert not (tmp_path / "o.tif").exists()
+        message = str(exc.value)
+        assert "wczesniejszej wersji Kartografa" in message
+        assert f"Usun go i ponow pobranie: {foreign}" in message
+        assert str(good) not in message
 
     def test_selection_expanded_by_one_pixel(self, tmp_path):
         """Crop przyciagany na zewnatrz (< 1 px) — selekcja z zapasem 1 px,
@@ -1523,9 +1528,31 @@ class TestLibraryApi:
                 vertical_crs="KRON86",
             )
 
-        factory.assert_called_once_with(vertical_crs="KRON86", resolution="5m")
+        factory.assert_called_once_with(
+            vertical_crs="KRON86", resolution="5m", cache=None
+        )
         assert result.path.parent == tmp_path / "nmt" / "pl_1992_5m_evrf2007" / "bbox"
         assert result.path.exists()
+
+    def test_cache_is_handed_to_the_factory(self, tmp_path):
+        """N6: ``download_pl_cutout(cache=)`` -> provider z cache rekordow;
+        bez kwargu fabryka dostaje ``cache=None`` (CLI: ``--force``)."""
+        from kartograf import download_pl_cutout
+
+        provider = self._provider()
+        cache = object()
+        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+        with (
+            patch(
+                "kartograf.providers.pl.create_nmt_provider", return_value=provider
+            ) as factory,
+            patch(
+                "kartograf.download.cutout.find_sheets_for_bbox",
+                return_value=list(self._SHEETS),
+            ),
+        ):
+            download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path, cache=cache)
+        assert factory.call_args.kwargs["cache"] is cache
 
     @pytest.mark.parametrize(
         ("attr", "value"), [("vertical_crs", "KRON86"), ("resolution", "5m")]
@@ -1635,6 +1662,80 @@ class TestMissingSheets:
             result.path.with_name(result.path.name + ".meta.json").read_text()
         )
         assert meta["extra"]["missing_sheets"] == ["N-34-130-D-d-2-4"]
+
+    def test_sidecar_lists_sheet_sources_from_sheet_sidecars(self, tmp_path):
+        """P5/D5: ``extra.sheet_sources`` = pochodzenie kazdego arkusza mozaiki
+        z jego sidecara; arkusz z cache sprzed 0.7.0 (bez sidecara) ma pola
+        ``null`` poza godlem, a arkusz z sidecarem bez ``source`` — tak samo."""
+        from kartograf.download.cutout import run_pl_cutout
+
+        sources = {
+            "N-34-130-D-d-2-3": {
+                "url": "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/1/1_a.asc",
+                "skorowidz": "https://mapy.geoportal.gov.pl/.../SkorowidzeUkladEVRF2007",
+                "layer": "SkorowidzeNMT2025",
+                "godlo": "N-34-130-D-d-2-3",
+                "aktualnosc": "2025-04-01",
+                "resolution_m": 1.0,
+            },
+            "N-34-130-D-d-2-4": {
+                "url": "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/2/2_b.asc",
+                "skorowidz": "https://mapy.geoportal.gov.pl/.../SkorowidzeUkladEVRF2007",
+                "layer": "SkorowidzeNMT2023iStarsze",
+                "godlo": "N-34-130-D-d-2-4",
+                "aktualnosc": "2022-05-09",
+                "resolution_m": 1.0,
+            },
+        }
+        provider = self._provider()
+        provider.source_info = lambda godlo: sources.get(godlo)
+        downloads = []
+        download = provider.download
+
+        def counting_download(godlo, path, timeout=30):
+            downloads.append(godlo)
+            return download(godlo, path, timeout)
+
+        provider.download = counting_download
+        cut, sheets = self._cutout(tmp_path)
+        result = run_pl_cutout(cut, sheets, provider=provider)
+        meta = json.loads(
+            result.path.with_name(result.path.name + ".meta.json").read_text()
+        )
+        by_godlo = {entry["godlo"]: entry for entry in meta["extra"]["sheet_sources"]}
+        assert by_godlo == {
+            "N-34-130-D-d-2-3": {
+                "godlo": "N-34-130-D-d-2-3",
+                "url": sources["N-34-130-D-d-2-3"]["url"],
+                "layer": "SkorowidzeNMT2025",
+                "aktualnosc": "2025-04-01",
+            },
+            "N-34-130-D-d-2-4": {
+                "godlo": "N-34-130-D-d-2-4",
+                "url": sources["N-34-130-D-d-2-4"]["url"],
+                "layer": "SkorowidzeNMT2023iStarsze",
+                "aktualnosc": "2022-05-09",
+            },
+        }
+        assert sorted(downloads) == sorted(TestLibraryApi._SHEETS)
+
+        # przebudowa z arkuszy w cache: jeden bez sidecara, drugi bez source
+        result.path.unlink()
+        sheet_a, sheet_b = sorted(result.sheet_paths)
+        sheet_a.with_name(sheet_a.name + ".meta.json").unlink()
+        sidecar_b = sheet_b.with_name(sheet_b.name + ".meta.json")
+        payload_b = json.loads(sidecar_b.read_text())
+        payload_b["extra"] = {}
+        sidecar_b.write_text(json.dumps(payload_b))
+        rebuilt = run_pl_cutout(cut, sheets, provider=provider)
+        meta = json.loads(
+            rebuilt.path.with_name(rebuilt.path.name + ".meta.json").read_text()
+        )
+        assert sorted(meta["extra"]["sheet_sources"], key=lambda e: e["godlo"]) == [
+            {"godlo": sheet_a.stem, "url": None, "layer": None, "aktualnosc": None},
+            {"godlo": sheet_b.stem, "url": None, "layer": None, "aktualnosc": None},
+        ]
+        assert len(downloads) == 2  # przebudowa bez pobierania (arkusze z cache)
 
     def test_transport_failure_stays_fatal(self, tmp_path):
         from kartograf.download.cutout import run_pl_cutout

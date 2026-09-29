@@ -25,6 +25,7 @@ Przyklad::
     print(result.path)
 """
 
+import json
 import logging
 import os
 import threading
@@ -287,10 +288,12 @@ _PL2000_MIN_X = 1_000_000.0
 def _reject_pl2000_sheets(sheet_paths: list[Path]) -> None:
     """Glosny blad zamiast cichej dziury (fakt 7 planu 2026-09-28).
 
-    Skorowidz GUGiK potrafi zwrocic dla godla PL-1992 arkusz nowszej kampanii
-    w ukladzie PL-2000 (fallback URL w ``GugikProvider._get_opendata_url``).
-    Mozaika wymusza EPSG:2180, wiec taki arkusz wyladowalby poza obszarem
-    i ``merge`` pominalby go bez slowa. Reprojekcja takich arkuszy to etap 2.
+    Do 0.7.0 skorowidz GUGiK potrafil wydac dla godla PL-1992 arkusz nowszej
+    kampanii w ukladzie PL-2000 (cichy fallback URL bez godla, usuniety razem
+    z K4 — ``select_sheet_record`` odrzuca rekord innego ukladu). Straz zostaje
+    dla arkuszy z cache pobranych wczesniejsza wersja: mozaika wymusza
+    EPSG:2180, wiec taki arkusz wyladowalby poza obszarem i ``merge``
+    pominalby go bez slowa. Reprojekcja takich arkuszy to etap 2.
     """
     import rasterio
 
@@ -303,12 +306,13 @@ def _reject_pl2000_sheets(sheet_paths: list[Path]) -> None:
         listing = ", ".join(
             f"{p.name} (strefa {zone}, EPSG:{2171 + zone})" for p, zone in foreign[:5]
         )
+        paths = ", ".join(str(p) for p, _ in foreign)
         raise ValidationError(
             f"{len(foreign)} arkusz(y) ma wspolrzedne PL-2000 zamiast PL-1992: "
-            f"{listing}{' ...' if len(foreign) > 5 else ''} — skorowidz GUGiK "
-            "wydal dla godla PL-1992 arkusz ukladu 2000 i wycinek pominalby go po "
-            "cichu (dziura nodata). Wycinek z takich arkuszy to etap 2; pobierz "
-            "obszar jako arkusze (bez --target-crs), np. z --system 2000."
+            f"{listing}{' ...' if len(foreign) > 5 else ''} — plik pochodzi "
+            "z wczesniejszej wersji Kartografa (cichy fallback skorowidza, "
+            "usuniety w 0.7.0) i wycinek pominalby go po cichu (dziura nodata). "
+            f"Usun go i ponow pobranie: {paths}"
         )
 
 
@@ -410,11 +414,34 @@ def build_pl_cutout(
         tmp.unlink(missing_ok=True)
 
 
+def _sheet_source(sheet_path: Path) -> dict:
+    """Pochodzenie arkusza z jego sidecara (``extra.source``), best-effort."""
+    entry: dict = {
+        "godlo": sheet_path.stem,
+        "url": None,
+        "layer": None,
+        "aktualnosc": None,
+    }
+    sidecar = sheet_path.parent / f"{sheet_path.name}.meta.json"
+    try:
+        meta = json.loads(sidecar.read_text(encoding="utf-8"))
+        source = meta["extra"]["source"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return entry  # arkusz bez sidecara (cache sprzed 0.7.0) albo bez source
+    request_godlo = meta.get("request", {}).get("godlo")
+    if isinstance(request_godlo, str):
+        entry["godlo"] = request_godlo
+    for key in ("url", "layer", "aktualnosc"):
+        entry[key] = source.get(key)
+    return entry
+
+
 def write_pl_cutout_sidecar(
     cutout: PlCutout,
     *,
     parent_request: dict | None = None,
     missing_sheets: tuple[str, ...] = (),
+    sheet_paths: tuple[Path, ...] = (),
 ) -> None:
     """Best-effort sidecar wycinka (blad nie przerywa pobrania).
 
@@ -422,6 +449,10 @@ def write_pl_cutout_sidecar(
     ``bbox_raster`` nie istnieje dla 5m, a dla 1m deklaruje wylacznie KRON86
     (ADR-027, odstepstwo od litery spec 6.1 pkt 5). ``missing_sheets``
     (niepuste) -> ``extra.missing_sheets``: arkusze bez danych GUGiK (R5).
+    ``sheet_paths`` (niepuste) -> ``extra.sheet_sources``: pochodzenie
+    kazdego arkusza mozaiki ``{godlo, url, layer, aktualnosc}`` czytane
+    z sidecarow arkuszy (``extra.source``, D5); arkusz bez sidecara albo bez
+    ``source`` (cache sprzed 0.7.0) ma ``null`` w polach poza ``godlo``.
     """
     try:
         from kartograf.sources.registry import get_source
@@ -435,6 +466,8 @@ def write_pl_cutout_sidecar(
         if missing_sheets:
             # R5: arkusze, dla ktorych GUGiK nie ma danych — tam wycinek ma nodata
             extra["missing_sheets"] = list(missing_sheets)
+        if sheet_paths:
+            extra["sheet_sources"] = [_sheet_source(Path(p)) for p in sheet_paths]
         meta = build_metadata(
             get_source(key),
             request={
@@ -633,7 +666,10 @@ def run_pl_cutout(
         prune_empty_dirs(cutout.target_path.parent, cutout.output_dir)
         raise
     write_pl_cutout_sidecar(
-        cutout, parent_request=parent_request, missing_sheets=missing
+        cutout,
+        parent_request=parent_request,
+        missing_sheets=missing,
+        sheet_paths=tuple(sheet_paths),
     )
     return PlCutoutResult(
         path=cutout.target_path,
@@ -656,14 +692,16 @@ def download_pl_cutout(
     force: bool = False,
     on_progress: ProgressCallback | None = None,
     parent_request: dict | None = None,
+    cache=None,
 ) -> PlCutoutResult:
     """Jeden scalony GeoTIFF NMT PL w ``target_crs`` dla bboxa albo geometrii.
 
     Tryb geometrii: ``bbox`` to obwiednia geometrii (np.
     ``get_overall_bbox(path, target_crs="EPSG:2180")``), ``geometry`` — plik
-    SHP/GPKG wyznaczajacy arkusze per obiekt (R-01 przy warpie). Regula
-    fabryki NMT: 5m => EVRF2007 (z ostrzezeniem w logu). Provider i sesja
-    pochodza z fabryki — wlasny provider/sesja/cache: kroki
+    Regula fabryki NMT: 5m => EVRF2007 (z ostrzezeniem w logu). Provider
+    i sesja pochodza z fabryki; ``cache`` (``MetadataCache`` albo ``None``)
+    trafia do providera — rekordy skorowidza sa czytane i zapisywane tylko
+    z cache (CLI: ``--force`` = ``None``). Wlasny provider/sesja: kroki
     ``prepare_pl_cutout`` -> ``select_pl_cutout_sheets`` ->
     ``run_pl_cutout(provider=...)``.
 
@@ -685,8 +723,8 @@ def download_pl_cutout(
         Brak bezpiecznej przypietej operacji EPSG:2180 -> ``target_crs``
         (przed jakakolwiek siecia).
     DownloadError
-        Awaria pobrania arkusza (siec, serwer, niepewna odpowiedz
-        skorowidza — nie brak danych); wycinek nie powstaje.
+        Awaria pobrania arkusza (siec, serwer; zerwane zapytanie warstwy
+        skorowidza po 3 probach — nie brak danych); wycinek nie powstaje.
     OSError
         Blad zapisu arkusza przy ``max_workers=1`` (w puli watkow liczy sie
         jak awaria pobrania).
@@ -702,7 +740,9 @@ def download_pl_cutout(
         )
     from kartograf.providers.pl import create_nmt_provider
 
-    provider = create_nmt_provider(vertical_crs=vertical_crs, resolution=resolution)
+    provider = create_nmt_provider(
+        vertical_crs=vertical_crs, resolution=resolution, cache=cache
+    )
     cutout = prepare_pl_cutout(
         bbox,
         target_crs,

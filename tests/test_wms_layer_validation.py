@@ -1,25 +1,31 @@
 """
-Tests for WMS GetCapabilities layer validation in GugikProvider.
+Testy odkrywania warstw skorowidza WMS w GugikProvider.
 
-Tests cover two new methods being added to GugikProvider:
-- _fetch_wms_layers(): fetches and parses WMS GetCapabilities XML
-- _get_validated_layers(): validates hardcoded layers against live WMS
+GugikProvider nie ma juz zaszytych list warstw ani cichego fallbacku:
+- _fetch_wms_layers(endpoint): GetCapabilities przez get_with_retry (3 proby,
+  backoff), filtr <Name> wzorcem LAYER_PATTERN, sortowanie rok malejaco
+  z warstwa "iStarsze" na koncu; kazda porazka (siec, zly XML, brak warstw)
+  konczy sie DownloadError
+- _layers(endpoint): memoizacja sukcesu per endpoint pod lockiem; porazka
+  nie jest zapamietywana, kolejne wywolanie probuje ponownie
+- GugikNmptProvider dziedziczy mechanizm z wlasnym wzorcem SkorowidzeNMPT*
 
-These methods validate that hardcoded WMS layer names match what the
-GUGiK WMS service actually exposes, falling back to hardcoded layers
-on errors.
+GugikOrtoProvider zachowuje wlasna walidacje zaszytej listy WMS_LAYERS.
 """
 
-import re
-import xml.etree.ElementTree as ET
-from unittest.mock import MagicMock, patch
+import time
+from concurrent.futures import ThreadPoolExecutor
+from unittest.mock import MagicMock, Mock, patch
+from urllib.parse import parse_qs, urlparse
 
 import pytest
 import requests
 
+from kartograf.exceptions import DownloadError, NoCoverageError
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
+from tests.conftest import render_gfi_body
 
 # ---------------------------------------------------------------------------
 # XML fixtures
@@ -55,13 +61,18 @@ WMS_XML_WITHOUT_NAMESPACE = """\
 </WMS_Capabilities>
 """
 
+# Nazwy spoza wzorca: zasiegi, warstwa zbiorcza bez roku, inne produkty
 WMS_XML_MIXED_LAYERS = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <WMS_Capabilities xmlns="http://www.opengis.net/wms" version="1.3.0">
   <Capability><Layer><Layer>
     <Name>SkorowidzeNMT2025</Name>
   </Layer><Layer>
-    <Name>OtherLayer</Name>
+    <Name>ZasiegiNMT2025</Name>
+  </Layer><Layer>
+    <Name>SkorowidzeNMTNajnowsze</Name>
+  </Layer><Layer>
+    <Name>SkorowidzeNMPT2025</Name>
   </Layer><Layer>
     <Name>BaseMap</Name>
   </Layer><Layer>
@@ -96,15 +107,19 @@ WMS_XML_RANDOM_ORDER = """\
 </WMS_Capabilities>
 """
 
-WMS_XML_WITH_NO_YEAR_LAYER = """\
+WMS_XML_NMT_AND_NMPT = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <WMS_Capabilities xmlns="http://www.opengis.net/wms" version="1.3.0">
   <Capability><Layer><Layer>
-    <Name>SkorowidzeNMTNajnowsze</Name>
+    <Name>SkorowidzeNMT2026</Name>
   </Layer><Layer>
-    <Name>SkorowidzeNMT2025</Name>
+    <Name>SkorowidzeNMPT2025</Name>
   </Layer><Layer>
-    <Name>SkorowidzeNMT2023</Name>
+    <Name>SkorowidzeNMPT2026</Name>
+  </Layer><Layer>
+    <Name>SkorowidzeNMPT2024iStarsze</Name>
+  </Layer><Layer>
+    <Name>SkorowidzeNMT2023iStarsze</Name>
   </Layer></Layer></Capability>
 </WMS_Capabilities>
 """
@@ -114,21 +129,32 @@ WMS_XML_WITH_NO_YEAR_LAYER = """\
 # Helpers
 # ---------------------------------------------------------------------------
 
-# Patch target for requests.Session created inside _fetch_wms_layers
-_SESSION_PATCH = "kartograf.providers.pl.gugik.requests.Session"
+ENDPOINT = "https://example.com/wms"
+NMT_1M_EVRF2007 = GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"]
+GODLO = "N-34-130-D-d-2-4"
 
 
-def _make_mock_response(text: str) -> MagicMock:
-    """Create a mock HTTP response with the given text content."""
-    mock_response = MagicMock()
+def _make_mock_response(text: str) -> Mock:
+    """Atrapa odpowiedzi HTTP 200 z podana trescia."""
+    mock_response = Mock()
+    mock_response.status_code = 200
     mock_response.text = text
-    mock_response.raise_for_status = MagicMock()
+    mock_response.raise_for_status = Mock()
     return mock_response
 
 
-def _make_provider(session=None) -> GugikProvider:
-    """Create a GugikProvider with an optional mock session."""
-    return GugikProvider(session=session)
+def _make_session(*responses) -> Mock:
+    """Sesja z kolejka odpowiedzi (jedna odpowiedz = zawsze ta sama)."""
+    session = Mock(spec=requests.Session)
+    if len(responses) == 1:
+        session.get = Mock(return_value=responses[0])
+    else:
+        session.get = Mock(side_effect=list(responses))
+    return session
+
+
+def _layer_of(url: str) -> str:
+    return parse_qs(urlparse(url).query)["LAYERS"][0]
 
 
 # ===========================================================================
@@ -138,24 +164,94 @@ def _make_provider(session=None) -> GugikProvider:
 
 @pytest.mark.real_wms_layers
 class TestFetchWmsLayers:
-    """Tests for GugikProvider._fetch_wms_layers().
+    """GugikProvider._fetch_wms_layers() na wstrzynietej sesji."""
 
-    Note: _fetch_wms_layers creates its own requests.Session() to avoid
-    interfering with the main session used for downloads. Tests must
-    patch requests.Session to inject mock responses.
-    """
+    def _fetch(self, xml_text: str) -> list[str]:
+        session = _make_session(_make_mock_response(xml_text))
+        provider = GugikProvider(session=session)
+        return provider._fetch_wms_layers(ENDPOINT, timeout=10)
 
-    def _call_with_mock_response(self, xml_text):
-        """Helper: call _fetch_wms_layers with a mocked session returning xml_text."""
-        mock_session = MagicMock()
-        mock_session.get.return_value = _make_mock_response(xml_text)
-        provider = _make_provider()
-        with patch(_SESSION_PATCH, return_value=mock_session):
-            return provider._fetch_wms_layers("https://example.com/wms", timeout=10)
+    def test_uses_injected_session_for_get_capabilities(self):
+        """GetCapabilities idzie przez sesje powierzona przez wolajacego."""
+        session = _make_session(_make_mock_response(WMS_XML_WITH_NAMESPACE))
+        provider = GugikProvider(session=session)
 
-    def test_fetch_wms_layers_with_namespace(self):
-        """Namespaced WMS 1.3.0 XML is parsed correctly."""
-        result = self._call_with_mock_response(WMS_XML_WITH_NAMESPACE)
+        provider._fetch_wms_layers(ENDPOINT, timeout=10)
+
+        session.get.assert_called_once()
+        url = session.get.call_args[0][0]
+        assert url.startswith(f"{ENDPOINT}?")
+        assert parse_qs(urlparse(url).query)["REQUEST"] == ["GetCapabilities"]
+        assert session.get.call_args[1]["timeout"] == 10
+
+    def test_parses_namespaced_xml(self):
+        """XML WMS 1.3.0 z xmlns jest parsowany."""
+        assert self._fetch(WMS_XML_WITH_NAMESPACE) == [
+            "SkorowidzeNMT2025",
+            "SkorowidzeNMT2024",
+            "SkorowidzeNMT2023",
+            "SkorowidzeNMT2022iStarsze",
+        ]
+
+    def test_parses_xml_without_namespace(self):
+        """XML bez xmlns daje ten sam wynik."""
+        assert self._fetch(WMS_XML_WITHOUT_NAMESPACE) == [
+            "SkorowidzeNMT2025",
+            "SkorowidzeNMT2024",
+            "SkorowidzeNMT2023",
+            "SkorowidzeNMT2022iStarsze",
+        ]
+
+    def test_sorts_newest_first_istarsze_last(self):
+        """Losowa kolejnosc w XML -> rok malejaco, warstwa zbiorcza na koncu."""
+        assert self._fetch(WMS_XML_RANDOM_ORDER) == [
+            "SkorowidzeNMT2025",
+            "SkorowidzeNMT2024",
+            "SkorowidzeNMT2023",
+            "SkorowidzeNMT2022iStarsze",
+        ]
+
+    def test_filters_names_by_layer_pattern(self):
+        """Zasiegi, warstwa bez roku i inne produkty sa odrzucane."""
+        assert self._fetch(WMS_XML_MIXED_LAYERS) == [
+            "SkorowidzeNMT2025",
+            "SkorowidzeNMT2023",
+        ]
+
+    def test_no_matching_layers_raises_download_error(self):
+        """Endpoint bez warstw skorowidza = DownloadError, nie pusta lista."""
+        with pytest.raises(DownloadError, match="nie publikuje warstw"):
+            self._fetch(WMS_XML_NO_SKOROWIDZE)
+
+    def test_invalid_xml_raises_download_error(self):
+        """Odpowiedz niebedaca XML = DownloadError."""
+        with pytest.raises(DownloadError, match="nieprawidlowy XML"):
+            self._fetch("This is not XML at all")
+
+    def test_network_error_after_three_attempts_raises(self):
+        """Trzy nieudane proby GetCapabilities = DownloadError (bez fallbacku)."""
+        session = _make_session(*[requests.ConnectionError("refused")] * 3)
+        provider = GugikProvider(session=session)
+
+        with (
+            patch("time.sleep") as mock_sleep,
+            pytest.raises(DownloadError, match="pobranie nieudane po 3 probach"),
+        ):
+            provider._fetch_wms_layers(ENDPOINT, timeout=10)
+
+        assert session.get.call_count == 3
+        assert mock_sleep.call_count == 2
+
+    def test_network_error_then_success_returns_layers(self):
+        """Jedna zerwana proba i sukces -> lista warstw po 2 zapytaniach."""
+        session = _make_session(
+            requests.ConnectionError("reset"),
+            _make_mock_response(WMS_XML_WITH_NAMESPACE),
+        )
+        provider = GugikProvider(session=session)
+
+        with patch("time.sleep") as mock_sleep:
+            result = provider._fetch_wms_layers(ENDPOINT, timeout=10)
 
         assert result == [
             "SkorowidzeNMT2025",
@@ -163,330 +259,143 @@ class TestFetchWmsLayers:
             "SkorowidzeNMT2023",
             "SkorowidzeNMT2022iStarsze",
         ]
-
-    def test_fetch_wms_layers_without_namespace(self):
-        """XML without xmlns attribute is parsed via namespace fallback."""
-        result = self._call_with_mock_response(WMS_XML_WITHOUT_NAMESPACE)
-
-        assert result == [
-            "SkorowidzeNMT2025",
-            "SkorowidzeNMT2024",
-            "SkorowidzeNMT2023",
-            "SkorowidzeNMT2022iStarsze",
-        ]
-
-    def test_fetch_wms_layers_sorting(self):
-        """Layers in random order are returned sorted: newest first, iStarsze last."""
-        result = self._call_with_mock_response(WMS_XML_RANDOM_ORDER)
-
-        assert result == [
-            "SkorowidzeNMT2025",
-            "SkorowidzeNMT2024",
-            "SkorowidzeNMT2023",
-            "SkorowidzeNMT2022iStarsze",
-        ]
-
-    def test_fetch_wms_layers_filters_non_skorowidze(self):
-        """Only layer names starting with 'Skorowidze' are returned."""
-        result = self._call_with_mock_response(WMS_XML_MIXED_LAYERS)
-
-        assert result == [
-            "SkorowidzeNMT2025",
-            "SkorowidzeNMT2023",
-        ]
-
-    def test_fetch_wms_layers_empty_raises_valueerror(self):
-        """ValueError is raised when no Skorowidze layers are found."""
-        mock_session = MagicMock()
-        mock_session.get.return_value = _make_mock_response(WMS_XML_NO_SKOROWIDZE)
-        provider = _make_provider()
-
-        with (
-            patch(_SESSION_PATCH, return_value=mock_session),
-            pytest.raises(ValueError),
-        ):
-            provider._fetch_wms_layers("https://example.com/wms", timeout=10)
-
-    def test_fetch_wms_layers_network_error(self):
-        """Network errors propagate as requests.RequestException."""
-        mock_session = MagicMock()
-        mock_session.get.side_effect = requests.ConnectionError("Connection refused")
-        provider = _make_provider()
-
-        with (
-            patch(_SESSION_PATCH, return_value=mock_session),
-            pytest.raises(requests.RequestException),
-        ):
-            provider._fetch_wms_layers("https://example.com/wms", timeout=10)
-
-    def test_fetch_wms_layers_invalid_xml(self):
-        """Non-XML response causes a parse error."""
-        mock_session = MagicMock()
-        mock_session.get.return_value = _make_mock_response("This is not XML at all")
-        provider = _make_provider()
-
-        with (
-            patch(_SESSION_PATCH, return_value=mock_session),
-            pytest.raises(ET.ParseError),
-        ):
-            provider._fetch_wms_layers("https://example.com/wms", timeout=10)
+        assert session.get.call_count == 2
+        mock_sleep.assert_called_once()
 
 
 # ===========================================================================
-# TestHardcodedLayerNames
+# TestLayers
 # ===========================================================================
 
 
-class TestHardcodedLayerNames:
-    """Regression guards for the hardcoded WMS_LAYERS roczniki.
+class TestLayers:
+    """GugikProvider._layers(endpoint): memoizacja sukcesu pod lockiem."""
 
-    These values were verified against live GUGiK GetCapabilities responses
-    (2026-06-24). They guard against silent drift / typos and document the
-    fact that the 5m endpoint lags behind the 1m EVRF2007 endpoint.
-    """
+    @pytest.mark.real_wms_layers
+    def test_memoizes_success_per_endpoint(self):
+        """Drugie wywolanie dla tego samego endpointu nie odpytuje uslugi."""
+        provider = GugikProvider()
+        layers = ["SkorowidzeNMT2026", "SkorowidzeNMT2025iStarsze"]
 
-    def test_1m_kron86_layers(self):
-        """1m/KRON86 matches SkorowidzeUkladKRON86 GetCapabilities."""
-        assert GugikProvider.WMS_LAYERS["1m"]["KRON86"] == [
-            "SkorowidzeNMT2019",
-            "SkorowidzeNMT2018",
-            "SkorowidzeNMT2017iStarsze",
+        with patch.object(
+            provider, "_fetch_wms_layers", return_value=layers
+        ) as mock_fetch:
+            first = provider._layers(ENDPOINT)
+            second = provider._layers(ENDPOINT)
+            provider._layers("https://example.com/other")
+
+        assert first == second == layers
+        assert mock_fetch.call_count == 2
+        assert [call[0][0] for call in mock_fetch.call_args_list] == [
+            ENDPOINT,
+            "https://example.com/other",
         ]
 
-    def test_1m_evrf2007_layers(self):
-        """1m/EVRF2007 matches SkorowidzeUkladEVRF2007 GetCapabilities."""
-        assert GugikProvider.WMS_LAYERS["1m"]["EVRF2007"] == [
+    @pytest.mark.real_wms_layers
+    def test_failure_is_not_memoized(self):
+        """Po DownloadError kolejne wywolanie probuje ponownie i moze sie udac."""
+        provider = GugikProvider()
+
+        with patch.object(
+            provider,
+            "_fetch_wms_layers",
+            side_effect=[DownloadError("x"), ["SkorowidzeNMT2026"]],
+        ) as mock_fetch:
+            with pytest.raises(DownloadError):
+                provider._layers(ENDPOINT)
+            result = provider._layers(ENDPOINT)
+
+        assert result == ["SkorowidzeNMT2026"]
+        assert mock_fetch.call_count == 2
+
+    @pytest.mark.real_wms_layers
+    def test_lock_serializes_concurrent_discovery(self):
+        """Cztery watki naraz -> dokladnie jedno GetCapabilities, wspolny wynik."""
+        provider = GugikProvider()
+        calls: list[str] = []
+
+        def slow_fetch(endpoint, timeout=10):
+            calls.append(endpoint)
+            time.sleep(0.05)
+            return ["SkorowidzeNMT2026", "SkorowidzeNMT2025iStarsze"]
+
+        with (
+            patch.object(provider, "_fetch_wms_layers", side_effect=slow_fetch),
+            ThreadPoolExecutor(max_workers=4) as pool,
+        ):
+            results = list(pool.map(lambda _: provider._layers(ENDPOINT), range(4)))
+
+        assert calls == [ENDPOINT]
+        assert results == [["SkorowidzeNMT2026", "SkorowidzeNMT2025iStarsze"]] * 4
+
+    @pytest.mark.real_wms_layers
+    def test_get_opendata_url_fails_before_get_feature_info(self):
+        """Porazka odkrywania warstw przewraca zapytanie bez GetFeatureInfo."""
+        session = _make_session(_make_mock_response(render_gfi_body([])))
+        provider = GugikProvider(session=session)
+
+        with (
+            patch.object(
+                provider,
+                "_fetch_wms_layers",
+                side_effect=DownloadError("GetCapabilities down"),
+            ),
+            pytest.raises(DownloadError, match="GetCapabilities down"),
+        ):
+            provider._get_opendata_url(GODLO)
+
+        session.get.assert_not_called()
+
+    def test_get_opendata_url_queries_layers_newest_first(self):
+        """Puste odpowiedzi -> kazda warstwa z _layers po kolei, NoCoverageError."""
+        session = _make_session(_make_mock_response(render_gfi_body([])))
+        provider = GugikProvider(session=session)
+
+        with pytest.raises(NoCoverageError, match="Brak danych NMT 1m"):
+            provider._get_opendata_url(GODLO)
+
+        urls = [call[0][0] for call in session.get.call_args_list]
+        assert all(url.startswith(f"{NMT_1M_EVRF2007}?") for url in urls)
+        assert [_layer_of(url) for url in urls] == provider._layers(NMT_1M_EVRF2007)
+        assert [_layer_of(url) for url in urls] == [
             "SkorowidzeNMT2026",
             "SkorowidzeNMT2025",
             "SkorowidzeNMT2024",
             "SkorowidzeNMT2023iStarsze",
         ]
 
-    def test_5m_evrf2007_layers(self):
-        """5m/EVRF2007 matches SheetsGrid5mEVRF2007 GetCapabilities.
 
-        The 5m skorowidze endpoint has NOT been rolled forward to 2026 — it
-        still serves the older roczniki, so this list intentionally differs
-        from the 1m/EVRF2007 list above.
-        """
-        assert GugikProvider.WMS_LAYERS["5m"]["EVRF2007"] == [
-            "SkorowidzeNMT2025",
-            "SkorowidzeNMT2024",
-            "SkorowidzeNMT2023",
-            "SkorowidzeNMT2022iStarsze",
+# ===========================================================================
+# TestNmptLayerPattern
+# ===========================================================================
+
+
+class TestNmptLayerPattern:
+    """GugikNmptProvider odkrywa warstwy wlasnym wzorcem SkorowidzeNMPT*."""
+
+    def test_pattern_accepts_only_nmpt_names(self):
+        assert GugikNmptProvider.LAYER_PATTERN.fullmatch("SkorowidzeNMPT2026")
+        assert GugikNmptProvider.LAYER_PATTERN.fullmatch("SkorowidzeNMPT2023iStarsze")
+        assert GugikNmptProvider.LAYER_PATTERN.fullmatch("SkorowidzeNMT2026") is None
+        assert GugikProvider.LAYER_PATTERN.fullmatch("SkorowidzeNMPT2026") is None
+
+    @pytest.mark.real_wms_layers
+    def test_fetch_wms_layers_returns_only_nmpt(self):
+        """GetCapabilities z warstwami obu produktow -> tylko NMPT, posortowane."""
+        session = _make_session(_make_mock_response(WMS_XML_NMT_AND_NMPT))
+        provider = GugikNmptProvider(session=session)
+
+        result = provider._fetch_wms_layers(ENDPOINT, timeout=10)
+
+        assert result == [
+            "SkorowidzeNMPT2026",
+            "SkorowidzeNMPT2025",
+            "SkorowidzeNMPT2024iStarsze",
         ]
 
-    def test_5m_differs_from_1m_evrf2007(self):
-        """The 5m and 1m EVRF2007 lists diverge (5m lags behind)."""
-        assert (
-            GugikProvider.WMS_LAYERS["5m"]["EVRF2007"]
-            != GugikProvider.WMS_LAYERS["1m"]["EVRF2007"]
-        )
-
-    def test_layers_ordered_newest_first(self):
-        """Every hardcoded list is ordered newest → oldest (iStarsze last)."""
-
-        def sort_key(name):
-            year = int(re.search(r"(\d{4})", name).group(1))
-            return (1, -year) if "iStarsze" in name else (0, -year)
-
-        for crs_layers in GugikProvider.WMS_LAYERS.values():
-            for layers in crs_layers.values():
-                assert layers == sorted(layers, key=sort_key)
-
 
 # ===========================================================================
-# TestGetValidatedLayers
-# ===========================================================================
-
-
-class TestGetValidatedLayers:
-    """Tests for GugikProvider._get_validated_layers()."""
-
-    def test_returns_discovered_layers_on_mismatch(self):
-        """Discovered layers are used on mismatch, with warning."""
-        provider = _make_provider()
-        # A hypothetical future roczniki set that differs from the hardcoded
-        # 1m/EVRF2007 list, so the mismatch branch (warn + use discovered)
-        # is exercised regardless of the current hardcoded values.
-        discovered = [
-            "SkorowidzeNMT2027",
-            "SkorowidzeNMT2026",
-            "SkorowidzeNMT2025",
-            "SkorowidzeNMT2024iStarsze",
-        ]
-        assert set(discovered) != set(GugikProvider.WMS_LAYERS["1m"]["EVRF2007"])
-
-        with (
-            patch.object(provider, "_fetch_wms_layers", return_value=discovered),
-            patch("kartograf.providers.pl.gugik.logger") as mock_logger,
-        ):
-            result = provider._get_validated_layers("1m", "EVRF2007")
-
-        assert result == discovered
-        mock_logger.warning.assert_called_once()
-        # The warning message should mention the mismatch
-        warning_msg = mock_logger.warning.call_args[0][0]
-        assert "layer" in warning_msg.lower() or "different" in warning_msg.lower()
-
-    def test_returns_hardcoded_on_match(self):
-        """Hardcoded layers used when WMS matches, no warning."""
-        provider = _make_provider()
-        hardcoded = list(GugikProvider.WMS_LAYERS["1m"]["EVRF2007"])
-
-        with (
-            patch.object(provider, "_fetch_wms_layers", return_value=hardcoded),
-            patch("kartograf.providers.pl.gugik.logger") as mock_logger,
-        ):
-            result = provider._get_validated_layers("1m", "EVRF2007")
-
-        assert result == hardcoded
-        mock_logger.warning.assert_not_called()
-
-    def test_falls_back_on_network_error(self):
-        """On network error, hardcoded layers are returned with a warning."""
-        provider = _make_provider()
-        hardcoded = list(GugikProvider.WMS_LAYERS["1m"]["EVRF2007"])
-
-        with (
-            patch.object(
-                provider,
-                "_fetch_wms_layers",
-                side_effect=requests.ConnectionError("timeout"),
-            ),
-            patch("kartograf.providers.pl.gugik.logger") as mock_logger,
-        ):
-            result = provider._get_validated_layers("1m", "EVRF2007")
-
-        assert result == hardcoded
-        mock_logger.warning.assert_called_once()
-
-    def test_falls_back_on_valueerror(self):
-        """On ValueError (no Skorowidze layers found), hardcoded layers are returned."""
-        provider = _make_provider()
-        hardcoded = list(GugikProvider.WMS_LAYERS["1m"]["EVRF2007"])
-
-        with (
-            patch.object(
-                provider,
-                "_fetch_wms_layers",
-                side_effect=ValueError("No Skorowidze layers"),
-            ),
-            patch("kartograf.providers.pl.gugik.logger") as mock_logger,
-        ):
-            result = provider._get_validated_layers("1m", "EVRF2007")
-
-        assert result == hardcoded
-        mock_logger.warning.assert_called_once()
-
-    def test_caches_result(self):
-        """Second call uses cache; _fetch_wms_layers called once."""
-        provider = _make_provider()
-        hardcoded = list(GugikProvider.WMS_LAYERS["1m"]["EVRF2007"])
-
-        with patch.object(
-            provider, "_fetch_wms_layers", return_value=hardcoded
-        ) as mock_fetch:
-            result1 = provider._get_validated_layers("1m", "EVRF2007")
-            result2 = provider._get_validated_layers("1m", "EVRF2007")
-
-        assert result1 == result2
-        mock_fetch.assert_called_once()
-
-    def test_falls_back_when_endpoint_not_found(self):
-        """Unknown resolution/crs combo returns hardcoded fallback silently."""
-        provider = _make_provider()
-
-        # "5m" + "KRON86" has no entry in WMS_SKOROWIDZE_ENDPOINTS
-        # The method should return hardcoded or handle gracefully
-        # Since there's no hardcoded entry for 5m/KRON86 either, we test
-        # with a valid hardcoded combo but missing endpoint.
-        with (
-            patch.dict(provider.WMS_SKOROWIDZE_ENDPOINTS, {"5m": {}}, clear=False),
-            patch("kartograf.providers.pl.gugik.logger"),
-        ):
-            # 5m/KRON86 has no endpoint AND no hardcoded layers
-            # _get_validated_layers should handle this without raising
-            try:
-                result = provider._get_validated_layers("5m", "KRON86")
-                # If it returns something, it should be a list (possibly empty
-                # or the hardcoded fallback)
-                assert isinstance(result, list)
-            except (KeyError, ValueError):
-                # Also acceptable — the endpoint doesn't exist
-                pass
-
-
-# ===========================================================================
-# TestGetValidatedLayersIntegration
-# ===========================================================================
-
-
-class TestGetValidatedLayersIntegration:
-    """Integration tests for _get_validated_layers with _get_opendata_url."""
-
-    def test_get_opendata_url_uses_validated_layers(self):
-        """_get_opendata_url uses _get_validated_layers."""
-        mock_session = MagicMock()
-
-        # WMS GetFeatureInfo response with OpenData URL
-        mock_wms_response = MagicMock()
-        mock_wms_response.status_code = 200
-        mock_wms_response.text = (
-            '<html><script>var data = {url:"https://opendata.geoportal.gov.pl'
-            '/NumDaneWys/NMT/12345/12345_N-34-130-D-d-2-4.asc"};'
-            "</script></html>"
-        )
-        mock_wms_response.raise_for_status = MagicMock()
-        mock_session.get.return_value = mock_wms_response
-
-        provider = GugikProvider(session=mock_session)
-
-        custom_layers = ["SkorowidzeNMT2026", "SkorowidzeNMT2025"]
-
-        with patch.object(
-            provider, "_get_validated_layers", return_value=custom_layers
-        ) as mock_validated:
-            url = provider._get_opendata_url("N-34-130-D-d-2-4")
-
-        # _get_validated_layers should have been called
-        mock_validated.assert_called_once()
-
-        # The URL found should be from OpenData
-        assert "opendata.geoportal.gov.pl" in url
-
-
-# ===========================================================================
-# TestNmptInheritsValidation
-# ===========================================================================
-
-
-class TestNmptInheritsValidation:
-    """Tests that GugikNmptProvider inherits WMS validation correctly."""
-
-    def test_nmpt_provider_uses_validation(self):
-        """NMPT provider calls _fetch_wms_layers with the NMPT WMS endpoint."""
-        provider = GugikNmptProvider()
-
-        # NMPT EVRF2007 endpoint
-        expected_endpoint = GugikNmptProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"]
-        nmpt_layers = list(GugikNmptProvider.WMS_LAYERS["1m"]["EVRF2007"])
-
-        with patch.object(
-            provider, "_fetch_wms_layers", return_value=nmpt_layers
-        ) as mock_fetch:
-            provider._get_validated_layers("1m", "EVRF2007")
-
-        mock_fetch.assert_called_once()
-        call_args = mock_fetch.call_args
-        # First positional arg should be the NMPT endpoint
-        called_endpoint = call_args[0][0]
-        assert "NMPT" in called_endpoint
-        assert called_endpoint == expected_endpoint
-
-
-# ===========================================================================
-# TestLayerSorting
+# TestOrtoLayerValidation
 # ===========================================================================
 
 
@@ -613,51 +522,3 @@ class TestOrtoLayerValidation:
             provider._get_validated_layers()
 
         mock_fetch.assert_called_once()
-
-
-@pytest.mark.real_wms_layers
-class TestLayerSorting:
-    """Tests for the layer sorting logic used in _fetch_wms_layers."""
-
-    def test_sort_with_istarsze_last(self):
-        """iStarsze layers sort after regular year layers."""
-        xml = """\
-<?xml version="1.0" encoding="UTF-8"?>
-<WMS_Capabilities xmlns="http://www.opengis.net/wms" version="1.3.0">
-  <Capability><Layer><Layer>
-    <Name>SkorowidzeNMT2022iStarsze</Name>
-  </Layer><Layer>
-    <Name>SkorowidzeNMT2025</Name>
-  </Layer><Layer>
-    <Name>SkorowidzeNMT2023</Name>
-  </Layer></Layer></Capability>
-</WMS_Capabilities>
-"""
-        mock_session = MagicMock()
-        mock_session.get.return_value = _make_mock_response(xml)
-        provider = _make_provider()
-
-        with patch(_SESSION_PATCH, return_value=mock_session):
-            result = provider._fetch_wms_layers("https://example.com/wms")
-
-        assert result == [
-            "SkorowidzeNMT2025",
-            "SkorowidzeNMT2023",
-            "SkorowidzeNMT2022iStarsze",
-        ]
-
-    def test_sort_layers_without_year(self):
-        """Layer names without a 4-digit year sort last (year=0)."""
-        mock_session = MagicMock()
-        mock_session.get.return_value = _make_mock_response(WMS_XML_WITH_NO_YEAR_LAYER)
-        provider = _make_provider()
-
-        with patch(_SESSION_PATCH, return_value=mock_session):
-            result = provider._fetch_wms_layers("https://example.com/wms")
-
-        # Year-bearing layers first (descending), no-year layer last
-        assert result == [
-            "SkorowidzeNMT2025",
-            "SkorowidzeNMT2023",
-            "SkorowidzeNMTNajnowsze",
-        ]

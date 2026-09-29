@@ -26,34 +26,26 @@ from urllib.parse import urlencode
 
 import requests
 
-from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.exceptions import (
+    DownloadError,
+    NoCoverageError,
+    ParseError,
+    ValidationError,
+)
 from kartograf.providers.base import BaseProvider
+from kartograf.providers.pl.skorowidz import (
+    SkorowidzRecord,
+    SourceInfoMixin,
+    query_skorowidz_layer,
+    select_sheet_record,
+)
+from kartograf.transport.http import get_with_retry, make_gugik_session
 
 logger = logging.getLogger(__name__)
 
-# Znaczniki raportu wyjatku OGC: WMS (<ServiceExceptionReport>) i OWS
-# (<ows:ExceptionReport>) — wielkosc liter jak w schematach OGC.
-_OGC_EXCEPTION_MARKERS = ("ServiceException", "ExceptionReport")
-# Tresc pierwszego elementu z komunikatem: <ServiceException code="..."> (WMS)
-# albo <ows:ExceptionText> (OWS); \b odrzuca korzen <ServiceExceptionReport>.
-_OGC_EXCEPTION_TEXT = re.compile(
-    r"<(?:\w+:)?(?:ServiceException|ExceptionText)\b[^>]*>(.*?)</", re.DOTALL
-)
 
-
-def _ogc_exception_excerpt(text: str, limit: int = 200) -> str:
-    """Krotki, jednoliniowy wyciag raportu wyjatku OGC do komunikatu bledu.
-
-    Komunikat elementu wyjatku, a nie poczatek dokumentu: pierwsze ~200 znakow
-    raportu MapServera to sama deklaracja XML i przestrzenie nazw.
-    """
-    match = _OGC_EXCEPTION_TEXT.search(text)
-    excerpt = match.group(1) if match and match.group(1).strip() else text
-    return " ".join(excerpt.split())[:limit]
-
-
-class GugikProvider(BaseProvider):
+class GugikProvider(SourceInfoMixin, BaseProvider):
     """
     Provider for downloading NMT data from GUGiK.
 
@@ -122,35 +114,8 @@ class GugikProvider(BaseProvider):
         },
     }
 
-    # Layers to query for ASC files (by resolution and vertical CRS)
-    # Ordered from newest to oldest
-    WMS_LAYERS = {
-        "1m": {
-            "KRON86": [
-                "SkorowidzeNMT2019",
-                "SkorowidzeNMT2018",
-                "SkorowidzeNMT2017iStarsze",
-            ],
-            "EVRF2007": [
-                "SkorowidzeNMT2026",
-                "SkorowidzeNMT2025",
-                "SkorowidzeNMT2024",
-                "SkorowidzeNMT2023iStarsze",
-            ],
-        },
-        "5m": {
-            # 5m layers (only EVRF2007)
-            # Note: the 5m skorowidze endpoint (SheetsGrid5mEVRF2007) still
-            # serves the older roczniki — it has NOT been rolled forward to
-            # 2026 like the 1m EVRF2007 endpoint. Verified via GetCapabilities.
-            "EVRF2007": [
-                "SkorowidzeNMT2025",
-                "SkorowidzeNMT2024",
-                "SkorowidzeNMT2023",
-                "SkorowidzeNMT2022iStarsze",
-            ],
-        },
-    }
+    # Nazwy warstw skorowidza tego produktu: grupa 1 = rok, grupa 2 = zbiorcza
+    LAYER_PATTERN = re.compile(r"^SkorowidzeNMT(\d{4})(iStarsze)?$")
 
     # Vertical CRS whose WCS endpoint GUGiK withdrew (HTTP 404 since 2026-08,
     # docs/PROGRESS.md). Applies to the NMT GRID1 endpoints declared above;
@@ -235,11 +200,14 @@ class GugikProvider(BaseProvider):
                     f"Supported: {self.SUPPORTED_VERTICAL_CRS}"
                 )
 
+        super().__init__()
+        self._local = threading.local()
+        self._layers_lock = threading.Lock()
         self._session = session
         self._vertical_crs = vertical_crs
         self._resolution = resolution
         self._cache = cache
-        self._validated_layers: dict[tuple[str, str], list[str]] = {}
+        self._validated_layers: dict[str, list[str]] = {}
         self.descriptor_key = f"pl.gugik.nmt_{resolution}"
 
     @property
@@ -271,129 +239,50 @@ class GugikProvider(BaseProvider):
     # WMS layer validation
     # =========================================================================
 
+    def _session_for_thread(self) -> requests.Session:
+        """Jedna sesja na watek albo sesja powierzona przez wolajacego."""
+        if self._session is not None:
+            return self._session
+        if not hasattr(self._local, "session"):
+            self._local.session = make_gugik_session()
+        return self._local.session
+
     def _fetch_wms_layers(self, wms_endpoint: str, timeout: int = 10) -> list[str]:
-        """
-        Fetch available Skorowidze layers from WMS GetCapabilities.
-
-        Parameters
-        ----------
-        wms_endpoint : str
-            WMS endpoint URL
-        timeout : int, optional
-            Request timeout in seconds (default: 10)
-
-        Returns
-        -------
-        list[str]
-            Sorted list of Skorowidze layer names (newest first,
-            iStarsze layers last)
-
-        Raises
-        ------
-        ValueError
-            If no Skorowidze layers found in response
-        requests.RequestException
-            On network errors
-        """
-        # Use a dedicated session to avoid interfering with the main
-        # session's mock side_effects in tests or download state
-        session = requests.Session()
-        params = {
-            "SERVICE": "WMS",
-            "VERSION": "1.3.0",
-            "REQUEST": "GetCapabilities",
-        }
-        response = session.get(wms_endpoint, params=params, timeout=timeout)
-        response.raise_for_status()
-
-        root = ET.fromstring(response.text)
-
-        # Try WMS 1.3.0 namespace first, fall back to namespace-less
-        wms_ns = "{http://www.opengis.net/wms}"
-        names = [elem.text for elem in root.iter(f"{wms_ns}Name") if elem.text]
-        if not names:
-            names = [elem.text for elem in root.iter("Name") if elem.text]
-
-        # Filter to Skorowidze layers
-        skorowidze = [n for n in names if n.startswith("Skorowidze")]
-
-        if not skorowidze:
-            raise ValueError("No Skorowidze layers found in GetCapabilities response")
-
-        # Sort: regular entries by year descending first,
-        # then iStarsze by year descending, then entries without year
-        def sort_key(name: str) -> tuple[int, int]:
-            year_match = re.search(r"(\d{4})", name)
-            if not year_match:
-                return (2, 0)
-            year = int(year_match.group(1))
-            if "iStarsze" in name:
-                return (1, -year)
-            return (0, -year)
-
-        skorowidze.sort(key=sort_key)
-
-        return skorowidze
-
-    def _get_validated_layers(
-        self, resolution: str, vertical_crs: str, timeout: int = 10
-    ) -> list[str]:
-        """
-        Get validated WMS layers, checking GetCapabilities against hardcoded.
-
-        Results are cached per (resolution, vertical_crs) pair for the
-        lifetime of this provider instance.
-
-        Parameters
-        ----------
-        resolution : str
-            Grid resolution ("1m" or "5m")
-        vertical_crs : str
-            Vertical CRS ("KRON86" or "EVRF2007")
-        timeout : int, optional
-            Request timeout for GetCapabilities (default: 10)
-
-        Returns
-        -------
-        list[str]
-            List of WMS layer names to query
-        """
-        cached = self._validated_layers.get((resolution, vertical_crs))
-        if cached is not None:
-            return cached
-
-        hardcoded = self.WMS_LAYERS.get(resolution, {}).get(vertical_crs, [])
-
-        resolution_endpoints = self.WMS_SKOROWIDZE_ENDPOINTS.get(resolution, {})
-        wms_endpoint = resolution_endpoints.get(vertical_crs)
-
-        if not wms_endpoint:
-            self._validated_layers[(resolution, vertical_crs)] = hardcoded
-            return hardcoded
-
+        """Odkryj warstwy produktu; blad uslugi nie ma zaszytego fallbacku."""
+        params = {"SERVICE": "WMS", "VERSION": "1.3.0", "REQUEST": "GetCapabilities"}
+        response = get_with_retry(
+            self._session_for_thread(),
+            f"{wms_endpoint}?{urlencode(params)}",
+            timeout=timeout,
+            description=f"GUGiK WMS GetCapabilities {wms_endpoint}",
+        )
         try:
-            discovered = self._fetch_wms_layers(wms_endpoint, timeout)
-
-            if set(discovered) != set(hardcoded):
-                logger.warning(
-                    f"WMS GetCapabilities returned different layers than hardcoded for "
-                    f"resolution={resolution}, vertical_crs={vertical_crs}. "
-                    f"Hardcoded: {hardcoded}. Discovered: {discovered}. "
-                    f"Using discovered layers. Consider updating WMS_LAYERS in code."
-                )
-                self._validated_layers[(resolution, vertical_crs)] = discovered
-                return discovered
-
-            self._validated_layers[(resolution, vertical_crs)] = hardcoded
-            return hardcoded
-
-        except (requests.RequestException, ValueError, ET.ParseError) as e:
-            logger.warning(
-                f"Failed to fetch WMS GetCapabilities from {wms_endpoint}: {e}. "
-                f"Using hardcoded WMS_LAYERS as fallback."
+            root = ET.fromstring(response.text)
+        except ET.ParseError as exc:
+            raise DownloadError(
+                f"GUGiK WMS GetCapabilities {wms_endpoint}: nieprawidlowy XML: {exc}"
+            ) from exc
+        # {nazwa: (rok, zbiorcza "iStarsze")} — od najnowszej, zbiorcza na koncu
+        layers: dict[str, tuple[int, bool]] = {}
+        for elem in root.iter():
+            if elem.tag.rsplit("}", 1)[-1] != "Name" or not elem.text:
+                continue
+            match = self.LAYER_PATTERN.fullmatch(elem.text)
+            if match:
+                layers[elem.text] = (int(match[1]), match[2] is not None)
+        if not layers:
+            raise DownloadError(
+                f"GUGiK WMS GetCapabilities {wms_endpoint}: "
+                "endpoint nie publikuje warstw skorowidza dla tego produktu"
             )
-            self._validated_layers[(resolution, vertical_crs)] = hardcoded
-            return hardcoded
+        return sorted(layers, key=lambda name: (layers[name][1], -layers[name][0]))
+
+    def _layers(self, endpoint: str) -> list[str]:
+        """Memoizuj tylko sukces, raz na endpoint; zapytania chroni lock."""
+        with self._layers_lock:
+            if endpoint not in self._validated_layers:
+                self._validated_layers[endpoint] = self._fetch_wms_layers(endpoint)
+            return self._validated_layers[endpoint]
 
     # =========================================================================
     # Download by godło → OpenData (ASC)
@@ -432,19 +321,13 @@ class GugikProvider(BaseProvider):
             none of them has the sheet, i.e. the source has no data for this
             godlo (sea, the Czech side of a border bbox, gaps in 1m coverage).
             An OGC exception report in a response is not an answer (see
-            ``_get_opendata_url``). ``DownloadManager`` records such sheets in
+            ``_resolve_sheet``). ``DownloadManager`` records such sheets in
             ``DownloadResult.no_coverage`` and the PL cutout fills them with
             nodata (ADR-027).
         DownloadError
-            If the skorowidz lookup fails (every layer query failed: service
-            unavailable; or some failed and the rest have no sheet: coverage
-            uncertain, not absent) or the ASC download still fails after all
-            retries
-
-        Notes
-        -----
-        Which file lands under ``godlo`` is decided by ``_get_opendata_url`` —
-        see its Notes for the known bugs of that choice (K3, K4, S1).
+            If any skorowidz layer query fails after retries, its answer is
+            invalid, or the ASC download fails after retries. An older campaign
+            is never substituted after a failed query.
 
         Examples
         --------
@@ -452,237 +335,108 @@ class GugikProvider(BaseProvider):
         >>> path = provider.download("N-34-130-D-d-2-4", Path("./data/sheet.asc"))
         """
         output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Get OpenData URL via WMS GetFeatureInfo
-        opendata_url = self._get_opendata_url(godlo, timeout)
+        record = self._resolve_sheet(godlo, timeout)
 
         return self._download_with_retry(
-            url=opendata_url,
+            url=record.url,
             output_path=output_path,
             timeout=timeout,
             description=f"{godlo} (OpenData)",
         )
 
-    def _get_opendata_url(
-        self,
-        godlo: str,
-        timeout: int = DEFAULT_TIMEOUT,
-    ) -> str:
-        """
-        Get OpenData URL for ASC file using WMS GetFeatureInfo.
+    def _get_opendata_url(self, godlo: str, timeout: int = DEFAULT_TIMEOUT) -> str:
+        """Zwroc URL scisle dopasowanego, najnowszego rekordu skorowidza."""
+        return self._resolve_sheet(godlo, timeout).url
 
-        Parameters
-        ----------
-        godlo : str
-            Map sheet identifier
-        timeout : int, optional
-            Request timeout in seconds
-
-        Returns
-        -------
-        str
-            OpenData URL for the ASC file
-
-        Raises
-        ------
-        NoCoverageError
-            If every skorowidz layer answered and none of them has the sheet
-            (the source has no data for this godlo). A response without an
-            OpenData URL whose body carries an OGC exception report
-            (``ServiceException``/``ExceptionReport``) is not an answer: it
-            counts as a failed query of that layer, like a transport error.
-        DownloadError
-            If every skorowidz layer query failed (transport error or OGC
-            exception report: service unavailable), or if only some layers
-            answered and the rest have no data for the sheet (coverage is
-            then uncertain, not absent)
-
-        Notes
-        -----
-        Layers are queried newest first, one request per layer, without
-        retries and — unless a ``session`` was injected — on a fresh
-        ``requests.Session`` per call. Known bugs (live tests 2026-09-29,
-        docs/PROGRESS.md "Znane bledy"; not intended behaviour):
-
-        - K3: if a newer layer query fails and an older layer has the sheet,
-          the older edition's URL is returned (only a log warning);
-        - K4: the first URL containing ``godlo`` as a substring wins,
-          regardless of resolution (0.5 m files sit in the 1 m index),
-          campaign date or coverage, and a URL without ``godlo`` is accepted
-          as a fallback (e.g. a PL-2000 sheet under a PL-1992 godlo);
-        - S1: no per-layer retry and no shared session.
-        """
-        # Check cache first
-        if self._cache is not None:
-            cached_url = self._cache.get_url(
-                godlo, self._resolution, self._vertical_crs, self._CACHE_PRODUCT
-            )
-            if cached_url is not None:
-                logger.debug(f"Using cached URL for {godlo}")
-                return cached_url
-
-        from kartograf.core.sheet_parser import SheetParser
-
+    def _resolve_sheet(
+        self, godlo: str, timeout: int = DEFAULT_TIMEOUT
+    ) -> SkorowidzRecord:
+        """Cache -> warstwy od najnowszej -> twardy filtr -> najnowsza kampania."""
         parser = SheetParser(godlo)
-        bbox = parser.get_bbox(crs="EPSG:2180")
-
-        # Query point at center of the sheet
-        center_x = (bbox.min_x + bbox.max_x) / 2
-        center_y = (bbox.min_y + bbox.max_y) / 2
-
-        # Small bbox around center (WMS 1.3.0 with EPSG:2180 uses y,x order)
-        buffer = 10
-        query_bbox = (
-            f"{center_y - buffer},{center_x - buffer},"
-            f"{center_y + buffer},{center_x + buffer}"
-        )
-
-        session = self._session or requests.Session()
-
-        # Get WMS endpoint and layers for current resolution and vertical CRS
-        resolution_endpoints = self.WMS_SKOROWIDZE_ENDPOINTS.get(self._resolution, {})
-        wms_endpoint = resolution_endpoints.get(self._vertical_crs)
-
-        if not wms_endpoint:
-            raise DownloadError(
-                f"No WMS endpoint available for resolution={self._resolution}, "
-                f"vertical_crs={self._vertical_crs}. "
-                f"5m resolution is only available for EVRF2007.",
-                godlo=godlo,
-            )
-
-        wms_layers = self._get_validated_layers(self._resolution, self._vertical_crs)
-
-        if not wms_layers:
-            raise DownloadError(
-                f"No WMS layers configured for resolution={self._resolution}, "
-                f"vertical_crs={self._vertical_crs}.",
-                godlo=godlo,
-            )
-
-        # Transport failures are counted separately from "layer answered but
-        # has no data": all-failed means the service is down, not that the
-        # sheet has no coverage
-        transport_errors = 0
-        last_error: Exception | None = None
-
-        # Try each layer from newest to oldest
-        for layer in wms_layers:
-            params = {
-                "SERVICE": "WMS",
-                "VERSION": "1.3.0",
-                "REQUEST": "GetFeatureInfo",
-                "LAYERS": layer,
-                "QUERY_LAYERS": layer,
-                "INFO_FORMAT": "text/html",
-                "CRS": "EPSG:2180",
-                "BBOX": query_bbox,
-                "WIDTH": 100,
-                "HEIGHT": 100,
-                "I": 50,
-                "J": 50,
-            }
-
-            try:
-                url = f"{wms_endpoint}?{urlencode(params)}"
-                logger.debug(
-                    f"Querying WMS for {godlo} on layer {layer} "
-                    f"(resolution={self._resolution})"
-                )
-
-                response = session.get(url, timeout=timeout)
-                response.raise_for_status()
-                text = response.text
-
-                # Parse HTML for OpenData URL pattern
-                urls = re.findall(
-                    r'url:"(https://opendata[^"]+\.asc)"',
-                    text,
-                )
-
-                if urls:
-                    # Prefer URL containing our godło
-                    for found_url in urls:
-                        if godlo in found_url:
-                            logger.debug(f"Found OpenData URL: {found_url}")
-                            self._cache_url(godlo, found_url)
-                            return found_url
-
-                    # Fallback: URL bez tego godla. Dla nowszych kampanii bywa to
-                    # arkusz PL-2000 (inny zasieg i uklad), zapisywany pod godlem
-                    # PL-1992 — wycinek --target-crs odrzuca taki arkusz glosno
-                    # (plan 2026-09-28, fakt 7), lista arkuszy przyjmuje go bez zmian
-                    # (znany blad K4, testy na zywo 2026-09-29).
-                    logger.warning(
-                        f"{godlo}: skorowidz zwrocil URL innego arkusza ({urls[0]}) "
-                        "— plik moze byc innym arkuszem, np. w ukladzie PL-2000"
-                    )
-                    self._cache_url(godlo, urls[0])
-                    return urls[0]
-
-                # Brak URL + raport wyjatku OGC (MapServer odpowiada nim z HTTP
-                # 200, np. LayerNotDefined dla nieaktualnej nazwy warstwy, gdy
-                # GetCapabilities sie nie udal) to porazka zapytania tej warstwy,
-                # nie "warstwa odpowiedziala i nie ma arkusza": pod R5 chwilowy
-                # blad albo zla nazwa warstwy zostawilyby trwala dziure nodata.
-                # Straz tylko negatywna — strona bledu z 200 BEZ znacznikow OGC
-                # liczy sie dalej jako brak arkusza. Na zywo (2026-09-29):
-                # pusta odpowiedz = szablon HTML MapServera (200, text/html) bez
-                # znacznikow OGC, zla warstwa = 200 text/xml z LayerNotDefined.
-                if any(marker in text for marker in _OGC_EXCEPTION_MARKERS):
-                    transport_errors += 1
-                    last_error = DownloadError(
-                        f"warstwa {layer}: raport wyjatku OGC w odpowiedzi "
-                        f"HTTP {response.status_code}: {_ogc_exception_excerpt(text)}",
-                        godlo=godlo,
-                    )
-                    logger.warning(f"WMS query failed for layer {layer}: {last_error}")
-                    continue
-
-            except requests.RequestException as e:
-                transport_errors += 1
-                last_error = e
-                logger.warning(f"WMS query failed for layer {layer}: {e}")
-                continue
-
-        if transport_errors == len(wms_layers):
-            raise DownloadError(  # bez zmian: cala usluga niedostepna
-                f"GUGiK WMS skorowidz unavailable for {godlo}: "
-                f"all {transport_errors} layer queries failed "
-                f"(last error: {last_error})",
-                godlo=godlo,
-            )
-
-        if transport_errors:
-            # Czesc warstw nie odpowiedziala — arkusz moze lezec wlasnie w nich.
-            # To NIE jest brak pokrycia: wycinek potraktowalby go jako nodata
-            # i chwilowa awaria zostawilaby trwala dziure (R5).
-            raise DownloadError(
-                f"GUGiK WMS skorowidz: {transport_errors} z {len(wms_layers)} "
-                f"warstw nie odpowiedzialo dla {godlo}, pozostale nie maja "
-                f"arkusza — brak pokrycia niepewny (ostatni blad: {last_error})",
-                godlo=godlo,
-            )
-
-        raise NoCoverageError(
-            f"No NMT {self._resolution} data available for {godlo} "
-            f"(vertical_crs={self._vertical_crs}). "
-            f"This area may not have {self._resolution} coverage in GUGiK. "
-            f"Check https://mapy.geoportal.gov.pl for data availability.",
-            godlo=godlo,
-        )
-
-    def _cache_url(self, godlo: str, url: str) -> None:
-        """Store URL in cache if cache is available."""
+        godlo = parser.godlo
+        cache_key = (self._CACHE_PRODUCT, self._resolution, self._vertical_crs, godlo)
         if self._cache is not None:
-            self._cache.set_url(
-                godlo,
-                self._resolution,
-                self._vertical_crs,
-                self._CACHE_PRODUCT,
-                url,
+            cached = self._cache.get_record(*cache_key)
+            if cached is not None:
+                if cached.get("no_coverage"):
+                    raise self._no_coverage(parser, [])
+                source = cached["source"]
+                self._remember_source(godlo, source)
+                return SkorowidzRecord.from_source(source)
+
+        endpoint = self.WMS_SKOROWIDZE_ENDPOINTS.get(self._resolution, {}).get(
+            self._vertical_crs
+        )
+        if endpoint is None:
+            raise DownloadError(
+                f"Brak endpointu WMS dla {self._resolution}, {self._vertical_crs}",
+                godlo=godlo,
             )
+        layers = self._layers(endpoint)
+        bbox = parser.get_bbox(crs="EPSG:2180")
+        x = (bbox.min_x + bbox.max_x) / 2
+        y = (bbox.min_y + bbox.max_y) / 2
+        query_bbox = f"{y - 10},{x - 10},{y + 10},{x + 10}"
+        rejected = []
+        for layer in layers:
+            records = query_skorowidz_layer(
+                self._session_for_thread(),
+                endpoint,
+                layer,
+                query_bbox=query_bbox,
+                godlo=godlo,
+                timeout=timeout,
+                retries=self.MAX_RETRIES,
+            )
+            chosen = select_sheet_record(
+                records,
+                godlo=godlo,
+                uklad=parser.uklad,
+                zone=int(godlo.split(".")[0]) if parser.uklad == "2000" else None,
+                resolution_m=float(self._resolution[:-1]),
+            )
+            if chosen is not None:
+                source = chosen.to_source(endpoint)
+                self._remember_source(godlo, source)
+                if self._cache is not None:
+                    self._cache.set_record(*cache_key, {"source": source})
+                return chosen
+            rejected.extend(records)
+        if self._cache is not None:
+            self._cache.set_record(*cache_key, {"no_coverage": True})
+        raise self._no_coverage(parser, rejected)
+
+    def _no_coverage(
+        self, parser: SheetParser, records: list[SkorowidzRecord]
+    ) -> NoCoverageError:
+        hints = set()
+        wanted_resolution = float(self._resolution[:-1])
+        for record in records:
+            if record.resolution_m != wanted_resolution:
+                if record.godlo == parser.godlo and record.resolution_m is not None:
+                    hints.add(
+                        f"GUGiK ma ten arkusz w {record.resolution_m:g} m — "
+                        f"Kartograf pobiera dokladnie {wanted_resolution:g} m"
+                    )
+                continue
+            if parser.uklad == "2000" and record.godlo.startswith(parser.godlo + "."):
+                scale = SheetParser(record.godlo).scale
+                hints.add(f"Dostepny potomek {record.godlo} — uzyj --scale {scale}")
+            elif record.uklad is not None and record.uklad != parser.uklad:
+                scale = SheetParser(record.godlo).scale
+                hints.add(
+                    f"Skorowidz ma ten obszar w PL-{record.uklad}: "
+                    f"{record.godlo} ({scale}) — uzyj tego godla lub "
+                    f"--system {record.uklad} --scale {scale}"
+                )
+        message = (
+            f"Brak danych {self._CACHE_PRODUCT.upper()} {self._resolution} dla "
+            f"{parser.godlo} (uklad PL-{parser.uklad}, {self._vertical_crs})"
+        )
+        if hints:
+            message += ". " + "; ".join(sorted(hints))
+        return NoCoverageError(message, godlo=parser.godlo)
 
     # =========================================================================
     # Download by bbox → WCS (GeoTIFF/PNG/JPEG)
@@ -775,7 +529,6 @@ class GugikProvider(BaseProvider):
             )
 
         output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         url = self._construct_wcs_url(bbox, format)
 
@@ -888,17 +641,8 @@ class GugikProvider(BaseProvider):
         )
 
     def _make_request(self, url: str, timeout: int) -> requests.Response:
-        """
-        Make HTTP GET request.
-
-        Thread-safety: When self._session is None (default), a new
-        requests.Session is created per call, making this method safe
-        for concurrent use from multiple threads. If a shared session
-        is provided via constructor, callers must ensure thread-safety
-        of that session externally.
-        """
-        session = self._session or requests.Session()
-        response = session.get(url, timeout=timeout, stream=True)
+        """Pobierz strumien na sesji watku (sesja wstrzyknieta: dba wolajacy)."""
+        response = self._session_for_thread().get(url, timeout=timeout, stream=True)
         response.raise_for_status()
         return response
 
@@ -909,6 +653,7 @@ class GugikProvider(BaseProvider):
         Uses a unique temp filename per process/thread to prevent
         collisions when multiple threads download concurrently.
         """
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         thread_id = threading.current_thread().ident
         temp_suffix = f"{output_path.suffix}.{os.getpid()}_{thread_id}.tmp"
         temp_path = output_path.with_suffix(temp_suffix)
@@ -964,9 +709,6 @@ class GugikProvider(BaseProvider):
 
     def validate_godlo(self, godlo: str) -> bool:
         """Validate godło format."""
-        from kartograf.core.sheet_parser import SheetParser
-        from kartograf.exceptions import ParseError
-
         try:
             SheetParser(godlo)
             return True
