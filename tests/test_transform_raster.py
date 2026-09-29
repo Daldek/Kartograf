@@ -298,3 +298,110 @@ class TestWarpToGrid:
                 src_crs="EPSG:4326",
                 nodata=_NODATA,
             )
+
+    def _flat_tif(
+        self, path, west, north, value, *, size=100, hole=None, crs="EPSG:2180"
+    ):
+        data = np.full((size, size), value, dtype="float32")
+        if hole is not None:
+            r0, r1, c0, c1 = hole
+            data[r0:r1, c0:c1] = _NODATA
+        with rasterio.open(
+            path,
+            "w",
+            driver="GTiff",
+            width=size,
+            height=size,
+            count=1,
+            dtype="float32",
+            crs=crs,
+            nodata=_NODATA,
+            transform=from_origin(west, north, 1.0, 1.0),
+        ) as dst:
+            dst.write(data, 1)
+        return path
+
+    def _grid_for(self, pinned, points):
+        """Siatka celu 5514 wokol obrazu bboxa 2180 (bez marginesu R-01 —
+        rogi moga byc nodata, testy patrza w srodek)."""
+        xs, ys = zip(*(pinned.transform(x, y) for x, y in points), strict=True)
+        return BBox(min(xs) + 5, min(ys) + 5, max(xs) - 5, max(ys) - 5, "EPSG:5514")
+
+    def test_many_sources_first_wins_and_nodata_never_overwrites(self, tmp_path):
+        """W1 (S5): lista zrodel = kazde reprojektowane osobno do jednego pasma.
+
+        W zakladce wygrywa PIERWSZE zrodlo listy (jak w ``merge``), a nodata
+        pozniejszego zrodla nie kasuje waznych pikseli wczesniejszego — GDAL
+        nadpisuje wazne piksele kolejnym zrodlem (zmierzone 2026-09-29), stad
+        lista idzie od konca.
+        """
+        # a: x 0..100, b: x 90..190 (zakladka 10 m); dziura w b w strefie zakladki
+        a = self._flat_tif(tmp_path / "a.tif", 530000, 382100, 100.0)
+        b = self._flat_tif(
+            tmp_path / "b.tif", 530090, 382100, 200.0, hole=(40, 60, 0, 10)
+        )
+        pinned = _pinned_2180_to("EPSG:5514")
+        bbox = self._grid_for(
+            pinned,
+            [(530010, 382010), (530180, 382010), (530010, 382090), (530180, 382090)],
+        )
+        in_overlap = tuple(float(v) for v in pinned.transform(530095, 382080))
+        in_hole = tuple(float(v) for v in pinned.transform(530095, 382050))
+        only_b = tuple(float(v) for v in pinned.transform(530150, 382050))
+
+        def probe(order, name):
+            dst = tmp_path / name
+            warp_to_grid(
+                order, dst, bbox, 1.0, pinned, src_crs="EPSG:2180", nodata=_NODATA
+            )
+            with rasterio.open(dst) as ds:
+                data = ds.read(1)
+                return {
+                    key: float(data[ds.index(*xy)])
+                    for key, xy in (
+                        ("overlap", in_overlap),
+                        ("hole", in_hole),
+                        ("only_b", only_b),
+                    )
+                }
+
+        a_first = probe([a, b], "ab.tif")
+        b_first = probe([b, a], "ba.tif")
+        assert a_first == {"overlap": 100.0, "hole": 100.0, "only_b": 200.0}
+        assert b_first == {"overlap": 200.0, "hole": 100.0, "only_b": 200.0}
+
+    def test_source_without_crs_takes_src_crs(self, tmp_path):
+        """Arkusz ASC GUGiK nie ma CRS: ``src_crs`` musi obowiazywac zrodlo
+        (``reproject`` ze zrodla bez CRS zwracal sam nodata mimo ``src_crs``
+        — stad VRT z wymuszonym SRS nad kazdym zrodlem)."""
+        src = self._flat_tif(tmp_path / "nocrs.tif", 530000, 382100, 7.0, crs=None)
+        with rasterio.open(src) as ds:
+            assert ds.crs is None, "fixtura ma CRS — test bylby atrapa"
+        pinned = _pinned_2180_to("EPSG:5514")
+        bbox = self._grid_for(
+            pinned,
+            [(530010, 382010), (530090, 382010), (530010, 382090), (530090, 382090)],
+        )
+        dst = tmp_path / "dst.tif"
+
+        warp_to_grid(src, dst, bbox, 1.0, pinned, src_crs="EPSG:2180", nodata=_NODATA)
+
+        with rasterio.open(dst) as ds:
+            data = ds.read(1)
+        assert (data == 7.0).all()
+
+    def test_empty_source_list_is_an_error(self, tmp_path):
+        from kartograf.exceptions import ValidationError
+
+        pinned = _pinned_2180_to("EPSG:5514")
+        with pytest.raises(ValidationError, match="brak rastrow"):
+            warp_to_grid(
+                [],
+                tmp_path / "dst.tif",
+                BBox(0.0, 0.0, 10.0, 10.0, "EPSG:5514"),
+                1.0,
+                pinned,
+                src_crs="EPSG:2180",
+                nodata=_NODATA,
+            )
+        assert not (tmp_path / "dst.tif").exists()
