@@ -4,10 +4,10 @@
 
 | Element | Status | Uwagi |
 |---------|--------|-------|
-| NMT (parser + pobieranie) | ✅ Gotowy | v0.1.0+ |
-| NMPT (Digital Surface Model) | ✅ Gotowy | v0.4.0 |
-| Ortofotomapa | ✅ Gotowy | v0.4.0 |
-| LAZ (chmury punktów LIDAR) | ✅ Gotowy | WFS, area-based, --product laz, 2026-06-24 |
+| NMT (parser + pobieranie) | ⚠️ Gotowy (znane bledy) | v0.1.0+; wybor pliku arkusza przez skorowidz: K3, K4, S1 |
+| NMPT (Digital Surface Model) | ⚠️ Gotowy (znane bledy) | v0.4.0; K3, S4 |
+| Ortofotomapa | ⚠️ Gotowy (znane bledy) | v0.4.0; K5 (CIR zamiast RGB), K4 |
+| LAZ (chmury punktów LIDAR) | ⚠️ Znany blad krytyczny K1 | WFS, area-based, --product laz, 2026-06-24; kafle z miejsca o zamienionych osiach — nie uzywac do naprawy |
 | Land Cover (BDOT10k) | ✅ Gotowy | v0.3.0+, 15 warstw v0.5.0 |
 | Land Cover (CORINE) | ✅ Gotowy | v0.3.0+ |
 | SoilGrids | ✅ Gotowy | v0.3.0+ |
@@ -16,18 +16,18 @@
 | geometry → godla | ✅ Gotowy | find_sheets_for_geometry(), CLI --geometry |
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
-| PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage |
+| PL-2000 (godlowanie) | ⚠️ Gotowy (znane bledy) | Parser2000, auto-detekcja, CLI, storage; pobranie godla PL-2000 daje arkusz PL-1992 (K4), sidecar z EPSG:2180 (N8) |
 | Pokrycie testami | ✅ Gotowy | 92,9%, 1861 testow offline + 8 `live` (po fali review max, develop, 2026-09-28; wczesniej 1787 lacznie z `live` 2026-08-28, 1716 na fix/release-0.7.0-audit 2026-08-23) |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
-| Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0 |
-| Weryfikacja BBox PL-2000 | ✅ Gotowy | 67 testow, reference values + live WMS |
-| Walidacja warstw WMS | ✅ Gotowy | GetCapabilities, lazy, fallback; NMT+NMPT v0.6.1, Orto 2026-06-24 |
+| Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0; tory PL go nie podlaczaja (N6) |
+| Weryfikacja BBox PL-2000 | ✅ Gotowy | 67 testow, reference values + live WMS (8 testow `live` niczego nie sprawdzaja — N5) |
+| Walidacja warstw WMS | ✅ Gotowy | GetCapabilities, lazy, fallback; NMT+NMPT v0.6.1, Orto 2026-06-24; zaszyta lista NMPT EVRF2007 nieaktualna (S4) |
 | Etap 0 — zrodla wielokrajowe (sources/transform/transport/providers-pl/CLI split/sidecar) | ✅ Gotowy | zmergowane do develop 2026-08-11; E2E 12/12 na realnych danych |
-| Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | ZMERGOWANY do develop 2026-08-12 (fast-forward do 0738ae0); 21 zadan TDD + fix ADR-024, E2E 11/11 + zywa weryfikacja tresci 3xPASS; wersja `0.7.0-dev` |
-| Wycinek NMT PL `--target-crs` (ADR-027) + API biblioteki `download_pl_cutout` | ✅ Gotowy (offline) | fala review max 2026-09-28: siatka arkuszy, R5 (`missing_sheets`), VRT, E2E offline na realnych arkuszach 5 m; zywa weryfikacja — checklista, "Nastepne kroki" pkt 12 |
+| Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ⚠️ Gotowy (znane bledy) | ZMERGOWANY do develop 2026-08-12 (fast-forward do 0738ae0); 21 zadan TDD + fix ADR-024, E2E 11/11; testy na zywo 2026-09-29: K2 (operacja S-JTSK — przesuniecie tresci 1-5 m), K6 (limit exportImage); wersja `0.7.0-dev` |
+| Wycinek NMT PL `--target-crs` (ADR-027) + API biblioteki `download_pl_cutout` | ⚠️ Gotowy (znane bledy) | fala review max 2026-09-28; testy na zywo 2026-09-29: mechanika PASS (siatka 1 m, 2180 1:1, 5514/3045 bit w bit, R5 na morzu i granicach); tresc zalezy od K3/K4, S1, S5; cel 5514 — K2 |
 
-<!-- Statusy: ✅ Gotowy | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
+<!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
 ## Checkpointy
 
@@ -83,7 +83,132 @@
 
 ## Ostatnia sesja
 
-**Data:** 2026-08-10 — 2026-09-28 (sekcje datowane ponizej)
+**Data:** 2026-08-10 — 2026-09-29 (sekcje datowane ponizej)
+
+### Testy na zywych danych + audyt dokumentacji (2026-09-29)
+
+- **Zlecenie uzytkownika:** czy pobieranie przetestowano na realnych danych
+  (centrum kraju, pas morski, pogranicza — nie tylko PL-CZ, takze PL-DE,
+  gdzie danych DE nie obslugujemy, i inne) i czy zaktualizowano cala
+  dokumentacje dotknieta falami 2026-08-28 i 2026-09-28. Stan przed sesja:
+  po fali review max nikt nie pobieral z zywych uslug GUGiK/CUZK (tylko E2E
+  offline na arkuszach 5 m z cache Hydrografu). Wykonanie: 7 agentow testow
+  na zywo (L1-L7) i 2 audytorow dokumentacji (D1, D2) rownolegle, potem
+  jedna fala poprawek dokumentacji. **Kod bez zmian zachowania** — bledy kodu
+  zebrane i opisane, decyzja o naprawie nalezy do uzytkownika ("Nastepne
+  kroki" pkt 15). Raporty (L1-L7, D1, D2, lista bledow `KNOWN-BUGS.md`,
+  raport fali `DOCS-FIX-REPORT.md`, uwagi dla Hydrografa
+  `hydrograf-uwagi-migracyjne.md`):
+  `docs/research/2026-09-29-live-e2e-i-audyt-docs/`.
+
+| Raport | Obszar i tryby | Wynik |
+|---|---|---|
+| L1 centrum-produkty | Spytkowice k. Krakowa: godla PL-1992 (1 m EVRF2007/KRON86, 5 m, rozwijanie 1:25000/1:50000), PL-2000, `--product nmpt/orto/laz`, lista `--bbox`, `pytest -m live` | 8 PASS / 5 UWAGA / 7 FAIL |
+| L2 wycinki-siatka | 1 m (okolice Siemiatycz) i 5 m (okolice Wegrowa): wycinki 2180/5514/3045, bbox calkowity i ulamkowy, `--force`, biblioteka vs CLI; faza siatki 1 m w 12 miastach | 21 PASS / 5 UWAGA / 6 FAIL |
+| L3 morze | Leba (5 m, 1 m, cel 5514), Hel, bbox w calosci nad morzem, Rozewie (54,90°N, offline), (j) surowe odpowiedzi skorowidza | 7 PASS / 4 UWAGA / 3 FAIL |
+| L4 pogranicze PL-CZ | Cieszyn, Karkonosze, Beskid Slaski, Raciborz; godla TM33/SM5; kafelkowanie `exportImage` | 10 PASS / 4 UWAGA / 4 FAIL |
+| L5 pogranicze PL-DE | Slubice, Zgorzelec, trojstyk PL-CZ-DE, Sieniawka, Osinow Dolny, Berlin | 7 PASS / 5 UWAGA / 2 FAIL |
+| L6 inne granice | PL-SK (Lysa Polana), PL-UA (Medyka), PL-BY (Terespol), PL-LT (Budzisko), PL-RU (Piaski) x lista/wycinek | 9 PASS / 1 UWAGA |
+| L7 duzy wycinek (offline) | N-33-118..132 (103 x 77 km) z cache Hydrografu, cel 2180/5514 x limit deskryptorow domyslny/256 | 4 PASS |
+| D1 docs uzytkowe | README, CLAUDE.md, SCOPE, PRD, `--help`, `__all__` | 35 znalezisk |
+| D2 docs architektura | ARCHITECTURE, DECISIONS, CHANGELOG, PROGRESS, DEVELOPMENT_STANDARDS, docstringi | 55 znalezisk (+11 w dokumentach Hydrografu) |
+
+- **Mechanika potwierdzona na zywo:** segmenty `data/` i sidecary dla
+  wszystkich produktow i ukladow (NMT 1 m/5 m EVRF2007/KRON86, PL-1992/PL-2000,
+  NMPT, orto, LAZ, CZ dmr5g/dmr4g bpv/evrf2007, `bbox/`); wycinek
+  `--target-crs EPSG:2180` na siatce arkuszy z wartosciami 1:1 (0 rozbieznych
+  pikseli m.in. na 20 mln px w L2 i 14,3 mln w L3), cele 5514/3045 bit w bit
+  z mozaika + warpem ta sama operacja; R5 na morzu i na granicach z CZ, DE,
+  UA, BY, RU (arkusze bez danych -> nodata + `Warning:` + `missing_sheets`,
+  nodata tylko nad morzem/za granica); `Skipped` bez sieci; nieudany `--force`
+  zostawia stary plik; biblioteka == CLI bajt w bajt; pogranicze PL-CZ: dwa
+  wycinki ze wspolnym `parent_request`; rozwijanie godel 1:25000/1:50000;
+  duzy wycinek bez wyczerpania deskryptorow.
+- **Zmierzone fakty:**
+  - faza siatki arkuszy: 1 m PL-1992 (EVRF2007 2019-2025, KRON86 2011-2018)
+    — jedna faza, narozniki pikseli na k + 0,5 m w 84 arkuszach (12
+    lokalizacji + obszar testu), kampanie roznia sie zasiegiem o 1 px, nie
+    faza — backlog `extra.off_grid_sheets` dla 1 m zbedny; 5 m — 5k + 2,5 m
+    w cache Hydrografu (1977 arkuszy), pod Wegrowem (48 arkuszy kampanii
+    2022/2024/2025) i w Lebie, ale arkusze 5 m kampanii 2022 pod Krakowem
+    maja kazdy inna faze (9 z 9), a w Cieszynie 2 z 12 (kampania 2019) — S5;
+  - styk PL/CZ (dane do R6): GUGiK wydaje dane ~200 m w glab CZ, CUZK ~118 m
+    w glab PL, pas wspolny ~310-350 m bez szczeliny tam, gdzie GUGiK ma
+    produkt w danej rozdzielczosci (Karkonosze 5 m: brak arkuszy GUGiK —
+    dziura 5,2 km² po stronie PL); roznice wysokosci PL - CZ (oba EVRF2007)
+    w pasie wspolnym: mediany -0,19..+0,14 m zaleznie od zbioru i spadku,
+    trojstyk PL-CZ-DE: mediana 0,17 m; siatki PL i CZ niewspolne;
+  - skorowidz GUGiK (j): pusta odpowiedz GetFeatureInfo (morze, strona czeska
+    i niemiecka) = szablon HTML MapServera, HTTP 200 `text/html`, 7721 B,
+    identyczny dla 1 m/5 m i wszystkich warstw, BEZ znacznikow OGC ->
+    `NoCoverageError`; zla warstwa = HTTP 200 `text/xml` (554 B)
+    `ServiceExceptionReport`/`LayerNotDefined` -> `DownloadError` — straz
+    I-2 potwierdzona w obie strony (surowe body w raportach L3, L4, L5);
+  - duzy wycinek (L7, offline): 1836 (cel 2180) / 2394 (cel 5514) arkuszy
+    w selekcji, 688/732 z danymi (reszta R5 = nodata): 36 s / 109 s, szczyt
+    RSS ~1 GiB (1037-1039 MiB), maks. 9 otwartych deskryptorow, `ulimit -n
+    256` przechodzi z wynikiem bit w bit (sha256);
+  - nodata przy morzu i granicy: `missing_sheets` wymienia tylko arkusze bez
+    pliku — nodata bywa tez wewnatrz pobranych arkuszy przybrzeznych
+    (kampania 5 m 2025 przycina rastry do zasiegu danych) i przygranicznych
+    (PL-SK: do 82 % arkusza); przy brzegu woda ma wartosci ~0 m (5 m: pas
+    setek metrow, 1 m: caly arkusz przybrzezny);
+  - warp GDAL (cele 5514/3045): domyslne opcje to takze przyblizony
+    transformator (`tolerance` 0,125 px) — wobec dokladnego bilineara
+    srednio 0,13-3,3 mm, maks. do 0,25 m (1 m) i 0,13 m (5 m, sama
+    `tolerance`);
+  - GUGiK zrywal 13-50 % polaczen podczas testow (L5: 39 z ~294 zapytan WMS;
+    L1: ~50 % swiezych polaczen) — mozliwy wplyw 9 agentow z jednego IP;
+    ta sama biblioteka na jednej sesji keep-alive z `Retry`: 72/72 zapytan
+    bez bledu.
+
+#### Znane bledy (testy na zywo 2026-09-29)
+
+Stan: czekaja na decyzje uzytkownika o naprawie ("Nastepne kroki" pkt 15);
+w tej sesji NIE naprawiane. Opisy, miejsca w kodzie i checkboxy: Backlog ->
+"Do naprawy — testy na zywych danych 2026-09-29 (przed wydaniem 0.7.0)".
+Raporty w `docs/research/2026-09-29-live-e2e-i-audyt-docs/`.
+
+| ID | Waga | Blad (jedno zdanie) | Raport |
+|---|---|---|---|
+| K1 | KRYTYCZNY | LAZ: discovery WFS z zamienionymi osiami — kafle z innego miejsca (Spytkowice -> Lubuskie, 426 km) | L1 |
+| K2 | WYSOKI | Operacja S-JTSK -> ETRS89 = EPSG:4829 (Slowacja) w Czechach — tresc CZ po reprojekcji i wycinek PL -> 5514 przesuniete o 1-5 m; diagnoza ADR-024 najpewniej bledna | L4, L2 |
+| K3 | WYSOKI | Zerwane zapytanie nowszej warstwy skorowidza -> po cichu starsza kampania w cache (dwa `--force`: 21 % pikseli, do 4,2 m) | L2, L3, L5, L1 |
+| K4 | WYSOKI | Wybor pliku arkusza: pierwszy URL z godlem — 0,5 m zamiast 1 m, najstarsza kampania, arkusz PL-1992 pod godlem PL-2000 | L2, L1 |
+| K5 | WYSOKI | `--product orto` pobiera CIR zamiast RGB | L1 |
+| K6 | WYSOKI | Realny limit `exportImage` ~8 Mpx — bbox CZ 2 m > ~5,5 x 5,5 km = HTTP 500 | L4 |
+| S1 | SREDNI | Skorowidz bez ponowien i bez wspolnej sesji — wycinki padaja przy zrywanych polaczeniach | L3, L5, L4 |
+| S2 | SREDNI | Tryb listy bez tolerancji R5 — morze/granica = kod 1, `--workers 1` = 0 plikow | L3, L5, L6, L4 |
+| S3 | SREDNI | `--country auto` po cichu przycina bbox do prostokata kraju | L5, L3 |
+| S4 | SREDNI | NMPT EVRF2007: nieaktualna lista warstw w kodzie — bez GetCapabilities NMPT sie nie pobiera | L1 |
+| S5 | SREDNI | Arkusze 5 m o roznych fazach siatki — wycinek 2180 z wartosciami z sasiedniego piksela | L1, L2 |
+| N1 | NISKI | Puste katalogi po arkuszach bez danych | L3, L5, L4 |
+| N2 | NISKI | Wynik w 100 % nodata jako sukces bez komunikatu | L4, L5 |
+| N3 | NISKI | Natywny wycinek CZ: piksel 2,0004 m | L4 |
+| N4 | NISKI | Pominiete arkusze/wycinek: bez `parent_request`, `missing_sheets == ()` | L1, D1 |
+| N5 | NISKI | Testy `-m live` niczego nie sprawdzaja | L1 |
+| N6 | NISKI | `MetadataCache` niepodlaczony w torach PL | D2, L3 |
+| N7 | NISKI | LAZ: "No LAZ tiles found" przy awarii sieci | L1 |
+| N8 | NISKI | Sidecar pliku PL-2000 z `horizontal_crs` EPSG:2180 | L1, L2 |
+| N9 | NISKI | Oszacowanie miejsca na dysku liczone dwa razy przy jawnym `estimate_pl_cutout_bytes` | L7 |
+| H1 | hipoteza | Regex URL skorowidza pomija `.ASC` wielkimi literami | L5 |
+
+- **Fala poprawek dokumentacji (ta sesja, brief
+  `.superpowers/sdd/2026-09-29-live-e2e-i-docs/DOCS-FIX-BRIEF.md`):** kazde
+  znalezisko D1/D2 zweryfikowane na kodzie; wynik (tabela per znalezisko:
+  `DOCS-FIX-REPORT.md`): D1 — 33 naprawione, 2 oznaczone jako znany blad
+  (N4); D2 — 50 naprawionych, 4 oznaczone (N6, K3 x2, S2), 1 pominiete
+  (docstring `gugik_laz.py` — plik K1 nietykany do naprawy); 0 odrzuconych;
+  11 uwag dla Hydrografa w `hydrograf-uwagi-migracyjne.md` (repo Hydrografu
+  nietkniete). Zmienione: README (sekcja "Znane problemy (0.7.0-dev)"),
+  CLAUDE.md, SCOPE 3.11, PRD 3.7, ARCHITECTURE, DECISIONS (errata ADR-021,
+  ADR-023, ADR-024 — K2, uzupelnienia ADR-003/010/018/019/020/026/027),
+  CHANGELOG (uwagi migracyjne 0.6.1 -> 0.7.0), DEVELOPMENT_STANDARDS 2.2,
+  IMPLEMENTATION_PROMPT 4.2, ten dokument oraz WYLACZNIE teksty w kodzie
+  (docstringi, komentarze, `--help` — AST bez docstringow bez zmian).
+  Brama: 1861 testow offline PASS (+8 `live` deselected), ruff check
+  + format czyste, mypy 32 = baseline (lista identyczna). Galaz nie
+  pushowana.
 
 ### Fala naprawcza po review max + wycinek PL w bibliotece (2026-09-28)
 
@@ -737,18 +862,28 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
    ~1 px, ~0,5% pikseli); (c) przestroga: blad serwerowej reprojekcji
    CUZK bywa zmienny przestrzennie (1,25 m kolo Cieszyna, 4,92 m w
    zachodnich Czechach) — nie zakladac stalego offsetu przy podobnych
-   diagnozach w przyszlosci.
+   diagnozach w przyszlosci. **Errata 2026-09-29:** te wartosci to
+   najpewniej roznica operacji EPSG:1622 - EPSG:4829, czyli blad lokalnej,
+   slowackiej operacji przypietej, nie serwera (znany blad K2, errata
+   ADR-024).
 3. **Push `develop` na origin** (**208 commitow** lokalnie — pomiar
    `git rev-list --count origin/develop..develop` 2026-09-28 po commicie
-   zamykajacym fale review max; wczesniej 148 po mergu audytu 0.7.0
-   2026-08-28; decyzja z etapu 0 nadal nierozwiazana) — patrz wyzej
+   zamykajacym fale review max, plus commity fali dokumentacji 2026-09-29;
+   wczesniej 148 po mergu audytu 0.7.0 2026-08-28; decyzja z etapu 0 nadal
+   nierozwiazana) — patrz wyzej
 4. **Zgloszenie/naprawa WCS EVRF2007 GUGiK** (male, przedistniejace, poza
    etapami 0/1): aktualizacja `WCS_ENDPOINTS`/`COVERAGE_IDS` w
    `providers/pl/gugik.py` po usunieciu endpointu przez GUGiK (patrz "Znany
    problem uslugowy" wyzej); rozwazyc walidacje WCS analogiczna do
-   walidacji warstw WMS
+   walidacji warstw WMS (czesciowo zrobione w audycie A1-4:
+   `download_bbox` z EVRF2007 konczy sie `ValidationError` przed siecia,
+   a kanal WCS deskryptora deklaruje tylko KRON86; zostaje zgloszenie do
+   GUGiK i ewentualna walidacja WCS)
 5. Odziedziczone: (do weryfikacji) zgodnosc `get_bbox` z godlowaniem kafli
-   LAZ (patrz [[gugik-laz-wfs]])
+   LAZ (patrz ADR-021 i `providers/pl/gugik_laz.py`) — obserwacja
+   "godlo -> kafle z innego arkusza" okazala sie objawem znanego bledu K1
+   (zamienione osie WFS, testy na zywo 2026-09-29); do ponownej oceny po
+   naprawie K1
 6. **Minory odroczone z etapu 1** (nieblokujace; pelna lista ~140 pozycji
    byla w ledgerze kontrolera — plik utracony, patrz adnotacja przy sekcji
    implementacji etapu 1 wyzej; ponizsze wyliczenie to zachowany zapis
@@ -781,53 +916,245 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
     **WYKONANE 2026-08-28** (12 zadan TDD z
     `docs/superpowers/plans/2026-08-28-uklad-data-i-target-crs-pl.md`;
     segmenty ADR-026, wycinek PL ADR-027, `docs/ARCHITECTURE.md`).
-12. **E2E live sciezek nowego ukladu `data/` + wycinka `--target-crs` PL**
-    — pozycja checklisty release (spec 12); suita jest offline, wiec
-    zadna sciezka nowego ukladu nie byla dotad sprawdzona na zywych danych.
-    Brama jakosci (Zad. 12) potwierdzila offline SAME SCIEZKI (realny
-    `FileStorage` + `main()` z zamockowana warstwa pobierania) — do
-    sprawdzenia na zywo zostaje TRESC i kompletnosc pobrania:
-    (a) godlo PL 1992/2000 x KRON86/EVRF2007 -> `nmt/pl_<uklad>_<res>_<vcrs>/`;
-    (b) `--product nmpt|orto|laz` -> `nmpt/`, `orto/pl_<uklad>/`,
-    `laz/pl_<uklad>_<vcrs>/` (LAZ: kafle z obu ukladow w jednym zadaniu);
-    (c) CZ godlo TM33/SM5 i bbox -> `nmt/cz_dmr{5g,4g}_<vcrs>/[bbox/]`;
-    (d) wycinek PL `--target-crs EPSG:5514` na realnych arkuszach GUGiK —
-    porownanie tresci z niezaleznym warpem (offline WYKONANE 2026-09-28 na
-    realnych arkuszach 5 m z cache Hydrografu — liczby w sekcji fali review
-    max; na zywo zostaje realne pobranie z GUGiK i arkusze 1 m); (e)
-    pogranicze `--country auto --target-crs EPSG:2180` na realnych danych
-    obu krajow. Dopisane po fali review max (2026-09-28):
-    (f) siatka pikseli arkuszy **1 m** EVRF2007 i KRON86 — jedna faza dla
-    wszystkich kampanii? (skrypt faz jak w fakcie 1 planu fali: 5 m ma
-    narozniki na 5k + 2,5 m); przy mieszanych fazach -> backlog
-    `extra.off_grid_sheets` + `Warning:`;
-    (g) arkusze 1 m wydawane przez GUGiK w ukladzie PL-2000 pod godlami
-    PL-1992 — jak czesto (ostrzezenia fallbacku skorowidza, bledy PL-2000
-    wycinka); fallback "URL innego arkusza" TEGO SAMEGO ukladu daje dziure
-    nodata BEZ wpisu w `missing_sheets` (ARCHITECTURE 4.3 krok 4);
-    (h) pogranicze `--country auto --target-crs` na zywo: wycinek PL z nodata
-    po stronie CZ + wycinek CZ; jak GUGiK i CUZK przycinaja dane na granicy
-    i jak wyglada styk (dane wejsciowe do R6);
-    (i) duzy wycinek (>= 1000 arkuszy): czas, pamiec, deskryptory;
-    (j) bbox nad morzem (np. Leba): `missing_sheets`; przy okazji ZAPISAC
-    realne body i `Content-Type` pustej odpowiedzi GetFeatureInfo (morze
-    i strona czeska) oraz raportu wyjatku przy zlej warstwie — w OBIE strony
-    strazy I-2: pusta odpowiedz nie moze zawierac `ServiceException`/
-    `ExceptionReport` (inaczej R5 nigdy nie zadziala i wycinki przy
-    wybrzezu/granicy koncza sie kodem 1), a dopiero z zapisana probka mozna
-    rozwazyc kontrole pozytywna.
-13. **Bump wersji + wydanie 0.7.0**: `kartograf.__version__`/
-    `pyproject.toml` `0.7.0-dev` -> `0.7.0`, data w CHANGELOG, tag
-    `v0.7.0`, push `develop` na origin (patrz pkt 3 wyzej — 208 commitow
-    niewypchnietych, pomiar 2026-09-28).
+12. ~~**E2E live sciezek nowego ukladu `data/` + wycinka `--target-crs` PL**~~
+    — **WYKONANE 2026-09-29** (7 raportow na zywo, sekcja "Testy na zywych
+    danych + audyt dokumentacji" wyzej; raporty
+    `docs/research/2026-09-29-live-e2e-i-audyt-docs/`). Status pozycji:
+    (a) godlo PL x KRON86/EVRF2007 -> `nmt/pl_<uklad>_<res>_<vcrs>/` —
+    PL-1992 PASS (1 m obu pionow, 5 m, rozwijanie 1:25000/1:50000, ponowne
+    uruchomienie bez sieci); PL-2000: sciezka poprawna, tresc — arkusz PL-1992
+    podstawiony po cichu (K4, N8); KRON86 x PL-2000 nieuruchamiane (L1);
+    (b) `--product nmpt|orto|laz` -> segmenty poprawne; NMPT PASS (S4 przy
+    awarii GetCapabilities); orto FAIL — CIR zamiast RGB (K5), najstarsze
+    zdjecie w "Starsze" (K4); LAZ FAIL — kafle z innego miejsca (K1); "kafle
+    z obu ukladow w jednym zadaniu" nie wykazane (L1);
+    (c) CZ godlo TM33/SM5 i bbox -> `nmt/cz_dmr{5g,4g}_<vcrs>/[bbox/]` —
+    PASS (sciezki, sidecary, EVRF2007); tresc obciaza K2, piksel natywnego
+    wycinka N3 (L4, L5);
+    (d) wycinek PL do EPSG:5514/3045 na realnych arkuszach 1 m i 5 m —
+    mechanika PASS (bit w bit z wlasna mozaika + ta sama operacja, wobec
+    niezaleznej interpolacji srednio 0,13-3,3 mm), ale tresc zalezy od
+    wyboru pliku arkusza (K3/K4: dwa `--force` — 21 % pikseli), a cel 5514 —
+    od K2 (L2, L3);
+    (e) pogranicze `--country auto --target-crs EPSG:2180` — PASS w Cieszynie
+    i na trojstyku PL-CZ-DE (dwa wycinki, wspolny `parent_request`, nodata PL
+    po stronie CZ, `missing_sheets`, `Warning:`, kod 0); Karkonosze 5 m: CLI
+    3/3 porazki przez S1, a udany wycinek PL = 100 % nodata (brak 5 m, N2)
+    (L4, L5);
+    (f) siatka 1 m — jedna faza, narozniki k + 0,5 m w 84 arkuszach (1 m:
+    `extra.off_grid_sheets` zbedne); 5 m nie zawsze 5k + 2,5 — S5 (L2, L1,
+    L4);
+    (g) arkusze PL-2000 pod godlem PL-1992 — rzadkie (KRON86 1/12 miast,
+    EVRF2007 0/12), wycinek odmawia glosno (PASS), ale plik zostaje w cache
+    PL-1992, a remedium `--system 2000` daje arkusz-dziecko (K4, N8);
+    grozniejszy kuzyn luki "URL innego arkusza": plik 0,5 m w skorowidzu
+    1 m (K4) (L2);
+    (h) styk PL/CZ zmierzony (GUGiK ~200 m w glab CZ, CUZK ~118 m w glab PL,
+    pas wspolny ~310-350 m, roznice -0,19..+0,14 m, trojstyk 0,17 m) — dane
+    wejsciowe do R6 (L4, L5);
+    (i) duzy wycinek (1836/2394 arkuszy): 36 s / 109 s, ~1 GiB RSS, 9
+    deskryptorow, `ulimit -n 256` bit w bit — PASS (L7; N9);
+    (j) surowe odpowiedzi skorowidza zapisane (morze, strona CZ i DE, zla
+    warstwa) — straz I-2 dziala w obie strony, PASS (L3, L4, L5; kontrola
+    pozytywna szablonu mozliwa, nie wdrozona);
+    (k) **dopisane i WYKONANE:** pogranicze PL-DE (Slubice, Zgorzelec,
+    trojstyk, Sieniawka, Osinow, Berlin) — wycinek PASS (arkusze niemieckie
+    w `missing_sheets`, nodata tylko za Odra/Nysa, 1:1), tryb listy kod 1
+    (S2), ciche przyciecie `auto` na zachod od 14,07°E (S3), plik CZ 100 %
+    nodata nad Saksonia (N2) (L5);
+    (l) **dopisane i WYKONANE:** granice PL-SK, PL-UA, PL-BY, PL-LT, PL-RU —
+    wycinek PASS (R5, `auto` == `pl`, CUZK nieodpytany), PL-LT niedokonczony
+    przez niestabilnosc GUGiK (poprawnie kod 1 "ponow"); tryb listy kod 1
+    i jeden zgloszony arkusz (S2); PL-SK: nodata wewnatrz opublikowanych
+    arkuszy (do 82 %) bez `missing_sheets`; 5 m brak w rejonie Sejn (L6).
+13. **Bump wersji + wydanie 0.7.0** — **czeka na decyzje z pkt 15**:
+    `kartograf.__version__` `0.7.0-dev` -> `0.7.0` (pyproject czyta wersje
+    dynamicznie), data w CHANGELOG, tag `v0.7.0`, push `develop` na origin
+    (patrz pkt 3 wyzej).
 14. **Checklista release** (z planu audytu 0.7.0): build sdist/wheel
     (`setuptools`); zywa weryfikacja CORINE GeoTIFF z prawdziwymi
-    credentials CLMS vs allowlista hostow (Auth Proxy); E2E kafelkowania
-    `exportImage` przy wyniku >16 Mpx (sciezka chunkowana
-    `mosaic_and_crop(dst_path=...)`) — nigdy nie uruchomione na zywo;
-    3 przebiegi pelnej suity testow pod rzad (kontrola stabilnosci/flakow).
+    credentials CLMS vs allowlista hostow (Auth Proxy); ~~E2E kafelkowania
+    `exportImage` przy wyniku >16 Mpx~~ — WYKONANE 2026-09-29 (L4: pas
+    22 Mpx z 3 kafli, szwy bit w bit, chunked merge dziala), ale realny limit
+    serwera ~8 Mpx (K6); 3 przebiegi pelnej suity testow pod rzad (kontrola
+    stabilnosci/flakow).
+15. **Decyzja uzytkownika o naprawie K1-K6/S1-S5 przed wydaniem 0.7.0**
+    (NOWE 2026-09-29; blokuje pkt 13). Lista i miejsca w kodzie: Backlog ->
+    "Do naprawy — testy na zywych danych 2026-09-29". K2 i K6 wymagaja
+    odmrozenia toru CZ (ADR-024); K1 (LAZ) jest krytyczny i sprzed fal.
+    Po naprawach: ponowne testy na zywo dotknietych scenariuszy i usuniecie
+    not "znany blad" z dokumentacji (README "Znane problemy", CLAUDE.md,
+    ARCHITECTURE, SCOPE, erraty ADR).
 
 ## Backlog
+
+#### Do naprawy — testy na zywych danych 2026-09-29 (przed wydaniem 0.7.0)
+
+Bledy kodu wykryte testami na zywo (sesja 2026-09-29, tabela "Znane bledy"
+wyzej); kazdy czeka na decyzje uzytkownika o naprawie ("Nastepne kroki"
+pkt 15). Linie kodu wg HEAD po fali dokumentacji 2026-09-29. Raporty:
+`docs/research/2026-09-29-live-e2e-i-audyt-docs/<raport>`. Oznaczenia wag:
+K = wysoki/krytyczny (zle dane po cichu), S = sredni (odpornosc/UX),
+N = niski, H = hipoteza.
+
+- [ ] **K1** (KRYTYCZNY, sprzed fal — LAZ od 2026-06-24) — discovery WFS
+      wysyla `BBOX` w kolejnosci (E, N), a `urn:ogc:def:crs:EPSG::2180`
+      wymaga (N, E); envelope kafla jest czytany tak samo odwrotnie, wiec
+      filtr przeciecia przechodzi, a kafle pochodza z miejsca o zamienionych
+      wspolrzednych (Spytkowice -> Lubuskie, 426 km; przyklady LAZ
+      z dokumentacji szukaja ~209 km dalej). Kod:
+      `providers/pl/gugik_laz.py:363-369` (zapytanie), `:464-465`
+      (envelope), `:482-497` (`_intersects`). Raport:
+      `L1-centrum-produkty-report.md` (BUG-L1-1); errata ADR-021.
+- [ ] **K2** (WYSOKI, etap 1 + ADR-027) — przypieta operacja S-JTSK ->
+      ETRS89 to EPSG:4829 (obszar uzycia: Slowacja, 0,5 m), a w Czechach
+      wlasciwa jest EPSG:1622 (1,0 m): tresc CZ po reprojekcji przesunieta
+      o 1,1-4,9 m (Karkonosze: 2,3 m wobec NMT GUGiK 1 m, z EPSG:1622 —
+      0,38 m), sidecar deklaruje 0,5 m; dotyczy kafli TM33, `--target-crs`
+      CZ, wycinka PL -> EPSG:5514 i `bbox_to_crs`; diagnoza ADR-024
+      (1,25/4,92 m "bledu serwera") najpewniej bledna. Kod:
+      `transform/crs.py:192` (`TransformerGroup` bez `area_of_interest`),
+      `:236` (`min` po dokladnosci), `KNOWN_PATHS`;
+      `providers/cuzk/dmr.py` (`_HORIZONTAL_POLICY`, `bbox_to_crs`).
+      **Wymaga odmrozenia toru CZ (ADR-024) — decyzja uzytkownika.** Raport:
+      `L4-pogranicze-cz-report.md` (BUG-L4-1), `L2-wycinki-siatka-report.md`
+      (BUG-L2-4); errata ADR-024.
+- [ ] **K3** (WYSOKI, sprzed fal) — zerwane zapytanie o nowsza warstwe
+      skorowidza -> po cichu URL starszej kampanii (NMT/NMPT/orto; LAZ
+      pomija caly rocznik); arkusz zostaje w cache (`skip_existing`) i trafia
+      do kolejnych wycinkow, a sidecar nie niesie URL-a ani daty kampanii;
+      dwa przebiegi `--force` tego samego wycinka roznily sie w 21 % pikseli
+      (do 4,2 m; wydmy do 5,2 m); zgloszone tez przez Hydrograf (92 arkusze
+      Opolskiego). Kod: `providers/pl/gugik.py:643-647` (`RequestException`
+      -> `continue`), `:604-622` (pierwszy znaleziony URL wygrywa bez
+      sprawdzenia bledow nowszych warstw); LAZ
+      `providers/pl/gugik_laz.py:385-388`. Raport:
+      `L2-wycinki-siatka-report.md` (BUG-L2-1), `L3-morze-report.md` (B2),
+      `L5-pogranicze-de-report.md` (B5), `L1-centrum-produkty-report.md`
+      (BUG-L1-5).
+- [ ] **K4** (WYSOKI, sprzed fal) — wybor URL arkusza: pierwszy URL
+      zawierajacy godlo jako podciag, bez wzgledu na rozdzielczosc, date
+      i zasieg — plik 0,5 m jako "1 m" (Szczecin: wycinek w 0,5 m, jeden
+      w 100 % nodata z kodem 0), w warstwie zbiorczej najstarsza kampania
+      (2019 zamiast 2023; orto — zdjecie z 2003), godlo PL-2000 dostaje po
+      cichu arkusz PL-1992 (lista `--system 2000`: kod 0, 0 % pokrycia),
+      a remedium `--system 2000` z komunikatu PL-2000 daje arkusz-dziecko
+      1:2000; plik PL-2000 z fallbacku zostaje w segmencie PL-1992 i blokuje
+      kolejne wycinki. Kod: `providers/pl/gugik.py:599-622` (regex, podciag
+      `:607`, fallback `:612-622`), orto `providers/pl/gugik_orto.py:376-384`.
+      Raport: `L2-wycinki-siatka-report.md` (BUG-L2-2, BUG-L2-3),
+      `L1-centrum-produkty-report.md` (BUG-L1-3, BUG-L1-4).
+- [ ] **K5** (WYSOKI, sprzed fal) — `--product orto` pobiera wariant CIR
+      zamiast RGB (w kampaniach 2024/2025 wpis CIR poprzedza RGB); sidecar
+      nie ma koloru ani URL-a. Kod: `providers/pl/gugik_orto.py:376-384`
+      (brak wyboru po `kolor`/`aktualnosc`). Raport:
+      `L1-centrum-produkty-report.md` (BUG-L1-2).
+- [ ] **K6** (WYSOKI dla bbox CZ, etap 1) — realny limit `exportImage` CUZK
+      to ~8 Mpx (deklarowane 15000 x 4100): bbox CZ 2 m wiekszy niz ~5,5 x
+      5,5 km konczy sie HTTP 500 takze po kafelkowaniu (sam mechanizm kafli
+      dziala: 22 Mpx, szwy bit w bit). Kod: `providers/cuzk/client.py:37-38`
+      (`MAX_EXPORT_WIDTH/HEIGHT`), `:142` (warunek tylko per wymiar),
+      `_tile_grid` (brak budzetu pikseli). **Wymaga odmrozenia toru CZ
+      (ADR-024) — decyzja uzytkownika.** Raport: `L4-pogranicze-cz-report.md`
+      (BUG-L4-2).
+- [ ] **S1** (SREDNI, sprzed fal; skutek zaostrzony przez R5) — zapytania
+      skorowidza GetFeatureInfo bez ponowien i bez wspolnej sesji (nowe
+      polaczenie per arkusz): przy zrywanych polaczeniach GUGiK wycinki
+      padaja (Hel CLI 4/4, Karkonosze 3/3; ta sama biblioteka na jednej
+      sesji keep-alive z `Retry`: 72/72 OK; czesc zerwan mogla wynikac z 9
+      agentow z jednego IP). Kod: `providers/pl/gugik.py:541`
+      (`self._session or requests.Session()`), `:594` (`session.get` bez
+      ponowien), `:300` (GetCapabilities). Raport: `L3-morze-report.md`
+      (B1), `L5-pogranicze-de-report.md` (B3), `L4-pogranicze-cz-report.md`
+      (BUG-L4-4).
+- [ ] **S2** (SREDNI, sprzed fal) — tryb listy arkuszy (bez `--target-crs`)
+      bez tolerancji R5: morze/granica = kod 1; `--workers 1` przerywa na
+      pierwszym arkuszu bez danych (0 plikow); `--workers > 1` zglasza tylko
+      pierwszy blad (moze zgubic sygnal "niepewny, ponow"); pod `auto`
+      mylace "nie pobrano danych z PL", choc arkusze sa na dysku. Kod:
+      `cli/download_cmd.py:863-919` (`_download_godlo_list`: petla
+      sekwencyjna `:869`, `raise` w puli `:918-919`), `:540-550`
+      (`_dispatch_area`, komunikat z samego kodu wyjscia), `:1159-1161`.
+      Raport: `L3-morze-report.md` (B3), `L5-pogranicze-de-report.md`
+      (B1, B2), `L6-inne-granice-report.md` (BUG-1, BUG-1b),
+      `L4-pogranicze-cz-report.md` (BUG-L4-3).
+- [ ] **S3** (SREDNI, etap 1) — `--country auto` po cichu przycina bbox do
+      prostokata kraju (np. na zachod od 14,07°E, na polnoc od 54,90°N;
+      pozostale krawedzie poszerzone o 40-110 m) — inny zasieg i nazwa
+      pliku niz zadanie, bez `Info:`. Kod: `cli/download_cmd.py:284-344`
+      (`_country_bbox`, przyciecie `:322-327`), wolane w `_dispatch_area`
+      `:517`. Raport: `L5-pogranicze-de-report.md` (B4),
+      `L3-morze-report.md` (B5).
+- [ ] **S4** (SREDNI, sprzed fal) — NMPT EVRF2007: lista warstw w kodzie
+      nieaktualna (2025..2022iStarsze wobec 2026..2023iStarsze) — gdy
+      GetCapabilities zawiedzie, NMPT nie pobiera sie wcale ("brak pokrycia
+      niepewny"), a kazde pobranie drukuje ostrzezenie. Kod:
+      `providers/pl/gugik_nmpt.py:83-86`. Raport:
+      `L1-centrum-produkty-report.md` (BUG-L1-9).
+- [ ] **S5** (SREDNI, fala review max — R1) — arkusze 5 m kampanii 2022
+      (okolice Krakowa) maja rozne fazy siatki -> wycinek EPSG:2180 bierze
+      wartosc z sasiedniego piksela (do 0,88 px) i ma 766 px nodata tam, gdzie
+      dane sa; komunikat "najblizszym sasiadem" nieprawdziwy (1 m: jedna
+      faza k + 0,5 w 84 arkuszach; 5 m w cache Hydrografu i w Lebie:
+      5k + 2,5). Kod: `transport/mosaic.py:324` (`merge` przy zrodlach poza
+      siatka), `:265-271` (komunikat). Raport:
+      `L1-centrum-produkty-report.md` (BUG-L1-7), `L2-wycinki-siatka-report.md`
+      (S24).
+- [ ] **N1** (NISKI, sprzed fal) — puste katalogi po arkuszach bez danych
+      (`mkdir` przed zapytaniem skorowidza; `prune_empty_dirs` sprzata tylko
+      `bbox/`). Kod: `providers/pl/gugik.py:455`. Raport:
+      `L3-morze-report.md` (B4), `L5-pogranicze-de-report.md` (B6),
+      `L4-pogranicze-cz-report.md` (BUG-L4-7).
+- [ ] **N2** (NISKI, etap 1 / fala) — wynik w 100 % nodata przyjmowany jako
+      sukces bez komunikatu (plik CZ nad DE/PL w prostokacie CZ; wycinek PL,
+      gdy pobrane arkusze nic nie wnosza). Kod: `download/cutout.py:609`
+      (sprawdzane tylko `sheet_paths`), tor CZ w `cli/download_cmd.py`
+      (`_cz_download_bbox`). Raport: `L4-pogranicze-cz-report.md`
+      (BUG-L4-5, U4), `L5-pogranicze-de-report.md` (H).
+- [ ] **N3** (NISKI, etap 1) — natywny wycinek CZ (EPSG:5514, jedno
+      zapytanie) ma piksel 2,0004 m zamiast 2 m (bbox bez dociagniecia do
+      calkowitej liczby pikseli). Kod: `providers/cuzk/client.py:139-147`.
+      Raport: `L4-pogranicze-cz-report.md` (BUG-L4-6).
+- [ ] **N4** (NISKI, fale) — arkusze pominiete (juz na dysku) nie dostaja
+      `extra.parent_request` nowego zadania; przy pominietym wycinku
+      `PlCutoutResult.missing_sheets == ()` mimo dziur w rastrze (lista tylko
+      w sidecarze). Kod: `download/manager.py:329`, `:516`, `:548` (skip
+      przed `_write_sidecar`), `download/cutout.py:568`, `:714`. Raport:
+      `L1-centrum-produkty-report.md` (BUG-L1-6),
+      `D1-docs-uzytkownik-report.md` (ID 5).
+- [ ] **N5** (NISKI, sprzed fal) — testy `pytest -m live` (8) niczego nie
+      sprawdzaja: odpytuja nieistniejaca warstwe i asertuja tylko HTTP 200.
+      Kod: `tests/test_pl2000_verification.py:456-457`, `:474`, `:482`.
+      Raport: `L1-centrum-produkty-report.md` (BUG-L1-10).
+- [ ] **N6** (NISKI, sprzed fal) — `MetadataCache` nie jest podlaczony
+      w zadnym torze PL (CLI, `DownloadManager`, `download_pl_cutout`:
+      `_cache is None`). Kod: `cli/download_cmd.py:86`,
+      `download/manager.py:211`, `download/cutout.py:572`, `:705`. Raport:
+      `D2-docs-architektura-report.md` (D2-01), `L3-morze-report.md`.
+- [ ] **N7** (NISKI, sprzed fal) — LAZ: przy awarii sieci komunikat
+      "No LAZ tiles found" zamiast bledu sieci (a przy czesciowej awarii
+      wynik niepelny z kodem 0). Kod: `cli/download_cmd.py:1324-1326`,
+      `providers/pl/gugik_laz.py:385-388`. Raport:
+      `L1-centrum-produkty-report.md` (BUG-L1-8).
+- [ ] **N8** (NISKI, sprzed fal) — sidecar pliku PL-2000 deklaruje
+      `horizontal_crs` EPSG:2180 (pole z kanalu deskryptora, nie z pliku);
+      dotyczy tez kafli LAZ `PL-2000:*`. Kod: `sources/sidecar.py:112`,
+      `sources/registry.py:77`. Raport: `L1-centrum-produkty-report.md`
+      (BUG-L1-11), `L2-wycinki-siatka-report.md` (BUG-L2-3).
+- [ ] **N9** (NISKI, wydajnosc, fala review max) — oszacowanie miejsca na
+      dysku kosztuje ~7 ms na arkusz nieobecny w cache; wolajacy, ktory sam
+      wola `estimate_pl_cutout_bytes` przed `run_pl_cutout`, placi dwa razy
+      (13-21 % czasu duzego wycinka). Kod: `download/cutout.py:482`
+      (`estimate_pl_cutout_bytes`), `:581` (`check_pl_cutout_disk_space`
+      w `run_pl_cutout`). Raport: `L7-duzy-wycinek-report.md`.
+- [ ] **H1** (hipoteza — do weryfikacji) — regex URL skorowidza
+      `url:"(https://opendata[^"]+\.asc)"` pomija `.ASC` wielkimi literami
+      (warstwa `SkorowidzeNMT2022iStarsze` ma takie rekordy); arkusz, ktorego
+      JEDYNY rekord ma `.ASC`, zostalby uznany za brak danych. Kod:
+      `providers/pl/gugik.py:599-602`. Raport:
+      `L5-pogranicze-de-report.md` (H1).
+
+#### Backlog ogolny (etapy i funkcje)
 
 - [x] Pokrycie testami do 80% (~84%, 990 testow)
 - [x] NMPT provider (GugikNmptProvider)
@@ -874,8 +1201,9 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
       `_download_single` zawsze oddaje sciezke) i zliczanie jest
       zduplikowane w dwoch petlach (sekwencyjnej i rownoleglej).
 - [ ] A2-7 — fallback `urls[0]` w `_get_opendata_url` moze scache'owac URL
-      innej warstwy niz zamierzona (Minor) — podniesc log do `warning`,
-      rozwazyc weryfikacje zasiegu przy `FEATURE_COUNT>1`.
+      innego arkusza (Minor) — log podniesiony do `warning` 2026-09-28
+      (cc10773); zostaje weryfikacja zasiegu przy `FEATURE_COUNT>1` -> K4
+      (wybor pliku arkusza, testy na zywo 2026-09-29).
 - [ ] A5-4 — regula "5m => EVRF2007" zaimplementowana w 3 miejscach
       (walidacja w `GugikProvider`, cicha korekta w `DownloadManager`,
       fabryka `create_nmt_provider`) — swiadome warstwowanie z etapu 0;
@@ -954,9 +1282,9 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
 - [ ] `TransformError` w petli krajow `_dispatch_area` konczy caly proces
       kodem 1 mimo czesciowego sukcesu (np. PL pobrane, CZ nie) — do
       etapu 2 (auto-split wielokrajowy).
-- [ ] E2E kafelkowania `exportImage` (wynik >16 Mpx, sciezka chunkowana
-      `mosaic_and_crop(dst_path=...)`) nigdy nie uruchomione na zywo — do
-      checklisty release / etapu 2.
+- [x] E2E kafelkowania `exportImage` (wynik >16 Mpx, sciezka chunkowana
+      `mosaic_and_crop(dst_path=...)`) — WYKONANE na zywo 2026-09-29 (pas
+      22 Mpx, szwy bit w bit); realny limit serwera ~8 Mpx -> K6.
 - [ ] `mosaic_and_crop(dst_path=...)` moze zostawic obciety plik wynikowy,
       gdy `merge` padnie w trakcie zapisu (brak `unlink` w obsludze bledu) —
       jedyne wywolanie produkcyjne (`export_image`) sprzata po sobie samo,
@@ -974,9 +1302,11 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
       strefa 2176-2179 przed sklejeniem)
 - [ ] Ujednolicenie `parent_request.bbox_crs` miedzy trybami jawny/auto
       (pozycja istniejaca — powiazac z `find_downloaded`)
-- [ ] Nota dla Hydrografa: `harmonize_dem(files, target_crs, resolution)`
-      na bazie `kartograf.transform.crs.PinnedTransform` (NIE golego pyproj
-      — lekcja ADR-024); wejscie z sidecarow
+- [ ] `harmonize_dem(files, target_crs, resolution)` na bazie
+      `kartograf.transform.crs.PinnedTransform` (NIE golego pyproj — lekcja
+      ADR-024), wejscie z sidecarow — po R6 (2026-09-28) kandydat do API
+      Kartografa razem ze scalaniem PL+CZ (etap 2), nie tylko nota dla
+      Hydrografa; wybor operacji S-JTSK -> K2
 
 #### Backlog po fali review max (2026-09-28)
 
@@ -994,28 +1324,34 @@ Rulingi i pelne uzasadnienia: `docs/research/2026-09-28-fala-review-max/`
 - [ ] Tryby CLI bez `--target-crs` na `DownloadManager.download_sheets`
       (dzis `_download_godlo_list` w trybie rownoleglym rzuca pierwsza
       porazka, pozostale gina) + tolerancja braku pokrycia (`NoCoverageError`)
-      poza wycinkiem.
+      poza wycinkiem -> S2.
 - [ ] Warp (`warp_to_grid` PL i `_warp_to_grid` CZ): wymiary siatki
       `max(1, round(...))` od naroznika NW — krawedz E/S do 0,5 px od obwiedni
       (E2E: 1,61 m / 0,76 m przy 5 m); skala resamplingu GDAL `XSCALE`/`YSCALE`
       liczona per kawalek — piksele zaleza lekko od zasiegu mozaiki (E2E:
       srednio 2,7 mm, maks. 0,15 m poza szwem; z `XSCALE=YSCALE=1` < 3,2 mm).
-      Oba zamrozone do wydania; test porownawczy + checklista live.
+      Oba zamrozone do wydania; test porownawczy + checklista live. Na zywo
+      2026-09-29: domyslny warp uzywa tez przyblizonego transformatora
+      (`tolerance` 0,125 px; przy 5 m do 0,13 m) — ARCHITECTURE 4.3 krok 6.
 - [ ] Obwiednia WGS84 z 4 naroznikow takze w
-      `core/parser_2000._transform_bbox_to_wgs84` (poludniki osiowe stref)
-      i w providerach landcover (`corine`/`soilgrids`) — sprawdzic pod katem
-      faktu 8 (pas przy gornej krawedzi na poludniku osiowym).
+      `core/parser_2000._transform_bbox_to_wgs84` (poludniki osiowe stref) —
+      sprawdzic pod katem faktu 8 (pas przy gornej krawedzi na poludniku
+      osiowym); `corine`/`soilgrids` licza `transform_bounds(densify_pts=21)`
+      (A4-7) — potwierdzic, ze blad jest pomijalny.
 - [ ] API wycinka: `download_pl_cutout(provider=, storage=)` addytywnie
-      (Hydrograf wstrzyknie wlasny provider/cache; dzis przez trzy kroki),
+      (Hydrograf wstrzyknie wlasny provider/cache; dzis przez trzy kroki —
+      obejscie S1/N6 po stronie wolajacego),
       walidacja wstrzyknietej `storage` w `run_pl_cutout`,
       `estimate_pl_cutout_bytes` z rozszerzeniem providera zamiast stalego
       `.asc`.
 - [ ] Arkusze spoza siatki wiekszosci: dzis tylko `logger.warning` — dodac
       `extra.off_grid_sheets` + `Warning:` w CLI, jesli pkt 12 (f) pokaze
-      mieszane fazy kampanii 1 m.
+      mieszane fazy kampanii 1 m. Pkt 12 (f): 1 m — jedna faza (zbedne);
+      5 m kampanii 2022 — mieszane fazy i bledna tresc mozaiki -> S5.
 - [ ] Z odmrozeniem toru CZ: `bbox_to_crs` z `providers/cuzk/dmr.py` do
       `transform/` (tor PL go importuje) i wspolny helper obwiedni geometrii
-      w ukladzie pliku (`_geometry_envelope` / `_resolve_cz_geometry_bbox`).
+      w ukladzie pliku (`_geometry_envelope` / `_resolve_cz_geometry_bbox`);
+      ta sama operacja S-JTSK -> K2.
 - [ ] Pobranie ASC bez kontroli `Content-Type`: strona bledu HTML z HTTP 200
       zapisana jako `.asc` zostaje w cache — mozaika pada kodem 1, ale kolejne
       przebiegi pomijaja plik jako istniejacy az do recznego usuniecia.
@@ -1031,4 +1367,5 @@ Rulingi i pelne uzasadnienia: `docs/research/2026-09-28-fala-review-max/`
       WKT1_ESRI (`lru_cache` po tekscie WKT); WKT1 z `TOWGS84[0,...]`
       odrzucany; testy lustrzane tolerancji przyciagania i remisu siatki;
       podwojne parsowanie lisci w `download_sheets`; komunikat bledu PL-2000
-      w bibliotece wspomina flagi CLI.
+      w bibliotece wspomina flagi CLI (a jego remedium `--system 2000` daje
+      dzis arkusz-dziecko -> K4).
