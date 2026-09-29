@@ -155,6 +155,7 @@ kartograf parse N-34-130-D-d-2-4
 kartograf download N-34-130-D-d-2-4
 kartograf download N-34-130-D-d-2-4 --product nmpt
 kartograf download N-34-130-D-d-2-4 --product orto
+# LAZ: znany blad K1 (osie WFS zamienione — kafle z innego miejsca, setki km dalej); nie uzywac do naprawy
 kartograf download N-34-130-D-d-2-4 --product laz
 kartograf download N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12
 kartograf download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86
@@ -164,9 +165,10 @@ kartograf download --geometry area.gpkg --layer catchments
 kartograf parse 6.179.12.20
 kartograf download 6.179.12.20
 kartograf download --bbox 6500000,5895000,6508000,5900000 --bbox-crs EPSG:2177 --system 2000
-kartograf download 302_5550 --country cz                      # DMR 5G (TM33), 2m, Bpv
+kartograf download 302_5550 --country cz                      # DMR 5G (TM33), 2m, Bpv (kafel ~93 % nodata — Niemcy)
 kartograf download CTES96 --resolution 5m                     # DMR 4G (SM5), kraj auto z godla
 # bbox przygraniczny --country auto -> osobne pliki PL i CZ, wspolny extra.parent_request
+# (bez --vertical-crs: PL w EVRF2007, CZ w Bpv)
 kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto
 # reprojekcja CZ -> EPSG:2180, lokalna przypieta operacja (tylko --bbox/--geometry, nie godlo)
 kartograf download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --target-crs EPSG:2180
@@ -255,14 +257,18 @@ kartograf cache path
   `list[Path]` (godlo PL-1992 grubsze niz 1:10000 — rozwijane do 1:10000);
   `download_hierarchy()` zawsze `list[Path]` + podsumowanie w `last_result`
 - `find_sheets_for_bbox()`/`find_sheets_for_geometry()`: stykajace sie krawedzie
-  NIE sa przecieciem (liczy sie dodatnie pole), wiec bbox rowny arkuszowi zwraca
-  tylko jego arkusze; nieznana wartosc `system=` to `ValidationError`
+  NIE sa przecieciem (liczy sie dodatnie pole), wiec bbox rowny arkuszowi
+  w EPSG:4326 zwraca tylko jego arkusze (bbox w EPSG:2180 idzie przez szersza
+  obwiednie WGS84 — obwiednia arkusza 1:10000 daje 9 godel); nieznana wartosc
+  `system=` to `ValidationError`
 - HSG: progi tekstur to kanoniczny trojkat USDA, a `TEXTURE_TO_HSG` swiadomie
   odbiega od TR-55 (`sandy_loam`=B, `clay_loam`/`silty_clay_loam`=C) — ADR-025
 - **CZ (CUZK, etap 1):** produkt w etapie 1 to wylacznie `nmt` (DMR 5G/4G) —
   `nmpt`/`orto`/`laz` dla CZ beda dostepne w etapie 2; `exportImage` ma limit
-  **asymetryczny 15000x4100 px** — wieksze bboxy sa kafelkowane po stronie
-  klienta i scalane (`mosaic_and_crop`); DMR 5G (godlo TM33) to zawsze 2m,
+  deklarowany **15000x4100 px** — wieksze bboxy sa kafelkowane po stronie
+  klienta i scalane (`mosaic_and_crop`); realnie serwer odrzuca (HTTP 500)
+  zadania > ~8 Mpx, wiec bbox CZ 2 m wiekszy niz ~5,5 x 5,5 km nie przechodzi
+  takze po kafelkowaniu (znany blad K6); DMR 5G (godlo TM33) to zawsze 2m,
   DMR 4G (godlo SM5) to zawsze 5m — `--resolution` wybiera miedzy nimi, nie
   jest niezalezna flaga jak w PL; `KRON86` jest **nieosiagalny** dla CZ (brak
   publicznych siatek Bpv->KRON86) — uzyj `--vertical-crs EVRF2007`; tryb
@@ -271,17 +277,21 @@ kartograf cache path
   `exportImage`); z `--target-crs` PL tez daje jeden plik (ADR-027);
   rastry CZ sa ZAWSZE pobierane w ukladzie natywnym EPSG:5514, a reprojekcje
   (`--target-crs`, kafel TM33 w 3045) robi lokalnie `rasterio.warp` przypieta
-  operacja — serwerowemu `imageSR` nie ufamy (ADR-024); `--target-crs`
-  dziala tylko z `--bbox`/`--geometry` (PL i CZ)
-  — z godlem konczy sie bledem (godlo dostarcza produkt natywny
-  1:1); obwiednia kraju CZ (`CountryProfile.extent_wgs84`) jest **prostokatna**,
+  operacja — serwerowemu `imageSR` nie ufamy (ADR-024); ta operacja
+  S-JTSK -> ETRS89 to dzis EPSG:4829 (obszar uzycia: Slowacja), wiec tresc CZ
+  po reprojekcji i wycinek PL -> EPSG:5514 sa przesuniete o 1-5 m (znany blad
+  K2); `--target-crs` dziala tylko z `--bbox`/`--geometry` (PL i CZ) —
+  z godlem konczy sie bledem (godlo wyznacza zasieg i uklad produktu: arkusz
+  PL i SM5 1:1, kafel TM33 na wlasnej siatce EPSG:3045); obwiednia kraju CZ
+  (`CountryProfile.extent_wgs84`) jest **prostokatna**,
   nie wielokatem granicy — `--country auto` w pasie na zachod od 18,86°E i na
   poludnie od 51,06°N (m.in. Opole, Walbrzych, Rybnik, poludniowe obrzeza
   Wroclawia; Krakow, Rzeszow i centrum Wroclawia sa juz poza prostokatem)
-  wysyla zapytanie do CUZK takze poza faktyczna granica (wynik: raster/sidecar
-  same-nodata, nie blad); symetrycznie prostokat PL (14,07..24,20°E) pokrywa
-  wiekszosc Czech, wiec `auto` w Pradze czy Brnie odpytuje takze GUGiK;
-  patrz ADR-023 i `docs/SCOPE.md`
+  wysyla zapytanie do CUZK takze poza faktyczna granica, takze w Saksonii
+  i w pasie Bogatyni (wynik: raster/sidecar same-nodata z kodem 0, bez
+  komunikatu — znany blad N2); symetrycznie prostokat PL (14,07..24,20°E)
+  pokrywa wiekszosc Czech, wiec `auto` w Pradze czy Brnie odpytuje takze
+  GUGiK; patrz ADR-023 i `docs/SCOPE.md`
 - **`--country` domyslnie = `auto`** (nowosc 0.7.0, nie bylo tej opcji w 0.6.1).
   Dla `--bbox`/`--geometry` znaczy to: (1) obszar przecinajacy obwiednie obu
   krajow pobiera sie z KAZDEGO z nich — osobne pliki i sidecary, wspolny
@@ -293,31 +303,66 @@ kartograf cache path
   siegajacym CZ nadal konczy sie bledem z podpowiedzia `--country pl`;
   (3) porazka jednego kraju przy sukcesie drugiego konczy sie kodem 0
   i `Warning:` na stderr — kod 1 zostaje dla jawnego `--country` i dla porazki
-  wszystkich krajow (ADR-023 pkt 4-5). Komunikaty `Info:`/`Warning:` ida na
-  stderr, wiec `-q` ich NIE tlumi. `--target-crs` NIE rozstrzyga kraju —
-  od ADR-027 dziala po obu stronach granicy
+  wszystkich krajow (ADR-023 pkt 4-5); (4) czesc zadania kazdego kraju jest
+  przycinana do jego prostokata — obszar poza WSZYSTKIMI prostokatami (np. na
+  zachod od 14,07°E, na polnoc od 54,90°N) znika bez komunikatu, a nazwa pliku
+  i `request.bbox` niosa bbox przyciety (znany blad S3; `--country pl` nie
+  przycina); bbox w calosci poza prostokatami = `Error:`, kod 1, bez sieci.
+  Na granicach z krajami spoza rejestru (DE, SK, UA, BY, LT, RU) `auto` ==
+  `pl` bez komunikatu (poza pasem wewnatrz prostokata CZ, np. Nysa ponizej
+  51,06°N). Komunikaty `Info:`/`Warning:` ida na stderr, wiec `-q` ich NIE
+  tlumi. `--target-crs` NIE rozstrzyga kraju — od ADR-027 dziala po obu
+  stronach granicy
 - **`--target-crs` dla PL (ADR-027):** tylko `--product nmt` i system 1992
   (nmpt/orto — etap 2; laz to chmura punktow; mozaika miedzystrefowa 2000 —
   etap 2); wynik to JEDEN GeoTIFF `nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif`.
   Tor zyje w bibliotece (`kartograf.download.cutout`: `download_pl_cutout`
   albo kroki `prepare_pl_cutout` -> `select_pl_cutout_sheets` ->
   `run_pl_cutout`), CLI jest nakladka (komunikaty, kody wyjscia).
-  Arkusz bez danych GUGiK (`NoCoverageError`: morze, strona czeska bboxa
-  przygranicznego, dziury pokrycia) = nodata + `Warning:` +
-  `extra.missing_sheets` w sidecarze (`PlCutoutResult.missing_sheets`);
-  kazda inna porazka pobrania = kod 1 (R5, 2026-09-28); `EPSG:2180` = crop
-  bez warpa na siatce arkuszy GUGiK (obszar rozszerzony na zewnatrz < 1 px,
-  wartosci 1:1, `transform: null`); arkusze trafiaja do mozaiki przez VRT
+  Arkusz bez danych GUGiK (`NoCoverageError`: morze, zagraniczna strona
+  bboxa przygranicznego — CZ, DE, SK/UA/BY/LT/RU — dziury pokrycia) = nodata
+  + `Warning:` + `extra.missing_sheets` w sidecarze
+  (`PlCutoutResult.missing_sheets`); kazda inna porazka pobrania = kod 1 (R5,
+  2026-09-28; potwierdzone na zywo 2026-09-29). `missing_sheets` wymienia tylko
+  arkusze bez pliku — nodata bywa tez wewnatrz pobranych arkuszy przybrzeznych
+  i przygranicznych (PL-SK: do 82 % arkusza), bez sladu w sidecarze;
+  `EPSG:2180` = crop bez warpa na siatce arkuszy GUGiK (obszar rozszerzony na
+  zewnatrz < 1 px, wartosci 1:1, `transform: null`; siatka 1 m potwierdzona na
+  zywo: k + 0,5 m; arkusze 5 m o roznych fazach — wartosci z sasiedniego
+  piksela, znany blad S5); arkusze trafiaja do mozaiki przez VRT
   (EPSG:2180, Float32), wiec mieszany cache z `.prj` Hydrografu dziala;
   arkusz GUGiK we wspolrzednych PL-2000 (fallback skorowidza) = blad
-  z opisem; wycinek z takich arkuszy to etap 2. Przed pobraniem kontrola
-  miejsca na dysku (dolne oszacowanie), `Info:` dla wycinka >= 1 GiB.
+  z opisem (plik zostaje w cache PL-1992 i blokuje kolejne wycinki do
+  recznego usuniecia; remedium `--system 2000` daje dzis arkusz potomny
+  1:2000 — znany blad K4); wycinek z takich arkuszy to etap 2. Przed
+  pobraniem kontrola miejsca na dysku (dolne oszacowanie), `Info:` dla
+  wycinka >= 1 GiB.
   W trybie `--geometry` wycinek obejmuje CALA obwiednie geometrii (bez
   maskowania do obiektow); `nodata` tylko tam, gdzie nie siega zaden pobrany
   arkusz (`--geometry` + `EPSG:2180` nie ma sumy R-01 ani zapasu 1 px
-  selekcji, wiec skrajna kolumna/wiersz moze byc nodata). Nieudana budowa
-  wycinka (takze z `--force`) NIE kasuje poprzedniego pliku wyniku — zapis
-  jest atomowy (`os.replace`), poprzedni plik przezywa awarie; inaczej tor CZ,
+  selekcji: arkusze wyznacza sama geometria, wiec pas miedzy odleglymi
+  obiektami oraz skrajna kolumna/wiersz moga byc nodata). Bez `--force`
+  istniejacy wycinek jest pomijany bez sieci (`Skipped - already exists`, bez
+  ponownego `Warning:`; biblioteka: `PlCutoutResult(skipped=True)` z pustym
+  `missing_sheets` — lista zostaje w sidecarze, znany blad N4); `--force`
+  pobiera ponownie TAKZE wszystkie arkusze (tanszy rebuild: usun plik
+  wycinka). Nieudana budowa wycinka (takze z `--force`) NIE kasuje
+  poprzedniego pliku wyniku — zapis jest atomowy (`os.replace`), poprzedni
+  plik przezywa awarie; inaczej tor CZ,
   ktory przy awarii warpu/mozaiki kasuje plik docelowy (kod zweryfikowany
   live, ADR-024 — nie ruszamy go przed wydaniem). Opis: `docs/ARCHITECTURE.md`
   sekcja 4.3
+- **Tryb listy arkuszy (PL `--bbox`/`--geometry` BEZ `--target-crs`) nie ma
+  tolerancji R5:** arkusz bez danych (morze, arkusz za granica) = kod 1
+  i `Error:` o JEDNYM arkuszu; `--workers 1` staje na pierwszym takim arkuszu
+  (0 plikow), `--workers > 1` pobiera reszte, ale zglasza tylko pierwsza
+  porazke; pod `auto` z sukcesem CZ — mylace "nie pobrano danych z PL" (znany
+  blad S2). Przy morzu i na granicach uzywaj `--target-crs EPSG:2180`
+- **Znane bledy kodu (testy na zywo 2026-09-29) — tabela i decyzja o naprawie:
+  `docs/PROGRESS.md` "Znane bledy".** Najwazniejsze: K1 LAZ (wyzej); K2
+  operacja S-JTSK (wyzej); K3/K4 skorowidz GUGiK po cichu daje starsza
+  kampanie albo inny plik (0,5 m zamiast 1 m, arkusz PL-1992 pod godlem
+  PL-2000, najstarsze zdjecie orto); K5 orto CIR zamiast RGB; K6 limit
+  `exportImage` (wyzej); S1 zapytania skorowidza bez ponowien — przy
+  zrywanych polaczeniach wycinek konczy sie kodem 1 ("ponow pobranie");
+  N6 `MetadataCache` nie jest podlaczony w zadnym torze PL
