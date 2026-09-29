@@ -280,8 +280,9 @@ kartograf cache path
   (`--target-crs`, kafel TM33 w 3045) robi lokalnie `rasterio.warp` przypieta
   operacja — serwerowemu `imageSR` nie ufamy (ADR-024); ta operacja
   S-JTSK -> ETRS89 to dzis EPSG:4829 (obszar uzycia: Slowacja), wiec tresc CZ
-  po reprojekcji i wycinek PL -> EPSG:5514 sa przesuniete o 1-5 m (znany blad
-  K2); `--target-crs` dziala tylko z `--bbox`/`--geometry` (PL i CZ) —
+  po reprojekcji i wycinek PL -> EPSG:5514 sa przesuniete do ~5 m (wzdluz
+  granicy PL-CZ 1,1-3,4 m; znany blad K2); `--target-crs` dziala tylko
+  z `--bbox`/`--geometry` (PL i CZ) —
   z godlem konczy sie bledem (godlo wyznacza zasieg i uklad produktu: arkusz
   PL i SM5 1:1, kafel TM33 na wlasnej siatce EPSG:3045); obwiednia kraju CZ
   (`CountryProfile.extent_wgs84`) jest **prostokatna**,

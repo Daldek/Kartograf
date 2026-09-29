@@ -24,7 +24,7 @@
 | Weryfikacja BBox PL-2000 | ✅ Gotowy | 67 testow, reference values + live WMS (8 testow `live` niczego nie sprawdzaja — N5) |
 | Walidacja warstw WMS | ✅ Gotowy | GetCapabilities, lazy, fallback; NMT+NMPT v0.6.1, Orto 2026-06-24; zaszyta lista NMPT EVRF2007 nieaktualna (S4) |
 | Etap 0 — zrodla wielokrajowe (sources/transform/transport/providers-pl/CLI split/sidecar) | ✅ Gotowy | zmergowane do develop 2026-08-11; E2E 12/12 na realnych danych |
-| Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ⚠️ Gotowy (znane bledy) | ZMERGOWANY do develop 2026-08-12 (fast-forward do 0738ae0); 21 zadan TDD + fix ADR-024, E2E 11/11; testy na zywo 2026-09-29: K2 (operacja S-JTSK — przesuniecie tresci 1-5 m), K6 (limit exportImage); wersja `0.7.0-dev` |
+| Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ⚠️ Gotowy (znane bledy) | ZMERGOWANY do develop 2026-08-12 (fast-forward do 0738ae0); 21 zadan TDD + fix ADR-024, E2E 11/11; testy na zywo 2026-09-29: K2 (operacja S-JTSK — przesuniecie tresci do ~5 m), K6 (limit exportImage); wersja `0.7.0-dev` |
 | Wycinek NMT PL `--target-crs` (ADR-027) + API biblioteki `download_pl_cutout` | ⚠️ Gotowy (znane bledy) | fala review max 2026-09-28; testy na zywo 2026-09-29: mechanika PASS (siatka 1 m, 2180 1:1, 5514/3045 bit w bit, R5 na morzu i granicach); tresc zalezy od K3/K4, S1, S5; cel 5514 — K2 |
 
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
@@ -173,7 +173,7 @@ Raporty w `docs/research/2026-09-29-live-e2e-i-audyt-docs/`.
 | ID | Waga | Blad (jedno zdanie) | Raport |
 |---|---|---|---|
 | K1 | KRYTYCZNY | LAZ: discovery WFS z zamienionymi osiami — kafle z innego miejsca (Spytkowice -> Lubuskie, 426 km) | L1 |
-| K2 | WYSOKI | Operacja S-JTSK -> ETRS89 = EPSG:4829 (Slowacja) w Czechach — tresc CZ po reprojekcji i wycinek PL -> 5514 przesuniete o 1-5 m; diagnoza ADR-024 najpewniej bledna | L4, L2 |
+| K2 | WYSOKI | Operacja S-JTSK -> ETRS89 = EPSG:4829 (Slowacja) w Czechach — tresc CZ po reprojekcji i wycinek PL -> 5514 przesuniete do ~5 m (granica PL-CZ 1,1-3,4 m); diagnoza ADR-024 najpewniej bledna | L4, L2 |
 | K3 | WYSOKI | Zerwane zapytanie nowszej warstwy skorowidza -> po cichu starsza kampania w cache (dwa `--force`: 21 % pikseli, do 4,2 m) | L2, L3, L5, L1 |
 | K4 | WYSOKI | Wybor pliku arkusza: pierwszy URL z godlem — 0,5 m zamiast 1 m, najstarsza kampania, arkusz PL-1992 pod godlem PL-2000 | L2, L1 |
 | K5 | WYSOKI | `--product orto` pobiera CIR zamiast RGB | L1 |
@@ -1015,9 +1015,10 @@ N = niski, H = hipoteza.
 - [ ] **K2** (WYSOKI, etap 1 + ADR-027) — przypieta operacja S-JTSK ->
       ETRS89 to EPSG:4829 (obszar uzycia: Slowacja, 0,5 m), a w Czechach
       wlasciwa jest EPSG:1622 (1,0 m): tresc CZ po reprojekcji przesunieta
-      o ok. 1-5 m (roznica EPSG:1622 - EPSG:4829 policzona pyproj: ~1,0 m
-      na wschodzie CZ — Ostrawa, Brno — do ~5,0 m na zachodzie — kafel
-      `302_5550`; wzdluz granicy PL-CZ 1,1-3,4 m; na zywo Karkonosze: 2,3 m
+      do ~5 m (roznica EPSG:1622 - EPSG:4829 policzona pyproj: 0,1-1,0 m
+      na Morawach — Zlin 0,14, Brno 0,98, Ostrawa 1,04 m — do ~5,0 m na
+      zachodzie — kafel `302_5550`; wzdluz granicy PL-CZ 1,1-3,4 m; na zywo
+      Karkonosze: 2,3 m
       wobec NMT GUGiK 1 m, z EPSG:1622 — 0,38 m), sidecar deklaruje 0,5 m;
       dotyczy kafli TM33, `--target-crs` CZ, wycinka PL -> EPSG:5514
       i `bbox_to_crs`; diagnoza ADR-024 (1,25/4,92 m "bledu serwera")
@@ -1031,11 +1032,13 @@ N = niski, H = hipoteza.
       `cli/download_cmd.py:1643-1644` ("tryb godlowy dostarcza dane natywne
       1:1" przy godle CZ z `--target-crs`) jest falszywy dla TM33 (warp
       5514 -> 3045); nieaktualne komentarze `providers/cuzk/dmr.py:86-88`
-      ("Znane operacje z Krovaka ... maja 0,5 m"), `transform/crs.py:134-140`
-      (`KNOWN_PATHS`: "serwerowej CUZK nie uzywamy, gubi datum shift")
+      ("Znane operacje z Krovaka ... maja 0,5 m"), `transform/crs.py:142-149`
+      (`KNOWN_PATHS` 2180 -> 5514: "Inverse of S-JTSK to ETRS89 (3)", 0,5 m)
       i `:159` (Bpv->EVRF2007 "+0,12..+0,14 m"; zmierzone 0,11-0,15 m);
-      "5514->3045 przesuwa tresc o 1,25 m" w `providers/cuzk/dmr.py:54-55`
-      i `:270-271` — diagnoza ADR-024 do weryfikacji razem z K2.
+      "5514->3045 przesuwa tresc o 1,25 m" w `providers/cuzk/dmr.py:55-56`
+      i `:271` — diagnoza ADR-024 do weryfikacji razem z K2. Zdanie o serwerze
+      gubiacym datum shift przy `imageSR=2180` (~135 m; `transform/crs.py:134-140`,
+      `providers/cuzk/dmr.py:55`, `:270-271`) pozostaje prawdziwe.
 - [ ] **K3** (WYSOKI, sprzed fal) — zerwane zapytanie o nowsza warstwe
       skorowidza -> po cichu URL starszej kampanii (NMT/NMPT/orto; LAZ
       pomija caly rocznik); arkusz zostaje w cache (`skip_existing`) i trafia

@@ -208,7 +208,8 @@ kodu, które czekają na decyzję o naprawie przed wydaniem 0.7.0. Pełna lista
   wysyła bbox z zamienionymi osiami, więc kafle pochodzą z obszaru oddalonego
   o setki kilometrów (dla okolic Krakowa - z Lubuskiego). Nie używaj LAZ do
   czasu naprawy.
-- **K2 - treść CZ po reprojekcji jest przesunięta o 1-5 m.** Przypięta
+- **K2 - treść CZ po reprojekcji jest przesunięta do ~5 m** (wzdłuż
+  granicy PL-CZ o 1,1-3,4 m). Przypięta
   operacja S-JTSK → ETRS89 to transformacja dla Słowacji (EPSG:4829), a nie
   dla Czech (EPSG:1622). Dotyczy kafli TM33 (godło), `--target-crs` dla CZ
   i wycinka PL do `EPSG:5514`; treść pobierana natywnie (`EPSG:5514` bez
@@ -272,7 +273,7 @@ kodu, które czekają na decyzję o naprawie przed wydaniem 0.7.0. Pełna lista
 - ✅ **DMR 5G** (2m, godło TM33 lub bbox) i **DMR 4G** (5m, godło SM5 lub bbox)
 - ✅ **CLI** - `--country {pl,cz,auto}`; `auto` na pograniczu dzieli żądanie na osobne pliki PL i CZ
 - ✅ **Układy** - natywnie S-JTSK/Bpv (EPSG:5514); opcjonalna reprojekcja lokalna `--target-crs` oraz `--vertical-crs EVRF2007`
-- ⚠️ **Znane błędy** - reprojekcja przesuwa treść o 1-5 m (K2); obszar 2 m zbliżony do kwadratu większy niż ok. 5,5 × 5,5 km kończy się HTTP 500 (K6) - patrz [Znane problemy](#znane-problemy-070-dev)
+- ⚠️ **Znane błędy** - reprojekcja przesuwa treść do ~5 m (K2); obszar 2 m zbliżony do kwadratu większy niż ok. 5,5 × 5,5 km kończy się HTTP 500 (K6) - patrz [Znane problemy](#znane-problemy-070-dev)
 
 ### NMPT (Numeryczny Model Pokrycia Terenu)
 - ✅ **Digital Surface Model** - Teren + obiekty powierzchniowe (drzewa, budynki)
