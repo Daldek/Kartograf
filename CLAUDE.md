@@ -287,15 +287,24 @@ kartograf cache path
   Opcje tylko-PL (`--product nmpt|orto`, `--system`, `KRON86`, `1m`)
   rozstrzygaja nakladajacy sie obszar do PL z `Info:`; LAZ nadal wymaga
   jawnego `--country pl` w obszarze spornym.
-  Przyciecie pod `auto` do obwiedni kraju drukuje `Info:` (takze o obszarze
-  poza oboma krajami); nietkniete krawedzie PL pozostaja oryginalne, a
-  `request.bbox` i nazwa pliku niosa zasieg przyciety. Oryginalne zadanie
-  zachowuje `extra.parent_request`. Jawne `--country pl` nie przycina.
+  Przyciecie pod `auto` drukuje `Info:` tylko, gdy naprawde ogranicza
+  pobieranie: `--geometry` bez `--target-crs` wyznacza arkusze PL z calej
+  geometrii, wiec nie drukuje Info dla PL ani o utracie obszaru pobieranego
+  przez PL; czesc CZ nadal bywa przycinana. Nietkniete krawedzie PL pozostaja
+  oryginalne. Wycinki PL/CZ niosa przyciety zasieg w nazwie pliku i
+  `request.bbox`; tryb listy `--bbox` wyznacza arkusze z przycietego bboxa,
+  a ich sidecary maja `request.godlo`. Oryginalne zadanie zachowuje
+  `extra.parent_request`. Jawne `--country pl` nie przycina.
   Bbox calkowicie poza obwiedniami = `Error:` kod 1 bez sieci.
   Kod 0 oznacza sukces co najmniej jednego kraju; przy porazce drugiego
   CLI daje `Warning:`, kod 1 gdy zaden kraj nie dostarczy wyniku lub
   `--country` bylo jawne. `Info:`/`Warning:` ida na stderr mimo `-q`.
   `--target-crs` dziala dla obu krajow, nie rozstrzyga wyboru kraju.
+- **LAZ --year:** jawny rok jest sprawdzany wobec GetCapabilities danej
+  uslugi wysokosciowej przed GetFeature; nieistniejacy rok zglasza
+  `rocznik ... nie istnieje w usludze ... (dostepne: ...)`, bez sugestii
+  ponowienia. Blad sieci/rocznika opublikowanego nadal daje `DownloadError`
+  z informacja o niekompletnym wyniku.
 - **Skorowidz GUGiK:** NMT/NMPT/orto pobieraja rekordy z warstw
   GetCapabilities (bez listy zaszytych warstw). Odpowiedz transportowa ma
   trzy proby z backoffem i jedna sesje na watek; awaria warstwy albo
@@ -307,8 +316,9 @@ kartograf cache path
   `NoCoverageError` z podpowiedzia, dla PL-2000 1:10000 z dostepnymi
   potomkami: `--scale 1:2000` (bez cichego fallbacku PL-1992).
   `extra.source` arkusza i `extra.sheet_sources` wycinka podaja pochodzenie.
-  `MetadataCache` przechowuje rekord lub potwierdzony brak pokrycia
-  (TTL 7d; `get_record/set_record`, `stats()["record_count"]`);
+  `MetadataCache` przechowuje rekord lub potwierdzony brak pokrycia wraz
+  z trescia podpowiedzi (TTL 7d; `get_record/set_record`,
+  `stats()["record_count"]`); cache hit odtwarza ten sam `NoCoverageError`.
   CLI podpina go w torach PL, `kartograf cache stats` drukuje `Record entries`.
   `--force` omija cache rekordow, `download_pl_cutout(cache=)` udostepnia go
   bibliotece. Orto domyslnie wybiera RGB; `GugikOrtoProvider(color="CIR")`

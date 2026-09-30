@@ -4499,6 +4499,7 @@ class TestAutoSplitBBox:
         err = capsys.readouterr().err
         assert "Info: --country auto: czesc PL przycieta" in err
         assert "N: 54,90°N" in err
+        assert "request.godlo" in err and "plik i request.bbox" not in err
         assert "poza zasiegiem PL/CZ" in err
         assert "--country pl" in err
 
@@ -5132,7 +5133,7 @@ class TestAutoSplitGeometry:
     @patch("kartograf.core.geometry.get_overall_bbox")
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_geometry_auto_clipping_prints_info(
+    def test_geometry_auto_clipping_does_not_print_pl_info(
         self,
         mock_manager_class,
         mock_find,
@@ -5142,7 +5143,7 @@ class TestAutoSplitGeometry:
         tmp_path,
         capsys,
     ):
-        """S3: --geometry pod auto dostaje ten sam Info: o przycieciu co --bbox."""
+        """PL pobiera arkusze z calej geometrii: brak falszywego Info o przycieciu."""
         geometry_file = tmp_path / "area.shp"
         geometry_file.write_bytes(b"stub")
         mock_overall.return_value = BBox(
@@ -5158,8 +5159,41 @@ class TestAutoSplitGeometry:
         assert result == 0
         mock_cz.assert_not_called()
         err = capsys.readouterr().err
-        assert "Info: --country auto: czesc PL przycieta" in err
-        assert "N: 54,90°N" in err and "poza zasiegiem PL/CZ" in err
+        assert "Info: --country auto:" not in err
+        assert "poza zasiegiem PL/CZ" not in err
+
+    @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
+    @patch("kartograf.cli.download_cmd._cmd_download_cz", return_value=0)
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_geometry_auto_informs_only_clipped_cz(
+        self, manager_class, find, overall, cz, read_crs, tmp_path, capsys
+    ):
+        geometry_file = tmp_path / "area.shp"
+        geometry_file.write_bytes(b"stub")
+        overall.return_value = BBox(465000.0, 200000.0, 505000.0, 220000.0, "EPSG:2180")
+        find.return_value = ["M-34-86-D-d-4-3"]
+        manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
+
+        assert (
+            main(
+                [
+                    "download",
+                    "--geometry",
+                    str(geometry_file),
+                    "-o",
+                    str(tmp_path),
+                    "-q",
+                ]
+            )
+            == 0
+        )
+        cz.assert_called_once()
+        err = capsys.readouterr().err
+        assert "Info: --country auto: czesc CZ przycieta" in err
+        assert "Info: --country auto: czesc PL" not in err
+        assert "poza zasiegiem PL/CZ" not in err
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     def test_geometry_explicit_cz_gets_parent_request(self, mock_cz, tmp_path):

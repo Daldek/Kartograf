@@ -14,7 +14,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rocznika LAZ `discover_tiles` zwraca `DownloadError` zamiast
   cichego przejścia do starszej kampanii / wyniku pustego.
 - `MetadataCache.get_url/set_url` zastąpiono `get_record/set_record`
-  (`{"source": ...}` lub `{"no_coverage": true}`); stara tabela SQLite
+  (`{"source": ...}` lub `{"no_coverage": true, "message": ...}`); trafienie
+  negatywne odtwarza pełną podpowiedź braku pokrycia. Stara tabela SQLite
   `url_cache` jest usuwana przy otwarciu, `stats()["record_count"]`
   i `kartograf cache stats` (`Record entries`) liczą nowe rekordy.
   `--force` omija cache rekordów, `download_pl_cutout(cache=)` daje
@@ -59,8 +60,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   per wątek i retry, aby zerwane połączenie nie kończyło zadania od razu.
 - **S2:** R5 obejmuje listę arkuszy i hierarchię: brak danych jednego
   arkusza nie przerywa pobierania pozostałych.
-- **S3:** `--country auto` drukuje `Info:` o przycięciu i utracie obszaru,
-  a nieobcięte krawędzie PL nie są poszerzane przez round-trip CRS.
+- **S3:** `--country auto` drukuje `Info:` o rzeczywistym przycięciu i utracie
+  obszaru (nie dla części PL `--geometry` bez `--target-crs`, która wyznacza
+  arkusze z całej geometrii); w trybie listy `--bbox` sidecar ma
+  `request.godlo`, a nie `request.bbox`. Nieobcięte krawędzie PL nie są
+  poszerzane przez round-trip CRS.
 - **S4:** Zniknął fallback na przestarzałe, zaszyte warstwy NMPT;
   brak prawidłowej odpowiedzi serwera jest błędem, nie niepewnym
   brakiem danych.
@@ -81,7 +85,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **N6:** CLI podpina cache rekordów do pobierania PL, aby kolejny
   przebieg bez `--force` nie pytał ponownie skorowidza.
 - **N7:** Awaria discovery rocznika LAZ zgłasza `DownloadError` z rokiem,
-  a `No LAZ tiles found` oznacza komplet poprawnych odpowiedzi.
+  a jawnie nieistniejący `--year` podaje lata z GetCapabilities bez sugestii
+  ponawiania; `No LAZ tiles found` oznacza komplet poprawnych odpowiedzi.
 - **N8:** Sidecar arkusza/kafla PL-2000 zapisuje EPSG odpowiedniej
   strefy zamiast EPSG:2180.
 - **N9:** Kontrola miejsca na dysku wykorzystuje policzone wcześniej

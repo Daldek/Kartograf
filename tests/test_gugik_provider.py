@@ -684,6 +684,26 @@ class TestGugikProviderGetOpendataUrl:
 
         assert "0.5 m" in str(exc_info.value)
 
+    def test_negative_cache_preserves_resolution_hint(self, tmp_path):
+        from kartograf.cache.metadata import MetadataCache
+
+        body = render_gfi_body([gfi_record(self.GODLO, resolution="0.50 m")])
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=_wms_response(body))
+        cache = MetadataCache(db_path=tmp_path / "cache.db")
+        try:
+            provider = GugikProvider(session=session, cache=cache)
+            with pytest.raises(NoCoverageError) as first:
+                provider._get_opendata_url(self.GODLO)
+            calls = session.get.call_count
+            with pytest.raises(NoCoverageError) as cached:
+                provider._get_opendata_url(self.GODLO)
+            assert session.get.call_count == calls
+            assert str(cached.value) == str(first.value)
+            assert "0.5 m" in str(cached.value)
+        finally:
+            cache.close()
+
     def test_rejected_record_does_not_stop_layer_loop(self, record_response):
         """Warstwa z samym 0,50 m nie konczy petli — 1 m z nastepnej warstwy."""
         first = _wms_response(

@@ -498,20 +498,23 @@ def _area_outside_extents(
 
 
 def _print_clipping_info(
-    bbox: BBox, countries: tuple[str, ...], parts: dict[str, CountryPart]
+    bbox: BBox,
+    countries: tuple[str, ...],
+    parts: dict[str, CountryPart],
+    *,
+    pl_geometry_sheets: bool = False,
+    pl_sheet_list: bool = False,
 ) -> None:
     """``Info:`` o przycieciu pod ``--country auto`` (S3; stderr, ``-q`` nie tlumi).
 
-    1. per kraj z niepustym ``clipped``: plik i ``request.bbox`` beda mialy
-       inny zasieg niz zadanie (takze gdy odcieta czesc jest po prostu
-       w drugim kraju — uzytkownik szuka pliku po wspolrzednych);
-    2. tylko przy realnej utracie (``_area_outside_extents``): obszar poza
-       prostokatami WSZYSTKICH odpytanych krajow nikt nie pobierze.
-    Brak przyciecia = brak komunikatow.
+    PL --geometry bez wycinka pobiera arkusze z calej geometrii, wiec
+    przyciecie jej pomocniczego bboxa nie ogranicza pobierania PL.
     """
     from kartograf.sources.registry import get_country
 
     for code in countries:
+        if code == "PL" and pl_geometry_sheets:
+            continue
         part = parts[code]
         if not part.clipped:
             continue
@@ -521,13 +524,25 @@ def _print_clipping_info(
             for edge, attr, _is_min, unit in _EDGES
             if edge in part.clipped
         )
+        if code == "PL" and pl_sheet_list:
+            result = (
+                "arkusze wyznaczono z przycietego bboxa, sidecar ma "
+                "request.godlo; oryginal w extra.parent_request.bbox"
+            )
+        else:
+            result = (
+                "plik i request.bbox niosa zasieg przyciety, oryginal "
+                "w extra.parent_request.bbox"
+            )
         print(
             f"Info: --country auto: czesc {code} przycieta do obwiedni kraju "
-            f"({edges}); plik i request.bbox niosa zasieg przyciety, oryginal "
-            "w extra.parent_request.bbox",
+            f"({edges}); {result}",
             file=sys.stderr,
         )
     if not any(parts[code].clipped for code in countries):
+        return
+    if pl_geometry_sheets and "PL" in countries:
+        # PL czyta CALA geometrie, wiec rowniez obszar poza prostokatami.
         return
     lost, share = _area_outside_extents(
         _bbox_to_wgs84(bbox), [get_country(c).extent_wgs84 for c in countries]
@@ -719,7 +734,16 @@ def _dispatch_area(
         except TransformError as e:
             return _print_transform_error(e)
     if auto:
-        _print_clipping_info(bbox, countries, parts)
+        pl_geometry_sheets = filepath is not None and not getattr(
+            args, "target_crs", None
+        )
+        _print_clipping_info(
+            bbox,
+            countries,
+            parts,
+            pl_geometry_sheets=pl_geometry_sheets,
+            pl_sheet_list=filepath is None and not getattr(args, "target_crs", None),
+        )
 
     results: list[tuple[str, int]] = []
     for code in countries:

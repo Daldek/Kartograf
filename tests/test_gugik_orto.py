@@ -426,6 +426,23 @@ class TestGugikOrtoProviderCache:
             provider._get_opendata_url(GODLO)
         session.get.assert_not_called()
 
+    def test_negative_cache_preserves_variant_hint(self, cache):
+        body = orto_body(
+            [orto_record(kolor="CIR", aktualnosc="2024-06-21", url=CIR_2024)]
+        )
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=gfi_response(body))
+        provider = GugikOrtoProvider(session=session, cache=cache)
+
+        with pytest.raises(NoCoverageError) as first:
+            provider._get_opendata_url(GODLO)
+        calls = session.get.call_count
+        with pytest.raises(NoCoverageError) as cached:
+            provider._get_opendata_url(GODLO)
+        assert session.get.call_count == calls
+        assert str(cached.value) == str(first.value)
+        assert "CIR 2024-06-21" in str(cached.value)
+
     def test_cache_miss_stores_source_with_kolor(self, cache):
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
@@ -459,10 +476,13 @@ class TestGugikOrtoProviderCache:
         session.get = Mock(return_value=gfi_response(orto_body([])))
         provider = GugikOrtoProvider(session=session, cache=cache)
 
-        with pytest.raises(NoCoverageError):
+        with pytest.raises(NoCoverageError) as exc:
             provider._get_opendata_url(GODLO)
 
-        assert cache.get_record("orto", "RGB", "none", GODLO) == {"no_coverage": True}
+        assert cache.get_record("orto", "RGB", "none", GODLO) == {
+            "no_coverage": True,
+            "message": str(exc.value),
+        }
 
     def test_query_failure_is_not_cached(self, cache):
         """K3-safe: awaria sieci = DownloadError, cache zostaje pusty."""

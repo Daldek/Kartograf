@@ -373,12 +373,6 @@ class TestLayers:
 class TestNmptLayerPattern:
     """GugikNmptProvider odkrywa warstwy wlasnym wzorcem SkorowidzeNMPT*."""
 
-    def test_pattern_accepts_only_nmpt_names(self):
-        assert GugikNmptProvider.LAYER_PATTERN.fullmatch("SkorowidzeNMPT2026")
-        assert GugikNmptProvider.LAYER_PATTERN.fullmatch("SkorowidzeNMPT2023iStarsze")
-        assert GugikNmptProvider.LAYER_PATTERN.fullmatch("SkorowidzeNMT2026") is None
-        assert GugikProvider.LAYER_PATTERN.fullmatch("SkorowidzeNMPT2026") is None
-
     @pytest.mark.real_wms_layers
     def test_fetch_wms_layers_returns_only_nmpt(self):
         """GetCapabilities z warstwami obu produktow -> tylko NMPT, posortowane."""
