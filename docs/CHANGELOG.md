@@ -6,6 +6,89 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.7.0] - Unreleased
+### Fala naprawcza 2026-09-29/30 — migracja
+- Przy wyborze arkusza GUGiK `NoCoverageError` zastępuje cichy plik
+  PL-1992 pod godłem PL-2000, plik 0,5 m pod żądaniem 1 m lub
+  arkusz potomny; dla PL-2000 1:10000 z samymi potomkami użyj
+  `--scale 1:2000`. Awaria nowszej warstwy skorowidza lub jednego
+  rocznika LAZ `discover_tiles` zwraca `DownloadError` zamiast
+  cichego przejścia do starszej kampanii / wyniku pustego.
+- `MetadataCache.get_url/set_url` zastąpiono `get_record/set_record`
+  (`{"source": ...}` lub `{"no_coverage": true}`); stara tabela SQLite
+  `url_cache` jest usuwana przy otwarciu, `stats()["record_count"]`
+  i `kartograf cache stats` (`Record entries`) liczą nowe rekordy.
+  `--force` omija cache rekordów, `download_pl_cutout(cache=)` daje
+  bibliotece opcjonalny cache.
+- Usunięto zaszyte `WMS_LAYERS` i `FALLBACK_YEARS`: discovery warstw
+  i lat bazuje na GetCapabilities; awaria daje `DownloadError`.
+  `GugikOrtoProvider(color="RGB")` domyślnie wybiera RGB, a
+  `color="CIR"` żąda podczerwieni.
+- `GridMismatchError(ValidationError)` z `.off_grid` zastępuje błędny
+  wycinek EPSG:2180 z arkuszy o różnych fazach; inny `--target-crs`
+  używa W1 (warp per arkusz). Lista arkuszy i hierarchia godła z R5:
+  `NoCoverageError` -> `DownloadProgress.status == "no_coverage"`,
+  `Warning:` i kod 0 przy co najmniej jednym pliku; brak wszystkich
+  lub twarda awaria -> kod 1 z pełną listą niepowodzeń.
+- Sidecar dodaje `extra.source` (arkusz), `sheet_sources` (wycinek),
+  `parent_requests` (arkusze wykorzystane ponownie) i
+  `off_grid_sheets` (W1); arkusze PL-2000 dostają rzeczywisty
+  `horizontal_crs` EPSG:2176–2179. `PlCutoutResult` dodaje
+  `all_nodata` i `off_grid_sheets`; pominięty wycinek odtwarza
+  brakujące/odchylone arkusze z sidecara. 16 testów `live` zamiast 8
+  (nieuruchomione w tej fali).
+- Istniejące rastry CZ i wycinki PL -> EPSG:5514 z sidecarem
+  `S-JTSK to ETRS89 (3)` były liczone słowacką operacją i mogą być
+  przesunięte o 1–5 m; CLI drukuje `Info:` przy ich pominięciu,
+  ale nie przebudowuje ich automatycznie: uruchom ponownie z `--force`.
+
+### Fixed — fala naprawcza 2026-09-29/30
+- **K1:** BBOX i envelope LAZ WFS respektują osie (N,E), a straż
+  przecięcia odrzuca kafle spoza żądanego obszaru.
+- **K2:** Pin czeskiej operacji EPSG:1622/1623 (1,0 m) zastępuje
+  słowacką EPSG:4829, usuwając przesunięcie reprojektowanego CZ
+  i wycinka PL -> 5514.
+- **K3:** Nieudane zapytanie nowszej warstwy kończy się `DownloadError`
+  po ponowieniach zamiast cicho pobierać starszą kampanię.
+- **K4:** Ścisły filtr godła, układu, rozdzielczości i daty wybiera
+  właściwy arkusz zamiast pierwszego częściowo zgodnego URL-a.
+- **K5:** Orto domyślnie wybiera najnowszy rekord RGB zamiast CIR
+  lub najstarszej edycji w warstwie zbiorczej.
+- **K6:** CUZK dzieli `exportImage` przy budżecie 4 Mpx na żądanie,
+  więc duże wycinki nie trafiają do limitu serwera ~8 Mpx.
+- **S1:** Zapytania GetCapabilities/GetFeatureInfo korzystają z sesji
+  per wątek i retry, aby zerwane połączenie nie kończyło zadania od razu.
+- **S2:** R5 obejmuje listę arkuszy i hierarchię: brak danych jednego
+  arkusza nie przerywa pobierania pozostałych.
+- **S3:** `--country auto` drukuje `Info:` o przycięciu i utracie obszaru,
+  a nieobcięte krawędzie PL nie są poszerzane przez round-trip CRS.
+- **S4:** Zniknął fallback na przestarzałe, zaszyte warstwy NMPT;
+  brak prawidłowej odpowiedzi serwera jest błędem, nie niepewnym
+  brakiem danych.
+- **S5:** Niezgodna faza arkuszy NMT 5 m powoduje jawny
+  `GridMismatchError` w EPSG:2180, a dla innego CRS uruchamia W1,
+  bez złych pikseli i szwów nodata z poprzedniej mozaiki.
+- **N1:** Uszkodzony szablon GetFeatureInfo nie jest już uznawany za
+  pustą odpowiedź i fałszywy brak pokrycia.
+- **N2:** CLI ostrzega o wycinku PL/CZ w całości nodata, zachowując
+  kod 0 dla poprawnie pobranego, lecz pustego rastra.
+- **N3:** Snap od naroża NW daje dokładny piksel 2 m/5 m również
+  dla pojedynczego wycinka CUZK.
+- **N4:** Pominięte arkusze dopisują nowe żądania do `parent_requests`,
+  a pominięty wycinek odczytuje `missing_sheets` i `off_grid_sheets`
+  z sidecara.
+- **N5:** Osiem testów WMS PL-2000 ma asercje wobec prawdziwych
+  rekordów/CRS zamiast samych połączeń (łącznie 16 testów `live`).
+- **N6:** CLI podpina cache rekordów do pobierania PL, aby kolejny
+  przebieg bez `--force` nie pytał ponownie skorowidza.
+- **N7:** Awaria discovery rocznika LAZ zgłasza `DownloadError` z rokiem,
+  a `No LAZ tiles found` oznacza komplet poprawnych odpowiedzi.
+- **N8:** Sidecar arkusza/kafla PL-2000 zapisuje EPSG odpowiedniej
+  strefy zamiast EPSG:2180.
+- **N9:** Kontrola miejsca na dysku wykorzystuje policzone wcześniej
+  brakujące arkusze zamiast przeliczać je przed uruchomieniem wycinka.
+- **H1:** Parser rekordów rozpoznaje URL-e arkuszy `.ASC` niezależnie
+  od wielkości liter, aby nie zgubić dostępnych danych.
+
 
 ### Breaking Changes
 - **Przejscie z 0.6.1 — co zrobic (m.in. Hydrograf):**

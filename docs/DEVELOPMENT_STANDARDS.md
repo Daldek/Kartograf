@@ -1,7 +1,7 @@
 # Standardy deweloperskie — Kartograf
 
-**Wersja:** 2.2
-**Data:** 2026-09-29
+**Wersja:** 2.3
+**Data:** 2026-09-30
 **Status:** Obowiazujacy
 **Zrodlo:** Zunifikowane standardy workspace (`shared/standards/DEVELOPMENT_STANDARDS.md` — repozytorium zewnetrzne, nieobecne w tym workspace)
 
@@ -13,6 +13,12 @@
 > z `-m "not live"` (sekcje 6.3, 10.1, 15), liczba testow i `download/`
 > w strukturze (7.1), `NoCoverageError` i wyjatki transformacji w hierarchii
 > (11.1), odnotowany rozjazd jezyka docstringow/commitow z praktyka (9.4).
+>
+> **Nota 2.3 (2026-09-30):** cache PL zapisuje rekord skorowidza lub
+> potwierdzony brak pokrycia (`get_record/set_record`, TTL 7 dni); uszkodzenie
+> odpowiedzi albo awaria warstwy to `DownloadError`, nie wpis negatywny.
+> `GridMismatchError(ValidationError)` chroni wartości 1:1 wycinka w EPSG:2180;
+> testy sieciowe `live` (16) są poza bramką offline.
 
 ---
 
@@ -319,11 +325,11 @@ Kartograf/
 │   ├── transport/           # wspolny transport (http: atomic download + retry; mosaic: merge kafli)
 │   ├── providers/           # providery danych
 │   │   ├── base.py          # BaseProvider, LandCoverProvider
-│   │   ├── pl/              # GUGiK: gugik.py, gugik_nmpt.py, gugik_orto.py, gugik_laz.py, bdot10k.py
+│   │   ├── pl/              # GUGiK: gugik.py, gugik_nmpt.py, gugik_orto.py, gugik_laz.py, skorowidz.py, bdot10k.py
 │   │   ├── cuzk/            # CUZK (Czechy): client.py, sheets.py, dmr.py
 │   │   ├── corine.py        # CORINE z Copernicus
 │   │   └── soilgrids.py     # SoilGrids z ISRIC
-│   ├── cache/               # MetadataCache (SQLite WAL)
+│   ├── cache/               # MetadataCache (SQLite WAL, record_cache 7d + sheet_cache 30d)
 │   ├── download/            # DownloadManager (NMT/NMPT/Orto), FileStorage, wycinek PL (cutout.py, ADR-027)
 │   ├── landcover/           # land cover management
 │   ├── hydrology/           # obliczenia hydrologiczne (HSG)
@@ -331,7 +337,7 @@ Kartograf/
 │   └── cli/                 # CLI podzielone per komenda: _parser.py (argparse),
 │                            # parse_cmd.py, download_cmd.py, landcover_cmd.py,
 │                            # soilgrids_cmd.py, cache_cmd.py + fasada commands.py
-├── tests/                   # 32 pliki testowe + conftest.py + fixtures/ (1861 testow offline + 8 `live`, stan 2026-09-28)
+├── tests/                   # conftest.py + fixtures/ (2057 testow offline + 16 `live`, stan 2026-09-30)
 ├── docs/                    # dokumentacja
 ├── CLAUDE.md
 ├── README.md
@@ -785,8 +791,8 @@ CorineProvider → localhost HTTP → AuthProxy (subprocess) → Keychain → CL
 ## 15. Pre-merge checklist
 
 ```markdown
-- [ ] Testy przechodza (`pytest tests/ -v -m "not live"`; testy `live` — 8
-      testow sieciowych WMS GUGiK — tylko swiadomie: `pytest tests/ -m live`)
+- [ ] Testy przechodza (`pytest tests/ -v -m "not live"`; testy `live` — 16
+      testow sieciowych — tylko swiadomie: `pytest tests/ -m live`)
 - [ ] Pokrycie kodu w normie (80% core / 60% utility)
 - [ ] Formatowanie OK (`ruff format --check kartograf/ tests/`)
 - [ ] Linting OK (`ruff check kartograf/ tests/`)
@@ -801,8 +807,8 @@ CorineProvider → localhost HTTP → AuthProxy (subprocess) → Keychain → CL
 
 ---
 
-**Wersja dokumentu:** 2.2
-**Data ostatniej aktualizacji:** 2026-09-29
+**Wersja dokumentu:** 2.3
+**Data ostatniej aktualizacji:** 2026-09-30
 **Zrodlo:** `shared/standards/DEVELOPMENT_STANDARDS.md` v1.0 (repozytorium zewnetrzne, nieobecne w tym workspace)
 
 *Odstepstwa od tych standardow wymagaja uzasadnienia w `CLAUDE.md` projektu.*

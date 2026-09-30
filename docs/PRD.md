@@ -1,8 +1,8 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.7
-**Data:** 2026-09-29
+**Wersja:** 3.8
+**Data:** 2026-09-30
 **Product Owner:** Piotr
 **Status:** Production (v0.6.1)
 
@@ -23,11 +23,9 @@
 > o pełnym podniesieniu PRD do 0.7.0 należy do Product Ownera (pozycja
 > w checkliście release).
 >
-> **Nota (3.7, 2026-09-29, audyt dokumentacji po testach na żywo):** punktowo
-> uzgodnione z kodem na `develop`: lista eksportów w sekcji 5 (39 nazw — API
-> wycinka PL i `NoCoverageError`), odsyłacz do wycinka `download_pl_cutout`
-> przy WCS, mozaika w sekcji 8, uwaga o znanym błędzie K1 przy LAZ (sekcja 3.4;
-> lista znanych błędów: `docs/PROGRESS.md`, „Znane bledy”).
+> **Nota (3.8, 2026-09-30):** sekcja 3.4 opisuje discovery LAZ z poprawną
+> kolejnością osi WFS (N,E); pozostałe wymagania wydania 0.7.0 opisują
+> `docs/SCOPE.md` i `docs/ARCHITECTURE.md`.
 
 ---
 
@@ -234,11 +232,8 @@ kartograf download --geometry area.shp --product laz
 ```
 
 #### Notes
-- **Znany błąd K1 (testy na żywo 2026-09-29, sprzed 0.7.0):** discovery WFS
-  wysyła bbox i czyta envelope kafli z zamienionymi osiami, więc kafle
-  pochodzą z innego miejsca (przykład z bboxem `530000,382000,...` szuka
-  ok. 209 km, a z godłem `N-34-130-D-d-2-4` — ok. 370 km od podanego
-  obszaru); nie używać do czasu naprawy
+- WFS EPSG:2180 przyjmuje bbox i zwraca envelope w kolejności osi (N,E);
+  discovery odrzuca zestaw kafli, w którym żaden nie przecina obszaru.
 - Źródło: GUGiK WFS (`DanePomiaroweLidarEVRF2007` / `DanePomiaroweLidarKRON86`)
 - Domyślnie newest-per-tile (dedup po godle, najnowszy `akt_rok`)
 - Pobieranie równoległe (`--workers`), pomijanie istniejących plików
@@ -686,6 +681,6 @@ HYDROGRAF (główna aplikacja)
 
 ---
 
-**Wersja dokumentu:** 3.7
-**Data ostatniej aktualizacji:** 2026-09-29
-**Status:** Production - v0.6.1 (snapshot; korekty spójności 3.5, 3.6 i 3.7 — patrz noty na początku dokumentu)
+**Wersja dokumentu:** 3.8
+**Data ostatniej aktualizacji:** 2026-09-30
+**Status:** Production - v0.6.1 (snapshot; punktowe korekty spójności do 3.8, patrz noty na początku dokumentu)

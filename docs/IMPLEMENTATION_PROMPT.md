@@ -1,7 +1,7 @@
 # Prompt implementacyjny — Kartograf
 
-**Wersja:** 4.2
-**Data:** 2026-09-29
+**Wersja:** 4.3
+**Data:** 2026-09-30
 **Dla:** Claude Code i inni asystenci AI
 
 > **Nota 4.0 (2026-08-18):** aktualizacja do stanu po etapie 1 (v0.7.0-dev,
@@ -17,6 +17,10 @@
 > **Nota 4.2 (2026-09-29, audyt dokumentacji):** Public API z wycinkiem PL
 > i `NoCoverageError`, komendy testow z `-m "not live"`, workery 4/1,
 > mozaikowanie wycinka PL, odsylacz do znanych bledow z testow na zywo.
+>
+> **Nota 4.3 (2026-09-30):** cache PL `get_record/set_record`,
+> skutek `--force`, `GridMismatchError` dla EPSG:2180 z arkuszy
+> o różnych fazach, warp W1 i budżet 4 Mpx CUZK (sekcja 9).
 
 ---
 
@@ -278,9 +282,9 @@ from kartograf import (
 - **CORINE GeoTIFF** — wymaga OAuth2 credentials; bez nich fallback na PNG (WMS)
 - **SoilGrids** — tylko WGS84 bbox (transformacja automatyczna)
 - **Retry** — max 3 proby, exponential backoff (nie konfigurowalne)
-- **Cache metadanych** — MetadataCache (SQLite WAL, TTL 7 dni); CLI: `kartograf cache stats|clear|path`; tory PL go nie podlaczaja (znany blad N6 — `docs/PROGRESS.md`, "Znane bledy")
-- **Mozaikowanie** — `transport/mosaic.py` (merge kafli + crop), uzywane dla kafelkowanych bboxow CZ (exportImage) i wycinka PL `--target-crs` / `download_pl_cutout` (ADR-027)
-- **Znane bledy z testow na zywo 2026-09-29** (K1-K6, S1-S5, N1-N9) — `docs/PROGRESS.md`, "Znane bledy"; m.in. `--product laz` pobiera kafle z innego miejsca (K1)
+- **Cache metadanych** — MetadataCache (SQLite WAL, TTL 7 dni): rekord skorowidza `get_record/set_record` (dane źródła albo brak pokrycia), statystyka `record_count` (`kartograf cache stats`: `Record entries`); CLI PL używa cache, poza `--force`; `download_pl_cutout(cache=)` przyjmuje go opcjonalnie
+- **Mozaikowanie** — `transport/mosaic.py` (merge + crop), dla kafelkowanego CUZK budżet 4 Mpx na zapytanie; wycinek PL z różnymi fazami siatki zgłasza `GridMismatchError` w EPSG:2180 albo używa warpu per arkusz (W1) w innym CRS
+- **Weryfikacja przed wydaniem** — testy offline nie zastępują ponownych testów na żywych serwisach; aktualne ograniczenia w README „Znane problemy (0.7.0-dev)”
 - **Pelna, aktualna lista ograniczen** (w tym CZ/CUZK etap 1) — CLAUDE.md, sekcja "Ograniczenia"
 
 ---
@@ -319,6 +323,6 @@ hsg_path = calc.calculate_hsg_by_godlo("N-34-130-D", Path("./hsg.tif"))
 
 ---
 
-**Wersja dokumentu:** 4.2
-**Data ostatniej aktualizacji:** 2026-09-29
+**Wersja dokumentu:** 4.3
+**Data ostatniej aktualizacji:** 2026-09-30
 **Status:** Aktywny dla wszystkich asystentow AI pracujacych nad projektem
