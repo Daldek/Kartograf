@@ -11,9 +11,9 @@ Narzędzie do automatycznego pobierania danych przestrzennych z zasobów GUGiK (
 - **SoilGrids** - Globalne dane glebowe (tekstura, węgiel organiczny, pH)
 - **HSG** - Hydrologic Soil Groups dla metody SCS-CN (grupy hydrologiczne gleb)
 
-> **0.7.0-dev:** pobieranie PL/CZ zweryfikowano offline po fali naprawczej; przed
-> wydaniem wymagane są ponowne testy na żywych serwisach. Pozostałe ograniczenia:
-> [Znane problemy (0.7.0-dev)](#znane-problemy-070-dev).
+> **0.7.0-dev:** pobieranie PL/CZ po fali naprawczej zweryfikowano offline
+> (2058 testów) i na żywych usługach GUGiK/CUZK (2026-09-30: 11 scenariuszy
+> PASS). Pozostałe ograniczenia: [Znane problemy (0.7.0-dev)](#znane-problemy-070-dev).
 
 ## Szybki Start
 
@@ -203,8 +203,8 @@ pliki z sidecarem `transform.horizontal` zawierającym
 
 ## Znane problemy (0.7.0-dev)
 
-Pozostają ograniczenia produktu i wymóg ponownej weryfikacji na żywych usługach
-GUGiK/CUZK po fali naprawczej (testy offline nie zastępują testów serwerów):
+Pozostają ograniczenia produktu (testy na żywych usługach po fali naprawczej
+2026-09-30: 11 PASS / 0 FAIL, `docs/research/2026-09-29-fala-naprawcza/live-2026-09-30.md`):
 
 - Kartograf nie scala jeszcze rastrów PL i CZ w jedną powierzchnię przygraniczną
   (R6); wyniki są osobne, powiązane przez `extra.parent_request`.
