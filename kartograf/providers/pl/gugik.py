@@ -33,18 +33,12 @@ from kartograf.exceptions import (
     ValidationError,
 )
 from kartograf.providers.base import BaseProvider
-from kartograf.providers.pl.skorowidz import (
-    SkorowidzLayersMixin,
-    SkorowidzRecord,
-    SourceInfoMixin,
-    query_skorowidz_layer,
-    select_sheet_record,
-)
+from kartograf.providers.pl.skorowidz import SkorowidzLayersMixin, SkorowidzRecord
 
 logger = logging.getLogger(__name__)
 
 
-class GugikProvider(SkorowidzLayersMixin, SourceInfoMixin, BaseProvider):
+class GugikProvider(SkorowidzLayersMixin, BaseProvider):
     """
     Provider for downloading NMT data from GUGiK.
 
@@ -301,58 +295,21 @@ class GugikProvider(SkorowidzLayersMixin, SourceInfoMixin, BaseProvider):
     ) -> SkorowidzRecord:
         """Cache -> warstwy od najnowszej -> twardy filtr -> najnowsza kampania."""
         parser = SheetParser(godlo)
-        godlo = parser.godlo
-        cache_key = (self._CACHE_PRODUCT, self._resolution, self._vertical_crs, godlo)
-        if self._cache is not None:
-            cached = self._cache.get_record(*cache_key)
-            if cached is not None:
-                if cached.get("no_coverage"):
-                    raise self._no_coverage(parser, [])
-                source = cached["source"]
-                self._remember_source(godlo, source)
-                return SkorowidzRecord.from_source(source)
-
-        endpoint = self.WMS_SKOROWIDZE_ENDPOINTS.get(self._resolution, {}).get(
-            self._vertical_crs
+        return self._resolve_record(
+            parser,
+            timeout,
+            cache_key=(
+                self._CACHE_PRODUCT,
+                self._resolution,
+                self._vertical_crs,
+                parser.godlo,
+            ),
+            endpoint=self.WMS_SKOROWIDZE_ENDPOINTS.get(self._resolution, {}).get(
+                self._vertical_crs
+            ),
+            resolution_m=float(self._resolution[:-1]),
+            no_coverage=self._no_coverage,
         )
-        if endpoint is None:
-            raise DownloadError(
-                f"Brak endpointu WMS dla {self._resolution}, {self._vertical_crs}",
-                godlo=godlo,
-            )
-        layers = self._layers(endpoint)
-        bbox = parser.get_bbox(crs="EPSG:2180")
-        x = (bbox.min_x + bbox.max_x) / 2
-        y = (bbox.min_y + bbox.max_y) / 2
-        query_bbox = f"{y - 10},{x - 10},{y + 10},{x + 10}"
-        rejected = []
-        for layer in layers:
-            records = query_skorowidz_layer(
-                self._session_for_thread(),
-                endpoint,
-                layer,
-                query_bbox=query_bbox,
-                godlo=godlo,
-                timeout=timeout,
-                retries=self.MAX_RETRIES,
-            )
-            chosen = select_sheet_record(
-                records,
-                godlo=godlo,
-                uklad=parser.uklad,
-                zone=int(godlo.split(".")[0]) if parser.uklad == "2000" else None,
-                resolution_m=float(self._resolution[:-1]),
-            )
-            if chosen is not None:
-                source = chosen.to_source(endpoint)
-                self._remember_source(godlo, source)
-                if self._cache is not None:
-                    self._cache.set_record(*cache_key, {"source": source})
-                return chosen
-            rejected.extend(records)
-        if self._cache is not None:
-            self._cache.set_record(*cache_key, {"no_coverage": True})
-        raise self._no_coverage(parser, rejected)
 
     def _no_coverage(
         self, parser: SheetParser, records: list[SkorowidzRecord]

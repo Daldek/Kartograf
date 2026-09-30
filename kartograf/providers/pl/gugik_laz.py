@@ -349,7 +349,13 @@ class GugikLazProvider(BaseProvider):
                 f"Supported: {self.SUPPORTED_VERTICAL_CRS}"
             )
 
-        years = [year] if year is not None else self._get_available_years(vcrs, timeout)
+        available_years = self._get_available_years(vcrs, timeout)
+        if year is not None and year not in available_years:
+            raise DownloadError(
+                f"rocznik {year} nie istnieje w usludze {vcrs} "
+                f"(dostepne: {', '.join(map(str, available_years))})"
+            )
+        years = [year] if year is not None else available_years
         endpoint = self.WFS_ENDPOINTS[vcrs]
 
         # Deduplicate by godło, keeping the newest acquisition year

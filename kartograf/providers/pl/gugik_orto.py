@@ -28,18 +28,12 @@ import requests
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.exceptions import DownloadError, NoCoverageError, ParseError
 from kartograf.providers.base import BaseProvider
-from kartograf.providers.pl.skorowidz import (
-    SkorowidzLayersMixin,
-    SkorowidzRecord,
-    SourceInfoMixin,
-    query_skorowidz_layer,
-    select_sheet_record,
-)
+from kartograf.providers.pl.skorowidz import SkorowidzLayersMixin, SkorowidzRecord
 
 logger = logging.getLogger(__name__)
 
 
-class GugikOrtoProvider(SkorowidzLayersMixin, SourceInfoMixin, BaseProvider):
+class GugikOrtoProvider(SkorowidzLayersMixin, BaseProvider):
     """
     Provider for downloading Orthophotomap data from GUGiK.
 
@@ -198,53 +192,16 @@ class GugikOrtoProvider(SkorowidzLayersMixin, SourceInfoMixin, BaseProvider):
     ) -> SkorowidzRecord:
         """Cache -> warstwy od najnowszej -> twardy filtr uklad+kolor -> najnowsza."""
         parser = SheetParser(godlo)
-        godlo = parser.godlo
-        cache_key = (self._CACHE_PRODUCT, self._color, "none", godlo)
-        if self._cache is not None:
-            cached = self._cache.get_record(*cache_key)
-            if cached is not None:
-                if cached.get("no_coverage"):
-                    raise self._no_coverage(parser, [])
-                source = cached["source"]
-                self._remember_source(godlo, source)
-                return SkorowidzRecord.from_source(source)
-
-        endpoint = self.WMS_SKOROWIDZE_ENDPOINT
-        layers = self._layers(endpoint)
-        bbox = parser.get_bbox(crs="EPSG:2180")
-        x = (bbox.min_x + bbox.max_x) / 2
-        y = (bbox.min_y + bbox.max_y) / 2
-        query_bbox = f"{y - 10},{x - 10},{y + 10},{x + 10}"
-        rejected = []
-        for layer in layers:
-            records = query_skorowidz_layer(
-                self._session_for_thread(),
-                endpoint,
-                layer,
-                query_bbox=query_bbox,
-                godlo=godlo,
-                timeout=timeout,
-                retries=self.MAX_RETRIES,
-            )
-            # Piksel (wielkoscPiksela) nie jest filtrem: produkt nie ma flagi
-            # rozdzielczosci, nowsze zdjecie pod tym samym godlem jest lepsze
-            chosen = select_sheet_record(
-                records,
-                godlo=godlo,
-                uklad=parser.uklad,
-                zone=int(godlo.split(".")[0]) if parser.uklad == "2000" else None,
-                predicate=lambda r: r.raw.get("kolor") == self._color,
-            )
-            if chosen is not None:
-                source = chosen.to_source(endpoint) | {"kolor": chosen.raw["kolor"]}
-                self._remember_source(godlo, source)
-                if self._cache is not None:
-                    self._cache.set_record(*cache_key, {"source": source})
-                return chosen
-            rejected.extend(records)
-        if self._cache is not None:
-            self._cache.set_record(*cache_key, {"no_coverage": True})
-        raise self._no_coverage(parser, rejected)
+        return self._resolve_record(
+            parser,
+            timeout,
+            cache_key=(self._CACHE_PRODUCT, self._color, "none", parser.godlo),
+            endpoint=self.WMS_SKOROWIDZE_ENDPOINT,
+            # Piksel nie jest filtrem: orto nie ma flagi rozdzielczosci.
+            predicate=lambda record: record.raw.get("kolor") == self._color,
+            source_extra={"kolor": self._color},
+            no_coverage=self._no_coverage,
+        )
 
     def _no_coverage(
         self, parser: SheetParser, records: list[SkorowidzRecord]

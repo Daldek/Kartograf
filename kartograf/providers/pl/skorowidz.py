@@ -11,8 +11,14 @@ from urllib.parse import urlencode
 
 import requests
 
+from kartograf.cache.metadata import MetadataCache
 from kartograf.core.sheet_parser import SheetParser
-from kartograf.exceptions import DownloadError, ParseError, ValidationError
+from kartograf.exceptions import (
+    DownloadError,
+    NoCoverageError,
+    ParseError,
+    ValidationError,
+)
 from kartograf.transport.http import get_with_retry, make_gugik_session
 
 logger = logging.getLogger(__name__)
@@ -269,7 +275,7 @@ class SourceInfoMixin:
             return dict(source) if source is not None else None
 
 
-class SkorowidzLayersMixin:
+class SkorowidzLayersMixin(SourceInfoMixin):
     """Sesja HTTP na watek i warstwy skorowidza WMS odkrywane per endpoint.
 
     Klasa pochodna deklaruje ``LAYER_PATTERN`` o dwoch grupach: grupa 1 = rok
@@ -280,6 +286,79 @@ class SkorowidzLayersMixin:
 
     LAYER_PATTERN: re.Pattern[str]
     _session: requests.Session | None
+    _cache: MetadataCache | None
+    MAX_RETRIES: int
+
+    def _resolve_record(
+        self,
+        parser: SheetParser,
+        timeout: int,
+        *,
+        cache_key: tuple[str, str, str, str],
+        endpoint: str | None,
+        no_coverage: Callable[[SheetParser, list[SkorowidzRecord]], NoCoverageError],
+        resolution_m: float | None = None,
+        predicate: Callable[[SkorowidzRecord], bool] | None = None,
+        source_extra: dict | None = None,
+    ) -> SkorowidzRecord:
+        """Rozwiaz arkusz po warstwach: cache, filtr produktu i podpowiedz braku."""
+        godlo = parser.godlo
+        if self._cache is not None:
+            cached = self._cache.get_record(*cache_key)
+            if cached is not None:
+                if cached.get("no_coverage"):
+                    raise NoCoverageError(
+                        cached.get("message") or str(no_coverage(parser, [])),
+                        godlo=godlo,
+                    )
+                source = cached["source"]
+                self._remember_source(godlo, source)
+                return SkorowidzRecord.from_source(source)
+
+        if endpoint is None:
+            raise DownloadError(
+                f"Brak endpointu WMS dla {cache_key[1]}, {cache_key[2]}",
+                godlo=godlo,
+            )
+        layers = self._layers(endpoint)
+        bbox = parser.get_bbox(crs="EPSG:2180")
+        x = (bbox.min_x + bbox.max_x) / 2
+        y = (bbox.min_y + bbox.max_y) / 2
+        query_bbox = f"{y - 10},{x - 10},{y + 10},{x + 10}"
+        rejected: list[SkorowidzRecord] = []
+        for layer in layers:
+            records = query_skorowidz_layer(
+                self._session_for_thread(),
+                endpoint,
+                layer,
+                query_bbox=query_bbox,
+                godlo=godlo,
+                timeout=timeout,
+                retries=self.MAX_RETRIES,
+            )
+            chosen = select_sheet_record(
+                records,
+                godlo=godlo,
+                uklad=parser.uklad,
+                zone=int(godlo.split(".")[0]) if parser.uklad == "2000" else None,
+                resolution_m=resolution_m,
+                predicate=predicate,
+            )
+            if chosen is not None:
+                source = chosen.to_source(endpoint)
+                if source_extra:
+                    source.update(source_extra)
+                self._remember_source(godlo, source)
+                if self._cache is not None:
+                    self._cache.set_record(*cache_key, {"source": source})
+                return chosen
+            rejected.extend(records)
+        error = no_coverage(parser, rejected)
+        if self._cache is not None:
+            self._cache.set_record(
+                *cache_key, {"no_coverage": True, "message": str(error)}
+            )
+        raise error
 
     def __init__(self) -> None:
         super().__init__()

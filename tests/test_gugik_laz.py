@@ -172,6 +172,7 @@ def _provider_with_getfeature(text):
     session = MagicMock()
     session.get.return_value = _make_response(text)
     provider = GugikLazProvider(session=session)
+    provider._available_years["EVRF2007"] = [2024, 2023]
     return provider, session
 
 
@@ -477,15 +478,30 @@ class TestDiscoverTiles:
         session = MagicMock()
         session.get.side_effect = [_make_response(page1), _make_response(page2)]
         p = GugikLazProvider(session=session)
+        p._available_years["EVRF2007"] = [2024]
         with patch.object(GugikLazProvider, "PAGE_SIZE", 2):
             tiles = p.discover_tiles(QUERY_BBOX, year=2024)
         assert {t.godlo for t in tiles} == {"P1", "P2", "P3"}
         assert session.get.call_count == 2
 
+    def test_unknown_year_reports_available_years_without_retry(self):
+        session = MagicMock()
+        session.get.return_value = _make_response(CAPABILITIES_XML)
+        provider = GugikLazProvider(session=session)
+
+        with pytest.raises(DownloadError) as exc:
+            provider.discover_tiles(QUERY_BBOX, year=2099)
+
+        assert "rocznik 2099 nie istnieje w usludze EVRF2007" in str(exc.value)
+        assert "2025, 2024, 2018" in str(exc.value)
+        assert "ponow pobranie" not in str(exc.value)
+        assert session.get.call_count == 1
+        assert "REQUEST=GetCapabilities" in session.get.call_args.args[0]
+
     def test_exception_report_raises_with_server_text(self):
         p, _ = _provider_with_getfeature(EXCEPTION_XML)
-        with pytest.raises(DownloadError, match="2099.*Unknown type name"):
-            p.discover_tiles(QUERY_BBOX, year=2099)
+        with pytest.raises(DownloadError, match="2024.*Unknown type name"):
+            p.discover_tiles(QUERY_BBOX, year=2024)
 
     def test_unreadable_response_raises_download_error(self):
         p, _ = _provider_with_getfeature("<wfs:FeatureCollection")
@@ -496,6 +512,7 @@ class TestDiscoverTiles:
         session = MagicMock()
         session.get.side_effect = requests.ConnectionError("reset")
         p = GugikLazProvider(session=session)
+        p._available_years["EVRF2007"] = [2024]
         with (
             patch("kartograf.transport.http.time.sleep"),
             pytest.raises(DownloadError, match="2024.*reset.*wynik bylby niepelny"),
@@ -525,6 +542,7 @@ class TestDiscoverTiles:
             *(requests.ConnectionError("reset") for _ in range(3)),
         ]
         p = GugikLazProvider(session=session)
+        p._available_years["EVRF2007"] = [2024]
         with (
             patch.object(p, "PAGE_SIZE", 1),
             patch("kartograf.transport.http.time.sleep"),
@@ -542,6 +560,7 @@ class TestDiscoverTiles:
             _make_response(_collection([])),
         ]
         p = GugikLazProvider(session=session)
+        p._available_years["EVRF2007"] = [2024]
         with (
             patch.object(p, "PAGE_SIZE", 1),
             patch("kartograf.transport.http.time.sleep"),

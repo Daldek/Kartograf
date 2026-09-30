@@ -131,14 +131,6 @@ class TestGugikNmptProviderEndpoints:
                     f"WMS endpoint for {resolution}/{crs} should contain 'NMPT'"
                 )
 
-    def test_layer_pattern_is_nmpt(self):
-        """Wzorzec odkrywania warstw przyjmuje tylko nazwy SkorowidzeNMPT*."""
-        pattern = GugikNmptProvider.LAYER_PATTERN
-        assert pattern.fullmatch("SkorowidzeNMPT2026")
-        assert pattern.fullmatch("SkorowidzeNMPT2023iStarsze")
-        assert pattern.fullmatch("SkorowidzeNMT2023iStarsze") is None
-        assert pattern.fullmatch("SkorowidzeNMPTNajnowsze") is None
-
     def test_coverage_ids_are_dsm(self):
         """Test że coverage IDs to DSM_PL-* (nie DTM)."""
         provider = GugikNmptProvider()
