@@ -8,7 +8,9 @@ Supports parallel downloads via ThreadPoolExecutor when max_workers > 1.
 """
 
 import concurrent.futures
+import json
 import logging
+import os
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -37,7 +39,11 @@ class DownloadProgress:
     godlo : str
         Current sheet being processed
     status : str
-        Status of current operation ("downloading", "skipped", "completed", "failed")
+        Status of current operation ("downloading", "skipped", "completed",
+        "failed", "no_coverage"). ``no_coverage`` is a sheet the source has
+        no data for (``NoCoverageError``: sea, area beyond the border) — an
+        expected outcome, not a transport failure; it is still listed in
+        ``DownloadResult.failed`` (and ``no_coverage``).
     message : str
         Optional message with additional details
     """
@@ -94,6 +100,16 @@ class DownloadResult:
     def all_paths(self) -> list[Path]:
         """Return paths of successfully downloaded files."""
         return list(self.succeeded)
+
+    @property
+    def hard_failures(self) -> list[str]:
+        """``failed`` minus ``no_coverage``: transport/service failures only.
+
+        These are the sheets worth retrying — a sheet the source has no
+        data for stays missing no matter how often it is requested.
+        """
+        no_data = set(self.no_coverage)
+        return [g for g in self.failed if g not in no_data]
 
 
 # Type alias for progress callback
@@ -328,6 +344,7 @@ class DownloadManager:
         # Check if already exists
         if skip_existing and target_path.exists():
             logger.info(f"Skipping {godlo} - already exists at {target_path}")
+            self._note_reuse(target_path)
             return target_path
 
         # Download
@@ -514,6 +531,7 @@ class DownloadManager:
             target_path = self._storage.get_path(descendant_godlo, self._default_ext)
 
             if skip_existing and target_path.exists():
+                self._note_reuse(target_path)
                 return (descendant_godlo, target_path, "skipped", "Already exists")
 
             path = self._provider.download(descendant_godlo, target_path)
@@ -547,6 +565,7 @@ class DownloadManager:
 
                 if skip_existing and target_path.exists():
                     # Skipped
+                    self._note_reuse(target_path)
                     if on_progress:
                         on_progress(
                             DownloadProgress(
@@ -599,7 +618,7 @@ class DownloadManager:
                             current=i,
                             total=total,
                             godlo=current_godlo,
-                            status="failed",
+                            status="no_coverage",
                             message=str(e),
                         )
                     )
@@ -715,7 +734,7 @@ class DownloadManager:
                                 current=current_count,
                                 total=total,
                                 godlo=current_godlo,
-                                status="failed",
+                                status=status,
                                 message=message,
                             )
                         )
@@ -881,6 +900,47 @@ class DownloadManager:
             write_sidecar(data_path, meta)
         except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
             logger.warning(f"Nie udalo sie zapisac sidecara dla {data_path}: {e}")
+
+    def _note_reuse(self, data_path: Path) -> None:
+        """Dopisz biezace zadanie do sidecara arkusza POMINIETEGO (N4, best-effort).
+
+        ``extra.parent_request`` to zadanie, ktore plik POBRALO (bez zmian —
+        ``downloaded_at`` zostaje prawdziwe); kolejne zadania obszarowe, ktore
+        arkusz reuzyly z cache, laduja w liscie ``extra.parent_requests``
+        (bez duplikatow; zadanie rowne ``parent_request`` nie jest dopisywane).
+        Konsument szuka ``parent_request == R or R in parent_requests``.
+        Bez sidecara (cache sprzed 0.7.0) nic nie powstaje — sidecar z
+        niepewna data i bez ``extra.source`` bylby zmyslaniem. Zapis przez plik
+        tymczasowy + ``os.replace`` (dwa procesy nad tym samym arkuszem).
+        """
+        request = (self._sidecar_extra or {}).get("parent_request")
+        if request is None:
+            return
+        sidecar = data_path.parent / f"{data_path.name}.meta.json"
+        try:
+            if not sidecar.exists():
+                return
+            payload = json.loads(sidecar.read_text(encoding="utf-8"))
+            extra = payload.get("extra")
+            if not isinstance(extra, dict):
+                extra = {}
+                payload["extra"] = extra
+            if extra.get("parent_request") == request:
+                return
+            seen = extra.get("parent_requests")
+            if not isinstance(seen, list):
+                seen = []
+            if request in seen:
+                return
+            extra["parent_requests"] = [*seen, request]
+            tmp = sidecar.with_name(f"{sidecar.name}.{os.getpid()}.tmp")
+            tmp.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+            os.replace(tmp, sidecar)
+        except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
+            logger.warning(f"Nie udalo sie dopisac zadania do sidecara {sidecar}: {e}")
 
     def __repr__(self) -> str:
         """Return string representation."""

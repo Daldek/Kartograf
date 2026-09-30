@@ -3,11 +3,20 @@
 """
 
 import argparse
+import contextlib
+import json
+import math
 import sys
+from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
-from kartograf.download.manager import DownloadManager, DownloadProgress
+from kartograf.download.manager import (
+    DownloadManager,
+    DownloadProgress,
+    DownloadResult,
+)
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 
 
@@ -39,6 +48,9 @@ def create_progress_callback(quiet: bool = False):
             "completed": "✓",
             "skipped": "○",
             "failed": "✗",
+            # D11: arkusz bez danych u zrodla (morze, obszar za granica) to
+            # oczekiwany stan, nie awaria — inna ikona niz porazka pobrania
+            "no_coverage": "∅",
         }.get(progress.status, " ")
 
         line = (
@@ -49,7 +61,7 @@ def create_progress_callback(quiet: bool = False):
         # Pad to overwrite previous longer lines
         line = line.ljust(80)
 
-        if progress.status in ("completed", "failed"):
+        if progress.status in ("completed", "failed", "no_coverage"):
             print(line, flush=True)
         else:
             print(line, end="", flush=True)
@@ -57,9 +69,15 @@ def create_progress_callback(quiet: bool = False):
     return on_progress
 
 
-def _create_provider_and_storage(product, output_dir, vertical_crs, resolution):
+def _create_provider_and_storage(
+    product, output_dir, vertical_crs, resolution, cache=None
+):
     """
     Create provider and storage based on product type.
+
+    ``cache`` (``MetadataCache`` albo ``None``) trafia do providera: rekordy
+    skorowidza GUGiK sa czytane i zapisywane wylacznie z cache (N6; CLI:
+    ``--force`` = ``None``, patrz ``_pl_metadata_cache``).
 
     LAZ has a separate flow (`_cmd_download_laz`) and never reaches this
     helper — `cmd_download` short-circuits it before any provider is built.
@@ -69,7 +87,7 @@ def _create_provider_and_storage(product, output_dir, vertical_crs, resolution):
     if product == "nmpt":
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
-        provider = GugikNmptProvider(vertical_crs=vertical_crs)
+        provider = GugikNmptProvider(vertical_crs=vertical_crs, cache=cache)
         storage = FileStorage(
             output_dir,
             product="nmpt",
@@ -78,12 +96,14 @@ def _create_provider_and_storage(product, output_dir, vertical_crs, resolution):
     elif product == "orto":
         from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
-        provider = GugikOrtoProvider()
+        provider = GugikOrtoProvider(cache=cache)
         storage = FileStorage(output_dir, product="orto")
     elif product == "nmt":
         from kartograf.providers.pl import create_nmt_provider
 
-        provider = create_nmt_provider(vertical_crs=vertical_crs, resolution=resolution)
+        provider = create_nmt_provider(
+            vertical_crs=vertical_crs, resolution=resolution, cache=cache
+        )
         storage = FileStorage(
             output_dir,
             resolution=resolution,
@@ -96,6 +116,35 @@ def _create_provider_and_storage(product, output_dir, vertical_crs, resolution):
         )
 
     return provider, storage
+
+
+@contextlib.contextmanager
+def _pl_metadata_cache(args: argparse.Namespace) -> Iterator[object | None]:
+    """
+    ``MetadataCache`` toru PL na czas jednego zadania (N6; wzor: tor CZ).
+
+    ``--force`` = ``None``: rekordy skorowidza nie sa ani czytane, ani
+    zapisywane (P4 — najprostsza, przewidywalna inwalidacja; ``kartograf
+    cache clear`` czysci wszystko). Bez ``--force`` cache jest otwierany
+    w cwd i zamykany po zadaniu (``close()`` czysci wygasle wpisy).
+    """
+    if args.force:
+        yield None
+        return
+    from kartograf.cache import MetadataCache
+
+    cache = MetadataCache()
+    try:
+        yield cache
+    finally:
+        cache.close()
+
+
+def _product_label(product: str, resolution: str | None) -> str:
+    """Etykieta zadania w komunikatach: orto nie ma rozdzielczosci (K5)."""
+    if product == "orto":
+        return "product: orto"
+    return f"resolution: {resolution}"
 
 
 _CZ_ONLY_NMT_MSG = (
@@ -281,9 +330,36 @@ def _countries_for_bbox(bbox: BBox) -> tuple[str, ...]:
     return tuple(sorted(hits))
 
 
+@dataclass(frozen=True)
+class CountryPart:
+    """Czesc zadania obszarowego dla jednego kraju (``_country_bbox``).
+
+    ``clipped`` wymienia krawedzie WGS84 faktycznie przyciete do obwiedni
+    kraju (``"W"``, ``"S"``, ``"E"``, ``"N"``; puste = bbox bez zmian) —
+    ``_dispatch_area`` robi z tego ``Info:`` (S3).
+    """
+
+    bbox: BBox
+    clipped: tuple[str, ...] = ()
+
+
+# krawedz -> (pole BBox, czy przyciecie podnosi minimum, jednostka)
+_EDGES = (
+    ("W", "min_x", True, "E"),
+    ("S", "min_y", True, "N"),
+    ("E", "max_x", False, "E"),
+    ("N", "max_y", False, "N"),
+)
+
+
+def _deg(value: float, unit: str) -> str:
+    """``54,90°N`` — stopnie z przecinkiem dziesietnym (komunikaty PL)."""
+    return f"{value:.2f}".replace(".", ",") + f"°{unit}"
+
+
 def _country_bbox(
     bbox: BBox, code: str, *, auto: bool, cz_crs: str = "EPSG:5514"
-) -> BBox:
+) -> CountryPart:
     """
     Czesc bboxa dla kraju w ukladzie jego zadania.
 
@@ -291,12 +367,20 @@ def _country_bbox(
     w ukladzie roboczym: CZ — ``cz_crs`` (Krovak albo ``--target-crs``), PL —
     uklad zadania bez zmian (zachowuje strefe PL-2000 i zerowy dryf). Jawny
     ``--country`` NIE przycina niczego (uzytkownik zna zasieg swojego zadania).
-    Przyciecie jest dzis ciche (bez ``Info:``), a powrot z WGS84 poszerza
-    pozostale krawedzie o dziesiatki metrow — znany blad S3 (testy na zywo
-    2026-09-29, docs/PROGRESS.md "Znane bledy").
+    Przyciete krawedzie wracaja w ``CountryPart.clipped`` — komunikat
+    ``Info:`` wypisuje ``_dispatch_area`` (S3).
 
     Gdy przyciecie nic nie zmienia, transformowany jest ORYGINALNY bbox —
     jeden skok z ukladu zadania zamiast dwoch (przez WGS84).
+
+    PL po przycieciu (S3): tylko krawedzie z ``clipped`` biora wartosc
+    z transformacji przycietego prostokata (obwiednia zakrzywionej krawedzi
+    kraju — konserwatywna na zewnatrz), pozostale zostaja wartoscia
+    oryginalu 1:1. Obwiednia CALEGO przycietego prostokata poszerzala
+    nietkniete krawedzie o dziesiatki metrow (Rozewie: W 110 / S 38 / E 82 m),
+    bo poludnik zadania nie jest linia prosta w EPSG:2180. Czesc CZ jest
+    z definicji w innym ukladzie (``bbox_to_crs`` z probkowaniem krawedzi),
+    wiec tam poszerzenie jest nieuniknione i uczciwe — bez zmian.
 
     Zadanie podane w ukladzie czeskim, ale kierowane do PL (``--bbox-crs
     EPSG:5514`` z ``--country pl`` albo z auto-splitem), opuszcza Krovaka
@@ -315,35 +399,149 @@ def _country_bbox(
         bbox = bbox_to_crs(bbox, "EPSG:2180")
 
     if not auto:
-        return bbox
+        return CountryPart(bbox)
 
     wgs = _bbox_to_wgs84(bbox)
     extent = get_country(code).extent_wgs84
-    clipped = (
-        max(wgs.min_x, extent.min_x),
-        max(wgs.min_y, extent.min_y),
-        min(wgs.max_x, extent.max_x),
-        min(wgs.max_y, extent.max_y),
+    clipped = tuple(
+        edge
+        for edge, attr, is_min, _unit in _EDGES
+        if (
+            getattr(wgs, attr) < getattr(extent, attr)
+            if is_min
+            else getattr(wgs, attr) > getattr(extent, attr)
+        )
     )
-    if clipped == (wgs.min_x, wgs.min_y, wgs.max_x, wgs.max_y):
+    if not clipped:
         source = bbox  # przyciecie bylo no-opem
     else:
-        source = BBox(*clipped, "EPSG:4326")
+        source = BBox(
+            max(wgs.min_x, extent.min_x),
+            max(wgs.min_y, extent.min_y),
+            min(wgs.max_x, extent.max_x),
+            min(wgs.max_y, extent.max_y),
+            "EPSG:4326",
+        )
 
     target = cz_crs if code == "CZ" else bbox.crs
     if wkid(source.crs) == wkid(target):
-        return source
+        return CountryPart(source, clipped)
     if code == "CZ":
         # do ukladu czeskiego wylacznie przypieta operacja z probkowaniem
         # krawedzi (obraz prostokata w Krovaku ma krzywe boki)
-        return bbox_to_crs(source, target)
-    return _transform_bbox(
+        return CountryPart(bbox_to_crs(source, target), clipped)
+    transformed = _transform_bbox(
         source.min_x,
         source.min_y,
         source.max_x,
         source.max_y,
         CRS.from_user_input(source.crs),
         target,
+    )
+    if not clipped:
+        return CountryPart(transformed)
+    # PL: nietkniete krawedzie 1:1 z oryginalu, przyciete z transformacji
+    values = {
+        attr: getattr(transformed if edge in clipped else bbox, attr)
+        for edge, attr, _is_min, _unit in _EDGES
+    }
+    return CountryPart(BBox(**values, crs=target), clipped)
+
+
+def _area_outside_extents(
+    wgs: BBox, extents: Sequence[BBox]
+) -> tuple[BBox | None, float]:
+    """
+    Czesc bboxa WGS84 poza WSZYSTKIMI prostokatami ``extents`` (S3).
+
+    Krawedzie prostokatow tna bbox na komorki; komorka, ktorej srodka nie
+    przykrywa zaden prostokat, jest utracona (pod ``--country auto`` nikt jej
+    nie pobierze). Zwraca obwiednie utraconych komorek (``None`` gdy bbox
+    jest w calosci pokryty) i udzial ich powierzchni w powierzchni bboxa
+    (0..1; komorki wazone ``cos(szerokosci)``, wiec udzial jest metryczny).
+
+    Sam test krawedzi nie wystarcza: bbox 13-15°E x 53-55°N ma krawedz W
+    wewnatrz zakresu dlugosci CZ, ale CZ konczy sie na 51,06°N — utrata
+    w narozniku jest widoczna dopiero po podziale na komorki.
+    """
+    xs = sorted(
+        {wgs.min_x, wgs.max_x}
+        | {v for e in extents for v in (e.min_x, e.max_x) if wgs.min_x < v < wgs.max_x}
+    )
+    ys = sorted(
+        {wgs.min_y, wgs.max_y}
+        | {v for e in extents for v in (e.min_y, e.max_y) if wgs.min_y < v < wgs.max_y}
+    )
+    total = 0.0
+    lost_area = 0.0
+    lost: list[tuple[float, float, float, float]] = []
+    for x0, x1 in zip(xs, xs[1:], strict=False):
+        for y0, y1 in zip(ys, ys[1:], strict=False):
+            area = (x1 - x0) * (y1 - y0) * math.cos(math.radians((y0 + y1) / 2))
+            total += area
+            cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+            if not any(
+                e.min_x <= cx <= e.max_x and e.min_y <= cy <= e.max_y for e in extents
+            ):
+                lost.append((x0, y0, x1, y1))
+                lost_area += area
+    if not lost or total <= 0:
+        return None, 0.0
+    envelope = BBox(
+        min(c[0] for c in lost),
+        min(c[1] for c in lost),
+        max(c[2] for c in lost),
+        max(c[3] for c in lost),
+        "EPSG:4326",
+    )
+    return envelope, lost_area / total
+
+
+def _print_clipping_info(
+    bbox: BBox, countries: tuple[str, ...], parts: dict[str, CountryPart]
+) -> None:
+    """``Info:`` o przycieciu pod ``--country auto`` (S3; stderr, ``-q`` nie tlumi).
+
+    1. per kraj z niepustym ``clipped``: plik i ``request.bbox`` beda mialy
+       inny zasieg niz zadanie (takze gdy odcieta czesc jest po prostu
+       w drugim kraju — uzytkownik szuka pliku po wspolrzednych);
+    2. tylko przy realnej utracie (``_area_outside_extents``): obszar poza
+       prostokatami WSZYSTKICH odpytanych krajow nikt nie pobierze.
+    Brak przyciecia = brak komunikatow.
+    """
+    from kartograf.sources.registry import get_country
+
+    for code in countries:
+        part = parts[code]
+        if not part.clipped:
+            continue
+        extent = get_country(code).extent_wgs84
+        edges = ", ".join(
+            f"{edge}: {_deg(getattr(extent, attr), unit)}"
+            for edge, attr, _is_min, unit in _EDGES
+            if edge in part.clipped
+        )
+        print(
+            f"Info: --country auto: czesc {code} przycieta do obwiedni kraju "
+            f"({edges}); plik i request.bbox niosa zasieg przyciety, oryginal "
+            "w extra.parent_request.bbox",
+            file=sys.stderr,
+        )
+    if not any(parts[code].clipped for code in countries):
+        return
+    lost, share = _area_outside_extents(
+        _bbox_to_wgs84(bbox), [get_country(c).extent_wgs84 for c in countries]
+    )
+    if lost is None:
+        return
+    explicit = "pl" if "PL" in countries else countries[0].lower()
+    print(
+        f"Info: --country auto: obszar {_deg(lost.min_x, 'E')}-{_deg(lost.max_x, 'E')}"
+        f" x {_deg(lost.min_y, 'N')}-{_deg(lost.max_y, 'N')} (~{share * 100:.0f} % "
+        "powierzchni zadania) lezy poza zasiegiem PL/CZ i zostal pominiety; "
+        f"caly bbox pobiera jawne --country {explicit} (za granica: arkusze "
+        "bez danych / nodata)",
+        file=sys.stderr,
     )
 
 
@@ -511,12 +709,21 @@ def _dispatch_area(
     parent_request = _build_parent_request(bbox, countries)
     cz_crs = getattr(args, "target_crs", None) or "EPSG:5514"
 
-    results: list[tuple[str, int]] = []
+    # Czesci per kraj PRZED jakimkolwiek pobraniem: bledy transformacji
+    # przewracaja zadanie w calosci, a komunikaty o przycieciu (S3) ida
+    # jednym blokiem przed praca.
+    parts: dict[str, CountryPart] = {}
     for code in countries:
         try:
-            part = _country_bbox(bbox, code, auto=auto, cz_crs=cz_crs)
+            parts[code] = _country_bbox(bbox, code, auto=auto, cz_crs=cz_crs)
         except TransformError as e:
             return _print_transform_error(e)
+    if auto:
+        _print_clipping_info(bbox, countries, parts)
+
+    results: list[tuple[str, int]] = []
+    for code in countries:
+        part = parts[code].bbox
         if code == "CZ":
             rc = _run_cz(args, bbox=part, parent_request=parent_request)
         else:
@@ -536,14 +743,15 @@ def _dispatch_area(
     # a nie awaria zadania. Kod 0, ale z ostrzezeniem, zeby porazka jednego
     # kraju na pasie przygranicznym nie zniknela po cichu. Jawny `--country`
     # (uzytkownik sam wskazal zasieg) i porazka WSZYSTKICH krajow zostaja
-    # przy dotychczasowym `max(exit_codes)`.
+    # przy dotychczasowym `max(exit_codes)`. Tresc bez zgadywania przyczyny:
+    # po D2 kod 1 galezi PL znaczy "blad pobrania albo zero danych" (czesc
+    # arkuszy mogla sie pobrac), a szczegoly stoja w Error wyzej.
     if auto and len(results) > 1 and 0 in exit_codes and max(exit_codes) != 0:
         failed = [code for code, rc in results if rc != 0]
         ok = [code for code, rc in results if rc == 0]
         print(
-            f"Warning: nie pobrano danych z {', '.join(failed)} dla tego "
-            "obszaru (brak pokrycia albo awaria zrodla — patrz Error wyzej) "
-            f"— pobrano {', '.join(ok)} "
+            f"Warning: czesc {', '.join(failed)} zadania zakonczyla sie bledem "
+            f"(patrz Error wyzej) — pobrano {', '.join(ok)}; kod 0 "
             "(prostokatne obwiednie krajow, ADR-023 pkt 4-5)",
             file=sys.stderr,
         )
@@ -676,8 +884,10 @@ def cmd_download(args: argparse.Namespace) -> int:
             return 1
         if getattr(args, "target_crs", None) is not None:
             print(
-                "Error: --target-crs dziala tylko z --bbox/--geometry; "
-                "tryb godlowy dostarcza dane natywne 1:1",
+                "Error: --target-crs dziala tylko z --bbox/--geometry; godlo "
+                "wyznacza zasieg i uklad produktu (arkusz PL 1:1 w ukladzie "
+                "godla, arkusz SM5 1:1 w EPSG:5514, kafel TM33 na siatce "
+                "EPSG:3045)",
                 file=sys.stderr,
             )
             return 1
@@ -709,104 +919,86 @@ def cmd_download(args: argparse.Namespace) -> int:
     vertical_crs = args.vertical_crs
     resolution = args.resolution
     product = getattr(args, "product", "nmt")
+    label = _product_label(product, resolution)
 
     workers = getattr(args, "workers", 4)
 
-    provider, storage = _create_provider_and_storage(
-        product, output_dir, vertical_crs, resolution
-    )
-    manager = DownloadManager(
-        output_dir=output_dir,
-        provider=provider,
-        storage=storage,
-        # provider juz przeszedl korekte "5m => EVRF2007" w fabryce — przekazujemy
-        # jego faktyczna wartosc, zeby manager nie ostrzegal drugi raz
-        vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
-        resolution=resolution,
-        max_workers=workers,
-    )
-
-    skip_existing = not args.force
-    on_progress = create_progress_callback(args.quiet)
-
-    try:
-        if args.scale:
-            # Download hierarchy
-            if not args.quiet:
-                count = manager.count_sheets(args.godlo, args.scale)
-                print(
-                    f"Downloading {count} sheets from {args.godlo} to {args.scale} "
-                    f"(resolution: {resolution})"
-                )
-                print()
-
-            paths = manager.download_hierarchy(
-                args.godlo,
-                args.scale,
-                skip_existing=skip_existing,
-                on_progress=on_progress,
-            )
-
-            if not args.quiet:
-                print()
-                print(f"Downloaded {len(paths)} files to {output_dir}")
-        else:
-            # Download single sheet (may expand to hierarchy for non-1:10000)
-            if not args.quiet:
-                print(f"Downloading {args.godlo} (resolution: {resolution})...")
-
-            result = manager.download_sheet(
-                args.godlo,
-                skip_existing=skip_existing,
-                on_progress=on_progress,
-            )
-
-            if not args.quiet:
-                if isinstance(result, list):
-                    print()
-                    print(f"Downloaded {len(result)} files to {output_dir}")
-                else:
-                    print(f"Downloaded to {result}")
-
-    except DownloadError as e:
-        print(f"\nError: {e}", file=sys.stderr)
-        return 1
-    except ValidationError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-
-    # Hierarchia polyka porazki pojedynczych arkuszy (raportuje je przez
-    # `on_progress`), wiec kod wyjscia bierzemy z podsumowania managera.
-    # `None` znaczy „bez hierarchii" — pojedynczy arkusz 1:10000 nie wypelnia
-    # `last_result` i tam sukces = brak wyjatku.
-    summary = manager.last_result
-    if summary is not None and summary.failed:
-        print(
-            f"\nError: {len(summary.failed)} of {summary.total} sheets failed "
-            f"to download (see messages above)",
-            file=sys.stderr,
+    with _pl_metadata_cache(args) as cache:
+        provider, storage = _create_provider_and_storage(
+            product, output_dir, vertical_crs, resolution, cache=cache
         )
-        return 1
+        manager = DownloadManager(
+            output_dir=output_dir,
+            provider=provider,
+            storage=storage,
+            # provider juz przeszedl korekte "5m => EVRF2007" w fabryce —
+            # przekazujemy jego faktyczna wartosc, zeby manager nie ostrzegal
+            # drugi raz
+            vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
+            resolution=resolution,
+            max_workers=workers,
+        )
 
-    return 0
+        skip_existing = not args.force
+        on_progress = create_progress_callback(args.quiet)
+
+        try:
+            if args.scale:
+                # Download hierarchy
+                if not args.quiet:
+                    count = manager.count_sheets(args.godlo, args.scale)
+                    print(
+                        f"Downloading {count} sheets from {args.godlo} to "
+                        f"{args.scale} ({label})"
+                    )
+                    print()
+
+                paths = manager.download_hierarchy(
+                    args.godlo,
+                    args.scale,
+                    skip_existing=skip_existing,
+                    on_progress=on_progress,
+                )
+            else:
+                # Download single sheet (may expand to hierarchy for non-1:10000)
+                if not args.quiet:
+                    print(f"Downloading {args.godlo} ({label})...")
+
+                result = manager.download_sheet(
+                    args.godlo,
+                    skip_existing=skip_existing,
+                    on_progress=on_progress,
+                )
+                if not isinstance(result, list):
+                    # pojedynczy arkusz 1:10000 / PL-2000: sukces = brak
+                    # wyjatku (brak danych = DownloadError, kod 1 — D10)
+                    if not args.quiet:
+                        print(f"Downloaded to {result}")
+                    return 0
+                paths = result
+
+        except DownloadError as e:
+            print(f"\nError: {e}", file=sys.stderr)
+            return 1
+        except ValidationError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
+    # Hierarchia (--scale albo godlo grubsze niz 1:10000) polyka porazki
+    # pojedynczych arkuszy i zdaje z nich sprawe w `last_result` — ten sam
+    # finisz co tryb listy arkuszy (D10: arkusze morskie pod godlem 1:50000
+    # na wybrzezu to ta sama sytuacja co pod --bbox).
+    return _finish_pl_sheets(
+        _last_result(manager), paths, output_dir=output_dir, quiet=args.quiet
+    )
 
 
-def _expands_to_hierarchy(godlo: str) -> bool:
-    """
-    True, gdy ``DownloadManager.download_sheet`` rozwinie godlo do hierarchii.
-
-    Lustro warunku z ``download_sheet`` (godla PL-2000 pobierane bezposrednio,
-    PL-1992 grubsze niz 1:10000 rozwijane do arkuszy 1:10000). CLI musi znac
-    ten warunek przed wywolaniem, bo tylko rozwiniecie wypelnia
-    ``manager.last_result`` — a zebranie go z puli watkow nie jest bezpieczne
-    (patrz ``_download_godlo_list``). Niepoprawne godlo zglosi
-    ``download_sheet`` — tu odpowiadamy False i nie dublujemy walidacji.
-    """
-    try:
-        parser = SheetParser(godlo)
-    except (ParseError, ValidationError):
-        return False
-    return parser.uklad != "2000" and parser.scale != "1:10000"
+def _last_result(manager: DownloadManager) -> DownloadResult:
+    """``manager.last_result`` po hierarchii/liscie — zawsze wypelnione (kontrakt)."""
+    result = manager.last_result
+    if result is None:  # pragma: no cover — kontrakt download_sheets/hierarchy
+        raise RuntimeError("DownloadManager nie wypelnil last_result po pobraniu listy")
+    return result
 
 
 def _download_godlo_list(
@@ -814,121 +1006,83 @@ def _download_godlo_list(
     godlo_list: list[str],
     skip_existing: bool,
     on_progress,
-    max_workers: int,
-) -> tuple[list[Path], list[str]]:
+) -> tuple[list[Path], DownloadResult]:
     """
-    Download a list of godla, using parallel threads when max_workers > 1.
+    Pobierz liste godel jednym ``DownloadManager.download_sheets`` (S2/D2).
 
-    Godla grubsze niz 1:10000 rozwijaja sie w ``download_sheet`` do
-    ``download_hierarchy``, ktora polyka porazki pojedynczych arkuszy i zdaje
-    z nich sprawe wylacznie przez ``manager.last_result``. Ten atrybut jest
-    JEDEN na managera i kasowany na wejsciu do kazdego ``download_sheet``,
-    wiec z puli watkow nie da sie go przypisac do wlasciwego godla. Dlatego
-    lista, ktorej godla sie rozwijaja, idzie petla sekwencyjna — rownoleglosc
-    nie ginie, bo to ``download_hierarchy`` pobiera wtedy arkusze na
-    ``max_workers`` watkach (i znika zwielokrotnienie watkow: dotad bylo ich
-    ``max_workers`` razy ``max_workers``). Pula watkow zostaje dla list
-    arkuszy 1:10000, gdzie ``last_result`` i tak jest zawsze ``None``.
-
-    Parameters
-    ----------
-    manager : DownloadManager
-        Configured download manager
-    godlo_list : list[str]
-        List of godlo identifiers to download
-    skip_existing : bool
-        Whether to skip already-downloaded files
-    on_progress : callable or None
-        Progress callback
-    max_workers : int
-        Number of parallel download threads
+    Godla grubsze niz 1:10000 rozwija ``expand_sheets`` (manager), pobranie
+    idzie na ``max_workers`` managera, a porazki pojedynczych arkuszy NIE
+    przerywaja listy: ``NoCoverageError`` (morze, arkusz za granica) i
+    ``DownloadError`` (siec, serwer) laduja w ``DownloadResult`` — kazdy
+    arkusz jest probowany niezaleznie od ``--workers``. Kod wyjscia i
+    komunikaty robi ``_finish_pl_sheets``.
 
     Returns
     -------
-    tuple[list[Path], list[str]]
-        Downloaded file paths and godla arkuszy, ktorych nie udalo sie pobrac
-        (puste, gdy wszystko sie powiodlo). Niepusta druga pozycja jest juz
-        zgloszona na stderr — wywolujacy ma z niej zrobic kod wyjscia 1.
-        Zbiera ja tylko rozwiniecie hierarchii: porazka arkusza 1:10000
-        (takze ``NoCoverageError`` — morze, arkusz za granica) wylatuje
-        wyjatkiem. W petli sekwencyjnej (``max_workers=1``) przerywa liste
-        (dalsze arkusze nie sa pobierane); w puli watkow wylatuje pierwsza
-        porazka wg kolejnosci ukonczenia, pozostale arkusze pobieraja sie do
-        konca, ale ich porazki nie sa zbierane. Tryb listy nie ma tolerancji
-        R5 wycinka — znany blad S2 (testy na zywo 2026-09-29, backlog:
-        ``DownloadManager.download_sheets``).
+    tuple[list[Path], DownloadResult]
+        Pliki dostepne po zadaniu (pobrane + pominiete jako istniejace)
+        i podsumowanie per arkusz (``manager.last_result``).
     """
-    expands = any(_expands_to_hierarchy(godlo) for godlo in godlo_list)
-
-    if max_workers <= 1 or expands:
-        # Sequential download
-        all_paths: list[Path] = []
-        failed: list[str] = []
-        total = 0
-        for godlo in godlo_list:
-            result = manager.download_sheet(
-                godlo,
-                skip_existing=skip_existing,
-                on_progress=on_progress,
-            )
-            if isinstance(result, list):
-                all_paths.extend(result)
-            else:
-                all_paths.append(result)
-
-            summary = manager.last_result
-            if summary is None:
-                total += 1  # pojedynczy arkusz 1:10000 — sukces bez hierarchii
-            else:
-                total += summary.total
-                failed.extend(summary.failed)
-
-        _report_failed_sheets(failed, total)
-        return all_paths, failed
-
-    # Parallel download using ThreadPoolExecutor.
-    # Tu zaden godlo sie nie rozwija, wiec `last_result` zostaje None i nie ma
-    # czego zbierac — porazka pojedynczego arkusza leci wyjatkiem.
-    import concurrent.futures
-    import threading
-
-    all_paths = []
-    lock = threading.Lock()
-
-    def _download_one(godlo: str) -> list[Path]:
-        result = manager.download_sheet(
-            godlo,
-            skip_existing=skip_existing,
-            on_progress=on_progress,
-        )
-        if isinstance(result, list):
-            return result
-        return [result]
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        future_to_godlo = {
-            executor.submit(_download_one, godlo): godlo for godlo in godlo_list
-        }
-        for future in concurrent.futures.as_completed(future_to_godlo):
-            godlo = future_to_godlo[future]
-            try:
-                paths = future.result()
-                with lock:
-                    all_paths.extend(paths)
-            except (DownloadError, ValidationError):
-                raise
-
-    return all_paths, []
-
-
-def _report_failed_sheets(failed: list[str], total: int) -> None:
-    """Wypisz na stderr arkusze, ktorych hierarchia nie zdolala pobrac."""
-    if not failed:
-        return
-    print(
-        f"Error: {len(failed)} of {total} sheets failed: {', '.join(failed)}",
-        file=sys.stderr,
+    paths = manager.download_sheets(
+        godlo_list, skip_existing=skip_existing, on_progress=on_progress
     )
+    return list(paths), _last_result(manager)
+
+
+def _finish_pl_sheets(
+    result: DownloadResult, paths: list[Path], *, output_dir: Path, quiet: bool
+) -> int:
+    """
+    Wspolne podsumowanie i kod wyjscia trybu wielu arkuszy PL (D2/D10).
+
+    Uzywany przez ``--bbox``/``--geometry`` (lista arkuszy) i przez tryb
+    godla z hierarchia (``--scale`` albo godlo grubsze niz 1:10000) — ta sama
+    semantyka "wiele plikow", te same arkusze morskie pod godlem 1:50000 na
+    wybrzezu co pod bboxem. Tolerancja R5 jak w wycinku:
+
+    - wszystko pobrane/pominiete -> 0, cisza;
+    - >= 1 plik, reszta bez danych GUGiK (``no_coverage``) -> ``Warning:``
+      z lista (do 10 godel), kod 0;
+    - >= 1 porazka pobrania (``hard_failures``: siec, serwer) -> ``Error:``
+      z PELNA lista i "ponow pobranie", kod 1 (plus ``Warning:`` jw., gdy
+      sa tez arkusze bez danych);
+    - 0 plikow i wszystkie bez danych -> ``Error:``, kod 1 (nic do pobrania,
+      spojnie z wycinkiem: ``ValidationError``).
+
+    ``Warning:``/``Error:`` ida na stderr, wiec ``-q`` ich NIE tlumi.
+    """
+    if not quiet:
+        # pasek postepu konczy "skipped"/"downloading" bez nowej linii
+        print()
+        print(
+            f"Downloaded {len(result.succeeded)} files to {output_dir} "
+            f"({len(result.skipped)} already existed)"
+        )
+    total = result.total
+    hard = result.hard_failures
+    missing = result.no_coverage
+    if missing and (paths or hard):
+        shown = ", ".join(missing[:10]) + (" ..." if len(missing) > 10 else "")
+        print(
+            f"Warning: GUGiK nie ma danych dla {len(missing)} z {total} arkuszy "
+            f"({shown}) — pominiete (morze, obszar za granica); pobrano "
+            f"{len(paths)}",
+            file=sys.stderr,
+        )
+    if hard:
+        print(
+            f"Error: {len(hard)} z {total} arkuszy nie pobrano (blad pobrania, "
+            f"nie brak danych): {', '.join(hard)} — ponow pobranie",
+            file=sys.stderr,
+        )
+        return 1
+    if not paths:
+        print(
+            f"Error: GUGiK nie ma danych dla zadnego z {total} arkuszy obszaru",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
 
 
 def _cmd_download_bbox(args: argparse.Namespace) -> int:
@@ -959,6 +1113,71 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
     return _dispatch_area(args, bbox)
 
 
+def _warn_missing_sheets(missing: tuple[str, ...], *, from_sidecar: bool) -> None:
+    """R5: ``Warning:`` o arkuszach bez danych GUGiK w wycinku (stderr, -q nie tlumi).
+
+    Przy pominietym wycinku lista pochodzi z jego sidecara (N4) — ten sam
+    komunikat co przy budowie, z dopiskiem o zrodle.
+    """
+    if not missing:
+        return
+    shown = ", ".join(missing[:10]) + (" ..." if len(missing) > 10 else "")
+    origin = " (z sidecara istniejacego wycinka)" if from_sidecar else ""
+    print(
+        f"Warning: GUGiK nie ma danych dla {len(missing)} arkuszy wycinka "
+        f"({shown}) — w tych miejscach wycinek ma nodata (lista w sidecarze: "
+        f"extra.missing_sheets){origin}",
+        file=sys.stderr,
+    )
+
+
+def _report_pl_cutout(result, *, from_sidecar: bool) -> None:
+    """Komunikaty o tresci wycinka: brak arkuszy (R5), W1 (S5), same nodata (N2)."""
+    _warn_missing_sheets(result.missing_sheets, from_sidecar=from_sidecar)
+    if result.off_grid_sheets:
+        origin = " (z sidecara istniejacego wycinka)" if from_sidecar else ""
+        print(
+            f"Info: {len(result.off_grid_sheets)} arkuszy o innej fazie siatki "
+            "przeprobkowanych osobno (W1; lista w sidecarze: "
+            f"extra.off_grid_sheets){origin}",
+            file=sys.stderr,
+        )
+    if result.all_nodata:
+        print(
+            "Warning: wycinek w calosci nodata — pobrane arkusze nie wnosza "
+            "zadnego piksela w obszarze zadania (brak danych GUGiK / obszar "
+            "poza pokryciem)",
+            file=sys.stderr,
+        )
+
+
+# opis kroku datum w sidecarach sprzed naprawy K2 (EPSG:4829, obszar uzycia:
+# Slowacja; tresc przesunieta 1-5 m) — po naprawie tor CZ i wycinek PL -> 5514
+# pinuja "S-JTSK to ETRS89 (1)"/"(2)"
+_LEGACY_KROVAK_STEP = "S-JTSK to ETRS89 (3)"
+
+
+def _print_legacy_krovak_info(target: Path) -> None:
+    """D12: pomijany plik sprzed naprawy operacji S-JTSK dostaje ``Info:``.
+
+    Czyta sidecar ``<plik>.meta.json`` (best-effort: brak/nieczytelny =
+    cisza) i sprawdza ``transform.horizontal``. Bez automatycznej
+    przebudowy — uzytkownik decyduje (``--force``).
+    """
+    sidecar = target.parent / f"{target.name}.meta.json"
+    try:
+        payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        horizontal = (payload.get("transform") or {}).get("horizontal")
+    except (OSError, ValueError, AttributeError):
+        return
+    if isinstance(horizontal, str) and _LEGACY_KROVAK_STEP in horizontal:
+        print(
+            f"Info: {target} pochodzi sprzed naprawy operacji S-JTSK (tresc "
+            "przesunieta 1-5 m) — pobierz ponownie z --force",
+            file=sys.stderr,
+        )
+
+
 def _download_pl_cutout(
     args: argparse.Namespace,
     bbox: BBox,
@@ -969,105 +1188,108 @@ def _download_pl_cutout(
 
     Wolane po ``_resolve_pl_sentinels``. Bledy przygotowania
     (``TransformError``/``ValidationError``), selekcji arkuszy
-    (``ValidationError``) i KAZDY blad pobrania lub budowy wycinka koncza sie
-    kodem 1 z komunikatem, nie tracebackiem: wyjatek wyciekajacy poza petle
-    krajow ``_dispatch_area`` zlamalby kontrakt czesciowego sukcesu
+    (``ValidationError``) i KAZDY blad pobrania lub budowy wycinka (takze
+    ``GridMismatchError`` z podpowiedzia innego ``--target-crs``, S5) koncza
+    sie kodem 1 z komunikatem, nie tracebackiem: wyjatek wyciekajacy poza
+    petle krajow ``_dispatch_area`` zlamalby kontrakt czesciowego sukcesu
     (ADR-023 pkt 4-5). Arkusz bez danych GUGiK nie jest bledem (R5): wycinek
     powstaje z nodata w jego miejscu, a ``Warning:`` na stderr wymienia takie
-    arkusze (do 10; pelna lista w sidecarze, ``extra.missing_sheets``).
+    arkusze (do 10; pelna lista w sidecarze, ``extra.missing_sheets``) —
+    takze przy pominieciu istniejacego wycinka (lista z jego sidecara, N4).
+    Wycinek bez ani jednego waznego piksela (N2) = ``Warning:``, kod 0.
     """
     from kartograf.download.cutout import (
         prepare_pl_cutout,
         run_pl_cutout,
         select_pl_cutout_sheets,
+        skipped_pl_cutout,
     )
     from kartograf.transform.crs import TransformError
 
     output_dir = Path(args.output)
-    provider, storage = _create_provider_and_storage(
-        getattr(args, "product", "nmt"), output_dir, args.vertical_crs, args.resolution
-    )
-    try:
-        # fail-fast: operacja przypieta budowana PRZED jakakolwiek siecia
-        cutout = prepare_pl_cutout(
-            bbox,
-            args.target_crs,
-            output_dir=output_dir,
-            resolution=args.resolution,
-            vertical_crs=getattr(provider, "vertical_crs", args.vertical_crs),
+    with _pl_metadata_cache(args) as cache:
+        provider, storage = _create_provider_and_storage(
+            getattr(args, "product", "nmt"),
+            output_dir,
+            args.vertical_crs,
+            args.resolution,
+            cache=cache,
         )
-    except TransformError as e:
-        return _print_transform_error(e)
-    except ValidationError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-    if not args.force and cutout.target_path.exists():
+        try:
+            # fail-fast: operacja przypieta budowana PRZED jakakolwiek siecia
+            cutout = prepare_pl_cutout(
+                bbox,
+                args.target_crs,
+                output_dir=output_dir,
+                resolution=args.resolution,
+                vertical_crs=getattr(provider, "vertical_crs", args.vertical_crs),
+            )
+        except TransformError as e:
+            return _print_transform_error(e)
+        except ValidationError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        if not args.force and cutout.target_path.exists():
+            result = skipped_pl_cutout(cutout)
+            if not args.quiet:
+                print(f"Skipped - already exists at {cutout.target_path}")
+            _report_pl_cutout(result, from_sidecar=True)
+            _print_legacy_krovak_info(cutout.target_path)
+            return 0
+
+        target_scale = args.scale or "1:10000"
+        try:
+            sheets = select_pl_cutout_sheets(
+                cutout,
+                geometry=geometry,
+                layer=getattr(args, "layer", None),
+                scale=target_scale,
+            )
+        except ValidationError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+
         if not args.quiet:
-            print(f"Skipped - already exists at {cutout.target_path}")
-        return 0
+            what = "bbox" if geometry is None else f"geometry {geometry.name}"
+            godla = list(sheets.godla)
+            print(
+                f"Found {len(godla)} sheets at {target_scale} "
+                f"for {what} (resolution: {args.resolution})"
+            )
+            if len(godla) <= 10:
+                print(f"  Sheets: {', '.join(godla)}")
+            else:
+                print(f"  Sheets: {', '.join(godla[:3] + ['...'] + godla[-2:])}")
+            print()
 
-    target_scale = args.scale or "1:10000"
-    try:
-        sheets = select_pl_cutout_sheets(
-            cutout,
-            geometry=geometry,
-            layer=getattr(args, "layer", None),
-            scale=target_scale,
-        )
-    except ValidationError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
+        if cutout.estimated_bytes >= 2**30:
+            # stderr, nie stdout: -q NIE tlumi Info:/Warning: (jak wyzej)
+            height, width = cutout.grid_shape
+            print(
+                f"Info: wycinek ~{cutout.estimated_bytes / 2**30:.1f} GiB "
+                f"({width} x {height} px float32)",
+                file=sys.stderr,
+            )
 
-    if not args.quiet:
-        what = "bbox" if geometry is None else f"geometry {geometry.name}"
-        godla = list(sheets.godla)
-        print(
-            f"Found {len(godla)} sheets at {target_scale} "
-            f"for {what} (resolution: {args.resolution})"
-        )
-        if len(godla) <= 10:
-            print(f"  Sheets: {', '.join(godla)}")
-        else:
-            print(f"  Sheets: {', '.join(godla[:3] + ['...'] + godla[-2:])}")
-        print()
-
-    if cutout.estimated_bytes >= 2**30:
-        # stderr, nie stdout: -q NIE tlumi Info:/Warning: (jak wyzej)
-        height, width = cutout.grid_shape
-        print(
-            f"Info: wycinek ~{cutout.estimated_bytes / 2**30:.1f} GiB "
-            f"({width} x {height} px float32)",
-            file=sys.stderr,
-        )
-
-    try:
-        result = run_pl_cutout(
-            cutout,
-            sheets,
-            provider=provider,
-            storage=storage,
-            max_workers=getattr(args, "workers", 4),
-            force=args.force,
-            on_progress=create_progress_callback(args.quiet),
-            parent_request=parent_request,
-        )
-    except Exception as e:  # noqa: BLE001 — kod 1 zamiast tracebacku (ADR-023)
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
+        try:
+            result = run_pl_cutout(
+                cutout,
+                sheets,
+                provider=provider,
+                storage=storage,
+                max_workers=getattr(args, "workers", 4),
+                force=args.force,
+                on_progress=create_progress_callback(args.quiet),
+                parent_request=parent_request,
+            )
+        except Exception as e:  # noqa: BLE001 — kod 1 zamiast tracebacku (ADR-023)
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
     if not args.quiet:
         # pasek postepu konczy "skipped" bez nowej linii — jak dotad pusta
         # linia przed podsumowaniem (i przed ostrzezeniem na stderr ponizej)
         print()
-    if result.missing_sheets:
-        # R5: stderr, wiec -q tego NIE tlumi; pelna lista jest w sidecarze
-        shown = ", ".join(result.missing_sheets[:10])
-        more = " ..." if len(result.missing_sheets) > 10 else ""
-        print(
-            f"Warning: GUGiK nie ma danych dla {len(result.missing_sheets)} arkuszy "
-            f"wycinka ({shown}{more}) — w tych miejscach wycinek ma nodata "
-            "(lista w sidecarze: extra.missing_sheets)",
-            file=sys.stderr,
-        )
+    _report_pl_cutout(result, from_sidecar=False)
     if not args.quiet:
         print(f"Downloaded to {result.path}")
     return 0
@@ -1088,6 +1310,7 @@ def _download_pl_bbox(
 
     Z ``--target-crs`` (ADR-027) — ``_download_pl_cutout`` (biblioteka
     ``download/cutout.py``): jeden scalony wycinek zamiast listy arkuszy.
+    Bez niego — lista arkuszy z tolerancja R5 (``_finish_pl_sheets``, D2).
     """
     if _resolve_pl_sentinels(args):
         return 1
@@ -1096,21 +1319,7 @@ def _download_pl_bbox(
 
     target_scale = args.scale or "1:10000"
 
-    # Create download manager
-    output_dir = Path(args.output)
-    # sentinele PL sa juz rozwiazane (`_resolve_pl_sentinels`), a argparse
-    # zawsze tworzy oba atrybuty — czytamy je wprost
-    vertical_crs = args.vertical_crs
-    resolution = args.resolution
-    product = getattr(args, "product", "nmt")
-    workers = getattr(args, "workers", 4)
-    skip_existing = not args.force
-
-    provider, storage = _create_provider_and_storage(
-        product, output_dir, vertical_crs, resolution
-    )
-
-    # Find sheets covering the bbox
+    # Find sheets covering the bbox (zero sieci, zero cache)
     try:
         godlo_list = find_sheets_for_bbox(bbox, target_scale, system=args.system)
     except ValidationError as e:
@@ -1121,24 +1330,36 @@ def _download_pl_bbox(
         print("Error: No sheets found for the given bbox", file=sys.stderr)
         return 1
 
-    manager = DownloadManager(
-        output_dir=output_dir,
-        provider=provider,
-        storage=storage,
-        # provider juz przeszedl korekte "5m => EVRF2007" w fabryce — przekazujemy
-        # jego faktyczna wartosc, zeby manager nie ostrzegal drugi raz
-        vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
-        resolution=resolution,
-        max_workers=workers,
-        sidecar_extra={"parent_request": parent_request},
+    return _download_pl_sheet_list(
+        args, godlo_list, parent_request, what="bbox", target_scale=target_scale
     )
 
-    on_progress = create_progress_callback(args.quiet)
+
+def _download_pl_sheet_list(
+    args: argparse.Namespace,
+    godlo_list: list[str],
+    parent_request: dict,
+    *,
+    what: str,
+    target_scale: str,
+) -> int:
+    """Tryb listy arkuszy PL (bbox/geometry bez ``--target-crs``): manager + finisz.
+
+    Sentinele PL sa juz rozwiazane (``_resolve_pl_sentinels``), a argparse
+    zawsze tworzy oba atrybuty — czytamy je wprost. ``MetadataCache`` zyje
+    tylko na czas zadania (N6).
+    """
+    output_dir = Path(args.output)
+    vertical_crs = args.vertical_crs
+    resolution = args.resolution
+    product = getattr(args, "product", "nmt")
+    workers = getattr(args, "workers", 4)
+    skip_existing = not args.force
 
     if not args.quiet:
         print(
             f"Found {len(godlo_list)} sheets at {target_scale} "
-            f"for bbox (resolution: {resolution})"
+            f"for {what} ({_product_label(product, resolution)})"
         )
         if len(godlo_list) <= 10:
             print(f"  Sheets: {', '.join(godlo_list)}")
@@ -1147,28 +1368,34 @@ def _download_pl_bbox(
             print(f"  Sheets: {', '.join(sample)}")
         print()
 
-    try:
-        all_paths, failed_sheets = _download_godlo_list(
-            manager, godlo_list, skip_existing, on_progress, workers
+    with _pl_metadata_cache(args) as cache:
+        provider, storage = _create_provider_and_storage(
+            product, output_dir, vertical_crs, resolution, cache=cache
         )
+        manager = DownloadManager(
+            output_dir=output_dir,
+            provider=provider,
+            storage=storage,
+            # provider juz przeszedl korekte "5m => EVRF2007" w fabryce —
+            # przekazujemy jego faktyczna wartosc, zeby manager nie ostrzegal
+            # drugi raz
+            vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
+            resolution=resolution,
+            max_workers=workers,
+            sidecar_extra={"parent_request": parent_request},
+        )
+        try:
+            all_paths, result = _download_godlo_list(
+                manager, godlo_list, skip_existing, create_progress_callback(args.quiet)
+            )
+        except DownloadError as e:
+            print(f"\nError: {e}", file=sys.stderr)
+            return 1
+        except ValidationError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
 
-        if not args.quiet:
-            print()
-            print(f"Downloaded {len(all_paths)} files to {output_dir}")
-
-    except DownloadError as e:
-        print(f"\nError: {e}", file=sys.stderr)
-        return 1
-    except ValidationError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-
-    # komunikat wypisal juz `_download_godlo_list` — tu zostaje kod wyjscia:
-    # nieudany arkusz = blad calosci (tryb listy arkuszy, bez --target-crs)
-    if failed_sheets:
-        return 1
-
-    return 0
+    return _finish_pl_sheets(result, all_paths, output_dir=output_dir, quiet=args.quiet)
 
 
 def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
@@ -1229,7 +1456,7 @@ def _write_laz_sidecar(provider, tile, target: Path, bbox: BBox) -> None:
     import logging
 
     try:
-        from kartograf.sources.registry import get_source
+        from kartograf.sources.registry import get_source, horizontal_crs_for_uklad
         from kartograf.sources.sidecar import build_metadata, write_sidecar
 
         key = getattr(provider, "descriptor_key", None)
@@ -1240,6 +1467,9 @@ def _write_laz_sidecar(provider, tile, target: Path, bbox: BBox) -> None:
                 "bbox_crs": bbox.crs,
             },
             vertical_crs=provider.vertical_crs,
+            # N8: kafel niesie wlasny uklad (PL-1992 albo strefa PL-2000),
+            # a kanal WFS deklaruje tylko domyslny — nieznany uklad = kanal
+            horizontal_crs=horizontal_crs_for_uklad(getattr(tile, "crs", None)),
             extra={
                 "godlo_kafla": tile.godlo,
                 "rok": tile.year,
@@ -1322,7 +1552,13 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         return 1
 
     if not tiles:
-        print("Error: No LAZ tiles found for the given area.", file=sys.stderr)
+        # N7: discovery przeszlo (wszystkie roczniki odpowiedzialy), wiec pusta
+        # lista to zasieg/filtry, nie awaria WFS
+        print(
+            "Error: No LAZ tiles found for the given area (sprawdz obszar, "
+            "--year i --vertical-crs; wszystkie roczniki WFS odpowiedzialy)",
+            file=sys.stderr,
+        )
         return 1
 
     if not quiet:
@@ -1382,6 +1618,27 @@ def _read_tif_nodata(path: Path) -> float | None:
             return src.nodata
     except Exception:  # noqa: BLE001 — metadane wzbogacone < dane
         return None
+
+
+def _warn_cz_all_nodata(target: Path, nodata: float | None) -> None:
+    """N2: ``Warning:`` gdy raster CZ nie ma ani jednego waznego piksela (kod 0).
+
+    Best-effort jak ``_read_tif_nodata`` — blad odczytu = cisza (mocki
+    providera nie zapisuja pliku). Brak tagu nodata: CUZK pisze -9999.
+    """
+    from kartograf.providers.cuzk.dmr import CUZK_NODATA
+    from kartograf.transport.mosaic import has_valid_pixels
+
+    try:
+        empty = not has_valid_pixels(target, CUZK_NODATA if nodata is None else nodata)
+    except Exception:  # noqa: BLE001 — ostrzezenie nigdy nie przerywa pobrania
+        return
+    if empty:
+        print(
+            f"Warning: {target} jest w calosci nodata — obszar poza pokryciem "
+            "DMR CUZK (poza granica CZ?)",
+            file=sys.stderr,
+        )
 
 
 def _write_cz_sidecar(
@@ -1456,6 +1713,7 @@ def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> i
     if skip_existing and target.exists():
         if not quiet:
             print(f"Skipped {godlo} - already exists at {target}")
+        _print_legacy_krovak_info(target)
         return 0
 
     if not quiet:
@@ -1466,6 +1724,8 @@ def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> i
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
+    nodata = _read_tif_nodata(target)
+    _warn_cz_all_nodata(target, nodata)
     is_sm5 = system is not None and system.id == "cz_sm5"
     extra: dict = {}
     if is_sm5:
@@ -1486,7 +1746,7 @@ def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> i
         capability="sheet_files" if is_sm5 else "bbox_raster",
         # arkusz SM5 przychodzi w Krovaku, kafel TM33 w siatce UTM33/ETRS89
         horizontal_crs="EPSG:5514" if is_sm5 else "EPSG:3045",
-        nodata=_read_tif_nodata(target),
+        nodata=nodata,
         extra=extra or None,
     )
     if not quiet:
@@ -1545,6 +1805,7 @@ def _cz_download_bbox(
     if skip_existing and target.exists():
         if not quiet:
             print(f"Skipped - already exists at {target}")
+        _print_legacy_krovak_info(target)
         return 0
 
     if not quiet:
@@ -1563,6 +1824,7 @@ def _cz_download_bbox(
         raise
 
     nodata = _read_tif_nodata(target)
+    _warn_cz_all_nodata(target, nodata)
     _write_cz_sidecar(
         provider,
         target,
@@ -1640,8 +1902,9 @@ def _cmd_download_cz(
     if has_godlo and args.target_crs is not None:
         # provider ignoruje target_crs w trybie godlowym — cisza bylaby klamstwem
         raise ValidationError(
-            "--target-crs dziala tylko z --bbox/--geometry; "
-            "tryb godlowy dostarcza dane natywne 1:1"
+            "--target-crs dziala tylko z --bbox/--geometry; godlo wyznacza "
+            "zasieg i uklad produktu (arkusz SM5 1:1 w EPSG:5514, kafel TM33 "
+            "na siatce EPSG:3045)"
         )
 
     cache = MetadataCache()
@@ -1745,7 +2008,8 @@ def _download_pl_geometry(
     wynik obejmuje CALA obwiednie geometrii, bez maskowania do jej obiektow
     (przy warpie arkusze to suma godel geometrii i obwiedni z zapasem, R-01 —
     ``select_pl_cutout_sheets``). Bez ``--target-crs`` arkusze wyznacza sama
-    geometria, a ``bbox`` nie jest uzywany.
+    geometria, a ``bbox`` nie jest uzywany; lista idzie przez
+    ``_download_pl_sheet_list`` (tolerancja R5, D2).
     """
     from kartograf.core.geometry import find_sheets_for_geometry
 
@@ -1769,65 +2033,10 @@ def _download_pl_geometry(
         print("Error: No sheets found for the given geometry", file=sys.stderr)
         return 1
 
-    # Create download manager
-    output_dir = Path(args.output)
-    # sentinele PL sa juz rozwiazane (`_resolve_pl_sentinels`), a argparse
-    # zawsze tworzy oba atrybuty — czytamy je wprost
-    vertical_crs = args.vertical_crs
-    resolution = args.resolution
-    product = getattr(args, "product", "nmt")
-    workers = getattr(args, "workers", 4)
-    skip_existing = not args.force
-
-    provider, storage = _create_provider_and_storage(
-        product, output_dir, vertical_crs, resolution
+    return _download_pl_sheet_list(
+        args,
+        godlo_list,
+        parent_request,
+        what=f"geometry {filepath.name}",
+        target_scale=target_scale,
     )
-
-    manager = DownloadManager(
-        output_dir=output_dir,
-        provider=provider,
-        storage=storage,
-        # provider juz przeszedl korekte "5m => EVRF2007" w fabryce — przekazujemy
-        # jego faktyczna wartosc, zeby manager nie ostrzegal drugi raz
-        vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
-        resolution=resolution,
-        max_workers=workers,
-        sidecar_extra={"parent_request": parent_request},
-    )
-
-    on_progress = create_progress_callback(args.quiet)
-
-    if not args.quiet:
-        print(
-            f"Found {len(godlo_list)} sheets at {target_scale} "
-            f"for geometry {filepath.name} (resolution: {resolution})"
-        )
-        if len(godlo_list) <= 10:
-            print(f"  Sheets: {', '.join(godlo_list)}")
-        else:
-            sample = godlo_list[:3] + ["..."] + godlo_list[-2:]
-            print(f"  Sheets: {', '.join(sample)}")
-        print()
-
-    try:
-        all_paths, failed_sheets = _download_godlo_list(
-            manager, godlo_list, skip_existing, on_progress, workers
-        )
-
-        if not args.quiet:
-            print()
-            print(f"Downloaded {len(all_paths)} files to {output_dir}")
-
-    except DownloadError as e:
-        print(f"\nError: {e}", file=sys.stderr)
-        return 1
-    except ValidationError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-
-    # komunikat wypisal juz `_download_godlo_list` — tu zostaje kod wyjscia:
-    # nieudany arkusz = blad calosci (tryb listy arkuszy, bez --target-crs)
-    if failed_sheets:
-        return 1
-
-    return 0

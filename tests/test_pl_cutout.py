@@ -14,6 +14,7 @@ from kartograf.cli.commands import main
 from kartograf.cli.download_cmd import _download_pl_bbox
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.cutout import build_pl_cutout, prepare_pl_cutout
+from kartograf.download.manager import DownloadResult
 from kartograf.transform.crs import (
     TransformPolicy,
     TransformUnavailableError,
@@ -24,13 +25,21 @@ _NODATA = -9999.0
 _APEX = (530050.0, 382050.0)  # EPSG:2180, okolice Piotrkowa Trybunalskiego
 
 
-def _write_sheet_asc(path, west, south, size=100, pixel=1.0, apex=None):
-    """Syntetyczny 'arkusz' AAIGrid: stozek wokol apex albo plaski 100.0."""
+@pytest.fixture(autouse=True)
+def _cwd_outside_repo(tmp_path, monkeypatch):
+    """``MetadataCache`` toru PL laduje w cwd — poza repo i katalogiem wyjsciowym."""
+    cwd = tmp_path / "cwd"
+    cwd.mkdir()
+    monkeypatch.chdir(cwd)
+
+
+def _write_sheet_asc(path, west, south, size=100, pixel=1.0, apex=None, fill=100.0):
+    """Syntetyczny 'arkusz' AAIGrid: stozek wokol apex albo plaski ``fill``."""
     cols, rows = np.meshgrid(np.arange(size), np.arange(size))
     xs = west + (cols + 0.5) * pixel
     ys = (south + size * pixel) - (rows + 0.5) * pixel
     if apex is None:
-        data = np.full((size, size), 100.0, dtype="float32")
+        data = np.full((size, size), fill, dtype="float32")
     else:
         data = (1000.0 - np.hypot(xs - apex[0], ys - apex[1])).astype("float32")
     header = (
@@ -652,7 +661,16 @@ class TestSheetGrid:
 class TestDownloadPlBboxCutout:
     """Spec 8: przeplyw wycinka na poziomie workera PL (mockowane pobranie)."""
 
-    def _run(self, tmp_path, args, sheets, failed=(), no_coverage=(), provider=None):
+    def _run(
+        self,
+        tmp_path,
+        args,
+        sheets,
+        failed=(),
+        no_coverage=(),
+        provider=None,
+        bbox=_BBOX_2180,
+    ):
         """Worker PL z mockowanym pobraniem; zwraca ``(rc, manager, find)``.
 
         Mock KLASY ``DownloadManager`` (kwargs konstruktora, np.
@@ -676,7 +694,7 @@ class TestDownloadPlBboxCutout:
             ),
             patch(f"{_CUT}.DownloadManager", return_value=manager) as dm,
         ):
-            rc = _download_pl_bbox(args, _BBOX_2180, _PARENT)
+            rc = _download_pl_bbox(args, bbox, _PARENT)
         self.dm = dm
         return rc, manager, find
 
@@ -805,6 +823,76 @@ class TestDownloadPlBboxCutout:
         err = capsys.readouterr().err
         assert "Warning:" in err and "N-2" in err
 
+    def test_all_nodata_cutout_warns_and_returns_0(self, tmp_path, capsys):
+        """N2: pobrane arkusze bez ani jednego waznego piksela = Warning:, kod 0."""
+        sheets = [
+            _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000, fill=_NODATA),
+            _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000, fill=_NODATA),
+        ]
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
+
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "Warning: wycinek w calosci nodata" in err
+        assert "brak danych GUGiK / obszar poza pokryciem" in err
+        (tif,) = (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif")
+        assert tif.exists()
+
+    def test_cutout_with_data_has_no_nodata_warning(self, tmp_path, capsys):
+        sheets = [
+            _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000, fill=_NODATA),
+            _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000),
+        ]
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
+
+        assert rc == 0
+        assert "w calosci nodata" not in capsys.readouterr().err
+
+    def test_skipped_cutout_repeats_missing_sheets_warning_from_sidecar(
+        self, tmp_path, capsys
+    ):
+        """N4: pominiety wycinek ostrzega o dziurach z SIDECARA (dotad cisza)."""
+        sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
+        rc, *_ = self._run(
+            tmp_path, _pl_args(tmp_path), sheets, failed=["N-2"], no_coverage=["N-2"]
+        )
+        assert rc == 0
+        first = capsys.readouterr().err
+        assert "z sidecara" not in first
+
+        rc, manager, find = self._run(tmp_path, _pl_args(tmp_path), sheets=[])
+
+        assert rc == 0
+        manager.download_sheets.assert_not_called()
+        find.assert_not_called()
+        second = capsys.readouterr().err
+        assert "Warning: GUGiK nie ma danych dla 1 arkuszy wycinka (N-2)" in second
+        assert "(z sidecara istniejacego wycinka)" in second
+
+    def test_skipped_cutout_to_krovak_reports_legacy_sidecar(self, tmp_path, capsys):
+        """D12: wycinek PL -> 5514 sprzed naprawy S-JTSK (krok "(3)") = Info:."""
+        sheets = [
+            _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000),
+            _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000),
+        ]
+        args = _pl_args(tmp_path, target_crs="EPSG:5514")
+        rc, *_ = self._run(tmp_path, args, sheets)
+        assert rc == 0
+        (tif,) = (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif")
+        sidecar = tif.with_name(f"{tif.name}.meta.json")
+        payload = json.loads(sidecar.read_text("utf-8"))
+        # po naprawie K2 nowy wycinek NIE pinuje kroku (3)
+        assert "S-JTSK to ETRS89 (3)" not in payload["transform"]["horizontal"]
+        assert "sprzed naprawy" not in capsys.readouterr().err
+
+        payload["transform"]["horizontal"] = "S-JTSK to ETRS89 (3) + Krovak (0.5 m)"
+        sidecar.write_text(json.dumps(payload), "utf-8")
+        rc, *_ = self._run(tmp_path, args, sheets=[])
+
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "sprzed naprawy operacji S-JTSK" in err and "--force" in err
+
     def test_missing_sheets_warning_shows_10_sidecar_lists_all(self, tmp_path, capsys):
         """Stderr pokazuje do 10 godel; pelna, posortowana lista jest w sidecarze.
 
@@ -914,7 +1002,10 @@ class TestDownloadPlBboxCutout:
                 return_value=(SimpleNamespace(vertical_crs="EVRF2007"), Mock()),
             ),
             patch(f"{_DL}.DownloadManager"),
-            patch(f"{_DL}._download_godlo_list", return_value=(sheets, [])),
+            patch(
+                f"{_DL}._download_godlo_list",
+                return_value=(sheets, DownloadResult(succeeded=sheets)),
+            ),
         ):
             rc = _download_pl_bbox(
                 _pl_args(tmp_path, target_crs=None), _BBOX_2180, _PARENT
@@ -1046,13 +1137,6 @@ class TestCutoutSize:
 
 
 class TestGeometryCutout:
-    @pytest.fixture(autouse=True)
-    def _isolate_cache(self, tmp_path, monkeypatch):
-        """MetadataCache laduje w cwd — poza repo i katalogiem wyjsciowym."""
-        cwd = tmp_path / "cwd"
-        cwd.mkdir()
-        monkeypatch.chdir(cwd)
-
     def test_geometry_mode_builds_cutout(self, tmp_path):
         from kartograf.cli.download_cmd import _download_pl_geometry
         from kartograf.download.manager import DownloadResult
@@ -1231,13 +1315,6 @@ class TestBorderTwoCutouts:
     # maly prostokat przecinajacy PROSTOKATNE obwiednie obu krajow
     # (CZ: 12.09..18.86E / 48.55..51.06N, PL: 14.07..24.20E / 49.00..54.90N)
     _BBOX = "18.80,49.70,18.801,49.7005"
-
-    @pytest.fixture(autouse=True)
-    def _isolate_cache(self, tmp_path, monkeypatch):
-        """MetadataCache laduje w cwd — poza repo i katalogiem wyjsciowym."""
-        cwd = tmp_path / "cwd"
-        cwd.mkdir()
-        monkeypatch.chdir(cwd)
 
     def _cz_provider(self):
         """Stub CuzkDmrProvider: zapisuje plik i udaje operacje przypieta."""
@@ -1848,6 +1925,37 @@ class TestMissingSheets:
             )
         assert not cut.target_path.exists()
 
+    def test_cutout_entirely_nodata_warns_and_flags_result(self, tmp_path, caplog):
+        """N2: arkusze pobrane, ale bez ani jednego waznego piksela w zadaniu.
+
+        Plik POWSTAJE (poprawny wynik "brak danych"), ``all_nodata=True``
+        i ``logger.warning`` — zero pikseli z arkuszami to NIE
+        ``ValidationError`` (zero arkuszy). Kontrola: wycinek z danymi ->
+        ``all_nodata=False``.
+        """
+        import logging
+
+        from kartograf.download.cutout import run_pl_cutout
+
+        provider = self._provider()
+        provider.download = lambda godlo, path, timeout=30: _write_sheet_asc(
+            path, *TestLibraryApi._SHEETS[godlo], fill=_NODATA
+        )
+        cut, sheets = self._cutout(tmp_path)
+        with caplog.at_level(logging.WARNING, logger="kartograf.download.cutout"):
+            result = run_pl_cutout(cut, sheets, provider=provider)
+
+        assert result.all_nodata is True
+        assert result.path.exists() and result.missing_sheets == ()
+        assert any("w calosci nodata" in r.message for r in caplog.records)
+        with rasterio.open(result.path) as ds:
+            assert (ds.read(1) == _NODATA).all()
+
+        control = run_pl_cutout(
+            self._cutout(tmp_path)[0], sheets, provider=self._provider(), force=True
+        )
+        assert control.all_nodata is False
+
     def test_failed_build_leaves_no_empty_bbox_dir(self, tmp_path):
         """Zn. 10: nieudana budowa bez poprzedniego wyniku nie zostawia
         pustego bbox/."""
@@ -1950,6 +2058,20 @@ class TestOffGridSheets:
         err = capsys.readouterr().err
         assert err.startswith("Error: 1 z 2 arkuszy")
         assert "--target-crs EPSG:5514" in err and "Arkusze zostaja w cache" in err
+
+    def test_cli_target_5514_off_grid_prints_info(self, tmp_path, capsys):
+        """W1 w CLI: arkusze o innej fazie = Info: (stderr), kod 0, plik powstaje."""
+        west = self._write_asc_5m(tmp_path / "M-34-76-A-a-1-1.asc", 535807.22, 460, 100)
+        east = self._write_asc_5m(tmp_path / "M-34-76-A-a-1-2.asc", 538045.16, 100, 200)
+        args = _pl_args(tmp_path, target_crs="EPSG:5514", resolution="5m")
+        rc, *_ = TestDownloadPlBboxCutout()._run(
+            tmp_path, args, [west, east], bbox=self._BBOX
+        )
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "Info: 1 arkuszy o innej fazie siatki przeprobkowanych osobno (W1" in err
+        assert "extra.off_grid_sheets" in err
+        assert "Warning:" not in err
 
     def test_target_5514_warps_each_off_grid_sheet_separately(self, tmp_path):
         """D8 (W1): warp z arkuszy o roznych fazach — kazdy arkusz ze swojej
