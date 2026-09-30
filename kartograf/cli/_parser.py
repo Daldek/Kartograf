@@ -75,7 +75,7 @@ def create_parser() -> argparse.ArgumentParser:
             "(exportImage pobierany natywnie w EPSG:5514, z --target-crs "
             "reprojektowany lokalnie). Dane zrodlowe 1:1 daja arkusze PL "
             "i arkusz SM5; kafel TM33 to lokalny warp z EPSG:5514 na siatke "
-            "EPSG:3045 (ADR-024). Znane bledy 0.7.0-dev: README, 'Znane problemy'."
+            "EPSG:3045 (ADR-024)."
         ),
     )
     download_parser.add_argument(
