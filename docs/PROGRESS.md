@@ -4,10 +4,10 @@
 
 | Element | Status | Uwagi |
 |---------|--------|-------|
-| NMT (parser + pobieranie) | ⚠️ Gotowy (znane bledy) | v0.1.0+; wybor pliku arkusza przez skorowidz: K3, K4, S1 |
-| NMPT (Digital Surface Model) | ⚠️ Gotowy (znane bledy) | v0.4.0; K3, S4 |
-| Ortofotomapa | ⚠️ Gotowy (znane bledy) | v0.4.0; K5 (CIR zamiast RGB), K4 |
-| LAZ (chmury punktów LIDAR) | ⚠️ Znany blad krytyczny K1 | WFS, area-based, --product laz, 2026-06-24; kafle z miejsca o zamienionych osiach — nie uzywac do naprawy |
+| NMT (parser + pobieranie) | ✅ Gotowy | v0.1.0+; wybor pliku arkusza przez `providers/pl/skorowidz.py` (filtr twardy + najnowsza kampania, ADR-028; K3/K4/S1/S4/H1/N1 naprawione 2026-09-30, live PASS) |
+| NMPT (Digital Surface Model) | ✅ Gotowy | v0.4.0; warstwy z GetCapabilities wg `LAYER_PATTERN` (S4 naprawione) |
+| Ortofotomapa | ✅ Gotowy | v0.4.0; RGB + najnowsza kampania (K5 naprawione, live PASS 2026-09-30) |
+| LAZ (chmury punktów LIDAR) | ✅ Gotowy | WFS, area-based, --product laz; osie (N,E) + straz przeciecia (K1 naprawione, live PASS: Spytkowice -> `M-34-76-A-a-1-1-3`); awaria WFS = `DownloadError` (N7) |
 | Land Cover (BDOT10k) | ✅ Gotowy | v0.3.0+, 15 warstw v0.5.0 |
 | Land Cover (CORINE) | ✅ Gotowy | v0.3.0+ |
 | SoilGrids | ✅ Gotowy | v0.3.0+ |
@@ -16,16 +16,16 @@
 | geometry → godla | ✅ Gotowy | find_sheets_for_geometry(), CLI --geometry |
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
-| PL-2000 (godlowanie) | ⚠️ Gotowy (znane bledy) | Parser2000, auto-detekcja, CLI, storage; pobranie godla PL-2000 daje arkusz PL-1992 (K4), sidecar z EPSG:2180 (N8) |
-| Pokrycie testami | ✅ Gotowy | 92,9%, 1861 testow offline + 8 `live` (po fali review max, develop, 2026-09-28; wczesniej 1787 lacznie z `live` 2026-08-28, 1716 na fix/release-0.7.0-audit 2026-08-23) |
+| PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage; godlo PL-2000 bez pliku PL-2000 = `NoCoverageError` z podpowiedzia `--scale` (K4), sidecar EPSG:2176-2179 (N8) |
+| Pokrycie testami | ✅ Gotowy | 2058 testow offline + 16 `live` (po fali naprawczej, develop, 2026-09-30; wczesniej 1861 + 8 po fali review max 2026-09-28) |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
-| Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0; tory PL go nie podlaczaja (N6) |
-| Weryfikacja BBox PL-2000 | ✅ Gotowy | 67 testow, reference values + live WMS (8 testow `live` niczego nie sprawdzaja — N5) |
-| Walidacja warstw WMS | ✅ Gotowy | GetCapabilities, lazy, fallback; NMT+NMPT v0.6.1, Orto 2026-06-24; zaszyta lista NMPT EVRF2007 nieaktualna (S4) |
+| Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0; od 2026-09-30 `record_cache` (rekord skorowidza / `no_coverage` z podpowiedzia) podlaczony w torach PL (N6), `--force` = bez cache |
+| Weryfikacja BBox PL-2000 | ✅ Gotowy | 67 testow, reference values + 16 testow `live` z realnymi asercjami na skorowidzu (N5) |
+| Walidacja warstw WMS | ✅ Gotowy | wylacznie GetCapabilities (lock, retry), `LAYER_PATTERN` per produkt, bez zaszytych list (S4, errata ADR-020) |
 | Etap 0 — zrodla wielokrajowe (sources/transform/transport/providers-pl/CLI split/sidecar) | ✅ Gotowy | zmergowane do develop 2026-08-11; E2E 12/12 na realnych danych |
-| Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ⚠️ Gotowy (znane bledy) | ZMERGOWANY do develop 2026-08-12 (fast-forward do 0738ae0); 21 zadan TDD + fix ADR-024, E2E 11/11; testy na zywo 2026-09-29: K2 (operacja S-JTSK — przesuniecie tresci do ~5 m), K6 (limit exportImage); wersja `0.7.0-dev` |
-| Wycinek NMT PL `--target-crs` (ADR-027) + API biblioteki `download_pl_cutout` | ⚠️ Gotowy (znane bledy) | fala review max 2026-09-28; testy na zywo 2026-09-29: mechanika PASS (siatka 1 m, 2180 1:1, 5514/3045 bit w bit, R5 na morzu i granicach); tresc zalezy od K3/K4, S1, S5; cel 5514 — K2 |
+| Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | ZMERGOWANY do develop 2026-08-12; tor CZ odmrozony w fali 2026-09-29/30 (D1): pin EPSG:1622 (K2; live: Karkonosze PL-CZ mediana -0,15 m, przesuniecie < 1 px), budzet 4 Mpx kafli (K6; live: 29,8 Mpx w 3 min 38 s), piksel dokladnie 2 m (N3), `Warning:` przy 100 % nodata (N2); wersja `0.7.0-dev` |
+| Wycinek NMT PL `--target-crs` (ADR-027) + API biblioteki `download_pl_cutout` | ✅ Gotowy | fala review max 2026-09-28 + fala naprawcza 2026-09-30: `GridMismatchError` dla 2180 z arkuszy o roznych fazach, W1 (warp per arkusz) dla 5514/3045 (S5/D3/D8), `extra.sheet_sources`, `all_nodata`, `download_pl_cutout(cache=)`; live PASS Krakow 5 m |
 
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
@@ -83,31 +83,96 @@
 
 ## Ostatnia sesja
 
-**Data:** 2026-08-10 — 2026-09-29 (sekcje datowane ponizej)
+**Data:** 2026-08-10 — 2026-09-30 (sekcje datowane ponizej)
 
-> **START NASTEPNEJ SESJI** (stan na koniec sesji 2026-09-29): **fala
-> naprawcza bledow kodu z testow na zywo** — uzytkownik 2026-09-29:
-> "przejdziemy do wdrozenia". Co naprawiac (waga, skutek, `plik:linia`,
-> raport): Backlog -> "Do naprawy — testy na zywych danych 2026-09-29"
-> (K1-K6, S1-S5, N1-N9, H1); dowody:
-> `docs/research/2026-09-29-live-e2e-i-audyt-docs/` (`KNOWN-BUGS.md`,
-> raporty L1-L7, surowe odpowiedzi skorowidza `gfi/`). Kolejnosc:
-> (1) pytania projektowe do uzytkownika, po jednym watku — odmrozenie toru
-> CZ dla K2/K6 (ADR-024), zachowanie trybu listy arkuszy przy morzu
-> i granicy (S2), arkusze 5 m o roznych fazach siatki (S5), zasada wyboru
-> pliku arkusza, gdy skorowidz daje kilka (K4), zakres S3-S5 i N1-N9;
-> (2) research przyczyn per klaster kodu: skorowidz GUGiK (K3, K4, S1, S4,
-> H1, N1), orto (K5), LAZ (K1, N7), CZ (K2, K6, N2, N3), CLI (S2, S3, S5,
-> N4, N6, N8, N9, N5) — przy zywych zapytaniach malo rownoleglosci (GUGiK
-> zrywa polaczenia); (3) plan -> pre-flight -> wdrozenie team-driven
-> z dowodami mutacyjnymi; (4) ponowne testy na zywo dotknietych
-> scenariuszy i usuniecie not "znany blad" (README "Znane problemy",
-> CLAUDE.md, ARCHITECTURE, SCOPE, erraty ADR, ostrzezenie K1/K5
-> w `--help`); (5) wydanie 0.7.0 (pkt 13-14). Stan repo: `develop`,
-> 1861 testow offline (+8 `live`), mypy 32, 223 commity przed origin (bez
-> push i bez merge do `main` — tylko na polecenie uzytkownika);
-> `e2e-data/2026-09-29-live/` (8,6 GB, gitignorowane) czeka na decyzje
-> uzytkownika o usunieciu.
+> **START NASTEPNEJ SESJI** (stan na koniec sesji 2026-09-30): **fala
+> naprawcza ZAKONCZONA** — 21 bledow z testow na zywo (K1-K6, S1-S5,
+> N1-N9, H1) naprawionych, review (5 znalezisk) domkniety, dokumentacja
+> bez not "znany blad", testy na zywo 2026-09-30: 11 PASS / 0 FAIL
+> (`docs/research/2026-09-29-fala-naprawcza/live-2026-09-30.md`). Nastepny
+> krok: **wydanie 0.7.0** ("Nastepne kroki" pkt 13-14: bump wersji
+> `0.7.0-dev` -> `0.7.0`, data w CHANGELOG, tag, push `develop`, merge do
+> `main` — WYLACZNIE na polecenie uzytkownika; checklista release pkt 14:
+> build sdist/wheel, zywa weryfikacja CORINE z credentials CLMS). Otwarte
+> po fali (backlog): scalanie PL+CZ w jedna powierzchnie (R6, etap 2),
+> rozwijanie godla PL-2000 1:10000 do potomkow z rekordami skorowidza
+> (etap 2), wielokat granicy zamiast prostokata (`--country auto`,
+> ADR-023), wycinek z arkuszy PL-2000 (etap 2). Stan repo: `develop`,
+> 2058 testow offline (+16 `live`), ruff czysty, mypy 32 (baseline),
+> 236 commitow przed origin (bez push); `e2e-data/2026-09-29-live/`
+> (8,6 GB) i `e2e-data/2026-09-30-live/` (0,6 GB) gitignorowane — czekaja
+> na decyzje uzytkownika o usunieciu. Modele: `task.agentModelOverrides`
+> = `openai-codex/gpt-6-sol` (zapisane globalnie 2026-09-30; astra
+> wyczerpuje limit po ~8 min pracy 3-4 agentow).
+
+### Fala naprawcza bledow z testow na zywo (2026-09-29/30)
+
+- **Zlecenie uzytkownika:** wdrozenie napraw 21 bledow z tabeli "Znane
+  bledy" (nizej); rola koordynatora = decyzje + najtrudniejsza analiza,
+  reszta przez subagentow. Artefakty: `docs/research/2026-09-29-fala-naprawcza/`
+  — `decisions.md` (D1-D12 uzytkownika + rozstrzygniecia koordynatora),
+  `plan.md` (fale A/B/C, wlasnosc plikow, kontrakty), `research-<klaster>.md`
+  x4 (przyczyny potwierdzone na kodzie i surowych body, projekty),
+  `impl-<pakiet>.md` x6 (dowody failing-before/passing-after), `review-fala.md`,
+  `docs-fala.md`, `live-2026-09-30.md`. Commity `6c46224..` (13 na develop).
+- **Decyzje uzytkownika:** D1 tor CZ odmrozony (K2+K6); D2/D10 tryb listy
+  i hierarchia godla z tolerancja R5 (kod 0 przy >= 1 pliku, `Warning:`
+  z lista; kod 1 przy porazce sieci albo zerze plikow); D3/D8 wycinek 2180
+  z arkuszy o roznych fazach = `GridMismatchError`, 5514/3045 = W1 (warp per
+  arkusz); D4/D9 wybor rekordu skorowidza = filtr twardy (godlo jako token,
+  rozdzielczosc, uklad, orto RGB) + najnowsza `aktualnosc`, koniec cichego
+  fallbacku PL-2000 -> PL-1992; D5 `extra.source` w sidecarze, zerwana
+  warstwa = `DownloadError`; D6 pelny zakres (z N6); D11 status
+  `no_coverage` w `DownloadProgress`; D12 `Info:` przy pomijaniu pliku ze
+  starym sidecarem "(3)".
+- **Kluczowe ustalenia research:** K2 — hipoteza `area_of_interest`
+  OBALONA (prostokat obszaru uzycia EPSG:4829 siega po Zlin/Jaworzynke;
+  AOI na zachod od 14,14°E daje pusta liste dla 5514->2180), diagnoza
+  ADR-024 OBALONA (roznica 1622−4829 w kaflu `302_5550` = (+4,52; +2,03) m
+  = "korekta" z ADR — serwer CUZK liczyl poprawnie); naprawa = jawny pin
+  `DATUM_STEP_PINS = {5514: {EPSG:1622, EPSG:1623}}`. K6 — limit to liczba
+  pikseli (7,5 Mpx OK / 8,38 -> 500), budzet `MAX_EXPORT_PIXELS = 4 Mpx`.
+  S5 — `rasterio.merge` przeprobkowuje "przez okno", warp z takich arkuszy
+  byl rownie zly. Skorowidz — rekordy maja pola `charakterystykaPrzestrzenna`,
+  `aktualnosc`, `ukladWspolrzednychPoziomych`, `godlo`; wewnatrz warstwy
+  rosnaco po dacie; H1 (`.ASC`) potwierdzona.
+- **Kod:** NOWY `providers/pl/skorowidz.py` (parser, `select_sheet_record`,
+  `query_skorowidz_layer` z retry, `SkorowidzLayersMixin`/`SourceInfoMixin`,
+  wspolna petla `_resolve_record`); `transport/http.py` (`make_gugik_session`,
+  `get_with_retry`); `gugik.py`/`gugik_nmpt.py`/`gugik_orto.py` bez
+  `WMS_LAYERS`, sesja per watek, leniwy mkdir; `cache/metadata.py`
+  `record_cache` (`get_record/set_record`, `url_cache` usuniete);
+  `transform/crs.py` pin; `cuzk/client.py` budzet + snap NW; `gugik_laz.py`
+  osie (N,E) + straz + `DownloadError`, `FALLBACK_YEARS` usuniete;
+  `transport/mosaic.py` `check_source_grid`/`GridMismatchError`/`has_valid_pixels`;
+  `transform/raster.py` `warp_to_grid(list[Path])`; `download/cutout.py`
+  (`skipped_pl_cutout`, `all_nodata`, `off_grid_sheets`, `sheet_sources`,
+  `cache=`); `download/manager.py` (`hard_failures`, `no_coverage`,
+  `parent_requests`, `extra.source`); `cli/download_cmd.py`
+  (`_finish_pl_sheets`, `CountryPart` + `Info:` S3, `Warning:` N2, cache
+  wiring, komunikaty K2/D12/N7); `sources/sidecar.py`/`registry.py` (N8).
+- **Brama:** 2058 testow offline PASS (+16 `live`), ruff check/format
+  czyste, mypy 32 = baseline. Review (reviewer, 5 znalezisk: `--year`
+  nieistniejacy bez "ponow", falszywe `Info:` S3 w `--geometry`, podpowiedz
+  `NoCoverageError` gubiona przy trafieniu cache negatywnego, duplikat petli
+  skorowidza w orto, testy pinujace `LAYER_PATTERN`) — wszystkie naprawione
+  (`c132241`).
+- **Testy na zywo 2026-09-30 (11 PASS / 0 FAIL):** K1 Spytkowice ->
+  `M-34-76-A-a-1-1-3`; K5 RGB 2024-06-21; K4 Szczecin `80225_` 1,00 m,
+  Warszawa 2025-04-27, rerun z cache 0,39 s; PL-2000 `5.167.25` ->
+  `NoCoverageError` z `--scale`, kod 1, bez pliku PL-1992; S2 Leba 4 arkusze
+  morskie `∅` + 8 plikow, `Warning:`, kod 0; K2 natywny res 2,000; K2
+  `--target-crs 2180` sidecar "(1) 1.0 m"; K2b Karkonosze PL vs CZ mediana
+  −0,15 m, brak przesuniecia >= 1 px (bylo 2,3 m); K6 29,8 Mpx (5473 x 5437)
+  przez kafle w 3 min 38 s bez HTTP 500; S5 Krakow 5 m 2180 ->
+  `GridMismatchError` (8/9 arkuszy), 5514 -> W1 `off_grid_sheets` 11; S3
+  Rozewie `Info:` 54,90°N + obszar poza zasiegiem.
+- **Modele:** GPT-6-astra padal z `usage_limit_reached` po 3-8 min przy 3-4
+  agentach (dwukrotnie; czesciowa praca odzyskana z drzewa i transkryptow);
+  Claude fable 429 przy 3-4 rownoleglych; skutecznie: 2 agenty naraz,
+  wznawianie z `history://<id>` + `git diff`. Na polecenie uzytkownika
+  `task` przelaczony na `openai-codex/gpt-6-sol` (zapis globalny), testy
+  live na Haiku (effort lo).
 
 ### Testy na zywych danych + audyt dokumentacji (2026-09-29)
 
@@ -189,10 +254,12 @@
 
 #### Znane bledy (testy na zywo 2026-09-29)
 
-Stan: czekaja na decyzje uzytkownika o naprawie ("Nastepne kroki" pkt 15);
-w tej sesji NIE naprawiane. Opisy, miejsca w kodzie i checkboxy: Backlog ->
+Stan: **WSZYSTKIE 21 NAPRAWIONE w fali 2026-09-29/30** (sekcja "Fala
+naprawcza" wyzej; dowody `docs/research/2026-09-29-fala-naprawcza/`,
+testy na zywo 2026-09-30: 11 PASS / 0 FAIL). Tabela zostaje jako zapis
+historyczny; opisy i miejsca w kodzie (wg HEAD sprzed naprawy): Backlog ->
 "Do naprawy — testy na zywych danych 2026-09-29 (przed wydaniem 0.7.0)".
-Raporty w `docs/research/2026-09-29-live-e2e-i-audyt-docs/`.
+Raporty z testow na zywo 2026-09-29: `docs/research/2026-09-29-live-e2e-i-audyt-docs/`.
 
 | ID | Waga | Blad (jedno zdanie) | Raport |
 |---|---|---|---|
@@ -1014,32 +1081,25 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
     22 Mpx z 3 kafli, szwy bit w bit, chunked merge dziala), ale realny limit
     serwera ~8 Mpx (K6); 3 przebiegi pelnej suity testow pod rzad (kontrola
     stabilnosci/flakow).
-15. **Fala naprawcza bledow z testow na zywo przed wydaniem 0.7.0** —
-    **NASTEPNA SESJA** (blokuje pkt 13). Uzytkownik 2026-09-29:
-    "przejdziemy do wdrozenia" — proponowany zakres K1-K6 + S1-S2,
-    S3-S5 i N1-N9 do ustalenia; otwarte pytania projektowe (zadawac po
-    jednym): odmrozenie toru CZ dla K2/K6 (ADR-024), tryb listy przy morzu
-    i granicy (S2), fazy siatki 5 m (S5), zasada wyboru pliku arkusza
-    (K4). Lista i miejsca w kodzie: Backlog -> "Do naprawy — testy na
-    zywych danych 2026-09-29"; kolejnosc pracy: blok "START NASTEPNEJ
-    SESJI" na poczatku "Ostatnia sesja". K1 (LAZ) jest krytyczny i sprzed
-    fal.
-    Po naprawach: ponowne testy na zywo dotknietych scenariuszy i usuniecie
-    not "znany blad" z dokumentacji (README "Znane problemy", CLAUDE.md,
-    ARCHITECTURE, SCOPE, erraty ADR).
+15. ~~**Fala naprawcza bledow z testow na zywo przed wydaniem 0.7.0**~~ —
+    **WYKONANE 2026-09-29/30** (sekcja "Fala naprawcza" w "Ostatnia
+    sesja"): 21 bledow naprawionych, review domkniety, dokumentacja bez
+    not "znany blad", testy na zywo 11 PASS. Odblokowuje pkt 13.
 
 ## Backlog
 
 #### Do naprawy — testy na zywych danych 2026-09-29 (przed wydaniem 0.7.0)
 
 Bledy kodu wykryte testami na zywo (sesja 2026-09-29, tabela "Znane bledy"
-wyzej); naprawa w nastepnej fali ("Nastepne kroki" pkt 15; uzytkownik
-2026-09-29: "przejdziemy do wdrozenia"). Linie kodu wg HEAD po fali dokumentacji 2026-09-29. Raporty:
-`docs/research/2026-09-29-live-e2e-i-audyt-docs/<raport>`. Oznaczenia wag:
+wyzej). **Wszystkie naprawione w fali 2026-09-29/30** (commity `6c46224..`,
+dowody failing-before/passing-after w `docs/research/2026-09-29-fala-naprawcza/impl-*.md`,
+decyzje D1-D12 w `decisions.md`). Linie kodu ponizej wg HEAD SPRZED naprawy
+(fala dokumentacji 2026-09-29) — nieaktualne, zachowane jako opis objawu.
+Raporty: `docs/research/2026-09-29-live-e2e-i-audyt-docs/<raport>`. Oznaczenia wag:
 K = wysoki/krytyczny (zle dane po cichu), S = sredni (odpornosc/UX),
 N = niski, H = hipoteza.
 
-- [ ] **K1** (KRYTYCZNY, sprzed fal — LAZ od 2026-06-24) — discovery WFS
+- [x] **K1** (KRYTYCZNY, sprzed fal — LAZ od 2026-06-24) — discovery WFS
       wysyla `BBOX` w kolejnosci (E, N), a `urn:ogc:def:crs:EPSG::2180`
       wymaga (N, E); envelope kafla jest czytany tak samo odwrotnie, wiec
       filtr przeciecia przechodzi, a kafle pochodza z miejsca o zamienionych
@@ -1052,7 +1112,7 @@ N = niski, H = hipoteza.
       Przy naprawie: komentarz `gugik_laz.py:363-365` ("... Verified live.")
       jest falszywy; usunac ostrzezenie K1 z pomocy `--product`
       (`cli/_parser.py:176-177`) i noty "znany blad K1" z dokumentacji.
-- [ ] **K2** (WYSOKI, etap 1 + ADR-027) — przypieta operacja S-JTSK ->
+- [x] **K2** (WYSOKI, etap 1 + ADR-027) — przypieta operacja S-JTSK ->
       ETRS89 to EPSG:4829 (obszar uzycia: Slowacja, 0,5 m), a w Czechach
       wlasciwa jest EPSG:1622 (1,0 m): tresc CZ po reprojekcji przesunieta
       do ~5 m (roznica EPSG:1622 - EPSG:4829 policzona pyproj: 0,1-1,0 m
@@ -1079,7 +1139,7 @@ N = niski, H = hipoteza.
       i `:271` — diagnoza ADR-024 do weryfikacji razem z K2. Zdanie o serwerze
       gubiacym datum shift przy `imageSR=2180` (~135 m; `transform/crs.py:134-140`,
       `providers/cuzk/dmr.py:55`, `:270-271`) pozostaje prawdziwe.
-- [ ] **K3** (WYSOKI, sprzed fal) — zerwane zapytanie o nowsza warstwe
+- [x] **K3** (WYSOKI, sprzed fal) — zerwane zapytanie o nowsza warstwe
       skorowidza -> po cichu URL starszej kampanii (NMT/NMPT/orto; LAZ
       pomija caly rocznik); arkusz zostaje w cache (`skip_existing`) i trafia
       do kolejnych wycinkow, a sidecar nie niesie URL-a ani daty kampanii;
@@ -1092,7 +1152,7 @@ N = niski, H = hipoteza.
       `L2-wycinki-siatka-report.md` (BUG-L2-1), `L3-morze-report.md` (B2),
       `L5-pogranicze-de-report.md` (B5), `L1-centrum-produkty-report.md`
       (BUG-L1-5).
-- [ ] **K4** (WYSOKI, sprzed fal) — wybor URL arkusza: pierwszy URL
+- [x] **K4** (WYSOKI, sprzed fal) — wybor URL arkusza: pierwszy URL
       zawierajacy godlo jako podciag, bez wzgledu na rozdzielczosc, date
       i zasieg — plik 0,5 m jako "1 m" (Szczecin: wycinek w 0,5 m, jeden
       w 100 % nodata z kodem 0), w warstwie zbiorczej najstarsza kampania
@@ -1107,13 +1167,13 @@ N = niski, H = hipoteza.
       remedium w komunikacie `download/cutout.py:306-311` ("pobierz obszar
       jako arkusze ..., np. z --system 2000") prowadzi dzis do arkusza-dziecka
       — poprawic razem z wyborem pliku.
-- [ ] **K5** (WYSOKI, sprzed fal) — `--product orto` pobiera wariant CIR
+- [x] **K5** (WYSOKI, sprzed fal) — `--product orto` pobiera wariant CIR
       zamiast RGB (w kampaniach 2024/2025 wpis CIR poprzedza RGB); sidecar
       nie ma koloru ani URL-a. Kod: `providers/pl/gugik_orto.py:376-384`
       (brak wyboru po `kolor`/`aktualnosc`). Raport:
       `L1-centrum-produkty-report.md` (BUG-L1-2). Przy naprawie: usunac
       ostrzezenie K5 z pomocy `--product` (`cli/_parser.py:176-177`).
-- [ ] **K6** (WYSOKI dla bbox CZ, etap 1) — realny limit `exportImage` CUZK
+- [x] **K6** (WYSOKI dla bbox CZ, etap 1) — realny limit `exportImage` CUZK
       to ~8 Mpx na zapytanie (deklarowane 15000 x 4100), a klient tnie kafle
       dopiero, gdy wymiar przekroczy 15000 x 4100 px: obszar CZ 2 m zblizony
       do kwadratu wiekszy niz ~5,5 x 5,5 km (albo np. 10 x 5 km wydluzony
@@ -1125,7 +1185,7 @@ N = niski, H = hipoteza.
       `_tile_grid` (brak budzetu pikseli). **Wymaga odmrozenia toru CZ
       (ADR-024) — decyzja uzytkownika.** Raport: `L4-pogranicze-cz-report.md`
       (BUG-L4-2).
-- [ ] **S1** (SREDNI, sprzed fal; skutek zaostrzony przez R5) — zapytania
+- [x] **S1** (SREDNI, sprzed fal; skutek zaostrzony przez R5) — zapytania
       skorowidza GetFeatureInfo bez ponowien i bez wspolnej sesji (nowe
       polaczenie per arkusz): przy zrywanych polaczeniach GUGiK wycinki
       padaja (Hel CLI 4/4, Karkonosze 3/3; ta sama biblioteka na jednej
@@ -1135,7 +1195,7 @@ N = niski, H = hipoteza.
       ponowien), `:300` (GetCapabilities). Raport: `L3-morze-report.md`
       (B1), `L5-pogranicze-de-report.md` (B3), `L4-pogranicze-cz-report.md`
       (BUG-L4-4).
-- [ ] **S2** (SREDNI, sprzed fal) — tryb listy arkuszy (bez `--target-crs`)
+- [x] **S2** (SREDNI, sprzed fal) — tryb listy arkuszy (bez `--target-crs`)
       bez tolerancji R5: morze/granica = kod 1; `--workers 1` przerywa na
       pierwszym arkuszu bez danych (zmierzone: 0 plikow, gdy byl pierwszy na
       liscie); `--workers > 1` zglasza tylko
@@ -1147,14 +1207,14 @@ N = niski, H = hipoteza.
       Raport: `L3-morze-report.md` (B3), `L5-pogranicze-de-report.md`
       (B1, B2), `L6-inne-granice-report.md` (BUG-1, BUG-1b),
       `L4-pogranicze-cz-report.md` (BUG-L4-3).
-- [ ] **S3** (SREDNI, etap 1) — `--country auto` po cichu przycina bbox do
+- [x] **S3** (SREDNI, etap 1) — `--country auto` po cichu przycina bbox do
       prostokata kraju (np. na zachod od 14,07°E, na polnoc od 54,90°N;
       pozostale krawedzie poszerzone o 40-110 m) — inny zasieg i nazwa
       pliku niz zadanie, bez `Info:`. Kod: `cli/download_cmd.py:284-344`
       (`_country_bbox`, przyciecie `:322-327`), wolane w `_dispatch_area`
       `:517`. Raport: `L5-pogranicze-de-report.md` (B4),
       `L3-morze-report.md` (B5).
-- [ ] **S4** (SREDNI, sprzed fal) — NMPT EVRF2007: lista warstw w kodzie
+- [x] **S4** (SREDNI, sprzed fal) — NMPT EVRF2007: lista warstw w kodzie
       nieaktualna (2025..2022iStarsze wobec 2026..2023iStarsze), a kazde
       pobranie drukuje ostrzezenie. Gdy GetCapabilities zawiedzie, dwie
       zaszyte warstwy nie istnieja (`LayerNotDefined` = awaria warstwy):
@@ -1165,7 +1225,7 @@ N = niski, H = hipoteza.
       2026-09-29, przeglad fali dokumentacji). Kod:
       `providers/pl/gugik_nmpt.py:83-86`. Raport:
       `L1-centrum-produkty-report.md` (BUG-L1-9).
-- [ ] **S5** (SREDNI, fala review max — R1) — arkusze 5 m kampanii 2022
+- [x] **S5** (SREDNI, fala review max — R1) — arkusze 5 m kampanii 2022
       (okolice Krakowa) maja rozne fazy siatki -> wycinek EPSG:2180 bierze
       wartosc z sasiedniego piksela (do 0,88 px) i ma 766 px nodata tam, gdzie
       dane sa; komunikat "najblizszym sasiadem" nieprawdziwy (1 m: jedna
@@ -1175,54 +1235,54 @@ N = niski, H = hipoteza.
       najblizszym sasiadem" — poprawic razem z naprawa). Raport:
       `L1-centrum-produkty-report.md` (BUG-L1-7), `L2-wycinki-siatka-report.md`
       (S24).
-- [ ] **N1** (NISKI, sprzed fal) — puste katalogi po arkuszach bez danych
+- [x] **N1** (NISKI, sprzed fal) — puste katalogi po arkuszach bez danych
       (`mkdir` przed zapytaniem skorowidza; `prune_empty_dirs` sprzata tylko
       `bbox/`). Kod: `providers/pl/gugik.py:455`. Raport:
       `L3-morze-report.md` (B4), `L5-pogranicze-de-report.md` (B6),
       `L4-pogranicze-cz-report.md` (BUG-L4-7).
-- [ ] **N2** (NISKI, etap 1 / fala) — wynik w 100 % nodata przyjmowany jako
+- [x] **N2** (NISKI, etap 1 / fala) — wynik w 100 % nodata przyjmowany jako
       sukces bez komunikatu (plik CZ nad DE/PL w prostokacie CZ; wycinek PL,
       gdy pobrane arkusze nic nie wnosza). Kod: `download/cutout.py:609`
       (sprawdzane tylko `sheet_paths`), tor CZ w `cli/download_cmd.py`
       (`_cz_download_bbox`). Raport: `L4-pogranicze-cz-report.md`
       (BUG-L4-5, U4), `L5-pogranicze-de-report.md` (H).
-- [ ] **N3** (NISKI, etap 1) — natywny wycinek CZ (EPSG:5514, jedno
+- [x] **N3** (NISKI, etap 1) — natywny wycinek CZ (EPSG:5514, jedno
       zapytanie) ma piksel 2,0004 m zamiast 2 m (bbox bez dociagniecia do
       calkowitej liczby pikseli). Kod: `providers/cuzk/client.py:139-147`.
       Raport: `L4-pogranicze-cz-report.md` (BUG-L4-6).
-- [ ] **N4** (NISKI, fale) — arkusze pominiete (juz na dysku) nie dostaja
+- [x] **N4** (NISKI, fale) — arkusze pominiete (juz na dysku) nie dostaja
       `extra.parent_request` nowego zadania; przy pominietym wycinku
       `PlCutoutResult.missing_sheets == ()` mimo dziur w rastrze (lista tylko
       w sidecarze). Kod: `download/manager.py:329`, `:516`, `:548` (skip
       przed `_write_sidecar`), `download/cutout.py:568`, `:714`. Raport:
       `L1-centrum-produkty-report.md` (BUG-L1-6),
       `D1-docs-uzytkownik-report.md` (ID 5).
-- [ ] **N5** (NISKI, sprzed fal) — testy `pytest -m live` (8) niczego nie
+- [x] **N5** (NISKI, sprzed fal) — testy `pytest -m live` (8) niczego nie
       sprawdzaja: odpytuja nieistniejaca warstwe i asertuja tylko HTTP 200.
       Kod: `tests/test_pl2000_verification.py:456-457`, `:474`, `:482`.
       Raport: `L1-centrum-produkty-report.md` (BUG-L1-10).
-- [ ] **N6** (NISKI, sprzed fal) — `MetadataCache` nie jest podlaczony
+- [x] **N6** (NISKI, sprzed fal) — `MetadataCache` nie jest podlaczony
       w zadnym torze PL (CLI, `DownloadManager`, `download_pl_cutout`:
       `_cache is None`). Kod: `cli/download_cmd.py:86`,
       `download/manager.py:211`, `download/cutout.py:572`, `:705`. Raport:
       `D2-docs-architektura-report.md` (D2-01), `L3-morze-report.md`.
-- [ ] **N7** (NISKI, sprzed fal) — LAZ: przy awarii sieci komunikat
+- [x] **N7** (NISKI, sprzed fal) — LAZ: przy awarii sieci komunikat
       "No LAZ tiles found" zamiast bledu sieci (a przy czesciowej awarii
       wynik niepelny z kodem 0). Kod: `cli/download_cmd.py:1324-1326`,
       `providers/pl/gugik_laz.py:385-388`. Raport:
       `L1-centrum-produkty-report.md` (BUG-L1-8).
-- [ ] **N8** (NISKI, sprzed fal) — sidecar pliku PL-2000 deklaruje
+- [x] **N8** (NISKI, sprzed fal) — sidecar pliku PL-2000 deklaruje
       `horizontal_crs` EPSG:2180 (pole z kanalu deskryptora, nie z pliku);
       dotyczy tez kafli LAZ `PL-2000:*`. Kod: `sources/sidecar.py:112`,
       `sources/registry.py:77`. Raport: `L1-centrum-produkty-report.md`
       (BUG-L1-11), `L2-wycinki-siatka-report.md` (BUG-L2-3).
-- [ ] **N9** (NISKI, wydajnosc, fala review max) — oszacowanie miejsca na
+- [x] **N9** (NISKI, wydajnosc, fala review max) — oszacowanie miejsca na
       dysku kosztuje ~7 ms na arkusz nieobecny w cache; wolajacy, ktory sam
       wola `estimate_pl_cutout_bytes` przed `run_pl_cutout`, placi dwa razy
       (13-21 % czasu duzego wycinka). Kod: `download/cutout.py:482`
       (`estimate_pl_cutout_bytes`), `:581` (`check_pl_cutout_disk_space`
       w `run_pl_cutout`). Raport: `L7-duzy-wycinek-report.md`.
-- [ ] **H1** (hipoteza — do weryfikacji) — regex URL skorowidza
+- [x] **H1** (hipoteza — POTWIERDZONA i naprawiona) — regex URL skorowidza
       `url:"(https://opendata[^"]+\.asc)"` pomija `.ASC` wielkimi literami
       (warstwa `SkorowidzeNMT2022iStarsze` ma takie rekordy); arkusz, ktorego
       JEDYNY rekord ma `.ASC`, zostalby uznany za brak danych. Kod:
