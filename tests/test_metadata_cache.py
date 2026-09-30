@@ -426,7 +426,9 @@ class TestGugikProviderCacheIntegration:
             provider._get_opendata_url(GODLO)
 
         assert mock_session.get.call_count == 4
-        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) == {"no_coverage": True}
+        cached = cache.get_record("nmt", "1m", "EVRF2007", GODLO)
+        assert cached is not None and cached["no_coverage"] is True
+        assert "Brak danych" in cached["message"]
 
     def test_query_failure_is_not_cached_as_no_coverage(self, cache):
         """K3-safe: awaria sieci = DownloadError, cache zostaje pusty."""
