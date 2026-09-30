@@ -511,6 +511,25 @@ class TestDownloadResultNoCoverage:
         assert result.no_coverage == ["N-34-130-D-d-2-1"]
         assert len(result.succeeded) == 2
 
+    @pytest.mark.parametrize("workers", [1, 4])
+    def test_hard_failures_excludes_no_coverage_and_progress_status(
+        self, tmp_path, provider, workers
+    ):
+        """D2/D11: ``hard_failures`` = porazki warte ponowienia; arkusz bez
+        danych raportuje status ``no_coverage`` (nie ``failed``)."""
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+        statuses: dict[str, str] = {}
+        manager.download_sheets(
+            ["N-34-130-D-d-2"],
+            max_workers=workers,
+            on_progress=lambda p: statuses.__setitem__(p.godlo, p.status),
+        )
+        result = manager.last_result
+        assert result.hard_failures == ["N-34-130-D-d-2-2"]
+        assert statuses["N-34-130-D-d-2-1"] == "no_coverage"
+        assert statuses["N-34-130-D-d-2-2"] == "failed"
+        assert statuses["N-34-130-D-d-2-3"] == "completed"
+
 
 class TestDownloadManagerDownloadSheets:
     """download_sheets(): lista godel -> liscie 1:10000, porazki w last_result."""
@@ -1040,3 +1059,78 @@ class TestSidecarWritten:
             (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
         )
         assert payload["extra"] == {}
+
+
+class TestReuseNotedInSidecar:
+    """N4: arkusz POMINIETY (juz w cache) dostaje ``extra.parent_requests``."""
+
+    _FIRST = {
+        "bbox": [1.0, 2.0, 3.0, 4.0],
+        "bbox_crs": "EPSG:2180",
+        "countries": ["PL"],
+    }
+    _SECOND = {
+        "bbox": [5.0, 6.0, 7.0, 8.0],
+        "bbox_crs": "EPSG:2180",
+        "countries": ["PL"],
+    }
+
+    @staticmethod
+    def _manager(tmp_path, request):
+        return DownloadManager(
+            output_dir=tmp_path,
+            provider=TestSidecarWritten()._mock_provider(),
+            sidecar_extra={"parent_request": request},
+        )
+
+    @staticmethod
+    def _payload(path):
+        import json
+
+        return json.loads((path.parent / f"{path.name}.meta.json").read_text("utf-8"))
+
+    @pytest.mark.parametrize("workers", [1, 3])
+    def test_skipped_sheet_gets_reusing_request_appended(self, tmp_path, workers):
+        """Pierwsze zadanie pobiera (``parent_request``), kolejne reuzywaja
+        (``parent_requests``: lista, bez duplikatow, bez rowniez zadania
+        pobierajacego). ``downloaded_at`` i reszta sidecara bez zmian."""
+        first = self._manager(tmp_path, self._FIRST)
+        (path,) = first.download_sheets(["N-34-130-D-d-2-4"], max_workers=workers)
+        before = self._payload(path)
+
+        second = self._manager(tmp_path, self._SECOND)
+        second.download_sheets(["N-34-130-D-d-2-4"], max_workers=workers)
+        second.download_sheets(["N-34-130-D-d-2-4"], max_workers=workers)  # duplikat
+        first.download_sheets(["N-34-130-D-d-2-4"], max_workers=workers)  # = parent
+
+        after = self._payload(path)
+        assert after["extra"]["parent_request"] == self._FIRST
+        assert after["extra"]["parent_requests"] == [self._SECOND]
+        assert after["downloaded_at"] == before["downloaded_at"]
+        assert {k: v for k, v in after.items() if k != "extra"} == {
+            k: v for k, v in before.items() if k != "extra"
+        }
+
+    def test_download_sheet_skip_path_also_notes_reuse(self, tmp_path):
+        first = self._manager(tmp_path, self._FIRST)
+        path = first.download_sheet("N-34-130-D-d-2-4")
+        self._manager(tmp_path, self._SECOND).download_sheet("N-34-130-D-d-2-4")
+        assert self._payload(path)["extra"]["parent_requests"] == [self._SECOND]
+
+    def test_no_sidecar_means_nothing_is_invented(self, tmp_path):
+        """Cache sprzed 0.7.0 (bez sidecara): zaden sidecar nie powstaje."""
+        first = self._manager(tmp_path, self._FIRST)
+        path = first.download_sheet("N-34-130-D-d-2-4")
+        (path.parent / f"{path.name}.meta.json").unlink()
+
+        self._manager(tmp_path, self._SECOND).download_sheet("N-34-130-D-d-2-4")
+
+        assert not (path.parent / f"{path.name}.meta.json").exists()
+
+    def test_manager_without_parent_request_leaves_sidecar_untouched(self, tmp_path):
+        first = self._manager(tmp_path, self._FIRST)
+        path = first.download_sheet("N-34-130-D-d-2-4")
+        DownloadManager(
+            output_dir=tmp_path, provider=TestSidecarWritten()._mock_provider()
+        ).download_sheet("N-34-130-D-d-2-4")
+        assert "parent_requests" not in self._payload(path)["extra"]

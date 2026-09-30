@@ -112,7 +112,7 @@ class PlCutoutResult:
     Przy ``skipped=True`` (plik istnial, ``force=False``) ``missing_sheets``
     i ``off_grid_sheets`` pochodza z sidecara istniejacego wycinka
     (``skipped_pl_cutout``), a ``sheet_paths`` jest puste — arkuszy nikt nie
-    dotykal.
+    dotykal; ``all_nodata`` jest wtedy ``False`` (plik nie jest czytany).
     """
 
     path: Path
@@ -121,6 +121,9 @@ class PlCutoutResult:
     missing_sheets: tuple[str, ...] = ()  # arkusze bez danych GUGiK (R5) -> nodata
     # arkusze o innej fazie siatki niz reszta, reprojektowane osobno (W1, S5)
     off_grid_sheets: tuple[str, ...] = ()
+    # wycinek bez ani jednego waznego piksela (N2): pobrane arkusze leza w
+    # marginesie selekcji albo same sa nodata — plik powstal, kod 0 w CLI
+    all_nodata: bool = False
 
 
 def _bbox_to_2180(bbox: BBox) -> BBox:
@@ -714,7 +717,11 @@ def run_pl_cutout(
     Brak danych u zrodla (``NoCoverageError``) -> nodata + ``missing_sheets``;
     kazda inna porazka pobrania arkusza (``DownloadError``) -> ``DownloadError``;
     gdy ZADEN arkusz nie ma danych -> ``ValidationError``. Oba bledy padaja,
-    zanim cokolwiek zostanie zbudowane. Inny wyjatek arkusza (np. ``OSError``
+    zanim cokolwiek zostanie zbudowane. Wycinek z arkuszy, ktore nie wnosza
+    ani jednego waznego piksela (N2: margines selekcji, arkusz w calosci
+    nodata), POWSTAJE i ma ``all_nodata=True`` (+ ``logger.warning``) — to
+    poprawny wynik "brak danych", nie blad.
+    Inny wyjatek arkusza (np. ``OSError``
     zapisu) przy ``max_workers=1`` wylatuje stad bez zmian, a w puli watkow
     liczy sie jak porazka pobrania (``DownloadError``). ``provider`` i
     ``storage`` domyslnie z fabryki NMT i ``FileStorage`` segmentu arkuszy
@@ -794,6 +801,19 @@ def run_pl_cutout(
         # (katalog z poprzednim wynikiem nie jest pusty — zostaje)
         prune_empty_dirs(cutout.target_path.parent, cutout.output_dir)
         raise
+    # N2: arkusze z marginesu selekcji (1 px / zapas warpu) potrafia nie
+    # wniesc zadnego piksela do obszaru zadania, a arkusz przygraniczny bywa
+    # w calosci nodata — plik jest wtedy poprawnym wynikiem "brak danych",
+    # ale konsument ma o tym wiedziec (CLI: Warning, kod 0).
+    from kartograf.transport.mosaic import has_valid_pixels
+
+    all_nodata = not has_valid_pixels(cutout.target_path, PL_NODATA)
+    if all_nodata:
+        logger.warning(
+            f"Wycinek {cutout.target_path} jest w calosci nodata — pobrane "
+            f"arkusze ({len(sheet_paths)}) nie wnosza zadnego piksela w obszarze "
+            "zadania (brak danych GUGiK / obszar poza pokryciem)"
+        )
     write_pl_cutout_sidecar(
         cutout,
         parent_request=parent_request,
@@ -806,6 +826,7 @@ def run_pl_cutout(
         sheet_paths=tuple(sheet_paths),
         missing_sheets=missing,
         off_grid_sheets=off_grid,
+        all_nodata=all_nodata,
     )
 
 
