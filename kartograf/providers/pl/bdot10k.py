@@ -185,7 +185,9 @@ class Bdot10kProvider(LandCoverProvider):
         Returns
         -------
         Path
-            Path to the downloaded file
+            Path to the downloaded file: ``output_path`` z rozszerzeniem
+            ``.gpkg`` (GPKG, rozpakowany i scalony) albo ``.zip`` (SHP —
+            oryginalne archiwum GUGiK z shapefile'ami)
 
         Raises
         ------
@@ -201,6 +203,11 @@ class Bdot10kProvider(LandCoverProvider):
             raise ValueError(f"Unsupported format: {format}. Use 'GPKG' or 'SHP'")
 
         output_path = Path(output_path)
+        if format == "SHP":
+            # Paczka SHP to archiwum ZIP z shapefile'ami (bez rozpakowania):
+            # nazwa musi to mowic, a nie udawac GeoPackage (review N1).
+            # Symetrycznie do GPKG, gdzie `_extract_gpkg_from_zip` nadaje .gpkg.
+            output_path = output_path.with_suffix(".zip")
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Construct OpenData URL
