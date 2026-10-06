@@ -367,9 +367,14 @@ kartograf cache path
   `cellsize` (np. 0,99937 m). Sidecar zapisuje faktyczny uklad PLIKU
   (`horizontal_crs: EPSG:2180`), deklaracje rekordu w `extra.source.uklad`
   (`PL-2000:S7`), a plik lezy w segmencie wg godla (`nmt/pl_2000_...`,
-  ADR-026). Ostrzezenie `Sidecar ...: godlo ... wskazuje EPSG:2178, ale
-  wspolrzedne pliku ... sa w EPSG:2180` idzie przez logger na stderr — BEZ
-  prefiksu `Warning:` (E17; test `tests/test_sidecar.py`).
+  ADR-026). CLI drukuje `Warning: N arkuszy GUGiK opublikowano w innym
+  ukladzie niz wskazuje godlo: <godlo> (godlo: EPSG:2178, plik: EPSG:2180)`
+  na stderr (tor godla, listy `--bbox`/`--geometry` i hierarchii, takze przy
+  skip i `-q`; fakt czytany z sidecara), kod wyjscia bez zmian. Biblioteka
+  loguje to samo przez logger `kartograf.sources.sidecar` (bez handlerow
+  CLI trafia on rowniez na stderr). Wycinek `--target-crs` nie dotyczy:
+  bierze tylko arkusze PL-1992 (E17; testy `tests/test_sidecar.py`,
+  `tests/test_cli.py::TestSheetCrsMismatchWarning`).
   `MetadataCache` przechowuje rekord lub potwierdzony brak pokrycia wraz
   z trescia podpowiedzi (TTL 7d; `get_record/set_record`,
   `stats()["record_count"]`); cache hit odtwarza ten sam `NoCoverageError`.

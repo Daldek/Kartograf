@@ -17,7 +17,13 @@ from kartograf.download.manager import (
     DownloadProgress,
     DownloadResult,
 )
-from kartograf.exceptions import DownloadError, ParseError, ValidationError
+from kartograf.exceptions import (
+    DownloadError,
+    KartografError,
+    ParseError,
+    ValidationError,
+)
+from kartograf.sources.registry import horizontal_crs_for_godlo
 
 
 def create_progress_callback(quiet: bool = False):
@@ -1009,7 +1015,7 @@ def cmd_download(args: argparse.Namespace) -> int:
                             print(f"Skipped {args.godlo} - already exists at {result}")
                         else:
                             print(f"Downloaded to {result}")
-                    _warn_partial_sheets([result])
+                    _warn_sheet_sidecars([result])
                     return 0
                 paths = result
 
@@ -1090,7 +1096,7 @@ def _finish_pl_sheets(
 
     ``Warning:``/``Error:`` ida na stderr, wiec ``-q`` ich NIE tlumi.
     """
-    _warn_partial_sheets(paths)
+    _warn_sheet_sidecars(paths)
     if not quiet:
         # pasek postepu konczy "skipped"/"downloading" bez nowej linii
         print()
@@ -1153,15 +1159,73 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
     return _dispatch_area(args, bbox)
 
 
+def _read_sheet_sidecar(path: Path) -> dict | None:
+    """Sidecar ``<plik>.meta.json`` arkusza; ``None`` gdy brak/nieczytelny."""
+    sidecar = path.with_name(f"{path.name}.meta.json")
+    try:
+        meta = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return meta if isinstance(meta, dict) else None
+
+
 def _is_partial_sheet(path: Path) -> bool:
     """Sidecar arkusza deklaruje niepelny arkusz (``extra.source.full_sheet``
     ``false``, E13). Best-effort: brak/nieczytelny sidecar = ``False``."""
-    sidecar = path.with_name(f"{path.name}.meta.json")
     try:
-        source = json.loads(sidecar.read_text(encoding="utf-8"))["extra"]["source"]
+        source = (_read_sheet_sidecar(path) or {})["extra"]["source"]
         return source.get("full_sheet") is False
-    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+    except (KeyError, TypeError, AttributeError):
         return False
+
+
+def _sheet_crs_mismatch(path: Path) -> tuple[str, str, str] | None:
+    """E17: ``(godlo, uklad_godla, uklad_pliku)`` gdy sidecar arkusza PL ma
+    ``horizontal_crs`` (uklad PLIKU, ``pl_sheet_horizontal_crs``) inny niz
+    wynika z godla — np. arkusz PL-2000 strefy 7 opublikowany przez GUGiK
+    we wspolrzednych EPSG:2180. Best-effort: brak sidecara/godla = ``None``."""
+    meta = _read_sheet_sidecar(path)
+    if meta is None or meta.get("country") != "PL":
+        return None
+    request = meta.get("request")
+    godlo = request.get("godlo") if isinstance(request, dict) else None
+    actual = meta.get("horizontal_crs")
+    if not isinstance(godlo, str) or not isinstance(actual, str):
+        return None
+    try:
+        expected = horizontal_crs_for_godlo(godlo)
+    except KartografError:
+        return None
+    if expected == actual:
+        return None
+    return godlo, expected, actual
+
+
+def _warn_crs_mismatch_sheets(paths) -> None:
+    """E17: ``Warning:`` o arkuszach, ktorych plik jest w innym ukladzie niz
+    deklaruje godlo/rekord skorowidza. Kod wyjscia bez zmian; sidecar opisuje
+    uklad PLIKU. Czyta sidecary, wiec powtarza sie przy skip."""
+    found = [m for m in (_sheet_crs_mismatch(Path(p)) for p in paths) if m]
+    if not found:
+        return
+    found.sort()
+    shown = ", ".join(
+        f"{godlo} (godlo: {expected}, plik: {actual})"
+        for godlo, expected, actual in found[:10]
+    ) + (" ..." if len(found) > 10 else "")
+    print(
+        f"Warning: {len(found)} arkuszy GUGiK opublikowano w innym ukladzie "
+        f"niz wskazuje godlo: {shown} — sidecar opisuje uklad pliku "
+        "(horizontal_crs); deklaracja rekordu w extra.source.uklad",
+        file=sys.stderr,
+    )
+
+
+def _warn_sheet_sidecars(paths) -> None:
+    """Ostrzezenia CLI z sidecarow arkuszy wyniku: niepelny arkusz (E13)
+    i uklad pliku inny niz godla (E17)."""
+    _warn_partial_sheets(paths)
+    _warn_crs_mismatch_sheets(paths)
 
 
 def _warn_partial_sheets(paths) -> None:
