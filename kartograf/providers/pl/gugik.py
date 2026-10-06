@@ -27,13 +27,18 @@ import requests
 
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.exceptions import (
-    DownloadError,
     NoCoverageError,
     ParseError,
     ValidationError,
 )
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import SkorowidzLayersMixin, SkorowidzRecord
+from kartograf.transport.http import (
+    http_failure,
+    http_status,
+    is_retryable,
+    retry_wait,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -533,15 +538,22 @@ class GugikProvider(SkorowidzLayersMixin, BaseProvider):
                 logger.warning(
                     f"Download failed for {description} (attempt {attempt}): {e}"
                 )
+                if not is_retryable(e):
+                    raise http_failure(
+                        f"Failed to download {description}: "
+                        f"HTTP {http_status(e)} (not retried): {e}",
+                        e,
+                    ) from e
 
                 if attempt < self.MAX_RETRIES:
-                    wait_time = self.RETRY_BACKOFF_BASE**attempt
+                    wait_time = retry_wait(e, self.RETRY_BACKOFF_BASE**attempt)
                     logger.debug(f"Retrying in {wait_time} seconds...")
                     time.sleep(wait_time)
 
-        raise DownloadError(
+        raise http_failure(
             f"Failed to download {description} after {self.MAX_RETRIES} attempts: "
             f"{last_error}",
+            last_error,
         )
 
     def _make_request(self, url: str, timeout: int) -> requests.Response:

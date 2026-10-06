@@ -156,7 +156,7 @@ kartograf/
 │   ├── crs.py           # TransformPolicy, PinnedTransform, build_pinned_transform, KNOWN_PATHS
 │   └── raster.py        # warp_to_grid — lokalny warp na siatke, operacja WYMUSZONA (tory PL)
 ├── transport/           # Wspolny transport
-│   ├── http.py          # download_to — zapis atomowy + retry z backoffem
+│   ├── http.py          # download_to/get_with_retry — zapis atomowy + retry (siec, 429, 5xx; Retry-After)
 │   └── mosaic.py        # mosaic_and_crop — merge rastrow + przyciecie, propagacja nodata;
 │                        # opcjonalnie crop na siatce zrodel i owijanie zrodel w VRT
 ├── providers/           # Providery danych

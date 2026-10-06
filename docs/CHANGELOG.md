@@ -6,6 +6,22 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.7.0] - Unreleased
+### Polityka ponowień HTTP i sesja BDOT10k (2026-10-06)
+- Pobieranie GUGiK (NMT/NMPT/orto/LAZ/BDOT10k) oraz wspólny transport
+  (`get_with_retry`, `download_to` — skorowidz, WFS LAZ, CUZK) ponawia
+  tylko błędy sieci, HTTP 429 i 5xx. Pozostałe 4xx (np. 404) kończą
+  pobieranie od razu, bez 3 prób i 6 s czekania; komunikat podaje
+  `HTTP <kod> (bez ponowien)` / `(not retried)`.
+- Nagłówek `Retry-After` (sekundy albo data HTTP) wydłuża przerwę przed
+  ponowieniem ponad backoff, z górną granicą 60 s (`MAX_RETRY_AFTER`).
+- `DownloadError.status_code` niesie kod HTTP ostatniej próby (wcześniej
+  zawsze `None` w tych torach). Nowe w `kartograf.transport.http`:
+  `is_retryable`, `retry_wait`, `http_status`, `http_failure`.
+- `Bdot10kProvider` bez wstrzykniętej sesji używa jednej sesji GUGiK na
+  wątek (`make_gugik_session`: keep-alive, `User-Agent: kartograf/<wersja>`)
+  dla zapytań TERYT i pobrań — wcześniej nowa `requests.Session()` na każde
+  wywołanie.
+
 ### Fala naprawcza 2026-09-29/30 — migracja
 - Przy wyborze arkusza GUGiK `NoCoverageError` zastępuje cichy plik
   PL-1992 pod godłem PL-2000, plik 0,5 m pod żądaniem 1 m lub
