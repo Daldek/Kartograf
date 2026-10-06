@@ -308,6 +308,24 @@ pytest tests/ -v --tb=short -m "not live"
 `pyproject.toml` nie odfiltrowuje testow `live` (`addopts` bez `-m`), wiec
 komenda bez `-m "not live"` wychodzi w siec.
 
+### 6.4 Gdzie zapisywac pobrane dane (sesje Claude)
+
+Od 2026-10-06 dane przestrzenne pobierane recznie lub w weryfikacjach na
+zywo (CLI `kartograf download/landcover/soilgrids`) zapisujemy na lokalnym
+serwerze sieciowym `<katalog-danych>`, nie w repo:
+
+```bash
+kartograf download N-34-130-D-d-2-4 -o <katalog-danych>/kartograf/data
+kartograf download --bbox 530000,382000,533000,386000 --target-crs EPSG:5514 \
+    -o <katalog-danych>/kartograf/e2e/2026-10-06-wycinek-pl
+```
+
+`kartograf/data/` = wspolny kanoniczny uklad (ADR-026), `kartograf/e2e/<data>-<cel>/`
+= przebiegi testow na zywo (wczesniej `e2e-data/` w repo). Raporty z przebiegow
+zostaja w `docs/research/`. `.kartograf_cache.db` zostaje w katalogu roboczym
+repo (SQLite WAL nie nadaje sie na udzial sieciowy). Szczegoly: `CLAUDE.md`,
+sekcja "katalog danych danych".
+
 ---
 
 ## 7. Python — struktura projektu
