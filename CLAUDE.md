@@ -37,6 +37,34 @@ Bez credentials CLMS: CORINE automatycznie pobiera podglad PNG przez WMS (fallba
 sidecar dostaje `extra.fallback = "wms_png"`). Alternatywa z poziomu biblioteki:
 `CorineProvider(clms_credentials={...})` (tryb bezposredni, z pominieciem proxy).
 
+## katalog danych danych (od 2026-10-06)
+
+**Wszystkie dane przestrzenne pobierane przez Claude** (testy na zywo,
+weryfikacje E2E, reczne wywolania CLI, dane do analiz) zapisuj na
+serwerze sieciowym `<katalog-danych>` — NIE w repo i NIE w `/tmp`.
+
+- Udzial CIFS/SMB `<udzial>`
+  zapis dla `claude-agent` (pliki 0640, katalogi 0750); przesyl szybki.
+- Domyslne `--output` CLI (`./data`, `./data/landcover`, `./data/hsg`)
+  wskazuja na repo — **zawsze podawaj `--output` jawnie**, np.
+  `kartograf download N-34-130-D-d-2-4 -o <katalog-danych>/kartograf/data`.
+- Uklad katalogow:
+  - `<katalog-danych>/kartograf/data/` — kanoniczny uklad `data/`
+    (ADR-026), wspolny dla kolejnych sesji (reuzycie pobranych arkuszy);
+  - `<katalog-danych>/kartograf/e2e/<RRRR-MM-DD>-<cel>/` — przebiegi
+    testow na zywo i weryfikacji (zastepuja dawne `e2e-data/` w repo);
+  - wyniki/notatki z przebiegu (raporty `.md`) nadal trafiaja do
+    `docs/research/...` w repo — na katalog danych idzie tylko ciezki raster/LAZ/GPKG.
+- Cache metadanych `.kartograf_cache.db` (SQLite WAL) **zostaje lokalnie**
+  (biezacy katalog = repo, gitignorowany): WAL na udziale sieciowym jest
+  zawodny. Uruchamiaj CLI z korzenia repo i kieruj na katalog danych tylko `--output`.
+- Montowanie jest `soft`: przy niedostepnosci serwera zapis konczy sie bledem
+  I/O (nie wisi). Przed dlugim pobieraniem sprawdz `df -h <katalog-danych>`;
+  gdy udzial nie jest zamontowany, zatrzymaj sie i zapytaj uzytkownika
+  zamiast pisac lokalnie.
+- Testy pytest nie dotycza katalog danych (offline: `tmp_path`; `live`: tylko
+  zapytania o metadane, bez plikow) — bez zmian.
+
 ## Dokumentacja
 
 **Przeczytaj w kolejnosci:**

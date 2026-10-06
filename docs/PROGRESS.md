@@ -85,6 +85,13 @@
 
 **Data:** 2026-08-10 — 2026-09-30 (sekcje datowane ponizej)
 
+> **katalog danych DANYCH (2026-10-06):** wszystkie pobierane dane przestrzenne
+> zapisujemy na `<katalog-danych>`:
+> `kartograf/data/` (kanoniczny uklad) i `kartograf/e2e/<data>-<cel>/`
+> (testy na zywo); zawsze jawne `--output`, cache SQLite zostaje w repo.
+> Zasady: `CLAUDE.md` sekcja "katalog danych danych". `e2e-data/` (9,1 GB) w repo
+> nadal czeka na decyzje: przeniesc na katalog danych czy usunac.
+
 > **START NASTEPNEJ SESJI** (stan na koniec sesji 2026-09-30): **fala
 > naprawcza ZAKONCZONA** — 21 bledow z testow na zywo (K1-K6, S1-S5,
 > N1-N9, H1) naprawionych, review (5 znalezisk) domkniety, dokumentacja
