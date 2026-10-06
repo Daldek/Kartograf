@@ -17,7 +17,7 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage; godlo PL-2000 bez pliku PL-2000 = `NoCoverageError` z podpowiedzia `--scale` (K4), sidecar EPSG:2176-2179 (N8) |
-| Pokrycie testami | ✅ Gotowy | 2058 testow offline + 16 `live` (po fali naprawczej, develop, 2026-09-30; wczesniej 1861 + 8 po fali review max 2026-09-28) |
+| Pokrycie testami | ✅ Gotowy | 2105 testow offline + 16 `live` (2026-10-06 po polityce ponowien; 2058 po fali naprawczej 2026-09-30; wczesniej 1861 + 8 po fali review max 2026-09-28) |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0; od 2026-09-30 `record_cache` (rekord skorowidza / `no_coverage` z podpowiedzia) podlaczony w torach PL (N6), `--force` = bez cache |
@@ -111,6 +111,28 @@
 > na decyzje uzytkownika o usunieciu. Modele: `task.agentModelOverrides`
 > = `openai-codex/gpt-6-sol` (zapisane globalnie 2026-09-30; astra
 > wyczerpuje limit po ~8 min pracy 3-4 agentow).
+
+### Polityka ponowien HTTP + sesja BDOT10k (2026-10-06)
+
+- **Zlecenie uzytkownika:** przed wydaniem 0.7.0 — ponawiac tylko bledy
+  sieci/429/5xx (4xx konczy od razu), respektowac `Retry-After`, dac
+  BDOT10k wspolna sesje GUGiK. Commit `9bcc040`.
+- **Kod:** `transport/http.py` — `is_retryable`, `retry_wait`
+  (`MAX_RETRY_AFTER = 60`), `http_status`, `http_failure`
+  (`DownloadError.status_code`); uzyte w `get_with_retry`, `download_to`
+  (wiec tez skorowidz, WFS LAZ, CUZK) i `_download_with_retry` w
+  `gugik.py`/`gugik_orto.py`/`gugik_laz.py`/`bdot10k.py`.
+  `Bdot10kProvider._session_for_thread()` (jak `SkorowidzLayersMixin`).
+- **Brama:** 2105 testow offline PASS (+47: `tests/test_retry_policy.py`,
+  `TestRetryPolicy`/`TestGetWithRetryPolicy`/`TestDownloadToPolicy`),
+  ruff czysty, mypy 32 = baseline (diff listy pusty). 6 mutacji
+  (zawsze-ponawiaj, ignoruj Retry-After, bez limitu 60 s, LAZ bez
+  szybkiego 404, BDOT nowa sesja co wywolanie, BDOT sesja wspolna watkom)
+  — kazda wykryta.
+- **Poza zakresem (backlog):** globalny limit tempa zapytan do GUGiK;
+  CORINE/SoilGrids nadal ponawiaja kazdy blad; zapytanie TERYT BDOT10k
+  bez ponowien; zduplikowane petle `_download_with_retry` w providerach.
+- **Nastepny krok bez zmian:** wydanie 0.7.0 (pkt 13-14).
 
 ### Fala naprawcza bledow z testow na zywo (2026-09-29/30)
 
