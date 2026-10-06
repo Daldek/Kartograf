@@ -99,7 +99,7 @@ Ponizszy graf zostal ZMIERZONY na drzewie importow (AST wszystkich plikow
 
 ```
 cli ──> download, landcover, hydrology, providers, sources,
-        transform, core, cache
+        transform, transport (leniwie), core, cache
 download ──> providers, sources, transform, transport, core
 landcover ──> providers, sources, download (FileStorage), core
 hydrology ──> providers, core
@@ -126,9 +126,12 @@ Trzy uwagi, ktore latwo przeoczyc:
   imporcie (typy `PinnedTransform`/`TransformPolicy`), `transport.mosaic`
   i `transform.raster` leniwie, w `build_pl_cutout`. `manager.py`
   i `storage.py` nie importuja zadnego z nich — `DownloadManager` pozostaje
-  warstwa koordynacji arkuszy. CLI od 2026-09-28 nie importuje juz
-  `transport` wcale (mozaika i warp wycinka przeszly do biblioteki, R3),
-  a z `transform` bierze tylko `TransformError`.
+  warstwa koordynacji arkuszy. CLI od 2026-09-28 nie buduje juz mozaiki
+  ani warpu wycinka (przeszly do biblioteki, R3), a z `transform` bierze
+  tylko `TransformError`. Jedyna krawedz `cli ──> transport` to leniwy
+  import `transport.mosaic.has_valid_pixels` w `_warn_cz_all_nodata`
+  (kontrola "wynik CZ w calosci nodata"; korekta 2026-10-06, review N13 —
+  przeniesienie jej do providera CZ, jak `all_nodata` w torze PL, to backlog).
 - Krawedz `download ──> providers` siega tez do zamrozonego toru CZ:
   `download/cutout.py` (tor PL) importuje leniwie generyczny `bbox_to_crs`
   z `providers/cuzk/dmr.py` (ADR-024); przeniesienie go do `transform/` to
@@ -406,10 +409,11 @@ z dopasowaniem; remis rozstrzyga `dt_pzgik`, URL. Brak zgodnego rekordu
 po poprawnych odpowiedziach warstw = `NoCoverageError`, np. dla PL-2000
 1:10000 z samymi potomkami podpowiedz `--scale 1:2000`. Awaria warstwy,
 raport OGC albo nieoczekiwany szablon = `DownloadError`, nie cichy fallback
-do starszej kampanii. Zapytania i pobrania maja 3 proby z backoffem
+do starszej kampanii. Zapytania i pobrania maja do 3 prob z backoffem
+(ponawiane: siec, 429, 5xx; inne 4xx koncza przy pierwszej probie)
 oraz sesje keep-alive per watek. `MetadataCache` (SQLite WAL, TTL 7 dni)
 zapisuje rekord `{"source": ...}` lub potwierdzony `{"no_coverage": true}`;
-CLI podpina cache w torach PL; `--force` otwiera go w trybie
+CLI podpina cache w torach PL i CZ; `--force` otwiera go w obu w trybie
 `MetadataCache(refresh=True)` — odczyt pominiety, swiezy rekord zapisany
 (E14) — biblioteka przyjmuje `cache=`; `kartograf cache stats` pokazuje `Record entries`.
 `DownloadManager` pisze sidecar po kazdym udanym arkuszu; arkusz ASC GUGiK
@@ -551,7 +555,8 @@ drugiego kraju nie daje juz kodu 0. Biblioteka nie ma `print` ani argparse.
    `run_pl_cutout`, tak samo jak bledy ponizej. `NoCoverageError` rzuca
    `GugikProvider`, gdy warstwy odpowiedzialy i zadna nie ma zgodnego
    rekordu; awaria ktorejkolwiek pytanej warstwy daje `DownloadError`
-   (retry 3 razy), bez zapisywania negatywnego wpisu w cache.
+   (do 3 prob przy bledzie sieci, 429 i 5xx; inne 4xx bez ponowien), bez
+   zapisywania negatywnego wpisu w cache.
    Odpowiedz pusta musi zawierac szablon `var ... = [];`; raport OGC
    (`ServiceException`/`ExceptionReport`) lub uszkodzony szablon to
    awaria, nie brak pokrycia. Po pobraniu `run_pl_cutout` rozstrzyga:
@@ -798,9 +803,12 @@ niesie bbox oraz `year`/`min_density`, gdy podane — E16).
 
 Bez zmian wzgledem 0.6.x. `LandCoverManager` ma **wlasny domyslny katalog**
 (`./data/landcover`, CLI `--output`) i wlasna konwencje nazw plikow:
-`<provider>_teryt_<teryt>.gpkg`, `<provider>_bbox_<minx>_<miny>_<maxx>_<maxy>.gpkg`
-albo `<provider>_godlo_<godlo>.gpkg` (`_generate_output_path`). Wyjatek:
-BDOT10k z `format="SHP"` (`--format SHP`) zapisuje oryginalne archiwum
+baza nazwy `<provider>_teryt_<teryt>`, `<provider>_bbox_<minx>_<miny>_<maxx>_<maxy>`
+albo `<provider>_godlo_<godlo>` (`_generate_output_path` nadaje `.gpkg`).
+Rozszerzenie FAKTYCZNEGO pliku nadaje provider: BDOT10k `.gpkg`, CORINE
+`.tif` (CLMS) albo `.png` (podglad WMS), SoilGrids `.tif`; zwracana
+sciezka i sidecar dotycza tego pliku (review 2026-10-06 N14). BDOT10k
+z `format="SHP"` (`--format SHP`) zapisuje oryginalne archiwum
 GUGiK z shapefile'ami pod ta sama nazwa z rozszerzeniem `.zip`
 (np. `bdot10k_teryt_1465.zip`, sidecar `bdot10k_teryt_1465.zip.meta.json`);
 rozszerzenie nadaje `Bdot10kProvider.download_by_admin_unit`, a CLI drukuje

@@ -920,7 +920,8 @@ def download_pl_cutout(
         (przed jakakolwiek siecia).
     DownloadError
         Awaria pobrania arkusza (siec, serwer; zerwane zapytanie warstwy
-        skorowidza po 3 probach — nie brak danych); wycinek nie powstaje.
+        skorowidza — do 3 prob przy bledzie sieci, 429 i 5xx, inne 4xx bez
+        ponowien — nie brak danych); wycinek nie powstaje.
     OSError
         Blad zapisu arkusza przy ``max_workers=1`` (w puli watkow liczy sie
         jak awaria pobrania).

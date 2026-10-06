@@ -294,7 +294,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`LandCoverManager.download_by_teryt/download_by_bbox/download_by_godlo`
   bez `output_path` nazywaja pliki tak jak `download()`** — bylo
   `CORINE Land Cover_N-34-130-D.gpkg` (spacje w nazwie, etykieta zrodla),
-  jest `corine_land_cover_godlo_N-34-130-D.gpkg`. Skrypty skladajace sciezke
+  jest `corine_land_cover_godlo_N-34-130-D.gpkg` (baza nazwy; rozszerzenie
+  zapisanego pliku nadaje provider — CORINE `.tif`/`.png`, SoilGrids `.tif`;
+  errata 2026-10-06, review N14). Skrypty skladajace sciezke
   wyniku z nazwy zrodla wymagaja poprawki. (audyt 0.7.0: A5-2)
 - **`GugikProvider.download_bbox(vertical_crs="EVRF2007")` konczy sie
   `ValidationError`** z remedium — GUGiK wycofal endpoint WCS

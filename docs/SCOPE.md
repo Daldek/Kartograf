@@ -341,9 +341,11 @@ from kartograf import (
 - Brak weryfikacji integralności plików (checksums)
 - Timeouty domyślne: 30 s dla NMT/NMPT (GUGiK) i dla discovery WFS w LAZ,
   60 s dla Ortofoto, pobierania kafli LAZ, CORINE (bbox/godło), CUZK oraz
-  SoilGrids przez godło, 120 s dla BDOT10k (wszystkie tryby), CORINE przez
-  TERYT oraz SoilGrids przez bbox i HSG
-- Max 3 próby retry (nie konfigurowalne)
+  SoilGrids przez godło, 120 s dla BDOT10k (wszystkie tryby) oraz SoilGrids
+  przez bbox i HSG (CORINE/SoilGrids przez TERYT: NotImplementedError);
+  GetCapabilities skorowidza GUGiK dziedziczy timeout providera
+- Max 3 próby retry (nie konfigurowalne); ponawiane tylko błędy sieci,
+  HTTP 429 i 5xx — inne 4xx (np. 404) kończą od razu
 - Synchroniczne pobieranie w obrębie jednego pliku (równoległość tylko
   między plikami, przez ThreadPoolExecutor/--workers)
 - NMT 5m (PL) wymaga EVRF2007
@@ -358,12 +360,13 @@ from kartograf import (
   są przecięciem (wymagane dodatnie pole) — bbox równy arkuszowi w EPSG:4326
   zwraca tylko jego arkusze (w EPSG:2180 także fragmenty sąsiadów), a bbox
   zdegenerowany do punktu → dokładnie jeden arkusz
-- Skorowidz GUGiK: retry (3 próby), sesja per wątek; awaria warstwy /
+- Skorowidz GUGiK: retry (do 3 prób: sieć, 429, 5xx), sesja per wątek; awaria warstwy /
   szablonu przerywa z DownloadError, bez degradacji kampanii. Rekord musi
   mieć całe godło, zgodny układ i rozdzielczość; w pierwszej warstwie
   z pasującymi rekordami wygrywa najnowsza data. Brak rekordu daje
   NoCoverageError; extra.source / extra.sheet_sources zachowują pochodzenie.
-  Cache PL zapisuje pełen rekord albo brak pokrycia (TTL 7 dni), --force go omija
+  Cache PL zapisuje pełen rekord albo brak pokrycia (TTL 7 dni); --force pomija
+  odczyt i zapisuje świeży wpis (w CZ tak samo dla indeksu arkuszy SM5)
 
 # CZ (CUZK, etap 1) — dodatkowe ograniczenia:
 - Produkt CZ w etapie 1: wyłącznie nmt (DMR 5G/4G) — nmpt/orto/laz w etapie 2

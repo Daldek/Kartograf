@@ -732,6 +732,12 @@ przetrwaly zapis tych zobowiazan to ponizsze punkty i PROGRESS.md):**
    - deklarowany sufit `exportImage` 15000 x 4100 px pozostaje,
      realna granica ~8 Mpx prowadzi do kafelkowania klienta z budzetem
      4 Mpx na zapytanie (ADR-024 errata 2).
+8. **Errata 2026-10-06 (review-2 N15):** pkt (f).1 "`extra.parent_request`
+   jest zapisywany **zawsze** w trybie `--bbox`/`--geometry`" nie obejmuje
+   toru LAZ: sidecar kafla LAZ (`_write_laz_sidecar`) nie ma
+   `parent_request` w zadnym trybie (ARCHITECTURE 3.4 i README juz to
+   mowia). Dopisanie klucza grupowania do LAZ (`_build_parent_request` jest
+   gotowe) pozostaje w backlogu.
 
 **Konsekwencje:** Pelna parytetowosc produktowa DMR miedzy PL i CZ (godlo,
 bbox, transformacja pozioma/pionowa opcjonalna). 1381 testow zielonych
@@ -1349,6 +1355,22 @@ lub `DownloadError`. `MetadataCache.get_url/set_url` zastapiono
 `get_record/set_record`, stara tabela `url_cache` jest usuwana przy
 inicjalizacji (ADR-019). Sidecar arkusza PL-2000 deklaruje rzeczywisty
 `horizontal_crs` strefy EPSG:2176-2179.
+
+**Errata 2026-10-06 (review-2 N4, E14, E17, D16):**
+- "po 3 probach" (tu i w errata 2026-09-30 ADR-020 "Zapytania transportowe
+  maja 3 proby"): od 9bcc040 ponawiane sa tylko blad sieci, HTTP 429 i 5xx
+  (do 3 prob, `Retry-After` wydluza przerwe); inne 4xx (403/404) koncza
+  przy pierwszej probie z `DownloadError.status_code`
+  (`transport/http.py::is_retryable`).
+- "`--force` omija cache": od E14 `--force` otwiera
+  `MetadataCache(refresh=True)` — odczyt jest chybieniem, ale swiezo wybrany
+  rekord (albo brak pokrycia) jest ZAPISYWANY; od D16 tak samo w torze CZ
+  dla indeksu arkuszy SM5.
+- "Sidecar arkusza PL-2000 deklaruje rzeczywisty `horizontal_crs` strefy":
+  sidecar opisuje uklad PLIKU — GUGiK publikuje czesc arkuszy PL-2000
+  strefy 7 we wspolrzednych EPSG:2180; wtedy `horizontal_crs` =
+  EPSG:2180, deklaracja rekordu zostaje w `extra.source.uklad`, a CLI
+  drukuje `Warning:` (E17).
 
 ---
 
