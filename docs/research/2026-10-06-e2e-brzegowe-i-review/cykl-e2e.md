@@ -168,7 +168,39 @@ w trakcie rundy) · **wycofane**.
 | Review-2 | Fable | Deklaracje (CLAUDE.md, ARCHITECTURE, ADR, docstringi, `--help`) vs faktyczny kod | `review-2-deklaracje.md` |
 | Koordynator | Opus | Ten dokument, weryfikacja znalezisk, F6–F9, raport końcowy | `raport-koncowy.md` |
 
+## 7a. Ponowny przebieg na żywo (F9) — zakres
+
+Po scaleniu `fix/review-2026-10-06` do `develop` (Sonnet, dane na katalog danych
+`.../2026-10-06-brzegowe/f9/`), tylko przypadki, ktorych dotyczyly naprawy:
+
+| ID | Przypadek | Oczekiwane po naprawie | Wymaganie |
+|----|-----------|------------------------|-----------|
+| F9-1 | M-34-90-C-b-4-4: RGB, potem CIR przez API (`GugikOrtoProvider(color="CIR")`) | CIR w `orto/pl_1992_cir/`, sidecar `kolor: CIR`, RGB nietkniety | E12 |
+| F9-2 | M-34-90-C-b-4-4 orto RGB (rekord 2026 niepelny) | `Warning:` o niepelnej kampanii, kod 0, `extra.source.full_sheet: false` | E13 |
+| F9-3 | Wycinek `--bbox 637000,473000,637100,473100 --target-crs EPSG:2180` (N-34-139-C-a-3-1, ucieta kampania 2025-10-21) | `Warning:` wskazuje niepelna najnowsza kampanie; sidecar `all_nodata: true`, `sheet_sources[].full_sheet`; rerun (skip) powtarza ostrzezenie | E13, E15 |
+| F9-4 | Godlo z cache: `--force` po wymianie rekordu, potem bez `--force` | drugi przebieg bierze rekord z `--force` | E14 |
+| F9-5 | Ponowne uruchomienie pojedynczego godla | komunikat o skip, nie `Downloaded to` | E15 |
+| F9-6 | LAZ `--year 2023` na obszarze w2 | sidecar `request.year == 2023` | E16 |
+| F9-7 | 7.125.11.19 (PL-2000:S7 w EPSG:2180) | `Warning:` o ukladzie pliku, sidecar EPSG:2180, `extra.source.uklad` = `PL-2000:S7` | E17 |
+| F9-8 | BDOT10k `--format SHP` (maly powiat) | plik `.zip` (naglowek `PK`), sidecar obok | E9 |
+| F9-9 | NMT godlo + wycinek PL (regresja ogolna rundy 2026-09-30) | jak w `live-2026-09-30.md` | E3–E5 |
+
 ## 8. Historia zmian
+
+- **2026-10-06, po falach A i B** — fala A (`fix/review-2026-10-06`, 6
+  zadan: D8/N7, D1/N9, N5, N1, N8, N6) i fala B (8 zadan: E12–E17, N3, D3)
+  zaimplementowane TDD z dowodami mutacyjnymi (`impl-fala-a.md`,
+  `impl-fala-b.md`); 28 testow regresyjnych na surowych body z tej rundy
+  (`impl-fixtury.md`, E18). Koordynator powtorzyl niezaleznie 5 mutacji
+  (A1, A4, M3, B1, B3) — wszystkie wykryte. Suita: 2105 -> 2206 offline.
+  Status wymagan: E8, E9, E10 (czesciowo: GetCapabilities N3, CUZK query,
+  TERYT), E12, E14, E15, E16, E18 — spelnione offline; E13 i E17 —
+  spelnione offline, E17 `Warning:` w fali C; wszystkie czekaja na F9
+  (sekcja 7a). E11 rozstrzygniete (D3 naprawione mimo braku w danych —
+  kafel/rekord z nierozpoznanym ukladem jest odrzucany).
+- Zauwazony problem procesu: agent fali A przepisal `docs/DECISIONS.md`
+  z CRLF na LF (2740 linii diffu przy 5 liniach zmiany) — przywrocone,
+  kolejne zlecenia zawieraja ostrzezenie o CRLF.
 
 - **2026-10-06, po E2E** — E2E-A (NMT/NMPT, 211 arkuszy w skorowidzu,
   38 uruchomien CLI): 0 FAIL, 4 UWAGI (PL-2000 strefa 7 z plikiem
