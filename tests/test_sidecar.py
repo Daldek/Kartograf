@@ -2,6 +2,7 @@
 
 import json
 import logging
+from pathlib import Path
 
 import pytest
 
@@ -312,3 +313,81 @@ class TestReadAscNodata:
         p.write_text("ncols 2\nnrows 2\n1 2\n3 4\n")
         assert read_asc_nodata(p) is None
         assert read_asc_nodata(tmp_path / "nie-ma.asc") is None
+
+
+class TestPl2000SheetPublishedIn2180:
+    """E17 (E2E-A C6b/C6h): GUGiK publikuje czesc arkuszy PL-2000 strefy 7
+    we wspolrzednych EPSG:2180 z niecalkowitym ``cellsize``.
+
+    Fixtura: naglowek + 2 wiersze surowego pliku GUGiK
+    ``77912_1384976_7.125.11.19.asc`` (rekord ``PL-2000:S7``, 2023-03-17;
+    ``xllcenter 567975.95``, ``cellsize 0.9993671653521061``). Oczekiwane:
+    sidecar ``horizontal_crs`` = uklad PLIKU (EPSG:2180),
+    ``extra.source.uklad`` = deklaracja rekordu, ostrzezenie, segment sciezki
+    wg godla (``pl_2000_...``, ADR-026).
+    """
+
+    GODLO = "7.125.11.19"
+    URL = (
+        "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/77912/"
+        "77912_1384976_7.125.11.19.asc"
+    )
+    FIXTURE = (
+        Path(__file__).parent
+        / "fixtures"
+        / "gugik_asc"
+        / "77912_1384976_7.125.11.19.head.asc"
+    )
+
+    def test_sidecar_describes_file_not_record(self, tmp_path, caplog):
+        from unittest.mock import Mock, patch
+
+        import requests
+
+        from kartograf.download.manager import DownloadManager
+        from kartograf.providers.pl.gugik import GugikProvider
+        from tests.conftest import gfi_record, render_gfi_body
+
+        body = render_gfi_body(
+            [
+                gfi_record(
+                    self.GODLO,
+                    uklad="PL-2000:S7",
+                    aktualnosc="2023-03-17",
+                    url=self.URL,
+                )
+            ]
+        )
+        raw = self.FIXTURE.read_bytes()
+
+        def get(url, **kwargs):
+            response = Mock(spec=requests.Response)
+            response.status_code = 200
+            response.raise_for_status = Mock()
+            response.text = body
+            response.iter_content = Mock(return_value=[raw])
+            response.headers = {}
+            return response
+
+        session = Mock(spec=requests.Session)
+        session.get = Mock(side_effect=get)
+        with (
+            patch(
+                "kartograf.providers.pl.skorowidz.make_gugik_session",
+                return_value=session,
+            ),
+            caplog.at_level(logging.WARNING, logger="kartograf.sources.sidecar"),
+        ):
+            manager = DownloadManager(output_dir=tmp_path, provider=GugikProvider())
+            path = manager.download_sheet(self.GODLO)
+
+        assert path.relative_to(tmp_path).parts[:2] == ("nmt", "pl_2000_1m_evrf2007")
+        assert session.get.call_args_list[-1][0][0] == self.URL
+        meta = json.loads(path.with_name(path.name + ".meta.json").read_text("utf-8"))
+        assert meta["horizontal_crs"] == "EPSG:2180"
+        assert meta["extra"]["source"]["uklad"] == "PL-2000:S7"
+        assert meta["nodata"] == -9999
+        warning = next(r for r in caplog.records if "wskazuje" in r.message)
+        assert warning.levelno == logging.WARNING
+        assert "EPSG:2178" in warning.getMessage()
+        assert "zapisano uklad pliku" in warning.getMessage()
