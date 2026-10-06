@@ -2095,7 +2095,9 @@ def _cmd_download_cz(
             "na siatce EPSG:3045)"
         )
 
-    cache = MetadataCache()
+    # D16: --force jak w torze PL — odczyt cache (indeks arkuszy SM5)
+    # pominiety, swiezy wpis zapisany
+    cache = MetadataCache(refresh=bool(args.force))
     try:
         try:
             provider = create_dmr_provider(
