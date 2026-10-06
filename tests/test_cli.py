@@ -5491,3 +5491,44 @@ class TestSingleGodloSkipMessage:
 
         assert "Downloaded to" in capsys.readouterr().out
         assert len(provider.calls) == 2
+
+
+class TestLazSidecarRequestFilters:
+    """E16 (E2E-B C13-f): sidecar LAZ ``request`` zapisuje --year i --min-density."""
+
+    @staticmethod
+    def _run(tmp_path, *extra):
+        tile = TestCmdDownloadLaz()._fake_tiles()[0]
+        instance = Mock()
+        instance.vertical_crs = "EVRF2007"
+        instance.discover_tiles.return_value = [tile]
+
+        def fake_download(url, target, **kwargs):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"LASF")
+            return target
+
+        instance.download.side_effect = fake_download
+        with patch(
+            "kartograf.providers.pl.gugik_laz.GugikLazProvider", return_value=instance
+        ):
+            rc = main(
+                ["download", "M-34-27-B-b-2-1", "--product", "laz"]
+                + list(extra)
+                + ["-o", str(tmp_path), "-q"]
+            )
+        (sidecar,) = tmp_path.rglob("*.meta.json")
+        return rc, json.loads(sidecar.read_text(encoding="utf-8"))["request"]
+
+    def test_filters_recorded(self, tmp_path):
+        rc, request = self._run(tmp_path, "--year", "2023", "--min-density", "13")
+
+        assert rc == 0
+        assert request["year"] == 2023
+        assert request["min_density"] == 13
+
+    def test_no_filters_no_keys(self, tmp_path):
+        rc, request = self._run(tmp_path)
+
+        assert rc == 0
+        assert "year" not in request and "min_density" not in request

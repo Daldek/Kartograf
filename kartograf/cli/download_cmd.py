@@ -1546,8 +1546,22 @@ def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
     return SheetParser(args.godlo).get_bbox(crs="EPSG:2180")
 
 
-def _write_laz_sidecar(provider, tile, target: Path, bbox: BBox) -> None:
-    """Best-effort sidecar dla kafla LAZ (blad nie przerywa pobrania)."""
+def _write_laz_sidecar(
+    provider,
+    tile,
+    target: Path,
+    bbox: BBox,
+    *,
+    year: int | None = None,
+    min_density: int | None = None,
+) -> None:
+    """Best-effort sidecar dla kafla LAZ (blad nie przerywa pobrania).
+
+    ``request`` opisuje faktyczne zadanie: bbox oraz filtry ``year``
+    i ``min_density``, gdy podane (E16). ``extra.gestosc`` i ``min_density``
+    to wartosc NOMINALNA z WFS GUGiK (``char_przestrz``) — faktyczna gestosc
+    kafla bywa kilkukrotnie wyzsza.
+    """
     import logging
 
     try:
@@ -1555,12 +1569,17 @@ def _write_laz_sidecar(provider, tile, target: Path, bbox: BBox) -> None:
         from kartograf.sources.sidecar import build_metadata, write_sidecar
 
         key = getattr(provider, "descriptor_key", None)
+        request: dict = {
+            "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+            "bbox_crs": bbox.crs,
+        }
+        if year is not None:
+            request["year"] = year
+        if min_density is not None:
+            request["min_density"] = min_density
         meta = build_metadata(
             get_source(key if isinstance(key, str) else "pl.gugik.laz"),
-            request={
-                "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
-                "bbox_crs": bbox.crs,
-            },
+            request=request,
             vertical_crs=provider.vertical_crs,
             # N8: kafel niesie wlasny uklad (PL-1992 albo strefa PL-2000),
             # a kanal WFS deklaruje tylko domyslny — nieznany uklad = kanal
@@ -1666,7 +1685,9 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
             return "skip", target, None
         try:
             provider.download(tile.url, target)
-            _write_laz_sidecar(provider, tile, target, bbox)
+            _write_laz_sidecar(
+                provider, tile, target, bbox, year=year, min_density=min_density
+            )
             return "ok", target, None
         except DownloadError as e:
             return "fail", tile, e
