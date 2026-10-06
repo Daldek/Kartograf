@@ -75,6 +75,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `ValidationError` zamiast zgadywać z formatu godła (wcześniej segment
   `pl_2000` przy sidecarze EPSG:2180). Realne dane GUGiK mają wyłącznie
   wartości rozpoznawane (E2E 2026-10-06, E11) (review-1 D3).
+- Dokumentacja i test (bez zmiany kodu): arkusze PL-2000 strefy 7
+  publikowane przez GUGiK we współrzędnych EPSG:2180 — sidecar opisuje
+  układ pliku (EPSG:2180), `extra.source.uklad` deklarację rekordu, plik
+  w segmencie wg godła; fixtura z surowego nagłówka
+  `tests/fixtures/gugik_asc/77912_1384976_7.125.11.19.head.asc` (E2E-A
+  C6b/C6h, E17).
 
 ### Polityka ponowień HTTP i sesja BDOT10k (2026-10-06)
 - Pobieranie GUGiK (NMT/NMPT/orto/LAZ/BDOT10k) oraz wspólny transport

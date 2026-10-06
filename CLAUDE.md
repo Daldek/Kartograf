@@ -362,6 +362,14 @@ kartograf cache path
   `extra.sheet_sources[].full_sheet` / `PlCutoutResult.partial_sheets` to
   zapisuja; pusty wycinek z takich arkuszy ostrzega o niepelnej kampanii,
   nie o braku danych GUGiK (E13).
+  GUGiK publikuje czesc arkuszy PL-2000 (zaobserwowane: strefa 7, np.
+  `7.125.11.19`, `7.173.21.01`) we wspolrzednych EPSG:2180 z niecalkowitym
+  `cellsize` (np. 0,99937 m). Sidecar zapisuje faktyczny uklad PLIKU
+  (`horizontal_crs: EPSG:2180`), deklaracje rekordu w `extra.source.uklad`
+  (`PL-2000:S7`), a plik lezy w segmencie wg godla (`nmt/pl_2000_...`,
+  ADR-026). Ostrzezenie `Sidecar ...: godlo ... wskazuje EPSG:2178, ale
+  wspolrzedne pliku ... sa w EPSG:2180` idzie przez logger na stderr — BEZ
+  prefiksu `Warning:` (E17; test `tests/test_sidecar.py`).
   `MetadataCache` przechowuje rekord lub potwierdzony brak pokrycia wraz
   z trescia podpowiedzi (TTL 7d; `get_record/set_record`,
   `stats()["record_count"]`); cache hit odtwarza ten sam `NoCoverageError`.
