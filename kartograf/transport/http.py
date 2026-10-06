@@ -11,6 +11,8 @@ import logging
 import os
 import threading
 import time
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 import requests
@@ -20,6 +22,51 @@ from kartograf.exceptions import DownloadError
 logger = logging.getLogger(__name__)
 
 RETRY_BACKOFF_BASE = 2
+# Gorna granica oczekiwania z naglowka Retry-After (s): dluzszego postoju
+# serwera i tak nie przeczekamy w trzech probach, a CLI nie moze "wisiec".
+MAX_RETRY_AFTER = 60
+
+
+def http_status(exc: requests.RequestException) -> int | None:
+    response = getattr(exc, "response", None)
+    return response.status_code if response is not None else None
+
+
+def is_retryable(exc: requests.RequestException) -> bool:
+    """Ponawiaj bledy sieci, 429 i 5xx; inne 4xx powtorzone daja to samo."""
+    status = http_status(exc) if isinstance(exc, requests.HTTPError) else None
+    if status is None:
+        return True
+    return status == 429 or status >= 500
+
+
+def retry_wait(exc: requests.RequestException, backoff: float) -> float:
+    """Czas przed kolejna proba: Retry-After (<= MAX_RETRY_AFTER) albo backoff."""
+    response = getattr(exc, "response", None)
+    value = response.headers.get("Retry-After") if response is not None else None
+    if not value:
+        return backoff
+    try:
+        seconds = float(value)
+    except ValueError:
+        try:
+            when = parsedate_to_datetime(value)
+        except (TypeError, ValueError):
+            return backoff
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=UTC)
+        seconds = (when - datetime.now(UTC)).total_seconds()
+    if seconds < 0:
+        return backoff
+    return max(backoff, min(seconds, MAX_RETRY_AFTER))
+
+
+def http_failure(
+    message: str, exc: requests.RequestException | None, **kwargs
+) -> DownloadError:
+    """DownloadError z kodem HTTP ostatniej proby (o ile byl)."""
+    status = http_status(exc) if exc is not None else None
+    return DownloadError(message, status_code=status, **kwargs)
 
 
 def make_gugik_session() -> requests.Session:
@@ -53,8 +100,12 @@ def get_with_retry(
             return response
         except requests.RequestException as exc:
             last_error = exc
+            if not is_retryable(exc):
+                raise http_failure(
+                    f"{context}: HTTP {http_status(exc)} (bez ponowien): {exc}", exc
+                ) from exc
             if attempt < retries - 1:
-                delay = RETRY_BACKOFF_BASE**attempt
+                delay = retry_wait(exc, RETRY_BACKOFF_BASE**attempt)
                 logger.warning(
                     "%s: proba %s/%s nieudana: %s; ponowienie za %ss",
                     context,
@@ -64,8 +115,9 @@ def get_with_retry(
                     delay,
                 )
                 time.sleep(delay)
-    raise DownloadError(
-        f"{context}: pobranie nieudane po {retries} probach: {last_error}"
+    raise http_failure(
+        f"{context}: pobranie nieudane po {retries} probach: {last_error}",
+        last_error,
     ) from last_error
 
 
@@ -85,7 +137,7 @@ def download_to(
         f"{output_path.name}.{os.getpid()}_{threading.get_ident()}.tmp"
     )
 
-    last_error: Exception | None = None
+    last_error: requests.RequestException | None = None
     for attempt in range(retries):
         try:
             response = session.get(url, stream=True, timeout=timeout)
@@ -100,8 +152,14 @@ def download_to(
             last_error = e
             if temp_path.exists():
                 temp_path.unlink(missing_ok=True)
+            if not is_retryable(e):
+                raise http_failure(
+                    f"Nie udalo sie pobrac {url}: "
+                    f"HTTP {http_status(e)} (bez ponowien): {e}",
+                    e,
+                ) from e
             if attempt < retries - 1:
-                wait = RETRY_BACKOFF_BASE**attempt
+                wait = retry_wait(e, RETRY_BACKOFF_BASE**attempt)
                 logger.warning(
                     f"Pobranie {url} nieudane (proba {attempt + 1}/{retries}): "
                     f"{e}; ponowienie za {wait}s"
@@ -112,6 +170,7 @@ def download_to(
                 temp_path.unlink(missing_ok=True)
             raise
 
-    raise DownloadError(
-        f"Nie udalo sie pobrac {url} po {retries} probach: {last_error}"
+    raise http_failure(
+        f"Nie udalo sie pobrac {url} po {retries} probach: {last_error}",
+        last_error,
     )

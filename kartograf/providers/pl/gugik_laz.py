@@ -48,7 +48,14 @@ import requests
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError
 from kartograf.providers.base import BaseProvider
-from kartograf.transport.http import get_with_retry, make_gugik_session
+from kartograf.transport.http import (
+    get_with_retry,
+    http_failure,
+    http_status,
+    is_retryable,
+    make_gugik_session,
+    retry_wait,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -584,14 +591,21 @@ class GugikLazProvider(BaseProvider):
                 logger.warning(
                     f"Download failed for {description} (attempt {attempt}): {e}"
                 )
+                if not is_retryable(e):
+                    raise http_failure(
+                        f"Failed to download {description}: "
+                        f"HTTP {http_status(e)} (not retried): {e}",
+                        e,
+                    ) from e
                 if attempt < self.MAX_RETRIES:
-                    wait_time = self.RETRY_BACKOFF_BASE**attempt
+                    wait_time = retry_wait(e, self.RETRY_BACKOFF_BASE**attempt)
                     logger.debug(f"Retrying in {wait_time} seconds...")
                     time.sleep(wait_time)
 
-        raise DownloadError(
+        raise http_failure(
             f"Failed to download {description} after "
             f"{self.MAX_RETRIES} attempts: {last_error}",
+            last_error,
         )
 
     def _make_request(self, url: str, timeout: int) -> requests.Response:

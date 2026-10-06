@@ -95,7 +95,7 @@ kartograf/
 │   ├── crs.py           # PinnedTransform, pin datum EPSG:1622/1623 dla S-JTSK, bez ballpark
 │   └── raster.py        # warp_to_grid — pojedyncza mozaika lub lista arkuszy (W1)
 ├── transport/           # Wspolny transport pobierania
-│   ├── http.py          # download_to, get_with_retry, make_gugik_session
+│   ├── http.py          # download_to, get_with_retry, make_gugik_session, is_retryable/retry_wait
 │   └── mosaic.py        # mosaic_and_crop, check_source_grid (GridMismatchError), has_valid_pixels
 ├── providers/           # Providery danych (abstrakcje nad API)
 │   ├── base.py          # DataSourceProvider (ABC), BaseProvider (NMT), LandCoverProvider (pokrycie terenu)
@@ -280,7 +280,13 @@ kartograf cache path
   60 s dla Ortofoto, kafli LAZ, CORINE (bbox/godlo), CUZK i SoilGrids przez
   godlo; 120 s dla BDOT10k (wszystkie tryby), CORINE przez TERYT oraz
   SoilGrids przez bbox i HSG
-- Max 3 proby retry (nie konfigurowalne)
+- Max 3 proby retry (nie konfigurowalne); ponawiane sa tylko bledy sieci,
+  HTTP 429 i 5xx — inne 4xx (np. 404) koncza od razu z
+  `DownloadError.status_code`; `Retry-After` wydluza przerwe (max 60 s).
+  Polityka: `transport/http.py` (`is_retryable`, `retry_wait`), uzywana
+  przez transport wspolny i providery GUGiK (NMT/NMPT/orto/LAZ/BDOT10k);
+  CORINE/SoilGrids maja jeszcze stara petle (ponawia kazdy blad), a
+  zapytanie TERYT BDOT10k nie ponawia wcale
 - Kazde udane pobranie tworzy sidecar `<plik>.meta.json` (metadane CRS/licencja/nodata)
 - `download_sheet()` zwraca `Path` (arkusz 1:10000 albo godlo PL-2000) albo
   `list[Path]` (godlo PL-1992 grubsze niz 1:10000 — rozwijane do 1:10000);

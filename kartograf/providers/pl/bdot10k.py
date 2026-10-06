@@ -41,6 +41,13 @@ import requests
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import LandCoverProvider
+from kartograf.transport.http import (
+    http_failure,
+    http_status,
+    is_retryable,
+    make_gugik_session,
+    retry_wait,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -124,12 +131,14 @@ class Bdot10kProvider(LandCoverProvider):
         Parameters
         ----------
         session : requests.Session, optional
-            HTTP session to use for requests.
+            HTTP session to use for requests. Default: one keep-alive
+            GUGiK session per thread (``make_gugik_session``).
         cache : MetadataCache, optional
             Metadata cache instance for caching TERYT lookup results.
             If None, no caching is performed (default behavior).
         """
         self._session = session
+        self._local = threading.local()
         self._cache = cache
         self.descriptor_key = "pl.gugik.bdot10k"
 
@@ -327,7 +336,7 @@ class Bdot10kProvider(LandCoverProvider):
 
         import re
 
-        session = self._session or requests.Session()
+        session = self._session_for_thread()
 
         # Create small bbox around the point
         buffer = 100  # meters
@@ -459,6 +468,14 @@ class Bdot10kProvider(LandCoverProvider):
     # Common utilities
     # =========================================================================
 
+    def _session_for_thread(self) -> requests.Session:
+        """Jedna sesja na watek albo sesja powierzona przez wolajacego."""
+        if self._session is not None:
+            return self._session
+        if not hasattr(self._local, "session"):
+            self._local.session = make_gugik_session()
+        return self._local.session
+
     def _download_with_retry(
         self,
         url: str,
@@ -494,7 +511,7 @@ class Bdot10kProvider(LandCoverProvider):
             If download fails after all retries
         """
         last_error = None
-        session = self._session or requests.Session()
+        session = self._session_for_thread()
 
         for attempt in range(1, self.MAX_RETRIES + 1):
             try:
@@ -519,15 +536,22 @@ class Bdot10kProvider(LandCoverProvider):
                 logger.warning(
                     f"Download failed for {description} (attempt {attempt}): {e}"
                 )
+                if not is_retryable(e):
+                    raise http_failure(
+                        f"Failed to download {description}: "
+                        f"HTTP {http_status(e)} (not retried): {e}",
+                        e,
+                    ) from e
 
                 if attempt < self.MAX_RETRIES:
-                    wait_time = self.RETRY_BACKOFF_BASE**attempt
+                    wait_time = retry_wait(e, self.RETRY_BACKOFF_BASE**attempt)
                     logger.debug(f"Retrying in {wait_time} seconds...")
                     time.sleep(wait_time)
 
-        raise DownloadError(
+        raise http_failure(
             f"Failed to download {description} after {self.MAX_RETRIES} attempts: "
             f"{last_error}",
+            last_error,
         )
 
     def _save_response(self, response: requests.Response, output_path: Path) -> None:
