@@ -187,6 +187,17 @@ Po scaleniu `fix/review-2026-10-06` do `develop` (Sonnet, dane na katalog danych
 
 ## 8. Historia zmian
 
+- **2026-10-06, zamkniecie rundy** — fala C (E17 `Warning:` w CLI, D16
+  `--force` CZ = refresh, N11, N17, errata dokumentacji). Merge
+  `b394570` do `develop`: 2216 testow offline. **F9: 9/9 PASS**
+  (`live-f9.md`) — E9, E12–E17 potwierdzone na zywo. Zmiana kontraktu
+  F9 po fakcie: cache SQLite dla testow cache NIE na katalog danych CIFS (WAL
+  -> `database is locked`), tylko lokalny katalog (zgodnie z CLAUDE.md;
+  blad w zleceniu koordynatora). Otwarte: decyzja uzytkownika o regule
+  niepelnego arkusza (E13 daje tylko widocznosc) i backlog —
+  `raport-koncowy.md` sekcje 4–5. Status wszystkich E: spelnione,
+  poza E13 w czesci "czy niepelny arkusz powinien wygrywac" (decyzja).
+
 - **2026-10-06, po falach A i B** — fala A (`fix/review-2026-10-06`, 6
   zadan: D8/N7, D1/N9, N5, N1, N8, N6) i fala B (8 zadan: E12–E17, N3, D3)
   zaimplementowane TDD z dowodami mutacyjnymi (`impl-fala-a.md`,

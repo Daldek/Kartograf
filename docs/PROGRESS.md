@@ -17,7 +17,7 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage; godlo PL-2000 bez pliku PL-2000 = `NoCoverageError` z podpowiedzia `--scale` (K4), sidecar EPSG:2176-2179 (N8) |
-| Pokrycie testami | ✅ Gotowy | 2105 testow offline + 16 `live` (2026-10-06 po polityce ponowien; 2058 po fali naprawczej 2026-09-30; wczesniej 1861 + 8 po fali review max 2026-09-28) |
+| Pokrycie testami | ✅ Gotowy | 2216 testow offline + 16 `live` (2026-10-06 po rundzie review/E2E, w tym 28 na surowych body GUGiK; 2105 po polityce ponowien; 2058 po fali naprawczej 2026-09-30; wczesniej 1861 + 8 po fali review max 2026-09-28) |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0; od 2026-09-30 `record_cache` (rekord skorowidza / `no_coverage` z podpowiedzia) podlaczony w torach PL (N6), `--force` = bez cache |
@@ -111,6 +111,30 @@
 > na decyzje uzytkownika o usunieciu. Modele: `task.agentModelOverrides`
 > = `openai-codex/gpt-6-sol` (zapisane globalnie 2026-09-30; astra
 > wyczerpuje limit po ~8 min pracy 3-4 agentow).
+
+### Runda E2E przypadkow brzegowych GUGiK + code review (2026-10-06)
+
+- **Zlecenie uzytkownika:** runda e2e (Sonnet) nastawiona na przypadki
+  brzegowe danych GUGiK (sidecary, wybor pliku arkusza, wersje/roczniki)
+  + code review (Fable: duplikacje, overengineering, deklaracje vs
+  dzialanie); koordynacja, zywy dokument cyklu, testy lapiace faktyczne
+  problemy. Artefakty: `docs/research/2026-10-06-e2e-brzegowe-i-review/`
+  — **`raport-koncowy.md`** (start), `cykl-e2e.md` (kontrakt E1–E18
+  z historia), raporty e2e-a/e2e-b/review-1/review-2/impl-fala-{a,b,c}/
+  impl-fixtury/live-f9. Dane: katalog danych `kartograf/e2e/2026-10-06-brzegowe/`
+  (3,2 GB).
+- **Wynik:** 1 FAIL e2e (orto CIR/RGB wspolna sciezka) + 3 WYSOKIE z review
+  (D1 retry rozjechane, D3 parsery ukladu, D8 warp CZ kasujacy wynik) +
+  N1 (BDOT SHP jako .gpkg) i kilkanascie srednich — naprawione w falach
+  A/B/C (TDD, mutacje), merge `b394570`. F9 na zywo 9/9 PASS.
+  2216 testow offline (+111; 28 na surowych body GUGiK), mypy 32.
+- **BREAKING:** `LazTile.uklad` dla nierozpoznanego `uklad_xy` rzuca
+  `ValidationError` (kafel pomijany w discovery); orto CIR/B-W w
+  `orto/pl_<uklad>_cir|_bw/`; BDOT10k SHP jako `.zip`.
+- **Czeka na uzytkownika:** regula wyboru niepelnego arkusza (ADR-028
+  D4/D9) — rekomendacja (c) najnowsza PELNA kampania + `Info:`
+  (`raport-koncowy.md` sekcja 4). Backlog: sekcja 5 raportu.
+- **Nastepny krok:** decyzja z sekcji 4, potem wydanie 0.7.0 (pkt 13-14).
 
 ### Polityka ponowien HTTP + sesja BDOT10k (2026-10-06)
 
