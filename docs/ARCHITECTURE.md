@@ -409,8 +409,9 @@ raport OGC albo nieoczekiwany szablon = `DownloadError`, nie cichy fallback
 do starszej kampanii. Zapytania i pobrania maja 3 proby z backoffem
 oraz sesje keep-alive per watek. `MetadataCache` (SQLite WAL, TTL 7 dni)
 zapisuje rekord `{"source": ...}` lub potwierdzony `{"no_coverage": true}`;
-CLI podpina cache w torach PL (chyba ze `--force`), biblioteka przyjmuje
-`cache=`; `kartograf cache stats` pokazuje `Record entries`.
+CLI podpina cache w torach PL; `--force` otwiera go w trybie
+`MetadataCache(refresh=True)` — odczyt pominiety, swiezy rekord zapisany
+(E14) — biblioteka przyjmuje `cache=`; `kartograf cache stats` pokazuje `Record entries`.
 `DownloadManager` pisze sidecar po kazdym udanym arkuszu; arkusz ASC GUGiK
 nie niesie CRS (rasterio: `crs=None`), wiec jedynym nosnikiem ukladu jest
 sidecar. Ponowne uruchomienie pomija istniejace pliki bez sieci (zmierzone:

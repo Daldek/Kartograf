@@ -851,3 +851,63 @@ class TestOrtoVariantStorage:
 
         path = manager.storage.get_path(GODLO, ".tif")
         assert path.relative_to(tmp_path).as_posix().startswith(segment + "/M-34/")
+
+
+class TestForceRefreshesRecordCache:
+    """E14 (E2E-B C15): ``--force`` omija ODCZYT cache rekordow, ale ZAPISUJE
+    swiezo wybrany rekord — kolejny przebieg bez ``--force`` dostaje nowy."""
+
+    STALE = "https://opendata.geoportal.gov.pl/ortofotomapa/70000/70000_1_M-34-76-A-a-1-1.tif"
+
+    def _run_cli(self, tmp_path, *extra):
+        from kartograf.cli.commands import main
+
+        session = Mock(spec=requests.Session)
+        session.get = Mock(
+            side_effect=[gfi_response(sample("orto_2024.html")), file_response()]
+        )
+        with patch(SESSION_FACTORY, return_value=session):
+            rc = main(
+                ["download", GODLO, "--product", "orto", "-o", str(tmp_path / "out")]
+                + list(extra)
+            )
+        return rc, session
+
+    def test_force_writes_fresh_record(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        key = ("orto", "RGB", "none", GODLO)
+        stale = MetadataCache()
+        stale_source = {
+            "url": self.STALE,
+            "layer": "SkorowidzeOrtofotomapyStarsze",
+            "godlo": GODLO,
+            "aktualnosc": "2020-01-01",
+            "kolor": "RGB",
+        }
+        stale.set_record(*key, {"source": stale_source})
+        stale.close()
+
+        rc, session = self._run_cli(tmp_path, "--force", "-q")
+
+        assert rc == 0
+        # odczyt pominiety: skorowidz odpytany, pobrany URL aktualny
+        assert session.get.call_args_list[-1][0][0] == RGB_2024
+        cache = MetadataCache()
+        try:
+            assert cache.get_record(*key)["source"]["url"] == RGB_2024
+        finally:
+            cache.close()
+
+    def test_refresh_cache_misses_reads_but_writes(self, tmp_path):
+        """Biblioteka: ``MetadataCache(refresh=True)`` — odczyt = chybienie."""
+        key = ("nmt", "1m", "EVRF2007", "N-34-130-D-d-2-4")
+        normal = MetadataCache(db_path=tmp_path / "c.db")
+        normal.set_record(*key, {"source": {"url": "old"}})
+        refreshing = MetadataCache(db_path=tmp_path / "c.db", refresh=True)
+        try:
+            assert refreshing.get_record(*key) is None
+            refreshing.set_record(*key, {"source": {"url": "new"}})
+            assert normal.get_record(*key) == {"source": {"url": "new"}}
+        finally:
+            refreshing.close()
+            normal.close()

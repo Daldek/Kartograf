@@ -386,7 +386,7 @@ from kartograf import (
 - Istniejący wycinek jest pomijany bez sieci; biblioteka
   PlCutoutResult(skipped=True) odtwarza missing_sheets/off_grid_sheets
   z sidecara, CLI przypomina Warning: o brakach. --force ponownie pobiera
-  także arkusze i omija cache rekordów; tańszy rebuild: usunąć tylko wycinek.
+  także arkusze i omija odczyt cache rekordów (świeży rekord zapisuje); tańszy rebuild: usunąć tylko wycinek.
   Nieudana przebudowa nie kasuje poprzedniego pliku. Kontrola miejsca na
   dysku korzysta z wcześniej ustalonego zbioru brakujących arkuszy;
   Info: dla wyniku >= 1 GiB, bez twardego limitu rozmiaru

@@ -996,13 +996,16 @@ class TestCmdDownloadProduct:
         assert "Downloading N-34-130-D-d-2-4 (product: orto)" in out
         assert "resolution" not in out
 
-    # --- N6: MetadataCache toru PL — --force = cache=None ---
+    # --- N6/E14: MetadataCache toru PL — --force = cache w trybie refresh ---
 
     @patch("kartograf.cli.download_cmd._create_provider_and_storage")
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_force_passes_no_cache_to_provider_factory(
+    def test_force_passes_refresh_cache_to_provider_factory(
         self, mock_manager_cls, mock_create, tmp_path
     ):
+        """E14: --force pomija odczyt cache, ale zapisuje nowy rekord."""
+        from kartograf.cache import MetadataCache
+
         mock_create.return_value = _mock_provider_and_storage(".asc")
         mock_manager_cls.return_value = _mock_manager(tmp_path / "test.asc")
 
@@ -1011,8 +1014,10 @@ class TestCmdDownloadProduct:
         )
 
         assert rc == 0
-        assert mock_create.call_args.kwargs["cache"] is None
-        assert not list(Path.cwd().glob(".kartograf_cache.db*"))
+        cache = mock_create.call_args.kwargs["cache"]
+        assert isinstance(cache, MetadataCache)
+        assert cache._refresh is True
+        assert cache._conn is None  # zamkniety po zadaniu
 
     @pytest.mark.parametrize(
         "argv",

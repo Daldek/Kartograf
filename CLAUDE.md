@@ -363,7 +363,9 @@ kartograf cache path
   z trescia podpowiedzi (TTL 7d; `get_record/set_record`,
   `stats()["record_count"]`); cache hit odtwarza ten sam `NoCoverageError`.
   CLI podpina go w torach PL, `kartograf cache stats` drukuje `Record entries`.
-  `--force` omija cache rekordow, `download_pl_cutout(cache=)` udostepnia go
+  `--force` omija ODCZYT cache rekordow, ale zapisuje swiezy wybor
+  (`MetadataCache(refresh=True)`; kolejny przebieg bez `--force` dostaje
+  nowy rekord, E14), `download_pl_cutout(cache=)` udostepnia go
   bibliotece. Orto domyslnie wybiera RGB; `GugikOrtoProvider(color="CIR")`
   wybiera podczerwien na zadanie.
 - **Wycinek PL `--target-crs` (ADR-027):** tylko `nmt` i PL-1992,
