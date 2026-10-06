@@ -145,7 +145,7 @@ def _offline_wms_layers(request):
         for path, layers in _STUB_LAYERS.items()
     }
 
-    def fake_fetch(endpoint, timeout=10):
+    def fake_fetch(endpoint, timeout=None):
         layers = endpoint_layers.get(endpoint)
         if layers is None:
             # Nie zamieniaj brakujacej atrapy na blad uslugi.

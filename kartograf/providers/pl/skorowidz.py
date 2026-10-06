@@ -288,6 +288,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
     _session: requests.Session | None
     _cache: MetadataCache | None
     MAX_RETRIES: int
+    DEFAULT_TIMEOUT: int
 
     def _resolve_record(
         self,
@@ -320,7 +321,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                 f"Brak endpointu WMS dla {cache_key[1]}, {cache_key[2]}",
                 godlo=godlo,
             )
-        layers = self._layers(endpoint)
+        layers = self._layers(endpoint, timeout)
         bbox = parser.get_bbox(crs="EPSG:2180")
         x = (bbox.min_x + bbox.max_x) / 2
         y = (bbox.min_y + bbox.max_y) / 2
@@ -374,8 +375,17 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             self._local.session = make_gugik_session()
         return self._local.session
 
-    def _fetch_wms_layers(self, wms_endpoint: str, timeout: int = 10) -> list[str]:
-        """Odkryj warstwy produktu; blad uslugi nie ma zaszytego fallbacku."""
+    def _fetch_wms_layers(
+        self, wms_endpoint: str, timeout: float | None = None
+    ) -> list[str]:
+        """Odkryj warstwy produktu; blad uslugi nie ma zaszytego fallbacku.
+
+        ``timeout`` domyslnie = ``DEFAULT_TIMEOUT`` providera (30 s NMT/NMPT,
+        60 s orto; N3) — porazka GetCapabilities konczy caly tor, wiec nie
+        moze miec krotszego limitu niz pobranie arkusza.
+        """
+        if timeout is None:
+            timeout = self.DEFAULT_TIMEOUT
         params = {"SERVICE": "WMS", "VERSION": "1.3.0", "REQUEST": "GetCapabilities"}
         response = get_with_retry(
             self._session_for_thread(),
@@ -410,9 +420,15 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             )
         return sorted(layers, key=layers.__getitem__)
 
-    def _layers(self, endpoint: str) -> list[str]:
-        """Memoizuj tylko sukces, raz na endpoint; zapytania chroni lock."""
+    def _layers(self, endpoint: str, timeout: float | None = None) -> list[str]:
+        """Memoizuj tylko sukces, raz na endpoint; zapytania chroni lock.
+
+        ``timeout`` (domyslnie ``DEFAULT_TIMEOUT`` providera) trafia do
+        GetCapabilities — ten sam co dla zapytan warstw w ``_resolve_record``.
+        """
         with self._layers_lock:
             if endpoint not in self._validated_layers:
-                self._validated_layers[endpoint] = self._fetch_wms_layers(endpoint)
+                self._validated_layers[endpoint] = self._fetch_wms_layers(
+                    endpoint, timeout
+                )
             return self._validated_layers[endpoint]
