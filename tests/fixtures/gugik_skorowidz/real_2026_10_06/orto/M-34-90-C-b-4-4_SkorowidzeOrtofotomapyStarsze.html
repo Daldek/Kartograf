@@ -1,0 +1,308 @@
+ <head><meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+.accordioni {
+  background-color: #ddd;
+  color: #444;
+  cursor: pointer;
+  padding: 10px;
+  border: none;
+  text-align: left;
+  outline: none;
+  font-size: 11px;
+  transition: 0.4s;
+  width: 236px;
+  font-family: Verdana,Arial,Helvetica,sans-serif;
+ 
+}
+
+.active, .accordioni:hover {
+  background-color: #ccc;
+}
+
+.accordioni:after {
+  content: '\002B';
+  color: #777;
+  font-weight: bold;
+  float: right;
+  margin-left: 5px;
+}
+
+.active:after {
+  content: "\2212";
+}
+
+.panel {
+  padding: 0 18px;
+  background-color: white;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.2s ease-out;
+    width: 200px;
+	margin-top: 2px;
+	margin-bottom: 5px;
+}
+
+
+ul, ol, li, h1, h2, h3, h4, h5, h6, pre, form, fieldset, input, p, blockquote, th, td {
+		margin: 0;
+		padding: 0;
+		font-family: Verdana,Arial,Helvetica,sans-serif;
+}
+
+p {
+	font-size: 11px;
+
+}
+	
+.gwt-HTML {
+
+	
+	font-size: 10px;
+	border-collapse: separate;
+    border-spacing: 2px;
+	color: black;
+	direction: ltr;
+	font-family: Verdana,Arial,Helvetica,sans-serif;
+}
+
+img {
+		max-width: 16px;
+		max-height: 16px;
+		border: 0;
+	}
+
+.item-ico {
+	margin: 8px 8px 0 8px;
+	float: left;
+
+}
+
+.resultR {
+    left: 0;
+    height: 2.5em;
+   line-height: normal;
+   position: relative;
+   padding: 0;
+}
+
+.item-label {
+    color: #333;
+    line-height: 12px;
+	float: left;
+    margin: 9px 0 0 0;
+    width: 190px;
+    font-size: 9px;
+    font-weight: normal;
+
+}
+b {
+ 
+	color: #000;
+	float: left;
+    width: 190px;
+    font-size: 11px;
+    font-weight: bold;
+	display: block;
+    position: absolute;
+    left: 0;
+    right: 0;
+    padding-right: 2em;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+
+}
+.item-content {
+	padding: 8px 0 0 32px;
+	clear: both;
+    color: #000;
+	font-size: 10px;
+}
+
+.item-fieldname {
+    clear: both;
+    color: #333;
+	font-size: 10px;
+    display: block;
+    float: left;
+    width: 190px;
+	font-family: Verdana,Arial,Helvetica,sans-serif;
+}
+
+.item-fieldvalue {
+    color: #000;
+    font-weight: bold;
+	display: block;
+    float: left;
+    width: 190px;
+	font-size: 10px;
+	font-family: Verdana,Arial,Helvetica,sans-serif;
+
+}
+
+.item-fielddesc {
+    display: block;
+    float: left;
+    width: 190px;
+    margin: 0 0 8px 0;
+    padding: 0 8px 4px 0;
+    color: #aaa;
+    font-size: 9px;
+    border-bottom: 1px solid #aaa;
+}
+.wordwrap {
+            word-wrap: break-word;
+            word-break: break-all;
+}
+
+
+
+
+</style>
+<script>
+
+
+function compare(a, b) {
+  //alert (1);
+  const arkuszA = a.aktualnosc;
+  const arkuszB = b.aktualnosc;
+
+  let comparison = 0;
+  if (arkuszA > arkuszB) {
+    comparison = 1;
+  } else if (arkuszA < arkuszB) {
+    comparison = -1;
+  }
+  return comparison * -1;
+}
+
+function createTable (skorDo5cm) {
+
+	skorDo5cm.sort( compare );
+	console.log(skorDo5cm.sort(compare));
+	
+	var textCustom, fLen, icustom;
+
+	fLen = skorDo5cm.length;
+
+	textCustom = "";
+	for (icustom = 0; icustom < fLen; icustom++) {
+	  
+	  textCustom += "<button class='accordioni'>" + skorDo5cm[icustom].godlo + " " + skorDo5cm[icustom].aktualnoscRok  + " " + skorDo5cm[icustom].kolor + "</button><div class='panel'>";
+	  textCustom += "<span class='item-fieldvalue wordwrap' title='Pobierz plik'><a href='"+ skorDo5cm[icustom].url+"'>Pobierz plik danych dla tej sekcji</a><br/></span><span class='item-fielddesc'></span>"
+	  textCustom += "<span class='item-fieldname'>GodÅo</span><span class='item-fieldvalue' title='"+skorDo5cm[icustom].godlo+"'>"+skorDo5cm[icustom].godlo+"</span><span class='item-fielddesc'></span>";
+	  textCustom += "<span class='item-fieldname'>AktualnoÅÄ</span><span class='item-fieldvalue' title='"+ skorDo5cm[icustom].aktualnosc +"'>" + skorDo5cm[icustom].aktualnosc + "</span><span class='item-fielddesc'></span>";
+	  textCustom += "<span class='item-fieldname'>WielkoÅÄ piksela</span><span class='item-fieldvalue' title='"+skorDo5cm[icustom].wielkoscPiksela+"'>"+skorDo5cm[icustom].wielkoscPiksela+"</span><span class='item-fielddesc'></span>";
+	  textCustom += "<span class='item-fieldname'>UkÅad wspÃ³ÅrzÄdnych</span><span class='item-fieldvalue' title='"+skorDo5cm[icustom].ukladWspolrzednych+"'>"+skorDo5cm[icustom].ukladWspolrzednych+"</span><span class='item-fielddesc'></span>";
+	  textCustom += "<span class='item-fieldname'>CaÅy arkusz wypeÅniony treÅciÄ</span><span class='item-fieldvalue' title='"+skorDo5cm[icustom].calyArkuszWyeplnionyTrescia+"'>"+skorDo5cm[icustom].calyArkuszWyeplnionyTrescia+"</span><span class='item-fielddesc'></span>";
+	  textCustom += "<span class='item-fieldname'>Rozmiar pliku w MB</span><span class='item-fieldvalue' title='"+skorDo5cm[icustom].rozmiarPlikuMB+"'>"+skorDo5cm[icustom].rozmiarPlikuMB+"</span><span class='item-fielddesc'></span>";
+	  textCustom += "<span class='item-fieldname'>ModuÅ archiwizacji</span><span class='item-fieldvalue' title='"+skorDo5cm[icustom].modulArchiwizacji+"'>"+skorDo5cm[icustom].modulArchiwizacji+"</span><span class='item-fielddesc'></span>";
+	  textCustom += "<span class='item-fieldname'>Å¹rÃ³dÅo danych</span><span class='item-fieldvalue' title='"+skorDo5cm[icustom].zrodloDanych+"'>"+skorDo5cm[icustom].zrodloDanych+"</span><span class='item-fielddesc'></span>";
+	  textCustom += "<span class='item-fieldname'>Kolor</span><span class='item-fieldvalue' title='"+skorDo5cm[icustom].kolor+"'>"+skorDo5cm[icustom].kolor+"</span><span class='item-fielddesc'></span>";
+	  textCustom += "<span class='item-fieldname'>Numer zgÅoszenia pracy</span><span class='item-fieldvalue' title='"+skorDo5cm[icustom].numerZgloszeniaPracy+"'>"+skorDo5cm[icustom].numerZgloszeniaPracy+"</span><span class='item-fielddesc'></span>";
+	  textCustom += "<span class='item-fieldname'>Data wÅÄczenia do PZGiK</span><span class='item-fieldvalue' title='"+ skorDo5cm[icustom].dt_pzgik +"'>" + skorDo5cm[icustom].dt_pzgik + "</span><span class='item-fielddesc'></span>";
+	  textCustom += "</div>";
+	}
+
+return textCustom;
+
+}
+
+
+</script>
+
+</head>
+<body>
+<!-- <p>Kliknij w celu rozwiniÄcia zawartoÅci.</p> -->
+
+
+
+
+
+
+<p>AktualnoÅÄ 2023 i starsze</p>
+<div id="listOfObjects3" style="width: 236px; margin-bottom: 3px;"></div>
+
+<script>
+var skorDo5cm = [];
+
+
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/77300/77300_1184641_M-34-90-C-b-4.tif",godlo:"M-34-90-C-b-4", aktualnosc:"1997-01-01", wielkoscPiksela:"0.75", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:10000", rozmiarPlikuMB:"130", zrodloDanych:"Zdj. cyfrowe", kolor:"RGB", numerZgloszeniaPracy:"DFT.7201.024.2023", aktualnoscRok:"1997", dt_pzgik:"2023-06-01"});
+
+
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/30/30_27217_M-34-90-C-b-4-4.tif",godlo:"M-34-90-C-b-4-4", aktualnosc:"2003-01-01", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:5000", rozmiarPlikuMB:"59", zrodloDanych:"Zdj. analogowe", kolor:"B/W", numerZgloszeniaPracy:"M-34-005/05", aktualnoscRok:"2003", dt_pzgik:"2005-09-13"});
+
+
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/75/75_94961_M-34-90-C-b-4-4.tif",godlo:"M-34-90-C-b-4-4", aktualnosc:"2009-01-01", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:5000", rozmiarPlikuMB:"42", zrodloDanych:"Zdj. analogowe", kolor:"RGB", numerZgloszeniaPracy:"M-34-010/09", aktualnoscRok:"2009", dt_pzgik:"2010-03-18"});
+
+
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/69792/69792_219411_M-34-90-C-b-4-4.tif",godlo:"M-34-90-C-b-4-4", aktualnosc:"2015-07-22", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:5000", rozmiarPlikuMB:"46", zrodloDanych:"Zdj. cyfrowe", kolor:"RGB", numerZgloszeniaPracy:"DFT.7201.004.2015", aktualnoscRok:"2015", dt_pzgik:"2016-05-19"});
+
+
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/64878/64878_367462_7.111.18.18.tif",godlo:"7.111.18.18", aktualnosc:"2015-07-22", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-2000:S7", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:2000", rozmiarPlikuMB:"13", zrodloDanych:"Zdj. cyfrowe", kolor:"RGB", numerZgloszeniaPracy:"DFT.7201.004.2015", aktualnoscRok:"2015", dt_pzgik:"2017-03-30"});
+
+
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/69791/69791_219412_M-34-90-C-b-4-4.tif",godlo:"M-34-90-C-b-4-4", aktualnosc:"2015-07-22", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:5000", rozmiarPlikuMB:"52", zrodloDanych:"Zdj. cyfrowe", kolor:"CIR", numerZgloszeniaPracy:"DFT.7201.004.2015", aktualnoscRok:"2015", dt_pzgik:"2016-05-19"});
+
+
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/70500/70500_794395_M-34-90-C-b-4-4.tif",godlo:"M-34-90-C-b-4-4", aktualnosc:"2018-05-03", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:5000", rozmiarPlikuMB:"43", zrodloDanych:"Zdj. cyfrowe", kolor:"RGB", numerZgloszeniaPracy:"DFT.7201.019.2018", aktualnoscRok:"2018", dt_pzgik:"2019-01-23"});
+
+
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/70183/70183_778709_7.111.18.18.tif",godlo:"7.111.18.18", aktualnosc:"2018-05-29", wielkoscPiksela:"0.07", ukladWspolrzednych:"PL-2000:S7", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:2000", rozmiarPlikuMB:"136", zrodloDanych:"Zdj. cyfrowe", kolor:"RGB", numerZgloszeniaPracy:"DFT.7201.046.2017", aktualnoscRok:"2018", dt_pzgik:"2018-12-18"});
+
+
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/70182/70182_778483_M-34-90-C-b-4-4-4.tif",godlo:"M-34-90-C-b-4-4-4", aktualnosc:"2018-05-30", wielkoscPiksela:"0.07", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:2500", rozmiarPlikuMB:"150", zrodloDanych:"Zdj. cyfrowe", kolor:"RGB", numerZgloszeniaPracy:"DFT.7201.046.2017", aktualnoscRok:"2018", dt_pzgik:"2018-12-18"});
+
+
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/73121/73121_876655_M-34-90-C-b-4-4.tif",godlo:"M-34-90-C-b-4-4", aktualnosc:"2019-08-26", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"NIE", modulArchiwizacji:"1:5000", rozmiarPlikuMB:"42", zrodloDanych:"Zdj. cyfrowe", kolor:"RGB", numerZgloszeniaPracy:"DFT.7201.003.2019", aktualnoscRok:"2019", dt_pzgik:"2019-12-12"});
+
+
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/76530/76530_1090199_M-34-90-C-b-4-4.tif",godlo:"M-34-90-C-b-4-4", aktualnosc:"2022-06-26", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:5000", rozmiarPlikuMB:"44", zrodloDanych:"Zdj. cyfrowe", kolor:"RGB", numerZgloszeniaPracy:"DFT.7201.003.2022", aktualnoscRok:"2022", dt_pzgik:"2023-01-17"});
+
+
+
+skorDo5cm.push({url:"https://opendata.geoportal.gov.pl/ortofotomapa/76529/76529_1090200_M-34-90-C-b-4-4.tif",godlo:"M-34-90-C-b-4-4", aktualnosc:"2022-06-26", wielkoscPiksela:"0.25", ukladWspolrzednych:"PL-1992", calyArkuszWyeplnionyTrescia:"TAK", modulArchiwizacji:"1:5000", rozmiarPlikuMB:"47", zrodloDanych:"Zdj. cyfrowe", kolor:"CIR", numerZgloszeniaPracy:"DFT.7201.003.2022", aktualnoscRok:"2022", dt_pzgik:"2023-01-17"});
+
+
+
+document.getElementById("listOfObjects3").innerHTML = createTable(skorDo5cm);
+
+</script>
+
+
+
+
+
+
+<script>
+var acc = document.getElementsByClassName("accordioni");
+var customValue;
+console.log(acc.length);
+
+for (customValue = 0; customValue < acc.length; customValue++) {
+	console.log(customValue);
+  acc[customValue].addEventListener("click", function() {
+    this.classList.toggle("active");
+    var panel = this.nextElementSibling;
+    if (panel.style.maxHeight) {
+      panel.style.maxHeight = null;
+    } else {
+      panel.style.maxHeight = panel.scrollHeight + "px";
+    } 
+  });
+}
+</script>
+
+</body>
