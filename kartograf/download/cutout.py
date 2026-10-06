@@ -881,7 +881,10 @@ def download_pl_cutout(
     Regula fabryki NMT: 5m => EVRF2007 (z ostrzezeniem w logu). Provider
     i sesja pochodza z fabryki; ``cache`` (``MetadataCache`` albo ``None``)
     trafia do providera — rekordy skorowidza sa czytane i zapisywane tylko
-    z cache (CLI: ``--force`` = ``None``). Wlasny provider/sesja: kroki
+    z cache. ``force=True`` NIE omija cache rekordow sam z siebie: zeby
+    odswiezyc rekordy (pominac odczyt, zapisac nowy wybor), podaj
+    ``MetadataCache(refresh=True)`` — tak robi CLI przy ``--force`` (E14).
+    Wlasny provider/sesja: kroki
     ``prepare_pl_cutout`` -> ``select_pl_cutout_sheets`` ->
     ``run_pl_cutout(provider=...)``.
 

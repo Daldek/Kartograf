@@ -49,6 +49,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   z nich ostrzega o niepełnej kampanii zamiast „brak danych GUGiK”.
   Reguła wyboru (ADR-028: najnowsza kampania) bez zmian (E2E-B C12-a/C14-b,
   E2E-A C5, E13).
+- `--force` w torach PL omija ODCZYT cache rekordów skorowidza, ale
+  zapisuje świeżo wybrany rekord (i potwierdzony brak pokrycia) — kolejny
+  przebieg bez `--force` dostaje nowy rekord zamiast starego sprzed zmiany
+  kampanii. Nowe: `MetadataCache(refresh=True)` (odczyty = chybienie,
+  zapisy normalnie); CLI przekazuje go zamiast `cache=None`
+  (E2E-B C15, E14).
 
 ### Polityka ponowień HTTP i sesja BDOT10k (2026-10-06)
 - Pobieranie GUGiK (NMT/NMPT/orto/LAZ/BDOT10k) oraz wspólny transport

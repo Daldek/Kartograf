@@ -77,7 +77,7 @@ def _create_provider_and_storage(
 
     ``cache`` (``MetadataCache`` albo ``None``) trafia do providera: rekordy
     skorowidza GUGiK sa czytane i zapisywane wylacznie z cache (N6; CLI:
-    ``--force`` = ``None``, patrz ``_pl_metadata_cache``).
+    ``--force`` = cache w trybie ``refresh``, patrz ``_pl_metadata_cache``).
 
     LAZ has a separate flow (`_cmd_download_laz`) and never reaches this
     helper — `cmd_download` short-circuits it before any provider is built.
@@ -125,17 +125,15 @@ def _pl_metadata_cache(args: argparse.Namespace) -> Iterator[object | None]:
     """
     ``MetadataCache`` toru PL na czas jednego zadania (N6; wzor: tor CZ).
 
-    ``--force`` = ``None``: rekordy skorowidza nie sa ani czytane, ani
-    zapisywane (P4 — najprostsza, przewidywalna inwalidacja; ``kartograf
-    cache clear`` czysci wszystko). Bez ``--force`` cache jest otwierany
-    w cwd i zamykany po zadaniu (``close()`` czysci wygasle wpisy).
+    ``--force`` = ``MetadataCache(refresh=True)`` (E14): rekordy skorowidza
+    NIE sa czytane, ale swiezo wybrany rekord (i potwierdzony brak pokrycia)
+    jest ZAPISYWANY — kolejny przebieg bez ``--force`` dostaje nowy rekord,
+    a nie stary sprzed zmiany kampanii (do wygasniecia TTL 7 d). Cache jest
+    otwierany w cwd i zamykany po zadaniu (``close()`` czysci wygasle wpisy).
     """
-    if args.force:
-        yield None
-        return
     from kartograf.cache import MetadataCache
 
-    cache = MetadataCache()
+    cache = MetadataCache(refresh=bool(args.force))
     try:
         yield cache
     finally:
