@@ -988,6 +988,14 @@ def cmd_download(args: argparse.Namespace) -> int:
                 if not args.quiet:
                     print(f"Downloading {args.godlo} ({label})...")
 
+                # E15: skip pojedynczego arkusza raportujemy jako skip — ta
+                # sama sciezka i ten sam warunek co w `download_sheet`
+                # (manager nie wypelnia `last_result` dla jednego arkusza).
+                # isinstance(Path): atrapa managera w testach daje Mock.
+                target = manager.storage.get_path(
+                    args.godlo, provider.default_extension
+                )
+                existed = skip_existing and isinstance(target, Path) and target.exists()
                 result = manager.download_sheet(
                     args.godlo,
                     skip_existing=skip_existing,
@@ -997,7 +1005,10 @@ def cmd_download(args: argparse.Namespace) -> int:
                     # pojedynczy arkusz 1:10000 / PL-2000: sukces = brak
                     # wyjatku (brak danych = DownloadError, kod 1 — D10)
                     if not args.quiet:
-                        print(f"Downloaded to {result}")
+                        if existed:
+                            print(f"Skipped {args.godlo} - already exists at {result}")
+                        else:
+                            print(f"Downloaded to {result}")
                     _warn_partial_sheets([result])
                     return 0
                 paths = result
@@ -1193,10 +1204,14 @@ def _warn_missing_sheets(missing: tuple[str, ...], *, from_sidecar: bool) -> Non
 
 def _report_pl_cutout(result, *, from_sidecar: bool) -> None:
     """Komunikaty o tresci wycinka: brak arkuszy (R5), W1 (S5), same nodata (N2),
-    arkusze z niepelnej najnowszej kampanii (E13)."""
+    arkusze z niepelnej najnowszej kampanii (E13).
+
+    Przy pominietym wycinku wszystkie dane pochodza z jego sidecara
+    (``skipped_pl_cutout``) — ostrzezenia powtarzaja sie z dopiskiem o zrodle.
+    """
     _warn_missing_sheets(result.missing_sheets, from_sidecar=from_sidecar)
+    origin = " (z sidecara istniejacego wycinka)" if from_sidecar else ""
     if result.off_grid_sheets:
-        origin = " (z sidecara istniejacego wycinka)" if from_sidecar else ""
         print(
             f"Info: {len(result.off_grid_sheets)} arkuszy o innej fazie siatki "
             "przeprobkowanych osobno (W1; lista w sidecarze: "
@@ -1212,21 +1227,21 @@ def _report_pl_cutout(result, *, from_sidecar: bool) -> None:
             "Warning: wycinek w calosci nodata — najnowsza kampania GUGiK "
             f"jest niepelna dla {len(partial)} arkuszy ({shown}) i nie pokrywa "
             "obszaru zadania (starsza kampania moze miec dane; "
-            "extra.sheet_sources[].full_sheet)",
+            f"extra.sheet_sources[].full_sheet){origin}",
             file=sys.stderr,
         )
     elif result.all_nodata:
         print(
             "Warning: wycinek w calosci nodata — pobrane arkusze nie wnosza "
             "zadnego piksela w obszarze zadania (brak danych GUGiK / obszar "
-            "poza pokryciem)",
+            f"poza pokryciem){origin}",
             file=sys.stderr,
         )
     elif partial:
         print(
             f"Warning: najnowsza kampania GUGiK jest niepelna dla {len(partial)} "
             f"arkuszy wycinka ({shown}) — wycinek moze miec w ich obszarze "
-            "nodata (extra.sheet_sources[].full_sheet)",
+            f"nodata (extra.sheet_sources[].full_sheet){origin}",
             file=sys.stderr,
         )
 

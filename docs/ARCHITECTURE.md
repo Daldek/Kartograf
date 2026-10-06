@@ -251,7 +251,7 @@ Kazde udane pobranie zapisuje **dwa** pliki: dane i `<plik>.meta.json`.
 | `license` | `{id, attribution, url}` z deskryptora |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, sekundy) i wersja pakietu |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
-| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `godlo_kafla`/`rok`/`gestosc`/`url`; SM5 ma `mapname`/`podil`; arkusze NMT/NMPT/orto PL maja `source` (URL, warstwa, aktualnosc, rozdzielczosc itd.); wycinek PL: `sheet_sources` (lista `{godlo, url, layer, aktualnosc, full_sheet}`; `full_sheet: false` = niepelna najnowsza kampania, E13), `missing_sheets` (brak pliku), `off_grid_sheets` (W1, niezgodna faza) |
+| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `godlo_kafla`/`rok`/`gestosc`/`url`; SM5 ma `mapname`/`podil`; arkusze NMT/NMPT/orto PL maja `source` (URL, warstwa, aktualnosc, rozdzielczosc itd.); wycinek PL: `sheet_sources` (lista `{godlo, url, layer, aktualnosc, full_sheet}`; `full_sheet: false` = niepelna najnowsza kampania, E13), `missing_sheets` (brak pliku), `off_grid_sheets` (W1, niezgodna faza), `all_nodata` (`true` dla wycinka bez waznego piksela, E15) |
 | `schema` | stale `kartograf-meta/1` |
 
 Kanal, z ktorego brany jest `horizontal_crs`/`vertical_crs_options`/
@@ -565,7 +565,10 @@ drugiego kraju nie daje juz kodu 0. Biblioteka nie ma `print` ani argparse.
    `extra.sheet_sources` wycinka (mapa godel na `extra.source`).
    Gdy wszystkie piksele gotowego wycinka sa nodata mimo pobranych
    arkuszy, `PlCutoutResult.all_nodata=True` i CLI wyswietla `Warning:`
-   (kod 0); pomijany istniejacy wycinek nie jest ponownie skanowany.
+   (kod 0); sidecar dostaje `extra.all_nodata: true`. Pomijany istniejacy
+   wycinek nie jest ponownie skanowany — `skipped_pl_cutout` odtwarza
+   `all_nodata` (i `missing_sheets`/`off_grid_sheets`/`partial_sheets`)
+   z sidecara, a CLI powtarza ostrzezenia (E15).
 5. **Mozaika na siatce arkuszy** (`build_pl_cutout`).
    `_reject_pl2000_sheets` chroni przed starym plikiem PL-2000 pod godlem
    PL-1992 w cache (usun taki plik i ponow); nowych plikow tego typu

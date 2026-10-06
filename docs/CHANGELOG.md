@@ -55,6 +55,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   kampanii. Nowe: `MetadataCache(refresh=True)` (odczyty = chybienie,
   zapisy normalnie); CLI przekazuje go zamiast `cache=None`
   (E2E-B C15, E14).
+- Skip: pojedyncze godło pominięte jako istniejące drukuje
+  `Skipped <godlo> - already exists at ...` zamiast `Downloaded to`.
+  Pusty wycinek PL zapisuje w sidecarze `extra.all_nodata: true`;
+  pominięcie takiego wycinka odtwarza `PlCutoutResult.all_nodata` z sidecara
+  (bez czytania rastra), a CLI powtarza `Warning:` (E2E-B C17, E15).
 
 ### Polityka ponowień HTTP i sesja BDOT10k (2026-10-06)
 - Pobieranie GUGiK (NMT/NMPT/orto/LAZ/BDOT10k) oraz wspólny transport

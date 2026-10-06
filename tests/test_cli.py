@@ -5453,3 +5453,41 @@ class TestPartialSheetWarning:
         assert rc == 0
         err = capsys.readouterr().err
         assert "niepelna" in err and "N-34-130-D-d-2-3" in err
+
+
+class TestSingleGodloSkipMessage:
+    """E15 (E2E-B C17): skip pojedynczego godla mowi o skip, nie ``Downloaded to``."""
+
+    @staticmethod
+    def _run(tmp_path, provider, *extra):
+        from kartograf.download.storage import FileStorage
+
+        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
+        with patch(
+            "kartograf.cli.download_cmd._create_provider_and_storage",
+            return_value=(provider, storage),
+        ):
+            return main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), *extra])
+
+    def test_second_run_reports_skip(self, tmp_path, capsys):
+        provider = _SheetProvider({})
+        assert self._run(tmp_path, provider) == 0
+        first = capsys.readouterr().out
+        assert "Downloaded to" in first
+
+        assert self._run(tmp_path, provider) == 0
+
+        out = capsys.readouterr().out
+        assert provider.calls == ["N-34-130-D-d-2-4"]  # drugi przebieg bez sieci
+        assert "Downloaded to" not in out
+        assert "Skipped N-34-130-D-d-2-4 - already exists at" in out
+
+    def test_force_reports_download(self, tmp_path, capsys):
+        provider = _SheetProvider({})
+        self._run(tmp_path, provider)
+        capsys.readouterr()
+
+        assert self._run(tmp_path, provider, "--force") == 0
+
+        assert "Downloaded to" in capsys.readouterr().out
+        assert len(provider.calls) == 2
