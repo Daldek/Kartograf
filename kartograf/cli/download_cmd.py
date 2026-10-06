@@ -1625,8 +1625,16 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
             f"({len(skipped)} skipped) to {output_dir / 'laz'}"
         )
     if failed:
-        print(f"Warning: {len(failed)} tiles failed to download", file=sys.stderr)
-        for _status, tile, error in failed[:5]:
+        # Kod 1 => `Error:` (konwencja: `Warning:` tylko przy kodzie 0) i PELNA
+        # lista nieudanych kafli do ponowienia — wzor `_finish_pl_sheets` (N6).
+        failed.sort(key=lambda r: (r[1].godlo, r[1].url))
+        names = ", ".join(tile.godlo for _status, tile, _error in failed)
+        print(
+            f"Error: {len(failed)} z {len(tiles)} kafli LAZ nie pobrano "
+            f"(blad pobrania): {names} — ponow pobranie",
+            file=sys.stderr,
+        )
+        for _status, tile, error in failed:
             print(f"  {tile.godlo}: {error}", file=sys.stderr)
         return 1
 

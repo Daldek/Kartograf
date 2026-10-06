@@ -32,6 +32,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (SoilGrids) albo `--year` (CORINE) kończy się `Error: <treść>` i kodem 1
   przed siecią — bez `ValueError:` i podpowiedzi `KARTOGRAF_DEBUG`, która
   sugerowała awarię programu (review N8).
+- LAZ: porażka pobrania kafli daje `Error: N z M kafli LAZ nie pobrano ...`
+  z PEŁNĄ listą nieudanych kafli (wcześniej `Warning:` przy kodzie 1 i tylko
+  5 pierwszych). Kod wyjścia bez zmian: 1 (review N6).
 
 ### Polityka ponowień HTTP i sesja BDOT10k (2026-10-06)
 - Pobieranie GUGiK (NMT/NMPT/orto/LAZ/BDOT10k) oraz wspólny transport

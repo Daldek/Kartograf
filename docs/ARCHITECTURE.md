@@ -755,6 +755,9 @@ GetCapabilities ustala roczniki (bez zaszytej listy); jesli
 ktorykolwiek rocznik zawiedzie po ponowieniach, `discover_tiles`
 rzuca `DownloadError` zamiast sugerowac brak kafli. Gdy wszystkie
 odpowiedza i nic nie znaleziono, CLI drukuje `No LAZ tiles found`.
+Porazka pobrania choc jednego kafla konczy polecenie kodem 1 z `Error:`
+i PELNA lista nieudanych kafli (jak `_finish_pl_sheets`; udane kafle
+zostaja na dysku i przy ponowieniu bez `--force` sa pomijane).
 Godlo kafla jest drobniejsze niz 1:10000 i NIE jest
 parsowane — `FileStorage.get_raw_path(..., uklad=tile.uklad)` buduje z niego
 sama hierarchie katalogow. Uklad poziomy jest ustalany **per kafel**
