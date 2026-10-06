@@ -81,6 +81,32 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   w segmencie wg godła; fixtura z surowego nagłówka
   `tests/fixtures/gugik_asc/77912_1384976_7.125.11.19.head.asc` (E2E-A
   C6b/C6h, E17).
+- Arkusz PL w innym układzie niż wskazuje godło (np. PL-2000 strefy 7
+  opublikowany w EPSG:2180): CLI drukuje `Warning: N arkuszy GUGiK
+  opublikowano w innym ukladzie niz wskazuje godlo: <godlo> (godlo: ...,
+  plik: ...)` na stderr — tor godła, listy `--bbox`/`--geometry`
+  i hierarchii, także przy skip i `-q`; fakt czytany z sidecara
+  (`horizontal_crs` vs układ z godła). Kod wyjścia bez zmian (0).
+  Wcześniej był tylko komunikat loggera bez prefiksu (E17).
+- `KARTOGRAF_DEBUG=1` daje pełny traceback także dla `KartografError`
+  docierającego do bariery `main` — wcześniej zawsze skracany do
+  `Error: ...` wbrew opisowi zmiennej (review N17).
+- `--force` w torze CZ otwiera `MetadataCache(refresh=True)` jak w PL:
+  indeks arkuszy SM5 (`sheet_cache`, TTL 30 d) jest odpytywany na nowo
+  i zapisywany. Wcześniej `--force` pobierał ponownie tylko plik,
+  a indeks szedł z cache (review-1 D16).
+- `Bdot10kProvider.DEFAULT_TIMEOUT` = 120 s i jest domyślną wartością
+  `download_by_admin_unit/godlo/bbox` (wcześniej martwa stała 60 s obok
+  sygnatur ze 120 s; zachowanie bez zmian) (review N11).
+- Errata dokumentacji (review-2): README — arkusz za granicą w trybie
+  listy to `Warning:` i kod 0, nie kod 1 (N2), liczby testów (N12);
+  „3 próby” doprecyzowane jako ponowienia tylko dla sieci/429/5xx w
+  CLAUDE.md, SCOPE, ARCHITECTURE, docstringu `download_pl_cutout`
+  i erracie ADR-028 (N4); lista timeoutów bez martwego „CORINE przez
+  TERYT” (N10); krawędź `cli -> transport` w ARCHITECTURE 2 (N13);
+  rozszerzenie pliku landcover nadaje provider (N14); errata ADR-023
+  (f).1 — LAZ bez `parent_request` (N15); docstringi `LandCoverManager`
+  i `MetadataCache` (N16).
 
 ### Polityka ponowień HTTP i sesja BDOT10k (2026-10-06)
 - Pobieranie GUGiK (NMT/NMPT/orto/LAZ/BDOT10k) oraz wspólny transport
