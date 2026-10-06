@@ -41,6 +41,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   przy istniejącym pliku RGB tego arkusza zwracał po cichu RGB (skip).
   Nowe: `BaseProvider.storage_variant`, `FileStorage(variant=...)`
   (E2E-B C12-f, E12).
+- Niepełny arkusz widoczny: gdy wybrany rekord skorowidza ma
+  `full_sheet: false` (najnowsza kampania nie wypełnia arkusza), CLI
+  drukuje `Warning:` w torze godła, listy arkuszy i wycinka (także przy
+  skip). `extra.sheet_sources` wycinka ma pole `full_sheet`,
+  `PlCutoutResult.partial_sheets` listuje takie arkusze, a pusty wycinek
+  z nich ostrzega o niepełnej kampanii zamiast „brak danych GUGiK”.
+  Reguła wyboru (ADR-028: najnowsza kampania) bez zmian (E2E-B C12-a/C14-b,
+  E2E-A C5, E13).
 
 ### Polityka ponowień HTTP i sesja BDOT10k (2026-10-06)
 - Pobieranie GUGiK (NMT/NMPT/orto/LAZ/BDOT10k) oraz wspólny transport

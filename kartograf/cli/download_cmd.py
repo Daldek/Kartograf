@@ -1000,6 +1000,7 @@ def cmd_download(args: argparse.Namespace) -> int:
                     # wyjatku (brak danych = DownloadError, kod 1 — D10)
                     if not args.quiet:
                         print(f"Downloaded to {result}")
+                    _warn_partial_sheets([result])
                     return 0
                 paths = result
 
@@ -1075,8 +1076,12 @@ def _finish_pl_sheets(
     - 0 plikow i wszystkie bez danych -> ``Error:``, kod 1 (nic do pobrania,
       spojnie z wycinkiem: ``ValidationError``).
 
+    Arkusze z niepelnej najnowszej kampanii (sidecar
+    ``extra.source.full_sheet: false``) -> ``Warning:`` (E13), kod bez zmian.
+
     ``Warning:``/``Error:`` ida na stderr, wiec ``-q`` ich NIE tlumi.
     """
+    _warn_partial_sheets(paths)
     if not quiet:
         # pasek postepu konczy "skipped"/"downloading" bez nowej linii
         print()
@@ -1139,6 +1144,37 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
     return _dispatch_area(args, bbox)
 
 
+def _is_partial_sheet(path: Path) -> bool:
+    """Sidecar arkusza deklaruje niepelny arkusz (``extra.source.full_sheet``
+    ``false``, E13). Best-effort: brak/nieczytelny sidecar = ``False``."""
+    sidecar = path.with_name(f"{path.name}.meta.json")
+    try:
+        source = json.loads(sidecar.read_text(encoding="utf-8"))["extra"]["source"]
+        return source.get("full_sheet") is False
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return False
+
+
+def _warn_partial_sheets(paths) -> None:
+    """E13: ``Warning:`` o arkuszach z niepelnej najnowszej kampanii GUGiK.
+
+    Regula wyboru (ADR-028: najnowsza kampania, bez preferencji pelnego
+    arkusza) zostaje — ostrzezenie tylko ja uwidacznia. Czyta sidecary
+    plikow wyniku, wiec dziala takze dla arkuszy pominietych jako istniejace.
+    """
+    partial = sorted(Path(p).stem for p in paths if _is_partial_sheet(Path(p)))
+    if not partial:
+        return
+    shown = ", ".join(partial[:10]) + (" ..." if len(partial) > 10 else "")
+    print(
+        f"Warning: najnowsza kampania GUGiK jest niepelna dla {len(partial)} "
+        f"arkuszy ({shown}) — skorowidz deklaruje arkusz nie w calosci "
+        "wypelniony trescia; plik moze miec duzo nodata/czerni "
+        "(extra.source.full_sheet w sidecarze)",
+        file=sys.stderr,
+    )
+
+
 def _warn_missing_sheets(missing: tuple[str, ...], *, from_sidecar: bool) -> None:
     """R5: ``Warning:`` o arkuszach bez danych GUGiK w wycinku (stderr, -q nie tlumi).
 
@@ -1158,7 +1194,8 @@ def _warn_missing_sheets(missing: tuple[str, ...], *, from_sidecar: bool) -> Non
 
 
 def _report_pl_cutout(result, *, from_sidecar: bool) -> None:
-    """Komunikaty o tresci wycinka: brak arkuszy (R5), W1 (S5), same nodata (N2)."""
+    """Komunikaty o tresci wycinka: brak arkuszy (R5), W1 (S5), same nodata (N2),
+    arkusze z niepelnej najnowszej kampanii (E13)."""
     _warn_missing_sheets(result.missing_sheets, from_sidecar=from_sidecar)
     if result.off_grid_sheets:
         origin = " (z sidecara istniejacego wycinka)" if from_sidecar else ""
@@ -1168,11 +1205,30 @@ def _report_pl_cutout(result, *, from_sidecar: bool) -> None:
             f"extra.off_grid_sheets){origin}",
             file=sys.stderr,
         )
-    if result.all_nodata:
+    partial = tuple(getattr(result, "partial_sheets", ()))
+    shown = ", ".join(partial[:10]) + (" ..." if len(partial) > 10 else "")
+    if result.all_nodata and partial:
+        # C14-b: GUGiK ma dane w starszej kampanii, a najnowsza (wybrana wg
+        # ADR-028) jest ucieta — "brak danych GUGiK" bylby mylacy
+        print(
+            "Warning: wycinek w calosci nodata — najnowsza kampania GUGiK "
+            f"jest niepelna dla {len(partial)} arkuszy ({shown}) i nie pokrywa "
+            "obszaru zadania (starsza kampania moze miec dane; "
+            "extra.sheet_sources[].full_sheet)",
+            file=sys.stderr,
+        )
+    elif result.all_nodata:
         print(
             "Warning: wycinek w calosci nodata — pobrane arkusze nie wnosza "
             "zadnego piksela w obszarze zadania (brak danych GUGiK / obszar "
             "poza pokryciem)",
+            file=sys.stderr,
+        )
+    elif partial:
+        print(
+            f"Warning: najnowsza kampania GUGiK jest niepelna dla {len(partial)} "
+            f"arkuszy wycinka ({shown}) — wycinek moze miec w ich obszarze "
+            "nodata (extra.sheet_sources[].full_sheet)",
             file=sys.stderr,
         )
 

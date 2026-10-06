@@ -109,8 +109,9 @@ class PlCutoutSheets:
 class PlCutoutResult:
     """Wynik ``run_pl_cutout`` / ``download_pl_cutout``.
 
-    Przy ``skipped=True`` (plik istnial, ``force=False``) ``missing_sheets``
-    i ``off_grid_sheets`` pochodza z sidecara istniejacego wycinka
+    Przy ``skipped=True`` (plik istnial, ``force=False``) ``missing_sheets``,
+    ``off_grid_sheets`` i ``partial_sheets`` pochodza z sidecara istniejacego
+    wycinka
     (``skipped_pl_cutout``), a ``sheet_paths`` jest puste — arkuszy nikt nie
     dotykal; ``all_nodata`` jest wtedy ``False`` (plik nie jest czytany).
     """
@@ -124,6 +125,9 @@ class PlCutoutResult:
     # wycinek bez ani jednego waznego piksela (N2): pobrane arkusze leza w
     # marginesie selekcji albo same sa nodata — plik powstal, kod 0 w CLI
     all_nodata: bool = False
+    # arkusze z niepelnej najnowszej kampanii (rekord skorowidza
+    # ``full_sheet=False``, E13) — wybrane wg ADR-028, ale moga wnosic nodata
+    partial_sheets: tuple[str, ...] = ()
 
 
 def _bbox_to_2180(bbox: BBox) -> BBox:
@@ -474,6 +478,7 @@ def _sheet_source(sheet_path: Path) -> dict:
         "url": None,
         "layer": None,
         "aktualnosc": None,
+        "full_sheet": None,
     }
     sidecar = sheet_path.parent / f"{sheet_path.name}.meta.json"
     try:
@@ -484,9 +489,24 @@ def _sheet_source(sheet_path: Path) -> dict:
     request_godlo = meta.get("request", {}).get("godlo")
     if isinstance(request_godlo, str):
         entry["godlo"] = request_godlo
-    for key in ("url", "layer", "aktualnosc"):
+    for key in ("url", "layer", "aktualnosc", "full_sheet"):
         entry[key] = source.get(key)
     return entry
+
+
+def _partial_sheets(sources: list) -> tuple[str, ...]:
+    """Godla wpisow ``sheet_sources`` z ``full_sheet is False`` (E13).
+
+    ``None`` (arkusz bez sidecara albo rekord bez flagi) nie jest niepelny —
+    ostrzegamy tylko o tym, co skorowidz jawnie deklaruje.
+    """
+    return tuple(
+        sorted(
+            str(entry.get("godlo"))
+            for entry in sources
+            if isinstance(entry, dict) and entry.get("full_sheet") is False
+        )
+    )
 
 
 def write_pl_cutout_sidecar(
@@ -504,7 +524,8 @@ def write_pl_cutout_sidecar(
     (ADR-027, odstepstwo od litery spec 6.1 pkt 5). ``missing_sheets``
     (niepuste) -> ``extra.missing_sheets``: arkusze bez danych GUGiK (R5).
     ``sheet_paths`` (niepuste) -> ``extra.sheet_sources``: pochodzenie
-    kazdego arkusza mozaiki ``{godlo, url, layer, aktualnosc}`` czytane
+    kazdego arkusza mozaiki ``{godlo, url, layer, aktualnosc, full_sheet}``
+    (``full_sheet`` = flaga pelnego arkusza z rekordu skorowidza, E13) czytane
     z sidecarow arkuszy (``extra.source``, D5); arkusz bez sidecara albo bez
     ``source`` (cache sprzed 0.7.0) ma ``null`` w polach poza ``godlo``.
     ``off_grid_sheets`` (niepuste) -> ``extra.off_grid_sheets``: arkusze
@@ -680,7 +701,8 @@ def skipped_pl_cutout(cutout: PlCutout) -> PlCutoutResult:
     ``extra.off_grid_sheets``), a nie jako puste krotki — konsument widzi to
     samo, co przy budowie. Bez sidecara, z sidecarem nieczytelnym albo bez
     tych pol (wycinek sprzed 0.7.0, bez dziur): puste. ``sheet_paths`` jest
-    puste — arkuszy nikt tu nie dotyka.
+    puste — arkuszy nikt tu nie dotyka. ``partial_sheets`` (E13) wraca
+    z ``extra.sheet_sources`` (wpisy z ``full_sheet: false``).
     """
     sidecar = cutout.target_path.with_name(f"{cutout.target_path.name}.meta.json")
     try:
@@ -694,6 +716,11 @@ def skipped_pl_cutout(cutout: PlCutout) -> PlCutoutResult:
         skipped=True,
         missing_sheets=_sidecar_sheet_list(extra, "missing_sheets"),
         off_grid_sheets=_sidecar_sheet_list(extra, "off_grid_sheets"),
+        partial_sheets=_partial_sheets(
+            extra.get("sheet_sources")
+            if isinstance(extra.get("sheet_sources"), list)
+            else []
+        ),
     )
 
 
@@ -827,6 +854,7 @@ def run_pl_cutout(
         missing_sheets=missing,
         off_grid_sheets=off_grid,
         all_nodata=all_nodata,
+        partial_sheets=_partial_sheets([_sheet_source(Path(p)) for p in sheet_paths]),
     )
 
 

@@ -1841,6 +1841,7 @@ class TestMissingSheets:
                 "godlo": "N-34-130-D-d-2-3",
                 "aktualnosc": "2025-04-01",
                 "resolution_m": 1.0,
+                "full_sheet": True,
             },
             "N-34-130-D-d-2-4": {
                 "url": "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/2/2_b.asc",
@@ -1849,6 +1850,7 @@ class TestMissingSheets:
                 "godlo": "N-34-130-D-d-2-4",
                 "aktualnosc": "2022-05-09",
                 "resolution_m": 1.0,
+                "full_sheet": False,
             },
         }
         provider = self._provider()
@@ -1873,14 +1875,18 @@ class TestMissingSheets:
                 "url": sources["N-34-130-D-d-2-3"]["url"],
                 "layer": "SkorowidzeNMT2025",
                 "aktualnosc": "2025-04-01",
+                "full_sheet": True,
             },
             "N-34-130-D-d-2-4": {
                 "godlo": "N-34-130-D-d-2-4",
                 "url": sources["N-34-130-D-d-2-4"]["url"],
                 "layer": "SkorowidzeNMT2023iStarsze",
                 "aktualnosc": "2022-05-09",
+                "full_sheet": False,
             },
         }
+        # E13: niepelny arkusz widoczny takze w wyniku biblioteki
+        assert result.partial_sheets == ("N-34-130-D-d-2-4",)
         assert sorted(downloads) == sorted(TestLibraryApi._SHEETS)
 
         # przebudowa z arkuszy w cache: jeden bez sidecara, drugi bez source
@@ -1896,9 +1902,22 @@ class TestMissingSheets:
             rebuilt.path.with_name(rebuilt.path.name + ".meta.json").read_text()
         )
         assert sorted(meta["extra"]["sheet_sources"], key=lambda e: e["godlo"]) == [
-            {"godlo": sheet_a.stem, "url": None, "layer": None, "aktualnosc": None},
-            {"godlo": sheet_b.stem, "url": None, "layer": None, "aktualnosc": None},
+            {
+                "godlo": sheet_a.stem,
+                "url": None,
+                "layer": None,
+                "aktualnosc": None,
+                "full_sheet": None,
+            },
+            {
+                "godlo": sheet_b.stem,
+                "url": None,
+                "layer": None,
+                "aktualnosc": None,
+                "full_sheet": None,
+            },
         ]
+        assert rebuilt.partial_sheets == ()
         assert len(downloads) == 2  # przebudowa bez pobierania (arkusze z cache)
 
     def test_transport_failure_stays_fatal(self, tmp_path):
@@ -2141,3 +2160,92 @@ class TestOffGridSheets:
         # mozaika + warp: interpolator widzi sasiada zza szwu, wiec na szwie
         # sa wartosci posrednie — ale tylko miedzy oboma poziomami
         assert data.min() == pytest.approx(100.25) and data.max() == 200.0
+
+
+def _write_sheet_source(sheet, *, full_sheet, godlo=None, url=None):
+    """Sidecar arkusza z ``extra.source`` jak po pobraniu przez manager."""
+    godlo = godlo or sheet.stem
+    payload = {
+        "request": {"godlo": godlo},
+        "extra": {
+            "source": {
+                "url": url or f"https://opendata.geoportal.gov.pl/NMT/1/1_{godlo}.asc",
+                "layer": "SkorowidzeNMT2025",
+                "aktualnosc": "2025-10-21",
+                "full_sheet": full_sheet,
+            }
+        },
+    }
+    sheet.with_name(sheet.name + ".meta.json").write_text(
+        json.dumps(payload), encoding="utf-8"
+    )
+
+
+class TestPartialSheetVisibility:
+    """E13 (E2E-B C14-b, C12-a): niepelna najnowsza kampania jest widoczna.
+
+    Regula wyboru ADR-028 bez zmian (najnowsza kampania) — tu tylko
+    widocznosc: ``full_sheet`` w ``extra.sheet_sources``, ``Warning:``
+    i tresc ostrzezenia o pustym wycinku.
+    """
+
+    _run = TestDownloadPlBboxCutout._run
+
+    def _sheets(self, tmp_path, *, fill=100.0, full=(True, False)):
+        sheets = [
+            _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000, fill=fill),
+            _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000, fill=fill),
+        ]
+        for sheet, godlo, full_sheet in zip(
+            sheets, ("N-34-139-C-a-3-2", "N-34-139-C-a-3-1"), full, strict=True
+        ):
+            _write_sheet_source(sheet, full_sheet=full_sheet, godlo=godlo)
+        return sheets
+
+    def test_sheet_sources_carry_full_sheet(self, tmp_path):
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), self._sheets(tmp_path))
+
+        assert rc == 0
+        (tif,) = (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif")
+        meta = json.loads(tif.with_name(tif.name + ".meta.json").read_text("utf-8"))
+        flags = {s["godlo"]: s["full_sheet"] for s in meta["extra"]["sheet_sources"]}
+        assert flags == {"N-34-139-C-a-3-2": True, "N-34-139-C-a-3-1": False}
+
+    def test_partial_sheet_warns(self, tmp_path, capsys):
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), self._sheets(tmp_path))
+
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "Warning:" in err and "niepelna" in err
+        assert "N-34-139-C-a-3-1" in err and "N-34-139-C-a-3-2" not in err
+
+    def test_skipped_cutout_repeats_partial_warning(self, tmp_path, capsys):
+        """Pominiety wycinek odtwarza ``partial_sheets`` z ``extra.sheet_sources``."""
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), self._sheets(tmp_path))
+        assert rc == 0
+        capsys.readouterr()
+
+        rc, manager, _ = self._run(tmp_path, _pl_args(tmp_path), sheets=[])
+
+        assert rc == 0
+        manager.download_sheets.assert_not_called()
+        err = capsys.readouterr().err
+        assert "niepelna" in err and "N-34-139-C-a-3-1" in err
+
+    def test_full_sheets_do_not_warn(self, tmp_path, capsys):
+        sheets = self._sheets(tmp_path, full=(True, True))
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
+
+        assert rc == 0
+        assert "niepelna" not in capsys.readouterr().err
+
+    def test_all_nodata_with_partial_sheet_blames_campaign(self, tmp_path, capsys):
+        """C14-b: pusty wycinek z niepelnej kampanii — nie "brak danych GUGiK"."""
+        sheets = self._sheets(tmp_path, fill=_NODATA)
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
+
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "Warning: wycinek w calosci nodata" in err
+        assert "niepelna" in err and "N-34-139-C-a-3-1" in err
+        assert "brak danych GUGiK / obszar poza pokryciem" not in err
