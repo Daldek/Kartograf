@@ -42,6 +42,7 @@ from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import LandCoverProvider
 from kartograf.transport.http import (
+    get_with_retry,
     http_failure,
     http_status,
     is_retryable,
@@ -363,39 +364,43 @@ class Bdot10kProvider(LandCoverProvider):
         url = f"{self.WMS_ENDPOINT}?{urlencode(params)}"
         logger.debug(f"Querying WMS for TERYT at ({x:.2f}, {y:.2f})")
 
+        # Siec/429/5xx ponawiane (3 proby, Retry-After), 4xx od razu —
+        # wspolna polityka transport/http.py (review N5).
         try:
-            response = session.get(url, timeout=timeout)
-            response.raise_for_status()
-
-            # Extract TERYT from GPKG URL pattern: .../GPKG/{woj}/{teryt}_GPKG.zip
-            gpkg_pattern = r"/GPKG/\d{2}/(\d{4})_GPKG\.zip"
-            match = re.search(gpkg_pattern, response.text)
-
-            if match:
-                teryt = match.group(1)
-                logger.debug(f"Found TERYT: {teryt}")
-                if self._cache is not None:
-                    self._cache.set_teryt(x, y, teryt)
-                return teryt
-
-            # Alternative: extract from SHP URL pattern
-            shp_pattern = r"/SHP/\d{2}/(\d{4})_SHP\.zip"
-            match = re.search(shp_pattern, response.text)
-
-            if match:
-                teryt = match.group(1)
-                logger.debug(f"Found TERYT: {teryt}")
-                if self._cache is not None:
-                    self._cache.set_teryt(x, y, teryt)
-                return teryt
-
-            raise DownloadError(
-                f"Could not determine TERYT for point ({x:.2f}, {y:.2f}). "
-                f"The location may be outside Poland or in a water body."
+            response = get_with_retry(
+                session, url, timeout=timeout, description="zapytanie TERYT"
             )
+        except DownloadError as e:
+            raise DownloadError(
+                f"WMS GetFeatureInfo failed: {e}", status_code=e.status_code
+            ) from e
 
-        except requests.RequestException as e:
-            raise DownloadError(f"WMS GetFeatureInfo failed: {e}") from e
+        # Extract TERYT from GPKG URL pattern: .../GPKG/{woj}/{teryt}_GPKG.zip
+        gpkg_pattern = r"/GPKG/\d{2}/(\d{4})_GPKG\.zip"
+        match = re.search(gpkg_pattern, response.text)
+
+        if match:
+            teryt = match.group(1)
+            logger.debug(f"Found TERYT: {teryt}")
+            if self._cache is not None:
+                self._cache.set_teryt(x, y, teryt)
+            return teryt
+
+        # Alternative: extract from SHP URL pattern
+        shp_pattern = r"/SHP/\d{2}/(\d{4})_SHP\.zip"
+        match = re.search(shp_pattern, response.text)
+
+        if match:
+            teryt = match.group(1)
+            logger.debug(f"Found TERYT: {teryt}")
+            if self._cache is not None:
+                self._cache.set_teryt(x, y, teryt)
+            return teryt
+
+        raise DownloadError(
+            f"Could not determine TERYT for point ({x:.2f}, {y:.2f}). "
+            f"The location may be outside Poland or in a water body."
+        )
 
     # =========================================================================
     # Download by bbox → Download county package
