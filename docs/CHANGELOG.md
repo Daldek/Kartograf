@@ -23,6 +23,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (wcześniej jedna próba), 404 kończy od razu ze `status_code`. Błąd
   treści (JSON) nie jest ponawiany. `get_with_retry` przyjmuje opcjonalne
   `params=` (review N5).
+- BDOT10k `--format SHP` zapisuje archiwum ZIP z shapefile'ami jako `.zip`
+  (np. `bdot10k_teryt_1465.zip`, sidecar obok), a nie pod nazwą `.gpkg`,
+  która udawała GeoPackage. `Bdot10kProvider.download_by_admin_unit`
+  (także przez bbox/godło) zwraca ścieżkę `.zip`; CLI drukuje faktyczną
+  ścieżkę (review N1).
 
 ### Polityka ponowień HTTP i sesja BDOT10k (2026-10-06)
 - Pobieranie GUGiK (NMT/NMPT/orto/LAZ/BDOT10k) oraz wspólny transport

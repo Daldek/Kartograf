@@ -282,7 +282,7 @@ Pozostają ograniczenia produktu (testy na żywych usługach po fali naprawczej
   - Automatyczne scalanie warstw do jednego GeoPackage (z zachowaniem rtree index)
 - ✅ **CORINE Land Cover** - Europejska klasyfikacja (Copernicus), 44 klasy
 - ✅ **Metody selekcji** - TERYT (powiat), bbox, godło arkusza, plik geometrii (SHP/GPKG)
-- ✅ **Formaty** - GeoPackage, Shapefile, GeoTIFF, PNG
+- ✅ **Formaty** - GeoPackage, Shapefile (BDOT10k `--format SHP`: archiwum `.zip`, np. `bdot10k_teryt_1465.zip`), GeoTIFF, PNG
 
 ### SoilGrids (Dane Glebowe)
 - ✅ **ISRIC SoilGrids** - Globalne dane glebowe, rozdzielczość 250m

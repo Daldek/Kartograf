@@ -776,7 +776,12 @@ Wynik: `data/laz/pl_2000_evrf2007/6/162/34/02/3/<oryginalna_nazwa>.laz`
 Bez zmian wzgledem 0.6.x. `LandCoverManager` ma **wlasny domyslny katalog**
 (`./data/landcover`, CLI `--output`) i wlasna konwencje nazw plikow:
 `<provider>_teryt_<teryt>.gpkg`, `<provider>_bbox_<minx>_<miny>_<maxx>_<maxy>.gpkg`
-albo `<provider>_godlo_<godlo>.gpkg` (`_generate_output_path`). Szablony
+albo `<provider>_godlo_<godlo>.gpkg` (`_generate_output_path`). Wyjatek:
+BDOT10k z `format="SHP"` (`--format SHP`) zapisuje oryginalne archiwum
+GUGiK z shapefile'ami pod ta sama nazwa z rozszerzeniem `.zip`
+(np. `bdot10k_teryt_1465.zip`, sidecar `bdot10k_teryt_1465.zip.meta.json`);
+rozszerzenie nadaje `Bdot10kProvider.download_by_admin_unit`, a CLI drukuje
+faktyczna sciezke (review 2026-10-06 N1). Szablony
 segmentow z sekcji 3 tych zrodel NIE dotycza — ich deskryptory maja
 `storage_subdir = None`. Sidecary pisze `LandCoverManager` tak samo jak
 pozostale warstwy zarzadzajace. CORINE bez credentials CLMS pobiera podglad
