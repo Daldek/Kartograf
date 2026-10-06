@@ -70,6 +70,17 @@ class BaseProvider(DataSourceProvider):
         """Default file extension for this provider (e.g. '.asc', '.tif')."""
         return ".asc"
 
+    @property
+    def storage_variant(self) -> str | None:
+        """Wariant produktu w segmencie storage (``<kraj>_<uklad>_<wariant>``).
+
+        ``None`` = wariant domyslny, bez sufiksu (ADR-026). Provider, ktory
+        pod tym samym godlem moze dostarczyc inny plik (orto CIR/B-W), zwraca
+        tu nazwe wariantu — inaczej skip zwrocilby po cichu plik innego
+        wariantu (E12).
+        """
+        return None
+
     def source_info(self, godlo: str) -> dict | None:
         """Pochodzenie pobranego arkusza, jesli provider je udostepnia."""
         return None

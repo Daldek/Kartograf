@@ -202,7 +202,7 @@ to `resolve_subdir()`.
 | `pl.gugik.nmt_1m` | `nmt/pl_{uklad}_1m_{vcrs}` | `.asc` |
 | `pl.gugik.nmt_5m` | `nmt/pl_{uklad}_5m_{vcrs}` | `.asc` |
 | `pl.gugik.nmpt` | `nmpt/pl_{uklad}_1m_{vcrs}` | `.asc` |
-| `pl.gugik.orto` | `orto/pl_{uklad}` | `.tif` |
+| `pl.gugik.orto` | `orto/pl_{uklad}` (+ `_<wariant>` dla CIR/B-W, regula 5) | `.tif` |
 | `pl.gugik.laz` | `laz/pl_{uklad}_{vcrs}` | `.laz` |
 | `cz.cuzk.dmr5g` | `nmt/cz_dmr5g_{vcrs}` | `.tif` |
 | `cz.cuzk.dmr4g` | `nmt/cz_dmr4g_{vcrs}` | `.tif` |
@@ -292,6 +292,7 @@ data/
 │   └── cz_dmr4g_bpv/CTES/96/CTES96.tif
 ├── nmpt/pl_1992_1m_evrf2007/...             # (+ _kron86, + pl_2000_...)
 ├── orto/pl_1992/...                         # bez ukladu pionowego
+├── orto/pl_1992_cir/...                     # wariant CIR (B/W: pl_<uklad>_bw), E12
 ├── laz/pl_2000_evrf2007/...                 # poziomy per kafel (uklad_xy), pionowy z flagi
 └── landcover/...                            # bez zmian (wlasny default --output)
 ```
@@ -320,6 +321,13 @@ data/
 4. Rozdzielczosc wchodzi do segmentu tylko tam, gdzie jest parametrem API
    (NMT/NMPT). Nie ma jej dla CZ (`dmr5g` to z definicji 2 m, `dmr4g` 5 m)
    ani dla orto/LAZ (brak takiego parametru).
+5. `<wariant>` rozroznia pliki tego samego godla i ukladu, ktore nie sa tym
+   samym produktem (E12, 2026-10-06). Dzis tylko orto: RGB (domyslny)
+   bez sufiksu w `orto/pl_<uklad>/` (bez migracji), CIR w
+   `orto/pl_<uklad>_cir/`, B/W w `orto/pl_<uklad>_bw/`. Wariant pochodzi
+   z `provider.storage_variant` (`GugikOrtoProvider(color=...)`) i trafia do
+   `FileStorage(variant=...)`; bez niego skip zwracal po cichu plik RGB na
+   zadanie CIR.
 
 Nowe zrodlo dodaje sie samym wpisem deskryptora — np.
 `nmt/de_bb_dgm1_dhhn2016/` nie wymaga zadnej zmiany w kodzie sciezek.

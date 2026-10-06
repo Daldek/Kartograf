@@ -139,6 +139,17 @@ class GugikOrtoProvider(SkorowidzLayersMixin, BaseProvider):
         """Colour variant this provider downloads (RGB by default)."""
         return self._color
 
+    @property
+    def storage_variant(self) -> str | None:
+        """Segment wariantu (E12): RGB bez sufiksu, CIR -> "cir", B/W -> "bw".
+
+        RGB zostaje w ``orto/pl_<uklad>/`` (bez migracji plikow sprzed E12);
+        inne warianty dostaja ``orto/pl_<uklad>_<wariant>/``.
+        """
+        if self._color == self.DEFAULT_COLOR:
+            return None
+        return re.sub(r"[^a-z0-9]", "", self._color.lower())
+
     # =========================================================================
     # Download by godło → OpenData (TIF)
     # =========================================================================
