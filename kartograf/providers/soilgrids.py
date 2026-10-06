@@ -42,6 +42,12 @@ import requests
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError
 from kartograf.providers.base import LandCoverProvider
+from kartograf.transport.http import (
+    http_failure,
+    http_status,
+    is_retryable,
+    retry_wait,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -435,7 +441,7 @@ class SoilGridsProvider(LandCoverProvider):
         DownloadError
             If download fails after all retries
         """
-        last_error = None
+        last_error: requests.RequestException | None = None
         session = self._session or requests.Session()
 
         for attempt in range(1, self.MAX_RETRIES + 1):
@@ -465,14 +471,22 @@ class SoilGridsProvider(LandCoverProvider):
                     f"Download failed for {description} (attempt {attempt}): {e}"
                 )
 
+                if not is_retryable(e):
+                    raise http_failure(
+                        f"Failed to download {description}: "
+                        f"HTTP {http_status(e)} (not retried): {e}",
+                        e,
+                    ) from e
+
                 if attempt < self.MAX_RETRIES:
-                    wait_time = self.RETRY_BACKOFF_BASE**attempt
+                    wait_time = retry_wait(e, self.RETRY_BACKOFF_BASE**attempt)
                     logger.debug(f"Retrying in {wait_time} seconds...")
                     time.sleep(wait_time)
 
-        raise DownloadError(
+        raise http_failure(
             f"Failed to download {description} after {self.MAX_RETRIES} attempts: "
             f"{last_error}",
+            last_error,
         )
 
     def _save_response(self, response: requests.Response, output_path: Path) -> None:

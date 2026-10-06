@@ -284,9 +284,9 @@ kartograf cache path
   HTTP 429 i 5xx — inne 4xx (np. 404) koncza od razu z
   `DownloadError.status_code`; `Retry-After` wydluza przerwe (max 60 s).
   Polityka: `transport/http.py` (`is_retryable`, `retry_wait`), uzywana
-  przez transport wspolny i providery GUGiK (NMT/NMPT/orto/LAZ/BDOT10k);
-  CORINE/SoilGrids maja jeszcze stara petle (ponawia kazdy blad), a
-  zapytanie TERYT BDOT10k nie ponawia wcale
+  przez transport wspolny, providery GUGiK (NMT/NMPT/orto/LAZ/BDOT10k)
+  oraz CORINE i SoilGrids (od 2026-10-06; backoff providerow nadal
+  2 s/4 s, transportu 1 s/2 s); zapytanie TERYT BDOT10k nie ponawia wcale
 - Kazde udane pobranie tworzy sidecar `<plik>.meta.json` (metadane CRS/licencja/nodata)
 - `download_sheet()` zwraca `Path` (arkusz 1:10000 albo godlo PL-2000) albo
   `list[Path]` (godlo PL-1992 grubsze niz 1:10000 — rozwijane do 1:10000);

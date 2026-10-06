@@ -1,4 +1,5 @@
-"""Polityka ponowien pobierania plikow GUGiK (NMT/NMPT/orto/LAZ/BDOT10k).
+"""Polityka ponowien pobierania plikow GUGiK (NMT/NMPT/orto/LAZ/BDOT10k),
+CORINE i SoilGrids (review 2026-10-06 D1/N9).
 
 Ponawiamy tylko bledy sieci, 429 i 5xx (z Retry-After); inne 4xx koncza
 pobieranie od razu z kodem HTTP w DownloadError.status_code.
@@ -10,11 +11,13 @@ import pytest
 import requests
 
 from kartograf.exceptions import DownloadError
+from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import GugikLazProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
+from kartograf.providers.soilgrids import SoilGridsProvider
 
 PROVIDERS = [
     pytest.param(GugikProvider, "kartograf.providers.pl.gugik", id="nmt"),
@@ -22,6 +25,8 @@ PROVIDERS = [
     pytest.param(GugikOrtoProvider, "kartograf.providers.pl.gugik_orto", id="orto"),
     pytest.param(GugikLazProvider, "kartograf.providers.pl.gugik_laz", id="laz"),
     pytest.param(Bdot10kProvider, "kartograf.providers.pl.bdot10k", id="bdot10k"),
+    pytest.param(CorineProvider, "kartograf.providers.corine", id="corine"),
+    pytest.param(SoilGridsProvider, "kartograf.providers.soilgrids", id="soilgrids"),
 ]
 
 
