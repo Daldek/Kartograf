@@ -1619,3 +1619,24 @@ class TestSidecarLandCover:
         payload = self._corine_png_sidecar(tmp_path, year=1990)
         assert payload["horizontal_crs"] == "EPSG:4326"
         assert payload["extra"]["fallback"] == "wms_png"
+
+
+class TestBdot10kDefaultTimeout:
+    """N11: ``Bdot10kProvider.DEFAULT_TIMEOUT`` jest zrodlem domyslnego
+    timeoutu pobrania we wszystkich trybach (CLAUDE.md: 120 s), nie martwa
+    stala sprzeczna z sygnaturami."""
+
+    @pytest.mark.parametrize(
+        "method", ["download_by_admin_unit", "download_by_godlo", "download_by_bbox"]
+    )
+    def test_download_default_timeout_is_class_constant(self, method):
+        import inspect
+
+        from kartograf.providers.pl.bdot10k import Bdot10kProvider
+
+        default = (
+            inspect.signature(getattr(Bdot10kProvider, method))
+            .parameters["timeout"]
+            .default
+        )
+        assert default == Bdot10kProvider.DEFAULT_TIMEOUT == 120

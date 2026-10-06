@@ -121,7 +121,7 @@ class Bdot10kProvider(LandCoverProvider):
     )
 
     # Default settings
-    DEFAULT_TIMEOUT = 60
+    DEFAULT_TIMEOUT = 120  # pobranie paczki (wszystkie tryby); TERYT: 30 s
     MAX_RETRIES = 3
     RETRY_BACKOFF_BASE = 2
 
@@ -161,7 +161,7 @@ class Bdot10kProvider(LandCoverProvider):
         self,
         code: str,
         output_path: Path,
-        timeout: int = 120,
+        timeout: int = DEFAULT_TIMEOUT,
         format: str = "GPKG",
         **kwargs,
     ) -> Path:
@@ -259,7 +259,7 @@ class Bdot10kProvider(LandCoverProvider):
         self,
         godlo: str,
         output_path: Path,
-        timeout: int = 120,
+        timeout: int = DEFAULT_TIMEOUT,
         format: str = "GPKG",
         **kwargs,
     ) -> Path:
@@ -417,7 +417,7 @@ class Bdot10kProvider(LandCoverProvider):
         self,
         bbox: BBox,
         output_path: Path,
-        timeout: int = 120,
+        timeout: int = DEFAULT_TIMEOUT,
         format: str = "GPKG",
         **kwargs,
     ) -> Path:
