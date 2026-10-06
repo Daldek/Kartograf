@@ -2773,6 +2773,57 @@ class TestCmdDownloadLaz:
         assert instance.download.call_count == 2
 
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
+    def test_laz_tile_failures_are_error_with_full_list(
+        self, mock_provider_cls, tmp_path, capsys
+    ):
+        """Porazka kafli -> `Error:` (nie `Warning:`), PELNA lista, kod 1 (N6).
+
+        Wzor: `_finish_pl_sheets` — `Warning:` oznacza kod 0, a uzytkownik
+        musi dostac kazdy nieudany kafel, zeby wiedziec, co ponowic.
+        """
+        from dataclasses import replace
+
+        from kartograf.exceptions import DownloadError
+
+        base = self._fake_tiles()[0]
+        godla = [f"N-33-131-B-a-1-1-{i}" for i in range(1, 9)]
+        tiles = [
+            replace(base, godlo=g, url=f"https://opendata.geoportal.gov.pl/x/{g}.laz")
+            for g in godla
+        ]
+        good = godla[0]
+
+        def _download(url, target, **_kwargs):
+            if good in url:
+                return target
+            raise DownloadError(f"HTTP 503 dla {url}")
+
+        instance = Mock()
+        instance.discover_tiles.return_value = tiles
+        instance.download.side_effect = _download
+        mock_provider_cls.return_value = instance
+
+        result = main(
+            [
+                "download",
+                "M-34-27-B-b-2-1",
+                "--product",
+                "laz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        err = capsys.readouterr().err
+        assert result == 1
+        assert "Warning:" not in err
+        assert "Error: 7 z 8 kafli LAZ nie pobrano" in err
+        for tile in tiles[1:]:
+            assert tile.godlo in err
+        assert f"{good}:" not in err
+
+    @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
     def test_laz_year_and_density_forwarded(self, mock_provider_cls, tmp_path):
         instance = Mock()
         instance.discover_tiles.return_value = self._fake_tiles()
