@@ -146,6 +146,10 @@ w trakcie rundy) · **wycofane**.
 | E5 | Kod wyjścia i komunikaty zgodne z CLAUDE.md (W11). | aktywne | CLAUDE.md |
 | E6 | Każdy FAIL i każdy nowy wzorzec danych kończy się testem offline na surowej fixturze, z dowodem mutacyjnym. | aktywne | cykl F7 |
 | E7 | Dane tylko na katalog danych, `--output` jawny, cache SQLite w repo. | aktywne | CLAUDE.md |
+| E8 | Nieudane ponowne budowanie wyniku (`--force`) nie usuwa poprzedniego poprawnego pliku — w KAZDYM torze (PL i CZ). | nowe (2026-10-06) | review-1 D8, review-2 N7 |
+| E9 | Nazwa i rozszerzenie pliku odpowiadaja jego faktycznemu formatowi (np. ZIP z SHP nie jest `.gpkg`); sidecar lezy obok faktycznego pliku. | nowe (2026-10-06) | review-2 N1 |
+| E10 | Kazde zapytanie sieciowe, ktore konczy tor bledem (indeks arkuszy CUZK, TERYT BDOT10k, GetCapabilities skorowidza), ma te sama polityke ponowien co pobieranie pliku i timeout zgodny z CLAUDE.md. | nowe (2026-10-06) | review-2 N3, N5 |
+| E11 | Wartosci `uklad_xy`/ukladu w rekordach GUGiK (skorowidz i WFS LAZ) sa zapisywane w raportach E2E dokladnie (z bialymi znakami i wielkoscia liter) — rozstrzygaja, czy rozjazd trzech parserow (review-1 D3) dotyczy realnych danych. | nowe (2026-10-06) | review-1 D3 |
 
 ## 7. Podział pracy
 
@@ -158,6 +162,15 @@ w trakcie rundy) · **wycofane**.
 | Koordynator | Opus | Ten dokument, weryfikacja znalezisk, F6–F9, raport końcowy | `raport-koncowy.md` |
 
 ## 8. Historia zmian
+
+- **2026-10-06, po review** — dodane E8–E11. Review-1: 19 duplikacji
+  (3 WYSOKIE: D1 petle retry rozjechane, D3 trzy parsery `uklad_xy`, D8
+  kopia warpu CZ kasuje poprzedni wynik) i 12 przypadkow overengineeringu.
+  Review-2: 17 niespojnosci (WYSOKA N1: BDOT10k SHP jako `.gpkg`).
+  Koordynator powtorzyl dowody D1, D3, D8 i N1 — potwierdzone. Fala
+  naprawcza A (D1/N9, D8/N7, N1, N5, N6, N8) w worktree
+  `fix/review-2026-10-06`, zeby nie zmieniac kodu pod biegnacymi testami
+  na zywo. D3 czeka na realne wartosci `uklad_xy` z E2E (E11).
 
 - **2026-10-06** — wersja pierwsza: fazy F0–F9, katalog C1–C17,
   lista W1–W12, wymagania E1–E7.
