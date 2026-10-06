@@ -95,6 +95,8 @@ def main(args: list[str] | None = None) -> int:
     try:
         return _dispatch(parser, parsed_args)
     except KartografError as e:
+        if os.environ.get("KARTOGRAF_DEBUG"):
+            raise
         print(f"Error: {e}", file=sys.stderr)
         return 1
     except Exception as e:  # noqa: BLE001 - last-resort barrier for the CLI user

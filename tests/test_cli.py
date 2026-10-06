@@ -347,6 +347,20 @@ class TestMain:
         with pytest.raises(RuntimeError):
             main(["parse", "N-34"])
 
+    @patch(
+        "kartograf.cli.commands.cmd_parse",
+        side_effect=ValidationError("zly godlo"),
+    )
+    def test_debug_env_reraises_kartograf_error(
+        self, mock_cmd_parse, capsys, monkeypatch
+    ):
+        """N17: KARTOGRAF_DEBUG=1 daje traceback takze dla KartografError
+        docierajacego do bariery ``main``."""
+        monkeypatch.setenv("KARTOGRAF_DEBUG", "1")
+
+        with pytest.raises(ValidationError, match="zly godlo"):
+            main(["parse", "N-34"])
+
     def test_top_level_help_mentions_cuzk_and_soilgrids(self, capsys):
         """Teksty --help opisuja CZ/CUZK, SoilGrids i warstwy hydrografii."""
         with pytest.raises(SystemExit):
