@@ -1,9 +1,10 @@
 """
 Lokalna reprojekcja rastra na zadana siatke, WYMUSZONA operacja przypieta.
 
-Sparametryzowany wzorzec `providers/cuzk/dmr.py::_warp_to_grid`
-(ADR-024) dla torow PL (ADR-027). Oba tory wymuszaja operacje wybrana przez
-`transform/crs.py`, wlacznie z przypietym czeskim krokiem datum S-JTSK.
+Wspolny warp torow PL (ADR-027) i CZ (ADR-024; od 2026-10-06 dawna kopia
+`providers/cuzk/dmr.py::_warp_to_grid` usunieta — review D8/N7). Oba tory
+wymuszaja operacje wybrana przez `transform/crs.py`, wlacznie z przypietym
+czeskim krokiem datum S-JTSK. Awaria nie kasuje poprzedniego wyniku.
 """
 
 import contextlib
@@ -47,8 +48,11 @@ def _same_crs(a: str, b: str) -> bool:
 def _quiet_transformer_only_option():
     """Wycisz jeden komunikat GDAL: `COORDINATE_OPERATION` jest opcja
     TRANSFORMERA, a `rasterio.warp.reproject` podaje kwargs takze jako opcje
-    warpera — GDAL loguje wtedy ostrzezenie o nieznanej opcji (lustro filtra
-    z providers/cuzk/dmr.py)."""
+    warpera — GDAL loguje wtedy ostrzezenie o nieznanej opcji
+    (`CPLE_NotSupported`). Operacja dziala (test
+    `test_bbox_target_crs_puts_content_where_pyproj_says` sprawdza to na
+    tresci), a ostrzezenie trafialoby na stderr kazdego warpu PL/CZ. Filtr
+    jest waski (dopasowanie po nazwie opcji) i zdejmowany natychmiast."""
     gdal_logger = logging.getLogger("rasterio._env")
 
     class _Filter(logging.Filter):

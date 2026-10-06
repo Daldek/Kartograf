@@ -1202,7 +1202,11 @@ backlogu "Mozaikowanie arkuszy NMT PL". Warp PL to osobna funkcja
 niewspoldzielona (testy ADR-024 patchuja `providers.cuzk.dmr.reproject`,
 tor CZ zweryfikowany live tuz przed wydaniem). Nieudana budowa wycinka NIE
 kasuje poprzedniego pliku wyniku (zapis atomowy przez `os.replace`, takze
-z `--force`); tor CZ jest tu wyjatkiem i przy awarii kasuje plik docelowy.
+z `--force`); tor CZ byl tu wyjatkiem i przy awarii kasowal plik docelowy.
+(Korekta 2026-10-06, review D8/N7: tor CZ wola teraz ten sam
+`transform/raster.warp_to_grid` — kopia `dmr._warp_to_grid` z kasowaniem
+pliku usunieta, wynik kafla TM33 i wycinka bit w bit identyczny; nieudany
+warp CZ zostawia poprzedni plik jak w PL.)
 (Korekta 2026-09-28: wczesniejsze brzmienie tego akapitu i zdania o selekcji
 arkuszy w `--geometry` opisywalo odwrotnosc zachowania kodu — review max
 2026-08-30, znaleziska 5-6.)

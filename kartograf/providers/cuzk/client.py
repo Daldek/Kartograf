@@ -282,7 +282,7 @@ def _tile_grid(
 ) -> list[tuple[BBox, int, int]]:
     """Deterministyczna siatka kafli cieta po pelnych pikselach (N->S, W->E);
     kotwica w narozniku NW — spojnie z rasterio.merge(bounds=...) i
-    _warp_to_grid (from_origin(min_x, max_y)).
+    transform/raster.warp_to_grid (from_origin(min_x, max_y)).
 
     Why NW: siatka wyniku mozaiki zawsze startuje w max_y i ma wysokosc
     round((max_y-min_y)/res), wiec przy bboxie o ulamkowej wysokosci
