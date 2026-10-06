@@ -12,6 +12,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `providers/cuzk/dmr.py::_warp_to_grid`. Nieudana reprojekcja (np. z
   `--force`) NIE kasuje już poprzedniego wycinka/kafla — tak jak w torze PL.
   Wynik warpu bit w bit bez zmian (review D8/N7).
+- CORINE i SoilGrids (`_download_with_retry`) stosują politykę ponowień
+  z `transport/http.py`: 4xx poza 429 (np. 404 przy błędnej nazwie
+  pokrycia WCS) kończy od razu, bez 3 prób i 6 s czekania; `Retry-After`
+  wydłuża przerwę; `DownloadError.status_code` niesie kod HTTP (wcześniej
+  zawsze `None`). Backoff bez zmian (2 s, 4 s) (review D1/N9).
 
 ### Polityka ponowień HTTP i sesja BDOT10k (2026-10-06)
 - Pobieranie GUGiK (NMT/NMPT/orto/LAZ/BDOT10k) oraz wspólny transport
