@@ -310,7 +310,7 @@ data/
    WYNIKU** (po `--target-crs`), formatowane `%.10g` i sklejane `_`.
    Nazwa niesie ZADANIE, nie dokladny zasieg rastra: wycinek PL w EPSG:2180
    lezy na siatce arkuszy i siega do < 1 px dalej, a siatka warpa
-   (`warp_to_grid` PL, `_warp_to_grid` CZ) ma calkowita liczbe pikseli
+   (`transform/raster.py::warp_to_grid`, wspolny dla PL i CZ) ma calkowita liczbe pikseli
    liczona od naroznika NW, wiec jej krawedz E i S moze odbiegac o do 0,5 px
    (sekcja 4.3).
    Konwencja wspolna dla PL i CZ, ale nie kazde zadanie obszarowe daje
@@ -613,11 +613,13 @@ tu czysta utrata danych — pod `--country auto` cale zadanie moglo skonczyc
 sie kodem 0 (bo drugi kraj sie udal), zostawiajac uzytkownika bez pliku,
 ktory mial wczesniej. Obietnica obejmuje wiec takze
 `--target-crs EPSG:5514`/`EPSG:3045`, czyli glowne zastosowanie flagi.
-Wlasne `except BaseException: dst.unlink(missing_ok=True)` ma dalej
-wylacznie tor CZ (`providers/cuzk/dmr.py::_warp_to_grid`, niezalezna
-kopia funkcji) — tam jest ono rownie zbedne (zapis idzie przez plik
-tymczasowy), ale to kod zweryfikowany na zywo, ktorego tuz przed wydaniem
-nie ruszamy (ADR-024). Bez
+Tor CZ korzysta od 2026-10-06 z tej samej funkcji
+(`CuzkDmrProvider._export_raster` -> `warp_to_grid(..., src_crs=EPSG:5514,
+nodata=-9999)`; dawna kopia `providers/cuzk/dmr.py::_warp_to_grid`
+z `except BaseException: dst.unlink(...)`, ktora przy awarii KASOWALA
+poprzedni wycinek lub kafel TM33, zostala usunieta — review 2026-10-06
+D8/N7), wiec gwarancja jest wspolna dla PL i CZ (test:
+`tests/test_cuzk_dmr.py::TestHorizontalReprojection::test_failed_warp_keeps_previous_output`). Bez
 `--force` sytuacja i tak nie wystepuje, bo skrot "plik juz istnieje" wraca
 wczesniej. Nieudana budowa nie zostawia tez pustego drzewa
 `<segment>/bbox/` (review max zn. 10): `run_pl_cutout` przy wyjatku

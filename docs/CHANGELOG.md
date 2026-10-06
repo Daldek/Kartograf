@@ -6,6 +6,13 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.7.0] - Unreleased
+### Runda review/E2E 2026-10-06
+- Tor CZ (`CuzkDmrProvider`, `--target-crs` i kafel TM33) używa wspólnego
+  `transform/raster.warp_to_grid` zamiast własnej kopii
+  `providers/cuzk/dmr.py::_warp_to_grid`. Nieudana reprojekcja (np. z
+  `--force`) NIE kasuje już poprzedniego wycinka/kafla — tak jak w torze PL.
+  Wynik warpu bit w bit bez zmian (review D8/N7).
+
 ### Polityka ponowień HTTP i sesja BDOT10k (2026-10-06)
 - Pobieranie GUGiK (NMT/NMPT/orto/LAZ/BDOT10k) oraz wspólny transport
   (`get_with_retry`, `download_to` — skorowidz, WFS LAZ, CUZK) ponawia
