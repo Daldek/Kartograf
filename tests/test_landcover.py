@@ -502,8 +502,9 @@ class TestBdot10kProviderDownload:
         with pytest.raises(DownloadError, match="Could not determine TERYT"):
             provider._get_teryt_for_point(500000, 600000)
 
-    def test_get_teryt_for_point_network_error(self):
-        """Network error -> DownloadError."""
+    @patch("kartograf.transport.http.time.sleep")
+    def test_get_teryt_for_point_network_error(self, _sleep):
+        """Network error -> DownloadError (po 3 probach get_with_retry)."""
         provider = Bdot10kProvider()
         mock_session = Mock()
         mock_session.get.side_effect = requests.RequestException("timeout")

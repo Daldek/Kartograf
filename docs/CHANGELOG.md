@@ -17,6 +17,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pokrycia WCS) kończy od razu, bez 3 prób i 6 s czekania; `Retry-After`
   wydłuża przerwę; `DownloadError.status_code` niesie kod HTTP (wcześniej
   zawsze `None`). Backoff bez zmian (2 s, 4 s) (review D1/N9).
+- `CuzkClient.query` (indeks arkuszy SM5/TM33) i zapytanie TERYT BDOT10k
+  (`Bdot10kProvider._get_teryt_for_point`) idą przez
+  `transport.http.get_with_retry`: błąd sieci, 429 i 5xx są ponawiane
+  (wcześniej jedna próba), 404 kończy od razu ze `status_code`. Błąd
+  treści (JSON) nie jest ponawiany. `get_with_retry` przyjmuje opcjonalne
+  `params=` (review N5).
 
 ### Polityka ponowień HTTP i sesja BDOT10k (2026-10-06)
 - Pobieranie GUGiK (NMT/NMPT/orto/LAZ/BDOT10k) oraz wspólny transport
