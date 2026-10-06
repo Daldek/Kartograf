@@ -66,6 +66,15 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - GetCapabilities skorowidza GUGiK (odkrywanie warstw NMT/NMPT/orto) ma
   timeout providera — 30 s NMT/NMPT, 60 s orto, albo `timeout=` przekazany
   do `download()` — zamiast zaszytych 10 s (review N3, E10).
+- Jeden parser wartości układu GUGiK: `sources.registry.parse_pl_uklad`
+  (`PL-1992`, `PL-2000:S5..S8`, białe znaki na brzegach obcinane) używany
+  przez rekordy skorowidza, `horizontal_crs_for_uklad` (sidecar) i
+  `LazTile.uklad`. Nietypowa wartość (np. `PL-2000` bez strefy) jest
+  odrzucana spójnie: rekord skorowidza bez układu, kafel LAZ pominięty
+  w discovery (ostrzeżenie w logu), **BREAKING:** `LazTile.uklad` rzuca
+  `ValidationError` zamiast zgadywać z formatu godła (wcześniej segment
+  `pl_2000` przy sidecarze EPSG:2180). Realne dane GUGiK mają wyłącznie
+  wartości rozpoznawane (E2E 2026-10-06, E11) (review-1 D3).
 
 ### Polityka ponowień HTTP i sesja BDOT10k (2026-10-06)
 - Pobieranie GUGiK (NMT/NMPT/orto/LAZ/BDOT10k) oraz wspólny transport

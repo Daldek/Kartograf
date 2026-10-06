@@ -19,6 +19,7 @@ from kartograf.exceptions import (
     ParseError,
     ValidationError,
 )
+from kartograf.sources.registry import parse_pl_uklad
 from kartograf.transport.http import get_with_retry, make_gugik_session
 
 logger = logging.getLogger(__name__)
@@ -35,11 +36,10 @@ _OGC_TEXT = re.compile(
 )
 
 
-def _horizontal_crs(value: str) -> tuple[str | None, int | None]:
-    if value == "PL-1992":
-        return "1992", None
-    match = re.fullmatch(r"PL-2000:S([5-8])", value)
-    return ("2000", int(match[1])) if match else (None, None)
+def _horizontal_crs(value: str | None) -> tuple[str | None, int | None]:
+    """``(uklad, strefa)`` rekordu; ``(None, None)`` = rekord bez ukladu
+    (odrzucany w ``select_sheet_record``). Parser: ``parse_pl_uklad`` (D3)."""
+    return parse_pl_uklad(value) or (None, None)
 
 
 @dataclass(frozen=True)

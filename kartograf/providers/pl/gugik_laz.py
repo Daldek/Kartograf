@@ -46,8 +46,9 @@ from urllib.parse import urlencode
 import requests
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import BaseProvider
+from kartograf.sources.registry import parse_pl_uklad
 from kartograf.transport.http import (
     get_with_retry,
     http_failure,
@@ -106,24 +107,21 @@ class LazTile:
         """Horizontal system of the tile for the storage segment: "1992" or "2000".
 
         Single source of truth for the CLI and the library (review max
-        2026-08-30, finding 8). Cascade: (1) ``crs`` (``uklad_xy``:
-        ``"PL-2000:*"`` / ``"PL-1992*"``); (2) godlo format (dots = 2000,
-        dashes = 1992); (3) ``"2000"`` with a warning — current GUGiK tiles are
-        cut in PL-2000.
+        2026-08-30, finding 8), parsed from ``crs`` (``uklad_xy``) by
+        ``sources.registry.parse_pl_uklad`` — the same parser as the skorowidz
+        records and ``horizontal_crs_for_uklad`` (sidecar), review-1 D3. An
+        unrecognized or missing ``uklad_xy`` (e.g. ``"PL-2000"`` without a
+        zone) raises ``ValidationError``: guessing from the godlo format used
+        to put such a tile into ``pl_2000`` with an EPSG:2180 sidecar.
+        ``discover_tiles`` never returns such tiles (they are skipped).
         """
-        crs = (self.crs or "").strip()
-        if crs.startswith("PL-2000"):
-            return "2000"
-        if crs.startswith("PL-1992"):
-            return "1992"
-        if "." in self.godlo:
-            return "2000"
-        if "-" in self.godlo:
-            return "1992"
-        logger.warning(
-            f"Kafel {self.godlo}: nierozpoznany uklad_xy '{self.crs}' — przyjmuje 2000"
-        )
-        return "2000"
+        parsed = parse_pl_uklad(self.crs)
+        if parsed is None:
+            raise ValidationError(
+                f"Kafel {self.godlo}: nierozpoznany uklad_xy {self.crs!r} "
+                "(oczekiwano 'PL-1992' albo 'PL-2000:S5'..'S8')"
+            )
+        return parsed[0]
 
 
 class GugikLazProvider(BaseProvider):
@@ -459,6 +457,13 @@ class GugikLazProvider(BaseProvider):
         godlo = text("godlo")
         if not url or not godlo:
             return None
+        crs = text("uklad_xy")
+        if parse_pl_uklad(crs) is None:
+            # D3: ten sam parser co skorowidz i sidecar — kafel bez
+            # rozpoznanego ukladu jest pomijany (jak rekord skorowidza), a nie
+            # zgadywany z godla (segment pl_2000 + sidecar EPSG:2180)
+            logger.warning(f"Kafel {godlo}: nierozpoznany uklad_xy {crs!r} — pominiety")
+            return None
 
         year_text = text("akt_rok")
         year = int(year_text) if year_text and year_text.isdigit() else None
@@ -492,7 +497,7 @@ class GugikLazProvider(BaseProvider):
             url=url,
             year=year,
             density=density,
-            crs=text("uklad_xy"),
+            crs=crs,
             min_x=min_x,
             min_y=min_y,
             max_x=max_x,
