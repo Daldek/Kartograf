@@ -353,6 +353,12 @@ kartograf cache path
   `NoCoverageError` z podpowiedzia, dla PL-2000 1:10000 z dostepnymi
   potomkami: `--scale 1:2000` (bez cichego fallbacku PL-1992).
   `extra.source` arkusza i `extra.sheet_sources` wycinka podaja pochodzenie.
+  Rekord niepelnego arkusza (`full_sheet: false`) nadal wygrywa, gdy jest
+  najnowszy (ADR-028), ale CLI drukuje `Warning:` (tor godla, listy
+  i wycinka, takze przy skip), a `extra.source.full_sheet` /
+  `extra.sheet_sources[].full_sheet` / `PlCutoutResult.partial_sheets` to
+  zapisuja; pusty wycinek z takich arkuszy ostrzega o niepelnej kampanii,
+  nie o braku danych GUGiK (E13).
   `MetadataCache` przechowuje rekord lub potwierdzony brak pokrycia wraz
   z trescia podpowiedzi (TTL 7d; `get_record/set_record`,
   `stats()["record_count"]`); cache hit odtwarza ten sam `NoCoverageError`.

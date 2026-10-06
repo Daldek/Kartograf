@@ -5365,3 +5365,86 @@ class TestPublicApiCz:
         from kartograf import __version__
 
         assert __version__ == "0.7.0-dev"
+
+
+class _PartialSheetProvider(_SheetProvider):
+    """Provider z pochodzeniem: arkusze o przyrostkach ``partial`` maja
+    ``full_sheet=False`` (najnowsza kampania niepelna, E2E-B C12-a/C14-b)."""
+
+    descriptor_key = "pl.gugik.nmt_1m"
+
+    def __init__(self, partial: tuple[str, ...]):
+        super().__init__({})
+        self.partial = partial
+
+    def source_info(self, godlo):
+        return {
+            "url": f"https://opendata.geoportal.gov.pl/NMT/1/1_{godlo}.asc",
+            "layer": "SkorowidzeNMT2025",
+            "aktualnosc": "2025-10-21",
+            "full_sheet": not godlo.endswith(self.partial),
+        }
+
+
+class TestPartialSheetWarning:
+    """E13: ``Warning:`` przy wyborze niepelnego arkusza (tor godla i listy).
+
+    Regula wyboru (ADR-028: najnowsza kampania) bez zmian — plik jest
+    pobierany, ale uzytkownik wie, ze moze miec duzo nodata/czerni.
+    """
+
+    @staticmethod
+    def _run(tmp_path, partial, argv):
+        from kartograf.download.storage import FileStorage
+
+        provider = _PartialSheetProvider(partial)
+        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
+        with (
+            patch(
+                "kartograf.cli.download_cmd._create_provider_and_storage",
+                return_value=(provider, storage),
+            ),
+            patch(
+                "kartograf.cli.download_cmd.find_sheets_for_bbox",
+                return_value=list(TestSheetListExitCode._GODLA),
+            ),
+        ):
+            return main([*argv, "-o", str(tmp_path)])
+
+    def test_single_godlo_partial_sheet_warns(self, tmp_path, capsys):
+        rc = self._run(tmp_path, ("-1",), ["download", "N-34-130-D-d-2-1"])
+
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "Warning:" in err and "niepelna" in err and "N-34-130-D-d-2-1" in err
+        (sidecar,) = tmp_path.rglob("*.meta.json")
+        meta = json.loads(sidecar.read_text("utf-8"))
+        assert meta["extra"]["source"]["full_sheet"] is False
+
+    def test_single_godlo_full_sheet_is_silent(self, tmp_path, capsys):
+        rc = self._run(tmp_path, ("-9",), ["download", "N-34-130-D-d-2-1"])
+
+        assert rc == 0
+        assert "niepelna" not in capsys.readouterr().err
+
+    def test_sheet_list_names_only_partial_sheets(self, tmp_path, capsys):
+        rc = self._run(
+            tmp_path,
+            ("-2", "-4"),
+            ["download", "--bbox", "630000,480000,637000,487000"],
+        )
+
+        assert rc == 0
+        warning = next(
+            line for line in capsys.readouterr().err.splitlines() if "niepelna" in line
+        )
+        assert "Warning:" in warning and "2 arkuszy" in warning
+        assert "N-34-130-D-d-2-2" in warning and "N-34-130-D-d-2-4" in warning
+        assert "N-34-130-D-d-2-1" not in warning
+
+    def test_hierarchy_partial_sheet_warns(self, tmp_path, capsys):
+        rc = self._run(tmp_path, ("-3",), ["download", "N-34-130-D-d-2"])
+
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "niepelna" in err and "N-34-130-D-d-2-3" in err
