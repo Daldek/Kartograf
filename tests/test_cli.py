@@ -3282,6 +3282,23 @@ class TestCmdDownloadCz:
             tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
         )
 
+    @pytest.mark.parametrize("force", [False, True])
+    def test_force_refreshes_sheet_index_cache(self, tmp_path, force):
+        """D16: ``--force`` w torze CZ = ``MetadataCache(refresh=True)`` jak w PL
+        (indeks arkuszy SM5 odpytany na nowo i zapisany); bez ``--force``
+        cache czytany normalnie. Cache zamkniety po zadaniu."""
+        from kartograf.cache import MetadataCache
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        with patch(_CZ_FACTORY_PATCH, return_value=_cz_provider_mock()) as factory:
+            result = _cmd_download_cz(_cz_args(tmp_path, force=force))
+
+        assert result == 0
+        cache = factory.call_args.kwargs["cache"]
+        assert isinstance(cache, MetadataCache)
+        assert cache._refresh is force
+        assert cache._conn is None
+
     def test_tm33_godlo_writes_sidecar(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
