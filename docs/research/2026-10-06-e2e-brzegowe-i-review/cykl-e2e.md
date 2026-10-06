@@ -150,6 +150,13 @@ w trakcie rundy) · **wycofane**.
 | E9 | Nazwa i rozszerzenie pliku odpowiadaja jego faktycznemu formatowi (np. ZIP z SHP nie jest `.gpkg`); sidecar lezy obok faktycznego pliku. | nowe (2026-10-06) | review-2 N1 |
 | E10 | Kazde zapytanie sieciowe, ktore konczy tor bledem (indeks arkuszy CUZK, TERYT BDOT10k, GetCapabilities skorowidza), ma te sama polityke ponowien co pobieranie pliku i timeout zgodny z CLAUDE.md. | nowe (2026-10-06) | review-2 N3, N5 |
 | E11 | Wartosci `uklad_xy`/ukladu w rekordach GUGiK (skorowidz i WFS LAZ) sa zapisywane w raportach E2E dokladnie (z bialymi znakami i wielkoscia liter) — rozstrzygaja, czy rozjazd trzech parserow (review-1 D3) dotyczy realnych danych. | nowe (2026-10-06) | review-1 D3 |
+| E12 | Wariant orto (RGB/CIR/B-W) jest czescia tozsamosci pliku: rozne warianty nie dziela sciezki, skip nie zwraca innego wariantu niz zadany. | nowe (2026-10-06) | E2E-B C12-f (FAIL) |
+| E13 | Wybor rekordu `full_sheet=false` (niepelny arkusz) jest widoczny: `Warning:` w CLI i `extra.source.full_sheet` w sidecarze arkusza oraz w `extra.sheet_sources` wycinka. Regula wyboru ADR-028 (najnowsza kampania) bez zmian — zmiana reguly wymaga decyzji uzytkownika. | nowe (2026-10-06) | E2E-B C12-a, C14-b; E2E-A C5, C10d |
+| E14 | `--force` omija ODCZYT cache rekordow, ale ZAPISUJE swiezo wybrany rekord (kolejne uruchomienie bez `--force` dostaje nowy rekord). | nowe (2026-10-06) | E2E-B C15 |
+| E15 | Komunikat przy skip mowi o skip (nie `Downloaded to`); pusty wycinek (`all_nodata`) jest zapisany w sidecarze i ostrzezenie powtarza sie przy skip. | nowe (2026-10-06) | E2E-B C17 |
+| E16 | Sidecar LAZ `request` zapisuje `year` i `min_density`; dokumentacja mowi, ze `gestosc`/`--min-density` to wartosc NOMINALNA GUGiK (faktyczna bywa kilkukrotnie wyzsza). | nowe (2026-10-06) | E2E-B C13-f |
+| E17 | Plik PL-2000 opublikowany przez GUGiK we wspolrzednych EPSG:2180 (strefa 7, niecalkowity `cellsize`): sidecar `horizontal_crs` = uklad pliku (EPSG:2180), `extra.source.uklad` = deklaracja rekordu, `Warning:`; segment sciezki wg godla (ADR-026) — zachowanie udokumentowane w CLAUDE.md. | nowe (2026-10-06) | E2E-A C6b/C6h (UWAGA, kod poprawny) |
+| E18 | Testy offline wyboru rekordu korzystaja z SUROWYCH body z tej rundy (C1b, C3, C6, C9, C10g, C12, C13, C14) — kazdy z dowodem mutacyjnym. | nowe (2026-10-06) | E6 + raporty E2E |
 
 ## 7. Podział pracy
 
@@ -162,6 +169,20 @@ w trakcie rundy) · **wycofane**.
 | Koordynator | Opus | Ten dokument, weryfikacja znalezisk, F6–F9, raport końcowy | `raport-koncowy.md` |
 
 ## 8. Historia zmian
+
+- **2026-10-06, po E2E** — E2E-A (NMT/NMPT, 211 arkuszy w skorowidzu,
+  38 uruchomien CLI): 0 FAIL, 4 UWAGI (PL-2000 strefa 7 z plikiem
+  EPSG:2180 — potwierdzone przez koordynatora na surowym naglowku;
+  KRON86/EVRF2007 bez wspolnej kampanii; NMPT o 6 lat starsze od NMT).
+  E2E-B (orto, LAZ, wycinek, cache): 13 PASS, 6 UWAG, 1 FAIL (C12-f:
+  CIR i RGB dziela sciezke — potwierdzone na kodzie: segment
+  `orto/pl_{uklad}` bez wariantu). E11 rozstrzygniete: w 1131 rekordach
+  skorowidza i 294 kaflach LAZ wystepuja tylko scisle wartosci
+  `PL-1992`/`PL-2000:S5..S8` — rozjazd parserow D3 jest utajony
+  (backlog, test kontraktowy). Dodane E12–E18. Decyzja koordynatora:
+  niepelne arkusze (C5/C12-a/C14-b) — widocznosc (E13), bez zmiany
+  reguly wyboru (decyzja uzytkownika D4/D9 z 2026-09-29; pytanie
+  w raporcie koncowym).
 
 - **2026-10-06, po review** — dodane E8–E11. Review-1: 19 duplikacji
   (3 WYSOKIE: D1 petle retry rozjechane, D3 trzy parsery `uklad_xy`, D8
