@@ -60,6 +60,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Pusty wycinek PL zapisuje w sidecarze `extra.all_nodata: true`;
   pominięcie takiego wycinka odtwarza `PlCutoutResult.all_nodata` z sidecara
   (bez czytania rastra), a CLI powtarza `Warning:` (E2E-B C17, E15).
+- LAZ: sidecar `request` zapisuje `year` i `min_density`, gdy podano
+  `--year`/`--min-density` (wcześniej tylko bbox). Dokumentacja: `gestosc`
+  i `--min-density` to gęstość nominalna z WFS GUGiK (E2E-B C13-f, E16).
 
 ### Polityka ponowień HTTP i sesja BDOT10k (2026-10-06)
 - Pobieranie GUGiK (NMT/NMPT/orto/LAZ/BDOT10k) oraz wspólny transport

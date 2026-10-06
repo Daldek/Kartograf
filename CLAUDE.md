@@ -342,6 +342,9 @@ kartograf cache path
   ponowienia. Blad sieci/rocznika opublikowanego nadal daje `DownloadError`
   z informacja o niekompletnym wyniku. Porazka pobrania choc jednego kafla
   = `Error:` z PELNA lista nieudanych kafli i kod 1 (pobrane kafle zostaja).
+  Sidecar `request` zapisuje `year`/`min_density` (gdy podane);
+  `extra.gestosc` i `--min-density` to gestosc NOMINALNA z WFS GUGiK —
+  faktyczna bywa kilkukrotnie wyzsza (E16).
 - **Skorowidz GUGiK:** NMT/NMPT/orto pobieraja rekordy z warstw
   GetCapabilities (bez listy zaszytych warstw). Odpowiedz transportowa ma
   trzy proby z backoffem i jedna sesje na watek; awaria warstwy albo

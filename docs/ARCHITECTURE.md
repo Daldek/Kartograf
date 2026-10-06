@@ -784,7 +784,11 @@ jeden `FileStorage` wystarcza na cale zadanie. W trybie obszarowym
 `--country pl` (LAZ dla CZ to etap 2).
 
 Wynik: `data/laz/pl_2000_evrf2007/6/162/34/02/3/<oryginalna_nazwa>.laz`
-(+ `.meta.json` z `extra.godlo_kafla`/`rok`/`gestosc`/`url`).
+(+ `.meta.json` z `extra.godlo_kafla`/`rok`/`gestosc`/`url`; `request`
+niesie bbox oraz `year`/`min_density`, gdy podane — E16).
+`gestosc` i filtr `--min-density` to wartosc NOMINALNA z WFS GUGiK
+(`char_przestrz`); faktyczna gestosc kafla bywa kilkukrotnie wyzsza
+(E2E 2026-10-06: ~119 pkt/m2 przy nominale 15).
 
 ### 4.8 Land cover i gleby (BDOT10k, CORINE, SoilGrids)
 
