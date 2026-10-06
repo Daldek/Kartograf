@@ -718,17 +718,14 @@ def skipped_pl_cutout(cutout: PlCutout) -> PlCutoutResult:
         extra = {}
     if not isinstance(extra, dict):
         extra = {}
+    sources = extra.get("sheet_sources")
     return PlCutoutResult(
         path=cutout.target_path,
         skipped=True,
         missing_sheets=_sidecar_sheet_list(extra, "missing_sheets"),
         off_grid_sheets=_sidecar_sheet_list(extra, "off_grid_sheets"),
         all_nodata=extra.get("all_nodata") is True,
-        partial_sheets=_partial_sheets(
-            extra.get("sheet_sources")
-            if isinstance(extra.get("sheet_sources"), list)
-            else []
-        ),
+        partial_sheets=_partial_sheets(sources if isinstance(sources, list) else []),
     )
 
 
