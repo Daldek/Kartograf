@@ -1,0 +1,278 @@
+ <head><meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+.accordioni {
+  background-color: #ddd;
+  color: #444;
+  cursor: pointer;
+  padding: 10px;
+  border: none;
+  text-align: left;
+  outline: none;
+  font-size: 11px;
+  transition: 0.4s;
+  width: 236px;
+  font-family: Verdana,Arial,Helvetica,sans-serif;
+ 
+}
+
+.active, .accordioni:hover {
+  background-color: #ccc;
+}
+
+.accordioni:after {
+  content: '\002B';
+  color: #777;
+  font-weight: bold;
+  float: right;
+  margin-left: 5px;
+}
+
+.active:after {
+  content: "\2212";
+}
+
+.panel {
+  padding: 0 18px;
+  background-color: white;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.2s ease-out;
+    width: 200px;
+	margin-top: 2px;
+	margin-bottom: 5px;
+}
+
+
+ul, ol, li, h1, h2, h3, h4, h5, h6, pre, form, fieldset, input, p, blockquote, th, td {
+		margin: 0;
+		padding: 0;
+		font-family: Verdana,Arial,Helvetica,sans-serif;
+}
+
+p {
+	font-size: 11px;
+
+}
+	
+.gwt-HTML {
+
+	
+	font-size: 10px;
+	border-collapse: separate;
+    border-spacing: 2px;
+	color: black;
+	direction: ltr;
+	font-family: Verdana,Arial,Helvetica,sans-serif;
+}
+
+img {
+		max-width: 16px;
+		max-height: 16px;
+		border: 0;
+	}
+
+.item-ico {
+	margin: 8px 8px 0 8px;
+	float: left;
+
+}
+
+.resultR {
+    left: 0;
+    height: 2.5em;
+   line-height: normal;
+   position: relative;
+   padding: 0;
+}
+
+.item-label {
+    color: #333;
+    line-height: 12px;
+	float: left;
+    margin: 9px 0 0 0;
+    width: 190px;
+    font-size: 9px;
+    font-weight: normal;
+
+}
+b {
+ 
+	color: #000;
+	float: left;
+    width: 190px;
+    font-size: 11px;
+    font-weight: bold;
+	display: block;
+    position: absolute;
+    left: 0;
+    right: 0;
+    padding-right: 2em;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+
+}
+.item-content {
+	padding: 8px 0 0 32px;
+	clear: both;
+    color: #000;
+	font-size: 10px;
+}
+
+.item-fieldname {
+    clear: both;
+    color: #333;
+	font-size: 10px;
+    display: block;
+    float: left;
+    width: 190px;
+	font-family: Verdana,Arial,Helvetica,sans-serif;
+}
+
+.item-fieldvalue {
+    color: #000;
+    font-weight: bold;
+	display: block;
+    float: left;
+    width: 190px;
+	font-size: 10px;
+	font-family: Verdana,Arial,Helvetica,sans-serif;
+
+}
+
+.item-fielddesc {
+    display: block;
+    float: left;
+    width: 190px;
+    margin: 0 0 8px 0;
+    padding: 0 8px 4px 0;
+    color: #aaa;
+    font-size: 9px;
+    border-bottom: 1px solid #aaa;
+}
+.wordwrap {
+            word-wrap: break-word;
+            word-break: break-all;
+}
+
+
+
+
+</style>
+<script>
+
+
+function compare(a, b) {
+  //alert (1);
+  const arkuszA = a.aktualnosc;
+  const arkuszB = b.aktualnosc;
+
+  let comparison = 0;
+  if (arkuszA > arkuszB) {
+    comparison = 1;
+  } else if (arkuszA < arkuszB) {
+    comparison = -1;
+  }
+  return comparison * -1;
+}
+
+function createTable (skor_NMT_wg_akt) {
+
+
+
+	skor_NMT_wg_akt.sort( compare );
+	console.log(skor_NMT_wg_akt.sort(compare));
+	
+	var textCustom, fLen, icustom;
+
+	fLen = skor_NMT_wg_akt.length;
+
+	textCustom = "";
+		for (icustom = 0; icustom < fLen; icustom++) {
+		  
+		  textCustom += "<button class='accordioni'>" + skor_NMT_wg_akt[icustom].godlo + " " + skor_NMT_wg_akt[icustom].aktualnoscRok  + " " + skor_NMT_wg_akt[icustom].charakterystykaPrzestrzenna + "</button><div class='panel'>";
+		  textCustom += "<span class='item-fieldvalue wordwrap' title='Pobierz plik'><a href='"+ skor_NMT_wg_akt[icustom].url+"'>Pobierz plik danych dla tej sekcji</a><br/></span><span class='item-fielddesc'></span>"
+		  textCustom += "<span class='item-fieldname'>GodÅo</span><span class='item-fieldvalue' title='"+skor_NMT_wg_akt[icustom].godlo+"'>"+skor_NMT_wg_akt[icustom].godlo+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>AktualnoÅÄ</span><span class='item-fieldvalue' title='"+ skor_NMT_wg_akt[icustom].aktualnosc +"'>" + skor_NMT_wg_akt[icustom].aktualnosc + "</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>Format</span><span class='item-fieldvalue' title='"+skor_NMT_wg_akt[icustom].format+"'>"+skor_NMT_wg_akt[icustom].format+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>Charakterystyka przestrzenna</span><span class='item-fieldvalue' title='"+skor_NMT_wg_akt[icustom].charakterystykaPrzestrzenna+"'>"+skor_NMT_wg_akt[icustom].charakterystykaPrzestrzenna+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>BÅÄd Åredni wysokoÅci</span><span class='item-fieldvalue' title='"+skor_NMT_wg_akt[icustom].bladSredniWysokosci+"'>"+skor_NMT_wg_akt[icustom].bladSredniWysokosci+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>BÅÄd Åredni poÅoÅ¼enia</span><span class='item-fieldvalue' title='"+skor_NMT_wg_akt[icustom].bladSredniPolozenia+"'>"+skor_NMT_wg_akt[icustom].bladSredniPolozenia+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>UkÅad wspÃ³ÅrzÄdnych poziomych</span><span class='item-fieldvalue' title='"+skor_NMT_wg_akt[icustom].ukladWspolrzednychPoziomych+"'>"+skor_NMT_wg_akt[icustom].ukladWspolrzednychPoziomych+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>UkÅad wspÃ³ÅrzÄdnych pionowych</span><span class='item-fieldvalue' title='"+skor_NMT_wg_akt[icustom].ukladWspolrzednychPionowych+"'>"+skor_NMT_wg_akt[icustom].ukladWspolrzednychPionowych+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>CaÅy arkusz wypeÅniony treÅciÄ</span><span class='item-fieldvalue' title='"+skor_NMT_wg_akt[icustom].calyArkuszWypelnionyTrescia+"'>"+skor_NMT_wg_akt[icustom].calyArkuszWypelnionyTrescia+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>ModuÅ archiwizacji</span><span class='item-fieldvalue' title='"+skor_NMT_wg_akt[icustom].modulArchiwizacji+"'>"+skor_NMT_wg_akt[icustom].modulArchiwizacji+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>Numer zgÅoszenia pracy</span><span class='item-fieldvalue' title='"+skor_NMT_wg_akt[icustom].numerZgloszeniaPracy+"'>"+skor_NMT_wg_akt[icustom].numerZgloszeniaPracy+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>Å¹rÃ³dÅo danych</span><span class='item-fieldvalue' title='"+skor_NMT_wg_akt[icustom].zrDanych+"'>"+skor_NMT_wg_akt[icustom].zrDanych+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>Data wÅÄczenia do PZGiK</span><span class='item-fieldvalue' title='"+ skor_NMT_wg_akt[icustom].dt_pzgik +"'>" + skor_NMT_wg_akt[icustom].dt_pzgik + "</span><span class='item-fielddesc'></span>";
+		  textCustom += "</div>";
+		}
+
+return textCustom;
+
+}
+
+
+</script>
+
+</head>
+<body>
+<!-- <p>Kliknij w celu rozwiniÄcia zawartoÅci.</p> -->
+
+
+
+
+<div id="listOfObjectsAkt" style="width: 256px; margin-bottom: 3px;"></div>
+<div id="listOfObjects" style="width: 256px; margin-bottom: 3px;"></div>
+
+<script>
+var skor_NMT_wg_akt = [];
+
+
+
+skor_NMT_wg_akt.push({url:"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/83233/83233_1744738_N-34-139-C-a-3-3.asc",godlo:"N-34-139-C-a-3-3", aktualnosc:"2025-04-27", format:"ARC/INFO ASCII GRID", charakterystykaPrzestrzenna:"1.00 m", bladSredniWysokosci:"0.05", bladSredniPolozenia:"0.06", ukladWspolrzednychPoziomych:"PL-1992", ukladWspolrzednychPionowych:"PL-EVRF2007-NH", calyArkuszWypelnionyTrescia:"TAK", modulArchiwizacji:"1:5000", numerZgloszeniaPracy:"GK-FOTO.6201.5.2025", aktualnoscRok:"2025", zrDanych:"Skaning laserowy", dt_pzgik:"2025-11-17"});
+
+
+
+skor_NMT_wg_akt.push({url:"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/84183/84183_1852498_N-34-139-C-a-3-3.asc",godlo:"N-34-139-C-a-3-3", aktualnosc:"2025-10-21", format:"ARC/INFO ASCII GRID", charakterystykaPrzestrzenna:"1.00 m", bladSredniWysokosci:"0.09", bladSredniPolozenia:"0.13", ukladWspolrzednychPoziomych:"PL-1992", ukladWspolrzednychPionowych:"PL-EVRF2007-NH", calyArkuszWypelnionyTrescia:"NIE", modulArchiwizacji:"1:5000", numerZgloszeniaPracy:"DFT.7201.053.2025", aktualnoscRok:"2025", zrDanych:"Zdj. lotnicze", dt_pzgik:"2026-07-10"});
+
+
+
+if (skor_NMT_wg_akt[0].aktualnoscRok>0) {
+  document.getElementById("listOfObjectsAkt").innerHTML = "<p>AktualnoÅÄ 2025</p>";
+  document.getElementById("listOfObjects").innerHTML = createTable(skor_NMT_wg_akt);
+  } 
+  else 	{
+
+		document.getElementById("listOfObjects").innerHTML = "<p>Dane z warstwy '2025' moÅ¼liwe do pobrania w skali 1:250 000 lub wiÄkszych</p><br>";
+
+	}
+  
+</script>
+
+
+
+
+
+
+<script>
+var acc = document.getElementsByClassName("accordioni");
+var customValue;
+console.log(acc.length);
+
+for (customValue = 0; customValue < acc.length; customValue++) {
+	console.log(customValue);
+  acc[customValue].addEventListener("click", function() {
+    this.classList.toggle("active");
+    var panel = this.nextElementSibling;
+    if (panel.style.maxHeight) {
+      panel.style.maxHeight = null;
+    } else {
+      panel.style.maxHeight = panel.scrollHeight + "px";
+    } 
+  });
+}
+</script>
+
+</body>

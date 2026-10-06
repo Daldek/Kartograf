@@ -5,7 +5,6 @@ All tests run offline: WFS GetCapabilities / GetFeature responses are provided
 as GML/XML fixtures through mocked sessions. Network is never touched.
 """
 
-import logging
 import math
 from unittest.mock import MagicMock, patch
 
@@ -13,7 +12,7 @@ import pytest
 import requests
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.pl.gugik_laz import GugikLazProvider, LazTile
 
 # Patch the shared GUGiK session factory at provider construction.
@@ -221,7 +220,7 @@ class TestLazTile:
 
 
 class TestLazTileUklad:
-    """Kaskada ukladu kafla LAZ: uklad_xy -> format godla -> 2000.
+    """Uklad kafla LAZ z uklad_xy (``parse_pl_uklad``, D3); nieznany = blad.
 
     Przeniesione z tests/test_cli.py::TestLazUklad (zn. 8, review max
     2026-08-30) — ``LazTile.uklad`` jest teraz jedynym zrodlem prawdy, uzywanym
@@ -248,19 +247,21 @@ class TestLazTileUklad:
     def test_crs_pl1992(self):
         assert self._tile(crs="PL-1992").uklad == "1992"
 
-    def test_none_crs_falls_back_to_dot_godlo(self):
-        assert self._tile(godlo="6.162.34.02.3", crs=None).uklad == "2000"
-
-    def test_none_crs_falls_back_to_dash_godlo(self):
-        assert self._tile(crs=None).uklad == "1992"
-
-    def test_unrecognized_crs_falls_back_to_godlo(self):
-        assert self._tile(crs="EPSG:2180").uklad == "1992"
-
-    def test_everything_fails_defaults_2000_with_warning(self, caplog):
-        with caplog.at_level(logging.WARNING):
-            assert self._tile(godlo="XYZ99", crs=None).uklad == "2000"
-        assert "XYZ99" in caplog.text
+    @pytest.mark.parametrize(
+        ("godlo", "crs"),
+        [
+            ("6.162.34.02.3", None),
+            ("N-33-131-B-a-1-1-4", None),
+            ("N-33-131-B-a-1-1-4", "EPSG:2180"),
+            ("6.162.34.02.3", "PL-2000"),
+            ("XYZ99", None),
+        ],
+    )
+    def test_unrecognized_crs_is_an_error_not_a_guess(self, godlo, crs):
+        """D3: bez rozpoznanego uklad_xy nie zgadujemy z godla (dawniej:
+        kaskada godlo -> 2000, segment pl_2000 przy sidecarze EPSG:2180)."""
+        with pytest.raises(ValidationError, match="uklad_xy"):
+            self._tile(godlo=godlo, crs=crs).uklad  # noqa: B018
 
 
 # ===========================================================================

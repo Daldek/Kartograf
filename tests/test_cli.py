@@ -347,6 +347,20 @@ class TestMain:
         with pytest.raises(RuntimeError):
             main(["parse", "N-34"])
 
+    @patch(
+        "kartograf.cli.commands.cmd_parse",
+        side_effect=ValidationError("zly godlo"),
+    )
+    def test_debug_env_reraises_kartograf_error(
+        self, mock_cmd_parse, capsys, monkeypatch
+    ):
+        """N17: KARTOGRAF_DEBUG=1 daje traceback takze dla KartografError
+        docierajacego do bariery ``main``."""
+        monkeypatch.setenv("KARTOGRAF_DEBUG", "1")
+
+        with pytest.raises(ValidationError, match="zly godlo"):
+            main(["parse", "N-34"])
+
     def test_top_level_help_mentions_cuzk_and_soilgrids(self, capsys):
         """Teksty --help opisuja CZ/CUZK, SoilGrids i warstwy hydrografii."""
         with pytest.raises(SystemExit):
@@ -996,13 +1010,16 @@ class TestCmdDownloadProduct:
         assert "Downloading N-34-130-D-d-2-4 (product: orto)" in out
         assert "resolution" not in out
 
-    # --- N6: MetadataCache toru PL — --force = cache=None ---
+    # --- N6/E14: MetadataCache toru PL — --force = cache w trybie refresh ---
 
     @patch("kartograf.cli.download_cmd._create_provider_and_storage")
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_force_passes_no_cache_to_provider_factory(
+    def test_force_passes_refresh_cache_to_provider_factory(
         self, mock_manager_cls, mock_create, tmp_path
     ):
+        """E14: --force pomija odczyt cache, ale zapisuje nowy rekord."""
+        from kartograf.cache import MetadataCache
+
         mock_create.return_value = _mock_provider_and_storage(".asc")
         mock_manager_cls.return_value = _mock_manager(tmp_path / "test.asc")
 
@@ -1011,8 +1028,10 @@ class TestCmdDownloadProduct:
         )
 
         assert rc == 0
-        assert mock_create.call_args.kwargs["cache"] is None
-        assert not list(Path.cwd().glob(".kartograf_cache.db*"))
+        cache = mock_create.call_args.kwargs["cache"]
+        assert isinstance(cache, MetadataCache)
+        assert cache._refresh is True
+        assert cache._conn is None  # zamkniety po zadaniu
 
     @pytest.mark.parametrize(
         "argv",
@@ -2773,6 +2792,57 @@ class TestCmdDownloadLaz:
         assert instance.download.call_count == 2
 
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
+    def test_laz_tile_failures_are_error_with_full_list(
+        self, mock_provider_cls, tmp_path, capsys
+    ):
+        """Porazka kafli -> `Error:` (nie `Warning:`), PELNA lista, kod 1 (N6).
+
+        Wzor: `_finish_pl_sheets` — `Warning:` oznacza kod 0, a uzytkownik
+        musi dostac kazdy nieudany kafel, zeby wiedziec, co ponowic.
+        """
+        from dataclasses import replace
+
+        from kartograf.exceptions import DownloadError
+
+        base = self._fake_tiles()[0]
+        godla = [f"N-33-131-B-a-1-1-{i}" for i in range(1, 9)]
+        tiles = [
+            replace(base, godlo=g, url=f"https://opendata.geoportal.gov.pl/x/{g}.laz")
+            for g in godla
+        ]
+        good = godla[0]
+
+        def _download(url, target, **_kwargs):
+            if good in url:
+                return target
+            raise DownloadError(f"HTTP 503 dla {url}")
+
+        instance = Mock()
+        instance.discover_tiles.return_value = tiles
+        instance.download.side_effect = _download
+        mock_provider_cls.return_value = instance
+
+        result = main(
+            [
+                "download",
+                "M-34-27-B-b-2-1",
+                "--product",
+                "laz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+
+        err = capsys.readouterr().err
+        assert result == 1
+        assert "Warning:" not in err
+        assert "Error: 7 z 8 kafli LAZ nie pobrano" in err
+        for tile in tiles[1:]:
+            assert tile.godlo in err
+        assert f"{good}:" not in err
+
+    @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
     def test_laz_year_and_density_forwarded(self, mock_provider_cls, tmp_path):
         instance = Mock()
         instance.discover_tiles.return_value = self._fake_tiles()
@@ -3211,6 +3281,23 @@ class TestCmdDownloadCz:
         assert target == (
             tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
         )
+
+    @pytest.mark.parametrize("force", [False, True])
+    def test_force_refreshes_sheet_index_cache(self, tmp_path, force):
+        """D16: ``--force`` w torze CZ = ``MetadataCache(refresh=True)`` jak w PL
+        (indeks arkuszy SM5 odpytany na nowo i zapisany); bez ``--force``
+        cache czytany normalnie. Cache zamkniety po zadaniu."""
+        from kartograf.cache import MetadataCache
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        with patch(_CZ_FACTORY_PATCH, return_value=_cz_provider_mock()) as factory:
+            result = _cmd_download_cz(_cz_args(tmp_path, force=force))
+
+        assert result == 0
+        cache = factory.call_args.kwargs["cache"]
+        assert isinstance(cache, MetadataCache)
+        assert cache._refresh is force
+        assert cache._conn is None
 
     def test_tm33_godlo_writes_sidecar(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
@@ -5314,3 +5401,280 @@ class TestPublicApiCz:
         from kartograf import __version__
 
         assert __version__ == "0.7.0-dev"
+
+
+class _PartialSheetProvider(_SheetProvider):
+    """Provider z pochodzeniem: arkusze o przyrostkach ``partial`` maja
+    ``full_sheet=False`` (najnowsza kampania niepelna, E2E-B C12-a/C14-b)."""
+
+    descriptor_key = "pl.gugik.nmt_1m"
+
+    def __init__(self, partial: tuple[str, ...]):
+        super().__init__({})
+        self.partial = partial
+
+    def source_info(self, godlo):
+        return {
+            "url": f"https://opendata.geoportal.gov.pl/NMT/1/1_{godlo}.asc",
+            "layer": "SkorowidzeNMT2025",
+            "aktualnosc": "2025-10-21",
+            "full_sheet": not godlo.endswith(self.partial),
+        }
+
+
+class TestPartialSheetWarning:
+    """E13: ``Warning:`` przy wyborze niepelnego arkusza (tor godla i listy).
+
+    Regula wyboru (ADR-028: najnowsza kampania) bez zmian — plik jest
+    pobierany, ale uzytkownik wie, ze moze miec duzo nodata/czerni.
+    """
+
+    @staticmethod
+    def _run(tmp_path, partial, argv):
+        from kartograf.download.storage import FileStorage
+
+        provider = _PartialSheetProvider(partial)
+        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
+        with (
+            patch(
+                "kartograf.cli.download_cmd._create_provider_and_storage",
+                return_value=(provider, storage),
+            ),
+            patch(
+                "kartograf.cli.download_cmd.find_sheets_for_bbox",
+                return_value=list(TestSheetListExitCode._GODLA),
+            ),
+        ):
+            return main([*argv, "-o", str(tmp_path)])
+
+    def test_single_godlo_partial_sheet_warns(self, tmp_path, capsys):
+        rc = self._run(tmp_path, ("-1",), ["download", "N-34-130-D-d-2-1"])
+
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "Warning:" in err and "niepelna" in err and "N-34-130-D-d-2-1" in err
+        (sidecar,) = tmp_path.rglob("*.meta.json")
+        meta = json.loads(sidecar.read_text("utf-8"))
+        assert meta["extra"]["source"]["full_sheet"] is False
+
+    def test_single_godlo_full_sheet_is_silent(self, tmp_path, capsys):
+        rc = self._run(tmp_path, ("-9",), ["download", "N-34-130-D-d-2-1"])
+
+        assert rc == 0
+        assert "niepelna" not in capsys.readouterr().err
+
+    def test_sheet_list_names_only_partial_sheets(self, tmp_path, capsys):
+        rc = self._run(
+            tmp_path,
+            ("-2", "-4"),
+            ["download", "--bbox", "630000,480000,637000,487000"],
+        )
+
+        assert rc == 0
+        warning = next(
+            line for line in capsys.readouterr().err.splitlines() if "niepelna" in line
+        )
+        assert "Warning:" in warning and "2 arkuszy" in warning
+        assert "N-34-130-D-d-2-2" in warning and "N-34-130-D-d-2-4" in warning
+        assert "N-34-130-D-d-2-1" not in warning
+
+    def test_hierarchy_partial_sheet_warns(self, tmp_path, capsys):
+        rc = self._run(tmp_path, ("-3",), ["download", "N-34-130-D-d-2"])
+
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "niepelna" in err and "N-34-130-D-d-2-3" in err
+
+
+class TestSingleGodloSkipMessage:
+    """E15 (E2E-B C17): skip pojedynczego godla mowi o skip, nie ``Downloaded to``."""
+
+    @staticmethod
+    def _run(tmp_path, provider, *extra):
+        from kartograf.download.storage import FileStorage
+
+        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
+        with patch(
+            "kartograf.cli.download_cmd._create_provider_and_storage",
+            return_value=(provider, storage),
+        ):
+            return main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), *extra])
+
+    def test_second_run_reports_skip(self, tmp_path, capsys):
+        provider = _SheetProvider({})
+        assert self._run(tmp_path, provider) == 0
+        first = capsys.readouterr().out
+        assert "Downloaded to" in first
+
+        assert self._run(tmp_path, provider) == 0
+
+        out = capsys.readouterr().out
+        assert provider.calls == ["N-34-130-D-d-2-4"]  # drugi przebieg bez sieci
+        assert "Downloaded to" not in out
+        assert "Skipped N-34-130-D-d-2-4 - already exists at" in out
+
+    def test_force_reports_download(self, tmp_path, capsys):
+        provider = _SheetProvider({})
+        self._run(tmp_path, provider)
+        capsys.readouterr()
+
+        assert self._run(tmp_path, provider, "--force") == 0
+
+        assert "Downloaded to" in capsys.readouterr().out
+        assert len(provider.calls) == 2
+
+
+class TestLazSidecarRequestFilters:
+    """E16 (E2E-B C13-f): sidecar LAZ ``request`` zapisuje --year i --min-density."""
+
+    @staticmethod
+    def _run(tmp_path, *extra):
+        tile = TestCmdDownloadLaz()._fake_tiles()[0]
+        instance = Mock()
+        instance.vertical_crs = "EVRF2007"
+        instance.discover_tiles.return_value = [tile]
+
+        def fake_download(url, target, **kwargs):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"LASF")
+            return target
+
+        instance.download.side_effect = fake_download
+        with patch(
+            "kartograf.providers.pl.gugik_laz.GugikLazProvider", return_value=instance
+        ):
+            rc = main(
+                ["download", "M-34-27-B-b-2-1", "--product", "laz"]
+                + list(extra)
+                + ["-o", str(tmp_path), "-q"]
+            )
+        (sidecar,) = tmp_path.rglob("*.meta.json")
+        return rc, json.loads(sidecar.read_text(encoding="utf-8"))["request"]
+
+    def test_filters_recorded(self, tmp_path):
+        rc, request = self._run(tmp_path, "--year", "2023", "--min-density", "13")
+
+        assert rc == 0
+        assert request["year"] == 2023
+        assert request["min_density"] == 13
+
+    def test_no_filters_no_keys(self, tmp_path):
+        rc, request = self._run(tmp_path)
+
+        assert rc == 0
+        assert "year" not in request and "min_density" not in request
+
+
+class TestSheetCrsMismatchWarning:
+    """E17 (E2E-A C6b/C6h): arkusz PL-2000 strefy 7 opublikowany we
+    wspolrzednych EPSG:2180 — ``Warning:`` CLI na stderr (takze przy ``-q``
+    i przy skip), kod 0; fakt czytany z sidecara pliku wyniku.
+
+    Fixtura: przyciety naglowek surowego pliku GUGiK
+    ``77912_1384976_7.125.11.19.asc`` (rekord ``PL-2000:S7``).
+    """
+
+    GODLO = "7.125.11.19"
+    URL = (
+        "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/77912/"
+        "77912_1384976_7.125.11.19.asc"
+    )
+    FIXTURE = (
+        Path(__file__).parent
+        / "fixtures"
+        / "gugik_asc"
+        / "77912_1384976_7.125.11.19.head.asc"
+    )
+
+    def _run(self, tmp_path, argv, raw=None):
+        import requests
+
+        from tests.conftest import gfi_record, render_gfi_body
+
+        body = render_gfi_body(
+            [
+                gfi_record(
+                    self.GODLO,
+                    uklad="PL-2000:S7",
+                    aktualnosc="2023-03-17",
+                    url=self.URL,
+                )
+            ]
+        )
+        data = self.FIXTURE.read_bytes() if raw is None else raw
+
+        def get(url, **kwargs):
+            response = Mock(spec=requests.Response)
+            response.status_code = 200
+            response.raise_for_status = Mock()
+            response.text = body
+            response.iter_content = Mock(return_value=[data])
+            response.headers = {}
+            return response
+
+        session = Mock(spec=requests.Session)
+        session.get = Mock(side_effect=get)
+        with (
+            patch(
+                "kartograf.providers.pl.skorowidz.make_gugik_session",
+                return_value=session,
+            ),
+            patch(
+                "kartograf.cli.download_cmd.find_sheets_for_bbox",
+                return_value=[self.GODLO],
+            ),
+        ):
+            return main([*argv, "-o", str(tmp_path / "out"), "-q"])
+
+    @staticmethod
+    def _warnings(err):
+        return [
+            line
+            for line in err.splitlines()
+            if line.startswith("Warning:") and "EPSG:2180" in line
+        ]
+
+    def test_single_godlo_warns_with_prefix(self, tmp_path, capsys):
+        rc = self._run(tmp_path, ["download", self.GODLO])
+
+        assert rc == 0
+        (warning,) = self._warnings(capsys.readouterr().err)
+        assert self.GODLO in warning and "EPSG:2178" in warning
+
+    def test_skip_repeats_warning(self, tmp_path, capsys):
+        assert self._run(tmp_path, ["download", self.GODLO]) == 0
+        capsys.readouterr()
+
+        assert self._run(tmp_path, ["download", self.GODLO]) == 0
+
+        (warning,) = self._warnings(capsys.readouterr().err)
+        assert self.GODLO in warning
+
+    def test_sheet_list_warns(self, tmp_path, capsys):
+        rc = self._run(
+            tmp_path,
+            [
+                "download",
+                "--bbox",
+                "7564000,5530000,7566000,5532000",
+                "--bbox-crs",
+                "EPSG:2178",
+                "--system",
+                "2000",
+                "--country",
+                "pl",
+            ],
+        )
+
+        assert rc == 0
+        (warning,) = self._warnings(capsys.readouterr().err)
+        assert self.GODLO in warning and "EPSG:2178" in warning
+
+    def test_file_in_zone_crs_is_silent(self, tmp_path, capsys):
+        head = self.FIXTURE.read_bytes().replace(b"567975.95", b"7567975.95", 1)
+        assert head != self.FIXTURE.read_bytes()
+
+        rc = self._run(tmp_path, ["download", self.GODLO], raw=head)
+
+        assert rc == 0
+        assert "innym ukladzie" not in capsys.readouterr().err

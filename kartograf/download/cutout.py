@@ -109,10 +109,11 @@ class PlCutoutSheets:
 class PlCutoutResult:
     """Wynik ``run_pl_cutout`` / ``download_pl_cutout``.
 
-    Przy ``skipped=True`` (plik istnial, ``force=False``) ``missing_sheets``
-    i ``off_grid_sheets`` pochodza z sidecara istniejacego wycinka
-    (``skipped_pl_cutout``), a ``sheet_paths`` jest puste — arkuszy nikt nie
-    dotykal; ``all_nodata`` jest wtedy ``False`` (plik nie jest czytany).
+    Przy ``skipped=True`` (plik istnial, ``force=False``) ``missing_sheets``,
+    ``off_grid_sheets``, ``partial_sheets`` i ``all_nodata`` pochodza
+    z sidecara istniejacego wycinka (``skipped_pl_cutout``; raster nie jest
+    czytany ponownie), a ``sheet_paths`` jest puste — arkuszy nikt nie
+    dotykal.
     """
 
     path: Path
@@ -124,6 +125,9 @@ class PlCutoutResult:
     # wycinek bez ani jednego waznego piksela (N2): pobrane arkusze leza w
     # marginesie selekcji albo same sa nodata — plik powstal, kod 0 w CLI
     all_nodata: bool = False
+    # arkusze z niepelnej najnowszej kampanii (rekord skorowidza
+    # ``full_sheet=False``, E13) — wybrane wg ADR-028, ale moga wnosic nodata
+    partial_sheets: tuple[str, ...] = ()
 
 
 def _bbox_to_2180(bbox: BBox) -> BBox:
@@ -474,6 +478,7 @@ def _sheet_source(sheet_path: Path) -> dict:
         "url": None,
         "layer": None,
         "aktualnosc": None,
+        "full_sheet": None,
     }
     sidecar = sheet_path.parent / f"{sheet_path.name}.meta.json"
     try:
@@ -484,9 +489,24 @@ def _sheet_source(sheet_path: Path) -> dict:
     request_godlo = meta.get("request", {}).get("godlo")
     if isinstance(request_godlo, str):
         entry["godlo"] = request_godlo
-    for key in ("url", "layer", "aktualnosc"):
+    for key in ("url", "layer", "aktualnosc", "full_sheet"):
         entry[key] = source.get(key)
     return entry
+
+
+def _partial_sheets(sources: list) -> tuple[str, ...]:
+    """Godla wpisow ``sheet_sources`` z ``full_sheet is False`` (E13).
+
+    ``None`` (arkusz bez sidecara albo rekord bez flagi) nie jest niepelny —
+    ostrzegamy tylko o tym, co skorowidz jawnie deklaruje.
+    """
+    return tuple(
+        sorted(
+            str(entry.get("godlo"))
+            for entry in sources
+            if isinstance(entry, dict) and entry.get("full_sheet") is False
+        )
+    )
 
 
 def write_pl_cutout_sidecar(
@@ -496,6 +516,7 @@ def write_pl_cutout_sidecar(
     missing_sheets: tuple[str, ...] = (),
     sheet_paths: tuple[Path, ...] = (),
     off_grid_sheets: tuple[str, ...] = (),
+    all_nodata: bool = False,
 ) -> None:
     """Best-effort sidecar wycinka (blad nie przerywa pobrania).
 
@@ -504,12 +525,16 @@ def write_pl_cutout_sidecar(
     (ADR-027, odstepstwo od litery spec 6.1 pkt 5). ``missing_sheets``
     (niepuste) -> ``extra.missing_sheets``: arkusze bez danych GUGiK (R5).
     ``sheet_paths`` (niepuste) -> ``extra.sheet_sources``: pochodzenie
-    kazdego arkusza mozaiki ``{godlo, url, layer, aktualnosc}`` czytane
+    kazdego arkusza mozaiki ``{godlo, url, layer, aktualnosc, full_sheet}``
+    (``full_sheet`` = flaga pelnego arkusza z rekordu skorowidza, E13) czytane
     z sidecarow arkuszy (``extra.source``, D5); arkusz bez sidecara albo bez
     ``source`` (cache sprzed 0.7.0) ma ``null`` w polach poza ``godlo``.
     ``off_grid_sheets`` (niepuste) -> ``extra.off_grid_sheets``: arkusze
     o innej fazie siatki niz reszta, reprojektowane osobno (W1, S5) —
     konsument widzi, ze szwy wycinka powstaly z niezaleznych warpow.
+    ``all_nodata=True`` -> ``extra.all_nodata: true`` (E15): wycinek bez
+    ani jednego waznego piksela; pominiecie istniejacego wycinka odtwarza
+    flage z sidecara zamiast czytac raster.
     """
     try:
         from kartograf.sources.registry import get_source
@@ -527,6 +552,8 @@ def write_pl_cutout_sidecar(
             extra["sheet_sources"] = [_sheet_source(Path(p)) for p in sheet_paths]
         if off_grid_sheets:
             extra["off_grid_sheets"] = list(off_grid_sheets)
+        if all_nodata:
+            extra["all_nodata"] = True
         meta = build_metadata(
             get_source(key),
             request={
@@ -680,7 +707,9 @@ def skipped_pl_cutout(cutout: PlCutout) -> PlCutoutResult:
     ``extra.off_grid_sheets``), a nie jako puste krotki — konsument widzi to
     samo, co przy budowie. Bez sidecara, z sidecarem nieczytelnym albo bez
     tych pol (wycinek sprzed 0.7.0, bez dziur): puste. ``sheet_paths`` jest
-    puste — arkuszy nikt tu nie dotyka.
+    puste — arkuszy nikt tu nie dotyka. ``partial_sheets`` (E13) wraca
+    z ``extra.sheet_sources`` (wpisy z ``full_sheet: false``), a
+    ``all_nodata`` (E15) z ``extra.all_nodata`` — raster nie jest czytany.
     """
     sidecar = cutout.target_path.with_name(f"{cutout.target_path.name}.meta.json")
     try:
@@ -689,11 +718,14 @@ def skipped_pl_cutout(cutout: PlCutout) -> PlCutoutResult:
         extra = {}
     if not isinstance(extra, dict):
         extra = {}
+    sources = extra.get("sheet_sources")
     return PlCutoutResult(
         path=cutout.target_path,
         skipped=True,
         missing_sheets=_sidecar_sheet_list(extra, "missing_sheets"),
         off_grid_sheets=_sidecar_sheet_list(extra, "off_grid_sheets"),
+        all_nodata=extra.get("all_nodata") is True,
+        partial_sheets=_partial_sheets(sources if isinstance(sources, list) else []),
     )
 
 
@@ -820,6 +852,7 @@ def run_pl_cutout(
         missing_sheets=missing,
         sheet_paths=tuple(sheet_paths),
         off_grid_sheets=off_grid,
+        all_nodata=all_nodata,
     )
     return PlCutoutResult(
         path=cutout.target_path,
@@ -827,6 +860,7 @@ def run_pl_cutout(
         missing_sheets=missing,
         off_grid_sheets=off_grid,
         all_nodata=all_nodata,
+        partial_sheets=_partial_sheets([_sheet_source(Path(p)) for p in sheet_paths]),
     )
 
 
@@ -853,7 +887,10 @@ def download_pl_cutout(
     Regula fabryki NMT: 5m => EVRF2007 (z ostrzezeniem w logu). Provider
     i sesja pochodza z fabryki; ``cache`` (``MetadataCache`` albo ``None``)
     trafia do providera — rekordy skorowidza sa czytane i zapisywane tylko
-    z cache (CLI: ``--force`` = ``None``). Wlasny provider/sesja: kroki
+    z cache. ``force=True`` NIE omija cache rekordow sam z siebie: zeby
+    odswiezyc rekordy (pominac odczyt, zapisac nowy wybor), podaj
+    ``MetadataCache(refresh=True)`` — tak robi CLI przy ``--force`` (E14).
+    Wlasny provider/sesja: kroki
     ``prepare_pl_cutout`` -> ``select_pl_cutout_sheets`` ->
     ``run_pl_cutout(provider=...)``.
 
@@ -883,7 +920,8 @@ def download_pl_cutout(
         (przed jakakolwiek siecia).
     DownloadError
         Awaria pobrania arkusza (siec, serwer; zerwane zapytanie warstwy
-        skorowidza po 3 probach — nie brak danych); wycinek nie powstaje.
+        skorowidza — do 3 prob przy bledzie sieci, 429 i 5xx, inne 4xx bez
+        ponowien — nie brak danych); wycinek nie powstaje.
     OSError
         Blad zapisu arkusza przy ``max_workers=1`` (w puli watkow liczy sie
         jak awaria pobrania).

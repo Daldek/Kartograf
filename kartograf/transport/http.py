@@ -89,13 +89,19 @@ def get_with_retry(
     timeout: float,
     retries: int = 3,
     description: str = "",
+    params: dict[str, str] | None = None,
 ) -> requests.Response:
-    """Pobierz odpowiedz HTTP; kazda nieudana proba zachowuje ten sam URL."""
+    """Pobierz odpowiedz HTTP; kazda nieudana proba zachowuje ten sam URL.
+
+    ``params`` (opcjonalne) trafiaja do ``session.get`` bez zmian — kazda
+    proba wysyla ten sam zestaw parametrow zapytania.
+    """
+    extra = {"params": params} if params is not None else {}
     context = description or url
     last_error: requests.RequestException | None = None
     for attempt in range(retries):
         try:
-            response = session.get(url, timeout=timeout)
+            response = session.get(url, timeout=timeout, **extra)
             response.raise_for_status()
             return response
         except requests.RequestException as exc:

@@ -32,6 +32,7 @@ Zmienne srodowiskowe (opcjonalne):
   (service `clms-token`). Bez zadnego z nich `AuthProxyClient.is_available()`
   na non-macOS zwraca False bez uruchamiania podprocesu.
 - `KARTOGRAF_DEBUG=1` — pelny traceback zamiast skroconego `Error: ...` z CLI
+  (dla kazdego wyjatku docierajacego do bariery `main`, takze `KartografError`)
 
 Bez credentials CLMS: CORINE automatycznie pobiera podglad PNG przez WMS (fallback,
 sidecar dostaje `extra.fallback = "wms_png"`). Alternatywa z poziomu biblioteki:
@@ -141,7 +142,8 @@ kartograf/
 
 `data/<produkt>/<kraj>_<uklad>[_<wariant>][_<vcrs>]/...` — np.
 `nmt/pl_1992_1m_evrf2007/`, `nmt/pl_2000_1m_evrf2007/`, `nmpt/pl_1992_1m_kron86/`,
-`orto/pl_1992/`, `laz/pl_2000_evrf2007/`, `nmt/cz_dmr5g_bpv/` (`pl_1992` vs
+`orto/pl_1992/` (RGB; CIR -> `orto/pl_1992_cir/`, B/W -> `orto/pl_1992_bw/`,
+E12), `laz/pl_2000_evrf2007/`, `nmt/cz_dmr5g_bpv/` (`pl_1992` vs
 `pl_2000` rozstrzyga format godla KAZDEGO pliku; wyjatek: kafle LAZ —
 `uklad_xy` kafla (`LazTile.uklad`)). Podkatalog
 `<segment>/bbox/<coords>.tif` dostaja wycinki: KAZDE `--bbox`/`--geometry` CZ
@@ -278,15 +280,18 @@ kartograf cache path
 - SoilGrids: tylko WGS84 bbox (transformacja z EPSG:2180 automatyczna)
 - Timeouty domyslne: 30 s dla NMT/NMPT (GUGiK) i discovery WFS w LAZ;
   60 s dla Ortofoto, kafli LAZ, CORINE (bbox/godlo), CUZK i SoilGrids przez
-  godlo; 120 s dla BDOT10k (wszystkie tryby), CORINE przez TERYT oraz
-  SoilGrids przez bbox i HSG
+  godlo; 120 s dla BDOT10k (wszystkie tryby; `Bdot10kProvider.DEFAULT_TIMEOUT`,
+  zapytanie TERYT 30 s) oraz SoilGrids przez bbox i HSG (CORINE i SoilGrids
+  przez TERYT to `NotImplementedError`); GetCapabilities skorowidza GUGiK
+  dziedziczy timeout providera (30 s NMT/NMPT, 60 s orto)
 - Max 3 proby retry (nie konfigurowalne); ponawiane sa tylko bledy sieci,
   HTTP 429 i 5xx — inne 4xx (np. 404) koncza od razu z
   `DownloadError.status_code`; `Retry-After` wydluza przerwe (max 60 s).
   Polityka: `transport/http.py` (`is_retryable`, `retry_wait`), uzywana
-  przez transport wspolny i providery GUGiK (NMT/NMPT/orto/LAZ/BDOT10k);
-  CORINE/SoilGrids maja jeszcze stara petle (ponawia kazdy blad), a
-  zapytanie TERYT BDOT10k nie ponawia wcale
+  przez transport wspolny, providery GUGiK (NMT/NMPT/orto/LAZ/BDOT10k)
+  oraz CORINE i SoilGrids (od 2026-10-06; backoff providerow nadal
+  2 s/4 s, transportu 1 s/2 s); zapytanie TERYT BDOT10k i `CuzkClient.query`
+  (indeks arkuszy SM5) ida przez `get_with_retry`
 - Kazde udane pobranie tworzy sidecar `<plik>.meta.json` (metadane CRS/licencja/nodata)
 - `download_sheet()` zwraca `Path` (arkusz 1:10000 albo godlo PL-2000) albo
   `list[Path]` (godlo PL-1992 grubsze niz 1:10000 — rozwijane do 1:10000);
@@ -338,10 +343,15 @@ kartograf cache path
   uslugi wysokosciowej przed GetFeature; nieistniejacy rok zglasza
   `rocznik ... nie istnieje w usludze ... (dostepne: ...)`, bez sugestii
   ponowienia. Blad sieci/rocznika opublikowanego nadal daje `DownloadError`
-  z informacja o niekompletnym wyniku.
+  z informacja o niekompletnym wyniku. Porazka pobrania choc jednego kafla
+  = `Error:` z PELNA lista nieudanych kafli i kod 1 (pobrane kafle zostaja).
+  Sidecar `request` zapisuje `year`/`min_density` (gdy podane);
+  `extra.gestosc` i `--min-density` to gestosc NOMINALNA z WFS GUGiK —
+  faktyczna bywa kilkukrotnie wyzsza (E16).
 - **Skorowidz GUGiK:** NMT/NMPT/orto pobieraja rekordy z warstw
   GetCapabilities (bez listy zaszytych warstw). Odpowiedz transportowa ma
-  trzy proby z backoffem i jedna sesje na watek; awaria warstwy albo
+  do trzech prob z backoffem (siec, 429, 5xx; inne 4xx bez ponowien)
+  i jedna sesje na watek; awaria warstwy albo
   niespodziewany szablon = `DownloadError` (bez cichego zejscia do starszej
   kampanii). Dopasowanie godla jest calym tokenem; uklad, rozdzielczosc
   1 m/5 m oraz RGB orto sa filtrowane twardo. W pierwszej pasujacej
@@ -350,12 +360,34 @@ kartograf cache path
   `NoCoverageError` z podpowiedzia, dla PL-2000 1:10000 z dostepnymi
   potomkami: `--scale 1:2000` (bez cichego fallbacku PL-1992).
   `extra.source` arkusza i `extra.sheet_sources` wycinka podaja pochodzenie.
+  Rekord niepelnego arkusza (`full_sheet: false`) nadal wygrywa, gdy jest
+  najnowszy (ADR-028), ale CLI drukuje `Warning:` (tor godla, listy
+  i wycinka, takze przy skip), a `extra.source.full_sheet` /
+  `extra.sheet_sources[].full_sheet` / `PlCutoutResult.partial_sheets` to
+  zapisuja; pusty wycinek z takich arkuszy ostrzega o niepelnej kampanii,
+  nie o braku danych GUGiK (E13).
+  GUGiK publikuje czesc arkuszy PL-2000 (zaobserwowane: strefa 7, np.
+  `7.125.11.19`, `7.173.21.01`) we wspolrzednych EPSG:2180 z niecalkowitym
+  `cellsize` (np. 0,99937 m). Sidecar zapisuje faktyczny uklad PLIKU
+  (`horizontal_crs: EPSG:2180`), deklaracje rekordu w `extra.source.uklad`
+  (`PL-2000:S7`), a plik lezy w segmencie wg godla (`nmt/pl_2000_...`,
+  ADR-026). CLI drukuje `Warning: N arkuszy GUGiK opublikowano w innym
+  ukladzie niz wskazuje godlo: <godlo> (godlo: EPSG:2178, plik: EPSG:2180)`
+  na stderr (tor godla, listy `--bbox`/`--geometry` i hierarchii, takze przy
+  skip i `-q`; fakt czytany z sidecara), kod wyjscia bez zmian. Biblioteka
+  loguje to samo przez logger `kartograf.sources.sidecar` (bez handlerow
+  CLI trafia on rowniez na stderr). Wycinek `--target-crs` nie dotyczy:
+  bierze tylko arkusze PL-1992 (E17; testy `tests/test_sidecar.py`,
+  `tests/test_cli.py::TestSheetCrsMismatchWarning`).
   `MetadataCache` przechowuje rekord lub potwierdzony brak pokrycia wraz
   z trescia podpowiedzi (TTL 7d; `get_record/set_record`,
   `stats()["record_count"]`); cache hit odtwarza ten sam `NoCoverageError`.
   CLI podpina go w torach PL, `kartograf cache stats` drukuje `Record entries`.
-  `--force` omija cache rekordow, `download_pl_cutout(cache=)` udostepnia go
-  bibliotece. Orto domyslnie wybiera RGB; `GugikOrtoProvider(color="CIR")`
+  `--force` omija ODCZYT cache rekordow, ale zapisuje swiezy wybor
+  (`MetadataCache(refresh=True)`; kolejny przebieg bez `--force` dostaje
+  nowy rekord, E14), `download_pl_cutout(cache=)` udostepnia go
+  bibliotece. Tor CZ ma te sama semantyke `--force`: indeks arkuszy SM5
+  (`sheet_cache`, TTL 30 d) jest odpytywany na nowo i zapisywany (D16). Orto domyslnie wybiera RGB; `GugikOrtoProvider(color="CIR")`
   wybiera podczerwien na zadanie.
 - **Wycinek PL `--target-crs` (ADR-027):** tylko `nmt` i PL-1992,
   jeden GeoTIFF w `nmt/pl_1992_<res>_<vcrs>/bbox/`. Biblioteka udostepnia
@@ -363,7 +395,10 @@ kartograf cache path
   `select_pl_cutout_sheets` -> `run_pl_cutout`. Brak arkusza GUGiK to
   nodata, `Warning:` i `extra.missing_sheets`; inna awaria pobrania = kod 1.
   `PlCutoutResult.all_nodata=True` i `Warning:` dla wyniku calkowicie pustego
-  mimo pobranych arkuszy (skipped nie czyta ponownie rastra).
+  mimo pobranych arkuszy; sidecar zapisuje `extra.all_nodata: true`, a skip
+  odtwarza flage z sidecara (bez czytania rastra) i CLI powtarza `Warning:`
+  (E15). Skip pojedynczego godla drukuje `Skipped <godlo> - already exists`,
+  nie `Downloaded to`.
   `EPSG:2180` zachowuje siatke i wartosci 1:1; arkusze o innej fazie
   powoduja `GridMismatchError(ValidationError)` i kod 1 z podpowiedzia
   innego `--target-crs`. Dla innego celu W1 reprojektuje kazdy arkusz

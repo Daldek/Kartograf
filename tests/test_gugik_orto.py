@@ -791,3 +791,123 @@ class TestGugikOrtoProviderInfo:
         assert provider.validate_godlo("INVALID") is False
         assert provider.validate_godlo("") is False
         assert provider.validate_godlo("123") is False
+
+
+class TestOrtoVariantStorage:
+    """E12 (E2E-B C12-f): wariant koloru jest czescia tozsamosci pliku."""
+
+    @staticmethod
+    def manager_for(tmp_path, color: str, content: bytes):
+        from kartograf.download.manager import DownloadManager
+
+        session = Mock(spec=requests.Session)
+        session.get = Mock(
+            side_effect=[
+                gfi_response(sample("orto_2024.html")),
+                file_response([content]),
+            ]
+        )
+        provider = GugikOrtoProvider(session=session, color=color)
+        return DownloadManager(output_dir=tmp_path, provider=provider), session
+
+    def test_cir_next_to_existing_rgb_is_downloaded_to_own_segment(self, tmp_path):
+        """Zadanie CIR przy istniejacym RGB pobiera CIR, nie zwraca po cichu RGB."""
+        import json
+
+        rgb_manager, _ = self.manager_for(tmp_path, "RGB", b"RGB")
+        rgb_path = rgb_manager.download_sheet(GODLO)
+
+        cir_manager, cir_session = self.manager_for(tmp_path, "CIR", b"CIR")
+        cir_path = cir_manager.download_sheet(GODLO)
+
+        # RGB bez zmian (bez migracji), CIR we wlasnym segmencie wariantu.
+        assert rgb_path.relative_to(tmp_path).parts[:2] == ("orto", "pl_1992")
+        assert cir_path.relative_to(tmp_path).parts[:2] == ("orto", "pl_1992_cir")
+        assert cir_path != rgb_path
+        assert rgb_path.read_bytes() == b"RGB"
+        assert cir_path.read_bytes() == b"CIR"
+        assert cir_session.get.call_args_list[-1][0][0] == CIR_2024
+        meta = json.loads(
+            cir_path.with_name(cir_path.name + ".meta.json").read_text("utf-8")
+        )
+        assert meta["extra"]["source"]["kolor"] == "CIR"
+        assert meta["extra"]["source"]["url"] == CIR_2024
+
+    @pytest.mark.parametrize(
+        ("color", "segment"),
+        [
+            ("RGB", "orto/pl_1992"),
+            ("CIR", "orto/pl_1992_cir"),
+            ("B/W", "orto/pl_1992_bw"),
+        ],
+    )
+    def test_variant_segment(self, tmp_path, color, segment):
+        """Kazdy wariant ma wlasny segment; RGB zostaje w `orto/pl_<uklad>`."""
+        from kartograf.download.manager import DownloadManager
+
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=GugikOrtoProvider(color=color)
+        )
+
+        path = manager.storage.get_path(GODLO, ".tif")
+        assert path.relative_to(tmp_path).as_posix().startswith(segment + "/M-34/")
+
+
+class TestForceRefreshesRecordCache:
+    """E14 (E2E-B C15): ``--force`` omija ODCZYT cache rekordow, ale ZAPISUJE
+    swiezo wybrany rekord — kolejny przebieg bez ``--force`` dostaje nowy."""
+
+    STALE = "https://opendata.geoportal.gov.pl/ortofotomapa/70000/70000_1_M-34-76-A-a-1-1.tif"
+
+    def _run_cli(self, tmp_path, *extra):
+        from kartograf.cli.commands import main
+
+        session = Mock(spec=requests.Session)
+        session.get = Mock(
+            side_effect=[gfi_response(sample("orto_2024.html")), file_response()]
+        )
+        with patch(SESSION_FACTORY, return_value=session):
+            rc = main(
+                ["download", GODLO, "--product", "orto", "-o", str(tmp_path / "out")]
+                + list(extra)
+            )
+        return rc, session
+
+    def test_force_writes_fresh_record(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        key = ("orto", "RGB", "none", GODLO)
+        stale = MetadataCache()
+        stale_source = {
+            "url": self.STALE,
+            "layer": "SkorowidzeOrtofotomapyStarsze",
+            "godlo": GODLO,
+            "aktualnosc": "2020-01-01",
+            "kolor": "RGB",
+        }
+        stale.set_record(*key, {"source": stale_source})
+        stale.close()
+
+        rc, session = self._run_cli(tmp_path, "--force", "-q")
+
+        assert rc == 0
+        # odczyt pominiety: skorowidz odpytany, pobrany URL aktualny
+        assert session.get.call_args_list[-1][0][0] == RGB_2024
+        cache = MetadataCache()
+        try:
+            assert cache.get_record(*key)["source"]["url"] == RGB_2024
+        finally:
+            cache.close()
+
+    def test_refresh_cache_misses_reads_but_writes(self, tmp_path):
+        """Biblioteka: ``MetadataCache(refresh=True)`` — odczyt = chybienie."""
+        key = ("nmt", "1m", "EVRF2007", "N-34-130-D-d-2-4")
+        normal = MetadataCache(db_path=tmp_path / "c.db")
+        normal.set_record(*key, {"source": {"url": "old"}})
+        refreshing = MetadataCache(db_path=tmp_path / "c.db", refresh=True)
+        try:
+            assert refreshing.get_record(*key) is None
+            refreshing.set_record(*key, {"source": {"url": "new"}})
+            assert normal.get_record(*key) == {"source": {"url": "new"}}
+        finally:
+            refreshing.close()
+            normal.close()

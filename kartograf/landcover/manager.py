@@ -42,7 +42,7 @@ class LandCoverManager:
     output_dir : str or Path, optional
         Directory for downloaded files (default: "./data/landcover")
     provider : LandCoverProvider or str, optional
-        Provider instance or name ("bdot10k", "corine").
+        Provider instance or name ("bdot10k", "corine", "soilgrids").
         Default: Bdot10kProvider
 
     Examples
@@ -99,7 +99,7 @@ class LandCoverManager:
         Parameters
         ----------
         name : str
-            Provider name ("bdot10k", "corine")
+            Provider name ("bdot10k", "corine", "soilgrids")
 
         Returns
         -------
@@ -136,7 +136,7 @@ class LandCoverManager:
         Parameters
         ----------
         provider : LandCoverProvider or str
-            Provider instance or name ("bdot10k", "corine")
+            Provider instance or name ("bdot10k", "corine", "soilgrids")
         """
         if isinstance(provider, str):
             self._provider = self._get_provider_by_name(provider)

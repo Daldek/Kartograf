@@ -348,6 +348,93 @@ class TestLandCoverCLI:
         assert "Invalid bbox" in captured.err
 
 
+class TestLandCoverInvalidOptions:
+    """Bledny --property/--year/--depth/--stat to blad UZYTKOWNIKA (N8).
+
+    `Error: <tresc>` bez nazwy typu wyjatku i bez podpowiedzi KARTOGRAF_DEBUG
+    (ta jest dla bledow wewnetrznych), kod 1, przed siecia (conftest blokuje
+    gniazda — proba polaczenia wywrocilaby test).
+    """
+
+    @pytest.mark.parametrize(
+        ("extra", "fragment"),
+        [
+            (["--source", "soilgrids", "--property", "foo"], "Invalid property"),
+            (["--source", "soilgrids", "--depth", "1-2cm"], "Invalid depth"),
+            (["--source", "soilgrids", "--stat", "median"], "Invalid stat"),
+            (["--source", "corine", "--year", "1999"], "1999"),
+        ],
+    )
+    def test_invalid_option_is_user_error(self, extra, fragment, tmp_path, capsys):
+        from kartograf.cli.commands import main
+
+        rc = main(
+            ["landcover", "download", "--godlo", "N-34-130-D", "-o", str(tmp_path)]
+            + extra
+        )
+        err = capsys.readouterr().err
+        assert rc == 1
+        assert fragment in err
+        assert "Error: " in err
+        assert "ValueError" not in err
+        assert "KARTOGRAF_DEBUG" not in err
+
+
+class TestBdot10kShpFormat:
+    """`--format SHP`: archiwum ZIP z shapefile'ami nie moze udawac `.gpkg` (N1)."""
+
+    SHP_ZIP = b"PK\x03\x04 udawany ZIP z plikami .shp"
+
+    def _session(self):
+        response = Mock()
+        response.raise_for_status = Mock()
+        response.iter_content = lambda chunk_size: iter([self.SHP_ZIP])
+        session = Mock()
+        session.get.return_value = response
+        return session
+
+    def test_cli_saves_shp_package_as_zip(self, tmp_path, capsys):
+        from kartograf.cli.commands import main
+
+        session = self._session()
+        with patch(
+            "kartograf.providers.pl.bdot10k.make_gugik_session", return_value=session
+        ):
+            rc = main(
+                [
+                    "landcover",
+                    "download",
+                    "--source",
+                    "bdot10k",
+                    "--teryt",
+                    "1465",
+                    "--format",
+                    "SHP",
+                    "-o",
+                    str(tmp_path),
+                ]
+            )
+        assert rc == 0
+        assert session.get.call_args[0][0].endswith("/SHP/14/1465_SHP.zip")
+        expected = tmp_path / "bdot10k_teryt_1465.zip"
+        assert expected.read_bytes().startswith(b"PK")
+        assert (tmp_path / "bdot10k_teryt_1465.zip.meta.json").exists()
+        assert sorted(p.name for p in tmp_path.iterdir()) == [
+            "bdot10k_teryt_1465.zip",
+            "bdot10k_teryt_1465.zip.meta.json",
+        ]
+        assert f"Downloaded to: {expected}" in capsys.readouterr().out
+
+    def test_provider_returns_zip_path_for_shp(self, tmp_path):
+        provider = Bdot10kProvider(session=self._session())
+        result = provider.download_by_admin_unit(
+            "1465", tmp_path / "powiat.gpkg", format="SHP"
+        )
+        assert result == tmp_path / "powiat.zip"
+        assert result.read_bytes() == self.SHP_ZIP
+        assert not (tmp_path / "powiat.gpkg").exists()
+
+
 class TestWojewodztwoMapping:
     """Test województwo TERYT mapping."""
 
@@ -502,8 +589,9 @@ class TestBdot10kProviderDownload:
         with pytest.raises(DownloadError, match="Could not determine TERYT"):
             provider._get_teryt_for_point(500000, 600000)
 
-    def test_get_teryt_for_point_network_error(self):
-        """Network error -> DownloadError."""
+    @patch("kartograf.transport.http.time.sleep")
+    def test_get_teryt_for_point_network_error(self, _sleep):
+        """Network error -> DownloadError (po 3 probach get_with_retry)."""
         provider = Bdot10kProvider()
         mock_session = Mock()
         mock_session.get.side_effect = requests.RequestException("timeout")
@@ -1531,3 +1619,24 @@ class TestSidecarLandCover:
         payload = self._corine_png_sidecar(tmp_path, year=1990)
         assert payload["horizontal_crs"] == "EPSG:4326"
         assert payload["extra"]["fallback"] == "wms_png"
+
+
+class TestBdot10kDefaultTimeout:
+    """N11: ``Bdot10kProvider.DEFAULT_TIMEOUT`` jest zrodlem domyslnego
+    timeoutu pobrania we wszystkich trybach (CLAUDE.md: 120 s), nie martwa
+    stala sprzeczna z sygnaturami."""
+
+    @pytest.mark.parametrize(
+        "method", ["download_by_admin_unit", "download_by_godlo", "download_by_bbox"]
+    )
+    def test_download_default_timeout_is_class_constant(self, method):
+        import inspect
+
+        from kartograf.providers.pl.bdot10k import Bdot10kProvider
+
+        default = (
+            inspect.signature(getattr(Bdot10kProvider, method))
+            .parameters["timeout"]
+            .default
+        )
+        assert default == Bdot10kProvider.DEFAULT_TIMEOUT == 120

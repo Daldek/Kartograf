@@ -409,10 +409,34 @@ def horizontal_crs_for_godlo(godlo: str) -> str:
     return PL_1992_CRS
 
 
+def parse_pl_uklad(value: str | None) -> tuple[str, int | None] | None:
+    """JEDYNY parser wartosci ukladu poziomego GUGiK (review-1 D3, E11).
+
+    Pola ``ukladWspolrzednychPoziomych``/``ukladWspolrzednych`` skorowidza
+    i ``uklad_xy`` WFS LAZ: ``"PL-1992"`` -> ``("1992", None)``,
+    ``"PL-2000:S5"``..``"PL-2000:S8"`` -> ``("2000", strefa)``. Biale znaki na
+    brzegach sa obcinane; kazda inna wartosc (``"PL-2000"`` bez strefy,
+    ``"PL-2000:S9"``, inna wielkosc liter, ``None``) -> ``None``. Realne dane
+    GUGiK (E2E 2026-10-06) maja wylacznie wartosci rozpoznawane.
+
+    Konsumenci (wybor rekordu skorowidza, ``horizontal_crs_for_uklad``,
+    ``LazTile.uklad``) traktuja ``None`` spojnie: rekord/kafel odrzucony
+    albo jawny blad — nigdy segment ``pl_2000`` z sidecarem EPSG:2180.
+    """
+    text = (value or "").strip()
+    if text == "PL-1992":
+        return "1992", None
+    match = re.fullmatch(r"PL-2000:S([5-8])", text)
+    return ("2000", int(match[1])) if match else None
+
+
 def horizontal_crs_for_uklad(uklad: str | None) -> str | None:
-    """Kod EPSG z nazwy ukladu GUGiK ("PL-1992", "PL-2000:S6"); None gdy nieznana."""
-    value = (uklad or "").strip()
-    if value == "PL-1992":
-        return PL_1992_CRS
-    match = re.fullmatch(r"PL-2000:S([5-8])", value)
-    return ZONE_EPSG[int(match[1])] if match else None
+    """Kod EPSG z nazwy ukladu GUGiK ("PL-1992", "PL-2000:S6"); None gdy nieznana.
+
+    Rozpoznawanie wartosci: ``parse_pl_uklad`` (wspolne ze skorowidzem i LAZ).
+    """
+    parsed = parse_pl_uklad(uklad)
+    if parsed is None:
+        return None
+    _system, zone = parsed
+    return ZONE_EPSG[zone] if zone is not None else PL_1992_CRS

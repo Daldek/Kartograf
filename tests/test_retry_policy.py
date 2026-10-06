@@ -1,4 +1,5 @@
-"""Polityka ponowien pobierania plikow GUGiK (NMT/NMPT/orto/LAZ/BDOT10k).
+"""Polityka ponowien pobierania plikow GUGiK (NMT/NMPT/orto/LAZ/BDOT10k),
+CORINE i SoilGrids (review 2026-10-06 D1/N9).
 
 Ponawiamy tylko bledy sieci, 429 i 5xx (z Retry-After); inne 4xx koncza
 pobieranie od razu z kodem HTTP w DownloadError.status_code.
@@ -10,11 +11,13 @@ import pytest
 import requests
 
 from kartograf.exceptions import DownloadError
+from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import GugikLazProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
+from kartograf.providers.soilgrids import SoilGridsProvider
 
 PROVIDERS = [
     pytest.param(GugikProvider, "kartograf.providers.pl.gugik", id="nmt"),
@@ -22,6 +25,8 @@ PROVIDERS = [
     pytest.param(GugikOrtoProvider, "kartograf.providers.pl.gugik_orto", id="orto"),
     pytest.param(GugikLazProvider, "kartograf.providers.pl.gugik_laz", id="laz"),
     pytest.param(Bdot10kProvider, "kartograf.providers.pl.bdot10k", id="bdot10k"),
+    pytest.param(CorineProvider, "kartograf.providers.corine", id="corine"),
+    pytest.param(SoilGridsProvider, "kartograf.providers.soilgrids", id="soilgrids"),
 ]
 
 
@@ -136,3 +141,77 @@ class TestBdot10kSession:
             provider = Bdot10kProvider(session=session)
             assert provider._session_for_thread() is session
         factory.assert_not_called()
+
+
+def _json_ok(payload):
+    response = MagicMock()
+    response.raise_for_status.return_value = None
+    response.json.return_value = payload
+    return response
+
+
+def _teryt_ok():
+    response = MagicMock()
+    response.raise_for_status.return_value = None
+    response.text = "https://opendata.geoportal.gov.pl/bdot10k/GPKG/14/1465_GPKG.zip"
+    return response
+
+
+_KLADY = "https://ags.cuzk.gov.cz/arcgis/rest/services/KladyMapovychListu/MapServer"
+
+
+def _cuzk_query(session):
+    from kartograf.providers.cuzk.client import CuzkClient
+
+    return CuzkClient(session=session).query(_KLADY, 24, where="MAPNOM='CTES96'")
+
+
+def _teryt_query(session):
+    return Bdot10kProvider(session=session)._get_teryt_for_point(637000, 486000)
+
+
+SINGLE_QUERIES = [
+    pytest.param(_cuzk_query, _json_ok({"features": [{"a": 1}]}), id="cuzk_query"),
+    pytest.param(_teryt_query, _teryt_ok(), id="bdot10k_teryt"),
+]
+
+
+class TestSingleQueryRetries:
+    """Zapytania CuzkClient.query i TERYT BDOT10k ida przez get_with_retry (N5)."""
+
+    @pytest.mark.parametrize(("query", "ok"), SINGLE_QUERIES)
+    def test_connection_error_is_retried(self, query, ok):
+        session = MagicMock(spec=requests.Session)
+        session.get.side_effect = [requests.ConnectionError("reset"), ok]
+        with patch("kartograf.transport.http.time.sleep") as sleep:
+            result = query(session)
+        assert result in ([{"a": 1}], "1465")
+        assert session.get.call_count == 2
+        sleep.assert_called_once_with(1)
+
+    @pytest.mark.parametrize(("query", "ok"), SINGLE_QUERIES)
+    def test_not_found_is_not_retried(self, query, ok):
+        session = MagicMock(spec=requests.Session)
+        session.get.return_value = _http_response(404)
+        with (
+            patch("kartograf.transport.http.time.sleep") as sleep,
+            pytest.raises(DownloadError, match="HTTP 404") as exc_info,
+        ):
+            query(session)
+        assert session.get.call_count == 1
+        sleep.assert_not_called()
+        assert exc_info.value.status_code == 404
+
+    def test_cuzk_invalid_json_is_not_retried(self):
+        session = MagicMock(spec=requests.Session)
+        bad = MagicMock()
+        bad.raise_for_status.return_value = None
+        bad.json.side_effect = ValueError("not json")
+        session.get.return_value = bad
+        with (
+            patch("kartograf.transport.http.time.sleep") as sleep,
+            pytest.raises(DownloadError, match="nieudane"),
+        ):
+            _cuzk_query(session)
+        assert session.get.call_count == 1
+        sleep.assert_not_called()
