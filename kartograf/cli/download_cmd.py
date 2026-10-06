@@ -97,7 +97,9 @@ def _create_provider_and_storage(
         from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
         provider = GugikOrtoProvider(cache=cache)
-        storage = FileStorage(output_dir, product="orto")
+        storage = FileStorage(
+            output_dir, product="orto", variant=provider.storage_variant
+        )
     elif product == "nmt":
         from kartograf.providers.pl import create_nmt_provider
 

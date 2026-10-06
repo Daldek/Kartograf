@@ -66,6 +66,7 @@ class FileStorage:
         product: str | None = None,
         subdir: str | None = None,
         vertical_crs: str | None = "EVRF2007",
+        variant: str | None = None,
     ):
         """
         Initialize file storage.
@@ -93,7 +94,20 @@ class FileStorage:
             template (lowercased; default "EVRF2007"). ``None`` leaves the
             placeholder unresolved — path methods then raise
             ``ValidationError`` for templates that require it.
+        variant : str, optional
+            Product variant appended to the END of the segment as
+            ``_<variant>`` (E12: orto CIR -> ``orto/pl_<uklad>_cir``). Only
+            orto uses it today; its template has no ``{vcrs}``, so the ADR-026
+            order ``<kraj>_<uklad>[_<wariant>][_<vcrs>]`` holds. ``None``
+            (default) = no suffix — the default variant (RGB) keeps its
+            pre-E12 path. Take it from ``provider.storage_variant``.
         """
+        if variant is not None and not re.fullmatch(r"[a-z0-9]+", variant):
+            raise ValidationError(
+                f"Nieprawidlowy wariant segmentu storage: '{variant}' "
+                "(oczekiwano [a-z0-9]+)"
+            )
+        self._variant = variant
         self._subdir_override = subdir
         if product:
             self._product = product
@@ -156,6 +170,8 @@ class FileStorage:
         else:
             key = self._RESOLUTION_SOURCES.get(self._resolution)
             template = self._descriptor_template(key) if key else self._resolution
+        if self._variant:
+            template = f"{template}_{self._variant}"
         # Falsy, not `is not None`: an empty string carries no dimension, so it
         # must leave `{vcrs}` unresolved for `_ensure_resolved` to report —
         # substituting it produced the silent segment `nmt/pl_1992_1m_`.

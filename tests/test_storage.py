@@ -841,3 +841,20 @@ class TestPruneEmptyDirs:
         outside.mkdir(parents=True)
         prune_empty_dirs(outside, tmp_path / "other")
         assert outside.exists()
+
+
+class TestStorageVariant:
+    """E12: wariant produktu jako sufiks segmentu (orto CIR/B-W)."""
+
+    def test_variant_suffix_and_default_without_suffix(self, tmp_path):
+        g = "N-34-130-D-d-2-4"
+        rgb = FileStorage(tmp_path, product="orto").get_path(g, ".tif")
+        cir = FileStorage(tmp_path, product="orto", variant="cir").get_path(g, ".tif")
+
+        assert rgb.relative_to(tmp_path).parts[:2] == ("orto", "pl_1992")
+        assert cir.relative_to(tmp_path).parts[:2] == ("orto", "pl_1992_cir")
+
+    @pytest.mark.parametrize("variant", ["", "CIR", "b/w", "_cir"])
+    def test_invalid_variant_rejected(self, tmp_path, variant):
+        with pytest.raises(ValidationError, match="wariant"):
+            FileStorage(tmp_path, product="orto", variant=variant)

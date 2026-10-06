@@ -141,7 +141,8 @@ kartograf/
 
 `data/<produkt>/<kraj>_<uklad>[_<wariant>][_<vcrs>]/...` — np.
 `nmt/pl_1992_1m_evrf2007/`, `nmt/pl_2000_1m_evrf2007/`, `nmpt/pl_1992_1m_kron86/`,
-`orto/pl_1992/`, `laz/pl_2000_evrf2007/`, `nmt/cz_dmr5g_bpv/` (`pl_1992` vs
+`orto/pl_1992/` (RGB; CIR -> `orto/pl_1992_cir/`, B/W -> `orto/pl_1992_bw/`,
+E12), `laz/pl_2000_evrf2007/`, `nmt/cz_dmr5g_bpv/` (`pl_1992` vs
 `pl_2000` rozstrzyga format godla KAZDEGO pliku; wyjatek: kafle LAZ —
 `uklad_xy` kafla (`LazTile.uklad`)). Podkatalog
 `<segment>/bbox/<coords>.tif` dostaja wycinki: KAZDE `--bbox`/`--geometry` CZ

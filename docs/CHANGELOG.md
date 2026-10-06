@@ -35,6 +35,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - LAZ: porażka pobrania kafli daje `Error: N z M kafli LAZ nie pobrano ...`
   z PEŁNĄ listą nieudanych kafli (wcześniej `Warning:` przy kodzie 1 i tylko
   5 pierwszych). Kod wyjścia bez zmian: 1 (review N6).
+- Orto: wariant koloru jest częścią ścieżki pliku. RGB zostaje
+  w `orto/pl_<uklad>/` (bez migracji), CIR trafia do `orto/pl_<uklad>_cir/`,
+  B/W do `orto/pl_<uklad>_bw/`. Wcześniej `GugikOrtoProvider(color="CIR")`
+  przy istniejącym pliku RGB tego arkusza zwracał po cichu RGB (skip).
+  Nowe: `BaseProvider.storage_variant`, `FileStorage(variant=...)`
+  (E2E-B C12-f, E12).
 
 ### Polityka ponowień HTTP i sesja BDOT10k (2026-10-06)
 - Pobieranie GUGiK (NMT/NMPT/orto/LAZ/BDOT10k) oraz wspólny transport
