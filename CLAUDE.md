@@ -374,7 +374,10 @@ kartograf cache path
   `select_pl_cutout_sheets` -> `run_pl_cutout`. Brak arkusza GUGiK to
   nodata, `Warning:` i `extra.missing_sheets`; inna awaria pobrania = kod 1.
   `PlCutoutResult.all_nodata=True` i `Warning:` dla wyniku calkowicie pustego
-  mimo pobranych arkuszy (skipped nie czyta ponownie rastra).
+  mimo pobranych arkuszy; sidecar zapisuje `extra.all_nodata: true`, a skip
+  odtwarza flage z sidecara (bez czytania rastra) i CLI powtarza `Warning:`
+  (E15). Skip pojedynczego godla drukuje `Skipped <godlo> - already exists`,
+  nie `Downloaded to`.
   `EPSG:2180` zachowuje siatke i wartosci 1:1; arkusze o innej fazie
   powoduja `GridMismatchError(ValidationError)` i kod 1 z podpowiedzia
   innego `--target-crs`. Dla innego celu W1 reprojektuje kazdy arkusz

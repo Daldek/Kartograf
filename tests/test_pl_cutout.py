@@ -2249,3 +2249,55 @@ class TestPartialSheetVisibility:
         assert "Warning: wycinek w calosci nodata" in err
         assert "niepelna" in err and "N-34-139-C-a-3-1" in err
         assert "brak danych GUGiK / obszar poza pokryciem" not in err
+
+
+class TestEmptyCutoutSkip:
+    """E15 (E2E-B C17c): pusty wycinek zapisany w sidecarze, skip ostrzega."""
+
+    _run = TestDownloadPlBboxCutout._run
+
+    def _empty_sheets(self, tmp_path):
+        return [
+            _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000, fill=_NODATA),
+            _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000, fill=_NODATA),
+        ]
+
+    def test_sidecar_records_all_nodata(self, tmp_path):
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), self._empty_sheets(tmp_path))
+
+        assert rc == 0
+        (tif,) = (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif")
+        meta = json.loads(tif.with_name(tif.name + ".meta.json").read_text("utf-8"))
+        assert meta["extra"]["all_nodata"] is True
+
+    def test_sidecar_without_flag_when_cutout_has_data(self, tmp_path):
+        sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
+
+        assert rc == 0
+        (tif,) = (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif")
+        meta = json.loads(tif.with_name(tif.name + ".meta.json").read_text("utf-8"))
+        assert "all_nodata" not in meta["extra"]
+
+    def test_skip_repeats_all_nodata_warning(self, tmp_path, capsys):
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), self._empty_sheets(tmp_path))
+        assert rc == 0
+        capsys.readouterr()
+
+        rc, manager, _ = self._run(tmp_path, _pl_args(tmp_path), sheets=[])
+
+        assert rc == 0
+        manager.download_sheets.assert_not_called()
+        err = capsys.readouterr().err
+        assert "Warning: wycinek w calosci nodata" in err
+        assert "(z sidecara istniejacego wycinka)" in err
+
+    def test_library_skip_restores_all_nodata(self, tmp_path):
+        from kartograf.download.cutout import skipped_pl_cutout
+
+        self._run(tmp_path, _pl_args(tmp_path), self._empty_sheets(tmp_path))
+        cutout = prepare_pl_cutout(_BBOX_2180, "EPSG:2180", output_dir=tmp_path)
+
+        result = skipped_pl_cutout(cutout)
+
+        assert result.skipped and result.all_nodata is True

@@ -110,10 +110,10 @@ class PlCutoutResult:
     """Wynik ``run_pl_cutout`` / ``download_pl_cutout``.
 
     Przy ``skipped=True`` (plik istnial, ``force=False``) ``missing_sheets``,
-    ``off_grid_sheets`` i ``partial_sheets`` pochodza z sidecara istniejacego
-    wycinka
-    (``skipped_pl_cutout``), a ``sheet_paths`` jest puste — arkuszy nikt nie
-    dotykal; ``all_nodata`` jest wtedy ``False`` (plik nie jest czytany).
+    ``off_grid_sheets``, ``partial_sheets`` i ``all_nodata`` pochodza
+    z sidecara istniejacego wycinka (``skipped_pl_cutout``; raster nie jest
+    czytany ponownie), a ``sheet_paths`` jest puste — arkuszy nikt nie
+    dotykal.
     """
 
     path: Path
@@ -516,6 +516,7 @@ def write_pl_cutout_sidecar(
     missing_sheets: tuple[str, ...] = (),
     sheet_paths: tuple[Path, ...] = (),
     off_grid_sheets: tuple[str, ...] = (),
+    all_nodata: bool = False,
 ) -> None:
     """Best-effort sidecar wycinka (blad nie przerywa pobrania).
 
@@ -531,6 +532,9 @@ def write_pl_cutout_sidecar(
     ``off_grid_sheets`` (niepuste) -> ``extra.off_grid_sheets``: arkusze
     o innej fazie siatki niz reszta, reprojektowane osobno (W1, S5) —
     konsument widzi, ze szwy wycinka powstaly z niezaleznych warpow.
+    ``all_nodata=True`` -> ``extra.all_nodata: true`` (E15): wycinek bez
+    ani jednego waznego piksela; pominiecie istniejacego wycinka odtwarza
+    flage z sidecara zamiast czytac raster.
     """
     try:
         from kartograf.sources.registry import get_source
@@ -548,6 +552,8 @@ def write_pl_cutout_sidecar(
             extra["sheet_sources"] = [_sheet_source(Path(p)) for p in sheet_paths]
         if off_grid_sheets:
             extra["off_grid_sheets"] = list(off_grid_sheets)
+        if all_nodata:
+            extra["all_nodata"] = True
         meta = build_metadata(
             get_source(key),
             request={
@@ -702,7 +708,8 @@ def skipped_pl_cutout(cutout: PlCutout) -> PlCutoutResult:
     samo, co przy budowie. Bez sidecara, z sidecarem nieczytelnym albo bez
     tych pol (wycinek sprzed 0.7.0, bez dziur): puste. ``sheet_paths`` jest
     puste — arkuszy nikt tu nie dotyka. ``partial_sheets`` (E13) wraca
-    z ``extra.sheet_sources`` (wpisy z ``full_sheet: false``).
+    z ``extra.sheet_sources`` (wpisy z ``full_sheet: false``), a
+    ``all_nodata`` (E15) z ``extra.all_nodata`` — raster nie jest czytany.
     """
     sidecar = cutout.target_path.with_name(f"{cutout.target_path.name}.meta.json")
     try:
@@ -716,6 +723,7 @@ def skipped_pl_cutout(cutout: PlCutout) -> PlCutoutResult:
         skipped=True,
         missing_sheets=_sidecar_sheet_list(extra, "missing_sheets"),
         off_grid_sheets=_sidecar_sheet_list(extra, "off_grid_sheets"),
+        all_nodata=extra.get("all_nodata") is True,
         partial_sheets=_partial_sheets(
             extra.get("sheet_sources")
             if isinstance(extra.get("sheet_sources"), list)
@@ -847,6 +855,7 @@ def run_pl_cutout(
         missing_sheets=missing,
         sheet_paths=tuple(sheet_paths),
         off_grid_sheets=off_grid,
+        all_nodata=all_nodata,
     )
     return PlCutoutResult(
         path=cutout.target_path,
