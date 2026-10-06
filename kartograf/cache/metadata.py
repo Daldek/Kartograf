@@ -42,8 +42,10 @@ class MetadataCache:
     """
     SQLite-based metadata cache for Kartograf.
 
-    Caches WMS lookup results (skorowidz records and TERYT codes) to avoid
-    repeated network requests for the same data.
+    Caches WMS lookup results (skorowidz records and TERYT codes, TTL 7 days)
+    and CZ sheet index entries (``sheet_cache``, SM5, TTL 30 days) to avoid
+    repeated network requests for the same data. ``refresh=True`` turns
+    every read into a miss while writes still happen (CLI ``--force``).
 
     Parameters
     ----------

@@ -32,6 +32,7 @@ Zmienne srodowiskowe (opcjonalne):
   (service `clms-token`). Bez zadnego z nich `AuthProxyClient.is_available()`
   na non-macOS zwraca False bez uruchamiania podprocesu.
 - `KARTOGRAF_DEBUG=1` — pelny traceback zamiast skroconego `Error: ...` z CLI
+  (dla kazdego wyjatku docierajacego do bariery `main`, takze `KartografError`)
 
 Bez credentials CLMS: CORINE automatycznie pobiera podglad PNG przez WMS (fallback,
 sidecar dostaje `extra.fallback = "wms_png"`). Alternatywa z poziomu biblioteki:
@@ -279,8 +280,10 @@ kartograf cache path
 - SoilGrids: tylko WGS84 bbox (transformacja z EPSG:2180 automatyczna)
 - Timeouty domyslne: 30 s dla NMT/NMPT (GUGiK) i discovery WFS w LAZ;
   60 s dla Ortofoto, kafli LAZ, CORINE (bbox/godlo), CUZK i SoilGrids przez
-  godlo; 120 s dla BDOT10k (wszystkie tryby), CORINE przez TERYT oraz
-  SoilGrids przez bbox i HSG
+  godlo; 120 s dla BDOT10k (wszystkie tryby; `Bdot10kProvider.DEFAULT_TIMEOUT`,
+  zapytanie TERYT 30 s) oraz SoilGrids przez bbox i HSG (CORINE i SoilGrids
+  przez TERYT to `NotImplementedError`); GetCapabilities skorowidza GUGiK
+  dziedziczy timeout providera (30 s NMT/NMPT, 60 s orto)
 - Max 3 proby retry (nie konfigurowalne); ponawiane sa tylko bledy sieci,
   HTTP 429 i 5xx — inne 4xx (np. 404) koncza od razu z
   `DownloadError.status_code`; `Retry-After` wydluza przerwe (max 60 s).
@@ -347,7 +350,8 @@ kartograf cache path
   faktyczna bywa kilkukrotnie wyzsza (E16).
 - **Skorowidz GUGiK:** NMT/NMPT/orto pobieraja rekordy z warstw
   GetCapabilities (bez listy zaszytych warstw). Odpowiedz transportowa ma
-  trzy proby z backoffem i jedna sesje na watek; awaria warstwy albo
+  do trzech prob z backoffem (siec, 429, 5xx; inne 4xx bez ponowien)
+  i jedna sesje na watek; awaria warstwy albo
   niespodziewany szablon = `DownloadError` (bez cichego zejscia do starszej
   kampanii). Dopasowanie godla jest calym tokenem; uklad, rozdzielczosc
   1 m/5 m oraz RGB orto sa filtrowane twardo. W pierwszej pasujacej
@@ -382,7 +386,8 @@ kartograf cache path
   `--force` omija ODCZYT cache rekordow, ale zapisuje swiezy wybor
   (`MetadataCache(refresh=True)`; kolejny przebieg bez `--force` dostaje
   nowy rekord, E14), `download_pl_cutout(cache=)` udostepnia go
-  bibliotece. Orto domyslnie wybiera RGB; `GugikOrtoProvider(color="CIR")`
+  bibliotece. Tor CZ ma te sama semantyke `--force`: indeks arkuszy SM5
+  (`sheet_cache`, TTL 30 d) jest odpytywany na nowo i zapisywany (D16). Orto domyslnie wybiera RGB; `GugikOrtoProvider(color="CIR")`
   wybiera podczerwien na zadanie.
 - **Wycinek PL `--target-crs` (ADR-027):** tylko `nmt` i PL-1992,
   jeden GeoTIFF w `nmt/pl_1992_<res>_<vcrs>/bbox/`. Biblioteka udostepnia
