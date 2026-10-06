@@ -348,6 +348,38 @@ class TestLandCoverCLI:
         assert "Invalid bbox" in captured.err
 
 
+class TestLandCoverInvalidOptions:
+    """Bledny --property/--year/--depth/--stat to blad UZYTKOWNIKA (N8).
+
+    `Error: <tresc>` bez nazwy typu wyjatku i bez podpowiedzi KARTOGRAF_DEBUG
+    (ta jest dla bledow wewnetrznych), kod 1, przed siecia (conftest blokuje
+    gniazda — proba polaczenia wywrocilaby test).
+    """
+
+    @pytest.mark.parametrize(
+        ("extra", "fragment"),
+        [
+            (["--source", "soilgrids", "--property", "foo"], "Invalid property"),
+            (["--source", "soilgrids", "--depth", "1-2cm"], "Invalid depth"),
+            (["--source", "soilgrids", "--stat", "median"], "Invalid stat"),
+            (["--source", "corine", "--year", "1999"], "1999"),
+        ],
+    )
+    def test_invalid_option_is_user_error(self, extra, fragment, tmp_path, capsys):
+        from kartograf.cli.commands import main
+
+        rc = main(
+            ["landcover", "download", "--godlo", "N-34-130-D", "-o", str(tmp_path)]
+            + extra
+        )
+        err = capsys.readouterr().err
+        assert rc == 1
+        assert fragment in err
+        assert "Error: " in err
+        assert "ValueError" not in err
+        assert "KARTOGRAF_DEBUG" not in err
+
+
 class TestBdot10kShpFormat:
     """`--format SHP`: archiwum ZIP z shapefile'ami nie moze udawac `.gpkg` (N1)."""
 
