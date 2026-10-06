@@ -42,8 +42,10 @@ class MetadataCache:
     """
     SQLite-based metadata cache for Kartograf.
 
-    Caches WMS lookup results (skorowidz records and TERYT codes) to avoid
-    repeated network requests for the same data.
+    Caches WMS lookup results (skorowidz records and TERYT codes, TTL 7 days)
+    and CZ sheet index entries (``sheet_cache``, SM5, TTL 30 days) to avoid
+    repeated network requests for the same data. ``refresh=True`` turns
+    every read into a miss while writes still happen (CLI ``--force``).
 
     Parameters
     ----------
@@ -55,6 +57,12 @@ class MetadataCache:
         (604800 seconds). Entries older than TTL are considered stale.
         Does not apply to sheet_cache, which uses a separate fixed TTL of
         30 days (SHEET_TTL_SECONDS).
+    refresh : bool, optional
+        Tryb odswiezania (E14, CLI ``--force``): kazdy odczyt
+        (``get_record``/``get_teryt``/``get_sheet``) jest chybieniem, a zapisy
+        dzialaja normalnie — swiezo pobrany rekord (albo potwierdzony brak
+        pokrycia) zastepuje stary wpis, wiec kolejny przebieg BEZ ``--force``
+        dostaje nowy rekord. Default ``False``.
 
     Examples
     --------
@@ -69,7 +77,9 @@ class MetadataCache:
         self,
         db_path: str | Path | None = None,
         ttl_seconds: int = DEFAULT_TTL_SECONDS,
+        refresh: bool = False,
     ):
+        self._refresh = refresh
         if db_path is None:
             db_path = Path(os.getcwd()) / DEFAULT_DB_NAME
         self._db_path = Path(db_path)
@@ -139,7 +149,9 @@ class MetadataCache:
         vertical_crs: str,
         godlo: str,
     ) -> dict | None:
-        """Zwroc rekord skorowidza albo None (brak/wygasly), TTL 7 dni."""
+        """Zwroc rekord skorowidza albo None (brak/wygasly/tryb refresh), TTL 7 dni."""
+        if self._refresh:
+            return None
         # The lock also guards this read (not just writes): CPython caches a
         # prepared statement per Connection, keyed by SQL text, and reuses it
         # across threads. Two threads executing the same SQL text on this
@@ -227,7 +239,10 @@ class MetadataCache:
         -------
         str or None
             Cached TERYT code if found and not expired, None otherwise
+            (always None in ``refresh`` mode)
         """
+        if self._refresh:
+            return None
         # Lock guards the read too - see comment in get_record().
         with self._write_lock:
             cursor = self._conn.execute(
@@ -284,8 +299,11 @@ class MetadataCache:
     def get_sheet(self, system: str, godlo: str) -> dict | None:
         """Zwroc zdekodowany payload arkusza albo None (brak/wygasly).
 
-        Lock guards the read too - see comment in get_record().
+        Lock guards the read too - see comment in get_record(). Tryb
+        ``refresh``: zawsze None.
         """
+        if self._refresh:
+            return None
         with self._write_lock:
             cursor = self._conn.execute(
                 "SELECT payload, cached_at FROM sheet_cache WHERE system=? AND godlo=?",

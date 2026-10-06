@@ -200,7 +200,8 @@ class DownloadManager:
             from the provider's source descriptor
             (`resolve_subdir(vertical_crs=...)`, `{uklad}` resolved per godlo),
             falling back to `resolution` when the provider has no
-            `descriptor_key`)
+            `descriptor_key`; the provider's `storage_variant`, e.g. orto CIR,
+            is appended as `_<variant>`)
         vertical_crs : str, optional
             Vertical CRS: "EVRF2007" or "KRON86" (default: "EVRF2007").
             Note: 5m resolution only supports EVRF2007.
@@ -245,11 +246,15 @@ class DownloadManager:
                 from kartograf.sources.registry import get_source
 
                 subdir = get_source(key).resolve_subdir(vertical_crs=vertical_crs)
+            # Wariant (orto CIR/B-W) w segmencie: inaczej skip zwrocilby po
+            # cichu plik RGB lezacy pod ta sama sciezka (E12).
+            variant = getattr(self._provider, "storage_variant", None)
             storage = FileStorage(
                 output_dir,
                 resolution=resolution,
                 subdir=subdir,
                 vertical_crs=vertical_crs,
+                variant=variant if isinstance(variant, str) else None,
             )
         self._storage = storage
         self._vertical_crs = vertical_crs

@@ -42,6 +42,7 @@ from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import LandCoverProvider
 from kartograf.transport.http import (
+    get_with_retry,
     http_failure,
     http_status,
     is_retryable,
@@ -120,7 +121,7 @@ class Bdot10kProvider(LandCoverProvider):
     )
 
     # Default settings
-    DEFAULT_TIMEOUT = 60
+    DEFAULT_TIMEOUT = 120  # pobranie paczki (wszystkie tryby); TERYT: 30 s
     MAX_RETRIES = 3
     RETRY_BACKOFF_BASE = 2
 
@@ -160,7 +161,7 @@ class Bdot10kProvider(LandCoverProvider):
         self,
         code: str,
         output_path: Path,
-        timeout: int = 120,
+        timeout: int = DEFAULT_TIMEOUT,
         format: str = "GPKG",
         **kwargs,
     ) -> Path:
@@ -184,7 +185,9 @@ class Bdot10kProvider(LandCoverProvider):
         Returns
         -------
         Path
-            Path to the downloaded file
+            Path to the downloaded file: ``output_path`` z rozszerzeniem
+            ``.gpkg`` (GPKG, rozpakowany i scalony) albo ``.zip`` (SHP —
+            oryginalne archiwum GUGiK z shapefile'ami)
 
         Raises
         ------
@@ -200,6 +203,11 @@ class Bdot10kProvider(LandCoverProvider):
             raise ValueError(f"Unsupported format: {format}. Use 'GPKG' or 'SHP'")
 
         output_path = Path(output_path)
+        if format == "SHP":
+            # Paczka SHP to archiwum ZIP z shapefile'ami (bez rozpakowania):
+            # nazwa musi to mowic, a nie udawac GeoPackage (review N1).
+            # Symetrycznie do GPKG, gdzie `_extract_gpkg_from_zip` nadaje .gpkg.
+            output_path = output_path.with_suffix(".zip")
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Construct OpenData URL
@@ -251,7 +259,7 @@ class Bdot10kProvider(LandCoverProvider):
         self,
         godlo: str,
         output_path: Path,
-        timeout: int = 120,
+        timeout: int = DEFAULT_TIMEOUT,
         format: str = "GPKG",
         **kwargs,
     ) -> Path:
@@ -363,39 +371,43 @@ class Bdot10kProvider(LandCoverProvider):
         url = f"{self.WMS_ENDPOINT}?{urlencode(params)}"
         logger.debug(f"Querying WMS for TERYT at ({x:.2f}, {y:.2f})")
 
+        # Siec/429/5xx ponawiane (3 proby, Retry-After), 4xx od razu —
+        # wspolna polityka transport/http.py (review N5).
         try:
-            response = session.get(url, timeout=timeout)
-            response.raise_for_status()
-
-            # Extract TERYT from GPKG URL pattern: .../GPKG/{woj}/{teryt}_GPKG.zip
-            gpkg_pattern = r"/GPKG/\d{2}/(\d{4})_GPKG\.zip"
-            match = re.search(gpkg_pattern, response.text)
-
-            if match:
-                teryt = match.group(1)
-                logger.debug(f"Found TERYT: {teryt}")
-                if self._cache is not None:
-                    self._cache.set_teryt(x, y, teryt)
-                return teryt
-
-            # Alternative: extract from SHP URL pattern
-            shp_pattern = r"/SHP/\d{2}/(\d{4})_SHP\.zip"
-            match = re.search(shp_pattern, response.text)
-
-            if match:
-                teryt = match.group(1)
-                logger.debug(f"Found TERYT: {teryt}")
-                if self._cache is not None:
-                    self._cache.set_teryt(x, y, teryt)
-                return teryt
-
-            raise DownloadError(
-                f"Could not determine TERYT for point ({x:.2f}, {y:.2f}). "
-                f"The location may be outside Poland or in a water body."
+            response = get_with_retry(
+                session, url, timeout=timeout, description="zapytanie TERYT"
             )
+        except DownloadError as e:
+            raise DownloadError(
+                f"WMS GetFeatureInfo failed: {e}", status_code=e.status_code
+            ) from e
 
-        except requests.RequestException as e:
-            raise DownloadError(f"WMS GetFeatureInfo failed: {e}") from e
+        # Extract TERYT from GPKG URL pattern: .../GPKG/{woj}/{teryt}_GPKG.zip
+        gpkg_pattern = r"/GPKG/\d{2}/(\d{4})_GPKG\.zip"
+        match = re.search(gpkg_pattern, response.text)
+
+        if match:
+            teryt = match.group(1)
+            logger.debug(f"Found TERYT: {teryt}")
+            if self._cache is not None:
+                self._cache.set_teryt(x, y, teryt)
+            return teryt
+
+        # Alternative: extract from SHP URL pattern
+        shp_pattern = r"/SHP/\d{2}/(\d{4})_SHP\.zip"
+        match = re.search(shp_pattern, response.text)
+
+        if match:
+            teryt = match.group(1)
+            logger.debug(f"Found TERYT: {teryt}")
+            if self._cache is not None:
+                self._cache.set_teryt(x, y, teryt)
+            return teryt
+
+        raise DownloadError(
+            f"Could not determine TERYT for point ({x:.2f}, {y:.2f}). "
+            f"The location may be outside Poland or in a water body."
+        )
 
     # =========================================================================
     # Download by bbox → Download county package
@@ -405,7 +417,7 @@ class Bdot10kProvider(LandCoverProvider):
         self,
         bbox: BBox,
         output_path: Path,
-        timeout: int = 120,
+        timeout: int = DEFAULT_TIMEOUT,
         format: str = "GPKG",
         **kwargs,
     ) -> Path:

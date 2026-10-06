@@ -204,3 +204,9 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
     except (ParseError, ValidationError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
+    except ValueError as e:
+        # Providery (SoilGrids/CORINE/BDOT10k) waliduja --property/--depth/
+        # --stat/--year/--format przez ValueError — to blad uzytkownika, nie
+        # awaria programu (bez podpowiedzi KARTOGRAF_DEBUG; review N8).
+        print(f"Error: {e}", file=sys.stderr)
+        return 1

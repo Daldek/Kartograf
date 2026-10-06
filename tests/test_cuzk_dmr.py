@@ -493,7 +493,7 @@ class TestHorizontalReprojection:
         with (
             patch(_CLIENT_PATCH) as client_cls,
             patch(
-                "kartograf.providers.cuzk.dmr.reproject",
+                "kartograf.transform.raster.reproject",
                 side_effect=RuntimeError("warp padl"),
             ),
             pytest.raises(RuntimeError),
@@ -503,6 +503,34 @@ class TestHorizontalReprojection:
             provider.download_bbox(bbox, target)
 
         assert list(tmp_path.iterdir()) == []
+
+    @pytest.mark.parametrize("kind", ["bbox", "godlo"])
+    def test_failed_warp_keeps_previous_output(self, tmp_path, kind):
+        """Nieudana przebudowa (``--force``) NIE kasuje poprzedniego wyniku (N7/D8).
+
+        Awaria pochodzi z nieczytelnej odpowiedzi natywnej, a nie z patcha
+        konkretnej funkcji warpu — test nie zalezy od tego, ktora implementacja
+        reprojekcji jest pod spodem. Tor PL (``transform/raster.warp_to_grid``)
+        zostawia poprzedni plik; tor CZ ma zachowywac sie tak samo.
+        """
+        from rasterio.errors import RasterioIOError
+
+        def _garbage(endpoint, bbox, **kwargs):
+            Path(kwargs["output_path"]).write_bytes(b"to nie jest GeoTIFF")
+
+        name = "area.tif" if kind == "bbox" else "302_5550.tif"
+        target = tmp_path / name
+        target.write_bytes(b"poprzedni poprawny wynik")
+        with patch(_CLIENT_PATCH) as client_cls, pytest.raises(RasterioIOError):
+            client_cls.return_value.export_image.side_effect = _garbage
+            if kind == "bbox":
+                provider = CuzkDmrProvider(resolution="2m", target_crs="EPSG:2180")
+                provider.download_bbox(_NATIVE_BBOX, target)
+            else:
+                CuzkDmrProvider(resolution="2m").download("302_5550", target)
+
+        assert target.read_bytes() == b"poprzedni poprawny wynik"
+        assert sorted(p.name for p in tmp_path.iterdir()) == [name]
 
     @pytest.mark.parametrize(
         ("kind", "target_crs"),
@@ -523,9 +551,7 @@ class TestHorizontalReprojection:
 
         with (
             patch(_CLIENT_PATCH) as client_cls,
-            patch(
-                "kartograf.providers.cuzk.dmr.reproject", wraps=real_reproject
-            ) as warp,
+            patch("kartograf.transform.raster.reproject", wraps=real_reproject) as warp,
         ):
             client_cls.return_value.export_image.side_effect = _server_emulator()
             if kind == "bbox":

@@ -99,7 +99,7 @@ Ponizszy graf zostal ZMIERZONY na drzewie importow (AST wszystkich plikow
 
 ```
 cli ──> download, landcover, hydrology, providers, sources,
-        transform, core, cache
+        transform, transport (leniwie), core, cache
 download ──> providers, sources, transform, transport, core
 landcover ──> providers, sources, download (FileStorage), core
 hydrology ──> providers, core
@@ -126,9 +126,12 @@ Trzy uwagi, ktore latwo przeoczyc:
   imporcie (typy `PinnedTransform`/`TransformPolicy`), `transport.mosaic`
   i `transform.raster` leniwie, w `build_pl_cutout`. `manager.py`
   i `storage.py` nie importuja zadnego z nich — `DownloadManager` pozostaje
-  warstwa koordynacji arkuszy. CLI od 2026-09-28 nie importuje juz
-  `transport` wcale (mozaika i warp wycinka przeszly do biblioteki, R3),
-  a z `transform` bierze tylko `TransformError`.
+  warstwa koordynacji arkuszy. CLI od 2026-09-28 nie buduje juz mozaiki
+  ani warpu wycinka (przeszly do biblioteki, R3), a z `transform` bierze
+  tylko `TransformError`. Jedyna krawedz `cli ──> transport` to leniwy
+  import `transport.mosaic.has_valid_pixels` w `_warn_cz_all_nodata`
+  (kontrola "wynik CZ w calosci nodata"; korekta 2026-10-06, review N13 —
+  przeniesienie jej do providera CZ, jak `all_nodata` w torze PL, to backlog).
 - Krawedz `download ──> providers` siega tez do zamrozonego toru CZ:
   `download/cutout.py` (tor PL) importuje leniwie generyczny `bbox_to_crs`
   z `providers/cuzk/dmr.py` (ADR-024); przeniesienie go do `transform/` to
@@ -202,7 +205,7 @@ to `resolve_subdir()`.
 | `pl.gugik.nmt_1m` | `nmt/pl_{uklad}_1m_{vcrs}` | `.asc` |
 | `pl.gugik.nmt_5m` | `nmt/pl_{uklad}_5m_{vcrs}` | `.asc` |
 | `pl.gugik.nmpt` | `nmpt/pl_{uklad}_1m_{vcrs}` | `.asc` |
-| `pl.gugik.orto` | `orto/pl_{uklad}` | `.tif` |
+| `pl.gugik.orto` | `orto/pl_{uklad}` (+ `_<wariant>` dla CIR/B-W, regula 5) | `.tif` |
 | `pl.gugik.laz` | `laz/pl_{uklad}_{vcrs}` | `.laz` |
 | `cz.cuzk.dmr5g` | `nmt/cz_dmr5g_{vcrs}` | `.tif` |
 | `cz.cuzk.dmr4g` | `nmt/cz_dmr4g_{vcrs}` | `.tif` |
@@ -228,7 +231,7 @@ Kto wypelnia ktory placeholder:
 |---|---|---|
 | `{vcrs}` | konstruktor `FileStorage(vertical_crs=)` albo jawne `resolve_subdir(vertical_crs=)` | raz, na starcie zadania — uklad pionowy jest wlasnoscia zadania, nie arkusza |
 | `{uklad}` | `FileStorage` per identyfikator (`get_path`/`get_raw_path`/`exists`/`delete`/`ensure_directory`), regula ta sama co `parser_registry.path_parts`: kropki -> `2000`, reszta -> `1992` | przy budowie kazdej sciezki |
-| `{uklad}` (jawnie) | tor LAZ: `LazTile.uklad` (kaskada `uklad_xy` kafla -> format godla -> "2000") przez `FileStorage.get_raw_path(..., uklad=)` — jedno zrodlo prawdy dla CLI i biblioteki (zn. 8, review max); wycinek PL (`prepare_pl_cutout`: `uklad="1992"` na stale — `--target-crs` z `--system 2000` jest odrzucane, a arkusz we wspolrzednych PL-2000 konczy budowe bledem, sekcja 4.3) | przed utworzeniem `FileStorage` / sciezki wycinka |
+| `{uklad}` (jawnie) | tor LAZ: `LazTile.uklad` (`uklad_xy` kafla przez `parse_pl_uklad`; nieznany = kafel pominiety / `ValidationError`) przez `FileStorage.get_raw_path(..., uklad=)` — jedno zrodlo prawdy dla CLI i biblioteki (zn. 8, review max); wycinek PL (`prepare_pl_cutout`: `uklad="1992"` na stale — `--target-crs` z `--system 2000` jest odrzucane, a arkusz we wspolrzednych PL-2000 konczy budowe bledem, sekcja 4.3) | przed utworzeniem `FileStorage` / sciezki wycinka |
 
 `FileStorage` waliduje wynik koncowy: segment, w ktorym po wypelnieniu zostala
 klamra `{`, konczy sie `ValidationError` z nazwa brakujacego wymiaru
@@ -251,7 +254,7 @@ Kazde udane pobranie zapisuje **dwa** pliki: dane i `<plik>.meta.json`.
 | `license` | `{id, attribution, url}` z deskryptora |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, sekundy) i wersja pakietu |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
-| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `godlo_kafla`/`rok`/`gestosc`/`url`; SM5 ma `mapname`/`podil`; arkusze NMT/NMPT/orto PL maja `source` (URL, warstwa, aktualnosc, rozdzielczosc itd.); wycinek PL: `sheet_sources` (mapa godlo -> source), `missing_sheets` (brak pliku), `off_grid_sheets` (W1, niezgodna faza) |
+| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `godlo_kafla`/`rok`/`gestosc`/`url`; SM5 ma `mapname`/`podil`; arkusze NMT/NMPT/orto PL maja `source` (URL, warstwa, aktualnosc, rozdzielczosc itd.); wycinek PL: `sheet_sources` (lista `{godlo, url, layer, aktualnosc, full_sheet}`; `full_sheet: false` = niepelna najnowsza kampania, E13), `missing_sheets` (brak pliku), `off_grid_sheets` (W1, niezgodna faza), `all_nodata` (`true` dla wycinka bez waznego piksela, E15) |
 | `schema` | stale `kartograf-meta/1` |
 
 Kanal, z ktorego brany jest `horizontal_crs`/`vertical_crs_options`/
@@ -292,6 +295,7 @@ data/
 │   └── cz_dmr4g_bpv/CTES/96/CTES96.tif
 ├── nmpt/pl_1992_1m_evrf2007/...             # (+ _kron86, + pl_2000_...)
 ├── orto/pl_1992/...                         # bez ukladu pionowego
+├── orto/pl_1992_cir/...                     # wariant CIR (B/W: pl_<uklad>_bw), E12
 ├── laz/pl_2000_evrf2007/...                 # poziomy per kafel (uklad_xy), pionowy z flagi
 └── landcover/...                            # bez zmian (wlasny default --output)
 ```
@@ -310,7 +314,7 @@ data/
    WYNIKU** (po `--target-crs`), formatowane `%.10g` i sklejane `_`.
    Nazwa niesie ZADANIE, nie dokladny zasieg rastra: wycinek PL w EPSG:2180
    lezy na siatce arkuszy i siega do < 1 px dalej, a siatka warpa
-   (`warp_to_grid` PL, `_warp_to_grid` CZ) ma calkowita liczbe pikseli
+   (`transform/raster.py::warp_to_grid`, wspolny dla PL i CZ) ma calkowita liczbe pikseli
    liczona od naroznika NW, wiec jej krawedz E i S moze odbiegac o do 0,5 px
    (sekcja 4.3).
    Konwencja wspolna dla PL i CZ, ale nie kazde zadanie obszarowe daje
@@ -320,6 +324,13 @@ data/
 4. Rozdzielczosc wchodzi do segmentu tylko tam, gdzie jest parametrem API
    (NMT/NMPT). Nie ma jej dla CZ (`dmr5g` to z definicji 2 m, `dmr4g` 5 m)
    ani dla orto/LAZ (brak takiego parametru).
+5. `<wariant>` rozroznia pliki tego samego godla i ukladu, ktore nie sa tym
+   samym produktem (E12, 2026-10-06). Dzis tylko orto: RGB (domyslny)
+   bez sufiksu w `orto/pl_<uklad>/` (bez migracji), CIR w
+   `orto/pl_<uklad>_cir/`, B/W w `orto/pl_<uklad>_bw/`. Wariant pochodzi
+   z `provider.storage_variant` (`GugikOrtoProvider(color=...)`) i trafia do
+   `FileStorage(variant=...)`; bez niego skip zwracal po cichu plik RGB na
+   zadanie CIR.
 
 Nowe zrodlo dodaje sie samym wpisem deskryptora — np.
 `nmt/de_bb_dgm1_dhhn2016/` nie wymaga zadnej zmiany w kodzie sciezek.
@@ -398,11 +409,13 @@ z dopasowaniem; remis rozstrzyga `dt_pzgik`, URL. Brak zgodnego rekordu
 po poprawnych odpowiedziach warstw = `NoCoverageError`, np. dla PL-2000
 1:10000 z samymi potomkami podpowiedz `--scale 1:2000`. Awaria warstwy,
 raport OGC albo nieoczekiwany szablon = `DownloadError`, nie cichy fallback
-do starszej kampanii. Zapytania i pobrania maja 3 proby z backoffem
+do starszej kampanii. Zapytania i pobrania maja do 3 prob z backoffem
+(ponawiane: siec, 429, 5xx; inne 4xx koncza przy pierwszej probie)
 oraz sesje keep-alive per watek. `MetadataCache` (SQLite WAL, TTL 7 dni)
 zapisuje rekord `{"source": ...}` lub potwierdzony `{"no_coverage": true}`;
-CLI podpina cache w torach PL (chyba ze `--force`), biblioteka przyjmuje
-`cache=`; `kartograf cache stats` pokazuje `Record entries`.
+CLI podpina cache w torach PL i CZ; `--force` otwiera go w obu w trybie
+`MetadataCache(refresh=True)` — odczyt pominiety, swiezy rekord zapisany
+(E14) — biblioteka przyjmuje `cache=`; `kartograf cache stats` pokazuje `Record entries`.
 `DownloadManager` pisze sidecar po kazdym udanym arkuszu; arkusz ASC GUGiK
 nie niesie CRS (rasterio: `crs=None`), wiec jedynym nosnikiem ukladu jest
 sidecar. Ponowne uruchomienie pomija istniejace pliki bez sieci (zmierzone:
@@ -542,7 +555,8 @@ drugiego kraju nie daje juz kodu 0. Biblioteka nie ma `print` ani argparse.
    `run_pl_cutout`, tak samo jak bledy ponizej. `NoCoverageError` rzuca
    `GugikProvider`, gdy warstwy odpowiedzialy i zadna nie ma zgodnego
    rekordu; awaria ktorejkolwiek pytanej warstwy daje `DownloadError`
-   (retry 3 razy), bez zapisywania negatywnego wpisu w cache.
+   (do 3 prob przy bledzie sieci, 429 i 5xx; inne 4xx bez ponowien), bez
+   zapisywania negatywnego wpisu w cache.
    Odpowiedz pusta musi zawierac szablon `var ... = [];`; raport OGC
    (`ServiceException`/`ExceptionReport`) lub uszkodzony szablon to
    awaria, nie brak pokrycia. Po pobraniu `run_pl_cutout` rozstrzyga:
@@ -556,7 +570,10 @@ drugiego kraju nie daje juz kodu 0. Biblioteka nie ma `print` ani argparse.
    `extra.sheet_sources` wycinka (mapa godel na `extra.source`).
    Gdy wszystkie piksele gotowego wycinka sa nodata mimo pobranych
    arkuszy, `PlCutoutResult.all_nodata=True` i CLI wyswietla `Warning:`
-   (kod 0); pomijany istniejacy wycinek nie jest ponownie skanowany.
+   (kod 0); sidecar dostaje `extra.all_nodata: true`. Pomijany istniejacy
+   wycinek nie jest ponownie skanowany — `skipped_pl_cutout` odtwarza
+   `all_nodata` (i `missing_sheets`/`off_grid_sheets`/`partial_sheets`)
+   z sidecara, a CLI powtarza ostrzezenia (E15).
 5. **Mozaika na siatce arkuszy** (`build_pl_cutout`).
    `_reject_pl2000_sheets` chroni przed starym plikiem PL-2000 pod godlem
    PL-1992 w cache (usun taki plik i ponow); nowych plikow tego typu
@@ -613,11 +630,13 @@ tu czysta utrata danych — pod `--country auto` cale zadanie moglo skonczyc
 sie kodem 0 (bo drugi kraj sie udal), zostawiajac uzytkownika bez pliku,
 ktory mial wczesniej. Obietnica obejmuje wiec takze
 `--target-crs EPSG:5514`/`EPSG:3045`, czyli glowne zastosowanie flagi.
-Wlasne `except BaseException: dst.unlink(missing_ok=True)` ma dalej
-wylacznie tor CZ (`providers/cuzk/dmr.py::_warp_to_grid`, niezalezna
-kopia funkcji) — tam jest ono rownie zbedne (zapis idzie przez plik
-tymczasowy), ale to kod zweryfikowany na zywo, ktorego tuz przed wydaniem
-nie ruszamy (ADR-024). Bez
+Tor CZ korzysta od 2026-10-06 z tej samej funkcji
+(`CuzkDmrProvider._export_raster` -> `warp_to_grid(..., src_crs=EPSG:5514,
+nodata=-9999)`; dawna kopia `providers/cuzk/dmr.py::_warp_to_grid`
+z `except BaseException: dst.unlink(...)`, ktora przy awarii KASOWALA
+poprzedni wycinek lub kafel TM33, zostala usunieta — review 2026-10-06
+D8/N7), wiec gwarancja jest wspolna dla PL i CZ (test:
+`tests/test_cuzk_dmr.py::TestHorizontalReprojection::test_failed_warp_keeps_previous_output`). Bez
 `--force` sytuacja i tak nie wystepuje, bo skrot "plik juz istnieje" wraca
 wczesniej. Nieudana budowa nie zostawia tez pustego drzewa
 `<segment>/bbox/` (review max zn. 10): `run_pl_cutout` przy wyjatku
@@ -753,13 +772,20 @@ GetCapabilities ustala roczniki (bez zaszytej listy); jesli
 ktorykolwiek rocznik zawiedzie po ponowieniach, `discover_tiles`
 rzuca `DownloadError` zamiast sugerowac brak kafli. Gdy wszystkie
 odpowiedza i nic nie znaleziono, CLI drukuje `No LAZ tiles found`.
+Porazka pobrania choc jednego kafla konczy polecenie kodem 1 z `Error:`
+i PELNA lista nieudanych kafli (jak `_finish_pl_sheets`; udane kafle
+zostaja na dysku i przy ponowieniu bez `--force` sa pomijane).
 Godlo kafla jest drobniejsze niz 1:10000 i NIE jest
 parsowane — `FileStorage.get_raw_path(..., uklad=tile.uklad)` buduje z niego
 sama hierarchie katalogow. Uklad poziomy jest ustalany **per kafel**
 wlasnoscia `LazTile.uklad` (jedno zrodlo prawdy dla CLI i biblioteki, zn. 8
-review max), kaskada: `uklad_xy` kafla (`PL-2000:*` -> `2000`, `PL-1992*` ->
-`1992`), potem format godla (kropki/myslniki), a na koncu fallback `2000`
-z ostrzezeniem. Uklad pionowy bierze sie z flagi CLI (biblioteka:
+review max) z `uklad_xy` kafla, parserem `sources.registry.parse_pl_uklad`
+wspolnym ze skorowidzem i sidecarem (`horizontal_crs_for_uklad`; review-1 D3):
+`PL-1992` -> `1992`, `PL-2000:S5..S8` -> `2000`. Nierozpoznana wartosc (np.
+`PL-2000` bez strefy) — kafel pominiety w discovery z ostrzezeniem w logu,
+a `LazTile.uklad` recznie zbudowanego kafla rzuca `ValidationError` (dawniej
+zgadywanie z formatu godla dawalo segment `pl_2000` z sidecarem EPSG:2180).
+Uklad pionowy bierze sie z flagi CLI (biblioteka:
 `FileStorage(vertical_crs=)`). Jedno zadanie moze wiec zapisac kafle do dwoch
 segmentow naraz — `{uklad}` rozwiazuje sie per wywolanie `get_raw_path`,
 jeden `FileStorage` wystarcza na cale zadanie. W trybie obszarowym
@@ -767,14 +793,26 @@ jeden `FileStorage` wystarcza na cale zadanie. W trybie obszarowym
 `--country pl` (LAZ dla CZ to etap 2).
 
 Wynik: `data/laz/pl_2000_evrf2007/6/162/34/02/3/<oryginalna_nazwa>.laz`
-(+ `.meta.json` z `extra.godlo_kafla`/`rok`/`gestosc`/`url`).
+(+ `.meta.json` z `extra.godlo_kafla`/`rok`/`gestosc`/`url`; `request`
+niesie bbox oraz `year`/`min_density`, gdy podane — E16).
+`gestosc` i filtr `--min-density` to wartosc NOMINALNA z WFS GUGiK
+(`char_przestrz`); faktyczna gestosc kafla bywa kilkukrotnie wyzsza
+(E2E 2026-10-06: ~119 pkt/m2 przy nominale 15).
 
 ### 4.8 Land cover i gleby (BDOT10k, CORINE, SoilGrids)
 
 Bez zmian wzgledem 0.6.x. `LandCoverManager` ma **wlasny domyslny katalog**
 (`./data/landcover`, CLI `--output`) i wlasna konwencje nazw plikow:
-`<provider>_teryt_<teryt>.gpkg`, `<provider>_bbox_<minx>_<miny>_<maxx>_<maxy>.gpkg`
-albo `<provider>_godlo_<godlo>.gpkg` (`_generate_output_path`). Szablony
+baza nazwy `<provider>_teryt_<teryt>`, `<provider>_bbox_<minx>_<miny>_<maxx>_<maxy>`
+albo `<provider>_godlo_<godlo>` (`_generate_output_path` nadaje `.gpkg`).
+Rozszerzenie FAKTYCZNEGO pliku nadaje provider: BDOT10k `.gpkg`, CORINE
+`.tif` (CLMS) albo `.png` (podglad WMS), SoilGrids `.tif`; zwracana
+sciezka i sidecar dotycza tego pliku (review 2026-10-06 N14). BDOT10k
+z `format="SHP"` (`--format SHP`) zapisuje oryginalne archiwum
+GUGiK z shapefile'ami pod ta sama nazwa z rozszerzeniem `.zip`
+(np. `bdot10k_teryt_1465.zip`, sidecar `bdot10k_teryt_1465.zip.meta.json`);
+rozszerzenie nadaje `Bdot10kProvider.download_by_admin_unit`, a CLI drukuje
+faktyczna sciezke (review 2026-10-06 N1). Szablony
 segmentow z sekcji 3 tych zrodel NIE dotycza — ich deskryptory maja
 `storage_subdir = None`. Sidecary pisze `LandCoverManager` tak samo jak
 pozostale warstwy zarzadzajace. CORINE bez credentials CLMS pobiera podglad

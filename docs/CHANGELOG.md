@@ -6,6 +6,108 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.7.0] - Unreleased
+### Runda review/E2E 2026-10-06
+- Tor CZ (`CuzkDmrProvider`, `--target-crs` i kafel TM33) używa wspólnego
+  `transform/raster.warp_to_grid` zamiast własnej kopii
+  `providers/cuzk/dmr.py::_warp_to_grid`. Nieudana reprojekcja (np. z
+  `--force`) NIE kasuje już poprzedniego wycinka/kafla — tak jak w torze PL.
+  Wynik warpu bit w bit bez zmian (review D8/N7).
+- CORINE i SoilGrids (`_download_with_retry`) stosują politykę ponowień
+  z `transport/http.py`: 4xx poza 429 (np. 404 przy błędnej nazwie
+  pokrycia WCS) kończy od razu, bez 3 prób i 6 s czekania; `Retry-After`
+  wydłuża przerwę; `DownloadError.status_code` niesie kod HTTP (wcześniej
+  zawsze `None`). Backoff bez zmian (2 s, 4 s) (review D1/N9).
+- `CuzkClient.query` (indeks arkuszy SM5/TM33) i zapytanie TERYT BDOT10k
+  (`Bdot10kProvider._get_teryt_for_point`) idą przez
+  `transport.http.get_with_retry`: błąd sieci, 429 i 5xx są ponawiane
+  (wcześniej jedna próba), 404 kończy od razu ze `status_code`. Błąd
+  treści (JSON) nie jest ponawiany. `get_with_retry` przyjmuje opcjonalne
+  `params=` (review N5).
+- BDOT10k `--format SHP` zapisuje archiwum ZIP z shapefile'ami jako `.zip`
+  (np. `bdot10k_teryt_1465.zip`, sidecar obok), a nie pod nazwą `.gpkg`,
+  która udawała GeoPackage. `Bdot10kProvider.download_by_admin_unit`
+  (także przez bbox/godło) zwraca ścieżkę `.zip`; CLI drukuje faktyczną
+  ścieżkę (review N1).
+- `kartograf landcover download` z błędnym `--property`/`--depth`/`--stat`
+  (SoilGrids) albo `--year` (CORINE) kończy się `Error: <treść>` i kodem 1
+  przed siecią — bez `ValueError:` i podpowiedzi `KARTOGRAF_DEBUG`, która
+  sugerowała awarię programu (review N8).
+- LAZ: porażka pobrania kafli daje `Error: N z M kafli LAZ nie pobrano ...`
+  z PEŁNĄ listą nieudanych kafli (wcześniej `Warning:` przy kodzie 1 i tylko
+  5 pierwszych). Kod wyjścia bez zmian: 1 (review N6).
+- Orto: wariant koloru jest częścią ścieżki pliku. RGB zostaje
+  w `orto/pl_<uklad>/` (bez migracji), CIR trafia do `orto/pl_<uklad>_cir/`,
+  B/W do `orto/pl_<uklad>_bw/`. Wcześniej `GugikOrtoProvider(color="CIR")`
+  przy istniejącym pliku RGB tego arkusza zwracał po cichu RGB (skip).
+  Nowe: `BaseProvider.storage_variant`, `FileStorage(variant=...)`
+  (E2E-B C12-f, E12).
+- Niepełny arkusz widoczny: gdy wybrany rekord skorowidza ma
+  `full_sheet: false` (najnowsza kampania nie wypełnia arkusza), CLI
+  drukuje `Warning:` w torze godła, listy arkuszy i wycinka (także przy
+  skip). `extra.sheet_sources` wycinka ma pole `full_sheet`,
+  `PlCutoutResult.partial_sheets` listuje takie arkusze, a pusty wycinek
+  z nich ostrzega o niepełnej kampanii zamiast „brak danych GUGiK”.
+  Reguła wyboru (ADR-028: najnowsza kampania) bez zmian (E2E-B C12-a/C14-b,
+  E2E-A C5, E13).
+- `--force` w torach PL omija ODCZYT cache rekordów skorowidza, ale
+  zapisuje świeżo wybrany rekord (i potwierdzony brak pokrycia) — kolejny
+  przebieg bez `--force` dostaje nowy rekord zamiast starego sprzed zmiany
+  kampanii. Nowe: `MetadataCache(refresh=True)` (odczyty = chybienie,
+  zapisy normalnie); CLI przekazuje go zamiast `cache=None`
+  (E2E-B C15, E14).
+- Skip: pojedyncze godło pominięte jako istniejące drukuje
+  `Skipped <godlo> - already exists at ...` zamiast `Downloaded to`.
+  Pusty wycinek PL zapisuje w sidecarze `extra.all_nodata: true`;
+  pominięcie takiego wycinka odtwarza `PlCutoutResult.all_nodata` z sidecara
+  (bez czytania rastra), a CLI powtarza `Warning:` (E2E-B C17, E15).
+- LAZ: sidecar `request` zapisuje `year` i `min_density`, gdy podano
+  `--year`/`--min-density` (wcześniej tylko bbox). Dokumentacja: `gestosc`
+  i `--min-density` to gęstość nominalna z WFS GUGiK (E2E-B C13-f, E16).
+- GetCapabilities skorowidza GUGiK (odkrywanie warstw NMT/NMPT/orto) ma
+  timeout providera — 30 s NMT/NMPT, 60 s orto, albo `timeout=` przekazany
+  do `download()` — zamiast zaszytych 10 s (review N3, E10).
+- Jeden parser wartości układu GUGiK: `sources.registry.parse_pl_uklad`
+  (`PL-1992`, `PL-2000:S5..S8`, białe znaki na brzegach obcinane) używany
+  przez rekordy skorowidza, `horizontal_crs_for_uklad` (sidecar) i
+  `LazTile.uklad`. Nietypowa wartość (np. `PL-2000` bez strefy) jest
+  odrzucana spójnie: rekord skorowidza bez układu, kafel LAZ pominięty
+  w discovery (ostrzeżenie w logu), **BREAKING:** `LazTile.uklad` rzuca
+  `ValidationError` zamiast zgadywać z formatu godła (wcześniej segment
+  `pl_2000` przy sidecarze EPSG:2180). Realne dane GUGiK mają wyłącznie
+  wartości rozpoznawane (E2E 2026-10-06, E11) (review-1 D3).
+- Dokumentacja i test (bez zmiany kodu): arkusze PL-2000 strefy 7
+  publikowane przez GUGiK we współrzędnych EPSG:2180 — sidecar opisuje
+  układ pliku (EPSG:2180), `extra.source.uklad` deklarację rekordu, plik
+  w segmencie wg godła; fixtura z surowego nagłówka
+  `tests/fixtures/gugik_asc/77912_1384976_7.125.11.19.head.asc` (E2E-A
+  C6b/C6h, E17).
+- Arkusz PL w innym układzie niż wskazuje godło (np. PL-2000 strefy 7
+  opublikowany w EPSG:2180): CLI drukuje `Warning: N arkuszy GUGiK
+  opublikowano w innym ukladzie niz wskazuje godlo: <godlo> (godlo: ...,
+  plik: ...)` na stderr — tor godła, listy `--bbox`/`--geometry`
+  i hierarchii, także przy skip i `-q`; fakt czytany z sidecara
+  (`horizontal_crs` vs układ z godła). Kod wyjścia bez zmian (0).
+  Wcześniej był tylko komunikat loggera bez prefiksu (E17).
+- `KARTOGRAF_DEBUG=1` daje pełny traceback także dla `KartografError`
+  docierającego do bariery `main` — wcześniej zawsze skracany do
+  `Error: ...` wbrew opisowi zmiennej (review N17).
+- `--force` w torze CZ otwiera `MetadataCache(refresh=True)` jak w PL:
+  indeks arkuszy SM5 (`sheet_cache`, TTL 30 d) jest odpytywany na nowo
+  i zapisywany. Wcześniej `--force` pobierał ponownie tylko plik,
+  a indeks szedł z cache (review-1 D16).
+- `Bdot10kProvider.DEFAULT_TIMEOUT` = 120 s i jest domyślną wartością
+  `download_by_admin_unit/godlo/bbox` (wcześniej martwa stała 60 s obok
+  sygnatur ze 120 s; zachowanie bez zmian) (review N11).
+- Errata dokumentacji (review-2): README — arkusz za granicą w trybie
+  listy to `Warning:` i kod 0, nie kod 1 (N2), liczby testów (N12);
+  „3 próby” doprecyzowane jako ponowienia tylko dla sieci/429/5xx w
+  CLAUDE.md, SCOPE, ARCHITECTURE, docstringu `download_pl_cutout`
+  i erracie ADR-028 (N4); lista timeoutów bez martwego „CORINE przez
+  TERYT” (N10); krawędź `cli -> transport` w ARCHITECTURE 2 (N13);
+  rozszerzenie pliku landcover nadaje provider (N14); errata ADR-023
+  (f).1 — LAZ bez `parent_request` (N15); docstringi `LandCoverManager`
+  i `MetadataCache` (N16).
+
 ### Polityka ponowień HTTP i sesja BDOT10k (2026-10-06)
 - Pobieranie GUGiK (NMT/NMPT/orto/LAZ/BDOT10k) oraz wspólny transport
   (`get_with_retry`, `download_to` — skorowidz, WFS LAZ, CUZK) ponawia
@@ -218,7 +320,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`LandCoverManager.download_by_teryt/download_by_bbox/download_by_godlo`
   bez `output_path` nazywaja pliki tak jak `download()`** — bylo
   `CORINE Land Cover_N-34-130-D.gpkg` (spacje w nazwie, etykieta zrodla),
-  jest `corine_land_cover_godlo_N-34-130-D.gpkg`. Skrypty skladajace sciezke
+  jest `corine_land_cover_godlo_N-34-130-D.gpkg` (baza nazwy; rozszerzenie
+  zapisanego pliku nadaje provider — CORINE `.tif`/`.png`, SoilGrids `.tif`;
+  errata 2026-10-06, review N14). Skrypty skladajace sciezke
   wyniku z nazwy zrodla wymagaja poprawki. (audyt 0.7.0: A5-2)
 - **`GugikProvider.download_bbox(vertical_crs="EVRF2007")` konczy sie
   `ValidationError`** z remedium — GUGiK wycofal endpoint WCS

@@ -17,7 +17,13 @@ from kartograf.download.manager import (
     DownloadProgress,
     DownloadResult,
 )
-from kartograf.exceptions import DownloadError, ParseError, ValidationError
+from kartograf.exceptions import (
+    DownloadError,
+    KartografError,
+    ParseError,
+    ValidationError,
+)
+from kartograf.sources.registry import horizontal_crs_for_godlo
 
 
 def create_progress_callback(quiet: bool = False):
@@ -77,7 +83,7 @@ def _create_provider_and_storage(
 
     ``cache`` (``MetadataCache`` albo ``None``) trafia do providera: rekordy
     skorowidza GUGiK sa czytane i zapisywane wylacznie z cache (N6; CLI:
-    ``--force`` = ``None``, patrz ``_pl_metadata_cache``).
+    ``--force`` = cache w trybie ``refresh``, patrz ``_pl_metadata_cache``).
 
     LAZ has a separate flow (`_cmd_download_laz`) and never reaches this
     helper — `cmd_download` short-circuits it before any provider is built.
@@ -97,7 +103,9 @@ def _create_provider_and_storage(
         from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
         provider = GugikOrtoProvider(cache=cache)
-        storage = FileStorage(output_dir, product="orto")
+        storage = FileStorage(
+            output_dir, product="orto", variant=provider.storage_variant
+        )
     elif product == "nmt":
         from kartograf.providers.pl import create_nmt_provider
 
@@ -123,17 +131,15 @@ def _pl_metadata_cache(args: argparse.Namespace) -> Iterator[object | None]:
     """
     ``MetadataCache`` toru PL na czas jednego zadania (N6; wzor: tor CZ).
 
-    ``--force`` = ``None``: rekordy skorowidza nie sa ani czytane, ani
-    zapisywane (P4 — najprostsza, przewidywalna inwalidacja; ``kartograf
-    cache clear`` czysci wszystko). Bez ``--force`` cache jest otwierany
-    w cwd i zamykany po zadaniu (``close()`` czysci wygasle wpisy).
+    ``--force`` = ``MetadataCache(refresh=True)`` (E14): rekordy skorowidza
+    NIE sa czytane, ale swiezo wybrany rekord (i potwierdzony brak pokrycia)
+    jest ZAPISYWANY — kolejny przebieg bez ``--force`` dostaje nowy rekord,
+    a nie stary sprzed zmiany kampanii (do wygasniecia TTL 7 d). Cache jest
+    otwierany w cwd i zamykany po zadaniu (``close()`` czysci wygasle wpisy).
     """
-    if args.force:
-        yield None
-        return
     from kartograf.cache import MetadataCache
 
-    cache = MetadataCache()
+    cache = MetadataCache(refresh=bool(args.force))
     try:
         yield cache
     finally:
@@ -988,6 +994,14 @@ def cmd_download(args: argparse.Namespace) -> int:
                 if not args.quiet:
                     print(f"Downloading {args.godlo} ({label})...")
 
+                # E15: skip pojedynczego arkusza raportujemy jako skip — ta
+                # sama sciezka i ten sam warunek co w `download_sheet`
+                # (manager nie wypelnia `last_result` dla jednego arkusza).
+                # isinstance(Path): atrapa managera w testach daje Mock.
+                target = manager.storage.get_path(
+                    args.godlo, provider.default_extension
+                )
+                existed = skip_existing and isinstance(target, Path) and target.exists()
                 result = manager.download_sheet(
                     args.godlo,
                     skip_existing=skip_existing,
@@ -997,7 +1011,11 @@ def cmd_download(args: argparse.Namespace) -> int:
                     # pojedynczy arkusz 1:10000 / PL-2000: sukces = brak
                     # wyjatku (brak danych = DownloadError, kod 1 — D10)
                     if not args.quiet:
-                        print(f"Downloaded to {result}")
+                        if existed:
+                            print(f"Skipped {args.godlo} - already exists at {result}")
+                        else:
+                            print(f"Downloaded to {result}")
+                    _warn_sheet_sidecars([result])
                     return 0
                 paths = result
 
@@ -1073,8 +1091,12 @@ def _finish_pl_sheets(
     - 0 plikow i wszystkie bez danych -> ``Error:``, kod 1 (nic do pobrania,
       spojnie z wycinkiem: ``ValidationError``).
 
+    Arkusze z niepelnej najnowszej kampanii (sidecar
+    ``extra.source.full_sheet: false``) -> ``Warning:`` (E13), kod bez zmian.
+
     ``Warning:``/``Error:`` ida na stderr, wiec ``-q`` ich NIE tlumi.
     """
+    _warn_sheet_sidecars(paths)
     if not quiet:
         # pasek postepu konczy "skipped"/"downloading" bez nowej linii
         print()
@@ -1137,6 +1159,95 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
     return _dispatch_area(args, bbox)
 
 
+def _read_sheet_sidecar(path: Path) -> dict | None:
+    """Sidecar ``<plik>.meta.json`` arkusza; ``None`` gdy brak/nieczytelny."""
+    sidecar = path.with_name(f"{path.name}.meta.json")
+    try:
+        meta = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return meta if isinstance(meta, dict) else None
+
+
+def _is_partial_sheet(path: Path) -> bool:
+    """Sidecar arkusza deklaruje niepelny arkusz (``extra.source.full_sheet``
+    ``false``, E13). Best-effort: brak/nieczytelny sidecar = ``False``."""
+    try:
+        source = (_read_sheet_sidecar(path) or {})["extra"]["source"]
+        return source.get("full_sheet") is False
+    except (KeyError, TypeError, AttributeError):
+        return False
+
+
+def _sheet_crs_mismatch(path: Path) -> tuple[str, str, str] | None:
+    """E17: ``(godlo, uklad_godla, uklad_pliku)`` gdy sidecar arkusza PL ma
+    ``horizontal_crs`` (uklad PLIKU, ``pl_sheet_horizontal_crs``) inny niz
+    wynika z godla — np. arkusz PL-2000 strefy 7 opublikowany przez GUGiK
+    we wspolrzednych EPSG:2180. Best-effort: brak sidecara/godla = ``None``."""
+    meta = _read_sheet_sidecar(path)
+    if meta is None or meta.get("country") != "PL":
+        return None
+    request = meta.get("request")
+    godlo = request.get("godlo") if isinstance(request, dict) else None
+    actual = meta.get("horizontal_crs")
+    if not isinstance(godlo, str) or not isinstance(actual, str):
+        return None
+    try:
+        expected = horizontal_crs_for_godlo(godlo)
+    except KartografError:
+        return None
+    if expected == actual:
+        return None
+    return godlo, expected, actual
+
+
+def _warn_crs_mismatch_sheets(paths) -> None:
+    """E17: ``Warning:`` o arkuszach, ktorych plik jest w innym ukladzie niz
+    deklaruje godlo/rekord skorowidza. Kod wyjscia bez zmian; sidecar opisuje
+    uklad PLIKU. Czyta sidecary, wiec powtarza sie przy skip."""
+    found = [m for m in (_sheet_crs_mismatch(Path(p)) for p in paths) if m]
+    if not found:
+        return
+    found.sort()
+    shown = ", ".join(
+        f"{godlo} (godlo: {expected}, plik: {actual})"
+        for godlo, expected, actual in found[:10]
+    ) + (" ..." if len(found) > 10 else "")
+    print(
+        f"Warning: {len(found)} arkuszy GUGiK opublikowano w innym ukladzie "
+        f"niz wskazuje godlo: {shown} — sidecar opisuje uklad pliku "
+        "(horizontal_crs); deklaracja rekordu w extra.source.uklad",
+        file=sys.stderr,
+    )
+
+
+def _warn_sheet_sidecars(paths) -> None:
+    """Ostrzezenia CLI z sidecarow arkuszy wyniku: niepelny arkusz (E13)
+    i uklad pliku inny niz godla (E17)."""
+    _warn_partial_sheets(paths)
+    _warn_crs_mismatch_sheets(paths)
+
+
+def _warn_partial_sheets(paths) -> None:
+    """E13: ``Warning:`` o arkuszach z niepelnej najnowszej kampanii GUGiK.
+
+    Regula wyboru (ADR-028: najnowsza kampania, bez preferencji pelnego
+    arkusza) zostaje — ostrzezenie tylko ja uwidacznia. Czyta sidecary
+    plikow wyniku, wiec dziala takze dla arkuszy pominietych jako istniejace.
+    """
+    partial = sorted(Path(p).stem for p in paths if _is_partial_sheet(Path(p)))
+    if not partial:
+        return
+    shown = ", ".join(partial[:10]) + (" ..." if len(partial) > 10 else "")
+    print(
+        f"Warning: najnowsza kampania GUGiK jest niepelna dla {len(partial)} "
+        f"arkuszy ({shown}) — skorowidz deklaruje arkusz nie w calosci "
+        "wypelniony trescia; plik moze miec duzo nodata/czerni "
+        "(extra.source.full_sheet w sidecarze)",
+        file=sys.stderr,
+    )
+
+
 def _warn_missing_sheets(missing: tuple[str, ...], *, from_sidecar: bool) -> None:
     """R5: ``Warning:`` o arkuszach bez danych GUGiK w wycinku (stderr, -q nie tlumi).
 
@@ -1156,21 +1267,45 @@ def _warn_missing_sheets(missing: tuple[str, ...], *, from_sidecar: bool) -> Non
 
 
 def _report_pl_cutout(result, *, from_sidecar: bool) -> None:
-    """Komunikaty o tresci wycinka: brak arkuszy (R5), W1 (S5), same nodata (N2)."""
+    """Komunikaty o tresci wycinka: brak arkuszy (R5), W1 (S5), same nodata (N2),
+    arkusze z niepelnej najnowszej kampanii (E13).
+
+    Przy pominietym wycinku wszystkie dane pochodza z jego sidecara
+    (``skipped_pl_cutout``) — ostrzezenia powtarzaja sie z dopiskiem o zrodle.
+    """
     _warn_missing_sheets(result.missing_sheets, from_sidecar=from_sidecar)
+    origin = " (z sidecara istniejacego wycinka)" if from_sidecar else ""
     if result.off_grid_sheets:
-        origin = " (z sidecara istniejacego wycinka)" if from_sidecar else ""
         print(
             f"Info: {len(result.off_grid_sheets)} arkuszy o innej fazie siatki "
             "przeprobkowanych osobno (W1; lista w sidecarze: "
             f"extra.off_grid_sheets){origin}",
             file=sys.stderr,
         )
-    if result.all_nodata:
+    partial = tuple(getattr(result, "partial_sheets", ()))
+    shown = ", ".join(partial[:10]) + (" ..." if len(partial) > 10 else "")
+    if result.all_nodata and partial:
+        # C14-b: GUGiK ma dane w starszej kampanii, a najnowsza (wybrana wg
+        # ADR-028) jest ucieta — "brak danych GUGiK" bylby mylacy
+        print(
+            "Warning: wycinek w calosci nodata — najnowsza kampania GUGiK "
+            f"jest niepelna dla {len(partial)} arkuszy ({shown}) i nie pokrywa "
+            "obszaru zadania (starsza kampania moze miec dane; "
+            f"extra.sheet_sources[].full_sheet){origin}",
+            file=sys.stderr,
+        )
+    elif result.all_nodata:
         print(
             "Warning: wycinek w calosci nodata — pobrane arkusze nie wnosza "
             "zadnego piksela w obszarze zadania (brak danych GUGiK / obszar "
-            "poza pokryciem)",
+            f"poza pokryciem){origin}",
+            file=sys.stderr,
+        )
+    elif partial:
+        print(
+            f"Warning: najnowsza kampania GUGiK jest niepelna dla {len(partial)} "
+            f"arkuszy wycinka ({shown}) — wycinek moze miec w ich obszarze "
+            f"nodata (extra.sheet_sources[].full_sheet){origin}",
             file=sys.stderr,
         )
 
@@ -1475,8 +1610,22 @@ def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
     return SheetParser(args.godlo).get_bbox(crs="EPSG:2180")
 
 
-def _write_laz_sidecar(provider, tile, target: Path, bbox: BBox) -> None:
-    """Best-effort sidecar dla kafla LAZ (blad nie przerywa pobrania)."""
+def _write_laz_sidecar(
+    provider,
+    tile,
+    target: Path,
+    bbox: BBox,
+    *,
+    year: int | None = None,
+    min_density: int | None = None,
+) -> None:
+    """Best-effort sidecar dla kafla LAZ (blad nie przerywa pobrania).
+
+    ``request`` opisuje faktyczne zadanie: bbox oraz filtry ``year``
+    i ``min_density``, gdy podane (E16). ``extra.gestosc`` i ``min_density``
+    to wartosc NOMINALNA z WFS GUGiK (``char_przestrz``) — faktyczna gestosc
+    kafla bywa kilkukrotnie wyzsza.
+    """
     import logging
 
     try:
@@ -1484,12 +1633,17 @@ def _write_laz_sidecar(provider, tile, target: Path, bbox: BBox) -> None:
         from kartograf.sources.sidecar import build_metadata, write_sidecar
 
         key = getattr(provider, "descriptor_key", None)
+        request: dict = {
+            "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+            "bbox_crs": bbox.crs,
+        }
+        if year is not None:
+            request["year"] = year
+        if min_density is not None:
+            request["min_density"] = min_density
         meta = build_metadata(
             get_source(key if isinstance(key, str) else "pl.gugik.laz"),
-            request={
-                "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
-                "bbox_crs": bbox.crs,
-            },
+            request=request,
             vertical_crs=provider.vertical_crs,
             # N8: kafel niesie wlasny uklad (PL-1992 albo strefa PL-2000),
             # a kanal WFS deklaruje tylko domyslny — nieznany uklad = kanal
@@ -1595,7 +1749,9 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
             return "skip", target, None
         try:
             provider.download(tile.url, target)
-            _write_laz_sidecar(provider, tile, target, bbox)
+            _write_laz_sidecar(
+                provider, tile, target, bbox, year=year, min_density=min_density
+            )
             return "ok", target, None
         except DownloadError as e:
             return "fail", tile, e
@@ -1625,8 +1781,16 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
             f"({len(skipped)} skipped) to {output_dir / 'laz'}"
         )
     if failed:
-        print(f"Warning: {len(failed)} tiles failed to download", file=sys.stderr)
-        for _status, tile, error in failed[:5]:
+        # Kod 1 => `Error:` (konwencja: `Warning:` tylko przy kodzie 0) i PELNA
+        # lista nieudanych kafli do ponowienia — wzor `_finish_pl_sheets` (N6).
+        failed.sort(key=lambda r: (r[1].godlo, r[1].url))
+        names = ", ".join(tile.godlo for _status, tile, _error in failed)
+        print(
+            f"Error: {len(failed)} z {len(tiles)} kafli LAZ nie pobrano "
+            f"(blad pobrania): {names} — ponow pobranie",
+            file=sys.stderr,
+        )
+        for _status, tile, error in failed:
             print(f"  {tile.godlo}: {error}", file=sys.stderr)
         return 1
 
@@ -1931,7 +2095,9 @@ def _cmd_download_cz(
             "na siatce EPSG:3045)"
         )
 
-    cache = MetadataCache()
+    # D16: --force jak w torze PL — odczyt cache (indeks arkuszy SM5)
+    # pominiety, swiezy wpis zapisany
+    cache = MetadataCache(refresh=bool(args.force))
     try:
         try:
             provider = create_dmr_provider(

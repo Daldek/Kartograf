@@ -15,17 +15,13 @@ import logging
 import os
 import shutil
 import threading
-from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
 import rasterio
 import requests
 from rasterio.crs import CRS
-from rasterio.enums import Resampling
-from rasterio.transform import from_origin
 from rasterio.transform import xy as _pixel_xy
-from rasterio.warp import reproject
 from rasterio.windows import Window
 
 from kartograf.cache.metadata import MetadataCache
@@ -45,6 +41,7 @@ from kartograf.transform.crs import (
     TransformUnavailableError,
     build_pinned_transform,
 )
+from kartograf.transform.raster import warp_to_grid
 
 logger = logging.getLogger(__name__)
 
@@ -275,6 +272,10 @@ class CuzkDmrProvider(BaseProvider):
         Kafelkowanie (limity ``exportImage``) i mozaikowanie dzieja sie po
         stronie ukladu natywnego, czyli PRZED warpem — szew kafli nie moze
         wiec zostac utrwalony przez interpolacje.
+
+        Warp to wspolny ``transform/raster.warp_to_grid`` (ten sam co w torze
+        PL): zapis przez plik tymczasowy i ``os.replace``, wiec nieudana
+        przebudowa (``--force``) zostawia poprzedni plik wyniku nietkniety.
         """
         client = self._client_for(timeout)
         # None == cel jest ukladem natywnym: serwer wydaje dane wprost
@@ -303,7 +304,17 @@ class CuzkDmrProvider(BaseProvider):
                 no_data=CUZK_NODATA,
                 output_path=native_path,
             )
-            _warp_to_grid(native_path, output_path, bbox, self._pixel_size, pinned)
+            # Wspolny warp torow PL i CZ (D8): zapis przez plik tymczasowy
+            # i os.replace — awaria NIE kasuje poprzedniego wyniku (N7).
+            warp_to_grid(
+                native_path,
+                output_path,
+                bbox,
+                self._pixel_size,
+                pinned,
+                src_crs=NATIVE_CRS,
+                nodata=CUZK_NODATA,
+            )
         finally:
             native_path.unlink(missing_ok=True)
 
@@ -473,92 +484,6 @@ class CuzkDmrProvider(BaseProvider):
                 _, _, shifted = pinned.transform(lon, lat, data[mask].astype("float64"))
                 data[mask] = np.asarray(shifted, dtype=data.dtype)
                 ds.write(data, 1, window=window)
-
-
-@contextmanager
-def _quiet_transformer_only_option():
-    """Wycisz jeden komunikat GDAL: ``COORDINATE_OPERATION`` jest opcja
-    TRANSFORMERA, a `rasterio.warp.reproject` podaje kwargs takze jako opcje
-    warpera, ktory jej nie zna i zglasza `CPLE_NotSupported`. Operacja dziala
-    (test `test_bbox_target_crs_puts_content_where_pyproj_says` to sprawdza na
-    tresci), a ostrzezenie trafialoby na stderr kazdego pobrania CZ z
-    reprojekcja. Filtr jest waski (dopasowanie po nazwie opcji) i zdejmowany
-    natychmiast, wiec nie ukrywa innych bledow GDAL.
-    """
-    gdal_logger = logging.getLogger("rasterio._env")
-
-    def _filter(record: logging.LogRecord) -> bool:
-        return "COORDINATE_OPERATION" not in record.getMessage()
-
-    gdal_logger.addFilter(_filter)
-    try:
-        yield
-    finally:
-        gdal_logger.removeFilter(_filter)
-
-
-def _warp_to_grid(
-    src_path: Path,
-    dst_path: Path,
-    bbox: BBox,
-    pixel_size: float,
-    pinned: PinnedTransform,
-) -> None:
-    """Zreprojektuj raster natywny na siatke ``bbox``/``pixel_size``.
-
-    Operacja jest WYMUSZONA (`COORDINATE_OPERATION`) — bez tego GDAL wybiera
-    ja sam, poza polityka `transform/crs.py` (zakaz ballparku, limit
-    dokladnosci, probe). Siatka wyniku liczona jest identycznie jak w
-    `CuzkClient.export_image`, wiec zasieg i rozmiar pliku nie zaleza od tego,
-    czy po drodze byla reprojekcja.
-
-    `src_nodata`/`dst_nodata` sprawiaja, ze GDAL maskuje piksele puste i nie
-    wpuszcza `-9999` do interpolacji (zweryfikowane pomiarem i testem
-    `test_nodata_does_not_bleed_into_interpolation`). Zapis jest atomowy:
-    plik docelowy powstaje dopiero z gotowej kopii tymczasowej.
-    """
-    width = max(1, round((bbox.max_x - bbox.min_x) / pixel_size))
-    height = max(1, round((bbox.max_y - bbox.min_y) / pixel_size))
-    dst_transform = from_origin(bbox.min_x, bbox.max_y, pixel_size, pixel_size)
-    tmp_path = dst_path.with_name(
-        f"{dst_path.name}.{os.getpid()}_{threading.get_ident()}.warp.tif"
-    )
-    logger.debug(
-        f"Reprojekcja lokalna {src_path.name} -> {bbox.crs}: "
-        f"{pinned.description} (dokladnosc {pinned.accuracy_m} m)"
-    )
-    try:
-        with rasterio.open(src_path) as src:
-            profile = {
-                "driver": "GTiff",
-                "dtype": "float32",
-                "count": 1,
-                "width": width,
-                "height": height,
-                "crs": CRS.from_string(bbox.crs),
-                "transform": dst_transform,
-                "nodata": CUZK_NODATA,
-            }
-            with (
-                rasterio.open(tmp_path, "w", **profile) as dst,
-                _quiet_transformer_only_option(),
-            ):
-                reproject(
-                    source=rasterio.band(src, 1),
-                    destination=rasterio.band(dst, 1),
-                    src_crs=CRS.from_string(NATIVE_CRS),
-                    src_nodata=CUZK_NODATA,
-                    dst_crs=CRS.from_string(bbox.crs),
-                    dst_nodata=CUZK_NODATA,
-                    resampling=Resampling.bilinear,
-                    COORDINATE_OPERATION=pinned.gdal_operation(),
-                )
-        os.replace(tmp_path, dst_path)
-    except BaseException:
-        dst_path.unlink(missing_ok=True)
-        raise
-    finally:
-        tmp_path.unlink(missing_ok=True)
 
 
 def bbox_to_crs(

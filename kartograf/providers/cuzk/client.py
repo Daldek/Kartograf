@@ -19,7 +19,7 @@ from rasterio.crs import CRS
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
-from kartograf.transport.http import download_to
+from kartograf.transport.http import download_to, get_with_retry
 from kartograf.transport.mosaic import mosaic_and_crop
 
 _TIFF_MAGIC = (b"II*\x00", b"MM\x00*")
@@ -77,11 +77,19 @@ class CuzkClient:
                 params["spatialRel"] = "esriSpatialRelIntersects"
             if out_sr is not None:
                 params["outSR"] = wkid(out_sr)
+            # Siec/429/5xx ponawiane (3 proby, Retry-After), 4xx od razu —
+            # wspolna polityka transport/http.py (review N5). Blad tresci
+            # (JSON) nie jest ponawiany.
+            response = get_with_retry(
+                self._session,
+                url,
+                timeout=self._timeout,
+                params=params,
+                description=f"Zapytanie {url}",
+            )
             try:
-                response = self._session.get(url, params=params, timeout=self._timeout)
-                response.raise_for_status()
                 data = response.json()
-            except (requests.RequestException, ValueError) as e:
+            except ValueError as e:
                 raise DownloadError(f"Zapytanie {url} nieudane: {e}") from e
             if "error" in data:
                 raise DownloadError(f"Blad ArcGIS dla {url}: {data['error']}")
@@ -282,7 +290,7 @@ def _tile_grid(
 ) -> list[tuple[BBox, int, int]]:
     """Deterministyczna siatka kafli cieta po pelnych pikselach (N->S, W->E);
     kotwica w narozniku NW — spojnie z rasterio.merge(bounds=...) i
-    _warp_to_grid (from_origin(min_x, max_y)).
+    transform/raster.warp_to_grid (from_origin(min_x, max_y)).
 
     Why NW: siatka wyniku mozaiki zawsze startuje w max_y i ma wysokosc
     round((max_y-min_y)/res), wiec przy bboxie o ulamkowej wysokosci

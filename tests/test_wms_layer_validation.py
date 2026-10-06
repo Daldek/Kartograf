@@ -386,3 +386,79 @@ class TestNmptLayerPattern:
             "SkorowidzeNMPT2025",
             "SkorowidzeNMPT2024iStarsze",
         ]
+
+
+# ===========================================================================
+# N3 / E10: GetCapabilities skorowidza z timeoutem providera
+# ===========================================================================
+
+
+@pytest.mark.real_wms_layers
+class TestCapabilitiesTimeout:
+    """N3: GetCapabilities dostaje timeout providera (30 s NMT/NMPT, 60 s orto),
+    a nie zaszyte 10 s — porazka tego zapytania konczy caly tor."""
+
+    CAPS = {
+        "nmt": WMS_XML_WITH_NAMESPACE,
+        "nmpt": WMS_XML_NMT_AND_NMPT,
+        "orto": WMS_XML_WITH_NAMESPACE.replace(
+            "SkorowidzeNMT2022iStarsze", "SkorowidzeOrtofotomapyStarsze"
+        ).replace("SkorowidzeNMT", "SkorowidzeOrtofotomapy"),
+    }
+
+    @staticmethod
+    def _provider(product, session):
+        from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
+
+        cls = {
+            "nmt": GugikProvider,
+            "nmpt": GugikNmptProvider,
+            "orto": GugikOrtoProvider,
+        }[product]
+        return cls(session=session)
+
+    @pytest.mark.parametrize(
+        ("product", "expected"), [("nmt", 30), ("nmpt", 30), ("orto", 60)]
+    )
+    def test_capabilities_use_provider_timeout(self, tmp_path, product, expected):
+        caps = _make_mock_response(self.CAPS[product])
+        empty = _make_mock_response(render_gfi_body([]))
+        session = Mock(spec=requests.Session)
+        session.get = Mock(
+            side_effect=lambda url, **kw: caps if "GetCapabilities" in url else empty
+        )
+        provider = self._provider(product, session)
+
+        with pytest.raises(NoCoverageError):
+            provider.download(GODLO, tmp_path / "x")
+
+        timeouts = [
+            call.kwargs.get("timeout")
+            for call in session.get.call_args_list
+            if "GetCapabilities" in call.args[0]
+        ]
+        assert timeouts == [expected]
+
+    def test_explicit_download_timeout_reaches_capabilities(self, tmp_path):
+        caps = _make_mock_response(WMS_XML_WITH_NAMESPACE)
+        empty = _make_mock_response(render_gfi_body([]))
+        session = Mock(spec=requests.Session)
+        session.get = Mock(
+            side_effect=lambda url, **kw: caps if "GetCapabilities" in url else empty
+        )
+
+        with pytest.raises(NoCoverageError):
+            GugikProvider(session=session).download(GODLO, tmp_path / "x", timeout=45)
+
+        caps_call = next(
+            c for c in session.get.call_args_list if "GetCapabilities" in c.args[0]
+        )
+        assert caps_call.kwargs["timeout"] == 45
+
+    @pytest.mark.parametrize(("product", "expected"), [("nmt", 30), ("orto", 60)])
+    def test_layers_default_timeout_is_provider_timeout(self, product, expected):
+        session = _make_session(_make_mock_response(self.CAPS[product]))
+
+        self._provider(product, session)._layers(ENDPOINT)
+
+        assert session.get.call_args.kwargs["timeout"] == expected

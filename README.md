@@ -12,8 +12,8 @@ Narzędzie do automatycznego pobierania danych przestrzennych z zasobów GUGiK (
 - **HSG** - Hydrologic Soil Groups dla metody SCS-CN (grupy hydrologiczne gleb)
 
 > **0.7.0-dev:** pobieranie PL/CZ po fali naprawczej zweryfikowano offline
-> (2058 testów) i na żywych usługach GUGiK/CUZK (2026-09-30: 11 scenariuszy
-> PASS). Pozostałe ograniczenia: [Znane problemy (0.7.0-dev)](#znane-problemy-070-dev).
+> (2216 testów; pomiar 2026-10-06) i na żywych usługach GUGiK/CUZK
+> (2026-09-30: 11 scenariuszy PASS). Pozostałe ograniczenia: [Znane problemy (0.7.0-dev)](#znane-problemy-070-dev).
 
 ## Szybki Start
 
@@ -68,7 +68,8 @@ kartograf download --geometry zlewnia.gpkg --layer catchments
 # reprojekcja przypiętą operacją; PL: tylko --product nmt i system 1992;
 # arkusz bez danych GUGiK - morze, strona zagraniczna - to nodata + "Warning:").
 # Na pograniczu, także z Niemcami (danych DE nie obsługujemy), używaj
-# --target-crs: bez niego arkusz leżący za granicą kończy polecenie kodem 1.
+# --target-crs: bez niego arkusz leżący za granicą jest pomijany z "Warning:"
+# (kod 0, gdy pobrano choć jeden arkusz), a w wynikowej liście plików go brak.
 kartograf download --bbox 530000,382000,533000,386000 --country pl --target-crs EPSG:2180
 kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --target-crs EPSG:2180
 
@@ -282,7 +283,7 @@ Pozostają ograniczenia produktu (testy na żywych usługach po fali naprawczej
   - Automatyczne scalanie warstw do jednego GeoPackage (z zachowaniem rtree index)
 - ✅ **CORINE Land Cover** - Europejska klasyfikacja (Copernicus), 44 klasy
 - ✅ **Metody selekcji** - TERYT (powiat), bbox, godło arkusza, plik geometrii (SHP/GPKG)
-- ✅ **Formaty** - GeoPackage, Shapefile, GeoTIFF, PNG
+- ✅ **Formaty** - GeoPackage, Shapefile (BDOT10k `--format SHP`: archiwum `.zip`, np. `bdot10k_teryt_1465.zip`), GeoTIFF, PNG
 
 ### SoilGrids (Dane Glebowe)
 - ✅ **ISRIC SoilGrids** - Globalne dane glebowe, rozdzielczość 250m
@@ -394,7 +395,7 @@ Kartograf/
 │   ├── landcover/       # Land Cover management
 │   ├── hydrology/       # Hydrologic Soil Groups (HSG)
 │   └── cli/             # CLI interface (moduły per komenda)
-├── tests/               # Testy (2057 offline + 16 live)
+├── tests/               # Testy (2216 offline + 16 live)
 ├── docs/                # Dokumentacja (ARCHITECTURE.md - kanoniczny opis architektury i układu data/)
 └── README.md
 ```
@@ -443,4 +444,4 @@ Projekt udostępniony na licencji MIT. Szczegóły w pliku `LICENSE`.
 
 ## Status
 
-**Wersja 0.7.0-dev** - NMT Czechy (CUZK DMR 5G/4G, `--country {pl,cz,auto}`, parser godeł TM33/SM5, sidecary metadanych `.meta.json`), układ `data/` per produkt ([ADR-026](docs/DECISIONS.md)) i `--target-crs` dla Polski w trybie `--bbox`/`--geometry` ([ADR-027](docs/DECISIONS.md)) - także jako API biblioteki `download_pl_cutout`. Wcześniej: v0.6.x (LAZ przez WFS, pobieranie równoległe `--workers`, cache metadanych SQLite, walidacja warstw WMS), v0.5.0 (PL-2000, 15 warstw BDOT10k). Po fali naprawczej: 2057 testów offline i 16 testów `live` (tych ostatnich nie uruchamiano w tej fali); [CHANGELOG.md](docs/CHANGELOG.md) opisuje zmiany kontraktów przed wydaniem.
+**Wersja 0.7.0-dev** - NMT Czechy (CUZK DMR 5G/4G, `--country {pl,cz,auto}`, parser godeł TM33/SM5, sidecary metadanych `.meta.json`), układ `data/` per produkt ([ADR-026](docs/DECISIONS.md)) i `--target-crs` dla Polski w trybie `--bbox`/`--geometry` ([ADR-027](docs/DECISIONS.md)) - także jako API biblioteki `download_pl_cutout`. Wcześniej: v0.6.x (LAZ przez WFS, pobieranie równoległe `--workers`, cache metadanych SQLite, walidacja warstw WMS), v0.5.0 (PL-2000, 15 warstw BDOT10k). Po rundzie review/E2E 2026-10-06: 2216 testów offline i 16 testów `live` (tych ostatnich nie uruchamiano w tej rundzie); [CHANGELOG.md](docs/CHANGELOG.md) opisuje zmiany kontraktów przed wydaniem.
