@@ -722,10 +722,19 @@ class TestHSGSidecar:
         assert meta["horizontal_crs"] == "EPSG:2180"
         assert meta["nodata"] == 0
         assert meta["request"]["bbox"] == [450000, 550000, 460000, 560000]
+        assert meta["request"]["bbox_crs"] == "EPSG:2180"
         assert meta["extra"]["derived"] == "hsg"
         assert meta["extra"]["source_layers"] == ["clay", "sand", "silt"]
         assert meta["extra"]["depth"] == "5-15cm"
         assert meta["extra"]["stat"] == "mean"
+
+    def test_sidecar_uses_bbox_raster_capability(self, tmp_path):
+        from kartograf.core.sheet_parser import BBox
+
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        with patch("kartograf.sources.sidecar.emit_sidecar") as emit:
+            self._calc().calculate_hsg_by_bbox(bbox, tmp_path / "h.tif")
+        assert emit.call_args.kwargs["capability"] == "bbox_raster"
 
     def test_sidecar_failure_does_not_break(self, tmp_path):
         from kartograf.core.sheet_parser import BBox

@@ -1762,17 +1762,37 @@ class TestBdot10kMergeOnNetworkShare:
         assert {"PTLZ", "PTWP"} <= tables
         assert [p.name for p in out_dir.iterdir()] == ["merged.gpkg"]
 
-    def test_no_leftovers_on_failure(self, tmp_path):
+    def test_no_leftovers_on_failure(self, tmp_path, monkeypatch):
+        import tempfile
+
         src = tmp_path / "src"
         src.mkdir()
         out_dir = tmp_path / "share"
         out_dir.mkdir()
-        g1 = src / "one.gpkg"
+        g1, g2 = src / "one.gpkg", src / "two.gpkg"
         _make_layer_gpkg(g1, "PTLZ", "forest")
-        bad = src / "bad.gpkg"
-        bad.write_bytes(b"not sqlite")
+        _make_layer_gpkg(g2, "PTWP", "water")
 
-        with pytest.raises(sqlite3.DatabaseError):
-            Bdot10kProvider()._merge_gpkg_files([g1, bad], out_dir / "merged.gpkg")
+        work_dirs = []
+        real_tmpdir = tempfile.TemporaryDirectory
 
+        class SpyTmp(real_tmpdir):
+            def __init__(self, *a, **kw):
+                super().__init__(*a, **kw)
+                work_dirs.append(Path(self.name))
+
+        monkeypatch.setattr(tempfile, "TemporaryDirectory", SpyTmp)
+
+        def boom(self, target):
+            # final_tmp juz istnieje (kopia po scaleniu) - awaria podmiany
+            assert self.exists()
+            raise OSError("replace failed")
+
+        monkeypatch.setattr(Path, "replace", boom)
+
+        with pytest.raises(OSError, match="replace failed"):
+            Bdot10kProvider()._merge_gpkg_files([g1, g2], out_dir / "merged.gpkg")
+
+        assert list(out_dir.glob("*.tmp")) == []
         assert list(out_dir.iterdir()) == []
+        assert len(work_dirs) == 1 and not work_dirs[0].exists()
