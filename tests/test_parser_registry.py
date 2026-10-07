@@ -18,17 +18,14 @@ class TestDetection:
         # Opaque godlo kafla LAZ (drobniejsze niz 1:10000) tez trafia do pl1992
         assert detect_system("N-33-131-B-a-1-1-4").id == "pl1992"
 
-    def test_registration_order_and_duplicate_guard(self):
-        with pytest.raises(ValueError):
-            parser_registry.register_system(
-                SheetSystem(
-                    id="pl2000",
-                    country="PL",
-                    detect=lambda g: False,
-                    parser_factory=lambda g: None,
-                    path_parts=lambda g: [],
-                )
-            )
+    def test_systems_order_fallback_last(self):
+        """Kolejnosc = priorytet detekcji; pl1992 (detect zawsze True) ostatni."""
+        ids = [s.id for s in parser_registry.SYSTEMS]
+        assert ids == ["pl2000", "cz_tm33", "cz_sm5", "pl1992"]
+        assert all(isinstance(s, SheetSystem) for s in parser_registry.SYSTEMS)
+
+    def test_detect_never_returns_none(self):
+        assert detect_system("").id == "pl1992"
 
 
 class TestPathParts:
@@ -48,16 +45,6 @@ class TestPathParts:
     )
     def test_golden_values(self, godlo, expected):
         assert path_parts(godlo) == expected
-
-
-class TestParserFactories:
-    def test_pl2000_factory(self):
-        parser = detect_system("6.179.12.20").parser_factory("6.179.12.20")
-        assert parser.godlo == "6.179.12.20"
-
-    def test_pl1992_factory(self):
-        parser = detect_system("N-34-130-D").parser_factory("N-34-130-D")
-        assert parser.scale == "1:100000"
 
 
 class TestSheetParserIntegration:
@@ -103,19 +90,46 @@ class TestCzechSystems:
     def test_cz_path_parts(self, godlo, parts):
         assert path_parts(godlo) == parts
 
-    def test_cz_tm33_factory(self):
-        parser = detect_system("302_5550").parser_factory("302_5550")
-        assert parser.uklad == "cz_tm33"
-        assert parser.get_bbox().crs == "EPSG:3045"
+    def test_cz_patterns_are_shared_with_parsers(self):
+        """Jeden wzorzec na system: ParserTM33 i SheetIndex uzywaja rejestru."""
+        from kartograf.core import parser_tm33
+        from kartograf.providers.cuzk import sheets
 
-    def test_cz_sm5_factory_no_io_at_construction(self):
-        parser = detect_system("CTES96").parser_factory("CTES96")
-        assert parser.uklad == "cz_sm5"
-        assert parser.godlo == "CTES96"
-        # get_bbox() wymaga indeksu (IO) — NIE wolamy go tutaj
+        assert parser_tm33.CZ_TM33_PATTERN is parser_registry.CZ_TM33_PATTERN
+        assert sheets.CZ_SM5_PATTERN is parser_registry.CZ_SM5_PATTERN
 
     def test_no_pattern_collisions(self):
         """Wzorce CZ nie przechwytuja godel PL i odwrotnie."""
         assert detect_system("30_5550").id == "pl1992"  # za krotkie na TM33
         assert detect_system("CTES9").id == "pl1992"  # za krotkie na SM5
         assert detect_system("CTES961").id == "pl1992"  # za dlugie na SM5
+
+
+class TestWhitespace:
+    """K5: detect_system i path_parts obcinaja biale znaki (jak parsery)."""
+
+    @pytest.mark.parametrize(
+        ("godlo", "system_id"),
+        [
+            (" CTES96", "cz_sm5"),
+            ("CTES96 ", "cz_sm5"),
+            ("302_5550 ", "cz_tm33"),
+            (" 302_5550", "cz_tm33"),
+            (" 6.179.12.20", "pl2000"),
+            ("\tN-34-130-D ", "pl1992"),
+        ],
+    )
+    def test_detect_strips(self, godlo, system_id):
+        assert detect_system(godlo).id == system_id
+
+    @pytest.mark.parametrize(
+        ("godlo", "parts"),
+        [
+            (" 302_5550", ["302", "5550"]),
+            ("CTES96 ", ["CTES", "96"]),
+            (" 6.179.12.20 ", ["6", "179", "12", "20"]),
+            (" N-34-130-D", ["N-34", "130", "D"]),
+        ],
+    )
+    def test_path_parts_strip(self, godlo, parts):
+        assert path_parts(godlo) == parts

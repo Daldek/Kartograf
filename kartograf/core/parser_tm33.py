@@ -7,15 +7,13 @@ Czysta matematyka, zero IO — wzor: Parser2000.
 """
 
 import math
-import re
 
+from kartograf.core.parser_registry import CZ_TM33_PATTERN
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import ParseError, ValidationError
 
 TM33_CRS = "EPSG:3045"
 TILE_SIZE_M = 2000
-
-_GODLO_RE = re.compile(r"^(\d{3})_(\d{4})$")
 
 
 class ParserTM33:
@@ -29,7 +27,7 @@ class ParserTM33:
                 f"Godlo TM33 musi byc stringiem, otrzymano: {type(godlo).__name__}"
             )
         godlo = godlo.strip()
-        match = _GODLO_RE.match(godlo)
+        match = CZ_TM33_PATTERN.match(godlo)
         if not match:
             raise ParseError(
                 f"Niepoprawne godlo TM33: '{godlo}' (oczekiwano EEE_NNNN, np. 302_5550)"

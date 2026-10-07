@@ -45,6 +45,7 @@ def create_parser() -> argparse.ArgumentParser:
     )
     parse_parser.add_argument(
         "godlo",
+        type=str.strip,
         help="Map sheet identifier (e.g., N-34-130-D, N-34-130-D-d-2-4)",
     )
     parse_parser.add_argument(
@@ -82,6 +83,9 @@ def create_parser() -> argparse.ArgumentParser:
         "godlo",
         nargs="?",
         default=None,
+        # argparse nie obcina bialych znakow; godlo z odstepem trafialoby do
+        # rejestru systemow i do nazwy pliku (ocena parserow 2026-10-07, K5)
+        type=str.strip,
         help="Map sheet identifier (e.g., N-34-130-D-d-2-4)",
     )
     download_parser.add_argument(

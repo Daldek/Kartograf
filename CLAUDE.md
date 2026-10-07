@@ -87,7 +87,7 @@ kartograf/
 │   ├── sheet_parser.py     # SheetParser — parser godel map topograficznych (BBox re-eksportowany z core/bbox.py)
 │   ├── parser_2000.py      # Parser2000 — parser godal PL-2000, find_sheets_2000_for_bbox
 │   ├── parser_tm33.py      # ParserTM33 — obliczalna siatka kafli CZ 2x2 km (EPSG:3045), wzor: Parser2000
-│   ├── parser_registry.py  # Rejestr systemow godel (pl1992, pl2000, cz_tm33, cz_sm5); SheetParser/FileStorage delegowane
+│   ├── parser_registry.py  # Rejestr systemow godel (literal SYSTEMS: pl2000, cz_tm33, cz_sm5, fallback pl1992; detect_system/path_parts ze strip(); wzorce CZ_TM33_PATTERN/CZ_SM5_PATTERN); SheetParser/FileStorage delegowane
 │   └── geometry.py         # Czytanie SHP/GPKG, find_sheets_for_geometry, get_overall_bbox
 ├── sources/             # Deskryptory zrodel jako dane (zero IO przy imporcie)
 │   ├── descriptor.py    # SourceDescriptor + resolve_subdir (szablony {uklad}/{vcrs}, ADR-026), AccessChannel (+endpoint dla silnikow sterowanych deskryptorem), TransportKind, LicenseInfo, CountryProfile
@@ -111,7 +111,7 @@ kartograf/
 │   │   └── __init__.py      # create_nmt_provider() — fabryka, jedno miejsce polskich domyslow NMT
 │   ├── cuzk/             # Providery czeskie (CUZK) — etap 1 (v0.7.0-dev)
 │   │   ├── client.py        # CuzkClient — silnik sterowany deskryptorem (ArcGIS REST: query/export_image + pliki openzu)
-│   │   ├── sheets.py         # SheetIndex/SheetInfo/Sm5Sheet — indeks arkuszy SM5/TM33 (KladyMapovychListu), filtr nadmiarowego wyboru
+│   │   ├── sheets.py         # SheetIndex/SheetInfo — indeks arkuszy SM5/TM33 (KladyMapovychListu), filtr nadmiarowego wyboru
 │   │   ├── dmr.py            # CuzkDmrProvider — DMR 5G/4G, transformacja pionowa Bpv->EVRF2007 opcjonalna
 │   │   └── __init__.py       # create_dmr_provider() — fabryka, jedno miejsce czeskich domyslow (wzor: pl)
 │   ├── corine.py        # CorineProvider — CORINE z Copernicus (CLMS API + WMS)

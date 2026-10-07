@@ -18,8 +18,7 @@ from kartograf.exceptions import ParseError, ValidationError
 
 def _is_pl2000_format(godlo: str) -> bool:
     """Check if godlo uses PL-2000 dot-separated numeric format (via registry)."""
-    system = parser_registry.detect_system(godlo)
-    return system is not None and system.id == "pl2000"
+    return parser_registry.detect_system(godlo).id == "pl2000"
 
 
 class SheetParser:
