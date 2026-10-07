@@ -251,6 +251,15 @@ def ensure_standard_link(
     ``cur == target`` na sciezkach znormalizowanych, nie ``samefile``
     (kopia nie jest tym samym plikiem). Porazka podmiany (takze kopii)
     wylatuje jako ``OSError``; dotychczasowe dowiazanie zostaje.
+
+    Ryzyko szczatkowe (wyscig, bez blokad — swiadoma decyzja): rownolegle
+    wywolania na tej samej sciezce ``link`` (w jednym procesie albo miedzy
+    procesami) moga chwilowo zostawic dowiazanie na starszej kampanii
+    (odczyt biezacego celu i podmiana nie sa jedna operacja atomowa).
+    Pliki w ``kampanie/`` pozostaja nietkniete, a kolejne wywolanie
+    ``newest``/``all`` samo naprawia dowiazanie. ``DownloadManager`` nie
+    wola tej funkcji rownolegle dla jednego arkusza (dowiazanie raz na
+    arkusz, deduplikacja godel w ``expand_sheets``).
     """
     cur = linked_campaign(link)
     if cur is not None:
