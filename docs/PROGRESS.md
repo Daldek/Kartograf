@@ -127,8 +127,10 @@
 > kopia, nigdy wstecz), `emit_sidecar(required=True)`, `MetadataCache`
 > `campaigns_cache`, skorowidz `select_campaign_records`/`layer_upper_year`/
 > `LAYER_FAMILY`/`file_format`, LAZ `campaigns="all"`/`min_year`.
-> Uwaga dla T7: rownolegle `ensure_standard_link` na tej samej sciezce (TOCTOU)
-> — linkowac raz na arkusz albo serializowac. Do oceny w T11: `to_source`
+> Uwaga dla T7 (decyzja uzytkownika): wyscig `ensure_standard_link` na tej
+> samej sciezce — wariant A z planu (link raz na arkusz + dedup godel), bez
+> blokad; ryzyko szczatkowe opisac w docstringach `ensure_standard_link`
+> i `_fetch_campaigns`. Do oceny w T11: `to_source`
 > zapisuje `"format": null` dla orto (wg planu 1.5).
 >
 > Przebieg fali 1: 5 agentow rownolegle (T2 opus, reszta sonnet), review per
