@@ -687,6 +687,9 @@ class DownloadManager:
         sidecara albo z obca trescia). Po zebraniu kampanii sciezka
         standardowa wskazuje najnowsza LOKALNA kampanie (``max`` po
         ``sort_key``; ``ensure_standard_link`` nigdy nie cofa dowiazania).
+        Istniejacy plik kampanii BEZ sidecara (R22: przerwanie przed jego
+        zapisem) przechodzi ``verify_file_format`` przed odtworzeniem
+        sidecara; niezgodna tresc = plik usuniety + porazka kampanii.
 
         Wspolbieznosc: dowiazanie jest ustawiane RAZ na arkusz, po zebraniu
         wszystkich jego kampanii, a ``expand_sheets`` deduplikuje godla —
@@ -750,6 +753,12 @@ class DownloadManager:
                 if path.with_name(path.name + ".meta.json").exists():
                     self._note_reuse(path)
                 else:  # R22: proces przerwany przed sidecarem — odtworz
+                    try:  # tresc niesprawdzona (przerwanie przed weryfikacja)
+                        verify_file_format(path, ext)
+                    except DownloadError as e:
+                        path.unlink(missing_ok=True)
+                        errors.append((ref.dirname, e))
+                        continue
                     try:
                         self._write_campaign_sidecar(path, godlo, record, ref)
                     except DownloadError as e:
@@ -1209,7 +1218,9 @@ class DownloadManager:
             if request in seen:
                 return
             extra["parent_requests"] = [*seen, request]
-            tmp = sidecar.with_name(f"{sidecar.name}.{os.getpid()}.tmp")
+            tmp = sidecar.with_name(
+                f"{sidecar.name}.{os.getpid()}_{threading.get_ident()}.tmp"
+            )
             tmp.write_text(
                 json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",

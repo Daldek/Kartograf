@@ -6755,3 +6755,66 @@ class TestCampaignOptions:
             fake.resolve_error = DownloadError("raport wyjatku OGC")
             assert main(argv) == 1
             assert "Error:" in capsys.readouterr().err
+
+    # -------------------------------------------------------------------------
+    # M-1: pojedyncze godlo z --campaigns all — linia podsumowania jak lista
+    # -------------------------------------------------------------------------
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_all_single_sheet_summary_counts_campaign_files(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        from kartograf.download.manager import SheetFetch
+
+        path = tmp_path / "a.asc"
+        manager = _mock_manager(path)
+        manager.last_sheet = SheetFetch(
+            "N-34-130-D-d-2-4",
+            path,
+            skipped=False,
+            downloaded=(tmp_path / "k1" / "a.asc", tmp_path / "k2" / "a.asc"),
+            reused=(tmp_path / "k3" / "a.asc",),
+            link="symlink",
+        )
+        mock_manager_class.return_value = manager
+
+        rc = main(
+            ["download", "N-34-130-D-d-2-4", "--campaigns", "all", "-o", str(tmp_path)]
+        )
+
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert (
+            f"Downloaded 2 campaign files for 1 sheets to {tmp_path} "
+            "(1 already existed)"
+        ) in out
+        assert "Downloaded to" not in out
+        assert "Skipped" not in out
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_all_single_sheet_all_local_summary(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        from kartograf.download.manager import SheetFetch
+
+        path = tmp_path / "a.asc"
+        manager = _mock_manager(path)
+        manager.last_sheet = SheetFetch(
+            "N-34-130-D-d-2-4",
+            path,
+            skipped=True,
+            reused=(tmp_path / "k1" / "a.asc", tmp_path / "k2" / "a.asc"),
+            link="symlink",
+        )
+        mock_manager_class.return_value = manager
+
+        rc = main(
+            ["download", "N-34-130-D-d-2-4", "--campaigns", "all", "-o", str(tmp_path)]
+        )
+
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert (
+            f"Downloaded 0 campaign files for 1 sheets to {tmp_path} "
+            "(2 already existed)"
+        ) in out

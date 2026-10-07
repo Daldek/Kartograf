@@ -152,13 +152,17 @@ def campaign_extension(ref: CampaignRef, default_ext: str) -> str:
 def verify_file_format(path: Path, ext: str) -> None:
     """Weryfikacja tresci pliku po pobraniu (64 pierwsze bajty).
 
-    '.asc' -> naglowek AAIGrid, '.tif' -> sygnatura TIFF/BigTIFF. Niezgodnosc
-    albo rozszerzenie spoza {'.asc', '.tif'} -> DownloadError.
+    '.asc' -> naglowek AAIGrid, '.tif' -> sygnatura TIFF/BigTIFF. Niezgodnosc,
+    rozszerzenie spoza {'.asc', '.tif'} albo blad odczytu (``OSError``)
+    -> DownloadError.
     """
     if ext not in _FORMAT_NAMES:
         raise DownloadError(f"{path.name}: brak weryfikacji formatu dla {ext!r}")
-    with path.open("rb") as fh:
-        head = fh.read(64)
+    try:
+        with path.open("rb") as fh:
+            head = fh.read(64)
+    except OSError as e:
+        raise DownloadError(f"{path.name}: odczyt do weryfikacji formatu: {e}") from e
     if ext == ".asc":
         words = head.lstrip().lower().split(None, 1)
         ok = bool(words) and words[0].decode("ascii", "ignore") in _AAIGRID_KEYS

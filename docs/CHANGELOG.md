@@ -103,6 +103,15 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `DownloadResult.unverified` (godło -> treść błędu). Biblioteka bez
   `MetadataCache` pyta skorowidz przy każdym `download_sheet` (także arkusza
   już pobranego) — przekaż cache providerowi (raz na 7 dni).
+- Poprawki po przeglądzie końcowym ADR-030: pojedyncze godło z
+  `--campaigns all` drukuje (bez `-q`) tę samą linię podsumowania co lista
+  (`Downloaded <n> campaign files for 1 sheets to <dir> (<k> already
+  existed)`) zamiast `Downloaded to`; plik kampanii bez sidecara (przerwany
+  przebieg) przechodzi weryfikację treści przed odtworzeniem sidecara
+  (niezgodna treść = plik usunięty, porażka kampanii); `verify_file_format`
+  zamienia `OSError` odczytu na `DownloadError`; LAZ `select_tiles` waliduje
+  `min_year` jak `DownloadManager` (`ValidationError` dla nie-int, `bool`,
+  spoza 1900..2100; komunikat nieznanej strategii jak w NMT).
 
 ### LAZ 2026-10-07
 - **Zmiana zachowania (ADR-029):** domyślnie (bez `--year`) LAZ pobiera
