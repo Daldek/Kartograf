@@ -288,6 +288,60 @@ class TestDownloadHierarchyLastResult:
 
         assert "2 downloaded, 1 skipped, 1 failed" in caplog.text
 
+    @pytest.mark.parametrize("workers", [1, 4])
+    def test_progress_reports_final_status_and_message_per_sheet(
+        self, tmp_path, workers
+    ):
+        """D10: oba tryby raportuja przez jeden ``_emit`` — koncowy status
+        i komunikat kazdego arkusza sa identyczne (sekwencyjny dodatkowo
+        zglasza ``downloading`` przed pobraniem)."""
+        from kartograf.exceptions import NoCoverageError
+
+        provider = Mock(spec=GugikProvider)
+        type(provider).default_extension = PropertyMock(return_value=".asc")
+
+        def mock_download(godlo, path, timeout=30):
+            if godlo.endswith("-1"):
+                raise DownloadError("Network error", godlo=godlo)
+            if godlo.endswith("-3"):
+                raise NoCoverageError("morze", godlo=godlo)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"ASC data")
+            return path
+
+        provider.download = mock_download
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+        existing = manager.storage.get_path("N-34-130-D-d-2-2", ".asc")
+        existing.parent.mkdir(parents=True, exist_ok=True)
+        existing.write_bytes(b"existing")
+
+        events = []
+        manager.download_hierarchy(
+            "N-34-130-D-d-2",
+            "1:10000",
+            max_workers=workers,
+            on_progress=events.append,
+        )
+
+        final = {
+            e.godlo: (e.status, e.message) for e in events if e.status != "downloading"
+        }
+        assert final["N-34-130-D-d-2-1"][0] == "failed"
+        assert "Network error" in final["N-34-130-D-d-2-1"][1]
+        assert final["N-34-130-D-d-2-2"] == ("skipped", "Already exists")
+        assert final["N-34-130-D-d-2-3"][0] == "no_coverage"
+        assert "morze" in final["N-34-130-D-d-2-3"][1]
+        assert final["N-34-130-D-d-2-4"] == ("completed", "")
+        assert sorted(e.current for e in events if e.status != "downloading") == [
+            1,
+            2,
+            3,
+            4,
+        ]
+        downloading = [e.godlo for e in events if e.status == "downloading"]
+        expected = ["N-34-130-D-d-2-1", "N-34-130-D-d-2-3", "N-34-130-D-d-2-4"]
+        assert downloading == (expected if workers == 1 else [])
+
     def test_last_result_counts_unexpected_error_as_failed(self, tmp_path):
         """Wyjatek spoza DownloadError w trybie rownoleglym trafia do failed."""
         provider = Mock(spec=GugikProvider)

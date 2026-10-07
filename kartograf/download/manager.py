@@ -327,21 +327,8 @@ class DownloadManager:
                 godlo, "1:10000", skip_existing=skip_existing, on_progress=on_progress
             )
 
-        # Get target path
-        target_path = self._storage.get_path(godlo, self._default_ext)
-
-        # Check if already exists
-        if skip_existing and target_path.exists():
-            logger.info(f"Skipping {godlo} - already exists at {target_path}")
-            self._note_reuse(target_path)
-            return target_path
-
-        # Download
-        logger.info(f"Downloading {godlo}...")
-        self._provider.download(godlo, target_path)
-        self._write_sidecar(target_path, {"godlo": godlo})
-
-        return target_path
+        path, _ = self._fetch_sheet(godlo, skip_existing)
+        return path
 
     def download_hierarchy(
         self,
@@ -416,16 +403,9 @@ class DownloadManager:
             f"({total} sheets, workers={workers})"
         )
 
-        if workers <= 1:
-            # Sequential download (backward compatible)
-            return self._download_hierarchy_sequential(
-                descendants, total, skip_existing, on_progress
-            )
-        else:
-            # Parallel download with ThreadPoolExecutor
-            return self._download_hierarchy_parallel(
-                descendants, total, skip_existing, on_progress, workers
-            )
+        return self._download_many(
+            [d.godlo for d in descendants], skip_existing, on_progress, workers
+        )
 
     @staticmethod
     def expand_sheets(godla: list[str]) -> list[str]:
@@ -487,28 +467,54 @@ class DownloadManager:
         total = len(leaves)
         workers = max_workers if max_workers is not None else self._max_workers
         logger.info(f"Starting sheet list download: {total} sheets, workers={workers}")
-        if workers <= 1:
-            return self._download_hierarchy_sequential(
-                leaves, total, skip_existing, on_progress
-            )
-        return self._download_hierarchy_parallel(
-            leaves, total, skip_existing, on_progress, workers
+        return self._download_many(
+            [leaf.godlo for leaf in leaves], skip_existing, on_progress, workers
         )
+
+    def _fetch_sheet(
+        self,
+        godlo: str,
+        skip_existing: bool,
+        on_download: Callable[[], None] | None = None,
+    ) -> tuple[Path, bool]:
+        """
+        Pobierz jeden arkusz — jedyna tresc "pobierz arkusz" (D10).
+
+        Sciezka z ``FileStorage``; istniejacy plik przy ``skip_existing``
+        jest pomijany (i notowany w sidecarze, N4); inaczej provider pobiera
+        plik, a manager pisze sidecar. ``on_download`` jest wolany tuz przed
+        pobraniem (tryb sekwencyjny raportuje ``"downloading"``). Wyjatki
+        providera wylatuja bez zmian.
+
+        Returns
+        -------
+        tuple[Path, bool]
+            (sciezka pliku, ``True`` gdy pominiety)
+        """
+        target_path = self._storage.get_path(godlo, self._default_ext)
+        if skip_existing and target_path.exists():
+            logger.info(f"Skipping {godlo} - already exists at {target_path}")
+            self._note_reuse(target_path)
+            return target_path, True
+        if on_download is not None:
+            on_download()
+        logger.info(f"Downloading {godlo}...")
+        path = self._provider.download(godlo, target_path)
+        self._write_sidecar(path, {"godlo": godlo})
+        return path, False
 
     def _download_single_sheet_task(
         self,
-        descendant_godlo: str,
+        godlo: str,
         skip_existing: bool,
+        on_download: Callable[[], None] | None = None,
     ) -> tuple[str, Path | None, str, str]:
         """
-        Download a single sheet — used as a task for both sequential and parallel modes.
+        Pobierz arkusz listy: ``DownloadError`` -> status zamiast wyjatku.
 
-        Parameters
-        ----------
-        descendant_godlo : str
-            Godlo identifier of the sheet to download
-        skip_existing : bool
-            Whether to skip if file already exists
+        Wspolne dla trybu sekwencyjnego i rownoleglego. Inny wyjatek (np.
+        ``OSError`` zapisu) wylatuje: sekwencyjnie przerywa liste, w puli
+        watkow lapie go ``_download_many`` jako ``"failed"``.
 
         Returns
         -------
@@ -517,223 +523,116 @@ class DownloadManager:
             status is one of: "skipped", "completed", "failed", "no_coverage"
         """
         try:
-            target_path = self._storage.get_path(descendant_godlo, self._default_ext)
-
-            if skip_existing and target_path.exists():
-                self._note_reuse(target_path)
-                return (descendant_godlo, target_path, "skipped", "Already exists")
-
-            path = self._provider.download(descendant_godlo, target_path)
-            self._write_sidecar(path, {"godlo": descendant_godlo})
-            return (descendant_godlo, path, "completed", "")
-
+            path, skipped = self._fetch_sheet(godlo, skip_existing, on_download)
         except NoCoverageError as e:
-            logger.warning(f"No data for {descendant_godlo}: {e}")
-            return (descendant_godlo, None, "no_coverage", str(e))
-
+            logger.warning(f"No data for {godlo}: {e}")
+            return (godlo, None, "no_coverage", str(e))
         except DownloadError as e:
-            logger.error(f"Failed to download {descendant_godlo}: {e}")
-            return (descendant_godlo, None, "failed", str(e))
+            logger.error(f"Failed to download {godlo}: {e}")
+            return (godlo, None, "failed", str(e))
+        if skipped:
+            return (godlo, path, "skipped", "Already exists")
+        return (godlo, path, "completed", "")
 
-    def _download_hierarchy_sequential(
-        self,
-        descendants: list,
-        total: int,
-        skip_existing: bool,
-        on_progress: ProgressCallback | None,
-    ) -> list[Path]:
-        """Execute sequential download of all descendants."""
-        downloaded_paths = []
-        result = DownloadResult()
-
-        for i, descendant in enumerate(descendants, 1):
-            current_godlo = descendant.godlo
-
-            try:
-                target_path = self._storage.get_path(current_godlo, self._default_ext)
-
-                if skip_existing and target_path.exists():
-                    # Skipped
-                    self._note_reuse(target_path)
-                    if on_progress:
-                        on_progress(
-                            DownloadProgress(
-                                current=i,
-                                total=total,
-                                godlo=current_godlo,
-                                status="skipped",
-                                message="Already exists",
-                            )
-                        )
-                    result.skipped.append(current_godlo)
-                    downloaded_paths.append(target_path)
-                    continue
-
-                # Download
-                if on_progress:
-                    on_progress(
-                        DownloadProgress(
-                            current=i,
-                            total=total,
-                            godlo=current_godlo,
-                            status="downloading",
-                        )
-                    )
-
-                path = self._provider.download(current_godlo, target_path)
-                self._write_sidecar(path, {"godlo": current_godlo})
+    @staticmethod
+    def _record(
+        result: DownloadResult,
+        paths: list[Path],
+        godlo: str,
+        path: Path | None,
+        status: str,
+    ) -> None:
+        """Wpisz wynik jednego arkusza do ``DownloadResult`` i listy sciezek."""
+        if status in ("completed", "skipped") and path is not None:
+            if status == "skipped":
+                result.skipped.append(godlo)
+            else:
                 result.succeeded.append(path)
-                downloaded_paths.append(path)
+            paths.append(path)
+        elif status in ("failed", "no_coverage"):
+            # R5: brak danych u zrodla — porazka listy, ale rozpoznawalna
+            result.failed.append(godlo)
+            if status == "no_coverage":
+                result.no_coverage.append(godlo)
 
-                if on_progress:
-                    on_progress(
-                        DownloadProgress(
-                            current=i,
-                            total=total,
-                            godlo=current_godlo,
-                            status="completed",
-                        )
-                    )
-
-            except NoCoverageError as e:
-                # R5: brak danych u zrodla — porazka listy, ale rozpoznawalna
-                result.failed.append(current_godlo)
-                result.no_coverage.append(current_godlo)
-                logger.warning(f"No data for {current_godlo}: {e}")
-
-                if on_progress:
-                    on_progress(
-                        DownloadProgress(
-                            current=i,
-                            total=total,
-                            godlo=current_godlo,
-                            status="no_coverage",
-                            message=str(e),
-                        )
-                    )
-
-            except DownloadError as e:
-                result.failed.append(current_godlo)
-                logger.error(f"Failed to download {current_godlo}: {e}")
-
-                if on_progress:
-                    on_progress(
-                        DownloadProgress(
-                            current=i,
-                            total=total,
-                            godlo=current_godlo,
-                            status="failed",
-                            message=str(e),
-                        )
-                    )
-
-        self.last_result = result
-        logger.info(
-            f"Hierarchy download complete: {len(result.succeeded)} downloaded, "
-            f"{len(result.skipped)} skipped, {len(result.failed)} failed (of {total})"
-        )
-
-        return downloaded_paths
-
-    def _download_hierarchy_parallel(
-        self,
-        descendants: list,
+    @staticmethod
+    def _emit(
+        on_progress: ProgressCallback | None,
+        current: int,
         total: int,
+        godlo: str,
+        status: str,
+        message: str = "",
+    ) -> None:
+        """Jedno miejsce budowy ``DownloadProgress`` dla obu trybow."""
+        if on_progress:
+            on_progress(
+                DownloadProgress(
+                    current=current,
+                    total=total,
+                    godlo=godlo,
+                    status=status,
+                    message=message,
+                )
+            )
+
+    def _download_many(
+        self,
+        godla: list[str],
         skip_existing: bool,
         on_progress: ProgressCallback | None,
-        max_workers: int,
+        workers: int,
     ) -> list[Path]:
-        """Execute parallel download of all descendants using ThreadPoolExecutor."""
+        """Pobierz liste arkuszy (``workers <= 1`` sekwencyjnie, inaczej pula).
+
+        Oba tryby wolaja ``_download_single_sheet_task`` i raportuja przez
+        ``_emit``/``_record``. Sekwencyjny dodatkowo zglasza ``"downloading"``
+        przed kazdym pobraniem i przepuszcza wyjatki spoza ``DownloadError``;
+        rownolegly (kolejnosc ukonczenia) liczy je jako ``"failed"``.
+        """
         downloaded_paths: list[Path] = []
         result = DownloadResult()
-        lock = threading.Lock()
-        counter = [0]  # mutable counter for progress tracking
+        total = len(godla)
 
-        def _submit_and_handle(descendant):
-            """Download a single descendant and return the result."""
-            return self._download_single_sheet_task(descendant.godlo, skip_existing)
+        if workers <= 1:
+            for i, godlo in enumerate(godla, 1):
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_godlo = {
-                executor.submit(_submit_and_handle, desc): desc.godlo
-                for desc in descendants
-            }
+                def started(i: int = i, godlo: str = godlo) -> None:
+                    self._emit(on_progress, i, total, godlo, "downloading")
 
-            for future in concurrent.futures.as_completed(future_to_godlo):
-                godlo_id = future_to_godlo[future]
-                try:
-                    current_godlo, path, status, message = future.result()
-                except Exception as e:
-                    # Unexpected exception from the future
-                    logger.error(f"Unexpected error downloading {godlo_id}: {e}")
+                _, path, status, message = self._download_single_sheet_task(
+                    godlo, skip_existing, on_download=started
+                )
+                self._record(result, downloaded_paths, godlo, path, status)
+                self._emit(on_progress, i, total, godlo, status, message)
+        else:
+            lock = threading.Lock()
+            counter = 0
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
+                future_to_godlo = {
+                    executor.submit(
+                        self._download_single_sheet_task, godlo, skip_existing
+                    ): godlo
+                    for godlo in godla
+                }
+                for future in concurrent.futures.as_completed(future_to_godlo):
+                    godlo = future_to_godlo[future]
+                    try:
+                        godlo, path, status, message = future.result()
+                    except Exception as e:
+                        logger.error(f"Unexpected error downloading {godlo}: {e}")
+                        path, status, message = None, "failed", str(e)
                     with lock:
-                        result.failed.append(godlo_id)
-                        counter[0] += 1
-                        current_count = counter[0]
-                    if on_progress:
-                        on_progress(
-                            DownloadProgress(
-                                current=current_count,
-                                total=total,
-                                godlo=godlo_id,
-                                status="failed",
-                                message=str(e),
-                            )
-                        )
-                    continue
-
-                with lock:
-                    counter[0] += 1
-                    current_count = counter[0]
-
-                    if status in ("completed", "skipped") and path is not None:
-                        if status == "skipped":
-                            result.skipped.append(current_godlo)
-                        else:
-                            result.succeeded.append(path)
-                        downloaded_paths.append(path)
-                    elif status in ("failed", "no_coverage"):
-                        result.failed.append(current_godlo)
-                        if status == "no_coverage":
-                            result.no_coverage.append(current_godlo)
-
-                if on_progress:
-                    if status == "skipped":
-                        on_progress(
-                            DownloadProgress(
-                                current=current_count,
-                                total=total,
-                                godlo=current_godlo,
-                                status="skipped",
-                                message=message,
-                            )
-                        )
-                    elif status == "completed":
-                        on_progress(
-                            DownloadProgress(
-                                current=current_count,
-                                total=total,
-                                godlo=current_godlo,
-                                status="completed",
-                            )
-                        )
-                    elif status in ("failed", "no_coverage"):
-                        on_progress(
-                            DownloadProgress(
-                                current=current_count,
-                                total=total,
-                                godlo=current_godlo,
-                                status=status,
-                                message=message,
-                            )
-                        )
+                        counter += 1
+                        current = counter
+                        self._record(result, downloaded_paths, godlo, path, status)
+                    self._emit(on_progress, current, total, godlo, status, message)
 
         self.last_result = result
         logger.info(
             f"Hierarchy download complete: {len(result.succeeded)} downloaded, "
             f"{len(result.skipped)} skipped, {len(result.failed)} failed (of {total})"
         )
-
         return downloaded_paths
 
     # =========================================================================
