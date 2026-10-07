@@ -39,6 +39,46 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Nowy moduł `kartograf/core/coverage.py` (przecięcie, różnica i bufor
   wypukłych wielokątów, bez nowych zależności).
 
+### Deduplikacja po review 2026-10-07
+- Providery i transport (review D1): sześć kopii pętli pobierania pliku
+  (`_download_with_retry`/`_make_request`/`_save_response` w GUGiK NMT/NMPT,
+  orto, LAZ, BDOT10k, CORINE, SoilGrids) zastąpił jeden
+  `transport.http.download_to` z hakami `validate=` (CORINE/SoilGrids:
+  `reject_error_document` — raport XML/HTML WMS/WCS bez ponowień) i `save=`
+  (BDOT10k GPKG: rozpakowanie ZIP). Zmiany zachowania, w których kopie się
+  rozjechały:
+  - **jeden backoff dla wszystkich: 2 s, potem 4 s** (`backoff_delay`);
+    skorowidz GUGiK, WFS LAZ, TERYT BDOT10k i CUZK (`get_with_retry`,
+    `download_to`) czekały dotąd 1 s/2 s. Wybrany wykładnik providerów:
+    to on obsługiwał dotąd cały ruch plików (przeciążony serwer 5xx), a
+    +3 s w najgorszym przypadku jest pomijalne wobec timeoutów 30–120 s;
+  - zapis atomowy przez `os.replace` zamiast `Path.rename` (także scalanie
+    GPKG BDOT10k): na Windows `rename` na istniejący plik rzuca
+    `FileExistsError`, więc `--force` nad pobranym arkuszem padał;
+  - komunikaty `DownloadError` po polsku jak w transporcie wspólnym
+    („HTTP 404 (bez ponowien)”, „po 3 probach”) zamiast angielskich;
+  - CORINE i SoilGrids: jedna sesja HTTP na wątek zamiast nowej,
+    niezamykanej `requests.Session()` przy każdym pobraniu (także zapytania
+    CLMS w trybie bezpośrednim);
+  - katalog docelowy powstaje dopiero po udanej odpowiedzi HTTP (LAZ nie
+    zostawia pustego katalogu po błędzie).
+  Usunięte atrybuty klas `RETRY_BACKOFF_BASE` providerów (martwe po
+  zmianie); `MAX_RETRIES` wskazuje `transport.http.MAX_RETRIES` (3).
+- `transport.http.SessionPerThread` zastępuje dwie kopie
+  `_session_for_thread` (mixin skorowidza GUGiK i BDOT10k); providery
+  trzymają `self._sessions` zamiast `self._session` (review D2).
+- `transform/bbox.py::envelope_from_2180` zastępuje
+  `_transform_bbox_to_wgs84`/`_transform_bbox_to_epsg3857` w CORINE i
+  SoilGrids (wynik bez zmian; review D19).
+- `providers/pl/wcs.py::GugikWcsMixin`: wspólne `WCS_FORMATS`,
+  `_construct_wcs_url` i `get_supported_formats` dla NMT/NMPT i orto;
+  `validate_godlo` w `SkorowidzLayersMixin`; usunięte
+  `GugikProvider.FORMAT_EXTENSIONS`/`get_file_extension` (kopia
+  `BaseProvider.get_file_extension`, dziedziczona bez zmian; review D13).
+- `transform.crs.CONTENT_POLICY` i `WARP_MARGIN_PX` zastępują prywatne
+  stałe toru CZ (`providers/cuzk/dmr.py`); lustro w `download/cutout.py`
+  do przepięcia osobno (review D9).
+
 ### Runda review/E2E 2026-10-06
 - Tor CZ (`CuzkDmrProvider`, `--target-crs` i kafel TM33) używa wspólnego
   `transform/raster.warp_to_grid` zamiast własnej kopii

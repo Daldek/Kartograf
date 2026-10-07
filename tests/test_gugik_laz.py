@@ -637,7 +637,7 @@ class TestDownload:
         session.get.side_effect = requests.ConnectionError("down")
         p = GugikLazProvider(session=session)
         with (
-            patch("kartograf.providers.pl.gugik_laz.time.sleep"),
+            patch("kartograf.transport.http.time.sleep"),
             pytest.raises(DownloadError),
         ):
             p.download("https://opendata.geoportal.gov.pl/x.laz", tmp_path / "t.laz")

@@ -16,34 +16,29 @@ Supported resolutions:
 """
 
 import logging
-import os
 import re
-import threading
-import time
 from pathlib import Path
-from urllib.parse import urlencode
 
 import requests
 
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.exceptions import (
     NoCoverageError,
-    ParseError,
     ValidationError,
 )
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import SkorowidzLayersMixin, SkorowidzRecord
+from kartograf.providers.pl.wcs import GugikWcsMixin
 from kartograf.transport.http import (
-    http_failure,
-    http_status,
-    is_retryable,
-    retry_wait,
+    MAX_RETRIES,
+    SessionPerThread,
+    download_to,
 )
 
 logger = logging.getLogger(__name__)
 
 
-class GugikProvider(SkorowidzLayersMixin, BaseProvider):
+class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     """
     Provider for downloading NMT data from GUGiK.
 
@@ -130,25 +125,9 @@ class GugikProvider(SkorowidzLayersMixin, BaseProvider):
     SUPPORTED_VERTICAL_CRS = ["KRON86", "EVRF2007"]
     SUPPORTED_VERTICAL_CRS_5M = ["EVRF2007"]  # 5m only supports EVRF2007
 
-    # WCS formats (for bbox downloads)
-    WCS_FORMATS = {
-        "GTiff": "image/tiff",
-        "PNG": "image/png",
-        "JPEG": "image/jpeg",
-    }
-
-    # File extensions
-    FORMAT_EXTENSIONS = {
-        "GTiff": ".tif",
-        "PNG": ".png",
-        "JPEG": ".jpg",
-        "ASC": ".asc",
-    }
-
     # Default settings
     DEFAULT_TIMEOUT = 30
-    MAX_RETRIES = 3
-    RETRY_BACKOFF_BASE = 2
+    MAX_RETRIES = MAX_RETRIES
 
     # Product identifier for cache key
     _CACHE_PRODUCT = "nmt"
@@ -199,7 +178,7 @@ class GugikProvider(SkorowidzLayersMixin, BaseProvider):
                 )
 
         super().__init__()
-        self._session = session
+        self._sessions = SessionPerThread(session)
         self._vertical_crs = vertical_crs
         self._resolution = resolution
         self._cache = cache
@@ -284,10 +263,12 @@ class GugikProvider(SkorowidzLayersMixin, BaseProvider):
 
         record = self._resolve_sheet(godlo, timeout)
 
-        return self._download_with_retry(
-            url=record.url,
-            output_path=output_path,
+        return download_to(
+            self._sessions.get(),
+            record.url,
+            output_path,
             timeout=timeout,
+            retries=self.MAX_RETRIES,
             description=f"{godlo} (OpenData)",
         )
 
@@ -441,156 +422,28 @@ class GugikProvider(SkorowidzLayersMixin, BaseProvider):
 
         url = self._construct_wcs_url(bbox, format)
 
-        return self._download_with_retry(
-            url=url,
-            output_path=output_path,
+        return download_to(
+            self._sessions.get(),
+            url,
+            output_path,
             timeout=timeout,
+            retries=self.MAX_RETRIES,
             description=(
                 f"bbox ({bbox.min_x:.0f},{bbox.min_y:.0f})-"
                 f"({bbox.max_x:.0f},{bbox.max_y:.0f})"
             ),
         )
 
-    def _construct_wcs_url(self, bbox: BBox, format: str) -> str:
-        """
-        Construct WCS GetCoverage URL for bounding box.
-
-        Parameters
-        ----------
-        bbox : BBox
-            Bounding box in EPSG:2180
-        format : str
-            Output format (GTiff, PNG, JPEG)
-
-        Returns
-        -------
-        str
-            Full WCS URL
-        """
-        wcs_endpoint = self.WCS_ENDPOINTS[self._vertical_crs]
-        coverage_id = self.COVERAGE_IDS[self._vertical_crs]
-
-        params = {
-            "SERVICE": "WCS",
-            "VERSION": "2.0.1",
-            "REQUEST": "GetCoverage",
-            "COVERAGEID": coverage_id,
-            "FORMAT": self.WCS_FORMATS[format],
-        }
-
-        base_url = f"{wcs_endpoint}?{urlencode(params)}"
-        subset_x = f"SUBSET=x({bbox.min_x:.2f},{bbox.max_x:.2f})"
-        subset_y = f"SUBSET=y({bbox.min_y:.2f},{bbox.max_y:.2f})"
-
-        return f"{base_url}&{subset_x}&{subset_y}"
-
-    # =========================================================================
-    # Common utilities
-    # =========================================================================
-
-    def _download_with_retry(
-        self,
-        url: str,
-        output_path: Path,
-        timeout: int,
-        description: str,
-    ) -> Path:
-        """
-        Download file with automatic retry on failure.
-
-        Parameters
-        ----------
-        url : str
-            URL to download
-        output_path : Path
-            Target path
-        timeout : int
-            Request timeout
-        description : str
-            Description for logging
-
-        Returns
-        -------
-        Path
-            Path to downloaded file
-
-        Raises
-        ------
-        DownloadError
-            If download fails after all retries
-        """
-        last_error = None
-
-        for attempt in range(1, self.MAX_RETRIES + 1):
-            try:
-                logger.debug(
-                    f"Downloading {description} (attempt {attempt}/{self.MAX_RETRIES})"
-                )
-
-                response = self._make_request(url, timeout)
-                self._save_response(response, output_path)
-
-                logger.info(f"Successfully downloaded {description} to {output_path}")
-                return output_path
-
-            except requests.RequestException as e:
-                last_error = e
-                logger.warning(
-                    f"Download failed for {description} (attempt {attempt}): {e}"
-                )
-                if not is_retryable(e):
-                    raise http_failure(
-                        f"Failed to download {description}: "
-                        f"HTTP {http_status(e)} (not retried): {e}",
-                        e,
-                    ) from e
-
-                if attempt < self.MAX_RETRIES:
-                    wait_time = retry_wait(e, self.RETRY_BACKOFF_BASE**attempt)
-                    logger.debug(f"Retrying in {wait_time} seconds...")
-                    time.sleep(wait_time)
-
-        raise http_failure(
-            f"Failed to download {description} after {self.MAX_RETRIES} attempts: "
-            f"{last_error}",
-            last_error,
+    def _wcs_target(self) -> tuple[str, str]:
+        """Endpoint i coverage WCS dla ukladu wysokosci providera."""
+        return (
+            self.WCS_ENDPOINTS[self._vertical_crs],
+            self.COVERAGE_IDS[self._vertical_crs],
         )
-
-    def _make_request(self, url: str, timeout: int) -> requests.Response:
-        """Pobierz strumien na sesji watku (sesja wstrzyknieta: dba wolajacy)."""
-        response = self._session_for_thread().get(url, timeout=timeout, stream=True)
-        response.raise_for_status()
-        return response
-
-    def _save_response(self, response: requests.Response, output_path: Path) -> None:
-        """
-        Save HTTP response to file atomically.
-
-        Uses a unique temp filename per process/thread to prevent
-        collisions when multiple threads download concurrently.
-        """
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        thread_id = threading.current_thread().ident
-        temp_suffix = f"{output_path.suffix}.{os.getpid()}_{thread_id}.tmp"
-        temp_path = output_path.with_suffix(temp_suffix)
-
-        try:
-            with open(temp_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            temp_path.rename(output_path)
-        except Exception:
-            if temp_path.exists():
-                temp_path.unlink()
-            raise
 
     # =========================================================================
     # Info methods
     # =========================================================================
-
-    def get_supported_formats(self) -> list[str]:
-        """Return list of supported WCS formats."""
-        return list(self.WCS_FORMATS.keys())
 
     def get_supported_resolutions(self) -> list[str]:
         """Return list of supported resolutions."""
@@ -616,20 +469,6 @@ class GugikProvider(SkorowidzLayersMixin, BaseProvider):
         if res == "5m":
             return list(self.SUPPORTED_VERTICAL_CRS_5M)
         return list(self.SUPPORTED_VERTICAL_CRS)
-
-    def get_file_extension(self, format: str) -> str:
-        """Get file extension for given format."""
-        if format not in self.FORMAT_EXTENSIONS:
-            raise ValueError(f"Unknown format: {format}")
-        return self.FORMAT_EXTENSIONS[format]
-
-    def validate_godlo(self, godlo: str) -> bool:
-        """Validate godło format."""
-        try:
-            SheetParser(godlo)
-            return True
-        except ParseError:
-            return False
 
     def is_wcs_available(self) -> bool:
         """
