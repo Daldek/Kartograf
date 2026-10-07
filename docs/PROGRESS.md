@@ -112,7 +112,7 @@
 > = `openai-codex/gpt-6-sol` (zapisane globalnie 2026-09-30; astra
 > wyczerpuje limit po ~8 min pracy 3-4 agentow).
 
-### ADR-030 strategie kampanii — fale 1-3 (T1-T7) zmergowane (2026-10-07)
+### ADR-030 strategie kampanii — fale 1-4 (T1-T9) zmergowane (2026-10-07)
 
 > **START NASTEPNEJ SESJI:** fala 1 planu `docs/research/2026-10-07-plan-adr030.md`
 > GOTOWA i w `develop` (merge `a187a5d` T1, `d839946` T2, `7fcd3bb` T3,
@@ -120,9 +120,15 @@
 > `resolve_campaigns`/`download_record`/`record_source`, `supports_campaigns`).
 > oraz fala 3 (`27ec40e` T7: `DownloadManager` z torem kampanii, `SheetFetch`,
 > `last_sheet`, dowiazanie raz na arkusz; porazka dowiazania = porazka arkusza).
-> Brama: **2579 testow offline**, ruff czysty, mypy lista = baseline (32).
-> Fala 4 (T8 CLI + T9 biblioteka/wycinek, rownolegle) — **TYLKO na polecenie
-> uzytkownika**. Ruling T7: zla `aktualnosc` rekordu w `all` = porazka tej
+> oraz fala 4 (`0541942` T9: eksporty `CampaignRef`/`SheetFetch`, testy
+> przeplywu na realnych body; `456d4ac` T8: CLI `--campaigns {newest,all}`,
+> `--min-year`, straze CZ/`--target-crs`/LAZ, podsumowanie `all` z nowym polem
+> `DownloadResult.reused_campaign_files`).
+> Brama: **2622 testy offline**, ruff czysty, mypy lista = baseline (32).
+> Fala 5 (T10 dokumentacja, potem T11 przeglad koncowy opus) — **TYLKO na
+> polecenie uzytkownika**; potem T12 na zywo (katalog danych). T10 ma opisac m.in.:
+> komunikat bledu pobrania kampanii = nazwa pliku z URL (nie godlo),
+> `reused_campaign_files`. Odlozone drobne uwagi dla T11: ledger SDD. Ruling T7: zla `aktualnosc` rekordu w `all` = porazka tej
 > kampanii, link na najnowsza poprawna (R16 doprecyzowane w duchu Q10). Ledger SDD
 > (rulingi, odlozone drobne uwagi do T11, uwagi dla T7):
 > `.superpowers/sdd/2026-10-07-plan-adr030/progress.md` (gitignorowany).
