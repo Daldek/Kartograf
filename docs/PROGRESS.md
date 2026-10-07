@@ -112,6 +112,33 @@
 > = `openai-codex/gpt-6-sol` (zapisane globalnie 2026-09-30; astra
 > wyczerpuje limit po ~8 min pracy 3-4 agentow).
 
+### ADR-030 strategie kampanii — ADR, plan, weryfikacja (2026-10-07, IMPLEMENTACJA NIE ROZPOCZETA)
+
+> **START NASTEPNEJ SESJI:** ADR-030 (+ errata 1, 2, 3) w `docs/DECISIONS.md`
+> i plan `docs/research/2026-10-07-plan-adr030.md` (commit `3127955`) sa
+> GOTOWE; implementacja czeka na polecenie uzytkownika. Worktree
+> `../Kartograf-adr030-t1..t5` (galezie `adr030/t1..t5`) to przerwana,
+> NIEAUTORYZOWANA fala 1 (niezacommitowane czesciowe zmiany) — do usuniecia
+> po potwierdzeniu uzytkownika. `develop` czysty.
+
+- **Decyzje uzytkownika:** strategie `--campaigns {newest,all}` (domyslnie
+  `newest`); `coverage`, `mosaic`, `--campaign <id>` ODRZUCONE (pokrycie
+  nieznane przed pobraniem: brak HTTP Range, geometria WFS = rama arkusza;
+  skladanie kampanii — narzedzie 0.7.1); `--min-year` od daty POZYSKANIA
+  (`aktualnosc`); uklad B: `<segment>/kampanie/<data>_<id>/<hierarchia>/<godlo>`
+  + sciezka standardowa = dowiazanie do najnowszej lokalnej kampanii
+  (symlink -> hardlink -> kopia; nigdy wstecz); `newest` sprawdza nowsza
+  kampanie; bez migracji starych plikow; sidecar kampanii obowiazkowy;
+  format z pola `format` rekordu (`.xyz` 72675 = AAIGrid); kampanie TYLKO PL
+  — CZ zawsze najnowsze, opcje kampanii dla CZ = `Error:`; aktualizacja CZ
+  (flaga CLI: pelne ponowne pobranie / porownanie metadanych) — kolejne wydanie.
+- **Research:** `pokrycie-kampanii.md` (8 par, 0,9-98,9 %),
+  `2026-10-07-pobieraczek.md` (+ errata: WFS skorowidzow istnieje, geometria
+  = rama), `2026-10-07-cuzk-kampanie.md` (CUZK bez historii; `ROK` w
+  Metadata/MapServer/20), `2026-10-07-weryfikacja-planu-adr030.md` (Fable).
+- **Plan:** 12 zadan, 5 fal (T1-T5 rownolegle; T6; T7; T8+T9; T10, T11) +
+  T12 na zywo; tabela wlasnosci plikow bez kolizji; testy i mutacje per zadanie.
+
 ### Deduplikacja z review, parsery, LAZ ADR-029, pokrycie kampanii (2026-10-07)
 
 - **Zlecenie uzytkownika:** wskazac arkusze z istotna roznica pokrycia
