@@ -197,7 +197,8 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Overwrite existing files (z --target-crs PL: przebudowuje wycinek "
         "i pobiera ponownie wszystkie jego arkusze; nieudana przebudowa "
-        "zostawia poprzedni plik)",
+        "zostawia poprzedni plik; PL nmt/nmpt/orto: pobiera ponownie "
+        "wybrane kampanie i odswieza ich liste z GUGiK)",
     )
     download_parser.add_argument(
         "--quiet",
@@ -231,7 +232,22 @@ def create_parser() -> argparse.ArgumentParser:
         type=int,
         metavar="YYYY",
         help="LAZ only: restrict to a single acquisition year "
-        "(default: newest available per tile)",
+        "(default: newest available per tile); wyklucza sie z --min-year",
+    )
+    download_parser.add_argument(
+        "--campaigns",
+        choices=["newest", "all"],
+        default="newest",
+        help="Kampanie GUGiK (tylko PL): newest = najnowsza kampania arkusza "
+        "(default), all = wszystkie kampanie do <segment>/kampanie/; "
+        "LAZ: all = bez deduplikacji pokrycia",
+    )
+    download_parser.add_argument(
+        "--min-year",
+        type=int,
+        metavar="YYYY",
+        help="Tylko PL: pomin kampanie starsze niz YYYY (rok aktualnosci; "
+        "LAZ: rok akt_rok); nie dziala z --target-crs",
     )
     download_parser.add_argument(
         "--min-density",

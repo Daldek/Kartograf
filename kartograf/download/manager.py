@@ -93,6 +93,9 @@ class DownloadResult:
     copied : list[str]
         Godla, ktorych sciezka standardowa jest KOPIA pliku kampanii
         (symlink i hardlink niedostepne).
+    reused_campaign_files : dict[str, tuple[Path, ...]]
+        Podzbior ``campaign_files``: godlo -> pliki kampanii juz lokalne
+        (nie pobrane w tym przebiegu). Tor bez kampanii: puste.
 
     Notes
     -----
@@ -107,6 +110,7 @@ class DownloadResult:
     no_coverage: list[str] = field(default_factory=list)
     campaign_files: dict[str, tuple[Path, ...]] = field(default_factory=dict)
     copied: list[str] = field(default_factory=list)
+    reused_campaign_files: dict[str, tuple[Path, ...]] = field(default_factory=dict)
 
     @property
     def total(self) -> int:
@@ -802,6 +806,7 @@ class DownloadManager:
             paths.append(fetch.path)
             if fetch.downloaded or fetch.reused:
                 result.campaign_files[godlo] = fetch.downloaded + fetch.reused
+                result.reused_campaign_files[godlo] = fetch.reused
             if fetch.link == "copy":
                 result.copied.append(godlo)
         elif status in ("failed", "no_coverage"):
