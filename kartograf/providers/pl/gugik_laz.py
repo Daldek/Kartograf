@@ -39,12 +39,23 @@ import re
 import threading
 import time
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass
+from collections.abc import Iterable
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlencode
 
 import requests
 
+from kartograf.core.coverage import (
+    AREA_EPS,
+    Polygon,
+    clip_convex,
+    expand_convex,
+    normalize_convex,
+    polygon_area,
+    rectangle,
+    uncovered_pieces,
+)
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import BaseProvider
@@ -63,6 +74,17 @@ logger = logging.getLogger(__name__)
 # XML namespaces used in the WFS GML responses
 _GUGIK_NS = "http://www.gugik.gov.pl"
 _GML_NS = "http://www.opengis.net/gml/3.2"
+
+# Tolerancja krawedzi pokrycia (m) przy wyborze kafli LAZ: kafel starszy
+# jest zbedny takze wtedy, gdy nowsze kafle mijaja jego czesc wspolna
+# z obszarem pasem wezszym niz ta wartosc. Uzasadnienie (impl-laz.md):
+# ramy kafli roznych ukladow (PL-1992 vs PL-2000) i kampanii nie leza
+# krawedz w krawedz, GUGiK zaokragla ich wspolrzedne do 1 cm, a blad
+# polozenia punktow ALS to 0,10-0,30 m (``blad_sr_syt``); pas 1 m to 2-4 rzedy
+# punktow przy 4-20 p/m2 — nie uzasadnia pobrania kafla 50-250 MB. Jednoczesnie
+# 1 m jest o 2-3 rzedy wielkosci mniejsze niz kafel (~500-1100 m), wiec
+# nie ukryje realnej luki w nowszej kampanii.
+COVERAGE_TOLERANCE_M = 1.0
 
 
 @dataclass
@@ -85,6 +107,17 @@ class LazTile:
         Horizontal CRS string (``uklad_xy``, e.g. ``PL-2000:S6``).
     min_x, min_y, max_x, max_y : float
         Tile extent in EPSG:2180 (NaN if the feature had no geometry).
+    footprint : tuple of (x, y), optional
+        Rama kafla z ``msGeometry`` w EPSG:2180, osie (E, N), wypukly
+        wielokat CCW bez wierzcholka zamykajacego. ``None``, gdy WFS nie podal
+        geometrii albo nie jest ona pojedynczym wypuklym wielokatem.
+    date : str, optional
+        Data aktualnosci ``akt_data`` (ISO ``RRRR-MM-DD``) — rozstrzyga
+        kolejnosc kafli tego samego roku.
+    full_sheet : bool, optional
+        ``czy_ark_wypelniony`` (``TAK``/``NIE``). Kafel z ``False`` nie
+        "pokrywa" obszaru przy wyborze kafli: jego footprint to rama arkusza,
+        a dane wypelniaja ja tylko czesciowo.
     """
 
     godlo: str
@@ -96,6 +129,9 @@ class LazTile:
     min_y: float
     max_x: float
     max_y: float
+    footprint: tuple[tuple[float, float], ...] | None = None
+    date: str | None = None
+    full_sheet: bool | None = None
 
     @property
     def filename(self) -> str:
@@ -122,6 +158,174 @@ class LazTile:
                 "(oczekiwano 'PL-1992' albo 'PL-2000:S5'..'S8')"
             )
         return parsed[0]
+
+
+@dataclass(frozen=True)
+class SupersededLazTile:
+    """
+    Kafel pominiety przy wyborze, z powodem.
+
+    ``covered_by`` — wybrane kafle (nowsze albo wczesniejsze w kolejnosci
+    tego samego roku), ktore razem pokrywaja czesc wspolna kafla z obszarem
+    (z tolerancja ``COVERAGE_TOLERANCE_M``). Pusta krotka: wielokat kafla
+    w ogole nie przecina obszaru (przecinala go tylko obwiednia z WFS).
+    """
+
+    tile: LazTile
+    covered_by: tuple[LazTile, ...] = ()
+
+    @property
+    def reason(self) -> str:
+        """``"covered"`` (pokryty nowszymi kaflami) albo ``"outside"``."""
+        return "covered" if self.covered_by else "outside"
+
+
+@dataclass(frozen=True)
+class LazTileSelection:
+    """Wynik wyboru kafli: ``tiles`` do pobrania (po godle) i ``superseded``."""
+
+    tiles: tuple[LazTile, ...]
+    superseded: tuple[SupersededLazTile, ...] = field(default=())
+
+
+def _tile_order_key(tile: LazTile) -> tuple:
+    """Kolejnosc zachlanna: najnowszy rok, najnowsza data, potem stabilnie."""
+    return (
+        -(tile.year or 0),
+        _negated_date(tile.date),
+        -(tile.density or 0),
+        tile.godlo,
+        tile.url,
+    )
+
+
+def _negated_date(date: str | None) -> tuple[int, ...]:
+    """``"2025-08-12"`` -> ``(-2025, -8, -12)``; brak daty na koncu roku."""
+    if not date:
+        return (0,)
+    try:
+        return tuple(-int(part) for part in date.split("-")[:3])
+    except ValueError:
+        return (0,)
+
+
+def _finite_envelope(tile: LazTile) -> bool:
+    return not any(
+        math.isnan(v) for v in (tile.min_x, tile.min_y, tile.max_x, tile.max_y)
+    )
+
+
+def _shift(poly: Iterable[tuple[float, float]], ox: float, oy: float) -> Polygon:
+    return tuple((x - ox, y - oy) for x, y in poly)
+
+
+def _tile_region(tile: LazTile, ox: float, oy: float) -> Polygon | None:
+    """Zasieg kafla (lokalnie): footprint, a bez niego obwiednia; None bez geometrii."""
+    if tile.footprint is not None:
+        return _shift(tile.footprint, ox, oy)
+    if _finite_envelope(tile):
+        return rectangle(
+            tile.min_x - ox, tile.min_y - oy, tile.max_x - ox, tile.max_y - oy
+        )
+    return None
+
+
+def _significant(poly: Polygon) -> bool:
+    return len(poly) >= 3 and abs(polygon_area(poly)) > AREA_EPS
+
+
+def _bounds(poly: Polygon) -> tuple[float, float, float, float]:
+    xs = [p[0] for p in poly]
+    ys = [p[1] for p in poly]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def select_newest_cover(
+    tiles: Iterable[LazTile],
+    area: BBox,
+    tolerance_m: float = COVERAGE_TOLERANCE_M,
+) -> LazTileSelection:
+    """
+    Zachlanny wybor kafli LAZ od najnowszego: bez dublowania obszaru.
+
+    Kafle sa przegladane od najnowszego ``year`` (w roku: nowsza ``date``,
+    wieksza gestosc, godlo, URL). Kafel jest pomijany, jesli jego czesc
+    wspolna z ``area`` jest juz pokryta przez sume kafli wybranych wczesniej,
+    kazdy powiekszony o ``tolerance_m`` (pas wezszy niz tolerancja nie
+    ratuje kafla); kafel wnoszacy niepokryty kawalek zostaje. Wszystko
+    w EPSG:2180 — kafle PL-1992 i PL-2000 porownuje sie w jednym ukladzie.
+
+    Zasady ostroznosci (watpliwosc = pobierz):
+
+    - zasieg kafla to ``footprint``; bez niego obwiednia (nadmiar = kafel
+      latwiej zostaje),
+    - pokrywaja tylko kafle z ``full_sheet`` innym niz ``False``, i to
+      wylacznie swoim ``footprint`` (obwiednia obroconej ramy wystaje poza
+      nia nawet o ~15 m) albo tym samym godlem (ta sama rama arkusza — tak
+      pokrywa tez kafel bez geometrii),
+    - kafel bez zadnej geometrii (NaN) zostaje, chyba ze wybrano juz pelny
+      kafel o tym samym godle.
+
+    ``area`` musi byc w EPSG:2180 (jak kafle z WFS).
+    """
+    if area.crs != "EPSG:2180":
+        raise ValueError(f"area must be in EPSG:2180, got {area.crs}")
+    # Lokalny poczatek ukladu: wspolrzedne ~10^5-10^6 m zjadaja precyzje pol.
+    ox, oy = area.min_x, area.min_y
+    area_poly = rectangle(0.0, 0.0, area.max_x - ox, area.max_y - oy)
+
+    kept: list[LazTile] = []
+    # (kafel, powiekszony zasieg, obwiednia powiekszonego zasiegu)
+    covers: list[tuple[LazTile, Polygon, tuple[float, float, float, float]]] = []
+    superseded: list[SupersededLazTile] = []
+    # wybrane pelne kafle wg godla: to samo godlo = ta sama rama arkusza
+    full_by_godlo: dict[str, LazTile] = {}
+    for tile in sorted(tiles, key=_tile_order_key):
+        same = full_by_godlo.get(tile.godlo)
+        if same is not None:
+            superseded.append(SupersededLazTile(tile=tile, covered_by=(same,)))
+            continue
+        region = _tile_region(tile, ox, oy)
+        if region is None:
+            kept.append(tile)  # bez geometrii nie da sie ocenic — pobierz
+            if tile.full_sheet is not False:
+                full_by_godlo.setdefault(tile.godlo, tile)
+            continue
+        part = clip_convex(region, area_poly)
+        if not _significant(part):
+            superseded.append(SupersededLazTile(tile=tile))  # tylko obwiednia
+            continue
+        px0, py0, px1, py1 = _bounds(part)
+        relevant = [
+            (other, grown)
+            for other, grown, (gx0, gy0, gx1, gy1) in covers
+            if gx0 < px1
+            and gx1 > px0
+            and gy0 < py1
+            and gy1 > py0
+            and _significant(clip_convex(part, grown))
+        ]
+        if not uncovered_pieces(part, [grown for _, grown in relevant]):
+            superseded.append(
+                SupersededLazTile(
+                    tile=tile, covered_by=tuple(other for other, _ in relevant)
+                )
+            )
+            continue
+        kept.append(tile)
+        if tile.full_sheet is False:
+            continue
+        full_by_godlo.setdefault(tile.godlo, tile)
+        if tile.footprint is not None:
+            grown = expand_convex(_shift(tile.footprint, ox, oy), tolerance_m)
+            covers.append((tile, grown, _bounds(grown)))
+
+    return LazTileSelection(
+        tiles=tuple(sorted(kept, key=lambda t: (t.godlo, t.url))),
+        superseded=tuple(
+            sorted(superseded, key=lambda s: (s.tile.godlo, -(s.tile.year or 0)))
+        ),
+    )
 
 
 class GugikLazProvider(BaseProvider):
@@ -310,27 +514,65 @@ class GugikLazProvider(BaseProvider):
         timeout: int = WFS_TIMEOUT,
     ) -> list[LazTile]:
         """
-        Discover LAZ tiles intersecting ``bbox`` via WFS.
+        Discover the LAZ tiles to download for ``bbox`` (sorted by godło).
+
+        Shortcut for ``select_tiles(...).tiles`` — see :meth:`select_tiles`
+        for the selection rule (newest tile per area, no duplicated area
+        across years / horizontal systems) and the raised errors. Use
+        :meth:`select_tiles` to also learn which tiles were skipped and why.
+        """
+        return list(
+            self.select_tiles(
+                bbox,
+                year=year,
+                min_density=min_density,
+                vertical_crs=vertical_crs,
+                timeout=timeout,
+            ).tiles
+        )
+
+    def select_tiles(
+        self,
+        bbox: BBox,
+        year: int | None = None,
+        min_density: int | None = None,
+        vertical_crs: str | None = None,
+        timeout: int = WFS_TIMEOUT,
+        tolerance_m: float = COVERAGE_TOLERANCE_M,
+    ) -> LazTileSelection:
+        """
+        Query WFS for tiles intersecting ``bbox`` and pick those to download.
+
+        Every available year (or only ``year``) is queried; tiles below
+        ``min_density`` are dropped first. The rest is chosen greedily by
+        :func:`select_newest_cover`: from the newest year, a tile is skipped
+        when its overlap with ``bbox`` is already covered by the tiles chosen
+        before it (in EPSG:2180, edges with ``tolerance_m``), so one place
+        does not get both a 2022/PL-2000 and a 2025/PL-1992 tile. With
+        ``year`` the same rule deduplicates within that year only.
 
         Parameters
         ----------
         bbox : BBox
             Area of interest in EPSG:2180.
         year : int, optional
-            Restrict to a single acquisition year. When omitted, all available
-            years are queried and overlapping tiles are deduplicated keeping the
-            newest ``akt_rok`` per godło.
+            Restrict to a single acquisition year.
         min_density : int, optional
-            Drop tiles whose point density is below this value (points/m²).
+            Drop tiles whose nominal point density is below this value
+            (points/m²) — before the coverage rule.
         vertical_crs : str, optional
             Override the default height system for this query.
         timeout : int, optional
             Per-request timeout for WFS calls.
+        tolerance_m : float, optional
+            Edge tolerance of the coverage rule (default
+            ``COVERAGE_TOLERANCE_M`` = 1 m; ``0`` = exact).
 
         Returns
         -------
-        list[LazTile]
-            Tiles intersecting the bbox, sorted by godło.
+        LazTileSelection
+            ``tiles`` to download (sorted by godło) and ``superseded`` —
+            skipped tiles with the tiles covering them.
 
         Raises
         ------
@@ -363,19 +605,16 @@ class GugikLazProvider(BaseProvider):
         years = [year] if year is not None else available_years
         endpoint = self.WFS_ENDPOINTS[vcrs]
 
-        # Deduplicate by godło, keeping the newest acquisition year
-        best: dict[str, LazTile] = {}
+        found: list[LazTile] = []
         for yr in years:
             for tile in self._query_layer(endpoint, yr, bbox, timeout):
                 if min_density is not None and (
                     tile.density is None or tile.density < min_density
                 ):
                     continue
-                existing = best.get(tile.godlo)
-                if existing is None or (tile.year or 0) > (existing.year or 0):
-                    best[tile.godlo] = tile
+                found.append(tile)
 
-        return sorted(best.values(), key=lambda t: t.godlo)
+        return select_newest_cover(found, bbox, tolerance_m)
 
     def _query_layer(
         self,
@@ -492,6 +731,9 @@ class GugikLazProvider(BaseProvider):
         else:
             min_x = min_y = max_x = max_y = math.nan
 
+        full_text = text("czy_ark_wypelniony")
+        full_sheet = {"TAK": True, "NIE": False}.get((full_text or "").upper())
+
         return LazTile(
             godlo=godlo,
             url=url,
@@ -502,6 +744,9 @@ class GugikLazProvider(BaseProvider):
             min_y=min_y,
             max_x=max_x,
             max_y=max_y,
+            footprint=_footprint(elem),
+            date=_time_position(elem, "akt_data"),
+            full_sheet=full_sheet,
         )
 
     @staticmethod
@@ -654,3 +899,49 @@ def _corner_xy(text: str, srs_name: str | None) -> tuple[float, float]:
     # URN/URI identifiers use EPSG axis order; missing srsName inherits the
     # requested URN. Only the legacy short identifier uses (E, N).
     return second, first
+
+
+def _footprint(feature: ET.Element) -> tuple[tuple[float, float], ...] | None:
+    """
+    Rama kafla z ``gugik:msGeometry`` jako wypukly wielokat (E, N) albo None.
+
+    Tylko pojedynczy ``gml:Polygon`` bez otworow: inna geometria (multi,
+    otwory, wielokat wklesly) daje ``None`` i kafel nie pokrywa innych
+    (zasada ostroznosci wyboru kafli). Osie jak w ``_corner_xy``: URN/brak
+    ``srsName`` = (N, E), krotkie ``EPSG:2180`` = (E, N).
+    """
+    geometry = feature.find(f"{{{_GUGIK_NS}}}msGeometry")
+    if geometry is None:
+        return None
+    polygons = list(geometry.iter(f"{{{_GML_NS}}}Polygon"))
+    if len(polygons) != 1 or polygons[0].find(f"{{{_GML_NS}}}interior") is not None:
+        return None
+    polygon = polygons[0]
+    pos_list = polygon.find(
+        f"{{{_GML_NS}}}exterior/{{{_GML_NS}}}LinearRing/{{{_GML_NS}}}posList"
+    )
+    if pos_list is None or not pos_list.text:
+        return None
+    try:
+        values = [float(v) for v in pos_list.text.split()]
+    except ValueError:
+        return None
+    if len(values) % 2:
+        return None
+    srs_name = polygon.get("srsName")
+    points = [
+        _corner_xy(f"{values[i]} {values[i + 1]}", srs_name)
+        for i in range(0, len(values), 2)
+    ]
+    return normalize_convex(points)
+
+
+def _time_position(feature: ET.Element, name: str) -> str | None:
+    """Tekst ``gml:timePosition`` atrybutu czasowego (np. ``akt_data``)."""
+    elem = feature.find(f"{{{_GUGIK_NS}}}{name}")
+    if elem is None:
+        return None
+    for child in elem.iter(f"{{{_GML_NS}}}timePosition"):
+        if child.text:
+            return child.text.strip()
+    return elem.text.strip() if elem.text and elem.text.strip() else None

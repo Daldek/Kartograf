@@ -87,7 +87,8 @@ kartograf/
 │   ├── parser_2000.py      # Parser2000 — parser godal PL-2000, find_sheets_2000_for_bbox
 │   ├── parser_tm33.py      # ParserTM33 — obliczalna siatka kafli CZ 2x2 km (EPSG:3045), wzor: Parser2000
 │   ├── parser_registry.py  # Rejestr systemow godel (pl1992, pl2000, cz_tm33, cz_sm5); SheetParser/FileStorage delegowane
-│   └── geometry.py         # Czytanie SHP/GPKG, find_sheets_for_geometry, get_overall_bbox
+│   ├── geometry.py         # Czytanie SHP/GPKG, find_sheets_for_geometry, get_overall_bbox
+│   └── coverage.py         # Wypukle wielokaty (przeciecie/roznica/bufor) — wybor kafli LAZ (ADR-029)
 ├── sources/             # Deskryptory zrodel jako dane (zero IO przy imporcie)
 │   ├── descriptor.py    # SourceDescriptor + resolve_subdir (szablony {uklad}/{vcrs}, ADR-026), AccessChannel (+endpoint dla silnikow sterowanych deskryptorem), TransportKind, LicenseInfo, CountryProfile
 │   ├── registry.py      # Rejestr PL/CZ/EU/GLOBAL — get_source, sources_for, get_country, all_countries, vertical_crs_code, resolve_vertical_crs (rodzina->realizacja)
@@ -104,7 +105,7 @@ kartograf/
 │   │   ├── gugik.py         # GugikProvider — NMT z GUGiK (WCS + OpenData)
 │   │   ├── gugik_nmpt.py    # GugikNmptProvider — NMPT/DSM z GUGiK (dziedziczy z GugikProvider)
 │   │   ├── gugik_orto.py    # GugikOrtoProvider — Ortofotomapa z GUGiK (BaseProvider)
-│   │   ├── gugik_laz.py     # GugikLazProvider — chmury punktów LAZ z GUGiK (WFS, area-based)
+│   │   ├── gugik_laz.py     # GugikLazProvider — chmury punktów LAZ z GUGiK (WFS, area-based); select_tiles/select_newest_cover
 │   │   ├── skorowidz.py     # Rekordy GetFeatureInfo, wybor najnowszego zgodnego z zadaniem, source_info
 │   │   ├── bdot10k.py       # Bdot10kProvider — BDOT10k z GUGiK
 │   │   └── __init__.py      # create_nmt_provider() — fabryka, jedno miejsce polskich domyslow NMT
@@ -119,6 +120,7 @@ kartograf/
 │   └── metadata.py      # MetadataCache — SQLite WAL; record_cache (7d, pozytywny/negatywny), sheet_cache (30d), thread-safe
 ├── download/            # Zarzadzanie pobieraniem NMT/NMPT/Orto
 │   ├── cutout.py        # Wycinek PL --target-crs jako API (ADR-027): R5, GridMismatchError/W1, all_nodata, sheet_sources
+│   ├── laz.py           # Kafle LAZ jako API (ADR-029): download_laz_area/run_laz_download, sidecar, failed/superseded w wyniku
 │   ├── manager.py       # DownloadManager — arkusze (parallel), status no_coverage, parent_requests
 │   └── storage.py       # FileStorage(vertical_crs=) — segmenty <produkt>/<kraj>_<uklad>_<vcrs> z szablonow deskryptora (ADR-026)
 ├── landcover/           # Zarzadzanie pobieraniem pokrycia terenu
@@ -186,7 +188,8 @@ kartograf parse N-34-130-D-d-2-4
 kartograf download N-34-130-D-d-2-4
 kartograf download N-34-130-D-d-2-4 --product nmpt
 kartograf download N-34-130-D-d-2-4 --product orto
-# LAZ: WFS EPSG:2180 uzywa kolejnosci osi (N,E); discovery sprawdza przeciecie kafli
+# LAZ: WFS EPSG:2180 uzywa kolejnosci osi (N,E); discovery sprawdza przeciecie kafli;
+# domyslnie najnowszy kafel per obszar (starsze pokryte -> Info:), --year wybiera rocznik
 kartograf download N-34-130-D-d-2-4 --product laz
 kartograf download N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12
 kartograf download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86
@@ -339,6 +342,20 @@ kartograf cache path
   CLI daje `Warning:`, kod 1 gdy zaden kraj nie dostarczy wyniku lub
   `--country` bylo jawne. `Info:`/`Warning:` ida na stderr mimo `-q`.
   `--target-crs` dziala dla obu krajow, nie rozstrzyga wyboru kraju.
+- **LAZ wybor kafli (ADR-029):** bez `--year` kafle ida zachlannie od
+  najnowszego `akt_rok` (w roku nowsza `akt_data`); starszy kafel jest
+  pomijany, gdy jego czesc wspolna z obszarem pokrywaja wybrane juz kafle
+  (ramy `msGeometry` w EPSG:2180, osie N,E; kazda rama +1 m tolerancji,
+  `COVERAGE_TOLERANCE_M`). Tak PL-1992 i PL-2000 tego miejsca sie nie
+  dubluja (w2: tylko 2025/PL-1992, bez 2022/PL-2000:S7). Kafel wnoszacy
+  niepokryty kawalek zostaje (caly). `--year` = tylko ten rok, dedup
+  pokryciowy w roku. Pokrywa tylko kafel `czy_ark_wypelniony` != `NIE`,
+  rama albo tym samym godlem — nigdy obwiednia; kafel z rama poza obszarem
+  (tylko obwiednia go przecina) jest pomijany. Pominiete: `Info:` na stderr
+  (takze z `-q`), w bibliotece `superseded`. Pobieranie i sidecar sa
+  w bibliotece (`download_laz_area` / `select_tiles` + `run_laz_download`);
+  porazki kafli w `result.failed`, CLI: `Error:` + pelna lista, kod 1.
+  Sidecar kafla niesie `extra.parent_request` w trybie `--bbox`/`--geometry`.
 - **LAZ --year:** jawny rok jest sprawdzany wobec GetCapabilities danej
   uslugi wysokosciowej przed GetFeature; nieistniejacy rok zglasza
   `rocznik ... nie istnieje w usludze ... (dostepne: ...)`, bez sugestii

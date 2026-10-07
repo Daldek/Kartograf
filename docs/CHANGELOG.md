@@ -6,6 +6,39 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.7.0] - Unreleased
+### LAZ 2026-10-07
+- **Zmiana zachowania (ADR-029):** domyślnie (bez `--year`) LAZ pobiera
+  najnowszy kafel per OBSZAR, nie per godło. Kafle są wybierane od
+  najnowszego `akt_rok` (w roku: nowsza `akt_data`); starszy kafel jest
+  pomijany, gdy jego część wspólna z obszarem pokrywają już wybrane kafle
+  (ramy `msGeometry` w EPSG:2180, tolerancja krawędzi 1 m). Obszar w2
+  (`--bbox 637400,487000,637450,487050`) pobiera tylko kafel 2025/PL-1992
+  zamiast także 2022/PL-2000:S7 (250 MB) — E2E C13 „zdublowany obszar”.
+  Kafel wnoszący niepokryty kawałek zostaje; kafel `czy_ark_wypelniony=NIE`
+  nie wypiera starszych; kafel, którego rama nie przecina obszaru (tylko
+  obwiednia), jest pomijany. `--year` — dedup pokryciowy w obrębie roku.
+  Pominięte kafle CLI wypisuje jako `Info:` na stderr (także z `-q`).
+- **Nowe API biblioteki (review-1 D17):** `kartograf.download.laz` —
+  `download_laz_area(bbox, ...)`, `run_laz_download(selection, ...)`,
+  `LazDownloadResult` (`downloaded`/`skipped`/`failed`/`superseded`),
+  `LazTileFailure`; `GugikLazProvider.select_tiles(...)` zwraca
+  `LazTileSelection` (`tiles`, `superseded` = `SupersededLazTile`).
+  Eksport w `kartograf/__init__.py`. Pula wątków, sidecar kafla i porażki
+  kafli przeniesione z `_cmd_download_laz` (CLI tylko drukuje; prywatne
+  `cli/download_cmd._write_laz_sidecar` usunięte — zastępuje je
+  `download.laz.write_laz_sidecar`). Porażka kafla nie jest wyjątkiem
+  biblioteki (`result.failed`); CLI bez zmian: `Error:` + pełna lista, kod 1.
+- `GugikLazProvider.discover_tiles` zwraca kafle wybrane regułą pokrycia
+  (= `select_tiles(...).tiles`); wcześniej najnowszy per godło.
+- `LazTile`: nowe pola `footprint` (rama w EPSG:2180, osie E,N), `date`
+  (`akt_data`), `full_sheet` (`czy_ark_wypelniony`) — z wartościami
+  domyślnymi, konstruktor pozycyjny bez zmian.
+- Sidecar kafla LAZ niesie `extra.parent_request` w trybie
+  `--bbox`/`--geometry` (bbox w układzie podanym, `countries: ["PL"]`) —
+  ADR-023 (f).1 obejmuje LAZ; errata ADR-023 pkt 8 (review-2 N15) usunięta.
+- Nowy moduł `kartograf/core/coverage.py` (przecięcie, różnica i bufor
+  wypukłych wielokątów, bez nowych zależności).
+
 ### Runda review/E2E 2026-10-06
 - Tor CZ (`CuzkDmrProvider`, `--target-crs` i kafel TM33) używa wspólnego
   `transform/raster.warp_to_grid` zamiast własnej kopii

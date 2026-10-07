@@ -188,13 +188,13 @@ oraz sidecar `<plik>.meta.json` ze schematem `kartograf-meta/1`:
 | `license` | identyfikator, atrybucja i URL licencji źródła |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC i wersja pakietu |
 | `transform` | słownik osi (klucze `horizontal`/`vertical`) z opisem użytej operacji: `pinned: <opis> (<dokładność> m)`; oś bez przeliczenia nie ma klucza, a bez żadnego przeliczenia (pliki PL pobierane godłem/arkuszami oraz wycinek `--target-crs EPSG:2180`) całe pole to `null`; wycinek PL w innym układzie niesie `pinned: ...` w osi poziomej ([ADR-027](docs/DECISIONS.md)) |
-| `extra.parent_request` / `extra.parent_requests` | oryginalny bbox, układ i próbowane kraje; na arkuszu już pobranym nowe żądania dopisywane są do `parent_requests`, bez zmiany wcześniejszego `parent_request`. LAZ ma osobny przepływ (`godlo_kafla`/`rok`/`gestosc`/`url`); biblioteka zapisuje `parent_request` tylko po przekazaniu argumentu |
+| `extra.parent_request` / `extra.parent_requests` | oryginalny bbox, układ i próbowane kraje; na arkuszu już pobranym nowe żądania dopisywane są do `parent_requests`, bez zmiany wcześniejszego `parent_request`. LAZ (od 2026-10-07 także z `parent_request`) dokłada `godlo_kafla`/`rok`/`gestosc`/`url`; biblioteka zapisuje `parent_request` tylko po przekazaniu argumentu |
 | `extra.source` / `extra.sheet_sources` | wybrany rekord skorowidza GUGiK (m.in. URL, warstwa, data, rozdzielczość) dla arkusza; mapa godeł na te rekordy dla wycinka PL |
 | `extra.off_grid_sheets` | wycinek PL reprojektowany osobno per arkusz (W1): arkusze o fazie różnej od siatki większości |
 | `extra.missing_sheets` | wycinek PL: posortowane godła bez pliku GUGiK; wycinek w ich miejscu ma nodata. Dziury wewnątrz pobranych arkuszy nie należą do tej listy |
 
 Sidecary pisze warstwa zarządzająca (`DownloadManager`, `LandCoverManager`,
-wycinek PL w bibliotece - `download/cutout.py`, CLI dla LAZ i CZ),
+wycinek PL i kafle LAZ w bibliotece - `download/cutout.py`, `download/laz.py`; CLI dla CZ),
 a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
 
 **Migracja istniejących danych CZ i wycinków PL → EPSG:5514:**
@@ -273,7 +273,9 @@ Pozostają ograniczenia produktu (testy na żywych usługach po fali naprawczej
 ### LAZ (Chmury Punktów LIDAR)
 - ✅ **Discovery WFS** - BBOX i envelope używają kolejności osi EPSG:2180 (N,E); odpowiedzi bez przecinających obszar kafli są odrzucane
 - ✅ **Dane pomiarowe ALS** (.laz) z GUGiK przez WFS, selekcja obszarem (godło/bbox/geometria)
+- ✅ **Najnowszy kafel per obszar** - starszy kafel (np. 2022 w PL-2000) jest pomijany, gdy obszar pokrywają nowsze kafle (np. 2025 w PL-1992); pominięte kafle jako `Info:` ([ADR-029](docs/DECISIONS.md))
 - ✅ **Filtry** - `--year`, `--min-density`; organizacja - `data/laz/pl_<układ>_<vcrs>/`
+- ✅ **API biblioteki** - `download_laz_area(bbox, ...)` zwraca pobrane, pominięte i nieudane kafle
   (układ poziomy ustalany per kafel)
 
 ### Land Cover (Pokrycie Terenu)
