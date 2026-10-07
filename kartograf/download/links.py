@@ -89,7 +89,9 @@ def link_atomic(target: Path, link: Path) -> LinkMethod:
             make()
             os.replace(tmp, link)
         except (OSError, NotImplementedError):
-            tmp.unlink(missing_ok=True)
+            # porazka sprzatania nie moze zgubic proby kopii ani bledu kopii
+            with contextlib.suppress(OSError):
+                tmp.unlink(missing_ok=True)
             if method == "copy":
                 raise
             continue

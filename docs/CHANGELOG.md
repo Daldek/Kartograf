@@ -21,8 +21,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   hardlinków powstaje duplikat).
 - **Errata 4 ADR-030 (bez symlinków):** Kartograf nie tworzy symlinków —
   symlink utworzony z Linuksa na udziale SMB jest nieczytelny dla klientów
-  Windows, a udział katalog danych przyjmuje cel symlinku najwyżej 77 znaków
-  (metoda zależała od długości godła). `LinkMethod`/`SheetFetch.link`/
+  Windows, a udziały SMB ograniczają długość celu symlinku (metoda
+  zależała od długości godła). `LinkMethod`/`SheetFetch.link`/
   `extra.link` nie przyjmują już `symlink`; istniejący symlink w ścieżce
   standardowej (dane deweloperskie) = ścieżka nieznana, `newest` zastępuje
   go hardlinkiem. Brak sidecara ścieżki standardowej = ścieżka nieznana
