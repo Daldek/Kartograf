@@ -1104,6 +1104,13 @@ def cmd_download(args: argparse.Namespace) -> int:
                             print(f"Downloaded to {result}")
                     if sheet is not None and sheet.link == "copy":
                         _warn_copied_links([args.godlo])
+                    if sheet is not None and sheet.unverified is not None:
+                        print(
+                            f"Warning: {args.godlo}: skorowidz GUGiK niedostepny "
+                            "— uzyto lokalnej kampanii bez sprawdzenia nowszej "
+                            f"({sheet.unverified})",
+                            file=sys.stderr,
+                        )
                     _warn_sheet_sidecars([result])
                     return 0
                 paths = result
@@ -1175,6 +1182,18 @@ def _warn_copied_links(godla: Sequence[str]) -> None:
     )
 
 
+def _warn_unverified(unverified: dict[str, str]) -> None:
+    """``Warning:`` o arkuszach z lokalnej kampanii bez sprawdzenia (I-1)."""
+    godla = list(unverified)
+    shown = ", ".join(godla[:10]) + (" ..." if len(godla) > 10 else "")
+    print(
+        "Warning: skorowidz GUGiK niedostepny — dla "
+        f"{len(godla)} arkuszy uzyto lokalnej kampanii bez sprawdzenia nowszej "
+        f"({shown}) ({unverified[godla[0]]})",
+        file=sys.stderr,
+    )
+
+
 def _finish_pl_sheets(
     result: DownloadResult,
     paths: list[Path],
@@ -1204,13 +1223,17 @@ def _finish_pl_sheets(
     ``extra.source.full_sheet: false``) -> ``Warning:`` (E13), kod bez zmian.
     Sciezka standardowa jako KOPIA kampanii (``result.copied``) ->
     ``Warning:``, kod bez zmian. ``campaigns="all"``: podsumowanie liczy
-    pliki kampanii (``result.campaign_files``), nie arkusze.
+    pliki kampanii (``result.campaign_files``), nie arkusze. Arkusze
+    ``newest`` z lokalnej kampanii przy awarii skorowidza
+    (``result.unverified``, I-1) -> ``Warning:``, kod bez zmian.
 
     ``Warning:``/``Error:`` ida na stderr, wiec ``-q`` ich NIE tlumi.
     """
     _warn_sheet_sidecars(paths)
     if result.copied:
         _warn_copied_links(result.copied)
+    if result.unverified:
+        _warn_unverified(result.unverified)
     if not quiet:
         # pasek postepu konczy "skipped"/"downloading" bez nowej linii
         print()
