@@ -5,6 +5,8 @@ Ten moduł zawiera testy dla klasy SheetParser, weryfikujące poprawność
 parsowania godeł dla wszystkich obsługiwanych skal (1:1M do 1:10k).
 """
 
+from unittest.mock import patch
+
 import pytest
 
 from kartograf.core.sheet_parser import (
@@ -1373,3 +1375,67 @@ class TestFindSheetsForBBoxSystem:
         bbox = BBox(17.0, 52.0, 17.1, 52.1, "EPSG:4326")
         result = find_sheets_for_bbox(bbox, "1:10000", system="2000")
         assert all(g.startswith("6.") for g in result)
+
+
+class TestSheetParserBBoxViaCoreBBox:
+    """K2 (ocena parserow): get_bbox i selekcja przez core.bbox.transform_bbox."""
+
+    @pytest.mark.parametrize(
+        ("godlo", "expected"),
+        [
+            (
+                "N-34-130-D-d-2-4",
+                (
+                    769911.0902514459,
+                    508419.16283969115,
+                    772163.7346478042,
+                    510851.5730979936,
+                ),
+            ),
+            (
+                "M-34-76-A-a-1",
+                (
+                    535822.7048583595,
+                    232456.93426109944,
+                    540335.3398690788,
+                    237119.99338652566,
+                ),
+            ),
+        ],
+    )
+    def test_10k_sheet_bbox_2180_unchanged(self, godlo, expected):
+        """Arkusze 1:10000 i drobniejsze: 4 narozniki == gesta obwiednia."""
+        bbox = SheetParser(godlo).get_bbox("EPSG:2180")
+        for got, exp in zip(bbox[:4], expected, strict=True):
+            assert got == pytest.approx(exp, abs=1e-6)
+
+    def test_1m_sheet_through_19e_south_edge_is_dense(self):
+        """N-34 (1:1M, 18-24E) przez 19E: min_y nizsze o ~468 m niz z naroznikow."""
+        bbox = SheetParser("N-34").get_bbox("EPSG:2180")
+        assert bbox.min_y == pytest.approx(459781.17 - 468.0, abs=5.0)
+
+    def test_one_transformer_for_200_get_bbox(self):
+        from pyproj import Transformer
+
+        from kartograf.core import bbox as bbox_mod
+
+        bbox_mod._transformer.cache_clear()
+        with patch.object(Transformer, "from_crs", wraps=Transformer.from_crs) as made:
+            for _ in range(200):
+                SheetParser("N-34-130-D-d-2-4").get_bbox("EPSG:2180")
+        assert made.call_count == 1
+
+    def test_find_sheets_rejects_inverted_bbox(self):
+        """Dawniej BBox(10,10,5,5) dawal arkusz-smiec ['L-33-1-D-c-4-3']."""
+        with pytest.raises(ValidationError, match="odwrocony"):
+            find_sheets_for_bbox(BBox(10, 10, 5, 5, "EPSG:2180"))
+
+    @pytest.mark.parametrize("system", ["1992", "2000"])
+    def test_find_sheets_rejects_nan_bbox(self, system):
+        with pytest.raises(ValidationError, match="skonczone"):
+            find_sheets_for_bbox(
+                BBox(float("nan"), 1, 2, 3, "EPSG:2180"), system=system
+            )
+
+    def test_find_sheets_point_bbox_still_allowed(self):
+        assert len(find_sheets_for_bbox(BBox(19.5, 50.5, 19.5, 50.5, "EPSG:4326"))) == 1
