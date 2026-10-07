@@ -1080,13 +1080,20 @@ def cmd_download(args: argparse.Namespace) -> int:
                 )
             else:
                 # Download single sheet (may expand to hierarchy for non-1:10000)
-                if not args.quiet:
-                    print(f"Downloading {args.godlo} ({label})...")
+                def announce() -> None:
+                    # O-3: dopiero gdy rusza pobieranie (nie przy Skipped/Error)
+                    if not args.quiet:
+                        print(f"Downloading {args.godlo} ({label})...")
+
+                parsed = SheetParser(args.godlo)
+                if parsed.uklad != "2000" and parsed.scale != "1:10000":
+                    announce()  # godlo grubsze: rozwiniecie do hierarchii
 
                 result = manager.download_sheet(
                     args.godlo,
                     skip_existing=skip_existing,
                     on_progress=on_progress,
+                    on_download=announce,
                 )
                 if not isinstance(result, list):
                     # pojedynczy arkusz 1:10000 / PL-2000: sukces = brak
@@ -1187,6 +1194,30 @@ def _warn_copied_links(godla: Sequence[str]) -> None:
     )
 
 
+def _coverage_hints(messages: dict[str, str]) -> list[str]:
+    """Podpowiedzi z tresci ``NoCoverageError`` arkuszy listy (bez ich duplikatow).
+
+    Podpowiedzi dopisuje provider po pierwszym ``". "`` komunikatu, rozdzielone
+    ``"; "``; CLI ich nie buduje, tylko przenosi. Ta sama rada dla wielu
+    arkuszy (np. ``uzyj --scale 1:2000``, rozna tylko godlem potomka) daje
+    jedna linie — klucz to koncowka po ostatnim ``" — "``.
+    """
+    seen: dict[str, str] = {}
+    for message in messages.values():
+        _, sep, tail = message.partition(". ")
+        if not sep:
+            continue
+        for hint in tail.split("; "):
+            seen.setdefault(hint.rsplit(" — ", 1)[-1], hint)
+    return list(seen.values())
+
+
+def _print_coverage_hints(result: DownloadResult) -> None:
+    """``Podpowiedz:`` na stderr (jak ``Warning:``/``Error:``, mimo ``-q``)."""
+    for hint in _coverage_hints(result.no_coverage_messages):
+        print(f"Podpowiedz: {hint}", file=sys.stderr)
+
+
 def _print_campaign_summary(
     downloaded: int, sheets: int, output_dir: Path, existed: int
 ) -> None:
@@ -1252,6 +1283,8 @@ def _finish_pl_sheets(
     if not quiet:
         # pasek postepu konczy "skipped"/"downloading" bez nowej linii
         print()
+    if not quiet and paths:
+        # O-7: bez pliku i bez skipu (same braki/porazki) podsumowanie 0 = szum
         if campaigns == "all":
             # `campaign_files` = pobrane + lokalne; lokalne osobno
             # (`reused_campaign_files`, podzbior per arkusz)
@@ -1277,6 +1310,7 @@ def _finish_pl_sheets(
             f"{len(paths)}",
             file=sys.stderr,
         )
+        _print_coverage_hints(result)
     if hard:
         print(
             f"Error: {len(hard)} z {total} arkuszy nie pobrano (blad pobrania, "
@@ -1289,6 +1323,7 @@ def _finish_pl_sheets(
             f"Error: GUGiK nie ma danych dla zadnego z {total} arkuszy obszaru",
             file=sys.stderr,
         )
+        _print_coverage_hints(result)
         return 1
     return 0
 
