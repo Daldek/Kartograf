@@ -210,6 +210,35 @@ class TestDownloadDispatch:
         with rasterio.open(target) as src:
             assert src.crs is not None and src.crs.to_epsg() == 5514
 
+    @pytest.mark.parametrize("godlo", [" CTES96", "CTES96 ", "\tCTES96\n"])
+    def test_sm5_godlo_with_whitespace_builds_clean_url(self, tmp_path, godlo):
+        """Wywolanie biblioteczne z bialymi znakami (CLI obcina juz godlo):
+        rejestr systemow rozpoznaje SM5 po strip(), wiec URL openzu i
+        walidacja w indeksie musza dostac godlo obciete."""
+        target = tmp_path / "CTES96.tif"
+        with patch(_CLIENT_PATCH) as client_cls, patch(_INDEX_PATCH) as index_cls:
+            index_cls.return_value.sm5_sheet.return_value = _ctes96_info()
+            client = client_cls.return_value
+
+            def fake_fetch(url, output_path, *, unzip_single=None):
+                _write_tif(Path(output_path), crs=None)
+                return Path(output_path)
+
+            client.fetch_file.side_effect = fake_fetch
+            CuzkDmrProvider(resolution="5m").download(godlo, target)
+
+        index_cls.return_value.sm5_sheet.assert_called_once_with("CTES96")
+        assert client.fetch_file.call_args.args[0] == (
+            "https://openzu.cuzk.gov.cz/opendata/DMR4G-TIFF/epsg-5514/CTES96.zip"
+        )
+
+    def test_tm33_godlo_with_whitespace_is_parsed(self, tmp_path):
+        """Kafel TM33 z bialymi znakami: ParserTM33 dostaje godlo obciete."""
+        with patch.object(CuzkDmrProvider, "_export_raster") as export:
+            CuzkDmrProvider(resolution="2m").download(" 302_5550 ", tmp_path / "t.tif")
+        bbox = export.call_args.args[0]
+        assert (bbox.min_x, bbox.min_y) == (302000.0, 5550000.0)
+
     def test_sm5_crs_repair_keeps_worldfile_georeference(self, tmp_path):
         """Naprawa CRS nie moze zgubic georeferencji trzymanej w .tfw."""
         target = tmp_path / "CTES96.tif"
