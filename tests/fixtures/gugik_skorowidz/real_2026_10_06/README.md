@@ -18,3 +18,8 @@ Pliki skopiowane BEZ edycji tresci; tylko wybrany podzbior rundy.
   plikom N-34-139-A-c-1-1 (ten sam punkt zapytania).
 
 Testy: `tests/test_real_gugik_responses.py`.
+- `caps/` — surowe GetCapabilities WMS (ADR-030, rodzina nazw warstw): z
+  `a/raw/caps/*.xml` (NMT EVRF2007/KRON86, NMT 5 m, NMPT EVRF2007/KRON86)
+  oraz `b/raw/C12/caps.xml` jako `ORTO_WMS_SkorowidzeWgAktualnosci.xml`
+  (poza warstwami skorowidza: `default`, `WMS`, a dla orto
+  `SkorowidzeOrtofotomapyZasiegi*`). Testy: `tests/test_wms_layer_validation.py`.
