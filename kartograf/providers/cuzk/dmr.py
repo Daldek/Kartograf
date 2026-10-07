@@ -213,6 +213,9 @@ class CuzkDmrProvider(BaseProvider):
         (ADR-024). Arkusz SM5 przychodzi plikiem juz w 5514 — bez warpu.
         """
         output_path = Path(output_path)
+        # jak rejestr systemow: biale znaki nie sa czescia godla (URL openzu,
+        # indeks SM5 i ParserTM33 dostaja to samo obciete godlo)
+        godlo = godlo.strip()
         system = detect_system(godlo)
         if system.country != "CZ":
             raise ValidationError(
