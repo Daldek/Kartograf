@@ -16,14 +16,16 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 import requests
 
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.exceptions import NoCoverageError
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import GugikLazProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from kartograf.providers.pl.skorowidz import (
+    SkorowidzRecord,
     parse_skorowidz_records,
+    select_campaign_records,
     select_sheet_record,
 )
 
@@ -499,3 +501,152 @@ class TestLazDiscoveryOnRealWfs:
         ).discover_tiles(W2_BBOX)[0]
         assert tile.filename == "70707_846000_N-34-139-A-c-1-1-3-4.laz"
         assert tile.filename.endswith(".laz")
+
+
+# =============================================================================
+# ADR-030: lista kampanii (select_campaign_records) na realnych body
+# =============================================================================
+
+NMT_DIR = REAL / "nmt"
+
+
+def _c14_records(godlo):
+    return [
+        r
+        for f in sorted((NMT_DIR / "c14").glob(f"{godlo}_EVRF2007_*.html"))
+        for r in layer_records(f, f.stem.split("_EVRF2007_")[1])
+    ]
+
+
+def _orto_records(godlo):
+    return [
+        r
+        for f in sorted((REAL / "orto").glob(f"{godlo}_*.html"))
+        for r in layer_records(f, f.stem.split("_", 1)[1])
+    ]
+
+
+def _is_rgb(record):
+    return record.raw.get("kolor") == "RGB"
+
+
+def _is_cir(record):
+    return record.raw.get("kolor") == "CIR"
+
+
+def _sheet_args(godlo):
+    parser = SheetParser(godlo)
+    zone = int(godlo.split(".")[0]) if parser.uklad == "2000" else None
+    return {"godlo": godlo, "uklad": parser.uklad, "zone": zone}
+
+
+def _real_cases():
+    """(godlo, rekordy, resolution_m, predicate) dla kazdego realnego body."""
+    cases = []
+    for folder in sorted(NMT_DIR.iterdir()):
+        if folder.name == "c14":
+            continue
+        by_prefix: dict[str, list] = {}
+        for body in sorted(folder.glob("*.body")):
+            prefix, layer = body.stem.split("__", 1)
+            by_prefix.setdefault(prefix, []).extend(layer_records(body, layer))
+        for prefix, records in by_prefix.items():
+            if prefix == "nmpt_evr":
+                continue
+            res = 5.0 if prefix.startswith("nmt5_") else 1.0
+            cases.append((folder.name, records, res, None))
+    for godlo in (
+        "N-34-139-C-a-3-1",
+        "N-34-139-C-a-3-2",
+        "N-34-139-C-a-3-3",
+        "N-34-139-C-a-3-4",
+    ):
+        cases.append((godlo, _c14_records(godlo), 1.0, None))
+    for godlo in sorted(
+        {f.name.rsplit("_Skorowidze", 1)[0] for f in (REAL / "orto").glob("*.html")}
+    ):
+        for pred in (_is_rgb, _is_cir):
+            cases.append((godlo, _orto_records(godlo), None, pred))
+    return cases
+
+
+class TestCampaignListsOnRealBodies:
+    def test_c14_all_campaigns_n34_139_c_a_3_1(self):
+        recs = select_campaign_records(
+            _c14_records("N-34-139-C-a-3-1"),
+            godlo="N-34-139-C-a-3-1",
+            uklad="1992",
+            resolution_m=1.0,
+        )
+        assert [file_id(r.url).split("_")[0] for r in recs] == [
+            "84183",
+            "83233",
+            "78047",
+            "73021",
+        ]
+
+    def test_select_sheet_record_equals_head_of_campaign_list_on_every_real_body(self):
+        cases = _real_cases()
+        assert len(cases) >= 15
+        for godlo, records, res, pred in cases:
+            args = {**_sheet_args(godlo), "resolution_m": res, "predicate": pred}
+            single = select_sheet_record(records, **args)
+            listed = select_campaign_records(records, **args)
+            assert single == (listed or [None])[0], (godlo, pred)
+
+    def test_orto_all_rgb_m34_90_c_b_4_4_excludes_cir_and_parent_sheet(self):
+        godlo = "M-34-90-C-b-4-4"
+        recs = select_campaign_records(
+            _orto_records(godlo), predicate=_is_rgb, **_sheet_args(godlo)
+        )
+        assert [file_id(r.url).split("_")[0] for r in recs] == [
+            "84466",
+            "81437",
+            "76530",
+            "73121",
+            "70500",
+            "69792",
+            "75",
+        ]
+
+    def test_duplicate_url_across_layers_listed_once(self):
+        godlo = "N-34-139-C-a-3-1"
+        body = next((NMT_DIR / "c14").glob(f"{godlo}_EVRF2007_*2025.html"))
+        twice = layer_records(body, "SkorowidzeNMT2025") + layer_records(
+            body, "SkorowidzeNMT2024"
+        )
+        recs = select_campaign_records(
+            twice, godlo=godlo, uklad="1992", resolution_m=1.0
+        )
+        assert len(recs) == len({r.url for r in recs}) > 0
+
+    def _xyz_record(self):
+        [r] = [
+            r
+            for r in layer_records(
+                NMT_DIR
+                / "N-33-69-A-d-3-2"
+                / "nmt1_evr__SkorowidzeNMT2023iStarsze.body",
+                "SkorowidzeNMT2023iStarsze",
+            )
+            if "72675" in r.url
+        ]
+        return r
+
+    def test_real_72675_record_has_aaigrid_format(self):
+        r = self._xyz_record()
+        assert r.url.endswith(".xyz") and r.file_format == "ARC/INFO ASCII GRID"
+
+    def test_record_format_survives_cache_roundtrip(self):
+        r = self._xyz_record()
+        back = SkorowidzRecord.from_source(r.to_source("https://wms"))
+        assert back.file_format == "ARC/INFO ASCII GRID"
+
+    def test_orto_record_has_no_format_and_roundtrip_keeps_none(self):
+        recs = _orto_records("M-34-90-C-b-4-4")
+        assert recs
+        for r in recs:
+            assert r.file_format is None
+            back = SkorowidzRecord.from_source(r.to_source("https://wms"))
+            assert back.file_format is None
+            assert "format" not in back.raw

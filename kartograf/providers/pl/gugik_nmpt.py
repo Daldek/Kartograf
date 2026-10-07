@@ -74,6 +74,7 @@ class GugikNmptProvider(GugikProvider):
     }
 
     LAYER_PATTERN = re.compile(r"^SkorowidzeNMPT(\d{4})(iStarsze)?$")
+    LAYER_FAMILY = re.compile(r"^SkorowidzeNMPT")
 
     # NMPT coverage IDs for WCS
     COVERAGE_IDS = {
