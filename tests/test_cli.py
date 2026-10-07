@@ -71,6 +71,17 @@ def _mock_manager(path):
     return manager
 
 
+def _starting_download(path):
+    """``download_sheet`` atrapy wolajacy ``on_download`` przed pobraniem."""
+
+    def fake(godlo, skip_existing=True, on_progress=None, on_download=None):
+        if on_download is not None:
+            on_download()
+        return path
+
+    return fake
+
+
 class TestCreateParser:
     """Tests for create_parser()."""
 
@@ -638,7 +649,7 @@ class TestCmdDownload:
 
         assert result == 0
         mock_manager.download_sheet.assert_called_once_with(
-            "N-34-130-D-d-2-4", skip_existing=True, on_progress=None
+            "N-34-130-D-d-2-4", skip_existing=True, on_progress=None, on_download=ANY
         )
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -680,7 +691,7 @@ class TestCmdDownload:
 
         assert result == 0
         mock_manager.download_sheet.assert_called_once_with(
-            "N-34-130-D-d-2-4", skip_existing=False, on_progress=None
+            "N-34-130-D-d-2-4", skip_existing=False, on_progress=None, on_download=ANY
         )
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -729,7 +740,9 @@ class TestCmdDownload:
         """Test that download shows progress when not quiet."""
         mock_manager = Mock()
         mock_manager.last_result = None
-        mock_manager.download_sheet.return_value = tmp_path / "test.tif"
+        mock_manager.download_sheet.side_effect = _starting_download(
+            tmp_path / "test.tif"
+        )
         mock_manager_class.return_value = mock_manager
 
         result = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path)])
@@ -1053,7 +1066,9 @@ class TestCmdDownloadProduct:
     ):
         """Orto nie ma rozdzielczosci — komunikat nie moze mowic 'resolution: 1m'."""
         mock_create.return_value = _mock_provider_and_storage(".tif")
-        mock_manager_cls.return_value = _mock_manager(tmp_path / "test.tif")
+        manager = _mock_manager(tmp_path / "test.tif")
+        manager.download_sheet.side_effect = _starting_download(tmp_path / "test.tif")
+        mock_manager_cls.return_value = manager
 
         result = main(
             ["download", "N-34-130-D-d-2-4", "--product", "orto", "-o", str(tmp_path)]
@@ -6818,3 +6833,106 @@ class TestCampaignOptions:
             f"Downloaded 0 campaign files for 1 sheets to {tmp_path} "
             "(2 already existed)"
         ) in out
+
+
+class TestListMessagesUx:
+    """O-3 / O-6 / O-7: komunikaty CLI przy braku danych, skipie i pobraniu."""
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_single_sheet_skip_has_no_downloading_line(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        """O-3: Skipped nie jest poprzedzony 'Downloading ...'."""
+        from kartograf.download.manager import SheetFetch
+
+        path = tmp_path / "a.asc"
+        manager = _mock_manager(path)  # atrapa nie woła on_download (skip)
+        manager.last_sheet = SheetFetch("N-34-130-D-d-2-4", path, skipped=True)
+        mock_manager_class.return_value = manager
+
+        rc = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path)])
+
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "Skipped" in out
+        assert "Downloading" not in out
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_single_sheet_error_has_no_downloading_line(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        """O-3: Error (brak rekordu) nie jest poprzedzony 'Downloading ...'."""
+        manager = _mock_manager(tmp_path / "a.asc")
+        manager.download_sheet.side_effect = DownloadError("brak")
+        mock_manager_class.return_value = manager
+
+        rc = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path)])
+
+        assert rc == 1
+        captured = capsys.readouterr()
+        assert "Error: brak" in captured.err
+        assert "Downloading" not in captured.out
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_all_no_coverage_list_has_scale_hint_once_and_no_summary(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        """O-6/O-7: podpowiedz z NoCoverageError raz; brak 'Downloaded 0 ...'."""
+        base = "Brak NMT dla {g} (uklad PL-2000). Dostepny potomek {g}.01 — "
+        hint = "uzyj --scale 1:2000"
+        result = DownloadResult(
+            failed=["7.173.21", "7.173.22"],
+            no_coverage=["7.173.21", "7.173.22"],
+            no_coverage_messages={
+                "7.173.21": base.format(g="7.173.21") + hint,
+                "7.173.22": base.format(g="7.173.22") + hint,
+            },
+        )
+        manager = Mock()
+        manager.last_result = result
+        manager.download_sheets.return_value = []
+        mock_manager_class.return_value = manager
+
+        rc = main(
+            [
+                "download",
+                "--bbox",
+                "419000,230000,426000,237000",
+                "--system",
+                "2000",
+                "--country",
+                "pl",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+
+        assert rc == 1
+        captured = capsys.readouterr()
+        assert "nie ma danych dla zadnego z 2 arkuszy" in captured.err
+        assert captured.err.count("--scale 1:2000") == 1
+        assert "Dostepny potomek 7.173.21.01 — uzyj --scale 1:2000" in captured.err
+        assert "Downloaded 0" not in captured.out
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_hierarchy_all_no_coverage_has_hint_and_no_summary(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        """O-6/O-7 w hierarchii: podpowiedz, bez podsumowania 0 plikow."""
+        manager = Mock()
+        manager.last_result = DownloadResult(
+            failed=["A"],
+            no_coverage=["A"],
+            no_coverage_messages={
+                "A": "Brak. Dostepny potomek A.01 — uzyj --scale 1:2000"
+            },
+        )
+        manager.download_sheet.return_value = []
+        mock_manager_class.return_value = manager
+
+        rc = main(["download", "N-34-130-D-d-2", "-o", str(tmp_path)])
+
+        assert rc == 1
+        captured = capsys.readouterr()
+        assert "uzyj --scale 1:2000" in captured.err
+        assert "Downloaded 0" not in captured.out

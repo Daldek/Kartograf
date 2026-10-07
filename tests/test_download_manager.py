@@ -512,6 +512,15 @@ class TestDownloadResultNoCoverage:
         assert len(result.succeeded) == 2
 
     @pytest.mark.parametrize("workers", [1, 4])
+    def test_no_coverage_messages_keep_error_text(self, tmp_path, provider, workers):
+        """O-6: tresc NoCoverageError (podpowiedzi) trafia do wyniku listy."""
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+        manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=workers)
+        assert manager.last_result.no_coverage_messages == {
+            "N-34-130-D-d-2-1": "No NMT 1m data available for N-34-130-D-d-2-1"
+        }
+
+    @pytest.mark.parametrize("workers", [1, 4])
     def test_hard_failures_excludes_no_coverage_and_progress_status(
         self, tmp_path, provider, workers
     ):
