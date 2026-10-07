@@ -35,6 +35,7 @@ from kartograf.core.geometry import find_sheets_for_geometry
 from kartograf.core.parser_2000 import Parser2000, find_sheets_2000_for_bbox
 from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
+from kartograf.download.campaigns import CampaignRef
 from kartograf.download.cutout import (
     PlCutout,
     PlCutoutResult,
@@ -50,7 +51,12 @@ from kartograf.download.laz import (
     download_laz_area,
     run_laz_download,
 )
-from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
+from kartograf.download.manager import (
+    DownloadManager,
+    DownloadProgress,
+    DownloadResult,
+    SheetFetch,
+)
 from kartograf.download.storage import FileStorage
 from kartograf.exceptions import (
     DownloadError,
@@ -94,6 +100,8 @@ __all__ = [
     "DownloadManager",
     "DownloadProgress",
     "DownloadResult",
+    "SheetFetch",
+    "CampaignRef",
     "FileStorage",
     # Download (wycinek PL, ADR-027)
     "PlCutout",
