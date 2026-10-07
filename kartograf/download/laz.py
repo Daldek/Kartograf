@@ -25,7 +25,6 @@ Przyklad::
         ...  # ponow: kafle juz pobrane sa pomijane (force=False)
 """
 
-import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
@@ -41,8 +40,6 @@ from kartograf.providers.pl.gugik_laz import (
     LazTileSelection,
     SupersededLazTile,
 )
-
-logger = logging.getLogger(__name__)
 
 # (pobrane lub pominiete kafle, liczba kafli) — wolane w watku wolajacego
 LazProgressCallback = Callable[[int, int], None]
@@ -94,7 +91,7 @@ def write_laz_sidecar(
     min_density: int | None = None,
     parent_request: dict | None = None,
 ) -> None:
-    """Best-effort sidecar kafla LAZ (blad zapisu = ostrzezenie w logu).
+    """Best-effort sidecar kafla LAZ przez ``emit_sidecar`` (blad = ostrzezenie w logu).
 
     ``request`` opisuje faktyczne zadanie: bbox oraz filtry ``year``
     i ``min_density``, gdy podane (E16). ``extra.gestosc`` i ``min_density``
@@ -102,39 +99,37 @@ def write_laz_sidecar(
     kafla bywa kilkukrotnie wyzsza. ``extra.parent_request`` — tylko gdy
     podany (ADR-023 (f).1: tryb ``--bbox``/``--geometry``).
     """
-    try:
-        from kartograf.sources.registry import get_source, horizontal_crs_for_uklad
-        from kartograf.sources.sidecar import build_metadata, write_sidecar
+    from kartograf.sources.registry import horizontal_crs_for_uklad
+    from kartograf.sources.sidecar import emit_sidecar
 
-        key = getattr(provider, "descriptor_key", None)
-        request: dict = {
-            "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
-            "bbox_crs": bbox.crs,
-        }
-        if year is not None:
-            request["year"] = year
-        if min_density is not None:
-            request["min_density"] = min_density
-        extra: dict = {
-            "godlo_kafla": tile.godlo,
-            "rok": tile.year,
-            "gestosc": tile.density,
-            "url": tile.url,
-        }
-        if parent_request is not None:
-            extra["parent_request"] = parent_request
-        meta = build_metadata(
-            get_source(key if isinstance(key, str) else "pl.gugik.laz"),
-            request=request,
-            vertical_crs=provider.vertical_crs,
-            # N8: kafel niesie wlasny uklad (PL-1992 albo strefa PL-2000),
-            # a kanal WFS deklaruje tylko domyslny — nieznany uklad = kanal
-            horizontal_crs=horizontal_crs_for_uklad(tile.crs),
-            extra=extra,
-        )
-        write_sidecar(target, meta)
-    except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
-        logger.warning(f"Nie udalo sie zapisac sidecara dla {target}: {e}")
+    request: dict = {
+        "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+        "bbox_crs": bbox.crs,
+    }
+    if year is not None:
+        request["year"] = year
+    if min_density is not None:
+        request["min_density"] = min_density
+    extra: dict = {
+        "godlo_kafla": tile.godlo,
+        "rok": tile.year,
+        "gestosc": tile.density,
+        "url": tile.url,
+    }
+    if parent_request is not None:
+        extra["parent_request"] = parent_request
+    key = getattr(provider, "descriptor_key", None)
+    emit_sidecar(
+        # provider bez deskryptora (atrapa) nadal dostaje sidecar LAZ
+        key if isinstance(key, str) else "pl.gugik.laz",
+        target,
+        request=request,
+        vertical_crs=provider.vertical_crs,
+        # N8: kafel niesie wlasny uklad (PL-1992 albo strefa PL-2000),
+        # a kanal WFS deklaruje tylko domyslny — nieznany uklad = kanal
+        horizontal_crs=horizontal_crs_for_uklad(tile.crs),
+        extra=extra,
+    )
 
 
 def run_laz_download(

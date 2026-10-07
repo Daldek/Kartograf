@@ -152,6 +152,43 @@ class TestRunLazDownload:
         for path in result.downloaded:
             assert _sidecar(path)["extra"]["parent_request"] == PARENT
 
+    def test_sidecar_failure_does_not_abort_download(self, tmp_path, caplog):
+        """Sidecar przez wspolny ``emit_sidecar``: awaria budowy metadanych to
+        ostrzezenie w logu, kafel zostaje pobrany (D7, polityka best-effort)."""
+        from unittest.mock import patch
+
+        tile = _tile("N-33-131-B-a-1-1-4")
+        with (
+            patch(
+                "kartograf.sources.sidecar.build_metadata",
+                side_effect=RuntimeError("zepsuty deskryptor"),
+            ),
+            caplog.at_level("WARNING", logger="kartograf.sources.sidecar"),
+        ):
+            result = run_laz_download(
+                _selection(tile),
+                provider=FakeProvider(),
+                bbox=BBOX,
+                output_dir=tmp_path,
+            )
+        (path,) = result.downloaded
+        assert path.exists()
+        assert not path.with_name(path.name + ".meta.json").exists()
+        assert "zepsuty deskryptor" in caplog.text
+
+    def test_provider_without_descriptor_key_still_gets_laz_sidecar(self, tmp_path):
+        """Provider bez ``descriptor_key`` (str) — sidecar z kluczem
+        ``pl.gugik.laz``, nie cisza (``emit_sidecar`` sam by go pominal)."""
+        provider = FakeProvider()
+        provider.descriptor_key = None
+        result = run_laz_download(
+            _selection(_tile("N-33-131-B-a-1-1-4")),
+            provider=provider,
+            bbox=BBOX,
+            output_dir=tmp_path,
+        )
+        assert _sidecar(result.downloaded[0])["dataset"] == "pl.gugik.laz"
+
     def test_failures_are_collected_not_raised(self, tmp_path):
         tiles = [_tile(f"N-33-131-B-a-1-1-{i}") for i in range(1, 5)]
         provider = FakeProvider(failing={"1-1-2", "1-1-4"})
@@ -304,9 +341,7 @@ def _cli(tmp_path, *args):
     from kartograf.cli.commands import main
 
     session = wfs_session()
-    with patch(
-        "kartograf.providers.pl.gugik_laz.make_gugik_session", return_value=session
-    ):
+    with patch("kartograf.transport.http.make_gugik_session", return_value=session):
         rc = main(["download", *args, "--product", "laz", "-o", str(tmp_path), "-q"])
     return rc, session
 

@@ -10,7 +10,7 @@ import sqlite3
 import struct
 from pathlib import Path
 
-from pyproj import CRS, Transformer
+from pyproj import CRS
 
 from kartograf.core.bbox import BBox, transform_bbox
 from kartograf.core.sheet_parser import find_sheets_for_bbox
@@ -405,65 +405,6 @@ def _read_gpkg_bboxes(filepath: Path, layer: str | None, target_crs: str) -> lis
         return bboxes
     finally:
         conn.close()
-
-
-# =========================================================================
-# CRS Transformation
-# =========================================================================
-
-
-def _transform_bbox(
-    min_x: float,
-    min_y: float,
-    max_x: float,
-    max_y: float,
-    source_crs: CRS,
-    target_crs: str,
-) -> BBox:
-    """
-    Transform a bounding box from source CRS to target CRS.
-
-    Uses 4-corner approach. Czytniki tego modulu uzywaja juz
-    ``core.bbox.transform_bbox`` (gesta obwiednia); ta funkcja zostaje
-    wylacznie dla wolajacych w ``cli/download_cmd.py`` i ``download/cutout.py``
-    — do usuniecia w kroku K6 oceny parserow (2026-10-07).
-
-    Parameters
-    ----------
-    min_x, min_y, max_x, max_y : float
-        Source bbox coordinates
-    source_crs : CRS
-        Source CRS object
-    target_crs : str
-        Target CRS string (e.g. "EPSG:2180")
-
-    Returns
-    -------
-    BBox
-        Transformed bounding box
-    """
-    target = CRS.from_user_input(target_crs)
-
-    if source_crs == target:
-        return BBox(min_x, min_y, max_x, max_y, target_crs)
-
-    transformer = Transformer.from_crs(source_crs, target, always_xy=True)
-
-    corners = [
-        (min_x, min_y),  # SW
-        (min_x, max_y),  # NW
-        (max_x, min_y),  # SE
-        (max_x, max_y),  # NE
-    ]
-
-    transformed = [transformer.transform(x, y) for x, y in corners]
-
-    t_min_x = min(c[0] for c in transformed)
-    t_min_y = min(c[1] for c in transformed)
-    t_max_x = max(c[0] for c in transformed)
-    t_max_y = max(c[1] for c in transformed)
-
-    return BBox(t_min_x, t_min_y, t_max_x, t_max_y, target_crs)
 
 
 # =========================================================================

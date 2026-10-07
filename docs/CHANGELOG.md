@@ -38,6 +38,16 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ADR-023 (f).1 obejmuje LAZ; errata ADR-023 pkt 8 (review-2 N15) usunięta.
 - Nowy moduł `kartograf/core/coverage.py` (przecięcie, różnica i bufor
   wypukłych wielokątów, bez nowych zależności).
+- `GugikLazProvider`: jedna sesja HTTP na wątek
+  (`transport.http.SessionPerThread`, jak pozostałe providery GUGiK) zamiast
+  jednej `requests.Session` dzielonej przez pulę wątków pobierania kafli;
+  sesja wstrzyknięta (`session=`) wygrywa zawsze. Sesja wątku powstaje przy
+  pierwszym zapytaniu (testy patchują `kartograf.transport.http.make_gugik_session`).
+- `download.laz.write_laz_sidecar` zapisuje przez wspólne
+  `sources.sidecar.emit_sidecar` (treść sidecara bez zmian: `request.year`,
+  `request.min_density`, `extra.parent_request`; provider bez
+  `descriptor_key` nadal dostaje `pl.gugik.laz`). Ostrzeżenie o nieudanym
+  sidecarze loguje `kartograf.sources.sidecar` (wcześniej `kartograf.download.laz`).
 
 ### Deduplikacja po review 2026-10-07
 - Providery i transport (review D1): sześć kopii pętli pobierania pliku
@@ -76,8 +86,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `GugikProvider.FORMAT_EXTENSIONS`/`get_file_extension` (kopia
   `BaseProvider.get_file_extension`, dziedziczona bez zmian; review D13).
 - `transform.crs.CONTENT_POLICY` i `WARP_MARGIN_PX` zastępują prywatne
-  stałe toru CZ (`providers/cuzk/dmr.py`); lustro w `download/cutout.py`
-  do przepięcia osobno (review D9).
+  stałe toru CZ (`providers/cuzk/dmr.py`) i lustrzane kopie wycinka PL
+  (`download/cutout.py`: `WARP_MARGIN_PX`, `_HORIZONTAL_POLICY`) — jedna
+  stała dla obu torów (review D9).
+- CLI: jeden helper komunikatu błędu transformacji
+  (`Error: ... Remedium: ...`, `_print_transform_error`) zamiast dwóch
+  ręcznych kopii (geometria CZ, fabryka providera CZ); treść bez zmian
+  (review D6).
 - Reguła „NMT 5m (PL) tylko w EVRF2007” żyje w jednym miejscu
   (`kartograf.providers.pl.nmt_vertical_crs`) i ma jeden skutek: korektę
   do EVRF2007. CLI (`--product nmt --resolution 5m --vertical-crs KRON86`)
@@ -105,7 +120,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Parsery 2026-10-07
 Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-parserow.md`
-(kroki K1–K5, K7a; raport `impl-parsery.md`).
+(kroki K1–K5, K7a; raport `impl-parsery.md`; K6, K7b, K9 — raport
+`impl-porzadki.md`).
 
 **BREAKING**
 - Usunięte `kartograf.providers.cuzk.Sm5Sheet` (także
@@ -121,6 +137,13 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   `ValidationError` dla bboxa odwróconego (`min > max`) albo z NaN/inf —
   dotąd zwracały arkusz-śmieć (`BBox(10, 10, 5, 5)` -> `L-33-1-D-c-4-3`)
   albo kończyły się `ValueError`. Bbox-punkt nadal dozwolony.
+- `kartograf.cli.commands` (fasada) nie re-eksportuje już prywatnych
+  `_create_provider_and_storage` i `_resolve_laz_bbox` — importować
+  z `kartograf.cli.download_cmd` (używały ich tylko testy; K9).
+- Usunięte prywatne `core.geometry._transform_bbox` (4 narożniki),
+  `download.cutout._sheet_frame_transformer`/`_sheet_frame_2180`,
+  `_CZ_CRS`, `cli.download_cmd._CZ_CRS_WKIDS` i `providers.cuzk.dmr._EDGE_SAMPLES`
+  — zastępują je `core.bbox.transform_bbox` i `is_czech_crs` (K6).
 
 **Fixed**
 - `find_sheets_for_bbox(..., system="2000")` z bboxa WGS84 przecinającego
@@ -148,6 +171,21 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   `Error: Invalid bbox format: <powód>. Expected: ...` na stderr i kodem 1
   (dotąd odwrócony/NaN przechodził do pobierania); podpowiedź `Expected`
   nie idzie już na stdout. Nowe `cli._parser.parse_bbox_arg`.
+- `kartograf download --bbox` (tory PL, CZ i LAZ) parsuje bbox tym samym
+  `parse_bbox_arg`: bbox odwrócony nie daje już arkusza-śmiecia, NaN nie
+  kończy się `Error: ValueError: ...`, podpowiedź idzie z błędem na stderr
+  (K7b).
+- Wycinek PL (`--target-crs`, `prepare_pl_cutout`/`download_pl_cutout`)
+  i selekcja kafli LAZ z bboxa WGS84 przecinającego 19°E: obwiednia
+  w EPSG:2180 z zagęszczonych krawędzi zamiast 4 narożników —
+  `BBox(18, 50, 20, 50.2, "EPSG:4326")` ma `min_y` 236968,4 zamiast
+  237447,4 (~479 m pasa na S); nazwa pliku wycinka niesie poprawny zasięg.
+  Rozpoznawanie/przycinanie krajów (`--country auto`) liczy obwiednię
+  WGS84 tak samo. Obwiednie CZ (`bbox_to_crs`, 9 -> 21 próbek na krawędź)
+  bit w bit bez zmian dla zmierzonych bboxów (K6).
+- `CuzkDmrProvider.download` obcina białe znaki godła na wejściu:
+  `download(" CTES96")` z biblioteki buduje poprawny URL openzu (dotąd
+  rejestr rozpoznawał SM5 po `strip()`, a URL dostawał godło ze spacją).
 
 **Added**
 - `kartograf.core.bbox`: `BBox` (przeniesiona z `sheet_parser` —

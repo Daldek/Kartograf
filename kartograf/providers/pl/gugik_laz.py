@@ -60,9 +60,9 @@ from kartograf.providers.base import BaseProvider
 from kartograf.sources.registry import parse_pl_uklad
 from kartograf.transport.http import (
     MAX_RETRIES,
+    SessionPerThread,
     download_to,
     get_with_retry,
-    make_gugik_session,
 )
 
 logger = logging.getLogger(__name__)
@@ -379,7 +379,10 @@ class GugikLazProvider(BaseProvider):
                 f"Unsupported vertical_crs: '{vertical_crs}'. "
                 f"Supported: {self.SUPPORTED_VERTICAL_CRS}"
             )
-        self._session = session or make_gugik_session()
+        # Jedna sesja na watek (pula CLI pobiera kafle rownolegle, a
+        # requests.Session nie jest bezpieczna watkowo); sesja wstrzyknieta
+        # wygrywa — o jej uzycie z wielu watkow dba wolajacy.
+        self._sessions = SessionPerThread(session)
         self._vertical_crs = vertical_crs
         self._cache = cache
         # In-memory cache of available years per height system
@@ -411,7 +414,7 @@ class GugikLazProvider(BaseProvider):
         """Fetch WFS XML without turning a failed request into missing coverage."""
         try:
             response = get_with_retry(
-                self._session,
+                self._sessions.get(),
                 url,
                 timeout=timeout,
                 retries=3,
@@ -799,7 +802,7 @@ class GugikLazProvider(BaseProvider):
             If the download fails after all retries.
         """
         return download_to(
-            self._session,
+            self._sessions.get(),
             url,
             Path(output_path),
             timeout=timeout,

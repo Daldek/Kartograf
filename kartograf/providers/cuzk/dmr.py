@@ -25,9 +25,9 @@ from rasterio.transform import xy as _pixel_xy
 from rasterio.windows import Window
 
 from kartograf.cache.metadata import MetadataCache
+from kartograf.core.bbox import BBox, transform_bbox
 from kartograf.core.parser_registry import detect_system
 from kartograf.core.parser_tm33 import ParserTM33
-from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.cuzk.client import CuzkClient, wkid
@@ -88,9 +88,6 @@ _ENVELOPE_POLICY = TransformPolicy(min_accuracy_m=2.0, allow_network_grids=False
 # Transformacja idzie pasami o stalej liczbie PIKSELI (nie wierszy): przy szerokim
 # rastrze pas wierszowy wygenerowalby wielkie tablice indeksow i lon/lat.
 _CHUNK_PIXELS = 4_000_000
-# Probki na krawedz przy przeliczaniu obwiedni: Krovak wzgledem UTM/PL-1992 jest
-# obrocony, wiec obraz krawedzi jest krzywa — same naroza moglyby obwiednie zanizyc.
-_EDGE_SAMPLES = 9
 
 
 class CuzkDmrProvider(BaseProvider):
@@ -216,8 +213,11 @@ class CuzkDmrProvider(BaseProvider):
         (ADR-024). Arkusz SM5 przychodzi plikiem juz w 5514 — bez warpu.
         """
         output_path = Path(output_path)
+        # jak rejestr systemow: biale znaki nie sa czescia godla (URL openzu,
+        # indeks SM5 i ParserTM33 dostaja to samo obciete godlo)
+        godlo = godlo.strip()
         system = detect_system(godlo)
-        if system is None or system.country != "CZ":
+        if system.country != "CZ":
             raise ValidationError(
                 f"Godlo '{godlo}' nie nalezy do zadnego systemu CZ "
                 f"(TM33: 302_5550, SM5: CTES96)"
@@ -486,11 +486,14 @@ class CuzkDmrProvider(BaseProvider):
 def bbox_to_crs(
     bbox: BBox, target_crs: str, pinned: PinnedTransform | None = None
 ) -> BBox:
-    """Obwiednia bboxa w ukladzie docelowym (normalizacja zadan exportImage).
+    """Obwiednia bboxa w ukladzie docelowym przez operacje PRZYPIETA (ADR-024).
 
-    Krawedzie sa probkowane (nie tylko naroza), bo obraz prostokata w innym
-    ukladzie jest czworokatem o krzywych bokach — obwiednia z samych naroznikow
-    potrafi uciac skrawek zadanego obszaru.
+    Jedyne wejscie dla zadan opuszczajacych uklad czeski (i normalizacji
+    zadan exportImage): wybiera operacje obwiedniowa (``_ENVELOPE_POLICY``
+    z punktem kontrolnym w srodku bboxa), gdy wolajacy jej nie poda.
+    Obwiednie z zageszczonych krawedzi liczy ``core.bbox.transform_bbox``
+    (21 probek na krawedz) — obraz prostokata w innym ukladzie jest
+    czworokatem o krzywych bokach.
 
     Funkcja modulowa (nie tylko metoda), bo warstwa CLI normalizuje bbox PRZED
     zbudowaniem nazwy pliku — nazwa musi niesc wspolrzedne faktycznie zadanego
@@ -502,22 +505,7 @@ def bbox_to_crs(
             target_crs,
             dataclasses.replace(_ENVELOPE_POLICY, probe_point=_center_of(bbox)),
         )
-    xs = np.linspace(bbox.min_x, bbox.max_x, _EDGE_SAMPLES)
-    ys = np.linspace(bbox.min_y, bbox.max_y, _EDGE_SAMPLES)
-    west = np.full(_EDGE_SAMPLES, bbox.min_x)
-    east = np.full(_EDGE_SAMPLES, bbox.max_x)
-    south = np.full(_EDGE_SAMPLES, bbox.min_y)
-    north = np.full(_EDGE_SAMPLES, bbox.max_y)
-    edge_x = np.concatenate([xs, xs, west, east])
-    edge_y = np.concatenate([south, north, ys, ys])
-    out_x, out_y = pinned.transform(edge_x, edge_y)
-    return BBox(
-        float(np.min(out_x)),
-        float(np.min(out_y)),
-        float(np.max(out_x)),
-        float(np.max(out_y)),
-        target_crs,
-    )
+    return transform_bbox(bbox, target_crs, transformer=pinned)
 
 
 def _center_of(bbox: BBox) -> tuple[float, float]:
