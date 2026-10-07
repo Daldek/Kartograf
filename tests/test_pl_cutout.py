@@ -14,7 +14,8 @@ from kartograf.cli.commands import main
 from kartograf.cli.download_cmd import _download_pl_bbox
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.cutout import build_pl_cutout, prepare_pl_cutout
-from kartograf.download.manager import DownloadResult
+from kartograf.download.manager import DownloadProgress, DownloadResult
+from kartograf.exceptions import DownloadError
 from kartograf.transform.crs import (
     TransformPolicy,
     TransformUnavailableError,
@@ -1877,7 +1878,7 @@ class TestMissingSheets:
     """R5: brak danych GUGiK = nodata + ostrzezenie; awaria pobrania = blad."""
 
     def _provider(self, *, no_coverage=(), broken=()):
-        from kartograf.exceptions import DownloadError, NoCoverageError
+        from kartograf.exceptions import NoCoverageError
 
         provider = Mock()
         provider.vertical_crs = "EVRF2007"
@@ -2041,7 +2042,6 @@ class TestMissingSheets:
 
     def test_transport_failure_stays_fatal(self, tmp_path):
         from kartograf.download.cutout import run_pl_cutout
-        from kartograf.exceptions import DownloadError
 
         cut, sheets = self._cutout(tmp_path)
         with pytest.raises(DownloadError, match="N-34-130-D-d-2-4"):
@@ -2610,3 +2610,32 @@ class TestUnverifiedSheets:
         (tif,) = (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif")
         meta = json.loads(tif.with_name(tif.name + ".meta.json").read_text("utf-8"))
         assert "unverified_sheets" not in (meta.get("extra") or {})
+
+    def test_skip_restores_unverified_from_sidecar_and_warns(self, tmp_path, capsys):
+        assert self._run_unverified(tmp_path) == 0
+        capsys.readouterr()
+
+        rc, manager, _ = self._run(tmp_path, _pl_args(tmp_path), sheets=[])
+
+        assert rc == 0
+        manager.download_sheets.assert_not_called()
+        err = capsys.readouterr().err
+        assert "skorowidz GUGiK niedostepny" in err and "(N-1) (HTTP 503)" in err
+        assert "z sidecara istniejacego wycinka" in err
+
+    def test_cutout_error_after_unfinished_progress_starts_new_line(
+        self, tmp_path, capsys
+    ):
+        sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
+        args = _pl_args(tmp_path, quiet=False)
+
+        def boom(*a, on_progress=None, **kw):
+            on_progress(DownloadProgress(0, 1, "N-1", "downloading", ""))
+            raise DownloadError("padl")
+
+        with patch(f"{_CUT}.run_pl_cutout", side_effect=boom):
+            rc, *_ = self._run(tmp_path, args, sheets)
+
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert err.endswith("\nError: padl\n")

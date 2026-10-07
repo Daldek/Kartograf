@@ -29,24 +29,17 @@ from kartograf.exceptions import (
 from kartograf.sources.registry import horizontal_crs_for_godlo
 
 
-def create_progress_callback(quiet: bool = False):
+class _ProgressPrinter:
+    """Callback paska postepu; ``pending`` = ostatnia linia bez konca linii.
+
+    Przy ``--workers > 1`` ``pending`` odzwierciedla ostatni zapis (najwyzej
+    zbedny albo brakujacy ``\\n`` przed ``Error:``).
     """
-    Create a progress callback for download operations.
 
-    Parameters
-    ----------
-    quiet : bool
-        If True, suppress output
+    def __init__(self) -> None:
+        self.pending = False
 
-    Returns
-    -------
-    callable
-        Progress callback function
-    """
-    if quiet:
-        return None
-
-    def on_progress(progress: DownloadProgress) -> None:
+    def __call__(self, progress: DownloadProgress) -> None:
         """Print progress bar and status."""
         bar_width = 30
         filled = int(bar_width * progress.current / max(progress.total, 1))
@@ -72,13 +65,29 @@ def create_progress_callback(quiet: bool = False):
 
         if progress.status in ("completed", "failed", "no_coverage"):
             print(line, flush=True)
-            on_progress.pending = False  # type: ignore[attr-defined]
+            self.pending = False
         else:
             print(line, end="", flush=True)
-            on_progress.pending = True  # type: ignore[attr-defined]
+            self.pending = True
 
-    on_progress.pending = False  # type: ignore[attr-defined]
-    return on_progress
+
+def create_progress_callback(quiet: bool = False):
+    """
+    Create a progress callback for download operations.
+
+    Parameters
+    ----------
+    quiet : bool
+        If True, suppress output
+
+    Returns
+    -------
+    callable or None
+        Progress callback (``None`` przy ``quiet``)
+    """
+    if quiet:
+        return None
+    return _ProgressPrinter()
 
 
 def _error_lead(on_progress) -> str:
@@ -1238,14 +1247,15 @@ def _print_campaign_summary(
     )
 
 
-def _warn_unverified(unverified: dict[str, str]) -> None:
+def _warn_unverified(unverified: dict[str, str], *, from_sidecar: bool = False) -> None:
     """``Warning:`` o arkuszach z lokalnej kampanii bez sprawdzenia (I-1)."""
     godla = list(unverified)
     shown = ", ".join(godla[:10]) + (" ..." if len(godla) > 10 else "")
     print(
         "Warning: skorowidz GUGiK niedostepny — dla "
         f"{len(godla)} arkuszy uzyto lokalnej kampanii bez sprawdzenia nowszej "
-        f"({shown}) ({unverified[godla[0]]})",
+        f"({shown}) ({unverified[godla[0]]})"
+        + (" (z sidecara istniejacego wycinka)" if from_sidecar else ""),
         file=sys.stderr,
     )
 
@@ -1474,7 +1484,7 @@ def _report_pl_cutout(result, *, from_sidecar: bool) -> None:
     unverified = getattr(result, "unverified", None)
     if isinstance(unverified, dict) and unverified:
         # I-1: jak lista/godlo; lista pelna w sidecarze (extra.unverified_sheets)
-        _warn_unverified(unverified)
+        _warn_unverified(unverified, from_sidecar=from_sidecar)
     origin = " (z sidecara istniejacego wycinka)" if from_sidecar else ""
     if result.off_grid_sheets:
         print(
@@ -1626,6 +1636,7 @@ def _download_pl_cutout(
                 file=sys.stderr,
             )
 
+        on_progress = create_progress_callback(args.quiet)
         try:
             result = run_pl_cutout(
                 cutout,
@@ -1634,11 +1645,11 @@ def _download_pl_cutout(
                 storage=storage,
                 max_workers=getattr(args, "workers", 4),
                 force=args.force,
-                on_progress=create_progress_callback(args.quiet),
+                on_progress=on_progress,
                 parent_request=parent_request,
             )
         except Exception as e:  # noqa: BLE001 — kod 1 zamiast tracebacku (ADR-023)
-            print(f"Error: {e}", file=sys.stderr)
+            print(f"{_error_lead(on_progress)}Error: {e}", file=sys.stderr)
             return 1
     if not args.quiet:
         # pasek postepu konczy "skipped" bez nowej linii — jak dotad pusta
