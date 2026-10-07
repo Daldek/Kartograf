@@ -141,9 +141,11 @@
 > galaz `adr030/hardlink`.
 > Errata 4 (decyzja uzytkownika): dowiazania WYLACZNIE twarde (hardlink ->
 > kopia), bez symlinkow — merge `ba42ead`, brama **2652** offline; na zywo
-> PL-2000 + hardlinki 11/11 PASS (dodatek w raporcie T12). Drobne UX do decyzji:
-> lista `--bbox --system 2000` bez `--scale 1:2000` nie podpowiada skali (O-6),
-> `Downloaded 0 ...` po `Error:` (O-7), `Downloading ...` przy Skipped (O-3).
+> PL-2000 + hardlinki 11/11 PASS (dodatek w raporcie T12). Poprawki UX O-3/O-6/O-7
+> (merge `601acf1`): lista bez pokrycia drukuje podpowiedzi `Info:` z
+> `NoCoverageError.hints` (np. `--scale 1:2000` dla PL-2000; dedup doslowny,
+> max 5 linii; przezywaja cache), brak `Downloaded 0 ...` po `Error:`,
+> `Downloading ...` tylko przy rzeczywistym pobraniu. Brama **2669** offline.
 > **Nastepny krok:** wydanie 0.7.0 (bump/tag/push/merge) TYLKO na polecenie
 > uzytkownika.
 > Otwarte drobne (decyzja uzytkownika): wycinek `--target-crs` przy fallbacku
