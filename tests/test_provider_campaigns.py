@@ -129,6 +129,19 @@ def test_newest_min_year_does_not_skip_layers():
 # =============================================================================
 
 
+def test_provider_does_not_log_campaign_count_at_info(caplog):
+    """M-7: liczbe kampanii na INFO loguje wylacznie manager."""
+    import logging
+
+    with caplog.at_level(logging.INFO):
+        GugikProvider(session=c14_session(G)).resolve_campaigns(G, campaigns="all")
+    assert not [
+        r
+        for r in caplog.records
+        if r.levelno >= logging.INFO and "kampanii" in r.getMessage()
+    ]
+
+
 def test_all_lists_every_matching_campaign_from_all_layers():
     s = c14_session(G)
     recs = GugikProvider(session=s).resolve_campaigns(G, campaigns="all")
