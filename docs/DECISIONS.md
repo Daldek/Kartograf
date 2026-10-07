@@ -1630,6 +1630,33 @@ zaakceptowane przez uzytkownika):**
   dowiazanie wskazuje najnowsza pobrana.
 - **[Q6]** `all` dla orto moze oznaczac ~10 kampanii i GB danych na arkusz —
   bez limitu, opis w dokumentacji i `logger.info` z liczba kampanii.
+
+**Errata 2 2026-10-07 (decyzje uzytkownika do pytan planu N-1..N-3):**
+- **[N-1]** Sidecar pliku w `kampanie/` jest OBOWIAZKOWY: nieudany zapis
+  sidecara kampanii = porazka pobrania tej kampanii (plik danych usuwany,
+  `DownloadError`). Sidecar niesie tozsamosc kampanii. Pozostale sidecary
+  (m.in. wycinka) zostaja best-effort. Brak sidecara kampanii jest odtad
+  wylacznie skutkiem ingerencji uzytkownika; wtedy klucz kampanii z nazwy
+  katalogu `<data>_<id>`. Bez skanowania `kampanie/` w 0.7.0 (ryzyko R21).
+- **[N-2] Zastepuje punkt [Q3] errata 1.** Format pliku wynika z pola
+  `format` rekordu skorowidza, nie z rozszerzenia URL. Weryfikacja
+  2026-10-07: wszystkie 1217 rekordow NMT/NMPT z rundy maja
+  `format: "ARC/INFO ASCII GRID"` — takze rekord 72675
+  (`72675_858113_N-33-69-A-d-3-2.xyz`), ktorego plik jest siatka AAIGrid
+  (naglowek `ncols/nrows/xllcorner`, GDAL `AAIGrid`, 1 m, 92,5 % waznych
+  pikseli); rozszerzenie `.xyz` to blad nazwy po stronie GUGiK. Rekordy
+  orto nie maja pola `format` (zawsze `.tif`). Zasada: plik zapisywany
+  z rozszerzeniem kanonicznym formatu (`.asc` dla ARC/INFO ASCII GRID),
+  traktowany jak kazda kampania (dowiazanie jak zwykle), a po pobraniu
+  format jest weryfikowany po tresci (naglowek AAIGrid / sygnatura TIFF).
+  Rekord o formacie nieobslugiwanym (pole `format` inne niz znane) albo
+  plik, ktorego tresc nie zgadza sie z formatem = porazka kampanii
+  (`DownloadError` z nazwa formatu), nie ciche zapisanie pod `.asc`.
+- **[N-3]** Obszar w calosci czeski pod `--country auto` z
+  `--campaigns all`/`--min-year` = `Error:`, kod 1 (opcje kampanii dotycza
+  tylko PL; CUZK nie publikuje kampanii w uslugach uzywanych przez
+  Kartograf — rozpoznanie katalogu rastrow DMR 5G w toku). `Info:` tylko
+  dla obszaru z czescia PL.
 ---
 
 <!-- Szablon nowej decyzji:
