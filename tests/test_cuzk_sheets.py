@@ -1,4 +1,4 @@
-"""Testy SheetIndex / Sm5Sheet — indeks arkuszy KladyMapovychListu (offline).
+"""Testy SheetIndex — indeks arkuszy KladyMapovychListu (offline).
 
 Fixtury `tests/fixtures/cuzk/*.json` to zapis realnych odpowiedzi uslugi
 (rekonesans Zad. 1) — sa zrodlem prawdy dla ksztaltu odpowiedzi i wartosci
@@ -7,7 +7,7 @@ atrybutow (MAPNAME "Cesky Tesin 9-6", PODIL 0.99 dla CTES96).
 
 import json
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -22,7 +22,6 @@ from kartograf.providers.cuzk.sheets import (
     TM33_LAYER,
     SheetIndex,
     SheetInfo,
-    Sm5Sheet,
 )
 
 FIXTURES = Path(__file__).parent / "fixtures" / "cuzk"
@@ -115,6 +114,20 @@ class TestSm5Sheet:
         index = SheetIndex(session=session)
         with pytest.raises(ValidationError, match="ZZZZ99"):
             index.sm5_sheet("ZZZZ99")
+
+    def test_whitespace_around_mapnom_is_stripped(self):
+        """Spojnie z rejestrem systemow (detect_system strip()) — K5."""
+        session = _session_returning(_fixture("klady_sm5_where_ctes96.json"))
+        info = SheetIndex(session=session).sm5_sheet(" CTES96 ")
+        assert info.godlo == "CTES96"
+        assert session.get.call_args.kwargs["params"]["where"] == "MAPNOM='CTES96'"
+
+    def test_whitespace_mapnom_uses_stripped_cache_key(self, tmp_path):
+        cache = MetadataCache(db_path=tmp_path / "c.db")
+        session = _session_returning(_fixture("klady_sm5_where_ctes96.json"))
+        SheetIndex(session=session, cache=cache).sm5_sheet(" CTES96")
+        assert cache.get_sheet("cz_sm5", "CTES96") is not None
+        cache.close()
 
     def test_malformed_mapnom_rejected_before_network(self):
         session = Mock()
@@ -312,76 +325,3 @@ class TestBboxQueries:
         SheetIndex(session=session, cache=cache).sm5_sheets_for_bbox(BBOX_SM5)
         assert cache.stats()["sheet_count"] == 0
         cache.close()
-
-
-class TestSm5SheetParserObject:
-    def test_attributes(self):
-        sheet = Sm5Sheet("CTES96")
-        assert sheet.godlo == "CTES96"
-        assert sheet.uklad == "cz_sm5"
-        assert repr(sheet) == "Sm5Sheet('CTES96')"
-
-    def test_whitespace_stripped(self):
-        assert Sm5Sheet("  CTES96 ").godlo == "CTES96"
-
-    @pytest.mark.parametrize(
-        "godlo", ["302_5550", "ctes96", "CTES9", "CTES961", "", 123, None]
-    )
-    def test_invalid_godlo_raises_parse_error(self, godlo):
-        with pytest.raises(ParseError):
-            Sm5Sheet(godlo)
-
-    def test_get_bbox_is_lazy_and_delegates(self):
-        """Konstrukcja bez IO; get_bbox dopiero pyta indeks."""
-        session = _session_returning(_fixture("klady_sm5_where_ctes96.json"))
-        index = SheetIndex(session=session)
-        sheet = Sm5Sheet("CTES96", index=index)
-        session.get.assert_not_called()
-        bbox = sheet.get_bbox()
-        assert bbox.crs == "EPSG:5514"
-        assert session.get.call_count == 1
-
-    def test_get_bbox_without_index_builds_cached_index_lazily(self):
-        """Bez wstrzyknietego indeksu: budowa dopiero w get_bbox, z cache."""
-        with (
-            patch("kartograf.providers.cuzk.sheets.SheetIndex") as index_cls,
-            patch("kartograf.providers.cuzk.sheets.MetadataCache") as cache_cls,
-        ):
-            sheet = Sm5Sheet("CTES96")
-            index_cls.assert_not_called()
-            cache_cls.assert_not_called()
-            bbox = sheet.get_bbox()
-            index_cls.assert_called_once_with(cache=cache_cls.return_value)
-            index_cls.return_value.sm5_sheet.assert_called_once_with("CTES96")
-            assert bbox is index_cls.return_value.sm5_sheet.return_value.bbox
-
-    def test_get_bbox_without_index_closes_cache_after_use(self):
-        """Cache utworzony samodzielnie w get_bbox() jest zamykany po zapytaniu."""
-        with (
-            patch("kartograf.providers.cuzk.sheets.SheetIndex"),
-            patch("kartograf.providers.cuzk.sheets.MetadataCache") as cache_cls,
-        ):
-            sheet = Sm5Sheet("CTES96")
-            sheet.get_bbox()
-            cache_cls.return_value.close.assert_called_once()
-
-    def test_get_bbox_without_index_closes_cache_even_on_error(self):
-        """Blad zapytania nie zostawia otwartego polaczenia z cache (finally)."""
-        with (
-            patch("kartograf.providers.cuzk.sheets.SheetIndex") as index_cls,
-            patch("kartograf.providers.cuzk.sheets.MetadataCache") as cache_cls,
-        ):
-            index_cls.return_value.sm5_sheet.side_effect = ValidationError("boom")
-            sheet = Sm5Sheet("CTES96")
-            with pytest.raises(ValidationError, match="boom"):
-                sheet.get_bbox()
-            cache_cls.return_value.close.assert_called_once()
-
-    def test_get_bbox_with_injected_index_does_not_close_its_cache(self):
-        """Wstrzykniety indeks zostaje wlasnoscia wywolujacego — bez auto-close."""
-        session = _session_returning(_fixture("klady_sm5_where_ctes96.json"))
-        with patch("kartograf.providers.cuzk.sheets.MetadataCache") as cache_cls:
-            index = SheetIndex(session=session)
-            sheet = Sm5Sheet("CTES96", index=index)
-            sheet.get_bbox()
-            cache_cls.assert_not_called()

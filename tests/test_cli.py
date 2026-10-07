@@ -113,6 +113,22 @@ class TestCreateParser:
         assert args.descendants == "1:10000"
 
 
+class TestCreateParserGodloStrip:
+    """K5: argparse nie obcina bialych znakow — godlo jest obcinane na wejsciu,
+    zanim rejestr systemow rozstrzygnie kraj i zanim powstanie nazwa pliku."""
+
+    @pytest.mark.parametrize("raw", [" 302_5550", "302_5550 ", "\t302_5550\n"])
+    def test_download_godlo_stripped(self, raw):
+        assert create_parser().parse_args(["download", raw]).godlo == "302_5550"
+
+    def test_parse_godlo_stripped(self):
+        assert create_parser().parse_args(["parse", " N-34 "]).godlo == "N-34"
+
+    def test_download_without_godlo_still_none(self):
+        args = create_parser().parse_args(["download", "--bbox", "1,2,3,4"])
+        assert args.godlo is None
+
+
 class TestFormatSheetInfo:
     """Tests for format_sheet_info()."""
 

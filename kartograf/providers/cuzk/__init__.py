@@ -6,14 +6,13 @@ from kartograf.cache.metadata import MetadataCache
 from kartograf.exceptions import ValidationError
 from kartograf.providers.cuzk.client import CuzkClient
 from kartograf.providers.cuzk.dmr import CuzkDmrProvider
-from kartograf.providers.cuzk.sheets import SheetIndex, SheetInfo, Sm5Sheet
+from kartograf.providers.cuzk.sheets import SheetIndex, SheetInfo
 
 __all__ = [
     "CuzkClient",
     "CuzkDmrProvider",
     "SheetIndex",
     "SheetInfo",
-    "Sm5Sheet",
     "create_dmr_provider",
 ]
 

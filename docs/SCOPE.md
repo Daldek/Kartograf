@@ -482,7 +482,7 @@ kartograf/
 │   │   └── __init__.py          # create_nmt_provider() — fabryka domyślnych NMT
 │   ├── cuzk/                  # Providery czeskie (CUZK, etap 1)
 │   │   ├── client.py            # CuzkClient — silnik sterowany deskryptorem (ArcGIS REST + openzu)
-│   │   ├── sheets.py            # SheetIndex/SheetInfo/Sm5Sheet — indeks arkuszy SM5/TM33
+│   │   ├── sheets.py            # SheetIndex/SheetInfo — indeks arkuszy SM5/TM33
 │   │   ├── dmr.py               # CuzkDmrProvider — DMR 5G/4G
 │   │   └── __init__.py          # create_dmr_provider() — fabryka domyślnych CZ
 │   ├── corine.py             # CorineProvider

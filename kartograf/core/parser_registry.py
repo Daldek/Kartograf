@@ -1,15 +1,25 @@
 """
-Rejestr systemow godel (etap 0: pl1992 + pl2000; etap 1: cz_tm33, cz_sm5).
+Rejestr systemow godel: pl2000, cz_tm33, cz_sm5 i fallback pl1992.
 
-Logika detekcji PL-2000 (regex) i dzielenia sciezek przeniesiona 1:1
-z sheet_parser._is_pl2000_format i FileStorage._get_directory_parts.
-Fabryki parserow uzywaja importow lazy (unikamy cyklu importow z sheet_parser).
+Jedno zrodlo prawdy dla rozpoznania systemu z godla (``detect_system``),
+dla podzialu godla na katalogi ``FileStorage`` (``path_parts``) oraz dla
+wzorcow godel CZ (``CZ_TM33_PATTERN``, ``CZ_SM5_PATTERN`` — importowane przez
+``core.parser_tm33`` i ``providers.cuzk.sheets``). Biale znaki wokol godla sa
+obcinane w kazdej funkcji (spojnie z parserami).
+
+Rejestr jest literalem ``SYSTEMS`` (kolejnosc = priorytet detekcji); modul
+nie importuje niczego z ``kartograf`` — brak cykli z parserami.
 """
 
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+
+# Godlo kafla TM33 `{E_km}_{N_km}` (grupy: kilometry E i N narozniku SW).
+CZ_TM33_PATTERN = re.compile(r"^(\d{3})_(\d{4})$")
+# Godlo arkusza SM5 (MAPNOM): 4 wielkie litery + 2 cyfry, np. CTES96.
+CZ_SM5_PATTERN = re.compile(r"^[A-Z]{4}\d{2}$")
+_PL2000_PATTERN = re.compile(r"^[5-8]\.\d")
 
 
 @dataclass(frozen=True)
@@ -18,42 +28,8 @@ class SheetSystem:
 
     id: str  # "pl1992", "pl2000", "cz_tm33", "cz_sm5"
     country: str
-    detect: Callable[[str], bool]
-    parser_factory: Callable[[str], Any]  # obiekt z .godlo, .get_bbox(), ...
+    detect: Callable[[str], bool]  # dostaje godlo bez bialych znakow
     path_parts: Callable[[str], list[str]]  # czesci sciezki dla FileStorage
-
-
-_REGISTRY: list[SheetSystem] = []
-
-
-def register_system(system: SheetSystem) -> None:
-    """Zarejestruj system godel; ValueError przy duplikacie id."""
-    if any(s.id == system.id for s in _REGISTRY):
-        raise ValueError(f"System godel '{system.id}' jest juz zarejestrowany")
-    _REGISTRY.append(system)
-
-
-def detect_system(godlo: str) -> SheetSystem | None:
-    """Zwroc pierwszy system (w kolejnosci rejestracji), ktorego detect pasuje."""
-    for system in _REGISTRY:
-        if system.detect(godlo):
-            return system
-    return None
-
-
-def path_parts(godlo: str) -> list[str]:
-    """Czesci sciezki katalogowej dla godla wg wykrytego systemu."""
-    system = detect_system(godlo)
-    if system is None:
-        raise ValueError(f"Brak systemu godel pasujacego do: '{godlo}'")
-    return system.path_parts(godlo)
-
-
-_PL2000_PATTERN = re.compile(r"^[5-8]\.\d")
-
-
-def _detect_pl2000(godlo: str) -> bool:
-    return bool(_PL2000_PATTERN.match(godlo))
 
 
 def _pl2000_path_parts(godlo: str) -> list[str]:
@@ -74,71 +50,47 @@ def _pl1992_path_parts(godlo: str) -> list[str]:
     return dir_parts
 
 
-def _make_parser_pl2000(godlo: str) -> Any:
-    from kartograf.core.parser_2000 import Parser2000
-
-    return Parser2000(godlo)
-
-
-def _make_parser_pl1992(godlo: str) -> Any:
-    from kartograf.core.sheet_parser import SheetParser
-
-    return SheetParser(godlo)
-
-
-_CZ_TM33_PATTERN = re.compile(r"^\d{3}_\d{4}$")
-_CZ_SM5_PATTERN = re.compile(r"^[A-Z]{4}\d{2}$")
-
-
-def _make_parser_cz_tm33(godlo: str) -> Any:
-    from kartograf.core.parser_tm33 import ParserTM33
-
-    return ParserTM33(godlo)
-
-
-def _make_parser_cz_sm5(godlo: str) -> Any:
-    # Import leniwy: unika ciagniecia providers/cuzk (i jego IO-zaleznych
-    # importow, np. CuzkClient) do core przy imporcie modulu. Wartosc "cz_sm5"
-    # jest zgodna z Sm5Sheet.uklad i SheetIndex.SM5_SYSTEM (providers/cuzk/sheets.py) —
-    # nie importowana stad celowo, zeby nie naruszyc warstwy core/providers.
-    from kartograf.providers.cuzk.sheets import Sm5Sheet
-
-    return Sm5Sheet(godlo)
-
-
-register_system(
+SYSTEMS: tuple[SheetSystem, ...] = (
     SheetSystem(
         id="pl2000",
         country="PL",
-        detect=_detect_pl2000,
-        parser_factory=_make_parser_pl2000,
+        detect=lambda godlo: bool(_PL2000_PATTERN.match(godlo)),
         path_parts=_pl2000_path_parts,
-    )
-)
-register_system(
+    ),
     SheetSystem(
         id="cz_tm33",
         country="CZ",
-        detect=lambda godlo: bool(_CZ_TM33_PATTERN.match(godlo)),
-        parser_factory=_make_parser_cz_tm33,
+        detect=lambda godlo: bool(CZ_TM33_PATTERN.match(godlo)),
         path_parts=lambda godlo: godlo.split("_"),
-    )
-)
-register_system(
+    ),
     SheetSystem(
         id="cz_sm5",
         country="CZ",
-        detect=lambda godlo: bool(_CZ_SM5_PATTERN.match(godlo)),
-        parser_factory=_make_parser_cz_sm5,
+        detect=lambda godlo: bool(CZ_SM5_PATTERN.match(godlo)),
         path_parts=lambda godlo: [godlo[:4], godlo[4:]],
-    )
-)
-register_system(
+    ),
     SheetSystem(
         id="pl1992",
         country="PL",
         detect=lambda godlo: True,  # fallback — zawsze ostatni
-        parser_factory=_make_parser_pl1992,
         path_parts=_pl1992_path_parts,
-    )
+    ),
 )
+
+
+def detect_system(godlo: str) -> SheetSystem:
+    """
+    Pierwszy system (w kolejnosci ``SYSTEMS``), ktorego ``detect`` pasuje.
+
+    Godlo jest obcinane z bialych znakow. Nigdy nie zwraca ``None``: ``pl1992``
+    jest fallbackiem dla kazdego identyfikatora (takze nieprawidlowego —
+    walidacje robi parser systemu).
+    """
+    cleaned = godlo.strip()
+    return next(s for s in SYSTEMS if s.detect(cleaned))
+
+
+def path_parts(godlo: str) -> list[str]:
+    """Czesci sciezki katalogowej dla godla (bez bialych znakow) wg systemu."""
+    cleaned = godlo.strip()
+    return detect_system(cleaned).path_parts(cleaned)
