@@ -268,6 +268,27 @@ class TestPreparePlCutout:
             tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox"
         )
 
+    @pytest.mark.parametrize(("resolution", "margin"), [("1m", 4.0), ("5m", 20.0)])
+    def test_source_has_warp_margin_of_four_pixels(self, tmp_path, resolution, margin):
+        """D9: zapas zrodla = WARP_MARGIN_PX (4 px) z kazdej strony obwiedni
+        celu sprowadzonej do EPSG:2180 — ta sama stala co w torze CZ."""
+        from kartograf.providers.cuzk.dmr import bbox_to_crs
+
+        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+        cut = prepare_pl_cutout(
+            bbox,
+            "EPSG:5514",
+            output_dir=str(tmp_path),
+            resolution=resolution,
+            vertical_crs="EVRF2007",
+        )
+        back = bbox_to_crs(cut.bbox_target, "EPSG:2180")
+        source = cut.bbox_source_2180
+        assert source.min_x == pytest.approx(back.min_x - margin)
+        assert source.min_y == pytest.approx(back.min_y - margin)
+        assert source.max_x == pytest.approx(back.max_x + margin)
+        assert source.max_y == pytest.approx(back.max_y + margin)
+
     def test_probe_point_is_center_of_request(self, tmp_path):
         """Operacje wybiera polityka Z PROBE w srodku zadania, nie sama polityka.
 
