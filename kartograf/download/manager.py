@@ -99,7 +99,7 @@ class DownloadResult:
         przebiegu i juz lokalne (dla udanych arkuszy). Tor bez kampanii: puste.
     copied : list[str]
         Godla, ktorych sciezka standardowa jest KOPIA pliku kampanii
-        (symlink i hardlink niedostepne).
+        (hardlink niedostepny, np. exFAT/FAT, sshfs/FUSE).
     reused_campaign_files : dict[str, tuple[Path, ...]]
         Podzbior ``campaign_files``: godlo -> pliki kampanii juz lokalne
         (nie pobrane w tym przebiegu). Tor bez kampanii: puste.
@@ -163,7 +163,7 @@ class SheetFetch:
     reused : tuple[Path, ...]
         Pliki kampanii juz lokalne.
     link : str or None
-        ``symlink``/``hardlink``/``copy``; ``None`` = tor bez kampanii.
+        ``hardlink``/``copy``; ``None`` = tor bez kampanii.
     unverified : str or None
         ``newest``: tresc bledu TRANSPORTU skorowidza GUGiK (siec, 429, 5xx),
         przy ktorym uzyto istniejacej lokalnej kampanii bez sprawdzenia, czy
@@ -820,7 +820,8 @@ class DownloadManager:
     def _note_standard_reuse(self, std: Path, outcome: LinkOutcome) -> None:
         """Dowiazanie bez zmian: sidecar standardowy jako zwykly plik + N4."""
         std_sidecar = std.with_name(std.name + ".meta.json")
-        if std_sidecar.is_symlink():  # nigdy zapis "przez" dowiazanie
+        # sidecar podmieniony przez uzytkownika na symlink: nigdy zapis przez niego
+        if std_sidecar.is_symlink():
             write_standard_sidecar(std, outcome.target, outcome.method)
         self._note_reuse(std)
 
@@ -829,11 +830,11 @@ class DownloadManager:
     ) -> SheetFetch | None:
         """I-1: lokalna kampania ``newest``, gdy skorowidz GUGiK niedostepny.
 
-        ``None`` = brak lokalnej kampanii (brak pliku, wiszace dowiazanie,
-        stary zwykly plik) — wolajacy zglasza pierwotny blad. Dowiazanie NIE
-        jest przestawiane: ``ensure_standard_link`` z biezacym celem i
-        najnizszym kluczem zwraca je bez zmian (odtwarza najwyzej brakujacy
-        sidecar standardowy).
+        ``None`` = brak lokalnej kampanii (brak pliku, ``extra.link_target``
+        nieistniejacy, stary zwykly plik, brak sidecara standardowego) —
+        wolajacy zglasza pierwotny blad. Dowiazanie NIE jest przestawiane:
+        ``ensure_standard_link`` z biezacym celem i najnizszym kluczem zwraca
+        je bez zmian.
         """
         target = linked_campaign(std)
         if target is None:
