@@ -1587,6 +1587,33 @@ class TestSidecarLandCover:
         assert payload["request"] == {"teryt": "1465"}
         assert payload["vertical_crs"] is None
 
+    def test_sidecar_failure_does_not_break_download(self, tmp_path, caplog):
+        """D7: blad budowy sidecara = ostrzezenie, plik danych zostaje."""
+        import logging
+
+        mock_provider = Mock()
+        mock_provider.name = "BDOT10k"
+        mock_provider.descriptor_key = "pl.gugik.bdot10k"
+        out = tmp_path / "out.gpkg"
+
+        def fake(teryt, output_path, **kwargs):
+            out.write_bytes(b"GPKG")
+            return out
+
+        mock_provider.download_by_teryt.side_effect = fake
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+        with (
+            patch(
+                "kartograf.sources.sidecar.build_metadata",
+                side_effect=RuntimeError("zepsuty deskryptor"),
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
+            result = manager.download_by_teryt("1465", output_path=out)
+        assert result.exists()
+        assert not (result.parent / f"{result.name}.meta.json").exists()
+        assert "zepsuty deskryptor" in caplog.text
+
     @staticmethod
     def _corine_png_sidecar(tmp_path, **kwargs):
         """Pobierz CORINE po bbox z fallbackiem PNG; zwroc payload sidecara."""

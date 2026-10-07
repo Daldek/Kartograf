@@ -417,37 +417,31 @@ class LandCoverManager:
     def _write_sidecar(
         self, data_path: Path, request: dict, kwargs: dict | None = None
     ) -> None:
-        """Best-effort zapis sidecara .meta.json (blad nie przerywa pobrania)."""
-        try:
-            from kartograf.sources.registry import get_source
-            from kartograf.sources.sidecar import build_metadata, write_sidecar
+        """Best-effort zapis sidecara .meta.json (``emit_sidecar``, D7)."""
+        from kartograf.sources.sidecar import emit_sidecar
 
-            key = getattr(self._provider, "descriptor_key", None)
-            if not isinstance(key, str):
-                return
-            descriptor = get_source(key)
-            meta = build_metadata(
-                descriptor,
-                request=request,
-                vertical_crs=getattr(self._provider, "vertical_crs", None),
-                data_path=data_path,
+        horizontal_crs = None
+        extra = None
+        # CORINE bez credentials CLMS spada na podglad PNG z WMS — inny CRS
+        # niz deklarowany dla kanalu CLMS GeoTIFF (EPSG:3035).
+        is_png = data_path.suffix.lower() == ".png"
+        key = getattr(self._provider, "descriptor_key", None)
+        if is_png and key == "eu.clms.corine":
+            year = (kwargs or {}).get("year", 2018)
+            # 1990 to jedyny rocznik DLR (WMS DLR, EPSG:4326); pozostale
+            # ida przez EEA Discomap (EPSG:3857) - patrz CorineProvider.EEA_YEARS.
+            horizontal_crs = (
+                "EPSG:4326" if year not in CorineProvider.EEA_YEARS else "EPSG:3857"
             )
-            # CORINE bez credentials CLMS spada na podglad PNG z WMS — inny CRS
-            # niz deklarowany dla kanalu CLMS GeoTIFF (EPSG:3035).
-            is_png = data_path.suffix.lower() == ".png"
-            if is_png and descriptor.key == "eu.clms.corine":
-                year = (kwargs or {}).get("year", 2018)
-                # 1990 to jedyny rocznik DLR (WMS DLR, EPSG:4326); pozostale
-                # ida przez EEA Discomap (EPSG:3857) - patrz CorineProvider.EEA_YEARS.
-                meta.horizontal_crs = (
-                    "EPSG:4326" if year not in CorineProvider.EEA_YEARS else "EPSG:3857"
-                )
-                meta.extra.update(
-                    {"fallback": "wms_png", "uwaga": "podglad WMS, nie dane"}
-                )
-            write_sidecar(data_path, meta)
-        except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
-            logger.warning(f"Nie udalo sie zapisac sidecara dla {data_path}: {e}")
+            extra = {"fallback": "wms_png", "uwaga": "podglad WMS, nie dane"}
+        emit_sidecar(
+            key,
+            data_path,
+            request=request,
+            vertical_crs=getattr(self._provider, "vertical_crs", None),
+            horizontal_crs=horizontal_crs,
+            extra=extra,
+        )
 
     # =========================================================================
     # Info methods

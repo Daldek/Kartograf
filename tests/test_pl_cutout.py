@@ -346,6 +346,19 @@ class TestPreparePlCutout:
         assert cut.bbox_2180 == BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         assert cut.target_path.name == "530010_382010_530190_382090.tif"
 
+    def test_utm_cutout_name_keeps_full_coordinates(self, tmp_path):
+        """D7: nazwa wycinka to ``format(v, ".10g")`` siatki wyniku — northing
+        UTM (7 cyfr) bez notacji wykladniczej; ta sama funkcja co tor CZ."""
+        cut = prepare_pl_cutout(
+            BBox(530010, 382010, 530190, 382090, "EPSG:2180"),
+            "EPSG:3045",
+            output_dir=str(tmp_path),
+        )
+        b = cut.bbox_target
+        coords = [format(v, ".10g") for v in (b.min_x, b.min_y, b.max_x, b.max_y)]
+        assert cut.target_path.name == "_".join(coords) + ".tif"
+        assert "e+" not in cut.target_path.name
+
     def test_wgs84_bbox_normalized_to_2180(self, tmp_path):
         bbox = BBox(18.60, 49.75, 18.65, 49.77, "EPSG:4326")
         cut = prepare_pl_cutout(
@@ -743,6 +756,8 @@ class TestDownloadPlBboxCutout:
         payload = json.loads((cut_dir / f"{tifs[0].name}.meta.json").read_text("utf-8"))
         assert payload["horizontal_crs"] == "EPSG:5514"
         assert payload["transform"]["horizontal"].startswith("pinned: ")
+        # D7: ten sam format co tor CZ (`pinned_label`) — z dokladnoscia
+        assert payload["transform"]["horizontal"].endswith(" m)")
         assert payload["request"]["bbox_crs"] == "EPSG:5514"
         # R-01: do SELEKCJI arkuszy idzie bbox Z ZAPASEM, nie samo zadanie —
         # inaczej rogi obroconej siatki wyniku wypadaja poza pobrane arkusze
@@ -1777,6 +1792,32 @@ class TestLibraryApi:
             "select_pl_cutout_sheets",
         ):
             assert name in kartograf.__all__ and hasattr(kartograf, name)
+
+    def test_sidecar_failure_does_not_break_cutout(self, tmp_path, caplog):
+        """D7: blad budowy sidecara wycinka = ostrzezenie, wycinek zostaje."""
+        import logging
+
+        from kartograf import download_pl_cutout
+
+        provider = self._provider()
+        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+        with (
+            patch("kartograf.providers.pl.create_nmt_provider", return_value=provider),
+            patch(
+                "kartograf.download.cutout.find_sheets_for_bbox",
+                return_value=list(self._SHEETS),
+            ),
+            patch(
+                "kartograf.sources.sidecar.build_metadata",
+                side_effect=RuntimeError("zepsuty deskryptor"),
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
+            result = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
+
+        assert result.path.exists()
+        assert not result.path.with_name(result.path.name + ".meta.json").exists()
+        assert "zepsuty deskryptor" in caplog.text
 
     @pytest.mark.parametrize(
         "kwargs",
