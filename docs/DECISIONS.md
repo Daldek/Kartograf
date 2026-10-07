@@ -1657,6 +1657,18 @@ zaakceptowane przez uzytkownika):**
   tylko PL; CUZK nie publikuje kampanii w uslugach uzywanych przez
   Kartograf — rozpoznanie katalogu rastrow DMR 5G w toku). `Info:` tylko
   dla obszaru z czescia PL.
+
+**Errata 3 2026-10-07 (decyzja uzytkownika po rozpoznaniu CUZK,
+`docs/research/2026-10-07-cuzk-kampanie.md`):** mechanizm kampanii jest
+WYLACZNIE dla PL (GUGiK) — bez wspolnej, kraj-niezaleznej abstrakcji
+kampanii. CUZK nie udostepnia danych archiwalnych (ImageServer = jeden
+raster biezacy; `Metadata/MapServer/20` daje tylko rok ostatniej
+aktualizacji per obszar), wiec Czechy zawsze pobieraja najnowsze dane;
+opcje kampanii dla CZ = `Error:` (I-3, N-3). Poza zakresem 0.7.0 (kolejne
+wydanie): mechanizm aktualizacji danych CZ jako flaga CLI — wymuszenie
+calkowicie nowego pobrania kompletu albo pobieranie czesciowe z
+porownaniem zmian w metadanych (np. `ROK` z Metadata/20, ATOM `<updated>`,
+`Last-Modified` plikow openzu).
 ---
 
 <!-- Szablon nowej decyzji:
