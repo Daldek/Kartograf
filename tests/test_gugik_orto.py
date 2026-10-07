@@ -90,7 +90,9 @@ def file_response(chunks: list[bytes] | None = None) -> Mock:
     response = Mock(spec=requests.Response)
     response.status_code = 200
     response.raise_for_status = Mock()
-    response.iter_content = Mock(return_value=chunks or [b"TIFF header data\x00"])
+    response.iter_content = Mock(
+        return_value=chunks or [b"II*\x00TIFF header data\x00"]
+    )
     return response
 
 
@@ -814,18 +816,18 @@ class TestOrtoVariantStorage:
         """Zadanie CIR przy istniejacym RGB pobiera CIR, nie zwraca po cichu RGB."""
         import json
 
-        rgb_manager, _ = self.manager_for(tmp_path, "RGB", b"RGB")
+        rgb_manager, _ = self.manager_for(tmp_path, "RGB", b"II*\x00RGB")
         rgb_path = rgb_manager.download_sheet(GODLO)
 
-        cir_manager, cir_session = self.manager_for(tmp_path, "CIR", b"CIR")
+        cir_manager, cir_session = self.manager_for(tmp_path, "CIR", b"II*\x00CIR")
         cir_path = cir_manager.download_sheet(GODLO)
 
         # RGB bez zmian (bez migracji), CIR we wlasnym segmencie wariantu.
         assert rgb_path.relative_to(tmp_path).parts[:2] == ("orto", "pl_1992")
         assert cir_path.relative_to(tmp_path).parts[:2] == ("orto", "pl_1992_cir")
         assert cir_path != rgb_path
-        assert rgb_path.read_bytes() == b"RGB"
-        assert cir_path.read_bytes() == b"CIR"
+        assert rgb_path.read_bytes() == b"II*\x00RGB"
+        assert cir_path.read_bytes() == b"II*\x00CIR"
         assert cir_session.get.call_args_list[-1][0][0] == CIR_2024
         meta = json.loads(
             cir_path.with_name(cir_path.name + ".meta.json").read_text("utf-8")
