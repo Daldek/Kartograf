@@ -7053,3 +7053,32 @@ class TestListMessagesUx:
         captured = capsys.readouterr()
         assert "uzyj --scale 1:2000" in captured.err
         assert "Downloaded 0" not in captured.out
+
+
+class TestErrorWithoutBlankLine:
+    """FB-1: `Error:` nie poprzedza pusta linia, gdy pasek postepu nie trwa."""
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_single_sheet_error_starts_stderr(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        manager = _mock_manager(tmp_path / "a.asc")
+        manager.download_sheet.side_effect = DownloadError("brak kampanii od 2024")
+        mock_manager_class.return_value = manager
+
+        rc = main(["download", "7.125.11.19", "-o", str(tmp_path)])
+
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert err.startswith("Error: brak kampanii od 2024")
+
+    def test_error_lead_only_after_unfinished_progress_line(self, capsys):
+        from kartograf.cli.download_cmd import _error_lead, create_progress_callback
+
+        cb = create_progress_callback(False)
+        assert _error_lead(cb) == ""
+        cb(DownloadProgress(0, 1, "N-1", "downloading", ""))
+        assert _error_lead(cb) == "\n"
+        cb(DownloadProgress(1, 1, "N-1", "failed", ""))
+        assert _error_lead(cb) == ""
+        assert _error_lead(None) == ""

@@ -29,7 +29,7 @@ import json
 import logging
 import os
 import threading
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from kartograf.core.bbox import BBox, is_czech_crs, transform_bbox
@@ -126,6 +126,10 @@ class PlCutoutResult:
     # arkusze z niepelnej najnowszej kampanii (rekord skorowidza
     # ``full_sheet=False``, E13) — wybrane wg ADR-028, ale moga wnosic nodata
     partial_sheets: tuple[str, ...] = ()
+    # godlo -> blad: arkusze z lokalnej kampanii, bo skorowidz byl niedostepny
+    # (blad transportu, I-1); nowsza kampania nie zostala sprawdzona. Przy
+    # ``skipped=True`` puste (skip nie dotyka sieci).
+    unverified: dict[str, str] = field(default_factory=dict)
 
 
 def _bbox_to_2180(bbox: BBox) -> BBox:
@@ -495,6 +499,7 @@ def write_pl_cutout_sidecar(
     sheet_paths: tuple[Path, ...] = (),
     off_grid_sheets: tuple[str, ...] = (),
     all_nodata: bool = False,
+    unverified: dict[str, str] | None = None,
 ) -> None:
     """Best-effort sidecar wycinka (blad nie przerywa pobrania).
 
@@ -512,7 +517,9 @@ def write_pl_cutout_sidecar(
     konsument widzi, ze szwy wycinka powstaly z niezaleznych warpow.
     ``all_nodata=True`` -> ``extra.all_nodata: true`` (E15): wycinek bez
     ani jednego waznego piksela; pominiecie istniejacego wycinka odtwarza
-    flage z sidecara zamiast czytac raster.
+    flage z sidecara zamiast czytac raster. ``unverified`` (niepuste) ->
+    ``extra.unverified_sheets`` ``{godlo: blad}``: arkusze z lokalnej
+    kampanii bez sprawdzenia nowszej (skorowidz niedostepny, I-1).
     """
     from kartograf.sources.sidecar import emit_sidecar
 
@@ -529,6 +536,8 @@ def write_pl_cutout_sidecar(
         extra["off_grid_sheets"] = list(off_grid_sheets)
     if all_nodata:
         extra["all_nodata"] = True
+    if unverified:
+        extra["unverified_sheets"] = dict(unverified)
     emit_sidecar(
         "pl.gugik.nmt_5m" if cutout.resolution == "5m" else "pl.gugik.nmt_1m",
         cutout.target_path,
@@ -733,6 +742,7 @@ def run_pl_cutout(
     no_data = set(summary.no_coverage) if summary is not None else set()
     fatal = [g for g in failed if g not in no_data]
     missing = tuple(sorted(g for g in failed if g in no_data))
+    unverified = dict(summary.unverified) if summary is not None else {}
     if fatal:
         # R5: tylko brak danych u zrodla bywa nodata. Kazda inna porazka
         # (siec, serwer, niepelna odpowiedz skorowidza) konczy zadanie — chwilowy
@@ -789,6 +799,7 @@ def run_pl_cutout(
         sheet_paths=tuple(sheet_paths),
         off_grid_sheets=off_grid,
         all_nodata=all_nodata,
+        unverified=unverified,
     )
     return PlCutoutResult(
         path=cutout.target_path,
@@ -797,6 +808,7 @@ def run_pl_cutout(
         off_grid_sheets=off_grid,
         all_nodata=all_nodata,
         partial_sheets=_partial_sheets([_sheet_source(Path(p)) for p in sheet_paths]),
+        unverified=unverified,
     )
 
 

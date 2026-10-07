@@ -642,7 +642,8 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                 f"(najnowsza: {found[0].aktualnosc})",
                 godlo=godlo,
             )
-        logger.info("%s: %s kampanii", godlo, len(kept))
+        # liczbe kampanii na INFO loguje manager (`_fetch_campaigns`, M-7)
+        logger.debug("%s: %s kampanii", godlo, len(kept))
         return kept
 
     def record_source(self, record: SkorowidzRecord) -> dict:

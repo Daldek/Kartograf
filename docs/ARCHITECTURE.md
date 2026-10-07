@@ -261,7 +261,7 @@ Kazde udane pobranie zapisuje **dwa** pliki: dane i `<plik>.meta.json`.
 | `vertical_source` | `native` / `ellipsoidal` / `server` (z `AccessChannel`) |
 | `resolution` | rozdzielczosc z deskryptora (`1m`/`5m`/`2m`) albo `null` |
 | `nodata` | wartosc pustego piksela: dla `.asc` czytana automatycznie z naglowka (`read_asc_nodata`), w torze CZ podawana przez CLI z tagu GeoTIFF (`_read_tif_nodata`; w trybie bbox z fallbackiem `CUZK_NODATA`), dla wycinka PL stala `-9999.0`; `null` gdy zadna z tych drog nie ma zastosowania (np. orto) |
-| `request` | zadanie, ktore dalo TEN plik: `godlo`, `bbox` + `bbox_crs` w ukladzie wyniku albo `teryt`; dla plikow PL (kampanie, ADR-030) `campaigns` (`newest`/`all`, zawsze) i `min_year` (tylko gdy podany); LAZ: `year`/`min_density`/`min_year` gdy podane oraz `campaigns` tylko dla `all`; oryginalne zadanie niesie `extra.parent_request` (3.4), rekord skorowidza PL niesie `extra.source` |
+| `request` | zadanie, ktore dalo TEN plik: `godlo`, `bbox` + `bbox_crs` w ukladzie wyniku albo `teryt`; dla plikow PL (kampanie, ADR-030) `campaigns` (`newest`/`all`, zawsze) i `min_year` (tylko gdy podany; `request` opisuje POBRANIE, ktore dalo plik, a nie jego ostatnie uzycie — reuzycia ida do `extra.parent_requests`); LAZ: `year`/`min_density`/`min_year` gdy podane oraz `campaigns` tylko dla `all`; oryginalne zadanie niesie `extra.parent_request` (3.4), rekord skorowidza PL niesie `extra.source` |
 | `license` | `{id, attribution, url}` z deskryptora |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, sekundy) i wersja pakietu |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
@@ -522,7 +522,7 @@ arkuszy (<godla do 10>) (extra.link=copy)`; podsumowanie `all` (bez `-q`):
 existed)`. "Skipped" przy pojedynczym godle zalezy od
 `manager.last_sheet.skipped`.
 
-Awaria skorowidza przy `newest` (I-1): gdy `resolve_campaigns` konczy sie
+Awaria skorowidza przy `newest` (I-1; wycinek `--target-crs` tez: `PlCutoutResult.unverified`, sidecar `extra.unverified_sheets` `{godlo: blad}`, `Warning:` jak dla listy): gdy `resolve_campaigns` konczy sie
 bledem TRANSPORTU (`DownloadError` z `status_code` 429/5xx albo bez kodu,
 ale z przyczyna `requests.RequestException` — siec/timeout; NIE
 `NoCoverageError`, inne 4xx ani raport OGC/zly szablon), a sciezka
