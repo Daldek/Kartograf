@@ -88,34 +88,21 @@ def _create_provider_and_storage(
     LAZ has a separate flow (`_cmd_download_laz`) and never reaches this
     helper — `cmd_download` short-circuits it before any provider is built.
     """
-    from kartograf.download.storage import FileStorage
+    from kartograf.download.storage import storage_for_provider
 
     if product == "nmpt":
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
         provider = GugikNmptProvider(vertical_crs=vertical_crs, cache=cache)
-        storage = FileStorage(
-            output_dir,
-            product="nmpt",
-            vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
-        )
     elif product == "orto":
         from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
         provider = GugikOrtoProvider(cache=cache)
-        storage = FileStorage(
-            output_dir, product="orto", variant=provider.storage_variant
-        )
     elif product == "nmt":
         from kartograf.providers.pl import create_nmt_provider
 
         provider = create_nmt_provider(
             vertical_crs=vertical_crs, resolution=resolution, cache=cache
-        )
-        storage = FileStorage(
-            output_dir,
-            resolution=resolution,
-            vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
         )
     else:
         raise ValidationError(
@@ -123,6 +110,9 @@ def _create_provider_and_storage(
             "(LAZ uses _cmd_download_laz)"
         )
 
+    storage = storage_for_provider(
+        output_dir, provider, resolution=resolution, vertical_crs=vertical_crs
+    )
     return provider, storage
 
 
@@ -1886,16 +1876,13 @@ def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> i
     import logging
 
     from kartograf.core.parser_registry import detect_system
-    from kartograf.download.storage import FileStorage
+    from kartograf.download.storage import storage_for_provider
     from kartograf.sources.registry import get_source
 
     godlo = args.godlo
     system = detect_system(godlo)
     descriptor = get_source(provider.descriptor_key)
-    storage = FileStorage(
-        args.output,
-        subdir=descriptor.resolve_subdir(vertical_crs=provider.vertical_crs),
-    )
+    storage = storage_for_provider(args.output, provider)
     target = storage.get_raw_path(godlo, f"{godlo}{descriptor.default_extension}")
 
     if skip_existing and target.exists():

@@ -1052,6 +1052,27 @@ class TestCutoutSize:
         assert (pending_both, pending_one) == (2, 1)
         assert cut.estimated_bytes < one < both
 
+    def test_estimate_default_storage_is_sheet_segment_of_vertical(self, tmp_path):
+        """D18: bez ``storage=`` arkusze w cache sa szukane w segmencie
+        FAKTYCZNEGO pionu wycinka (KRON86), nie w domyslnym EVRF2007."""
+        from kartograf.download.cutout import (
+            PlCutoutSheets,
+            estimate_pl_cutout_bytes,
+            prepare_pl_cutout,
+        )
+
+        cut = prepare_pl_cutout(
+            _BBOX_2180, "EPSG:2180", output_dir=tmp_path, vertical_crs="KRON86"
+        )
+        sheets = PlCutoutSheets(godla=("N-34-130-D-d-2-3", "N-34-130-D-d-2-4"))
+        cached = (
+            tmp_path / "nmt/pl_1992_1m_kron86/N-34/130/D/d/2/3/N-34-130-D-d-2-3.asc"
+        )
+        cached.parent.mkdir(parents=True)
+        cached.write_bytes(b"x")
+        _, pending = estimate_pl_cutout_bytes(cut, sheets)
+        assert pending == 1
+
     def test_estimate_builds_one_transformer_for_all_sheets(self, tmp_path):
         """N9: ``Transformer.from_crs`` (~7 ms, pyproj go nie cache'uje) raz na
         proces, nie raz na arkusz — estymacja dla 1221 arkuszy spadla z ~9 s
@@ -1596,6 +1617,28 @@ class TestLibraryApi:
         assert not rebuilt.skipped and rebuilt.path == first.path
         assert rebuilt.path.exists()
         assert len(rebuilt.sheet_paths) == len(self._SHEETS)
+
+    def test_default_sheet_storage_follows_provider_vertical(self, tmp_path):
+        """D18: ``run_pl_cutout`` bez ``storage=`` kladzie arkusze w segmencie
+        pionu providera (KRON86) — ten sam segment co lista arkuszy CLI."""
+        from kartograf import download_pl_cutout
+
+        provider = self._provider()
+        provider.vertical_crs = "KRON86"
+        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+        with (
+            patch("kartograf.providers.pl.create_nmt_provider", return_value=provider),
+            patch(
+                "kartograf.download.cutout.find_sheets_for_bbox",
+                return_value=list(self._SHEETS),
+            ),
+        ):
+            result = download_pl_cutout(
+                bbox, "EPSG:2180", output_dir=tmp_path, vertical_crs="KRON86"
+            )
+
+        segments = {p.relative_to(tmp_path).parts[:2] for p in result.sheet_paths}
+        assert segments == {("nmt", "pl_1992_1m_kron86")}
 
     def test_5m_request_follows_factory_vertical_rule(self, tmp_path):
         """Regula fabryki NMT (5m => EVRF2007): wycinek idzie za PROVIDEREM.

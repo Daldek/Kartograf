@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from kartograf.core.sheet_parser import BBox, SheetParser
-from kartograf.download.storage import FileStorage
+from kartograf.download.storage import FileStorage, storage_for_provider
 from kartograf.exceptions import DownloadError, NoCoverageError
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl import create_nmt_provider
@@ -238,23 +238,11 @@ class DownloadManager:
         if isinstance(provider_vertical_crs, str):
             vertical_crs = provider_vertical_crs
         if storage is None:
-            subdir = None
-            key = getattr(self._provider, "descriptor_key", None)
-            # isinstance(str), nie `is not None`: dla Mock(spec=Provider)
-            # descriptor_key (atrybut klasy BaseProvider) zwraca Mock, nie None.
-            if isinstance(key, str):
-                from kartograf.sources.registry import get_source
-
-                subdir = get_source(key).resolve_subdir(vertical_crs=vertical_crs)
-            # Wariant (orto CIR/B-W) w segmencie: inaczej skip zwrocilby po
-            # cichu plik RGB lezacy pod ta sama sciezka (E12).
-            variant = getattr(self._provider, "storage_variant", None)
-            storage = FileStorage(
+            storage = storage_for_provider(
                 output_dir,
+                self._provider,
                 resolution=resolution,
-                subdir=subdir,
                 vertical_crs=vertical_crs,
-                variant=variant if isinstance(variant, str) else None,
             )
         self._storage = storage
         self._vertical_crs = vertical_crs

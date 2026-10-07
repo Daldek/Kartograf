@@ -35,7 +35,11 @@ from pathlib import Path
 
 from kartograf.core.sheet_parser import BBox, find_sheets_for_bbox
 from kartograf.download.manager import DownloadManager, ProgressCallback
-from kartograf.download.storage import FileStorage, prune_empty_dirs
+from kartograf.download.storage import (
+    FileStorage,
+    prune_empty_dirs,
+    storage_for_provider,
+)
 from kartograf.exceptions import DownloadError, GridMismatchError, ValidationError
 from kartograf.transform.crs import PinnedTransform, TransformPolicy
 
@@ -647,7 +651,7 @@ def estimate_pl_cutout_bytes(
     (jeden transformer na proces, ``_sheet_frame_transformer``), wiec
     wolajacy, ktory liczy ja sam przed ``run_pl_cutout``, nie placi podwojnie.
     """
-    storage = storage or FileStorage(
+    storage = storage or storage_for_provider(
         cutout.output_dir,
         resolution=cutout.resolution,
         vertical_crs=cutout.vertical_crs,
@@ -774,8 +778,9 @@ def run_pl_cutout(
             vertical_crs=cutout.vertical_crs, resolution=cutout.resolution
         )
     if storage is None:
-        storage = FileStorage(
+        storage = storage_for_provider(
             cutout.output_dir,
+            provider,
             resolution=cutout.resolution,
             vertical_crs=cutout.vertical_crs,
         )
