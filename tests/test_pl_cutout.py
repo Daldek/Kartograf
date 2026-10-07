@@ -301,12 +301,10 @@ class TestPreparePlCutout:
         """m-2: etykieta ukladu czeskiego niezalezna od wielkosci liter i spacji.
 
         Porownanie bylo doslowne: wywolanie biblioteczne z ``"epsg:5514"``
-        szlo po cichu domyslnym transformerem ``core/geometry`` zamiast
-        przypieta operacja (obejscie ADR-024 w publicznym API).
+        szlo po cichu domyslnym transformerem pyproj zamiast przypieta
+        operacja (obejscie ADR-024 w publicznym API).
         """
-        from pyproj import CRS
-
-        from kartograf.core.geometry import _transform_bbox
+        from kartograf.core.bbox import transform_bbox
 
         coords = (-455000.0, -1117000.0, -454000.0, -1116000.0)  # Cieszyn (PL)
         pinned = prepare_pl_cutout(
@@ -317,9 +315,7 @@ class TestPreparePlCutout:
         ).bbox_2180
         # warunek sensownosci: sciezka niepinowana daje tu INNY bbox (zmierzone
         # 1,06 m na max_y) — inaczej test nie odroznilby obu sciezek
-        unpinned = _transform_bbox(
-            *coords, CRS.from_user_input("EPSG:5514"), "EPSG:2180"
-        )
+        unpinned = transform_bbox(BBox(*coords, "EPSG:5514"), "EPSG:2180")
         shift = max(abs(a - b) for a, b in zip(pinned[:4], unpinned[:4], strict=True))
         assert shift > 0.01
 
@@ -345,6 +341,20 @@ class TestPreparePlCutout:
 
         assert cut.bbox_2180 == BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         assert cut.target_path.name == "530010_382010_530190_382090.tif"
+
+    def test_wgs84_bbox_across_19e_keeps_southern_band(self, tmp_path):
+        """K6: bbox WGS84 przez poludnik osiowy EPSG:2180 (19E) — krawedz S
+        to luk wygiety na poludnie, a cztery narozniki gubily ~479 m pasa
+        (min_y 237447,4 zamiast 236968,4). Nazwa pliku niesie poprawny zasieg."""
+        cut = prepare_pl_cutout(
+            BBox(18.0, 50.0, 20.0, 50.2, "EPSG:4326"),
+            "EPSG:2180",
+            output_dir=str(tmp_path),
+            vertical_crs="EVRF2007",
+        )
+
+        assert cut.bbox_2180.min_y == pytest.approx(236968.4486, abs=0.01)
+        assert cut.target_path.name.split("_")[1] == "236968.4486"
 
     def test_utm_cutout_name_keeps_full_coordinates(self, tmp_path):
         """D7: nazwa wycinka to ``format(v, ".10g")`` siatki wyniku — northing
@@ -1108,8 +1118,8 @@ class TestCutoutSize:
         placi podwojnie. Bajty identyczne z obwiednia ``SheetParser``."""
         from pyproj import Transformer
 
+        from kartograf.core import bbox as core_bbox
         from kartograf.core.sheet_parser import SheetParser
-        from kartograf.download import cutout as cutout_mod
         from kartograf.download.cutout import (
             PlCutoutSheets,
             estimate_pl_cutout_bytes,
@@ -1119,7 +1129,7 @@ class TestCutoutSize:
         cut = prepare_pl_cutout(_BBOX_2180, "EPSG:2180", output_dir=tmp_path)
         godla = ("N-34-130-D-d-2-3", "N-34-130-D-d-2-4", "N-34-130-D-d-4-1")
         sheets = PlCutoutSheets(godla=godla)
-        cutout_mod._sheet_frame_transformer.cache_clear()
+        core_bbox._transformer.cache_clear()
         with patch.object(Transformer, "from_crs", wraps=Transformer.from_crs) as made:
             first, pending = estimate_pl_cutout_bytes(cut, sheets)
             second, _ = estimate_pl_cutout_bytes(cut, sheets)
@@ -1390,19 +1400,12 @@ class TestBorderTwoCutouts:
         return provider
 
     def test_two_cutouts_share_parent_request(self, tmp_path):
-        from pyproj import CRS
-
-        from kartograf.core.geometry import _transform_bbox
+        from kartograf.core.bbox import transform_bbox
         from kartograf.download.manager import DownloadResult
 
         # jeden syntetyczny arkusz pokrywajacy polska czesc zadania
-        b = _transform_bbox(
-            18.80,
-            49.70,
-            18.801,
-            49.7005,
-            CRS.from_user_input("EPSG:4326"),
-            "EPSG:2180",
+        b = transform_bbox(
+            BBox(18.80, 49.70, 18.801, 49.7005, "EPSG:4326"), "EPSG:2180"
         )
         sheet = _write_sheet_asc(
             tmp_path / "sheet.asc",
@@ -1463,13 +1466,11 @@ class TestBorderTwoCutouts:
     ):
         """R5: strona czeska bboxa przygranicznego nie ma danych GUGiK —
         wycinek PL powstaje (nodata tam), wycinek CZ tez, kod 0."""
-        from pyproj import CRS
-
-        from kartograf.core.geometry import _transform_bbox
+        from kartograf.core.bbox import transform_bbox
         from kartograf.download.manager import DownloadResult
 
-        b = _transform_bbox(
-            18.80, 49.70, 18.801, 49.7005, CRS.from_user_input("EPSG:4326"), "EPSG:2180"
+        b = transform_bbox(
+            BBox(18.80, 49.70, 18.801, 49.7005, "EPSG:4326"), "EPSG:2180"
         )
         sheet = _write_sheet_asc(
             tmp_path / "sheet.asc", b.min_x - 100, b.min_y - 100, size=60, pixel=5.0

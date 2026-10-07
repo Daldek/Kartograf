@@ -295,36 +295,21 @@ def _print_transform_error(error: Exception) -> int:
     return 1
 
 
-# wkidy ukladow, w ktorych CUZK wydaje dane — zadanie w nich podane musi
-# opuscic Krovaka przypieta operacja, zanim dotknie go cokolwiek polskiego
-_CZ_CRS_WKIDS = frozenset({"5514", "3045"})
-
-
 def _bbox_to_wgs84(bbox: BBox) -> BBox:
     """
     Bbox w WGS84 — wspolny uklad rozpoznawania krajow i przycinania.
 
-    Uzywa transformacji z ``core/geometry`` (obwiednia z naroznikow): sluzy
-    do ROZPOZNANIA kraju i przyciecia do jego obwiedni, a nie do zadania
-    pobrania. Przypieta operacja (``_country_bbox`` -> ``bbox_to_crs``)
-    obowiazuje przy OPUSZCZANIU ukladow czeskich (Krovak/UTM33N) — dla
-    przycietego bboxa PL skok WGS84->EPSG:2180 idzie swiadomie domyslnym
-    (niepinowanym) transformerem pyproj, patrz ``_country_bbox``.
+    Domyslny transformer pyproj (``core.bbox.transform_bbox``, obwiednia
+    z zageszczonych krawedzi): sluzy do ROZPOZNANIA kraju i przyciecia do jego
+    obwiedni, a nie do zadania pobrania. Przypieta operacja (``_country_bbox``
+    -> ``bbox_to_crs``) obowiazuje przy OPUSZCZANIU ukladow czeskich
+    (Krovak/UTM33N) — dla przycietego bboxa PL skok WGS84->EPSG:2180 idzie
+    swiadomie domyslnym (niepinowanym) transformerem pyproj, patrz
+    ``_country_bbox``.
     """
-    from pyproj import CRS
+    from kartograf.core.bbox import transform_bbox
 
-    from kartograf.core.geometry import _transform_bbox
-
-    if bbox.crs == "EPSG:4326":
-        return bbox
-    return _transform_bbox(
-        bbox.min_x,
-        bbox.min_y,
-        bbox.max_x,
-        bbox.max_y,
-        CRS.from_user_input(bbox.crs),
-        "EPSG:4326",
-    )
+    return transform_bbox(bbox, "EPSG:4326")
 
 
 def _countries_for_bbox(bbox: BBox) -> tuple[str, ...]:
@@ -409,14 +394,12 @@ def _country_bbox(
     arkuszy) pracuja juz w EPSG:2180, wiec selekcja arkuszy GUGiK nigdy nie
     wynika z niepinowanej transformacji Krovaka.
     """
-    from pyproj import CRS
-
-    from kartograf.core.geometry import _transform_bbox
+    from kartograf.core.bbox import is_czech_crs, transform_bbox
     from kartograf.providers.cuzk.client import wkid
     from kartograf.providers.cuzk.dmr import bbox_to_crs
     from kartograf.sources.registry import get_country
 
-    if code != "CZ" and wkid(bbox.crs) in _CZ_CRS_WKIDS:
+    if code != "CZ" and is_czech_crs(bbox.crs):
         bbox = bbox_to_crs(bbox, "EPSG:2180")
 
     if not auto:
@@ -451,14 +434,7 @@ def _country_bbox(
         # do ukladu czeskiego wylacznie przypieta operacja z probkowaniem
         # krawedzi (obraz prostokata w Krovaku ma krzywe boki)
         return CountryPart(bbox_to_crs(source, target), clipped)
-    transformed = _transform_bbox(
-        source.min_x,
-        source.min_y,
-        source.max_x,
-        source.max_y,
-        CRS.from_user_input(source.crs),
-        target,
-    )
+    transformed = transform_bbox(source, target)
     if not clipped:
         return CountryPart(transformed)
     # PL: nietkniete krawedzie 1:1 z oryginalu, przyciete z transformacji
@@ -858,11 +834,12 @@ def _geometry_envelope(filepath: Path, layer: str | None) -> BBox:
     wystarczyla: ``wkid()`` jej nie rozpoznaje i skok przypiety zostalby
     pominiety. Pozostale uklady — jak dotad, wprost do EPSG:2180.
     """
+    from kartograf.core.bbox import is_czech_crs
     from kartograf.core.geometry import get_overall_bbox, read_source_crs
 
     source_crs = read_source_crs(filepath, layer=layer)
     epsg = source_crs.to_epsg()
-    if epsg is not None and str(epsg) in _CZ_CRS_WKIDS:
+    if epsg is not None and is_czech_crs(f"EPSG:{epsg}"):
         # obwiednia w ukladzie pliku (tozsamosc — zero transformacji)
         env = get_overall_bbox(filepath, layer=layer, target_crs=source_crs.to_wkt())
         return BBox(env.min_x, env.min_y, env.max_x, env.max_y, f"EPSG:{epsg}")
@@ -909,11 +886,10 @@ def cmd_download(args: argparse.Namespace) -> int:
     product = getattr(args, "product", "nmt")
 
     if has_godlo:
+        # rejestr konczy sie fallbackiem pl1992 (zawsze pasuje, nigdy None)
         system = detect_system(args.godlo)
-        # rejestr konczy sie fallbackiem pl1992 (zawsze pasuje) — None tylko
-        # gdyby rejestr byl pusty
-        system_id = system.id if system is not None else "pl1992"
-        system_country = system.country if system is not None else "PL"
+        system_id = system.id
+        system_country = system.country
         if country_flag != "auto" and country_flag.upper() != system_country:
             print(
                 f"Error: Godlo '{args.godlo}' nalezy do systemu {system_id} "
@@ -1582,31 +1558,17 @@ def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
         if len(parts) != 4:
             raise ValueError("BBOX must have 4 values: min_x,min_y,max_x,max_y")
         bbox = BBox(parts[0], parts[1], parts[2], parts[3], args.bbox_crs)
-        if bbox.crs != "EPSG:2180":
-            from kartograf.providers.cuzk.client import wkid
+        from kartograf.core.bbox import is_czech_crs, transform_bbox
 
-            if wkid(bbox.crs) in _CZ_CRS_WKIDS:
-                # Uklad czeski (Krovak/UTM33N) opuszczany WYLACZNIE przypieta
-                # operacja (jak _country_bbox) — niepinowany _transform_bbox
-                # (ballpark, nieznana dokladnosc) grozilby zla selekcja kafli
-                # LAZ na pasie granicznym.
-                from kartograf.providers.cuzk.dmr import bbox_to_crs
+        if is_czech_crs(bbox.crs):
+            # Uklad czeski (Krovak/UTM33N) opuszczany WYLACZNIE przypieta
+            # operacja (jak _country_bbox) — niepinowany transformer pyproj
+            # (ballpark, nieznana dokladnosc) grozilby zla selekcja kafli
+            # LAZ na pasie granicznym.
+            from kartograf.providers.cuzk.dmr import bbox_to_crs
 
-                bbox = bbox_to_crs(bbox, "EPSG:2180")
-            else:
-                from pyproj import CRS
-
-                from kartograf.core.geometry import _transform_bbox
-
-                bbox = _transform_bbox(
-                    bbox.min_x,
-                    bbox.min_y,
-                    bbox.max_x,
-                    bbox.max_y,
-                    CRS.from_user_input(bbox.crs),
-                    "EPSG:2180",
-                )
-        return bbox
+            return bbox_to_crs(bbox, "EPSG:2180")
+        return transform_bbox(bbox, "EPSG:2180")
 
     # godło mode — SheetParser validates and transforms to EPSG:2180
     return SheetParser(args.godlo).get_bbox(crs="EPSG:2180")
@@ -1864,7 +1826,7 @@ def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> i
 
     nodata = _read_tif_nodata(target)
     _warn_cz_all_nodata(target, nodata)
-    is_sm5 = system is not None and system.id == "cz_sm5"
+    is_sm5 = system.id == "cz_sm5"
     extra: dict = {}
     if is_sm5:
         try:

@@ -3219,6 +3219,20 @@ class TestResolveLazBbox:
         assert bbox.crs == "EPSG:2180"
         assert bbox.min_x < bbox.max_x and bbox.min_y < bbox.max_y
 
+    def test_bbox_wgs84_across_19e_keeps_southern_band(self):
+        """K6: obwiednia z zageszczonych krawedzi — cztery narozniki gubily
+        ~479 m na S dla bboxa przez 19E (selekcja kafli LAZ za waska)."""
+        from argparse import Namespace
+
+        from kartograf.cli.download_cmd import _resolve_laz_bbox
+
+        args = Namespace(
+            godlo=None, bbox="18,50,20,50.2", bbox_crs="EPSG:4326", geometry=None
+        )
+        bbox = _resolve_laz_bbox(args)
+        assert bbox.crs == "EPSG:2180"
+        assert bbox.min_y == pytest.approx(236968.4486, abs=0.01)
+
     def test_bbox_2180_passthrough(self):
         from argparse import Namespace
 
@@ -3249,12 +3263,12 @@ class TestResolveLazBbox:
 
     def test_bbox_from_krovak_uses_pinned_transform(self):
         """--bbox-crs EPSG:5514 (F2): przejscie do 2180 musi isc przypieta
-        operacja (bbox_to_crs), NIE niepinowanym _transform_bbox — inaczej
+        operacja (bbox_to_crs), NIE niepinowanym transformerem pyproj — inaczej
         selekcja kafli LAZ na pasie granicznym mogla wyniknac z ballparku."""
         from argparse import Namespace
 
         from kartograf.cli.commands import _resolve_laz_bbox
-        from kartograf.core import geometry as geom
+        from kartograf.core import bbox as core_bbox
         from kartograf.providers.cuzk import dmr
 
         args = Namespace(
@@ -3265,7 +3279,9 @@ class TestResolveLazBbox:
         )
         with (
             patch.object(dmr, "bbox_to_crs", wraps=dmr.bbox_to_crs) as pinned,
-            patch.object(geom, "_transform_bbox", wraps=geom._transform_bbox) as plain,
+            patch.object(
+                core_bbox, "_transformer", wraps=core_bbox._transformer
+            ) as plain,
         ):
             bbox = _resolve_laz_bbox(args)
 
@@ -3278,7 +3294,7 @@ class TestResolveLazBbox:
         from argparse import Namespace
 
         from kartograf.cli.commands import _resolve_laz_bbox
-        from kartograf.core import geometry as geom
+        from kartograf.core import bbox as core_bbox
         from kartograf.providers.cuzk import dmr
 
         args = Namespace(
@@ -3289,7 +3305,9 @@ class TestResolveLazBbox:
         )
         with (
             patch.object(dmr, "bbox_to_crs", wraps=dmr.bbox_to_crs) as pinned,
-            patch.object(geom, "_transform_bbox", wraps=geom._transform_bbox) as plain,
+            patch.object(
+                core_bbox, "_transformer", wraps=core_bbox._transformer
+            ) as plain,
         ):
             bbox = _resolve_laz_bbox(args)
 
@@ -4354,10 +4372,15 @@ class TestCountryDispatch:
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     def test_geometry_cz_skips_unpinned_transformer(self, mock_cz, tmp_path):
-        """core/geometry Transformer (ballpark dozwolony) nie jest uzywany."""
+        """Niepinowany transformer pyproj (``core.bbox``, ballpark dozwolony)
+        nie jest uzywany."""
+        from kartograf.core import bbox as core_bbox
+
         shp = _write_prague_shp(tmp_path)
         mock_cz.return_value = 0
-        with patch("kartograf.core.geometry.Transformer") as mock_transformer:
+        with patch.object(
+            core_bbox, "_transformer", wraps=core_bbox._transformer
+        ) as mock_transformer:
             result = main(
                 [
                     "download",
@@ -4372,7 +4395,7 @@ class TestCountryDispatch:
             )
 
         assert result == 0
-        mock_transformer.from_crs.assert_not_called()
+        mock_transformer.assert_not_called()
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     def test_geometry_cz_target_crs_in_one_hop(self, mock_cz, tmp_path):
@@ -4879,9 +4902,9 @@ class TestAutoSplitBBox:
         moglaby wyniknac z niepinowanych transformacji Krovaka.
         """
         from kartograf.cli.download_cmd import _bbox_to_wgs84
-        from kartograf.core import geometry as geom
+        from kartograf.core import bbox as core_bbox
+        from kartograf.core.bbox import is_czech_crs
         from kartograf.providers.cuzk import dmr
-        from kartograf.providers.cuzk.client import wkid
 
         mock_find.return_value = ["M-33-46-A-a-1-1"]
         mock_manager = _sheet_list_manager(tmp_path / "x.asc")
@@ -4890,7 +4913,9 @@ class TestAutoSplitBBox:
 
         with (
             patch.object(dmr, "bbox_to_crs", wraps=dmr.bbox_to_crs) as pinned,
-            patch.object(geom, "_transform_bbox", wraps=geom._transform_bbox) as plain,
+            patch.object(
+                core_bbox, "_transformer", wraps=core_bbox._transformer
+            ) as plain,
         ):
             result = main(
                 [
@@ -4913,9 +4938,7 @@ class TestAutoSplitBBox:
         # ...i wyprowadzony przypieta operacja z Krovaka
         assert any(call.args[1] == "EPSG:2180" for call in pinned.call_args_list)
         # niepinowany transformer nigdy nie celuje w uklad czeski
-        assert not any(
-            wkid(str(call.args[5])) in {"5514", "3045"} for call in plain.call_args_list
-        )
+        assert not any(is_czech_crs(call.args[1]) for call in plain.call_args_list)
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
