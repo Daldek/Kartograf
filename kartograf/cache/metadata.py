@@ -116,6 +116,19 @@ class MetadataCache:
             )
             self._conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS campaigns_cache (
+                    godlo TEXT NOT NULL,
+                    resolution TEXT NOT NULL,
+                    vertical_crs TEXT NOT NULL,
+                    product TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    cached_at REAL NOT NULL,
+                    PRIMARY KEY (godlo, resolution, vertical_crs, product)
+                )
+                """
+            )
+            self._conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS teryt_cache (
                     x REAL NOT NULL,
                     y REAL NOT NULL,
@@ -219,6 +232,79 @@ class MetadataCache:
             )
             self._conn.commit()
         logger.debug(f"Cached record for {godlo} ({product})")
+
+    # =========================================================================
+    # Campaigns cache (--campaigns all, ADR-030 h)
+    # =========================================================================
+
+    def get_campaigns(
+        self,
+        product: str,
+        resolution: str,
+        vertical_crs: str,
+        godlo: str,
+    ) -> dict | None:
+        """Zwroc kampanie arkusza albo None (brak/wygasla/tryb refresh), TTL 7 dni.
+
+        Klucz jak w record_cache; `--min-year` NIE wchodzi do klucza.
+        """
+        if self._refresh:
+            return None
+        # Lock obejmuje tez odczyt - patrz komentarz w get_record().
+        with self._write_lock:
+            row = self._conn.execute(
+                """
+                SELECT payload, cached_at FROM campaigns_cache
+                WHERE godlo=? AND resolution=? AND vertical_crs=? AND product=?
+                """,
+                (godlo, resolution, vertical_crs, product),
+            ).fetchone()
+            if row is None:
+                return None
+
+            payload, cached_at = row
+            if time.time() - cached_at >= self._ttl_seconds:
+                logger.debug(f"Campaigns cache expired for {godlo} ({product})")
+                self._conn.execute(
+                    """
+                    DELETE FROM campaigns_cache
+                    WHERE godlo=? AND resolution=? AND vertical_crs=? AND product=?
+                    """,
+                    (godlo, resolution, vertical_crs, product),
+                )
+                self._conn.commit()
+                return None
+
+            logger.debug(f"Campaigns cache hit for {godlo} ({product})")
+            return json.loads(payload)
+
+    def set_campaigns(
+        self,
+        product: str,
+        resolution: str,
+        vertical_crs: str,
+        godlo: str,
+        payload: dict,
+    ) -> None:
+        """Zapisz kampanie arkusza (od najnowszej) lub pewny brak pokrycia."""
+        with self._write_lock:
+            self._conn.execute(
+                """
+                INSERT OR REPLACE INTO campaigns_cache
+                (godlo, resolution, vertical_crs, product, payload, cached_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    godlo,
+                    resolution,
+                    vertical_crs,
+                    product,
+                    json.dumps(payload, ensure_ascii=False),
+                    time.time(),
+                ),
+            )
+            self._conn.commit()
+        logger.debug(f"Cached campaigns for {godlo} ({product})")
 
     # =========================================================================
     # TERYT cache (for Bdot10kProvider)
@@ -346,6 +432,7 @@ class MetadataCache:
         """Delete all cached entries from all tables."""
         with self._write_lock:
             self._conn.execute("DELETE FROM record_cache")
+            self._conn.execute("DELETE FROM campaigns_cache")
             self._conn.execute("DELETE FROM teryt_cache")
             self._conn.execute("DELETE FROM sheet_cache")
             self._conn.commit()
@@ -366,6 +453,7 @@ class MetadataCache:
         dict
             Dictionary with keys:
             - record_count: number of cached skorowidz entries
+            - campaign_count: number of cached campaign lists
             - teryt_count: number of cached TERYT entries
             - sheet_count: number of cached sheet entries
             - db_size_bytes: size of the database file in bytes
@@ -375,6 +463,9 @@ class MetadataCache:
         with self._write_lock:
             record_count = self._conn.execute(
                 "SELECT COUNT(*) FROM record_cache"
+            ).fetchone()[0]
+            campaign_count = self._conn.execute(
+                "SELECT COUNT(*) FROM campaigns_cache"
             ).fetchone()[0]
             teryt_count = self._conn.execute(
                 "SELECT COUNT(*) FROM teryt_cache"
@@ -389,6 +480,7 @@ class MetadataCache:
 
         return {
             "record_count": record_count,
+            "campaign_count": campaign_count,
             "teryt_count": teryt_count,
             "sheet_count": sheet_count,
             "db_size_bytes": db_size,
@@ -411,6 +503,10 @@ class MetadataCache:
                 "DELETE FROM record_cache WHERE cached_at < ?", (cutoff,)
             )
             record_deleted = self._conn.execute("SELECT changes()").fetchone()[0]
+            self._conn.execute(
+                "DELETE FROM campaigns_cache WHERE cached_at < ?", (cutoff,)
+            )
+            campaign_deleted = self._conn.execute("SELECT changes()").fetchone()[0]
             self._conn.execute("DELETE FROM teryt_cache WHERE cached_at < ?", (cutoff,))
             teryt_deleted = self._conn.execute("SELECT changes()").fetchone()[0]
             sheet_cutoff = now - SHEET_TTL_SECONDS
@@ -419,11 +515,12 @@ class MetadataCache:
             )
             sheet_deleted = self._conn.execute("SELECT changes()").fetchone()[0]
             self._conn.commit()
-        total = record_deleted + teryt_deleted + sheet_deleted
+        total = record_deleted + campaign_deleted + teryt_deleted + sheet_deleted
         if total > 0:
             logger.debug(
                 f"Pruned {total} expired entries ({record_deleted} Record, "
-                f"{teryt_deleted} TERYT, {sheet_deleted} Sheet)"
+                f"{campaign_deleted} Campaigns, {teryt_deleted} TERYT, "
+                f"{sheet_deleted} Sheet)"
             )
         return total
 
