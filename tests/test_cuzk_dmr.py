@@ -315,9 +315,10 @@ _NATIVE_BBOX = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
 
 
 def _pinned_5514_to(target_crs):
-    from kartograf.providers.cuzk.dmr import _HORIZONTAL_POLICY, NATIVE_CRS
+    from kartograf.providers.cuzk.dmr import NATIVE_CRS
+    from kartograf.transform.crs import CONTENT_POLICY
 
-    return build_pinned_transform(NATIVE_CRS, target_crs, _HORIZONTAL_POLICY)
+    return build_pinned_transform(NATIVE_CRS, target_crs, CONTENT_POLICY)
 
 
 def _apex_in(target_crs):
@@ -452,6 +453,17 @@ class TestHorizontalReprojection:
         assert corners.min_y <= target_bbox.min_y
         assert corners.max_x >= target_bbox.max_x
         assert corners.max_y >= target_bbox.max_y
+
+    def test_native_request_has_warp_margin_of_four_pixels(self):
+        """Zapas zadania natywnego = 4 px (8 m przy 2 m) z kazdej strony."""
+        bbox = BBox(530000, 382000, 532000, 384000, "EPSG:2180")
+        provider = CuzkDmrProvider(resolution="2m", target_crs="EPSG:2180")
+        native = provider._bbox_to_crs(bbox, "EPSG:5514")
+        sent = provider._native_request_bbox(bbox)
+        assert sent.min_x == pytest.approx(native.min_x - 8.0)
+        assert sent.min_y == pytest.approx(native.min_y - 8.0)
+        assert sent.max_x == pytest.approx(native.max_x + 8.0)
+        assert sent.max_y == pytest.approx(native.max_y + 8.0)
 
     def test_nodata_does_not_bleed_into_interpolation(self, tmp_path):
         """Piksele nodata nie moga rozcienczac wartosci sasiadow ani zniknac.
