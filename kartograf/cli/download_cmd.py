@@ -1180,7 +1180,7 @@ def _warn_copied_links(godla: Sequence[str]) -> None:
     """``Warning:`` o sciezce standardowej jako KOPII kampanii (ADR-030)."""
     shown = ", ".join(godla[:10]) + (" ..." if len(godla) > 10 else "")
     print(
-        "Warning: dowiazanie niedostepne na tym systemie plikow — sciezka "
+        "Warning: hardlink niedostepny na tym systemie plikow — sciezka "
         f"standardowa jest KOPIA najnowszej kampanii dla {len(godla)} arkuszy "
         f"({shown}) (extra.link=copy)",
         file=sys.stderr,
