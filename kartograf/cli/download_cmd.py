@@ -1849,36 +1849,22 @@ def _write_cz_sidecar(
     `"server:EPSG:<kod>"` bez dokladnosci, co ukrywalo blad reprojekcji
     serwerowej (135 m) przed konsumentem sidecara.
     """
-    import logging
+    from kartograf.sources.sidecar import emit_sidecar
 
-    try:
-        from kartograf.sources.registry import get_source
-        from kartograf.sources.sidecar import build_metadata, write_sidecar
-
-        meta = build_metadata(
-            get_source(provider.descriptor_key),
-            request=request,
-            vertical_crs=provider.vertical_crs,
-            capability=capability,
-            nodata=nodata,
-            extra=extra,
-        )
-        transform: dict = {}
-        for axis, pinned in (
-            ("horizontal", provider.horizontal_transform(horizontal_crs)),
-            ("vertical", provider.vertical_transform),
-        ):
-            if pinned is not None:
-                transform[axis] = (
-                    f"pinned: {pinned.description} ({pinned.accuracy_m} m)"
-                )
-        meta.transform = transform or None
-        meta.horizontal_crs = horizontal_crs
-        write_sidecar(target, meta)
-    except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
-        logging.getLogger(__name__).warning(
-            f"Nie udalo sie zapisac sidecara dla {target}: {e}"
-        )
+    emit_sidecar(
+        provider.descriptor_key,
+        target,
+        request=request,
+        vertical_crs=provider.vertical_crs,
+        horizontal_crs=horizontal_crs,
+        pinned_transforms={
+            "horizontal": provider.horizontal_transform(horizontal_crs),
+            "vertical": provider.vertical_transform,
+        },
+        capability=capability,
+        nodata=nodata,
+        extra=extra,
+    )
 
 
 def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> int:
@@ -1955,7 +1941,7 @@ def _cz_download_bbox(
     Do serwera idzie potem zadanie w ukladzie natywnym, a na siatke wyniku
     przenosi je lokalny warp w providerze (ADR-024).
     """
-    from kartograf.download.storage import prune_empty_dirs
+    from kartograf.download.storage import bbox_cutout_path, prune_empty_dirs
     from kartograf.providers.cuzk.client import wkid
     from kartograf.providers.cuzk.dmr import CUZK_NODATA, bbox_to_crs
     from kartograf.sources.registry import get_source
@@ -1977,14 +1963,11 @@ def _cz_download_bbox(
         bbox = bbox_to_crs(bbox, image_sr)
 
     descriptor = get_source(provider.descriptor_key)
-    coords = "_".join(
-        format(v, ".10g") for v in (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
-    )
-    target = (
-        Path(args.output)
-        / descriptor.resolve_subdir(vertical_crs=provider.vertical_crs)
-        / "bbox"
-        / f"{coords}{descriptor.default_extension}"
+    target = bbox_cutout_path(
+        args.output,
+        descriptor.resolve_subdir(vertical_crs=provider.vertical_crs),
+        bbox,
+        descriptor.default_extension,
     )
 
     if skip_existing and target.exists():

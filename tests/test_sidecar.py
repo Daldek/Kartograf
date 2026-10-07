@@ -391,3 +391,70 @@ class TestPl2000SheetPublishedIn2180:
         assert warning.levelno == logging.WARNING
         assert "EPSG:2178" in warning.getMessage()
         assert "zapisano uklad pliku" in warning.getMessage()
+
+
+class TestEmitSidecar:
+    """D7: jedno opakowanie best-effort dla wszystkich torow."""
+
+    def _data(self, tmp_path):
+        path = tmp_path / "wynik.tif"
+        path.write_bytes(b"II*\x00")
+        return path
+
+    def test_non_str_key_writes_nothing(self, tmp_path):
+        from unittest.mock import Mock
+
+        from kartograf.sources.sidecar import emit_sidecar
+
+        data = self._data(tmp_path)
+        assert emit_sidecar(Mock(), data, request={"godlo": "X"}) is None
+        assert emit_sidecar(None, data, request={"godlo": "X"}) is None
+        assert list(tmp_path.glob("*.meta.json")) == []
+
+    def test_build_error_is_logged_not_raised(self, tmp_path, caplog):
+        import logging
+
+        from kartograf.sources.sidecar import emit_sidecar
+
+        data = self._data(tmp_path)
+        with caplog.at_level(logging.WARNING):
+            result = emit_sidecar("brak.takiego.klucza", data, request={"bbox": [1]})
+        assert result is None
+        assert "Nie udalo sie zapisac sidecara" in caplog.text
+
+    def test_pinned_transforms_and_horizontal_override(self, tmp_path):
+        from types import SimpleNamespace
+
+        from kartograf.sources.sidecar import emit_sidecar
+
+        data = self._data(tmp_path)
+        pinned = SimpleNamespace(description="S-JTSK to ETRS89 (1)", accuracy_m=1.0)
+        sidecar = emit_sidecar(
+            "cz.cuzk.dmr5g",
+            data,
+            request={"bbox": [0, 0, 1, 1], "bbox_crs": "EPSG:2180"},
+            vertical_crs="Bpv",
+            horizontal_crs="EPSG:2180",
+            pinned_transforms={"horizontal": pinned, "vertical": None},
+            capability="bbox_raster",
+            nodata=-9999.0,
+        )
+        payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        assert payload["transform"] == {
+            "horizontal": "pinned: S-JTSK to ETRS89 (1) (1.0 m)"
+        }
+        assert payload["horizontal_crs"] == "EPSG:2180"
+        assert payload["nodata"] == -9999.0
+
+    def test_only_none_transforms_give_null(self, tmp_path):
+        from kartograf.sources.sidecar import emit_sidecar
+
+        data = self._data(tmp_path)
+        sidecar = emit_sidecar(
+            "cz.cuzk.dmr5g",
+            data,
+            request={"bbox": [0, 0, 1, 1], "bbox_crs": "EPSG:5514"},
+            pinned_transforms={"horizontal": None},
+        )
+        payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        assert payload["transform"] is None

@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 from kartograf.core import parser_registry
-from kartograf.core.sheet_parser import SheetParser
+from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.exceptions import ValidationError
 from kartograf.sources.registry import get_source
 
@@ -580,3 +580,19 @@ def storage_for_provider(
         vertical_crs=vertical_crs,
         variant=variant if isinstance(variant, str) else None,
     )
+
+
+def bbox_cutout_path(
+    output_dir: str | Path, subdir: str, bbox: BBox, extension: str
+) -> Path:
+    """
+    Sciezka wycinka bbox: ``<output>/<segment>/bbox/<coords><ext>`` (ADR-026).
+
+    ``<coords>`` = ``min_x_min_y_max_x_max_y`` z ``format(v, ".10g")`` —
+    wspolrzedne siatki wyniku w jej ukladzie. Jedna nazwa dla wycinka PL
+    (``--target-crs``) i wycinka CZ (D7).
+    """
+    coords = "_".join(
+        format(v, ".10g") for v in (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
+    )
+    return Path(output_dir) / subdir / "bbox" / f"{coords}{extension}"

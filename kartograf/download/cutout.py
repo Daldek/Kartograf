@@ -37,6 +37,7 @@ from kartograf.core.sheet_parser import BBox, find_sheets_for_bbox
 from kartograf.download.manager import DownloadManager, ProgressCallback
 from kartograf.download.storage import (
     FileStorage,
+    bbox_cutout_path,
     prune_empty_dirs,
     storage_for_provider,
 )
@@ -236,15 +237,6 @@ def prepare_pl_cutout(
 
     key = "pl.gugik.nmt_5m" if resolution == "5m" else "pl.gugik.nmt_1m"
     subdir = get_source(key).resolve_subdir(uklad="1992", vertical_crs=vertical_crs)
-    coords = "_".join(
-        format(v, ".10g")
-        for v in (
-            bbox_target.min_x,
-            bbox_target.min_y,
-            bbox_target.max_x,
-            bbox_target.max_y,
-        )
-    )
     return PlCutout(
         target_crs=target_crs,
         resolution=resolution,
@@ -254,7 +246,7 @@ def prepare_pl_cutout(
         bbox_source_2180=bbox_source_2180,
         bbox_target=bbox_target,
         pinned=pinned,
-        target_path=Path(output_dir) / subdir / "bbox" / f"{coords}.tif",
+        target_path=bbox_cutout_path(output_dir, subdir, bbox_target, ".tif"),
     )
 
 
@@ -542,45 +534,35 @@ def write_pl_cutout_sidecar(
     ani jednego waznego piksela; pominiecie istniejacego wycinka odtwarza
     flage z sidecara zamiast czytac raster.
     """
-    try:
-        from kartograf.sources.registry import get_source
-        from kartograf.sources.sidecar import build_metadata, write_sidecar
+    from kartograf.sources.sidecar import emit_sidecar
 
-        key = "pl.gugik.nmt_5m" if cutout.resolution == "5m" else "pl.gugik.nmt_1m"
-        b = cutout.bbox_target
-        extra: dict = {}
-        if parent_request:
-            extra["parent_request"] = parent_request
-        if missing_sheets:
-            # R5: arkusze, dla ktorych GUGiK nie ma danych — tam wycinek ma nodata
-            extra["missing_sheets"] = list(missing_sheets)
-        if sheet_paths:
-            extra["sheet_sources"] = [_sheet_source(Path(p)) for p in sheet_paths]
-        if off_grid_sheets:
-            extra["off_grid_sheets"] = list(off_grid_sheets)
-        if all_nodata:
-            extra["all_nodata"] = True
-        meta = build_metadata(
-            get_source(key),
-            request={
-                "bbox": [b.min_x, b.min_y, b.max_x, b.max_y],
-                "bbox_crs": cutout.target_crs,
-            },
-            vertical_crs=cutout.vertical_crs,
-            capability="sheet_files",
-            nodata=PL_NODATA,
-            extra=extra or None,
-        )
-        meta.horizontal_crs = cutout.target_crs
-        pinned = cutout.pinned
-        meta.transform = (
-            {"horizontal": f"pinned: {pinned.description} ({pinned.accuracy_m} m)"}
-            if pinned is not None
-            else None
-        )
-        write_sidecar(cutout.target_path, meta)
-    except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
-        logger.warning(f"Nie udalo sie zapisac sidecara dla {cutout.target_path}: {e}")
+    b = cutout.bbox_target
+    extra: dict = {}
+    if parent_request:
+        extra["parent_request"] = parent_request
+    if missing_sheets:
+        # R5: arkusze, dla ktorych GUGiK nie ma danych — tam wycinek ma nodata
+        extra["missing_sheets"] = list(missing_sheets)
+    if sheet_paths:
+        extra["sheet_sources"] = [_sheet_source(Path(p)) for p in sheet_paths]
+    if off_grid_sheets:
+        extra["off_grid_sheets"] = list(off_grid_sheets)
+    if all_nodata:
+        extra["all_nodata"] = True
+    emit_sidecar(
+        "pl.gugik.nmt_5m" if cutout.resolution == "5m" else "pl.gugik.nmt_1m",
+        cutout.target_path,
+        request={
+            "bbox": [b.min_x, b.min_y, b.max_x, b.max_y],
+            "bbox_crs": cutout.target_crs,
+        },
+        vertical_crs=cutout.vertical_crs,
+        horizontal_crs=cutout.target_crs,
+        pinned_transforms={"horizontal": cutout.pinned},
+        capability="sheet_files",
+        nodata=PL_NODATA,
+        extra=extra or None,
+    )
 
 
 def _require_matching_provider(cutout: PlCutout, provider) -> None:

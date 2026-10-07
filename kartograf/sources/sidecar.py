@@ -228,3 +228,64 @@ def write_sidecar(data_path: Path, meta: ResultMetadata) -> Path:
     except OSError as e:
         logger.warning(f"Nie udalo sie zapisac sidecara {sidecar_path}: {e}")
     return sidecar_path
+
+
+def pinned_label(pinned) -> str:
+    """Opis przypietej operacji w polu ``transform`` sidecara (jeden format)."""
+    return f"pinned: {pinned.description} ({pinned.accuracy_m} m)"
+
+
+def emit_sidecar(
+    descriptor_key: object,
+    data_path: Path,
+    *,
+    request: dict,
+    vertical_crs: str | None = None,
+    horizontal_crs: str | None = None,
+    pinned_transforms: dict | None = None,
+    extra: dict | None = None,
+    capability: str | None = None,
+    nodata: float | None = None,
+) -> Path | None:
+    """Best-effort sidecar wyniku — jedyne miejsce polityki "sidecar nigdy
+    nie przerywa pobrania" (D7): kazdy wyjatek budowy/zapisu konczy sie
+    ostrzezeniem w logu i ``None``.
+
+    ``descriptor_key`` nie bedacy ``str`` (provider bez deskryptora, atrapa
+    ``Mock``) = brak sidecara, bez ostrzezenia. ``pinned_transforms``
+    (``{"horizontal": PinnedTransform | None, "vertical": ...}``) trafia do
+    ``transform`` w formacie ``pinned_label``; wpisy ``None`` sa pomijane,
+    a pusty wynik daje ``transform: null``. Pozostale argumenty jak
+    w ``build_metadata`` (``horizontal_crs`` = uklad FAKTYCZNEGO wyniku).
+
+    Returns
+    -------
+    Path or None
+        Sciezka sidecara albo ``None``, gdy nie powstal z powodu bledu
+        budowy metadanych lub braku deskryptora.
+    """
+    if not isinstance(descriptor_key, str):
+        return None
+    try:
+        from kartograf.sources.registry import get_source
+
+        transform = {
+            axis: pinned_label(pinned)
+            for axis, pinned in (pinned_transforms or {}).items()
+            if pinned is not None
+        }
+        meta = build_metadata(
+            get_source(descriptor_key),
+            request=request,
+            vertical_crs=vertical_crs,
+            data_path=data_path,
+            transform=transform or None,
+            extra=extra,
+            capability=capability,
+            nodata=nodata,
+            horizontal_crs=horizontal_crs,
+        )
+        return write_sidecar(data_path, meta)
+    except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
+        logger.warning(f"Nie udalo sie zapisac sidecara dla {data_path}: {e}")
+        return None
