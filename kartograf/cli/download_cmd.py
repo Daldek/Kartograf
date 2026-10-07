@@ -72,10 +72,18 @@ def create_progress_callback(quiet: bool = False):
 
         if progress.status in ("completed", "failed", "no_coverage"):
             print(line, flush=True)
+            on_progress.pending = False  # type: ignore[attr-defined]
         else:
             print(line, end="", flush=True)
+            on_progress.pending = True  # type: ignore[attr-defined]
 
+    on_progress.pending = False  # type: ignore[attr-defined]
     return on_progress
+
+
+def _error_lead(on_progress) -> str:
+    """``"\\n"`` tylko gdy pasek postepu zostal bez konca linii (bez pustej linii)."""
+    return "\n" if getattr(on_progress, "pending", False) is True else ""
 
 
 def _create_provider_and_storage(
@@ -1042,6 +1050,7 @@ def cmd_download(args: argparse.Namespace) -> int:
         provider, storage = _create_provider_and_storage(
             product, output_dir, vertical_crs, resolution, cache=cache
         )
+        on_progress = create_progress_callback(args.quiet)
         try:
             manager = DownloadManager(
                 output_dir=output_dir,
@@ -1059,7 +1068,6 @@ def cmd_download(args: argparse.Namespace) -> int:
             return 1
 
         skip_existing = not args.force
-        on_progress = create_progress_callback(args.quiet)
 
         try:
             if args.scale:
@@ -1128,7 +1136,7 @@ def cmd_download(args: argparse.Namespace) -> int:
                 paths = result
 
         except DownloadError as e:
-            print(f"\nError: {e}", file=sys.stderr)
+            print(f"{_error_lead(on_progress)}Error: {e}", file=sys.stderr)
             return 1
         except ValidationError as e:
             print(f"Error: {e}", file=sys.stderr)
@@ -1463,6 +1471,10 @@ def _report_pl_cutout(result, *, from_sidecar: bool) -> None:
     (``skipped_pl_cutout``) — ostrzezenia powtarzaja sie z dopiskiem o zrodle.
     """
     _warn_missing_sheets(result.missing_sheets, from_sidecar=from_sidecar)
+    unverified = getattr(result, "unverified", None)
+    if isinstance(unverified, dict) and unverified:
+        # I-1: jak lista/godlo; lista pelna w sidecarze (extra.unverified_sheets)
+        _warn_unverified(unverified)
     origin = " (z sidecara istniejacego wycinka)" if from_sidecar else ""
     if result.off_grid_sheets:
         print(
@@ -1712,6 +1724,7 @@ def _download_pl_sheet_list(
         provider, storage = _create_provider_and_storage(
             product, output_dir, vertical_crs, resolution, cache=cache
         )
+        on_progress = create_progress_callback(args.quiet)
         try:
             manager = DownloadManager(
                 output_dir=output_dir,
@@ -1726,10 +1739,10 @@ def _download_pl_sheet_list(
                 min_year=min_year,
             )
             all_paths, result = _download_godlo_list(
-                manager, godlo_list, skip_existing, create_progress_callback(args.quiet)
+                manager, godlo_list, skip_existing, on_progress
             )
         except DownloadError as e:
-            print(f"\nError: {e}", file=sys.stderr)
+            print(f"{_error_lead(on_progress)}Error: {e}", file=sys.stderr)
             return 1
         except ValidationError as e:
             print(f"Error: {e}", file=sys.stderr)

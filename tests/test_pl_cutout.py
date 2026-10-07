@@ -2564,3 +2564,49 @@ class TestCutoutOverCampaignLinks:
 
         assert pending == 1  # brakujacy arkusz liczony, hardlink nie
         assert need < base_need
+
+
+class TestUnverifiedSheets:
+    """I-1: wycinek przy awarii skorowidza (lokalna kampania bez sprawdzenia)."""
+
+    _run = TestDownloadPlBboxCutout._run
+
+    def _run_unverified(self, tmp_path):
+        from kartograf.download.manager import DownloadResult
+
+        sheets = [
+            _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000),
+            _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000),
+        ]
+
+        def make(**kw):
+            result = DownloadResult(**kw)
+            result.unverified = {"N-1": "HTTP 503"}
+            return result
+
+        with patch("kartograf.download.manager.DownloadResult", make):
+            rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
+        return rc
+
+    def test_cli_warns_and_sidecar_records(self, tmp_path, capsys):
+        rc = self._run_unverified(tmp_path)
+
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert (
+            "Warning: skorowidz GUGiK niedostepny — dla 1 arkuszy uzyto lokalnej "
+            "kampanii bez sprawdzenia nowszej (N-1) (HTTP 503)"
+        ) in err
+        (tif,) = (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif")
+        meta = json.loads(tif.with_name(tif.name + ".meta.json").read_text("utf-8"))
+        assert meta["extra"]["unverified_sheets"] == {"N-1": "HTTP 503"}
+
+    def test_verified_cutout_has_no_warning_nor_field(self, tmp_path, capsys):
+        sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
+
+        assert rc == 0
+        assert "skorowidz GUGiK niedostepny" not in capsys.readouterr().err
+        (tif,) = (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif")
+        meta = json.loads(tif.with_name(tif.name + ".meta.json").read_text("utf-8"))
+        assert "unverified_sheets" not in (meta.get("extra") or {})

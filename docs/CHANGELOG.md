@@ -7,6 +7,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.7.0] - Unreleased
 ### Kampanie GUGiK 2026-10-07 (ADR-030 + errata 2026-10-07)
+- **Poprawki po tescie na zywo (FB):** `Error:` w torze godla/listy nie
+  poprzedza pusta linia, gdy pasek postepu nie zostal rozpoczety;
+  wycinek `--target-crs` przy awarii skorowidza (lokalna kampania `newest`)
+  raportuje `PlCutoutResult.unverified`, `extra.unverified_sheets`
+  w sidecarze i `Warning:` (I-1); liczba kampanii logowana raz (manager).
 - **BREAKING (układ `data/`):** prawdziwe pliki NMT/NMPT/orto PL leżą
   wyłącznie w `<segment>/kampanie/<data>_<id>/<hierarchia godła>/<godło>.<ext>`
   (+ `.meta.json`); ścieżka standardowa `<segment>/<hierarchia>/<godło>.<ext>`
