@@ -80,7 +80,23 @@ class NoCoverageError(DownloadError):
     contains the sheet — a state of the data, not a transport failure:
     retrying will not help. Raster builders (PL cutout, ADR-027 addendum
     2026-09-28) treat it as nodata; every other DownloadError stays fatal.
+
+    Attributes
+    ----------
+    hints : tuple[str, ...]
+        Podpowiedzi dla uzytkownika (np. ``uzyj --scale 1:2000``), te same
+        teksty, ktore komunikat zawiera po kropce; puste, gdy brak.
     """
+
+    def __init__(
+        self,
+        message: str,
+        godlo: str | None = None,
+        status_code: int | None = None,
+        hints: tuple[str, ...] = (),
+    ):
+        super().__init__(message, godlo=godlo, status_code=status_code)
+        self.hints = tuple(hints)
 
 
 class ValidationError(KartografError):

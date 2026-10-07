@@ -491,7 +491,9 @@ class TestDownloadResultNoCoverage:
         def download(godlo, path, timeout=30):
             if godlo.endswith("-1"):
                 raise NoCoverageError(
-                    f"No NMT 1m data available for {godlo}", godlo=godlo
+                    f"No NMT 1m data available for {godlo}",
+                    godlo=godlo,
+                    hints=("uzyj --scale 1:2000",),
                 )
             if godlo.endswith("-2"):
                 raise DownloadError(f"timeout {godlo}", godlo=godlo)
@@ -512,13 +514,18 @@ class TestDownloadResultNoCoverage:
         assert len(result.succeeded) == 2
 
     @pytest.mark.parametrize("workers", [1, 4])
-    def test_no_coverage_messages_keep_error_text(self, tmp_path, provider, workers):
-        """O-6: tresc NoCoverageError (podpowiedzi) trafia do wyniku listy."""
+    def test_no_coverage_hints_kept_only_for_no_coverage(
+        self, tmp_path, provider, workers
+    ):
+        """O-6: podpowiedzi NoCoverageError w wyniku listy; twarda porazka bez."""
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
         manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=workers)
-        assert manager.last_result.no_coverage_messages == {
-            "N-34-130-D-d-2-1": "No NMT 1m data available for N-34-130-D-d-2-1"
+        result = manager.last_result
+        assert result.no_coverage_hints == {
+            "N-34-130-D-d-2-1": ("uzyj --scale 1:2000",)
         }
+        assert "N-34-130-D-d-2-2" in result.failed
+        assert "N-34-130-D-d-2-2" not in result.no_coverage_hints
 
     @pytest.mark.parametrize("workers", [1, 4])
     def test_hard_failures_excludes_no_coverage_and_progress_status(

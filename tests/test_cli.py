@@ -6873,62 +6873,133 @@ class TestListMessagesUx:
         assert "Error: brak" in captured.err
         assert "Downloading" not in captured.out
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_all_no_coverage_list_has_scale_hint_once_and_no_summary(
-        self, mock_manager_class, capsys, tmp_path
-    ):
-        """O-6/O-7: podpowiedz z NoCoverageError raz; brak 'Downloaded 0 ...'."""
-        base = "Brak NMT dla {g} (uklad PL-2000). Dostepny potomek {g}.01 — "
-        hint = "uzyj --scale 1:2000"
-        result = DownloadResult(
-            failed=["7.173.21", "7.173.22"],
-            no_coverage=["7.173.21", "7.173.22"],
-            no_coverage_messages={
-                "7.173.21": base.format(g="7.173.21") + hint,
-                "7.173.22": base.format(g="7.173.22") + hint,
-            },
-        )
+    @staticmethod
+    def _list_manager(result):
         manager = Mock()
         manager.last_result = result
         manager.download_sheets.return_value = []
-        mock_manager_class.return_value = manager
+        manager.download_sheet.return_value = []
+        return manager
 
-        rc = main(
-            [
-                "download",
-                "--bbox",
-                "419000,230000,426000,237000",
-                "--system",
-                "2000",
-                "--country",
-                "pl",
-                "-o",
-                str(tmp_path),
-            ]
+    @staticmethod
+    def _real_error(godlo):
+        """Prawdziwy ``no_coverage_error`` skorowidza (potomek PL-2000)."""
+        from kartograf.providers.pl.skorowidz import (
+            SkorowidzRecord,
+            coverage_hints,
+            no_coverage_error,
         )
+
+        parser = SheetParser(godlo)
+        child = SkorowidzRecord(
+            url="https://example.invalid/x.asc",
+            godlo=f"{godlo}.01",
+            aktualnosc="2024-01-01",
+            dt_pzgik=None,
+            layer="L",
+            uklad="2000",
+            zone=7,
+            resolution_m=1.0,
+            full_sheet=True,
+            raw={},
+        )
+        return no_coverage_error(
+            parser, f"Brak NMT dla {godlo}", coverage_hints(parser, [child])
+        )
+
+    _BBOX_ARGS = (
+        "download",
+        "--bbox",
+        "419000,230000,426000,237000",
+        "--system",
+        "2000",
+        "--country",
+        "pl",
+    )
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_all_no_coverage_list_prints_real_hint_once(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        """O-6/O-7: prawdziwe `hints` -> jedna linia `Info:`; brak 'Downloaded 0'."""
+        errors = {g: self._real_error(g) for g in ("7.173.21", "7.173.22")}
+        result = DownloadResult(
+            failed=list(errors),
+            no_coverage=list(errors),
+            no_coverage_hints={g: e.hints for g, e in errors.items()},
+        )
+        mock_manager_class.return_value = self._list_manager(result)
+
+        rc = main([*self._BBOX_ARGS, "-o", str(tmp_path)])
 
         assert rc == 1
         captured = capsys.readouterr()
         assert "nie ma danych dla zadnego z 2 arkuszy" in captured.err
-        assert captured.err.count("--scale 1:2000") == 1
-        assert "Dostepny potomek 7.173.21.01 — uzyj --scale 1:2000" in captured.err
+        info = [x for x in captured.err.splitlines() if x.startswith("Info:")]
+        assert info == ["Info: Dostepny potomek 7.173.21.01 — uzyj --scale 1:2000"]
         assert "Downloaded 0" not in captured.out
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_message_with_dot_but_no_hints_prints_no_info(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        """Komunikat z ". " bez `hints` nie daje falszywej podpowiedzi."""
+        result = DownloadResult(failed=["A"], no_coverage=["A"])
+        mock_manager_class.return_value = self._list_manager(result)
+
+        rc = main([*self._BBOX_ARGS, "-o", str(tmp_path)])
+
+        assert rc == 1
+        assert "Info:" not in capsys.readouterr().err
+
+    @pytest.mark.parametrize("campaigns", ["newest", "all"])
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_all_no_coverage_quiet_keeps_stderr_no_summary(
+        self, mock_manager_class, campaigns, capsys, tmp_path
+    ):
+        """O-7 w obu torach i z -q: Error/Info na stderr, brak podsumowania."""
+        err = self._real_error("7.173.21")
+        result = DownloadResult(
+            failed=["7.173.21"],
+            no_coverage=["7.173.21"],
+            no_coverage_hints={"7.173.21": err.hints},
+        )
+        mock_manager_class.return_value = self._list_manager(result)
+
+        rc = main(
+            [*self._BBOX_ARGS, "--campaigns", campaigns, "-q", "-o", str(tmp_path)]
+        )
+
+        assert rc == 1
+        captured = capsys.readouterr()
+        assert "nie ma danych dla zadnego z 1 arkuszy" in captured.err
+        assert "Info: Dostepny potomek 7.173.21.01" in captured.err
+        assert "Downloaded" not in captured.out
+
+    @pytest.mark.parametrize("campaigns", ["newest", "all"])
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_all_no_coverage_not_quiet_no_summary(
+        self, mock_manager_class, campaigns, capsys, tmp_path
+    ):
+        result = DownloadResult(failed=["A"], no_coverage=["A"])
+        mock_manager_class.return_value = self._list_manager(result)
+
+        rc = main([*self._BBOX_ARGS, "--campaigns", campaigns, "-o", str(tmp_path)])
+
+        assert rc == 1
+        assert "Downloaded" not in capsys.readouterr().out
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_hierarchy_all_no_coverage_has_hint_and_no_summary(
         self, mock_manager_class, capsys, tmp_path
     ):
         """O-6/O-7 w hierarchii: podpowiedz, bez podsumowania 0 plikow."""
-        manager = Mock()
-        manager.last_result = DownloadResult(
-            failed=["A"],
-            no_coverage=["A"],
-            no_coverage_messages={
-                "A": "Brak. Dostepny potomek A.01 — uzyj --scale 1:2000"
-            },
+        err = self._real_error("7.173.21")
+        mock_manager_class.return_value = self._list_manager(
+            DownloadResult(
+                failed=["A"], no_coverage=["A"], no_coverage_hints={"A": err.hints}
+            )
         )
-        manager.download_sheet.return_value = []
-        mock_manager_class.return_value = manager
 
         rc = main(["download", "N-34-130-D-d-2", "-o", str(tmp_path)])
 
