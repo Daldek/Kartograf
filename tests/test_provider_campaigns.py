@@ -6,6 +6,7 @@ Fixtury: ``tests/fixtures/gugik_skorowidz/real_2026_10_06/`` (runda E2E
 2026-10-06); warstwy GetCapabilities z autouse stuba ``tests/conftest.py``.
 """
 
+import re
 from pathlib import Path
 from unittest.mock import Mock, patch
 from urllib.parse import parse_qs, urlparse
@@ -360,3 +361,76 @@ def test_nmpt_inherits_campaigns(tmp_path):
 def test_supports_campaigns_flag():
     assert GugikProvider.supports_campaigns is True
     assert GugikOrtoProvider.supports_campaigns is True
+
+
+# =============================================================================
+# Fix round 1
+# =============================================================================
+
+
+def test_all_cache_partial_scan_does_not_serve_lower_bound(tmp_path):
+    """Wpis ze scanned_from=2024 nie obsluguje min_year=2023 — ponowny skan."""
+    cache = MetadataCache(tmp_path / "c.db")
+    GugikProvider(session=c14_session(G), cache=cache).resolve_campaigns(
+        G, campaigns="all", min_year=2024
+    )
+    assert cache.get_campaigns("nmt", "1m", "EVRF2007", G)["scanned_from"] == 2024
+
+    s2 = c14_session(G)
+    recs = GugikProvider(session=s2, cache=cache).resolve_campaigns(
+        G, campaigns="all", min_year=2023
+    )
+    assert "SkorowidzeNMT2023iStarsze" in queried_layers(s2)
+    assert ids(recs) == ["84183", "83233", "78047"]
+    # przy min_year=2023 zadna warstwa nie jest pominieta -> pelny skan
+    assert cache.get_campaigns("nmt", "1m", "EVRF2007", G)["scanned_from"] is None
+
+
+def test_all_cached_partial_no_coverage_does_not_serve_lower_bound(tmp_path):
+    cache = MetadataCache(tmp_path / "c.db")
+    with pytest.raises(NoCoverageError, match="od roku 2024"):
+        GugikProvider(
+            session=routed_session(lambda layer: None), cache=cache
+        ).resolve_campaigns(G, campaigns="all", min_year=2024)
+    assert cache.get_campaigns("nmt", "1m", "EVRF2007", G)["scanned_from"] == 2024
+
+    s2 = routed_session(lambda layer: None)
+    with pytest.raises(NoCoverageError) as exc:
+        GugikProvider(session=s2, cache=cache).resolve_campaigns(
+            G, campaigns="all", min_year=2023
+        )
+    assert "SkorowidzeNMT2023iStarsze" in queried_layers(s2)
+    assert "od roku" not in str(exc.value)
+    assert "Brak danych NMT 1m" in str(exc.value)
+
+
+def _c14_copy(tmp_path: Path, blank_ids: set[str]) -> Mock:
+    """Kopia realnych body c14 w tmp_path z wyczyszczonym rokiem rekordow."""
+    copy = tmp_path / "c14"
+    copy.mkdir()
+    for src in (REAL / "nmt" / "c14").glob(f"{G}_EVRF2007_*.html"):
+        lines = []
+        for line in src.read_text(encoding="utf-8").splitlines(keepends=True):
+            if any(f"/{i}_" in line for i in blank_ids) and ".push({" in line:
+                line = re.sub(r'aktualnosc:"[^"]*"', 'aktualnosc:""', line)
+                line = re.sub(r'aktualnoscRok:"[^"]*"', 'aktualnoscRok:""', line)
+            lines.append(line)
+        (copy / src.name).write_text("".join(lines), encoding="utf-8")
+
+    def path_for_layer(layer):
+        path = copy / f"{G}_EVRF2007_{layer}.html"
+        return path if path.exists() else None
+
+    return routed_session(path_for_layer)
+
+
+def test_all_record_without_year_is_dropped_by_min_year(tmp_path):
+    s = _c14_copy(tmp_path, {"84183"})
+    recs = GugikProvider(session=s).resolve_campaigns(G, campaigns="all", min_year=2024)
+    assert ids(recs) == ["83233"]
+
+
+def test_newest_record_without_year_fails_min_year(tmp_path):
+    s = _c14_copy(tmp_path, {"84183", "83233"})
+    with pytest.raises(NoCoverageError, match="starsza niz min_year=2024"):
+        GugikProvider(session=s).resolve_campaigns(G, min_year=2024)

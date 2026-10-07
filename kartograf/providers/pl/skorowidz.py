@@ -340,9 +340,19 @@ def _zone(parser: SheetParser) -> int | None:
     return int(parser.godlo.split(".")[0]) if parser.uklad == "2000" else None
 
 
-def _record_year(record: SkorowidzRecord) -> int:
-    """Rok kampanii z ``aktualnosc`` (nie ``dt_pzgik``) — granica ``min_year``."""
-    return int(record.aktualnosc[:4])
+def _record_year(record: SkorowidzRecord) -> int | None:
+    """Rok kampanii jak w parserze (``aktualnoscRok`` albo ``aktualnosc``, nie
+    ``dt_pzgik``) — granica ``min_year``; nieustalony -> ``None``."""
+    year = record.raw.get("aktualnoscRok") or record.aktualnosc[:4]
+    return int(year) if year.isdigit() else None
+
+
+def _meets_min_year(record: SkorowidzRecord, min_year: int | None) -> bool:
+    """Rekord spelnia granice; rok nieustalony nie spelnia zadnej granicy."""
+    if min_year is None:
+        return True
+    year = _record_year(record)
+    return year is not None and year >= min_year
 
 
 def _covers(scanned_from: int | None, min_year: int | None) -> bool:
@@ -411,18 +421,28 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             self._skorowidz_query(parser),
         )
 
-    def _query_layer(
-        self, parser: SheetParser, endpoint: str, layer: str, timeout: int
-    ) -> list[SkorowidzRecord]:
-        """Rekordy jednej warstwy w punkcie srodkowym arkusza."""
+    @staticmethod
+    def _query_bbox(parser: SheetParser) -> str:
+        """Bbox zapytania GetFeatureInfo (osie N,E) wokol srodka arkusza."""
         bbox = parser.get_bbox(crs="EPSG:2180")
         x = (bbox.min_x + bbox.max_x) / 2
         y = (bbox.min_y + bbox.max_y) / 2
+        return f"{y - 10},{x - 10},{y + 10},{x + 10}"
+
+    def _query_layer(
+        self,
+        parser: SheetParser,
+        endpoint: str,
+        layer: str,
+        timeout: int,
+        query_bbox: str,
+    ) -> list[SkorowidzRecord]:
+        """Rekordy jednej warstwy w punkcie srodkowym arkusza."""
         return query_skorowidz_layer(
             self._sessions.get(),
             endpoint,
             layer,
-            query_bbox=f"{y - 10},{x - 10},{y + 10},{x + 10}",
+            query_bbox=query_bbox,
             godlo=parser.godlo,
             timeout=timeout,
             retries=self.MAX_RETRIES,
@@ -455,8 +475,11 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         if query.endpoint is None:
             raise self._missing_endpoint(query, godlo)
         rejected: list[SkorowidzRecord] = []
+        query_bbox = self._query_bbox(parser)
         for layer in self._layers(query.endpoint, timeout):
-            records = self._query_layer(parser, query.endpoint, layer, timeout)
+            records = self._query_layer(
+                parser, query.endpoint, layer, timeout, query_bbox
+            )
             chosen = select_sheet_record(
                 records,
                 godlo=godlo,
@@ -514,6 +537,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         found: list[SkorowidzRecord] = []
         rejected: list[SkorowidzRecord] = []
         skipped = False
+        query_bbox = self._query_bbox(parser)
         for layer in self._layers(query.endpoint, timeout):
             upper = layer_upper_year(self.LAYER_PATTERN, layer)
             if min_year is not None and upper is not None and upper < min_year:
@@ -522,7 +546,9 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                     "Warstwa %s pominieta (rok %s < %s)", layer, upper, min_year
                 )
                 continue
-            records = self._query_layer(parser, query.endpoint, layer, timeout)
+            records = self._query_layer(
+                parser, query.endpoint, layer, timeout, query_bbox
+            )
             matched = select_campaign_records(
                 records,
                 godlo=godlo,
@@ -532,7 +558,9 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                 predicate=query.predicate,
             )
             found.extend(matched)
-            rejected.extend(r for r in records if r not in matched)
+            # rejected sluzy tylko podpowiedziom przy pustym found, czyli gdy
+            # zadna warstwa nic nie dopasowala — wtedy to wszystkie rekordy
+            rejected.extend(records)
         found = sorted(
             {r.url: r for r in reversed(found)}.values(),
             key=_campaign_key,
@@ -591,7 +619,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         query = self._skorowidz_query(parser)
         if campaigns == "newest":
             record = self._resolve_record(parser, timeout, query)
-            if min_year is not None and _record_year(record) < min_year:
+            if not _meets_min_year(record, min_year):
                 raise NoCoverageError(
                     f"Najnowsza kampania {godlo} ma date {record.aktualnosc} — "
                     f"starsza niz min_year={min_year} (--min-year)",
@@ -599,7 +627,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                 )
             return [record]
         found = self._resolve_all(parser, timeout, query, min_year=min_year)
-        kept = [r for r in found if min_year is None or _record_year(r) >= min_year]
+        kept = [r for r in found if _meets_min_year(r, min_year)]
         if not kept:
             raise NoCoverageError(
                 f"Brak kampanii {godlo} od roku {min_year} "
