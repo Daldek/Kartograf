@@ -55,6 +55,17 @@ class TransformPolicy:
     allow_network_grids: bool = True  # PROJ CDN
 
 
+# Polityka operacji reprojektujacej TRESC rastra (tor CZ ``CuzkDmrProvider``
+# i wycinek PL ``download/cutout.py``) — jedyna, ktora przesuwa piksele, wiec
+# limit dokladnosci jest ostrzejszy niz dla obwiedni. Krok datum do ukladow
+# 2180/3045 jest przypiety do czeskiej EPSG:1622 (1,0 m, KNOWN_PATHS);
+# probe_point dokladany per zadanie (``dataclasses.replace``).
+CONTENT_POLICY = TransformPolicy(min_accuracy_m=1.0, allow_network_grids=False)
+# Zapas obwiedni zrodla w pikselach przy warpie: pokrywa niepewnosc operacji
+# obwiedniowej (<= 2 m) i halo interpolatora bilinear (1 px) na krawedziach.
+WARP_MARGIN_PX = 4
+
+
 @dataclass(frozen=True)
 class PinnedTransform:
     """Przypieta (wybrana raz, deterministyczna) operacja transformacji."""
