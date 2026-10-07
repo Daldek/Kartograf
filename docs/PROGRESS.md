@@ -17,7 +17,7 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage; godlo PL-2000 bez pliku PL-2000 = `NoCoverageError` z podpowiedzia `--scale` (K4), sidecar EPSG:2176-2179 (N8) |
-| Pokrycie testami | ✅ Gotowy | 2216 testow offline + 16 `live` (2026-10-06 po rundzie review/E2E, w tym 28 na surowych body GUGiK; 2105 po polityce ponowien; 2058 po fali naprawczej 2026-09-30; wczesniej 1861 + 8 po fali review max 2026-09-28) |
+| Pokrycie testami | ✅ Gotowy | 2406 testow offline + 16 `live` (2026-10-07 po deduplikacji, parserach i LAZ ADR-029; 2216 2026-10-06 po rundzie review/E2E, w tym 28 na surowych body GUGiK; 2105 po polityce ponowien; 2058 po fali naprawczej 2026-09-30; wczesniej 1861 + 8 po fali review max 2026-09-28) |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0; od 2026-09-30 `record_cache` (rekord skorowidza / `no_coverage` z podpowiedzia) podlaczony w torach PL (N6), `--force` = bez cache |
@@ -111,6 +111,36 @@
 > na decyzje uzytkownika o usunieciu. Modele: `task.agentModelOverrides`
 > = `openai-codex/gpt-6-sol` (zapisane globalnie 2026-09-30; astra
 > wyczerpuje limit po ~8 min pracy 3-4 agentow).
+
+### Deduplikacja z review, parsery, LAZ ADR-029, pokrycie kampanii (2026-10-07)
+
+- **Zlecenie uzytkownika:** wskazac arkusze z istotna roznica pokrycia
+  miedzy kampaniami (orto+NMT); deduplikacja kodu z review przez
+  subagentow, wczesniej ocena uproszczenia parserow; naprawa LAZ.
+- **Pokrycie kampanii:** `docs/research/2026-10-06-e2e-brzegowe-i-review/pokrycie-kampanii.md`
+  — 8 par z pomiarem (N-34-139-C-a-3-1 0,9 %, orto M-34-90-C-b-4-4 3,2 %,
+  N-34-144-C-c-2-2 17,9 %, N-34-131-D-a-3-2 23,6 % ...); flaga
+  `calyArkuszWypelnionyTrescia` nie mierzy skali braku. Serwer GUGiK NIE
+  obsluguje HTTP Range (zdalny odczyt piramidy niemozliwy); tanie
+  przyblizenia: naglowek ASC (zasieg), `rozmiarPlikuMB` orto; rekord NMT ma
+  `zrDanych` (skaning vs zdjecia) i `numerZgloszeniaPracy` (id kampanii).
+- **Kod (merge do develop):** LAZ `55c55f2` (ADR-029: wybor kafli wg
+  pokrycia obszaru od najnowszego roku, `download_laz_area`,
+  `parent_request`); dedup providerow `e793a02` (D1 jeden `download_to`,
+  backoff 2/4 s wszedzie, `os.replace`, D2, D9, D13, D19); dedup download
+  `fe15fcb` (D7, D10, D11 `Info:` przy 5m+KRON86, D14, D15, D18); parsery
+  `fec42d1` (`core/bbox.py`, naprawa gubienia wiersza arkuszy PL-2000 przy
+  poludniku osiowym, BREAKING: usuniete `Sm5Sheet`/`register_system`/
+  `parser_factory`, `get_bbox` ~170x szybsze); porzadki `425ffc7` (K6:
+  wycinek PL nie gubi ~479 m na poludniu dla bboxa WGS84 przez 19E; K7b
+  walidacja `--bbox` we wszystkich torach; K9, D6, sesja LAZ na watek).
+  Raporty: `ocena-parserow.md`, `impl-{laz,dedup-providers,dedup-download,parsery,porzadki}.md`.
+- **Brama:** 2406 testow offline, ruff czysty, mypy 32 (lista = baseline);
+  `kartograf/` netto −90 linii przy +4 funkcjach naprawczych.
+- **Czeka na uzytkownika:** strategia kampanii (`kartograf campaigns`,
+  `--campaign`, `--campaign-strategy newest|coverage`, `--min-coverage`;
+  domyslna `newest` czy `coverage`) — zastepuje otwarta decyzje o regule
+  niepelnego arkusza. Potem wydanie 0.7.0.
 
 ### Runda E2E przypadkow brzegowych GUGiK + code review (2026-10-06)
 
