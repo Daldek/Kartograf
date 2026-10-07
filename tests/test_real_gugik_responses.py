@@ -269,7 +269,7 @@ class TestNoCoverageHintsOnRealBodies:
             provider._resolve_sheet(godlo)
         assert "5.167.25.13" in str(exc.value)
         # warstwy KRON86: wszystkie sprawdzone, zanim padl brak pokrycia
-        assert queried_layers(provider._session) == [
+        assert queried_layers(provider._sessions.injected) == [
             "SkorowidzeNMT2019",
             "SkorowidzeNMT2018",
             "SkorowidzeNMT2017iStarsze",

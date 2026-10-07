@@ -30,6 +30,7 @@ from kartograf.exceptions import NoCoverageError, ParseError
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import SkorowidzLayersMixin, SkorowidzRecord
 from kartograf.transport.http import (
+    SessionPerThread,
     http_failure,
     http_status,
     is_retryable,
@@ -114,7 +115,7 @@ class GugikOrtoProvider(SkorowidzLayersMixin, BaseProvider):
             ``NoCoverageError`` — other variants are never substituted.
         """
         super().__init__()
-        self._session = session
+        self._sessions = SessionPerThread(session)
         self._cache = cache
         self._color = color
         self.descriptor_key = "pl.gugik.orto"
@@ -383,7 +384,7 @@ class GugikOrtoProvider(SkorowidzLayersMixin, BaseProvider):
 
     def _make_request(self, url: str, timeout: int) -> requests.Response:
         """Pobierz strumien na sesji watku (sesja wstrzyknieta: dba wolajacy)."""
-        response = self._session_for_thread().get(url, timeout=timeout, stream=True)
+        response = self._sessions.get().get(url, timeout=timeout, stream=True)
         response.raise_for_status()
         return response
 

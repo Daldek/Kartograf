@@ -42,11 +42,11 @@ from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import LandCoverProvider
 from kartograf.transport.http import (
+    SessionPerThread,
     get_with_retry,
     http_failure,
     http_status,
     is_retryable,
-    make_gugik_session,
     retry_wait,
 )
 
@@ -138,8 +138,7 @@ class Bdot10kProvider(LandCoverProvider):
             Metadata cache instance for caching TERYT lookup results.
             If None, no caching is performed (default behavior).
         """
-        self._session = session
-        self._local = threading.local()
+        self._sessions = SessionPerThread(session)
         self._cache = cache
         self.descriptor_key = "pl.gugik.bdot10k"
 
@@ -344,7 +343,7 @@ class Bdot10kProvider(LandCoverProvider):
 
         import re
 
-        session = self._session_for_thread()
+        session = self._sessions.get()
 
         # Create small bbox around the point
         buffer = 100  # meters
@@ -480,14 +479,6 @@ class Bdot10kProvider(LandCoverProvider):
     # Common utilities
     # =========================================================================
 
-    def _session_for_thread(self) -> requests.Session:
-        """Jedna sesja na watek albo sesja powierzona przez wolajacego."""
-        if self._session is not None:
-            return self._session
-        if not hasattr(self._local, "session"):
-            self._local.session = make_gugik_session()
-        return self._local.session
-
     def _download_with_retry(
         self,
         url: str,
@@ -523,7 +514,7 @@ class Bdot10kProvider(LandCoverProvider):
             If download fails after all retries
         """
         last_error = None
-        session = self._session_for_thread()
+        session = self._sessions.get()
 
         for attempt in range(1, self.MAX_RETRIES + 1):
             try:

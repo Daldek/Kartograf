@@ -5616,7 +5616,7 @@ class TestSheetCrsMismatchWarning:
         session.get = Mock(side_effect=get)
         with (
             patch(
-                "kartograf.providers.pl.skorowidz.make_gugik_session",
+                "kartograf.transport.http.make_gugik_session",
                 return_value=session,
             ),
             patch(

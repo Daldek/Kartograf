@@ -12,6 +12,7 @@ import requests
 from kartograf.exceptions import DownloadError
 from kartograf.transport.http import (
     MAX_RETRY_AFTER,
+    SessionPerThread,
     download_to,
     get_with_retry,
     is_retryable,
@@ -262,3 +263,30 @@ class TestDownloadToPolicy:
             download_to(session, "https://example.test/p", out, timeout=5)
         assert out.read_bytes() == b"abcdef"
         sleep.assert_called_once_with(5)
+
+
+class TestSessionPerThread:
+    """Jedna sesja na watek albo sesja wolajacego (D2)."""
+
+    def test_injected_session_wins(self):
+        session = MagicMock(spec=requests.Session)
+        factory = MagicMock()
+        sessions = SessionPerThread(session, factory=factory)
+        assert sessions.get() is session
+        factory.assert_not_called()
+
+    def test_one_session_per_thread(self):
+        sessions = SessionPerThread(factory=lambda: MagicMock(spec=requests.Session))
+        seen = []
+        worker = threading.Thread(target=lambda: seen.append(sessions.get()))
+        worker.start()
+        worker.join()
+        seen.extend([sessions.get(), sessions.get()])
+        assert seen[0] is not seen[1]
+        assert seen[1] is seen[2]
+
+    def test_default_factory_is_gugik_session_resolved_lazily(self):
+        sessions = SessionPerThread()
+        with patch("kartograf.transport.http.make_gugik_session") as factory:
+            assert sessions.get() is factory.return_value
+        factory.assert_called_once_with()

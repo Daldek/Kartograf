@@ -107,7 +107,7 @@ class TestBdot10kSession:
         teryt.text = "https://opendata.geoportal.gov.pl/bdot10k/GPKG/14/1465_GPKG.zip"
         session.get.side_effect = [_ok_response(), _ok_response(), teryt]
         with patch(
-            "kartograf.providers.pl.bdot10k.make_gugik_session", return_value=session
+            "kartograf.transport.http.make_gugik_session", return_value=session
         ) as factory:
             provider = Bdot10kProvider()
             _download(provider, tmp_path / "a.bin")
@@ -121,25 +121,25 @@ class TestBdot10kSession:
 
         sessions = []
         with patch(
-            "kartograf.providers.pl.bdot10k.make_gugik_session",
+            "kartograf.transport.http.make_gugik_session",
             side_effect=lambda: MagicMock(spec=requests.Session),
         ):
             provider = Bdot10kProvider()
             worker = threading.Thread(
-                target=lambda: sessions.append(provider._session_for_thread())
+                target=lambda: sessions.append(provider._sessions.get())
             )
             worker.start()
             worker.join()
-            sessions.append(provider._session_for_thread())
-            sessions.append(provider._session_for_thread())
+            sessions.append(provider._sessions.get())
+            sessions.append(provider._sessions.get())
         assert sessions[0] is not sessions[1]
         assert sessions[1] is sessions[2]
 
     def test_injected_session_wins(self):
         session = MagicMock(spec=requests.Session)
-        with patch("kartograf.providers.pl.bdot10k.make_gugik_session") as factory:
+        with patch("kartograf.transport.http.make_gugik_session") as factory:
             provider = Bdot10kProvider(session=session)
-            assert provider._session_for_thread() is session
+            assert provider._sessions.get() is session
         factory.assert_not_called()
 
 
