@@ -443,15 +443,30 @@ def feature_years(session: MagicMock) -> list[str]:
 
 
 class TestLazDiscoveryOnRealWfs:
-    def test_c13_evrf2007_two_tiles_in_two_horizontal_systems(self):
-        tiles = GugikLazProvider(session=laz_session()).discover_tiles(W2_BBOX)
+    def test_c13_evrf2007_newest_tile_covers_both_systems(self):
+        """L1: dwa uklady w obszarze, ale 2025/PL-1992 pokrywa go w calosci.
+
+        Do 2026-10-06 wynik mial DWA kafle (dedup tylko po godle): 2022 w
+        PL-2000:S7 (250 MB) i 2025 w PL-1992 — zdublowany obszar (C13 UWAGA 1).
+        """
+        selection = GugikLazProvider(session=laz_session()).select_tiles(W2_BBOX)
+        tiles = selection.tiles
         assert [(t.godlo, t.year, t.crs) for t in tiles] == [
-            ("7.173.21.06.2", 2022, "PL-2000:S7"),
             ("N-34-139-A-c-1-1-3-4", 2025, "PL-1992"),
         ]
-        assert [t.uklad for t in tiles] == ["2000", "1992"]
-        assert [t.density for t in tiles] == [15, 12]
-        assert tiles[1].url.endswith("83230_1743191_N-34-139-A-c-1-1-3-4.laz")
+        assert [t.uklad for t in tiles] == ["1992"]
+        assert [t.density for t in tiles] == [12]
+        assert tiles[0].url.endswith("83230_1743191_N-34-139-A-c-1-1-3-4.laz")
+        assert sorted(
+            (s.tile.godlo, s.tile.year, s.tile.crs) for s in selection.superseded
+        ) == [
+            ("7.173.21.06.2", 2022, "PL-2000:S7"),
+            ("N-34-139-A-c-1-1-3-4", 2023, "PL-1992"),
+        ]
+        # drugi uklad poziomy nadal jest rozpoznawany (segment pl_2000)
+        assert [s.tile.uklad for s in selection.superseded if s.tile.year == 2022] == [
+            "2000"
+        ]
 
     def test_c13_year_2023_returns_the_single_older_tile(self):
         session = laz_session()
