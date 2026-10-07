@@ -12,7 +12,8 @@ from pathlib import Path
 
 from pyproj import CRS, Transformer
 
-from kartograf.core.sheet_parser import BBox, find_sheets_for_bbox
+from kartograf.core.bbox import BBox, transform_bbox
+from kartograf.core.sheet_parser import find_sheets_for_bbox
 from kartograf.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
@@ -216,7 +217,9 @@ def _read_shp_bboxes(filepath: Path, target_crs: str) -> list[BBox]:
     """
     import shapefile
 
-    source_crs = _read_shp_crs(filepath)
+    # etykieta ukladu jako WKT: klucz cache transformerow w core.bbox jest
+    # stringiem — jeden transformer na warstwe, nie na obiekt
+    source_label = _read_shp_crs(filepath).to_wkt()
 
     bboxes = []
     with shapefile.Reader(str(filepath)) as sf:
@@ -231,10 +234,8 @@ def _read_shp_bboxes(filepath: Path, target_crs: str) -> list[BBox]:
                     continue
                 x, y = shape.points[0][0], shape.points[0][1]
                 bbox = (x, y, x, y)
-            transformed = _transform_bbox(
-                bbox[0], bbox[1], bbox[2], bbox[3], source_crs, target_crs
-            )
-            bboxes.append(transformed)
+            source_bbox = BBox(bbox[0], bbox[1], bbox[2], bbox[3], source_label)
+            bboxes.append(transform_bbox(source_bbox, target_crs))
 
     return bboxes
 
@@ -377,7 +378,7 @@ def _read_gpkg_bboxes(filepath: Path, layer: str | None, target_crs: str) -> lis
     conn = sqlite3.connect(str(filepath))
     try:
         table_name = _resolve_gpkg_layer(conn, filepath, layer)
-        source_crs = _read_gpkg_crs(conn, table_name)
+        source_label = _read_gpkg_crs(conn, table_name).to_wkt()
 
         # Get geometry column name
         cursor = conn.execute(
@@ -398,11 +399,8 @@ def _read_gpkg_bboxes(filepath: Path, layer: str | None, target_crs: str) -> lis
             envelope = _parse_gpkg_envelope(blob)
             if envelope is None:
                 continue
-            min_x, min_y, max_x, max_y = envelope
-            transformed = _transform_bbox(
-                min_x, min_y, max_x, max_y, source_crs, target_crs
-            )
-            bboxes.append(transformed)
+            source_bbox = BBox(*envelope, source_label)
+            bboxes.append(transform_bbox(source_bbox, target_crs))
 
         return bboxes
     finally:
@@ -425,7 +423,10 @@ def _transform_bbox(
     """
     Transform a bounding box from source CRS to target CRS.
 
-    Uses 4-corner approach for accuracy.
+    Uses 4-corner approach. Czytniki tego modulu uzywaja juz
+    ``core.bbox.transform_bbox`` (gesta obwiednia); ta funkcja zostaje
+    wylacznie dla wolajacych w ``cli/download_cmd.py`` i ``download/cutout.py``
+    — do usuniecia w kroku K6 oceny parserow (2026-10-07).
 
     Parameters
     ----------
