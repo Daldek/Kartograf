@@ -4,7 +4,9 @@ DMR 5G/4G from CUZK (CZ), BDOT10k, CORINE (Copernicus) and SoilGrids (ISRIC).
 
 Example usage::
 
-    from kartograf import BBox, DownloadManager, SheetParser, download_pl_cutout
+    from kartograf import (
+        BBox, DownloadManager, SheetParser, download_laz_area, download_pl_cutout
+    )
 
     # Parse a map sheet identifier
     parser = SheetParser("N-34-130-D-d-2-4")
@@ -13,6 +15,9 @@ Example usage::
     # Download NMT data (one sheet from GUGiK OpenData)
     manager = DownloadManager(output_dir="./data")
     path = manager.download_sheet("N-34-130-D-d-2-4")
+
+    # LAZ tiles for an area: newest per area, sidecars, failures in result
+    laz = download_laz_area(BBox(637400, 487000, 637450, 487050, "EPSG:2180"))
 
     # One merged NMT GeoTIFF for an area (PL cutout, ADR-027)
     result = download_pl_cutout(
@@ -39,6 +44,12 @@ from kartograf.download.cutout import (
     run_pl_cutout,
     select_pl_cutout_sheets,
 )
+from kartograf.download.laz import (
+    LazDownloadResult,
+    LazTileFailure,
+    download_laz_area,
+    run_laz_download,
+)
 from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
 from kartograf.download.storage import FileStorage
 from kartograf.exceptions import (
@@ -56,7 +67,12 @@ from kartograf.providers.corine import CorineProvider
 from kartograf.providers.cuzk import CuzkDmrProvider, create_dmr_provider
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.pl.gugik import GugikProvider
-from kartograf.providers.pl.gugik_laz import GugikLazProvider, LazTile
+from kartograf.providers.pl.gugik_laz import (
+    GugikLazProvider,
+    LazTile,
+    LazTileSelection,
+    SupersededLazTile,
+)
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
@@ -87,6 +103,11 @@ __all__ = [
     "prepare_pl_cutout",
     "run_pl_cutout",
     "select_pl_cutout_sheets",
+    # Download (kafle LAZ, D17)
+    "LazDownloadResult",
+    "LazTileFailure",
+    "download_laz_area",
+    "run_laz_download",
     # Land Cover
     "LandCoverManager",
     # Providers
@@ -96,6 +117,8 @@ __all__ = [
     "GugikOrtoProvider",
     "GugikLazProvider",
     "LazTile",
+    "LazTileSelection",
+    "SupersededLazTile",
     "LandCoverProvider",
     "Bdot10kProvider",
     "CorineProvider",

@@ -1610,56 +1610,43 @@ def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
     return SheetParser(args.godlo).get_bbox(crs="EPSG:2180")
 
 
-def _write_laz_sidecar(
-    provider,
-    tile,
-    target: Path,
-    bbox: BBox,
-    *,
-    year: int | None = None,
-    min_density: int | None = None,
-) -> None:
-    """Best-effort sidecar dla kafla LAZ (blad nie przerywa pobrania).
+def _laz_parent_request(args: argparse.Namespace, bbox: BBox) -> dict | None:
+    """``extra.parent_request`` kafli LAZ (ADR-023 (f).1, review-2 N15).
 
-    ``request`` opisuje faktyczne zadanie: bbox oraz filtry ``year``
-    i ``min_density``, gdy podane (E16). ``extra.gestosc`` i ``min_density``
-    to wartosc NOMINALNA z WFS GUGiK (``char_przestrz``) — faktyczna gestosc
-    kafla bywa kilkukrotnie wyzsza.
+    Tylko tryb ``--bbox``/``--geometry`` (godlo: ``None``). Jak w pozostalych
+    torach: ``--bbox`` w ukladzie PODANYM (przed transformacja do EPSG:2180),
+    ``--geometry`` jako obwiednia EPSG:2180; ``countries`` = ``["PL"]`` — LAZ
+    odpytuje tylko GUGiK.
     """
-    import logging
+    if args.godlo is not None:
+        return None
+    if args.bbox is not None:
+        parts = [float(x.strip()) for x in args.bbox.split(",")]
+        bbox = BBox(parts[0], parts[1], parts[2], parts[3], args.bbox_crs)
+    return _build_parent_request(bbox, ("PL",))
 
-    try:
-        from kartograf.sources.registry import get_source, horizontal_crs_for_uklad
-        from kartograf.sources.sidecar import build_metadata, write_sidecar
 
-        key = getattr(provider, "descriptor_key", None)
-        request: dict = {
-            "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
-            "bbox_crs": bbox.crs,
-        }
-        if year is not None:
-            request["year"] = year
-        if min_density is not None:
-            request["min_density"] = min_density
-        meta = build_metadata(
-            get_source(key if isinstance(key, str) else "pl.gugik.laz"),
-            request=request,
-            vertical_crs=provider.vertical_crs,
-            # N8: kafel niesie wlasny uklad (PL-1992 albo strefa PL-2000),
-            # a kanal WFS deklaruje tylko domyslny — nieznany uklad = kanal
-            horizontal_crs=horizontal_crs_for_uklad(getattr(tile, "crs", None)),
-            extra={
-                "godlo_kafla": tile.godlo,
-                "rok": tile.year,
-                "gestosc": tile.density,
-                "url": tile.url,
-            },
-        )
-        write_sidecar(target, meta)
-    except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
-        logging.getLogger(__name__).warning(
-            f"Nie udalo sie zapisac sidecara dla {target}: {e}"
-        )
+def _laz_tile_label(tile) -> str:
+    return f"{tile.godlo} ({tile.year}, {tile.crs})"
+
+
+def _print_laz_superseded(superseded) -> None:
+    """``Info:`` o kaflach pominietych przy wyborze (stderr, takze z ``-q``)."""
+    if not superseded:
+        return
+    print(
+        f"Info: pominieto {len(superseded)} kafli LAZ — obszar pokrywaja "
+        "nowsze kafle (domyslnie najnowszy rocznik per obszar; starszy "
+        "rocznik: --year)",
+        file=sys.stderr,
+    )
+    for entry in superseded:
+        if entry.covered_by:
+            covering = ", ".join(_laz_tile_label(t) for t in entry.covered_by)
+            reason = f"pokryty przez {covering}"
+        else:
+            reason = "rama kafla nie przecina obszaru (tylko obwiednia WFS)"
+        print(f"  {_laz_tile_label(entry.tile)}: {reason}", file=sys.stderr)
 
 
 def _cmd_download_laz(args: argparse.Namespace) -> int:
@@ -1668,13 +1655,12 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
 
     Accepts the same inputs as the other products — a godło (down to 1:10000),
     --bbox/--bbox-crs, or --geometry/--layer — resolves them to an EPSG:2180
-    bbox, discovers every intersecting LAZ tile via WFS, and downloads them in
-    parallel. One 1:10000 area maps to many LAZ tiles (GUGiK tiles LAZ finer
-    than 1:10000); each tile is saved under its own opaque godło.
+    bbox and hands the work to the library (``kartograf.download.laz``):
+    ``GugikLazProvider.select_tiles`` (newest tile per area) and
+    ``run_laz_download`` (parallel download, sidecars, failures). This
+    function only prints and maps the result to an exit code.
     """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    from kartograf.download.storage import FileStorage
+    from kartograf.download.laz import NO_TILES_MESSAGE, run_laz_download
     from kartograf.providers.pl.gugik_laz import GugikLazProvider
 
     # godlo CZ + laz odpada juz w dyspozycji; tu zostaje jawny --country cz
@@ -1714,84 +1700,63 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     workers = getattr(args, "workers", 4) or 1
     output_dir = Path(args.output)
     quiet = args.quiet
-    skip_existing = not args.force
 
     provider = GugikLazProvider(vertical_crs=vertical_crs)
-    # jeden storage: {uklad} rozwiazuje sie per kafel (LazTile.uklad), nie
-    # per zadanie — jedno zadanie moze zwrocic kafle z obu ukladow (zn. 8)
-    storage = FileStorage(output_dir, product="laz", vertical_crs=vertical_crs)
 
     if not quiet:
         print(f"Querying GUGiK WFS for LAZ tiles ({vertical_crs})...")
     try:
-        tiles = provider.discover_tiles(bbox, year=year, min_density=min_density)
+        selection = provider.select_tiles(bbox, year=year, min_density=min_density)
     except (ValueError, DownloadError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    if not tiles:
+    _print_laz_superseded(selection.superseded)
+    if not selection.tiles:
         # N7: discovery przeszlo (wszystkie roczniki odpowiedzialy), wiec pusta
         # lista to zasieg/filtry, nie awaria WFS
-        print(
-            "Error: No LAZ tiles found for the given area (sprawdz obszar, "
-            "--year i --vertical-crs; wszystkie roczniki WFS odpowiedzialy)",
-            file=sys.stderr,
-        )
+        print(f"Error: {NO_TILES_MESSAGE}", file=sys.stderr)
         return 1
 
+    total = len(selection.tiles)
     if not quiet:
-        print(f"Found {len(tiles)} LAZ tiles. Downloading with {workers} worker(s)...")
+        print(f"Found {total} LAZ tiles. Downloading with {workers} worker(s)...")
         print()
 
-    def _fetch(tile):
-        target = storage.get_raw_path(tile.godlo, tile.filename, uklad=tile.uklad)
-        if skip_existing and target.exists():
-            return "skip", target, None
-        try:
-            provider.download(tile.url, target)
-            _write_laz_sidecar(
-                provider, tile, target, bbox, year=year, min_density=min_density
-            )
-            return "ok", target, None
-        except DownloadError as e:
-            return "fail", tile, e
+    def _progress(done: int, count: int) -> None:
+        if not quiet:
+            print(f"\r  {done}/{count} tiles", end="", flush=True)
 
-    results: list[tuple] = []
-    if workers > 1:
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = [executor.submit(_fetch, t) for t in tiles]
-            for future in as_completed(futures):
-                results.append(future.result())
-                if not quiet:
-                    print(f"\r  {len(results)}/{len(tiles)} tiles", end="", flush=True)
-    else:
-        for tile in tiles:
-            results.append(_fetch(tile))
-            if not quiet:
-                print(f"\r  {len(results)}/{len(tiles)} tiles", end="", flush=True)
-
-    ok = [r for r in results if r[0] == "ok"]
-    skipped = [r for r in results if r[0] == "skip"]
-    failed = [r for r in results if r[0] == "fail"]
+    result = run_laz_download(
+        selection,
+        provider=provider,
+        bbox=bbox,
+        output_dir=output_dir,
+        year=year,
+        min_density=min_density,
+        max_workers=workers,
+        force=args.force,
+        on_progress=_progress,
+        parent_request=_laz_parent_request(args, bbox),
+    )
 
     if not quiet:
         print()
         print(
-            f"Downloaded {len(ok)} tiles "
-            f"({len(skipped)} skipped) to {output_dir / 'laz'}"
+            f"Downloaded {len(result.downloaded)} tiles "
+            f"({len(result.skipped)} skipped) to {output_dir / 'laz'}"
         )
-    if failed:
+    if result.failed:
         # Kod 1 => `Error:` (konwencja: `Warning:` tylko przy kodzie 0) i PELNA
         # lista nieudanych kafli do ponowienia — wzor `_finish_pl_sheets` (N6).
-        failed.sort(key=lambda r: (r[1].godlo, r[1].url))
-        names = ", ".join(tile.godlo for _status, tile, _error in failed)
+        names = ", ".join(f.tile.godlo for f in result.failed)
         print(
-            f"Error: {len(failed)} z {len(tiles)} kafli LAZ nie pobrano "
+            f"Error: {len(result.failed)} z {total} kafli LAZ nie pobrano "
             f"(blad pobrania): {names} — ponow pobranie",
             file=sys.stderr,
         )
-        for _status, tile, error in failed:
-            print(f"  {tile.godlo}: {error}", file=sys.stderr)
+        for failure in result.failed:
+            print(f"  {failure.tile.godlo}: {failure.error}", file=sys.stderr)
         return 1
 
     return 0

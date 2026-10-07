@@ -2687,6 +2687,12 @@ class TestDownloadGeometrySystem:
         assert call_kwargs.kwargs.get("system") == "1992"
 
 
+def _selection(tiles, superseded=()):
+    from kartograf.providers.pl.gugik_laz import LazTileSelection
+
+    return LazTileSelection(tiles=tuple(tiles), superseded=tuple(superseded))
+
+
 class TestCmdDownloadLaz:
     """Tests for the LAZ product flow in the download command."""
 
@@ -2745,7 +2751,8 @@ class TestCmdDownloadLaz:
     def test_laz_godlo_mode_downloads_all_tiles(self, mock_provider_cls, tmp_path):
         """godło → discover tiles → download each via provider.download."""
         instance = Mock()
-        instance.discover_tiles.return_value = self._fake_tiles()
+        instance.vertical_crs = "EVRF2007"
+        instance.select_tiles.return_value = _selection(self._fake_tiles())
         instance.download.return_value = tmp_path / "x.laz"
         mock_provider_cls.return_value = instance
 
@@ -2763,16 +2770,17 @@ class TestCmdDownloadLaz:
 
         assert result == 0
         # discovery happened once, download once per tile
-        instance.discover_tiles.assert_called_once()
+        instance.select_tiles.assert_called_once()
         assert instance.download.call_count == 2
-        # bbox passed to discover_tiles is in EPSG:2180
-        bbox_arg = instance.discover_tiles.call_args[0][0]
+        # bbox passed to select_tiles is in EPSG:2180
+        bbox_arg = instance.select_tiles.call_args[0][0]
         assert bbox_arg.crs == "EPSG:2180"
 
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
     def test_laz_bbox_mode(self, mock_provider_cls, tmp_path):
         instance = Mock()
-        instance.discover_tiles.return_value = self._fake_tiles()
+        instance.vertical_crs = "EVRF2007"
+        instance.select_tiles.return_value = _selection(self._fake_tiles())
         instance.download.return_value = tmp_path / "x.laz"
         mock_provider_cls.return_value = instance
 
@@ -2818,7 +2826,8 @@ class TestCmdDownloadLaz:
             raise DownloadError(f"HTTP 503 dla {url}")
 
         instance = Mock()
-        instance.discover_tiles.return_value = tiles
+        instance.vertical_crs = "EVRF2007"
+        instance.select_tiles.return_value = _selection(tiles)
         instance.download.side_effect = _download
         mock_provider_cls.return_value = instance
 
@@ -2845,7 +2854,8 @@ class TestCmdDownloadLaz:
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
     def test_laz_year_and_density_forwarded(self, mock_provider_cls, tmp_path):
         instance = Mock()
-        instance.discover_tiles.return_value = self._fake_tiles()
+        instance.vertical_crs = "EVRF2007"
+        instance.select_tiles.return_value = _selection(self._fake_tiles())
         instance.download.return_value = tmp_path / "x.laz"
         mock_provider_cls.return_value = instance
 
@@ -2864,7 +2874,7 @@ class TestCmdDownloadLaz:
                 "-q",
             ]
         )
-        kwargs = instance.discover_tiles.call_args.kwargs
+        kwargs = instance.select_tiles.call_args.kwargs
         assert kwargs.get("year") == 2023
         assert kwargs.get("min_density") == 12
 
@@ -2949,7 +2959,7 @@ class TestCmdDownloadLaz:
         tile = self._fake_tiles()[0]
         instance = Mock()
         instance.vertical_crs = "EVRF2007"
-        instance.discover_tiles.return_value = [tile]
+        instance.select_tiles.return_value = _selection([tile])
 
         def fake_download(url, target, **kwargs):
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -3017,7 +3027,7 @@ class TestCmdDownloadLaz:
         tile = self._fake_tiles()[0]
         instance = Mock()
         instance.vertical_crs = "KRON86"
-        instance.discover_tiles.return_value = [tile]
+        instance.select_tiles.return_value = _selection([tile])
 
         def fake_download(url, target, **kwargs):
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -3062,7 +3072,7 @@ class TestCmdDownloadLaz:
         tile = replace(self._fake_tiles()[0], crs="PL-2000:S7")
         instance = Mock()
         instance.vertical_crs = "EVRF2007"
-        instance.discover_tiles.return_value = [tile]
+        instance.select_tiles.return_value = _selection([tile])
 
         def fake_download(url, target, **kwargs):
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -5102,7 +5112,7 @@ class TestAutoSplitBBox:
         from kartograf.providers.pl import gugik_laz
 
         with patch.object(gugik_laz, "GugikLazProvider") as provider_cls:
-            provider_cls.return_value.discover_tiles.return_value = []
+            provider_cls.return_value.select_tiles.return_value = _selection([])
             result = main(
                 ["download", "M-34-86-D-d-4-3", "--product", "laz", "-o", str(tmp_path)]
             )
@@ -5532,7 +5542,7 @@ class TestLazSidecarRequestFilters:
         tile = TestCmdDownloadLaz()._fake_tiles()[0]
         instance = Mock()
         instance.vertical_crs = "EVRF2007"
-        instance.discover_tiles.return_value = [tile]
+        instance.select_tiles.return_value = _selection([tile])
 
         def fake_download(url, target, **kwargs):
             target.parent.mkdir(parents=True, exist_ok=True)
