@@ -1080,13 +1080,20 @@ def cmd_download(args: argparse.Namespace) -> int:
                 )
             else:
                 # Download single sheet (may expand to hierarchy for non-1:10000)
-                if not args.quiet:
-                    print(f"Downloading {args.godlo} ({label})...")
+                def announce() -> None:
+                    # O-3: dopiero gdy rusza pobieranie (nie przy Skipped/Error)
+                    if not args.quiet:
+                        print(f"Downloading {args.godlo} ({label})...")
+
+                parsed = SheetParser(args.godlo)
+                if parsed.uklad != "2000" and parsed.scale != "1:10000":
+                    announce()  # godlo grubsze: rozwiniecie do hierarchii
 
                 result = manager.download_sheet(
                     args.godlo,
                     skip_existing=skip_existing,
                     on_progress=on_progress,
+                    on_download=announce,
                 )
                 if not isinstance(result, list):
                     # pojedynczy arkusz 1:10000 / PL-2000: sukces = brak
@@ -1187,6 +1194,32 @@ def _warn_copied_links(godla: Sequence[str]) -> None:
     )
 
 
+MAX_HINT_LINES = 5
+
+
+def _print_coverage_hints(result: DownloadResult) -> None:
+    """``Info:`` z podpowiedziami ``NoCoverageError`` (stderr, mimo ``-q``).
+
+    Podpowiedzi buduje provider (``NoCoverageError.hints``); CLI tylko je
+    przenosi: bez doslownych duplikatow, w kolejnosci pierwszego wystapienia,
+    do ``MAX_HINT_LINES`` linii; reszta to jedna linia z liczba pominietych
+    (pelna lista w ``DownloadResult.no_coverage_hints``).
+    """
+    unique = dict.fromkeys(
+        h for hints in result.no_coverage_hints.values() for h in hints
+    )
+    hints = list(unique)
+    for hint in hints[:MAX_HINT_LINES]:
+        print(f"Info: {hint}", file=sys.stderr)
+    rest = len(hints) - MAX_HINT_LINES
+    if rest > 0:
+        print(
+            f"Info: ... i {rest} innych podpowiedzi "
+            "(pelna lista: DownloadResult.no_coverage_hints)",
+            file=sys.stderr,
+        )
+
+
 def _print_campaign_summary(
     downloaded: int, sheets: int, output_dir: Path, existed: int
 ) -> None:
@@ -1252,6 +1285,8 @@ def _finish_pl_sheets(
     if not quiet:
         # pasek postepu konczy "skipped"/"downloading" bez nowej linii
         print()
+    if not quiet and paths:
+        # O-7: bez pliku i bez skipu (same braki/porazki) podsumowanie 0 = szum
         if campaigns == "all":
             # `campaign_files` = pobrane + lokalne; lokalne osobno
             # (`reused_campaign_files`, podzbior per arkusz)
@@ -1277,6 +1312,7 @@ def _finish_pl_sheets(
             f"{len(paths)}",
             file=sys.stderr,
         )
+        _print_coverage_hints(result)
     if hard:
         print(
             f"Error: {len(hard)} z {total} arkuszy nie pobrano (blad pobrania, "
@@ -1289,6 +1325,7 @@ def _finish_pl_sheets(
             f"Error: GUGiK nie ma danych dla zadnego z {total} arkuszy obszaru",
             file=sys.stderr,
         )
+        _print_coverage_hints(result)
         return 1
     return 0
 
