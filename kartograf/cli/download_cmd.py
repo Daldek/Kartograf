@@ -218,6 +218,8 @@ def _reject_campaign_opts_with_target_crs(args: argparse.Namespace) -> bool:
 
     Errata (j) Q2: wycinek sklada jedna kampanie na arkusz, a jego nazwa nie
     niesie granicy roku. True (po ``Error:`` na stderr) przed siecia.
+    Wolana wylacznie w ``_dispatch_area`` (jedyna droga do wycinka PL), przed
+    galezia CZ; godlo z ``--target-crs`` odrzuca wczesniej straz godla.
     """
     if getattr(args, "target_crs", None) is None:
         return False
@@ -288,8 +290,6 @@ def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
             "mozaika miedzystrefowa to etap 2; uzyj domyslnego --system 1992",
             file=sys.stderr,
         )
-        return 1
-    if _reject_campaign_opts_with_target_crs(args):
         return 1
 
     args.resolution = getattr(args, "resolution", None) or "1m"
@@ -792,13 +792,15 @@ def _dispatch_area(
         return 1
     if _validate_cross_country(args, countries):
         return 1
-    # kraje sa juz rozstrzygniete (`_pl_only_flags` wyzej): obszar bez PL
-    # odrzuca opcje kampanii, obszar PL+CZ dostaje Info. Wycinek PL sprawdzany
-    # tu, a nie dopiero w galezi PL — pod auto CZ idzie PRZED PL (sortowanie),
-    # wiec pozniejsza straz przyszlaby po pobraniu CZ.
-    if _reject_campaign_opts_without_pl(args, countries):
-        return 1
+    # Wycinek PL + opcje kampanii: jedyne miejsce tej strazy (wycinek PL
+    # powstaje tylko stad). Tu, a nie w galezi PL — pod auto CZ idzie PRZED
+    # PL (sortowanie), wiec pozniejsza straz przyszlaby po pobraniu CZ; przed
+    # Info o kampaniach, zeby odrzucone zadanie nie dostalo Info. Kraje sa
+    # juz rozstrzygniete (`_pl_only_flags` wyzej): obszar bez PL odrzuca
+    # opcje kampanii, obszar PL+CZ dostaje Info.
     if "PL" in countries and _reject_campaign_opts_with_target_crs(args):
+        return 1
+    if _reject_campaign_opts_without_pl(args, countries):
         return 1
 
     parent_request = _build_parent_request(bbox, countries)
@@ -967,7 +969,8 @@ def cmd_download(args: argparse.Namespace) -> int:
     try:
         validate_campaign_args(campaigns, min_year)
     except ValidationError as e:
-        print(f"Error: {e}", file=sys.stderr)
+        # komunikat biblioteki nazywa parametr; CLI mowi o fladze
+        print(f"Error: {str(e).replace('min_year', '--min-year')}", file=sys.stderr)
         return 1
 
     country_flag = getattr(args, "country", "auto")
@@ -1212,11 +1215,10 @@ def _finish_pl_sheets(
         # pasek postepu konczy "skipped"/"downloading" bez nowej linii
         print()
         if campaigns == "all":
-            # `campaign_files` laczy pobrane i lokalne; "already existed" =
-            # pliki arkuszy pominietych w calosci (nic nie pobrano)
-            skipped = set(result.skipped)
+            # `campaign_files` = pobrane + lokalne; lokalne osobno
+            # (`reused_campaign_files`, podzbior per arkusz)
             files = result.campaign_files
-            existed = sum(len(f) for g, f in files.items() if g in skipped)
+            existed = sum(len(f) for f in result.reused_campaign_files.values())
             total_files = sum(len(f) for f in files.values())
             print(
                 f"Downloaded {total_files - existed} campaign files for "
