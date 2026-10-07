@@ -143,6 +143,17 @@ def _product_label(product: str, resolution: str | None) -> str:
     return f"resolution: {resolution}"
 
 
+def _print_sheet_list(
+    godla: list[str], target_scale: str, *, what: str, label: str
+) -> None:
+    """Naglowek listy arkuszy PL (wycinek i tryb listy, D15): do 10 godel
+    w calosci, dluzsza lista jako 3 pierwsze + ``...`` + 2 ostatnie."""
+    print(f"Found {len(godla)} sheets at {target_scale} for {what} ({label})")
+    sample = godla if len(godla) <= 10 else godla[:3] + ["..."] + godla[-2:]
+    print(f"  Sheets: {', '.join(sample)}")
+    print()
+
+
 _CZ_ONLY_NMT_MSG = (
     "Error: --product {product} dla CZ bedzie dostepny w etapie 2 — teraz tylko nmt"
 )
@@ -1411,17 +1422,12 @@ def _download_pl_cutout(
             return 1
 
         if not args.quiet:
-            what = "bbox" if geometry is None else f"geometry {geometry.name}"
-            godla = list(sheets.godla)
-            print(
-                f"Found {len(godla)} sheets at {target_scale} "
-                f"for {what} (resolution: {args.resolution})"
+            _print_sheet_list(
+                list(sheets.godla),
+                target_scale,
+                what="bbox" if geometry is None else f"geometry {geometry.name}",
+                label=_product_label("nmt", args.resolution),
             )
-            if len(godla) <= 10:
-                print(f"  Sheets: {', '.join(godla)}")
-            else:
-                print(f"  Sheets: {', '.join(godla[:3] + ['...'] + godla[-2:])}")
-            print()
 
         if cutout.estimated_bytes >= 2**30:
             # stderr, nie stdout: -q NIE tlumi Info:/Warning: (jak wyzej)
@@ -1518,16 +1524,12 @@ def _download_pl_sheet_list(
     skip_existing = not args.force
 
     if not args.quiet:
-        print(
-            f"Found {len(godlo_list)} sheets at {target_scale} "
-            f"for {what} ({_product_label(product, resolution)})"
+        _print_sheet_list(
+            godlo_list,
+            target_scale,
+            what=what,
+            label=_product_label(product, resolution),
         )
-        if len(godlo_list) <= 10:
-            print(f"  Sheets: {', '.join(godlo_list)}")
-        else:
-            sample = godlo_list[:3] + ["..."] + godlo_list[-2:]
-            print(f"  Sheets: {', '.join(sample)}")
-        print()
 
     with _pl_metadata_cache(args) as cache:
         provider, storage = _create_provider_and_storage(

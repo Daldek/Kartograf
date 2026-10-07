@@ -1312,6 +1312,22 @@ class TestCmdDownloadBBox:
         assert result == 0
         mock_manager.download_sheets.assert_called_once()
 
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_download_bbox_sheet_list_header(
+        self, mock_manager_class, mock_find, capsys, tmp_path
+    ):
+        """D15: naglowek listy arkuszy = ten sam co wycinek (skrot >10)."""
+        mock_manager_class.return_value = _sheet_list_manager(tmp_path / "t.asc")
+        mock_find.return_value = [f"N-{i}" for i in range(1, 13)]
+        result = main(
+            ["download", "--bbox", "630000,480000,637000,487000", "-o", str(tmp_path)]
+        )
+        assert result == 0
+        out = capsys.readouterr().out
+        assert "Found 12 sheets at 1:10000 for bbox (resolution: 1m)\n" in out
+        assert "  Sheets: N-1, N-2, N-3, ..., N-11, N-12\n" in out
+
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_bbox_epsg4326(self, mock_manager_class, capsys, tmp_path):
         """Test --bbox z --bbox-crs EPSG:4326."""
