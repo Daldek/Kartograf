@@ -683,6 +683,7 @@ class TestDownloadPlBboxCutout:
         no_coverage=(),
         provider=None,
         bbox=_BBOX_2180,
+        godla=("N-1", "N-2"),
     ):
         """Worker PL z mockowanym pobraniem; zwraca ``(rc, manager, find)``.
 
@@ -700,7 +701,7 @@ class TestDownloadPlBboxCutout:
             failed=list(failed), no_coverage=list(no_coverage)
         )
         with (
-            patch(f"{_CUT}.find_sheets_for_bbox", return_value=["N-1", "N-2"]) as find,
+            patch(f"{_CUT}.find_sheets_for_bbox", return_value=list(godla)) as find,
             patch(
                 f"{_DL}._create_provider_and_storage",
                 return_value=(provider, Mock()),
@@ -710,6 +711,18 @@ class TestDownloadPlBboxCutout:
             rc = _download_pl_bbox(args, bbox, _PARENT)
         self.dm = dm
         return rc, manager, find
+
+    def test_sheet_list_header(self, tmp_path, capsys):
+        """D15: naglowek listy arkuszy wycinka = ten sam co tryb listy."""
+        sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
+        godla = tuple(f"N-{i}" for i in range(1, 13))
+        rc, *_ = self._run(
+            tmp_path, _pl_args(tmp_path, quiet=False), sheets, godla=godla
+        )
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "Found 12 sheets at 1:10000 for bbox (resolution: 1m)\n" in out
+        assert "  Sheets: N-1, N-2, N-3, ..., N-11, N-12\n" in out
 
     def test_creates_cutout_and_sidecar(self, tmp_path):
         sheets = [
