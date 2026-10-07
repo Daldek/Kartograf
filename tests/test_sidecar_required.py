@@ -55,6 +55,8 @@ def test_required_sidecar_build_error_raises(tmp_path, monkeypatch):
     )
     with pytest.raises(DownloadError):
         emit_sidecar("pl.gugik.nmt_1m", _data(tmp_path), request={}, required=True)
+    assert not (tmp_path / "x.asc.meta.json").exists()
+    assert not list(tmp_path.glob("*.tmp"))
 
 
 @pytest.mark.parametrize("key", [None, Mock()])

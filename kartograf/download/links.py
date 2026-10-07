@@ -75,6 +75,7 @@ def link_atomic(target: Path, link: Path) -> LinkMethod:
     """
     link.parent.mkdir(parents=True, exist_ok=True)
     tmp = _tmp_name(link, "link.tmp")
+    tmp.unlink(missing_ok=True)  # pozostalosc po przerwanym przebiegu (ten sam pid_tid)
     attempts: list[tuple[LinkMethod, Callable[[], object]]] = [
         ("symlink", lambda: os.symlink(os.path.relpath(target, link.parent), tmp)),
         ("hardlink", lambda: os.link(target, tmp)),
@@ -125,25 +126,26 @@ def campaign_key_of(data_path: Path) -> tuple[str, str, str] | None:
 
     Najpierw ``campaign_key_from_sidecar``; gdy ``None`` (brak sidecara
     kampanii = tylko ingerencja uzytkownika, errata 2 N-1) — z nazwy
-    katalogu: pierwszy element sciezki po ``kampanie`` pasujacy w calosci do
-    ``<data>_<id>`` -> ``(data, "", "")``. Fallback jest DOLNYM oszacowaniem
-    klucza (puste ``dt_pzgik`` i URL), wiec przy tej samej dacie nowy cel
-    wygrywa, a cel o pozniejszej dacie zostaje. ``None`` tylko gdy ani
+    katalogu: element sciezki po OSTATNIM segmencie ``kampanie``, po ktorym
+    nastepuje nazwa pasujaca w calosci do ``<data>_<id>`` (szukanie od
+    konca — korzen wyjscia moze zawierac ``kampanie``) -> ``(data, "", "")``.
+    Fallback jest DOLNYM oszacowaniem klucza (puste ``dt_pzgik`` i URL),
+    wiec przy tej samej dacie nowy cel wygrywa, a cel o pozniejszej dacie
+    zostaje. ``None`` tylko gdy ani
     sidecar, ani nazwa katalogu nie daja klucza.
     """
     key = campaign_key_from_sidecar(data_path)
     if key is not None:
         return key
     parts = PurePath(_norm(data_path)).parts
-    if _CAMPAIGNS_DIR not in parts:
-        return None
-    idx = parts.index(_CAMPAIGNS_DIR)
-    if idx + 1 >= len(parts):
-        return None
-    m = _CAMPAIGN_DIR.fullmatch(parts[idx + 1])
-    if m is None:
-        return None
-    return (m.group(1), "", "")
+    # od konca: katalog wyjsciowy uzytkownika moze sam zawierac "kampanie"
+    for idx in range(len(parts) - 2, -1, -1):
+        if parts[idx] != _CAMPAIGNS_DIR:
+            continue
+        m = _CAMPAIGN_DIR.fullmatch(parts[idx + 1])
+        if m is not None:
+            return (m.group(1), "", "")
+    return None
 
 
 def linked_campaign(link: Path) -> Path | None:
