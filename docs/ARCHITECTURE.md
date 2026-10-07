@@ -179,7 +179,7 @@ kartograf/
 ├── cache/metadata.py    # MetadataCache — SQLite WAL, TTL 7 dni (campaigns_cache 7 dni, sheet_cache 30 dni), thread-safe
 ├── download/            # Pobieranie NMT/NMPT/Orto po godle + wycinek PL
 │   ├── campaigns.py     # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu, verify_file_format
-│   ├── links.py         # Dowiazanie sciezki standardowej (symlink -> hardlink -> kopia, nigdy wstecz)
+│   ├── links.py         # Dowiazanie sciezki standardowej (hardlink -> kopia, bez symlinkow, nigdy wstecz)
 │   ├── cutout.py        # Wycinek PL --target-crs jako API (ADR-027): prepare/select/run/
 │   │                    # download_pl_cutout — mozaika arkuszy + warp, sidecar
 │   ├── laz.py           # Kafle LAZ jako API (ADR-029): download_laz_area/run_laz_download —
@@ -265,7 +265,7 @@ Kazde udane pobranie zapisuje **dwa** pliki: dane i `<plik>.meta.json`.
 | `license` | `{id, attribution, url}` z deskryptora |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, sekundy) i wersja pakietu |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
-| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `godlo_kafla`/`rok`/`gestosc`/`url`; SM5 ma `mapname`/`podil`; arkusze NMT/NMPT/orto PL maja `source` (URL, warstwa, aktualnosc, rozdzielczosc itd.); wycinek PL: `sheet_sources` (lista `{godlo, url, layer, aktualnosc, full_sheet}`; `full_sheet: false` = niepelna najnowsza kampania, E13), `missing_sheets` (brak pliku), `off_grid_sheets` (W1, niezgodna faza), `all_nodata` (`true` dla wycinka bez waznego piksela, E15); plik kampanii (ADR-030): `campaign` = `{id, date, zgloszenie, source, full_sheet, dt_pzgik}` obok `source`; sidecar sciezki standardowej: `link` (`symlink`/`hardlink`/`copy`) i `link_target` (sciezka celu wzgledem dowiazania) |
+| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `godlo_kafla`/`rok`/`gestosc`/`url`; SM5 ma `mapname`/`podil`; arkusze NMT/NMPT/orto PL maja `source` (URL, warstwa, aktualnosc, rozdzielczosc itd.); wycinek PL: `sheet_sources` (lista `{godlo, url, layer, aktualnosc, full_sheet}`; `full_sheet: false` = niepelna najnowsza kampania, E13), `missing_sheets` (brak pliku), `off_grid_sheets` (W1, niezgodna faza), `all_nodata` (`true` dla wycinka bez waznego piksela, E15); plik kampanii (ADR-030): `campaign` = `{id, date, zgloszenie, source, full_sheet, dt_pzgik}` obok `source`; sidecar sciezki standardowej: `link` (`hardlink`/`copy`) i `link_target` (sciezka celu wzgledem dowiazania; jedyne zrodlo celu) |
 | `schema` | stale `kartograf-meta/1` |
 
 Kanal, z ktorego brany jest `horizontal_crs`/`vertical_crs_options`/
@@ -296,8 +296,10 @@ rzuca `DownloadError` (manager usuwa plik danych, kampania jest porazka,
 dowiazanie nie jest przestawiane). Pozostale sidecary (arkusz toru plain,
 wycinek, LAZ, CZ, landcover) zostaja best-effort. Sidecar sciezki standardowej
 (dowiazania) to ZWYKLY plik — kopia sidecara celu z dopisanym `extra.link`
-i `extra.link_target` (zapis `tmp` + `os.replace`, nigdy "przez" dowiazanie do
-sidecara kampanii; best-effort).
+i `extra.link_target` (zapis `tmp` + `os.replace`, nigdy "przez" symlink
+sidecara pozostawiony przez uzytkownika; best-effort). To JEDYNE zrodlo celu
+dowiazania (hardlink nie niesie wskazania): brak sidecara standardowego =
+sciezka nieznana.
 
 ### 3.3 Kanoniczny uklad `data/`
 
@@ -361,16 +363,21 @@ data/
    (RRRR-MM-DD), `<id>` = pierwszy segment liczbowy nazwy pliku w URL
    (`83233_1744736_<godlo>.asc` -> `83233`), inaczej `u` + 8 znakow hex
    `sha1(URL)`. Segment ADR-026 bez zmian (takze `orto/pl_1992_cir`).
-   Metoda dowiazania: 1) symlink WZGLEDNY, 2) hardlink, 3) kopia + `Warning:`
-   (`extra.link` = `symlink`/`hardlink`/`copy`); podmiana atomowa
-   (tymczasowe dowiazanie + `os.replace`); dowiazanie nigdy nie cofa sie na
-   kampanie starsza od biezacego celu (klucz celu z jego sidecara, a gdy
-   nieczytelny — z nazwy katalogu). Kontrola istnienia sprawdza CEL
-   (wiszace dowiazanie = brak pliku). `FileStorage.get_campaign_path` buduje
-   sciezke kampanii, `list_files()` domyslnie pomija `kampanie/` i wiszace
-   dowiazania (`campaigns=True` = tylko `kampanie/`). CZ, LAZ, BDOT10k i
-   land cover nie uzywaja `kampanie/`. Kopiowanie `data/`: `cp -rL`/`rsync -aL`
-   (bez `-L` kopiuje sie dowiazanie).
+   Metoda dowiazania (errata 4): 1) hardlink, 2) kopia + `Warning:`
+   (`extra.link` = `hardlink`/`copy`); symlinkow nie tworzymy (nieczytelne
+   dla klientow Windows przez SMB, limit dlugosci celu na udziale); kampania
+   lezy zawsze w tym samym segmencie co sciezka standardowa (ten sam system
+   plikow). Podmiana atomowa (plik tymczasowy + `os.replace`; istniejacy
+   symlink sprzed errata 4 = sciezka nieznana, zastepowany); dowiazanie
+   nigdy nie cofa sie na kampanie starsza od biezacego celu (klucz celu
+   z jego sidecara, a gdy nieczytelny — z nazwy katalogu). Kontrola
+   istnienia: cel z `extra.link_target` sidecara standardowego (`samefile`
+   dla hardlinku, rozmiar + mtime dla kopii); usuniety katalog kampanii =
+   brak pliku. `FileStorage.get_campaign_path` buduje sciezke kampanii,
+   `list_files()` domyslnie pomija `kampanie/` (`campaigns=True` = tylko
+   `kampanie/`). CZ, LAZ, BDOT10k i land cover nie uzywaja `kampanie/`.
+   Kopiowanie `data/`: `rsync -aH`/`cp -a` (bez zachowania hardlinkow
+   powstaje duplikat).
 
 Nowe zrodlo dodaje sie samym wpisem deskryptora — np.
 `nmt/de_bb_dgm1_dhhn2016/` nie wymaga zadnej zmiany w kodzie sciezek.
@@ -437,8 +444,9 @@ utworzeniu.
 | Stan | Zachowanie |
 |---|---|
 | zwykly plik NMT/NMPT/orto w sciezce standardowej (stary uklad bez `kampanie/`) | traktowany jako nieznany (brak migracji); przy pierwszym `newest` kampania jest pobierana do `kampanie/`, a zwykly plik (z sidecarem) ZASTEPOWANY dowiazaniem |
-| dowiazanie w sciezce standardowej | cel = najnowsza lokalna kampania; kolejne `newest`/`all` przestawiaja je tylko na kampanie o kluczu `(aktualnosc, dt_pzgik, url)` scisle wiekszym niz klucz biezacego celu (ten sam cel albo klucz rowny/wiekszy = bez zmian; klucz z sidecara celu, a gdy nieczytelny z nazwy katalogu `<data>_<id>`) |
-| wiszace dowiazanie (cel usuniety) | brak pliku — pobranie od nowa |
+| dowiazanie (hardlink/kopia) w sciezce standardowej | cel = najnowsza lokalna kampania (z `extra.link_target`); kolejne `newest`/`all` przestawiaja je tylko na kampanie o kluczu `(aktualnosc, dt_pzgik, url)` scisle wiekszym niz klucz biezacego celu (ten sam cel albo klucz rowny/wiekszy = bez zmian; klucz z sidecara celu, a gdy nieczytelny z nazwy katalogu `<data>_<id>`) |
+| dowiazanie, ktorego `extra.link_target` nie istnieje (katalog kampanii usuniety) albo bez sidecara standardowego | brak pliku — pobranie od nowa |
+| symlink w sciezce standardowej (dane sprzed errata 4) | nieznany — `newest` zastepuje go hardlinkiem (bez kodu zgodnosci) |
 
 ### 4.1 Godlo PL (NMT/NMPT/Orto)
 
@@ -507,7 +515,7 @@ dalej takze przy `--workers 1`, pobrane kampanie zostaja). Wyscig bez
 blokad: rownolegle wywolania na tej samej sciezce (procesy lub watki
 biblioteki) moga chwilowo zostawic dowiazanie na starszej kampanii;
 kolejne `newest`/`all` je naprawia, pliki w `kampanie/` sa nietkniete.
-Przy metodzie `copy` CLI drukuje `Warning: dowiazanie niedostepne na tym
+Przy metodzie `copy` CLI drukuje `Warning: hardlink niedostepny na tym
 systemie plikow — sciezka standardowa jest KOPIA najnowszej kampanii dla N
 arkuszy (<godla do 10>) (extra.link=copy)`; podsumowanie `all` (bez `-q`):
 `Downloaded <n> campaign files for <m> sheets to <dir> (<k> already
@@ -528,7 +536,7 @@ nowszej (<blad>)` (pojedyncze godlo) albo `Warning: skorowidz GUGiK
 niedostepny — dla N arkuszy uzyto lokalnej kampanii bez sprawdzenia nowszej
 (<godla do 10>) (<pierwszy blad>)` (lista), stderr takze z `-q`, kod bez
 zmian. `all`, `--min-year`, `--force` i brak lokalnej kampanii (takze
-wiszace dowiazanie) — blad jak dotad. Biblioteka bez `MetadataCache` pyta
+dowiazanie z usunieta kampania docelowa) — blad jak dotad. Biblioteka bez `MetadataCache` pyta
 skorowidz przy KAZDYM `download_sheet` (takze arkusza juz pobranego);
 przekazanie cache providerowi ogranicza to do raz na 7 dni.
 
@@ -793,8 +801,8 @@ ze wspolnym `extra.parent_request`.
 
 **Kampanie a wycinek (ADR-030, errata Q2/Q4).** Wycinek jest ZAWSZE
 `newest`: `run_pl_cutout` buduje wlasny `DownloadManager` bez `campaigns`
-i czyta arkusze przez dowiazania sciezki standardowej (`rasterio` podaza za
-symlinkiem; hardlink i kopia to zwykle pliki), a `extra.sheet_sources` czyta
+i czyta arkusze przez dowiazania sciezki standardowej (hardlink i kopia to
+zwykle pliki), a `extra.sheet_sources` czyta
 sidecar standardowy. `--target-crs` + (`--campaigns all` lub `--min-year`)
 odrzuca CLI przed siecia (`Error: --campaigns all nie dziala z --target-crs
 — wycinek sklada jedna kampanie na arkusz; laczenie kampanii: narzedzie
@@ -803,8 +811,8 @@ niesie granicy roku`, kod 1). Wycinek jest pomijany po SAMYM istnieniu
 pliku wyniku (Q4), takze gdy skorowidz ma juz nowsza kampanie — odswiezenie:
 `--force` albo usuniecie wycinka. Kontrola wolnego miejsca
 (`estimate_pl_cutout_bytes`, D-3) to DOLNE oszacowanie: liczy arkusze bez
-pliku w sciezce standardowej (takze wiszace dowiazanie), a pod `newest`
-arkusz z nowsza kampania zostanie pobrany mimo istniejacego dowiazania.
+pliku w sciezce standardowej, a pod `newest` arkusz z nowsza (albo
+usunieta) kampania zostanie pobrany mimo istniejacego dowiazania.
 
 Wynik: **jeden plik** `data/nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif`
 (+ `.meta.json`), np. dla bboxa 419000,230000,421000,232000 w EPSG:2180
@@ -1083,6 +1091,6 @@ Pelne uzasadnienia: `docs/DECISIONS.md`.
 | ADR-027 | `--target-crs` dla PL jako scalony wycinek | R5 obejmuje wycinek i liste/hierarchie; EPSG:2180 wymaga zgodnej fazy (`GridMismatchError`), W1 warpuje kazdy arkusz osobno przy innym CRS. Sidecar: `missing_sheets`, `sheet_sources`, `off_grid_sheets`. |
 | ADR-028 | Wybor rekordu skorowidza GUGiK i `extra.source` | Twardy filtr godla, ukladu, rozdzielczosci i koloru orto; najnowsza kampania bez cichego fallbacku; cache pelnych rekordow i pochodzenie w sidecarze. |
 | ADR-029 | Wybor kafli LAZ wg pokrycia obszaru, LAZ w bibliotece | Kafle od najnowszego rocznika, starszy pomijany, gdy rama nowszych (EPSG:2180, tolerancja 1 m) pokrywa jego czesc obszaru; `download/laz.py` z pula watkow, sidecarem i `parent_request`; CLI cienkie. |
-| ADR-030 | Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem (+ errata 2026-10-07) | Prawdziwe pliki PL tylko w `<segment>/kampanie/<data>_<id>/`, sciezka standardowa = dowiazanie do najnowszej lokalnej kampanii (symlink -> hardlink -> kopia, nigdy wstecz); `newest` sprawdza nowsza kampanie, `all` pobiera wszystkie; `--min-year` z roku `aktualnosc`; format z pola rekordu; sidecar kampanii obowiazkowy; kampanie tylko PL; `coverage`/`mosaic`/`--campaign <id>` odrzucone (skladanie kampanii: 0.7.1). |
+| ADR-030 | Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem (+ errata 2026-10-07) | Prawdziwe pliki PL tylko w `<segment>/kampanie/<data>_<id>/`, sciezka standardowa = dowiazanie do najnowszej lokalnej kampanii (hardlink -> kopia, bez symlinkow — errata 4; nigdy wstecz); `newest` sprawdza nowsza kampanie, `all` pobiera wszystkie; `--min-year` z roku `aktualnosc`; format z pola rekordu; sidecar kampanii obowiazkowy; kampanie tylko PL; `coverage`/`mosaic`/`--campaign <id>` odrzucone (skladanie kampanii: 0.7.1). |
 
 ADR-026–030 sa spisane w `docs/DECISIONS.md` w ramach wydania 0.7.0.

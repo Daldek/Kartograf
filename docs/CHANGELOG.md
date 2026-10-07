@@ -10,14 +10,24 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **BREAKING (układ `data/`):** prawdziwe pliki NMT/NMPT/orto PL leżą
   wyłącznie w `<segment>/kampanie/<data>_<id>/<hierarchia godła>/<godło>.<ext>`
   (+ `.meta.json`); ścieżka standardowa `<segment>/<hierarchia>/<godło>.<ext>`
-  jest dowiązaniem do najnowszej lokalnej kampanii (symlink względny, potem
-  hardlink, potem kopia z `Warning:`; `extra.link` = `symlink`/`hardlink`/
-  `copy`; przestawiane tylko na kampanię o kluczu `(aktualnosc, dt_pzgik, url)`
+  jest dowiązaniem twardym do najnowszej lokalnej kampanii (hardlink, a gdy
+  niedostępny kopia z `Warning:`; `extra.link` = `hardlink`/`copy`,
+  `extra.link_target` = jedyne źródło celu; przestawiane tylko na kampanię o kluczu `(aktualnosc, dt_pzgik, url)`
   ściśle większym niż klucz obecnego celu; ten sam cel lub klucz równy/większy
   = bez zmian).
   Brak migracji: zwykły plik w ścieżce standardowej jest nieznany, pierwsze
   uruchomienie pobiera go ponownie do `kampanie/` i zastępuje dowiązaniem
-  (z sidecarem). Kopiowanie `data/` wymaga `cp -rL`/`rsync -aL`.
+  (z sidecarem). Kopiowanie `data/`: `rsync -aH`/`cp -a` (bez zachowania
+  hardlinków powstaje duplikat).
+- **Errata 4 ADR-030 (bez symlinków):** Kartograf nie tworzy symlinków —
+  symlink utworzony z Linuksa na udziale SMB jest nieczytelny dla klientów
+  Windows, a udział katalog danych przyjmuje cel symlinku najwyżej 77 znaków
+  (metoda zależała od długości godła). `LinkMethod`/`SheetFetch.link`/
+  `extra.link` nie przyjmują już `symlink`; istniejący symlink w ścieżce
+  standardowej (dane deweloperskie) = ścieżka nieznana, `newest` zastępuje
+  go hardlinkiem. Brak sidecara ścieżki standardowej = ścieżka nieznana
+  (ponowne dowiązanie). Komunikat kopii: `Warning: hardlink niedostepny na
+  tym systemie plikow — ...`.
 - **BREAKING (zachowanie):** domyślna strategia `newest` przy każdym
   uruchomieniu rozwiązuje najnowszy rekord skorowidza (cache `record_cache`
   7 dni), więc po wygaśnięciu cache pyta sieć i pobiera nowszą kampanię, jeśli

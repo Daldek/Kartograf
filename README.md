@@ -229,11 +229,14 @@ błąd nadal kończy pobranie arkusza porażką. Wycinek
 `--target-crs` zawsze składa się z najnowszych kampanii i nie przyjmuje
 `--campaigns all`/`--min-year`.
 
-- **Kopiowanie `data/`:** użyj `cp -rL`/`rsync -aL` - bez `-L` kopiuje się samo
-  dowiązanie, a nie plik.
-- **Windows:** symlinki wymagają trybu dewelopera; bez niego Kartograf tworzy
-  hardlink (NTFS), a gdy i to się nie uda - kopię z `Warning:`
-  (`extra.link: copy` w sidecarze).
+- **Dowiązanie = hardlink:** ścieżka standardowa to dowiązanie twarde do pliku
+  kampanii (ten sam plik na dysku, bez dodatkowego miejsca); Kartograf nie
+  tworzy symlinków. Gdy system plików nie obsługuje hardlinków (exFAT/FAT,
+  sshfs/FUSE), powstaje kopia z `Warning:` (`extra.link: copy` w sidecarze).
+- **Kopiowanie `data/`:** użyj `rsync -aH` albo `cp -a` - bez zachowania
+  hardlinków ścieżka standardowa staje się osobną kopią (duplikat danych).
+- **Windows:** hardlink działa bez dodatkowych uprawnień (NTFS), a dane
+  udostępnione przez SMB klient Windows widzi jako zwykłe pliki.
 - **Migracja:** brak; zwykły plik NMT/NMPT/orto w starej ścieżce standardowej
   jest traktowany jak nieznany - pierwsze uruchomienie pobiera go ponownie do
   `kampanie/` i zastępuje dowiązaniem.
