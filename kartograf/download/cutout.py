@@ -576,6 +576,11 @@ def estimate_pl_cutout_bytes(
     sa liczone: to kontrola "na pewno nie wystarczy", nie gwarancja. Tania
     (``get_bbox`` uzywa transformera z cache ``core.bbox``, N9), wiec
     wolajacy, ktory liczy ja sam przed ``run_pl_cutout``, nie placi podwojnie.
+
+    Arkusz jest liczony, gdy sciezka standardowa nie istnieje — takze wiszacy
+    link (``exists()`` sprawdza cel). Pod ``newest`` arkusz z nowsza kampania
+    zostanie pobrany mimo istniejacego linku, wiec szacunek pozostaje dolnym
+    ograniczeniem.
     """
     storage = storage or storage_for_provider(
         cutout.output_dir,

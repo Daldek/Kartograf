@@ -2420,3 +2420,146 @@ class TestEmptyCutoutSkip:
         result = skipped_pl_cutout(cutout)
 
         assert result.skipped and result.all_nodata is True
+
+
+class TestCutoutOverCampaignLinks:
+    """ADR-030 (errata Q4): wycinek czyta arkusze przez dowiazania kampanii."""
+
+    _SHEETS = {
+        "N-34-130-D-d-2-3": (530000, 382000),
+        "N-34-130-D-d-2-4": (530100, 382000),
+    }
+    _BBOX = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+
+    class _CampaignProvider:
+        """Atrapa z kontraktem kampanii (atrybut KLASOWY supports_campaigns)."""
+
+        supports_campaigns = True
+        descriptor_key = "pl.gugik.nmt_1m"
+        vertical_crs = "EVRF2007"
+        resolution = "1m"
+        default_extension = ".asc"
+        name = "fake"
+
+        def __init__(self, sheets):
+            self.sheets = sheets
+            self.resolve_calls = []
+
+        def resolve_campaigns(
+            self, godlo, *, campaigns="newest", min_year=None, timeout=None
+        ):
+            from kartograf.providers.pl.skorowidz import SkorowidzRecord
+
+            self.resolve_calls.append(godlo)
+            return [
+                SkorowidzRecord(
+                    url=f"https://opendata.geoportal.gov.pl/NMT/83233/"
+                    f"83233_1744736_{godlo}.asc",
+                    godlo=godlo,
+                    aktualnosc="2025-04-27",
+                    dt_pzgik="2025-05-01",
+                    layer="SkorowidzeNMT2025",
+                    uklad="1992",
+                    zone=None,
+                    resolution_m=1.0,
+                    full_sheet=True,
+                    raw={"format": "ARC/INFO ASCII GRID"},
+                )
+            ]
+
+        def record_source(self, record):
+            return record.to_source("https://wms")
+
+        def download_record(self, record, path, timeout=None):
+            west, south = self.sheets[record.godlo]
+            return _write_sheet_asc(path, west, south)
+
+    def _run(self, tmp_path, provider=None, **kwargs):
+        from kartograf import download_pl_cutout
+
+        provider = provider or self._CampaignProvider(self._SHEETS)
+        with (
+            patch("kartograf.providers.pl.create_nmt_provider", return_value=provider),
+            patch(
+                "kartograf.download.cutout.find_sheets_for_bbox",
+                return_value=list(self._SHEETS),
+            ),
+        ):
+            result = download_pl_cutout(
+                self._BBOX, "EPSG:2180", output_dir=tmp_path, **kwargs
+            )
+        return result, provider
+
+    def test_cutout_builds_from_symlinked_sheets(self, tmp_path):
+        result, _ = self._run(tmp_path)
+
+        assert result.path.exists() and not result.skipped
+        assert len(result.sheet_paths) == 2
+        for sheet in result.sheet_paths:
+            assert sheet.is_symlink()
+            assert "kampanie/2025-04-27_83233" in str(sheet.resolve())
+        with rasterio.open(result.path) as src:
+            assert src.count == 1
+
+    def test_cutout_sheet_sources_from_standard_sidecar(self, tmp_path):
+        result, _ = self._run(tmp_path)
+
+        meta = json.loads(
+            result.path.with_name(result.path.name + ".meta.json").read_text("utf-8")
+        )
+        sources = meta["extra"]["sheet_sources"]
+        assert sorted(s["godlo"] for s in sources) == sorted(self._SHEETS)
+        for source in sources:
+            assert source["url"] == (
+                "https://opendata.geoportal.gov.pl/NMT/83233/"
+                f"83233_1744736_{source['godlo']}.asc"
+            )
+
+    def test_cutout_skip_still_by_target_existence(self, tmp_path):
+        first, provider = self._run(tmp_path)
+        calls = len(provider.resolve_calls)
+        assert calls == 2
+
+        second, _ = self._run(tmp_path, provider=provider)
+
+        assert second.skipped and second.path == first.path
+        assert len(provider.resolve_calls) == calls
+
+    def test_estimate_counts_dangling_link_as_pending(self, tmp_path):
+        import os
+
+        from kartograf.download.cutout import (
+            estimate_pl_cutout_bytes,
+            prepare_pl_cutout,
+            select_pl_cutout_sheets,
+        )
+        from kartograf.download.storage import storage_for_provider
+
+        cutout = prepare_pl_cutout(self._BBOX, "EPSG:2180", output_dir=tmp_path)
+        with patch(
+            "kartograf.download.cutout.find_sheets_for_bbox",
+            return_value=list(self._SHEETS),
+        ):
+            sheets = select_pl_cutout_sheets(cutout)
+        storage = storage_for_provider(tmp_path)
+        base_need, base_pending = estimate_pl_cutout_bytes(
+            cutout, sheets, storage=storage
+        )
+        assert base_pending == 2
+
+        first, second = sorted(self._SHEETS)
+        real = tmp_path / "kampanie_real" / f"{first}.asc"
+        real.parent.mkdir(parents=True)
+        real.write_text("x")
+        live = storage.get_path(first, ".asc")
+        live.parent.mkdir(parents=True, exist_ok=True)
+        os.symlink(os.path.relpath(real, live.parent), live)
+        dangling = storage.get_path(second, ".asc")
+        dangling.parent.mkdir(parents=True, exist_ok=True)
+        os.symlink(os.path.relpath(tmp_path / "nie_ma.asc", dangling.parent), dangling)
+        assert dangling.is_symlink() and not dangling.exists()
+
+        need, pending = estimate_pl_cutout_bytes(cutout, sheets, storage=storage)
+
+        assert pending == 1  # wiszacy link liczony, link do istniejacego celu nie
+        assert need < base_need
