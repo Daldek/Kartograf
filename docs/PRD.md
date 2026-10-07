@@ -235,7 +235,7 @@ kartograf download --geometry area.shp --product laz
 - WFS EPSG:2180 przyjmuje bbox i zwraca envelope w kolejności osi (N,E);
   discovery odrzuca zestaw kafli, w którym żaden nie przecina obszaru.
 - Źródło: GUGiK WFS (`DanePomiaroweLidarEVRF2007` / `DanePomiaroweLidarKRON86`)
-- Domyślnie newest-per-tile (dedup po godle, najnowszy `akt_rok`)
+- Domyślnie najnowszy kafel per obszar: starszy kafel pomijany, gdy jego część obszaru pokrywają nowsze (ramy w EPSG:2180, tolerancja 1 m; ADR-029)
 - Pobieranie równoległe (`--workers`), pomijanie istniejących plików
 
 ---

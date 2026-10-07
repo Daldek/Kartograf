@@ -34,7 +34,8 @@ deskryptor mowi CO zrodlo potrafi i gdzie ma wyladowac wynik, nie JAK je pobrac.
 i pionowy, `nodata`, oryginalne zadanie, licencja, wersja pakietu, opis
 wykonanych transformacji. Sidecary pisza **warstwy zarzadzajace** —
 `DownloadManager`, `LandCoverManager`, wycinek PL w bibliotece
-(`download/cutout.py::write_pl_cutout_sidecar`) i CLI (tory LAZ i CZ) —
+(`download/cutout.py::write_pl_cutout_sidecar`), kafle LAZ w bibliotece
+(`download/laz.py::write_laz_sidecar`, ADR-029) i CLI (tor CZ) —
 nigdy providery; provider zwraca `Path`, metadane skladane sa pietro wyzej,
 gdzie znany jest kontekst zadania. Zapis sidecara jest best-effort: kazdy blad
 (IO, brakujacy klucz deskryptora, wyjatek w budowie metadanych) konczy sie
@@ -149,7 +150,8 @@ kartograf/
 │   ├── parser_2000.py      # Parser2000 (PL-2000), find_sheets_2000_for_bbox
 │   ├── parser_tm33.py      # ParserTM33 — obliczalna siatka kafli CZ 2x2 km (EPSG:3045)
 │   ├── parser_registry.py  # Rejestr systemow godel: pl1992, pl2000, cz_tm33, cz_sm5
-│   └── geometry.py         # Czytanie SHP/GPKG, find_sheets_for_geometry, get_overall_bbox
+│   ├── geometry.py         # Czytanie SHP/GPKG, find_sheets_for_geometry, get_overall_bbox
+│   └── coverage.py         # Wypukle wielokaty: przeciecie, roznica, bufor (wybor kafli LAZ)
 ├── sources/             # Deskryptory zrodel jako dane (zero IO przy imporcie)
 │   ├── descriptor.py    # SourceDescriptor (+ resolve_subdir), AccessChannel,
 │   │                    # TransportKind, TileScheme, LicenseInfo, CountryProfile
@@ -174,6 +176,8 @@ kartograf/
 ├── download/            # Pobieranie NMT/NMPT/Orto po godle + wycinek PL
 │   ├── cutout.py        # Wycinek PL --target-crs jako API (ADR-027): prepare/select/run/
 │   │                    # download_pl_cutout — mozaika arkuszy + warp, sidecar
+│   ├── laz.py           # Kafle LAZ jako API (ADR-029): download_laz_area/run_laz_download —
+│   │                    # pula watkow, sidecar kafla, porazki w wyniku
 │   ├── manager.py       # DownloadManager — koordynacja arkuszy (ThreadPoolExecutor), sidecary;
 │   │                    # download_sheets/expand_sheets (lista godel, porazki w last_result)
 │   └── storage.py       # FileStorage — segmenty z szablonow rejestru (ADR-026);
@@ -365,10 +369,8 @@ segmentu).
 ### 3.4 `extra.parent_request`
 
 W trybie `--bbox`/`--geometry` sidecary zadania dostaja `extra.parent_request`
-— **poza torem LAZ**, ktory ma wlasny przeplyw (`_cmd_download_laz`) i dzis
-tego klucza nie niesie wcale (`_write_laz_sidecar` wypelnia `extra` tylko
-polami kafla; `_build_parent_request` nie jest stamtad wolane). Konsument
-grupujacy po tym kluczu zgubi wiec kafle LAZ:
+— od 2026-10-07 takze kafle LAZ (`run_laz_download(parent_request=)`,
+review-2 N15; `countries` = `["PL"]`, bo LAZ odpytuje tylko GUGiK):
 
 ```json
 {"bbox": [min_x, min_y, max_x, max_y], "bbox_crs": "EPSG:2180", "countries": ["CZ", "PL"]}
@@ -761,18 +763,39 @@ i CZ (warp kotwiczony w rogu NW zadania) nie sa wspolne.
 
 ### 4.7 LAZ (chmury punktow LIDAR, PL)
 
-Osobny przeplyw CLI (`_cmd_download_laz`), poza `DownloadManager` — jedno
-zadanie obszarowe daje wiele kafli. Wejscie (godlo do 1:10000, `--bbox`,
-`--geometry`) sprowadzane jest do bboxa EPSG:2180, discovery idzie przez
+Przeplyw poza `DownloadManager` — jedno zadanie obszarowe daje wiele kafli.
+Logika jest w bibliotece (`download/laz.py`, ADR-029; wzor `cutout.py`):
+`GugikLazProvider.select_tiles` -> `run_laz_download`, albo jednym
+wywolaniem `download_laz_area(bbox_2180, ...)`. CLI (`_cmd_download_laz`)
+sprowadza wejscie (godlo do 1:10000, `--bbox`, `--geometry`) do bboxa
+EPSG:2180, drukuje komunikaty i tlumaczy wynik na kod wyjscia.
+Discovery idzie przez
 **WFS** `GetFeature` (WMS skorowidzy LAZ zwraca 401 — ADR-021), a kafle
 pobierane sa rownolegle. WFS `urn:ogc:def:crs:EPSG::2180` oczekuje
-osi (N,E): bbox jest wysylany, a `gml:Envelope` czytany w tym
-porzadku, potem kafle sa filtrowane rzeczywistym przecieciem.
+osi (N,E): bbox jest wysylany, a `gml:Envelope` i rama `msGeometry`
+czytane w tym porzadku, potem kafle sa filtrowane rzeczywistym przecieciem.
 GetCapabilities ustala roczniki (bez zaszytej listy); jesli
-ktorykolwiek rocznik zawiedzie po ponowieniach, `discover_tiles`
+ktorykolwiek rocznik zawiedzie po ponowieniach, `select_tiles`
 rzuca `DownloadError` zamiast sugerowac brak kafli. Gdy wszystkie
-odpowiedza i nic nie znaleziono, CLI drukuje `No LAZ tiles found`.
-Porazka pobrania choc jednego kafla konczy polecenie kodem 1 z `Error:`
+odpowiedza i nic nie znaleziono, CLI drukuje `No LAZ tiles found`
+(`download_laz_area`: `NoCoverageError`).
+
+**Wybor kafli (ADR-029).** Domyslnie (bez `--year`) kafle sa wybierane
+zachlannie od najnowszego `akt_rok` (w roku: nowsza `akt_data`): kafel
+starszy jest pomijany, gdy jego czesc wspolna z obszarem zadania pokrywa
+juz suma wybranych kafli — porownanie ram `msGeometry` w EPSG:2180,
+kazda rama pokrycia powiekszona o 1 m (`COVERAGE_TOLERANCE_M`); kafel
+wnoszacy niepokryty kawalek zostaje (caly — LAZ nie jest przycinany).
+Dzieki temu PL-1992 i PL-2000 tego samego miejsca nie dubluja sie (w2:
+2025/PL-1992 zamiast 2025 + 2022/PL-2000:S7). Z `--year` regula dziala
+w obrebie tego roku. Pokrywa tylko kafel pelny (`czy_ark_wypelniony` !=
+`NIE`) i tylko rama albo tym samym godlem, nigdy obwiednia. Kafel, ktorego
+rama nie przecina obszaru (przecina go tylko obwiednia), jest pomijany.
+Pominiete kafle: `LazTileSelection.superseded` / `LazDownloadResult.superseded`
+(kafel + kafle pokrywajace), w CLI `Info:` na stderr takze z `-q`.
+
+Porazka pobrania choc jednego kafla trafia do `LazDownloadResult.failed`
+(biblioteka nie rzuca); CLI konczy wtedy kodem 1 z `Error:`
 i PELNA lista nieudanych kafli (jak `_finish_pl_sheets`; udane kafle
 zostaja na dysku i przy ponowieniu bez `--force` sa pomijane).
 Godlo kafla jest drobniejsze niz 1:10000 i NIE jest
@@ -793,7 +816,8 @@ jeden `FileStorage` wystarcza na cale zadanie. W trybie obszarowym
 `--country pl` (LAZ dla CZ to etap 2).
 
 Wynik: `data/laz/pl_2000_evrf2007/6/162/34/02/3/<oryginalna_nazwa>.laz`
-(+ `.meta.json` z `extra.godlo_kafla`/`rok`/`gestosc`/`url`; `request`
+(+ `.meta.json` z `extra.godlo_kafla`/`rok`/`gestosc`/`url` oraz
+`extra.parent_request` w trybie `--bbox`/`--geometry`; `request`
 niesie bbox oraz `year`/`min_density`, gdy podane — E16).
 `gestosc` i filtr `--min-density` to wartosc NOMINALNA z WFS GUGiK
 (`char_przestrz`); faktyczna gestosc kafla bywa kilkukrotnie wyzsza
@@ -902,5 +926,6 @@ Pelne uzasadnienia: `docs/DECISIONS.md`.
 | ADR-026 | Uklad `data/` per produkt + szablony `storage_subdir` | `data/<produkt>/<kraj>_<uklad>[_<wariant>][_<vcrs>]/...`; `storage_subdir` staje sie szablonem z `{uklad}`/`{vcrs}`, a `FileStorage` odrzuca segment z nierozwiazana klamra. |
 | ADR-027 | `--target-crs` dla PL jako scalony wycinek | R5 obejmuje wycinek i liste/hierarchie; EPSG:2180 wymaga zgodnej fazy (`GridMismatchError`), W1 warpuje kazdy arkusz osobno przy innym CRS. Sidecar: `missing_sheets`, `sheet_sources`, `off_grid_sheets`. |
 | ADR-028 | Wybor rekordu skorowidza GUGiK i `extra.source` | Twardy filtr godla, ukladu, rozdzielczosci i koloru orto; najnowsza kampania bez cichego fallbacku; cache pelnych rekordow i pochodzenie w sidecarze. |
+| ADR-029 | Wybor kafli LAZ wg pokrycia obszaru, LAZ w bibliotece | Kafle od najnowszego rocznika, starszy pomijany, gdy rama nowszych (EPSG:2180, tolerancja 1 m) pokrywa jego czesc obszaru; `download/laz.py` z pula watkow, sidecarem i `parent_request`; CLI cienkie. |
 
-ADR-026–028 sa spisane w `docs/DECISIONS.md` w ramach wydania 0.7.0.
+ADR-026–029 sa spisane w `docs/DECISIONS.md` w ramach wydania 0.7.0.
