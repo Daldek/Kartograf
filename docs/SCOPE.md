@@ -167,7 +167,7 @@ patrz sekcja 3.2, znane ograniczenie.
   błąd jednego rocznika przerywa odkrywanie (`DownloadError`)
 - Kafle drobniejsze niż 1:10000 (jedno godło 1:10000 → wiele kafli .laz)
 - url_do_pobrania brany wprost z atrybutu WFS (godło kafla nieparsowane)
-- Domyślnie newest-per-tile; flagi --year, --vertical-crs, --min-density
+- Domyślnie najnowszy kafel per obszar (ADR-029); flagi --year, --vertical-crs, --min-density
 - Dwa układy wysokościowe: EVRF2007 (domyślny, 2018+), KRON86 (legacy, 2010-2019)
 - Pobieranie równoległe (--workers), pomijanie istniejących plików
 
