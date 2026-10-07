@@ -17,7 +17,7 @@
 | CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage; godlo PL-2000 bez pliku PL-2000 = `NoCoverageError` z podpowiedzia `--scale` (K4), sidecar EPSG:2176-2179 (N8) |
-| Pokrycie testami | ✅ Gotowy | 2406 testow offline + 16 `live` (2026-10-07 po deduplikacji, parserach i LAZ ADR-029; 2216 2026-10-06 po rundzie review/E2E, w tym 28 na surowych body GUGiK; 2105 po polityce ponowien; 2058 po fali naprawczej 2026-09-30; wczesniej 1861 + 8 po fali review max 2026-09-28) |
+| Pokrycie testami | ✅ Gotowy | 2622 testow offline + 16 `live` (2026-10-07 po ADR-030 T1-T9; 2406 po deduplikacji, parserach i LAZ ADR-029; 2216 2026-10-06 po rundzie review/E2E, w tym 28 na surowych body GUGiK; 2105 po polityce ponowien; 2058 po fali naprawczej 2026-09-30; wczesniej 1861 + 8 po fali review max 2026-09-28) |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0; od 2026-09-30 `record_cache` (rekord skorowidza / `no_coverage` z podpowiedzia) podlaczony w torach PL (N6), `--force` = bez cache |
@@ -112,37 +112,31 @@
 > = `openai-codex/gpt-6-sol` (zapisane globalnie 2026-09-30; astra
 > wyczerpuje limit po ~8 min pracy 3-4 agentow).
 
-### ADR-030 strategie kampanii — fale 1-4 (T1-T9) zmergowane (2026-10-07)
+### ADR-030 strategie kampanii — wdrozenie T1-T9 + dokumentacja T10 (2026-10-07)
 
-> **START NASTEPNEJ SESJI:** fala 1 planu `docs/research/2026-10-07-plan-adr030.md`
-> GOTOWA i w `develop` (merge `a187a5d` T1, `d839946` T2, `7fcd3bb` T3,
-> `e5b5208` T4, `91fea75` T5) oraz fala 2 (`d6fa032` T6: providery
-> `resolve_campaigns`/`download_record`/`record_source`, `supports_campaigns`).
-> oraz fala 3 (`27ec40e` T7: `DownloadManager` z torem kampanii, `SheetFetch`,
-> `last_sheet`, dowiazanie raz na arkusz; porazka dowiazania = porazka arkusza).
-> oraz fala 4 (`0541942` T9: eksporty `CampaignRef`/`SheetFetch`, testy
-> przeplywu na realnych body; `456d4ac` T8: CLI `--campaigns {newest,all}`,
-> `--min-year`, straze CZ/`--target-crs`/LAZ, podsumowanie `all` z nowym polem
-> `DownloadResult.reused_campaign_files`).
+> **START NASTEPNEJ SESJI:** ADR-030 (+ errata 2026-10-07) WDROZONY w
+> `develop` (fale 1-4, T1-T9) i opisany w dokumentacji (T10: `CLAUDE.md`,
+> `docs/ARCHITECTURE.md` 3.2/3.3/4.1-4.3/4.6/4.7/6, `README.md` sekcja
+> "Kampanie", `docs/CHANGELOG.md` [0.7.0], `docs/SCOPE.md` 2.11/2.12/3.1).
+> Merge'e: `a187a5d` T1, `d839946` T2, `7fcd3bb` T3, `e5b5208` T4, `91fea75` T5,
+> `d6fa032` T6 (providery), `27ec40e` T7 (manager, dowiazania), `0541942` T9
+> (eksporty, przeplyw na realnych fixturach), `456d4ac` T8 (CLI `--campaigns`,
+> `--min-year`, straze CZ/`--target-crs`/LAZ).
 > Brama: **2622 testy offline**, ruff czysty, mypy lista = baseline (32).
-> Fala 5 (T10 dokumentacja, potem T11 przeglad koncowy opus) — **TYLKO na
-> polecenie uzytkownika**; potem T12 na zywo (katalog danych). T10 ma opisac m.in.:
-> komunikat bledu pobrania kampanii = nazwa pliku z URL (nie godlo),
-> `reused_campaign_files`. Odlozone drobne uwagi dla T11: ledger SDD. Ruling T7: zla `aktualnosc` rekordu w `all` = porazka tej
-> kampanii, link na najnowsza poprawna (R16 doprecyzowane w duchu Q10). Ledger SDD
-> (rulingi, odlozone drobne uwagi do T11, uwagi dla T7):
-> `.superpowers/sdd/2026-10-07-plan-adr030/progress.md` (gitignorowany).
-> Nowe w kodzie (biblioteka, bez CLI): `download/campaigns.py` (`CampaignRef`,
-> format z rekordu, `verify_file_format`), `FileStorage.get_campaign_path`/
-> `list_files(campaigns=)`, `download/links.py` (dowiazanie symlink->hardlink->
-> kopia, nigdy wstecz), `emit_sidecar(required=True)`, `MetadataCache`
-> `campaigns_cache`, skorowidz `select_campaign_records`/`layer_upper_year`/
-> `LAYER_FAMILY`/`file_format`, LAZ `campaigns="all"`/`min_year`.
-> Uwaga dla T7 (decyzja uzytkownika): wyscig `ensure_standard_link` na tej
-> samej sciezce — wariant A z planu (link raz na arkusz + dedup godel), bez
-> blokad; ryzyko szczatkowe opisac w docstringach `ensure_standard_link`
-> i `_fetch_campaigns`. Do oceny w T11: `to_source`
-> zapisuje `"format": null` dla orto (wg planu 1.5).
+> **Nastepne kroki:** (1) T11 — przeglad koncowy (opus; ledger SDD z odlozonymi
+> uwagami, m.in. `to_source` zapisuje `"format": null` dla orto wg planu 1.5);
+> (2) T12 — weryfikacja na zywo (katalog danych `<katalog-danych>`, jawne `-o`,
+> cache lokalnie); (3) wydanie 0.7.0 (bump/tag/push/merge) TYLKO na polecenie
+> uzytkownika. Kazda kolejna fala — tylko na polecenie.
+> Ledger SDD (rulingi, uwagi): `.superpowers/sdd/2026-10-07-plan-adr030/progress.md`
+> (gitignorowany). Rulingi: T7 — zla `aktualnosc` rekordu w `all` = porazka tej
+> kampanii, link na najnowsza poprawna; wyscig `ensure_standard_link` bez
+> blokad (decyzja uzytkownika, ryzyko szczatkowe w docstringach); T8 —
+> `DownloadResult.reused_campaign_files`.
+> Roznice kod vs plan opisane w dokumentacji: komunikat bledu pobrania
+> kampanii = nazwa pliku z URL (nie godlo); rekord bez roku przy `--min-year`
+> nie spelnia granicy; `campaigns_cache` po skanie czesciowym tylko dla
+> granic >= granicy skanu; porazka dowiazania = porazka arkusza.
 >
 > Przebieg fali 1: 5 agentow rownolegle (T2 opus, reszta sonnet), review per
 > zadanie (T2, T4 opus), koordynator: brama + wlasna mutacja na kopii. T2:

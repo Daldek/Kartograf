@@ -118,11 +118,13 @@ kartograf/
 │   ├── corine.py        # CorineProvider — CORINE z Copernicus (CLMS API + WMS)
 │   └── soilgrids.py     # SoilGridsProvider — dane glebowe z ISRIC (WCS)
 ├── cache/               # Cache metadanych
-│   └── metadata.py      # MetadataCache — SQLite WAL; record_cache (7d, pozytywny/negatywny), sheet_cache (30d), thread-safe
+│   └── metadata.py      # MetadataCache — SQLite WAL; record_cache (7d, pozytywny/negatywny), campaigns_cache (7d, lista kampanii arkusza), sheet_cache (30d), thread-safe
 ├── download/            # Zarzadzanie pobieraniem NMT/NMPT/Orto
+│   ├── campaigns.py     # Kampanie GUGiK (ADR-030): CampaignRef (<data>_<id>), format z rekordu, verify_file_format, validate_campaign_args
+│   ├── links.py         # Dowiazanie sciezki standardowej do najnowszej kampanii (symlink -> hardlink -> kopia, nigdy wstecz), sidecar standardowy
 │   ├── cutout.py        # Wycinek PL --target-crs jako API (ADR-027): R5, GridMismatchError/W1, all_nodata, sheet_sources
 │   ├── laz.py           # Kafle LAZ jako API (ADR-029): download_laz_area/run_laz_download, sidecar, failed/superseded w wyniku
-│   ├── manager.py       # DownloadManager — arkusze (parallel), status no_coverage, parent_requests
+│   ├── manager.py       # DownloadManager(campaigns=, min_year=) — arkusze (parallel), status no_coverage, parent_requests, SheetFetch/last_sheet
 │   └── storage.py       # FileStorage(vertical_crs=) — segmenty <produkt>/<kraj>_<uklad>_<vcrs> z szablonow deskryptora (ADR-026)
 ├── landcover/           # Zarzadzanie pobieraniem pokrycia terenu
 │   └── manager.py       # LandCoverManager — dispatch do providerow
@@ -153,6 +155,17 @@ E12), `laz/pl_2000_evrf2007/`, `nmt/cz_dmr5g_bpv/` (`pl_1992` vs
 oraz `--bbox`/`--geometry` PL **tylko z `--target-crs`** — bez tej flagi PL
 zapisuje arkusze w hierarchii godel. Kanoniczna tabela i migracja:
 `docs/ARCHITECTURE.md` sekcja 3. `landcover/` bez zmian.
+
+**Kampanie (ADR-030 + errata 2026-10-07):** prawdziwe pliki NMT/NMPT/orto PL
+leza WYLACZNIE w `<segment>/kampanie/<data>_<id>/<hierarchia godla>/<godlo>.<ext>`
+(+ `.meta.json`; `<data>` = `aktualnosc` rekordu, `<id>` = pierwszy segment
+liczbowy nazwy pliku w URL, inaczej `u` + 8 znakow hex `sha1(URL)`).
+Sciezka standardowa `<segment>/<hierarchia>/<godlo>.<ext>` jest dowiazaniem do
+najnowszej LOKALNEJ kampanii (takze niepelnej); jej sidecar to zwykly plik
+z `extra.link` (`symlink`/`hardlink`/`copy`) i `extra.link_target`. Brak
+migracji: zwykly plik w sciezce standardowej jest nieznany — pierwsze
+uruchomienie `newest` pobiera go ponownie do `kampanie/` i zastepuje
+dowiazaniem. Kopiowanie `data/` wymaga `cp -rL`/`rsync -aL`.
 
 ## Komendy
 
@@ -195,6 +208,12 @@ kartograf download N-34-130-D-d-2-4 --product laz
 kartograf download N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12
 kartograf download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86
 kartograf download N-34-130-D --scale 1:10000 --resolution 5m --workers 8
+# kampanie GUGiK (ADR-030): domyslnie `newest`; `all` pobiera kazda kampanie arkusza
+# do <segment>/kampanie/, `--min-year` odcina kampanie z `aktualnosc` sprzed roku
+kartograf download N-34-130-D-d-2-4 --campaigns all
+kartograf download N-34-130-D-d-2-4 --min-year 2024
+kartograf download --bbox 530000,382000,533000,386000 --campaigns all --min-year 2022
+kartograf download --bbox 530000,382000,533000,386000 --product laz --campaigns all   # LAZ bez dedup ADR-029
 kartograf download --geometry area.shp
 kartograf download --geometry area.gpkg --layer catchments
 kartograf parse 6.179.12.20
@@ -343,6 +362,73 @@ kartograf cache path
   CLI daje `Warning:`, kod 1 gdy zaden kraj nie dostarczy wyniku lub
   `--country` bylo jawne. `Info:`/`Warning:` ida na stderr mimo `-q`.
   `--target-crs` dziala dla obu krajow, nie rozstrzyga wyboru kraju.
+- **Kampanie (ADR-030 + errata 2026-10-07):** `--campaigns {newest,all}`
+  (domyslnie `newest`), `--min-year RRRR` (1900..2100, inaczej `Error:`
+  bez sieci); tylko PL (GUGiK) — CZ zawsze biezaca mozaika.
+  `newest` = regula ADR-028, ale PRZY KAZDYM uruchomieniu rozwiazuje
+  najnowszy rekord (siec, gdy cache `record_cache`/`campaigns_cache` 7 d
+  wygasl) i pobiera tylko brakujace kampanie; ponowne uruchomienie nie jest
+  juz "bez sieci" po wygasnieciu cache. `all` = KAZDY rekord po twardym
+  filtrze ADR-028 ze wszystkich warstw, bez limitu liczby kampanii
+  (`logger.info` z liczba kampanii arkusza). `--min-year` = granica na roku
+  `aktualnosc` (nie `dt_pzgik`; rekord bez ustalonego roku nie spelnia
+  granicy); `newest` z najnowsza kampania starsza od granicy =
+  `NoCoverageError` z data tej kampanii (lista/hierarchia: status
+  `no_coverage`). Rok z nazwy warstwy sluzy TYLKO w `all` do pominiecia
+  zapytania warstwy (gorny rok < granicy); `Starsze` zawsze odpytywane,
+  o wyniku decyduje `aktualnosc`. `campaigns_cache` po skanie czesciowym
+  (`--min-year`) obsluguje tylko granice >= granicy skanu (nizsza = ponowny
+  skan). Warstwa spoza `LAYER_PATTERN` nie jest odpytywana; nazwa z rodziny
+  produktu (`LAYER_FAMILY`) daje `logger.warning`.
+  Format pliku z pola `format` rekordu (nie z URL); plik zawsze z
+  rozszerzeniem kanonicznym `.asc`/`.tif` (rekord 72675 z URL `.xyz` to
+  AAIGrid = zwykla kampania `.asc`); po pobraniu weryfikacja tresci
+  (naglowek AAIGrid / sygnatura TIFF); nieznany format albo niezgodna tresc
+  = porazka kampanii (`DownloadError`, plik usuniety, nigdy ciche `.asc`).
+  Sidecar pliku w `kampanie/` jest OBOWIAZKOWY (`emit_sidecar(required=True)`):
+  porazka zapisu = porazka kampanii, plik danych usuniety, dowiazanie
+  nieprzestawione; pozostale sidecary best-effort. Sidecar kampanii:
+  `extra.campaign` = `{id, date, zgloszenie, source, full_sheet, dt_pzgik}`,
+  `request.campaigns` zawsze, `request.min_year` tylko gdy podany.
+  Dowiazanie: raz na arkusz po zebraniu kampanii, przestawiane tylko na klucz
+  `(aktualnosc, dt_pzgik, url)` scisle wiekszy niz klucz biezacego celu (z
+  sidecara, a gdy nieczytelny — z nazwy katalogu; ten sam cel = bez zmian), metoda symlink WZGLEDNY
+  -> hardlink -> kopia; przy kopii `Warning:` (`dowiazanie niedostepne na tym
+  systemie plikow — sciezka standardowa jest KOPIA najnowszej kampanii dla N
+  arkuszy (...) (extra.link=copy)`, kod bez zmian). Kontrola istnienia
+  sprawdza CEL (wiszace dowiazanie = brak pliku). Porazka dowiazania (nawet
+  kopii) = porazka arkusza (kod 1, lista idzie dalej, pobrane kampanie
+  zostaja). Wyscig bez blokad: rownolegle wywolania na tej samej sciezce
+  moga chwilowo zostawic dowiazanie na starszej kampanii; kolejne
+  `newest`/`all` je naprawia. Czesciowa porazka `all` na arkuszu (np.
+  niepoprawna `aktualnosc` jednej kampanii) = kod 1, pozostale kampanie
+  pobrane, dowiazanie na najnowsza poprawna. Blad pobrania pliku podaje
+  nazwe pliku z URL, nie godlo (`84183_1852496_N-34-139-C-a-3-1.asc
+  (OpenData): HTTP 404`). Podsumowanie `all` (bez `-q`): `Downloaded <n>
+  campaign files for <m> sheets to <dir> (<k> already existed)` (n =
+  pobrane, k = lokalne z `DownloadResult.reused_campaign_files`).
+  `FileStorage.list_files()` domyslnie pomija `kampanie/` i wiszace
+  dowiazania (`campaigns=True` = tylko `kampanie/`). Bez skanowania
+  `kampanie/` w 0.7.0.
+  Wycinek `--target-crs` + (`--campaigns all` lub `--min-year`) = `Error:`
+  kod 1 przed siecia; wycinek zawsze `newest`, czyta arkusze przez
+  dowiazania (`run_pl_cutout` nie przyjmuje `campaigns`) i jest pomijany
+  po samym istnieniu pliku wyniku.
+  Opcje kampanii a CZ (jedna regula, `_reject_campaign_opts_without_pl`):
+  zadanie bez PL (godlo CZ takze pod `auto`, obszar/geometria z jawnym
+  `--country cz`, obszar w calosci czeski pod `auto`) = `Error: CZ (CUZK)
+  nie ma kampanii — --campaigns all/--min-year dotycza tylko PL`, kod 1,
+  bez sieci; obszar pod `auto` z PL i CZ = jedno `Info: --campaigns/--min-year
+  dotycza tylko czesci PL (CZ: biezaca wersja danych CUZK)`, CZ pobierane
+  dalej (opcje kampanii nie zwezaja `auto` do PL).
+  LAZ: `newest` = ADR-029; `--campaigns all` = wszystkie kafle, ktorych
+  rama przecina obszar, bez deduplikacji pokryciowej (kafel przeciety tylko
+  obwiednia pomijany jak dotad); `--min-year` = dolna granica `akt_rok`;
+  `--min-year` i `--year` wykluczaja sie (`Error:`); LAZ bez dowiazan.
+  Wynik pojedynczego godla: "Skipped" tylko gdy `manager.last_sheet.skipped`.
+  Kontrola wolnego miejsca wycinka to DOLNE oszacowanie: liczy arkusze bez
+  pliku w sciezce standardowej (takze wiszace dowiazanie), a pod `newest`
+  arkusz z nowsza kampania zostanie pobrany mimo istniejacego dowiazania.
 - **LAZ wybor kafli (ADR-029):** bez `--year` kafle ida zachlannie od
   najnowszego `akt_rok` (w roku nowsza `akt_data`); starszy kafel jest
   pomijany, gdy jego czesc wspolna z obszarem pokrywaja wybrane juz kafle
