@@ -1271,7 +1271,7 @@ class TestCreateProviderAndStorage:
 
     def test_nmt_creates_gugik_provider(self, tmp_path):
         """Test that nmt creates GugikProvider + FileStorage."""
-        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.cli.download_cmd import _create_provider_and_storage
         from kartograf.providers.pl.gugik import GugikProvider
 
         provider, storage = _create_provider_and_storage(
@@ -1283,7 +1283,7 @@ class TestCreateProviderAndStorage:
 
     def test_nmpt_creates_nmpt_provider(self, tmp_path):
         """Test that nmpt creates GugikNmptProvider."""
-        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.cli.download_cmd import _create_provider_and_storage
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
         provider, storage = _create_provider_and_storage(
@@ -1294,7 +1294,7 @@ class TestCreateProviderAndStorage:
 
     def test_orto_creates_orto_provider(self, tmp_path):
         """Test that orto creates GugikOrtoProvider."""
-        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.cli.download_cmd import _create_provider_and_storage
         from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
         provider, storage = _create_provider_and_storage(
@@ -1305,20 +1305,20 @@ class TestCreateProviderAndStorage:
 
     def test_laz_product_raises_validation_error(self, tmp_path):
         """LAZ ma osobny przeplyw (_cmd_download_laz) — tu nie ma prawa dotrzec."""
-        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.cli.download_cmd import _create_provider_and_storage
 
         with pytest.raises(ValidationError, match="LAZ"):
             _create_provider_and_storage("laz", tmp_path, "EVRF2007", "1m")
 
     def test_unknown_product_raises_validation_error(self, tmp_path):
         """Nieznany produkt nie moze po cichu spasc na fabryke NMT."""
-        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.cli.download_cmd import _create_provider_and_storage
 
         with pytest.raises(ValidationError, match="dmr5g"):
             _create_provider_and_storage("dmr5g", tmp_path, "EVRF2007", "1m")
 
     def test_nmt_kron86_storage_segment(self, tmp_path):
-        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.cli.download_cmd import _create_provider_and_storage
 
         provider, storage = _create_provider_and_storage(
             "nmt", tmp_path, "KRON86", "1m"
@@ -1327,7 +1327,7 @@ class TestCreateProviderAndStorage:
 
     def test_nmt_5m_kron86_storage_follows_provider_correction(self, tmp_path):
         """Fabryka koryguje 5m=>EVRF2007 — segment ma niesc fakt, nie flage."""
-        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.cli.download_cmd import _create_provider_and_storage
 
         provider, storage = _create_provider_and_storage(
             "nmt", tmp_path, "KRON86", "5m"
@@ -1335,7 +1335,7 @@ class TestCreateProviderAndStorage:
         assert storage._subdir == "nmt/pl_{uklad}_5m_evrf2007"
 
     def test_nmpt_storage_segment(self, tmp_path):
-        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.cli.download_cmd import _create_provider_and_storage
 
         provider, storage = _create_provider_and_storage(
             "nmpt", tmp_path, "KRON86", "1m"
@@ -3244,7 +3244,7 @@ class TestResolveLazBbox:
     def test_godlo_to_2180(self):
         from argparse import Namespace
 
-        from kartograf.cli.commands import _resolve_laz_bbox
+        from kartograf.cli.download_cmd import _resolve_laz_bbox
 
         args = Namespace(godlo="M-34-27-B-b-2-1", bbox=None, geometry=None)
         bbox = _resolve_laz_bbox(args)
@@ -3268,7 +3268,7 @@ class TestResolveLazBbox:
     def test_bbox_2180_passthrough(self):
         from argparse import Namespace
 
-        from kartograf.cli.commands import _resolve_laz_bbox
+        from kartograf.cli.download_cmd import _resolve_laz_bbox
 
         args = Namespace(
             godlo=None,
@@ -3287,7 +3287,7 @@ class TestResolveLazBbox:
     def test_bbox_wrong_value_count_raises(self):
         from argparse import Namespace
 
-        from kartograf.cli.commands import _resolve_laz_bbox
+        from kartograf.cli.download_cmd import _resolve_laz_bbox
 
         args = Namespace(godlo=None, bbox="1,2,3", bbox_crs="EPSG:2180", geometry=None)
         with pytest.raises(ValidationError, match="Invalid bbox format"):
@@ -3299,7 +3299,7 @@ class TestResolveLazBbox:
         selekcja kafli LAZ na pasie granicznym mogla wyniknac z ballparku."""
         from argparse import Namespace
 
-        from kartograf.cli.commands import _resolve_laz_bbox
+        from kartograf.cli.download_cmd import _resolve_laz_bbox
         from kartograf.core import bbox as core_bbox
         from kartograf.providers.cuzk import dmr
 
@@ -3325,7 +3325,7 @@ class TestResolveLazBbox:
         """Jak wyzej, ale dla drugiego czeskiego ukladu (EPSG:3045)."""
         from argparse import Namespace
 
-        from kartograf.cli.commands import _resolve_laz_bbox
+        from kartograf.cli.download_cmd import _resolve_laz_bbox
         from kartograf.core import bbox as core_bbox
         from kartograf.providers.cuzk import dmr
 
