@@ -228,6 +228,20 @@ def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    if product == "nmt":
+        # D11: jedna regula (`nmt_vertical_crs`), jeden skutek — korekta;
+        # CLI pokazuje ja jawnie (stderr, jak inne Info:), dalej leci juz
+        # pion FAKTYCZNY, wiec fabryka/manager/wycinek nic nie koryguja.
+        from kartograf.providers.pl import nmt_vertical_crs
+
+        actual = nmt_vertical_crs(args.resolution, args.vertical_crs, log=False)
+        if actual != args.vertical_crs:
+            print(
+                f"Info: NMT 5m (PL) jest dostepny tylko w {actual} — "
+                f"--vertical-crs {args.vertical_crs} zamieniony na {actual}",
+                file=sys.stderr,
+            )
+            args.vertical_crs = actual
     return 0
 
 
@@ -951,10 +965,8 @@ def cmd_download(args: argparse.Namespace) -> int:
             output_dir=output_dir,
             provider=provider,
             storage=storage,
-            # provider juz przeszedl korekte "5m => EVRF2007" w fabryce —
-            # przekazujemy jego faktyczna wartosc, zeby manager nie ostrzegal
-            # drugi raz
-            vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
+            # pion juz FAKTYCZNY: "5m => EVRF2007" w _resolve_pl_sentinels (D11)
+            vertical_crs=vertical_crs,
             resolution=resolution,
             max_workers=workers,
         )
@@ -1371,7 +1383,7 @@ def _download_pl_cutout(
                 args.target_crs,
                 output_dir=output_dir,
                 resolution=args.resolution,
-                vertical_crs=getattr(provider, "vertical_crs", args.vertical_crs),
+                vertical_crs=args.vertical_crs,
             )
         except TransformError as e:
             return _print_transform_error(e)
@@ -1525,10 +1537,8 @@ def _download_pl_sheet_list(
             output_dir=output_dir,
             provider=provider,
             storage=storage,
-            # provider juz przeszedl korekte "5m => EVRF2007" w fabryce —
-            # przekazujemy jego faktyczna wartosc, zeby manager nie ostrzegal
-            # drugi raz
-            vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
+            # pion juz FAKTYCZNY: "5m => EVRF2007" w _resolve_pl_sentinels (D11)
+            vertical_crs=vertical_crs,
             resolution=resolution,
             max_workers=workers,
             sidecar_extra={"parent_request": parent_request},

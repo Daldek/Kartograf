@@ -486,8 +486,9 @@ drugiego kraju nie daje juz kodu 0. Biblioteka nie ma `print` ani argparse.
    uklad docelowy spoza `SUPPORTED_TARGET_CRS` (`EPSG:2180`, `EPSG:5514`,
    `EPSG:3045` — ta sama krotka ogranicza `choices` flagi CLI), rozdzielczosc
    spoza 1m/5m, pion spoza EVRF2007/KRON86 i 5m z KRON86 (`prepare_pl_cutout`
-   przyjmuje pion FAKTYCZNY; korekte 5m => EVRF2007 robi `download_pl_cutout`,
-   a w CLI fabryka providera). Bbox trafia do EPSG:2180 (uklady czeskie
+   przyjmuje pion FAKTYCZNY; korekte 5m => EVRF2007 robi `download_pl_cutout`
+   przez fabryke providera, a CLI juz w `_resolve_pl_sentinels` z `Info:` na
+   stderr — regula zyje w jednym miejscu, `providers.pl.nmt_vertical_crs`). Bbox trafia do EPSG:2180 (uklady czeskie
    przypieta operacja `bbox_to_crs`, pozostale domyslnym transformerem, jak
    w calym przeplywie PL), po czym dla pary `EPSG:2180 -> target_crs`
    budowana jest operacja przypieta (polityka `min_accuracy_m=1.0`, bez

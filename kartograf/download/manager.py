@@ -20,7 +20,7 @@ from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.storage import FileStorage, storage_for_provider
 from kartograf.exceptions import DownloadError, NoCoverageError
 from kartograf.providers.base import BaseProvider
-from kartograf.providers.pl import create_nmt_provider
+from kartograf.providers.pl import create_nmt_provider, nmt_vertical_crs
 
 logger = logging.getLogger(__name__)
 
@@ -217,14 +217,8 @@ class DownloadManager:
             Dodatkowe pola scalane do `extra` kazdego sidecara (etap 1:
             `parent_request` w trybie bbox/geometry).
         """
-        # If resolution is 5m, force EVRF2007
-        if resolution == "5m" and vertical_crs != "EVRF2007":
-            logger.warning(
-                f"Resolution 5m only supports EVRF2007, changing "
-                f"vertical_crs from '{vertical_crs}' to 'EVRF2007'"
-            )
-            vertical_crs = "EVRF2007"
-
+        # Regula "5m => EVRF2007" zyje w fabryce (`nmt_vertical_crs`, D11);
+        # bez providera koryguje (i loguje) fabryka.
         self._provider = provider or create_nmt_provider(
             vertical_crs=vertical_crs, resolution=resolution
         )
@@ -237,6 +231,8 @@ class DownloadManager:
         provider_vertical_crs = getattr(self._provider, "vertical_crs", None)
         if isinstance(provider_vertical_crs, str):
             vertical_crs = provider_vertical_crs
+        else:
+            vertical_crs = nmt_vertical_crs(resolution, vertical_crs)
         if storage is None:
             storage = storage_for_provider(
                 output_dir,
