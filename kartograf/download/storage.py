@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import BinaryIO
 
 from kartograf.core import parser_registry
-from kartograf.core.sheet_parser import SheetParser
+from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.exceptions import ValidationError
 from kartograf.sources.registry import get_source
 
@@ -541,3 +541,58 @@ def prune_empty_dirs(start: Path, stop: Path) -> None:
         except OSError:
             return
         current = current.parent
+
+
+def storage_for_provider(
+    output_dir: str | Path,
+    provider=None,
+    *,
+    resolution: str = "1m",
+    vertical_crs: str | None = "EVRF2007",
+) -> FileStorage:
+    """
+    ``FileStorage`` segmentu, w ktorym laduja pliki providera — jedyne miejsce
+    budowy (D18: CLI, ``DownloadManager``, wycinek PL, tor CZ).
+
+    Segment pochodzi z deskryptora zrodla providera
+    (``resolve_subdir(vertical_crs=...)``, ``{uklad}`` rozwiazywany per
+    godlo), a bez ``descriptor_key`` — z ``resolution`` (szablon NMT PL).
+    Pion: FAKTYCZNY pion providera, gdy go zna (``str``), inaczej
+    ``vertical_crs`` — segment niesie fakt, nie zyczenie wolajacego.
+    Wariant providera (``storage_variant``, orto CIR/B-W) trafia na koniec
+    segmentu (E12). ``isinstance(str)``, nie ``is not None``: dla
+    ``Mock(spec=Provider)`` atrybuty klasy daja ``Mock``.
+    """
+    provider_vertical_crs = getattr(provider, "vertical_crs", None)
+    if isinstance(provider_vertical_crs, str):
+        vertical_crs = provider_vertical_crs
+    key = getattr(provider, "descriptor_key", None)
+    subdir = (
+        get_source(key).resolve_subdir(vertical_crs=vertical_crs)
+        if isinstance(key, str)
+        else None
+    )
+    variant = getattr(provider, "storage_variant", None)
+    return FileStorage(
+        output_dir,
+        resolution=resolution,
+        subdir=subdir,
+        vertical_crs=vertical_crs,
+        variant=variant if isinstance(variant, str) else None,
+    )
+
+
+def bbox_cutout_path(
+    output_dir: str | Path, subdir: str, bbox: BBox, extension: str
+) -> Path:
+    """
+    Sciezka wycinka bbox: ``<output>/<segment>/bbox/<coords><ext>`` (ADR-026).
+
+    ``<coords>`` = ``min_x_min_y_max_x_max_y`` z ``format(v, ".10g")`` —
+    wspolrzedne siatki wyniku w jej ukladzie. Jedna nazwa dla wycinka PL
+    (``--target-crs``) i wycinka CZ (D7).
+    """
+    coords = "_".join(
+        format(v, ".10g") for v in (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
+    )
+    return Path(output_dir) / subdir / "bbox" / f"{coords}{extension}"

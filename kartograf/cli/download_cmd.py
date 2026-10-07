@@ -88,34 +88,21 @@ def _create_provider_and_storage(
     LAZ has a separate flow (`_cmd_download_laz`) and never reaches this
     helper — `cmd_download` short-circuits it before any provider is built.
     """
-    from kartograf.download.storage import FileStorage
+    from kartograf.download.storage import storage_for_provider
 
     if product == "nmpt":
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
         provider = GugikNmptProvider(vertical_crs=vertical_crs, cache=cache)
-        storage = FileStorage(
-            output_dir,
-            product="nmpt",
-            vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
-        )
     elif product == "orto":
         from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
         provider = GugikOrtoProvider(cache=cache)
-        storage = FileStorage(
-            output_dir, product="orto", variant=provider.storage_variant
-        )
     elif product == "nmt":
         from kartograf.providers.pl import create_nmt_provider
 
         provider = create_nmt_provider(
             vertical_crs=vertical_crs, resolution=resolution, cache=cache
-        )
-        storage = FileStorage(
-            output_dir,
-            resolution=resolution,
-            vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
         )
     else:
         raise ValidationError(
@@ -123,6 +110,9 @@ def _create_provider_and_storage(
             "(LAZ uses _cmd_download_laz)"
         )
 
+    storage = storage_for_provider(
+        output_dir, provider, resolution=resolution, vertical_crs=vertical_crs
+    )
     return provider, storage
 
 
@@ -151,6 +141,17 @@ def _product_label(product: str, resolution: str | None) -> str:
     if product == "orto":
         return "product: orto"
     return f"resolution: {resolution}"
+
+
+def _print_sheet_list(
+    godla: list[str], target_scale: str, *, what: str, label: str
+) -> None:
+    """Naglowek listy arkuszy PL (wycinek i tryb listy, D15): do 10 godel
+    w calosci, dluzsza lista jako 3 pierwsze + ``...`` + 2 ostatnie."""
+    print(f"Found {len(godla)} sheets at {target_scale} for {what} ({label})")
+    sample = godla if len(godla) <= 10 else godla[:3] + ["..."] + godla[-2:]
+    print(f"  Sheets: {', '.join(sample)}")
+    print()
 
 
 _CZ_ONLY_NMT_MSG = (
@@ -238,6 +239,20 @@ def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
+    if product == "nmt":
+        # D11: jedna regula (`nmt_vertical_crs`), jeden skutek — korekta;
+        # CLI pokazuje ja jawnie (stderr, jak inne Info:), dalej leci juz
+        # pion FAKTYCZNY, wiec fabryka/manager/wycinek nic nie koryguja.
+        from kartograf.providers.pl import nmt_vertical_crs
+
+        actual = nmt_vertical_crs(args.resolution, args.vertical_crs, log=False)
+        if actual != args.vertical_crs:
+            print(
+                f"Info: NMT 5m (PL) jest dostepny tylko w {actual} — "
+                f"--vertical-crs {args.vertical_crs} zamieniony na {actual}",
+                file=sys.stderr,
+            )
+            args.vertical_crs = actual
     return 0
 
 
@@ -961,10 +976,8 @@ def cmd_download(args: argparse.Namespace) -> int:
             output_dir=output_dir,
             provider=provider,
             storage=storage,
-            # provider juz przeszedl korekte "5m => EVRF2007" w fabryce —
-            # przekazujemy jego faktyczna wartosc, zeby manager nie ostrzegal
-            # drugi raz
-            vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
+            # pion juz FAKTYCZNY: "5m => EVRF2007" w _resolve_pl_sentinels (D11)
+            vertical_crs=vertical_crs,
             resolution=resolution,
             max_workers=workers,
         )
@@ -1381,7 +1394,7 @@ def _download_pl_cutout(
                 args.target_crs,
                 output_dir=output_dir,
                 resolution=args.resolution,
-                vertical_crs=getattr(provider, "vertical_crs", args.vertical_crs),
+                vertical_crs=args.vertical_crs,
             )
         except TransformError as e:
             return _print_transform_error(e)
@@ -1409,17 +1422,12 @@ def _download_pl_cutout(
             return 1
 
         if not args.quiet:
-            what = "bbox" if geometry is None else f"geometry {geometry.name}"
-            godla = list(sheets.godla)
-            print(
-                f"Found {len(godla)} sheets at {target_scale} "
-                f"for {what} (resolution: {args.resolution})"
+            _print_sheet_list(
+                list(sheets.godla),
+                target_scale,
+                what="bbox" if geometry is None else f"geometry {geometry.name}",
+                label=_product_label("nmt", args.resolution),
             )
-            if len(godla) <= 10:
-                print(f"  Sheets: {', '.join(godla)}")
-            else:
-                print(f"  Sheets: {', '.join(godla[:3] + ['...'] + godla[-2:])}")
-            print()
 
         if cutout.estimated_bytes >= 2**30:
             # stderr, nie stdout: -q NIE tlumi Info:/Warning: (jak wyzej)
@@ -1516,16 +1524,12 @@ def _download_pl_sheet_list(
     skip_existing = not args.force
 
     if not args.quiet:
-        print(
-            f"Found {len(godlo_list)} sheets at {target_scale} "
-            f"for {what} ({_product_label(product, resolution)})"
+        _print_sheet_list(
+            godlo_list,
+            target_scale,
+            what=what,
+            label=_product_label(product, resolution),
         )
-        if len(godlo_list) <= 10:
-            print(f"  Sheets: {', '.join(godlo_list)}")
-        else:
-            sample = godlo_list[:3] + ["..."] + godlo_list[-2:]
-            print(f"  Sheets: {', '.join(sample)}")
-        print()
 
     with _pl_metadata_cache(args) as cache:
         provider, storage = _create_provider_and_storage(
@@ -1535,10 +1539,8 @@ def _download_pl_sheet_list(
             output_dir=output_dir,
             provider=provider,
             storage=storage,
-            # provider juz przeszedl korekte "5m => EVRF2007" w fabryce —
-            # przekazujemy jego faktyczna wartosc, zeby manager nie ostrzegal
-            # drugi raz
-            vertical_crs=getattr(provider, "vertical_crs", vertical_crs),
+            # pion juz FAKTYCZNY: "5m => EVRF2007" w _resolve_pl_sentinels (D11)
+            vertical_crs=vertical_crs,
             resolution=resolution,
             max_workers=workers,
             sidecar_extra={"parent_request": parent_request},
@@ -1814,36 +1816,22 @@ def _write_cz_sidecar(
     `"server:EPSG:<kod>"` bez dokladnosci, co ukrywalo blad reprojekcji
     serwerowej (135 m) przed konsumentem sidecara.
     """
-    import logging
+    from kartograf.sources.sidecar import emit_sidecar
 
-    try:
-        from kartograf.sources.registry import get_source
-        from kartograf.sources.sidecar import build_metadata, write_sidecar
-
-        meta = build_metadata(
-            get_source(provider.descriptor_key),
-            request=request,
-            vertical_crs=provider.vertical_crs,
-            capability=capability,
-            nodata=nodata,
-            extra=extra,
-        )
-        transform: dict = {}
-        for axis, pinned in (
-            ("horizontal", provider.horizontal_transform(horizontal_crs)),
-            ("vertical", provider.vertical_transform),
-        ):
-            if pinned is not None:
-                transform[axis] = (
-                    f"pinned: {pinned.description} ({pinned.accuracy_m} m)"
-                )
-        meta.transform = transform or None
-        meta.horizontal_crs = horizontal_crs
-        write_sidecar(target, meta)
-    except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
-        logging.getLogger(__name__).warning(
-            f"Nie udalo sie zapisac sidecara dla {target}: {e}"
-        )
+    emit_sidecar(
+        provider.descriptor_key,
+        target,
+        request=request,
+        vertical_crs=provider.vertical_crs,
+        horizontal_crs=horizontal_crs,
+        pinned_transforms={
+            "horizontal": provider.horizontal_transform(horizontal_crs),
+            "vertical": provider.vertical_transform,
+        },
+        capability=capability,
+        nodata=nodata,
+        extra=extra,
+    )
 
 
 def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> int:
@@ -1851,16 +1839,13 @@ def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> i
     import logging
 
     from kartograf.core.parser_registry import detect_system
-    from kartograf.download.storage import FileStorage
+    from kartograf.download.storage import storage_for_provider
     from kartograf.sources.registry import get_source
 
     godlo = args.godlo
     system = detect_system(godlo)
     descriptor = get_source(provider.descriptor_key)
-    storage = FileStorage(
-        args.output,
-        subdir=descriptor.resolve_subdir(vertical_crs=provider.vertical_crs),
-    )
+    storage = storage_for_provider(args.output, provider)
     target = storage.get_raw_path(godlo, f"{godlo}{descriptor.default_extension}")
 
     if skip_existing and target.exists():
@@ -1923,7 +1908,7 @@ def _cz_download_bbox(
     Do serwera idzie potem zadanie w ukladzie natywnym, a na siatke wyniku
     przenosi je lokalny warp w providerze (ADR-024).
     """
-    from kartograf.download.storage import prune_empty_dirs
+    from kartograf.download.storage import bbox_cutout_path, prune_empty_dirs
     from kartograf.providers.cuzk.client import wkid
     from kartograf.providers.cuzk.dmr import CUZK_NODATA, bbox_to_crs
     from kartograf.sources.registry import get_source
@@ -1945,14 +1930,11 @@ def _cz_download_bbox(
         bbox = bbox_to_crs(bbox, image_sr)
 
     descriptor = get_source(provider.descriptor_key)
-    coords = "_".join(
-        format(v, ".10g") for v in (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
-    )
-    target = (
-        Path(args.output)
-        / descriptor.resolve_subdir(vertical_crs=provider.vertical_crs)
-        / "bbox"
-        / f"{coords}{descriptor.default_extension}"
+    target = bbox_cutout_path(
+        args.output,
+        descriptor.resolve_subdir(vertical_crs=provider.vertical_crs),
+        bbox,
+        descriptor.default_extension,
     )
 
     if skip_existing and target.exists():

@@ -20,7 +20,29 @@ __all__ = [
     "GugikOrtoProvider",
     "LazTile",
     "create_nmt_provider",
+    "nmt_vertical_crs",
 ]
+
+# NMT 5 m GUGiK istnieje wylacznie w EVRF2007 (skorowidz SheetsGrid5mEVRF2007).
+NMT_5M_VERTICAL_CRS = "EVRF2007"
+
+
+def nmt_vertical_crs(resolution: str, vertical_crs: str, *, log: bool = True) -> str:
+    """Pion FAKTYCZNY NMT PL — jedyne miejsce reguly "5m => EVRF2007" (D11).
+
+    Skutek reguly jest jeden: korekta do EVRF2007. Fabryka providera
+    i ``DownloadManager`` loguja ja ostrzezeniem (``log=True``), CLI drukuje
+    ``Info:`` na stderr (``log=False`` + wlasny komunikat), a kroki
+    przyjmujace pion juz FAKTYCZNY (``prepare_pl_cutout``) odrzucaja
+    niezgodny ``ValidationError`` (``log=False``).
+    """
+    actual = NMT_5M_VERTICAL_CRS if resolution == "5m" else vertical_crs
+    if log and actual != vertical_crs:
+        logger.warning(
+            f"Resolution 5m only supports EVRF2007, changing "
+            f"vertical_crs from '{vertical_crs}' to '{actual}'"
+        )
+    return actual
 
 
 def create_nmt_provider(
@@ -31,17 +53,11 @@ def create_nmt_provider(
 ) -> GugikProvider:
     """Fabryka domyslnego providera NMT — jedno miejsce polskich domyslow.
 
-    Egzekwuje regule "5m => EVRF2007" (identycznie jak DownloadManager).
+    Regula "5m => EVRF2007": ``nmt_vertical_crs`` (korekta z ostrzezeniem).
     """
-    if resolution == "5m" and vertical_crs != "EVRF2007":
-        logger.warning(
-            f"Resolution 5m only supports EVRF2007, changing "
-            f"vertical_crs from '{vertical_crs}' to 'EVRF2007'"
-        )
-        vertical_crs = "EVRF2007"
     return GugikProvider(
         session=session,
-        vertical_crs=vertical_crs,
+        vertical_crs=nmt_vertical_crs(resolution, vertical_crs),
         resolution=resolution,
         cache=cache,
     )

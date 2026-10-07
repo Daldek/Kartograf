@@ -27,7 +27,12 @@ from kartograf.exceptions import (
     ValidationError,
 )
 from kartograf.providers.base import BaseProvider
-from kartograf.providers.pl.skorowidz import SkorowidzLayersMixin, SkorowidzRecord
+from kartograf.providers.pl.skorowidz import (
+    SkorowidzLayersMixin,
+    SkorowidzRecord,
+    coverage_hints,
+    no_coverage_error,
+)
 from kartograf.providers.pl.wcs import GugikWcsMixin
 from kartograf.transport.http import (
     MAX_RETRIES,
@@ -302,6 +307,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     ) -> NoCoverageError:
         hints = set()
         wanted_resolution = float(self._resolution[:-1])
+        matching = []
         for record in records:
             if record.resolution_m != wanted_resolution:
                 if record.godlo == parser.godlo and record.resolution_m is not None:
@@ -310,23 +316,14 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
                         f"Kartograf pobiera dokladnie {wanted_resolution:g} m"
                     )
                 continue
-            if parser.uklad == "2000" and record.godlo.startswith(parser.godlo + "."):
-                scale = SheetParser(record.godlo).scale
-                hints.add(f"Dostepny potomek {record.godlo} — uzyj --scale {scale}")
-            elif record.uklad is not None and record.uklad != parser.uklad:
-                scale = SheetParser(record.godlo).scale
-                hints.add(
-                    f"Skorowidz ma ten obszar w PL-{record.uklad}: "
-                    f"{record.godlo} ({scale}) — uzyj tego godla lub "
-                    f"--system {record.uklad} --scale {scale}"
-                )
-        message = (
+            matching.append(record)
+        hints |= coverage_hints(parser, matching)
+        return no_coverage_error(
+            parser,
             f"Brak danych {self._CACHE_PRODUCT.upper()} {self._resolution} dla "
-            f"{parser.godlo} (uklad PL-{parser.uklad}, {self._vertical_crs})"
+            f"{parser.godlo} (uklad PL-{parser.uklad}, {self._vertical_crs})",
+            hints,
         )
-        if hints:
-            message += ". " + "; ".join(sorted(hints))
-        return NoCoverageError(message, godlo=parser.godlo)
 
     # =========================================================================
     # Download by bbox → WCS (GeoTIFF/PNG/JPEG)
