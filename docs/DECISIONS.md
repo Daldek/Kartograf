@@ -1669,6 +1669,25 @@ wydanie): mechanizm aktualizacji danych CZ jako flaga CLI — wymuszenie
 calkowicie nowego pobrania kompletu albo pobieranie czesciowe z
 porownaniem zmian w metadanych (np. `ROK` z Metadata/20, ATOM `<updated>`,
 `Last-Modified` plikow openzu).
+
+**Errata 4 2026-10-07 (decyzja uzytkownika po weryfikacji na zywo T12,
+`docs/research/2026-10-07-adr030-live/raport.md`):** sciezka standardowa
+jest dowiazaniem WYLACZNIE twardym: metody `hardlink` -> `copy` (+ `Warning:`);
+symlink USUNIETY (zastepuje kolejnosc symlink -> hardlink -> kopia z punktu (d)).
+Powody: (1) symlink utworzony z Linuksa na udziale SMB (`reparse=nfs` albo
+`mfsymlinks`) jest nieczytelny dla klientow Windows, ktorzy beda korzystac
+z danych; (2) udzial katalog danych przyjmuje cel symlinku najwyzej 77 znakow, wiec
+czesc arkuszy dostawala symlink (PL-2000, cel 65-72 znaki), a czesc hardlink
+(PL-1992, orto, 79-81) — zachowanie zalezne od dlugosci godla; (3) hardlink
+dziala bez uprawnien na ext4/btrfs/APFS/NTFS i przez SMB (serwer pokazuje
+zwykly plik); kampania lezy zawsze w tym samym segmencie co sciezka
+standardowa (ten sam system plikow). Kopia zostaje dla systemow bez
+hardlinkow (exFAT/FAT, sshfs/FUSE). `extra.link` = `hardlink|copy`,
+`extra.link_target` bez zmian (sciezka wzgledna do pliku kampanii — jedyne
+zrodlo celu, bo hardlink nie niesie wskazania). Istniejacy symlink (dane
+deweloperskie sprzed wydania) = sciezka nieznana: `newest` zastepuje go
+hardlinkiem, bez kodu zgodnosci. Kopiowanie `data/`: `rsync -aH` / `cp -a`
+(bez zachowania hardlinkow powstaje duplikat).
 ---
 
 <!-- Szablon nowej decyzji:
