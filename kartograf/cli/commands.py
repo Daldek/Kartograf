@@ -2,9 +2,10 @@
 CLI commands for Kartograf — fasada zgodnosci.
 
 Implementacje zyja w modulach _parser/parse_cmd/download_cmd/landcover_cmd/
-soilgrids_cmd/cache_cmd; ten modul re-eksportuje publiczne nazwy i helpery
-uzywane przez testy oraz utrzymuje entry point `main`
-(pyproject: kartograf = "kartograf.cli.commands:main").
+soilgrids_cmd/cache_cmd; ten modul re-eksportuje wylacznie publiczne nazwy
+(``create_parser``, ``cmd_*``, formatery) i utrzymuje entry point `main`
+(pyproject: kartograf = "kartograf.cli.commands:main"). Prywatne helpery
+importuje sie z modulu docelowego (np. ``kartograf.cli.download_cmd``).
 """
 
 import argparse
@@ -13,12 +14,7 @@ import sys
 
 from kartograf.cli._parser import create_parser
 from kartograf.cli.cache_cmd import cmd_cache
-from kartograf.cli.download_cmd import (
-    _create_provider_and_storage,
-    _resolve_laz_bbox,
-    cmd_download,
-    create_progress_callback,
-)
+from kartograf.cli.download_cmd import cmd_download, create_progress_callback
 from kartograf.cli.landcover_cmd import cmd_landcover
 from kartograf.cli.parse_cmd import (
     cmd_parse,
@@ -43,8 +39,6 @@ __all__ = [
     "format_hierarchy",
     "format_children",
     "format_descendants",
-    "_create_provider_and_storage",
-    "_resolve_laz_bbox",
 ]
 
 
