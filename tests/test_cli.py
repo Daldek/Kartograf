@@ -5392,6 +5392,36 @@ class TestAutoSplitBBox:
         assert "brak bezpiecznej operacji" in err
         assert "Remedium" in err
 
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd._country_bbox")
+    def test_country_bbox_transform_error_returns_1_before_download(
+        self, mock_country_bbox, mock_cz, tmp_path, capsys
+    ):
+        """TransformError przy podziale obszaru na kraje = kod 1, bez pobierania."""
+        from kartograf.transform.crs import TransformUnavailableError
+
+        mock_country_bbox.side_effect = TransformUnavailableError(
+            "brak operacji dla obwiedni kraju", remedy="podaj --bbox-crs EPSG:2180"
+        )
+        result = main(
+            [
+                "download",
+                "--bbox",
+                "18.60,49.752,18.65,49.768",
+                "--bbox-crs",
+                "EPSG:4326",
+                "-o",
+                str(tmp_path / "out"),
+                "-q",
+            ]
+        )
+        assert result == 1
+        err = capsys.readouterr().err
+        assert "Error: brak operacji dla obwiedni kraju" in err
+        assert "Remedium: podaj --bbox-crs EPSG:2180" in err
+        mock_cz.assert_not_called()
+        assert not (tmp_path / "out").exists()
+
 
 class TestAutoSplitGeometry:
     """--geometry w trybie auto: obwiednia decyduje o krajach."""
