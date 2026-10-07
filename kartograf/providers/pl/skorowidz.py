@@ -432,3 +432,36 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                     endpoint, timeout
                 )
             return self._validated_layers[endpoint]
+
+
+def coverage_hints(parser: SheetParser, records: Iterable[SkorowidzRecord]) -> set[str]:
+    """Podpowiedzi ``NoCoverageError`` wspolne dla NMT/NMPT i orto (D14).
+
+    Potomek PL-2000 zadanego godla -> ``--scale`` potomka; rekord w innym
+    ukladzie -> jego godlo albo ``--system``/``--scale``. ``records`` sa juz
+    przefiltrowane przez providera (rozdzielczosc NMT); podpowiedzi wlasne
+    providera (rozdzielczosc, warianty koloru orto) zostaja u niego.
+    """
+    hints = set()
+    for record in records:
+        if parser.uklad == "2000" and record.godlo.startswith(parser.godlo + "."):
+            scale = SheetParser(record.godlo).scale
+            hints.add(f"Dostepny potomek {record.godlo} — uzyj --scale {scale}")
+        elif record.uklad is not None and record.uklad != parser.uklad:
+            scale = SheetParser(record.godlo).scale
+            hints.add(
+                f"Skorowidz ma ten obszar w PL-{record.uklad}: "
+                f"{record.godlo} ({scale}) — uzyj tego godla lub "
+                f"--system {record.uklad} --scale {scale}"
+            )
+    return hints
+
+
+def no_coverage_error(
+    parser: SheetParser, message: str, hints: Iterable[str]
+) -> NoCoverageError:
+    """``NoCoverageError`` z podpowiedziami dopisanymi w stalej kolejnosci."""
+    ordered = sorted(hints)
+    if ordered:
+        message += ". " + "; ".join(ordered)
+    return NoCoverageError(message, godlo=parser.godlo)

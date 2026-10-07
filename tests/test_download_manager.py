@@ -908,6 +908,17 @@ class TestCreateNmtProviderFactory:
         assert provider.vertical_crs == "EVRF2007"
         assert "5m only supports EVRF2007" in caplog.text
 
+    def test_rule_without_log_is_silent(self, caplog):
+        """D11: ``log=False`` (CLI, ``prepare_pl_cutout``) — korekta bez logu."""
+        import logging
+
+        from kartograf.providers.pl import nmt_vertical_crs
+
+        with caplog.at_level(logging.WARNING):
+            assert nmt_vertical_crs("5m", "KRON86", log=False) == "EVRF2007"
+            assert nmt_vertical_crs("1m", "KRON86") == "KRON86"
+        assert caplog.text == ""
+
     def test_passes_session_and_cache(self):
         from unittest.mock import MagicMock
 
@@ -952,6 +963,28 @@ class TestSidecarWritten:
         assert payload["vertical_crs"] == "EPSG:9651"
         assert payload["nodata"] == -9999.0
         assert payload["request"] == {"godlo": "N-34-130-D-d-2-4"}
+
+    @pytest.mark.parametrize("mode", ["sheet", "list_seq", "list_parallel"])
+    def test_every_mode_returns_provider_path(self, tmp_path, mode):
+        """D10: jedna tresc "pobierz arkusz" — sciezka i sidecar to plik, ktory
+        provider ZWROCIL. Wczesniej ``download_sheet`` zwracal (i opisywal
+        sidecarem) sciezke docelowa managera, a tryb listy — wynik providera."""
+        provider = self._mock_provider()
+        written = self._mock_provider().download.side_effect
+
+        def download_elsewhere(godlo, target, timeout=30):
+            return written(godlo, target.with_name(f"{target.stem}_v2.asc"))
+
+        provider.download.side_effect = download_elsewhere
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+        godlo = "N-34-130-D-d-2-4"
+        if mode == "sheet":
+            path = manager.download_sheet(godlo)
+        else:
+            workers = 1 if mode == "list_seq" else 3
+            (path,) = manager.download_sheets([godlo], max_workers=workers)
+        assert path.name == f"{godlo}_v2.asc"
+        assert (path.parent / f"{path.name}.meta.json").exists()
 
     def test_skip_existing_writes_no_sidecar(self, tmp_path):
         provider = self._mock_provider()

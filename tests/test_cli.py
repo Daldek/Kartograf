@@ -1224,8 +1224,8 @@ class TestCreateProviderAndStorage:
             "nmt", tmp_path, "EVRF2007", "1m"
         )
         assert isinstance(provider, GugikProvider)
-        assert storage._product is None
         assert storage._resolution == "1m"
+        assert storage._subdir == "nmt/pl_{uklad}_1m_evrf2007"
 
     def test_nmpt_creates_nmpt_provider(self, tmp_path):
         """Test that nmpt creates GugikNmptProvider."""
@@ -1236,7 +1236,7 @@ class TestCreateProviderAndStorage:
             "nmpt", tmp_path, "EVRF2007", "1m"
         )
         assert isinstance(provider, GugikNmptProvider)
-        assert storage._product == "nmpt"
+        assert storage._subdir == "nmpt/pl_{uklad}_1m_evrf2007"
 
     def test_orto_creates_orto_provider(self, tmp_path):
         """Test that orto creates GugikOrtoProvider."""
@@ -1247,7 +1247,7 @@ class TestCreateProviderAndStorage:
             "orto", tmp_path, "EVRF2007", "1m"
         )
         assert isinstance(provider, GugikOrtoProvider)
-        assert storage._product == "orto"
+        assert storage._subdir == "orto/pl_{uklad}"
 
     def test_laz_product_raises_validation_error(self, tmp_path):
         """LAZ ma osobny przeplyw (_cmd_download_laz) — tu nie ma prawa dotrzec."""
@@ -1311,6 +1311,22 @@ class TestCmdDownloadBBox:
 
         assert result == 0
         mock_manager.download_sheets.assert_called_once()
+
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_download_bbox_sheet_list_header(
+        self, mock_manager_class, mock_find, capsys, tmp_path
+    ):
+        """D15: naglowek listy arkuszy = ten sam co wycinek (skrot >10)."""
+        mock_manager_class.return_value = _sheet_list_manager(tmp_path / "t.asc")
+        mock_find.return_value = [f"N-{i}" for i in range(1, 13)]
+        result = main(
+            ["download", "--bbox", "630000,480000,637000,487000", "-o", str(tmp_path)]
+        )
+        assert result == 0
+        out = capsys.readouterr().out
+        assert "Found 12 sheets at 1:10000 for bbox (resolution: 1m)\n" in out
+        assert "  Sheets: N-1, N-2, N-3, ..., N-11, N-12\n" in out
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_bbox_epsg4326(self, mock_manager_class, capsys, tmp_path):
@@ -3989,6 +4005,77 @@ class TestCountryDispatch:
         kwargs = mock_manager_class.call_args.kwargs
         assert kwargs["resolution"] == "1m"
         assert kwargs["vertical_crs"] == "EVRF2007"
+
+    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_pl_5m_kron86_corrected_with_info(
+        self, mock_manager_class, mock_create, tmp_path, capsys
+    ):
+        """D11: jedna regula "5m => EVRF2007", jeden skutek — jawna korekta.
+
+        Wczesniej korekta szla tylko do logu (niewidoczna w CLI); teraz
+        ``Info:`` na stderr (takze z ``-q``), a fabryka i manager dostaja
+        juz pion FAKTYCZNY.
+        """
+        mock_create.return_value = (Mock(), Mock())
+        mock_manager = Mock()
+        mock_manager.last_result = None
+        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = mock_manager
+        result = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--resolution",
+                "5m",
+                "--vertical-crs",
+                "KRON86",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+        assert result == 0
+        err = capsys.readouterr().err
+        assert "Info:" in err and "KRON86" in err and "EVRF2007" in err
+        assert mock_create.call_args.args[2] == "EVRF2007"
+        assert mock_manager_class.call_args.kwargs["vertical_crs"] == "EVRF2007"
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_pl_1m_kron86_no_correction(self, mock_manager_class, tmp_path, capsys):
+        mock_manager = Mock()
+        mock_manager.last_result = None
+        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager_class.return_value = mock_manager
+        result = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--vertical-crs",
+                "KRON86",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+        assert result == 0
+        assert "Info:" not in capsys.readouterr().err
+        assert mock_manager_class.call_args.kwargs["vertical_crs"] == "KRON86"
+
+    def test_5m_rule_only_for_nmt(self, capsys):
+        """LAZ tez przechodzi przez sentinele PL — regula NMT go nie dotyczy."""
+        from kartograf.cli.download_cmd import _resolve_pl_sentinels
+
+        args = argparse.Namespace(
+            product="laz",
+            resolution="5m",
+            vertical_crs="KRON86",
+            target_crs=None,
+            system=None,
+        )
+        assert _resolve_pl_sentinels(args) == 0
+        assert args.vertical_crs == "KRON86"
+        assert "Info:" not in capsys.readouterr().err
 
     def test_pl_godlo_with_2m_rejected(self, tmp_path, capsys):
         result = main(

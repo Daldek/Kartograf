@@ -346,6 +346,19 @@ class TestPreparePlCutout:
         assert cut.bbox_2180 == BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         assert cut.target_path.name == "530010_382010_530190_382090.tif"
 
+    def test_utm_cutout_name_keeps_full_coordinates(self, tmp_path):
+        """D7: nazwa wycinka to ``format(v, ".10g")`` siatki wyniku — northing
+        UTM (7 cyfr) bez notacji wykladniczej; ta sama funkcja co tor CZ."""
+        cut = prepare_pl_cutout(
+            BBox(530010, 382010, 530190, 382090, "EPSG:2180"),
+            "EPSG:3045",
+            output_dir=str(tmp_path),
+        )
+        b = cut.bbox_target
+        coords = [format(v, ".10g") for v in (b.min_x, b.min_y, b.max_x, b.max_y)]
+        assert cut.target_path.name == "_".join(coords) + ".tif"
+        assert "e+" not in cut.target_path.name
+
     def test_wgs84_bbox_normalized_to_2180(self, tmp_path):
         bbox = BBox(18.60, 49.75, 18.65, 49.77, "EPSG:4326")
         cut = prepare_pl_cutout(
@@ -670,6 +683,7 @@ class TestDownloadPlBboxCutout:
         no_coverage=(),
         provider=None,
         bbox=_BBOX_2180,
+        godla=("N-1", "N-2"),
     ):
         """Worker PL z mockowanym pobraniem; zwraca ``(rc, manager, find)``.
 
@@ -687,7 +701,7 @@ class TestDownloadPlBboxCutout:
             failed=list(failed), no_coverage=list(no_coverage)
         )
         with (
-            patch(f"{_CUT}.find_sheets_for_bbox", return_value=["N-1", "N-2"]) as find,
+            patch(f"{_CUT}.find_sheets_for_bbox", return_value=list(godla)) as find,
             patch(
                 f"{_DL}._create_provider_and_storage",
                 return_value=(provider, Mock()),
@@ -697,6 +711,18 @@ class TestDownloadPlBboxCutout:
             rc = _download_pl_bbox(args, bbox, _PARENT)
         self.dm = dm
         return rc, manager, find
+
+    def test_sheet_list_header(self, tmp_path, capsys):
+        """D15: naglowek listy arkuszy wycinka = ten sam co tryb listy."""
+        sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
+        godla = tuple(f"N-{i}" for i in range(1, 13))
+        rc, *_ = self._run(
+            tmp_path, _pl_args(tmp_path, quiet=False), sheets, godla=godla
+        )
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert "Found 12 sheets at 1:10000 for bbox (resolution: 1m)\n" in out
+        assert "  Sheets: N-1, N-2, N-3, ..., N-11, N-12\n" in out
 
     def test_creates_cutout_and_sidecar(self, tmp_path):
         sheets = [
@@ -743,6 +769,8 @@ class TestDownloadPlBboxCutout:
         payload = json.loads((cut_dir / f"{tifs[0].name}.meta.json").read_text("utf-8"))
         assert payload["horizontal_crs"] == "EPSG:5514"
         assert payload["transform"]["horizontal"].startswith("pinned: ")
+        # D7: ten sam format co tor CZ (`pinned_label`) — z dokladnoscia
+        assert payload["transform"]["horizontal"].endswith(" m)")
         assert payload["request"]["bbox_crs"] == "EPSG:5514"
         # R-01: do SELEKCJI arkuszy idzie bbox Z ZAPASEM, nie samo zadanie —
         # inaczej rogi obroconej siatki wyniku wypadaja poza pobrane arkusze
@@ -1051,6 +1079,27 @@ class TestCutoutSize:
         one, pending_one = estimate_pl_cutout_bytes(cut, sheets, storage=storage)
         assert (pending_both, pending_one) == (2, 1)
         assert cut.estimated_bytes < one < both
+
+    def test_estimate_default_storage_is_sheet_segment_of_vertical(self, tmp_path):
+        """D18: bez ``storage=`` arkusze w cache sa szukane w segmencie
+        FAKTYCZNEGO pionu wycinka (KRON86), nie w domyslnym EVRF2007."""
+        from kartograf.download.cutout import (
+            PlCutoutSheets,
+            estimate_pl_cutout_bytes,
+            prepare_pl_cutout,
+        )
+
+        cut = prepare_pl_cutout(
+            _BBOX_2180, "EPSG:2180", output_dir=tmp_path, vertical_crs="KRON86"
+        )
+        sheets = PlCutoutSheets(godla=("N-34-130-D-d-2-3", "N-34-130-D-d-2-4"))
+        cached = (
+            tmp_path / "nmt/pl_1992_1m_kron86/N-34/130/D/d/2/3/N-34-130-D-d-2-3.asc"
+        )
+        cached.parent.mkdir(parents=True)
+        cached.write_bytes(b"x")
+        _, pending = estimate_pl_cutout_bytes(cut, sheets)
+        assert pending == 1
 
     def test_estimate_builds_one_transformer_for_all_sheets(self, tmp_path):
         """N9: ``Transformer.from_crs`` (~7 ms, pyproj go nie cache'uje) raz na
@@ -1597,6 +1646,28 @@ class TestLibraryApi:
         assert rebuilt.path.exists()
         assert len(rebuilt.sheet_paths) == len(self._SHEETS)
 
+    def test_default_sheet_storage_follows_provider_vertical(self, tmp_path):
+        """D18: ``run_pl_cutout`` bez ``storage=`` kladzie arkusze w segmencie
+        pionu providera (KRON86) — ten sam segment co lista arkuszy CLI."""
+        from kartograf import download_pl_cutout
+
+        provider = self._provider()
+        provider.vertical_crs = "KRON86"
+        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+        with (
+            patch("kartograf.providers.pl.create_nmt_provider", return_value=provider),
+            patch(
+                "kartograf.download.cutout.find_sheets_for_bbox",
+                return_value=list(self._SHEETS),
+            ),
+        ):
+            result = download_pl_cutout(
+                bbox, "EPSG:2180", output_dir=tmp_path, vertical_crs="KRON86"
+            )
+
+        segments = {p.relative_to(tmp_path).parts[:2] for p in result.sheet_paths}
+        assert segments == {("nmt", "pl_1992_1m_kron86")}
+
     def test_5m_request_follows_factory_vertical_rule(self, tmp_path):
         """Regula fabryki NMT (5m => EVRF2007): wycinek idzie za PROVIDEREM.
 
@@ -1734,6 +1805,32 @@ class TestLibraryApi:
             "select_pl_cutout_sheets",
         ):
             assert name in kartograf.__all__ and hasattr(kartograf, name)
+
+    def test_sidecar_failure_does_not_break_cutout(self, tmp_path, caplog):
+        """D7: blad budowy sidecara wycinka = ostrzezenie, wycinek zostaje."""
+        import logging
+
+        from kartograf import download_pl_cutout
+
+        provider = self._provider()
+        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+        with (
+            patch("kartograf.providers.pl.create_nmt_provider", return_value=provider),
+            patch(
+                "kartograf.download.cutout.find_sheets_for_bbox",
+                return_value=list(self._SHEETS),
+            ),
+            patch(
+                "kartograf.sources.sidecar.build_metadata",
+                side_effect=RuntimeError("zepsuty deskryptor"),
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
+            result = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
+
+        assert result.path.exists()
+        assert not result.path.with_name(result.path.name + ".meta.json").exists()
+        assert "zepsuty deskryptor" in caplog.text
 
     @pytest.mark.parametrize(
         "kwargs",

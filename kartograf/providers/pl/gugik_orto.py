@@ -24,7 +24,12 @@ import requests
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.exceptions import NoCoverageError
 from kartograf.providers.base import BaseProvider
-from kartograf.providers.pl.skorowidz import SkorowidzLayersMixin, SkorowidzRecord
+from kartograf.providers.pl.skorowidz import (
+    SkorowidzLayersMixin,
+    SkorowidzRecord,
+    coverage_hints,
+    no_coverage_error,
+)
 from kartograf.providers.pl.wcs import GugikWcsMixin
 from kartograf.transport.http import (
     MAX_RETRIES,
@@ -221,16 +226,6 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
             and record.uklad == parser.uklad
             and record.zone == zone
         )
-        hints = set()
-        for record in records:
-            if parser.uklad == "2000" and record.godlo.startswith(parser.godlo + "."):
-                scale = SheetParser(record.godlo).scale
-                hints.add(f"Dostepny potomek {record.godlo} — uzyj --scale {scale}")
-            elif record.uklad is not None and record.uklad != parser.uklad:
-                hints.add(
-                    f"Skorowidz ma ten obszar w PL-{record.uklad}: "
-                    f"{record.godlo} — uzyj tego godla"
-                )
         message = (
             f"Brak ortofotomapy {self._color} dla {parser.godlo} "
             f"(uklad PL-{parser.uklad})"
@@ -239,9 +234,7 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
             message += ". Dostepne warianty tego arkusza: " + ", ".join(
                 f"{kolor} {aktualnosc}" for aktualnosc, kolor in variants
             )
-        if hints:
-            message += ". " + "; ".join(sorted(hints))
-        return NoCoverageError(message, godlo=parser.godlo)
+        return no_coverage_error(parser, message, coverage_hints(parser, records))
 
     # =========================================================================
     # Download by bbox → WCS (GeoTIFF)
