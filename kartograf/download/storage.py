@@ -13,6 +13,7 @@ from typing import BinaryIO
 
 from kartograf.core import parser_registry
 from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.download.campaigns import CAMPAIGNS_DIR, CampaignRef
 from kartograf.exceptions import ValidationError
 from kartograf.sources.registry import get_source
 
@@ -253,6 +254,24 @@ class FileStorage:
         filename = f"{normalized_godlo}{ext}"
         return dir_path / filename
 
+    def get_campaign_path(
+        self, godlo: str, campaign: CampaignRef, ext: str = ".asc"
+    ) -> Path:
+        """
+        Sciezka pliku kampanii (ADR-030):
+        ``<output>/<segment>/kampanie/<data>_<id>/<hierarchia>/<godlo><ext>``.
+        """
+        normalized = SheetParser(godlo).godlo
+        dir_path = (
+            self._output_dir
+            / self._resolved_subdir(normalized)
+            / CAMPAIGNS_DIR
+            / campaign.dirname
+        )
+        for part in self._get_directory_parts(normalized):
+            dir_path = dir_path / part
+        return dir_path / f"{normalized}{ext}"
+
     def get_raw_path(
         self, identifier: str, filename: str, *, uklad: str | None = None
     ) -> Path:
@@ -444,14 +463,18 @@ class FileStorage:
             True if file was deleted, False if it didn't exist
         """
         path = self.get_path(godlo, ext)
-        if path.exists():
+        # is_symlink: wiszace dowiazanie (cel kampanii usuniety) tez jest do usuniecia;
+        # unlink() kasuje samo dowiazanie, plik w kampanie/ zostaje.
+        if path.exists() or path.is_symlink():
             path.unlink()
             # Sidecar metadanych nie moze przezyc pliku danych.
             path.with_name(path.name + ".meta.json").unlink(missing_ok=True)
             return True
         return False
 
-    def list_files(self, pattern: str = "**/*.asc") -> list[Path]:
+    def list_files(
+        self, pattern: str = "**/*.asc", *, campaigns: bool = False
+    ) -> list[Path]:
         """
         List all files matching pattern in storage directory.
 
@@ -463,6 +486,9 @@ class FileStorage:
         ----------
         pattern : str, optional
             Glob pattern for matching files (default: "**/*.asc")
+        campaigns : bool, optional
+            False (default): sciezki standardowe — bez ``kampanie/`` i bez
+            wiszacych dowiazan. True: tylko pliki w ``kampanie/`` (ADR-030).
 
         Returns
         -------
@@ -478,7 +504,13 @@ class FileStorage:
         for name in subdirs:
             root = self._output_dir / self._ensure_resolved(name)
             if root.exists():
-                files.extend(root.glob(pattern))
+                for p in root.glob(pattern):
+                    in_campaigns = p.relative_to(root).parts[:1] == (CAMPAIGNS_DIR,)
+                    if in_campaigns != campaigns:
+                        continue
+                    if not campaigns and p.is_symlink() and not p.exists():
+                        continue  # wiszace dowiazanie = brak pliku
+                    files.append(p)
         return files
 
     def get_size(self, godlo: str, ext: str = ".asc") -> int | None:
