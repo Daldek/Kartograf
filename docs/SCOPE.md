@@ -455,7 +455,8 @@ kartograf/
 ├── __init__.py           # Public API exports
 ├── exceptions.py         # KartografError, ParseError, ValidationError, DownloadError, NoCoverageError
 ├── core/                 # Logika bazowa
-│   ├── sheet_parser.py      # SheetParser — parser godeł map topograficznych, BBox
+│   ├── bbox.py              # BBox, validate_bbox, transform_bbox, is_czech_crs
+│   ├── sheet_parser.py      # SheetParser — parser godeł map topograficznych
 │   ├── parser_2000.py       # Parser2000 — parser godeł PL-2000
 │   ├── parser_tm33.py       # ParserTM33 — obliczalna siatka kafli CZ 2x2 km (EPSG:3045)
 │   ├── parser_registry.py   # Rejestr systemów godeł (pl1992, pl2000, cz_tm33, cz_sm5)
