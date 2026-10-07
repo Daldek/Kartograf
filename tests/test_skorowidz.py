@@ -567,3 +567,58 @@ class TestSourceInfoMixin:
         for t in threads:
             t.join()
         assert [holder.source_info(g)["godlo"] for g in godla] == godla
+
+
+def _hint_record(godlo, uklad, zone=None, resolution_m=1.0):
+    return SkorowidzRecord(
+        url=f"https://example.invalid/{godlo}.asc",
+        godlo=godlo,
+        aktualnosc="2024-01-01",
+        dt_pzgik=None,
+        layer="L",
+        uklad=uklad,
+        zone=zone,
+        resolution_m=resolution_m,
+        full_sheet=True,
+        raw={"kolor": "RGB"},
+    )
+
+
+class TestCoverageHints:
+    """D14: podpowiedzi ``NoCoverageError`` wspolne dla NMT i orto."""
+
+    _PL2000 = "6.129.30"
+    _RECORDS = (
+        _hint_record("6.129.30.13.4", "2000", zone=6),
+        _hint_record("M-34-63-A-c-2-1", "1992"),
+    )
+    _EXPECTED = {
+        "Dostepny potomek 6.129.30.13.4 — uzyj --scale 1:1000",
+        "Skorowidz ma ten obszar w PL-1992: M-34-63-A-c-2-1 (1:10000) — uzyj "
+        "tego godla lub --system 1992 --scale 1:10000",
+    }
+
+    def test_helper(self):
+        from kartograf.core.sheet_parser import SheetParser
+        from kartograf.providers.pl.skorowidz import coverage_hints
+
+        hints = coverage_hints(SheetParser(self._PL2000), self._RECORDS)
+        assert hints == self._EXPECTED
+
+    @pytest.mark.parametrize("product", ["nmt", "orto"])
+    def test_providers_share_hints(self, product):
+        """Orto mial krotsza podpowiedz innego ukladu (bez ``--system``/
+        ``--scale``) — po ujednoliceniu oba providery mowia to samo."""
+        from kartograf.core.sheet_parser import SheetParser
+        from kartograf.providers.pl.gugik import GugikProvider
+        from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
+
+        cls = GugikProvider if product == "nmt" else GugikOrtoProvider
+        provider = cls(session=Mock())
+        error = provider._no_coverage(SheetParser(self._PL2000), list(self._RECORDS))
+        message = str(error)
+        for hint in self._EXPECTED:
+            assert hint in message
+        assert error.godlo == self._PL2000
+        # kolejnosc podpowiedzi stala (posortowane), oddzielone "; "
+        assert message.endswith("; ".join(sorted(self._EXPECTED)))
