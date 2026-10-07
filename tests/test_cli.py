@@ -6918,10 +6918,10 @@ class TestListMessagesUx:
     )
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_all_no_coverage_list_prints_real_hint_once(
+    def test_all_no_coverage_list_prints_real_hints(
         self, mock_manager_class, capsys, tmp_path
     ):
-        """O-6/O-7: prawdziwe `hints` -> jedna linia `Info:`; brak 'Downloaded 0'."""
+        """O-6/O-7: prawdziwe `hints` -> `Info:` per godlo; brak 'Downloaded 0'."""
         errors = {g: self._real_error(g) for g in ("7.173.21", "7.173.22")}
         result = DownloadResult(
             failed=list(errors),
@@ -6936,8 +6936,54 @@ class TestListMessagesUx:
         captured = capsys.readouterr()
         assert "nie ma danych dla zadnego z 2 arkuszy" in captured.err
         info = [x for x in captured.err.splitlines() if x.startswith("Info:")]
-        assert info == ["Info: Dostepny potomek 7.173.21.01 — uzyj --scale 1:2000"]
+        assert info == [
+            "Info: Dostepny potomek 7.173.21.01 — uzyj --scale 1:2000",
+            "Info: Dostepny potomek 7.173.22.01 — uzyj --scale 1:2000",
+        ]
         assert "Downloaded 0" not in captured.out
+
+    @staticmethod
+    def _info_lines(hints_by_godlo, capsys, tmp_path):
+        result = DownloadResult(
+            failed=list(hints_by_godlo),
+            no_coverage=list(hints_by_godlo),
+            no_coverage_hints=hints_by_godlo,
+        )
+        with patch("kartograf.cli.download_cmd.DownloadManager") as cls:
+            cls.return_value = TestListMessagesUx._list_manager(result)
+            main([*TestListMessagesUx._BBOX_ARGS, "-o", str(tmp_path)])
+        err = capsys.readouterr().err
+        return [x for x in err.splitlines() if x.startswith("Info:")]
+
+    def test_pl1992_hints_with_different_godlo_are_all_kept(self, capsys, tmp_path):
+        """Rozne godla w podpowiedziach (PL-1992) nie sa zlewane w jedna."""
+        h = "Skorowidz ma ten obszar w PL-1992: {g} (1:10000) — uzyj tego godla"
+        lines = self._info_lines(
+            {
+                "S1": (h.format(g="M-34-63-A-c-2-1"),),
+                "S2": (h.format(g="M-34-63-A-c-2-2"),),
+            },
+            capsys,
+            tmp_path,
+        )
+        assert lines == [
+            "Info: " + h.format(g="M-34-63-A-c-2-1"),
+            "Info: " + h.format(g="M-34-63-A-c-2-2"),
+        ]
+
+    def test_literal_duplicate_hint_printed_once(self, capsys, tmp_path):
+        lines = self._info_lines(
+            {"S1": ("rada A",), "S2": ("rada A",)}, capsys, tmp_path
+        )
+        assert lines == ["Info: rada A"]
+
+    def test_seven_hints_capped_at_five_plus_summary(self, capsys, tmp_path):
+        hints = {f"S{i}": (f"rada {i}",) for i in range(7)}
+        lines = self._info_lines(hints, capsys, tmp_path)
+        assert lines[:5] == [f"Info: rada {i}" for i in range(5)]
+        assert len(lines) == 6
+        assert "i 2 innych podpowiedzi" in lines[5]
+        assert "no_coverage_hints" in lines[5]
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_message_with_dot_but_no_hints_prints_no_info(
