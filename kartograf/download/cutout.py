@@ -25,7 +25,6 @@ Przyklad::
     print(result.path)
 """
 
-import functools
 import json
 import logging
 import os
@@ -33,7 +32,8 @@ import threading
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from kartograf.core.sheet_parser import BBox, find_sheets_for_bbox
+from kartograf.core.bbox import BBox, is_czech_crs, transform_bbox
+from kartograf.core.sheet_parser import SheetParser, find_sheets_for_bbox
 from kartograf.download.manager import DownloadManager, ProgressCallback
 from kartograf.download.storage import (
     FileStorage,
@@ -59,8 +59,6 @@ WARP_MARGIN_PX = 4
 # Polityka operacji reprojektujacej TRESC wycinka — lustro _HORIZONTAL_POLICY
 # toru CZ; probe_point dokladany per zadanie (srodek bboxa).
 _HORIZONTAL_POLICY = TransformPolicy(min_accuracy_m=1.0, allow_network_grids=False)
-# uklady czeskie opuszczamy wylacznie przypieta operacja (ADR-024)
-_CZ_CRS = frozenset({"EPSG:5514", "EPSG:3045"})
 _VERTICAL_CRS = ("EVRF2007", "KRON86")
 # Dolne oszacowanie rozmiaru arkusza ASC na dysku: 5,74-7,95 B na wartosc
 # w realnych plikach GUGiK 5 m (fakt 9 planu 2026-09-28) — bierzemy mniej,
@@ -138,33 +136,20 @@ class PlCutoutResult:
 def _bbox_to_2180(bbox: BBox) -> BBox:
     """Zadanie w EPSG:2180: uklady czeskie przypieta operacja, reszta jak dotad.
 
-    Uklady PL/WGS84 — swiadomie domyslny transformer, jak w calym przeplywie PL.
+    Uklady PL/WGS84 — swiadomie domyslny transformer, jak w calym przeplywie PL,
+    obwiednia z zageszczonych krawedzi (``core.bbox.transform_bbox``; cztery
+    narozniki gubily pas przy 19E — do ~480 m na S dla bboxa 2 x 0,2 st.).
     CLI podaje tu bbox juz po ``_country_bbox``, ktory opuszcza uklady czeskie
     przypieta operacja; galaz czeska dotyczy wiec wywolan bibliotecznych.
-    Etykieta ukladu jest porownywana bez wielkosci liter i spacji: doslowne
-    porownanie puszczalo ``"epsg:5514"`` domyslnym transformerem (obok
-    ADR-024, finalny review fali, m-2).
+    Etykieta ukladu jest porownywana bez wielkosci liter i spacji
+    (``is_czech_crs``): doslowne porownanie puszczalo ``"epsg:5514"``
+    domyslnym transformerem (obok ADR-024, finalny review fali, m-2).
     """
-    crs = bbox.crs.strip().upper()
-    if crs == "EPSG:2180":
-        # etykieta kanoniczna, jak dotad z transformacji tozsamosciowej
-        return bbox._replace(crs=crs)
-    if crs in _CZ_CRS:
+    if is_czech_crs(bbox.crs):
         from kartograf.providers.cuzk.dmr import bbox_to_crs
 
         return bbox_to_crs(bbox, "EPSG:2180")
-    from pyproj import CRS
-
-    from kartograf.core.geometry import _transform_bbox
-
-    return _transform_bbox(
-        bbox.min_x,
-        bbox.min_y,
-        bbox.max_x,
-        bbox.max_y,
-        CRS.from_user_input(bbox.crs),
-        "EPSG:2180",
-    )
+    return transform_bbox(bbox, "EPSG:2180")
 
 
 def prepare_pl_cutout(
@@ -586,44 +571,6 @@ def _require_matching_provider(cutout: PlCutout, provider) -> None:
             )
 
 
-@functools.cache
-def _sheet_frame_transformer():
-    """Jeden transformer WGS84 -> EPSG:2180 na proces (N9).
-
-    ``SheetParser.get_bbox("EPSG:2180")`` buduje ``Transformer.from_crs`` przy
-    KAZDYM wywolaniu (~7 ms; pyproj nie cache'uje ``from_crs``), a estymacja
-    liczy obwiednie kazdego arkusza spoza cache — 1221 arkuszy to ~9 s, i tyle
-    samo drugi raz, gdy wolajacy sam sprawdza miejsce przed ``run_pl_cutout``.
-    Z jednym transformerem (bezpieczny miedzy watkami od pyproj 3.1) ta sama
-    petla schodzi ponizej 0,2 s.
-    """
-    from pyproj import Transformer
-
-    return Transformer.from_crs("EPSG:4326", "EPSG:2180", always_xy=True)
-
-
-def _sheet_frame_2180(godlo: str) -> BBox:
-    """Obwiednia arkusza w EPSG:2180 — jak ``SheetParser.get_bbox("EPSG:2180")``
-    (obwiednia 4 przetransformowanych naroznikow), ze wspolnym transformerem."""
-    from kartograf.core.sheet_parser import SheetParser
-
-    wgs = SheetParser(godlo).get_bbox("EPSG:4326")
-    transformer = _sheet_frame_transformer()
-    xs, ys = zip(
-        *(
-            transformer.transform(lon, lat)
-            for lon, lat in (
-                (wgs.min_x, wgs.min_y),
-                (wgs.min_x, wgs.max_y),
-                (wgs.max_x, wgs.min_y),
-                (wgs.max_x, wgs.max_y),
-            )
-        ),
-        strict=True,
-    )
-    return BBox(min(xs), min(ys), max(xs), max(ys), "EPSG:2180")
-
-
 def estimate_pl_cutout_bytes(
     cutout: PlCutout, sheets: PlCutoutSheets, *, storage: FileStorage | None = None
 ) -> tuple[int, int]:
@@ -632,7 +579,7 @@ def estimate_pl_cutout_bytes(
     Wynik float32 bez kompresji + arkusze jeszcze nie pobrane po 5,5 B na
     wartosc. Plik posredni mozaiki (skompresowany) i narzut systemu plikow NIE
     sa liczone: to kontrola "na pewno nie wystarczy", nie gwarancja. Tania
-    (jeden transformer na proces, ``_sheet_frame_transformer``), wiec
+    (``get_bbox`` uzywa transformera z cache ``core.bbox``, N9), wiec
     wolajacy, ktory liczy ja sam przed ``run_pl_cutout``, nie placi podwojnie.
     """
     storage = storage or storage_for_provider(
@@ -647,7 +594,7 @@ def estimate_pl_cutout_bytes(
         if storage.get_path(leaf, ".asc").exists():
             continue
         pending += 1
-        frame = _sheet_frame_2180(leaf)
+        frame = SheetParser(leaf).get_bbox("EPSG:2180")
         need += int(
             (frame.max_x - frame.min_x)
             * (frame.max_y - frame.min_y)

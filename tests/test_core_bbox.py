@@ -88,7 +88,8 @@ class TestTransformBBoxDuck:
         assert out == BBox(10.0, -5.0, 12.0, -1.0, "B")
 
     def test_pinned_transform_passes(self):
-        from kartograf.providers.cuzk.dmr import bbox_to_crs
+        """PinnedTransform (ADR-024) przechodzi przez duck typing; obwiednia
+        obejmuje obrazy wszystkich naroznikow (Krovak jest obrocony)."""
         from kartograf.transform.crs import TransformPolicy, build_pinned_transform
 
         src = BBox(-447000, -1114000, -440000, -1110000, "EPSG:5514")
@@ -98,10 +99,13 @@ class TestTransformBBoxDuck:
             TransformPolicy(probe_point=(-443500, -1112000), allow_network_grids=False),
         )
         out = transform_bbox(src, "EPSG:2180", transformer=pinned)
-        ref = bbox_to_crs(src, "EPSG:2180", pinned)
+        xs, ys = pinned.transform(
+            np.array([src.min_x, src.min_x, src.max_x, src.max_x]),
+            np.array([src.min_y, src.max_y, src.min_y, src.max_y]),
+        )
         assert out.crs == "EPSG:2180"
-        for a, b in zip(out[:4], ref[:4], strict=True):
-            assert a == pytest.approx(b, abs=0.05)
+        assert out.min_x <= xs.min() and out.max_x >= xs.max()
+        assert out.min_y <= ys.min() and out.max_y >= ys.max()
 
 
 class TestValidateBBox:

@@ -14,7 +14,6 @@ import pytest
 
 from kartograf.core.geometry import (
     _parse_gpkg_envelope,
-    _transform_bbox,
     find_sheets_for_geometry,
     get_overall_bbox,
     read_feature_bboxes,
@@ -893,48 +892,6 @@ class TestReadSourceCrs:
         path.write_text("{}", encoding="utf-8")
         with pytest.raises(ValidationError, match="Unsupported geometry format"):
             read_source_crs(path)
-
-
-# =========================================================================
-# Tests — _transform_bbox
-# =========================================================================
-
-
-class TestTransformBbox:
-    """Tests for CRS transformation of bboxes."""
-
-    def test_same_crs_no_transform(self):
-        """Same CRS returns original coordinates."""
-        from pyproj import CRS
-
-        source = CRS.from_epsg(2180)
-        result = _transform_bbox(420000, 230000, 421000, 231000, source, "EPSG:2180")
-
-        assert result.min_x == pytest.approx(420000)
-        assert result.min_y == pytest.approx(230000)
-        assert result.crs == "EPSG:2180"
-
-    def test_4326_to_2180(self):
-        """Transform from WGS84 to PL-1992."""
-        from pyproj import CRS
-
-        source = CRS.from_epsg(4326)
-        result = _transform_bbox(19.93, 50.05, 19.95, 50.07, source, "EPSG:2180")
-
-        assert 100_000 < result.min_x < 900_000
-        assert 100_000 < result.min_y < 900_000
-        assert result.crs == "EPSG:2180"
-
-    def test_2180_to_4326(self):
-        """Transform from PL-1992 to WGS84."""
-        from pyproj import CRS
-
-        source = CRS.from_epsg(2180)
-        result = _transform_bbox(420000, 230000, 421000, 231000, source, "EPSG:4326")
-
-        assert 14 < result.min_x < 25  # longitude range for Poland
-        assert 49 < result.min_y < 55  # latitude range for Poland
-        assert result.crs == "EPSG:4326"
 
 
 # =========================================================================
