@@ -466,8 +466,8 @@ class TestBdot10kProviderDownload:
         provider = Bdot10kProvider()
         output = tmp_path / "out.gpkg"
 
-        with patch.object(
-            provider, "_download_with_retry", return_value=output
+        with patch(
+            "kartograf.providers.pl.bdot10k.download_to", return_value=output
         ) as mock_dl:
             result = provider.download_by_teryt("1465", output)
 
@@ -602,52 +602,47 @@ class TestBdot10kProviderDownload:
 class TestBdot10kRetryAndIO:
     """Test retry, save, extract, merge."""
 
-    def test_download_with_retry_success(self, tmp_path):
-        """Successful download on first attempt."""
-        provider = Bdot10kProvider()
-        output = tmp_path / "out.shp"
+    def test_download_shp_success(self, tmp_path):
+        """Paczka SHP pobrana za pierwszym razem: strumien zapisany w .zip."""
         mock_session = Mock()
         mock_resp = Mock()
         mock_resp.iter_content.return_value = [b"shp_data"]
         mock_resp.raise_for_status = Mock()
         mock_session.get.return_value = mock_resp
-        provider._sessions.injected = mock_session
+        provider = Bdot10kProvider(session=mock_session)
 
-        result = provider._download_with_retry(
-            url="https://example.com/file.shp",
-            output_path=output,
-            timeout=30,
-            description="test",
+        result = provider.download_by_admin_unit(
+            "1465", tmp_path / "out.shp", format="SHP"
         )
-        assert result == output
-        assert output.read_bytes() == b"shp_data"
+        assert result == tmp_path / "out.zip"
+        assert result.read_bytes() == b"shp_data"
 
-    @patch("kartograf.providers.pl.bdot10k.time.sleep")
-    def test_download_with_retry_all_fail(self, _sleep, tmp_path):
+    @patch("kartograf.transport.http.time.sleep")
+    def test_download_all_fail(self, _sleep, tmp_path):
         """All retries fail -> DownloadError."""
-        provider = Bdot10kProvider()
-        output = tmp_path / "out.shp"
         mock_session = Mock()
         mock_session.get.side_effect = requests.RequestException("fail")
-        provider._sessions.injected = mock_session
+        provider = Bdot10kProvider(session=mock_session)
 
-        with pytest.raises(DownloadError, match="after 3 attempts"):
-            provider._download_with_retry(
-                url="https://example.com/file.shp",
-                output_path=output,
-                timeout=30,
-                description="test",
-            )
+        with pytest.raises(DownloadError, match="po 3 probach"):
+            provider.download_by_admin_unit("1465", tmp_path / "out.shp", format="SHP")
+        assert mock_session.get.call_count == 3
+        assert list(tmp_path.iterdir()) == []
 
-    def test_save_response(self, tmp_path):
-        """_save_response writes response content to file."""
-        provider = Bdot10kProvider()
-        output = tmp_path / "out.gpkg"
+    def test_download_writes_all_chunks(self, tmp_path):
+        """Wszystkie fragmenty odpowiedzi trafiaja do pliku, bez resztek .tmp."""
+        mock_session = Mock()
         mock_resp = Mock()
         mock_resp.iter_content.return_value = [b"chunk1", b"chunk2"]
+        mock_resp.raise_for_status = Mock()
+        mock_session.get.return_value = mock_resp
+        provider = Bdot10kProvider(session=mock_session)
 
-        provider._save_response(mock_resp, output)
+        output = provider.download_by_admin_unit(
+            "1465", tmp_path / "out.gpkg", format="SHP"
+        )
         assert output.read_bytes() == b"chunk1chunk2"
+        assert [p.name for p in tmp_path.iterdir()] == ["out.zip"]
 
     def test_extract_gpkg_from_zip(self, tmp_path):
         """Extract PT* GPKG files from ZIP and merge."""
@@ -684,6 +679,40 @@ class TestBdot10kRetryAndIO:
 
         provider._extract_gpkg_from_zip(mock_resp, output)
         assert output.with_suffix(".gpkg").exists()
+
+    def test_merge_overwrites_existing_gpkg_like_windows(self, tmp_path):
+        """Scalony GPKG nadpisuje stary plik takze przy semantyce Windows."""
+        import os
+
+        provider = Bdot10kProvider()
+        gpkg_path = tmp_path / "PTLZ.gpkg"
+        conn = sqlite3.connect(str(gpkg_path))
+        c = conn.cursor()
+        c.execute(
+            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+            "identifier TEXT, description TEXT, last_change TEXT, "
+            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+        )
+        c.execute(
+            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+        )
+        c.execute("CREATE TABLE PTLZ (id INTEGER PRIMARY KEY, name TEXT)")
+        conn.commit()
+        conn.close()
+        output = tmp_path / "out" / "merged.gpkg"
+        output.parent.mkdir()
+        output.write_bytes(b"stary plik")
+
+        def windows_rename(self, target):
+            if Path(target).exists():
+                raise FileExistsError(f"[WinError 183] {target}")
+            return os.replace(self, target)
+
+        with patch.object(Path, "rename", windows_rename):
+            provider._merge_gpkg_files([gpkg_path], output)
+        assert output.read_bytes().startswith(b"SQLite format 3")
+        assert [p.name for p in output.parent.iterdir()] == ["merged.gpkg"]
 
     def test_extract_gpkg_bad_zip(self, tmp_path):
         """Invalid ZIP -> DownloadError."""
@@ -826,8 +855,8 @@ class TestCorineProviderDownload:
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         output = tmp_path / "test.png"
 
-        with patch.object(
-            provider, "_download_with_retry", return_value=output
+        with patch(
+            "kartograf.providers.corine.download_to", return_value=output
         ) as mock_dl:
             result = provider._download_via_wms(bbox, output, 2018, 60)
 
@@ -843,13 +872,12 @@ class TestCorineProviderDownload:
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         output = tmp_path / "test.png"
 
-        with patch.object(
-            provider, "_download_with_retry", return_value=output
+        with patch(
+            "kartograf.providers.corine.download_to", return_value=output
         ) as mock_dl:
             provider._download_via_wms(bbox, output, 2018, 60)
 
-        call_args = mock_dl.call_args
-        url = call_args.kwargs.get("url", call_args[1].get("url", ""))
+        url = mock_dl.call_args.args[1]
         assert "WIDTH=100" in url
         # Height follows the EPSG:3857 envelope, which is not an exact square
         height = int(re.search(r"HEIGHT=(\d+)", url).group(1))
@@ -869,12 +897,12 @@ class TestCorineProviderDownload:
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         output = tmp_path / "test.png"
 
-        with patch.object(
-            provider, "_download_with_retry", return_value=output
+        with patch(
+            "kartograf.providers.corine.download_to", return_value=output
         ) as mock_dl:
             provider._download_via_wms(bbox, output, 1990, 60)
 
-        url = mock_dl.call_args.kwargs["url"]
+        url = mock_dl.call_args.args[1]
         assert "geoservice.dlr.de" in url  # DLR branch, BBOX in degrees
         assert "WIDTH=100" in url
         height = int(re.search(r"HEIGHT=(\d+)", url).group(1))
@@ -887,13 +915,12 @@ class TestCorineProviderDownload:
         bbox = BBox(200000, 300000, 700000, 800000, "EPSG:2180")
         output = tmp_path / "test.png"
 
-        with patch.object(
-            provider, "_download_with_retry", return_value=output
+        with patch(
+            "kartograf.providers.corine.download_to", return_value=output
         ) as mock_dl:
             provider._download_via_wms(bbox, output, 2018, 60)
 
-        call_args = mock_dl.call_args
-        url = call_args.kwargs.get("url", call_args[1].get("url", ""))
+        url = mock_dl.call_args.args[1]
         assert "WIDTH=4096" in url
         assert "HEIGHT=4096" in url
 
@@ -908,12 +935,12 @@ class TestCorineProviderDownload:
         bbox = SheetParser("N-34-130-D").get_bbox("EPSG:2180")
         output = tmp_path / "test.png"
 
-        with patch.object(
-            provider, "_download_with_retry", return_value=output
+        with patch(
+            "kartograf.providers.corine.download_to", return_value=output
         ) as mock_dl:
             provider._download_via_wms(bbox, output, 2018, 60)
 
-        url = mock_dl.call_args.kwargs["url"]
+        url = mock_dl.call_args.args[1]
         width = int(re.search(r"WIDTH=(\d+)", url).group(1))
         height = int(re.search(r"HEIGHT=(\d+)", url).group(1))
         bx_min, by_min, bx_max, by_max = (
@@ -942,74 +969,51 @@ class TestCorineProviderDownload:
         assert result == output
         mock_dl.assert_called_once()
 
-    def test_download_with_retry_success(self, tmp_path):
-        """Successful download on first attempt."""
-        provider = CorineProvider(use_proxy=False)
-        output = tmp_path / "test.png"
+    _BBOX = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+
+    def test_download_via_wms_writes_png(self, tmp_path):
+        """Podglad WMS pobrany za pierwszym razem trafia do .png."""
         mock_session = Mock()
         mock_resp = Mock()
         mock_resp.headers = {"Content-Type": "image/png"}
         mock_resp.iter_content.return_value = [b"png_data"]
         mock_resp.raise_for_status = Mock()
         mock_session.get.return_value = mock_resp
-        provider._session = mock_session
+        provider = CorineProvider(session=mock_session, use_proxy=False)
 
-        result = provider._download_with_retry(
-            url="https://example.com/wms",
-            output_path=output,
-            timeout=30,
-            description="test",
-        )
-        assert result == output
+        result = provider._download_via_wms(self._BBOX, tmp_path / "t.tif", 2018, 30)
+        assert result == tmp_path / "t.png"
+        assert result.read_bytes() == b"png_data"
+        # zapis atomowy: zadnych resztek pliku tymczasowego
+        assert [p.name for p in tmp_path.iterdir()] == ["t.png"]
 
-    def test_download_with_retry_wms_error_response(self, tmp_path):
-        """XML content type -> DownloadError."""
-        provider = CorineProvider(use_proxy=False)
-        output = tmp_path / "test.png"
+    @patch("kartograf.transport.http.time.sleep")
+    def test_download_via_wms_error_response(self, sleep, tmp_path):
+        """XML content type -> DownloadError bez ponowien i bez pliku."""
         mock_session = Mock()
         mock_resp = Mock()
         mock_resp.headers = {"Content-Type": "application/xml"}
         mock_resp.text = "<ServiceException>Error</ServiceException>"
         mock_resp.raise_for_status = Mock()
         mock_session.get.return_value = mock_resp
-        provider._session = mock_session
+        provider = CorineProvider(session=mock_session, use_proxy=False)
 
         with pytest.raises(DownloadError, match="WMS returned error"):
-            provider._download_with_retry(
-                url="https://example.com/wms",
-                output_path=output,
-                timeout=30,
-                description="test",
-            )
+            provider._download_via_wms(self._BBOX, tmp_path / "t.png", 2018, 30)
+        assert mock_session.get.call_count == 1
+        sleep.assert_not_called()
+        assert list(tmp_path.iterdir()) == []
 
-    @patch("kartograf.providers.corine.time.sleep")
-    def test_download_with_retry_all_fail(self, _sleep, tmp_path):
+    @patch("kartograf.transport.http.time.sleep")
+    def test_download_via_wms_all_fail(self, _sleep, tmp_path):
         """All retries fail -> DownloadError."""
-        provider = CorineProvider(use_proxy=False)
-        output = tmp_path / "test.png"
         mock_session = Mock()
         mock_session.get.side_effect = requests.RequestException("timeout")
-        provider._session = mock_session
+        provider = CorineProvider(session=mock_session, use_proxy=False)
 
-        with pytest.raises(DownloadError, match="after 3 attempts"):
-            provider._download_with_retry(
-                url="https://example.com/wms",
-                output_path=output,
-                timeout=30,
-                description="test",
-            )
-
-    def test_save_response_atomic(self, tmp_path):
-        """_save_response writes atomically via temp file."""
-        provider = CorineProvider(use_proxy=False)
-        output = tmp_path / "out.png"
-        mock_resp = Mock()
-        mock_resp.iter_content.return_value = [b"data"]
-
-        provider._save_response(mock_resp, output)
-        assert output.read_bytes() == b"data"
-        # Temp file should not remain
-        assert not output.with_suffix(".png.tmp").exists()
+        with pytest.raises(DownloadError, match="po 3 probach"):
+            provider._download_via_wms(self._BBOX, tmp_path / "t.png", 2018, 30)
+        assert mock_session.get.call_count == 3
 
     def test_transform_bbox_to_wgs84(self):
         """Known EPSG:2180 bbox transforms to WGS84."""
