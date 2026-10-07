@@ -6,6 +6,32 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.7.0] - Unreleased
+### Deduplikacja po review 2026-10-07
+- Reguła „NMT 5m (PL) tylko w EVRF2007” żyje w jednym miejscu
+  (`kartograf.providers.pl.nmt_vertical_crs`) i ma jeden skutek: korektę
+  do EVRF2007. CLI (`--product nmt --resolution 5m --vertical-crs KRON86`)
+  drukuje teraz `Info:` na stderr (także z `-q`) zamiast korekty widocznej
+  tylko w logu; fabryka `create_nmt_provider` loguje ją jak dotąd,
+  `prepare_pl_cutout` nadal odrzuca niefaktyczny pion `ValidationError`.
+  `DownloadManager` z providerem znającym swój pion nie loguje już
+  korekty (pion i tak pochodzi z providera) (review D11).
+- `DownloadManager.download_sheet` zwraca (i opisuje sidecarem) ścieżkę
+  zwróconą przez provider — tak jak `download_hierarchy`/`download_sheets`;
+  wcześniej zwracał ścieżkę docelową managera. Tryb sekwencyjny i równoległy
+  korzystają z jednej treści „pobierz arkusz” (`_fetch_sheet`) i jednego
+  raportu postępu; sekwencja statusów bez zmian (`downloading` tylko
+  sekwencyjnie) (review D10).
+- Ortofotomapa: podpowiedź `NoCoverageError` o arkuszu w innym układzie
+  ma pełną postać jak w NMT (`<godło> (<skala>) — użyj tego godła lub
+  --system X --scale Y`); wspólne `skorowidz.coverage_hints` (review D14).
+- Wewnętrznie: jedna fabryka segmentu providera
+  `download.storage.storage_for_provider` (CLI, `DownloadManager`, wycinek
+  PL, tor CZ — review D18); jedno opakowanie best-effort sidecara
+  `sources.sidecar.emit_sidecar` z formatem operacji `pinned_label`
+  i nazwą wycinka `download.storage.bbox_cutout_path` (wycinek PL i CZ —
+  review D7); jeden nagłówek listy arkuszy CLI `_print_sheet_list`
+  (review D15). Ścieżki plików i treść sidecarów bez zmian.
+
 ### Runda review/E2E 2026-10-06
 - Tor CZ (`CuzkDmrProvider`, `--target-crs` i kafel TM33) używa wspólnego
   `transform/raster.warp_to_grid` zamiast własnej kopii
