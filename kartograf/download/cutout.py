@@ -108,7 +108,7 @@ class PlCutoutResult:
     """Wynik ``run_pl_cutout`` / ``download_pl_cutout``.
 
     Przy ``skipped=True`` (plik istnial, ``force=False``) ``missing_sheets``,
-    ``off_grid_sheets``, ``partial_sheets`` i ``all_nodata`` pochodza
+    ``off_grid_sheets``, ``partial_sheets``, ``unverified`` i ``all_nodata`` pochodza
     z sidecara istniejacego wycinka (``skipped_pl_cutout``; raster nie jest
     czytany ponownie), a ``sheet_paths`` jest puste — arkuszy nikt nie
     dotykal.
@@ -128,7 +128,7 @@ class PlCutoutResult:
     partial_sheets: tuple[str, ...] = ()
     # godlo -> blad: arkusze z lokalnej kampanii, bo skorowidz byl niedostepny
     # (blad transportu, I-1); nowsza kampania nie zostala sprawdzona. Przy
-    # ``skipped=True`` puste (skip nie dotyka sieci).
+    # ``skipped=True`` odtwarzane z sidecara (``extra.unverified_sheets``).
     unverified: dict[str, str] = field(default_factory=dict)
 
 
@@ -642,6 +642,14 @@ def _sidecar_sheet_list(extra: dict, key: str) -> tuple[str, ...]:
     return tuple(v for v in value if isinstance(v, str))
 
 
+def _sidecar_unverified(extra: dict) -> dict[str, str]:
+    """``extra.unverified_sheets`` {godlo: blad} — puste, gdy brak/zly ksztalt."""
+    value = extra.get("unverified_sheets")
+    if not isinstance(value, dict):
+        return {}
+    return {str(k): str(v) for k, v in value.items()}
+
+
 def skipped_pl_cutout(cutout: PlCutout) -> PlCutoutResult:
     """Wynik dla wycinka, ktory JUZ istnieje (``force=False``): zero sieci.
 
@@ -670,6 +678,7 @@ def skipped_pl_cutout(cutout: PlCutout) -> PlCutoutResult:
         off_grid_sheets=_sidecar_sheet_list(extra, "off_grid_sheets"),
         all_nodata=extra.get("all_nodata") is True,
         partial_sheets=_partial_sheets(sources if isinstance(sources, list) else []),
+        unverified=_sidecar_unverified(extra),
     )
 
 
