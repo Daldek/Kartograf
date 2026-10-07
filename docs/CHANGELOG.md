@@ -123,6 +123,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `min_year` jak `DownloadManager` (`ValidationError` dla nie-int, `bool`,
   spoza 1900..2100; komunikat nieznanej strategii jak w NMT).
 
+- **CLI (UX, O-3/O-6/O-7):** lista arkuszy PL (`--bbox`/`--geometry`/hierarchia) bez danych GUGiK
+  przenosi podpowiedzi `NoCoverageError` (np. `uzyj --scale 1:2000` dla PL-2000 1:10000) jako
+  `Info:` na stderr (bez doslownych duplikatow, max 5 linii + "i K innych"; `NoCoverageError.hints`, `DownloadResult.no_coverage_hints`; `hints` w cache rekordow — wpisy cache sprzed zmiany nie maja podpowiedzi do wygasniecia TTL 7 d); brak
+  podsumowania `Downloaded 0 ...` przy zerze plikow; `Downloading <godlo> ...` godla drukowane dopiero
+  przy starcie pobrania (`download_sheet(on_download=)`), nie przy `Skipped`/`Error:`.
+
 ### LAZ 2026-10-07
 - **Zmiana zachowania (ADR-029):** domyślnie (bez `--year`) LAZ pobiera
   najnowszy kafel per OBSZAR, nie per godło. Kafle są wybierane od

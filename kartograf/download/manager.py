@@ -103,6 +103,9 @@ class DownloadResult:
     reused_campaign_files : dict[str, tuple[Path, ...]]
         Podzbior ``campaign_files``: godlo -> pliki kampanii juz lokalne
         (nie pobrane w tym przebiegu). Tor bez kampanii: puste.
+    no_coverage_hints : dict[str, tuple[str, ...]]
+        Podzbior kluczy ``no_coverage``: godlo -> ``NoCoverageError.hints``
+        (np. ``uzyj --scale 1:2000``); tylko arkusze z podpowiedzia.
     unverified : dict[str, str]
         Podzbior ``skipped``: godlo -> blad transportu skorowidza GUGiK,
         przy ktorym ``newest`` uzyl lokalnej kampanii bez sprawdzenia
@@ -123,6 +126,7 @@ class DownloadResult:
     copied: list[str] = field(default_factory=list)
     reused_campaign_files: dict[str, tuple[Path, ...]] = field(default_factory=dict)
     unverified: dict[str, str] = field(default_factory=dict)
+    no_coverage_hints: dict[str, tuple[str, ...]] = field(default_factory=dict)
 
     @property
     def total(self) -> int:
@@ -424,6 +428,7 @@ class DownloadManager:
         godlo: str,
         skip_existing: bool = True,
         on_progress: ProgressCallback | None = None,
+        on_download: Callable[[], None] | None = None,
     ) -> Path | list[Path]:
         """
         Download a map sheet as ASC.
@@ -440,6 +445,9 @@ class DownloadManager:
             Skip download if file exists (default: True)
         on_progress : callable, optional
             Callback function for progress updates (used when expanding hierarchy).
+        on_download : callable, optional
+            Wolany raz, tuz przed pierwszym pobraniem pliku pojedynczego
+            arkusza (nie przy skip ani bledzie rozwiazania rekordu).
 
         Returns
         -------
@@ -477,7 +485,7 @@ class DownloadManager:
                 godlo, "1:10000", skip_existing=skip_existing, on_progress=on_progress
             )
 
-        fetch = self._fetch_sheet(godlo, skip_existing)
+        fetch = self._fetch_sheet(godlo, skip_existing, on_download)
         self.last_sheet = fetch
         return fetch.path
 
@@ -863,7 +871,7 @@ class DownloadManager:
         godlo: str,
         skip_existing: bool,
         on_download: Callable[[], None] | None = None,
-    ) -> tuple[str, SheetFetch | None, str, str]:
+    ) -> tuple[str, SheetFetch | None, str, str, tuple[str, ...]]:
         """
         Pobierz arkusz listy: ``DownloadError`` -> status zamiast wyjatku.
 
@@ -873,21 +881,21 @@ class DownloadManager:
 
         Returns
         -------
-        tuple[str, SheetFetch | None, str, str]
-            (godlo, fetch_or_none, status, message)
+        tuple[str, SheetFetch | None, str, str, tuple[str, ...]]
+            (godlo, fetch_or_none, status, message, hints)
             status is one of: "skipped", "completed", "failed", "no_coverage"
         """
         try:
             fetch = self._fetch_sheet(godlo, skip_existing, on_download)
         except NoCoverageError as e:
             logger.warning(f"No data for {godlo}: {e}")
-            return (godlo, None, "no_coverage", str(e))
+            return (godlo, None, "no_coverage", str(e), e.hints)
         except DownloadError as e:
             logger.error(f"Failed to download {godlo}: {e}")
-            return (godlo, None, "failed", str(e))
+            return (godlo, None, "failed", str(e), ())
         if fetch.skipped:
-            return (godlo, fetch, "skipped", "Already exists")
-        return (godlo, fetch, "completed", "")
+            return (godlo, fetch, "skipped", "Already exists", ())
+        return (godlo, fetch, "completed", "", ())
 
     @staticmethod
     def _record(
@@ -896,6 +904,7 @@ class DownloadManager:
         godlo: str,
         fetch: SheetFetch | None,
         status: str,
+        hints: tuple[str, ...] = (),
     ) -> None:
         """Wpisz wynik jednego arkusza do ``DownloadResult`` i listy sciezek."""
         if status in ("completed", "skipped") and fetch is not None:
@@ -916,6 +925,8 @@ class DownloadManager:
             result.failed.append(godlo)
             if status == "no_coverage":
                 result.no_coverage.append(godlo)
+                if hints:
+                    result.no_coverage_hints[godlo] = hints
 
     @staticmethod
     def _emit(
@@ -962,10 +973,10 @@ class DownloadManager:
                 def started(i: int = i, godlo: str = godlo) -> None:
                     self._emit(on_progress, i, total, godlo, "downloading")
 
-                _, fetch, status, message = self._download_single_sheet_task(
+                _, fetch, status, message, hints = self._download_single_sheet_task(
                     godlo, skip_existing, on_download=started
                 )
-                self._record(result, downloaded_paths, godlo, fetch, status)
+                self._record(result, downloaded_paths, godlo, fetch, status, hints)
                 self._emit(on_progress, i, total, godlo, status, message)
         else:
             lock = threading.Lock()
@@ -980,14 +991,16 @@ class DownloadManager:
                 for future in concurrent.futures.as_completed(future_to_godlo):
                     godlo = future_to_godlo[future]
                     try:
-                        godlo, fetch, status, message = future.result()
+                        godlo, fetch, status, message, hints = future.result()
                     except Exception as e:
                         logger.error(f"Unexpected error downloading {godlo}: {e}")
-                        fetch, status, message = None, "failed", str(e)
+                        fetch, status, message, hints = None, "failed", str(e), ()
                     with lock:
                         counter += 1
                         current = counter
-                        self._record(result, downloaded_paths, godlo, fetch, status)
+                        self._record(
+                            result, downloaded_paths, godlo, fetch, status, hints
+                        )
                     self._emit(on_progress, current, total, godlo, status, message)
 
         self.last_result = result

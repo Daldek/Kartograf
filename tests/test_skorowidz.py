@@ -627,6 +627,16 @@ class TestCoverageHints:
         assert error.godlo == self._PL2000
         # kolejnosc podpowiedzi stala (posortowane), oddzielone "; "
         assert message.endswith("; ".join(sorted(self._EXPECTED)))
+        # to samo strukturalnie (CLI nie parsuje komunikatu)
+        assert error.hints == tuple(sorted(self._EXPECTED))
+
+    def test_error_without_hints_has_empty_hints(self):
+        from kartograf.core.sheet_parser import SheetParser
+        from kartograf.providers.pl.skorowidz import no_coverage_error
+
+        error = no_coverage_error(SheetParser(self._PL2000), "Brak. Cos", [])
+        assert error.hints == ()
+        assert str(error) == "Brak. Cos"
 
 
 @pytest.mark.parametrize(

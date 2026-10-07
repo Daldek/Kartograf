@@ -467,6 +467,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                     raise NoCoverageError(
                         cached.get("message") or str(query.no_coverage(parser, [])),
                         godlo=godlo,
+                        hints=tuple(cached.get("hints") or ()),
                     )
                 source = cached["source"]
                 self._remember_source(godlo, source)
@@ -498,7 +499,12 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         error = query.no_coverage(parser, rejected)
         if self._cache is not None:
             self._cache.set_record(
-                *query.cache_key, {"no_coverage": True, "message": str(error)}
+                *query.cache_key,
+                {
+                    "no_coverage": True,
+                    "message": str(error),
+                    **({"hints": list(error.hints)} if error.hints else {}),
+                },
             )
         raise error
 
@@ -529,6 +535,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                     raise NoCoverageError(
                         cached.get("message") or str(query.no_coverage(parser, [])),
                         godlo=godlo,
+                        hints=tuple(cached.get("hints") or ()),
                     )
                 return [SkorowidzRecord.from_source(s) for s in cached["sources"]]
 
@@ -579,6 +586,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                     {
                         "no_coverage": True,
                         "message": str(error),
+                        **({"hints": list(error.hints)} if error.hints else {}),
                         "scanned_from": scanned_from,
                     },
                 )
@@ -772,4 +780,4 @@ def no_coverage_error(
     ordered = sorted(hints)
     if ordered:
         message += ". " + "; ".join(ordered)
-    return NoCoverageError(message, godlo=parser.godlo)
+    return NoCoverageError(message, godlo=parser.godlo, hints=tuple(ordered))

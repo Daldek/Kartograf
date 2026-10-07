@@ -416,6 +416,37 @@ class TestGugikProviderCacheIntegration:
         assert cached["source"]["layer"] == "SkorowidzeNMT2026"
         assert provider.source_info(GODLO) == cached["source"]
 
+    def test_no_coverage_hints_survive_cache(self, cache):
+        """Podpowiedzi NoCoverageError: zapis w cache i odtworzenie z trafienia."""
+        godlo = "N-33-90-C-c-2-4"
+        mock_session = Mock(spec=requests.Session)
+        mock_session.get.return_value = _gfi_response(
+            render_gfi_body([gfi_record(godlo, resolution="5.00 m")])
+        )
+        provider = GugikProvider(session=mock_session, cache=cache)
+        with pytest.raises(NoCoverageError) as first:
+            provider._get_opendata_url(godlo)
+        assert first.value.hints
+        assert cache.get_record("nmt", "1m", "EVRF2007", godlo)["hints"] == list(
+            first.value.hints
+        )
+
+        offline = Mock(spec=requests.Session)
+        with pytest.raises(NoCoverageError) as hit:
+            GugikProvider(session=offline, cache=cache)._get_opendata_url(godlo)
+        offline.get.assert_not_called()
+        assert hit.value.hints == first.value.hints
+
+    def test_old_cache_entry_without_hints_gives_no_hints(self, cache):
+        cache.set_record(
+            "nmt", "1m", "EVRF2007", GODLO, {"no_coverage": True, "message": "Brak. X"}
+        )
+        with pytest.raises(NoCoverageError) as hit:
+            GugikProvider(
+                session=Mock(spec=requests.Session), cache=cache
+            )._get_opendata_url(GODLO)
+        assert hit.value.hints == ()
+
     def test_cache_miss_all_layers_empty_stores_no_coverage(self, cache):
         """Puste odpowiedzi WSZYSTKICH warstw = pewny brak pokrycia w cache."""
         mock_session = Mock(spec=requests.Session)
