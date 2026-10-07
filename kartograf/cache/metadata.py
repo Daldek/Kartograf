@@ -534,11 +534,14 @@ class MetadataCache:
 
     def __del__(self):
         """Ensure database connection is closed on garbage collection."""
-        import contextlib
-
-        if hasattr(self, "_conn") and self._conn is not None:
-            with contextlib.suppress(Exception):
-                self._conn.close()
+        # Bez importow i bez wyjatkow: przy zamykaniu interpretera
+        # sys.meta_path bywa None (import w __del__ rzucal ImportError).
+        try:
+            conn = getattr(self, "_conn", None)
+            if conn is not None:
+                conn.close()
+        except Exception:  # noqa: BLE001, S110 - finalizator nie rzuca
+            pass
 
     def __repr__(self) -> str:
         return (

@@ -692,3 +692,55 @@ class TestHSGCalculatorCalculateFull:
             assert "area_ha" in stats[group]
             assert "percent" in stats[group]
             assert "description" in stats[group]
+
+
+class TestHSGSidecar:
+    """Wynik HSG dostaje sidecar <plik>.meta.json (zasada projektu)."""
+
+    def _calc(self):
+        mock_provider = Mock()
+
+        def fake_download(bbox, path, timeout, property, depth, stat):
+            data = np.full((5, 5), 200 if property == "clay" else 400, np.float32)
+            _create_test_raster(path, data)
+            return path
+
+        mock_provider.download_by_bbox.side_effect = fake_download
+        return HSGCalculator(provider=mock_provider)
+
+    def test_sidecar_written(self, tmp_path):
+        import json
+
+        from kartograf.core.sheet_parser import BBox
+
+        out = tmp_path / "hsg_x.tif"
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        self._calc().calculate_hsg_by_bbox(bbox, out, depth="5-15cm", stat="mean")
+
+        meta = json.loads((tmp_path / "hsg_x.tif.meta.json").read_text())
+        assert meta["dataset"] == "global.isric.soilgrids"
+        assert meta["horizontal_crs"] == "EPSG:2180"
+        assert meta["nodata"] == 0
+        assert meta["request"]["bbox"] == [450000, 550000, 460000, 560000]
+        assert meta["request"]["bbox_crs"] == "EPSG:2180"
+        assert meta["extra"]["derived"] == "hsg"
+        assert meta["extra"]["source_layers"] == ["clay", "sand", "silt"]
+        assert meta["extra"]["depth"] == "5-15cm"
+        assert meta["extra"]["stat"] == "mean"
+
+    def test_sidecar_uses_bbox_raster_capability(self, tmp_path):
+        from kartograf.core.sheet_parser import BBox
+
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        with patch("kartograf.sources.sidecar.emit_sidecar") as emit:
+            self._calc().calculate_hsg_by_bbox(bbox, tmp_path / "h.tif")
+        assert emit.call_args.kwargs["capability"] == "bbox_raster"
+
+    def test_sidecar_failure_does_not_break(self, tmp_path):
+        from kartograf.core.sheet_parser import BBox
+
+        out = tmp_path / "hsg_y.tif"
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        with patch("kartograf.sources.sidecar.write_sidecar", side_effect=OSError("x")):
+            result = self._calc().calculate_hsg_by_bbox(bbox, out)
+        assert result == out and out.exists()

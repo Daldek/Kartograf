@@ -28,7 +28,9 @@ Hydrographic (SW - Sieć Wodna, 3 layers):
 """
 
 import logging
+import shutil
 import sqlite3
+import tempfile
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -501,8 +503,6 @@ class Bdot10kProvider(LandCoverProvider):
         Path
             Path to the merged GPKG file that was actually written to disk
         """
-        import tempfile
-
         # Read ZIP into memory
         zip_data = BytesIO()
         for chunk in response.iter_content(chunk_size=8192):
@@ -561,34 +561,40 @@ class Bdot10kProvider(LandCoverProvider):
         if not source_files:
             raise DownloadError("No files to merge")
 
-        temp_path = output_path.with_suffix(".gpkg.tmp")
+        # SQLite pisze ZAWSZE w lokalnym katalogu tymczasowym: na udziale
+        # CIFS/SMB bez `nobrl` blokady zakresow bajtow konczyly scalanie
+        # `database is locked`. Do celu trafia gotowy plik (kopia + os.replace).
+        final_tmp = output_path.with_suffix(".gpkg.tmp")
 
         try:
-            # Copy first file as base (includes GPKG metadata structure)
-            first_file = source_files[0]
-            with open(first_file, "rb") as src, open(temp_path, "wb") as dst:
-                dst.write(src.read())
+            with tempfile.TemporaryDirectory() as work_dir:
+                local_path = Path(work_dir) / "merged.gpkg"
 
-            logger.debug(f"Using {first_file.name} as base GPKG")
+                # Copy first file as base (includes GPKG metadata structure)
+                first_file = source_files[0]
+                shutil.copyfile(first_file, local_path)
 
-            # Merge remaining files
-            conn = sqlite3.connect(temp_path)
-            cursor = conn.cursor()
+                logger.debug(f"Using {first_file.name} as base GPKG")
 
-            for source_file in source_files[1:]:
-                self._copy_gpkg_layer(cursor, source_file)
+                # Merge remaining files
+                conn = sqlite3.connect(local_path)
+                try:
+                    cursor = conn.cursor()
+                    for source_file in source_files[1:]:
+                        self._copy_gpkg_layer(cursor, source_file)
+                    conn.commit()
+                finally:
+                    conn.close()
 
-            conn.commit()
-            conn.close()
+                shutil.copyfile(local_path, final_tmp)
 
             # Atomic rename
             # os.replace: nadpisuje istniejacy plik takze na Windows (--force)
-            temp_path.replace(output_path)
+            final_tmp.replace(output_path)
             logger.info(f"Merged {len(source_files)} layers into {output_path}")
 
         except Exception:
-            if temp_path.exists():
-                temp_path.unlink()
+            final_tmp.unlink(missing_ok=True)
             raise
 
     def _copy_gpkg_layer(self, cursor, source_path: Path) -> None:

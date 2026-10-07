@@ -526,6 +526,7 @@ class HSGCalculator:
                 compress="deflate",
             )
 
+            hsg_crs = profile.get("crs")
             with rasterio.open(output_path, "w", **profile) as dst:
                 dst.write(hsg, 1)
 
@@ -546,8 +547,34 @@ class HSGCalculator:
                 shutil.copy(silt_path, out_dir / "silt.tif")
                 logger.info(f"Intermediate files saved to {out_dir}")
 
+        self._write_sidecar(output_path, bbox, depth, stat, hsg_crs)
+
         logger.info(f"HSG calculation complete: {output_path}")
         return output_path
+
+    @staticmethod
+    def _write_sidecar(output_path: Path, bbox, depth: str, stat: str, crs) -> None:
+        """Best-effort sidecar wyniku (wynik obliczenia z warstw SoilGrids)."""
+        from kartograf.sources.sidecar import emit_sidecar
+
+        emit_sidecar(
+            "global.isric.soilgrids",
+            output_path,
+            request={
+                "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+                "bbox_crs": getattr(bbox, "crs", None),
+            },
+            horizontal_crs=str(crs) if crs else None,
+            capability="bbox_raster",
+            nodata=0,
+            extra={
+                "derived": "hsg",
+                "source_layers": ["clay", "sand", "silt"],
+                "depth": depth,
+                "stat": stat,
+                "classes": "1=A, 2=B, 3=C, 4=D",
+            },
+        )
 
     def get_hsg_statistics(self, hsg_path: Path) -> dict:
         """
