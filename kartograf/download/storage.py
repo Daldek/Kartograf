@@ -203,13 +203,9 @@ class FileStorage:
         subdir = self._subdir
         if "{uklad}" in subdir:
             if uklad is None:
+                # pl1992 jest fallbackiem rejestru (nigdy None)
                 system = parser_registry.detect_system(identifier)
-                # None tylko gdyby rejestr byl pusty (nie zdarza sie w
-                # praktyce — pl1992 jest fallbackiem z detect=lambda godlo:
-                # True); warunek zostaje, zeby mypy nie zglosil union-attr.
-                uklad = (
-                    "2000" if system is not None and system.id == "pl2000" else "1992"
-                )
+                uklad = "2000" if system.id == "pl2000" else "1992"
             subdir = subdir.replace("{uklad}", uklad)
         return self._ensure_resolved(subdir)
 

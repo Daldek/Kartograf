@@ -1271,7 +1271,7 @@ class TestCreateProviderAndStorage:
 
     def test_nmt_creates_gugik_provider(self, tmp_path):
         """Test that nmt creates GugikProvider + FileStorage."""
-        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.cli.download_cmd import _create_provider_and_storage
         from kartograf.providers.pl.gugik import GugikProvider
 
         provider, storage = _create_provider_and_storage(
@@ -1283,7 +1283,7 @@ class TestCreateProviderAndStorage:
 
     def test_nmpt_creates_nmpt_provider(self, tmp_path):
         """Test that nmpt creates GugikNmptProvider."""
-        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.cli.download_cmd import _create_provider_and_storage
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
         provider, storage = _create_provider_and_storage(
@@ -1294,7 +1294,7 @@ class TestCreateProviderAndStorage:
 
     def test_orto_creates_orto_provider(self, tmp_path):
         """Test that orto creates GugikOrtoProvider."""
-        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.cli.download_cmd import _create_provider_and_storage
         from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
         provider, storage = _create_provider_and_storage(
@@ -1305,20 +1305,20 @@ class TestCreateProviderAndStorage:
 
     def test_laz_product_raises_validation_error(self, tmp_path):
         """LAZ ma osobny przeplyw (_cmd_download_laz) — tu nie ma prawa dotrzec."""
-        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.cli.download_cmd import _create_provider_and_storage
 
         with pytest.raises(ValidationError, match="LAZ"):
             _create_provider_and_storage("laz", tmp_path, "EVRF2007", "1m")
 
     def test_unknown_product_raises_validation_error(self, tmp_path):
         """Nieznany produkt nie moze po cichu spasc na fabryke NMT."""
-        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.cli.download_cmd import _create_provider_and_storage
 
         with pytest.raises(ValidationError, match="dmr5g"):
             _create_provider_and_storage("dmr5g", tmp_path, "EVRF2007", "1m")
 
     def test_nmt_kron86_storage_segment(self, tmp_path):
-        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.cli.download_cmd import _create_provider_and_storage
 
         provider, storage = _create_provider_and_storage(
             "nmt", tmp_path, "KRON86", "1m"
@@ -1327,7 +1327,7 @@ class TestCreateProviderAndStorage:
 
     def test_nmt_5m_kron86_storage_follows_provider_correction(self, tmp_path):
         """Fabryka koryguje 5m=>EVRF2007 — segment ma niesc fakt, nie flage."""
-        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.cli.download_cmd import _create_provider_and_storage
 
         provider, storage = _create_provider_and_storage(
             "nmt", tmp_path, "KRON86", "5m"
@@ -1335,7 +1335,7 @@ class TestCreateProviderAndStorage:
         assert storage._subdir == "nmt/pl_{uklad}_5m_evrf2007"
 
     def test_nmpt_storage_segment(self, tmp_path):
-        from kartograf.cli.commands import _create_provider_and_storage
+        from kartograf.cli.download_cmd import _create_provider_and_storage
 
         provider, storage = _create_provider_and_storage(
             "nmpt", tmp_path, "KRON86", "1m"
@@ -1442,6 +1442,38 @@ class TestCmdDownloadBBox:
         assert result == 1
         captured = capsys.readouterr()
         assert "Invalid bbox format" in captured.err
+
+    @pytest.mark.parametrize(
+        "bbox", ["invalid", "10,10,5,5", "nan,1,2,3", "1,2,-inf,4", "1,2,3"]
+    )
+    @pytest.mark.parametrize(
+        "extra",
+        [[], ["--country", "pl"], ["--country", "cz"], ["--product", "laz"]],
+        ids=["auto", "pl", "cz", "laz"],
+    )
+    def test_download_rejects_bad_bbox_before_network(
+        self, bbox, extra, capsys, tmp_path
+    ):
+        """K7b: jedno parsowanie --bbox we wszystkich torach download (PL, CZ,
+        LAZ): kod 1, `Error: Invalid bbox format` na stderr (bez ValueError,
+        bez podpowiedzi na stdout), zero providerow. Dawniej bbox odwrocony
+        szedl dalej (arkusz-smiec), NaN konczyl sie `ValueError`."""
+        with (
+            patch("kartograf.cli.download_cmd.DownloadManager") as manager,
+            patch(_CZ_FACTORY_PATCH) as cz_factory,
+            patch("kartograf.providers.pl.gugik_laz.GugikLazProvider") as laz,
+        ):
+            result = main(
+                ["download", f"--bbox={bbox}", "-o", str(tmp_path), "-q", *extra]
+            )
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Error: Invalid bbox format" in captured.err
+        assert "ValueError" not in captured.err
+        assert "Expected" not in captured.out
+        manager.assert_not_called()
+        cz_factory.assert_not_called()
+        laz.assert_not_called()
 
     def test_download_bbox_too_few_values(self, capsys):
         """Test za mało wartości w bbox → exit 1."""
@@ -3212,17 +3244,31 @@ class TestResolveLazBbox:
     def test_godlo_to_2180(self):
         from argparse import Namespace
 
-        from kartograf.cli.commands import _resolve_laz_bbox
+        from kartograf.cli.download_cmd import _resolve_laz_bbox
 
         args = Namespace(godlo="M-34-27-B-b-2-1", bbox=None, geometry=None)
         bbox = _resolve_laz_bbox(args)
         assert bbox.crs == "EPSG:2180"
         assert bbox.min_x < bbox.max_x and bbox.min_y < bbox.max_y
 
+    def test_bbox_wgs84_across_19e_keeps_southern_band(self):
+        """K6: obwiednia z zageszczonych krawedzi — cztery narozniki gubily
+        ~479 m na S dla bboxa przez 19E (selekcja kafli LAZ za waska)."""
+        from argparse import Namespace
+
+        from kartograf.cli.download_cmd import _resolve_laz_bbox
+
+        args = Namespace(
+            godlo=None, bbox="18,50,20,50.2", bbox_crs="EPSG:4326", geometry=None
+        )
+        bbox = _resolve_laz_bbox(args)
+        assert bbox.crs == "EPSG:2180"
+        assert bbox.min_y == pytest.approx(236968.4486, abs=0.01)
+
     def test_bbox_2180_passthrough(self):
         from argparse import Namespace
 
-        from kartograf.cli.commands import _resolve_laz_bbox
+        from kartograf.cli.download_cmd import _resolve_laz_bbox
 
         args = Namespace(
             godlo=None,
@@ -3241,20 +3287,20 @@ class TestResolveLazBbox:
     def test_bbox_wrong_value_count_raises(self):
         from argparse import Namespace
 
-        from kartograf.cli.commands import _resolve_laz_bbox
+        from kartograf.cli.download_cmd import _resolve_laz_bbox
 
         args = Namespace(godlo=None, bbox="1,2,3", bbox_crs="EPSG:2180", geometry=None)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError, match="Invalid bbox format"):
             _resolve_laz_bbox(args)
 
     def test_bbox_from_krovak_uses_pinned_transform(self):
         """--bbox-crs EPSG:5514 (F2): przejscie do 2180 musi isc przypieta
-        operacja (bbox_to_crs), NIE niepinowanym _transform_bbox — inaczej
+        operacja (bbox_to_crs), NIE niepinowanym transformerem pyproj — inaczej
         selekcja kafli LAZ na pasie granicznym mogla wyniknac z ballparku."""
         from argparse import Namespace
 
-        from kartograf.cli.commands import _resolve_laz_bbox
-        from kartograf.core import geometry as geom
+        from kartograf.cli.download_cmd import _resolve_laz_bbox
+        from kartograf.core import bbox as core_bbox
         from kartograf.providers.cuzk import dmr
 
         args = Namespace(
@@ -3265,7 +3311,9 @@ class TestResolveLazBbox:
         )
         with (
             patch.object(dmr, "bbox_to_crs", wraps=dmr.bbox_to_crs) as pinned,
-            patch.object(geom, "_transform_bbox", wraps=geom._transform_bbox) as plain,
+            patch.object(
+                core_bbox, "_transformer", wraps=core_bbox._transformer
+            ) as plain,
         ):
             bbox = _resolve_laz_bbox(args)
 
@@ -3277,8 +3325,8 @@ class TestResolveLazBbox:
         """Jak wyzej, ale dla drugiego czeskiego ukladu (EPSG:3045)."""
         from argparse import Namespace
 
-        from kartograf.cli.commands import _resolve_laz_bbox
-        from kartograf.core import geometry as geom
+        from kartograf.cli.download_cmd import _resolve_laz_bbox
+        from kartograf.core import bbox as core_bbox
         from kartograf.providers.cuzk import dmr
 
         args = Namespace(
@@ -3289,7 +3337,9 @@ class TestResolveLazBbox:
         )
         with (
             patch.object(dmr, "bbox_to_crs", wraps=dmr.bbox_to_crs) as pinned,
-            patch.object(geom, "_transform_bbox", wraps=geom._transform_bbox) as plain,
+            patch.object(
+                core_bbox, "_transformer", wraps=core_bbox._transformer
+            ) as plain,
         ):
             bbox = _resolve_laz_bbox(args)
 
@@ -3501,18 +3551,26 @@ class TestCmdDownloadCz:
         assert payload["transform"] is None  # bez --target-crs: uklad natywny
 
     def test_bbox_string_is_normalized_to_image_sr(self, tmp_path):
-        """Nazwa pliku niesie wspolrzedne FINALNEGO zadania (po normalizacji)."""
-        from kartograf.cli.download_cmd import _cmd_download_cz
+        """Nazwa pliku niesie wspolrzedne FINALNEGO zadania (po normalizacji).
 
+        Przez ``main`` (K7b): tryb obszarowy CZ zawsze dostaje gotowy bbox
+        z ``_dispatch_area``; dawne bezposrednie wywolanie z ``args.bbox``
+        jako tekstem szlo martwa galezia parsowania w ``_cz_download_bbox``.
+        """
         provider = _cz_provider_mock()
-        args = _cz_args(
-            tmp_path,
-            godlo=None,
-            bbox="472887.5,208337.5,473808.0,209409.8",
-            bbox_crs="EPSG:2180",
-        )
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
-            result = _cmd_download_cz(args)
+            result = main(
+                [
+                    "download",
+                    "--bbox",
+                    "472887.5,208337.5,473808.0,209409.8",
+                    "--country",
+                    "cz",
+                    "-o",
+                    str(tmp_path),
+                    "-q",
+                ]
+            )
 
         assert result == 0
         sent_bbox, target = provider.download_bbox.call_args.args[:2]
@@ -3582,14 +3640,39 @@ class TestCmdDownloadCz:
         assert "Traceback" not in captured.err
         assert not list(tmp_path.rglob("*.tif"))
 
-    def test_invalid_bbox_string_returns_1(self, tmp_path, capsys):
-        from kartograf.cli.download_cmd import _cmd_download_cz
+    def test_provider_factory_transform_error_reports_remedy(self, tmp_path, capsys):
+        """D6: TransformError z konstruktora providera (operacja dla
+        ``--target-crs``) — ten sam format ``Error: ... Remedium: ...`` co
+        pozostale tory CLI, kod 1, bez tracebacku."""
+        from kartograf.transform.crs import TransformUnavailableError
 
-        with patch(_CZ_FACTORY_PATCH, return_value=_cz_provider_mock()):
-            result = _cmd_download_cz(_cz_args(tmp_path, godlo=None, bbox="1,2,3"))
+        boom = TransformUnavailableError(
+            "Brak bezpiecznej operacji transformacji EPSG:5514 -> EPSG:3045",
+            remedy="zainstaluj siatki recznie do PROJ_DATA",
+        )
+        with patch(_CZ_FACTORY_PATCH, side_effect=boom):
+            result = main(
+                [
+                    "download",
+                    "--bbox=-447000,-1114000,-446000,-1113000",
+                    "--bbox-crs",
+                    "EPSG:5514",
+                    "--country",
+                    "cz",
+                    "--target-crs",
+                    "EPSG:3045",
+                    "-o",
+                    str(tmp_path),
+                ]
+            )
 
         assert result == 1
-        assert "bbox" in capsys.readouterr().err.lower()
+        err = capsys.readouterr().err
+        assert (
+            "Error: Brak bezpiecznej operacji transformacji EPSG:5514 -> EPSG:3045 "
+            "Remedium: zainstaluj siatki recznie do PROJ_DATA"
+        ) in err
+        assert "Traceback" not in err
 
     def test_target_crs_with_godlo_rejected(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
@@ -4354,10 +4437,15 @@ class TestCountryDispatch:
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     def test_geometry_cz_skips_unpinned_transformer(self, mock_cz, tmp_path):
-        """core/geometry Transformer (ballpark dozwolony) nie jest uzywany."""
+        """Niepinowany transformer pyproj (``core.bbox``, ballpark dozwolony)
+        nie jest uzywany."""
+        from kartograf.core import bbox as core_bbox
+
         shp = _write_prague_shp(tmp_path)
         mock_cz.return_value = 0
-        with patch("kartograf.core.geometry.Transformer") as mock_transformer:
+        with patch.object(
+            core_bbox, "_transformer", wraps=core_bbox._transformer
+        ) as mock_transformer:
             result = main(
                 [
                     "download",
@@ -4372,7 +4460,7 @@ class TestCountryDispatch:
             )
 
         assert result == 0
-        mock_transformer.from_crs.assert_not_called()
+        mock_transformer.assert_not_called()
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     def test_geometry_cz_target_crs_in_one_hop(self, mock_cz, tmp_path):
@@ -4879,9 +4967,9 @@ class TestAutoSplitBBox:
         moglaby wyniknac z niepinowanych transformacji Krovaka.
         """
         from kartograf.cli.download_cmd import _bbox_to_wgs84
-        from kartograf.core import geometry as geom
+        from kartograf.core import bbox as core_bbox
+        from kartograf.core.bbox import is_czech_crs
         from kartograf.providers.cuzk import dmr
-        from kartograf.providers.cuzk.client import wkid
 
         mock_find.return_value = ["M-33-46-A-a-1-1"]
         mock_manager = _sheet_list_manager(tmp_path / "x.asc")
@@ -4890,7 +4978,9 @@ class TestAutoSplitBBox:
 
         with (
             patch.object(dmr, "bbox_to_crs", wraps=dmr.bbox_to_crs) as pinned,
-            patch.object(geom, "_transform_bbox", wraps=geom._transform_bbox) as plain,
+            patch.object(
+                core_bbox, "_transformer", wraps=core_bbox._transformer
+            ) as plain,
         ):
             result = main(
                 [
@@ -4913,9 +5003,7 @@ class TestAutoSplitBBox:
         # ...i wyprowadzony przypieta operacja z Krovaka
         assert any(call.args[1] == "EPSG:2180" for call in pinned.call_args_list)
         # niepinowany transformer nigdy nie celuje w uklad czeski
-        assert not any(
-            wkid(str(call.args[5])) in {"5514", "3045"} for call in plain.call_args_list
-        )
+        assert not any(is_czech_crs(call.args[1]) for call in plain.call_args_list)
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
