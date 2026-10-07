@@ -14,8 +14,10 @@ GugikOrtoProvider dzieli ten sam mixin (wzorzec SkorowidzeOrtofotomapy*,
 warstwa "Starsze" bez roku) — testy w tests/test_gugik_orto.py.
 """
 
+import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from unittest.mock import Mock, patch
 from urllib.parse import parse_qs, urlparse
 
@@ -25,6 +27,7 @@ import requests
 from kartograf.exceptions import DownloadError, NoCoverageError
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
+from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from tests.conftest import render_gfi_body
 
 # ---------------------------------------------------------------------------
@@ -462,3 +465,60 @@ class TestCapabilitiesTimeout:
         self._provider(product, session)._layers(ENDPOINT)
 
         assert session.get.call_args.kwargs["timeout"] == expected
+
+
+# ===========================================================================
+# ADR-030: rodzina nazw warstw (LAYER_FAMILY) na realnych GetCapabilities
+# ===========================================================================
+
+CAPS = (
+    Path(__file__).parent / "fixtures" / "gugik_skorowidz" / "real_2026_10_06" / "caps"
+)
+
+
+def _caps(name: str) -> str:
+    return (CAPS / name).read_text(encoding="utf-8")
+
+
+@pytest.mark.real_wms_layers
+def test_real_caps_orto_skips_default_wms_and_zasiegi_without_warning(caplog):
+    session = _make_session(
+        _make_mock_response(_caps("ORTO_WMS_SkorowidzeWgAktualnosci.xml"))
+    )
+    provider = GugikOrtoProvider(session=session)
+    with caplog.at_level(logging.WARNING):
+        layers = provider._fetch_wms_layers(ENDPOINT, timeout=10)
+    assert layers == [
+        "SkorowidzeOrtofotomapy2026",
+        "SkorowidzeOrtofotomapy2025",
+        "SkorowidzeOrtofotomapy2024",
+        "SkorowidzeOrtofotomapyStarsze",
+    ]
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]
+
+
+@pytest.mark.real_wms_layers
+def test_family_name_outside_pattern_warns_and_is_not_queried(caplog):
+    xml = _caps("NMT_WMS_SkorowidzeUkladEVRF2007.xml")
+    assert "<Name>SkorowidzeNMT2026</Name>" in xml
+    xml = xml.replace(
+        "<Name>SkorowidzeNMT2026</Name>",
+        "<Name>SkorowidzeNMT2026</Name><Name>SkorowidzeNMT2027Kwartal1</Name>",
+        1,
+    )
+    provider = GugikProvider(session=_make_session(_make_mock_response(xml)))
+    with caplog.at_level(logging.WARNING):
+        layers = provider._fetch_wms_layers(ENDPOINT, timeout=10)
+    assert "SkorowidzeNMT2027Kwartal1" not in layers
+    assert "SkorowidzeNMT2026" in layers
+    assert "SkorowidzeNMT2027Kwartal1" in caplog.text
+    assert "NIE odpytywana" in caplog.text
+
+
+@pytest.mark.real_wms_layers
+def test_nmt_family_does_not_warn_for_nmpt_names(caplog):
+    xml = _caps("NMPT_WMS_SkorowidzeUkladEVRF2007.xml")
+    provider = GugikProvider(session=_make_session(_make_mock_response(xml)))
+    with caplog.at_level(logging.WARNING), pytest.raises(DownloadError):
+        provider._fetch_wms_layers(ENDPOINT, timeout=10)
+    assert not [r for r in caplog.records if r.levelno >= logging.WARNING]

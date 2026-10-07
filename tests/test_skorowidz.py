@@ -18,10 +18,14 @@ import pytest
 import requests
 
 from kartograf.exceptions import DownloadError
+from kartograf.providers.pl.gugik import GugikProvider
+from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
+from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from kartograf.providers.pl.skorowidz import (
     SkorowidzRecord,
     SourceInfoMixin,
     is_skorowidz_answer,
+    layer_upper_year,
     parse_skorowidz_records,
     query_skorowidz_layer,
     select_sheet_record,
@@ -395,6 +399,7 @@ class TestSourcePayload:
             "full_sheet": True,
             "numer_zgloszenia": record.raw["numerZgloszeniaPracy"],
             "zrodlo_danych": record.raw["zrDanych"],
+            "format": "ARC/INFO ASCII GRID",
         }
 
     def test_from_source_round_trips_selection_fields(self):
@@ -622,3 +627,18 @@ class TestCoverageHints:
         assert error.godlo == self._PL2000
         # kolejnosc podpowiedzi stala (posortowane), oddzielone "; "
         assert message.endswith("; ".join(sorted(self._EXPECTED)))
+
+
+@pytest.mark.parametrize(
+    "cls,name,year",
+    [
+        (GugikProvider, "SkorowidzeNMT2019", 2019),
+        (GugikProvider, "SkorowidzeNMT2017iStarsze", 2017),
+        (GugikNmptProvider, "SkorowidzeNMPT2023iStarsze", 2023),
+        (GugikOrtoProvider, "SkorowidzeOrtofotomapy2026", 2026),
+        (GugikOrtoProvider, "SkorowidzeOrtofotomapyStarsze", None),
+        (GugikProvider, "SkorowidzeNMT2027Nowe", None),
+    ],
+)
+def test_layer_upper_year(cls, name, year):
+    assert layer_upper_year(cls.LAYER_PATTERN, name) == year

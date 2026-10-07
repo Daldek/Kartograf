@@ -55,6 +55,11 @@ class SkorowidzRecord:
     full_sheet: bool | None
     raw: dict[str, str]
 
+    @property
+    def file_format(self) -> str | None:
+        """Pole ``format`` rekordu (NMT: ``ARC/INFO ASCII GRID``; orto: brak)."""
+        return self.raw.get("format")
+
     def to_source(self, endpoint: str) -> dict:
         """Metadane wybranego pliku do sidecara oraz cache rekordow."""
         return {
@@ -71,6 +76,7 @@ class SkorowidzRecord:
             "full_sheet": self.full_sheet,
             "numer_zgloszenia": self.raw.get("numerZgloszeniaPracy"),
             "zrodlo_danych": self.raw.get("zrDanych") or self.raw.get("zrodloDanych"),
+            "format": self.raw.get("format"),
         }
 
     @classmethod
@@ -84,6 +90,7 @@ class SkorowidzRecord:
                 ("aktualnoscRok", "aktualnosc_rok"),
                 ("numerZgloszeniaPracy", "numer_zgloszenia"),
                 ("zrDanych", "zrodlo_danych"),
+                ("format", "format"),
             )
             if source.get(field) is not None
         }
@@ -173,6 +180,40 @@ def parse_skorowidz_records(text: str, layer: str) -> list[SkorowidzRecord]:
     return records
 
 
+def _matches(
+    record: SkorowidzRecord,
+    *,
+    godlo: str,
+    uklad: str,
+    zone: int | None,
+    resolution_m: float | None,
+    predicate: Callable[[SkorowidzRecord], bool] | None,
+) -> bool:
+    """Twardy filtr ADR-028 wspolny dla wyboru jednego rekordu i listy kampanii.
+
+    ``godlo`` ma byc juz znormalizowane; wolane raz na rekord (ostrzezenie
+    o braku ukladu/rozdzielczosci nie dubluje sie).
+    """
+    if record.uklad is None or record.resolution_m is None:
+        logger.warning(
+            "Warstwa %s: rekord %s bez ukladu lub rozdzielczosci — pominieto",
+            record.layer,
+            record.godlo,
+        )
+        return False
+    if record.godlo != godlo or record.uklad != uklad:
+        return False
+    if uklad == "2000" and record.zone != zone:
+        return False
+    if resolution_m is not None and abs(record.resolution_m - resolution_m) >= 1e-6:
+        return False
+    return predicate is None or predicate(record)
+
+
+def _campaign_key(record: SkorowidzRecord) -> tuple[str, str, str]:
+    return (record.aktualnosc, record.dt_pzgik or "", record.url)
+
+
 def select_sheet_record(
     records: Iterable[SkorowidzRecord],
     *,
@@ -184,30 +225,54 @@ def select_sheet_record(
 ) -> SkorowidzRecord | None:
     """Wybierz najnowsza kampanie spelniajaca WSZYSTKIE wymagania zadania."""
     godlo = SheetParser(godlo).godlo
-    chosen = None
+    matching = [
+        record
+        for record in records
+        if _matches(
+            record,
+            godlo=godlo,
+            uklad=uklad,
+            zone=zone,
+            resolution_m=resolution_m,
+            predicate=predicate,
+        )
+    ]
+    return max(matching, key=_campaign_key, default=None)
+
+
+def select_campaign_records(
+    records: Iterable[SkorowidzRecord],
+    *,
+    godlo: str,
+    uklad: str,
+    zone: int | None = None,
+    resolution_m: float | None = None,
+    predicate: Callable[[SkorowidzRecord], bool] | None = None,
+) -> list[SkorowidzRecord]:
+    """Wszystkie rekordy przechodzace filtr ``select_sheet_record``, bez
+    duplikatow URL, malejaco po ``(aktualnosc, dt_pzgik, url)``."""
+    godlo = SheetParser(godlo).godlo
+    unique: dict[str, SkorowidzRecord] = {}
     for record in records:
-        if record.uklad is None or record.resolution_m is None:
-            logger.warning(
-                "Warstwa %s: rekord %s bez ukladu lub rozdzielczosci — pominieto",
-                record.layer,
-                record.godlo,
-            )
-            continue
-        if record.godlo != godlo or record.uklad != uklad:
-            continue
-        if uklad == "2000" and record.zone != zone:
-            continue
-        if resolution_m is not None and abs(record.resolution_m - resolution_m) >= 1e-6:
-            continue
-        if predicate is not None and not predicate(record):
-            continue
-        if chosen is None or (record.aktualnosc, record.dt_pzgik or "", record.url) > (
-            chosen.aktualnosc,
-            chosen.dt_pzgik or "",
-            chosen.url,
+        if _matches(
+            record,
+            godlo=godlo,
+            uklad=uklad,
+            zone=zone,
+            resolution_m=resolution_m,
+            predicate=predicate,
         ):
-            chosen = record
-    return chosen
+            unique.setdefault(record.url, record)
+    return sorted(unique.values(), key=_campaign_key, reverse=True)
+
+
+def layer_upper_year(pattern: re.Pattern[str], name: str) -> int | None:
+    """Gorny rok z nazwy warstwy (grupa 1 ``LAYER_PATTERN``): ``2019`` -> 2019,
+    ``2017iStarsze`` -> 2017; ``Starsze`` albo nazwa spoza wzorca -> ``None``."""
+    match = pattern.fullmatch(name)
+    if match is None or match.group(1) is None:
+        return None
+    return int(match.group(1))
 
 
 def query_skorowidz_layer(
@@ -286,6 +351,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
     """
 
     LAYER_PATTERN: re.Pattern[str]
+    LAYER_FAMILY: re.Pattern[str]
     _sessions: SessionPerThread
     _cache: MetadataCache | None
     MAX_RETRIES: int
@@ -406,7 +472,15 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             if elem.tag.rsplit("}", 1)[-1] != "Name" or not elem.text:
                 continue
             match = self.LAYER_PATTERN.fullmatch(elem.text)
-            if match:
+            if match is None:
+                if self.LAYER_FAMILY.match(elem.text):
+                    logger.warning(
+                        "Warstwa GetCapabilities %s z rodziny produktu nie pasuje "
+                        "do wzorca %s — NIE odpytywana",
+                        elem.text,
+                        self.LAYER_PATTERN.pattern,
+                    )
+            else:
                 year, cumulative = match.group(1), match.group(2)
                 layers[elem.text] = (
                     year is None,
