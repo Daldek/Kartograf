@@ -10,11 +10,11 @@ from __future__ import annotations
 
 import math
 import re
-from typing import NamedTuple
 
 from pyproj import Transformer
 
 from kartograf.core import parser_registry
+from kartograf.core.bbox import BBox
 from kartograf.exceptions import ParseError, ValidationError
 
 
@@ -22,16 +22,6 @@ def _is_pl2000_format(godlo: str) -> bool:
     """Check if godlo uses PL-2000 dot-separated numeric format (via registry)."""
     system = parser_registry.detect_system(godlo)
     return system is not None and system.id == "pl2000"
-
-
-class BBox(NamedTuple):
-    """Bounding box z współrzędnymi i układem odniesienia."""
-
-    min_x: float
-    min_y: float
-    max_x: float
-    max_y: float
-    crs: str
 
 
 class SheetParser:

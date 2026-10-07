@@ -83,7 +83,8 @@ kartograf/
 ├── __init__.py          # Public API exports
 ├── exceptions.py        # KartografError, ValidationError, GridMismatchError(ValidationError), DownloadError, NoCoverageError(DownloadError)
 ├── core/                # Logika bazowa
-│   ├── sheet_parser.py     # SheetParser — parser godel map topograficznych, BBox
+│   ├── bbox.py             # BBox, validate_bbox, transform_bbox (gesta obwiednia densify 21, cache transformerow, transformer= duck typing), is_czech_crs
+│   ├── sheet_parser.py     # SheetParser — parser godel map topograficznych (BBox re-eksportowany z core/bbox.py)
 │   ├── parser_2000.py      # Parser2000 — parser godal PL-2000, find_sheets_2000_for_bbox
 │   ├── parser_tm33.py      # ParserTM33 — obliczalna siatka kafli CZ 2x2 km (EPSG:3045), wzor: Parser2000
 │   ├── parser_registry.py  # Rejestr systemow godel (pl1992, pl2000, cz_tm33, cz_sm5); SheetParser/FileStorage delegowane

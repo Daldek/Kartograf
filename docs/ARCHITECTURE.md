@@ -145,7 +145,9 @@ kartograf/
 ├── exceptions.py        # KartografError, ParseError, ValidationError, DownloadError,
 │                        # NoCoverageError(DownloadError) — zrodlo nie ma danych arkusza
 ├── core/                # Logika bazowa, bez IO sieciowego
-│   ├── sheet_parser.py     # SheetParser (PL-1992), BBox, find_sheets_for_bbox
+│   ├── bbox.py             # BBox, validate_bbox, transform_bbox (gesta obwiednia, cache
+│   │                       # transformerow, operacja przypieta przez duck typing), is_czech_crs
+│   ├── sheet_parser.py     # SheetParser (PL-1992), find_sheets_for_bbox (BBox z core/bbox.py)
 │   ├── parser_2000.py      # Parser2000 (PL-2000), find_sheets_2000_for_bbox
 │   ├── parser_tm33.py      # ParserTM33 — obliczalna siatka kafli CZ 2x2 km (EPSG:3045)
 │   ├── parser_registry.py  # Rejestr systemow godel: pl1992, pl2000, cz_tm33, cz_sm5
