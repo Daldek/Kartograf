@@ -1194,20 +1194,30 @@ def _warn_copied_links(godla: Sequence[str]) -> None:
     )
 
 
+MAX_HINT_LINES = 5
+
+
 def _print_coverage_hints(result: DownloadResult) -> None:
     """``Info:`` z podpowiedziami ``NoCoverageError`` (stderr, mimo ``-q``).
 
     Podpowiedzi buduje provider (``NoCoverageError.hints``); CLI tylko je
-    przenosi. Ta sama rada dla wielu arkuszy (rozna tylko godlem potomka,
-    np. ``... — uzyj --scale 1:2000``) daje jedna linie: klucz to koncowka
-    po ostatnim ``" — "``, zachowana zostaje pierwsza podpowiedz.
+    przenosi: bez doslownych duplikatow, w kolejnosci pierwszego wystapienia,
+    do ``MAX_HINT_LINES`` linii; reszta to jedna linia z liczba pominietych
+    (pelna lista w ``DownloadResult.no_coverage_hints``).
     """
-    seen: dict[str, str] = {}
-    for hints in result.no_coverage_hints.values():
-        for hint in hints:
-            seen.setdefault(hint.rsplit(" — ", 1)[-1], hint)
-    for hint in seen.values():
+    unique = dict.fromkeys(
+        h for hints in result.no_coverage_hints.values() for h in hints
+    )
+    hints = list(unique)
+    for hint in hints[:MAX_HINT_LINES]:
         print(f"Info: {hint}", file=sys.stderr)
+    rest = len(hints) - MAX_HINT_LINES
+    if rest > 0:
+        print(
+            f"Info: ... i {rest} innych podpowiedzi "
+            "(pelna lista: DownloadResult.no_coverage_hints)",
+            file=sys.stderr,
+        )
 
 
 def _print_campaign_summary(

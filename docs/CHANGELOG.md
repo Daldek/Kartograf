@@ -125,7 +125,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - **CLI (UX, O-3/O-6/O-7):** lista arkuszy PL (`--bbox`/`--geometry`/hierarchia) bez danych GUGiK
   przenosi podpowiedzi `NoCoverageError` (np. `uzyj --scale 1:2000` dla PL-2000 1:10000) jako
-  `Info:` na stderr (jedna linia na ta sama rade; `NoCoverageError.hints`, `DownloadResult.no_coverage_hints`, hints w cache rekordow); brak
+  `Info:` na stderr (bez doslownych duplikatow, max 5 linii + "i K innych"; `NoCoverageError.hints`, `DownloadResult.no_coverage_hints`; `hints` w cache rekordow — wpisy cache sprzed zmiany nie maja podpowiedzi do wygasniecia TTL 7 d); brak
   podsumowania `Downloaded 0 ...` przy zerze plikow; `Downloading <godlo> ...` godla drukowane dopiero
   przy starcie pobrania (`download_sheet(on_download=)`), nie przy `Skipped`/`Error:`.
 
