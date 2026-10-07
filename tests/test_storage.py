@@ -6,6 +6,7 @@ generowania ścieżek i operacji na plikach.
 """
 
 import io
+import os
 
 import pytest  # noqa: F401 - required for fixtures
 
@@ -917,3 +918,93 @@ class TestStorageForProvider:
             tmp_path, Mock(spec=GugikProvider), vertical_crs="KRON86"
         )
         assert self._segment(storage, tmp_path) == ("nmt", "pl_1992_1m_kron86")
+
+
+# --- ADR-030: sciezki kampanii ---
+from types import SimpleNamespace  # noqa: E402
+
+from kartograf.download.campaigns import CampaignRef  # noqa: E402
+
+
+def _rec(
+    url="https://opendata.geoportal.gov.pl/NumDaneWys/NMT/83233/83233_1744736_N-34-139-C-a-3-1.asc",
+):
+    return SimpleNamespace(
+        url=url,
+        godlo="N-34-139-C-a-3-1",
+        aktualnosc="2025-04-27",
+        dt_pzgik="2025-11-17",
+        full_sheet=True,
+        raw={"format": "ARC/INFO ASCII GRID"},
+    )
+
+
+REF = CampaignRef.from_record(_rec())
+
+
+class TestCampaignPaths:
+    def test_campaign_path_layout_adr030(self, tmp_path):
+        ref = CampaignRef.from_record(_rec())
+        path = FileStorage(tmp_path, resolution="1m").get_campaign_path(
+            "N-34-139-C-a-3-1", ref, ".asc"
+        )
+        assert path == (
+            tmp_path
+            / "nmt/pl_1992_1m_evrf2007/kampanie/2025-04-27_83233"
+            / "N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc"
+        )
+
+    def test_campaign_path_keeps_orto_variant_segment(self, tmp_path):
+        st = FileStorage(tmp_path, product="orto", variant="cir")
+        path = st.get_campaign_path("M-34-90-C-b-4-4", REF, ".tif")
+        assert "orto/pl_1992_cir/kampanie/" in path.as_posix()
+
+    def test_campaign_path_pl2000(self, tmp_path):
+        p = FileStorage(tmp_path).get_campaign_path("6.129.30.13.4", REF, ".asc")
+        assert p.relative_to(tmp_path).parts[:3] == (
+            "nmt",
+            "pl_2000_1m_evrf2007",
+            "kampanie",
+        )
+
+    def test_list_files_excludes_campaigns_and_dangling_links(self, tmp_path):
+        st = FileStorage(tmp_path)
+        camp = st.get_campaign_path("N-34-139-C-a-3-1", REF, ".asc")
+        camp.parent.mkdir(parents=True)
+        camp.write_text("x")
+        std = st.get_path("N-34-139-C-a-3-1", ".asc")
+        std.parent.mkdir(parents=True)
+        std.symlink_to(os.path.relpath(camp, std.parent))
+        dang = st.get_path("N-34-139-C-a-3-2", ".asc")
+        dang.parent.mkdir(parents=True, exist_ok=True)
+        dang.symlink_to("../../../kampanie/nie-ma/x.asc")
+        assert st.list_files() == [std]
+        assert st.list_files(campaigns=True) == [camp]
+
+    def test_delete_removes_dangling_link_and_sidecar_not_campaign(self, tmp_path):
+        st = FileStorage(tmp_path)
+        other = st.get_campaign_path("N-34-139-C-a-3-2", REF, ".asc")
+        other.parent.mkdir(parents=True)
+        other.write_text("x")
+        link = st.get_path("N-34-139-C-a-3-1", ".asc")
+        link.parent.mkdir(parents=True)
+        link.symlink_to("../../../kampanie/nie-ma/x.asc")
+        sidecar = link.with_name(link.name + ".meta.json")
+        sidecar.write_text("{}")
+        assert link.is_symlink() and not link.exists()
+        assert st.delete("N-34-139-C-a-3-1", ".asc") is True
+        assert not link.is_symlink()
+        assert not sidecar.exists()
+        assert other.exists()
+
+    def test_delete_symlink_keeps_campaign_file(self, tmp_path):
+        st = FileStorage(tmp_path)
+        camp = st.get_campaign_path("N-34-139-C-a-3-1", REF, ".asc")
+        camp.parent.mkdir(parents=True)
+        camp.write_text("x")
+        link = st.get_path("N-34-139-C-a-3-1", ".asc")
+        link.parent.mkdir(parents=True)
+        link.symlink_to(os.path.relpath(camp, link.parent))
+        assert st.delete("N-34-139-C-a-3-1", ".asc") is True
+        assert not link.is_symlink()
+        assert camp.exists()
