@@ -112,14 +112,30 @@
 > = `openai-codex/gpt-6-sol` (zapisane globalnie 2026-09-30; astra
 > wyczerpuje limit po ~8 min pracy 3-4 agentow).
 
-### ADR-030 strategie kampanii — ADR, plan, weryfikacja (2026-10-07, IMPLEMENTACJA NIE ROZPOCZETA)
+### ADR-030 strategie kampanii — fala 1 (T1-T5) zmergowana (2026-10-07)
 
-> **START NASTEPNEJ SESJI:** ADR-030 (+ errata 1, 2, 3) w `docs/DECISIONS.md`
-> i plan `docs/research/2026-10-07-plan-adr030.md` (commit `3127955`) sa
-> GOTOWE; implementacja czeka na polecenie uzytkownika. Worktree
-> `../Kartograf-adr030-t1..t5` (galezie `adr030/t1..t5`) to przerwana,
-> NIEAUTORYZOWANA fala 1 (niezacommitowane czesciowe zmiany) — do usuniecia
-> po potwierdzeniu uzytkownika. `develop` czysty.
+> **START NASTEPNEJ SESJI:** fala 1 planu `docs/research/2026-10-07-plan-adr030.md`
+> GOTOWA i w `develop` (merge `a187a5d` T1, `d839946` T2, `7fcd3bb` T3,
+> `e5b5208` T4, `91fea75` T5). Brama: **2514 testow offline**, ruff czysty,
+> mypy lista = baseline (32). Fala 2 (T6 providery: `resolve_campaigns`/
+> `download_record`) — **TYLKO na polecenie uzytkownika**. Ledger SDD
+> (rulingi, odlozone drobne uwagi do T11, uwagi dla T7):
+> `.superpowers/sdd/2026-10-07-plan-adr030/progress.md` (gitignorowany).
+> Nowe w kodzie (biblioteka, bez CLI): `download/campaigns.py` (`CampaignRef`,
+> format z rekordu, `verify_file_format`), `FileStorage.get_campaign_path`/
+> `list_files(campaigns=)`, `download/links.py` (dowiazanie symlink->hardlink->
+> kopia, nigdy wstecz), `emit_sidecar(required=True)`, `MetadataCache`
+> `campaigns_cache`, skorowidz `select_campaign_records`/`layer_upper_year`/
+> `LAYER_FAMILY`/`file_format`, LAZ `campaigns="all"`/`min_year`.
+> Uwaga dla T7: rownolegle `ensure_standard_link` na tej samej sciezce (TOCTOU)
+> — linkowac raz na arkusz albo serializowac. Do oceny w T11: `to_source`
+> zapisuje `"format": null` dla orto (wg planu 1.5).
+>
+> Przebieg fali 1: 5 agentow rownolegle (T2 opus, reszta sonnet), review per
+> zadanie (T2, T4 opus), koordynator: brama + wlasna mutacja na kopii. T2:
+> 1 runda poprawek (`campaign_key_of` bral pierwszy segment `kampanie` —
+> katalog wyjsciowy z `kampanie` w sciezce wylaczal ochrone przed cofnieciem).
+> Nieautoryzowane worktree z poprzedniej proby usuniete na polecenie.
 
 - **Decyzje uzytkownika:** strategie `--campaigns {newest,all}` (domyslnie
   `newest`); `coverage`, `mosaic`, `--campaign <id>` ODRZUCONE (pokrycie
