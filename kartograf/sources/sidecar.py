@@ -9,11 +9,14 @@ pola dokladane addytywnie.
 
 import json
 import logging
+import os
+import threading
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
 from kartograf.core.parser_2000 import ZONE_EPSG
+from kartograf.exceptions import DownloadError
 from kartograf.sources.descriptor import AccessChannel, SourceDescriptor
 from kartograf.sources.registry import (
     PL_1992_CRS,
@@ -214,14 +217,32 @@ def build_metadata(
     )
 
 
-def write_sidecar(data_path: Path, meta: ResultMetadata) -> Path:
+def write_sidecar(
+    data_path: Path, meta: ResultMetadata, *, atomic: bool = False
+) -> Path:
     """Zapisz `<data_path>.meta.json` obok pliku danych; zwroc sciezke sidecara.
 
-    Wyjatki IO sa lapane i logowane jako warning (spec sekcja 8) — brak
-    sidecara nigdy nie przerywa pobrania; przy bledzie zwracana sciezka
-    wskazuje plik, ktory NIE powstal.
+    ``atomic=False`` (domyslnie): wyjatki IO sa lapane i logowane jako
+    warning (spec sekcja 8) — brak sidecara nigdy nie przerywa pobrania;
+    przy bledzie zwracana sciezka wskazuje plik, ktory NIE powstal.
+
+    ``atomic=True`` (sidecar obowiazkowy, ADR-030 errata 2 N-1): zapis do
+    ``<name>.meta.json.<pid>_<tid>.tmp`` + ``os.replace``; ``OSError``
+    WYLATUJE, tmp jest sprzatany (nigdy czesciowy sidecar).
     """
     sidecar_path = data_path.parent / f"{data_path.name}.meta.json"
+    if atomic:
+        payload = json.dumps(asdict(meta), ensure_ascii=False, indent=2)
+        tmp = sidecar_path.with_name(
+            f"{sidecar_path.name}.{os.getpid()}_{threading.get_ident()}.tmp"
+        )
+        try:
+            tmp.write_text(payload + "\n", encoding="utf-8")
+            os.replace(tmp, sidecar_path)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
+        return sidecar_path
     try:
         payload = json.dumps(asdict(meta), ensure_ascii=False, indent=2)
         sidecar_path.write_text(payload + "\n", encoding="utf-8")
@@ -246,6 +267,7 @@ def emit_sidecar(
     extra: dict | None = None,
     capability: str | None = None,
     nodata: float | None = None,
+    required: bool = False,
 ) -> Path | None:
     """Best-effort sidecar wyniku — jedyne miejsce polityki "sidecar nigdy
     nie przerywa pobrania" (D7): kazdy wyjatek budowy/zapisu konczy sie
@@ -258,13 +280,29 @@ def emit_sidecar(
     a pusty wynik daje ``transform: null``. Pozostale argumenty jak
     w ``build_metadata`` (``horizontal_crs`` = uklad FAKTYCZNEGO wyniku).
 
+    ``required=True`` (sidecar pliku kampanii, ADR-030 errata 2 N-1): zapis
+    atomowy (``write_sidecar(atomic=True)``), a brak deskryptora albo
+    dowolny wyjatek budowy/zapisu konczy sie ``DownloadError`` — wolajacy
+    wybiera tylko tryb, interpretacja porazki zostaje tutaj (D7).
+
     Returns
     -------
     Path or None
         Sciezka sidecara albo ``None``, gdy nie powstal z powodu bledu
-        budowy metadanych lub braku deskryptora.
+        budowy metadanych lub braku deskryptora (tylko ``required=False``).
+
+    Raises
+    ------
+    DownloadError
+        Tylko przy ``required=True``, gdy sidecar nie powstal.
     """
+    sidecar_path = data_path.parent / f"{data_path.name}.meta.json"
     if not isinstance(descriptor_key, str):
+        if required:
+            raise DownloadError(
+                f"Nie udalo sie zapisac obowiazkowego sidecara {sidecar_path}: "
+                f"brak deskryptora zrodla ({descriptor_key!r})"
+            )
         return None
     try:
         from kartograf.sources.registry import get_source
@@ -285,7 +323,11 @@ def emit_sidecar(
             nodata=nodata,
             horizontal_crs=horizontal_crs,
         )
-        return write_sidecar(data_path, meta)
+        return write_sidecar(data_path, meta, atomic=required)
     except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
+        if required:
+            raise DownloadError(
+                f"Nie udalo sie zapisac obowiazkowego sidecara {sidecar_path}: {e}"
+            ) from e
         logger.warning(f"Nie udalo sie zapisac sidecara dla {data_path}: {e}")
         return None
