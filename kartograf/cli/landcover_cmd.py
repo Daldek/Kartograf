@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from kartograf.core.sheet_parser import BBox
+from kartograf.cli._parser import parse_bbox_arg
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
 
@@ -136,20 +136,8 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
         )
         return 1
 
-    # Parse bbox if provided
-    bbox = None
-    if args.bbox:
-        try:
-            parts = [float(x.strip()) for x in args.bbox.split(",")]
-            if len(parts) != 4:
-                raise ValueError("BBOX must have 4 values")
-            bbox = BBox(parts[0], parts[1], parts[2], parts[3], "EPSG:2180")
-        except ValueError as e:
-            print(f"Error: Invalid bbox format: {e}", file=sys.stderr)
-            print(
-                "Expected: min_x,min_y,max_x,max_y (e.g., 450000,550000,460000,560000)"
-            )
-            return 1
+    # Parse bbox if provided (zly bbox -> ValidationError -> Error: w main)
+    bbox = parse_bbox_arg(args.bbox, "EPSG:2180") if args.bbox else None
 
     # Create manager with selected provider
     output_dir = Path(args.output)
