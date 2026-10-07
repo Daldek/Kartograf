@@ -11,6 +11,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from kartograf.cli._parser import parse_bbox_arg
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
 from kartograf.download.manager import (
     DownloadManager,
@@ -1134,18 +1135,8 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
     int
         Exit code (0 for success, 1 for error)
     """
-    # Parse bbox string
-    try:
-        parts = [float(x.strip()) for x in args.bbox.split(",")]
-        if len(parts) != 4:
-            raise ValueError("BBOX must have 4 values")
-        bbox = BBox(parts[0], parts[1], parts[2], parts[3], args.bbox_crs)
-    except ValueError as e:
-        print(f"Error: Invalid bbox format: {e}", file=sys.stderr)
-        print("Expected: min_x,min_y,max_x,max_y (e.g., 419000,230000,426000,237000)")
-        return 1
-
-    return _dispatch_area(args, bbox)
+    # ValidationError (zly format, NaN, min > max) -> `Error: ...` w main
+    return _dispatch_area(args, parse_bbox_arg(args.bbox, args.bbox_crs))
 
 
 def _read_sheet_sidecar(path: Path) -> dict | None:
@@ -1540,7 +1531,7 @@ def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
     Resolve a godło / --bbox / --geometry input to an EPSG:2180 BBox for LAZ.
 
     Returns None (after printing an error) if a geometry file is missing.
-    Raises ParseError / ValidationError / ValueError on invalid input.
+    Raises ParseError / ValidationError on invalid input.
     """
     if getattr(args, "geometry", None):
         from kartograf.core.geometry import get_overall_bbox
@@ -1554,10 +1545,7 @@ def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
         )
 
     if args.bbox is not None:
-        parts = [float(x.strip()) for x in args.bbox.split(",")]
-        if len(parts) != 4:
-            raise ValueError("BBOX must have 4 values: min_x,min_y,max_x,max_y")
-        bbox = BBox(parts[0], parts[1], parts[2], parts[3], args.bbox_crs)
+        bbox = parse_bbox_arg(args.bbox, args.bbox_crs)
         from kartograf.core.bbox import is_czech_crs, transform_bbox
 
         if is_czech_crs(bbox.crs):
@@ -1637,7 +1625,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
 
     try:
         bbox = _resolve_laz_bbox(args)
-    except (ParseError, ValidationError, ValueError) as e:
+    except (ParseError, ValidationError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
     if bbox is None:
@@ -1857,7 +1845,7 @@ def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> i
 def _cz_download_bbox(
     args,
     provider,
-    bbox: BBox | None,
+    bbox: BBox,
     parent_request: dict | None,
     *,
     quiet: bool,
@@ -1874,16 +1862,6 @@ def _cz_download_bbox(
     from kartograf.providers.cuzk.client import wkid
     from kartograf.providers.cuzk.dmr import CUZK_NODATA, bbox_to_crs
     from kartograf.sources.registry import get_source
-
-    if bbox is None:
-        try:
-            parts = [float(x.strip()) for x in args.bbox.split(",")]
-            if len(parts) != 4:
-                raise ValueError("BBOX must have 4 values")
-            bbox = BBox(parts[0], parts[1], parts[2], parts[3], args.bbox_crs)
-        except ValueError as e:
-            print(f"Error: Invalid bbox format: {e}", file=sys.stderr)
-            return 1
 
     image_sr = args.target_crs or "EPSG:5514"
     if wkid(bbox.crs) != wkid(image_sr):
@@ -1956,8 +1934,8 @@ def _cmd_download_cz(
     args : argparse.Namespace
         Sparsowane argumenty (godlo / --bbox / --target-crs / --resolution ...).
     bbox : BBox, optional
-        Gotowy bbox — pomija parsowanie ``args.bbox`` (uzywane przez auto-split
-        wielokrajowy, Zad. 17).
+        Bbox trybu obszarowego (``_dispatch_area`` podaje go zawsze, takze
+        przy jawnym ``--country cz``); ``None`` = tryb godlowy (``args.godlo``).
     parent_request : dict, optional
         Oryginalne zadanie uzytkownika przed podzialem per kraj; trafia do
         ``extra.parent_request`` sidecara.
@@ -1982,7 +1960,7 @@ def _cmd_download_cz(
 
     resolution = args.resolution or "2m"
     vertical_crs = args.vertical_crs or "Bpv"
-    has_godlo = args.godlo is not None and bbox is None
+    has_godlo = bbox is None
 
     if resolution == "1m":
         print(
@@ -2026,7 +2004,7 @@ def _cmd_download_cz(
 
         quiet = args.quiet
         skip_existing = not args.force
-        if has_godlo:
+        if bbox is None:
             return _cz_download_godlo(
                 args, provider, quiet=quiet, skip_existing=skip_existing
             )
