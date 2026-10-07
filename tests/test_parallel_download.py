@@ -447,13 +447,12 @@ class TestProviderThreadSafety:
             assert path.read_bytes() == f"data-{godlo}".encode()
 
     def test_concurrent_provider_sessions_independent(self):
-        """Test that _make_request creates independent sessions per call."""
-        # Verify the provider creates new sessions when self._session is None
+        """Bez wstrzyknietej sesji provider trzyma osobna sesje na watek."""
         provider = GugikProvider()
 
-        # The key is that _session is None by default, so each _make_request
-        # call creates its own Session - safe for concurrent access
-        assert provider._session is None
+        # Brak sesji wolajacego: SessionPerThread tworzy sesje per watek,
+        # wiec pula watkow nie dzieli jednej requests.Session.
+        assert provider._sessions.injected is None
 
 
 class TestLandCoverParallelDownload:

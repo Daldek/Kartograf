@@ -915,7 +915,7 @@ class TestCreateNmtProviderFactory:
 
         session, cache = MagicMock(), MagicMock()
         provider = create_nmt_provider(session=session, cache=cache)
-        assert provider._session is session and provider._cache is cache
+        assert provider._sessions.injected is session and provider._cache is cache
 
 
 class TestSidecarWritten:

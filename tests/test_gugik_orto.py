@@ -36,7 +36,7 @@ LAYERS = [
 GODLO = "M-34-76-A-a-1-1"
 RGB_2024 = "https://opendata.geoportal.gov.pl/ortofotomapa/81423/81423_1371958_M-34-76-A-a-1-1.tif"
 CIR_2024 = "https://opendata.geoportal.gov.pl/ortofotomapa/81422/81422_1368112_M-34-76-A-a-1-1.tif"
-SESSION_FACTORY = "kartograf.providers.pl.skorowidz.make_gugik_session"
+SESSION_FACTORY = "kartograf.transport.http.make_gugik_session"
 
 
 def sample(name: str) -> str:
@@ -110,14 +110,14 @@ class TestGugikOrtoProviderInit:
     def test_init_no_args(self):
         """Test tworzenia providera bez argumentów (domyślne wartości)."""
         provider = GugikOrtoProvider()
-        assert provider._session is None
+        assert provider._sessions.injected is None
         assert provider.color == "RGB"
 
     def test_init_with_session(self):
         """Test tworzenia providera z własną sesją HTTP."""
         session = Mock(spec=requests.Session)
         provider = GugikOrtoProvider(session=session)
-        assert provider._session is session
+        assert provider._sessions.injected is session
 
     def test_color_kwarg(self):
         """Wariant koloru to kwarg biblioteki (bez flagi CLI)."""

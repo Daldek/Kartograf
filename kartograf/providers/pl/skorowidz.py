@@ -20,7 +20,7 @@ from kartograf.exceptions import (
     ValidationError,
 )
 from kartograf.sources.registry import parse_pl_uklad
-from kartograf.transport.http import get_with_retry, make_gugik_session
+from kartograf.transport.http import SessionPerThread, get_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -281,11 +281,12 @@ class SkorowidzLayersMixin(SourceInfoMixin):
     Klasa pochodna deklaruje ``LAYER_PATTERN`` o dwoch grupach: grupa 1 = rok
     warstwy (pusta dla warstwy bez roku), grupa 2 = znacznik warstwy zbiorczej
     (``iStarsze``/``Starsze``, pusta dla warstwy rocznej) — oraz ustawia
-    ``self._session`` (sesja powierzona przez wolajacego albo ``None``).
+    ``self._sessions`` (``SessionPerThread`` z sesja powierzona przez
+    wolajacego albo ``None``).
     """
 
     LAYER_PATTERN: re.Pattern[str]
-    _session: requests.Session | None
+    _sessions: SessionPerThread
     _cache: MetadataCache | None
     MAX_RETRIES: int
     DEFAULT_TIMEOUT: int
@@ -329,7 +330,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         rejected: list[SkorowidzRecord] = []
         for layer in layers:
             records = query_skorowidz_layer(
-                self._session_for_thread(),
+                self._sessions.get(),
                 endpoint,
                 layer,
                 query_bbox=query_bbox,
@@ -363,17 +364,16 @@ class SkorowidzLayersMixin(SourceInfoMixin):
 
     def __init__(self) -> None:
         super().__init__()
-        self._local = threading.local()
         self._layers_lock = threading.Lock()
         self._validated_layers: dict[str, list[str]] = {}
 
-    def _session_for_thread(self) -> requests.Session:
-        """Jedna sesja na watek albo sesja powierzona przez wolajacego."""
-        if self._session is not None:
-            return self._session
-        if not hasattr(self._local, "session"):
-            self._local.session = make_gugik_session()
-        return self._local.session
+    def validate_godlo(self, godlo: str) -> bool:
+        """Godlo parsowalne przez ``SheetParser`` (PL-1992 albo PL-2000)."""
+        try:
+            SheetParser(godlo)
+            return True
+        except ParseError:
+            return False
 
     def _fetch_wms_layers(
         self, wms_endpoint: str, timeout: float | None = None
@@ -388,7 +388,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             timeout = self.DEFAULT_TIMEOUT
         params = {"SERVICE": "WMS", "VERSION": "1.3.0", "REQUEST": "GetCapabilities"}
         response = get_with_retry(
-            self._session_for_thread(),
+            self._sessions.get(),
             f"{wms_endpoint}?{urlencode(params)}",
             timeout=timeout,
             description=f"GUGiK WMS GetCapabilities {wms_endpoint}",

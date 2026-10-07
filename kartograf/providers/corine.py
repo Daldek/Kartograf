@@ -34,8 +34,6 @@ them out of the main application process.
 
 import json
 import logging
-import os
-import threading
 import time
 from pathlib import Path
 from urllib.parse import urlencode
@@ -45,11 +43,12 @@ import requests
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError
 from kartograf.providers.base import LandCoverProvider
+from kartograf.transform.bbox import envelope_from_2180
 from kartograf.transport.http import (
-    http_failure,
-    http_status,
-    is_retryable,
-    retry_wait,
+    MAX_RETRIES,
+    SessionPerThread,
+    download_to,
+    reject_error_document,
 )
 
 logger = logging.getLogger(__name__)
@@ -238,8 +237,7 @@ class CorineProvider(LandCoverProvider):
     DEFAULT_TIMEOUT = 60
     CLMS_POLL_INTERVAL = 10  # seconds between status checks
     CLMS_MAX_WAIT = 600  # max seconds to wait for CLMS download
-    MAX_RETRIES = 3
-    RETRY_BACKOFF_BASE = 2
+    MAX_RETRIES = MAX_RETRIES
     DEFAULT_YEAR = 2018
 
     # Output format settings
@@ -268,7 +266,7 @@ class CorineProvider(LandCoverProvider):
             The proxy isolates credentials in a separate subprocess.
             Set to False to use direct mode (requires clms_credentials).
         """
-        self._session = session
+        self._sessions = SessionPerThread(session, factory=requests.Session)
         self._use_proxy = use_proxy and clms_credentials is None
         self._clms_auth: CLMSAuth | None = None
 
@@ -386,7 +384,7 @@ class CorineProvider(LandCoverProvider):
         # the ground resolution along Y matches the one along X. Degrees would
         # not do: plate carree is not conformal, a pixel square in degrees is
         # 1/cos(lat) taller on the ground (~1.6x in Poland).
-        aspect_bounds = self._transform_bbox_to_epsg3857(bbox)
+        aspect_bounds = envelope_from_2180(bbox, "EPSG:3857")
 
         # Envelope actually sent as BBOX, in the CRS of the WMS request:
         # EPSG:3857 for the EEA endpoint, EPSG:4326 for the DLR fallback
@@ -394,7 +392,7 @@ class CorineProvider(LandCoverProvider):
         if year in self.EEA_YEARS:
             target_bounds = aspect_bounds
         else:
-            target_bounds = self._transform_bbox_to_wgs84(bbox)
+            target_bounds = envelope_from_2180(bbox, "EPSG:4326")
 
         # Width follows the ground resolution along X, height follows the
         # aspect ratio of the requested area on the ground.
@@ -423,10 +421,13 @@ class CorineProvider(LandCoverProvider):
             year,
         )
 
-        return self._download_with_retry(
-            url=url,
-            output_path=output_path.with_suffix(".png"),
+        return download_to(
+            self._sessions.get(),
+            url,
+            output_path.with_suffix(".png"),
             timeout=timeout,
+            retries=self.MAX_RETRIES,
+            validate=reject_error_document("WMS"),
             description=(
                 f"CLC {year} for bbox "
                 f"({bbox.min_x:.0f},{bbox.min_y:.0f})-"
@@ -455,7 +456,7 @@ class CorineProvider(LandCoverProvider):
         4. Download the result file
         """
         # Transform bbox to WGS84 for CLMS API
-        bbox_wgs84 = self._transform_bbox_to_wgs84(bbox)
+        bbox_wgs84 = envelope_from_2180(bbox, "EPSG:4326")
 
         # Request download
         dataset_id = self.CLMS_DATASET_UIDS[year]
@@ -592,7 +593,7 @@ class CorineProvider(LandCoverProvider):
         timeout: int,
     ) -> Path:
         """Download via CLMS API using direct authentication."""
-        session = self._session or requests.Session()
+        session = self._sessions.get()
 
         # Get access token via OAuth2
         access_token = self._clms_auth.get_access_token(session)
@@ -631,10 +632,13 @@ class CorineProvider(LandCoverProvider):
 
             # Download the file
             logger.info("Downloading GeoTIFF from CLMS...")
-            return self._download_with_retry(
-                url=download_url,
-                output_path=output_path.with_suffix(".tif"),
+            return download_to(
+                session,
+                download_url,
+                output_path.with_suffix(".tif"),
                 timeout=timeout,
+                retries=self.MAX_RETRIES,
+                validate=reject_error_document("WMS"),
                 description=f"CLC {year} GeoTIFF",
             )
 
@@ -771,7 +775,7 @@ class CorineProvider(LandCoverProvider):
         bounds : tuple
             Envelope of the requested area in the CRS of the request:
             EPSG:3857 for EEA years, EPSG:4326 for the DLR fallback
-            (see _transform_bbox_to_epsg3857 / _transform_bbox_to_wgs84)
+            (see transform.bbox.envelope_from_2180)
         year : int
             Reference year
         width : int
@@ -849,154 +853,6 @@ class CorineProvider(LandCoverProvider):
         }
 
         return f"{self.DLR_WMS_ENDPOINT}?{urlencode(params)}"
-
-    def _transform_bbox_to_epsg3857(
-        self, bbox: BBox
-    ) -> tuple[float, float, float, float]:
-        """
-        Transform EPSG:2180 bounding box to Web Mercator (EPSG:3857).
-
-        Envelope of the whole rectangle (edges densified), not just two
-        corners: the EPSG:2180 grid is rotated against the meridians, so
-        the SW/NE pair alone cuts off the north and south strips.
-
-        Returns
-        -------
-        tuple
-            (min_x, min_y, max_x, max_y) in EPSG:3857
-        """
-        from pyproj import Transformer
-
-        transformer = Transformer.from_crs("EPSG:2180", "EPSG:3857", always_xy=True)
-
-        return transformer.transform_bounds(
-            bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y, densify_pts=21
-        )
-
-    def _transform_bbox_to_wgs84(self, bbox: BBox) -> tuple[float, float, float, float]:
-        """
-        Transform EPSG:2180 bounding box to WGS84 (EPSG:4326).
-
-        Envelope of the whole rectangle (edges densified), not just two
-        corners: the EPSG:2180 grid is rotated against the meridians, so
-        the SW/NE pair alone cuts off the north and south strips.
-
-        Returns
-        -------
-        tuple
-            (min_lon, min_lat, max_lon, max_lat) in WGS84
-        """
-        from pyproj import Transformer
-
-        transformer = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
-
-        return transformer.transform_bounds(
-            bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y, densify_pts=21
-        )
-
-    # =========================================================================
-    # Common utilities
-    # =========================================================================
-
-    def _download_with_retry(
-        self,
-        url: str,
-        output_path: Path,
-        timeout: int,
-        description: str,
-    ) -> Path:
-        """
-        Download file with automatic retry on failure.
-
-        Parameters
-        ----------
-        url : str
-            URL to download
-        output_path : Path
-            Target path
-        timeout : int
-            Request timeout
-        description : str
-            Description for logging
-
-        Returns
-        -------
-        Path
-            Path to downloaded file
-
-        Raises
-        ------
-        DownloadError
-            If download fails after all retries
-        """
-        last_error: requests.RequestException | None = None
-        session = self._session or requests.Session()
-
-        for attempt in range(1, self.MAX_RETRIES + 1):
-            try:
-                logger.debug(
-                    f"Downloading {description} (attempt {attempt}/{self.MAX_RETRIES})"
-                )
-
-                response = session.get(url, timeout=timeout, stream=True)
-                response.raise_for_status()
-
-                # Check if response is actually an image
-                content_type = response.headers.get("Content-Type", "")
-                if "xml" in content_type.lower() or "html" in content_type.lower():
-                    # WMS error response
-                    error_text = response.text[:500]
-                    raise DownloadError(f"WMS returned error response: {error_text}")
-
-                self._save_response(response, output_path)
-
-                logger.info(f"Successfully downloaded {description} to {output_path}")
-                return output_path
-
-            except requests.RequestException as e:
-                last_error = e
-                logger.warning(
-                    f"Download failed for {description} (attempt {attempt}): {e}"
-                )
-
-                if not is_retryable(e):
-                    raise http_failure(
-                        f"Failed to download {description}: "
-                        f"HTTP {http_status(e)} (not retried): {e}",
-                        e,
-                    ) from e
-
-                if attempt < self.MAX_RETRIES:
-                    wait_time = retry_wait(e, self.RETRY_BACKOFF_BASE**attempt)
-                    logger.debug(f"Retrying in {wait_time} seconds...")
-                    time.sleep(wait_time)
-
-        raise http_failure(
-            f"Failed to download {description} after {self.MAX_RETRIES} attempts: "
-            f"{last_error}",
-            last_error,
-        )
-
-    def _save_response(self, response: requests.Response, output_path: Path) -> None:
-        """
-        Save HTTP response to file atomically.
-
-        Uses a unique temp filename per process/thread to prevent
-        collisions when multiple threads download concurrently.
-        """
-        thread_id = threading.current_thread().ident
-        temp_suffix = f"{output_path.suffix}.{os.getpid()}_{thread_id}.tmp"
-        temp_path = output_path.with_suffix(temp_suffix)
-
-        try:
-            with open(temp_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            temp_path.rename(output_path)
-        except Exception:
-            if temp_path.exists():
-                temp_path.unlink()
-            raise
 
     # =========================================================================
     # Info methods

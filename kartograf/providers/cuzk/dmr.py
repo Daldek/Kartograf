@@ -35,7 +35,9 @@ from kartograf.providers.cuzk.sheets import SheetIndex
 from kartograf.sources.descriptor import AccessChannel, TransportKind
 from kartograf.sources.registry import get_source
 from kartograf.transform.crs import (
+    CONTENT_POLICY,
     REMEDIES,
+    WARP_MARGIN_PX,
     PinnedTransform,
     TransformPolicy,
     TransformUnavailableError,
@@ -74,19 +76,14 @@ _VERTICAL_POLICY = TransformPolicy(min_accuracy_m=0.2)
 #    szerokosci, wiec blad 2 m to ~3e-7 m wysokosci;
 #  - obwiednia zadania natywnego: ma tylko POKRYC obszar celu, a ewentualny
 #    rozjazd z operacja przypieta (<= 2 m) miesci sie w zapasie
-#    _WARP_MARGIN_PX (4 px = 8 m przy 2 m) — zmniejszajac ten zapas trzeba
+#    WARP_MARGIN_PX (4 px = 8 m przy 2 m) — zmniejszajac ten zapas trzeba
 #    zaostrzyc te polityke albo policzyc obwiednie ta sama operacja co warp.
 # Siatki z CDN nie sa tu potrzebne (kosztuja ~2 s na pare ukladow), dlatego
 # allow_network_grids=False.
 _LONLAT_POLICY = TransformPolicy(min_accuracy_m=2.0, allow_network_grids=False)
 _ENVELOPE_POLICY = TransformPolicy(min_accuracy_m=2.0, allow_network_grids=False)
-# Operacja reprojektujaca TRESC rastra — jedyna, ktora przesuwa piksele, wiec
-# limit dokladnosci jest ostrzejszy niz dla obwiedni. Krok datum do ukladow
-# 2180/3045 jest przypiety do czeskiej EPSG:1622 (1,0 m, KNOWN_PATHS).
-_HORIZONTAL_POLICY = TransformPolicy(min_accuracy_m=1.0, allow_network_grids=False)
-# Zapas obwiedni zadania natywnego w pikselach: pokrywa niepewnosc operacji
-# obwiedniowej (<= 2 m) i halo interpolatora bilinear (1 px) na krawedziach.
-_WARP_MARGIN_PX = 4
+# Operacja reprojektujaca TRESC rastra: CONTENT_POLICY, zapas obwiedni:
+# WARP_MARGIN_PX — oba z transform/crs.py, wspolne z wycinkiem PL (D9).
 
 # Transformacja idzie pasami o stalej liczbie PIKSELI (nie wierszy): przy szerokim
 # rastrze pas wierszowy wygenerowalby wielkie tablice indeksow i lon/lat.
@@ -196,7 +193,7 @@ class CuzkDmrProvider(BaseProvider):
         if wkid(target_crs) == wkid(NATIVE_CRS):
             return None
         return self._pinned(
-            NATIVE_CRS, target_crs, _HORIZONTAL_POLICY, probe=CZ_PROBE_NATIVE
+            NATIVE_CRS, target_crs, CONTENT_POLICY, probe=CZ_PROBE_NATIVE
         )
 
     @property
@@ -321,7 +318,7 @@ class CuzkDmrProvider(BaseProvider):
     def _native_request_bbox(self, bbox: BBox) -> BBox:
         """Obwiednia zadania natywnego: cel przeliczony do 5514 plus zapas."""
         native = self._bbox_to_crs(bbox, NATIVE_CRS)
-        margin = _WARP_MARGIN_PX * self._pixel_size
+        margin = WARP_MARGIN_PX * self._pixel_size
         return BBox(
             native.min_x - margin,
             native.min_y - margin,

@@ -21,7 +21,7 @@ from tests.conftest import _STUB_LAYERS, gfi_record, render_gfi_body
 
 _EVRF2007_LAYERS = _STUB_LAYERS["NMT/WMS/SkorowidzeUkladEVRF2007"]
 # Fabryka sesji na watek zyje w SkorowidzLayersMixin (skorowidz.py)
-SESSION_FACTORY = "kartograf.providers.pl.skorowidz.make_gugik_session"
+SESSION_FACTORY = "kartograf.transport.http.make_gugik_session"
 
 
 def _wms_response(body: str) -> Mock:
