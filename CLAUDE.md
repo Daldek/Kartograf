@@ -164,9 +164,11 @@ Sciezka standardowa `<segment>/<hierarchia>/<godlo>.<ext>` jest dowiazaniem
 TWARDYM (hardlink, a gdy niedostepny kopia; bez symlinkow — errata 4 ADR-030)
 do najnowszej LOKALNEJ kampanii (takze niepelnej); jej sidecar to zwykly plik
 z `extra.link` (`hardlink`/`copy`) i `extra.link_target` (jedyne zrodlo celu).
-Brak migracji: zwykly plik w sciezce standardowej (takze symlink sprzed
-errata 4) jest nieznany — pierwsze uruchomienie `newest` pobiera go ponownie
-do `kampanie/` i zastepuje hardlinkiem. Kopiowanie `data/`: `rsync -aH` /
+Brak migracji: zwykly plik w sciezce standardowej jest nieznany — pierwsze
+uruchomienie `newest` pobiera go ponownie do `kampanie/` i zastepuje
+hardlinkiem. Symlink sprzed errata 4 to tez sciezka nieznana, ale plik
+kampanii jest lokalny: `newest` go nie pobiera, tylko zastepuje symlink
+hardlinkiem (bez kodu zgodnosci). Kopiowanie `data/`: `rsync -aH` /
 `cp -a` (bez zachowania hardlinkow powstaje duplikat).
 
 ## Komendy

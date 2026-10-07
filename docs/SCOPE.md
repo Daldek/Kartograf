@@ -299,7 +299,7 @@ from kartograf import (
   kafla (`LazTile.uklad`), dopiero w drugiej kolejności z formatu godła
 - Kampanie GUGiK (ADR-030): prawdziwe pliki NMT/NMPT/orto PL w
   `<segment>/kampanie/<data>_<id>/...`, ścieżka standardowa = dowiązanie do
-  najnowszej lokalnej kampanii (symlink → hardlink → kopia); brak migracji
+  najnowszej lokalnej kampanii (hardlink → kopia, bez symlinków — errata 4); brak migracji
 - `landcover/` bez zmian (własny default `--output`)
 
 ### 2.12 Kampanie GUGiK (ADR-030) - IN SCOPE

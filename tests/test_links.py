@@ -409,3 +409,32 @@ def test_kampanie_in_output_root_still_prevents_regression(tmp_path):
     out = ensure_standard_link(link, a, k_a)
     assert out.changed is False and _same(out.target, b)
     assert link.read_text() == "B"
+
+
+# --- Fix round 1: porazka sprzatania tmp nie gubi proby kopii ---
+
+
+def test_tmp_cleanup_failure_after_hardlink_error_still_copies(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    old, k_old = _a(tmp_path)
+    link = _link(tmp_path)
+    real_unlink = Path.unlink
+    calls = {"n": 0}
+
+    def link_then_fail(src, dst):
+        Path(dst).write_text("polowiczny")  # tmp zostal, ale link sie nie udal
+        raise OSError(1, "not permitted")
+
+    def flaky_unlink(self, missing_ok=False):
+        if self.name.endswith(".link.tmp"):
+            calls["n"] += 1
+            if calls["n"] > 1:  # pierwsze = sprzatanie po przerwanym przebiegu
+                raise OSError(16, "busy")
+        return real_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(os, "link", link_then_fail)
+    monkeypatch.setattr(Path, "unlink", flaky_unlink)
+    out = ensure_standard_link(link, old, k_old)
+    assert out.method == "copy" and link.read_text() == "A"
+    assert calls["n"] >= 2
