@@ -1194,28 +1194,20 @@ def _warn_copied_links(godla: Sequence[str]) -> None:
     )
 
 
-def _coverage_hints(messages: dict[str, str]) -> list[str]:
-    """Podpowiedzi z tresci ``NoCoverageError`` arkuszy listy (bez ich duplikatow).
+def _print_coverage_hints(result: DownloadResult) -> None:
+    """``Info:`` z podpowiedziami ``NoCoverageError`` (stderr, mimo ``-q``).
 
-    Podpowiedzi dopisuje provider po pierwszym ``". "`` komunikatu, rozdzielone
-    ``"; "``; CLI ich nie buduje, tylko przenosi. Ta sama rada dla wielu
-    arkuszy (np. ``uzyj --scale 1:2000``, rozna tylko godlem potomka) daje
-    jedna linie — klucz to koncowka po ostatnim ``" — "``.
+    Podpowiedzi buduje provider (``NoCoverageError.hints``); CLI tylko je
+    przenosi. Ta sama rada dla wielu arkuszy (rozna tylko godlem potomka,
+    np. ``... — uzyj --scale 1:2000``) daje jedna linie: klucz to koncowka
+    po ostatnim ``" — "``, zachowana zostaje pierwsza podpowiedz.
     """
     seen: dict[str, str] = {}
-    for message in messages.values():
-        _, sep, tail = message.partition(". ")
-        if not sep:
-            continue
-        for hint in tail.split("; "):
+    for hints in result.no_coverage_hints.values():
+        for hint in hints:
             seen.setdefault(hint.rsplit(" — ", 1)[-1], hint)
-    return list(seen.values())
-
-
-def _print_coverage_hints(result: DownloadResult) -> None:
-    """``Podpowiedz:`` na stderr (jak ``Warning:``/``Error:``, mimo ``-q``)."""
-    for hint in _coverage_hints(result.no_coverage_messages):
-        print(f"Podpowiedz: {hint}", file=sys.stderr)
+    for hint in seen.values():
+        print(f"Info: {hint}", file=sys.stderr)
 
 
 def _print_campaign_summary(
