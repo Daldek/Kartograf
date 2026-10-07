@@ -16,7 +16,7 @@ from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.pl.gugik_laz import GugikLazProvider, LazTile
 
 # Patch the shared GUGiK session factory at provider construction.
-_LAZ_SESSION_PATCH = "kartograf.providers.pl.gugik_laz.make_gugik_session"
+_LAZ_SESSION_PATCH = "kartograf.transport.http.make_gugik_session"
 
 
 # ---------------------------------------------------------------------------
@@ -275,8 +275,72 @@ class TestAvailableYears:
         session.get.return_value = _make_response(CAPABILITIES_XML)
         with patch(_LAZ_SESSION_PATCH, return_value=session):
             p = GugikLazProvider()
-        years = p._fetch_available_years("EVRF2007")
+            # sesja watku powstaje przy pierwszym zapytaniu, nie w konstruktorze
+            years = p._fetch_available_years("EVRF2007")
         assert years == [2025, 2024, 2018]
+
+
+class TestSessionPerThread:
+    """Sesja HTTP na watek, jak w pozostalych providerach GUGiK (D2)."""
+
+    def test_threads_get_separate_sessions(self):
+        import threading
+
+        made: list[MagicMock] = []
+
+        def new_session():
+            session = MagicMock()
+            session.get.return_value = _make_response(CAPABILITIES_XML)
+            made.append(session)
+            return session
+
+        errors: list[Exception] = []
+        with patch(_LAZ_SESSION_PATCH, side_effect=new_session) as factory:
+            p = GugikLazProvider()
+
+            def worker():
+                try:
+                    p._fetch_available_years("EVRF2007")
+                except Exception as exc:  # noqa: BLE001 — zbieramy do asercji
+                    errors.append(exc)
+
+            threads = [threading.Thread(target=worker) for _ in range(2)]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+
+        assert errors == []
+        assert factory.call_count == 2
+        assert [session.get.call_count for session in made] == [1, 1]
+
+    def test_same_thread_reuses_session(self):
+        session = MagicMock()
+        session.get.return_value = _make_response(CAPABILITIES_XML)
+        with patch(_LAZ_SESSION_PATCH, return_value=session) as factory:
+            p = GugikLazProvider()
+            p._fetch_available_years("EVRF2007")
+            p._fetch_available_years("KRON86")
+        factory.assert_called_once()
+        assert session.get.call_count == 2
+
+    def test_injected_session_wins_in_every_thread(self):
+        import threading
+
+        injected = MagicMock()
+        injected.get.return_value = _make_response(CAPABILITIES_XML)
+        with patch(_LAZ_SESSION_PATCH) as factory:
+            p = GugikLazProvider(session=injected)
+            threads = [
+                threading.Thread(target=p._fetch_available_years, args=("EVRF2007",))
+                for _ in range(2)
+            ]
+            for thread in threads:
+                thread.start()
+            for thread in threads:
+                thread.join()
+        factory.assert_not_called()
+        assert injected.get.call_count == 2
 
     @pytest.mark.parametrize(
         ("text", "message"),
