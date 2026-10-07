@@ -7,6 +7,7 @@ import threading
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from pathlib import Path
 from urllib.parse import urlencode
 
 import requests
@@ -20,7 +21,7 @@ from kartograf.exceptions import (
     ValidationError,
 )
 from kartograf.sources.registry import parse_pl_uklad
-from kartograf.transport.http import SessionPerThread, get_with_retry
+from kartograf.transport.http import SessionPerThread, download_to, get_with_retry
 
 logger = logging.getLogger(__name__)
 
@@ -322,6 +323,42 @@ def query_skorowidz_layer(
     return parse_skorowidz_records(text, layer)
 
 
+@dataclass(frozen=True)
+class SkorowidzQuery:
+    """Parametry rozwiazania arkusza u providera (hook ``_skorowidz_query``)."""
+
+    cache_key: tuple[str, str, str, str]
+    endpoint: str | None
+    no_coverage: Callable[[SheetParser, list[SkorowidzRecord]], NoCoverageError]
+    resolution_m: float | None = None
+    predicate: Callable[[SkorowidzRecord], bool] | None = None
+    source_extra: dict | None = None
+
+
+def _zone(parser: SheetParser) -> int | None:
+    """Strefa PL-2000 godla (filtr rekordow); PL-1992 -> ``None``."""
+    return int(parser.godlo.split(".")[0]) if parser.uklad == "2000" else None
+
+
+def _record_year(record: SkorowidzRecord) -> int:
+    """Rok kampanii z ``aktualnosc`` (nie ``dt_pzgik``) — granica ``min_year``."""
+    return int(record.aktualnosc[:4])
+
+
+def _covers(scanned_from: int | None, min_year: int | None) -> bool:
+    """Wpis ze skanu od ``scanned_from`` (``None`` = pelny) wystarcza dla granicy."""
+    return scanned_from is None or (min_year is not None and scanned_from <= min_year)
+
+
+def _partial_scan_no_coverage(godlo: str, min_year: int | None) -> NoCoverageError:
+    """Brak kampanii w skanie czesciowym — jedno zrodlo tresci (D-2)."""
+    return NoCoverageError(
+        f"Brak kampanii {godlo} od roku {min_year} "
+        f"(warstwy starsze niz {min_year} pominiete)",
+        godlo=godlo,
+    )
+
+
 class SourceInfoMixin:
     """Pochodzenie per godlo, niezalezne od kolejnosci zakonczenia watkow."""
 
@@ -357,76 +394,245 @@ class SkorowidzLayersMixin(SourceInfoMixin):
     MAX_RETRIES: int
     DEFAULT_TIMEOUT: int
 
+    supports_campaigns: bool = True
+    # Opis pobrania w logach/komunikatach: "<plik z URL> (<etykieta>)"
+    DOWNLOAD_LABEL = "OpenData"
+
+    def _skorowidz_query(self, parser: SheetParser) -> SkorowidzQuery:
+        """Hook providera: klucz cache, endpoint i filtr produktu dla arkusza."""
+        raise NotImplementedError
+
+    def _resolve_sheet(self, godlo: str, timeout: int | None = None) -> SkorowidzRecord:
+        """Cache -> warstwy od najnowszej -> twardy filtr -> najnowsza kampania."""
+        parser = SheetParser(godlo)
+        return self._resolve_record(
+            parser,
+            self.DEFAULT_TIMEOUT if timeout is None else timeout,
+            self._skorowidz_query(parser),
+        )
+
+    def _query_layer(
+        self, parser: SheetParser, endpoint: str, layer: str, timeout: int
+    ) -> list[SkorowidzRecord]:
+        """Rekordy jednej warstwy w punkcie srodkowym arkusza."""
+        bbox = parser.get_bbox(crs="EPSG:2180")
+        x = (bbox.min_x + bbox.max_x) / 2
+        y = (bbox.min_y + bbox.max_y) / 2
+        return query_skorowidz_layer(
+            self._sessions.get(),
+            endpoint,
+            layer,
+            query_bbox=f"{y - 10},{x - 10},{y + 10},{x + 10}",
+            godlo=parser.godlo,
+            timeout=timeout,
+            retries=self.MAX_RETRIES,
+        )
+
+    @staticmethod
+    def _missing_endpoint(query: SkorowidzQuery, godlo: str) -> DownloadError:
+        return DownloadError(
+            f"Brak endpointu WMS dla {query.cache_key[1]}, {query.cache_key[2]}",
+            godlo=godlo,
+        )
+
     def _resolve_record(
-        self,
-        parser: SheetParser,
-        timeout: int,
-        *,
-        cache_key: tuple[str, str, str, str],
-        endpoint: str | None,
-        no_coverage: Callable[[SheetParser, list[SkorowidzRecord]], NoCoverageError],
-        resolution_m: float | None = None,
-        predicate: Callable[[SkorowidzRecord], bool] | None = None,
-        source_extra: dict | None = None,
+        self, parser: SheetParser, timeout: int, query: SkorowidzQuery
     ) -> SkorowidzRecord:
         """Rozwiaz arkusz po warstwach: cache, filtr produktu i podpowiedz braku."""
         godlo = parser.godlo
         if self._cache is not None:
-            cached = self._cache.get_record(*cache_key)
+            cached = self._cache.get_record(*query.cache_key)
             if cached is not None:
                 if cached.get("no_coverage"):
                     raise NoCoverageError(
-                        cached.get("message") or str(no_coverage(parser, [])),
+                        cached.get("message") or str(query.no_coverage(parser, [])),
                         godlo=godlo,
                     )
                 source = cached["source"]
                 self._remember_source(godlo, source)
                 return SkorowidzRecord.from_source(source)
 
-        if endpoint is None:
-            raise DownloadError(
-                f"Brak endpointu WMS dla {cache_key[1]}, {cache_key[2]}",
-                godlo=godlo,
-            )
-        layers = self._layers(endpoint, timeout)
-        bbox = parser.get_bbox(crs="EPSG:2180")
-        x = (bbox.min_x + bbox.max_x) / 2
-        y = (bbox.min_y + bbox.max_y) / 2
-        query_bbox = f"{y - 10},{x - 10},{y + 10},{x + 10}"
+        if query.endpoint is None:
+            raise self._missing_endpoint(query, godlo)
         rejected: list[SkorowidzRecord] = []
-        for layer in layers:
-            records = query_skorowidz_layer(
-                self._sessions.get(),
-                endpoint,
-                layer,
-                query_bbox=query_bbox,
-                godlo=godlo,
-                timeout=timeout,
-                retries=self.MAX_RETRIES,
-            )
+        for layer in self._layers(query.endpoint, timeout):
+            records = self._query_layer(parser, query.endpoint, layer, timeout)
             chosen = select_sheet_record(
                 records,
                 godlo=godlo,
                 uklad=parser.uklad,
-                zone=int(godlo.split(".")[0]) if parser.uklad == "2000" else None,
-                resolution_m=resolution_m,
-                predicate=predicate,
+                zone=_zone(parser),
+                resolution_m=query.resolution_m,
+                predicate=query.predicate,
             )
             if chosen is not None:
-                source = chosen.to_source(endpoint)
-                if source_extra:
-                    source.update(source_extra)
+                source = self.record_source(chosen)
                 self._remember_source(godlo, source)
                 if self._cache is not None:
-                    self._cache.set_record(*cache_key, {"source": source})
+                    self._cache.set_record(*query.cache_key, {"source": source})
                 return chosen
             rejected.extend(records)
-        error = no_coverage(parser, rejected)
+        error = query.no_coverage(parser, rejected)
         if self._cache is not None:
             self._cache.set_record(
-                *cache_key, {"no_coverage": True, "message": str(error)}
+                *query.cache_key, {"no_coverage": True, "message": str(error)}
             )
         raise error
+
+    def _resolve_all(
+        self,
+        parser: SheetParser,
+        timeout: int,
+        query: SkorowidzQuery,
+        *,
+        min_year: int | None,
+    ) -> list[SkorowidzRecord]:
+        """Wszystkie kampanie arkusza ze wszystkich warstw (od najnowszej).
+
+        Z ``min_year`` warstwa o gornym roku z nazwy < granicy nie jest
+        odpytywana (warstwa bez roku — zawsze). Wpis ``campaigns_cache`` ze
+        skanu czesciowego (``scanned_from``) jest wazny tylko dla granic
+        ``>= scanned_from``. Awaria warstwy = ``DownloadError``, nic nie
+        trafia do cache. Provider nie filtruje formatu pliku (errata 2 N-2).
+        """
+        godlo = parser.godlo
+        if self._cache is not None:
+            cached = self._cache.get_campaigns(*query.cache_key)
+            if cached is not None and _covers(cached.get("scanned_from"), min_year):
+                if cached.get("no_coverage"):
+                    if cached.get("scanned_from") is not None:
+                        # D-2: komunikat z BIEZACEJ granicy, nie zapamietanej
+                        raise _partial_scan_no_coverage(godlo, min_year)
+                    raise NoCoverageError(
+                        cached.get("message") or str(query.no_coverage(parser, [])),
+                        godlo=godlo,
+                    )
+                return [SkorowidzRecord.from_source(s) for s in cached["sources"]]
+
+        if query.endpoint is None:
+            raise self._missing_endpoint(query, godlo)
+        found: list[SkorowidzRecord] = []
+        rejected: list[SkorowidzRecord] = []
+        skipped = False
+        for layer in self._layers(query.endpoint, timeout):
+            upper = layer_upper_year(self.LAYER_PATTERN, layer)
+            if min_year is not None and upper is not None and upper < min_year:
+                skipped = True
+                logger.debug(
+                    "Warstwa %s pominieta (rok %s < %s)", layer, upper, min_year
+                )
+                continue
+            records = self._query_layer(parser, query.endpoint, layer, timeout)
+            matched = select_campaign_records(
+                records,
+                godlo=godlo,
+                uklad=parser.uklad,
+                zone=_zone(parser),
+                resolution_m=query.resolution_m,
+                predicate=query.predicate,
+            )
+            found.extend(matched)
+            rejected.extend(r for r in records if r not in matched)
+        found = sorted(
+            {r.url: r for r in reversed(found)}.values(),
+            key=_campaign_key,
+            reverse=True,
+        )
+        scanned_from = min_year if skipped else None
+        if not found:
+            error = (
+                _partial_scan_no_coverage(godlo, min_year)
+                if skipped and min_year is not None
+                else query.no_coverage(parser, rejected)
+            )
+            if self._cache is not None:
+                self._cache.set_campaigns(
+                    *query.cache_key,
+                    {
+                        "no_coverage": True,
+                        "message": str(error),
+                        "scanned_from": scanned_from,
+                    },
+                )
+            raise error
+        if self._cache is not None:
+            self._cache.set_campaigns(
+                *query.cache_key,
+                {
+                    "sources": [self.record_source(r) for r in found],
+                    "scanned_from": scanned_from,
+                },
+            )
+        return found
+
+    def resolve_campaigns(
+        self,
+        godlo: str,
+        *,
+        campaigns: str = "newest",
+        min_year: int | None = None,
+        timeout: int | None = None,
+    ) -> list[SkorowidzRecord]:
+        """Kampanie arkusza wg strategii ADR-030 (od najnowszej).
+
+        ``newest`` = jeden rekord ADR-028 (bez zmian), z ``min_year``
+        starszy = ``NoCoverageError`` z jego data; ``all`` = kazdy rekord
+        przechodzacy twardy filtr ze wszystkich warstw, z ``min_year``
+        tylko kampanie z rokiem ``aktualnosc`` >= granicy.
+        """
+        # lokalnie: pakiet kartograf.download importuje manager -> providers.pl
+        from kartograf.download.campaigns import validate_campaign_args
+
+        validate_campaign_args(campaigns, min_year)
+        if timeout is None:
+            timeout = self.DEFAULT_TIMEOUT
+        parser = SheetParser(godlo)
+        godlo = parser.godlo
+        query = self._skorowidz_query(parser)
+        if campaigns == "newest":
+            record = self._resolve_record(parser, timeout, query)
+            if min_year is not None and _record_year(record) < min_year:
+                raise NoCoverageError(
+                    f"Najnowsza kampania {godlo} ma date {record.aktualnosc} — "
+                    f"starsza niz min_year={min_year} (--min-year)",
+                    godlo=godlo,
+                )
+            return [record]
+        found = self._resolve_all(parser, timeout, query, min_year=min_year)
+        kept = [r for r in found if min_year is None or _record_year(r) >= min_year]
+        if not kept:
+            raise NoCoverageError(
+                f"Brak kampanii {godlo} od roku {min_year} "
+                f"(najnowsza: {found[0].aktualnosc})",
+                godlo=godlo,
+            )
+        logger.info("%s: %s kampanii", godlo, len(kept))
+        return kept
+
+    def record_source(self, record: SkorowidzRecord) -> dict:
+        """Metadane rekordu (``to_source``) z endpointem i ``source_extra``."""
+        query = self._skorowidz_query(SheetParser(record.godlo))
+        source = record.to_source(query.endpoint or "")
+        if query.source_extra:
+            source.update(query.source_extra)
+        return source
+
+    def download_record(
+        self,
+        record: SkorowidzRecord,
+        output_path: Path,
+        timeout: int | None = None,
+    ) -> Path:
+        """Pobierz plik wskazanego rekordu (kampanii) do ``output_path``."""
+        return download_to(
+            self._sessions.get(),
+            record.url,
+            Path(output_path),
+            timeout=self.DEFAULT_TIMEOUT if timeout is None else timeout,
+            retries=self.MAX_RETRIES,
+            # nazwa pliku z URL (id kampanii + godlo) odroznia kampanie w logach
+            description=f"{record.url.rsplit('/', 1)[-1]} ({self.DOWNLOAD_LABEL})",
+        )
 
     def __init__(self) -> None:
         super().__init__()

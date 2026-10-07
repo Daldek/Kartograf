@@ -29,6 +29,7 @@ from kartograf.exceptions import (
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import (
     SkorowidzLayersMixin,
+    SkorowidzQuery,
     SkorowidzRecord,
     coverage_hints,
     no_coverage_error,
@@ -266,31 +267,21 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         >>> provider = GugikProvider()
         >>> path = provider.download("N-34-130-D-d-2-4", Path("./data/sheet.asc"))
         """
-        output_path = Path(output_path)
-
-        record = self._resolve_sheet(godlo, timeout)
-
-        return download_to(
-            self._sessions.get(),
-            record.url,
-            output_path,
-            timeout=timeout,
-            retries=self.MAX_RETRIES,
-            description=f"{godlo} (OpenData)",
+        return self.download_record(
+            self._resolve_sheet(godlo, timeout), Path(output_path), timeout
         )
 
     def _get_opendata_url(self, godlo: str, timeout: int = DEFAULT_TIMEOUT) -> str:
         """Zwroc URL scisle dopasowanego, najnowszego rekordu skorowidza."""
         return self._resolve_sheet(godlo, timeout).url
 
-    def _resolve_sheet(
-        self, godlo: str, timeout: int = DEFAULT_TIMEOUT
-    ) -> SkorowidzRecord:
-        """Cache -> warstwy od najnowszej -> twardy filtr -> najnowsza kampania."""
-        parser = SheetParser(godlo)
-        return self._resolve_record(
-            parser,
-            timeout,
+    def _skorowidz_query(self, parser: SheetParser) -> SkorowidzQuery:
+        """Klucz cache, endpoint (rozdzielczosc + pion) i filtr rozdzielczosci.
+
+        Czyta atrybuty przez ``self`` — NMPT nadpisuje ``_CACHE_PRODUCT``
+        i ``WMS_SKOROWIDZE_ENDPOINTS``.
+        """
+        return SkorowidzQuery(
             cache_key=(
                 self._CACHE_PRODUCT,
                 self._resolution,
