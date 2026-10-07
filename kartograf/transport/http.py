@@ -11,6 +11,7 @@ import logging
 import os
 import threading
 import time
+from collections.abc import Callable
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -80,6 +81,36 @@ def make_gugik_session() -> requests.Session:
             scheme, requests.adapters.HTTPAdapter(pool_connections=4, pool_maxsize=8)
         )
     return session
+
+
+class SessionPerThread:
+    """Jedna sesja na watek albo sesja powierzona przez wolajacego.
+
+    ``requests.Session`` nie ma gwarancji bezpieczenstwa watkowego, wiec
+    provider wspoldzielony przez pule watkow trzyma osobna sesje dla kazdego
+    watku. Sesja wstrzyknieta (``injected``) wygrywa zawsze — o jej uzycie
+    z wielu watkow dba wolajacy. ``factory`` (domyslnie
+    ``make_gugik_session``) jest rozwiazywana przy pierwszym ``get()``
+    w danym watku.
+    """
+
+    def __init__(
+        self,
+        injected: requests.Session | None = None,
+        factory: Callable[[], requests.Session] | None = None,
+    ) -> None:
+        self.injected = injected
+        self._factory = factory
+        self._local = threading.local()
+
+    def get(self) -> requests.Session:
+        if self.injected is not None:
+            return self.injected
+        session = getattr(self._local, "session", None)
+        if session is None:
+            factory = self._factory or make_gugik_session
+            session = self._local.session = factory()
+        return session
 
 
 def get_with_retry(

@@ -531,7 +531,7 @@ class TestLiveGugikIndex:
 
         with pytest.raises(DownloadError, match="OGC") as exc:
             query_skorowidz_layer(
-                provider._session_for_thread(),
+                provider._sessions.get(),
                 GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"],
                 "SkorowidzeNMT1999NieIstnieje",
                 query_bbox=query_bbox,
@@ -556,7 +556,7 @@ class TestLiveGugikIndex:
         for layer in provider._layers(endpoint):
             records.extend(
                 query_skorowidz_layer(
-                    provider._session_for_thread(),
+                    provider._sessions.get(),
                     endpoint,
                     layer,
                     query_bbox=query_bbox,

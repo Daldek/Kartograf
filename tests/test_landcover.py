@@ -397,9 +397,7 @@ class TestBdot10kShpFormat:
         from kartograf.cli.commands import main
 
         session = self._session()
-        with patch(
-            "kartograf.providers.pl.bdot10k.make_gugik_session", return_value=session
-        ):
+        with patch("kartograf.transport.http.make_gugik_session", return_value=session):
             rc = main(
                 [
                     "landcover",
@@ -538,7 +536,7 @@ class TestBdot10kProviderDownload:
 
         mock_session = Mock()
         mock_session.get.return_value = mock_resp
-        provider._session = mock_session
+        provider._sessions.injected = mock_session
 
         output_zip = tmp_path / "powiat_1465.zip"
         result = provider.download_by_admin_unit("1465", output_zip)
@@ -556,7 +554,7 @@ class TestBdot10kProviderDownload:
         )
         mock_resp.raise_for_status = Mock()
         mock_session.get.return_value = mock_resp
-        provider._session = mock_session
+        provider._sessions.injected = mock_session
 
         teryt = provider._get_teryt_for_point(500000, 600000)
         assert teryt == "1465"
@@ -571,7 +569,7 @@ class TestBdot10kProviderDownload:
         )
         mock_resp.raise_for_status = Mock()
         mock_session.get.return_value = mock_resp
-        provider._session = mock_session
+        provider._sessions.injected = mock_session
 
         teryt = provider._get_teryt_for_point(500000, 600000)
         assert teryt == "1465"
@@ -584,7 +582,7 @@ class TestBdot10kProviderDownload:
         mock_resp.text = "<html>No data here</html>"
         mock_resp.raise_for_status = Mock()
         mock_session.get.return_value = mock_resp
-        provider._session = mock_session
+        provider._sessions.injected = mock_session
 
         with pytest.raises(DownloadError, match="Could not determine TERYT"):
             provider._get_teryt_for_point(500000, 600000)
@@ -595,7 +593,7 @@ class TestBdot10kProviderDownload:
         provider = Bdot10kProvider()
         mock_session = Mock()
         mock_session.get.side_effect = requests.RequestException("timeout")
-        provider._session = mock_session
+        provider._sessions.injected = mock_session
 
         with pytest.raises(DownloadError, match="WMS GetFeatureInfo failed"):
             provider._get_teryt_for_point(500000, 600000)
@@ -613,7 +611,7 @@ class TestBdot10kRetryAndIO:
         mock_resp.iter_content.return_value = [b"shp_data"]
         mock_resp.raise_for_status = Mock()
         mock_session.get.return_value = mock_resp
-        provider._session = mock_session
+        provider._sessions.injected = mock_session
 
         result = provider._download_with_retry(
             url="https://example.com/file.shp",
@@ -631,7 +629,7 @@ class TestBdot10kRetryAndIO:
         output = tmp_path / "out.shp"
         mock_session = Mock()
         mock_session.get.side_effect = requests.RequestException("fail")
-        provider._session = mock_session
+        provider._sessions.injected = mock_session
 
         with pytest.raises(DownloadError, match="after 3 attempts"):
             provider._download_with_retry(

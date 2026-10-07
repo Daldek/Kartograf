@@ -34,6 +34,7 @@ from kartograf.exceptions import (
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import SkorowidzLayersMixin, SkorowidzRecord
 from kartograf.transport.http import (
+    SessionPerThread,
     http_failure,
     http_status,
     is_retryable,
@@ -199,7 +200,7 @@ class GugikProvider(SkorowidzLayersMixin, BaseProvider):
                 )
 
         super().__init__()
-        self._session = session
+        self._sessions = SessionPerThread(session)
         self._vertical_crs = vertical_crs
         self._resolution = resolution
         self._cache = cache
@@ -558,7 +559,7 @@ class GugikProvider(SkorowidzLayersMixin, BaseProvider):
 
     def _make_request(self, url: str, timeout: int) -> requests.Response:
         """Pobierz strumien na sesji watku (sesja wstrzyknieta: dba wolajacy)."""
-        response = self._session_for_thread().get(url, timeout=timeout, stream=True)
+        response = self._sessions.get().get(url, timeout=timeout, stream=True)
         response.raise_for_status()
         return response
 
