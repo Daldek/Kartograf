@@ -324,6 +324,41 @@ def select_newest_cover(
     )
 
 
+def select_all_intersecting(tiles: Iterable[LazTile], area: BBox) -> LazTileSelection:
+    """
+    Wszystkie kafle LAZ, ktorych zasieg przecina ``area`` (bez deduplikacji).
+
+    Strategia ``campaigns="all"`` (ADR-030): zadnego pomijania kafla
+    pokrytego nowszym (inaczej niz :func:`select_newest_cover`). Zasieg kafla
+    to ``footprint`` (bez niego obwiednia); kafel, ktorego wielokat nie ma
+    dodatniego pola wspolnego z obszarem (przecinala go tylko obwiednia z WFS),
+    trafia do ``superseded`` z pusta ``covered_by`` (powod ``"outside"``).
+    Kafel bez zadnej geometrii (NaN) zostaje. ``area`` w EPSG:2180.
+    """
+    if area.crs != "EPSG:2180":
+        raise ValueError(f"area must be in EPSG:2180, got {area.crs}")
+    ox, oy = area.min_x, area.min_y
+    area_poly = rectangle(0.0, 0.0, area.max_x - ox, area.max_y - oy)
+
+    kept: list[LazTile] = []
+    superseded: list[SupersededLazTile] = []
+    for tile in tiles:
+        region = _tile_region(tile, ox, oy)
+        if region is None:
+            kept.append(tile)  # bez geometrii nie da sie ocenic — pobierz
+            continue
+        if not _significant(clip_convex(region, area_poly)):
+            superseded.append(SupersededLazTile(tile=tile))  # tylko obwiednia
+            continue
+        kept.append(tile)
+    return LazTileSelection(
+        tiles=tuple(sorted(kept, key=lambda t: (t.godlo, t.url))),
+        superseded=tuple(
+            sorted(superseded, key=lambda s: (s.tile.godlo, -(s.tile.year or 0)))
+        ),
+    )
+
+
 class GugikLazProvider(BaseProvider):
     """
     Provider for downloading LAZ point-cloud data from GUGiK via WFS.
@@ -537,6 +572,9 @@ class GugikLazProvider(BaseProvider):
         vertical_crs: str | None = None,
         timeout: int = WFS_TIMEOUT,
         tolerance_m: float = COVERAGE_TOLERANCE_M,
+        *,
+        campaigns: str = "newest",
+        min_year: int | None = None,
     ) -> LazTileSelection:
         """
         Query WFS for tiles intersecting ``bbox`` and pick those to download.
@@ -565,6 +603,13 @@ class GugikLazProvider(BaseProvider):
         tolerance_m : float, optional
             Edge tolerance of the coverage rule (default
             ``COVERAGE_TOLERANCE_M`` = 1 m; ``0`` = exact).
+        campaigns : {"newest", "all"}
+            ``"newest"`` (default) — the rule above (ADR-029); ``"all"`` —
+            every tile intersecting ``bbox`` (:func:`select_all_intersecting`),
+            no coverage-based skipping (ADR-030).
+        min_year : int, optional
+            Lower bound of ``akt_rok``: year layers below it are not queried.
+            Exclusive with ``year``.
 
         Returns
         -------
@@ -576,11 +621,19 @@ class GugikLazProvider(BaseProvider):
         ------
         ValueError
             If ``bbox`` is not in EPSG:2180.
+        ValidationError
+            Unknown ``campaigns`` or ``year`` together with ``min_year``.
         DownloadError
             If WFS discovery fails, returns unreadable XML or an exception,
             or all returned tiles miss the requested bbox. Partial results
             are never returned.
         """
+        if campaigns not in ("newest", "all"):
+            raise ValidationError(
+                f"nieznana strategia campaigns={campaigns!r} (dozwolone: newest, all)"
+            )
+        if year is not None and min_year is not None:
+            raise ValidationError("year i min_year wykluczaja sie")
         if bbox.crs != "EPSG:2180":
             raise ValueError(
                 f"bbox must be in EPSG:2180, got {bbox.crs}. "
@@ -601,6 +654,8 @@ class GugikLazProvider(BaseProvider):
                 f"(dostepne: {', '.join(map(str, available_years))})"
             )
         years = [year] if year is not None else available_years
+        if min_year is not None:
+            years = [y for y in years if y >= min_year]
         endpoint = self.WFS_ENDPOINTS[vcrs]
 
         found: list[LazTile] = []
@@ -612,6 +667,8 @@ class GugikLazProvider(BaseProvider):
                     continue
                 found.append(tile)
 
+        if campaigns == "all":
+            return select_all_intersecting(found, bbox)
         return select_newest_cover(found, bbox, tolerance_m)
 
     def _query_layer(
