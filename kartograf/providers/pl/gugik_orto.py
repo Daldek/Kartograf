@@ -26,6 +26,7 @@ from kartograf.exceptions import NoCoverageError
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import (
     SkorowidzLayersMixin,
+    SkorowidzQuery,
     SkorowidzRecord,
     coverage_hints,
     no_coverage_error,
@@ -64,6 +65,8 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
 
     WCS_ENDPOINT = f"{BASE_URL}/wss/service/PZGIK/ORTO/WCS/StandardResolution"
     COVERAGE_ID = "Orthoimagery_StandardResolution"
+
+    DOWNLOAD_LABEL = "Ortofoto OpenData"
 
     WMS_SKOROWIDZE_ENDPOINT = (
         f"{BASE_URL}/wss/service/PZGIK/ORTO/WMS/SkorowidzeWgAktualnosci"
@@ -183,31 +186,17 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
             invalid, or the TIF download fails after retries. An older
             campaign is never substituted after a failed query.
         """
-        output_path = Path(output_path)
-
-        record = self._resolve_sheet(godlo, timeout)
-
-        return download_to(
-            self._sessions.get(),
-            record.url,
-            output_path,
-            timeout=timeout,
-            retries=self.MAX_RETRIES,
-            description=f"{godlo} (Ortofoto OpenData)",
+        return self.download_record(
+            self._resolve_sheet(godlo, timeout), Path(output_path), timeout
         )
 
     def _get_opendata_url(self, godlo: str, timeout: int = DEFAULT_TIMEOUT) -> str:
         """Zwroc URL najnowszego rekordu skorowidza w zadanym wariancie koloru."""
         return self._resolve_sheet(godlo, timeout).url
 
-    def _resolve_sheet(
-        self, godlo: str, timeout: int = DEFAULT_TIMEOUT
-    ) -> SkorowidzRecord:
-        """Cache -> warstwy od najnowszej -> twardy filtr uklad+kolor -> najnowsza."""
-        parser = SheetParser(godlo)
-        return self._resolve_record(
-            parser,
-            timeout,
+    def _skorowidz_query(self, parser: SheetParser) -> SkorowidzQuery:
+        """Klucz cache per wariant koloru; twardy filtr uklad+kolor."""
+        return SkorowidzQuery(
             cache_key=(self._CACHE_PRODUCT, self._color, "none", parser.godlo),
             endpoint=self.WMS_SKOROWIDZE_ENDPOINT,
             # Piksel nie jest filtrem: orto nie ma flagi rozdzielczosci.
