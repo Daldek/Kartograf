@@ -1002,3 +1002,99 @@ class TestPruneExpired:
         count = cache._conn.execute("SELECT COUNT(*) FROM teryt_cache").fetchone()[0]
         assert count == 0
         cache.close()
+
+
+# =========================================================================
+# TestCampaignsCache (ADR-030 h)
+# =========================================================================
+
+_CAMP = ("nmt", "1m", "EVRF2007", "N-34-139-C-a-3-1")
+_CAMP_PAYLOAD = {"sources": [{"url": "u"}], "scanned_from": None}
+
+
+class TestCampaignsCache:
+    def test_campaigns_roundtrip_independent_of_record_cache(self, tmp_path):
+        c = MetadataCache(tmp_path / "c.db")
+        c.set_campaigns(*_CAMP, _CAMP_PAYLOAD)
+        assert c.get_campaigns(*_CAMP)["sources"] == [{"url": "u"}]
+        assert c.get_record(*_CAMP) is None
+        c.close()
+
+    def test_campaigns_key_includes_product_resolution_vcrs(self, tmp_path):
+        c = MetadataCache(tmp_path / "c.db")
+        c.set_campaigns(*_CAMP, _CAMP_PAYLOAD)
+        assert c.get_campaigns("nmpt", "1m", "EVRF2007", _CAMP[3]) is None
+        assert c.get_campaigns("nmt", "5m", "EVRF2007", _CAMP[3]) is None
+        assert c.get_campaigns("nmt", "1m", "KRON86", _CAMP[3]) is None
+        assert c.get_campaigns("nmt", "1m", "EVRF2007", "OTHER") is None
+        assert c.get_campaigns(*_CAMP) == _CAMP_PAYLOAD
+        c.close()
+
+    def test_campaigns_ttl_expired_is_miss_and_deleted(self, tmp_path, monkeypatch):
+        c = MetadataCache(tmp_path / "c.db")
+        c.set_campaigns(*_CAMP, _CAMP_PAYLOAD)
+        real = time.time
+        monkeypatch.setattr(time, "time", lambda: real() + 7 * 86400 + 5)
+        assert c.get_campaigns(*_CAMP) is None
+        assert c.stats()["campaign_count"] == 0
+        c.close()
+
+    def test_campaigns_refresh_reads_miss_but_writes(self, tmp_path):
+        path = tmp_path / "c.db"
+        c = MetadataCache(path, refresh=True)
+        c.set_campaigns(*_CAMP, _CAMP_PAYLOAD)
+        assert c.get_campaigns(*_CAMP) is None
+        c.close()
+        c2 = MetadataCache(path)
+        assert c2.get_campaigns(*_CAMP) == _CAMP_PAYLOAD
+        c2.close()
+
+    def test_stats_and_clear_and_prune_cover_campaigns(self, tmp_path):
+        c = MetadataCache(tmp_path / "c.db", ttl_seconds=1)
+        c.set_campaigns(*_CAMP, _CAMP_PAYLOAD)
+        c.set_campaigns("nmt", "1m", "EVRF2007", "B", {"no_coverage": True})
+        assert c.stats()["campaign_count"] == 2
+        c.clear()
+        assert c.stats()["campaign_count"] == 0
+        c.set_campaigns(*_CAMP, _CAMP_PAYLOAD)
+        time.sleep(1.1)
+        assert c.prune_expired() == 1
+        assert c.stats()["campaign_count"] == 0
+        c.close()
+
+    def test_cmd_cache_stats_prints_campaign_entries(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        monkeypatch.chdir(tmp_path)
+        c = MetadataCache(db_path=tmp_path / ".kartograf_cache.db")
+        c.set_campaigns(*_CAMP, _CAMP_PAYLOAD)
+        c.close()
+        assert main(["cache", "stats"]) == 0
+        assert "Campaign entries: 1" in capsys.readouterr().out
+
+    def test_concurrent_get_campaigns_returns_own_key(self, tmp_path):
+        cache = MetadataCache(db_path=tmp_path / "c.db")
+        for i in range(300):
+            cache.set_campaigns(
+                "nmt", "1m", "EVRF2007", f"G{i}", {"sources": [{"url": f"u://G{i}"}]}
+            )
+        errors: list[str] = []
+
+        def worker(seed: int) -> None:
+            for k in range(400):
+                i = (seed * 37 + k) % 300
+                try:
+                    got = cache.get_campaigns("nmt", "1m", "EVRF2007", f"G{i}")
+                except Exception as e:  # noqa: BLE001
+                    errors.append(f"{type(e).__name__}: {e}")
+                    continue
+                if got != {"sources": [{"url": f"u://G{i}"}]}:
+                    errors.append(f"G{i} -> {got!r}")
+
+        threads = [threading.Thread(target=worker, args=(s,)) for s in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        cache.close()
+        assert errors == []
