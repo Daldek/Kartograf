@@ -1443,6 +1443,38 @@ class TestCmdDownloadBBox:
         captured = capsys.readouterr()
         assert "Invalid bbox format" in captured.err
 
+    @pytest.mark.parametrize(
+        "bbox", ["invalid", "10,10,5,5", "nan,1,2,3", "1,2,-inf,4", "1,2,3"]
+    )
+    @pytest.mark.parametrize(
+        "extra",
+        [[], ["--country", "pl"], ["--country", "cz"], ["--product", "laz"]],
+        ids=["auto", "pl", "cz", "laz"],
+    )
+    def test_download_rejects_bad_bbox_before_network(
+        self, bbox, extra, capsys, tmp_path
+    ):
+        """K7b: jedno parsowanie --bbox we wszystkich torach download (PL, CZ,
+        LAZ): kod 1, `Error: Invalid bbox format` na stderr (bez ValueError,
+        bez podpowiedzi na stdout), zero providerow. Dawniej bbox odwrocony
+        szedl dalej (arkusz-smiec), NaN konczyl sie `ValueError`."""
+        with (
+            patch("kartograf.cli.download_cmd.DownloadManager") as manager,
+            patch(_CZ_FACTORY_PATCH) as cz_factory,
+            patch("kartograf.providers.pl.gugik_laz.GugikLazProvider") as laz,
+        ):
+            result = main(
+                ["download", f"--bbox={bbox}", "-o", str(tmp_path), "-q", *extra]
+            )
+        assert result == 1
+        captured = capsys.readouterr()
+        assert "Error: Invalid bbox format" in captured.err
+        assert "ValueError" not in captured.err
+        assert "Expected" not in captured.out
+        manager.assert_not_called()
+        cz_factory.assert_not_called()
+        laz.assert_not_called()
+
     def test_download_bbox_too_few_values(self, capsys):
         """Test za mało wartości w bbox → exit 1."""
         result = main(
@@ -3258,7 +3290,7 @@ class TestResolveLazBbox:
         from kartograf.cli.commands import _resolve_laz_bbox
 
         args = Namespace(godlo=None, bbox="1,2,3", bbox_crs="EPSG:2180", geometry=None)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError, match="Invalid bbox format"):
             _resolve_laz_bbox(args)
 
     def test_bbox_from_krovak_uses_pinned_transform(self):
@@ -3519,18 +3551,26 @@ class TestCmdDownloadCz:
         assert payload["transform"] is None  # bez --target-crs: uklad natywny
 
     def test_bbox_string_is_normalized_to_image_sr(self, tmp_path):
-        """Nazwa pliku niesie wspolrzedne FINALNEGO zadania (po normalizacji)."""
-        from kartograf.cli.download_cmd import _cmd_download_cz
+        """Nazwa pliku niesie wspolrzedne FINALNEGO zadania (po normalizacji).
 
+        Przez ``main`` (K7b): tryb obszarowy CZ zawsze dostaje gotowy bbox
+        z ``_dispatch_area``; dawne bezposrednie wywolanie z ``args.bbox``
+        jako tekstem szlo martwa galezia parsowania w ``_cz_download_bbox``.
+        """
         provider = _cz_provider_mock()
-        args = _cz_args(
-            tmp_path,
-            godlo=None,
-            bbox="472887.5,208337.5,473808.0,209409.8",
-            bbox_crs="EPSG:2180",
-        )
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
-            result = _cmd_download_cz(args)
+            result = main(
+                [
+                    "download",
+                    "--bbox",
+                    "472887.5,208337.5,473808.0,209409.8",
+                    "--country",
+                    "cz",
+                    "-o",
+                    str(tmp_path),
+                    "-q",
+                ]
+            )
 
         assert result == 0
         sent_bbox, target = provider.download_bbox.call_args.args[:2]
@@ -3599,15 +3639,6 @@ class TestCmdDownloadCz:
         assert "Remedium: zainstaluj siatki recznie" in captured.err
         assert "Traceback" not in captured.err
         assert not list(tmp_path.rglob("*.tif"))
-
-    def test_invalid_bbox_string_returns_1(self, tmp_path, capsys):
-        from kartograf.cli.download_cmd import _cmd_download_cz
-
-        with patch(_CZ_FACTORY_PATCH, return_value=_cz_provider_mock()):
-            result = _cmd_download_cz(_cz_args(tmp_path, godlo=None, bbox="1,2,3"))
-
-        assert result == 1
-        assert "bbox" in capsys.readouterr().err.lower()
 
     def test_target_crs_with_godlo_rejected(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
