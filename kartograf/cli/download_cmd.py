@@ -13,10 +13,12 @@ from pathlib import Path
 
 from kartograf.cli._parser import parse_bbox_arg
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
+from kartograf.download.campaigns import validate_campaign_args
 from kartograf.download.manager import (
     DownloadManager,
     DownloadProgress,
     DownloadResult,
+    SheetFetch,
 )
 from kartograf.exceptions import (
     DownloadError,
@@ -171,6 +173,72 @@ def _reject_non_nmt_for_cz(product: str) -> bool:
         return False
     print(_CZ_ONLY_NMT_MSG.format(product=product), file=sys.stderr)
     return True
+
+
+def _campaign_opts(args: argparse.Namespace) -> tuple[str, int | None]:
+    """``(campaigns, min_year)`` — getattr, bo testy buduja Namespace recznie."""
+    return getattr(args, "campaigns", "newest"), getattr(args, "min_year", None)
+
+
+def _reject_campaign_opts_without_pl(
+    args: argparse.Namespace, countries: tuple[str, ...]
+) -> bool:
+    """
+    Opcje kampanii (``--campaigns all``, ``--min-year``) dotycza tylko PL.
+
+    Jedna regula dla wszystkich punktow wejscia CLI (ADR-030, errata (j) Q9
+    i errata 2 N-3): bez PL wsrod krajow -> ``Error:`` i True (przed siecia);
+    PL i CZ -> ``Info:`` raz, False (CZ pobierane dalej, biezaca wersja);
+    brak opcji albo sama PL -> False, cisza. Komunikaty na stderr (``-q`` ich
+    nie tlumi). Opcje kampanii celowo NIE wchodza do ``_pl_only_flags`` —
+    inaczej ``auto`` zwezaloby obszar przygraniczny do PL.
+    """
+    campaigns, min_year = _campaign_opts(args)
+    if campaigns == "newest" and min_year is None:
+        return False
+    if "PL" not in countries:
+        print(
+            "Error: CZ (CUZK) nie ma kampanii — --campaigns all/--min-year "
+            "dotycza tylko PL",
+            file=sys.stderr,
+        )
+        return True
+    if "CZ" in countries:
+        print(
+            "Info: --campaigns/--min-year dotycza tylko czesci PL "
+            "(CZ: biezaca wersja danych CUZK)",
+            file=sys.stderr,
+        )
+    return False
+
+
+def _reject_campaign_opts_with_target_crs(args: argparse.Namespace) -> bool:
+    """
+    Wycinek PL ``--target-crs`` + ``--campaigns all``/``--min-year`` = blad.
+
+    Errata (j) Q2: wycinek sklada jedna kampanie na arkusz, a jego nazwa nie
+    niesie granicy roku. True (po ``Error:`` na stderr) przed siecia.
+    Wolana wylacznie w ``_dispatch_area`` (jedyna droga do wycinka PL), przed
+    galezia CZ; godlo z ``--target-crs`` odrzuca wczesniej straz godla.
+    """
+    if getattr(args, "target_crs", None) is None:
+        return False
+    campaigns, min_year = _campaign_opts(args)
+    if campaigns == "all":
+        print(
+            "Error: --campaigns all nie dziala z --target-crs — wycinek sklada "
+            "jedna kampanie na arkusz; laczenie kampanii: narzedzie 0.7.1",
+            file=sys.stderr,
+        )
+        return True
+    if min_year is not None:
+        print(
+            "Error: --min-year nie dziala z --target-crs — nazwa wycinka nie "
+            "niesie granicy roku",
+            file=sys.stderr,
+        )
+        return True
+    return False
 
 
 def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
@@ -657,7 +725,9 @@ def _pl_only_flags(args: argparse.Namespace) -> list[str]:
     * ``--resolution 2m`` i ``--vertical-crs Bpv`` sa czeskie, wiec rozstrzygaja
       co najwyzej w druga strone (dzis: blad walidacji);
     * ``--target-crs`` od ADR-027 dziala po obu stronach granicy (PL: scalony
-      wycinek), wiec nie rozstrzyga kraju w zadna strone.
+      wycinek), wiec nie rozstrzyga kraju w zadna strone;
+    * ``--campaigns all``/``--min-year`` (ADR-030) tez nie: obszar PL+CZ
+      pobiera CZ w biezacej wersji (``_reject_campaign_opts_without_pl``).
     """
     flags: list[str] = []
     product = getattr(args, "product", "nmt")
@@ -721,6 +791,16 @@ def _dispatch_area(
     if countries == ("CZ",) and _reject_non_nmt_for_cz(product):
         return 1
     if _validate_cross_country(args, countries):
+        return 1
+    # Wycinek PL + opcje kampanii: jedyne miejsce tej strazy (wycinek PL
+    # powstaje tylko stad). Tu, a nie w galezi PL — pod auto CZ idzie PRZED
+    # PL (sortowanie), wiec pozniejsza straz przyszlaby po pobraniu CZ; przed
+    # Info o kampaniach, zeby odrzucone zadanie nie dostalo Info. Kraje sa
+    # juz rozstrzygniete (`_pl_only_flags` wyzej): obszar bez PL odrzuca
+    # opcje kampanii, obszar PL+CZ dostaje Info.
+    if "PL" in countries and _reject_campaign_opts_with_target_crs(args):
+        return 1
+    if _reject_campaign_opts_without_pl(args, countries):
         return 1
 
     parent_request = _build_parent_request(bbox, countries)
@@ -884,6 +964,15 @@ def cmd_download(args: argparse.Namespace) -> int:
     # --- Dyspozycja per kraj: godlo rozstrzyga kraj przez rejestr systemow ---
     from kartograf.core.parser_registry import detect_system
 
+    # ADR-030: --min-year 1900..2100 (i strategia) przed jakakolwiek praca
+    campaigns, min_year = _campaign_opts(args)
+    try:
+        validate_campaign_args(campaigns, min_year)
+    except ValidationError as e:
+        # komunikat biblioteki nazywa parametr; CLI mowi o fladze
+        print(f"Error: {str(e).replace('min_year', '--min-year')}", file=sys.stderr)
+        return 1
+
     country_flag = getattr(args, "country", "auto")
     product = getattr(args, "product", "nmt")
 
@@ -901,6 +990,9 @@ def cmd_download(args: argparse.Namespace) -> int:
             return 1
         if system_country == "CZ":
             if _reject_non_nmt_for_cz(product):
+                return 1
+            # godlo CZ niezaleznie od `country_flag` (jawne cz albo auto)
+            if _reject_campaign_opts_without_pl(args, ("CZ",)):
                 return 1
             return _run_cz(args)
         if _resolve_pl_sentinels(args):
@@ -950,15 +1042,21 @@ def cmd_download(args: argparse.Namespace) -> int:
         provider, storage = _create_provider_and_storage(
             product, output_dir, vertical_crs, resolution, cache=cache
         )
-        manager = DownloadManager(
-            output_dir=output_dir,
-            provider=provider,
-            storage=storage,
-            # pion juz FAKTYCZNY: "5m => EVRF2007" w _resolve_pl_sentinels (D11)
-            vertical_crs=vertical_crs,
-            resolution=resolution,
-            max_workers=workers,
-        )
+        try:
+            manager = DownloadManager(
+                output_dir=output_dir,
+                provider=provider,
+                storage=storage,
+                # pion juz FAKTYCZNY: "5m => EVRF2007" w _resolve_pl_sentinels (D11)
+                vertical_crs=vertical_crs,
+                resolution=resolution,
+                max_workers=workers,
+                campaigns=campaigns,
+                min_year=min_year,
+            )
+        except ValidationError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
 
         skip_existing = not args.force
         on_progress = create_progress_callback(args.quiet)
@@ -985,14 +1083,6 @@ def cmd_download(args: argparse.Namespace) -> int:
                 if not args.quiet:
                     print(f"Downloading {args.godlo} ({label})...")
 
-                # E15: skip pojedynczego arkusza raportujemy jako skip — ta
-                # sama sciezka i ten sam warunek co w `download_sheet`
-                # (manager nie wypelnia `last_result` dla jednego arkusza).
-                # isinstance(Path): atrapa managera w testach daje Mock.
-                target = manager.storage.get_path(
-                    args.godlo, provider.default_extension
-                )
-                existed = skip_existing and isinstance(target, Path) and target.exists()
                 result = manager.download_sheet(
                     args.godlo,
                     skip_existing=skip_existing,
@@ -1000,12 +1090,20 @@ def cmd_download(args: argparse.Namespace) -> int:
                 )
                 if not isinstance(result, list):
                     # pojedynczy arkusz 1:10000 / PL-2000: sukces = brak
-                    # wyjatku (brak danych = DownloadError, kod 1 — D10)
+                    # wyjatku (brak danych = DownloadError, kod 1 — D10).
+                    # E15: o skipie mowi manager (`last_sheet`), nie istnienie
+                    # sciezki standardowej — dowiazanie moze istniec, a nowa
+                    # kampania i tak zostac pobrana. isinstance (I-1): atrapa
+                    # Mock() managera ma `last_sheet.skipped` = Mock (prawda).
+                    fetch = manager.last_sheet
+                    sheet = fetch if isinstance(fetch, SheetFetch) else None
                     if not args.quiet:
-                        if existed:
+                        if sheet is not None and sheet.skipped:
                             print(f"Skipped {args.godlo} - already exists at {result}")
                         else:
                             print(f"Downloaded to {result}")
+                    if sheet is not None and sheet.link == "copy":
+                        _warn_copied_links([args.godlo])
                     _warn_sheet_sidecars([result])
                     return 0
                 paths = result
@@ -1022,7 +1120,11 @@ def cmd_download(args: argparse.Namespace) -> int:
     # finisz co tryb listy arkuszy (D10: arkusze morskie pod godlem 1:50000
     # na wybrzezu to ta sama sytuacja co pod --bbox).
     return _finish_pl_sheets(
-        _last_result(manager), paths, output_dir=output_dir, quiet=args.quiet
+        _last_result(manager),
+        paths,
+        output_dir=output_dir,
+        quiet=args.quiet,
+        campaigns=campaigns,
     )
 
 
@@ -1062,8 +1164,24 @@ def _download_godlo_list(
     return list(paths), _last_result(manager)
 
 
+def _warn_copied_links(godla: Sequence[str]) -> None:
+    """``Warning:`` o sciezce standardowej jako KOPII kampanii (ADR-030)."""
+    shown = ", ".join(godla[:10]) + (" ..." if len(godla) > 10 else "")
+    print(
+        "Warning: dowiazanie niedostepne na tym systemie plikow — sciezka "
+        f"standardowa jest KOPIA najnowszej kampanii dla {len(godla)} arkuszy "
+        f"({shown}) (extra.link=copy)",
+        file=sys.stderr,
+    )
+
+
 def _finish_pl_sheets(
-    result: DownloadResult, paths: list[Path], *, output_dir: Path, quiet: bool
+    result: DownloadResult,
+    paths: list[Path],
+    *,
+    output_dir: Path,
+    quiet: bool,
+    campaigns: str = "newest",
 ) -> int:
     """
     Wspolne podsumowanie i kod wyjscia trybu wielu arkuszy PL (D2/D10).
@@ -1084,17 +1202,33 @@ def _finish_pl_sheets(
 
     Arkusze z niepelnej najnowszej kampanii (sidecar
     ``extra.source.full_sheet: false``) -> ``Warning:`` (E13), kod bez zmian.
+    Sciezka standardowa jako KOPIA kampanii (``result.copied``) ->
+    ``Warning:``, kod bez zmian. ``campaigns="all"``: podsumowanie liczy
+    pliki kampanii (``result.campaign_files``), nie arkusze.
 
     ``Warning:``/``Error:`` ida na stderr, wiec ``-q`` ich NIE tlumi.
     """
     _warn_sheet_sidecars(paths)
+    if result.copied:
+        _warn_copied_links(result.copied)
     if not quiet:
         # pasek postepu konczy "skipped"/"downloading" bez nowej linii
         print()
-        print(
-            f"Downloaded {len(result.succeeded)} files to {output_dir} "
-            f"({len(result.skipped)} already existed)"
-        )
+        if campaigns == "all":
+            # `campaign_files` = pobrane + lokalne; lokalne osobno
+            # (`reused_campaign_files`, podzbior per arkusz)
+            files = result.campaign_files
+            existed = sum(len(f) for f in result.reused_campaign_files.values())
+            total_files = sum(len(f) for f in files.values())
+            print(
+                f"Downloaded {total_files - existed} campaign files for "
+                f"{len(files)} sheets to {output_dir} ({existed} already existed)"
+            )
+        else:
+            print(
+                f"Downloaded {len(result.succeeded)} files to {output_dir} "
+                f"({len(result.skipped)} already existed)"
+            )
     total = result.total
     hard = result.hard_failures
     missing = result.no_coverage
@@ -1490,6 +1624,7 @@ def _download_pl_sheet_list(
     product = getattr(args, "product", "nmt")
     workers = getattr(args, "workers", 4)
     skip_existing = not args.force
+    campaigns, min_year = _campaign_opts(args)
 
     if not args.quiet:
         _print_sheet_list(
@@ -1503,17 +1638,19 @@ def _download_pl_sheet_list(
         provider, storage = _create_provider_and_storage(
             product, output_dir, vertical_crs, resolution, cache=cache
         )
-        manager = DownloadManager(
-            output_dir=output_dir,
-            provider=provider,
-            storage=storage,
-            # pion juz FAKTYCZNY: "5m => EVRF2007" w _resolve_pl_sentinels (D11)
-            vertical_crs=vertical_crs,
-            resolution=resolution,
-            max_workers=workers,
-            sidecar_extra={"parent_request": parent_request},
-        )
         try:
+            manager = DownloadManager(
+                output_dir=output_dir,
+                provider=provider,
+                storage=storage,
+                # pion juz FAKTYCZNY: "5m => EVRF2007" w _resolve_pl_sentinels (D11)
+                vertical_crs=vertical_crs,
+                resolution=resolution,
+                max_workers=workers,
+                sidecar_extra={"parent_request": parent_request},
+                campaigns=campaigns,
+                min_year=min_year,
+            )
             all_paths, result = _download_godlo_list(
                 manager, godlo_list, skip_existing, create_progress_callback(args.quiet)
             )
@@ -1524,7 +1661,13 @@ def _download_pl_sheet_list(
             print(f"Error: {e}", file=sys.stderr)
             return 1
 
-    return _finish_pl_sheets(result, all_paths, output_dir=output_dir, quiet=args.quiet)
+    return _finish_pl_sheets(
+        result,
+        all_paths,
+        output_dir=output_dir,
+        quiet=args.quiet,
+        campaigns=campaigns,
+    )
 
 
 def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
@@ -1621,6 +1764,10 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     if getattr(args, "country", "auto") == "cz":
         print(_CZ_ONLY_NMT_MSG.format(product="laz"), file=sys.stderr)
         return 1
+    campaigns, min_year = _campaign_opts(args)
+    if min_year is not None and getattr(args, "year", None) is not None:
+        print("Error: --min-year i --year wykluczaja sie (LAZ)", file=sys.stderr)
+        return 1
     if _resolve_pl_sentinels(args):
         return 1
 
@@ -1659,8 +1806,14 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     if not quiet:
         print(f"Querying GUGiK WFS for LAZ tiles ({vertical_crs})...")
     try:
-        selection = provider.select_tiles(bbox, year=year, min_density=min_density)
-    except (ValueError, DownloadError) as e:
+        selection = provider.select_tiles(
+            bbox,
+            year=year,
+            min_density=min_density,
+            campaigns=campaigns,
+            min_year=min_year,
+        )
+    except (ValueError, ValidationError, DownloadError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
@@ -1687,6 +1840,8 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         output_dir=output_dir,
         year=year,
         min_density=min_density,
+        campaigns=campaigns,
+        min_year=min_year,
         max_workers=workers,
         force=args.force,
         on_progress=_progress,
@@ -2044,6 +2199,9 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
     country_flag = getattr(args, "country", "auto")
     if country_flag == "cz":
         if _reject_non_nmt_for_cz(getattr(args, "product", "nmt")):
+            return 1
+        # ta galaz omija `_dispatch_area` — straz kampanii takze tutaj
+        if _reject_campaign_opts_without_pl(args, ("CZ",)):
             return 1
         bbox = _resolve_cz_geometry_bbox(args)
         if bbox is None:
