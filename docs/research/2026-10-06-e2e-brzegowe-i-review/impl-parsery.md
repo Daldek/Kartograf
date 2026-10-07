@@ -192,7 +192,7 @@ planu, plus ponizsze resztki z K1-K5:
   dodac `godlo = godlo.strip()` na poczatku `download`. Dotad taki godlo
   konczyl sie `ValidationError` przed siecia; dzis — bledem pobrania.
   Brak konsumentow bibliotecznych CZ (Hydrograf/Hydrolog), waga niska.
-- `cli/download_cmd.py:897-900` i `:1924` (`system is not None`),
+- `cli/download_cmd.py:900-901` i `:1917` (`system is not None`),
   `download/storage.py:206-212` — martwe galezie `None` (mypy nie protestuje).
 - Opcjonalnie (providers zablokowane): `providers/corine.py`
   `_transform_bbox_to_epsg3857/_wgs84`, `providers/soilgrids.py`
@@ -226,4 +226,4 @@ zapytan `exportImage`/`query`. Do decyzji przy odmrozeniu toru CZ.
 | `c903955` | K4 `refactor(core): czytniki SHP/GPKG przez core.bbox.transform_bbox` |
 | `dd8c3da` | K5 `refactor(core)!: rejestr systemow godel bez parser_factory i Sm5Sheet, strip() spojnie` |
 | `da8fc35` | K7a `fix(cli): parse_bbox_arg — jedno parsowanie --bbox z walidacja w landcover/soilgrids` |
-| (ten) | `docs: CHANGELOG Parsery 2026-10-07 + raport impl-parsery` |
+| `8cb604a` (+ poprawka) | `docs: CHANGELOG Parsery 2026-10-07 i raport implementacji uproszczenia parserow` |
