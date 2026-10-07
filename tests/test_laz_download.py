@@ -304,9 +304,7 @@ def _cli(tmp_path, *args):
     from kartograf.cli.commands import main
 
     session = wfs_session()
-    with patch(
-        "kartograf.providers.pl.gugik_laz.make_gugik_session", return_value=session
-    ):
+    with patch("kartograf.transport.http.make_gugik_session", return_value=session):
         rc = main(["download", *args, "--product", "laz", "-o", str(tmp_path), "-q"])
     return rc, session
 
