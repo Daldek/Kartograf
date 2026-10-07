@@ -6,6 +6,17 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.7.0] - Unreleased
+### Poprawki po tescie na zywo ADR-030 (FA)
+- **BDOT10k GPKG na udzialach CIFS/SMB:** `_merge_gpkg_files` sklada GPKG
+  w lokalnym katalogu tymczasowym systemu (SQLite bez `nobrl` konczyl na
+  udziale `database is locked`), a gotowy plik trafia do celu przez kopie
+  obok i `os.replace`; sprzatanie takze przy wyjatku.
+- **HSG:** `kartograf soilgrids hsg` / `HSGCalculator.calculate_hsg_by_bbox`
+  zapisuja sidecar `<plik>.meta.json` (deskryptor `global.isric.soilgrids`,
+  `extra.derived = "hsg"`, warstwy zrodlowe, glebokosc, statystyka).
+- **`MetadataCache.__del__`** nie importuje i nie rzuca przy zamykaniu
+  interpretera (`ImportError: sys.meta_path is None`).
+
 ### Kampanie GUGiK 2026-10-07 (ADR-030 + errata 2026-10-07)
 - **BREAKING (układ `data/`):** prawdziwe pliki NMT/NMPT/orto PL leżą
   wyłącznie w `<segment>/kampanie/<data>_<id>/<hierarchia godła>/<godło>.<ext>`

@@ -1129,3 +1129,34 @@ class TestCampaignsCache:
             t.join()
         cache.close()
         assert errors == []
+
+
+class TestMetadataCacheFinalizer:
+    """__del__ nie importuje i nie rzuca przy finalizacji interpretera."""
+
+    def test_del_does_not_import_and_does_not_raise(self, tmp_path):
+        import builtins
+
+        cache = MetadataCache(db_path=tmp_path / "c.db")
+
+        def no_import(*a, **kw):
+            raise ImportError("sys.meta_path is None")
+
+        real_import = builtins.__import__
+        builtins.__import__ = no_import
+        try:
+            cache.__del__()  # nie rzuca
+        finally:
+            builtins.__import__ = real_import
+
+    def test_del_swallows_close_error(self):
+        class Boom:
+            def close(self):
+                raise sqlite3.ProgrammingError("closed")
+
+        cache = MetadataCache.__new__(MetadataCache)
+        cache._conn = Boom()
+        cache.__del__()
+
+    def test_del_without_conn_attribute(self):
+        MetadataCache.__new__(MetadataCache).__del__()
