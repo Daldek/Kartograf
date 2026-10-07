@@ -43,7 +43,7 @@ gdzie znany jest kontekst zadania. Zapis sidecara jest best-effort: kazdy blad
 Poza bledem zapisu jedyny cichy przypadek braku sidecara przy sukcesie
 to provider bez `descriptor_key` (`DownloadManager._write_sidecar`
 wraca wtedy po cichu). Pominiety juz pobrany plik zachowuje
-dotychczasowy sidecar; arkusz z sidecarem ponownie wykorzystany
+dotychczasowy sidecar (wyjatek ADR-030: sidecar pliku w `kampanie/` jest obowiazkowy, sekcja 3.2); arkusz z sidecarem ponownie wykorzystany
 w zadaniu obszarowym dopisuje `extra.parent_requests` bez zmiany
 oryginalnego `parent_request`.
 
@@ -176,13 +176,16 @@ kartograf/
 │   │                    # sheets.py (indeks SM5/TM33), dmr.py, __init__.py (create_dmr_provider)
 │   ├── corine.py        # CORINE z Copernicus CLMS (+ fallback WMS PNG)
 │   └── soilgrids.py     # SoilGrids z ISRIC (WCS)
-├── cache/metadata.py    # MetadataCache — SQLite WAL, TTL 7 dni (sheet_cache 30 dni), thread-safe
+├── cache/metadata.py    # MetadataCache — SQLite WAL, TTL 7 dni (campaigns_cache 7 dni, sheet_cache 30 dni), thread-safe
 ├── download/            # Pobieranie NMT/NMPT/Orto po godle + wycinek PL
+│   ├── campaigns.py     # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu, verify_file_format
+│   ├── links.py         # Dowiazanie sciezki standardowej (symlink -> hardlink -> kopia, nigdy wstecz)
 │   ├── cutout.py        # Wycinek PL --target-crs jako API (ADR-027): prepare/select/run/
 │   │                    # download_pl_cutout — mozaika arkuszy + warp, sidecar
 │   ├── laz.py           # Kafle LAZ jako API (ADR-029): download_laz_area/run_laz_download —
 │   │                    # pula watkow, sidecar kafla, porazki w wyniku
 │   ├── manager.py       # DownloadManager — koordynacja arkuszy (ThreadPoolExecutor), sidecary;
+│   │                    # kampanie (campaigns=, min_year=), SheetFetch/last_sheet
 │   │                    # download_sheets/expand_sheets (lista godel, porazki w last_result)
 │   └── storage.py       # FileStorage — segmenty z szablonow rejestru (ADR-026);
 │                        # prune_empty_dirs — sprzatanie pustych bbox/ po porazce
@@ -258,11 +261,11 @@ Kazde udane pobranie zapisuje **dwa** pliki: dane i `<plik>.meta.json`.
 | `vertical_source` | `native` / `ellipsoidal` / `server` (z `AccessChannel`) |
 | `resolution` | rozdzielczosc z deskryptora (`1m`/`5m`/`2m`) albo `null` |
 | `nodata` | wartosc pustego piksela: dla `.asc` czytana automatycznie z naglowka (`read_asc_nodata`), w torze CZ podawana przez CLI z tagu GeoTIFF (`_read_tif_nodata`; w trybie bbox z fallbackiem `CUZK_NODATA`), dla wycinka PL stala `-9999.0`; `null` gdy zadna z tych drog nie ma zastosowania (np. orto) |
-| `request` | zadanie, ktore dalo TEN plik: `godlo`, `bbox` + `bbox_crs` w ukladzie wyniku albo `teryt`; oryginalne zadanie niesie `extra.parent_request` (3.4), rekord skorowidza PL niesie `extra.source` |
+| `request` | zadanie, ktore dalo TEN plik: `godlo`, `bbox` + `bbox_crs` w ukladzie wyniku albo `teryt`; dla plikow PL (kampanie, ADR-030) `campaigns` (`newest`/`all`, zawsze) i `min_year` (tylko gdy podany); LAZ: `year`/`min_density`/`min_year` gdy podane oraz `campaigns` tylko dla `all`; oryginalne zadanie niesie `extra.parent_request` (3.4), rekord skorowidza PL niesie `extra.source` |
 | `license` | `{id, attribution, url}` z deskryptora |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, sekundy) i wersja pakietu |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
-| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `godlo_kafla`/`rok`/`gestosc`/`url`; SM5 ma `mapname`/`podil`; arkusze NMT/NMPT/orto PL maja `source` (URL, warstwa, aktualnosc, rozdzielczosc itd.); wycinek PL: `sheet_sources` (lista `{godlo, url, layer, aktualnosc, full_sheet}`; `full_sheet: false` = niepelna najnowsza kampania, E13), `missing_sheets` (brak pliku), `off_grid_sheets` (W1, niezgodna faza), `all_nodata` (`true` dla wycinka bez waznego piksela, E15) |
+| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `godlo_kafla`/`rok`/`gestosc`/`url`; SM5 ma `mapname`/`podil`; arkusze NMT/NMPT/orto PL maja `source` (URL, warstwa, aktualnosc, rozdzielczosc itd.); wycinek PL: `sheet_sources` (lista `{godlo, url, layer, aktualnosc, full_sheet}`; `full_sheet: false` = niepelna najnowsza kampania, E13), `missing_sheets` (brak pliku), `off_grid_sheets` (W1, niezgodna faza), `all_nodata` (`true` dla wycinka bez waznego piksela, E15); plik kampanii (ADR-030): `campaign` = `{id, date, zgloszenie, source, full_sheet, dt_pzgik}` obok `source`; sidecar sciezki standardowej: `link` (`symlink`/`hardlink`/`copy`) i `link_target` (sciezka celu wzgledem dowiazania) |
 | `schema` | stale `kartograf-meta/1` |
 
 Kanal, z ktorego brany jest `horizontal_crs`/`vertical_crs_options`/
@@ -287,12 +290,22 @@ CLI): po zbudowaniu nadpisuje `horizontal_crs` na uklad docelowy i ustawia
 `extra` — `parent_request` (gdy podany; bez niego z biblioteki `"extra": {}`)
 i `missing_sheets` (gdy niepusta).
 
+**Kampanie (ADR-030).** Sidecar pliku w `kampanie/` jest OBOWIAZKOWY:
+`emit_sidecar(..., required=True)` zapisuje go atomowo, a porazka zapisu
+rzuca `DownloadError` (manager usuwa plik danych, kampania jest porazka,
+dowiazanie nie jest przestawiane). Pozostale sidecary (arkusz toru plain,
+wycinek, LAZ, CZ, landcover) zostaja best-effort. Sidecar sciezki standardowej
+(dowiazania) to ZWYKLY plik — kopia sidecara celu z dopisanym `extra.link`
+i `extra.link_target` (zapis `tmp` + `os.replace`, nigdy "przez" dowiazanie do
+sidecara kampanii; best-effort).
+
 ### 3.3 Kanoniczny uklad `data/`
 
 ```
 data/
 ├── nmt/
-│   ├── pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
+│   ├── pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc   # DOWIAZANIE (regula 6)
+│   ├── pl_1992_1m_evrf2007/kampanie/2022-05-10_83233/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc   # prawdziwy plik
 │   ├── pl_1992_1m_kron86/...
 │   ├── pl_1992_5m_evrf2007/...              # 5m tylko EVRF2007 (regula istniejaca)
 │   ├── pl_1992_1m_evrf2007/bbox/<coords>.tif    # wycinek --target-crs (sekcja 4.3)
@@ -339,6 +352,25 @@ data/
    z `provider.storage_variant` (`GugikOrtoProvider(color=...)`) i trafia do
    `FileStorage(variant=...)`; bez niego skip zwracal po cichu plik RGB na
    zadanie CIR.
+
+6. **Kampanie (ADR-030 + errata 2026-10-07).** Prawdziwe pliki NMT/NMPT/orto PL
+   leza WYLACZNIE w `<segment>/kampanie/<data>_<id>/<hierarchia godla>/
+   <godlo>.<ext>` (+ `.meta.json`), takze dla `newest`; sciezka standardowa
+   `<segment>/<hierarchia>/<godlo>.<ext>` jest dowiazaniem do najnowszej
+   LOKALNEJ kampanii (takze niepelnej). `<data>` = `aktualnosc` rekordu
+   (RRRR-MM-DD), `<id>` = pierwszy segment liczbowy nazwy pliku w URL
+   (`83233_1744736_<godlo>.asc` -> `83233`), inaczej `u` + 8 znakow hex
+   `sha1(URL)`. Segment ADR-026 bez zmian (takze `orto/pl_1992_cir`).
+   Metoda dowiazania: 1) symlink WZGLEDNY, 2) hardlink, 3) kopia + `Warning:`
+   (`extra.link` = `symlink`/`hardlink`/`copy`); podmiana atomowa
+   (tymczasowe dowiazanie + `os.replace`); dowiazanie nigdy nie cofa sie na
+   kampanie starsza od biezacego celu (klucz celu z jego sidecara, a gdy
+   nieczytelny — z nazwy katalogu). Kontrola istnienia sprawdza CEL
+   (wiszace dowiazanie = brak pliku). `FileStorage.get_campaign_path` buduje
+   sciezke kampanii, `list_files()` domyslnie pomija `kampanie/` i wiszace
+   dowiazania (`campaigns=True` = tylko `kampanie/`). CZ, LAZ, BDOT10k i
+   land cover nie uzywaja `kampanie/`. Kopiowanie `data/`: `cp -rL`/`rsync -aL`
+   (bez `-L` kopiuje sie dowiazanie).
 
 Nowe zrodlo dodaje sie samym wpisem deskryptora — np.
 `nmt/de_bb_dgm1_dhhn2016/` nie wymaga zadnej zmiany w kodzie sciezek.
@@ -400,6 +432,14 @@ utworzeniu.
 
 ## 4. Przeplywy per produkt
 
+**Migracja 0.7.0-dev -> 0.7.0 (ADR-030, BREAKING):**
+
+| Stan | Zachowanie |
+|---|---|
+| zwykly plik NMT/NMPT/orto w sciezce standardowej (stary uklad bez `kampanie/`) | traktowany jako nieznany (brak migracji); przy pierwszym `newest` kampania jest pobierana do `kampanie/`, a zwykly plik (z sidecarem) ZASTEPOWANY dowiazaniem |
+| dowiazanie w sciezce standardowej | cel = najnowsza lokalna kampania; kolejne `newest`/`all` przestawiaja je tylko na kampanie o kluczu `(aktualnosc, dt_pzgik, url)` scisle wiekszym niz klucz biezacego celu (ten sam cel albo klucz rowny/wiekszy = bez zmian; klucz z sidecara celu, a gdy nieczytelny z nazwy katalogu `<data>_<id>`) |
+| wiszace dowiazanie (cel usuniety) | brak pliku — pobranie od nowa |
+
 ### 4.1 Godlo PL (NMT/NMPT/Orto)
 
 `SheetParser` waliduje godlo i normalizuje wielkosc liter (zer wiodacych NIE
@@ -410,8 +450,8 @@ PL-1992 grubsze niz 1:10000 rozwija sie do arkuszy 1:10000
 kazdego arkusza pyta WMS skorowidz (`GetFeatureInfo`, warstwy wykryte lazy
 przez `GetCapabilities` — ADR-020). `providers/pl/skorowidz.py` parsuje
 pelne rekordy; filtruje cale godlo, zgodny uklad i rozdzielczosc
-(dla orto tez domyslnie RGB), wybiera najnowsza date w pierwszej warstwie
-z dopasowaniem; remis rozstrzyga `dt_pzgik`, URL. Brak zgodnego rekordu
+(dla orto tez domyslnie RGB), wybiera (strategia `newest`) rekord z najnowsza data w pierwszej
+warstwie z dopasowaniem; remis rozstrzyga `dt_pzgik`, URL. Brak zgodnego rekordu
 po poprawnych odpowiedziach warstw = `NoCoverageError`, np. dla PL-2000
 1:10000 z samymi potomkami podpowiedz `--scale 1:2000`. Awaria warstwy,
 raport OGC albo nieoczekiwany szablon = `DownloadError`, nie cichy fallback
@@ -424,12 +464,59 @@ CLI podpina cache w torach PL i CZ; `--force` otwiera go w obu w trybie
 (E14) — biblioteka przyjmuje `cache=`; `kartograf cache stats` pokazuje `Record entries`.
 `DownloadManager` pisze sidecar po kazdym udanym arkuszu; arkusz ASC GUGiK
 nie niesie CRS (rasterio: `crs=None`), wiec jedynym nosnikiem ukladu jest
-sidecar. Ponowne uruchomienie pomija istniejace pliki bez sieci (zmierzone:
-0,4 s w przestrzeni bez sieci). `--target-crs` w trybie godlowym jest
+sidecar. Ponowne uruchomienie rozwiazuje najnowszy rekord arkusza (cache 7 d;
+po jego wygasnieciu zapytanie do skorowidza) i pobiera tylko brakujace
+kampanie — kampania juz lokalna jest pomijana (`SheetFetch.skipped`). `--target-crs` w trybie godlowym jest
 **odrzucane** (kod 1) — godlo PL dostarcza arkusz natywny 1:1.
 
-Wynik: `data/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc`
-(+ `.meta.json`); dla NMPT `data/nmpt/pl_1992_1m_evrf2007/...`, dla orto
+**Kampanie (ADR-030 + errata 2026-10-07).** `--campaigns {newest,all}`
+(domyslnie `newest`) i `--min-year RRRR` (granica na roku `aktualnosc`,
+nie `dt_pzgik`; 1900..2100) steruja wyborem rekordow.
+`GugikProvider.resolve_campaigns` zwraca `CampaignRef` (`download/campaigns.py`):
+`newest` = jeden rekord wg ADR-028 (bez zmian), `all` = kazdy rekord po
+twardym filtrze ADR-028 ze WSZYSTKICH warstw (`select_campaign_records`),
+bez limitu liczby kampanii (`logger.info` z liczba). Rok z nazwy warstwy
+(`layer_upper_year`) sluzy wylacznie do pominiecia zapytania i tylko w
+`all` (warstwa `Starsze` zawsze odpytywana); warstwa spoza `LAYER_PATTERN`
+nie jest odpytywana, nazwa z rodziny produktu (`LAYER_FAMILY`) daje
+`logger.warning`. Rekord bez ustalonego roku nie spelnia `--min-year`
+(`all`: pominiety; `newest`: `NoCoverageError` "starsza niz min_year" z data
+najnowszej kampanii). `MetadataCache` ma tabele `campaigns_cache` (klucz jak
+`record_cache`, TTL 7 d, `--min-year` poza kluczem; skan czesciowy obsluguje
+tylko granice >= granicy skanu), `kartograf cache stats` drukuje
+`Campaign entries`. `DownloadManager(campaigns=, min_year=)` pobiera kazda
+brakujaca kampanie (`GugikProvider.download_record`; plik w `kampanie/`,
+`record_source` -> `extra.source`), po zebraniu kampanii przestawia
+dowiazanie RAZ na arkusz (deduplikacja godel; nigdy wstecz) i zwraca
+`SheetFetch(godlo, path, skipped, downloaded, reused, link)` w
+`DownloadManager.last_sheet`; `DownloadResult` niesie `campaign_files`,
+`reused_campaign_files` (kampanie juz lokalne per arkusz) i `copied`
+(arkusze, ktorych sciezka standardowa jest KOPIA). Plik: format z pola
+`format` rekordu (nie z URL; brak pola — format domyslny produktu),
+rozszerzenie zawsze kanoniczne (`.asc`/`.tif`; rekord 72675 z URL `.xyz` to
+AAIGrid, zwykla kampania `.asc`), po pobraniu `verify_file_format`
+(naglowek AAIGrid / sygnatura TIFF); nieznany format albo niezgodna tresc
+= `DownloadError` kampanii z nazwa formatu, plik usuniety. Blad pobrania
+podaje nazwe pliku z URL (`84183_1852496_N-34-139-C-a-3-1.asc (OpenData):
+HTTP 404`), co w `all` rozroznia kampanie. Porazki: kampania (w tym
+niepoprawna `aktualnosc` rekordu w `all`, brak sidecara, porazka
+weryfikacji) = porazka tej kampanii — pozostale sa pobierane, dowiazanie
+idzie na najnowsza poprawna, ale arkusz konczy sie porazka (kod 1);
+porazka samego dowiazania (nawet kopii) = porazka arkusza (lista idzie
+dalej takze przy `--workers 1`, pobrane kampanie zostaja). Wyscig bez
+blokad: rownolegle wywolania na tej samej sciezce (procesy lub watki
+biblioteki) moga chwilowo zostawic dowiazanie na starszej kampanii;
+kolejne `newest`/`all` je naprawia, pliki w `kampanie/` sa nietkniete.
+Przy metodzie `copy` CLI drukuje `Warning: dowiazanie niedostepne na tym
+systemie plikow — sciezka standardowa jest KOPIA najnowszej kampanii dla N
+arkuszy (<godla do 10>) (extra.link=copy)`; podsumowanie `all` (bez `-q`):
+`Downloaded <n> campaign files for <m> sheets to <dir> (<k> already
+existed)`. "Skipped" przy pojedynczym godle zalezy od
+`manager.last_sheet.skipped`.
+
+Wynik: `data/nmt/pl_1992_1m_evrf2007/kampanie/<data>_<id>/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc`
+(+ `.meta.json`) i dowiazanie `data/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc`;
+dla NMPT `data/nmpt/pl_1992_1m_evrf2007/...`, dla orto
 `data/orto/pl_1992/...`.
 
 ### 4.2 Bbox / geometria PL bez `--target-crs`
@@ -451,7 +538,13 @@ inna awaria pobrania, CLI konczy kodem 1 i wypisuje pelna liste porazek.
 Pojedynczy arkusz bez danych to kod 1; pod `--country auto` kod zalezy
 jeszcze od sukcesu drugiego kraju (sekcja 4.6).
 
-Wynik: **wiele plikow** — lista arkuszy w segmencie jak w 4.1. To jest
+Opcje kampanii (`--campaigns`, `--min-year`, sekcja 4.1) dzialaja tu per
+arkusz; podsumowanie `all` liczy pliki kampanii, nie arkusze. Arkusz, ktorego
+najnowsza kampania jest starsza od `--min-year`, to `NoCoverageError`
+(status `no_coverage`, `Warning:` R5).
+
+Wynik: **wiele plikow** — lista arkuszy w segmencie jak w 4.1 (dowiazania do
+`kampanie/`; przy `all` dodatkowo kazda kampania). To jest
 asymetria wzgledem CZ, gdzie bbox daje jeden wycinek.
 
 ### 4.3 Bbox / geometria PL z `--target-crs` (ADR-027)
@@ -680,6 +773,21 @@ pojdzie w siec. Scalanie PL+CZ w jedna ciagla powierzchnie przygraniczna
 `--country auto --target-crs` daje dwa osobne wycinki w tym samym ukladzie,
 ze wspolnym `extra.parent_request`.
 
+**Kampanie a wycinek (ADR-030, errata Q2/Q4).** Wycinek jest ZAWSZE
+`newest`: `run_pl_cutout` buduje wlasny `DownloadManager` bez `campaigns`
+i czyta arkusze przez dowiazania sciezki standardowej (`rasterio` podaza za
+symlinkiem; hardlink i kopia to zwykle pliki), a `extra.sheet_sources` czyta
+sidecar standardowy. `--target-crs` + (`--campaigns all` lub `--min-year`)
+odrzuca CLI przed siecia (`Error: --campaigns all nie dziala z --target-crs
+— wycinek sklada jedna kampanie na arkusz; laczenie kampanii: narzedzie
+0.7.1` / `Error: --min-year nie dziala z --target-crs — nazwa wycinka nie
+niesie granicy roku`, kod 1). Wycinek jest pomijany po SAMYM istnieniu
+pliku wyniku (Q4), takze gdy skorowidz ma juz nowsza kampanie — odswiezenie:
+`--force` albo usuniecie wycinka. Kontrola wolnego miejsca
+(`estimate_pl_cutout_bytes`, D-3) to DOLNE oszacowanie: liczy arkusze bez
+pliku w sciezce standardowej (takze wiszace dowiazanie), a pod `newest`
+arkusz z nowsza kampania zostanie pobrany mimo istniejacego dowiazania.
+
 Wynik: **jeden plik** `data/nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif`
 (+ `.meta.json`), np. dla bboxa 419000,230000,421000,232000 w EPSG:2180
 z `--target-crs EPSG:5514`:
@@ -756,6 +864,16 @@ PL lub CZ pod `auto` daje kod 0, `Warning:` przy awarii drugiej
 czesci; `--resolution 1m` rozstrzyga do PL. Bez `--vertical-crs`
 pogranicze daje PL w EVRF2007 i CZ w Bpv.
 
+Opcje kampanii (ADR-030; errata Q9, N-3) dotycza tylko PL; jedna funkcja
+`_reject_campaign_opts_without_pl(args, countries)` obsluguje wszystkie
+punkty wejscia: zadanie bez PL wsrod krajow (godlo CZ pod `cz`/`auto`,
+obszar lub geometria z jawnym `--country cz`, obszar w calosci czeski pod
+`auto`) = `Error: CZ (CUZK) nie ma kampanii — --campaigns all/--min-year
+dotycza tylko PL`, kod 1, bez sieci; obszar pod `auto` z PL i CZ = jedno
+`Info: --campaigns/--min-year dotycza tylko czesci PL (CZ: biezaca wersja
+danych CUZK)`, CZ pobierane dalej. Opcje kampanii nie naleza do
+`_pl_only_flags` — nie zwezaja `auto` do PL.
+
 Styk PL/CZ zmierzony na zywo 2026-09-29 (dane wejsciowe do R6; oba wycinki
 w EPSG:2180): GUGiK wydaje dane ~200 m w glab CZ, CUZK ~118 m w glab PL, pas
 wspolny ~310-350 m (Cieszyn, Karkonosze, Beskid Slaski, trojstyk PL-CZ-DE),
@@ -819,6 +937,18 @@ segmentow naraz — `{uklad}` rozwiazuje sie per wywolanie `get_raw_path`,
 jeden `FileStorage` wystarcza na cale zadanie. W trybie obszarowym
 `--country auto` obszar siegajacy CZ konczy sie bledem z podpowiedzia
 `--country pl` (LAZ dla CZ to etap 2).
+
+**Kampanie LAZ (ADR-030).** `--campaigns newest` (domyslnie) = ADR-029
+bez zmian. `--campaigns all` = wszystkie kafle, ktorych rama
+(`footprint`) przecina obszar, bez deduplikacji pokryciowej
+(`select_all_intersecting`); kafel, ktorego przecina obszar tylko obwiednia
+z WFS (rama bez czesci wspolnej), jest pomijany jak dotad i trafia do
+`superseded` z pusta lista pokrywajacych (powod "outside"). `--min-year RRRR` = dolna
+granica `akt_rok` (obie strategie; `download_laz_area(campaigns=, min_year=)`);
+`--min-year` z `--year` wykluczaja sie (`Error: --min-year i --year
+wykluczaja sie (LAZ)`, kod 1; w bibliotece `ValidationError`). Uklad LAZ
+bez zmian — bez `kampanie/` i dowiazan; `request.campaigns` w sidecarze
+tylko dla `all`, `request.min_year` gdy podany.
 
 Wynik: `data/laz/pl_2000_evrf2007/6/162/34/02/3/<oryginalna_nazwa>.laz`
 (+ `.meta.json` z `extra.godlo_kafla`/`rok`/`gestosc`/`url` oraz
@@ -935,5 +1065,6 @@ Pelne uzasadnienia: `docs/DECISIONS.md`.
 | ADR-027 | `--target-crs` dla PL jako scalony wycinek | R5 obejmuje wycinek i liste/hierarchie; EPSG:2180 wymaga zgodnej fazy (`GridMismatchError`), W1 warpuje kazdy arkusz osobno przy innym CRS. Sidecar: `missing_sheets`, `sheet_sources`, `off_grid_sheets`. |
 | ADR-028 | Wybor rekordu skorowidza GUGiK i `extra.source` | Twardy filtr godla, ukladu, rozdzielczosci i koloru orto; najnowsza kampania bez cichego fallbacku; cache pelnych rekordow i pochodzenie w sidecarze. |
 | ADR-029 | Wybor kafli LAZ wg pokrycia obszaru, LAZ w bibliotece | Kafle od najnowszego rocznika, starszy pomijany, gdy rama nowszych (EPSG:2180, tolerancja 1 m) pokrywa jego czesc obszaru; `download/laz.py` z pula watkow, sidecarem i `parent_request`; CLI cienkie. |
+| ADR-030 | Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem (+ errata 2026-10-07) | Prawdziwe pliki PL tylko w `<segment>/kampanie/<data>_<id>/`, sciezka standardowa = dowiazanie do najnowszej lokalnej kampanii (symlink -> hardlink -> kopia, nigdy wstecz); `newest` sprawdza nowsza kampanie, `all` pobiera wszystkie; `--min-year` z roku `aktualnosc`; format z pola rekordu; sidecar kampanii obowiazkowy; kampanie tylko PL; `coverage`/`mosaic`/`--campaign <id>` odrzucone (skladanie kampanii: 0.7.1). |
 
-ADR-026–029 sa spisane w `docs/DECISIONS.md` w ramach wydania 0.7.0.
+ADR-026–030 sa spisane w `docs/DECISIONS.md` w ramach wydania 0.7.0.

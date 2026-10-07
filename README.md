@@ -49,6 +49,13 @@ kartograf download N-34-130-D --scale 1:10000 --resolution 5m --output ./data
 kartograf download N-34-130-D-d-2-4 --product nmpt
 kartograf download N-34-130-D-d-2-4 --product laz
 
+# Kampanie GUGiK: domyślnie najnowsza (newest); wszystkie kampanie arkusza (all);
+# tylko kampanie z roku pozyskania >= 2024 (--min-year); LAZ: też all / --min-year
+kartograf download N-34-130-D-d-2-4 --campaigns all
+kartograf download N-34-130-D-d-2-4 --min-year 2024
+kartograf download --bbox 530000,382000,533000,386000 --campaigns all --min-year 2022
+kartograf download N-34-130-D-d-2-4 --product laz --campaigns all
+
 # Selekcja obszaru: bbox albo plik geometrii (SHP/GPKG).
 # Domyślnie działa --country auto: obszar przecinający prostokątną obwiednię CZ
 # (na zachód od 18,86°E i na południe od 51,06°N) trafia także do CUZK - dla czystego
@@ -201,6 +208,32 @@ a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
 pliki z sidecarem `transform.horizontal` zawierającym
 `S-JTSK to ETRS89 (3)` nie są przebudowywane automatycznie; CLI drukuje
 `Info:` przy pominięciu pliku, do pobrania ponownie użyj `--force`.
+
+## Kampanie (od 0.7.0)
+
+GUGiK publikuje ten sam arkusz w kilku kampaniach (różne lata pozyskania).
+`--campaigns newest` (domyślnie) pobiera najnowszą; `--campaigns all` - każdą;
+`--min-year RRRR` odcina kampanie z `aktualnosc` sprzed danego roku (obie
+strategie; kampanie dotyczą tylko PL, dla CZ opcje dają `Error:`/`Info:`).
+Prawdziwe pliki NMT/NMPT/orto leżą w
+`data/<produkt>/<segment>/kampanie/<data>_<id>/<hierarchia godła>/<godło>.<ext>`
+(`<data>` = data pozyskania, `<id>` = numer kampanii z nazwy pliku GUGiK), a
+ścieżka standardowa `data/<produkt>/<segment>/<hierarchia godła>/<godło>.<ext>`
+jest dowiązaniem do najnowszej lokalnej kampanii. `newest` po wygaśnięciu cache
+(7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania. Wycinek
+`--target-crs` zawsze składa się z najnowszych kampanii i nie przyjmuje
+`--campaigns all`/`--min-year`.
+
+- **Kopiowanie `data/`:** użyj `cp -rL`/`rsync -aL` - bez `-L` kopiuje się samo
+  dowiązanie, a nie plik.
+- **Windows:** symlinki wymagają trybu dewelopera; bez niego Kartograf tworzy
+  hardlink (NTFS), a gdy i to się nie uda - kopię z `Warning:`
+  (`extra.link: copy` w sidecarze).
+- **Migracja:** brak; zwykły plik NMT/NMPT/orto w starej ścieżce standardowej
+  jest traktowany jak nieznany - pierwsze uruchomienie pobiera go ponownie do
+  `kampanie/` i zastępuje dowiązaniem.
+- Składanie kilku kampanii w jedną powierzchnię (`mosaic`/`coverage`) nie jest
+  w 0.7.0 - narzędzie planowane na 0.7.1.
 
 ## Znane problemy (0.7.0-dev)
 

@@ -297,7 +297,23 @@ from kartograf import (
   każdego pliku z osobna — jeden stary katalog (np. `orto/`) rozchodzi się
   przy migracji na dwa segmenty; wyjątek: kafle LAZ — układ z `uklad_xy`
   kafla (`LazTile.uklad`), dopiero w drugiej kolejności z formatu godła
+- Kampanie GUGiK (ADR-030): prawdziwe pliki NMT/NMPT/orto PL w
+  `<segment>/kampanie/<data>_<id>/...`, ścieżka standardowa = dowiązanie do
+  najnowszej lokalnej kampanii (symlink → hardlink → kopia); brak migracji
 - `landcover/` bez zmian (własny default `--output`)
+
+### 2.12 Kampanie GUGiK (ADR-030) - IN SCOPE
+
+```python
+# Strategie (tylko PL; CZ zawsze bieżąca mozaika):
+- --campaigns newest (domyślnie): najnowszy rekord skorowidza (ADR-028),
+  sprawdzany przy każdym uruchomieniu po wygaśnięciu cache (7 dni)
+- --campaigns all: każda kampania arkusza po twardym filtrze ADR-028, bez limitu
+- --min-year RRRR: dolna granica roku pozyskania (aktualnosc), obie strategie
+- LAZ: --campaigns all (kafle z ramą przecinającą obszar, bez deduplikacji ADR-029), --min-year (akt_rok)
+- Wycinek --target-crs: zawsze newest (all/--min-year = Error:)
+- API: DownloadManager(campaigns=, min_year=), SheetFetch, CampaignRef
+```
 
 ---
 
@@ -321,6 +337,11 @@ from kartograf import (
   zależne od zbioru), siatki PL i CZ niewspólne
 - Wycinek PL --target-crs z arkuszy PL-2000 (reprojekcja arkuszy,
   mozaika międzystrefowa; dziś błąd z opisem)
+
+# Kampanie — poza zakresem 0.7.0 (odrzucone w ADR-030):
+- --campaign <id> (wybór jednej kampanii), strategie coverage i mosaic
+- Narzędzie składania kampanii w jedną powierzchnię — 0.7.1
+- Kampanie dla CZ (CUZK nie publikuje historii) — backlog po 0.7.0
 
 # Etap 3 (CZ):
 - ZABAGED — wektorowa baza topograficzna (149 warstw), odpowiednik BDOT10k
@@ -589,9 +610,10 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-09-28 | 3.10 | Fala review max: wycinek PL jako API biblioteki (download_pl_cutout), siatka arkuszy, R5 (NoCoverageError -> nodata + extra.missing_sheets), eksporty w 2.10, drzewo modulow, etap 2: scalanie PL+CZ i wycinek z arkuszy PL-2000; liczby 1861/92,9% (po fali naprawczej finalnego review) |
 | 2026-09-29 | 3.11 | Historyczne testy na żywo i audyt przed falą naprawczą: diagnozy LAZ, S-JTSK, skorowidza, orto, limitu CUZK i dyspozycji kraju; dowody zachowania na morzu i pograniczach oraz wejście do R6 |
 | 2026-09-30 | 3.12 | Aktualizacja po fali naprawczej: filtr rekordow GUGiK i cache, R5 w liscie/hierarchii, W1/blad fazy w 2180, pin EPSG:1622/1623, budzet 4 Mpx, osie LAZ; 2057 offline + 16 live nieuruchomionych |
+| 2026-10-07 | 3.13 | Kampanie GUGiK (ADR-030): sekcja 2.12, uklad `kampanie/` z dowiazaniem w 2.11, odrzucone strategie w 3.1 |
 
 ---
 
-**Wersja dokumentu:** 3.12
-**Data ostatniej aktualizacji:** 2026-09-30
+**Wersja dokumentu:** 3.13
+**Data ostatniej aktualizacji:** 2026-10-07
 **Status:** Rozwoj — v0.7.0 (Unreleased), etap 1 zmergowany do `develop` 2026-08-12
