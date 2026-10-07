@@ -38,6 +38,7 @@ def cmd_cache(args: argparse.Namespace) -> int:
             st = cache.stats()
             print("Metadata cache statistics:")
             print(f"  Record entries: {st['record_count']}")
+            print(f"  Campaign entries: {st['campaign_count']}")
             print(f"  TERYT entries: {st['teryt_count']}")
             print(f"  Sheet entries: {st['sheet_count']}")
             db_size_kb = st["db_size_bytes"] / 1024
