@@ -324,7 +324,7 @@ def emit_sidecar(
             horizontal_crs=horizontal_crs,
         )
         return write_sidecar(data_path, meta, atomic=required)
-    except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
+    except Exception as e:  # noqa: BLE001 — polityka porazki w jednym miejscu (D7)
         if required:
             raise DownloadError(
                 f"Nie udalo sie zapisac obowiazkowego sidecara {sidecar_path}: {e}"

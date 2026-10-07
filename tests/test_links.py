@@ -334,3 +334,25 @@ def test_copy_older_than_target_is_replaced(tmp_path, monkeypatch):
     assert linked_campaign(link) is None
     out = ensure_standard_link(link, a, k_a)
     assert out.changed is True and link.read_text() == "N"
+
+
+# --- Fix round 1: segment "kampanie" w korzeniu katalogu wyjsciowego ---
+
+
+def test_campaign_key_from_dir_uses_last_kampanie_segment(tmp_path):
+    root = tmp_path / "kampanie" / "data"
+    b, _ = _b(root)
+    (b.parent / "x.asc.meta.json").unlink()
+    assert campaign_key_of(b) == ("2025-10-21", "", "")
+
+
+def test_kampanie_in_output_root_still_prevents_regression(tmp_path):
+    root = tmp_path / "kampanie" / "data"
+    a, k_a = _a(root)
+    b, k_b = _b(root)
+    link = _link(root)
+    ensure_standard_link(link, b, k_b)
+    (b.parent / "x.asc.meta.json").unlink()
+    out = ensure_standard_link(link, a, k_a)
+    assert out.changed is False and _same(out.target, b)
+    assert link.read_text() == "B"
