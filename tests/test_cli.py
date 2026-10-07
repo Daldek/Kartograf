@@ -6415,6 +6415,10 @@ class TestCampaignOptions:
             "B": (tmp_path / "k1" / "b.asc",),
             "C": (tmp_path / "k1" / "c.asc", tmp_path / "k2" / "c.asc"),
         }
+        # arkusz pominiety = wszystkie jego kampanie juz lokalne (jak manager)
+        manager.last_result.reused_campaign_files = {
+            "C": manager.last_result.campaign_files["C"]
+        }
         mock_manager_class.return_value = manager
 
         rc = main(
@@ -6428,6 +6432,156 @@ class TestCampaignOptions:
             "(2 already existed)"
         ) in out
         assert "Downloaded 2 files" not in out
+
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_all_summary_partially_new_sheets(
+        self, mock_manager_class, mock_find, capsys, tmp_path
+    ):
+        """Fix 1: 10 arkuszy x (1 nowa + 3 lokalne) -> 10 pobranych, 30 lokalnych."""
+        godla = [f"N-34-130-D-d-2-{i}" for i in range(10)]
+        mock_find.return_value = godla
+        paths = [tmp_path / f"{g}.asc" for g in godla]
+        manager = _sheet_list_manager(*paths)
+        files = {
+            g: tuple(tmp_path / f"k{k}" / f"{g}.asc" for k in range(4)) for g in godla
+        }
+        manager.last_result.campaign_files = files
+        manager.last_result.reused_campaign_files = {g: f[1:] for g, f in files.items()}
+        mock_manager_class.return_value = manager
+
+        rc = main(
+            ["download", *_PL_BBOX_2180, "--campaigns", "all", "-o", str(tmp_path)]
+        )
+
+        assert rc == 0
+        assert (
+            f"Downloaded 10 campaign files for 10 sheets to {tmp_path} "
+            "(30 already existed)"
+        ) in capsys.readouterr().out
+
+    @patch("kartograf.download.cutout.prepare_pl_cutout")
+    @patch("kartograf.cli.download_cmd._run_cz")
+    def test_target_crs_with_all_cross_border_no_info_before_error(
+        self, mock_run_cz, mock_prepare, capsys, tmp_path
+    ):
+        """Fix 2: straz --target-crs przed Info o kampaniach."""
+        rc = main(
+            [
+                "download",
+                *_BORDER_BBOX,
+                "--target-crs",
+                "EPSG:2180",
+                "--campaigns",
+                "all",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "0.7.1" in err
+        assert "Info:" not in err
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_pl_godlo_target_crs_with_all_gets_godlo_error(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        """Fix 3: ogolniejsza straz godla (--target-crs z godlem) wygrywa."""
+        rc = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--target-crs",
+                "EPSG:2180",
+                "--campaigns",
+                "all",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "Error: --target-crs dziala tylko z --bbox/--geometry" in err
+        assert "0.7.1" not in err
+        mock_manager_class.assert_not_called()
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_min_year_error_names_cli_flag(self, mock_manager_class, capsys, tmp_path):
+        """Fix 4: CLI mowi --min-year, nie min_year (parametr biblioteki)."""
+        rc = main(
+            ["download", "N-34-130-D-d-2-4", "--min-year", "1800", "-o", str(tmp_path)]
+        )
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "Error: --min-year musi byc" in err and "1800" in err
+        assert " min_year" not in err
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_campaigns_passed_to_manager_hierarchy(self, mock_manager_class, tmp_path):
+        """Fix 5: tor hierarchii (--scale)."""
+        manager = Mock()
+        manager.download_hierarchy.return_value = [tmp_path / "a.asc"]
+        manager.count_sheets.return_value = 1
+        manager.last_result = DownloadResult(succeeded=[tmp_path / "a.asc"])
+        mock_manager_class.return_value = manager
+
+        rc = main(
+            [
+                "download",
+                "N-34-130-D",
+                "--scale",
+                "1:10000",
+                "--campaigns",
+                "all",
+                "--min-year",
+                "2021",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+        assert rc == 0
+        manager.download_hierarchy.assert_called_once()
+        kwargs = mock_manager_class.call_args.kwargs
+        assert kwargs["campaigns"] == "all" and kwargs["min_year"] == 2021
+
+    @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_campaigns_passed_to_manager_geometry_list(
+        self, mock_manager_class, mock_find, mock_overall, mock_read_crs, tmp_path
+    ):
+        """Fix 5: tor listy z --geometry PL."""
+        geometry_file = tmp_path / "area.shp"
+        geometry_file.write_bytes(b"stub")
+        mock_overall.return_value = BBox(
+            530000.0, 382000.0, 533000.0, 386000.0, "EPSG:2180"
+        )
+        mock_find.return_value = ["N-34-130-D-d-2-4"]
+        mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
+
+        rc = main(
+            [
+                "download",
+                "--geometry",
+                str(geometry_file),
+                "--country",
+                "pl",
+                "--campaigns",
+                "all",
+                "--min-year",
+                "2022",
+                "-o",
+                str(tmp_path / "out"),
+                "-q",
+            ]
+        )
+        assert rc == 0
+        mock_find.assert_called_once()
+        kwargs = mock_manager_class.call_args.kwargs
+        assert kwargs["campaigns"] == "all" and kwargs["min_year"] == 2022
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_newest_min_year_single_sheet_no_coverage_exit_1(

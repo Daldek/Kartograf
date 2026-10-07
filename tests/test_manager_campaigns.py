@@ -268,6 +268,23 @@ def test_all_skips_existing_campaigns_individually(tmp_path):
     assert len(m.last_result.campaign_files[G]) == 4
 
 
+def test_all_reused_campaign_files_lists_only_local_ones(tmp_path):
+    """T8 fix 1: ``reused_campaign_files`` = podzbior juz lokalnych kampanii."""
+    fake = FakeCampaignProvider({"all": [REC["84183"], REC["83233"]]})
+    first = DownloadManager(tmp_path, provider=fake, campaigns="all")
+    first.download_sheets([G])
+    assert first.last_result.reused_campaign_files.get(G, ()) == ()
+    fake.records = C14
+    m = DownloadManager(tmp_path, provider=fake, campaigns="all")
+    m.download_sheets([G])
+    reused = m.last_result.reused_campaign_files[G]
+    assert sorted(reused) == sorted(
+        campaign_path(tmp_path, REC[k]) for k in ("84183", "83233")
+    )
+    assert set(reused) <= set(m.last_result.campaign_files[G])
+    assert len(m.last_result.campaign_files[G]) == 4
+
+
 def test_all_min_year_filters(tmp_path):
     fake = FakeCampaignProvider(C14)
     m = DownloadManager(tmp_path, provider=fake, campaigns="all", min_year=2025)
