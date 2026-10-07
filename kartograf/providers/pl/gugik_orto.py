@@ -18,14 +18,14 @@ Unlike NMT/NMPT, orthophotos:
 import logging
 import re
 from pathlib import Path
-from urllib.parse import urlencode
 
 import requests
 
 from kartograf.core.sheet_parser import BBox, SheetParser
-from kartograf.exceptions import NoCoverageError, ParseError
+from kartograf.exceptions import NoCoverageError
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import SkorowidzLayersMixin, SkorowidzRecord
+from kartograf.providers.pl.wcs import GugikWcsMixin
 from kartograf.transport.http import (
     MAX_RETRIES,
     SessionPerThread,
@@ -35,7 +35,7 @@ from kartograf.transport.http import (
 logger = logging.getLogger(__name__)
 
 
-class GugikOrtoProvider(SkorowidzLayersMixin, BaseProvider):
+class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     """
     Provider for downloading Orthophotomap data from GUGiK.
 
@@ -75,13 +75,6 @@ class GugikOrtoProvider(SkorowidzLayersMixin, BaseProvider):
     # Klucz record_cache: slot rozdzielczosci niesie wariant koloru (orto nie
     # ma flagi rozdzielczosci, a RGB i CIR tego samego arkusza to inne pliki)
     _CACHE_PRODUCT = "orto"
-
-    # WCS formats
-    WCS_FORMATS = {
-        "GTiff": "image/tiff",
-        "PNG": "image/png",
-        "JPEG": "image/jpeg",
-    }
 
     # Settings
     DEFAULT_TIMEOUT = 60  # Ortofoto files are larger
@@ -315,34 +308,6 @@ class GugikOrtoProvider(SkorowidzLayersMixin, BaseProvider):
             ),
         )
 
-    def _construct_wcs_url(self, bbox: BBox, format: str) -> str:
-        """Construct WCS GetCoverage URL."""
-        params = {
-            "SERVICE": "WCS",
-            "VERSION": "2.0.1",
-            "REQUEST": "GetCoverage",
-            "COVERAGEID": self.COVERAGE_ID,
-            "FORMAT": self.WCS_FORMATS[format],
-        }
-
-        base_url = f"{self.WCS_ENDPOINT}?{urlencode(params)}"
-        subset_x = f"SUBSET=x({bbox.min_x:.2f},{bbox.max_x:.2f})"
-        subset_y = f"SUBSET=y({bbox.min_y:.2f},{bbox.max_y:.2f})"
-
-        return f"{base_url}&{subset_x}&{subset_y}"
-
-    # =========================================================================
-    # Info methods
-    # =========================================================================
-
-    def get_supported_formats(self) -> list[str]:
-        """Return list of supported WCS formats."""
-        return list(self.WCS_FORMATS.keys())
-
-    def validate_godlo(self, godlo: str) -> bool:
-        """Validate godło format."""
-        try:
-            SheetParser(godlo)
-            return True
-        except ParseError:
-            return False
+    def _wcs_target(self) -> tuple[str, str]:
+        """Jeden staly endpoint i coverage ortofotomapy (Standard Resolution)."""
+        return self.WCS_ENDPOINT, self.COVERAGE_ID

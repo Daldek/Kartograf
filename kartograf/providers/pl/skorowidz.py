@@ -367,6 +367,14 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         self._layers_lock = threading.Lock()
         self._validated_layers: dict[str, list[str]] = {}
 
+    def validate_godlo(self, godlo: str) -> bool:
+        """Godlo parsowalne przez ``SheetParser`` (PL-1992 albo PL-2000)."""
+        try:
+            SheetParser(godlo)
+            return True
+        except ParseError:
+            return False
+
     def _fetch_wms_layers(
         self, wms_endpoint: str, timeout: float | None = None
     ) -> list[str]:
