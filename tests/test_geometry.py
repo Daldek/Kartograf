@@ -1028,3 +1028,66 @@ class TestFindSheetsForGeometry:
             assert result == ["N-34-130-D-d-2-4"]
             # Should have been called once (one feature in layer_b)
             assert mock_find.call_count == 1
+
+
+# =========================================================================
+# Tests — czytniki przez core.bbox.transform_bbox (ocena parserow K4)
+# =========================================================================
+
+
+def _shp_with_rects(path: Path, rects, epsg: int = 2180) -> Path:
+    import shapefile
+
+    with shapefile.Writer(str(path)) as w:
+        w.field("name", "C", 10)
+        for i, (x0, y0, x1, y1) in enumerate(rects):
+            w.poly([[(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)]])
+            w.record(f"r{i}")
+    _write_prj(path.with_suffix(".prj"), epsg)
+    return path
+
+
+class TestReadersUseCoreBBox:
+    RECTS = [
+        (420000, 230000, 421000, 231000),
+        (500000, 300000, 501000, 301000),
+        (600000, 400000, 601000, 401000),
+    ]
+
+    @pytest.fixture(autouse=True)
+    def _fresh_cache(self):
+        from kartograf.core import bbox as bbox_mod
+
+        bbox_mod._transformer.cache_clear()
+        bbox_mod._same_crs.cache_clear()
+
+    def test_shp_one_transformer_per_layer(self, tmp_path):
+        from pyproj import Transformer
+
+        shp = _shp_with_rects(tmp_path / "three.shp", self.RECTS)
+        with patch.object(Transformer, "from_crs", wraps=Transformer.from_crs) as made:
+            bboxes = read_feature_bboxes(shp, target_crs="EPSG:4326")
+        assert len(bboxes) == 3
+        assert made.call_count == 1
+
+    def test_gpkg_one_transformer_per_layer(self, tmp_path):
+        from pyproj import Transformer
+
+        gpkg = tmp_path / "three.gpkg"
+        _build_gpkg(gpkg, [_make_gpkg_blob(*r) for r in self.RECTS])
+        with patch.object(Transformer, "from_crs", wraps=Transformer.from_crs) as made:
+            bboxes = read_feature_bboxes(gpkg, target_crs="EPSG:4326")
+        assert len(bboxes) == 3
+        assert made.call_count == 1
+
+    def test_shp_feature_across_19e_keeps_northern_band(self, tmp_path):
+        """Obiekt 50 km przez x=500000: 4 narozniki gubily ~65 m na polnocy."""
+        shp = _shp_with_rects(tmp_path / "wide.shp", [(475000, 600000, 525000, 610000)])
+        (bbox,) = read_feature_bboxes(shp, target_crs="EPSG:4326")
+        assert bbox.max_y == pytest.approx(53.3551052, abs=1e-7)
+        assert bbox.crs == "EPSG:4326"
+
+    def test_same_crs_keeps_coordinates_and_target_label(self, tmp_path):
+        shp = _shp_with_rects(tmp_path / "same.shp", self.RECTS[:1])
+        (bbox,) = read_feature_bboxes(shp, target_crs="EPSG:2180")
+        assert tuple(bbox) == (420000, 230000, 421000, 231000, "EPSG:2180")

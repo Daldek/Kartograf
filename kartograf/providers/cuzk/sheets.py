@@ -24,11 +24,11 @@ warstwy 24.
 """
 
 import logging
-import re
 from dataclasses import dataclass
 from typing import Any
 
 from kartograf.cache.metadata import MetadataCache
+from kartograf.core.parser_registry import CZ_SM5_PATTERN
 from kartograf.core.parser_tm33 import TM33_CRS
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import ParseError, ValidationError
@@ -47,7 +47,6 @@ SM5_SYSTEM = "cz_sm5"  # klucz `system` w sheet_cache
 _SM5_FIELDS = "MAPNOM,MAPNAME,PODIL"
 _TM33_FIELDS = "MAPNOM,IN_CZ"
 
-_SM5_RE = re.compile(r"^[A-Z]{4}\d{2}$")
 _SM5_HINT = "oczekiwano 4 wielkich liter + 2 cyfr, np. CTES96"
 
 # Wspolrzedne z ArcGIS niosa szum siatkowania rzedu 1e-3 m (np. -449999.999308
@@ -83,15 +82,16 @@ class SheetIndex:
 
     def sm5_sheet(self, mapnom: str) -> SheetInfo:
         """Arkusz SM5 po MAPNOM; ValidationError gdy nieznany (przed pobraniem)."""
-        if not isinstance(mapnom, str) or not _SM5_RE.match(mapnom):
+        if not isinstance(mapnom, str) or not CZ_SM5_PATTERN.match(mapnom.strip()):
             raise ValidationError(f"Niepoprawne godlo SM5: '{mapnom}' ({_SM5_HINT})")
+        mapnom = mapnom.strip()  # spojnie z detect_system (rejestr systemow)
         if self._cache is not None:
             cached = self._cache.get_sheet(SM5_SYSTEM, mapnom)
             if cached is not None:
                 info = _info_from_payload(cached)
                 if info is not None:
                     return info
-        # mapnom przeszedl _SM5_RE (tylko [A-Z] i cyfry) — brak ryzyka wstrzykniecia
+        # mapnom przeszedl CZ_SM5_PATTERN (tylko [A-Z] i cyfry) — bez wstrzykniecia
         features = self._client.query(
             self._endpoint,
             SM5_LAYER,
@@ -132,42 +132,6 @@ class SheetIndex:
             out_sr=TM33_CRS,
         )
         return _intersecting(bbox, [_tm33_info(f) for f in features])
-
-
-class Sm5Sheet:
-    """Obiekt parsera dla rejestru cz_sm5 — bbox przez SheetIndex (lazy).
-
-    Sciezka szczesliwa pobierania SM5 nie potrzebuje bboxa (URL openzu to
-    czysta nazwa arkusza) — get_bbox() to jedyne miejsce z IO.
-    """
-
-    uklad = "cz_sm5"
-
-    def __init__(self, godlo: str, index: SheetIndex | None = None):
-        if not isinstance(godlo, str) or not _SM5_RE.match(godlo.strip()):
-            raise ParseError(f"Niepoprawne godlo SM5: '{godlo}' ({_SM5_HINT})")
-        self.godlo = godlo.strip()
-        self._index = index
-
-    def get_bbox(self) -> BBox:
-        """BBox arkusza w EPSG:5514 (zapytanie do indeksu, z cache).
-
-        Gdy indeks nie zostal wstrzykniety w konstruktorze, `MetadataCache`
-        jest budowany na potrzeby tego jednego zapytania i zawsze zamykany
-        (try/finally) — polaczenie sqlite nie zostaje otwarte po powrocie
-        z metody. Wstrzykniety indeks (`index=`) pozostaje wlasnoscia
-        wywolujacego — jego cache NIE jest tutaj zamykany.
-        """
-        if self._index is not None:
-            return self._index.sm5_sheet(self.godlo).bbox
-        cache = MetadataCache()
-        try:
-            return SheetIndex(cache=cache).sm5_sheet(self.godlo).bbox
-        finally:
-            cache.close()
-
-    def __repr__(self) -> str:
-        return f"Sm5Sheet('{self.godlo}')"
 
 
 def _validate_request_bbox(bbox: BBox, expected_crs: str, method: str) -> None:

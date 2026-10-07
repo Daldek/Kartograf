@@ -347,6 +347,28 @@ class TestLandCoverCLI:
         assert result == 1
         captured = capsys.readouterr()
         assert "Invalid bbox" in captured.err
+        # podpowiedz "Expected" idzie na stderr razem z bledem (review-1 D4)
+        assert "Expected" in captured.err
+        assert "Expected" not in captured.out
+
+    @pytest.mark.parametrize(
+        "bbox",
+        ["10,10,5,5", "1,10,5,5", "nan,1,2,3", "1,2,inf,4", "1,2,3", "1,2,3,4,5"],
+    )
+    def test_landcover_download_rejects_bad_bbox(self, bbox, capsys, tmp_path):
+        """Odwrocony/NaN/inf/zla liczba wartosci -> Error na stderr, kod 1 (K7a)."""
+        from kartograf.cli.commands import main
+
+        with patch("kartograf.cli.landcover_cmd.LandCoverManager") as manager:
+            result = main(
+                ["landcover", "download", f"--bbox={bbox}", "-o", str(tmp_path)]
+            )
+        assert result == 1
+        manager.assert_not_called()
+        captured = capsys.readouterr()
+        assert "Error: Invalid bbox format" in captured.err
+        assert "ValueError" not in captured.err
+        assert "Expected" not in captured.out
 
 
 class TestLandCoverInvalidOptions:

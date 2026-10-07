@@ -116,12 +116,13 @@ exceptions ──> (lisc; importowany przez wszystkie warstwy)
 
 Trzy uwagi, ktore latwo przeoczyc:
 
-- `core` ma **jeden leniwy** import w druga strone:
-  `parser_registry._make_parser_cz_sm5` siega po
-  `providers.cuzk.sheets.Sm5Sheet` dopiero w momencie wywolania. Odroczenie
-  jest celowe (komentarz w kodzie) — przy imporcie `core` nie ciagnie
-  providerow ani ich zaleznosci IO, wiec warstwa pozostaje czysta dla
-  wszystkiego poza budowa parsera arkusza SM5.
+- `core` nie importuje nic spoza `core` i `exceptions` — takze leniwie
+  (od 2026-10-07: rejestr systemow godel nie buduje juz parserow, wiec
+  dawny leniwy import `providers.cuzk.sheets.Sm5Sheet` zniknal razem
+  z `parser_factory`). Kierunek jest odwrotny: `providers.cuzk.sheets`
+  i `core.parser_tm33` importuja wzorce godel CZ z `core.parser_registry`.
+  Operacja przypieta (ADR-024) wchodzi do `core.bbox.transform_bbox`
+  przez duck typing (`transformer=`), bez importu `transform`.
 - `download` siega po `transform` i `transport` WYLACZNIE w
   `download/cutout.py` (wycinek PL, sekcja 4.3): `transform.crs` przy
   imporcie (typy `PinnedTransform`/`TransformPolicy`), `transport.mosaic`
@@ -146,10 +147,13 @@ kartograf/
 ├── exceptions.py        # KartografError, ParseError, ValidationError, DownloadError,
 │                        # NoCoverageError(DownloadError) — zrodlo nie ma danych arkusza
 ├── core/                # Logika bazowa, bez IO sieciowego
-│   ├── sheet_parser.py     # SheetParser (PL-1992), BBox, find_sheets_for_bbox
+│   ├── bbox.py             # BBox, validate_bbox, transform_bbox (gesta obwiednia, cache
+│   │                       # transformerow, operacja przypieta przez duck typing), is_czech_crs
+│   ├── sheet_parser.py     # SheetParser (PL-1992), find_sheets_for_bbox (BBox z core/bbox.py)
 │   ├── parser_2000.py      # Parser2000 (PL-2000), find_sheets_2000_for_bbox
 │   ├── parser_tm33.py      # ParserTM33 — obliczalna siatka kafli CZ 2x2 km (EPSG:3045)
-│   ├── parser_registry.py  # Rejestr systemow godel: pl1992, pl2000, cz_tm33, cz_sm5
+│   ├── parser_registry.py  # Rejestr systemow godel (SYSTEMS: pl2000, cz_tm33, cz_sm5,
+│   │                       # pl1992), detect_system/path_parts ze strip(), wzorce CZ
 │   ├── geometry.py         # Czytanie SHP/GPKG, find_sheets_for_geometry, get_overall_bbox
 │   └── coverage.py         # Wypukle wielokaty: przeciecie, roznica, bufor (wybor kafli LAZ)
 ├── sources/             # Deskryptory zrodel jako dane (zero IO przy imporcie)
@@ -863,10 +867,13 @@ Checklist na przykladzie DE (Brandenburgia, DGM1):
    `all_countries()`, wiec dyspozycja `--country auto` zaczyna widziec nowy
    kraj bez zmian w CLI. Pamietaj, ze obwiednia jest prostokatem (sekcja 4.6).
 3. **Parser godel/kafli** w `core/` (jesli kraj ma wlasny system godel):
-   klasa parsera + rejestracja `SheetSystem` w `core/parser_registry.py`
-   (`detect`, `parser_factory`, `path_parts`). Wzory: `ParserTM33` (siatka
-   obliczalna) i `Sm5Sheet` (siatka wymagajaca indeksu). Fallback `pl1992`
-   musi zostac ostatni — jego `detect` zawsze zwraca `True`.
+   klasa parsera + wpis `SheetSystem` (`detect`, `path_parts`) w literale
+   `SYSTEMS` w `core/parser_registry.py`; wzorzec godla trzymaj tam jako
+   stala publiczna (jak `CZ_TM33_PATTERN`/`CZ_SM5_PATTERN`) i importuj ja
+   w parserze/indeksie — jeden wzorzec na system. Wzory: `ParserTM33`
+   (siatka obliczalna) i `SheetIndex.sm5_sheet` (siatka wymagajaca
+   indeksu). Fallback `pl1992` musi zostac ostatni — jego `detect` zawsze
+   zwraca `True`, wiec `detect_system` nigdy nie zwraca `None`.
 4. **Provider** w `providers/de/`, wzorowany na `providers/cuzk/`: generyczny
    silnik sterowany deskryptorem (odpowiednik `CuzkClient` — zna URL-e
    z `AccessChannel.endpoint`, nie zna godel ani sidecarow), provider

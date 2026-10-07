@@ -103,6 +103,58 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   review D7); jeden nagłówek listy arkuszy CLI `_print_sheet_list`
   (review D15). Ścieżki plików i treść sidecarów bez zmian.
 
+### Parsery 2026-10-07
+Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-parserow.md`
+(kroki K1–K5, K7a; raport `impl-parsery.md`).
+
+**BREAKING**
+- Usunięte `kartograf.providers.cuzk.Sm5Sheet` (także
+  `providers.cuzk.sheets.Sm5Sheet`) — jedynym producentem była fabryka
+  rejestru, której nikt nie wołał. Arkusz SM5 po godle: `SheetIndex.sm5_sheet`.
+- `core.parser_registry`: usunięte `register_system`, `_REGISTRY`
+  i `SheetSystem.parser_factory`; rejestr to literał `SYSTEMS`.
+  `detect_system` zwraca `SheetSystem` (nigdy `None` — `pl1992` jest
+  fallbackiem). Wzorce godeł CZ: `parser_registry.CZ_TM33_PATTERN`
+  i `CZ_SM5_PATTERN` (zamiast `parser_tm33._GODLO_RE`, `sheets._SM5_RE`).
+  `kartograf/__init__.py` bez zmian; Hydrograf/Hydrolog nie importują tych nazw.
+- `find_sheets_for_bbox` / `find_sheets_2000_for_bbox` zgłaszają
+  `ValidationError` dla bboxa odwróconego (`min > max`) albo z NaN/inf —
+  dotąd zwracały arkusz-śmieć (`BBox(10, 10, 5, 5)` -> `L-33-1-D-c-4-3`)
+  albo kończyły się `ValueError`. Bbox-punkt nadal dozwolony.
+
+**Fixed**
+- `find_sheets_for_bbox(..., system="2000")` z bboxa WGS84 przecinającego
+  południk osiowy strefy (15/18/21/24°E) gubił cały wiersz arkuszy:
+  `BBox(17.6, 50.535, 18.4, 50.555, "EPSG:4326")` dawał 8 arkuszy (tylko
+  `6.136.*`) zamiast 16 (brak `6.135.17`–`6.135.24`). Obwiednia strefowa
+  liczona z zagęszczonych krawędzi zamiast 4 narożników.
+- Obwiednie bboxów między układami w `core` (`SheetParser.get_bbox`,
+  `Parser2000.get_bbox`, selekcja arkuszy PL-1992/PL-2000, czytniki
+  SHP/GPKG `read_feature_bboxes`/`get_overall_bbox`/`find_sheets_for_geometry`)
+  liczone są jedną funkcją `core.bbox.transform_bbox` (zagęszczenie 21
+  punktów/krawędź): arkusze 1:10000 bez zmian (1e-6 m), arkusze grube
+  przez 19°E (np. `N-34`) dostają poprawną dolną krawędź (-468 m),
+  obiekt SHP/GPKG przez 19°E czytany do WGS84 nie traci ~65 m na północy.
+- `SheetParser.get_bbox("EPSG:2180")` buduje transformer raz na proces
+  (cache), a nie przy każdym wywołaniu: 200 wywołań 1371 ms -> 8 ms.
+  Czytniki SHP/GPKG: jeden transformer na warstwę zamiast na obiekt.
+- Białe znaki wokół godła: `detect_system`, `path_parts`
+  i `SheetIndex.sm5_sheet` obcinają je spójnie z parserami; CLI obcina
+  pozycyjne godło `download`/`parse` w argparse — `kartograf download
+  " 302_5550"` nie trafia już do toru PL z mylącym
+  `Nieprawidlowe godlo PL-1992`.
+- `kartograf landcover download --bbox` i `kartograf soilgrids hsg --bbox`:
+  bbox odwrócony, NaN/inf albo zła liczba wartości kończy się
+  `Error: Invalid bbox format: <powód>. Expected: ...` na stderr i kodem 1
+  (dotąd odwrócony/NaN przechodził do pobierania); podpowiedź `Expected`
+  nie idzie już na stdout. Nowe `cli._parser.parse_bbox_arg`.
+
+**Added**
+- `kartograf.core.bbox`: `BBox` (przeniesiona z `sheet_parser` —
+  `kartograf.BBox`, `core.sheet_parser.BBox`, `core.geometry.BBox` to ta
+  sama klasa), `validate_bbox`, `transform_bbox` (cache transformerów,
+  operacja przypięta przez `transformer=` — duck typing), `is_czech_crs`.
+
 ### Runda review/E2E 2026-10-06
 - Tor CZ (`CuzkDmrProvider`, `--target-crs` i kafel TM33) używa wspólnego
   `transform/raster.warp_to_grid` zamiast własnej kopii

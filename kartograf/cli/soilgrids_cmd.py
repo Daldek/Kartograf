@@ -6,7 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from kartograf.core.sheet_parser import BBox
+from kartograf.cli._parser import parse_bbox_arg
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 
 
@@ -99,17 +99,8 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
             print(f"Error: {e}", file=sys.stderr)
             return 1
     elif args.bbox:
-        try:
-            parts = [float(x.strip()) for x in args.bbox.split(",")]
-            if len(parts) != 4:
-                raise ValueError("BBOX must have 4 values")
-            bbox = BBox(parts[0], parts[1], parts[2], parts[3], "EPSG:2180")
-        except ValueError as e:
-            print(f"Error: Invalid bbox format: {e}", file=sys.stderr)
-            print(
-                "Expected: min_x,min_y,max_x,max_y (e.g., 450000,550000,460000,560000)"
-            )
-            return 1
+        # zly bbox -> ValidationError -> Error: w main (stderr, kod 1)
+        bbox = parse_bbox_arg(args.bbox, "EPSG:2180")
 
     # Create calculator
     calc = HSGCalculator()

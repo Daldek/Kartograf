@@ -1676,3 +1676,44 @@ class TestBBoxesIntersect2000:
         a = BBox(0, 2, 0, 2, "EPSG:2177")
         b = BBox(0, 0, 5, 5, "EPSG:2177")
         assert _bboxes_intersect_2000(a, b) is True
+
+
+class TestFindSheets2000DenseEnvelope:
+    """K3 (ocena parserow): bbox WGS84 przez poludnik osiowy strefy (18E dla 6).
+
+    Rownoleznik w odwzorowaniu poprzecznym ma minimum ``y`` na poludniku
+    osiowym — obwiednia z 4 naroznikow podnosila dolna krawedz o ~76 m
+    i gubila caly wiersz arkuszy 6.135.* (8 zamiast 16 arkuszy).
+    """
+
+    BBOX = BBox(17.6, 50.535, 18.4, 50.555, "EPSG:4326")
+
+    def test_row_across_central_meridian_is_kept(self):
+        from kartograf.core.sheet_parser import find_sheets_for_bbox
+
+        result = find_sheets_for_bbox(self.BBOX, system="2000")
+        assert {"6.135.17", "6.135.18", "6.135.19"} <= set(result)
+        assert len(result) == 16
+
+    def test_find_sheets_2000_directly(self):
+        result = find_sheets_2000_for_bbox(self.BBOX)
+        assert {"6.135.17", "6.135.18", "6.135.19"} <= set(result)
+
+    def test_inverted_bbox_rejected(self):
+        with pytest.raises(ValidationError, match="odwrocony"):
+            find_sheets_2000_for_bbox(
+                BBox(6_500_000, 5_600_000, 6_490_000, 5_590_000, "EPSG:2177")
+            )
+
+    def test_get_bbox_to_4326_uses_cached_transformer(self):
+        from unittest.mock import patch
+
+        from pyproj import Transformer
+
+        from kartograf.core import bbox as bbox_mod
+
+        bbox_mod._transformer.cache_clear()
+        with patch.object(Transformer, "from_crs", wraps=Transformer.from_crs) as made:
+            for _ in range(50):
+                Parser2000("6.179.12.20").get_bbox("EPSG:4326")
+        assert made.call_count == 1

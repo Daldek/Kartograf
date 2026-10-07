@@ -10,8 +10,7 @@ PL-2000 uses dot-separated numeric format: zone.row.column[.subdivisions]
 import math
 import re
 
-from pyproj import Transformer
-
+from kartograf.core.bbox import transform_bbox, validate_bbox
 from kartograf.core.sheet_parser import (
     _DEGENERATE_EPS_DEG,
     BBox,
@@ -306,8 +305,11 @@ class Parser2000:
         if crs == native_crs:
             return BBox(min_x=west, min_y=south, max_x=east, max_y=north, crs=crs)
 
-        # Transformacja do docelowego CRS
-        return self._transform_bbox(south, north, west, east, native_crs, crs)
+        # Transformacja do docelowego CRS (gesta obwiednia, core.bbox)
+        return transform_bbox(
+            BBox(min_x=west, min_y=south, max_x=east, max_y=north, crs=native_crs),
+            crs,
+        )
 
     def _calculate_native_bbox(self) -> tuple[float, float, float, float]:
         """
@@ -567,56 +569,6 @@ class Parser2000:
             current = parent
         return chain
 
-    # =========================================================================
-    # BBox — metody prywatne
-    # =========================================================================
-
-    @staticmethod
-    def _transform_bbox(
-        south: float,
-        north: float,
-        west: float,
-        east: float,
-        src_crs: str,
-        dst_crs: str,
-    ) -> BBox:
-        """
-        Transformuje bbox z src_crs do dst_crs za pomoca pyproj.
-
-        Transformuje wszystkie 4 rogi i bierze min/max.
-
-        Parameters
-        ----------
-        south, north, west, east : float
-            Bbox w src_crs
-        src_crs : str
-            Zrodlowy CRS
-        dst_crs : str
-            Docelowy CRS
-
-        Returns
-        -------
-        BBox
-            Bbox w docelowym CRS
-        """
-        transformer = Transformer.from_crs(src_crs, dst_crs, always_xy=True)
-
-        corners = [
-            (west, south),  # SW
-            (west, north),  # NW
-            (east, south),  # SE
-            (east, north),  # NE
-        ]
-
-        transformed = [transformer.transform(x, y) for x, y in corners]
-
-        min_x = min(c[0] for c in transformed)
-        max_x = max(c[0] for c in transformed)
-        min_y = min(c[1] for c in transformed)
-        max_y = max(c[1] for c in transformed)
-
-        return BBox(min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, crs=dst_crs)
-
 
 # =========================================================================
 # Standalone functions: bbox → godła lookup (PL-2000)
@@ -687,80 +639,6 @@ def _determine_zones_for_bbox(bbox_wgs84: BBox) -> list[int]:
     return sorted(zones)
 
 
-def _transform_bbox_to_wgs84(bbox: BBox) -> BBox:
-    """
-    Transformuje BBox z dowolnego obslugiwanego CRS do WGS84 (EPSG:4326).
-
-    Parameters
-    ----------
-    bbox : BBox
-        Bbox w obslugiwanym CRS
-
-    Returns
-    -------
-    BBox
-        Bbox w EPSG:4326
-    """
-    if bbox.crs == "EPSG:4326":
-        return bbox
-
-    transformer = Transformer.from_crs(bbox.crs, "EPSG:4326", always_xy=True)
-
-    corners = [
-        (bbox.min_x, bbox.min_y),  # SW
-        (bbox.min_x, bbox.max_y),  # NW
-        (bbox.max_x, bbox.min_y),  # SE
-        (bbox.max_x, bbox.max_y),  # NE
-    ]
-
-    transformed = [transformer.transform(x, y) for x, y in corners]
-
-    min_lon = min(c[0] for c in transformed)
-    max_lon = max(c[0] for c in transformed)
-    min_lat = min(c[1] for c in transformed)
-    max_lat = max(c[1] for c in transformed)
-
-    return BBox(
-        min_x=min_lon, min_y=min_lat, max_x=max_lon, max_y=max_lat, crs="EPSG:4326"
-    )
-
-
-def _transform_bbox_to_zone_crs(bbox_wgs84: BBox, zone: int) -> BBox:
-    """
-    Transformuje BBox z WGS84 do natywnego CRS strefy PL-2000.
-
-    Parameters
-    ----------
-    bbox_wgs84 : BBox
-        Bbox w EPSG:4326
-    zone : int
-        Numer strefy (5-8)
-
-    Returns
-    -------
-    BBox
-        Bbox w EPSG:2176-2179
-    """
-    dst_crs = ZONE_EPSG[zone]
-    transformer = Transformer.from_crs("EPSG:4326", dst_crs, always_xy=True)
-
-    corners = [
-        (bbox_wgs84.min_x, bbox_wgs84.min_y),  # SW
-        (bbox_wgs84.min_x, bbox_wgs84.max_y),  # NW
-        (bbox_wgs84.max_x, bbox_wgs84.min_y),  # SE
-        (bbox_wgs84.max_x, bbox_wgs84.max_y),  # NE
-    ]
-
-    transformed = [transformer.transform(x, y) for x, y in corners]
-
-    min_x = min(c[0] for c in transformed)
-    max_x = max(c[0] for c in transformed)
-    min_y = min(c[1] for c in transformed)
-    max_y = max(c[1] for c in transformed)
-
-    return BBox(min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, crs=dst_crs)
-
-
 def find_sheets_2000_for_bbox(
     bbox: BBox,
     target_scale: str = "1:10000",
@@ -792,7 +670,8 @@ def find_sheets_2000_for_bbox(
     Raises
     ------
     ValidationError
-        Jesli target_scale jest nieprawidlowa lub CRS nieobslugiwany
+        Jesli target_scale jest nieprawidlowa, CRS nieobslugiwany albo bbox
+        odwrocony (min > max) lub z wartoscia NaN/inf
     """
     if target_scale not in SCALE_HIERARCHY_2000:
         raise ValidationError(
@@ -800,8 +679,10 @@ def find_sheets_2000_for_bbox(
             f"Dozwolone: {', '.join(SCALE_HIERARCHY_2000)}"
         )
 
+    validate_bbox(bbox)
+
     # Krok 1: Transformuj do WGS84 dla detekcji strefy
-    bbox_wgs84 = _transform_bbox_to_wgs84(bbox)
+    bbox_wgs84 = transform_bbox(bbox, "EPSG:4326")
 
     # Krok 2: Okresl strefy. Detekcja porownuje zakresy dlugosci ostrymi
     # nierownosciami, wiec punkt na poludniku granicy stref (16.5/19.5/22.5E)
@@ -824,7 +705,10 @@ def find_sheets_2000_for_bbox(
         if bbox.crs == zone_crs:
             zone_bbox = bbox
         else:
-            zone_bbox = _transform_bbox_to_zone_crs(bbox_wgs84, z)
+            # Gesta obwiednia: rownoleznik ma minimum y na poludniku osiowym
+            # strefy (15/18/21/24E) — 4 narozniki podnosily dolna krawedz
+            # i gubily caly wiersz arkuszy (ocena parserow 2026-10-07, K3)
+            zone_bbox = transform_bbox(bbox_wgs84, zone_crs)
 
         # Punkt/wlos: rozszerz o eps po stronie MAX (dokladnie jeden arkusz)
         zone_bbox = _expand_degenerate(zone_bbox, _DEGENERATE_EPS_M)
