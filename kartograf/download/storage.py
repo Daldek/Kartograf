@@ -397,6 +397,11 @@ class FileStorage:
 
         Uses a temporary file and atomic rename to prevent partial files.
 
+        Pisze do sciezki STANDARDOWEJ: ``temp.rename(target)`` zastepuje
+        dowiazanie do kampanii (ADR-030) zwyklym plikiem; bez sidecara z
+        ``extra.link`` jest on dla toru kampanii plikiem "nieznanym", ktory
+        nastepne ``newest`` podmieni na dowiazanie.
+
         Parameters
         ----------
         godlo : str

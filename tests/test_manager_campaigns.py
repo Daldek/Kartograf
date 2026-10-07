@@ -950,3 +950,58 @@ def test_transport_failure_with_force_fails(tmp_path):
     fake.resolve_error = _transport_error(G, 503)
     with pytest.raises(DownloadError):
         m.download_sheet(G, skip_existing=False)
+
+
+# =============================================================================
+# M-2: plik kampanii bez sidecara (R22) — weryfikacja tresci
+# =============================================================================
+
+
+def test_reused_campaign_without_sidecar_with_foreign_content_fails(tmp_path):
+    fake = FakeCampaignProvider(C14)
+    m = DownloadManager(tmp_path, provider=fake)
+    std = m.download_sheet(G)
+    target = campaign_path(tmp_path, REC["84183"])
+    sidecar(target).unlink()
+    target.write_bytes(b"<html>blad serwera</html>")
+    with pytest.raises(DownloadError, match="2025-10-21_84183") as exc:
+        m.download_sheet(G)
+    assert "AAIGrid" in str(exc.value)
+    assert not target.exists() and not sidecar(target).exists()
+    assert fake.downloads == [REC["84183"].url]
+    # kolejny przebieg pobiera kampanie ponownie (plik nie byl "lokalny")
+    m.download_sheet(G)
+    assert fake.downloads == [REC["84183"].url] * 2
+    assert std.is_symlink() and linked(std) == str(target)
+
+
+# =============================================================================
+# M-6: ponowny przebieg bez pobrania nie przestawia dowiazania (copy)
+# =============================================================================
+
+
+def test_rerun_without_download_does_not_recopy(tmp_path, monkeypatch):
+    import shutil
+
+    deny_links(monkeypatch)
+    fake = FakeCampaignProvider(C14)
+    m = DownloadManager(tmp_path, provider=fake)
+    std = m.download_sheet(G)
+    assert m.last_sheet.link == "copy"
+    aux = std.parent / f"{std.name}.aux.xml"
+    aux.write_text("<PAMDataset/>")
+    std_meta = sidecar(std).read_text(encoding="utf-8")
+    real_copy = shutil.copyfile
+    calls: list = []
+
+    def copyfile(*args, **kwargs):
+        calls.append(args)
+        return real_copy(*args, **kwargs)
+
+    monkeypatch.setattr(shutil, "copyfile", copyfile)
+    m.download_sheet(G)
+    assert calls == []
+    assert aux.exists()
+    assert sidecar(std).read_text(encoding="utf-8") == std_meta
+    assert m.last_sheet.skipped is True and m.last_sheet.link == "copy"
+    assert fake.downloads == [REC["84183"].url]
