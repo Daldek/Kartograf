@@ -133,8 +133,12 @@
 > `docs/research/2026-10-07-adr030-live/raport.md` (dane 929 MB:
 > katalog danych `kartograf/e2e/2026-10-07-adr030-kampanie/`). Obserwacje: udzial CIFS
 > katalog danych przyjmuje cel symlinku <= 77 B (`reparse=nfs`), wiec na nim
-> dowiazania sa HARDLINKAMI (fallback dziala); `Downloading ...` drukowane
-> takze przy Skipped/Error; `all` orto bez powtorzenia `Warning:` E13.
+> czesc dowiazan byla symlinkami, czesc HARDLINKAMI; `Downloading ...`
+> drukowane takze przy Skipped/Error; `all` orto bez powtorzenia `Warning:` E13.
+> **Errata 4 (decyzja uzytkownika):** dowiazania WYLACZNIE twarde (hardlink ->
+> kopia), symlinki usuniete z kodu (`links.py`: `LinkMethod` = hardlink|copy,
+> cel tylko z sidecara standardowego; stary symlink = sciezka nieznana);
+> galaz `adr030/hardlink`.
 > **Nastepny krok:** wydanie 0.7.0 (bump/tag/push/merge) TYLKO na polecenie
 > uzytkownika.
 > Otwarte drobne (decyzja uzytkownika): wycinek `--target-crs` przy fallbacku
@@ -165,7 +169,7 @@
   skladanie kampanii — narzedzie 0.7.1); `--min-year` od daty POZYSKANIA
   (`aktualnosc`); uklad B: `<segment>/kampanie/<data>_<id>/<hierarchia>/<godlo>`
   + sciezka standardowa = dowiazanie do najnowszej lokalnej kampanii
-  (symlink -> hardlink -> kopia; nigdy wstecz); `newest` sprawdza nowsza
+  (hardlink -> kopia, bez symlinkow — errata 4; nigdy wstecz); `newest` sprawdza nowsza
   kampanie; bez migracji starych plikow; sidecar kampanii obowiazkowy;
   format z pola `format` rekordu (`.xyz` 72675 = AAIGrid); kampanie TYLKO PL
   — CZ zawsze najnowsze, opcje kampanii dla CZ = `Error:`; aktualizacja CZ

@@ -6356,7 +6356,7 @@ class TestCampaignOptions:
             target,
             skipped=False,
             downloaded=(tmp_path / "kampanie" / "new.asc",),
-            link="symlink",
+            link="hardlink",
         )
         mock_manager_class.return_value = manager
 
@@ -6380,7 +6380,7 @@ class TestCampaignOptions:
         assert rc == 0
         err = capsys.readouterr().err
         assert (
-            "Warning: dowiazanie niedostepne na tym systemie plikow — sciezka "
+            "Warning: hardlink niedostepny na tym systemie plikow — sciezka "
             "standardowa jest KOPIA najnowszej kampanii dla 2 arkuszy "
             "(N-34-130-D-d-2-4, N-34-130-D-d-2-3) (extra.link=copy)"
         ) in err
@@ -6677,7 +6677,7 @@ class TestCampaignOptions:
             path,
             skipped=True,
             reused=(tmp_path / "kampanie" / "a.asc",),
-            link="symlink",
+            link="hardlink",
             unverified="pobranie nieudane po 3 probach: HTTP 503",
         )
         mock_manager_class.return_value = manager
@@ -6774,7 +6774,7 @@ class TestCampaignOptions:
             skipped=False,
             downloaded=(tmp_path / "k1" / "a.asc", tmp_path / "k2" / "a.asc"),
             reused=(tmp_path / "k3" / "a.asc",),
-            link="symlink",
+            link="hardlink",
         )
         mock_manager_class.return_value = manager
 
@@ -6804,7 +6804,7 @@ class TestCampaignOptions:
             path,
             skipped=True,
             reused=(tmp_path / "k1" / "a.asc", tmp_path / "k2" / "a.asc"),
-            link="symlink",
+            link="hardlink",
         )
         mock_manager_class.return_value = manager
 

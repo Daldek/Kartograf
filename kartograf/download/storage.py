@@ -468,9 +468,9 @@ class FileStorage:
             True if file was deleted, False if it didn't exist
         """
         path = self.get_path(godlo, ext)
-        # is_symlink: wiszace dowiazanie (cel kampanii usuniety) tez jest do usuniecia;
-        # unlink() kasuje samo dowiazanie, plik w kampanie/ zostaje.
-        if path.exists() or path.is_symlink():
+        # Sciezka standardowa kampanii to hardlink albo kopia (ADR-030):
+        # unlink() kasuje sama sciezke, plik w kampanie/ zostaje.
+        if path.exists():
             path.unlink()
             # Sidecar metadanych nie moze przezyc pliku danych.
             path.with_name(path.name + ".meta.json").unlink(missing_ok=True)
@@ -492,8 +492,8 @@ class FileStorage:
         pattern : str, optional
             Glob pattern for matching files (default: "**/*.asc")
         campaigns : bool, optional
-            False (default): sciezki standardowe — bez ``kampanie/`` i bez
-            wiszacych dowiazan. True: tylko pliki w ``kampanie/`` (ADR-030).
+            False (default): sciezki standardowe — bez ``kampanie/``.
+            True: tylko pliki w ``kampanie/`` (ADR-030).
 
         Returns
         -------
@@ -513,8 +513,6 @@ class FileStorage:
                     in_campaigns = p.relative_to(root).parts[:1] == (CAMPAIGNS_DIR,)
                     if in_campaigns != campaigns:
                         continue
-                    if not campaigns and p.is_symlink() and not p.exists():
-                        continue  # wiszace dowiazanie = brak pliku
                     files.append(p)
         return files
 

@@ -12,6 +12,7 @@ import dataclasses
 import json
 import logging
 import os
+import shutil
 import threading
 from pathlib import Path
 from unittest.mock import Mock, PropertyMock, patch
@@ -19,6 +20,7 @@ from unittest.mock import Mock, PropertyMock, patch
 import pytest
 import requests
 
+from kartograf.download.links import linked_campaign
 from kartograf.download.manager import DownloadManager, DownloadProgress, SheetFetch
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.pl.gugik import GugikProvider
@@ -156,15 +158,39 @@ def meta(path: Path) -> dict:
 
 
 def linked(path: Path) -> str:
-    return os.path.realpath(path)
+    """Plik kampanii wg sidecara standardowego (jedyne zrodlo celu)."""
+    return str(linked_campaign(path))
+
+
+def hardlinked(path: Path) -> bool:
+    """Sciezka standardowa jest hardlinkiem (nie symlinkiem) swojej kampanii."""
+    target = linked_campaign(path)
+    return (
+        target is not None
+        and not path.is_symlink()
+        and os.path.samefile(path, target)
+        and os.stat(path).st_nlink == 2
+    )
 
 
 def deny_links(monkeypatch):
     def denied(*args, **kwargs):
         raise OSError("brak uprawnien")
 
-    monkeypatch.setattr(os, "symlink", denied)
     monkeypatch.setattr(os, "link", denied)
+
+
+_REAL_SYMLINK = os.symlink  # ingerencja uzytkownika w tescie (sidecar)
+
+
+@pytest.fixture(autouse=True)
+def no_symlinks(monkeypatch):
+    """Errata 4 ADR-030: przeplyw managera nigdy nie tworzy symlinku."""
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("os.symlink wywolane w przeplywie kampanii")
+
+    monkeypatch.setattr(os, "symlink", forbidden)
 
 
 # =============================================================================
@@ -179,13 +205,13 @@ def test_newest_downloads_into_kampanie_and_links(tmp_path):
         path
         == tmp_path / "nmt/pl_1992_1m_evrf2007/N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc"
     )
-    assert path.is_symlink() and "kampanie/2025-10-21_84183" in os.readlink(path)
+    assert hardlinked(path) and "kampanie/2025-10-21_84183" in linked(path)
     data = json.loads((path.parent / (path.name + ".meta.json")).read_text())
-    assert data["extra"]["link"] == "symlink"
+    assert data["extra"]["link"] == "hardlink"
     assert data["extra"]["campaign"]["id"] == "84183"
     assert data["request"] == {"godlo": G, "campaigns": "newest"}
     assert isinstance(m.last_sheet, SheetFetch)
-    assert m.last_sheet.skipped is False and m.last_sheet.link == "symlink"
+    assert m.last_sheet.skipped is False and m.last_sheet.link == "hardlink"
     assert m.last_sheet.downloaded == (campaign_path(tmp_path, REC["84183"]),)
 
 
@@ -197,7 +223,7 @@ def test_rerun_newest_existing_campaign_no_download_skipped(tmp_path):
     assert fake.downloads == [REC["84183"].url]
     assert m.last_sheet.skipped is True
     assert m.last_sheet.reused == (campaign_path(tmp_path, REC["84183"]),)
-    assert path.is_symlink() and "2025-10-21_84183" in os.readlink(path)
+    assert hardlinked(path) and "2025-10-21_84183" in linked(path)
 
 
 def test_existing_standard_file_is_not_a_reason_to_skip(tmp_path):
@@ -208,7 +234,7 @@ def test_existing_standard_file_is_not_a_reason_to_skip(tmp_path):
     m = DownloadManager(tmp_path, provider=fake)
     m.download_sheet(G)
     assert fake.downloads == [REC["84183"].url]
-    assert std.is_symlink()
+    assert hardlinked(std)
     assert m.last_sheet.skipped is False
 
 
@@ -220,7 +246,7 @@ def test_legacy_regular_file_replaced_by_link(tmp_path):
         json.dumps({"extra": {"parent_requests": [{"bbox": [1, 2, 3, 4]}]}})
     )
     DownloadManager(tmp_path, provider=FakeCampaignProvider(C14)).download_sheet(G)
-    assert std.is_symlink()
+    assert hardlinked(std)
     assert linked(std) == str(campaign_path(tmp_path, REC["84183"]))
     data = meta(std)
     assert data["extra"]["campaign"]["id"] == "84183"
@@ -232,11 +258,11 @@ def test_newer_campaign_appears_relinks(tmp_path):
     fake = FakeCampaignProvider({"newest": [REC["83233"]]})
     m = DownloadManager(tmp_path, provider=fake)
     std = m.download_sheet(G)
-    assert "2025-04-27_83233" in os.readlink(std)
+    assert "2025-04-27_83233" in linked(std)
     fake.records = {"newest": [REC["84183"]]}
     m.download_sheet(G)
     assert fake.downloads == [REC["83233"].url, REC["84183"].url]
-    assert "2025-10-21_84183" in os.readlink(std)
+    assert "2025-10-21_84183" in linked(std)
     assert campaign_path(tmp_path, REC["83233"]).is_file()
     assert meta(std)["extra"]["campaign"]["id"] == "84183"
 
@@ -257,7 +283,7 @@ def test_all_downloads_every_campaign_links_newest(tmp_path):
         "2025-04-27_83233",
         "2025-10-21_84183",
     ]
-    assert "2025-10-21_84183" in os.readlink(std_path(tmp_path))
+    assert "2025-10-21_84183" in linked(std_path(tmp_path))
     assert len(m.last_result.campaign_files[G]) == 4
     assert m.last_result.succeeded == [std_path(tmp_path)]
 
@@ -313,7 +339,7 @@ def test_newest_after_all_keeps_link_on_newer_local_campaign(tmp_path):
     m = DownloadManager(tmp_path, provider=stale)
     path = m.download_sheet(G)
     assert stale.downloads == []
-    assert "2025-10-21_84183" in os.readlink(path)
+    assert "2025-10-21_84183" in linked(path)
     assert m.last_sheet.skipped is True
 
 
@@ -323,21 +349,24 @@ def test_all_partial_campaign_failure_is_hard_failure_but_links_best_local(tmp_p
     m.download_sheets([G])
     assert m.last_result.failed == [G]
     assert m.last_result.no_coverage == []
-    assert "2025-04-27_83233" in os.readlink(std_path(tmp_path))
+    assert "2025-04-27_83233" in linked(std_path(tmp_path))
     for key in ("83233", "78047", "73021"):
         assert campaign_path(tmp_path, REC[key]).is_file()
     assert not campaign_path(tmp_path, REC["84183"]).exists()
 
 
-def test_dangling_link_redownloads_newest(tmp_path):
+def test_removed_campaign_dir_redownloads_newest(tmp_path):
+    """T12 krok 7: hardlink przezywa usuniecie katalogu kampanii, ale
+    ``extra.link_target`` nie istnieje — ``newest`` pobiera ponownie."""
     fake = FakeCampaignProvider(C14)
     m = DownloadManager(tmp_path, provider=fake)
     std = m.download_sheet(G)
-    campaign_path(tmp_path, REC["84183"]).unlink()
-    assert not std.exists()
+    shutil.rmtree(campaign_path(tmp_path, REC["84183"]).parents[5])
+    assert std.is_file() and linked_campaign(std) is None
     m.download_sheet(G)
     assert fake.downloads == [REC["84183"].url] * 2
-    assert std.exists() and std.is_symlink()
+    assert hardlinked(std)
+    assert linked(std) == str(campaign_path(tmp_path, REC["84183"]))
     assert m.last_sheet.skipped is False
 
 
@@ -348,7 +377,7 @@ def test_force_redownloads_all_campaigns_and_relinks(tmp_path):
     fake.downloads.clear()
     m.download_sheets([G], skip_existing=False)
     assert sorted(fake.downloads) == sorted(r.url for r in C14_ALL)
-    assert "2025-10-21_84183" in os.readlink(std_path(tmp_path))
+    assert "2025-10-21_84183" in linked(std_path(tmp_path))
     assert m.last_result.succeeded == [std_path(tmp_path)]
 
 
@@ -450,7 +479,7 @@ def test_all_with_real_xyz_72675_links_newest(tmp_path):
     m = DownloadManager(tmp_path, provider=fake, campaigns="all")
     m.download_sheets([G2])
     assert len(list((tmp_path / SEGMENT / "kampanie").rglob("*.asc"))) == 5
-    assert "2024-09-23_81025" in os.readlink(std_path(tmp_path, G2))
+    assert "2024-09-23_81025" in linked(std_path(tmp_path, G2))
     assert m.last_result.failed == []
 
 
@@ -482,7 +511,7 @@ def test_content_mismatch_removes_file_and_fails(tmp_path):
         m.download_sheet(G2)
     bad = campaign_path(tmp_path, new, G2)
     assert not bad.exists() and not sidecar(bad).exists()
-    assert "2022-03-20_75506" in os.readlink(std)
+    assert "2022-03-20_75506" in linked(std)
 
 
 def test_all_content_mismatch_on_newest_links_previous(tmp_path):
@@ -490,7 +519,7 @@ def test_all_content_mismatch_on_newest_links_previous(tmp_path):
     m = DownloadManager(tmp_path, provider=fake, campaigns="all")
     m.download_sheets([G])
     assert m.last_result.failed == [G]
-    assert "2025-04-27_83233" in os.readlink(std_path(tmp_path))
+    assert "2025-04-27_83233" in linked(std_path(tmp_path))
     assert not campaign_path(tmp_path, REC["84183"]).exists()
 
 
@@ -532,7 +561,7 @@ def test_campaign_sidecar_failure_removes_data_and_keeps_link(tmp_path, monkeypa
     with pytest.raises(DownloadError, match="obowiazkowego sidecara"):
         m.download_sheet(G)
     assert not campaign_path(tmp_path, REC["84183"]).exists()
-    assert "2025-04-27_83233" in os.readlink(std)
+    assert "2025-04-27_83233" in linked(std)
     assert sidecar(std).read_bytes() == before
 
 
@@ -550,7 +579,7 @@ def test_all_campaign_sidecar_failure_is_partial_failure(tmp_path, monkeypatch):
     m = DownloadManager(tmp_path, provider=FakeCampaignProvider(C14), campaigns="all")
     m.download_sheets([G])
     assert m.last_result.failed == [G]
-    assert "2025-04-27_83233" in os.readlink(std_path(tmp_path))
+    assert "2025-04-27_83233" in linked(std_path(tmp_path))
     assert not campaign_path(tmp_path, REC["84183"]).exists()
     for key in ("83233", "78047", "73021"):
         assert sidecar(campaign_path(tmp_path, REC[key])).is_file()
@@ -565,7 +594,7 @@ def test_reused_campaign_without_sidecar_gets_sidecar(tmp_path):
     m.download_sheet(G)
     assert fake.downloads == [REC["84183"].url]
     assert meta(target)["extra"]["campaign"]["id"] == "84183"
-    assert std.is_symlink() and linked(std) == str(target)
+    assert hardlinked(std) and linked(std) == str(target)
 
 
 def _mock_provider(tmp_payload: bytes = b"ncols 1\n") -> Mock:
@@ -707,6 +736,33 @@ def test_invalid_campaigns_value():
 # =============================================================================
 
 
+def test_note_reuse_with_symlinked_valid_standard_sidecar(tmp_path):
+    """<std>.meta.json jako symlink do POPRAWNEJ tresci sidecara standardowego
+    lezacej gdzie indziej: dowiazanie danych zostaje (bez pobrania), a reuzycie
+    (takze bez ``parent_request``) zamienia sidecar standardowy w zwykly plik,
+    nie piszac przez symlink."""
+    r1 = {"bbox": [1, 2, 3, 4]}
+    fake = FakeCampaignProvider(C14)
+    DownloadManager(
+        tmp_path, provider=fake, sidecar_extra={"parent_request": r1}
+    ).download_sheets([G])
+    std_side = sidecar(std_path(tmp_path))
+    elsewhere = tmp_path / "gdzie_indziej.json"
+    elsewhere.write_bytes(std_side.read_bytes())
+    std_side.unlink()
+    _REAL_SYMLINK(elsewhere, std_side)
+    before = elsewhere.read_bytes()
+
+    m = DownloadManager(tmp_path, provider=fake)
+    m.download_sheets([G])
+
+    assert fake.downloads == [REC["84183"].url]
+    assert m.last_result.skipped == [G]
+    assert elsewhere.read_bytes() == before
+    assert std_side.is_file() and not std_side.is_symlink()
+    assert meta(std_path(tmp_path))["extra"]["link"] == "hardlink"
+
+
 @pytest.mark.parametrize("parent", [None, {"bbox": [5, 6, 7, 8]}])
 def test_note_reuse_with_symlinked_standard_sidecar(tmp_path, parent):
     """<std>.meta.json bedacy SYMLINKIEM do sidecara kampanii: reuzycie nie
@@ -720,7 +776,7 @@ def test_note_reuse_with_symlinked_standard_sidecar(tmp_path, parent):
     camp_side = sidecar(campaign_path(tmp_path, REC["84183"]))
     std_side = sidecar(std_path(tmp_path))
     std_side.unlink()
-    std_side.symlink_to(os.path.relpath(camp_side, std_side.parent))
+    _REAL_SYMLINK(os.path.relpath(camp_side, std_side.parent), std_side)
     before = camp_side.read_bytes()
 
     extra = {"parent_request": parent} if parent else None
@@ -732,7 +788,7 @@ def test_note_reuse_with_symlinked_standard_sidecar(tmp_path, parent):
     camp = json.loads(camp_side.read_text())
     assert "link" not in camp["extra"] and "link_target" not in camp["extra"]
     std = json.loads(std_side.read_text())
-    assert std["extra"]["link"] == "symlink"
+    assert std["extra"]["link"] == "hardlink"
     if parent is None:
         assert camp_side.read_bytes() == before
         assert "parent_requests" not in std["extra"]
@@ -797,7 +853,7 @@ def test_invalid_aktualnosc_is_campaign_failure_links_best_valid(tmp_path):
     with pytest.raises(DownloadError, match="84183_1852496") as exc:
         m.download_sheet(G)
     assert "nie pobrano 1 z 4 kampanii" in str(exc.value)
-    assert "2025-04-27_83233" in os.readlink(std_path(tmp_path))
+    assert "2025-04-27_83233" in linked(std_path(tmp_path))
     for key in ("83233", "78047", "73021"):
         assert campaign_path(tmp_path, REC[key]).is_file()
 
@@ -846,17 +902,17 @@ def test_newest_transport_failure_uses_local_campaign(tmp_path, failure, caplog)
     fake = FakeCampaignProvider(C14)
     m = DownloadManager(tmp_path, provider=fake)
     std = m.download_sheet(G)
-    before = os.readlink(std)
+    before = linked(std)
     fake.resolve_error = _transport_error(G, failure)
     with caplog.at_level(logging.WARNING, logger="kartograf.download.manager"):
         path = m.download_sheet(G)
     target = campaign_path(tmp_path, REC["84183"])
-    assert path == std and os.readlink(std) == before
+    assert path == std and linked(std) == before
     assert fake.downloads == [REC["84183"].url]
     fetch = m.last_sheet
     assert fetch.skipped is True
     assert fetch.reused == (target,) and fetch.downloaded == ()
-    assert fetch.link == "symlink"
+    assert fetch.link == "hardlink"
     assert fetch.unverified and str(fake.resolve_error) in fetch.unverified
     assert any(
         r.levelno == logging.WARNING and G in r.getMessage() for r in caplog.records
@@ -940,7 +996,7 @@ def test_transport_failure_with_dangling_link_fails(tmp_path):
     fake.resolve_error = _transport_error(G, 503)
     with pytest.raises(DownloadError):
         m.download_sheet(G)
-    assert std.is_symlink()
+    assert std.is_file() and linked_campaign(std) is None  # nietkniety
 
 
 def test_transport_failure_with_force_fails(tmp_path):
@@ -972,7 +1028,7 @@ def test_reused_campaign_without_sidecar_with_foreign_content_fails(tmp_path):
     # kolejny przebieg pobiera kampanie ponownie (plik nie byl "lokalny")
     m.download_sheet(G)
     assert fake.downloads == [REC["84183"].url] * 2
-    assert std.is_symlink() and linked(std) == str(target)
+    assert hardlinked(std) and linked(std) == str(target)
 
 
 # =============================================================================

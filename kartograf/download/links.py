@@ -3,11 +3,14 @@ Dowiazanie sciezki standardowej do najnowszej lokalnej kampanii (ADR-030 d).
 
 Prawdziwe pliki NMT/NMPT/orto leza w ``<segment>/kampanie/<data>_<id>/...``;
 sciezka standardowa ``<segment>/<hierarchia>/<godlo>.<ext>`` wskazuje
-najnowsza LOKALNA kampanie. Metoda: 1) symlink WZGLEDNY, 2) hardlink,
-3) kopia (``logger.warning``); podmiana zawsze atomowa (tymczasowe
-dowiazanie w katalogu linku + ``os.replace``). Sidecar sciezki standardowej
-to ZWYKLY plik (kopia sidecara celu + ``extra.link``/``extra.link_target``),
-nigdy zapis "przez" dowiazanie.
+najnowsza LOKALNA kampanie. Metoda (errata 4 ADR-030): 1) hardlink,
+2) kopia (``logger.warning``); symlinkow nie tworzymy (nieczytelne dla
+klientow Windows przez SMB, limit dlugosci celu na udziale). Podmiana zawsze
+atomowa (plik tymczasowy w katalogu linku + ``os.replace``). Sidecar sciezki
+standardowej to ZWYKLY plik (kopia sidecara celu + ``extra.link``/
+``extra.link_target``) i JEDYNE zrodlo celu dowiazania (hardlink nie niesie
+wskazania). Istniejacy symlink (dane sprzed wydania) = sciezka nieznana,
+zastepowana hardlinkiem.
 
 Dowiazanie nigdy nie cofa sie na kampanie starsza od biezacego celu: klucz
 celu z jego sidecara, a gdy nieczytelny — z nazwy katalogu ``<data>_<id>``
@@ -28,7 +31,7 @@ from typing import Literal
 
 logger = logging.getLogger(__name__)
 
-LinkMethod = Literal["symlink", "hardlink", "copy"]
+LinkMethod = Literal["hardlink", "copy"]
 
 # Lokalna stala (bez importu z download/campaigns.py — zadanie rownolegle).
 _CAMPAIGNS_DIR = "kampanie"
@@ -65,19 +68,19 @@ def _read_json(path: Path) -> dict | None:
 
 
 def link_atomic(target: Path, link: Path) -> LinkMethod:
-    """Ustaw ``link`` -> ``target``: symlink WZGLEDNY, potem hardlink, potem kopia.
+    """Ustaw ``link`` -> ``target``: hardlink, a gdy niedostepny — kopia.
 
     Zawsze przez plik tymczasowy w katalogu ``link``
-    (``<name>.<pid>_<tid>.link.tmp``) + ``os.replace``. Wyjatki proby
-    (OSError, NotImplementedError, ValueError z ``relpath`` na Windows)
-    = nastepna metoda; tmp sprzatany. Porazka kopii (OSError) wylatuje,
-    a dotychczasowe dowiazanie zostaje nietkniete.
+    (``<name>.<pid>_<tid>.link.tmp``) + ``os.replace`` (na miejscu
+    istniejacego symlinku zastepuje SAM symlink, nie pisze przez niego).
+    Wyjatek hardlinku (OSError, NotImplementedError — np. exFAT/FAT,
+    sshfs/FUSE) = kopia + ``logger.warning``; tmp sprzatany. Porazka kopii
+    (OSError) wylatuje, a dotychczasowe dowiazanie zostaje nietkniete.
     """
     link.parent.mkdir(parents=True, exist_ok=True)
     tmp = _tmp_name(link, "link.tmp")
     tmp.unlink(missing_ok=True)  # pozostalosc po przerwanym przebiegu (ten sam pid_tid)
     attempts: list[tuple[LinkMethod, Callable[[], object]]] = [
-        ("symlink", lambda: os.symlink(os.path.relpath(target, link.parent), tmp)),
         ("hardlink", lambda: os.link(target, tmp)),
         ("copy", lambda: shutil.copyfile(target, tmp)),
     ]
@@ -85,13 +88,19 @@ def link_atomic(target: Path, link: Path) -> LinkMethod:
         try:
             make()
             os.replace(tmp, link)
-        except (OSError, NotImplementedError, ValueError):
-            tmp.unlink(missing_ok=True)
+        except (OSError, NotImplementedError):
+            # porazka sprzatania nie moze zgubic proby kopii ani bledu kopii
+            with contextlib.suppress(OSError):
+                tmp.unlink(missing_ok=True)
             if method == "copy":
                 raise
             continue
+        # rename(2) na ten sam i-wezel (link juz jest hardlinkiem celu) nic
+        # nie robi i zostawia tmp
+        with contextlib.suppress(OSError):
+            tmp.unlink(missing_ok=True)
         if method == "copy":
-            logger.warning(f"Dowiazanie {link} niedostepne — kopia {target}")
+            logger.warning(f"Hardlink {link} niedostepny — kopia {target}")
         return method
     raise AssertionError("unreachable")
 
@@ -151,16 +160,16 @@ def campaign_key_of(data_path: Path) -> tuple[str, str, str] | None:
 def linked_campaign(link: Path) -> Path | None:
     """Plik kampanii, na ktory wskazuje sciezka standardowa.
 
-    ``None`` = brak pliku, wiszace dowiazanie, zwykly plik bez ``extra.link``
-    (stary plik — errata (e)), hardlink, ktory nie jest juz tym samym plikiem
-    (``samefile``), kopia o innym rozmiarze niz cel ALBO starsza od celu
-    (D-5: ``target.st_mtime > link.st_mtime`` — cel pobrany ponownie po
-    skopiowaniu; ``shutil.copyfile`` nie przenosi mtime, wiec swieza kopia
-    ma mtime >= cel).
+    Cel WYLACZNIE z sidecara standardowego (``extra.link`` in
+    {hardlink, copy} + ``extra.link_target``), zweryfikowany z plikiem.
+    ``None`` = brak pliku, plik bez ``extra.link`` albo z innym ``extra.link``
+    (stary plik — errata (e); symlink sprzed errata 4), ``link_target``
+    nieistniejacy (katalog kampanii usuniety), hardlink, ktory nie jest juz
+    tym samym plikiem (``samefile``), kopia o innym rozmiarze niz cel ALBO
+    starsza od celu (D-5: ``target.st_mtime > link.st_mtime`` — cel pobrany
+    ponownie po skopiowaniu; ``shutil.copyfile`` nie przenosi mtime, wiec
+    swieza kopia ma mtime >= cel).
     """
-    if link.is_symlink():
-        target = Path(_norm(link.parent / os.readlink(link)))
-        return target if target.exists() else None
     if not link.is_file():
         return None
     meta = _read_json(_sidecar_of(link))
@@ -195,10 +204,12 @@ def _link_target_text(link: Path, target: Path) -> str:
 def write_standard_sidecar(link: Path, target: Path, method: LinkMethod) -> None:
     """``<link>.meta.json`` = sidecar celu + ``extra.link`` + ``extra.link_target``.
 
-    ZWYKLY plik: tmp + ``os.replace`` (zastepuje takze symlink — nigdy zapis
-    "przez" dowiazanie do sidecara kampanii). Sidecar celu nieczytelny ->
-    stary sidecar standardowy usuniety + ``logger.warning``. Nigdy nie
-    rzuca wyjatku (sidecar standardowy jest best-effort).
+    ZWYKLY plik: tmp + ``os.replace`` (zastepuje takze symlink sidecara
+    pozostawiony przez uzytkownika — nigdy zapis "przez" niego do sidecara
+    kampanii). ``extra.link_target`` = sciezka wzgledna do pliku kampanii
+    (absolutna, gdy wzgledna niemozliwa) — jedyne zrodlo celu. Sidecar celu
+    nieczytelny -> stary sidecar standardowy usuniety + ``logger.warning``.
+    Nigdy nie rzuca wyjatku (sidecar standardowy jest best-effort).
     """
     sidecar = _sidecar_of(link)
     tmp = _tmp_name(sidecar, "tmp")
@@ -227,8 +238,6 @@ def write_standard_sidecar(link: Path, target: Path, method: LinkMethod) -> None
 
 
 def _current_method(link: Path) -> LinkMethod:
-    if link.is_symlink():
-        return "symlink"
     meta = _read_json(_sidecar_of(link)) or {}
     extra = meta.get("extra")
     method = extra.get("link") if isinstance(extra, dict) else None
@@ -246,8 +255,9 @@ def ensure_standard_link(
     i ``cur == target``), oraz ``cur == target`` ALBO klucz biezacego celu
     (``campaign_key_of`` — sidecar, a gdy nieczytelny nazwa katalogu) jest
     ``>= key``. Inaczej ``link_atomic`` + ``write_standard_sidecar`` +
-    usuniecie ``<link>.aux.xml`` (stale statystyki GDAL PAM). Gdy dowiazanie
-    zostaje, a ``<link>.meta.json`` brak — jest odtwarzany. Porownanie
+    usuniecie ``<link>.aux.xml`` (stale statystyki GDAL PAM). Brak
+    ``<link>.meta.json`` = sciezka nieznana (sidecar to jedyne zrodlo celu),
+    wiec dowiazanie jest tworzone od nowa. Porownanie
     ``cur == target`` na sciezkach znormalizowanych, nie ``samefile``
     (kopia nie jest tym samym plikiem). Porazka podmiany (takze kopii)
     wylatuje jako ``OSError``; dotychczasowe dowiazanie zostaje.
@@ -267,10 +277,7 @@ def ensure_standard_link(
         if not (refresh and same):
             cur_key = campaign_key_of(cur)
             if same or (cur_key is not None and cur_key >= key):
-                method = _current_method(link)
-                if not _sidecar_of(link).exists():
-                    write_standard_sidecar(link, cur, method)
-                return LinkOutcome(method, cur, False)
+                return LinkOutcome(_current_method(link), cur, False)
     method = link_atomic(target, link)
     write_standard_sidecar(link, target, method)
     (link.parent / f"{link.name}.aux.xml").unlink(missing_ok=True)
