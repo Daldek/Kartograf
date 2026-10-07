@@ -43,6 +43,7 @@ import requests
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError
 from kartograf.providers.base import LandCoverProvider
+from kartograf.transform.bbox import envelope_from_2180
 from kartograf.transport.http import (
     MAX_RETRIES,
     SessionPerThread,
@@ -383,7 +384,7 @@ class CorineProvider(LandCoverProvider):
         # the ground resolution along Y matches the one along X. Degrees would
         # not do: plate carree is not conformal, a pixel square in degrees is
         # 1/cos(lat) taller on the ground (~1.6x in Poland).
-        aspect_bounds = self._transform_bbox_to_epsg3857(bbox)
+        aspect_bounds = envelope_from_2180(bbox, "EPSG:3857")
 
         # Envelope actually sent as BBOX, in the CRS of the WMS request:
         # EPSG:3857 for the EEA endpoint, EPSG:4326 for the DLR fallback
@@ -391,7 +392,7 @@ class CorineProvider(LandCoverProvider):
         if year in self.EEA_YEARS:
             target_bounds = aspect_bounds
         else:
-            target_bounds = self._transform_bbox_to_wgs84(bbox)
+            target_bounds = envelope_from_2180(bbox, "EPSG:4326")
 
         # Width follows the ground resolution along X, height follows the
         # aspect ratio of the requested area on the ground.
@@ -455,7 +456,7 @@ class CorineProvider(LandCoverProvider):
         4. Download the result file
         """
         # Transform bbox to WGS84 for CLMS API
-        bbox_wgs84 = self._transform_bbox_to_wgs84(bbox)
+        bbox_wgs84 = envelope_from_2180(bbox, "EPSG:4326")
 
         # Request download
         dataset_id = self.CLMS_DATASET_UIDS[year]
@@ -774,7 +775,7 @@ class CorineProvider(LandCoverProvider):
         bounds : tuple
             Envelope of the requested area in the CRS of the request:
             EPSG:3857 for EEA years, EPSG:4326 for the DLR fallback
-            (see _transform_bbox_to_epsg3857 / _transform_bbox_to_wgs84)
+            (see transform.bbox.envelope_from_2180)
         year : int
             Reference year
         width : int
@@ -852,50 +853,6 @@ class CorineProvider(LandCoverProvider):
         }
 
         return f"{self.DLR_WMS_ENDPOINT}?{urlencode(params)}"
-
-    def _transform_bbox_to_epsg3857(
-        self, bbox: BBox
-    ) -> tuple[float, float, float, float]:
-        """
-        Transform EPSG:2180 bounding box to Web Mercator (EPSG:3857).
-
-        Envelope of the whole rectangle (edges densified), not just two
-        corners: the EPSG:2180 grid is rotated against the meridians, so
-        the SW/NE pair alone cuts off the north and south strips.
-
-        Returns
-        -------
-        tuple
-            (min_x, min_y, max_x, max_y) in EPSG:3857
-        """
-        from pyproj import Transformer
-
-        transformer = Transformer.from_crs("EPSG:2180", "EPSG:3857", always_xy=True)
-
-        return transformer.transform_bounds(
-            bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y, densify_pts=21
-        )
-
-    def _transform_bbox_to_wgs84(self, bbox: BBox) -> tuple[float, float, float, float]:
-        """
-        Transform EPSG:2180 bounding box to WGS84 (EPSG:4326).
-
-        Envelope of the whole rectangle (edges densified), not just two
-        corners: the EPSG:2180 grid is rotated against the meridians, so
-        the SW/NE pair alone cuts off the north and south strips.
-
-        Returns
-        -------
-        tuple
-            (min_lon, min_lat, max_lon, max_lat) in WGS84
-        """
-        from pyproj import Transformer
-
-        transformer = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
-
-        return transformer.transform_bounds(
-            bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y, densify_pts=21
-        )
 
     # =========================================================================
     # Info methods

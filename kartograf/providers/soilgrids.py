@@ -38,6 +38,7 @@ import requests
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.providers.base import LandCoverProvider
+from kartograf.transform.bbox import envelope_from_2180
 from kartograf.transport.http import (
     MAX_RETRIES,
     SessionPerThread,
@@ -235,7 +236,7 @@ class SoilGridsProvider(LandCoverProvider):
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Transform bbox to WGS84 for WCS
-        bbox_wgs84 = self._transform_bbox_to_wgs84(bbox)
+        bbox_wgs84 = envelope_from_2180(bbox, "EPSG:4326")
 
         # Download via WCS
         return self._download_via_wcs(
@@ -245,32 +246,6 @@ class SoilGridsProvider(LandCoverProvider):
             depth=depth,
             stat=stat,
             timeout=timeout,
-        )
-
-    def _transform_bbox_to_wgs84(self, bbox: BBox) -> tuple[float, float, float, float]:
-        """
-        Transform EPSG:2180 bounding box to WGS84 (EPSG:4326).
-
-        Envelope of the whole rectangle (edges densified), not just two
-        corners: the EPSG:2180 grid is rotated against the meridians, so
-        the SW/NE pair alone cuts off the north and south strips.
-
-        Parameters
-        ----------
-        bbox : BBox
-            Bounding box in EPSG:2180
-
-        Returns
-        -------
-        tuple
-            (min_lon, min_lat, max_lon, max_lat) in WGS84
-        """
-        from pyproj import Transformer
-
-        transformer = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
-
-        return transformer.transform_bounds(
-            bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y, densify_pts=21
         )
 
     def _download_via_wcs(

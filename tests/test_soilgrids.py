@@ -13,6 +13,7 @@ import pytest
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError
 from kartograf.providers.soilgrids import PROPERTY_DESCRIPTIONS, SoilGridsProvider
+from kartograf.transform.bbox import envelope_from_2180
 
 
 class TestSoilGridsProvider:
@@ -159,9 +160,8 @@ class TestSoilGridsCRSTransform:
 
     def test_transform_bbox_to_wgs84(self):
         """Test transformation from EPSG:2180 to WGS84."""
-        provider = SoilGridsProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        result = provider._transform_bbox_to_wgs84(bbox)
+        result = envelope_from_2180(bbox, "EPSG:4326")
 
         # Result should be (min_lon, min_lat, max_lon, max_lat)
         min_lon, min_lat, max_lon, max_lat = result
@@ -172,15 +172,17 @@ class TestSoilGridsCRSTransform:
         assert min_lon < max_lon
         assert min_lat < max_lat
 
-    def test_transform_bbox_to_wgs84_covers_all_corners(self):
-        """Envelope covers all four corners, not only SW and NE."""
+    def test_download_by_bbox_sends_envelope_covering_all_corners(self, tmp_path):
+        """WCS dostaje obwiednie WGS84 calego prostokata, nie tylko SW i NE."""
         from pyproj import Transformer
 
         from kartograf.core.sheet_parser import SheetParser
 
-        provider = SoilGridsProvider()
         bbox = SheetParser("N-34-130-D").get_bbox("EPSG:2180")
-        min_lon, min_lat, max_lon, max_lat = provider._transform_bbox_to_wgs84(bbox)
+        provider = SoilGridsProvider()
+        with patch.object(provider, "_download_via_wcs") as wcs:
+            provider.download_by_bbox(bbox, tmp_path / "x.tif")
+        min_lon, min_lat, max_lon, max_lat = wcs.call_args.kwargs["bbox_wgs84"]
 
         transformer = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
         for x, y in (
