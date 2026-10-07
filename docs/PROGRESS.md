@@ -146,6 +146,19 @@
 > `NoCoverageError.hints` (np. `--scale 1:2000` dla PL-2000; dedup doslowny,
 > max 5 linii; przezywaja cache), brak `Downloaded 0 ...` po `Error:`,
 > `Downloading ...` tylko przy rzeczywistym pobraniu. Brama **2669** offline.
+> Pelny przebieg na zywo (wszystkie produkty, PL-1992/PL-2000 S6-S8, EVRF2007/
+> KRON86, CZ TM33/SM5, LAZ, landcover): 51 PASS / 1 FAIL / 2 SKIP
+> (`docs/research/2026-10-07-adr030-live/e2e-full-A.md`, `-B.md`). Poprawki
+> (merge `9b4cb73` FA, `7d9ad6f` FB): BDOT10k GPKG skladany lokalnie (udzial
+> SMB odrzuca blokady zakresow bajtow — `database is locked`; zweryfikowane na
+> zywo 332 MB/70 warstw), sidecar wyniku HSG, `MetadataCache.__del__` bez
+> `ImportError`, bez pustej linii przed `Error:`, wycinek raportuje arkusze
+> bez sprawdzenia skorowidza (`PlCutoutResult.unverified`,
+> `extra.unverified_sheets`, `Warning:` takze przy skip), jeden INFO liczby
+> kampanii. Brama **2684** offline.
+> **Serwer katalog danych (uzytkownik zajmie sie sam — PRZYPOMNIEC):** udzial odrzuca
+> blokady zakresow bajtow (`EACCES`) — diagnoza Samby/FS zamiast `nobrl`
+> (dotknie tez klientow Windows).
 > **Nastepny krok:** wydanie 0.7.0 (bump/tag/push/merge) TYLKO na polecenie
 > uzytkownika.
 > Otwarte drobne (decyzja uzytkownika): wycinek `--target-crs` przy fallbacku
