@@ -1433,6 +1433,161 @@ dostac oba. Biblioteka (Hydrograf) pobiera LAZ bez powielania CLI.
 
 ---
 
+## ADR-030: Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem
+
+**Data:** 2026-10-07
+**Status:** Przyjeta (decyzje uzytkownika 2026-10-07; uzupelnia ADR-026 i ADR-028, nie zmienia reguly wyboru z ADR-028)
+
+**Kontekst:** Arkusz GUGiK ma czesto kilka kampanii (rozne daty pozyskania,
+zlecenia, zrodla: skaning laserowy albo zdjecia lotnicze). Pomiar 2026-10-07
+(`docs/research/2026-10-06-e2e-brzegowe-i-review/pokrycie-kampanii.md`):
+najnowsza kampania bywa niepelna (N-34-139-C-a-3-1: 0,9 % danych starszej
+pelnej kampanii; orto M-34-90-C-b-4-4: 3,2 %), a flaga
+`calyArkuszWypelnionyTrescia` nie mierzy skali braku. Pokrycia nie da sie
+wyznaczyc przed pobraniem: serwer `opendata.geoportal.gov.pl` nie obsluguje
+HTTP Range, a geometria WFS skorowidzow (`.../WFS/Skorowidze`, `msGeometry`)
+to rama arkusza, nie zasieg danych (errata w
+`docs/research/2026-10-07-pobieraczek.md`). Dzis Kartograf pobiera wylacznie
+najnowsza kampanie (ADR-028), plik w sciezce standardowej nie niesie
+tozsamosci kampanii, a ponowne uruchomienie pomija istniejacy plik bez
+sprawdzenia, czy pojawila sie nowsza kampania. Uzytkownik chce moc pobrac
+wszystkie kampanie i skladac je sam (QGIS; uniwersalne narzedzie laczenia
+kampanii planowane w 0.7.1).
+
+**Opcje (strategie):**
+- `newest` — najnowsza kampania (stan, ADR-028).
+- `all` — wszystkie kampanie arkusza spelniajace twardy filtr ADR-028.
+- `coverage` — najnowsza o pokryciu >= progu. ODRZUCONA: pokrycie znane
+  dopiero po pobraniu (albo przerwanym pobieraniu) — zbedne obciazenie
+  infrastruktury GUGiK.
+- `mosaic` — najnowsza + starsze tylko w lukach, jeden plik zlozony.
+  ODRZUCONA: skladanie kampanii nalezy do uzytkownika/narzedzia 0.7.1.
+- Wskazanie konkretnej kampanii (`--campaign <id>`). ODRZUCONE: wymaga
+  znajomosci identyfikatorow GUGiK, nikt tego nie uzyje.
+
+**Opcje (uklad plikow wielu kampanii):** A) sufiks w nazwie pliku w
+katalogu arkusza; B) najpierw kampania, potem hierarchia arkusza
+(`kampanie/<kampania>/<hierarchia>/<godlo>.<ext>`); C) najpierw arkusz, potem
+kampania; D) zawsze oryginalna nazwa pliku GUGiK. Wybrane B — jedna dostawa
+GUGiK = jeden katalog, ktory w QGIS daje spojna mozaike kampanii (VRT),
+a nazwy plikow i hierarchia godel zostaja bez zmian.
+
+**Decyzje:**
+
+(a) **Strategie.** CLI `--campaigns {newest,all}` (domyslnie `newest`);
+biblioteka: parametr `campaigns="newest"|"all"` w `DownloadManager` (i
+sciezkach, ktore go uzywaja). Dotyczy produktow PL z kampaniami w
+skorowidzu: NMT (1 m, 5 m), NMPT, orto — we wszystkich trybach arkuszy:
+godlo, lista `--bbox`/`--geometry`, hierarchia godla. Regula wyboru
+`newest` = ADR-028 bez zmian (najnowsza `aktualnosc`, potem `dt_pzgik`,
+URL; bez preferencji pelnego arkusza). `all` = kazdy rekord, ktory
+przechodzi twardy filtr ADR-028 (godlo jako token, uklad, rozdzielczosc,
+pion, wariant koloru orto), z kazdej warstwy uslugi.
+
+(b) **`newest` sprawdza, czy jest nowsza kampania.** Kazde uruchomienie
+rozwiazuje aktualny rekord najnowszy (z `MetadataCache.record_cache`, TTL 7
+dni; po wygasnieciu albo z `--force` — zapytanie do skorowidza). Jesli plik
+tej kampanii jest lokalnie — tylko zapewnienie dowiazania (d), bez pobrania.
+Jesli nie — pobranie do `kampanie/` i przestawienie dowiazania. Istniejacy
+plik w sciezce standardowej nie jest juz powodem pominiecia.
+
+(c) **Tozsamosc kampanii i uklad.** Katalog kampanii `<data>_<id>`:
+`<data>` = `aktualnosc` (data POZYSKANIA danych, RRRR-MM-DD), `<id>` =
+identyfikator zlecenia — pierwszy segment liczbowy nazwy pliku w URL
+(`.../NMT/83233/83233_1744736_<godlo>.asc` -> `83233`), przy braku takiego
+segmentu `u<8 znakow sha1(URL)>`. Plik kampanii:
+`<segment>/kampanie/<data>_<id>/<hierarchia godla>/<godlo>.<ext>` + sidecar
+obok, np. `nmt/pl_1992_1m_evrf2007/kampanie/2025-04-27_83233/N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc`.
+Segment (ADR-026) bez zmian, takze wariant orto
+(`orto/pl_1992_cir/kampanie/...`). Prawdziwe pliki leza WYLACZNIE w
+`kampanie/` — dotyczy obu strategii.
+
+(d) **Sciezka standardowa = dowiazanie do najnowszej kampanii lokalnie.**
+`<segment>/<hierarchia>/<godlo>.<ext>` (sciezka z ADR-026, ta sama dla
+konsumentow, m.in. Hydrografu) i jej sidecar `.meta.json` wskazuja plik
+i sidecar najnowszej kampanii, jaka jest lokalnie — takze niepelnej (zgodnie
+z `newest`). Kazde pobranie kampanii nowszej od celu dowiazania (przez
+`newest` albo `all`) przestawia dowiazanie atomowo (tymczasowe dowiazanie +
+`os.replace`). Metoda wybierana automatycznie, w kolejnosci:
+1) dowiazanie symboliczne WZGLEDNE (Linux/macOS; Windows z trybem
+dewelopera) — widac, na ktora kampanie wskazuje, `data/` mozna przenosic;
+2) dowiazanie twarde (zwykly Windows na NTFS, udzialy bez symlinkow; ten sam
+wolumin); 3) kopia + `Warning:` (FAT32/exFAT, inny wolumin). Uzyta metoda:
+`extra.link` w sidecarze (`symlink|hardlink|copy`). Zweryfikowano
+2026-10-07: symlink, hardlink i atomowa podmiana dzialaja na dysku lokalnym
+i na udziale CIFS SMB 3.1.1 (`<katalog-danych>`). Dowiazanie wiszace (usunieta
+kampania) = plik brakujacy: kontrola istnienia sprawdza CEL, nie link.
+
+(e) **Brak migracji.** Pliki sprzed tej zmiany (zwykle pliki w sciezce
+standardowej) sa traktowane jak nieznane: `newest` pobiera najnowsza kampanie
+do `kampanie/` i ZASTEPUJE stary plik (oraz jego sidecar) dowiazaniem.
+Kartograf nie przenosi starych plikow do `kampanie/` na podstawie sidecarow
+— ryzyko brakujacych/niepelnych metadanych; ponowne pobranie jest tanie.
+
+(f) **`--min-year RRRR`** (obie strategie): dolna granica roku z
+`aktualnosc` (data pozyskania, nie `dt_pzgik` — roznica dochodzi do roku:
+2025-10-21 przyjeta do PZGiK 2026-07-10). `newest --min-year`: gdy najnowsza
+kampania jest starsza od granicy — brak pokrycia (`NoCoverageError` z
+podpowiedzia: data najnowszej kampanii; w trybie listy status
+`no_coverage`/`Warning:` jak R5). `all --min-year`: kampanie od tego roku
+wlacznie. Weryfikacja 2026-10-07: 1381 rekordow skorowidza (NMT 1 m/5 m,
+NMPT, orto; KRON86/EVRF2007) — `aktualnosc` zawsze pelna data, `aktualnoscRok`
+zawsze zgodny.
+
+(g) **Odpornosc na zmiany nazw warstw.** Warstwy pochodza z GetCapabilities
+(`LAYER_PATTERN`, bez list zaszytych — ADR-028/S4). Dla `--min-year`: rok
+z nazwy warstwy sluzy WYLACZNIE do pominiecia zapytania — warstwa jest
+pomijana tylko, gdy nazwa daje jednoznaczny GORNY rok (`2019`,
+`2017iStarsze`) mniejszy od granicy. Warstwa bez roku (`Starsze`) albo
+o nazwie niepasujacej do wzorca jest odpytywana zawsze. O wyniku decyduje
+wylacznie `aktualnosc` rekordu. Warstwa, ktorej nazwa nie pasuje do
+`LAYER_PATTERN`, daje ostrzezenie w logu (dzis jest po cichu pomijana —
+zmiana schematu nazw nie moze gubic danych bez sladu); czy ma byc
+odpytywana zamiast pomijana — rozstrzyga plan po przegladzie
+`_fetch_wms_layers`.
+
+(h) **Cache.** `record_cache` (najnowszy rekord) bez zmian semantyki;
+`all` potrzebuje listy rekordow arkusza — nowa tabela (np.
+`campaigns_cache`, klucz jak `record_cache`, TTL 7 dni, `--force` = refresh
+jak E14). Granica `--min-year` NIE wchodzi do klucza: filtr dziala na
+liscie/rekordzie po odczycie.
+
+(i) **Sidecar.** Kazdy plik kampanii: `extra.campaign` = {`id`, `date`
+(`aktualnosc`), `zgloszenie` (`numerZgloszeniaPracy`), `source`
+(`zrDanych`/`zrodloDanych`), `full_sheet`, `dt_pzgik`} obok istniejacego
+`extra.source`; `request` zapisuje `campaigns` i `min_year`; `extra.link`
+w sidecarze sciezki standardowej.
+
+(j) **Poza zakresem / zachowanie innych torow.** Wycinek PL (`--target-crs`,
+ADR-027) z `--campaigns all` = `ValidationError` przed siecia (laczenie
+kampanii — narzedzie 0.7.1); wycinek z `newest` bierze arkusze przez
+dowiazania jak dotad. CZ (CUZK) nie ma kampanii: jawne `--country cz`
+z `all`/`--min-year` = `ValidationError`; pod `--country auto` opcje
+dotycza tylko czesci PL (`Info:`). LAZ: `newest` = ADR-029 (wybor wg
+pokrycia obszaru); `all` = wylaczenie deduplikacji ADR-029 (wszystkie
+roczniki spelniajace filtry), `--min-year` = dolna granica `akt_rok`,
+wzajemnie wykluczajace z `--year`; uklad LAZ bez zmian (nazwa pliku =
+oryginalna nazwa GUGiK, unikalna per kampania), bez dowiazan.
+
+**Konsekwencje:**
+- Konsument (Hydrograf) widzi te same sciezki; GDAL/rasterio ida za
+  dowiazaniem. Narzedzia kopiujace `data/` moga kopiowac link zamiast
+  danych — opisac w README.
+- Uklad `data/` zmienia sie wewnetrznie (ADR-026 + `kampanie/`): `FileStorage`
+  musi rozrozniac sciezke standardowa i kampanii; `list_files`/`delete`
+  musza obslugiwac dowiazania (delete standardowej = usuniecie linku, nie
+  kampanii).
+- `newest` wykonuje zapytanie do skorowidza po wygasnieciu cache rekordow
+  (7 dni) dla kazdego arkusza — swiadomy koszt aktualnosci danych.
+- Pierwsze uruchomienie po wdrozeniu pobiera ponownie arkusze z cache
+  (brak migracji, (e)).
+- Testy: tozsamosc kampanii z realnych URL (NMT/NMPT/orto), metody
+  dowiazan z fallbackiem (symulacja braku uprawnien), atomowa podmiana,
+  dowiazanie wiszace, `--min-year` na surowych body (warstwy jednoroczne,
+  zbiorcze, `Starsze`, nazwa nieznana), `all` + skip per kampania.
+
+---
+
 <!-- Szablon nowej decyzji:
 
 ## ADR-XXX: Tytul
