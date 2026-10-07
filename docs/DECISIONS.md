@@ -1586,6 +1586,50 @@ oryginalna nazwa GUGiK, unikalna per kampania), bez dowiazan.
   dowiazanie wiszace, `--min-year` na surowych body (warstwy jednoroczne,
   zbiorcze, `Starsze`, nazwa nieznana), `all` + skip per kampania.
 
+
+**Errata 2026-10-07 (plan `docs/research/2026-10-07-plan-adr030.md`,
+weryfikacja `docs/research/2026-10-07-weryfikacja-planu-adr030.md`;
+zaakceptowane przez uzytkownika):**
+- (g) **[Q1]** Warstwa GetCapabilities o nazwie niepasujacej do
+  `LAYER_PATTERN` NIE jest odpytywana (zamiast "odpytywana zawsze"):
+  realne GetCapabilities zawieraja `default`, `WMS` i (orto)
+  `SkorowidzeOrtofotomapyZasiegi*`, a odpowiedz spoza szablonu skorowidza
+  przewraca arkusz (`DownloadError`). Nazwa z rodziny produktu (np.
+  `Skorowidz...NMT...`), ktora nie pasuje do wzorca, daje `logger.warning`
+  — zmiana schematu nazw nie ginie bez sladu. Warstwa `Starsze` (bez roku)
+  pasuje do wzorca i jest odpytywana zawsze.
+- (g) **[Q5]** Pomijanie warstw wg roku z nazwy dziala TYLKO w `all`.
+  `newest --min-year` odpytuje warstwy jak dotad (od najnowszej), zeby
+  `record_cache` nie zalezal od granicy, a komunikat braku podawal date
+  najnowszej kampanii.
+- (d) **[Q7]** Sidecar sciezki standardowej to ZWYKLY plik (kopia
+  sidecara kampanii + `extra.link`, `extra.link_target`), zapisywany
+  atomowo — nie dowiazanie: zapis przez symlink nadpisalby sidecar
+  kampanii (`write_sidecar`, `_note_reuse`). Dowiazaniem jest tylko plik
+  danych.
+- (d) Dowiazanie NIGDY nie jest przestawiane na kampanie starsza od
+  biezacego celu (porownanie klucza `<data>_<id>`; gdy sidecar celu jest
+  nieczytelny — klucz z nazwy katalogu kampanii).
+- (j) **[Q2]** Wycinek PL (`--target-crs`) z `--min-year` = `ValidationError`
+  przed siecia, kod 1 — tak jak z `--campaigns all`.
+- (j) **[Q9]** Godlo CZ (jednoznacznie czeskie) pod `--country auto`
+  z `--campaigns all`/`--min-year` = `Error:`, kod 1 (spojnie z
+  `--product nmpt/orto` dla CZ). `Info:` (opcje dotycza tylko czesci PL)
+  wylacznie dla obszaru `--bbox`/`--geometry`.
+- (c) **[Q3]** Kampania o innym formacie pliku niz domyslny produktu (realnie
+  `.xyz`, rekord 72675) jest zapisywana z rozszerzeniem z URL i NIE dostaje
+  dowiazania. Gdy taka kampania jest najnowsza pod `newest` — arkusz konczy
+  sie porazka (`DownloadError`), plik zostaje w `kampanie/`. (Dzis `.xyz`
+  zapisywany jako `.asc` — blad, naprawiony ta zmiana.)
+- (i) **[Q8]** `request.min_year` tylko, gdy podany; LAZ: `request.campaigns`
+  tylko przy `all`.
+- **[Q4]** Wycinek PL z `newest` jest pomijany, gdy plik wyniku istnieje
+  (bez sprawdzania nowszych kampanii arkuszy) — odswiezenie przez `--force`.
+- **[Q10]** Czesciowa porazka `all` na arkuszu (np. jedna kampania nie do
+  pobrania) = twarda porazka arkusza (kod 1); pobrane kampanie zostaja,
+  dowiazanie wskazuje najnowsza pobrana.
+- **[Q6]** `all` dla orto moze oznaczac ~10 kampanii i GB danych na arkusz —
+  bez limitu, opis w dokumentacji i `logger.info` z liczba kampanii.
 ---
 
 <!-- Szablon nowej decyzji:
