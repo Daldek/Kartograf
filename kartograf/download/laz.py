@@ -45,8 +45,8 @@ from kartograf.providers.pl.gugik_laz import (
 LazProgressCallback = Callable[[int, int], None]
 
 NO_TILES_MESSAGE = (
-    "No LAZ tiles found for the given area (sprawdz obszar, --year "
-    "i --vertical-crs; wszystkie roczniki WFS odpowiedzialy)"
+    "No LAZ tiles found for the given area (sprawdz obszar, --year, "
+    "--min-year i --vertical-crs; wszystkie roczniki WFS odpowiedzialy)"
 )
 
 
@@ -89,6 +89,8 @@ def write_laz_sidecar(
     *,
     year: int | None = None,
     min_density: int | None = None,
+    campaigns: str = "newest",
+    min_year: int | None = None,
     parent_request: dict | None = None,
 ) -> None:
     """Best-effort sidecar kafla LAZ przez ``emit_sidecar`` (blad = ostrzezenie w logu).
@@ -96,7 +98,9 @@ def write_laz_sidecar(
     ``request`` opisuje faktyczne zadanie: bbox oraz filtry ``year``
     i ``min_density``, gdy podane (E16). ``extra.gestosc`` i ``min_density``
     to wartosc NOMINALNA z WFS GUGiK (``char_przestrz``) — faktyczna gestosc
-    kafla bywa kilkukrotnie wyzsza. ``extra.parent_request`` — tylko gdy
+    kafla bywa kilkukrotnie wyzsza. ``request.campaigns`` tylko dla ``"all"``
+    (``newest`` = ADR-029, bez zmian), ``request.min_year`` gdy podany
+    (ADR-030). ``extra.parent_request`` — tylko gdy
     podany (ADR-023 (f).1: tryb ``--bbox``/``--geometry``).
     """
     from kartograf.sources.registry import horizontal_crs_for_uklad
@@ -110,6 +114,10 @@ def write_laz_sidecar(
         request["year"] = year
     if min_density is not None:
         request["min_density"] = min_density
+    if campaigns == "all":
+        request["campaigns"] = campaigns
+    if min_year is not None:
+        request["min_year"] = min_year
     extra: dict = {
         "godlo_kafla": tile.godlo,
         "rok": tile.year,
@@ -140,6 +148,8 @@ def run_laz_download(
     output_dir: str | Path = "./data",
     year: int | None = None,
     min_density: int | None = None,
+    campaigns: str = "newest",
+    min_year: int | None = None,
     max_workers: int = 1,
     force: bool = False,
     on_progress: LazProgressCallback | None = None,
@@ -157,7 +167,8 @@ def run_laz_download(
     udane zostaja na dysku. Inne wyjatki (np. ``OSError`` zapisu) przerywaja
     wywolanie.
 
-    ``bbox``, ``year``, ``min_density`` i ``parent_request`` opisuja zadanie
+    ``bbox``, ``year``, ``min_density``, ``campaigns``, ``min_year``
+    i ``parent_request`` opisuja zadanie
     w sidecarach (``request`` i ``extra.parent_request``).
     """
     storage = FileStorage(output_dir, product="laz", vertical_crs=provider.vertical_crs)
@@ -179,6 +190,8 @@ def run_laz_download(
             bbox,
             year=year,
             min_density=min_density,
+            campaigns=campaigns,
+            min_year=min_year,
             parent_request=parent_request,
         )
         return "ok", tile, target, None
@@ -225,6 +238,8 @@ def download_laz_area(
     vertical_crs: str | None = None,
     year: int | None = None,
     min_density: int | None = None,
+    campaigns: str = "newest",
+    min_year: int | None = None,
     max_workers: int = 1,
     force: bool = False,
     on_progress: LazProgressCallback | None = None,
@@ -249,6 +264,12 @@ def download_laz_area(
         kafle sa wybierane od najnowszego rocznika, a starszy kafel jest
         pomijany, gdy jego czesc wspolna z obszarem pokrywaja nowsze
         (``result.superseded``); z ``year`` — tylko ten rocznik.
+    campaigns : {"newest", "all"}
+        ``"newest"`` — wybor ADR-029; ``"all"`` — kazdy kafel przecinajacy
+        obszar, bez deduplikacji (ADR-030).
+    min_year : int, optional
+        Dolna granica ``akt_rok`` (roczniki starsze nie sa odpytywane);
+        wyklucza sie z ``year`` (``ValidationError``).
     parent_request : dict, optional
         ``extra.parent_request`` sidecarow (ADR-023 (f).1) — CLI podaje go
         w trybie ``--bbox``/``--geometry``.
@@ -266,6 +287,8 @@ def download_laz_area(
     ------
     ValueError
         ``bbox`` nie w EPSG:2180 albo nieznany / niezgodny ``vertical_crs``.
+    ValidationError
+        Nieznane ``campaigns`` albo ``year`` razem z ``min_year``.
     DownloadError
         Awaria discovery WFS (wynik bylby niepelny) albo nieistniejacy
         ``year``.
@@ -281,7 +304,12 @@ def download_laz_area(
             f"({provider.vertical_crs})"
         )
     selection = provider.select_tiles(
-        bbox, year=year, min_density=min_density, tolerance_m=tolerance_m
+        bbox,
+        year=year,
+        min_density=min_density,
+        tolerance_m=tolerance_m,
+        campaigns=campaigns,
+        min_year=min_year,
     )
     if not selection.tiles:
         raise NoCoverageError(NO_TILES_MESSAGE)
@@ -292,6 +320,8 @@ def download_laz_area(
         output_dir=output_dir,
         year=year,
         min_density=min_density,
+        campaigns=campaigns,
+        min_year=min_year,
         max_workers=max_workers,
         force=force,
         on_progress=on_progress,
