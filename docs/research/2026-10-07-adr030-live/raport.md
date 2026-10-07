@@ -45,3 +45,28 @@ Straze "bez sieci" sprawdzane z zablokowanym `socket.connect` (wywolanie `main()
   zachowanie `find_sheets_for_bbox`).
 
 Dane: 929 MB na katalog danych (NMT 1 m, 3 arkusze orto, 1 kafel LAZ, wycinki PL/CZ).
+
+## Dodatek: errata 4 (dowiazania wylacznie twarde) i uklad PL-2000 — na zywo, 2026-10-07
+
+Kod: develop `ba42ead` (errata 4: `hardlink` -> `copy`, bez symlinkow). Dane:
+`<katalog-danych>/kartograf/e2e/2026-10-07-adr030-hardlink-pl2000/` (125 MB). Wynik: 11/11 PASS.
+
+| Krok | Wynik |
+|---|---|
+| P1 newest `7.125.11.19` | PASS — `kampanie/2023-03-17_77912/7/125/11/19/7.125.11.19.asc`, sciezka standardowa = hardlink (nlink 2, ten sam i-wezel), `link_target` 65 znakow; `Warning:` E17 (plik w EPSG:2180, godlo 2178), sidecar `horizontal_crs=EPSG:2180`, `extra.source.uklad=PL-2000:S7` |
+| P2 powtorka | PASS — `Skipped`, bez pobrania |
+| P3 `--campaigns all` | PASS — 2 kampanie (77912, 75172), `Downloaded 1 ... (1 already existed)`, link na 77912 |
+| P4 `--min-year 2024` | PASS — `Error:` z data 2023-03-17, kod 1 |
+| P5 `all --min-year 2022` | PASS — `Downloaded 0 ... (1 already existed)` (75172 z 2021 poza granica) |
+| P6 stary symlink (cel 65 znakow — na udziale DA SIE go utworzyc) z sidecarem `extra.link=symlink` | PASS — `newest` zastapil sam symlink hardlinkiem (`Skipped`, bez pobrania), plik kampanii nietkniety (md5, i-wezel), sidecar `extra.link=hardlink` |
+| P7 usuniety katalog kampanii | PASS — zostaje zwykly plik (nlink 1), `newest` pobiera kampanie ponownie i dowiazuje (nowy i-wezel, nlink 2) |
+| P8 lista `--bbox ... --bbox-crs EPSG:2178 --system 2000 --campaigns all` | PASS po `--scale 1:2000` — bez niej lista wybiera arkusz 1:10000 `7.173.21`, ktorego GUGiK nie ma w 1 m (`∅`, `Error:` kod 1 — zachowanie sprzed ADR-030, patrz O-6); z `--scale 1:2000`: 2 arkusze (`7.173.21.01`, `.02`), kampania 75064, hardlinki, `request.campaigns=all`, `extra.parent_request` z oryginalnym bboxem w sidecarze standardowym i kampanii |
+| P9 `--target-crs` + `--system 2000` | PASS — `Error:` (wycinek tylko PL-1992, E17), kod 1 |
+| P10 hierarchia `7.173.21 --scale 1:2000` | PASS — 25 arkuszy 1:2000 (23 pobrane, 2 juz lokalne), `Warning:` E17 dla 3 arkuszy w EPSG:2180 |
+| P11 PL-1992 `N-34-139-C-a-3-2` | PASS — hardlink (cel 81 znakow — dawniej symlink niemozliwy, teraz bez znaczenia); w calym drzewie 0 symlinkow |
+
+Obserwacje:
+- **O-6:** lista `--bbox --system 2000` bez `--scale` wybiera arkusze 1:10000, a NMT 1 m w PL-2000 lezy na 1:2000 —
+  komunikat `∅` + `Error: GUGiK nie ma danych dla zadnego z 1 arkuszy obszaru` nie podpowiada `--scale 1:2000`
+  (podpowiedz istnieje dla pojedynczego godla). Zachowanie sprzed ADR-030; kandydat na drobna poprawke UX.
+- **O-7:** po `Error:` "nie ma danych dla zadnego arkusza" CLI drukuje jeszcze `Downloaded 0 campaign files for 0 sheets ...`.

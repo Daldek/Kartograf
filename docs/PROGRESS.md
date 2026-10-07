@@ -139,6 +139,11 @@
 > kopia), symlinki usuniete z kodu (`links.py`: `LinkMethod` = hardlink|copy,
 > cel tylko z sidecara standardowego; stary symlink = sciezka nieznana);
 > galaz `adr030/hardlink`.
+> Errata 4 (decyzja uzytkownika): dowiazania WYLACZNIE twarde (hardlink ->
+> kopia), bez symlinkow — merge `ba42ead`, brama **2652** offline; na zywo
+> PL-2000 + hardlinki 11/11 PASS (dodatek w raporcie T12). Drobne UX do decyzji:
+> lista `--bbox --system 2000` bez `--scale 1:2000` nie podpowiada skali (O-6),
+> `Downloaded 0 ...` po `Error:` (O-7), `Downloading ...` przy Skipped (O-3).
 > **Nastepny krok:** wydanie 0.7.0 (bump/tag/push/merge) TYLKO na polecenie
 > uzytkownika.
 > Otwarte drobne (decyzja uzytkownika): wycinek `--target-crs` przy fallbacku
