@@ -5,11 +5,15 @@ Ponawiamy tylko bledy sieci, 429 i 5xx (z Retry-After); inne 4xx koncza
 pobieranie od razu z kodem HTTP w DownloadError.status_code.
 """
 
+import os
+from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 import requests
 
+from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
@@ -19,14 +23,50 @@ from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 
+_URL = "https://opendata.geoportal.gov.pl/x"
+_SLEEP = "kartograf.transport.http.time.sleep"
+_BBOX_2180 = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+
+
+def _sheet(cls):
+    """NMT/NMPT/orto: arkusz z rozwiazanym rekordem skorowidza -> plik."""
+
+    def run(provider, out):
+        record = SimpleNamespace(url=_URL)
+        with patch.object(provider, "_resolve_sheet", return_value=record):
+            return provider.download("N-34-130-D-d-2-4", out)
+
+    return run
+
+
+def _laz(provider, out):
+    return provider.download(_URL, out)
+
+
+def _bdot10k(provider, out):
+    return provider.download_by_admin_unit("1465", out, format="SHP")
+
+
+def _corine(provider, out):
+    return provider._download_via_wms(_BBOX_2180, out, 2018, 30)
+
+
+def _soilgrids(provider, out):
+    return provider._download_via_wcs(
+        (19.0, 50.0, 19.1, 50.1), out, "soc", "0-5cm", "mean", 30
+    )
+
+
+# Kazdy provider przez WLASNY tor pobierania pliku (nie przez transport
+# bezposrednio): dowod, ze wszystkie dawne kopie petli ida przez download_to.
 PROVIDERS = [
-    pytest.param(GugikProvider, "kartograf.providers.pl.gugik", id="nmt"),
-    pytest.param(GugikNmptProvider, "kartograf.providers.pl.gugik", id="nmpt"),
-    pytest.param(GugikOrtoProvider, "kartograf.providers.pl.gugik_orto", id="orto"),
-    pytest.param(GugikLazProvider, "kartograf.providers.pl.gugik_laz", id="laz"),
-    pytest.param(Bdot10kProvider, "kartograf.providers.pl.bdot10k", id="bdot10k"),
-    pytest.param(CorineProvider, "kartograf.providers.corine", id="corine"),
-    pytest.param(SoilGridsProvider, "kartograf.providers.soilgrids", id="soilgrids"),
+    pytest.param(GugikProvider, _sheet(GugikProvider), ".bin", id="nmt"),
+    pytest.param(GugikNmptProvider, _sheet(GugikNmptProvider), ".bin", id="nmpt"),
+    pytest.param(GugikOrtoProvider, _sheet(GugikOrtoProvider), ".bin", id="orto"),
+    pytest.param(GugikLazProvider, _laz, ".bin", id="laz"),
+    pytest.param(Bdot10kProvider, _bdot10k, ".zip", id="bdot10k"),
+    pytest.param(CorineProvider, _corine, ".png", id="corine"),
+    pytest.param(SoilGridsProvider, _soilgrids, ".tif", id="soilgrids"),
 ]
 
 
@@ -35,7 +75,7 @@ def _http_response(status, headers=None):
     response.status_code = status
     response.headers.update(headers or {})
     response._content = b""
-    response.url = "https://opendata.geoportal.gov.pl/x"
+    response.url = _URL
     return response
 
 
@@ -46,30 +86,24 @@ def _ok_response():
     return response
 
 
-def _download(provider, out):
-    return provider._download_with_retry(
-        "https://opendata.geoportal.gov.pl/x", out, 30, "arkusz testowy"
-    )
-
-
-@pytest.mark.parametrize(("cls", "module"), PROVIDERS)
-def test_not_found_is_not_retried(cls, module, tmp_path):
+@pytest.mark.parametrize(("cls", "download", "suffix"), PROVIDERS)
+def test_not_found_is_not_retried(cls, download, suffix, tmp_path):
     session = MagicMock(spec=requests.Session)
     session.get.return_value = _http_response(404)
     provider = cls(session=session)
     with (
-        patch(f"{module}.time.sleep") as sleep,
+        patch(_SLEEP) as sleep,
         pytest.raises(DownloadError, match="HTTP 404") as exc_info,
     ):
-        _download(provider, tmp_path / "x.bin")
+        download(provider, tmp_path / "x.bin")
     assert session.get.call_count == 1
     sleep.assert_not_called()
     assert exc_info.value.status_code == 404
     assert list(tmp_path.iterdir()) == []
 
 
-@pytest.mark.parametrize(("cls", "module"), PROVIDERS)
-def test_throttled_download_waits_retry_after(cls, module, tmp_path):
+@pytest.mark.parametrize(("cls", "download", "suffix"), PROVIDERS)
+def test_throttled_download_waits_retry_after(cls, download, suffix, tmp_path):
     session = MagicMock(spec=requests.Session)
     session.get.side_effect = [
         _http_response(429, {"Retry-After": "11"}),
@@ -77,24 +111,51 @@ def test_throttled_download_waits_retry_after(cls, module, tmp_path):
     ]
     provider = cls(session=session)
     out = tmp_path / "x.bin"
-    with patch(f"{module}.time.sleep") as sleep:
-        assert _download(provider, out) == out
+    with patch(_SLEEP) as sleep:
+        assert download(provider, out) == out.with_suffix(suffix)
     sleep.assert_called_once_with(11)
-    assert out.read_bytes() == b"dane"
+    assert out.with_suffix(suffix).read_bytes() == b"dane"
+    assert sorted(p.name for p in tmp_path.iterdir()) == [f"x{suffix}"]
 
 
-@pytest.mark.parametrize(("cls", "module"), PROVIDERS)
-def test_exhausted_server_errors_keep_status(cls, module, tmp_path):
+@pytest.mark.parametrize(("cls", "download", "suffix"), PROVIDERS)
+def test_exhausted_server_errors_keep_status(cls, download, suffix, tmp_path):
     session = MagicMock(spec=requests.Session)
     session.get.return_value = _http_response(503)
     provider = cls(session=session)
     with (
-        patch(f"{module}.time.sleep"),
-        pytest.raises(DownloadError) as exc_info,
+        patch(_SLEEP) as sleep,
+        pytest.raises(DownloadError, match="po 3 probach") as exc_info,
     ):
-        _download(provider, tmp_path / "x.bin")
+        download(provider, tmp_path / "x.bin")
     assert session.get.call_count == cls.MAX_RETRIES
     assert exc_info.value.status_code == 503
+    # jeden wykladnik backoffu dla wszystkich providerow (D1, 2026-10-07)
+    assert [c.args for c in sleep.call_args_list] == [(2,), (4,)]
+
+
+def _windows_rename(self, target):
+    """Path.rename z semantyka Windows: istniejacy cel = FileExistsError."""
+    if Path(target).exists():
+        raise FileExistsError(f"[WinError 183] {target}")
+    return os.replace(self, target)
+
+
+@pytest.mark.parametrize(("cls", "download", "suffix"), PROVIDERS)
+def test_redownload_overwrites_existing_file(cls, download, suffix, tmp_path):
+    """--force nad juz pobranym plikiem: zapis atomowy przez os.replace.
+
+    Dawne kopie w providerach robily ``Path.rename``, ktore na Windows nie
+    nadpisuje istniejacego pliku (review 2026-10-06 D1 pkt 3).
+    """
+    out = tmp_path / "x.bin"
+    out.with_suffix(suffix).write_bytes(b"stare")
+    session = MagicMock(spec=requests.Session)
+    session.get.return_value = _ok_response()
+    provider = cls(session=session)
+    with patch.object(Path, "rename", _windows_rename):
+        assert download(provider, out) == out.with_suffix(suffix)
+    assert out.with_suffix(suffix).read_bytes() == b"dane"
 
 
 class TestBdot10kSession:
@@ -110,8 +171,8 @@ class TestBdot10kSession:
             "kartograf.transport.http.make_gugik_session", return_value=session
         ) as factory:
             provider = Bdot10kProvider()
-            _download(provider, tmp_path / "a.bin")
-            _download(provider, tmp_path / "b.bin")
+            _bdot10k(provider, tmp_path / "a.bin")
+            _bdot10k(provider, tmp_path / "b.bin")
             assert provider._get_teryt_for_point(637000, 486000) == "1465"
         factory.assert_called_once_with()
         assert session.get.call_count == 3
@@ -187,7 +248,7 @@ class TestSingleQueryRetries:
             result = query(session)
         assert result in ([{"a": 1}], "1465")
         assert session.get.call_count == 2
-        sleep.assert_called_once_with(1)
+        sleep.assert_called_once_with(2)
 
     @pytest.mark.parametrize(("query", "ok"), SINGLE_QUERIES)
     def test_not_found_is_not_retried(self, query, ok):

@@ -28,10 +28,7 @@ Hydrographic (SW - Sieć Wodna, 3 layers):
 """
 
 import logging
-import os
 import sqlite3
-import threading
-import time
 import zipfile
 from io import BytesIO
 from pathlib import Path
@@ -42,12 +39,10 @@ from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import LandCoverProvider
 from kartograf.transport.http import (
+    MAX_RETRIES,
     SessionPerThread,
+    download_to,
     get_with_retry,
-    http_failure,
-    http_status,
-    is_retryable,
-    retry_wait,
 )
 
 logger = logging.getLogger(__name__)
@@ -122,8 +117,7 @@ class Bdot10kProvider(LandCoverProvider):
 
     # Default settings
     DEFAULT_TIMEOUT = 120  # pobranie paczki (wszystkie tryby); TERYT: 30 s
-    MAX_RETRIES = 3
-    RETRY_BACKOFF_BASE = 2
+    MAX_RETRIES = MAX_RETRIES
 
     def __init__(self, session: requests.Session | None = None, cache=None):
         """
@@ -212,12 +206,14 @@ class Bdot10kProvider(LandCoverProvider):
         # Construct OpenData URL
         url = self._construct_opendata_url(code, format)
 
-        return self._download_with_retry(
-            url=url,
-            output_path=output_path,
+        return download_to(
+            self._sessions.get(),
+            url,
+            output_path,
             timeout=timeout,
+            retries=self.MAX_RETRIES,
             description=f"BDOT10k TERYT {code}",
-            extract_from_zip=(format == "GPKG"),
+            save=self._extract_gpkg_from_zip if format == "GPKG" else None,
         )
 
     def _construct_opendata_url(self, teryt: str, format: str) -> str:
@@ -479,105 +475,6 @@ class Bdot10kProvider(LandCoverProvider):
     # Common utilities
     # =========================================================================
 
-    def _download_with_retry(
-        self,
-        url: str,
-        output_path: Path,
-        timeout: int,
-        description: str,
-        extract_from_zip: bool = False,
-    ) -> Path:
-        """
-        Download file with automatic retry on failure.
-
-        Parameters
-        ----------
-        url : str
-            URL to download
-        output_path : Path
-            Target path
-        timeout : int
-            Request timeout
-        description : str
-            Description for logging
-        extract_from_zip : bool, optional
-            If True, extract GPKG from downloaded ZIP
-
-        Returns
-        -------
-        Path
-            Path to downloaded/extracted file
-
-        Raises
-        ------
-        DownloadError
-            If download fails after all retries
-        """
-        last_error = None
-        session = self._sessions.get()
-
-        for attempt in range(1, self.MAX_RETRIES + 1):
-            try:
-                logger.debug(
-                    f"Downloading {description} (attempt {attempt}/{self.MAX_RETRIES})"
-                )
-
-                response = session.get(url, timeout=timeout, stream=True)
-                response.raise_for_status()
-
-                if extract_from_zip:
-                    saved = self._extract_gpkg_from_zip(response, output_path)
-                else:
-                    self._save_response(response, output_path)
-                    saved = output_path
-
-                logger.info(f"Successfully downloaded {description} to {saved}")
-                return saved
-
-            except requests.RequestException as e:
-                last_error = e
-                logger.warning(
-                    f"Download failed for {description} (attempt {attempt}): {e}"
-                )
-                if not is_retryable(e):
-                    raise http_failure(
-                        f"Failed to download {description}: "
-                        f"HTTP {http_status(e)} (not retried): {e}",
-                        e,
-                    ) from e
-
-                if attempt < self.MAX_RETRIES:
-                    wait_time = retry_wait(e, self.RETRY_BACKOFF_BASE**attempt)
-                    logger.debug(f"Retrying in {wait_time} seconds...")
-                    time.sleep(wait_time)
-
-        raise http_failure(
-            f"Failed to download {description} after {self.MAX_RETRIES} attempts: "
-            f"{last_error}",
-            last_error,
-        )
-
-    def _save_response(self, response: requests.Response, output_path: Path) -> None:
-        """
-        Save HTTP response to file atomically.
-
-        Uses a unique temp filename per process/thread to prevent
-        collisions when multiple threads download concurrently.
-        """
-        thread_id = threading.current_thread().ident
-        temp_suffix = f"{output_path.suffix}.{os.getpid()}_{thread_id}.tmp"
-        temp_path = output_path.with_suffix(temp_suffix)
-
-        try:
-            with open(temp_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            temp_path.rename(output_path)
-        except Exception:
-            if temp_path.exists():
-                temp_path.unlink()
-            raise
-
     def _extract_gpkg_from_zip(
         self,
         response: requests.Response,
@@ -685,7 +582,8 @@ class Bdot10kProvider(LandCoverProvider):
             conn.close()
 
             # Atomic rename
-            temp_path.rename(output_path)
+            # os.replace: nadpisuje istniejacy plik takze na Windows (--force)
+            temp_path.replace(output_path)
             logger.info(f"Merged {len(source_files)} layers into {output_path}")
 
         except Exception:

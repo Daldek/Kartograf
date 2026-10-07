@@ -110,7 +110,7 @@ class TestGetWithRetry:
             result = get_with_retry(session, "https://example.test/gfi", timeout=4)
         assert result.content == b"recovered"
         assert session.get.call_args_list[0] == session.get.call_args_list[1]
-        sleep.assert_called_once_with(1)
+        sleep.assert_called_once_with(2)
 
     def test_http_failure_exhausts_retries(self):
         session = MagicMock(spec=requests.Session)
@@ -128,7 +128,7 @@ class TestGetWithRetry:
                 description="warstwa 2026",
             )
         assert session.get.call_count == 3
-        assert [call.args for call in sleep.call_args_list] == [(1,), (2,)]
+        assert [call.args for call in sleep.call_args_list] == [(2,), (4,)]
 
     def test_gugik_session_does_not_multiply_retries(self):
         with make_gugik_session() as session:

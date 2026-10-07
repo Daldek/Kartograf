@@ -230,57 +230,43 @@ class TestSoilGridsTeryt:
 class TestSoilGridsDownload:
     """Test download functionality with mocks."""
 
-    @patch("kartograf.providers.soilgrids.requests.Session")
-    def test_download_with_retry_success(self, mock_session_class):
+    _BBOX = (19.0, 50.0, 19.1, 50.1)
+
+    def test_download_via_wcs_success(self, tmp_path):
         """Test successful download."""
-        import tempfile
-
         mock_session = Mock()
-        mock_session_class.return_value = mock_session
-
-        # Mock response
         mock_response = Mock()
         mock_response.headers = {"Content-Type": "image/tiff"}
         mock_response.iter_content.return_value = [b"fake tiff data"]
         mock_response.raise_for_status = Mock()
         mock_session.get.return_value = mock_response
-
         provider = SoilGridsProvider(session=mock_session)
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_path = Path(tmpdir) / "test.tif"
-            result = provider._download_with_retry(
-                url="https://example.com/test.tif",
-                output_path=output_path,
-                timeout=30,
-                description="test download",
-            )
+        result = provider._download_via_wcs(
+            self._BBOX, tmp_path / "test.tif", "soc", "0-5cm", "mean", 30
+        )
 
-            assert result == output_path
-            assert output_path.exists()
+        assert result == tmp_path / "test.tif"
+        assert result.read_bytes() == b"fake tiff data"
 
-    @patch("kartograf.providers.soilgrids.requests.Session")
-    def test_download_with_retry_xml_error(self, mock_session_class):
+    @patch("kartograf.transport.http.time.sleep")
+    def test_download_via_wcs_xml_error(self, sleep, tmp_path):
         """Test download handling WCS error response."""
         mock_session = Mock()
-        mock_session_class.return_value = mock_session
-
-        # Mock XML error response
         mock_response = Mock()
         mock_response.headers = {"Content-Type": "application/xml"}
         mock_response.text = "<ServiceExceptionReport>Error</ServiceExceptionReport>"
         mock_response.raise_for_status = Mock()
         mock_session.get.return_value = mock_response
-
         provider = SoilGridsProvider(session=mock_session)
 
         with pytest.raises(DownloadError, match="WCS returned error"):
-            provider._download_with_retry(
-                url="https://example.com/test.tif",
-                output_path=Path("/tmp/test.tif"),
-                timeout=30,
-                description="test download",
+            provider._download_via_wcs(
+                self._BBOX, tmp_path / "test.tif", "soc", "0-5cm", "mean", 30
             )
+        assert mock_session.get.call_count == 1
+        sleep.assert_not_called()
+        assert list(tmp_path.iterdir()) == []
 
 
 class TestSoilGridsCLI:

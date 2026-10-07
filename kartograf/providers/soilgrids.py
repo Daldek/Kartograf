@@ -31,22 +31,18 @@ Statistics: mean, Q0.05, Q0.5, Q0.95, uncertainty
 """
 
 import logging
-import os
-import threading
-import time
 from pathlib import Path
 from urllib.parse import urlencode
 
 import requests
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError
 from kartograf.providers.base import LandCoverProvider
 from kartograf.transport.http import (
-    http_failure,
-    http_status,
-    is_retryable,
-    retry_wait,
+    MAX_RETRIES,
+    SessionPerThread,
+    download_to,
+    reject_error_document,
 )
 
 logger = logging.getLogger(__name__)
@@ -129,8 +125,7 @@ class SoilGridsProvider(LandCoverProvider):
 
     # Default settings
     DEFAULT_TIMEOUT = 120
-    MAX_RETRIES = 3
-    RETRY_BACKOFF_BASE = 2
+    MAX_RETRIES = MAX_RETRIES
     DEFAULT_PROPERTY = "soc"
     DEFAULT_DEPTH = "0-5cm"
     DEFAULT_STAT = "mean"
@@ -148,7 +143,7 @@ class SoilGridsProvider(LandCoverProvider):
             (WCS URLs are computed, not looked up), but accepted for
             API consistency with other providers.
         """
-        self._session = session
+        self._sessions = SessionPerThread(session, factory=requests.Session)
         self._cache = cache
         self.descriptor_key = "global.isric.soilgrids"
 
@@ -315,10 +310,13 @@ class SoilGridsProvider(LandCoverProvider):
         description = f"SoilGrids {property} {depth} {stat}"
         logger.info(f"Downloading {description} via WCS...")
 
-        return self._download_with_retry(
-            url=url,
-            output_path=output_path.with_suffix(".tif"),
+        return download_to(
+            self._sessions.get(),
+            url,
+            output_path.with_suffix(".tif"),
             timeout=timeout,
+            retries=self.MAX_RETRIES,
+            validate=reject_error_document("WCS"),
             description=description,
         )
 
@@ -405,110 +403,6 @@ class SoilGridsProvider(LandCoverProvider):
             "SoilGrids does not support TERYT selection - use --bbox or "
             "--godlo (download_by_bbox / download_by_godlo)"
         )
-
-    # =========================================================================
-    # Common utilities
-    # =========================================================================
-
-    def _download_with_retry(
-        self,
-        url: str,
-        output_path: Path,
-        timeout: int,
-        description: str,
-    ) -> Path:
-        """
-        Download file with automatic retry on failure.
-
-        Parameters
-        ----------
-        url : str
-            URL to download
-        output_path : Path
-            Target path
-        timeout : int
-            Request timeout
-        description : str
-            Description for logging
-
-        Returns
-        -------
-        Path
-            Path to downloaded file
-
-        Raises
-        ------
-        DownloadError
-            If download fails after all retries
-        """
-        last_error: requests.RequestException | None = None
-        session = self._session or requests.Session()
-
-        for attempt in range(1, self.MAX_RETRIES + 1):
-            try:
-                logger.debug(
-                    f"Downloading {description} (attempt {attempt}/{self.MAX_RETRIES})"
-                )
-
-                response = session.get(url, timeout=timeout, stream=True)
-                response.raise_for_status()
-
-                # Check if response is actually a TIFF
-                content_type = response.headers.get("Content-Type", "")
-                if "xml" in content_type.lower() or "html" in content_type.lower():
-                    # WCS error response
-                    error_text = response.text[:500]
-                    raise DownloadError(f"WCS returned error response: {error_text}")
-
-                self._save_response(response, output_path)
-
-                logger.info(f"Successfully downloaded {description} to {output_path}")
-                return output_path
-
-            except requests.RequestException as e:
-                last_error = e
-                logger.warning(
-                    f"Download failed for {description} (attempt {attempt}): {e}"
-                )
-
-                if not is_retryable(e):
-                    raise http_failure(
-                        f"Failed to download {description}: "
-                        f"HTTP {http_status(e)} (not retried): {e}",
-                        e,
-                    ) from e
-
-                if attempt < self.MAX_RETRIES:
-                    wait_time = retry_wait(e, self.RETRY_BACKOFF_BASE**attempt)
-                    logger.debug(f"Retrying in {wait_time} seconds...")
-                    time.sleep(wait_time)
-
-        raise http_failure(
-            f"Failed to download {description} after {self.MAX_RETRIES} attempts: "
-            f"{last_error}",
-            last_error,
-        )
-
-    def _save_response(self, response: requests.Response, output_path: Path) -> None:
-        """
-        Save HTTP response to file atomically.
-
-        Uses a unique temp filename per process/thread to prevent
-        collisions when multiple threads download concurrently.
-        """
-        thread_id = threading.current_thread().ident
-        temp_suffix = f"{output_path.suffix}.{os.getpid()}_{thread_id}.tmp"
-        temp_path = output_path.with_suffix(temp_suffix)
-
-        try:
-            with open(temp_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            temp_path.rename(output_path)
-        except Exception:
-            if temp_path.exists():
-                temp_path.unlink()
-            raise
 
     # =========================================================================
     # Info methods

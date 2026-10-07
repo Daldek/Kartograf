@@ -16,10 +16,7 @@ Unlike NMT/NMPT, orthophotos:
 """
 
 import logging
-import os
 import re
-import threading
-import time
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -30,11 +27,9 @@ from kartograf.exceptions import NoCoverageError, ParseError
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import SkorowidzLayersMixin, SkorowidzRecord
 from kartograf.transport.http import (
+    MAX_RETRIES,
     SessionPerThread,
-    http_failure,
-    http_status,
-    is_retryable,
-    retry_wait,
+    download_to,
 )
 
 logger = logging.getLogger(__name__)
@@ -90,8 +85,7 @@ class GugikOrtoProvider(SkorowidzLayersMixin, BaseProvider):
 
     # Settings
     DEFAULT_TIMEOUT = 60  # Ortofoto files are larger
-    MAX_RETRIES = 3
-    RETRY_BACKOFF_BASE = 2
+    MAX_RETRIES = MAX_RETRIES
 
     def __init__(
         self,
@@ -194,10 +188,12 @@ class GugikOrtoProvider(SkorowidzLayersMixin, BaseProvider):
 
         record = self._resolve_sheet(godlo, timeout)
 
-        return self._download_with_retry(
-            url=record.url,
-            output_path=output_path,
+        return download_to(
+            self._sessions.get(),
+            record.url,
+            output_path,
             timeout=timeout,
+            retries=self.MAX_RETRIES,
             description=f"{godlo} (Ortofoto OpenData)",
         )
 
@@ -307,10 +303,12 @@ class GugikOrtoProvider(SkorowidzLayersMixin, BaseProvider):
 
         url = self._construct_wcs_url(bbox, format)
 
-        return self._download_with_retry(
-            url=url,
-            output_path=output_path,
+        return download_to(
+            self._sessions.get(),
+            url,
+            output_path,
             timeout=timeout,
+            retries=self.MAX_RETRIES,
             description=(
                 f"ortofoto bbox ({bbox.min_x:.0f},{bbox.min_y:.0f})-"
                 f"({bbox.max_x:.0f},{bbox.max_y:.0f})"
@@ -332,85 +330,6 @@ class GugikOrtoProvider(SkorowidzLayersMixin, BaseProvider):
         subset_y = f"SUBSET=y({bbox.min_y:.2f},{bbox.max_y:.2f})"
 
         return f"{base_url}&{subset_x}&{subset_y}"
-
-    # =========================================================================
-    # Common utilities
-    # =========================================================================
-
-    def _download_with_retry(
-        self,
-        url: str,
-        output_path: Path,
-        timeout: int,
-        description: str,
-    ) -> Path:
-        """Download file with automatic retry on failure."""
-        last_error = None
-
-        for attempt in range(1, self.MAX_RETRIES + 1):
-            try:
-                logger.debug(
-                    f"Downloading {description} (attempt {attempt}/{self.MAX_RETRIES})"
-                )
-
-                response = self._make_request(url, timeout)
-                self._save_response(response, output_path)
-
-                logger.info(f"Successfully downloaded {description} to {output_path}")
-                return output_path
-
-            except requests.RequestException as e:
-                last_error = e
-                logger.warning(
-                    f"Download failed for {description} (attempt {attempt}): {e}"
-                )
-                if not is_retryable(e):
-                    raise http_failure(
-                        f"Failed to download {description}: "
-                        f"HTTP {http_status(e)} (not retried): {e}",
-                        e,
-                    ) from e
-
-                if attempt < self.MAX_RETRIES:
-                    wait_time = retry_wait(e, self.RETRY_BACKOFF_BASE**attempt)
-                    logger.debug(f"Retrying in {wait_time} seconds...")
-                    time.sleep(wait_time)
-
-        raise http_failure(
-            f"Failed to download {description} after "
-            f"{self.MAX_RETRIES} attempts: {last_error}",
-            last_error,
-        )
-
-    def _make_request(self, url: str, timeout: int) -> requests.Response:
-        """Pobierz strumien na sesji watku (sesja wstrzyknieta: dba wolajacy)."""
-        response = self._sessions.get().get(url, timeout=timeout, stream=True)
-        response.raise_for_status()
-        return response
-
-    def _save_response(self, response: requests.Response, output_path: Path) -> None:
-        """
-        Save HTTP response to file atomically.
-
-        The target directory is created here, after the skorowidz has
-        answered — a sheet without data leaves no empty directory behind.
-        Uses a unique temp filename per process/thread to prevent
-        collisions when multiple threads download concurrently.
-        """
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        thread_id = threading.current_thread().ident
-        temp_suffix = f"{output_path.suffix}.{os.getpid()}_{thread_id}.tmp"
-        temp_path = output_path.with_suffix(temp_suffix)
-
-        try:
-            with open(temp_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            temp_path.rename(output_path)
-        except Exception:
-            if temp_path.exists():
-                temp_path.unlink()
-            raise
 
     # =========================================================================
     # Info methods

@@ -287,11 +287,11 @@ kartograf cache path
 - Max 3 proby retry (nie konfigurowalne); ponawiane sa tylko bledy sieci,
   HTTP 429 i 5xx — inne 4xx (np. 404) koncza od razu z
   `DownloadError.status_code`; `Retry-After` wydluza przerwe (max 60 s).
-  Polityka: `transport/http.py` (`is_retryable`, `retry_wait`), uzywana
-  przez transport wspolny, providery GUGiK (NMT/NMPT/orto/LAZ/BDOT10k)
-  oraz CORINE i SoilGrids (od 2026-10-06; backoff providerow nadal
-  2 s/4 s, transportu 1 s/2 s); zapytanie TERYT BDOT10k i `CuzkClient.query`
-  (indeks arkuszy SM5) ida przez `get_with_retry`
+  Jedno miejsce: `transport/http.py` — pliki wszystkich providerow
+  (GUGiK NMT/NMPT/orto/LAZ/BDOT10k, CORINE, SoilGrids, CUZK) pobiera
+  `download_to` (zapis atomowy `os.replace`), zapytania `get_with_retry`
+  (skorowidz, WFS LAZ, TERYT BDOT10k, `CuzkClient.query`); backoff jeden
+  dla wszystkich: 2 s, potem 4 s (`backoff_delay`, od 2026-10-07)
 - Kazde udane pobranie tworzy sidecar `<plik>.meta.json` (metadane CRS/licencja/nodata)
 - `download_sheet()` zwraca `Path` (arkusz 1:10000 albo godlo PL-2000) albo
   `list[Path]` (godlo PL-1992 grubsze niz 1:10000 — rozwijane do 1:10000);

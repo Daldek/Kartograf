@@ -34,10 +34,8 @@ Examples
 
 import logging
 import math
-import os
 import re
 import threading
-import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -50,12 +48,10 @@ from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import BaseProvider
 from kartograf.sources.registry import parse_pl_uklad
 from kartograf.transport.http import (
+    MAX_RETRIES,
+    download_to,
     get_with_retry,
-    http_failure,
-    http_status,
-    is_retryable,
     make_gugik_session,
-    retry_wait,
 )
 
 logger = logging.getLogger(__name__)
@@ -163,8 +159,7 @@ class GugikLazProvider(BaseProvider):
 
     DEFAULT_TIMEOUT = 60  # LAZ files are large
     WFS_TIMEOUT = 30
-    MAX_RETRIES = 3
-    RETRY_BACKOFF_BASE = 2
+    MAX_RETRIES = MAX_RETRIES
     PAGE_SIZE = 1000  # WFS pagination COUNT
 
     _CACHE_PRODUCT = "laz"
@@ -558,87 +553,14 @@ class GugikLazProvider(BaseProvider):
         DownloadError
             If the download fails after all retries.
         """
-        output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        return self._download_with_retry(
-            url=url,
-            output_path=output_path,
+        return download_to(
+            self._session,
+            url,
+            Path(output_path),
             timeout=timeout,
+            retries=self.MAX_RETRIES,
             description=output_path.name,
         )
-
-    # =========================================================================
-    # Common download utilities (mirrors GugikOrtoProvider)
-    # =========================================================================
-
-    def _download_with_retry(
-        self,
-        url: str,
-        output_path: Path,
-        timeout: int,
-        description: str,
-    ) -> Path:
-        """Download a file with automatic retry on failure."""
-        last_error = None
-
-        for attempt in range(1, self.MAX_RETRIES + 1):
-            try:
-                logger.debug(
-                    f"Downloading {description} (attempt {attempt}/{self.MAX_RETRIES})"
-                )
-                response = self._make_request(url, timeout)
-                self._save_response(response, output_path)
-                logger.info(f"Successfully downloaded {description} to {output_path}")
-                return output_path
-
-            except requests.RequestException as e:
-                last_error = e
-                logger.warning(
-                    f"Download failed for {description} (attempt {attempt}): {e}"
-                )
-                if not is_retryable(e):
-                    raise http_failure(
-                        f"Failed to download {description}: "
-                        f"HTTP {http_status(e)} (not retried): {e}",
-                        e,
-                    ) from e
-                if attempt < self.MAX_RETRIES:
-                    wait_time = retry_wait(e, self.RETRY_BACKOFF_BASE**attempt)
-                    logger.debug(f"Retrying in {wait_time} seconds...")
-                    time.sleep(wait_time)
-
-        raise http_failure(
-            f"Failed to download {description} after "
-            f"{self.MAX_RETRIES} attempts: {last_error}",
-            last_error,
-        )
-
-    def _make_request(self, url: str, timeout: int) -> requests.Response:
-        """Make a streaming HTTP GET request."""
-        response = self._session.get(url, timeout=timeout, stream=True)
-        response.raise_for_status()
-        return response
-
-    def _save_response(self, response: requests.Response, output_path: Path) -> None:
-        """
-        Save an HTTP response to a file atomically.
-
-        Uses a unique temp filename per process/thread to prevent collisions
-        when multiple threads download concurrently.
-        """
-        thread_id = threading.current_thread().ident
-        temp_suffix = f"{output_path.suffix}.{os.getpid()}_{thread_id}.tmp"
-        temp_path = output_path.with_suffix(temp_suffix)
-
-        try:
-            with open(temp_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            temp_path.rename(output_path)
-        except Exception:
-            if temp_path.exists():
-                temp_path.unlink()
-            raise
 
 
 def _localname(tag: str) -> str:
