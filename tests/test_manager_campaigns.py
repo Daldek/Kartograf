@@ -678,3 +678,103 @@ def test_invalid_campaigns_value():
         DownloadManager(provider=FakeCampaignProvider(C14), campaigns="mosaic")
     with pytest.raises(ValidationError):
         DownloadManager(provider=FakeCampaignProvider(C14), min_year=True)
+
+
+# =============================================================================
+# Fix round 1
+# =============================================================================
+
+
+@pytest.mark.parametrize("parent", [None, {"bbox": [5, 6, 7, 8]}])
+def test_note_reuse_with_symlinked_standard_sidecar(tmp_path, parent):
+    """<std>.meta.json bedacy SYMLINKIEM do sidecara kampanii: reuzycie nie
+    modyfikuje sidecara kampanii przez dowiazanie, a sidecar standardowy
+    staje sie zwyklym plikiem."""
+    r1 = {"bbox": [1, 2, 3, 4]}
+    fake = FakeCampaignProvider(C14)
+    DownloadManager(
+        tmp_path, provider=fake, sidecar_extra={"parent_request": r1}
+    ).download_sheets([G])
+    camp_side = sidecar(campaign_path(tmp_path, REC["84183"]))
+    std_side = sidecar(std_path(tmp_path))
+    std_side.unlink()
+    std_side.symlink_to(os.path.relpath(camp_side, std_side.parent))
+    before = camp_side.read_bytes()
+
+    extra = {"parent_request": parent} if parent else None
+    DownloadManager(tmp_path, provider=fake, sidecar_extra=extra).download_sheets([G])
+
+    assert fake.downloads == [REC["84183"].url]
+    assert std_side.is_file() and not std_side.is_symlink()
+    assert not camp_side.is_symlink()
+    camp = json.loads(camp_side.read_text())
+    assert "link" not in camp["extra"] and "link_target" not in camp["extra"]
+    std = json.loads(std_side.read_text())
+    assert std["extra"]["link"] == "symlink"
+    if parent is None:
+        assert camp_side.read_bytes() == before
+        assert "parent_requests" not in std["extra"]
+    else:
+        assert camp["extra"]["parent_requests"] == [parent]
+        assert std["extra"]["parent_requests"] == [parent]
+
+
+def test_link_failure_is_sheet_failure_and_list_continues(tmp_path, monkeypatch):
+    """R5: porazka dowiazania (kopia pada) = porazka arkusza, nie przerwanie
+    listy przy max_workers=1; pobrana kampania zostaje."""
+    import shutil
+
+    g3 = "N-34-139-C-a-3-2"
+    other = c14_records(g3)[0]
+    deny_links(monkeypatch)
+    real_copy = shutil.copyfile
+
+    def copyfile(src, dst, *args, **kwargs):
+        if G in str(src):
+            raise OSError("dysk pelny")
+        return real_copy(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(shutil, "copyfile", copyfile)
+    events: list[DownloadProgress] = []
+    fake = FakeCampaignProvider({"newest": [REC["84183"], other]})
+    m = DownloadManager(tmp_path, provider=fake, max_workers=1)
+    m.download_sheets([G, g3], on_progress=events.append)
+    assert m.last_result.failed == [G]
+    assert m.last_result.no_coverage == []
+    assert m.last_result.succeeded == [std_path(tmp_path, g3)]
+    assert campaign_path(tmp_path, REC["84183"]).is_file()
+    assert not std_path(tmp_path).exists()
+    failed = next(e for e in events if e.godlo == G and e.status == "failed")
+    assert "dowiazanie" in failed.message and "dysk pelny" in failed.message
+
+
+def test_link_failure_reported_together_with_campaign_errors(tmp_path, monkeypatch):
+    import shutil
+
+    deny_links(monkeypatch)
+
+    def copyfile(*args, **kwargs):
+        raise OSError("dysk pelny")
+
+    monkeypatch.setattr(shutil, "copyfile", copyfile)
+    fake = FakeCampaignProvider(C14, fail_urls={REC["78047"].url})
+    m = DownloadManager(tmp_path, provider=fake, campaigns="all")
+    with pytest.raises(DownloadError) as exc:
+        m.download_sheet(G)
+    assert "2023-09-05_78047" in str(exc.value)
+    assert "dowiazanie" in str(exc.value)
+    for key in ("84183", "83233", "73021"):
+        assert campaign_path(tmp_path, REC[key]).is_file()
+
+
+def test_invalid_aktualnosc_is_campaign_failure_links_best_valid(tmp_path):
+    """R16 w duchu Q10: zla aktualnosc jednego rekordu nie przerywa petli."""
+    bad = dataclasses.replace(REC["84183"], aktualnosc="2025/10/21")
+    fake = FakeCampaignProvider({"all": [bad, *C14_ALL[1:]]})
+    m = DownloadManager(tmp_path, provider=fake, campaigns="all")
+    with pytest.raises(DownloadError, match="84183_1852496") as exc:
+        m.download_sheet(G)
+    assert "nie pobrano 1 z 4 kampanii" in str(exc.value)
+    assert "2025-04-27_83233" in os.readlink(std_path(tmp_path))
+    for key in ("83233", "78047", "73021"):
+        assert campaign_path(tmp_path, REC[key]).is_file()

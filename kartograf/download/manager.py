@@ -15,7 +15,7 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Protocol, cast
 
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.campaigns import (
@@ -24,11 +24,12 @@ from kartograf.download.campaigns import (
     validate_campaign_args,
     verify_file_format,
 )
-from kartograf.download.links import ensure_standard_link
+from kartograf.download.links import ensure_standard_link, write_standard_sidecar
 from kartograf.download.storage import FileStorage, storage_for_provider
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl import create_nmt_provider, nmt_vertical_crs
+from kartograf.providers.pl.skorowidz import SkorowidzRecord
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +156,22 @@ class SheetFetch:
     downloaded: tuple[Path, ...] = ()
     reused: tuple[Path, ...] = ()
     link: str | None = None
+
+
+class CampaignProvider(Protocol):
+    """API kampanii providera GUGiK (ADR-030; mechanizm WYLACZNIE PL).
+
+    ``BaseProvider`` go nie deklaruje — manager wybiera tor kampanii po
+    ``supports_campaigns is True`` i rzutuje providera na ten protokol.
+    """
+
+    def resolve_campaigns(
+        self, godlo: str, *, campaigns: str = "newest", min_year: int | None = None
+    ) -> list[SkorowidzRecord]: ...
+
+    def download_record(self, record: SkorowidzRecord, output_path: Path) -> Path: ...
+
+    def record_source(self, record: SkorowidzRecord) -> dict: ...
 
 
 # Type alias for progress callback
@@ -357,13 +374,9 @@ class DownloadManager:
         return self._storage
 
     @property
-    def _campaign_provider(self) -> Any:
-        """Provider toru kampanii (``supports_campaigns is True``, GUGiK).
-
-        ``BaseProvider`` nie deklaruje API kampanii (mechanizm WYLACZNIE PL):
-        ``resolve_campaigns``, ``download_record``, ``record_source``.
-        """
-        return self._provider
+    def _campaign_provider(self) -> CampaignProvider:
+        """Provider toru kampanii (``supports_campaigns is True``, GUGiK)."""
+        return cast(CampaignProvider, self._provider)
 
     # =========================================================================
     # Download by godło → ASC
@@ -649,9 +662,10 @@ class DownloadManager:
         NoCoverageError
             Brak kampanii (z ``resolve_campaigns``).
         DownloadError
-            Porazka choc jednej kampanii (pelna lista w komunikacie);
-            kampanie udane zostaja na dysku, a dowiazanie wskazuje
-            najnowsza z nich.
+            Porazka choc jednej kampanii (takze niepoprawna ``aktualnosc``
+            rekordu) albo dowiazania (``OSError`` z ``ensure_standard_link``)
+            — wszystko w jednym komunikacie; kampanie udane zostaja na dysku,
+            a dowiazanie wskazuje najnowsza z nich.
         """
         std = self._storage.get_path(godlo, self._default_ext)
         records = self._campaign_provider.resolve_campaigns(
@@ -661,14 +675,18 @@ class DownloadManager:
         downloaded: list[Path] = []
         reused: list[Path] = []
         local: list[tuple[CampaignRef, Path]] = []
-        errors: list[tuple[CampaignRef, DownloadError]] = []
+        errors: list[tuple[str, DownloadError]] = []  # (kampania, blad)
         started = False
         for record in records:
-            ref = CampaignRef.from_record(record)  # R16: DownloadError -> arkusz
+            try:  # R16 (w duchu Q10): zla aktualnosc = porazka tej kampanii
+                ref = CampaignRef.from_record(record)
+            except DownloadError as e:
+                errors.append((record.url, e))
+                continue
             try:
                 ext = campaign_extension(ref, self._default_ext)  # przed siecia
             except DownloadError as e:
-                errors.append((ref, e))
+                errors.append((ref.dirname, e))
                 continue
             path = self._storage.get_campaign_path(godlo, ref, ext)
             if skip_existing and path.exists():
@@ -678,7 +696,9 @@ class DownloadManager:
                     try:
                         self._write_campaign_sidecar(path, godlo, record, ref)
                     except DownloadError as e:
-                        errors.append((ref, e))  # plik zostaje (sprzed przebiegu)
+                        errors.append(
+                            (ref.dirname, e)
+                        )  # plik zostaje (sprzed przebiegu)
                         continue
                 logger.info(f"Skipping {godlo} {ref.dirname} - already exists")
                 reused.append(path)
@@ -694,26 +714,37 @@ class DownloadManager:
                 self._write_campaign_sidecar(path, godlo, record, ref)
             except DownloadError as e:
                 path.unlink(missing_ok=True)
-                errors.append((ref, e))
+                errors.append((ref.dirname, e))
                 continue
             downloaded.append(path)
             local.append((ref, path))  # kandydat dowiazania DOPIERO z sidecarem
         method: str | None = None
+        link_error: OSError | None = None
         if local:
             ref, path = max(local, key=lambda rp: rp[0].sort_key)
-            outcome = ensure_standard_link(
-                std, path, ref.sort_key, refresh=path in downloaded
-            )
-            if not outcome.changed:
-                self._note_reuse(std)
-            method = outcome.method
-        if errors:  # Q10: pelna lista porazek
-            listing = ", ".join(f"{r.dirname}: {e}" for r, e in errors)
-            raise DownloadError(
-                f"{godlo}: nie pobrano {len(errors)} z {len(records)} kampanii "
-                f"({listing})",
-                godlo=godlo,
-            )
+            try:
+                outcome = ensure_standard_link(
+                    std, path, ref.sort_key, refresh=path in downloaded
+                )
+            except OSError as e:  # R5: porazka arkusza, nie przerwanie listy
+                link_error = e
+            else:
+                method = outcome.method
+                if not outcome.changed:
+                    std_sidecar = std.with_name(std.name + ".meta.json")
+                    if std_sidecar.is_symlink():  # nigdy zapis "przez" dowiazanie
+                        write_standard_sidecar(std, outcome.target, outcome.method)
+                    self._note_reuse(std)
+        if errors or link_error is not None:  # Q10: pelna lista porazek
+            problems = []
+            if errors:
+                listing = ", ".join(f"{name}: {e}" for name, e in errors)
+                problems.append(
+                    f"nie pobrano {len(errors)} z {len(records)} kampanii ({listing})"
+                )
+            if link_error is not None:
+                problems.append(f"dowiazanie {std}: {link_error}")
+            raise DownloadError(f"{godlo}: " + "; ".join(problems), godlo=godlo)
         return SheetFetch(
             godlo,
             std,
@@ -1022,7 +1053,7 @@ class DownloadManager:
         )
 
     def _write_campaign_sidecar(
-        self, path: Path, godlo: str, record, ref: CampaignRef
+        self, path: Path, godlo: str, record: SkorowidzRecord, ref: CampaignRef
     ) -> None:
         """OBOWIAZKOWY sidecar pliku kampanii (errata 2 N-1).
 
