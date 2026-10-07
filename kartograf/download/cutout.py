@@ -42,7 +42,7 @@ from kartograf.download.storage import (
     storage_for_provider,
 )
 from kartograf.exceptions import DownloadError, GridMismatchError, ValidationError
-from kartograf.transform.crs import PinnedTransform, TransformPolicy
+from kartograf.transform.crs import CONTENT_POLICY, WARP_MARGIN_PX, PinnedTransform
 
 logger = logging.getLogger(__name__)
 
@@ -52,13 +52,8 @@ PL_NODATA = -9999.0
 PIXEL_SIZES = {"1m": 1.0, "5m": 5.0}
 # uklady docelowe z przypieta operacja EPSG:2180 -> cel (KNOWN_PATHS, ADR-027)
 SUPPORTED_TARGET_CRS = ("EPSG:2180", "EPSG:5514", "EPSG:3045")
-# Zapas obwiedni zrodla w pikselach — lustro _WARP_MARGIN_PX toru CZ
-# (providers/cuzk/dmr.py): pokrywa niepewnosc operacji obwiedniowej i halo
-# interpolatora bilinear (1 px) na krawedziach siatki wyniku.
-WARP_MARGIN_PX = 4
-# Polityka operacji reprojektujacej TRESC wycinka — lustro _HORIZONTAL_POLICY
-# toru CZ; probe_point dokladany per zadanie (srodek bboxa).
-_HORIZONTAL_POLICY = TransformPolicy(min_accuracy_m=1.0, allow_network_grids=False)
+# Polityka operacji reprojektujacej TRESC (CONTENT_POLICY) i zapas obwiedni
+# zrodla (WARP_MARGIN_PX) — wspolne z torem CZ, z transform/crs.py (D9).
 _VERTICAL_CRS = ("EVRF2007", "KRON86")
 # Dolne oszacowanie rozmiaru arkusza ASC na dysku: 5,74-7,95 B na wartosc
 # w realnych plikach GUGiK 5 m (fakt 9 planu 2026-09-28) — bierzemy mniej,
@@ -201,9 +196,9 @@ def prepare_pl_cutout(
             (bbox_2180.min_x + bbox_2180.max_x) / 2,
             (bbox_2180.min_y + bbox_2180.max_y) / 2,
         )
-        # polityka jak _HORIZONTAL_POLICY toru CZ + probe w srodku zadania
+        # polityka tresci jak w torze CZ + probe w srodku zadania
         pinned = build_pinned_transform(
-            "EPSG:2180", target_crs, replace(_HORIZONTAL_POLICY, probe_point=center)
+            "EPSG:2180", target_crs, replace(CONTENT_POLICY, probe_point=center)
         )
         bbox_target = bbox_to_crs(bbox_2180, target_crs, pinned)
         # Zrodlo musi pokryc CALA siatke wyniku: obwiednia celu wraca do 2180
