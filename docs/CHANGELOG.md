@@ -92,6 +92,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   zmian (bez dowiązań).
 - Pojedyncze godło: „Skipped” zależy od `manager.last_sheet.skipped`
   (wcześniej pre-check istnienia pliku w CLI).
+- `newest` przy awarii skorowidza GUGiK (I-1): błąd TRANSPORTU przy
+  rozwiązywaniu rekordu (sieć, HTTP 429/5xx; nie brak pokrycia, nie inne 4xx
+  ani raport OGC) na arkuszu z istniejącą lokalną kampanią nie jest porażką —
+  arkusz pominięty z lokalnej kampanii (dowiązanie bez zmian), `Warning:`
+  na stderr także z `-q` (`<godło>: skorowidz GUGiK niedostepny — uzyto
+  lokalnej kampanii bez sprawdzenia nowszej (...)`; lista: jedno `Warning:`
+  z godłami), kod bez zmian. `--campaigns all`, `--min-year`, `--force` i brak
+  lokalnej kampanii — błąd jak dotąd. API: `SheetFetch.unverified`,
+  `DownloadResult.unverified` (godło -> treść błędu). Biblioteka bez
+  `MetadataCache` pyta skorowidz przy każdym `download_sheet` (także arkusza
+  już pobranego) — przekaż cache providerowi (raz na 7 dni).
 
 ### LAZ 2026-10-07
 - **Zmiana zachowania (ADR-029):** domyślnie (bez `--year`) LAZ pobiera

@@ -17,11 +17,13 @@ from pathlib import Path
 from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
+import requests
 
 from kartograf.download.manager import DownloadManager, DownloadProgress, SheetFetch
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.skorowidz import parse_skorowidz_records
+from kartograf.transport.http import get_with_retry
 
 FIXTURES = Path(__file__).parent / "fixtures"
 NMT = FIXTURES / "gugik_skorowidz" / "real_2026_10_06" / "nmt"
@@ -88,6 +90,7 @@ class FakeCampaignProvider:
         self.fixed_mtime: float | None = None
         self.downloads: list[str] = []
         self.resolve_calls: list[str] = []
+        self.resolve_error: Exception | None = None  # I-1: awaria skorowidza
         self._lock = threading.Lock()  # D-6: liczba rozwiazan per godlo
 
     def resolve_campaigns(
@@ -95,6 +98,8 @@ class FakeCampaignProvider:
     ):
         with self._lock:
             self.resolve_calls.append(godlo)
+        if self.resolve_error is not None:
+            raise self.resolve_error
         recs = [
             r
             for r in self.records[campaigns]
@@ -795,3 +800,153 @@ def test_invalid_aktualnosc_is_campaign_failure_links_best_valid(tmp_path):
     assert "2025-04-27_83233" in os.readlink(std_path(tmp_path))
     for key in ("83233", "78047", "73021"):
         assert campaign_path(tmp_path, REC[key]).is_file()
+
+
+# =============================================================================
+# I-1: newest przy awarii transportu skorowidza -> lokalna kampania
+# =============================================================================
+
+
+def _transport_error(godlo: str, failure) -> DownloadError:
+    """``DownloadError`` dokladnie z ``get_with_retry`` (ponowienia bez czekania).
+
+    ``failure``: wyjatek ``session.get`` albo kod HTTP odpowiedzi.
+    """
+    session = Mock(spec=requests.Session)
+    if isinstance(failure, int):
+        response = Mock(spec=requests.Response)
+        response.status_code = failure
+        response.headers = {}
+        response.raise_for_status = Mock(
+            side_effect=requests.HTTPError(f"HTTP {failure}", response=response)
+        )
+        session.get = Mock(return_value=response)
+    else:
+        session.get = Mock(side_effect=failure)
+    with patch("kartograf.transport.http.time.sleep"):
+        try:
+            get_with_retry(session, "https://wms", timeout=1, description=godlo)
+        except DownloadError as e:
+            return e
+    raise AssertionError("get_with_retry nie zglosil bledu")
+
+
+TRANSPORT_FAILURES = [
+    requests.ConnectionError("brak sieci"),
+    requests.Timeout("timeout"),
+    503,
+    429,
+]
+
+
+@pytest.mark.parametrize(
+    "failure", TRANSPORT_FAILURES, ids=["conn", "timeout", "503", "429"]
+)
+def test_newest_transport_failure_uses_local_campaign(tmp_path, failure, caplog):
+    fake = FakeCampaignProvider(C14)
+    m = DownloadManager(tmp_path, provider=fake)
+    std = m.download_sheet(G)
+    before = os.readlink(std)
+    fake.resolve_error = _transport_error(G, failure)
+    with caplog.at_level(logging.WARNING, logger="kartograf.download.manager"):
+        path = m.download_sheet(G)
+    target = campaign_path(tmp_path, REC["84183"])
+    assert path == std and os.readlink(std) == before
+    assert fake.downloads == [REC["84183"].url]
+    fetch = m.last_sheet
+    assert fetch.skipped is True
+    assert fetch.reused == (target,) and fetch.downloaded == ()
+    assert fetch.link == "symlink"
+    assert fetch.unverified and str(fake.resolve_error) in fetch.unverified
+    assert any(
+        r.levelno == logging.WARNING and G in r.getMessage() for r in caplog.records
+    )
+
+
+def test_newest_transport_failure_in_list_is_skipped_and_reported(tmp_path):
+    fake = FakeCampaignProvider(C14)
+    m = DownloadManager(tmp_path, provider=fake)
+    m.download_sheet(G)
+    fake.resolve_error = _transport_error(G, 503)
+    events: list[DownloadProgress] = []
+    paths = m.download_sheets([G], on_progress=events.append)
+    result = m.last_result
+    assert paths == [std_path(tmp_path)]
+    assert result.skipped == [G] and result.failed == []
+    assert set(result.unverified) == {G}
+    assert "503" in result.unverified[G]
+    assert events[-1].status == "skipped"
+
+
+def test_newest_transport_failure_keeps_copy_link_untouched(tmp_path, monkeypatch):
+    deny_links(monkeypatch)
+    fake = FakeCampaignProvider(C14)
+    m = DownloadManager(tmp_path, provider=fake)
+    std = m.download_sheet(G)
+    (std.parent / f"{std.name}.aux.xml").write_text("<PAMDataset/>")
+    fake.resolve_error = _transport_error(G, requests.ConnectionError("x"))
+    with patch("shutil.copyfile") as copy:
+        m.download_sheet(G)
+    copy.assert_not_called()
+    assert (std.parent / f"{std.name}.aux.xml").exists()
+    assert m.last_sheet.link == "copy" and m.last_sheet.unverified
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "error"),
+    [
+        # brak pokrycia = stan danych, nie transport
+        ({}, NoCoverageError("Brak kampanii", godlo=G)),
+        # 4xx bez ponowien i blad tresci odpowiedzi nie sa transportem
+        ({}, "404"),
+        ({}, DownloadError("raport wyjatku OGC", godlo=G)),
+        # tylko newest bez min_year
+        ({"campaigns": "all"}, "conn"),
+        ({"min_year": 2020}, "conn"),
+    ],
+    ids=["no-coverage", "http-404", "ogc", "all", "min-year"],
+)
+def test_resolve_failure_without_fallback_still_fails(tmp_path, kwargs, error):
+    fake = FakeCampaignProvider(C14)
+    DownloadManager(tmp_path, provider=fake, **kwargs).download_sheets([G])
+    assert std_path(tmp_path).exists()
+    if error == "404":
+        error = _transport_error(G, 404)
+    elif error == "conn":
+        error = _transport_error(G, requests.ConnectionError("x"))
+    fake.resolve_error = error
+    m = DownloadManager(tmp_path, provider=fake, **kwargs)
+    with pytest.raises(type(error)) as exc:
+        m.download_sheet(G)
+    assert exc.value is error
+    assert m.last_sheet is None
+
+
+def test_transport_failure_without_local_campaign_fails(tmp_path):
+    fake = FakeCampaignProvider(C14)
+    fake.resolve_error = _transport_error(G, 503)
+    m = DownloadManager(tmp_path, provider=fake)
+    with pytest.raises(DownloadError):
+        m.download_sheet(G)
+    m.download_sheets([G])
+    assert m.last_result.failed == [G] and m.last_result.unverified == {}
+
+
+def test_transport_failure_with_dangling_link_fails(tmp_path):
+    fake = FakeCampaignProvider(C14)
+    m = DownloadManager(tmp_path, provider=fake)
+    std = m.download_sheet(G)
+    campaign_path(tmp_path, REC["84183"]).unlink()
+    fake.resolve_error = _transport_error(G, 503)
+    with pytest.raises(DownloadError):
+        m.download_sheet(G)
+    assert std.is_symlink()
+
+
+def test_transport_failure_with_force_fails(tmp_path):
+    fake = FakeCampaignProvider(C14)
+    m = DownloadManager(tmp_path, provider=fake)
+    m.download_sheet(G)
+    fake.resolve_error = _transport_error(G, 503)
+    with pytest.raises(DownloadError):
+        m.download_sheet(G, skip_existing=False)

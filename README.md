@@ -220,7 +220,12 @@ Prawdziwe pliki NMT/NMPT/orto leżą w
 (`<data>` = data pozyskania, `<id>` = numer kampanii z nazwy pliku GUGiK), a
 ścieżka standardowa `data/<produkt>/<segment>/<hierarchia godła>/<godło>.<ext>`
 jest dowiązaniem do najnowszej lokalnej kampanii. `newest` po wygaśnięciu cache
-(7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania. Wycinek
+(7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania. Gdy skorowidz
+GUGiK jest niedostępny (sieć, HTTP 429/5xx), a arkusz ma już lokalną kampanię,
+`newest` jej używa i drukuje `Warning: <godło>: skorowidz GUGiK niedostepny —
+uzyto lokalnej kampanii bez sprawdzenia nowszej (...)` (kod 0, także z `-q`);
+bez lokalnej kampanii, z `--force`, `--campaigns all` albo `--min-year` taki
+błąd nadal kończy pobranie arkusza porażką. Wycinek
 `--target-crs` zawsze składa się z najnowszych kampanii i nie przyjmuje
 `--campaigns all`/`--min-year`.
 
@@ -232,6 +237,13 @@ jest dowiązaniem do najnowszej lokalnej kampanii. `newest` po wygaśnięciu cac
 - **Migracja:** brak; zwykły plik NMT/NMPT/orto w starej ścieżce standardowej
   jest traktowany jak nieznany - pierwsze uruchomienie pobiera go ponownie do
   `kampanie/` i zastępuje dowiązaniem.
+- **Biblioteka:** bez `MetadataCache` `newest` pyta skorowidz GUGiK przy
+  KAŻDYM `download_sheet`, także dla arkusza już pobranego. Przekaż cache
+  providerowi (`create_nmt_provider(cache=MetadataCache())` albo
+  `GugikProvider(cache=...)`), a zapytania o arkusz ograniczą się do raz na
+  7 dni. Arkusz z lokalnej kampanii użyty przy awarii skorowidza:
+  `DownloadManager.last_sheet.unverified` / `DownloadResult.unverified`
+  (treść błędu transportu).
 - Składanie kilku kampanii w jedną powierzchnię (`mosaic`/`coverage`) nie jest
   w 0.7.0 - narzędzie planowane na 0.7.1.
 

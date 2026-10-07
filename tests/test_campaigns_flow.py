@@ -161,3 +161,24 @@ def test_end_to_end_all_with_real_xyz_campaign(tmp_path):
     meta = json.loads(sidecar(old).read_text(encoding="utf-8"))
     assert meta["extra"]["source"]["url"].endswith(".xyz")
     assert "2024-09-23_81025" in os.readlink(std_path(tmp_path, G2))
+
+
+def test_newest_uses_local_campaign_when_skorowidz_unreachable(tmp_path):
+    """I-1 na prawdziwym ``GugikProvider`` bez ``MetadataCache``: kolejny
+    ``download_sheet`` pyta skorowidz; awaria sieci -> lokalna kampania."""
+    from unittest.mock import patch
+
+    m = DownloadManager(tmp_path, provider=GugikProvider(session=c14_session(G)))
+    std = m.download_sheet(G)
+    before = os.readlink(std)
+
+    offline = Mock(spec=requests.Session)
+    offline.get = Mock(side_effect=requests.ConnectionError("GUGiK lezy"))
+    m2 = DownloadManager(tmp_path, provider=GugikProvider(session=offline))
+    with patch("kartograf.transport.http.time.sleep"):
+        path = m2.download_sheet(G)
+
+    assert offline.get.called  # bez cache rekordow: zapytanie przy kazdym wywolaniu
+    assert path == std and os.readlink(std) == before
+    assert m2.last_sheet.skipped is True
+    assert "GUGiK lezy" in m2.last_sheet.unverified

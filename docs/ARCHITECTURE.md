@@ -514,6 +514,24 @@ arkuszy (<godla do 10>) (extra.link=copy)`; podsumowanie `all` (bez `-q`):
 existed)`. "Skipped" przy pojedynczym godle zalezy od
 `manager.last_sheet.skipped`.
 
+Awaria skorowidza przy `newest` (I-1): gdy `resolve_campaigns` konczy sie
+bledem TRANSPORTU (`DownloadError` z `status_code` 429/5xx albo bez kodu,
+ale z przyczyna `requests.RequestException` — siec/timeout; NIE
+`NoCoverageError`, inne 4xx ani raport OGC/zly szablon), a sciezka
+standardowa wskazuje istniejaca lokalna kampanie (`linked_campaign`)
+i `skip_existing`, manager NIE zglasza porazki: `logger.warning` i
+`SheetFetch(skipped=True, reused=(<kampania>,), unverified=<tresc bledu>)`,
+dowiazanie bez zmian. Lista/hierarchia: arkusz w `skipped`, a
+`DownloadResult.unverified` (godlo -> tresc bledu). CLI: `Warning: <godlo>:
+skorowidz GUGiK niedostepny — uzyto lokalnej kampanii bez sprawdzenia
+nowszej (<blad>)` (pojedyncze godlo) albo `Warning: skorowidz GUGiK
+niedostepny — dla N arkuszy uzyto lokalnej kampanii bez sprawdzenia nowszej
+(<godla do 10>) (<pierwszy blad>)` (lista), stderr takze z `-q`, kod bez
+zmian. `all`, `--min-year`, `--force` i brak lokalnej kampanii (takze
+wiszace dowiazanie) — blad jak dotad. Biblioteka bez `MetadataCache` pyta
+skorowidz przy KAZDYM `download_sheet` (takze arkusza juz pobranego);
+przekazanie cache providerowi ogranicza to do raz na 7 dni.
+
 Wynik: `data/nmt/pl_1992_1m_evrf2007/kampanie/<data>_<id>/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc`
 (+ `.meta.json`) i dowiazanie `data/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc`;
 dla NMPT `data/nmpt/pl_1992_1m_evrf2007/...`, dla orto
