@@ -432,9 +432,9 @@ maja 3 proby, a orto korzysta z tego samego parsera rekordow.
 - C) Konstruowanie URL z wzorca `.../{density}/{density}_{id}_{godło}.laz` — wymaga nieprzewidywalnego `id` → niewykonalne
 - D) ATOM/CSW — bardziej zlozone i mniej bezposrednie niz WFS
 
-**Decyzja:** Opcja B. `GugikLazProvider` z discovery area-based: godło (≤1:10000) / `--bbox` / `--geometry` → bbox EPSG:2180 → WFS GetFeature (`gugik:SkorowidzDanychPomiarowychLIDAR{rok}`) → kafle z `url_do_pobrania`. Godło kafla jest opaque, bez zmian `SheetParser`; dwie usługi WFS wg układu pionowego, domyślnie newest-per-tile i filtry `--year`/`--min-density`. Historyczna implementacja wysyłała osie EPSG:2180 jako (E,N), co skorygowano w erracie poniżej.
+**Decyzja:** Opcja B. `GugikLazProvider` z discovery area-based: godło (≤1:10000) / `--bbox` / `--geometry` → bbox EPSG:2180 → WFS GetFeature (`gugik:SkorowidzDanychPomiarowychLIDAR{rok}`) → kafle z `url_do_pobrania`. Godło kafla jest opaque, bez zmian `SheetParser`; dwie usługi WFS wg układu pionowego, domyślnie newest-per-tile (od 2026-10-07: najnowszy kafel per OBSZAR — ADR-029) i filtry `--year`/`--min-density`. Historyczna implementacja wysyłała osie EPSG:2180 jako (E,N), co skorygowano w erracie poniżej.
 
-**Konsekwencje:** Brak zmian w `SheetParser`: godlo kafla pozostaje opaque. LAZ ma osobny przeplyw `_cmd_download_laz` (area→WFS→tiles→parallel download). WFS daje rok/gestosc/CRS; roczniki pochodza z GetCapabilities (bez fallbacku listy zaszytej). Wyniki live sprzed naprawy osi potwierdzaly format LASF, a nie poprawne polozenie kafla.
+**Konsekwencje:** Brak zmian w `SheetParser`: godlo kafla pozostaje opaque. LAZ ma osobny przeplyw `_cmd_download_laz` (area→WFS→tiles→parallel download; od 2026-10-07 pobieranie i sidecar w bibliotece `download/laz.py`, CLI jest nakladka — ADR-029). WFS daje rok/gestosc/CRS; roczniki pochodza z GetCapabilities (bez fallbacku listy zaszytej). Wyniki live sprzed naprawy osi potwierdzaly format LASF, a nie poprawne polozenie kafla.
 
 **Errata 2026-09-29 (diagnoza historyczna):** pierwotne
 „zweryfikowano live” sprawdzalo niepoprawnie sparowane BBOX i envelope:
@@ -732,13 +732,6 @@ przetrwaly zapis tych zobowiazan to ponizsze punkty i PROGRESS.md):**
    - deklarowany sufit `exportImage` 15000 x 4100 px pozostaje,
      realna granica ~8 Mpx prowadzi do kafelkowania klienta z budzetem
      4 Mpx na zapytanie (ADR-024 errata 2).
-8. **Errata 2026-10-06 (review-2 N15):** pkt (f).1 "`extra.parent_request`
-   jest zapisywany **zawsze** w trybie `--bbox`/`--geometry`" nie obejmuje
-   toru LAZ: sidecar kafla LAZ (`_write_laz_sidecar`) nie ma
-   `parent_request` w zadnym trybie (ARCHITECTURE 3.4 i README juz to
-   mowia). Dopisanie klucza grupowania do LAZ (`_build_parent_request` jest
-   gotowe) pozostaje w backlogu.
-
 **Konsekwencje:** Pelna parytetowosc produktowa DMR miedzy PL i CZ (godlo,
 bbox, transformacja pozioma/pionowa opcjonalna). 1381 testow zielonych
 (+244 wzgledem stanu po etapie 0), pokrycie ~89%, ruff/mypy bez nowego
@@ -1371,6 +1364,72 @@ inicjalizacji (ADR-019). Sidecar arkusza PL-2000 deklaruje rzeczywisty
   strefy 7 we wspolrzednych EPSG:2180; wtedy `horizontal_crs` =
   EPSG:2180, deklaracja rekordu zostaje w `extra.source.uklad`, a CLI
   drukuje `Warning:` (E17).
+
+---
+
+## ADR-029: Wybor kafli LAZ wg pokrycia obszaru i pobieranie LAZ w bibliotece
+
+**Data:** 2026-10-07
+**Status:** Przyjeta (zastepuje regule "newest-per-tile" z ADR-021)
+
+**Kontekst:** ADR-021 deduplikowal kafle po godle (najnowszy `akt_rok`
+per godlo). Kafle PL-1992 i PL-2000 tego samego miejsca maja rozne godla,
+wiec E2E 2026-10-06 (C13, obszar w2 w Warszawie, 50 x 50 m) dostal dwa
+kafle: 2022/PL-2000:S7 (250 MB) i 2025/PL-1992 (50 MB) — zdublowany obszar,
+a "najnowszy rocznik" nie byl gwarantowany per obszar. Ponadto petla puli
+watkow, sidecar kafla i porazki kafli zyly tylko w CLI (review-1 D17), a
+sidecar LAZ nie niosl `extra.parent_request` (review-2 N15; errata ADR-023
+pkt 8 o tym wyjatku usunieta wraz z ta naprawa).
+
+**Opcje:**
+- A) Dedup po godle (stan) — nie laczy ukladow ani kampanii o innym ciecu.
+- B) Dedup po obwiedni z WFS — obwiednia obroconej ramy (EPSG:2180)
+  wystaje poza nia o ~15 m w naroznikach: falszywe "pokrycie".
+- C) Zachlanny wybor po ramie kafla (`msGeometry`) od najnowszego roku,
+  porownanie w EPSG:2180 z tolerancja krawedzi.
+- D) Pobierac wszystko i zostawic wybor uzytkownikowi (`--year`).
+
+**Decyzja:** C. `GugikLazProvider.select_tiles` (i `discover_tiles` =
+`select_tiles(...).tiles`) odpytuje roczniki jak dotad, odrzuca kafle
+ponizej `--min-density`, a potem `select_newest_cover` przeglada kafle
+od najnowszego `akt_rok` (w roku: nowsza `akt_data`, wieksza gestosc,
+godlo, URL). Kafel jest pomijany, jesli jego czesc wspolna z obszarem
+zadania jest pokryta suma wybranych juz kafli, kazdy powiekszony o
+`COVERAGE_TOLERANCE_M` = 1 m; kafel wnoszacy niepokryty kawalek zostaje.
+Z `--year` regula dziala w obrebie tego roku. Rama kafla to wielokat
+`msGeometry` (osie N,E dla URN, jak envelope), znormalizowany do
+wypuklego czworokata (`core/coverage.py`: wierzcholki wspolliniowe do
+10 cm usuwane — boki rownoleznikowe arkuszy PL-1992 sa lukami ~3 cm).
+Zasady ostroznosci (watpliwosc = pobierz): pokrywa tylko kafel
+`czy_ark_wypelniony` != `NIE` (rama arkusza niepelnego nie jest zasiegiem
+danych — Wroclaw 2025 ma dwie dostawy NIE tego samego arkusza), i to
+wylacznie rama albo tym samym godlem (nigdy obwiednia); kafel bez
+geometrii zostaje; kafel, ktorego rama nie przecina obszaru (tylko
+obwiednia) jest pomijany jako "outside". Pominiete kafle wraca
+`LazTileSelection.superseded` (kafel + kafle pokrywajace); CLI drukuje
+je jako `Info:` na stderr (takze z `-q`).
+
+Tolerancja 1 m: ramy kafli roznych ukladow i kampanii nie leza krawedz
+w krawedz, a pas wezszy niz 1 m to 2-4 rzedy punktow przy 4-20 p/m2 przy
+bledzie polozenia 0,10-0,30 m (`blad_sr_syt`) — nie uzasadnia pobrania
+kafla 50-250 MB; jednoczesnie jest 2-3 rzedy wielkosci mniejsza od
+kafla (~500-1100 m), wiec nie ukryje realnej luki w nowszej kampanii.
+
+Pobieranie przechodzi do biblioteki: `kartograf.download.laz`
+(`download_laz_area`, `run_laz_download`, `write_laz_sidecar`;
+`LazDownloadResult` z `downloaded`/`skipped`/`failed`/`superseded`), wzor
+`download/cutout.py`. Porazka kafla nie jest wyjatkiem, trafia do
+`failed`; CLI tlumaczy ja na `Error:` z pelna lista i kod 1. Sidecar
+kafla niesie `extra.parent_request` w trybie `--bbox`/`--geometry`
+(ADR-023 (f).1 obejmuje teraz LAZ; `countries` = `["PL"]`).
+
+**Konsekwencje:** Obszar w2 pobiera jeden kafel (2025/PL-1992) zamiast
+dwoch; starsze roczniki tylko jawnie (`--year`). Wynik zalezy od obszaru:
+obszar wychodzacy poza nowsza kampanie dostanie takze starszy kafel
+(caly — LAZ nie jest przycinany). `LazTile` ma nowe pola `footprint`,
+`date`, `full_sheet` (addytywne, z wartosciami domyslnymi). Kafle
+niepelne (`NIE`) nie wypieraja starszych pelnych — obszar moze wtedy
+dostac oba. Biblioteka (Hydrograf) pobiera LAZ bez powielania CLI.
 
 ---
 
