@@ -310,7 +310,7 @@ from kartograf import (
   sprawdzany przy każdym uruchomieniu po wygaśnięciu cache (7 dni)
 - --campaigns all: każda kampania arkusza po twardym filtrze ADR-028, bez limitu
 - --min-year RRRR: dolna granica roku pozyskania (aktualnosc), obie strategie
-- LAZ: --campaigns all (bez deduplikacji ADR-029), --min-year (akt_rok)
+- LAZ: --campaigns all (kafle z ramą przecinającą obszar, bez deduplikacji ADR-029), --min-year (akt_rok)
 - Wycinek --target-crs: zawsze newest (all/--min-year = Error:)
 - API: DownloadManager(campaigns=, min_year=), SheetFetch, CampaignRef
 ```
@@ -614,6 +614,6 @@ pyshp >= 2.3.0         # Shapefile reading
 
 ---
 
-**Wersja dokumentu:** 3.12
-**Data ostatniej aktualizacji:** 2026-09-30
+**Wersja dokumentu:** 3.13
+**Data ostatniej aktualizacji:** 2026-10-07
 **Status:** Rozwoj — v0.7.0 (Unreleased), etap 1 zmergowany do `develop` 2026-08-12

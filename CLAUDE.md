@@ -390,8 +390,9 @@ kartograf cache path
   nieprzestawione; pozostale sidecary best-effort. Sidecar kampanii:
   `extra.campaign` = `{id, date, zgloszenie, source, full_sheet, dt_pzgik}`,
   `request.campaigns` zawsze, `request.min_year` tylko gdy podany.
-  Dowiazanie: raz na arkusz po zebraniu kampanii, nigdy wstecz (klucz celu
-  z sidecara, a gdy nieczytelny — z nazwy katalogu), metoda symlink WZGLEDNY
+  Dowiazanie: raz na arkusz po zebraniu kampanii, przestawiane tylko na klucz
+  `(aktualnosc, dt_pzgik, url)` scisle wiekszy niz klucz biezacego celu (z
+  sidecara, a gdy nieczytelny — z nazwy katalogu; ten sam cel = bez zmian), metoda symlink WZGLEDNY
   -> hardlink -> kopia; przy kopii `Warning:` (`dowiazanie niedostepne na tym
   systemie plikow — sciezka standardowa jest KOPIA najnowszej kampanii dla N
   arkuszy (...) (extra.link=copy)`, kod bez zmian). Kontrola istnienia
@@ -420,8 +421,9 @@ kartograf cache path
   bez sieci; obszar pod `auto` z PL i CZ = jedno `Info: --campaigns/--min-year
   dotycza tylko czesci PL (CZ: biezaca wersja danych CUZK)`, CZ pobierane
   dalej (opcje kampanii nie zwezaja `auto` do PL).
-  LAZ: `newest` = ADR-029; `--campaigns all` = wszystkie kafle bez
-  deduplikacji pokryciowej; `--min-year` = dolna granica `akt_rok`;
+  LAZ: `newest` = ADR-029; `--campaigns all` = wszystkie kafle, ktorych
+  rama przecina obszar, bez deduplikacji pokryciowej (kafel przeciety tylko
+  obwiednia pomijany jak dotad); `--min-year` = dolna granica `akt_rok`;
   `--min-year` i `--year` wykluczaja sie (`Error:`); LAZ bez dowiazan.
   Wynik pojedynczego godla: "Skipped" tylko gdy `manager.last_sheet.skipped`.
   Kontrola wolnego miejsca wycinka to DOLNE oszacowanie: liczy arkusze bez

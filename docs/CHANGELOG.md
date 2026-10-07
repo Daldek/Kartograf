@@ -12,7 +12,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (+ `.meta.json`); ścieżka standardowa `<segment>/<hierarchia>/<godło>.<ext>`
   jest dowiązaniem do najnowszej lokalnej kampanii (symlink względny, potem
   hardlink, potem kopia z `Warning:`; `extra.link` = `symlink`/`hardlink`/
-  `copy`; zawsze tylko do kampanii nowszej lub równej obecnemu celowi).
+  `copy`; przestawiane tylko na kampanię o kluczu `(aktualnosc, dt_pzgik, url)`
+  ściśle większym niż klucz obecnego celu; ten sam cel lub klucz równy/większy
+  = bez zmian).
   Brak migracji: zwykły plik w ścieżce standardowej jest nieznany, pierwsze
   uruchomienie pobiera go ponownie do `kampanie/` i zastępuje dowiązaniem
   (z sidecarem). Kopiowanie `data/` wymaga `cp -rL`/`rsync -aL`.
@@ -83,7 +85,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pod `auto`) = `Error: CZ (CUZK) nie ma kampanii — --campaigns
   all/--min-year dotyczą tylko PL` (kod 1, bez sieci); obszar pod `auto` z
   PL i CZ = jedno `Info:`, CZ pobierane dalej.
-- LAZ: `--campaigns all` (bez deduplikacji ADR-029), `--min-year` (dolna
+- LAZ: `--campaigns all` (wszystkie kafle, których rama przecina obszar, bez
+  deduplikacji ADR-029; kafel przecięty tylko obwiednią pomijany jak dotąd),
+  `--min-year` (dolna
   granica `akt_rok`); `--min-year` z `--year` wykluczają się. Układ LAZ bez
   zmian (bez dowiązań).
 - Pojedyncze godło: „Skipped” zależy od `manager.last_sheet.skipped`
