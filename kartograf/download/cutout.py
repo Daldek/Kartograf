@@ -195,7 +195,9 @@ def prepare_pl_cutout(
         raise ValidationError(
             f"Uklad wysokosci NMT PL: EVRF2007 albo KRON86 (podano {vertical_crs})"
         )
-    if resolution == "5m" and vertical_crs != "EVRF2007":
+    from kartograf.providers.pl import nmt_vertical_crs
+
+    if nmt_vertical_crs(resolution, vertical_crs, log=False) != vertical_crs:
         raise ValidationError("NMT 5m jest dostepny wylacznie w EVRF2007")
 
     from kartograf.providers.cuzk.dmr import bbox_to_crs

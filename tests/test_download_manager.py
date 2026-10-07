@@ -908,6 +908,17 @@ class TestCreateNmtProviderFactory:
         assert provider.vertical_crs == "EVRF2007"
         assert "5m only supports EVRF2007" in caplog.text
 
+    def test_rule_without_log_is_silent(self, caplog):
+        """D11: ``log=False`` (CLI, ``prepare_pl_cutout``) — korekta bez logu."""
+        import logging
+
+        from kartograf.providers.pl import nmt_vertical_crs
+
+        with caplog.at_level(logging.WARNING):
+            assert nmt_vertical_crs("5m", "KRON86", log=False) == "EVRF2007"
+            assert nmt_vertical_crs("1m", "KRON86") == "KRON86"
+        assert caplog.text == ""
+
     def test_passes_session_and_cache(self):
         from unittest.mock import MagicMock
 
