@@ -281,11 +281,12 @@ class TestSelectNewestCover:
         assert sorted(t.godlo for t in selection.tiles) == ["NEW", "OLD"]
 
     def test_same_year_duplicate_is_deduplicated_by_coverage(self):
-        a = _tile("A", 2024, _square(0, 0, 300, 300), date="2024-08-01")
-        b = _tile("B", 2024, _square(0, 0, 300, 300), date="2024-03-01")
-        selection = select_newest_cover([b, a], AREA)
-        assert [t.godlo for t in selection.tiles] == ["A"]  # nowsza akt_data
-        assert [s.tile.godlo for s in selection.superseded] == ["B"]
+        # godla odwrotnie do dat: wygrywa nowsza akt_data, nie kolejnosc godel
+        newer = _tile("Z", 2024, _square(0, 0, 300, 300), date="2024-08-01")
+        older = _tile("A", 2024, _square(0, 0, 300, 300), date="2024-03-01")
+        selection = select_newest_cover([older, newer], AREA)
+        assert [t.godlo for t in selection.tiles] == ["Z"]
+        assert [s.tile.godlo for s in selection.superseded] == ["A"]
 
     def test_older_tile_outside_newer_cover_kept(self):
         new = _tile("NEW", 2024, _square(0, 0, 150, 300))
