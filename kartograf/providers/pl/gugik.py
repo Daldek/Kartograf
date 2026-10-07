@@ -18,18 +18,17 @@ Supported resolutions:
 import logging
 import re
 from pathlib import Path
-from urllib.parse import urlencode
 
 import requests
 
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.exceptions import (
     NoCoverageError,
-    ParseError,
     ValidationError,
 )
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import SkorowidzLayersMixin, SkorowidzRecord
+from kartograf.providers.pl.wcs import GugikWcsMixin
 from kartograf.transport.http import (
     MAX_RETRIES,
     SessionPerThread,
@@ -39,7 +38,7 @@ from kartograf.transport.http import (
 logger = logging.getLogger(__name__)
 
 
-class GugikProvider(SkorowidzLayersMixin, BaseProvider):
+class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     """
     Provider for downloading NMT data from GUGiK.
 
@@ -125,21 +124,6 @@ class GugikProvider(SkorowidzLayersMixin, BaseProvider):
     # Supported vertical CRS by resolution
     SUPPORTED_VERTICAL_CRS = ["KRON86", "EVRF2007"]
     SUPPORTED_VERTICAL_CRS_5M = ["EVRF2007"]  # 5m only supports EVRF2007
-
-    # WCS formats (for bbox downloads)
-    WCS_FORMATS = {
-        "GTiff": "image/tiff",
-        "PNG": "image/png",
-        "JPEG": "image/jpeg",
-    }
-
-    # File extensions
-    FORMAT_EXTENSIONS = {
-        "GTiff": ".tif",
-        "PNG": ".png",
-        "JPEG": ".jpg",
-        "ASC": ".asc",
-    }
 
     # Default settings
     DEFAULT_TIMEOUT = 30
@@ -450,46 +434,16 @@ class GugikProvider(SkorowidzLayersMixin, BaseProvider):
             ),
         )
 
-    def _construct_wcs_url(self, bbox: BBox, format: str) -> str:
-        """
-        Construct WCS GetCoverage URL for bounding box.
-
-        Parameters
-        ----------
-        bbox : BBox
-            Bounding box in EPSG:2180
-        format : str
-            Output format (GTiff, PNG, JPEG)
-
-        Returns
-        -------
-        str
-            Full WCS URL
-        """
-        wcs_endpoint = self.WCS_ENDPOINTS[self._vertical_crs]
-        coverage_id = self.COVERAGE_IDS[self._vertical_crs]
-
-        params = {
-            "SERVICE": "WCS",
-            "VERSION": "2.0.1",
-            "REQUEST": "GetCoverage",
-            "COVERAGEID": coverage_id,
-            "FORMAT": self.WCS_FORMATS[format],
-        }
-
-        base_url = f"{wcs_endpoint}?{urlencode(params)}"
-        subset_x = f"SUBSET=x({bbox.min_x:.2f},{bbox.max_x:.2f})"
-        subset_y = f"SUBSET=y({bbox.min_y:.2f},{bbox.max_y:.2f})"
-
-        return f"{base_url}&{subset_x}&{subset_y}"
+    def _wcs_target(self) -> tuple[str, str]:
+        """Endpoint i coverage WCS dla ukladu wysokosci providera."""
+        return (
+            self.WCS_ENDPOINTS[self._vertical_crs],
+            self.COVERAGE_IDS[self._vertical_crs],
+        )
 
     # =========================================================================
     # Info methods
     # =========================================================================
-
-    def get_supported_formats(self) -> list[str]:
-        """Return list of supported WCS formats."""
-        return list(self.WCS_FORMATS.keys())
 
     def get_supported_resolutions(self) -> list[str]:
         """Return list of supported resolutions."""
@@ -515,20 +469,6 @@ class GugikProvider(SkorowidzLayersMixin, BaseProvider):
         if res == "5m":
             return list(self.SUPPORTED_VERTICAL_CRS_5M)
         return list(self.SUPPORTED_VERTICAL_CRS)
-
-    def get_file_extension(self, format: str) -> str:
-        """Get file extension for given format."""
-        if format not in self.FORMAT_EXTENSIONS:
-            raise ValueError(f"Unknown format: {format}")
-        return self.FORMAT_EXTENSIONS[format]
-
-    def validate_godlo(self, godlo: str) -> bool:
-        """Validate godło format."""
-        try:
-            SheetParser(godlo)
-            return True
-        except ParseError:
-            return False
 
     def is_wcs_available(self) -> bool:
         """
