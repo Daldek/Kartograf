@@ -110,7 +110,7 @@ def test_year_and_min_year_are_exclusive():
 
 def test_unknown_campaigns_value_rejected():
     provider = GugikLazProvider(session=laz_session())
-    with pytest.raises(ValidationError, match="campaigns"):
+    with pytest.raises(ValidationError, match="Nieznana strategia kampanii"):
         provider.select_tiles(W2_BBOX, campaigns="coverage")
 
 
@@ -203,3 +203,12 @@ def test_download_laz_area_all_writes_campaigns_to_sidecars(tmp_path):
         request = _meta(path)["request"]
         assert request["campaigns"] == "all"
         assert request["min_year"] == 2022
+
+
+@pytest.mark.parametrize("bad", ["2020", True, 1800])
+def test_invalid_min_year_rejected_before_network(bad):
+    """M-3: ``select_tiles`` waliduje ``min_year`` jak ``DownloadManager``."""
+    session = laz_session()
+    with pytest.raises(ValidationError, match="min_year"):
+        GugikLazProvider(session=session).select_tiles(W2_BBOX, min_year=bad)
+    session.get.assert_not_called()

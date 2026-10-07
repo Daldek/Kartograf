@@ -410,6 +410,15 @@ kartograf cache path
   `FileStorage.list_files()` domyslnie pomija `kampanie/` i wiszace
   dowiazania (`campaigns=True` = tylko `kampanie/`). Bez skanowania
   `kampanie/` w 0.7.0.
+  Awaria skorowidza (I-1): `newest` (bez `--min-year`, bez `--force`) przy
+  bledzie TRANSPORTU `resolve_campaigns` (siec, 429, 5xx; nie
+  `NoCoverageError`, nie inne 4xx/raport OGC) i istniejacej lokalnej
+  kampanii (`linked_campaign(std)`) = arkusz pominiety z lokalnej kampanii,
+  `Warning: <godlo>: skorowidz GUGiK niedostepny — uzyto lokalnej kampanii
+  bez sprawdzenia nowszej (...)` (lista: jedno `Warning:` z godlami), kod
+  bez zmian; biblioteka: `SheetFetch.unverified`/`DownloadResult.unverified`.
+  `all`/`--min-year`/brak lokalnej = blad jak dotad. Biblioteka bez
+  `MetadataCache` pyta skorowidz przy kazdym `download_sheet`.
   Wycinek `--target-crs` + (`--campaigns all` lub `--min-year`) = `Error:`
   kod 1 przed siecia; wycinek zawsze `newest`, czyta arkusze przez
   dowiazania (`run_pl_cutout` nie przyjmuje `campaigns`) i jest pomijany

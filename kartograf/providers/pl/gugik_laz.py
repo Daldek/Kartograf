@@ -622,16 +622,17 @@ class GugikLazProvider(BaseProvider):
         ValueError
             If ``bbox`` is not in EPSG:2180.
         ValidationError
-            Unknown ``campaigns`` or ``year`` together with ``min_year``.
+            Unknown ``campaigns``, invalid ``min_year`` (not an int, bool,
+            outside 1900..2100) or ``year`` together with ``min_year``.
         DownloadError
             If WFS discovery fails, returns unreadable XML or an exception,
             or all returned tiles miss the requested bbox. Partial results
             are never returned.
         """
-        if campaigns not in ("newest", "all"):
-            raise ValidationError(
-                f"nieznana strategia campaigns={campaigns!r} (dozwolone: newest, all)"
-            )
+        # lokalnie: pakiet kartograf.download importuje manager -> providers.pl
+        from kartograf.download.campaigns import validate_campaign_args
+
+        validate_campaign_args(campaigns, min_year)
         if year is not None and min_year is not None:
             raise ValidationError("year i min_year wykluczaja sie")
         if bbox.crs != "EPSG:2180":

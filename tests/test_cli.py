@@ -6659,3 +6659,162 @@ class TestCampaignOptions:
         kwargs = mock_manager_class.call_args.kwargs
         assert kwargs["campaigns"] == "newest"
         assert kwargs["min_year"] is None
+
+    # -------------------------------------------------------------------------
+    # I-1: newest przy awarii skorowidza -> lokalna kampania + Warning
+    # -------------------------------------------------------------------------
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_unverified_local_campaign_warns_single_sheet(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        from kartograf.download.manager import SheetFetch
+
+        path = tmp_path / "a.asc"
+        manager = _mock_manager(path)
+        manager.last_sheet = SheetFetch(
+            "N-34-130-D-d-2-4",
+            path,
+            skipped=True,
+            reused=(tmp_path / "kampanie" / "a.asc",),
+            link="symlink",
+            unverified="pobranie nieudane po 3 probach: HTTP 503",
+        )
+        mock_manager_class.return_value = manager
+
+        rc = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"])
+
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert (
+            "Warning: N-34-130-D-d-2-4: skorowidz GUGiK niedostepny — uzyto "
+            "lokalnej kampanii bez sprawdzenia nowszej "
+            "(pobranie nieudane po 3 probach: HTTP 503)"
+        ) in err
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_verified_single_sheet_has_no_unverified_warning(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        from kartograf.download.manager import SheetFetch
+
+        path = tmp_path / "a.asc"
+        manager = _mock_manager(path)
+        manager.last_sheet = SheetFetch("N-34-130-D-d-2-4", path, skipped=True)
+        mock_manager_class.return_value = manager
+
+        assert main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"]) == 0
+        assert "skorowidz GUGiK niedostepny" not in capsys.readouterr().err
+
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_unverified_local_campaign_warns_in_list_mode(
+        self, mock_manager_class, mock_find, capsys, tmp_path
+    ):
+        godla = ["N-34-130-D-d-2-4", "N-34-130-D-d-2-3"]
+        mock_find.return_value = godla
+        manager = _sheet_list_manager(
+            tmp_path / "a.asc", tmp_path / "b.asc", skipped=godla
+        )
+        manager.last_result.succeeded = []
+        manager.last_result.unverified = {g: "HTTP 503" for g in godla}
+        mock_manager_class.return_value = manager
+
+        rc = main(["download", *_PL_BBOX_2180, "-o", str(tmp_path), "-q"])
+
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert (
+            "Warning: skorowidz GUGiK niedostepny — dla 2 arkuszy uzyto lokalnej "
+            "kampanii bez sprawdzenia nowszej (N-34-130-D-d-2-4, N-34-130-D-d-2-3) "
+            "(HTTP 503)"
+        ) in err
+
+    def test_unverified_end_to_end_with_real_manager(self, capsys, tmp_path):
+        """Prawdziwy ``DownloadManager`` + provider kampanii bez sieci: drugi
+        przebieg przy awarii skorowidza = kod 0 i ``Warning:`` mimo ``-q``."""
+        from tests.test_manager_campaigns import C14, FakeCampaignProvider
+
+        fake = FakeCampaignProvider(C14)
+        godlo = "N-34-139-C-a-3-1"
+        out = tmp_path / "out"
+        argv = ["download", godlo, "-o", str(out), "-q"]
+        with patch(
+            "kartograf.cli.download_cmd._create_provider_and_storage",
+            return_value=(fake, None),
+        ):
+            assert main(argv) == 0
+            fake.resolve_error = DownloadError(
+                "GetFeatureInfo: pobranie nieudane po 3 probach", status_code=503
+            )
+            capsys.readouterr()
+            assert main(argv) == 0
+            err = capsys.readouterr().err
+            assert f"Warning: {godlo}: skorowidz GUGiK niedostepny" in err
+
+            fake.resolve_error = DownloadError("raport wyjatku OGC")
+            assert main(argv) == 1
+            assert "Error:" in capsys.readouterr().err
+
+    # -------------------------------------------------------------------------
+    # M-1: pojedyncze godlo z --campaigns all — linia podsumowania jak lista
+    # -------------------------------------------------------------------------
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_all_single_sheet_summary_counts_campaign_files(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        from kartograf.download.manager import SheetFetch
+
+        path = tmp_path / "a.asc"
+        manager = _mock_manager(path)
+        manager.last_sheet = SheetFetch(
+            "N-34-130-D-d-2-4",
+            path,
+            skipped=False,
+            downloaded=(tmp_path / "k1" / "a.asc", tmp_path / "k2" / "a.asc"),
+            reused=(tmp_path / "k3" / "a.asc",),
+            link="symlink",
+        )
+        mock_manager_class.return_value = manager
+
+        rc = main(
+            ["download", "N-34-130-D-d-2-4", "--campaigns", "all", "-o", str(tmp_path)]
+        )
+
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert (
+            f"Downloaded 2 campaign files for 1 sheets to {tmp_path} "
+            "(1 already existed)"
+        ) in out
+        assert "Downloaded to" not in out
+        assert "Skipped" not in out
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_all_single_sheet_all_local_summary(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        from kartograf.download.manager import SheetFetch
+
+        path = tmp_path / "a.asc"
+        manager = _mock_manager(path)
+        manager.last_sheet = SheetFetch(
+            "N-34-130-D-d-2-4",
+            path,
+            skipped=True,
+            reused=(tmp_path / "k1" / "a.asc", tmp_path / "k2" / "a.asc"),
+            link="symlink",
+        )
+        mock_manager_class.return_value = manager
+
+        rc = main(
+            ["download", "N-34-130-D-d-2-4", "--campaigns", "all", "-o", str(tmp_path)]
+        )
+
+        assert rc == 0
+        out = capsys.readouterr().out
+        assert (
+            f"Downloaded 0 campaign files for 1 sheets to {tmp_path} "
+            "(2 already existed)"
+        ) in out

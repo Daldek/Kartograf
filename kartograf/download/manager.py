@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, cast
 
+import requests
+
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.campaigns import (
     CampaignRef,
@@ -24,7 +26,12 @@ from kartograf.download.campaigns import (
     validate_campaign_args,
     verify_file_format,
 )
-from kartograf.download.links import ensure_standard_link, write_standard_sidecar
+from kartograf.download.links import (
+    LinkOutcome,
+    ensure_standard_link,
+    linked_campaign,
+    write_standard_sidecar,
+)
 from kartograf.download.storage import FileStorage, storage_for_provider
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.base import BaseProvider
@@ -96,6 +103,10 @@ class DownloadResult:
     reused_campaign_files : dict[str, tuple[Path, ...]]
         Podzbior ``campaign_files``: godlo -> pliki kampanii juz lokalne
         (nie pobrane w tym przebiegu). Tor bez kampanii: puste.
+    unverified : dict[str, str]
+        Podzbior ``skipped``: godlo -> blad transportu skorowidza GUGiK,
+        przy ktorym ``newest`` uzyl lokalnej kampanii bez sprawdzenia
+        nowszej (``SheetFetch.unverified``). Inaczej puste.
 
     Notes
     -----
@@ -111,6 +122,7 @@ class DownloadResult:
     campaign_files: dict[str, tuple[Path, ...]] = field(default_factory=dict)
     copied: list[str] = field(default_factory=list)
     reused_campaign_files: dict[str, tuple[Path, ...]] = field(default_factory=dict)
+    unverified: dict[str, str] = field(default_factory=dict)
 
     @property
     def total(self) -> int:
@@ -152,6 +164,11 @@ class SheetFetch:
         Pliki kampanii juz lokalne.
     link : str or None
         ``symlink``/``hardlink``/``copy``; ``None`` = tor bez kampanii.
+    unverified : str or None
+        ``newest``: tresc bledu TRANSPORTU skorowidza GUGiK (siec, 429, 5xx),
+        przy ktorym uzyto istniejacej lokalnej kampanii bez sprawdzenia, czy
+        jest nowsza (``skipped=True``, dowiazanie nietkniete). ``None`` =
+        rekord rozwiazany normalnie.
     """
 
     godlo: str
@@ -160,6 +177,7 @@ class SheetFetch:
     downloaded: tuple[Path, ...] = ()
     reused: tuple[Path, ...] = ()
     link: str | None = None
+    unverified: str | None = None
 
 
 class CampaignProvider(Protocol):
@@ -180,6 +198,21 @@ class CampaignProvider(Protocol):
 
 # Type alias for progress callback
 ProgressCallback = Callable[[DownloadProgress], None]
+
+
+def _is_transport_failure(error: DownloadError) -> bool:
+    """Blad TRANSPORTU (siec, 429, 5xx) wg polityki ``transport/http.py``.
+
+    ``status_code`` niesie kod HTTP ostatniej proby (``http_failure``): 429
+    i 5xx = transport, inne 4xx nie. Bez kodu rozstrzyga przyczyna
+    (``get_with_retry`` rzuca ``... from`` wyjatku ``requests``): blad
+    sieci/timeout. Brak pokrycia (``NoCoverageError``) i bledy tresci
+    odpowiedzi (raport OGC, zly szablon, XML) nie maja ani kodu, ani
+    przyczyny z ``requests`` — nie sa transportem.
+    """
+    if error.status_code is not None:
+        return error.status_code == 429 or error.status_code >= 500
+    return isinstance(error.__cause__, requests.RequestException)
 
 
 class DownloadManager:
@@ -654,12 +687,23 @@ class DownloadManager:
         sidecara albo z obca trescia). Po zebraniu kampanii sciezka
         standardowa wskazuje najnowsza LOKALNA kampanie (``max`` po
         ``sort_key``; ``ensure_standard_link`` nigdy nie cofa dowiazania).
+        Istniejacy plik kampanii BEZ sidecara (R22: przerwanie przed jego
+        zapisem) przechodzi ``verify_file_format`` przed odtworzeniem
+        sidecara; niezgodna tresc = plik usuniety + porazka kampanii.
 
         Wspolbieznosc: dowiazanie jest ustawiane RAZ na arkusz, po zebraniu
         wszystkich jego kampanii, a ``expand_sheets`` deduplikuje godla —
         jeden arkusz = jeden watek. Bezpieczenstwo w jednym wywolaniu
         managera wynika wiec ze struktury, nie z blokady (blokad nie ma);
         wyscig miedzy procesami opisuje ``ensure_standard_link``.
+
+        Awaria skorowidza (I-1): ``newest`` bez ``min_year`` przy
+        ``skip_existing``, gdy ``resolve_campaigns`` konczy sie bledem
+        TRANSPORTU (``_is_transport_failure``), a sciezka standardowa wskazuje
+        istniejaca lokalna kampanie (``linked_campaign``) — NIE porazka:
+        ``logger.warning`` i ``SheetFetch(skipped=True, unverified=<blad>)``
+        z lokalnej kampanii, dowiazanie bez zmian. ``all``, ``min_year``,
+        ``--force``, brak lokalnej kampanii albo inny blad — wyjatek jak dotad.
 
         Raises
         ------
@@ -672,9 +716,21 @@ class DownloadManager:
             a dowiazanie wskazuje najnowsza z nich.
         """
         std = self._storage.get_path(godlo, self._default_ext)
-        records = self._campaign_provider.resolve_campaigns(
-            godlo, campaigns=self._campaigns, min_year=self._min_year
-        )
+        try:
+            records = self._campaign_provider.resolve_campaigns(
+                godlo, campaigns=self._campaigns, min_year=self._min_year
+            )
+        except DownloadError as e:
+            if (
+                self._campaigns == "newest"
+                and self._min_year is None
+                and skip_existing
+                and _is_transport_failure(e)
+            ):
+                fetch = self._local_newest(godlo, std, e)
+                if fetch is not None:
+                    return fetch
+            raise
         logger.info("%s: %d kampanii (%s)", godlo, len(records), self._campaigns)
         downloaded: list[Path] = []
         reused: list[Path] = []
@@ -697,6 +753,12 @@ class DownloadManager:
                 if path.with_name(path.name + ".meta.json").exists():
                     self._note_reuse(path)
                 else:  # R22: proces przerwany przed sidecarem — odtworz
+                    try:  # tresc niesprawdzona (przerwanie przed weryfikacja)
+                        verify_file_format(path, ext)
+                    except DownloadError as e:
+                        path.unlink(missing_ok=True)
+                        errors.append((ref.dirname, e))
+                        continue
                     try:
                         self._write_campaign_sidecar(path, godlo, record, ref)
                     except DownloadError as e:
@@ -735,10 +797,7 @@ class DownloadManager:
             else:
                 method = outcome.method
                 if not outcome.changed:
-                    std_sidecar = std.with_name(std.name + ".meta.json")
-                    if std_sidecar.is_symlink():  # nigdy zapis "przez" dowiazanie
-                        write_standard_sidecar(std, outcome.target, outcome.method)
-                    self._note_reuse(std)
+                    self._note_standard_reuse(std, outcome)
         if errors or link_error is not None:  # Q10: pelna lista porazek
             problems = []
             if errors:
@@ -756,6 +815,46 @@ class DownloadManager:
             downloaded=tuple(downloaded),
             reused=tuple(reused),
             link=method,
+        )
+
+    def _note_standard_reuse(self, std: Path, outcome: LinkOutcome) -> None:
+        """Dowiazanie bez zmian: sidecar standardowy jako zwykly plik + N4."""
+        std_sidecar = std.with_name(std.name + ".meta.json")
+        if std_sidecar.is_symlink():  # nigdy zapis "przez" dowiazanie
+            write_standard_sidecar(std, outcome.target, outcome.method)
+        self._note_reuse(std)
+
+    def _local_newest(
+        self, godlo: str, std: Path, error: DownloadError
+    ) -> SheetFetch | None:
+        """I-1: lokalna kampania ``newest``, gdy skorowidz GUGiK niedostepny.
+
+        ``None`` = brak lokalnej kampanii (brak pliku, wiszace dowiazanie,
+        stary zwykly plik) — wolajacy zglasza pierwotny blad. Dowiazanie NIE
+        jest przestawiane: ``ensure_standard_link`` z biezacym celem i
+        najnizszym kluczem zwraca je bez zmian (odtwarza najwyzej brakujacy
+        sidecar standardowy).
+        """
+        target = linked_campaign(std)
+        if target is None:
+            return None
+        try:
+            outcome = ensure_standard_link(std, target, ("", "", ""))
+        except OSError:
+            return None
+        logger.warning(
+            f"{godlo}: skorowidz GUGiK niedostepny ({error}) — uzyto lokalnej "
+            f"kampanii {outcome.target} bez sprawdzenia nowszej"
+        )
+        self._note_reuse(outcome.target)
+        self._note_standard_reuse(std, outcome)
+        return SheetFetch(
+            godlo,
+            std,
+            skipped=True,
+            reused=(outcome.target,),
+            link=outcome.method,
+            unverified=str(error),
         )
 
     def _download_single_sheet_task(
@@ -809,6 +908,8 @@ class DownloadManager:
                 result.reused_campaign_files[godlo] = fetch.reused
             if fetch.link == "copy":
                 result.copied.append(godlo)
+            if fetch.unverified is not None:
+                result.unverified[godlo] = fetch.unverified
         elif status in ("failed", "no_coverage"):
             # R5: brak danych u zrodla — porazka listy, ale rozpoznawalna
             result.failed.append(godlo)
@@ -1117,7 +1218,9 @@ class DownloadManager:
             if request in seen:
                 return
             extra["parent_requests"] = [*seen, request]
-            tmp = sidecar.with_name(f"{sidecar.name}.{os.getpid()}.tmp")
+            tmp = sidecar.with_name(
+                f"{sidecar.name}.{os.getpid()}_{threading.get_ident()}.tmp"
+            )
             tmp.write_text(
                 json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
                 encoding="utf-8",
