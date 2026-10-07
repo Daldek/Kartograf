@@ -1703,3 +1703,96 @@ class TestBdot10kDefaultTimeout:
             .default
         )
         assert default == Bdot10kProvider.DEFAULT_TIMEOUT == 120
+
+
+def _make_layer_gpkg(path, table, value):
+    conn = sqlite3.connect(str(path))
+    c = conn.cursor()
+    c.execute(
+        "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+        "identifier TEXT, description TEXT, last_change TEXT, "
+        "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+    )
+    c.execute(
+        "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+        "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+    )
+    c.execute(f"CREATE TABLE {table} (id INTEGER PRIMARY KEY, name TEXT)")
+    c.execute(f"INSERT INTO {table} VALUES (1, '{value}')")
+    conn.commit()
+    conn.close()
+
+
+class TestBdot10kMergeOnNetworkShare:
+    """CIFS/SMB bez nobrl: SQLite nie moze pisac w katalogu wyjsciowym."""
+
+    def _patch_locked_in(self, monkeypatch, out_dir):
+        real_connect = sqlite3.connect
+
+        def fake_connect(database, *a, **kw):
+            if Path(str(database)).resolve().is_relative_to(out_dir.resolve()):
+                raise sqlite3.OperationalError("database is locked")
+            return real_connect(database, *a, **kw)
+
+        monkeypatch.setattr(sqlite3, "connect", fake_connect)
+
+    def test_merge_succeeds_when_sqlite_locked_in_output_dir(
+        self, tmp_path, monkeypatch
+    ):
+        src = tmp_path / "src"
+        src.mkdir()
+        out_dir = tmp_path / "share"
+        out_dir.mkdir()
+        g1, g2 = src / "one.gpkg", src / "two.gpkg"
+        _make_layer_gpkg(g1, "PTLZ", "forest")
+        _make_layer_gpkg(g2, "PTWP", "water")
+        self._patch_locked_in(monkeypatch, out_dir)
+
+        output = out_dir / "merged.gpkg"
+        Bdot10kProvider()._merge_gpkg_files([g1, g2], output)
+
+        monkeypatch.undo()
+        assert output.exists()
+        conn = sqlite3.connect(str(output))
+        tables = {
+            r[0]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        conn.close()
+        assert {"PTLZ", "PTWP"} <= tables
+        assert [p.name for p in out_dir.iterdir()] == ["merged.gpkg"]
+
+    def test_no_leftovers_on_failure(self, tmp_path, monkeypatch):
+        import tempfile
+
+        src = tmp_path / "src"
+        src.mkdir()
+        out_dir = tmp_path / "share"
+        out_dir.mkdir()
+        g1, g2 = src / "one.gpkg", src / "two.gpkg"
+        _make_layer_gpkg(g1, "PTLZ", "forest")
+        _make_layer_gpkg(g2, "PTWP", "water")
+
+        work_dirs = []
+        real_tmpdir = tempfile.TemporaryDirectory
+
+        class SpyTmp(real_tmpdir):
+            def __init__(self, *a, **kw):
+                super().__init__(*a, **kw)
+                work_dirs.append(Path(self.name))
+
+        monkeypatch.setattr(tempfile, "TemporaryDirectory", SpyTmp)
+
+        def boom(self, target):
+            # final_tmp juz istnieje (kopia po scaleniu) - awaria podmiany
+            assert self.exists()
+            raise OSError("replace failed")
+
+        monkeypatch.setattr(Path, "replace", boom)
+
+        with pytest.raises(OSError, match="replace failed"):
+            Bdot10kProvider()._merge_gpkg_files([g1, g2], out_dir / "merged.gpkg")
+
+        assert list(out_dir.glob("*.tmp")) == []
+        assert list(out_dir.iterdir()) == []
+        assert len(work_dirs) == 1 and not work_dirs[0].exists()
