@@ -455,7 +455,8 @@ kartograf/
 ├── __init__.py           # Public API exports
 ├── exceptions.py         # KartografError, ParseError, ValidationError, DownloadError, NoCoverageError
 ├── core/                 # Logika bazowa
-│   ├── sheet_parser.py      # SheetParser — parser godeł map topograficznych, BBox
+│   ├── bbox.py              # BBox, validate_bbox, transform_bbox, is_czech_crs
+│   ├── sheet_parser.py      # SheetParser — parser godeł map topograficznych
 │   ├── parser_2000.py       # Parser2000 — parser godeł PL-2000
 │   ├── parser_tm33.py       # ParserTM33 — obliczalna siatka kafli CZ 2x2 km (EPSG:3045)
 │   ├── parser_registry.py   # Rejestr systemów godeł (pl1992, pl2000, cz_tm33, cz_sm5)
@@ -481,7 +482,7 @@ kartograf/
 │   │   └── __init__.py          # create_nmt_provider() — fabryka domyślnych NMT
 │   ├── cuzk/                  # Providery czeskie (CUZK, etap 1)
 │   │   ├── client.py            # CuzkClient — silnik sterowany deskryptorem (ArcGIS REST + openzu)
-│   │   ├── sheets.py            # SheetIndex/SheetInfo/Sm5Sheet — indeks arkuszy SM5/TM33
+│   │   ├── sheets.py            # SheetIndex/SheetInfo — indeks arkuszy SM5/TM33
 │   │   ├── dmr.py               # CuzkDmrProvider — DMR 5G/4G
 │   │   └── __init__.py          # create_dmr_provider() — fabryka domyślnych CZ
 │   ├── corine.py             # CorineProvider

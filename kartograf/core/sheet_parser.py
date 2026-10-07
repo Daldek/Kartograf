@@ -10,28 +10,15 @@ from __future__ import annotations
 
 import math
 import re
-from typing import NamedTuple
-
-from pyproj import Transformer
 
 from kartograf.core import parser_registry
+from kartograf.core.bbox import BBox, transform_bbox, validate_bbox
 from kartograf.exceptions import ParseError, ValidationError
 
 
 def _is_pl2000_format(godlo: str) -> bool:
     """Check if godlo uses PL-2000 dot-separated numeric format (via registry)."""
-    system = parser_registry.detect_system(godlo)
-    return system is not None and system.id == "pl2000"
-
-
-class BBox(NamedTuple):
-    """Bounding box z współrzędnymi i układem odniesienia."""
-
-    min_x: float
-    min_y: float
-    max_x: float
-    max_y: float
-    crs: str
+    return parser_registry.detect_system(godlo).id == "pl2000"
 
 
 class SheetParser:
@@ -656,28 +643,11 @@ class SheetParser:
             )
 
         if crs == "EPSG:2180":
-            # Transformacja WGS84 → PL-1992
-            transformer = Transformer.from_crs("EPSG:4326", "EPSG:2180", always_xy=True)
-
-            # Transformuj wszystkie 4 rogi i znajdź min/max
-            corners_wgs84 = [
-                (west, south),  # SW
-                (west, north),  # NW
-                (east, south),  # SE
-                (east, north),  # NE
-            ]
-
-            corners_2180 = [
-                transformer.transform(lon, lat) for lon, lat in corners_wgs84
-            ]
-
-            min_x = min(c[0] for c in corners_2180)
-            max_x = max(c[0] for c in corners_2180)
-            min_y = min(c[1] for c in corners_2180)
-            max_y = max(c[1] for c in corners_2180)
-
-            return BBox(
-                min_x=min_x, min_y=min_y, max_x=max_x, max_y=max_y, crs="EPSG:2180"
+            # Gesta obwiednia (core.bbox): przy arkuszach przecinajacych 19E
+            # 4 narozniki zawyzaly dolna krawedz (N-34: ~468 m)
+            return transform_bbox(
+                BBox(min_x=west, min_y=south, max_x=east, max_y=north, crs="EPSG:4326"),
+                "EPSG:2180",
             )
 
         raise ValidationError(
@@ -924,61 +894,6 @@ def _bboxes_intersect(a: BBox, b: BBox) -> bool:
     )
 
 
-# Poludnik osiowy PUWG 1992 (EPSG:2180): false easting 500 000 m <=> 19°E.
-_PL1992_CENTRAL_X = 500_000.0
-
-
-def _transform_bbox_to_wgs84(bbox: BBox) -> BBox:
-    """
-    Transformuje BBox z EPSG:2180 do EPSG:4326.
-
-    Narozniki NIE wystarczaja: w PUWG 1992 rownolezniki sa lukami i wzdluz
-    linii stalego y szerokosc geograficzna jest NAJWIEKSZA na poludniku
-    osiowym (x = 500 000 m, 19°E), malejac monotonicznie z odlegloscia od
-    niego. Dla bboxa przecinajacego ten poludnik obwiednia z 4 naroznikow
-    gubila pas przy gornej krawedzi (zmierzone 2026-09-28: 6 arkuszy 1:10000
-    dla bboxa szerokiego na 20 km; pas rosnie z kwadratem szerokosci, ~63 m
-    przy 50 km). Punkt na poludniku osiowym na GORNEJ krawedzi daje maksimum
-    szerokosci dokladnie (to on gubil arkusze); na DOLNEJ krawedzi minimum
-    szerokosci i tak wypada w naroznikach — dodatkowy punkt tam jest
-    niegrozny, ale nie zmienia wyniku (P-15). Dlugosc geograficzna i
-    krawedzie pionowe maja ekstrema w naroznikach.
-
-    Parameters
-    ----------
-    bbox : BBox
-        Bbox w EPSG:2180
-
-    Returns
-    -------
-    BBox
-        Bbox w EPSG:4326 (min_x=west_lon, min_y=south_lat, ...)
-    """
-    transformer = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
-
-    points_2180 = [
-        (bbox.min_x, bbox.min_y),  # SW
-        (bbox.min_x, bbox.max_y),  # NW
-        (bbox.max_x, bbox.min_y),  # SE
-        (bbox.max_x, bbox.max_y),  # NE
-    ]
-    if bbox.min_x < _PL1992_CENTRAL_X < bbox.max_x:
-        points_2180 += [
-            (_PL1992_CENTRAL_X, bbox.min_y),
-            (_PL1992_CENTRAL_X, bbox.max_y),
-        ]
-
-    points_4326 = [transformer.transform(x, y) for x, y in points_2180]
-
-    return BBox(
-        min_x=min(p[0] for p in points_4326),
-        min_y=min(p[1] for p in points_4326),
-        max_x=max(p[0] for p in points_4326),
-        max_y=max(p[1] for p in points_4326),
-        crs="EPSG:4326",
-    )
-
-
 def find_sheets_for_bbox(
     bbox: BBox,
     target_scale: str = "1:10000",
@@ -1016,12 +931,15 @@ def find_sheets_for_bbox(
     Raises
     ------
     ValidationError
-        Jeśli system, target_scale lub CRS jest nieobsługiwany
+        Jeśli system, target_scale lub CRS jest nieobsługiwany, a także dla
+        bboxa odwróconego (min > max) lub z wartością NaN/inf
     """
     if system not in ("1992", "2000"):
         raise ValidationError(
             f"Nieobsługiwany system godeł: {system!r}. Dozwolone: '1992', '2000'"
         )
+
+    validate_bbox(bbox)
 
     if system == "2000":
         from kartograf.core.parser_2000 import find_sheets_2000_for_bbox
@@ -1039,8 +957,10 @@ def find_sheets_for_bbox(
             f"Nieobsługiwany CRS: '{bbox.crs}'. Obsługiwane: EPSG:2180, EPSG:4326"
         )
 
-    # Normalizuj do WGS84
-    wgs_bbox = _transform_bbox_to_wgs84(bbox) if bbox.crs == "EPSG:2180" else bbox
+    # Normalizuj do WGS84. Gesta obwiednia (core.bbox): w PUWG 1992 linia
+    # stalego y ma maksimum szerokosci na poludniku osiowym (x = 500 000 m,
+    # 19E), wiec 4 narozniki gubily pas przy gornej krawedzi (2026-09-28).
+    wgs_bbox = transform_bbox(bbox, "EPSG:4326")
     # Punkt/włos: rozszerz o eps po stronie MAX, żeby dać dokładnie jeden arkusz
     wgs_bbox = _expand_degenerate(wgs_bbox, _DEGENERATE_EPS_DEG)
 

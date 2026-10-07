@@ -113,6 +113,60 @@ class TestCreateParser:
         assert args.descendants == "1:10000"
 
 
+class TestParseBboxArg:
+    """K7a: cli._parser.parse_bbox_arg — jedno parsowanie --bbox."""
+
+    def test_valid_with_spaces(self):
+        from kartograf.cli._parser import parse_bbox_arg
+
+        bbox = parse_bbox_arg(" 1, 2 ,3,4", "EPSG:2180")
+        assert tuple(bbox) == (1.0, 2.0, 3.0, 4.0, "EPSG:2180")
+
+    def test_point_allowed(self):
+        from kartograf.cli._parser import parse_bbox_arg
+
+        assert parse_bbox_arg("5,5,5,5", "EPSG:4326").crs == "EPSG:4326"
+
+    @pytest.mark.parametrize(
+        ("text", "reason"),
+        [
+            ("1,2,3", "expected 4 comma-separated values, got 3"),
+            ("1,2,3,4,", "expected 4 comma-separated values, got 5"),
+            ("1;2;3;4", "got 1"),
+            ("a,2,3,4", "'a' is not a number"),
+            ("10,10,5,5", "min > max"),
+            ("1,10,5,5", "min > max"),
+            ("nan,1,2,3", "skonczone"),
+            ("1,2,inf,4", "skonczone"),
+        ],
+    )
+    def test_invalid(self, text, reason):
+        from kartograf.cli._parser import parse_bbox_arg
+
+        with pytest.raises(ValidationError) as exc:
+            parse_bbox_arg(text, "EPSG:2180")
+        msg = str(exc.value)
+        assert msg.startswith("Invalid bbox format: ")
+        assert reason in msg
+        assert "Expected: min_x,min_y,max_x,max_y" in msg
+
+
+class TestCreateParserGodloStrip:
+    """K5: argparse nie obcina bialych znakow — godlo jest obcinane na wejsciu,
+    zanim rejestr systemow rozstrzygnie kraj i zanim powstanie nazwa pliku."""
+
+    @pytest.mark.parametrize("raw", [" 302_5550", "302_5550 ", "\t302_5550\n"])
+    def test_download_godlo_stripped(self, raw):
+        assert create_parser().parse_args(["download", raw]).godlo == "302_5550"
+
+    def test_parse_godlo_stripped(self):
+        assert create_parser().parse_args(["parse", " N-34 "]).godlo == "N-34"
+
+    def test_download_without_godlo_still_none(self):
+        args = create_parser().parse_args(["download", "--bbox", "1,2,3,4"])
+        assert args.godlo is None
+
+
 class TestFormatSheetInfo:
     """Tests for format_sheet_info()."""
 
@@ -2033,6 +2087,20 @@ class TestCmdSoilgrids:
         assert result == 1
         captured = capsys.readouterr()
         assert "Error" in captured.err
+
+    @pytest.mark.parametrize(
+        "bbox", ["invalid", "10,10,5,5", "nan,1,2,3", "1,2,-inf,4", "1,2,3"]
+    )
+    def test_soilgrids_hsg_rejects_bad_bbox(self, bbox, capsys, tmp_path):
+        """K7a: zly --bbox -> Error na stderr, kod 1, kalkulator nie startuje."""
+        with patch("kartograf.hydrology.HSGCalculator") as calc_cls:
+            result = main(["soilgrids", "hsg", f"--bbox={bbox}", "-o", str(tmp_path)])
+        assert result == 1
+        calc_cls.return_value.calculate_hsg_by_bbox.assert_not_called()
+        captured = capsys.readouterr()
+        assert "Error: Invalid bbox format" in captured.err
+        assert "ValueError" not in captured.err
+        assert "Expected" not in captured.out
 
     def test_soilgrids_hsg_no_selection(self, capsys):
         """soilgrids hsg without --godlo or --bbox -> exit 1."""

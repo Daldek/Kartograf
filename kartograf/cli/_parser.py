@@ -8,7 +8,55 @@ subcommand parsers (parse, download, landcover, soilgrids, cache).
 import argparse
 
 from kartograf import __version__
+from kartograf.core.bbox import BBox, validate_bbox
 from kartograf.download.cutout import SUPPORTED_TARGET_CRS
+from kartograf.exceptions import ValidationError
+
+_BBOX_EXPECTED = "Expected: min_x,min_y,max_x,max_y (e.g., 450000,550000,460000,560000)"
+
+
+def parse_bbox_arg(text: str, crs: str) -> BBox:
+    """
+    Parsuje wartosc ``--bbox`` (``"min_x,min_y,max_x,max_y"``) do ``BBox``.
+
+    Jeden komunikat dla kazdej wady wejscia — wolajacy nie lapia wyjatku:
+    ``ValidationError`` jest ``KartografError``, wiec ``main`` drukuje
+    ``Error: ...`` na stderr i zwraca 1 (podpowiedz razem z bledem, nie
+    na stdout).
+
+    Parameters
+    ----------
+    text : str
+        Wartosc argumentu; biale znaki wokol liczb sa dozwolone
+    crs : str
+        Uklad, w ktorym podano wspolrzedne
+
+    Raises
+    ------
+    ValidationError
+        ``Invalid bbox format: <powod>. Expected: ...`` dla liczby wartosci
+        innej niz 4, wartosci nienumerycznej, NaN/inf albo ``min > max``
+        (``core.bbox.validate_bbox``; bbox-punkt jest dozwolony).
+    """
+    parts = text.split(",")
+    if len(parts) != 4:
+        reason = f"expected 4 comma-separated values, got {len(parts)}"
+        raise ValidationError(f"Invalid bbox format: {reason}. {_BBOX_EXPECTED}")
+    values = []
+    for part in parts:
+        try:
+            values.append(float(part.strip()))
+        except ValueError:
+            reason = f"{part.strip()!r} is not a number"
+            raise ValidationError(
+                f"Invalid bbox format: {reason}. {_BBOX_EXPECTED}"
+            ) from None
+    bbox = BBox(values[0], values[1], values[2], values[3], crs)
+    try:
+        validate_bbox(bbox)
+    except ValidationError as e:
+        raise ValidationError(f"Invalid bbox format: {e}. {_BBOX_EXPECTED}") from e
+    return bbox
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -45,6 +93,7 @@ def create_parser() -> argparse.ArgumentParser:
     )
     parse_parser.add_argument(
         "godlo",
+        type=str.strip,
         help="Map sheet identifier (e.g., N-34-130-D, N-34-130-D-d-2-4)",
     )
     parse_parser.add_argument(
@@ -82,6 +131,9 @@ def create_parser() -> argparse.ArgumentParser:
         "godlo",
         nargs="?",
         default=None,
+        # argparse nie obcina bialych znakow; godlo z odstepem trafialoby do
+        # rejestru systemow i do nazwy pliku (ocena parserow 2026-10-07, K5)
+        type=str.strip,
         help="Map sheet identifier (e.g., N-34-130-D-d-2-4)",
     )
     download_parser.add_argument(
