@@ -287,7 +287,11 @@ def _run_cz(
 
 
 def _print_transform_error(error: Exception) -> int:
-    """Komunikat bledu transformacji (z remedium, gdy jest); zawsze zwraca 1."""
+    """Komunikat bledu transformacji (z remedium, gdy jest); zawsze zwraca 1.
+
+    Jedyne miejsce formatu ``Error: <blad> Remedium: <remedium>`` w CLI;
+    wyjatek bez atrybutu ``remedy`` daje samo ``Error: <blad>``.
+    """
     remedy = getattr(error, "remedy", None)
     print(
         f"Error: {error}" + (f" Remedium: {remedy}" if remedy else ""),
@@ -818,10 +822,7 @@ def _resolve_cz_geometry_bbox(args: argparse.Namespace) -> BBox | None:
             return BBox(bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y, image_sr)
         return bbox_to_crs(bbox, image_sr)
     except (ValidationError, ValueError, TransformError) as e:
-        remedy = getattr(e, "remedy", None)
-        print(
-            f"Error: {e}" + (f" Remedium: {remedy}" if remedy else ""), file=sys.stderr
-        )
+        _print_transform_error(e)
         return None
 
 
@@ -1994,10 +1995,7 @@ def _cmd_download_cz(
                 vertical_crs=vertical_crs,
             )
         except TransformError as e:
-            remedy = getattr(e, "remedy", None)
-            message = f"Error: {e}" + (f" Remedium: {remedy}" if remedy else "")
-            print(message, file=sys.stderr)
-            return 1
+            return _print_transform_error(e)
         except ValidationError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1

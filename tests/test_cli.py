@@ -3640,6 +3640,40 @@ class TestCmdDownloadCz:
         assert "Traceback" not in captured.err
         assert not list(tmp_path.rglob("*.tif"))
 
+    def test_provider_factory_transform_error_reports_remedy(self, tmp_path, capsys):
+        """D6: TransformError z konstruktora providera (operacja dla
+        ``--target-crs``) — ten sam format ``Error: ... Remedium: ...`` co
+        pozostale tory CLI, kod 1, bez tracebacku."""
+        from kartograf.transform.crs import TransformUnavailableError
+
+        boom = TransformUnavailableError(
+            "Brak bezpiecznej operacji transformacji EPSG:5514 -> EPSG:3045",
+            remedy="zainstaluj siatki recznie do PROJ_DATA",
+        )
+        with patch(_CZ_FACTORY_PATCH, side_effect=boom):
+            result = main(
+                [
+                    "download",
+                    "--bbox=-447000,-1114000,-446000,-1113000",
+                    "--bbox-crs",
+                    "EPSG:5514",
+                    "--country",
+                    "cz",
+                    "--target-crs",
+                    "EPSG:3045",
+                    "-o",
+                    str(tmp_path),
+                ]
+            )
+
+        assert result == 1
+        err = capsys.readouterr().err
+        assert (
+            "Error: Brak bezpiecznej operacji transformacji EPSG:5514 -> EPSG:3045 "
+            "Remedium: zainstaluj siatki recznie do PROJ_DATA"
+        ) in err
+        assert "Traceback" not in err
+
     def test_target_crs_with_godlo_rejected(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
