@@ -437,7 +437,7 @@ utworzeniu.
 | Stan | Zachowanie |
 |---|---|
 | zwykly plik NMT/NMPT/orto w sciezce standardowej (stary uklad bez `kampanie/`) | traktowany jako nieznany (brak migracji); przy pierwszym `newest` kampania jest pobierana do `kampanie/`, a zwykly plik (z sidecarem) ZASTEPOWANY dowiazaniem |
-| dowiazanie w sciezce standardowej | cel = najnowsza lokalna kampania; kolejne `newest`/`all` przestawia je tylko na NOWSZA |
+| dowiazanie w sciezce standardowej | cel = najnowsza lokalna kampania; kolejne `newest`/`all` przestawiaja je tylko na kampanie o kluczu `(aktualnosc, dt_pzgik, url)` scisle wiekszym niz klucz biezacego celu (ten sam cel albo klucz rowny/wiekszy = bez zmian; klucz z sidecara celu, a gdy nieczytelny z nazwy katalogu `<data>_<id>`) |
 | wiszace dowiazanie (cel usuniety) | brak pliku — pobranie od nowa |
 
 ### 4.1 Godlo PL (NMT/NMPT/Orto)
@@ -450,8 +450,8 @@ PL-1992 grubsze niz 1:10000 rozwija sie do arkuszy 1:10000
 kazdego arkusza pyta WMS skorowidz (`GetFeatureInfo`, warstwy wykryte lazy
 przez `GetCapabilities` — ADR-020). `providers/pl/skorowidz.py` parsuje
 pelne rekordy; filtruje cale godlo, zgodny uklad i rozdzielczosc
-(dla orto tez domyslnie RGB), wybiera (`newest`) najnowsza date w pierwszej warstwie
-z dopasowaniem; remis rozstrzyga `dt_pzgik`, URL. Brak zgodnego rekordu
+(dla orto tez domyslnie RGB), wybiera (strategia `newest`) rekord z najnowsza data w pierwszej
+warstwie z dopasowaniem; remis rozstrzyga `dt_pzgik`, URL. Brak zgodnego rekordu
 po poprawnych odpowiedziach warstw = `NoCoverageError`, np. dla PL-2000
 1:10000 z samymi potomkami podpowiedz `--scale 1:2000`. Awaria warstwy,
 raport OGC albo nieoczekiwany szablon = `DownloadError`, nie cichy fallback
@@ -939,8 +939,11 @@ jeden `FileStorage` wystarcza na cale zadanie. W trybie obszarowym
 `--country pl` (LAZ dla CZ to etap 2).
 
 **Kampanie LAZ (ADR-030).** `--campaigns newest` (domyslnie) = ADR-029
-bez zmian. `--campaigns all` = wszystkie kafle przecinajace obszar, bez
-deduplikacji pokryciowej (`superseded` puste). `--min-year RRRR` = dolna
+bez zmian. `--campaigns all` = wszystkie kafle, ktorych rama
+(`footprint`) przecina obszar, bez deduplikacji pokryciowej
+(`select_all_intersecting`); kafel, ktorego przecina obszar tylko obwiednia
+z WFS (rama bez czesci wspolnej), jest pomijany jak dotad i trafia do
+`superseded` z pusta lista pokrywajacych (powod "outside"). `--min-year RRRR` = dolna
 granica `akt_rok` (obie strategie; `download_laz_area(campaigns=, min_year=)`);
 `--min-year` z `--year` wykluczaja sie (`Error: --min-year i --year
 wykluczaja sie (LAZ)`, kod 1; w bibliotece `ValidationError`). Uklad LAZ
