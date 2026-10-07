@@ -858,3 +858,62 @@ class TestStorageVariant:
     def test_invalid_variant_rejected(self, tmp_path, variant):
         with pytest.raises(ValidationError, match="wariant"):
             FileStorage(tmp_path, product="orto", variant=variant)
+
+
+class TestStorageForProvider:
+    """D18: jedyna fabryka FileStorage segmentu providera."""
+
+    G = "N-34-130-D-d-2-4"
+
+    def _segment(self, storage, tmp_path, ext=".asc"):
+        return storage.get_path(self.G, ext).relative_to(tmp_path).parts[:2]
+
+    def test_without_provider_uses_nmt_resolution_template(self, tmp_path):
+        from kartograf.download.storage import storage_for_provider
+
+        storage = storage_for_provider(tmp_path, resolution="5m")
+        assert self._segment(storage, tmp_path) == ("nmt", "pl_1992_5m_evrf2007")
+
+    def test_descriptor_segment_and_provider_vertical_win(self, tmp_path):
+        """Pion FAKTYCZNY providera wygrywa z argumentem wolajacego."""
+        from types import SimpleNamespace
+
+        from kartograf.download.storage import storage_for_provider
+
+        provider = SimpleNamespace(
+            descriptor_key="pl.gugik.nmpt", vertical_crs="KRON86"
+        )
+        storage = storage_for_provider(tmp_path, provider, vertical_crs="EVRF2007")
+        assert self._segment(storage, tmp_path) == ("nmpt", "pl_1992_1m_kron86")
+
+    def test_variant_suffix(self, tmp_path):
+        from types import SimpleNamespace
+
+        from kartograf.download.storage import storage_for_provider
+
+        provider = SimpleNamespace(
+            descriptor_key="pl.gugik.orto", vertical_crs=None, storage_variant="cir"
+        )
+        storage = storage_for_provider(tmp_path, provider)
+        assert self._segment(storage, tmp_path, ".tif") == ("orto", "pl_1992_cir")
+
+    def test_cz_descriptor_segment(self, tmp_path):
+        from types import SimpleNamespace
+
+        from kartograf.download.storage import storage_for_provider
+
+        provider = SimpleNamespace(descriptor_key="cz.cuzk.dmr5g", vertical_crs="Bpv")
+        storage = storage_for_provider(tmp_path, provider)
+        assert storage._subdir == "nmt/cz_dmr5g_bpv"
+
+    def test_mock_attributes_are_ignored(self, tmp_path):
+        """Mock(spec=...) daje Mock zamiast str — fallback na argumenty."""
+        from unittest.mock import Mock
+
+        from kartograf.download.storage import storage_for_provider
+        from kartograf.providers.pl.gugik import GugikProvider
+
+        storage = storage_for_provider(
+            tmp_path, Mock(spec=GugikProvider), vertical_crs="KRON86"
+        )
+        assert self._segment(storage, tmp_path) == ("nmt", "pl_1992_1m_kron86")

@@ -1224,8 +1224,8 @@ class TestCreateProviderAndStorage:
             "nmt", tmp_path, "EVRF2007", "1m"
         )
         assert isinstance(provider, GugikProvider)
-        assert storage._product is None
         assert storage._resolution == "1m"
+        assert storage._subdir == "nmt/pl_{uklad}_1m_evrf2007"
 
     def test_nmpt_creates_nmpt_provider(self, tmp_path):
         """Test that nmpt creates GugikNmptProvider."""
@@ -1236,7 +1236,7 @@ class TestCreateProviderAndStorage:
             "nmpt", tmp_path, "EVRF2007", "1m"
         )
         assert isinstance(provider, GugikNmptProvider)
-        assert storage._product == "nmpt"
+        assert storage._subdir == "nmpt/pl_{uklad}_1m_evrf2007"
 
     def test_orto_creates_orto_provider(self, tmp_path):
         """Test that orto creates GugikOrtoProvider."""
@@ -1247,7 +1247,7 @@ class TestCreateProviderAndStorage:
             "orto", tmp_path, "EVRF2007", "1m"
         )
         assert isinstance(provider, GugikOrtoProvider)
-        assert storage._product == "orto"
+        assert storage._subdir == "orto/pl_{uklad}"
 
     def test_laz_product_raises_validation_error(self, tmp_path):
         """LAZ ma osobny przeplyw (_cmd_download_laz) — tu nie ma prawa dotrzec."""
