@@ -23,6 +23,7 @@ from kartograf.providers.pl.bdot10k import (
     WOJEWODZTWO_NAMES,
     Bdot10kProvider,
 )
+from kartograf.transform.bbox import envelope_from_2180
 
 
 class TestLandCoverProviderBase:
@@ -181,7 +182,7 @@ class TestCorineProvider:
         """Test WMS URL construction for EEA endpoint."""
         provider = CorineProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        bounds = provider._transform_bbox_to_epsg3857(bbox)
+        bounds = envelope_from_2180(bbox, "EPSG:3857")
         url = provider._construct_wms_url(bounds, 2018, 100, 100)
         assert "WMS" in url
         assert "GetMap" in url
@@ -192,7 +193,7 @@ class TestCorineProvider:
         """Test WMS URL construction for DLR fallback (1990)."""
         provider = CorineProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        bounds = provider._transform_bbox_to_wgs84(bbox)
+        bounds = envelope_from_2180(bbox, "EPSG:4326")
         url = provider._construct_wms_url(bounds, 1990, 100, 100)
         assert "WMS" in url
         assert "GetMap" in url
@@ -834,6 +835,13 @@ class TestCorineProviderInit:
         assert provider._clms_auth is None
 
 
+def _wms_bbox(url):
+    """Wartosc parametru BBOX z URL GetMap jako cztery liczby."""
+    from urllib.parse import parse_qs, urlparse
+
+    return tuple(float(v) for v in parse_qs(urlparse(url).query)["BBOX"][0].split(","))
+
+
 class TestCorineProviderDownload:
     """Test CorineProvider download methods."""
 
@@ -1017,9 +1025,8 @@ class TestCorineProviderDownload:
 
     def test_transform_bbox_to_wgs84(self):
         """Known EPSG:2180 bbox transforms to WGS84."""
-        provider = CorineProvider(use_proxy=False)
         bbox = BBox(500000, 600000, 510000, 610000, "EPSG:2180")
-        result = provider._transform_bbox_to_wgs84(bbox)
+        result = envelope_from_2180(bbox, "EPSG:4326")
         # Should be roughly in Poland (14-25 E, 49-55 N)
         assert 14 < result[0] < 25  # min_lon
         assert 49 < result[1] < 56  # min_lat
@@ -1028,23 +1035,25 @@ class TestCorineProviderDownload:
 
     def test_transform_bbox_to_epsg3857(self):
         """Known EPSG:2180 bbox transforms to EPSG:3857."""
-        provider = CorineProvider(use_proxy=False)
         bbox = BBox(500000, 600000, 510000, 610000, "EPSG:2180")
-        result = provider._transform_bbox_to_epsg3857(bbox)
+        result = envelope_from_2180(bbox, "EPSG:3857")
         # EPSG:3857 values are in millions for European coordinates
         assert result[0] > 1_000_000
         assert result[2] > result[0]
         assert result[3] > result[1]
 
-    def test_transform_bbox_to_wgs84_covers_all_corners(self):
+    def test_wms_dlr_bbox_covers_all_corners(self, tmp_path):
         """Envelope covers all four corners, not only SW and NE."""
         from pyproj import Transformer
 
         from kartograf.core.sheet_parser import SheetParser
 
-        provider = CorineProvider(use_proxy=False)
         bbox = SheetParser("N-34-130-D").get_bbox("EPSG:2180")
-        min_lon, min_lat, max_lon, max_lat = provider._transform_bbox_to_wgs84(bbox)
+        # tor providera: DLR (1990) wysyla BBOX w EPSG:4326 (WMS 1.1.1, lon/lat)
+        provider = CorineProvider(use_proxy=False)
+        with patch("kartograf.providers.corine.download_to") as dl:
+            provider._download_via_wms(bbox, tmp_path / "x.png", 1990, 30)
+        min_lon, min_lat, max_lon, max_lat = _wms_bbox(dl.call_args.args[1])
 
         transformer = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
         for x, y in (
@@ -1060,15 +1069,18 @@ class TestCorineProviderDownload:
         # Two corners span 0.1657 deg of latitude, the true envelope 0.1830 deg.
         assert max_lat - min_lat > 0.18
 
-    def test_transform_bbox_to_epsg3857_covers_all_corners(self):
+    def test_wms_eea_bbox_covers_all_corners(self, tmp_path):
         """Envelope covers all four corners, not only SW and NE."""
         from pyproj import Transformer
 
         from kartograf.core.sheet_parser import SheetParser
 
-        provider = CorineProvider(use_proxy=False)
         bbox = SheetParser("N-34-130-D").get_bbox("EPSG:2180")
-        min_x, min_y, max_x, max_y = provider._transform_bbox_to_epsg3857(bbox)
+        # tor providera: EEA (2018) wysyla BBOX w EPSG:3857
+        provider = CorineProvider(use_proxy=False)
+        with patch("kartograf.providers.corine.download_to") as dl:
+            provider._download_via_wms(bbox, tmp_path / "x.png", 2018, 30)
+        min_x, min_y, max_x, max_y = _wms_bbox(dl.call_args.args[1])
 
         transformer = Transformer.from_crs("EPSG:2180", "EPSG:3857", always_xy=True)
         for x, y in (
