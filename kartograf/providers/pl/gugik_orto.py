@@ -73,6 +73,7 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     # roku ("Starsze" — GUGiK scalil warstwy 2023..2018 w jedna). Warstwy
     # "SkorowidzeOrtofotomapyZasiegi*" (zasiegi, bez URL-i) nie pasuja do wzorca.
     LAYER_PATTERN = re.compile(r"^SkorowidzeOrtofotomapy(?:(\d{4})|(Starsze))$")
+    LAYER_FAMILY = re.compile(r"^SkorowidzeOrtofotomapy(?!Zasiegi)")
 
     # Wariant koloru pobierany domyslnie; CIR/B-W tylko przez kwarg `color`
     DEFAULT_COLOR = "RGB"

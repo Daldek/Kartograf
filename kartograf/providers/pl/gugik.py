@@ -114,6 +114,8 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
 
     # Nazwy warstw skorowidza tego produktu: grupa 1 = rok, grupa 2 = zbiorcza
     LAYER_PATTERN = re.compile(r"^SkorowidzeNMT(\d{4})(iStarsze)?$")
+    # Rodzina nazw produktu: nazwa z rodziny spoza LAYER_PATTERN daje ostrzezenie
+    LAYER_FAMILY = re.compile(r"^SkorowidzeNMT(?!P)")
 
     # Vertical CRS whose WCS endpoint GUGiK withdrew (HTTP 404 since 2026-08,
     # docs/PROGRESS.md). Applies to the NMT GRID1 endpoints declared above;
