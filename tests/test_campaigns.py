@@ -238,3 +238,12 @@ def test_validate_campaign_args_rejects(campaigns, min_year):
 def test_validate_campaign_args_accepts():
     validate_campaign_args("newest", None)
     validate_campaign_args("all", 2024)
+
+
+def test_verify_file_format_oserror_is_download_error(tmp_path):
+    """M-2: ``OSError`` odczytu (brak pliku, katalog) -> ``DownloadError``."""
+    with pytest.raises(DownloadError, match="missing.asc"):
+        verify_file_format(tmp_path / "missing.asc", ".asc")
+    (tmp_path / "dir.tif").mkdir()
+    with pytest.raises(DownloadError, match="dir.tif"):
+        verify_file_format(tmp_path / "dir.tif", ".tif")
