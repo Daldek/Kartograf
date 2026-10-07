@@ -6,6 +6,89 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.7.0] - Unreleased
+### Kampanie GUGiK 2026-10-07 (ADR-030 + errata 2026-10-07)
+- **BREAKING (układ `data/`):** prawdziwe pliki NMT/NMPT/orto PL leżą
+  wyłącznie w `<segment>/kampanie/<data>_<id>/<hierarchia godła>/<godło>.<ext>`
+  (+ `.meta.json`); ścieżka standardowa `<segment>/<hierarchia>/<godło>.<ext>`
+  jest dowiązaniem do najnowszej lokalnej kampanii (symlink względny, potem
+  hardlink, potem kopia z `Warning:`; `extra.link` = `symlink`/`hardlink`/
+  `copy`; zawsze tylko do kampanii nowszej lub równej obecnemu celowi).
+  Brak migracji: zwykły plik w ścieżce standardowej jest nieznany, pierwsze
+  uruchomienie pobiera go ponownie do `kampanie/` i zastępuje dowiązaniem
+  (z sidecarem). Kopiowanie `data/` wymaga `cp -rL`/`rsync -aL`.
+- **BREAKING (zachowanie):** domyślna strategia `newest` przy każdym
+  uruchomieniu rozwiązuje najnowszy rekord skorowidza (cache `record_cache`
+  7 dni), więc po wygaśnięciu cache pyta sieć i pobiera nowszą kampanię, jeśli
+  się pojawiła; „ponowne uruchomienie bez sieci” działa tylko w oknie cache.
+- **BREAKING (API):** `FileStorage.list_files()` domyślnie zwraca ścieżki
+  standardowe — bez `kampanie/` i bez wiszących dowiązań
+  (`list_files(campaigns=True)` = tylko `kampanie/`).
+- Nowe: `--campaigns {newest,all}` (domyślnie `newest`) i `--min-year RRRR`
+  (1900..2100; granica na roku `aktualnosc`, nie `dt_pzgik`; obie strategie).
+  `all` pobiera każdą kampanię arkusza przechodzącą twardy filtr ADR-028 ze
+  wszystkich warstw, bez limitu liczby kampanii (`logger.info` z liczbą).
+  Rok z nazwy warstwy służy tylko w `all` do pominięcia zapytania; warstwa
+  `Starsze` jest zawsze odpytywana. Rekord bez ustalonego roku nie spełnia
+  `--min-year` (`all`: pominięty; `newest`: `NoCoverageError` „starsza niż
+  min_year”). Podsumowanie `all` (bez `-q`): `Downloaded <n> campaign files
+  for <m> sheets to <dir> (<k> already existed)`.
+- API biblioteki: `DownloadManager(campaigns=, min_year=)`,
+  `DownloadManager.last_sheet` (`SheetFetch`: `godlo`, `path`, `skipped`,
+  `downloaded`, `reused`, `link`), `DownloadResult.campaign_files`,
+  `DownloadResult.reused_campaign_files` (kampanie już lokalne per arkusz)
+  i `DownloadResult.copied`; eksporty `kartograf.CampaignRef`,
+  `kartograf.SheetFetch`; nowe moduły `download/campaigns.py`
+  (`CampaignRef`, `validate_campaign_args`, `verify_file_format`) i
+  `download/links.py`; `FileStorage.get_campaign_path`.
+- Providery PL: `resolve_campaigns`, `download_record`, `record_source`,
+  `_resolve_record(parser, timeout, query)`; skorowidz:
+  `select_campaign_records`, `layer_upper_year`, `LAYER_FAMILY`.
+  Nazwa warstwy GetCapabilities z rodziny produktu, ale spoza wzorca =
+  `logger.warning` (warstwa nie jest odpytywana).
+- Format pliku z pola `format` rekordu (nie z rozszerzenia URL); plik zawsze
+  z rozszerzeniem kanonicznym (`.asc`/`.tif`; rekord 72675 z URL `.xyz` to
+  AAIGrid i jest zwykłą kampanią `.asc`); brak pola (orto, stare wpisy cache)
+  = format domyślny produktu. Po pobraniu weryfikacja po treści (nagłówek
+  AAIGrid / sygnatura TIFF); nieznany format albo niezgodna treść = porażka
+  kampanii (`DownloadError` z nazwą formatu, plik usunięty), nigdy ciche
+  zapisanie pod `.asc`.
+- Sidecar pliku kampanii jest obowiązkowy: `emit_sidecar(required=True)`
+  (zapis atomowy); porażka zapisu = porażka kampanii (plik danych usunięty,
+  dowiązanie nieprzestawione). Pozostałe sidecary zostają best-effort.
+  Sidecar kampanii: `extra.campaign` = `{id, date, zgloszenie, source,
+  full_sheet, dt_pzgik}`, `request.campaigns` zawsze, `request.min_year` tylko
+  gdy podany; sidecar ścieżki standardowej to zwykły plik z `extra.link` i
+  `extra.link_target`.
+- Cache: `MetadataCache` ma tabelę `campaigns_cache` (TTL 7 dni, `--force` =
+  `MetadataCache(refresh=True)`, `--min-year` poza kluczem; po skanie
+  częściowym obsługuje tylko granice ≥ granicy skanu, niższa = ponowny
+  skan); `kartograf cache stats` drukuje `Campaign entries`.
+- Błędy i porażki: komunikat błędu pobrania pliku NMT/NMPT/orto
+  (`DownloadError` z `download_to`) podaje nazwę pliku z URL zamiast godła,
+  np. `84183_1852496_N-34-139-C-a-3-1.asc (OpenData): HTTP 404` (w `all`
+  rozróżnia kampanie). Częściowa porażka `all` na arkuszu (także
+  niepoprawna `aktualnosc` jednej kampanii) = kod 1 z pełną listą; pozostałe
+  kampanie pobrane, dowiązanie na najnowszą poprawną. Porażka dowiązania
+  (nawet kopii) = porażka arkusza; lista idzie dalej także przy `--workers 1`.
+  Wyścig bez blokad: równoległe wywołania na tej samej ścieżce mogą chwilowo
+  zostawić dowiązanie na starszej kampanii (samonaprawa przy kolejnym
+  `newest`/`all`; pliki w `kampanie/` nietknięte).
+- Wycinek PL `--target-crs`: zawsze `newest`, czyta arkusze przez dowiązania
+  (`run_pl_cutout` nie przyjmuje `campaigns`), pomijany po samym istnieniu
+  pliku wyniku; `--campaigns all` lub `--min-year` z `--target-crs` =
+  `Error:` kod 1 przed siecią. Kontrola wolnego miejsca to dolne oszacowanie
+  (D-3).
+- CZ: opcje kampanii dotyczą tylko PL. Zadanie bez PL (godło CZ także pod
+  `auto`, obszar/geometria z jawnym `--country cz`, obszar w całości czeski
+  pod `auto`) = `Error: CZ (CUZK) nie ma kampanii — --campaigns
+  all/--min-year dotyczą tylko PL` (kod 1, bez sieci); obszar pod `auto` z
+  PL i CZ = jedno `Info:`, CZ pobierane dalej.
+- LAZ: `--campaigns all` (bez deduplikacji ADR-029), `--min-year` (dolna
+  granica `akt_rok`); `--min-year` z `--year` wykluczają się. Układ LAZ bez
+  zmian (bez dowiązań).
+- Pojedyncze godło: „Skipped” zależy od `manager.last_sheet.skipped`
+  (wcześniej pre-check istnienia pliku w CLI).
+
 ### LAZ 2026-10-07
 - **Zmiana zachowania (ADR-029):** domyślnie (bez `--year`) LAZ pobiera
   najnowszy kafel per OBSZAR, nie per godło. Kafle są wybierane od
