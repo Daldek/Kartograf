@@ -112,13 +112,16 @@
 > = `openai-codex/gpt-6-sol` (zapisane globalnie 2026-09-30; astra
 > wyczerpuje limit po ~8 min pracy 3-4 agentow).
 
-### ADR-030 strategie kampanii — fala 1 (T1-T5) zmergowana (2026-10-07)
+### ADR-030 strategie kampanii — fale 1-2 (T1-T6) zmergowane (2026-10-07)
 
 > **START NASTEPNEJ SESJI:** fala 1 planu `docs/research/2026-10-07-plan-adr030.md`
 > GOTOWA i w `develop` (merge `a187a5d` T1, `d839946` T2, `7fcd3bb` T3,
-> `e5b5208` T4, `91fea75` T5). Brama: **2514 testow offline**, ruff czysty,
-> mypy lista = baseline (32). Fala 2 (T6 providery: `resolve_campaigns`/
-> `download_record`) — **TYLKO na polecenie uzytkownika**. Ledger SDD
+> `e5b5208` T4, `91fea75` T5) oraz fala 2 (`d6fa032` T6: providery
+> `resolve_campaigns`/`download_record`/`record_source`, `supports_campaigns`).
+> Brama: **2538 testow offline**, ruff czysty, mypy lista = baseline (32).
+> Fala 3 (T7 `DownloadManager`: tor kampanii) — **TYLKO na polecenie
+> uzytkownika**. Dla T7 z review T6: pochodzenie kampanii w torze `all` brac
+> z `record_source(record)` (nie `source_info(godlo)`). Ledger SDD
 > (rulingi, odlozone drobne uwagi do T11, uwagi dla T7):
 > `.superpowers/sdd/2026-10-07-plan-adr030/progress.md` (gitignorowany).
 > Nowe w kodzie (biblioteka, bez CLI): `download/campaigns.py` (`CampaignRef`,
