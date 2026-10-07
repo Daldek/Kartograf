@@ -112,7 +112,7 @@
 > = `openai-codex/gpt-6-sol` (zapisane globalnie 2026-09-30; astra
 > wyczerpuje limit po ~8 min pracy 3-4 agentow).
 
-### ADR-030 strategie kampanii — wdrozenie T1-T9 + dokumentacja T10 (2026-10-07)
+### ADR-030 strategie kampanii — wdrozenie T1-T11 zakonczone (2026-10-07)
 
 > **START NASTEPNEJ SESJI:** ADR-030 (+ errata 2026-10-07) WDROZONY w
 > `develop` (fale 1-4, T1-T9) i opisany w dokumentacji (T10: `CLAUDE.md`,
@@ -122,12 +122,22 @@
 > `d6fa032` T6 (providery), `27ec40e` T7 (manager, dowiazania), `0541942` T9
 > (eksporty, przeplyw na realnych fixturach), `456d4ac` T8 (CLI `--campaigns`,
 > `--min-year`, straze CZ/`--target-crs`/LAZ).
-> Brama: **2622 testy offline**, ruff czysty, mypy lista = baseline (32).
-> **Nastepne kroki:** (1) T11 — przeglad koncowy (opus; ledger SDD z odlozonymi
-> uwagami, m.in. `to_source` zapisuje `"format": null` dla orto wg planu 1.5);
-> (2) T12 — weryfikacja na zywo (katalog danych `<katalog-danych>`, jawne `-o`,
-> cache lokalnie); (3) wydanie 0.7.0 (bump/tag/push/merge) TYLKO na polecenie
-> uzytkownika. Kazda kolejna fala — tylko na polecenie.
+> `af94ae3` T10 (dokumentacja), `0f2f30b` poprawki po przegladzie koncowym T11
+> (I-1: `newest` przy awarii TRANSPORTU skorowidza i istniejacej lokalnej
+> kampanii -> `Warning:` + lokalna kampania, `SheetFetch.unverified`/
+> `DownloadResult.unverified`; README zaleca `MetadataCache` w bibliotece;
+> M-1..M-6). T11 (opus): 98/101 mutacji zabitych, kazdy Review Focus/R1-R23/
+> errata ma test, 4 rulingi zgodne ze specem.
+> Brama: **2649 testow offline**, ruff czysty, mypy lista = baseline (32).
+> **Nastepne kroki:** (1) T12 — weryfikacja na zywo (plan sekcja 6; katalog danych
+> `<katalog-danych>`, jawne `-o`, cache lokalnie) — na polecenie;
+> (2) wydanie 0.7.0 (bump/tag/push/merge) TYLKO na polecenie uzytkownika.
+> Otwarte drobne (decyzja uzytkownika): wycinek `--target-crs` przy fallbacku
+> I-1 bez `Warning:`/`PlCutoutResult.unverified` (tylko log managera);
+> podwojna linia ostrzezenia I-1 w CLI (log + `Warning:`); `MetadataCache.__del__`
+> `ImportError` przy zamykaniu interpretera (zaobserwowane przez `python -c`);
+> M-7 podwojny INFO liczby kampanii; M-8 nieaktualny sidecar standardowy po
+> awarii zapisu (samonaprawa).
 > Ledger SDD (rulingi, uwagi): `.superpowers/sdd/2026-10-07-plan-adr030/progress.md`
 > (gitignorowany). Rulingi: T7 — zla `aktualnosc` rekordu w `all` = porazka tej
 > kampanii, link na najnowsza poprawna; wyscig `ensure_standard_link` bez
