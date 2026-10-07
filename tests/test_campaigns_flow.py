@@ -15,6 +15,7 @@ import rasterio
 import requests
 
 from kartograf.core.sheet_parser import SheetParser
+from kartograf.download.links import linked_campaign
 from kartograf.download.manager import DownloadManager
 from kartograf.providers.pl.gugik import GugikProvider
 
@@ -115,7 +116,7 @@ def test_end_to_end_all_on_real_c14_bodies(tmp_path):
     meta = json.loads(sidecar(std_path(tmp_path, G)).read_text(encoding="utf-8"))
     assert meta["extra"]["source"]["full_sheet"] is False
     assert meta["extra"]["campaign"]["zgloszenie"] == "DFT.7201.053.2025"
-    assert "2025-10-21_84183" in os.readlink(std_path(tmp_path, G))
+    assert "2025-10-21_84183" in str(linked_campaign(std_path(tmp_path, G)))
 
 
 def test_download_sheet_returns_standard_path_readable_by_rasterio(tmp_path):
@@ -123,9 +124,10 @@ def test_download_sheet_returns_standard_path_readable_by_rasterio(tmp_path):
     path = m.download_sheet(G)
 
     assert path == std_path(tmp_path, G)
-    assert path.is_symlink()
     [campaign_file] = m.storage.list_files(campaigns=True)
-    assert path.resolve() == campaign_file.resolve()
+    assert not path.is_symlink() and os.path.samefile(path, campaign_file)
+    meta = json.loads(sidecar(path).read_text(encoding="utf-8"))
+    assert meta["extra"]["link"] == "hardlink"
     with rasterio.open(path) as src, rasterio.open(campaign_file) as direct:
         assert src.read(1).tolist() == direct.read(1).tolist()
         assert src.read(1)[0, 0] == 84183  # najnowsza kampania
@@ -160,7 +162,7 @@ def test_end_to_end_all_with_real_xyz_campaign(tmp_path):
     [old] = [p for p in asc if "2019-04-29_72675" in p.as_posix()]
     meta = json.loads(sidecar(old).read_text(encoding="utf-8"))
     assert meta["extra"]["source"]["url"].endswith(".xyz")
-    assert "2024-09-23_81025" in os.readlink(std_path(tmp_path, G2))
+    assert "2024-09-23_81025" in str(linked_campaign(std_path(tmp_path, G2)))
 
 
 def test_newest_uses_local_campaign_when_skorowidz_unreachable(tmp_path):
@@ -170,7 +172,8 @@ def test_newest_uses_local_campaign_when_skorowidz_unreachable(tmp_path):
 
     m = DownloadManager(tmp_path, provider=GugikProvider(session=c14_session(G)))
     std = m.download_sheet(G)
-    before = os.readlink(std)
+    before = str(linked_campaign(std))
+    assert "2025-10-21_84183" in before
 
     offline = Mock(spec=requests.Session)
     offline.get = Mock(side_effect=requests.ConnectionError("GUGiK lezy"))
@@ -179,6 +182,6 @@ def test_newest_uses_local_campaign_when_skorowidz_unreachable(tmp_path):
         path = m2.download_sheet(G)
 
     assert offline.get.called  # bez cache rekordow: zapytanie przy kazdym wywolaniu
-    assert path == std and os.readlink(std) == before
+    assert path == std and str(linked_campaign(std)) == before
     assert m2.last_sheet.skipped is True
     assert "GUGiK lezy" in m2.last_sheet.unverified

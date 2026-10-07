@@ -2490,14 +2490,19 @@ class TestCutoutOverCampaignLinks:
             )
         return result, provider
 
-    def test_cutout_builds_from_symlinked_sheets(self, tmp_path):
+    def test_cutout_builds_from_hardlinked_sheets(self, tmp_path):
+        import os
+
+        from kartograf.download.links import linked_campaign
+
         result, _ = self._run(tmp_path)
 
         assert result.path.exists() and not result.skipped
         assert len(result.sheet_paths) == 2
         for sheet in result.sheet_paths:
-            assert sheet.is_symlink()
-            assert "kampanie/2025-04-27_83233" in str(sheet.resolve())
+            target = linked_campaign(sheet)
+            assert not sheet.is_symlink() and os.path.samefile(sheet, target)
+            assert "kampanie/2025-04-27_83233" in str(target)
         with rasterio.open(result.path) as src:
             assert src.count == 1
 
@@ -2525,7 +2530,7 @@ class TestCutoutOverCampaignLinks:
         assert second.skipped and second.path == first.path
         assert len(provider.resolve_calls) == calls
 
-    def test_estimate_counts_dangling_link_as_pending(self, tmp_path):
+    def test_estimate_skips_hardlinked_sheet(self, tmp_path):
         import os
 
         from kartograf.download.cutout import (
@@ -2547,19 +2552,15 @@ class TestCutoutOverCampaignLinks:
         )
         assert base_pending == 2
 
-        first, second = sorted(self._SHEETS)
+        first, _ = sorted(self._SHEETS)
         real = tmp_path / "kampanie_real" / f"{first}.asc"
         real.parent.mkdir(parents=True)
         real.write_text("x")
         live = storage.get_path(first, ".asc")
         live.parent.mkdir(parents=True, exist_ok=True)
-        os.symlink(os.path.relpath(real, live.parent), live)
-        dangling = storage.get_path(second, ".asc")
-        dangling.parent.mkdir(parents=True, exist_ok=True)
-        os.symlink(os.path.relpath(tmp_path / "nie_ma.asc", dangling.parent), dangling)
-        assert dangling.is_symlink() and not dangling.exists()
+        os.link(real, live)
 
         need, pending = estimate_pl_cutout_bytes(cutout, sheets, storage=storage)
 
-        assert pending == 1  # wiszacy link liczony, link do istniejacego celu nie
+        assert pending == 1  # brakujacy arkusz liczony, hardlink nie
         assert need < base_need

@@ -967,44 +967,27 @@ class TestCampaignPaths:
             "kampanie",
         )
 
-    def test_list_files_excludes_campaigns_and_dangling_links(self, tmp_path):
+    def test_list_files_excludes_campaigns(self, tmp_path):
         st = FileStorage(tmp_path)
         camp = st.get_campaign_path("N-34-139-C-a-3-1", REF, ".asc")
         camp.parent.mkdir(parents=True)
         camp.write_text("x")
         std = st.get_path("N-34-139-C-a-3-1", ".asc")
         std.parent.mkdir(parents=True)
-        std.symlink_to(os.path.relpath(camp, std.parent))
-        dang = st.get_path("N-34-139-C-a-3-2", ".asc")
-        dang.parent.mkdir(parents=True, exist_ok=True)
-        dang.symlink_to("../../../kampanie/nie-ma/x.asc")
+        os.link(camp, std)
         assert st.list_files() == [std]
         assert st.list_files(campaigns=True) == [camp]
 
-    def test_delete_removes_dangling_link_and_sidecar_not_campaign(self, tmp_path):
-        st = FileStorage(tmp_path)
-        other = st.get_campaign_path("N-34-139-C-a-3-2", REF, ".asc")
-        other.parent.mkdir(parents=True)
-        other.write_text("x")
-        link = st.get_path("N-34-139-C-a-3-1", ".asc")
-        link.parent.mkdir(parents=True)
-        link.symlink_to("../../../kampanie/nie-ma/x.asc")
-        sidecar = link.with_name(link.name + ".meta.json")
-        sidecar.write_text("{}")
-        assert link.is_symlink() and not link.exists()
-        assert st.delete("N-34-139-C-a-3-1", ".asc") is True
-        assert not link.is_symlink()
-        assert not sidecar.exists()
-        assert other.exists()
-
-    def test_delete_symlink_keeps_campaign_file(self, tmp_path):
+    def test_delete_hardlink_and_sidecar_keeps_campaign_file(self, tmp_path):
         st = FileStorage(tmp_path)
         camp = st.get_campaign_path("N-34-139-C-a-3-1", REF, ".asc")
         camp.parent.mkdir(parents=True)
         camp.write_text("x")
         link = st.get_path("N-34-139-C-a-3-1", ".asc")
         link.parent.mkdir(parents=True)
-        link.symlink_to(os.path.relpath(camp, link.parent))
+        os.link(camp, link)
+        sidecar = link.with_name(link.name + ".meta.json")
+        sidecar.write_text("{}")
         assert st.delete("N-34-139-C-a-3-1", ".asc") is True
-        assert not link.is_symlink()
-        assert camp.exists()
+        assert not link.exists() and not sidecar.exists()
+        assert camp.read_text() == "x" and camp.stat().st_nlink == 1

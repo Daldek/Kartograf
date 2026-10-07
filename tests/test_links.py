@@ -1,6 +1,7 @@
 """Testy dowiazan sciezki standardowej (kartograf.download.links, ADR-030 d)."""
 
 import json
+import logging
 import os
 import shutil
 from unittest.mock import Mock
@@ -11,7 +12,9 @@ from kartograf.download.links import (
     LinkOutcome,
     campaign_key_of,
     ensure_standard_link,
+    link_atomic,
     linked_campaign,
+    write_standard_sidecar,
 )
 
 A = ("2025-04-27_83233", "2025-04-27", "2025-11-17", "u1")
@@ -55,30 +58,42 @@ def _sidecar(link):
     return link.parent / f"{link.name}.meta.json"
 
 
-def _no_symlink(monkeypatch):
-    monkeypatch.setattr(
-        os, "symlink", Mock(side_effect=OSError(1314, "privilege not held"))
-    )
-
-
 def _no_links(monkeypatch):
-    _no_symlink(monkeypatch)
     monkeypatch.setattr(os, "link", Mock(side_effect=OSError(1, "not permitted")))
+
+
+def _hardlinked(link, target):
+    return (
+        not link.is_symlink()
+        and os.path.samefile(link, target)
+        and os.stat(link).st_nlink == 2
+    )
 
 
 def _same(p, q):
     return os.path.normpath(os.path.abspath(p)) == os.path.normpath(os.path.abspath(q))
 
 
-def test_symlink_is_relative_and_atomic(tmp_path):
+def test_hardlink_is_atomic(tmp_path):
     old, k_old = _a(tmp_path)
     link = _link(tmp_path)
     link.parent.mkdir(parents=True)
     link.write_text("legacy")
     out = ensure_standard_link(link, old, k_old)
-    assert out == LinkOutcome("symlink", old, True)
-    assert not os.path.isabs(os.readlink(link)) and link.read_text() == "A"
+    assert out == LinkOutcome("hardlink", old, True)
+    assert _hardlinked(link, old) and link.read_text() == "A"
     assert not list(link.parent.glob("*.tmp"))
+
+
+def test_link_atomic_never_creates_symlink(tmp_path, monkeypatch):
+    old, k_old = _a(tmp_path)
+    link = _link(tmp_path)
+    monkeypatch.setattr(os, "symlink", Mock(side_effect=AssertionError("symlink")))
+    assert link_atomic(old, link) == "hardlink"
+    with monkeypatch.context() as m:
+        _no_links(m)
+        assert link_atomic(old, link) == "copy"
+    assert not link.is_symlink()
 
 
 def test_standard_sidecar_is_regular_file_with_link_fields(tmp_path):
@@ -88,7 +103,7 @@ def test_standard_sidecar_is_regular_file_with_link_fields(tmp_path):
     sc = _sidecar(link)
     assert sc.is_file() and not sc.is_symlink()
     extra = json.loads(sc.read_text())["extra"]
-    assert extra["link"] == "symlink"
+    assert extra["link"] == "hardlink"
     assert extra["link_target"] == "../../kampanie/2025-04-27_83233/N-34/139/x.asc"
     assert extra["campaign"]["date"] == "2025-04-27"
     assert extra["campaign"]["dt_pzgik"] == "2025-11-17"
@@ -109,6 +124,41 @@ def test_standard_sidecar_is_regular_file_even_if_symlink_existed(tmp_path):
     assert not sc.is_symlink() and sc.is_file()
     assert json.loads(sc.read_text())["extra"]["campaign"]["date"] == "2025-10-21"
     assert a_sc.read_bytes() == before
+    # os.replace zastepuje SAM symlink, cel symlinku nietkniety
+    assert _hardlinked(link, b)
+    assert a.read_text() == "A" and os.stat(a).st_nlink == 1
+
+
+def test_legacy_symlink_with_symlink_sidecar_is_unknown_and_replaced(tmp_path):
+    """Errata 4: symlink z sidecarem ``extra.link=symlink`` (dane sprzed
+    wydania) to sciezka nieznana — nawet przy tym samym celu ``newest``
+    zastepuje go hardlinkiem, bez zapisu przez symlink."""
+    a, k_a = _a(tmp_path)
+    link = _link(tmp_path)
+    link.parent.mkdir(parents=True)
+    os.symlink(os.path.relpath(a, link.parent), link)
+    meta = json.loads((a.parent / "x.asc.meta.json").read_text())
+    meta["extra"]["link"] = "symlink"
+    meta["extra"]["link_target"] = os.path.relpath(a, link.parent)
+    _sidecar(link).write_text(json.dumps(meta))
+    a_side = (a.parent / "x.asc.meta.json").read_bytes()
+    assert linked_campaign(link) is None
+    out = ensure_standard_link(link, a, k_a)
+    assert out == LinkOutcome("hardlink", a, True)
+    assert _hardlinked(link, a) and a.read_text() == "A"
+    assert not a.is_symlink() and (a.parent / "x.asc.meta.json").read_bytes() == a_side
+    assert json.loads(_sidecar(link).read_text())["extra"]["link"] == "hardlink"
+
+
+def test_regular_file_claiming_hardlink_to_other_campaign_is_not_trusted(tmp_path):
+    a, k_a = _a(tmp_path)
+    b, _ = _b(tmp_path)
+    link = _link(tmp_path)
+    ensure_standard_link(link, a, k_a)
+    meta = json.loads(_sidecar(link).read_text())
+    meta["extra"]["link_target"] = os.path.relpath(b, link.parent)
+    _sidecar(link).write_text(json.dumps(meta))
+    assert linked_campaign(link) is None
 
 
 def test_newer_campaign_moves_link(tmp_path):
@@ -131,25 +181,29 @@ def test_ensure_link_never_regresses_to_older_campaign(tmp_path):
     assert link.read_text() == "B"
 
 
-def test_same_campaign_is_noop_and_restores_missing_sidecar(tmp_path):
+def test_same_campaign_is_noop_missing_sidecar_relinks(tmp_path):
     a, k_a = _a(tmp_path)
     link = _link(tmp_path)
     assert ensure_standard_link(link, a, k_a).changed is True
     assert ensure_standard_link(link, a, k_a).changed is False
-    _sidecar(link).unlink()
+    _sidecar(link).unlink()  # sidecar = jedyne zrodlo celu: sciezka nieznana
+    assert linked_campaign(link) is None
     out = ensure_standard_link(link, a, k_a)
-    assert out.changed is False and out.method == "symlink"
+    assert out.changed is True and out.method == "hardlink"
+    assert _hardlinked(link, a)  # rename na ten sam i-wezel: tmp sprzatniety
+    assert not list(link.parent.glob("*.tmp"))
     assert _sidecar(link).is_file()
-    assert json.loads(_sidecar(link).read_text())["extra"]["link"] == "symlink"
+    assert json.loads(_sidecar(link).read_text())["extra"]["link"] == "hardlink"
 
 
-def test_dangling_link_is_missing_and_relinked(tmp_path):
+def test_removed_campaign_dir_is_missing_and_relinked(tmp_path):
     a, k_a = _a(tmp_path)
     b, k_b = _b(tmp_path)
     link = _link(tmp_path)
     ensure_standard_link(link, b, k_b)
     shutil.rmtree(tmp_path / "seg" / "kampanie" / B[0])
-    assert linked_campaign(link) is None
+    assert link.is_file()  # hardlink przezywa usuniecie kampanii
+    assert linked_campaign(link) is None  # link_target z sidecara nie istnieje
     out = ensure_standard_link(link, a, k_a)
     assert out.changed is True and _same(out.target, a)
     assert link.read_text() == "A"
@@ -163,36 +217,36 @@ def test_legacy_regular_file_without_link_field_is_replaced(tmp_path):
     _sidecar(link).write_text(json.dumps({"extra": {"source": {"url": "old"}}}))
     assert linked_campaign(link) is None
     out = ensure_standard_link(link, a, k_a)
-    assert out.changed is True and link.is_symlink()
+    assert out.changed is True and _hardlinked(link, a)
 
 
-def test_symlink_denied_falls_back_to_hardlink(tmp_path, monkeypatch):
-    old, k_old = _a(tmp_path)
-    link = _link(tmp_path)
-    sidecar = _sidecar(link)
-    _no_symlink(monkeypatch)
-    out = ensure_standard_link(link, old, k_old)
-    assert out.method == "hardlink" and os.path.samefile(link, old)
-    assert json.loads(sidecar.read_text())["extra"]["link"] == "hardlink"
-
-
-def test_no_links_falls_back_to_copy(tmp_path, monkeypatch):
+def test_no_hardlink_falls_back_to_copy_with_warning(tmp_path, monkeypatch, caplog):
     old, k_old = _a(tmp_path)
     link = _link(tmp_path)
     _no_links(monkeypatch)
-    out = ensure_standard_link(link, old, k_old)
+    with caplog.at_level(logging.WARNING, logger="kartograf.download.links"):
+        out = ensure_standard_link(link, old, k_old)
     assert out.method == "copy" and out.changed is True
     assert link.read_text() == "A" and not os.path.samefile(link, old)
     assert not link.is_symlink()
     assert json.loads(_sidecar(link).read_text())["extra"]["link"] == "copy"
+    assert any(
+        r.levelno == logging.WARNING and "kopia" in r.getMessage()
+        for r in caplog.records
+    )
+    assert not list(link.parent.glob("*.tmp"))
 
 
-def test_relpath_valueerror_falls_back(tmp_path, monkeypatch):
+def test_relpath_valueerror_gives_absolute_link_target(tmp_path, monkeypatch):
     old, k_old = _a(tmp_path)
     link = _link(tmp_path)
     monkeypatch.setattr(os.path, "relpath", Mock(side_effect=ValueError("other drive")))
     out = ensure_standard_link(link, old, k_old)
-    assert out.method == "hardlink" and os.path.samefile(link, old)
+    assert out.method == "hardlink" and _hardlinked(link, old)
+    target = json.loads(_sidecar(link).read_text())["extra"]["link_target"]
+    assert os.path.isabs(target)
+    monkeypatch.undo()
+    assert _same(linked_campaign(link), old)
     assert not list(link.parent.glob("*.tmp"))
 
 
@@ -221,7 +275,6 @@ def test_copy_with_size_mismatch_is_replaced(tmp_path, monkeypatch):
 def test_hardlink_broken_by_edit_is_replaced(tmp_path, monkeypatch):
     a, k_a = _a(tmp_path)
     link = _link(tmp_path)
-    _no_symlink(monkeypatch)
     assert ensure_standard_link(link, a, k_a).method == "hardlink"
     other = link.parent / "other.asc"
     other.write_text("A")
@@ -277,9 +330,9 @@ def test_ensure_link_replaces_older_target_set_by_other_process(tmp_path):
     link = _link(tmp_path)
     ensure_standard_link(link, b, k_b)
     # inny proces (R2) ustawia link na A po tym, jak B byl celem
-    tmp = link.with_name("x.asc.other.tmp")
-    os.symlink(os.path.relpath(a, link.parent), tmp)
-    os.replace(tmp, link)
+    assert link_atomic(a, link) == "hardlink"
+    write_standard_sidecar(link, a, "hardlink")
+    assert _same(linked_campaign(link), a)
     out = ensure_standard_link(link, b, k_b)
     assert out.changed is True and _same(out.target, b) and link.read_text() == "B"
 
@@ -287,15 +340,15 @@ def test_ensure_link_replaces_older_target_set_by_other_process(tmp_path):
 # --- poprawki po weryfikacji (D-1, D-5) ---
 
 
-@pytest.mark.parametrize("method", ["symlink", "hardlink"])
+@pytest.mark.parametrize("method", ["hardlink", "copy"])
 def test_missing_target_sidecar_still_prevents_regression(
     tmp_path, monkeypatch, method
 ):
     a, k_a = _a(tmp_path)
     b, k_b = _b(tmp_path)
     link = _link(tmp_path)
-    if method == "hardlink":
-        _no_symlink(monkeypatch)
+    if method == "copy":
+        _no_links(monkeypatch)
     assert ensure_standard_link(link, b, k_b).method == method
     (b.parent / "x.asc.meta.json").unlink()
     assert _sidecar(link).exists()
