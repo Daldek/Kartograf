@@ -121,7 +121,7 @@ kartograf/
 │   └── metadata.py      # MetadataCache — SQLite WAL; record_cache (7d, pozytywny/negatywny), campaigns_cache (7d, lista kampanii arkusza), sheet_cache (30d), thread-safe
 ├── download/            # Zarzadzanie pobieraniem NMT/NMPT/Orto
 │   ├── campaigns.py     # Kampanie GUGiK (ADR-030): CampaignRef (<data>_<id>), format z rekordu, verify_file_format, validate_campaign_args
-│   ├── links.py         # Dowiazanie sciezki standardowej do najnowszej kampanii (symlink -> hardlink -> kopia, nigdy wstecz), sidecar standardowy
+│   ├── links.py         # Dowiazanie sciezki standardowej do najnowszej kampanii (hardlink -> kopia, bez symlinkow, nigdy wstecz), sidecar standardowy
 │   ├── cutout.py        # Wycinek PL --target-crs jako API (ADR-027): R5, GridMismatchError/W1, all_nodata, sheet_sources
 │   ├── laz.py           # Kafle LAZ jako API (ADR-029): download_laz_area/run_laz_download, sidecar, failed/superseded w wyniku
 │   ├── manager.py       # DownloadManager(campaigns=, min_year=) — arkusze (parallel), status no_coverage, parent_requests, SheetFetch/last_sheet
@@ -160,12 +160,14 @@ zapisuje arkusze w hierarchii godel. Kanoniczna tabela i migracja:
 leza WYLACZNIE w `<segment>/kampanie/<data>_<id>/<hierarchia godla>/<godlo>.<ext>`
 (+ `.meta.json`; `<data>` = `aktualnosc` rekordu, `<id>` = pierwszy segment
 liczbowy nazwy pliku w URL, inaczej `u` + 8 znakow hex `sha1(URL)`).
-Sciezka standardowa `<segment>/<hierarchia>/<godlo>.<ext>` jest dowiazaniem do
-najnowszej LOKALNEJ kampanii (takze niepelnej); jej sidecar to zwykly plik
-z `extra.link` (`symlink`/`hardlink`/`copy`) i `extra.link_target`. Brak
-migracji: zwykly plik w sciezce standardowej jest nieznany — pierwsze
-uruchomienie `newest` pobiera go ponownie do `kampanie/` i zastepuje
-dowiazaniem. Kopiowanie `data/` wymaga `cp -rL`/`rsync -aL`.
+Sciezka standardowa `<segment>/<hierarchia>/<godlo>.<ext>` jest dowiazaniem
+TWARDYM (hardlink, a gdy niedostepny kopia; bez symlinkow — errata 4 ADR-030)
+do najnowszej LOKALNEJ kampanii (takze niepelnej); jej sidecar to zwykly plik
+z `extra.link` (`hardlink`/`copy`) i `extra.link_target` (jedyne zrodlo celu).
+Brak migracji: zwykly plik w sciezce standardowej (takze symlink sprzed
+errata 4) jest nieznany — pierwsze uruchomienie `newest` pobiera go ponownie
+do `kampanie/` i zastepuje hardlinkiem. Kopiowanie `data/`: `rsync -aH` /
+`cp -a` (bez zachowania hardlinkow powstaje duplikat).
 
 ## Komendy
 
@@ -392,11 +394,13 @@ kartograf cache path
   `request.campaigns` zawsze, `request.min_year` tylko gdy podany.
   Dowiazanie: raz na arkusz po zebraniu kampanii, przestawiane tylko na klucz
   `(aktualnosc, dt_pzgik, url)` scisle wiekszy niz klucz biezacego celu (z
-  sidecara, a gdy nieczytelny — z nazwy katalogu; ten sam cel = bez zmian), metoda symlink WZGLEDNY
-  -> hardlink -> kopia; przy kopii `Warning:` (`dowiazanie niedostepne na tym
-  systemie plikow — sciezka standardowa jest KOPIA najnowszej kampanii dla N
-  arkuszy (...) (extra.link=copy)`, kod bez zmian). Kontrola istnienia
-  sprawdza CEL (wiszace dowiazanie = brak pliku). Porazka dowiazania (nawet
+  sidecara, a gdy nieczytelny — z nazwy katalogu; ten sam cel = bez zmian), metoda hardlink
+  -> kopia (bez symlinkow, errata 4); przy kopii `Warning:` (`hardlink
+  niedostepny na tym systemie plikow — sciezka standardowa jest KOPIA
+  najnowszej kampanii dla N arkuszy (...) (extra.link=copy)`, kod bez zmian).
+  Kontrola istnienia: cel z sidecara standardowego (`extra.link_target`,
+  `samefile` dla hardlinku); usuniety katalog kampanii albo brak sidecara =
+  brak pliku (pobranie od nowa). Porazka dowiazania (nawet
   kopii) = porazka arkusza (kod 1, lista idzie dalej, pobrane kampanie
   zostaja). Wyscig bez blokad: rownolegle wywolania na tej samej sciezce
   moga chwilowo zostawic dowiazanie na starszej kampanii; kolejne
@@ -407,8 +411,8 @@ kartograf cache path
   (OpenData): HTTP 404`). Podsumowanie `all` (bez `-q`): `Downloaded <n>
   campaign files for <m> sheets to <dir> (<k> already existed)` (n =
   pobrane, k = lokalne z `DownloadResult.reused_campaign_files`).
-  `FileStorage.list_files()` domyslnie pomija `kampanie/` i wiszace
-  dowiazania (`campaigns=True` = tylko `kampanie/`). Bez skanowania
+  `FileStorage.list_files()` domyslnie pomija `kampanie/`
+  (`campaigns=True` = tylko `kampanie/`). Bez skanowania
   `kampanie/` w 0.7.0.
   Awaria skorowidza (I-1): `newest` (bez `--min-year`, bez `--force`) przy
   bledzie TRANSPORTU `resolve_campaigns` (siec, 429, 5xx; nie
@@ -436,8 +440,8 @@ kartograf cache path
   `--min-year` i `--year` wykluczaja sie (`Error:`); LAZ bez dowiazan.
   Wynik pojedynczego godla: "Skipped" tylko gdy `manager.last_sheet.skipped`.
   Kontrola wolnego miejsca wycinka to DOLNE oszacowanie: liczy arkusze bez
-  pliku w sciezce standardowej (takze wiszace dowiazanie), a pod `newest`
-  arkusz z nowsza kampania zostanie pobrany mimo istniejacego dowiazania.
+  pliku w sciezce standardowej, a pod `newest` arkusz z nowsza (albo
+  usunieta) kampania zostanie pobrany mimo istniejacego dowiazania.
 - **LAZ wybor kafli (ADR-029):** bez `--year` kafle ida zachlannie od
   najnowszego `akt_rok` (w roku nowsza `akt_data`); starszy kafel jest
   pomijany, gdy jego czesc wspolna z obszarem pokrywaja wybrane juz kafle
