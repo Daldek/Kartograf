@@ -7,6 +7,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.7.1] - Unreleased
 
+### Dodane
+
+- Roadmapa do v1.0.0 w dokumentacji (`docs/SCOPE.md` 3.3, `docs/PRD.md`
+  sekcja 8): komplet publicznych danych GUGiK, gotowe dane dla kazdego
+  produktu, manager danych (magazyn wersjonowany, manifest projektu),
+  wtyczka QGIS i GUI webowe.
+
 ## [0.7.0] - 2026-10-08
 
 Wydanie wielokrajowe. Najwazniejsze nowosci wzgledem 0.6.1:

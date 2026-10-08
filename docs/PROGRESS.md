@@ -29,6 +29,7 @@
 | Kampanie GUGiK (ADR-030 + errata 1-5) | ✅ Gotowy | `--campaigns {newest,all}`, `--min-year`; pliki w `<segment>/kampanie/`, sciezka standardowa = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`) |
 | Wycinek NMT PL `--target-crs` (ADR-027) + API biblioteki `download_pl_cutout` | ✅ Gotowy | fala review max 2026-09-28 + fala naprawcza 2026-09-30: `GridMismatchError` dla 2180 z arkuszy o roznych fazach, W1 (warp per arkusz) dla 5514/3045 (S5/D3/D8), `extra.sheet_sources`, `all_nodata`, `download_pl_cutout(cache=)`; live PASS Krakow 5 m |
 
+| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | ⏳ Zaplanowany | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3 |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
 ## Checkpointy
@@ -98,11 +99,12 @@
 > przed wydaniem: `docs/research/2026-10-08-test-przed-0.7.0/raport.md`.
 > Stan galezi i tagow sprawdzaj w gicie (`git status`, `git log`,
 > `git ls-remote --tags origin`), nie w tym dzienniku.
-> **Nastepny cykl (0.7.1):** pierwszy commit cyklu podbija
-> `kartograf.__version__` do `0.7.1-dev` (asercje w `tests/test_cli.py`
-> i `tests/test_integration.py`) i dodaje na gorze CHANGELOG sekcje
-> `## [0.7.1] - Unreleased` z linkiem `compare/v0.7.0...develop`; zakres:
-> backlog "Do 0.7.1" (sekcja Backlog nizej), potem ogolny backlog.
+> **Cykl 0.7.1 otwarty:** `kartograf.__version__ = "0.7.1-dev"` i sekcja
+> `## [0.7.1] - Unreleased` w CHANGELOG (link `compare/v0.7.0...develop`);
+> zakres: backlog "Do 0.7.1" (sekcja Backlog nizej), potem ogolny backlog.
+> **Kierunek do v1.0.0:** roadmapa w `docs/SCOPE.md` 3.3 (zatwierdzona
+> 2026-10-08). Nastepny krok projektowy: brainstorming podprojektu 1
+> (magazyn wersjonowany) — spec przed jakakolwiek implementacja.
 > Brama (stan sprawdzaj komendami, nie liczbami z dziennika):
 > `.venv/bin/python -m pytest tests/ -m "not live"` (zielone),
 > `.venv/bin/python -m ruff check .` i `ruff format --check .` (czyste,
@@ -112,6 +114,23 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Roadmapa do v1.0.0 (2026-10-08)
+
+- Sesja projektowa (bez zmian w kodzie): ustalony cel v1.0.0 i kolejnosc
+  podprojektow, zapisane w `docs/SCOPE.md` 3.3 (wersja dokumentu 3.15).
+- Decyzje: pelny katalog publicznych danych GUGiK = warunek wejscia,
+  "gotowe dane" (wycinek, scalenie, reprojekcja, sidecar) = wyroznik;
+  manager danych = magazyn wersjonowany + manifest projektu (projekt ->
+  dane, sidecar niezmienny, indeks z manifestow) + GUI jako przegladarka;
+  nakladki najpierw lokalnie dla zespolu, publikacja po testach; kolejnosc
+  1 magazyn wersjonowany, 2 manifest, 3 katalog (strumien), 4 wtyczka QGIS,
+  5 GUI webowe.
+- Lista "poza zakresem 1.0+" w SCOPE 3.1: GUI zastapione odsylaczem do 3.3.
+- `docs/PRD.md` 4.1: docelowe persony (uzytkownik QGIS, zespol/firma) i
+  wymagania v1.0.0 w sekcji 8.
+- Poczatek cyklu 0.7.1: `__version__ = "0.7.1-dev"`, sekcja
+  `[0.7.1] - Unreleased` w CHANGELOG.
 
 ### Wydanie 0.7.0 (2026-10-08)
 
@@ -1268,6 +1287,18 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
     not "znany blad", testy na zywo 11 PASS. Odblokowuje pkt 13.
 
 ## Backlog
+
+#### Do v1.0.0 — roadmapa
+
+Podprojekty, kolejnosc i zasady: `docs/SCOPE.md` 3.3. Kazdy podprojekt
+zaczyna sie od brainstormingu i specu; implementacja dopiero po
+zatwierdzeniu specu i planu.
+
+- [ ] 1. Magazyn wersjonowany
+- [ ] 2. Manifest projektu
+- [ ] 3. Katalog GUGiK i gotowe dane (strumien produktow)
+- [ ] 4. Wtyczka QGIS
+- [ ] 5. GUI webowe (lokalny manager danych)
 
 #### Do 0.7.1 — uwagi z testu na zywo przed wydaniem 0.7.0 (2026-10-08)
 
