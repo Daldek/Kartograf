@@ -246,9 +246,19 @@ class SheetParser:
             if re.match(pattern, self._godlo):
                 return scale
 
+        if self._original_godlo in ("5", "6", "7", "8"):
+            # A bare PL-2000 zone number is not a sheet designation.
+            raise ParseError(
+                f"Nieprawidłowe godło: '{self._original_godlo}'. "
+                f"To numer strefy PL-2000, a nie godło arkusza. "
+                f"Najgrubsze godło PL-2000 ma format strefa.pas.slup "
+                f"(1:10000), np. 6.179.12."
+            )
+
         raise ParseError(
             f"Nieprawidłowe godło: '{self._original_godlo}'. "
-            f"Godło musi być w formacie zgodnym z układem 1992/2000."
+            f"Oczekiwano godła PL-1992 (np. N-34-130-D-d-2-4) "
+            f"albo PL-2000 (np. 6.179.12)."
         )
 
     def _parse_components(self) -> dict[str, str]:
