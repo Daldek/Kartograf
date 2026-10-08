@@ -55,8 +55,8 @@ kartograf download --bbox 530000,382000,533000,386000 --product laz --vertical-c
 # zgodnej z arkuszami GUGiK (sekcja 1.6)
 kartograf parse 6.179.12.20
 kartograf download 6.179.12.20
-kartograf download 6.179.12 --scale 1:2000
-kartograf download --bbox 6500000,5895000,6508000,5900000 --bbox-crs EPSG:2177 --system 2000 --scale 1:2000
+kartograf download 7.171.21 --scale 1:2000
+kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --system 2000 --scale 1:2000
 
 # Kampanie GUGiK (sekcja 4): domyślnie najnowsza (newest); wszystkie kampanie
 # arkusza (all); tylko kampanie z roku pozyskania >= RRRR (--min-year)
@@ -211,7 +211,7 @@ dopasowany. Domyślnie `1:10000`.
 - `--bbox`/`--geometry` bez `--target-crs`: obszar jest rozbijany na arkusze
   w tej skali (z `--system 1992` albo `--system 2000`);
 - bez flagi godło 7-członowe PL-1992 i każde godło PL-2000 (także
-  1:10000, np. `6.179.12`) to pojedynczy arkusz — rozwijane jest tylko
+  1:10000, np. `7.171.21`) to pojedynczy arkusz — rozwijane jest tylko
   godło PL-1992 grubsze niż 1:10000;
 - nie dotyczy LAZ (kafle wybierane z WFS) ani CZ (godło TM33/SM5 albo
   wycinek z usługi).
@@ -226,7 +226,7 @@ moduł archiwizacji 1:5000 (`modulArchiwizacji`). `--scale` przyjmuje
 etykiety Kartografu (SCOPE 2.1).
 
 **PL-2000 — flaga zwykle niezbędna.** Kartograf zaczyna podział PL-2000 od
-arkusza 1:10000 (`strefa.pas.słup`, np. `6.179.12`), a GUGiK publikuje
+arkusza 1:10000 (`strefa.pas.słup`, np. `7.171.21`), a GUGiK publikuje
 arkusze PL-2000 w drobniejszych modułach. W zapisanych odpowiedziach
 skorowidza NMT 1 m i ortofotomapy, na których opierają się testy
 Kartografu, arkusze PL-2000 mają najczęściej moduł 1:2000 (np.
@@ -235,8 +235,8 @@ i 1:5000; arkusza PL-2000 1:10000 nie było w nich wcale. Dlatego dla godła 1:1
 z `--system 2000` podaj skalę arkuszy z danymi, zwykle `--scale 1:2000`:
 
 ```bash
-kartograf download 6.179.12 --scale 1:2000
-kartograf download --bbox 6500000,5895000,6508000,5900000 --bbox-crs EPSG:2177 --system 2000 --scale 1:2000
+kartograf download 7.171.21 --scale 1:2000
+kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --system 2000 --scale 1:2000
 ```
 
 **Co się dzieje przy niedopasowaniu.** Brak arkusza o zamówionym godle to
