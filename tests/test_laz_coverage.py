@@ -1,12 +1,12 @@
 """
-Wybor kafli LAZ wg pokrycia obszaru (LAZ 2026-10-07, E2E C13 "zdublowany obszar").
+LAZ tile selection by area coverage (LAZ 2026-10-07, E2E C13 "duplicated area").
 
-Dwie warstwy:
+Two layers:
 
-- geometria wypuklych wielokatow (``kartograf.core.coverage``) — czysta, bez IO;
-- ``GugikLazProvider.select_tiles`` na SUROWYCH odpowiedziach WFS z rundy
-  2026-10-06 (obszar w2, Warszawa: kafel 2022 w PL-2000:S7 i ten sam obszar
-  2023/2025 w PL-1992) oraz na syntetycznych kaflach dla tolerancji krawedzi.
+- the geometry of convex polygons (``kartograf.core.coverage``) - pure, no IO;
+- ``GugikLazProvider.select_tiles`` on RAW WFS responses from the 2026-10-06
+  round (area w2, Warsaw: a 2022 tile in PL-2000:S7 and the same area
+  2023/2025 in PL-1992) and on synthetic tiles for the edge tolerance.
 """
 
 from pathlib import Path
@@ -154,9 +154,9 @@ class TestFootprintParsing:
         assert tile.godlo == OLD_2000
         assert tile.footprint is not None
         # posList GUGiK: "486799.764986 637347.517691 ..." = (N, E)
-        assert len(tile.footprint) == 4  # bez wierzcholka zamykajacego
+        assert len(tile.footprint) == 4  # no closing vertex
         corners = {(round(x, 3), round(y, 3)) for x, y in tile.footprint}
-        assert (637347.518, 486799.765) in corners  # SW: (E, N), nie (N, E)
+        assert (637347.518, 486799.765) in corners  # SW: (E, N), not (N, E)
         assert (638133.109, 487321.447) in corners
         assert tile.date == "2022-05-09"
         assert tile.full_sheet is True
@@ -205,8 +205,8 @@ class TestSelectTilesOnRealWfs:
         assert selection.superseded == ()
 
     def test_tile_whose_footprint_misses_area_is_skipped_as_outside(self):
-        # SW naroznik obwiedni kafla PL-2000 (obrocony wzgledem EPSG:2180):
-        # obwiednia przecina obszar, wielokat kafla — nie
+        # SW corner of the PL-2000 tile envelope (rotated relative to EPSG:2180):
+        # the envelope intersects the area, the tile polygon does not
         area = BBox(637334, 486800, 637340, 486806, "EPSG:2180")
         selection = GugikLazProvider(session=laz_session()).select_tiles(
             area, year=2022
@@ -254,7 +254,7 @@ class TestSelectNewestCover:
         assert sorted(t.godlo for t in entry.covered_by) == ["E", "W"]
 
     def test_gap_within_tolerance_is_covered(self):
-        # nowszy kafel konczy sie 0,5 m przed krawedzia obszaru
+        # the newer tile ends 0.5 m before the area edge
         old = _tile("OLD", 2020, _square(0, 0, 300, 300))
         new = _tile("NEW", 2024, _square(0, 0, 199.5, 300))
         selection = select_newest_cover([old, new], AREA)
@@ -274,14 +274,15 @@ class TestSelectNewestCover:
         assert sorted(t.godlo for t in selection.tiles) == ["NEW", "OLD"]
 
     def test_partial_newer_sheet_does_not_cover(self):
-        """``czy_ark_wypelniony=NIE``: footprint to rama arkusza, nie zasieg danych."""
+        """``czy_ark_wypelniony=NIE``: the footprint is the sheet frame, not the data
+        extent."""
         old = _tile("OLD", 2020, _square(0, 0, 300, 300))
         new = _tile("NEW", 2024, _square(0, 0, 300, 300), full_sheet=False)
         selection = select_newest_cover([old, new], AREA)
         assert sorted(t.godlo for t in selection.tiles) == ["NEW", "OLD"]
 
     def test_same_year_duplicate_is_deduplicated_by_coverage(self):
-        # godla odwrotnie do dat: wygrywa nowsza akt_data, nie kolejnosc godel
+        # sheet codes in reverse to dates: the newer akt_data wins, not sheet code order
         newer = _tile("Z", 2024, _square(0, 0, 300, 300), date="2024-08-01")
         older = _tile("A", 2024, _square(0, 0, 300, 300), date="2024-03-01")
         selection = select_newest_cover([older, newer], AREA)
@@ -303,7 +304,8 @@ class TestSelectNewestCover:
         assert sorted(t.godlo for t in selection.tiles) == ["NEW", "X"]
 
     def test_same_godlo_covers_without_footprint(self):
-        """Kafel bez msGeometry: to samo godlo (ta sama rama) nadal pokrywa."""
+        """A tile without msGeometry: the same sheet code (the same frame) still
+        covers."""
         new = LazTile("SAME", "u/new.laz", 2024, 12, "PL-1992", 0, 0, 300, 300)
         old = LazTile("SAME", "u/old.laz", 2023, 12, "PL-1992", 0, 0, 300, 300)
         selection = select_newest_cover([old, new], AREA)
@@ -311,14 +313,14 @@ class TestSelectNewestCover:
         assert [s.tile.url for s in selection.superseded] == ["u/old.laz"]
 
     def test_envelope_alone_never_covers(self):
-        """Obwiednia obroconej ramy wystaje poza nia — nie wolno nia pokrywac."""
+        """The envelope of a rotated frame sticks out past it - it must not cover."""
         new = LazTile("NEW", "u/new.laz", 2024, 12, "PL-1992", 0, 0, 300, 300)
         old = _tile("OLD", 2020, _square(0, 0, 300, 300))
         selection = select_newest_cover([old, new], AREA)
         assert sorted(t.godlo for t in selection.tiles) == ["NEW", "OLD"]
 
     def test_partial_same_godlo_does_not_cover(self):
-        """Wroclaw 2025: dwie dostawy NIE tego samego arkusza — obie zostaja."""
+        """Wroclaw 2025: two deliveries of NOT the same sheet - both stay."""
         a = _tile(
             "G", 2025, _square(0, 0, 300, 300), full_sheet=False, date="2025-08-12"
         )

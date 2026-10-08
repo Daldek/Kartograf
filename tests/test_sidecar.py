@@ -26,7 +26,7 @@ def _asc(path, xllcorner: float, key: str = "xllcorner") -> None:
 
 
 class TestPlSheetHorizontalCrs:
-    """N8: sidecar arkusza PL-2000 opisuje strefe (EPSG:2176-2179), nie 2180."""
+    """N8: a PL-2000 sheet sidecar describes the zone (EPSG:2176-2179), not 2180."""
 
     def test_pl2000_sheet_sidecar_carries_zone_crs(self, tmp_path):
         asc = tmp_path / "6.179.12.20.asc"
@@ -62,7 +62,8 @@ class TestPlSheetHorizontalCrs:
         assert "zapisano uklad pliku" not in caplog.text
 
     def test_file_in_other_system_wins_with_warning(self, tmp_path, caplog):
-        """K4: plik PL-1992 pod godlem PL-2000 (cache sprzed 0.7.0) — uklad pliku."""
+        """K4: a PL-1992 file under a PL-2000 sheet code (cache from before 0.7.0) -
+        the file CRS."""
         asc = tmp_path / "7.123.8.asc"
         _asc(asc, 542_560.30)
         with caplog.at_level(logging.WARNING):
@@ -96,7 +97,7 @@ class TestPlSheetHorizontalCrs:
             dtype="uint8",
             transform=from_origin(7_540_000.0, 5_530_000.0, 0.25, 0.25),
         ):
-            pass  # pusty raster: liczy sie tylko georeferencja
+            pass  # empty raster: only georeferencing matters
         with caplog.at_level(logging.WARNING):
             meta = build_metadata(
                 get_source("pl.gugik.orto"),
@@ -106,7 +107,7 @@ class TestPlSheetHorizontalCrs:
         assert meta.horizontal_crs == "EPSG:2178"
         assert "zapisano uklad pliku" not in caplog.text
 
-        # ten sam TIF pod godlem PL-1992 = rozjazd: uklad pliku + ostrzezenie
+        # the same TIF under a PL-1992 sheet code = a mismatch: file CRS + warning
         with caplog.at_level(logging.WARNING):
             assert pl_sheet_horizontal_crs(tif, "M-34-76-A-a-1-1") == "EPSG:2178"
         assert "zapisano uklad pliku" in caplog.text
@@ -123,7 +124,7 @@ class TestPlSheetHorizontalCrs:
         assert meta.horizontal_crs == "EPSG:5514"
 
     def test_laz_tile_crs_from_uklad_xy(self):
-        """Kafel LAZ: godlo myslnikowe, dane w PL-2000:S6 — uklad z uklad_xy."""
+        """LAZ tile: hyphenated sheet code, data in PL-2000:S6 - CRS from uklad_xy."""
         meta = build_metadata(
             get_source("pl.gugik.laz"),
             request={"bbox": [530500, 382500, 531000, 383000], "bbox_crs": "EPSG:2180"},
@@ -134,7 +135,8 @@ class TestPlSheetHorizontalCrs:
         assert meta.horizontal_crs == "EPSG:2177"
 
     def test_non_sheet_pl_product_keeps_channel_crs(self):
-        """BDOT10k po godle PL-2000 to GPKG w EPSG:2180 — godlo tylko wybiera obszar."""
+        """BDOT10k by a PL-2000 sheet code is a GPKG in EPSG:2180 - the code only
+        selects the area."""
         meta = build_metadata(
             get_source("pl.gugik.bdot10k"), request={"sheet": "6.179.12"}
         )
@@ -222,8 +224,8 @@ class TestWriteSidecar:
         assert payload["license"]["id"] == "PL-PGiK-40a"
 
     def test_write_failure_warns_and_does_not_raise(self, tmp_path, caplog):
-        # Spec sekcja 8: wyjatki IO w write_sidecar lapane i logowane jako
-        # warning — pobranie (wolajacy) dostaje wynik normalnie.
+        # Spec section 8: IO exceptions in write_sidecar are caught and logged as
+        # a warning - the download (the caller) gets its result normally.
         data = tmp_path / "missing-dir" / "x.tif"
         with caplog.at_level(logging.WARNING):
             out = write_sidecar(data, self._meta())
@@ -232,11 +234,12 @@ class TestWriteSidecar:
 
 
 class TestSelectChannelByCapability:
-    # dmr4g (Zad. 3) ma dwa kanaly o TYM SAMYM horizontal_crs (EPSG:5514) —
-    # ResultMetadata nie niesie pola transport, wiec asercje na samym
-    # ResultMetadata nie odrozniaja poprawnej selekcji od heurystyki/ignorowania
-    # `capability=`. Testujemy wiec `_select_channel_by_capability` bezposrednio
-    # na zwroconym kanale (transport + capabilities) — patrz R5 w task brief.
+    # dmr4g (Task 3) has two channels with the SAME horizontal_crs (EPSG:5514) -
+    # ResultMetadata carries no transport field, so assertions on
+    # ResultMetadata alone do not distinguish correct selection from a
+    # heuristic/ignoring
+    # `capability=`. So we test `_select_channel_by_capability` directly
+    # on the returned channel (transport + capabilities) - see R5 in the task brief.
     def test_sheet_files_returns_direct_files_channel(self):
         d = get_source("cz.cuzk.dmr4g")
         ch = _select_channel_by_capability(d, "sheet_files")
@@ -257,9 +260,9 @@ class TestSelectChannelByCapability:
 
 class TestBuildMetadataCapabilityAndNodata:
     def test_capability_selects_named_channel(self):
-        # Smoke test z briefu: oba kanaly dmr4g maja EPSG:5514, wiec ta
-        # asercja sama w sobie nie dowodzi poprawnej selekcji (patrz
-        # TestSelectChannelByCapability powyzej dla wlasciwego dowodu).
+        # Smoke test from the brief: both dmr4g channels have EPSG:5514, so this
+        # assertion alone does not prove correct selection (see
+        # TestSelectChannelByCapability above for the real proof).
         d = get_source("cz.cuzk.dmr4g")
         meta_files = build_metadata(
             d, request={"sheet": "CTES96"}, capability="sheet_files"
@@ -268,8 +271,9 @@ class TestBuildMetadataCapabilityAndNodata:
         meta_bbox = build_metadata(
             d, request={"sheet": "CTES96"}, capability="bbox_raster"
         )
-        # oba kanaly dmr4g maja 5514; rozroznia je transport — sprawdzamy,
-        # ze selekcja nie uzyla heurystyki bbox (request godlo + capability bbox)
+        # both dmr4g channels have 5514; the transport tells them apart - we check
+        # that selection did not use the bbox heuristic (request godlo + capability
+        # bbox)
         assert meta_bbox.horizontal_crs == "EPSG:5514"
 
     def test_capability_unknown_raises_keyerror(self):
@@ -316,15 +320,15 @@ class TestReadAscNodata:
 
 
 class TestPl2000SheetPublishedIn2180:
-    """E17 (E2E-A C6b/C6h): GUGiK publikuje czesc arkuszy PL-2000 strefy 7
-    we wspolrzednych EPSG:2180 z niecalkowitym ``cellsize``.
+    """E17 (E2E-A C6b/C6h): GUGiK publishes some zone-7 PL-2000 sheets
+    in EPSG:2180 coordinates with a non-integer ``cellsize``.
 
-    Fixtura: naglowek + 2 wiersze surowego pliku GUGiK
-    ``77912_1384976_7.125.11.19.asc`` (rekord ``PL-2000:S7``, 2023-03-17;
-    ``xllcenter 567975.95``, ``cellsize 0.9993671653521061``). Oczekiwane:
-    sidecar ``horizontal_crs`` = uklad PLIKU (EPSG:2180),
-    ``extra.source.uklad`` = deklaracja rekordu, ostrzezenie, segment sciezki
-    wg godla (``pl_2000_...``, ADR-026).
+    Fixture: a header + 2 rows of the raw GUGiK file
+    ``77912_1384976_7.125.11.19.asc`` (record ``PL-2000:S7``, 2023-03-17;
+    ``xllcenter 567975.95``, ``cellsize 0.9993671653521061``). Expected:
+    sidecar ``horizontal_crs`` = the FILE CRS (EPSG:2180),
+    ``extra.source.uklad`` = the record's declaration, a warning, the path
+    segment by sheet code (``pl_2000_...``, ADR-026).
     """
 
     GODLO = "7.125.11.19"
@@ -394,7 +398,7 @@ class TestPl2000SheetPublishedIn2180:
 
 
 class TestEmitSidecar:
-    """D7: jedno opakowanie best-effort dla wszystkich torow."""
+    """D7: one best-effort wrapper for all paths."""
 
     def _data(self, tmp_path):
         path = tmp_path / "wynik.tif"

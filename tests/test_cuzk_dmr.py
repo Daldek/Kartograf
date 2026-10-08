@@ -1,11 +1,12 @@
-"""Testy CuzkDmrProvider — dispatch SM5/TM33/bbox, CRS, transformacja pionowa.
+"""Tests of CuzkDmrProvider - SM5/TM33/bbox dispatch, CRS, vertical transformation.
 
-Wartosci arkusza CTES96 (MAPNAME, PODIL, bbox) pochodza z fixtury rekonesansu
-`tests/fixtures/cuzk/klady_sm5_where_ctes96.json` — "Cesky Tesin 9-6",
-PODIL 0.99, zasieg (-450000, -1114000, -447500, -1112000) w EPSG:5514.
+The values of the CTES96 sheet (MAPNAME, PODIL, bbox) come from the
+reconnaissance fixture `tests/fixtures/cuzk/klady_sm5_where_ctes96.json` -
+"Cesky Tesin 9-6", PODIL 0.99, extent (-450000, -1114000, -447500, -1112000)
+in EPSG:5514.
 
-Testy sa offline: CuzkClient i SheetIndex sa mockowane, a pliki GeoTIFF
-powstaja lokalnie przez rasterio (wzor: test_cuzk_client.py).
+The tests are offline: CuzkClient and SheetIndex are mocked, and the GeoTIFF
+files are created locally with rasterio (pattern: test_cuzk_client.py).
 """
 
 import warnings
@@ -67,8 +68,8 @@ def _write_tif(
 
 
 def _write_dmr4g_pair(path: Path):
-    """Realny ksztalt pliku z openzu: GeoTIFF bez CRS i bez geotransformacji,
-    georeferencja wylacznie w .tfw (rekonesans Zad. 1, krok 6)."""
+    """The real shape of an openzu file: a GeoTIFF without CRS and without a
+    geotransform, georeferencing only in .tfw (reconnaissance Task 1, step 6)."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")  # NotGeoreferencedWarning — celowe
         with rasterio.open(
@@ -89,7 +90,7 @@ def _write_dmr4g_pair(path: Path):
 
 
 def _exporting(crs):
-    """side_effect dla export_image: zapisz maly GeoTIFF w zadanym CRS."""
+    """side_effect for export_image: write a small GeoTIFF in the requested CRS."""
 
     def _fake(endpoint, bbox, **kwargs):
         output_path = Path(kwargs["output_path"])
@@ -159,8 +160,8 @@ class TestConstruction:
 
 class TestDownloadDispatch:
     def test_tm33_godlo_requests_native_then_warps_to_3045(self, tmp_path):
-        """Kafel TM33 jest zdefiniowany w 3045, ale sciagany w 5514: reprojekcje
-        robi Kartograf, nie serwer (ADR-024)."""
+        """The TM33 tile is defined in 3045 but fetched in 5514: Kartograf does
+        the reprojection, not the server (ADR-024)."""
         target = tmp_path / "302_5550.tif"
         with patch(_CLIENT_PATCH) as client_cls:
             client = client_cls.return_value
@@ -194,7 +195,7 @@ class TestDownloadDispatch:
             client = client_cls.return_value
 
             def fake_fetch(url, output_path, *, unzip_single=None):
-                # DMR4G-TIFF: crs=None (georeferencja tylko w .tfw)
+                # DMR4G-TIFF: crs=None (georeferencing only in .tfw)
                 _write_tif(Path(output_path), crs=None)
                 return Path(output_path)
 
@@ -213,9 +214,9 @@ class TestDownloadDispatch:
 
     @pytest.mark.parametrize("godlo", [" CTES96", "CTES96 ", "\tCTES96\n"])
     def test_sm5_godlo_with_whitespace_builds_clean_url(self, tmp_path, godlo):
-        """Wywolanie biblioteczne z bialymi znakami (CLI obcina juz godlo):
-        rejestr systemow rozpoznaje SM5 po strip(), wiec URL openzu i
-        walidacja w indeksie musza dostac godlo obciete."""
+        """A library call with whitespace (the CLI already trims the sheet code):
+        the system registry recognises SM5 after strip(), so the openzu URL
+        and the index validation must receive the trimmed sheet code."""
         target = tmp_path / "CTES96.tif"
         with patch(_CLIENT_PATCH) as client_cls, patch(_INDEX_PATCH) as index_cls:
             index_cls.return_value.sm5_sheet.return_value = _ctes96_info()
@@ -241,7 +242,7 @@ class TestDownloadDispatch:
         assert (bbox.min_x, bbox.min_y) == (302000.0, 5550000.0)
 
     def test_sm5_crs_repair_keeps_worldfile_georeference(self, tmp_path):
-        """Naprawa CRS nie moze zgubic georeferencji trzymanej w .tfw."""
+        """The CRS fix must not lose the georeferencing kept in .tfw."""
         target = tmp_path / "CTES96.tif"
         with patch(_CLIENT_PATCH) as client_cls, patch(_INDEX_PATCH) as index_cls:
             index_cls.return_value.sm5_sheet.return_value = _ctes96_info()
@@ -261,11 +262,11 @@ class TestDownloadDispatch:
             assert src.nodata == CUZK_NODATA
 
     def test_sm5_corrupted_tiff_raises_download_error_and_cleans_up(self, tmp_path):
-        """ZIP ma poprawna strukture, ale rozpakowany .tif jest uszkodzony
-        (np. urwane pobieranie) — rasterio.open zglasza niemapowany wyjatek
-        (tu: RasterioIOError), ktory _assign_crs musi zamienic na
-        DownloadError. Zarowno .tif jak i towarzyszacy .tfw musza zniknac,
-        inaczej kolejny --skip-existing utrwali korupcje (F1)."""
+        """The ZIP has a valid structure, but the unpacked .tif is damaged
+        (e.g. a truncated download) - rasterio.open raises an unmapped
+        exception (here: RasterioIOError), which _assign_crs must turn into
+        DownloadError. Both the .tif and the accompanying .tfw must disappear,
+        otherwise the next --skip-existing would entrench the corruption (F1)."""
         target = tmp_path / "CTES96.tif"
         with patch(_CLIENT_PATCH) as client_cls, patch(_INDEX_PATCH) as index_cls:
             index_cls.return_value.sm5_sheet.return_value = _ctes96_info()
@@ -297,7 +298,7 @@ class TestDownloadDispatch:
             provider.download("N-34-130-D-d-2-4", tmp_path / "x.tif")
 
     def test_openzu_404_points_to_sheet_index(self, tmp_path):
-        """404 openzu dla arkusza znanego indeksowi => czytelna podpowiedz."""
+        """A 404 from openzu for a sheet known to the index => a readable hint."""
         with patch(_CLIENT_PATCH) as client_cls, patch(_INDEX_PATCH) as index_cls:
             index_cls.return_value.sm5_sheet.return_value = _ctes96_info()
             client_cls.return_value.fetch_file.side_effect = DownloadError(
@@ -310,7 +311,7 @@ class TestDownloadDispatch:
         assert "KladyMapovychListu" in str(exc.value)
 
     def test_missing_files_channel_is_config_error(self, tmp_path):
-        """Deskryptor bez kanalu plikowego => jasny blad, nie AttributeError."""
+        """A descriptor without a file channel => a clear error, not AttributeError."""
         descriptor = get_source("cz.cuzk.dmr4g")
         without_files = replace(
             descriptor,
@@ -335,10 +336,10 @@ class TestDownloadDispatch:
         )
 
 
-# --- emulator serwera CUZK (wspolny dla testow poziomych i pionowych) --------
+# --- CUZK server emulator (shared by the horizontal and vertical tests) --------
 
-# zmierzony blad reprojekcji serwerowej dla okolic Cieszyna (dE, dN):
-# pominiety datum shift S-JTSK->ETRS89, |d| = 135 m (pomiar 2026-08-11)
+# measured server reprojection error for the Cieszyn area (dE, dN):
+# skipped datum shift S-JTSK->ETRS89, |d| = 135 m (measured 2026-08-11)
 _BALLPARK_SHIFT = (119.0, 64.0)
 _APEX_5514 = (-449000.0, -1113000.0)
 _NATIVE_BBOX = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
@@ -352,18 +353,18 @@ def _pinned_5514_to(target_crs):
 
 
 def _apex_in(target_crs):
-    """Wierzcholek stozka w ukladzie docelowym wg pyproj (wzorzec prawdy)."""
+    """The cone apex in the target CRS according to pyproj (the truth reference)."""
     x, y = _pinned_5514_to(target_crs).transform(*_APEX_5514)
     return float(x), float(y)
 
 
 def _server_emulator(calls=None, *, nodata_west_of=None, flat=None):
-    """side_effect dla export_image odtwarzajacy zachowanie ArcGIS CUZK.
+    """side_effect for export_image reproducing the ArcGIS CUZK behaviour.
 
-    Odpowiedz natywna (5514) jest poprawna; kazda inna dostaje tresc
-    przesunieta o `_BALLPARK_SHIFT` — dokladnie tak, jak zmierzony serwer.
-    Kod ufajacy reprojekcji serwerowej przepusci to przesuniecie do pliku
-    wynikowego; kod pobierajacy natywnie i reprojektujacy lokalnie — nie.
+    The native (5514) response is correct; any other gets content shifted
+    by `_BALLPARK_SHIFT` - exactly like the measured server. Code that trusts
+    server reprojection lets this shift through into the result file; code that
+    downloads natively and reprojects locally does not.
     """
 
     def _fake(endpoint, bbox, **kwargs):
@@ -413,7 +414,7 @@ def _apex_of(path):
 
 
 class TestHorizontalReprojection:
-    """Reprojekcja tresci CZ jest LOKALNA (przypieta operacja), a nie serwerowa."""
+    """Reprojection of CZ content is LOCAL (a pinned operation), not server-side."""
 
     BALLPARK_SHIFT = _BALLPARK_SHIFT
     APEX_5514 = _APEX_5514
@@ -443,7 +444,7 @@ class TestHorizontalReprojection:
         assert abs(got[1] - expected[1]) < 2.0, f"N: {got} vs {expected}"
 
     def test_server_is_asked_only_for_native_5514(self, tmp_path: Path) -> None:
-        """Zadania exportImage bija wylacznie w uklad natywny, niezaleznie od celu."""
+        """exportImage requests hit only the native CRS, regardless of the target."""
         bbox = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
         calls: list = []
         with patch(_CLIENT_PATCH) as client_cls:
@@ -456,7 +457,7 @@ class TestHorizontalReprojection:
         assert all(wkid(sent.crs) == "5514" for sent, _, _ in calls)
 
     def test_tm33_godlo_also_goes_native_then_local_warp(self, tmp_path: Path) -> None:
-        """Kafel TM33 (3045) tez nie ufa reprojekcji serwerowej."""
+        """The TM33 tile (3045) does not trust server reprojection either."""
         target = tmp_path / "302_5550.tif"
         calls: list = []
         with patch(_CLIENT_PATCH) as client_cls:
@@ -498,11 +499,11 @@ class TestHorizontalReprojection:
         assert sent.max_y == pytest.approx(native.max_y + 8.0)
 
     def test_nodata_does_not_bleed_into_interpolation(self, tmp_path):
-        """Piksele nodata nie moga rozcienczac wartosci sasiadow ani zniknac.
+        """Nodata pixels must neither dilute neighbours' values nor vanish.
 
-        Pole zrodlowe jest PLASKIE (300 m) z polowa obszaru jako nodata:
-        kazda wartosc rozna od 300 w wyniku byloby dowodem, ze interpolator
-        wmieszal `-9999` do sredniej wazonej na krawedzi maski.
+        The source field is FLAT (300 m) with half the area as nodata:
+        any value other than 300 in the result would be proof that the
+        interpolator mixed `-9999` into the weighted mean at the mask edge.
         """
         target = tmp_path / "area.tif"
         bbox = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
@@ -550,12 +551,13 @@ class TestHorizontalReprojection:
 
     @pytest.mark.parametrize("kind", ["bbox", "godlo"])
     def test_failed_warp_keeps_previous_output(self, tmp_path, kind):
-        """Nieudana przebudowa (``--force``) NIE kasuje poprzedniego wyniku (N7/D8).
+        """A failed rebuild (``--force``) does NOT delete the previous result (N7/D8).
 
-        Awaria pochodzi z nieczytelnej odpowiedzi natywnej, a nie z patcha
-        konkretnej funkcji warpu — test nie zalezy od tego, ktora implementacja
-        reprojekcji jest pod spodem. Tor PL (``transform/raster.warp_to_grid``)
-        zostawia poprzedni plik; tor CZ ma zachowywac sie tak samo.
+        The failure comes from an unreadable native response, not from patching
+        a specific warp function - the test does not depend on which
+        reprojection implementation is underneath. The PL path
+        (``transform/raster.warp_to_grid``) leaves the previous file; the CZ
+        path is to behave the same.
         """
         from rasterio.errors import RasterioIOError
 
@@ -581,15 +583,16 @@ class TestHorizontalReprojection:
         [("bbox", "EPSG:2180"), ("godlo", "EPSG:3045")],
     )
     def test_warp_forces_the_pinned_operation(self, tmp_path, kind, target_crs):
-        """Operacja MUSI byc podana GDAL-owi jawnie (ADR-024 pkt b).
+        """The operation MUST be passed to GDAL explicitly (ADR-024 point b).
 
-        Bez `COORDINATE_OPERATION` warp nadal sie udaje i nadal trafia blisko
-        prawdy — GDAL wybiera wtedy operacje sam, poza polityka
-        `transform/crs.py` (zakaz ballparku, limit dokladnosci, probe).
-        Roznica wzgledem operacji przypietej to srednio 0,08 m, ale do 1,9 m
-        w pojedynczych pikselach — czyli za malo, by wywrocic asercje TRESCI
-        (tolerancja 1 px = 2 m), a wiec za malo, by wykryc regresje. Ten test
-        pilnuje samego wymuszenia: sprawdza, ktora operacja poszla do GDAL-a.
+        Without `COORDINATE_OPERATION` the warp still succeeds and still lands
+        close to the truth - GDAL then picks the operation itself, outside the
+        `transform/crs.py` policy (no ballpark, accuracy limit, probe).
+        The difference from the pinned operation is 0.08 m on average, but up
+        to 1.9 m in single pixels - too little to overturn the CONTENT
+        assertion (tolerance 1 px = 2 m), and so too little to detect a
+        regression. This test guards the enforcement itself: it checks which
+        operation went to GDAL.
         """
         from rasterio.warp import reproject as real_reproject
 
@@ -609,8 +612,8 @@ class TestHorizontalReprojection:
         warp.assert_called_once()
         expected = _pinned_5514_to(target_crs).gdal_operation()
         assert warp.call_args.kwargs["COORDINATE_OPERATION"] == expected
-        # sanity: wymuszona operacja niesie transformacje datum S-JTSK->ETRS89
-        # (jej brak to wlasnie zmierzony blad 135 m serwera CUZK)
+        # sanity: the enforced operation carries the S-JTSK->ETRS89 datum transformation
+        # (its absence is exactly the measured 135 m error of the CUZK server)
         assert "helmert" in expected and "x=570.8" in expected
 
     def test_tm33_tile_uses_czech_datum_operation(self, tmp_path):
@@ -650,7 +653,7 @@ class TestHorizontalReprojection:
 
 
 def _group_of(*transformers):
-    """Zamiennik TransformerGroup: podane operacje, bez ruchu sieciowego."""
+    """A TransformerGroup replacement: the given operations, no network traffic."""
     group = MagicMock()
     group.transformers = list(transformers)
     group.unavailable_operations = []
@@ -672,9 +675,10 @@ def _fake_operation(accuracy, description, result, codes=("EPSG:1622",)):
 
 
 class TestProbePoint:
-    """Punkt kontrolny w politykach POZIOMYCH CZ: siatka obcego kraju
-    (np. sk_gku, Slowacja) bywa dokladniejsza na papierze, a nad Czechami
-    zwraca inf — probe ma ja odrzucic, zanim popsuje pobranie (audyt A1-2).
+    """A control point in the CZ HORIZONTAL policies: a foreign country's grid
+    (e.g. sk_gku, Slovakia) may be more accurate on paper, but over Czechia
+    it returns inf - the probe must reject it before it spoils the download (audit
+    A1-2).
     """
 
     def test_horizontal_policy_rejects_operation_returning_inf(self):
@@ -690,8 +694,8 @@ class TestProbePoint:
         assert pinned.accuracy_m == 0.5
 
     def test_envelope_policy_probe_is_bbox_center(self):
-        """Obwiednia: punkt kontrolny to srodek przeliczanego bboxa
-        (w ukladzie ZRODLOWYM, wiec bez dodatkowej transformacji)."""
+        """Envelope: the control point is the centre of the converted bbox
+        (in the SOURCE CRS, so with no extra transformation)."""
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
         with patch(_PINNED_PATCH, wraps=build_pinned_transform) as pinned_mock:
             provider = CuzkDmrProvider(resolution="2m", session=MagicMock())
@@ -700,10 +704,10 @@ class TestProbePoint:
         assert pinned_mock.call_args.args[2].probe_point == (-446500.0, -1113500.0)
 
     def test_module_level_bbox_to_crs_carries_probe(self):
-        """Galaz `pinned is None` modulowej `bbox_to_crs` — jedyna, ktorej
-        uzywa CLI (`_country_bbox`, normalizacja nazwy pliku, `--country auto`,
-        sciezka mozaiki). Provider jej nie dotyka, wiec bez tej asercji ciche
-        usuniecie probe w tej galezi przeszloby bez sladu."""
+        """The `pinned is None` branch of the module-level `bbox_to_crs` - the only
+        one the CLI uses (`_country_bbox`, file-name normalisation, `--country auto`,
+        the mosaic path). The provider does not touch it, so without this assertion
+        a silent removal of the probe in this branch would pass unnoticed."""
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
         with patch(_PINNED_PATCH, wraps=build_pinned_transform) as pinned_mock:
             bbox_to_crs(bbox, "EPSG:4326")
@@ -720,9 +724,9 @@ class TestProbePoint:
         assert pinned_mock.call_args.args[2].probe_point == CZ_PROBE_NATIVE
 
     def test_all_horizontal_pinned_calls_carry_probe(self, tmp_path: Path) -> None:
-        """Zadna operacja POZIOMA nie jest budowana bez punktu kontrolnego —
-        ani reprojekcja tresci, ani obwiednia, ani lon/lat dla shiftu pionowego.
-        Wyjatek jest jeden: para czysto pionowa 8357->5621."""
+        """No HORIZONTAL operation is built without a control point -
+        neither the content reprojection, nor the envelope, nor lon/lat for a
+        vertical shift. There is one exception: a purely vertical pair 8357->5621."""
         calls: list = []
         vertical = MagicMock()
         vertical.description = "Baltic 1957 height to EVRF2007 height (1)"
@@ -751,7 +755,7 @@ class TestProbePoint:
         assert {(c[0], c[1]) for c in horizontal} == {
             ("EPSG:5514", "EPSG:2180"),  # reprojekcja tresci
             ("EPSG:2180", "EPSG:5514"),  # obwiednia zadania natywnego
-            ("EPSG:2180", "EPSG:4326"),  # lon/lat dla operacji pionowej
+            ("EPSG:2180", "EPSG:4326"),  # lon/lat for the vertical operation
         }
         assert all(policy.probe_point is not None for _, _, policy in horizontal)
 
@@ -768,7 +772,7 @@ class TestDownloadBbox:
         assert client.export_image.call_args.args[1] == bbox
 
     def test_bbox_works_for_5m_too(self, tmp_path):
-        """Rekonesans krok 4: dmr4g/exportImage dziala — bbox nie jest blokowany."""
+        """Reconnaissance step 4: dmr4g/exportImage works - the bbox is not blocked."""
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
         with patch(_CLIENT_PATCH) as client_cls:
             client = client_cls.return_value
@@ -780,7 +784,7 @@ class TestDownloadBbox:
         )
 
     def test_target_crs_produces_target_grid_from_native_request(self, tmp_path):
-        """`--target-crs` zmienia siatke WYNIKU, ale nie uklad ZADANIA."""
+        """`--target-crs` changes the RESULT grid, but not the REQUEST CRS."""
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
         target = tmp_path / "area.tif"
         with patch(_CLIENT_PATCH) as client_cls:
@@ -793,7 +797,7 @@ class TestDownloadBbox:
         assert kwargs["image_sr"] == "EPSG:5514"
         sent = client.export_image.call_args.args[1]
         assert sent.crs == "EPSG:5514"
-        # wynik lezy na siatce zadanej: okolice Cieszyna w PL-1992
+        # the result lies on the requested grid: the Cieszyn area in PL-1992
         expected = bbox_to_crs(bbox, "EPSG:2180")
         with rasterio.open(target) as src:
             assert src.crs.to_epsg() == 2180
@@ -933,19 +937,19 @@ class TestOnDownloadCallback:
 
 
 class TestVerticalTransform:
-    """Przedmiotem testow jest `_apply_vertical_shift`, dlatego rastry ida
-    sciezka NATYWNA (bbox w 5514) — bez reprojekcji poziomej, ktora
-    przeprobkowalaby syntetyczne fixtury. Wspolgranie obu transformacji
-    sprawdza `test_tm33_godlo_warps_then_shifts_vertically`."""
+    """The subject of the tests is `_apply_vertical_shift`, so the rasters go
+    the NATIVE path (bbox in 5514) - without horizontal reprojection, which
+    would resample the synthetic fixtures. The interplay of both
+    transformations is checked by `test_tm33_godlo_warps_then_shifts_vertically`."""
 
     def _pinned_fakes(self, real_horizontal=False):
-        """side_effect dla build_pinned_transform: OSOBNE fake'i dla operacji
-        pionowej 8357->5621 (3-argumentowa, przesuwa z o +0.13) i pomocniczej
-        poziomej raster_crs->4326 (2-argumentowa, identycznosc) —
-        _apply_vertical_shift buduje obie przez te sama funkcje.
+        """side_effect for build_pinned_transform: SEPARATE fakes for the
+        vertical operation 8357->5621 (3-argument, shifts z by +0.13) and the
+        auxiliary horizontal raster_crs->4326 (2-argument, identity) -
+        _apply_vertical_shift builds both through the same function.
 
-        `real_horizontal=True` zostawia operacje reprojekcji TRESCI (5514->cel)
-        prawdziwa — fake'owy pipeline nie przeszedlby przez GDAL.
+        `real_horizontal=True` leaves the CONTENT reprojection operation
+        (5514->target) real - a fake pipeline would not pass through GDAL.
         """
         vertical = MagicMock()
         vertical.description = "Baltic 1957 height to EVRF2007 height (1)"
@@ -989,12 +993,12 @@ class TestVerticalTransform:
         with rasterio.open(target) as src:
             data = src.read(1)
         assert data[5, 5] == pytest.approx(100.13, abs=1e-4)
-        assert data[0, 0] == CUZK_NODATA  # nodata NIE jest transformowane
+        assert data[0, 0] == CUZK_NODATA  # nodata is NOT transformed
         assert vertical.transform.called
 
     def test_tm33_godlo_warps_then_shifts_vertically(self, tmp_path):
-        """Kafel TM33: reprojekcja pozioma i przesuniecie pionowe skladaja sie
-        (raster w 3045, wartosci po operacji Bpv->EVRF2007, nodata nietkniete)."""
+        """TM33 tile: the horizontal reprojection and the vertical shift compose
+        (raster in 3045, values after the Bpv->EVRF2007 operation, nodata untouched)."""
         target = tmp_path / "302_5550.tif"
         factory, vertical = self._pinned_fakes(real_horizontal=True)
         with (
@@ -1034,7 +1038,7 @@ class TestVerticalTransform:
         assert vertical.transform.called
 
     def test_all_nodata_raster_is_left_alone(self, tmp_path):
-        """Kafel calkiem poza CZ (sam noData) nie moze zostac przesuniety."""
+        """A tile entirely outside CZ (nodata only) must not be shifted."""
         target = tmp_path / "empty.tif"
         factory, vertical = self._pinned_fakes()
         with (
@@ -1069,8 +1073,9 @@ class TestVerticalTransform:
         assert not list(tmp_path.iterdir())
 
     def test_failed_shift_leaves_no_half_transformed_file(self, tmp_path):
-        """Awaria na drugim pasie nie moze zostawic rastra o wymieszanych
-        ukladach pionowych pod docelowa nazwa (skip_existing utrwalilby korupcje)."""
+        """A failure on the second strip must not leave a raster with mixed
+        vertical CRSs under the target name (skip_existing would entrench the
+        corruption)."""
         target = tmp_path / "area.tif"
         factory, vertical = self._pinned_fakes()
         calls = {"n": 0}
@@ -1094,11 +1099,11 @@ class TestVerticalTransform:
 
         assert calls["n"] > 1  # awaria faktycznie po zapisaniu pierwszego pasa
         assert not target.exists()
-        assert list(tmp_path.iterdir()) == []  # zero plikow tymczasowych
+        assert list(tmp_path.iterdir()) == []  # zero temporary files
 
     def test_failed_shift_removes_sm5_worldfile_too(self, tmp_path):
-        """Sciezka SM5: razem z .tif znika towarzyszacy .tfw (zaden osierocony
-        plik nie zostaje na dysku)."""
+        """SM5 path: the accompanying .tfw disappears along with the .tif (no
+        orphaned file stays on disk)."""
         target = tmp_path / "CTES96.tif"
         factory, vertical = self._pinned_fakes()
         vertical.transform.side_effect = TransformError("wartosc nieskonczona")
@@ -1120,7 +1125,8 @@ class TestVerticalTransform:
         assert list(tmp_path.iterdir()) == []
 
     def test_raster_without_crs_reports_clear_error(self, tmp_path):
-        """Bez CRS nie da sie policzyc (lon, lat) — czytelny blad zamiast CRSError."""
+        """Without a CRS (lon, lat) cannot be computed - a readable error instead of
+        CRSError."""
         factory, _ = self._pinned_fakes()
         with (
             patch(_CLIENT_PATCH) as client_cls,
@@ -1132,10 +1138,10 @@ class TestVerticalTransform:
                 provider.download_bbox(_NATIVE_BBOX, tmp_path / "t.tif")
 
     def test_vertical_shift_rejects_raster_without_geotransform(self, tmp_path):
-        """Raster z CRS, ale z jednostkowa geotransformacja (DMR4G-TIFF, ktory
-        zgubil .tfw): (lon, lat) wyszlyby z NUMEROW pikseli, a wysokosci
-        zostalyby cicho przesuniete o zly offset (rzedu 0,14 m). Ma byc jawny
-        blad i sprzatniecie, a nie po cichu zly plik."""
+        """A raster with a CRS but a unit geotransform (a DMR4G-TIFF that lost
+        its .tfw): (lon, lat) would come out of pixel NUMBERS, and the heights
+        would be silently shifted by a wrong offset (of the order of 0.14 m).
+        It must be an explicit error and cleanup, not a silently wrong file."""
         path = tmp_path / "CTES96.tif"
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")  # NotGeoreferencedWarning — celowe
@@ -1159,10 +1165,10 @@ class TestVerticalTransform:
             with pytest.raises(ValidationError, match="geotransformacj"):
                 provider._apply_vertical_shift(path)
 
-        assert not vertical.transform.called  # nic nie zostalo przeliczone
+        assert not vertical.transform.called  # nothing was converted
         assert not path.exists()
         assert not path.with_suffix(".tfw").exists()
-        assert list(tmp_path.iterdir()) == []  # zero plikow tymczasowych
+        assert list(tmp_path.iterdir()) == []  # zero temporary files
 
     def test_chunking_covers_whole_raster(self, tmp_path):
         """Raster wyzszy niz jeden pas: kazdy piksel danych przesuniety raz."""
@@ -1186,8 +1192,8 @@ class TestVerticalTransform:
         assert np.all(data[data != CUZK_NODATA] == pytest.approx(100.13, abs=1e-4))
 
     def test_vertical_transform_gets_lon_lat_order(self, tmp_path):
-        """Rekonesans 7a: przy always_xy=True argumentami sa (lon, lat, h);
-        zamiana daje cichy blad ~0,44 m."""
+        """Reconnaissance 7a: with always_xy=True the arguments are (lon, lat, h);
+        swapping gives a silent error of ~0.44 m."""
         factory, vertical = self._pinned_fakes()
         with (
             patch(_CLIENT_PATCH) as client_cls,
@@ -1232,7 +1238,7 @@ class TestDescriptorProviderConsistency:
         assert storage._subdir == "nmt/cz_dmr5g_bpv"
         for ch in d.channels:
             assert ch.vertical_crs_options == ("EPSG:8357",)
-            assert ch.endpoint  # silnik jest sterowany deskryptorem
+            assert ch.endpoint  # the engine is descriptor-driven
 
     def test_dmr4g(self, tmp_path):
         d = get_source("cz.cuzk.dmr4g")
