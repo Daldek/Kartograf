@@ -1,4 +1,4 @@
-# Final review galezi `fix/release-0.7.0-audit` (f432403..f10388c, 66 commitow)
+# Final review galezi `fix/release-0.7.0-audit` (ff145a9..7e6036b, 66 commitow)
 
 Reviewer: Senior Code Reviewer (fable), 2026-08-23. Read-only; zadnych zmian w drzewie.
 
@@ -16,7 +16,7 @@ snippetem, osiagalny przez publiczne `LandCoverManager.download_batch()` z domys
 
 | | Status | Dowod |
 |---|---|---|
-| (a) zero shimow | OK | `git diff f432403..f10388c -- kartograf/ \| grep -i "alias\|compat\|shim"` -> jedyne trafienie to docstring `SheetParser` ("aliases are planned for the next major"); `kartograf.__all__` bez zmian (31 nazw), `kartograf/__init__.py` nie w diffie |
+| (a) zero shimow | OK | `git diff ff145a9..7e6036b -- kartograf/ \| grep -i "alias\|compat\|shim"` -> jedyne trafienie to docstring `SheetParser` ("aliases are planned for the next major"); `kartograf.__all__` bez zmian (31 nazw), `kartograf/__init__.py` nie w diffie |
 | (b) test przypinajacy per naprawa | OK | 27 sprawdzonych nazw testow z planu (po jednym na zadanie 1-21) — 27/27 istnieje w `tests/` (`grep -rl "def <nazwa>"`); ledger niesie RED/GREEN per zadanie |
 | (c) ruff / format / mypy | OK | `ruff check kartograf/ tests/` -> `All checks passed!`; `ruff format --check` -> `83 files already formatted`; `mypy kartograf/` -> `Found 32 errors in 9 files` (baseline 33) |
 | (d) ADR-022/023/024 | OK | `exportImage` wolane wylacznie z `image_sr=NATIVE_CRS` (dmr.py:278-299, oba wywolania); `ResultMetadata.schema == "kartograf-meta/1"` (`sources/sidecar.py` nie w diffie); `parent_request` budowany w `_dispatch_area` dla KAZDEGO trybu bbox/geometry, takze po `auto -> pl` (download_cmd.py:~488); `server_reprojection=False` dla obu CZ; lokalny warp `_warp_to_grid` nietkniety |
@@ -25,7 +25,7 @@ snippetem, osiagalny przez publiczne `LandCoverManager.download_batch()` z domys
 | (g) testy offline | OK | pelna suita z wlasnym pluginem blokujacym `socket.getaddrinfo` (scratchpad, nie w repo) -> **0 prob DNS**, `pyproj.network.is_network_enabled() == False`; `-m "not live"`: 1700 passed, 8 deselected. UWAGA: bez `-m "not live"` 8 testow `live` (`test_pl2000_verification.py::TestPL2000LiveWMS`) faktycznie odpytuje GUGiK (przeszly w przebiegu 1 — sa wylaczone z blokady) |
 | (h) wersja / authors | OK | `__version__ == "0.7.0-dev"`; diff `pyproject.toml`: `authors`/`license` nietkniete |
 | (i) komendy | OK | jak w (c); pytest: przebieg 1 (pelny) `1708 passed in 24.13s`; przebieg 2 (swiezy `__pycache__`, `-m "not live"`) `1700 passed, 8 deselected in 23.90s`; przebieg 3 (plugin DNS) `1700 passed`; testy wspolbiezne (`test_metadata_cache`, `test_auth_client`, `test_parallel_download`) 5x pod rzad `140 passed` — suita deterministyczna |
-| (j) commity | OK | 66 commitow, wszystkie Conventional Commits bez diakrytykow (`git log --oneline f432403..f10388c`) |
+| (j) commity | OK | 66 commitow, wszystkie Conventional Commits bez diakrytykow (`git log --oneline ff145a9..7e6036b`) |
 | (k)/(l) baseline / dowody | OK (ledger) | kanoniczny przebieg po zad. 21 zgodny z moim: 1708 collected / 93% / mypy 32 |
 
 ### Findings

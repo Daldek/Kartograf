@@ -1,6 +1,6 @@
 # L6 — inne granice (PL-SK, PL-UA, PL-BY, PL-LT, PL-RU) — raport z testow na zywych danych GUGiK
 
-Data: 2026-09-29. Galaz `develop`, HEAD 6985765 (repo TYLKO DO ODCZYTU — zero zmian w
+Data: 2026-09-29. Galaz `develop`, HEAD 152c31e (repo TYLKO DO ODCZYTU — zero zmian w
 kodzie/testach/dokumentacji, `git status` czysty przez cala sesje). Katalog roboczy:
 `/home/claude-agent/workspace/Kartograf/e2e-data/2026-09-29-live/L6-inne-granice/`
 (gitignored). Laczny rozmiar pobranych danych: **120 MB** (budzet <= ~3 GB, `--workers 2`

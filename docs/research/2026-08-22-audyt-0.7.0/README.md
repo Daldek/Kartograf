@@ -13,4 +13,4 @@ Kopia artefaktow z git-ignored katalogu `.superpowers/sdd/2026-08-22-release-0.7
 - `REPORT_FORMAT.md`, `VERIFY_FORMAT.md` — formaty raportow
 
 Raporty implementerow per zadanie (task-N-report.md) i pakiety diffow NIE sa kopiowane
-(odtwarzalne z git: commity f432403..HEAD).
+(odtwarzalne z git: commity ff145a9..HEAD).

@@ -1,7 +1,7 @@
 # Implementacja uproszczenia parserow (K1-K5, K7a)
 
 Data: 2026-10-07. Galaz `refactor/parsers` (worktree
-`Kartograf-parsers`), baza `develop` @ `483afb7`. Plan:
+`Kartograf-parsers`), baza `develop` @ `a9d502f`. Plan:
 `ocena-parserow.md`, sekcja "Plan dla implementera". Bez sieci.
 
 ## Bilans
@@ -30,7 +30,7 @@ sa z jawnym `PYTHONPATH` (sprawdzone `kartograf.__file__`).
 
 ## Kroki
 
-### K1 — `core/bbox.py` (commit `bed1ffe`, `refactor(core)`)
+### K1 — `core/bbox.py` (commit `42c3214`, `refactor(core)`)
 
 - Nowy modul-lisc: `BBox` (przeniesiona z `sheet_parser`, ksztalt bez
   zmian), `validate_bbox(bbox, *, crs=None)` (NaN/inf, `min > max`, uklad;
@@ -53,7 +53,7 @@ sa z jawnym `PYTHONPATH` (sprawdzone `kartograf.__file__`).
 - Docs: drzewa modulow w `CLAUDE.md`, `docs/ARCHITECTURE.md`, `docs/SCOPE.md`.
 - Bilans: kod +160/-11, testy +146.
 
-### K2 — `SheetParser.get_bbox` i selekcja PL-1992 (commit `6a02d37`, `refactor(core)`)
+### K2 — `SheetParser.get_bbox` i selekcja PL-1992 (commit `bd0dc6c`, `refactor(core)`)
 
 - `get_bbox("EPSG:2180")` -> `transform_bbox`; kopia
   `_transform_bbox_to_wgs84` (6 punktow, poprawka 2026-09-28) i
@@ -69,7 +69,7 @@ sa z jawnym `PYTHONPATH` (sprawdzone `kartograf.__file__`).
   starego kodu (nowy transformer + 4 narozniki) -> 2 testy.
 - Bilans: kod +14/-83, testy +66.
 
-### K3 — `parser_2000`: naprawa gubienia wiersza (commit `2bd1d4d`, `fix(parser)`)
+### K3 — `parser_2000`: naprawa gubienia wiersza (commit `2cd6bcb`, `fix(parser)`)
 
 - `Parser2000._transform_bbox`, `_transform_bbox_to_wgs84`,
   `_transform_bbox_to_zone_crs` (trzy kopie 4-naroznikowe) usuniete;
@@ -86,7 +86,7 @@ sa z jawnym `PYTHONPATH` (sprawdzone `kartograf.__file__`).
   bez `validate_bbox` -> 1 test.
 - Bilans: kod +15/-131, testy +41.
 
-### K4 — czytniki SHP/GPKG (commit `c903955`, `refactor(core)`)
+### K4 — czytniki SHP/GPKG (commit `a567af1`, `refactor(core)`)
 
 - `_read_shp_bboxes`/`_read_gpkg_bboxes`: `transform_bbox(BBox(...,
   source_crs.to_wkt()), target_crs)` — klucz cache to WKT (string), jeden
@@ -109,7 +109,7 @@ regresja wiersza), `test_geometry` (obiekt przez 19E). `_transformer` bez
 cache (`__wrapped__`): **5 testow** w tych samych czterech plikach
 (sheet_parser, parser_2000, geometry x2, core_bbox).
 
-### K5 — rejestr, `Sm5Sheet`, wzorce CZ, `strip()` (commit `dd8c3da`, `refactor(core)!`)
+### K5 — rejestr, `Sm5Sheet`, wzorce CZ, `strip()` (commit `c129d46`, `refactor(core)!`)
 
 - `core/parser_registry.py`: literal `SYSTEMS` (pl2000, cz_tm33, cz_sm5,
   pl1992) zamiast `register_system`/`_REGISTRY`; `SheetSystem` bez
@@ -142,7 +142,7 @@ cache (`__wrapped__`): **5 testow** w tych samych czterech plikach
   drzewo modulow), `SCOPE.md`, `CLAUDE.md`. Historia w `PROGRESS.md` bez zmian.
 - Bilans: kod +54/-138, testy +76/-106.
 
-### K7a — `parse_bbox_arg` (commit `da8fc35`, `fix(cli)`)
+### K7a — `parse_bbox_arg` (commit `a87b1a6`, `fix(cli)`)
 
 - `cli/_parser.py::parse_bbox_arg(text, crs) -> BBox`: 4 wartosci, liczby,
   `validate_bbox`; jeden komunikat `Invalid bbox format: <powod>.
@@ -220,10 +220,10 @@ zapytan `exportImage`/`query`. Do decyzji przy odmrozeniu toru CZ.
 
 | Commit | Krok |
 |---|---|
-| `bed1ffe` | K1 `refactor(core): core/bbox.py — BBox, validate_bbox, transform_bbox, is_czech_crs` |
-| `6a02d37` | K2 `refactor(core): SheetParser.get_bbox i selekcja arkuszy przez core.bbox` |
-| `2bd1d4d` | K3 `fix(parser): PL-2000 z bboxa WGS84 przez poludnik osiowy strefy nie gubi wiersza arkuszy` |
-| `c903955` | K4 `refactor(core): czytniki SHP/GPKG przez core.bbox.transform_bbox` |
-| `dd8c3da` | K5 `refactor(core)!: rejestr systemow godel bez parser_factory i Sm5Sheet, strip() spojnie` |
-| `da8fc35` | K7a `fix(cli): parse_bbox_arg — jedno parsowanie --bbox z walidacja w landcover/soilgrids` |
-| `8cb604a` (+ poprawka) | `docs: CHANGELOG Parsery 2026-10-07 i raport implementacji uproszczenia parserow` |
+| `42c3214` | K1 `refactor(core): core/bbox.py — BBox, validate_bbox, transform_bbox, is_czech_crs` |
+| `bd0dc6c` | K2 `refactor(core): SheetParser.get_bbox i selekcja arkuszy przez core.bbox` |
+| `2cd6bcb` | K3 `fix(parser): PL-2000 z bboxa WGS84 przez poludnik osiowy strefy nie gubi wiersza arkuszy` |
+| `a567af1` | K4 `refactor(core): czytniki SHP/GPKG przez core.bbox.transform_bbox` |
+| `c129d46` | K5 `refactor(core)!: rejestr systemow godel bez parser_factory i Sm5Sheet, strip() spojnie` |
+| `a87b1a6` | K7a `fix(cli): parse_bbox_arg — jedno parsowanie --bbox z walidacja w landcover/soilgrids` |
+| `b8f1a22` (+ poprawka) | `docs: CHANGELOG Parsery 2026-10-07 i raport implementacji uproszczenia parserow` |

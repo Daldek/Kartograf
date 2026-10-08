@@ -2,7 +2,7 @@
 
 Status: DONE
 
-Commit: `bc35107` — "fix(storage): uklad kafla LAZ z LazTile.uklad — jeden segment dla CLI i biblioteki"
+Commit: `2f4c4b1` — "fix(storage): uklad kafla LAZ z LazTile.uklad — jeden segment dla CLI i biblioteki"
 
 ## Co zrobiono
 
@@ -105,7 +105,7 @@ tests/test_cli.py ..........                                             [100%]
 
 ## Dowody mutacyjne
 
-Wszystkie wykonane PO commicie `bc35107` (`git checkout -- <plik>` bezpiecznie
+Wszystkie wykonane PO commicie `2f4c4b1` (`git checkout -- <plik>` bezpiecznie
 przywraca stan zacommitowany). Cztery mutacje (trzy z briefu + jedna dodatkowa
 dla nowej walidacji `ValidationError`):
 
@@ -169,7 +169,7 @@ FAILED ...::test_laz_unknown_uklad_rejected
 `git checkout -- kartograf/download/storage.py` -> 1 passed.
 
 Po kazdej mutacji: `git status --short` puste (poza przywroconym plikiem —
-czyli w istocie zero roznicy wobec `bc35107`).
+czyli w istocie zero roznicy wobec `2f4c4b1`).
 
 ## Zmierzone liczby
 
@@ -219,7 +219,7 @@ czyli w istocie zero roznicy wobec `bc35107`).
 
 ```
 git status --short   -> (puste)
-git log --oneline -1 -> bc35107 fix(storage): uklad kafla LAZ z LazTile.uklad — jeden segment dla CLI i biblioteki
+git log --oneline -1 -> 2f4c4b1 fix(storage): uklad kafla LAZ z LazTile.uklad — jeden segment dla CLI i biblioteki
 pytest tests/ -q -m "not live"  -> 1852 passed, 8 deselected
 ruff check kartograf/ tests/    -> All checks passed!
 ruff format --check kartograf/ tests/ -> 87 files already formatted

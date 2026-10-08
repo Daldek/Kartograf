@@ -1,11 +1,11 @@
-# Finalny review fali naprawczej 0bf3d9f..fa1f771 (Kartograf, develop)
+# Finalny review fali naprawczej 81e71cb..84bd0a8 (Kartograf, develop)
 
 **Data:** 2026-09-28  
 **Reviewer:** fable (finalny review calej galezi, wg `FINAL-REVIEW-BRIEF.md`)  
-**Zakres:** 22 commity (`git log --oneline 0bf3d9f..fa1f771`), 28 plikow, +3937/-828.  
+**Zakres:** 22 commity (`git log --oneline 81e71cb..84bd0a8`), 28 plikow, +3937/-828.  
 **Metoda:** COMMON-CONTEXT (R1-R6, fakty 1-11) -> spec review max -> plan (Kontekst,
 Przeglad zadan, Poza zakresem, Review Focus, Zad. 17, Zakonczenie) -> pakiet diffu
-`review-final-0bf3d9f..fa1f771.diff` czytany **w 9 partiach** (docs 58-1778, kod
+`review-final-81e71cb..84bd0a8.diff` czytany **w 9 partiach** (docs 58-1778, kod
 1778-4618, testy 4618-7649; dwie partie przez pliki persisted) + zywy kod wszystkich
 modulow produkcyjnych toru wycinka (`cutout.py`, `mosaic.py`, `manager.py`,
 `gugik.py`, `download_cmd.py`, `storage.py`, `descriptor.py`, `raster.py`,
@@ -239,7 +239,7 @@ wiersz `extra.missing_sheets`, kto pisze sidecary, 1854+8); SCOPE (2.10 eksporty
 = `__all__`, 3.2 R5, 3.1 etap 2). Rozjazdy: wylacznie nieprecyzje m-8/m-9 (zadna
 nie opisuje odwrotnosci kodu); grep starych nazw w docs czysty.
 
-**E. Global Constraints.** `git diff 0bf3d9f..fa1f771 --stat -- kartograf/
+**E. Global Constraints.** `git diff 81e71cb..84bd0a8 --stat -- kartograf/
 providers/cuzk kartograf/transform/raster.py` -> pusty. Shimy: grep
 `_prepare_pl_cutout|_build_pl_cutout|_finalize_pl_cutout|_PlCutout|_laz_uklad|
 _PL_NODATA|_PL_PIXEL|_RESOLUTION_SUBDIRS|_PRODUCT_SUBDIRS` w `kartograf/`,

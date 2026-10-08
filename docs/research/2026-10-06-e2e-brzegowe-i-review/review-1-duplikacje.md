@@ -1,6 +1,6 @@
 # Review-1: zduplikowana logika i overengineering w `kartograf/` (przed 0.7.0)
 
-Data: 2026-10-06. Galaz: `develop` @ `55070f8`. Zakres: caly pakiet
+Data: 2026-10-06. Galaz: `develop` @ `ead24c2`. Zakres: caly pakiet
 `kartograf/`, nacisk na `providers/pl/*`, `providers/cuzk/*`, `download/*`,
 `transport/*`, `sources/*`, `cli/*`, `cache/*`.
 
@@ -114,7 +114,7 @@ jako `SessionPerThread` (patrz D2). `CuzkClient.query` buduje URL z
 `test_parallel_download.py`, `test_landcover.py`, `test_soilgrids.py`) patchuje
 `_download_with_retry`/`_save_response`/`_make_request` — pelna konsolidacja
 to backlog po 0.7.0. **Przed wydaniem**: (a) CORINE/SoilGrids dostaja
-`is_retryable`/`http_failure` (mechaniczna zmiana jak w commicie 9bcc040,
+`is_retryable`/`http_failure` (mechaniczna zmiana jak w commicie ca4d004,
 3 linie na provider), (b) `CuzkClient.query` dostaje petle z
 `is_retryable`/`retry_wait`, (c) decyzja o wykladniku backoffu (jedna stala
 `RETRY_BACKOFF_BASE**attempt` z tym samym zakresem) + dopisanie do CLAUDE.md.
@@ -584,7 +584,7 @@ przed wydaniem.
    ~90 linii, testy CZ zostaja bez zmian. Ryzyko: niskie; po zmianie
    uruchomic `tests/test_cuzk_dmr.py` i jeden przebieg na zywo kafla TM33.
 2. **D1 (a)+(b)** — CORINE i SoilGrids: `is_retryable`/`retry_wait`/
-   `http_failure` jak w 9bcc040 (zero czekania na 404, `status_code` w
+   `http_failure` jak w ca4d004 (zero czekania na 404, `status_code` w
    wyjatku); `CuzkClient.query` z ta sama petla (indeks SM5 przed kazdym
    DMR 4G). Ryzyko: niskie; `test_retry_policy.py` jest sparametryzowany po
    klasach — dopisac corine/soilgrids/CuzkClient do parametryzacji.

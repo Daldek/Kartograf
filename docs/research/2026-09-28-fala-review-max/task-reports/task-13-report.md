@@ -1,6 +1,6 @@
 # Zad. 13 — raport: porazka nie zostawia pustego drzewa `<segment>/bbox/` (zn. 10)
 
-Start: develop @ `4cf6ab9`. Commit: `32cc058` "fix(download): porazka wycinka nie zostawia pustych katalogow bbox/".
+Start: develop @ `b3477f4`. Commit: `d4632ab` "fix(download): porazka wycinka nie zostawia pustych katalogow bbox/".
 
 ## Co zrobiono
 
@@ -76,7 +76,7 @@ Dodatkowo (spoza gate'u, dla pewnosci ze tor CZ nietkniety):
 --name-only` — 7 plikow: storage.py, download_cmd.py, cutout.py, 3x test,
 CHANGELOG).
 
-## Dowody mutacyjne (PO commicie `32cc058`, przywracane `git checkout --`)
+## Dowody mutacyjne (PO commicie `d4632ab`, przywracane `git checkout --`)
 
 **Mutacja 1** — usuniete wywolanie `prune_empty_dirs` w galezi
 `except (DownloadError, ValidationError)` `_cz_download_bbox`:
@@ -116,7 +116,7 @@ Przywrocone `git checkout -- kartograf/download/storage.py` → 74 passed
 
 Po wszystkich trzech mutacjach + przywroceniach: `git diff --stat HEAD`
 pusty, `git status --short` pusty — drzewo robocze identyczne z commitem
-`32cc058`.
+`d4632ab`.
 
 ## Pliki
 

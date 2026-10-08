@@ -1,6 +1,6 @@
 # Bugfix: reprojekcja tresci CZ szla przez serwer CUZK
 
-Galaz `feature/etap1-cz-dmr`, 2026-08-11. Commity: `6bf5e2b` (kod), `fd5c5b0` (docs).
+Galaz `feature/etap1-cz-dmr`, 2026-08-11. Commity: `3c2cf44` (kod), `155c2b9` (docs).
 Zgloszenie: `seam-report.md` (analiza szwu PL/CZ na Olzie)
 (kopia: docs/research/2026-08-11-adr024-seam-report.md).
 
@@ -235,7 +235,7 @@ czysty, `mypy` 33 bledy = baseline. Wszystko offline.
 
 # Runda naprawcza po review (2026-08-11)
 
-Commit: `2dd8dae`. Testy: **1402** (+3), ruff/format czyste, mypy 33 = baseline.
+Commit: `71b7b4e`. Testy: **1402** (+3), ruff/format czyste, mypy 33 = baseline.
 
 ## FINDING 1 (Important) — wymuszenie operacji bez zadnego testu: **POTWIERDZONE, naprawione**
 

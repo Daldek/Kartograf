@@ -1,6 +1,6 @@
 # Weryfikacja E2E bugfixu reprojekcji CZ — punkty 1 i 4 z kontrola TRESCI
 
-Galaz `feature/etap1-cz-dmr` @ `2dd8dae`, 2026-08-11, dane **zywe** (serwery CUZK + GUGiK).
+Galaz `feature/etap1-cz-dmr` @ `71b7b4e`, 2026-08-11, dane **zywe** (serwery CUZK + GUGiK).
 Katalog roboczy: `/tmp/claude-1001/-home-claude-agent-workspace-Kartograf/f27c5cce-cd98-44b3-80e9-a90c445a283f/scratchpad/seam/verify`
 **Zadnych zmian w kodzie, zadnej zmiany galezi** (`git status` czysty przez cala sesje).
 

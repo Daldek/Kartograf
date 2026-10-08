@@ -1,6 +1,6 @@
 # Zad. 8: Wycinek PL jako API biblioteki (`kartograf/download/cutout.py`) — raport implementacji
 
-Commit: `ad9e056` (na `2290be5`)
+Commit: `c00a426` (na `3ce32a1`)
 `refactor(download): wycinek PL jako API biblioteki (download/cutout.py), CLI jako nakladka`
 Pliki (8): `kartograf/download/cutout.py` (nowy, +453), `kartograf/cli/download_cmd.py` (+92/-332),
 `kartograf/cli/_parser.py`, `kartograf/__init__.py`, `tests/test_pl_cutout.py`, `docs/CHANGELOG.md`, `README.md`, `CLAUDE.md`.
@@ -92,7 +92,7 @@ Pelna suita offline:
 .venv/bin/python -m pytest tests/ -q -m "not live"
 1812 passed, 8 deselected in 26.25s
 ```
-Punkt startowy (zmierzony na `2290be5` przed praca): 1806 passed. +6 = dokladnie `TestLibraryApi`. Dodatkowo
+Punkt startowy (zmierzony na `3ce32a1` przed praca): 1806 passed. +6 = dokladnie `TestLibraryApi`. Dodatkowo
 `tests/test_cuzk_client.py tests/test_cuzk_dmr.py tests/test_cli.py`: `331 passed`.
 
 ## ruff / mypy
@@ -106,7 +106,7 @@ Punkt startowy (zmierzony na `2290be5` przed praca): 1806 passed. +6 = dokladnie
   `kartograf/cli/download_cmd.py:521: error: Missing positional argument "bbox" in call to "_download_pl_geometry"  [call-arg]`
   (33 bledy). Jedyny wolajacy (`_dispatch_area`) podaje `bbox=part` — mypy czysty.
 
-## Dowody mutacyjne (wszystkie PO commicie `ad9e056`; przywracanie `git checkout -- <plik>`)
+## Dowody mutacyjne (wszystkie PO commicie `c00a426`; przywracanie `git checkout -- <plik>`)
 
 Driver: skrypt w scratchpadzie — asercja, ze kotwica mutacji wystepuje dokladnie tyle razy, ile trzeba -> mutacja ->
 skupiony test (`pytest -q -p no:cacheprovider <testy>`) -> `git checkout -- <plik>` -> ten sam test -> `git status --short`.
@@ -214,7 +214,7 @@ wyjscia (`Building cutout`) w dokumentacji uzytkowej: brak (grep).
 
 # Runda poprawek 1 (review Zad. 8)
 
-Commit: `6bc1c19` (na `ad9e056`)
+Commit: `96a57de` (na `c00a426`)
 `fix(download): run_pl_cutout odrzuca providera niezgodnego z wycinkiem; testy reuse cache/sidecar/5m`
 Pliki: `kartograf/download/cutout.py` (+26/-1), `tests/test_pl_cutout.py` (+118/-1), `docs/CHANGELOG.md` (+3/-1).
 
@@ -269,7 +269,7 @@ GREEN: `tests/test_pl_cutout.py` — `38 passed` (33 + 5 nowych). Pelna suita of
 (1812 + 5). `ruff check`: `All checks passed!`; `ruff format --check`: `87 files already formatted` (format bez zmian);
 `mypy kartograf/`: `Found 32 errors in 9 files (checked 53 source files)`, diff listy wzgledem baseline: 0 nowych, 0 zniknietych.
 
-## Dowody mutacyjne (PO commicie `6bc1c19`; przywracanie `git checkout -- kartograf/download/cutout.py`)
+## Dowody mutacyjne (PO commicie `96a57de`; przywracanie `git checkout -- kartograf/download/cutout.py`)
 
 Kazda mutacja uruchomiona na `tests/test_pl_cutout.py tests/test_cli.py` (295 testow) — lista FAILED pokazuje, ze pod
 mutacjami A-D pada WYLACZNIE nowy/zmieniony test (stary zestaw je przepuszczal, zgodnie z review).
@@ -285,7 +285,7 @@ mutacjami A-D pada WYLACZNIE nowy/zmieniony test (stary zestaw je przepuszczal, 
 | **D** | komunikat: `', '.join(failed)` -> `failed[0]` | 1 failed, 294 passed: `test_error_lists_all_failed_sheets` | `Error: 2 of 2 sheets failed: N-1 (wycinek wymaga kompletu arkuszy)` — brak `N-2` |
 
 Po kazdej: `PRZYWROCONE -> 295 passed; git status: (czysto)`.
-Kontrolnie caly zestaw M1-M16 z pierwszej rundy powtorzony na `6bc1c19`: wszystkie `[OK]` (M3: 2 failed, 36 passed;
+Kontrolnie caly zestaw M1-M16 z pierwszej rundy powtorzony na `96a57de`: wszystkie `[OK]` (M3: 2 failed, 36 passed;
 M12: 7 failed, 1 passed — dochodzi nowy test D z tej klasy), drzewo czyste.
 
 ## Watpliwosci

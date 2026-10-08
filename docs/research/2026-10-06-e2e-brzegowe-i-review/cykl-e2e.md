@@ -5,7 +5,7 @@ wymagania, zmienia stare i notuje każdą zmianę w sekcji „Historia zmian”.
 Agenci wykonawczy czytają go jako kontrakt, ale go nie edytują: swoje wyniki
 zapisują we własnych raportach.
 
-- **Runda:** 2026-10-06, przed wydaniem 0.7.0, `develop` od `fef7bf0`
+- **Runda:** 2026-10-06, przed wydaniem 0.7.0, `develop` od `6d9a6d0`
 - **Dane:** `<katalog-danych>/kartograf/e2e/2026-10-06-brzegowe/`
   (rastry, LAZ, surowe odpowiedzi serwera). Raporty `.md` trafiają do
   tego katalogu w repo.
@@ -33,8 +33,8 @@ których tamta runda nie dotknęła.
 
 | Faza | Co | Wynik |
 |------|----|-------|
-| F0 | **Przygotowanie.** `df -h <katalog-danych>`, `git rev-parse HEAD`, CLI z korzenia repo (cache SQLite lokalnie), `--output` zawsze na katalog danych. Przy rozpoznaniu wyboru pliku `--force`, żeby cache rekordów nie maskował zmian. | Nagłówek raportu |
-| F1 | **Rozpoznanie danych.** Surowe zapytania do skorowidza GUGiK (WMS GetCapabilities, GetFeatureInfo `text/html`), WFS LAZ, nagłówki plików (HEAD). Szukamy arkuszy z katalogu C (sekcja 3). Surowe body zapisujemy na katalog danych (`raw/<przypadek>/...`). | Lista kandydatów z uzasadnieniem |
+| F0 | **Przygotowanie.** `df -h <katalog-danych>`, `git rev-parse HEAD`, CLI z korzenia repo (cache SQLite lokalnie), `--output` zawsze w katalogu danych. Przy rozpoznaniu wyboru pliku `--force`, żeby cache rekordów nie maskował zmian. | Nagłówek raportu |
+| F1 | **Rozpoznanie danych.** Surowe zapytania do skorowidza GUGiK (WMS GetCapabilities, GetFeatureInfo `text/html`), WFS LAZ, nagłówki plików (HEAD). Szukamy arkuszy z katalogu C (sekcja 3). Surowe body zapisujemy w katalogu danych (`raw/<przypadek>/...`). | Lista kandydatów z uzasadnieniem |
 | F2 | **Wyrocznia przed uruchomieniem.** Z surowych rekordów, ręcznie i NIEZALEŻNIE od kodu, wyprowadzamy oczekiwany wynik: który URL wygra, jaka `aktualnosc`, rozdzielczość, układ, pion, kod wyjścia, komunikat. Zapisujemy to PRZED uruchomieniem CLI. | Kolumna „oczekiwane” |
 | F3 | **Wykonanie.** CLI (albo API biblioteki, gdy CLI nie daje dostępu). Zapisujemy pełną komendę, kod wyjścia, stderr (`Info:`/`Warning:`/`Error:`) i czas. | Kolumna „faktyczne” |
 | F4 | **Weryfikacja trójstronna:** rekord źródłowy ↔ plik na dysku ↔ sidecar. Lista kontrolna W1–W12 (sekcja 4). | Tabela zgodności |
@@ -140,12 +140,12 @@ w trakcie rundy) · **wycofane**.
 | ID | Wymaganie | Status | Źródło |
 |----|-----------|--------|--------|
 | E1 | Każdy przypadek C ma wyrocznię zapisaną PRZED uruchomieniem CLI. | aktywne | cykl F2 |
-| E2 | Każdy FAIL ma surowy dowód (body skorowidza, nagłówek pliku, sidecar) zapisany na katalog danych i zacytowany w raporcie. | aktywne | cykl F1/F5 |
+| E2 | Każdy FAIL ma surowy dowód (body skorowidza, nagłówek pliku, sidecar) zapisany w katalogu danych i zacytowany w raporcie. | aktywne | cykl F1/F5 |
 | E3 | Sidecar opisuje faktyczny plik (W3–W6), nie żądanie. | aktywne | ADR-026/028 |
 | E4 | Wybór pliku arkusza zgodny z ADR-028 dla C1–C4, C8, C9, C12. | aktywne | ADR-028 |
 | E5 | Kod wyjścia i komunikaty zgodne z CLAUDE.md (W11). | aktywne | CLAUDE.md |
 | E6 | Każdy FAIL i każdy nowy wzorzec danych kończy się testem offline na surowej fixturze, z dowodem mutacyjnym. | aktywne | cykl F7 |
-| E7 | Dane tylko na katalog danych, `--output` jawny, cache SQLite w repo. | aktywne | CLAUDE.md |
+| E7 | Dane tylko w katalogu danych, `--output` jawny, cache SQLite w repo. | aktywne | CLAUDE.md |
 | E8 | Nieudane ponowne budowanie wyniku (`--force`) nie usuwa poprzedniego poprawnego pliku — w KAZDYM torze (PL i CZ). | nowe (2026-10-06) | review-1 D8, review-2 N7 |
 | E9 | Nazwa i rozszerzenie pliku odpowiadaja jego faktycznemu formatowi (np. ZIP z SHP nie jest `.gpkg`); sidecar lezy obok faktycznego pliku. | nowe (2026-10-06) | review-2 N1 |
 | E10 | Kazde zapytanie sieciowe, ktore konczy tor bledem (indeks arkuszy CUZK, TERYT BDOT10k, GetCapabilities skorowidza), ma te sama polityke ponowien co pobieranie pliku i timeout zgodny z CLAUDE.md. | nowe (2026-10-06) | review-2 N3, N5 |
@@ -170,7 +170,7 @@ w trakcie rundy) · **wycofane**.
 
 ## 7a. Ponowny przebieg na żywo (F9) — zakres
 
-Po scaleniu `fix/review-2026-10-06` do `develop` (Sonnet, dane na katalog danych
+Po scaleniu `fix/review-2026-10-06` do `develop` (Sonnet, dane w katalogu danych
 `.../2026-10-06-brzegowe/f9/`), tylko przypadki, ktorych dotyczyly naprawy:
 
 | ID | Przypadek | Oczekiwane po naprawie | Wymaganie |
@@ -189,9 +189,9 @@ Po scaleniu `fix/review-2026-10-06` do `develop` (Sonnet, dane na katalog danych
 
 - **2026-10-06, zamkniecie rundy** — fala C (E17 `Warning:` w CLI, D16
   `--force` CZ = refresh, N11, N17, errata dokumentacji). Merge
-  `b394570` do `develop`: 2216 testow offline. **F9: 9/9 PASS**
+  `9c47988` do `develop`: 2216 testow offline. **F9: 9/9 PASS**
   (`live-f9.md`) — E9, E12–E17 potwierdzone na zywo. Zmiana kontraktu
-  F9 po fakcie: cache SQLite dla testow cache NIE na katalog danych CIFS (WAL
+  F9 po fakcie: cache SQLite dla testow cache NIE na udziale sieciowym CIFS (WAL
   -> `database is locked`), tylko lokalny katalog (zgodnie z CLAUDE.md;
   blad w zleceniu koordynatora). Otwarte: decyzja uzytkownika o regule
   niepelnego arkusza (E13 daje tylko widocznosc) i backlog —

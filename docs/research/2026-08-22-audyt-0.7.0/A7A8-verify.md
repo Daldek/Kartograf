@@ -269,7 +269,7 @@ polaczen, a nie tylko blokada.
   209-226, 269-277, 281-329, 595-626, 638-680, 689-720, 732-779, 793-827.
 - Uzasadnienie: sciezka jest krytyczna funkcjonalnie (to **glowny** produkt CORINE — GeoTIFF;
   testowany jest wylacznie fallback WMS/PNG), ale **nie jest to regresja 0.7.0**:
-  `git diff --stat f9a0a0f..HEAD -- kartograf/providers/corine.py` daje 4 wstawki / 2 usuniecia,
+  `git diff --stat c356bf5..HEAD -- kartograf/providers/corine.py` daje 4 wstawki / 2 usuniecia,
   a hunki (`@@ -48`, `@@ -446,0`, `@@ -466`) leza **poza** niepokrytym obszarem CLMS.
   Czyli luka istnieje od co najmniej v0.6.0 i wydanie 0.7.0 jej nie pogarsza.
 - Naprawa przed wydaniem 0.7.0: NIE (odlozyc)
@@ -288,8 +288,8 @@ polaczen, a nie tylko blokada.
 - Uzasadnienie: sciezka krytyczna z punktu widzenia bezpieczenstwa — jedynym zadaniem tego
   komponentu jest izolacja credentials i doklejanie naglowka `Bearer`, a zaden test tego nie
   sprawdza. Ale, jak przy A8-3, **to nie jest regresja 0.7.0**:
-  `git diff --stat f9a0a0f..HEAD -- kartograf/auth/proxy.py` jest **pusty** — plik nie byl
-  ruszany od v0.6.0 (ostatni commit dotyczacy: `4dd5f4d`, sprzed 0.6.0).
+  `git diff --stat c356bf5..HEAD -- kartograf/auth/proxy.py` jest **pusty** — plik nie byl
+  ruszany od v0.6.0 (ostatni commit dotyczacy: `d3acf22`, sprzed 0.6.0).
 - Naprawa przed wydaniem 0.7.0: NIE (odlozyc)
 - Zakres naprawy: n/d przed wydaniem. Do backlogu: `tests/test_auth_proxy.py` — instancjonowac
   klase handlera z podstawionym `rfile`/`wfile` (BytesIO) i `credentials` jako Mock; 4 asercje

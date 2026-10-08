@@ -2,7 +2,7 @@
 
 **Kontekst.** Repo `/home/claude-agent/workspace/Kartograf`, galaz `develop`. Po testach na zywych
 danych (raporty `L1`..`L7-*-report.md`) i audycie dokumentacji (`D1`, `D2`) agent wykonal fale
-poprawek DOKUMENTACJI: 12 commitow `6985765..f577d1c` (BASE `6985765`, HEAD `f577d1c`).
+poprawek DOKUMENTACJI: 12 commitow `152c31e..515f275` (BASE `152c31e`, HEAD `515f275`).
 Wszystkie pliki ponizej leza w katalogu tego zlecenia:
 `/home/claude-agent/workspace/Kartograf/.superpowers/sdd/2026-09-29-live-e2e-i-docs/`.
 
@@ -26,7 +26,7 @@ Pliki tymczasowe tylko w katalogu z `mktemp -d`.
    (spodziewany: `kartograf/cli/_parser.py`) wykaz, ze roznice to wylacznie literaly napisow
    w argumentach `help=`/`description=`/`epilog=`; kazda inna roznica (np. komunikat runtime,
    `choices`, domyslna wartosc) = znalezisko BLOKUJACE. Pliki bledow K1/K2/K6 nietkniete:
-   `git diff --stat 6985765..f577d1c -- kartograf/providers/pl/gugik_laz.py kartograf/providers/cuzk kartograf/transform/crs.py`
+   `git diff --stat 152c31e..515f275 -- kartograf/providers/pl/gugik_laz.py kartograf/providers/cuzk kartograf/transform/crs.py`
    musi byc puste.
 2. **Prawdziwosc.** Kazde NOWE lub ZMIENIONE twierdzenie o zachowaniu w diffie (dokumenty
    i docstringi) zweryfikuj na kodzie HEAD (`plik:linia`) albo w raporcie L/D (fakty z testow na
@@ -67,13 +67,13 @@ Pliki tymczasowe tylko w katalogu z `mktemp -d`.
    Hydrografu — sprawdz co najmniej 5 w repo Hydrografu (tylko odczyt).
 8. **Forma.** Pliki pisane bez polskich znakow zostaja bez nich (README ma diakrytyki — tam ich
    brak to usterka); `docs/DECISIONS.md` ma konce linii CRLF — porownaj liczbe linii CRLF i LF
-   w BASE i HEAD (`git show 6985765:docs/DECISIONS.md | grep -c $'\r$'`, analogicznie HEAD i
+   w BASE i HEAD (`git show 152c31e:docs/DECISIONS.md | grep -c $'\r$'`, analogicznie HEAD i
    `grep -vc $'\r$'`); brak pozostalosci roboczych w dokumentach biezacych (TODO, "kontroler",
    "agent", sciezki `/tmp`).
 9. **Brama.** `.venv/bin/python -m pytest tests/ -q -m "not live" -p no:cacheprovider` (oczekiwane
    1861 passed, 8 deselected); `.venv/bin/python -m ruff check kartograf/ tests/` i
    `.venv/bin/python -m ruff format --check kartograf/ tests/`; mypy: lista bledow bez numerow linii
-   na HEAD vs BASE — BASE rozpakuj przez `git archive 6985765 | tar -x -C "$(mktemp -d)"` i uruchom
+   na HEAD vs BASE — BASE rozpakuj przez `git archive 152c31e | tar -x -C "$(mktemp -d)"` i uruchom
    `.venv/bin/python -m mypy kartograf/` (sciezka do venv absolutna) z tego katalogu; porownaj
    `grep -E "error:" | sed -E 's/:[0-9]+: /: /' | sort` (oczekiwane 32 = 32, `diff` pusty).
 
@@ -81,7 +81,7 @@ Skrypt AST (pkt 1) — uruchom z katalogu repo:
 
 ```python
 import ast, subprocess
-BASE, HEAD = "6985765", "f577d1c"
+BASE, HEAD = "152c31e", "515f275"
 files = subprocess.run(
     ["git", "diff", "--name-only", f"{BASE}..{HEAD}", "--", "*.py"],
     capture_output=True, text=True, check=True,

@@ -23,9 +23,9 @@ Efekt dla `DownloadManager._write_sidecar` (bez edycji managera): `request={"god
 
 ## 2. Dowody per blad
 
-Failing-before: `git worktree` na HEAD `c8e8959` z sonda `tests/test_before_b3.py` (7 testow, tylko stare API: `_get_opendata_url`, `build_metadata`) + fixture'ami `orto_2024.html`, `orto_starsze.html` — **7 failed**; ta sama sonda na drzewie roboczym — **7 passed** (sonda i worktree usuniete).
+Failing-before: `git worktree` na HEAD `a01a0f9` z sonda `tests/test_before_b3.py` (7 testow, tylko stare API: `_get_opendata_url`, `build_metadata`) + fixture'ami `orto_2024.html`, `orto_starsze.html` — **7 failed**; ta sama sonda na drzewie roboczym — **7 passed** (sonda i worktree usuniete).
 
-| Blad | Test (po naprawie, `tests/test_gugik_orto.py` / `tests/test_sidecar.py`) | Failing-before na `c8e8959` (wynik sondy) | Passing-after |
+| Blad | Test (po naprawie, `tests/test_gugik_orto.py` / `tests/test_sidecar.py`) | Failing-before na `a01a0f9` (wynik sondy) | Passing-after |
 |---|---|---|---|
 | K5 CIR zamiast RGB | `TestGugikOrtoProviderSelection::test_picks_rgb_not_first_record`, `test_source_info_carries_kolor_and_campaign`, `test_color_kwarg_selects_other_variant` | `81422_1368112` (CIR, pierwszy w HTML) zamiast `81423_1371958` | URL RGB; `source_info` = `kolor RGB`, `aktualnosc 2024-06-21`, `layer SkorowidzeOrtofotomapy2026` (warstwa atrapy), `resolution_m 0.25`, `uklad PL-1992` |
 | K5 najstarsze zdjecie w `Starsze` | `test_starsze_picks_newest_rgb_not_oldest` | `17_21794` (2003, B/W) zamiast `76530_1087101` (2022-06-03 RGB) | najnowsze RGB; 4 warstwy odpytane w kolejnosci |

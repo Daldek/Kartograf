@@ -1,6 +1,6 @@
 # Implementacja — pakiet A3 LAZ (K1, N7)
 
-Data: 2026-09-29. Galaz `develop`, baza `c5b3110` (zawiera `make_gugik_session`
+Data: 2026-09-29. Galaz `develop`, baza `eb2ea10` (zawiera `make_gugik_session`
 i `get_with_retry` z A1). Projekt: `research-orto-laz.md` sekcje K1 i N7;
 rozstrzygniecia: ponowienia WYLACZNIE przez `get_with_retry` (P9, bez
 `urllib3.Retry`), straz "zwrocone, zadne nie przecina" = `DownloadError`,
@@ -54,7 +54,7 @@ ponowien (URL ~500 znakow) — `get_with_retry` loguje po stronie A1.
 
 ## Testy (failing-before / passing-after)
 
-Dowod failing-before: `git worktree add /tmp/kb HEAD` (= `c5b3110`) + tylko
+Dowod failing-before: `git worktree add /tmp/kb HEAD` (= `eb2ea10`) + tylko
 nowe `tests/test_gugik_laz.py`, `tests/test_cli.py`:
 `pytest tests/test_gugik_laz.py` -> 27 failed w tym pliku (z 60 lacznie dla
 A2+A3); `pytest tests/test_cli.py -k TestCmdDownloadLaz` -> 2 failed. Po

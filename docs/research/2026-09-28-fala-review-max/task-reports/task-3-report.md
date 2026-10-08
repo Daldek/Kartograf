@@ -132,7 +132,7 @@ Po wszystkich 4 mutacjach + przywroceniach: `git status --short` = tylko dwa zam
   - test: `assert (src.transform.c - 0.5) == pytest.approx(round(src.transform.c - 0.5), abs=1e-9)` -> wyciagniete do zmiennej posredniej `phase = src.transform.c - 0.5; assert phase == pytest.approx(round(phase), abs=1e-9)` (ten sam warunek, czytelniejszy).
   - test: `_write_lattice_tile(tmp_path / "a.tif", 0, 0, 10, 10, x0=0.0, y_top=1.0, res=0.1)` zawiniete na wiele linii (te same argumenty).
   - `ruff format` dodatkowo przelamal wywolania `mosaic_and_crop(...)`/`rasterio.open(...)` w nowych testach na wiele linii (kosmetyka, bez zmiany logiki) — diff pokazany w sekcji ruff wyzej.
-- Zadnych odchylen semantycznych od briefu. Kotwice file:line w briefie byly przyblizone (np. `dst_kwds` na koncu sygnatury) — kod jest zrodlem prawdy i zgadza sie z aktualnym stanem po Zad. 2 (HEAD `d50b7d5`).
+- Zadnych odchylen semantycznych od briefu. Kotwice file:line w briefie byly przyblizone (np. `dst_kwds` na koncu sygnatury) — kod jest zrodlem prawdy i zgadza sie z aktualnym stanem po Zad. 2 (HEAD `26ab9cb`).
 
 ## Pliki
 

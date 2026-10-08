@@ -60,7 +60,7 @@ zmian):
   wolajacy, ktory sam liczy `estimate_pl_cutout_bytes` przed `run_pl_cutout`
   (jak skrypt pomiarowy L7); CLI liczy tylko `cutout.estimated_bytes`
   (`cli/download_cmd.py:1034`).
-- **K2 (druga korekta, re-review rundy f52593a — RR-16):** dolna granica "ok. 1 m"
+- **K2 (druga korekta, re-review rundy 2dbed85 — RR-16):** dolna granica "ok. 1 m"
   byla falszywa — na Morawach roznica EPSG:1622 - EPSG:4829 wynosi 0,1-1,0 m
   (pomiar kontrolera ta sama metoda pyproj: Zlin 0,14, Uherske Hradiste 0,23,
   Olomouc 0,75, Brno 0,98, Ostrawa 1,04 m). Zakres w dokumentach: "do ~5 m

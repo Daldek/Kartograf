@@ -1,4 +1,4 @@
-# Finalny review calej fali (Kartograf, develop, 0bf3d9f..fa1f771)
+# Finalny review calej fali (Kartograf, develop, 81e71cb..84bd0a8)
 
 Jestes Senior Code Reviewerem. Oceniasz CALA fale naprawcza (18 zadan, 22 commity),
 nie pojedyncze zadanie — kazde zadanie przeszlo juz wlasny review. Twoja wartosc
@@ -40,13 +40,13 @@ Fala naprawcza po review max z 2026-08-30 (15 znalezisk w torze wycinka PL
    `docs/superpowers/plans/2026-09-28-fala-review-max-i-wycinek-biblioteczny.md` —
    "Przeglad zadan", "Poza zakresem", "Review Focus", "Zakonczenie".
 4. Pakiet diffu calej fali (bez planu i raportow research):
-   `review-final-0bf3d9f..fa1f771.diff` (~354 KB — czytaj partiami, powiedz w raporcie,
+   `review-final-81e71cb..84bd0a8.diff` (~354 KB — czytaj partiami, powiedz w raporcie,
    ze tak zrobiles). Commity:
-   `git log --oneline 0bf3d9f..fa1f771` w `/home/claude-agent/workspace/Kartograf`.
+   `git log --oneline 81e71cb..84bd0a8` w `/home/claude-agent/workspace/Kartograf`.
 5. Ledger: `progress.md` — WSZYSTKIE linie `Ruling:`, `minor (deferred)`,
    `DEFERRED-LOAD-BEARING`, `note`. Raporty zadan: `task-N-report.md` (wedlug potrzeby).
 
-## Stan bramy jakosci przy fa1f771 (zmierzony przez implementera Zad. 17, nie powtarzaj)
+## Stan bramy jakosci przy 84bd0a8 (zmierzony przez implementera Zad. 17, nie powtarzaj)
 
 `.venv/bin/python -m pytest tests/ -q -m "not live"`: 1854 passed, 8 deselected;
 pokrycie 92,87 %; ruff check + format czyste; mypy 32 bledy = baseline (diff listy pusty).
@@ -80,7 +80,7 @@ D. **Kod vs dokumentacja**: ARCHITECTURE 4.3, ADR-027 (+ uzupelnienia 2026-09-28
    do sprawdzenia, weryfikuj na zywym kodzie (w tej galezi dokumenty klamaly czesciej
    niz kod — w historii projektu 8 razy).
 E. **Zgodnosc z Global Constraints**: tor CZ i `transform/raster.py` bez zmian
-   (`git diff 0bf3d9f..fa1f771 --stat -- kartograf/providers/cuzk kartograf/transform/raster.py`);
+   (`git diff 81e71cb..84bd0a8 --stat -- kartograf/providers/cuzk kartograf/transform/raster.py`);
    brak shimow zgodnosciowych; semantyka, ktorej nie wolno zmienic (lista w
    COMMON-CONTEXT); CHANGELOG mowi o przebudowie z `--force`.
 F. **Konsument biblioteki — Hydrograf** (tylko odczyt: `/home/claude-agent/workspace/Hydrograf`,

@@ -1,6 +1,6 @@
 # ADR-030 — weryfikacja na zywo (T12), 2026-10-07
 
-Kod: develop `19100b6` (ADR-030 T1-T11 + poprawki). Dane: `<katalog-danych>/kartograf/e2e/2026-10-07-adr030-kampanie/`
+Kod: develop `3441029` (ADR-030 T1-T11 + poprawki). Dane: `<katalog-danych>/kartograf/e2e/2026-10-07-adr030-kampanie/`
 (CIFS SMB 3.1.1, `reparse=nfs`), cache SQLite lokalnie (cwd = repo), `kartograf cache clear` przed krokiem 1.
 Straze "bez sieci" sprawdzane z zablokowanym `socket.connect` (wywolanie `main()` CLI w procesie).
 
@@ -28,7 +28,7 @@ Straze "bez sieci" sprawdzane z zablokowanym `socket.connect` (wywolanie `main()
 
 ## Obserwacje
 
-- **O-1 (wazne dla dokumentacji): udzial CIFS katalog danych przyjmuje cel symlinku najwyzej 77 bajtow** (`reparse=nfs`;
+- **O-1 (wazne dla dokumentacji): testowany udzial CIFS przyjmuje cel symlinku najwyzej 77 bajtow** (`reparse=nfs`;
   78+ -> `OSError: [Errno 5] EIO`). Wzgledne cele kampanii maja ~82+ znakow
   (`../../../../../../kampanie/2025-10-21_84183/N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc`), wiec kod schodzi do
   hardlinka (zgodnie z R4/R5) — zachowanie poprawne, ale twierdzenie z ADR/planu "symlink zweryfikowany na SMB 3.1"
@@ -44,11 +44,11 @@ Straze "bez sieci" sprawdzane z zablokowanym `socket.connect` (wywolanie `main()
 - **O-5:** wycinek z bboxa ramy N-34-139-C-a-3 w EPSG:2180 objal 16 arkuszy (szersza obwiednia WGS84 — znane
   zachowanie `find_sheets_for_bbox`).
 
-Dane: 929 MB na katalog danych (NMT 1 m, 3 arkusze orto, 1 kafel LAZ, wycinki PL/CZ).
+Dane: 929 MB w katalogu danych (NMT 1 m, 3 arkusze orto, 1 kafel LAZ, wycinki PL/CZ).
 
 ## Dodatek: errata 4 (dowiazania wylacznie twarde) i uklad PL-2000 — na zywo, 2026-10-07
 
-Kod: develop `ba42ead` (errata 4: `hardlink` -> `copy`, bez symlinkow). Dane:
+Kod: develop `1744b90` (errata 4: `hardlink` -> `copy`, bez symlinkow). Dane:
 `<katalog-danych>/kartograf/e2e/2026-10-07-adr030-hardlink-pl2000/` (125 MB). Wynik: 11/11 PASS.
 
 | Krok | Wynik |

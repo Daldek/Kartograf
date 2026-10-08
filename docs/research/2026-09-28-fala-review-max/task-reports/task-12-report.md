@@ -120,7 +120,7 @@ mutacji/przywroceniu (patrz nizej) — **1842 passed, 8 deselected** ponownie.
   `kartograf/auth/proxy.py` — **zweryfikowane jako preexisting i niezwiazane
   z tym zadaniem**: `git stash` (zapisujac niezacommitowanej-juz-wtedy pracy
   nie dotyczylo, commit byl juz zlozony — stash byl uzyty tylko dla porownania
-  czystego `develop` HEAD `97a5bb4` bez zadnych zmian Zad. 12) →
+  czystego `develop` HEAD `209ca14` bez zadnych zmian Zad. 12) →
   `mypy kartograf/` na czystym HEAD → te same 3 `note:` linie w
   `auth/proxy.py` (plik nietkniety przez to zadanie) → `git stash pop`
   przywrocilo prace. Baseline najwyrazniej zostal przechwycony bez linii
@@ -150,7 +150,7 @@ FAILED tests/test_cli.py::TestCountryDispatch::test_geometry_in_czech_crs_leaves
 1 failed in 0.77s
 ```
 Przywrocenie: `git checkout -- kartograf/cli/download_cmd.py` (bezpieczne —
-zadanie juz zacommitowane jako `4cf6ab9`) → `git status --short` pusty.
+zadanie juz zacommitowane jako `b3477f4`) → `git status --short` pusty.
 Ponowny focused test → **1 passed in 0.36s** (PASS). Pelna suita ponownie
 **1842 passed, 8 deselected**. `git status --short` czysty poza `.superpowers/`
 (nieplikowany w repo).
@@ -179,7 +179,7 @@ Ponowny focused test → **1 passed in 0.36s** (PASS). Pelna suita ponownie
 
 ## Commit
 
-`4cf6ab9` — `fix(cli): obwiednia geometrii w ukladzie czeskim opuszcza Krovaka przypieta operacja`
+`b3477f4` — `fix(cli): obwiednia geometrii w ukladzie czeskim opuszcza Krovaka przypieta operacja`
 (4 files changed, 121 insertions(+), 17 deletions(-)).
 
 ## Samoocena i watpliwosci

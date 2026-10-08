@@ -1,7 +1,7 @@
 # Implementacja: ostatnia fala porzadkowa (K6, K7b, K9, D6, D9-PL, LAZ, strip)
 
 Galaz `refactor/cleanup` (worktree `Kartograf-cleanup`), baza develop
-`fec42d1`. Zrodla: `ocena-parserow.md` (plan K6-K9), `impl-parsery.md`
+`a813ea4`. Zrodla: `ocena-parserow.md` (plan K6-K9), `impl-parsery.md`
 (pozostawione), `impl-dedup-providers.md` (D6, D9 strona PL, sesja LAZ),
 `impl-dedup-download.md` (LAZ sidecar przez `emit_sidecar`). Bez sieci.
 
@@ -9,28 +9,28 @@ Galaz `refactor/cleanup` (worktree `Kartograf-cleanup`), baza develop
 
 | Stan | Testy offline | ruff | format | mypy |
 |---|---|---|---|---|
-| baza `fec42d1` | 2375 passed (16 live deselected) | czysto | czysto | 32 bledy |
+| baza `a813ea4` | 2375 passed (16 live deselected) | czysto | czysto | 32 bledy |
 | koniec | 2405 passed (16 live deselected) | czysto | czysto | 32 bledy, lista (bez numerow linii) identyczna z baza |
 
-Linie (`git diff --shortstat fec42d1 HEAD`): `kartograf/` +122 / -325
+Linie (`git diff --shortstat a813ea4 HEAD`): `kartograf/` +122 / -325
 (netto **-203**), `tests/` +318 / -119 (netto +199).
 
 | Commit | Zadanie | kartograf/ | tests/ |
 |---|---|---|---|
-| `8381e59` | K6 `fix(download): jedna obwiednia bboxa w cutout/CLI/dmr` | +52 / -221 | +71 / -86 |
-| `d32fe11` | K7b `fix(cli): parse_bbox_arg w torach download PL/CZ/LAZ` | +11 / -33 | +50 / -19 |
-| `c27f976` | K9 `refactor(cli)!: fasada commands.py bez prywatnych helperow` | +5 / -11 | +13 / -13 |
-| `b5e83cd` | D6 `refactor(cli): jeden helper komunikatu TransformError` | +7 / -9 | +34 / 0 |
-| `a2466f9` | D9 PL `refactor(download): CONTENT_POLICY i WARP_MARGIN_PX z transform.crs` | +5 / -10 | +21 / 0 |
-| `03eac02` | LAZ `fix(laz): sesja HTTP na watek (SessionPerThread)` | +7 / -4 | +67 / -5 |
-| `234ef2e` | LAZ `refactor(laz): sidecar kafla przez emit_sidecar` | +32 / -37 | +37 / 0 |
-| `e039740` | strip `fix(cuzk): CuzkDmrProvider.download obcina godlo` | +3 / 0 | +29 / 0 |
+| `83c197b` | K6 `fix(download): jedna obwiednia bboxa w cutout/CLI/dmr` | +52 / -221 | +71 / -86 |
+| `a2dc1c5` | K7b `fix(cli): parse_bbox_arg w torach download PL/CZ/LAZ` | +11 / -33 | +50 / -19 |
+| `1e15068` | K9 `refactor(cli)!: fasada commands.py bez prywatnych helperow` | +5 / -11 | +13 / -13 |
+| `1e0e5a6` | D6 `refactor(cli): jeden helper komunikatu TransformError` | +7 / -9 | +34 / 0 |
+| `fb9162f` | D9 PL `refactor(download): CONTENT_POLICY i WARP_MARGIN_PX z transform.crs` | +5 / -10 | +21 / 0 |
+| `038bf13` | LAZ `fix(laz): sesja HTTP na watek (SessionPerThread)` | +7 / -4 | +67 / -5 |
+| `22c20d1` | LAZ `refactor(laz): sidecar kafla przez emit_sidecar` | +32 / -37 | +37 / 0 |
+| `478843a` | strip `fix(cuzk): CuzkDmrProvider.download obcina godlo` | +3 / 0 | +29 / 0 |
 
 Mutacje uruchamiane skryptem w prywatnym katalogu `/tmp/claude-2001/cleanup/`
 (kopia pliku -> podmiana -> pytest -> przywrocenie; skrypt przerywa, gdy
 wzorzec nie pasuje). Po kazdej mutacji `git diff` pliku = stan sprzed niej.
 
-## 1. K6 — jedna obwiednia w cutout/CLI/dmr (`8381e59`)
+## 1. K6 — jedna obwiednia w cutout/CLI/dmr (`83c197b`)
 
 **Zmiana.**
 - `core/geometry._transform_bbox` (4 narozniki, transformer na wywolanie)
@@ -96,7 +96,7 @@ teraz `core.bbox._transformer`.
   naroznikow: pada tylko test jednostkowy (84 punkty). Testy CZ jej nie
   bronia — zgodnie z pomiarem wyzej, dla danych CZ nie ma to wplywu na wynik.
 
-## 2. K7b — `parse_bbox_arg` w download, martwa galaz CZ (`d32fe11`)
+## 2. K7b — `parse_bbox_arg` w download, martwa galaz CZ (`a2dc1c5`)
 
 **Zmiana.** `_cmd_download_bbox` i `_resolve_laz_bbox` -> `parse_bbox_arg(args.bbox,
 args.bbox_crs)` (ValidationError -> `Error: ...` w barierze `main`).
@@ -136,7 +136,7 @@ ASC. Nie ma tu dwoch kopii jednej logiki (ASC i TIFF to rozne formaty,
 a nowa publiczna funkcja w `sidecar.py` to nowe API do utrzymania.
 Zostawione; `docs/ARCHITECTURE.md:260` nadal poprawnie opisuje `_read_tif_nodata`.
 
-## 4. K9 — fasada `cli/commands.py` (`c27f976`)
+## 4. K9 — fasada `cli/commands.py` (`1e15068`)
 
 **Zmiana.** Fasada nie re-eksportuje `_create_provider_and_storage`
 i `_resolve_laz_bbox` (`__all__` i import); zostaja `main`, `create_parser`,
@@ -148,7 +148,7 @@ zmian. CHANGELOG: BREAKING (prywatne nazwy, uzywaly ich tylko testy).
 **Testy/mutacje.** Refaktoryzacja importow — suita zielona przed/po; brak
 zachowania do mutowania.
 
-## 5. D6 — jeden helper komunikatu `TransformError` (`b5e83cd`)
+## 5. D6 — jeden helper komunikatu `TransformError` (`1e0e5a6`)
 
 **Zmiana.** Dwie reczne kopie f-stringa `Error: {e} Remedium: {remedy}`
 (`_resolve_cz_geometry_bbox`, fabryka providera w `_cmd_download_cz`) ->
@@ -173,7 +173,7 @@ pelna tresc komunikatu, kod 1). Przed nim format tej sciezki nie byl bronony
   `_country_bbox` (`TransformError` z czesci kraju, juz przez helper przed
   ta praca) przechodzi cala suite — ta galaz nie ma testu kodu wyjscia.
 
-## 6. D9 strona PL (`a2466f9`)
+## 6. D9 strona PL (`fb9162f`)
 
 **Zmiana.** `download/cutout.py` importuje `CONTENT_POLICY` i `WARP_MARGIN_PX`
 z `kartograf.transform.crs`; lustrzane `WARP_MARGIN_PX = 4` i
@@ -192,7 +192,7 @@ jako import). Import `TransformPolicy` zbedny.
   (operacja 1,0 m odrzucona) — wycinek PL korzysta teraz ze wspolnej stalej
   (wczesniej mutacja przechodzila wycinek, bo mial wlasna kopie).
 
-## 7. Sesja LAZ na watek (`03eac02`)
+## 7. Sesja LAZ na watek (`038bf13`)
 
 **Zmiana.** `GugikLazProvider`: `self._sessions = SessionPerThread(session)`
 zamiast `session or make_gugik_session()`; `_get_wfs_xml` i `download`
@@ -213,7 +213,7 @@ trzeci przechodzi (zachowanie zachowane).
 orto, BDOT10k i transport pokrywaja to samo od D2). Sesja wstrzyknieta
 ignorowana (`SessionPerThread(None)`): 29 failed w testach LAZ.
 
-## 8. Sidecar LAZ przez `emit_sidecar` (`234ef2e`)
+## 8. Sidecar LAZ przez `emit_sidecar` (`22c20d1`)
 
 **Zmiana.** `download/laz.write_laz_sidecar` buduje `request` (bbox,
 `year`, `min_density` gdy podane) i `extra` (`godlo_kafla`, `rok`,
@@ -240,7 +240,7 @@ istniejace testy tresci (`request.year/min_density`, `parent_request`,
 (przed nim LAZ tej polityki nie bronil); `request={}`: padaja
 `test_tiles_land_in_storage_with_sidecar` i `test_year_downloads_that_year_only`.
 
-## 9. `CuzkDmrProvider.download` — `strip()` (`e039740`)
+## 9. `CuzkDmrProvider.download` — `strip()` (`478843a`)
 
 **Zmiana.** `godlo = godlo.strip()` na wejsciu `download` (przed
 `detect_system`); URL openzu, `sm5_sheet` i `ParserTM33` dostaja to samo

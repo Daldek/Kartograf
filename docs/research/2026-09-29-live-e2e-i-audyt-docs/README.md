@@ -6,8 +6,8 @@ obslugujemy) i czy zaktualizowano cala dokumentacje dotknieta falami 2026-08-28
 (uklad `data/` + `--target-crs` PL) i 2026-09-28 (fala review max + wycinek PL
 w bibliotece). Nie byly. Sesja: 7 agentow testow na zywo (L1-L7) i 2 audytorow
 dokumentacji (D1, D2) rownolegle, potem jedna fala poprawek DOKUMENTACJI (12 commitow
-`57ef96b..f577d1c`), jej niezalezny przeglad, runda poprawek (`f52593a`) i re-review
-(resztki poprawione przez kontrolera w `fb3cede`). **Kod bez zmian zachowania** — bledy kodu
+`af71c00..515f275`), jej niezalezny przeglad, runda poprawek (`2dbed85`) i re-review
+(resztki poprawione przez kontrolera w `15ee818`). **Kod bez zmian zachowania** — bledy kodu
 zebrane w `KNOWN-BUGS.md`, w repo zyja jako backlog "Do naprawy — testy na zywych danych
 2026-09-29" w `docs/PROGRESS.md` (naprawa = nastepna fala).
 
@@ -33,7 +33,7 @@ Pobrane rastry, kafle i skrypty agentow (8,6 GB) zostaly w gitignorowanym
 | `KNOWN-BUGS.md` | Lista bledow KODU: K1-K6 (wysokie/krytyczne), S1-S5 (srednie), N1-N9 (niskie), H1 (hipoteza) — z dowodami i pochodzeniem; zrodlo backlogu "Do naprawy" w PROGRESS |
 | `DOCS-FIX-BRIEF.md`, `DOCS-FIX-REPORT.md` | Fala poprawek dokumentacji (opus): zasady (falszywe twierdzenia zwiazane z bledem oznaczone "znany blad <ID>", pliki K1/K2/K6 nietykane) i tabela WSZYSTKICH znalezisk D1/D2 -> naprawione / oznaczone / pominiete |
 | `hydrograf-uwagi-migracyjne.md` | Co zmienic w Hydrografie (pinuje 0.6.1) przy przejsciu na Kartograf 0.7.0: katalogi cache, importy, dokumentacja |
-| `DOCS-REREVIEW-BRIEF.md`, `DOCS-REREVIEW-REPORT.md` | Niezalezny przeglad fali dokumentacji (opus): AST kodu bez docstringow, prawdziwosc twierdzen, odsylacze, liczby, spojnosc, brama — 15 usterek (1 blokujaca: "`auto` == `pl`" na granicach spoza rejestru vs przycinanie S3), naprawione w `f52593a` (sekcja 8 `DOCS-FIX-REPORT.md`); na koncu re-review rundy: 2 resztki (dolna granica K2, odsylacze), poprawione przez kontrolera w `fb3cede` (ruling w `sdd-ledger.md`) |
+| `DOCS-REREVIEW-BRIEF.md`, `DOCS-REREVIEW-REPORT.md` | Niezalezny przeglad fali dokumentacji (opus): AST kodu bez docstringow, prawdziwosc twierdzen, odsylacze, liczby, spojnosc, brama — 15 usterek (1 blokujaca: "`auto` == `pl`" na granicach spoza rejestru vs przycinanie S3), naprawione w `2dbed85` (sekcja 8 `DOCS-FIX-REPORT.md`); na koncu re-review rundy: 2 resztki (dolna granica K2, odsylacze), poprawione przez kontrolera w `15ee818` (ruling w `sdd-ledger.md`) |
 | `gfi/` | Surowe odpowiedzi GetFeatureInfo skorowidza NMT (L3 (j)): morze/lad x 1 m/5 m x kazda warstwa + nieistniejaca warstwa; `index.json` — URL, status HTTP, Content-Type, rozmiar, znaczniki OGC |
 
 ## Co warto stad zapamietac

@@ -1,6 +1,6 @@
 # DOCS-REREVIEW — niezalezny przeglad fali poprawek dokumentacji (Kartograf, 2026-09-29)
 
-Zakres: `6985765..f577d1c` (12 commitow), galaz `develop`, HEAD `f577d1c`. Repo Kartografu
+Zakres: `152c31e..515f275` (12 commitow), galaz `develop`, HEAD `515f275`. Repo Kartografu
 i Hydrografu tylko czytane (`git status --short` Kartografu czysty przed i po; zmienione
 wylacznie ignorowane cache narzedzi `.mypy_cache`/`.ruff_cache`/`__pycache__`). Pliki tymczasowe tylko
 w katalogu z `mktemp -d` w scratchpadzie sesji. Bez sieci, bez subagentow.
@@ -38,7 +38,7 @@ w `DECISIONS.md` zachowane, odsylacze do raportow tylko do nazw z listy. Do popr
   `metavar`, komunikaty runtime — bez zmian.
 - `--help` wszystkich 13 (sub)komend: exit 0 (brak pulapki `%` w argparse; zadnego `%`
   w nowych napisach pomocy).
-- `git diff --stat 6985765..f577d1c -- kartograf/providers/pl/gugik_laz.py kartograf/providers/cuzk kartograf/transform/crs.py`
+- `git diff --stat 152c31e..515f275 -- kartograf/providers/pl/gugik_laz.py kartograf/providers/cuzk kartograf/transform/crs.py`
   -> **puste**. Testy (`tests/`) nie zmienione (brak w `--stat`).
 
 ### 2. Prawdziwosc — 3 znaleziska istotne + 12 drobnych
@@ -174,7 +174,7 @@ wszystko zgodne. Drobna nieprecyzyjnosc B4 — RR-15.
   8 deselected** (27,4 s); z `--cov` (plik `.coverage` poza repo) -> 92,92 %.
 - `.venv/bin/python -m ruff check kartograf/ tests/` -> `All checks passed!`;
   `.venv/bin/python -m ruff format --check kartograf/ tests/` -> `87 files already formatted`.
-- mypy: BASE (`git archive 6985765 | tar -x -C "$(mktemp -d)"`, uruchomienie
+- mypy: BASE (`git archive 152c31e | tar -x -C "$(mktemp -d)"`, uruchomienie
   `/home/claude-agent/workspace/Kartograf/.venv/bin/python -m mypy kartograf/` z tego katalogu) —
   `Found 32 errors in 9 files`; HEAD — `Found 32 errors in 9 files`;
   `grep -E "error:" | sed -E 's/:[0-9]+: /: /' | sort` -> 32 = 32, `diff` **pusty**.
@@ -463,7 +463,7 @@ PL-2000 4 narozniki `parser_2000.py:707+`), :352-356 (ADR-018; domyslne 4/1 — 
 **docs/PROGRESS.md**: :7-28 statusy (K3/K4/S1, K3/S4, K5/K4, K1, K4/N8, N6, N5, S4, K2/K6, K3/K4/S1/S5/K2),
 :86-163 (sesja; liczby jak w pkt 5), :165-194 (tabela 21 ID), :196-211 (brama — pomiar), :874-881 (pkt 4 A1-4),
 :882-886 (pkt 5 -> K1), :919-969 (pkt 12 (a)-(l) — L1-L7), :970-987 (pkt 13-15), :989-1158 (Do naprawy;
-RR-11, RR-14), :1204-1207 (A2-7; commit `cc10773` zmienil `logger.debug` -> `warning`), :1286-1288
+RR-11, RR-14), :1204-1207 (A2-7; commit `2856f41` zmienil `logger.debug` -> `warning`), :1286-1288
 (E2E kafelkowania — L4 S3b), :1306-1310 (`harmonize_dem` -> K2), :1338-1341 (`densify_pts=21`
 w `corine.py:867, :888`, `soilgrids.py:272`) -> OK.
 
@@ -498,12 +498,12 @@ sygnatura), `_parser.py:69-80, :90-91, :122-128, :133-134, :146-148, :160-161, :
 
 ---
 
-## Re-review rundy poprawek (f52593a)
+## Re-review rundy poprawek (2dbed85)
 
-Zakres: `f577d1c..f52593a` (1 commit, 7 plikow dokumentacji, +154/-76), pakiet
-`DOCS-REVIEW-PACKAGE-RR.diff` (zgodny bajt w bajt z `git diff -U10 f577d1c..f52593a`),
+Zakres: `515f275..2dbed85` (1 commit, 7 plikow dokumentacji, +154/-76), pakiet
+`DOCS-REVIEW-PACKAGE-RR.diff` (zgodny bajt w bajt z `git diff -U10 515f275..2dbed85`),
 sekcja 8 `DOCS-FIX-REPORT.md`, pliki robocze `KNOWN-BUGS.md` i `hydrograf-uwagi-migracyjne.md`.
-Repo Kartografu i Hydrografu tylko czytane (`git status` czysty, HEAD `f52593a`).
+Repo Kartografu i Hydrografu tylko czytane (`git status` czysty, HEAD `2dbed85`).
 
 ### Werdykt: RESZTKI — 0 BLOKUJACE, 1 WAZNE (RR-16), 1 DROBNE (RR-17)
 
@@ -515,7 +515,7 @@ jest nieprawdziwa dla wschodnich Moraw (RR-16) i dwa nietrafione szczegoly w not
 
 ### Tabela RR-1..RR-15
 
-| RR | Wynik | Dowod (linie wg f52593a) |
+| RR | Wynik | Dowod (linie wg 2dbed85) |
 |---|---|---|
 | RR-1 | OK | CLAUDE.md:313-319, SCOPE.md:428-433, ARCHITECTURE.md:895-902: "`auto` odpytuje tylko PL ... ale z przycieciem, wiec nie zawsze jak `--country pl`" + Osinow Dolny 6,2 km / 4 arkusze vs 8,9 km / 6 (L5 I/J: 1235 px x 5 m = 6,175 km, 1773 px = 8,865 km; lista auto 4 / pl 6); "Nysa Luzycka", Opolszczyzna przeniesiona do N2; PROGRESS.md:966-968 (bboxy L6 wewnatrz prostokata PL — sprawdzone w L6, sekcja "Zakres") |
 | RR-2 | OK | ARCHITECTURE.md:729-735 "1,1-3,4 m wzdluz granicy PL-CZ" — pomiar re-review wzdluz calej granicy: Jaworzynka 1,12 ... trojstyk PL-CZ-DE 3,39, hak frydlancki 3,35 m; L4 S6 2,3 m. (Dolna granica "ok. 1-5 m" dla calych Czech — RR-16) |
@@ -576,7 +576,7 @@ RR-17, `providers/cuzk/dmr.py:54-55` — chybione o linie (RR-17), `:270-271` OK
 
 ### Nowe znaleziska
 
-| ID | Waga | plik:linia (f52593a) | Temat |
+| ID | Waga | plik:linia (2dbed85) | Temat |
 |---|---|---|---|
 | RR-16 | WAZNE | PROGRESS.md:1018-1020; KNOWN-BUGS.md:11 i sekcja "Korekty" (K2); skrocone "1-5 m": CLAUDE.md:283, README.md:211, :275, SCOPE.md:105, ARCHITECTURE.md:82, :832, DECISIONS.md:933, PROGRESS.md:27, :176, hydrograf-uwagi-migracyjne.md:165 | K2: "ok. 1-5 m", "~1,0 m na wschodzie CZ — Ostrawa, Brno" — we wschodnich Morawach roznica 0,1-0,9 m |
 | RR-17 | DROBNE | PROGRESS.md:1033-1038 | notka "Przy naprawie" K2: `dmr.py:54-55` -> `:55-56`; "gubi datum shift" w `KNOWN_PATHS` nie jest nieaktualne |
@@ -637,10 +637,10 @@ RR-17, `providers/cuzk/dmr.py:54-55` — chybione o linie (RR-17), `:270-271` OK
 - Te same zdania spojne miedzy CLAUDE.md, README, SCOPE, ARCHITECTURE, PROGRESS (i DECISIONS):
   S3/`auto` na granicach spoza rejestru, RR-5, K6, obejscie S2, S4 (DECISIONS/PROGRESS/KNOWN-BUGS);
   K2 spojne miedzy soba (RR-16 dotyczy wszystkich kopii).
-- `docs/DECISIONS.md`: f577d1c 1316 CRLF / 0 LF -> f52593a 1324 CRLF / 0 LF; wszystkie dodane linie
+- `docs/DECISIONS.md`: 515f275 1316 CRLF / 0 LF -> 2dbed85 1324 CRLF / 0 LF; wszystkie dodane linie
   z `\r`. Pliki ASCII (CLAUDE, ARCHITECTURE, DECISIONS, PROGRESS): zero nowych liter z diakrytykami;
   dopiski README/SCOPE/PRD z diakrytykami. W dodanych liniach zero `.superpowers/`, `/tmp/`,
   `e2e-data/`, `TODO`, "kontroler"; jedyna nazwa raportu: `L1-centrum-produkty-report.md` (z listy).
-- Kod: `git diff --name-only f577d1c..f52593a -- '*.py'` puste (AST/ruff/mypy bez zmian wzgledem
+- Kod: `git diff --name-only 515f275..2dbed85 -- '*.py'` puste (AST/ruff/mypy bez zmian wzgledem
   pierwszego przegladu); `.venv/bin/python -m pytest tests/ -q -m "not live" -p no:cacheprovider`
   -> 1861 passed, 8 deselected.

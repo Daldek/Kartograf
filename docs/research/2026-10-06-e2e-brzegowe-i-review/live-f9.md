@@ -1,7 +1,7 @@
 # F9: ponowny przebieg na zywo po naprawach (2026-10-06)
 
-- **Data:** 2026-10-06, agent F9 (Sonnet), commit `b3945709252aa332c23f72eb8774677148de63b0` (develop, czyste drzewo)
-- **df przed:** `<udzial>, uzyte 2,6G, wolne 98G`; po: uzyte 3,2G (F9 zajmuje 618 MB)
+- **Data:** 2026-10-06, agent F9 (Sonnet), commit `9c47988eed1f035b3cf1648675d9996c6a4c3bfc` (develop, czyste drzewo)
+- **Miejsce:** F9 zajmuje 618 MB
 - **Dane:** `F=<katalog-danych>/kartograf/e2e/2026-10-06-brzegowe/f9/` (`out/f9N`, `logs/`, `scripts/`)
 - **Wyrocznie:** `F/logs/ORACLE_F9.txt` (zapisane przed pierwszym uruchomieniem CLI)
 - Cache: F9-1..3, 5-9 z cwd = korzen repo (cache repo, nie czyszczony); F9-4 z wlasnym cache w katalogu `scratchpad/f94` (patrz obserwacja O1).
@@ -75,7 +75,7 @@ TERYT 0661 (HEAD: 200, Content-Length 5 103 713; inne sprawdzone: 0262 5,9 MB, 0
 
 ## 3. Nowe obserwacje (poza zakresem F9)
 
-- **O1.** Cache SQLite WAL na udziale CIFS jest nieuzywalny: CLI z cwd w `f9/scripts/` (na katalog danych) zakonczylo sie `Error: OperationalError: database is locked`, pusty `.kartograf_cache.db` o 0 B. Potwierdza zalecenie CLAUDE.md (cache lokalnie); kontrakt F9 zalecal ten katalog, wiec do poprawy w kontrakcie. F9-4 przeprowadzony z lokalnym cwd w scratchpadzie.
+- **O1.** Cache SQLite WAL na udziale CIFS jest nieuzywalny: CLI z cwd w `f9/scripts/` (w katalogu danych) zakonczylo sie `Error: OperationalError: database is locked`, pusty `.kartograf_cache.db` o 0 B. Potwierdza zalecenie CLAUDE.md (cache lokalnie); kontrakt F9 zalecal ten katalog, wiec do poprawy w kontrakcie. F9-4 przeprowadzony z lokalnym cwd w scratchpadzie.
 - **O2.** `MetadataCache.__del__` (`kartograf/cache/metadata.py:440`) przy zamknieciu interpretera w skrypcie `python -I` drukuje `ImportError: sys.meta_path is None, Python is likely shutting down` (po `close()`); kosmetyczne.
 - **O3.** Sidecar BDOT10k SHP nie zapisuje formatu (`request` = tylko `teryt`, `extra` = `{}`); przy ponownym uruchomieniu tej samej komendy wypisuje `Downloaded to` w 2,3 s (zdaje sie pobierac ponownie, bez `Skipped`) — nie badane dalej.
 - **O4.** Dla wycinka z niepelnymi arkuszami (639000,472800,...) sidecar nie ma `all_nodata` (poprawnie, 100 % waznych), ale komunikat stdout o all_nodata w F9-3 jest wypisywany dwukrotnie (linia `Wycinek ... jest w calosci nodata` na stdout oraz `Warning:` na stderr, o troche innej tresci) — dubel informacyjny.

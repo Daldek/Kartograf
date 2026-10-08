@@ -41,7 +41,7 @@ Decyzja kontrolera (bez pytania, w duchu raportu): zn. 9 — bez twardego limitu
 8. **Selekcja arkuszy gubi pas przy gornej krawedzi bboxa na poludniku 19°E (poza raportem):** `core/sheet_parser.py::_transform_bbox_to_wgs84` bierze obwiednie z 4 naroznikow; w PUWG 1992 najwieksza szerokosc gornej krawedzi wypada na poludniku osiowym (x = 500 000), nie w naroznikach. Zmierzone: dla `BBox(490000, 470000, 510000, 480161)` pomijane jest 6 arkuszy, ktore faktycznie przecinaja bbox (`N-34-134-B-d-3-2`, `N-34-134-B-d-4-1`, `N-34-134-B-d-4-2`, `N-34-135-A-c-3-1`, `N-34-135-A-c-3-2`, `N-34-135-A-c-4-1`); dla bboxa szerokiego na 10 km — 0. Pas rosnie z kwadratem szerokosci (~63 m przy 50 km).
 9. Realne pliki ASC GUGiK 5 m: **5,74-7,95 bajta na wartosc** (mediana 6,88; 1454 arkusze) — do szacunku miejsca na dysku.
 10. `tiled=True` w `dst_kwds` mozaiki bez `blockxsize/blockysize` konczy sie `RasterBlockError` (profil AAIGrid ma `blockxsize=ncols, blockysize=1`); z `blockxsize=blockysize=512` dziala; `compress=deflate, predictor=3` trafia do opcji tworzenia GTiff; `bigtiff=IF_SAFER` jest wlasciwe (IF_NEEDED nie przelacza skompresowanego wyniku na BigTIFF).
-11. mypy na `develop` (`8cf1e5a`): **32 bledy w 9 plikach** — baseline; brama: zero nowych (diff LISTY, nie liczby).
+11. mypy na `develop` (`5b5ffa4`): **32 bledy w 9 plikach** — baseline; brama: zero nowych (diff LISTY, nie liczby).
 
 ## Global Constraints
 
@@ -173,7 +173,7 @@ git status --short && git log --oneline -1
 .venv/bin/python -m pytest tests/ -q -m "not live" 2>&1 | tail -2
 .venv/bin/python -m mypy kartograf/ 2>&1 | grep -E "error:" | sed -E 's/:[0-9]+: /: /' | sort > "$SDD_WS/mypy-baseline.txt"; wc -l < "$SDD_WS/mypy-baseline.txt"
 ```
-Expected: HEAD `8cf1e5a`, jedyny nieskomitowany plik to raport review; `1779 passed, 8 deselected` (bez `-m "not live"`: `1787 passed`, w tym 8 testow `live` z siecia — pre-flight P-16); 32 linie bledow mypy.
+Expected: HEAD `5b5ffa4`, jedyny nieskomitowany plik to raport review; `1779 passed, 8 deselected` (bez `-m "not live"`: `1787 passed`, w tym 8 testow `live` z siecia — pre-flight P-16); 32 linie bledow mypy.
 
 - [ ] **Step 2: Wiersz w README folderu research** — dopisz do tabeli:
 
@@ -993,7 +993,7 @@ Model: sonnet (review: sonnet). Zmienia sie klasyfikacja, nie kody wyjscia trybo
 
 - [ ] **Step 1: Testy padajace.** W `tests/test_gugik_provider.py`:
   (a) w `test_get_opendata_url_not_found` dopisz `from kartograf.exceptions import NoCoverageError` i `assert isinstance(exc_info.value, NoCoverageError)`;
-  (b) test `test_get_opendata_url_partial_transport_error_keeps_no_coverage_message` ZMIEN (swiadoma zmiana decyzji z audytu 619679d — przy R5 chwilowa awaria warstwy z danymi nie moze zamienic sie w trwala dziure nodata):
+  (b) test `test_get_opendata_url_partial_transport_error_keeps_no_coverage_message` ZMIEN (swiadoma zmiana decyzji z audytu f53895f — przy R5 chwilowa awaria warstwy z danymi nie moze zamienic sie w trwala dziure nodata):
 
 ```python
     def test_get_opendata_url_partial_transport_error_is_not_no_coverage(

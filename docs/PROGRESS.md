@@ -102,13 +102,10 @@
 > `ruff format --check` (czyste), `.venv/bin/python -m mypy kartograf/`
 > (porownuj LISTE bledow z baseline'em bez numerow linii, nie ich liczbe).
 > Testy `live` tylko swiadomie (`-m live`).
-> **Otwarte drobiazgi:** (a) PRZYPOMNIEC o serwerze `<serwer>`:
-> udzial `<katalog-danych>` odrzuca blokady zakresow bajtow (`EACCES`) —
-> uzytkownik zajmie sie diagnoza Samby/systemu plikow (NIE `nobrl`, bo
-> dotknie tez klientow Windows); (b) drobne otwarte punkty ADR-030 w
-> dzienniku nizej ("Otwarte drobne"), do decyzji uzytkownika.
-> Dane testow na zywo: `<katalog-danych>` (CLAUDE.md, sekcja
-> "katalog danych danych"); katalog `e2e-data/` w repo nie istnieje.
+> **Otwarte drobiazgi:** drobne otwarte punkty ADR-030 w dzienniku nizej
+> ("Otwarte drobne"), do decyzji uzytkownika.
+> Dane testow na zywo: poza repo, jawne `--output`
+> (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
 
 ### ADR-030 strategie kampanii — wdrozony i zweryfikowany na zywo (T1-T12, 2026-10-07)
 
@@ -116,11 +113,11 @@
 > `develop` (fale 1-4, T1-T9) i opisany w dokumentacji (T10: `CLAUDE.md`,
 > `docs/ARCHITECTURE.md` 3.2/3.3/4.1-4.3/4.6/4.7/6, `README.md` sekcja
 > "Kampanie", `docs/CHANGELOG.md` [0.7.0], `docs/SCOPE.md` 2.11/2.12/3.1).
-> Merge'e: `a187a5d` T1, `d839946` T2, `7fcd3bb` T3, `e5b5208` T4, `91fea75` T5,
-> `d6fa032` T6 (providery), `27ec40e` T7 (manager, dowiazania), `0541942` T9
-> (eksporty, przeplyw na realnych fixturach), `456d4ac` T8 (CLI `--campaigns`,
+> Merge'e: `803d42d` T1, `96afa6b` T2, `e1c0f4e` T3, `7635876` T4, `8c453e5` T5,
+> `91cf170` T6 (providery), `e0694a0` T7 (manager, dowiazania), `c36d408` T9
+> (eksporty, przeplyw na realnych fixturach), `e5af2a8` T8 (CLI `--campaigns`,
 > `--min-year`, straze CZ/`--target-crs`/LAZ).
-> `af94ae3` T10 (dokumentacja), `0f2f30b` poprawki po przegladzie koncowym T11
+> `f9d7980` T10 (dokumentacja), `e325590` poprawki po przegladzie koncowym T11
 > (I-1: `newest` przy awarii TRANSPORTU skorowidza i istniejacej lokalnej
 > kampanii -> `Warning:` + lokalna kampania, `SheetFetch.unverified`/
 > `DownloadResult.unverified`; README zaleca `MetadataCache` w bibliotece;
@@ -129,8 +126,8 @@
 > Brama: **2649 testow offline**, ruff czysty, mypy lista = baseline (32).
 > T12 na zywo: **15/15 krokow + fallback I-1 PASS** —
 > `docs/research/2026-10-07-adr030-live/raport.md` (dane 929 MB:
-> katalog danych `kartograf/e2e/2026-10-07-adr030-kampanie/`). Obserwacje: udzial CIFS
-> katalog danych przyjmuje cel symlinku <= 77 B (`reparse=nfs`), wiec na nim
+> katalog danych poza repo). Obserwacje: testowany udzial CIFS
+> przyjmuje cel symlinku <= 77 B (`reparse=nfs`), wiec na nim
 > czesc dowiazan byla symlinkami, czesc HARDLINKAMI; `Downloading ...`
 > drukowane takze przy Skipped/Error; `all` orto bez powtorzenia `Warning:` E13.
 > **Errata 4 (decyzja uzytkownika):** dowiazania WYLACZNIE twarde (hardlink ->
@@ -138,25 +135,22 @@
 > cel tylko z sidecara standardowego; stary symlink = sciezka nieznana);
 > galaz `adr030/hardlink`.
 > Errata 4 (decyzja uzytkownika): dowiazania WYLACZNIE twarde (hardlink ->
-> kopia), bez symlinkow — merge `ba42ead`, brama **2652** offline; na zywo
+> kopia), bez symlinkow — merge `1744b90`, brama **2652** offline; na zywo
 > PL-2000 + hardlinki 11/11 PASS (dodatek w raporcie T12). Poprawki UX O-3/O-6/O-7
-> (merge `601acf1`): lista bez pokrycia drukuje podpowiedzi `Info:` z
+> (merge `c3c7a7c`): lista bez pokrycia drukuje podpowiedzi `Info:` z
 > `NoCoverageError.hints` (np. `--scale 1:2000` dla PL-2000; dedup doslowny,
 > max 5 linii; przezywaja cache), brak `Downloaded 0 ...` po `Error:`,
 > `Downloading ...` tylko przy rzeczywistym pobraniu. Brama **2669** offline.
 > Pelny przebieg na zywo (wszystkie produkty, PL-1992/PL-2000 S6-S8, EVRF2007/
 > KRON86, CZ TM33/SM5, LAZ, landcover): 51 PASS / 1 FAIL / 2 SKIP
 > (`docs/research/2026-10-07-adr030-live/e2e-full-A.md`, `-B.md`). Poprawki
-> (merge `9b4cb73` FA, `7d9ad6f` FB): BDOT10k GPKG skladany lokalnie (udzial
+> (merge `5d2da2f` FA, `5fb8141` FB): BDOT10k GPKG skladany lokalnie (udzial
 > SMB odrzuca blokady zakresow bajtow — `database is locked`; zweryfikowane na
 > zywo 332 MB/70 warstw), sidecar wyniku HSG, `MetadataCache.__del__` bez
 > `ImportError`, bez pustej linii przed `Error:`, wycinek raportuje arkusze
 > bez sprawdzenia skorowidza (`PlCutoutResult.unverified`,
 > `extra.unverified_sheets`, `Warning:` takze przy skip), jeden INFO liczby
 > kampanii. Brama **2684** offline.
-> **Serwer katalog danych (uzytkownik zajmie sie sam — PRZYPOMNIEC):** udzial odrzuca
-> blokady zakresow bajtow (`EACCES`) — diagnoza Samby/FS zamiast `nobrl`
-> (dotknie tez klientow Windows).
 > **Nastepny krok (wtedy):** wydanie 0.7.0 TYLKO na polecenie uzytkownika
 > (aktualny stan: blok "START NASTEPNEJ SESJI" wyzej).
 > Otwarte drobne (decyzja uzytkownika): wycinek `--target-crs` przy fallbacku
@@ -211,14 +205,14 @@
   obsluguje HTTP Range (zdalny odczyt piramidy niemozliwy); tanie
   przyblizenia: naglowek ASC (zasieg), `rozmiarPlikuMB` orto; rekord NMT ma
   `zrDanych` (skaning vs zdjecia) i `numerZgloszeniaPracy` (id kampanii).
-- **Kod (merge do develop):** LAZ `55c55f2` (ADR-029: wybor kafli wg
+- **Kod (merge do develop):** LAZ `4921f09` (ADR-029: wybor kafli wg
   pokrycia obszaru od najnowszego roku, `download_laz_area`,
-  `parent_request`); dedup providerow `e793a02` (D1 jeden `download_to`,
+  `parent_request`); dedup providerow `dbe876f` (D1 jeden `download_to`,
   backoff 2/4 s wszedzie, `os.replace`, D2, D9, D13, D19); dedup download
-  `fe15fcb` (D7, D10, D11 `Info:` przy 5m+KRON86, D14, D15, D18); parsery
-  `fec42d1` (`core/bbox.py`, naprawa gubienia wiersza arkuszy PL-2000 przy
+  `8a0b173` (D7, D10, D11 `Info:` przy 5m+KRON86, D14, D15, D18); parsery
+  `a813ea4` (`core/bbox.py`, naprawa gubienia wiersza arkuszy PL-2000 przy
   poludniku osiowym, BREAKING: usuniete `Sm5Sheet`/`register_system`/
-  `parser_factory`, `get_bbox` ~170x szybsze); porzadki `425ffc7` (K6:
+  `parser_factory`, `get_bbox` ~170x szybsze); porzadki `146944c` (K6:
   wycinek PL nie gubi ~479 m na poludniu dla bboxa WGS84 przez 19E; K7b
   walidacja `--bbox` we wszystkich torach; K9, D6, sesja LAZ na watek).
   Raporty: `ocena-parserow.md`, `impl-{laz,dedup-providers,dedup-download,parsery,porzadki}.md`.
@@ -238,12 +232,12 @@
   problemy. Artefakty: `docs/research/2026-10-06-e2e-brzegowe-i-review/`
   — **`raport-koncowy.md`** (start), `cykl-e2e.md` (kontrakt E1–E18
   z historia), raporty e2e-a/e2e-b/review-1/review-2/impl-fala-{a,b,c}/
-  impl-fixtury/live-f9. Dane: katalog danych `kartograf/e2e/2026-10-06-brzegowe/`
+  impl-fixtury/live-f9. Dane: katalog danych poza repo
   (3,2 GB).
 - **Wynik:** 1 FAIL e2e (orto CIR/RGB wspolna sciezka) + 3 WYSOKIE z review
   (D1 retry rozjechane, D3 parsery ukladu, D8 warp CZ kasujacy wynik) +
   N1 (BDOT SHP jako .gpkg) i kilkanascie srednich — naprawione w falach
-  A/B/C (TDD, mutacje), merge `b394570`. F9 na zywo 9/9 PASS.
+  A/B/C (TDD, mutacje), merge `9c47988`. F9 na zywo 9/9 PASS.
   2216 testow offline (+111; 28 na surowych body GUGiK), mypy 32.
 - **BREAKING:** `LazTile.uklad` dla nierozpoznanego `uklad_xy` rzuca
   `ValidationError` (kafel pomijany w discovery); orto CIR/B-W w
@@ -257,7 +251,7 @@
 
 - **Zlecenie uzytkownika:** przed wydaniem 0.7.0 — ponawiac tylko bledy
   sieci/429/5xx (4xx konczy od razu), respektowac `Retry-After`, dac
-  BDOT10k wspolna sesje GUGiK. Commit `9bcc040`.
+  BDOT10k wspolna sesje GUGiK. Commit `ca4d004`.
 - **Kod:** `transport/http.py` — `is_retryable`, `retry_wait`
   (`MAX_RETRY_AFTER = 60`), `http_status`, `http_failure`
   (`DownloadError.status_code`); uzyte w `get_with_retry`, `download_to`
@@ -284,7 +278,7 @@
   `plan.md` (fale A/B/C, wlasnosc plikow, kontrakty), `research-<klaster>.md`
   x4 (przyczyny potwierdzone na kodzie i surowych body, projekty),
   `impl-<pakiet>.md` x6 (dowody failing-before/passing-after), `review-fala.md`,
-  `docs-fala.md`, `live-2026-09-30.md`. Commity `6c46224..` (13 na develop).
+  `docs-fala.md`, `live-2026-09-30.md`. Commity `035ac15..` (13 na develop).
 - **Decyzje uzytkownika:** D1 tor CZ odmrozony (K2+K6); D2/D10 tryb listy
   i hierarchia godla z tolerancja R5 (kod 0 przy >= 1 pliku, `Warning:`
   z lista; kod 1 przy porazce sieci albo zerze plikow); D3/D8 wycinek 2180
@@ -326,7 +320,7 @@
   nieistniejacy bez "ponow", falszywe `Info:` S3 w `--geometry`, podpowiedz
   `NoCoverageError` gubiona przy trafieniu cache negatywnego, duplikat petli
   skorowidza w orto, testy pinujace `LAYER_PATTERN`) — wszystkie naprawione
-  (`c132241`).
+  (`649afd9`).
 - **Testy na zywo 2026-09-30 (11 PASS / 0 FAIL):** K1 Spytkowice ->
   `M-34-76-A-a-1-1-3`; K5 RGB 2024-06-21; K4 Szczecin `80225_` 1,00 m,
   Warszawa 2025-04-27, rerun z cache 0,39 s; PL-2000 `5.167.25` ->
@@ -477,9 +471,9 @@ Raporty z testow na zywo 2026-09-29: `docs/research/2026-09-29-live-e2e-i-audyt-
   w backlogu "Do naprawy" dokladnie raz; 15 usterek (1 blokujaca:
   "`auto` == `pl`" na granicach z krajami spoza rejestru przeczylo
   przycinaniu S3; 2 wazne: zakres K2 w ARCHITECTURE, S4 "NMPT nie
-  pobiera sie wcale") naprawione w f52593a; re-review rundy: 2 resztki
+  pobiera sie wcale") naprawione w 2dbed85; re-review rundy: 2 resztki
   (dolna granica K2 — na Morawach roznica operacji to 0,1-1,0 m;
-  odsylacze w notce K2) poprawione w fb3cede. Raporty:
+  odsylacze w notce K2) poprawione w 15ee818. Raporty:
   `DOCS-REREVIEW-REPORT.md` i `sdd-ledger.md` w katalogu raportow wyzej.
 
 ### Fala naprawcza po review max + wycinek PL w bibliotece (2026-09-28)
@@ -547,10 +541,10 @@ Raporty z testow na zywo 2026-09-29: `docs/research/2026-09-29-live-e2e-i-audyt-
   docstringi `last_result`/`NoCoverageError`, komendy testow offline
   (`-m "not live"`) w CLAUDE.md/README, precyzja ARCHITECTURE 4.3. Re-review:
   6/6 naprawione, 4 drobiazgi zaparkowane z rulingami (backlog nizej).
-- **Stan koncowy (pomiar 2026-09-28, HEAD bbd1cd4 + commit zamykajacy): 1861
+- **Stan koncowy (pomiar 2026-09-28, HEAD 61f60de + commit zamykajacy): 1861
   testow offline PASS** (+8 `live` deselected), pokrycie **92,92 %**, ruff
   check + format czyste, **mypy 32 = baseline** (lista identyczna), drzewo
-  czyste. 30 commitow fali na `develop` (od 8cf1e5a, razem z raportem, planem
+  czyste. 30 commitow fali na `develop` (od 5b5ffa4, razem z raportem, planem
   i commitem zamykajacym); galaz swiadomie NIE pushowana ani nie mergowana do
   `main` — wydanie czeka na checkliste live (pkt 12-14 nizej).
 
@@ -619,9 +613,9 @@ Raporty z testow na zywo 2026-09-29: `docs/research/2026-09-29-live-e2e-i-audyt-
 **Stan: SPEC + PLAN gotowe** (zapis sprzed wdrozenia; implementacja opisana
 w sekcji wyzej).
 
-- Spec (commit 635c6e1): `docs/superpowers/specs/2026-08-28-uklad-data-i-target-crs-pl-design.md`
+- Spec (commit 0517058): `docs/superpowers/specs/2026-08-28-uklad-data-i-target-crs-pl-design.md`
   — decyzje D1-D8 zatwierdzone w rozmowie 2026-08-28.
-- Plan (commit 6cb662d): `docs/superpowers/plans/2026-08-28-uklad-data-i-target-crs-pl.md`
+- Plan (commit af1e760): `docs/superpowers/plans/2026-08-28-uklad-data-i-target-crs-pl.md`
   — 12 zadan TDD / 74 kroki, kolejnosc dobrana tak, by suita byla zielona
   po KAZDYM commicie (stad Zad. 2 laczy rejestr + FileStorage + CZ CLI:
   dziela te same wartosci `storage_subdir`).
@@ -668,7 +662,7 @@ patchuja `kartograf.providers.cuzk.dmr.reproject`
 (`tests/test_cuzk_dmr.py:496,527`), a tor CZ jest zweryfikowany live.
 
 ### Merge etapu 1 do develop (2026-08-12)
-- `feature/etap1-cz-dmr` zmergowana do `develop` fast-forwardem do `0738ae0`
+- `feature/etap1-cz-dmr` zmergowana do `develop` fast-forwardem do `d5a1ac7`
   (34 commity od 7e9c039); suita na zmergowanym develop: **1402 passed**;
   galaz feature usunieta (rekord = git + ten dokument + ADR-023/024).
 - develop nadal NIE wypchniety na origin (71 commitow lokalnie: research +
@@ -926,7 +920,7 @@ liczby testow/pokrycia zsynchronizowane (1381/89%).
 zmian** (NIE bumpowane do `0.7.0-dev`). Zbadana konwencja repo
 (`git log -p -- pyproject.toml`): `pyproject.toml` jest bumpowany leniwie,
 zwykle w tym samym commicie co finalizacja wydania — bump 0.5.0→0.6.1
-przeskoczyl 0.6.0 w jednym commicie (`4f6a33d`), mimo ze `__init__.py` mial
+przeskoczyl 0.6.0 w jednym commicie (`7e0aff3`), mimo ze `__init__.py` mial
 `0.6.0` przez caly czas trwania tamtych prac. `pyproject.toml` NIE sledzi
 kazdego przyrostu `kartograf.__version__` (ktory bywa bumpowany na starcie
 prac, czasem z sufiksem `-dev`, jak teraz). Zaden test nie asertuje
@@ -957,7 +951,7 @@ zreprojektowanych lokalnie):**
 Czyli 3045 **nie** ma bledu datum (serwer go stosuje), ale ma wlasne,
 niewyjasnione 1,25 m — 0,6 piksela DMR 5G.
 
-**Naprawa (ADR-024, commit `6bf5e2b`):** serwer dostaje zadania rastrowe
+**Naprawa (ADR-024, commit `3c2cf44`):** serwer dostaje zadania rastrowe
 wylacznie w ukladzie natywnym `EPSG:5514`; reprojekcje tresci robi lokalnie
 `rasterio.warp.reproject` z **wymuszonym** pipeline'em przypietej operacji
 (`PinnedTransform.gdal_operation()` → `COORDINATE_OPERATION`). Objete obie
@@ -983,7 +977,7 @@ przesunieciem ballparku, a test sprawdza, gdzie **wyladowal wierzcholek**
 ### Zywa weryfikacja fixu ADR-024 (2026-08-11)
 
 Bugfix ADR-024 zweryfikowany **live 3xPASS** na danych CUZK+GUGiK, galaz
-`feature/etap1-cz-dmr @ 2dd8dae` (commity `6bf5e2b`, `fd5c5b0`, `2dd8dae`
+`feature/etap1-cz-dmr @ 71b7b4e` (commity `3c2cf44`, `155c2b9`, `71b7b4e`
 + ten commit dokumentacyjny), metoda kontroli TRESCI (dopasowanie do
 referencji natywnej 5514, minimum RMS w skanie przesuniec) — zamyka luke
 odnotowana w E2E (punkty 1 i 4 sprawdzaly wtedy tylko bounds/CRS/res, nie
@@ -1063,10 +1057,10 @@ patrz nowa sekcja "Backlog po audycie 0.7.0" nizej).
 
 **Faza B (naprawa, 2026-08-22 — 2026-08-23):** wykonanie 26 zadan (TDD,
 subagent-driven) na galezi `fix/release-0.7.0-audit` (odgalezionej od
-`develop` @ `f432403`, tej samej co merge etapu 1 wyzej) plus fala
+`develop` @ `ff145a9`, tej samej co merge etapu 1 wyzej) plus fala
 naprawcza po finalnym review calej galezi (nizej) — **71 commitow na
 moment zamkniecia fali** (stan koncowy galezi:
-`git log --oneline f432403..HEAD`), w tym ta aktualizacja
+`git log --oneline ff145a9..HEAD`), w tym ta aktualizacja
 `PROGRESS.md`. Rozklad wg typu Conventional Commits: 40 `fix`,
 21 `docs`, 3 `test`, 2 `refactor`, 2 `feat`, 2 `chore`, 1 `perf`.
 
@@ -1081,7 +1075,7 @@ bylo 1708 testow (5349 stmts / 397 miss, 92,58%) — fala dolozyla 8 testow
 (auth proxy: singleton, reap podprocesu, zamkniecie strumienia, polityka
 tokena na `/download`).
 
-**Finalny review calej galezi (fable, 2026-08-23, `f432403..f10388c`):**
+**Finalny review calej galezi (fable, 2026-08-23, `ff145a9..7e6036b`):**
 werdykt "NEEDS ONE FIX WAVE" — 0 ustalen Critical, kontrakty
 ADR-022/023/024 nienaruszone, Global Constraints (a)-(l) spelnione, suita
 deterministyczna w 3 przebiegach (0 prob DNS). Jedna fala naprawcza
@@ -1117,7 +1111,7 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
 
 ### Nastepne kroki
 1. ~~Merge `feature/etap1-cz-dmr` do `develop`~~ — **WYKONANE 2026-08-12**
-   (fast-forward do 0738ae0, suita 1402 passed na wyniku, galaz usunieta).
+   (fast-forward do d5a1ac7, suita 1402 passed na wyniku, galaz usunieta).
 2. **Etap 2** (DMP/Orto/LAZ CZ + wielokat granicy administracyjnej zamiast
    prostokatnej obwiedni + ujednolicenie `extra.parent_request.bbox_crs`
    miedzy trybami jawny/auto; od 2026-09-28 takze: scalanie PL+CZ w jedna
@@ -1169,7 +1163,7 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
 8. **Fala naprawcza minorow** z audytu — patrz nowa sekcja "Backlog po
    audycie 0.7.0" nizej.
 9. ~~Merge `fix/release-0.7.0-audit` do `develop`~~ — **WYKONANY
-   2026-08-28** (fast-forward `f432403..d327f0c`, 75 commitow; suita na
+   2026-08-28** (fast-forward `ff145a9..2454b84`, 75 commitow; suita na
    zmergowanym develop: 1708 passed + 8 deselected `live`, pokrycie
    92,64%, ruff/format czyste, mypy 32 = baseline; galaz usunieta).
 10. ~~Zadanie licencyjne uzytkownika~~ — **WYKONANE 2026-08-28**: `authors`
@@ -1259,7 +1253,7 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
 #### Do naprawy — testy na zywych danych 2026-09-29 (przed wydaniem 0.7.0)
 
 Bledy kodu wykryte testami na zywo (sesja 2026-09-29, tabela "Znane bledy"
-wyzej). **Wszystkie naprawione w fali 2026-09-29/30** (commity `6c46224..`,
+wyzej). **Wszystkie naprawione w fali 2026-09-29/30** (commity `035ac15..`,
 dowody failing-before/passing-after w `docs/research/2026-09-29-fala-naprawcza/impl-*.md`,
 decyzje D1-D12 w `decisions.md`). Linie kodu ponizej wg HEAD SPRZED naprawy
 (fala dokumentacji 2026-09-29) — nieaktualne, zachowane jako opis objawu.
@@ -1479,7 +1473,7 @@ N = niski, H = hipoteza.
       transform/crs.py, transport/, providers/pl/, podzial CLI)
 - [x] Etap 1 — NMT Czechy: CUZK DMR 5G/4G (`providers/cuzk/`, `ParserTM33`,
       `--country`/`--target-crs`/`--vertical-crs`) — zmergowany do develop
-      2026-08-12 (fast-forward do 0738ae0, galaz feature usunieta)
+      2026-08-12 (fast-forward do d5a1ac7, galaz feature usunieta)
 - [ ] Etap 2 — DMP/Orto/LAZ CZ, wielokat granicy administracyjnej CZ
       (zamiast prostokatnej obwiedni), ujednolicenie
       `extra.parent_request.bbox_crs` miedzy trybami jawny/auto, scalanie
@@ -1505,7 +1499,7 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
       zduplikowane w dwoch petlach (sekwencyjnej i rownoleglej).
 - [x] A2-7 — fallback `urls[0]` w `_get_opendata_url` moze scache'owac URL
       innego arkusza (Minor) — log podniesiony do `warning` 2026-09-28
-      (cc10773); zostaje weryfikacja zasiegu przy `FEATURE_COUNT>1` -> K4
+      (2856f41); zostaje weryfikacja zasiegu przy `FEATURE_COUNT>1` -> K4
       (wybor pliku arkusza, testy na zywo 2026-09-29).
       **ZROBIONE:** `_get_opendata_url` zwraca `_resolve_sheet(...).url` (dopasowanie calego tokenu godla, ADR-028); fallback `urls[0]` usuniety.
 - [ ] A5-4 — regula "5m => EVRF2007" zaimplementowana w 3 miejscach
@@ -1538,7 +1532,7 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
       wspolnego `transport.download_to` (spec etapu 0 sekcja 6.5 swiadomie
       odlozyl migracje); skutek uboczny przyszlej zmiany: backoff
       2s/4s -> 1s/2s.
-      **ZROBIONE:** jeden `transport/http.download_to` dla wszystkich providerow, backoff 2 s/4 s (`9c7aaa9`, `e793a02`, D1).
+      **ZROBIONE:** jeden `transport/http.download_to` dla wszystkich providerow, backoff 2 s/4 s (`d071b75`, `dbe876f`, D1).
 - [ ] A5-6 — polityka zero-ballpark z `transform/crs.py` obowiazuje dzis
       tylko na sciezce CZ — 9 miejsc (w tym `core/geometry.py:_transform_bbox`,
       CRS z pliku uzytkownika) uzywa surowego `Transformer.from_crs`
@@ -1665,7 +1659,7 @@ Rulingi i pelne uzasadnienia: `docs/research/2026-09-28-fala-review-max/`
 - [x] Walidacja `--bbox`: NaN/inf przechodza `float()` (wycinek konczy sie
       `ValueError` w barierze `main()` albo mylacym `TransformError`),
       min > max przechodzi prepare/select wycinka.
-      **ZROBIONE:** `core/bbox.py:validate_bbox` (NaN/inf/min>max; bbox-punkt dozwolony), uzywane przez `parse_bbox_arg` i parsery arkuszy (`fec42d1`, `425ffc7`).
+      **ZROBIONE:** `core/bbox.py:validate_bbox` (NaN/inf/min>max; bbox-punkt dozwolony), uzywane przez `parse_bbox_arg` i parsery arkuszy (`a813ea4`, `146944c`).
 - [ ] Straz I-2 (raport wyjatku OGC w odpowiedzi 2xx): test "URL wygrywa"
       takze dla odpowiedzi fallbackowej (URL innego arkusza + znacznik OGC);
       ograniczyc regex wyciagu komunikatu (`(.{0,2000}?)</` albo prefiks

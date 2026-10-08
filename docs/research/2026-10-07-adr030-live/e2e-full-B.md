@@ -1,6 +1,6 @@
 # E2E na zywo po ADR-030 — czesc B (LAZ, CZ, pogranicze, landcover/gleby), 2026-10-07
 
-Kod: develop ec19478. Dane: `<katalog-danych>/kartograf/e2e/2026-10-07-adr030-full-B/data` (1,5 GB).
+Kod: develop d589c88. Dane: `<katalog-danych>/kartograf/e2e/2026-10-07-adr030-full-B/data` (1,5 GB).
 
 ## Przypadki
 
@@ -37,7 +37,7 @@ Razem: 22 PASS, 1 FAIL (BDOT10k GPKG na CIFS), 0 SKIP.
 1. `kartograf landcover download --source bdot10k --teryt 1465 -o <katalog-danych>/kartograf/e2e/2026-10-07-adr030-full-B/data/landcover` (domyslny `--format GPKG`)
    - Oczekiwane: `bdot10k_teryt_1465.gpkg` + sidecar. Faktyczne: `Error: OperationalError: database is locked`, kod 1, powtarzalne (3/3 prob, rowniez z `KARTOGRAF_DEBUG=1`).
    - Traceback: `bdot10k.py:541 _extract_gpkg_from_zip -> :579 _merge_gpkg_files -> :639 _copy_gpkg_layer: cursor.execute(create_sql)`.
-   - Przyczyna (hipoteza, niezweryfikowana na dysku lokalnym — dane tylko na katalog danych): `_merge_gpkg_files` buduje wynikowy GPKG (SQLite) bezposrednio w `--output`, a udzial CIFS nie obsluguje blokad SQLite (jak WAL cache). Nie jest to regresja ADR-030, ale uzytkownik z `-o` na CIFS/SMB ma nieczytelny blad. Obejscie: `--format SHP` (dziala) albo budowa GPKG w katalogu tymczasowym lokalnym + `os.replace`/kopia.
+   - Przyczyna (hipoteza, niezweryfikowana na dysku lokalnym — dane tylko w katalogu danych): `_merge_gpkg_files` buduje wynikowy GPKG (SQLite) bezposrednio w `--output`, a udzial CIFS nie obsluguje blokad SQLite (jak WAL cache). Nie jest to regresja ADR-030, ale uzytkownik z `-o` na CIFS/SMB ma nieczytelny blad. Obejscie: `--format SHP` (dziala) albo budowa GPKG w katalogu tymczasowym lokalnym + `os.replace`/kopia.
    - Zadnych sladow po porazce (brak polowicznego .gpkg ani journala).
 
 ## OBSERWACJE

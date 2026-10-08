@@ -1,4 +1,4 @@
-# Review-2: deklarowane vs faktyczne dzialanie (develop 55070f8, przed 0.7.0)
+# Review-2: deklarowane vs faktyczne dzialanie (develop ead24c2, przed 0.7.0)
 
 **Data:** 2026-10-06
 **Zakres:** CLAUDE.md (sekcja "Ograniczenia"), docs/ARCHITECTURE.md,
@@ -83,7 +83,7 @@ i zgodnych (sekcja na koncu).
   10 s"). GUGiK bywa wolny przy GetCapabilities, wiec kod jest lepszym
   kierunkiem — deklarowane 30/60 s sugeruja, ze tyle ma kazda odpowiedz toru.
 
-### N4 (SREDNIA) — "3 proby" w ARCHITECTURE/ADR-028/CLAUDE.md sa bezwarunkowe, a od 9bcc040 4xx konczy od razu
+### N4 (SREDNIA) — "3 proby" w ARCHITECTURE/ADR-028/CLAUDE.md sa bezwarunkowe, a od ca4d004 4xx konczy od razu
 
 - **Deklaracja:** ARCHITECTURE.md 4.1 "Zapytania i pobrania maja 3 proby
   z backoffem"; 4.3 krok 4 "awaria ktorejkolwiek pytanej warstwy daje
@@ -96,7 +96,7 @@ i zgodnych (sekcja na koncu).
   429 i 5xx sa ponawiane; inne 4xx (403/404 z WMS, 404 pliku OpenData)
   koncza przy pierwszej probie (`get_with_retry` `http.py:100-106`,
   `_download_with_retry` w `gugik.py/gugik_orto.py/gugik_laz.py/bdot10k.py`).
-  Commit 9bcc040 zaktualizowal tylko `ARCHITECTURE.md:159` i CHANGELOG;
+  Commit ca4d004 zaktualizowal tylko `ARCHITECTURE.md:159` i CHANGELOG;
   pozostale zdania zostaly w brzmieniu "3 proby".
 - **Dowod:** `exp_retry.py`: `get_with_retry 404 -> proby=1`,
   `503 -> proby=3 sleep=[1, 2]`, `429 Retry-After=7 -> sleep=[7.0, 7.0]`;
@@ -404,5 +404,5 @@ Top 5 do decyzji przed 0.7.0: **N1** (SHP = ZIP pod `.gpkg`, kod),
 ARCHITECTURE, decyzja kod/dokument), **N3** (GetCapabilities 10 s
 niedokumentowane, kod), **N5** (brak ponowien w `CuzkClient.query`
 i TERYT BDOT10k, kod), **N4** (bezwarunkowe "3 proby" w czterech
-dokumentach po 9bcc040, dokument). N2 (README "kod 1" na pograniczu) to
+dokumentach po ca4d004, dokument). N2 (README "kod 1" na pograniczu) to
 jednozdaniowa poprawka README.

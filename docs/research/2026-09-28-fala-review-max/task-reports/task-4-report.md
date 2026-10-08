@@ -1,7 +1,7 @@
 # Zad. 4 — raport implementera (opus)
 
 **Status:** DONE_WITH_CONCERNS (jedno swiadome odstepstwo od kodu briefu — sekcja "Odstepstwa", pkt 1; do decyzji reviewera)
-**Commit:** `e3f82df` feat(transport): mosaic_and_crop(assign_crs=, dtype=) — normalizacja zrodel przez VRT (BASE `8d3ac8a`)
+**Commit:** `dc45432` feat(transport): mosaic_and_crop(assign_crs=, dtype=) — normalizacja zrodel przez VRT (BASE `784ea47`)
 **Pliki:** `kartograf/transport/mosaic.py`, `tests/test_transport_mosaic.py` (nic w `kartograf/providers/cuzk/*`, nic w `transform/raster.py`)
 
 ## Co zrobiono
@@ -63,7 +63,7 @@ $ .venv/bin/python -m pytest tests/ -q -m "not live"
 ===================== 1795 passed, 8 deselected in 26.82s ======================   (baseline 1785 + 10 nowych)
 ```
 
-## Dowody mutacyjne (wszystkie PO commicie `e3f82df`; kazda: zmiana -> FAIL -> `git checkout -- kartograf/transport/mosaic.py` -> PASS -> `git status --short` pusty)
+## Dowody mutacyjne (wszystkie PO commicie `dc45432`; kazda: zmiana -> FAIL -> `git checkout -- kartograf/transport/mosaic.py` -> PASS -> `git status --short` pusty)
 
 Mutacje nakladane skryptem, ktory podmienia DOKLADNIE jedno wystapienie (inaczej przerywa); zmiana potwierdzana `git diff`.
 
@@ -81,7 +81,7 @@ Mutacje nakladane skryptem, ktory podmienia DOKLADNIE jedno wystapienie (inaczej
 | 9 | `nodata=meta["nodata"]` -> wyrazenie z briefu `nodata if nodata is not None else meta["nodata"]` | `::test_wrapping_keeps_each_source_own_nodata` | `Mismatched elements: 8 / 24 (33.3%)`, `[0, 2]: -9999.0 (ACTUAL), 2.5 (DESIRED)` | 1 passed |
 | 10 | (P-20) `transforms = [... for m in reversed(metas)]` | `tests/test_transport_mosaic.py` | `test_snap_uses_majority_grid_and_warns`: ostrzezenie wskazuje `b.tif` zamiast `odd.tif` — 1 failed, 22 passed | 23 passed |
 
-Po ostatniej mutacji: `git status --short` pusty, `git diff HEAD --stat` pusty, HEAD = `e3f82df`.
+Po ostatniej mutacji: `git status --short` pusty, `git diff HEAD --stat` pusty, HEAD = `dc45432`.
 
 ## Pomiary, o ktore prosi brief
 

@@ -1,6 +1,6 @@
 # L7 — duzy wycinek NMT PL (>= 1000 arkuszy): czas, pamiec, deskryptory — raport OFFLINE
 
-Data: 2026-09-29. Galaz `develop`, HEAD 6985765 (repo Kartograf TYLKO DO ODCZYTU —
+Data: 2026-09-29. Galaz `develop`, HEAD 152c31e (repo Kartograf TYLKO DO ODCZYTU —
 zero zmian w kodzie/testach/dokumentacji, `git status` czysty przez cala sesje).
 Katalog roboczy: `/home/claude-agent/workspace/Kartograf/e2e-data/2026-09-29-live/L7-duzy-wycinek/`
 (gitignored). **Zadanie jest OFFLINE** — siec zablokowana w skrypcie pomiarowym

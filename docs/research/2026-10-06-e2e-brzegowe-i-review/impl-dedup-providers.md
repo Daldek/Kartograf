@@ -1,6 +1,6 @@
 # Implementacja deduplikacji: providery i transport (2026-10-07)
 
-Galaz `refactor/dedup-providers` (od `develop` 0f5e4f4). Zrodlo:
+Galaz `refactor/dedup-providers` (od `develop` a7bf7a8). Zrodlo:
 `review-1-duplikacje.md`, zakres D1, D2, D6, D9, D13, D19. Bez sieci.
 
 Bramki: suita offline 2216 -> **2227 passed** (16 `live` odznaczonych),
@@ -10,7 +10,7 @@ source files": nowe `transform/bbox.py`, `providers/pl/wcs.py`).
 
 ## Aktualnosc znalezisk na starcie
 
-| D | Stan na 0f5e4f4 | Decyzja |
+| D | Stan na a7bf7a8 | Decyzja |
 |---|---|---|
 | D1 | aktualne: 6 kopii petli; po 2026-10-06 wszystkie z `is_retryable`/`retry_wait`/`http_failure`, ale nadal skopiowane; rozjazdy 2-5 z review nadal prawdziwe (pkt 1 i 6 naprawione 2026-10-06) | zrobione |
 | D2 | aktualne: `skorowidz.py:370-376`, `bdot10k.py:483-489` | zrobione |
@@ -19,7 +19,7 @@ source files": nowe `transform/bbox.py`, `providers/pl/wcs.py`).
 | D13 | aktualne (linie jak w review +-10) | zrobione |
 | D19 | aktualne: `corine.py:853,876`, `soilgrids.py:255` | zrobione |
 
-## D1 — petla pobierania pliku (commit 9c7aaa9)
+## D1 — petla pobierania pliku (commit d071b75)
 
 **Przed:** 6 kopii `_download_with_retry` + 3 `_make_request` + 6
 `_save_response`: `gugik.py:491-589`, `gugik_orto.py:339-414`,
@@ -99,7 +99,7 @@ z sesja w konstruktorze; testy WMS URL patchuja
 Kazda z 7 dawnych kopii (NMT, NMPT, orto, LAZ, BDOT10k, CORINE,
 SoilGrids) pada pod mutacjami 1-3 — wszystkie przeszly przez helper.
 
-## D2 — sesja na watek (commit e9a1d3c)
+## D2 — sesja na watek (commit e0afa28)
 
 **Przed:** 2 kopie co do znaku (`skorowidz.py:370-376`,
 `bdot10k.py:483-489`) + `self._local = threading.local()` x2.
@@ -118,7 +118,7 @@ konstrukcji -> `provider._sessions.injected = x`; 3 nowe testy
 wstrzyknietej -> 143 testy (NMT, NMPT, orto, BDOT10k, skorowidz, cache,
 WMS) — wszystkie trzy dawne miejsca uzycia.
 
-## D19 — obwiednia bboxa EPSG:2180 (commit 8a2a4d1)
+## D19 — obwiednia bboxa EPSG:2180 (commit e26099d)
 
 **Przed:** 3 metody: `corine.py:853` (`->3857`), `corine.py:876` i
 `soilgrids.py:255` (`->4326`, identyczne). **Po:**
@@ -133,7 +133,7 @@ przekazany przez `SoilGridsProvider.download_by_bbox`).
 helpera); `densify_pts=0` -> CORINE DLR (URL, wysokosc, naroza) i SoilGrids.
 Szersze D5 (geometry/sheet_parser/cutout) poza zakresem.
 
-## D13 — WCS GUGiK i walidacja godla (commit 6c39b8b)
+## D13 — WCS GUGiK i walidacja godla (commit 661d110)
 
 **Przed:** `WCS_FORMATS` x2 (`gugik.py:134`, `gugik_orto.py:84`),
 `_construct_wcs_url` x2 (`:454`, `:319`), `get_supported_formats` x2,
@@ -149,7 +149,7 @@ martwego API — poza zakresem). `kartograf/`: +65 / -109, testy bez zmian.
 `validate_godlo` zawsze True -> NMT `TestGugikProviderValidation`, orto
 `TestGugikOrtoProviderInfo`.
 
-## D9 — stale polityk transformacji (commit 8f3a995, czesc CZ)
+## D9 — stale polityk transformacji (commit 6f5c868, czesc CZ)
 
 **Przed:** `dmr.py:86 _HORIZONTAL_POLICY`, `:89 _WARP_MARGIN_PX` i lustro
 `cutout.py:53 WARP_MARGIN_PX`, `:56 _HORIZONTAL_POLICY`.
@@ -182,7 +182,7 @@ Wycinek PL pod tymi mutacjami nie pada, bo ma jeszcze wlasna kopie.
 - Historyczne wzmianki `_download_with_retry` w `docs/DECISIONS.md`
   (ADR z 2026-02/03) i `docs/PROGRESS.md` — zapis historii, bez zmian.
 
-## Bilans linii (`git diff --stat 0f5e4f4..8f3a995`)
+## Bilans linii (`git diff --stat a7bf7a8..6f5c868`)
 
 ```
 kartograf/: 12 files changed, 340 insertions(+), 898 deletions(-)   netto -558
@@ -191,8 +191,8 @@ tests/:     14 files changed, 310 insertions(+), 208 deletions(-)   netto +102
 
 | Commit | D | kartograf/ | tests/ |
 |---|---|---|---|
-| e9a1d3c | D2 | +47 / -31 | +57 / -32 |
-| 9c7aaa9 | D1 | +177 / -678 | +208 / -157 |
-| 8a2a4d1 | D19 | +38 / -75 | +32 / -18 |
-| 6c39b8b | D13 | +65 / -109 | 0 |
-| 8f3a995 | D9 | +18 / -10 | +14 / -2 |
+| e0afa28 | D2 | +47 / -31 | +57 / -32 |
+| d071b75 | D1 | +177 / -678 | +208 / -157 |
+| e26099d | D19 | +38 / -75 | +32 / -18 |
+| 661d110 | D13 | +65 / -109 | 0 |
+| 6f5c868 | D9 | +18 / -10 | +14 / -2 |

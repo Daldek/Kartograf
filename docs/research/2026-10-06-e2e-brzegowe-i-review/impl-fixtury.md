@@ -88,7 +88,7 @@ broni test dwoch kafli, M16). Test "potomek nie bierze rodzica" przechodzil pod 
 - Remis `aktualnosc` rozstrzygany `dt_pzgik`/URL: brak remisu w danych na zywo; sam kolejny klucz
   (`dt_pzgik` przed `aktualnosc`) jest chroniony przez test N-33-69-A-d-3-2.
 - C6b/C6h (plik PL-2000 w wspolrzednych EPSG:2180, E17): to zachowanie sidecara przy
-  prawdziwym naglowku `.asc` (11 MB per plik na katalog danych); kopiowanie naglowkow odpada,
+  prawdziwym naglowku `.asc` (11 MB per plik w katalogu danych); kopiowanie naglowkow odpada,
   a asercja wymaga zapisu pliku przez manager. Test selekcji rekordu 77912 jest (C6).
 - C14 `missing_sheets`/`off_grid_sheets`/`all_nodata` w wycinku: wymaga rastra i mozaiki,
   w fixturach tylko skorowidz; testowane jest tylko pochodzenie arkuszy (`sheet_sources`).

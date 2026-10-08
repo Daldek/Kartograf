@@ -1,6 +1,6 @@
 # L1 — centrum, produkty (Spytkowice k. Krakowa) — raport z testow na zywych danych GUGiK
 
-- Data: 2026-09-29, 09:25-09:58 CEST. Galaz `develop`, HEAD `6985765` (bez zmian; `git status` czysty
+- Data: 2026-09-29, 09:25-09:58 CEST. Galaz `develop`, HEAD `152c31e` (bez zmian; `git status` czysty
   przed i po). `kartograf 0.7.0-dev`, `.venv` repo.
 - Katalog roboczy: `e2e-data/2026-09-29-live/L1-centrum-produkty/` (wszystkie polecenia z niego; `-o ./data`).
 - Pobrano lacznie ok. 300 MB (`data/` 286 MB, `ref/` 11 MB, `data-lazcheck/` 1,7 MB), `--workers 2`.

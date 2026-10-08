@@ -1,6 +1,6 @@
 # Etap 1 — fundament CZ + DMR (CUZK): plan implementacji
 
-**Status: WYKONANY** — wszystkie 21 zadań zrealizowane; zmergowany do develop 2026-08-12 (ff do 0738ae0). Errata (2026-08-18): implementacja `server_crs`/sidecar `server:EPSG:*`/asercja E2E `transform.horizontal == "server:EPSG:2180"` z tego planu została następnie zastąpiona lokalną przypiętą operacją (ADR-024).
+**Status: WYKONANY** — wszystkie 21 zadań zrealizowane; zmergowany do develop 2026-08-12 (ff do d5a1ac7). Errata (2026-08-18): implementacja `server_crs`/sidecar `server:EPSG:*`/asercja E2E `transform.horizontal == "server:EPSG:2180"` z tego planu została następnie zastąpiona lokalną przypiętą operacją (ADR-024).
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 

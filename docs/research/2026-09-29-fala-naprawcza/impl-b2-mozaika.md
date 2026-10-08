@@ -1,6 +1,6 @@
 # Pakiet B2 — mozaika/wycinek: S5 (D3 + D8), N4 (wycinek), N9
 
-Data: 2026-09-29. Galaz `develop`, baza: `5e5e653` (A1). Testy offline, zero sieci.
+Data: 2026-09-29. Galaz `develop`, baza: `381a7b2` (A1). Testy offline, zero sieci.
 
 ## Co zmienione
 
@@ -81,12 +81,12 @@ Data: 2026-09-29. Galaz `develop`, baza: `5e5e653` (A1). Testy offline, zero sie
   oraz `download_pl_cutout` (linia skipu) tymczasowo B2; B1 dopisze `all_nodata` po tym
   commicie.
 - A1 (IRC): `write_pl_cutout_sidecar(off_grid_sheets=)` i linia skipu w
-  `download_pl_cutout` edytowane dopiero PO jego commicie `5e5e653` (jego wersja pliku
+  `download_pl_cutout` edytowane dopiero PO jego commicie `381a7b2` (jego wersja pliku
   identyczna z kopia, na ktorej pracowalem w osobnym worktree).
 
 ## Testy: failing-before / passing-after
 
-Dowod: nowe pliki testow uruchomione na drzewie `git worktree` z HEAD `5e5e653`
+Dowod: nowe pliki testow uruchomione na drzewie `git worktree` z HEAD `381a7b2`
 (kod sprzed B2) — 10 nowych testow FAILED, po zmianach wszystkie PASSED
 (`test_transport_mosaic.py` 38, `test_transform_raster.py` 13, `test_pl_cutout.py` 73 =
 124 passed).

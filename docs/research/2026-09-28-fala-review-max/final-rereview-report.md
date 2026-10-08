@@ -1,4 +1,4 @@
-# Re-review fali finalnej (fa1f771..bbd1cd4) — raport re-reviewera (opus)
+# Re-review fali finalnej (84bd0a8..61f60de) — raport re-reviewera (opus)
 
 (Zapis odpowiedzi re-reviewera przekazanej kontrolerowi; rulingi kontrolera do
 N-1..N-4 — w `sdd-ledger.md`.)
@@ -52,7 +52,7 @@ Kazdy przebieg: odmowa startu przy brudnym drzewie -> mutacja -> pytest z nowym 
 | 6 | m-2 `crs = bbox.crs` | 2 failed | 3 passed, pusty |
 | 7 | N-1: straz w `if urls:` przed fallbackiem | przezywa: 1861 passed | 1861 passed, pusty |
 
-Brama na bbd1cd4 (swiezy pycache): 1861 passed, 8 deselected; ruff check/format czyste; mypy 32, lista `error:` = baseline (roznia sie tylko 3 linie `note:` w nietknietym `auth/proxy.py`, ktorych baseline nie zawiera); diff od fa1f771 dla `providers/cuzk`, `transform/raster.py`, `docs/PROGRESS.md` pusty; 6 commitow, bez plikow `.superpowers/`; `git status --short` pusty.
+Brama na 61f60de (swiezy pycache): 1861 passed, 8 deselected; ruff check/format czyste; mypy 32, lista `error:` = baseline (roznia sie tylko 3 linie `note:` w nietknietym `auth/proxy.py`, ktorych baseline nie zawiera); diff od 84bd0a8 dla `providers/cuzk`, `transform/raster.py`, `docs/PROGRESS.md` pusty; 6 commitow, bez plikow `.superpowers/`; `git status --short` pusty.
 
 ## Out-of-Scope Observations
 

@@ -98,7 +98,7 @@ Liczba "+4" z briefu — potwierdzona pomiarem, nie tylko przepisana.
 
 ## Dowod mutacyjny
 
-Mutacja (Step 5 z briefu, wykonana PO commicie `c5b15dc`, bezpiecznie
+Mutacja (Step 5 z briefu, wykonana PO commicie `8c124fc`, bezpiecznie
 przywracalna przez `git checkout --`): usuniety blok `if bbox.min_x <
 _PL1992_CENTRAL_X < bbox.max_x: points_2180 += [...]` w
 `_transform_bbox_to_wgs84` — powrot do samych 4 naroznikow.
@@ -122,7 +122,7 @@ E   AssertionError: assert {'N-34-134-B-d-4-2', 'N-34-135-A-c-3-2', ...} <= {...
 ```
 
 Przywrocenie: `git checkout -- kartograf/core/sheet_parser.py` (bezpieczne —
-praca byla juz zacommitowana w `c5b15dc`).
+praca byla juz zacommitowana w `8c124fc`).
 
 Po przywroceniu:
 - `git status --short` → pusty (czyste drzewo)
@@ -201,7 +201,7 @@ kryterium bramki (lista `error:` identyczna).
 ## Commit
 
 ```
-c5b15dc fix(core): selekcja arkuszy uwzglednia poludnik osiowy przy gornej krawedzi bboxa
+8c124fc fix(core): selekcja arkuszy uwzglednia poludnik osiowy przy gornej krawedzi bboxa
 ```
 3 pliki wg briefu (`kartograf/core/sheet_parser.py`, `tests/test_sheet_parser.py`,
 `docs/CHANGELOG.md`), stopka `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`

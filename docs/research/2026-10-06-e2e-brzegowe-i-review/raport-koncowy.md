@@ -1,7 +1,7 @@
 # Raport końcowy: runda E2E przypadków brzegowych GUGiK + code review (2026-10-06)
 
-**Stan wyjściowy:** `develop` `fef7bf0`, 2105 testów offline.
-**Stan końcowy:** `develop` po merge `b394570` + dokumentacja rundy, **2216 testów
+**Stan wyjściowy:** `develop` `6d9a6d0`, 2105 testów offline.
+**Stan końcowy:** `develop` po merge `9c47988` + dokumentacja rundy, **2216 testów
 offline** (+111) + 16 `live`, ruff czysty, mypy 32 (lista błędów = baseline).
 Kontrakt rundy i jego historia: `cykl-e2e.md` (wymagania E1–E18).
 
@@ -21,7 +21,7 @@ Kontrakt rundy i jego historia: `cykl-e2e.md` (wymagania E1–E18).
 
 Koordynator sam sprawdził wszystkie znaleziska WYSOKIE i jedyny FAIL, uruchamiając
 ponownie skrypty dowodowe, czytając surowe nagłówki i kod. Powtórzył też niezależnie
-6 mutacji (A1, A4, M3, B1, B3 oraz retry z 9bcc040); każdą testy wykryły.
+6 mutacji (A1, A4, M3, B1, B3 oraz retry z ca4d004); każdą testy wykryły.
 
 ## 2. Błędy naprawione (wszystkie z testem, który bez naprawy pada)
 
@@ -109,7 +109,7 @@ dlatego nie zostało zrobione bez Ciebie.
   Obie gałęzie są scalone i usunięte.
 - Agent fali A przepisał `docs/DECISIONS.md` z CRLF na LF (2740 linii diffu przy 5 liniach
   zmiany). Koordynator to przywrócił, a kolejne zlecenia zawierały ostrzeżenie.
-- Kontrakt F9 zalecał cache SQLite w katalogu na katalog danych CIFS, a WAL na CIFS daje
+- Kontrakt F9 zalecał cache SQLite w katalogu na udziale sieciowym CIFS, a WAL na CIFS daje
   `database is locked`, co CLAUDE.md już opisuje. Agent przeszedł na lokalny katalog.
 - Dane rundy: 3,2 GB w `<katalog-danych>/kartograf/e2e/2026-10-06-brzegowe/`.
 - Nic nie zostało wypchnięte: `develop` ma 275+ commitów przed origin. Wydanie 0.7.0
