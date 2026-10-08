@@ -27,6 +27,15 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   z rozdzielczoscia (zrodlo DMR 5G/4G) i dla SM5 wymagaja `resolution="5m"`.
 
 ### Dokumentacja
+- **`--scale`:** nowy podrozdzial `docs/USAGE.md` 1.6 "Kiedy `--scale` jest
+  niezbedne" (skala docelowa = skala arkuszy publikowanych przez GUGiK;
+  PL-1992 bez flagi, PL-2000 zwykle `--scale 1:2000`; zasieg flagi,
+  zachowanie przy niedopasowaniu i podpowiedzi `uzyj --scale ...`).
+  Z przykladow (USAGE, PRD) usuniete zbedne `--scale 1:10000` przy godle
+  PL-1992; przyklady PL-2000 `--bbox ... --system 2000` z `--scale 1:2000`.
+  Pomoc CLI `--scale` po polsku z odeslaniem do USAGE, pomoc
+  `--resolution` opisuje SM5 (tylko 5m) vs TM33/bbox (2m domyslnie lub 5m);
+  przyklady `kartograf download CTES96` bez `--resolution`.
 - **Reorganizacja dokumentacji (2026-10-08):** nowy `docs/USAGE.md`
   (przewodnik uzytkownika: przyklady CLI i biblioteki, wynik pobrania,
   kampanie, CLMS, znane problemy); `IMPLEMENTATION_PROMPT.md` usuniety

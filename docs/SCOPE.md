@@ -95,7 +95,9 @@ dokładnie jeden arkusz. Nieznana wartość `system=` to `ValidationError`.
 - DMR 5G (rozdzielczość 2m) — pobieranie po godle TM33 (siatka 2x2 km,
   EPSG:3045, obliczalna) LUB po bbox przez exportImage (ArcGIS ImageServer)
 - DMR 4G (rozdzielczość 5m) — pobieranie po godle SM5 (indeks arkuszy
-  KladyMapovychListu, EPSG:5514) LUB po bbox przez exportImage
+  KladyMapovychListu, EPSG:5514; arkusz istnieje tylko w 5m, więc CLI bez
+  `--resolution` pobiera 5m, a `--resolution 2m` z godłem SM5 to błąd)
+  LUB po bbox przez exportImage
 - Selekcja obszaru: godło (TM33/SM5), bbox, plik geometrii — `--country
   {pl,cz,auto}`; `auto` wykrywa kraj z godła/bboxa, dzieli bbox/geometrię
   transgraniczną na osobne pliki per kraj (bez scalania — dziś scala
@@ -256,7 +258,7 @@ kartograf download --geometry area.shp         # NMT z pliku geometrii
 kartograf download --geometry area.gpkg --layer catchments
 kartograf download <godlo> --resolution 5m # NMT 5m
 kartograf download 302_5550 --country cz               # DMR 5G (CZ), godlo TM33
-kartograf download CTES96 --resolution 5m               # DMR 4G (CZ), godlo SM5, kraj auto
+kartograf download CTES96                               # DMR 4G (CZ, 5m), godlo SM5, kraj auto
 kartograf download --bbox ... --bbox-crs EPSG:4326 --country auto   # bbox transgraniczny -> pliki per kraj
 kartograf download --bbox ... --country cz --target-crs EPSG:2180   # reprojekcja lokalna (pinned)
 kartograf download --bbox ... --country pl --target-crs EPSG:2180   # wycinek PL: jeden GeoTIFF (ADR-027)
