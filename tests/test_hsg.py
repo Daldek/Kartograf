@@ -728,6 +728,33 @@ class TestHSGSidecar:
         assert meta["extra"]["depth"] == "5-15cm"
         assert meta["extra"]["stat"] == "mean"
 
+    def test_sidecar_by_godlo_records_sheet(self, tmp_path):
+        import json
+
+        out = tmp_path / "hsg_sheet.tif"
+        self._calc().calculate_hsg_by_godlo("N-34-130-D", out)
+
+        request = json.loads((tmp_path / "hsg_sheet.tif.meta.json").read_text())[
+            "request"
+        ]
+        assert request["sheet"] == "N-34-130-D"
+        assert request["bbox_crs"] == "EPSG:2180"
+        assert len(request["bbox"]) == 4
+
+    def test_sidecar_by_bbox_has_no_sheet(self, tmp_path):
+        import json
+
+        from kartograf.core.sheet_parser import BBox
+
+        out = tmp_path / "hsg_nosheet.tif"
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        self._calc().calculate_hsg_by_bbox(bbox, out)
+
+        request = json.loads((tmp_path / "hsg_nosheet.tif.meta.json").read_text())[
+            "request"
+        ]
+        assert "sheet" not in request
+
     def test_sidecar_uses_bbox_raster_capability(self, tmp_path):
         from kartograf.core.sheet_parser import BBox
 

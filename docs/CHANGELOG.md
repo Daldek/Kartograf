@@ -67,6 +67,15 @@ Wydanie wielokrajowe. Najwazniejsze nowosci wzgledem 0.6.1:
   `corine_land_cover_godlo_N-34-130-D.<ext>`; rozszerzenie nadaje provider
   (CORINE `.tif`/`.png`, SoilGrids `.tif`). Skrypty skladajace sciezke
   wyniku z nazwy zrodla wymagaja poprawki (A5-2, N14).
+- **`soilgrids hsg` nazywa domyslny plik z glebokoscia:**
+  `hsg_<godlo>_<depth>.tif` (np. `hsg_N-34-130-D_0-5cm.tif`) i
+  `hsg_bbox_<depth>.tif`; bylo `hsg_<godlo>.tif` / `hsg_bbox.tif`, wiec
+  kolejne `--depth` po cichu nadpisywaly wynik. Sidecar HSG z `--godlo`
+  / `calculate_hsg_by_godlo` zapisuje tez `request.sheet` (obok
+  pochodnego `bbox`/`bbox_crs`); `--bbox`/`--geometry` bez `sheet`.
+  Skrypty skladajace sciezke wyniku HSG wymagaja poprawki. Statystyka
+  (`stat`) nie jest parametrem CLI (zawsze `mean`); w bibliotece nazwe
+  pliku wybiera wywolujacy (`output_path`).
 - **`DownloadManager` bierze segment z providera:** bez jawnego `storage=`
   podkatalog pochodzi z deskryptora providera (bylo: zawsze segment NMT 1m,
   wiec `DownloadManager(provider=GugikNmptProvider())` pisal do katalogu NMT
