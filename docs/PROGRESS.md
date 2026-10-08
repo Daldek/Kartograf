@@ -1355,8 +1355,11 @@ zatwierdzeniu specu i planu.
 Zgloszenie Hydrografa (pozycje A na 0.7.1, B na 0.8.0) przejrzane wzgledem
 kodu `develop` i specu magazynu wersjonowanego; podzial zaakceptowany przez
 uzytkownika. Kryterium 0.7.1: zmiany addytywne, bez lamania CLI i API.
-Z planu 0.8.0 wchodza wczesniej tylko: sha256 liczone w strumieniu
-`download_to` + `sha256` w sidecarze oraz `extra.http` (spec 3.3, 8).
+Z planu 0.8.0 wchodza wczesniej tylko: `sha256` w sidecarze oraz
+`extra.http` (spec 3.3, 8). `sha256` liczone przez ponowny odczyt
+gotowego pliku w `build_metadata` — jedno miejsce, obejmuje tez produkty
+pochodne (decyzja uzytkownika 2026-10-08 po pre-flight planu); hash
+liczony w strumieniu `download_to` zostaje w magazynie 0.8.0.
 
 - [ ] **A1 — odkrywanie TERYT:** publiczne `discover_teryts_for_bbox(bbox, *,
   session=None, cache=None) -> list[str]` (powiaty przecinajace obszar;
@@ -1396,8 +1399,11 @@ Z planu 0.8.0 wchodza wczesniej tylko: sha256 liczone w strumieniu
   EPSG:2180, `vertical_crs="EVRF2007"`), publiczny podzial obszaru na kraje
   (dzis `_countries_for_bbox` w CLI), sidecar zapisywany przez biblioteke
   (dzis `_write_cz_sidecar` w CLI), flaga `all_nodata` w wyniku (jak
-  `PlCutoutResult`). CLI bez zmian zachowania. Do sprawdzenia: czy warp CZ
-  do 2180 trafia w siatke wycinka PL (ADR-027).
+  `PlCutoutResult`). CLI bez zmian zachowania. Siatka wyniku od zadanego
+  bboxa, jak dzis w CLI. Dawne "do sprawdzenia: czy warp CZ do 2180 trafia
+  w siatke wycinka PL (ADR-027)" — wyrownanie siatki CZ do siatki PL
+  przeniesione do osobnego specu razem z R6 i A11 (decyzja uzytkownika
+  2026-10-08, fakt z pomiaru przy A11).
 - [ ] **A7 — walidacja godel** (decyzje uzytkownika 2026-10-08):
   godla spoza nomenklatury (np. `N-34-999-D` daje dzis bbox y = -2,2 mln,
   `X-99-1-D-d-3` bbox `inf`) -> `ParseError` przed zapytaniem sieciowym;
@@ -1417,9 +1423,18 @@ Z planu 0.8.0 wchodza wczesniej tylko: sha256 liczone w strumieniu
 - [ ] **A10 — mozaika z lokalnych arkuszy:** publiczna
   `build_cutout_from_sheets(...)` bez sieci, wynik pod sciezka
   wywolujacego (dzis `build_pl_cutout` wewnetrzne).
-- [ ] **A11 — jawny resampling przy EPSG:2180:** opcja
+- [ ] **A11 — jawny resampling przy EPSG:2180** — PRZENIESIONE poza 0.7.1,
+  do osobnego specu razem z R6 i wyrownaniem siatki CZ (decyzja
+  uzytkownika 2026-10-08 po pre-flight planu). Pierwotnie: opcja
   `resample_off_grid=True` (W1 z operacja tozsamosciowa, siatka
   w wielokrotnosciach piksela); domyslnie `GridMismatchError`, CLI bez zmian.
+  Fakt z pomiaru prawdziwych arkuszy GUGiK (lokalne ASC): 1 m — wiekszosc
+  arkuszy ma narozniki pikseli w `.5` m (srodki w pelnych metrach), czesc
+  w `.0`; 5 m — wiele roznych faz. "Siatka w wielokrotnosciach piksela" nie
+  odpowiada wiec danym: resampling na nia przesuwalby o pol piksela takze
+  arkusze zgodne z wiekszoscia. Punkt wyjscia dla specu: siatka zaczepiona
+  w fazie wiekszosci arkuszy (jak `check_source_grid`), resampling tylko
+  arkuszy spoza niej.
 - [ ] **A12 — `source_info()` przy kampaniach:** dokumentacja (decyzja:
   bez zmiany kodu) — zrodlem pochodzenia arkusza jest sidecar sciezki
   standardowej (link moze wskazywac starsza kampanie niz najnowszy rekord).
@@ -1428,7 +1443,8 @@ Z planu 0.8.0 wchodza wczesniej tylko: sha256 liczone w strumieniu
 - [ ] **A6 (rozszerzenie) — 100 % nodata CZ w bibliotece:** flaga wyniku,
   `extra.all_nodata` i `logger.warning`. Scalanie PL+CZ z priorytetem PL
   (R6) — decyzja uzytkownika 2026-10-08: osobno po 0.7.1, wlasny
-  brainstorming i spec.
+  brainstorming i spec (ten sam spec obejmie A11 i wyrownanie siatki CZ
+  do siatki PL).
 - [ ] **B1-B3 — rozbieznosci ze specem magazynu** (do rozstrzygniecia przed
   implementacja 0.8.0, nie teraz): wersja NMT = kampania + odcisk vs D1
   (sha256 tresci); `.lock` vs brak blokad; import plikow 0.6.1 vs D10 (bez
