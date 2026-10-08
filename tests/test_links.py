@@ -124,13 +124,13 @@ def test_standard_sidecar_is_regular_file_even_if_symlink_existed(tmp_path):
     assert not sc.is_symlink() and sc.is_file()
     assert json.loads(sc.read_text())["extra"]["campaign"]["date"] == "2025-10-21"
     assert a_sc.read_bytes() == before
-    # os.replace zastepuje SAM symlink, cel symlinku nietkniety
+    # os.replace replaces the symlink ITSELF, its target stays untouched
     assert _hardlinked(link, b)
     assert a.read_text() == "A" and os.stat(a).st_nlink == 1
 
 
 def test_legacy_symlink_with_symlink_sidecar_is_unknown_and_replaced(tmp_path):
-    """Erratum 4: a symlink with a sidecar ``extra.link=symlink`` (data from
+    """Errata 4: a symlink with a sidecar ``extra.link=symlink`` (data from
     before the release) is an unknown path - even with the same target
     ``newest`` replaces it with a hard link, without writing through the symlink."""
     a, k_a = _a(tmp_path)
@@ -190,7 +190,7 @@ def test_same_campaign_is_noop_missing_sidecar_relinks(tmp_path):
     assert linked_campaign(link) is None
     out = ensure_standard_link(link, a, k_a)
     assert out.changed is True and out.method == "hardlink"
-    assert _hardlinked(link, a)  # rename na ten sam i-wezel: tmp sprzatniety
+    assert _hardlinked(link, a)  # rename onto the same inode: tmp cleaned up
     assert not list(link.parent.glob("*.tmp"))
     assert _sidecar(link).is_file()
     assert json.loads(_sidecar(link).read_text())["extra"]["link"] == "hardlink"
@@ -202,7 +202,7 @@ def test_removed_campaign_dir_is_missing_and_relinked(tmp_path):
     link = _link(tmp_path)
     ensure_standard_link(link, b, k_b)
     shutil.rmtree(tmp_path / "seg" / "kampanie" / B[0])
-    assert link.is_file()  # hardlink przezywa usuniecie kampanii
+    assert link.is_file()  # the hardlink survives deletion of the campaign
     assert linked_campaign(link) is None  # link_target from the sidecar does not exist
     out = ensure_standard_link(link, a, k_a)
     assert out.changed is True and _same(out.target, a)
@@ -290,7 +290,7 @@ def test_refresh_recopies_when_target_redownloaded(tmp_path, monkeypatch):
     link = _link(tmp_path)
     _no_links(monkeypatch)
     ensure_standard_link(link, a, k_a)
-    a.write_text("Z")  # ten sam rozmiar
+    a.write_text("Z")  # same size
     # target not "newer" than the copy: only refresh decides
     t = link.stat().st_mtime - 10
     os.utime(a, (t, t))
@@ -330,7 +330,7 @@ def test_ensure_link_replaces_older_target_set_by_other_process(tmp_path):
     b, k_b = _b(tmp_path)
     link = _link(tmp_path)
     ensure_standard_link(link, b, k_b)
-    # inny proces (R2) ustawia link na A po tym, jak B byl celem
+    # another process (R2) points the link at A after B was the target
     assert link_atomic(a, link) == "hardlink"
     write_standard_sidecar(link, a, "hardlink")
     assert _same(linked_campaign(link), a)
@@ -338,7 +338,7 @@ def test_ensure_link_replaces_older_target_set_by_other_process(tmp_path):
     assert out.changed is True and _same(out.target, b) and link.read_text() == "B"
 
 
-# --- poprawki po weryfikacji (D-1, D-5) ---
+# --- fixes after verification (D-1, D-5) ---
 
 
 @pytest.mark.parametrize("method", ["hardlink", "copy"])
@@ -422,7 +422,7 @@ def test_copy_older_than_target_is_replaced(tmp_path, monkeypatch):
     ensure_standard_link(link, a, k_a)
     t0 = link.stat().st_mtime
     tmp = a.with_name("x.asc.part")
-    tmp.write_text("N")  # ten sam rozmiar, jak download_to (tmp + os.replace)
+    tmp.write_text("N")  # same size, like download_to (tmp + os.replace)
     os.replace(tmp, a)
     os.utime(a, (t0 + 10, t0 + 10))
     assert linked_campaign(link) is None
@@ -430,7 +430,7 @@ def test_copy_older_than_target_is_replaced(tmp_path, monkeypatch):
     assert out.changed is True and link.read_text() == "N"
 
 
-# --- Fix round 1: segment "kampanie" w korzeniu katalogu wyjsciowego ---
+# --- Fix round 1: a "kampanie" segment at the output directory root ---
 
 
 def test_campaign_key_from_dir_uses_last_kampanie_segment(tmp_path):
@@ -470,7 +470,7 @@ def test_tmp_cleanup_failure_after_hardlink_error_still_copies(tmp_path, monkeyp
     def flaky_unlink(self, missing_ok=False):
         if self.name.endswith(".link.tmp"):
             calls["n"] += 1
-            if calls["n"] > 1:  # pierwsze = sprzatanie po przerwanym przebiegu
+            if calls["n"] > 1:  # first = cleanup after an interrupted run
                 raise OSError(16, "busy")
         return real_unlink(self, missing_ok=missing_ok)
 

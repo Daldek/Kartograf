@@ -1,5 +1,5 @@
 """
-GUGiK provider for downloading NMPT (Digital Surface Model) data.
+GUGiK provider for downloading Digital Surface Model (NMPT) data.
 
 This module provides the GugikNmptProvider class for downloading
 NMPT data from the Polish GUGiK services.
@@ -21,7 +21,7 @@ from kartograf.providers.pl.gugik import GugikProvider
 
 class GugikNmptProvider(GugikProvider):
     """
-    Provider for downloading NMPT (Digital Surface Model) data from GUGiK.
+    Provider for downloading Digital Surface Model (NMPT) data from GUGiK.
 
     Inherits all download logic from GugikProvider, overriding only
     the endpoints, layer names, and coverage IDs for NMPT.

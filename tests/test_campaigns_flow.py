@@ -131,7 +131,7 @@ def test_download_sheet_returns_standard_path_readable_by_rasterio(tmp_path):
     assert meta["extra"]["link"] == "hardlink"
     with rasterio.open(path) as src, rasterio.open(campaign_file) as direct:
         assert src.read(1).tolist() == direct.read(1).tolist()
-        assert src.read(1)[0, 0] == 84183  # najnowsza kampania
+        assert src.read(1)[0, 0] == 84183  # newest campaign
         assert src.shape == (5, 5)
 
 

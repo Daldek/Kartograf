@@ -26,14 +26,14 @@ from kartograf.providers.cuzk.sheets import (
 
 FIXTURES = Path(__file__).parent / "fixtures" / "cuzk"
 
-# Koperty uzyte w rekonesansie do wygenerowania fixtur.
+# Envelopes used in the reconnaissance to generate the fixtures.
 BBOX_SM5 = BBox(-450000, -1105000, -440000, -1095000, SM5_CRS)
 BBOX_TM33_OVERSEL = BBox(744000, 5534000, 746000, 5536000, TM33_CRS)
 BBOX_TM33_BRIEF = BBox(744000, 5540000, 760000, 5556000, TM33_CRS)
 
 
 def _session_returning(*payloads):
-    """Mock requests.Session zwracajacy kolejne payloady JSON."""
+    """Mock requests.Session returning successive JSON payloads."""
     session = Mock()
     responses = []
     for p in payloads:
@@ -50,7 +50,7 @@ def _fixture(name):
 
 
 def _sm5_feature(mapnom, west, south, east, north, name="Test", podil=1.0):
-    """Syntetyczny feature warstwy 24 (prostokat)."""
+    """Synthetic layer 24 feature (rectangle)."""
     return {
         "attributes": {"MAPNOM": mapnom, "MAPNAME": name, "PODIL": podil},
         "geometry": {
@@ -78,12 +78,12 @@ class TestSm5Sheet:
         info = index.sm5_sheet("CTES96")
         assert isinstance(info, SheetInfo)
         assert info.godlo == "CTES96"
-        assert info.name  # MAPNAME obecne
+        assert info.name  # MAPNAME present
         assert info.podil is not None and 0.0 < info.podil <= 1.0
         assert info.in_cz is None
         assert info.bbox.crs == "EPSG:5514"
         assert info.bbox.min_x < info.bbox.max_x
-        # zapytanie poszlo do warstwy 24 z where po MAPNOM
+        # the query went to layer 24 with a where on MAPNOM
         (url,), kwargs = session.get.call_args
         assert url == f"{KLADY_ENDPOINT}/{SM5_LAYER}/query"
         assert "MAPNOM" in kwargs["params"]["where"]
@@ -116,7 +116,7 @@ class TestSm5Sheet:
             index.sm5_sheet("ZZZZ99")
 
     def test_whitespace_around_mapnom_is_stripped(self):
-        """Spojnie z rejestrem systemow (detect_system strip()) — K5."""
+        """Consistent with the system registry (detect_system strip()) — K5."""
         session = _session_returning(_fixture("klady_sm5_where_ctes96.json"))
         info = SheetIndex(session=session).sm5_sheet(" CTES96 ")
         assert info.godlo == "CTES96"
@@ -172,7 +172,7 @@ class TestSm5Sheet:
         cache.close()
 
     def test_cache_payload_is_json_round_trip_of_info(self):
-        """To, co trafia do set_sheet, odtwarza dokladnie ten sam SheetInfo."""
+        """What goes into set_sheet restores exactly the same SheetInfo."""
         cache = Mock()
         cache.get_sheet.return_value = None
         session = _session_returning(_fixture("klady_sm5_where_ctes96.json"))
@@ -254,16 +254,17 @@ class TestBboxQueries:
         assert "IN_CZ" in kwargs["params"]["outFields"]
 
     def test_tm33_tiles_for_bbox_drops_krovak_halo(self):
-        """Fixtura z briefu: jedyny zwrocony kafel lezy 2 km na S od koperty.
+        """Fixture from the brief: the only returned tile lies 2 km S of the envelope.
 
-        Halo powstaje z reprojekcji koperty 3045 -> Krovak po stronie serwera
-        (rekonesans Zad. 1, dowod 3) — filtr klienta musi je usunac.
+        The halo comes from the server-side reprojection of the 3045 envelope
+        to Krovak (reconnaissance Task 1, evidence 3) — the client filter
+        must remove it.
         """
         session = _session_returning(_fixture("klady_tm33_bbox.json"))
         assert SheetIndex(session=session).tm33_tiles_for_bbox(BBOX_TM33_BRIEF) == []
 
     def test_filter_tolerates_arcgis_coordinate_noise(self):
-        """Styk krawedzia (~1e-4 m szumu) odpada; realne przeciecie zostaje."""
+        """Edge contact (~1e-4 m of noise) is dropped; a real intersection stays."""
         payload = _collection(
             _sm5_feature("AAAA01", -452500, -1105000, -449999.9995, -1095000),
             _sm5_feature("AAAA02", -452500, -1105000, -449999.0, -1095000),
@@ -275,7 +276,7 @@ class TestBboxQueries:
         assert [i.godlo for i in infos] == ["AAAA02", "AAAA04"]
 
     def test_multi_ring_geometry_uses_envelope_of_all_rings(self):
-        """Wielokat wieloczesciowy/z dziurami: obwiednia wszystkich pierscieni."""
+        """Multipart/holed polygon: envelope of all rings."""
         feature = _sm5_feature("BBBB01", -449000, -1104000, -448000, -1103000)
         feature["geometry"]["rings"].append(
             [

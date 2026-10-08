@@ -1,1 +1,1 @@
-"""Wspolne narzedzia transportowe (downloader HTTP, mozaikowanie rastrow)."""
+"""Shared transport tools (HTTP downloader, raster mosaicking)."""

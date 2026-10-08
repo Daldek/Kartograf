@@ -31,7 +31,7 @@ class TransportKind(StrEnum):
 class LicenseInfo:
     """License and ready-made attribution text for a source."""
 
-    id: str  # np. "CC-BY-4.0", "PL-PGiK-40a", "dl-de/by-2-0"
+    id: str  # e.g. "CC-BY-4.0", "PL-PGiK-40a", "dl-de/by-2-0"
     attribution: str  # ready-made attribution text
     url: str = ""
 
@@ -61,12 +61,12 @@ class TileScheme:
     crs: str
     width_m: float | None
     height_m: float | None
-    description: str  # np. "SM5: nazwa miasta + cyfry, wymaga indeksu"
+    description: str  # e.g. "SM5: nazwa miasta + cyfry, wymaga indeksu"
 
 
 @dataclass(frozen=True)
 class SourceDescriptor:
-    """Pelny opis jednego zbioru danych."""
+    """Full description of one dataset."""
 
     key: str  # "pl.gugik.nmt_1m"
     country: str  # "PL" | "CZ" | "EU" | "GLOBAL" (later "DE","SK")
@@ -116,8 +116,7 @@ class SourceDescriptor:
 
 @dataclass(frozen=True)
 class CountryProfile:
-    """Country profile: approximate extent (for --country auto in stage 1) +
-    datasets."""
+    """Country profile: rough extent (for --country auto in stage 1) + datasets."""
 
     code: str  # "PL"
     name: str

@@ -42,7 +42,7 @@ class TestParserTM33Parsing:
 
 class TestParserTM33BBox:
     def test_bbox_research_example(self):
-        """Przyklad zweryfikowany researchem: 302_5550."""
+        """Example verified by research: 302_5550."""
         bbox = ParserTM33("302_5550").get_bbox()
         assert bbox == BBox(302_000, 5_550_000, 304_000, 5_552_000, "EPSG:3045")
 

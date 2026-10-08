@@ -33,7 +33,7 @@ REAL = {
     "PL-2000:S7": ("2000", 7, "EPSG:2178"),
     "PL-2000:S8": ("2000", 8, "EPSG:2179"),
 }
-# Biale znaki na brzegach sa tolerowane (WFS i tak je obcina); reszta odrzucona.
+# Whitespace at the edges is tolerated (WFS trims it anyway); the rest rejected.
 TOLERATED = {" PL-1992": REAL["PL-1992"], "PL-2000:S7 ": REAL["PL-2000:S7"]}
 ATYPICAL = ["PL-2000", "PL-2000:S9", "PL-2000:S4", "pl-2000:s6", "PL-1992:S1", ""]
 ATYPICAL += ["EPSG:2180", "PL-2000 S6", "PL-1992-NH"]
@@ -79,10 +79,10 @@ def test_atypical_value_rejected_everywhere(value):
     assert parse_pl_uklad(value) is None
     assert _skorowidz_record(value).uklad is None
     assert horizontal_crs_for_uklad(value) is None
-    # discovery pomija kafel zamiast zapisac go do pl_2000 z sidecarem EPSG:2180
+    # discovery skips the tile rather than write it to pl_2000 with a 2180 sidecar
     assert _laz_tile(value) is None
     with pytest.raises(ValidationError, match="uklad_xy"):
-        _hand_tile(value).uklad  # noqa: B018 — property rzuca
+        _hand_tile(value).uklad  # noqa: B018 — the property raises
 
 
 def test_missing_value_rejected():

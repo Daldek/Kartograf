@@ -135,7 +135,7 @@ def test_exhausted_server_errors_keep_status(cls, download, suffix, tmp_path):
 
 
 def _windows_rename(self, target):
-    """Path.rename z semantyka Windows: istniejacy cel = FileExistsError."""
+    """Path.rename with Windows semantics: an existing target = FileExistsError."""
     if Path(target).exists():
         raise FileExistsError(f"[WinError 183] {target}")
     return os.replace(self, target)

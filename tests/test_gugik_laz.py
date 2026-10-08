@@ -222,7 +222,7 @@ class TestLazTile:
 class TestLazTileUklad:
     """LAZ tile CRS from uklad_xy (``parse_pl_uklad``, D3); unknown = error.
 
-    Moved from tests/test_cli.py::TestLazUklad (item 8, review max
+    Moved from tests/test_cli.py::TestLazUklad (finding 8, review max
     2026-08-30) - ``LazTile.uklad`` is now the single source of truth, used
     by both the CLI and the library (``FileStorage.get_raw_path``).
     """
@@ -282,7 +282,7 @@ class TestAvailableYears:
 
 
 class TestSessionPerThread:
-    """Sesja HTTP na watek, jak w pozostalych providerach GUGiK (D2)."""
+    """One HTTP session per thread, as in the other GUGiK providers (D2)."""
 
     def test_threads_get_separate_sessions(self) -> None:
         import threading
@@ -302,7 +302,7 @@ class TestSessionPerThread:
             def worker():
                 try:
                     p._fetch_available_years("EVRF2007")
-                except Exception as exc:  # noqa: BLE001 — zbieramy do asercji
+                except Exception as exc:  # noqa: BLE001 — collected for the assertion
                     errors.append(exc)
 
             threads = [threading.Thread(target=worker) for _ in range(2)]

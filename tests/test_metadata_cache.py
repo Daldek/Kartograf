@@ -35,7 +35,7 @@ from tests.conftest import gfi_record, render_gfi_body
 
 GODLO = "N-34-130-D-d-2-4"
 
-# Payload `source` o kluczach z SkorowidzRecord.to_source (kontrakt cache).
+# A `source` payload with the SkorowidzRecord.to_source keys (cache contract).
 SOURCE = {
     "url": (
         f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/78955/78955_1_{GODLO}.asc"
@@ -58,7 +58,7 @@ SOURCE = {
 
 
 def _gfi_response(body: str) -> Mock:
-    """Atrapa odpowiedzi GetFeatureInfo z szablonem skorowidza GUGiK."""
+    """Fake GetFeatureInfo response with the GUGiK index template."""
     resp = Mock(spec=requests.Response)
     resp.status_code = 200
     resp.text = body
@@ -99,7 +99,7 @@ def short_ttl_cache(cache_path):
 
 
 class TestMetadataCacheRecord:
-    """Tabela record_cache: payload JSON pod kluczem (product, res, vcrs, godlo)."""
+    """The record_cache table: a JSON payload under (product, res, vcrs, godlo)."""
 
     def test_set_and_get_round_trip(self, cache):
         """A nested payload comes back 1:1 (JSON round-trip, also None/float)."""
@@ -127,7 +127,7 @@ class TestMetadataCacheRecord:
         assert count == 0
 
     def test_overwrite_same_key(self, cache):
-        """Ten sam klucz: nowy payload zastepuje stary (np. no_coverage -> source)."""
+        """Same key: the new payload replaces the old (e.g. no_coverage -> source)."""
         cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"no_coverage": True})
         cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
         assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) == {"source": SOURCE}
@@ -144,7 +144,7 @@ class TestMetadataCacheRecord:
         ids=["product", "resolution", "vertical_crs", "godlo"],
     )
     def test_each_key_part_separates_entries(self, cache, other_key):
-        """Kazde z 4 pol klucza rozdziela wpisy — brak przeciekow miedzy nimi."""
+        """Each of the 4 key fields separates entries — no leaks between them."""
         other_payload = {"source": {**SOURCE, "url": "https://other/file.asc"}}
         cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
         assert cache.get_record(*other_key) is None
@@ -227,7 +227,7 @@ class TestMetadataCacheSheet:
         cache.set_sheet("cz_sm5", "CTES96", self._PAYLOAD)
         monkeypatch.setattr("kartograf.cache.metadata.SHEET_TTL_SECONDS", 0)
         assert cache.get_sheet("cz_sm5", "CTES96") is None
-        # wpis usuniety oportunistycznie
+        # entry removed opportunistically
         row = cache._conn.execute("SELECT COUNT(*) FROM sheet_cache").fetchone()
         assert row[0] == 0
 
@@ -377,10 +377,10 @@ class TestMetadataCacheManagement:
 
 
 class TestGugikProviderCacheIntegration:
-    """GugikProvider._resolve_sheet: cache -> warstwy skorowidza -> cache."""
+    """GugikProvider._resolve_sheet: cache -> index layers -> cache."""
 
     def test_cache_hit_source_skips_network(self, cache):
-        """Trafienie `source` = zero sieci; URL i source_info z payloadu."""
+        """A `source` hit = no network; URL and source_info from the payload."""
         cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
 
         mock_session = Mock(spec=requests.Session)
@@ -401,7 +401,7 @@ class TestGugikProviderCacheIntegration:
         mock_session.get.assert_not_called()
 
     def test_cache_miss_queries_wms_and_stores_source(self, cache):
-        """Miss: pierwsza warstwa z rekordem konczy petle, cache dostaje `source`."""
+        """Miss: the first layer with a record ends the loop; cache gets `source`."""
         mock_session = Mock(spec=requests.Session)
         mock_session.get.return_value = _gfi_response(
             render_gfi_body([gfi_record(GODLO)])
@@ -419,7 +419,7 @@ class TestGugikProviderCacheIntegration:
         assert provider.source_info(GODLO) == cached["source"]
 
     def test_no_coverage_hints_survive_cache(self, cache):
-        """Podpowiedzi NoCoverageError: zapis w cache i odtworzenie z trafienia."""
+        """NoCoverageError hints: stored in the cache and restored from a hit."""
         godlo = "N-33-90-C-c-2-4"
         mock_session = Mock(spec=requests.Session)
         mock_session.get.return_value = _gfi_response(
@@ -450,7 +450,7 @@ class TestGugikProviderCacheIntegration:
         assert hit.value.hints == ()
 
     def test_cache_miss_all_layers_empty_stores_no_coverage(self, cache):
-        """Puste odpowiedzi WSZYSTKICH warstw = pewny brak pokrycia w cache."""
+        """Empty responses from ALL layers = confirmed no coverage in the cache."""
         mock_session = Mock(spec=requests.Session)
         mock_session.get.return_value = _gfi_response(render_gfi_body([]))
 
@@ -464,7 +464,7 @@ class TestGugikProviderCacheIntegration:
         assert "Brak danych" in cached["message"]
 
     def test_query_failure_is_not_cached_as_no_coverage(self, cache):
-        """K3-safe: awaria sieci = DownloadError, cache zostaje pusty."""
+        """K3-safe: network failure = DownloadError, the cache stays empty."""
         mock_session = Mock(spec=requests.Session)
         mock_session.get.side_effect = [requests.ConnectionError("boom")] * 3
 
@@ -529,8 +529,7 @@ class TestGugikNmptProviderCacheIntegration:
         mock_session.get.assert_not_called()
 
     def test_nmt_entry_does_not_serve_nmpt(self, cache):
-        """An "nmt" entry is not a hit for NMPT - a miss goes to the network under
-        "nmpt"."""
+        """An "nmt" entry is no NMPT hit - the miss goes to the network as "nmpt"."""
         cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
         nmpt_url = "https://opendata.geoportal.gov.pl/NumDaneWys/NMPT/1/x.asc"
         mock_session = Mock(spec=requests.Session)
@@ -1168,7 +1167,7 @@ class TestMetadataCacheFinalizer:
 
 
 # =========================================================================
-# TestLazyOpen - baza powstaje dopiero przy pierwszym zapisie
+# TestLazyOpen - the database is created only on the first write
 # =========================================================================
 
 
@@ -1291,7 +1290,7 @@ class TestLazyOpen:
     def test_concurrent_first_writes_open_one_connection(
         self, cache_path: Path
     ) -> None:
-        """Kilka watkow naraz robi pierwszy zapis: jedno polaczenie, komplet."""
+        """Several threads make the first write at once: one connection, all rows."""
         c = MetadataCache(db_path=cache_path)
         real_connect = sqlite3.connect
         connects = []
@@ -1340,8 +1339,7 @@ class TestLazyOpen:
 
 
 class TestCLICacheCommandsWithoutDatabase:
-    """``kartograf cache path|stats|clear`` in a directory without a database do not
-    create one."""
+    """``kartograf cache path|stats|clear`` never create a missing database."""
 
     def test_cache_path_does_not_create_db(self, tmp_path, monkeypatch, capsys):
         monkeypatch.chdir(tmp_path)

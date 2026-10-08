@@ -140,14 +140,12 @@ def warp_to_grid(
 ) -> None:
     """Reproject raster(s) onto the ``bbox``/``pixel_size`` grid (``bbox.crs``).
 
-    The operation is FORCED (`COORDINATE_OPERATION`) - without it GDAL picks
-    it itself, outside the `transform/crs.py` policy (ballpark ban, accuracy
-    limit, probe). `src_nodata`/`dst_nodata` mask empty pixels so that
-    nodata does not enter the interpolation. Atomic write: the target file
-    is created only from a finished temporary copy - and since that is so, a failure
-    does NOT
-    delete ``dst_path``: if a previous result was there, it survives
-    untouched (only the temporary file is cleaned up).
+    The operation is FORCED (`COORDINATE_OPERATION`) - without it GDAL picks it itself,
+    outside the `transform/crs.py` policy (ballpark ban, accuracy limit, probe).
+    `src_nodata`/`dst_nodata` mask empty pixels so that nodata does not enter the
+    interpolation. Atomic write: the target file is created only from a finished
+    temporary copy - and since that is so, a failure does NOT delete ``dst_path``: if a
+    previous result was there, it survives untouched (only the temp file is removed).
 
     ``sources`` is one raster or a list of them (W1, S5): each source is
     reprojected ONCE, from its own grid onto the result grid, into THE SAME

@@ -218,7 +218,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         return self.BASE_URL
 
     # =========================================================================
-    # Download by sheet code (godlo) → OpenData (ASC)
+    # Download by sheet code → OpenData (ASC)
     # =========================================================================
 
     def download(
@@ -336,7 +336,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         (not aligned to standard map sheets).
 
         Note: WCS is only available for 1m resolution. For 5m resolution,
-        use download() with a sheet code (godlo) instead.
+        use download() with a sheet code instead.
 
         Parameters
         ----------

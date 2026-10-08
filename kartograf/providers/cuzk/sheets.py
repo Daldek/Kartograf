@@ -64,7 +64,7 @@ class SheetInfo:
 
     godlo: str  # MAPNOM ("CTES96" / "744_5534")
     name: str | None  # MAPNAME ("Český Těšín 9-6"); None for TM33
-    bbox: BBox  # EPSG:5514 (w. 24) / EPSG:3045 (w. 26)
+    bbox: BBox  # EPSG:5514 (layer 24) / EPSG:3045 (layer 26)
     podil: float | None  # share of the sheet in CZ territory; None for TM33
     in_cz: bool | None  # layer 26; None for SM5
 
@@ -86,7 +86,7 @@ class SheetIndex:
         """SM5 sheet by MAPNOM; ValidationError when unknown (before download)."""
         if not isinstance(mapnom, str) or not CZ_SM5_PATTERN.match(mapnom.strip()):
             raise ValidationError(f"Niepoprawne godlo SM5: '{mapnom}' ({_SM5_HINT})")
-        mapnom = mapnom.strip()  # spojnie z detect_system (rejestr systemow)
+        mapnom = mapnom.strip()  # consistent with detect_system (system registry)
         if self._cache is not None:
             cached = self._cache.get_sheet(SM5_SYSTEM, mapnom)
             if cached is not None:

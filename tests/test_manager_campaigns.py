@@ -45,7 +45,7 @@ ASC_TEMPLATE = (
 
 
 def _filtered(files: list[Path], godlo: str) -> list:
-    """Rekordy przechodzace twardy filtr (PL-1992, 1 m), od najnowszego."""
+    """Records passing the hard filter (PL-1992, 1 m), newest first."""
     records = []
     for f in files:
         layer = f.stem.rsplit("_", 1)[-1]
@@ -76,8 +76,11 @@ def tag(record) -> str:
 
 
 class FakeCampaignProvider(BaseProvider):
-    """supports_campaigns MUSI byc atrybutem KLASOWYM == True (DownloadManager
-    sprawdza ``is True``; Mock/Mock(spec=...) daja Mock -> tor plain)."""
+    """supports_campaigns MUST be a CLASS attribute == True.
+
+    DownloadManager checks ``is True``; Mock/Mock(spec=...) give a Mock ->
+    plain path.
+    """
 
     supports_campaigns = True
     descriptor_key = "pl.gugik.nmt_1m"
@@ -93,13 +96,13 @@ class FakeCampaignProvider(BaseProvider):
     def __init__(self, records_by_strategy, fail_urls=(), contents=None) -> None:
         self.records = records_by_strategy
         self.fail_urls = set(fail_urls)
-        self.contents = dict(contents or {})  # url -> bajty (domyslnie ASC)
+        self.contents = dict(contents or {})  # url -> bytes (ASC by default)
         self.version = "v1"
         self.fixed_mtime: float | None = None
         self.downloads: list[str] = []
         self.resolve_calls: list[str] = []
-        self.resolve_error: Exception | None = None  # I-1: awaria skorowidza
-        self._lock = threading.Lock()  # D-6: liczba rozwiazan per godlo
+        self.resolve_error: Exception | None = None  # I-1: index failure
+        self._lock = threading.Lock()  # D-6: number of resolutions per sheet code
 
     def resolve_campaigns(
         self, godlo, *, campaigns="newest", min_year=None, timeout=None
@@ -186,12 +189,12 @@ def deny_links(monkeypatch):
     monkeypatch.setattr(os, "link", denied)
 
 
-_REAL_SYMLINK = os.symlink  # ingerencja uzytkownika w tescie (sidecar)
+_REAL_SYMLINK = os.symlink  # user interference in the test (sidecar)
 
 
 @pytest.fixture(autouse=True)
 def no_symlinks(monkeypatch):
-    """Erratum 4 of ADR-030: the manager flow never creates a symlink."""
+    """ADR-030 errata 4: the manager flow never creates a symlink."""
 
     def forbidden(*args, **kwargs):
         raise AssertionError("os.symlink wywolane w przeplywie kampanii")
@@ -306,7 +309,7 @@ def test_all_skips_existing_campaigns_individually(tmp_path):
 
 
 def test_all_reused_campaign_files_lists_only_local_ones(tmp_path):
-    """T8 fix 1: ``reused_campaign_files`` = podzbior juz lokalnych kampanii."""
+    """T8 fix 1: ``reused_campaign_files`` = the subset of already local campaigns."""
     fake = FakeCampaignProvider({"all": [REC["84183"], REC["83233"]]})
     first = DownloadManager(tmp_path, provider=fake, campaigns="all")
     first.download_sheets([G])
@@ -341,7 +344,7 @@ def test_newest_after_all_keeps_link_on_newer_local_campaign(tmp_path):
     DownloadManager(
         tmp_path, provider=FakeCampaignProvider(C14), campaigns="all"
     ).download_sheets([G])
-    stale = FakeCampaignProvider({"newest": [REC["83233"]]})  # stary record_cache
+    stale = FakeCampaignProvider({"newest": [REC["83233"]]})  # stale record_cache
     m = DownloadManager(tmp_path, provider=stale)
     path = m.download_sheet(G)
     assert stale.downloads == []
@@ -395,7 +398,7 @@ def test_force_redownload_relinks_copy(tmp_path, monkeypatch):
     m = DownloadManager(tmp_path, provider=fake)
     std = m.download_sheet(G)
     assert not std.is_symlink() and "v1" in std.read_text()
-    fake.version = "v2"  # ten sam rozmiar
+    fake.version = "v2"  # same size
     m.download_sheet(G, skip_existing=False)
     assert "v2" in campaign_path(tmp_path, REC["84183"]).read_text()
     assert "v2" in std.read_text()
@@ -455,7 +458,7 @@ def test_campaign_sidecar_source_matches_its_own_record(tmp_path):
 
 
 # =============================================================================
-# file format (erratum 2 N-2)
+# file format (errata 2 N-2)
 # =============================================================================
 
 
@@ -550,7 +553,7 @@ def test_cache_entry_without_format_uses_default_and_verifies(tmp_path):
 
 
 # =============================================================================
-# sidecar kampanii obowiazkowy (errata 2 N-1)
+# mandatory campaign sidecar (errata 2 N-1)
 # =============================================================================
 
 
@@ -861,8 +864,7 @@ def test_link_failure_reported_together_with_campaign_errors(tmp_path, monkeypat
 
 
 def test_invalid_aktualnosc_is_campaign_failure_links_best_valid(tmp_path):
-    """R16 in the spirit of Q10: a bad acquisition date of one record does not break the
-    loop."""
+    """R16 (as Q10): one record's bad acquisition date does not break the loop."""
     bad = dataclasses.replace(REC["84183"], aktualnosc="2025/10/21")
     fake = FakeCampaignProvider({"all": [bad, *C14_ALL[1:]]})
     m = DownloadManager(tmp_path, provider=fake, campaigns="all")
@@ -875,7 +877,7 @@ def test_invalid_aktualnosc_is_campaign_failure_links_best_valid(tmp_path):
 
 
 # =============================================================================
-# I-1: newest przy awarii transportu skorowidza -> lokalna kampania
+# I-1: newest on an index transport failure -> local campaign
 # =============================================================================
 
 
@@ -1015,7 +1017,7 @@ def test_transport_failure_with_dangling_link_fails(tmp_path):
     fake.resolve_error = _transport_error(G, 503)
     with pytest.raises(DownloadError):
         m.download_sheet(G)
-    assert std.is_file() and linked_campaign(std) is None  # nietkniety
+    assert std.is_file() and linked_campaign(std) is None  # untouched
 
 
 def test_transport_failure_with_force_fails(tmp_path):

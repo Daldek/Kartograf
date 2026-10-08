@@ -22,7 +22,7 @@ def _fresh_cache():
 
 
 class TestBBoxImportPaths:
-    """Hydrograf importuje BBox z trzech sciezek — wszystkie to ta sama klasa."""
+    """Hydrograf imports BBox from three paths — all are the same class."""
 
     def test_all_import_paths_are_the_same_class(self):
         import kartograf
@@ -54,13 +54,13 @@ class TestTransformBBoxIdentity:
 
 class TestTransformBBoxDense:
     def test_4326_to_2180_keeps_southern_band_at_central_meridian(self):
-        """Rownoleznik ma minimum y na 19E — 4 narozniki dawaly 237447,4 (479 m)."""
+        """The parallel has its minimum y at 19E — 4 corners gave 237447,4 (479 m)."""
         out = transform_bbox(BBox(18.0, 50.0, 20.0, 50.2, "EPSG:4326"), "EPSG:2180")
         assert out.min_y == pytest.approx(236968.4, abs=0.5)
         assert out.crs == "EPSG:2180"
 
     def test_2180_to_4326_keeps_northern_band_at_central_meridian(self):
-        """Linia stalego y ma maksimum szerokosci na x=500000 (19E)."""
+        """A line of constant y has its maximum latitude at x=500000 (19E)."""
         out = transform_bbox(
             BBox(475000, 600000, 525000, 610000, "EPSG:2180"), "EPSG:4326"
         )
