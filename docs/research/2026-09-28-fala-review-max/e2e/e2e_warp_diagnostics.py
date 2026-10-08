@@ -121,8 +121,8 @@ def main() -> None:
         both = (n >= 1) & (mw != NODATA)
         d = np.abs(mw.astype(np.float64) - val)
 
-        def stats(mask):
-            dd = d[mask]
+        def stats(diff, mask):
+            dd = diff[mask]
             return {
                 "n": int(dd.size),
                 "mean_abs_m": float(dd.mean()),
@@ -137,9 +137,9 @@ def main() -> None:
                 str(k): int(np.count_nonzero(n == k)) for k in range(3)
             },
             "mosaic_warp_equals_cutout": bool(np.array_equal(mw, cut)),
-            "all": stats(both),
-            "within_1px_of_seam": stats(both & (dist <= 1)),
-            "farther_than_1px_from_seam": stats(both & (dist > 1)),
+            "all": stats(d, both),
+            "within_1px_of_seam": stats(d, both & (dist <= 1)),
+            "farther_than_1px_from_seam": stats(d, both & (dist > 1)),
             "gt_1cm_by_seam_distance_px": {
                 str(int(k)): int(v)
                 for k, v in zip(*np.unique(dist[big], return_counts=True), strict=True)
