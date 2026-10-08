@@ -1676,7 +1676,7 @@ class TestSidecarLandCover:
         payload = self._corine_png_sidecar(tmp_path)
         assert payload["horizontal_crs"] == "EPSG:3857"
         assert payload["extra"]["fallback"] == "wms_png"
-        assert payload["extra"]["uwaga"] == "podglad WMS, nie dane"
+        assert payload["extra"]["note"] == "podglad WMS, nie dane"
 
     def test_corine_png_fallback_1990_uses_wgs84(self, tmp_path):
         payload = self._corine_png_sidecar(tmp_path, year=1990)

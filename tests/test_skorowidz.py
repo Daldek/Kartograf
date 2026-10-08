@@ -388,17 +388,17 @@ class TestSourcePayload:
         source = record.to_source(ENDPOINT)
         assert source == {
             "url": record.url,
-            "skorowidz": ENDPOINT,
+            "index_url": ENDPOINT,
             "layer": "SkorowidzeNMT2025",
-            "godlo": "N-33-48-C-a-3-4",
-            "aktualnosc": "2025-05-20",
-            "aktualnosc_rok": "2025",
-            "dt_pzgik": record.raw["dt_pzgik"],
+            "sheet": "N-33-48-C-a-3-4",
+            "acquisition_date": "2025-05-20",
+            "acquisition_year": "2025",
+            "pzgik_date": record.raw["dt_pzgik"],
             "resolution_m": 5.0,
-            "uklad": "PL-1992",
+            "declared_crs": "PL-1992",
             "full_sheet": True,
-            "numer_zgloszenia": record.raw["numerZgloszeniaPracy"],
-            "zrodlo_danych": record.raw["zrDanych"],
+            "survey_work_id": record.raw["numerZgloszeniaPracy"],
+            "data_source": record.raw["zrDanych"],
             "format": "ARC/INFO ASCII GRID",
         }
 

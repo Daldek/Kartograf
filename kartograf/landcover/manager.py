@@ -211,7 +211,7 @@ class LandCoverManager:
             return path
         else:
             path = self._provider.download_by_godlo(godlo, output_path, **kwargs)
-            self._write_sidecar(path, {"godlo": godlo}, kwargs)
+            self._write_sidecar(path, {"sheet": godlo}, kwargs)
             return path
 
     def download_by_teryt(
@@ -308,7 +308,7 @@ class LandCoverManager:
         if output_path is None:
             output_path = self._generate_output_path(None, None, godlo)
         path = self._provider.download_by_godlo(godlo, output_path, **kwargs)
-        self._write_sidecar(path, {"godlo": godlo}, kwargs)
+        self._write_sidecar(path, {"sheet": godlo}, kwargs)
         return path
 
     def download_batch(
@@ -433,7 +433,7 @@ class LandCoverManager:
             horizontal_crs = (
                 "EPSG:4326" if year not in CorineProvider.EEA_YEARS else "EPSG:3857"
             )
-            extra = {"fallback": "wms_png", "uwaga": "podglad WMS, nie dane"}
+            extra = {"fallback": "wms_png", "note": "podglad WMS, nie dane"}
         emit_sidecar(
             key,
             data_path,

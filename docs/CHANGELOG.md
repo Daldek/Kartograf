@@ -107,8 +107,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Sidecar pliku kampanii jest obowiązkowy: `emit_sidecar(required=True)`
   (zapis atomowy); porażka zapisu = porażka kampanii (plik danych usunięty,
   dowiązanie nieprzestawione). Pozostałe sidecary zostają best-effort.
-  Sidecar kampanii: `extra.campaign` = `{id, date, zgloszenie, source,
-  full_sheet, dt_pzgik}`, `request.campaigns` zawsze, `request.min_year` tylko
+  Sidecar kampanii: `extra.campaign` = `{id, date, survey_work_id, source,
+  full_sheet, pzgik_date}`, `request.campaigns` zawsze, `request.min_year` tylko
   gdy podany; sidecar ścieżki standardowej to zwykły plik z `extra.link` i
   `extra.link_target`.
 - Cache: `MetadataCache` ma tabelę `campaigns_cache` (TTL 7 dni, `--force` =
@@ -400,7 +400,7 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   pominięcie takiego wycinka odtwarza `PlCutoutResult.all_nodata` z sidecara
   (bez czytania rastra), a CLI powtarza `Warning:` (E2E-B C17, E15).
 - LAZ: sidecar `request` zapisuje `year` i `min_density`, gdy podano
-  `--year`/`--min-density` (wcześniej tylko bbox). Dokumentacja: `gestosc`
+  `--year`/`--min-density` (wcześniej tylko bbox). Dokumentacja: `extra.nominal_density`
   i `--min-density` to gęstość nominalna z WFS GUGiK (E2E-B C13-f, E16).
 - GetCapabilities skorowidza GUGiK (odkrywanie warstw NMT/NMPT/orto) ma
   timeout providera — 30 s NMT/NMPT, 60 s orto, albo `timeout=` przekazany
@@ -416,7 +416,7 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   wartości rozpoznawane (E2E 2026-10-06, E11) (review-1 D3).
 - Dokumentacja i test (bez zmiany kodu): arkusze PL-2000 strefy 7
   publikowane przez GUGiK we współrzędnych EPSG:2180 — sidecar opisuje
-  układ pliku (EPSG:2180), `extra.source.uklad` deklarację rekordu, plik
+  układ pliku (EPSG:2180), `extra.source.declared_crs` deklarację rekordu, plik
   w segmencie wg godła; fixtura z surowego nagłówka
   `tests/fixtures/gugik_asc/77912_1384976_7.125.11.19.head.asc` (E2E-A
   C6b/C6h, E17).
@@ -518,7 +518,7 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
 - **S3:** `--country auto` drukuje `Info:` o rzeczywistym przycięciu i utracie
   obszaru (nie dla części PL `--geometry` bez `--target-crs`, która wyznacza
   arkusze z całej geometrii); w trybie listy `--bbox` sidecar ma
-  `request.godlo`, a nie `request.bbox`. Nieobcięte krawędzie PL nie są
+  `request.sheet`, a nie `request.bbox`. Nieobcięte krawędzie PL nie są
   poszerzane przez round-trip CRS.
 - **S4:** Zniknął fallback na przestarzałe, zaszyte warstwy NMPT;
   brak prawidłowej odpowiedzi serwera jest błędem, nie niepewnym
@@ -581,6 +581,33 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
     obok kazdego pobranego pliku; `NoCoverageError` jest podklasa
     `DownloadError` (`except DownloadError` lapie oba); `import kartograf` laduje
     `rasterio`; w CLI domyslne `--country auto` (tabele i opisy nizej).
+- **Klucze sidecara `.meta.json` po angielsku (ADR-031, 2026-10-08).**
+  Schemat zostaje `kartograf-meta/1` (niewydany), bez warstwy zgodnosci:
+
+  | Bylo | Jest |
+  |---|---|
+  | `request.godlo` (wszystkie tory) | `request.sheet` |
+  | `extra.source.godlo` | `extra.source.sheet` |
+  | `extra.source.aktualnosc` / `aktualnosc_rok` | `extra.source.acquisition_date` / `acquisition_year` |
+  | `extra.source.uklad` | `extra.source.declared_crs` |
+  | `extra.source.zrodlo_danych` | `extra.source.data_source` |
+  | `extra.source.numer_zgloszenia`, `extra.campaign.zgloszenie` | `survey_work_id` (w obu) |
+  | `extra.source.skorowidz` | `extra.source.index_url` |
+  | `extra.source.dt_pzgik`, `extra.campaign.dt_pzgik` | `pzgik_date` (w obu) |
+  | `extra.source.kolor` (orto) | `extra.source.color` |
+  | `extra.godlo_kafla` / `rok` / `gestosc` (LAZ) | `extra.tile_sheet` / `year` / `nominal_density` |
+  | `extra.uwaga` (CORINE PNG) | `extra.note` |
+  | `extra.podil` (CZ SM5) | `extra.cz_share` |
+  | `extra.sheet_sources[]`: `godlo`, `aktualnosc` | `sheet`, `acquisition_date` |
+
+  `teryt` zostaje (nazwa wlasna rejestru). Stare lokalne sidecary nie sa
+  migrowane: sidecar kampanii bez `extra.campaign.pzgik_date` daje klucz
+  dowiazania z nazwy katalogu (dolne oszacowanie), wpisy `sheet_sources`
+  bez `sheet` nie licza sie jako niepelne arkusze przy pominieciu wycinka,
+  a wpis `record_cache`/`campaigns_cache` z polskimi kluczami jest
+  chybieniem cache (skorowidz odpytywany ponownie, wpis nadpisany).
+  Odswiezenie sidecarow: `--force`. Konsument (Hydrograf) czyta nowe nazwy.
+  Kanoniczna tabela: `docs/ARCHITECTURE.md` 3.2.
 - **Nowy uklad `data/` — segmenty `<produkt>/<kraj>_<uklad>[_<wariant>][_<vcrs>]`**
   (ADR-026, decyzje D1-D8; kanoniczny opis: `docs/ARCHITECTURE.md` sekcja 3).
   Kazdy segment koduje jawnie kraj, uklad poziomy (PL: 1992/2000 — domkniecie

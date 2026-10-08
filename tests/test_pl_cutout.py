@@ -1956,19 +1956,19 @@ class TestMissingSheets:
         sources = {
             "N-34-130-D-d-2-3": {
                 "url": "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/1/1_a.asc",
-                "skorowidz": "https://mapy.geoportal.gov.pl/.../SkorowidzeUkladEVRF2007",
+                "index_url": "https://mapy.geoportal.gov.pl/.../SkorowidzeUkladEVRF2007",
                 "layer": "SkorowidzeNMT2025",
-                "godlo": "N-34-130-D-d-2-3",
-                "aktualnosc": "2025-04-01",
+                "sheet": "N-34-130-D-d-2-3",
+                "acquisition_date": "2025-04-01",
                 "resolution_m": 1.0,
                 "full_sheet": True,
             },
             "N-34-130-D-d-2-4": {
                 "url": "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/2/2_b.asc",
-                "skorowidz": "https://mapy.geoportal.gov.pl/.../SkorowidzeUkladEVRF2007",
+                "index_url": "https://mapy.geoportal.gov.pl/.../SkorowidzeUkladEVRF2007",
                 "layer": "SkorowidzeNMT2023iStarsze",
-                "godlo": "N-34-130-D-d-2-4",
-                "aktualnosc": "2022-05-09",
+                "sheet": "N-34-130-D-d-2-4",
+                "acquisition_date": "2022-05-09",
                 "resolution_m": 1.0,
                 "full_sheet": False,
             },
@@ -1988,20 +1988,20 @@ class TestMissingSheets:
         meta = json.loads(
             result.path.with_name(result.path.name + ".meta.json").read_text()
         )
-        by_godlo = {entry["godlo"]: entry for entry in meta["extra"]["sheet_sources"]}
+        by_godlo = {entry["sheet"]: entry for entry in meta["extra"]["sheet_sources"]}
         assert by_godlo == {
             "N-34-130-D-d-2-3": {
-                "godlo": "N-34-130-D-d-2-3",
+                "sheet": "N-34-130-D-d-2-3",
                 "url": sources["N-34-130-D-d-2-3"]["url"],
                 "layer": "SkorowidzeNMT2025",
-                "aktualnosc": "2025-04-01",
+                "acquisition_date": "2025-04-01",
                 "full_sheet": True,
             },
             "N-34-130-D-d-2-4": {
-                "godlo": "N-34-130-D-d-2-4",
+                "sheet": "N-34-130-D-d-2-4",
                 "url": sources["N-34-130-D-d-2-4"]["url"],
                 "layer": "SkorowidzeNMT2023iStarsze",
-                "aktualnosc": "2022-05-09",
+                "acquisition_date": "2022-05-09",
                 "full_sheet": False,
             },
         }
@@ -2021,19 +2021,19 @@ class TestMissingSheets:
         meta = json.loads(
             rebuilt.path.with_name(rebuilt.path.name + ".meta.json").read_text()
         )
-        assert sorted(meta["extra"]["sheet_sources"], key=lambda e: e["godlo"]) == [
+        assert sorted(meta["extra"]["sheet_sources"], key=lambda e: e["sheet"]) == [
             {
-                "godlo": sheet_a.stem,
+                "sheet": sheet_a.stem,
                 "url": None,
                 "layer": None,
-                "aktualnosc": None,
+                "acquisition_date": None,
                 "full_sheet": None,
             },
             {
-                "godlo": sheet_b.stem,
+                "sheet": sheet_b.stem,
                 "url": None,
                 "layer": None,
-                "aktualnosc": None,
+                "acquisition_date": None,
                 "full_sheet": None,
             },
         ]
@@ -2285,12 +2285,12 @@ def _write_sheet_source(sheet, *, full_sheet, godlo=None, url=None):
     """Sidecar arkusza z ``extra.source`` jak po pobraniu przez manager."""
     godlo = godlo or sheet.stem
     payload = {
-        "request": {"godlo": godlo},
+        "request": {"sheet": godlo},
         "extra": {
             "source": {
                 "url": url or f"https://opendata.geoportal.gov.pl/NMT/1/1_{godlo}.asc",
                 "layer": "SkorowidzeNMT2025",
-                "aktualnosc": "2025-10-21",
+                "acquisition_date": "2025-10-21",
                 "full_sheet": full_sheet,
             }
         },
@@ -2327,7 +2327,7 @@ class TestPartialSheetVisibility:
         assert rc == 0
         (tif,) = (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif")
         meta = json.loads(tif.with_name(tif.name + ".meta.json").read_text("utf-8"))
-        flags = {s["godlo"]: s["full_sheet"] for s in meta["extra"]["sheet_sources"]}
+        flags = {s["sheet"]: s["full_sheet"] for s in meta["extra"]["sheet_sources"]}
         assert flags == {"N-34-139-C-a-3-2": True, "N-34-139-C-a-3-1": False}
 
     def test_partial_sheet_warns(self, tmp_path, capsys):
@@ -2350,6 +2350,67 @@ class TestPartialSheetVisibility:
         manager.download_sheets.assert_not_called()
         err = capsys.readouterr().err
         assert "niepelna" in err and "N-34-139-C-a-3-1" in err
+
+    def test_skip_with_pre_adr031_cutout_sidecar_is_no_information(
+        self, tmp_path, capsys
+    ):
+        """ADR-031: ``sheet_sources`` with Polish keys (``godlo``) carry no
+        usable sheet name — skip treats them as no information, no error."""
+        from kartograf.download.cutout import skipped_pl_cutout
+
+        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), self._sheets(tmp_path))
+        assert rc == 0
+        (tif,) = (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif")
+        sidecar = tif.with_name(tif.name + ".meta.json")
+        meta = json.loads(sidecar.read_text("utf-8"))
+        meta["extra"]["sheet_sources"] = [
+            {
+                "godlo": s["sheet"],
+                "url": s["url"],
+                "layer": s["layer"],
+                "aktualnosc": s["acquisition_date"],
+                "full_sheet": s["full_sheet"],
+            }
+            for s in meta["extra"]["sheet_sources"]
+        ]
+        sidecar.write_text(json.dumps(meta), encoding="utf-8")
+        capsys.readouterr()
+
+        cutout = prepare_pl_cutout(_BBOX_2180, "EPSG:2180", output_dir=tmp_path)
+        assert skipped_pl_cutout(cutout).partial_sheets == ()
+        rc, manager, _ = self._run(tmp_path, _pl_args(tmp_path), sheets=[])
+        assert rc == 0
+        manager.download_sheets.assert_not_called()
+        assert "niepelna" not in capsys.readouterr().err
+
+    def test_pre_adr031_sheet_sidecar_gives_null_fields(self, tmp_path):
+        """Sheet sidecar with Polish keys: ``sheet`` from the file name,
+        renamed fields null, unchanged ones (``url``) kept."""
+        from kartograf.download.cutout import _sheet_source
+
+        sheet = _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)
+        sheet.with_name(sheet.name + ".meta.json").write_text(
+            json.dumps(
+                {
+                    "request": {"godlo": "N-34-139-C-a-3-2"},
+                    "extra": {
+                        "source": {
+                            "url": "https://example.invalid/s1.asc",
+                            "aktualnosc": "2025-10-21",
+                            "godlo": "N-34-139-C-a-3-2",
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        assert _sheet_source(sheet) == {
+            "sheet": "s1",
+            "url": "https://example.invalid/s1.asc",
+            "layer": None,
+            "acquisition_date": None,
+            "full_sheet": None,
+        }
 
     def test_full_sheets_do_not_warn(self, tmp_path, capsys):
         sheets = self._sheets(tmp_path, full=(True, True))
@@ -2513,11 +2574,11 @@ class TestCutoutOverCampaignLinks:
             result.path.with_name(result.path.name + ".meta.json").read_text("utf-8")
         )
         sources = meta["extra"]["sheet_sources"]
-        assert sorted(s["godlo"] for s in sources) == sorted(self._SHEETS)
+        assert sorted(s["sheet"] for s in sources) == sorted(self._SHEETS)
         for source in sources:
             assert source["url"] == (
                 "https://opendata.geoportal.gov.pl/NMT/83233/"
-                f"83233_1744736_{source['godlo']}.asc"
+                f"83233_1744736_{source['sheet']}.asc"
             )
 
     def test_cutout_skip_still_by_target_existence(self, tmp_path):

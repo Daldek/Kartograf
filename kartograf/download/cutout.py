@@ -456,10 +456,10 @@ def build_pl_cutout(
 def _sheet_source(sheet_path: Path) -> dict:
     """Pochodzenie arkusza z jego sidecara (``extra.source``), best-effort."""
     entry: dict = {
-        "godlo": sheet_path.stem,
+        "sheet": sheet_path.stem,
         "url": None,
         "layer": None,
-        "aktualnosc": None,
+        "acquisition_date": None,
         "full_sheet": None,
     }
     sidecar = sheet_path.parent / f"{sheet_path.name}.meta.json"
@@ -468,10 +468,14 @@ def _sheet_source(sheet_path: Path) -> dict:
         source = meta["extra"]["source"]
     except (OSError, ValueError, KeyError, TypeError):
         return entry  # arkusz bez sidecara (cache sprzed 0.7.0) albo bez source
-    request_godlo = meta.get("request", {}).get("godlo")
-    if isinstance(request_godlo, str):
-        entry["godlo"] = request_godlo
-    for key in ("url", "layer", "aktualnosc", "full_sheet"):
+    if not isinstance(source, dict):
+        return entry
+    request = meta.get("request")
+    request_sheet = request.get("sheet") if isinstance(request, dict) else None
+    if isinstance(request_sheet, str):
+        entry["sheet"] = request_sheet
+    # a pre-ADR-031 sheet sidecar (Polish keys) yields null fields, not an error
+    for key in ("url", "layer", "acquisition_date", "full_sheet"):
         entry[key] = source.get(key)
     return entry
 
@@ -482,11 +486,15 @@ def _partial_sheets(sources: list) -> tuple[str, ...]:
     ``None`` (arkusz bez sidecara albo rekord bez flagi) nie jest niepelny —
     ostrzegamy tylko o tym, co skorowidz jawnie deklaruje.
     """
+    # entries without a ``sheet`` string (pre-ADR-031 cutout sidecar with
+    # Polish keys) carry no usable sheet name and are skipped
     return tuple(
         sorted(
-            str(entry.get("godlo"))
+            entry["sheet"]
             for entry in sources
-            if isinstance(entry, dict) and entry.get("full_sheet") is False
+            if isinstance(entry, dict)
+            and entry.get("full_sheet") is False
+            and isinstance(entry.get("sheet"), str)
         )
     )
 
@@ -508,10 +516,10 @@ def write_pl_cutout_sidecar(
     (ADR-027, odstepstwo od litery spec 6.1 pkt 5). ``missing_sheets``
     (niepuste) -> ``extra.missing_sheets``: arkusze bez danych GUGiK (R5).
     ``sheet_paths`` (niepuste) -> ``extra.sheet_sources``: pochodzenie
-    kazdego arkusza mozaiki ``{godlo, url, layer, aktualnosc, full_sheet}``
+    kazdego arkusza mozaiki ``{sheet, url, layer, acquisition_date, full_sheet}``
     (``full_sheet`` = flaga pelnego arkusza z rekordu skorowidza, E13) czytane
     z sidecarow arkuszy (``extra.source``, D5); arkusz bez sidecara albo bez
-    ``source`` (cache sprzed 0.7.0) ma ``null`` w polach poza ``godlo``.
+    ``source`` (cache sprzed 0.7.0) ma ``null`` w polach poza ``sheet``.
     ``off_grid_sheets`` (niepuste) -> ``extra.off_grid_sheets``: arkusze
     o innej fazie siatki niz reszta, reprojektowane osobno (W1, S5) —
     konsument widzi, ze szwy wycinka powstaly z niezaleznych warpow.
