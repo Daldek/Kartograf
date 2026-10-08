@@ -21,8 +21,8 @@ from kartograf.hydrology.hsg import (
     texture_to_hsg_array,
 )
 
-# Punkty kontrolne kanonicznego trojkata USDA (Soil Survey Manual):
-# 4 punkty z weryfikacji A4-4 + srodki wszystkich 12 klas.
+# Control points of the canonical USDA triangle (Soil Survey Manual):
+# 4 points from verification A4-4 + the centres of all 12 classes.
 CANONICAL_CONTROL_POINTS = [
     # (clay, sand, silt, expected)
     (0, 70, 30, "sandy_loam"),  # silt + 2*clay = 30 >= 30
@@ -45,7 +45,7 @@ CANONICAL_CONTROL_POINTS = [
 
 
 def _simplex_points():
-    """Wszystkie punkty symplexu clay+sand+silt=100 co 1 procent (5151 pkt)."""
+    """All simplex points clay+sand+silt=100 in 1 percent steps (5151 points)."""
     return [
         (clay, sand, 100 - clay - sand)
         for clay in range(0, 101)
@@ -73,9 +73,9 @@ class TestUSDATextureClassification:
         """Test sandy loam classification."""
         assert classify_usda_texture(clay=15, sand=60, silt=25) == "sandy_loam"
         assert classify_usda_texture(clay=10, sand=65, silt=25) == "sandy_loam"
-        # canonical USDA: silt + 2*clay = 30 >= 30 (dawniej "loamy_sand")
+        # canonical USDA: silt + 2*clay = 30 >= 30 (formerly "loamy_sand")
         assert classify_usda_texture(clay=10, sand=80, silt=10) == "sandy_loam"
-        # canonical USDA: silt + 2*clay = 37 >= 30 (dawniej "loamy_sand")
+        # canonical USDA: silt + 2*clay = 37 >= 30 (formerly "loamy_sand")
         assert classify_usda_texture(clay=12, sand=75, silt=13) == "sandy_loam"
 
     def test_loam(self):
@@ -136,7 +136,7 @@ class TestUSDATextureClassification:
     def test_classify_matches_canonical_usda_control_points(
         self, clay, sand, silt, expected
     ):
-        """Kanoniczne punkty kontrolne trojkata USDA (Soil Survey Manual)."""
+        """Canonical control points of the USDA triangle (Soil Survey Manual)."""
         assert classify_usda_texture(clay=clay, sand=sand, silt=silt) == expected
 
     def test_zero_sum_returns_loam(self):
@@ -218,7 +218,7 @@ class TestArrayClassification:
         assert result[2] == 0
 
     def test_scalar_and_array_agree_on_whole_simplex(self):
-        """Skalar i wektor licza z jednej listy regul - zgodnosc 1:1."""
+        """Scalar and vector compute from one rule list - a 1:1 match."""
         points = _simplex_points()
         assert len(points) == 5151
 
@@ -233,12 +233,12 @@ class TestArrayClassification:
         )
 
         assert np.array_equal(codes, expected)
-        # reguly USDA sa partycja symplexu - kazdy punkt ma klase 1-12
+        # the USDA rules partition the simplex - every point has a class 1-12
         assert (codes >= 1).all() and (codes <= 12).all()
 
     def test_array_float32_input_boundary_clay_15(self):
         """float32 at the clay=15% boundary does not diverge from the scalar (A4-8)."""
-        # jak w potoku rastrowym: g/kg (float32) / 10 -> procent
+        # as in the raster pipeline: g/kg (float32) / 10 -> percent
         clay = np.array([np.float32(150)], dtype=np.float32) / np.float32(10)
         sand = np.array([np.float32(750)], dtype=np.float32) / np.float32(10)
         silt = np.array([np.float32(100)], dtype=np.float32) / np.float32(10)

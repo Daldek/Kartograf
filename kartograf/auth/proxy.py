@@ -342,13 +342,11 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "Missing 'url'"}, 400)
                 return
 
-            # The last step of the CLMS GeoTIFF flow is a presigned
-            # DownloadURL, which the API may place on a host outside the
-            # allowlist (CDN/object storage). Refusing it would break the
-            # whole download, so forward it - but strip the token: a
-            # presigned link carries its own authorization. Plain http is
-            # still refused (the request itself, and any token, would go in
-            # clear text).
+            # The last step of the CLMS GeoTIFF flow is a presigned DownloadURL, which
+            # the API may place on a host outside the allowlist (CDN/object storage).
+            # Refusing it would break the whole download, so forward it - but strip the
+            # token: a presigned link carries its own authorization. Plain http is still
+            # refused (the request itself, and any token, would go in clear text).
             if urlparse(url).scheme != "https":
                 self.send_json(
                     {"error": f"Scheme not allowed: {urlparse(url).scheme}"},
@@ -382,14 +380,12 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": f"Download failed: {e}"}, 502)
                 return
 
-            # The body is forwarded verbatim (decode_content=False), so the
-            # upstream Content-Encoding/Content-Length keep describing exactly
-            # the bytes the client receives. Without an upstream
-            # Content-Length the body would be delimited by closing the
-            # connection (protocol_version is HTTP/1.0), which makes a
-            # truncated download indistinguishable from a complete one -
-            # frame it as chunked instead and withhold the terminating chunk
-            # on failure.
+            # The body is forwarded verbatim (decode_content=False), so the upstream
+            # Content-Encoding/Content-Length keep describing exactly the bytes the
+            # client receives. Without an upstream Content-Length the body would be
+            # delimited by closing the connection (protocol_version is HTTP/1.0), which
+            # makes a truncated download indistinguishable from a complete one - frame
+            # it as chunked instead and withhold the terminating chunk on failure.
             use_chunked = "Content-Length" not in resp.headers
 
             try:

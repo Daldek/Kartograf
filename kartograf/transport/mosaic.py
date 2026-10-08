@@ -190,10 +190,9 @@ def mosaic_and_crop(
     Sources are opened ONE AT A TIME: metadata is read by a sequential loop (one
     descriptor at a time), while ``merge`` gets PATHS and opens the sources itself one
     at a time, per chunk of the result. A 75 x 75 km cutout is >1200 sheets, and the
-    default
-    descriptor limit is 1024 (Linux; macOS 256) - keeping all
-    sources open at once ended in "Too many open files" only AFTER a
-    multi-hour download (review max 2026-08-30, finding 3).
+    default descriptor limit is 1024 (Linux; macOS 256) - keeping all sources open at
+    once ended in "Too many open files" only AFTER a multi-hour download (review max
+    2026-08-30, finding 3).
 
     ``snap_to_source_grid`` (default ``False``, the CZ path unchanged): before
     cropping it expands the bbox OUTWARD to the source pixel grid lines
@@ -207,23 +206,21 @@ def mosaic_and_crop(
     ``check_source_grid`` and per-source reprojection. A source with a rotated grid
     (rotation/skew in the transform) ends in ``ValidationError``.
 
-    ``assign_crs`` / ``dtype`` (default ``None``, the CZ path unchanged): when
-    either is given, each source is wrapped in a single-band 1:1 VRT in
-    ``/vsimem/`` with SRS = ``assign_crs`` (or the source's own CRS) and band type
-    = ``dtype`` (or its own); ``merge`` gets the VRT names, and the VRT carries the
-    source's OWN nodata, so pixel masking is the same as without wrapping.
-    Why: Hydrograf writes a ``.prj`` (EPSG:2180) next to some ASC sheets -
-    a sheet with a ``.prj`` has a CRS, a fresh one without it has ``None``, and
-    ``merge`` raised
-    ``CRS mismatch``; an ASC sheet with integers only is read by GDAL
-    as Int32, and ``merge`` takes the type from the FIRST source, so everything
-    would be truncated to integers. With ``assign_crs`` a source without a CRS
-    is allowed, while a source with its OWN CRS different from the enforced one ends in
-    ``ValidationError`` (the enforcement does not convert coordinates). When
-    wrapping, ``ValidationError`` is also raised for a multiband source and a band type
-    outside ``VRT_TYPES``; the default result driver is GTiff, by default without
-    tiles (``tiled=False``; explicit tiles in ``dst_kwds`` win) - ``merge`` takes the
-    output profile from the first source, i.e. from the VRT.
+    ``assign_crs`` / ``dtype`` (default ``None``, the CZ path unchanged): when either is
+    given, each source is wrapped in a single-band 1:1 VRT in ``/vsimem/`` with SRS =
+    ``assign_crs`` (or the source's own CRS) and band type = ``dtype`` (or its own);
+    ``merge`` gets the VRT names, and the VRT carries the source's OWN nodata, so pixel
+    masking is the same as without wrapping. Why: Hydrograf writes a ``.prj``
+    (EPSG:2180) next to some ASC sheets - a sheet with a ``.prj`` has a CRS, a fresh one
+    without it has ``None``, and ``merge`` raised ``CRS mismatch``; an ASC sheet with
+    integers only is read by GDAL as Int32, and ``merge`` takes the type from the FIRST
+    source, so everything would be truncated to integers. With ``assign_crs`` a source
+    without a CRS is allowed, while a source with its OWN CRS different from the
+    enforced one ends in ``ValidationError`` (the enforcement does not convert
+    coordinates). When wrapping, ``ValidationError`` is also raised for a multiband
+    source and a band type outside ``VRT_TYPES``; the default result driver is GTiff, by
+    default without tiles (``tiled=False``; explicit tiles in ``dst_kwds`` win) -
+    ``merge`` takes the output profile from the first source, i.e. from the VRT.
     """
     if not inputs:
         raise ValidationError("mosaic_and_crop: brak rastrow wejsciowych")
@@ -259,9 +256,8 @@ def mosaic_and_crop(
                 f"mosaic_and_crop: niezgodne CRS wejsc: {sorted(crs_set)}"
             )
     else:
-        # A CRS of None (ASC without .prj) alongside EPSG:2180 is allowed - the VRT
-        # will assign
-        # it an SRS; we reject only a source with its OWN, different CRS.
+        # A CRS of None (ASC without .prj) alongside EPSG:2180 is allowed - the VRT will
+        # assign it an SRS; we reject only a source with its OWN, different CRS.
         target = CRS.from_user_input(assign_crs)
         for path, meta in zip(paths, metas, strict=True):
             if meta["crs"] is not None and not _same_projection(meta["crs"], target):
@@ -291,10 +287,9 @@ def mosaic_and_crop(
     bounds = (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
     if snap_to_source_grid:
         # Without this the result grid is anchored at the bbox corner, and merge
-        # rewrites pixels
-        # by nearest neighbor: content shifts by a fraction of a pixel, and on a
-        # tie (a bbox exactly on the GUGiK grid with corners at k + 0.5) neighboring
-        # columns get mixed (review max 2026-08-30, finding 1; fact 2 of the plan).
+        # rewrites pixels by nearest neighbor: content shifts by a fraction of a pixel,
+        # and on a tie (a bbox exactly on the GUGiK grid with corners at k + 0.5)
+        # neighboring columns get mixed (review max 2026-08-30, finding 1; plan fact 2).
         grid = _source_grid(paths, transforms)
         if grid.off_grid:
             raise GridMismatchError(grid.describe_off_grid(len(paths)), grid.off_grid)
@@ -312,10 +307,9 @@ def mosaic_and_crop(
     if dst_kwds:
         kwds.update(dst_kwds)
     if wrap:
-        # The first source is a VRT: without this a result without dst_kwds would be
-        # written
-        # with the VRT driver ("Writing through VRTSourcedRasterBand is not
-        # supported").
+        # The first source is a VRT: without this, a result without dst_kwds would
+        # be written with the VRT driver ("Writing through VRTSourcedRasterBand
+        # is not supported").
         kwds.setdefault("driver", "GTiff")
         # ...and would inherit the VRT tiles min(128, w) x min(128, h) (tiled for
         # a source wider than 128 px): a height < 128 not divisible by 16

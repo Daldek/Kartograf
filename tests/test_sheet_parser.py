@@ -287,10 +287,10 @@ class TestSheetParserEdgeCases:
 
 
 class TestSheetParserStringRepresentations:
-    """Testy reprezentacji tekstowych."""
+    """Tests of the string representations."""
 
     def test_repr(self):
-        """Test metody __repr__."""
+        """Test __repr__."""
         parser = SheetParser("N-34-130-D", uklad="1992")
         repr_str = repr(parser)
 
@@ -300,7 +300,7 @@ class TestSheetParserStringRepresentations:
         assert "1992" in repr_str
 
     def test_str(self):
-        """Test metody __str__."""
+        """Test __str__."""
         parser = SheetParser("N-34-130-D", uklad="1992")
         str_repr = str(parser)
 
@@ -376,7 +376,7 @@ class TestSheetParserComponentsImmutability:
 
 
 class TestSheetParserScaleHierarchy:
-    """Testy hierarchii skal."""
+    """Tests of the scale hierarchy."""
 
     def test_scale_hierarchy_order(self):
         """Test of the correct order of scales in the hierarchy."""
@@ -398,12 +398,12 @@ class TestSheetParserScaleHierarchy:
 
 
 # =============================================================================
-# Testy metod hierarchii (Etap 4)
+# Hierarchy method tests (Stage 4)
 # =============================================================================
 
 
 class TestSheetParserGetParent:
-    """Testy metody get_parent()."""
+    """Tests of get_parent()."""
 
     def test_get_parent_from_10k(self):
         """Test of get_parent() for the 1:10000 scale."""
@@ -443,7 +443,7 @@ class TestSheetParserGetParent:
         assert parent.scale == "1:200000"
 
     def test_get_parent_from_200k_section_a(self):
-        """Test get_parent() 1:200000, sekcja A (wiersze 0-5, kolumny 0-5)."""
+        """Test get_parent() 1:200000, section A (rows 0-5, columns 0-5)."""
         parser = SheetParser("N-34-1")  # Sheet 1 → section A
         parent = parser.get_parent()
 
@@ -452,8 +452,7 @@ class TestSheetParserGetParent:
         assert parent.scale == "1:500000"
 
     def test_get_parent_from_200k_section_b(self):
-        """Test of get_parent() for the 1:200000 scale in section B (grid columns
-        6-11)."""
+        """get_parent() at 1:200000 in section B (grid columns 6-11)."""
         parser = SheetParser("N-34-7")  # Sheet 7 → row 0, column 6 → section B
         parent = parser.get_parent()
 
@@ -462,7 +461,7 @@ class TestSheetParserGetParent:
         assert parent.scale == "1:500000"
 
     def test_get_parent_from_200k_section_c(self):
-        """Test get_parent() 1:200000, sekcja C (wiersze 6-11, kolumny 0-5)."""
+        """Test get_parent() 1:200000, section C (rows 6-11, columns 0-5)."""
         parser = SheetParser("N-34-73")  # Sheet 73 → section C
         parent = parser.get_parent()
 
@@ -471,7 +470,7 @@ class TestSheetParserGetParent:
         assert parent.scale == "1:500000"
 
     def test_get_parent_from_200k_section_d(self):
-        """Test get_parent() 1:200000, sekcja D (wiersze 6-11, kolumny 6-11)."""
+        """Test get_parent() 1:200000, section D (rows 6-11, columns 6-11)."""
         parser = SheetParser("N-34-130")  # Sheet 130 → section D
         parent = parser.get_parent()
 
@@ -514,7 +513,7 @@ class TestSheetParserGetParent:
 
 
 class TestSheetParserGetChildren:
-    """Testy metody get_children()."""
+    """Tests of get_children()."""
 
     def test_get_children_from_1m(self):
         """Test of get_children() for the 1:1000000 scale (4 children)."""
@@ -529,8 +528,7 @@ class TestSheetParserGetChildren:
         assert all(c.scale == "1:500000" for c in children)
 
     def test_get_children_from_500k_section_a(self):
-        """Test of get_children() for the 1:500000 scale, section A (36 children, 6x6
-        block)."""
+        """get_children() at 1:500000, section A (36 children, a 6x6 block)."""
         parser = SheetParser("N-34-A")
         children = parser.get_children()
 
@@ -540,8 +538,7 @@ class TestSheetParserGetChildren:
         assert all(c.scale == "1:200000" for c in children)
 
     def test_get_children_from_500k_section_d(self):
-        """Test of get_children() for the 1:500000 scale, section D (36 children, 6x6
-        block)."""
+        """get_children() at 1:500000, section D (36 children, a 6x6 block)."""
         parser = SheetParser("N-34-D")
         children = parser.get_children()
 
@@ -629,7 +626,7 @@ class TestSheetParserGetChildren:
 
 
 class TestSheetParserGetHierarchyUp:
-    """Testy metody get_hierarchy_up()."""
+    """Tests of get_hierarchy_up()."""
 
     def test_hierarchy_up_from_10k(self):
         """Test get_hierarchy_up() od 1:10000 do 1:1M."""
@@ -684,7 +681,7 @@ class TestSheetParserGetHierarchyUp:
             "N-34-130-D-d",
             "N-34-130-D",
             "N-34-130",
-            "N-34-D",  # 130 → sekcja D
+            "N-34-D",  # 130 → section D
             "N-34",
         ]
 
@@ -692,7 +689,7 @@ class TestSheetParserGetHierarchyUp:
 
 
 class TestSheetParserGetAllDescendants:
-    """Testy metody get_all_descendants()."""
+    """Tests of get_all_descendants()."""
 
     def test_descendants_from_50k_to_10k(self):
         """Test get_all_descendants() od 1:50000 do 1:10000."""
@@ -788,7 +785,7 @@ class TestSheetParserHierarchyRoundTrip:
 
     def test_full_hierarchy_roundtrip(self):
         """Test of the full path up and down."""
-        # Start od 1:10k
+        # Start from 1:10k
         parser_10k = SheetParser("N-34-130-D-d-2-4")
 
         # Go up to 1:1M
@@ -806,12 +803,12 @@ class TestSheetParserHierarchyRoundTrip:
 
 
 # =============================================================================
-# Testy metody get_bbox() (obliczanie bounding box)
+# get_bbox() tests (bounding box computation)
 # =============================================================================
 
 
 class TestSheetParserGetBBox:
-    """Testy metody get_bbox()."""
+    """Tests of get_bbox()."""
 
     def test_bbox_returns_named_tuple(self):
         """Test that get_bbox() returns a BBox NamedTuple."""
@@ -939,7 +936,7 @@ class TestSheetParserGetBBox:
         children = parser.get_children()
         assert len(children) == 4
 
-        # Oblicz sumaryczny bbox wszystkich dzieci
+        # Compute the combined bbox of all children
         all_min_x = min(c.get_bbox(crs="EPSG:4326").min_x for c in children)
         all_max_x = max(c.get_bbox(crs="EPSG:4326").max_x for c in children)
         all_min_y = min(c.get_bbox(crs="EPSG:4326").min_y for c in children)
@@ -957,7 +954,7 @@ class TestSheetParserGetBBox:
 
 
 class TestBBoxesIntersect:
-    """Testy funkcji _bboxes_intersect()."""
+    """Tests of _bboxes_intersect()."""
 
     def test_overlapping_boxes(self):
         """Test of intersecting boxes."""
@@ -1003,8 +1000,7 @@ class TestBBoxesIntersect:
         assert _bboxes_intersect(a, b) is True
 
     def test_point_bbox_on_max_edge_does_not_intersect(self):
-        """A point on the max edge of a box - does not intersect (half-open
-        interval)."""
+        """A point on a box's max edge does not intersect (half-open interval)."""
         a = BBox(5, 2, 5, 2, "EPSG:4326")
         b = BBox(0, 0, 5, 5, "EPSG:4326")
         assert _bboxes_intersect(a, b) is False
@@ -1016,7 +1012,7 @@ class TestBBoxesIntersect:
         assert _bboxes_intersect(a, b) is True
 
     def test_contained_box(self):
-        """Test boxa zawartego w innym boxie."""
+        """Test a box contained in another box."""
         a = BBox(0, 0, 10, 10, "EPSG:4326")
         b = BBox(2, 2, 8, 8, "EPSG:4326")
         assert _bboxes_intersect(a, b) is True
@@ -1033,11 +1029,10 @@ class TestBBoxesIntersect:
 
 
 class TestFindSheetsForBBox:
-    """Testy funkcji find_sheets_for_bbox()."""
+    """Tests of find_sheets_for_bbox()."""
 
     def test_single_sheet_exact_match(self):
-        """Test of bbox = get_bbox() of a single 1:10k → returns exactly that one sheet
-        code."""
+        """bbox = get_bbox() of a single 1:10k → returns exactly that sheet code."""
         godlo = "N-34-130-D-d-2-4"
         parser = SheetParser(godlo)
         bbox = parser.get_bbox(crs="EPSG:4326")
@@ -1083,7 +1078,7 @@ class TestFindSheetsForBBox:
         parser = SheetParser(godlo)
         bbox_2180 = parser.get_bbox(crs="EPSG:2180")
 
-        # Nieco zmniejszamy
+        # Shrink slightly
         shrink = 10  # 10 metres
         inner_bbox = BBox(
             bbox_2180.min_x + shrink,
@@ -1218,8 +1213,7 @@ class TestFindSheetsForBBox:
         assert len(result) == 1
 
     def test_find_sheets_for_bbox_rejects_unknown_system(self):
-        """An unknown sheet code system → ValidationError instead of a silent PL-1992
-        (A9-1)."""
+        """Unknown sheet code system → ValidationError, not a silent PL-1992 (A9-1)."""
         bbox = BBox(19.0, 50.0, 19.1, 50.1, "EPSG:4326")
         with pytest.raises(ValidationError, match="system"):
             find_sheets_for_bbox(bbox, "1:100000", system="banana")
@@ -1285,7 +1279,7 @@ class TestFindSheetsForBBox:
 
 
 # =============================================================================
-# Testy auto-detekcji PL-1992 vs PL-2000
+# PL-1992 vs PL-2000 auto-detection tests
 # =============================================================================
 
 
@@ -1450,8 +1444,7 @@ class TestSheetParserBBoxViaCoreBBox:
             assert got == pytest.approx(exp, abs=1e-6)
 
     def test_1m_sheet_through_19e_south_edge_is_dense(self):
-        """N-34 (1:1M, 18-24E) through 19E: min_y lower by ~468 m than from the
-        corners."""
+        """N-34 (1:1M, 18-24E) through 19E: min_y ~468 m below the corners' value."""
         bbox = SheetParser("N-34").get_bbox("EPSG:2180")
         assert bbox.min_y == pytest.approx(459781.17 - 468.0, abs=5.0)
 

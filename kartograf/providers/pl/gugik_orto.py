@@ -81,9 +81,8 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     # Colour variant downloaded by default; CIR/B-W only via the `color` kwarg
     DEFAULT_COLOR = "RGB"
 
-    # record_cache key: the resolution slot carries the colour variant (orto
-    # has no resolution flag, and RGB and CIR of the same sheet are different
-    # files)
+    # record_cache key: the resolution slot carries the colour variant (orto has no
+    # resolution flag, and RGB and CIR of the same sheet are different files)
     _CACHE_PRODUCT = "orto"
 
     # Settings
@@ -97,7 +96,7 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         color: str = DEFAULT_COLOR,
     ):
         """
-        Initialize GUGiK Ortofotomapa provider.
+        Initialize the GUGiK orthophoto map (Ortofotomapa) provider.
 
         Parameters
         ----------
@@ -149,7 +148,7 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         return re.sub(r"[^a-z0-9]", "", self._color.lower())
 
     # =========================================================================
-    # Download by sheet code (godlo) → OpenData (TIF)
+    # Download by sheet code → OpenData (TIF)
     # =========================================================================
 
     def download(

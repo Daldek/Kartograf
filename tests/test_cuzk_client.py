@@ -187,7 +187,7 @@ class TestFetchFile:
         assert result == target
         assert target.read_bytes() == b"II*\x00tifdata"
         assert (tmp_path / "CTES96.tfw").read_bytes().startswith(b"5\n")
-        # ZIP posprzatany
+        # ZIP cleaned up
         assert list(tmp_path.glob("*.zip")) == []
 
     def test_unzip_single_without_expected_file_raises(self, tmp_path):
@@ -263,8 +263,10 @@ class TestFetchFile:
 
 
 class TestRetryPropagation:
-    """Retry/backoff pochodzi z transport.download_to — spec 7:
-    wyczerpanie prob => DownloadError."""
+    """Retry/backoff comes from transport.download_to (spec 7).
+
+    Exhausted retries => DownloadError.
+    """
 
     def test_fetch_file_exhausts_retries(self, tmp_path):
         import requests as requests_lib
@@ -311,7 +313,7 @@ def _write_geotiff(
     nodata: float = -9999.0,
     crs: str = "EPSG:3045",
 ) -> None:
-    """Syntetyczny GeoTIFF float32 pokrywajacy bbox (do testow mozaiki)."""
+    """Synthetic float32 GeoTIFF covering the bbox (for mosaic tests)."""
     from rasterio.transform import from_bounds
 
     transform = from_bounds(
@@ -398,8 +400,10 @@ class TestExportImage:
         assert not target.exists()
 
     def test_tiling_above_limits_mosaics(self, tmp_path):
-        """Patch limitow na male wartosci: bbox 8x8 px przy limicie 4x4
-        => 4 kafle 4x4, kazdy z tym samym noData, zszyte mosaic_and_crop."""
+        """Limits patched to small values: an 8x8 px bbox, a 4x4 limit -> 4 tiles.
+
+        Each 4x4 tile has the same noData; mosaic_and_crop stitches them.
+        """
         requested = []
 
         def fake_download(session, url, output_path, *, timeout, **kwargs):
@@ -423,7 +427,7 @@ class TestExportImage:
             return Path(output_path)
 
         target = tmp_path / "mosaic.tif"
-        bbox = BBox(0, 0, 16, 16, "EPSG:3045")  # 8x8 px przy pixel_size=2
+        bbox = BBox(0, 0, 16, 16, "EPSG:3045")  # 8x8 px at pixel_size=2
         client = CuzkClient(session=Mock())
         with (
             patch.object(CuzkClient, "MAX_EXPORT_WIDTH", 4),
@@ -532,7 +536,7 @@ class TestExportImage:
             w, h = (int(v) for v in params["size"][0].split(","))
             calls.append(url)
             if len(calls) == 2:
-                # poprawny naglowek TIFF (przechodzi sniff magic), urwane cialo
+                # valid TIFF header (passes the magic sniff), truncated body
                 Path(output_path).write_bytes(b"II*\x00" + b"\x00" * 64)
                 return Path(output_path)
             _write_geotiff(
@@ -548,7 +552,7 @@ class TestExportImage:
             return Path(output_path)
 
         target = tmp_path / "mosaic.tif"
-        bbox = BBox(0, 0, 16, 16, "EPSG:3045")  # 8x8 px przy pixel_size=2
+        bbox = BBox(0, 0, 16, 16, "EPSG:3045")  # 8x8 px at pixel_size=2
         client = CuzkClient(session=Mock())
         with (
             patch.object(CuzkClient, "MAX_EXPORT_WIDTH", 4),

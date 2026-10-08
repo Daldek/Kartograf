@@ -255,8 +255,7 @@ class MetadataCache:
         godlo: str,
         payload: dict,
     ) -> None:
-        """Store the chosen record or a confirmed no coverage after successful
-        queries."""
+        """Store the chosen record or confirmed no coverage after successful queries."""
         with self._write_lock:
             conn = self._connection()
             conn.execute(
@@ -515,7 +514,7 @@ class MetadataCache:
         -------
         dict
             Dictionary with keys:
-            - record_count: number of cached index (skorowidz) entries
+            - record_count: number of cached index entries
             - campaign_count: number of cached campaign lists
             - teryt_count: number of cached TERYT entries
             - sheet_count: number of cached sheet entries

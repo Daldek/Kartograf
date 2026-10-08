@@ -28,14 +28,14 @@ class TestFileStorageBasic:
         assert str(storage.output_dir) == "/custom/path"
 
     def test_repr(self):
-        """Test reprezentacji tekstowej."""
+        """Test the string representation."""
         storage = FileStorage("./data")
         assert "FileStorage" in repr(storage)
         assert "data" in repr(storage)
 
 
 class TestFileStorageGetPath:
-    """Testy metody get_path()."""
+    """Tests of get_path()."""
 
     def test_get_path_1m(self):
         """Test the path for scale 1:1000000."""
@@ -136,7 +136,7 @@ class TestFileStorageGetPath:
 
 
 class TestFileStorageEnsureDirectory:
-    """Testy metody ensure_directory()."""
+    """Tests of ensure_directory()."""
 
     def test_ensure_directory_creates_dirs(self, tmp_path):
         """Test directory creation."""
@@ -158,7 +158,7 @@ class TestFileStorageEnsureDirectory:
 
 
 class TestFileStorageExists:
-    """Testy metody exists()."""
+    """Tests of exists()."""
 
     def test_exists_false_when_not_present(self, tmp_path):
         """Test that exists() returns False when the file does not exist."""
@@ -177,7 +177,7 @@ class TestFileStorageExists:
 
 
 class TestFileStorageWriteAtomic:
-    """Testy metody write_atomic()."""
+    """Tests of write_atomic()."""
 
     def test_write_atomic_bytes(self, tmp_path):
         """Test atomic byte writing."""
@@ -230,7 +230,7 @@ class TestFileStorageWriteAtomic:
 
 
 class TestFileStorageDelete:
-    """Testy metody delete()."""
+    """Tests of delete()."""
 
     def test_delete_existing_file(self, tmp_path):
         """Test deleting an existing file."""
@@ -252,10 +252,10 @@ class TestFileStorageDelete:
 
 
 class TestFileStorageListFiles:
-    """Testy metody list_files()."""
+    """Tests of list_files()."""
 
     def test_list_files_empty(self, tmp_path):
-        """Test pustego katalogu."""
+        """Test an empty directory."""
         storage = FileStorage(tmp_path)
 
         files = storage.list_files()
@@ -274,7 +274,7 @@ class TestFileStorageListFiles:
         assert len(files) == 3
 
     def test_list_files_with_pattern(self, tmp_path):
-        """Test z wzorcem."""
+        """Test with a pattern."""
         storage = FileStorage(tmp_path)
         storage.write_atomic("N-34-130-A", b"data1", ".tif")
         storage.write_atomic("N-34-130-B", b"data2", ".asc")
@@ -295,7 +295,7 @@ class TestFileStorageListFiles:
 
 
 class TestFileStorageGetSize:
-    """Testy metody get_size()."""
+    """Tests of get_size()."""
 
     def test_get_size_existing_file(self, tmp_path):
         """Test the size of an existing file."""
@@ -604,13 +604,13 @@ class TestFileStorageGetRawPath:
 
 
 class TestSubdirOverride:
-    """Etap 0: subdir sterowany deskryptorem (etap 1: np. cz_dmr5g)."""
+    """Stage 0: descriptor-driven subdir (stage 1: e.g. cz_dmr5g)."""
 
     def test_subdir_takes_precedence(self, tmp_path):
         storage = FileStorage(tmp_path, subdir="cz_dmr5g")
         path = storage.get_raw_path("302_5550", "302_5550.tif")
-        # "302_5550" to godlo TM33 (rejestracja cz_tm33, Zad. 11) — nested
-        # katalogi ["302", "5550"] wg path_parts, jak inne systemy wieloczesciowe.
+        # "302_5550" is a TM33 sheet code (cz_tm33 registration, Task 11) — nested
+        # directories ["302", "5550"] per path_parts, like other multi-part systems.
         assert path == tmp_path / "cz_dmr5g" / "302" / "5550" / "302_5550.tif"
 
     def test_subdir_wins_over_product_and_resolution(self, tmp_path):
@@ -720,9 +720,11 @@ class TestFileStorageSegments:
         assert tuple(p2000.parts[-8:-6]) == ("laz", "pl_2000_evrf2007")
 
     def test_laz_uklad_from_tile_overrides_identifier(self, tmp_path):
-        """Fact 8: a PL-2000:S6 tile with a hyphenated sheet code lands in pl_2000 also
-        through the library API (previously the library gave pl_1992 and the CLI
-        pl_2000)."""
+        """Finding 8: a PL-2000:S6 tile with a hyphenated code lands in pl_2000.
+
+        Also through the library API (previously the library gave pl_1992 and
+        the CLI pl_2000).
+        """
         storage = FileStorage(tmp_path, product="laz")
         path = storage.get_raw_path("N-33-131-B-a-1-1-4", "a.laz", uklad="2000")
         assert tuple(path.parts[-10:-8]) == ("laz", "pl_2000_evrf2007")
@@ -796,9 +798,11 @@ class TestFileStorageSegments:
     def test_segment_templates_come_from_registry(
         self, tmp_path, monkeypatch, kwargs, key, godlo, expected
     ):
-        """Fact 11: one source of truth - the template from the descriptor, not a copy
-        in FileStorage (ADR-026: a new source = a new descriptor entry, no path code
-        changes)."""
+        """Finding 11: one source of truth - the template comes from the descriptor.
+
+        Not a copy in FileStorage (ADR-026: a new source = a new descriptor
+        entry, no path code changes).
+        """
         from dataclasses import replace
 
         from kartograf.download import storage as storage_mod
@@ -818,7 +822,7 @@ class TestFileStorageSegments:
 
 
 class TestPruneEmptyDirs:
-    """Fact 10: a failure does not leave an empty <segment>/bbox/ tree."""
+    """Finding 10: a failure does not leave an empty <segment>/bbox/ tree."""
 
     def test_removes_empty_chain_but_not_stop(self, tmp_path):
         from kartograf.download.storage import prune_empty_dirs
@@ -864,7 +868,7 @@ class TestStorageVariant:
 
 
 class TestStorageForProvider:
-    """D18: jedyna fabryka FileStorage segmentu providera."""
+    """D18: the single FileStorage factory for a provider segment."""
 
     G = "N-34-130-D-d-2-4"
 
@@ -878,7 +882,7 @@ class TestStorageForProvider:
         assert self._segment(storage, tmp_path) == ("nmt", "pl_1992_5m_evrf2007")
 
     def test_descriptor_segment_and_provider_vertical_win(self, tmp_path):
-        """Pion FAKTYCZNY providera wygrywa z argumentem wolajacego."""
+        """The provider's ACTUAL vertical CRS wins over the caller's argument."""
         from types import SimpleNamespace
 
         from kartograf.download.storage import storage_for_provider
@@ -910,7 +914,7 @@ class TestStorageForProvider:
         assert storage._subdir == "nmt/cz_dmr5g_bpv"
 
     def test_mock_attributes_are_ignored(self, tmp_path):
-        """Mock(spec=...) daje Mock zamiast str — fallback na argumenty."""
+        """Mock(spec=...) gives a Mock instead of str — fall back to the arguments."""
         from unittest.mock import Mock
 
         from kartograf.download.storage import storage_for_provider

@@ -103,7 +103,7 @@ __all__ = [
     "SheetFetch",
     "CampaignRef",
     "FileStorage",
-    # Download (wycinek PL, ADR-027)
+    # Download (PL cutout, ADR-027)
     "PlCutout",
     "PlCutoutResult",
     "PlCutoutSheets",
@@ -111,7 +111,7 @@ __all__ = [
     "prepare_pl_cutout",
     "run_pl_cutout",
     "select_pl_cutout_sheets",
-    # Download (kafle LAZ, D17)
+    # Download (LAZ tiles, D17)
     "LazDownloadResult",
     "LazTileFailure",
     "download_laz_area",

@@ -71,7 +71,7 @@ def _write_dmr4g_pair(path: Path):
     """The real shape of an openzu file: a GeoTIFF without CRS and without a
     geotransform, georeferencing only in .tfw (reconnaissance Task 1, step 6)."""
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore")  # NotGeoreferencedWarning — celowe
+        warnings.simplefilter("ignore")  # NotGeoreferencedWarning — intentional
         with rasterio.open(
             path,
             "w",
@@ -83,7 +83,7 @@ def _write_dmr4g_pair(path: Path):
             nodata=CUZK_NODATA,
         ) as dst:
             dst.write(np.full((4, 5), 300.0, dtype="float32"), 1)
-    # 500 m/px, srodek lewego-gornego piksela — zasieg CTES96
+    # 500 m/px, centre of the top-left pixel — extent of CTES96
     path.with_suffix(".tfw").write_text(
         "500.0\n0.0\n0.0\n-500.0\n-449750.0\n-1112250.0\n"
     )
@@ -129,7 +129,7 @@ class TestConstruction:
     def test_kron86_raises_with_remedy(self):
         with pytest.raises(TransformUnavailableError) as exc:
             CuzkDmrProvider(vertical_crs="KRON86")
-        assert exc.value.remedy  # remedium z REMEDIES (siatki niepubliczne)
+        assert exc.value.remedy  # remedy from REMEDIES (non-public grids)
 
     def test_unknown_vertical_rejected(self):
         with pytest.raises(ValidationError):
@@ -150,12 +150,12 @@ class TestConstruction:
             CuzkDmrProvider(resolution="2m")
 
     def test_metadata_properties(self):
-        """Warstwa CLI (Zad. 15) czyta te wlasciwosci przy budowie sidecara."""
+        """The CLI layer (Task 15) reads these properties when building the sidecar."""
         provider = CuzkDmrProvider(resolution="5m", vertical_crs="Bpv")
         assert provider.name == "CUZK DMR (5m)"
         assert provider.resolution == "5m"
         assert provider.vertical_crs == "Bpv"
-        assert provider.sheet_index is provider.sheet_index  # jeden indeks
+        assert provider.sheet_index is provider.sheet_index  # a single index
 
 
 class TestDownloadDispatch:
@@ -179,7 +179,7 @@ class TestDownloadDispatch:
             "https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr5g/ImageServer"
         )
         assert called_bbox.crs == "EPSG:5514"
-        # zadanie natywne pokrywa kafel po przeliczeniu z powrotem do 3045
+        # the native request covers the tile after converting back to 3045
         tile = BBox(302000, 5550000, 304000, 5552000, "EPSG:3045")
         back = bbox_to_crs(called_bbox, "EPSG:3045")
         assert back.min_x <= tile.min_x and back.min_y <= tile.min_y
@@ -235,7 +235,7 @@ class TestDownloadDispatch:
         )
 
     def test_tm33_godlo_with_whitespace_is_parsed(self, tmp_path):
-        """Kafel TM33 z bialymi znakami: ParserTM33 dostaje godlo obciete."""
+        """TM33 tile with whitespace: ParserTM33 gets the stripped sheet code."""
         with patch.object(CuzkDmrProvider, "_export_raster") as export:
             CuzkDmrProvider(resolution="2m").download(" 302_5550 ", tmp_path / "t.tif")
         bbox = export.call_args.args[0]
@@ -307,7 +307,7 @@ class TestDownloadDispatch:
             provider = CuzkDmrProvider(resolution="5m")
             with pytest.raises(DownloadError) as exc:
                 provider.download("CTES96", tmp_path / "CTES96.tif")
-        assert "404" in str(exc.value)  # oryginalny komunikat zachowany
+        assert "404" in str(exc.value)  # original message preserved
         assert "KladyMapovychListu" in str(exc.value)
 
     def test_missing_files_channel_is_config_error(self, tmp_path):
@@ -406,7 +406,7 @@ def _server_emulator(calls=None, *, nodata_west_of=None, flat=None):
 
 
 def _apex_of(path):
-    """Wspolrzedne piksela o najwyzszej wartosci (wierzcholek stozka)."""
+    """Coordinates of the highest-value pixel (the cone apex)."""
     with rasterio.open(path) as ds:
         data = ds.read(1, masked=True)
         row, col = np.unravel_index(np.argmax(data.filled(-np.inf)), data.shape)
@@ -429,7 +429,7 @@ class TestHorizontalReprojection:
     def test_bbox_target_crs_puts_content_where_pyproj_says(
         self, tmp_path: Path
     ) -> None:
-        """Regresja TRESCI: wierzcholek ma trafic tam, gdzie wskazuje pyproj."""
+        """CONTENT regression: the apex must land where pyproj points."""
         target = tmp_path / "area.tif"
         bbox = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
         calls: list = []
@@ -471,7 +471,7 @@ class TestHorizontalReprojection:
             assert (ds.width, ds.height) == (1000, 1000)
 
     def test_native_request_covers_whole_target_bbox(self, tmp_path: Path) -> None:
-        """Obwiednia zadania natywnego musi POKRYWAC cel (z zapasem na warp)."""
+        """The native request envelope must COVER the target (with a warp margin)."""
         bbox = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
         calls: list = []
         with patch(_CLIENT_PATCH) as client_cls:
@@ -488,7 +488,7 @@ class TestHorizontalReprojection:
         assert corners.max_y >= target_bbox.max_y
 
     def test_native_request_has_warp_margin_of_four_pixels(self):
-        """Zapas zadania natywnego = 4 px (8 m przy 2 m) z kazdej strony."""
+        """Native request margin = 4 px (8 m at 2 m) on each side."""
         bbox = BBox(530000, 382000, 532000, 384000, "EPSG:2180")
         provider = CuzkDmrProvider(resolution="2m", target_crs="EPSG:2180")
         native = provider._bbox_to_crs(bbox, "EPSG:5514")
@@ -639,7 +639,7 @@ class TestHorizontalReprojection:
         assert pinned.accuracy_m <= 1.0
 
     def test_unavailable_horizontal_operation_fails_before_download(self, tmp_path):
-        """Fail-fast: brak bezpiecznej operacji przerywa PRZED transferem."""
+        """Fail-fast: no safe operation aborts BEFORE the transfer."""
         with (
             patch(_CLIENT_PATCH) as client_cls,
             patch(
@@ -753,8 +753,8 @@ class TestProbePoint:
 
         horizontal = [c for c in calls if (c[0], c[1]) != ("EPSG:8357", "EPSG:5621")]
         assert {(c[0], c[1]) for c in horizontal} == {
-            ("EPSG:5514", "EPSG:2180"),  # reprojekcja tresci
-            ("EPSG:2180", "EPSG:5514"),  # obwiednia zadania natywnego
+            ("EPSG:5514", "EPSG:2180"),  # content reprojection
+            ("EPSG:2180", "EPSG:5514"),  # envelope of the native request
             ("EPSG:2180", "EPSG:4326"),  # lon/lat for the vertical operation
         }
         assert all(policy.probe_point is not None for _, _, policy in horizontal)
@@ -1057,8 +1057,10 @@ class TestVerticalTransform:
         assert not vertical.transform.called
 
     def test_unavailable_operation_fails_before_any_download(self, tmp_path):
-        """Fail-fast jak przy KRON86: brak bezpiecznej operacji 8357->5621
-        przerywa w konstruktorze, zanim cokolwiek zostanie pobrane."""
+        """Fail-fast as with KRON86: no safe 8357->5621 operation.
+
+        The constructor aborts before anything is downloaded.
+        """
         with (
             patch(_CLIENT_PATCH) as client_cls,
             patch(
@@ -1090,14 +1092,14 @@ class TestVerticalTransform:
         with (
             patch(_CLIENT_PATCH) as client_cls,
             patch(_PINNED_PATCH, side_effect=factory),
-            patch("kartograf.providers.cuzk.dmr._CHUNK_PIXELS", 20),  # 5 pasow
+            patch("kartograf.providers.cuzk.dmr._CHUNK_PIXELS", 20),  # 5 strips
         ):
             client_cls.return_value.export_image.side_effect = _exporting("EPSG:5514")
             provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
             with pytest.raises(TransformError):
                 provider.download_bbox(_NATIVE_BBOX, target)
 
-        assert calls["n"] > 1  # awaria faktycznie po zapisaniu pierwszego pasa
+        assert calls["n"] > 1  # the failure really follows the first written strip
         assert not target.exists()
         assert list(tmp_path.iterdir()) == []  # zero temporary files
 
@@ -1125,8 +1127,7 @@ class TestVerticalTransform:
         assert list(tmp_path.iterdir()) == []
 
     def test_raster_without_crs_reports_clear_error(self, tmp_path):
-        """Without a CRS (lon, lat) cannot be computed - a readable error instead of
-        CRSError."""
+        """Without a CRS (lon, lat) is unknown - a readable error, not CRSError."""
         factory, _ = self._pinned_fakes()
         with (
             patch(_CLIENT_PATCH) as client_cls,
@@ -1144,7 +1145,7 @@ class TestVerticalTransform:
         It must be an explicit error and cleanup, not a silently wrong file."""
         path = tmp_path / "CTES96.tif"
         with warnings.catch_warnings():
-            warnings.simplefilter("ignore")  # NotGeoreferencedWarning — celowe
+            warnings.simplefilter("ignore")  # NotGeoreferencedWarning — intentional
             with rasterio.open(
                 path,
                 "w",
@@ -1171,7 +1172,7 @@ class TestVerticalTransform:
         assert list(tmp_path.iterdir()) == []  # zero temporary files
 
     def test_chunking_covers_whole_raster(self, tmp_path):
-        """Raster wyzszy niz jeden pas: kazdy piksel danych przesuniety raz."""
+        """Raster taller than one strip: every data pixel shifted once."""
         factory, _ = self._pinned_fakes()
         target = tmp_path / "wide.tif"
         with (
@@ -1200,7 +1201,7 @@ class TestVerticalTransform:
             patch(_PINNED_PATCH, side_effect=factory) as pinned_mock,
         ):
             client = client_cls.return_value
-            # raster w EPSG:4326: piksele leza w okolicach Cieszyna
+            # raster in EPSG:4326: the pixels lie in the Cieszyn area
             client.export_image.side_effect = lambda e, b, **kw: (
                 _write_tif(
                     Path(kw["output_path"]),
@@ -1212,7 +1213,7 @@ class TestVerticalTransform:
             provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
             provider.download_bbox(_NATIVE_BBOX, tmp_path / "t.tif")
 
-        # transformacja pomocnicza budowana z CRS rastra do WGS84
+        # helper transformation built from the raster CRS to WGS84
         horizontal_calls = [
             call for call in pinned_mock.call_args_list if call.args[0] != "EPSG:8357"
         ]
@@ -1225,7 +1226,7 @@ class TestVerticalTransform:
 
 
 class TestDescriptorProviderConsistency:
-    """Wzor: TestDescriptorProviderConsistency z test_sources_registry."""
+    """Pattern: TestDescriptorProviderConsistency from test_sources_registry."""
 
     def test_dmr5g(self, tmp_path):
         from kartograf.download.storage import FileStorage

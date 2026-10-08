@@ -137,9 +137,8 @@ class CuzkDmrProvider(BaseProvider):
             if vertical_crs == "EVRF2007"
             else None
         )
-        # The same rule for the horizontal part: when the user requested a CRS
-        # other than native, the lack of a safe operation must abort before
-        # the transfer.
+        # The same rule for the horizontal part: when the user requested a CRS other
+        # than native, the lack of a safe operation must abort before the transfer.
         if target_crs is not None:
             self.horizontal_transform(target_crs)
 
@@ -337,9 +336,8 @@ class CuzkDmrProvider(BaseProvider):
                 no_data=CUZK_NODATA,
                 output_path=native_path,
             )
-            # Warp shared by the PL and CZ paths (D8): written through a temp
-            # file and os.replace — a failure does NOT delete the previous
-            # result (N7).
+            # Warp shared by the PL and CZ paths (D8): written through a temp file and
+            # os.replace — a failure does NOT delete the previous result (N7).
             warp_to_grid(
                 native_path,
                 output_path,

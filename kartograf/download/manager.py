@@ -170,7 +170,7 @@ class SheetFetch:
     link : str or None
         ``hardlink``/``copy``; ``None`` = flow without campaigns.
     unverified : str or None
-        ``newest``: text of the GUGiK index (skorowidz) TRANSPORT error
+        ``newest``: text of the GUGiK index TRANSPORT error
         (network, 429, 5xx) with which an existing local campaign was used
         without checking whether a newer one exists (``skipped=True``, link
         untouched). ``None`` = record resolved normally.
