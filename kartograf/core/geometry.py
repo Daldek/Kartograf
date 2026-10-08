@@ -2,7 +2,7 @@
 Reading geometry files (SHP, GPKG) for spatial data selection.
 
 Extracts per-feature bounding boxes from geometry files and maps them
-to map sheet identifiers (godla) for tile-based downloads.
+to map sheet codes (godla) for tile-based downloads.
 """
 
 import logging
@@ -74,8 +74,8 @@ def _point_from_wkb(
             "(e.g. ogr2ogr) or use SHP"
         )
 
-    # EWKB z flaga SRID wstawia 4 B identyfikatora ukladu MIEDZY typ a
-    # wspolrzedne — bez tego przeskoku odczytalibysmy smieci.
+    # EWKB with the SRID flag inserts a 4 B CRS identifier BETWEEN the type and
+    # the coordinates - without skipping it we would read garbage.
     coord_offset = offset + 9 if wkb_type & 0x20000000 else offset + 5
     if len(blob) < coord_offset + 16:  # 2 x float64
         return None
@@ -97,12 +97,13 @@ def _parse_gpkg_envelope(blob: bytes) -> tuple[float, float, float, float] | Non
       Offset 8: envelope (if type > 0):
         type 1 (2D): minx, maxx, miny, maxy (4 x float64)
 
-    Sciezki:
-      * flaga pustej geometrii — obiekt pomijany (``None``), nie ma zasiegu;
-      * ``envelope_type > 0`` — obwiednia czytana wprost z naglowka;
-      * ``envelope_type == 0`` — obwiedni nie ma (tak GDAL/QGIS zapisuja warstwy
-        punktowe), wiec wspolrzedne pochodza z samego WKB (``_point_from_wkb``);
-        dla geometrii innej niz punkt konczy sie to ``ValidationError``.
+    Code paths:
+      * empty-geometry flag - the feature is skipped (``None``), it has no extent;
+      * ``envelope_type > 0`` - the envelope is read straight from the header;
+      * ``envelope_type == 0`` - there is no envelope (this is how GDAL/QGIS
+        write point layers), so the coordinates come from the WKB itself
+        (``_point_from_wkb``); for a non-point geometry this ends in
+        ``ValidationError``.
 
     Parameters
     ----------
@@ -133,12 +134,12 @@ def _parse_gpkg_envelope(blob: bytes) -> tuple[float, float, float, float] | Non
     is_empty = (flags >> 4) & 0x01
 
     if is_empty:
-        # Pusta geometria nie ma zasiegu — GDAL zapisuje ja jako POINT(NaN NaN),
-        # wiec obiekt trzeba pominac, zanim NaN trafi do wyszukiwania arkuszy.
+        # An empty geometry has no extent - GDAL writes it as POINT(NaN NaN),
+        # so the feature must be skipped before NaN reaches the sheet lookup.
         return None
 
     if envelope_type == 0:
-        # Brak obwiedni w naglowku — sprobuj odczytac punkt z WKB tuz za nim.
+        # No envelope in the header - try to read a point from the WKB right after it.
         return _point_from_wkb(blob, offset=8)
 
     # Need at least 8 (header) + 32 (4 doubles) = 40 bytes for 2D envelope
@@ -212,13 +213,13 @@ def _read_shp_bboxes(filepath: Path, target_crs: str) -> list[BBox]:
 
     Notes
     -----
-    Obiekty punktowe (POINT/POINTZ/POINTM) daja obwiednie zdegenerowana
-    ``(x, y, x, y)`` — pyshp nie wystawia dla nich atrybutu ``bbox``.
+    Point features (POINT/POINTZ/POINTM) give a degenerate envelope
+    ``(x, y, x, y)`` - pyshp does not expose a ``bbox`` attribute for them.
     """
     import shapefile
 
-    # etykieta ukladu jako WKT: klucz cache transformerow w core.bbox jest
-    # stringiem — jeden transformer na warstwe, nie na obiekt
+    # CRS label as WKT: the transformer cache key in core.bbox is a string -
+    # one transformer per layer, not per feature
     source_label = _read_shp_crs(filepath).to_wkt()
 
     bboxes = []
@@ -314,14 +315,14 @@ def _resolve_gpkg_layer(
     conn: sqlite3.Connection, filepath: Path, layer: str | None
 ) -> str:
     """
-    Nazwa tabeli obiektow do odczytu (walidacja ``--layer``, domyslnie pierwsza).
+    Name of the feature table to read (``--layer`` validation, first by default).
 
     Parameters
     ----------
     conn : sqlite3.Connection
         Open GPKG database connection
     filepath : Path
-        Path to .gpkg file (do komunikatow bledu)
+        Path to .gpkg file (for error messages)
     layer : str or None
         Layer name (None = first feature table)
 
@@ -456,10 +457,10 @@ def read_source_crs(filepath: Path, layer: str | None = None) -> CRS:
     """
     Read the CRS the geometry file stores its coordinates in (no transformation).
 
-    Pozwala policzyc obwiednie W UKLADZIE PLIKU (``target_crs`` rowny temu
-    ukladowi = brak transformacji) i wykonac skok do ukladu docelowego
-    mechanizmem przypietych operacji z ``kartograf.transform.crs`` zamiast
-    domyslnym transformerem pyproj uzywanym w tym module.
+    Makes it possible to compute the envelope IN THE FILE'S CRS (``target_crs``
+    equal to that CRS = no transformation) and to make the jump to the target
+    CRS with the pinned-operation mechanism from ``kartograf.transform.crs``
+    instead of the default pyproj transformer used in this module.
 
     Parameters
     ----------
@@ -557,13 +558,13 @@ def find_sheets_for_geometry(
     layer : str or None
         Layer name for GPKG (None = first layer)
     system : str
-        Układ współrzędnych: "1992" (PL-1992) lub "2000" (PL-2000).
-        Default: "1992" — pełna kompatybilność wsteczna.
+        Coordinate system: "1992" (PL-1992) or "2000" (PL-2000).
+        Default: "1992" - full backward compatibility.
 
     Returns
     -------
     list[str]
-        Sorted, deduplicated list of godla (sheet identifiers)
+        Sorted, deduplicated list of sheet codes (godla)
     """
     bboxes = read_feature_bboxes(filepath, layer=layer, target_crs="EPSG:2180")
 

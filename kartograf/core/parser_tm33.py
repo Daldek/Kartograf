@@ -1,9 +1,9 @@
 """
-ParserTM33 — obliczalna siatka kafli 2x2 km ETRS89/TM33N (EPSG:3045) dla CZ.
+ParserTM33 - computable grid of 2x2 km ETRS89/TM33N (EPSG:3045) tiles for CZ.
 
-Godlo `{E_km}_{N_km}` to naroznik SW kafla (np. "302_5550" => E 302000..304000,
-N 5550000..5552000; zweryfikowane wobec georss w researchu 2026-08-10).
-Czysta matematyka, zero IO — wzor: Parser2000.
+The sheet code (godlo) `{E_km}_{N_km}` is the SW corner of the tile (e.g.
+"302_5550" => E 302000..304000, N 5550000..5552000; verified against georss
+in the 2026-08-10 research). Pure maths, zero IO - modelled on Parser2000.
 """
 
 import math
@@ -17,7 +17,7 @@ TILE_SIZE_M = 2000
 
 
 class ParserTM33:
-    """Parser godel siatki TM33 (naroznik SW, krok 2 km)."""
+    """Parser of TM33 grid sheet codes (SW corner, 2 km step)."""
 
     uklad = "cz_tm33"
 
@@ -43,7 +43,7 @@ class ParserTM33:
         self._south = n_km * 1000
 
     def get_bbox(self) -> BBox:
-        """BBox kafla w EPSG:3045."""
+        """Tile BBox in EPSG:3045."""
         return BBox(
             self._west,
             self._south,
@@ -54,7 +54,7 @@ class ParserTM33:
 
     @staticmethod
     def tile_for(easting: float, northing: float) -> str:
-        """Godlo kafla zawierajacego punkt (EPSG:3045)."""
+        """Sheet code of the tile containing the point (EPSG:3045)."""
         e_km = int(math.floor(easting / TILE_SIZE_M)) * 2
         n_km = int(math.floor(northing / TILE_SIZE_M)) * 2
         return f"{e_km:03d}_{n_km:04d}"
@@ -64,10 +64,10 @@ class ParserTM33:
 
 
 def find_tiles_tm33_for_bbox(bbox: BBox) -> list[str]:
-    """Godla kafli TM33 przecinajacych bbox (EPSG:3045).
+    """Sheet codes of TM33 tiles intersecting the bbox (EPSG:3045).
 
-    Krawedzie stykajace sie NIE licza sie jako przeciecie (kafel wchodzi,
-    gdy jego wnetrze przecina bbox). Kolejnosc: wiersze S->N, kolumny W->E.
+    Touching edges do NOT count as an intersection (a tile is included when
+    its interior intersects the bbox). Order: rows S->N, columns W->E.
     """
     if bbox.crs != TM33_CRS:
         raise ValidationError(
