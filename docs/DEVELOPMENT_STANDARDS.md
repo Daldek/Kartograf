@@ -1,6 +1,6 @@
 # Standardy deweloperskie — Kartograf
 
-**Wersja:** 3.0
+**Wersja:** 3.1
 **Data:** 2026-10-08
 **Status:** Obowiazujacy
 **Zrodlo:** Zunifikowane standardy workspace (`shared/standards/DEVELOPMENT_STANDARDS.md` — repozytorium zewnetrzne, nieobecne w tym workspace)
@@ -29,6 +29,9 @@
 > kodu (drzewo projektu 7.1, hierarchia wyjatkow 11.1, tabela timeoutow
 > 13.4, liczby testow i pokrycia 10.1) zastapione regula i odsylaczem do
 > zrodla prawdy; `CLMS_CREDENTIALS` zamiast nieistniejacej zmiennej (14).
+>
+> **Nota 3.1 (2026-10-08):** jezyk rozstrzygniety (9.4): kod po angielsku,
+> commity i dokumentacja po polsku; przyklady commitow (2.3, 15.4) po polsku.
 
 ---
 
@@ -126,17 +129,20 @@ serwisach (`-m live` oraz przebiegi CLI na katalog danych, sekcja 6.4).
 
 ### 2.3 Scope — specyficzne dla Kartograf
 
+Typ i scope po angielsku (slowa kluczowe Conventional Commits), opis i tresc
+po polsku (sekcja 9.4):
+
 ```bash
-feat(parser): add support for 2000 coordinate system
-fix(download): handle timeout in retry logic
-feat(landcover): add BDOT10k provider
-feat(soilgrids): add WCS download for soil data
-feat(hsg): implement USDA texture classification
-fix(auth): fix proxy token refresh
-docs(readme): update installation instructions
-test(parser): add edge case tests for hierarchy
-refactor(providers): extract common validation
-chore(deps): update requests to 2.32.0
+feat(parser): obsluga godel ukladu 2000
+fix(download): obsluga timeoutu w logice ponowien
+feat(landcover): provider BDOT10k
+feat(soilgrids): pobieranie danych glebowych przez WCS
+feat(hsg): klasyfikacja tekstury wg trojkata USDA
+fix(auth): odswiezanie tokenu w proxy
+docs(readme): instrukcja instalacji
+test(parser): przypadki brzegowe hierarchii arkuszy
+refactor(providers): wspolna walidacja wejscia
+chore(deps): requests 2.32.0
 ```
 
 ---
@@ -553,16 +559,20 @@ timeout = 30
 
 ### 9.4 Jezyk
 
-- **Pliki .md** — po polsku
-- **Docstrings i komentarze w kodzie** — po angielsku
-- **Commit messages** — po angielsku
+Regula obowiazujaca (decyzja wlasciciela projektu, 2026-10-08):
 
-**Odstepstwo praktyki (do rozstrzygniecia przez wlasciciela projektu):** kod od etapu 0 ma docstringi i komentarze takze po polsku bez
-polskich znakow (w calosci m.in. `download/cutout.py`, `transport/mosaic.py`,
-wiekszosc `cli/download_cmd.py`), a commity sa po polsku (Conventional
-Commits). Nowe publiczne API wycinka (`download_pl_cutout` i kroki) ma
-docstringi bez pelnego kompletu sekcji NumPy. Do decyzji: ujednolicic
-standard z praktyka albo praktyke ze standardem.
+- **Docstringi i komentarze w kodzie** (`kartograf/`, `tests/`) — po angielsku
+- **Commit messages** — po polsku (format Conventional Commits z sekcji 2:
+  typ i scope to angielskie slowa kluczowe, opis i tresc po polsku)
+- **Dokumentacja** — po polsku: `docs/`, `README.md`, `CLAUDE.md` i inne
+  pliki `.md`
+
+Stan zastany: czesc kodu sprzed tej decyzji ma docstringi i komentarze po
+polsku bez polskich znakow (m.in. `download/cutout.py`, `transport/mosaic.py`,
+wiekszosc `cli/download_cmd.py`) — jest niezgodna z regula; nowy kod pisze
+sie po angielsku. Niezaleznie od jezyka: publiczne API wycinka
+(`download_pl_cutout` i kroki) ma docstringi bez pelnego kompletu sekcji
+NumPy (sekcja 9.1).
 
 ---
 
@@ -896,7 +906,7 @@ danych, uklad `data/`) -> `docs/PRD.md` (wymagania) -> `docs/CHANGELOG.md`
 ### 15.4 W trakcie sesji — commity
 
 ```
-1. Conventional Commits (sekcja 2): feat(parser): add bbox calculation
+1. Conventional Commits (sekcja 2, opis po polsku — 9.4): feat(parser): obliczanie bbox arkusza
 2. Commituj czesto, male zmiany
 3. Aktualizuj docs/CHANGELOG.md na biezaco — sekcja wersji niewydanej
    (naglowek "## [X.Y.Z] - Unreleased" na gorze pliku)
@@ -1002,8 +1012,8 @@ sekcja 5 ("Jak dodac nowe zrodlo albo nowy kraj").
 
 ---
 
-**Wersja dokumentu:** 3.0
+**Wersja dokumentu:** 3.1
 **Data ostatniej aktualizacji:** 2026-10-08
 **Zrodlo:** `shared/standards/DEVELOPMENT_STANDARDS.md` v1.0 (repozytorium zewnetrzne, nieobecne w tym workspace)
 
-*Odstepstwa od tych standardow wymagaja uzasadnienia — w tym dokumencie (jak sekcja 9.4) albo w ADR (`docs/DECISIONS.md`).*
+*Odstepstwa od tych standardow wymagaja uzasadnienia — w tym dokumencie albo w ADR (`docs/DECISIONS.md`).*
