@@ -394,7 +394,8 @@ class HSGCalculator:
             stat=stat,
             keep_intermediate=keep_intermediate,
             timeout=timeout,
-            sheet=godlo,
+            # Canonical sheet code in the sidecar, as for NMT and land cover (A7)
+            sheet=parser.godlo,
         )
 
     def calculate_hsg_by_bbox(
