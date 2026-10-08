@@ -6451,8 +6451,13 @@ class TestSheetCrsMismatchWarning:
         assert self.GODLO in warning and "EPSG:2178" in warning
 
     def test_file_in_zone_crs_is_silent(self, tmp_path, capsys):
-        head = self.FIXTURE.read_bytes().replace(b"567975.95", b"7567975.95", 1)
-        assert head != self.FIXTURE.read_bytes()
+        # header moved into the real EPSG:2178 frame of 7.125.11.19
+        # (7424800, 5546000, 7426400, 5547000) - B4 extent check passes
+        raw = self.FIXTURE.read_bytes()
+        head = raw.replace(b"567975.95", b"7424800.5", 1).replace(
+            b"242449.35", b"5546000.5", 1
+        )
+        assert head.count(b"7424800.5") == 1 and head.count(b"5546000.5") == 1
 
         rc = self._run(tmp_path, ["download", self.GODLO], raw=head)
 

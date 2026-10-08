@@ -2500,11 +2500,13 @@ class TestEmptyCutoutSkip:
 class TestCutoutOverCampaignLinks:
     """ADR-030 (errata Q4): the cutout reads sheets through campaign links."""
 
+    # Synthetic 100 m sheets inside their godlo frames (B4 extent check):
+    # the frames of 2-3 and 2-4 overlap around x = 770000 (EPSG:2180).
     _SHEETS = {
-        "N-34-130-D-d-2-3": (530000, 382000),
-        "N-34-130-D-d-2-4": (530100, 382000),
+        "N-34-130-D-d-2-3": (769900, 509000),
+        "N-34-130-D-d-2-4": (770000, 509000),
     }
-    _BBOX = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+    _BBOX = BBox(769910, 509010, 770090, 509090, "EPSG:2180")
 
     class _CampaignProvider:
         """A fake with the campaign contract (CLASS attribute supports_campaigns)."""

@@ -25,6 +25,8 @@ from kartograf.download.campaigns import (
     campaign_extension,
     validate_campaign_args,
     verify_file_format,
+    verify_record_url,
+    verify_sheet_extent,
 )
 from kartograf.download.links import (
     LinkOutcome,
@@ -695,18 +697,22 @@ class DownloadManager:
         Campaign flow (ADR-030): files in ``kampanie/``, standard link.
 
         Records from ``provider.resolve_campaigns`` (never an empty list —
-        none = ``NoCoverageError``). For each campaign: the extension from
-        the record ``format`` field (BEFORE the network), skipping an existing
-        campaign file with ``skip_existing`` (the existence of the standard
-        path is NOT a reason to skip), otherwise ``download_record`` ->
-        ``verify_file_format`` -> mandatory campaign sidecar; a failure of
-        any of these steps removes the data file (never a file without a
-        sidecar or with foreign content). After the campaigns are collected
-        the standard path points to the newest LOCAL campaign (``max`` by
-        ``sort_key``; ``ensure_standard_link`` never moves the link back).
+        none = ``NoCoverageError``). For each campaign, BEFORE the network:
+        ``verify_record_url`` (the record URL must name the sheet, B4) and
+        the extension from the record ``format`` field; then skipping an
+        existing campaign file with ``skip_existing`` (the existence of the
+        standard path is NOT a reason to skip), otherwise ``download_record``
+        -> ``verify_file_format`` -> ``verify_sheet_extent`` (the ASC header
+        extent lies in the sheet frame, B4) -> mandatory campaign sidecar; a
+        failure of any of these steps removes the data file (never a file
+        without a sidecar or with foreign content). After the campaigns are
+        collected the standard path points to the newest LOCAL campaign
+        (``max`` by ``sort_key``; ``ensure_standard_link`` never moves the
+        link back).
         An existing campaign file WITHOUT a sidecar (R22: interrupted before
-        writing it) goes through ``verify_file_format`` before the sidecar is
-        recreated; mismatched content = file removed + campaign failure.
+        writing it) goes through ``verify_file_format`` and
+        ``verify_sheet_extent`` before the sidecar is recreated; mismatched
+        content = file removed + campaign failure.
 
         Concurrency: the link is set ONCE per sheet, after all its campaigns
         are collected, and ``expand_sheets`` deduplicates godla — one sheet =
@@ -762,6 +768,11 @@ class DownloadManager:
             except DownloadError as e:
                 errors.append((record.url, e))
                 continue
+            try:  # B4: the URL must name the sheet - before the network
+                verify_record_url(record.url, godlo)
+            except DownloadError as e:
+                errors.append((ref.dirname, e))
+                continue
             try:
                 ext = campaign_extension(ref, self._default_ext)  # before the network
             except DownloadError as e:
@@ -774,6 +785,7 @@ class DownloadManager:
                 else:  # R22: process interrupted before the sidecar — recreate
                     try:  # content unverified (interrupted before verification)
                         verify_file_format(path, ext)
+                        verify_sheet_extent(path, godlo, ext)
                     except DownloadError as e:
                         path.unlink(missing_ok=True)
                         errors.append((ref.dirname, e))
@@ -796,6 +808,7 @@ class DownloadManager:
             try:
                 self._campaign_provider.download_record(record, path)
                 verify_file_format(path, ext)
+                verify_sheet_extent(path, godlo, ext)
                 self._write_campaign_sidecar(path, godlo, record, ref)
             except DownloadError as e:
                 path.unlink(missing_ok=True)
