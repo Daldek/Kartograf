@@ -11,9 +11,8 @@ Narzędzie do automatycznego pobierania danych przestrzennych z zasobów GUGiK (
 - **SoilGrids** - Globalne dane glebowe (tekstura, węgiel organiczny, pH)
 - **HSG** - Hydrologic Soil Groups dla metody SCS-CN (grupy hydrologiczne gleb)
 
-> **0.7.0-dev:** pobieranie PL/CZ po fali naprawczej zweryfikowano offline
-> (2216 testów; pomiar 2026-10-06) i na żywych usługach GUGiK/CUZK
-> (2026-09-30: 11 scenariuszy PASS). Pozostałe ograniczenia: [Znane problemy (0.7.0-dev)](#znane-problemy-070-dev).
+> **0.7.0-dev:** pobieranie PL/CZ jest weryfikowane testami offline i na żywych
+> usługach GUGiK/CUZK (raporty przebiegów: `docs/research/`). Pozostałe ograniczenia: [Znane problemy (0.7.0-dev)](#znane-problemy-070-dev).
 
 ## Szybki Start
 
@@ -252,8 +251,7 @@ błąd nadal kończy pobranie arkusza porażką. Wycinek
 
 ## Znane problemy (0.7.0-dev)
 
-Pozostają ograniczenia produktu (testy na żywych usługach po fali naprawczej
-2026-09-30: 11 PASS / 0 FAIL, `docs/research/2026-09-29-fala-naprawcza/live-2026-09-30.md`):
+Pozostają ograniczenia produktu:
 
 - Kartograf nie scala jeszcze rastrów PL i CZ w jedną powierzchnię przygraniczną
   (R6); wyniki są osobne, powiązane przez `extra.parent_request`.
@@ -438,14 +436,14 @@ Kartograf/
 │   ├── cache/           # Cache metadanych (SQLite)
 │   ├── core/            # Parsery godeł (PL-1992/PL-2000/TM33), BBox, geometria (SHP/GPKG)
 │   ├── sources/         # Deskryptory źródeł danych + sidecar metadanych
-│   ├── transform/       # Transformacje CRS (crs.py) i rastrów (raster.py - warp_to_grid)
+│   ├── transform/       # Transformacje CRS (crs.py, bbox.py) i rastrów (raster.py - warp_to_grid)
 │   ├── transport/       # Wspólny transport HTTP + mozaikowanie rastrów
 │   ├── providers/       # Providery danych (pl/: GUGiK, BDOT10k; cuzk/: DMR CZ; CORINE, SoilGrids)
-│   ├── download/        # Download management (NMT/NMPT/Orto/LAZ) + wycinek PL (cutout.py)
+│   ├── download/        # Download management (NMT/NMPT/Orto/LAZ) + kampanie GUGiK + wycinek PL (cutout.py)
 │   ├── landcover/       # Land Cover management
 │   ├── hydrology/       # Hydrologic Soil Groups (HSG)
 │   └── cli/             # CLI interface (moduły per komenda)
-├── tests/               # Testy (2216 offline + 16 live)
+├── tests/               # Testy offline + `live` (marker; liczba: `pytest --collect-only`)
 ├── docs/                # Dokumentacja (ARCHITECTURE.md - kanoniczny opis architektury i układu data/)
 └── README.md
 ```
@@ -475,7 +473,7 @@ pytest tests/ -m "not live"
 pytest tests/ -m "not live" --cov=kartograf --cov-report=html
 
 # Testy sieciowe (live)
-pytest tests/ -m live   # 16 testów sieciowych - tylko świadomie
+pytest tests/ -m live   # testy sieciowe - tylko świadomie
 
 # Formatowanie
 ruff format kartograf/ tests/
@@ -494,4 +492,4 @@ Projekt udostępniony na licencji MIT. Szczegóły w pliku `LICENSE`.
 
 ## Status
 
-**Wersja 0.7.0-dev** - NMT Czechy (CUZK DMR 5G/4G, `--country {pl,cz,auto}`, parser godeł TM33/SM5, sidecary metadanych `.meta.json`), układ `data/` per produkt ([ADR-026](docs/DECISIONS.md)) i `--target-crs` dla Polski w trybie `--bbox`/`--geometry` ([ADR-027](docs/DECISIONS.md)) - także jako API biblioteki `download_pl_cutout`. Wcześniej: v0.6.x (LAZ przez WFS, pobieranie równoległe `--workers`, cache metadanych SQLite, walidacja warstw WMS), v0.5.0 (PL-2000, 15 warstw BDOT10k). Po rundzie review/E2E 2026-10-06: 2216 testów offline i 16 testów `live` (tych ostatnich nie uruchamiano w tej rundzie); [CHANGELOG.md](docs/CHANGELOG.md) opisuje zmiany kontraktów przed wydaniem.
+**Wersja 0.7.0-dev** - NMT Czechy (CUZK DMR 5G/4G, `--country {pl,cz,auto}`, parser godeł TM33/SM5, sidecary metadanych `.meta.json`), układ `data/` per produkt ([ADR-026](docs/DECISIONS.md)) i `--target-crs` dla Polski w trybie `--bbox`/`--geometry` ([ADR-027](docs/DECISIONS.md)) - także jako API biblioteki `download_pl_cutout`, oraz kampanie GUGiK (`--campaigns {newest,all}`, `--min-year`; każda kampania arkusza w `kampanie/`, ścieżka standardowa jako dowiązanie twarde do najnowszej, [ADR-030](docs/DECISIONS.md)). Wcześniej: v0.6.x (LAZ przez WFS, pobieranie równoległe `--workers`, cache metadanych SQLite, walidacja warstw WMS), v0.5.0 (PL-2000, 15 warstw BDOT10k). [CHANGELOG.md](docs/CHANGELOG.md) opisuje zmiany kontraktów przed wydaniem.
