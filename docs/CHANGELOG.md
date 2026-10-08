@@ -44,6 +44,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   nieudane pobranie (np. HTTP 404) nie zostawia pustego katalogu. Kod
   biblioteczny, ktory zakladal istnienie `output_dir` zaraz po
   `LandCoverManager(...)`, musi utworzyc go sam.
+- **HSG: katalog wyjsciowy dopiero przy zapisie:** `kartograf soilgrids hsg`
+  i `HSGCalculator.calculate_hsg_by_bbox`/`_by_godlo` tworza katalog tuz
+  przed zapisem rastra wyniku, wiec brakujacy plik `--geometry` albo blad
+  pobrania SoilGrids nie zostawia pustego katalogu (np. `./data/hsg`).
 
 ### Dokumentacja
 - **`--scale`:** nowy podrozdzial `docs/USAGE.md` 1.6 "Kiedy `--scale` jest
