@@ -24,9 +24,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   lapie tez bledy godel.
 - Liczby w godle PL-1992 sa zapisywane bez zer wiodacych, jak w skorowidzu
   GUGiK (`M-33-036-A` -> `M-33-36-A`) — w sciezce, sidecarze i wyniku,
-  takze w nazwach plikow land cover (`..._godlo_M-33-36-A`). Pliki zapisane
-  wczesniej pod godlem z zerami wiodacymi nie sa rozpoznawane; pobierz je
-  ponownie.
+  takze w nazwach plikow land cover (`..._godlo_M-33-36-A`) i w domyslnej
+  nazwie wyniku `kartograf soilgrids hsg --godlo`
+  (`hsg_M-33-36-A_<glebokosc>.tif`). Pliki zapisane wczesniej pod godlem
+  z zerami wiodacymi nie sa rozpoznawane; pobierz je ponownie.
 - `find_sheets_for_bbox` zwraca tylko godla z zakresu nomenklatury PL-1992:
   obszar wychodzacy poza pasy M/N i slupy 33-35 (np. bbox przez 12E)
   daje godla tylko jego polskiej czesci, obszar calkowicie poza zakresem —

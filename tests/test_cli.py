@@ -2136,6 +2136,33 @@ class TestCmdSoilgrids:
         captured = capsys.readouterr()
         assert "Error" in captured.err
 
+    @patch("kartograf.hydrology.HSGCalculator")
+    def test_soilgrids_hsg_godlo_leading_zeros_canonical(self, mock_calc_cls, tmp_path):
+        """A7: default HSG file name and the calculator use the canonical godlo."""
+        mock_calc = mock_calc_cls.return_value
+        mock_calc.calculate_hsg_by_godlo.return_value = tmp_path / "hsg.tif"
+        out = tmp_path / "out"
+
+        result = main(["soilgrids", "hsg", "--godlo", "M-33-036-A", "-o", str(out)])
+
+        assert result == 0
+        kwargs = mock_calc.calculate_hsg_by_godlo.call_args.kwargs
+        assert kwargs["godlo"] == "M-33-36-A"
+        assert kwargs["output_path"] == out / "hsg_M-33-36-A_0-5cm.tif"
+
+    @patch("kartograf.hydrology.HSGCalculator")
+    def test_soilgrids_hsg_out_of_range_godlo(self, mock_calc_cls, capsys, tmp_path):
+        """A7: an out-of-range godlo -> Error on stderr, code 1, no calculation."""
+        out = tmp_path / "out"
+
+        result = main(["soilgrids", "hsg", "--godlo", "N-34-999-D", "-o", str(out)])
+
+        assert result == 1
+        mock_calc_cls.return_value.calculate_hsg_by_godlo.assert_not_called()
+        captured = capsys.readouterr()
+        assert "Error: " in captured.err
+        assert "poza zakresem" in captured.err
+
     @pytest.mark.parametrize(
         "bbox", ["invalid", "10,10,5,5", "nan,1,2,3", "1,2,-inf,4", "1,2,3"]
     )

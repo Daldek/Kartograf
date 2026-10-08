@@ -741,6 +741,16 @@ class TestHSGSidecar:
         assert request["bbox_crs"] == "EPSG:2180"
         assert len(request["bbox"]) == 4
 
+    def test_sidecar_by_godlo_leading_zeros_canonical(self, tmp_path):
+        """A7: the HSG sidecar records the canonical godlo, as NMT/land cover do."""
+        import json
+
+        out = tmp_path / "hsg_sheet.tif"
+        self._calc().calculate_hsg_by_godlo("M-33-036-A", out)
+
+        meta = json.loads((tmp_path / "hsg_sheet.tif.meta.json").read_text())
+        assert meta["request"]["sheet"] == "M-33-36-A"
+
     def test_sidecar_by_bbox_has_no_sheet(self, tmp_path):
         import json
 
