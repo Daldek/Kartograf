@@ -353,8 +353,8 @@ Bezposrednie wywolanie providera sidecara nie pisze; DMR CZ z biblioteki
 | `vertical_crs` | kod realizacji ukladu pionowego: `EPSG:9651` (EVRF2007-PL), `EPSG:9650` (KRON86), `EPSG:8357` (Bpv), `EPSG:5621` (EVRF2007); `null` gdy produkt nie ma pionu (orto) |
 | `vertical_source` | `native` / `ellipsoidal` / `server` (z `AccessChannel`) |
 | `resolution` | rozdzielczosc z deskryptora (`1m`/`5m`/`2m`) albo `null` |
-| `nodata` | wartosc pustego piksela: dla `.asc` czytana automatycznie z naglowka (`read_asc_nodata`), w torze CZ podawana przez CLI z tagu GeoTIFF (`_read_tif_nodata`; w trybie bbox z fallbackiem `CUZK_NODATA`), dla wycinka PL stala `-9999.0`, dla wyniku HSG `0`; `null` gdy zadna z tych drog nie ma zastosowania (np. orto) |
-| `request` | zadanie, ktore dalo TEN plik: `sheet` (godlo), `bbox` + `bbox_crs` w ukladzie wyniku albo `teryt`; dla plikow PL (kampanie, ADR-030) `campaigns` (`newest`/`all`, zawsze) i `min_year` (tylko gdy podany; `request` opisuje POBRANIE, ktore dalo plik, a nie jego ostatnie uzycie — reuzycia ida do `extra.parent_requests`); LAZ: `year`/`min_density`/`min_year` gdy podane oraz `campaigns` tylko dla `all`; oryginalne zadanie niesie `extra.parent_request` (3.4), rekord skorowidza PL niesie `extra.source` |
+| `nodata` | wartosc pustego piksela: dla `.asc` czytana automatycznie z naglowka (`read_asc_nodata`), w torze CZ podawana przez CLI z tagu GeoTIFF (`_read_tif_nodata`; w trybie bbox z fallbackiem `CUZK_NODATA`), dla wycinka PL stala `-9999.0`, dla wyniku HSG `0`, dla GeoTIFF CORINE/SoilGrids z `LandCoverManager` z tagu pliku (sekcja 4.8); `null` gdy zadna z tych drog nie ma zastosowania (np. orto) |
+| `request` | zadanie, ktore dalo TEN plik: `sheet` (godlo), `bbox` + `bbox_crs` w ukladzie wyniku albo `teryt`; dla plikow PL (kampanie, ADR-030) `campaigns` (`newest`/`all`, zawsze) i `min_year` (tylko gdy podany; `request` opisuje POBRANIE, ktore dalo plik, a nie jego ostatnie uzycie — reuzycia ida do `extra.parent_requests`); LAZ: `year`/`min_density`/`min_year` gdy podane oraz `campaigns` tylko dla `all`; land cover: parametry tresci z wartosciami domyslnymi — SoilGrids `property`/`depth`/`stat`, CORINE `year`, BDOT10k `format` (sekcja 4.8); oryginalne zadanie niesie `extra.parent_request` (3.4), rekord skorowidza PL niesie `extra.source` |
 | `license` | `{id, attribution, url}` z deskryptora |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, sekundy) i wersja pakietu z `kartograf/_version.py::build_version()`: wydanie = samo `__version__`; wersja rozwojowa (`dev`) = `<__version__>+<krotki SHA>` commita, z ktorego zaimportowano pakiet, z sufiksem `.dirty`, gdy sledzone pliki katalogu `kartograf/` maja niezacommitowane zmiany (docs/testy sie nie licza); gdy git jest niedostepny albo pakiet nie pochodzi z repozytorium, w ktorym lezy (`os.path.samefile`), samo `__version__`. Ta sama wartosc w `kartograf --version`; `User-Agent` HTTP niesie samo `__version__` |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
@@ -1198,9 +1198,29 @@ Zmiany od 0.6.x (szczegoly: `docs/CHANGELOG.md`): sidecary wynikow,
 rozszerzenie pliku z faktycznego formatu (N14), SHP BDOT10k jako `.zip`
 (N1), sidecar wyniku HSG, scalanie GPKG BDOT10k w lokalnym katalogu
 tymczasowym. `LandCoverManager` ma **wlasny domyslny katalog**
-(`./data/landcover`, CLI `--output`) i wlasna konwencje nazw plikow:
-baza nazwy `<provider>_teryt_<teryt>`, `<provider>_bbox_<minx>_<miny>_<maxx>_<maxy>`
-albo `<provider>_godlo_<godlo>` (`_generate_output_path` nadaje `.gpkg`).
+(`./data/landcover`, CLI `--output`) i wlasna konwencje nazw plikow
+(`_generate_output_path`): `<zrodlo>[_<parametr>...]_<tryb>_<id>.<ext>`,
+gdzie `<zrodlo>` to klucz `--source` (`bdot10k`/`corine`/`soilgrids`;
+provider spoza rejestru: nazwa malymi literami, spacje -> `_`), `<tryb>_<id>`
+to `teryt_<teryt>`, `bbox_<minx>_<miny>_<maxx>_<maxy>` (EPSG:2180, liczby
+calkowite; `--geometry` = obwiednia) albo `godlo_<godlo>`, a parametry to
+KAZDA opcja zmieniajaca tresc wyniku, z wartoscia domyslna wlacznie
+(`LandCoverManager._content_params`, U3):
+
+| Zrodlo | Parametry w nazwie | Przyklad |
+|---|---|---|
+| SoilGrids | `<property>_<depth>_<stat>` | `soilgrids_clay_0-5cm_mean_bbox_770000_509000_772000_511000.tif` |
+| CORINE | `<year>` | `corine_2018_godlo_N-34-130-D.tif` (`.png` z podgladu WMS) |
+| BDOT10k | brak — `format` niesie rozszerzenie | `bdot10k_teryt_1465.gpkg`, `bdot10k_teryt_1465.zip` (SHP) |
+
+Rozne parametry = rozne pliki; te same parametry = ta sama sciezka (ponowne
+pobranie nadpisuje plik, land cover nie pomija istniejacych wynikow). Te
+same wartosci trafiaja do sidecara `request` (`property`/`depth`/`stat`,
+`year`, `format`; klucze ADR-031) obok `teryt`/`bbox`+`bbox_crs`/`sheet`,
+a `nodata` wyniku GeoTIFF jest czytane z pliku (`null`, gdy plik go nie
+deklaruje — np. GeoTIFF z WCS SoilGrids bywa bez tagu NoData; Kartograf nie
+dopisuje wartosci z dokumentacji zrodla). Nazwy sprzed 0.7.0
+(`soilgrids_bbox_<coords>.tif`, `corine_land_cover_...`) nie sa rozpoznawane.
 Rozszerzenie FAKTYCZNEGO pliku nadaje provider: BDOT10k `.gpkg`, CORINE
 `.tif` (CLMS) albo `.png` (podglad WMS), SoilGrids `.tif`; zwracana
 sciezka i sidecar dotycza tego pliku (review 2026-10-06 N14). BDOT10k

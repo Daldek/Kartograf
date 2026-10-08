@@ -178,7 +178,12 @@ kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:55
 kartograf landcover download --source bdot10k --teryt 1465
 kartograf landcover download --source bdot10k --teryt 1465 --format SHP   # archiwum .zip
 kartograf landcover download --source corine --year 2018 --godlo N-34-130-D
+#   -> corine_2018_godlo_N-34-130-D.tif (bez credentials CLMS: .png z WMS)
 kartograf landcover download --source soilgrids --godlo N-34-130-D --property clay --depth 15-30cm
+#   -> soilgrids_clay_15-30cm_mean_godlo_N-34-130-D.tif
+# Nazwa niesie każdy parametr treści (także domyślny), więc --property sand
+# dla tego samego obszaru daje osobny plik; parametry są też w sidecarze
+# (request.property/depth/stat, request.year, request.format).
 
 # Hydrologic Soil Groups dla metody SCS-CN
 kartograf soilgrids hsg --godlo N-34-130-D --stats
