@@ -42,7 +42,7 @@ def _layer_of(url: str) -> str:
 
 
 def routed_session(path_for_layer) -> Mock:
-    """GetFeatureInfo -> surowe body warstwy; plik OpenData -> ``b"DATA"``."""
+    """GetFeatureInfo -> the raw layer body; an OpenData file -> ``b"DATA"``."""
     session = Mock(spec=requests.Session)
 
     def get(url, **kwargs):
@@ -166,8 +166,9 @@ def test_all_min_year_2023_queries_2023iStarsze_and_filters_by_aktualnosc(tmp_pa
         G, campaigns="all", min_year=2023
     )
     assert [r.aktualnosc[:4] for r in recs] == ["2025", "2025", "2023"]
-    # Granica z roku aktualnosc, nie dt_pzgik: 84183 (2025-10-21, dt_pzgik
-    # 2026-07-10) nie przechodzi min_year=2026 -> 0 kampanii, nie 1.
+    # The cut-off from the acquisition-date year, not dt_pzgik: 84183 (2025-10-21,
+    # dt_pzgik
+    # 2026-07-10) does not pass min_year=2026 -> 0 campaigns, not 1.
     cache = MetadataCache(tmp_path / "c.db")
     GugikProvider(session=c14_session(G), cache=cache).resolve_campaigns(
         G, campaigns="all"
@@ -304,7 +305,8 @@ def test_all_failed_layer_is_download_error_and_not_cached(tmp_path):
 
 
 def test_all_cached_partial_no_coverage_message_uses_current_bound(tmp_path):
-    """D-2: wpis no_coverage ze scanned_from=2026 wazny dla 2027, tekst z 2027."""
+    """D-2: a no_coverage entry with scanned_from=2026 valid for 2027, text from
+    2027."""
     cache = MetadataCache(tmp_path / "c.db")
     s = c14_session(G)
     with pytest.raises(NoCoverageError, match="od roku 2026"):
@@ -382,7 +384,7 @@ def test_supports_campaigns_flag():
 
 
 def test_all_cache_partial_scan_does_not_serve_lower_bound(tmp_path):
-    """Wpis ze scanned_from=2024 nie obsluguje min_year=2023 — ponowny skan."""
+    """An entry with scanned_from=2024 does not serve min_year=2023 - a rescan."""
     cache = MetadataCache(tmp_path / "c.db")
     GugikProvider(session=c14_session(G), cache=cache).resolve_campaigns(
         G, campaigns="all", min_year=2024
@@ -395,7 +397,7 @@ def test_all_cache_partial_scan_does_not_serve_lower_bound(tmp_path):
     )
     assert "SkorowidzeNMT2023iStarsze" in queried_layers(s2)
     assert ids(recs) == ["84183", "83233", "78047"]
-    # przy min_year=2023 zadna warstwa nie jest pominieta -> pelny skan
+    # with min_year=2023 no layer is skipped -> a full scan
     assert cache.get_campaigns("nmt", "1m", "EVRF2007", G)["scanned_from"] is None
 
 

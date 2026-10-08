@@ -1,15 +1,16 @@
 """
-Testy jednostkowe dla modułu gugik_orto provider.
+Unit tests for the gugik_orto provider module.
 
-GugikOrtoProvider konsumuje wspolny modul skorowidza (K5, D4, D5):
-- download(godlo) → skorowidz (warstwy od najnowszej) → OpenData (TIF)
-- wybor pliku: godlo jako caly token, uklad z formatu godla, wariant koloru
-  (domyslnie RGB) jako filtr twardy, potem najnowsza `aktualnosc`
+GugikOrtoProvider consumes the shared index (skorowidz) module (K5, D4, D5):
+- download(godlo) → index (layers from the newest) → OpenData (TIF)
+- file selection: the sheet code as a whole token, CRS from the sheet code
+  format, colour variant (RGB by default) as a hard filter, then the newest
+  `aktualnosc` (acquisition date)
 - download_bbox(bbox) → WCS (GeoTIFF/PNG/JPEG)
 
-Probki w ``tests/fixtures/gugik_skorowidz/``: ``orto_2024.html`` (surowa
-odpowiedz GUGiK: CIR przed RGB) i ``orto_starsze.html`` (warstwa zbiorcza,
-rekordy rosnaco po dacie, godla PL-1992 i PL-2000, arkusz nadrzedny).
+Samples in ``tests/fixtures/gugik_skorowidz/``: ``orto_2024.html`` (a raw
+GUGiK response: CIR before RGB) and ``orto_starsze.html`` (a collective layer,
+records ascending by date, PL-1992 and PL-2000 sheet codes, a parent sheet).
 """
 
 import threading
@@ -110,34 +111,34 @@ class TestGugikOrtoProviderInit:
     """Testy inicjalizacji GugikOrtoProvider."""
 
     def test_init_no_args(self):
-        """Test tworzenia providera bez argumentów (domyślne wartości)."""
+        """Test creating a provider without arguments (default values)."""
         provider = GugikOrtoProvider()
         assert provider._sessions.injected is None
         assert provider.color == "RGB"
 
     def test_init_with_session(self):
-        """Test tworzenia providera z własną sesją HTTP."""
+        """Test creating a provider with a custom HTTP session."""
         session = Mock(spec=requests.Session)
         provider = GugikOrtoProvider(session=session)
         assert provider._sessions.injected is session
 
     def test_color_kwarg(self):
-        """Wariant koloru to kwarg biblioteki (bez flagi CLI)."""
+        """The colour variant is a library kwarg (no CLI flag)."""
         assert GugikOrtoProvider(color="CIR").color == "CIR"
 
     def test_no_vertical_crs(self):
-        """Test że provider nie ma atrybutu vertical_crs (w odróżnieniu od NMT/NMPT)."""
+        """Test that the provider has no vertical_crs attribute (unlike NMT/NMPT)."""
         provider = GugikOrtoProvider()
         assert not hasattr(provider, "vertical_crs")
 
     def test_no_resolution(self):
-        """Test że provider nie ma atrybutu resolution (w odróżnieniu od NMT)."""
+        """Test that the provider has no resolution attribute (unlike NMT)."""
         provider = GugikOrtoProvider()
         assert not hasattr(provider, "resolution")
 
 
 class TestGugikOrtoProviderProperties:
-    """Testy właściwości GugikOrtoProvider."""
+    """Tests of GugikOrtoProvider properties."""
 
     def test_name(self):
         """Test nazwy providera."""
@@ -150,29 +151,29 @@ class TestGugikOrtoProviderProperties:
         assert provider.base_url == "https://mapy.geoportal.gov.pl"
 
     def test_default_extension(self):
-        """Test domyślnego rozszerzenia pliku."""
+        """Test the default file extension."""
         provider = GugikOrtoProvider()
         assert provider.default_extension == ".tif"
 
     def test_repr(self):
-        """Test metody __repr__ — zawiera nazwę klasy."""
+        """Test the __repr__ method - contains the class name."""
         provider = GugikOrtoProvider()
         repr_str = repr(provider)
         assert "GugikOrtoProvider" in repr_str
 
     def test_str(self):
-        """Test metody __str__ — zawiera nazwę providera."""
+        """Test the __str__ method - contains the provider name."""
         provider = GugikOrtoProvider()
         str_repr = str(provider)
         assert "GUGiK Ortofotomapa" in str_repr
 
 
 class TestGugikOrtoProviderDownload:
-    """Testy pobierania przez godło (skorowidz → OpenData)."""
+    """Tests of download by sheet code (index → OpenData)."""
 
     @pytest.fixture
     def session(self):
-        """Sesja: warstwa 2026 ma arkusz (CIR przed RGB), potem plik."""
+        """Session: the 2026 layer has the sheet (CIR before RGB), then the file."""
         session = Mock(spec=requests.Session)
         session.get = Mock(
             side_effect=[gfi_response(sample("orto_2024.html")), file_response()]
@@ -180,7 +181,7 @@ class TestGugikOrtoProviderDownload:
         return session
 
     def test_download_success(self, tmp_path, session):
-        """download(godlo) pyta skorowidz, pobiera URL RGB i zapisuje plik."""
+        """download(godlo) queries the index, fetches the RGB URL and saves the file."""
         provider = GugikOrtoProvider(session=session)
         output_path = tmp_path / "sheet.tif"
 
@@ -193,7 +194,7 @@ class TestGugikOrtoProviderDownload:
         assert session.get.call_args_list[1][0][0] == RGB_2024
 
     def test_download_creates_directory(self, tmp_path, session):
-        """Katalog docelowy powstaje dopiero przy zapisie pliku."""
+        """The target directory is created only when the file is written."""
         provider = GugikOrtoProvider(session=session)
         output_path = tmp_path / "subdir" / "nested" / "sheet.tif"
 
@@ -203,7 +204,7 @@ class TestGugikOrtoProviderDownload:
         assert output_path.parent.exists()
 
     def test_download_saves_content(self, tmp_path, session):
-        """Test że download zapisuje zawartość pliku na dysk."""
+        """Test that download writes the file content to disk."""
         provider = GugikOrtoProvider(session=session)
         output_path = tmp_path / "sheet.tif"
 
@@ -212,7 +213,7 @@ class TestGugikOrtoProviderDownload:
         assert b"TIFF header data" in output_path.read_bytes()
 
     def test_no_coverage_leaves_no_directory(self, tmp_path):
-        """N1: arkusz bez danych nie zostawia pustego katalogu."""
+        """N1: a sheet without data leaves no empty directory."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=gfi_response(orto_body([])))
         output = tmp_path / "not-created" / "sheet.tif"
@@ -224,7 +225,8 @@ class TestGugikOrtoProviderDownload:
 
 
 class TestGugikOrtoProviderSelection:
-    """K5: wariant RGB + najnowsza kampania, godlo jako caly token, uklad z godla."""
+    """K5: RGB variant + newest campaign, sheet code as a whole token, CRS from the
+    code."""
 
     @staticmethod
     def provider_with(*bodies: str) -> tuple[GugikOrtoProvider, Mock]:
@@ -233,14 +235,16 @@ class TestGugikOrtoProviderSelection:
         return GugikOrtoProvider(session=session), session
 
     def test_picks_rgb_not_first_record(self):
-        """Surowa odpowiedz GUGiK (CIR przed RGB) -> URL RGB, nie pierwszy w HTML."""
+        """A raw GUGiK response (CIR before RGB) -> the RGB URL, not the first in
+        HTML."""
         provider, session = self.provider_with(sample("orto_2024.html"))
 
         assert provider._get_opendata_url(GODLO) == RGB_2024
         assert session.get.call_count == 1
 
     def test_source_info_carries_color_and_campaign(self):
-        """extra.source (D5): url, warstwa, aktualnosc, piksel i kolor pliku."""
+        """extra.source (D5): url, layer, acquisition date, pixel and colour of the
+        file."""
         provider, _ = self.provider_with(sample("orto_2024.html"))
         provider._get_opendata_url(GODLO)
 
@@ -254,7 +258,7 @@ class TestGugikOrtoProviderSelection:
         assert source["index_url"] == ENDPOINT
 
     def test_starsze_picks_newest_rgb_not_oldest(self):
-        """Warstwa zbiorcza rosnaco po dacie -> najnowsze RGB, nie 1997/2003 B-W."""
+        """A collective layer ascending by date -> the newest RGB, not 1997/2003 B-W."""
         empty = orto_body([])
         provider, session = self.provider_with(
             empty, empty, empty, sample("orto_starsze.html")
@@ -267,7 +271,8 @@ class TestGugikOrtoProviderSelection:
         assert provider.source_info(GODLO)["acquisition_date"] == "2022-06-03"
 
     def test_pl2000_godlo_gets_pl2000_record(self):
-        """Godlo PL-2000 dostaje rekord PL-2000, nie CIR PL-1992 z pierwszej warstwy."""
+        """A PL-2000 sheet code gets a PL-2000 record, not the PL-1992 CIR from the
+        first layer."""
         provider, _ = self.provider_with(
             sample("orto_2024.html"),
             orto_body([]),
@@ -281,7 +286,8 @@ class TestGugikOrtoProviderSelection:
         assert provider.source_info("7.124.07.24")["declared_crs"] == "PL-2000:S7"
 
     def test_pl1992_godlo_never_takes_pl2000_or_parent_sheet(self):
-        """Arkusz nadrzedny (M-34-76-A-a-1) i rekord PL-2000 nie zastepuja arkusza."""
+        """A parent sheet (M-34-76-A-a-1) and a PL-2000 record do not stand in for the
+        sheet."""
         body = orto_body(
             [
                 orto_record(
@@ -307,7 +313,7 @@ class TestGugikOrtoProviderSelection:
         assert "PL-2000: 7.124.07.24" in message
 
     def test_only_cir_and_bw_raises_no_coverage_with_variants(self):
-        """Tylko CIR/B-W = NoCoverageError z lista wariantow (kolor + data)."""
+        """Only CIR/B-W = NoCoverageError with a list of variants (colour + date)."""
         body = orto_body(
             [
                 orto_record(kolor="B/W", aktualnosc="2003-01-01"),
@@ -324,7 +330,7 @@ class TestGugikOrtoProviderSelection:
         assert exc.value.godlo == GODLO
 
     def test_color_kwarg_selects_other_variant(self):
-        """color="CIR" pobiera CIR — kolor to filtr twardy, nie preferencja."""
+        """color="CIR" downloads CIR - colour is a hard filter, not a preference."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
 
@@ -345,7 +351,7 @@ class TestGugikOrtoProviderSelection:
         assert queried_layers(session) == LAYERS[:2]
 
     def test_continues_past_layer_with_only_other_variant(self):
-        """Warstwa z samym CIR nie konczy szukania RGB w starszych warstwach."""
+        """A layer with CIR only does not end the RGB search in older layers."""
         rgb_2025 = orto_record(aktualnosc="2025-07-02")
         provider, session = self.provider_with(
             orto_body([orto_record(kolor="CIR", aktualnosc="2026-05-01")]),
@@ -365,7 +371,7 @@ class TestGugikOrtoProviderSelection:
         assert queried_layers(session) == LAYERS
 
     def test_newer_layer_failure_is_error_not_older_campaign(self):
-        """K3 dla orto: zerwana warstwa = DownloadError, nie URL ze starszej."""
+        """K3 for orto: a broken layer = DownloadError, not a URL from an older one."""
         session = Mock(spec=requests.Session)
         session.get = Mock(
             side_effect=[requests.ConnectionError("reset")] * 3
@@ -382,7 +388,7 @@ class TestGugikOrtoProviderSelection:
         assert sleep.call_count == 2
 
     def test_ogc_exception_is_error_not_no_coverage(self):
-        """Raport wyjatku OGC (np. zla warstwa) nie jest brakiem pokrycia."""
+        """An OGC exception report (e.g. a wrong layer) is not a lack of coverage."""
         provider, session = self.provider_with(sample("ogc_exception.body"))
 
         with pytest.raises(DownloadError) as exc:
@@ -459,7 +465,8 @@ class TestGugikOrtoProviderCache:
         assert provider.source_info(GODLO) == cached["source"]
 
     def test_cache_key_distinguishes_color(self, cache, source):
-        """Wpis RGB nie obsluguje providera CIR — inny plik, inny klucz."""
+        """An RGB entry does not serve a CIR provider - a different file, a different
+        key."""
         cache.set_record("orto", "RGB", "none", GODLO, {"source": source})
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
@@ -498,7 +505,7 @@ class TestGugikOrtoProviderCache:
         assert cache.get_record("orto", "RGB", "none", GODLO) is None
 
     def test_no_cache_backward_compat(self):
-        """cache=None: to samo rozstrzygniecie, bez zapisu."""
+        """cache=None: the same resolution, without writing."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
 
@@ -529,7 +536,8 @@ ORTO_WMS_XML = """\
 
 @pytest.mark.real_wms_layers
 class TestGugikOrtoLayerDiscovery:
-    """GetCapabilities przez sesje watku, filtr LAYER_PATTERN, bez zaszytej listy."""
+    """GetCapabilities through the thread session, LAYER_PATTERN filter, no hardcoded
+    list."""
 
     def test_fetch_orto_layers_sorts_and_excludes_zasiegi(self):
         """Roczne malejaco, Starsze na koncu; Zasiegi i inne produkty pominiete."""
@@ -579,7 +587,7 @@ class TestGugikOrtoLayerDiscovery:
 
 
 class TestGugikOrtoProviderSession:
-    """Sesja wstrzyknieta obsluguje wszystko; bez niej jedna sesja na watek."""
+    """An injected session serves everything; without it, one session per thread."""
 
     def test_uses_provided_session_for_index_and_file(self, tmp_path):
         session = Mock(spec=requests.Session)
@@ -639,7 +647,7 @@ class TestGugikOrtoProviderSession:
 
 
 class TestGugikOrtoProviderDownloadBbox:
-    """Testy pobierania przez bbox (WCS)."""
+    """Tests of download by bbox (WCS)."""
 
     @pytest.fixture
     def mock_wcs_response(self):
@@ -648,13 +656,13 @@ class TestGugikOrtoProviderDownloadBbox:
 
     @pytest.fixture
     def sample_bbox(self):
-        """Przykładowy bbox w EPSG:2180."""
+        """Sample bbox in EPSG:2180."""
         return BBox(
             min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
         )
 
     def test_download_bbox_success(self, tmp_path, mock_wcs_response, sample_bbox):
-        """Test że download_bbox pobiera dane przez WCS."""
+        """Test that download_bbox fetches data through WCS."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=mock_wcs_response)
 
@@ -674,7 +682,7 @@ class TestGugikOrtoProviderDownloadBbox:
     def test_download_bbox_url_contains_coverage_id(
         self, tmp_path, mock_wcs_response, sample_bbox
     ):
-        """Test że URL WCS zawiera COVERAGEID=Orthoimagery_StandardResolution."""
+        """Test that the WCS URL contains COVERAGEID=Orthoimagery_StandardResolution."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=mock_wcs_response)
 
@@ -688,7 +696,7 @@ class TestGugikOrtoProviderDownloadBbox:
         assert output_path.exists()
 
     def test_download_bbox_invalid_crs(self, tmp_path):
-        """Test błędu dla bbox z nieprawidłowym CRS (nie EPSG:2180)."""
+        """Test the error for a bbox with an invalid CRS (not EPSG:2180)."""
         provider = GugikOrtoProvider()
         output_path = tmp_path / "area.tif"
 
@@ -700,7 +708,7 @@ class TestGugikOrtoProviderDownloadBbox:
             provider.download_bbox(wrong_crs_bbox, output_path)
 
     def test_download_bbox_invalid_format(self, tmp_path, sample_bbox):
-        """Test błędu dla nieobsługiwanego formatu WCS."""
+        """Test the error for an unsupported WCS format."""
         provider = GugikOrtoProvider()
         output_path = tmp_path / "area.xyz"
 
@@ -709,7 +717,7 @@ class TestGugikOrtoProviderDownloadBbox:
 
 
 class TestGugikOrtoProviderRetry:
-    """Testy retry i obsługi błędów pobierania pliku."""
+    """Tests of retry and file download error handling."""
 
     @staticmethod
     def failing_response() -> Mock:
@@ -718,7 +726,7 @@ class TestGugikOrtoProviderRetry:
         return response
 
     def test_download_retry_on_failure(self, tmp_path):
-        """Test ponawiania próby po błędzie — 1. nieudana, 2. udana."""
+        """Test retrying after an error - 1st failed, 2nd succeeded."""
         session = Mock(spec=requests.Session)
         session.get = Mock(
             side_effect=[
@@ -737,7 +745,7 @@ class TestGugikOrtoProviderRetry:
         assert session.get.call_count == 3
 
     def test_download_retry_exhausted(self, tmp_path):
-        """Test błędu DownloadError po wyczerpaniu wszystkich prób."""
+        """Test the DownloadError after all attempts are exhausted."""
         session = Mock(spec=requests.Session)
         session.get = Mock(
             side_effect=[gfi_response(sample("orto_2024.html"))]
@@ -772,14 +780,14 @@ class TestGugikOrtoProviderInfo:
     """Testy metod informacyjnych."""
 
     def test_supported_formats(self):
-        """Test listy obsługiwanych formatów WCS."""
+        """Test the list of supported WCS formats."""
         provider = GugikOrtoProvider()
         formats = provider.get_supported_formats()
 
         assert formats == ["GTiff", "PNG", "JPEG"]
 
     def test_validate_valid_godlo(self):
-        """Test walidacji poprawnego godła — zwraca True."""
+        """Test validation of a valid sheet code - returns True."""
         provider = GugikOrtoProvider()
 
         assert provider.validate_godlo("N-34-130-D") is True
@@ -787,7 +795,7 @@ class TestGugikOrtoProviderInfo:
         assert provider.validate_godlo("M-33-A") is True
 
     def test_validate_invalid_godlo(self):
-        """Test walidacji niepoprawnego godła — zwraca False."""
+        """Test validation of an invalid sheet code - returns False."""
         provider = GugikOrtoProvider()
 
         assert provider.validate_godlo("INVALID") is False
@@ -796,7 +804,7 @@ class TestGugikOrtoProviderInfo:
 
 
 class TestOrtoVariantStorage:
-    """E12 (E2E-B C12-f): wariant koloru jest czescia tozsamosci pliku."""
+    """E12 (E2E-B C12-f): the colour variant is part of the file identity."""
 
     @staticmethod
     def manager_for(tmp_path, color: str, content: bytes):
@@ -813,7 +821,8 @@ class TestOrtoVariantStorage:
         return DownloadManager(output_dir=tmp_path, provider=provider), session
 
     def test_cir_next_to_existing_rgb_is_downloaded_to_own_segment(self, tmp_path):
-        """Zadanie CIR przy istniejacym RGB pobiera CIR, nie zwraca po cichu RGB."""
+        """A CIR request with an existing RGB downloads CIR, not silently returns
+        RGB."""
         import json
 
         rgb_manager, _ = self.manager_for(tmp_path, "RGB", b"II*\x00RGB")
@@ -822,7 +831,7 @@ class TestOrtoVariantStorage:
         cir_manager, cir_session = self.manager_for(tmp_path, "CIR", b"II*\x00CIR")
         cir_path = cir_manager.download_sheet(GODLO)
 
-        # RGB bez zmian (bez migracji), CIR we wlasnym segmencie wariantu.
+        # RGB unchanged (no migration), CIR in its own variant segment.
         assert rgb_path.relative_to(tmp_path).parts[:2] == ("orto", "pl_1992")
         assert cir_path.relative_to(tmp_path).parts[:2] == ("orto", "pl_1992_cir")
         assert cir_path != rgb_path
@@ -844,7 +853,7 @@ class TestOrtoVariantStorage:
         ],
     )
     def test_variant_segment(self, tmp_path, color, segment):
-        """Kazdy wariant ma wlasny segment; RGB zostaje w `orto/pl_<uklad>`."""
+        """Each variant has its own segment; RGB stays in `orto/pl_<crs>`."""
         from kartograf.download.manager import DownloadManager
 
         manager = DownloadManager(
@@ -856,8 +865,8 @@ class TestOrtoVariantStorage:
 
 
 class TestForceRefreshesRecordCache:
-    """E14 (E2E-B C15): ``--force`` omija ODCZYT cache rekordow, ale ZAPISUJE
-    swiezo wybrany rekord — kolejny przebieg bez ``--force`` dostaje nowy."""
+    """E14 (E2E-B C15): ``--force`` bypasses READING the record cache but WRITES
+    the freshly chosen record - the next run without ``--force`` gets the new one."""
 
     STALE = "https://opendata.geoportal.gov.pl/ortofotomapa/70000/70000_1_M-34-76-A-a-1-1.tif"
 

@@ -173,7 +173,7 @@ class TestSoilGridsCRSTransform:
         assert min_lat < max_lat
 
     def test_download_by_bbox_sends_envelope_covering_all_corners(self, tmp_path):
-        """WCS dostaje obwiednie WGS84 calego prostokata, nie tylko SW i NE."""
+        """WCS gets the WGS84 envelope of the whole rectangle, not just SW and NE."""
         from pyproj import Transformer
 
         from kartograf.core.sheet_parser import SheetParser

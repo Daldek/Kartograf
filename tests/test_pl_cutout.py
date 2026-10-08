@@ -35,7 +35,7 @@ def _cwd_outside_repo(tmp_path, monkeypatch):
 
 
 def _write_sheet_asc(path, west, south, size=100, pixel=1.0, apex=None, fill=100.0):
-    """Syntetyczny 'arkusz' AAIGrid: stozek wokol apex albo plaski ``fill``."""
+    """Synthetic AAIGrid 'sheet': a cone around the apex or a flat ``fill``."""
     cols, rows = np.meshgrid(np.arange(size), np.arange(size))
     xs = west + (cols + 0.5) * pixel
     ys = (south + size * pixel) - (rows + 0.5) * pixel
@@ -76,9 +76,9 @@ def _write_grid_sheet(
     nodata_header="-9999.0",
     fmt="{:.4f}",
 ):
-    """Arkusz ASC na siatce jak u GUGiK: narozniki pikseli pol piksela od liczb
-    calkowitych (fakt 1 planu 2026-09-28). value(xs, ys) -> wartosci (srodki
-    pikseli)."""
+    """ASC sheet on a GUGiK-like grid: pixel corners half a pixel from whole
+    numbers (fact 1 of the 2026-09-28 plan). value(xs, ys) -> values (pixel
+    centres)."""
     xs = x0 + (np.arange(cols) + col0 + 0.5) * pixel
     ys = y_top - (np.arange(rows) + 0.5) * pixel
     gx, gy = np.meshgrid(xs, ys)
@@ -100,7 +100,7 @@ def _ids(gx, gy):
     return 1000.0 * np.floor(382150.5 - gy) + np.floor(gx - 529950.5)
 
 
-# P-01: prawdziwa tresc .prj, nie WKT1_GDAL z pyproj
+# P-01: real .prj content, not WKT1_GDAL from pyproj
 _HYDROGRAF_2180_WKT = (  # tresc .prj z cache Hydrografu (gdalsrsinfo -o wkt_simple)
     'PROJCS["ETRF2000-PL / CS92",GEOGCS["ETRF2000-PL",DATUM["ETRF2000_Poland",'
     'SPHEROID["GRS 1980",6378137,298.257222101]],PRIMEM["Greenwich",0],'
@@ -112,10 +112,10 @@ _HYDROGRAF_2180_WKT = (  # tresc .prj z cache Hydrografu (gdalsrsinfo -o wkt_sim
 
 
 class TestBuildPlCutout:
-    """Spec 8a-c: regresja tresci, mozaika z nodata, crop bez warpa."""
+    """Spec 8a-c: content regression, mosaic with nodata, crop without warp."""
 
     def test_target_5514_content_lt_1px(self, tmp_path):
-        """Mozaika 2 arkuszy + warp: wierzcholek tam, gdzie mowi pyproj."""
+        """Mosaic of 2 sheets + warp: the apex where pyproj says it should be."""
         from kartograf.providers.cuzk.dmr import bbox_to_crs
 
         west = _write_sheet_asc(tmp_path / "a.asc", 530000, 382000, apex=_APEX)
@@ -138,11 +138,11 @@ class TestBuildPlCutout:
         assert list(target.parent.glob("*.mosaic.tif")) == []  # sprzatanie tmp
 
     def test_target_5514_full_coverage_from_source_bbox(self, tmp_path):
-        """R-01: arkusze z ``bbox_source_2180`` pokrywaja CALA siatke wyniku.
+        """R-01: sheets with ``bbox_source_2180`` cover the WHOLE result grid.
 
-        Obraz prostokata 2180 w Krovaku jest czworokatem obroconym, wiec
-        obwiednia celu wystaje poza zadanie — bez zapasu po stronie zrodla
-        rogi wyniku byly by nodata.
+        The image of a 2180 rectangle in Krovak is a rotated quadrilateral, so
+        the target envelope sticks out past the request - without a margin on
+        the source side the result corners would be nodata.
         """
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         cut = prepare_pl_cutout(
@@ -171,7 +171,7 @@ class TestBuildPlCutout:
         assert not (data == _NODATA).any()
 
     def test_nodata_seam_between_sheets(self, tmp_path):
-        """Mozaika arkuszy z przerwa: pas nodata w wyniku, nigdy zero."""
+        """Mosaic of sheets with a gap: a nodata strip in the result, never zero."""
         a = _write_sheet_asc(tmp_path / "a.asc", 530000, 382000)
         b = _write_sheet_asc(tmp_path / "b.asc", 530120, 382000)  # 20 m przerwy
         bbox = BBox(530010, 382010, 530210, 382090, "EPSG:2180")
@@ -199,13 +199,13 @@ class TestBuildPlCutout:
             assert ds.bounds == (530010.0, 382010.0, 530090.0, 382090.0)
 
     def test_failed_build_keeps_previous_result(self, tmp_path):
-        """Przerwana budowa NIE niszczy poprzedniego wyniku ani nie zostawia tmp.
+        """An aborted build does NOT destroy the previous result or leave tmp.
 
-        Obie sciezki zapisu sa atomowe (``os.replace`` przy samym cropie,
-        wewnetrzny ``os.replace`` w ``warp_to_grid``), wiec pod finalna sciezka
-        nie da sie zostawic polzapisanego pliku — a skoro tak, to kasowanie
-        starego wyniku bylo czysta utrata danych (kod 0 calego zadania na
-        pograniczu pod ``--country auto``).
+        Both write paths are atomic (``os.replace`` for a plain crop, the
+        internal ``os.replace`` in ``warp_to_grid``), so a half-written file
+        cannot be left at the final path - and that being the case, deleting
+        the old result was pure data loss (exit code 0 for the whole task on
+        the border under ``--country auto``).
         """
         from kartograf.providers.cuzk.dmr import bbox_to_crs
 
@@ -239,7 +239,7 @@ class TestPreparePlCutout:
         )
         assert cut.pinned is None
         assert cut.bbox_target is cut.bbox_2180
-        # bez warpa siatka wyniku rowna sie zadaniu — zapas zbedny (R-01)
+        # without a warp the result grid equals the request - margin unneeded (R-01)
         assert cut.bbox_source_2180 is cut.bbox_2180
         assert cut.target_path == (
             tmp_path
@@ -263,7 +263,7 @@ class TestPreparePlCutout:
         assert source.min_y < cut.bbox_2180.min_y
         assert source.max_x > cut.bbox_2180.max_x
         assert source.max_y > cut.bbox_2180.max_y
-        # nazwa niesie wspolrzedne w ukladzie WYNIKU (Krovak: ujemne)
+        # the name carries coordinates in the RESULT CRS (Krovak: negative)
         assert cut.target_path.name.startswith("-")
         assert cut.target_path.parent == (
             tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox"
@@ -291,10 +291,12 @@ class TestPreparePlCutout:
         assert source.max_y == pytest.approx(back.max_y + margin)
 
     def test_probe_point_is_center_of_request(self, tmp_path):
-        """Operacje wybiera polityka Z PROBE w srodku zadania, nie sama polityka.
+        """The operations are chosen by the policy WITH A PROBE at the request
+        centre, not by the policy alone.
 
-        Bez probe przeszlaby operacja, ktorej siatka nie pokrywa obszaru
-        (inf/NaN dla zadania) — regula 3 polityki, lustro toru CZ.
+        Without the probe an operation whose grid does not cover the area
+        (inf/NaN for the request) would pass - policy rule 3, a mirror of the
+        CZ path.
         """
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         real = _pinned_2180_to("EPSG:5514")
@@ -320,11 +322,11 @@ class TestPreparePlCutout:
 
     @pytest.mark.parametrize("label", ["epsg:5514", " EPSG:5514 "])
     def test_czech_crs_label_leaves_krovak_by_pinned_operation(self, tmp_path, label):
-        """m-2: etykieta ukladu czeskiego niezalezna od wielkosci liter i spacji.
+        """m-2: the Czech CRS label is independent of letter case and spaces.
 
-        Porownanie bylo doslowne: wywolanie biblioteczne z ``"epsg:5514"``
-        szlo po cichu domyslnym transformerem pyproj zamiast przypieta
-        operacja (obejscie ADR-024 w publicznym API).
+        The comparison used to be literal: a library call with ``"epsg:5514"``
+        silently went through the default pyproj transformer instead of the
+        pinned operation (a bypass of ADR-024 in the public API).
         """
         from kartograf.core.bbox import transform_bbox
 
@@ -335,8 +337,8 @@ class TestPreparePlCutout:
             output_dir=str(tmp_path),
             vertical_crs="EVRF2007",
         ).bbox_2180
-        # warunek sensownosci: sciezka niepinowana daje tu INNY bbox (zmierzone
-        # 1,06 m na max_y) — inaczej test nie odroznilby obu sciezek
+        # sanity condition: the unpinned path gives a DIFFERENT bbox here (measured
+        # 1.06 m on max_y) - otherwise the test would not tell the paths apart
         unpinned = transform_bbox(BBox(*coords, "EPSG:5514"), "EPSG:2180")
         shift = max(abs(a - b) for a, b in zip(pinned[:4], unpinned[:4], strict=True))
         assert shift > 0.01
@@ -351,9 +353,9 @@ class TestPreparePlCutout:
         assert cut.bbox_2180 == pinned
 
     def test_lowercase_2180_label_is_canonical(self, tmp_path):
-        """m-2: ``"epsg:2180"`` to uklad wycinka bez transformacji, a pola
-        ``PlCutout`` niosa kanoniczna etykiete — jak przed normalizacja, gdy
-        taki bbox szedl transformacja tozsamosciowa."""
+        """m-2: ``"epsg:2180"`` is the cutout CRS without a transformation, and
+        the ``PlCutout`` fields carry the canonical label - as before
+        normalisation, when such a bbox went through an identity transformation."""
         cut = prepare_pl_cutout(
             BBox(530010, 382010, 530190, 382090, "epsg:2180"),
             "EPSG:2180",
@@ -365,9 +367,10 @@ class TestPreparePlCutout:
         assert cut.target_path.name == "530010_382010_530190_382090.tif"
 
     def test_wgs84_bbox_across_19e_keeps_southern_band(self, tmp_path):
-        """K6: bbox WGS84 przez poludnik osiowy EPSG:2180 (19E) — krawedz S
-        to luk wygiety na poludnie, a cztery narozniki gubily ~479 m pasa
-        (min_y 237447,4 zamiast 236968,4). Nazwa pliku niesie poprawny zasieg."""
+        """K6: a WGS84 bbox across the EPSG:2180 central meridian (19E) - the S
+        edge is an arc bent to the south, and four corners lost ~479 m of the
+        strip (min_y 237447.4 instead of 236968.4). The file name carries the
+        correct extent."""
         cut = prepare_pl_cutout(
             BBox(18.0, 50.0, 20.0, 50.2, "EPSG:4326"),
             "EPSG:2180",
@@ -379,8 +382,9 @@ class TestPreparePlCutout:
         assert cut.target_path.name.split("_")[1] == "236968.4486"
 
     def test_utm_cutout_name_keeps_full_coordinates(self, tmp_path):
-        """D7: nazwa wycinka to ``format(v, ".10g")`` siatki wyniku — northing
-        UTM (7 cyfr) bez notacji wykladniczej; ta sama funkcja co tor CZ."""
+        """D7: the cutout name is ``format(v, ".10g")`` of the result grid -
+        a UTM northing (7 digits) without exponent notation; the same function
+        as the CZ path."""
         cut = prepare_pl_cutout(
             BBox(530010, 382010, 530190, 382090, "EPSG:2180"),
             "EPSG:3045",
@@ -415,12 +419,12 @@ class TestPreparePlCutout:
 
 
 _DL = "kartograf.cli.download_cmd"
-# warstwa biblioteczna wycinka (R3) — tu zyja selekcja arkuszy i manager
+# cutout library layer (R3) - sheet selection and the manager live here
 _CUT = "kartograf.download.cutout"
 
 
 def _pl_args(tmp_path, **overrides):
-    """Namespace jak z argparse dla bezposrednich wywolan _download_pl_bbox."""
+    """Namespace as from argparse for direct calls of _download_pl_bbox."""
     base = dict(
         godlo=None,
         bbox="530010,382010,530190,382090",
@@ -451,14 +455,14 @@ _PARENT = {
     "countries": ["PL"],
 }
 
-# Bbox zadania wspolny dla przeplywow ponizej. Stala, a nie obiekt budowany
-# w helperze — testy sprawdzaja TOZSAMOSC obiektu podanego do selekcji arkuszy
-# (dowod, ze bez --target-crs zapas NIE wchodzi do selekcji).
+# The request bbox shared by the flows below. A constant, not an object built
+# in a helper - the tests check the IDENTITY of the object passed to sheet
+# selection (proof that without --target-crs the margin does NOT enter selection).
 _BBOX_2180 = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
 
 
 class TestSheetGrid:
-    """Zn. 1 / R1: wycinek na siatce arkuszy, bez przesuniecia tresci."""
+    """Fact 1 / R1: a cutout on the sheet grid, without shifting the content."""
 
     def _sheets(self, tmp_path, value):
         a = _write_grid_sheet(tmp_path / "a.asc", 0, 160, 200, value)
@@ -495,10 +499,10 @@ class TestSheetGrid:
         np.testing.assert_array_equal(data, _ids(gx, gy).astype("float32"))
 
     def test_target_5514_warp_has_no_subpixel_shift(self, tmp_path):
-        """Rampa liniowa: wycinek z arkuszy == warp idealnego rastra na siatce
-        arkuszy (ta sama operacja przypieta, ta sama siatka wyniku). Kazde
-        przesuniecie tresci w mozaice wychodzi jako rozbieznosc (bez naprawy:
-        srednio 0,35 m, maks. 0,64 m; po naprawie: 0)."""
+        """Linear ramp: a cutout from sheets == a warp of an ideal raster on the
+        sheet grid (the same pinned operation, the same result grid). Any
+        content shift in the mosaic shows up as a discrepancy (without the fix:
+        mean 0.35 m, max 0.64 m; after the fix: 0)."""
         from rasterio.transform import from_origin
 
         from kartograf.download.cutout import build_pl_cutout, prepare_pl_cutout
@@ -523,7 +527,7 @@ class TestSheetGrid:
             cut.pinned,
             cut.target_path,
         )
-        cols, rows = np.meshgrid(np.arange(310), np.arange(200))  # suma obu arkuszy
+        cols, rows = np.meshgrid(np.arange(310), np.arange(200))  # sum of both sheets
         ideal = tmp_path / "ideal.tif"
         with rasterio.open(
             ideal,
@@ -555,9 +559,10 @@ class TestSheetGrid:
             np.testing.assert_array_equal(got.read(1), exp.read(1))
 
     def test_mixed_prj_cache_builds(self, tmp_path):
-        """Fakt 6: arkusz z .prj (Hydrograf) obok arkusza bez .prj. Uzywa
-        prawdziwej tresci .prj z cache Hydrografu (P-01) — WKT1_GDAL z pyproj
-        rozniloby sie od tego, co naprawde stoi w .prj na dysku Hydrografu."""
+        """Fact 6: a sheet with .prj (Hydrograf) next to a sheet without .prj.
+        Uses the real .prj content from the Hydrograf cache (P-01) - WKT1_GDAL
+        from pyproj would differ from what is actually in the .prj on the
+        Hydrograf disk."""
         from kartograf.download.cutout import build_pl_cutout
 
         sheets = self._sheets(tmp_path, _ids)
@@ -569,13 +574,12 @@ class TestSheetGrid:
 
     @pytest.mark.parametrize("reverse", [False, True], ids=["a_first", "b_first"])
     def test_integer_first_sheet_keeps_decimals(self, tmp_path, reverse):
-        """Fakt 5: arkusz z samymi liczbami calkowitymi nie moze obcinac
-        wysokosci pozostalych arkuszy, NIEZALEZNIE OD KOLEJNOSCI WEJSCIA
-        (P-07). RED oczekiwany dla kolejnosci [a, b]: przed naprawa
-        (`sorted()`/`dtype="float32"` w Step 3) merge bierze dtype z
-        PIERWSZEGO zrodla na wejsciowej liscie, a `a` (int) jest wtedy
-        pierwsze; kolejnosc [b, a] nie jest RED (float juz jest pierwszy),
-        ale zostaje jako ochrona przed regresja."""
+        """Fact 5: a sheet with integers only must not truncate the heights of
+        the other sheets, REGARDLESS OF INPUT ORDER (P-07). RED expected for
+        the order [a, b]: before the fix (`sorted()`/`dtype="float32"` in
+        Step 3) merge takes the dtype from the FIRST source on the input
+        list, and `a` (int) is then first; the order [b, a] is not RED (float
+        is already first) but stays as a regression guard."""
         from kartograf.download.cutout import build_pl_cutout
 
         a = _write_grid_sheet(
@@ -604,9 +608,9 @@ class TestSheetGrid:
             assert ds.read(1)[0, -1] == pytest.approx(100.25)
 
     def test_pl2000_sheet_rejected_loudly(self, tmp_path):
-        """Fakt 7: arkusz we wspolrzednych PL-2000 pod godlem PL-1992 (cache
-        sprzed 0.7.0) — blad z opisem i sciezka do usuniecia zamiast cichej
-        dziury nodata."""
+        """Fact 7: a sheet in PL-2000 coordinates under a PL-1992 sheet code
+        (cache from before 0.7.0) - an error with a description and a path to
+        delete instead of a silent nodata hole."""
         from kartograf.download.cutout import build_pl_cutout
         from kartograf.exceptions import ValidationError
 
@@ -622,8 +626,8 @@ class TestSheetGrid:
         assert str(good) not in message
 
     def test_selection_expanded_by_one_pixel(self, tmp_path):
-        """Crop przyciagany na zewnatrz (< 1 px) — selekcja z zapasem 1 px,
-        zeby brzegowy piksel nie wpadl w arkusz spoza listy."""
+        """Crop snapped outwards (< 1 px) - selection with a 1 px margin so
+        that an edge pixel does not fall into a sheet outside the list."""
         from kartograf.download.cutout import prepare_pl_cutout, select_pl_cutout_sheets
 
         cut = prepare_pl_cutout(
@@ -647,9 +651,9 @@ class TestSheetGrid:
         )
 
     def test_geometry_sum_selection_expanded_by_one_pixel(self, tmp_path):
-        """Suma R-01 (geometria + warp) bierze arkusze z tej samej obwiedni
-        z zapasem 1 px co tryb bbox — crop przyciagany na zewnatrz dotyczy
-        obu trybow."""
+        """The R-01 sum (geometry + warp) takes sheets from the same envelope
+        with a 1 px margin as the bbox mode - the outward-snapped crop applies
+        to both modes."""
         from kartograf.download.cutout import prepare_pl_cutout, select_pl_cutout_sheets
 
         cut = prepare_pl_cutout(
@@ -679,10 +683,10 @@ class TestSheetGrid:
         )
 
     def test_input_order_does_not_change_result(self, tmp_path):
-        """Wejscia sortowane: wynik nie zalezy od kolejnosci listy (pobieranie
-        rownolegle zwraca arkusze w kolejnosci ukonczenia). ``merge`` oddaje
-        zakladke PIERWSZEMU zrodlu, wiec bez sortowania ta sama lista arkuszy
-        w innej kolejnosci dawalaby inny raster."""
+        """Sorted inputs: the result does not depend on list order (parallel
+        download returns sheets in completion order). ``merge`` gives the
+        overlap to the FIRST source, so without sorting the same sheet list in
+        a different order would give a different raster."""
         from kartograf.download.cutout import build_pl_cutout
 
         a = _write_grid_sheet(
@@ -697,8 +701,8 @@ class TestSheetGrid:
             build_pl_cutout(order, bbox, bbox, 1.0, None, tmp_path / name)
             with rasterio.open(tmp_path / name) as ds:
                 results.append(ds.read(1))
-        # warunek sensownosci: w wyniku sa oba arkusze, a ich zakladka
-        # (x 530100,5-530110,5) lezy w bboxie
+        # sanity condition: both sheets are in the result, and their overlap
+        # (x 530100.5-530110.5) lies within the bbox
         assert {1.0, 2.0} <= set(np.unique(results[0]).tolist())
         np.testing.assert_array_equal(results[0], results[1])
 
@@ -717,12 +721,12 @@ class TestDownloadPlBboxCutout:
         bbox=_BBOX_2180,
         godla=("N-1", "N-2"),
     ):
-        """Worker PL z mockowanym pobraniem; zwraca ``(rc, manager, find)``.
+        """PL worker with a mocked download; returns ``(rc, manager, find)``.
 
-        Mock KLASY ``DownloadManager`` (kwargs konstruktora, np.
-        ``sidecar_extra``) zostaje w ``self.dm`` — zwrot zostaje trojka, bo
-        rozpakowuja go kolejne testy. ``no_coverage`` to podzbior ``failed``
-        (arkusze bez danych GUGiK, R5) — jak w ``DownloadResult``.
+        The CLASS mock of ``DownloadManager`` (constructor kwargs, e.g.
+        ``sidecar_extra``) stays in ``self.dm`` - the return stays a triple
+        because later tests unpack it. ``no_coverage`` is a subset of
+        ``failed`` (sheets without GUGiK data, R5) - as in ``DownloadResult``.
         """
         from kartograf.download.manager import DownloadResult
 
@@ -745,7 +749,7 @@ class TestDownloadPlBboxCutout:
         return rc, manager, find
 
     def test_sheet_list_header(self, tmp_path, capsys):
-        """D15: naglowek listy arkuszy wycinka = ten sam co tryb listy."""
+        """D15: the cutout sheet-list header = the same as in list mode."""
         sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
         godla = tuple(f"N-{i}" for i in range(1, 13))
         rc, *_ = self._run(
@@ -779,10 +783,10 @@ class TestDownloadPlBboxCutout:
         assert payload["horizontal_crs"] == "EPSG:2180"
         assert payload["transform"] is None  # 2180 = sam crop (spec 6.1)
         assert payload["nodata"] == _NODATA
-        assert payload["vertical_crs"] == "EPSG:9651"  # EVRF2007-PL, kanal arkuszy
+        assert payload["vertical_crs"] == "EPSG:9651"  # EVRF2007-PL, sheet channel
         assert payload["request"]["bbox_crs"] == "EPSG:2180"
         assert payload["extra"]["parent_request"] == _PARENT
-        # sidecary ARKUSZY (cache) tez niosa rodzica zadania — jak bez wycinka
+        # the SHEET sidecars (cache) also carry the task parent - as without a cutout
         assert self.dm.call_args.kwargs["sidecar_extra"] == {"parent_request": _PARENT}
 
     def test_target_5514_sidecar_has_pinned_transform(self, tmp_path):
@@ -804,8 +808,8 @@ class TestDownloadPlBboxCutout:
         # D7: ten sam format co tor CZ (`pinned_label`) — z dokladnoscia
         assert payload["transform"]["horizontal"].endswith(" m)")
         assert payload["request"]["bbox_crs"] == "EPSG:5514"
-        # R-01: do SELEKCJI arkuszy idzie bbox Z ZAPASEM, nie samo zadanie —
-        # inaczej rogi obroconej siatki wyniku wypadaja poza pobrane arkusze
+        # R-01: the bbox WITH A MARGIN goes to sheet SELECTION, not the request
+        # itself - otherwise rotated result-grid corners fall outside the sheets
         sent = find.call_args.args[0]
         assert sent.min_x < _BBOX_2180.min_x
         assert sent.max_x > _BBOX_2180.max_x
@@ -813,14 +817,14 @@ class TestDownloadPlBboxCutout:
         assert sent.max_y > _BBOX_2180.max_y
 
     def test_5m_kron86_grid_dataset_vertical_and_segment(self, tmp_path):
-        """Caly przeplyw 5m w jednym tescie: siatka, deskryptor, pion, segment.
+        """The whole 5m flow in one test: grid, descriptor, vertical, segment.
 
-        ``--resolution 5m`` z ``--vertical-crs KRON86`` jest korygowane do
-        EVRF2007 w fabryce providera (5m nie istnieje w KRON86), wiec wycinek
-        musi isc za PROVIDEREM, nie za surowa flaga CLI. Dla arkuszy ta klasa
-        bledu jest broniona od dawna — tor wycinka byl w niej luka: piksel 1 m
-        z danych 5 m (25x rozmiar pliku) albo segment ``pl_1992_5m_kron86``
-        z sidecarem EPSG:9650 przechodzily cala suite.
+        ``--resolution 5m`` with ``--vertical-crs KRON86`` is corrected to
+        EVRF2007 in the provider factory (5m does not exist in KRON86), so the
+        cutout must follow the PROVIDER, not the raw CLI flag. For sheets this
+        error class has long been guarded - the cutout path was a gap in it:
+        a 1 m pixel from 5 m data (25x the file size) or a ``pl_1992_5m_kron86``
+        segment with an EPSG:9650 sidecar passed the whole suite.
         """
         sheets = [
             _write_sheet_asc(tmp_path / "s1.asc", 529900, 381950, size=40, pixel=5.0),
@@ -842,11 +846,12 @@ class TestDownloadPlBboxCutout:
         assert payload["vertical_crs"] == "EPSG:9651"
 
     def test_unexpected_raster_error_returns_1(self, tmp_path, capsys):
-        """Blad spoza (ValidationError, TransformError) tez konczy sie kodem 1.
+        """An error outside (ValidationError, TransformError) also ends with code 1.
 
-        ``mosaic_and_crop``/``warp_to_grid`` moga rzucic ``RasterioIOError``
-        (uszkodzony arkusz z cache). Przeciek takiego wyjatku poza petle krajow
-        ``_dispatch_area`` lamie kontrakt czesciowego sukcesu ADR-023.
+        ``mosaic_and_crop``/``warp_to_grid`` may raise ``RasterioIOError``
+        (a damaged cached sheet). Letting such an exception leak out of the
+        country loop of ``_dispatch_area`` breaks the ADR-023 partial-success
+        contract.
         """
         from rasterio.errors import RasterioIOError
 
@@ -867,7 +872,8 @@ class TestDownloadPlBboxCutout:
         assert "PL-2000" in capsys.readouterr().err
 
     def test_failed_sheet_returns_1_and_no_cutout(self, tmp_path):
-        """R5: awaria pobrania arkusza (nie brak danych GUGiK) = kod 1, bez wycinka."""
+        """R5: a sheet download failure (not a lack of GUGiK data) = code 1, no
+        cutout."""
         sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
         rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets, failed=["N-2"])
 
@@ -884,7 +890,7 @@ class TestDownloadPlBboxCutout:
         assert "Warning:" in err and "N-2" in err
 
     def test_all_nodata_cutout_warns_and_returns_0(self, tmp_path, capsys):
-        """N2: pobrane arkusze bez ani jednego waznego piksela = Warning:, kod 0."""
+        """N2: downloaded sheets without a single valid pixel = Warning:, code 0."""
         sheets = [
             _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000, fill=_NODATA),
             _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000, fill=_NODATA),
@@ -941,7 +947,7 @@ class TestDownloadPlBboxCutout:
         (tif,) = (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif")
         sidecar = tif.with_name(f"{tif.name}.meta.json")
         payload = json.loads(sidecar.read_text("utf-8"))
-        # po naprawie K2 nowy wycinek NIE pinuje kroku (3)
+        # after the K2 fix the new cutout does NOT pin step (3)
         assert "S-JTSK to ETRS89 (3)" not in payload["transform"]["horizontal"]
         assert "sprzed naprawy" not in capsys.readouterr().err
 
@@ -954,12 +960,12 @@ class TestDownloadPlBboxCutout:
         assert "sprzed naprawy operacji S-JTSK" in err and "--force" in err
 
     def test_missing_sheets_warning_shows_10_sidecar_lists_all(self, tmp_path, capsys):
-        """Stderr pokazuje do 10 godel; pelna, posortowana lista jest w sidecarze.
+        """Stderr shows up to 10 sheet codes; the full, sorted list is in the sidecar.
 
-        Wybrzeze albo pas przygraniczny to dziesiatki arkuszy bez danych —
-        stderr zostaje czytelny, a konsument dostaje komplet z sidecara.
-        Wejscie w odwroconej kolejnosci: pobieranie rownolegle oddaje arkusze
-        w kolejnosci ukonczenia, a lista ma byc stabilna.
+        A coast or a border strip is dozens of sheets without data - stderr
+        stays readable, and the consumer gets the full list from the sidecar.
+        Input in reverse order: parallel download returns sheets in completion
+        order, and the list must be stable.
         """
         names = [f"N-{i:02d}" for i in range(12)]
         sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
@@ -974,7 +980,7 @@ class TestDownloadPlBboxCutout:
         assert rc == 0
         err = capsys.readouterr().err
         assert "12 arkuszy" in err
-        # 10 pierwszych po sortowaniu, reszta jako " ..."
+        # the first 10 after sorting, the rest as " ..."
         assert "N-00, N-01" in err and "N-09 ..." in err and "N-10" not in err
         cut_dir = tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox"
         (tif,) = cut_dir.glob("*.tif")
@@ -982,10 +988,10 @@ class TestDownloadPlBboxCutout:
         assert payload["extra"]["missing_sheets"] == names
 
     def test_error_lists_all_failed_sheets(self, tmp_path, capsys):
-        """Komunikat wymienia WSZYSTKIE nieudane arkusze (``download_sheets``).
+        """The message lists ALL failed sheets (``download_sheets``).
 
-        Dotad pula watkow konczyla sie pierwszym wyjatkiem — uzytkownik
-        poznawal jeden brakujacy arkusz na przebieg.
+        Until now the thread pool ended with the first exception - the user
+        learned about one missing sheet per run.
         """
         rc, *_ = self._run(tmp_path, _pl_args(tmp_path), [], failed=["N-1", "N-2"])
 
@@ -1008,16 +1014,16 @@ class TestDownloadPlBboxCutout:
 
         assert rc == 0
         manager.download_sheets.assert_not_called()
-        # skrot dziala PRZED selekcja arkuszy — zero pracy na godlach
+        # the shortcut works BEFORE sheet selection - no work on sheet codes
         find.assert_not_called()
 
     def test_force_rebuilds_existing_cutout_and_passes_workers(self, tmp_path):
-        """I-1/m-1: ``--force`` i ``--workers`` z CLI docieraja do biblioteki.
+        """I-1/m-1: ``--force`` and ``--workers`` from the CLI reach the library.
 
-        ``run_pl_cutout`` ma WLASNY skrot "plik istnieje": gdyby CLI przestalo
-        przekazywac ``force``, ``--force`` na istniejacym wycinku bylby cichym
-        no-opem (kod 0, ``Downloaded to <stary plik>``) — a CHANGELOG kaze
-        wycinki sprzed poprawki siatki przebudowac wlasnie z ``--force``.
+        ``run_pl_cutout`` has its OWN "file exists" shortcut: if the CLI stopped
+        passing ``force``, ``--force`` on an existing cutout would be a silent
+        no-op (code 0, ``Downloaded to <old file>``) - and the CHANGELOG says
+        to rebuild cutouts from before the grid fix precisely with ``--force``.
         """
         target = (
             tmp_path
@@ -1041,18 +1047,18 @@ class TestDownloadPlBboxCutout:
         assert rc == 0
         assert target.read_bytes() != stale, "--force nie przebudowal wycinka"
         with rasterio.open(target) as ds:
-            # oba arkusze plaskie 100.0 pokrywaja caly bbox — zero nodata
+            # both flat 100.0 sheets cover the whole bbox - zero nodata
             assert (ds.read(1) == 100.0).all()
-        # --force pobiera ponownie takze arkusze (CHANGELOG), nie tylko wycinek
+        # --force downloads the sheets again too (CHANGELOG), not just the cutout
         assert manager.download_sheets.call_args.kwargs["skip_existing"] is False
         # --workers dociera do managera toru wycinka (m-1)
         assert self.dm.call_args.kwargs["max_workers"] == 3
 
     def test_without_target_crs_behaviour_unchanged(self, tmp_path):
-        """Bez flagi: lista arkuszy jak dotad, zero wycinka (spec 6.1).
+        """Without the flag: a sheet list as before, no cutout (spec 6.1).
 
-        Tor BEZ wycinka zostaje w ``cli.download_cmd`` — dlatego wlasne patche
-        ``_DL``, a nie harness ``_run`` (ten patchuje ``download.cutout``).
+        The path WITHOUT a cutout stays in ``cli.download_cmd`` - hence the own
+        ``_DL`` patches, not the ``_run`` harness (which patches ``download.cutout``).
         """
         sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
         with (
@@ -1073,13 +1079,13 @@ class TestDownloadPlBboxCutout:
 
         assert rc == 0
         assert not (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").exists()
-        # bez wycinka zapas NIE wchodzi do selekcji — arkusze wyznacza
-        # dokladnie zadanie uzytkownika (ten sam obiekt, nie kopia z marginesem)
+        # without a cutout the margin does NOT enter selection - the sheets are
+        # determined exactly by the user's request (the same object, not a padded copy)
         assert find.call_args.args[0] is _BBOX_2180
 
 
 class TestCutoutSize:
-    """Zn. 9: bez twardego limitu, ale bez odkrywania pelnego dysku po godzinach."""
+    """Fact 9: no hard limit, but no discovering of the full disk after hours."""
 
     def test_disk_check_blocks_before_download(self, tmp_path, monkeypatch, capsys):
         monkeypatch.setattr(
@@ -1113,8 +1119,8 @@ class TestCutoutSize:
         assert cut.estimated_bytes < one < both
 
     def test_estimate_default_storage_is_sheet_segment_of_vertical(self, tmp_path):
-        """D18: bez ``storage=`` arkusze w cache sa szukane w segmencie
-        FAKTYCZNEGO pionu wycinka (KRON86), nie w domyslnym EVRF2007."""
+        """D18: without ``storage=`` the cached sheets are looked up in the
+        segment of the cutout's ACTUAL vertical (KRON86), not the default EVRF2007."""
         from kartograf.download.cutout import (
             PlCutoutSheets,
             estimate_pl_cutout_bytes,
@@ -1134,10 +1140,11 @@ class TestCutoutSize:
         assert pending == 1
 
     def test_estimate_builds_one_transformer_for_all_sheets(self, tmp_path):
-        """N9: ``Transformer.from_crs`` (~7 ms, pyproj go nie cache'uje) raz na
-        proces, nie raz na arkusz — estymacja dla 1221 arkuszy spadla z ~9 s
-        do < 0,2 s, wiec wolajacy liczacy ja sam przed ``run_pl_cutout`` nie
-        placi podwojnie. Bajty identyczne z obwiednia ``SheetParser``."""
+        """N9: ``Transformer.from_crs`` (~7 ms, pyproj does not cache it) once
+        per process, not once per sheet - the estimate for 1221 sheets dropped
+        from ~9 s to < 0.2 s, so a caller computing it itself before
+        ``run_pl_cutout`` does not pay twice. Bytes identical to the
+        ``SheetParser`` envelope."""
         from pyproj import Transformer
 
         from kartograf.core import bbox as core_bbox
@@ -1191,7 +1198,7 @@ class TestCutoutSize:
         assert warp_kwds["compress"] == "deflate" and warp_kwds["predictor"] == 3
         assert warp_kwds["tiled"] is True and warp_kwds["blockxsize"] == 512
         assert warp_kwds["bigtiff"] == "IF_SAFER"
-        assert "compress" not in crop_kwds  # EPSG:2180: plik posredni JEST wynikiem
+        assert "compress" not in crop_kwds  # EPSG:2180: the intermediate is the result
 
     def test_large_grid_prints_info(self, tmp_path, capsys):
         from kartograf.download.cutout import PlCutoutResult
@@ -1227,7 +1234,7 @@ class TestGeometryCutout:
             _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000),
         ]
         geom = tmp_path / "area.gpkg"
-        geom.write_bytes(b"stub")  # sciezka nieuzywana: discovery zamockowane
+        geom.write_bytes(b"stub")  # unused path: discovery mocked
         provider = SimpleNamespace(vertical_crs="EVRF2007")
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         args = _pl_args(tmp_path, bbox=None, geometry=str(geom))
@@ -1260,13 +1267,13 @@ class TestGeometryCutout:
         ).exists()
 
     def test_geometry_target_5514_covers_whole_envelope(self, tmp_path):
-        """R-01 obowiazuje takze w `--geometry`: zapas wchodzi do SELEKCJI.
+        """R-01 also applies in `--geometry`: the margin enters SELECTION.
 
-        Geometria wskazuje sam arkusz zachodni, ale obwiednia celu wraca do
-        EPSG:2180 wieksza niz zadanie (obrot Krovaka) i siega juz na arkusz
-        wschodni. Bez sumy z ``find_sheets_for_bbox`` wycinek ma na wschodniej
-        krawedzi ramke nodata — przy tej samej fladze, ktora w trybie ``--bbox``
-        daje komplet.
+        The geometry points at the western sheet only, but the target envelope
+        returns to EPSG:2180 larger than the request (Krovak rotation) and
+        already reaches the eastern sheet. Without the union with
+        ``find_sheets_for_bbox`` the cutout has a nodata frame on the eastern
+        edge - with the same flag that gives a complete result in ``--bbox`` mode.
         """
         from kartograf.cli.download_cmd import _download_pl_geometry
         from kartograf.download.manager import DownloadResult
@@ -1276,11 +1283,11 @@ class TestGeometryCutout:
             "N-2": _write_sheet_asc(tmp_path / "s2.asc", 530100, 381950, size=200),
         }
         geom = tmp_path / "area.gpkg"
-        geom.write_bytes(b"stub")  # sciezka nieuzywana: discovery zamockowane
+        geom.write_bytes(b"stub")  # unused path: discovery mocked
         provider = SimpleNamespace(vertical_crs="EVRF2007")
         args = _pl_args(tmp_path, bbox=None, geometry=str(geom), target_crs="EPSG:5514")
         manager = Mock()
-        # godla -> arkusze: do mozaiki trafiaja DOKLADNIE wybrane arkusze
+        # sheet codes -> sheets: EXACTLY the selected sheets go into the mosaic
         manager.download_sheets.side_effect = lambda godla, **kw: [
             sheets[g] for g in godla
         ]
@@ -1313,13 +1320,13 @@ class TestGeometryCutout:
         assert sent.min_x < _BBOX_2180.min_x and sent.max_x > _BBOX_2180.max_x
 
     def test_cli_geometry_target_crs_reaches_worker(self, tmp_path):
-        """Cala sciezka przez main(): dyspozycja MUSI podac obwiednie workerowi.
+        """The whole path through main(): dispatch MUST pass the envelope to the worker.
 
-        Broni `bbox=part` w `_dispatch_area` — jedynej linii, dzieki ktorej
-        wycinek geometry jest osiagalny z CLI: obwiednia wyznacza siatke
-        i crop wycinka, a ``bbox`` jest w ``_download_pl_geometry`` argumentem
-        WYMAGANYM. Bez tej linii worker nie dostaje obwiedni i wycinek nie
-        powstaje (komenda konczy sie kodem 1).
+        Guards `bbox=part` in `_dispatch_area` - the only line that makes the
+        geometry cutout reachable from the CLI: the envelope determines the
+        grid and the crop of the cutout, and ``bbox`` is a REQUIRED argument
+        in ``_download_pl_geometry``. Without that line the worker gets no
+        envelope and the cutout is not created (the command ends with code 1).
         """
         from pyproj import CRS
 
@@ -1338,9 +1345,9 @@ class TestGeometryCutout:
         manager.last_result = DownloadResult()
 
         with (
-            # oba importy lokalne (cli.download_cmd, download.cutout) ->
-            # patch u zrodla
-            # plik-atrapa (P-03): _geometry_envelope czyta CRS PRZED obwiednia
+            # both imports are local (cli.download_cmd, download.cutout) ->
+            # patch at the source
+            # stub file (P-03): _geometry_envelope reads the CRS BEFORE the envelope
             patch(
                 "kartograf.core.geometry.read_source_crs",
                 return_value=CRS.from_epsg(2180),
@@ -1380,8 +1387,8 @@ class TestGeometryCutout:
             / "530010_382010_530190_382090.tif"
         )
         assert target.exists()
-        # parent_request powstaje WYLACZNIE w warstwie dyspozycji — dowod,
-        # ze wycinek przyszedl przez `_dispatch_area`, a nie obok niej
+        # parent_request arises ONLY in the dispatch layer - proof that the
+        # cutout came through `_dispatch_area`, not beside it
         payload = json.loads(
             (target.parent / f"{target.name}.meta.json").read_text("utf-8")
         )
@@ -1391,14 +1398,14 @@ class TestGeometryCutout:
 
 
 class TestBorderTwoCutouts:
-    """Spec 13.6 / 8(e): jedna komenda -> dwa wycinki w tym samym ukladzie."""
+    """Spec 13.6 / 8(e): one command -> two cutouts in the same CRS."""
 
     # maly prostokat przecinajacy PROSTOKATNE obwiednie obu krajow
     # (CZ: 12.09..18.86E / 48.55..51.06N, PL: 14.07..24.20E / 49.00..54.90N)
     _BBOX = "18.80,49.70,18.801,49.7005"
 
     def _cz_provider(self):
-        """Stub CuzkDmrProvider: zapisuje plik i udaje operacje przypieta."""
+        """CuzkDmrProvider stub: writes a file and pretends to be a pinned operation."""
         provider = Mock()
         provider.descriptor_key = "cz.cuzk.dmr4g"
         provider.resolution = "5m"
@@ -1425,7 +1432,7 @@ class TestBorderTwoCutouts:
         from kartograf.core.bbox import transform_bbox
         from kartograf.download.manager import DownloadResult
 
-        # jeden syntetyczny arkusz pokrywajacy polska czesc zadania
+        # one synthetic sheet covering the Polish part of the request
         b = transform_bbox(
             BBox(18.80, 49.70, 18.801, 49.7005, "EPSG:4326"), "EPSG:2180"
         )
@@ -1486,8 +1493,8 @@ class TestBorderTwoCutouts:
     def test_border_pl_sheet_without_data_still_gives_both_cutouts(
         self, tmp_path, capsys
     ):
-        """R5: strona czeska bboxa przygranicznego nie ma danych GUGiK —
-        wycinek PL powstaje (nodata tam), wycinek CZ tez, kod 0."""
+        """R5: the Czech side of a border bbox has no GUGiK data -
+        the PL cutout is created (nodata there), the CZ cutout too, code 0."""
         from kartograf.core.bbox import transform_bbox
         from kartograf.download.manager import DownloadResult
 
@@ -1542,7 +1549,7 @@ class TestBorderTwoCutouts:
 
 
 class TestTargetCrsValidations:
-    """Spec 6.3 przez main() — czytelne bledy, kod 1."""
+    """Spec 6.3 through main() - readable errors, code 1."""
 
     _BBOX = ["--bbox", "530010,382010,530190,382090", "--country", "pl"]
 
@@ -1595,7 +1602,7 @@ class TestTargetCrsValidations:
 
 
 class TestLibraryApi:
-    """R3: wycinek PL jako API biblioteki (bez argparse)."""
+    """R3: the PL cutout as a library API (without argparse)."""
 
     _SHEETS = {
         "N-34-130-D-d-2-3": (530000, 382000),
@@ -1643,11 +1650,11 @@ class TestLibraryApi:
         assert sorted(provider.calls) == sorted(list(self._SHEETS) * 2)
 
     def test_rebuild_reuses_cached_sheets(self, tmp_path):
-        """Brak wycinka, arkusze w cache: przebudowa BEZ pobierania (force=False).
+        """No cutout, sheets in cache: rebuild WITHOUT downloading (force=False).
 
-        Arkusze dzialaja jako cache (``skip_existing = not force``) — skasowany
-        albo nigdy niezbudowany wycinek nie moze kosztowac ponownego pobrania
-        arkuszy, ktore juz leza w swoim segmencie.
+        Sheets act as a cache (``skip_existing = not force``) - a deleted or
+        never-built cutout must not cost re-downloading sheets that already
+        lie in their segment.
         """
         from kartograf import download_pl_cutout
 
@@ -1661,17 +1668,18 @@ class TestLibraryApi:
             ),
         ):
             first = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
-            first.path.unlink()  # wycinek znika, arkusze zostaja w segmencie
+            first.path.unlink()  # the cutout disappears, the sheets stay in the segment
             rebuilt = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
 
-        assert sorted(provider.calls) == sorted(self._SHEETS)  # tylko 1. przebieg
+        assert sorted(provider.calls) == sorted(self._SHEETS)  # the 1st run only
         assert not rebuilt.skipped and rebuilt.path == first.path
         assert rebuilt.path.exists()
         assert len(rebuilt.sheet_paths) == len(self._SHEETS)
 
     def test_default_sheet_storage_follows_provider_vertical(self, tmp_path):
-        """D18: ``run_pl_cutout`` bez ``storage=`` kladzie arkusze w segmencie
-        pionu providera (KRON86) — ten sam segment co lista arkuszy CLI."""
+        """D18: ``run_pl_cutout`` without ``storage=`` puts sheets in the
+        provider's vertical segment (KRON86) - the same segment as the CLI sheet
+        list."""
         from kartograf import download_pl_cutout
 
         provider = self._provider()
@@ -1692,16 +1700,16 @@ class TestLibraryApi:
         assert segments == {("nmt", "pl_1992_1m_kron86")}
 
     def test_5m_request_follows_factory_vertical_rule(self, tmp_path):
-        """Regula fabryki NMT (5m => EVRF2007): wycinek idzie za PROVIDEREM.
+        """NMT factory rule (5m => EVRF2007): the cutout follows the PROVIDER.
 
-        ``download_pl_cutout`` podaje fabryce surowe parametry, a pion wycinka
-        bierze z providera — z surowa flaga KRON86 wycinek 5m nie powstalby
-        (5m istnieje wylacznie w EVRF2007).
+        ``download_pl_cutout`` gives the factory the raw parameters, and takes
+        the cutout vertical from the provider - with the raw KRON86 flag a 5m
+        cutout would not be created (5m exists only in EVRF2007).
         """
         from kartograf import download_pl_cutout
 
         provider = self._provider()
-        # to, co zwraca prawdziwa fabryka dla 5m + KRON86 (korekta pionu)
+        # what the real factory returns for 5m + KRON86 (vertical correction)
         provider.vertical_crs = "EVRF2007"
         provider.resolution = "5m"
         provider.descriptor_key = "pl.gugik.nmt_5m"
@@ -1737,8 +1745,8 @@ class TestLibraryApi:
         assert result.path.exists()
 
     def test_cache_is_handed_to_the_factory(self, tmp_path):
-        """N6: ``download_pl_cutout(cache=)`` -> provider z cache rekordow;
-        bez kwargu fabryka dostaje ``cache=None`` (CLI: ``--force``)."""
+        """N6: ``download_pl_cutout(cache=)`` -> a provider with the record cache;
+        without the kwarg the factory gets ``cache=None`` (CLI: ``--force``)."""
         from kartograf import download_pl_cutout
 
         provider = self._provider()
@@ -1757,9 +1765,9 @@ class TestLibraryApi:
         assert factory.call_args.kwargs["cache"] is cache
 
     def test_skipped_download_reads_sheet_lists_from_sidecar(self, tmp_path):
-        """N4: istniejacy wycinek (``force=False``) oddaje ``missing_sheets``
-        i ``off_grid_sheets`` z WLASNEGO sidecara, nie puste krotki — bez
-        sieci i bez selekcji arkuszy."""
+        """N4: an existing cutout (``force=False``) returns ``missing_sheets``
+        and ``off_grid_sheets`` from its OWN sidecar, not empty tuples - with
+        no network and no sheet selection."""
         from kartograf import download_pl_cutout
 
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
@@ -1793,12 +1801,13 @@ class TestLibraryApi:
         ("attr", "value"), [("vertical_crs", "KRON86"), ("resolution", "5m")]
     )
     def test_run_rejects_provider_not_matching_cutout(self, tmp_path, attr, value):
-        """Provider niezgodny z wycinkiem zatrulby wspolny cache arkuszy.
+        """A provider inconsistent with the cutout would poison the shared sheet cache.
 
-        Segment arkuszy i sidecar wycinka biora pion/rozdzielczosc z wycinka,
-        a dane z providera: arkusze KRON86 (albo 5 m) trafilyby do segmentu
-        ``pl_1992_1m_evrf2007`` i kolejne przebiegi EVRF2007 1m uzylyby ich
-        ponownie bez ostrzezenia. Blad PRZED pobraniem i przed katalogami.
+        The sheet segment and the cutout sidecar take the vertical/resolution
+        from the cutout, and the data from the provider: KRON86 (or 5 m) sheets
+        would land in the ``pl_1992_1m_evrf2007`` segment and later EVRF2007 1m
+        runs would reuse them without warning. The error comes BEFORE the
+        download and before the directories.
         """
         from kartograf.download.cutout import PlCutoutSheets, run_pl_cutout
         from kartograf.exceptions import ValidationError
@@ -1830,7 +1839,7 @@ class TestLibraryApi:
             assert name in kartograf.__all__ and hasattr(kartograf, name)
 
     def test_sidecar_failure_does_not_break_cutout(self, tmp_path, caplog):
-        """D7: blad budowy sidecara wycinka = ostrzezenie, wycinek zostaje."""
+        """D7: a cutout sidecar build error = a warning, the cutout stays."""
         import logging
 
         from kartograf import download_pl_cutout
@@ -1875,7 +1884,7 @@ class TestLibraryApi:
 
 
 class TestMissingSheets:
-    """R5: brak danych GUGiK = nodata + ostrzezenie; awaria pobrania = blad."""
+    """R5: no GUGiK data = nodata + warning; a download failure = error."""
 
     def _provider(self, *, no_coverage=(), broken=()):
         from kartograf.exceptions import NoCoverageError
@@ -1926,8 +1935,9 @@ class TestMissingSheets:
         assert meta["extra"]["missing_sheets"] == ["N-34-130-D-d-2-4"]
 
     def test_skipped_run_reads_missing_sheets_from_sidecar(self, tmp_path):
-        """N4: drugi przebieg bez ``force`` -> ``skipped`` z lista brakujacych
-        arkuszy z sidecara (dotad puste ``()``); bez sidecara — puste."""
+        """N4: the second run without ``force`` -> ``skipped`` with the list of
+        missing sheets from the sidecar (previously empty ``()``); no sidecar -
+        empty."""
         from kartograf.download.cutout import run_pl_cutout
 
         cut, sheets = self._cutout(tmp_path)
@@ -1948,9 +1958,10 @@ class TestMissingSheets:
         assert without_sidecar.skipped and without_sidecar.missing_sheets == ()
 
     def test_sidecar_lists_sheet_sources_from_sheet_sidecars(self, tmp_path):
-        """P5/D5: ``extra.sheet_sources`` = pochodzenie kazdego arkusza mozaiki
-        z jego sidecara; arkusz z cache sprzed 0.7.0 (bez sidecara) ma pola
-        ``null`` poza godlem, a arkusz z sidecarem bez ``source`` — tak samo."""
+        """P5/D5: ``extra.sheet_sources`` = the origin of each mosaic sheet
+        from its sidecar; a sheet from the pre-0.7.0 cache (no sidecar) has
+        ``null`` fields except the sheet code, and so does a sheet with a
+        sidecar without ``source``."""
         from kartograf.download.cutout import run_pl_cutout
 
         sources = {
@@ -2005,11 +2016,11 @@ class TestMissingSheets:
                 "full_sheet": False,
             },
         }
-        # E13: niepelny arkusz widoczny takze w wyniku biblioteki
+        # E13: a partial sheet is visible in the library result too
         assert result.partial_sheets == ("N-34-130-D-d-2-4",)
         assert sorted(downloads) == sorted(TestLibraryApi._SHEETS)
 
-        # przebudowa z arkuszy w cache: jeden bez sidecara, drugi bez source
+        # rebuild from cached sheets: one without a sidecar, the other without source
         result.path.unlink()
         sheet_a, sheet_b = sorted(result.sheet_paths)
         sheet_a.with_name(sheet_a.name + ".meta.json").unlink()
@@ -2038,7 +2049,7 @@ class TestMissingSheets:
             },
         ]
         assert rebuilt.partial_sheets == ()
-        assert len(downloads) == 2  # przebudowa bez pobierania (arkusze z cache)
+        assert len(downloads) == 2  # rebuild without downloading (sheets from cache)
 
     def test_transport_failure_stays_fatal(self, tmp_path):
         from kartograf.download.cutout import run_pl_cutout
@@ -2064,11 +2075,11 @@ class TestMissingSheets:
         assert not cut.target_path.exists()
 
     def test_cutout_entirely_nodata_warns_and_flags_result(self, tmp_path, caplog):
-        """N2: arkusze pobrane, ale bez ani jednego waznego piksela w zadaniu.
+        """N2: sheets downloaded, but without a single valid pixel in the request.
 
-        Plik POWSTAJE (poprawny wynik "brak danych"), ``all_nodata=True``
-        i ``logger.warning`` — zero pikseli z arkuszami to NIE
-        ``ValidationError`` (zero arkuszy). Kontrola: wycinek z danymi ->
+        The file IS CREATED (a correct "no data" result), ``all_nodata=True``
+        and ``logger.warning`` - zero pixels with sheets present is NOT a
+        ``ValidationError`` (zero sheets). Control: a cutout with data ->
         ``all_nodata=False``.
         """
         import logging
@@ -2095,8 +2106,8 @@ class TestMissingSheets:
         assert control.all_nodata is False
 
     def test_failed_build_leaves_no_empty_bbox_dir(self, tmp_path):
-        """Zn. 10: nieudana budowa bez poprzedniego wyniku nie zostawia
-        pustego bbox/."""
+        """Fact 10: a failed build without a previous result does not leave
+        an empty bbox/."""
         from kartograf.download.cutout import run_pl_cutout
 
         cut, sheets = self._cutout(tmp_path)
@@ -2109,19 +2120,19 @@ class TestMissingSheets:
         ):
             run_pl_cutout(cut, sheets, provider=self._provider())
         assert not cut.target_path.parent.exists()
-        assert cut.target_path.parent.parent.exists()  # segment z arkuszami zostaje
+        assert cut.target_path.parent.parent.exists()  # the sheet segment stays
 
 
 class TestOffGridSheets:
-    """S5 (D3/D8): arkusze o roznych fazach siatki pikseli.
+    """S5 (D3/D8): sheets with different pixel grid phases.
 
-    Naglowki jak w L1 (5 m, kampania 2022): ``xllcorner 535807.22`` (faza
-    0,444) i ``538045.16`` (faza 0,032) -> arkusz wschodni lezy 0,412 px
-    na zachod od siatki zachodniego; wspolny ``yllcorner`` (rozjazd tylko w x).
+    Headers as in L1 (5 m, 2022 campaign): ``xllcorner 535807.22`` (phase
+    0.444) and ``538045.16`` (phase 0.032) -> the eastern sheet lies 0.412 px
+    west of the western sheet's grid; a common ``yllcorner`` (the offset is in x only).
     """
 
     _GODLA = ("M-34-76-A-a-1-1", "M-34-76-A-a-1-2")
-    # zadanie na szwie (arkusze: 535807..538107 i 538045..538545 x 232508..233008)
+    # request on the seam (sheets: 535807..538107 and 538045..538545 x 232508..233008)
     _BBOX = BBox(537800, 232600, 538300, 232900, "EPSG:2180")
 
     @staticmethod
@@ -2136,7 +2147,7 @@ class TestOffGridSheets:
         return path
 
     def _provider(self, tmp_path, *, east_xll=538045.16, east_fmt="{:.3f}"):
-        """Provider 5 m piszacy arkusz zachodni (100,25) i wschodni (200)."""
+        """5 m provider writing the western sheet (100.25) and the eastern (200)."""
         provider = Mock()
         provider.vertical_crs = "EVRF2007"
         provider.resolution = "5m"
@@ -2164,9 +2175,9 @@ class TestOffGridSheets:
         return cut, PlCutoutSheets(godla=self._GODLA)
 
     def test_target_2180_off_grid_sheets_is_an_error(self, tmp_path):
-        """D3: EPSG:2180 (wartosci 1:1) z arkuszy o roznych fazach = blad
-        z podpowiedzia innego --target-crs; bez pliku wyniku, bez ``bbox/``,
-        arkusze zostaja w cache."""
+        """D3: EPSG:2180 (values 1:1) from sheets with different phases = an error
+        with a hint for another --target-crs; no result file, no ``bbox/``,
+        the sheets stay in the cache."""
         from kartograf.download.cutout import run_pl_cutout
         from kartograf.download.storage import FileStorage
         from kartograf.exceptions import GridMismatchError, ValidationError
@@ -2198,7 +2209,8 @@ class TestOffGridSheets:
         assert "--target-crs EPSG:5514" in err and "Arkusze zostaja w cache" in err
 
     def test_cli_target_5514_off_grid_prints_info(self, tmp_path, capsys):
-        """W1 w CLI: arkusze o innej fazie = Info: (stderr), kod 0, plik powstaje."""
+        """W1 in the CLI: sheets with a different phase = Info: (stderr), code 0, file
+        created."""
         west = self._write_asc_5m(tmp_path / "M-34-76-A-a-1-1.asc", 535807.22, 460, 100)
         east = self._write_asc_5m(tmp_path / "M-34-76-A-a-1-2.asc", 538045.16, 100, 200)
         args = _pl_args(tmp_path, target_crs="EPSG:5514", resolution="5m")
@@ -2212,13 +2224,14 @@ class TestOffGridSheets:
         assert "Warning:" not in err
 
     def test_target_5514_warps_each_off_grid_sheet_separately(self, tmp_path):
-        """D8 (W1): warp z arkuszy o roznych fazach — kazdy arkusz ze swojej
-        siatki prosto na siatke wyniku. Wynik ma DOKLADNIE dwa poziomy (100,25
-        i 200): zadnej mieszanki na szwie, zadnego nodata; w zakladce wygrywa
-        pierwszy w sortowaniu (zachodni, do 538107); arkusz wschodni z samymi
-        liczbami calkowitymi (Int32) nie obcina zachodniego. Bez naprawy
-        mozaika posrednia ``merge`` zostawiala kolumne nodata na szwie,
-        a bilinear rozmywal ja na ~70 wartosci posrednich."""
+        """D8 (W1): a warp from sheets with different phases - each sheet from
+        its own grid straight to the result grid. The result has EXACTLY two
+        levels (100.25 and 200): no mixture on the seam, no nodata; in the
+        overlap the first in sort order wins (western, up to 538107); the
+        eastern sheet with integers only (Int32) does not truncate the western
+        one. Without the fix the intermediate ``merge`` mosaic left a nodata
+        column on the seam, and bilinear smeared it into ~70 intermediate
+        values."""
         from kartograf.download.cutout import run_pl_cutout
 
         cut, sheets = self._cutout(tmp_path, "EPSG:5514")
@@ -2246,8 +2259,8 @@ class TestOffGridSheets:
         assert list(result.path.parent.glob("*.mosaic.tif")) == []
 
     def test_single_phase_sheets_keep_mosaic_path(self, tmp_path):
-        """Arkusze na jednej fazie: dotychczasowa sciezka (mozaika 1:1 + warp
-        z pliku posredniego), bez ``off_grid_sheets`` w wyniku i sidecarze."""
+        """Sheets on one phase: the existing path (1:1 mosaic + warp from an
+        intermediate file), without ``off_grid_sheets`` in the result and sidecar."""
         from kartograf.download.cutout import run_pl_cutout
         from kartograf.transform import raster as raster_mod
         from kartograf.transport import mosaic as mosaic_mod
@@ -2276,13 +2289,13 @@ class TestOffGridSheets:
         with rasterio.open(result.path) as ds:
             data = ds.read(1)
         assert not (data == _NODATA).any()
-        # mozaika + warp: interpolator widzi sasiada zza szwu, wiec na szwie
-        # sa wartosci posrednie — ale tylko miedzy oboma poziomami
+        # mosaic + warp: the interpolator sees the neighbour across the seam, so
+        # there are intermediate values on the seam - but only between the two levels
         assert data.min() == pytest.approx(100.25) and data.max() == 200.0
 
 
 def _write_sheet_source(sheet, *, full_sheet, godlo=None, url=None):
-    """Sidecar arkusza z ``extra.source`` jak po pobraniu przez manager."""
+    """Sheet sidecar with ``extra.source`` as after a download by the manager."""
     godlo = godlo or sheet.stem
     payload = {
         "request": {"sheet": godlo},
@@ -2301,11 +2314,11 @@ def _write_sheet_source(sheet, *, full_sheet, godlo=None, url=None):
 
 
 class TestPartialSheetVisibility:
-    """E13 (E2E-B C14-b, C12-a): niepelna najnowsza kampania jest widoczna.
+    """E13 (E2E-B C14-b, C12-a): a partial newest campaign is visible.
 
-    Regula wyboru ADR-028 bez zmian (najnowsza kampania) — tu tylko
-    widocznosc: ``full_sheet`` w ``extra.sheet_sources``, ``Warning:``
-    i tresc ostrzezenia o pustym wycinku.
+    The ADR-028 selection rule is unchanged (the newest campaign) - this is
+    only about visibility: ``full_sheet`` in ``extra.sheet_sources``,
+    ``Warning:`` and the text of the empty-cutout warning.
     """
 
     _run = TestDownloadPlBboxCutout._run
@@ -2420,7 +2433,7 @@ class TestPartialSheetVisibility:
         assert "niepelna" not in capsys.readouterr().err
 
     def test_all_nodata_with_partial_sheet_blames_campaign(self, tmp_path, capsys):
-        """C14-b: pusty wycinek z niepelnej kampanii — nie "brak danych GUGiK"."""
+        """C14-b: an empty cutout from a partial campaign - not "no GUGiK data"."""
         sheets = self._sheets(tmp_path, fill=_NODATA)
         rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
 
@@ -2484,7 +2497,7 @@ class TestEmptyCutoutSkip:
 
 
 class TestCutoutOverCampaignLinks:
-    """ADR-030 (errata Q4): wycinek czyta arkusze przez dowiazania kampanii."""
+    """ADR-030 (errata Q4): the cutout reads sheets through campaign links."""
 
     _SHEETS = {
         "N-34-130-D-d-2-3": (530000, 382000),
@@ -2623,12 +2636,12 @@ class TestCutoutOverCampaignLinks:
 
         need, pending = estimate_pl_cutout_bytes(cutout, sheets, storage=storage)
 
-        assert pending == 1  # brakujacy arkusz liczony, hardlink nie
+        assert pending == 1  # the missing sheet is counted, the hardlink is not
         assert need < base_need
 
 
 class TestUnverifiedSheets:
-    """I-1: wycinek przy awarii skorowidza (lokalna kampania bez sprawdzenia)."""
+    """I-1: a cutout when the index fails (local campaign without checking)."""
 
     _run = TestDownloadPlBboxCutout._run
 

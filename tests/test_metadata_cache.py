@@ -102,7 +102,7 @@ class TestMetadataCacheRecord:
     """Tabela record_cache: payload JSON pod kluczem (product, res, vcrs, godlo)."""
 
     def test_set_and_get_round_trip(self, cache):
-        """Zagniezdzony payload wraca 1:1 (JSON round-trip, takze None/float)."""
+        """A nested payload comes back 1:1 (JSON round-trip, also None/float)."""
         cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
         assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) == {"source": SOURCE}
 
@@ -114,7 +114,7 @@ class TestMetadataCacheRecord:
         assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) is None
 
     def test_ttl_expiry(self, short_ttl_cache):
-        """Wpis wygasa po ttl_seconds i jest usuwany oportunistycznie."""
+        """An entry expires after ttl_seconds and is removed opportunistically."""
         short_ttl_cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
         assert short_ttl_cache.get_record("nmt", "1m", "EVRF2007", GODLO) is not None
 
@@ -201,7 +201,7 @@ class TestMetadataCacheTERYT:
 
 
 class TestMetadataCacheSheet:
-    """Tabela sheet_cache (indeks arkuszy CZ) — TTL wg SHEET_TTL_SECONDS."""
+    """The sheet_cache table (CZ sheet index) - TTL per SHEET_TTL_SECONDS."""
 
     _PAYLOAD = {
         "godlo": "CTES96",
@@ -232,7 +232,7 @@ class TestMetadataCacheSheet:
         assert row[0] == 0
 
     def test_sheet_ttl_independent_from_record_ttl(self, cache_path):
-        """ttl_seconds=1 (record/teryt) nie dotyczy sheet_cache (TTL 30 dni)."""
+        """ttl_seconds=1 (record/teryt) does not apply to sheet_cache (TTL 30 days)."""
         c = MetadataCache(db_path=cache_path, ttl_seconds=1)
         c.set_sheet("cz_sm5", "CTES96", self._PAYLOAD)
         time.sleep(1.1)
@@ -245,7 +245,7 @@ class TestMetadataCacheSheet:
         assert cache.prune_expired() == 1
 
     def test_old_database_gains_sheet_table(self, cache_path):
-        """Stara baza (bez sheet_cache) doposaza sie przy otwarciu."""
+        """An old database (without sheet_cache) is upgraded on open."""
         c = MetadataCache(db_path=cache_path)
         c.set_teryt(1.0, 2.0, "1465")  # first write creates the database
         c._conn.execute("DROP TABLE sheet_cache")
@@ -263,7 +263,7 @@ class TestMetadataCacheSheet:
 
 
 class TestMetadataCacheMigration:
-    """Stary plik cache (0.6.x, tabela url_cache) migruje przy otwarciu."""
+    """An old cache file (0.6.x, url_cache table) migrates on open."""
 
     def test_legacy_url_cache_table_is_dropped(self, cache_path):
         conn = sqlite3.connect(str(cache_path))
@@ -479,7 +479,7 @@ class TestGugikProviderCacheIntegration:
         assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) is None
 
     def test_no_cache_backward_compat(self):
-        """cache=None: to samo rozstrzygniecie, bez zapisu."""
+        """cache=None: the same resolution, without writing."""
         mock_session = Mock(spec=requests.Session)
         mock_session.get.return_value = _gfi_response(
             render_gfi_body([gfi_record(GODLO)])
@@ -489,7 +489,7 @@ class TestGugikProviderCacheIntegration:
         assert provider._get_opendata_url(GODLO) == gfi_record(GODLO)["url"]
 
     def test_5m_resolution_with_cache(self, cache):
-        """Klucz 5m: trafienie bez sieci, miss zapisuje pod ("nmt","5m",...)."""
+        """5m key: a hit without network, a miss writes under ("nmt","5m",...)."""
         cache.set_record(
             "nmt", "5m", "EVRF2007", GODLO, {"source": {**SOURCE, "resolution_m": 5.0}}
         )
@@ -516,7 +516,7 @@ class TestGugikProviderCacheIntegration:
 
 
 class TestGugikNmptProviderCacheIntegration:
-    """GugikNmptProvider uzywa klucza product="nmpt" (nie "nmt")."""
+    """GugikNmptProvider uses the product="nmpt" key (not "nmt")."""
 
     def test_cache_hit_source_skips_network(self, cache):
         nmpt_source = {**SOURCE, "url": "https://opendata.cached.com/nmpt.asc"}
@@ -529,7 +529,8 @@ class TestGugikNmptProviderCacheIntegration:
         mock_session.get.assert_not_called()
 
     def test_nmt_entry_does_not_serve_nmpt(self, cache):
-        """Wpis "nmt" nie jest trafieniem dla NMPT — miss idzie w siec pod "nmpt"."""
+        """An "nmt" entry is not a hit for NMPT - a miss goes to the network under
+        "nmpt"."""
         cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
         nmpt_url = "https://opendata.geoportal.gov.pl/NumDaneWys/NMPT/1/x.asc"
         mock_session = Mock(spec=requests.Session)
@@ -1136,7 +1137,7 @@ class TestCampaignsCache:
 
 
 class TestMetadataCacheFinalizer:
-    """__del__ nie importuje i nie rzuca przy finalizacji interpretera."""
+    """__del__ does not import and does not raise during interpreter finalisation."""
 
     def test_del_does_not_import_and_does_not_raise(self, tmp_path):
         import builtins
@@ -1149,7 +1150,7 @@ class TestMetadataCacheFinalizer:
         real_import = builtins.__import__
         builtins.__import__ = no_import
         try:
-            cache.__del__()  # nie rzuca
+            cache.__del__()  # does not raise
         finally:
             builtins.__import__ = real_import
 
@@ -1172,7 +1173,7 @@ class TestMetadataCacheFinalizer:
 
 
 class TestLazyOpen:
-    """Konstrukcja, odczyty, stats/clear/close nie tworza pliku bazy."""
+    """Construction, reads, stats/clear/close do not create the database file."""
 
     def test_constructor_does_not_create_file(self, cache_path):
         c = MetadataCache(db_path=cache_path)
@@ -1339,7 +1340,8 @@ class TestLazyOpen:
 
 
 class TestCLICacheCommandsWithoutDatabase:
-    """``kartograf cache path|stats|clear`` w katalogu bez bazy jej nie tworza."""
+    """``kartograf cache path|stats|clear`` in a directory without a database do not
+    create one."""
 
     def test_cache_path_does_not_create_db(self, tmp_path, monkeypatch, capsys):
         monkeypatch.chdir(tmp_path)

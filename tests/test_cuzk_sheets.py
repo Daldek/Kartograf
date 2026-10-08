@@ -1,8 +1,8 @@
-"""Testy SheetIndex — indeks arkuszy KladyMapovychListu (offline).
+"""Tests of SheetIndex - the KladyMapovychListu sheet index (offline).
 
-Fixtury `tests/fixtures/cuzk/*.json` to zapis realnych odpowiedzi uslugi
-(rekonesans Zad. 1) — sa zrodlem prawdy dla ksztaltu odpowiedzi i wartosci
-atrybutow (MAPNAME "Cesky Tesin 9-6", PODIL 0.99 dla CTES96).
+The fixtures `tests/fixtures/cuzk/*.json` are recordings of real service
+responses (reconnaissance Task 1) - they are the source of truth for the
+response shape and attribute values (MAPNAME "Cesky Tesin 9-6", PODIL 0.99 for CTES96).
 """
 
 import json
@@ -89,7 +89,7 @@ class TestSm5Sheet:
         assert "MAPNOM" in kwargs["params"]["where"]
 
     def test_sm5_sheet_values_match_fixture(self):
-        """Wartosci z realnej odpowiedzi (nie ze starego researchu: 9-6, 0.99)."""
+        """Values from the real response (not from the old research: 9-6, 0.99)."""
         session = _session_returning(_fixture("klady_sm5_where_ctes96.json"))
         info = SheetIndex(session=session).sm5_sheet("CTES96")
         assert info.name == "Český Těšín 9-6"
@@ -133,7 +133,7 @@ class TestSm5Sheet:
         session = Mock()
         index = SheetIndex(session=session)
         with pytest.raises(ValidationError):
-            index.sm5_sheet("ctes96")  # male litery — nie przechodzi wzorca
+            index.sm5_sheet("ctes96")  # lower case - does not pass the pattern
         session.get.assert_not_called()
 
     def test_feature_without_geometry_raises_parse_error(self):
@@ -181,7 +181,7 @@ class TestSm5Sheet:
         cache.get_sheet.assert_called_once_with("cz_sm5", "CTES96")
         system, godlo, payload = cache.set_sheet.call_args.args
         assert (system, godlo) == ("cz_sm5", "CTES96")
-        # payload musi przejsc przez JSON (tak zapisuje go MetadataCache)
+        # the payload must go through JSON (that is how MetadataCache stores it)
         decoded = json.loads(json.dumps(payload, ensure_ascii=False))
 
         replay_cache = Mock()
@@ -195,7 +195,7 @@ class TestSm5Sheet:
 
     def test_corrupt_cache_payload_falls_back_to_query(self, tmp_path):
         cache = MetadataCache(db_path=tmp_path / "c.db")
-        cache.set_sheet("cz_sm5", "CTES96", {"godlo": "CTES96"})  # bez bbox
+        cache.set_sheet("cz_sm5", "CTES96", {"godlo": "CTES96"})  # no bbox
         session = _session_returning(_fixture("klady_sm5_where_ctes96.json"))
         info = SheetIndex(session=session, cache=cache).sm5_sheet("CTES96")
         assert info.bbox.crs == SM5_CRS
@@ -216,9 +216,10 @@ class TestBboxQueries:
         assert params["spatialRel"] == "esriSpatialRelIntersects"
 
     def test_sm5_sheets_for_bbox_drops_edge_touching_sheets(self):
-        """13 features z uslugi -> 7 przecinajacych koperte wnetrzem (Zad. 1, 3b).
+        """13 features from the service -> 7 intersecting the envelope by interior
+        (Task 1, 3b).
 
-        Odrzucone arkusze maja wschodnia krawedz dokladnie na xmin koperty.
+        The rejected sheets have their east edge exactly at the envelope xmin.
         """
         fixture = _fixture("klady_sm5_bbox.json")
         assert len(fixture["features"]) == 13
@@ -235,7 +236,7 @@ class TestBboxQueries:
         ]
 
     def test_tm33_tiles_for_bbox(self):
-        """Koperta = dokladnie 1 kafel; usluga zwraca 9 (sasiedztwo 3x3)."""
+        """Envelope = exactly 1 tile; the service returns 9 (a 3x3 neighbourhood)."""
         fixture = _fixture("klady_tm33_bbox_oversel.json")
         assert len(fixture["features"]) == 9
         session = _session_returning(fixture)
@@ -319,7 +320,7 @@ class TestBboxQueries:
         session.get.assert_not_called()
 
     def test_bbox_queries_do_not_touch_cache(self, tmp_path):
-        """Cache trzyma pojedyncze arkusze (klucz godlo) — nie wyniki bbox."""
+        """The cache holds single sheets (key: sheet code) - not bbox results."""
         cache = MetadataCache(db_path=tmp_path / "c.db")
         session = _session_returning(_fixture("klady_sm5_bbox.json"))
         SheetIndex(session=session, cache=cache).sm5_sheets_for_bbox(BBOX_SM5)
