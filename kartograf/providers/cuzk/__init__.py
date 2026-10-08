@@ -1,0 +1,38 @@
+"""Providers of Czech data sources (CUZK)."""
+
+import requests
+
+from kartograf.cache.metadata import MetadataCache
+from kartograf.exceptions import ValidationError
+from kartograf.providers.cuzk.client import CuzkClient
+from kartograf.providers.cuzk.dmr import CuzkDmrProvider
+from kartograf.providers.cuzk.sheets import SheetIndex, SheetInfo
+
+__all__ = [
+    "CuzkClient",
+    "CuzkDmrProvider",
+    "SheetIndex",
+    "SheetInfo",
+    "create_dmr_provider",
+]
+
+
+def create_dmr_provider(
+    resolution: str = "2m",
+    session: requests.Session | None = None,
+    cache: MetadataCache | None = None,
+    target_crs: str | None = None,
+    vertical_crs: str = "Bpv",
+) -> CuzkDmrProvider:
+    """DMR provider factory — the one place for Czech defaults (model: pl)."""
+    if resolution not in {"2m", "5m"}:
+        raise ValidationError(
+            f"Nieobslugiwana rozdzielczosc CZ: '{resolution}' (dostepne: 2m, 5m)"
+        )
+    return CuzkDmrProvider(
+        resolution=resolution,
+        session=session,
+        cache=cache,
+        target_crs=target_crs,
+        vertical_crs=vertical_crs,
+    )

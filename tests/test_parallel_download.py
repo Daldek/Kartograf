@@ -8,6 +8,7 @@ This module tests:
 - CLI --workers flag
 """
 
+import logging
 import threading
 from pathlib import Path
 from unittest.mock import Mock, PropertyMock, patch
@@ -20,9 +21,9 @@ from kartograf.download.manager import (
     DownloadResult,
 )
 from kartograf.download.storage import FileStorage
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
-from kartograf.providers.gugik import GugikProvider
+from kartograf.providers.pl.gugik import GugikProvider
 
 
 class TestDownloadResult:
@@ -233,6 +234,201 @@ class TestParallelDownloadHierarchy:
         assert manager._max_workers == 1
 
 
+class TestDownloadHierarchyLastResult:
+    """Tests of the DownloadManager.last_result attribute filled by the hierarchy."""
+
+    @pytest.fixture
+    def flaky_provider(self):
+        """Provider: a sheet code ending in '-1' fails, the rest download correctly."""
+        provider = Mock(spec=GugikProvider)
+        type(provider).default_extension = PropertyMock(return_value=".asc")
+
+        def mock_download(godlo, path, timeout=30):
+            if godlo.endswith("-1"):
+                raise DownloadError("Network error", godlo=godlo)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"ASC data")
+            return path
+
+        provider.download = mock_download
+        return provider
+
+    def test_last_result_is_none_before_download(self, tmp_path, flaky_provider):
+        """Before the first hierarchy last_result is None."""
+        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
+
+        assert manager.last_result is None
+
+    @pytest.mark.parametrize("workers", [1, 4])
+    def test_last_result_counts_succeeded_skipped_failed(
+        self, tmp_path, flaky_provider, caplog, workers
+    ):
+        """last_result separates downloaded, skipped and failed sheets."""
+        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
+
+        existing_godlo = "N-34-130-D-d-2-2"
+        existing_path = manager.storage.get_path(existing_godlo, ".asc")
+        existing_path.parent.mkdir(parents=True, exist_ok=True)
+        existing_path.write_bytes(b"existing")
+
+        with caplog.at_level(logging.INFO, logger="kartograf.download.manager"):
+            paths = manager.download_hierarchy(
+                "N-34-130-D-d-2", "1:10000", max_workers=workers
+            )
+
+        assert manager.last_result is not None
+        assert manager.last_result.failed == ["N-34-130-D-d-2-1"]
+        assert set(manager.last_result.skipped) == {existing_godlo}
+        assert len(manager.last_result.succeeded) == 2
+        assert manager.last_result.total == 4
+
+        # Return type unchanged: a list of paths (2 downloaded + 1 skipped)
+        assert len(paths) == 3
+        assert all(isinstance(p, Path) for p in paths)
+
+        assert "2 downloaded, 1 skipped, 1 failed" in caplog.text
+
+    @pytest.mark.parametrize("workers", [1, 4])
+    def test_progress_reports_final_status_and_message_per_sheet(
+        self, tmp_path, workers
+    ):
+        """D10: both modes report through a single ``_emit`` - the final status
+        and message of every sheet are identical (the sequential one additionally
+        reports ``downloading`` before the download)."""
+        from kartograf.exceptions import NoCoverageError
+
+        provider = Mock(spec=GugikProvider)
+        type(provider).default_extension = PropertyMock(return_value=".asc")
+
+        def mock_download(godlo, path, timeout=30):
+            if godlo.endswith("-1"):
+                raise DownloadError("Network error", godlo=godlo)
+            if godlo.endswith("-3"):
+                raise NoCoverageError("morze", godlo=godlo)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"ASC data")
+            return path
+
+        provider.download = mock_download
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+        existing = manager.storage.get_path("N-34-130-D-d-2-2", ".asc")
+        existing.parent.mkdir(parents=True, exist_ok=True)
+        existing.write_bytes(b"existing")
+
+        events = []
+        manager.download_hierarchy(
+            "N-34-130-D-d-2",
+            "1:10000",
+            max_workers=workers,
+            on_progress=events.append,
+        )
+
+        final = {
+            e.godlo: (e.status, e.message) for e in events if e.status != "downloading"
+        }
+        assert final["N-34-130-D-d-2-1"][0] == "failed"
+        assert "Network error" in final["N-34-130-D-d-2-1"][1]
+        assert final["N-34-130-D-d-2-2"] == ("skipped", "Already exists")
+        assert final["N-34-130-D-d-2-3"][0] == "no_coverage"
+        assert "morze" in final["N-34-130-D-d-2-3"][1]
+        assert final["N-34-130-D-d-2-4"] == ("completed", "")
+        assert sorted(e.current for e in events if e.status != "downloading") == [
+            1,
+            2,
+            3,
+            4,
+        ]
+        downloading = [e.godlo for e in events if e.status == "downloading"]
+        expected = ["N-34-130-D-d-2-1", "N-34-130-D-d-2-3", "N-34-130-D-d-2-4"]
+        assert downloading == (expected if workers == 1 else [])
+
+    def test_last_result_counts_unexpected_error_as_failed(self, tmp_path):
+        """A non-DownloadError exception in parallel mode lands in failed."""
+        provider = Mock(spec=GugikProvider)
+        type(provider).default_extension = PropertyMock(return_value=".asc")
+
+        def mock_download(godlo, path, timeout=30):
+            if godlo.endswith("-1"):
+                raise RuntimeError("boom")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"ASC data")
+            return path
+
+        provider.download = mock_download
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+
+        paths = manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=4)
+
+        assert len(paths) == 3
+        assert manager.last_result is not None
+        assert manager.last_result.failed == ["N-34-130-D-d-2-1"]
+        assert len(manager.last_result.succeeded) == 3
+
+    def test_last_result_reset_when_next_hierarchy_fails_before_loop(
+        self, tmp_path, flaky_provider
+    ):
+        """A new hierarchy call clears the previous result before entering the loop."""
+        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
+
+        manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=1)
+        assert manager.last_result is not None
+        assert manager.last_result.failed == ["N-34-130-D-d-2-1"]
+
+        with pytest.raises(ValidationError):
+            manager.download_hierarchy("N-34-130-D-d-2", "1:5000")
+
+        # The caller must not get the result of the PREVIOUS run.
+        assert manager.last_result is None
+
+    def test_last_result_reset_when_sequential_run_aborts(
+        self, tmp_path, flaky_provider
+    ):
+        """An exception other than DownloadError (sequential) leaves no old result."""
+        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
+
+        manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=1)
+        assert manager.last_result is not None
+
+        def boom(godlo, path, timeout=30):
+            raise RuntimeError("boom")
+
+        flaky_provider.download = boom
+
+        with pytest.raises(RuntimeError):
+            manager.download_hierarchy("N-34-130-D-d-1", "1:10000", max_workers=1)
+
+        assert manager.last_result is None
+
+    def test_last_result_reset_by_download_sheet_of_single_10k(
+        self, tmp_path, flaky_provider
+    ):
+        """download_sheet of a single 1:10000 clears the previous hierarchy result."""
+        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
+
+        manager.download_hierarchy("N-34-130-D-d-1", "1:10000", max_workers=1)
+        assert manager.last_result is not None
+        assert manager.last_result.failed == ["N-34-130-D-d-1-1"]
+
+        path = manager.download_sheet("N-34-130-D-d-2-4")
+
+        assert path.exists()
+        # A single sheet does not fill last_result - nor does it leave the old one.
+        assert manager.last_result is None
+
+    def test_last_result_set_when_download_sheet_expands_hierarchy(
+        self, tmp_path, flaky_provider
+    ):
+        """download_sheet with a code coarser than 1:10000 still fills last_result."""
+        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
+
+        paths = manager.download_sheet("N-34-130-D-d-2")
+
+        assert isinstance(paths, list)
+        assert manager.last_result is not None
+        assert manager.last_result.failed == ["N-34-130-D-d-2-1"]
+        assert len(manager.last_result.succeeded) == 3
+
+
 class TestProviderThreadSafety:
     """Tests for provider thread-safety during concurrent downloads."""
 
@@ -305,13 +501,12 @@ class TestProviderThreadSafety:
             assert path.read_bytes() == f"data-{godlo}".encode()
 
     def test_concurrent_provider_sessions_independent(self):
-        """Test that _make_request creates independent sessions per call."""
-        # Verify the provider creates new sessions when self._session is None
+        """Without an injected session the provider keeps one session per thread."""
         provider = GugikProvider()
 
-        # The key is that _session is None by default, so each _make_request
-        # call creates its own Session - safe for concurrent access
-        assert provider._session is None
+        # No caller session: SessionPerThread creates a session per thread,
+        # so the thread pool does not share a single requests.Session.
+        assert provider._sessions.injected is None
 
 
 class TestLandCoverParallelDownload:
@@ -468,8 +663,10 @@ class TestCLIWorkersFlag:
     def test_workers_passed_to_download_manager(self, tmp_path):
         """Test that --workers value is passed to DownloadManager."""
         with (
-            patch("kartograf.cli.commands._create_provider_and_storage") as mock_create,
-            patch("kartograf.cli.commands.DownloadManager") as mock_dm_class,
+            patch(
+                "kartograf.cli.download_cmd._create_provider_and_storage"
+            ) as mock_create,
+            patch("kartograf.cli.download_cmd.DownloadManager") as mock_dm_class,
         ):
             mock_provider = Mock()
             mock_provider.default_extension = ".asc"
@@ -477,6 +674,7 @@ class TestCLIWorkersFlag:
             mock_create.return_value = (mock_provider, mock_storage)
 
             mock_dm = Mock()
+            mock_dm.last_result = None
             mock_dm.download_sheet.return_value = Path("test.asc")
             mock_dm_class.return_value = mock_dm
 

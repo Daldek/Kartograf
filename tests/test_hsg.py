@@ -7,17 +7,50 @@ Tests cover USDA texture classification, HSG mapping, and HSGCalculator.
 from unittest.mock import Mock, patch
 
 import numpy as np
+import pytest
 
 from kartograf.hydrology.hsg import (
     HSG_DESCRIPTIONS,
     HSG_VALUES,
     TEXTURE_CLASSES,
+    TEXTURE_NAMES,
     HSGCalculator,
     classify_usda_texture,
     classify_usda_texture_array,
     texture_to_hsg,
     texture_to_hsg_array,
 )
+
+# Control points of the canonical USDA triangle (Soil Survey Manual):
+# 4 points from verification A4-4 + the centres of all 12 classes.
+CANONICAL_CONTROL_POINTS = [
+    # (clay, sand, silt, expected)
+    (0, 70, 30, "sandy_loam"),  # silt + 2*clay = 30 >= 30
+    (20, 45, 35, "loam"),  # sand <= 52, silt 28-50
+    (35, 45, 20, "clay_loam"),  # sand <= 45 => not sandy_clay
+    (12, 75, 13, "sandy_loam"),  # silt + 2*clay = 37 >= 30
+    (5, 90, 5, "sand"),
+    (5, 80, 15, "loamy_sand"),
+    (10, 65, 25, "sandy_loam"),
+    (20, 40, 40, "loam"),
+    (15, 20, 65, "silt_loam"),
+    (5, 5, 90, "silt"),
+    (27, 60, 13, "sandy_clay_loam"),
+    (33, 33, 34, "clay_loam"),
+    (33, 10, 57, "silty_clay_loam"),
+    (42, 52, 6, "sandy_clay"),
+    (47, 6, 47, "silty_clay"),
+    (60, 20, 20, "clay"),
+]
+
+
+def _simplex_points():
+    """All simplex points clay+sand+silt=100 in 1 percent steps (5151 points)."""
+    return [
+        (clay, sand, 100 - clay - sand)
+        for clay in range(0, 101)
+        for sand in range(0, 101 - clay)
+    ]
 
 
 class TestUSDATextureClassification:
@@ -26,17 +59,24 @@ class TestUSDATextureClassification:
     def test_sand(self):
         """Test sand classification."""
         assert classify_usda_texture(clay=5, sand=90, silt=5) == "sand"
-        assert classify_usda_texture(clay=8, sand=87, silt=5) == "sand"
+        # canonical USDA: silt + 1.5*clay = 14.0 < 15
+        assert classify_usda_texture(clay=8, sand=90, silt=2) == "sand"
 
     def test_loamy_sand(self):
         """Test loamy sand classification."""
-        assert classify_usda_texture(clay=10, sand=80, silt=10) == "loamy_sand"
-        assert classify_usda_texture(clay=12, sand=75, silt=13) == "loamy_sand"
+        assert classify_usda_texture(clay=5, sand=80, silt=15) == "loamy_sand"
+        # canonical USDA: silt + 1.5*clay = 17 >= 15, silt + 2*clay = 21 < 30
+        # (formerly pinned as "sand")
+        assert classify_usda_texture(clay=8, sand=87, silt=5) == "loamy_sand"
 
     def test_sandy_loam(self):
         """Test sandy loam classification."""
         assert classify_usda_texture(clay=15, sand=60, silt=25) == "sandy_loam"
         assert classify_usda_texture(clay=10, sand=65, silt=25) == "sandy_loam"
+        # canonical USDA: silt + 2*clay = 30 >= 30 (formerly "loamy_sand")
+        assert classify_usda_texture(clay=10, sand=80, silt=10) == "sandy_loam"
+        # canonical USDA: silt + 2*clay = 37 >= 30 (formerly "loamy_sand")
+        assert classify_usda_texture(clay=12, sand=75, silt=13) == "sandy_loam"
 
     def test_loam(self):
         """Test loam classification."""
@@ -89,6 +129,19 @@ class TestUSDATextureClassification:
         result1 = classify_usda_texture(clay=10, sand=180, silt=10)
         result2 = classify_usda_texture(clay=5, sand=90, silt=5)
         assert result1 == result2
+
+    @pytest.mark.parametrize(
+        ("clay", "sand", "silt", "expected"), CANONICAL_CONTROL_POINTS
+    )
+    def test_classify_matches_canonical_usda_control_points(
+        self, clay, sand, silt, expected
+    ):
+        """Canonical control points of the USDA triangle (Soil Survey Manual)."""
+        assert classify_usda_texture(clay=clay, sand=sand, silt=silt) == expected
+
+    def test_zero_sum_returns_loam(self):
+        """Sum 0 (no data) -> explicitly loam, not a hit of the `sand` rule."""
+        assert classify_usda_texture(clay=0, sand=0, silt=0) == "loam"
 
 
 class TestTextureToHSG:
@@ -163,6 +216,48 @@ class TestArrayClassification:
         assert result[0] == 0
         assert result[1] == HSG_VALUES["A"]
         assert result[2] == 0
+
+    def test_scalar_and_array_agree_on_whole_simplex(self):
+        """Scalar and vector compute from one rule list - a 1:1 match."""
+        points = _simplex_points()
+        assert len(points) == 5151
+
+        clay = np.array([p[0] for p in points], dtype=np.float64)
+        sand = np.array([p[1] for p in points], dtype=np.float64)
+        silt = np.array([p[2] for p in points], dtype=np.float64)
+
+        codes = classify_usda_texture_array(clay, sand, silt)
+        expected = np.array(
+            [TEXTURE_CLASSES[classify_usda_texture(c, s, si)] for c, s, si in points],
+            dtype=np.uint8,
+        )
+
+        assert np.array_equal(codes, expected)
+        # the USDA rules partition the simplex - every point has a class 1-12
+        assert (codes >= 1).all() and (codes <= 12).all()
+
+    def test_array_float32_input_boundary_clay_15(self):
+        """float32 at the clay=15% boundary does not diverge from the scalar (A4-8)."""
+        # as in the raster pipeline: g/kg (float32) / 10 -> percent
+        clay = np.array([np.float32(150)], dtype=np.float32) / np.float32(10)
+        sand = np.array([np.float32(750)], dtype=np.float32) / np.float32(10)
+        silt = np.array([np.float32(100)], dtype=np.float32) / np.float32(10)
+
+        code = int(classify_usda_texture_array(clay, sand, silt)[0])
+        scalar = classify_usda_texture(15.0, 75.0, 10.0)
+
+        assert TEXTURE_NAMES[code] == scalar
+
+    def test_array_zero_sum_returns_loam(self):
+        """Sum 0 in an array -> loam (explicit guard, not the `sand` rule)."""
+        clay = np.array([0.0, 5.0])
+        sand = np.array([0.0, 90.0])
+        silt = np.array([0.0, 5.0])
+
+        result = classify_usda_texture_array(clay, sand, silt)
+
+        assert result[0] == TEXTURE_CLASSES["loam"]
+        assert result[1] == TEXTURE_CLASSES["sand"]
 
 
 class TestTextureClassesDict:
@@ -310,7 +405,7 @@ class TestHSGCLI:
         assert args.stats is True
 
 
-def _create_test_raster(path, data, transform=None):
+def _create_test_raster(path, data, transform=None, crs="EPSG:2180", nodata=0):
     """Helper to create a minimal GeoTIFF for testing."""
     import rasterio
     from rasterio.transform import from_bounds
@@ -326,9 +421,9 @@ def _create_test_raster(path, data, transform=None):
         "width": data.shape[1],
         "height": data.shape[0],
         "count": 1,
-        "crs": "EPSG:2180",
+        "crs": crs,
         "transform": transform,
-        "nodata": 0,
+        "nodata": nodata,
     }
 
     with rasterio.open(path, "w", **profile) as dst:
@@ -437,6 +532,68 @@ class TestHSGCalculatorCalculateFull:
             hsg = src.read(1)
         assert np.all(hsg == 0)
 
+    def test_calculate_hsg_masks_int16_nodata(self, tmp_path):
+        """Cells flagged as nodata in the source rasters -> HSG 0, not B."""
+        from kartograf.core.sheet_parser import BBox
+
+        mock_provider = Mock()
+        calc = HSGCalculator(provider=mock_provider)
+
+        # Valid soil everywhere: clay=300, sand=300, silt=400 g/kg -> clay_loam -> C
+        def fake_download(bbox, path, timeout, property, depth, stat):
+            fill = {"clay": 300, "sand": 300, "silt": 400}[property]
+            data = np.full((3, 3), fill, dtype=np.int16)
+            # [1, 1] is nodata in clay only, [2, 2] is nodata in all three
+            if property == "clay":
+                data[1, 1] = -32768
+            data[2, 2] = -32768
+            _create_test_raster(path, data, nodata=-32768)
+            return path
+
+        mock_provider.download_by_bbox.side_effect = fake_download
+
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        output = tmp_path / "hsg.tif"
+        calc.calculate_hsg_by_bbox(bbox, output)
+
+        import rasterio
+
+        with rasterio.open(output) as src:
+            hsg = src.read(1)
+
+        assert hsg[0, 0] == 3  # clay_loam -> C
+        assert hsg[1, 1] == 0  # nodata in clay alone is enough
+        assert hsg[2, 2] == 0  # nodata in all three bands
+
+    def test_calculate_hsg_masks_nan(self, tmp_path):
+        """NaN in a source raster -> HSG 0, even without a nodata tag."""
+        from kartograf.core.sheet_parser import BBox
+
+        mock_provider = Mock()
+        calc = HSGCalculator(provider=mock_provider)
+
+        def fake_download(bbox, path, timeout, property, depth, stat):
+            fill = {"clay": 300.0, "sand": 300.0, "silt": 400.0}[property]
+            data = np.full((3, 3), fill, dtype=np.float32)
+            if property == "sand":
+                data[1, 1] = np.nan
+            _create_test_raster(path, data, nodata=None)
+            return path
+
+        mock_provider.download_by_bbox.side_effect = fake_download
+
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        output = tmp_path / "hsg.tif"
+        calc.calculate_hsg_by_bbox(bbox, output)
+
+        import rasterio
+
+        with rasterio.open(output) as src:
+            hsg = src.read(1)
+
+        assert hsg[1, 1] == 0
+        assert np.all(np.delete(hsg.reshape(-1), 4) > 0)
+
     def test_calculate_hsg_keep_intermediate(self, tmp_path):
         """keep_intermediate=True copies clay/sand/silt files."""
         from kartograf.core.sheet_parser import BBox
@@ -477,6 +634,47 @@ class TestHSGCalculatorCalculateFull:
         assert abs(stats["A"]["percent"] - 50.0) < 0.1
         assert abs(stats["B"]["percent"] - 25.0) < 0.1
 
+    def test_get_hsg_statistics_geographic_crs_area_in_hectares(self, tmp_path):
+        """EPSG:4326 rasters get geodetic areas, not square degrees."""
+        from pyproj import Geod
+        from rasterio.transform import from_origin
+
+        calc = HSGCalculator()
+
+        res = 0.0022457  # ~250 m in latitude
+        transform = from_origin(22.7, 52.5, res, res)
+        data = np.full((100, 100), 2, dtype=np.uint8)
+        hsg_path = tmp_path / "hsg_4326.tif"
+        _create_test_raster(hsg_path, data, transform=transform, crs="EPSG:4326")
+
+        west, north = 22.7, 52.5
+        east, south = west + 100 * res, north - 100 * res
+        geod = Geod(ellps="WGS84")
+        area, _ = geod.polygon_area_perimeter(
+            [west, east, east, west], [south, south, north, north]
+        )
+        expected_ha = abs(area) / 10000
+
+        stats = calc.get_hsg_statistics(hsg_path)
+
+        assert stats["B"]["count"] == 10000
+        assert stats["B"]["area_ha"] == pytest.approx(expected_ha, rel=0.02)
+        assert stats["B"]["percent"] == 100.0
+
+    def test_get_hsg_statistics_projected_crs_unchanged(self, tmp_path):
+        """Metric CRS keeps the plain width*height cell area."""
+        calc = HSGCalculator()
+
+        # 2x2 raster over 10x10 km -> 5x5 km cells = 2500 ha each
+        data = np.array([[1, 1], [2, 3]], dtype=np.uint8)
+        hsg_path = tmp_path / "hsg_2180.tif"
+        _create_test_raster(hsg_path, data)
+
+        stats = calc.get_hsg_statistics(hsg_path)
+
+        assert stats["A"]["area_ha"] == pytest.approx(5000.0)
+        assert stats["B"]["area_ha"] == pytest.approx(2500.0)
+
     def test_get_hsg_statistics_structure(self, tmp_path):
         """Verify stats dict has required keys."""
         calc = HSGCalculator()
@@ -494,3 +692,117 @@ class TestHSGCalculatorCalculateFull:
             assert "area_ha" in stats[group]
             assert "percent" in stats[group]
             assert "description" in stats[group]
+
+
+class TestHSGSidecar:
+    """The HSG result gets a <file>.meta.json sidecar (project rule)."""
+
+    def _calc(self):
+        mock_provider = Mock()
+
+        def fake_download(bbox, path, timeout, property, depth, stat):
+            data = np.full((5, 5), 200 if property == "clay" else 400, np.float32)
+            _create_test_raster(path, data)
+            return path
+
+        mock_provider.download_by_bbox.side_effect = fake_download
+        return HSGCalculator(provider=mock_provider)
+
+    def test_sidecar_written(self, tmp_path):
+        import json
+
+        from kartograf.core.sheet_parser import BBox
+
+        out = tmp_path / "hsg_x.tif"
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        self._calc().calculate_hsg_by_bbox(bbox, out, depth="5-15cm", stat="mean")
+
+        meta = json.loads((tmp_path / "hsg_x.tif.meta.json").read_text())
+        assert meta["dataset"] == "global.isric.soilgrids"
+        assert meta["horizontal_crs"] == "EPSG:2180"
+        assert meta["nodata"] == 0
+        assert meta["request"]["bbox"] == [450000, 550000, 460000, 560000]
+        assert meta["request"]["bbox_crs"] == "EPSG:2180"
+        assert meta["extra"]["derived"] == "hsg"
+        assert meta["extra"]["source_layers"] == ["clay", "sand", "silt"]
+        assert meta["extra"]["depth"] == "5-15cm"
+        assert meta["extra"]["stat"] == "mean"
+
+    def test_sidecar_by_godlo_records_sheet(self, tmp_path):
+        import json
+
+        out = tmp_path / "hsg_sheet.tif"
+        self._calc().calculate_hsg_by_godlo("N-34-130-D", out)
+
+        request = json.loads((tmp_path / "hsg_sheet.tif.meta.json").read_text())[
+            "request"
+        ]
+        assert request["sheet"] == "N-34-130-D"
+        assert request["bbox_crs"] == "EPSG:2180"
+        assert len(request["bbox"]) == 4
+
+    def test_sidecar_by_bbox_has_no_sheet(self, tmp_path):
+        import json
+
+        from kartograf.core.sheet_parser import BBox
+
+        out = tmp_path / "hsg_nosheet.tif"
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        self._calc().calculate_hsg_by_bbox(bbox, out)
+
+        request = json.loads((tmp_path / "hsg_nosheet.tif.meta.json").read_text())[
+            "request"
+        ]
+        assert "sheet" not in request
+
+    def test_sidecar_uses_bbox_raster_capability(self, tmp_path):
+        from kartograf.core.sheet_parser import BBox
+
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        with patch("kartograf.sources.sidecar.emit_sidecar") as emit:
+            self._calc().calculate_hsg_by_bbox(bbox, tmp_path / "h.tif")
+        assert emit.call_args.kwargs["capability"] == "bbox_raster"
+
+    def test_sidecar_failure_does_not_break(self, tmp_path):
+        from kartograf.core.sheet_parser import BBox
+
+        out = tmp_path / "hsg_y.tif"
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        with patch("kartograf.sources.sidecar.write_sidecar", side_effect=OSError("x")):
+            result = self._calc().calculate_hsg_by_bbox(bbox, out)
+        assert result == out and out.exists()
+
+
+class TestHSGOutputDirOnWrite:
+    """The output directory is created only right before the result is written."""
+
+    @staticmethod
+    def _bbox():
+        from kartograf.core.sheet_parser import BBox
+
+        return BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+
+    def test_download_failure_leaves_no_output_dir(self, tmp_path):
+        from kartograf.exceptions import DownloadError
+
+        provider = Mock()
+        provider.download_by_bbox.side_effect = DownloadError("siec")
+        out = tmp_path / "a" / "b" / "hsg.tif"
+        with pytest.raises(DownloadError):
+            HSGCalculator(provider=provider).calculate_hsg_by_bbox(self._bbox(), out)
+        assert not (tmp_path / "a").exists()
+
+    def test_nested_output_dir_created_on_success(self, tmp_path):
+        def fake_download(bbox, path, timeout, property, depth, stat):
+            _create_test_raster(path, np.full((5, 5), 200, np.float32))
+            return path
+
+        provider = Mock()
+        provider.download_by_bbox.side_effect = fake_download
+        out = tmp_path / "a" / "b" / "hsg.tif"
+        HSGCalculator(provider=provider).calculate_hsg_by_bbox(
+            self._bbox(), out, keep_intermediate=True
+        )
+        assert out.exists()
+        assert (tmp_path / "a" / "b" / "hsg.tif.meta.json").exists()
+        assert (tmp_path / "a" / "b" / "clay.tif").exists()

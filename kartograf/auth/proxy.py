@@ -3,7 +3,8 @@
 CLMS Authentication Proxy Server.
 
 This script runs as a separate subprocess to handle CLMS API authentication.
-It reads credentials from macOS Keychain and performs OAuth2 token exchange,
+It reads credentials from the CLMS_CREDENTIALS environment variable (JSON)
+or, as a fallback, from macOS Keychain, and performs OAuth2 token exchange,
 keeping credentials isolated from the main application process.
 
 Security model:
@@ -21,6 +22,7 @@ The server prints the actual port to stdout for the parent process.
 import argparse
 import json
 import logging
+import os
 import platform
 import re
 import subprocess
@@ -40,19 +42,71 @@ logger = logging.getLogger(__name__)
 # Keychain service name
 KEYCHAIN_SERVICE = "clms-token"
 
+# Only these hosts may receive the CLMS access token. /proxy (the CLMS API)
+# refuses anything else outright; /download forwards to other https hosts as
+# well - a presigned DownloadURL may point at a CDN - but then WITHOUT the
+# Authorization header, so the token never leaves the allowlist.
+ALLOWED_HOST_SUFFIXES = ("copernicus.eu", "eea.europa.eu")
+
+
+def _host_allowed(url: str) -> bool:
+    """Check whether the token may be forwarded to this URL (https + allowlist)."""
+    parsed = urlparse(url)
+    if parsed.scheme != "https":
+        return False
+
+    hostname = (parsed.hostname or "").lower()
+    return any(
+        hostname == suffix or hostname.endswith("." + suffix)
+        for suffix in ALLOWED_HOST_SUFFIXES
+    )
+
 
 class CLMSCredentials:
-    """Manages CLMS OAuth2 credentials from Keychain."""
+    """
+    Manages CLMS OAuth2 credentials.
 
-    def __init__(self):
+    Credentials come from the CLMS_CREDENTIALS environment variable (JSON)
+    or, as a fallback, macOS Keychain (service clms-token).
+    """
+
+    def __init__(self) -> None:
         self._credentials: dict | None = None
         self._access_token: str | None = None
         self._token_expires: float = 0
 
+    def load_from_env(self) -> bool:
+        """Load credentials from the CLMS_CREDENTIALS environment variable."""
+        raw = os.environ.get("CLMS_CREDENTIALS")
+        if not raw:
+            return False
+
+        try:
+            creds = json.loads(raw)
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in CLMS_CREDENTIALS: {e}")
+            return False
+
+        if (
+            not isinstance(creds, dict)
+            or not creds.get("client_id")
+            or not creds.get("private_key")
+        ):
+            logger.error(
+                "CLMS_CREDENTIALS must be a JSON object with "
+                "'client_id' and 'private_key'"
+            )
+            return False
+
+        self._credentials = creds
+        logger.info("Credentials loaded from CLMS_CREDENTIALS")
+        return True
+
     def load_from_keychain(self) -> bool:
         """Load credentials from macOS Keychain."""
         if platform.system() != "Darwin":
-            logger.error("Keychain only available on macOS")
+            # Normal case once CLMS_CREDENTIALS is the primary source.
+            logger.debug("Keychain only available on macOS")
             return False
 
         try:
@@ -90,7 +144,10 @@ class CLMSCredentials:
 
     def get_access_token(self) -> str | None:
         """Get valid access token, refreshing if needed."""
-        if not self._credentials and not self.load_from_keychain():
+        if not self._credentials and not self.load_from_env():
+            self.load_from_keychain()
+        creds = self._credentials
+        if not creds:
             return None
 
         # Return cached token if still valid
@@ -102,7 +159,6 @@ class CLMSCredentials:
             import jwt
             import requests
 
-            creds = self._credentials
             now = int(time.time())
 
             payload = {
@@ -117,9 +173,14 @@ class CLMSCredentials:
             if creds.get("key_id"):
                 headers["kid"] = creds["key_id"]
 
+            private_key = creds.get("private_key")
+            if not private_key:
+                logger.error("Token exchange failed: credentials lack 'private_key'")
+                return None
+
             assertion = jwt.encode(
                 payload,
-                creds.get("private_key"),
+                private_key,
                 algorithm="RS256",
                 headers=headers if headers else None,
             )
@@ -149,13 +210,13 @@ class CLMSCredentials:
         """Check if credentials are available."""
         if self._credentials:
             return True
-        return self.load_from_keychain()
+        return self.load_from_env() or self.load_from_keychain()
 
 
 class ProxyHandler(BaseHTTPRequestHandler):
     """HTTP request handler for the auth proxy."""
 
-    credentials: CLMSCredentials = None  # Set by server
+    credentials: CLMSCredentials  # Set by run_server() before serving
 
     def log_message(self, format, *args):
         """Log to stderr instead of stdout."""
@@ -166,7 +227,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
         body = json.dumps(data).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", len(body))
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
@@ -181,18 +242,21 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     "credentials_available": self.credentials.is_available,
                 }
             )
-        elif parsed.path == "/token":
-            token = self.credentials.get_access_token()
-            if token:
-                self.send_json({"access_token": token})
-            else:
-                self.send_json({"error": "Failed to get access token"}, 500)
         else:
             self.send_json({"error": "Not found"}, 404)
 
     def do_POST(self):
-        """Handle POST requests - proxy to CLMS API."""
+        """Handle POST requests - proxy to CLMS API.
+
+        ``/proxy`` forwards an API call with the Bearer token and answers
+        with JSON; the target host must be on ``ALLOWED_HOST_SUFFIXES``.
+        ``/download`` streams a file body back to the client: an allowlisted
+        host gets the token, any other **https** host is forwarded WITHOUT
+        the Authorization header (presigned CLMS DownloadURLs may live on a
+        CDN), and a non-https URL is refused with 403.
+        """
         import requests
+        import urllib3
 
         parsed = urlparse(self.path)
 
@@ -215,6 +279,13 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
             if not target_url:
                 self.send_json({"error": "Missing 'url' in request"}, 400)
+                return
+
+            if not _host_allowed(target_url):
+                self.send_json(
+                    {"error": f"Host not allowed: {urlparse(target_url).hostname}"},
+                    403,
+                )
                 return
 
             # Add authorization
@@ -271,31 +342,87 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 self.send_json({"error": "Missing 'url'"}, 400)
                 return
 
-            token = self.credentials.get_access_token()
-            if not token:
-                self.send_json({"error": "Failed to get access token"}, 500)
+            # The last step of the CLMS GeoTIFF flow is a presigned DownloadURL, which
+            # the API may place on a host outside the allowlist (CDN/object storage).
+            # Refusing it would break the whole download, so forward it - but strip the
+            # token: a presigned link carries its own authorization. Plain http is still
+            # refused (the request itself, and any token, would go in clear text).
+            if urlparse(url).scheme != "https":
+                self.send_json(
+                    {"error": f"Scheme not allowed: {urlparse(url).scheme}"},
+                    403,
+                )
                 return
 
+            headers = {}
+            if _host_allowed(url):
+                token = self.credentials.get_access_token()
+                if not token:
+                    self.send_json({"error": "Failed to get access token"}, 500)
+                    return
+                headers["Authorization"] = f"Bearer {token}"
+            else:
+                logger.info(
+                    "Forwarding download without token (host outside allowlist): %s",
+                    urlparse(url).hostname,
+                )
+
+            # Phase 1: connect. Nothing has been written to the client yet,
+            # so a failure here is still reportable as JSON.
             try:
                 resp = requests.get(
                     url,
-                    headers={"Authorization": f"Bearer {token}"},
+                    headers=headers,
                     timeout=120,
                     stream=True,
                 )
+            except requests.RequestException as e:
+                self.send_json({"error": f"Download failed: {e}"}, 502)
+                return
 
-                # Stream the response
+            # The body is forwarded verbatim (decode_content=False), so the upstream
+            # Content-Encoding/Content-Length keep describing exactly the bytes the
+            # client receives. Without an upstream Content-Length the body would be
+            # delimited by closing the connection (protocol_version is HTTP/1.0), which
+            # makes a truncated download indistinguishable from a complete one - frame
+            # it as chunked instead and withhold the terminating chunk on failure.
+            use_chunked = "Content-Length" not in resp.headers
+
+            try:
+                if use_chunked:
+                    self.protocol_version = "HTTP/1.1"
+
                 self.send_response(resp.status_code)
                 for key, value in resp.headers.items():
                     if key.lower() not in ("transfer-encoding", "connection"):
                         self.send_header(key, value)
+                if use_chunked:
+                    self.send_header("Transfer-Encoding", "chunked")
+                self.send_header("Connection", "close")
                 self.end_headers()
 
-                for chunk in resp.iter_content(chunk_size=8192):
-                    self.wfile.write(chunk)
+                # Phase 2: stream the body. The headers are already out, so an
+                # error MUST NOT be reported with send_json - that would append
+                # a whole HTTP response to the file the client is writing.
+                # Drop the connection instead: the client sees a short read
+                # against Content-Length, or a missing terminating chunk.
+                try:
+                    for chunk in resp.raw.stream(8192, decode_content=False):
+                        if use_chunked:
+                            self.wfile.write(b"%X\r\n" % len(chunk))
+                            self.wfile.write(chunk)
+                            self.wfile.write(b"\r\n")
+                        else:
+                            self.wfile.write(chunk)
 
-            except requests.RequestException as e:
-                self.send_json({"error": f"Download failed: {e}"}, 502)
+                    if use_chunked:
+                        self.wfile.write(b"0\r\n\r\n")
+
+                except (requests.RequestException, urllib3.exceptions.HTTPError) as e:
+                    logger.error("Download stream aborted: %s", e)
+                    self.close_connection = True
+            finally:
+                resp.close()
 
         else:
             self.send_json({"error": "Not found"}, 404)

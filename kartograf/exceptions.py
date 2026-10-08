@@ -1,8 +1,10 @@
 """
 Custom exceptions for Kartograf.
 
-This module defines all custom exceptions used throughout the Kartograf package.
-All exceptions inherit from KartografError for easy catching of package-specific errors.
+This module defines the core custom exceptions of the Kartograf package
+(coordinate transformation errors live in ``kartograf.transform.crs``:
+``TransformError``, ``TransformUnavailableError``). All of them inherit from
+KartografError for easy catching of package-specific errors.
 """
 
 
@@ -27,9 +29,9 @@ class KartografError(Exception):
 
 class ParseError(KartografError):
     """
-    Error parsing godło string.
+    Error parsing sheet code string.
 
-    Raised when a godło string cannot be parsed due to invalid format,
+    Raised when a sheet code string cannot be parsed due to invalid format,
     unknown scale, or other parsing issues.
 
     Examples
@@ -50,7 +52,7 @@ class DownloadError(KartografError):
     Attributes
     ----------
     godlo : str, optional
-        The godło that was being downloaded when the error occurred.
+        The sheet code that was being downloaded when the error occurred.
     status_code : int, optional
         HTTP status code if applicable.
 
@@ -70,6 +72,33 @@ class DownloadError(KartografError):
         self.status_code = status_code
 
 
+class NoCoverageError(DownloadError):
+    """
+    The source has no data for the requested sheet.
+
+    Raised when every index (skorowidz) layer answered and none of them
+    contains the sheet — a state of the data, not a transport failure:
+    retrying will not help. Raster builders (PL cutout, ADR-027 errata 1,
+    2026-09-28) treat it as nodata; every other DownloadError stays fatal.
+
+    Attributes
+    ----------
+    hints : tuple[str, ...]
+        User-facing hints (e.g. ``use --scale 1:2000``), the same texts the
+        message contains after the period; empty when there are none.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        godlo: str | None = None,
+        status_code: int | None = None,
+        hints: tuple[str, ...] = (),
+    ):
+        super().__init__(message, godlo=godlo, status_code=status_code)
+        self.hints = tuple(hints)
+
+
 class ValidationError(KartografError):
     """
     Error validating input data.
@@ -83,3 +112,25 @@ class ValidationError(KartografError):
     """
 
     pass
+
+
+class GridMismatchError(ValidationError):
+    """
+    Mosaic sources lie on different pixel grids (S5).
+
+    Raised by ``transport.mosaic.mosaic_and_crop(snap_to_source_grid=True)``
+    and by the PL cutout for ``EPSG:2180`` when at least one source raster
+    is shifted by a fraction of a pixel against the reference grid: copying
+    pixels 1:1 (R1) is impossible without resampling. Sources on the same
+    grid within float noise (1e-6 px) are not a mismatch.
+
+    Attributes
+    ----------
+    off_grid : tuple[OffGridSource, ...]
+        Every off-grid source with its shift in pixels
+        (``transport.mosaic.OffGridSource``: ``path``, ``dx_px``, ``dy_px``).
+    """
+
+    def __init__(self, message: str, off_grid: tuple = ()):
+        super().__init__(message)
+        self.off_grid = off_grid

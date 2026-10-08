@@ -17,6 +17,7 @@ Validate hardcoded layer names against WMS GetCapabilities at runtime. When a mi
 
 - **In scope:** `GugikProvider` (NMT) and `GugikNmptProvider` (NMPT, inherits from GugikProvider)
 - **Out of scope:** `GugikOrtoProvider` — inherits from `BaseProvider` (not `GugikProvider`), has a flat `WMS_LAYERS` list (not nested dict), a single `WMS_SKOROWIDZE_ENDPOINT` string (not dict), and its own `_get_opendata_url()` implementation. Adapting it requires a separate design.
+  - *Adnotacja (2026-08-18): od 2026-06-24 GugikOrtoProvider MA wlasna walidacje warstw (`_fetch_wms_layers`/`_get_validated_layers` w `providers/pl/gugik_orto.py`).*
 
 ## Design Decisions
 
@@ -126,6 +127,7 @@ Using hardcoded WMS_LAYERS as fallback.
 - `_get_opendata_url()` — one line change to call `_get_validated_layers()`
 - `GugikNmptProvider` — inherits from `GugikProvider`, has its own `WMS_LAYERS` (with `SkorowidzeNMPT*` prefix) and `WMS_SKOROWIDZE_ENDPOINTS`. Validation works automatically via inheritance since `_get_validated_layers` reads `self.WMS_LAYERS` and `self.WMS_SKOROWIDZE_ENDPOINTS`.
 - `GugikOrtoProvider` — **not affected** (separate inheritance tree, separate `_get_opendata_url()`)
+  - *Adnotacja (2026-08-18): nieaktualne — od 2026-06-24 GugikOrtoProvider ma wlasna walidacje warstw (`_fetch_wms_layers` w `providers/pl/gugik_orto.py`).*
 
 ## Testing
 

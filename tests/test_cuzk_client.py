@@ -1,0 +1,732 @@
+"""Tests of CuzkClient - the ArcGIS REST engine + openzu files (offline)."""
+
+import io
+import json
+import zipfile
+from pathlib import Path
+from unittest.mock import Mock, patch
+from urllib.parse import parse_qs, urlparse
+
+import numpy as np
+import pytest
+import rasterio
+
+from kartograf.core.sheet_parser import BBox
+from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.providers.cuzk.client import CuzkClient, _tile_grid, wkid
+
+_CUZK_SESSION_PATCH = "kartograf.providers.cuzk.client.requests.Session"
+_DOWNLOAD_TO_PATCH = "kartograf.providers.cuzk.client.download_to"
+
+KLADY = "https://ags.cuzk.gov.cz/arcgis/rest/services/KladyMapovychListu/MapServer"
+
+
+def _json_response(payload):
+    response = Mock()
+    response.raise_for_status = Mock()
+    response.json.return_value = payload
+    return response
+
+
+def _feature(mapnom="CTES96", podil=0.507):
+    return {
+        "attributes": {"MAPNOM": mapnom, "MAPNAME": "Cesky Tesin 8-6", "PODIL": podil},
+        "geometry": {
+            "rings": [
+                [
+                    [-450000, -1105000],
+                    [-447500, -1105000],
+                    [-447500, -1103000],
+                    [-450000, -1103000],
+                    [-450000, -1105000],
+                ]
+            ]
+        },
+    }
+
+
+class TestWkid:
+    def test_epsg_prefix_stripped(self):
+        assert wkid("EPSG:5514") == "5514"
+
+    def test_bare_code_passes(self):
+        assert wkid("3045") == "3045"
+
+
+class TestSessionOwnership:
+    def test_creates_own_session_when_none(self):
+        with patch(_CUZK_SESSION_PATCH) as session_cls:
+            client = CuzkClient()
+        assert client._session is session_cls.return_value
+
+    def test_injected_session_is_used(self):
+        session = Mock()
+        assert CuzkClient(session=session)._session is session
+
+
+class TestQuery:
+    def test_where_query_builds_params(self):
+        session = Mock()
+        session.get.return_value = _json_response({"features": [_feature()]})
+        client = CuzkClient(session=session)
+
+        features = client.query(
+            KLADY,
+            24,
+            where="MAPNOM='CTES96'",
+            out_fields="MAPNOM,MAPNAME,PODIL",
+            out_sr="EPSG:5514",
+        )
+
+        assert len(features) == 1
+        (url,), kwargs = session.get.call_args
+        assert url == f"{KLADY}/24/query"
+        params = kwargs["params"]
+        assert params["f"] == "json"
+        assert params["where"] == "MAPNOM='CTES96'"
+        assert params["outFields"] == "MAPNOM,MAPNAME,PODIL"
+        assert params["outSR"] == "5514"
+        assert params["resultOffset"] == "0"
+        assert "geometry" not in params
+
+    def test_bbox_query_builds_envelope(self):
+        session = Mock()
+        session.get.return_value = _json_response({"features": []})
+        client = CuzkClient(session=session)
+
+        client.query(
+            KLADY, 26, bbox=BBox(744000, 5540000, 760000, 5556000, "EPSG:3045")
+        )
+
+        params = session.get.call_args.kwargs["params"]
+        assert params["geometry"] == "744000,5540000,760000,5556000"
+        assert params["geometryType"] == "esriGeometryEnvelope"
+        assert params["inSR"] == "3045"
+        assert params["spatialRel"] == "esriSpatialRelIntersects"
+
+    def test_pagination_follows_exceeded_transfer_limit(self):
+        session = Mock()
+        page1 = {
+            "features": [_feature("AAAA01"), _feature("AAAA02")],
+            "exceededTransferLimit": True,
+        }
+        page2 = {"features": [_feature("AAAA03")]}
+        session.get.side_effect = [_json_response(page1), _json_response(page2)]
+        client = CuzkClient(session=session)
+
+        features = client.query(KLADY, 24, where="1=1")
+
+        assert [f["attributes"]["MAPNOM"] for f in features] == [
+            "AAAA01",
+            "AAAA02",
+            "AAAA03",
+        ]
+        assert session.get.call_count == 2
+        first_params = session.get.call_args_list[0].kwargs["params"]
+        assert first_params["resultRecordCount"] == str(CuzkClient.QUERY_PAGE_SIZE)
+        second_params = session.get.call_args_list[1].kwargs["params"]
+        assert second_params["resultOffset"] == "2"
+
+    def test_arcgis_error_payload_raises(self):
+        session = Mock()
+        session.get.return_value = _json_response(
+            {"error": {"code": 400, "message": "Invalid query"}}
+        )
+        client = CuzkClient(session=session)
+        with pytest.raises(DownloadError, match="Invalid query"):
+            client.query(KLADY, 24, where="zle")
+
+    def test_real_fixture_shape_parses(self):
+        """A reconnaissance fixture (Task 1) goes through query 1:1."""
+        fixture = json.loads(
+            Path("tests/fixtures/cuzk/klady_sm5_where_ctes96.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        session = Mock()
+        session.get.return_value = _json_response(fixture)
+        features = CuzkClient(session=session).query(KLADY, 24, where="MAPNOM='CTES96'")
+        assert features[0]["attributes"]["MAPNOM"] == "CTES96"
+
+
+def _zip_bytes(members: dict[str, bytes]) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for name, data in members.items():
+            zf.writestr(name, data)
+    return buf.getvalue()
+
+
+class TestFetchFile:
+    def _client_with_zip(self, tmp_path, zip_content: bytes):
+        def fake_download(session, url, output_path, *, timeout, **kwargs):
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+            Path(output_path).write_bytes(zip_content)
+            return Path(output_path)
+
+        return fake_download
+
+    def test_plain_download_delegates_to_download_to(self, tmp_path):
+        target = tmp_path / "plik.laz"
+        with patch(_DOWNLOAD_TO_PATCH) as mock_dl:
+            mock_dl.return_value = target
+            result = CuzkClient(session=Mock()).fetch_file("http://x/plik.laz", target)
+        assert result == target
+        assert mock_dl.call_count == 1
+
+    def test_unzip_single_extracts_tif_and_tfw(self, tmp_path):
+        zip_content = _zip_bytes(
+            {"CTES96.tif": b"II*\x00tifdata", "CTES96.tfw": b"5\n0\n0\n-5\n1\n2\n"}
+        )
+        target = tmp_path / "CTES96.tif"
+        fake_download = self._client_with_zip(tmp_path, zip_content)
+        with patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download):
+            result = CuzkClient(session=Mock()).fetch_file(
+                "http://x/CTES96.zip", target, unzip_single=".tif"
+            )
+        assert result == target
+        assert target.read_bytes() == b"II*\x00tifdata"
+        assert (tmp_path / "CTES96.tfw").read_bytes().startswith(b"5\n")
+        # ZIP cleaned up
+        assert list(tmp_path.glob("*.zip")) == []
+
+    def test_unzip_single_without_expected_file_raises(self, tmp_path):
+        zip_content = _zip_bytes({"readme.txt": b"nic"})
+        target = tmp_path / "CTES96.tif"
+        fake_download = self._client_with_zip(tmp_path, zip_content)
+        with (
+            patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
+            pytest.raises(DownloadError, match="1 pliku"),
+        ):
+            CuzkClient(session=Mock()).fetch_file(
+                "http://x/CTES96.zip", target, unzip_single=".tif"
+            )
+        assert not target.exists()
+        # the ZIP and any temporary files are cleaned up after the error
+        assert list(tmp_path.glob("*.zip")) == []
+        assert list(tmp_path.glob("*.tmp")) == []
+
+    def test_corrupted_zip_raises_download_error(self, tmp_path):
+        target = tmp_path / "CTES96.tif"
+        fake_download = self._client_with_zip(tmp_path, b"to nie zip")
+        with (
+            patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
+            pytest.raises(DownloadError, match="ZIP"),
+        ):
+            CuzkClient(session=Mock()).fetch_file(
+                "http://x/CTES96.zip", target, unzip_single=".tif"
+            )
+        assert not target.exists()
+        # the ZIP and any temporary files are cleaned up after the error
+        assert list(tmp_path.glob("*.zip")) == []
+        assert list(tmp_path.glob("*.tmp")) == []
+
+    def test_unzip_single_tfw_extraction_failure_leaves_no_files(self, tmp_path):
+        """Regression (Task 8 review): if extraction of the accompanying .tfw
+        fails AFTER the .tif was extracted successfully (e.g. OSError, disk
+        full), the whole operation must be atomic as a unit - neither a partial
+        .tif, nor an orphaned .tfw, nor temporary/ZIP leftovers may stay on disk."""
+        zip_content = _zip_bytes(
+            {"CTES96.tif": b"II*\x00tifdata", "CTES96.tfw": b"5\n0\n0\n-5\n1\n2\n"}
+        )
+        target = tmp_path / "CTES96.tif"
+        fake_download = self._client_with_zip(tmp_path, zip_content)
+
+        import kartograf.providers.cuzk.client as client_module
+
+        real_extract_to = client_module._extract_to
+        calls = {"n": 0}
+
+        def flaky_extract_to(zf, member, dest):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                # The second extraction (the accompanying .tfw) fails - a simulation
+                # of OSError/disk full AFTER the .tif was already extracted
+                # to a temporary file.
+                raise OSError("disk full (symulowany)")
+            real_extract_to(zf, member, dest)
+
+        with (
+            patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
+            patch.object(client_module, "_extract_to", side_effect=flaky_extract_to),
+            pytest.raises(DownloadError, match="Rozpakowanie"),
+        ):
+            CuzkClient(session=Mock()).fetch_file(
+                "http://x/CTES96.zip", target, unzip_single=".tif"
+            )
+
+        assert calls["n"] == 2
+        assert not target.exists()
+        assert not (tmp_path / "CTES96.tfw").exists()
+        assert list(tmp_path.glob("*.zip")) == []
+        assert list(tmp_path.glob("*.tmp")) == []
+
+
+class TestRetryPropagation:
+    """Retry/backoff comes from transport.download_to (spec 7).
+
+    Exhausted retries => DownloadError.
+    """
+
+    def test_fetch_file_exhausts_retries(self, tmp_path):
+        import requests as requests_lib
+
+        session = Mock()
+        session.get.side_effect = requests_lib.RequestException("padlo")
+        with (
+            patch("kartograf.transport.http.time.sleep") as mock_sleep,
+            pytest.raises(DownloadError, match="3 probach"),
+        ):
+            CuzkClient(session=session).fetch_file(
+                "http://x/CTES96.zip", tmp_path / "CTES96.zip"
+            )
+        assert session.get.call_count == 3
+        assert mock_sleep.call_count == 2
+
+
+DMR5G = "https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr5g/ImageServer"
+
+# The CRS actually returned by the CUZK exportImage (reconnaissance Task 1, step 4):
+# LOCAL_CS instead of PROJCS - GDAL does not resolve it to an EPSG code despite a
+# correct AUTHORITY. Used in the TestExportImage fixtures instead of a plain
+# "EPSG:3045", so that the CRS-overwrite tests actually detect regressions: with a
+# hardcoded correct CRS the assertion `to_epsg() == 3045` passes even after
+# removing the _overwrite_crs call from export_image (reproduced standalone
+# during the review).
+_UNRESOLVABLE_CRS_WKT = (
+    'LOCAL_CS["S-JTSK / Krovak East North",'
+    'UNIT["metre",1,AUTHORITY["EPSG","9001"]],'
+    'AXIS["Easting",EAST],AXIS["Northing",NORTH],AUTHORITY["EPSG","5514"]]'
+)
+assert rasterio.crs.CRS.from_wkt(_UNRESOLVABLE_CRS_WKT).to_epsg() is None, (
+    "sanity: fixture CRS musi byc nierozwiazywalny do EPSG, inaczej test nie "
+    "wykryje regresji nadpisania CRS"
+)
+
+
+def _write_geotiff(
+    path: Path,
+    bbox: BBox,
+    width: int,
+    height: int,
+    value: float = 100.0,
+    nodata: float = -9999.0,
+    crs: str = "EPSG:3045",
+) -> None:
+    """Synthetic float32 GeoTIFF covering the bbox (for mosaic tests)."""
+    from rasterio.transform import from_bounds
+
+    transform = from_bounds(
+        bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y, width, height
+    )
+    profile = {
+        "driver": "GTiff",
+        "dtype": "float32",
+        "count": 1,
+        "width": width,
+        "height": height,
+        "crs": crs,
+        "transform": transform,
+        "nodata": nodata,
+    }
+    data = np.full((height, width), value, dtype="float32")
+    with rasterio.open(path, "w", **profile) as dst:
+        dst.write(data, 1)
+
+
+class TestExportImage:
+    def test_single_shot_url_params(self, tmp_path):
+        captured = {}
+
+        def fake_download(session, url, output_path, *, timeout, **kwargs):
+            captured["url"] = url
+            # Fix 2 (reconnaissance): export_image overwrites the CRS unconditionally
+            # after every export (rasterio "r+"), so the fixture must be a
+            # really openable GeoTIFF, not just a 4-byte header
+            # sniffed by magic number. The CRS is set to an unresolvable one
+            # (like the real CUZK response) - see the assertion AFTER below.
+            _write_geotiff(Path(output_path), bbox, 2, 2, crs=_UNRESOLVABLE_CRS_WKT)
+            return Path(output_path)
+
+        target = tmp_path / "out.tif"
+        bbox = BBox(302000, 5550000, 304000, 5552000, "EPSG:3045")
+        with patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download):
+            CuzkClient(session=Mock()).export_image(
+                DMR5G,
+                bbox,
+                pixel_size=2.0,
+                image_sr="EPSG:3045",
+                output_path=target,
+            )
+
+        parsed = urlparse(captured["url"])
+        assert parsed.path.endswith("/exportImage")
+        params = parse_qs(parsed.query)
+        assert params["f"] == ["image"]
+        assert params["format"] == ["tiff"]
+        assert params["pixelType"] == ["F32"]
+        assert params["bbox"] == ["302000,5550000,304000,5552000"]
+        assert params["bboxSR"] == ["3045"]
+        assert params["imageSR"] == ["3045"]
+        assert params["size"] == ["1000,1000"]
+        assert params["noData"] == ["-9999"]
+        assert params["noDataInterpretation"] == ["esriNoDataMatchAny"]
+        # CRS overwritten unconditionally (reconnaissance: to_epsg() is useless for
+        # both SRs returned by CUZK - see docs/research/...step 4-5).
+        # The fixture BEFORE the overwrite had to_epsg()==None (_UNRESOLVABLE_CRS_WKT
+        # sanity-checked above) - so this assertion really proves that
+        # _overwrite_crs worked, rather than just rewriting an already-correct CRS.
+        with rasterio.open(target) as src:
+            assert src.crs.to_epsg() == 3045
+
+    def test_non_tiff_response_raises_with_content(self, tmp_path):
+        def fake_download(session, url, output_path, *, timeout, **kwargs):
+            Path(output_path).write_bytes(b'{"error":{"code":400,"message":"Bad"}}')
+            return Path(output_path)
+
+        target = tmp_path / "out.tif"
+        bbox = BBox(0, 0, 100, 100, "EPSG:5514")
+        with (
+            patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
+            pytest.raises(DownloadError, match="error"),
+        ):
+            CuzkClient(session=Mock()).export_image(
+                DMR5G,
+                bbox,
+                pixel_size=2.0,
+                image_sr="EPSG:5514",
+                output_path=target,
+            )
+        assert not target.exists()
+
+    def test_tiling_above_limits_mosaics(self, tmp_path):
+        """Limits patched to small values: an 8x8 px bbox, a 4x4 limit -> 4 tiles.
+
+        Each 4x4 tile has the same noData; mosaic_and_crop stitches them.
+        """
+        requested = []
+
+        def fake_download(session, url, output_path, *, timeout, **kwargs):
+            params = parse_qs(urlparse(url).query)
+            tile_bbox = [float(v) for v in params["bbox"][0].split(",")]
+            w, h = (int(v) for v in params["size"][0].split(","))
+            requested.append((tile_bbox, w, h, params["noData"][0]))
+            # An unresolvable CRS (like the real CUZK response for every
+            # tile) - see the assertion AFTER below and the sanity check at
+            # _UNRESOLVABLE_CRS_WKT.
+            _write_geotiff(
+                Path(output_path),
+                BBox(
+                    tile_bbox[0], tile_bbox[1], tile_bbox[2], tile_bbox[3], "EPSG:3045"
+                ),
+                w,
+                h,
+                value=float(len(requested)),
+                crs=_UNRESOLVABLE_CRS_WKT,
+            )
+            return Path(output_path)
+
+        target = tmp_path / "mosaic.tif"
+        bbox = BBox(0, 0, 16, 16, "EPSG:3045")  # 8x8 px at pixel_size=2
+        client = CuzkClient(session=Mock())
+        with (
+            patch.object(CuzkClient, "MAX_EXPORT_WIDTH", 4),
+            patch.object(CuzkClient, "MAX_EXPORT_HEIGHT", 4),
+            patch.object(CuzkClient, "MAX_EXPORT_PIXELS", 4_000_000),
+            patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
+        ):
+            client.export_image(
+                DMR5G,
+                bbox,
+                pixel_size=2.0,
+                image_sr="EPSG:3045",
+                output_path=target,
+            )
+
+        assert len(requested) == 4
+        assert all(nd == "-9999" for (_, _, _, nd) in requested)
+        with rasterio.open(target) as src:
+            assert src.width == 8 and src.height == 8
+            assert src.bounds == (0.0, 0.0, 16.0, 16.0)
+            assert src.nodata == -9999.0
+            # Every tile had to_epsg()==None (LOCAL_CS) before the mosaic/
+            # overwrite - this assertion proves that _overwrite_crs worked
+            # after mosaic_and_crop, rather than rewriting an already-correct CRS.
+            assert src.crs.to_epsg() == 3045
+        # partial files cleaned up
+        assert list(tmp_path.glob("*.part*.tif")) == []
+
+    def test_tiling_fractional_height_keeps_content_aligned(self, tmp_path):
+        """A bbox with a fractional height (90.7 px -> 91): tiles must be
+        anchored at the NW corner, the same as the result grid
+        `merge(bounds=...)`.
+
+        An SW anchor gave a whole bottom row of -9999 and shifted the content
+        in strips by up to 1 px (A3-1). Every pixel here carries the northing
+        of its centre, so any shift is measurable directly against the
+        result transform.
+        """
+        from rasterio.transform import from_origin
+
+        def fake_download(session, url, output_path, *, timeout, **kwargs):
+            params = parse_qs(urlparse(url).query)
+            min_x, _min_y, _max_x, max_y = (
+                float(v) for v in params["bbox"][0].split(",")
+            )
+            w, h = (int(v) for v in params["size"][0].split(","))
+            rows = np.arange(h, dtype="float64")
+            column = (max_y - (rows + 0.5) * 2.0).astype("float32")
+            data = np.repeat(column[:, None], w, axis=1)
+            with rasterio.open(
+                output_path,
+                "w",
+                driver="GTiff",
+                width=w,
+                height=h,
+                count=1,
+                dtype="float32",
+                crs=_UNRESOLVABLE_CRS_WKT,
+                transform=from_origin(min_x, max_y, 2.0, 2.0),
+                nodata=-9999.0,
+            ) as dst:
+                dst.write(data, 1)
+            return Path(output_path)
+
+        target = tmp_path / "frac.tif"
+        bbox = BBox(0.0, 0.0, 500.0, 181.4, "EPSG:3045")
+        client = CuzkClient(session=Mock())
+        with (
+            patch.object(CuzkClient, "MAX_EXPORT_WIDTH", 250),
+            patch.object(CuzkClient, "MAX_EXPORT_HEIGHT", 40),
+            patch.object(CuzkClient, "MAX_EXPORT_PIXELS", 4_000_000),
+            patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
+        ):
+            client.export_image(
+                DMR5G,
+                bbox,
+                pixel_size=2.0,
+                image_sr="EPSG:3045",
+                output_path=target,
+            )
+
+        with rasterio.open(target) as src:
+            assert src.height == 91 and src.width == 250
+            data = src.read(1)
+            # No row may be entirely nodata - the server returned
+            # data for the whole request height.
+            assert not np.any(np.all(data == -9999.0, axis=1))
+            # The result extent = the tile extent (NW anchor).
+            assert src.bounds.top == 181.4
+            assert src.bounds.bottom == pytest.approx(181.4 - 91 * 2.0)
+            # Content consistent with the result transform - zero shift.
+            for r in range(src.height):
+                assert np.allclose(data[r, :], (src.transform * (0.5, r + 0.5))[1])
+        assert list(tmp_path.glob("*.part*.tif")) == []
+
+    def test_tiling_corrupted_tile_raises_download_error_and_cleans_up(self, tmp_path):
+        """A tile with a correct magic number but a truncated body: the mosaic
+        error must surface as DownloadError (not RasterioIOError) and leave
+        neither a result nor partial files - as on the SM5 path (A3-3).
+        """
+        calls = []
+
+        def fake_download(session, url, output_path, *, timeout, **kwargs):
+            params = parse_qs(urlparse(url).query)
+            tile_bbox = [float(v) for v in params["bbox"][0].split(",")]
+            w, h = (int(v) for v in params["size"][0].split(","))
+            calls.append(url)
+            if len(calls) == 2:
+                # valid TIFF header (passes the magic sniff), truncated body
+                Path(output_path).write_bytes(b"II*\x00" + b"\x00" * 64)
+                return Path(output_path)
+            _write_geotiff(
+                Path(output_path),
+                BBox(
+                    tile_bbox[0], tile_bbox[1], tile_bbox[2], tile_bbox[3], "EPSG:3045"
+                ),
+                w,
+                h,
+                value=float(len(calls)),
+                crs=_UNRESOLVABLE_CRS_WKT,
+            )
+            return Path(output_path)
+
+        target = tmp_path / "mosaic.tif"
+        bbox = BBox(0, 0, 16, 16, "EPSG:3045")  # 8x8 px at pixel_size=2
+        client = CuzkClient(session=Mock())
+        with (
+            patch.object(CuzkClient, "MAX_EXPORT_WIDTH", 4),
+            patch.object(CuzkClient, "MAX_EXPORT_HEIGHT", 4),
+            patch.object(CuzkClient, "MAX_EXPORT_PIXELS", 4_000_000),
+            patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
+            pytest.raises(DownloadError, match="mozaik"),
+        ):
+            client.export_image(
+                DMR5G,
+                bbox,
+                pixel_size=2.0,
+                image_sr="EPSG:3045",
+                output_path=target,
+            )
+
+        assert not target.exists()
+        assert list(tmp_path.glob("*.part*.tif")) == []
+
+    def test_tiling_with_crs_mismatch_raises(self, tmp_path):
+        bbox = BBox(0, 0, 16, 16, "EPSG:5514")
+        client = CuzkClient(session=Mock())
+        with (
+            patch.object(CuzkClient, "MAX_EXPORT_WIDTH", 4),
+            patch.object(CuzkClient, "MAX_EXPORT_HEIGHT", 4),
+            patch.object(CuzkClient, "MAX_EXPORT_PIXELS", 4_000_000),
+            pytest.raises(ValidationError, match="image_sr"),
+        ):
+            client.export_image(
+                DMR5G,
+                bbox,
+                pixel_size=2.0,
+                image_sr="EPSG:2180",
+                output_path=tmp_path / "x.tif",
+            )
+
+
+class TestExportPixelGrid:
+    def test_pixel_budget_tiles_below_dimension_limits(self, tmp_path):
+        requested = []
+
+        def fake_download(session, url, output_path, *, timeout, **kwargs):
+            params = parse_qs(urlparse(url).query)
+            bounds = tuple(float(v) for v in params["bbox"][0].split(","))
+            width, height = (int(v) for v in params["size"][0].split(","))
+            requested.append((bounds, width, height))
+            _write_geotiff(
+                Path(output_path),
+                BBox(*bounds, "EPSG:5514"),
+                width,
+                height,
+                value=float(len(requested)),
+                crs="EPSG:5514",
+            )
+            return Path(output_path)
+
+        bbox = BBox(0, 0, 6000, 6000, "EPSG:5514")  # 3000 x 3000 px
+        target = tmp_path / "budget.tif"
+        with patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download):
+            CuzkClient(session=Mock()).export_image(
+                DMR5G, bbox, pixel_size=2.0, image_sr=bbox.crs, output_path=target
+            )
+
+        assert len(requested) > 1, requested
+        assert all(w * h <= 4_000_000 for _, w, h in requested)
+        assert sum(w * h for _, w, h in requested) == 9_000_000
+        with rasterio.open(target) as src:
+            assert src.shape == (3000, 3000)
+            assert src.bounds == (0, 0, 6000, 6000)
+            assert src.res == (2.0, 2.0)
+            data = src.read(1)
+            for value, (bounds, width, height) in enumerate(requested, start=1):
+                col = round(bounds[0] / 2)
+                row = round((6000 - bounds[3]) / 2)
+                np.testing.assert_array_equal(
+                    data[row : row + height, col : col + width],
+                    np.full((height, width), value, dtype="float32"),
+                )
+        assert list(tmp_path.glob("*.part*.tif")) == []
+
+    def test_single_shot_snaps_bbox_to_pixel_grid_nw(self, tmp_path):
+        requested = []
+
+        def fake_download(session, url, output_path, *, timeout, **kwargs):
+            params = parse_qs(urlparse(url).query)
+            requested.append(params)
+            bounds = tuple(float(v) for v in params["bbox"][0].split(","))
+            width, height = (int(v) for v in params["size"][0].split(","))
+            _write_geotiff(
+                Path(output_path),
+                BBox(*bounds, "EPSG:5514"),
+                width,
+                height,
+                crs="EPSG:5514",
+            )
+            return Path(output_path)
+
+        target = tmp_path / "snap.tif"
+        with patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download):
+            CuzkClient(session=Mock()).export_image(
+                DMR5G,
+                BBox(0, 0, 1000.7, 181.4, "EPSG:5514"),
+                pixel_size=2.0,
+                image_sr="EPSG:5514",
+                output_path=target,
+            )
+        assert len(requested) == 1
+        assert requested[0]["bbox"] == ["0,-0.6,1000,181.4"]
+        assert requested[0]["size"] == ["500,91"]
+        with rasterio.open(target) as src:
+            assert src.res == (2.0, 2.0)
+            assert src.bounds.top == 181.4
+            assert src.bounds.left == 0
+
+    def test_tiled_and_single_paths_share_the_grid(self, tmp_path):
+        def fake_download(session, url, output_path, *, timeout, **kwargs):
+            params = parse_qs(urlparse(url).query)
+            bounds = tuple(float(v) for v in params["bbox"][0].split(","))
+            width, height = (int(v) for v in params["size"][0].split(","))
+            _write_geotiff(
+                Path(output_path),
+                BBox(*bounds, "EPSG:5514"),
+                width,
+                height,
+                crs="EPSG:5514",
+            )
+            return Path(output_path)
+
+        client = CuzkClient(session=Mock())
+        outputs = []
+        for budget in (4_000_000, 10_000):
+            target = tmp_path / f"grid-{budget}.tif"
+            with (
+                patch.object(CuzkClient, "MAX_EXPORT_PIXELS", budget),
+                patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download),
+            ):
+                client.export_image(
+                    DMR5G,
+                    BBox(0, 0, 1000.7, 181.4, "EPSG:5514"),
+                    pixel_size=2.0,
+                    image_sr="EPSG:5514",
+                    output_path=target,
+                )
+            outputs.append(target)
+        with rasterio.open(outputs[0]) as single, rasterio.open(outputs[1]) as tiled:
+            assert single.transform == tiled.transform
+            assert single.shape == tiled.shape == (91, 500)
+            np.testing.assert_array_equal(single.read(1), tiled.read(1))
+
+
+@pytest.mark.parametrize(
+    ("width", "height"), [(5000, 5000), (1800, 12300), (50000, 50), (8, 8)]
+)
+def test_tile_grid_respects_budget_and_covers_request(width, height):
+    bbox = BBox(0.3, 100.7 - height * 2, 0.3 + width * 2, 100.7, "EPSG:5514")
+    tiles = _tile_grid(bbox, 2.0, width, height, 15000, 4100, 4_000_000)
+    assert sum(w * h for _, w, h in tiles) == width * height
+    assert tiles[0][0].min_x == bbox.min_x
+    assert tiles[0][0].max_y == bbox.max_y
+    for index, (tile, w, h) in enumerate(tiles):
+        assert 0 < w <= 15000 and 0 < h <= 4100
+        assert w * h <= 4_000_000
+        assert tile.max_x - tile.min_x == pytest.approx(w * 2)
+        assert tile.max_y - tile.min_y == pytest.approx(h * 2)
+        assert bbox.min_x <= tile.min_x < tile.max_x <= bbox.max_x
+        assert bbox.min_y <= tile.min_y < tile.max_y <= bbox.max_y
+        for other, _, _ in tiles[index + 1 :]:
+            assert (
+                tile.max_x <= other.min_x
+                or other.max_x <= tile.min_x
+                or tile.max_y <= other.min_y
+                or other.max_y <= tile.min_y
+            )
+
+
+def test_default_budget_is_below_measured_server_limit():
+    assert 0 < CuzkClient.MAX_EXPORT_PIXELS <= 6_000_000

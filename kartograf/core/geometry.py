@@ -2,7 +2,7 @@
 Reading geometry files (SHP, GPKG) for spatial data selection.
 
 Extracts per-feature bounding boxes from geometry files and maps them
-to map sheet identifiers (godla) for tile-based downloads.
+to map sheet codes (godla) for tile-based downloads.
 """
 
 import logging
@@ -10,9 +10,10 @@ import sqlite3
 import struct
 from pathlib import Path
 
-from pyproj import CRS, Transformer
+from pyproj import CRS
 
-from kartograf.core.sheet_parser import BBox, find_sheets_for_bbox
+from kartograf.core.bbox import BBox, transform_bbox
+from kartograf.core.sheet_parser import find_sheets_for_bbox
 from kartograf.exceptions import ValidationError
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,63 @@ _SUPPORTED_EXTENSIONS = {".shp", ".gpkg"}
 # =========================================================================
 
 
+def _point_from_wkb(
+    blob: bytes, offset: int
+) -> tuple[float, float, float, float] | None:
+    """
+    Read a degenerate envelope from a WKB geometry that starts at ``offset``.
+
+    Used when the GeoPackage header carries no envelope (``envelope_type == 0``);
+    GDAL/QGIS write point layers exactly this way, and for a point the geometry
+    itself is the envelope.
+
+    Parameters
+    ----------
+    blob : bytes
+        Raw geometry blob from GPKG
+    offset : int
+        Index of the first WKB byte (byte order marker)
+
+    Returns
+    -------
+    tuple or None
+        (x, y, x, y) for a POINT, or None if the WKB is truncated before the
+        geometry type or before the coordinates
+
+    Raises
+    ------
+    ValidationError
+        If the WKB holds a non-point geometry (its extent cannot be derived
+        without a full WKB parser)
+    """
+    # WKB prefix: 1 B byte order + 4 B geometry type
+    if len(blob) < offset + 5:
+        return None
+
+    order = blob[offset]
+    endian = "<" if order == 1 else ">"
+    wkb_type = struct.unpack(f"{endian}I", blob[offset + 1 : offset + 5])[0]
+
+    # Strip EWKB flag bits (Z=0x80000000, M=0x40000000, SRID=0x20000000), then
+    # the ISO dimension prefix (1001 = POINT Z, 2001 = POINT M, 3001 = POINT ZM).
+    base_type = (wkb_type & 0x0FFFFFFF) % 1000
+    if base_type != 1:
+        raise ValidationError(
+            "GPKG geometry without envelope in header (envelope_type=0) "
+            f"for WKB type {wkb_type} - rebuild the file with envelopes "
+            "(e.g. ogr2ogr) or use SHP"
+        )
+
+    # EWKB with the SRID flag inserts a 4 B CRS identifier BETWEEN the type and
+    # the coordinates - without skipping it we would read garbage.
+    coord_offset = offset + 9 if wkb_type & 0x20000000 else offset + 5
+    if len(blob) < coord_offset + 16:  # 2 x float64
+        return None
+
+    x, y = struct.unpack(f"{endian}2d", blob[coord_offset : coord_offset + 16])
+    return (x, y, x, y)
+
+
 def _parse_gpkg_envelope(blob: bytes) -> tuple[float, float, float, float] | None:
     """
     Parse GeoPackage Binary geometry header to extract envelope.
@@ -33,10 +91,19 @@ def _parse_gpkg_envelope(blob: bytes) -> tuple[float, float, float, float] | Non
     GeoPackage spec binary header:
       Offset 0: "GP" magic (2 bytes)
       Offset 2: version (1 byte)
-      Offset 3: flags (1 byte) — envelope_type = (flags >> 1) & 0x07
+      Offset 3: flags (1 byte) — envelope_type = (flags >> 1) & 0x07,
+                empty geometry flag = (flags >> 4) & 0x01
       Offset 4: SRS ID (4 bytes, int32)
       Offset 8: envelope (if type > 0):
         type 1 (2D): minx, maxx, miny, maxy (4 x float64)
+
+    Code paths:
+      * empty-geometry flag - the feature is skipped (``None``), it has no extent;
+      * ``envelope_type > 0`` - the envelope is read straight from the header;
+      * ``envelope_type == 0`` - there is no envelope (this is how GDAL/QGIS
+        write point layers), so the coordinates come from the WKB itself
+        (``_point_from_wkb``); for a non-point geometry this ends in
+        ``ValidationError``.
 
     Parameters
     ----------
@@ -46,7 +113,13 @@ def _parse_gpkg_envelope(blob: bytes) -> tuple[float, float, float, float] | Non
     Returns
     -------
     tuple or None
-        (min_x, min_y, max_x, max_y) or None if no envelope
+        (min_x, min_y, max_x, max_y), or None for an empty geometry or an
+        unusable header/WKB
+
+    Raises
+    ------
+    ValidationError
+        If the header has no envelope and the WKB is not a point
     """
     if blob is None or len(blob) < 8:
         return None
@@ -58,9 +131,16 @@ def _parse_gpkg_envelope(blob: bytes) -> tuple[float, float, float, float] | Non
     flags = blob[3]
     byte_order = flags & 0x01  # 0 = big-endian, 1 = little-endian
     envelope_type = (flags >> 1) & 0x07
+    is_empty = (flags >> 4) & 0x01
+
+    if is_empty:
+        # An empty geometry has no extent - GDAL writes it as POINT(NaN NaN),
+        # so the feature must be skipped before NaN reaches the sheet lookup.
+        return None
 
     if envelope_type == 0:
-        return None
+        # No envelope in the header - try to read a point from the WKB right after it.
+        return _point_from_wkb(blob, offset=8)
 
     # Need at least 8 (header) + 32 (4 doubles) = 40 bytes for 2D envelope
     if len(blob) < 40:
@@ -130,21 +210,33 @@ def _read_shp_bboxes(filepath: Path, target_crs: str) -> list[BBox]:
     -------
     list[BBox]
         Per-feature bboxes in target CRS
+
+    Notes
+    -----
+    Point features (POINT/POINTZ/POINTM) give a degenerate envelope
+    ``(x, y, x, y)`` - pyshp does not expose a ``bbox`` attribute for them.
     """
     import shapefile
 
-    source_crs = _read_shp_crs(filepath)
+    # CRS label as WKT: the transformer cache key in core.bbox is a string -
+    # one transformer per layer, not per feature
+    source_label = _read_shp_crs(filepath).to_wkt()
 
     bboxes = []
     with shapefile.Reader(str(filepath)) as sf:
         for shape in sf.iterShapes():
             if shape.shapeType == 0:  # NULL shape
                 continue
-            bbox = shape.bbox  # (min_x, min_y, max_x, max_y)
-            transformed = _transform_bbox(
-                bbox[0], bbox[1], bbox[2], bbox[3], source_crs, target_crs
-            )
-            bboxes.append(transformed)
+            # pyshp exposes `bbox` only for multi-vertex shapes; POINT/POINTZ/
+            # POINTM carry a single vertex, so build a degenerate bbox from it.
+            bbox = getattr(shape, "bbox", None)  # (min_x, min_y, max_x, max_y)
+            if bbox is None:
+                if not shape.points:
+                    continue
+                x, y = shape.points[0][0], shape.points[0][1]
+                bbox = (x, y, x, y)
+            source_bbox = BBox(bbox[0], bbox[1], bbox[2], bbox[3], source_label)
+            bboxes.append(transform_bbox(source_bbox, target_crs))
 
     return bboxes
 
@@ -219,6 +311,53 @@ def _read_gpkg_crs(conn: sqlite3.Connection, table_name: str) -> CRS:
             raise ValidationError(f"Cannot parse CRS for srs_id={srs_id}: {e}") from e
 
 
+def _resolve_gpkg_layer(
+    conn: sqlite3.Connection, filepath: Path, layer: str | None
+) -> str:
+    """
+    Name of the feature table to read (``--layer`` validation, first by default).
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Open GPKG database connection
+    filepath : Path
+        Path to .gpkg file (for error messages)
+    layer : str or None
+        Layer name (None = first feature table)
+
+    Returns
+    -------
+    str
+        Feature table name
+
+    Raises
+    ------
+    ValidationError
+        If the GeoPackage has no feature tables or the layer does not exist
+    """
+    tables = _get_gpkg_feature_tables(conn)
+    if not tables:
+        raise ValidationError(f"No feature tables found in GeoPackage: {filepath}")
+
+    if layer is not None:
+        if layer not in tables:
+            raise ValidationError(
+                f"Layer '{layer}' not found in GeoPackage. "
+                f"Available layers: {', '.join(tables)}"
+            )
+        return layer
+
+    table_name = tables[0]
+    if len(tables) > 1:
+        logger.info(
+            "Multiple layers in GPKG, using '%s'. Available: %s",
+            table_name,
+            ", ".join(tables),
+        )
+    return table_name
+
+
 def _read_gpkg_bboxes(filepath: Path, layer: str | None, target_crs: str) -> list[BBox]:
     """
     Read per-feature bounding boxes from a GeoPackage.
@@ -239,27 +378,8 @@ def _read_gpkg_bboxes(filepath: Path, layer: str | None, target_crs: str) -> lis
     """
     conn = sqlite3.connect(str(filepath))
     try:
-        tables = _get_gpkg_feature_tables(conn)
-        if not tables:
-            raise ValidationError(f"No feature tables found in GeoPackage: {filepath}")
-
-        if layer is not None:
-            if layer not in tables:
-                raise ValidationError(
-                    f"Layer '{layer}' not found in GeoPackage. "
-                    f"Available layers: {', '.join(tables)}"
-                )
-            table_name = layer
-        else:
-            table_name = tables[0]
-            if len(tables) > 1:
-                logger.info(
-                    "Multiple layers in GPKG, using '%s'. Available: %s",
-                    table_name,
-                    ", ".join(tables),
-                )
-
-        source_crs = _read_gpkg_crs(conn, table_name)
+        table_name = _resolve_gpkg_layer(conn, filepath, layer)
+        source_label = _read_gpkg_crs(conn, table_name).to_wkt()
 
         # Get geometry column name
         cursor = conn.execute(
@@ -280,71 +400,12 @@ def _read_gpkg_bboxes(filepath: Path, layer: str | None, target_crs: str) -> lis
             envelope = _parse_gpkg_envelope(blob)
             if envelope is None:
                 continue
-            min_x, min_y, max_x, max_y = envelope
-            transformed = _transform_bbox(
-                min_x, min_y, max_x, max_y, source_crs, target_crs
-            )
-            bboxes.append(transformed)
+            source_bbox = BBox(*envelope, source_label)
+            bboxes.append(transform_bbox(source_bbox, target_crs))
 
         return bboxes
     finally:
         conn.close()
-
-
-# =========================================================================
-# CRS Transformation
-# =========================================================================
-
-
-def _transform_bbox(
-    min_x: float,
-    min_y: float,
-    max_x: float,
-    max_y: float,
-    source_crs: CRS,
-    target_crs: str,
-) -> BBox:
-    """
-    Transform a bounding box from source CRS to target CRS.
-
-    Uses 4-corner approach for accuracy.
-
-    Parameters
-    ----------
-    min_x, min_y, max_x, max_y : float
-        Source bbox coordinates
-    source_crs : CRS
-        Source CRS object
-    target_crs : str
-        Target CRS string (e.g. "EPSG:2180")
-
-    Returns
-    -------
-    BBox
-        Transformed bounding box
-    """
-    target = CRS.from_user_input(target_crs)
-
-    if source_crs == target:
-        return BBox(min_x, min_y, max_x, max_y, target_crs)
-
-    transformer = Transformer.from_crs(source_crs, target, always_xy=True)
-
-    corners = [
-        (min_x, min_y),  # SW
-        (min_x, max_y),  # NW
-        (max_x, min_y),  # SE
-        (max_x, max_y),  # NE
-    ]
-
-    transformed = [transformer.transform(x, y) for x, y in corners]
-
-    t_min_x = min(c[0] for c in transformed)
-    t_min_y = min(c[1] for c in transformed)
-    t_max_x = max(c[0] for c in transformed)
-    t_max_y = max(c[1] for c in transformed)
-
-    return BBox(t_min_x, t_min_y, t_max_x, t_max_y, target_crs)
 
 
 # =========================================================================
@@ -390,6 +451,49 @@ def read_feature_bboxes(
             f"Unsupported geometry format: '{ext}'. "
             f"Supported: {', '.join(sorted(_SUPPORTED_EXTENSIONS))}"
         )
+
+
+def read_source_crs(filepath: Path, layer: str | None = None) -> CRS:
+    """
+    Read the CRS the geometry file stores its coordinates in (no transformation).
+
+    Makes it possible to compute the envelope IN THE FILE'S CRS (``target_crs``
+    equal to that CRS = no transformation) and to make the jump to the target
+    CRS with the pinned-operation mechanism from ``kartograf.transform.crs``
+    instead of the default pyproj transformer used in this module.
+
+    Parameters
+    ----------
+    filepath : Path
+        Path to SHP or GPKG file
+    layer : str or None
+        Layer name for GPKG (None = first feature table)
+
+    Returns
+    -------
+    CRS
+        pyproj CRS object
+
+    Raises
+    ------
+    ValidationError
+        If the format is unsupported or the CRS cannot be determined
+    """
+    ext = filepath.suffix.lower()
+
+    if ext == ".shp":
+        return _read_shp_crs(filepath)
+    if ext == ".gpkg":
+        conn = sqlite3.connect(str(filepath))
+        try:
+            return _read_gpkg_crs(conn, _resolve_gpkg_layer(conn, filepath, layer))
+        finally:
+            conn.close()
+
+    raise ValidationError(
+        f"Unsupported geometry format: '{ext}'. "
+        f"Supported: {', '.join(sorted(_SUPPORTED_EXTENSIONS))}"
+    )
 
 
 def get_overall_bbox(
@@ -454,13 +558,13 @@ def find_sheets_for_geometry(
     layer : str or None
         Layer name for GPKG (None = first layer)
     system : str
-        Układ współrzędnych: "1992" (PL-1992) lub "2000" (PL-2000).
-        Default: "1992" — pełna kompatybilność wsteczna.
+        Coordinate system: "1992" (PL-1992) or "2000" (PL-2000).
+        Default: "1992" - full backward compatibility.
 
     Returns
     -------
     list[str]
-        Sorted, deduplicated list of godla (sheet identifiers)
+        Sorted, deduplicated list of sheet codes (godla)
     """
     bboxes = read_feature_bboxes(filepath, layer=layer, target_crs="EPSG:2180")
 

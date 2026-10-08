@@ -53,7 +53,7 @@ class TestPublicAPIImports:
 
         semver_pattern = r"^\d+\.\d+\.\d+(-\w+)?$"
         assert re.match(semver_pattern, __version__), f"Invalid version: {__version__}"
-        assert __version__ == "0.6.1"
+        assert __version__ == "0.7.0"
 
 
 class TestParserStorageIntegration:
@@ -89,7 +89,16 @@ class TestParserStorageIntegration:
             assert storage.exists(child.godlo)
 
         # Verify common parent directory (includes resolution subfolder)
-        common_parent = test_data_dir / "nmt_1m" / "N-34" / "130" / "D" / "d" / "2"
+        common_parent = (
+            test_data_dir
+            / "nmt"
+            / "pl_1992_1m_evrf2007"
+            / "N-34"
+            / "130"
+            / "D"
+            / "d"
+            / "2"
+        )
         assert common_parent.exists()
 
     def test_all_scales_storage(self, test_data_dir, sample_godlos, mock_tif_data):
@@ -331,3 +340,27 @@ class TestEdgeCases:
             current=4, total=4, godlo="N-34", status="completed"
         )
         assert progress.progress_percent == 100.0
+
+
+class TestPyprojectMetadata:
+    """Test that pyproject.toml has a dynamic version and correct metadata."""
+
+    def test_pyproject_metadata(self):
+        """Version is dynamic from kartograf.__version__; tests excluded from
+        package; description/keywords mention CUZK."""
+        import tomllib
+        from pathlib import Path
+
+        pyproject_path = Path(__file__).resolve().parents[1] / "pyproject.toml"
+        data = tomllib.loads(pyproject_path.read_text())
+
+        project = data["project"]
+        assert "version" in project["dynamic"]
+        assert "version" not in project
+
+        setuptools_cfg = data["tool"]["setuptools"]
+        assert setuptools_cfg["dynamic"]["version"]["attr"] == "kartograf.__version__"
+        assert setuptools_cfg["packages"]["find"]["include"] == ["kartograf*"]
+
+        assert "cuzk" in project["keywords"]
+        assert "CUZK" in project["description"]

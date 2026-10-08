@@ -22,21 +22,18 @@ Authentication modes:
 
 To configure credentials:
 1. Register at https://land.copernicus.eu
-2. Generate API credentials (JSON with client_id, private_key, token_uri)
-3. Save to macOS Keychain:
-   security add-generic-password -a "$USER" -s "clms-token" -w '<json>'
+2. Generate API credentials (JSON with client_id, private_key, token_uri,
+   optionally user_id)
+3. Either set CLMS_CREDENTIALS as a JSON string in the environment
+   (read by the kartograf.auth.proxy subprocess), or pass
+   ``CorineProvider(clms_credentials={...})`` explicitly from library code.
 
-The auth proxy automatically reads credentials from Keychain,
-keeping them isolated from the main application process.
+The auth proxy isolates credentials in a separate subprocess, keeping
+them out of the main application process.
 """
 
 import json
 import logging
-import os
-import platform
-import re
-import subprocess
-import threading
 import time
 from pathlib import Path
 from urllib.parse import urlencode
@@ -45,7 +42,14 @@ import requests
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError
-from kartograf.providers.landcover_base import LandCoverProvider
+from kartograf.providers.base import LandCoverProvider
+from kartograf.transform.bbox import envelope_from_2180
+from kartograf.transport.http import (
+    MAX_RETRIES,
+    SessionPerThread,
+    download_to,
+    reject_error_document,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -61,169 +65,6 @@ def _get_auth_proxy():
 
         _auth_proxy_client = AuthProxyClient()
     return _auth_proxy_client
-
-
-# Keychain service name for CLMS credentials
-KEYCHAIN_SERVICE = "clms-token"
-
-
-def get_credentials_from_keychain() -> dict | None:
-    """
-    Retrieve CLMS OAuth2 credentials from macOS Keychain.
-
-    Note: This function is kept for backward compatibility.
-    Prefer using AuthProxyClient for secure credential handling.
-
-    Returns
-    -------
-    dict or None
-        Credentials dict with client_id, private_key, token_uri, etc.
-    """
-    if platform.system() != "Darwin":
-        return None
-
-    try:
-        # Try without account filter first (more flexible)
-        result = subprocess.run(
-            [
-                "security",
-                "find-generic-password",
-                "-s",
-                KEYCHAIN_SERVICE,
-                "-w",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode != 0:
-            return None
-
-        creds_data = result.stdout.strip()
-        if not creds_data:
-            return None
-
-        # Handle hex-encoded data (sometimes Keychain stores it this way)
-        if creds_data and not creds_data.startswith("{"):
-            try:
-                decoded = bytes.fromhex(creds_data).decode("utf-8")
-                # Remove terminal escape sequences like ESC[200~ and ESC[201~
-                # \x1b is ESC character, followed by [NNN~
-                decoded = re.sub(r"\x1b\[\d+~", "", decoded)
-                # Also remove lone ESC characters
-                decoded = decoded.lstrip("\x1b")
-                creds_data = decoded.strip()
-            except (ValueError, UnicodeDecodeError):
-                pass  # Not hex, use as-is
-
-        # Parse JSON
-        creds = json.loads(creds_data)
-        logger.debug("CLMS credentials loaded from macOS Keychain")
-        return creds
-
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
-        logger.debug(f"Could not read from Keychain: {e}")
-    except json.JSONDecodeError as e:
-        logger.warning(f"Invalid JSON in Keychain: {e}")
-
-    return None
-
-
-def save_credentials_to_keychain(credentials: dict) -> bool:
-    """
-    Save CLMS OAuth2 credentials to macOS Keychain.
-
-    Parameters
-    ----------
-    credentials : dict
-        The CLMS credentials dict to save.
-
-    Returns
-    -------
-    bool
-        True if saved successfully, False otherwise.
-    """
-    if platform.system() != "Darwin":
-        logger.warning("Keychain storage only available on macOS")
-        return False
-
-    try:
-        import json
-
-        creds_json = json.dumps(credentials)
-
-        # First try to delete existing entry (ignore errors)
-        subprocess.run(
-            [
-                "security",
-                "delete-generic-password",
-                "-a",
-                os.environ.get("USER", ""),
-                "-s",
-                KEYCHAIN_SERVICE,
-            ],
-            capture_output=True,
-            timeout=5,
-        )
-
-        # Add new entry
-        result = subprocess.run(
-            [
-                "security",
-                "add-generic-password",
-                "-a",
-                os.environ.get("USER", ""),
-                "-s",
-                KEYCHAIN_SERVICE,
-                "-w",
-                creds_json,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0:
-            logger.info("CLMS credentials saved to macOS Keychain")
-            return True
-        else:
-            logger.error(f"Failed to save credentials: {result.stderr}")
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as e:
-        logger.error(f"Could not save to Keychain: {e}")
-
-    return False
-
-
-def get_clms_credentials() -> dict | None:
-    """
-    Get CLMS OAuth2 credentials from available sources.
-
-    Checks in order:
-    1. Environment variable CLMS_CREDENTIALS (JSON string)
-    2. macOS Keychain
-
-    Returns
-    -------
-    dict or None
-        Credentials dict if found, None otherwise.
-    """
-    import json
-
-    # Check environment variable first
-    creds_env = os.environ.get("CLMS_CREDENTIALS")
-    if creds_env:
-        try:
-            creds = json.loads(creds_env)
-            logger.debug("CLMS credentials loaded from environment variable")
-            return creds
-        except json.JSONDecodeError:
-            logger.warning("Invalid JSON in CLMS_CREDENTIALS env var")
-
-    # Try macOS Keychain
-    creds = get_credentials_from_keychain()
-    if creds:
-        return creds
-
-    return None
 
 
 class CLMSAuth:
@@ -293,6 +134,9 @@ class CLMSAuth:
         headers = {}
         if self.key_id:
             headers["kid"] = self.key_id
+
+        if not self.private_key:
+            raise DownloadError("Failed to create JWT assertion: missing private_key")
 
         try:
             assertion = jwt.encode(
@@ -384,7 +228,6 @@ class CorineProvider(LandCoverProvider):
     # Available years
     AVAILABLE_YEARS = [2018, 2012, 2006, 2000, 1990]
     EEA_YEARS = [2018, 2012, 2006, 2000]
-    DLR_YEARS = [1990]
     CLMS_YEARS = [2018, 2012, 2006, 2000]  # Years with CLMS API support
 
     # WMS layer names
@@ -397,8 +240,7 @@ class CorineProvider(LandCoverProvider):
     DEFAULT_TIMEOUT = 60
     CLMS_POLL_INTERVAL = 10  # seconds between status checks
     CLMS_MAX_WAIT = 600  # max seconds to wait for CLMS download
-    MAX_RETRIES = 3
-    RETRY_BACKOFF_BASE = 2
+    MAX_RETRIES = MAX_RETRIES
     DEFAULT_YEAR = 2018
 
     # Output format settings
@@ -427,7 +269,7 @@ class CorineProvider(LandCoverProvider):
             The proxy isolates credentials in a separate subprocess.
             Set to False to use direct mode (requires clms_credentials).
         """
-        self._session = session
+        self._sessions = SessionPerThread(session, factory=requests.Session)
         self._use_proxy = use_proxy and clms_credentials is None
         self._clms_auth: CLMSAuth | None = None
 
@@ -443,6 +285,8 @@ class CorineProvider(LandCoverProvider):
                 logger.info("CLMS OAuth2 authentication configured (direct mode)")
             except Exception as e:
                 logger.warning(f"Failed to initialize CLMS auth: {e}")
+
+        self.descriptor_key = "eu.clms.corine"
 
     @property
     def has_clms_token(self) -> bool:
@@ -463,7 +307,7 @@ class CorineProvider(LandCoverProvider):
         return "CORINE Land Cover"
 
     @property
-    def source_url(self) -> str:
+    def base_url(self) -> str:
         """Return source URL."""
         return "https://land.copernicus.eu/en/products/corine-land-cover"
 
@@ -522,7 +366,6 @@ class CorineProvider(LandCoverProvider):
             )
 
         output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Use CLMS API if token available and year is supported
         if self.has_clms_token and year in self.CLMS_YEARS:
@@ -539,11 +382,31 @@ class CorineProvider(LandCoverProvider):
         timeout: int,
     ) -> Path:
         """Download styled preview via WMS."""
-        # Calculate image dimensions based on bbox size and resolution
-        width_m = bbox.max_x - bbox.min_x
-        height_m = bbox.max_y - bbox.min_y
-        width_px = max(1, int(width_m / self.WMS_RESOLUTION))
-        height_px = max(1, int(height_m / self.WMS_RESOLUTION))
+        # Aspect ratio always comes from the metric (EPSG:3857) envelope, so
+        # the ground resolution along Y matches the one along X. Degrees would
+        # not do: plate carree is not conformal, a pixel square in degrees is
+        # 1/cos(lat) taller on the ground (~1.6x in Poland).
+        aspect_bounds = envelope_from_2180(bbox, "EPSG:3857")
+
+        # Envelope actually sent as BBOX, in the CRS of the WMS request:
+        # EPSG:3857 for the EEA endpoint, EPSG:4326 for the DLR fallback
+        # (same branch as in _construct_wms_url).
+        if year in self.EEA_YEARS:
+            target_bounds = aspect_bounds
+        else:
+            target_bounds = envelope_from_2180(bbox, "EPSG:4326")
+
+        # Width follows the ground resolution along X, height follows the
+        # aspect ratio of the requested area on the ground.
+        width_px = max(1, int((bbox.max_x - bbox.min_x) / self.WMS_RESOLUTION))
+        height_px = max(
+            1,
+            round(
+                width_px
+                * (aspect_bounds[3] - aspect_bounds[1])
+                / (aspect_bounds[2] - aspect_bounds[0])
+            ),
+        )
 
         # Limit max size to prevent huge requests
         max_size = 4096
@@ -552,16 +415,21 @@ class CorineProvider(LandCoverProvider):
         if height_px > max_size:
             height_px = max_size
 
-        url = self._construct_wms_url(bbox, year, width_px, height_px)
+        url = self._construct_wms_url(target_bounds, year, width_px, height_px)
 
-        logger.info(
-            f"Downloading CLC {year} preview via WMS (no CLMS token - styled image)"
+        logger.warning(
+            "Downloading CLC %s preview via WMS "
+            "(no CLMS credentials - styled PNG, not class codes)",
+            year,
         )
 
-        return self._download_with_retry(
-            url=url,
-            output_path=output_path.with_suffix(".png"),
+        return download_to(
+            self._sessions.get(),
+            url,
+            output_path.with_suffix(".png"),
             timeout=timeout,
+            retries=self.MAX_RETRIES,
+            validate=reject_error_document("WMS"),
             description=(
                 f"CLC {year} for bbox "
                 f"({bbox.min_x:.0f},{bbox.min_y:.0f})-"
@@ -590,7 +458,7 @@ class CorineProvider(LandCoverProvider):
         4. Download the result file
         """
         # Transform bbox to WGS84 for CLMS API
-        bbox_wgs84 = self._transform_bbox_to_wgs84(bbox)
+        bbox_wgs84 = envelope_from_2180(bbox, "EPSG:4326")
 
         # Request download
         dataset_id = self.CLMS_DATASET_UIDS[year]
@@ -727,9 +595,13 @@ class CorineProvider(LandCoverProvider):
         timeout: int,
     ) -> Path:
         """Download via CLMS API using direct authentication."""
-        session = self._session or requests.Session()
+        session = self._sessions.get()
 
         # Get access token via OAuth2
+        # Reachable only via has_clms_token with the proxy off, i.e. with
+        # _clms_auth set; the check narrows the Optional for the type checker.
+        if self._clms_auth is None:
+            raise DownloadError("CLMS direct mode requires clms_credentials")
         access_token = self._clms_auth.get_access_token(session)
 
         headers = {
@@ -766,10 +638,13 @@ class CorineProvider(LandCoverProvider):
 
             # Download the file
             logger.info("Downloading GeoTIFF from CLMS...")
-            return self._download_with_retry(
-                url=download_url,
-                output_path=output_path.with_suffix(".tif"),
+            return download_to(
+                session,
+                download_url,
+                output_path.with_suffix(".tif"),
                 timeout=timeout,
+                retries=self.MAX_RETRIES,
+                validate=reject_error_document("WMS"),
                 description=f"CLC {year} GeoTIFF",
             )
 
@@ -835,7 +710,7 @@ class CorineProvider(LandCoverProvider):
         **kwargs,
     ) -> Path:
         """
-        Download CORINE Land Cover data for a map sheet (godło).
+        Download CORINE Land Cover data for a map sheet (godlo).
 
         Parameters
         ----------
@@ -890,7 +765,7 @@ class CorineProvider(LandCoverProvider):
 
     def _construct_wms_url(
         self,
-        bbox: BBox,
+        bounds: tuple[float, float, float, float],
         year: int,
         width: int,
         height: int,
@@ -903,8 +778,10 @@ class CorineProvider(LandCoverProvider):
 
         Parameters
         ----------
-        bbox : BBox
-            Bounding box in EPSG:2180
+        bounds : tuple
+            Envelope of the requested area in the CRS of the request:
+            EPSG:3857 for EEA years, EPSG:4326 for the DLR fallback
+            (see transform.bbox.envelope_from_2180)
         year : int
             Reference year
         width : int
@@ -918,13 +795,13 @@ class CorineProvider(LandCoverProvider):
             Full WMS URL
         """
         if year in self.EEA_YEARS:
-            return self._construct_eea_wms_url(bbox, year, width, height)
+            return self._construct_eea_wms_url(bounds, year, width, height)
         else:
-            return self._construct_dlr_wms_url(bbox, year, width, height)
+            return self._construct_dlr_wms_url(bounds, year, width, height)
 
     def _construct_eea_wms_url(
         self,
-        bbox: BBox,
+        bbox_3857: tuple[float, float, float, float],
         year: int,
         width: int,
         height: int,
@@ -936,9 +813,6 @@ class CorineProvider(LandCoverProvider):
         """
         # EEA endpoint for this year
         endpoint = f"{self.EEA_WMS_BASE}/CLC{year}_WM/MapServer/WMSServer"
-
-        # Transform EPSG:2180 bbox to Web Mercator (EPSG:3857)
-        bbox_3857 = self._transform_bbox_to_epsg3857(bbox)
 
         params = {
             "SERVICE": "WMS",
@@ -958,7 +832,7 @@ class CorineProvider(LandCoverProvider):
 
     def _construct_dlr_wms_url(
         self,
-        bbox: BBox,
+        bbox_wgs84: tuple[float, float, float, float],
         year: int,
         width: int,
         height: int,
@@ -969,9 +843,6 @@ class CorineProvider(LandCoverProvider):
         DLR WMS uses WMS 1.1.1 with EPSG:4326.
         """
         layer = self.DLR_WMS_LAYERS[year]
-
-        # Transform EPSG:2180 bbox to WGS84 (EPSG:4326)
-        bbox_wgs84 = self._transform_bbox_to_wgs84(bbox)
 
         params = {
             "SERVICE": "WMS",
@@ -988,140 +859,6 @@ class CorineProvider(LandCoverProvider):
         }
 
         return f"{self.DLR_WMS_ENDPOINT}?{urlencode(params)}"
-
-    def _transform_bbox_to_epsg3857(
-        self, bbox: BBox
-    ) -> tuple[float, float, float, float]:
-        """
-        Transform EPSG:2180 bounding box to Web Mercator (EPSG:3857).
-
-        Returns
-        -------
-        tuple
-            (min_x, min_y, max_x, max_y) in EPSG:3857
-        """
-        from pyproj import Transformer
-
-        transformer = Transformer.from_crs("EPSG:2180", "EPSG:3857", always_xy=True)
-
-        min_x, min_y = transformer.transform(bbox.min_x, bbox.min_y)
-        max_x, max_y = transformer.transform(bbox.max_x, bbox.max_y)
-
-        return (min_x, min_y, max_x, max_y)
-
-    def _transform_bbox_to_wgs84(self, bbox: BBox) -> tuple[float, float, float, float]:
-        """
-        Transform EPSG:2180 bounding box to WGS84 (EPSG:4326).
-
-        Returns
-        -------
-        tuple
-            (min_lon, min_lat, max_lon, max_lat) in WGS84
-        """
-        from pyproj import Transformer
-
-        transformer = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
-
-        min_lon, min_lat = transformer.transform(bbox.min_x, bbox.min_y)
-        max_lon, max_lat = transformer.transform(bbox.max_x, bbox.max_y)
-
-        return (min_lon, min_lat, max_lon, max_lat)
-
-    # =========================================================================
-    # Common utilities
-    # =========================================================================
-
-    def _download_with_retry(
-        self,
-        url: str,
-        output_path: Path,
-        timeout: int,
-        description: str,
-    ) -> Path:
-        """
-        Download file with automatic retry on failure.
-
-        Parameters
-        ----------
-        url : str
-            URL to download
-        output_path : Path
-            Target path
-        timeout : int
-            Request timeout
-        description : str
-            Description for logging
-
-        Returns
-        -------
-        Path
-            Path to downloaded file
-
-        Raises
-        ------
-        DownloadError
-            If download fails after all retries
-        """
-        last_error = None
-        session = self._session or requests.Session()
-
-        for attempt in range(1, self.MAX_RETRIES + 1):
-            try:
-                logger.debug(
-                    f"Downloading {description} (attempt {attempt}/{self.MAX_RETRIES})"
-                )
-
-                response = session.get(url, timeout=timeout, stream=True)
-                response.raise_for_status()
-
-                # Check if response is actually an image
-                content_type = response.headers.get("Content-Type", "")
-                if "xml" in content_type.lower() or "html" in content_type.lower():
-                    # WMS error response
-                    error_text = response.text[:500]
-                    raise DownloadError(f"WMS returned error response: {error_text}")
-
-                self._save_response(response, output_path)
-
-                logger.info(f"Successfully downloaded {description} to {output_path}")
-                return output_path
-
-            except requests.RequestException as e:
-                last_error = e
-                logger.warning(
-                    f"Download failed for {description} (attempt {attempt}): {e}"
-                )
-
-                if attempt < self.MAX_RETRIES:
-                    wait_time = self.RETRY_BACKOFF_BASE**attempt
-                    logger.debug(f"Retrying in {wait_time} seconds...")
-                    time.sleep(wait_time)
-
-        raise DownloadError(
-            f"Failed to download {description} after {self.MAX_RETRIES} attempts: "
-            f"{last_error}",
-        )
-
-    def _save_response(self, response: requests.Response, output_path: Path) -> None:
-        """
-        Save HTTP response to file atomically.
-
-        Uses a unique temp filename per process/thread to prevent
-        collisions when multiple threads download concurrently.
-        """
-        thread_id = threading.current_thread().ident
-        temp_suffix = f"{output_path.suffix}.{os.getpid()}_{thread_id}.tmp"
-        temp_path = output_path.with_suffix(temp_suffix)
-
-        try:
-            with open(temp_path, "wb") as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-            temp_path.rename(output_path)
-        except Exception:
-            if temp_path.exists():
-                temp_path.unlink()
-            raise
 
     # =========================================================================
     # Info methods

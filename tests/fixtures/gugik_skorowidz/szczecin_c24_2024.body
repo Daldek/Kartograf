@@ -1,0 +1,5 @@
+<script>
+var skor_NMT_wg_akt = [];
+skor_NMT_wg_akt.push({godlo:"N-33-90-C-c-2-4",aktualnosc:"2024-08-28",charakterystykaPrzestrzenna:"0.50 m",calyArkuszWypelnionyTrescia:"NIE",ukladWspolrzednychPoziomych:"PL-1992",numerZgloszeniaPracy:"DFT.7201.024.2024",modulArchiwizacji:"1:5000",url:"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/84007/84007_1843832_N-33-90-C-c-2-4.asc",aktualnoscRok:"2024"});
+skor_NMT_wg_akt.push({godlo:"N-33-90-C-c-2-4",aktualnosc:"2024-09-03",charakterystykaPrzestrzenna:"1.00 m",calyArkuszWypelnionyTrescia:"TAK",ukladWspolrzednychPoziomych:"PL-1992",numerZgloszeniaPracy:"GK-FOTO.6201.26.2024",modulArchiwizacji:"1:5000",url:"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/80225/80225_1536688_N-33-90-C-c-2-4.asc",aktualnoscRok:"2024"});
+</script>
