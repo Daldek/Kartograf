@@ -82,6 +82,7 @@ from kartograf.providers.pl.gugik_laz import (
 )
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
+from kartograf.providers.pl.prg import discover_teryts_for_bbox, teryt_for_point
 from kartograf.providers.soilgrids import SoilGridsProvider
 from kartograf.transport.http import get_with_retry, make_gugik_session
 from kartograf.transport.mosaic import check_source_grid, mosaic_and_crop
@@ -136,6 +137,9 @@ __all__ = [
     "SoilGridsProvider",
     "CuzkDmrProvider",
     "create_dmr_provider",
+    # TERYT (PRG)
+    "discover_teryts_for_bbox",
+    "teryt_for_point",
     # Hydrology
     "HSGCalculator",
     # Transport and mosaic (stable since 0.7.1)

@@ -27,6 +27,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   w ramie godla (co najmniej 50 % powierzchni pliku, rama w ukladzie
   pliku — arkusze PL-2000 publikowane w EPSG:2180 przechodza);
   rozbieznosc = `DownloadError` arkusza, plik nie zostaje zapisany.
+- `discover_teryts_for_bbox(bbox, *, session, cache)` i
+  `teryt_for_point(x, y, crs, ...)`: kody TERYT powiatow z WFS PRG GUGiK
+  (filtr po geometrii); blad uslugi albo lista obcieta stronicowaniem =
+  `DownloadError`, pusta lista tylko przy poprawnej odpowiedzi bez
+  obiektow. Odpowiedzi trafiaja do cache metadanych (nowa tabela
+  `teryt_bbox_cache`; `cache stats`: `TERYT entries` liczy punkty i
+  obszary).
 
 ### Zmienione
 

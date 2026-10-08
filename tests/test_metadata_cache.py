@@ -27,6 +27,7 @@ import requests
 
 from kartograf.cache.metadata import MetadataCache
 from kartograf.cli.commands import create_parser, main
+from kartograf.core.bbox import BBox
 from kartograf.exceptions import DownloadError, NoCoverageError
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.pl.gugik import GugikProvider
@@ -198,6 +199,37 @@ class TestMetadataCacheTERYT:
         cache.set_teryt(500000.0, 400000.0, "1465")
         cache.set_teryt(500000.0, 400000.0, "1466")
         assert cache.get_teryt(500000.0, 400000.0) == "1466"
+
+
+class TestTerytBboxCache:
+    """The teryt_bbox_cache table (A1/U5): powiat TERYT codes per area."""
+
+    B = BBox(1.0, 2.0, 3.0, 4.0, "EPSG:2180")
+
+    def test_round_trip(self, tmp_path):
+        cache = MetadataCache(db_path=tmp_path / "c.db")
+        assert cache.get_teryts_for_bbox(self.B) is None
+        cache.set_teryts_for_bbox(self.B, ["0208", "0224"])
+        assert cache.get_teryts_for_bbox(self.B) == ["0208", "0224"]
+
+    def test_empty_list_is_cached(self, tmp_path):
+        cache = MetadataCache(db_path=tmp_path / "c.db")
+        cache.set_teryts_for_bbox(self.B, [])
+        assert cache.get_teryts_for_bbox(self.B) == []
+
+    def test_refresh_mode_misses(self, tmp_path):
+        MetadataCache(db_path=tmp_path / "c.db").set_teryts_for_bbox(self.B, ["0208"])
+        fresh = MetadataCache(db_path=tmp_path / "c.db", refresh=True)
+        assert fresh.get_teryts_for_bbox(self.B) is None
+
+    def test_counted_cleared_and_pruned(self, tmp_path):
+        cache = MetadataCache(db_path=tmp_path / "c.db", ttl_seconds=0)
+        cache.set_teryts_for_bbox(self.B, ["0208"])
+        assert cache.stats()["teryt_count"] == 1
+        assert cache.prune_expired() == 1
+        cache.set_teryts_for_bbox(self.B, ["0208"])
+        cache.clear()
+        assert cache.stats()["teryt_count"] == 0
 
 
 # =========================================================================
