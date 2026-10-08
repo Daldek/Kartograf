@@ -1,20 +1,20 @@
 """
-Dowiazanie sciezki standardowej do najnowszej lokalnej kampanii (ADR-030 d).
+Linking the standard path to the newest local campaign (ADR-030 d).
 
-Prawdziwe pliki NMT/NMPT/orto leza w ``<segment>/kampanie/<data>_<id>/...``;
-sciezka standardowa ``<segment>/<hierarchia>/<godlo>.<ext>`` wskazuje
-najnowsza LOKALNA kampanie. Metoda (errata 4 ADR-030): 1) hardlink,
-2) kopia (``logger.warning``); symlinkow nie tworzymy (nieczytelne dla
-klientow Windows przez SMB, limit dlugosci celu na udziale). Podmiana zawsze
-atomowa (plik tymczasowy w katalogu linku + ``os.replace``). Sidecar sciezki
-standardowej to ZWYKLY plik (kopia sidecara celu + ``extra.link``/
-``extra.link_target``) i JEDYNE zrodlo celu dowiazania (hardlink nie niesie
-wskazania). Istniejacy symlink (dane sprzed wydania) = sciezka nieznana,
-zastepowana hardlinkiem.
+The real NMT/NMPT/orto files live in ``<segment>/kampanie/<date>_<id>/...``;
+the standard path ``<segment>/<hierarchy>/<godlo>.<ext>`` points to the
+newest LOCAL campaign. Method (errata 4 ADR-030): 1) hardlink, 2) copy
+(``logger.warning``); we do not create symlinks (unreadable for Windows
+clients over SMB, target length limit on the share). The swap is always
+atomic (temporary file in the link directory + ``os.replace``). The standard
+path sidecar is a REGULAR file (a copy of the target sidecar +
+``extra.link``/``extra.link_target``) and the ONLY source of the link target
+(a hardlink carries no pointer). An existing symlink (data from before the
+release) = unknown path, replaced with a hardlink.
 
-Dowiazanie nigdy nie cofa sie na kampanie starsza od biezacego celu: klucz
-celu z jego sidecara, a gdy nieczytelny — z nazwy katalogu ``<data>_<id>``
-(errata ADR-030 (d), D-1).
+The link never moves back to a campaign older than the current target: the
+target key comes from its sidecar and, when unreadable, from the directory
+name ``<date>_<id>`` (errata ADR-030 (d), D-1).
 """
 
 import contextlib
@@ -33,18 +33,18 @@ logger = logging.getLogger(__name__)
 
 LinkMethod = Literal["hardlink", "copy"]
 
-# Lokalna stala (bez importu z download/campaigns.py — zadanie rownolegle).
+# Local constant (no import from download/campaigns.py — parallel task).
 _CAMPAIGNS_DIR = "kampanie"
 _CAMPAIGN_DIR = re.compile(r"(\d{4}-\d{2}-\d{2})_(\d+|u[0-9a-f]{8})")
 
 
 @dataclass(frozen=True)
 class LinkOutcome:
-    """Wynik ``ensure_standard_link``."""
+    """Result of ``ensure_standard_link``."""
 
     method: LinkMethod
-    target: Path  # plik kampanii wskazywany przez sciezke standardowa
-    changed: bool  # dowiazanie utworzone/przestawione w tym wywolaniu
+    target: Path  # campaign file the standard path points to
+    changed: bool  # link created/moved in this call
 
 
 def _sidecar_of(path: Path) -> Path:
@@ -68,18 +68,19 @@ def _read_json(path: Path) -> dict | None:
 
 
 def link_atomic(target: Path, link: Path) -> LinkMethod:
-    """Ustaw ``link`` -> ``target``: hardlink, a gdy niedostepny — kopia.
+    """Set ``link`` -> ``target``: a hardlink, or a copy when unavailable.
 
-    Zawsze przez plik tymczasowy w katalogu ``link``
-    (``<name>.<pid>_<tid>.link.tmp``) + ``os.replace`` (na miejscu
-    istniejacego symlinku zastepuje SAM symlink, nie pisze przez niego).
-    Wyjatek hardlinku (OSError, NotImplementedError — np. exFAT/FAT,
-    sshfs/FUSE) = kopia + ``logger.warning``; tmp sprzatany. Porazka kopii
-    (OSError) wylatuje, a dotychczasowe dowiazanie zostaje nietkniete.
+    Always via a temporary file in the ``link`` directory
+    (``<name>.<pid>_<tid>.link.tmp``) + ``os.replace`` (in place of an
+    existing symlink it replaces the symlink ITSELF, it does not write
+    through it). A hardlink exception (OSError, NotImplementedError — e.g.
+    exFAT/FAT, sshfs/FUSE) = copy + ``logger.warning``; tmp cleaned up. A
+    copy failure (OSError) propagates and the existing link is left
+    untouched.
     """
     link.parent.mkdir(parents=True, exist_ok=True)
     tmp = _tmp_name(link, "link.tmp")
-    tmp.unlink(missing_ok=True)  # pozostalosc po przerwanym przebiegu (ten sam pid_tid)
+    tmp.unlink(missing_ok=True)  # leftover from an interrupted run (same pid_tid)
     attempts: list[tuple[LinkMethod, Callable[[], object]]] = [
         ("hardlink", lambda: os.link(target, tmp)),
         ("copy", lambda: shutil.copyfile(target, tmp)),
@@ -89,14 +90,14 @@ def link_atomic(target: Path, link: Path) -> LinkMethod:
             make()
             os.replace(tmp, link)
         except (OSError, NotImplementedError):
-            # porazka sprzatania nie moze zgubic proby kopii ani bledu kopii
+            # a cleanup failure must not lose the copy attempt or the copy error
             with contextlib.suppress(OSError):
                 tmp.unlink(missing_ok=True)
             if method == "copy":
                 raise
             continue
-        # rename(2) na ten sam i-wezel (link juz jest hardlinkiem celu) nic
-        # nie robi i zostawia tmp
+        # rename(2) onto the same inode (link is already a hardlink of the
+        # target) does nothing and leaves tmp behind
         with contextlib.suppress(OSError):
             tmp.unlink(missing_ok=True)
         if method == "copy":
@@ -107,7 +108,7 @@ def link_atomic(target: Path, link: Path) -> LinkMethod:
 
 def campaign_key_from_sidecar(data_path: Path) -> tuple[str, str, str] | None:
     """``(extra.campaign.date, extra.campaign.pzgik_date or "", extra.source.url)``
-    z ``<data_path>.meta.json``; ``None`` gdy brak/nieczytelny/niepelny.
+    from ``<data_path>.meta.json``; ``None`` when missing/unreadable/incomplete.
 
     A sidecar without the ``extra.campaign.pzgik_date`` key (written before
     ADR-031 with Polish key names) is incomplete: ``None``, so
@@ -138,23 +139,23 @@ def campaign_key_from_sidecar(data_path: Path) -> tuple[str, str, str] | None:
 
 
 def campaign_key_of(data_path: Path) -> tuple[str, str, str] | None:
-    """Klucz kampanii pliku (errata ADR-030 (d), D-1).
+    """Campaign key of a file (errata ADR-030 (d), D-1).
 
-    Najpierw ``campaign_key_from_sidecar``; gdy ``None`` (brak sidecara
-    kampanii = tylko ingerencja uzytkownika, errata 2 N-1) — z nazwy
-    katalogu: element sciezki po OSTATNIM segmencie ``kampanie``, po ktorym
-    nastepuje nazwa pasujaca w calosci do ``<data>_<id>`` (szukanie od
-    konca — korzen wyjscia moze zawierac ``kampanie``) -> ``(data, "", "")``.
-    Fallback jest DOLNYM oszacowaniem klucza (puste ``dt_pzgik`` i URL),
-    wiec przy tej samej dacie nowy cel wygrywa, a cel o pozniejszej dacie
-    zostaje. ``None`` tylko gdy ani
-    sidecar, ani nazwa katalogu nie daja klucza.
+    First ``campaign_key_from_sidecar``; when ``None`` (no campaign sidecar
+    = only user interference, errata 2 N-1) — from the directory name: the
+    path element after the LAST ``kampanie`` segment that is followed by a
+    name fully matching ``<date>_<id>`` (searched from the end — the output
+    root may contain ``kampanie``) -> ``(date, "", "")``. The fallback is a
+    LOWER BOUND of the key (empty ``dt_pzgik`` and URL), so with the same
+    date the new target wins, while a target with a later date stays.
+    ``None`` only when neither the sidecar nor the directory name yields a
+    key.
     """
     key = campaign_key_from_sidecar(data_path)
     if key is not None:
         return key
     parts = PurePath(_norm(data_path)).parts
-    # od konca: katalog wyjsciowy uzytkownika moze sam zawierac "kampanie"
+    # from the end: the user output directory may itself contain "kampanie"
     for idx in range(len(parts) - 2, -1, -1):
         if parts[idx] != _CAMPAIGNS_DIR:
             continue
@@ -165,17 +166,18 @@ def campaign_key_of(data_path: Path) -> tuple[str, str, str] | None:
 
 
 def linked_campaign(link: Path) -> Path | None:
-    """Plik kampanii, na ktory wskazuje sciezka standardowa.
+    """Campaign file the standard path points to.
 
-    Cel WYLACZNIE z sidecara standardowego (``extra.link`` in
-    {hardlink, copy} + ``extra.link_target``), zweryfikowany z plikiem.
-    ``None`` = brak pliku, plik bez ``extra.link`` albo z innym ``extra.link``
-    (stary plik — errata (e); symlink sprzed errata 4), ``link_target``
-    nieistniejacy (katalog kampanii usuniety), hardlink, ktory nie jest juz
-    tym samym plikiem (``samefile``), kopia o innym rozmiarze niz cel ALBO
-    starsza od celu (D-5: ``target.st_mtime > link.st_mtime`` — cel pobrany
-    ponownie po skopiowaniu; ``shutil.copyfile`` nie przenosi mtime, wiec
-    swieza kopia ma mtime >= cel).
+    The target comes ONLY from the standard sidecar (``extra.link`` in
+    {hardlink, copy} + ``extra.link_target``), verified against the file.
+    ``None`` = no file, a file without ``extra.link`` or with another
+    ``extra.link`` (old file — errata (e); symlink from before errata 4), a
+    nonexistent ``link_target`` (campaign directory removed), a hardlink
+    that is no longer the same file (``samefile``), a copy of a different
+    size than the target OR older than the target (D-5:
+    ``target.st_mtime > link.st_mtime`` — target downloaded again after
+    copying; ``shutil.copyfile`` does not carry over mtime, so a fresh copy
+    has mtime >= target).
     """
     if not link.is_file():
         return None
@@ -204,19 +206,19 @@ def linked_campaign(link: Path) -> Path | None:
 def _link_target_text(link: Path, target: Path) -> str:
     try:
         return PurePath(os.path.relpath(target, link.parent)).as_posix()
-    except ValueError:  # inny dysk (Windows) — sciezka absolutna
+    except ValueError:  # different drive (Windows) — absolute path
         return PurePath(_norm(target)).as_posix()
 
 
 def write_standard_sidecar(link: Path, target: Path, method: LinkMethod) -> None:
-    """``<link>.meta.json`` = sidecar celu + ``extra.link`` + ``extra.link_target``.
+    """``<link>.meta.json`` = target sidecar + ``extra.link`` + ``extra.link_target``.
 
-    ZWYKLY plik: tmp + ``os.replace`` (zastepuje takze symlink sidecara
-    pozostawiony przez uzytkownika — nigdy zapis "przez" niego do sidecara
-    kampanii). ``extra.link_target`` = sciezka wzgledna do pliku kampanii
-    (absolutna, gdy wzgledna niemozliwa) — jedyne zrodlo celu. Sidecar celu
-    nieczytelny -> stary sidecar standardowy usuniety + ``logger.warning``.
-    Nigdy nie rzuca wyjatku (sidecar standardowy jest best-effort).
+    A REGULAR file: tmp + ``os.replace`` (also replaces a sidecar symlink
+    left by the user — never a write "through" it into the campaign
+    sidecar). ``extra.link_target`` = path relative to the campaign file
+    (absolute when a relative one is impossible) — the only source of the
+    target. Unreadable target sidecar -> the old standard sidecar is removed
+    + ``logger.warning``. Never raises (the standard sidecar is best-effort).
     """
     sidecar = _sidecar_of(link)
     tmp = _tmp_name(sidecar, "tmp")
@@ -238,7 +240,7 @@ def write_standard_sidecar(link: Path, target: Path, method: LinkMethod) -> None
             json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
         os.replace(tmp, sidecar)
-    except Exception as e:  # noqa: BLE001 — sidecar standardowy best-effort
+    except Exception as e:  # noqa: BLE001 — standard sidecar is best-effort
         with contextlib.suppress(OSError):
             tmp.unlink(missing_ok=True)
         logger.warning(f"Nie udalo sie zapisac sidecara {sidecar}: {e}")
@@ -248,35 +250,36 @@ def _current_method(link: Path) -> LinkMethod:
     meta = _read_json(_sidecar_of(link)) or {}
     extra = meta.get("extra")
     method = extra.get("link") if isinstance(extra, dict) else None
-    # linked_campaign zwraca cel zwyklego pliku tylko dla hardlink/copy
+    # linked_campaign returns the target of a regular file only for hardlink/copy
     return "copy" if method == "copy" else "hardlink"
 
 
 def ensure_standard_link(
     link: Path, target: Path, key: tuple[str, str, str], *, refresh: bool = False
 ) -> LinkOutcome:
-    """Dowiazanie standardowe do najnowszej LOKALNEJ kampanii.
+    """Standard link to the newest LOCAL campaign.
 
-    Biezacy cel ``cur = linked_campaign(link)`` zostaje (``changed=False``),
-    gdy istnieje i nie jest to odswiezenie tego samego celu (``refresh``
-    i ``cur == target``), oraz ``cur == target`` ALBO klucz biezacego celu
-    (``campaign_key_of`` — sidecar, a gdy nieczytelny nazwa katalogu) jest
-    ``>= key``. Inaczej ``link_atomic`` + ``write_standard_sidecar`` +
-    usuniecie ``<link>.aux.xml`` (stale statystyki GDAL PAM). Brak
-    ``<link>.meta.json`` = sciezka nieznana (sidecar to jedyne zrodlo celu),
-    wiec dowiazanie jest tworzone od nowa. Porownanie
-    ``cur == target`` na sciezkach znormalizowanych, nie ``samefile``
-    (kopia nie jest tym samym plikiem). Porazka podmiany (takze kopii)
-    wylatuje jako ``OSError``; dotychczasowe dowiazanie zostaje.
+    The current target ``cur = linked_campaign(link)`` stays
+    (``changed=False``) when it exists, this is not a refresh of the same
+    target (``refresh`` and ``cur == target``), and either ``cur == target``
+    OR the key of the current target (``campaign_key_of`` — sidecar, and
+    when unreadable the directory name) is ``>= key``. Otherwise
+    ``link_atomic`` + ``write_standard_sidecar`` + removal of
+    ``<link>.aux.xml`` (stale GDAL PAM statistics). A missing
+    ``<link>.meta.json`` = unknown path (the sidecar is the only source of
+    the target), so the link is created anew. The ``cur == target``
+    comparison uses normalized paths, not ``samefile`` (a copy is not the
+    same file). A swap failure (a copy too) propagates as ``OSError``; the
+    existing link stays.
 
-    Ryzyko szczatkowe (wyscig, bez blokad — swiadoma decyzja): rownolegle
-    wywolania na tej samej sciezce ``link`` (w jednym procesie albo miedzy
-    procesami) moga chwilowo zostawic dowiazanie na starszej kampanii
-    (odczyt biezacego celu i podmiana nie sa jedna operacja atomowa).
-    Pliki w ``kampanie/`` pozostaja nietkniete, a kolejne wywolanie
-    ``newest``/``all`` samo naprawia dowiazanie. ``DownloadManager`` nie
-    wola tej funkcji rownolegle dla jednego arkusza (dowiazanie raz na
-    arkusz, deduplikacja godel w ``expand_sheets``).
+    Residual risk (race, no locks — a deliberate decision): parallel calls
+    on the same ``link`` path (within one process or across processes) may
+    briefly leave the link on an older campaign (reading the current target
+    and the swap are not one atomic operation). Files in ``kampanie/``
+    remain untouched, and the next ``newest``/``all`` call repairs the link
+    itself. ``DownloadManager`` does not call this function in parallel for
+    one sheet (a link once per sheet, godlo deduplication in
+    ``expand_sheets``).
     """
     cur = linked_campaign(link)
     if cur is not None:
