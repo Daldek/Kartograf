@@ -348,17 +348,55 @@ Bezposrednie wywolanie providera sidecara nie pisze; DMR CZ z biblioteki
 |---|---|
 | `dataset` | klucz deskryptora zrodla (np. `pl.gugik.nmt_1m`) |
 | `country`, `product`, `provider` | kraj, produkt i nazwa dostawcy z deskryptora |
-| `horizontal_crs` | faktyczny uklad poziomy pliku: arkusz PL-1992 `EPSG:2180`, arkusz PL-2000 `EPSG:2176`–`EPSG:2179` wedlug strefy godla, CZ natywnie `EPSG:5514`, kafel TM33 `EPSG:3045`; wycinek po `--target-crs` w ukladzie docelowym. Dla arkusza PL uklad z godla jest SPRAWDZANY wspolrzednymi pliku (`sources/sidecar.py::pl_sheet_horizontal_crs`): plik opublikowany przez GUGiK w innym ukladzie niz wskazuje godlo (E17, np. arkusze PL-2000 strefy 7 jak `7.125.11.19` w EPSG:2180) dostaje uklad PLIKU, deklaracja rekordu skorowidza zostaje w `extra.source.uklad`, logger `kartograf.sources.sidecar` ostrzega, a CLI drukuje `Warning: N arkuszy GUGiK opublikowano w innym ukladzie niz wskazuje godlo: ...` (kod bez zmian; segment katalogu nadal wg godla, ADR-026) |
+| `horizontal_crs` | faktyczny uklad poziomy pliku: arkusz PL-1992 `EPSG:2180`, arkusz PL-2000 `EPSG:2176`–`EPSG:2179` wedlug strefy godla, CZ natywnie `EPSG:5514`, kafel TM33 `EPSG:3045`; wycinek po `--target-crs` w ukladzie docelowym. Dla arkusza PL uklad z godla jest SPRAWDZANY wspolrzednymi pliku (`sources/sidecar.py::pl_sheet_horizontal_crs`): plik opublikowany przez GUGiK w innym ukladzie niz wskazuje godlo (E17, np. arkusze PL-2000 strefy 7 jak `7.125.11.19` w EPSG:2180) dostaje uklad PLIKU, deklaracja rekordu skorowidza zostaje w `extra.source.declared_crs`, logger `kartograf.sources.sidecar` ostrzega, a CLI drukuje `Warning: N arkuszy GUGiK opublikowano w innym ukladzie niz wskazuje godlo: ...` (kod bez zmian; segment katalogu nadal wg godla, ADR-026) |
 | `vertical_crs` | kod realizacji ukladu pionowego: `EPSG:9651` (EVRF2007-PL), `EPSG:9650` (KRON86), `EPSG:8357` (Bpv), `EPSG:5621` (EVRF2007); `null` gdy produkt nie ma pionu (orto) |
 | `vertical_source` | `native` / `ellipsoidal` / `server` (z `AccessChannel`) |
 | `resolution` | rozdzielczosc z deskryptora (`1m`/`5m`/`2m`) albo `null` |
 | `nodata` | wartosc pustego piksela: dla `.asc` czytana automatycznie z naglowka (`read_asc_nodata`), w torze CZ podawana przez CLI z tagu GeoTIFF (`_read_tif_nodata`; w trybie bbox z fallbackiem `CUZK_NODATA`), dla wycinka PL stala `-9999.0`, dla wyniku HSG `0`; `null` gdy zadna z tych drog nie ma zastosowania (np. orto) |
-| `request` | zadanie, ktore dalo TEN plik: `godlo`, `bbox` + `bbox_crs` w ukladzie wyniku albo `teryt`; dla plikow PL (kampanie, ADR-030) `campaigns` (`newest`/`all`, zawsze) i `min_year` (tylko gdy podany; `request` opisuje POBRANIE, ktore dalo plik, a nie jego ostatnie uzycie — reuzycia ida do `extra.parent_requests`); LAZ: `year`/`min_density`/`min_year` gdy podane oraz `campaigns` tylko dla `all`; oryginalne zadanie niesie `extra.parent_request` (3.4), rekord skorowidza PL niesie `extra.source` |
+| `request` | zadanie, ktore dalo TEN plik: `sheet` (godlo), `bbox` + `bbox_crs` w ukladzie wyniku albo `teryt`; dla plikow PL (kampanie, ADR-030) `campaigns` (`newest`/`all`, zawsze) i `min_year` (tylko gdy podany; `request` opisuje POBRANIE, ktore dalo plik, a nie jego ostatnie uzycie — reuzycia ida do `extra.parent_requests`); LAZ: `year`/`min_density`/`min_year` gdy podane oraz `campaigns` tylko dla `all`; oryginalne zadanie niesie `extra.parent_request` (3.4), rekord skorowidza PL niesie `extra.source` |
 | `license` | `{id, attribution, url}` z deskryptora |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, sekundy) i wersja pakietu z `kartograf/_version.py::build_version()`: wydanie = samo `__version__`; wersja rozwojowa (`dev`) = `<__version__>+<krotki SHA>` commita, z ktorego zaimportowano pakiet, z sufiksem `.dirty`, gdy sledzone pliki katalogu `kartograf/` maja niezacommitowane zmiany (docs/testy sie nie licza); gdy git jest niedostepny albo pakiet nie pochodzi z repozytorium, w ktorym lezy (`os.path.samefile`), samo `__version__`. Ta sama wartosc w `kartograf --version`; `User-Agent` HTTP niesie samo `__version__` |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
-| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `godlo_kafla`/`rok`/`gestosc`/`url`; SM5 ma `mapname`/`podil`; arkusze NMT/NMPT/orto PL maja `source` (URL, warstwa, aktualnosc, rozdzielczosc itd.); wycinek PL: `parent_request`, `missing_sheets`, `sheet_sources`, `off_grid_sheets`, `all_nodata`, `unverified_sheets` — znaczenie i warunki zapisu w akapicie "Wycinek PL w sidecarze" nizej (jedyne pelne zestawienie); CORINE z podgladu WMS: `fallback: "wms_png"` i `uwaga` (`landcover/manager.py`, sekcja 4.8); wynik HSG: `derived: "hsg"`, `source_layers`, `depth`, `stat`, `classes` (sekcja 4.8); plik kampanii (ADR-030): `campaign` = `{id, date, zgloszenie, source, full_sheet, dt_pzgik}` obok `source`; sidecar sciezki standardowej: `link` (`hardlink`/`copy`) i `link_target` (sciezka celu wzgledem dowiazania; jedyne zrodlo celu) |
+| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `tile_sheet`/`year`/`nominal_density`/`url`; SM5 ma `mapname`/`cz_share` (udzial arkusza w terytorium CZ, pole `PODIL` CUZK); arkusze NMT/NMPT/orto PL maja `source` (klucze w tabeli nizej); wycinek PL: `parent_request`, `missing_sheets`, `sheet_sources`, `off_grid_sheets`, `all_nodata`, `unverified_sheets` — znaczenie i warunki zapisu w akapicie "Wycinek PL w sidecarze" nizej (jedyne pelne zestawienie); CORINE z podgladu WMS: `fallback: "wms_png"` i `note` (`landcover/manager.py`, sekcja 4.8); wynik HSG: `derived: "hsg"`, `source_layers`, `depth`, `stat`, `classes` (sekcja 4.8); plik kampanii (ADR-030): `campaign` = `{id, date, survey_work_id, source, full_sheet, pzgik_date}` obok `source`; sidecar sciezki standardowej: `link` (`hardlink`/`copy`) i `link_target` (sciezka celu wzgledem dowiazania; jedyne zrodlo celu) |
 | `schema` | stale `kartograf-meta/1` |
+
+Nazwy kluczy sa angielskie (ADR-031, od 0.7.0); wyjatkiem jest `teryt` —
+nazwa wlasna rejestru. Wartosci (godla, nazwy warstw, daty, komunikaty)
+zostaja w postaci zrodlowej. Sidecary zapisane przed ADR-031 (polskie
+klucze, np. `request.godlo`, `extra.source.aktualnosc`) nie sa
+migrowane: kod czytajacy sidecary traktuje brak nowego klucza jak brak
+informacji (sekcja "Stare sidecary" nizej).
+
+`extra.source` — pochodzenie arkusza PL z rekordu skorowidza GUGiK
+(`SkorowidzRecord.to_source`; ten sam slownik trafia do `record_cache`
+i `campaigns_cache`):
+
+| Klucz | Zawartosc (pole rekordu GUGiK) |
+|---|---|
+| `url` | URL pliku OpenData (`url`) |
+| `index_url` | endpoint WMS skorowidza, z ktorego pochodzi rekord |
+| `layer` | warstwa skorowidza (np. `SkorowidzeNMT2025`) |
+| `sheet` | godlo arkusza po normalizacji (`godlo`) |
+| `acquisition_date` | data aktualnosci danych `RRRR-MM-DD` (`aktualnosc`) |
+| `acquisition_year` | rok aktualnosci (`aktualnoscRok`, inaczej z `aktualnosc`) |
+| `pzgik_date` | data przyjecia do PZGiK (`dt_pzgik`) albo `null` |
+| `resolution_m` | rozdzielczosc w metrach (`charakterystykaPrzestrzenna`/`wielkoscPiksela`) |
+| `declared_crs` | uklad zadeklarowany w rekordzie, np. `PL-2000:S7` (`ukladWspolrzednychPoziomych`) — moze sie roznic od `horizontal_crs` pliku (E17) |
+| `full_sheet` | `true`/`false` = pelny/niepelny arkusz (`calyArkuszWypelnionyTrescia`), `null` gdy brak |
+| `survey_work_id` | numer zgloszenia pracy geodezyjnej (`numerZgloszeniaPracy`) |
+| `data_source` | zrodlo danych (`zrDanych`/`zrodloDanych`) |
+| `format` | format pliku z rekordu (`format`), np. `ARC/INFO ASCII GRID` |
+| `color` | tylko orto: wariant `RGB`/`CIR`/`B/W` |
+
+**Stare sidecary i wpisy cache (sprzed ADR-031).** Wpis `record_cache`/
+`campaigns_cache` bez nowych kluczy jest chybieniem cache (skorowidz
+odpytywany ponownie, wpis nadpisany). Sidecar kampanii bez
+`extra.campaign.pzgik_date` nie daje klucza dowiazania z sidecara —
+uzywane jest dolne oszacowanie z nazwy katalogu kampanii (jak przy braku
+sidecara). Wpisy `extra.sheet_sources` bez `sheet` nie licza sie jako
+niepelne arkusze przy pominieciu wycinka; arkusz ze starym sidecarem
+daje w nowym wycinku `null` w polach o zmienionej nazwie. Ostrzezenie E17
+nie powstaje dla sidecara bez `request.sheet`. Odswiezenie: `--force`.
 
 Kanal, z ktorego brany jest `horizontal_crs`/`vertical_crs_options`/
 `vertical_source`, wybiera `build_metadata`: albo jawnie po `capability=`,
@@ -388,7 +426,7 @@ gdy wartosc jest niepusta/prawdziwa; bez zadnego z nich `extra` to `{}`:
 |---|---|---|
 | `parent_request` | oryginalne zadanie (sekcja 3.4); tylko gdy przekazane `parent_request=` | — |
 | `missing_sheets` | lista godel bez danych GUGiK (`NoCoverageError`, R5) — w ich miejscu nodata | `missing_sheets` |
-| `sheet_sources` | lista `{godlo, url, layer, aktualnosc, full_sheet}` z `extra.source` sidecarow arkuszy mozaiki (arkusz bez sidecara/`source`: `null` poza `godlo`); `full_sheet: false` = niepelna najnowsza kampania (E13) | `partial_sheets` (godla z `full_sheet: false`) |
+| `sheet_sources` | lista `{sheet, url, layer, acquisition_date, full_sheet}` z `extra.source` sidecarow arkuszy mozaiki (arkusz bez sidecara/`source`: `null` poza `sheet`); `full_sheet: false` = niepelna najnowsza kampania (E13) | `partial_sheets` (godla z `full_sheet: false`) |
 | `off_grid_sheets` | godla o innej fazie siatki, reprojektowane osobno (W1) | `off_grid_sheets` |
 | `all_nodata` | `true`, gdy wycinek nie ma ani jednego waznego piksela mimo pobranych arkuszy (E15) | `all_nodata` |
 | `unverified_sheets` | `{godlo: blad}` — arkusze z lokalnej kampanii bez sprawdzenia nowszej, bo skorowidz byl niedostepny (I-1, errata 5 ADR-030) | `unverified` |
@@ -1026,7 +1064,7 @@ przez WGS84. Przed pobraniem CLI drukuje `Info:` o przycieciu oraz
 o obszarze pozostawionym poza oboma prostokatami (takze naroznym).
 Nazwa pliku i `request.bbox` niosa bbox przyciety, oryginal tylko
 w `extra.parent_request`. Tryb listy PL (`--bbox` bez `--target-crs`)
-wyznacza arkusze z przycietego bboxa, a ich sidecary maja `request.godlo`
+wyznacza arkusze z przycietego bboxa, a ich sidecary maja `request.sheet`
 (oryginal: `extra.parent_request.bbox`). Przy geometrii bez `--target-crs`
 arkusze PL wyznacza sama geometria (cala), wiec CLI nie drukuje `Info:`
 o przycieciu PL ani o obszarze poza prostokatami
@@ -1134,10 +1172,10 @@ bez zmian — bez `kampanie/` i dowiazan; `request.campaigns` w sidecarze
 tylko dla `all`, `request.min_year` gdy podany.
 
 Wynik: `data/laz/pl_2000_evrf2007/6/162/34/02/3/<oryginalna_nazwa>.laz`
-(+ `.meta.json` z `extra.godlo_kafla`/`rok`/`gestosc`/`url` oraz
+(+ `.meta.json` z `extra.tile_sheet`/`year`/`nominal_density`/`url` oraz
 `extra.parent_request` w trybie `--bbox`/`--geometry`; `request`
 niesie bbox oraz `year`/`min_density`, gdy podane — E16).
-`gestosc` i filtr `--min-density` to wartosc NOMINALNA z WFS GUGiK
+`nominal_density` i filtr `--min-density` to wartosc NOMINALNA z WFS GUGiK
 (`char_przestrz`); faktyczna gestosc kafla bywa kilkukrotnie wyzsza
 (E2E 2026-10-06: ~119 pkt/m2 przy nominale 15).
 
@@ -1161,7 +1199,7 @@ rozszerzenie nadaje `Bdot10kProvider.download_by_admin_unit`, a CLI drukuje
 faktyczna sciezke (review 2026-10-06 N1). Sidecary pisze `LandCoverManager` tak samo jak
 pozostale warstwy zarzadzajace. CORINE bez credentials CLMS pobiera podglad
 PNG przez WMS: sidecar ma wtedy `horizontal_crs` uslugi WMS (EPSG:3857, dla
-rocznika 1990 EPSG:4326) oraz `extra.fallback = "wms_png"` i `extra.uwaga`
+rocznika 1990 EPSG:4326) oraz `extra.fallback = "wms_png"` i `extra.note`
 (`"podglad WMS, nie dane"`).
 
 BDOT10k GPKG: archiwum ZIP z GUGiK jest rozpakowywane, a warstwy scalane
