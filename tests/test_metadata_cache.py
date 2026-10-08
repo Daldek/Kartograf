@@ -305,6 +305,54 @@ class TestMetadataCacheMigration:
             c.close()
 
 
+class TestStrictMode:
+    """A9: strict=True turns the disabled-cache state into CacheError."""
+
+    def _broken(self, tmp_path, **kw):
+        db = tmp_path / "cache.db"
+        db.write_bytes(b"not a sqlite database at all" * 10)
+        return MetadataCache(db_path=db, **kw)
+
+    def test_default_disables_silently(self, tmp_path):
+        messages = []
+        cache = self._broken(tmp_path, on_disabled=messages.append)
+        assert cache.get_teryt(1.0, 2.0) is None
+        assert cache.error is not None
+        assert len(messages) == 1
+
+    def test_strict_raises_cache_error(self, tmp_path):
+        from kartograf.exceptions import CacheError
+
+        cache = self._broken(tmp_path, strict=True)
+        with pytest.raises(CacheError, match="cache metadanych"):
+            cache.get_teryt(1.0, 2.0)
+
+    def test_strict_raises_on_every_later_call(self, tmp_path):
+        from kartograf.exceptions import CacheError
+
+        cache = self._broken(tmp_path, strict=True)
+        with pytest.raises(CacheError):
+            cache.get_teryt(1.0, 2.0)
+        with pytest.raises(CacheError):
+            cache.set_teryt(1.0, 2.0, "1465")
+
+    def test_strict_still_reports_on_disabled_once(self, tmp_path):
+        from kartograf.exceptions import CacheError
+
+        messages = []
+        cache = self._broken(tmp_path, strict=True, on_disabled=messages.append)
+        for _ in range(2):
+            with pytest.raises(CacheError):
+                cache.get_teryt(1.0, 2.0)
+        assert len(messages) == 1
+
+    def test_strict_healthy_cache_works(self, tmp_path):
+        cache = MetadataCache(db_path=tmp_path / "ok.db", strict=True)
+        cache.set_teryt(1.0, 2.0, "1465")
+        assert cache.get_teryt(1.0, 2.0) == "1465"
+        cache.close()
+
+
 # =========================================================================
 # TestMetadataCacheManagement
 # =========================================================================

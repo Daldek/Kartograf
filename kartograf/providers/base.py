@@ -83,7 +83,15 @@ class BaseProvider(DataSourceProvider):
         return None
 
     def source_info(self, godlo: str) -> dict | None:
-        """Origin of the downloaded sheet, if the provider exposes it."""
+        """Origin of the downloaded sheet, if the provider exposes it.
+
+        Filled by the single-record flow (e.g. ``download`` of one record). In
+        the campaign flow (``DownloadManager(campaigns=...)``) it may be None:
+        the origin of a sheet is its sidecar (``extra.source``,
+        ``extra.campaign``) - the standard path sidecar describes the campaign
+        the link actually points to, which can be older than the newest record
+        when its download failed.
+        """
         return None
 
     @abstractmethod

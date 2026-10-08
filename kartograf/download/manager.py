@@ -114,8 +114,8 @@ class DownloadResult:
 
     Notes
     -----
-    Populated by `download_hierarchy` and `download_sheets` (and so by
-    `download_sheet` when it expands a coarser PL-1992 godlo) and exposed as
+    Populated by `download_hierarchy`, `download_sheets` and `download_sheet`
+    (a one-element result for a single sheet) and exposed as
     `DownloadManager.last_result`.
     """
 
@@ -246,12 +246,11 @@ class DownloadManager:
     Attributes
     ----------
     last_result : DownloadResult or None
-        Per-sheet outcome of the most recent multi-sheet download. Reset to
-        None at the start of each `download_sheet` / `download_hierarchy` /
-        `download_sheets` call; set by `download_hierarchy` and
-        `download_sheets` (and so by `download_sheet` when it expands a
-        coarser PL-1992 godlo). A single sheet downloaded directly via
-        `download_sheet` (a 1:10000 or PL-2000 godlo) leaves it None;
+        Per-sheet outcome of the most recent download. Reset to None at the
+        start of each `download_sheet` / `download_hierarchy` /
+        `download_sheets` call and set when the call completes - also for a
+        single sheet downloaded directly via `download_sheet` (a one-element
+        `DownloadResult`); a call that raises leaves it None.
         `download_bbox` does not touch it.
     last_sheet : SheetFetch or None
         Result of a single sheet downloaded directly by `download_sheet`
@@ -469,9 +468,9 @@ class DownloadManager:
         Notes
         -----
         `self.last_result` is reset to None at the start of the call and set
-        only by the expansion to 1:10000 (via `download_hierarchy`), so a
-        single sheet downloaded here directly (a 1:10000 or PL-2000 godlo)
-        leaves it None and never exposes the previous run's result.
+        when the call completes - also for a single sheet downloaded here
+        directly (a one-element `DownloadResult`); a call that raises leaves
+        it None, so the previous run's result never leaks.
         `self.last_sheet` is reset the same way and set (``SheetFetch``) only
         for a single sheet downloaded directly.
         """
@@ -491,6 +490,12 @@ class DownloadManager:
 
         fetch = self._fetch_sheet(parser.godlo, skip_existing, on_download)
         self.last_sheet = fetch
+        # A9: one sheet is a one-element result too - same reading as a list
+        result = DownloadResult()
+        self._record(
+            result, [], fetch.godlo, fetch, "skipped" if fetch.skipped else "completed"
+        )
+        self.last_result = result
         return fetch.path
 
     def download_hierarchy(

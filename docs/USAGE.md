@@ -363,7 +363,8 @@ rozwijane do arkuszy 1:10000 przez `download_hierarchy()` (ta zawsze zwraca
 
 **Podsumowania** (pola: dataclassy w kodzie, opis — ARCHITECTURE 4.1–4.3):
 
-- `DownloadManager.last_result` (`DownloadResult`) po liście/hierarchii:
+- `DownloadManager.last_result` (`DownloadResult`) po liście/hierarchii
+  (także po pojedynczym arkuszu — wynik jednoelementowy):
   `succeeded`, `failed`, `skipped`, `no_coverage` (arkusze, dla których
   GUGiK nie ma danych — `NoCoverageError`, podklasa `DownloadError`; są też
   w `failed`), pliki kampanii i `unverified` (sekcja 4).

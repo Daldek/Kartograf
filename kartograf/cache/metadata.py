@@ -25,7 +25,9 @@ any ``sqlite3.Error`` while opening, reading or writing (a corrupted or
 truncated file, no read permission, a lock held too long by another
 process) switches the instance into a disabled state for the rest of its
 life - reads are misses, writes are no-ops - and reports it exactly once
-(``logger.warning`` or the ``on_disabled`` callback).
+(``logger.warning`` or the ``on_disabled`` callback). With
+``MetadataCache(strict=True)`` the same state raises ``CacheError`` instead
+(on the failing call and on every later one).
 """
 
 import json
@@ -37,6 +39,8 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from pathlib import Path
+
+from kartograf.exceptions import CacheError
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +94,10 @@ class MetadataCache:
         Called once with a user-facing message when the cache gets disabled
         by an SQLite error (see the module docstring). Default ``None`` =
         the message goes to ``logger.warning`` instead.
+    strict : bool, optional
+        Strict mode (A9): an SQLite error raises ``CacheError`` on the
+        failing call and on every later call, instead of disabling the cache
+        silently. ``on_disabled`` is still called once. Default ``False``.
 
     Examples
     --------
@@ -106,9 +114,13 @@ class MetadataCache:
         ttl_seconds: int = DEFAULT_TTL_SECONDS,
         refresh: bool = False,
         on_disabled: Callable[[str], None] | None = None,
+        strict: bool = False,
     ):
         self._refresh = refresh
         self._on_disabled = on_disabled
+        self._strict = strict
+        # Message of the error that disabled the cache (for strict mode).
+        self._error_message: str = ""
         # First SQLite error; once set, the cache is disabled (guarded by
         # _write_lock, so concurrent threads report it only once).
         self._error: sqlite3.Error | None = None
@@ -142,12 +154,17 @@ class MetadataCache:
         try:
             yield
         except sqlite3.Error as e:
-            self._disable(e)
+            message = self._disable(e)
+            if self._strict:
+                raise CacheError(message) from e
 
-    def _disable(self, error: sqlite3.Error) -> None:
-        """Disable the cache and report it once (caller holds ``_write_lock``)."""
+    def _disable(self, error: sqlite3.Error) -> str:
+        """Disable the cache and report it once (caller holds ``_write_lock``).
+
+        Returns the message describing why the cache is disabled.
+        """
         if self._error is not None:
-            return
+            return self._error_message
         self._error = error
         if self._conn is not None:
             with suppress(sqlite3.Error):
@@ -163,10 +180,12 @@ class MetadataCache:
                 f"cache metadanych nieczytelny ({self._db_path}): {error} — "
                 f"praca bez cache; uzyj `kartograf cache clear` albo usun plik"
             )
+        self._error_message = message
         if self._on_disabled is not None:
             self._on_disabled(message)
         else:
             logger.warning(message)
+        return message
 
     def _existing_connection(self) -> sqlite3.Connection | None:
         """Return the connection only if the database file already exists.
@@ -178,6 +197,8 @@ class MetadataCache:
         or process is picked up. Caller must hold ``_write_lock``.
         """
         if self._error is not None:
+            if self._strict:
+                raise CacheError(self._error_message)
             return None
         if self._conn is None and not self._db_path.exists():
             return None
@@ -194,6 +215,8 @@ class MetadataCache:
         mode and creates missing tables (also migrating an older database).
         """
         if self._error is not None:
+            if self._strict:
+                raise CacheError(self._error_message)
             return None
         if self._conn is not None:
             return self._conn

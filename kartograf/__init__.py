@@ -59,6 +59,7 @@ from kartograf.download.manager import (
 )
 from kartograf.download.storage import FileStorage
 from kartograf.exceptions import (
+    CacheError,
     DownloadError,
     GridMismatchError,
     KartografError,
@@ -82,6 +83,8 @@ from kartograf.providers.pl.gugik_laz import (
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
+from kartograf.transport.http import get_with_retry, make_gugik_session
+from kartograf.transport.mosaic import check_source_grid, mosaic_and_crop
 
 __version__ = "0.7.1-dev"
 
@@ -135,6 +138,11 @@ __all__ = [
     "create_dmr_provider",
     # Hydrology
     "HSGCalculator",
+    # Transport and mosaic (stable since 0.7.1)
+    "get_with_retry",
+    "make_gugik_session",
+    "mosaic_and_crop",
+    "check_source_grid",
     # Exceptions
     "KartografError",
     "ParseError",
@@ -142,6 +150,7 @@ __all__ = [
     "DownloadError",
     "NoCoverageError",
     "GridMismatchError",
+    "CacheError",
     # Version
     "__version__",
 ]
