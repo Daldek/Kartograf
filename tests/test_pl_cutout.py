@@ -2854,7 +2854,7 @@ class TestBuildFromLocalSheets:
         good = _write_sheet_asc(tmp_path / "good.asc", 500000.0, 600000.0)
         ghost = tmp_path / "ghost.asc"
         out = tmp_path / "project" / "dem.tif"
-        with pytest.raises(ValidationError, match="ghost.asc"):
+        with pytest.raises(ValidationError, match="nie istnieje.*ghost.asc"):
             self._call([good, ghost], out)
         assert not out.parent.exists()
 
@@ -2864,7 +2864,7 @@ class TestBuildFromLocalSheets:
         folder = tmp_path / "folder.asc"
         folder.mkdir()
         out = tmp_path / "project" / "dem.tif"
-        with pytest.raises(ValidationError, match="folder.asc"):
+        with pytest.raises(ValidationError, match="nie istnieje.*folder.asc"):
             self._call([folder], out)
         assert not out.parent.exists()
 
@@ -2874,7 +2874,7 @@ class TestBuildFromLocalSheets:
         junk = tmp_path / "junk.asc"
         junk.write_text("this is not a raster", encoding="utf-8")
         out = tmp_path / "project" / "dem.tif"
-        with pytest.raises(ValidationError, match="junk.asc"):
+        with pytest.raises(ValidationError, match="nie da sie odczytac.*junk.asc"):
             self._call([junk], out)
         assert not out.parent.exists()
 
