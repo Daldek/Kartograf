@@ -27,11 +27,13 @@ def cmd_cache(args: argparse.Namespace) -> int:
         print("Run 'kartograf cache <command> --help' for details")
         return 0
 
+    # MetadataCache opens the database lazily: none of these subcommands
+    # creates the file when it does not exist yet.
     cache = MetadataCache()
 
     try:
         if args.cache_command == "path":
-            print(cache.stats()["db_path"])
+            print(cache.db_path)
             return 0
 
         if args.cache_command == "stats":
@@ -42,7 +44,9 @@ def cmd_cache(args: argparse.Namespace) -> int:
             print(f"  TERYT entries: {st['teryt_count']}")
             print(f"  Sheet entries: {st['sheet_count']}")
             db_size_kb = st["db_size_bytes"] / 1024
-            if db_size_kb < 1024:
+            if not st["db_exists"]:
+                print("  Database size: - (file not created yet)")
+            elif db_size_kb < 1024:
                 print(f"  Database size: {db_size_kb:.1f} KB")
             else:
                 print(f"  Database size: {db_size_kb / 1024:.1f} MB")
