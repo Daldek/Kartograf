@@ -1,10 +1,10 @@
 """
-Deskryptory zrodel danych — czyste dane, zero IO, zero zachowan.
+Source descriptors - pure data, zero IO, zero behavior.
 
-Deskryptor opisuje JEDEN zbior danych (np. NMT 1m z GUGiK): kanaly dostepu,
-uklady, licencje, schemat kafli. Zrodlem prawdy dla logiki wykonawczej
-pozostaja providery; capabilities sluza dzis wyborowi kanalu w sidecarze
-(``build_metadata(capability=)``), nie sa egzekwowane w managerach.
+A descriptor describes ONE dataset (e.g. NMT 1 m from GUGiK): access channels,
+coordinate systems, licenses, tile scheme. The providers remain the source of
+truth for runtime logic; capabilities currently only drive channel selection
+in the sidecar (``build_metadata(capability=)``) and are not enforced in managers.
 """
 
 from dataclasses import dataclass
@@ -15,47 +15,47 @@ from kartograf.exceptions import ValidationError
 
 
 class TransportKind(StrEnum):
-    """Rodzaj transportu danych (mechanizm pobierania)."""
+    """Kind of data transport (the download mechanism)."""
 
-    WCS = "wcs"  # PL nmt_1m bbox, SoilGrids; pozniej DE/SK
-    WMS_SHEET_INDEX = "wms_sheet_index"  # PL: skorowidz WMS -> URL pliku
+    WCS = "wcs"  # PL nmt_1m bbox, SoilGrids; later DE/SK
+    WMS_SHEET_INDEX = "wms_sheet_index"  # PL: WMS index (skorowidz) -> file URL
     WFS = "wfs"  # PL LAZ
     DIRECT_FILES = "direct_files"  # PL BDOT10k, CZ openzu (DMR 4G)
     CLMS_API = "clms_api"  # CORINE
-    ARCGIS_IMAGE = "arcgis_image"  # etap 1 (CZ exportImage)
-    ARCGIS_QUERY = "arcgis_query"  # etap 3 (ZABAGED), SK
+    ARCGIS_IMAGE = "arcgis_image"  # stage 1 (CZ exportImage)
+    ARCGIS_QUERY = "arcgis_query"  # stage 3 (ZABAGED), SK
     OGC_API_FEATURES = "ogc_api_features"  # DE basemap.de
 
 
 @dataclass(frozen=True)
 class LicenseInfo:
-    """Licencja i gotowy tekst atrybucji dla zrodla."""
+    """License and ready-made attribution text for a source."""
 
     id: str  # np. "CC-BY-4.0", "PL-PGiK-40a", "dl-de/by-2-0"
-    attribution: str  # gotowy tekst atrybucji
+    attribution: str  # ready-made attribution text
     url: str = ""
 
 
 @dataclass(frozen=True)
 class AccessChannel:
-    """Jeden kanal dostepu do zrodla (transport + uklady + zdolnosci)."""
+    """One access channel to a source (transport + CRSs + capabilities)."""
 
     transport: TransportKind
     horizontal_crs: str  # "EPSG:2180", "EPSG:5514", ...
-    vertical_crs_options: tuple[str, ...] = ()  # () gdy nie dotyczy (orto, landcover)
+    vertical_crs_options: tuple[str, ...] = ()  # () when n/a (orto, landcover)
     vertical_source: str = "native"  # "native" | "ellipsoidal" | "server"
     server_reprojection: bool = False
     capabilities: frozenset[str] = frozenset()
     # {"bbox_raster","bbox_vector","sheet_files","area_files","admin_unit_files"}
     notes: str = ""
     endpoint: str = ""
-    # URL kanalu dla silnikow sterowanych deskryptorem (etap 1: CuzkClient).
-    # Wpisy PL: "" — zrodlem prawdy pozostaja stale providerow (etap 0).
+    # Channel URL for descriptor-driven engines (stage 1: CuzkClient).
+    # PL entries: "" - the provider constants remain the source of truth (stage 0).
 
 
 @dataclass(frozen=True)
 class TileScheme:
-    """Schemat kafli zrodla (obliczalny lub wymagajacy indeksu)."""
+    """Tile scheme of a source (computable or requiring an index)."""
 
     kind: str  # "computable" | "index"
     crs: str
@@ -69,13 +69,13 @@ class SourceDescriptor:
     """Pelny opis jednego zbioru danych."""
 
     key: str  # "pl.gugik.nmt_1m"
-    country: str  # "PL" | "CZ" | "EU" | "GLOBAL" (pozniej "DE","SK")
+    country: str  # "PL" | "CZ" | "EU" | "GLOBAL" (later "DE","SK")
     product: str  # "nmt" | "nmpt" | "orto" | "laz" | "landcover" | "soil"
-    name: str  # czytelna nazwa zbioru
+    name: str  # human-readable dataset name
     provider_name: str  # "GUGiK", "CUZK", ...
     channels: tuple[AccessChannel, ...]
     tile_scheme: TileScheme | None
-    # Szablon segmentu {uklad}/{vcrs} (ADR-026); None dla zrodel LandCoverManagera
+    # Segment template {uklad}/{vcrs} (ADR-026); None for LandCoverManager sources
     storage_subdir: str | None
     default_extension: str
     license: LicenseInfo
@@ -85,18 +85,18 @@ class SourceDescriptor:
     def resolve_subdir(
         self, *, uklad: str | None = None, vertical_crs: str | None = None
     ) -> str:
-        """Wypelnij szablon ``storage_subdir`` (placeholdery {uklad}, {vcrs}).
+        """Fill in the ``storage_subdir`` template (placeholders {uklad}, {vcrs}).
 
-        ``str.replace``, nie ``str.format`` — czesciowe wypelnienie jest
-        legalne ({uklad} moze zostac do rozwiazania pozniej, per godlo,
-        w FileStorage). Wymiar nieobecny w szablonie = no-op (orto ignoruje
-        vcrs). Walidacje "zero klamer w segmencie" robi wolajacy koncowy
-        (FileStorage) — ADR-026.
+        ``str.replace``, not ``str.format`` - partial filling is legal
+        ({uklad} may be left to be resolved later, per sheet code, in
+        FileStorage). A dimension absent from the template = no-op (orto ignores
+        vcrs). The "no braces left in the segment" validation is done by the
+        final caller (FileStorage) - ADR-026.
 
-        ``None`` nadal znaczy "wypelnij pozniej" (dozwolone), ale pusty string
-        (lub sam whitespace) to blad wolajacego, nie brak wymiaru — bez tej
-        kontroli dawal cichy, dangling segment storage (np. `nmt/pl_1992_1m_`,
-        review max 2026-08-30, zn. 7).
+        ``None`` still means "fill in later" (allowed), but an empty string
+        (or whitespace only) is a caller error, not a missing dimension - without
+        this check it produced a silent, dangling storage segment (e.g.
+        `nmt/pl_1992_1m_`, review max 2026-08-30, finding 7).
         """
         if self.storage_subdir is None:
             raise ValueError(f"Zrodlo '{self.key}' nie ma storage_subdir")
@@ -116,7 +116,8 @@ class SourceDescriptor:
 
 @dataclass(frozen=True)
 class CountryProfile:
-    """Profil kraju: przyblizony zasieg (dla --country auto w etapie 1) + zbiory."""
+    """Country profile: approximate extent (for --country auto in stage 1) +
+    datasets."""
 
     code: str  # "PL"
     name: str

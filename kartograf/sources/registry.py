@@ -1,10 +1,10 @@
 """
-Rejestr zrodel danych i krajow.
+Registry of data sources and countries.
 
-Deskryptory sa zrodlem prawdy dla storage_subdir (szablony segmentow,
-ADR-026), default_extension, licencji, opcji pionowych i capabilities
-(konsumpcja: sidecar + testy spojnosci). Capabilities wybieraja kanal
-w sidecarze; managery ich nie egzekwuja.
+Descriptors are the source of truth for storage_subdir (segment templates,
+ADR-026), default_extension, licenses, vertical options and capabilities
+(consumed by: sidecar + consistency tests). Capabilities select the channel
+in the sidecar; managers do not enforce them.
 """
 
 import re
@@ -20,23 +20,24 @@ from kartograf.sources.descriptor import (
     TransportKind,
 )
 
-# Mapowanie nazw ukladow pionowych uzywanych w CLI na kody EPSG.
+# Mapping of vertical CRS names used in the CLI to EPSG codes.
 _VERTICAL_CRS_CODES = {
-    "KRON86": "EPSG:9650",  # PL-KRON86-NH (bez zmian)
-    "EVRF2007": "EPSG:5621",  # ogolnoeuropejski EVRF2007 (decyzja 2026-08-11)
-    "EVRF2007-PL": "EPSG:9651",  # realizacja polska PL-EVRF2007-NH
+    "KRON86": "EPSG:9650",  # PL-KRON86-NH (unchanged)
+    "EVRF2007": "EPSG:5621",  # pan-European EVRF2007 (decision 2026-08-11)
+    "EVRF2007-PL": "EPSG:9651",  # Polish realization PL-EVRF2007-NH
     "Bpv": "EPSG:8357",  # Baltic 1957 (CZ)
 }
 
-# Rodzina -> realizacje krajowe; konsumowane przy budowie sidecara:
-# jesli kod rodziny nie wystepuje w vertical_crs_options kanalu, ale wystepuje
-# jego realizacja — sidecar zapisuje kod realizacji (fakt, nie zyczenie).
+# Family -> national realizations; consumed when building the sidecar:
+# if the family code is absent from the channel's vertical_crs_options but
+# its realization is present - the sidecar records the realization code (fact, not
+# wish).
 _VERTICAL_FAMILY: dict[str, tuple[str, ...]] = {"EPSG:5621": ("EPSG:9651",)}
 
-# Uklad poziomy zrodel PL. Kanaly deklaruja EPSG:2180 (uklad zapytan bbox/WCS
-# i arkuszy PL-1992); plik arkusza albo kafla PL-2000 jest w ukladzie SWOJEJ
-# strefy (5..8 -> EPSG:2176..2179) — sidecar bierze go z horizontal_crs_for_*
-# ponizej, nie z kanalu (N8).
+# Horizontal CRS of PL sources. Channels declare EPSG:2180 (the CRS of bbox/WCS
+# queries and PL-1992 sheets); a PL-2000 sheet or tile file is in the CRS of ITS OWN
+# zone (5..8 -> EPSG:2176..2179) - the sidecar takes it from horizontal_crs_for_*
+# below, not from the channel (N8).
 PL_1992_CRS = "EPSG:2180"
 
 _GUGIK_LICENSE = LicenseInfo(
@@ -83,7 +84,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             channels=(
                 AccessChannel(
                     transport=TransportKind.WMS_SHEET_INDEX,
-                    horizontal_crs=PL_1992_CRS,  # PL-2000: strefa z godla (N8)
+                    horizontal_crs=PL_1992_CRS,  # PL-2000: zone from sheet code (N8)
                     vertical_crs_options=_PL_VERTICAL_BOTH,
                     capabilities=frozenset({"sheet_files"}),
                 ),
@@ -343,7 +344,7 @@ _COUNTRIES: dict[str, CountryProfile] = {
 
 
 def get_source(key: str) -> SourceDescriptor:
-    """Zwroc deskryptor zrodla; KeyError z lista dostepnych kluczy."""
+    """Return a source descriptor; KeyError with a list of available keys."""
     try:
         return _SOURCES[key]
     except KeyError:
@@ -355,7 +356,7 @@ def get_source(key: str) -> SourceDescriptor:
 def sources_for(
     country: str | None = None, product: str | None = None
 ) -> list[SourceDescriptor]:
-    """Zwroc deskryptory pasujace do kraju i/lub produktu."""
+    """Return descriptors matching the country and/or product."""
     return [
         d
         for d in _SOURCES.values()
@@ -365,7 +366,7 @@ def sources_for(
 
 
 def get_country(code: str) -> CountryProfile:
-    """Zwroc profil kraju; KeyError z lista dostepnych kodow."""
+    """Return a country profile; KeyError with a list of available codes."""
     try:
         return _COUNTRIES[code]
     except KeyError:
@@ -375,12 +376,12 @@ def get_country(code: str) -> CountryProfile:
 
 
 def all_countries() -> list[CountryProfile]:
-    """Wszystkie profile krajow, deterministycznie po kodzie (dla --country auto)."""
+    """All country profiles, deterministically by code (for --country auto)."""
     return [_COUNTRIES[code] for code in sorted(_COUNTRIES)]
 
 
 def vertical_crs_code(name: str) -> str:
-    """Mapuj nazwe CLI ukladu pionowego na kod EPSG (kody przechodza bez zmian)."""
+    """Map a CLI vertical CRS name to an EPSG code (codes pass through unchanged)."""
     if name in _VERTICAL_CRS_CODES:
         return _VERTICAL_CRS_CODES[name]
     if name in _VERTICAL_CRS_CODES.values():
@@ -391,7 +392,8 @@ def vertical_crs_code(name: str) -> str:
 
 
 def resolve_vertical_crs(name: str, options: tuple[str, ...]) -> str:
-    """Kod EPSG dla nazwy ukladu wzgledem opcji kanalu (rodzina -> realizacja)."""
+    """EPSG code for a CRS name relative to the channel options (family ->
+    realization)."""
     code = vertical_crs_code(name)
     if code in options:
         return code
@@ -402,7 +404,8 @@ def resolve_vertical_crs(name: str, options: tuple[str, ...]) -> str:
 
 
 def horizontal_crs_for_godlo(godlo: str) -> str:
-    """Uklad poziomy arkusza PL z formatu godla: PL-1992 -> 2180, PL-2000 -> strefa."""
+    """Horizontal CRS of a PL sheet from the sheet code format: PL-1992 -> 2180,
+    PL-2000 -> zone."""
     parser = SheetParser(godlo)
     if parser.uklad == "2000":
         return ZONE_EPSG[int(parser.godlo.split(".")[0])]
@@ -410,18 +413,19 @@ def horizontal_crs_for_godlo(godlo: str) -> str:
 
 
 def parse_pl_uklad(value: str | None) -> tuple[str, int | None] | None:
-    """JEDYNY parser wartosci ukladu poziomego GUGiK (review-1 D3, E11).
+    """The ONLY parser of GUGiK horizontal CRS values (review-1 D3, E11).
 
-    Pola ``ukladWspolrzednychPoziomych``/``ukladWspolrzednych`` skorowidza
-    i ``uklad_xy`` WFS LAZ: ``"PL-1992"`` -> ``("1992", None)``,
-    ``"PL-2000:S5"``..``"PL-2000:S8"`` -> ``("2000", strefa)``. Biale znaki na
-    brzegach sa obcinane; kazda inna wartosc (``"PL-2000"`` bez strefy,
-    ``"PL-2000:S9"``, inna wielkosc liter, ``None``) -> ``None``. Realne dane
-    GUGiK (E2E 2026-10-06) maja wylacznie wartosci rozpoznawane.
+    The index fields ``ukladWspolrzednychPoziomych``/``ukladWspolrzednych``
+    and WFS LAZ ``uklad_xy``: ``"PL-1992"`` -> ``("1992", None)``,
+    ``"PL-2000:S5"``..``"PL-2000:S8"`` -> ``("2000", zone)``. Surrounding
+    whitespace is stripped; any other value (``"PL-2000"`` without a zone,
+    ``"PL-2000:S9"``, different letter case, ``None``) -> ``None``. Real GUGiK
+    data (E2E 2026-10-06) contains only recognized values.
 
-    Konsumenci (wybor rekordu skorowidza, ``horizontal_crs_for_uklad``,
-    ``LazTile.uklad``) traktuja ``None`` spojnie: rekord/kafel odrzucony
-    albo jawny blad — nigdy segment ``pl_2000`` z sidecarem EPSG:2180.
+    Consumers (index record selection, ``horizontal_crs_for_uklad``,
+    ``LazTile.uklad``) treat ``None`` consistently: the record/tile is rejected
+    or an explicit error is raised - never a ``pl_2000`` segment with an EPSG:2180
+    sidecar.
     """
     text = (value or "").strip()
     if text == "PL-1992":
@@ -431,9 +435,9 @@ def parse_pl_uklad(value: str | None) -> tuple[str, int | None] | None:
 
 
 def horizontal_crs_for_uklad(uklad: str | None) -> str | None:
-    """Kod EPSG z nazwy ukladu GUGiK ("PL-1992", "PL-2000:S6"); None gdy nieznana.
+    """EPSG code from a GUGiK CRS name ("PL-1992", "PL-2000:S6"); None if unknown.
 
-    Rozpoznawanie wartosci: ``parse_pl_uklad`` (wspolne ze skorowidzem i LAZ).
+    Value recognition: ``parse_pl_uklad`` (shared with the index and LAZ).
     """
     parsed = parse_pl_uklad(uklad)
     if parsed is None:

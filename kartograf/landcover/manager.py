@@ -35,7 +35,7 @@ class LandCoverManager:
 
     Coordinates downloads from multiple land cover providers,
     handles file storage, and provides a unified interface
-    for downloading by TERYT, bbox, or godło.
+    for downloading by TERYT, bbox, or sheet code (godlo).
 
     Parameters
     ----------
@@ -52,7 +52,7 @@ class LandCoverManager:
     >>> # Download by TERYT (BDOT10k)
     >>> manager.download(teryt="1465")
     >>>
-    >>> # Download by godło
+    >>> # Download by sheet code
     >>> manager.download(godlo="N-34-130-D")
     >>>
     >>> # Download CORINE data
@@ -425,14 +425,14 @@ class LandCoverManager:
 
         horizontal_crs = None
         extra = None
-        # CORINE bez credentials CLMS spada na podglad PNG z WMS — inny CRS
-        # niz deklarowany dla kanalu CLMS GeoTIFF (EPSG:3035).
+        # CORINE without CLMS credentials falls back to a PNG preview from WMS - a
+        # different CRS than the one declared for the CLMS GeoTIFF channel (EPSG:3035).
         is_png = data_path.suffix.lower() == ".png"
         key = getattr(self._provider, "descriptor_key", None)
         if is_png and key == "eu.clms.corine":
             year = (kwargs or {}).get("year", 2018)
-            # 1990 to jedyny rocznik DLR (WMS DLR, EPSG:4326); pozostale
-            # ida przez EEA Discomap (EPSG:3857) - patrz CorineProvider.EEA_YEARS.
+            # 1990 is the only DLR vintage (WMS DLR, EPSG:4326); the others
+            # go through EEA Discomap (EPSG:3857) - see CorineProvider.EEA_YEARS.
             horizontal_crs = (
                 "EPSG:4326" if year not in CorineProvider.EEA_YEARS else "EPSG:3857"
             )

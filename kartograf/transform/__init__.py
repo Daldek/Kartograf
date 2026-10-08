@@ -1,1 +1,1 @@
-"""Twarda polityka transformacji ukladow (etap 0: infrastruktura + testy)."""
+"""Strict CRS transformation policy (stage 0: infrastructure + tests)."""

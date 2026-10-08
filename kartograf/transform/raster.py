@@ -1,10 +1,10 @@
 """
-Lokalna reprojekcja rastra na zadana siatke, WYMUSZONA operacja przypieta.
+Local raster reprojection onto a given grid, with a FORCED pinned operation.
 
-Wspolny warp torow PL (ADR-027) i CZ (ADR-024; od 2026-10-06 dawna kopia
-`providers/cuzk/dmr.py::_warp_to_grid` usunieta — review D8/N7). Oba tory
-wymuszaja operacje wybrana przez `transform/crs.py`, wlacznie z przypietym
-czeskim krokiem datum S-JTSK. Awaria nie kasuje poprzedniego wyniku.
+Shared warp of the PL (ADR-027) and CZ (ADR-024) paths (since 2026-10-06 the former copy
+`providers/cuzk/dmr.py::_warp_to_grid` is removed - review D8/N7). Both paths
+force the operation chosen by `transform/crs.py`, including the pinned
+Czech S-JTSK datum step. A failure does not delete the previous result.
 """
 
 import contextlib
@@ -30,29 +30,29 @@ logger = logging.getLogger(__name__)
 
 
 def _same_crs(a: str, b: str) -> bool:
-    """Czy to ten sam uklad? Porownanie semantyczne, nie tekstowe.
+    """Is it the same CRS? A semantic comparison, not a textual one.
 
-    `EPSG:2180` i `epsg:2180` to ten sam uklad — samo porownanie stringow
-    dawaloby falszywe odrzuty, a odrzut zdrowego wywolania jest gorszy niz
-    przepuszczenie dziwnie zapisanego ukladu.
+    `EPSG:2180` and `epsg:2180` are the same CRS - comparing strings alone
+    would give false rejections, and rejecting a healthy call is worse than
+    letting an oddly written CRS through.
     """
     if a == b:
         return True
     try:
         return bool(CRS.from_user_input(a) == CRS.from_user_input(b))
-    except Exception:  # noqa: BLE001 — nieparsowalny uklad = nie ta sama para
+    except Exception:  # noqa: BLE001 — an unparsable CRS = not the same pair
         return False
 
 
 @contextlib.contextmanager
 def _quiet_transformer_only_option():
-    """Wycisz jeden komunikat GDAL: `COORDINATE_OPERATION` jest opcja
-    TRANSFORMERA, a `rasterio.warp.reproject` podaje kwargs takze jako opcje
-    warpera — GDAL loguje wtedy ostrzezenie o nieznanej opcji
-    (`CPLE_NotSupported`). Operacja dziala (test
-    `test_bbox_target_crs_puts_content_where_pyproj_says` sprawdza to na
-    tresci), a ostrzezenie trafialoby na stderr kazdego warpu PL/CZ. Filtr
-    jest waski (dopasowanie po nazwie opcji) i zdejmowany natychmiast."""
+    """Silence one GDAL message: `COORDINATE_OPERATION` is a TRANSFORMER
+    option, while `rasterio.warp.reproject` passes kwargs also as warper
+    options - GDAL then logs a warning about an unknown option
+    (`CPLE_NotSupported`). The operation works (the test
+    `test_bbox_target_crs_puts_content_where_pyproj_says` checks this on
+    content), but the warning would land on stderr on every PL/CZ warp. The filter
+    is narrow (matched by option name) and removed immediately."""
     gdal_logger = logging.getLogger("rasterio._env")
 
     class _Filter(logging.Filter):
@@ -67,7 +67,7 @@ def _quiet_transformer_only_option():
         gdal_logger.removeFilter(_filter)
 
 
-# typ numpy/rasterio -> nazwa typu GDAL w XML VRT
+# numpy/rasterio type -> GDAL type name in the VRT XML
 VRT_TYPES = {
     "uint8": "Byte",
     "int16": "Int16",
@@ -80,11 +80,11 @@ VRT_TYPES = {
 
 
 def vrt_xml(path: Path, meta: dict, *, crs_wkt: str | None, dtype: str, nodata) -> str:
-    """Jednopasmowy VRT 1:1 nad zrodlem: wymuszony SRS i typ pasma.
+    """Single-band 1:1 VRT over a source: forced SRS and band type.
 
-    Sciezka zrodla absolutna (``relativeToVRT="0"``) — VRT zyje w
-    ``/vsimem/``, wzgledna nie mialaby do czego sie odnosic. ``meta``:
-    ``transform``, ``width``, ``height`` zrodla.
+    The source path is absolute (``relativeToVRT="0"``) - the VRT lives in
+    ``/vsimem/``, a relative one would have nothing to refer to. ``meta``:
+    the source's ``transform``, ``width``, ``height``.
     """
     t = meta["transform"]
     srs = f"<SRS>{escape(crs_wkt)}</SRS>" if crs_wkt else ""
@@ -102,13 +102,13 @@ def vrt_xml(path: Path, meta: dict, *, crs_wkt: str | None, dtype: str, nodata) 
 
 @contextlib.contextmanager
 def _vrt_over(path: Path, *, crs_wkt: str, dtype: str) -> Iterator[str]:
-    """Nazwa VRT 1:1 w ``/vsimem/`` nad zrodlem: SRS i typ pasma wymuszone,
-    nodata WLASNE zrodla (lustro owijania w ``mosaic_and_crop``).
+    """Name of a 1:1 VRT in ``/vsimem/`` over a source: SRS and band type forced,
+    the source's OWN nodata (mirrors the wrapping in ``mosaic_and_crop``).
 
-    Po co: ``reproject`` ze zrodla BEZ CRS (arkusz ASC GUGiK bez ``.prj``)
-    zwraca sam nodata mimo jawnego ``src_crs`` (zmierzone 2026-09-29,
-    rasterio 1.5), a arkusz z samymi liczbami calkowitymi GDAL czyta jako
-    Int32. VRT nie trzyma deskryptora; zrodlo otwiera dopiero czytelnik VRT.
+    Why: ``reproject`` from a source WITHOUT a CRS (a GUGiK ASC sheet without ``.prj``)
+    returns only nodata despite an explicit ``src_crs`` (measured 2026-09-29,
+    rasterio 1.5), and a sheet with integers only is read by GDAL as
+    Int32. The VRT holds no descriptor; the source is opened only by the VRT reader.
     """
     with rasterio.open(path) as src:
         if src.count != 1:
@@ -138,32 +138,34 @@ def warp_to_grid(
     src_crs: str,
     nodata: float,
 ) -> None:
-    """Zreprojektuj raster(y) na siatke ``bbox``/``pixel_size`` (``bbox.crs``).
+    """Reproject raster(s) onto the ``bbox``/``pixel_size`` grid (``bbox.crs``).
 
-    Operacja jest WYMUSZONA (`COORDINATE_OPERATION`) — bez tego GDAL wybiera
-    ja sam, poza polityka `transform/crs.py` (zakaz ballparku, limit
-    dokladnosci, probe). `src_nodata`/`dst_nodata` maskuja piksele puste,
-    zeby nodata nie weszlo do interpolacji. Zapis atomowy: plik docelowy
-    powstaje dopiero z gotowej kopii tymczasowej — a skoro tak, awaria NIE
-    kasuje ``dst_path``: jesli lezal tam poprzedni wynik, przezywa on
-    nietkniety (sprzatany jest tylko plik tymczasowy).
+    The operation is FORCED (`COORDINATE_OPERATION`) - without it GDAL picks
+    it itself, outside the `transform/crs.py` policy (ballpark ban, accuracy
+    limit, probe). `src_nodata`/`dst_nodata` mask empty pixels so that
+    nodata does not enter the interpolation. Atomic write: the target file
+    is created only from a finished temporary copy - and since that is so, a failure
+    does NOT
+    delete ``dst_path``: if a previous result was there, it survives
+    untouched (only the temporary file is cleaned up).
 
-    ``sources`` to jeden raster albo ich lista (W1, S5): kazde zrodlo jest
-    reprojektowane RAZ, ze swojej siatki na siatke wyniku, do TEGO SAMEGO
-    pasma docelowego (pierwsze z ``init_dest_nodata=True``, kolejne ``False``)
-    — bez mozaiki posredniej, wiec arkusze o roznych fazach siatki nie sa
-    najpierw przepisywane na wspolna siatke. W zakladce wygrywa PIERWSZE
-    zrodlo listy (jak w ``rasterio.merge``): GDAL nadpisuje wazne piksele
-    kolejnym zrodlem, a nodata zrodla NIE nadpisuje waznych pikseli
-    poprzednika (zmierzone 2026-09-29), wiec lista jest przetwarzana od konca.
-    ``src_crs`` obowiazuje kazde zrodlo (takze ASC bez CRS). Szwy miedzy
-    zrodlami to niezalezne warpy: interpolator nie widzi sasiada zza szwu.
+    ``sources`` is one raster or a list of them (W1, S5): each source is
+    reprojected ONCE, from its own grid onto the result grid, into THE SAME
+    target band (the first with ``init_dest_nodata=True``, the rest ``False``)
+    - without an intermediate mosaic, so sheets with different grid phases are not
+    first rewritten onto a common grid. In an overlap the FIRST list
+    source wins (as in ``rasterio.merge``): GDAL overwrites valid pixels with
+    the next source, while a source's nodata does NOT overwrite the predecessor's
+    valid pixels (measured 2026-09-29), so the list is processed from the end.
+    ``src_crs`` applies to every source (also an ASC without a CRS). Seams between
+    sources are independent warps: the interpolator does not see the neighbor across
+    the seam.
 
-    Para ukladow musi zgadzac sie z ``pinned`` (o ile ten ja zna) — inaczej
-    ``TransformError``. Wymuszona operacja czyni bowiem ``src_crs`` martwym
-    dla GDAL-a (zmierzone: dla tego samego pipeline'u 2180/4326/3857/32633/5514
-    daja identyczny wynik), wiec sama sygnatura nie chroni przed podaniem
-    ``pinned`` zbudowanego dla innej pary niz faktycznie zadana.
+    The CRS pair must agree with ``pinned`` (if it knows it) - otherwise
+    ``TransformError``. A forced operation makes ``src_crs`` dead
+    for GDAL (measured: for the same pipeline 2180/4326/3857/32633/5514
+    give an identical result), so the signature alone does not protect against passing a
+    ``pinned`` built for a different pair than the one actually requested.
     """
     if (pinned.src_crs is not None and not _same_crs(pinned.src_crs, src_crs)) or (
         pinned.dst_crs is not None and not _same_crs(pinned.dst_crs, bbox.crs)
@@ -207,8 +209,8 @@ def warp_to_grid(
             rasterio.open(tmp_path, "w", **profile) as dst,
             _quiet_transformer_only_option(),
         ):
-            # Od konca listy: ostatnie reprojektowane zrodlo wygrywa w zakladce,
-            # wiec pierwsze na liscie laduje na wierzchu (jak w `merge`).
+            # From the end of the list: the last reprojected source wins in an overlap,
+            # so the first on the list ends up on top (as in `merge`).
             for i, path in enumerate(reversed(paths)):
                 with (
                     _vrt_over(path, crs_wkt=src_wkt, dtype="float32") as name,
@@ -227,6 +229,6 @@ def warp_to_grid(
                     )
         os.replace(tmp_path, dst_path)
     finally:
-        # Sprzatamy WYLACZNIE plik tymczasowy. Pliku docelowego nie ruszamy:
-        # przy awarii jest to nadal poprzedni, poprawny wynik.
+        # We clean up ONLY the temporary file. We do not touch the target file:
+        # on failure it is still the previous, valid result.
         tmp_path.unlink(missing_ok=True)
