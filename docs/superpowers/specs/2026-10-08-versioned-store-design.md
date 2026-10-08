@@ -158,6 +158,24 @@ Deskryptor zrodla (`sources/`) deklaruje `update_signal`:
 
 Przyporzadkowanie zrodel — inwentaryzacja (sekcja 8).
 
+**Sprawdzanie porownuje sygnal, nie sha256.** Tozsamosc wersji (sha256)
+sluzy zapisowi w magazynie i manifestowi; poznaje sie ja dopiero po
+pobraniu. Sprawdzanie swiezosci (domyslne `Info:`, `--check-updates`,
+`--upgrade`) porownuje wylacznie sygnal i **nigdy nie pobiera danych**:
+
+| Sygnal | Strona lokalna (sidecar wersji) | Strona zrodla |
+|---|---|---|
+| `index` | `extra.campaign` / `extra.source` (data aktualnosci, id kampanii z URL, numer zgloszenia); LAZ: `extra.year` i URL kafla | najnowszy rekord skorowidza w zakresie strategii kampanii |
+| `metadata` | etykieta edycji (`extra.version.label`) | data/rok/edycja z metadanych uslugi |
+| `http` | `extra.http` (`etag`, `last_modified`, `content_length`) | naglowki odpowiedzi na `HEAD` |
+| `none` | — | brak; wynik "nie da sie sprawdzic bez pobrania" |
+
+Ograniczenie: zmiana tresci pliku przy niezmienionym sygnale (cicha poprawka
+u zrodla pod tym samym rekordem i URL) jest niewykrywalna bez pobrania;
+wykrywa ja `--force` (inne sha256 = nowa wersja). Zrodlo moze miec sygnal
+uzupelniajacy (np. `index` + `Content-Length` z `HEAD`): rozny rozmiar =
+na pewno inna tresc, ten sam rozmiar niczego nie dowodzi.
+
 ### 4.2 Tryby
 
 Biblioteka: jeden parametr `update: None | "check" | "upgrade" | "force"`.
@@ -296,7 +314,15 @@ surowe odpowiedzi jako fixtury:
   zmienia sie tresc?
 - CUZK (DMR 5G/4G): rok aktualizacji (`Metadata`) jako etykieta i sygnal;
 - LAZ: rekord WFS jako sygnal `index` (rok, gestosc);
-- NMT/NMPT/orto: skorowidz — bez zmian (`index`).
+- NMT/NMPT/orto: skorowidz — bez zmian (`index`). Ustalone na zywo
+  2026-10-08 (`HEAD` arkusza NMT na `opendata.geoportal.gov.pl`): serwer NIE
+  podaje sum kontrolnych (brak naglowka `Digest`, pliki `<plik>.md5`/
+  `.sha256`/`.sha1` = 404, rekord skorowidza bez pola sumy), NIE podaje
+  `ETag` ani `Last-Modified`, katalogi kampanii bez listingu (404); jest
+  tylko `Content-Length`. Do rozstrzygniecia w planie: czy `Content-Length`
+  z `HEAD` jako sygnal uzupelniajacy (koszt: jedno zapytanie na plik).
+- Pozostale hosty (paczki BDOT10k, LAZ, ISRIC, CUZK): te same pytania —
+  sumy kontrolne, `ETag`/`Last-Modified`, `Content-Length`.
 
 Wynik ustala `update_signal` i etykiete zrodla per deskryptor; zrodlo bez
 taniego sygnalu dostaje `none`.
