@@ -1292,7 +1292,7 @@ timeout=)` pyta PRG (`Bdot10kProvider.teryts_for_area` ->
 `discover_teryts_for_bbox`, obszar w dowolnym obslugiwanym ukladzie) i
 pobiera pakiet KAZDEGO powiatu przecinajacego obszar, w kolejnosci kodow,
 przez `Bdot10kProvider.download_package(code, path, *, timeout, format,
-layers, keep_raw) -> Bdot10kPackage(path, teryt, url, format, http,
+layers, keep_raw, raw_path) -> Bdot10kPackage(path, teryt, url, format, http,
 raw_path)`; jeden plik i sidecar per powiat (`_download_county`, jedyna
 sciezka pobrania BDOT10k w menedzerze, takze dla `--teryt`); brak powiatu = `NoCoverageError`, awaria
 PRG albo pakietu = `DownloadError` (pliki pobrane wczesniej zostaja). CLI
@@ -1330,10 +1330,15 @@ zgadywane). Serwer paczek BDOT10k nie podaje dzis `ETag` ani
 ignoruje `Range`; o zmianie paczki u zrodla mowi wiec glownie `sha256`
 pliku. `keep_raw=True` (biblioteka: `download_package`, `LandCoverManager.
 download*`; tylko GPKG — przy SHP `ValidationError`, bo wynik SHP to juz
-oryginalny ZIP) zapisuje obok GPKG nietkniete archiwum GUGiK jako
-`<nazwa wyniku>_GPKG.zip` (np. `bdot10k_teryt_1465_GPKG.zip`) z wlasnym
-sidecarem (`request` jak pliku wyniku, `extra.source` bez `raw_file`,
-`sha256`/`size_bytes` archiwum); sidecar GPKG dostaje wtedy
+oryginalny ZIP) zapisuje obok GPKG nietkniete archiwum GUGiK. Archiwum
+to zawsze PELNY pakiet powiatu, wiec na sciezce standardowej nosi
+standardowa nazwe BEZ tokenu warstw (A2): `bdot10k_teryt_<TERYT>_GPKG.zip`
+(np. `bdot10k_teryt_1465_GPKG.zip`) — jeden plik dla kazdego filtra
+`layers=` (menedzer podaje go jako `download_package(raw_path=)`); przy
+jawnym `output_path` nazwe wybiera wywolujacy: `<rdzen output_path>_GPKG.zip`.
+Archiwum ma wlasny sidecar (`request` jak pliku wyniku, ale bez `layers`,
+np. `{teryt, format}`; `extra.source` bez `raw_file`; `sha256`/`size_bytes`
+archiwum); sidecar GPKG dostaje wtedy
 `extra.source.raw_file` = nazwa archiwum. Archiwum jest zapisywane
 atomowo i dopiero po udanym scaleniu, wiec blad rozpakowania nie zostawia
 ZIP bez sidecara. `keep_raw` nie zmienia tresci GPKG, wiec nie trafia do

@@ -433,10 +433,16 @@ class LandCoverManager:
         """
         provider = self._provider
         assert isinstance(provider, Bdot10kProvider)
+        options = {k: v for k, v in kwargs.items() if k in _BDOT_OPTIONS}
+        if output_path is None and kwargs.get("keep_raw"):
+            # The raw ZIP is the full package: the standard name WITHOUT the
+            # layers token (A2), one file for every layer filter.
+            full = self._generate_output_path(
+                teryt, None, None, self._without_layers(kwargs)
+            )
+            options["raw_path"] = full.with_name(f"{full.stem}_GPKG.zip")
         target = output_path or self._generate_output_path(teryt, None, None, kwargs)
-        package = provider.download_package(
-            teryt, target, **{k: v for k, v in kwargs.items() if k in _BDOT_OPTIONS}
-        )
+        package = provider.download_package(teryt, target, **options)
         extra = {"parent_request": parent} if parent else None
         self._write_bdot_sidecars(package, request or {"teryt": teryt}, kwargs, extra)
         return package.path
@@ -452,18 +458,27 @@ class LandCoverManager:
 
         Both get ``extra.source`` (``url``, ``teryt``, ``format``) and
         ``extra.http`` (response headers) over ``extra``; the result's source
-        also names the raw ZIP (``raw_file``) when it was kept.
+        also names the raw ZIP (``raw_file``) when it was kept. The raw ZIP is
+        the full package, so its ``request`` never has ``layers``.
         """
         source = {"url": package.url, "teryt": package.teryt, "format": package.format}
         base = {**(extra or {}), "http": package.http}
         if package.raw_path is not None:
             self._write_sidecar(
-                package.raw_path, request, kwargs, extra={**base, "source": source}
+                package.raw_path,
+                request,
+                self._without_layers(kwargs),
+                extra={**base, "source": source},
             )
             source = {**source, "raw_file": package.raw_path.name}
         self._write_sidecar(
             package.path, request, kwargs, extra={**base, "source": source}
         )
+
+    @staticmethod
+    def _without_layers(kwargs: dict) -> dict:
+        """``kwargs`` without the BDOT10k layer filter (the full package)."""
+        return {k: v for k, v in kwargs.items() if k != "layers"}
 
     def download_batch(
         self,

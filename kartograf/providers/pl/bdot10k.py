@@ -175,6 +175,7 @@ class Bdot10kProvider(LandCoverProvider):
         format: str = "GPKG",
         layers: Sequence[str] | None = None,
         keep_raw: bool = False,
+        raw_path: Path | None = None,
     ) -> Bdot10kPackage:
         """Download one powiat package; ``layers`` keeps only those layer codes (GPKG).
 
@@ -202,6 +203,10 @@ class Bdot10kProvider(LandCoverProvider):
             Also keep the original GUGiK ZIP next to the GeoPackage as
             ``<output stem>_GPKG.zip`` (written only after a successful
             merge). GPKG only: the SHP result already is the original ZIP.
+        raw_path : Path, optional
+            Where ``keep_raw`` saves the original ZIP instead of
+            ``<output stem>_GPKG.zip`` (e.g. one unfiltered name shared by
+            every layer filter); only together with ``keep_raw``.
 
         Returns
         -------
@@ -215,7 +220,7 @@ class Bdot10kProvider(LandCoverProvider):
         ------
         ValidationError
             Invalid TERYT or layer code (before the network); ``layers`` or
-            ``keep_raw`` with SHP.
+            ``keep_raw`` with SHP; ``raw_path`` without ``keep_raw``.
         DownloadError
             Download failure, a requested layer missing in the package, or two
             package files with the same table name.
@@ -239,6 +244,8 @@ class Bdot10kProvider(LandCoverProvider):
             raise ValidationError(
                 "keep_raw dotyczy tylko GPKG (SHP to juz oryginalny ZIP)"
             )
+        if raw_path is not None and not keep_raw:
+            raise ValidationError("raw_path wymaga keep_raw=True")
         output_path = Path(output_path)
         if format == "SHP":
             # The SHP package is a ZIP archive of shapefiles (not unpacked): the name
@@ -262,9 +269,8 @@ class Bdot10kProvider(LandCoverProvider):
                 content_length=int(length) if length and length.isdigit() else None,
             )
 
-        raw_path = (
-            output_path.with_name(f"{output_path.stem}_GPKG.zip") if keep_raw else None
-        )
+        if keep_raw and raw_path is None:
+            raw_path = output_path.with_name(f"{output_path.stem}_GPKG.zip")
 
         def save(response: requests.Response, target: Path) -> Path:
             return self._extract_gpkg_from_zip(

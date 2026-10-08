@@ -1984,6 +1984,13 @@ class TestBdot10kSidecarSource:
             )
         session.get.assert_not_called()
 
+    def test_raw_path_without_keep_raw_rejected(self, tmp_path):
+        session = _zip_session(b"")
+        provider = Bdot10kProvider(session=session)
+        with pytest.raises(ValidationError, match="raw_path"):
+            provider.download_package("0262", tmp_path / "x", raw_path=tmp_path / "r")
+        session.get.assert_not_called()
+
     def test_keep_raw_failed_merge_leaves_no_zip(self, tmp_path):
         """The raw ZIP is written only after a successful merge (no orphan):
         two package files with the same table fail inside the merge."""
@@ -2049,7 +2056,7 @@ class TestBdot10kSidecarSource:
                 godlo="M-33-48-A", keep_raw=True, layers=["PTWP"]
             )
         assert [p.name for p in paths] == ["bdot10k_PTWP_teryt_0262.gpkg"]
-        raw = tmp_path / "out" / "bdot10k_PTWP_teryt_0262_GPKG.zip"
+        raw = tmp_path / "out" / "bdot10k_teryt_0262_GPKG.zip"
         assert raw.read_bytes() == body
         meta = json.loads(paths[0].with_name(paths[0].name + ".meta.json").read_text())
         assert meta["extra"]["parent_request"] == {
@@ -2059,6 +2066,32 @@ class TestBdot10kSidecarSource:
         assert meta["extra"]["source"]["raw_file"] == raw.name
         raw_meta = json.loads(raw.with_name(raw.name + ".meta.json").read_text())
         assert raw_meta["extra"]["parent_request"] == meta["extra"]["parent_request"]
+
+    def test_layer_filters_share_one_unfiltered_raw_zip(self, tmp_path):
+        """A2: the raw ZIP is the full package - one standard name without a
+        layers token and a sidecar ``request`` without ``layers``, whatever the
+        filter of the GPKG."""
+        body = _bdot_zip(tmp_path, ["OT_PTWP_A", "OT_SWRS_L"])
+        manager = LandCoverManager(output_dir=tmp_path / "out", provider="bdot10k")
+        manager.provider._sessions = SessionPerThread(self._session(body, {}))
+        with patch.object(manager.provider, "teryts_for_area", return_value=["0262"]):
+            for layers in (["PTWP"], ["SWRS"]):
+                manager.download_all_counties(
+                    godlo="M-33-48-A", keep_raw=True, layers=layers
+                )
+        out = tmp_path / "out"
+        assert sorted(p.name for p in out.glob("*.zip")) == [
+            "bdot10k_teryt_0262_GPKG.zip"
+        ]
+        raw = out / "bdot10k_teryt_0262_GPKG.zip"
+        assert raw.read_bytes() == body
+        raw_meta = json.loads(raw.with_name(raw.name + ".meta.json").read_text())
+        assert raw_meta["request"] == {"teryt": "0262", "format": "GPKG"}
+        for layer in ("PTWP", "SWRS"):
+            gpkg = out / f"bdot10k_{layer}_teryt_0262.gpkg"
+            meta = json.loads(gpkg.with_name(gpkg.name + ".meta.json").read_text())
+            assert meta["request"]["layers"] == [layer]
+            assert meta["extra"]["source"]["raw_file"] == raw.name
 
     def test_bbox_explicit_output_path_keeps_request_and_source(self, tmp_path):
         """An explicit ``output_path`` (bbox) also gets the source and the raw
