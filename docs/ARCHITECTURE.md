@@ -832,6 +832,16 @@ GeoTIFF zamiast listy arkuszy. Od 2026-09-28 (R3) caly tor zyje w bibliotece
   `run_pl_cutout` -> `PlCutoutResult` (`path`, `skipped`, `sheet_paths`,
   `missing_sheets`, `off_grid_sheets`, `all_nodata`, `partial_sheets`,
   `unverified`; zwiazek z kluczami sidecara — tabela w sekcji 3.2).
+- `build_cutout_from_sheets(sheet_paths, bbox, target_crs, output_path, *,
+  resolution, vertical_crs) -> PlCutoutResult` — ten sam wycinek z
+  LOKALNYCH arkuszy, zero sieci (A10): sciezka wyniku pochodzi od
+  wywolujacego (takze poza drzewem `data/`), sidecar powstaje obok pliku
+  wyniku (`extra.sheet_sources` z sidecarow arkuszy, o ile istnieja).
+  Reguly siatki i warpu jak w `download_pl_cutout` (`prepare_pl_cutout` +
+  `build_pl_cutout`): cel EPSG:2180 i arkusze o roznej fazie siatki =
+  `GridMismatchError`, cel z warpem raportuje je w `off_grid_sheets`;
+  arkusz PL-2000 = `ValidationError`. Wynik jest budowany zawsze (bez
+  pomijania istniejacego pliku), puste `sheet_paths` = `ValidationError`.
 
 CLI jest nakladka: `_download_pl_bbox`/`_download_pl_geometry` wolaja
 `_download_pl_cutout` (`cli/download_cmd.py`), ktore wstrzykuje providera

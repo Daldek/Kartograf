@@ -2716,3 +2716,126 @@ class TestUnverifiedSheets:
         assert rc == 1
         err = capsys.readouterr().err
         assert err.endswith("\nError: padl\n")
+
+
+class TestBuildFromLocalSheets:
+    """A10: mosaic from local files, no network, caller's output path."""
+
+    def test_no_network_and_path_outside_data_tree(self, tmp_path):
+        from kartograf.download.cutout import build_cutout_from_sheets
+
+        a = _write_sheet_asc(
+            tmp_path / "s" / "N-34-130-D-d-2-3.asc", 500000.0, 600000.0, fill=100.0
+        )
+        out = tmp_path / "project" / "dem.tif"
+        result = build_cutout_from_sheets(
+            [a],
+            BBox(500010, 600010, 500090, 600090, "EPSG:2180"),
+            "EPSG:2180",
+            out,
+            resolution="1m",
+            vertical_crs="EVRF2007",
+        )
+        assert result.path == out and not result.all_nodata
+        assert result.sheet_paths == (a,)
+        assert sorted(p.name for p in out.parent.iterdir()) == [
+            "dem.tif",
+            "dem.tif.meta.json",
+        ]
+
+    def test_off_grid_sheets_with_2180_target_raise(self, tmp_path):
+        """Grid rule as in download_pl_cutout: no silent resampling (A11 deferred)."""
+        from kartograf.download.cutout import build_cutout_from_sheets
+        from kartograf.exceptions import GridMismatchError
+
+        a = _write_sheet_asc(tmp_path / "N-34-130-D-d-2-3.asc", 500000.0, 600000.0)
+        b = _write_sheet_asc(tmp_path / "N-34-130-D-d-2-4.asc", 500100.5, 600000.0)
+        with pytest.raises(GridMismatchError):
+            build_cutout_from_sheets(
+                [a, b],
+                BBox(500010, 600010, 500190, 600090, "EPSG:2180"),
+                "EPSG:2180",
+                tmp_path / "out" / "c.tif",
+                resolution="1m",
+                vertical_crs="EVRF2007",
+            )
+
+    def test_sidecar_has_sheet_sources_and_checksum(self, tmp_path):
+        from kartograf.download.cutout import build_cutout_from_sheets
+
+        a = _write_sheet_asc(
+            tmp_path / "s" / "N-34-130-D-d-2-3.asc", 500000.0, 600000.0
+        )
+        (tmp_path / "s" / "N-34-130-D-d-2-3.asc.meta.json").write_text(
+            json.dumps(
+                {
+                    "request": {"sheet": "N-34-130-D-d-2-3"},
+                    "extra": {
+                        "source": {
+                            "url": "https://example.test/a.asc",
+                            "layer": "L",
+                            "acquisition_date": "2022-01-01",
+                            "full_sheet": False,
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        out = tmp_path / "project" / "dem.tif"
+        result = build_cutout_from_sheets(
+            [a],
+            BBox(500010, 600010, 500090, 600090, "EPSG:2180"),
+            "EPSG:2180",
+            out,
+            resolution="1m",
+            vertical_crs="EVRF2007",
+        )
+        meta = json.loads((out.parent / "dem.tif.meta.json").read_text("utf-8"))
+        assert meta["dataset"] == "pl.gugik.nmt_1m"
+        assert meta["sha256"] and meta["size_bytes"] == out.stat().st_size
+        (entry,) = meta["extra"]["sheet_sources"]
+        assert entry["sheet"] == "N-34-130-D-d-2-3"
+        assert entry["url"] == "https://example.test/a.asc"
+        assert result.partial_sheets == ("N-34-130-D-d-2-3",)
+
+    def test_off_grid_sheets_with_warp_target_are_reported(self, tmp_path):
+        """Warp target (W1): off-grid sheets are reprojected separately."""
+        from kartograf.download.cutout import build_cutout_from_sheets
+
+        a = _write_sheet_asc(tmp_path / "N-34-130-D-d-2-3.asc", 530000.0, 382000.0)
+        b = _write_sheet_asc(tmp_path / "N-34-130-D-d-2-4.asc", 530100.5, 382000.0)
+        c = _write_sheet_asc(tmp_path / "N-34-130-D-d-2-5.asc", 530200.0, 382000.0)
+        out = tmp_path / "out" / "c.tif"
+        result = build_cutout_from_sheets(
+            [a, b, c],
+            BBox(530010, 382010, 530290, 382090, "EPSG:2180"),
+            "EPSG:5514",
+            out,
+            resolution="1m",
+            vertical_crs="EVRF2007",
+        )
+        assert result.off_grid_sheets == ("N-34-130-D-d-2-4",)
+        meta = json.loads((out.parent / "c.tif.meta.json").read_text("utf-8"))
+        assert meta["extra"]["off_grid_sheets"] == ["N-34-130-D-d-2-4"]
+        with rasterio.open(out) as ds:
+            assert ds.crs.to_epsg() == 5514
+
+    def test_empty_list_rejected(self, tmp_path):
+        from kartograf.download.cutout import build_cutout_from_sheets
+        from kartograf.exceptions import ValidationError
+
+        with pytest.raises(ValidationError, match="arkusz"):
+            build_cutout_from_sheets(
+                [],
+                BBox(0, 0, 1, 1, "EPSG:2180"),
+                "EPSG:2180",
+                tmp_path / "c.tif",
+                resolution="1m",
+                vertical_crs="EVRF2007",
+            )
+
+    def test_exported(self):
+        import kartograf
+
+        assert "build_cutout_from_sheets" in kartograf.__all__
