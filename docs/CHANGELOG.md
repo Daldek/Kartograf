@@ -19,7 +19,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Poprawki po tescie na zywo ADR-030 (FA)
 - **`kartograf parse 6`:** sam numer strefy PL-2000 (5-8) daje komunikat, ze
   to strefa, a nie godlo, z najgrubszym formatem `strefa.pas.slup`
-  (np. `6.179.12`); ogolny blad godla podaje formaty PL-1992 i PL-2000
+  (np. `6.179.12`), takze z jawnym `uklad=` w `SheetParser`; ogolny blad godla podaje formaty PL-1992 i PL-2000
   z przykladami.
 - **BDOT10k GPKG na udzialach CIFS/SMB:** `_merge_gpkg_files` sklada GPKG
   w lokalnym katalogu tymczasowym systemu (SQLite bez `nobrl` konczyl na

@@ -187,6 +187,16 @@ class TestSheetParserValidation:
         assert "N-34-130-D-d-2-4" in msg
         assert "6.179.12" in msg
 
+    @pytest.mark.parametrize("uklad", ["2000", "1992"])
+    @pytest.mark.parametrize("zone", ["5", "6", "7", "8", " 6 "])
+    def test_bare_zone_number_with_explicit_uklad(self, zone, uklad):
+        """Numer strefy z jawnym układem daje ten sam komunikat o strefie."""
+        with pytest.raises(ParseError, match="numer strefy PL-2000") as exc:
+            SheetParser(zone, uklad=uklad)
+        msg = str(exc.value)
+        assert "6.179.12" in msg
+        assert "format PL-1992" not in msg
+
     def test_incomplete_pl2000_keeps_specific_message(self):
         """Niepełne godło PL-2000 nadal daje komunikat z parsera PL-2000."""
         with pytest.raises(ParseError, match="PL-2000") as exc:
