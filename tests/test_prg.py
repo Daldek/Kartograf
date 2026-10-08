@@ -145,7 +145,23 @@ def test_cache_hit_skips_network(tmp_path):
 
 
 def test_teryt_for_point():
-    """Two codes in the answer (as for a point on a boundary) -> the lower one."""
+    """Raw point answer (2026-10-08): E345000/N295000 lies in 0224 only.
+
+    The query must be a point-sized square around the point: a wider square
+    could reach the lower-coded neighbour 0208 across the border.
+    """
+    session = _session((FIX / "point_0224.xml").read_text(encoding="utf-8"))
+    assert teryt_for_point(345000, 295000, "EPSG:2180", session=session) == "0224"
+    params = session.get.call_args.kwargs["params"]
+    assert params["BBOX"] == "295000,345000,295000,345000,urn:ogc:def:crs:EPSG::2180"
+
+
+def test_teryt_for_point_boundary_takes_lowest_code():
+    """Synthetic boundary case: an answer with two powiats -> the lower code.
+
+    The two-county AREA response stands in for a point exactly on a border;
+    it is not the real answer for this point (see ``test_teryt_for_point``).
+    """
     session = _session((FIX / "two_counties.xml").read_text(encoding="utf-8"))
     assert teryt_for_point(345000, 295000, "EPSG:2180", session=session) == "0208"
 
@@ -159,11 +175,11 @@ def test_teryt_for_point_uses_point_cache(tmp_path):
     from kartograf.cache.metadata import MetadataCache
 
     cache = MetadataCache(db_path=tmp_path / "c.db")
-    cache.set_teryt(345000.0, 295000.0, "0208")
+    cache.set_teryt(345000.0, 295000.0, "0224")
     other = _session("unused")
     assert (
         teryt_for_point(345000, 295000, "EPSG:2180", session=other, cache=cache)
-        == "0208"
+        == "0224"
     )
     other.get.assert_not_called()
 
