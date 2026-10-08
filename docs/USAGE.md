@@ -343,6 +343,26 @@ print(result.missing_sheets)
 # nieobsługiwany parametr); GridMismatchError (różne fazy siatki przy EPSG:2180).
 # Kroki osobno (własny provider/sesja/FileStorage):
 # prepare_pl_cutout -> select_pl_cutout_sheets -> run_pl_cutout.
+
+# Zlewnia przygraniczna PL/CZ: podział obszaru na kraje i wycinek CZ
+# w układzie PL (EPSG:2180 + EVRF2007); siatka CZ startuje od zadanego obszaru
+from kartograf import download_cz_cutout, split_bbox_by_country
+
+area = BBox(16.19, 50.42, 16.25, 50.45, "EPSG:4326")  # Kudowa-Zdrój / Náchod
+parts = split_bbox_by_country(area, cz_crs="EPSG:2180")  # {"CZ": ..., "PL": ...}
+cz = download_cz_cutout(
+    parts["CZ"].bbox,
+    output_dir="./data",
+    target_crs="EPSG:2180",
+    vertical_crs="EVRF2007",
+    resolution="2m",          # "2m" DMR 5G / "5m" DMR 4G
+)
+print(cz.path)                # data/nmt/cz_dmr5g_evrf2007/bbox/<coords>.tif
+# all_nodata=True: część CZ bez ani jednego ważnego piksela (prostokąt
+# obwiedni CZ sięga w głąb Polski) — plik powstaje, flaga też w sidecarze
+print(cz.all_nodata)
+# Część PL (parts["PL"].bbox) pobierz przez download_pl_cutout (wyżej).
+# Własny provider: run_cz_cutout(provider, bbox, output_dir=, image_crs=).
 ```
 
 **Cache metadanych w bibliotece.** Bez `MetadataCache` provider NMT pyta
@@ -391,6 +411,8 @@ rozwijane do arkuszy 1:10000 przez `download_hierarchy()` (ta zawsze zwraca
   `path`, `skipped`, `downloaded`, `reused`, `link`, `unverified`.
 - `PlCutoutResult` (wycinek): `path`, `skipped`, `missing_sheets`,
   `off_grid_sheets`, `partial_sheets`, `all_nodata`, `unverified`.
+- `CzCutoutResult` (wycinek CZ, `download_cz_cutout`/`run_cz_cutout`):
+  `path`, `skipped`, `all_nodata`.
 - `LazDownloadResult` (`download_laz_area`): `downloaded`, `skipped`,
   `failed`, `superseded` (kafle pominięte jako pokryte przez nowsze).
 
@@ -401,8 +423,8 @@ poziomy i pionowy pliku, nodata, żądanie, licencja, użyte transformacje,
 pochodzenie (`extra.source`), a dla zadań obszarowych `extra.parent_request`
 łączący pliki jednego zadania. Pełna tabela pól: ARCHITECTURE 3.2,
 `parent_request`: ARCHITECTURE 3.4. Sidecary pisze warstwa zarządzająca
-(`DownloadManager`, `LandCoverManager`, wycinek PL i kafle LAZ w bibliotece;
-CLI dla CZ), a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
+(`DownloadManager`, `LandCoverManager`, wycinki PL i CZ oraz kafle LAZ
+w bibliotece; dla godła CZ — CLI), a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
 Bezpośrednie wywołanie providera (np. `CuzkDmrProvider` z biblioteki) zapisuje
 sam plik danych, bez sidecara.
 

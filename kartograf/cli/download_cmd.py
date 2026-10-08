@@ -8,13 +8,19 @@ import json
 import math
 import sys
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from kartograf.cli._parser import parse_bbox_arg
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
 from kartograf.download.campaigns import validate_campaign_args
+from kartograf.download.countries import EDGES as _EDGES
+from kartograf.download.countries import CountryPart
+from kartograf.download.countries import bbox_to_wgs84 as _bbox_to_wgs84
+from kartograf.download.countries import countries_for_bbox as _countries_for_bbox
+from kartograf.download.countries import country_bbox as _country_bbox
+from kartograf.download.cz_cutout import read_tif_nodata as _read_tif_nodata
+from kartograf.download.cz_cutout import write_cz_sidecar as _write_cz_sidecar
 from kartograf.download.manager import (
     DownloadManager,
     DownloadProgress,
@@ -415,154 +421,9 @@ def _print_transform_error(error: Exception) -> int:
     return 1
 
 
-def _bbox_to_wgs84(bbox: BBox) -> BBox:
-    """
-    Bbox in WGS84 - the common CRS for country recognition and clipping.
-
-    The default pyproj transformer (``core.bbox.transform_bbox``, an envelope
-    from densified edges): it serves to RECOGNIZE the country and clip to its
-    envelope, not to request a download. The pinned operation (``_country_bbox``
-    -> ``bbox_to_crs``) applies when LEAVING Czech CRSs
-    (Krovak/UTM33N) - for a clipped PL bbox the WGS84->EPSG:2180 jump goes
-    deliberately through the default (unpinned) pyproj transformer, see
-    ``_country_bbox``.
-    """
-    from kartograf.core.bbox import transform_bbox
-
-    return transform_bbox(bbox, "EPSG:4326")
-
-
-def _countries_for_bbox(bbox: BBox) -> tuple[str, ...]:
-    """
-    Codes of countries whose ``extent_wgs84`` intersects the bbox (sorted).
-
-    Country envelopes are rectangles, so a border strip of one country
-    can lie inside the neighbor's rectangle (e.g. Opole Silesia inside the
-    CZ envelope) - auto-split then queries both sources instead of guessing the border.
-    """
-    from kartograf.sources.registry import all_countries
-
-    wgs = _bbox_to_wgs84(bbox)
-    hits = [
-        profile.code
-        for profile in all_countries()
-        if (
-            wgs.min_x < profile.extent_wgs84.max_x
-            and wgs.max_x > profile.extent_wgs84.min_x
-            and wgs.min_y < profile.extent_wgs84.max_y
-            and wgs.max_y > profile.extent_wgs84.min_y
-        )
-    ]
-    return tuple(sorted(hits))
-
-
-@dataclass(frozen=True)
-class CountryPart:
-    """Part of an area task for one country (``_country_bbox``).
-
-    ``clipped`` lists the WGS84 edges actually clipped to the country's
-    envelope (``"W"``, ``"S"``, ``"E"``, ``"N"``; empty = bbox unchanged) -
-    ``_dispatch_area`` turns this into an ``Info:`` (S3).
-    """
-
-    bbox: BBox
-    clipped: tuple[str, ...] = ()
-
-
-# edge -> (BBox field, whether clipping raises the minimum, unit)
-_EDGES = (
-    ("W", "min_x", True, "E"),
-    ("S", "min_y", True, "N"),
-    ("E", "max_x", False, "E"),
-    ("N", "max_y", False, "N"),
-)
-
-
 def _deg(value: float, unit: str) -> str:
     """``54,90°N`` — degrees with a decimal comma (Polish messages)."""
     return f"{value:.2f}".replace(".", ",") + f"°{unit}"
-
-
-def _country_bbox(
-    bbox: BBox, code: str, *, auto: bool, cz_crs: str = "EPSG:5514"
-) -> CountryPart:
-    """
-    Part of the bbox for a country in the CRS of its task.
-
-    ``auto`` mode clips the bbox to the country's envelope (in WGS84) and returns the
-    result in the working CRS: CZ - ``cz_crs`` (Krovak or ``--target-crs``), PL - the
-    task CRS unchanged (keeps the PL-2000 zone and zero drift). An explicit
-    ``--country`` does NOT clip anything (the user knows the extent of their task).
-    Clipped edges come back in ``CountryPart.clipped`` - the ``Info:`` message is
-    printed by ``_dispatch_area`` (S3).
-
-    When clipping changes nothing, the ORIGINAL bbox is transformed -
-    one jump from the task CRS instead of two (via WGS84).
-
-    PL after clipping (S3): only the edges in ``clipped`` take their value
-    from the transformation of the clipped rectangle (the envelope of the country's
-    curved edge - conservative outward), the rest keep the
-    original value 1:1. The envelope of the WHOLE clipped rectangle widened
-    the untouched edges by tens of meters (Rozewie: W 110 / S 38 / E 82 m),
-    because the task meridian is not a straight line in EPSG:2180. The CZ part is
-    by definition in a different CRS (``bbox_to_crs`` with edge sampling),
-    so widening there is unavoidable and honest - unchanged.
-
-    A task given in a Czech CRS but directed to PL (``--bbox-crs
-    EPSG:5514`` with ``--country pl`` or with auto-split) leaves Krovak
-    IMMEDIATELY and only through the pinned operation: later steps (clipping, sheet
-    selection) already work in EPSG:2180, so GUGiK sheet selection never
-    results from an unpinned Krovak transformation.
-    """
-    from kartograf.core.bbox import is_czech_crs, transform_bbox
-    from kartograf.providers.cuzk.client import wkid
-    from kartograf.providers.cuzk.dmr import bbox_to_crs
-    from kartograf.sources.registry import get_country
-
-    if code != "CZ" and is_czech_crs(bbox.crs):
-        bbox = bbox_to_crs(bbox, "EPSG:2180")
-
-    if not auto:
-        return CountryPart(bbox)
-
-    wgs = _bbox_to_wgs84(bbox)
-    extent = get_country(code).extent_wgs84
-    clipped = tuple(
-        edge
-        for edge, attr, is_min, _unit in _EDGES
-        if (
-            getattr(wgs, attr) < getattr(extent, attr)
-            if is_min
-            else getattr(wgs, attr) > getattr(extent, attr)
-        )
-    )
-    if not clipped:
-        source = bbox  # clipping was a no-op
-    else:
-        source = BBox(
-            max(wgs.min_x, extent.min_x),
-            max(wgs.min_y, extent.min_y),
-            min(wgs.max_x, extent.max_x),
-            min(wgs.max_y, extent.max_y),
-            "EPSG:4326",
-        )
-
-    target = cz_crs if code == "CZ" else bbox.crs
-    if wkid(source.crs) == wkid(target):
-        return CountryPart(source, clipped)
-    if code == "CZ":
-        # into a Czech CRS only the pinned operation with edge sampling
-        # (the image of a rectangle in Krovak has curved sides)
-        return CountryPart(bbox_to_crs(source, target), clipped)
-    transformed = transform_bbox(source, target)
-    if not clipped:
-        return CountryPart(transformed)
-    # PL: untouched edges 1:1 from the original, clipped ones from the transformation
-    values = {
-        attr: getattr(transformed if edge in clipped else bbox, attr)
-        for edge, attr, _is_min, _unit in _EDGES
-    }
-    return CountryPart(BBox(**values, crs=target), clipped)
 
 
 def _area_outside_extents(
@@ -2007,17 +1868,6 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     return 0
 
 
-def _read_tif_nodata(path: Path) -> float | None:
-    """Nodata from a GeoTIFF tag (None if missing/unreadable)."""
-    try:
-        import rasterio
-
-        with rasterio.open(path) as src:
-            return src.nodata
-    except Exception:  # noqa: BLE001 — enriching metadata < data
-        return None
-
-
 def _warn_cz_all_nodata(target: Path, nodata: float | None) -> None:
     """N2: ``Warning:`` when a CZ raster has not a single valid pixel (code 0).
 
@@ -2037,44 +1887,6 @@ def _warn_cz_all_nodata(target: Path, nodata: float | None) -> None:
             "DMR CUZK (poza granica CZ?)",
             file=sys.stderr,
         )
-
-
-def _write_cz_sidecar(
-    provider,
-    target: Path,
-    *,
-    request: dict,
-    capability: str,
-    horizontal_crs: str,
-    nodata: float | None,
-    extra: dict | None = None,
-) -> None:
-    """Best-effort sidecar for a CZ result (an error does not abort the download).
-
-    `horizontal_crs` is the CRS of the ACTUAL result (TM33 tile: EPSG:3045,
-    --target-crs: the CRS requested by the user), not the channel's default CRS.
-
-    Both `transform` entries describe PINNED operations performed locally -
-    horizontal and vertical alike (ADR-024). Previously the horizontal field carried
-    `"server:EPSG:<code>"` without an accuracy, which hid the server-side
-    reprojection error (135 m) from the sidecar consumer.
-    """
-    from kartograf.sources.sidecar import emit_sidecar
-
-    emit_sidecar(
-        provider.descriptor_key,
-        target,
-        request=request,
-        vertical_crs=provider.vertical_crs,
-        horizontal_crs=horizontal_crs,
-        pinned_transforms={
-            "horizontal": provider.horizontal_transform(horizontal_crs),
-            "vertical": provider.vertical_transform,
-        },
-        capability=capability,
-        nodata=nodata,
-        extra=extra,
-    )
 
 
 def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> int:
@@ -2139,6 +1951,20 @@ def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> i
     return 0
 
 
+@contextlib.contextmanager
+def _library_log_muted(name: str) -> Iterator[None]:
+    """Mute one library logger while the CLI prints the same message itself."""
+    import logging
+
+    log = logging.getLogger(name)
+    previous = log.disabled
+    log.disabled = True
+    try:
+        yield
+    finally:
+        log.disabled = previous
+
+
 def _cz_download_bbox(
     args,
     provider,
@@ -2154,66 +1980,47 @@ def _cz_download_bbox(
     5514) - the file name carries the coordinates of the actually requested cutout.
     The request then goes to the server in the native CRS, and the local
     warp in the provider moves it onto the result grid (ADR-024).
+
+    Implementation: ``download.cz_cutout.run_cz_cutout``.
     """
-    from kartograf.download.storage import bbox_cutout_path, prune_empty_dirs
-    from kartograf.providers.cuzk.client import wkid
-    from kartograf.providers.cuzk.dmr import CUZK_NODATA, bbox_to_crs
-    from kartograf.sources.registry import get_source
+    from kartograf.download.cz_cutout import run_cz_cutout
 
     image_sr = args.target_crs or "EPSG:5514"
-    if wkid(bbox.crs) != wkid(image_sr):
-        # normalization BEFORE naming the file: the name carries the coordinates
-        # of the actually requested cutout (in download_bbox this is already a no-op)
-        bbox = bbox_to_crs(bbox, image_sr)
-
-    descriptor = get_source(provider.descriptor_key)
-    target = bbox_cutout_path(
-        args.output,
-        descriptor.resolve_subdir(vertical_crs=provider.vertical_crs),
-        bbox,
-        descriptor.default_extension,
-    )
-
-    if skip_existing and target.exists():
-        if not quiet:
-            print(f"Skipped - already exists at {target}")
-        _print_legacy_krovak_info(target)
-        return 0
 
     def announce() -> None:
         # O-3: printed by the provider right before the first exportImage
         if not quiet:
             print(f"Downloading CZ bbox ({provider.resolution}, {image_sr})...")
 
-    # the provider creates directories only when fetching - the sidecar needs them
-    target.parent.mkdir(parents=True, exist_ok=True)
     try:
-        provider.download_bbox(bbox, target, on_download=announce)
+        # the CLI prints its own 'Warning:' line - the library log would
+        # repeat it on stderr (logging.lastResort; the CLI configures no logging)
+        with _library_log_muted("kartograf.download.cz_cutout"):
+            result = run_cz_cutout(
+                provider,
+                bbox,
+                output_dir=args.output,
+                image_crs=args.target_crs,
+                force=not skip_existing,
+                parent_request=parent_request,
+                on_download=announce,
+            )
     except (DownloadError, ValidationError) as e:
-        # finding 10: a failure leaves no empty <segment>/bbox/ tree
-        prune_empty_dirs(target.parent, Path(args.output))
         print(f"Error: {e}", file=sys.stderr)
         return 1
-    except BaseException:
-        prune_empty_dirs(target.parent, Path(args.output))
-        raise
-
-    nodata = _read_tif_nodata(target)
-    _warn_cz_all_nodata(target, nodata)
-    _write_cz_sidecar(
-        provider,
-        target,
-        request={
-            "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
-            "bbox_crs": bbox.crs,
-        },
-        capability="bbox_raster",
-        horizontal_crs=image_sr,
-        nodata=nodata if nodata is not None else CUZK_NODATA,
-        extra={"parent_request": parent_request} if parent_request else None,
-    )
+    if result.skipped:
+        if not quiet:
+            print(f"Skipped - already exists at {result.path}")
+        _print_legacy_krovak_info(result.path)
+        return 0
+    if result.all_nodata:
+        print(
+            f"Warning: {result.path} jest w calosci nodata — obszar poza pokryciem "
+            "DMR CUZK (poza granica CZ?)",
+            file=sys.stderr,
+        )
     if not quiet:
-        print(f"Downloaded to {target}")
+        print(f"Downloaded to {result.path}")
     return 0
 
 
