@@ -15,6 +15,7 @@ Tests cover:
 """
 
 import logging
+import os
 import sqlite3
 import threading
 import time
@@ -1209,6 +1210,7 @@ class TestLazyOpen:
             "db_size_bytes": 0,
             "db_path": str(cache_path),
             "db_exists": False,
+            "error": None,
         }
         assert not cache_path.exists()
         c.close()
@@ -1367,3 +1369,284 @@ class TestCLICacheCommandsWithoutDatabase:
         assert main(["cache", "clear"]) == 0
         assert "Cache cleared." in capsys.readouterr().out
         assert list(tmp_path.iterdir()) == []
+
+
+# =========================================================================
+# Unreadable database: the cache disables itself, the download goes on
+# =========================================================================
+
+
+def _garbage_db(path: Path) -> None:
+    path.write_bytes(b"to nie jest baza SQLite\n" * 200)
+
+
+def _truncated_db(path: Path) -> None:
+    """A valid database (several pages) cut to half of its size."""
+    c = MetadataCache(db_path=path)
+    for i in range(300):
+        c.set_record("nmt", "1m", "EVRF2007", f"G-{i}", {"pad": "x" * 200})
+    c.close()
+    data = path.read_bytes()
+    path.write_bytes(data[: len(data) // 2])
+
+
+def _unreadable_db(path: Path) -> None:
+    c = MetadataCache(db_path=path)
+    c.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
+    c.close()
+    path.chmod(0)
+
+
+_needs_non_root = pytest.mark.skipif(
+    hasattr(os, "geteuid") and os.geteuid() == 0,
+    reason="root ignoruje prawa dostepu do pliku",
+)
+
+BROKEN_DBS = [
+    pytest.param(_garbage_db, id="garbage"),
+    pytest.param(_truncated_db, id="truncated"),
+    pytest.param(_unreadable_db, id="no-read-permission", marks=_needs_non_root),
+]
+
+
+def _cache_warnings(caplog) -> list[logging.LogRecord]:
+    return [
+        r
+        for r in caplog.records
+        if r.name == "kartograf.cache.metadata" and r.levelno == logging.WARNING
+    ]
+
+
+def _exercise_all(c: MetadataCache) -> None:
+    """Every public operation of the cache - none may raise."""
+    assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+    c.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
+    assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+    assert c.get_campaigns("nmt", "1m", "EVRF2007", GODLO) is None
+    c.set_campaigns("nmt", "1m", "EVRF2007", GODLO, {"campaigns": []})
+    assert c.get_teryt(1.0, 2.0) is None
+    c.set_teryt(1.0, 2.0, "1465")
+    assert c.get_sheet("cz_sm5", "CTES96") is None
+    c.set_sheet("cz_sm5", "CTES96", {"name": "x"})
+    st = c.stats()
+    assert st["record_count"] == 0
+    assert st["error"] is not None
+    assert c.prune_expired() == 0
+    c.vacuum()
+    c.clear()
+
+
+def _locked(_conn):
+    raise sqlite3.OperationalError("database is locked")
+
+
+class TestUnreadableDatabase:
+    """A corrupted/unreadable cache file = work without cache, one warning."""
+
+    @pytest.mark.parametrize("make_broken", BROKEN_DBS)
+    def test_operations_do_not_raise_and_warn_once(
+        self, cache_path, caplog, make_broken
+    ):
+        make_broken(cache_path)
+        caplog.set_level(logging.WARNING, logger="kartograf.cache.metadata")
+        c = MetadataCache(db_path=cache_path)
+
+        _exercise_all(c)
+        assert isinstance(c.error, sqlite3.Error)
+        warnings = _cache_warnings(caplog)
+        assert len(warnings) == 1
+        message = warnings[0].getMessage()
+        assert "cache metadanych nieczytelny" in message
+        assert str(cache_path) in message
+        assert str(c.error) in message
+        assert "kartograf cache clear" in message
+
+        # later calls stay silent (disabled for the rest of the instance)
+        _exercise_all(c)
+        c.close()
+        assert len(_cache_warnings(caplog)) == 1
+
+    @pytest.mark.parametrize("make_broken", BROKEN_DBS)
+    def test_stats_reports_error_without_raising(self, cache_path, make_broken):
+        make_broken(cache_path)
+        c = MetadataCache(db_path=cache_path, on_disabled=lambda _m: None)
+        st = c.stats()
+        c.close()
+        assert st["db_exists"] is True
+        assert st["error"] == str(c.error)
+        assert (st["record_count"], st["campaign_count"]) == (0, 0)
+        assert (st["teryt_count"], st["sheet_count"]) == (0, 0)
+
+    def test_first_read_error_disables_cache(self, cache_path, caplog):
+        """A read that fails AFTER a successful open also disables the cache."""
+        c = MetadataCache(db_path=cache_path)
+        c.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
+        assert c._conn is not None
+        c._conn.execute("DROP TABLE record_cache")
+        caplog.set_level(logging.WARNING, logger="kartograf.cache.metadata")
+
+        assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+        assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+        # intact tables are off too: disabled for the rest of the instance
+        c.set_teryt(1.0, 2.0, "1465")
+        assert c.get_teryt(1.0, 2.0) is None
+        c.close()
+        assert len(_cache_warnings(caplog)) == 1
+
+    def test_on_disabled_callback_replaces_logger(self, cache_path, caplog):
+        _garbage_db(cache_path)
+        caplog.set_level(logging.WARNING, logger="kartograf.cache.metadata")
+        seen = []
+        c = MetadataCache(db_path=cache_path, on_disabled=seen.append)
+
+        _exercise_all(c)
+        _exercise_all(c)
+        c.close()
+
+        assert len(seen) == 1
+        assert seen[0].startswith(f"cache metadanych nieczytelny ({cache_path})")
+        assert _cache_warnings(caplog) == []
+
+    def test_locked_database_disables_with_lock_message(
+        self, cache_path, caplog, monkeypatch
+    ):
+        """``database is locked``: same disabled state, no advice to delete."""
+        monkeypatch.setattr(MetadataCache, "_create_tables", staticmethod(_locked))
+        caplog.set_level(logging.WARNING, logger="kartograf.cache.metadata")
+        c = MetadataCache(db_path=cache_path)
+
+        c.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
+        assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+        c.close()
+
+        warnings = _cache_warnings(caplog)
+        assert len(warnings) == 1
+        message = warnings[0].getMessage()
+        assert "zablokowany przez inny proces" in message
+        assert "usun plik" not in message
+
+    @pytest.mark.parametrize("make_broken", BROKEN_DBS)
+    def test_many_threads_one_warning(self, cache_path, caplog, make_broken):
+        make_broken(cache_path)
+        caplog.set_level(logging.WARNING, logger="kartograf.cache.metadata")
+        c = MetadataCache(db_path=cache_path)
+        errors = []
+        start = threading.Barrier(8)
+
+        def worker(i: int) -> None:
+            try:
+                start.wait()
+                for j in range(20):
+                    godlo = f"G-{i}-{j}"
+                    assert c.get_record("nmt", "1m", "EVRF2007", godlo) is None
+                    c.set_record("nmt", "1m", "EVRF2007", godlo, {"i": i})
+                    c.get_teryt(float(i), float(j))
+            except BaseException as e:  # noqa: BLE001 - reported below
+                errors.append(e)
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        c.close()
+
+        assert errors == []
+        assert len(_cache_warnings(caplog)) == 1
+
+
+class TestCLICacheCommandsUnreadable:
+    """``kartograf cache stats|clear|path`` with an unreadable database file."""
+
+    @staticmethod
+    def _db(tmp_path: Path) -> Path:
+        return tmp_path / ".kartograf_cache.db"
+
+    @pytest.mark.parametrize("make_broken", BROKEN_DBS)
+    def test_clear_removes_unreadable_file_with_wal_shm(
+        self, tmp_path, monkeypatch, capsys, make_broken
+    ):
+        monkeypatch.chdir(tmp_path)
+        db = self._db(tmp_path)
+        make_broken(db)
+        Path(f"{db}-wal").write_bytes(b"x")
+        Path(f"{db}-shm").write_bytes(b"x")
+
+        assert main(["cache", "clear"]) == 0
+
+        captured = capsys.readouterr()
+        assert captured.out == f"Usunieto nieczytelny plik cache: {db}\n"
+        assert captured.err == ""
+        assert list(tmp_path.iterdir()) == []
+        # the regular path works again: a fresh database is created
+        c = MetadataCache(db_path=db)
+        c.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
+        assert c.get_record("nmt", "1m", "EVRF2007", GODLO) == {"source": SOURCE}
+        c.close()
+
+    @_needs_non_root
+    def test_clear_without_delete_permission_is_error(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        work = tmp_path / "ro"
+        work.mkdir()
+        monkeypatch.chdir(work)
+        db = self._db(work)
+        _garbage_db(db)
+        work.chmod(0o500)
+        try:
+            rc = main(["cache", "clear"])
+        finally:
+            work.chmod(0o700)
+
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert f"Error: nie mozna usunac nieczytelnego pliku cache {db}" in err
+        assert db.exists()
+
+    def test_clear_locked_database_is_error_and_keeps_file(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        monkeypatch.chdir(tmp_path)
+        db = self._db(tmp_path)
+        c = MetadataCache(db_path=db)
+        c.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
+        c.close()
+        monkeypatch.setattr(MetadataCache, "_create_tables", staticmethod(_locked))
+
+        assert main(["cache", "clear"]) == 1
+
+        err = capsys.readouterr().err
+        assert "Error: cache zablokowany przez inny proces" in err
+        assert db.exists()
+
+    @pytest.mark.parametrize("make_broken", BROKEN_DBS)
+    def test_stats_prints_readable_error(
+        self, tmp_path, monkeypatch, capsys, make_broken
+    ):
+        monkeypatch.chdir(tmp_path)
+        db = self._db(tmp_path)
+        make_broken(db)
+
+        assert main(["cache", "stats"]) == 1
+
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        lines = captured.err.splitlines()
+        assert len(lines) == 1
+        assert lines[0].startswith(f"Error: cache nieczytelny: {db} (")
+        assert lines[0].endswith("— uzyj `kartograf cache clear`")
+        assert "DatabaseError" not in captured.err
+        assert db.exists()
+
+    @pytest.mark.parametrize("make_broken", BROKEN_DBS)
+    def test_path_works(self, tmp_path, monkeypatch, capsys, make_broken):
+        monkeypatch.chdir(tmp_path)
+        db = self._db(tmp_path)
+        make_broken(db)
+
+        assert main(["cache", "path"]) == 0
+
+        captured = capsys.readouterr()
+        assert captured.out == f"{db}\n"
+        assert captured.err == ""

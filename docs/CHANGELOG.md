@@ -25,6 +25,25 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `cache stats` drukuje wtedy `Database size: - (file not created yet)`.
   Otwarcie (WAL, tabele, migracja starej bazy) odbywa sie pod istniejacym
   lockiem — jedno polaczenie przy rownoleglym pierwszym zapisie.
+- **Uszkodzony cache metadanych nie blokuje pobierania:** blad SQLite przy
+  otwarciu, odczycie albo zapisie `.kartograf_cache.db` (smieci zamiast bazy,
+  ucieta baza, brak uprawnien, `database is locked`) wylacza cache na reszte
+  zycia instancji `MetadataCache` — odczyty to chybienie, zapisy no-op,
+  `stats()` zwraca zera i nowy klucz `error`, nowa wlasciwosc
+  `MetadataCache.error`; jedno ostrzezenie na instancje (`logger.warning`
+  albo nowy parametr `on_disabled=`), bez wyjatku do wolajacego,
+  thread-safe. Wczesniej lista arkuszy konczyla sie porazka KAZDEGO arkusza
+  (`file is not a database`, kod 1), a pojedyncze godlo `Error:
+  DatabaseError`. CLI pobierania drukuje jedno ``Warning: cache metadanych
+  nieczytelny (<sciezka>): <blad> — praca bez cache; uzyj `kartograf cache
+  clear` albo usun plik`` na stderr (takze z `-q`), kod wyjscia wedlug wyniku
+  pobrania; blokada przez inny proces daje `Warning: cache metadanych
+  zablokowany przez inny proces (...)` bez rady usuniecia pliku.
+  `kartograf cache clear` usuwa nieczytelny plik wraz z `-wal`/`-shm`
+  (`Usunieto nieczytelny plik cache: <sciezka>`, kod 0; brak prawa do
+  usuniecia albo blokada = `Error:`, kod 1), `cache stats` drukuje ``Error:
+  cache nieczytelny: <sciezka> (<blad>) — uzyj `kartograf cache clear` ``
+  (kod 1), `cache path` dziala bez zmian.
 - **Godlo CZ SM5 bez `--resolution` pobiera 5m:** arkusz SM5 (np.
   `kartograf download CTES96`) to gotowy plik DMR 4G istniejacy tylko
   w 5 m, wiec CLI wyznacza rozdzielczosc z godla (takze pod

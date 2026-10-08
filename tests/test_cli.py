@@ -3659,6 +3659,25 @@ class TestCmdDownloadCz:
         assert cache._refresh is force
         assert cache._conn is None
 
+    def test_unreadable_cache_warns_and_downloads(self, tmp_path, capsys):
+        """An unreadable cache in the CZ path: one ``Warning:``, code 0."""
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        db = Path.cwd() / ".kartograf_cache.db"
+        db.write_bytes(b"to nie jest baza SQLite\n" * 200)
+
+        def factory(**kwargs):
+            kwargs["cache"].get_sheet("cz_sm5", "CTES96")
+            return _cz_provider_mock()
+
+        with patch(_CZ_FACTORY_PATCH, side_effect=factory):
+            result = _cmd_download_cz(_cz_args(tmp_path))
+
+        assert result == 0
+        err = capsys.readouterr().err
+        assert "Error:" not in err
+        assert f"Warning: cache metadanych nieczytelny ({db})" in err
+
     def test_tm33_godlo_writes_sidecar(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
@@ -6127,6 +6146,117 @@ class TestSingleGodloSkipMessage:
 
         assert "Downloaded to" in capsys.readouterr().out
         assert len(provider.calls) == 2
+
+
+class _CachingSheetProvider(_SheetProvider):
+    """``_SheetProvider`` that reads/writes the CLI cache like GugikProvider."""
+
+    def __init__(self, cache):
+        super().__init__({})
+        self.cache = cache
+
+    def download(self, godlo, path, timeout=30):
+        if self.cache.get_record("nmt", "1m", "EVRF2007", godlo) is None:
+            self.cache.set_record("nmt", "1m", "EVRF2007", godlo, {"godlo": godlo})
+        return super().download(godlo, path, timeout)
+
+
+class TestUnreadableMetadataCache:
+    """An unreadable ``.kartograf_cache.db`` in the cwd does not block downloads.
+
+    Before the fix every sheet of a list failed with ``file is not a
+    database`` (code 1, nothing downloaded) and a single sheet code ended with
+    ``Error: DatabaseError`` from the ``main`` barrier.
+    """
+
+    _GODLA = [f"N-34-130-D-d-2-{i}" for i in (1, 2, 3, 4)]
+
+    @staticmethod
+    def _broken_cache() -> Path:
+        db = Path.cwd() / ".kartograf_cache.db"
+        db.write_bytes(b"to nie jest baza SQLite\n" * 200)
+        return db
+
+    @staticmethod
+    def _run(tmp_path, argv, godla=()):
+        from kartograf.download.storage import FileStorage
+
+        out = tmp_path / "out"
+        storage = FileStorage(out, resolution="1m", vertical_crs="EVRF2007")
+        providers = []
+
+        def create(*_args, cache=None, **_kwargs):
+            providers.append(_CachingSheetProvider(cache))
+            return providers[-1], storage
+
+        with (
+            patch(
+                "kartograf.cli.download_cmd._create_provider_and_storage",
+                side_effect=create,
+            ),
+            patch(
+                "kartograf.cli.download_cmd.find_sheets_for_bbox",
+                return_value=list(godla),
+            ),
+        ):
+            rc = main([*argv, "-o", str(out)])
+        files = sorted(p.name for p in out.rglob("*.asc"))
+        return rc, providers, files
+
+    @staticmethod
+    def _cache_warnings(err: str) -> list[str]:
+        return [line for line in err.splitlines() if "cache metadanych" in line]
+
+    @pytest.mark.parametrize("workers", ["1", "4"])
+    @pytest.mark.parametrize("quiet", [False, True], ids=["verbose", "quiet"])
+    def test_sheet_list_downloads_with_one_warning(
+        self, tmp_path, capsys, workers, quiet
+    ):
+        db = self._broken_cache()
+        argv = ["download", "--bbox", "630000,480000,637000,487000"]
+        argv += ["--country", "pl", "--workers", workers]
+        if quiet:
+            argv.append("-q")
+
+        rc, providers, files = self._run(tmp_path, argv, godla=self._GODLA)
+
+        assert rc == 0
+        assert files == [f"{g}.asc" for g in self._GODLA]
+        assert sorted(providers[0].calls) == self._GODLA
+        err = capsys.readouterr().err
+        assert "Error:" not in err
+        assert "file is not a database" in err
+        warnings = self._cache_warnings(err)
+        assert warnings == [
+            f"Warning: cache metadanych nieczytelny ({db}): file is not a "
+            "database — praca bez cache; uzyj `kartograf cache clear` albo "
+            "usun plik"
+        ]
+        assert db.read_bytes().startswith(b"to nie jest baza")  # untouched
+
+    def test_single_godlo_downloads_with_warning(self, tmp_path, capsys):
+        self._broken_cache()
+
+        rc, providers, files = self._run(tmp_path, ["download", "N-34-130-D-d-2-4"])
+
+        assert rc == 0
+        assert files == ["N-34-130-D-d-2-4.asc"]
+        assert providers[0].calls == ["N-34-130-D-d-2-4"]
+        captured = capsys.readouterr()
+        assert "Downloaded to" in captured.out
+        assert "Error:" not in captured.err
+        assert len(self._cache_warnings(captured.err)) == 1
+        assert captured.err.startswith("Warning: cache metadanych nieczytelny (")
+
+    def test_warning_once_per_command_not_per_process(self, tmp_path, capsys):
+        """Every command reports the broken cache again (dedup reset)."""
+        self._broken_cache()
+        argv = ["download", "N-34-130-D-d-2-4", "--force"]
+
+        self._run(tmp_path, argv)
+        self._run(tmp_path, argv)
+
+        assert len(self._cache_warnings(capsys.readouterr().err)) == 2
 
 
 class TestLazSidecarRequestFilters:
