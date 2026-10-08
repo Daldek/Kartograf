@@ -17,12 +17,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **`MetadataCache.__del__`** nie importuje i nie rzuca przy zamykaniu
   interpretera (`ImportError: sys.meta_path is None`).
 
-### Kampanie GUGiK 2026-10-07 (ADR-030 + errata 2026-10-07)
+### Kampanie GUGiK 2026-10-07 (ADR-030, errata 1–5)
 - **Poprawki po tescie na zywo (FB):** `Error:` w torze godla/listy nie
   poprzedza pusta linia, gdy pasek postepu nie zostal rozpoczety;
   wycinek `--target-crs` przy awarii skorowidza (lokalna kampania `newest`)
   raportuje `PlCutoutResult.unverified`, `extra.unverified_sheets`
-  w sidecarze i `Warning:` (I-1); liczba kampanii logowana raz (manager).
+  w sidecarze i `Warning:` (I-1, errata 5 ADR-030); liczba kampanii
+  logowana raz (manager).
 - **BREAKING (układ `data/`):** prawdziwe pliki NMT/NMPT/orto PL leżą
   wyłącznie w `<segment>/kampanie/<data>_<id>/<hierarchia godła>/<godło>.<ext>`
   (+ `.meta.json`); ścieżka standardowa `<segment>/<hierarchia>/<godło>.<ext>`
@@ -118,7 +119,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   zmian (bez dowiązań).
 - Pojedyncze godło: „Skipped” zależy od `manager.last_sheet.skipped`
   (wcześniej pre-check istnienia pliku w CLI).
-- `newest` przy awarii skorowidza GUGiK (I-1): błąd TRANSPORTU przy
+- `newest` przy awarii skorowidza GUGiK (I-1, errata 5 ADR-030): błąd TRANSPORTU przy
   rozwiązywaniu rekordu (sieć, HTTP 429/5xx; nie brak pokrycia, nie inne 4xx
   ani raport OGC) na arkuszu z istniejącą lokalną kampanią nie jest porażką —
   arkusz pominięty z lokalnej kampanii (dowiązanie bez zmian), `Warning:`
@@ -263,15 +264,6 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
 `impl-porzadki.md`).
 
 **BREAKING**
-- Usunięte `kartograf.providers.cuzk.Sm5Sheet` (także
-  `providers.cuzk.sheets.Sm5Sheet`) — jedynym producentem była fabryka
-  rejestru, której nikt nie wołał. Arkusz SM5 po godle: `SheetIndex.sm5_sheet`.
-- `core.parser_registry`: usunięte `register_system`, `_REGISTRY`
-  i `SheetSystem.parser_factory`; rejestr to literał `SYSTEMS`.
-  `detect_system` zwraca `SheetSystem` (nigdy `None` — `pl1992` jest
-  fallbackiem). Wzorce godeł CZ: `parser_registry.CZ_TM33_PATTERN`
-  i `CZ_SM5_PATTERN` (zamiast `parser_tm33._GODLO_RE`, `sheets._SM5_RE`).
-  `kartograf/__init__.py` bez zmian; Hydrograf/Hydrolog nie importują tych nazw.
 - `find_sheets_for_bbox` / `find_sheets_2000_for_bbox` zgłaszają
   `ValidationError` dla bboxa odwróconego (`min > max`) albo z NaN/inf —
   dotąd zwracały arkusz-śmieć (`BBox(10, 10, 5, 5)` -> `L-33-1-D-c-4-3`)
@@ -279,10 +271,8 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
 - `kartograf.cli.commands` (fasada) nie re-eksportuje już prywatnych
   `_create_provider_and_storage` i `_resolve_laz_bbox` — importować
   z `kartograf.cli.download_cmd` (używały ich tylko testy; K9).
-- Usunięte prywatne `core.geometry._transform_bbox` (4 narożniki),
-  `download.cutout._sheet_frame_transformer`/`_sheet_frame_2180`,
-  `_CZ_CRS`, `cli.download_cmd._CZ_CRS_WKIDS` i `providers.cuzk.dmr._EDGE_SAMPLES`
-  — zastępują je `core.bbox.transform_bbox` i `is_czech_crs` (K6).
+- Usunięte prywatne `core.geometry._transform_bbox` (4 narożniki) —
+  zastępuje je `core.bbox.transform_bbox` (K6).
 
 **Fixed**
 - `find_sheets_for_bbox(..., system="2000")` z bboxa WGS84 przecinającego
@@ -397,7 +387,7 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   przez rekordy skorowidza, `horizontal_crs_for_uklad` (sidecar) i
   `LazTile.uklad`. Nietypowa wartość (np. `PL-2000` bez strefy) jest
   odrzucana spójnie: rekord skorowidza bez układu, kafel LAZ pominięty
-  w discovery (ostrzeżenie w logu), **BREAKING:** `LazTile.uklad` rzuca
+  w discovery (ostrzeżenie w logu), `LazTile.uklad` rzuca
   `ValidationError` zamiast zgadywać z formatu godła (wcześniej segment
   `pl_2000` przy sidecarze EPSG:2180). Realne dane GUGiK mają wyłącznie
   wartości rozpoznawane (E2E 2026-10-06, E11) (review-1 D3).
@@ -430,9 +420,8 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   CLAUDE.md, SCOPE, ARCHITECTURE, docstringu `download_pl_cutout`
   i erracie ADR-028 (N4); lista timeoutów bez martwego „CORINE przez
   TERYT” (N10); krawędź `cli -> transport` w ARCHITECTURE 2 (N13);
-  rozszerzenie pliku landcover nadaje provider (N14); errata ADR-023
-  (f).1 — LAZ bez `parent_request` (N15); docstringi `LandCoverManager`
-  i `MetadataCache` (N16).
+  rozszerzenie pliku landcover nadaje provider (N14); docstringi
+  `LandCoverManager` i `MetadataCache` (N16).
 
 ### Polityka ponowień HTTP i sesja BDOT10k (2026-10-06)
 - Pobieranie GUGiK (NMT/NMPT/orto/LAZ/BDOT10k) oraz wspólny transport
@@ -464,7 +453,7 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   i `kartograf cache stats` (`Record entries`) liczą nowe rekordy.
   `--force` omija cache rekordów, `download_pl_cutout(cache=)` daje
   bibliotece opcjonalny cache.
-- Usunięto zaszyte `WMS_LAYERS` i `FALLBACK_YEARS`: discovery warstw
+- Usunięto zaszyte `WMS_LAYERS` (i listę lat LAZ): discovery warstw
   i lat bazuje na GetCapabilities; awaria daje `DownloadError`.
   `GugikOrtoProvider(color="RGB")` domyślnie wybiera RGB, a
   `color="CIR"` żąda podczerwieni.
@@ -479,8 +468,7 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   `off_grid_sheets` (W1); arkusze PL-2000 dostają rzeczywisty
   `horizontal_crs` EPSG:2176–2179. `PlCutoutResult` dodaje
   `all_nodata` i `off_grid_sheets`; pominięty wycinek odtwarza
-  brakujące/odchylone arkusze z sidecara. 16 testów `live` zamiast 8
-  (nieuruchomione w tej fali).
+  brakujące/odchylone arkusze z sidecara.
 - Istniejące rastry CZ i wycinki PL -> EPSG:5514 z sidecarem
   `S-JTSK to ETRS89 (3)` były liczone słowacką operacją i mogą być
   przesunięte o 1–5 m; CLI drukuje `Info:` przy ich pominięciu,
@@ -524,8 +512,8 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
 - **N4:** Pominięte arkusze dopisują nowe żądania do `parent_requests`,
   a pominięty wycinek odczytuje `missing_sheets` i `off_grid_sheets`
   z sidecara.
-- **N5:** Osiem testów WMS PL-2000 ma asercje wobec prawdziwych
-  rekordów/CRS zamiast samych połączeń (łącznie 16 testów `live`).
+- **N5:** Testy `live` WMS PL-2000 mają asercje wobec prawdziwych
+  rekordów/CRS zamiast samych połączeń.
 - **N6:** CLI podpina cache rekordów do pobierania PL, aby kolejny
   przebieg bez `--force` nie pytał ponownie skorowidza.
 - **N7:** Awaria discovery rocznika LAZ zgłasza `DownloadError` z rokiem,
@@ -541,24 +529,22 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
 
 ### Breaking Changes
 - **Przejscie z 0.6.1 — co zrobic (m.in. Hydrograf):**
-  - **Istniejacy cache `data/`** — Kartograf nie migruje go sam, a sciezki
-    z 0.6.1 przestaja byc widziane jako pobrane (`skip_existing` pobierze
-    wszystko ponownie). Przed upgradem przenies katalogi: z `nmt_5m/`
-    hierarchie godel PL-1992 (`N-34/...`, `M-33/...`) do
-    `nmt/pl_1992_5m_evrf2007/`, a hierarchie PL-2000 (`5/`..`8/`) do
-    `nmt/pl_2000_5m_evrf2007/`; z `nmt_1m/` analogicznie do
-    `nmt/pl_<uklad>_1m_<vcrs>/`, gdzie `<vcrs>` trzeba znac z wlasnej
-    konfiguracji (0.6.1 nie pisal sidecarow, a arkusze KRON86 i EVRF2007
-    dzielily w nim jeden katalog; domyslny byl EVRF2007) — przed
-    przeniesieniem sprawdz `cellsize` w naglowku ASC (w cache Hydrografu
-    katalog `nmt_1m/` zawiera pliki 5 m). Analogicznie `nmpt/`, `orto/`, `laz/`
-    (tabela nizej). Pliki przeniesione nie dostaja sidecarow (pobranie
-    pominiete jako istniejace nie pisze sidecara).
+  - **Istniejacy cache `data/` nie jest reuzywany** — arkusze NMT/NMPT/orto
+    z 0.6.1 (`nmt_1m/`, `nmt_5m/`, `nmpt/`, `orto/`) zostana pobrane ponownie,
+    takze jesli przeniesiesz je recznie do nowych segmentow: prawdziwe pliki
+    leza teraz w `<segment>/kampanie/`, a zwykly plik w sciezce standardowej
+    (bez sidecara z `extra.link`) jest dla Kartografa nieznany — pierwsze
+    uruchomienie pobiera go do `kampanie/` i zastepuje dowiazaniem (ADR-030,
+    patrz wpis "BREAKING (uklad `data/`)" w sekcji kampanii). Reczna migracja
+    nie oszczedza wiec transferu; zaplanuj miejsce i czas pierwszego
+    pobrania, a stare katalogi usun po nim. `landcover/` bez zmian. Tabela
+    migracji nizej opisuje odpowiedniosc katalogow (np. dla wlasnych skryptow
+    czytajacych `data/`).
   - **Importy** — przeniesione moduly providerow nie maja shimow:
     `from kartograf.providers.bdot10k import Bdot10kProvider` konczy sie
     `ModuleNotFoundError`; uzyj `from kartograf import Bdot10kProvider` albo
     `kartograf.providers.pl.bdot10k` (pelna tabela nizej: `gugik`,
-    `gugik_nmpt`, `gugik_orto`, `gugik_laz`, `bdot10k`, `landcover_base`).
+    `gugik_nmpt`, `gugik_orto`, `bdot10k`, `landcover_base`).
     Prywatne `Bdot10kProvider._get_teryt_for_point()` nadal istnieje.
   - **Jeden raster NMT dla obszaru** — zamiast skladac mozaike samemu
     (albo z `kartograf.transport.mosaic.mosaic_and_crop`, ktore NIE jest
@@ -570,8 +556,7 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
     `run_pl_cutout(provider=...)`.
   - **Pozostale zmiany widoczne dla konsumenta:** sidecar `<plik>.meta.json`
     obok kazdego pobranego pliku; `NoCoverageError` jest podklasa
-    `DownloadError` (`except DownloadError` lapie oba);
-    `vertical_crs_code("EVRF2007")` = `EPSG:5621`; `import kartograf` laduje
+    `DownloadError` (`except DownloadError` lapie oba); `import kartograf` laduje
     `rasterio`; w CLI domyslne `--country auto` (tabele i opisy nizej).
 - **Nowy uklad `data/` — segmenty `<produkt>/<kraj>_<uklad>[_<wariant>][_<vcrs>]`**
   (ADR-026, decyzje D1-D8; kanoniczny opis: `docs/ARCHITECTURE.md` sekcja 3).
@@ -586,21 +571,20 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   | `nmt_5m/` | `nmt/pl_<uklad>_5m_evrf2007/` |
   | `nmpt/` | `nmpt/pl_<uklad>_1m_<vcrs>/` |
   | `orto/` | `orto/pl_<uklad>/` |
-  | `laz/` | `laz/pl_<uklad>_<vcrs>/` |
+  | `laz/` (tylko 0.7.0-dev) | `laz/pl_<uklad>_<vcrs>/` |
   | `cz_dmr5g/` (tylko 0.7.0-dev) | `nmt/cz_dmr5g_<vcrs>/` |
   | `cz_dmr4g/` (tylko 0.7.0-dev) | `nmt/cz_dmr4g_<vcrs>/` |
 
   `<uklad>` bierze sie z formatu godla KAZDEGO pliku z osobna (kropki ->
-  `2000`, myslniki -> `1992`) — stary `nmt_5m/`, `nmpt/`, `orto/` i `laz/`
-  trzymaly oba systemy razem, wiec jeden stary katalog rozchodzi sie przy
-  migracji na dwa segmenty. `<vcrs>` przy migracji recznej odczytaj
-  z sidecara (`vertical_crs`);
-  pliki sprzed etapu 0 nie maja sidecarow — wtedy re-download albo wiedza
-  wlasna uzytkownika. Kartograf nie migruje `data/` automatycznie: pliki
-  w starym ukladzie przestaja byc widziane jako pobrane. `landcover/` bez zmian.
-- **`SourceDescriptor.storage_subdir` zmienia semantyke: literal -> szablon**
-  z placeholderami `{uklad}`/`{vcrs}` (ADR-026). Konsument czytajacy pole
-  wprost dostanie szablon — uzywaj `resolve_subdir()`.
+  `2000`, myslniki -> `1992`; kafle LAZ — z `uklad_xy` kafla) — stare
+  `nmt_5m/`, `nmpt/` i `orto/` trzymaly oba systemy razem, wiec jeden stary
+  katalog odpowiada dwom segmentom. Kartograf nie migruje `data/`
+  automatycznie. Dla NMT/NMPT/orto PL reczne przeniesienie nie zapobiega
+  ponownemu pobraniu (pliki trafiaja do `kampanie/`, ADR-030 — patrz
+  "Przejscie z 0.6.1" wyzej); przeniesienie wedlug tabeli ma sens tylko dla
+  danych z 0.7.0-dev bez kampanii (`laz/`, `cz_dmr5g/`, `cz_dmr4g/`),
+  ktore sa pomijane po istnieniu pliku. `<vcrs>` odczytaj wtedy z sidecara
+  (`vertical_crs`). `landcover/` bez zmian.
 - **Glebokie sciezki importu providerow** (bez shimow — decyzja z review
   specu etapu 0; publiczne API `from kartograf import ...` BEZ zmian):
 
@@ -609,7 +593,6 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   | `kartograf.providers.gugik` | `kartograf.providers.pl.gugik` |
   | `kartograf.providers.gugik_nmpt` | `kartograf.providers.pl.gugik_nmpt` |
   | `kartograf.providers.gugik_orto` | `kartograf.providers.pl.gugik_orto` |
-  | `kartograf.providers.gugik_laz` | `kartograf.providers.pl.gugik_laz` |
   | `kartograf.providers.bdot10k` | `kartograf.providers.pl.bdot10k` |
   | `kartograf.providers.landcover_base` | `kartograf.providers.base` |
 
@@ -618,26 +601,6 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   tylko `teryt`, `output_path`, `timeout`; kazdy kolejny argument (np. `format`
   w `Bdot10kProvider.download_by_admin_unit`) przekazany pozycyjnie (4. argument)
   konczy sie `TypeError`. Przekazuj takie argumenty jako keyword (`format=...`).
-- **Sidecary CZ: `transform.horizontal` zmienia format i zakres** (ADR-024).
-  Bylo `"server:EPSG:<kod>"` (tylko przy `--target-crs`), jest
-  `"pinned: <opis operacji> (<dokladnosc> m)"` — i pojawia sie takze dla kafli
-  TM33 pobranych godlem, ktore dotad mialy `transform: null`. Konsumenci
-  parsujacy prefiks `server:` musza zostac dostosowani; format jest teraz
-  wspolny dla obu osi (`transform.vertical` mial go od poczatku).
-- **`vertical_crs_code("EVRF2007")` zwraca teraz `EPSG:5621`** (ogolnoeuropejski
-  EVRF2007), nie `EPSG:9651` (dawna wartosc dla realizacji polskiej). Powod:
-  `EVRF2007` jest teraz nazwa RODZINY ukladow, wspolna dla PL i CZ. Realizacja
-  polska dostepna pod nowa nazwa `EVRF2007-PL`. Sidecary PL bez zmian tresci
-  (mapowanie rodzina→realizacja przez nowa funkcje `resolve_vertical_crs`).
-  Dotyczy: Hydrograf/Hydrolog, jesli woluja `vertical_crs_code` bezposrednio.
-
-  | Nazwa (CLI/API) | Stary kod (< 0.7.0) | Nowy kod (>= 0.7.0) |
-  |---|---|---|
-  | `KRON86` | `EPSG:9650` | `EPSG:9650` (bez zmian) |
-  | `EVRF2007` | `EPSG:9651` (realizacja PL) | `EPSG:5621` (rodzina, ogolnoeuropejski) |
-  | `EVRF2007-PL` | — (nie istniala) | `EPSG:9651` (nowa nazwa realizacji polskiej) |
-  | `Bpv` | — (nie istniala, CZ) | `EPSG:8357` (Baltic 1957, CUZK) |
-
 - **`SoilGridsProvider.download_by_teryt()` rzuca `NotImplementedError`** —
   dotad zwracal jako sukces dane dla stalego obszaru 60x60 km wokol srodka
   WOJEWODZTWA (2-cyfrowy prefiks TERYT), identyczne dla kazdej gminy w tym
@@ -714,6 +677,18 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   `cmd_landcover_list_sources`, `cmd_soilgrids_hsg`; import z fasady konczy sie
   `ImportError`, kanoniczne sa moduly `cli/*_cmd.py` (szczegoly w Removed).
   (audyt 0.7.0: A5-1)
+- **Usuniete publiczne atrybuty i metody klas eksportowanych w `kartograf`**
+  (porownanie z 0.6.1; dostep konczy sie `AttributeError`):
+
+  | Usuniete | Zamiast |
+  |---|---|
+  | `MetadataCache.get_url()` / `set_url()` | `get_record()` / `set_record()` (rekord skorowidza albo potwierdzony brak pokrycia; tabela `url_cache` usuwana przy otwarciu) |
+  | `WMS_LAYERS` (`GugikProvider`, `GugikNmptProvider`, `GugikOrtoProvider`) | brak listy zaszytej — warstwy z GetCapabilities (`LAYER_PATTERN` providera) |
+  | `GugikProvider.FORMAT_EXTENSIONS` (takze w `GugikNmptProvider`) | `get_file_extension()` (dziedziczone z `BaseProvider`) |
+  | `GugikOrtoProvider.OPENDATA_URL_PATTERN` | brak — URL arkusza z rekordu skorowidza |
+  | `RETRY_BACKOFF_BASE` (`GugikProvider`, `GugikNmptProvider`, `GugikOrtoProvider`, `Bdot10kProvider`, `CorineProvider`, `SoilGridsProvider`) | `kartograf.transport.http.RETRY_BACKOFF_BASE` (jeden backoff dla wszystkich) |
+  | `CorineProvider.DLR_YEARS` | brak (martwy kod, patrz Removed) |
+  | `SoilGridsProvider.TERYT_WMS_ENDPOINT` | brak — `download_by_teryt()` rzuca `NotImplementedError` (wyzej) |
 - **Zmiany zachowania widoczne dla skryptow** (tresc wpisow w Changed/Fixed):
   - pobranie hierarchii z porazkami konczy sie kodem 1, nie 0 (Fixed, A2-3);
   - `DownloadManager(provider=GugikNmptProvider())` bez `storage=` pisze do
@@ -721,7 +696,11 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   - domyslne `--country auto` doklada dla zadan w poludniowej Polsce plik
     i sidecar z CUZK (Changed, A6-3);
   - selekcja arkuszy z bboxa EPSG:2180 przecinajacego 19°E zwraca wiecej
-    arkuszy (Fixed, poludnik osiowy).
+    arkuszy (Fixed, poludnik osiowy);
+  - BDOT10k `format="SHP"` (`--format SHP`) zapisuje archiwum ZIP pod
+    rozszerzeniem `.zip` i zwraca te sciezke (np. `bdot10k_teryt_1465.zip`)
+    — w 0.6.1 ZIP trafial pod podana sciezke, zwykle `.gpkg` (Runda
+    review/E2E 2026-10-06, review N1).
 
 ### Added
 - **Wycinek PL jako API biblioteki** (`kartograf.download.cutout`, eksport
@@ -780,19 +759,28 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
 - **Etap 0 — architektura zrodel wielokrajowych (przygotowanie pod CZ/DE/SK)**
   - `kartograf/sources/` — deskryptory zrodel (SourceDescriptor, AccessChannel,
     TransportKind, LicenseInfo, CountryProfile) + rejestr (`get_source`,
-    `sources_for`, `get_country`, `vertical_crs_code`); zero IO przy imporcie
+    `sources_for`, `get_country`, `vertical_crs_code`); zero IO przy imporcie.
+    `SourceDescriptor.storage_subdir` to szablon z `{uklad}`/`{vcrs}` (ADR-026)
+    — sciezke daje `resolve_subdir()`, nie odczyt pola wprost
+  - Nazwy ukladow pionowych -> kody (`vertical_crs_code`): `KRON86` =
+    `EPSG:9650`, `EVRF2007` = `EPSG:5621` (rodzina, ogolnoeuropejski, wspolna
+    dla PL i CZ), `EVRF2007-PL` = `EPSG:9651` (realizacja polska), `Bpv` =
+    `EPSG:8357` (Baltic 1957, CUZK); sidecary PL deklaruja realizacje polska
+    (mapowanie rodzina -> realizacja: `resolve_vertical_crs`)
   - **Sidecar metadanych**: po kazdym udanym pobraniu powstaje
     `<plik>.meta.json` (schema `kartograf-meta/1`: dataset, CRS-y, nodata,
     licencja, request, wersja) — kontrakt dla Hydrografa; blad zapisu sidecara
-    nie przerywa pobrania
+    nie przerywa pobrania (wyjatek: obowiazkowy sidecar pliku kampanii,
+    ADR-030)
   - `kartograf/transform/crs.py` — twarda polityka transformacji:
     `TransformerGroup(allow_ballpark=False)`, filtr dokladnosci, probe
     odrzucajacy siatki obcych krajow (inf), kontrola isfinite,
     `TransformError`/`TransformUnavailableError` z remedium; `KNOWN_PATHS`
   - `kartograf/transport/` — `download_to()` (atomic write + retry) i
     `mosaic_and_crop()` (rasterio.merge + przyciecie, propagacja nodata)
-  - `kartograf/core/parser_registry.py` — rejestr systemow godel (pl1992,
-    pl2000); `SheetParser` i `FileStorage` deleguja do rejestru (wyniki
+  - `kartograf/core/parser_registry.py` — rejestr systemow godel (literal
+    `SYSTEMS`; `detect_system` zawsze zwraca `SheetSystem`, fallbackiem jest
+    `pl1992`); `SheetParser` i `FileStorage` deleguja do rejestru (wyniki
     identyczne)
   - `providers/pl/__init__.py`: fabryka `create_nmt_provider()` — jedno
     miejsce polskich domyslow NMT (w tym regula 5m => EVRF2007)
@@ -807,9 +795,10 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
 - **Etap 1 — Czechy (CUZK)**
   - `providers/cuzk/` — `CuzkClient` (pierwszy silnik sterowany deskryptorem:
     `AccessChannel.endpoint`; `query()` z paginacja i filtrem nadmiarowego
-    wyboru po stronie klienta, `export_image()` z kafelkowaniem 15000x4100 px
-    + nadpisaniem CRS, `fetch_file()` z ZIP openzu → TIFF+TFW), `SheetIndex`/
-    `SheetInfo`/`Sm5Sheet` (indeks arkuszy SM5/TM33 z KladyMapovychListu),
+    wyboru po stronie klienta, `export_image()` z kafelkowaniem (budzet
+    4 Mpx na zapytanie, kotwica NW) + nadpisaniem CRS, `fetch_file()` z ZIP
+    openzu → TIFF+TFW), `SheetIndex`/`SheetInfo` (indeks arkuszy SM5/TM33
+    z KladyMapovychListu; arkusz SM5 po godle: `SheetIndex.sm5_sheet`),
     `CuzkDmrProvider` + fabryka `create_dmr_provider` — DMR 5G/4G (CUZK),
     godla TM33/SM5, bbox przez exportImage, opcjonalna transformacja
     Bpv->EVRF2007 (EPSG:8357 -> EPSG:5621, przypieta operacja 0,1 m, offset
@@ -818,7 +807,7 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   - `core/parser_tm33.py` — `ParserTM33`: obliczalna siatka kafli TM33
     2x2 km (EPSG:3045, godlo `{E_km}_{N_km}` = naroznik SW), wzorowana na
     `Parser2000`; zarejestrowana w `parser_registry` jako `cz_tm33`/`cz_sm5`
-    (przed fallbackiem pl1992)
+    (przed fallbackiem pl1992; wzorce godel `CZ_TM33_PATTERN`/`CZ_SM5_PATTERN`)
   - `AccessChannel.endpoint` — nowe pole deskryptora: jedyne zrodlo URL-i dla
     silnikow sterowanych deskryptorem (CZ); kanaly PL maja `endpoint=""`
     (zrodlem prawdy pozostaja stale providerow z etapu 0)
@@ -851,9 +840,9 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   - `extra.parent_request` w sidecarach trybu bbox/geometry (oryginalny bbox
     zadania, jego uklad i **probowane** — niekoniecznie pobrane — kraje) —
     grupowanie plikow jednego zadania, takze po obu stronach granicy; tryb
-    godlowy sidecarow nie zmienia (nigdy nie dostaje `parent_request`), a tor
-    `--product laz` ma wlasny przeplyw i niesie w `extra` pola kafla
-    (backlog)
+    godlowy sidecarow nie zmienia (nigdy nie dostaje `parent_request`);
+    sidecar kafla `--product laz` niesie `parent_request` w trybie
+    `--bbox`/`--geometry` obok pol kafla (ADR-029, patrz LAZ 2026-10-07)
   - `--product laz` w trybie obszarowym `--country auto`: obszar siegajacy CZ
     konczy sie bledem z podpowiedzia `--country pl` (bez cichego pomijania kraju)
 - **Nowy produkt: LAZ — chmury punktow LIDAR (dane pomiarowe ALS) z GUGiK**
@@ -865,23 +854,28 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
     godlo kafla jest **nieparsowalne** i traktowane jako etykieta — `url_do_pobrania`
     bierzemy wprost z atrybutu WFS, bez konstruowania URL i bez `SheetParser`
   - WFS zwraca metadane: rok (`akt_rok`), gestosc (`char_przestrz`), CRS, geometria
-  - Domyslnie: EVRF2007, **najnowszy rok per kafel** (dedup po godle); flagi
-    `--year`, `--vertical-crs`, `--min-density` do nadpisania
+  - Domyslnie: EVRF2007, **najnowsze kafle per obszar** (ADR-029:
+    wybor od najnowszego `akt_rok`, starszy kafel pominiety, gdy jego czesc
+    wspolna z obszarem pokrywaja wybrane juz kafle — patrz LAZ 2026-10-07);
+    flagi `--year`, `--vertical-crs`, `--min-density`, `--campaigns`,
+    `--min-year`
   - CLI: `kartograf download <godlo|--bbox|--geometry> --product laz [...]`,
     pobieranie rownolegle (`--workers`), pomijanie istniejacych plikow
   - `GugikLazProvider._fetch_available_years()` / `_get_available_years()` —
-    lista lat z WFS GetCapabilities, in-memory cache, fallback na hardcoded
+    lista lat wylacznie z WFS GetCapabilities (bez listy zaszytej; awaria =
+    `DownloadError`), in-memory cache tylko udanych odpowiedzi
   - `FileStorage.get_raw_path()` — sciezka dla nieparsowalnego (drobnego) godla
     bez `SheetParser`; pliki w
     `laz/pl_<uklad>_<vcrs>/<hierarchia godla>/<oryginalna nazwa>.laz`
   - Eksport: `GugikLazProvider`, `LazTile` w `kartograf/__init__.py`
-  - Weryfikacja: pobrano realne pliki LAZ (magic `LASF`) E2E; 41 nowych testow
-- **Walidacja warstw WMS przez GetCapabilities dla Ortofotomapy**
-  - `GugikOrtoProvider._fetch_wms_layers()` i `_get_validated_layers()` — analogicznie
-    do GugikProvider; dotad orto NIE mialo zadnego fallbacku (twarda lista)
-  - Lazy, in-memory cache per instancja; graceful fallback do `WMS_LAYERS` przy bledzie
-  - Filtruje prefiks `SkorowidzeOrtofotomapy`, wyklucza warianty `Zasiegi`,
-    sortuje malejaco po roczniku (warstwa `Starsze` na koncu)
+  - Weryfikacja: pobrano realne pliki LAZ (magic `LASF`) E2E
+- **Warstwy skorowidza GUGiK (NMT/NMPT/orto) wylacznie z GetCapabilities**
+  — wspolne `skorowidz._fetch_wms_layers` z wzorcem `LAYER_PATTERN`
+  providera (orto: `SkorowidzeOrtofotomapy<rok>`/`Starsze`, bez wariantow
+  `Zasiegi`), warstwy roczne malejaco, zbiorcze i `Starsze` na koncu;
+  in-memory cache per instancja tylko udanych odpowiedzi. Bez list zaszytych
+  i bez fallbacku: awaria GetCapabilities = `DownloadError` (zastepuje
+  zaszyte `WMS_LAYERS` i fallback z 0.6.1 — patrz Breaking Changes)
 - **Audyt przedwydaniowy 0.7.0**
   - `DownloadManager.last_result` — podsumowanie `DownloadResult` (succeeded /
     failed / skipped / no_coverage) ostatniego `download_hierarchy()` /
@@ -927,9 +921,7 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
 - `FileStorage` bierze szablony segmentow z deskryptorow rejestru zamiast
   wlasnych kopii (jedno zrodlo prawdy, ADR-026; review max, zn. 11).
 - Czesciowa awaria warstw skorowidza GUGiK przy braku arkusza w pozostalych
-  to teraz "brak pokrycia niepewny" (`DownloadError`), nie brak pokrycia;
-  URL innego arkusza z fallbacku skorowidza loguje ostrzezenie (arkusze
-  PL-2000 pod godlem PL-1992).
+  to teraz "brak pokrycia niepewny" (`DownloadError`), nie brak pokrycia.
 - `DownloadManager` bierze uklad pionowy segmentu z PROVIDERA, nie z wlasnej
   flagi `vertical_crs=` — `DownloadManager(provider=GugikProvider(
   vertical_crs="KRON86"))` pisal dotad do `nmt/pl_1992_1m_evrf2007/` obok
@@ -941,8 +933,9 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   uklad zasmiecal korzen `data/`; uklad plaski nigdy nie zostal wydany
   (oba warianty tylko w 0.7.0-dev) (segment wg ADR-026)
 - LAZ: segment storage wyznaczany per kafel z `uklad_xy`
-  (`laz/pl_<uklad>_<vcrs>/`); fallback: format godla, ostatecznie `2000`
-  z ostrzezeniem w logu
+  (`LazTile.uklad`, `laz/pl_<uklad>_<vcrs>/`); wartosc nierozpoznana =
+  `ValidationError`, a discovery pomija taki kafel z ostrzezeniem w logu
+  (bez zgadywania z formatu godla)
 - CLI: sentinele `None` dla `--resolution`/`--vertical-crs`/`--system`
   rozwiazywane dopiero po ustaleniu kraju docelowego (PL: 1m/EVRF2007/1992
   bez zmian; CZ: 2m/Bpv, `--system` nie dotyczy) — zamiast twardo zakodowanych
@@ -958,8 +951,7 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
 - Sidecary PL w trybie `--bbox`/`--geometry` (takze `--country pl`/`auto`)
   dostaja teraz dodatkowo `extra.parent_request` — nowe pole, tresc
   pozostalych pol bez zmian; wspolny klucz grupowania z sidecarami CZ dla
-  tego samego zadania (poza `--product laz`, ktory ma wlasny przeplyw
-  i niesie w `extra` pola kafla — backlog)
+  tego samego zadania (takze sidecary kafli `--product laz`, ADR-029)
 - **Sidecary CZ: `transform.horizontal` niesie operacje przypieta zamiast
   serwerowej** (ADR-024) — `"pinned: <opis operacji> (<dokladnosc> m)"`,
   symetrycznie do `transform.vertical`, zamiast `"server:EPSG:<kod>"` bez pola
@@ -1078,36 +1070,21 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   w konstruktorze providera, przed transferem.
 - CLI z `--resolution 5m --vertical-crs KRON86` tworzy teraz provider skorygowany
   do EVRF2007 przez fabryke `create_nmt_provider` (wczesniej provider dostawal
-  niewspierana kombinacje). Skorygowana wartosc jest tez przekazywana do
-  `DownloadManager`, wiec ostrzezenie o zmianie ukladu pionowego pojawia sie
-  raz, a nie dwa razy.
+  niewspierana kombinacje); korekte CLI zglasza jednym `Info:` na stderr
+  (patrz Deduplikacja po review 2026-10-07, review D11).
 - Sidecar CORINE na sciezce fallbacku PNG (brak credentials CLMS) deklaruje
   faktyczny CRS podgladu WMS — `EPSG:3857` (EEA Discomap) lub `EPSG:4326`
   (DLR, rok 1990) — zamiast `EPSG:3035` wlasciwego wylacznie dla GeoTIFF z
   CLMS; dochodzi `extra.fallback = "wms_png"` z adnotacja "podglad WMS, nie dane".
 - `FileStorage.delete()` usuwa takze sidecar `.meta.json` pliku danych
   (wczesniej zostawal osierocony).
-- **NMT 1m/EVRF2007: zaktualizowane nazwy warstw WMS (nowe roczniki)**
-  - `WMS_LAYERS["1m"]["EVRF2007"]`: `[2025, 2024, 2023, 2022iStarsze]` →
-    `[2026, 2025, 2024, 2023iStarsze]`
-  - Dodana brakujaca warstwa `SkorowidzeNMT2026`
-  - Usuniete nieistniejace juz warstwy `SkorowidzeNMT2023` i `SkorowidzeNMT2022iStarsze`
-    (GetFeatureInfo zwracalo "Invalid layer(s) given in the LAYERS parameter")
-  - Zweryfikowane przez GetCapabilities endpointu `SkorowidzeUkladEVRF2007` (2026-06-24)
-  - Wykryte podczas rozpoznania danych dla godla M-34-27-B-b-1-2 (Kielchinow)
-  - `1m/KRON86` (`SkorowidzeUkladKRON86`) i `5m/EVRF2007` (`SheetsGrid5mEVRF2007`)
-    zweryfikowane — bez zmian; endpoint 5m nadal udostepnia starsze roczniki
-    (`[2025, 2024, 2023, 2022iStarsze]`) i nie zostal przesuniety do 2026 jak 1m
-  - Mechanizm `_get_validated_layers()` (GetCapabilities + fallback z v0.6.1) i tak
-    auto-korygowal te liste w runtime; aktualizacja usuwa rozbieznosc i warning
-- **Ortofotomapa: naprawione i odswiezone nazwy warstw WMS**
-  - `WMS_LAYERS` (GugikOrtoProvider): `[2025, 2024, 2023, 2022, 2021, 2020, 2019,
-    2018, Starsze]` → `[2026, 2025, 2024, Starsze]`
-  - GUGiK skonsolidowal starsze warstwy rocznikowe (2023..2018) w jedna
-    `SkorowidzeOrtofotomapyStarsze` — zapytania o usuniete warstwy zwracaly
-    "Invalid layer(s) given in the LAYERS parameter"; brakowalo tez `2026`
-  - Zweryfikowane przez GetCapabilities endpointu `SkorowidzeWgAktualnosci` (2026-06-24)
-  - Warstwy `SkorowidzeOrtofotomapyZasiegi*` (zasiegi, bez URL OpenData) sa pomijane
+- **Nieaktualne nazwy warstw skorowidza GUGiK (NMT 1m/EVRF2007, orto)** —
+  zaszyte listy `WMS_LAYERS` z 0.6.1 zawieraly warstwy wycofane przez GUGiK
+  (np. `SkorowidzeNMT2023`; roczne warstwy orto 2018..2023 scalone
+  w `SkorowidzeOrtofotomapyStarsze`) i nie znaly nowych rocznikow (2026);
+  orto, bez walidacji GetCapabilities w 0.6.1, dostawalo "Invalid layer(s)
+  given in the LAYERS parameter". Usunieto przyczyne: warstwy pochodza
+  wylacznie z GetCapabilities (patrz Added, "Warstwy skorowidza GUGiK").
 - **Kafelkowanie `exportImage` (CZ) gubilo wiersz i przesuwalo tresc** —
   kafle sa teraz kotwiczone w narozniku NW zadania, wiec ostatni wiersz
   mozaiki nie jest juz wypelniony `-9999`, a przesuniecia tresci miedzy
@@ -1189,8 +1166,8 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   w EPSG:2180, wiec moga pojawic sie arkusze spoza bboxa (zmierzone: +4
   arkusze dla bboxa uzytego w testach tego zadania). Dotyczy
   `find_sheets_for_bbox`/`find_sheets_for_geometry` z bboxem w EPSG:2180
-  (`--system 2000` uzywa osobnej obwiedni w `parser_2000` — nie objete tu,
-  patrz backlog).
+  (`--system 2000` — obwiednia strefowa w `parser_2000`, naprawiona
+  osobno: patrz Parsery 2026-10-07, Fixed).
 - **Wycinek PL przesuwal tresc o ulamek piksela** (review max, zn. 1): crop
   mozaiki kotwiczony w rogu zadania + kopiowanie najblizszym sasiadem. Arkusze
   GUGiK maja narozniki pikseli w polowie miedzy wielokrotnosciami piksela
@@ -1243,64 +1220,34 @@ Uproszczenie parserów wg `docs/research/2026-10-06-e2e-brzegowe-i-review/ocena-
   wielkimi literami). (finalny review fali review max, m-2)
 
 ### Tests
-- **1861 testow offline, pokrycie 92,9%** (pomiar 2026-09-28:
-  `pytest tests/ -m "not live"` — 1861 passed, 8 deselected; 8 testow `live`
-  wymaga sieci i nie nalezy do bramki). Historia: 1142 po mergu etapu 0,
-  1402 po etapie 1, 1716 po audycie przedwydaniowym 0.7.0 (1708 po 26
-  zadaniach + 8 w fali naprawczej po finalnym review), 1787 lacznie z 8
-  `live` (1779 offline) po ukladzie `data/` i `--target-crs` PL, 1861
-  offline po fali review max (1854 po 18 zadaniach + 7 w fali naprawczej
-  po finalnym review; lacznie +82). ruff i `ruff format` czyste, mypy 32
-  bledy (baseline sprzed etapu 0: 33; fala review max bez nowych bledow)
-- **Testy na zywych danych (2026-09-29)** — centrum kraju, pas morski,
-  pogranicza PL-CZ, PL-DE, PL-SK/UA/BY/LT/RU, duzy wycinek (offline) — 7
-  raportow w `docs/research/2026-09-29-live-e2e-i-audyt-docs/`; wyniki
-  i bledy wykryte na zywo: `docs/PROGRESS.md`.
-- **Fala review max (2026-09-28)** — nowe i zmienione testy m.in.
-  w `tests/test_pl_cutout.py` (API biblioteki, siatka arkuszy, VRT, R5,
-  rozmiar i dysk), `tests/test_transport_mosaic.py` (leniwe otwieranie
-  zrodel, crop na siatce zrodel, owijanie w VRT), `test_download_manager.py`
-  (`download_sheets`/`expand_sheets`, `no_coverage`), `test_storage.py`,
-  `test_sheet_parser.py`, `test_cli.py`; kazdy test zachowania z dowodem
-  mutacyjnym. E2E offline na realnych arkuszach 5 m z cache Hydrografu
-  (provider kopiujacy arkusze, poza tym zero podmian): cel EPSG:2180 —
-  0 z 80 601 pikseli rozbieznych z arkuszem zawierajacym srodek piksela,
-  siatka `mod 5 = 2,5 m`; cel EPSG:5514 — wzgledem niezaleznego warpu GDAL
-  kazdego arkusza srednio 2,7 mm (maks. 0,15 m poza szwem arkuszy, patrz
-  `docs/ARCHITECTURE.md` 4.3); arkusz nieobecny w cache -> `missing_sheets`
-  i nodata wylacznie w jego miejscu
-- **Etap 0 — walidacja warstw WMS**
-  - `tests/test_wms_layer_validation.py` — nowa klasa `TestHardcodedLayerNames`
-    (5 testow): regresyjne strazniki nazw warstw zweryfikowanych z GetCapabilities
-    (KRON86, 1m EVRF2007, 5m EVRF2007, divergencja 5m vs 1m, kolejnosc newest-first)
-  - Zaktualizowany `test_returns_discovered_layers_on_mismatch` — uzywa hipotetycznego
-    przyszlego zestawu rocznikow, aby galaz mismatch byla niezalezna od hardcoded
-  - `tests/test_wms_layer_validation.py` — nowa klasa `TestOrtoLayerValidation`
-    (7 testow): parsowanie/sortowanie GetCapabilities orto, wykluczanie `Zasiegi`,
-    mismatch/match/fallback/cache, straznik nazw warstw
-  - `tests/test_gugik_orto.py` — autouse fixture stubujaca GetCapabilities (offline),
-    zaktualizowany `test_get_opendata_url_tries_all_layers` (9 → 4 warstwy)
-- **Etap 1 — Czechy (CUZK)**
-  - +260 testow wzgledem stanu po mergu etapu 0 (1142 -> 1402), w tym +18
-    testow regresji fixu ADR-024 i +3 przypiecia sciezki godlowej
-  - E2E na zywych danych CUZK + regresja PL: **11/11 PASS**
-    (`docs/research/2026-08-11-etap1-e2e.md`) — godlo TM33 (dmr5g, Bpv),
-    godlo SM5 (dmr4g, kraj auto-wykryty), bbox przygraniczny `--country auto`
-    (osobne pliki PL/CZ, wspolny `parent_request`), `--target-crs EPSG:2180`,
-    transformacja pionowa `--vertical-crs EVRF2007` (offset zmierzony na zywo
-    +0,132366 m, zgodny z modelem), `--vertical-crs KRON86` (blad z remedium),
-    regresja PL (godlo, `landcover list-sources`, `cache stats`)
-- **Audyt przedwydaniowy 0.7.0**
-  - blokada sieci w `tests/conftest.py` i globalny stub GetCapabilities —
-    20 testow przestalo odpytywac serwery GUGiK; lokalny autouse fixture
-    w `tests/test_gugik_orto.py` zastapiony tym globalnym, a realnych nazw
-    warstw pilnuje osobny marker `real_wms_layers` (A8-1)
-  - `test_get_opendata_url_tries_all_layers` niezalezny od liczby warstw
-    GUGiK (A8-2)
-  - nowe testy `--workers 1` w trybie `--bbox`/`--geometry` (petla sekwencyjna
-    zbiera wszystkie sciezki, A8-5) i skrotu transformacji geometrii podanej
-    juz w ukladzie zadania CZ (A8-6)
-  - kazda naprawa bledu z audytu ma test przypinajacy (RED przed fixem, GREEN po)
+- **Bramka jakosci:** testy offline (`pytest tests/ -m "not live"`; liczba
+  testow: `pytest --collect-only -m "not live"`), prog pokrycia `fail_under`
+  w `pyproject.toml`, `ruff check`, `ruff format --check`; `mypy kartograf/`
+  bez nowych bledow wzgledem znanej listy.
+  Testy `live` wymagaja sieci i nie naleza do bramki (`pytest -m live`,
+  tylko swiadomie).
+- **Testy offline:** `tests/conftest.py` przewraca kazdy test
+  otwierajacy gniazdo spoza loopbacku (wyjatek: marker `live`) i stubuje
+  globalnie GetCapabilities skorowidza GUGiK; testy samego odkrywania warstw
+  wylaczaja stub markerem `real_wms_layers` (`tests/test_wms_layer_validation.py`:
+  `TestFetchWmsLayers`, `TestLayers`, `TestNmptLayerPattern`,
+  `TestCapabilitiesTimeout`). Fixtury z surowych odpowiedzi serwerow:
+  `tests/fixtures/gugik_skorowidz/`, `gugik_laz/`, `gugik_asc/`, `cuzk/`.
+- **Testy zachowania z dowodem mutacyjnym** — naprawy bledow maja testy
+  przypinajace (RED przed poprawka, GREEN po), m.in.
+  `tests/test_pl_cutout.py` (API wycinka, siatka arkuszy, VRT, R5, rozmiar
+  i dysk), `tests/test_transport_mosaic.py`, `test_download_manager.py`,
+  `test_storage.py`, `test_sheet_parser.py`, `test_cli.py`.
+- **Weryfikacje na zywych danych** (raporty w `docs/research/`):
+  etap 1 CZ (`2026-08-11-etap1-e2e.md` — godlo TM33/SM5, bbox przygraniczny
+  `--country auto`, `--target-crs`, transformacja pionowa Bpv -> EVRF2007,
+  regresja PL), pogranicza i pas morski
+  (`2026-09-29-live-e2e-i-audyt-docs/`), przypadki brzegowe
+  (`2026-10-06-e2e-brzegowe-i-review/`), kampanie ADR-030
+  (`2026-10-07-adr030-live/`). E2E offline wycinka PL na realnych
+  arkuszach 5 m: cel EPSG:2180 bez rozbieznosci wartosci wzgledem arkusza
+  zawierajacego srodek piksela; cel EPSG:5514 zgodny z niezaleznym warpem
+  GDAL kazdego arkusza (odchylenia przy szwach — `docs/ARCHITECTURE.md` 4.3).
 
 ## [0.6.1] - 2026-03-24
 
@@ -1875,13 +1822,13 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
-[0.7.0]: https://github.com/Daldek/Kartograf/compare/v0.6.1...HEAD
-[0.6.1]: https://github.com/Daldek/Kartograf/compare/v0.6.0...v0.6.1
-[0.6.0]: https://github.com/Daldek/Kartograf/compare/v0.5.0...v0.6.0
+[0.7.0]: https://github.com/Daldek/Kartograf/compare/v0.6.1...develop
+[0.6.1]: https://github.com/Daldek/Kartograf/compare/6e50abd8466a8ca64f300ff6ea84dc5d8444fa7f...v0.6.1
+[0.6.0]: https://github.com/Daldek/Kartograf/compare/v0.5.0...6e50abd8466a8ca64f300ff6ea84dc5d8444fa7f
 [0.5.0]: https://github.com/Daldek/Kartograf/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Daldek/Kartograf/compare/v0.4.0...v0.4.1
-[0.4.0]: https://github.com/Daldek/Kartograf/compare/v0.3.2...v0.4.0
-[0.3.2]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.2
+[0.4.0]: https://github.com/Daldek/Kartograf/compare/44a72411ba33e42e3f90d09750f1a179d481381a...v0.4.0
+[0.3.2]: https://github.com/Daldek/Kartograf/compare/v0.3.1...44a72411ba33e42e3f90d09750f1a179d481381a
 [0.3.1]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.2.0
