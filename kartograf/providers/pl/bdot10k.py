@@ -203,7 +203,6 @@ class Bdot10kProvider(LandCoverProvider):
             # nazwa musi to mowic, a nie udawac GeoPackage (review N1).
             # Symetrycznie do GPKG, gdzie `_extract_gpkg_from_zip` nadaje .gpkg.
             output_path = output_path.with_suffix(".zip")
-        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Construct OpenData URL
         url = self._construct_opendata_url(code, format)

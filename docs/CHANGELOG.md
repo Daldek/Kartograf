@@ -25,6 +25,16 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Kafel TM33 oraz `--bbox`/`--geometry` CZ bez zmian (domyslnie 2m).
   Biblioteka bez zmian: `CuzkDmrProvider`/`create_dmr_provider` sa zwiazane
   z rozdzielczoscia (zrodlo DMR 5G/4G) i dla SM5 wymagaja `resolution="5m"`.
+- **Katalog wyjsciowy land cover powstaje dopiero przy zapisie:**
+  `LandCoverManager()` nie tworzy juz `output_dir` (domyslnie
+  `./data/landcover`) w konstruktorze — samo utworzenie menedzera
+  (np. przez biblioteke pobierajaca tylko NMT) i `kartograf landcover
+  list-layers` nie zostawiaja katalogow na dysku. Katalog tworzy zapis
+  pliku (`transport/http.download_to` po udanej odpowiedzi); providery
+  BDOT10k, CORINE i SoilGrids nie tworza go juz przed zapytaniem, wiec
+  nieudane pobranie (np. HTTP 404) nie zostawia pustego katalogu. Kod
+  biblioteczny, ktory zakladal istnienie `output_dir` zaraz po
+  `LandCoverManager(...)`, musi utworzyc go sam.
 
 ### Dokumentacja
 - **`--scale`:** nowy podrozdzial `docs/USAGE.md` 1.6 "Kiedy `--scale` jest
