@@ -939,6 +939,21 @@ def download_pl_cutout(
     )
 
 
+def _unreadable_sheets(sheets: Sequence[Path]) -> list[Path]:
+    """Sheets that rasterio cannot open (damaged, not a raster)."""
+    import rasterio
+    from rasterio.errors import RasterioIOError
+
+    bad: list[Path] = []
+    for path in sheets:
+        try:
+            with rasterio.open(path):
+                pass
+        except RasterioIOError:
+            bad.append(path)
+    return bad
+
+
 def build_cutout_from_sheets(
     sheet_paths: Sequence[Path],
     bbox: BBox,
@@ -959,7 +974,11 @@ def build_cutout_from_sheets(
     Raises
     ------
     ValidationError
-        Empty sheet list, bad parameters, PL-2000 sheets.
+        Empty sheet list, a sheet path that is missing, not a file or not
+        readable as a raster (the message lists the paths), ``output_path``
+        equal to one of the sheets (it would overwrite the input), bad
+        parameters, PL-2000 sheets. All input checks run before anything is
+        written.
     GridMismatchError
         EPSG:2180 target and sheets with different grid phases.
     TransformError
@@ -968,6 +987,25 @@ def build_cutout_from_sheets(
     if not sheet_paths:
         raise ValidationError("build_cutout_from_sheets: brak arkuszy wejsciowych")
     output_path = Path(output_path)
+    sheets = tuple(Path(p) for p in sheet_paths)
+    resolved_output = output_path.resolve()
+    if any(p.resolve() == resolved_output for p in sheets):
+        raise ValidationError(
+            f"build_cutout_from_sheets: sciezka wyniku {output_path} jest jednym "
+            "z arkuszy wejsciowych — wynik nadpisalby dane; podaj inna sciezke"
+        )
+    missing = [p for p in sheets if not p.is_file()]
+    if missing:
+        raise ValidationError(
+            f"build_cutout_from_sheets: {len(missing)} arkusz(y) nie istnieje "
+            f"albo nie jest plikiem: {', '.join(str(p) for p in missing)}"
+        )
+    unreadable = _unreadable_sheets(sheets)
+    if unreadable:
+        raise ValidationError(
+            f"build_cutout_from_sheets: {len(unreadable)} arkusz(y) nie da sie "
+            f"odczytac jako rastra: {', '.join(str(p) for p in unreadable)}"
+        )
     prepared = prepare_pl_cutout(
         bbox,
         target_crs,
@@ -976,7 +1014,6 @@ def build_cutout_from_sheets(
         vertical_crs=vertical_crs,
     )
     cutout = replace(prepared, target_path=output_path)
-    sheets = tuple(Path(p) for p in sheet_paths)
     off_grid = build_pl_cutout(
         list(sheets),
         cutout.bbox_source_2180,
