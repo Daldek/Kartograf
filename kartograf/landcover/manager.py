@@ -28,6 +28,28 @@ PROVIDERS = {
     "soilgrids": SoilGridsProvider,
 }
 
+# Providers whose result is a GeoTIFF (CORINE falls back to a .png preview).
+_RASTER_PROVIDERS = (CorineProvider, SoilGridsProvider)
+
+
+def _read_geotiff_nodata(path: Path) -> float | None:
+    """NoData declared by a GeoTIFF result; None for other files or when unreadable.
+
+    The sidecar describes the FILE: a raster without a declared NoData gets
+    ``nodata: null`` (nothing is guessed from the source documentation).
+    """
+    if path.suffix.lower() not in {".tif", ".tiff"}:
+        return None
+    import rasterio  # lazy: BDOT10k/PNG results do not need GDAL
+    from rasterio.errors import RasterioError
+
+    try:
+        with rasterio.open(path) as dataset:
+            nodata = dataset.nodata
+    except (OSError, ValueError, RasterioError):
+        return None
+    return float(nodata) if nodata is not None else None
+
 
 class LandCoverManager:
     """
@@ -190,30 +212,12 @@ class LandCoverManager:
         if len(provided) > 1:
             raise ValueError("Provide only one of: teryt, bbox, or godlo")
 
-        # Generate output path if not provided
-        if output_path is None:
-            output_path = self._generate_output_path(teryt, bbox, godlo)
-
-        # Dispatch to appropriate download method
         if teryt is not None:
-            path = self._provider.download_by_teryt(teryt, output_path, **kwargs)
-            self._write_sidecar(path, {"teryt": teryt}, kwargs)
-            return path
-        elif bbox is not None:
-            path = self._provider.download_by_bbox(bbox, output_path, **kwargs)
-            self._write_sidecar(
-                path,
-                {
-                    "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
-                    "bbox_crs": bbox.crs,
-                },
-                kwargs,
-            )
-            return path
-        elif godlo is not None:
-            path = self._provider.download_by_godlo(godlo, output_path, **kwargs)
-            self._write_sidecar(path, {"sheet": godlo}, kwargs)
-            return path
+            return self.download_by_teryt(teryt, output_path, **kwargs)
+        if bbox is not None:
+            return self.download_by_bbox(bbox, output_path, **kwargs)
+        if godlo is not None:
+            return self.download_by_godlo(godlo, output_path, **kwargs)
         # Unreachable after the validation above; keeps godlo narrowed to str.
         raise ValueError("Must provide one of: teryt, bbox, or godlo")
 
@@ -242,7 +246,7 @@ class LandCoverManager:
             Path to downloaded file
         """
         if output_path is None:
-            output_path = self._generate_output_path(teryt, None, None)
+            output_path = self._generate_output_path(teryt, None, None, kwargs)
         path = self._provider.download_by_teryt(teryt, output_path, **kwargs)
         self._write_sidecar(path, {"teryt": teryt}, kwargs)
         return path
@@ -272,7 +276,7 @@ class LandCoverManager:
             Path to downloaded file
         """
         if output_path is None:
-            output_path = self._generate_output_path(None, bbox, None)
+            output_path = self._generate_output_path(None, bbox, None, kwargs)
         path = self._provider.download_by_bbox(bbox, output_path, **kwargs)
         self._write_sidecar(
             path,
@@ -309,7 +313,7 @@ class LandCoverManager:
             Path to downloaded file
         """
         if output_path is None:
-            output_path = self._generate_output_path(None, None, godlo)
+            output_path = self._generate_output_path(None, None, godlo, kwargs)
         path = self._provider.download_by_godlo(godlo, output_path, **kwargs)
         self._write_sidecar(path, {"sheet": godlo}, kwargs)
         return path
@@ -396,26 +400,74 @@ class LandCoverManager:
         logger.info(f"Batch download complete: {len(results)}/{len(items)} successful")
         return results
 
+    def _content_params(self, kwargs: dict | None = None) -> dict[str, object]:
+        """Effective provider options that change the CONTENT of the result.
+
+        Defaults are filled in, so the result is unambiguous without knowing
+        them: SoilGrids ``property``/``depth``/``stat``, CORINE ``year``,
+        BDOT10k ``format``. Options that do not change the content (e.g.
+        ``timeout``) are left out; an unknown provider gives ``{}``.
+
+        The values go into the file name (`_generate_output_path`) and into
+        the sidecar ``request`` (`_write_sidecar`) - one source for both.
+        """
+        kwargs = kwargs or {}
+        provider = self._provider
+        if isinstance(provider, SoilGridsProvider):
+            return {
+                "property": kwargs.get("property", provider.DEFAULT_PROPERTY),
+                "depth": kwargs.get("depth", provider.DEFAULT_DEPTH),
+                "stat": kwargs.get("stat", provider.DEFAULT_STAT),
+            }
+        if isinstance(provider, CorineProvider):
+            return {"year": kwargs.get("year", provider.DEFAULT_YEAR)}
+        if isinstance(provider, Bdot10kProvider):
+            # Default of Bdot10kProvider.download_by_* (``format="GPKG"``).
+            return {"format": kwargs.get("format", "GPKG")}
+        return {}
+
     def _generate_output_path(
         self,
         teryt: str | None,
         bbox: BBox | None,
         godlo: str | None,
+        kwargs: dict | None = None,
     ) -> Path:
-        """Generate output path based on selection method."""
-        provider_prefix = self._provider.name.lower().replace(" ", "_")
+        """Generate the output path from the selection method and the options.
+
+        Pattern: ``<source>[_<param>...]_<mode>_<id>.<ext>``, e.g.
+        ``soilgrids_clay_0-5cm_mean_bbox_<coords>.tif``,
+        ``corine_2018_godlo_N-34-130-D.tif``, ``bdot10k_teryt_1465.gpkg``.
+        Every option that changes the content of the result
+        (`_content_params`) is part of the name, so different options never
+        share a file and the same options always give the same path. The
+        BDOT10k ``format`` is carried by the extension (the provider saves
+        SHP as ``.zip``), CORINE without CLMS credentials saves ``.png``.
+        """
+        prefix = self._source_prefix()
+        params = self._content_params(kwargs)
+        tokens = [str(v) for k, v in params.items() if k != "format"]
 
         if teryt:
-            filename = f"{provider_prefix}_teryt_{teryt}.gpkg"
+            selection = f"teryt_{teryt}"
         elif bbox:
-            bbox_str = (
-                f"{bbox.min_x:.0f}_{bbox.min_y:.0f}_{bbox.max_x:.0f}_{bbox.max_y:.0f}"
+            selection = (
+                f"bbox_{bbox.min_x:.0f}_{bbox.min_y:.0f}"
+                f"_{bbox.max_x:.0f}_{bbox.max_y:.0f}"
             )
-            filename = f"{provider_prefix}_bbox_{bbox_str}.gpkg"
         else:
-            filename = f"{provider_prefix}_godlo_{godlo}.gpkg"
+            selection = f"godlo_{godlo}"
 
+        suffix = ".tif" if isinstance(self._provider, _RASTER_PROVIDERS) else ".gpkg"
+        filename = "_".join([prefix, *tokens, selection]) + suffix
         return self._output_dir / filename
+
+    def _source_prefix(self) -> str:
+        """File name prefix: the registry key of the provider (``--source``)."""
+        for key, cls in PROVIDERS.items():
+            if isinstance(self._provider, cls):
+                return key
+        return self._provider.name.lower().replace(" ", "_")
 
     def _write_sidecar(
         self, data_path: Path, request: dict, kwargs: dict | None = None
@@ -440,10 +492,11 @@ class LandCoverManager:
         emit_sidecar(
             key,
             data_path,
-            request=request,
+            request={**request, **self._content_params(kwargs)},
             vertical_crs=getattr(self._provider, "vertical_crs", None),
             horizontal_crs=horizontal_crs,
             extra=extra,
+            nodata=_read_geotiff_nodata(data_path),
         )
 
     # =========================================================================

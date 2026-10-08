@@ -39,7 +39,8 @@ Wydanie wielokrajowe. Najwazniejsze nowosci wzgledem 0.6.1:
   `orto/pl_1992/`. `<uklad>` wynika z formatu godla KAZDEGO pliku z osobna
   (kropki -> `2000`, myslniki -> `1992`; kafle LAZ — `uklad_xy` kafla).
   Kartograf nie migruje `data/` automatycznie (tabela w "Przejscie
-  z 0.6.1"). `landcover/` bez zmian. Kanoniczny opis: `docs/ARCHITECTURE.md`
+  z 0.6.1"). Katalog `landcover/` bez zmian (nazwy plikow CORINE/SoilGrids
+  — nizej). Kanoniczny opis: `docs/ARCHITECTURE.md`
   sekcja 3.
 - **Kampanie (ADR-030):** prawdziwe pliki NMT/NMPT/orto PL leza wylacznie
   w `<segment>/kampanie/<data>_<id>/<hierarchia godla>/<godlo>.<ext>`;
@@ -64,9 +65,28 @@ Wydanie wielokrajowe. Najwazniejsze nowosci wzgledem 0.6.1:
 - **`LandCoverManager.download_by_teryt/download_by_bbox/download_by_godlo`
   bez `output_path` nazywaja pliki tak jak `download()`** — bylo
   `CORINE Land Cover_N-34-130-D.gpkg` (spacje, etykieta zrodla), jest
-  `corine_land_cover_godlo_N-34-130-D.<ext>`; rozszerzenie nadaje provider
-  (CORINE `.tif`/`.png`, SoilGrids `.tif`). Skrypty skladajace sciezke
-  wyniku z nazwy zrodla wymagaja poprawki (A5-2, N14).
+  `corine_2018_godlo_N-34-130-D.<ext>` (wzorzec nizej); rozszerzenie nadaje
+  provider (CORINE `.tif`/`.png`, SoilGrids `.tif`). Skrypty skladajace
+  sciezke wyniku z nazwy zrodla wymagaja poprawki (A5-2, N14).
+- **Nazwy plikow land cover niosa parametry tresci** (U3, cicha utrata
+  danych w 0.6.1): `soilgrids ... --property clay`, a potem `--property
+  sand` dla tego samego obszaru zapisywaly ten sam plik
+  `soilgrids_bbox_<coords>.tif` — drugi wynik po cichu nadpisywal pierwszy;
+  tak samo CORINE z innym `--year`. Nowy wzorzec
+  `<zrodlo>[_<parametr>...]_<tryb>_<id>.<ext>`, `<zrodlo>` = wartosc
+  `--source` (`bdot10k`/`corine`/`soilgrids`), parametry z wartosciami
+  domyslnymi wlacznie:
+  `soilgrids_<property>_<depth>_<stat>_bbox_<coords>.tif` (np.
+  `soilgrids_clay_0-5cm_mean_bbox_770000_509000_772000_511000.tif`),
+  `corine_<year>_godlo_N-34-130-D.tif` (`.png` z podgladu WMS); bylo
+  `soilgrids_bbox_<coords>.tif` i `corine_land_cover_bbox_<coords>.<ext>`.
+  BDOT10k bez zmian (`bdot10k_teryt_1465.gpkg`/`.zip` — format rozroznia
+  rozszerzenie). Te same parametry = ta sama sciezka (ponowne pobranie
+  nadpisuje jak dotad). Sidecar zapisuje parametry w `request`
+  (`property`/`depth`/`stat`, `year`, `format`), a `nodata` wyniku GeoTIFF
+  odczytuje z pliku (`null`, gdy plik go nie deklaruje). Pliki z 0.6.1
+  (stare nazwy) nie sa rozpoznawane — Kartograf ich nie zmienia ani nie
+  czyta.
 - **`DownloadManager` bierze segment z providera:** bez jawnego `storage=`
   podkatalog pochodzi z deskryptora providera (bylo: zawsze segment NMT 1m,
   wiec `DownloadManager(provider=GugikNmptProvider())` pisal do katalogu NMT
@@ -254,7 +274,8 @@ Wydanie wielokrajowe. Najwazniejsze nowosci wzgledem 0.6.1:
   takze po recznym przeniesieniu do nowych segmentow (zwykly plik w sciezce
   standardowej bez sidecara z `extra.link` jest nieznany, ADR-030). Reczna
   migracja nie oszczedza transferu: zaplanuj miejsce i czas pierwszego
-  pobrania, stare katalogi usun po nim. `landcover/` bez zmian. Tabela
+  pobrania, stare katalogi usun po nim. Katalog `landcover/` bez zmian
+  (nazwy plikow — punkt nizej). Tabela
   odpowiedniosci katalogow (np. dla wlasnych skryptow czytajacych `data/`):
 
   | Stara sciezka | Nowa sciezka |
@@ -270,6 +291,15 @@ Wydanie wielokrajowe. Najwazniejsze nowosci wzgledem 0.6.1:
 
   Stare `nmt_5m/`, `nmpt/` i `orto/` trzymaly oba systemy godel razem, wiec
   jeden stary katalog odpowiada dwom segmentom.
+- **Pliki CORINE/SoilGrids w `landcover/`** maja nowe nazwy z parametrami
+  (`soilgrids_bbox_<coords>.tif` -> `soilgrids_<property>_<depth>_<stat>_bbox_<coords>.tif`,
+  `corine_land_cover_bbox_<coords>.tif` -> `corine_<year>_bbox_<coords>.tif`;
+  analogicznie `godlo_<godlo>`). Stary plik SoilGrids nie mowi, ktorego
+  parametru dotyczy (sidecar go nie zapisal), wiec bezpieczniej pobrac
+  ponownie niz zmieniac nazwe; plik CORINE mozna przemianowac recznie,
+  jesli rocznik jest znany (w 0.6.1 domyslnie 2018). Skrypty skladajace
+  nazwe wyniku powinny brac sciezke zwracana przez `LandCoverManager.download()`
+  (CLI: `Downloaded to:`). BDOT10k bez zmian.
 - **Importy** — przeniesione moduly providerow (bez shimow); prywatne
   `Bdot10kProvider._get_teryt_for_point()` nadal istnieje:
 
