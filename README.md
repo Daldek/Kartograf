@@ -1,489 +1,114 @@
 # Kartograf
 
-Narzędzie do automatycznego pobierania danych przestrzennych z zasobów GUGiK (Polska), CUZK (Czechy), Copernicus i ISRIC:
-- **NMT (PL)** - Numeryczny Model Terenu z GUGiK (dane wysokościowe, 1m/5m)
-- **NMT (CZ)** - DMR 5G/4G z CUZK (2m/5m, godło TM33/SM5 lub bbox, `--country {pl,cz,auto}`)
-- **NMPT** - Numeryczny Model Pokrycia Terenu / DSM (teren + obiekty, 1m)
-- **Ortofotomapa** - Zdjęcia lotnicze Standard Resolution (25cm, TIF)
-- **LAZ** - Chmury punktów LIDAR (dane pomiarowe ALS) z GUGiK przez WFS
-- **BDOT10k** - Baza Danych Obiektów Topograficznych (pokrycie terenu, wektory)
-- **CORINE Land Cover** - Europejska klasyfikacja pokrycia terenu (44 klasy)
-- **SoilGrids** - Globalne dane glebowe (tekstura, węgiel organiczny, pH)
-- **HSG** - Hydrologic Soil Groups dla metody SCS-CN (grupy hydrologiczne gleb)
+Kartograf pobiera dane przestrzenne z publicznych usług GUGiK (Polska), CUZK
+(Czechy), Copernicus i ISRIC: wybierasz obszar (godło arkusza, bbox albo plik
+geometrii), a Kartograf znajduje właściwe arkusze, pobiera je i zapisuje
+w uporządkowanym katalogu `data/` razem z metadanymi każdego pliku. Działa
+jako narzędzie wiersza poleceń (`kartograf`) i jako biblioteka Python.
 
-> **0.7.0-dev:** pobieranie PL/CZ jest weryfikowane testami offline i na żywych
-> usługach GUGiK/CUZK (raporty przebiegów: `docs/research/`). Pozostałe ograniczenia: [Znane problemy (0.7.0-dev)](#znane-problemy-070-dev).
+Jest częścią toolchainu hydrologicznego: **Hydrograf** używa go jako źródła
+danych GIS (NMT, pokrycie terenu), **Hydrolog** opcjonalnie (grupy
+hydrologiczne gleb, SoilGrids), a dane obserwacyjne dostarcza **IMGWTools**.
+Kartograf nie wykonuje obliczeń hydrologicznych (poza klasyfikacją HSG).
 
-## Szybki Start
+## Obsługiwane dane
 
-### Instalacja
+- **NMT (PL)** — Numeryczny Model Terenu z GUGiK (1 m / 5 m)
+- **NMT (CZ)** — DMR 5G/4G z CUZK (2 m / 5 m)
+- **NMPT** — Numeryczny Model Pokrycia Terenu (DSM) z GUGiK
+- **Ortofotomapa** — zdjęcia lotnicze GUGiK (25 cm)
+- **LAZ** — chmury punktów LIDAR (ALS) z GUGiK
+- **BDOT10k** — wektorowa baza obiektów topograficznych (pokrycie terenu, hydrografia)
+- **CORINE Land Cover** — europejska klasyfikacja pokrycia terenu (Copernicus)
+- **SoilGrids** — globalne dane glebowe (ISRIC)
+- **HSG** — grupy hydrologiczne gleb dla metody SCS-CN, liczone z SoilGrids
+
+## Instalacja
 
 ```bash
-# Klonowanie repozytorium
 git clone https://github.com/Daldek/Kartograf.git
 cd Kartograf
-
-# Utworzenie środowiska wirtualnego
 python3.12 -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# .venv\Scripts\activate   # Windows
-
-# Instalacja pakietu
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e .
 ```
 
-### Użycie
+## Szybki start
 
-#### Jako CLI
+### CLI
 
 ```bash
-# Informacje o godle (auto-detekcja PL-1992 / PL-2000)
+# Informacje o godle arkusza
 kartograf parse N-34-130-D-d-2-4
 
-# Pobieranie NMT: pojedynczy arkusz albo hierarchia, opcjonalnie 5m
+# NMT dla arkusza, inne produkty GUGiK
 kartograf download N-34-130-D-d-2-4
-kartograf download N-34-130-D --scale 1:10000 --resolution 5m --output ./data
+kartograf download N-34-130-D-d-2-4 --product orto
 
-# Inne produkty GUGiK: NMPT (DSM), ortofotomapa, chmury punktów LAZ
-kartograf download N-34-130-D-d-2-4 --product nmpt
-kartograf download N-34-130-D-d-2-4 --product laz
-
-# Kampanie GUGiK: domyślnie najnowsza (newest); wszystkie kampanie arkusza (all);
-# tylko kampanie z roku pozyskania >= 2024 (--min-year); LAZ: też all / --min-year
-kartograf download N-34-130-D-d-2-4 --campaigns all
-kartograf download N-34-130-D-d-2-4 --min-year 2024
-kartograf download --bbox 530000,382000,533000,386000 --campaigns all --min-year 2022
-kartograf download N-34-130-D-d-2-4 --product laz --campaigns all
-
-# Selekcja obszaru: bbox albo plik geometrii (SHP/GPKG).
-# Domyślnie działa --country auto: obszar przecinający prostokątną obwiednię CZ
-# (na zachód od 18,86°E i na południe od 51,06°N) trafia także do CUZK - dla czystego
-# PL użyj --country pl. Flagi bez odpowiednika czeskiego (--product nmpt|orto,
-# --system, --vertical-crs KRON86, --resolution 1m) same przełączają auto na pl
-# (komunikat "Info:" na stderr) na obszarze objętym obwiedniami OBU krajów.
-# Prostokąt PL (14,07–24,20°E, 49,00–54,90°N) obejmuje większość Czech, więc
-# np. w Pradze czy Brnie taka flaga kieruje zadanie do GUGiK, który nie ma tam
-# danych (błąd pobrania); od razu, przed siecią, błąd dostaje dopiero obszar
-# poza prostokątem PL (dla --product nmpt|orto - komunikat o etapie 2).
-# Pod auto przycięcie do prostokątnych obwiedni krajów jest komunikowane jako Info:;
-# oryginalny bbox zachowuje extra.parent_request; cały bbox pobiera --country pl.
-kartograf download --bbox 771000,509000,772000,510000 --product orto
+# NMT dla obszaru: bbox (domyślnie EPSG:2180) albo plik SHP/GPKG
+kartograf download --bbox 530000,382000,533000,386000 --country pl
 kartograf download --geometry zlewnia.gpkg --layer catchments
 
-# Jeden scalony GeoTIFF NMT zamiast listy arkuszy (--target-crs; lokalna
-# reprojekcja przypiętą operacją; PL: tylko --product nmt i system 1992;
-# arkusz bez danych GUGiK - morze, strona zagraniczna - to nodata + "Warning:").
-# Na pograniczu, także z Niemcami (danych DE nie obsługujemy), używaj
-# --target-crs: bez niego arkusz leżący za granicą jest pomijany z "Warning:"
-# (kod 0, gdy pobrano choć jeden arkusz), a w wynikowej liście plików go brak.
-kartograf download --bbox 530000,382000,533000,386000 --country pl --target-crs EPSG:2180
-kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --target-crs EPSG:2180
-
-# PL-2000: godło albo bbox w CRS strefy
-kartograf download 6.179.12.20
-kartograf download --bbox 6500000,5895000,6508000,5900000 --bbox-crs EPSG:2177 --system 2000
-
-# NMT Czechy (CUZK DMR 5G/4G); na pograniczu --country auto dzieli żądanie na PL i CZ
-# (osobne pliki i sidecary, wspólny extra.parent_request). Porażka jednego kraju
-# (brak danych albo awaria źródła) przy sukcesie drugiego kończy się kodem 0
-# i ostrzeżeniem "Warning:" na stderr.
+# NMT Czech
 kartograf download 302_5550 --country cz
-kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto
-# Bboxy w EPSG:5514 są na terytorium CZ ujemne - podaj je bez spacji po --bbox=
-kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:5514 --country cz --resolution 5m
 
-# Pokrycie terenu i gleby: BDOT10k, CORINE, SoilGrids
+# Pokrycie terenu i grupy hydrologiczne gleb
 kartograf landcover download --source bdot10k --teryt 1465
-kartograf landcover download --source corine --year 2018 --godlo N-34-130-D
-kartograf landcover download --source soilgrids --godlo N-34-130-D --property clay --depth 15-30cm
-
-# Hydrologic Soil Groups dla metody SCS-CN
 kartograf soilgrids hsg --godlo N-34-130-D --stats
-
-# Przegląd źródeł/warstw i cache metadanych
-kartograf landcover list-sources
-kartograf landcover list-layers --source soilgrids
-kartograf cache stats
 ```
 
-#### Jako biblioteka Python
+Pełna lista opcji: `kartograf <komenda> --help`. Więcej przykładów, wybór
+kraju (`--country`), scalony wycinek (`--target-crs`) i kampanie GUGiK:
+[docs/USAGE.md](docs/USAGE.md).
+
+### Biblioteka Python
 
 ```python
-from pathlib import Path
-from kartograf import SheetParser, DownloadManager, BBox
+from kartograf import BBox, DownloadManager, download_pl_cutout
 
-# Parsowanie godła i bounding box arkusza
-parser = SheetParser("N-34-130-D-d-2-4")
-print(parser.scale)                      # "1:10000"
-bbox = parser.get_bbox(crs="EPSG:2180")  # lub "EPSG:4326"
-
-# Pobieranie przez godło → ASC (OpenData); hierarchia: download_hierarchy()
+# Arkusz NMT po godle
 manager = DownloadManager(output_dir="./data")
 path = manager.download_sheet("N-34-130-D-d-2-4")
 
-# Pobieranie przez bbox → GeoTIFF (WCS) - tylko NMT 1m i tylko w układzie KRON86:
-# endpoint WCS dla EVRF2007 został wycofany przez GUGiK (HTTP 404 od 2026-08), więc
-# download_bbox pod EVRF2007 kończy się ValidationError. Wysokości EVRF2007
-# bierz z arkuszy: download_sheet() albo CLI `--bbox` (rozwijany na arkusze OpenData),
-# a jako jeden GeoTIFF z arkuszy: download_pl_cutout() (niżej).
-kron = DownloadManager(output_dir="./data", vertical_crs="KRON86")
-area = BBox(min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180")
-path = kron.download_bbox(area, "my_area.tif")
-
-# Land Cover: BDOT10k / CORINE / SoilGrids
-from kartograf import LandCoverManager
-lc = LandCoverManager()
-lc.download(teryt="1465")                   # BDOT10k (powiat)
-lc.set_provider("corine")
-lc.download(godlo="N-34-130-D", year=2018)  # CORINE
-
-# Hydrologic Soil Groups
-from kartograf import HSGCalculator
-calc = HSGCalculator()
-calc.calculate_hsg_by_godlo("N-34-130-D", Path("./hsg.tif"))
-stats = calc.get_hsg_statistics(Path("./hsg.tif"))
-
-# Scalony wycinek NMT PL w zadanym układzie (jeden GeoTIFF + sidecar)
-from kartograf import BBox, download_pl_cutout
-
+# Obszar jako jeden GeoTIFF w zadanym układzie
 result = download_pl_cutout(
     BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
-    "EPSG:5514",
+    "EPSG:2180",
     output_dir="./data",
-    max_workers=4,
 )
 print(result.path)
-# arkusze bez danych GUGiK (nodata); także gdy result.skipped, z sidecara
-print(result.missing_sheets)
-# Wyjątki: DownloadError (awaria pobrania arkusza - wycinek nie powstaje),
-# ValidationError (żaden arkusz nie ma danych, za mało miejsca na dysku,
-# nieobsługiwany parametr); GridMismatchError (różne fazy siatki przy EPSG:2180).
-# Kroki osobno (własny provider/sesja/FileStorage):
-# prepare_pl_cutout -> select_pl_cutout_sheets -> run_pl_cutout.
 ```
 
-Pozostałe elementy publicznego API (m.in. `GugikNmptProvider`, `GugikOrtoProvider`,
-`GugikLazProvider`, `CuzkDmrProvider`/`create_dmr_provider` dla Czech, `Parser2000`,
-`ParserTM33`, `MetadataCache`, `FileStorage`) — patrz eksporty w `kartograf/__init__.py`
-oraz [SCOPE.md](docs/SCOPE.md).
+## Gdzie trafiają dane
 
-### Wynik pobrania
-
-`DownloadManager.download_sheet()` zwraca **`Path`** dla arkusza 1:10000 i dla godła
-PL-2000 (pobierane bezpośrednio), a **`list[Path]`** dla godła PL-1992 grubszego niż
-1:10000 - takie godło jest automatycznie rozwijane do arkuszy 1:10000 przez
-`download_hierarchy()` (ta zawsze zwraca `list[Path]`, a podsumowanie sukcesów/porażek
-zostawia w `DownloadManager.last_result`). CLI musi obsłużyć oba warianty.
-`DownloadManager.download_sheets(godla)` pobiera listę godeł (grubsze PL-1992
-rozwijane do 1:10000 — `expand_sheets()`) i nie przerywa się na porażce arkusza:
-porażki trafiają do `last_result.failed`, a arkusze, dla których GUGiK nie ma
-danych (`NoCoverageError`, podklasa `DownloadError`), także do
-`last_result.no_coverage`.
-
-Każde udane pobranie zapisuje **dwa** pliki: dane (`.asc`, `.tif`, `.laz`, `.gpkg`)
-oraz sidecar `<plik>.meta.json` ze schematem `kartograf-meta/1`:
-
-| Pole | Znaczenie |
-|---|---|
-| `dataset`, `country`, `product`, `provider` | klucz deskryptora źródła i jego opis |
-| `horizontal_crs` | układ poziomy pliku: arkusze PL-1992 `EPSG:2180`, arkusze PL-2000 `EPSG:2176`–`EPSG:2179` według strefy godła; CZ natywnie `EPSG:5514`, kafel TM33 `EPSG:3045`; wycinki PL/CZ po `--target-crs` w układzie docelowym |
-| `vertical_crs` | kod realizacji układu pionowego: `EPSG:9651` (EVRF2007-PL), `EPSG:9650` (KRON86), `EPSG:8357` (Bpv), `EPSG:5621` (EVRF2007) |
-| `vertical_source` | `native` / `ellipsoidal` / `server` |
-| `nodata` | wartość pustego piksela odczytana z pliku |
-| `resolution`, `request` | rozdzielczość i żądanie tego pliku (`godlo` albo `bbox` + `bbox_crs`); dla wycinków (`bbox/`) to obwiednia wyniku w jego układzie (po przycięciu do kraju i transformacji) - oryginalne żądanie niesie `extra.parent_request` |
-| `license` | identyfikator, atrybucja i URL licencji źródła |
-| `downloaded_at`, `kartograf_version` | znacznik czasu UTC i wersja pakietu |
-| `transform` | słownik osi (klucze `horizontal`/`vertical`) z opisem użytej operacji: `pinned: <opis> (<dokładność> m)`; oś bez przeliczenia nie ma klucza, a bez żadnego przeliczenia (pliki PL pobierane godłem/arkuszami oraz wycinek `--target-crs EPSG:2180`) całe pole to `null`; wycinek PL w innym układzie niesie `pinned: ...` w osi poziomej ([ADR-027](docs/DECISIONS.md)) |
-| `extra.parent_request` / `extra.parent_requests` | oryginalny bbox, układ i próbowane kraje; na arkuszu już pobranym nowe żądania dopisywane są do `parent_requests`, bez zmiany wcześniejszego `parent_request`. LAZ (od 2026-10-07 także z `parent_request`) dokłada `godlo_kafla`/`rok`/`gestosc`/`url`; biblioteka zapisuje `parent_request` tylko po przekazaniu argumentu |
-| `extra.source` / `extra.sheet_sources` | wybrany rekord skorowidza GUGiK (m.in. URL, warstwa, data, rozdzielczość) dla arkusza; mapa godeł na te rekordy dla wycinka PL |
-| `extra.off_grid_sheets` | wycinek PL reprojektowany osobno per arkusz (W1): arkusze o fazie różnej od siatki większości |
-| `extra.missing_sheets` | wycinek PL: posortowane godła bez pliku GUGiK; wycinek w ich miejscu ma nodata. Dziury wewnątrz pobranych arkuszy nie należą do tej listy |
-
-Sidecary pisze warstwa zarządzająca (`DownloadManager`, `LandCoverManager`,
-wycinek PL i kafle LAZ w bibliotece - `download/cutout.py`, `download/laz.py`; CLI dla CZ),
-a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
-
-**Migracja istniejących danych CZ i wycinków PL → EPSG:5514:**
-pliki z sidecarem `transform.horizontal` zawierającym
-`S-JTSK to ETRS89 (3)` nie są przebudowywane automatycznie; CLI drukuje
-`Info:` przy pominięciu pliku, do pobrania ponownie użyj `--force`.
-
-## Kampanie (od 0.7.0)
-
-GUGiK publikuje ten sam arkusz w kilku kampaniach (różne lata pozyskania).
-`--campaigns newest` (domyślnie) pobiera najnowszą; `--campaigns all` - każdą;
-`--min-year RRRR` odcina kampanie z `aktualnosc` sprzed danego roku (obie
-strategie; kampanie dotyczą tylko PL, dla CZ opcje dają `Error:`/`Info:`).
-Prawdziwe pliki NMT/NMPT/orto leżą w
-`data/<produkt>/<segment>/kampanie/<data>_<id>/<hierarchia godła>/<godło>.<ext>`
-(`<data>` = data pozyskania, `<id>` = numer kampanii z nazwy pliku GUGiK), a
-ścieżka standardowa `data/<produkt>/<segment>/<hierarchia godła>/<godło>.<ext>`
-jest dowiązaniem do najnowszej lokalnej kampanii. `newest` po wygaśnięciu cache
-(7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania. Gdy skorowidz
-GUGiK jest niedostępny (sieć, HTTP 429/5xx), a arkusz ma już lokalną kampanię,
-`newest` jej używa i drukuje `Warning: <godło>: skorowidz GUGiK niedostepny —
-uzyto lokalnej kampanii bez sprawdzenia nowszej (...)` (kod 0, także z `-q`);
-bez lokalnej kampanii, z `--force`, `--campaigns all` albo `--min-year` taki
-błąd nadal kończy pobranie arkusza porażką. Wycinek
-`--target-crs` zawsze składa się z najnowszych kampanii i nie przyjmuje
-`--campaigns all`/`--min-year`.
-
-- **Dowiązanie = hardlink:** ścieżka standardowa to dowiązanie twarde do pliku
-  kampanii (ten sam plik na dysku, bez dodatkowego miejsca); Kartograf nie
-  tworzy symlinków. Gdy system plików nie obsługuje hardlinków (exFAT/FAT,
-  sshfs/FUSE), powstaje kopia z `Warning:` (`extra.link: copy` w sidecarze).
-- **Kopiowanie `data/`:** użyj `rsync -aH` albo `cp -a` - bez zachowania
-  hardlinków ścieżka standardowa staje się osobną kopią (duplikat danych).
-- **Windows:** hardlink działa bez dodatkowych uprawnień (NTFS), a dane
-  udostępnione przez SMB klient Windows widzi jako zwykłe pliki.
-- **Migracja:** brak; zwykły plik NMT/NMPT/orto w starej ścieżce standardowej
-  jest traktowany jak nieznany - pierwsze uruchomienie pobiera go ponownie do
-  `kampanie/` i zastępuje dowiązaniem.
-- **Biblioteka:** bez `MetadataCache` `newest` pyta skorowidz GUGiK przy
-  KAŻDYM `download_sheet`, także dla arkusza już pobranego. Przekaż cache
-  providerowi (`create_nmt_provider(cache=MetadataCache())` albo
-  `GugikProvider(cache=...)`), a zapytania o arkusz ograniczą się do raz na
-  7 dni. Arkusz z lokalnej kampanii użyty przy awarii skorowidza:
-  `DownloadManager.last_sheet.unverified` / `DownloadResult.unverified`
-  (treść błędu transportu).
-- Składanie kilku kampanii w jedną powierzchnię (`mosaic`/`coverage`) nie jest
-  w 0.7.0 - narzędzie planowane na 0.7.1.
-
-## Znane problemy (0.7.0-dev)
-
-Pozostają ograniczenia produktu:
-
-- Kartograf nie scala jeszcze rastrów PL i CZ w jedną powierzchnię przygraniczną
-  (R6); wyniki są osobne, powiązane przez `extra.parent_request`.
-- Gdy skorowidz dla godła PL-2000 1:10000 udostępnia tylko arkusze potomne,
-  pobranie zwraca `NoCoverageError` z podpowiedzią `--scale 1:2000`;
-  nie pobiera arkusza PL-1992 jako zamiennika.
-- Rozpoznawanie krajów używa prostokątnych obwiedni (ADR-023), nie wielokąta
-  granic; `--country auto` może odpytować CUZK poza Czechami i GUGiK w Czechach.
-- Arkusze NMT 5 m mogą mieć różne fazy siatki: wycinek
-  `--target-crs EPSG:2180` kończy się `GridMismatchError` zamiast zwracać
-  niezgodne wartości; inny `--target-crs` uruchamia warp per arkusz (W1).
-
-## Funkcjonalności
-
-### NMT (Numeryczny Model Terenu)
-- ✅ **Parser godeł** - Obsługa układów PL-1992 (1:1M - 1:10k) i PL-2000 (1:10k - 1:500)
-- ✅ **Bounding box** - Obliczanie współrzędnych arkusza (EPSG:2180, EPSG:4326)
-- ✅ **Hierarchia arkuszy** - Automatyczne określanie arkuszy nadrzędnych i podrzędnych
-- ✅ **Selekcja obszaru** - Godło, bbox, plik geometrii (SHP/GPKG)
-- ✅ **Pobieranie NMT** - Z retry logic i progress tracking
-- ✅ **Organizacja plików** - Automatyczna struktura katalogów
-  (`data/nmt/pl_1992_1m_evrf2007/`, `data/nmt/pl_1992_5m_evrf2007/`;
-  pełny układ: [ARCHITECTURE.md](docs/ARCHITECTURE.md) sekcja 3)
-- ✅ **Wycinek bbox** - `--target-crs` skleja arkusze i reprojektuje lokalnie
-  (przypięta operacja) do jednego GeoTIFF, także jako `download_pl_cutout`;
-  brak arkusza GUGiK = nodata i `extra.missing_sheets`. Przy `EPSG:2180`
-  wynik zachowuje wartości 1:1 albo zgłasza `GridMismatchError` dla
-  arkuszy o różnych fazach siatki.
-  Istniejący wycinek (ta sama nazwa = te same współrzędne żądania) jest
-  pomijany bez sieci (`Skipped - already exists`); przebudowa: `--force`
-  (pobiera ponownie także wszystkie arkusze) albo usunięcie pliku wycinka
-  (arkusze z cache zostaną użyte ponownie). Nieudana przebudowa nie kasuje
-  poprzedniego pliku. Przed pobraniem kontrola miejsca na dysku (dolne
-  oszacowanie; brak miejsca = błąd przed siecią), `Info:` dla wycinka >= 1 GiB;
-  twardego limitu rozmiaru nie ma
-- ✅ **Formaty** - GeoTIFF, PNG, JPEG (WCS), ASC (OpenData)
-- ⚠️ **Pobieranie przez bbox jako GeoTIFF (WCS)** - tylko 1m i tylko KRON86
-  (endpoint EVRF2007 zwraca 404 od 2026-08); wysokości EVRF2007 z obszaru:
-  CLI `--bbox` (arkusze OpenData) albo jeden GeoTIFF: `--target-crs` /
-  `download_pl_cutout`
-- ✅ **Rozdzielczości:**
-  - `1m` (GRID1) - wysoka rozdzielczość, KRON86 i EVRF2007
-  - `5m` (GRID5) - niższa rozdzielczość, tylko EVRF2007
-
-### NMT Czechy (CUZK, od 0.7.0-dev)
-- ✅ **DMR 5G** (2m, godło TM33 lub bbox) i **DMR 4G** (5m, godło SM5 lub bbox)
-- ✅ **CLI** - `--country {pl,cz,auto}`; `auto` na pograniczu dzieli żądanie na osobne pliki PL i CZ
-- ✅ **Układy** - natywnie S-JTSK/Bpv (EPSG:5514); opcjonalna reprojekcja lokalna `--target-crs` oraz `--vertical-crs EVRF2007`
-- ✅ **Reprojekcja i duże obszary** - przypięta czeska operacja EPSG:1622/1623; `exportImage` jest kafelkowany z budżetem 4 Mpx na żądanie i pikselem dokładnie 2 m/5 m
-
-### NMPT (Numeryczny Model Pokrycia Terenu)
-- ✅ **Digital Surface Model** - Teren + obiekty powierzchniowe (drzewa, budynki)
-- ✅ **Pobieranie przez godło** → ASC (OpenData)
-- ✅ **Pobieranie przez bbox** → GeoTIFF (WCS) - z biblioteki (`download_bbox`); CLI `--bbox` pobiera arkusze OpenData
-- ✅ **Rozdzielczość** - Tylko 1m, układy KRON86 i EVRF2007
-- ✅ **Organizacja** - `data/nmpt/pl_1992_1m_evrf2007/`
-
-### Ortofotomapa (Standard Resolution)
-- ✅ **Zdjęcia lotnicze** - 25cm, format TIF
-- ✅ **Pobieranie przez godło** → TIF (OpenData)
-- ✅ **Pobieranie przez bbox** → GeoTIFF (WCS), także PNG i JPEG - z biblioteki (`download_bbox`); CLI `--bbox` pobiera arkusze OpenData
-- ✅ **Wybór zdjęcia** - domyślnie najnowszy pasujący rekord RGB; biblioteka: `GugikOrtoProvider(color="CIR")` dla podczerwieni; warstwy wykrywane przez GetCapabilities
-- ✅ **Organizacja** - `data/orto/pl_1992/`
-
-### LAZ (Chmury Punktów LIDAR)
-- ✅ **Discovery WFS** - BBOX i envelope używają kolejności osi EPSG:2180 (N,E); odpowiedzi bez przecinających obszar kafli są odrzucane
-- ✅ **Dane pomiarowe ALS** (.laz) z GUGiK przez WFS, selekcja obszarem (godło/bbox/geometria)
-- ✅ **Najnowszy kafel per obszar** - starszy kafel (np. 2022 w PL-2000) jest pomijany, gdy obszar pokrywają nowsze kafle (np. 2025 w PL-1992); pominięte kafle jako `Info:` ([ADR-029](docs/DECISIONS.md))
-- ✅ **Filtry** - `--year`, `--min-density`; organizacja - `data/laz/pl_<układ>_<vcrs>/`
-- ✅ **API biblioteki** - `download_laz_area(bbox, ...)` zwraca pobrane, pominięte i nieudane kafle
-  (układ poziomy ustalany per kafel)
-
-### Land Cover (Pokrycie Terenu)
-- ✅ **BDOT10k** - Polska baza wektorowa (GUGiK), szczegółowość 1:10 000
-  - 15 warstw: 12 pokrycia terenu (PT*) + 3 hydrograficzne (SW*)
-  - Lasy, wody, zabudowa, tereny rolne, rzeki, kanały, rowy melioracyjne, itp.
-  - Automatyczne scalanie warstw do jednego GeoPackage (z zachowaniem rtree index)
-- ✅ **CORINE Land Cover** - Europejska klasyfikacja (Copernicus), 44 klasy
-- ✅ **Metody selekcji** - TERYT (powiat), bbox, godło arkusza, plik geometrii (SHP/GPKG)
-- ✅ **Formaty** - GeoPackage, Shapefile (BDOT10k `--format SHP`: archiwum `.zip`, np. `bdot10k_teryt_1465.zip`), GeoTIFF, PNG
-
-### SoilGrids (Dane Glebowe)
-- ✅ **ISRIC SoilGrids** - Globalne dane glebowe, rozdzielczość 250m
-- ✅ **11 parametrów glebowych:**
-  - `clay`, `sand`, `silt` - tekstura gleby (%)
-  - `soc` - węgiel organiczny (g/kg)
-  - `phh2o` - pH w H2O
-  - `nitrogen` - azot całkowity (g/kg)
-  - `bdod` - gęstość objętościowa (kg/dm³)
-  - `cec` - pojemność wymiany kationowej (cmol/kg)
-  - `cfvo` - fragmenty gruboziarniste (%)
-  - `ocd`, `ocs` - gęstość i zasób węgla organicznego
-- ✅ **6 głębokości:** 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm
-- ✅ **5 statystyk:** mean, Q0.05, Q0.5, Q0.95, uncertainty
-
-### Hydrologic Soil Groups (HSG)
-- ✅ **Kalkulacja HSG** dla metody SCS-CN (Curve Number)
-- ✅ **Klasyfikacja USDA** - trójkąt tekstury, 12 klas
-- ✅ **4 grupy hydrologiczne:**
-  - A - wysoka infiltracja (piasek)
-  - B - umiarkowana infiltracja (glina)
-  - C - wolna infiltracja (glina ilasta)
-  - D - bardzo wolna infiltracja (ił)
-- ✅ **Automatyczne pobieranie** clay/sand/silt z SoilGrids
-- ✅ **Statystyki pokrycia** dla każdej grupy HSG - `--stats` podaje powierzchnie
-  w ha także dla rastrów w EPSG:4326 (pole liczone geodezyjnie na elipsoidzie,
-  nie w stopniach kwadratowych)
-
-Od 0.7.0 klasyfikacja tekstury używa **kanonicznych progów trójkąta USDA**
-(skośne granice `silt + 1.5*clay`, `silt + 2*clay`), wspólnych dla wersji skalarnej
-i tablicowej. Mapowanie tekstura → HSG jest świadomie łagodniejsze niż tabela TR-55:
-`sandy_loam` = **B** (nie A), `clay_loam` i `silty_clay_loam` = **C** (nie D) -
-to klasy przejściowe, których grupa zależy też od struktury gleby. Uzasadnienie
-i wpływ na wynik: [ADR-025](docs/DECISIONS.md).
-
-## Konfiguracja CLMS API (opcjonalne)
-
-Aby pobierać dane CORINE jako **GeoTIFF z kodami klas** (zamiast podglądu PNG),
-potrzebujesz konta w Copernicus Land Monitoring Service:
-
-1. Zarejestruj się na https://land.copernicus.eu
-2. Wygeneruj API credentials (JSON z polami `client_id`, `private_key`, `token_uri`,
-   opcjonalnie `key_id` i `user_id`)
-3. Ustaw je w zmiennej środowiskowej `CLMS_CREDENTIALS` - działa na każdym systemie:
-
-```bash
-export CLMS_CREDENTIALS='{
-  "client_id": "...",
-  "private_key": "-----BEGIN RSA PRIVATE KEY-----\n...",
-  "token_uri": "https://land.copernicus.eu/@@oauth2-token",
-  "key_id": "...",
-  "user_id": "..."
-}'
-```
-
-Na macOS alternatywą (fallback, gdy zmiennej nie ma) jest Keychain:
-
-```bash
-security add-generic-password -a "$USER" -s "clms-token" -w '{ ... ten sam JSON ... }'
-```
-
-**Bezpieczeństwo:** Credentials czyta wyłącznie podproces Auth Proxy
-(`python -m kartograf.auth.proxy`), który dziedziczy zmienne środowiskowe rodzica.
-Główna aplikacja nigdy nie widzi kluczy prywatnych ani tokenu - proxy pobiera dane
-samo, a token dostają wyłącznie hosty `*.copernicus.eu` i `*.eea.europa.eu`
-(presigned link pobrania na innym hoście `https` jest forwardowany bez tokenu,
-adres `http` odrzucany).
-
-**Bez konfiguracji:** CORINE automatycznie pobiera podgląd PNG przez WMS
-(sidecar dostaje wtedy `extra.fallback = "wms_png"`).
-
-**Z poziomu biblioteki** można też podać credentials wprost:
-`CorineProvider(clms_credentials={...})` (tryb bezpośredni, z pominięciem proxy).
+Pliki lądują w `data/<produkt>/<kraj>_<układ>[_<wariant>][_<vcrs>]/...`
+(np. `data/nmt/pl_1992_1m_evrf2007/`), a każdy ma obok sidecar
+`<plik>.meta.json` z układem, licencją i pochodzeniem danych — opis
+w [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (sekcja 3).
 
 ## Dokumentacja
 
-- [SCOPE.md](docs/SCOPE.md) - Zakres projektu (co JEST i czego NIE MA)
-- [ARCHITECTURE.md](docs/ARCHITECTURE.md) - Architektura, kontrakty danych, kanoniczny układ `data/`
-- [PRD.md](docs/PRD.md) - Product Requirements Document
-- [PROGRESS.md](docs/PROGRESS.md) - Status implementacji i checkpointy
-- [CHANGELOG.md](docs/CHANGELOG.md) - Historia zmian
-- [DECISIONS.md](docs/DECISIONS.md) - Rejestr decyzji architektonicznych (ADR)
-- [DEVELOPMENT_STANDARDS.md](docs/DEVELOPMENT_STANDARDS.md) - Standardy kodowania i workflow pracy (także dla asystentów AI)
+| Plik | Zawartość |
+|---|---|
+| [USAGE.md](docs/USAGE.md) | Przewodnik użytkownika: CLI i biblioteka, wynik pobrania, kampanie, CLMS, znane problemy |
+| [SCOPE.md](docs/SCOPE.md) | Zakres projektu: co jest, czego nie ma, ograniczenia techniczne |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architektura, moduły, kontrakty danych, układ `data/`, przepływy per produkt |
+| [PRD.md](docs/PRD.md) | Wymagania produktowe, publiczne API |
+| [DECISIONS.md](docs/DECISIONS.md) | Rejestr decyzji architektonicznych (ADR) |
+| [CHANGELOG.md](docs/CHANGELOG.md) | Historia zmian per wydanie |
+| [PROGRESS.md](docs/PROGRESS.md) | Bieżący stan prac |
+| [DEVELOPMENT_STANDARDS.md](docs/DEVELOPMENT_STANDARDS.md) | Dla deweloperów: środowisko, testy, konwencje, workflow |
 
 ## Wymagania
 
-- Python 3.12+
-- requests >= 2.31.0
-- pyproj >= 3.6.0
-- PyJWT[crypto] >= 2.8.0
-- rasterio >= 1.3.0
-- numpy >= 1.24.0
-- pyshp >= 2.3.0
-
-## Struktura Projektu
-
-```
-Kartograf/
-├── kartograf/           # Kod źródłowy
-│   ├── auth/            # Auth Proxy (bezpieczna autentykacja CLMS)
-│   ├── cache/           # Cache metadanych (SQLite)
-│   ├── core/            # Parsery godeł (PL-1992/PL-2000/TM33), BBox, geometria (SHP/GPKG)
-│   ├── sources/         # Deskryptory źródeł danych + sidecar metadanych
-│   ├── transform/       # Transformacje CRS (crs.py, bbox.py) i rastrów (raster.py - warp_to_grid)
-│   ├── transport/       # Wspólny transport HTTP + mozaikowanie rastrów
-│   ├── providers/       # Providery danych (pl/: GUGiK, BDOT10k; cuzk/: DMR CZ; CORINE, SoilGrids)
-│   ├── download/        # Download management (NMT/NMPT/Orto/LAZ) + kampanie GUGiK + wycinek PL (cutout.py)
-│   ├── landcover/       # Land Cover management
-│   ├── hydrology/       # Hydrologic Soil Groups (HSG)
-│   └── cli/             # CLI interface (moduły per komenda)
-├── tests/               # Testy offline + `live` (marker; liczba: `pytest --collect-only`)
-├── docs/                # Dokumentacja (ARCHITECTURE.md - kanoniczny opis architektury i układu data/)
-└── README.md
-```
-
-## Dla Deweloperów
-
-### Środowisko
-
-```bash
-# Aktywuj .venv
-source .venv/bin/activate
-
-# Zależności deweloperskie (pytest, pytest-cov, ruff, mypy)
-pip install -e ".[dev]"
-
-# Przeczytaj dokumentację przed rozpoczęciem
-cat CLAUDE.md
-```
-
-### Testy
-
-```bash
-# Uruchom testy (offline)
-pytest tests/ -m "not live"
-
-# Z pokryciem kodu
-pytest tests/ -m "not live" --cov=kartograf --cov-report=html
-
-# Testy sieciowe (live)
-pytest tests/ -m live   # testy sieciowe - tylko świadomie
-
-# Formatowanie
-ruff format kartograf/ tests/
-
-# Linting
-ruff check kartograf/ tests/
-```
+Python 3.12+; zależności wymienia `pyproject.toml` (`dependencies`,
+narzędzia deweloperskie w `[dev]`). CORINE jako GeoTIFF wymaga konta
+Copernicus CLMS ([docs/USAGE.md](docs/USAGE.md), sekcja 6) — bez niego
+pobierany jest podgląd PNG.
 
 ## Licencja
 
-Projekt udostępniony na licencji MIT. Szczegóły w pliku `LICENSE`.
+MIT — szczegóły w pliku `LICENSE`.
 
 ## Autor
 
@@ -491,4 +116,6 @@ Projekt udostępniony na licencji MIT. Szczegóły w pliku `LICENSE`.
 
 ## Status
 
-**Wersja 0.7.0-dev** - NMT Czechy (CUZK DMR 5G/4G, `--country {pl,cz,auto}`, parser godeł TM33/SM5, sidecary metadanych `.meta.json`), układ `data/` per produkt ([ADR-026](docs/DECISIONS.md)) i `--target-crs` dla Polski w trybie `--bbox`/`--geometry` ([ADR-027](docs/DECISIONS.md)) - także jako API biblioteki `download_pl_cutout`, oraz kampanie GUGiK (`--campaigns {newest,all}`, `--min-year`; każda kampania arkusza w `kampanie/`, ścieżka standardowa jako dowiązanie twarde do najnowszej, [ADR-030](docs/DECISIONS.md)). Wcześniej: v0.6.x (LAZ przez WFS, pobieranie równoległe `--workers`, cache metadanych SQLite, walidacja warstw WMS), v0.5.0 (PL-2000, 15 warstw BDOT10k). [CHANGELOG.md](docs/CHANGELOG.md) opisuje zmiany kontraktów przed wydaniem.
+Projekt w aktywnym rozwoju; wersję pakietu podaje `kartograf --version`.
+Zmiany, także niewydane jeszcze zmiany kontraktów, opisuje
+[docs/CHANGELOG.md](docs/CHANGELOG.md).
