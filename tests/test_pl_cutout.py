@@ -2835,6 +2835,62 @@ class TestBuildFromLocalSheets:
                 vertical_crs="EVRF2007",
             )
 
+    @staticmethod
+    def _call(sheets, out):
+        from kartograf.download.cutout import build_cutout_from_sheets
+
+        return build_cutout_from_sheets(
+            sheets,
+            BBox(500010, 600010, 500090, 600090, "EPSG:2180"),
+            "EPSG:2180",
+            out,
+            resolution="1m",
+            vertical_crs="EVRF2007",
+        )
+
+    def test_missing_sheet_is_validation_error_and_nothing_written(self, tmp_path):
+        from kartograf.exceptions import ValidationError
+
+        good = _write_sheet_asc(tmp_path / "good.asc", 500000.0, 600000.0)
+        ghost = tmp_path / "ghost.asc"
+        out = tmp_path / "project" / "dem.tif"
+        with pytest.raises(ValidationError, match="ghost.asc"):
+            self._call([good, ghost], out)
+        assert not out.parent.exists()
+
+    def test_directory_as_sheet_is_validation_error(self, tmp_path):
+        from kartograf.exceptions import ValidationError
+
+        folder = tmp_path / "folder.asc"
+        folder.mkdir()
+        out = tmp_path / "project" / "dem.tif"
+        with pytest.raises(ValidationError, match="folder.asc"):
+            self._call([folder], out)
+        assert not out.parent.exists()
+
+    def test_garbage_sheet_is_validation_error(self, tmp_path):
+        from kartograf.exceptions import ValidationError
+
+        junk = tmp_path / "junk.asc"
+        junk.write_text("this is not a raster", encoding="utf-8")
+        out = tmp_path / "project" / "dem.tif"
+        with pytest.raises(ValidationError, match="junk.asc"):
+            self._call([junk], out)
+        assert not out.parent.exists()
+
+    def test_output_equal_to_input_sheet_is_rejected(self, tmp_path):
+        from kartograf.exceptions import ValidationError
+
+        a = _write_sheet_asc(tmp_path / "a.asc", 500000.0, 600000.0)
+        before = a.read_bytes()
+        # same file reached through a different spelling of the path
+        alias = tmp_path / "sub" / ".." / "a.asc"
+        (tmp_path / "sub").mkdir()
+        with pytest.raises(ValidationError, match="nadpisal"):
+            self._call([a], alias)
+        assert a.read_bytes() == before
+        assert not (tmp_path / "a.asc.meta.json").exists()
+
     def test_exported(self):
         import kartograf
 

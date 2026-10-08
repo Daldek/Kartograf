@@ -841,7 +841,11 @@ GeoTIFF zamiast listy arkuszy. Od 2026-09-28 (R3) caly tor zyje w bibliotece
   `build_pl_cutout`): cel EPSG:2180 i arkusze o roznej fazie siatki =
   `GridMismatchError`, cel z warpem raportuje je w `off_grid_sheets`;
   arkusz PL-2000 = `ValidationError`. Wynik jest budowany zawsze (bez
-  pomijania istniejacego pliku), puste `sheet_paths` = `ValidationError`.
+  pomijania istniejacego pliku). `ValidationError` przed jakimkolwiek
+  zapisem: puste `sheet_paths`, sciezka arkusza nieistniejaca / nie plik /
+  nieczytelna jako raster (komunikat wymienia sciezki) oraz `output_path`
+  rowny jednemu z arkuszy (porownanie po `resolve()`; inaczej wynik
+  nadpisalby dane wejsciowe).
 
 CLI jest nakladka: `_download_pl_bbox`/`_download_pl_geometry` wolaja
 `_download_pl_cutout` (`cli/download_cmd.py`), ktore wstrzykuje providera
