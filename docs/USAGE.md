@@ -325,6 +325,14 @@ calc = HSGCalculator()
 calc.calculate_hsg_by_godlo("N-34-130-D", Path("./hsg.tif"))
 stats = calc.get_hsg_statistics(Path("./hsg.tif"))
 
+# HSG z gotowych rastrow clay/sand/silt (g/kg) na jawnej siatce - bez pobierania
+from kartograf import BBox, hsg_from_rasters
+hsg_from_rasters(
+    Path("clay.tif"), Path("sand.tif"), Path("silt.tif"),
+    bbox=BBox(501000, 596000, 503000, 598000, "EPSG:2180"),
+    crs="EPSG:2180", pixel_m=100.0, output_path=Path("./hsg_100m.tif"),
+)
+
 # Scalony wycinek NMT PL w zadanym układzie (jeden GeoTIFF + sidecar)
 from kartograf import download_pl_cutout, MetadataCache
 
@@ -508,6 +516,11 @@ Reguły szczegółowe: SCOPE 2.12, ARCHITECTURE 3.3 (reguła 6), ADR-030.
   `silt` z SoilGrids, klasyfikuje teksturę wg trójkąta USDA (12 klas)
   i mapuje ją na grupy A–D; wynik to GeoTIFF 1–4 (0 = nodata) z sidecarem
   (PRD 3.8).
+- `hsg_from_rasters(clay, sand, silt, *, bbox, crs, pixel_m, output_path)`
+  robi to samo z gotowych rastrow (g/kg) na siatce o zadanym ukladzie
+  i pikselu, bez wartosci domyslnych. Nodata wejscia tylko z jego tagu,
+  a piksele poza zasiegiem wejscia dostaja `0`; sidecar zawiera skroty
+  SHA-256 plikow wejsciowych (`extra.source_layers`).
 - Klasyfikacja używa **kanonicznych progów trójkąta USDA** (skośne granice
   `silt + 1.5*clay`, `silt + 2*clay`), wspólnych dla wersji skalarnej
   i tablicowej. Mapowanie tekstura → HSG jest świadomie łagodniejsze niż

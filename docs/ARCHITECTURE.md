@@ -123,7 +123,7 @@ cli ──> kartograf (__version__), download, landcover, core, sources,
         providers (l), transform (l), transport (l), hydrology (l), cache (l)
 download ──> providers, sources, transform, core, transport (l)
 landcover ──> providers, download (FileStorage), core, cache, sources (l)
-hydrology ──> providers (l), core (l), sources (l)
+hydrology ──> core, providers (l), sources (l), transform (l)
 providers ──> sources, transform, transport, core, cache,
         auth (l), download (l)
 sources ──> core, kartograf (l, __version__)
@@ -190,9 +190,13 @@ Uwagi, ktore latwo przeoczyc:
   importuje `MetadataCache` na poziomie modulu (adnotacja) i przekazuje go
   providerom tworzonym po nazwie (`Bdot10kProvider(cache=)` — odpowiedzi
   PRG, `SoilGridsProvider(cache=)`); CORINE cache nie ma.
-- `hydrology` importuje wszystko leniwie: `providers.soilgrids` (warstwy
-  gleb), `core.sheet_parser` (godlo -> bbox) i `sources.sidecar.emit_sidecar`
-  (sidecar wyniku HSG).
+- `hydrology ──> core` istnieje na poziomie modulu tylko pod
+  `if TYPE_CHECKING:` (adnotacja `BBox` w `hsg_from_rasters`; wg reguly grafu
+  to import na poziomie modulu). Reszta jest leniwa: `providers.soilgrids`
+  (warstwy gleb), `core.sheet_parser` (godlo -> bbox), `core.bbox`
+  (`transform_bbox`), `transform` (przypieta reprojekcja wejsc
+  `hsg_from_rasters`) i `sources.sidecar` (`emit_sidecar`, `file_digest` —
+  sidecar wyniku HSG).
 - `sources` i `transport` siegaja do pakietu glownego leniwie i tylko po
   `__version__` (sidecar, naglowek `User-Agent`) — import przy imporcie
   modulu dalby cykl, bo `kartograf/__init__.py` importuje providery.
@@ -1397,6 +1401,19 @@ glebokosc: `hsg_<godlo>_<depth>.tif`, `hsg_bbox_<depth>.tif`),
 `horizontal_crs` = uklad rastra wyniku, `nodata: 0`,
 `extra` = `{derived: "hsg", source_layers: ["clay", "sand", "silt"], depth,
 stat, classes: "1=A, 2=B, 3=C, 4=D"}`.
+
+`hsg_from_rasters(clay, sand, silt, *, bbox, crs, pixel_m, output_path)`
+(od 0.7.1, A8) liczy HSG z gotowych rastrow (g/kg, SoilGrids) bez pobierania
+i bez wartosci domyslnych: kazde wejscie jest reprojektowane przypieta
+operacja (`CONTENT_POLICY`, bilinear; `warp_to_grid`) na siatke `crs`/`pixel_m`
+zaczepiona w `bbox` (przeliczonym do `crs`), a klasyfikacja (`_classify_hsg`)
+i zapis GeoTIFF (`_write_hsg_geotiff`) sa wspolne z
+`HSGCalculator.calculate_hsg_by_bbox`. Nodata wejscia pochodzi wylacznie z
+jego tagu (brak tagu = brak wartosci nodata, bez domyslnego `-32768`); piksele
+poza zasiegiem wejscia oraz trojki zerowe daja `0`. Sidecar jak wyzej, ale
+`extra.source_layers` to lista `{name, file, sha256}` (skrot pliku wejsciowego,
+`file_digest`), bez `depth`/`stat` (nie sa znane), a `request` niesie
+siatke (`bbox` w `crs`).
 
 **Odkrywanie TERYT (od 0.7.1).** `providers/pl/prg.py` to jedyne miejsce,
 ktore pyta, w jakich powiatach lezy obszar albo punkt:

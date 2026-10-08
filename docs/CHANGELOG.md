@@ -60,6 +60,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   resolution, vertical_crs)`: wycinek NMT PL z lokalnych arkuszy bez
   zapytan sieciowych, wynik i sidecar pod sciezka podana przez
   wywolujacego (reguly siatki jak w `download_pl_cutout`).
+- `hsg_from_rasters(clay, sand, silt, *, bbox, crs, pixel_m, output_path)`:
+  HSG z gotowych rastrow SoilGrids (g/kg) na jawnie podanej siatce, bez
+  wartosci domyslnych (nodata wejsc tylko z tagu, jak w
+  `calculate_hsg_by_bbox`); sidecar z `sha256` warstw wejsciowych
+  (`extra.source_layers`: `name`, `file`, `sha256`).
 
 ### Zmienione
 
