@@ -39,14 +39,16 @@ wykonanych transformacji. Sidecary pisza **warstwy zarzadzajace** —
 (`download/cutout.py::write_pl_cutout_sidecar`), kafle LAZ w bibliotece
 (`download/laz.py::write_laz_sidecar`, ADR-029), wynik HSG
 (`HSGCalculator._write_sidecar`, sekcja 4.8) i wynik CZ
-(`download/cz_cutout.py::write_cz_sidecar`, od 0.7.1) — nigdy providery; provider zwraca `Path`, metadane skladane sa pietro wyzej,
-gdzie znany jest kontekst zadania. Wynika z tego, ze bezposrednie wywolanie
+(`download/cz_cutout.py::write_cz_sidecar`, od 0.7.1) — nigdy providery;
+provider zwraca `Path`, metadane skladane sa pietro wyzej, gdzie znany jest
+kontekst zadania. Wynika z tego, ze bezposrednie wywolanie
 providera z biblioteki (np. `GugikProvider.download`,
 `CuzkDmrProvider.download`/`download_bbox`) zapisuje sam plik danych, bez
 sidecara — w szczegolnosci sidecar DMR CZ pisze
 `download/cz_cutout.py::write_cz_sidecar`: dla wycinka bbox wolany przez
 `run_cz_cutout` (biblioteka i CLI, sekcja 4.5), dla godla CZ przez CLI
-(`_cz_download_godlo`), bo tor CZ omija `DownloadManager` (ADR-023). Nowy sidecar powstaje zawsze przez
+(`_cz_download_godlo`), bo tor CZ omija `DownloadManager` (ADR-023).
+Nowy sidecar powstaje zawsze przez
 `sources/sidecar.py::emit_sidecar` — jedyne miejsce polityki zapisu
 (poza nim: kopia sidecara celu w sciezce standardowej,
 `download/links.py::write_standard_sidecar`, i dopisanie
@@ -70,8 +72,8 @@ bboxa podanego w ukladzie czeskim) i obwiednia pliku geometrii w torze LAZ
 (`_resolve_laz_bbox`: `get_overall_bbox(..., target_crs="EPSG:2180")`).
 Przeliczenia obwiedni miedzy ukladami PL i WGS84 (selekcja arkuszy
 w `core/sheet_parser.py` i `core/geometry.py`, `bbox_to_2180` wycinka
-i odkrywania TERYT dla ukladow nieczeskich, dyspozycja krajow w CLI, obwiednia bboxa EPSG:2180
-w ukladzie uslugi CORINE/SoilGrids — `transform/bbox.py::envelope_from_2180`)
+i odkrywania TERYT dla ukladow nieczeskich, dyspozycja krajow w CLI,
+obwiednia bboxa EPSG:2180 w ukladzie uslugi CORINE/SoilGrids — `transform/bbox.py::envelope_from_2180`)
 swiadomie uzywaja domyslnego transformera pyproj — migracja to backlog A5-6.
 `transform/crs.py` ma cztery twarde reguly: (1) transformer budowany tylko przez
 `TransformerGroup(..., always_xy=True, allow_ballpark=False)` — `Transformer.
@@ -166,7 +168,8 @@ Uwagi, ktore latwo przeoczyc:
   `transform.crs.build_pinned_transform` (`prepare_pl_cutout`),
   `transport.mosaic` i `transform.raster` (`build_pl_cutout`) oraz
   `transport.mosaic.has_valid_pixels` (`run_pl_cutout` i `run_cz_cutout`,
-  kontrola `all_nodata`; w `cz_cutout.py` tylko ten leniwy import). `manager.py` i `storage.py` nie importuja zadnego z nich —
+  kontrola `all_nodata`; w `cz_cutout.py` tylko ten leniwy import).
+  `manager.py` i `storage.py` nie importuja zadnego z nich —
   `DownloadManager` pozostaje warstwa koordynacji arkuszy.
 - `cli` nie buduje mozaiki ani warpu wycinka (robi to biblioteka, R3),
   a z `transform` bierze tylko `TransformError`. Jedyna krawedz
@@ -252,8 +255,8 @@ kartograf/
 │                        # i CZ); vrt_xml/VRT_TYPES dla transport/mosaic.py
 ├── transport/           # Wspolny transport
 │   ├── http.py          # download_to (pliki WSZYSTKICH providerow; zapis atomowy os.replace)
-│   │                    # i get_with_retry (zapytania: skorowidz, WFS LAZ, TERYT BDOT10k,
-│   │                    # WFS PRG, CuzkClient.query) — jedyne miejsce retry (siec, 429, 5xx;
+│   │                    # i get_with_retry (zapytania: skorowidz, WFS LAZ, WFS PRG,
+│   │                    # CuzkClient.query) — jedyne miejsce retry (siec, 429, 5xx;
 │   │                    # Retry-After): is_retryable, retry_wait, backoff_delay;
 │   │                    # make_gugik_session, SessionPerThread (sesja per watek)
 │   └── mosaic.py        # mosaic_and_crop — merge rastrow + przyciecie, propagacja nodata;
@@ -281,14 +284,21 @@ kartograf/
 │   ├── corine.py        # CORINE z Copernicus CLMS (+ fallback WMS PNG)
 │   └── soilgrids.py     # SoilGrids z ISRIC (WCS)
 ├── cache/metadata.py    # MetadataCache — SQLite WAL, thread-safe; tabele record_cache,
-│                        # campaigns_cache, teryt_cache (TTL 7 d, DEFAULT_TTL_SECONDS)
+│                        # campaigns_cache, teryt_cache, teryt_bbox_cache (TTL 7 d,
+│                        # DEFAULT_TTL_SECONDS)
 │                        # i sheet_cache (30 d, SHEET_TTL_SECONDS); plik bazy
 │                        # otwierany leniwie, powstaje przy pierwszym zapisie
 ├── download/            # Pobieranie NMT/NMPT/Orto po godle + wycinek PL
-│   ├── campaigns.py     # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu, verify_file_format, verify_record_url/verify_sheet_extent (B4)
+│   ├── campaigns.py     # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu,
+│   │                    # verify_file_format, verify_record_url/verify_sheet_extent (B4),
+│   │                    # verify_record_vertical_crs (uklad wysokosci rekordu)
+│   ├── countries.py     # Podzial obszaru na kraje: countries_for_bbox, split_bbox_by_country
 │   ├── links.py         # Dowiazanie sciezki standardowej (hardlink -> kopia, bez symlinkow, nigdy wstecz)
 │   ├── cutout.py        # Wycinek PL --target-crs jako API (ADR-027): prepare/select/run/
-│   │                    # download_pl_cutout — mozaika arkuszy + warp, sidecar
+│   │                    # download_pl_cutout — mozaika arkuszy + warp, sidecar;
+│   │                    # build_cutout_from_sheets (z lokalnych arkuszy, bez sieci)
+│   ├── cz_cutout.py     # Wycinek CZ jako API: download_cz_cutout/run_cz_cutout, all_nodata,
+│   │                    # write_cz_sidecar
 │   ├── laz.py           # Kafle LAZ jako API (ADR-029): download_laz_area/run_laz_download —
 │   │                    # pula watkow, sidecar kafla, porazki w wyniku
 │   ├── manager.py       # DownloadManager — koordynacja arkuszy (ThreadPoolExecutor), sidecary;
@@ -366,8 +376,10 @@ Kazde udane pobranie przez CLI albo warstwe zarzadzajaca biblioteki
 (`DownloadManager`, `LandCoverManager`, `download_pl_cutout`/`run_pl_cutout`,
 `download_laz_area`/`run_laz_download`, `HSGCalculator`) zapisuje **dwa**
 pliki: dane i `<plik>.meta.json` (zapis best-effort, wyjatki — sekcja 1).
-Bezposrednie wywolanie providera sidecara nie pisze; DMR CZ z biblioteki
-(`CuzkDmrProvider`) jest wiec bez sidecara — pisze go tylko CLI.
+Od 0.7.1 takze `download_cz_cutout`/`run_cz_cutout` (wycinek CZ),
+`build_cutout_from_sheets` (wycinek z lokalnych arkuszy) i
+`hsg_from_rasters`. Bezposrednie wywolanie providera sidecara nie pisze
+(np. `CuzkDmrProvider.download`); sidecar godla CZ pisze CLI.
 
 | Pole | Znaczenie |
 |---|---|
@@ -1356,8 +1368,8 @@ pobiera pakiet KAZDEGO powiatu przecinajacego obszar, w kolejnosci kodow,
 przez `Bdot10kProvider.download_package(code, path, *, timeout, format,
 layers, keep_raw, raw_path) -> Bdot10kPackage(path, teryt, url, format, http,
 raw_path)`; jeden plik i sidecar per powiat (`_download_county`, jedyna
-sciezka pobrania BDOT10k w menedzerze, takze dla `--teryt`); brak powiatu = `NoCoverageError`, awaria
-PRG albo pakietu = `DownloadError` (pliki pobrane wczesniej zostaja). CLI
+sciezka pobrania BDOT10k w menedzerze, takze dla `--teryt`); brak powiatu =
+`NoCoverageError`, awaria PRG albo pakietu = `DownloadError` (pliki pobrane wczesniej zostaja). CLI
 `landcover download --source bdot10k` z `--bbox`/`--godlo`/`--geometry`
 wola te metode i drukuje `Downloaded to:` dla kazdego pliku; `--teryt`
 bez zmian. Stare `download_by_bbox`/`download_by_godlo` (menedzera bez
@@ -1395,7 +1407,7 @@ download*`; tylko GPKG — przy SHP `ValidationError`, bo wynik SHP to juz
 oryginalny ZIP) zapisuje obok GPKG nietkniete archiwum GUGiK. Archiwum
 to zawsze PELNY pakiet powiatu, wiec na sciezce standardowej nosi
 standardowa nazwe BEZ tokenu warstw (A2): `bdot10k_teryt_<TERYT>_GPKG.zip`
-(np. `bdot10k_teryt_1465_GPKG.zip`) — jeden plik dla kazdego filtra
+(np. `bdot10k_teryt_1465_GPKG.zip`) — ten sam plik niezaleznie od filtra
 `layers=` (menedzer podaje go jako `download_package(raw_path=)`); przy
 jawnym `output_path` nazwe wybiera wywolujacy: `<rdzen output_path>_GPKG.zip`.
 Archiwum ma wlasny sidecar (`request` jak pliku wyniku, ale bez `layers`,

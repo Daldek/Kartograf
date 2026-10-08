@@ -181,8 +181,8 @@ kartograf landcover download --source bdot10k --teryt 1465
 kartograf landcover download --source bdot10k --teryt 1465 --format SHP   # archiwum .zip
 # Obszar z dwóch powiatów (TERYT z WFS PRG): pakiet KAŻDEGO powiatu, osobny plik
 kartograf landcover download --source bdot10k --bbox 340000,290000,350000,300000 -o ./dane
-#   -> Downloaded to: ./dane/bdot10k_teryt_0208.gpkg
-#   -> Downloaded to: ./dane/bdot10k_teryt_0224.gpkg
+#   -> Downloaded to: dane/bdot10k_teryt_0208.gpkg
+#   -> Downloaded to: dane/bdot10k_teryt_0224.gpkg
 #   (nazwa zawsze teryt_<TERYT> — pakiet to cały powiat; obszar żądania
 #    w sidecarze extra.parent_request; to samo dla --godlo i --geometry)
 kartograf landcover download --source corine --year 2018 --godlo N-34-130-D
@@ -370,6 +370,8 @@ local = build_cutout_from_sheets(
     resolution="1m",
     vertical_crs="EVRF2007",
 )
+# ValidationError przed zapisem: brak/nieczytelny arkusz (lista ścieżek)
+# albo output_path równy jednemu z arkuszy (nadpisałby dane wejściowe)
 
 # Zlewnia przygraniczna PL/CZ: podział obszaru na kraje i wycinek CZ
 # w układzie PL (EPSG:2180 + EVRF2007); siatka CZ startuje od zadanego obszaru
@@ -510,8 +512,8 @@ cache (7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania.
 - **LAZ:** `--campaigns all` pobiera wszystkie kafle, których rama przecina
   obszar (bez deduplikacji ADR-029), `--min-year` to dolna granica roku
   kafla; `--min-year` i `--year` wykluczają się. LAZ nie używa dowiązań.
-- Składanie kilku kampanii w jedną powierzchnię nie jest częścią 0.7.0
-  (planowane na 0.7.1, SCOPE 3.1).
+- Składanie kilku kampanii w jedną powierzchnię nie jest częścią
+  Kartografu (plany: SCOPE 3.1).
 
 Reguły szczegółowe: SCOPE 2.12, ARCHITECTURE 3.3 (reguła 6), ADR-030.
 

@@ -45,7 +45,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`etag`, `last_modified`, `content_length` z odpowiedzi; serwer paczek
   GUGiK podaje dzis tylko `Content-Length`). `keep_raw=True` zachowuje
   oryginalny ZIP GUGiK obok GPKG (pelny pakiet: `bdot10k_teryt_<TERYT>_GPKG.zip`
-  bez tokenu warstw, jeden dla kazdego filtra `layers=`, z wlasnym
+  bez tokenu warstw, ten sam plik niezaleznie od filtra `layers=`, z wlasnym
   sidecarem; tylko GPKG). `Bdot10kPackage` ma pola `http` i `raw_path`.
 - Wycinek CZ w bibliotece: `download_cz_cutout(bbox, output_dir=,
   target_crs=, vertical_crs=, resolution=)` (np. EPSG:2180 + EVRF2007;
@@ -59,7 +59,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `build_cutout_from_sheets(sheet_paths, bbox, target_crs, output_path, *,
   resolution, vertical_crs)`: wycinek NMT PL z lokalnych arkuszy bez
   zapytan sieciowych, wynik i sidecar pod sciezka podana przez
-  wywolujacego (reguly siatki jak w `download_pl_cutout`).
+  wywolujacego (reguly siatki jak w `download_pl_cutout`). Brakujacy albo
+  nieczytelny arkusz i `output_path` rowny arkuszowi wejsciowemu =
+  `ValidationError` przed zapisem.
 - `hsg_from_rasters(clay, sand, silt, *, bbox, crs, pixel_m, output_path)`:
   HSG z gotowych rastrow SoilGrids (g/kg) na jawnie podanej siatce, bez
   wartosci domyslnych (nodata wejsc tylko z tagu, jak w
@@ -78,6 +80,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `DownloadManager.download_sheet()` ustawia `last_result` takze dla
   pojedynczego arkusza (jednoelementowy `DownloadResult`); dotad `None`.
+  Co zrobic: kod, ktory po `download_sheet()` traktowal `last_result`
+  jako `None`, moze czytac z niego wynik arkusza.
 - Udokumentowano: przy kampaniach (`campaigns=`) zrodlem pochodzenia
   arkusza jest sidecar, nie `source_info()` (A12).
 - Godla PL-1992 spoza zakresu nomenklatury (pas inny niz M/N, slup spoza
@@ -85,7 +89,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `ParseError` przed jakimkolwiek zapytaniem sieciowym; dotad trafialy do
   uslug z bboxem `inf` albo poza Polska.
 - `ParseError` dziedziczy po `ValidationError` — `except ValidationError`
-  lapie tez bledy godel.
+  lapie tez bledy godel. Co zrobic: gdy kod obsluguje oba wyjatki osobno,
+  `except ParseError` musi stac przed `except ValidationError`.
 - Liczby w godle PL-1992 sa zapisywane bez zer wiodacych, jak w skorowidzu
   GUGiK (`M-33-036-A` -> `M-33-36-A`) — w sciezce, sidecarze i wyniku,
   takze w nazwach plikow land cover (`..._godlo_M-33-36-A`) i w domyslnej
