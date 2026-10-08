@@ -1,4 +1,4 @@
-"""Testy dowiazan sciezki standardowej (kartograf.download.links, ADR-030 d)."""
+"""Tests of standard path links (kartograf.download.links, ADR-030 d)."""
 
 import json
 import logging
@@ -130,9 +130,9 @@ def test_standard_sidecar_is_regular_file_even_if_symlink_existed(tmp_path):
 
 
 def test_legacy_symlink_with_symlink_sidecar_is_unknown_and_replaced(tmp_path):
-    """Errata 4: symlink z sidecarem ``extra.link=symlink`` (dane sprzed
-    wydania) to sciezka nieznana — nawet przy tym samym celu ``newest``
-    zastepuje go hardlinkiem, bez zapisu przez symlink."""
+    """Erratum 4: a symlink with a sidecar ``extra.link=symlink`` (data from
+    before the release) is an unknown path - even with the same target
+    ``newest`` replaces it with a hard link, without writing through the symlink."""
     a, k_a = _a(tmp_path)
     link = _link(tmp_path)
     link.parent.mkdir(parents=True)
@@ -186,7 +186,7 @@ def test_same_campaign_is_noop_missing_sidecar_relinks(tmp_path):
     link = _link(tmp_path)
     assert ensure_standard_link(link, a, k_a).changed is True
     assert ensure_standard_link(link, a, k_a).changed is False
-    _sidecar(link).unlink()  # sidecar = jedyne zrodlo celu: sciezka nieznana
+    _sidecar(link).unlink()  # sidecar = the only source of the target: unknown path
     assert linked_campaign(link) is None
     out = ensure_standard_link(link, a, k_a)
     assert out.changed is True and out.method == "hardlink"
@@ -203,7 +203,7 @@ def test_removed_campaign_dir_is_missing_and_relinked(tmp_path):
     ensure_standard_link(link, b, k_b)
     shutil.rmtree(tmp_path / "seg" / "kampanie" / B[0])
     assert link.is_file()  # hardlink przezywa usuniecie kampanii
-    assert linked_campaign(link) is None  # link_target z sidecara nie istnieje
+    assert linked_campaign(link) is None  # link_target from the sidecar does not exist
     out = ensure_standard_link(link, a, k_a)
     assert out.changed is True and _same(out.target, a)
     assert link.read_text() == "A"
@@ -291,7 +291,8 @@ def test_refresh_recopies_when_target_redownloaded(tmp_path, monkeypatch):
     _no_links(monkeypatch)
     ensure_standard_link(link, a, k_a)
     a.write_text("Z")  # ten sam rozmiar
-    t = link.stat().st_mtime - 10  # cel nie "nowszy" od kopii: tylko refresh decyduje
+    # target not "newer" than the copy: only refresh decides
+    t = link.stat().st_mtime - 10
     os.utime(a, (t, t))
     assert _same(linked_campaign(link), a)
     out = ensure_standard_link(link, a, k_a, refresh=True)
@@ -451,7 +452,7 @@ def test_kampanie_in_output_root_still_prevents_regression(tmp_path):
     assert link.read_text() == "B"
 
 
-# --- Fix round 1: porazka sprzatania tmp nie gubi proby kopii ---
+# --- Fix round 1: a tmp cleanup failure does not lose the copy attempt ---
 
 
 def test_tmp_cleanup_failure_after_hardlink_error_still_copies(tmp_path, monkeypatch):
@@ -463,7 +464,7 @@ def test_tmp_cleanup_failure_after_hardlink_error_still_copies(tmp_path, monkeyp
     calls = {"n": 0}
 
     def link_then_fail(src, dst):
-        Path(dst).write_text("polowiczny")  # tmp zostal, ale link sie nie udal
+        Path(dst).write_text("polowiczny")  # tmp remained, but the link failed
         raise OSError(1, "not permitted")
 
     def flaky_unlink(self, missing_ok=False):

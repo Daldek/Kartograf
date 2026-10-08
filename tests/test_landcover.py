@@ -107,7 +107,7 @@ class TestBdot10kProvider:
         assert "1465_SHP.zip" in url
 
     def test_construct_opendata_url_invalid_woj(self):
-        """Test OpenData URL with invalid województwo code."""
+        """Test OpenData URL with invalid voivodeship code."""
         provider = Bdot10kProvider()
         with pytest.raises(ValidationError):
             provider._construct_opendata_url("9999", "GPKG")
@@ -372,11 +372,12 @@ class TestLandCoverCLI:
 
 
 class TestLandCoverInvalidOptions:
-    """Bledny --property/--year/--depth/--stat to blad UZYTKOWNIKA (N8).
+    """An invalid --property/--year/--depth/--stat is a USER error (N8).
 
-    `Error: <tresc>` bez nazwy typu wyjatku i bez podpowiedzi KARTOGRAF_DEBUG
-    (ta jest dla bledow wewnetrznych), kod 1, przed siecia (conftest blokuje
-    gniazda — proba polaczenia wywrocilaby test).
+    `Error: <message>` without the exception type name and without the
+    KARTOGRAF_DEBUG hint (that one is for internal errors), exit code 1, before
+    the network (conftest blocks sockets - a connection attempt would fail the
+    test).
     """
 
     @pytest.mark.parametrize(
@@ -404,7 +405,7 @@ class TestLandCoverInvalidOptions:
 
 
 class TestBdot10kShpFormat:
-    """`--format SHP`: archiwum ZIP z shapefile'ami nie moze udawac `.gpkg` (N1)."""
+    """`--format SHP`: a ZIP archive of shapefiles must not pass as `.gpkg` (N1)."""
 
     SHP_ZIP = b"PK\x03\x04 udawany ZIP z plikami .shp"
 
@@ -457,14 +458,14 @@ class TestBdot10kShpFormat:
 
 
 class TestWojewodztwoMapping:
-    """Test województwo TERYT mapping."""
+    """Test voivodeship TERYT mapping."""
 
     def test_all_wojewodztwa_mapped(self):
-        """Test that all 16 województwa are mapped."""
+        """Test that all 16 voivodeships are mapped."""
         assert len(WOJEWODZTWO_NAMES) == 16
 
     def test_known_wojewodztwa(self):
-        """Test known województwo mappings."""
+        """Test known voivodeship mappings."""
         assert WOJEWODZTWO_NAMES["14"] == "mazowieckie"
         assert WOJEWODZTWO_NAMES["12"] == "malopolskie"
         assert WOJEWODZTWO_NAMES["02"] == "dolnoslaskie"
@@ -653,7 +654,7 @@ class TestBdot10kRetryAndIO:
         assert list(tmp_path.iterdir()) == []
 
     def test_download_writes_all_chunks(self, tmp_path):
-        """Wszystkie fragmenty odpowiedzi trafiaja do pliku, bez resztek .tmp."""
+        """All response chunks end up in the file, no .tmp leftovers."""
         mock_session = Mock()
         mock_resp = Mock()
         mock_resp.iter_content.return_value = [b"chunk1", b"chunk2"]
@@ -704,7 +705,7 @@ class TestBdot10kRetryAndIO:
         assert output.with_suffix(".gpkg").exists()
 
     def test_merge_overwrites_existing_gpkg_like_windows(self, tmp_path):
-        """Scalony GPKG nadpisuje stary plik takze przy semantyce Windows."""
+        """The merged GPKG overwrites the old file also under Windows semantics."""
         import os
 
         provider = Bdot10kProvider()
@@ -843,13 +844,12 @@ class TestCorineProviderInit:
         assert provider._use_proxy is False
 
     def test_env_var_does_not_enable_direct_mode(self, monkeypatch):
-        """CLMS_CREDENTIALS w env NIE wlacza trybu direct (ADR-002).
+        """CLMS_CREDENTIALS in env does NOT enable direct mode (ADR-002).
 
-        Credentials z env sa konsumowane wylacznie przez podproces auth
-        proxy (kartograf.auth.proxy) — nigdy przez CorineProvider.__init__
-        bezposrednio. Przypina to, ze usuniecie martwego bloku
-        get_clms_credentials()/Keychain w corine.py (zad. 20 audytu
-        0.7.0) nie zmienia tego zachowania.
+        Credentials from env are consumed exclusively by the auth proxy subprocess
+        (kartograf.auth.proxy) - never by CorineProvider.__init__ directly. This
+        pins that removing the dead get_clms_credentials()/Keychain block in
+        corine.py (task 20 of the 0.7.0 audit) does not change this behaviour.
         """
         monkeypatch.setenv("CLMS_CREDENTIALS", '{"client_id": "x"}')
         provider = CorineProvider()
@@ -858,7 +858,7 @@ class TestCorineProviderInit:
 
 
 def _wms_bbox(url):
-    """Wartosc parametru BBOX z URL GetMap jako cztery liczby."""
+    """Value of the BBOX parameter of a GetMap URL as four numbers."""
     from urllib.parse import parse_qs, urlparse
 
     return tuple(float(v) for v in parse_qs(urlparse(url).query)["BBOX"][0].split(","))
@@ -1014,12 +1014,12 @@ class TestCorineProviderDownload:
         result = provider._download_via_wms(self._BBOX, tmp_path / "t.tif", 2018, 30)
         assert result == tmp_path / "t.png"
         assert result.read_bytes() == b"png_data"
-        # zapis atomowy: zadnych resztek pliku tymczasowego
+        # atomic write: no temporary file leftovers
         assert [p.name for p in tmp_path.iterdir()] == ["t.png"]
 
     @patch("kartograf.transport.http.time.sleep")
     def test_download_via_wms_error_response(self, sleep, tmp_path):
-        """XML content type -> DownloadError bez ponowien i bez pliku."""
+        """XML content type -> DownloadError without retries and without a file."""
         mock_session = Mock()
         mock_resp = Mock()
         mock_resp.headers = {"Content-Type": "application/xml"}
@@ -1292,7 +1292,7 @@ class TestLandCoverManagerDownload:
     def test_download_and_download_by_x_generate_same_path(
         self, tmp_path, call_kwargs, method_name
     ):
-        """download() i download_by_* musza generowac identyczne sciezki bez spacji."""
+        """download() and download_by_* must generate identical paths without spaces."""
         mock_provider = Mock()
         mock_provider.name = "CORINE Land Cover"
         provider_method = getattr(mock_provider, f"download_by_{method_name}")
@@ -1624,7 +1624,7 @@ class TestSidecarLandCover:
         assert payload["vertical_crs"] is None
 
     def test_sidecar_failure_does_not_break_download(self, tmp_path, caplog):
-        """D7: blad budowy sidecara = ostrzezenie, plik danych zostaje."""
+        """D7: a sidecar build error = warning, the data file stays."""
         import logging
 
         mock_provider = Mock()
@@ -1652,7 +1652,7 @@ class TestSidecarLandCover:
 
     @staticmethod
     def _corine_png_sidecar(tmp_path, **kwargs):
-        """Pobierz CORINE po bbox z fallbackiem PNG; zwroc payload sidecara."""
+        """Download CORINE by bbox with the PNG fallback; return the sidecar payload."""
         import json
 
         mock_provider = Mock()
@@ -1685,9 +1685,9 @@ class TestSidecarLandCover:
 
 
 class TestBdot10kDefaultTimeout:
-    """N11: ``Bdot10kProvider.DEFAULT_TIMEOUT`` jest zrodlem domyslnego
-    timeoutu pobrania we wszystkich trybach (SCOPE 3.2: 120 s), nie martwa
-    stala sprzeczna z sygnaturami."""
+    """N11: ``Bdot10kProvider.DEFAULT_TIMEOUT`` is the source of the default
+    download timeout in all modes (SCOPE 3.2: 120 s), not a dead constant
+    contradicting the signatures."""
 
     @pytest.mark.parametrize(
         "method", ["download_by_admin_unit", "download_by_godlo", "download_by_bbox"]
@@ -1724,7 +1724,7 @@ def _make_layer_gpkg(path, table, value):
 
 
 class TestBdot10kMergeOnNetworkShare:
-    """CIFS/SMB bez nobrl: SQLite nie moze pisac w katalogu wyjsciowym."""
+    """CIFS/SMB without nobrl: SQLite cannot write in the output directory."""
 
     def _patch_locked_in(self, monkeypatch, out_dir):
         real_connect = sqlite3.connect
@@ -1812,7 +1812,7 @@ def _stream_response(body: bytes, content_type: str) -> Mock:
 
 
 class TestLandCoverNoSideEffectsOnInit:
-    """Katalog wyjsciowy powstaje dopiero przy zapisie, nie w ``__init__``."""
+    """The output directory is created only on write, not in ``__init__``."""
 
     @pytest.fixture
     def empty_cwd(self, tmp_path, monkeypatch):

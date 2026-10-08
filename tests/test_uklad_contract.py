@@ -1,17 +1,19 @@
 """
-Kontrakt jednego parsera ukladu poziomego GUGiK (review-1 D3, E11).
+Contract of the single GUGiK horizontal CRS parser (review-1 D3, E11).
 
-Wartosc pola ukladu (``ukladWspolrzednychPoziomych``/``ukladWspolrzednych``
-skorowidza i ``uklad_xy`` WFS LAZ) czytaja trzy miejsca: rekord skorowidza
-(wybor pliku arkusza), ``horizontal_crs_for_uklad`` (sidecar) i
-``LazTile.uklad`` (segment storage). Kazde z nich MUSI dac te sama odpowiedz
-— inaczej kafel ``"PL-2000"`` bez strefy ladowal w ``laz/pl_2000_...``
-z sidecarem ``EPSG:2180``.
+The CRS field value (``ukladWspolrzednychPoziomych``/``ukladWspolrzednych``
+of the GUGiK index (skorowidz) and ``uklad_xy`` of the LAZ WFS) is read in
+three places: the index record (sheet file selection),
+``horizontal_crs_for_uklad`` (sidecar) and ``LazTile.uklad`` (storage
+segment). Each of them MUST give the same answer - otherwise a ``"PL-2000"``
+tile without a zone ended up in ``laz/pl_2000_...`` with an ``EPSG:2180``
+sidecar.
 
-Wartosci realne (E2E 2026-10-06: 1131 rekordow skorowidza, 294 kafle LAZ):
-tylko ``PL-1992`` i ``PL-2000:S5``..``S8``. Nietypowe sa odrzucane spojnie:
-rekord skorowidza bez ukladu, ``horizontal_crs_for_uklad`` = ``None``, kafel
-LAZ pominiety w discovery, a ``LazTile.uklad`` = ``ValidationError``.
+Real values (E2E 2026-10-06: 1131 index records, 294 LAZ tiles): only
+``PL-1992`` and ``PL-2000:S5``..``S8``. Unusual ones are rejected
+consistently: an index record without a CRS, ``horizontal_crs_for_uklad`` =
+``None``, a LAZ tile skipped in discovery, and ``LazTile.uklad`` =
+``ValidationError``.
 """
 
 import xml.etree.ElementTree as ET

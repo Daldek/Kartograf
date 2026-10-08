@@ -27,7 +27,7 @@ CANONICAL_CONTROL_POINTS = [
     # (clay, sand, silt, expected)
     (0, 70, 30, "sandy_loam"),  # silt + 2*clay = 30 >= 30
     (20, 45, 35, "loam"),  # sand <= 52, silt 28-50
-    (35, 45, 20, "clay_loam"),  # sand <= 45 => nie sandy_clay
+    (35, 45, 20, "clay_loam"),  # sand <= 45 => not sandy_clay
     (12, 75, 13, "sandy_loam"),  # silt + 2*clay = 37 >= 30
     (5, 90, 5, "sand"),
     (5, 80, 15, "loamy_sand"),
@@ -66,7 +66,7 @@ class TestUSDATextureClassification:
         """Test loamy sand classification."""
         assert classify_usda_texture(clay=5, sand=80, silt=15) == "loamy_sand"
         # canonical USDA: silt + 1.5*clay = 17 >= 15, silt + 2*clay = 21 < 30
-        # (dawniej pinowane jako "sand")
+        # (formerly pinned as "sand")
         assert classify_usda_texture(clay=8, sand=87, silt=5) == "loamy_sand"
 
     def test_sandy_loam(self):
@@ -140,7 +140,7 @@ class TestUSDATextureClassification:
         assert classify_usda_texture(clay=clay, sand=sand, silt=silt) == expected
 
     def test_zero_sum_returns_loam(self):
-        """Suma 0 (brak danych) -> jawnie loam, nie trafienie reguly `sand`."""
+        """Sum 0 (no data) -> explicitly loam, not a hit of the `sand` rule."""
         assert classify_usda_texture(clay=0, sand=0, silt=0) == "loam"
 
 
@@ -237,7 +237,7 @@ class TestArrayClassification:
         assert (codes >= 1).all() and (codes <= 12).all()
 
     def test_array_float32_input_boundary_clay_15(self):
-        """float32 na granicy clay=15% nie rozjezdza sie ze skalarem (A4-8)."""
+        """float32 at the clay=15% boundary does not diverge from the scalar (A4-8)."""
         # jak w potoku rastrowym: g/kg (float32) / 10 -> procent
         clay = np.array([np.float32(150)], dtype=np.float32) / np.float32(10)
         sand = np.array([np.float32(750)], dtype=np.float32) / np.float32(10)
@@ -249,7 +249,7 @@ class TestArrayClassification:
         assert TEXTURE_NAMES[code] == scalar
 
     def test_array_zero_sum_returns_loam(self):
-        """Suma 0 w tablicy -> loam (jawny guard, nie regula `sand`)."""
+        """Sum 0 in an array -> loam (explicit guard, not the `sand` rule)."""
         clay = np.array([0.0, 5.0])
         sand = np.array([0.0, 90.0])
         silt = np.array([0.0, 5.0])
@@ -695,7 +695,7 @@ class TestHSGCalculatorCalculateFull:
 
 
 class TestHSGSidecar:
-    """Wynik HSG dostaje sidecar <plik>.meta.json (zasada projektu)."""
+    """The HSG result gets a <file>.meta.json sidecar (project rule)."""
 
     def _calc(self):
         mock_provider = Mock()
@@ -747,7 +747,7 @@ class TestHSGSidecar:
 
 
 class TestHSGOutputDirOnWrite:
-    """Katalog wyjsciowy powstaje dopiero tuz przed zapisem wyniku."""
+    """The output directory is created only right before the result is written."""
 
     @staticmethod
     def _bbox():
