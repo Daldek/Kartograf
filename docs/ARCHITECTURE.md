@@ -259,7 +259,8 @@ kartograf/
 │   └── soilgrids.py     # SoilGrids z ISRIC (WCS)
 ├── cache/metadata.py    # MetadataCache — SQLite WAL, thread-safe; tabele record_cache,
 │                        # campaigns_cache, teryt_cache (TTL 7 d, DEFAULT_TTL_SECONDS)
-│                        # i sheet_cache (30 d, SHEET_TTL_SECONDS)
+│                        # i sheet_cache (30 d, SHEET_TTL_SECONDS); plik bazy
+│                        # otwierany leniwie, powstaje przy pierwszym zapisie
 ├── download/            # Pobieranie NMT/NMPT/Orto po godle + wycinek PL
 │   ├── campaigns.py     # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu, verify_file_format
 │   ├── links.py         # Dowiazanie sciezki standardowej (hardlink -> kopia, bez symlinkow, nigdy wstecz)
@@ -620,6 +621,11 @@ zapisuje rekord `{"source": ...}` lub potwierdzony `{"no_coverage": true}`;
 CLI podpina cache w torach PL i CZ; `--force` otwiera go w obu w trybie
 `MetadataCache(refresh=True)` — odczyt pominiety, swiezy rekord zapisany
 (E14) — biblioteka przyjmuje `cache=`; `kartograf cache stats` pokazuje `Record entries`.
+Baza jest otwierana leniwie: plik `.kartograf_cache.db` powstaje dopiero przy
+pierwszym zapisie (`set_*`); konstrukcja, odczyty (`get_*` = chybienie),
+`stats()` (zera, `db_exists: false`), `clear()` i `close()` na braku pliku
+go nie tworza, wiec `kartograf cache path|stats|clear` w katalogu bez bazy
+niczego nie zapisuja.
 `DownloadManager` pisze sidecar po kazdym udanym arkuszu; arkusz ASC GUGiK
 nie niesie CRS (rasterio: `crs=None`), wiec jedynym nosnikiem ukladu jest
 sidecar. Ponowne uruchomienie rozwiazuje najnowszy rekord arkusza (cache 7 d;

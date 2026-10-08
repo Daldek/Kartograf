@@ -16,6 +16,15 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   wydania bez zmian. `__version__` i `User-Agent` bez zmian.
 
 ### Zmienione
+- **Cache metadanych otwierany leniwie:** `MetadataCache()` nie tworzy juz
+  pliku `.kartograf_cache.db` przy konstrukcji — plik i schemat powstaja przy
+  pierwszym zapisie (`set_*`). Odczyty na braku pliku sa chybieniem,
+  `stats()` zwraca zera (nowy klucz `db_exists`), `clear()`/`vacuum()`/
+  `close()` nic nie tworza; nowa wlasciwosc `MetadataCache.db_path`.
+  `kartograf cache path|stats|clear` w katalogu bez bazy jej nie tworza;
+  `cache stats` drukuje wtedy `Database size: - (file not created yet)`.
+  Otwarcie (WAL, tabele, migracja starej bazy) odbywa sie pod istniejacym
+  lockiem — jedno polaczenie przy rownoleglym pierwszym zapisie.
 - **Godlo CZ SM5 bez `--resolution` pobiera 5m:** arkusz SM5 (np.
   `kartograf download CTES96`) to gotowy plik DMR 4G istniejacy tylko
   w 5 m, wiec CLI wyznacza rozdzielczosc z godla (takze pod
