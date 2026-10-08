@@ -3135,8 +3135,8 @@ class TestCmdDownloadLaz:
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
         assert payload["dataset"] == "pl.gugik.laz"
         assert payload["vertical_crs"] == "EPSG:9651"
-        assert payload["extra"]["godlo_kafla"] == tile.godlo
-        assert payload["extra"]["rok"] == tile.year
+        assert payload["extra"]["tile_sheet"] == tile.godlo
+        assert payload["extra"]["year"] == tile.year
         assert payload["request"]["bbox_crs"] == "EPSG:2180"
 
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
@@ -3479,7 +3479,7 @@ class TestCmdDownloadCz:
         assert payload["horizontal_crs"] == "EPSG:3045"  # faktyczny uklad kafla
         assert payload["vertical_crs"] == "EPSG:8357"  # Bpv natywnie
         assert payload["license"]["id"] == "CC-BY-4.0"
-        assert payload["request"] == {"godlo": "302_5550"}
+        assert payload["request"] == {"sheet": "302_5550"}
         # kafel TM33 lezy w 3045, a dane CUZK w 5514 — reprojekcja jest LOKALNA
         # i sidecar niesie jej dokladnosc (ADR-024)
         assert payload["transform"] == {
@@ -3487,7 +3487,7 @@ class TestCmdDownloadCz:
         }
         assert "parent_request" not in payload["extra"]  # tryb godlowy bez pola
 
-    def test_sm5_godlo_enriches_extra_with_podil(self, tmp_path):
+    def test_sm5_godlo_enriches_extra_with_cz_share(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
         from kartograf.providers.cuzk.sheets import SheetInfo
 
@@ -3511,7 +3511,7 @@ class TestCmdDownloadCz:
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
         assert payload["horizontal_crs"] == "EPSG:5514"
         assert payload["extra"]["mapname"] == "Český Těšín 9-6"
-        assert payload["extra"]["podil"] == 0.99
+        assert payload["extra"]["cz_share"] == 0.99
 
     def test_sm5_index_failure_after_download_keeps_file(self, tmp_path):
         """Blad indeksu przy PODIL: warning, plik i sidecar bez podil zostaja."""
@@ -3530,7 +3530,7 @@ class TestCmdDownloadCz:
         payload = json.loads(
             (target.parent / "CTES96.tif.meta.json").read_text(encoding="utf-8")
         )
-        assert "podil" not in payload["extra"]
+        assert "cz_share" not in payload["extra"]
 
     def test_bbox_mode_file_in_bbox_subdir_and_parent_request(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
@@ -4854,7 +4854,7 @@ class TestAutoSplitBBox:
         err = capsys.readouterr().err
         assert "Info: --country auto: czesc PL przycieta" in err
         assert "N: 54,90°N" in err
-        assert "request.godlo" in err and "plik i request.bbox" not in err
+        assert "request.sheet" in err and "plik i request.bbox" not in err
         assert "poza zasiegiem PL/CZ" in err
         assert "--country pl" in err
 
@@ -5715,7 +5715,7 @@ class _PartialSheetProvider(_SheetProvider):
         return {
             "url": f"https://opendata.geoportal.gov.pl/NMT/1/1_{godlo}.asc",
             "layer": "SkorowidzeNMT2025",
-            "aktualnosc": "2025-10-21",
+            "acquisition_date": "2025-10-21",
             "full_sheet": not godlo.endswith(self.partial),
         }
 

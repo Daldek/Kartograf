@@ -43,7 +43,7 @@ class ResultMetadata:
     vertical_source: str  # "native" | "ellipsoidal" | "server"
     resolution: str | None
     nodata: float | None
-    request: dict  # {"godlo": ...} | {"bbox": [...], "bbox_crs": ...}
+    request: dict  # {"sheet": ...} | {"bbox": [...], "bbox_crs": ...}
     license: dict  # {"id","attribution","url"}
     downloaded_at: str  # ISO 8601 UTC
     kartograf_version: str
@@ -138,7 +138,7 @@ def _default_horizontal_crs(
     data_path: Path | None,
 ) -> str:
     """Uklad kanalu; dla arkusza PL po godle — uklad pliku (strefa PL-2000, N8)."""
-    godlo = request.get("godlo")
+    godlo = request.get("sheet")
     if (
         descriptor.country == "PL"
         and "sheet_files" in channel.capabilities

@@ -88,10 +88,10 @@ def test_ref_fields_dirname_and_extra():
     assert ref.to_extra() == {
         "id": "83233",
         "date": "2025-04-27",
-        "zgloszenie": "GK-FOTO.6201.5.2025",
+        "survey_work_id": "GK-FOTO.6201.5.2025",
         "source": "Skaning laserowy",
         "full_sheet": True,
-        "dt_pzgik": "2025-11-17",
+        "pzgik_date": "2025-11-17",
     }
 
 

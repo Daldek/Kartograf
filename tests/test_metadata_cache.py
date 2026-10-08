@@ -40,20 +40,20 @@ SOURCE = {
     "url": (
         f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/78955/78955_1_{GODLO}.asc"
     ),
-    "skorowidz": (
+    "index_url": (
         "https://mapy.geoportal.gov.pl/wss/service/PZGIK/NMT/WMS/"
         "SkorowidzeUkladEVRF2007"
     ),
     "layer": "SkorowidzeNMT2024",
-    "godlo": GODLO,
-    "aktualnosc": "2024-09-03",
-    "aktualnosc_rok": "2024",
-    "dt_pzgik": "2024-09-03",
+    "sheet": GODLO,
+    "acquisition_date": "2024-09-03",
+    "acquisition_year": "2024",
+    "pzgik_date": "2024-09-03",
     "resolution_m": 1.0,
-    "uklad": "PL-1992",
+    "declared_crs": "PL-1992",
     "full_sheet": True,
-    "numer_zgloszenia": None,
-    "zrodlo_danych": None,
+    "survey_work_id": None,
+    "data_source": None,
 }
 
 

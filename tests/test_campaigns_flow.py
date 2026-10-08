@@ -115,7 +115,7 @@ def test_end_to_end_all_on_real_c14_bodies(tmp_path):
     ]
     meta = json.loads(sidecar(std_path(tmp_path, G)).read_text(encoding="utf-8"))
     assert meta["extra"]["source"]["full_sheet"] is False
-    assert meta["extra"]["campaign"]["zgloszenie"] == "DFT.7201.053.2025"
+    assert meta["extra"]["campaign"]["survey_work_id"] == "DFT.7201.053.2025"
     assert "2025-10-21_84183" in str(linked_campaign(std_path(tmp_path, G)))
 
 

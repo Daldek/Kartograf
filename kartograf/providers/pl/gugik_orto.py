@@ -201,7 +201,7 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
             endpoint=self.WMS_SKOROWIDZE_ENDPOINT,
             # Piksel nie jest filtrem: orto nie ma flagi rozdzielczosci.
             predicate=lambda record: record.raw.get("kolor") == self._color,
-            source_extra={"kolor": self._color},
+            source_extra={"color": self._color},
             no_coverage=self._no_coverage,
         )
 

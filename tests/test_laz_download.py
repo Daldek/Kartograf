@@ -135,7 +135,13 @@ class TestRunLazDownload:
         assert meta["request"]["bbox"] == [530000, 382000, 533000, 386000]
         assert meta["request"]["year"] == 2024  # fala B (E16) zachowana
         assert meta["request"]["min_density"] == 12
-        assert meta["extra"]["godlo_kafla"] == tile.godlo
+        # ADR-031: English keys only (tile_sheet / year / nominal_density)
+        assert {k: meta["extra"][k] for k in ("tile_sheet", "year")} == {
+            "tile_sheet": tile.godlo,
+            "year": tile.year,
+        }
+        assert meta["extra"]["nominal_density"] == tile.density
+        assert not {"godlo_kafla", "rok", "gestosc"} & set(meta["extra"])
         assert "parent_request" not in meta["extra"]  # nie podano
 
     def test_parent_request_written_to_every_tile_sidecar(self, tmp_path):
@@ -294,7 +300,7 @@ class TestDownloadLazArea:
             ("N-34-139-A-c-1-1-3-4", 2023),
         ]
         meta = _sidecar(path)
-        assert meta["extra"]["rok"] == 2025
+        assert meta["extra"]["year"] == 2025
         assert meta["extra"]["parent_request"] == PARENT
         assert not list((tmp_path / "laz").glob("pl_2000_*"))
 

@@ -106,8 +106,13 @@ def link_atomic(target: Path, link: Path) -> LinkMethod:
 
 
 def campaign_key_from_sidecar(data_path: Path) -> tuple[str, str, str] | None:
-    """``(extra.campaign.date, extra.campaign.dt_pzgik or "", extra.source.url)``
-    z ``<data_path>.meta.json``; ``None`` gdy brak/nieczytelny/niepelny."""
+    """``(extra.campaign.date, extra.campaign.pzgik_date or "", extra.source.url)``
+    z ``<data_path>.meta.json``; ``None`` gdy brak/nieczytelny/niepelny.
+
+    A sidecar without the ``extra.campaign.pzgik_date`` key (written before
+    ADR-031 with Polish key names) is incomplete: ``None``, so
+    ``campaign_key_of`` falls back to the lower bound from the directory name.
+    """
     meta = _read_json(_sidecar_of(data_path))
     if meta is None:
         return None
@@ -118,8 +123,10 @@ def campaign_key_from_sidecar(data_path: Path) -> tuple[str, str, str] | None:
     source = extra.get("source")
     if not isinstance(campaign, dict) or not isinstance(source, dict):
         return None
+    if "pzgik_date" not in campaign:
+        return None
     date = campaign.get("date")
-    dt_pzgik = campaign.get("dt_pzgik") or ""
+    dt_pzgik = campaign.get("pzgik_date") or ""
     url = source.get("url")
     if (
         not isinstance(date, str)

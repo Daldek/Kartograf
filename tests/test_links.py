@@ -32,7 +32,7 @@ def _campaign(root, dirname, body, date, dt, url):
                     "campaign": {
                         "id": dirname.split("_")[1],
                         "date": date,
-                        "dt_pzgik": dt,
+                        "pzgik_date": dt,
                     },
                     "source": {"url": url},
                 }
@@ -106,7 +106,7 @@ def test_standard_sidecar_is_regular_file_with_link_fields(tmp_path):
     assert extra["link"] == "hardlink"
     assert extra["link_target"] == "../../kampanie/2025-04-27_83233/N-34/139/x.asc"
     assert extra["campaign"]["date"] == "2025-04-27"
-    assert extra["campaign"]["dt_pzgik"] == "2025-11-17"
+    assert extra["campaign"]["pzgik_date"] == "2025-11-17"
 
 
 def test_standard_sidecar_is_regular_file_even_if_symlink_existed(tmp_path):
@@ -365,6 +365,46 @@ def test_same_target_with_missing_sidecar_is_noop(tmp_path):
     (a.parent / "x.asc.meta.json").unlink()
     out = ensure_standard_link(link, a, k_a)
     assert out.changed is False and _same(out.target, a)
+
+
+def _write_pre_adr031_sidecar(data_path):
+    """Campaign sidecar written before ADR-031 (``dt_pzgik`` instead of
+    ``pzgik_date``, Polish ``extra.source`` keys)."""
+    (data_path.parent / f"{data_path.name}.meta.json").write_text(
+        json.dumps(
+            {
+                "request": {"godlo": "N-34-139-C-a-3-1", "campaigns": "newest"},
+                "extra": {
+                    "campaign": {
+                        "id": "84183",
+                        "date": "2025-10-21",
+                        "zgloszenie": "DFT.7201.053.2025",
+                        "dt_pzgik": "2025-12-01",
+                    },
+                    "source": {"url": "u2", "aktualnosc": "2025-10-21"},
+                },
+            }
+        )
+    )
+
+
+def test_pre_adr031_sidecar_key_is_directory_lower_bound(tmp_path):
+    """ADR-031: an old campaign sidecar gives no KeyError and no half-read
+    key — the lower bound from the directory name, as without a sidecar."""
+    b, _ = _b(tmp_path)
+    _write_pre_adr031_sidecar(b)
+    assert campaign_key_of(b) == ("2025-10-21", "", "")
+
+
+def test_pre_adr031_target_sidecar_still_prevents_regression(tmp_path):
+    a, k_a = _a(tmp_path)
+    b, k_b = _b(tmp_path)
+    link = _link(tmp_path)
+    ensure_standard_link(link, b, k_b)
+    _write_pre_adr031_sidecar(b)
+    out = ensure_standard_link(link, a, k_a)
+    assert out.changed is False and _same(out.target, b)
+    assert link.read_text() == "B"
 
 
 def test_unparsable_campaign_dir_without_sidecar_gives_no_key(tmp_path):

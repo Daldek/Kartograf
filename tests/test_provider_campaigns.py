@@ -334,8 +334,8 @@ def test_record_source_carries_endpoint_and_orto_color():
     p = GugikOrtoProvider(session=orto_session("M-34-90-C-b-4-4"))
     [r] = p.resolve_campaigns("M-34-90-C-b-4-4")
     src = p.record_source(r)
-    assert src["skorowidz"] == GugikOrtoProvider.WMS_SKOROWIDZE_ENDPOINT
-    assert src["kolor"] == "RGB"
+    assert src["index_url"] == GugikOrtoProvider.WMS_SKOROWIDZE_ENDPOINT
+    assert src["color"] == "RGB"
 
 
 def test_download_record_fetches_record_url(tmp_path):
@@ -447,3 +447,66 @@ def test_newest_record_without_year_fails_min_year(tmp_path):
     s = _c14_copy(tmp_path, {"84183", "83233"})
     with pytest.raises(NoCoverageError, match="starsza niz min_year=2024"):
         GugikProvider(session=s).resolve_campaigns(G, min_year=2024)
+
+
+# =============================================================================
+# ADR-031: cache entries written before the switch to English sidecar keys
+# =============================================================================
+
+_PRE_ADR031_KEYS = {
+    "index_url": "skorowidz",
+    "sheet": "godlo",
+    "acquisition_date": "aktualnosc",
+    "acquisition_year": "aktualnosc_rok",
+    "pzgik_date": "dt_pzgik",
+    "declared_crs": "uklad",
+    "survey_work_id": "numer_zgloszenia",
+    "data_source": "zrodlo_danych",
+}
+
+
+def _pre_adr031(source: dict) -> dict:
+    """``to_source`` payload as stored before ADR-031 (Polish key names)."""
+    return {_PRE_ADR031_KEYS.get(key, key): value for key, value in source.items()}
+
+
+def test_pre_adr031_record_cache_entry_is_a_miss_and_is_overwritten(tmp_path):
+    """Old ``record_cache`` payload: no KeyError, sheet resolved again, entry
+    rewritten with English keys (``source_info`` never sees Polish keys)."""
+    cache = MetadataCache(tmp_path / "c.db")
+    GugikProvider(session=c14_session(G), cache=cache).resolve_campaigns(G)
+    fresh = cache.get_record("nmt", "1m", "EVRF2007", G)["source"]
+    cache.set_record("nmt", "1m", "EVRF2007", G, {"source": _pre_adr031(fresh)})
+
+    session = c14_session(G)
+    provider = GugikProvider(session=session, cache=cache)
+    (record,) = provider.resolve_campaigns(G)
+
+    assert queried_layers(session)  # cache miss -> index queried again
+    assert ids([record]) == ["84183"]
+    assert cache.get_record("nmt", "1m", "EVRF2007", G)["source"] == fresh
+    assert provider.source_info(G) == fresh
+
+
+def test_pre_adr031_campaigns_cache_entry_is_a_miss_and_is_overwritten(tmp_path):
+    cache = MetadataCache(tmp_path / "c.db")
+    GugikProvider(session=c14_session(G), cache=cache).resolve_campaigns(
+        G, campaigns="all"
+    )
+    fresh = cache.get_campaigns("nmt", "1m", "EVRF2007", G)["sources"]
+    cache.set_campaigns(
+        "nmt",
+        "1m",
+        "EVRF2007",
+        G,
+        {"sources": [_pre_adr031(s) for s in fresh], "scanned_from": None},
+    )
+
+    session = c14_session(G)
+    recs = GugikProvider(session=session, cache=cache).resolve_campaigns(
+        G, campaigns="all"
+    )
+
+    assert queried_layers(session)
+    assert ids(recs) == ["84183", "83233", "78047", "73021"]
+    assert cache.get_campaigns("nmt", "1m", "EVRF2007", G)["sources"] == fresh
