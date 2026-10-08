@@ -6,11 +6,39 @@ subcommand parsers (parse, download, landcover, soilgrids, cache).
 """
 
 import argparse
+import sys
+from collections.abc import Sequence
+from typing import Any, NoReturn
 
-from kartograf import __version__
+from kartograf._version import build_version
 from kartograf.core.bbox import BBox, validate_bbox
 from kartograf.download.cutout import SUPPORTED_TARGET_CRS
 from kartograf.exceptions import ValidationError
+
+
+class _LazyVersionAction(argparse.Action):
+    """``--version`` resolving the build identifier only when requested."""
+
+    def __init__(
+        self,
+        option_strings: Sequence[str],
+        dest: str = argparse.SUPPRESS,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(
+            option_strings, dest=dest, default=argparse.SUPPRESS, nargs=0, **kwargs
+        )
+
+    def __call__(
+        self,
+        parser: argparse.ArgumentParser,
+        namespace: argparse.Namespace,
+        values: str | Sequence[Any] | None,
+        option_string: str | None = None,
+    ) -> NoReturn:
+        sys.stdout.write(f"{parser.prog} {build_version()}\n")
+        parser.exit()
+
 
 _BBOX_EXPECTED = "Expected: min_x,min_y,max_x,max_y (e.g., 450000,550000,460000,560000)"
 
@@ -79,8 +107,8 @@ def create_parser() -> argparse.ArgumentParser:
 
     parser.add_argument(
         "--version",
-        action="version",
-        version=f"%(prog)s {__version__}",
+        action=_LazyVersionAction,
+        help="show program's version number and exit",
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")

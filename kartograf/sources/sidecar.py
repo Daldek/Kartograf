@@ -15,6 +15,7 @@ from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
+from kartograf._version import build_version
 from kartograf.core.parser_2000 import ZONE_EPSG
 from kartograf.exceptions import DownloadError
 from kartograf.sources.descriptor import AccessChannel, SourceDescriptor
@@ -179,8 +180,6 @@ def build_metadata(
     — strefe PL-2000 z godla sprawdzona wspolrzednymi pliku; pozostale
     wyniki dziedzicza ``horizontal_crs`` kanalu.
     """
-    from kartograf import __version__  # lazy: unika cyklu importow
-
     if capability is not None:
         channel = _select_channel_by_capability(descriptor, capability)
     else:
@@ -213,7 +212,7 @@ def build_metadata(
         transform=transform,
         extra=extra or {},
         downloaded_at=datetime.now(UTC).isoformat(timespec="seconds"),
-        kartograf_version=__version__,
+        kartograf_version=build_version(),
     )
 
 
