@@ -5,7 +5,7 @@ This module provides the GugikOrtoProvider class for downloading
 orthophoto (aerial imagery) data from the Polish GUGiK services.
 
 Standard Resolution orthophotos (25cm) are available as GeoTIFF
-via WMS skorowidze → OpenData and WCS.
+via WMS indexes (skorowidze) → OpenData and WCS.
 
 Unlike NMT/NMPT, orthophotos:
 - Have no vertical CRS (2D RGB imagery)
@@ -46,7 +46,7 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     Provider for downloading Orthophotomap data from GUGiK.
 
     Supports two download modes:
-    - By godło (map sheet ID): downloads from OpenData as TIF
+    - By sheet code (godlo): downloads from OpenData as TIF
     - By bbox (bounding box): downloads from WCS as GeoTIFF
 
     Examples
@@ -72,17 +72,18 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         f"{BASE_URL}/wss/service/PZGIK/ORTO/WMS/SkorowidzeWgAktualnosci"
     )
 
-    # Nazwy warstw skorowidza: grupa 1 = rok, grupa 2 = warstwa zbiorcza bez
-    # roku ("Starsze" — GUGiK scalil warstwy 2023..2018 w jedna). Warstwy
-    # "SkorowidzeOrtofotomapyZasiegi*" (zasiegi, bez URL-i) nie pasuja do wzorca.
+    # Index layer names: group 1 = year, group 2 = aggregate layer without a
+    # year ("Starsze" — GUGiK merged the 2023..2018 layers into one). Layers
+    # "SkorowidzeOrtofotomapyZasiegi*" (extents, no URLs) do not match the pattern.
     LAYER_PATTERN = re.compile(r"^SkorowidzeOrtofotomapy(?:(\d{4})|(Starsze))$")
     LAYER_FAMILY = re.compile(r"^SkorowidzeOrtofotomapy(?!Zasiegi)")
 
-    # Wariant koloru pobierany domyslnie; CIR/B-W tylko przez kwarg `color`
+    # Colour variant downloaded by default; CIR/B-W only via the `color` kwarg
     DEFAULT_COLOR = "RGB"
 
-    # Klucz record_cache: slot rozdzielczosci niesie wariant koloru (orto nie
-    # ma flagi rozdzielczosci, a RGB i CIR tego samego arkusza to inne pliki)
+    # record_cache key: the resolution slot carries the colour variant (orto
+    # has no resolution flag, and RGB and CIR of the same sheet are different
+    # files)
     _CACHE_PRODUCT = "orto"
 
     # Settings
@@ -103,7 +104,7 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         session : requests.Session, optional
             HTTP session to use for requests.
         cache : MetadataCache, optional
-            Metadata cache instance for caching skorowidz lookups.
+            Metadata cache instance for caching index (skorowidz) lookups.
             If None, no caching is performed (default behavior).
         color : str, optional
             Colour variant to download as published by GUGiK: "RGB"
@@ -138,17 +139,17 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
 
     @property
     def storage_variant(self) -> str | None:
-        """Segment wariantu (E12): RGB bez sufiksu, CIR -> "cir", B/W -> "bw".
+        """Variant segment (E12): RGB without suffix, CIR -> "cir", B/W -> "bw".
 
-        RGB zostaje w ``orto/pl_<uklad>/`` (bez migracji plikow sprzed E12);
-        inne warianty dostaja ``orto/pl_<uklad>_<wariant>/``.
+        RGB stays in ``orto/pl_<crs>/`` (no migration of pre-E12 files);
+        other variants get ``orto/pl_<crs>_<variant>/``.
         """
         if self._color == self.DEFAULT_COLOR:
             return None
         return re.sub(r"[^a-z0-9]", "", self._color.lower())
 
     # =========================================================================
-    # Download by godło → OpenData (TIF)
+    # Download by sheet code (godlo) → OpenData (TIF)
     # =========================================================================
 
     def download(
@@ -158,7 +159,7 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         timeout: int = DEFAULT_TIMEOUT,
     ) -> Path:
         """
-        Download orthophoto for a map sheet (godło) from OpenData.
+        Download orthophoto for a map sheet (godlo) from OpenData.
 
         Parameters
         ----------
@@ -177,12 +178,12 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         Raises
         ------
         NoCoverageError
-            Subclass of ``DownloadError``: every skorowidz layer answered and
+            Subclass of ``DownloadError``: every index layer answered and
             none has this sheet in the requested colour variant and the
             godlo's coordinate system (other variants are listed in the
             message, never substituted).
         DownloadError
-            If any skorowidz layer query fails after retries, its answer is
+            If any index layer query fails after retries, its answer is
             invalid, or the TIF download fails after retries. An older
             campaign is never substituted after a failed query.
         """
@@ -191,15 +192,15 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         )
 
     def _get_opendata_url(self, godlo: str, timeout: int = DEFAULT_TIMEOUT) -> str:
-        """Zwroc URL najnowszego rekordu skorowidza w zadanym wariancie koloru."""
+        """Return the URL of the newest index record in the requested colour."""
         return self._resolve_sheet(godlo, timeout).url
 
     def _skorowidz_query(self, parser: SheetParser) -> SkorowidzQuery:
-        """Klucz cache per wariant koloru; twardy filtr uklad+kolor."""
+        """Cache key per colour variant; hard CRS + colour filter."""
         return SkorowidzQuery(
             cache_key=(self._CACHE_PRODUCT, self._color, "none", parser.godlo),
             endpoint=self.WMS_SKOROWIDZE_ENDPOINT,
-            # Piksel nie jest filtrem: orto nie ma flagi rozdzielczosci.
+            # Pixel size is not a filter: orto has no resolution flag.
             predicate=lambda record: record.raw.get("kolor") == self._color,
             source_extra={"color": self._color},
             no_coverage=self._no_coverage,
@@ -292,5 +293,5 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         )
 
     def _wcs_target(self) -> tuple[str, str]:
-        """Jeden staly endpoint i coverage ortofotomapy (Standard Resolution)."""
+        """The single fixed orthophotomap endpoint and coverage (Standard Res.)."""
         return self.WCS_ENDPOINT, self.COVERAGE_ID

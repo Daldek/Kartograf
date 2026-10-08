@@ -50,7 +50,7 @@ from kartograf.transport.http import (
 logger = logging.getLogger(__name__)
 
 
-# Mapping of województwo TERYT codes to names used in OpenData URLs
+# Mapping of voivodeship (wojewodztwo) TERYT codes to names used in OpenData URLs
 WOJEWODZTWO_NAMES = {
     "02": "dolnoslaskie",
     "04": "kujawsko-pomorskie",
@@ -82,7 +82,7 @@ class Bdot10kProvider(LandCoverProvider):
     Supports three download modes:
     - By TERYT code: downloads pre-packaged county (powiat) data
     - By bbox: downloads data via WFS service
-    - By godło: converts to bbox and downloads via WFS
+    - By sheet code (godlo): converts to bbox and downloads via WFS
 
     Examples
     --------
@@ -98,14 +98,14 @@ class Bdot10kProvider(LandCoverProvider):
     ... )
     >>> provider.download_by_bbox(bbox, Path("./data/area.gpkg"))
     >>>
-    >>> # Download by godło
+    >>> # Download by sheet code (godlo)
     >>> provider.download_by_godlo("N-34-130-D", Path("./data/sheet.gpkg"))
     """
 
     # OpenData base URL for BDOT10k packages
     OPENDATA_BASE = "https://opendata.geoportal.gov.pl/bdot10k"
 
-    # URL patterns for different formats (schemat 2021)
+    # URL patterns for different formats (2021 schema)
     # Pattern: {base}/schemat2021/{subdir}/{woj_code}/{teryt}_{suffix}.zip
     OPENDATA_PATTERNS = {
         "GPKG": "{base}/schemat2021/GPKG/{woj}/{teryt}_GPKG.zip",
@@ -118,7 +118,7 @@ class Bdot10kProvider(LandCoverProvider):
     )
 
     # Default settings
-    DEFAULT_TIMEOUT = 120  # pobranie paczki (wszystkie tryby); TERYT: 30 s
+    DEFAULT_TIMEOUT = 120  # package download (all modes); TERYT: 30 s
     MAX_RETRIES = MAX_RETRIES
 
     def __init__(self, session: requests.Session | None = None, cache=None):
@@ -180,9 +180,9 @@ class Bdot10kProvider(LandCoverProvider):
         Returns
         -------
         Path
-            Path to the downloaded file: ``output_path`` z rozszerzeniem
-            ``.gpkg`` (GPKG, rozpakowany i scalony) albo ``.zip`` (SHP —
-            oryginalne archiwum GUGiK z shapefile'ami)
+            Path to the downloaded file: ``output_path`` with the extension
+            ``.gpkg`` (GPKG, unpacked and merged) or ``.zip`` (SHP —
+            the original GUGiK archive with shapefiles)
 
         Raises
         ------
@@ -199,9 +199,10 @@ class Bdot10kProvider(LandCoverProvider):
 
         output_path = Path(output_path)
         if format == "SHP":
-            # Paczka SHP to archiwum ZIP z shapefile'ami (bez rozpakowania):
-            # nazwa musi to mowic, a nie udawac GeoPackage (review N1).
-            # Symetrycznie do GPKG, gdzie `_extract_gpkg_from_zip` nadaje .gpkg.
+            # The SHP package is a ZIP archive of shapefiles (not unpacked):
+            # the name must say so rather than pretend to be a GeoPackage
+            # (review N1). Symmetric to GPKG, where `_extract_gpkg_from_zip`
+            # assigns .gpkg.
             output_path = output_path.with_suffix(".zip")
 
         # Construct OpenData URL
@@ -248,7 +249,7 @@ class Bdot10kProvider(LandCoverProvider):
         return pattern.format(base=self.OPENDATA_BASE, woj=woj_code, teryt=teryt)
 
     # =========================================================================
-    # Download by godło → OpenData (via TERYT lookup)
+    # Download by sheet code (godlo) → OpenData (via TERYT lookup)
     # =========================================================================
 
     def download_by_godlo(
@@ -260,9 +261,9 @@ class Bdot10kProvider(LandCoverProvider):
         **kwargs,
     ) -> Path:
         """
-        Download BDOT10k data for a map sheet (godło).
+        Download BDOT10k data for a map sheet (godlo).
 
-        Finds the powiat (county) TERYT code for the given godło
+        Finds the powiat (county) TERYT code for the given godlo
         and downloads the entire county package. This is the recommended
         method as it provides complete data coverage.
 
@@ -367,8 +368,8 @@ class Bdot10kProvider(LandCoverProvider):
         url = f"{self.WMS_ENDPOINT}?{urlencode(params)}"
         logger.debug(f"Querying WMS for TERYT at ({x:.2f}, {y:.2f})")
 
-        # Siec/429/5xx ponawiane (3 proby, Retry-After), 4xx od razu —
-        # wspolna polityka transport/http.py (review N5).
+        # Network/429/5xx are retried (3 attempts, Retry-After), 4xx fails at
+        # once — the shared transport/http.py policy (review N5).
         try:
             response = get_with_retry(
                 session, url, timeout=timeout, description="zapytanie TERYT"
@@ -560,9 +561,10 @@ class Bdot10kProvider(LandCoverProvider):
         if not source_files:
             raise DownloadError("No files to merge")
 
-        # SQLite pisze ZAWSZE w lokalnym katalogu tymczasowym: na udziale
-        # CIFS/SMB bez `nobrl` blokady zakresow bajtow konczyly scalanie
-        # `database is locked`. Do celu trafia gotowy plik (kopia + os.replace).
+        # SQLite ALWAYS writes in a local temp directory: on a CIFS/SMB share
+        # without `nobrl`, byte-range locks ended the merge with
+        # `database is locked`. The target receives the finished file (copy +
+        # os.replace).
         final_tmp = output_path.with_suffix(".gpkg.tmp")
 
         try:
@@ -588,7 +590,7 @@ class Bdot10kProvider(LandCoverProvider):
                 shutil.copyfile(local_path, final_tmp)
 
             # Atomic rename
-            # os.replace: nadpisuje istniejacy plik takze na Windows (--force)
+            # os.replace: overwrites an existing file on Windows too (--force)
             final_tmp.replace(output_path)
             logger.info(f"Merged {len(source_files)} layers into {output_path}")
 

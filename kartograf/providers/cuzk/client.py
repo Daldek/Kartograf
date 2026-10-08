@@ -1,9 +1,9 @@
 """
-CuzkClient — silnik zrodel CUZK: ArcGIS REST (exportImage, query) + pliki openzu.
+CuzkClient — CUZK source engine: ArcGIS REST (exportImage, query) + openzu files.
 
-Pierwszy silnik sterowany deskryptorem (ADR-022/ADR-023): metody sa generyczne,
-parametryzowane endpointem; klient nie zna godel, produktow ani sidecarow.
-Retry/backoff i atomic write pochodza z transport/http.py.
+The first descriptor-driven engine (ADR-022/ADR-023): the methods are generic,
+parameterized by endpoint; the client knows no sheet codes, products or sidecars.
+Retry/backoff and atomic write come from transport/http.py.
 """
 
 import math
@@ -26,19 +26,19 @@ _TIFF_MAGIC = (b"II*\x00", b"MM\x00*")
 
 
 def wkid(crs: str) -> str:
-    """'EPSG:5514' -> '5514' (ArcGIS przyjmuje goly wkid)."""
+    """'EPSG:5514' -> '5514' (ArcGIS accepts a bare wkid)."""
     return crs.split(":", 1)[1] if ":" in crs else crs
 
 
 class CuzkClient:
-    """Transport CUZK: zapytania ArcGIS REST i pobieranie plikow openzu."""
+    """CUZK transport: ArcGIS REST queries and openzu file downloads."""
 
     MAX_EXPORT_WIDTH = 15000
     MAX_EXPORT_HEIGHT = 4100
-    # Sondy 2026-09-29: 7,5 Mpx OK, 8,38 Mpx HTTP 500 niezaleznie od
-    # ksztaltu. Budzet z zapasem wobec tego limitu i timeoutu 60 s.
+    # Probes of 2026-09-29: 7.5 Mpx OK, 8.38 Mpx HTTP 500 regardless of
+    # shape. The budget leaves a margin against this limit and the 60 s timeout.
     MAX_EXPORT_PIXELS = 4_000_000
-    QUERY_PAGE_SIZE = 2000  # maxRecordCount uslug CUZK (potwierdzone w Zad. 1)
+    QUERY_PAGE_SIZE = 2000  # maxRecordCount of CUZK services (confirmed in Task 1)
 
     def __init__(self, session: requests.Session | None = None, timeout: int = 60):
         self._session = session or requests.Session()
@@ -54,7 +54,7 @@ class CuzkClient:
         out_fields: str = "*",
         out_sr: str | None = None,
     ) -> list[dict]:
-        """GET {endpoint}/{layer}/query (f=json) z paginacja resultOffset."""
+        """GET {endpoint}/{layer}/query (f=json) with resultOffset pagination."""
         url = f"{endpoint}/{layer}/query"
         features: list[dict] = []
         offset = 0
@@ -77,9 +77,9 @@ class CuzkClient:
                 params["spatialRel"] = "esriSpatialRelIntersects"
             if out_sr is not None:
                 params["outSR"] = wkid(out_sr)
-            # Siec/429/5xx ponawiane (3 proby, Retry-After), 4xx od razu —
-            # wspolna polityka transport/http.py (review N5). Blad tresci
-            # (JSON) nie jest ponawiany.
+            # Network/429/5xx are retried (3 attempts, Retry-After), 4xx fails
+            # at once — the shared transport/http.py policy (review N5). A
+            # content (JSON) error is not retried.
             response = get_with_retry(
                 self._session,
                 url,
@@ -107,10 +107,10 @@ class CuzkClient:
         *,
         unzip_single: str | None = None,
     ) -> Path:
-        """Pobierz plik; przy unzip_single wyciagnij jedyny plik o rozszerzeniu
-        (+ towarzyszacy .tfw), zapisz atomowo (oba pliki razem albo zaden),
-        usun ZIP. Kazdy blad ekstrakcji => DownloadError, bez pozostawiania
-        czesciowych wynikow na dysku."""
+        """Download a file; with unzip_single extract the only file with that
+        extension (+ the accompanying .tfw), write atomically (both files
+        together or neither), delete the ZIP. Any extraction error =>
+        DownloadError, leaving no partial results on disk."""
         output_path = Path(output_path)
         if unzip_single is None:
             return download_to(self._session, url, output_path, timeout=self._timeout)
@@ -135,22 +135,23 @@ class CuzkClient:
         no_data: float = -9999.0,
         output_path: Path,
     ) -> Path:
-        """GeoTIFF float32 z {endpoint}/exportImage; kafelkowanie nad limitem.
+        """float32 GeoTIFF from {endpoint}/exportImage; tiled above the limit.
 
-        no_data NIGDY nie jest pomijane (obszar poza CZ bylby wypelniony
-        zerami bez oznaczenia — research 2026-08-10/11, Zad. 1 krok 4).
+        no_data is NEVER omitted (the area outside CZ would be filled with
+        unmarked zeros — research 2026-08-10/11, Task 1 step 4).
 
-        CRS zwracany przez exportImage jest bezuzyteczny do reprojekcji
-        (`to_epsg()` daje None zarowno dla 5514 — LOCAL_CS, jak i 3045 —
-        niedopasowany PROJCS z osiami "(N-E)" vs deklaracja E-N; rekonesans
-        Zad. 1, kroki 4-5), wiec po kazdym eksporcie (pojedynczym lub
-        mozaice) CRS jest nadpisywany bezwarunkowo na deklarowany image_sr.
+        The CRS returned by exportImage is useless for reprojection
+        (`to_epsg()` gives None both for 5514 — LOCAL_CS, and for 3045 — a
+        mismatched PROJCS with "(N-E)" axes vs the E-N declaration;
+        reconnaissance Task 1, steps 4-5), so after every export (single or
+        mosaic) the CRS is overwritten unconditionally with the declared
+        image_sr.
         """
         output_path = Path(output_path)
         width_px = max(1, round((bbox.max_x - bbox.min_x) / pixel_size))
         height_px = max(1, round((bbox.max_y - bbox.min_y) / pixel_size))
-        # Kotwica NW i calkowita liczba pikseli, wspolne dla pojedynczego
-        # eksportu, kafli i mozaiki. Niezrownany bbox zmienial rozmiar piksela.
+        # NW anchor and an integer pixel count, shared by a single export,
+        # tiles and the mosaic. An unaligned bbox changed the pixel size.
         bbox = BBox(
             bbox.min_x,
             bbox.max_y - height_px * pixel_size,
@@ -207,7 +208,7 @@ class CuzkClient:
                 mosaic_and_crop(tile_paths, bbox, output_path, nodata=no_data)
             except ValidationError:
                 raise
-            except Exception as e:  # noqa: BLE001 - rasterio/GDAL nie maja wspolnej bazy
+            except Exception as e:  # noqa: BLE001 - rasterio/GDAL have no common base
                 output_path.unlink(missing_ok=True)
                 raise DownloadError(
                     f"exportImage: nie udalo sie zszyc {len(tile_paths)} kafli "
@@ -258,15 +259,16 @@ class CuzkClient:
 
 
 def _overwrite_crs(output_path: Path, image_sr: str) -> None:
-    """Nadpisz CRS pliku na deklarowany image_sr zadania (rasterio "r+").
+    """Overwrite the file's CRS with the request's declared image_sr (rasterio "r+").
 
-    exportImage CUZK zwraca GeoTIFF, ktorego CRS jest bezuzyteczny do
-    reprojekcji przez GDAL/rasterio: `to_epsg()` daje None zarowno dla
-    5514 (zapisywany jako LOCAL_CS, nie PROJCS) jak i dla 3045
-    (PROJCS z AUTHORITY poprawnym, ale osiami "(N-E)" niezgodnymi z
-    deklaracja Easting/Northing — GDAL nie dopasowuje kodu EPSG).
-    Krok wykonywany bezwarunkowo, bo tag `nodata` serwer JUZ ustawia
-    poprawnie (rekonesans Zad. 1, krok 4) — nie ma potrzeby go dopisywac.
+    The CUZK exportImage returns a GeoTIFF whose CRS is useless for
+    reprojection by GDAL/rasterio: `to_epsg()` gives None both for
+    5514 (written as LOCAL_CS, not PROJCS) and for 3045
+    (PROJCS with a correct AUTHORITY, but "(N-E)" axes inconsistent with the
+    Easting/Northing declaration — GDAL does not match the EPSG code).
+    The step runs unconditionally, because the server ALREADY sets the
+    `nodata` tag correctly (reconnaissance Task 1, step 4) — there is no
+    need to add it.
     """
     try:
         with rasterio.open(output_path, "r+") as ds:
@@ -288,17 +290,18 @@ def _tile_grid(
     max_h: int,
     max_px: int,
 ) -> list[tuple[BBox, int, int]]:
-    """Deterministyczna siatka kafli cieta po pelnych pikselach (N->S, W->E);
-    kotwica w narozniku NW — spojnie z rasterio.merge(bounds=...) i
+    """Deterministic tile grid cut on whole pixels (N->S, W->E);
+    anchored at the NW corner — consistent with rasterio.merge(bounds=...) and
     transform/raster.warp_to_grid (from_origin(min_x, max_y)).
 
-    Why NW: siatka wyniku mozaiki zawsze startuje w max_y i ma wysokosc
-    round((max_y-min_y)/res), wiec przy bboxie o ulamkowej wysokosci
-    kotwica SW rozjezdza sie z nia o 0<delta<res: dolny wiersz wyniku
-    wypada pod zasiegiem kafli (caly pas nodata), a tresc — przenoszona
-    przez merge blokami, bez resamplingu — jest przesunieta do 1 px.
-    To ten sam rzad bledu geolokalizacji, dla ktorego ADR-024 zakazal
-    reprojekcji serwerowej, i tak samo niewidoczny w metadanych (A3-1).
+    Why NW: the mosaic result grid always starts at max_y and has height
+    round((max_y-min_y)/res), so for a bbox of fractional height an SW
+    anchor diverges from it by 0<delta<res: the bottom row of the result
+    falls below the tile extent (a whole nodata strip), and the content —
+    carried over by merge in blocks, without resampling — is shifted by up
+    to 1 px. This is the same order of geolocation error for which ADR-024
+    forbade server-side reprojection, and equally invisible in metadata
+    (A3-1).
     """
 
     def _splits(total_px: int, parts: int) -> list[tuple[int, int]]:
@@ -308,8 +311,8 @@ def _tile_grid(
             for i in range(parts)
         ]
 
-    # Kwadratowawe kafle zamiast waskich pasow 15000 x 260 px:
-    # sondy serwera potwierdzily te klase ksztaltow, nie dlugie pasy.
+    # Square-ish tiles instead of narrow 15000 x 260 px strips:
+    # server probes confirmed this class of shapes, not long strips.
     col_cap = max(1, min(max_w, math.isqrt(max_px)))
     cols = _splits(width_px, math.ceil(width_px / col_cap))
     tile_w = max(size for _, size in cols)
@@ -338,15 +341,15 @@ def _tile_grid(
 def _extract_zip_pair(
     zip_path: Path, output_path: Path, unzip_single: str, url: str
 ) -> None:
-    """Wyciagnij dokladnie 1 plik o rozszerzeniu unzip_single (+ opcjonalny
-    towarzyszacy .tfw) z zip_path do output_path.
+    """Extract exactly 1 file with the extension unzip_single (+ the optional
+    accompanying .tfw) from zip_path to output_path.
 
-    Oba pliki sa najpierw rozpakowywane do lokalizacji tymczasowych; dopiero
-    gdy WSZYSTKIE ekstrakcje sie powioda, sa commitowane (os.replace) razem.
-    Kazdy blad na dowolnym etapie (uszkodzony ZIP, zla liczba dopasowan, IO,
-    nieobslugiwana kompresja, zaszyfrowany element, blad commitu) mapuje sie
-    na DownloadError, a wszelkie juz zapisane pliki tymczasowe/wynikowe sa
-    sprzatane — na dysku nie zostaje ani czesciowy .tif, ani osierocony .tfw.
+    Both files are first unpacked to temporary locations; only when ALL
+    extractions succeed are they committed (os.replace) together.
+    Any error at any stage (corrupt ZIP, wrong number of matches, IO,
+    unsupported compression, encrypted member, commit error) maps to
+    DownloadError, and any already written temporary/result files are
+    cleaned up — no partial .tif and no orphaned .tfw is left on disk.
     """
     tfw_path = output_path.with_suffix(".tfw")
     tmp_main = output_path.with_name(
@@ -374,7 +377,7 @@ def _extract_zip_pair(
             if tfw_member is not None:
                 _extract_to(zf, tfw_member, tmp_tfw)
 
-        # Obie ekstrakcje gotowe w tmp -> commit atomowy razem.
+        # Both extractions ready in tmp -> atomic commit together.
         os.replace(tmp_main, output_path)
         try:
             if has_tfw:
@@ -394,7 +397,7 @@ def _extract_zip_pair(
 
 
 def _extract_to(zf: zipfile.ZipFile, member: str, target: Path) -> None:
-    """Wypakuj element ZIP do target (bez commitu/rename — robi to wolajacy)."""
+    """Extract a ZIP member to target (no commit/rename — the caller does it)."""
     target.parent.mkdir(parents=True, exist_ok=True)
     with zf.open(member) as src, open(target, "wb") as dst:
         while chunk := src.read(1_048_576):
