@@ -45,26 +45,26 @@ _BBOX_EXPECTED = "Expected: min_x,min_y,max_x,max_y (e.g., 450000,550000,460000,
 
 def parse_bbox_arg(text: str, crs: str) -> BBox:
     """
-    Parsuje wartosc ``--bbox`` (``"min_x,min_y,max_x,max_y"``) do ``BBox``.
+    Parses the ``--bbox`` value (``"min_x,min_y,max_x,max_y"``) into a ``BBox``.
 
-    Jeden komunikat dla kazdej wady wejscia — wolajacy nie lapia wyjatku:
-    ``ValidationError`` jest ``KartografError``, wiec ``main`` drukuje
-    ``Error: ...`` na stderr i zwraca 1 (podpowiedz razem z bledem, nie
-    na stdout).
+    One message for every input defect - callers do not catch the exception:
+    ``ValidationError`` is a ``KartografError``, so ``main`` prints
+    ``Error: ...`` to stderr and returns 1 (the hint comes with the error,
+    not on stdout).
 
     Parameters
     ----------
     text : str
-        Wartosc argumentu; biale znaki wokol liczb sa dozwolone
+        Argument value; whitespace around numbers is allowed
     crs : str
-        Uklad, w ktorym podano wspolrzedne
+        CRS in which the coordinates were given
 
     Raises
     ------
     ValidationError
-        ``Invalid bbox format: <powod>. Expected: ...`` dla liczby wartosci
-        innej niz 4, wartosci nienumerycznej, NaN/inf albo ``min > max``
-        (``core.bbox.validate_bbox``; bbox-punkt jest dozwolony).
+        ``Invalid bbox format: <reason>. Expected: ...`` for a number of values
+        other than 4, a non-numeric value, NaN/inf or ``min > max``
+        (``core.bbox.validate_bbox``; a point bbox is allowed).
     """
     parts = text.split(",")
     if len(parts) != 4:
@@ -159,8 +159,8 @@ def create_parser() -> argparse.ArgumentParser:
         "godlo",
         nargs="?",
         default=None,
-        # argparse nie obcina bialych znakow; godlo z odstepem trafialoby do
-        # rejestru systemow i do nazwy pliku (ocena parserow 2026-10-07, K5)
+        # argparse does not strip whitespace; a sheet code with padding would reach
+        # the system registry and the file name (parser review 2026-10-07, K5)
         type=str.strip,
         help="Map sheet identifier (e.g., N-34-130-D-d-2-4)",
     )
@@ -195,8 +195,8 @@ def create_parser() -> argparse.ArgumentParser:
     )
     download_parser.add_argument(
         "--target-crs",
-        # zestaw wycinka PL (download/cutout.py) ogranicza takze tor CZ —
-        # rozszerzenie tylko po jednej stronie wymaga walidacji per kraj
+        # the PL cutout set (download/cutout.py) also constrains the CZ path -
+        # extending it on one side only requires per-country validation
         choices=list(SUPPORTED_TARGET_CRS),
         default=None,
         help="Reprojekcja wyniku, wykonywana lokalnie przypieta operacja "

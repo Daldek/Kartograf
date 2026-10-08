@@ -1,11 +1,11 @@
 """
-CLI commands for Kartograf — fasada zgodnosci.
+CLI commands for Kartograf — compatibility facade.
 
-Implementacje zyja w modulach _parser/parse_cmd/download_cmd/landcover_cmd/
-soilgrids_cmd/cache_cmd; ten modul re-eksportuje wylacznie publiczne nazwy
-(``create_parser``, ``cmd_*``, formatery) i utrzymuje entry point `main`
-(pyproject: kartograf = "kartograf.cli.commands:main"). Prywatne helpery
-importuje sie z modulu docelowego (np. ``kartograf.cli.download_cmd``).
+The implementations live in the _parser/parse_cmd/download_cmd/landcover_cmd/
+soilgrids_cmd/cache_cmd modules; this module re-exports public names only
+(``create_parser``, ``cmd_*``, formatters) and keeps the `main` entry point
+(pyproject: kartograf = "kartograf.cli.commands:main"). Private helpers
+are imported from the target module (e.g. ``kartograf.cli.download_cmd``).
 """
 
 import argparse
@@ -83,7 +83,7 @@ def main(args: list[str] | None = None) -> int:
         Exit code (0 for success, non-zero for error)
     """
     parser = create_parser()
-    # argparse rzuca SystemExit dla --help/--version - ma przejsc bez zmian
+    # argparse raises SystemExit for --help/--version - let it pass unchanged
     parsed_args = parser.parse_args(args)
 
     try:

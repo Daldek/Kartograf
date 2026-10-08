@@ -1,10 +1,10 @@
 """
-Sidecar metadanych wyniku pobrania: `<pelna_nazwa_pliku>.meta.json`.
+Result sidecar for a download: `<full_file_name>.meta.json`.
 
-Kontrakt dla konsumentow (Hydrograf): CRS-y, nodata, zrodlo, licencja.
-W 0.7.0 dane transgraniczne scala konsument; scalanie PL+CZ w jedna
-powierzchnie to etap 2 Kartografa (R6). Format wersjonowany polem `schema`;
-pola dokladane addytywnie.
+Contract for consumers (Hydrograf): CRSs, nodata, source, license.
+In 0.7.0 the consumer merges cross-border data; merging PL+CZ into one
+surface is Kartograf stage 2 (R6). The format is versioned by the `schema` field;
+fields are added additively.
 """
 
 import json
@@ -32,9 +32,9 @@ _BBOX_CAPS = {"bbox_raster", "bbox_vector"}
 
 @dataclass(kw_only=True)
 class ResultMetadata:
-    """Metadane jednego pliku wynikowego."""
+    """Metadata of a single result file."""
 
-    dataset: str  # klucz deskryptora
+    dataset: str  # descriptor key
     country: str
     product: str
     provider: str
@@ -47,13 +47,13 @@ class ResultMetadata:
     license: dict  # {"id","attribution","url"}
     downloaded_at: str  # ISO 8601 UTC
     kartograf_version: str
-    transform: dict | None = None  # etap 0: None
+    transform: dict | None = None  # stage 0: None
     extra: dict = field(default_factory=dict)
     schema: str = "kartograf-meta/1"
 
 
 def _read_asc_header(path: Path) -> dict[str, float]:
-    """Naglowek Arc/Info ASCII Grid: {klucz malymi literami: wartosc}; {} gdy brak."""
+    """Arc/Info ASCII Grid header: {lowercase key: value}; {} if absent."""
     header: dict[str, float] = {}
     try:
         with open(path, encoding="ascii", errors="replace") as f:
@@ -71,18 +71,19 @@ def _read_asc_header(path: Path) -> dict[str, float]:
 
 
 def read_asc_nodata(path: Path) -> float | None:
-    """Odczytaj NODATA_value z naglowka Arc/Info ASCII Grid (None gdy brak)."""
+    """Read NODATA_value from an Arc/Info ASCII Grid header (None if absent)."""
     return _read_asc_header(path).get("nodata_value")
 
 
 def _file_min_x(path: Path) -> float | None:
-    """Lewa krawedz rastra (x) z naglowka ASC albo z rasterio; None gdy nieczytelna."""
+    """Left edge (x) of the raster from the ASC header or rasterio; None if
+    unreadable."""
     suffix = path.suffix.lower()
     if suffix == ".asc":
         header = _read_asc_header(path)
         return header.get("xllcorner", header.get("xllcenter"))
     if suffix in {".tif", ".tiff"}:
-        import rasterio  # lazy: sidecar arkusza ASC nie potrzebuje GDAL
+        import rasterio  # lazy: an ASC sheet sidecar does not need GDAL
 
         try:
             with rasterio.open(path) as dataset:
@@ -100,12 +101,13 @@ def _crs_from_pl_coordinate(x: float) -> str | None:
 
 
 def pl_sheet_horizontal_crs(data_path: Path | None, godlo: str) -> str:
-    """Uklad FAKTYCZNY pliku arkusza PL: strefa z godla, sprawdzona wspolrzednymi.
+    """ACTUAL CRS of a PL sheet file: zone from the sheet code, checked against
+    coordinates.
 
-    Godlo PL-2000 wyznacza strefe (EPSG:2176..2179), PL-1992 -> EPSG:2180.
-    Gdy plik da sie odczytac, a jego lewa krawedz wskazuje inny uklad (arkusz
-    PL-1992 podstawiony pod godlo PL-2000 przez cache sprzed 0.7.0 — K4),
-    sidecar opisuje PLIK: zwracany jest uklad z pliku, z ostrzezeniem.
+    A PL-2000 sheet code determines the zone (EPSG:2176..2179), PL-1992 -> EPSG:2180.
+    When the file is readable and its left edge points to a different CRS (a
+    PL-1992 sheet substituted for a PL-2000 sheet code by a pre-0.7.0 cache - K4),
+    the sidecar describes the FILE: the CRS from the file is returned, with a warning.
     """
     expected = horizontal_crs_for_godlo(godlo)
     if data_path is None:
@@ -137,7 +139,7 @@ def _default_horizontal_crs(
     request: dict,
     data_path: Path | None,
 ) -> str:
-    """Uklad kanalu; dla arkusza PL po godle — uklad pliku (strefa PL-2000, N8)."""
+    """Channel CRS; for a PL sheet by sheet code - the file's CRS (PL-2000 zone, N8)."""
     godlo = request.get("sheet")
     if (
         descriptor.country == "PL"
@@ -151,7 +153,7 @@ def _default_horizontal_crs(
 def _select_channel_by_capability(
     descriptor: SourceDescriptor, capability: str
 ) -> AccessChannel:
-    """Pierwszy kanal deklarujacy capability; KeyError gdy brak."""
+    """First channel declaring the capability; KeyError if none."""
     for ch in descriptor.channels:
         if capability in ch.capabilities:
             return ch
@@ -172,13 +174,13 @@ def build_metadata(
     nodata: float | None = None,
     horizontal_crs: str | None = None,
 ) -> ResultMetadata:
-    """Zbuduj metadane z deskryptora + kontekstu wywolania.
+    """Build metadata from the descriptor + the call context.
 
-    ``horizontal_crs`` (jawny) opisuje uklad FAKTYCZNEGO wyniku i ma
-    pierwszenstwo przed kanalem. Bez niego arkusz PL pobrany przez godlo
-    (kanal ``sheet_files``) dostaje uklad z ``pl_sheet_horizontal_crs``
-    — strefe PL-2000 z godla sprawdzona wspolrzednymi pliku; pozostale
-    wyniki dziedzicza ``horizontal_crs`` kanalu.
+    ``horizontal_crs`` (explicit) describes the ACTUAL result's CRS and takes
+    precedence over the channel. Without it a PL sheet downloaded by sheet code
+    (channel ``sheet_files``) gets the CRS from ``pl_sheet_horizontal_crs``
+    - the PL-2000 zone from the sheet code checked against the file's coordinates;
+    other results inherit the channel's ``horizontal_crs``.
     """
     if capability is not None:
         channel = _select_channel_by_capability(descriptor, capability)
@@ -219,15 +221,15 @@ def build_metadata(
 def write_sidecar(
     data_path: Path, meta: ResultMetadata, *, atomic: bool = False
 ) -> Path:
-    """Zapisz `<data_path>.meta.json` obok pliku danych; zwroc sciezke sidecara.
+    """Write `<data_path>.meta.json` next to the data file; return the sidecar path.
 
-    ``atomic=False`` (domyslnie): wyjatki IO sa lapane i logowane jako
-    warning (spec sekcja 8) — brak sidecara nigdy nie przerywa pobrania;
-    przy bledzie zwracana sciezka wskazuje plik, ktory NIE powstal.
+    ``atomic=False`` (default): IO exceptions are caught and logged as a
+    warning (spec section 8) - a missing sidecar never aborts the download;
+    on error the returned path points to a file that was NOT created.
 
-    ``atomic=True`` (sidecar obowiazkowy, ADR-030 errata 2 N-1): zapis do
+    ``atomic=True`` (mandatory sidecar, ADR-030 errata 2 N-1): written to
     ``<name>.meta.json.<pid>_<tid>.tmp`` + ``os.replace``; ``OSError``
-    WYLATUJE, tmp jest sprzatany (nigdy czesciowy sidecar).
+    PROPAGATES, the tmp file is cleaned up (never a partial sidecar).
     """
     sidecar_path = data_path.parent / f"{data_path.name}.meta.json"
     if atomic:
@@ -251,7 +253,8 @@ def write_sidecar(
 
 
 def pinned_label(pinned) -> str:
-    """Opis przypietej operacji w polu ``transform`` sidecara (jeden format)."""
+    """Description of a pinned operation in the sidecar's ``transform`` field (one
+    format)."""
     return f"pinned: {pinned.description} ({pinned.accuracy_m} m)"
 
 
@@ -268,32 +271,32 @@ def emit_sidecar(
     nodata: float | None = None,
     required: bool = False,
 ) -> Path | None:
-    """Best-effort sidecar wyniku — jedyne miejsce polityki "sidecar nigdy
-    nie przerywa pobrania" (D7): kazdy wyjatek budowy/zapisu konczy sie
-    ostrzezeniem w logu i ``None``.
+    """Best-effort result sidecar - the one place of the policy "a sidecar never
+    aborts the download" (D7): any build/write exception ends in
+    a log warning and ``None``.
 
-    ``descriptor_key`` nie bedacy ``str`` (provider bez deskryptora, atrapa
-    ``Mock``) = brak sidecara, bez ostrzezenia. ``pinned_transforms``
-    (``{"horizontal": PinnedTransform | None, "vertical": ...}``) trafia do
-    ``transform`` w formacie ``pinned_label``; wpisy ``None`` sa pomijane,
-    a pusty wynik daje ``transform: null``. Pozostale argumenty jak
-    w ``build_metadata`` (``horizontal_crs`` = uklad FAKTYCZNEGO wyniku).
+    A ``descriptor_key`` that is not a ``str`` (provider without a descriptor, a
+    ``Mock`` stand-in) = no sidecar, without a warning. ``pinned_transforms``
+    (``{"horizontal": PinnedTransform | None, "vertical": ...}``) goes into
+    ``transform`` in the ``pinned_label`` format; ``None`` entries are skipped,
+    and an empty result gives ``transform: null``. Other arguments as
+    in ``build_metadata`` (``horizontal_crs`` = the ACTUAL result's CRS).
 
-    ``required=True`` (sidecar pliku kampanii, ADR-030 errata 2 N-1): zapis
-    atomowy (``write_sidecar(atomic=True)``), a brak deskryptora albo
-    dowolny wyjatek budowy/zapisu konczy sie ``DownloadError`` — wolajacy
-    wybiera tylko tryb, interpretacja porazki zostaje tutaj (D7).
+    ``required=True`` (campaign file sidecar, ADR-030 errata 2 N-1): atomic
+    write (``write_sidecar(atomic=True)``), and a missing descriptor or
+    any build/write exception ends in ``DownloadError`` - the caller
+    chooses only the mode, the interpretation of the failure stays here (D7).
 
     Returns
     -------
     Path or None
-        Sciezka sidecara albo ``None``, gdy nie powstal z powodu bledu
-        budowy metadanych lub braku deskryptora (tylko ``required=False``).
+        Sidecar path or ``None`` when it was not created due to a metadata
+        build error or a missing descriptor (``required=False`` only).
 
     Raises
     ------
     DownloadError
-        Tylko przy ``required=True``, gdy sidecar nie powstal.
+        Only with ``required=True``, when the sidecar was not created.
     """
     sidecar_path = data_path.parent / f"{data_path.name}.meta.json"
     if not isinstance(descriptor_key, str):
@@ -323,7 +326,7 @@ def emit_sidecar(
             horizontal_crs=horizontal_crs,
         )
         return write_sidecar(data_path, meta, atomic=required)
-    except Exception as e:  # noqa: BLE001 — polityka porazki w jednym miejscu (D7)
+    except Exception as e:  # noqa: BLE001 — failure policy in one place (D7)
         if required:
             raise DownloadError(
                 f"Nie udalo sie zapisac obowiazkowego sidecara {sidecar_path}: {e}"

@@ -1,10 +1,10 @@
 """
-Generyczny fallback kaflowy: pobierz kafle -> zszyj -> przytnij do bbox.
+Generic tiling fallback: download tiles -> stitch -> crop to bbox.
 
-Pierwszy konsument: etap 1 (kafelkowanie CZ exportImage powyzej limitu
-15000x4100 px — deklarowanego przez usluge; realny limit ~8 Mpx, znany blad
-K6); kolejny: wycinek PL (ADR-027); planowany: Saksonia (brak WCS, etap DE).
-Nodata jest propagowane do wyniku — NIGDY nie zamieniane na 0.
+First consumer: stage 1 (CZ exportImage tiling above the declared service limit
+of 15000x4100 px; the real limit is ~8 Mpx, known bug
+K6); next: the PL cutout (ADR-027); planned: Saxony (no WCS, DE stage).
+Nodata is propagated to the result - NEVER replaced with 0.
 """
 
 import math
@@ -25,37 +25,38 @@ from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import GridMismatchError, ValidationError
 from kartograf.transform.raster import VRT_TYPES, vrt_xml
 
-# Tolerancja w pikselach: siatki zgodne i bboxy lezace na linii siatki
-# z dokladnoscia bledu zmiennoprzecinkowego nie moga ani dokladac kolumny,
-# ani rozdzielac zrodel na rozne siatki. Szum zmiennoprzecinkowy wspolrzednych
-# ~5e5..7e5 m to ~2e-11 px (5 m); realne rozjazdy arkuszy GUGiK (naglowki
-# z 2-3 miejscami) to >= 2e-3 px — 1e-6 lezy 5 rzedow nad szumem i 3 pod
-# najmniejszym realnym rozjazdem.
+# Tolerance in pixels: matching grids and bboxes lying on a grid line
+# within floating-point error must neither add a column nor
+# split the sources into different grids. Floating-point noise of coordinates
+# ~5e5..7e5 m is ~2e-11 px (5 m); real offsets between GUGiK sheets (headers
+# with 2-3 decimal places) are >= 2e-3 px - 1e-6 lies 5 orders above the noise and 3
+# below
+# the smallest real offset.
 _GRID_TOL_PX = 1e-6
 
 
 def _same_projection(src_crs, target: CRS) -> bool:
-    """Czy CRS zrodla to uklad wymuszany?
+    """Is the source CRS the enforced CRS?
 
-    Samo ``CRS.equals(..., ignore_axis_order=True)`` NIE wystarcza: kazdy WKT1
-    EPSG:2180 (WKT1_GDAL z pyproj, ESRI, ``gdalsrsinfo -o wkt_simple`` z .prj
-    Hydrografu) daje False (zmierzone 2026-09-28, pyproj 3.7.2 / PROJ 9.5.1),
-    wiec porownujemy takze parametry odwzorowania (slownik PROJ.4).
+    ``CRS.equals(..., ignore_axis_order=True)`` alone is NOT enough: every WKT1
+    of EPSG:2180 (WKT1_GDAL from pyproj, ESRI, ``gdalsrsinfo -o wkt_simple`` from
+    a Hydrograf .prj) gives False (measured 2026-09-28, pyproj 3.7.2 / PROJ 9.5.1),
+    so projection parameters are compared too (a PROJ.4 dict).
     """
     candidate = CRS.from_user_input(src_crs.to_wkt())
     if candidate.equals(target, ignore_axis_order=True):
         return True
     with warnings.catch_warnings():
-        warnings.simplefilter("ignore", UserWarning)  # to_dict() ostrzega o PROJ.4
+        warnings.simplefilter("ignore", UserWarning)  # to_dict() warns about PROJ.4
         return candidate.to_dict() == target.to_dict()
 
 
 @dataclass(frozen=True)
 class OffGridSource:
-    """Zrodlo poza siatka odniesienia.
+    """A source off the reference grid.
 
-    ``dx_px``/``dy_px``: przesuniecie linii siatki zrodla wzgledem linii
-    siatki odniesienia, w pikselach, w przedziale [-0,5; 0,5).
+    ``dx_px``/``dy_px``: offset of the source's grid lines relative to the
+    reference grid lines, in pixels, in the range [-0.5, 0.5).
     """
 
     path: Path
@@ -65,19 +66,19 @@ class OffGridSource:
 
 @dataclass(frozen=True)
 class SourceGrid:
-    """Siatka pikseli zrodel mozaiki (``check_source_grid``).
+    """Pixel grid of the mosaic sources (``check_source_grid``).
 
-    ``reference``: transformacja zrodla odniesienia — siatka WIEKSZOSCI zrodel
-    (remis rozstrzyga kolejnosc wejscia). ``off_grid``: zrodla, ktorych linie
-    siatki leza dalej niz ``_GRID_TOL_PX`` od linii odniesienia; puste = wszystkie
-    zrodla na jednej siatce.
+    ``reference``: transform of the reference source - the grid of the MAJORITY of
+    sources (a tie is broken by input order). ``off_grid``: sources whose grid
+    lines lie farther than ``_GRID_TOL_PX`` from the reference lines; empty = all
+    sources on one grid.
     """
 
     reference: Affine
     off_grid: tuple[OffGridSource, ...]
 
     def describe_off_grid(self, total: int, noun: str = "zrodel") -> str:
-        """Tresc ``GridMismatchError``: liczba, najwieksze przesuniecie, do 10 nazw."""
+        """``GridMismatchError`` text: count, largest offset, up to 10 names."""
         worst = max(max(abs(s.dx_px), abs(s.dy_px)) for s in self.off_grid)
         names = ", ".join(s.path.name for s in self.off_grid[:10])
         more = " ..." if len(self.off_grid) > 10 else ""
@@ -88,8 +89,8 @@ class SourceGrid:
 
 
 def _phase_key(value: float, step: float) -> int:
-    """Kubelek fazy linii siatki (w jednostkach tolerancji) — do wyboru siatki
-    wiekszosci; faza tuz ponizej 1 to ta sama siatka co faza 0."""
+    """Bucket of a grid line's phase (in tolerance units) - for choosing the
+    majority grid; a phase just below 1 is the same grid as phase 0."""
     p = (value / step) % 1.0
     if p > 1.0 - _GRID_TOL_PX:
         p = 0.0
@@ -97,24 +98,24 @@ def _phase_key(value: float, step: float) -> int:
 
 
 def _shift_px(value: float, origin: float, step: float) -> float:
-    """Przesuniecie linii siatki ``value`` wzgledem siatki ``origin + k * step``
-    w pikselach, w przedziale [-0,5; 0,5) — owiniecie przez 1 jest w modulo."""
+    """Offset of the grid line ``value`` relative to the grid ``origin + k * step``
+    in pixels, in the range [-0.5, 0.5) - wrapping by 1 is done by the modulo."""
     return ((value - origin) / step + 0.5) % 1.0 - 0.5
 
 
 def _source_grid(paths: list[Path], transforms: list[Affine]) -> SourceGrid:
-    """``check_source_grid`` na gotowych transformacjach (bez otwierania plikow).
+    """``check_source_grid`` on ready-made transforms (without opening files).
 
-    Linie pionowe ``x0 + k * rx``, poziome ``y0 + k * ry`` (``y0`` to GORNA
-    krawedz, ``transform.f``). Arkusze GUGiK zwykle leza na jednej siatce, ale
-    NIE na wielokrotnosciach piksela (1977 arkuszy 5 m z cache Hydrografu:
-    narozniki na 5k + 2,5 m; 84 arkusze 1 m na zywo 2026-09-29: k + 0,5 m) —
-    stad siatka z transformacji. Nie zawsze: arkusze 5 m kampanii 2022 pod
-    Krakowem maja kazdy inna faze (19 arkuszy, 19 faz; S5). Siatke wiekszosci
-    wybieraja kubelki faz (``_phase_key``), ale o przynaleznosci KAZDEGO zrodla
-    rozstrzyga odleglosc jego linii od linii odniesienia (``<= _GRID_TOL_PX``,
-    z owinieciem przez 1) — dwa szumy po dwu stronach granicy kubelka nie moga
-    dac falszywego bledu twardego.
+    Vertical lines ``x0 + k * rx``, horizontal ``y0 + k * ry`` (``y0`` is the TOP
+    edge, ``transform.f``). GUGiK sheets usually lie on one grid, but
+    NOT on pixel multiples (1977 5 m sheets from the Hydrograf cache:
+    corners at 5k + 2.5 m; 84 1 m sheets live 2026-09-29: k + 0.5 m) -
+    hence the grid from transforms. Not always: 5 m sheets of the 2022 campaign near
+    Krakow each have a different phase (19 sheets, 19 phases; S5). The majority grid is
+    chosen by phase buckets (``_phase_key``), but the membership of EACH source is
+    decided by the distance of its lines from the reference lines (``<= _GRID_TOL_PX``,
+    with wrapping by 1) - two noise values on either side of a bucket boundary must not
+    give a false hard error.
     """
     for path, t in zip(paths, transforms, strict=True):
         if t.b != 0 or t.d != 0:
@@ -135,15 +136,15 @@ def _source_grid(paths: list[Path], transforms: list[Affine]) -> SourceGrid:
 
 
 def check_source_grid(paths: Sequence[Path]) -> SourceGrid:
-    """Siatka pikseli zrodel: odniesienie (wiekszosc) + zrodla spoza niej.
+    """Pixel grid of the sources: reference (majority) + sources off it.
 
-    Sama detekcja, bez decyzji — co zrobic ze zrodlami ``off_grid``, wybiera
-    wolajacy: ``mosaic_and_crop(snap_to_source_grid=True)`` rzuca
-    ``GridMismatchError`` (kopia pikseli 1:1 jest wtedy niemozliwa), a wycinek
-    PL z warpem reprojektuje kazdy arkusz osobno na siatke wyniku
-    (``download/cutout.py``, W1). Zrodla otwierane sa po jednym (tylko
-    metadane). ``ValidationError``: brak zrodel, obrocona siatka (rotacja/skos
-    w transformacji), rozne rozdzielczosci.
+    Detection only, no decisions - what to do with ``off_grid`` sources is chosen by
+    the caller: ``mosaic_and_crop(snap_to_source_grid=True)`` raises
+    ``GridMismatchError`` (a 1:1 pixel copy is then impossible), while the PL
+    cutout with a warp reprojects each sheet separately onto the result grid
+    (``download/cutout.py``, W1). Sources are opened one at a time (metadata
+    only). ``ValidationError``: no sources, a rotated grid (rotation/skew
+    in the transform), differing resolutions.
     """
     if not paths:
         raise ValidationError("check_source_grid: brak rastrow wejsciowych")
@@ -158,7 +159,7 @@ def check_source_grid(paths: Sequence[Path]) -> SourceGrid:
 def _snap_outward(
     bounds: tuple[float, float, float, float], ref: Affine
 ) -> tuple[float, float, float, float]:
-    """Bounds rozszerzone NA ZEWNATRZ do linii siatki odniesienia (< 1 px)."""
+    """Bounds expanded OUTWARD to the reference grid lines (< 1 px)."""
     rx, ry = ref.a, -ref.e
     x0, y0 = ref.c, ref.f
     min_x, min_y, max_x, max_y = bounds
@@ -181,46 +182,48 @@ def mosaic_and_crop(
     assign_crs: str | None = None,
     dtype: str | None = None,
 ) -> Path:
-    """Zszyj rastry wejsciowe i przytnij do bbox; zwroc output_path.
+    """Stitch the input rasters and crop to bbox; return output_path.
 
-    ``dst_kwds`` nadpisuje profil wyjscia (np. driver/CRS, gdy zrodla ASC
-    ich nie maja).
+    ``dst_kwds`` overrides the output profile (e.g. driver/CRS when ASC sources
+    lack them).
 
-    Zrodla otwierane sa POJEDYNCZO: metadane czyta petla sekwencyjna (jeden
-    deskryptor naraz), a ``merge`` dostaje SCIEZKI i sam otwiera zrodla po
-    jednym, per kawalek wyniku. Wycinek 75 x 75 km to >1200 arkuszy, a domyslny
-    limit deskryptorow to 1024 (Linux; macOS 256) — trzymanie wszystkich
-    zrodel otwartych naraz konczylo sie "Too many open files" dopiero PO
-    wielogodzinnym pobraniu (review max 2026-08-30, zn. 3).
+    Sources are opened ONE AT A TIME: metadata is read by a sequential loop (one
+    descriptor at a time), while ``merge`` gets PATHS and opens the sources itself one
+    at a time, per chunk of the result. A 75 x 75 km cutout is >1200 sheets, and the
+    default
+    descriptor limit is 1024 (Linux; macOS 256) - keeping all
+    sources open at once ended in "Too many open files" only AFTER a
+    multi-hour download (review max 2026-08-30, finding 3).
 
-    ``snap_to_source_grid`` (domyslnie ``False``, tor CZ bez zmian): przed
-    przycieciem rozszerza bbox NA ZEWNATRZ do linii siatki pikseli zrodel
-    (siatka WIEKSZOSCI zrodel; remis rozstrzyga kolejnosc wejscia), wiec
-    wynik kopiuje piksele zrodel 1:1 zamiast przesuwac tresc o ulamek piksela
-    (review max 2026-08-30, zn. 1). Zrodlo spoza tej siatki (dalej niz
-    ``_GRID_TOL_PX`` od jej linii) konczy sie ``GridMismatchError`` z lista
-    przesuniec (``.off_grid``): ``merge`` przepisalby je "przez okno" —
-    nie zawsze z najblizszego piksela i z kolumna/wierszem nodata na szwie
-    (S5, testy na zywo 2026-09-29) — a wolajacy, ktory chce warpu, ma
-    ``check_source_grid`` i reprojekcje per zrodlo. Zrodlo z obrocona siatka
-    (rotacja/skos w transformie) konczy sie ``ValidationError``.
+    ``snap_to_source_grid`` (default ``False``, the CZ path unchanged): before
+    cropping it expands the bbox OUTWARD to the source pixel grid lines
+    (the grid of the MAJORITY of sources; a tie is broken by input order), so the
+    result copies source pixels 1:1 instead of shifting content by a fraction of a pixel
+    (review max 2026-08-30, finding 1). A source off this grid (farther than
+    ``_GRID_TOL_PX`` from its lines) ends in ``GridMismatchError`` with a list of
+    offsets (``.off_grid``): ``merge`` would rewrite it "through a window" -
+    not always from the nearest pixel and with a nodata column/row at the seam
+    (S5, live tests 2026-09-29) - while a caller who wants a warp has
+    ``check_source_grid`` and per-source reprojection. A source with a rotated grid
+    (rotation/skew in the transform) ends in ``ValidationError``.
 
-    ``assign_crs`` / ``dtype`` (domyslnie ``None``, tor CZ bez zmian): gdy
-    ktorys jest podany, kazde zrodlo owijane jest w jednopasmowy VRT 1:1 w
-    ``/vsimem/`` z SRS = ``assign_crs`` (albo wlasny CRS zrodla) i typem pasma
-    = ``dtype`` (albo wlasny); ``merge`` dostaje nazwy VRT, a VRT niesie
-    nodata WLASNE zrodla, wiec maskowanie pikseli jest takie jak bez owijania.
-    Po co: Hydrograf dopisuje ``.prj`` (EPSG:2180) do czesci arkuszy ASC —
-    arkusz z ``.prj`` ma CRS, swiezy bez niego ``None``, i ``merge`` rzucal
-    ``CRS mismatch``; arkusz ASC z samymi liczbami calkowitymi GDAL czyta
-    jako Int32, a ``merge`` bierze typ z PIERWSZEGO zrodla, wiec calosc
-    bylaby obcieta do liczb calkowitych. Z ``assign_crs`` zrodlo bez CRS
-    jest dozwolone, a zrodlo z WLASNYM CRS innym niz wymuszany konczy sie
-    ``ValidationError`` (wymuszenie nie przelicza wspolrzednych). Przy
-    owijaniu ``ValidationError`` daje tez zrodlo wielopasmowe i typ pasma
-    spoza ``VRT_TYPES``; domyslny sterownik wyniku to GTiff, domyslnie bez
-    kafli (``tiled=False``; jawne kafle w ``dst_kwds`` wygrywaja) — profil
-    wyjscia ``merge`` bierze z pierwszego zrodla, czyli z VRT.
+    ``assign_crs`` / ``dtype`` (default ``None``, the CZ path unchanged): when
+    either is given, each source is wrapped in a single-band 1:1 VRT in
+    ``/vsimem/`` with SRS = ``assign_crs`` (or the source's own CRS) and band type
+    = ``dtype`` (or its own); ``merge`` gets the VRT names, and the VRT carries the
+    source's OWN nodata, so pixel masking is the same as without wrapping.
+    Why: Hydrograf writes a ``.prj`` (EPSG:2180) next to some ASC sheets -
+    a sheet with a ``.prj`` has a CRS, a fresh one without it has ``None``, and
+    ``merge`` raised
+    ``CRS mismatch``; an ASC sheet with integers only is read by GDAL
+    as Int32, and ``merge`` takes the type from the FIRST source, so everything
+    would be truncated to integers. With ``assign_crs`` a source without a CRS
+    is allowed, while a source with its OWN CRS different from the enforced one ends in
+    ``ValidationError`` (the enforcement does not convert coordinates). When
+    wrapping, ``ValidationError`` is also raised for a multiband source and a band type
+    outside ``VRT_TYPES``; the default result driver is GTiff, by default without
+    tiles (``tiled=False``; explicit tiles in ``dst_kwds`` win) - ``merge`` takes the
+    output profile from the first source, i.e. from the VRT.
     """
     if not inputs:
         raise ValidationError("mosaic_and_crop: brak rastrow wejsciowych")
@@ -245,8 +248,8 @@ def mosaic_and_crop(
                     "nodata": src.nodata,
                 }
             )
-    # _source_grid konsumuje transformacje zrodel — wyprowadzone z metas,
-    # bez drugiej petli otwierajacej pliki.
+    # _source_grid consumes the sources' transforms - derived from metas,
+    # without a second loop opening the files.
     transforms = [m["transform"] for m in metas]
 
     if assign_crs is None:
@@ -256,8 +259,9 @@ def mosaic_and_crop(
                 f"mosaic_and_crop: niezgodne CRS wejsc: {sorted(crs_set)}"
             )
     else:
-        # CRS None (ASC bez .prj) obok EPSG:2180 jest dozwolony — VRT nada
-        # mu SRS; odrzucamy tylko zrodlo z WLASNYM, innym ukladem.
+        # A CRS of None (ASC without .prj) alongside EPSG:2180 is allowed - the VRT
+        # will assign
+        # it an SRS; we reject only a source with its OWN, different CRS.
         target = CRS.from_user_input(assign_crs)
         for path, meta in zip(paths, metas, strict=True):
             if meta["crs"] is not None and not _same_projection(meta["crs"], target):
@@ -286,20 +290,21 @@ def mosaic_and_crop(
 
     bounds = (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
     if snap_to_source_grid:
-        # Bez tego siatke wyniku kotwiczy rog bbox, a merge przepisuje piksele
-        # najblizszym sasiadem: tresc przesuwa sie o ulamek piksela, a przy
-        # remisie (bbox calkowity na siatce GUGiK z narozami w k + 0,5) sasiednie
-        # kolumny mieszaja sie (review max 2026-08-30, zn. 1; fakt 2 planu).
+        # Without this the result grid is anchored at the bbox corner, and merge
+        # rewrites pixels
+        # by nearest neighbor: content shifts by a fraction of a pixel, and on a
+        # tie (a bbox exactly on the GUGiK grid with corners at k + 0.5) neighboring
+        # columns get mixed (review max 2026-08-30, finding 1; fact 2 of the plan).
         grid = _source_grid(paths, transforms)
         if grid.off_grid:
             raise GridMismatchError(grid.describe_off_grid(len(paths)), grid.off_grid)
         bounds = _snap_outward(bounds, grid.reference)
 
-    # merge z dst_path sam otwiera plik do zapisu (stad mkdir PRZED
-    # wywolaniem) i liczy wynik kawalkami wg mem_limit; bez dst_path
-    # caly raster ladowalby do jednej tablicy w RAM — szczyt 2,63x
-    # rozmiaru danych, czyli ok. 2,4 GB dla zlewni 30x30 km przy DMR 5G.
-    # Profil wyjscia merge bierze z PIERWSZEGO zrodla.
+    # merge opens the file for writing from dst_path itself (hence mkdir BEFORE
+    # the call) and computes the result in chunks per mem_limit; without dst_path
+    # the whole raster would load into one array in RAM - a peak of 2.63x
+    # the data size, i.e. about 2.4 GB for a 30x30 km catchment at DMR 5G.
+    # merge takes the output profile from the FIRST source.
     output_path.parent.mkdir(parents=True, exist_ok=True)
     kwds: dict = {}
     if nodata is not None:
@@ -307,19 +312,20 @@ def mosaic_and_crop(
     if dst_kwds:
         kwds.update(dst_kwds)
     if wrap:
-        # Pierwsze zrodlo to VRT: bez tego wynik bez dst_kwds zapisywalby sie
-        # sterownikiem VRT ("Writing through VRTSourcedRasterBand is not
+        # The first source is a VRT: without this a result without dst_kwds would be
+        # written
+        # with the VRT driver ("Writing through VRTSourcedRasterBand is not
         # supported").
         kwds.setdefault("driver", "GTiff")
-        # ...i dziedziczylby kafle VRT min(128, w) x min(128, h) (tiled dla
-        # zrodla szerszego niz 128 px): wysokosc < 128 niepodzielna przez 16
-        # konczyla zapis GTiff RasterBlockError. Jawne kafle z dst_kwds
-        # wygrywaja (setdefault).
+        # ...and would inherit the VRT tiles min(128, w) x min(128, h) (tiled for
+        # a source wider than 128 px): a height < 128 not divisible by 16
+        # ended the GTiff write with RasterBlockError. Explicit tiles from dst_kwds
+        # win (setdefault).
         kwds.setdefault("tiled", False)
 
-    # Owijanie PO przyciaganiu: transformacje VRT = transformacje zrodel, wiec
-    # siatka policzona na oryginalach jest wazna. VRT w /vsimem/ nie trzyma
-    # deskryptorow; merge otwiera je (i zrodla pod nimi) po jednym.
+    # Wrapping AFTER snapping: VRT transforms = source transforms, so the
+    # grid computed on the originals is valid. A VRT in /vsimem/ holds no
+    # descriptors; merge opens them (and the sources beneath) one at a time.
     memfiles: list[MemoryFile] = []
     try:
         if wrap:
@@ -334,11 +340,11 @@ def mosaic_and_crop(
                     meta,
                     crs_wkt=wkt,
                     dtype=dtype or meta["dtype"],
-                    # NoDataValue = nodata WLASNE zrodla, nie mozaiki:
-                    # SimpleSource kopiuje piksele 1:1, wiec inna wartosc
-                    # odmaskowalaby nodata zrodla i w zakladce arkuszy
-                    # przykrylaby wazne dane nastepnego zrodla. Nodata WYNIKU
-                    # ustawia merge (parametr nodata), jak bez owijania.
+                    # NoDataValue = the source's OWN nodata, not the mosaic's:
+                    # SimpleSource copies pixels 1:1, so a different value would
+                    # unmask the source's nodata and, in a sheet overlap,
+                    # cover valid data of the next source. The RESULT's nodata
+                    # is set by merge (the nodata parameter), as without wrapping.
                     nodata=meta["nodata"],
                 )
                 memfile = MemoryFile(xml.encode(), ext=".vrt")
@@ -360,7 +366,7 @@ def mosaic_and_crop(
 
 
 def has_valid_pixels(path: Path, nodata: float | None) -> bool:
-    """Czy raster ma choc jeden piksel spoza nodata/NaN (wczesne wyjscie)."""
+    """Whether the raster has at least one pixel other than nodata/NaN (early exit)."""
     with rasterio.open(path) as src:
         for _, window in src.block_windows(1):
             data = src.read(1, window=window)

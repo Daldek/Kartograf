@@ -1,13 +1,13 @@
 """
-Wspolny transport HTTP wszystkich providerow (review 2026-10-06 D1/D2).
+Shared HTTP transport of all providers (review 2026-10-06 D1/D2).
 
-Jedno miejsce polityki pobierania: zapis do pliku tymczasowego
-``<plik>.<pid>_<tid>.tmp`` + ``os.replace`` (atomowo), do ``MAX_RETRIES``
-prob z backoffem wykladniczym (``backoff_delay``: 2 s, 4 s), ponawiane
-tylko bledy sieci, 429 i 5xx (``is_retryable``), ``Retry-After`` wydluza
-przerwe (``retry_wait``), ``DownloadError.status_code`` niesie kod HTTP
-ostatniej proby (``http_failure``). Pliki pobieraja ``download_to``,
-odpowiedzi w pamieci ``get_with_retry``; sesje na watek ``SessionPerThread``.
+The one place of the download policy: writing to a temporary file
+``<file>.<pid>_<tid>.tmp`` + ``os.replace`` (atomically), up to ``MAX_RETRIES``
+attempts with exponential backoff (``backoff_delay``: 2 s, 4 s), only
+network errors, 429 and 5xx are retried (``is_retryable``), ``Retry-After`` extends
+the pause (``retry_wait``), ``DownloadError.status_code`` carries the HTTP code
+of the last attempt (``http_failure``). Files are downloaded by ``download_to``,
+in-memory responses by ``get_with_retry``; per-thread sessions by ``SessionPerThread``.
 """
 
 import logging
@@ -25,14 +25,14 @@ from kartograf.exceptions import DownloadError
 
 logger = logging.getLogger(__name__)
 
-# Liczba prob (pierwsza + ponowienia) — jedna dla calego pakietu.
+# Number of attempts (first + retries) - one for the whole package.
 MAX_RETRIES = 3
-# Backoff przed ponowieniem n (n = 1, 2, ...): RETRY_BACKOFF_BASE ** n,
-# czyli 2 s i 4 s. Jedna wartosc dla plikow i zapytan (D1, 2026-10-07):
-# wczesniej providery czekaly 2 s/4 s, a transport wspolny 1 s/2 s.
+# Backoff before retry n (n = 1, 2, ...): RETRY_BACKOFF_BASE ** n,
+# i.e. 2 s and 4 s. One value for files and queries (D1, 2026-10-07):
+# previously providers waited 2 s/4 s, and the shared transport 1 s/2 s.
 RETRY_BACKOFF_BASE = 2
-# Gorna granica oczekiwania z naglowka Retry-After (s): dluzszego postoju
-# serwera i tak nie przeczekamy w trzech probach, a CLI nie moze "wisiec".
+# Upper bound of the wait from the Retry-After header (s): we would not outlast a longer
+# server outage within three attempts anyway, and the CLI must not "hang".
 MAX_RETRY_AFTER = 60
 
 
@@ -55,7 +55,7 @@ def is_retryable(exc: requests.RequestException) -> bool:
 
 
 def retry_wait(exc: requests.RequestException, backoff: float) -> float:
-    """Czas przed kolejna proba: Retry-After (<= MAX_RETRY_AFTER) albo backoff."""
+    """Time before the next attempt: Retry-After (<= MAX_RETRY_AFTER) or backoff."""
     response = getattr(exc, "response", None)
     value = response.headers.get("Retry-After") if response is not None else None
     if not value:
@@ -97,14 +97,14 @@ def make_gugik_session() -> requests.Session:
 
 
 class SessionPerThread:
-    """Jedna sesja na watek albo sesja powierzona przez wolajacego.
+    """One session per thread, or a session entrusted by the caller.
 
-    ``requests.Session`` nie ma gwarancji bezpieczenstwa watkowego, wiec
-    provider wspoldzielony przez pule watkow trzyma osobna sesje dla kazdego
-    watku. Sesja wstrzyknieta (``injected``) wygrywa zawsze — o jej uzycie
-    z wielu watkow dba wolajacy. ``factory`` (domyslnie
-    ``make_gugik_session``) jest rozwiazywana przy pierwszym ``get()``
-    w danym watku.
+    ``requests.Session`` has no thread-safety guarantee, so a
+    provider shared by a thread pool keeps a separate session for each
+    thread. An injected session (``injected``) always wins - its use
+    from many threads is the caller's concern. ``factory`` (default
+    ``make_gugik_session``) is resolved on the first ``get()``
+    in a given thread.
     """
 
     def __init__(
@@ -127,11 +127,11 @@ class SessionPerThread:
 
 
 def reject_error_document(service: str) -> Callable[[requests.Response], None]:
-    """Walidator ``download_to``: raport bledu XML/HTML zamiast danych.
+    """``download_to`` validator: an XML/HTML error report instead of data.
 
-    Uslugi OGC (WMS/WCS) potrafia odpowiedziec HTTP 200 z dokumentem
-    ``ServiceException`` — taki plik nie moze trafic na dysk jako raster.
-    Blad tresci nie jest ponawiany (ten sam URL da ten sam raport).
+    OGC services (WMS/WCS) can answer HTTP 200 with a
+    ``ServiceException`` document - such a file must not land on disk as a raster.
+    A content error is not retried (the same URL gives the same report).
     """
 
     def validate(response: requests.Response) -> None:
@@ -153,10 +153,10 @@ def get_with_retry(
     description: str = "",
     params: dict[str, str] | None = None,
 ) -> requests.Response:
-    """Pobierz odpowiedz HTTP; kazda nieudana proba zachowuje ten sam URL.
+    """Fetch an HTTP response; every failed attempt keeps the same URL.
 
-    ``params`` (opcjonalne) trafiaja do ``session.get`` bez zmian — kazda
-    proba wysyla ten sam zestaw parametrow zapytania.
+    ``params`` (optional) go to ``session.get`` unchanged - every
+    attempt sends the same set of query parameters.
     """
     extra = {"params": params} if params is not None else {}
     context = description or url
@@ -192,7 +192,7 @@ def get_with_retry(
 def _write_atomic(
     response: requests.Response, output_path: Path, chunk_size: int
 ) -> Path:
-    """Zapisz strumien odpowiedzi do output_path przez plik tymczasowy."""
+    """Write the response stream to output_path via a temporary file."""
     temp_path = output_path.with_name(
         f"{output_path.name}.{os.getpid()}_{threading.get_ident()}.tmp"
     )
@@ -220,23 +220,24 @@ def download_to(
     save: Callable[[requests.Response, Path], Path] | None = None,
     chunk_size: int = 1_048_576,
 ) -> Path:
-    """Pobierz URL do pliku (atomowo, z polityka ponowien); zwroc sciezke.
+    """Download a URL to a file (atomically, with a retry policy); return the path.
 
     Parameters
     ----------
     description : str, optional
-        Opis do komunikatow i logow (domyslnie URL).
+        Description for messages and logs (default: the URL).
     validate : callable, optional
-        Wolany z odpowiedzia po ``raise_for_status``, przed zapisem; wyjatek
-        spoza ``requests.RequestException`` konczy pobieranie bez ponowien
-        (np. ``reject_error_document``).
+        Called with the response after ``raise_for_status``, before writing; an
+        exception
+        other than ``requests.RequestException`` ends the download without retries
+        (e.g. ``reject_error_document``).
     save : callable, optional
-        Zapis odpowiedzi zamiast domyslnego atomowego zapisu strumienia;
-        zwraca sciezke faktycznie zapisanego pliku (np. rozpakowany ZIP).
-        Przerwany strumien (``RequestException``) jest ponawiany.
+        Write the response instead of the default atomic stream write;
+        returns the path of the file actually written (e.g. an unpacked ZIP).
+        An interrupted stream (``RequestException``) is retried.
 
-    Katalog docelowy powstaje dopiero po udanej odpowiedzi — blad HTTP nie
-    zostawia pustych katalogow.
+    The target directory is created only after a successful response - an HTTP error
+    leaves no empty directories.
     """
     output_path = Path(output_path)
     context = description or url
