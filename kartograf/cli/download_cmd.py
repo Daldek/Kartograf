@@ -280,7 +280,7 @@ def _reject_campaign_opts_with_target_crs(args: argparse.Namespace) -> bool:
     if campaigns == "all":
         print(
             "Error: --campaigns all nie dziala z --target-crs — wycinek sklada "
-            "jedna kampanie na arkusz; laczenie kampanii: narzedzie 0.7.1",
+            "jedna kampanie na arkusz",
             file=sys.stderr,
         )
         return True

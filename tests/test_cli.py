@@ -6697,7 +6697,10 @@ class TestCampaignOptions:
         assert rc == 1
         err = capsys.readouterr().err
         assert "Error: --campaigns all nie dziala z --target-crs" in err
-        assert "0.7.1" in err
+        # no promise of a campaign-composing tool in a given release (ADR-030
+        # errata 6): the message ends with the reason
+        assert "0.7.1" not in err
+        assert "narzedzie" not in err
         mock_prepare.assert_not_called()
 
     @patch("kartograf.download.cutout.prepare_pl_cutout")
@@ -6742,7 +6745,10 @@ class TestCampaignOptions:
             ]
         )
         assert rc == 1
-        assert "0.7.1" in capsys.readouterr().err
+        assert (
+            "Error: --campaigns all nie dziala z --target-crs"
+            in capsys.readouterr().err
+        )
         mock_run_cz.assert_not_called()
         mock_prepare.assert_not_called()
 
@@ -7081,7 +7087,7 @@ class TestCampaignOptions:
         )
         assert rc == 1
         err = capsys.readouterr().err
-        assert "0.7.1" in err
+        assert "Error: --campaigns all nie dziala z --target-crs" in err
         assert "Info:" not in err
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -7104,7 +7110,7 @@ class TestCampaignOptions:
         assert rc == 1
         err = capsys.readouterr().err
         assert "Error: --target-crs dziala tylko z --bbox/--geometry" in err
-        assert "0.7.1" not in err
+        assert "--campaigns all nie dziala" not in err
         mock_manager_class.assert_not_called()
 
     @patch("kartograf.cli.download_cmd.DownloadManager")

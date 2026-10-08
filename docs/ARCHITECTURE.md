@@ -1094,9 +1094,8 @@ i czyta arkusze przez dowiazania sciezki standardowej (hardlink i kopia to
 zwykle pliki), a `extra.sheet_sources` czyta
 sidecar standardowy. `--target-crs` + (`--campaigns all` lub `--min-year`)
 odrzuca CLI przed siecia (`Error: --campaigns all nie dziala z --target-crs
-— wycinek sklada jedna kampanie na arkusz; laczenie kampanii: narzedzie
-0.7.1` / `Error: --min-year nie dziala z --target-crs — nazwa wycinka nie
-niesie granicy roku`, kod 1). Wycinek jest pomijany po SAMYM istnieniu
+— wycinek sklada jedna kampanie na arkusz` / `Error: --min-year nie dziala
+z --target-crs — nazwa wycinka nie niesie granicy roku`, kod 1). Wycinek jest pomijany po SAMYM istnieniu
 pliku wyniku (Q4), takze gdy skorowidz ma juz nowsza kampanie — odswiezenie:
 `--force` albo usuniecie wycinka. Kontrola wolnego miejsca
 (`estimate_pl_cutout_bytes`, D-3) to DOLNE oszacowanie: liczy arkusze bez

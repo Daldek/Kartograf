@@ -128,6 +128,19 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (albo `resolution="1m"`, gdy potrzebny jest KRON86). CLI bez zmian:
   `--resolution 5m --vertical-crs KRON86` nadal drukuje `Info:` i pobiera
   EVRF2007 (kod 0).
+- Pobieranie arkuszy NMT/NMPT/orto GUGiK (CLI i `DownloadManager`, takze
+  wycinek `--target-crs`) odrzuca rekordy i pliki, ktore w 0.7.0 przechodzily:
+  URL rekordu bez godla, plik ASC poza rama godla (B4) oraz rekord NMT/NMPT
+  deklarujacy inny uklad wysokosci niz zadany — `DownloadError` arkusza
+  (kampanii), plik nie zostaje zapisany. Kontrole rekordu dzialaja przed
+  pominieciem juz pobranej kampanii, a `--force` (`skip_existing=False`) ich
+  nie wylacza. Co zrobic: sprawdz rekord w skorowidzu GUGiK (geoportal) —
+  komunikat podaje godlo i rozbieznosc; to blad danych u zrodla, ktory
+  warto zglosic GUGiK; dla innych arkuszy pobieranie trwa dalej (lista:
+  porazka arkusza wg R5, `--campaigns all`: pozostale kampanie).
+- Komunikat `Error: --campaigns all nie dziala z --target-crs` nie odsyla
+  juz do "narzedzia 0.7.1" (skladanie kampanii nie ma przypisanego wydania,
+  ADR-030 errata 6); kod wyjscia bez zmian.
 
 ### Naprawione
 

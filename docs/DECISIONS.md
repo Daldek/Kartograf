@@ -1837,12 +1837,13 @@ zalecane podpiecie cache (`docs/USAGE.md` sekcja 2).
 
 **Errata 6 (2026-10-09, domkniecie 0.7.1, przeglad dokumentacji):**
 zapowiedz "narzedzie skladania kampanii w jedna powierzchnie — 0.7.1"
-(Kontekst, opcja `mosaic`, decyzja) nie zostala zrealizowana: zakres 0.7.1
-wyznaczyly wymagania Hydrografa (`docs/PROGRESS.md`, backlog "Do 0.7.1 —
-wymagania Hydrografa"), a skladanie kampanii nie jest przypisane do zadnego
-wydania. Decyzja bez zmian (`mosaic` odrzucona jako strategia pobierania;
-skladanie nalezy do uzytkownika albo osobnego narzedzia); stan planu:
-`docs/SCOPE.md` 3.1.
+(Kontekst, opcja `mosaic`, decyzja, (j)) nie zostala zrealizowana: zakres
+0.7.1 wyznaczyly wymagania Hydrografa (`docs/PROGRESS.md`, backlog "Do 0.7.1
+— wymagania Hydrografa"), a skladanie kampanii nie jest przypisane do
+zadnego wydania. Decyzja bez zmian (`mosaic` odrzucona jako strategia
+pobierania; skladanie nalezy do uzytkownika albo osobnego narzedzia); stan
+planu: `docs/SCOPE.md` 3.1. Komunikat CLI dla `--target-crs` z `--campaigns
+all` (j) konczy sie od 0.7.1 na powodzie, bez odeslania do narzedzia.
 
 ---
 
