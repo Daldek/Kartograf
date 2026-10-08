@@ -162,7 +162,7 @@
 > M-7 podwojny INFO liczby kampanii; M-8 nieaktualny sidecar standardowy po
 > awarii zapisu (samonaprawa).
 > Ledger SDD (rulingi, uwagi): `.superpowers/sdd/2026-10-07-plan-adr030/progress.md`
-> (gitignorowany). Rulingi: T7 — zla `aktualnosc` rekordu w `all` = porazka tej
+> (gitignorowany; katalog `.superpowers/` usuniety 2026-10-08 — rulingi sa w tym bloku). Rulingi: T7 — zla `aktualnosc` rekordu w `all` = porazka tej
 > kampanii, link na najnowsza poprawna; wyscig `ensure_standard_link` bez
 > blokad (decyzja uzytkownika, ryzyko szczatkowe w docstringach); T8 —
 > `DownloadResult.reused_campaign_files`.
@@ -1251,6 +1251,26 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
     not "znany blad", testy na zywo 11 PASS. Odblokowuje pkt 13.
 
 ## Backlog
+
+#### Do 0.7.1 — uwagi z testu na zywo przed wydaniem 0.7.0 (2026-10-08)
+
+Raport: `docs/research/2026-10-08-test-przed-0.7.0/raport.md` (decyzja
+uzytkownika: U3 i U4 poprawione przed 0.7.0, reszta do 0.7.1).
+
+- [ ] **U6 — rozdzielczosc ortofotomapy w dokumentacji:** README, SCOPE, PRD
+  i docstring `providers/pl/gugik_orto.py` podaja 25 cm, a pobrany arkusz ma
+  0,1 m (`extra.source.resolution_m`); rozdzielczosc zalezy od kampanii —
+  opisac jako "wg kampanii (np. 25 cm, 10 cm)".
+- [ ] **U2 — podpowiedzi braku pokrycia w liscie PL-2000 bez `--scale`:**
+  drukowane dwa razy (linia `No data for ...` bez prefiksu + `Info:`), a
+  podpowiedz wymienia jednego potomka zamiast wszystkich z obszaru.
+- [ ] **U5 — `cache stats` `TERYT entries` zawsze 0 z CLI:** tor land cover
+  (`landcover_cmd.py`, `LandCoverManager`) tworzy `Bdot10kProvider()` bez
+  `cache=`, wiec `teryt_cache` nie jest uzywany.
+- [ ] **U1 — wyjscie `kartograf parse`:** dla PL-2000 naglowki po angielsku,
+  skladowe po polsku, "Strefa" powtorzona, `Natywny CRS` pod `Components`;
+  komunikaty raz z polskimi znakami, raz bez (takze `soilgrids hsg`
+  `Godlo:`). Godla CZ w `parse` — osobna pozycja nizej.
 
 #### Do naprawy — testy na zywych danych 2026-09-29 (przed wydaniem 0.7.0)
 
