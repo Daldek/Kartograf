@@ -1821,7 +1821,7 @@ transport = blad jak dotad (ADR-028: bez cichej degradacji; ADR-028
 errata 2). Powod: chwilowa awaria GUGiK nie powinna przewracac ponownego
 uruchomienia, gdy dane sa juz lokalnie; `Warning:` zachowuje jawnosc.
 Biblioteka bez `MetadataCache` pyta skorowidz przy kazdym pobraniu arkusza —
-zalecane podpiecie cache (README).
+zalecane podpiecie cache (`docs/USAGE.md` sekcja 2).
 
 ---
 
