@@ -1,8 +1,8 @@
 """
-LAZ: strategia ``campaigns="all"`` i ``min_year`` (ADR-030 j, biblioteka).
+LAZ: the ``campaigns="all"`` strategy and ``min_year`` (ADR-030 j, library).
 
-Offline: WFS z surowych XML rundy 2026-10-06 (obszar w2: kafle 2022/PL-2000:S7,
-2023 i 2025/PL-1992). ``newest`` = ADR-029 bez zmian (regresja).
+Offline: WFS from the raw XML of the 2026-10-06 round (area w2: tiles 2022/PL-2000:S7,
+2023 and 2025/PL-1992). ``newest`` = ADR-029 unchanged (regression).
 """
 
 import json
@@ -115,7 +115,8 @@ def test_unknown_campaigns_value_rejected():
 
 
 def test_all_still_drops_outside_tiles():
-    # SW naroznik obwiedni kafla PL-2000: obwiednia przecina obszar, wielokat nie
+    # SW corner of the PL-2000 tile envelope: the envelope intersects the area, the
+    # polygon does not
     area = BBox(637334, 486800, 637340, 486806, "EPSG:2180")
     selection = GugikLazProvider(session=laz_session()).select_tiles(
         area, year=2022, campaigns="all"
@@ -162,7 +163,7 @@ def test_sidecar_request_records_campaigns_and_min_year(tmp_path):
     plain = tmp_path / "b.laz"
     write_laz_sidecar(_Provider(), _tile(), plain, bbox)
     request = _meta(plain)["request"]
-    assert "campaigns" not in request  # newest = bez zmian wzgledem ADR-029
+    assert "campaigns" not in request  # newest = unchanged relative to ADR-029
     assert "min_year" not in request
 
 

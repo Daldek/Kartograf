@@ -129,9 +129,9 @@ _STUB_LAYERS = {
 
 @pytest.fixture(autouse=True)
 def _offline_wms_layers(request):
-    """Stub GetCapabilities bez sieci, niezalezny od konfiguracji produkcyjnej.
+    """A GetCapabilities stub without network, independent of production configuration.
 
-    Testy odkrywania warstw uzywaja markera ``real_wms_layers``.
+    Layer discovery tests use the ``real_wms_layers`` marker.
     """
     if request.node.get_closest_marker("real_wms_layers"):
         yield
@@ -148,7 +148,7 @@ def _offline_wms_layers(request):
     def fake_fetch(endpoint, timeout=None):
         layers = endpoint_layers.get(endpoint)
         if layers is None:
-            # Nie zamieniaj brakujacej atrapy na blad uslugi.
+            # Do not turn a missing stub into a service error.
             raise AssertionError(
                 f"No offline GetCapabilities stub for WMS endpoint {endpoint!r}. "
                 f"Add it to tests/conftest.py::_STUB_LAYERS."
@@ -177,8 +177,8 @@ def _offline_wms_layers(request):
 
 
 def render_gfi_body(records: list[dict], var: str = "skor_NMT_wg_akt") -> str:
-    """Renderuj szablon MapServera jak GUGiK: pusta odpowiedz ma tylko naglowek
-    z ``createTable`` (gfi/01), deklaracja tablicy pojawia sie z rekordami."""
+    """Render a MapServer template like GUGiK: an empty response has only the header
+    with ``createTable`` (gfi/01), the array declaration appears with records."""
     header = "<script>function createTable (rows) { return rows; }</script>\n"
     if not records:
         return header

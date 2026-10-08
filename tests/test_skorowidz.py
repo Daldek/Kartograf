@@ -1,13 +1,13 @@
 """
-Testy modulu ``kartograf.providers.pl.skorowidz`` (K3, K4, H1; D4, D5, D9).
+Tests of the ``kartograf.providers.pl.skorowidz`` module (K3, K4, H1; D4, D5, D9).
 
-Probki w ``tests/fixtures/gugik_skorowidz/`` to surowe odpowiedzi GetFeatureInfo
-GUGiK z testow na zywo 2026-09-29 (``docs/research/2026-09-29-live-e2e-i-audyt-docs/``
-katalog ``gfi/`` i ``e2e-data/``): pusta odpowiedz (morze), rekord 5 m, rekord
-``.ASC`` wielkimi
-literami (Slubice), dwa rekordy Szczecina (0,50 m przed 1,00 m), cztery rekordy
-Warszawy w warstwie zbiorczej (rosnaco po dacie, godla PL-1992 i PL-2000),
-orto CIR+RGB oraz raport wyjatku OGC.
+The samples in ``tests/fixtures/gugik_skorowidz/`` are raw GUGiK GetFeatureInfo
+responses from the 2026-09-29 live tests
+(``docs/research/2026-09-29-live-e2e-i-audyt-docs/``, the ``gfi/`` and
+``e2e-data/`` directories): an empty response (sea), a 5 m record, an
+upper-case ``.ASC`` record (Slubice), two Szczecin records (0.50 m before
+1.00 m), four Warsaw records in a collective layer (ascending by date,
+PL-1992 and PL-2000 sheet codes), orto CIR+RGB and an OGC exception report.
 """
 
 import threading
@@ -57,7 +57,7 @@ def response(body: str, status: int = 200) -> Mock:
 
 class TestIsSkorowidzAnswer:
     def test_empty_gugik_answer_is_a_template(self):
-        """Morze (gfi/01): naglowek szablonu bez deklaracji tablicy rekordow."""
+        """Sea (gfi/01): a template header without a record array declaration."""
         assert is_skorowidz_answer(sample("empty.body"))
 
     @pytest.mark.parametrize(
@@ -102,7 +102,7 @@ class TestParseSkorowidzRecords:
         assert record.raw["ukladWspolrzednychPionowych"] == "PL-EVRF2007-NH"
 
     def test_uppercase_asc_url_is_kept_verbatim(self):
-        """H1: rozszerzenie zrodla nie filtruje rekordu i nie jest normalizowane."""
+        """H1: the source extension does not filter the record and is not normalised."""
         (record,) = parse_skorowidz_records(
             sample("slubice_c32_2022iStarsze.html"), "SkorowidzeNMT2022iStarsze"
         )
@@ -129,7 +129,7 @@ class TestParseSkorowidzRecords:
         assert records[2].resolution_m == 0.5
 
     def test_orto_fields_map_to_the_same_record(self):
-        """Orto: ``wielkoscPiksela``/``ukladWspolrzednych``/literowka ``Wyeplniony``."""
+        """Orto: ``wielkoscPiksela``/``ukladWspolrzednych``/the ``Wyeplniony`` typo."""
         records = parse_skorowidz_records(
             sample("orto_2024.html"), "SkorowidzeOrtofotomapy2024"
         )
@@ -179,7 +179,8 @@ class TestParseSkorowidzRecords:
         assert record.godlo == "N-34-130-D-d-2-4"
 
     def test_partition_violation_is_only_a_warning(self, caplog):
-        """P2: rekord z rokiem spoza partycji warstwy zostaje, ale jest widoczny."""
+        """P2: a record with a year outside the layer partition stays, but is
+        visible."""
         body = render_gfi_body(
             [gfi_record("N-34-130-D-d-2-4", aktualnosc="2025-03-01")]
         )
@@ -222,7 +223,7 @@ class TestSelectSheetRecord:
         assert chosen.full_sheet is True
 
     def test_warszawa_latest_campaign_not_first_in_html(self):
-        """K4: warstwa zbiorcza rosnie po dacie — wygrywa 2023, nie 2019."""
+        """K4: a collective layer grows by date - 2023 wins, not 2019."""
         records = parse_skorowidz_records(
             sample("warszawa_2023iStarsze.body"), "SkorowidzeNMT2023iStarsze"
         )
@@ -234,7 +235,8 @@ class TestSelectSheetRecord:
         assert chosen.aktualnosc == "2023-09-05"
 
     def test_pl2000_needs_whole_token_and_zone(self):
-        """K4: potomek ``7.173.21.06.3`` to nie ``7.173.21.06``; strefa musi pasowac."""
+        """K4: descendant ``7.173.21.06.3`` is not ``7.173.21.06``; the zone must
+        match."""
         records = parse_skorowidz_records(
             sample("warszawa_2023iStarsze.body"), "SkorowidzeNMT2023iStarsze"
         )
@@ -256,7 +258,8 @@ class TestSelectSheetRecord:
         )
 
     def test_other_system_record_never_matches(self):
-        """K4: rekord PL-1992 nie jest arkuszem godla PL-2000 (i odwrotnie)."""
+        """K4: a PL-1992 record is not a sheet of a PL-2000 sheet code (and vice
+        versa)."""
         records = _records(gfi_record("N-33-48-C-a-3-4", resolution="5.00 m"))
         assert (
             select_sheet_record(
@@ -306,7 +309,7 @@ class TestSelectSheetRecord:
         assert chosen is not None and "81423_1371958" in chosen.url
 
     def test_records_without_resolution_or_system_are_rejected(self, caplog):
-        """P6: brak pola rozdzielczosci/ukladu = rekord odrzucony z ostrzezeniem."""
+        """P6: a missing resolution/CRS field = the record rejected with a warning."""
         body = render_gfi_body(
             [
                 {
@@ -332,7 +335,8 @@ class TestSelectSheetRecord:
         assert caplog.text.count("bez ukladu lub rozdzielczosci") == 2
 
     def test_newest_wins_regardless_of_full_sheet(self):
-        """D9: najnowsza aktualnosc, takze gdy ``calyArkuszWypelnionyTrescia: NIE``."""
+        """D9: the newest acquisition date, also when ``calyArkuszWypelnionyTrescia:
+        NIE``."""
         records = _records(
             gfi_record(
                 "N-34-130-D-d-2-4", aktualnosc="2024-09-03", url="https://x/full.asc"
@@ -478,7 +482,8 @@ class TestQuerySkorowidzLayer:
         assert sleep.call_count == 1
 
     def test_exhausted_retries_raise_download_error_with_context(self):
-        """K3: zerwane zapytanie warstwy = blad z godlem i warstwa, nie brak arkusza."""
+        """K3: a broken layer query = an error with the sheet code and layer, not a
+        missing sheet."""
         session = Mock(spec=requests.Session)
         session.get.side_effect = requests.ConnectionError("reset")
         with (
@@ -501,7 +506,7 @@ class TestQuerySkorowidzLayer:
         assert session.get.call_count == 2
 
     def test_ogc_exception_report_fails_without_retry(self):
-        """Raport OGC z HTTP 200 (zla warstwa) jest deterministyczny — 1 proba."""
+        """An OGC report with HTTP 200 (a wrong layer) is deterministic - 1 attempt."""
         session = Mock(spec=requests.Session)
         session.get.return_value = response(sample("ogc_exception.body"))
         with (
@@ -515,7 +520,8 @@ class TestQuerySkorowidzLayer:
         assert exc.value.godlo == "N-34-130-D-d-2-4"
 
     def test_non_template_html_is_not_an_answer(self):
-        """P7: strona bledu z HTTP 200 bez znacznikow OGC to blad, nie nodata."""
+        """P7: an error page with HTTP 200 without OGC markers is an error, not
+        nodata."""
         session = Mock(spec=requests.Session)
         session.get.return_value = response("<html><body>502 Bad Gateway</body></html>")
         with pytest.raises(DownloadError, match="nie jest szablonem skorowidza"):
@@ -590,7 +596,7 @@ def _hint_record(godlo, uklad, zone=None, resolution_m=1.0):
 
 
 class TestCoverageHints:
-    """D14: podpowiedzi ``NoCoverageError`` wspolne dla NMT i orto."""
+    """D14: ``NoCoverageError`` hints shared by NMT and orto."""
 
     _PL2000 = "6.129.30"
     _RECORDS = (
@@ -612,8 +618,8 @@ class TestCoverageHints:
 
     @pytest.mark.parametrize("product", ["nmt", "orto"])
     def test_providers_share_hints(self, product):
-        """Orto mial krotsza podpowiedz innego ukladu (bez ``--system``/
-        ``--scale``) — po ujednoliceniu oba providery mowia to samo."""
+        """Orto had a shorter hint about another CRS (without ``--system``/
+        ``--scale``) - after unification both providers say the same."""
         from kartograf.core.sheet_parser import SheetParser
         from kartograf.providers.pl.gugik import GugikProvider
         from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
@@ -627,7 +633,7 @@ class TestCoverageHints:
         assert error.godlo == self._PL2000
         # kolejnosc podpowiedzi stala (posortowane), oddzielone "; "
         assert message.endswith("; ".join(sorted(self._EXPECTED)))
-        # to samo strukturalnie (CLI nie parsuje komunikatu)
+        # the same structurally (the CLI does not parse the message)
         assert error.hints == tuple(sorted(self._EXPECTED))
 
     def test_error_without_hints_has_empty_hints(self):
