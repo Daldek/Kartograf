@@ -489,7 +489,7 @@ class DownloadManager:
                 godlo, "1:10000", skip_existing=skip_existing, on_progress=on_progress
             )
 
-        fetch = self._fetch_sheet(godlo, skip_existing, on_download)
+        fetch = self._fetch_sheet(parser.godlo, skip_existing, on_download)
         self.last_sheet = fetch
         return fetch.path
 

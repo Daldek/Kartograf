@@ -27,12 +27,29 @@ class KartografError(Exception):
     pass
 
 
-class ParseError(KartografError):
+class ValidationError(KartografError):
+    """
+    Error validating input data.
+
+    Raised when input data fails validation checks,
+    such as invalid coordinate system or unsupported scale.
+
+    Examples
+    --------
+    >>> raise ValidationError("Invalid układ: '1965'. Must be '1992' or '2000'")
+    """
+
+    pass
+
+
+class ParseError(ValidationError):
     """
     Error parsing sheet code string.
 
     Raised when a sheet code string cannot be parsed due to invalid format,
-    unknown scale, or other parsing issues.
+    unknown scale, a value outside the nomenclature range, or other parsing
+    issues. A subclass of ``ValidationError`` (0.7.1): a bad sheet code is
+    invalid input, so ``except ValidationError`` catches it too.
 
     Examples
     --------
@@ -97,21 +114,6 @@ class NoCoverageError(DownloadError):
     ):
         super().__init__(message, godlo=godlo, status_code=status_code)
         self.hints = tuple(hints)
-
-
-class ValidationError(KartografError):
-    """
-    Error validating input data.
-
-    Raised when input data fails validation checks,
-    such as invalid coordinate system or unsupported scale.
-
-    Examples
-    --------
-    >>> raise ValidationError("Invalid układ: '1965'. Must be '1992' or '2000'")
-    """
-
-    pass
 
 
 class GridMismatchError(ValidationError):

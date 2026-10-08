@@ -11,7 +11,7 @@ import concurrent.futures
 import logging
 from pathlib import Path
 
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.storage import FileStorage
 from kartograf.providers.base import LandCoverProvider
 from kartograf.providers.corine import CorineProvider
@@ -312,6 +312,8 @@ class LandCoverManager:
         Path
             Path to downloaded file
         """
+        # One canonical sheet code in the name and the sidecar (A7)
+        godlo = SheetParser(godlo).godlo
         if output_path is None:
             output_path = self._generate_output_path(None, None, godlo, kwargs)
         path = self._provider.download_by_godlo(godlo, output_path, **kwargs)
