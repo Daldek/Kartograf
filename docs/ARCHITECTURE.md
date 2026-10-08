@@ -364,6 +364,7 @@ Bezposrednie wywolanie providera sidecara nie pisze; DMR CZ z biblioteki
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, sekundy) i wersja pakietu z `kartograf/_version.py::build_version()`: wydanie = samo `__version__`; wersja rozwojowa (`dev`) = `<__version__>+<krotki SHA>` commita, z ktorego zaimportowano pakiet, z sufiksem `.dirty`, gdy sledzone pliki katalogu `kartograf/` maja niezacommitowane zmiany (docs/testy sie nie licza); gdy git jest niedostepny albo pakiet nie pochodzi z repozytorium, w ktorym lezy (`os.path.samefile`), samo `__version__`. Ta sama wartosc w `kartograf --version`; `User-Agent` HTTP niesie samo `__version__` |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
 | `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `tile_sheet`/`year`/`nominal_density`/`url`; SM5 ma `mapname`/`cz_share` (udzial arkusza w terytorium CZ, pole `PODIL` CUZK); arkusze NMT/NMPT/orto PL maja `source` (klucze w tabeli nizej); wycinek PL: `parent_request`, `missing_sheets`, `sheet_sources`, `off_grid_sheets`, `all_nodata`, `unverified_sheets` — znaczenie i warunki zapisu w akapicie "Wycinek PL w sidecarze" nizej (jedyne pelne zestawienie); CORINE z podgladu WMS: `fallback: "wms_png"` i `note` (`landcover/manager.py`, sekcja 4.8); wynik HSG: `derived: "hsg"`, `source_layers`, `depth`, `stat`, `classes` (sekcja 4.8); plik kampanii (ADR-030): `campaign` = `{id, date, survey_work_id, source, full_sheet, pzgik_date}` obok `source`; sidecar sciezki standardowej: `link` (`hardlink`/`copy`) i `link_target` (sciezka celu wzgledem dowiazania; jedyne zrodlo celu) |
+| `sha256`, `size_bytes` | od 0.7.1: skrot SHA-256 (hex) i rozmiar w bajtach pliku danych, liczone w `build_metadata` (`sources/sidecar.py::file_digest`) przez ponowny odczyt GOTOWEGO pliku — jedno miejsce dla wszystkich produktow, takze pochodnych (wycinek, scalony GPKG BDOT10k, HSG); `null`, gdy sidecar powstaje bez istniejacego pliku danych. Sidecar sciezki standardowej kampanii (kopia sidecara celu) niesie skrot celu — tresc dowiazania jest ta sama |
 | `schema` | stale `kartograf-meta/1` |
 
 Nazwy kluczy sa angielskie (ADR-031, od 0.7.0); wyjatkiem jest `teryt` —
@@ -392,11 +393,17 @@ i `campaigns_cache`):
 | `survey_work_id` | numer zgloszenia pracy geodezyjnej (`numerZgloszeniaPracy`) |
 | `data_source` | zrodlo danych (`zrDanych`/`zrodloDanych`) |
 | `format` | format pliku z rekordu (`format`), np. `ARC/INFO ASCII GRID` |
+| `height_rmse_m` | od 0.7.1: blad sredni wysokosci w metrach (`bladSredniWysokosci`); `null`, gdy brak albo wartosc nieliczbowa |
+| `position_rmse_m` | od 0.7.1: blad sredni polozenia w metrach (`bladSredniPolozenia`); `null` jak wyzej |
+| `archive_module` | od 0.7.1: modul archiwizacji, np. `1:5000` (`modulArchiwizacji`), albo `null` |
+| `declared_vertical_crs` | od 0.7.1: uklad wysokosci zadeklarowany w rekordzie, np. `PL-EVRF2007-NH` (`ukladWspolrzednychPionowych`), albo `null` |
 | `color` | tylko orto: wariant `RGB`/`CIR`/`B/W` |
 
 **Stare sidecary i wpisy cache (sprzed ADR-031).** Wpis `record_cache`/
 `campaigns_cache` bez nowych kluczy jest chybieniem cache (skorowidz
-odpytywany ponownie, wpis nadpisany). Sidecar kampanii bez
+odpytywany ponownie, wpis nadpisany); od 0.7.1 dotyczy to takze wpisow
+bez klucza `archive_module` (zapisanych przed dodaniem kluczy dokladnosci).
+Sidecar kampanii bez
 `extra.campaign.pzgik_date` nie daje klucza dowiazania z sidecara —
 uzywane jest dolne oszacowanie z nazwy katalogu kampanii (jak przy braku
 sidecara). Wpisy `extra.sheet_sources` bez `sheet` nie licza sie jako

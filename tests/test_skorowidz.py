@@ -24,6 +24,7 @@ from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from kartograf.providers.pl.skorowidz import (
     SkorowidzRecord,
     SourceInfoMixin,
+    cached_record,
     is_skorowidz_answer,
     layer_upper_year,
     parse_skorowidz_records,
@@ -400,6 +401,10 @@ class TestSourcePayload:
             "survey_work_id": record.raw["numerZgloszeniaPracy"],
             "data_source": record.raw["zrDanych"],
             "format": "ARC/INFO ASCII GRID",
+            "height_rmse_m": 0.5,
+            "position_rmse_m": 0.5,
+            "archive_module": "1:5000",
+            "declared_vertical_crs": "PL-EVRF2007-NH",
         }
 
     def test_from_source_round_trips_selection_fields(self):
@@ -652,3 +657,78 @@ class TestCoverageHints:
 )
 def test_layer_upper_year(cls, name, year):
     assert layer_upper_year(cls.LAYER_PATTERN, name) == year
+
+
+class TestSourceExtraFields:
+    """A3: accuracy, archive module and vertical CRS from the record raw fields."""
+
+    def _record(self, **raw):
+        base = {
+            "bladSredniWysokosci": "0.15",
+            "bladSredniPolozenia": "0.25",
+            "modulArchiwizacji": "1:5000",
+            "ukladWspolrzednychPionowych": "PL-EVRF2007-NH",
+        }
+        base.update(raw)
+        return SkorowidzRecord(
+            url="https://x/1_2_N-34-130-D-d-2-4.asc",
+            godlo="N-34-130-D-d-2-4",
+            aktualnosc="2020-05-01",
+            dt_pzgik=None,
+            layer="L",
+            uklad="1992",
+            zone=None,
+            resolution_m=1.0,
+            full_sheet=True,
+            raw=base,
+        )
+
+    def test_to_source_maps_new_fields(self):
+        source = self._record().to_source("https://e")
+        assert source["height_rmse_m"] == 0.15
+        assert source["position_rmse_m"] == 0.25
+        assert source["archive_module"] == "1:5000"
+        assert source["declared_vertical_crs"] == "PL-EVRF2007-NH"
+
+    def test_missing_or_unparseable_fields_are_none(self):
+        record = self._record(bladSredniWysokosci="brak")
+        del record.raw["modulArchiwizacji"]
+        source = record.to_source("https://e")
+        assert source["height_rmse_m"] is None
+        assert source["archive_module"] is None
+
+    def test_rmse_accepts_comma_and_unit(self):
+        source = self._record(
+            bladSredniWysokosci="0,15", bladSredniPolozenia="0.25 m"
+        ).to_source("https://e")
+        assert (source["height_rmse_m"], source["position_rmse_m"]) == (0.15, 0.25)
+
+    def test_round_trip_keeps_new_fields(self):
+        source = self._record().to_source("https://e")
+        again = SkorowidzRecord.from_source(source).to_source("https://e")
+        for key in (
+            "height_rmse_m",
+            "position_rmse_m",
+            "archive_module",
+            "declared_vertical_crs",
+        ):
+            assert again[key] == source[key]
+
+    def test_cache_entry_without_new_keys_is_a_miss(self):
+        """Entries written before 0.7.1 lack the keys -> re-query the index."""
+        source = self._record().to_source("https://e")
+        del source["archive_module"]
+        assert cached_record(source) is None
+
+    def test_real_fixture_record(self):
+        """Raw GUGiK record (fixture) gives numeric RMSE values."""
+        root = FIXTURES / "real_2026_10_06"
+        texts = [
+            p.read_text(encoding="utf-8")
+            for p in sorted(root.rglob("*"))
+            if p.is_file()
+        ]
+        records = [r for t in texts for r in parse_skorowidz_records(t, "L")]
+        with_rmse = [r for r in records if "bladSredniWysokosci" in r.raw]
+        assert with_rmse, "fixture has records with bladSredniWysokosci"
+        assert isinstance(with_rmse[0].to_source("e")["height_rmse_m"], float)

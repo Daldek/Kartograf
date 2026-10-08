@@ -17,6 +17,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `mosaic_and_crop`, `check_source_grid` eksportowane z `kartograf`.
 - `MetadataCache(strict=True)`: blad SQLite konczy sie `CacheError`
   (nowy wyjatek) zamiast cichego wylaczenia cache.
+- Sidecar: `sha256` i `size_bytes` pliku danych na gornym poziomie
+  (wszystkie produkty). Sidecar arkusza NMT/NMPT/orto: w `extra.source`
+  `height_rmse_m`, `position_rmse_m`, `archive_module`,
+  `declared_vertical_crs` z rekordu skorowidza. Wpisy cache rekordow
+  sprzed 0.7.1 sa odpytywane ponownie.
 
 ### Zmienione
 

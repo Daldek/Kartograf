@@ -55,6 +55,10 @@ SOURCE = {
     "full_sheet": True,
     "survey_work_id": None,
     "data_source": None,
+    "height_rmse_m": None,
+    "position_rmse_m": None,
+    "archive_module": None,
+    "declared_vertical_crs": None,
 }
 
 
