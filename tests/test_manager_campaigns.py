@@ -1,11 +1,11 @@
 """
-Tor kampanii ``DownloadManager`` (ADR-030): pliki w ``kampanie/``, dowiazanie
-sciezki standardowej, obowiazkowy sidecar kampanii, ``SheetFetch``/``last_sheet``.
+The ``DownloadManager`` campaign path (ADR-030): files in ``kampanie/``, the
+standard path link, the mandatory campaign sidecar, ``SheetFetch``/``last_sheet``.
 
-Rekordy: prawdziwe ``SkorowidzRecord`` z surowych odpowiedzi skorowidza
+Records: real ``SkorowidzRecord`` objects from raw index (skorowidz) responses
 (``tests/fixtures/gugik_skorowidz/real_2026_10_06/nmt``): C14
-(N-34-139-C-a-3-1..4) oraz N-33-69-A-d-3-2 (kampania 72675 z URL ``.xyz``).
-Provider to atrapa bez sieci (``FakeCampaignProvider``).
+(N-34-139-C-a-3-1..4) and N-33-69-A-d-3-2 (campaign 72675 with a ``.xyz`` URL).
+The provider is a mock with no network (``FakeCampaignProvider``).
 """
 
 import dataclasses
@@ -164,12 +164,12 @@ def meta(path: Path) -> dict:
 
 
 def linked(path: Path) -> str:
-    """Plik kampanii wg sidecara standardowego (jedyne zrodlo celu)."""
+    """Campaign file per the standard sidecar (the only source of the target)."""
     return str(linked_campaign(path))
 
 
 def hardlinked(path: Path) -> bool:
-    """Sciezka standardowa jest hardlinkiem (nie symlinkiem) swojej kampanii."""
+    """The standard path is a hard link (not a symlink) to its campaign."""
     target = linked_campaign(path)
     return (
         target is not None
@@ -191,7 +191,7 @@ _REAL_SYMLINK = os.symlink  # ingerencja uzytkownika w tescie (sidecar)
 
 @pytest.fixture(autouse=True)
 def no_symlinks(monkeypatch):
-    """Errata 4 ADR-030: przeplyw managera nigdy nie tworzy symlinku."""
+    """Erratum 4 of ADR-030: the manager flow never creates a symlink."""
 
     def forbidden(*args, **kwargs):
         raise AssertionError("os.symlink wywolane w przeplywie kampanii")
@@ -279,7 +279,7 @@ def test_newer_campaign_appears_relinks(tmp_path):
 
 
 def test_all_downloads_every_campaign_links_newest(tmp_path):
-    # lista od najstarszej: link musi isc za sort_key, nie za kolejnoscia pobran
+    # list from the oldest: the link must follow sort_key, not download order
     fake = FakeCampaignProvider({"all": list(reversed(C14_ALL))})
     m = DownloadManager(tmp_path, provider=fake, campaigns="all")
     m.download_sheets([G])
@@ -362,8 +362,8 @@ def test_all_partial_campaign_failure_is_hard_failure_but_links_best_local(tmp_p
 
 
 def test_removed_campaign_dir_redownloads_newest(tmp_path):
-    """T12 krok 7: hardlink przezywa usuniecie katalogu kampanii, ale
-    ``extra.link_target`` nie istnieje — ``newest`` pobiera ponownie."""
+    """T12 step 7: the hard link survives removal of the campaign directory, but
+    ``extra.link_target`` does not exist - ``newest`` downloads again."""
     fake = FakeCampaignProvider(C14)
     m = DownloadManager(tmp_path, provider=fake)
     std = m.download_sheet(G)
@@ -390,7 +390,8 @@ def test_force_redownloads_all_campaigns_and_relinks(tmp_path):
 def test_force_redownload_relinks_copy(tmp_path, monkeypatch):
     deny_links(monkeypatch)
     fake = FakeCampaignProvider(C14)
-    fake.fixed_mtime = 1_000_000_000.0  # cel nigdy "nowszy" od kopii (D-5 nie pomaga)
+    # target never "newer" than the copy (D-5 does not help)
+    fake.fixed_mtime = 1_000_000_000.0
     m = DownloadManager(tmp_path, provider=fake)
     std = m.download_sheet(G)
     assert not std.is_symlink() and "v1" in std.read_text()
@@ -454,7 +455,7 @@ def test_campaign_sidecar_source_matches_its_own_record(tmp_path):
 
 
 # =============================================================================
-# format pliku (errata 2 N-2)
+# file format (erratum 2 N-2)
 # =============================================================================
 
 
@@ -632,7 +633,7 @@ def test_plain_track_sidecar_failure_still_best_effort(tmp_path, monkeypatch):
 
 
 # =============================================================================
-# lista arkuszy, rownoleglosc, logi
+# sheet list, parallelism, logs
 # =============================================================================
 
 
@@ -693,7 +694,7 @@ def test_last_sheet_none_after_list_download(tmp_path):
 
 
 # =============================================================================
-# provider bez kampanii (tor plain) i walidacja
+# provider without campaigns (plain path) and validation
 # =============================================================================
 
 
@@ -720,7 +721,7 @@ def test_provider_without_campaigns_rejects_all_and_min_year():
 def test_spec_mock_is_not_campaign_aware(tmp_path):
     p = Mock(spec=GugikProvider)
     type(p).default_extension = PropertyMock(return_value=".asc")
-    m = DownloadManager(tmp_path, provider=p)  # bez wyjatku
+    m = DownloadManager(tmp_path, provider=p)  # no exception
     assert m.campaigns == "newest" and m.min_year is None
 
     def download(godlo, path):
@@ -729,7 +730,7 @@ def test_spec_mock_is_not_campaign_aware(tmp_path):
         return path
 
     p.download.side_effect = download
-    path = m.download_sheet(G)  # tor plain: provider.download, nie resolve_campaigns
+    path = m.download_sheet(G)  # plain path: provider.download, not resolve_campaigns
     assert p.download.call_count == 1
     assert path.is_file() and not path.is_symlink()
 
@@ -747,10 +748,10 @@ def test_invalid_campaigns_value():
 
 
 def test_note_reuse_with_symlinked_valid_standard_sidecar(tmp_path):
-    """<std>.meta.json jako symlink do POPRAWNEJ tresci sidecara standardowego
-    lezacej gdzie indziej: dowiazanie danych zostaje (bez pobrania), a reuzycie
-    (takze bez ``parent_request``) zamienia sidecar standardowy w zwykly plik,
-    nie piszac przez symlink."""
+    """<std>.meta.json as a symlink to the CORRECT content of the standard
+    sidecar located elsewhere: the data link stays (no download), and reuse
+    (also without ``parent_request``) turns the standard sidecar into a regular
+    file, without writing through the symlink."""
     r1 = {"bbox": [1, 2, 3, 4]}
     fake = FakeCampaignProvider(C14)
     DownloadManager(
@@ -775,9 +776,9 @@ def test_note_reuse_with_symlinked_valid_standard_sidecar(tmp_path):
 
 @pytest.mark.parametrize("parent", [None, {"bbox": [5, 6, 7, 8]}])
 def test_note_reuse_with_symlinked_standard_sidecar(tmp_path, parent):
-    """<std>.meta.json bedacy SYMLINKIEM do sidecara kampanii: reuzycie nie
-    modyfikuje sidecara kampanii przez dowiazanie, a sidecar standardowy
-    staje sie zwyklym plikiem."""
+    """<std>.meta.json being a SYMLINK to the campaign sidecar: reuse does not
+    modify the campaign sidecar through the link, and the standard sidecar
+    becomes a regular file."""
     r1 = {"bbox": [1, 2, 3, 4]}
     fake = FakeCampaignProvider(C14)
     DownloadManager(
@@ -810,8 +811,8 @@ def test_note_reuse_with_symlinked_standard_sidecar(tmp_path, parent):
 def test_link_failure_is_sheet_failure_and_list_continues(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """R5: porazka dowiazania (kopia pada) = porazka arkusza, nie przerwanie
-    listy przy max_workers=1; pobrana kampania zostaje."""
+    """R5: a link failure (the copy fails) = a sheet failure, not an abort of
+    the list at max_workers=1; the downloaded campaign stays."""
     import shutil
 
     g3 = "N-34-139-C-a-3-2"
@@ -860,7 +861,8 @@ def test_link_failure_reported_together_with_campaign_errors(tmp_path, monkeypat
 
 
 def test_invalid_aktualnosc_is_campaign_failure_links_best_valid(tmp_path):
-    """R16 w duchu Q10: zla aktualnosc jednego rekordu nie przerywa petli."""
+    """R16 in the spirit of Q10: a bad acquisition date of one record does not break the
+    loop."""
     bad = dataclasses.replace(REC["84183"], aktualnosc="2025/10/21")
     fake = FakeCampaignProvider({"all": [bad, *C14_ALL[1:]]})
     m = DownloadManager(tmp_path, provider=fake, campaigns="all")
@@ -878,9 +880,9 @@ def test_invalid_aktualnosc_is_campaign_failure_links_best_valid(tmp_path):
 
 
 def _transport_error(godlo: str, failure) -> DownloadError:
-    """``DownloadError`` dokladnie z ``get_with_retry`` (ponowienia bez czekania).
+    """``DownloadError`` exactly from ``get_with_retry`` (retries without waiting).
 
-    ``failure``: wyjatek ``session.get`` albo kod HTTP odpowiedzi.
+    ``failure``: a ``session.get`` exception or the HTTP status code of the response.
     """
     session = Mock(spec=requests.Session)
     if isinstance(failure, int):
@@ -968,12 +970,12 @@ def test_newest_transport_failure_keeps_copy_link_untouched(tmp_path, monkeypatc
 @pytest.mark.parametrize(
     ("kwargs", "error"),
     [
-        # brak pokrycia = stan danych, nie transport
+        # no coverage = a data state, not transport
         ({}, NoCoverageError("Brak kampanii", godlo=G)),
-        # 4xx bez ponowien i blad tresci odpowiedzi nie sa transportem
+        # 4xx without retries and a response-content error are not transport
         ({}, "404"),
         ({}, DownloadError("raport wyjatku OGC", godlo=G)),
-        # tylko newest bez min_year
+        # only newest without min_year
         ({"campaigns": "all"}, "conn"),
         ({"min_year": 2020}, "conn"),
     ],
@@ -1026,7 +1028,7 @@ def test_transport_failure_with_force_fails(tmp_path):
 
 
 # =============================================================================
-# M-2: plik kampanii bez sidecara (R22) — weryfikacja tresci
+# M-2: campaign file without a sidecar (R22) - content verification
 # =============================================================================
 
 
@@ -1042,14 +1044,14 @@ def test_reused_campaign_without_sidecar_with_foreign_content_fails(tmp_path):
     assert "AAIGrid" in str(exc.value)
     assert not target.exists() and not sidecar(target).exists()
     assert fake.downloads == [REC["84183"].url]
-    # kolejny przebieg pobiera kampanie ponownie (plik nie byl "lokalny")
+    # the next run downloads the campaigns again (the file was not "local")
     m.download_sheet(G)
     assert fake.downloads == [REC["84183"].url] * 2
     assert hardlinked(std) and linked(std) == str(target)
 
 
 # =============================================================================
-# M-6: ponowny przebieg bez pobrania nie przestawia dowiazania (copy)
+# M-6: a re-run without download does not move the link (copy)
 # =============================================================================
 
 

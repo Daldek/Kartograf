@@ -1,9 +1,9 @@
 """
-Testy jednostkowe dla modułu gugik provider.
+Unit tests for the gugik provider module.
 
-Ten moduł zawiera testy dla klasy GugikProvider z nową architekturą:
-- download(godlo) → OpenData (ASC)
-- download_bbox(bbox) → WCS (GeoTIFF/PNG/JPEG)
+This module contains tests for the GugikProvider class with the new architecture:
+- download(godlo) -> OpenData (ASC)
+- download_bbox(bbox) -> WCS (GeoTIFF/PNG/JPEG)
 """
 
 import threading
@@ -42,7 +42,7 @@ def _queried_layers(session: Mock) -> list[str]:
 
 
 class TestGugikProviderBasic:
-    """Testy podstawowej funkcjonalności GugikProvider."""
+    """Tests of the basic GugikProvider functionality."""
 
     def test_provider_name(self):
         """Test nazwy providera."""
@@ -55,7 +55,7 @@ class TestGugikProviderBasic:
         assert provider.base_url == "https://mapy.geoportal.gov.pl"
 
     def test_supported_formats(self):
-        """Test obsługiwanych formatów WCS."""
+        """Test of the supported WCS formats."""
         provider = GugikProvider()
         formats = provider.get_supported_formats()
 
@@ -65,7 +65,7 @@ class TestGugikProviderBasic:
         assert len(formats) == 3  # Only WCS formats
 
     def test_file_extensions(self):
-        """Test rozszerzeń plików."""
+        """Test of file extensions."""
         provider = GugikProvider()
 
         assert provider.get_file_extension("GTiff") == ".tif"
@@ -74,7 +74,7 @@ class TestGugikProviderBasic:
         assert provider.get_file_extension("ASC") == ".asc"
 
     def test_file_extension_invalid_format(self):
-        """Test rozszerzenia dla nieprawidłowego formatu."""
+        """Test of the extension for an invalid format."""
         provider = GugikProvider()
 
         with pytest.raises(ValueError, match="Unknown format"):
@@ -82,36 +82,36 @@ class TestGugikProviderBasic:
 
 
 class TestGugikProviderResolution:
-    """Testy obsługi rozdzielczości (1m/5m)."""
+    """Tests of resolution handling (1m/5m)."""
 
     def test_default_resolution_is_1m(self):
-        """Test że domyślna rozdzielczość to 1m."""
+        """Test that the default resolution is 1m."""
         provider = GugikProvider()
         assert provider.resolution == "1m"
 
     def test_resolution_1m_explicit(self):
-        """Test jawnego ustawienia rozdzielczości 1m."""
+        """Test of explicitly setting the 1m resolution."""
         provider = GugikProvider(resolution="1m")
         assert provider.resolution == "1m"
 
     def test_resolution_5m(self):
-        """Test ustawienia rozdzielczości 5m (wymaga EVRF2007)."""
+        """Test of setting the 5m resolution (requires EVRF2007)."""
         provider = GugikProvider(resolution="5m", vertical_crs="EVRF2007")
         assert provider.resolution == "5m"
         assert provider.vertical_crs == "EVRF2007"
 
     def test_resolution_5m_requires_evrf2007(self):
-        """Test że rozdzielczość 5m wymaga EVRF2007."""
+        """Test that the 5m resolution requires EVRF2007."""
         with pytest.raises(ValueError, match="5m is only available for EVRF2007"):
             GugikProvider(resolution="5m", vertical_crs="KRON86")
 
     def test_resolution_invalid(self):
-        """Test nieprawidłowej rozdzielczości."""
+        """Test of an invalid resolution."""
         with pytest.raises(ValueError, match="Unsupported resolution"):
             GugikProvider(resolution="2m")
 
     def test_supported_resolutions(self):
-        """Test listy obsługiwanych rozdzielczości."""
+        """Test of the list of supported resolutions."""
         provider = GugikProvider()
         resolutions = provider.get_supported_resolutions()
 
@@ -120,7 +120,7 @@ class TestGugikProviderResolution:
         assert len(resolutions) == 2
 
     def test_supported_vertical_crs_for_1m(self):
-        """Test obsługiwanych CRS dla 1m."""
+        """Test of the supported CRS for 1m."""
         provider = GugikProvider(resolution="1m")
         crs_list = provider.get_supported_vertical_crs_for_resolution()
 
@@ -128,7 +128,7 @@ class TestGugikProviderResolution:
         assert "EVRF2007" in crs_list
 
     def test_supported_vertical_crs_for_5m(self):
-        """Test obsługiwanych CRS dla 5m."""
+        """Test of the supported CRS for 5m."""
         provider = GugikProvider(resolution="5m", vertical_crs="EVRF2007")
         crs_list = provider.get_supported_vertical_crs_for_resolution()
 
@@ -136,22 +136,22 @@ class TestGugikProviderResolution:
         assert "KRON86" not in crs_list
 
     def test_is_wcs_available_1m(self):
-        """Test dostępności WCS dla 1m (tylko KRON86 — EVRF2007 = 404)."""
+        """Test of WCS availability for 1m (KRON86 only - EVRF2007 = 404)."""
         provider = GugikProvider(resolution="1m", vertical_crs="KRON86")
         assert provider.is_wcs_available() is True
 
     def test_is_wcs_available_1m_evrf2007_false(self):
-        """Test niedostępności WCS dla 1m/EVRF2007 (endpoint wycofany)."""
+        """Test of WCS unavailability for 1m/EVRF2007 (endpoint withdrawn)."""
         provider = GugikProvider(resolution="1m", vertical_crs="EVRF2007")
         assert provider.is_wcs_available() is False
 
     def test_is_wcs_available_5m(self):
-        """Test niedostępności WCS dla 5m."""
+        """Test of WCS unavailability for 5m."""
         provider = GugikProvider(resolution="5m", vertical_crs="EVRF2007")
         assert provider.is_wcs_available() is False
 
     def test_download_bbox_not_available_for_5m(self, tmp_path):
-        """Test że download_bbox nie jest dostępne dla 5m."""
+        """Test that download_bbox is not available for 5m."""
         provider = GugikProvider(resolution="5m", vertical_crs="EVRF2007")
         output_path = tmp_path / "test.tif"
 
@@ -164,10 +164,10 @@ class TestGugikProviderResolution:
 
 
 class TestGugikProviderValidation:
-    """Testy walidacji godła."""
+    """Tests of sheet code validation."""
 
     def test_validate_valid_godlo(self):
-        """Test walidacji poprawnego godła."""
+        """Test of validation of a valid sheet code."""
         provider = GugikProvider()
 
         assert provider.validate_godlo("N-34-130-D") is True
@@ -175,7 +175,7 @@ class TestGugikProviderValidation:
         assert provider.validate_godlo("M-33-A") is True
 
     def test_validate_invalid_godlo(self):
-        """Test walidacji niepoprawnego godła."""
+        """Test of validation of an invalid sheet code."""
         provider = GugikProvider()
 
         assert provider.validate_godlo("INVALID") is False
@@ -184,16 +184,16 @@ class TestGugikProviderValidation:
 
 
 class TestGugikProviderDownloadGodlo:
-    """Testy pobierania przez godło (OpenData)."""
+    """Tests of download by sheet code (OpenData)."""
 
     @pytest.fixture
     def mock_wms_response(self):
-        """Mock odpowiedzi WMS GetFeatureInfo z rekordem arkusza N-34-130-D."""
+        """Mock of a WMS GetFeatureInfo response with the N-34-130-D sheet record."""
         return _wms_response(render_gfi_body([gfi_record("N-34-130-D")]))
 
     @pytest.fixture
     def mock_opendata_response(self):
-        """Mock odpowiedzi pobierania pliku ASC."""
+        """Mock of an ASC file download response."""
         response = Mock(spec=requests.Response)
         response.status_code = 200
         response.iter_content = Mock(
@@ -204,7 +204,7 @@ class TestGugikProviderDownloadGodlo:
     def test_download_godlo_uses_opendata(
         self, tmp_path, mock_wms_response, mock_opendata_response
     ):
-        """Test że download(godlo) używa OpenData."""
+        """Test that download(godlo) uses OpenData."""
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[mock_wms_response, mock_opendata_response])
 
@@ -227,7 +227,7 @@ class TestGugikProviderDownloadGodlo:
     def test_download_godlo_creates_directory(
         self, tmp_path, mock_wms_response, mock_opendata_response
     ):
-        """Test że download tworzy katalog docelowy."""
+        """Test that download creates the target directory."""
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[mock_wms_response, mock_opendata_response])
 
@@ -242,7 +242,7 @@ class TestGugikProviderDownloadGodlo:
     def test_download_godlo_saves_content(
         self, tmp_path, mock_wms_response, mock_opendata_response
     ):
-        """Test że download zapisuje zawartość pliku."""
+        """Test that download writes the file content."""
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[mock_wms_response, mock_opendata_response])
 
@@ -257,7 +257,7 @@ class TestGugikProviderDownloadGodlo:
     def test_download_godlo_with_timeout(
         self, tmp_path, mock_wms_response, mock_opendata_response
     ):
-        """Test pobierania z określonym timeout."""
+        """Test of download with a specified timeout."""
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[mock_wms_response, mock_opendata_response])
 
@@ -291,7 +291,7 @@ class TestGugikProviderDownloadGodlo:
 
 
 class TestGugikProviderDownloadBbox:
-    """Testy pobierania przez bbox (WCS)."""
+    """Tests of download by bbox (WCS)."""
 
     @pytest.fixture
     def mock_wcs_response(self):
@@ -303,13 +303,13 @@ class TestGugikProviderDownloadBbox:
 
     @pytest.fixture
     def sample_bbox(self):
-        """Przykładowy bbox w EPSG:2180."""
+        """Sample bbox in EPSG:2180."""
         return BBox(
             min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
         )
 
     def test_download_bbox_uses_wcs(self, tmp_path, mock_wcs_response, sample_bbox):
-        """Test że download_bbox używa WCS."""
+        """Test that download_bbox uses WCS."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=mock_wcs_response)
 
@@ -321,7 +321,7 @@ class TestGugikProviderDownloadBbox:
         assert result == output_path
         assert output_path.exists()
 
-        # WCS bbox jest dostepne wylacznie w KRON86 (EVRF2007 = HTTP 404)
+        # WCS bbox is available only in KRON86 (EVRF2007 = HTTP 404)
         call_url = session.get.call_args[0][0]
         assert "WCS" in call_url
         assert "COVERAGEID=DTM_PL-KRON86-NH_TIFF" in call_url
@@ -329,7 +329,7 @@ class TestGugikProviderDownloadBbox:
         assert "SUBSET=y(" in call_url
 
     def test_download_bbox_gtiff_format(self, tmp_path, mock_wcs_response, sample_bbox):
-        """Test pobierania bbox w formacie GTiff."""
+        """Test of bbox download in the GTiff format."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=mock_wcs_response)
 
@@ -342,7 +342,7 @@ class TestGugikProviderDownloadBbox:
         assert "image%2Ftiff" in call_url or "image/tiff" in call_url
 
     def test_download_bbox_png_format(self, tmp_path, mock_wcs_response, sample_bbox):
-        """Test pobierania bbox w formacie PNG."""
+        """Test of bbox download in the PNG format."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=mock_wcs_response)
 
@@ -355,7 +355,7 @@ class TestGugikProviderDownloadBbox:
         assert "image%2Fpng" in call_url or "image/png" in call_url
 
     def test_download_bbox_invalid_format(self, tmp_path, sample_bbox):
-        """Test błędu dla nieprawidłowego formatu."""
+        """Test of the error for an invalid format."""
         provider = GugikProvider()
         output_path = tmp_path / "test.xyz"
 
@@ -363,7 +363,7 @@ class TestGugikProviderDownloadBbox:
             provider.download_bbox(sample_bbox, output_path, format="InvalidFormat")
 
     def test_download_bbox_wrong_crs(self, tmp_path):
-        """Test błędu dla nieprawidłowego CRS."""
+        """Test of the error for an invalid CRS."""
         provider = GugikProvider()
         output_path = tmp_path / "test.tif"
 
@@ -377,7 +377,7 @@ class TestGugikProviderDownloadBbox:
     def test_download_bbox_contains_subset_parameters(
         self, tmp_path, mock_wcs_response, sample_bbox
     ):
-        """Test że URL zawiera parametry SUBSET z bounding box."""
+        """Test that the URL contains SUBSET parameters with the bounding box."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=mock_wcs_response)
 
@@ -395,7 +395,7 @@ class TestGugikProviderDownloadBbox:
     def test_download_bbox_evrf2007_raises_validation_error(
         self, tmp_path, sample_bbox
     ):
-        """WCS NMT 1m dla EVRF2007 zostal wycofany — blad walidacji, nie 404."""
+        """WCS NMT 1m for EVRF2007 was withdrawn - a validation error, not 404."""
         session = Mock(spec=requests.Session)
 
         provider = GugikProvider(session=session)  # domyslnie EVRF2007
@@ -408,10 +408,10 @@ class TestGugikProviderDownloadBbox:
 
 
 class TestGugikProviderRetry:
-    """Testy retry i obsługi błędów."""
+    """Tests of retry and error handling."""
 
     def test_download_retry_on_failure(self, tmp_path):
-        """Test ponawiania próby po błędzie."""
+        """Test of retrying after an error."""
         session = Mock(spec=requests.Session)
 
         # Mock WMS response (succeeds)
@@ -444,7 +444,7 @@ class TestGugikProviderRetry:
         assert session.get.call_count == 3
 
     def test_download_retry_exhausted(self, tmp_path):
-        """Test błędu po wyczerpaniu prób."""
+        """Test of the error after retries are exhausted."""
         session = Mock(spec=requests.Session)
 
         # Mock WMS response (succeeds)
@@ -473,7 +473,7 @@ class TestGugikProviderRetry:
             provider.download("N-34-130-D", output_path)
 
     def test_download_exponential_backoff(self, tmp_path):
-        """Test exponential backoff między próbami."""
+        """Test of exponential backoff between tries."""
         session = Mock(spec=requests.Session)
         wms_response = _wms_response(
             render_gfi_body(
@@ -506,11 +506,11 @@ class TestGugikProviderRetry:
         assert sleep_times == [2, 4]
 
 
-# Raport wyjatku OGC w ksztalcie MapServera (WMS 1.3.0), ktory odpowiada nim
-# z HTTP 200. Tresc "Invalid layer(s) given in the LAYERS parameter" GUGiK
-# zwracal naprawde na GetFeatureInfo o nieaktualna warstwe (CHANGELOG 0.7.0,
-# nazwy warstw WMS); kodu HTTP i Content-Type realnej odpowiedzi nikt nie
-# zapisal (checklista live).
+# OGC exception report in the MapServer shape (WMS 1.3.0) that answers with it
+# on HTTP 200. GUGiK really returned the text "Invalid layer(s) given in the
+# LAYERS parameter" on GetFeatureInfo for an outdated layer (CHANGELOG 0.7.0,
+# WMS layer names); nobody recorded the HTTP status and Content-Type of the real
+# response (live checklist).
 _OGC_EXCEPTION_REPORT = (
     '<?xml version="1.0" encoding="UTF-8" standalone="no" ?>\n'
     '<ServiceExceptionReport version="1.3.0" xmlns="http://www.opengis.net/ogc" '
@@ -525,8 +525,8 @@ _OGC_EXCEPTION_REPORT = (
 )
 
 
-# Minimalne GetCapabilities z warstwa skorowidza, warstwa zbiorcza i warstwa
-# innego produktu (ZasiegiNMT — odrzucana przez LAYER_PATTERN).
+# Minimal GetCapabilities with an index (skorowidz) layer, an aggregate layer
+# and a layer of another product (ZasiegiNMT - rejected by LAYER_PATTERN).
 _CAPABILITIES_XML = (
     '<?xml version="1.0" encoding="UTF-8"?>\n'
     '<WMS_Capabilities xmlns="http://www.opengis.net/wms" version="1.3.0">'
@@ -538,14 +538,14 @@ _CAPABILITIES_XML = (
 
 
 class TestGugikProviderGetOpendataUrl:
-    """Testy dla _get_opendata_url (warstwy z autouse stuba conftest)."""
+    """Tests of _get_opendata_url (layers from the conftest autouse stub)."""
 
     GODLO = "N-34-130-D-d-2-4"
     URL = f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/78955/78955_1_{GODLO}.asc"
 
     @pytest.fixture
     def record_response(self):
-        """Odpowiedz z jednym rekordem 1 m PL-1992 dla GODLO."""
+        """Response with a single 1 m PL-1992 record for GODLO."""
         return _wms_response(render_gfi_body([gfi_record(self.GODLO)]))
 
     @pytest.fixture
@@ -554,7 +554,7 @@ class TestGugikProviderGetOpendataUrl:
         return _wms_response(render_gfi_body([]))
 
     def test_get_opendata_url_success(self, record_response):
-        """Rekord w najnowszej warstwie: jej URL, petla konczy sie po 1 zapytaniu."""
+        """Record in the newest layer: its URL, the loop ends after 1 query."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=record_response)
 
@@ -591,8 +591,9 @@ class TestGugikProviderGetOpendataUrl:
         assert sleep.call_count == 1
 
     def test_transport_error_exhausted_is_service_failure(self, record_response):
-        """3 x awaria najnowszej warstwy = DownloadError; starszych warstw nie
-        pytamy (rekord z 2. warstwy nigdy nie zastepuje nieznanej nowszej kampanii)."""
+        """3 x failure of the newest layer = DownloadError; older layers are not
+        queried (a record from the 2nd layer never replaces an unknown newer
+        campaign)."""
         session = Mock(spec=requests.Session)
         session.get = Mock(
             side_effect=[requests.ConnectionError("reset")] * 3 + [record_response] * 3
@@ -608,8 +609,8 @@ class TestGugikProviderGetOpendataUrl:
         assert sleep.call_count == 2
 
     def test_ogc_exception_report_is_service_failure(self):
-        """Raport wyjatku OGC z HTTP 200 = DownloadError po 1 zapytaniu, bez
-        ponowien i bez brania go za brak arkusza."""
+        """An OGC exception report on HTTP 200 = DownloadError after 1 query, without
+        retries and not mistaken for a missing sheet."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=_wms_response(_OGC_EXCEPTION_REPORT))
 
@@ -622,7 +623,7 @@ class TestGugikProviderGetOpendataUrl:
         sleep.assert_not_called()
 
     def test_html_without_template_is_service_failure(self):
-        """HTML 200 bez szablonu skorowidza (np. strona bramy) = DownloadError."""
+        """HTML 200 without an index template (e.g. a gateway page) = DownloadError."""
         session = Mock(spec=requests.Session)
         session.get = Mock(
             return_value=_wms_response("<html><body>502 Bad Gateway</body></html>")
@@ -646,7 +647,8 @@ class TestGugikProviderGetOpendataUrl:
 
     @pytest.mark.parametrize("newest_first", [True, False])
     def test_latest_campaign_wins_within_layer(self, newest_first):
-        """W jednej warstwie wygrywa najnowsza aktualnosc, nie kolejnosc w HTML."""
+        """Within one layer the newest acquisition date wins, not the order in the
+        HTML."""
         records = [
             gfi_record(self.GODLO, aktualnosc="2024-09-03", url="https://x/new.asc"),
             gfi_record(self.GODLO, aktualnosc="2019-04-18", url="https://x/old.asc"),
@@ -674,7 +676,7 @@ class TestGugikProviderGetOpendataUrl:
         assert url == "https://x/later.asc"
 
     def test_other_resolution_only_is_no_coverage_with_hint(self):
-        """Jedyny rekord 0,50 m: 1 m nie ma, ale podpowiedz mowi, co jest."""
+        """The only 0.50 m record: there is no 1 m, but the hint says what exists."""
         body = render_gfi_body([gfi_record(self.GODLO, resolution="0.50 m")])
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=_wms_response(body))
@@ -705,7 +707,7 @@ class TestGugikProviderGetOpendataUrl:
             cache.close()
 
     def test_rejected_record_does_not_stop_layer_loop(self, record_response):
-        """Warstwa z samym 0,50 m nie konczy petli — 1 m z nastepnej warstwy."""
+        """A layer with only 0.50 m does not end the loop - 1 m from the next layer."""
         first = _wms_response(
             render_gfi_body([gfi_record(self.GODLO, resolution="0.50 m")])
         )
@@ -718,7 +720,7 @@ class TestGugikProviderGetOpendataUrl:
         assert _queried_layers(session) == list(_EVRF2007_LAYERS[:2])
 
     def test_get_opendata_url_uses_correct_endpoint_for_1m(self, record_response):
-        """Test że 1m używa właściwego endpointu (domyślnie EVRF2007)."""
+        """Test that 1m uses the right endpoint (default EVRF2007)."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=record_response)
 
@@ -729,7 +731,7 @@ class TestGugikProviderGetOpendataUrl:
         assert "SkorowidzeUkladEVRF2007" in call_url
 
     def test_get_opendata_url_uses_correct_endpoint_for_5m(self):
-        """Test że 5m używa właściwego endpointu."""
+        """Test that 5m uses the right endpoint."""
         body = render_gfi_body([gfi_record(self.GODLO, resolution="5.00 m")])
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=_wms_response(body))
@@ -744,7 +746,7 @@ class TestGugikProviderGetOpendataUrl:
 
 
 class TestGugikProviderSession:
-    """Testy zarzadzania sesja HTTP: jedna wstrzyknieta albo jedna na watek."""
+    """Tests of HTTP session management: one injected or one per thread."""
 
     GODLO = "N-34-130-D"
 
@@ -759,7 +761,7 @@ class TestGugikProviderSession:
         return response
 
     def test_uses_provided_session(self, tmp_path, record_body):
-        """Wstrzyknieta sesja obsluguje skorowidz i plik; zadna inna nie powstaje."""
+        """The injected session serves the index and the file; no other is created."""
         session = Mock(spec=requests.Session)
         session.get = Mock(
             side_effect=[_wms_response(record_body), self.file_response()]
@@ -785,7 +787,7 @@ class TestGugikProviderSession:
         assert session.get.call_count == 2
 
     def test_separate_session_per_thread(self, record_body) -> None:
-        """Kazdy watek dostaje wlasna sesje i uzywa tylko jej."""
+        """Each thread gets its own session and uses only that one."""
         sessions: list[Mock] = []
         results: list[str] = []
         errors: list[Exception] = []
@@ -818,8 +820,8 @@ class TestGugikProviderSession:
 
     @pytest.mark.real_wms_layers
     def test_provided_session_serves_get_capabilities(self, tmp_path, record_body):
-        """Bez stuba warstw: wstrzyknieta sesja robi GetCapabilities, potem
-        GetFeatureInfo na warstwie z capabilities, potem strumien pliku."""
+        """Without the layer stub: the injected session does GetCapabilities, then
+        GetFeatureInfo on a layer from capabilities, then the file stream."""
         session = Mock(spec=requests.Session)
         session.get = Mock(
             side_effect=[

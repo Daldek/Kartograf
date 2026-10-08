@@ -1,4 +1,4 @@
-"""Testy jednostkowe dla modulu parser_tm33 (siatka CZ TM33 2x2 km)."""
+"""Unit tests for the parser_tm33 module (CZ TM33 2x2 km grid)."""
 
 import pytest
 
@@ -35,7 +35,7 @@ class TestParserTM33Parsing:
 
     @pytest.mark.parametrize("godlo", ["303_5550", "302_5551", "301_5549"])
     def test_odd_kilometers_raise(self, godlo):
-        """Kafle co 2 km — nieparzyste kilometry to nie naroznik SW."""
+        """Tiles every 2 km - odd kilometres are not an SW corner."""
         with pytest.raises(ParseError, match="parzyste"):
             ParserTM33(godlo)
 
@@ -83,7 +83,7 @@ class TestFindTilesTM33ForBBox:
         ]
 
     def test_touching_edge_excluded(self):
-        """max dokladnie na krawedzi kafla — kafel za krawedzia NIE wchodzi."""
+        """max exactly on the tile edge - the tile past the edge is NOT included."""
         bbox = BBox(302_000, 5_550_000, 304_000, 5_552_000, "EPSG:3045")
         assert find_tiles_tm33_for_bbox(bbox) == ["302_5550"]
 

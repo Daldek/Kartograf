@@ -220,11 +220,11 @@ class TestLazTile:
 
 
 class TestLazTileUklad:
-    """Uklad kafla LAZ z uklad_xy (``parse_pl_uklad``, D3); nieznany = blad.
+    """LAZ tile CRS from uklad_xy (``parse_pl_uklad``, D3); unknown = error.
 
-    Przeniesione z tests/test_cli.py::TestLazUklad (zn. 8, review max
-    2026-08-30) — ``LazTile.uklad`` jest teraz jedynym zrodlem prawdy, uzywanym
-    zarowno przez CLI, jak i przez biblioteke (``FileStorage.get_raw_path``).
+    Moved from tests/test_cli.py::TestLazUklad (item 8, review max
+    2026-08-30) - ``LazTile.uklad`` is now the single source of truth, used
+    by both the CLI and the library (``FileStorage.get_raw_path``).
     """
 
     def _tile(self, godlo="N-33-131-B-a-1-1-4", crs="PL-2000:S6"):
@@ -241,7 +241,7 @@ class TestLazTileUklad:
         )
 
     def test_crs_pl2000_wins_over_dash_godlo(self):
-        # godlo myslnikowe, ale uklad_xy mowi PL-2000 — crs wygrywa
+        # hyphenated sheet code, but uklad_xy says PL-2000 - the CRS wins
         assert self._tile().uklad == "2000"
 
     def test_crs_pl1992(self):
@@ -258,8 +258,9 @@ class TestLazTileUklad:
         ],
     )
     def test_unrecognized_crs_is_an_error_not_a_guess(self, godlo, crs):
-        """D3: bez rozpoznanego uklad_xy nie zgadujemy z godla (dawniej:
-        kaskada godlo -> 2000, segment pl_2000 przy sidecarze EPSG:2180)."""
+        """D3: without a recognised uklad_xy we do not guess from the sheet code
+        (formerly: sheet code -> 2000 cascade, a pl_2000 segment with an EPSG:2180
+        sidecar)."""
         with pytest.raises(ValidationError, match="uklad_xy"):
             self._tile(godlo=godlo, crs=crs).uklad  # noqa: B018
 
@@ -275,7 +276,7 @@ class TestAvailableYears:
         session.get.return_value = _make_response(CAPABILITIES_XML)
         with patch(_LAZ_SESSION_PATCH, return_value=session):
             p = GugikLazProvider()
-            # sesja watku powstaje przy pierwszym zapytaniu, nie w konstruktorze
+            # the thread session is created on the first request, not in the constructor
             years = p._fetch_available_years("EVRF2007")
         assert years == [2025, 2024, 2018]
 
@@ -511,7 +512,7 @@ class TestDiscoverTiles:
         assert [t.godlo for t in tiles] == ["BBB"]
 
     def test_newest_per_godlo_dedup(self):
-        # Same godło present in 2024 and 2023 → keep 2024
+        # Same sheet code present in 2024 and 2023 -> keep 2024
         coll_2024 = _collection(
             [_feature("SAME", 2024, (530500, 382500), (531000, 383000), seq="new")]
         )

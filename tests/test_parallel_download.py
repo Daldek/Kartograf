@@ -235,11 +235,11 @@ class TestParallelDownloadHierarchy:
 
 
 class TestDownloadHierarchyLastResult:
-    """Testy atrybutu DownloadManager.last_result wypelnianego przez hierarchie."""
+    """Tests of the DownloadManager.last_result attribute filled by the hierarchy."""
 
     @pytest.fixture
     def flaky_provider(self):
-        """Provider: godlo konczace sie na '-1' pada, reszta pobiera sie poprawnie."""
+        """Provider: a sheet code ending in '-1' fails, the rest download correctly."""
         provider = Mock(spec=GugikProvider)
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
@@ -254,7 +254,7 @@ class TestDownloadHierarchyLastResult:
         return provider
 
     def test_last_result_is_none_before_download(self, tmp_path, flaky_provider):
-        """Przed pierwsza hierarchia last_result jest None."""
+        """Before the first hierarchy last_result is None."""
         manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
 
         assert manager.last_result is None
@@ -263,7 +263,7 @@ class TestDownloadHierarchyLastResult:
     def test_last_result_counts_succeeded_skipped_failed(
         self, tmp_path, flaky_provider, caplog, workers
     ):
-        """last_result rozdziela pobrane, pominiete i nieudane arkusze."""
+        """last_result separates downloaded, skipped and failed sheets."""
         manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
 
         existing_godlo = "N-34-130-D-d-2-2"
@@ -282,7 +282,7 @@ class TestDownloadHierarchyLastResult:
         assert len(manager.last_result.succeeded) == 2
         assert manager.last_result.total == 4
 
-        # Typ zwracany bez zmian: lista sciezek (2 pobrane + 1 pominiety)
+        # Return type unchanged: a list of paths (2 downloaded + 1 skipped)
         assert len(paths) == 3
         assert all(isinstance(p, Path) for p in paths)
 
@@ -292,9 +292,9 @@ class TestDownloadHierarchyLastResult:
     def test_progress_reports_final_status_and_message_per_sheet(
         self, tmp_path, workers
     ):
-        """D10: oba tryby raportuja przez jeden ``_emit`` — koncowy status
-        i komunikat kazdego arkusza sa identyczne (sekwencyjny dodatkowo
-        zglasza ``downloading`` przed pobraniem)."""
+        """D10: both modes report through a single ``_emit`` - the final status
+        and message of every sheet are identical (the sequential one additionally
+        reports ``downloading`` before the download)."""
         from kartograf.exceptions import NoCoverageError
 
         provider = Mock(spec=GugikProvider)
@@ -367,7 +367,7 @@ class TestDownloadHierarchyLastResult:
     def test_last_result_reset_when_next_hierarchy_fails_before_loop(
         self, tmp_path, flaky_provider
     ):
-        """Nowe wywolanie hierarchii kasuje wynik poprzedniego, nim wejdzie w petle."""
+        """A new hierarchy call clears the previous result before entering the loop."""
         manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
 
         manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=1)
@@ -377,13 +377,13 @@ class TestDownloadHierarchyLastResult:
         with pytest.raises(ValidationError):
             manager.download_hierarchy("N-34-130-D-d-2", "1:5000")
 
-        # Wolajacy nie moze dostac wyniku POPRZEDNIEGO przebiegu.
+        # The caller must not get the result of the PREVIOUS run.
         assert manager.last_result is None
 
     def test_last_result_reset_when_sequential_run_aborts(
         self, tmp_path, flaky_provider
     ):
-        """Wyjatek spoza DownloadError (sekwencyjnie) nie zostawia starego wyniku."""
+        """An exception other than DownloadError (sequential) leaves no old result."""
         manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
 
         manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=1)
@@ -402,7 +402,7 @@ class TestDownloadHierarchyLastResult:
     def test_last_result_reset_by_download_sheet_of_single_10k(
         self, tmp_path, flaky_provider
     ):
-        """download_sheet pojedynczego 1:10000 kasuje wynik poprzedniej hierarchii."""
+        """download_sheet of a single 1:10000 clears the previous hierarchy result."""
         manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
 
         manager.download_hierarchy("N-34-130-D-d-1", "1:10000", max_workers=1)
@@ -412,7 +412,8 @@ class TestDownloadHierarchyLastResult:
         path = manager.download_sheet("N-34-130-D-d-2-4")
 
         assert path.exists()
-        # Pojedynczy arkusz nie wypelnia last_result — ale tez nie zostawia starego.
+        # A single sheet does not fill last_result - but does not leave the old one
+        # either.
         assert manager.last_result is None
 
     def test_last_result_set_when_download_sheet_expands_hierarchy(
@@ -501,11 +502,12 @@ class TestProviderThreadSafety:
             assert path.read_bytes() == f"data-{godlo}".encode()
 
     def test_concurrent_provider_sessions_independent(self):
-        """Bez wstrzyknietej sesji provider trzyma osobna sesje na watek."""
+        """Without an injected session the provider keeps a separate session per
+        thread."""
         provider = GugikProvider()
 
-        # Brak sesji wolajacego: SessionPerThread tworzy sesje per watek,
-        # wiec pula watkow nie dzieli jednej requests.Session.
+        # No caller session: SessionPerThread creates a session per thread,
+        # so the thread pool does not share a single requests.Session.
         assert provider._sessions.injected is None
 
 

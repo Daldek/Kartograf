@@ -1,17 +1,18 @@
 """
-Testy odkrywania warstw skorowidza WMS (SkorowidzLayersMixin w GugikProvider).
+Tests of GUGiK index (skorowidz) WMS layer discovery (SkorowidzLayersMixin in
+GugikProvider).
 
-GugikProvider nie ma juz zaszytych list warstw ani cichego fallbacku:
-- _fetch_wms_layers(endpoint): GetCapabilities przez get_with_retry (3 proby,
-  backoff), filtr <Name> wzorcem LAYER_PATTERN, sortowanie rok malejaco
-  z warstwa "iStarsze" na koncu; kazda porazka (siec, zly XML, brak warstw)
-  konczy sie DownloadError
-- _layers(endpoint): memoizacja sukcesu per endpoint pod lockiem; porazka
-  nie jest zapamietywana, kolejne wywolanie probuje ponownie
-- GugikNmptProvider dziedziczy mechanizm z wlasnym wzorcem SkorowidzeNMPT*
+GugikProvider no longer has hard-coded layer lists or a silent fallback:
+- _fetch_wms_layers(endpoint): GetCapabilities via get_with_retry (3 tries,
+  backoff), <Name> filtered by the LAYER_PATTERN pattern, sorted by year
+  descending with the "iStarsze" layer last; every failure (network, bad XML,
+  no layers) ends with a DownloadError
+- _layers(endpoint): success memoised per endpoint under a lock; a failure
+  is not remembered, the next call tries again
+- GugikNmptProvider inherits the mechanism with its own SkorowidzeNMPT* pattern
 
-GugikOrtoProvider dzieli ten sam mixin (wzorzec SkorowidzeOrtofotomapy*,
-warstwa "Starsze" bez roku) — testy w tests/test_gugik_orto.py.
+GugikOrtoProvider shares the same mixin (SkorowidzeOrtofotomapy* pattern,
+the "Starsze" layer without a year) - tests in tests/test_gugik_orto.py.
 """
 
 import logging
@@ -64,7 +65,7 @@ WMS_XML_WITHOUT_NAMESPACE = """\
 </WMS_Capabilities>
 """
 
-# Nazwy spoza wzorca: zasiegi, warstwa zbiorcza bez roku, inne produkty
+# Names outside the pattern: extents, an aggregate layer without a year, other products
 WMS_XML_MIXED_LAYERS = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <WMS_Capabilities xmlns="http://www.opengis.net/wms" version="1.3.0">
@@ -147,7 +148,7 @@ def _make_mock_response(text: str) -> Mock:
 
 
 def _make_session(*responses) -> Mock:
-    """Sesja z kolejka odpowiedzi (jedna odpowiedz = zawsze ta sama)."""
+    """A session with a queue of responses (one response = always the same)."""
     session = Mock(spec=requests.Session)
     if len(responses) == 1:
         session.get = Mock(return_value=responses[0])
@@ -175,7 +176,7 @@ class TestFetchWmsLayers:
         return provider._fetch_wms_layers(ENDPOINT, timeout=10)
 
     def test_uses_injected_session_for_get_capabilities(self):
-        """GetCapabilities idzie przez sesje powierzona przez wolajacego."""
+        """GetCapabilities goes through the session handed in by the caller."""
         session = _make_session(_make_mock_response(WMS_XML_WITH_NAMESPACE))
         provider = GugikProvider(session=session)
 
@@ -188,7 +189,7 @@ class TestFetchWmsLayers:
         assert session.get.call_args[1]["timeout"] == 10
 
     def test_parses_namespaced_xml(self):
-        """XML WMS 1.3.0 z xmlns jest parsowany."""
+        """WMS 1.3.0 XML with xmlns is parsed."""
         assert self._fetch(WMS_XML_WITH_NAMESPACE) == [
             "SkorowidzeNMT2025",
             "SkorowidzeNMT2024",
@@ -197,7 +198,7 @@ class TestFetchWmsLayers:
         ]
 
     def test_parses_xml_without_namespace(self):
-        """XML bez xmlns daje ten sam wynik."""
+        """XML without xmlns gives the same result."""
         assert self._fetch(WMS_XML_WITHOUT_NAMESPACE) == [
             "SkorowidzeNMT2025",
             "SkorowidzeNMT2024",
@@ -215,14 +216,14 @@ class TestFetchWmsLayers:
         ]
 
     def test_filters_names_by_layer_pattern(self):
-        """Zasiegi, warstwa bez roku i inne produkty sa odrzucane."""
+        """Extents, a layer without a year and other products are rejected."""
         assert self._fetch(WMS_XML_MIXED_LAYERS) == [
             "SkorowidzeNMT2025",
             "SkorowidzeNMT2023",
         ]
 
     def test_no_matching_layers_raises_download_error(self):
-        """Endpoint bez warstw skorowidza = DownloadError, nie pusta lista."""
+        """An endpoint without index layers = DownloadError, not an empty list."""
         with pytest.raises(DownloadError, match="nie publikuje warstw"):
             self._fetch(WMS_XML_NO_SKOROWIDZE)
 
@@ -232,7 +233,7 @@ class TestFetchWmsLayers:
             self._fetch("This is not XML at all")
 
     def test_network_error_after_three_attempts_raises(self):
-        """Trzy nieudane proby GetCapabilities = DownloadError (bez fallbacku)."""
+        """Three failed GetCapabilities tries = DownloadError (no fallback)."""
         session = _make_session(*[requests.ConnectionError("refused")] * 3)
         provider = GugikProvider(session=session)
 
@@ -276,7 +277,7 @@ class TestLayers:
 
     @pytest.mark.real_wms_layers
     def test_memoizes_success_per_endpoint(self):
-        """Drugie wywolanie dla tego samego endpointu nie odpytuje uslugi."""
+        """A second call for the same endpoint does not query the service."""
         provider = GugikProvider()
         layers = ["SkorowidzeNMT2026", "SkorowidzeNMT2025iStarsze"]
 
@@ -296,7 +297,7 @@ class TestLayers:
 
     @pytest.mark.real_wms_layers
     def test_failure_is_not_memoized(self):
-        """Po DownloadError kolejne wywolanie probuje ponownie i moze sie udac."""
+        """After a DownloadError the next call retries and may succeed."""
         provider = GugikProvider()
 
         with patch.object(
@@ -313,7 +314,7 @@ class TestLayers:
 
     @pytest.mark.real_wms_layers
     def test_lock_serializes_concurrent_discovery(self) -> None:
-        """Cztery watki naraz -> dokladnie jedno GetCapabilities, wspolny wynik."""
+        """Four threads at once -> exactly one GetCapabilities, shared result."""
         provider = GugikProvider()
         calls: list[str] = []
 
@@ -333,7 +334,7 @@ class TestLayers:
 
     @pytest.mark.real_wms_layers
     def test_get_opendata_url_fails_before_get_feature_info(self):
-        """Porazka odkrywania warstw przewraca zapytanie bez GetFeatureInfo."""
+        """A layer discovery failure fails the query without GetFeatureInfo."""
         session = _make_session(_make_mock_response(render_gfi_body([])))
         provider = GugikProvider(session=session)
 
@@ -378,7 +379,7 @@ class TestNmptLayerPattern:
 
     @pytest.mark.real_wms_layers
     def test_fetch_wms_layers_returns_only_nmpt(self):
-        """GetCapabilities z warstwami obu produktow -> tylko NMPT, posortowane."""
+        """GetCapabilities with layers of both products -> only NMPT, sorted."""
         session = _make_session(_make_mock_response(WMS_XML_NMT_AND_NMPT))
         provider = GugikNmptProvider(session=session)
 
@@ -398,8 +399,8 @@ class TestNmptLayerPattern:
 
 @pytest.mark.real_wms_layers
 class TestCapabilitiesTimeout:
-    """N3: GetCapabilities dostaje timeout providera (30 s NMT/NMPT, 60 s orto),
-    a nie zaszyte 10 s — porazka tego zapytania konczy caly tor."""
+    """N3: GetCapabilities gets the provider timeout (30 s NMT/NMPT, 60 s ortho),
+    not a hard-coded 10 s - a failure of this request ends the whole path."""
 
     CAPS = {
         "nmt": WMS_XML_WITH_NAMESPACE,

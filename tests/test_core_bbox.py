@@ -88,8 +88,8 @@ class TestTransformBBoxDuck:
         assert out == BBox(10.0, -5.0, 12.0, -1.0, "B")
 
     def test_pinned_transform_passes(self):
-        """PinnedTransform (ADR-024) przechodzi przez duck typing; obwiednia
-        obejmuje obrazy wszystkich naroznikow (Krovak jest obrocony)."""
+        """PinnedTransform (ADR-024) works through duck typing; the envelope
+        covers the images of all corners (Krovak is rotated)."""
         from kartograf.transform.crs import TransformPolicy, build_pinned_transform
 
         src = BBox(-447000, -1114000, -440000, -1110000, "EPSG:5514")
