@@ -43,6 +43,14 @@ def _horizontal_crs(value: str | None) -> tuple[str | None, int | None]:
     return parse_pl_uklad(value) or (None, None)
 
 
+def _metres(value: str | None) -> float | None:
+    """'0.15' / '0,15' / '0.15 m' -> 0.15; None when missing or unparseable."""
+    if value is None:
+        return None
+    match = re.fullmatch(r"\s*(\d+(?:[.,]\d+)?)\s*(?:m)?\s*", value)
+    return float(match[1].replace(",", ".")) if match else None
+
+
 @dataclass(frozen=True)
 class SkorowidzRecord:
     url: str
@@ -82,6 +90,10 @@ class SkorowidzRecord:
             "survey_work_id": self.raw.get("numerZgloszeniaPracy"),
             "data_source": self.raw.get("zrDanych") or self.raw.get("zrodloDanych"),
             "format": self.raw.get("format"),
+            "height_rmse_m": _metres(self.raw.get("bladSredniWysokosci")),
+            "position_rmse_m": _metres(self.raw.get("bladSredniPolozenia")),
+            "archive_module": self.raw.get("modulArchiwizacji"),
+            "declared_vertical_crs": self.raw.get("ukladWspolrzednychPionowych"),
         }
 
     @classmethod
@@ -89,10 +101,12 @@ class SkorowidzRecord:
         """Restore the selected record from a cache payload (no reselection).
 
         Raises ``KeyError`` when a required key (``url``, ``sheet``,
-        ``acquisition_date``, ``layer``) is missing — e.g. a cache entry
-        written before ADR-031 with Polish key names; callers treat that
-        as a cache miss (``cached_record``).
+        ``acquisition_date``, ``layer``, ``archive_module``) is missing — e.g.
+        a cache entry written before ADR-031 with Polish key names, or before
+        0.7.1 without the accuracy keys; callers treat that as a cache miss
+        (``cached_record``). ``archive_module`` itself may be ``None``.
         """
+        source["archive_module"]  # 0.7.1 key: older cache entries are a miss
         uklad, zone = _horizontal_crs(source.get("declared_crs") or "")
         raw = {
             key: str(source[field])
@@ -102,6 +116,10 @@ class SkorowidzRecord:
                 ("numerZgloszeniaPracy", "survey_work_id"),
                 ("zrDanych", "data_source"),
                 ("format", "format"),
+                ("bladSredniWysokosci", "height_rmse_m"),
+                ("bladSredniPolozenia", "position_rmse_m"),
+                ("modulArchiwizacji", "archive_module"),
+                ("ukladWspolrzednychPionowych", "declared_vertical_crs"),
             )
             if source.get(field) is not None
         }
@@ -168,12 +186,7 @@ def parse_skorowidz_records(text: str, layer: str) -> list[SkorowidzRecord]:
         resolution_text = raw.get("charakterystykaPrzestrzenna") or raw.get(
             "wielkoscPiksela", ""
         )
-        resolution_match = re.fullmatch(
-            r"\s*(\d+(?:[.,]\d+)?)\s*(?:m)?\s*", resolution_text
-        )
-        resolution = (
-            float(resolution_match[1].replace(",", ".")) if resolution_match else None
-        )
+        resolution = _metres(resolution_text)
         full_sheet = raw.get("calyArkuszWypelnionyTrescia") or raw.get(
             "calyArkuszWyeplnionyTrescia"
         )
