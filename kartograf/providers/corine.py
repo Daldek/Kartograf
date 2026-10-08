@@ -710,7 +710,7 @@ class CorineProvider(LandCoverProvider):
         **kwargs,
     ) -> Path:
         """
-        Download CORINE Land Cover data for a map sheet (godło).
+        Download CORINE Land Cover data for a map sheet (godlo).
 
         Parameters
         ----------

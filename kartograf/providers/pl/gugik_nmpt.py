@@ -7,7 +7,7 @@ NMPT data from the Polish GUGiK services.
 NMPT includes terrain AND surface objects (buildings, trees) — unlike NMT
 which is bare-earth only.
 
-Uses the same mechanisms as NMT (WMS skorowidze → OpenData ASC, WCS → GeoTIFF)
+Uses the same mechanisms as NMT (WMS indexes (skorowidze) → OpenData ASC, WCS → GeoTIFF)
 but with different endpoints and coverage IDs.
 
 Supported resolutions:
@@ -59,7 +59,7 @@ class GugikNmptProvider(GugikProvider):
         ),
     }
 
-    # WMS endpoints for NMPT skorowidze (1m only)
+    # WMS endpoints for NMPT indexes (1m only)
     WMS_SKOROWIDZE_ENDPOINTS = {
         "1m": {
             "KRON86": (

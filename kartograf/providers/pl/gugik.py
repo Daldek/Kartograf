@@ -6,7 +6,7 @@ Digital Terrain Model (NMT) data from the Polish GUGiK
 (Główny Urząd Geodezji i Kartografii) services.
 
 Two download methods based on input type:
-- Godło (map sheet ID) → OpenData (ASC format)
+- Sheet code (godlo) → OpenData (ASC format)
 - BBox (bounding box) → WCS (GeoTIFF/PNG/JPEG formats; 1m and KRON86 only —
   the EVRF2007 WCS endpoint was withdrawn by GUGiK, see ``download_bbox``)
 
@@ -49,7 +49,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     Provider for downloading NMT data from GUGiK.
 
     Supports two download modes:
-    - By godło (map sheet ID): downloads from OpenData as ASC
+    - By sheet code (godlo): downloads from OpenData as ASC
     - By bbox (bounding box): downloads from WCS as GeoTIFF/PNG/JPEG
       (1m and KRON86 only, see ``download_bbox``)
 
@@ -64,7 +64,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     Examples
     --------
     >>> provider = GugikProvider()
-    >>> # Download by godło → ASC from OpenData
+    >>> # Download by sheet code (godlo) → ASC from OpenData
     >>> provider.download("N-34-130-D-d-2-4", Path("./sheet.asc"))
     >>>
     >>> # Download by bbox → GeoTIFF from WCS (KRON86 only, see download_bbox)
@@ -100,7 +100,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         "DigitalTerrainModelFormatTIFFEVRF2007",
     }
 
-    # WMS endpoints for skorowidze (index maps) - used to find OpenData URLs
+    # WMS endpoints for the indexes (skorowidze) - used to find OpenData URLs
     # Structure: {resolution: {vertical_crs: endpoint}}
     WMS_SKOROWIDZE_ENDPOINTS = {
         "1m": {
@@ -113,9 +113,9 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         },
     }
 
-    # Nazwy warstw skorowidza tego produktu: grupa 1 = rok, grupa 2 = zbiorcza
+    # Index layer names of this product: group 1 = year, group 2 = aggregate
     LAYER_PATTERN = re.compile(r"^SkorowidzeNMT(\d{4})(iStarsze)?$")
-    # Rodzina nazw produktu: nazwa z rodziny spoza LAYER_PATTERN daje ostrzezenie
+    # Product name family: a family name outside LAYER_PATTERN gives a warning
     LAYER_FAMILY = re.compile(r"^SkorowidzeNMT(?!P)")
 
     # Vertical CRS whose WCS endpoint GUGiK withdrew (HTTP 404 since 2026-08,
@@ -218,7 +218,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         return self.BASE_URL
 
     # =========================================================================
-    # Download by godło → OpenData (ASC)
+    # Download by sheet code (godlo) → OpenData (ASC)
     # =========================================================================
 
     def download(
@@ -228,10 +228,10 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         timeout: int = DEFAULT_TIMEOUT,
     ) -> Path:
         """
-        Download NMT data for a map sheet (godło) from OpenData.
+        Download NMT data for a map sheet (godlo) from OpenData.
 
         Always downloads ASC format - this is the native format for
-        godło-based downloads from GUGiK OpenData.
+        sheet-code-based downloads from GUGiK OpenData.
 
         Parameters
         ----------
@@ -250,7 +250,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         Raises
         ------
         NoCoverageError
-            Subclass of ``DownloadError``: every skorowidz layer answered and
+            Subclass of ``DownloadError``: every index (skorowidz) layer answered and
             none of them has the sheet, i.e. the source has no data for this
             godlo (sea, the Czech side of a border bbox, gaps in 1m coverage).
             An OGC exception report in a response is not an answer (see
@@ -258,7 +258,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
             ``DownloadResult.no_coverage`` and the PL cutout fills them with
             nodata (ADR-027).
         DownloadError
-            If any skorowidz layer query fails after retries, its answer is
+            If any index layer query fails after retries, its answer is
             invalid, or the ASC download fails after retries. An older campaign
             is never substituted after a failed query.
 
@@ -272,14 +272,14 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         )
 
     def _get_opendata_url(self, godlo: str, timeout: int = DEFAULT_TIMEOUT) -> str:
-        """Zwroc URL scisle dopasowanego, najnowszego rekordu skorowidza."""
+        """Return the URL of the strictly matching, newest index record."""
         return self._resolve_sheet(godlo, timeout).url
 
     def _skorowidz_query(self, parser: SheetParser) -> SkorowidzQuery:
-        """Klucz cache, endpoint (rozdzielczosc + pion) i filtr rozdzielczosci.
+        """Cache key, endpoint (resolution + vertical CRS) and resolution filter.
 
-        Czyta atrybuty przez ``self`` — NMPT nadpisuje ``_CACHE_PRODUCT``
-        i ``WMS_SKOROWIDZE_ENDPOINTS``.
+        Reads attributes through ``self`` — NMPT overrides ``_CACHE_PRODUCT``
+        and ``WMS_SKOROWIDZE_ENDPOINTS``.
         """
         return SkorowidzQuery(
             cache_key=(
@@ -336,7 +336,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         (not aligned to standard map sheets).
 
         Note: WCS is only available for 1m resolution. For 5m resolution,
-        use download() with a godło instead.
+        use download() with a sheet code (godlo) instead.
 
         Parameters
         ----------
@@ -369,7 +369,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         Known service outage: the EVRF2007 WCS endpoint
         (DigitalTerrainModelFormatTIFFEVRF2007) has returned HTTP 404 since
         2026-08 (docs/PROGRESS.md), so bbox downloads work only with
-        ``vertical_crs="KRON86"``. Use ``download()`` with a godło to get
+        ``vertical_crs="KRON86"``. Use ``download()`` with a sheet code to get
         EVRF2007 heights.
 
         Examples
@@ -425,7 +425,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         )
 
     def _wcs_target(self) -> tuple[str, str]:
-        """Endpoint i coverage WCS dla ukladu wysokosci providera."""
+        """WCS endpoint and coverage for the provider's vertical CRS."""
         return (
             self.WCS_ENDPOINTS[self._vertical_crs],
             self.COVERAGE_IDS[self._vertical_crs],
