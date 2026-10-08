@@ -1,14 +1,14 @@
 """
-Pobieranie kafli LAZ dla obszaru — warstwa biblioteczna (review-1 D17).
+Downloading LAZ tiles for an area — library layer (review-1 D17).
 
-Wzor: ``download/cutout.py`` — CLI (``kartograf download --product laz``)
-jest nakladka na ten modul: wypisuje komunikaty i tlumaczy wynik na kod
-wyjscia. Tu nie ma ``print`` ani argparse.
+Pattern: ``download/cutout.py`` — the CLI (``kartograf download --product
+laz``) is a thin layer over this module: it prints messages and translates
+the result into an exit code. There is no ``print`` or argparse here.
 
-Przeplyw: bbox EPSG:2180 -> ``GugikLazProvider.select_tiles`` (WFS, wybor
-kafli od najnowszego rocznika bez dublowania obszaru) -> ``run_laz_download``
-(pula watkow, sidecar ``<plik>.laz.meta.json`` per kafel, porazki kafli
-zbierane, nie rzucane).
+Flow: bbox EPSG:2180 -> ``GugikLazProvider.select_tiles`` (WFS, tile
+selection from the newest vintage without duplicating the area) ->
+``run_laz_download`` (thread pool, ``<file>.laz.meta.json`` sidecar per
+tile, tile failures collected, not raised).
 
 Przyklad::
 
@@ -20,9 +20,9 @@ Przyklad::
         max_workers=4,
     )
     for skipped in result.superseded:
-        print(skipped.tile.godlo, "pokryty przez", skipped.covered_by)
+        print(skipped.tile.godlo, "covered by", skipped.covered_by)
     if result.failed:
-        ...  # ponow: kafle juz pobrane sa pomijane (force=False)
+        ...  # retry: tiles already downloaded are skipped (force=False)
 """
 
 from collections.abc import Callable
@@ -41,7 +41,7 @@ from kartograf.providers.pl.gugik_laz import (
     SupersededLazTile,
 )
 
-# (pobrane lub pominiete kafle, liczba kafli) — wolane w watku wolajacego
+# (downloaded or skipped tiles, tile count) — called in the caller's thread
 LazProgressCallback = Callable[[int, int], None]
 
 NO_TILES_MESSAGE = (
@@ -52,7 +52,7 @@ NO_TILES_MESSAGE = (
 
 @dataclass(frozen=True)
 class LazTileFailure:
-    """Kafel, ktorego nie udalo sie pobrac, i blad pobrania."""
+    """A tile that could not be downloaded, and the download error."""
 
     tile: LazTile
     error: DownloadError
@@ -61,12 +61,13 @@ class LazTileFailure:
 @dataclass(frozen=True)
 class LazDownloadResult:
     """
-    Wynik ``run_laz_download`` / ``download_laz_area``.
+    Result of ``run_laz_download`` / ``download_laz_area``.
 
-    ``tiles`` — kafle wybrane do pobrania (po godle); kazdy trafia do
-    dokladnie jednej z list ``downloaded`` (pobrany teraz), ``skipped``
-    (plik juz byl, ``force=False``) albo ``failed``. ``superseded`` — kafle
-    pominiete przy wyborze (pokryte nowszymi kaflami albo poza obszarem).
+    ``tiles`` — tiles selected for download (by godlo); each ends up in
+    exactly one of the lists ``downloaded`` (downloaded now), ``skipped``
+    (file already existed, ``force=False``) or ``failed``. ``superseded`` —
+    tiles dropped during selection (covered by newer tiles or outside the
+    area).
     """
 
     tiles: tuple[LazTile, ...]
@@ -77,7 +78,7 @@ class LazDownloadResult:
 
     @property
     def ok(self) -> bool:
-        """True, gdy zaden kafel nie zawiodl."""
+        """True when no tile failed."""
         return not self.failed
 
 
@@ -93,15 +94,16 @@ def write_laz_sidecar(
     min_year: int | None = None,
     parent_request: dict | None = None,
 ) -> None:
-    """Best-effort sidecar kafla LAZ przez ``emit_sidecar`` (blad = ostrzezenie w logu).
+    """Best-effort LAZ tile sidecar via ``emit_sidecar`` (error = warning in log).
 
-    ``request`` opisuje faktyczne zadanie: bbox oraz filtry ``year``
-    i ``min_density``, gdy podane (E16). ``extra.nominal_density`` i ``min_density``
-    to wartosc NOMINALNA z WFS GUGiK (``char_przestrz``) — faktyczna gestosc
-    kafla bywa kilkukrotnie wyzsza. ``request.campaigns`` tylko dla ``"all"``
-    (``newest`` = ADR-029, bez zmian), ``request.min_year`` gdy podany
-    (ADR-030). ``extra.parent_request`` — tylko gdy
-    podany (ADR-023 (f).1: tryb ``--bbox``/``--geometry``).
+    ``request`` describes the actual request: the bbox and the ``year`` and
+    ``min_density`` filters, when given (E16). ``extra.nominal_density`` and
+    ``min_density`` are the NOMINAL value from the GUGiK WFS
+    (``char_przestrz``) — the actual tile density is often several times
+    higher. ``request.campaigns`` only for ``"all"`` (``newest`` = ADR-029,
+    unchanged), ``request.min_year`` when given (ADR-030).
+    ``extra.parent_request`` — only when given (ADR-023 (f).1: ``--bbox``/
+    ``--geometry`` mode).
     """
     from kartograf.sources.registry import horizontal_crs_for_uklad
     from kartograf.sources.sidecar import emit_sidecar
@@ -128,13 +130,13 @@ def write_laz_sidecar(
         extra["parent_request"] = parent_request
     key = getattr(provider, "descriptor_key", None)
     emit_sidecar(
-        # provider bez deskryptora (atrapa) nadal dostaje sidecar LAZ
+        # a provider without a descriptor (a stub) still gets a LAZ sidecar
         key if isinstance(key, str) else "pl.gugik.laz",
         target,
         request=request,
         vertical_crs=provider.vertical_crs,
-        # N8: kafel niesie wlasny uklad (PL-1992 albo strefa PL-2000),
-        # a kanal WFS deklaruje tylko domyslny — nieznany uklad = kanal
+        # N8: the tile carries its own CRS (PL-1992 or a PL-2000 zone), while
+        # the WFS channel declares only the default — unknown CRS = channel
         horizontal_crs=horizontal_crs_for_uklad(tile.crs),
         extra=extra,
     )
@@ -156,20 +158,20 @@ def run_laz_download(
     parent_request: dict | None = None,
 ) -> LazDownloadResult:
     """
-    Pobierz wybrane kafle LAZ (rownolegle) i zapisz sidecary.
+    Download the selected LAZ tiles (in parallel) and write sidecars.
 
-    Kafel trafia do ``FileStorage(output_dir, product="laz",
-    vertical_crs=provider.vertical_crs)`` — segment ``{uklad}`` per kafel
-    (``LazTile.uklad``), wiec jedno zadanie moze pisac do ``pl_1992_*``
-    i ``pl_2000_*``. Istniejacy plik jest pomijany bez sieci, chyba ze
-    ``force=True``. Porazka pobrania kafla (``DownloadError``) NIE przerywa
-    pozostalych: trafia do ``failed`` (posortowane po godle i URL), a kafle
-    udane zostaja na dysku. Inne wyjatki (np. ``OSError`` zapisu) przerywaja
-    wywolanie.
+    A tile goes to ``FileStorage(output_dir, product="laz",
+    vertical_crs=provider.vertical_crs)`` — the ``{uklad}`` segment per tile
+    (``LazTile.uklad``), so one request may write to ``pl_1992_*`` and
+    ``pl_2000_*``. An existing file is skipped without network access,
+    unless ``force=True``. A tile download failure (``DownloadError``) does
+    NOT abort the others: it goes to ``failed`` (sorted by godlo and URL),
+    and successful tiles stay on disk. Other exceptions (e.g. a write
+    ``OSError``) abort the call.
 
-    ``bbox``, ``year``, ``min_density``, ``campaigns``, ``min_year``
-    i ``parent_request`` opisuja zadanie
-    w sidecarach (``request`` i ``extra.parent_request``).
+    ``bbox``, ``year``, ``min_density``, ``campaigns``, ``min_year`` and
+    ``parent_request`` describe the request in the sidecars (``request`` and
+    ``extra.parent_request``).
     """
     storage = FileStorage(output_dir, product="laz", vertical_crs=provider.vertical_crs)
     tiles = selection.tiles
@@ -248,53 +250,56 @@ def download_laz_area(
     tolerance_m: float = COVERAGE_TOLERANCE_M,
 ) -> LazDownloadResult:
     """
-    Kafle LAZ GUGiK dla obszaru: wybor (WFS) + pobranie + sidecary.
+    GUGiK LAZ tiles for an area: selection (WFS) + download + sidecars.
 
     Parameters
     ----------
     bbox : BBox
-        Obszar w EPSG:2180 (np. ``SheetParser(godlo).get_bbox(crs="EPSG:2180")``
-        albo ``get_overall_bbox(path, target_crs="EPSG:2180")``).
+        Area in EPSG:2180 (e.g. ``SheetParser(godlo).get_bbox(crs="EPSG:2180")``
+        or ``get_overall_bbox(path, target_crs="EPSG:2180")``).
     vertical_crs : str, optional
-        ``"EVRF2007"`` (domyslnie) albo ``"KRON86"`` — usluga WFS i segment
-        ``laz/pl_<uklad>_<vcrs>``. Z wlasnym ``provider`` domyslnie jego pion;
-        jawna, inna wartosc to ``ValueError``.
+        ``"EVRF2007"`` (default) or ``"KRON86"`` — the WFS service and the
+        ``laz/pl_<uklad>_<vcrs>`` segment. With a custom ``provider`` it
+        defaults to its vertical CRS; an explicit, different value is a
+        ``ValueError``.
     year, min_density
-        Filtry WFS (jak ``GugikLazProvider.select_tiles``). Bez ``year``
-        kafle sa wybierane od najnowszego rocznika, a starszy kafel jest
-        pomijany, gdy jego czesc wspolna z obszarem pokrywaja nowsze
-        (``result.superseded``); z ``year`` — tylko ten rocznik.
+        WFS filters (as in ``GugikLazProvider.select_tiles``). Without
+        ``year`` tiles are selected from the newest vintage, and an older
+        tile is dropped when its intersection with the area is covered by
+        newer ones (``result.superseded``); with ``year`` — only that
+        vintage.
     campaigns : {"newest", "all"}
-        ``"newest"`` — wybor ADR-029; ``"all"`` — kazdy kafel przecinajacy
-        obszar, bez deduplikacji (ADR-030).
+        ``"newest"`` — ADR-029 selection; ``"all"`` — every tile
+        intersecting the area, without deduplication (ADR-030).
     min_year : int, optional
-        Dolna granica ``akt_rok`` (roczniki starsze nie sa odpytywane);
-        wyklucza sie z ``year`` (``ValidationError``).
+        Lower bound on ``akt_rok`` (older vintages are not queried);
+        mutually exclusive with ``year`` (``ValidationError``).
     parent_request : dict, optional
-        ``extra.parent_request`` sidecarow (ADR-023 (f).1) — CLI podaje go
-        w trybie ``--bbox``/``--geometry``.
+        Sidecar ``extra.parent_request`` (ADR-023 (f).1) — the CLI passes it
+        in ``--bbox``/``--geometry`` mode.
     provider : GugikLazProvider, optional
-        Wlasny provider (sesja); domyslnie nowy dla ``vertical_crs``.
+        Custom provider (session); by default a new one for ``vertical_crs``.
     tolerance_m : float
-        Tolerancja krawedzi regul pokrycia (``COVERAGE_TOLERANCE_M``).
+        Edge tolerance of the coverage rules (``COVERAGE_TOLERANCE_M``).
 
     Returns
     -------
     LazDownloadResult
-        Porazki pobrania kafli sa w ``failed`` (nie wyjatek) — ``result.ok``.
+        Tile download failures are in ``failed`` (not an exception) —
+        ``result.ok``.
 
     Raises
     ------
     ValueError
-        ``bbox`` nie w EPSG:2180 albo nieznany / niezgodny ``vertical_crs``.
+        ``bbox`` not in EPSG:2180, or an unknown / mismatched ``vertical_crs``.
     ValidationError
-        Nieznane ``campaigns`` albo ``year`` razem z ``min_year``.
+        Unknown ``campaigns``, or ``year`` together with ``min_year``.
     DownloadError
-        Awaria discovery WFS (wynik bylby niepelny) albo nieistniejacy
-        ``year``.
+        WFS discovery failure (the result would be incomplete) or a
+        nonexistent ``year``.
     NoCoverageError
-        (podklasa ``DownloadError``) WFS odpowiedzial, ale nie ma kafli dla
-        obszaru i filtrow.
+        (a ``DownloadError`` subclass) the WFS responded, but there are no
+        tiles for the area and filters.
     """
     if provider is None:
         provider = GugikLazProvider(vertical_crs=vertical_crs or "EVRF2007")

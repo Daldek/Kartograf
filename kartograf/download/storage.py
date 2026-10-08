@@ -23,7 +23,7 @@ class FileStorage:
     Manages file storage for downloaded NMT data.
 
     Files are organized in a hierarchical directory structure based on
-    resolution and godło components, making it easy to navigate and find
+    resolution and sheet code components, making it easy to navigate and find
     specific sheets while keeping different resolutions separate.
 
     Directory structure example (PL-1992):
@@ -87,9 +87,9 @@ class FileStorage:
             "laz"). When set, the product template replaces the resolution one
             (`output_dir/nmpt/pl_<uklad>_1m_<vcrs>/...`).
         subdir : str, optional
-            Explicit segment template sterowany deskryptorem zrodla
-            (np. "nmt/cz_dmr5g_{vcrs}"). Ma pierwszenstwo przed product
-            i resolution.
+            Explicit segment template driven by the source descriptor
+            (e.g. "nmt/cz_dmr5g_{vcrs}"). Takes precedence over product
+            and resolution.
         vertical_crs : str, optional
             Vertical CRS filling the ``{vcrs}`` placeholder of the segment
             template (lowercased; default "EVRF2007"). ``None`` leaves the
@@ -204,7 +204,7 @@ class FileStorage:
         subdir = self._subdir
         if "{uklad}" in subdir:
             if uklad is None:
-                # pl1992 jest fallbackiem rejestru (nigdy None)
+                # pl1992 is the registry fallback (never None)
                 system = parser_registry.detect_system(identifier)
                 uklad = "2000" if system.id == "pl2000" else "1992"
             subdir = subdir.replace("{uklad}", uklad)
@@ -212,10 +212,10 @@ class FileStorage:
 
     def get_path(self, godlo: str, ext: str = ".asc") -> Path:
         """
-        Generate file path for given godło and extension.
+        Generate file path for given sheet code and extension.
 
         The path follows a hierarchical structure based on resolution
-        and godło components:
+        and sheet code components:
         - 1:1M (N-34) → nmt/pl_1992_1m_evrf2007/N-34/N-34.asc
         - 1:10k (N-34-130-D-d-2-4) →
           nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
@@ -238,12 +238,12 @@ class FileStorage:
         >>> storage.get_path("N-34-130-D-d-2-4", ".asc")
         PosixPath('data/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc')
         """
-        # Normalize godło case via SheetParser (leading zeros are NOT stripped:
+        # Normalize sheet code case via SheetParser (leading zeros are NOT stripped:
         # 'M-33-036-...' and 'M-33-36-...' map to different paths)
         parser = SheetParser(godlo)
         normalized_godlo = parser.godlo
 
-        # Build directory path from godło components
+        # Build directory path from sheet code components
         dir_parts = self._get_directory_parts(normalized_godlo)
 
         # Construct full path with resolved segment (product or resolution)
@@ -258,8 +258,8 @@ class FileStorage:
         self, godlo: str, campaign: CampaignRef, ext: str = ".asc"
     ) -> Path:
         """
-        Sciezka pliku kampanii (ADR-030):
-        ``<output>/<segment>/kampanie/<data>_<id>/<hierarchia>/<godlo><ext>``.
+        Path of a campaign file (ADR-030):
+        ``<output>/<segment>/kampanie/<date>_<id>/<hierarchy>/<godlo><ext>``.
         """
         normalized = SheetParser(godlo).godlo
         dir_path = (
@@ -280,13 +280,13 @@ class FileStorage:
 
         Unlike :meth:`get_path`, this does not run the identifier through
         ``SheetParser`` — it only splits it into a directory hierarchy. This is
-        required for LAZ point-cloud tiles, whose godła are finer than 1:10000
+        required for LAZ point-cloud tiles, whose sheet codes are finer than 1:10000
         and would otherwise raise ``ParseError``.
 
         Parameters
         ----------
         identifier : str
-            Opaque godło used purely for the directory hierarchy
+            Opaque sheet code used purely for the directory hierarchy
             (e.g. ``"N-33-131-B-a-1-1-4"`` or ``"6.162.34.02.3"``).
         filename : str
             File name to use as-is (e.g. the original OpenData ``.laz`` name).
@@ -294,7 +294,7 @@ class FileStorage:
             Explicit horizontal system (``"1992"`` or ``"2000"``) filling the
             ``{uklad}`` segment placeholder. For LAZ tiles pass ``tile.uklad``
             — the tile's ``uklad_xy`` decides, not the godlo format (a
-            ``"PL-2000:*"`` tile can still carry a dash-form godło). ``None``
+            ``"PL-2000:*"`` tile can still carry a dash-form sheet code). ``None``
             (default) keeps the previous behaviour: detect the system from
             ``identifier``'s format.
 
@@ -331,7 +331,7 @@ class FileStorage:
 
     def _get_directory_parts(self, godlo: str) -> list[str]:
         """
-        Extract directory parts from godło.
+        Extract directory parts from sheet code.
 
         Supports both PL-1992 (dash-separated) and PL-2000 (dot-separated)
         formats:
@@ -341,7 +341,7 @@ class FileStorage:
         Parameters
         ----------
         godlo : str
-            Normalized godło string
+            Normalized sheet code string
 
         Returns
         -------
@@ -352,7 +352,7 @@ class FileStorage:
 
     def ensure_directory(self, godlo: str) -> Path:
         """
-        Ensure directory exists for given godło.
+        Ensure directory exists for given sheet code.
 
         Parameters
         ----------
@@ -370,7 +370,7 @@ class FileStorage:
 
     def exists(self, godlo: str, ext: str = ".asc") -> bool:
         """
-        Check if file for given godło exists.
+        Check if file for given sheet code exists.
 
         Parameters
         ----------
@@ -397,10 +397,10 @@ class FileStorage:
 
         Uses a temporary file and atomic rename to prevent partial files.
 
-        Pisze do sciezki STANDARDOWEJ: ``temp.rename(target)`` zastepuje
-        dowiazanie do kampanii (ADR-030) zwyklym plikiem; bez sidecara z
-        ``extra.link`` jest on dla toru kampanii plikiem "nieznanym", ktory
-        nastepne ``newest`` podmieni na dowiazanie.
+        Writes to the STANDARD path: ``temp.rename(target)`` replaces the
+        campaign link (ADR-030) with a regular file; without a sidecar
+        carrying ``extra.link`` it is an "unknown" file for the campaign
+        flow, which the next ``newest`` replaces with a link.
 
         Parameters
         ----------
@@ -451,7 +451,7 @@ class FileStorage:
 
     def delete(self, godlo: str, ext: str = ".asc") -> bool:
         """
-        Delete file for given godło.
+        Delete file for given sheet code.
 
         Also deletes the companion `<file>.meta.json` sidecar, if present.
 
@@ -468,11 +468,11 @@ class FileStorage:
             True if file was deleted, False if it didn't exist
         """
         path = self.get_path(godlo, ext)
-        # Sciezka standardowa kampanii to hardlink albo kopia (ADR-030):
-        # unlink() kasuje sama sciezke, plik w kampanie/ zostaje.
+        # The campaign standard path is a hardlink or a copy (ADR-030):
+        # unlink() removes the path itself, the file in kampanie/ stays.
         if path.exists():
             path.unlink()
-            # Sidecar metadanych nie moze przezyc pliku danych.
+            # The metadata sidecar must not outlive the data file.
             path.with_name(path.name + ".meta.json").unlink(missing_ok=True)
             return True
         return False
@@ -492,8 +492,8 @@ class FileStorage:
         pattern : str, optional
             Glob pattern for matching files (default: "**/*.asc")
         campaigns : bool, optional
-            False (default): sciezki standardowe — bez ``kampanie/``.
-            True: tylko pliki w ``kampanie/`` (ADR-030).
+            False (default): standard paths — without ``kampanie/``.
+            True: only files in ``kampanie/`` (ADR-030).
 
         Returns
         -------
@@ -518,7 +518,7 @@ class FileStorage:
 
     def get_size(self, godlo: str, ext: str = ".asc") -> int | None:
         """
-        Get file size for given godło.
+        Get file size for given sheet code.
 
         Parameters
         ----------
@@ -582,17 +582,19 @@ def storage_for_provider(
     vertical_crs: str | None = "EVRF2007",
 ) -> FileStorage:
     """
-    ``FileStorage`` segmentu, w ktorym laduja pliki providera — jedyne miejsce
-    budowy (D18: CLI, ``DownloadManager``, wycinek PL, tor CZ).
+    ``FileStorage`` of the segment where the provider's files land — the
+    single place it is built (D18: CLI, ``DownloadManager``, PL cutout, CZ
+    flow).
 
-    Segment pochodzi z deskryptora zrodla providera
-    (``resolve_subdir(vertical_crs=...)``, ``{uklad}`` rozwiazywany per
-    godlo), a bez ``descriptor_key`` — z ``resolution`` (szablon NMT PL).
-    Pion: FAKTYCZNY pion providera, gdy go zna (``str``), inaczej
-    ``vertical_crs`` — segment niesie fakt, nie zyczenie wolajacego.
-    Wariant providera (``storage_variant``, orto CIR/B-W) trafia na koniec
-    segmentu (E12). ``isinstance(str)``, nie ``is not None``: dla
-    ``Mock(spec=Provider)`` atrybuty klasy daja ``Mock``.
+    The segment comes from the provider's source descriptor
+    (``resolve_subdir(vertical_crs=...)``, ``{uklad}`` resolved per godlo),
+    and without ``descriptor_key`` from ``resolution`` (PL NMT template).
+    Vertical CRS: the provider's ACTUAL vertical CRS when it knows it
+    (``str``), otherwise ``vertical_crs`` — the segment carries the fact,
+    not the caller's wish. The provider variant (``storage_variant``, orto
+    CIR/B-W) goes at the end of the segment (E12). ``isinstance(str)``, not
+    ``is not None``: for ``Mock(spec=Provider)`` class attributes yield a
+    ``Mock``.
     """
     provider_vertical_crs = getattr(provider, "vertical_crs", None)
     if isinstance(provider_vertical_crs, str):
@@ -617,11 +619,11 @@ def bbox_cutout_path(
     output_dir: str | Path, subdir: str, bbox: BBox, extension: str
 ) -> Path:
     """
-    Sciezka wycinka bbox: ``<output>/<segment>/bbox/<coords><ext>`` (ADR-026).
+    Path of a bbox cutout: ``<output>/<segment>/bbox/<coords><ext>`` (ADR-026).
 
-    ``<coords>`` = ``min_x_min_y_max_x_max_y`` z ``format(v, ".10g")`` —
-    wspolrzedne siatki wyniku w jej ukladzie. Jedna nazwa dla wycinka PL
-    (``--target-crs``) i wycinka CZ (D7).
+    ``<coords>`` = ``min_x_min_y_max_x_max_y`` with ``format(v, ".10g")`` —
+    the result grid coordinates in its own CRS. One name for the PL cutout
+    (``--target-crs``) and the CZ cutout (D7).
     """
     coords = "_".join(
         format(v, ".10g") for v in (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
