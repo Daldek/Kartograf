@@ -5,7 +5,7 @@ Wszystkie istotne zmiany w projekcie sa dokumentowane w tym pliku.
 Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.7.0] - Unreleased
+## [0.7.0] - 2026-10-08
 
 Wydanie wielokrajowe. Najwazniejsze nowosci wzgledem 0.6.1:
 
@@ -114,7 +114,7 @@ Wydanie wielokrajowe. Najwazniejsze nowosci wzgledem 0.6.1:
 - **Sidecar jest nowy w 0.7.0** (obok kazdego pobranego pliku, schemat
   `kartograf-meta/1`, opis w Dodane). Klucze sa angielskie (ADR-031) —
   konsumenci czytajacy sidecary z wersji rozwojowych 0.7.0-dev musza
-  przejsc na nowe nazwy; schemat zostaje `kartograf-meta/1` (niewydany),
+  przejsc na nowe nazwy; schemat zostaje `kartograf-meta/1` (przed 0.7.0 niewydany),
   bez warstwy zgodnosci:
 
   | Bylo (0.7.0-dev) | Jest |
@@ -1748,7 +1748,7 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
-[0.7.0]: https://github.com/Daldek/Kartograf/compare/v0.6.1...develop
+[0.7.0]: https://github.com/Daldek/Kartograf/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/Daldek/Kartograf/compare/4cec5d87b9aad1ffdb59693ec7163c7c97540983...v0.6.1
 [0.6.0]: https://github.com/Daldek/Kartograf/compare/v0.5.0...4cec5d87b9aad1ffdb59693ec7163c7c97540983
 [0.5.0]: https://github.com/Daldek/Kartograf/compare/v0.4.1...v0.5.0

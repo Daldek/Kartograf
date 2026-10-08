@@ -4,10 +4,10 @@
 **Wersja:** 4.0
 **Data:** 2026-10-08
 **Product Owner:** Piotr
-**Status:** Rozwój — v0.7.0 (Unreleased; `__version__ = "0.7.0-dev"`), ostatnie wydanie: v0.6.1
+**Status:** Wydanie v0.7.0 (2026-10-08)
 
 > Dokument opisuje wymagania produktowe wersji 0.7.0 w postaci
-> zrealizowanej w kodzie na `develop`. Szczegóły zachowania (komunikaty,
+> zrealizowanej w kodzie wydania v0.7.0. Szczegóły zachowania (komunikaty,
 > kody wyjścia, przypadki brzegowe) — `docs/SCOPE.md` i
 > `docs/ARCHITECTURE.md`; uzasadnienia decyzji — `docs/DECISIONS.md`
 > (ADR-022..ADR-030); historia zmian — `docs/CHANGELOG.md`. Pełna lista
@@ -843,7 +843,7 @@ from kartograf import (
     GridMismatchError,      # (ValidationError)
 
     # Version
-    __version__,            # "0.7.0-dev" (0.7.0 po wydaniu)
+    __version__,            # "0.7.0"
 )
 ```
 
@@ -959,4 +959,4 @@ HYDROGRAF (główna aplikacja)
 
 **Wersja dokumentu:** 4.0
 **Data ostatniej aktualizacji:** 2026-10-08
-**Status:** Rozwój — v0.7.0 (Unreleased)
+**Status:** Wydanie v0.7.0 (2026-10-08)

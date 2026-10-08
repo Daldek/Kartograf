@@ -3,13 +3,13 @@
 
 **Wersja:** 3.14
 **Data:** 2026-10-08
-**Status:** Rozwoj — v0.7.0 (Unreleased; `__version__ = "0.7.0-dev"`), ostatnie wydanie: v0.6.1
+**Status:** Wydanie v0.7.0 (2026-10-08)
 
 ---
 
 ## 1. Cel Projektu
 
-**Kartograf** to narzędzie do pobierania danych przestrzennych z zasobów GUGiK i CUZK (NMT), Copernicus i ISRIC dla Polski, a od etapu 1 (v0.7.0-dev) — częściowo dla Czech (pełna parytetowość produktowa DMR, planowana dalsza dla DE/SK).
+**Kartograf** to narzędzie do pobierania danych przestrzennych z zasobów GUGiK i CUZK (NMT), Copernicus i ISRIC dla Polski, a od etapu 1 (v0.7.0) — częściowo dla Czech (pełna parytetowość produktowa DMR, planowana dalsza dla DE/SK).
 
 ### 1.1 Problem
 
@@ -88,7 +88,7 @@ arkusze (`N-34-130-D` w skali 1:50000 → 4, nie 9); w EPSG:2180 (domyślny
 i obejmuje fragmenty sąsiadów (16 zamiast 4). Bbox zdegenerowany do punktu →
 dokładnie jeden arkusz. Nieznana wartość `system=` to `ValidationError`.
 
-### 2.2 NMT — Czechy (CUZK, etap 1, v0.7.0-dev) - IN SCOPE
+### 2.2 NMT — Czechy (CUZK, etap 1, v0.7.0) - IN SCOPE
 
 ```python
 # Funkcjonalności (DMR — Digitalni model reliefu, odpowiednik NMT):
@@ -691,4 +691,4 @@ pyshp >= 2.3.0         # Shapefile reading
 
 **Wersja dokumentu:** 3.14
 **Data ostatniej aktualizacji:** 2026-10-08
-**Status:** Rozwoj — v0.7.0 (Unreleased)
+**Status:** Wydanie v0.7.0 (2026-10-08)

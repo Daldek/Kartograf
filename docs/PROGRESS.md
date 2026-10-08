@@ -24,7 +24,7 @@
 | Weryfikacja BBox PL-2000 | ✅ Gotowy | 67 testow, reference values + 16 testow `live` z realnymi asercjami na skorowidzu (N5) |
 | Walidacja warstw WMS | ✅ Gotowy | wylacznie GetCapabilities (lock, retry), `LAYER_PATTERN` per produkt, bez zaszytych list (S4, errata ADR-020) |
 | Etap 0 — zrodla wielokrajowe (sources/transform/transport/providers-pl/CLI split/sidecar) | ✅ Gotowy | zmergowane do develop 2026-08-11; E2E 12/12 na realnych danych |
-| Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | ZMERGOWANY do develop 2026-08-12; tor CZ odmrozony w fali 2026-09-29/30 (D1): pin EPSG:1622 (K2; live: Karkonosze PL-CZ mediana -0,15 m, przesuniecie < 1 px), budzet 4 Mpx kafli (K6; live: 29,8 Mpx w 3 min 38 s), piksel dokladnie 2 m (N3), `Warning:` przy 100 % nodata (N2); wersja `0.7.0-dev` |
+| Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | ZMERGOWANY do develop 2026-08-12; tor CZ odmrozony w fali 2026-09-29/30 (D1): pin EPSG:1622 (K2; live: Karkonosze PL-CZ mediana -0,15 m, przesuniecie < 1 px), budzet 4 Mpx kafli (K6; live: 29,8 Mpx w 3 min 38 s), piksel dokladnie 2 m (N3), `Warning:` przy 100 % nodata (N2); wydany w v0.7.0 |
 | LAZ — wybor kafli (ADR-029) | ✅ Gotowy | `download_laz_area` / `select_tiles`: najnowszy kafel per obszar wg pokrycia, `--year`, `--min-density`, `extra.parent_request` w trybie `--bbox`/`--geometry` |
 | Kampanie GUGiK (ADR-030 + errata 1-5) | ✅ Gotowy | `--campaigns {newest,all}`, `--min-year`; pliki w `<segment>/kampanie/`, sciezka standardowa = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`) |
 | Wycinek NMT PL `--target-crs` (ADR-027) + API biblioteki `download_pl_cutout` | ✅ Gotowy | fala review max 2026-09-28 + fala naprawcza 2026-09-30: `GridMismatchError` dla 2180 z arkuszy o roznych fazach, W1 (warp per arkusz) dla 5514/3045 (S5/D3/D8), `extra.sheet_sources`, `all_nodata`, `download_pl_cutout(cache=)`; live PASS Krakow 5 m |
@@ -83,22 +83,26 @@
 - **Wersja:** v0.6.1
 - **Zakres:** Naprawione nazwy warstw WMS 5m, walidacja warstw WMS przez GetCapabilities (lazy, fallback, in-memory cache), 1007 testow
 
+### CP11 — Wydanie wielokrajowe
+- **Data:** 2026-10-08
+- **Wersja:** v0.7.0
+- **Zakres:** NMT Czech (CUZK) i `--country`, LAZ (ADR-029), wycinek PL `--target-crs` (ADR-027), uklad `data/` (ADR-026), sidecar `kartograf-meta/1` z angielskimi kluczami (ADR-031), skorowidz GUGiK i kampanie (ADR-028, ADR-030), wspolny transport HTTP; pelna lista i zmiany lamiace: `docs/CHANGELOG.md` [0.7.0]
+
 ## Ostatnia sesja
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI:** ADR-030 (strategie kampanii) jest WDROZONY
-> i zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`);
-> fallback offline I-1 to "Errata 5" ADR-030 (`docs/DECISIONS.md`).
-> Przeglad dokumentacji 2026-10-08 (raport:
-> `docs/research/2026-10-08-przeglad-dokumentacji/raport.md`) i fala
-> poprawek ZAKONCZONE: dokumentacja bez wartosci ulotnych, `CLAUDE.md`
-> = zasady krytyczne + mapa dokumentacji, konwencje w
-> `docs/DEVELOPMENT_STANDARDS.md`, przewodnik uzytkownika `docs/USAGE.md`,
-> README jako wprowadzenie, `IMPLEMENTATION_PROMPT.md` usuniety, indeks ADR
-> w `docs/DECISIONS.md`. Nastepny krok: **wydanie 0.7.0** (bump
-> `0.7.0-dev` -> `0.7.0`, data w CHANGELOG, tag, push `develop`, merge do
-> `main`) WYLACZNIE na polecenie uzytkownika.
+> **START NASTEPNEJ SESJI:** **v0.7.0 WYDANA (2026-10-08)** — tag
+> `v0.7.0` na commicie merge `develop` -> `main`; `develop`, `main` i tag
+> na `origin`. Opis wydania: `docs/CHANGELOG.md` [0.7.0]; test na zywo
+> przed wydaniem: `docs/research/2026-10-08-test-przed-0.7.0/raport.md`.
+> Stan galezi i tagow sprawdzaj w gicie (`git status`, `git log`,
+> `git ls-remote --tags origin`), nie w tym dzienniku.
+> **Nastepny cykl (0.7.1):** pierwszy commit cyklu podbija
+> `kartograf.__version__` do `0.7.1-dev` (asercje w `tests/test_cli.py`
+> i `tests/test_integration.py`) i dodaje na gorze CHANGELOG sekcje
+> `## [0.7.1] - Unreleased` z linkiem `compare/v0.7.0...develop`; zakres:
+> backlog "Do 0.7.1" (sekcja Backlog nizej), potem ogolny backlog.
 > Brama (stan sprawdzaj komendami, nie liczbami z dziennika):
 > `.venv/bin/python -m pytest tests/ -m "not live"` (zielone),
 > `.venv/bin/python -m ruff check .` i `ruff format --check .` (czyste,
@@ -108,6 +112,19 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Wydanie 0.7.0 (2026-10-08)
+
+- Przed wydaniem: CHANGELOG [0.7.0] przebudowany (podsumowanie, zmiany
+  lamiace, przejscie z 0.6.1, sekcje tematyczne); test na zywo bez FAIL
+  (uwagi U3 i U4 poprawione przed wydaniem, reszta w backlogu "Do 0.7.1");
+  paczki sdist i wheel zbudowane i sprawdzone w czystym srodowisku
+  (testy z sdist przechodza); CORINE z prawdziwymi credentials CLMS
+  pominiety decyzja uzytkownika.
+- Wydanie: `__version__ = "0.7.0"`, data w CHANGELOG i link
+  `compare/v0.6.1...v0.7.0`, status w SCOPE i PRD; merge `develop` ->
+  `main`, tag `v0.7.0` (annotowany, jak poprzednie wydania), push
+  `develop`, `main` i tagu na `origin`.
 
 ### ADR-030 strategie kampanii — wdrozony i zweryfikowany na zywo (T1-T12, 2026-10-07)
 
@@ -1134,8 +1151,8 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
    najpewniej roznica operacji EPSG:1622 - EPSG:4829, czyli blad lokalnej,
    slowackiej operacji przypietej, nie serwera (znany blad K2, errata
    ADR-024).
-3. **Push `develop` na origin** (stan: `git rev-list --count origin/develop..develop`;
-   decyzja z etapu 0 nadal nierozwiazana; razem z wydaniem 0.7.0, pkt 13)
+3. ~~**Push `develop` na origin**~~ — **WYKONANE przy wydaniu 0.7.0
+   (2026-10-08)**, pkt 13
 4. **Zgloszenie/naprawa WCS EVRF2007 GUGiK** (male, przedistniejace, poza
    etapami 0/1): aktualizacja `WCS_ENDPOINTS`/`COVERAGE_IDS` w
    `providers/pl/gugik.py` po usunieciu endpointu przez GUGiK (patrz `CLAUDE.md`,
@@ -1232,13 +1249,13 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
     przez niestabilnosc GUGiK (poprawnie kod 1 "ponow"); tryb listy kod 1
     i jeden zgloszony arkusz (S2); PL-SK: nodata wewnatrz opublikowanych
     arkuszy (do 82 %) bez `missing_sheets`; 5 m brak w rejonie Sejn (L6).
-13. **Bump wersji + wydanie 0.7.0** — **czeka WYLACZNIE na polecenie
-    uzytkownika** (fala naprawcza pkt 15 i przeglad dokumentacji 2026-10-08
-    zamkniete; kolejnosc: poprawki dokumentacji -> wydanie):
-    `kartograf.__version__` `0.7.0-dev` -> `0.7.0` (pyproject czyta wersje
-    dynamicznie), data w CHANGELOG (`## [0.7.0] - Unreleased`), tag
-    `v0.7.0`, push `develop` na origin (patrz pkt 3 wyzej), merge do `main`.
-14. **Checklista release** (z planu audytu 0.7.0): build sdist/wheel
+13. ~~**Bump wersji + wydanie 0.7.0**~~ — **WYKONANE 2026-10-08** (sekcja
+    "Wydanie 0.7.0" w "Ostatnia sesja"): `__version__ = "0.7.0"`, data w
+    CHANGELOG, merge do `main`, tag `v0.7.0`, push na `origin`.
+14. ~~**Checklista release**~~ — **ZAMKNIETA przy wydaniu 0.7.0 (2026-10-08)**:
+    sdist/wheel zbudowane i sprawdzone; weryfikacja CORINE z credentials CLMS
+    pominieta decyzja uzytkownika. Pierwotna tresc (z planu audytu 0.7.0):
+    build sdist/wheel
     (`setuptools`); zywa weryfikacja CORINE GeoTIFF z prawdziwymi
     credentials CLMS vs allowlista hostow (Auth Proxy); ~~E2E kafelkowania
     `exportImage` przy wyniku >16 Mpx~~ — WYKONANE 2026-09-29 (L4: pas
