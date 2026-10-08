@@ -2021,10 +2021,12 @@ class TestBdot10kSidecarSource:
 
         monkeypatch.setattr(Path, "write_bytes", disk_full)
         provider = Bdot10kProvider(session=self._session(body, {}))
-        with pytest.raises(DownloadError, match="No space left") as exc:
+        with pytest.raises(DownloadError, match="oryginalnego ZIP") as exc:
             provider.download_package(
                 "0262", tmp_path / "o" / "bdot10k_teryt_0262.gpkg", keep_raw=True
             )
+        assert "No space left" in str(exc.value)
+        assert "bdot10k_teryt_0262.gpkg usuniety" in str(exc.value)
         assert isinstance(exc.value.__cause__, OSError)
         assert sorted(p.name for p in (tmp_path / "o").iterdir()) == []
 
