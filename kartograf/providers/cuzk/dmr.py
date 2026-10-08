@@ -15,6 +15,7 @@ import logging
 import os
 import shutil
 import threading
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -202,7 +203,12 @@ class CuzkDmrProvider(BaseProvider):
         return self._vertical_transform
 
     def download(
-        self, godlo: str, output_path: Path, timeout: int = _DEFAULT_TIMEOUT
+        self,
+        godlo: str,
+        output_path: Path,
+        timeout: int = _DEFAULT_TIMEOUT,
+        *,
+        on_download: Callable[[], None] | None = None,
     ) -> Path:
         """Pobierz kafel TM33 (siatka w 3045) lub arkusz SM5 (openzu, 5514).
 
@@ -211,6 +217,12 @@ class CuzkDmrProvider(BaseProvider):
         Kafel TM33 lezy w EPSG:3045, a dane CUZK w EPSG:5514: `exportImage`
         dostaje zadanie natywne, a na siatke kafla przenosi je lokalny warp
         (ADR-024). Arkusz SM5 przychodzi plikiem juz w 5514 — bez warpu.
+
+        ``on_download`` is called exactly once, after every validation
+        (CZ system, SM5 resolution and sheet-index lookup, TM33 grid parse)
+        and right before the data transfer starts; it is never called when
+        the request is rejected (same contract as
+        ``DownloadManager.download_sheet(on_download=)`` in the PL flow).
         """
         output_path = Path(output_path)
         # jak rejestr systemow: biale znaki nie sa czescia godla (URL openzu,
@@ -223,12 +235,12 @@ class CuzkDmrProvider(BaseProvider):
                 f"(TM33: 302_5550, SM5: CTES96)"
             )
         if system.id == "cz_sm5":
-            self._download_sm5(godlo, output_path, timeout)
+            self._download_sm5(godlo, output_path, timeout, on_download)
         else:  # cz_tm33
             # Parsowanie przez ParserTM33 (pelna walidacja: kilometry parzyste),
             # nie przez sam regex rejestru systemow.
             bbox = ParserTM33(godlo).get_bbox()
-            self._export_raster(bbox, output_path, timeout)
+            self._export_raster(bbox, output_path, timeout, on_download)
         if self.vertical_transform is not None:
             self._apply_vertical_shift(output_path)
         return output_path
@@ -239,8 +251,14 @@ class CuzkDmrProvider(BaseProvider):
         output_path: Path,
         format: str = "GTiff",
         timeout: int = _DEFAULT_TIMEOUT,
+        *,
+        on_download: Callable[[], None] | None = None,
     ) -> Path:
-        """Jeden wycinek dla dowolnego bboxa (`--target-crs` => warp lokalny)."""
+        """Jeden wycinek dla dowolnego bboxa (`--target-crs` => warp lokalny).
+
+        ``on_download``: called once right before the first ``exportImage``
+        request, after format and CRS validation (see :meth:`download`).
+        """
         if format != "GTiff":
             raise ValidationError(
                 f"CuzkDmrProvider.download_bbox obsluguje tylko GTiff "
@@ -250,12 +268,18 @@ class CuzkDmrProvider(BaseProvider):
         image_sr = self._target_crs or NATIVE_CRS
         if wkid(bbox.crs) != wkid(image_sr):
             bbox = self._bbox_to_crs(bbox, image_sr)
-        self._export_raster(bbox, output_path, timeout)
+        self._export_raster(bbox, output_path, timeout, on_download)
         if self.vertical_transform is not None:
             self._apply_vertical_shift(output_path)
         return output_path
 
-    def _export_raster(self, bbox: BBox, output_path: Path, timeout: int) -> None:
+    def _export_raster(
+        self,
+        bbox: BBox,
+        output_path: Path,
+        timeout: int,
+        on_download: Callable[[], None] | None = None,
+    ) -> None:
         """Raster pokrywajacy ``bbox`` w ukladzie ``bbox.crs``.
 
         Serwer dostaje zadanie WYLACZNIE w ukladzie natywnym (``NATIVE_CRS``);
@@ -278,6 +302,8 @@ class CuzkDmrProvider(BaseProvider):
         # None == cel jest ukladem natywnym: serwer wydaje dane wprost
         pinned = self.horizontal_transform(bbox.crs)
         if pinned is None:
+            if on_download is not None:
+                on_download()
             client.export_image(
                 self._image_endpoint,
                 bbox,
@@ -292,6 +318,8 @@ class CuzkDmrProvider(BaseProvider):
         native_path = output_path.with_name(
             f"{output_path.name}.{os.getpid()}_{threading.get_ident()}.native.tif"
         )
+        if on_download is not None:
+            on_download()
         try:
             client.export_image(
                 self._image_endpoint,
@@ -327,7 +355,13 @@ class CuzkDmrProvider(BaseProvider):
             NATIVE_CRS,
         )
 
-    def _download_sm5(self, godlo: str, output_path: Path, timeout: int) -> None:
+    def _download_sm5(
+        self,
+        godlo: str,
+        output_path: Path,
+        timeout: int,
+        on_download: Callable[[], None] | None = None,
+    ) -> None:
         """Arkusz SM5 (DMR 4G) z openzu + naprawa metadanych CRS."""
         if self._resolution != "5m":
             raise ValidationError(
@@ -343,6 +377,8 @@ class CuzkDmrProvider(BaseProvider):
             )
         self._sheet_index.sm5_sheet(godlo)  # walidacja przed pobraniem
         url = self._files_endpoint.format(sheet=godlo)
+        if on_download is not None:
+            on_download()
         try:
             self._client_for(timeout).fetch_file(url, output_path, unzip_single=".tif")
         except DownloadError as e:

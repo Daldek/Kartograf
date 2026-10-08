@@ -3408,19 +3408,205 @@ def _cz_provider_mock(resolution="2m"):
 
     provider.horizontal_transform.side_effect = fake_horizontal
 
-    def fake_download(godlo, target, timeout=60):
+    def fake_download(godlo, target, timeout=60, *, on_download=None):
+        # provider contract: announce after validation, before the transfer
+        if on_download is not None:
+            on_download()
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(b"II*\x00dane")
         return target
 
     provider.download.side_effect = fake_download
     provider.download_bbox.side_effect = lambda bbox, target, **kw: fake_download(
-        "x", target
+        "x", target, on_download=kw.get("on_download")
     )
     return provider
 
 
 _CZ_FACTORY_PATCH = "kartograf.providers.cuzk.create_dmr_provider"
+
+
+class TestCzDownloadingAfterValidation:
+    """``Downloading ...`` in the CZ flow only when the transfer really starts.
+
+    Uses the real ``CuzkDmrProvider`` (offline: ``CuzkClient`` and
+    ``SheetIndex`` mocked), so validations inside the provider run for real.
+    """
+
+    _CLIENT = "kartograf.providers.cuzk.dmr.CuzkClient"
+    _INDEX = "kartograf.providers.cuzk.dmr.SheetIndex"
+
+    @staticmethod
+    def _sm5_info():
+        from kartograf.providers.cuzk.sheets import SheetInfo
+
+        return SheetInfo(
+            godlo="CTES96",
+            name=None,
+            bbox=BBox(-450000, -1114000, -447500, -1112000, "EPSG:5514"),
+            podil=None,
+            in_cz=None,
+        )
+
+    @staticmethod
+    def _write_tif(path, crs):
+        import numpy as np
+        import rasterio
+        from rasterio.transform import from_bounds
+
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        with rasterio.open(
+            path,
+            "w",
+            driver="GTiff",
+            dtype="float32",
+            count=1,
+            width=4,
+            height=4,
+            crs=crs,
+            transform=from_bounds(0, 0, 8, 8, 4, 4),
+            nodata=-9999.0,
+        ) as dst:
+            dst.write(np.full((4, 4), 100.0, dtype="float32"), 1)
+
+    def test_unknown_sm5_sheet_is_error_without_downloading(self, tmp_path, capsys):
+        out = tmp_path / "out"
+        with patch(self._CLIENT) as client_cls, patch(self._INDEX) as index_cls:
+            index_cls.return_value.sm5_sheet.side_effect = ValidationError(
+                "Arkusz SM5 'ABCD12' nie istnieje w indeksie KladyMapovychListu"
+            )
+            rc = main(["download", "ABCD12", "--country", "cz", "-o", str(out)])
+            client_cls.return_value.fetch_file.assert_not_called()
+
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "Downloading" not in captured.out
+        assert "Error: Arkusz SM5 'ABCD12' nie istnieje" in captured.err
+        assert not list(out.rglob("*.tif"))
+
+    def test_invalid_tm33_tile_is_error_without_downloading(self, tmp_path, capsys):
+        """Odd kilometres match the TM33 pattern but fail ``ParserTM33``."""
+        with patch(self._CLIENT) as client_cls, patch(self._INDEX):
+            rc = main(
+                ["download", "301_5550", "--country", "cz", "-o", str(tmp_path / "o")]
+            )
+            client_cls.return_value.export_image.assert_not_called()
+
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "Downloading" not in captured.out
+        assert "Error:" in captured.err and "parzyste" in captured.err
+
+    def test_sm5_announces_once_before_file_is_written(self, tmp_path, capsys):
+        seen_at_fetch: list[str] = []
+
+        def fake_fetch(url, output_path, *, unzip_single=None):
+            seen_at_fetch.append(capsys.readouterr().out)
+            self._write_tif(output_path, crs=None)
+            return output_path
+
+        with patch(self._CLIENT) as client_cls, patch(self._INDEX) as index_cls:
+            index_cls.return_value.sm5_sheet.return_value = self._sm5_info()
+            client_cls.return_value.fetch_file.side_effect = fake_fetch
+            rc = main(
+                ["download", "CTES96", "--country", "cz", "-o", str(tmp_path / "o")]
+            )
+
+        rest = capsys.readouterr().out
+        assert rc == 0
+        assert len(seen_at_fetch) == 1
+        assert seen_at_fetch[0].count("Downloading CTES96 (CZ, resolution: 5m)") == 1
+        assert "Downloading" not in rest
+        assert "Downloaded to " in rest
+
+    def test_tm33_announces_once_before_export(self, tmp_path, capsys):
+        seen_at_export: list[str] = []
+
+        def fake_export(endpoint, bbox, **kwargs):
+            seen_at_export.append(capsys.readouterr().out)
+            self._write_tif(kwargs["output_path"], crs="EPSG:5514")
+            return kwargs["output_path"]
+
+        with (
+            patch(self._CLIENT) as client_cls,
+            patch(self._INDEX),
+            patch("kartograf.providers.cuzk.dmr.warp_to_grid") as warp,
+        ):
+            warp.side_effect = lambda src, dst, *a, **k: self._write_tif(
+                dst, crs="EPSG:3045"
+            )
+            client_cls.return_value.export_image.side_effect = fake_export
+            rc = main(
+                ["download", "302_5550", "--country", "cz", "-o", str(tmp_path / "o")]
+            )
+
+        rest = capsys.readouterr().out
+        assert rc == 0
+        assert len(seen_at_export) == 1
+        assert seen_at_export[0].count("Downloading 302_5550 (CZ, resolution: 2m)") == 1
+        assert "Downloading" not in rest
+
+    def test_bbox_announces_once_before_export(self, tmp_path, capsys):
+        seen_at_export: list[str] = []
+
+        def fake_export(endpoint, bbox, **kwargs):
+            seen_at_export.append(capsys.readouterr().out)
+            self._write_tif(kwargs["output_path"], crs="EPSG:5514")
+            return kwargs["output_path"]
+
+        with patch(self._CLIENT) as client_cls, patch(self._INDEX):
+            client_cls.return_value.export_image.side_effect = fake_export
+            rc = main(
+                [
+                    "download",
+                    "--bbox=-447000,-1114000,-446000,-1113000",
+                    "--bbox-crs",
+                    "EPSG:5514",
+                    "--country",
+                    "cz",
+                    "-o",
+                    str(tmp_path / "o"),
+                ]
+            )
+
+        rest = capsys.readouterr().out
+        assert rc == 0
+        assert len(seen_at_export) == 1
+        assert seen_at_export[0].count("Downloading CZ bbox (2m, EPSG:5514)") == 1
+        assert "Downloading" not in rest
+
+    def test_bbox_rejected_in_provider_is_error_without_downloading(
+        self, tmp_path, capsys
+    ):
+        """A validation failure inside ``download_bbox`` (before exportImage)."""
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        provider = _cz_provider_mock()
+        provider.download_bbox.side_effect = ValidationError("zly bbox")
+        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+        args = _cz_args(tmp_path, godlo=None, quiet=False)
+        with patch(_CZ_FACTORY_PATCH, return_value=provider):
+            rc = _cmd_download_cz(args, bbox=bbox)
+
+        captured = capsys.readouterr()
+        assert rc == 1
+        assert "Downloading" not in captured.out
+        assert "Error: zly bbox" in captured.err
+
+    @pytest.mark.parametrize("bbox_mode", [False, True])
+    def test_quiet_passes_no_announcement(self, tmp_path, capsys, bbox_mode):
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        provider = _cz_provider_mock()
+        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+        args = _cz_args(tmp_path, godlo=None if bbox_mode else "302_5550")
+        with patch(_CZ_FACTORY_PATCH, return_value=provider):
+            rc = _cmd_download_cz(args, bbox=bbox if bbox_mode else None)
+
+        assert rc == 0
+        assert capsys.readouterr().out == ""
+        called = provider.download_bbox if bbox_mode else provider.download
+        called.assert_called_once()
 
 
 class TestCmdDownloadCz:
@@ -3964,7 +4150,7 @@ class TestCmdDownloadCz:
 
         from kartograf.cli.download_cmd import _cmd_download_cz
 
-        def real_tif(godlo, target, timeout=60):
+        def real_tif(godlo, target, timeout=60, *, on_download=None):
             target.parent.mkdir(parents=True, exist_ok=True)
             with rasterio.open(
                 target,
