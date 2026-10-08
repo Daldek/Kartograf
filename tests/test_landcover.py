@@ -1985,14 +1985,19 @@ class TestBdot10kSidecarSource:
         session.get.assert_not_called()
 
     def test_keep_raw_failed_merge_leaves_no_zip(self, tmp_path):
-        """The raw ZIP is written only after a successful merge (no orphan)."""
-        body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
-        provider = Bdot10kProvider(session=self._session(body, {}))
-        with pytest.raises(DownloadError, match="SWKN"):
-            provider.download_package(
-                "0262", tmp_path / "o" / "x.gpkg", layers=["SWKN"], keep_raw=True
-            )
-        assert not (tmp_path / "o" / "x_GPKG.zip").exists()
+        """The raw ZIP is written only after a successful merge (no orphan):
+        two package files with the same table fail inside the merge."""
+        g1, g2 = tmp_path / "a.gpkg", tmp_path / "b.gpkg"
+        _make_layer_gpkg(g1, "OT_PTWP_A", "one")
+        _make_layer_gpkg(g2, "OT_PTWP_A", "two")
+        buf = BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.write(g1, "PL.PZGiK.337.BDOT10k.0262__OT_PTWP_A.gpkg")
+            zf.write(g2, "PL.PZGiK.337.BDOT10k.0262__OT_PTWP_A_copy.gpkg")
+        provider = Bdot10kProvider(session=self._session(buf.getvalue(), {}))
+        with pytest.raises(DownloadError, match="OT_PTWP_A"):
+            provider.download_package("0262", tmp_path / "o" / "x.gpkg", keep_raw=True)
+        assert sorted(p.name for p in (tmp_path / "o").iterdir()) == []
 
     def test_manager_sidecar_has_source_and_http(self, tmp_path):
         body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
