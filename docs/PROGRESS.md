@@ -91,9 +91,12 @@
 > i zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`);
 > fallback offline I-1 to "Errata 5" ADR-030 (`docs/DECISIONS.md`).
 > Przeglad dokumentacji 2026-10-08 (raport:
-> `docs/research/2026-10-08-przeglad-dokumentacji/raport.md`) zakonczony
-> fala poprawek dokumentacji. Kolejnosc: (1) przeglad dokumentacji ->
-> (2) poprawki dokumentacji (ta fala) -> (3) **wydanie 0.7.0** (bump
+> `docs/research/2026-10-08-przeglad-dokumentacji/raport.md`) i fala
+> poprawek ZAKONCZONE: dokumentacja bez wartosci ulotnych, `CLAUDE.md`
+> = zasady krytyczne + mapa dokumentacji, konwencje w
+> `docs/DEVELOPMENT_STANDARDS.md`, przewodnik uzytkownika `docs/USAGE.md`,
+> README jako wprowadzenie, `IMPLEMENTATION_PROMPT.md` usuniety, indeks ADR
+> w `docs/DECISIONS.md`. Nastepny krok: **wydanie 0.7.0** (bump
 > `0.7.0-dev` -> `0.7.0`, data w CHANGELOG, tag, push `develop`, merge do
 > `main`) WYLACZNIE na polecenie uzytkownika.
 > Brama (stan sprawdzaj komendami, nie liczbami z dziennika):

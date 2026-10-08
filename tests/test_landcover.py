@@ -1686,7 +1686,7 @@ class TestSidecarLandCover:
 
 class TestBdot10kDefaultTimeout:
     """N11: ``Bdot10kProvider.DEFAULT_TIMEOUT`` jest zrodlem domyslnego
-    timeoutu pobrania we wszystkich trybach (CLAUDE.md: 120 s), nie martwa
+    timeoutu pobrania we wszystkich trybach (SCOPE 3.2: 120 s), nie martwa
     stala sprzeczna z sygnaturami."""
 
     @pytest.mark.parametrize(
