@@ -3532,6 +3532,96 @@ class TestCmdDownloadCz:
         )
         assert "cz_share" not in payload["extra"]
 
+    @pytest.mark.parametrize("country", ["auto", "cz"])
+    def test_sm5_godlo_without_resolution_defaults_to_5m(
+        self, tmp_path, capsys, country
+    ):
+        """Arkusz SM5 istnieje tylko w 5 m (DMR 4G): bez ``--resolution``
+        rozdzielczosc wynika z godla — pobranie rusza, bez dodatkowego
+        komunikatu (rozdzielczosc widac w ``Downloading``)."""
+        from kartograf.providers.cuzk.sheets import SheetInfo
+
+        provider = _cz_provider_mock(resolution="5m")
+        provider.sheet_index.sm5_sheet.return_value = SheetInfo(
+            godlo="CTES96",
+            name=None,
+            bbox=BBox(-450000, -1114000, -447500, -1112000, "EPSG:5514"),
+            podil=None,
+            in_cz=None,
+        )
+        with patch(_CZ_FACTORY_PATCH, return_value=provider) as factory:
+            rc = main(
+                [
+                    "download",
+                    "CTES96",
+                    "--country",
+                    country,
+                    "-o",
+                    str(tmp_path / "out"),
+                ]
+            )
+
+        assert rc == 0
+        assert factory.call_args.kwargs["resolution"] == "5m"
+        provider.download.assert_called_once()
+        captured = capsys.readouterr()
+        assert "Downloading CTES96 (CZ, resolution: 5m)..." in captured.out
+        assert captured.err == ""
+
+    def test_sm5_godlo_with_explicit_2m_is_error_without_network(
+        self, tmp_path, capsys
+    ):
+        """Jawne ``--resolution 2m`` z godlem SM5 to sprzeczne zadanie:
+        ``Error:`` przed utworzeniem providera i bez ``Downloading``."""
+        with patch(_CZ_FACTORY_PATCH) as factory:
+            rc = main(
+                [
+                    "download",
+                    "CTES96",
+                    "--resolution",
+                    "2m",
+                    "-o",
+                    str(tmp_path / "out"),
+                ]
+            )
+
+        assert rc == 1
+        factory.assert_not_called()
+        captured = capsys.readouterr()
+        assert "Downloading" not in captured.out
+        assert "Error: Arkusze SM5" in captured.err
+        assert "5m" in captured.err
+
+    def test_tm33_godlo_without_resolution_stays_2m(self, tmp_path):
+        """Kafel TM33 wycinany z uslugi: domyslnie 2 m jak dotad."""
+        provider = _cz_provider_mock()
+        with patch(_CZ_FACTORY_PATCH, return_value=provider) as factory:
+            rc = main(["download", "302_5550", "-o", str(tmp_path / "out"), "-q"])
+
+        assert rc == 0
+        assert factory.call_args.kwargs["resolution"] == "2m"
+
+    def test_cz_bbox_without_resolution_stays_2m(self, tmp_path):
+        """Wycinek ``--bbox`` CZ: domyslnie 2 m jak dotad."""
+        provider = _cz_provider_mock()
+        with patch(_CZ_FACTORY_PATCH, return_value=provider) as factory:
+            rc = main(
+                [
+                    "download",
+                    "--bbox=-447000,-1114000,-446000,-1113000",
+                    "--bbox-crs",
+                    "EPSG:5514",
+                    "--country",
+                    "cz",
+                    "-o",
+                    str(tmp_path / "out"),
+                    "-q",
+                ]
+            )
+
+        assert rc == 0
+        assert factory.call_args.kwargs["resolution"] == "2m"
+
     def test_bbox_mode_file_in_bbox_subdir_and_parent_request(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
 

@@ -2209,16 +2209,31 @@ def _cmd_download_cz(
         ValidationError.
     """
     from kartograf.cache import MetadataCache
+    from kartograf.core.parser_registry import detect_system
     from kartograf.providers.cuzk import create_dmr_provider
     from kartograf.transform.crs import TransformError
 
-    resolution = args.resolution or "2m"
-    vertical_crs = args.vertical_crs or "Bpv"
     has_godlo = bbox is None
+    # An SM5 sheet is a ready-made DMR 4G file that exists only at 5 m, so the
+    # sheet itself determines the resolution; TM33 tiles and bbox cutouts are
+    # cut from the service, where 2 m (default) and 5 m are a real choice.
+    is_sm5 = has_godlo and detect_system(args.godlo).id == "cz_sm5"
+    resolution = args.resolution or ("5m" if is_sm5 else "2m")
+    vertical_crs = args.vertical_crs or "Bpv"
 
     if resolution == "1m":
         print(
             "Error: CZ nie ma rozdzielczosci 1m — dostepne: 2m (DMR 5G), 5m (DMR 4G)",
+            file=sys.stderr,
+        )
+        return 1
+    if is_sm5 and resolution != "5m":
+        # contradictory request: rejected before the provider (no network)
+        # and before the "Downloading" announcement
+        print(
+            f"Error: Arkusze SM5 sa dostepne tylko w 5m (DMR 4G) — pomin "
+            f"--resolution albo podaj 5m; dla {resolution} uzyj godla TM33 "
+            f"albo --bbox [godlo: {args.godlo}]",
             file=sys.stderr,
         )
         return 1
