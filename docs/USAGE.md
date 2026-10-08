@@ -344,6 +344,20 @@ print(result.missing_sheets)
 # Kroki osobno (własny provider/sesja/FileStorage):
 # prepare_pl_cutout -> select_pl_cutout_sheets -> run_pl_cutout.
 
+# Mozaika z lokalnych arkuszy (bez sieci) do katalogu projektu — wynik
+# i sidecar pod ścieżką podaną przez wywołującego, te same reguły siatki
+# co w download_pl_cutout (EPSG:2180 + różne fazy siatki -> GridMismatchError)
+from kartograf import build_cutout_from_sheets
+
+local = build_cutout_from_sheets(
+    [Path("./arkusze/N-34-130-D-d-2-3.asc"), Path("./arkusze/N-34-130-D-d-2-4.asc")],
+    BBox(530000, 382000, 530200, 382100, "EPSG:2180"),
+    "EPSG:2180",
+    Path("./projekt/nmt.tif"),     # sidecar: ./projekt/nmt.tif.meta.json
+    resolution="1m",
+    vertical_crs="EVRF2007",
+)
+
 # Zlewnia przygraniczna PL/CZ: podział obszaru na kraje i wycinek CZ
 # w układzie PL (EPSG:2180 + EVRF2007); siatka CZ startuje od zadanego obszaru
 from kartograf import download_cz_cutout, split_bbox_by_country

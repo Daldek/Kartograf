@@ -56,6 +56,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--geometry` dla CZ) korzysta z tej samej implementacji — komunikaty
   i kody wyjscia bez zmian, sidecar wycinka CZ dostaje
   `extra.all_nodata` (`true`/`false`).
+- `build_cutout_from_sheets(sheet_paths, bbox, target_crs, output_path, *,
+  resolution, vertical_crs)`: wycinek NMT PL z lokalnych arkuszy bez
+  zapytan sieciowych, wynik i sidecar pod sciezka podana przez
+  wywolujacego (reguly siatki jak w `download_pl_cutout`).
 
 ### Zmienione
 

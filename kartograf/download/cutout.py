@@ -29,6 +29,7 @@ import json
 import logging
 import os
 import threading
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -935,4 +936,67 @@ def download_pl_cutout(
         force=force,
         on_progress=on_progress,
         parent_request=parent_request,
+    )
+
+
+def build_cutout_from_sheets(
+    sheet_paths: Sequence[Path],
+    bbox: BBox,
+    target_crs: str,
+    output_path: Path,
+    *,
+    resolution: str,
+    vertical_crs: str,
+) -> PlCutoutResult:
+    """NMT PL cutout from LOCAL sheet files - no network (A10).
+
+    The result goes to ``output_path`` chosen by the caller (also outside
+    the Kartograf ``data/`` tree), with its sidecar next to it
+    (``extra.sheet_sources`` from the sheets' sidecars, when present). Grid
+    and warp rules as in ``download_pl_cutout``; the file is always built
+    (no skip of an existing result).
+
+    Raises
+    ------
+    ValidationError
+        Empty sheet list, bad parameters, PL-2000 sheets.
+    GridMismatchError
+        EPSG:2180 target and sheets with different grid phases.
+    TransformError
+        No safe pinned operation to ``target_crs``.
+    """
+    if not sheet_paths:
+        raise ValidationError("build_cutout_from_sheets: brak arkuszy wejsciowych")
+    output_path = Path(output_path)
+    prepared = prepare_pl_cutout(
+        bbox,
+        target_crs,
+        output_dir=output_path.parent,
+        resolution=resolution,
+        vertical_crs=vertical_crs,
+    )
+    cutout = replace(prepared, target_path=output_path)
+    sheets = tuple(Path(p) for p in sheet_paths)
+    off_grid = build_pl_cutout(
+        list(sheets),
+        cutout.bbox_source_2180,
+        cutout.bbox_target,
+        cutout.pixel_size,
+        cutout.pinned,
+        cutout.target_path,
+    )
+    from kartograf.transport.mosaic import has_valid_pixels
+
+    all_nodata = not has_valid_pixels(output_path, PL_NODATA)
+    if all_nodata:
+        logger.warning(f"Wycinek {output_path} jest w calosci nodata")
+    write_pl_cutout_sidecar(
+        cutout, sheet_paths=sheets, off_grid_sheets=off_grid, all_nodata=all_nodata
+    )
+    return PlCutoutResult(
+        path=output_path,
+        sheet_paths=sheets,
+        off_grid_sheets=off_grid,
+        all_nodata=all_nodata,
+        partial_sheets=_partial_sheets([_sheet_source(p) for p in sheets]),
     )
