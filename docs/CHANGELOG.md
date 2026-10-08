@@ -57,6 +57,24 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   i `HSGCalculator.calculate_hsg_by_bbox`/`_by_godlo` tworza katalog tuz
   przed zapisem rastra wyniku, wiec brakujacy plik `--geometry` albo blad
   pobrania SoilGrids nie zostawia pustego katalogu (np. `./data/hsg`).
+- **mypy bez bledow:** `mypy kartograf/ tests/` przechodzi czysto (wczesniej
+  31 bledow w `kartograf/` i 1 w `tests/`); poprawki wylacznie typujace,
+  bez `# type: ignore`/`cast` — zadna nie ukrywala realnej usterki (sciezki
+  `None` byly osloniete wczesniejszymi warunkami). Widoczne drobiazgi:
+  brak `private_key` w poswiadczeniach CLMS konczy sie jawnym komunikatem
+  (proxy: `None` + log, tryb bezposredni: `DownloadError`) zamiast bledu
+  z wnetrza PyJWT. `affine` (zaleznosc rasterio bez stubow) w
+  `ignore_missing_imports`.
+- **Bez `from __future__ import annotations`:** usuniety z pieciu plikow
+  (Python 3.12 go nie wymaga); odwolania wprzod w `core/sheet_parser.py`
+  w cudzyslowie, `transform/bbox.py` importuje `BBox` wprost z `core/bbox.py`.
+- **Brama jakosci zaostrzona:** `ruff check .` i `ruff format --check .`
+  na calym repo (takze skrypty `docs/research/`; B023 w
+  `e2e_warp_diagnostics.py` nie byl realnym bledem — funkcja wolana w tej
+  samej iteracji — teraz dostaje tablice parametrem), `mypy kartograf/
+  tests/` bez bledow — bez
+  porownywania z lista bledow. `.claude/` w `.gitignore` i wykluczony
+  z ruff/mypy.
 
 ### Dokumentacja
 - **`--scale`:** nowy podrozdzial `docs/USAGE.md` 1.6 "Kiedy `--scale` jest
