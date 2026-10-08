@@ -50,6 +50,7 @@ kartograf download N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12
 kartograf download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86
 
 # PL-2000: godło albo bbox w CRS strefy
+kartograf parse 6.179.12.20
 kartograf download 6.179.12.20
 kartograf download --bbox 6500000,5895000,6508000,5900000 --bbox-crs EPSG:2177 --system 2000
 
@@ -59,18 +60,24 @@ kartograf download N-34-130-D-d-2-4 --campaigns all
 kartograf download N-34-130-D-d-2-4 --min-year 2024
 kartograf download --bbox 530000,382000,533000,386000 --campaigns all --min-year 2022
 kartograf download N-34-130-D-d-2-4 --product laz --campaigns all
+kartograf download --bbox 530000,382000,533000,386000 --product laz --campaigns all
 ```
+
+Pełna lista komend i opcji: `kartograf --help`, `kartograf <komenda> --help`.
 
 LAZ: domyślnie pobierany jest najnowszy kafel dla każdego fragmentu obszaru;
 starsze kafle pokryte przez nowsze są pomijane z komunikatem `Info:`
-([ADR-029](DECISIONS.md), szczegóły: SCOPE 2.5 i CLAUDE.md "LAZ wybór
-kafli"). `--min-density` i `extra.gestosc` to gęstość **nominalna** z WFS
+([ADR-029](DECISIONS.md), szczegóły: SCOPE 2.5 i ARCHITECTURE 4.7 "Wybór
+kafli"); `--year` wybiera jeden rocznik (rocznik nieobecny w usłudze = błąd
+z listą dostępnych). WFS GUGiK w EPSG:2180 używa kolejności osi (N,E).
+`--min-density` i `extra.gestosc` to gęstość **nominalna** z WFS
 GUGiK — faktyczna bywa wyższa.
 
 ### 1.2 Selekcja obszaru i wybór kraju (`--country`)
 
 ```bash
 kartograf download --bbox 771000,509000,772000,510000 --product orto
+kartograf download --geometry area.shp
 kartograf download --geometry zlewnia.gpkg --layer catchments
 kartograf download --bbox 530000,382000,533000,386000 --country pl
 ```
@@ -130,15 +137,22 @@ kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --targe
 ### 1.4 Czechy (CUZK)
 
 ```bash
-kartograf download 302_5550 --country cz                       # DMR 5G (2 m), godło TM33
+# DMR 5G (2 m), godło TM33 (ten kafel leży w większości w Niemczech — głównie nodata)
+kartograf download 302_5550 --country cz
 kartograf download CTES96 --resolution 5m                      # DMR 4G (5 m), godło SM5, kraj z godła
-kartograf download 302_5550 --country cz --vertical-crs EVRF2007   # Bpv -> EVRF2007
+kartograf download 302_5550 --country cz --vertical-crs EVRF2007   # Bpv -> EVRF2007 (EPSG:5621)
+# reprojekcja CZ (tylko --bbox/--geometry, nie godło), lokalnie przypiętą operacją
 kartograf download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --target-crs EPSG:2180
 # pogranicze pod auto: osobne pliki PL i CZ, wspólny extra.parent_request
+# (bez --vertical-crs: PL w EVRF2007, CZ w Bpv)
 kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto
-# bboxy w EPSG:5514 są na terytorium CZ ujemne — podaj je jako --bbox=... (bez spacji)
+# bboxy w EPSG:5514 są na terytorium CZ ujemne — podaj je jako --bbox=... (bez spacji),
+# inaczej argparse odczyta wartość jako nieznaną flagę
 kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:5514 --country cz --resolution 5m
 ```
+
+`kartograf parse` obsługuje tylko godła PL (PL-1992/PL-2000); godła CZ
+(TM33, SM5) przyjmuje `kartograf download`.
 
 - CZ `--bbox` zawsze daje jeden plik (wycinek), PL bez `--target-crs`
   listę arkuszy.
@@ -276,7 +290,8 @@ rozwijane do arkuszy 1:10000 przez `download_hierarchy()` (ta zawsze zwraca
 - `LazDownloadResult` (`download_laz_area`): `downloaded`, `skipped`,
   `failed`, `superseded` (kafle pominięte jako pokryte przez nowsze).
 
-**Sidecar.** Każde udane pobranie zapisuje dwa pliki: dane (`.asc`, `.tif`,
+**Sidecar.** Każde udane pobranie przez CLI albo warstwę zarządzającą
+biblioteki (niżej) zapisuje dwa pliki: dane (`.asc`, `.tif`,
 `.laz`, `.gpkg`, ...) i `<plik>.meta.json` (schemat `kartograf-meta/1`): układ
 poziomy i pionowy pliku, nodata, żądanie, licencja, użyte transformacje,
 pochodzenie (`extra.source`), a dla zadań obszarowych `extra.parent_request`
@@ -284,6 +299,8 @@ pochodzenie (`extra.source`), a dla zadań obszarowych `extra.parent_request`
 `parent_request`: ARCHITECTURE 3.4. Sidecary pisze warstwa zarządzająca
 (`DownloadManager`, `LandCoverManager`, wycinek PL i kafle LAZ w bibliotece;
 CLI dla CZ), a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
+Bezpośrednie wywołanie providera (np. `CuzkDmrProvider` z biblioteki) zapisuje
+sam plik danych, bez sidecara.
 
 **Gdzie leżą pliki.** `data/<produkt>/<kraj>_<układ>[_<wariant>][_<vcrs>]/...`
 — kanoniczna tabela, przykłady i migracja z 0.6.x: ARCHITECTURE 3.3.

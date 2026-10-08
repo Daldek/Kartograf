@@ -406,9 +406,21 @@ from kartograf import (
   60 s dla Ortofoto, pobierania kafli LAZ, CORINE (bbox/godło), CUZK oraz
   SoilGrids przez godło, 120 s dla BDOT10k (wszystkie tryby) oraz SoilGrids
   przez bbox i HSG (CORINE/SoilGrids przez TERYT: NotImplementedError);
-  GetCapabilities skorowidza GUGiK dziedziczy timeout providera
+  GetCapabilities skorowidza GUGiK dziedziczy timeout providera (30 s
+  NMT/NMPT, 60 s orto). Źródło prawdy — stałe w kodzie:
+  GugikProvider.DEFAULT_TIMEOUT (NMT; NMPT dziedziczy),
+  GugikOrtoProvider.DEFAULT_TIMEOUT, GugikLazProvider.DEFAULT_TIMEOUT (kafle)
+  i .WFS_TIMEOUT (discovery), CorineProvider.DEFAULT_TIMEOUT,
+  SoilGridsProvider.DEFAULT_TIMEOUT (bbox; godło: domyślne 60 s
+  z LandCoverProvider.download_by_godlo), Bdot10kProvider.DEFAULT_TIMEOUT
+  (zapytanie TERYT _get_teryt_for_point: 30 s), _DEFAULT_TIMEOUT
+  w providers/cuzk/dmr.py, HSGCalculator: parametr timeout=120
+  (grep -rn "_TIMEOUT =" kartograf/providers)
 - Max 3 próby retry (nie konfigurowalne); ponawiane tylko błędy sieci,
-  HTTP 429 i 5xx — inne 4xx (np. 404) kończą od razu
+  HTTP 429 i 5xx — inne 4xx (np. 404) kończą od razu z DownloadError.status_code;
+  przerwa 2 s, potem 4 s, Retry-After wydłuża ją maks. do 60 s; jedno
+  miejsce dla wszystkich providerów: transport/http.py (download_to,
+  get_with_retry; stałe i szczegóły: DEVELOPMENT_STANDARDS 13.4)
 - Synchroniczne pobieranie w obrębie jednego pliku (równoległość tylko
   między plikami, przez ThreadPoolExecutor/--workers; domyślnie 4 workery
   w CLI, 1 w bibliotece — DownloadManager(max_workers=1))
