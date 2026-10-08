@@ -20,7 +20,7 @@ from rasterio.transform import from_origin
 from kartograf.core.sheet_parser import BBox
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.corine import CorineProvider
-from kartograf.providers.pl.bdot10k import Bdot10kProvider
+from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 
 BBOX = BBox(770000, 509000, 772000, 511000, "EPSG:2180")
@@ -225,12 +225,12 @@ class TestBdot10kOutputParams:
         provider = Bdot10kProvider()
         manager = LandCoverManager(output_dir=tmp_path, provider=provider)
 
-        def _fake(teryt, out, timeout=None, format="GPKG", **kwargs):
+        def _fake(teryt, out, *, format="GPKG", **kwargs):
             target = out.with_suffix(".zip") if format == "SHP" else out
             target.write_bytes(b"x")
-            return target
+            return Bdot10kPackage(path=target, teryt=teryt, url="u", format=format)
 
-        with patch.object(provider, "download_by_admin_unit", side_effect=_fake):
+        with patch.object(provider, "download_package", side_effect=_fake):
             gpkg = manager.download(teryt="1465")
             shp = manager.download(teryt="1465", format="SHP")
         assert gpkg.name == "bdot10k_teryt_1465.gpkg"

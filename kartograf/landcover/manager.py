@@ -17,7 +17,7 @@ from kartograf.download.storage import FileStorage
 from kartograf.exceptions import NoCoverageError, ValidationError
 from kartograf.providers.base import LandCoverProvider
 from kartograf.providers.corine import CorineProvider
-from kartograf.providers.pl.bdot10k import Bdot10kProvider
+from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ PROVIDERS = {
 _RASTER_PROVIDERS = (CorineProvider, SoilGridsProvider)
 
 # Provider options of a BDOT10k powiat package (``Bdot10kProvider.download_package``).
-_BDOT_OPTIONS = ("format", "layers", "timeout")
+_BDOT_OPTIONS = ("format", "layers", "timeout", "keep_raw")
 
 
 def _read_geotiff_nodata(path: Path) -> float | None:
@@ -262,13 +262,16 @@ class LandCoverManager:
             `download()` (see `_generate_output_path`).
         **kwargs
             Provider-specific options (BDOT10k: ``format``, ``layers``,
-            ``timeout``)
+            ``timeout``, ``keep_raw`` - see ``Bdot10kProvider.download_package``;
+            the sidecar gets ``extra.source`` and ``extra.http``)
 
         Returns
         -------
         Path
             Path to downloaded file
         """
+        if isinstance(self._provider, Bdot10kProvider):
+            return self._download_county(teryt, kwargs, None, output_path)
         if output_path is None:
             output_path = self._generate_output_path(teryt, None, None, kwargs)
         path = self._provider.download_by_teryt(teryt, output_path, **kwargs)
@@ -289,6 +292,9 @@ class LandCoverManager:
         ``bdot10k[_<layers>]_teryt_<T>.<ext>`` with ``extra.parent_request``
         (the bbox) in the sidecar - the same file as `download_all_counties`
         would give. Several powiats: ``ValidationError`` listing the codes.
+        With ``output_path`` the same powiat package goes there and the
+        sidecar ``request`` is the bbox. Either way the BDOT10k sidecar has
+        ``extra.source``/``extra.http`` (`_write_bdot_sidecars`).
 
         Parameters
         ----------
@@ -305,21 +311,20 @@ class LandCoverManager:
         Path
             Path to downloaded file
         """
-        if isinstance(self._provider, Bdot10kProvider) and output_path is None:
+        request = {
+            "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+            "bbox_crs": bbox.crs,
+        }
+        if isinstance(self._provider, Bdot10kProvider):
             parent, area = self._bdot_area(bbox, None)
             teryt = self._provider._single_teryt(area, "BDOT10k bbox")
-            return self._download_county(teryt, kwargs, parent)
+            if output_path is None:
+                return self._download_county(teryt, kwargs, parent)
+            return self._download_county(teryt, kwargs, None, output_path, request)
         if output_path is None:
             output_path = self._generate_output_path(None, bbox, None, kwargs)
         path = self._provider.download_by_bbox(bbox, output_path, **kwargs)
-        self._write_sidecar(
-            path,
-            {
-                "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
-                "bbox_crs": bbox.crs,
-            },
-            kwargs,
-        )
+        self._write_sidecar(path, request, kwargs)
         return path
 
     def download_by_godlo(
@@ -333,7 +338,8 @@ class LandCoverManager:
 
         BDOT10k without ``output_path``: as in `download_by_bbox` - the ONE
         powiat intersecting the sheet frame, file ``..._teryt_<T>``, sidecar
-        ``extra.parent_request = {"sheet": godlo, "countries": ["PL"]}``.
+        ``extra.parent_request = {"sheet": godlo, "countries": ["PL"]}``;
+        with ``output_path``: that path and ``request = {"sheet": godlo}``.
 
         Parameters
         ----------
@@ -352,10 +358,14 @@ class LandCoverManager:
         """
         # One canonical sheet code in the name and the sidecar (A7)
         godlo = SheetParser(godlo).godlo
-        if isinstance(self._provider, Bdot10kProvider) and output_path is None:
+        if isinstance(self._provider, Bdot10kProvider):
             parent, area = self._bdot_area(None, godlo)
             teryt = self._provider._single_teryt(area, f"BDOT10k {parent['sheet']}")
-            return self._download_county(teryt, kwargs, parent)
+            if output_path is None:
+                return self._download_county(teryt, kwargs, parent)
+            return self._download_county(
+                teryt, kwargs, None, output_path, {"sheet": godlo}
+            )
         if output_path is None:
             output_path = self._generate_output_path(None, None, godlo, kwargs)
         path = self._provider.download_by_godlo(godlo, output_path, **kwargs)
@@ -370,7 +380,7 @@ class LandCoverManager:
         Exactly one of ``bbox``/``godlo``. Files ``bdot10k[_<layers>]_teryt_<T>``
         in TERYT order; each sidecar has ``request.teryt`` and
         ``extra.parent_request`` (the area). Provider options (``format``,
-        ``layers``, ``timeout``) as in ``download_by_teryt``.
+        ``layers``, ``timeout``, ``keep_raw``) as in ``download_by_teryt``.
 
         Raises
         ------
@@ -406,18 +416,54 @@ class LandCoverManager:
         }
         return parent, bbox
 
-    def _download_county(self, teryt: str, kwargs: dict, parent: dict) -> Path:
-        """One powiat package at the standard path, with its sidecar (A2)."""
+    def _download_county(
+        self,
+        teryt: str,
+        kwargs: dict,
+        parent: dict | None,
+        output_path: Path | None = None,
+        request: dict | None = None,
+    ) -> Path:
+        """One powiat package with its sidecars (A2, A4); ``parent`` = the area.
+
+        The single BDOT10k download path of the manager (TERYT, bbox, godlo,
+        all counties); default target = the standard ``..._teryt_<T>`` path
+        and default sidecar ``request`` = ``{"teryt": teryt}`` (an explicit
+        ``output_path`` from bbox/godlo keeps that selection as ``request``).
+        """
         provider = self._provider
         assert isinstance(provider, Bdot10kProvider)
-        target = self._generate_output_path(teryt, None, None, kwargs)
+        target = output_path or self._generate_output_path(teryt, None, None, kwargs)
         package = provider.download_package(
             teryt, target, **{k: v for k, v in kwargs.items() if k in _BDOT_OPTIONS}
         )
-        self._write_sidecar(
-            package.path, {"teryt": teryt}, kwargs, extra={"parent_request": parent}
-        )
+        extra = {"parent_request": parent} if parent else None
+        self._write_bdot_sidecars(package, request or {"teryt": teryt}, kwargs, extra)
         return package.path
+
+    def _write_bdot_sidecars(
+        self,
+        package: Bdot10kPackage,
+        request: dict,
+        kwargs: dict,
+        extra: dict | None = None,
+    ) -> None:
+        """Sidecars of a BDOT10k package: the result file and the raw ZIP (A4).
+
+        Both get ``extra.source`` (``url``, ``teryt``, ``format``) and
+        ``extra.http`` (response headers) over ``extra``; the result's source
+        also names the raw ZIP (``raw_file``) when it was kept.
+        """
+        source = {"url": package.url, "teryt": package.teryt, "format": package.format}
+        base = {**(extra or {}), "http": package.http}
+        if package.raw_path is not None:
+            self._write_sidecar(
+                package.raw_path, request, kwargs, extra={**base, "source": source}
+            )
+            source = {**source, "raw_file": package.raw_path.name}
+        self._write_sidecar(
+            package.path, request, kwargs, extra={**base, "source": source}
+        )
 
     def download_batch(
         self,
