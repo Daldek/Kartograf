@@ -25,6 +25,15 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Kafel TM33 oraz `--bbox`/`--geometry` CZ bez zmian (domyslnie 2m).
   Biblioteka bez zmian: `CuzkDmrProvider`/`create_dmr_provider` sa zwiazane
   z rozdzielczoscia (zrodlo DMR 5G/4G) i dla SM5 wymagaja `resolution="5m"`.
+  Komunikat `Downloading ...` w torze CZ (godlo SM5/TM33, `--bbox`/`--geometry`,
+  takze pod `--country auto`) drukowany jest dopiero, gdy rusza transfer danych
+  (jak w torze PL, O-3): nieznany arkusz SM5 (brak w indeksie
+  KladyMapovychListu), awaria zapytania indeksu albo niepoprawny kafel TM33
+  (np. `301_5550`, nieparzyste kilometry) daja samo `Error:`, bez
+  `Downloading`. Biblioteka: `CuzkDmrProvider.download` i `download_bbox`
+  przyjmuja opcjonalny, keyword-only `on_download: Callable[[], None] | None`
+  wolany raz, po walidacjach, tuz przed pobraniem pliku SM5 / pierwszym
+  zapytaniem `exportImage` (dotychczasowe wywolania bez zmian).
 
 ### Dokumentacja
 - **`--scale`:** nowy podrozdzial `docs/USAGE.md` 1.6 "Kiedy `--scale` jest

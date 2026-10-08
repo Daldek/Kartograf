@@ -2058,10 +2058,14 @@ def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> i
         _print_legacy_krovak_info(target)
         return 0
 
-    if not quiet:
-        print(f"Downloading {godlo} (CZ, resolution: {provider.resolution})...")
+    def announce() -> None:
+        # O-3 as in the PL flow: only when the transfer really starts (after
+        # the provider's validations: SM5 sheet index, TM33 grid parse)
+        if not quiet:
+            print(f"Downloading {godlo} (CZ, resolution: {provider.resolution})...")
+
     try:
-        provider.download(godlo, target)
+        provider.download(godlo, target, on_download=announce)
     except (DownloadError, ValidationError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
@@ -2137,12 +2141,15 @@ def _cz_download_bbox(
         _print_legacy_krovak_info(target)
         return 0
 
-    if not quiet:
-        print(f"Downloading CZ bbox ({provider.resolution}, {image_sr})...")
+    def announce() -> None:
+        # O-3: printed by the provider right before the first exportImage
+        if not quiet:
+            print(f"Downloading CZ bbox ({provider.resolution}, {image_sr})...")
+
     # provider tworzy katalogi dopiero przy fetchu — sidecar wymaga ich zawsze
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
-        provider.download_bbox(bbox, target)
+        provider.download_bbox(bbox, target, on_download=announce)
     except (DownloadError, ValidationError) as e:
         # zn. 10: porazka nie zostawia pustego drzewa <segment>/bbox/
         prune_empty_dirs(target.parent, Path(args.output))
