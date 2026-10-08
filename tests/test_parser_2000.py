@@ -1368,7 +1368,7 @@ class TestFindSheets2000ForBBox:
 
     def test_wgs84_bbox_auto_detect_zone_6(self):
         """WGS84 bbox in zone 6 (lon 16.5-19.5)."""
-        # Point near Warsaw (lon ~18, lat ~52)
+        # Point near Poznan (lon ~17, lat ~52.5)
         p = Parser2000("6.179.12")
         wgs_bbox = p.get_bbox("EPSG:4326")
         # Use a slightly smaller bbox to be sure of a single sheet
