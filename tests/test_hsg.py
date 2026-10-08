@@ -821,7 +821,7 @@ class TestHSGOutputDirOnWrite:
 class TestHsgFromRasters:
     """A8: HSG from ready clay/sand/silt rasters, no configuration defaults."""
 
-    def _raster(self, path, value, nodata=None):
+    def _raster(self, path, value, nodata=None, width=20):
         import rasterio
         from rasterio.transform import from_origin
 
@@ -831,13 +831,13 @@ class TestHsgFromRasters:
             driver="GTiff",
             dtype="int16",
             count=1,
-            width=20,
+            width=width,
             height=20,
             crs="EPSG:2180",
             transform=from_origin(500000, 600000, 250, 250),
             nodata=nodata,
         ) as dst:
-            dst.write(np.full((20, 20), value, dtype="int16"), 1)
+            dst.write(np.full((20, width), value, dtype="int16"), 1)
         return path
 
     def test_classifies_on_requested_grid(self, tmp_path):
@@ -943,6 +943,29 @@ class TestHsgFromRasters:
             data = src.read(1)
         assert np.all(data[:10] == 0)
         assert np.all(data[10:] == 4)
+
+    def test_one_input_narrower_than_others_leaves_gap(self, tmp_path):
+        """A cell outside ONE input is a gap, not soil with that part set to 0."""
+        import rasterio
+
+        from kartograf import BBox, hsg_from_rasters
+
+        clay = self._raster(tmp_path / "clay.tif", 450, width=10)  # x < 502500
+        sand = self._raster(tmp_path / "sand.tif", 200)
+        silt = self._raster(tmp_path / "silt.tif", 350)
+        out = hsg_from_rasters(
+            clay,
+            sand,
+            silt,
+            bbox=BBox(501000, 596000, 504000, 598000, "EPSG:2180"),
+            crs="EPSG:2180",
+            pixel_m=250.0,
+            output_path=tmp_path / "h.tif",
+        )
+        with rasterio.open(out) as src:
+            data = src.read(1)
+        assert np.all(data[:, :6] == 4)  # x 501000-502500 covered by all three
+        assert np.all(data[:, 6:] == 0)  # beyond the clay footprint
 
     def test_tagged_nodata_masks_cells(self, tmp_path):
         import rasterio
