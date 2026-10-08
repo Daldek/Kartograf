@@ -19,6 +19,13 @@ row - see the comment in MetadataCache.get_record()).
 The database is opened lazily: constructing a MetadataCache, reading from
 or querying stats of a missing database, clear() and close() never create
 the file - only the first write (``set_*``) does.
+
+The cache is only an accelerator, so its failure never blocks a download:
+any ``sqlite3.Error`` while opening, reading or writing (a corrupted or
+truncated file, no read permission, a lock held too long by another
+process) switches the instance into a disabled state for the rest of its
+life - reads are misses, writes are no-ops - and reports it exactly once
+(``logger.warning`` or the ``on_disabled`` callback).
 """
 
 import json
@@ -27,6 +34,8 @@ import os
 import sqlite3
 import threading
 import time
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager, suppress
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -39,6 +48,16 @@ SHEET_TTL_SECONDS = 30 * 24 * 3600
 
 # Default database filename
 DEFAULT_DB_NAME = ".kartograf_cache.db"
+
+
+def is_lock_error(error: BaseException) -> bool:
+    """True when ``error`` is SQLite's "database is locked" (busy) error.
+
+    A lock is not damage: the file is fine, another process holds it longer
+    than the connection timeout. The cache is disabled the same way, but the
+    message does not suggest deleting the file.
+    """
+    return isinstance(error, sqlite3.OperationalError) and "locked" in str(error)
 
 
 class MetadataCache:
@@ -67,6 +86,10 @@ class MetadataCache:
         work normally - a freshly fetched record (or a confirmed lack of
         coverage) replaces the old entry, so the next run WITHOUT ``--force``
         gets the new record. Default ``False``.
+    on_disabled : callable, optional
+        Called once with a user-facing message when the cache gets disabled
+        by an SQLite error (see the module docstring). Default ``None`` =
+        the message goes to ``logger.warning`` instead.
 
     Examples
     --------
@@ -82,8 +105,13 @@ class MetadataCache:
         db_path: str | Path | None = None,
         ttl_seconds: int = DEFAULT_TTL_SECONDS,
         refresh: bool = False,
+        on_disabled: Callable[[str], None] | None = None,
     ):
         self._refresh = refresh
+        self._on_disabled = on_disabled
+        # First SQLite error; once set, the cache is disabled (guarded by
+        # _write_lock, so concurrent threads report it only once).
+        self._error: sqlite3.Error | None = None
         if db_path is None:
             db_path = Path(os.getcwd()) / DEFAULT_DB_NAME
         self._db_path = Path(db_path)
@@ -99,6 +127,47 @@ class MetadataCache:
         """Path to the SQLite database file (it may not exist yet)."""
         return self._db_path
 
+    @property
+    def error(self) -> sqlite3.Error | None:
+        """SQLite error that disabled the cache, or None while it works."""
+        return self._error
+
+    @contextmanager
+    def _db_errors(self) -> Iterator[None]:
+        """Turn an ``sqlite3.Error`` into the disabled state (no exception).
+
+        Used inside ``_write_lock``; the caller falls through to its "miss"
+        return value after a suppressed error.
+        """
+        try:
+            yield
+        except sqlite3.Error as e:
+            self._disable(e)
+
+    def _disable(self, error: sqlite3.Error) -> None:
+        """Disable the cache and report it once (caller holds ``_write_lock``)."""
+        if self._error is not None:
+            return
+        self._error = error
+        if self._conn is not None:
+            with suppress(sqlite3.Error):
+                self._conn.close()
+            self._conn = None
+        if is_lock_error(error):
+            message = (
+                f"cache metadanych zablokowany przez inny proces "
+                f"({self._db_path}): {error} — praca bez cache do konca zadania"
+            )
+        else:
+            message = (
+                f"cache metadanych nieczytelny ({self._db_path}): {error} — "
+                f"praca bez cache; uzyj `kartograf cache clear` albo usun plik"
+            )
+        if self._on_disabled is not None:
+            self._on_disabled(message)
+        else:
+            logger.warning(message)
+
     def _existing_connection(self) -> sqlite3.Connection | None:
         """Return the connection only if the database file already exists.
 
@@ -108,17 +177,24 @@ class MetadataCache:
         repeated on every call, so a file created later by another instance
         or process is picked up. Caller must hold ``_write_lock``.
         """
+        if self._error is not None:
+            return None
         if self._conn is None and not self._db_path.exists():
             return None
         return self._connection()
 
-    def _connection(self) -> sqlite3.Connection:
+    def _connection(self) -> sqlite3.Connection | None:
         """Return the shared connection, opening (and creating) it on first use.
+
+        None when the cache is disabled; an open failure raises
+        ``sqlite3.Error`` (turned into the disabled state by ``_db_errors``).
 
         Caller must hold ``_write_lock`` - this makes the check-and-open
         atomic, so two threads never open two connections. Opening sets WAL
         mode and creates missing tables (also migrating an older database).
         """
+        if self._error is not None:
+            return None
         if self._conn is not None:
             return self._conn
         conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
@@ -214,7 +290,7 @@ class MetadataCache:
         # threads sharing one connection. So execute+fetchone (and the
         # opportunistic DELETE below) must happen as a single critical
         # section, not just the writes.
-        with self._write_lock:
+        with self._write_lock, self._db_errors():
             conn = self._existing_connection()
             if conn is None:
                 return None
@@ -246,6 +322,7 @@ class MetadataCache:
 
             logger.debug(f"Record cache hit for {godlo} ({product})")
             return json.loads(payload)
+        return None  # disabled by an SQLite error (_db_errors)
 
     def set_record(
         self,
@@ -256,8 +333,10 @@ class MetadataCache:
         payload: dict,
     ) -> None:
         """Store the chosen record or confirmed no coverage after successful queries."""
-        with self._write_lock:
+        with self._write_lock, self._db_errors():
             conn = self._connection()
+            if conn is None:
+                return
             conn.execute(
                 """
                 INSERT OR REPLACE INTO record_cache
@@ -295,7 +374,7 @@ class MetadataCache:
         if self._refresh:
             return None
         # The lock covers the read too - see the comment in get_record().
-        with self._write_lock:
+        with self._write_lock, self._db_errors():
             conn = self._existing_connection()
             if conn is None:
                 return None
@@ -324,6 +403,7 @@ class MetadataCache:
 
             logger.debug(f"Campaigns cache hit for {godlo} ({product})")
             return json.loads(payload)
+        return None  # disabled by an SQLite error (_db_errors)
 
     def set_campaigns(
         self,
@@ -334,8 +414,10 @@ class MetadataCache:
         payload: dict,
     ) -> None:
         """Store the sheet's campaigns (newest first) or a confirmed no coverage."""
-        with self._write_lock:
+        with self._write_lock, self._db_errors():
             conn = self._connection()
+            if conn is None:
+                return
             conn.execute(
                 """
                 INSERT OR REPLACE INTO campaigns_cache
@@ -378,7 +460,7 @@ class MetadataCache:
         if self._refresh:
             return None
         # Lock guards the read too - see comment in get_record().
-        with self._write_lock:
+        with self._write_lock, self._db_errors():
             conn = self._existing_connection()
             if conn is None:
                 return None
@@ -404,6 +486,7 @@ class MetadataCache:
 
             logger.debug(f"TERYT cache hit for ({x}, {y}): {teryt}")
             return teryt
+        return None  # disabled by an SQLite error (_db_errors)
 
     def set_teryt(self, x: float, y: float, teryt: str) -> None:
         """
@@ -418,8 +501,10 @@ class MetadataCache:
         teryt : str
             TERYT code to cache
         """
-        with self._write_lock:
+        with self._write_lock, self._db_errors():
             conn = self._connection()
+            if conn is None:
+                return
             conn.execute(
                 """
                 INSERT OR REPLACE INTO teryt_cache (x, y, teryt, cached_at)
@@ -442,7 +527,7 @@ class MetadataCache:
         """
         if self._refresh:
             return None
-        with self._write_lock:
+        with self._write_lock, self._db_errors():
             conn = self._existing_connection()
             if conn is None:
                 return None
@@ -465,11 +550,14 @@ class MetadataCache:
                 return None
             logger.debug(f"Sheet cache hit for {system}/{godlo}")
             return json.loads(payload)
+        return None  # disabled by an SQLite error (_db_errors)
 
     def set_sheet(self, system: str, godlo: str, payload: dict) -> None:
         """Store the sheet payload (JSON) under the key (system, godlo)."""
-        with self._write_lock:
+        with self._write_lock, self._db_errors():
             conn = self._connection()
+            if conn is None:
+                return
             conn.execute(
                 """
                 INSERT OR REPLACE INTO sheet_cache
@@ -486,7 +574,7 @@ class MetadataCache:
 
     def clear(self) -> None:
         """Delete all cached entries from all tables."""
-        with self._write_lock:
+        with self._write_lock, self._db_errors():
             conn = self._existing_connection()
             if conn is None:
                 return
@@ -495,16 +583,16 @@ class MetadataCache:
             conn.execute("DELETE FROM teryt_cache")
             conn.execute("DELETE FROM sheet_cache")
             conn.commit()
-        logger.info("Cache cleared")
+            logger.info("Cache cleared")
 
     def vacuum(self) -> None:
         """Reclaim unused space in the database file."""
-        with self._write_lock:
+        with self._write_lock, self._db_errors():
             conn = self._existing_connection()
             if conn is None:
                 return
             conn.execute("VACUUM")
-        logger.debug("Cache vacuumed")
+            logger.debug("Cache vacuumed")
 
     def stats(self) -> dict:
         """
@@ -522,9 +610,12 @@ class MetadataCache:
             - db_path: path to the database file
             - db_exists: whether the database file exists (it is created
               by the first write; until then all counts are 0)
+            - error: ``str`` of the SQLite error that disabled the cache
+              (counts are then 0), ``None`` while it works
         """
+        counts: tuple[int, ...] = (0, 0, 0, 0)
         # Lock guards these reads too - see comment in get_record().
-        with self._write_lock:
+        with self._write_lock, self._db_errors():
             conn = self._existing_connection()
             if conn is None:
                 # Nothing cached yet - report zeros without creating the file.
@@ -552,6 +643,7 @@ class MetadataCache:
             "db_size_bytes": db_size,
             "db_path": str(self._db_path),
             "db_exists": db_exists,
+            "error": None if self._error is None else str(self._error),
         }
 
     def prune_expired(self) -> int:
@@ -565,7 +657,7 @@ class MetadataCache:
         """
         now = time.time()
         cutoff = now - self._ttl_seconds
-        with self._write_lock:
+        with self._write_lock, self._db_errors():
             conn = self._existing_connection()
             if conn is None:
                 return 0
@@ -579,22 +671,27 @@ class MetadataCache:
             conn.execute("DELETE FROM sheet_cache WHERE cached_at < ?", (sheet_cutoff,))
             sheet_deleted = conn.execute("SELECT changes()").fetchone()[0]
             conn.commit()
-        total = record_deleted + campaign_deleted + teryt_deleted + sheet_deleted
-        if total > 0:
-            logger.debug(
-                f"Pruned {total} expired entries ({record_deleted} Record, "
-                f"{campaign_deleted} Campaigns, {teryt_deleted} TERYT, "
-                f"{sheet_deleted} Sheet)"
-            )
-        return total
+            total = record_deleted + campaign_deleted + teryt_deleted + sheet_deleted
+            if total > 0:
+                logger.debug(
+                    f"Pruned {total} expired entries ({record_deleted} Record, "
+                    f"{campaign_deleted} Campaigns, {teryt_deleted} TERYT, "
+                    f"{sheet_deleted} Sheet)"
+                )
+            return total
+        return 0  # disabled by an SQLite error (_db_errors)
 
     def close(self) -> None:
         """Close the database connection, pruning expired entries first."""
         if self._conn:
             self.prune_expired()
-            self._conn.close()
-            self._conn = None
-            logger.debug("MetadataCache closed")
+        # prune_expired() may have disabled the cache (connection closed).
+        with self._write_lock:
+            if self._conn is not None:
+                with suppress(sqlite3.Error):
+                    self._conn.close()
+                self._conn = None
+                logger.debug("MetadataCache closed")
 
     def __del__(self):
         """Ensure database connection is closed on garbage collection."""
