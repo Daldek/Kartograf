@@ -1267,6 +1267,9 @@ uzytkownika: U3 i U4 poprawione przed 0.7.0, reszta do 0.7.1).
 - [ ] **U5 — `cache stats` `TERYT entries` zawsze 0 z CLI:** tor land cover
   (`landcover_cmd.py`, `LandCoverManager`) tworzy `Bdot10kProvider()` bez
   `cache=`, wiec `teryt_cache` nie jest uzywany.
+- [ ] **SoilGrids `nodata` w sidecarze:** GeoTIFF z WCS ISRIC nie ma tagu
+  NoData, wiec sidecar zapisuje `nodata: null`; wg dokumentacji ISRIC brak
+  danych = -32768 — zdecydowac, czy wpisywac wartosc z dokumentacji.
 - [ ] **U1 — wyjscie `kartograf parse`:** dla PL-2000 naglowki po angielsku,
   skladowe po polsku, "Strefa" powtorzona, `Natywny CRS` pod `Components`;
   komunikaty raz z polskimi znakami, raz bez (takze `soilgrids hsg`
