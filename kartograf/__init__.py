@@ -83,7 +83,7 @@ from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 
-__version__ = "0.7.0"
+__version__ = "0.7.1-dev"
 
 __all__ = [
     # Cache
