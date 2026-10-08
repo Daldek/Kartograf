@@ -108,7 +108,7 @@
 > (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`,
 > `docs/superpowers/plans/2026-10-08-versioned-store-1-core-pl-sheets.md`);
 > implementacja WSTRZYMANA decyzja uzytkownika. Najpierw wydanie 0.7.1
-> (uwagi z Hydrografa + backlog "Do 0.7.1") z `develop`.
+> (backlogi "Do 0.7.1": wymagania Hydrografa i uwagi z testu) z `develop`.
 > Brama (stan sprawdzaj komendami, nie liczbami z dziennika):
 > `.venv/bin/python -m pytest tests/ -m "not live"` (zielone),
 > `.venv/bin/python -m ruff check .` i `ruff format --check .` (czyste,
@@ -118,6 +118,12 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Wymagania Hydrografa -> zakres 0.7.1 (2026-10-08)
+
+- Przeglad zgloszenia Hydrografa (A1-A9, B1-B4) wzgledem kodu i specu
+  magazynu wersjonowanego; podzial 0.7.1 / 0.8.0 zaakceptowany; decyzje
+  A2 i A7 w backlogu "Do 0.7.1 — wymagania Hydrografa". Bez zmian w kodzie.
 
 ### Roadmapa do v1.0.0 (2026-10-08)
 
@@ -1324,6 +1330,11 @@ wchodza w tym samym wydaniu (decyzja uzytkownika). Kazda na wlasnej galezi.
   inwentaryzacja pozostalych polskich identyfikatorow publicznego API —
   decyzja uzytkownika, czy tez wchodza do 0.8.0.
 
+- [ ] **Parametry wymagane w API (Hydrograf A8):** bez wartosci domyslnych
+  `output_dir="./data"`, `vertical_crs="EVRF2007"` (`DownloadManager`),
+  `MetadataCache` w biezacym katalogu, `depth="0-5cm"`/`stat="mean"`
+  (`calculate_hsg_by_bbox`) — BREAKING; w 0.7.x wartosci mozna podawac jawnie.
+
 #### Do v1.0.0 — roadmapa
 
 Podprojekty, kolejnosc i zasady: `docs/SCOPE.md` 3.3. Kazdy podprojekt
@@ -1335,6 +1346,77 @@ zatwierdzeniu specu i planu.
 - [ ] 3. Katalog GUGiK i gotowe dane (strumien produktow)
 - [ ] 4. Wtyczka QGIS
 - [ ] 5. GUI webowe (lokalny manager danych)
+
+#### Do 0.7.1 — wymagania Hydrografa (2026-10-08)
+
+Zgloszenie Hydrografa (pozycje A na 0.7.1, B na 0.8.0) przejrzane wzgledem
+kodu `develop` i specu magazynu wersjonowanego; podzial zaakceptowany przez
+uzytkownika. Kryterium 0.7.1: zmiany addytywne, bez lamania CLI i API.
+Z planu 0.8.0 wchodza wczesniej tylko: sha256 liczone w strumieniu
+`download_to` + `sha256` w sidecarze oraz `extra.http` (spec 3.3, 8).
+
+- [ ] **A1 — odkrywanie TERYT:** publiczne `discover_teryts_for_bbox(bbox, *,
+  session=None, cache=None) -> list[str]` (powiaty przecinajace obszar;
+  nowy endpoint WFS PRG — rozpoznanie na zywo i fixtury z surowych
+  odpowiedzi) oraz `teryt_for_point(x, y, crs) -> str | None`. Blad uslugi =
+  wyjatek; pusta lista / `None` tylko przy poprawnej odpowiedzi bez obiektow
+  (morze). Razem z U5 (cache TERYT w torze land cover).
+- [ ] **A2 — BDOT10k z wielu powiatow** (decyzje uzytkownika 2026-10-08):
+  - nowa funkcja biblioteki zwracajaca liste plikow (jeden pakiet na
+    powiat, przez A1), filtr `layers=[...]`;
+  - CLI `landcover download --bbox/--godlo/--geometry` pobiera WSZYSTKIE
+    powiaty przecinajace obszar;
+  - nazwa pliku ZAWSZE `bdot10k_teryt_XXXX.gpkg` (plik zawiera caly,
+    niezmieniony pakiet powiatu — tresc nie jest przycinana ani
+    reprojektowana, GPKG to tylko scalenie warstw z ZIP 1:1); takze dla
+    jednego powiatu — zmiana nazwy w CHANGELOG;
+  - stare `download_by_bbox`/`download_by_godlo`: jeden powiat = `Path` jak
+    dzis (nowa nazwa), kilka powiatow = `ValidationError` z lista TERYT
+    i wskazaniem nowej funkcji;
+  - scalanie wielu pakietow w jeden GPKG — 0.8.0 (produkt pochodny, D8 specu);
+  - luka: `_copy_gpkg_layer` po cichu pomija tabele o powtorzonej nazwie
+    (`logger.debug`) — zamienic na blad.
+- [ ] **A3 — pelniejszy rekord w sidecarze NMT/NMPT/orto:** do
+  `extra.source` pola `bladSredniWysokosci`, `bladSredniPolozenia`,
+  `modulArchiwizacji`, `ukladWspolrzednychPionowych` (nazwy angielskie,
+  ADR-031); `sha256` i `size_bytes` na GORNYM poziomie sidecara (zgodnie ze
+  specem 0.8.0, nie w `extra.source`). Wpisy `record_cache` bez nowych pol
+  traktowac jak brak wpisu.
+- [ ] **A4 — sidecar BDOT10k:** `extra.source` (URL pakietu, TERYT, data
+  pobrania), `extra.http` (`etag`, `last_modified`, `content_length` —
+  najpierw sprawdzic na zywo naglowki serwera paczek, spec sekcja 8);
+  parametr `keep_raw=True` (surowy ZIP GUGiK obok GPKG).
+- [ ] **A5 — stabilne API:** eksport `mosaic_and_crop`, `check_source_grid`,
+  `get_with_retry`, `make_gugik_session` w `kartograf/__init__.py`
+  (`get_with_retry` juz przyjmuje dowolny URL i `params`; tylko GET).
+- [ ] **A6 — wycinek CZ w bibliotece:** `download_cz_cutout(...)` (cel
+  EPSG:2180, `vertical_crs="EVRF2007"`), publiczny podzial obszaru na kraje
+  (dzis `_countries_for_bbox` w CLI), sidecar zapisywany przez biblioteke
+  (dzis `_write_cz_sidecar` w CLI), flaga `all_nodata` w wyniku (jak
+  `PlCutoutResult`). CLI bez zmian zachowania. Do sprawdzenia: czy warp CZ
+  do 2180 trafia w siatke wycinka PL (ADR-027).
+- [ ] **A7 — walidacja godel** (decyzje uzytkownika 2026-10-08):
+  godla spoza nomenklatury (np. `N-34-999-D` daje dzis bbox y = -2,2 mln,
+  `X-99-1-D-d-3` bbox `inf`) -> `ParseError` przed zapytaniem sieciowym;
+  `ParseError` dziedziczy po `ValidationError` (sprawdzic miejsca lapiace
+  oba wyjatki osobno); zera wiodace PL-1992 normalizowane do postaci GUGiK
+  (`M-33-036-A` -> `M-33-36-A`) w `SheetParser.godlo` — ta sama postac
+  w sciezce, sidecarze i wyniku; pliki zapisane pod postacia z zerami
+  przestaja byc widziane (CHANGELOG). PL-2000 bez zmian.
+- [ ] **A8 (czesc) — `hsg_from_rasters(clay, sand, silt, bbox, crs, pixel_m)`**
+  bez wartosci domyslnych (wydzielenie z `calculate_hsg_by_bbox`).
+  Parametry wymagane — backlog "Do 0.8.0".
+- [ ] **A9 — spojnosc API:** `download_sheet()` ustawia `last_result` takze
+  dla pojedynczego arkusza; `MetadataCache(strict=True)` — blad SQLite to
+  wyjatek zamiast `on_disabled`.
+- [ ] **B4 — weryfikacja pobranych arkuszy NMT** (przeniesione z 0.8.0):
+  naglowek ASC wzgledem bboxa godla, URL rekordu bez godla w nazwie = blad.
+- [ ] **B1-B3 — rozbieznosci ze specem magazynu** (do rozstrzygniecia przed
+  implementacja 0.8.0, nie teraz): wersja NMT = kampania + odcisk vs D1
+  (sha256 tresci); `.lock` vs brak blokad; import plikow 0.6.1 vs D10 (bez
+  migracji); dwa korzenie staging/archiwum, `copy_to`/`fsck`/
+  `estimate_missing` vs `verify` w podprojekcie 2; "brak pokrycia" jako
+  wersja i SoilGrids z natywnych kafli ISRIC — poza specem.
 
 #### Do 0.7.1 — uwagi z testu na zywo przed wydaniem 0.7.0 (2026-10-08)
 
