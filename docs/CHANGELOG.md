@@ -41,6 +41,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`path`, `teryt`, `url`, `format`; eksport z `kartograf`).
   `LandCoverManager(cache=)` przekazuje cache metadanych providerom
   tworzonym po nazwie (BDOT10k, SoilGrids).
+- Sidecar BDOT10k: `extra.source` (`url`, `teryt`, `format`) i `extra.http`
+  (`etag`, `last_modified`, `content_length` z odpowiedzi; serwer paczek
+  GUGiK podaje dzis tylko `Content-Length`). `keep_raw=True` zachowuje
+  oryginalny ZIP GUGiK obok GPKG (`<nazwa>_GPKG.zip`, z wlasnym sidecarem;
+  tylko GPKG). `Bdot10kPackage` ma pola `http` i `raw_path`.
 
 ### Zmienione
 

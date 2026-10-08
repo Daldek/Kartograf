@@ -376,7 +376,7 @@ Bezposrednie wywolanie providera sidecara nie pisze; DMR CZ z biblioteki
 | `license` | `{id, attribution, url}` z deskryptora |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, sekundy) i wersja pakietu z `kartograf/_version.py::build_version()`: wydanie = samo `__version__`; wersja rozwojowa (`dev`) = `<__version__>+<krotki SHA>` commita, z ktorego zaimportowano pakiet, z sufiksem `.dirty`, gdy sledzone pliki katalogu `kartograf/` maja niezacommitowane zmiany (docs/testy sie nie licza); gdy git jest niedostepny albo pakiet nie pochodzi z repozytorium, w ktorym lezy (`os.path.samefile`), samo `__version__`. Ta sama wartosc w `kartograf --version`; `User-Agent` HTTP niesie samo `__version__` |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
-| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `tile_sheet`/`year`/`nominal_density`/`url`; SM5 ma `mapname`/`cz_share` (udzial arkusza w terytorium CZ, pole `PODIL` CUZK); arkusze NMT/NMPT/orto PL maja `source` (klucze w tabeli nizej); wycinek PL: `parent_request`, `missing_sheets`, `sheet_sources`, `off_grid_sheets`, `all_nodata`, `unverified_sheets` — znaczenie i warunki zapisu w akapicie "Wycinek PL w sidecarze" nizej (jedyne pelne zestawienie); CORINE z podgladu WMS: `fallback: "wms_png"` i `note` (`landcover/manager.py`, sekcja 4.8); wynik HSG: `derived: "hsg"`, `source_layers`, `depth`, `stat`, `classes` (sekcja 4.8); plik kampanii (ADR-030): `campaign` = `{id, date, survey_work_id, source, full_sheet, pzgik_date}` obok `source`; sidecar sciezki standardowej: `link` (`hardlink`/`copy`) i `link_target` (sciezka celu wzgledem dowiazania; jedyne zrodlo celu) |
+| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `tile_sheet`/`year`/`nominal_density`/`url`; SM5 ma `mapname`/`cz_share` (udzial arkusza w terytorium CZ, pole `PODIL` CUZK); arkusze NMT/NMPT/orto PL maja `source` (klucze w tabeli nizej); wycinek PL: `parent_request`, `missing_sheets`, `sheet_sources`, `off_grid_sheets`, `all_nodata`, `unverified_sheets` — znaczenie i warunki zapisu w akapicie "Wycinek PL w sidecarze" nizej (jedyne pelne zestawienie); CORINE z podgladu WMS: `fallback: "wms_png"` i `note` (`landcover/manager.py`, sekcja 4.8); wynik HSG: `derived: "hsg"`, `source_layers`, `depth`, `stat`, `classes` (sekcja 4.8); pakiet BDOT10k (od 0.7.1): `source` = `{url, teryt, format[, raw_file]}` i `http` = `{etag, last_modified, content_length}` (sekcja 4.8); plik kampanii (ADR-030): `campaign` = `{id, date, survey_work_id, source, full_sheet, pzgik_date}` obok `source`; sidecar sciezki standardowej: `link` (`hardlink`/`copy`) i `link_target` (sciezka celu wzgledem dowiazania; jedyne zrodlo celu) |
 | `sha256`, `size_bytes` | od 0.7.1: skrot SHA-256 (hex) i rozmiar w bajtach pliku danych, liczone w `build_metadata` (`sources/sidecar.py::file_digest`) przez ponowny odczyt GOTOWEGO pliku — jedno miejsce dla wszystkich produktow, takze pochodnych (wycinek, scalony GPKG BDOT10k, HSG); `null`, gdy sidecar powstaje bez istniejacego pliku danych. Sidecar sciezki standardowej kampanii (kopia sidecara celu) niesie skrot celu — tresc dowiazania jest ta sama |
 | `schema` | stale `kartograf-meta/1` |
 
@@ -1292,8 +1292,9 @@ timeout=)` pyta PRG (`Bdot10kProvider.teryts_for_area` ->
 `discover_teryts_for_bbox`, obszar w dowolnym obslugiwanym ukladzie) i
 pobiera pakiet KAZDEGO powiatu przecinajacego obszar, w kolejnosci kodow,
 przez `Bdot10kProvider.download_package(code, path, *, timeout, format,
-layers) -> Bdot10kPackage(path, teryt, url, format)`; jeden plik i sidecar
-per powiat (`_download_county`); brak powiatu = `NoCoverageError`, awaria
+layers, keep_raw) -> Bdot10kPackage(path, teryt, url, format, http,
+raw_path)`; jeden plik i sidecar per powiat (`_download_county`, jedyna
+sciezka pobrania BDOT10k w menedzerze, takze dla `--teryt`); brak powiatu = `NoCoverageError`, awaria
 PRG albo pakietu = `DownloadError` (pliki pobrane wczesniej zostaja). CLI
 `landcover download --source bdot10k` z `--bbox`/`--godlo`/`--geometry`
 wola te metode i drukuje `Downloaded to:` dla kazdego pliku; `--teryt`
@@ -1318,6 +1319,26 @@ w jeden GeoPackage w LOKALNYM katalogu tymczasowym (`tempfile`); do
 `--output` trafia gotowy plik (kopia jako `.gpkg.tmp` + `os.replace`).
 Powod: SQLite na udzialach CIFS/SMB bez blokad zakresow bajtow konczyl
 scalanie bledem `database is locked` (`Bdot10kProvider._merge_gpkg_files`).
+
+**Pochodzenie pakietu BDOT10k w sidecarze (od 0.7.1, A4).** Sidecar pliku
+BDOT10k (`LandCoverManager._write_bdot_sidecars`) ma `extra.source = {url,
+teryt, format}` (URL paczki OpenData, z ktorej powstal plik) oraz
+`extra.http = {etag, last_modified, content_length}` — naglowki odpowiedzi
+GUGiK zapisane tak, jak przyszly (brak naglowka = `null`, nic nie jest
+zgadywane). Serwer paczek BDOT10k nie podaje dzis `ETag` ani
+`Last-Modified` (ani w `HEAD`, ani w `GET`), tylko `Content-Length`, i
+ignoruje `Range`; o zmianie paczki u zrodla mowi wiec glownie `sha256`
+pliku. `keep_raw=True` (biblioteka: `download_package`, `LandCoverManager.
+download*`; tylko GPKG — przy SHP `ValidationError`, bo wynik SHP to juz
+oryginalny ZIP) zapisuje obok GPKG nietkniete archiwum GUGiK jako
+`<nazwa wyniku>_GPKG.zip` (np. `bdot10k_teryt_1465_GPKG.zip`) z wlasnym
+sidecarem (`request` jak pliku wyniku, `extra.source` bez `raw_file`,
+`sha256`/`size_bytes` archiwum); sidecar GPKG dostaje wtedy
+`extra.source.raw_file` = nazwa archiwum. Archiwum jest zapisywane
+atomowo i dopiero po udanym scaleniu, wiec blad rozpakowania nie zostawia
+ZIP bez sidecara. `keep_raw` nie zmienia tresci GPKG, wiec nie trafia do
+nazwy pliku ani do `request`. `extra.parent_request` (obszar zadania)
+zostaje obok `source` i `http`.
 
 `HSGCalculator` (`hydrology/hsg.py`) liczy grupy glebowe z warstw SoilGrids
 (`clay`, `sand`, `silt`) wg kanonicznego trojkata USDA (ADR-025) i pisze

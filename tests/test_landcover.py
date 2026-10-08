@@ -26,6 +26,7 @@ from kartograf.providers.pl.bdot10k import (
     Bdot10kProvider,
 )
 from kartograf.transform.bbox import envelope_from_2180
+from kartograf.transport.http import SessionPerThread
 
 
 class TestLandCoverProviderBase:
@@ -1939,6 +1940,138 @@ class TestBdot10kLayersAndDuplicates:
         _make_layer_gpkg(g2, "OT_PTWP_A", "two")
         with pytest.raises(DownloadError, match="OT_PTWP_A"):
             Bdot10kProvider()._merge_gpkg_files([g1, g2], tmp_path / "m.gpkg")
+
+
+class TestBdot10kSidecarSource:
+    """A4: source URL, HTTP headers and the raw GUGiK ZIP of a BDOT10k package."""
+
+    def _session(self, body, headers):
+        session = _zip_session(body)
+        session.get.return_value.headers = headers
+        return session
+
+    def test_package_http_headers(self, tmp_path):
+        body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
+        provider = Bdot10kProvider(
+            session=self._session(body, {"Content-Length": str(len(body))})
+        )
+        pkg = provider.download_package("0262", tmp_path / "o" / "x.gpkg")
+        assert pkg.http == {
+            "etag": None,
+            "last_modified": None,
+            "content_length": len(body),
+        }
+        assert pkg.raw_path is None
+        assert not (tmp_path / "o" / "x_GPKG.zip").exists()
+
+    def test_keep_raw_saves_original_zip(self, tmp_path):
+        body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
+        provider = Bdot10kProvider(session=self._session(body, {"ETag": '"abc"'}))
+        pkg = provider.download_package(
+            "0262", tmp_path / "o" / "bdot10k_teryt_0262.gpkg", keep_raw=True
+        )
+        assert pkg.raw_path == tmp_path / "o" / "bdot10k_teryt_0262_GPKG.zip"
+        assert pkg.raw_path.read_bytes() == body
+        assert pkg.http["etag"] == '"abc"'
+        assert [p.name for p in (tmp_path / "o").iterdir() if ".tmp" in p.name] == []
+
+    def test_keep_raw_with_shp_rejected(self, tmp_path):
+        session = _zip_session(b"")
+        provider = Bdot10kProvider(session=session)
+        with pytest.raises(ValidationError, match="keep_raw"):
+            provider.download_package(
+                "0262", tmp_path / "x", format="SHP", keep_raw=True
+            )
+        session.get.assert_not_called()
+
+    def test_keep_raw_failed_merge_leaves_no_zip(self, tmp_path):
+        """The raw ZIP is written only after a successful merge (no orphan)."""
+        body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
+        provider = Bdot10kProvider(session=self._session(body, {}))
+        with pytest.raises(DownloadError, match="SWKN"):
+            provider.download_package(
+                "0262", tmp_path / "o" / "x.gpkg", layers=["SWKN"], keep_raw=True
+            )
+        assert not (tmp_path / "o" / "x_GPKG.zip").exists()
+
+    def test_manager_sidecar_has_source_and_http(self, tmp_path):
+        body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
+        manager = LandCoverManager(output_dir=tmp_path / "out", provider="bdot10k")
+        manager.provider._sessions = SessionPerThread(
+            self._session(body, {"Content-Length": str(len(body))})
+        )
+        path = manager.download(teryt="0262", keep_raw=True)
+        meta = json.loads(path.with_name(path.name + ".meta.json").read_text())
+        assert meta["extra"]["source"] == {
+            "url": "https://opendata.geoportal.gov.pl/bdot10k/schemat2021/GPKG/02/0262_GPKG.zip",
+            "teryt": "0262",
+            "format": "GPKG",
+            "raw_file": "bdot10k_teryt_0262_GPKG.zip",
+        }
+        assert meta["extra"]["http"]["content_length"] == len(body)
+        assert len(meta["sha256"]) == 64
+        assert "keep_raw" not in meta["request"]
+        raw = tmp_path / "out" / "bdot10k_teryt_0262_GPKG.zip"
+        raw_meta = json.loads(raw.with_name(raw.name + ".meta.json").read_text())
+        assert raw_meta["size_bytes"] == len(body)
+        assert "raw_file" not in raw_meta["extra"]["source"]
+
+    def test_manager_without_keep_raw_has_no_raw_file(self, tmp_path):
+        body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
+        manager = LandCoverManager(output_dir=tmp_path / "out", provider="bdot10k")
+        manager.provider._sessions = SessionPerThread(self._session(body, {}))
+        path = manager.download(teryt="0262")
+        meta = json.loads(path.with_name(path.name + ".meta.json").read_text())
+        assert "raw_file" not in meta["extra"]["source"]
+        assert meta["extra"]["http"] == {
+            "etag": None,
+            "last_modified": None,
+            "content_length": None,
+        }
+        assert sorted(p.name for p in (tmp_path / "out").iterdir()) == [
+            "bdot10k_teryt_0262.gpkg",
+            "bdot10k_teryt_0262.gpkg.meta.json",
+        ]
+
+    def test_all_counties_keep_raw_reaches_provider(self, tmp_path):
+        """keep_raw passes the manager's option filter (``_BDOT_OPTIONS``) and
+        the source joins ``extra.parent_request``."""
+        body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
+        manager = LandCoverManager(output_dir=tmp_path / "out", provider="bdot10k")
+        manager.provider._sessions = SessionPerThread(self._session(body, {}))
+        with patch.object(manager.provider, "teryts_for_area", return_value=["0262"]):
+            paths = manager.download_all_counties(
+                godlo="M-33-48-A", keep_raw=True, layers=["PTWP"]
+            )
+        assert [p.name for p in paths] == ["bdot10k_PTWP_teryt_0262.gpkg"]
+        raw = tmp_path / "out" / "bdot10k_PTWP_teryt_0262_GPKG.zip"
+        assert raw.read_bytes() == body
+        meta = json.loads(paths[0].with_name(paths[0].name + ".meta.json").read_text())
+        assert meta["extra"]["parent_request"] == {
+            "sheet": "M-33-48-A",
+            "countries": ["PL"],
+        }
+        assert meta["extra"]["source"]["raw_file"] == raw.name
+        raw_meta = json.loads(raw.with_name(raw.name + ".meta.json").read_text())
+        assert raw_meta["extra"]["parent_request"] == meta["extra"]["parent_request"]
+
+    def test_bbox_explicit_output_path_keeps_request_and_source(self, tmp_path):
+        """An explicit ``output_path`` (bbox) also gets the source and the raw
+        ZIP sidecar; ``request`` stays the bbox."""
+        body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
+        manager = LandCoverManager(output_dir=tmp_path / "out", provider="bdot10k")
+        manager.provider._sessions = SessionPerThread(self._session(body, {}))
+        bbox = BBox(340000, 290000, 350000, 300000, "EPSG:2180")
+        out = tmp_path / "own" / "area.gpkg"
+        with patch.object(manager.provider, "teryts_for_area", return_value=["0262"]):
+            path = manager.download_by_bbox(bbox, output_path=out, keep_raw=True)
+        assert path == out
+        meta = json.loads(out.with_name(out.name + ".meta.json").read_text())
+        assert meta["request"]["bbox"] == [340000, 290000, 350000, 300000]
+        assert "teryt" not in meta["request"]
+        assert meta["extra"]["source"]["teryt"] == "0262"
+        assert meta["extra"]["source"]["raw_file"] == "area_GPKG.zip"
+        assert (tmp_path / "own" / "area_GPKG.zip.meta.json").exists()
 
 
 class TestBdot10kManyCounties:

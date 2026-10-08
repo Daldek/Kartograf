@@ -28,13 +28,15 @@ Hydrographic (SW - Sieć Wodna, 3 layers):
 """
 
 import logging
+import os
 import re
 import shutil
 import sqlite3
 import tempfile
+import threading
 import zipfile
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
 
@@ -60,6 +62,9 @@ class Bdot10kPackage:
     teryt: str
     url: str
     format: str
+    # Response headers: etag / last_modified / content_length (None = not sent)
+    http: dict = field(default_factory=dict)
+    raw_path: Path | None = None  # original GUGiK ZIP (keep_raw=True)
 
 
 # Mapping of voivodeship (wojewodztwo) TERYT codes to names used in OpenData URLs
@@ -169,6 +174,7 @@ class Bdot10kProvider(LandCoverProvider):
         timeout: int = DEFAULT_TIMEOUT,
         format: str = "GPKG",
         layers: Sequence[str] | None = None,
+        keep_raw: bool = False,
     ) -> Bdot10kPackage:
         """Download one powiat package; ``layers`` keeps only those layer codes (GPKG).
 
@@ -192,17 +198,24 @@ class Bdot10kProvider(LandCoverProvider):
         layers : Sequence[str], optional
             Layer codes to keep (4 upper-case letters, e.g. ``PTWP``,
             ``SWRS``); every other layer of the package is dropped. GPKG only.
+        keep_raw : bool, optional
+            Also keep the original GUGiK ZIP next to the GeoPackage as
+            ``<output stem>_GPKG.zip`` (written only after a successful
+            merge). GPKG only: the SHP result already is the original ZIP.
 
         Returns
         -------
         Bdot10kPackage
             ``path`` = the file actually written, plus ``teryt``, ``url``,
-            ``format``
+            ``format``, ``http`` (``etag``, ``last_modified``,
+            ``content_length`` of the response; None when not sent) and
+            ``raw_path`` (the raw ZIP with ``keep_raw``, else None)
 
         Raises
         ------
         ValidationError
-            Invalid TERYT or layer code (before the network); ``layers`` with SHP.
+            Invalid TERYT or layer code (before the network); ``layers`` or
+            ``keep_raw`` with SHP.
         DownloadError
             Download failure, a requested layer missing in the package, or two
             package files with the same table name.
@@ -222,6 +235,10 @@ class Bdot10kProvider(LandCoverProvider):
                 )
             if format != "GPKG":
                 raise ValidationError("Filtr warstw BDOT10k dziala tylko z GPKG")
+        if keep_raw and format != "GPKG":
+            raise ValidationError(
+                "keep_raw dotyczy tylko GPKG (SHP to juz oryginalny ZIP)"
+            )
         output_path = Path(output_path)
         if format == "SHP":
             # The SHP package is a ZIP archive of shapefiles (not unpacked): the name
@@ -229,9 +246,30 @@ class Bdot10kProvider(LandCoverProvider):
             # to GPKG, where `_extract_gpkg_from_zip` assigns .gpkg.
             output_path = output_path.with_suffix(".zip")
         url = self._construct_opendata_url(code, format)
+        headers: dict = {}
+
+        def capture(response: requests.Response) -> None:
+            def text(name: str) -> str | None:
+                # str only: anything else (e.g. a test double) is "absent"
+                value = response.headers.get(name)
+                return value if isinstance(value, str) else None
+
+            length = text("Content-Length")
+            headers.clear()
+            headers.update(
+                etag=text("ETag"),
+                last_modified=text("Last-Modified"),
+                content_length=int(length) if length and length.isdigit() else None,
+            )
+
+        raw_path = (
+            output_path.with_name(f"{output_path.stem}_GPKG.zip") if keep_raw else None
+        )
 
         def save(response: requests.Response, target: Path) -> Path:
-            return self._extract_gpkg_from_zip(response, target, layers=wanted)
+            return self._extract_gpkg_from_zip(
+                response, target, layers=wanted, raw_path=raw_path
+            )
 
         path = download_to(
             self._sessions.get(),
@@ -240,9 +278,17 @@ class Bdot10kProvider(LandCoverProvider):
             timeout=timeout,
             retries=self.MAX_RETRIES,
             description=f"BDOT10k TERYT {code}",
+            validate=capture,
             save=save if format == "GPKG" else None,
         )
-        return Bdot10kPackage(path=path, teryt=code, url=url, format=format)
+        return Bdot10kPackage(
+            path=path,
+            teryt=code,
+            url=url,
+            format=format,
+            http=dict(headers),
+            raw_path=raw_path,
+        )
 
     def download_by_admin_unit(
         self,
@@ -254,8 +300,8 @@ class Bdot10kProvider(LandCoverProvider):
     ) -> Path:
         """``LandCoverProvider`` entry point: ``download_package(...).path``.
 
-        ``kwargs`` may carry ``layers`` (see ``download_package``); other
-        options are ignored.
+        ``kwargs`` may carry ``layers`` and ``keep_raw`` (see
+        ``download_package``); other options are ignored.
         """
         return self.download_package(
             code,
@@ -263,6 +309,7 @@ class Bdot10kProvider(LandCoverProvider):
             timeout=timeout,
             format=format,
             layers=kwargs.get("layers"),
+            keep_raw=kwargs.get("keep_raw", False),
         ).path
 
     def _construct_opendata_url(self, teryt: str, format: str) -> str:
@@ -430,6 +477,7 @@ class Bdot10kProvider(LandCoverProvider):
         response: requests.Response,
         output_path: Path,
         layers: Sequence[str] | None = None,
+        raw_path: Path | None = None,
     ) -> Path:
         """
         Extract and merge all layers from downloaded ZIP.
@@ -449,6 +497,9 @@ class Bdot10kProvider(LandCoverProvider):
             returned)
         layers : Sequence[str], optional
             Layer codes to keep (``OT_<code>_*`` files); None = all
+        raw_path : Path, optional
+            Where to also save the downloaded ZIP unchanged (atomically, only
+            after a successful merge); None = not kept
 
         Returns
         -------
@@ -509,6 +560,17 @@ class Bdot10kProvider(LandCoverProvider):
                     # Merge all layers into single GPKG
                     output_gpkg = output_path.with_suffix(".gpkg")
                     self._merge_gpkg_files(extracted_files, output_gpkg)
+                    if raw_path is not None:
+                        # original GUGiK ZIP (A4), atomically like download_to
+                        tmp = raw_path.with_name(
+                            f"{raw_path.name}.{os.getpid()}_{threading.get_ident()}.tmp"
+                        )
+                        try:
+                            tmp.write_bytes(zip_data.getvalue())
+                            os.replace(tmp, raw_path)
+                        except BaseException:
+                            tmp.unlink(missing_ok=True)
+                            raise
                     return output_gpkg
 
         except zipfile.BadZipFile as e:
