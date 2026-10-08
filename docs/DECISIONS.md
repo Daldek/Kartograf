@@ -3,6 +3,56 @@
 Kazda decyzja architektoniczna lub projektowa jest udokumentowana ponizej.
 Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja, konsekwencje.
 
+Tresc decyzji opisuje stan w chwili jej podjecia i nie jest modernizowana.
+Pozniejsze zmiany faktow i ustalenia dodatkowe sa dopisywane na koncu wpisu
+jako erraty `**Errata N (RRRR-MM-DD, zrodlo/powod):**`, numerowane w obrebie
+ADR chronologicznie. Szablon nowego wpisu: [Szablon nowego ADR](#szablon-nowego-adr).
+
+**Slownik statusow** (linia `**Status:**` kazdego wpisu):
+- `Przyjeta` — decyzja obowiazuje w calosci;
+- `Przyjeta — czesciowo zastapiona przez ADR-x (zakres)` — wskazana czesc nie obowiazuje;
+- `Przyjeta — uzupelniona przez ADR-x (zakres)` — obowiazuje, pozniejsza decyzja ja rozszerza;
+- `Zastapiona przez ADR-x` — nie obowiazuje;
+- `Odrzucona` — rozwazona i nieprzyjeta.
+
+Po srednikiu status moze podac relacje odwrotne (`zastepuje ...`, `uzupelnia ...`);
+kazda relacja jest zapisana po obu stronach.
+
+## Indeks
+
+| ADR | Tytul | Data | Status |
+|---|---|---|---|
+| [ADR-001](#adr-001-flat-layout-zamiast-src-layout) | Flat layout zamiast src layout | 2026-01-17 | Przyjeta |
+| [ADR-002](#adr-002-auth-proxy-do-izolacji-credentials-clms) | Auth Proxy do izolacji credentials CLMS | 2026-01-18 | Przyjeta |
+| [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) | OpenData (ASC) vs WCS (GeoTIFF) — rozdzielenie sciezek pobierania NMT | 2026-01-18 | Przyjeta — czesciowo zastapiona przez [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (bbox = WCS GeoTIFF; errata 1) |
+| [ADR-004](#adr-004-evrf2007-jako-domyslny-uklad-wysokosciowy) | EVRF2007 jako domyslny uklad wysokosciowy | 2026-01-21 | Przyjeta |
+| [ADR-005](#adr-005-struktura-katalogow-nmt-rozdzielona-wg-rozdzielczosci) | Struktura katalogow NMT rozdzielona wg rozdzielczosci | 2026-01-21 | Przyjeta — czesciowo zastapiona przez [ADR-013](#adr-013-zmiana-nazw-podkatalogow-storage-z-1m5m-na-nmt_1mnmt_5m), a nastepnie [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (realizacja ukladu katalogow; errata 1) |
+| [ADR-006](#adr-006-landcoverprovider-jako-osobna-hierarchia-od-baseprovider) | LandCoverProvider jako osobna hierarchia od BaseProvider | 2026-01-18 | Przyjeta |
+| [ADR-007](#adr-007-migracja-z-black--flake8-na-ruff) | Migracja z black + flake8 na ruff | 2026-02-03 | Przyjeta |
+| [ADR-008](#adr-008-kondensacja-progressmd-z-785-do-80-linii) | Kondensacja PROGRESS.md z 785 do ~80 linii | 2026-02-03 | Przyjeta |
+| [ADR-009](#adr-009-rozbudowanie-development_standards-i-implementation_prompt) | Rozbudowanie DEVELOPMENT_STANDARDS i IMPLEMENTATION_PROMPT | 2026-02-03 | Przyjeta |
+| [ADR-010](#adr-010-algorytm-find_sheets_for_bbox--hierarchiczne-przycinanie-bez-wfs) | Algorytm find_sheets_for_bbox — hierarchiczne przycinanie bez WFS | 2026-02-07 | Przyjeta |
+| [ADR-011](#adr-011-gugiknmptprovider-dziedziczy-z-gugikprovider) | GugikNmptProvider dziedziczy z GugikProvider | 2026-02-07 | Przyjeta |
+| [ADR-012](#adr-012-gugikortoprovider-jako-osobna-klasa-nie-dziedziczy-z-gugikprovider) | GugikOrtoProvider jako osobna klasa (nie dziedziczy z GugikProvider) | 2026-02-07 | Przyjeta |
+| [ADR-013](#adr-013-zmiana-nazw-podkatalogow-storage-z-1m5m-na-nmt_1mnmt_5m) | Zmiana nazw podkatalogow storage z 1m/5m na nmt_1m/nmt_5m | 2026-02-07 | Zastapiona przez [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach); czesciowo zastepuje [ADR-005](#adr-005-struktura-katalogow-nmt-rozdzielona-wg-rozdzielczosci) (nazwy katalogow) |
+| [ADR-014](#adr-014-bdot10k-category-based-extraction-pt-vs-hydro) | BDOT10k category-based extraction (pt vs hydro) | 2026-02-08 | Zastapiona przez [ADR-016](#adr-016-bdot10k--usunięcie-filtrowania-po-kategorii-pobieranie-całego-pliku) |
+| [ADR-015](#adr-015-pyshp--sqlite3-zamiast-fiona-dla-czytania-geometrii) | pyshp + sqlite3 zamiast fiona dla czytania geometrii | 2026-02-08 | Przyjeta |
+| [ADR-016](#adr-016-bdot10k--usunięcie-filtrowania-po-kategorii-pobieranie-całego-pliku) | BDOT10k — usunięcie filtrowania po kategorii, pobieranie całego pliku | 2026-03-02 | Przyjeta; zastepuje [ADR-014](#adr-014-bdot10k-category-based-extraction-pt-vs-hydro) |
+| [ADR-017](#adr-017-pl-2000-sheet-naming--composition-pattern-with-auto-detection) | PL-2000 sheet naming — composition pattern with auto-detection | 2026-02-24 | Przyjeta — uzupelniona przez [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (wlasne segmenty PL-2000; errata 1) |
+| [ADR-018](#adr-018-threadpoolexecutor-dla-rownoleglego-pobierania) | ThreadPoolExecutor dla rownoleglego pobierania | 2026-03-03 | Przyjeta |
+| [ADR-019](#adr-019-sqlite-wal-jako-metadata-cache) | SQLite WAL jako metadata cache | 2026-03-03 | Przyjeta — uzupelniona przez [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (`record_cache` zamiast `url_cache`; errata 1) i [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`campaigns_cache`; errata 2) |
+| [ADR-020](#adr-020-walidacja-warstw-wms-przez-getcapabilities) | Walidacja warstw WMS przez GetCapabilities | 2026-03-24 | Przyjeta — czesciowo zastapiona przez [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (warstwy wylacznie z GetCapabilities, bez list zaszytych i fallbacku; errata 3) |
+| [ADR-021](#adr-021-laz-chmury-punktów-lidar--discovery-przez-wfs-area-based) | LAZ (chmury punktów LIDAR) — discovery przez WFS, area-based | 2026-06-24 | Przyjeta — czesciowo zastapiona przez [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) (regula newest-per-tile) |
+| [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) | Architektura zrodel wielokrajowych — deskryptory, rejestry, sidecar, twarda polityka transformacji (etap 0) | 2026-08-10 | Przyjeta — uzupelniona przez [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (formalny interfejs silnika: `CuzkClient`, (a)) |
+| [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) | Silnik CUZK, polityka układów CZ i EVRF2007→5621 (etap 1) | 2026-08-11 | Przyjeta — czesciowo zastapiona przez [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) i [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (`--target-crs` wylacznie dla CZ; Ustalenia dodatkowe pkt 6); uzupelniona przez [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) ((f).1 obejmuje LAZ); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) |
+| [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) | Reprojekcja tresci CZ wylacznie lokalnie (zakaz `imageSR` != natywny) | 2026-08-11 | Przyjeta; zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) |
+| [ADR-025](#adr-025-mapowanie-tekstura---hsg-i-kanoniczny-trojkat-usda-audyt-070) | Mapowanie tekstura -> HSG i kanoniczny trojkat USDA (audyt 0.7.0) | 2026-08-22 | Przyjeta |
+| [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) | Uklad data/ per produkt — segmenty i szablony w deskryptorach | 2026-08-28 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (pliki w `<segment>/kampanie/`, sciezka standardowa = dowiazanie twarde albo kopia; errata 2); zastepuje [ADR-013](#adr-013-zmiana-nazw-podkatalogow-storage-z-1m5m-na-nmt_1mnmt_5m) i realizacje ukladu z [ADR-005](#adr-005-struktura-katalogow-nmt-rozdzielona-wg-rozdzielczosci), uzupelnia [ADR-017](#adr-017-pl-2000-sheet-naming--composition-pattern-with-auto-detection) (domyka odroczenie) |
+| [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) | --target-crs dla PL — scalony wycinek bbox (mozaika + pinned warp) | 2026-08-28 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (wycinek tylko `newest`; arkusze bez sprawdzenia skorowidza: errata 5 [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem)); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (`--target-crs` wylacznie dla CZ) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (bbox = WCS GeoTIFF) |
+| [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) | Wybor rekordu skorowidza GUGiK i `extra.source` | 2026-09-30 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (strategie kampanii `newest`/`all`, `--min-year`; regula wyboru `newest` bez zmian; awaria skorowidza: errata 2); zastepuje czesc [ADR-020](#adr-020-walidacja-warstw-wms-przez-getcapabilities) (zaszyte warstwy i fallback) |
+| [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) | Wybor kafli LAZ wg pokrycia obszaru i pobieranie LAZ w bibliotece | 2026-10-07 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`--campaigns all`/`--min-year` dla LAZ, (j); errata 1); zastepuje czesc [ADR-021](#adr-021-laz-chmury-punktów-lidar--discovery-przez-wfs-area-based) (regula newest-per-tile) |
+| [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) | Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem | 2026-10-07 | Przyjeta; uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`kampanie/`), [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wycinek tylko `newest`), [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (strategie; regula wyboru `newest` bez zmian), [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) (LAZ: `all`, `--min-year`) i [ADR-019](#adr-019-sqlite-wal-jako-metadata-cache) (`campaigns_cache`) |
+
 ---
 
 ## ADR-001: Flat layout zamiast src layout
@@ -43,7 +93,7 @@ Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja
 ## ADR-003: OpenData (ASC) vs WCS (GeoTIFF) — rozdzielenie sciezek pobierania NMT
 
 **Data:** 2026-01-18
-**Status:** Przyjeta (czesc "bbox = WCS" nieaktualna — patrz korekta 2026-09-29)
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-027 (bbox = WCS GeoTIFF; errata 1)
 
 **Kontekst:** GUGiK oferuje dwa sposoby pobierania NMT: OpenData (pliki ASC po godle) i WCS (GeoTIFF po bbox). Poczatkowo probowano ujednolicic oba w jednym flow.
 
@@ -55,7 +105,7 @@ Format: numer, data, kontekst (dlaczego temat powstal), rozwazone opcje, decyzja
 
 **Konsekwencje:** Czytelniejszy kod. Uzytkownik jawnie wybiera metode. NMT 5m dziala tylko przez OpenData (WCS niedostepne).
 
-**Korekta (2026-09-29, audyt dokumentacji):** czesc "bbox zawsze daje GeoTIFF
+**Errata 1 (2026-09-29, audyt dokumentacji):** czesc "bbox zawsze daje GeoTIFF
 przez WCS" juz nie obowiazuje: CLI rozwija bbox PL na arkusze OpenData,
 a jeden GeoTIFF dla bboxa/geometrii buduje z arkuszy wycinek `--target-crs` /
 `download_pl_cutout` (ADR-027). WCS zostal tylko w
@@ -85,7 +135,7 @@ KRON86 — endpoint EVRF2007 GUGiK wycofal (HTTP 404 od 2026-08), a
 ## ADR-005: Struktura katalogow NMT rozdzielona wg rozdzielczosci
 
 **Data:** 2026-01-21
-**Status:** Przyjeta (uklad katalogow zastapiony przez ADR-013, a nastepnie przez ADR-026)
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-013, a nastepnie ADR-026 (realizacja ukladu katalogow; errata 1)
 
 **Kontekst:** Po dodaniu obslugi NMT 5m, pliki 1m i 5m dla tego samego godla mialy te sama sciezke. Grozi nadpisaniem.
 
@@ -97,7 +147,7 @@ KRON86 — endpoint EVRF2007 GUGiK wycofal (HTTP 404 od 2026-08), a
 
 **Konsekwencje:** Breaking change — stare sciezki bez `1m/`/`5m/` nie sa kompatybilne. Czyste rozdzielenie, latwe do zrozumienia. FileStorage przyjmuje parametr `resolution`.
 
-**Korekta (2026-08-28):** decyzja "rozdzielczosc jest wymiarem sciezki"
+**Errata 1 (2026-08-28, ADR-026):** decyzja "rozdzielczosc jest wymiarem sciezki"
 obowiazuje nadal, ale jej realizacja zmieniala sie dwa razy: `1m`/`5m` ->
 `nmt_1m`/`nmt_5m` (ADR-013) -> segmenty `nmt/pl_<uklad>_<res>_<vcrs>`
 (ADR-026). Parametr `resolution` w `FileStorage` zostal, tyle ze mapuje
@@ -190,7 +240,7 @@ dzis na SZABLON segmentu, nie na nazwe katalogu.
 
 **Konsekwencje:** Dziala offline. Szybkie (~1s dla 1:10k). Zalezy od poprawnosci _calculate_wgs84_bbox() — jesli zmieni sie logika bbox, find_sheets_for_bbox tez sie zmieni. CLI download godlo staje sie opcjonalne (nargs="?").
 
-**Korekta (2026-09-29, audyt dokumentacji; stan kodu po audycie 0.7.0
+**Errata 1 (2026-09-29, audyt dokumentacji; stan kodu po audycie 0.7.0
 i fali review max 2026-09-28):** (a) od audytu 0.7.0 (A1-7) liczy sie
 dodatnie pole przeciecia — stykajace sie krawedzie nie sa przecieciem;
 (b) bbox w EPSG:2180 jest zamieniany na obwiednie WGS84 z 4 naroznikow i 2
@@ -200,6 +250,12 @@ selekcja obejmuje arkusze sasiednie (obwiednia EPSG:2180 arkusza
 `N-34-130-D-d-2-4` daje 9 godel, `N-34-130-D` w skali 1:50000 — 16 zamiast
 4; w duzym wycinku do ~3,7 km poza zadaniem); (c) `--system 2000` liczy
 obwiednie z 4 naroznikow (`core/parser_2000`, backlog).
+
+**Errata 2 (2026-10-07, parsery — `core/bbox.py`):** obwiednie z errata 1
+(b) i (c) liczy teraz jedna funkcja `core/bbox.py::transform_bbox`
+(`transform_bounds` z `densify_pts=21` na krawedz) — w `find_sheets_for_bbox`
+i `find_sheets_2000_for_bbox`; punkt (c) z backlogu jest domkniety. Regula
+dodatniego pola z (a) i szersza obwiednia bboxa EPSG:2180 bez zmian.
 
 ---
 
@@ -240,7 +296,7 @@ obwiednie z 4 naroznikow (`core/parser_2000`, backlog).
 ## ADR-013: Zmiana nazw podkatalogow storage z 1m/5m na nmt_1m/nmt_5m
 
 **Data:** 2026-02-07
-**Status:** Przyjeta (uklad katalogow zastapiony przez ADR-026)
+**Status:** Zastapiona przez ADR-026; czesciowo zastepuje ADR-005 (nazwy katalogow)
 
 **Kontekst:** Po dodaniu NMPT i Ortofoto, podkatalogi `1m` i `5m` w FileStorage staly sie niejednoznaczne — moglyby oznaczac rozdzielczosc dowolnego produktu. Nowe produkty uzywaja podkatalogow `nmpt` i `orto`.
 
@@ -252,7 +308,7 @@ obwiednie z 4 naroznikow (`core/parser_2000`, backlog).
 
 **Konsekwencje:** Breaking change — stare sciezki `data/1m/` i `data/5m/` nie sa kompatybilne. Jednoznaczna struktura. Parametr `product` w FileStorage pozwala na latwe dodawanie nowych produktow.
 
-**Korekta (2026-08-28):** uklad `nmt_1m`/`nmt_5m` zastapiony segmentami
+**Errata 1 (2026-08-28, ADR-026):** uklad `nmt_1m`/`nmt_5m` zastapiony segmentami
 `nmt/pl_<uklad>_<res>_<vcrs>` — patrz ADR-026.
 
 ---
@@ -296,7 +352,7 @@ obwiednie z 4 naroznikow (`core/parser_2000`, backlog).
 ## ADR-016: BDOT10k — usunięcie filtrowania po kategorii, pobieranie całego pliku
 
 **Data:** 2026-03-02
-**Status:** Przyjeta (zastepuje ADR-014)
+**Status:** Przyjeta; zastepuje ADR-014
 
 **Kontekst:** Filtrowanie po kategorii (pt/hydro) w Bdot10kProvider dodane w ADR-014 okazalo sie niepotrzebna komplikacja. Uzytkownik i tak pobiera caly ZIP z GUGiK — filtrowanie po stronie klienta powodowalo utrate danych (np. SW* warstwy pomijane domyslnie). Lepiej pobrac wszystko i pozwolic uzytkownikowi filtrowac w GIS.
 
@@ -313,7 +369,7 @@ obwiednie z 4 naroznikow (`core/parser_2000`, backlog).
 ## ADR-017: PL-2000 sheet naming — composition pattern with auto-detection
 
 **Data:** 2026-02-24
-**Status:** Przyjeta
+**Status:** Przyjeta — uzupelniona przez ADR-026 (wlasne segmenty PL-2000; errata 1)
 
 **Kontekst:** PL-2000 to inny system godlowania niz PL-1992. PL-2000 uzywa formatu `strefa.pas.slup[.podpodzialki]` (np. `6.179.12.20`), 4 stref merydianowych (EPSG:2176-2179) i skal od 1:10k do 1:500. Wymaga osobnego parsera z inna logika BBox i hierarchii.
 
@@ -326,7 +382,7 @@ obwiednie z 4 naroznikow (`core/parser_2000`, backlog).
 
 **Konsekwencje:** Czysta separacja logiki PL-1992 i PL-2000. Auto-detekcja w SheetParser zachowuje unified API. Nowe eksporty: `Parser2000`, `find_sheets_2000_for_bbox`. CLI: `--system {1992,2000}` pozwala wymusic system. FileStorage: podkatalog `nmt_2000_1m` dla PL-2000 arkuszy.
 
-**Korekta (2026-08-28, ADR-026):** zapowiedziany tu podkatalog `nmt_2000_1m`
+**Errata 1 (2026-08-28, ADR-026):** zapowiedziany tu podkatalog `nmt_2000_1m`
 nigdy nie powstal (arkusze PL-2000 ladowaly w `nmt_<res>/` obok PL-1992 —
 patrz uwaga w CHANGELOG 0.5.0). Odroczenie domkniete w ADR-026: PL-2000 ma
 wlasne segmenty `pl_2000_*`.
@@ -349,7 +405,7 @@ wlasne segmenty `pl_2000_*`.
 
 **Konsekwencje:** Wymagane thread-safe temp filenames we wszystkich providerach (pattern `pid_threadid.tmp`). DownloadResult zamiast list[Path] dla structured results. Backward-compatible: `max_workers=1` daje sekwencyjne pobieranie.
 
-**Korekta (2026-09-29, audyt dokumentacji):** `max_workers=4` jest domyslne
+**Errata 1 (2026-09-29, audyt dokumentacji):** `max_workers=4` jest domyslne
 w CLI (`--workers`), a w bibliotece — 1 (`DownloadManager`,
 `download_pl_cutout`, `run_pl_cutout`). Metody zwracaja `list[Path]`,
 a strukturalny wynik (`DownloadResult`: succeeded/failed/skipped/no_coverage)
@@ -360,7 +416,7 @@ trafia do `DownloadManager.last_result`.
 ## ADR-019: SQLite WAL jako metadata cache
 
 **Data:** 2026-03-03
-**Status:** Przyjeta
+**Status:** Przyjeta — uzupelniona przez ADR-028 (`record_cache` zamiast `url_cache`; errata 1) i ADR-030 (`campaigns_cache`; errata 2)
 
 **Kontekst:** Kazde pobieranie arkusza wymaga request do GUGiK API po URL OpenData. Przy powtarzanych pobieraniach te same URLe sa odpytywane wielokrotnie. Podobnie BDOT10k — mapowanie punkt→TERYT.
 
@@ -373,19 +429,25 @@ trafia do `DownloadManager.last_result`.
 
 **Konsekwencje:** Nowy modul `kartograf/cache/metadata.py`, `.kartograf_cache.db` w katalogu roboczym, CLI `kartograf cache` do zarzadzania. `prune_expired()` czysci stale wpisy. Optional — providery dzialaja bez cache.
 
-**Uzupelnienie 2026-09-30:** CLI PL podpina `MetadataCache` do NMT/NMPT/orto
+**Errata 1 (2026-09-30, fala naprawcza, ADR-028):** CLI PL podpina `MetadataCache` do NMT/NMPT/orto
 poza `--force` (ten tryb omija cache). API wycinka ma `cache=`.
 Cache przechowuje `record_cache` (pelny `source` albo potwierdzony
 `no_coverage`, TTL 7 dni), a nie same URL-e; `url_cache` jest usuwana
 przy otwarciu bazy, `get_url/set_url` zastapiono `get_record/set_record`.
 `stats()["record_count"]` i CLI `Record entries` raportuja nowe wpisy.
 
+**Errata 2 (2026-10-07, review-2 E14 i D16; ADR-030):** `--force` nie
+omija juz cache, tylko jego ODCZYT: `MetadataCache(refresh=True)` zapisuje
+swiezo wybrany rekord (ADR-028 errata 1); tak samo indeks arkuszy SM5 toru CZ
+(`sheet_cache`, TTL 30 dni). ADR-030 dodal tabele `campaigns_cache` (lista
+kampanii arkusza, TTL 7 dni).
+
 ---
 
 ## ADR-020: Walidacja warstw WMS przez GetCapabilities
 
 **Data:** 2026-03-24
-**Status:** Przyjeta
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-028 (warstwy wylacznie z GetCapabilities, bez list zaszytych i fallbacku; errata 3)
 
 **Kontekst:** Hardcoded nazwy warstw WMS w GugikProvider okazaly sie bledne dla NMT 5m — GUGiK zmienil nazwy warstw (np. `SkorowidzeNMT2022` → `SkorowidzeNMT2022iStarsze`, dodal `SkorowidzeNMT2025`). Blad powodowal niepowodzenie wszystkich pobrań NMT 5m. Potrzebny mechanizm wykrywania rozbieznosci miedzy hardcoded a live WMS.
 
@@ -399,16 +461,16 @@ przy otwarciu bazy, `get_url/set_url` zastapiono `get_record/set_record`.
 
 **Konsekwencje:** Automatyczne wykrywanie zmian warstw WMS bez recznej aktualizacji kodu. Zero kosztu jesli provider nie jest uzywany (lazy). GugikNmptProvider dziedziczy walidacje z GugikProvider bez dodatkowego kodu. GugikOrtoProvider poza zakresem (inna hierarchia dziedziczenia, inny format warstw). 17 nowych testow w `tests/test_wms_layer_validation.py`.
 
-**Aktualizacja (2026-06-24):** GugikOrtoProvider otrzymal wlasna walidacje (`_fetch_wms_layers`/`_get_validated_layers`, wyklucza warianty `Zasiegi`). Nazwy warstw NMT 1m/EVRF2007 i Orto odswiezone (nowe roczniki 2026).
+**Errata 1 (2026-06-24, walidacja orto i roczniki 2026):** GugikOrtoProvider otrzymal wlasna walidacje (`_fetch_wms_layers`/`_get_validated_layers`, wyklucza warianty `Zasiegi`). Nazwy warstw NMT 1m/EVRF2007 i Orto odswiezone (nowe roczniki 2026).
 
-**Aktualizacja (2026-09-29; historia przed fala naprawcza):**
+**Errata 2 (2026-09-29, historia przed fala naprawcza):**
 GetFeatureInfo potrafilo zwrocic HTTP 200 z raportem OGC zamiast
 prawidlowej pustej odpowiedzi; taki raport oznacza awarie warstwy,
 nie `NoCoverageError` (ADR-027). Stary fallback na zaszyte warstwy
 mogl zadac nieaktualne nazwy i zgubic nowsze rekordy; ponizsza
 errata zastapila te polityke.
 
-**Errata 2026-09-30 (fala naprawcza):** zaszyte `WMS_LAYERS` dla
+**Errata 3 (2026-09-30, fala naprawcza):** zaszyte `WMS_LAYERS` dla
 NMT/NMPT/orto usunieto. Warstwy pochodza tylko z GetCapabilities,
 odkrywane lazy i cache'owane per instancja z lockiem; blad pobrania
 GetCapabilities nie jest zapamietywany ani zastapiony stara lista.
@@ -417,12 +479,22 @@ GetFeatureInfo oczekuje szablonu pustej lub pelnej odpowiedzi
 bez cichej degradacji do starszej kampanii. Zapytania transportowe
 maja 3 proby, a orto korzysta z tego samego parsera rekordow.
 
+**Errata 4 (2026-10-06, review N3, E10):** "Osobny timeout 10s dla
+GetCapabilities" nie obowiazuje: GetCapabilities skorowidza dziedziczy
+timeout providera (`DEFAULT_TIMEOUT`: 30 s `GugikProvider` — NMT i NMPT,
+60 s `GugikOrtoProvider`) albo `timeout=` przekazany do pobrania — porazka
+GetCapabilities konczy caly tor, wiec limit nie moze byc krotszy niz dla
+pobrania arkusza. Ponawiane sa tylko bledy transportu (ADR-028 errata 1).
+Odkrywanie warstw zyje we wspolnym `SkorowidzLayersMixin`
+(`providers/pl/skorowidz.py`: `_fetch_wms_layers`, `_layers`);
+`_get_validated_layers` nie istnieje.
+
 ---
 
 ## ADR-021: LAZ (chmury punktów LIDAR) — discovery przez WFS, area-based
 
 **Data:** 2026-06-24
-**Status:** Przyjeta
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-029 (regula newest-per-tile)
 
 **Kontekst:** Dodanie pobierania plików LAZ (dane pomiarowe ALS) z GUGiK. Dwa problemy: (1) kafle LAZ są godłowane drobniej niz 1:10000 (np. `M-34-27-B-b-2-1-1`, modul 1:1000), a `SheetParser` parsuje maks. do 1:10000 — godło kafla jest nieparsowalne; (2) usługa **WMS** skorowidzy LAZ (`DanePomNMT/WMS/...`) zwraca HTTP 401, wiec mechanizm WMS GetFeatureInfo (jak w NMT/orto) nie dziala.
 
@@ -436,14 +508,14 @@ maja 3 proby, a orto korzysta z tego samego parsera rekordow.
 
 **Konsekwencje:** Brak zmian w `SheetParser`: godlo kafla pozostaje opaque. LAZ ma osobny przeplyw `_cmd_download_laz` (area→WFS→tiles→parallel download; od 2026-10-07 pobieranie i sidecar w bibliotece `download/laz.py`, CLI jest nakladka — ADR-029). WFS daje rok/gestosc/CRS; roczniki pochodza z GetCapabilities (bez fallbacku listy zaszytej). Wyniki live sprzed naprawy osi potwierdzaly format LASF, a nie poprawne polozenie kafla.
 
-**Errata 2026-09-29 (diagnoza historyczna):** pierwotne
+**Errata 1 (2026-09-29, diagnoza historyczna):** pierwotne
 „zweryfikowano live” sprawdzalo niepoprawnie sparowane BBOX i envelope:
 `urn:ogc:def:crs:EPSG::2180` wymaga (N,E), a stary klient uzywal
 (E,N). Pod Spytkowicami odpowiedz z bledna kolejnoscia kierowala
 do Lubuskiego zamiast poprawnego kafla `M-34-76-A-a-1-1-3`.
 Ponizsza naprawa zastapila te zalozenia.
 
-**Naprawa 2026-09-30 (K1/N7):** dla WFS `urn:ogc:def:crs:EPSG::2180`
+**Errata 2 (2026-09-30, naprawa K1/N7):** dla WFS `urn:ogc:def:crs:EPSG::2180`
 `BBOX` i odczyt `gml:Envelope` uzywaja osi EPSG (N,E);
 straz sprawdza, czy przynajmniej jeden zwrocony kafel przecina
 zadany obszar (gdy wszystkie sa poza nim, `DownloadError`).
@@ -456,7 +528,7 @@ ktoregokolwiek rocznika po ponowieniach konczy `discover_tiles`
 ## ADR-022: Architektura zrodel wielokrajowych — deskryptory, rejestry, sidecar, twarda polityka transformacji (etap 0)
 
 **Data:** 2026-08-10
-**Status:** Przyjeta
+**Status:** Przyjeta — uzupelniona przez ADR-023 (formalny interfejs silnika: `CuzkClient`, (a))
 
 **Kontekst:** Decyzja kierunkowa: rozszerzenie o Czechy (pelna parytetowosc produktowa), potem Niemcy i Slowacje (analizy transgraniczne). Research 3 krajow (docs/research/2026-08-10-*) dal 4 realne przypadki do zaprojektowania granic abstrakcji i wykazal pulapki: DE = federacja 17 modeli; SK WCS zwraca wysokosci elipsoidalne (42,3 m odchylki od Bpv); PROJ przy braku sieci cicho zwraca identycznosc (ballpark); siatki transformacyjne obcych krajow zwracaja inf poza swoim obszarem; CZ wypelnia obszar poza granica zerami (bez metadanych 0 m udaje poziom morza). Spec: docs/superpowers/specs/2026-08-10-etap0-zrodla-wielokrajowe-design.md.
 
@@ -474,7 +546,7 @@ ktoregokolwiek rocznika po ponowieniach konczy `discover_tiles`
 ## ADR-023: Silnik CUZK, polityka układów CZ i EVRF2007→5621 (etap 1)
 
 **Data:** 2026-08-11
-**Status:** Przyjeta
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-024 (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) i ADR-027 (`--target-crs` wylacznie dla CZ; Ustalenia dodatkowe pkt 6); uzupelniona przez ADR-029 ((f).1 obejmuje LAZ); uzupelnia ADR-022
 
 **Kontekst:** Etap 1 dodaje pierwsze zagraniczne zrodlo danych — CUZK (Czeski
 Urzad Zememericky a Katastralni), DMR 5G (2 m, `exportImage`) i DMR 4G (5 m,
@@ -704,34 +776,7 @@ przetrwaly zapis tych zobowiazan to ponizsze punkty i PROGRESS.md):**
    stronach granicy, wiec nie rozstrzyga w zadna strone. Asymetria z punktu
    (c) obowiazuje odtad tylko bez `--target-crs`: z ta flaga bbox PL daje
    jeden scalony wycinek.
-7. **Errata 2026-09-29 (audyt dokumentacji i testy na zywo;
-   `docs/research/2026-09-29-live-e2e-i-audyt-docs/`):**
-   - pkt (f).2: "pojedynczy kafel pobrany godlem jest z definicji
-     juz-natywnym produktem 1:1" — od ADR-024 nieaktualne dla TM33: kafel
-     TM33 to lokalny warp z EPSG:5514 na siatke EPSG:3045; 1:1 daja arkusz
-     SM5 i arkusze PL. Odrzucenie `--target-crs` z godlem zostaje (godlo
-     wyznacza zasieg i uklad produktu);
-   - pkt 3 ("jawny `--country cz` zapisuje CRS pliku geometrii, a `auto`/
-     `--country pl` — EPSG:2180"): jawny `--country cz` zapisuje obwiednie
-     w ukladzie zadania CZ (EPSG:5514 albo `--target-crs`), a `auto`/`pl` —
-     w ukladzie pliku, gdy plik jest w EPSG:5514/3045 (od 2026-09-28, review
-     max zn. 4), inaczej w EPSG:2180. Klucze sa zgodne tylko wtedy, gdy oba
-     uklady sie pokrywaja (np. plik w EPSG:5514 bez `--target-crs`);
-     ograniczenie do ujednolicenia w etapie 2 bez zmian;
-   - pkt 4: brak danych GUGiK to `NoCoverageError(DownloadError)`;
-     wycinek z czesciowym brakiem zapisuje nodata i `extra.missing_sheets`;
-     tryb listy/hierarchii ma od 2026-09-30 tolerancje R5 (ADR-027 addendum);
-     wynik CZ calkowicie nodata daje `Warning:` i kod 0, podobnie PL gdy
-     pobrane arkusze nie wnosza waznych pikseli;
-   - przycinanie pod `auto` drukuje `Info:` na stderr o obcietych
-     krawedziach i utraconej czesci poza krajami. Nietkniete krawedzie PL
-     zachowuja oryginalne wartosci (koniec poszerzania przy round-trip WGS84).
-     Nazwa pliku i `request.bbox` niosa przyciecie, oryginal
-     `extra.parent_request`; jawny kraj nie przycina. Przy `--geometry`
-     bez `--target-crs` arkusze PL wyznacza geometria;
-   - deklarowany sufit `exportImage` 15000 x 4100 px pozostaje,
-     realna granica ~8 Mpx prowadzi do kafelkowania klienta z budzetem
-     4 Mpx na zapytanie (ADR-024 errata 2).
+
 **Konsekwencje:** Pelna parytetowosc produktowa DMR miedzy PL i CZ (godlo,
 bbox, transformacja pozioma/pionowa opcjonalna). 1381 testow zielonych
 (+244 wzgledem stanu po etapie 0), pokrycie ~89%, ruff/mypy bez nowego
@@ -743,12 +788,41 @@ Etap 2 (DMP/Orto/LAZ CZ, wielokat granicy, ujednolicenie `parent_request`)
 buduje na tym samym `CuzkClient`/deskryptorach — kolejny konsument moze
 uzasadnic ekstrakcje silnika do `transport/` (punkt a).
 
+**Errata 1 (2026-09-29, audyt dokumentacji i testy na zywo;
+`docs/research/2026-09-29-live-e2e-i-audyt-docs/`):**
+- pkt (f).2: "pojedynczy kafel pobrany godlem jest z definicji
+  juz-natywnym produktem 1:1" — od ADR-024 nieaktualne dla TM33: kafel
+  TM33 to lokalny warp z EPSG:5514 na siatke EPSG:3045; 1:1 daja arkusz
+  SM5 i arkusze PL. Odrzucenie `--target-crs` z godlem zostaje (godlo
+  wyznacza zasieg i uklad produktu);
+- pkt 3 ("jawny `--country cz` zapisuje CRS pliku geometrii, a `auto`/
+  `--country pl` — EPSG:2180"): jawny `--country cz` zapisuje obwiednie
+  w ukladzie zadania CZ (EPSG:5514 albo `--target-crs`), a `auto`/`pl` —
+  w ukladzie pliku, gdy plik jest w EPSG:5514/3045 (od 2026-09-28, review
+  max zn. 4), inaczej w EPSG:2180. Klucze sa zgodne tylko wtedy, gdy oba
+  uklady sie pokrywaja (np. plik w EPSG:5514 bez `--target-crs`);
+  ograniczenie do ujednolicenia w etapie 2 bez zmian;
+- pkt 4: brak danych GUGiK to `NoCoverageError(DownloadError)`;
+  wycinek z czesciowym brakiem zapisuje nodata i `extra.missing_sheets`;
+  tryb listy/hierarchii ma od 2026-09-30 tolerancje R5 (ADR-027 errata 3);
+  wynik CZ calkowicie nodata daje `Warning:` i kod 0, podobnie PL gdy
+  pobrane arkusze nie wnosza waznych pikseli;
+- przycinanie pod `auto` drukuje `Info:` na stderr o obcietych
+  krawedziach i utraconej czesci poza krajami. Nietkniete krawedzie PL
+  zachowuja oryginalne wartosci (koniec poszerzania przy round-trip WGS84).
+  Nazwa pliku i `request.bbox` niosa przyciecie, oryginal
+  `extra.parent_request`; jawny kraj nie przycina. Przy `--geometry`
+  bez `--target-crs` arkusze PL wyznacza geometria;
+- deklarowany sufit `exportImage` 15000 x 4100 px pozostaje,
+  realna granica ~8 Mpx prowadzi do kafelkowania klienta z budzetem
+  4 Mpx na zapytanie (ADR-024 errata 2).
+
 ---
 
 ## ADR-024: Reprojekcja tresci CZ wylacznie lokalnie (zakaz `imageSR` != natywny)
 
 **Data:** 2026-08-11
-**Status:** Przyjeta (zastepuje ADR-023, "Ustalenia dodatkowe" pkt 1)
+**Status:** Przyjeta; zastepuje czesc ADR-023 (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1)
 
 **Kontekst:** Analiza szwu PL/CZ na Olzie (Cieszyn / Cesky Tesin) wykryla, ze
 `kartograf download --country cz --target-crs EPSG:2180` zwraca raster, ktorego
@@ -910,7 +984,7 @@ poprawne, GDAL renormalizuje wagi). Kierunek naprawy: maskowanie przed
 interpolacja na krawedzi, jesli konsument liczy dokladna powierzchnie
 pokrycia.
 
-**Errata (2026-09-29, pomiary historyczne przed poprawka; raport
+**Errata 1 (2026-09-29, pomiary historyczne przed poprawka; raport
 `docs/research/2026-09-29-live-e2e-i-audyt-docs/L4-pogranicze-cz-report.md`):**
 - **Diagnoza historycznej roznicy 1,25/4,92 m:** lokalny
   `build_pinned_transform` wybieral slowacki EPSG:4829 (0,5 m)
@@ -922,7 +996,7 @@ pokrycia.
   do calkowitych pikseli (co najmniej 1), krawedz E/S moze
   odbiegac o do 1/2 px lub bardziej przy bboxie < 1/2 px.
 
-**Errata 2 (fala naprawcza 2026-09-30, D1: tor CZ odmrozony):**
+**Errata 2 (2026-09-30, fala naprawcza, D1: tor CZ odmrozony):**
 1. **Operacja S-JTSK (K2).** Pomiar roznicy EPSG:1622 − EPSG:4829
    w EPSG:3045: Cieszyn (+0,03; −1,16) m i kafel `302_5550`
    (+4,52; +2,03) m wyjasnia historyczne pomiary 1,25 m i 4,92 m.
@@ -954,6 +1028,11 @@ pokrycia.
 5. Poprzednie stwierdzenie „tor CZ zweryfikowany live — nie ruszamy”
    traci moc. Testy offline sa zielone; ponowne L4 na zywej usludze
    pozostaje brama przed wydaniem, nie dowod wykonany w tej fali.
+
+**Errata 3 (2026-10-07, deduplikacja review D9):** stale z punktow (a)
+i (f) zyja w `transform/crs.py`, wspolne dla toru CZ i wycinka PL (ADR-027):
+`_WARP_MARGIN_PX` -> `WARP_MARGIN_PX` (nadal 4 px), `_HORIZONTAL_POLICY` ->
+`CONTENT_POLICY` (`min_accuracy_m=1.0`, bez siatek z CDN).
 
 ---
 
@@ -1083,7 +1162,7 @@ tabeli powyzej — policzone testem wprost na implementacji z punktu (a).
 ## ADR-026: Uklad data/ per produkt — segmenty i szablony w deskryptorach
 
 **Data:** 2026-08-28
-**Status:** Przyjeta (domyka odroczenie z ADR-017; zastepuje uklad ADR-013)
+**Status:** Przyjeta — uzupelniona przez ADR-030 (pliki w `<segment>/kampanie/`, sciezka standardowa = dowiazanie twarde albo kopia; errata 2); zastepuje ADR-013 i realizacje ukladu z ADR-005, uzupelnia ADR-017 (domyka odroczenie)
 
 **Kontekst:** Plaski uklad `data/` nie kodowal kraju ani ukladow (`nmt_1m/`
 obok `cz_dmr5g/`; PL-2000 dzielil katalog z PL-1992; ten sam arkusz w KRON86
@@ -1125,7 +1204,7 @@ dostaje szablon — pole bylo de facto wewnetrzne; uzyj `resolve_subdir()`.
 FileStorage: nowy parametr `vertical_crs` (default "EVRF2007"); nieznany
 `product` nadal passthrough (np. testowe `nmt_2000_1m`).
 
-**Uzupelnienie (2026-09-29, audyt dokumentacji; zmiany kodu z fali review max
+**Errata 1 (2026-09-29, audyt dokumentacji; zmiany kodu z fali review max
 2026-09-28, zn. 7, 8, 11):** `resolve_subdir` odrzuca pusty/bialy wymiar
 (`ValidationError`); dla kafli LAZ `{uklad}` wyznacza `LazTile.uklad`
 (kaskada `uklad_xy` -> format godla -> "2000"), przekazywany jawnie
@@ -1136,13 +1215,18 @@ deskryptora zamiast kopii szablonu (jedno zrodlo prawdy). Na zywo
 EVRF2007/KRON86, PL-1992/PL-2000, NMPT, orto, LAZ, CZ dmr5g/dmr4g bpv/evrf2007,
 `bbox/`); pochodzenie i zgodnosc rekordu GUGiK reguluje ADR-028.
 
+**Errata 2 (2026-10-07, ADR-030):** w produktach PL z kampaniami (NMT, NMPT,
+orto) sciezka `<segment>/<hierarchia>/<godlo>.<ext>` nie jest juz zwyklym
+plikiem: prawdziwe pliki leza w `<segment>/kampanie/<data>_<id>/<hierarchia>/`,
+a sciezka standardowa to dowiazanie twarde (albo kopia) do najnowszej lokalnej
+kampanii (ADR-030 (c), (d), errata 4). Segmenty z tej decyzji bez zmian.
+
 ---
 
 ## ADR-027: --target-crs dla PL — scalony wycinek bbox (mozaika + pinned warp)
 
 **Data:** 2026-08-28
-**Status:** Przyjeta (errata do ADR-023: target-crs przestaje byc flaga czeska;
-uzupelnienia 2026-09-28 na koncu wpisu)
+**Status:** Przyjeta — uzupelniona przez ADR-030 (wycinek tylko `newest`; arkusze bez sprawdzenia skorowidza: errata 5 ADR-030); zastepuje czesc ADR-023 (`--target-crs` wylacznie dla CZ) i ADR-003 (bbox = WCS GeoTIFF)
 
 **Kontekst:** `--target-crs` istnial tylko dla CZ; scenariusz "obszar
 zainteresowania w jednym kraju + dociagniecie danych z drugiego" wymagal
@@ -1169,12 +1253,12 @@ skip-existing standardowo), potem `mosaic_and_crop` (GTiff+CRS wymuszone —
 ASC ich nie niesie) + lokalny warp `warp_to_grid` z WYMUSZONA operacja
 `PinnedTransform.gdal_operation()` (maszyneria i pulapki ADR-024, w tym
 axisswap dla celow northing-first). `EPSG:2180` = sam crop
-(`transform: null`; od 2026-09-28 crop na siatce arkuszy — drugie
-uzupelnienie nizej). Fail-fast operacji przed siecia; kazdy failed arkusz =
+(`transform: null`; od 2026-09-28 crop na siatce arkuszy — errata 2
+nizej). Fail-fast operacji przed siecia; kazdy failed arkusz =
 blad calosci (kod 1; zmienione 2026-09-28 dla arkusza bez danych GUGiK —
-uzupelnienie R5 nizej). Nazwa pliku niesie wspolrzedne w ukladzie WYNIKU.
+errata 1 (R5) nizej). Nazwa pliku niesie wspolrzedne w ukladzie WYNIKU.
 Sidecar pisze CLI (od 2026-09-28 biblioteka, `write_pl_cutout_sidecar` —
-drugie uzupelnienie nizej): `horizontal_crs=target`, `transform.horizontal=
+errata 2 nizej): `horizontal_crs=target`, `transform.horizontal=
 "pinned: ..."`, `nodata=-9999`, `extra.parent_request`; kanal
 `sheet_files` (fakt: dane z arkuszy OpenData — kanal `bbox_raster` nie
 istnieje dla 5m, a dla 1m deklaruje wylacznie KRON86). Wylaczenia 0.7.0:
@@ -1190,8 +1274,8 @@ Ten powiekszony bbox steruje TAKZE selekcja arkuszy w OBU trybach: `--bbox`
 wybiera arkusze wprost z niego, a `--geometry` przy warpie bierze SUME godel
 geometrii (per obiekt) i godel powiekszonego bboxa (R-01; dla celu EPSG:2180
 zapasu nie ma, wiec arkusze wyznacza sama geometria). Od 2026-09-28 selekcja
-w trybie bbox i w sumie R-01 ma jeszcze zapas 1 piksela (drugie
-uzupelnienie nizej). Wycinek z `--geometry` obejmuje CALA obwiednie
+w trybie bbox i w sumie R-01 ma jeszcze zapas 1 piksela (errata 2
+nizej). Wycinek z `--geometry` obejmuje CALA obwiednie
 geometrii — nie ma maskowania do obiektow, a `nodata` oznacza wylacznie
 brak pobranego arkusza.
 
@@ -1210,7 +1294,7 @@ warp CZ zostawia poprzedni plik jak w PL.)
 arkuszy w `--geometry` opisywalo odwrotnosc zachowania kodu — review max
 2026-08-30, znaleziska 5-6.)
 
-**Uzupelnienie 2026-09-28 (R5, review max zn. 2):** arkusz, dla ktorego GUGiK
+**Errata 1 (2026-09-28, R5, review max zn. 2):** arkusz, dla ktorego GUGiK
 nie ma danych (`NoCoverageError` — wszystkie warstwy skorowidza odpowiedzialy
 i zadna nie ma arkusza), nie wetuje wycinka: w jego miejscu jest nodata,
 CLI wypisuje `Warning:`, a sidecar niesie `extra.missing_sheets` (API
@@ -1228,7 +1312,7 @@ pokrycia GUGiK — na morzu, w dziurach pokrycia 1 m, po czeskiej stronie
 bboxa przygranicznego; jeden taki arkusz wetowal dotad caly wycinek, wiec
 `--country auto --target-crs` na granicy dawal wtedy sam wycinek CZ.
 
-**Uzupelnienie 2026-09-28 (R1, R3, fakty 5-8 planu fali review max):**
+**Errata 2 (2026-09-28, R1, R3, fakty 5-8 planu fali review max):**
 - **Siatka arkuszy (R1, review max zn. 1).** Crop mozaiki jest rozszerzany
   NA ZEWNATRZ do siatki pikseli arkuszy (siatka wiekszosci zrodel, < 1 px na
   strone). Dla `EPSG:2180` wycinek to wiec obszar zadania rozszerzony
@@ -1273,7 +1357,7 @@ bboxa przygranicznego; jeden taki arkusz wetowal dotad caly wycinek, wiec
   jest kompresowany, miejsce na dysku sprawdzane przed siecia (dolne
   oszacowanie), a CLI wypisuje `Info:` dla wycinkow >= 1 GiB.
 
-**Uzupelnienie 2026-09-30 (R5-lista, D3/D8, D4/D5/D9, N2/N4/N9):**
+**Errata 3 (2026-09-30, R5-lista, D3/D8, D4/D5/D9, N2/N4/N9):**
 - **R5 w liscie i hierarchii.** `NoCoverageError` dla arkusza
   nie wetuje wszystkich pozostalych: niezaleznie od `--workers`
   probowane sa wszystkie, z `DownloadProgress.status="no_coverage"`
@@ -1305,7 +1389,7 @@ Opis biezacego przeplywu: `docs/ARCHITECTURE.md` sekcja 4.3.
 ## ADR-028: Wybor rekordu skorowidza GUGiK i `extra.source`
 
 **Data:** 2026-09-30
-**Status:** Przyjeta
+**Status:** Przyjeta — uzupelniona przez ADR-030 (strategie kampanii `newest`/`all`, `--min-year`; regula wyboru `newest` bez zmian; awaria skorowidza: errata 2); zastepuje czesc ADR-020 (zaszyte warstwy i fallback)
 
 **Kontekst:** GetFeatureInfo zwraca wiele rekordow: rozne kampanie, RGB/CIR,
 rozdzielczosci 0,5 m i 1 m, arkusze PL-1992/2000 i potomne godla.
@@ -1349,8 +1433,8 @@ lub `DownloadError`. `MetadataCache.get_url/set_url` zastapiono
 inicjalizacji (ADR-019). Sidecar arkusza PL-2000 deklaruje rzeczywisty
 `horizontal_crs` strefy EPSG:2176-2179.
 
-**Errata 2026-10-06 (review-2 N4, E14, E17, D16):**
-- "po 3 probach" (tu i w errata 2026-09-30 ADR-020 "Zapytania transportowe
+**Errata 1 (2026-10-06, review-2 N4, E14, E17, D16):**
+- "po 3 probach" (tu i w errata 3 ADR-020 z 2026-09-30 "Zapytania transportowe
   maja 3 proby"): od 9bcc040 ponawiane sa tylko blad sieci, HTTP 429 i 5xx
   (do 3 prob, `Retry-After` wydluza przerwe); inne 4xx (403/404) koncza
   przy pierwszej probie z `DownloadError.status_code`
@@ -1365,12 +1449,20 @@ inicjalizacji (ADR-019). Sidecar arkusza PL-2000 deklaruje rzeczywisty
   EPSG:2180, deklaracja rekordu zostaje w `extra.source.uklad`, a CLI
   drukuje `Warning:` (E17).
 
+**Errata 2 (2026-10-07, ADR-030 errata 5):** zdanie z Konsekwencji
+"konsumenci nie dostana [...] starszej kampanii po awarii skorowidza" ma
+jeden jawny wyjatek: `newest` przy bledzie TRANSPORTU skorowidza (siec,
+429, 5xx) i istniejacej lokalnej kampanii arkusza uzywa tej lokalnej
+kampanii — z `Warning:` i polem `unverified` w wyniku, nigdy po cichu.
+Awaria inna niz transport, `all`, `--min-year`, `--force` albo brak
+lokalnej kampanii = `DownloadError` jak dotad.
+
 ---
 
 ## ADR-029: Wybor kafli LAZ wg pokrycia obszaru i pobieranie LAZ w bibliotece
 
 **Data:** 2026-10-07
-**Status:** Przyjeta (zastepuje regule "newest-per-tile" z ADR-021)
+**Status:** Przyjeta — uzupelniona przez ADR-030 (`--campaigns all`/`--min-year` dla LAZ, (j); errata 1); zastepuje czesc ADR-021 (regula newest-per-tile)
 
 **Kontekst:** ADR-021 deduplikowal kafle po godle (najnowszy `akt_rok`
 per godlo). Kafle PL-1992 i PL-2000 tego samego miejsca maja rozne godla,
@@ -1431,12 +1523,19 @@ obszar wychodzacy poza nowsza kampanie dostanie takze starszy kafel
 niepelne (`NIE`) nie wypieraja starszych pelnych — obszar moze wtedy
 dostac oba. Biblioteka (Hydrograf) pobiera LAZ bez powielania CLI.
 
+**Errata 1 (2026-10-07, ADR-030 (j)):** "starsze roczniki tylko jawnie
+(`--year`)" — takze przez `--campaigns all`: wszystkie kafle, ktorych rama
+przecina obszar, bez deduplikacji pokryciowej (kafel przeciety tylko
+obwiednia nadal pomijany). `--min-year` jest dolna granica `akt_rok`
+(z `newest` wybor wg pokrycia dziala na rocznikach od granicy) i wyklucza
+sie z `--year`.
+
 ---
 
 ## ADR-030: Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem
 
-**Data:** 2026-10-07
-**Status:** Przyjeta (decyzje uzytkownika 2026-10-07; uzupelnia ADR-026 i ADR-028, nie zmienia reguly wyboru z ADR-028)
+**Data:** 2026-10-07 (decyzje uzytkownika)
+**Status:** Przyjeta; uzupelnia ADR-026 (`kampanie/`), ADR-027 (wycinek tylko `newest`), ADR-028 (strategie; regula wyboru `newest` bez zmian), ADR-029 (LAZ: `all`, `--min-year`) i ADR-019 (`campaigns_cache`)
 
 **Kontekst:** Arkusz GUGiK ma czesto kilka kampanii (rozne daty pozyskania,
 zlecenia, zrodla: skaning laserowy albo zdjecia lotnicze). Pomiar 2026-10-07
@@ -1587,7 +1686,7 @@ oryginalna nazwa GUGiK, unikalna per kampania), bez dowiazan.
   zbiorcze, `Starsze`, nazwa nieznana), `all` + skip per kampania.
 
 
-**Errata 2026-10-07 (plan `docs/research/2026-10-07-plan-adr030.md`,
+**Errata 1 (2026-10-07, plan `docs/research/2026-10-07-plan-adr030.md`,
 weryfikacja `docs/research/2026-10-07-weryfikacja-planu-adr030.md`;
 zaakceptowane przez uzytkownika):**
 - (g) **[Q1]** Warstwa GetCapabilities o nazwie niepasujacej do
@@ -1608,8 +1707,12 @@ zaakceptowane przez uzytkownika):**
   kampanii (`write_sidecar`, `_note_reuse`). Dowiazaniem jest tylko plik
   danych.
 - (d) Dowiazanie NIGDY nie jest przestawiane na kampanie starsza od
-  biezacego celu (porownanie klucza `<data>_<id>`; gdy sidecar celu jest
-  nieczytelny — klucz z nazwy katalogu kampanii).
+  biezacego celu: przestawienie tylko na klucz `(aktualnosc, dt_pzgik, url)`
+  scisle wiekszy niz klucz celu (rowny albo mniejszy = bez zmian). Klucz
+  celu pochodzi z sidecara kampanii, a gdy ten jest nieczytelny — z nazwy
+  katalogu `<data>_<id>` jako `(data, "", "")`, dolne oszacowanie
+  (`download/links.py::campaign_key_of`). [Poprawione 2026-10-08:
+  wczesniejsze brzmienie mowilo o porownaniu klucza `<data>_<id>`.]
 - (j) **[Q2]** Wycinek PL (`--target-crs`) z `--min-year` = `ValidationError`
   przed siecia, kod 1 — tak jak z `--campaigns all`.
 - (j) **[Q9]** Godlo CZ (jednoznacznie czeskie) pod `--country auto`
@@ -1631,7 +1734,7 @@ zaakceptowane przez uzytkownika):**
 - **[Q6]** `all` dla orto moze oznaczac ~10 kampanii i GB danych na arkusz —
   bez limitu, opis w dokumentacji i `logger.info` z liczba kampanii.
 
-**Errata 2 2026-10-07 (decyzje uzytkownika do pytan planu N-1..N-3):**
+**Errata 2 (2026-10-07, decyzje uzytkownika do pytan planu N-1..N-3):**
 - **[N-1]** Sidecar pliku w `kampanie/` jest OBOWIAZKOWY: nieudany zapis
   sidecara kampanii = porazka pobrania tej kampanii (plik danych usuwany,
   `DownloadError`). Sidecar niesie tozsamosc kampanii. Pozostale sidecary
@@ -1658,7 +1761,7 @@ zaakceptowane przez uzytkownika):**
   Kartograf — rozpoznanie katalogu rastrow DMR 5G w toku). `Info:` tylko
   dla obszaru z czescia PL.
 
-**Errata 3 2026-10-07 (decyzja uzytkownika po rozpoznaniu CUZK,
+**Errata 3 (2026-10-07, decyzja uzytkownika po rozpoznaniu CUZK,
 `docs/research/2026-10-07-cuzk-kampanie.md`):** mechanizm kampanii jest
 WYLACZNIE dla PL (GUGiK) — bez wspolnej, kraj-niezaleznej abstrakcji
 kampanii. CUZK nie udostepnia danych archiwalnych (ImageServer = jeden
@@ -1670,7 +1773,7 @@ calkowicie nowego pobrania kompletu albo pobieranie czesciowe z
 porownaniem zmian w metadanych (np. `ROK` z Metadata/20, ATOM `<updated>`,
 `Last-Modified` plikow openzu).
 
-**Errata 4 2026-10-07 (decyzja uzytkownika po weryfikacji na zywo T12,
+**Errata 4 (2026-10-07, decyzja uzytkownika po weryfikacji na zywo T12,
 `docs/research/2026-10-07-adr030-live/raport.md`):** sciezka standardowa
 jest dowiazaniem WYLACZNIE twardym: metody `hardlink` -> `copy` (+ `Warning:`);
 symlink USUNIETY (zastepuje kolejnosc symlink -> hardlink -> kopia z punktu (d)).
@@ -1687,15 +1790,52 @@ hardlinkow (exFAT/FAT, sshfs/FUSE). `extra.link` = `hardlink|copy`,
 zrodlo celu, bo hardlink nie niesie wskazania). Istniejacy symlink (dane
 deweloperskie sprzed wydania) = sciezka nieznana: `newest` zastepuje go
 hardlinkiem, bez kodu zgodnosci. Kopiowanie `data/`: `rsync -aH` / `cp -a`
-(bez zachowania hardlinkow powstaje duplikat).
+(bez zachowania hardlinkow powstaje duplikat). Errata obejmuje tez
+Konsekwencje: ryzyko "narzedzia kopiujace moga kopiowac link zamiast danych"
+przechodzi w ryzyko duplikatu (kopiowanie bez `rsync -aH`/`cp -a`), a
+"dowiazania wiszacego" z punktu (d) nie ma — usuniety katalog kampanii (albo
+brak sidecara standardowego) oznacza brak celu w `extra.link_target`, wiec
+plik jest traktowany jak brakujacy i pobierany od nowa; `FileStorage.delete`
+sciezki standardowej usuwa tylko te nazwe (plik w `kampanie/` zostaje).
+
+**Errata 5 (2026-10-07, przeglad koncowy T11 (I-1) i poprawki FB; decyzja
+uzytkownika, zapis 2026-10-08):** awaria skorowidza pod `newest` nie
+przewraca arkusza, ktory ma lokalna kampanie (uzupelnia (b)). Warunki:
+strategia `newest`, bez `--min-year`, bez `--force` (biblioteka:
+`skip_existing`), `resolve_campaigns` konczy sie bledem TRANSPORTU (siec
+albo timeout, HTTP 429, 5xx — `_is_transport_failure` w
+`download/manager.py`, polityka `transport/http.py`; NIE `NoCoverageError`,
+nie inne 4xx, nie raport OGC ani zly szablon odpowiedzi), a sciezka
+standardowa wskazuje istniejaca lokalna kampanie (`linked_campaign(std)`).
+Wtedy arkusz jest pomijany z lokalnej kampanii, dowiazanie zostaje bez
+zmian, a wynik niesie blad: `SheetFetch.unverified`,
+`DownloadResult.unverified` (`{godlo: blad}`). CLI drukuje `Warning: <godlo>:
+skorowidz GUGiK niedostepny — uzyto lokalnej kampanii bez sprawdzenia nowszej
+(<blad>)` (lista i hierarchia: jedno `Warning:` z liczba arkuszy i godlami),
+kod wyjscia bez zmian. Wycinek `--target-crs` (ADR-027):
+`PlCutoutResult.unverified` i sidecar `extra.unverified_sheets`
+(`{godlo: blad}`), odtwarzane z sidecara przy pominieciu istniejacego wycinka
+(CLI powtarza `Warning:` z dopiskiem `(z sidecara istniejacego wycinka)`).
+`all`, `--min-year`, `--force`, brak lokalnej kampanii albo blad inny niz
+transport = blad jak dotad (ADR-028: bez cichej degradacji; ADR-028
+errata 2). Powod: chwilowa awaria GUGiK nie powinna przewracac ponownego
+uruchomienia, gdy dane sa juz lokalnie; `Warning:` zachowuje jawnosc.
+Biblioteka bez `MetadataCache` pyta skorowidz przy kazdym pobraniu arkusza —
+zalecane podpiecie cache (README).
+
 ---
 
-<!-- Szablon nowej decyzji:
+## Szablon nowego ADR
 
+Kopiuj ponizszy blok przy dodawaniu decyzji: kolejny numer, status ze
+slownika na poczatku pliku, nowy wiersz w indeksie i odsylacze po obu
+stronach relacji. Erraty dopisuj na koncu wpisu.
+
+```markdown
 ## ADR-XXX: Tytul
 
-**Data:** YYYY-MM-DD
-**Status:** Przyjeta | Odrzucona | Zastapiona przez ADR-YYY
+**Data:** RRRR-MM-DD
+**Status:** Przyjeta | Przyjeta — czesciowo zastapiona przez ADR-YYY (zakres) | Przyjeta — uzupelniona przez ADR-YYY (zakres) | Zastapiona przez ADR-YYY | Odrzucona
 
 **Kontekst:** Dlaczego temat powstal.
 
@@ -1707,4 +1847,5 @@ hardlinkiem, bez kodu zgodnosci. Kopiowanie `data/`: `rsync -aH` / `cp -a`
 
 **Konsekwencje:** Co z tego wynika.
 
--->
+**Errata 1 (RRRR-MM-DD, zrodlo/powod):** Dopisywane pozniej.
+```
