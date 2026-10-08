@@ -123,7 +123,10 @@
 
 - Przeglad zgloszenia Hydrografa (A1-A9, B1-B4) wzgledem kodu i specu
   magazynu wersjonowanego; podzial 0.7.1 / 0.8.0 zaakceptowany; decyzje
-  A2 i A7 w backlogu "Do 0.7.1 — wymagania Hydrografa". Bez zmian w kodzie.
+  A2 i A7 w backlogu "Do 0.7.1 — wymagania Hydrografa"; uzupelnienie A10-A13
+  dopisane (R6 osobno po 0.7.1). Plan implementacji:
+  `docs/superpowers/plans/2026-10-08-hydrograf-0.7.1.md` (11 zadan, galaz
+  `feat/hydrograf-0.7.1`). Bez zmian w kodzie.
 
 ### Roadmapa do v1.0.0 (2026-10-08)
 
@@ -1411,12 +1414,32 @@ Z planu 0.8.0 wchodza wczesniej tylko: sha256 liczone w strumieniu
   wyjatek zamiast `on_disabled`.
 - [ ] **B4 — weryfikacja pobranych arkuszy NMT** (przeniesione z 0.8.0):
   naglowek ASC wzgledem bboxa godla, URL rekordu bez godla w nazwie = blad.
+- [ ] **A10 — mozaika z lokalnych arkuszy:** publiczna
+  `build_cutout_from_sheets(...)` bez sieci, wynik pod sciezka
+  wywolujacego (dzis `build_pl_cutout` wewnetrzne).
+- [ ] **A11 — jawny resampling przy EPSG:2180:** opcja
+  `resample_off_grid=True` (W1 z operacja tozsamosciowa, siatka
+  w wielokrotnosciach piksela); domyslnie `GridMismatchError`, CLI bez zmian.
+- [ ] **A12 — `source_info()` przy kampaniach:** dokumentacja (decyzja:
+  bez zmiany kodu) — zrodlem pochodzenia arkusza jest sidecar sciezki
+  standardowej (link moze wskazywac starsza kampanie niz najnowszy rekord).
+- [ ] **A13 — `LandCoverManager(cache=)`** przekazywany do BDOT10k
+  i SoilGrids (CORINE bez cache).
+- [ ] **A6 (rozszerzenie) — 100 % nodata CZ w bibliotece:** flaga wyniku,
+  `extra.all_nodata` i `logger.warning`. Scalanie PL+CZ z priorytetem PL
+  (R6) — decyzja uzytkownika 2026-10-08: osobno po 0.7.1, wlasny
+  brainstorming i spec.
 - [ ] **B1-B3 — rozbieznosci ze specem magazynu** (do rozstrzygniecia przed
   implementacja 0.8.0, nie teraz): wersja NMT = kampania + odcisk vs D1
   (sha256 tresci); `.lock` vs brak blokad; import plikow 0.6.1 vs D10 (bez
   migracji); dwa korzenie staging/archiwum, `copy_to`/`fsck`/
   `estimate_missing` vs `verify` w podprojekcie 2; "brak pokrycia" jako
-  wersja i SoilGrids z natywnych kafli ISRIC — poza specem.
+  wersja i SoilGrids z natywnych kafli ISRIC — poza specem;
+  rozszerzenie B1 (uzupelnienie 2026-10-08): tryb offline, wersja i sha256
+  w wyniku pobrania, migracja/import drzewa `kampanie/` -> `versions/`
+  (sprzeczne z D10 specu). Fakt: paczki BDOT10k nie maja `ETag` ani
+  `Last-Modified` (tylko `Content-Length`), wiec wersja BDOT10k
+  z `Last-Modified` (B2) jest niewykonalna.
 
 #### Do 0.7.1 — uwagi z testu na zywo przed wydaniem 0.7.0 (2026-10-08)
 
