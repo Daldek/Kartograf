@@ -209,7 +209,7 @@ def test_newest_downloads_into_kampanie_and_links(tmp_path):
     data = json.loads((path.parent / (path.name + ".meta.json")).read_text())
     assert data["extra"]["link"] == "hardlink"
     assert data["extra"]["campaign"]["id"] == "84183"
-    assert data["request"] == {"godlo": G, "campaigns": "newest"}
+    assert data["request"] == {"sheet": G, "campaigns": "newest"}
     assert isinstance(m.last_sheet, SheetFetch)
     assert m.last_sheet.skipped is False and m.last_sheet.link == "hardlink"
     assert m.last_sheet.downloaded == (campaign_path(tmp_path, REC["84183"]),)
@@ -325,7 +325,7 @@ def test_all_min_year_filters(tmp_path):
         "2025-10-21_84183",
     ]
     assert meta(campaign_path(tmp_path, REC["83233"]))["request"] == {
-        "godlo": G,
+        "sheet": G,
         "campaigns": "all",
         "min_year": 2025,
     }
@@ -444,7 +444,7 @@ def test_campaign_sidecar_source_matches_its_own_record(tmp_path):
         data = meta(campaign_path(tmp_path, record))
         assert data["extra"]["source"]["url"] == record.url
         assert data["extra"]["campaign"]["date"] == record.aktualnosc
-        assert data["extra"]["source"]["skorowidz"] == "https://wms"
+        assert data["extra"]["source"]["index_url"] == "https://wms"
 
 
 # =============================================================================

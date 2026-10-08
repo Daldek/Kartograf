@@ -62,44 +62,54 @@ class SkorowidzRecord:
         return self.raw.get("format")
 
     def to_source(self, endpoint: str) -> dict:
-        """Metadane wybranego pliku do sidecara oraz cache rekordow."""
+        """Metadane wybranego pliku do sidecara oraz cache rekordow.
+
+        Keys follow the sidecar schema ``kartograf-meta/1`` (English names,
+        ADR-031); GUGiK record fields are mapped here, in one place.
+        """
         return {
             "url": self.url,
-            "skorowidz": endpoint,
+            "index_url": endpoint,
             "layer": self.layer,
-            "godlo": self.godlo,
-            "aktualnosc": self.aktualnosc,
-            "aktualnosc_rok": self.raw.get("aktualnoscRok") or self.aktualnosc[:4],
-            "dt_pzgik": self.dt_pzgik,
+            "sheet": self.godlo,
+            "acquisition_date": self.aktualnosc,
+            "acquisition_year": self.raw.get("aktualnoscRok") or self.aktualnosc[:4],
+            "pzgik_date": self.dt_pzgik,
             "resolution_m": self.resolution_m,
-            "uklad": self.raw.get("ukladWspolrzednychPoziomych")
+            "declared_crs": self.raw.get("ukladWspolrzednychPoziomych")
             or self.raw.get("ukladWspolrzednych"),
             "full_sheet": self.full_sheet,
-            "numer_zgloszenia": self.raw.get("numerZgloszeniaPracy"),
-            "zrodlo_danych": self.raw.get("zrDanych") or self.raw.get("zrodloDanych"),
+            "survey_work_id": self.raw.get("numerZgloszeniaPracy"),
+            "data_source": self.raw.get("zrDanych") or self.raw.get("zrodloDanych"),
             "format": self.raw.get("format"),
         }
 
     @classmethod
     def from_source(cls, source: dict) -> "SkorowidzRecord":
-        """Odtworz wybrany rekord z payloadu cache (bez ponownej selekcji)."""
-        uklad, zone = _horizontal_crs(source.get("uklad") or "")
+        """Odtworz wybrany rekord z payloadu cache (bez ponownej selekcji).
+
+        Raises ``KeyError`` when a required key (``url``, ``sheet``,
+        ``acquisition_date``, ``layer``) is missing — e.g. a cache entry
+        written before ADR-031 with Polish key names; callers treat that
+        as a cache miss (``cached_record``).
+        """
+        uklad, zone = _horizontal_crs(source.get("declared_crs") or "")
         raw = {
             key: str(source[field])
             for key, field in (
-                ("ukladWspolrzednychPoziomych", "uklad"),
-                ("aktualnoscRok", "aktualnosc_rok"),
-                ("numerZgloszeniaPracy", "numer_zgloszenia"),
-                ("zrDanych", "zrodlo_danych"),
+                ("ukladWspolrzednychPoziomych", "declared_crs"),
+                ("aktualnoscRok", "acquisition_year"),
+                ("numerZgloszeniaPracy", "survey_work_id"),
+                ("zrDanych", "data_source"),
                 ("format", "format"),
             )
             if source.get(field) is not None
         }
         return cls(
             url=source["url"],
-            godlo=source["godlo"],
-            aktualnosc=source["aktualnosc"],
-            dt_pzgik=source.get("dt_pzgik"),
+            godlo=source["sheet"],
+            aktualnosc=source["acquisition_date"],
+            dt_pzgik=source.get("pzgik_date"),
             layer=source["layer"],
             uklad=uklad,
             zone=zone,
@@ -107,6 +117,21 @@ class SkorowidzRecord:
             full_sheet=source.get("full_sheet"),
             raw=raw,
         )
+
+
+def cached_record(source: object) -> SkorowidzRecord | None:
+    """Record restored from a ``record_cache``/``campaigns_cache`` payload.
+
+    ``None`` = unusable payload (not a dict, missing keys — an entry written
+    before ADR-031 with Polish key names): the caller treats it as a cache
+    miss, resolves the sheet again and overwrites the entry.
+    """
+    if not isinstance(source, dict):
+        return None
+    try:
+        return SkorowidzRecord.from_source(source)
+    except (KeyError, TypeError, ValueError):
+        return None
 
 
 def is_skorowidz_answer(text: str) -> bool:
@@ -469,9 +494,13 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                         godlo=godlo,
                         hints=tuple(cached.get("hints") or ()),
                     )
-                source = cached["source"]
-                self._remember_source(godlo, source)
-                return SkorowidzRecord.from_source(source)
+                source = cached.get("source")
+                record = cached_record(source)
+                if record is not None and isinstance(source, dict):
+                    self._remember_source(godlo, source)
+                    return record
+                # pre-ADR-031 payload (Polish keys) = cache miss
+                logger.debug("%s: unreadable record_cache entry — refreshing", godlo)
 
         if query.endpoint is None:
             raise self._missing_endpoint(query, godlo)
@@ -537,7 +566,12 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                         godlo=godlo,
                         hints=tuple(cached.get("hints") or ()),
                     )
-                return [SkorowidzRecord.from_source(s) for s in cached["sources"]]
+                sources = cached.get("sources")
+                restored = [cached_record(s) for s in sources or ()]
+                if sources and all(r is not None for r in restored):
+                    return [r for r in restored if r is not None]
+                # pre-ADR-031 payload (Polish keys) = cache miss
+                logger.debug("%s: unreadable campaigns_cache entry — refreshing", godlo)
 
         if query.endpoint is None:
             raise self._missing_endpoint(query, godlo)

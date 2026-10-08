@@ -121,13 +121,14 @@ class CampaignRef:
         return (self.date, self.dt_pzgik or "", self.url)
 
     def to_extra(self) -> dict:
+        """``extra.campaign`` of the campaign sidecar (English keys, ADR-031)."""
         return {
             "id": self.id,
             "date": self.date,
-            "zgloszenie": self.zgloszenie,
+            "survey_work_id": self.zgloszenie,
             "source": self.source,
             "full_sheet": self.full_sheet,
-            "dt_pzgik": self.dt_pzgik,
+            "pzgik_date": self.dt_pzgik,
         }
 
 
