@@ -625,7 +625,13 @@ Baza jest otwierana leniwie: plik `.kartograf_cache.db` powstaje dopiero przy
 pierwszym zapisie (`set_*`); konstrukcja, odczyty (`get_*` = chybienie),
 `stats()` (zera, `db_exists: false`), `clear()` i `close()` na braku pliku
 go nie tworza, wiec `kartograf cache path|stats|clear` w katalogu bez bazy
-niczego nie zapisuja.
+niczego nie zapisuja. Cache jest tylko przyspieszeniem: kazdy
+`sqlite3.Error` (uszkodzony/uciety plik, brak uprawnien, `database is
+locked`) wylacza instancje na reszte jej zycia (odczyt = chybienie, zapis =
+no-op, `MetadataCache.error`, `stats()["error"]`) z jednym ostrzezeniem
+(`logger.warning` albo `on_disabled=`; CLI: jedno `Warning:` na komende);
+pobieranie idzie dalej. Naprawa: `kartograf cache clear` usuwa nieczytelny
+plik z `-wal`/`-shm`.
 `DownloadManager` pisze sidecar po kazdym udanym arkuszu; arkusz ASC GUGiK
 nie niesie CRS (rasterio: `crs=None`), wiec jedynym nosnikiem ukladu jest
 sidecar. Ponowne uruchomienie rozwiazuje najnowszy rekord arkusza (cache 7 d;
