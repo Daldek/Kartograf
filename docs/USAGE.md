@@ -70,7 +70,7 @@ starsze kafle pokryte przez nowsze są pomijane z komunikatem `Info:`
 ([ADR-029](DECISIONS.md), szczegóły: SCOPE 2.5 i ARCHITECTURE 4.7 "Wybór
 kafli"); `--year` wybiera jeden rocznik (rocznik nieobecny w usłudze = błąd
 z listą dostępnych). WFS GUGiK w EPSG:2180 używa kolejności osi (N,E).
-`--min-density` i `extra.gestosc` to gęstość **nominalna** z WFS
+`--min-density` i `extra.nominal_density` to gęstość **nominalna** z WFS
 GUGiK — faktyczna bywa wyższa.
 
 ### 1.2 Selekcja obszaru i wybór kraju (`--country`)
