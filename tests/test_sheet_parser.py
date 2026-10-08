@@ -1540,6 +1540,16 @@ class TestFindSheetsOutsideRange:
         assert sheets
         assert all(s.startswith("M-33-") for s in sheets)
 
+    def test_bbox_crossing_48n_returns_only_m_band_sheets(self):
+        """Columns in range, band L (44-48N) outside it: only M-33 codes."""
+        from kartograf.core.bbox import BBox
+
+        sheets = find_sheets_for_bbox(
+            BBox(15.0, 47.9, 15.2, 48.1, "EPSG:4326"), "1:100000"
+        )
+        assert sheets
+        assert all(s.startswith("M-33-") for s in sheets)
+
     def test_bbox_fully_outside_poland_returns_empty(self):
         from kartograf.core.bbox import BBox
 
