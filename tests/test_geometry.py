@@ -168,7 +168,7 @@ def shp_points_epsg2180(tmp_path):
     shp_path = tmp_path / "points_2180.shp"
     with shapefile.Writer(str(shp_path), shapeType=shapefile.POINT) as w:
         w.field("name", "C", 40)
-        # Punkt 1: Warszawa (przekroj hydrologiczny)
+        # Point 1: Warsaw (hydrological cross-section)
         w.point(637000, 487000)
         w.record("point1")
         # Point 2: another 1:10000 sheet
@@ -504,14 +504,14 @@ def _build_gpkg(gpkg_path: Path, blobs: list[bytes], geometry_type: str = "POLYG
 
 @pytest.fixture
 def gpkg_no_envelope_polygon(tmp_path):
-    """GPKG z envelope_type=0 i geometria inna niz punkt (WKB POLYGON)."""
+    """GPKG with envelope_type=0 and a non-point geometry (WKB POLYGON)."""
     blob = _make_gpkg_blob(420000, 230000, 421000, 231000, envelope_type=0, wkb_type=3)
     return _build_gpkg(tmp_path / "no_env_poly.gpkg", [blob])
 
 
 @pytest.fixture
 def gpkg_empty_and_point(tmp_path):
-    """GPKG (envelope_type=0) z pusta geometria i prawdziwym punktem."""
+    """GPKG (envelope_type=0) with an empty geometry and a real point."""
     empty_blob = _make_gpkg_blob(0, 0, 0, 0, envelope_type=0, empty=True)
     point_blob = _make_gpkg_blob(420000, 230000, 420000, 230000, envelope_type=0)
     return _build_gpkg(
@@ -865,7 +865,7 @@ class TestReadSourceCrs:
             read_source_crs(shp_no_prj)
 
     def test_gpkg_crs(self, gpkg_epsg2180):
-        """GPKG: CRS z gpkg_spatial_ref_sys pierwszej warstwy."""
+        """GPKG: CRS from gpkg_spatial_ref_sys of the first layer."""
         from pyproj import CRS
 
         from kartograf.core.geometry import read_source_crs
@@ -873,7 +873,7 @@ class TestReadSourceCrs:
         assert read_source_crs(gpkg_epsg2180) == CRS.from_epsg(2180)
 
     def test_gpkg_layer_selection_matches_bboxes(self, gpkg_multi_layer):
-        """Wybor warstwy taki sam jak przy czytaniu obiektow."""
+        """Layer choice is the same as when reading features."""
         from kartograf.core.geometry import read_source_crs
 
         crs = read_source_crs(gpkg_multi_layer, layer="layer_b")

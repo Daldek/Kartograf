@@ -53,7 +53,7 @@ def orto_record(
     url: str | None = None,
     **fields: str,
 ) -> dict:
-    """Rekord skorowidza orto o polach jak w odpowiedzi GUGiK (2026-09-29)."""
+    """Orto index record with fields as in the GUGiK response (2026-09-29)."""
     record = {
         "url": url
         or f"https://opendata.geoportal.gov.pl/ortofotomapa/81423/81423_1_{godlo}.tif",
@@ -79,7 +79,7 @@ def orto_body(records: list[dict]) -> str:
 
 
 def gfi_response(body: str) -> Mock:
-    """Atrapa odpowiedzi HTTP 200 skorowidza (GetFeatureInfo / GetCapabilities)."""
+    """Fake HTTP 200 index response (GetFeatureInfo / GetCapabilities)."""
     response = Mock(spec=requests.Response)
     response.status_code = 200
     response.text = body
@@ -108,7 +108,7 @@ def queried_layers(session: Mock) -> list[str]:
 
 
 class TestGugikOrtoProviderInit:
-    """Testy inicjalizacji GugikOrtoProvider."""
+    """Tests of GugikOrtoProvider initialization."""
 
     def test_init_no_args(self):
         """Test creating a provider without arguments (default values)."""
@@ -141,12 +141,12 @@ class TestGugikOrtoProviderProperties:
     """Tests of GugikOrtoProvider properties."""
 
     def test_name(self):
-        """Test nazwy providera."""
+        """Test the provider name."""
         provider = GugikOrtoProvider()
         assert provider.name == "GUGiK Ortofotomapa"
 
     def test_base_url(self):
-        """Test bazowego URL geoportal."""
+        """Test the geoportal base URL."""
         provider = GugikOrtoProvider()
         assert provider.base_url == "https://mapy.geoportal.gov.pl"
 
@@ -225,8 +225,7 @@ class TestGugikOrtoProviderDownload:
 
 
 class TestGugikOrtoProviderSelection:
-    """K5: RGB variant + newest campaign, sheet code as a whole token, CRS from the
-    code."""
+    """K5: RGB + newest campaign, code as a whole token, CRS from the code."""
 
     @staticmethod
     def provider_with(*bodies: str) -> tuple[GugikOrtoProvider, Mock]:
@@ -235,16 +234,14 @@ class TestGugikOrtoProviderSelection:
         return GugikOrtoProvider(session=session), session
 
     def test_picks_rgb_not_first_record(self):
-        """A raw GUGiK response (CIR before RGB) -> the RGB URL, not the first in
-        HTML."""
+        """A raw GUGiK response (CIR before RGB) -> the RGB URL, not the first one."""
         provider, session = self.provider_with(sample("orto_2024.html"))
 
         assert provider._get_opendata_url(GODLO) == RGB_2024
         assert session.get.call_count == 1
 
     def test_source_info_carries_color_and_campaign(self):
-        """extra.source (D5): url, layer, acquisition date, pixel and colour of the
-        file."""
+        """extra.source (D5): url, layer, acquisition date, pixel and file colour."""
         provider, _ = self.provider_with(sample("orto_2024.html"))
         provider._get_opendata_url(GODLO)
 
@@ -271,8 +268,7 @@ class TestGugikOrtoProviderSelection:
         assert provider.source_info(GODLO)["acquisition_date"] == "2022-06-03"
 
     def test_pl2000_godlo_gets_pl2000_record(self):
-        """A PL-2000 sheet code gets a PL-2000 record, not the PL-1992 CIR from the
-        first layer."""
+        """A PL-2000 code gets a PL-2000 record, not the first layer's PL-1992 CIR."""
         provider, _ = self.provider_with(
             sample("orto_2024.html"),
             orto_body([]),
@@ -286,8 +282,7 @@ class TestGugikOrtoProviderSelection:
         assert provider.source_info("7.124.07.24")["declared_crs"] == "PL-2000:S7"
 
     def test_pl1992_godlo_never_takes_pl2000_or_parent_sheet(self):
-        """A parent sheet (M-34-76-A-a-1) and a PL-2000 record do not stand in for the
-        sheet."""
+        """A parent sheet (M-34-76-A-a-1) or a PL-2000 record never stands in."""
         body = orto_body(
             [
                 orto_record(
@@ -340,7 +335,7 @@ class TestGugikOrtoProviderSelection:
         assert provider.source_info(GODLO)["color"] == "CIR"
 
     def test_stops_at_first_layer_with_matching_variant(self):
-        """P2: rekord w warstwie rocznej konczy petle — starsze warstwy niepytane."""
+        """P2: a record in a yearly layer ends the loop — older layers not queried."""
         provider, session = self.provider_with(
             orto_body([]),
             orto_body([orto_record(aktualnosc="2025-07-02")]),
@@ -362,7 +357,7 @@ class TestGugikOrtoProviderSelection:
         assert queried_layers(session) == LAYERS[:2]
 
     def test_all_layers_empty_is_no_coverage(self):
-        """Puste odpowiedzi wszystkich warstw = NoCoverageError po polsku."""
+        """Empty responses from all layers = NoCoverageError in Polish."""
         provider, session = self.provider_with(*[orto_body([])] * 4)
 
         with pytest.raises(NoCoverageError, match="Brak ortofotomapy RGB"):
@@ -399,7 +394,7 @@ class TestGugikOrtoProviderSelection:
 
 
 class TestGugikOrtoProviderCache:
-    """MetadataCache: klucz (orto, <kolor>, none, godlo); payload source/no_coverage."""
+    """MetadataCache: key (orto, <colour>, none, godlo); payload source/no_coverage."""
 
     @pytest.fixture
     def cache(self, tmp_path):
@@ -416,7 +411,7 @@ class TestGugikOrtoProviderCache:
         return provider.source_info(GODLO)
 
     def test_cache_hit_source_skips_network(self, cache, source):
-        """Trafienie `source` = zero sieci; URL i source_info z payloadu."""
+        """A `source` hit = no network; URL and source_info from the payload."""
         cache.set_record("orto", "RGB", "none", GODLO, {"source": source})
         session = Mock(spec=requests.Session)
         provider = GugikOrtoProvider(session=session, cache=cache)
@@ -465,8 +460,7 @@ class TestGugikOrtoProviderCache:
         assert provider.source_info(GODLO) == cached["source"]
 
     def test_cache_key_distinguishes_color(self, cache, source):
-        """An RGB entry does not serve a CIR provider - a different file, a different
-        key."""
+        """An RGB entry does not serve a CIR provider - other file, other key."""
         cache.set_record("orto", "RGB", "none", GODLO, {"source": source})
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
@@ -494,7 +488,7 @@ class TestGugikOrtoProviderCache:
         }
 
     def test_query_failure_is_not_cached(self, cache):
-        """K3-safe: awaria sieci = DownloadError, cache zostaje pusty."""
+        """K3-safe: network failure = DownloadError, the cache stays empty."""
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[requests.ConnectionError("boom")] * 3)
         provider = GugikOrtoProvider(session=session, cache=cache)
@@ -536,11 +530,10 @@ ORTO_WMS_XML = """\
 
 @pytest.mark.real_wms_layers
 class TestGugikOrtoLayerDiscovery:
-    """GetCapabilities through the thread session, LAYER_PATTERN filter, no hardcoded
-    list."""
+    """GetCapabilities via the thread session, LAYER_PATTERN filter, no fixed list."""
 
     def test_fetch_orto_layers_sorts_and_excludes_zasiegi(self):
-        """Roczne malejaco, Starsze na koncu; Zasiegi i inne produkty pominiete."""
+        """Yearly descending, Starsze last; Zasiegi and other products skipped."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=gfi_response(ORTO_WMS_XML))
 
@@ -558,7 +551,7 @@ class TestGugikOrtoLayerDiscovery:
             GugikOrtoProvider(session=session)._fetch_wms_layers(ENDPOINT)
 
     def test_get_opendata_url_fails_before_get_feature_info(self):
-        """Awaria GetCapabilities po 3 probach = DownloadError, zero GetFeatureInfo."""
+        """GetCapabilities fails after 3 attempts = DownloadError, no GetFeatureInfo."""
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=requests.ConnectionError("reset"))
         provider = GugikOrtoProvider(session=session)
@@ -631,7 +624,7 @@ class TestGugikOrtoProviderSession:
             def worker():
                 try:
                     results.append(provider._get_opendata_url(GODLO))
-                except Exception as exc:  # noqa: BLE001 — zbieramy do asercji
+                except Exception as exc:  # noqa: BLE001 — collected for the assertion
                     errors.append(exc)
 
             threads = [threading.Thread(target=worker) for _ in range(2)]
@@ -651,7 +644,7 @@ class TestGugikOrtoProviderDownloadBbox:
 
     @pytest.fixture
     def mock_wcs_response(self):
-        """Mock odpowiedzi WCS."""
+        """Mock WCS response."""
         return file_response([b"TIFF data..."])
 
     @pytest.fixture
@@ -757,7 +750,7 @@ class TestGugikOrtoProviderRetry:
             provider.download(GODLO, tmp_path / "test.tif")
 
     def test_download_exponential_backoff(self, tmp_path):
-        """Test exponential backoff — czasy oczekiwania [2, 4] sekund."""
+        """Test exponential backoff — waits of [2, 4] seconds."""
         session = Mock(spec=requests.Session)
         session.get = Mock(
             side_effect=[gfi_response(sample("orto_2024.html"))]
@@ -777,7 +770,7 @@ class TestGugikOrtoProviderRetry:
 
 
 class TestGugikOrtoProviderInfo:
-    """Testy metod informacyjnych."""
+    """Tests of the info methods."""
 
     def test_supported_formats(self):
         """Test the list of supported WCS formats."""
@@ -821,8 +814,7 @@ class TestOrtoVariantStorage:
         return DownloadManager(output_dir=tmp_path, provider=provider), session
 
     def test_cir_next_to_existing_rgb_is_downloaded_to_own_segment(self, tmp_path):
-        """A CIR request with an existing RGB downloads CIR, not silently returns
-        RGB."""
+        """A CIR request with RGB present downloads CIR, not silently RGB."""
         import json
 
         rgb_manager, _ = self.manager_for(tmp_path, "RGB", b"II*\x00RGB")
@@ -901,7 +893,7 @@ class TestForceRefreshesRecordCache:
         rc, session = self._run_cli(tmp_path, "--force", "-q")
 
         assert rc == 0
-        # odczyt pominiety: skorowidz odpytany, pobrany URL aktualny
+        # read skipped: the index was queried, the current URL downloaded
         assert session.get.call_args_list[-1][0][0] == RGB_2024
         cache = MetadataCache()
         try:
@@ -910,7 +902,7 @@ class TestForceRefreshesRecordCache:
             cache.close()
 
     def test_refresh_cache_misses_reads_but_writes(self, tmp_path):
-        """Biblioteka: ``MetadataCache(refresh=True)`` — odczyt = chybienie."""
+        """Library: ``MetadataCache(refresh=True)`` — a read = a miss."""
         key = ("nmt", "1m", "EVRF2007", "N-34-130-D-d-2-4")
         normal = MetadataCache(db_path=tmp_path / "c.db")
         normal.set_record(*key, {"source": {"url": "old"}})

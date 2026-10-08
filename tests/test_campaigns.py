@@ -77,7 +77,7 @@ def test_campaign_id_without_numeric_prefix_is_sha1():
 
 
 def test_campaign_id_ignores_digits_not_followed_by_underscore():
-    url = "https://example.org/NMT/2019/5.167.25.13.asc"  # katalog liczbowy
+    url = "https://example.org/NMT/2019/5.167.25.13.asc"  # numeric directory
     assert campaign_id_from_url(url).startswith("u")
 
 
@@ -102,7 +102,7 @@ def test_ref_source_falls_back_to_zrodloDanych():
     )
 
 
-# --- erratum 2 N-2: format from the record's `format` field, not from the URL ---
+# --- errata 2 N-2: format from the record's `format` field, not from the URL ---
 def test_real_xyz_record_72675_gets_canonical_asc():
     url = "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/72675/72675_858113_N-33-69-A-d-3-2.xyz"
     ref = CampaignRef.from_record(
@@ -117,7 +117,7 @@ def test_uppercase_url_suffix_is_irrelevant():  # 76969 `.ASC`
     assert campaign_extension(ref, ".asc") == ".asc"
 
 
-def test_campaign_extension_missing_format_uses_product_default():  # orto, stary cache
+def test_campaign_extension_missing_format_uses_product_default():  # orto, old cache
     ref = CampaignRef.from_record(_rec(raw={}))
     assert ref.file_format is None and campaign_extension(ref, ".tif") == ".tif"
 
@@ -133,7 +133,7 @@ def test_campaign_extension_unknown_or_foreign_format_is_download_error(fmt, def
 
 @pytest.mark.parametrize(
     "path", [XYZ_HEAD, ASC_HEAD]
-)  # realne naglowki: xllcorner (72675) i xllcenter (77912)
+)  # real headers: xllcorner (72675) and xllcenter (77912)
 def test_verify_file_format_accepts_real_aaigrid(path, tmp_path):
     dst = tmp_path / "x.asc"
     dst.write_bytes(path.read_bytes())
@@ -154,7 +154,7 @@ def test_verify_file_format_accepts_tiff_signatures(tmp_path):
         (
             b"314511.5 708632.5 -9999.0\n314512.5 708632.5 201.5\n",
             ".asc",
-        ),  # punkty XYZ != AAIGrid
+        ),  # XYZ points != AAIGrid
         (b"", ".asc"),
         (b"TIFF header data\x00", ".tif"),
         (None, ".tif"),  # None = XYZ_HEAD content (AAIGrid) saved as .tif
@@ -192,7 +192,7 @@ def test_same_date_different_id_distinct_dirs_and_order():
     assert a.dirname != b.dirname
     assert (
         max([a, b], key=lambda r: r.sort_key) is b
-    )  # remis daty i dt_pzgik -> URL (ADR-028)
+    )  # date and dt_pzgik tie -> URL (ADR-028)
 
 
 def test_sort_key_uses_dt_pzgik_before_url():
@@ -205,7 +205,7 @@ def test_sort_key_uses_dt_pzgik_before_url():
         _rec(url=url_b, aktualnosc="2025-04-04", dt="2025-06-04")
     )
     assert a.sort_key == ("2025-04-04", "2025-06-05", url_a)
-    assert a.sort_key > b.sort_key  # dt_pzgik wygrywa mimo mniejszego URL
+    assert a.sort_key > b.sort_key  # dt_pzgik wins despite the smaller URL
 
 
 def test_sort_key_date_beats_dt_pzgik():

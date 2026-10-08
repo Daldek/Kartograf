@@ -343,7 +343,7 @@ class TestDownloadHierarchyLastResult:
         assert downloading == (expected if workers == 1 else [])
 
     def test_last_result_counts_unexpected_error_as_failed(self, tmp_path):
-        """Wyjatek spoza DownloadError w trybie rownoleglym trafia do failed."""
+        """A non-DownloadError exception in parallel mode lands in failed."""
         provider = Mock(spec=GugikProvider)
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
@@ -412,14 +412,13 @@ class TestDownloadHierarchyLastResult:
         path = manager.download_sheet("N-34-130-D-d-2-4")
 
         assert path.exists()
-        # A single sheet does not fill last_result - but does not leave the old one
-        # either.
+        # A single sheet does not fill last_result - nor does it leave the old one.
         assert manager.last_result is None
 
     def test_last_result_set_when_download_sheet_expands_hierarchy(
         self, tmp_path, flaky_provider
     ):
-        """download_sheet z godlem grubszym niz 1:10000 nadal wypelnia last_result."""
+        """download_sheet with a code coarser than 1:10000 still fills last_result."""
         manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
 
         paths = manager.download_sheet("N-34-130-D-d-2")
@@ -502,8 +501,7 @@ class TestProviderThreadSafety:
             assert path.read_bytes() == f"data-{godlo}".encode()
 
     def test_concurrent_provider_sessions_independent(self):
-        """Without an injected session the provider keeps a separate session per
-        thread."""
+        """Without an injected session the provider keeps one session per thread."""
         provider = GugikProvider()
 
         # No caller session: SessionPerThread creates a session per thread,

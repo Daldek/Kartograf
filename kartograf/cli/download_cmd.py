@@ -91,8 +91,7 @@ def create_progress_callback(quiet: bool = False):
 
 
 def _error_lead(on_progress) -> str:
-    """``"\\n"`` only when the progress bar was left without a line ending (no blank
-    line)."""
+    """``"\\n"`` only if the progress bar left a line unterminated (no blank line)."""
     return "\n" if getattr(on_progress, "pending", False) is True else ""
 
 
@@ -143,12 +142,11 @@ def _pl_metadata_cache(args: argparse.Namespace) -> Iterator[object | None]:
     ``MetadataCache`` of the PL path for the duration of one task (N6; model: the CZ
     path).
 
-    ``--force`` = ``MetadataCache(refresh=True)`` (E14): index records
-    are NOT read, but the freshly chosen record (and a confirmed no coverage)
-    is WRITTEN - the next run without ``--force`` gets the new record,
-    not the old one from before a campaign change (until the 7-day TTL expires). The
-    cache is
-    opened in the cwd and closed after the task (``close()`` purges expired entries).
+    ``--force`` = ``MetadataCache(refresh=True)`` (E14): index records are NOT read, but
+    the freshly chosen record (and a confirmed no coverage) is WRITTEN - the next run
+    without ``--force`` gets the new record, not the old one from before a campaign
+    change (until the 7-day TTL expires). The cache is opened in the cwd and closed
+    after the task (``close()`` purges expired entries).
     """
     from kartograf.cache import MetadataCache
 
@@ -196,7 +194,7 @@ def _reject_non_nmt_for_cz(product: str) -> bool:
 
 
 def _campaign_opts(args: argparse.Namespace) -> tuple[str, int | None]:
-    """``(campaigns, min_year)`` — getattr, bo testy buduja Namespace recznie."""
+    """``(campaigns, min_year)`` via getattr: tests build the Namespace by hand."""
     return getattr(args, "campaigns", "newest"), getattr(args, "min_year", None)
 
 
@@ -357,15 +355,13 @@ def _run_cz(
 
     The CZ flow signals a bad task with an exception: ``ValidationError`` (e.g.
     ``--target-crs`` with a sheet code), ``ParseError`` (a sheet code matching the
-    TM33/SM5
-    pattern but invalid - e.g. odd kilometers) or
-    ``TransformError`` (normalizing the bbox to the task CRS has no
-    safe operation). ``main`` has a barrier (``KartografError`` ->
-    ``Error: ...``, code 1), but an exception leaking from here would break the
-    country loop of ``_dispatch_area`` - under ``--country auto`` the success of the
-    other country
-    would no longer give code 0 (ADR-023 points 4-5). Hence they are translated here;
-    the PL branch catches the same exceptions in ``cmd_download``.
+    TM33/SM5 pattern but invalid - e.g. odd kilometers) or ``TransformError``
+    (normalizing the bbox to the task CRS has no safe operation). ``main`` has a barrier
+    (``KartografError`` -> ``Error: ...``, code 1), but an exception leaking from here
+    would break the country loop of ``_dispatch_area`` - under ``--country auto`` the
+    success of the other country would no longer give code 0 (ADR-023 points 4-5). Hence
+    they are translated here; the PL branch catches the same exceptions in
+    ``cmd_download``.
     """
     from kartograf.transform.crs import TransformError
 
@@ -456,7 +452,7 @@ _EDGES = (
 
 
 def _deg(value: float, unit: str) -> str:
-    """``54,90°N`` — stopnie z przecinkiem dziesietnym (komunikaty PL)."""
+    """``54,90°N`` — degrees with a decimal comma (Polish messages)."""
     return f"{value:.2f}".replace(".", ",") + f"°{unit}"
 
 
@@ -467,12 +463,11 @@ def _country_bbox(
     Part of the bbox for a country in the CRS of its task.
 
     ``auto`` mode clips the bbox to the country's envelope (in WGS84) and returns the
-    result
-    in the working CRS: CZ - ``cz_crs`` (Krovak or ``--target-crs``), PL -
-    the task CRS unchanged (keeps the PL-2000 zone and zero drift). An explicit
+    result in the working CRS: CZ - ``cz_crs`` (Krovak or ``--target-crs``), PL - the
+    task CRS unchanged (keeps the PL-2000 zone and zero drift). An explicit
     ``--country`` does NOT clip anything (the user knows the extent of their task).
-    Clipped edges come back in ``CountryPart.clipped`` - the ``Info:``
-    message is printed by ``_dispatch_area`` (S3).
+    Clipped edges come back in ``CountryPart.clipped`` - the ``Info:`` message is
+    printed by ``_dispatch_area`` (S3).
 
     When clipping changes nothing, the ORIGINAL bbox is transformed -
     one jump from the task CRS instead of two (via WGS84).
@@ -685,12 +680,11 @@ def _validate_cross_country(
     """
     Options must be resolvable for EVERY intersected country (0=OK, 1=error).
 
-    Validation happens BEFORE any download - otherwise part of one country
-    would be downloaded and the other branch would reject the task only afterwards
-    (partial execution). Instead of silently skipping a country, the CLI suggests an
-    explicit
-    ``--country`` - but only when the area actually intersects more than one
-    country (with one country the choice is already resolved).
+    Validation happens BEFORE any download - otherwise part of one country would be
+    downloaded and the other branch would reject the task only afterwards (partial
+    execution). Instead of silently skipping a country, the CLI suggests an explicit
+    ``--country`` - but only when the area actually intersects more than one country
+    (with one country the choice is already resolved).
 
     ORDER: under ``--country auto`` some options are already resolved
     earlier (``_pl_only_flags`` in ``_dispatch_area``, ADR-023 point 5), so
@@ -795,16 +789,14 @@ def _dispatch_area(
             file=sys.stderr,
         )
         return 1
-    # ADR-023 point 5 (N6-2): country envelopes are rectangles (point 4), so
-    # auto-split pulls CZ in also for tasks lying entirely in Poland - and then an
-    # option with no Czech counterpart broke the whole command (`--system
-    # 2000` near Racibórz: code 1, a regression vs 0.6.1). Such an option
-    # therefore decides the country instead of spoiling the task; from here on it is
-    # exactly an explicit
-    # `--country pl` (auto=False => no clipping to the envelope). The condition
-    # `len(countries) > 1 and "PL" in countries` narrows this to truly
-    # disputed areas: an entirely Czech area still gets the message
-    # about stage 2 (below), and an entirely Polish area needs nothing.
+    # ADR-023 point 5 (N6-2): country envelopes are rectangles (point 4), so auto-split
+    # pulls CZ in also for tasks lying entirely in Poland - and then an option with no
+    # Czech counterpart broke the whole command (`--system 2000` near Racibórz: code 1,
+    # a regression vs 0.6.1). Such an option therefore decides the country instead of
+    # spoiling the task; from here on it is exactly an explicit `--country pl`
+    # (auto=False => no clipping to the envelope). The condition `len(countries) > 1 and
+    # "PL" in countries` narrows this to truly disputed areas: an entirely Czech area
+    # still gets the message about stage 2 (below); an entirely Polish one needs none.
     if auto and len(countries) > 1 and "PL" in countries:
         pl_only = _pl_only_flags(args)
         if pl_only:
@@ -863,8 +855,7 @@ def _dispatch_area(
             rc = _run_cz(args, bbox=part, parent_request=parent_request)
         else:
             # COPY of args: _resolve_pl_sentinels mutates the Namespace (None->"1m"),
-            # which would poison the CZ branch; the copy removes the dependence on
-            # country order
+            # which would poison the CZ branch; the copy removes the order dependence
             pl_args = argparse.Namespace(**vars(args))
             if filepath is not None:
                 rc = _download_pl_geometry(pl_args, filepath, parent_request, bbox=part)
@@ -873,17 +864,15 @@ def _dispatch_area(
         results.append((code, rc))
 
     exit_codes = [rc for _, rc in results]
-    # A3-2: under `auto` countries are taken from RECTANGULAR envelopes (ADR-023
-    # point 4), so a task deep inside one country routinely hits the
-    # other one too, which has no data there - this is a normal result of country
-    # selection,
-    # not a task failure. Code 0, but with a warning, so that one
-    # country's failure in a border strip does not vanish silently. An explicit
-    # `--country`
-    # (the user pointed out the extent themself) and failure of ALL countries stay
-    # with the existing `max(exit_codes)`. The text does not guess the cause:
-    # after D2 the PL branch's code 1 means "download error or zero data" (some
-    # sheets may have been downloaded), and details stand in the Error above.
+    # A3-2: under `auto` countries are taken from RECTANGULAR envelopes (ADR-023 point
+    # 4), so a task deep inside one country routinely hits the other one too, which has
+    # no data there - this is a normal result of country selection, not a task failure.
+    # Code 0, but with a warning, so that one country's failure in a border strip does
+    # not vanish silently. An explicit `--country` (the user pointed out the extent
+    # themself) and failure of ALL countries stay with the existing `max(exit_codes)`.
+    # The text does not guess the cause: after D2 the PL branch's code 1 means "download
+    # error or zero data" (some sheets may have been downloaded), and details stand in
+    # the Error above.
     if auto and len(results) > 1 and 0 in exit_codes and max(exit_codes) != 0:
         failed = [code for code, rc in results if rc != 0]
         ok = [code for code, rc in results if rc == 0]
@@ -906,13 +895,11 @@ def _resolve_cz_geometry_bbox(args: argparse.Namespace) -> BBox | None:
     in the LAZ flow, except in a Czech CRS instead of EPSG:2180).
 
     The envelope is computed IN THE FILE'S CRS, and the jump to the target CRS is done
-    by
-    ``bbox_to_crs`` (pinned operation + edge sampling). The transformation
-    from ``core/geometry`` is unacceptable here: it uses the default pyproj
-    transformer (ballpark allowed, unknown accuracy) and a four-corner
-    envelope that, with a rotated Krovak, cuts off slivers of the area. A single jump
-    straight to the task CRS also means that ``_cz_download_bbox`` does not
-    transform a second time.
+    by ``bbox_to_crs`` (pinned operation + edge sampling). The transformation from
+    ``core/geometry`` is unacceptable here: it uses the default pyproj transformer
+    (ballpark allowed, unknown accuracy) and a four-corner envelope that, with a rotated
+    Krovak, cuts off slivers of the area. A single jump straight to the task CRS also
+    means that ``_cz_download_bbox`` does not transform a second time.
     """
     from pyproj import CRS
 
@@ -942,13 +929,12 @@ def _resolve_cz_geometry_bbox(args: argparse.Namespace) -> BBox | None:
 def _geometry_envelope(filepath: Path, layer: str | None) -> BBox:
     """Envelope of a geometry for country dispatch (``--country auto``/``pl``).
 
-    A file in a Czech CRS (EPSG:5514/3045): the envelope IN THE FILE'S CRS
-    labeled with the EPSG CODE - the jump to EPSG:2180 will be done by the pinned
-    operation
-    in ``_country_bbox`` (review max 2026-08-30, finding 4: the default transformer
-    from ``core/geometry`` shifted the result grid by ~1.2 m). A WKT label would not
-    suffice: ``wkid()`` does not recognize it and the pinned jump would be
-    skipped. Other CRSs - as before, straight to EPSG:2180.
+    A file in a Czech CRS (EPSG:5514/3045): the envelope IN THE FILE'S CRS labeled with
+    the EPSG CODE - the jump to EPSG:2180 will be done by the pinned operation in
+    ``_country_bbox`` (review max 2026-08-30, finding 4: the default transformer from
+    ``core/geometry`` shifted the result grid by ~1.2 m). A WKT label would not suffice:
+    ``wkid()`` does not recognize it and the pinned jump would be skipped. Other CRSs -
+    as before, straight to EPSG:2180.
     """
     from kartograf.core.bbox import is_czech_crs
     from kartograf.core.geometry import get_overall_bbox, read_source_crs
@@ -1132,13 +1118,12 @@ def cmd_download(args: argparse.Namespace) -> int:
                     on_download=announce,
                 )
                 if not isinstance(result, list):
-                    # a single 1:10000 / PL-2000 sheet: success = no
-                    # exception (no data = DownloadError, code 1 - D10).
-                    # E15: skip is reported by the manager (`last_sheet`), not by the
-                    # existence
-                    # of the standard path - a link may exist while a new
-                    # campaign is still downloaded. isinstance (I-1): the manager's
-                    # Mock() stand-in has `last_sheet.skipped` = Mock (truthy).
+                    # a single 1:10000 / PL-2000 sheet: success = no exception (no data
+                    # = DownloadError, code 1 - D10). E15: skip is reported by the
+                    # manager (`last_sheet`), not by the existence of the standard path
+                    # - a link may exist while a new campaign is still downloaded.
+                    # isinstance (I-1): the manager's Mock() stand-in has
+                    # `last_sheet.skipped` = Mock (truthy).
                     fetch = manager.last_sheet
                     sheet = fetch if isinstance(fetch, SheetFetch) else None
                     if not args.quiet:
@@ -1202,12 +1187,11 @@ def _download_godlo_list(
     Download a list of sheet codes with one ``DownloadManager.download_sheets`` (S2/D2).
 
     Sheet codes coarser than 1:10000 are expanded by ``expand_sheets`` (the manager),
-    the download
-    goes to the manager's ``max_workers``, and failures of individual sheets do NOT
-    abort the list: ``NoCoverageError`` (sea, a sheet abroad) and
-    ``DownloadError`` (network, server) land in ``DownloadResult`` - every
-    sheet is attempted independently of ``--workers``. The exit code and
-    messages are produced by ``_finish_pl_sheets``.
+    the download goes to the manager's ``max_workers``, and failures of individual
+    sheets do NOT abort the list: ``NoCoverageError`` (sea, a sheet abroad) and
+    ``DownloadError`` (network, server) land in ``DownloadResult`` - every sheet is
+    attempted independently of ``--workers``. The exit code and messages are produced by
+    ``_finish_pl_sheets``.
 
     Returns
     -------
@@ -1269,8 +1253,7 @@ def _print_campaign_summary(
 
 
 def _warn_unverified(unverified: dict[str, str], *, from_sidecar: bool = False) -> None:
-    """``Warning:`` about sheets taken from a local campaign without verification
-    (I-1)."""
+    """``Warning:`` for sheets taken from a local campaign unverified (I-1)."""
     godla = list(unverified)
     shown = ", ".join(godla[:10]) + (" ..." if len(godla) > 10 else "")
     print(
@@ -1327,8 +1310,7 @@ def _finish_pl_sheets(
         # the progress bar ends with "skipped"/"downloading" without a newline
         print()
     if not quiet and paths:
-        # O-7: without a file and without a skip (only gaps/failures) a summary of 0 is
-        # noise
+        # O-7: with no file and no skip (only gaps/failures) a summary of 0 is noise
         if campaigns == "all":
             # `campaign_files` = downloaded + local; local ones separately
             # (`reused_campaign_files`, a per-sheet subset)
@@ -1886,8 +1868,8 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     from kartograf.providers.pl.gugik_laz import GugikLazProvider
 
     # a CZ sheet code + laz is dropped already at dispatch; what remains here is an
-    # explicit --country cz
-    # in area mode (LAZ bypasses the bbox/geometry branches in cmd_download)
+    # explicit --country cz in area mode (LAZ skips cmd_download's bbox/geometry
+    # branches)
     if getattr(args, "country", "auto") == "cz":
         print(_CZ_ONLY_NMT_MSG.format(product="laz"), file=sys.stderr)
         return 1
@@ -2068,8 +2050,7 @@ def _write_cz_sidecar(
 
 
 def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> int:
-    """CZ sheet code: a TM33 tile (exportImage) or an SM5 sheet (openzu) into
-    FileStorage."""
+    """CZ sheet code: TM33 tile (exportImage) or SM5 sheet (openzu) into FileStorage."""
     import logging
 
     from kartograf.core.parser_registry import detect_system
@@ -2176,8 +2157,7 @@ def _cz_download_bbox(
         if not quiet:
             print(f"Downloading CZ bbox ({provider.resolution}, {image_sr})...")
 
-    # the provider creates directories only at fetch time - the sidecar always needs
-    # them
+    # the provider creates directories only when fetching - the sidecar needs them
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
         provider.download_bbox(bbox, target, on_download=announce)
@@ -2241,10 +2221,9 @@ def _cmd_download_cz(
     ------
     ValidationError
         When ``--target-crs`` accompanies a sheet code (the sheet code determines the
-        extent and CRS of
-        the product: an SM5 sheet 1:1 in EPSG:5514, a TM33 tile by a local warp onto the
-        EPSG:3045 grid). Translated by ``_run_cz`` (called from ``cmd_download``
-        and ``_dispatch_area``) - as the other flows treat
+        extent and CRS of the product: an SM5 sheet 1:1 in EPSG:5514, a TM33 tile by a
+        local warp onto the EPSG:3045 grid). Translated by ``_run_cz`` (called from
+        ``cmd_download`` and ``_dispatch_area``) - as the other flows treat
         ValidationError.
     """
     from kartograf.cache import MetadataCache
@@ -2391,13 +2370,10 @@ def _download_pl_geometry(
     ``--target-crs`` (ADR-027) - ``_download_pl_cutout`` (library
     ``download/cutout.py``): the envelope determines the grid and the cutout crop, so
     the result covers the WHOLE envelope of the geometry, without masking to its
-    features
-    (with a warp the sheets are the union of the geometry's sheet codes and the
-    envelope's with a margin, R-01 -
-    ``select_pl_cutout_sheets``). Without ``--target-crs`` the sheets are determined by
-    the
-    geometry itself and ``bbox`` is not used; the list goes through
-    ``_download_pl_sheet_list`` (R5 tolerance, D2).
+    features (with a warp the sheets are the union of the geometry's sheet codes and the
+    envelope's with a margin, R-01 - ``select_pl_cutout_sheets``). Without
+    ``--target-crs`` the sheets are determined by the geometry itself and ``bbox`` is
+    not used; the list goes through ``_download_pl_sheet_list`` (R5 tolerance, D2).
     """
     from kartograf.core.geometry import find_sheets_for_geometry
 

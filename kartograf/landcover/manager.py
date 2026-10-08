@@ -420,7 +420,7 @@ class LandCoverManager:
     def _write_sidecar(
         self, data_path: Path, request: dict, kwargs: dict | None = None
     ) -> None:
-        """Best-effort zapis sidecara .meta.json (``emit_sidecar``, D7)."""
+        """Best-effort write of the .meta.json sidecar (``emit_sidecar``, D7)."""
         from kartograf.sources.sidecar import emit_sidecar
 
         horizontal_crs = None

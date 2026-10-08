@@ -1,4 +1,4 @@
-"""Testy obowiazkowego sidecara (emit_sidecar(required=True), ADR-030 errata 2 N-1)."""
+"""Mandatory sidecar tests (emit_sidecar(required=True), ADR-030 errata 2 N-1)."""
 
 import json
 from pathlib import Path
@@ -23,7 +23,7 @@ GODLO = "7.125.11.19"
 
 def _data(tmp_path):
     p = tmp_path / "x.asc"
-    p.write_bytes(ASC_HEAD.read_bytes())  # realny naglowek 77912
+    p.write_bytes(ASC_HEAD.read_bytes())  # real header 77912
     return p
 
 

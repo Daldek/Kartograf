@@ -37,7 +37,7 @@ MAX_RETRY_AFTER = 60
 
 
 def backoff_delay(attempt: int) -> float:
-    """Przerwa po nieudanej probie ``attempt`` (od 0): 2 s, 4 s, ..."""
+    """Pause after failed attempt ``attempt`` (from 0): 2 s, 4 s, ..."""
     return RETRY_BACKOFF_BASE ** (attempt + 1)
 
 
@@ -47,7 +47,7 @@ def http_status(exc: requests.RequestException) -> int | None:
 
 
 def is_retryable(exc: requests.RequestException) -> bool:
-    """Ponawiaj bledy sieci, 429 i 5xx; inne 4xx powtorzone daja to samo."""
+    """Retry network errors, 429 and 5xx; other 4xx would just repeat."""
     status = http_status(exc) if isinstance(exc, requests.HTTPError) else None
     if status is None:
         return True
@@ -78,13 +78,13 @@ def retry_wait(exc: requests.RequestException, backoff: float) -> float:
 def http_failure(
     message: str, exc: requests.RequestException | None, **kwargs
 ) -> DownloadError:
-    """DownloadError z kodem HTTP ostatniej proby (o ile byl)."""
+    """DownloadError with the HTTP code of the last attempt (if any)."""
     status = http_status(exc) if exc is not None else None
     return DownloadError(message, status_code=status, **kwargs)
 
 
 def make_gugik_session() -> requests.Session:
-    """Utworz sesje keep-alive GUGiK; ponowienia obsluguje aplikacja."""
+    """Create a GUGiK keep-alive session; the application handles retries."""
     from kartograf import __version__
 
     session = requests.Session()
@@ -228,9 +228,8 @@ def download_to(
         Description for messages and logs (default: the URL).
     validate : callable, optional
         Called with the response after ``raise_for_status``, before writing; an
-        exception
-        other than ``requests.RequestException`` ends the download without retries
-        (e.g. ``reject_error_document``).
+        exception other than ``requests.RequestException`` ends the download without
+        retries (e.g. ``reject_error_document``).
     save : callable, optional
         Write the response instead of the default atomic stream write;
         returns the path of the file actually written (e.g. an unpacked ZIP).

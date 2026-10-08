@@ -30,7 +30,7 @@ from kartograf.exceptions import DownloadError, ValidationError
 
 @pytest.fixture(autouse=True)
 def _cwd_outside_repo(tmp_path, monkeypatch):
-    """``MetadataCache`` toru PL/CZ laduje w cwd — poza repo i katalogiem wyjsciowym."""
+    """The PL/CZ ``MetadataCache`` lands in cwd — outside the repo and output dir."""
     cwd = tmp_path / "cwd"
     cwd.mkdir()
     monkeypatch.chdir(cwd)
@@ -72,7 +72,7 @@ def _mock_manager(path):
 
 
 def _starting_download(path):
-    """``download_sheet`` atrapy wolajacy ``on_download`` przed pobraniem."""
+    """A fake ``download_sheet`` that calls ``on_download`` before downloading."""
 
     def fake(godlo, skip_existing=True, on_progress=None, on_download=None):
         if on_download is not None:
@@ -125,7 +125,7 @@ class TestCreateParser:
 
 
 class TestParseBboxArg:
-    """K7a: cli._parser.parse_bbox_arg — jedno parsowanie --bbox."""
+    """K7a: cli._parser.parse_bbox_arg — a single --bbox parser."""
 
     def test_valid_with_spaces(self):
         from kartograf.cli._parser import parse_bbox_arg
@@ -384,8 +384,7 @@ class TestMain:
 
     @patch("kartograf.cli.commands.cmd_parse", side_effect=RuntimeError("boom"))
     def test_unexpected_exception_is_reported_not_raised(self, mock_cmd_parse, capsys):
-        """An exception other than KartografError gives a message and exit code 1, not a
-        traceback."""
+        """A non-KartografError exception gives a message and code 1, no traceback."""
         result = main(["parse", "N-34"])
 
         assert result == 1
@@ -408,7 +407,7 @@ class TestMain:
 
     @patch("kartograf.cli.commands.cmd_parse", side_effect=RuntimeError("boom"))
     def test_debug_env_reraises(self, mock_cmd_parse, capsys, monkeypatch):
-        """KARTOGRAF_DEBUG=1 przepuszcza pelny traceback."""
+        """KARTOGRAF_DEBUG=1 lets the full traceback through."""
         monkeypatch.setenv("KARTOGRAF_DEBUG", "1")
 
         with pytest.raises(RuntimeError):
@@ -429,7 +428,7 @@ class TestMain:
             main(["parse", "N-34"])
 
     def test_top_level_help_mentions_cuzk_and_soilgrids(self, capsys):
-        """Teksty --help opisuja CZ/CUZK, SoilGrids i warstwy hydrografii."""
+        """--help texts describe CZ/CUZK, SoilGrids and the hydrography layers."""
         with pytest.raises(SystemExit):
             main(["--help"])
         captured = capsys.readouterr()
@@ -551,7 +550,7 @@ class TestCreateParserCountry:
             create_parser().parse_args(["download", "X", "--target-crs", "EPSG:4326"])
 
     def test_sentinel_defaults(self):
-        """Domyslne --resolution/--vertical-crs/--system to None (per kraj)."""
+        """--resolution/--vertical-crs/--system default to None (per country)."""
         args = create_parser().parse_args(["download", "X"])
         assert args.resolution is None
         assert args.vertical_crs is None
@@ -754,11 +753,11 @@ class TestCmdDownload:
         assert "Downloading" in captured.out
         assert "Downloaded to" in captured.out
 
-    # --- kod wyjscia hierarchii (A2-3) ---
+    # --- hierarchy exit code (A2-3) ---
 
     @staticmethod
     def _hierarchy_manager(result: DownloadResult):
-        """Godlo grubsze niz 1:10000: ``download_sheet`` -> lista + ``last_result``."""
+        """Code coarser than 1:10000: ``download_sheet`` -> list + ``last_result``."""
         mock_manager = Mock()
         mock_manager.download_sheet.return_value = list(result.succeeded)
         mock_manager.count_sheets.return_value = result.total
@@ -769,8 +768,7 @@ class TestCmdDownload:
     def test_hierarchy_all_failed_returns_exit_1(
         self, mock_manager_class, capsys, tmp_path
     ):
-        """100% download failures in the hierarchy is an error with the full list of
-        sheets."""
+        """100% download failures in the hierarchy: an error listing all sheets."""
         mock_manager_class.return_value = self._hierarchy_manager(
             DownloadResult(succeeded=[], failed=["A", "B", "C", "D"], skipped=[])
         )
@@ -786,8 +784,7 @@ class TestCmdDownload:
     def test_hierarchy_partial_failure_returns_exit_1(
         self, mock_manager_class, capsys, tmp_path
     ):
-        """A download failure (not a no-data case) ends with 1 despite partial
-        success."""
+        """A download failure (not missing data) ends with 1 despite partial success."""
         paths = [tmp_path / f"test{i}.asc" for i in range(3)]
         mock_manager_class.return_value = self._hierarchy_manager(
             DownloadResult(succeeded=paths, failed=["A"], skipped=[])
@@ -802,8 +799,7 @@ class TestCmdDownload:
     def test_hierarchy_no_coverage_with_files_warns_and_returns_0(
         self, mock_manager_class, capsys, tmp_path
     ):
-        """D10: sea sheets under a 1:50000 sheet code = Warning + exit code 0 (like
-        --bbox)."""
+        """D10: sea sheets under a 1:50000 code = Warning + exit code 0 (as --bbox)."""
         paths = [tmp_path / f"test{i}.asc" for i in range(3)]
         mock_manager_class.return_value = self._hierarchy_manager(
             DownloadResult(succeeded=paths, failed=["A"], no_coverage=["A"])
@@ -856,7 +852,7 @@ class TestCmdDownload:
     def test_hierarchy_scale_mode_failure_returns_exit_1(
         self, mock_manager_class, capsys, tmp_path
     ):
-        """Ta sama kontrola obowiazuje na galezi --scale."""
+        """The same check applies on the --scale branch."""
         mock_manager = Mock()
         mock_manager.count_sheets.return_value = 4
         mock_manager.download_hierarchy.return_value = []
@@ -1084,14 +1080,14 @@ class TestCmdDownloadProduct:
         assert "Downloading N-34-130-D-d-2-4 (product: orto)" in out
         assert "resolution" not in out
 
-    # --- N6/E14: MetadataCache toru PL — --force = cache w trybie refresh ---
+    # --- N6/E14: PL-path MetadataCache — --force = cache in refresh mode ---
 
     @patch("kartograf.cli.download_cmd._create_provider_and_storage")
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_force_passes_refresh_cache_to_provider_factory(
         self, mock_manager_cls, mock_create, tmp_path
     ):
-        """E14: --force pomija odczyt cache, ale zapisuje nowy rekord."""
+        """E14: --force skips the cache read but writes the new record."""
         from kartograf.cache import MetadataCache
 
         mock_create.return_value = _mock_provider_and_storage(".asc")
@@ -1105,7 +1101,7 @@ class TestCmdDownloadProduct:
         cache = mock_create.call_args.kwargs["cache"]
         assert isinstance(cache, MetadataCache)
         assert cache._refresh is True
-        assert cache._conn is None  # zamkniety po zadaniu
+        assert cache._conn is None  # closed after the task
 
     @pytest.mark.parametrize(
         "argv",
@@ -1133,18 +1129,17 @@ class TestCmdDownloadProduct:
         cache = mock_create.call_args.kwargs["cache"]
         assert isinstance(cache, MetadataCache)
         assert cache._db_path.parent == Path.cwd()
-        # zamkniety po zadaniu (wzor CZ): polaczenie zwolnione
+        # closed after the task (CZ pattern): connection released
         assert cache._conn is None
 
-    # --- walidacja par product/resolution i product/vertical-crs (V2-N1) ---
+    # --- product/resolution and product/vertical-crs pair validation (V2-N1) ---
 
     @patch("kartograf.cli.download_cmd._create_provider_and_storage")
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_nmpt_with_resolution_5m_rejected(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
-        """NMPT 5m does not exist - the CLI rejects instead of quietly downloading
-        1m."""
+        """NMPT 5m does not exist - the CLI rejects it instead of quietly using 1m."""
         mock_create.return_value = _mock_provider_and_storage(".asc")
         mock_manager_cls.return_value = _mock_manager(tmp_path / "test.asc")
 
@@ -1226,7 +1221,7 @@ class TestCmdDownloadProduct:
     def test_bbox_nmpt_with_resolution_5m_rejected(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
-        """Ta sama walidacja obowiazuje w trybie --bbox (sentinele PL)."""
+        """The same validation applies in --bbox mode (PL sentinels)."""
         mock_create.return_value = _mock_provider_and_storage(".asc")
         mock_manager_cls.return_value = _mock_manager(tmp_path / "test.asc")
 
@@ -1259,7 +1254,7 @@ class TestCmdDownloadProduct:
     def test_bbox_orto_with_vertical_crs_rejected(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
-        """Ta sama walidacja obowiazuje w trybie --bbox (sentinele PL)."""
+        """The same validation applies in --bbox mode (PL sentinels)."""
         mock_create.return_value = _mock_provider_and_storage(".asc")
         mock_manager_cls.return_value = _mock_manager(tmp_path / "test.asc")
 
@@ -1347,8 +1342,7 @@ class TestCreateProviderAndStorage:
         assert storage._subdir == "nmt/pl_{uklad}_1m_kron86"
 
     def test_nmt_5m_kron86_storage_follows_provider_correction(self, tmp_path):
-        """The factory corrects 5m=>EVRF2007 - the segment must carry the fact, not the
-        flag."""
+        """Factory corrects 5m=>EVRF2007 - the segment carries the fact, not a flag."""
         from kartograf.cli.download_cmd import _create_provider_and_storage
 
         provider, storage = _create_provider_and_storage(
@@ -1443,7 +1437,7 @@ class TestCmdDownloadBBox:
         assert "Specify only one of" in captured.err
 
     def test_download_no_input_error(self, capsys):
-        """Test brak godlo i --bbox → exit 1."""
+        """Test no sheet code and no --bbox → exit 1."""
         result = main(["download", "-q"])
 
         assert result == 1
@@ -1603,7 +1597,7 @@ class TestCmdDownloadBBox:
     def test_bbox_list_goes_through_download_sheets(
         self, mock_manager_cls, mock_find, capsys, tmp_path
     ):
-        """Cala lista godel idzie JEDNYM ``download_sheets`` (rozwija manager)."""
+        """The whole sheet list goes via ONE ``download_sheets`` (manager expands)."""
         mock_find.return_value = ["A", "B"]
         mock_manager = _sheet_list_manager(
             tmp_path / "A.asc", tmp_path / "B1.asc", tmp_path / "B2.asc"
@@ -1757,7 +1751,7 @@ class TestSheetListExitCode:
         assert "ponow pobranie" not in err
 
     def test_quiet_keeps_warning_and_error_on_stderr(self, tmp_path, capsys):
-        """-q tlumi stdout, ale Warning:/Error: ida na stderr."""
+        """-q silences stdout, but Warning:/Error: go to stderr."""
         rc, _provider, _files = self._run_bbox(
             tmp_path, {"-1": "no_coverage", "-3": "fail"}, "-q"
         )
@@ -1768,7 +1762,7 @@ class TestSheetListExitCode:
         assert "Warning:" in captured.err and "Error:" in captured.err
 
     def test_coarse_godlo_expands_in_manager(self, tmp_path, capsys):
-        """Godlo grubsze niz 1:10000 rozwija manager; porazka liscia w podsumowaniu."""
+        """The manager expands a coarser code; a leaf failure is in the summary."""
         rc, provider, files = self._run_bbox(
             tmp_path,
             {"-2-3": "fail"},
@@ -1788,8 +1782,7 @@ class TestSheetListExitCode:
     def test_auto_partial_no_coverage_with_cz_ok_has_no_false_warning(
         self, mock_cz, tmp_path, capsys
     ):
-        """auto + CZ ok + PL partially without data -> exit code 0 without 'PL part ...
-        error'."""
+        """auto + CZ ok + PL partly without data -> code 0, no 'PL part ... error'."""
         from kartograf.download.storage import FileStorage
 
         provider = _SheetProvider({"-1": "no_coverage"})
@@ -2147,8 +2140,7 @@ class TestCmdSoilgrids:
         "bbox", ["invalid", "10,10,5,5", "nan,1,2,3", "1,2,-inf,4", "1,2,3"]
     )
     def test_soilgrids_hsg_rejects_bad_bbox(self, bbox, capsys, tmp_path):
-        """K7a: a bad --bbox -> Error on stderr, exit code 1, the calculator does not
-        start."""
+        """K7a: bad --bbox -> Error on stderr, code 1, the calculator never starts."""
         with patch("kartograf.hydrology.HSGCalculator") as calc_cls:
             result = main(["soilgrids", "hsg", f"--bbox={bbox}", "-o", str(tmp_path)])
         assert result == 1
@@ -2242,7 +2234,7 @@ class TestCmdDownloadGeometry:
 
         mock_overall.return_value = BBox(
             630000.0, 480000.0, 640000.0, 490000.0, "EPSG:2180"
-        )  # Warszawa — glebia PL
+        )  # Warsaw — deep inside PL
         mock_find.return_value = ["N-34-130-D-d-2-4"]
         mock_manager = _sheet_list_manager(tmp_path / "test.asc")
         mock_manager_cls.return_value = mock_manager
@@ -2333,7 +2325,7 @@ class TestCmdDownloadGeometry:
     def test_geometry_list_goes_through_download_sheets(
         self, mock_overall, mock_manager_cls, mock_find, mock_read_crs, capsys, tmp_path
     ):
-        """Cala lista godel idzie JEDNYM ``download_sheets`` (rozwija manager)."""
+        """The whole sheet list goes via ONE ``download_sheets`` (manager expands)."""
         shp_file = tmp_path / "area.shp"
         shp_file.touch()
 
@@ -2805,7 +2797,7 @@ class TestDownloadGeometrySystem:
 
         mock_overall.return_value = BBox(
             630000.0, 480000.0, 640000.0, 490000.0, "EPSG:2180"
-        )  # Warszawa — glebia PL
+        )  # Warsaw — deep inside PL
         mock_find.return_value = ["N-34-130-D-d-2-4"]
         mock_manager = _sheet_list_manager(tmp_path / "test.asc")
         mock_manager_cls.return_value = mock_manager
@@ -3091,7 +3083,7 @@ class TestCmdDownloadLaz:
 
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
     def test_laz_writes_sidecar_next_to_tile(self, mock_provider_cls, tmp_path):
-        """Kazdy pobrany kafel dostaje sidecar <nazwa>.laz.meta.json."""
+        """Every downloaded tile gets a <name>.laz.meta.json sidecar."""
         import json
 
         from kartograf.download.storage import FileStorage
@@ -3129,7 +3121,7 @@ class TestCmdDownloadLaz:
         target = sidecar.parent / tile.filename
         assert target.exists()
         assert "pl_2000_evrf2007" in str(sidecar.parent)
-        # Item 8 (P-09): the file lands EXACTLY where the library API points for the
+        # Finding 8 (P-09): the file lands EXACTLY where the library API points for the
         # same tile (uklad_xy PL-2000:S6, hyphenated sheet code) - not only the
         # segment substring (as above), but also path equality AND the literal
         # segment. Equality with ``FileStorage(...).get_raw_path(...)`` alone is not
@@ -3205,8 +3197,7 @@ class TestCmdDownloadLaz:
     def test_laz_sidecar_horizontal_crs_comes_from_tile(
         self, mock_provider_cls, tmp_path
     ):
-        """N8: a PL-2000:S7 tile gets EPSG:2178 (not the default CRS of the WFS
-        channel)."""
+        """N8: a PL-2000:S7 tile gets EPSG:2178 (not the WFS channel's default CRS)."""
         from dataclasses import replace
 
         tile = replace(self._fake_tiles()[0], crs="PL-2000:S7")
@@ -3678,7 +3669,7 @@ class TestCmdDownloadCz:
         assert payload["dataset"] == "cz.cuzk.dmr5g"
         assert payload["country"] == "CZ"
         assert payload["horizontal_crs"] == "EPSG:3045"  # the tile's actual CRS
-        assert payload["vertical_crs"] == "EPSG:8357"  # Bpv natywnie
+        assert payload["vertical_crs"] == "EPSG:8357"  # Bpv natively
         assert payload["license"]["id"] == "CC-BY-4.0"
         assert payload["request"] == {"sheet": "302_5550"}
         # the TM33 tile lies in 3045, and CUZK data in 5514 - the reprojection is LOCAL
@@ -3796,7 +3787,7 @@ class TestCmdDownloadCz:
         assert "5m" in captured.err
 
     def test_tm33_godlo_without_resolution_stays_2m(self, tmp_path):
-        """Kafel TM33 wycinany z uslugi: domyslnie 2 m jak dotad."""
+        """TM33 tile cut from the service: 2 m by default, as before."""
         provider = _cz_provider_mock()
         with patch(_CZ_FACTORY_PATCH, return_value=provider) as factory:
             rc = main(["download", "302_5550", "-o", str(tmp_path / "out"), "-q"])
@@ -3805,7 +3796,7 @@ class TestCmdDownloadCz:
         assert factory.call_args.kwargs["resolution"] == "2m"
 
     def test_cz_bbox_without_resolution_stays_2m(self, tmp_path):
-        """Wycinek ``--bbox`` CZ: domyslnie 2 m jak dotad."""
+        """CZ ``--bbox`` cutout: 2 m by default, as before."""
         provider = _cz_provider_mock()
         with patch(_CZ_FACTORY_PATCH, return_value=provider) as factory:
             rc = main(
@@ -3855,7 +3846,7 @@ class TestCmdDownloadCz:
         assert payload["extra"]["parent_request"] == parent
         assert payload["horizontal_crs"] == "EPSG:5514"
         assert payload["request"]["bbox_crs"] == "EPSG:5514"
-        assert payload["nodata"] == -9999.0  # tag GeoTIFF nieczytelny -> domyslna
+        assert payload["nodata"] == -9999.0  # GeoTIFF tag unreadable -> default
         assert payload["transform"] is None  # without --target-crs: native CRS
 
     def test_bbox_string_is_normalized_to_image_sr(self, tmp_path):
@@ -3884,7 +3875,7 @@ class TestCmdDownloadCz:
         assert result == 0
         sent_bbox, target = provider.download_bbox.call_args.args[:2]
         assert sent_bbox.crs == "EPSG:5514"
-        assert -450000 < sent_bbox.min_x < -440000  # Krovak: wartosci ujemne
+        assert -450000 < sent_bbox.min_x < -440000  # Krovak: negative values
         assert target.parent == tmp_path / "nmt" / "cz_dmr5g_bpv" / "bbox"
         assert target.name == (
             f"{format(sent_bbox.min_x, '.10g')}"
@@ -4056,8 +4047,10 @@ class TestCmdDownloadCz:
         provider.download.assert_called_once()
 
     def test_evrf2007_transform_lands_in_sidecar(self, tmp_path):
-        """Transformacja pionowa Bpv->EVRF2007 w sidecarze; segment niesie
-        pion providera (ADR-026)."""
+        """Bpv->EVRF2007 vertical transformation recorded in the sidecar.
+
+        The segment carries the provider's vertical CRS (ADR-026).
+        """
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
@@ -4162,8 +4155,7 @@ class TestCmdDownloadCz:
         assert not (tmp_path / "nmt").exists()
 
     def test_sidecar_nodata_comes_from_geotiff_tag(self, tmp_path):
-        """Nodata in the sidecar comes from the downloaded raster's tag, not from a
-        constant."""
+        """Sidecar nodata comes from the downloaded raster's tag, not a constant."""
         import numpy as np
         import rasterio
         from rasterio.transform import from_origin
@@ -4204,7 +4196,7 @@ class TestCmdDownloadCz:
         )
         assert payload["nodata"] == -32767.0
 
-    # --- N2: raster w calosci nodata = Warning:, kod 0 ---
+    # --- N2: raster entirely nodata = Warning:, code 0 ---
 
     @staticmethod
     def _real_tif_writer(fill: float, nodata: float = -9999.0):
@@ -4261,7 +4253,7 @@ class TestCmdDownloadCz:
         assert "302_5550.tif jest w calosci nodata" in err
 
     def test_bbox_with_data_has_no_nodata_warning(self, tmp_path, capsys):
-        """Kontrola: raster z danymi (choc jeden piksel) — cisza."""
+        """Control: a raster with data (even one pixel) — no message."""
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
@@ -4339,7 +4331,7 @@ class TestCmdDownloadCz:
         assert capsys.readouterr().err == ""
 
     def test_target_crs_with_godlo_message_names_product_frames(self, tmp_path):
-        """K2: komunikat mowi, CO wyznacza godlo (SM5 w 5514, TM33 na siatce 3045)."""
+        """K2: the message says WHAT the code defines (SM5 in 5514, TM33 on 3045)."""
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         with pytest.raises(ValidationError, match="kafel TM33 na siatce EPSG:3045"):
@@ -4347,7 +4339,7 @@ class TestCmdDownloadCz:
 
 
 def _write_prague_shp(directory):
-    """Maly shapefile (poligon w okolicach Pragi) w EPSG:4326 — dane offline."""
+    """Small shapefile (a polygon near Prague) in EPSG:4326 — offline data."""
     import shapefile
     from pyproj import CRS
 
@@ -4399,9 +4391,9 @@ def _write_krovak_shp(directory):
 
 
 class TestCountryDispatch:
-    """Dyspozycja per kraj w cmd_download (godlo -> rejestr systemow)."""
+    """Per-country dispatch in cmd_download (sheet code -> system registry)."""
 
-    # --- godlo -> kraj ---
+    # --- sheet code -> country ---
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     def test_cz_godlo_routes_to_cz_flow(self, mock_cz, tmp_path):
@@ -4525,8 +4517,7 @@ class TestCountryDispatch:
         assert mock_manager_class.call_args.kwargs["vertical_crs"] == "KRON86"
 
     def test_5m_rule_only_for_nmt(self, capsys):
-        """LAZ also goes through the PL sentinels - the NMT rule does not apply to
-        it."""
+        """LAZ also goes through the PL sentinels - the NMT rule does not apply."""
         from kartograf.cli.download_cmd import _resolve_pl_sentinels
 
         args = argparse.Namespace(
@@ -4575,8 +4566,8 @@ class TestCountryDispatch:
         assert result == 1
         assert "--bbox/--geometry" in capsys.readouterr().err
 
-    # PL bbox + --target-crs to od ADR-027 legalny przeplyw wycinka —
-    # pokrycie przejmuje tests/test_pl_cutout.py (TestDownloadPlBboxCutout).
+    # PL bbox + --target-crs has been a legal cutout flow since ADR-027 —
+    # covered by tests/test_pl_cutout.py (TestDownloadPlBboxCutout).
 
     # --- ValidationError from the CZ flow does not escape as a traceback ---
 
@@ -4591,8 +4582,7 @@ class TestCountryDispatch:
     def test_cz_godlo_with_target_crs_returns_1_without_traceback(
         self, tmp_path, capsys
     ):
-        """R9: --target-crs + CZ sheet code = a CLI error (main does not catch
-        exceptions)."""
+        """R9: --target-crs + CZ sheet code = a CLI error (main catches nothing)."""
         result = main(
             ["download", "302_5550", "--target-crs", "EPSG:3045", "-o", str(tmp_path)]
         )
@@ -4664,7 +4654,7 @@ class TestCountryDispatch:
         assert "etapie 2" in capsys.readouterr().err
         mock_cz.assert_not_called()
 
-    # --- tryby obszarowe: jawny --country cz ---
+    # --- area modes: explicit --country cz ---
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     def test_bbox_with_country_cz_routes_to_cz_flow(self, mock_cz, tmp_path):
@@ -4687,8 +4677,7 @@ class TestCountryDispatch:
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     def test_geometry_with_country_cz_reads_bbox_in_file_crs(self, mock_cz, tmp_path):
-        """The envelope is computed in the FILE's CRS - transformations are done by the
-        CZ layer."""
+        """The envelope is computed in the FILE's CRS - the CZ layer transforms it."""
         from pyproj import CRS
 
         from kartograf.core import geometry as geom
@@ -4718,7 +4707,7 @@ class TestCountryDispatch:
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     def test_geometry_cz_bbox_goes_through_pinned_transform(self, mock_cz, tmp_path):
-        """Skok do Krovaka idzie przypieta operacja z probkowaniem krawedzi."""
+        """The hop to Krovak uses the pinned operation with edge sampling."""
         from kartograf.providers.cuzk import dmr
 
         shp = _write_prague_shp(tmp_path)
@@ -4744,15 +4733,14 @@ class TestCountryDispatch:
         assert spy.call_args.args[1] == "EPSG:5514"
         bbox = mock_cz.call_args.kwargs["bbox"]
         assert bbox.crs == "EPSG:5514"
-        # Praga w Krovaku: obie wspolrzedne ujemne, |X| ~ 743 km, |Y| ~ 1044 km
+        # Prague in Krovak: both coordinates negative, |X| ~ 743 km, |Y| ~ 1044 km
         assert -745000 < bbox.min_x < -740000
         assert -1047000 < bbox.min_y < -1041000
         assert bbox.max_x > bbox.min_x and bbox.max_y > bbox.min_y
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     def test_geometry_cz_skips_unpinned_transformer(self, mock_cz, tmp_path):
-        """An unpinned pyproj transformer (``core.bbox``, ballpark allowed)
-        is not used."""
+        """An unpinned pyproj transformer (``core.bbox``, ballpark) is unused."""
         from kartograf.core import bbox as core_bbox
 
         shp = _write_prague_shp(tmp_path)
@@ -4778,8 +4766,7 @@ class TestCountryDispatch:
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     def test_geometry_cz_target_crs_in_one_hop(self, mock_cz, tmp_path):
-        """--target-crs: the envelope right away in the CRS requested from the
-        server."""
+        """--target-crs: the envelope directly in the CRS requested from the server."""
         shp = _write_prague_shp(tmp_path)
         mock_cz.return_value = 0
 
@@ -4824,7 +4811,7 @@ class TestCountryDispatch:
     @patch("kartograf.cli.download_cmd.DownloadManager")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
     def test_bbox_auto_stays_pl(self, mock_find, mock_manager_class, mock_cz, tmp_path):
-        """--country auto + bbox w glebi PL (Warszawa): przeplyw CZ nietkniety."""
+        """--country auto + a bbox deep inside PL (Warsaw): the CZ flow untouched."""
         mock_find.return_value = ["N-34-130-D-d-2-4"]
         mock_manager = _sheet_list_manager(tmp_path / "x.asc")
         mock_manager_class.return_value = mock_manager
@@ -4847,9 +4834,12 @@ class TestCountryDispatch:
     def test_geometry_in_czech_crs_leaves_krovak_by_pinned_operation_for_pl(
         self, tmp_path
     ):
-        """Item 4 of review max: a geometry file in EPSG:5514 with --country pl - the PL
-        envelope is built by the pinned operation (like --bbox in a Czech CRS), not
-        by the default transformer from core/geometry (~1.2 m difference)."""
+        """Finding 4 of review max: a geometry file in EPSG:5514 with --country pl.
+
+        The PL envelope is built by the pinned operation (like --bbox in a Czech
+        CRS), not by the default transformer from core/geometry (~1.2 m
+        difference).
+        """
         from kartograf.providers.cuzk.dmr import bbox_to_crs
 
         shp = _write_krovak_shp(tmp_path)
@@ -4888,15 +4878,15 @@ class TestCountryDispatch:
 
 
 # ===========================================================================
-# Auto-split bbox/geometrii per kraj + extra.parent_request (Zad. 17)
+# Auto-split of bbox/geometry per country + extra.parent_request (Task 17)
 # ===========================================================================
 
 
 class TestAutoSplitBBox:
-    """--country auto: bbox transgraniczny dzielony na kraje, parent_request."""
+    """--country auto: a cross-border bbox split into countries, parent_request."""
 
-    # 18.4-18.8E / 49.55-49.75N — pas przygraniczny PL/CZ (obie obwiednie
-    # krajow zawieraja ten prostokat: CZ do 18.86E/51.06N, PL od 14.07E/49.0N)
+    # 18.4-18.8E / 49.55-49.75N — PL/CZ border strip (both country envelopes
+    # contain this rectangle: CZ up to 18.86E/51.06N, PL from 14.07E/49.0N)
     _BORDER = [
         "download",
         "--bbox",
@@ -4905,7 +4895,7 @@ class TestAutoSplitBBox:
         "EPSG:4326",
         "-q",
     ]
-    # 21.0-21.2E / 52.0-52.2N — Warszawa, na wschod od obwiedni CZ (18.86E)
+    # 21.0-21.2E / 52.0-52.2N — Warsaw, east of the CZ envelope (18.86E)
     _PL_ONLY = [
         "download",
         "--bbox",
@@ -4914,7 +4904,7 @@ class TestAutoSplitBBox:
         "EPSG:4326",
         "-q",
     ]
-    # 13.3-13.5E / 49.7-49.8N — Pilzno, na zachod od obwiedni PL (14.07E)
+    # 13.3-13.5E / 49.7-49.8N — Plzen, west of the PL envelope (14.07E)
     _CZ_ONLY = [
         "download",
         "--bbox",
@@ -4943,10 +4933,10 @@ class TestAutoSplitBBox:
             "bbox_crs": "EPSG:4326",
             "countries": ["CZ", "PL"],
         }
-        # PL: manager dostal sidecar_extra z parent_request
+        # PL: the manager received sidecar_extra with parent_request
         kwargs = mock_manager_class.call_args.kwargs
         assert kwargs["sidecar_extra"] == {"parent_request": expected_parent}
-        # CZ: przeplyw wywolany z tym samym parent_request i bboxem w Krovaku
+        # CZ: flow called with the same parent_request and a bbox in Krovak
         cz_kwargs = mock_cz.call_args.kwargs
         assert cz_kwargs["parent_request"] == expected_parent
         assert cz_kwargs["bbox"].crs == "EPSG:5514"
@@ -4957,7 +4947,7 @@ class TestAutoSplitBBox:
     def test_country_order_is_deterministic(
         self, mock_manager_class, mock_find, mock_cz, tmp_path
     ):
-        """Kolejnosc krajow z all_countries() — posortowana (CZ przed PL)."""
+        """Country order from all_countries() — sorted (CZ before PL)."""
         mock_find.return_value = ["M-34-86-D-d-4-3"]
         mock_manager = _sheet_list_manager(tmp_path / "x.asc")
         mock_manager_class.return_value = mock_manager
@@ -4974,7 +4964,7 @@ class TestAutoSplitBBox:
     def test_pl_branch_does_not_poison_cz_args(
         self, mock_manager_class, mock_find, mock_cz, tmp_path
     ):
-        """Galaz PL pracuje na KOPII args — sentinele CZ zostaja None."""
+        """The PL branch works on a COPY of args — the CZ sentinels stay None."""
         mock_find.return_value = ["M-34-86-D-d-4-3"]
         mock_manager = _sheet_list_manager(tmp_path / "x.asc")
         mock_manager_class.return_value = mock_manager
@@ -4982,8 +4972,8 @@ class TestAutoSplitBBox:
 
         main(self._BORDER + ["-o", str(tmp_path)])
 
-        # mock trzyma REFERENCJE do Namespace'u — gdyby galaz PL (idaca po CZ)
-        # mutowala ten sam obiekt, sentinele bylyby juz rozwiazane
+        # the mock holds a REFERENCE to the Namespace — had the PL branch (run
+        # after CZ) mutated the same object, the sentinels would be resolved
         cz_args = mock_cz.call_args.args[0]
         assert cz_args.resolution is None
         assert cz_args.vertical_crs is None
@@ -5087,7 +5077,7 @@ class TestAutoSplitBBox:
     def test_auto_clips_cz_part_to_country_extent(
         self, mock_manager_class, mock_find, mock_cz, tmp_path
     ):
-        """Tryb auto przycina czesc CZ do obwiedni kraju (18.86E)."""
+        """Auto mode clips the CZ part to the country envelope (18.86E)."""
         from kartograf.providers.cuzk.dmr import bbox_to_crs
 
         mock_find.return_value = ["M-34-86-D-d-4-3"]
@@ -5113,7 +5103,7 @@ class TestAutoSplitBBox:
             BBox(18.4, 49.55, 18.86, 49.75, "EPSG:4326"), "EPSG:5514"
         )
         assert mock_cz.call_args.kwargs["bbox"] == expected
-        # parent_request niesie ORYGINALNY bbox zadania (przed przycieciem)
+        # parent_request carries the ORIGINAL request bbox (before clipping)
         parent = mock_cz.call_args.kwargs["parent_request"]
         assert parent["bbox"] == [18.4, 49.55, 19.5, 49.75]
 
@@ -5192,7 +5182,7 @@ class TestAutoSplitBBox:
     def test_bogatynia_cz_clipped_but_nothing_lost(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
-        """Odcieta czesc CZ lezy w PL: jeden Info: (CZ, 51,06°N), zero utraty."""
+        """The clipped CZ part lies in PL: one Info: (CZ, 51,06°N), nothing lost."""
         mock_cz.return_value = 0
         rc = self._run_auto(
             mock_find, mock_manager_class, tmp_path, "15.0,50.9,15.3,51.2", "EPSG:4326"
@@ -5230,7 +5220,7 @@ class TestAutoSplitBBox:
     def test_corner_loss_reported_even_when_edges_look_covered(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
-        """13-15°E x 53-55°N: utrata w narozniku widoczna dopiero po podziale."""
+        """13-15°E x 53-55°N: the corner loss shows only after the split."""
         rc = self._run_auto(
             mock_find, mock_manager_class, tmp_path, "13,53,15,55", "EPSG:4326"
         )
@@ -5242,13 +5232,13 @@ class TestAutoSplitBBox:
         assert "% powierzchni zadania" in err
 
     def test_area_outside_extents_splits_bbox_into_cells(self):
-        """Czysta funkcja: komorki poza wszystkimi prostokatami + udzial."""
+        """Pure function: cells outside all rectangles + the share."""
         from kartograf.cli.download_cmd import _area_outside_extents
 
         pl = BBox(14.07, 49.0, 24.2, 54.9, "EPSG:4326")
         cz = BBox(12.09, 48.55, 18.86, 51.06, "EPSG:4326")
 
-        # bbox w calosci wewnatrz PL
+        # bbox entirely inside PL
         assert _area_outside_extents(BBox(18, 50, 19, 51, "EPSG:4326"), [pl, cz]) == (
             None,
             0.0,
@@ -5264,7 +5254,7 @@ class TestAutoSplitBBox:
         lost, share = _area_outside_extents(BBox(13, 53, 15, 55, "EPSG:4326"), [pl, cz])
         assert lost == BBox(13, 53, 15, 55, "EPSG:4326")
         assert 0.5 < share < 0.6
-        # bbox w calosci poza — wszystko utracone
+        # bbox entirely outside — everything lost
         lost, share = _area_outside_extents(BBox(10, 56, 11, 57, "EPSG:4326"), [pl, cz])
         assert lost == BBox(10, 56, 11, 57, "EPSG:4326") and share == 1.0
 
@@ -5313,9 +5303,9 @@ class TestAutoSplitBBox:
         # the PL branch got a bbox in the Polish CRS
         pl_bbox = mock_find.call_args.args[0]
         assert pl_bbox.crs == "EPSG:2180"
-        # ...przyciety do obwiedni PL (zadanie siegalo 13.73E, PL od 14.07E)
+        # ...clipped to the PL envelope (request reached 13.73E, PL from 14.07E)
         assert _bbox_to_wgs84(pl_bbox).min_x > 13.9
-        # ...i wyprowadzony przypieta operacja z Krovaka
+        # ...and derived from Krovak with the pinned operation
         assert any(call.args[1] == "EPSG:2180" for call in pinned.call_args_list)
         # an unpinned transformer never targets a Czech CRS
         assert not any(is_czech_crs(call.args[1]) for call in plain.call_args_list)
@@ -5326,12 +5316,11 @@ class TestAutoSplitBBox:
     def test_cz_failure_does_not_skip_pl_and_warns(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
-        """A failure of the first country does not cancel the second or the whole
-        task."""
+        """A failure of the first country cancels neither the second nor the task."""
         mock_find.return_value = ["M-34-86-D-d-4-3"]
         mock_manager = _sheet_list_manager(tmp_path / "x.asc")
         mock_manager_class.return_value = mock_manager
-        mock_cz.return_value = 1  # CZ idzie pierwsze (sortowanie) i pada
+        mock_cz.return_value = 1  # CZ goes first (sorting) and fails
 
         result = main(self._BORDER + ["-o", str(tmp_path)])
 
@@ -5362,7 +5351,7 @@ class TestAutoSplitBBox:
         assert "Error: 1 z 1 arkuszy nie pobrano" in err
         assert "Warning: czesc PL zadania zakonczyla sie bledem" in err
 
-    # --- A3-2: prostokatne obwiednie krajow a kod wyjscia ---
+    # --- A3-2: rectangular country envelopes vs exit code ---
 
     # 14.40-14.45E / 50.05-50.10N - Prague, deep in CZ, but inside the PL
     # rectangle (from 14.07E): auto also queries GUGiK, which has no data there
@@ -5381,8 +5370,7 @@ class TestAutoSplitBBox:
     def test_auto_one_country_failed_other_succeeded_returns_0(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
-        """A country without data in the area of the other country does not break the
-        whole task."""
+        """A country with no data in the other's area does not break the task."""
         mock_find.return_value = ["M-33-65-D-b-3-3"]
         mock_manager = _sheet_list_manager(no_coverage=["M-33-65-D-b-3-3"])
         mock_manager_class.return_value = mock_manager
@@ -5617,7 +5605,7 @@ class TestAutoSplitBBox:
     def test_resolution_5m_resolvable_for_both(
         self, mock_manager_class, mock_find, mock_cz, tmp_path
     ):
-        """5m istnieje po obu stronach — auto-split przechodzi."""
+        """5m exists on both sides — auto-split goes ahead."""
         mock_find.return_value = ["M-34-86-D"]
         mock_manager = _sheet_list_manager(tmp_path / "x.asc")
         mock_manager_class.return_value = mock_manager
@@ -5687,8 +5675,7 @@ class TestAutoSplitBBox:
     def test_cz_bbox_transform_error_returns_1_with_remedy(
         self, mock_to_crs, tmp_path, capsys
     ):
-        """TransformError from CZ bbox normalisation = a CLI message, not a
-        traceback."""
+        """TransformError in CZ bbox normalisation = a CLI message, not a traceback."""
         from kartograf.transform.crs import TransformUnavailableError
 
         mock_to_crs.side_effect = TransformUnavailableError(
@@ -5716,8 +5703,7 @@ class TestAutoSplitBBox:
     def test_country_bbox_transform_error_returns_1_before_download(
         self, mock_country_bbox, mock_cz, tmp_path, capsys
     ):
-        """TransformError when splitting the area into countries = exit code 1, no
-        download."""
+        """TransformError splitting the area into countries = code 1, no download."""
         from kartograf.transform.crs import TransformUnavailableError
 
         mock_country_bbox.side_effect = TransformUnavailableError(
@@ -5744,7 +5730,7 @@ class TestAutoSplitBBox:
 
 
 class TestAutoSplitGeometry:
-    """--geometry w trybie auto: obwiednia decyduje o krajach."""
+    """--geometry in auto mode: the envelope decides the countries."""
 
     @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
@@ -5762,8 +5748,8 @@ class TestAutoSplitGeometry:
     ):
         geometry_file = tmp_path / "area.shp"
         geometry_file.write_bytes(b"stub")
-        # obwiednia w 2180 przecinajaca oba kraje (okolice Cieszyna:
-        # 18.513-18.792E / 49.666-49.847N — wewnatrz obwiedni CZ i PL)
+        # envelope in 2180 intersecting both countries (Cieszyn area:
+        # 18.513-18.792E / 49.666-49.847N — inside the CZ and PL envelopes)
         mock_overall.return_value = BBox(
             465000.0, 200000.0, 485000.0, 220000.0, "EPSG:2180"
         )
@@ -5804,7 +5790,7 @@ class TestAutoSplitGeometry:
         geometry_file.write_bytes(b"stub")
         mock_overall.return_value = BBox(
             630000.0, 480000.0, 640000.0, 490000.0, "EPSG:2180"
-        )  # Warszawa — poza obwiednia CZ
+        )  # Warsaw — outside the CZ envelope
         mock_find.return_value = ["N-34-138-A-b-1-1"]
         mock_manager = _sheet_list_manager(tmp_path / "x.asc")
         mock_manager_class.return_value = mock_manager
@@ -5838,7 +5824,7 @@ class TestAutoSplitGeometry:
         geometry_file.write_bytes(b"stub")
         mock_overall.return_value = BBox(
             455000.0, 773000.0, 459000.0, 784000.0, "EPSG:2180"
-        )  # Rozewie — obwiednia siega za 54,90°N
+        )  # Rozewie — the envelope reaches beyond 54.90°N
         mock_find.return_value = ["N-33-38-B-d-1-1"]
         mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
 
@@ -5887,8 +5873,7 @@ class TestAutoSplitGeometry:
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     def test_geometry_explicit_cz_gets_parent_request(self, mock_cz, tmp_path):
-        """Explicit --country cz: parent_request from the envelope in the request
-        CRS."""
+        """Explicit --country cz: parent_request from the request-CRS envelope."""
         shp = _write_prague_shp(tmp_path)
         mock_cz.return_value = 0
 
@@ -6091,8 +6076,7 @@ class TestPartialSheetWarning:
 
 
 class TestSingleGodloSkipMessage:
-    """E15 (E2E-B C17): a skip of a single sheet code says skip, not ``Downloaded
-    to``."""
+    """E15 (E2E-B C17): skipping one sheet code says skip, not ``Downloaded to``."""
 
     @staticmethod
     def _run(tmp_path, provider, *extra):
@@ -6130,7 +6114,7 @@ class TestSingleGodloSkipMessage:
 
 
 class TestLazSidecarRequestFilters:
-    """E16 (E2E-B C13-f): sidecar LAZ ``request`` zapisuje --year i --min-density."""
+    """E16 (E2E-B C13-f): LAZ sidecar ``request`` records --year/--min-density."""
 
     @staticmethod
     def _run(tmp_path, *extra):
@@ -6291,7 +6275,7 @@ _CAMPAIGN_INFO = "Info: --campaigns/--min-year dotycza tylko czesci PL"
 _CZ_CAMPAIGN_ERROR = (
     "Error: CZ (CUZK) nie ma kampanii — --campaigns all/--min-year dotycza tylko PL"
 )
-# pas przygraniczny PL/CZ (obie prostokatne obwiednie, ADR-023)
+# PL/CZ border strip (both rectangular envelopes, ADR-023)
 _BORDER_BBOX = ["--bbox", "18.4,49.55,18.8,49.75", "--bbox-crs", "EPSG:4326"]
 # Ceske Budejovice: _countries_for_bbox == ("CZ",)
 _CZ_ONLY_BBOX = ["--bbox", "14.45,48.95,14.50,49.00", "--bbox-crs", "EPSG:4326"]
@@ -6448,7 +6432,7 @@ class TestCampaignOptions:
     def test_target_crs_with_all_cross_border_rejected_before_cz(
         self, mock_run_cz, mock_prepare, capsys, tmp_path
     ):
-        """Pod auto CZ idzie przed PL — straz musi zadzialac przed CZ."""
+        """Under auto CZ goes before PL — the guard must fire before CZ."""
         mock_run_cz.return_value = 0
         rc = main(
             [
@@ -6655,7 +6639,7 @@ class TestCampaignOptions:
     def test_single_sheet_mock_manager_reports_downloaded(
         self, mock_manager_class, capsys, tmp_path
     ):
-        """I-1: atrapa Mock() ma ``last_sheet.skipped`` = Mock (prawda)."""
+        """I-1: a Mock() fake has ``last_sheet.skipped`` = Mock (truthy)."""
         mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
 
         assert main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path)]) == 0
@@ -6787,7 +6771,7 @@ class TestCampaignOptions:
     def test_target_crs_with_all_cross_border_no_info_before_error(
         self, mock_run_cz, mock_prepare, capsys, tmp_path
     ):
-        """Fix 2: straz --target-crs przed Info o kampaniach."""
+        """Fix 2: the --target-crs guard comes before the campaign Info."""
         rc = main(
             [
                 "download",
@@ -6809,7 +6793,7 @@ class TestCampaignOptions:
     def test_pl_godlo_target_crs_with_all_gets_godlo_error(
         self, mock_manager_class, capsys, tmp_path
     ):
-        """Fix 3: ogolniejsza straz godla (--target-crs z godlem) wygrywa."""
+        """Fix 3: the more general sheet code guard (--target-crs with a code) wins."""
         rc = main(
             [
                 "download",
@@ -6841,7 +6825,7 @@ class TestCampaignOptions:
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_campaigns_passed_to_manager_hierarchy(self, mock_manager_class, tmp_path):
-        """Fix 5: tor hierarchii (--scale)."""
+        """Fix 5: the hierarchy path (--scale)."""
         manager = Mock()
         manager.download_hierarchy.return_value = [tmp_path / "a.asc"]
         manager.count_sheets.return_value = 1
@@ -6875,7 +6859,7 @@ class TestCampaignOptions:
     def test_campaigns_passed_to_manager_geometry_list(
         self, mock_manager_class, mock_find, mock_overall, mock_read_crs, tmp_path
     ):
-        """Fix 5: tor listy z --geometry PL."""
+        """Fix 5: the list path with PL --geometry."""
         geometry_file = tmp_path / "area.shp"
         geometry_file.write_bytes(b"stub")
         mock_overall.return_value = BBox(
@@ -6983,7 +6967,7 @@ class TestCampaignOptions:
         assert kwargs["min_year"] is None
 
     # -------------------------------------------------------------------------
-    # I-1: newest przy awarii skorowidza -> lokalna kampania + Warning
+    # I-1: newest on an index failure -> local campaign + Warning
     # -------------------------------------------------------------------------
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -7079,7 +7063,7 @@ class TestCampaignOptions:
             assert "Error:" in capsys.readouterr().err
 
     # -------------------------------------------------------------------------
-    # M-1: pojedyncze godlo z --campaigns all — linia podsumowania jak lista
+    # M-1: single sheet code with --campaigns all — summary line as for a list
     # -------------------------------------------------------------------------
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -7143,7 +7127,7 @@ class TestCampaignOptions:
 
 
 class TestListMessagesUx:
-    """O-3 / O-6 / O-7: komunikaty CLI przy braku danych, skipie i pobraniu."""
+    """O-3 / O-6 / O-7: CLI messages on no data, skip and download."""
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_single_sheet_skip_has_no_downloading_line(
@@ -7190,7 +7174,7 @@ class TestListMessagesUx:
 
     @staticmethod
     def _real_error(godlo):
-        """Prawdziwy ``no_coverage_error`` skorowidza (potomek PL-2000)."""
+        """A real index ``no_coverage_error`` (PL-2000 descendant)."""
         from kartograf.providers.pl.skorowidz import (
             SkorowidzRecord,
             coverage_hints,
@@ -7228,7 +7212,7 @@ class TestListMessagesUx:
     def test_all_no_coverage_list_prints_real_hints(
         self, mock_manager_class, capsys, tmp_path
     ):
-        """O-6/O-7: prawdziwe `hints` -> `Info:` per godlo; brak 'Downloaded 0'."""
+        """O-6/O-7: real `hints` -> `Info:` per sheet code; no 'Downloaded 0'."""
         errors = {g: self._real_error(g) for g in ("7.173.21", "7.173.22")}
         result = DownloadResult(
             failed=list(errors),
@@ -7310,7 +7294,7 @@ class TestListMessagesUx:
     def test_all_no_coverage_quiet_keeps_stderr_no_summary(
         self, mock_manager_class, campaigns, capsys, tmp_path
     ):
-        """O-7 w obu torach i z -q: Error/Info na stderr, brak podsumowania."""
+        """O-7 on both paths and with -q: Error/Info on stderr, no summary."""
         err = self._real_error("7.173.21")
         result = DownloadResult(
             failed=["7.173.21"],
@@ -7363,8 +7347,7 @@ class TestListMessagesUx:
 
 
 class TestErrorWithoutBlankLine:
-    """FB-1: `Error:` is not preceded by an empty line when the progress bar is not
-    running."""
+    """FB-1: no blank line before `Error:` when the progress bar is not running."""
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_single_sheet_error_starts_stderr(

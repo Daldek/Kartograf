@@ -1,4 +1,4 @@
-"""Testy deskryptorow i rejestru zrodel (kartograf.sources)."""
+"""Tests of source descriptors and the registry (kartograf.sources)."""
 
 import dataclasses
 
@@ -356,8 +356,7 @@ class TestDescriptorProviderConsistency:
             assert d.license.attribution != ""
 
     def test_horizontal_crs_matches_channel_reality(self):
-        """The descriptor's horizontal CRS = the CRS actually returned by the
-        channel."""
+        """Descriptor horizontal CRS = the CRS the channel actually returns."""
         for key in (
             "pl.gugik.nmt_1m",
             "pl.gugik.nmt_5m",
@@ -399,7 +398,7 @@ class TestDescriptorProviderConsistency:
         }
         for provider, key in expected.items():
             assert provider.descriptor_key == key
-            get_source(key)  # klucz istnieje w rejestrze
+            get_source(key)  # the key exists in the registry
 
 
 class TestResolveSubdir:
@@ -461,7 +460,7 @@ class TestResolveSubdir:
         "kwargs", [{"vertical_crs": ""}, {"vertical_crs": "  "}, {"uklad": ""}]
     )
     def test_empty_dimension_raises(self, kwargs):
-        """Item 7: an empty string is a caller error, not a missing dimension - so
+        """Finding 7: an empty string is a caller error, not a missing dimension - so
         far it gave a silent segment `nmt/pl_{uklad}_1m_` (FileStorage closes the
         same trap with a falsy check)."""
         from kartograf.exceptions import ValidationError

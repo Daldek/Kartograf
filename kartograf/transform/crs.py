@@ -48,7 +48,7 @@ class TransformUnavailableError(TransformError):
 
 @dataclass(frozen=True)
 class TransformPolicy:
-    """Polityka doboru operacji transformacji."""
+    """Transformation operation selection policy."""
 
     min_accuracy_m: float = 1.0
     probe_point: tuple[float, float] | None = None  # in the source CRS
@@ -69,7 +69,7 @@ WARP_MARGIN_PX = 4
 
 @dataclass(frozen=True)
 class PinnedTransform:
-    """Przypieta (wybrana raz, deterministyczna) operacja transformacji."""
+    """Pinned (chosen once, deterministic) transformation operation."""
 
     accuracy_m: float
     description: str  # operation description (goes to the sidecar in stage 1+)
@@ -98,17 +98,15 @@ class PinnedTransform:
         the pinned one by 0.08 m on average, 1.9 m max) and has no ban
         on ballpark.
 
-        The axis correction is necessary: the pipeline comes from an
-        ``always_xy=True`` transformer (E-N order), while GDAL passes coordinates to
-        the operation in the AUTHORITATIVE axis order of both CRSs. Therefore
-        ``axisswap``
-        is added INDEPENDENTLY for the source (at the front) and for the target (at the
-        end)
-        - each time the given CRS is northing-first (EPSG:2180,
-        EPSG:3045; EPSG:5514 is not). Without the correction the raster is entirely
-        nodata - a silent failure mode that is easy to overlook (measured for the
-        PL 2180 -> 5514 path without the leading ``axisswap``: 0 of 46225 valid
-        pixels) - so it is derived from ``axis_info`` rather than assumed.
+        The axis correction is necessary: the pipeline comes from an ``always_xy=True``
+        transformer (E-N order), while GDAL passes coordinates to the operation in the
+        AUTHORITATIVE axis order of both CRSs. Therefore ``axisswap`` is added
+        INDEPENDENTLY for the source (at the front) and for the target (at the end) -
+        each time the given CRS is northing-first (EPSG:2180, EPSG:3045; EPSG:5514 is
+        not). Without the correction the raster is entirely nodata - a silent failure
+        mode that is easy to overlook (measured for the PL 2180 -> 5514 path without
+        the leading ``axisswap``: 0 of 46225 valid pixels) - so it is derived from
+        ``axis_info`` rather than assumed.
         """
         if self.src_crs is None or self.dst_crs is None:
             raise TransformError(
@@ -196,11 +194,10 @@ KNOWN_PATHS: tuple[KnownPath, ...] = (
     ),
 )
 
-# EPSG areas of use are rectangles: the Slovak one also covers Zlin
-# and Jablunkov, so neither the AOI nor the PROJ ranking decides a data's country.
-# The CUZK S-JTSK needs the Czech datum step, not the Slovak operation
-# (EPSG:4829) that is more accurate on paper. Both pins have the same Helmert
-# parameters.
+# EPSG areas of use are rectangles: the Slovak one also covers Zlin and Jablunkov, so
+# neither the AOI nor the PROJ ranking decides a data's country. The CUZK S-JTSK needs
+# the Czech datum step, not the Slovak operation (EPSG:4829) that is more accurate on
+# paper. Both pins have the same Helmert parameters.
 DATUM_STEP_PINS: dict[int, frozenset[str]] = {
     5514: frozenset({"EPSG:1622", "EPSG:1623"}),
 }

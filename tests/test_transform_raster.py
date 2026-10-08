@@ -1,4 +1,4 @@
-"""Testy warp_to_grid — lokalna reprojekcja przypieta operacja (wzorzec ADR-024)."""
+"""Tests of warp_to_grid — local reprojection with a pinned operation (ADR-024)."""
 
 import dataclasses
 from unittest.mock import patch
@@ -19,7 +19,7 @@ from kartograf.transform.crs import (
 from kartograf.transform.raster import warp_to_grid
 
 _NODATA = -9999.0
-# EPSG:2180, srodkowa Polska — realny teren, operacja 2180->5514 ma tu 0,5 m
+# EPSG:2180, central Poland — real terrain, the 2180->5514 operation has 0.5 m here
 _APEX_2180 = (530050.0, 382050.0)
 
 
@@ -76,7 +76,7 @@ def _apex_of(path):
 
 class TestWarpToGrid:
     def test_content_lands_where_pyproj_says(self, tmp_path):
-        """Regresja TRESCI: wierzcholek < 1 px od wzorca pyproj (2180->5514)."""
+        """CONTENT regression: apex < 1 px from the pyproj reference (2180->5514)."""
         src = _write_cone_tif(tmp_path / "src.tif", _APEX_2180)
         pinned = _pinned_2180_to("EPSG:5514")
         ax, ay = (float(v) for v in pinned.transform(*_APEX_2180))
@@ -106,7 +106,7 @@ class TestWarpToGrid:
         assert list(tmp_path.glob("*.warp.tif")) == []
 
     def test_operation_is_forced(self, tmp_path):
-        """COORDINATE_OPERATION musi byc podane GDAL-owi jawnie (ADR-024)."""
+        """COORDINATE_OPERATION must be passed to GDAL explicitly (ADR-024)."""
         from rasterio.warp import reproject as real_reproject
 
         src = _write_cone_tif(tmp_path / "src.tif", _APEX_2180)
@@ -190,7 +190,7 @@ class TestWarpToGrid:
         assert seen["dst_exists"] is False, "polzapisany raster pod finalna sciezka"
         assert seen["tmp"], "warp nie uzyl pliku tymczasowego"
         assert not dst.exists()
-        assert list(tmp_path.glob("*.warp.tif")) == []  # sprzatanie po awarii
+        assert list(tmp_path.glob("*.warp.tif")) == []  # cleanup after the failure
 
     def test_failed_warp_keeps_previous_destination(self, tmp_path):
         """A failed warp LEAVES the previous result untouched.
@@ -221,7 +221,7 @@ class TestWarpToGrid:
 
         assert dst.exists(), "awaria warpu skasowala poprzedni wynik"
         assert dst.read_bytes() == previous, "poprzedni wynik zostal nadpisany"
-        assert list(tmp_path.glob("*.warp.tif")) == []  # sprzatanie po awarii
+        assert list(tmp_path.glob("*.warp.tif")) == []  # cleanup after the failure
 
     def test_lowercase_crs_is_the_same_pair(self, tmp_path):
         """`epsg:2180` is the same CRS as `EPSG:2180` - a semantic comparison.
@@ -341,7 +341,7 @@ class TestWarpToGrid:
         one - GDAL overwrites valid pixels with the next source (measured
         2026-09-29), hence the list goes from the end.
         """
-        # a: x 0..100, b: x 90..190 (zakladka 10 m); dziura w b w strefie zakladki
+        # a: x 0..100, b: x 90..190 (10 m overlap); a hole in b within the overlap
         a = self._flat_tif(tmp_path / "a.tif", 530000, 382100, 100.0)
         b = self._flat_tif(
             tmp_path / "b.tif", 530090, 382100, 200.0, hole=(40, 60, 0, 10)

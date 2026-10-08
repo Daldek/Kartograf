@@ -20,12 +20,12 @@ from kartograf.providers.pl.gugik import GugikProvider
 from tests.conftest import _STUB_LAYERS, gfi_record, render_gfi_body
 
 _EVRF2007_LAYERS = _STUB_LAYERS["NMT/WMS/SkorowidzeUkladEVRF2007"]
-# Fabryka sesji na watek zyje w SkorowidzLayersMixin (skorowidz.py)
+# The per-thread session factory lives in SkorowidzLayersMixin (skorowidz.py)
 SESSION_FACTORY = "kartograf.transport.http.make_gugik_session"
 
 
 def _wms_response(body: str) -> Mock:
-    """Atrapa odpowiedzi HTTP 200 skorowidza (GetFeatureInfo / GetCapabilities)."""
+    """Fake HTTP 200 index response (GetFeatureInfo / GetCapabilities)."""
     response = Mock(spec=requests.Response)
     response.status_code = 200
     response.text = body
@@ -34,7 +34,7 @@ def _wms_response(body: str) -> Mock:
 
 
 def _queried_layers(session: Mock) -> list[str]:
-    """Wartosci LAYERS= z kolejnych zapytan GetFeatureInfo na sesji."""
+    """LAYERS= values from successive GetFeatureInfo requests on the session."""
     return [
         parse_qs(urlparse(call.args[0]).query)["LAYERS"][0]
         for call in session.get.call_args_list
@@ -45,12 +45,12 @@ class TestGugikProviderBasic:
     """Tests of the basic GugikProvider functionality."""
 
     def test_provider_name(self):
-        """Test nazwy providera."""
+        """Test the provider name."""
         provider = GugikProvider()
         assert provider.name == "GUGiK"
 
     def test_provider_base_url(self):
-        """Test bazowego URL."""
+        """Test the base URL."""
         provider = GugikProvider()
         assert provider.base_url == "https://mapy.geoportal.gov.pl"
 
@@ -273,7 +273,7 @@ class TestGugikProviderDownloadGodlo:
     def test_download_skorowidz_failure_leaves_no_directory(
         self, tmp_path, mock_opendata_response
     ):
-        """Awaria skorowidza (3 x ConnectionError) = DownloadError przed mkdir."""
+        """Index failure (3 x ConnectionError) = DownloadError before mkdir."""
         session = Mock(spec=requests.Session)
         session.get = Mock(
             side_effect=[requests.ConnectionError("reset")] * 3
@@ -295,7 +295,7 @@ class TestGugikProviderDownloadBbox:
 
     @pytest.fixture
     def mock_wcs_response(self):
-        """Mock odpowiedzi WCS."""
+        """Mock WCS response."""
         response = Mock(spec=requests.Response)
         response.status_code = 200
         response.iter_content = Mock(return_value=[b"TIFF data..."])
@@ -398,7 +398,7 @@ class TestGugikProviderDownloadBbox:
         """WCS NMT 1m for EVRF2007 was withdrawn - a validation error, not 404."""
         session = Mock(spec=requests.Session)
 
-        provider = GugikProvider(session=session)  # domyslnie EVRF2007
+        provider = GugikProvider(session=session)  # EVRF2007 by default
         output_path = tmp_path / "test.tif"
 
         with pytest.raises(ValidationError, match="KRON86"):
@@ -550,7 +550,7 @@ class TestGugikProviderGetOpendataUrl:
 
     @pytest.fixture
     def empty_response(self):
-        """Pusty szablon skorowidza (morze, zagranica)."""
+        """Empty index template (sea, abroad)."""
         return _wms_response(render_gfi_body([]))
 
     def test_get_opendata_url_success(self, record_response):
@@ -564,7 +564,7 @@ class TestGugikProviderGetOpendataUrl:
         assert _queried_layers(session) == [_EVRF2007_LAYERS[0]]
 
     def test_get_opendata_url_not_found(self, empty_response):
-        """Pusta odpowiedz KAZDEJ warstwy = NoCoverageError z opisem zadania."""
+        """Empty response from EVERY layer = NoCoverageError describing the request."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=empty_response)
 
@@ -577,7 +577,7 @@ class TestGugikProviderGetOpendataUrl:
         assert _queried_layers(session) == list(_EVRF2007_LAYERS)
 
     def test_transport_error_retries_same_layer(self, record_response):
-        """Zerwane polaczenie ponawia TE SAMA warstwe po backoffie."""
+        """A dropped connection retries THE SAME layer after backoff."""
         session = Mock(spec=requests.Session)
         session.get = Mock(
             side_effect=[requests.ConnectionError("reset"), record_response]
@@ -636,7 +636,7 @@ class TestGugikProviderGetOpendataUrl:
         assert session.get.call_count == 1
 
     def test_get_opendata_url_tries_all_layers(self, empty_response, record_response):
-        """Puste warstwy sa odpytywane po kolei od najnowszej az do rekordu."""
+        """Empty layers are queried in turn from the newest until a record."""
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[empty_response] * 3 + [record_response])
 
@@ -647,8 +647,7 @@ class TestGugikProviderGetOpendataUrl:
 
     @pytest.mark.parametrize("newest_first", [True, False])
     def test_latest_campaign_wins_within_layer(self, newest_first):
-        """Within one layer the newest acquisition date wins, not the order in the
-        HTML."""
+        """Within a layer the newest acquisition date wins, not the HTML order."""
         records = [
             gfi_record(self.GODLO, aktualnosc="2024-09-03", url="https://x/new.asc"),
             gfi_record(self.GODLO, aktualnosc="2019-04-18", url="https://x/old.asc"),
@@ -663,7 +662,7 @@ class TestGugikProviderGetOpendataUrl:
         assert url == "https://x/new.asc"
 
     def test_dt_pzgik_breaks_aktualnosc_tie(self):
-        """Remis aktualnosc rozstrzyga pozniejszy dt_pzgik."""
+        """An acquisition date tie is broken by the later dt_pzgik."""
         records = [
             gfi_record(self.GODLO, dt_pzgik="2024-11-02", url="https://x/earlier.asc"),
             gfi_record(self.GODLO, dt_pzgik="2025-01-10", url="https://x/later.asc"),
@@ -774,7 +773,7 @@ class TestGugikProviderSession:
         assert session.get.call_count == 2
 
     def test_one_session_per_thread(self, record_body):
-        """Dwa zadania w jednym watku dziela jedna sesje z make_gugik_session."""
+        """Two requests in one thread share one session from make_gugik_session."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=_wms_response(record_body))
 
@@ -845,10 +844,10 @@ class TestGugikProviderSession:
 
 
 class TestGugikProviderRepr:
-    """Testy reprezentacji tekstowej."""
+    """Tests of the string representation."""
 
     def test_repr(self):
-        """Test metody __repr__."""
+        """Test __repr__."""
         provider = GugikProvider()
         repr_str = repr(provider)
 
@@ -856,7 +855,7 @@ class TestGugikProviderRepr:
         assert "mapy.geoportal.gov.pl" in repr_str
 
     def test_str(self):
-        """Test metody __str__."""
+        """Test __str__."""
         provider = GugikProvider()
         str_repr = str(provider)
 

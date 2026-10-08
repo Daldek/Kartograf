@@ -1,4 +1,4 @@
-"""Testy twardej polityki transformacji (kartograf.transform.crs)."""
+"""Tests of the strict transformation policy (kartograf.transform.crs)."""
 
 import math
 from unittest.mock import MagicMock, patch
@@ -53,7 +53,7 @@ class TestErrorHierarchy:
 
 class TestBuildPinnedTransform:
     def test_ballpark_disabled_in_group_construction(self):
-        """(a) Grupa budowana wylacznie z allow_ballpark=False, always_xy=True."""
+        """(a) The group is built only with allow_ballpark=False, always_xy=True."""
         with patch(_GROUP_PATCH) as mock_cls:
             mock_cls.return_value = _mock_group([_mock_transformer(0.5, "op dokladna")])
             build_pinned_transform("EPSG:5514", "EPSG:2180", TransformPolicy())
@@ -62,7 +62,7 @@ class TestBuildPinnedTransform:
         assert kwargs["always_xy"] is True
 
     def test_empty_group_raises_with_remedy(self):
-        """(b) Pusta lista operacji => TransformUnavailableError z remedium."""
+        """(b) An empty operation list => TransformUnavailableError with a remedy."""
         with patch(_GROUP_PATCH) as mock_cls:
             mock_cls.return_value = _mock_group([])
             with pytest.raises(TransformUnavailableError) as exc:
@@ -90,7 +90,7 @@ class TestBuildPinnedTransform:
             assert after == before
 
     def test_accuracy_filter(self):
-        """(c) Odrzuc accuracy < 0 (nieznana) i > min_accuracy_m; 0.0 akceptowane."""
+        """(c) Reject accuracy < 0 (unknown) and > min_accuracy_m; 0.0 accepted."""
         good = _mock_transformer(0.0, "dokladna konwersja")
         unknown = _mock_transformer(-1.0, "nieznana dokladnosc")
         coarse = _mock_transformer(7.0, "za gruba")
@@ -103,7 +103,7 @@ class TestBuildPinnedTransform:
         assert pinned.description == "dokladna konwersja"
 
     def test_probe_rejects_inf(self):
-        """(d) Probe: operacja zwracajaca inf na punkcie kontrolnym odpada."""
+        """(d) Probe: an operation returning inf at the control point is rejected."""
         bad_grid = _mock_transformer(
             0.03, "siatka obcego kraju", result=(math.inf, math.inf)
         )
@@ -255,9 +255,9 @@ class TestKnownPaths:
     def test_pl_cutout_pairs_documented_with_measured_accuracy(self):
         """Accuracy of the documented PL pairs matches the real operation."""
         by_pair = {(p.src, p.dst): p for p in KNOWN_PATHS}
-        probe = (530050.0, 382050.0)  # EPSG:2180, srodkowa Polska
+        probe = (530050.0, 382050.0)  # EPSG:2180, central Poland
         for dst, expected in (("EPSG:5514", 1.0), ("EPSG:3045", 0.0)):
-            entry = by_pair[("EPSG:2180", dst)]  # KeyError = brak wpisu
+            entry = by_pair[("EPSG:2180", dst)]  # KeyError = missing entry
             pinned = build_pinned_transform(
                 "EPSG:2180",
                 dst,
@@ -324,7 +324,7 @@ class TestGdalOperation:
         assert "axisswap" not in pinned.gdal_operation()
 
     def test_operation_carries_datum_step(self):
-        """Sedno: operacja MUSI niesc transformacje datum S-JTSK->ETRS89."""
+        """Crux: the operation MUST carry the S-JTSK->ETRS89 datum transformation."""
         pinned = build_pinned_transform("EPSG:5514", "EPSG:2180", self._POLICY)
         operation = pinned.gdal_operation()
         assert "helmert" in operation and "x=570.8" in operation

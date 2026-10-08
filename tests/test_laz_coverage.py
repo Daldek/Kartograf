@@ -33,14 +33,14 @@ from kartograf.providers.pl.gugik_laz import (
 
 REAL_LAZ = Path(__file__).parent / "fixtures" / "gugik_laz" / "real_2026_10_06"
 
-# Zadanie z rundy E2E (C13, L1): 50 x 50 m w Warszawie
+# Request from the E2E round (C13, L1): 50 x 50 m in Warsaw
 W2_AREA = BBox(637400, 487000, 637450, 487050, "EPSG:2180")
 NEW_1992 = "N-34-139-A-c-1-1-3-4"  # 2023 i 2025, PL-1992
 OLD_2000 = "7.173.21.06.2"  # 2022, PL-2000:S7
 
 
 def laz_session() -> MagicMock:
-    """WFS z surowych XML rundy 2026-10-06 (GetCapabilities + GetFeature/rok)."""
+    """WFS from raw XML of the 2026-10-06 round (GetCapabilities + GetFeature/year)."""
     session = MagicMock()
 
     def get(url, **kwargs):
@@ -84,14 +84,14 @@ def _tile(godlo, year, footprint, *, full_sheet=True, date=None, crs="PL-1992"):
 
 
 # =============================================================================
-# Geometria wypuklych wielokatow
+# Convex polygon geometry
 # =============================================================================
 
 
 class TestConvexGeometry:
     def test_normalize_drops_closing_and_collinear_vertices(self):
-        # realny kafel PL-1992 z Krakowa: 9 wierzcholkow (srodki bokow
-        # wspolliniowe + zamkniecie) -> 4 wierzcholki
+        # a real PL-1992 tile from Krakow: 9 vertices (collinear edge midpoints
+        # + the closing point) -> 4 vertices
         ring = [
             (535834.31, 235351.46),
             (535830.44, 235930.44),
@@ -143,7 +143,7 @@ class TestConvexGeometry:
 
 
 # =============================================================================
-# Footprint z WFS (msGeometry, osie N,E)
+# Footprint from WFS (msGeometry, N,E axes)
 # =============================================================================
 
 
@@ -163,13 +163,13 @@ class TestFootprintParsing:
 
 
 # =============================================================================
-# Selekcja na surowym WFS w2
+# Selection on the raw WFS w2
 # =============================================================================
 
 
 class TestSelectTilesOnRealWfs:
     def test_newest_tile_covers_area_older_systems_are_skipped(self):
-        """C13 L1: 2025/PL-1992 pokrywa obszar -> 2022/PL-2000 i 2023 pominiete."""
+        """C13 L1: 2025/PL-1992 covers the area -> 2022/PL-2000 and 2023 skipped."""
         selection = GugikLazProvider(session=laz_session()).select_tiles(W2_AREA)
         assert [(t.godlo, t.year) for t in selection.tiles] == [(NEW_1992, 2025)]
         skipped = {(s.tile.godlo, s.tile.year): s for s in selection.superseded}
@@ -185,8 +185,8 @@ class TestSelectTilesOnRealWfs:
         ]
 
     def test_older_tile_adding_uncovered_area_is_kept(self):
-        # obszar wychodzi na wschod poza kafel 2025 (E <= 637617.67), w kafel
-        # 2022 (E do ~638146) — kafel 2022 wnosi niepokryty kawalek
+        # the area extends east beyond the 2025 tile (E <= 637617.67) into the
+        # 2022 tile (E up to ~638146) — the 2022 tile adds an uncovered piece
         area = BBox(637500, 487000, 637800, 487100, "EPSG:2180")
         selection = GugikLazProvider(session=laz_session()).select_tiles(area)
         assert sorted((t.godlo, t.year) for t in selection.tiles) == [
@@ -228,7 +228,7 @@ class TestSelectTilesOnRealWfs:
 
 
 # =============================================================================
-# Regula zachlanna (kafle syntetyczne)
+# Greedy rule (synthetic tiles)
 # =============================================================================
 
 
@@ -274,8 +274,7 @@ class TestSelectNewestCover:
         assert sorted(t.godlo for t in selection.tiles) == ["NEW", "OLD"]
 
     def test_partial_newer_sheet_does_not_cover(self):
-        """``czy_ark_wypelniony=NIE``: the footprint is the sheet frame, not the data
-        extent."""
+        """``czy_ark_wypelniony=NIE``: footprint = sheet frame, not the data extent."""
         old = _tile("OLD", 2020, _square(0, 0, 300, 300))
         new = _tile("NEW", 2024, _square(0, 0, 300, 300), full_sheet=False)
         selection = select_newest_cover([old, new], AREA)
@@ -304,8 +303,7 @@ class TestSelectNewestCover:
         assert sorted(t.godlo for t in selection.tiles) == ["NEW", "X"]
 
     def test_same_godlo_covers_without_footprint(self):
-        """A tile without msGeometry: the same sheet code (the same frame) still
-        covers."""
+        """A tile without msGeometry: the same sheet code (same frame) still covers."""
         new = LazTile("SAME", "u/new.laz", 2024, 12, "PL-1992", 0, 0, 300, 300)
         old = LazTile("SAME", "u/old.laz", 2023, 12, "PL-1992", 0, 0, 300, 300)
         selection = select_newest_cover([old, new], AREA)
