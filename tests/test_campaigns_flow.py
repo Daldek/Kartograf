@@ -1,7 +1,8 @@
 """
-Przeplyw kampanii ADR-030 end-to-end: PRAWDZIWY ``GugikProvider`` na surowych
-odpowiedziach GetFeatureInfo (``tests/fixtures/gugik_skorowidz/real_2026_10_06``)
-+ sesja pobran oddajaca maly ASC z ramy arkusza (EPSG:2180) dla URL-i opendata.
+ADR-030 campaign flow end-to-end: a REAL ``GugikProvider`` on raw
+GetFeatureInfo responses (``tests/fixtures/gugik_skorowidz/real_2026_10_06``)
++ a download session returning a small ASC with the sheet frame (EPSG:2180)
+for opendata URLs.
 """
 
 import json
@@ -40,7 +41,7 @@ def _response(body: str) -> Mock:
 
 
 def asc_bytes(godlo: str, value: int) -> bytes:
-    """Maly ASC 5x5 z xllcorner/yllcorner z ramy arkusza (EPSG:2180)."""
+    """Small 5x5 ASC with xllcorner/yllcorner from the sheet frame (EPSG:2180)."""
     frame = SheetParser(godlo).get_bbox("EPSG:2180")
     rows = "\n".join(" ".join([str(value)] * 5) for _ in range(5))
     header = (
@@ -51,8 +52,8 @@ def asc_bytes(godlo: str, value: int) -> bytes:
 
 
 def routed_session(path_for_layer, downloads=None) -> Mock:
-    """GetFeatureInfo -> surowe body warstwy; plik opendata -> ASC (albo
-    ``downloads[url]``); wartosc ASC = pierwszy segment liczbowy nazwy pliku."""
+    """GetFeatureInfo -> raw layer body; opendata file -> ASC (or
+    ``downloads[url]``); ASC value = first numeric segment of the file name."""
     session = Mock(spec=requests.Session)
 
     def get(url, **kwargs):
@@ -166,8 +167,9 @@ def test_end_to_end_all_with_real_xyz_campaign(tmp_path):
 
 
 def test_newest_uses_local_campaign_when_skorowidz_unreachable(tmp_path):
-    """I-1 na prawdziwym ``GugikProvider`` bez ``MetadataCache``: kolejny
-    ``download_sheet`` pyta skorowidz; awaria sieci -> lokalna kampania."""
+    """I-1 on a real ``GugikProvider`` without ``MetadataCache``: the next
+    ``download_sheet`` queries the index (skorowidz); network failure -> local
+    campaign."""
     from unittest.mock import patch
 
     m = DownloadManager(tmp_path, provider=GugikProvider(session=c14_session(G)))
@@ -181,7 +183,7 @@ def test_newest_uses_local_campaign_when_skorowidz_unreachable(tmp_path):
     with patch("kartograf.transport.http.time.sleep"):
         path = m2.download_sheet(G)
 
-    assert offline.get.called  # bez cache rekordow: zapytanie przy kazdym wywolaniu
+    assert offline.get.called  # no record cache: a query on every call
     assert path == std and str(linked_campaign(std)) == before
     assert m2.last_sheet.skipped is True
     assert "GUGiK lezy" in m2.last_sheet.unverified

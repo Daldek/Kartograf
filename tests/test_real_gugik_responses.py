@@ -1,12 +1,13 @@
 """
-Testy regresyjne wyboru rekordu i obslugi danych na SUROWYCH odpowiedziach GUGiK.
+Regression tests of record selection and data handling on RAW GUGiK responses.
 
-Fixtury w ``tests/fixtures/gugik_skorowidz/real_2026_10_06/`` (NMT/NMPT/orto) i
-``tests/fixtures/gugik_laz/real_2026_10_06/`` (WFS LAZ) to nieedytowane body z
-rundy E2E na zywo 2026-10-06 (``docs/research/2026-10-06-e2e-brzegowe-i-review/``,
-wymaganie E18). Kazda warstwa skorowidza jest zwracana z pliku o jej nazwie,
-dokladnie tak, jak odpowiadal serwer (kolejnosc warstw: najnowsza -> najstarsza).
-Testy dotycza zachowan, ktore kod JUZ ma i ktore runda potwierdzila.
+Fixtures in ``tests/fixtures/gugik_skorowidz/real_2026_10_06/`` (NMT/NMPT/ortho)
+and ``tests/fixtures/gugik_laz/real_2026_10_06/`` (LAZ WFS) are unedited bodies
+from the live E2E round of 2026-10-06
+(``docs/research/2026-10-06-e2e-brzegowe-i-review/``, requirement E18). Each
+index layer is returned from a file of its name, exactly as the server
+answered (layer order: newest -> oldest).
+The tests cover behaviours the code ALREADY has and the round confirmed.
 """
 
 from pathlib import Path
@@ -50,9 +51,9 @@ def _layer_of(url: str) -> str:
 
 
 def routed_session(path_for_layer) -> Mock:
-    """Sesja, ktora na GetFeatureInfo oddaje surowe body danej warstwy.
+    """A session that returns the raw body of a given layer on GetFeatureInfo.
 
-    ``path_for_layer(layer)`` zwraca sciezke pliku albo None (pusta odpowiedz).
+    ``path_for_layer(layer)`` returns the file path or None (empty response).
     """
     session = Mock(spec=requests.Session)
 
@@ -127,11 +128,11 @@ class TestNmtRecordSelectionOnRealBodies:
         url = provider._get_opendata_url(godlo)
         assert file_id(url) == "77381_1339240"
         assert provider.source_info(godlo)["acquisition_date"] == "2023-03-29"
-        # Warstwy 2026..2024 puste -> przejscie do zbiorczej, bez bledu
+        # Layers 2026..2024 empty -> fall through to the aggregate one, no error
         assert queried_layers(session)[-1] == "SkorowidzeNMT2023iStarsze"
 
     def test_c3_layer_2025_only_half_metre_falls_through_to_1m_older_layer(self):
-        """M-33-57-C-b-4-2: 2025 ma TYLKO 0,5 m, 1 m jest w 2023iStarsze."""
+        """M-33-57-C-b-4-2: 2025 has ONLY 0.5 m, 1 m is in 2023iStarsze."""
         godlo = "M-33-57-C-b-4-2"
         newer = layer_records(
             REAL / "nmt" / godlo / "nmt1_evr__SkorowidzeNMT2025.body",
@@ -197,8 +198,8 @@ class TestNmtRecordSelectionOnRealBodies:
         assert file_id(record.url) == "81025_1562196"
 
     def test_c9_xyz_record_is_parsed_but_never_decides(self):
-        """Rekord ``.xyz`` (72675, 2019-04-29) jest czytany (H1: bez filtra
-        rozszerzenia), ale przegrywa z nowszymi."""
+        """A ``.xyz`` record (72675, 2019-04-29) is read (H1: no extension
+        filter), but loses to newer ones."""
         godlo = "N-33-69-A-d-3-2"
         records = layer_records(
             REAL / "nmt" / godlo / "nmt1_evr__SkorowidzeNMT2023iStarsze.body",
@@ -235,7 +236,7 @@ class TestNmtRecordSelectionOnRealBodies:
         body = (REAL / "nmt" / godlo / "nmt1_krn__SkorowidzeNMT2018.body").read_text(
             encoding="utf-8"
         )
-        assert 'godlo:"N-33-59-c-a-1-3"' in body  # surowe body, bez edycji
+        assert 'godlo:"N-33-59-c-a-1-3"' in body  # raw body, unedited
         provider = GugikProvider(
             session=nmt_session(godlo, "nmt1_krn"), vertical_crs="KRON86"
         )
@@ -287,7 +288,7 @@ class TestNoCoverageHintsOnRealBodies:
 
 
 # =============================================================================
-# Orto: RGB/CIR, token godla, niepelny arkusz (C12)
+# Ortho: RGB/CIR, sheet code token, partial sheet (C12)
 # =============================================================================
 
 
@@ -311,8 +312,8 @@ class TestOrtoRecordSelectionOnRealBodies:
         assert provider.source_info(self.GODLO)["color"] == "RGB"
 
     def test_c12_token_parent_request_never_takes_child_records(self):
-        """M-34-90-C-b-4 (arkusz nadrzedny) -> jego wlasny rekord 0,75 m z 1997,
-        a nie nowsze rekordy potomka M-34-90-C-b-4-4."""
+        """M-34-90-C-b-4 (parent sheet) -> its own 0.75 m record from 1997,
+        not the newer records of the child M-34-90-C-b-4-4."""
         records = layer_records(
             REAL / "orto" / "M-34-90-C-b-4-4_SkorowidzeOrtofotomapyStarsze.html",
             "SkorowidzeOrtofotomapyStarsze",
@@ -327,18 +328,19 @@ class TestOrtoRecordSelectionOnRealBodies:
         assert parent.godlo == "M-34-90-C-b-4"
 
     def test_c12_token_child_request_never_takes_parent_record(self):
-        """Z rekordow samego rodzica M-34-90-C-b-4 zadanie M-34-90-C-b-4-4 nie
-        wybiera nic (godlo to caly token, nie prefiks)."""
+        """From the records of the parent M-34-90-C-b-4 alone, the request
+        M-34-90-C-b-4-4 selects nothing (the sheet code is a whole token, not a
+        prefix)."""
         records = layer_records(
             REAL / "orto" / "M-34-90-C-b-4-4_SkorowidzeOrtofotomapyStarsze.html",
             "SkorowidzeOrtofotomapyStarsze",
         )
         parents = [r for r in records if r.godlo == "M-34-90-C-b-4"]
-        assert parents  # rodzic jest w surowym body
+        assert parents  # the parent is in the raw body
         assert (
             select_sheet_record(parents, godlo="M-34-90-C-b-4-4", uklad="1992") is None
         )
-        # a prawdziwy rekord arkusza wygrywa z najnowszych: 2022-06-26 RGB (76530)
+        # and the sheet's own real record beats the newest: 2022-06-26 RGB (76530)
         child = select_sheet_record(
             records,
             godlo="M-34-90-C-b-4-4",
@@ -349,8 +351,8 @@ class TestOrtoRecordSelectionOnRealBodies:
         assert child.godlo == "M-34-90-C-b-4-4"
 
     def test_c12_record_with_full_sheet_false_wins_adr_028(self):
-        """M-34-90-C-b-4-4: 2026 (niepelny arkusz) przed pelnym 2024 — bez
-        preferencji flagi ``calyArkuszWypelnionyTrescia``."""
+        """M-34-90-C-b-4-4: 2026 (partial sheet) before the full 2024 - no
+        preference for the ``calyArkuszWypelnionyTrescia`` flag."""
         godlo = "M-34-90-C-b-4-4"
         provider = GugikOrtoProvider(session=orto_session(godlo))
         record = provider._resolve_sheet(godlo)
@@ -371,7 +373,7 @@ class TestOrtoRecordSelectionOnRealBodies:
 
 
 # =============================================================================
-# Wycinek: arkusze z roznych kampanii (C14)
+# Cutout: sheets from different campaigns (C14)
 # =============================================================================
 
 
@@ -446,10 +448,10 @@ def feature_years(session: MagicMock) -> list[str]:
 
 class TestLazDiscoveryOnRealWfs:
     def test_c13_evrf2007_newest_tile_covers_both_systems(self):
-        """L1: dwa uklady w obszarze, ale 2025/PL-1992 pokrywa go w calosci.
+        """L1: two CRS in the area, but 2025/PL-1992 covers it entirely.
 
-        Do 2026-10-06 wynik mial DWA kafle (dedup tylko po godle): 2022 w
-        PL-2000:S7 (250 MB) i 2025 w PL-1992 — zdublowany obszar (C13 UWAGA 1).
+        Until 2026-10-06 the result had TWO tiles (dedup by sheet code only): 2022 in
+        PL-2000:S7 (250 MB) and 2025 in PL-1992 - a duplicated area (C13 NOTE 1).
         """
         selection = GugikLazProvider(session=laz_session()).select_tiles(W2_BBOX)
         tiles = selection.tiles
@@ -465,7 +467,7 @@ class TestLazDiscoveryOnRealWfs:
             ("7.173.21.06.2", 2022, "PL-2000:S7"),
             ("N-34-139-A-c-1-1-3-4", 2023, "PL-1992"),
         ]
-        # drugi uklad poziomy nadal jest rozpoznawany (segment pl_2000)
+        # the second horizontal CRS is still recognised (pl_2000 segment)
         assert [s.tile.uklad for s in selection.superseded if s.tile.year == 2022] == [
             "2000"
         ]
@@ -541,7 +543,7 @@ def _sheet_args(godlo):
 
 
 def _real_cases() -> list[tuple]:
-    """(godlo, rekordy, resolution_m, predicate) dla kazdego realnego body."""
+    """(sheet code, records, resolution_m, predicate) for every real body."""
     cases: list[tuple] = []
     for folder in sorted(NMT_DIR.iterdir()):
         if folder.name == "c14":

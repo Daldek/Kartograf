@@ -71,9 +71,9 @@ class TestBuildPinnedTransform:
         assert "pl07_2019" in exc.value.remedy
 
     def test_network_state_restored(self):
-        """(g) Globalny stan sieci PROJ przywracany po build_pinned_transform,
-        dla obu wartosci allow_network_grids — funkcja nie moze na trwale
-        mutowac stanu wspoldzielonego z innymi konsumentami pyproj w procesie.
+        """(g) The global PROJ network state is restored after build_pinned_transform,
+        for both values of allow_network_grids - the function must not
+        permanently mutate state shared with other pyproj consumers in the process.
         """
         for allow in (True, False):
             before = network.is_network_enabled()
@@ -130,7 +130,7 @@ class TestBuildPinnedTransform:
         assert "op A" in reasons and "op B" in reasons
 
     def test_result_isfinite_guard(self):
-        """(e) Wynik nieskonczony => TransformError, nie dane."""
+        """(e) Infinite result => TransformError, not data."""
         flaky = _mock_transformer(0.5, "psuje sie po zbudowaniu")
         with patch(_GROUP_PATCH) as mock_cls:
             mock_cls.return_value = _mock_group([flaky])
@@ -140,7 +140,7 @@ class TestBuildPinnedTransform:
             pinned.transform(1.0, 2.0)
 
     def test_25833_to_2180_end_to_end_offline(self):
-        """(f) Realna para DE->PL: bez siatek, dziala offline, acc 0.0."""
+        """(f) Real DE->PL pair: no grids, works offline, acc 0.0."""
         policy = TransformPolicy(probe_point=(400000.0, 5800000.0))
         pinned = build_pinned_transform("EPSG:25833", "EPSG:2180", policy)
         assert pinned.accuracy_m == 0.0
@@ -253,7 +253,7 @@ class TestKnownPaths:
         assert ("EPSG:4937", "EPSG:8357") in pairs
 
     def test_pl_cutout_pairs_documented_with_measured_accuracy(self):
-        """Dokladnosc udokumentowanych par PL zgadza sie z realna operacja."""
+        """Accuracy of the documented PL pairs matches the real operation."""
         by_pair = {(p.src, p.dst): p for p in KNOWN_PATHS}
         probe = (530050.0, 382050.0)  # EPSG:2180, srodkowa Polska
         for dst, expected in (("EPSG:5514", 1.0), ("EPSG:3045", 0.0)):
@@ -303,12 +303,12 @@ class TestTransformPolymorphic:
 
 
 class TestGdalOperation:
-    """Pipeline dla GDAL-owego COORDINATE_OPERATION (rasterio.warp.reproject).
+    """Pipeline for GDAL's COORDINATE_OPERATION (rasterio.warp.reproject).
 
-    GDAL podaje operacji wspolrzedne w kolejnosci osi AUTORYTATYWNEJ ukladu,
-    a `PinnedTransform` jest zbudowany z `always_xy=True` (kolejnosc E-N).
-    Bez korekty osi warp do ukladu northing-first (EPSG:2180, EPSG:3045)
-    daje raster w calosci nodata — zmierzone 2026-08-11.
+    GDAL passes the operation coordinates in the AUTHORITATIVE axis order of the
+    CRS, while `PinnedTransform` is built with `always_xy=True` (E-N order).
+    Without the axis correction a warp to a northing-first CRS (EPSG:2180,
+    EPSG:3045) yields an all-nodata raster - measured 2026-08-11.
     """
 
     _POLICY = TransformPolicy(min_accuracy_m=1.0, allow_network_grids=False)
@@ -345,8 +345,8 @@ class TestGdalOperation:
 
 class TestProbeUnderNetworkPolicy:
     def test_probe_runs_under_policy_network_context(self):
-        """5.8b: probe wykonuje sie w kontekscie sieci wg policy,
-        a nie po przywroceniu stanu globalnego."""
+        """5.8b: the probe runs in the network context per policy,
+        not after the global state is restored."""
         before = network.is_network_enabled()
         states_during_probe = []
 

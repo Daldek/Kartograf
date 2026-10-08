@@ -1,9 +1,9 @@
 """
-Testy jednostkowe dla modułu download manager.
+Unit tests for the download manager module.
 
-Ten moduł zawiera testy dla klasy DownloadManager z nową architekturą:
-- download_sheet(godlo) → ASC
-- download_bbox(bbox) → GeoTIFF
+This module contains tests for the DownloadManager class with the new architecture:
+- download_sheet(godlo) -> ASC
+- download_bbox(bbox) -> GeoTIFF
 """
 
 from pathlib import Path
@@ -22,7 +22,7 @@ class TestDownloadProgress:
     """Testy klasy DownloadProgress."""
 
     def test_progress_attributes(self):
-        """Test atrybutów progress."""
+        """Test of progress attributes."""
         progress = DownloadProgress(
             current=5,
             total=10,
@@ -38,7 +38,7 @@ class TestDownloadProgress:
         assert progress.message == "In progress"
 
     def test_progress_percent(self):
-        """Test obliczania procentu postępu."""
+        """Test of the progress percentage computation."""
         progress = DownloadProgress(
             current=5, total=10, godlo="N-34-130-D", status="downloading"
         )
@@ -46,7 +46,7 @@ class TestDownloadProgress:
         assert progress.progress_percent == 50.0
 
     def test_progress_percent_zero_total(self):
-        """Test procentu postępu gdy total=0."""
+        """Test of the progress percentage when total=0."""
         progress = DownloadProgress(
             current=0, total=0, godlo="N-34-130-D", status="completed"
         )
@@ -54,7 +54,7 @@ class TestDownloadProgress:
         assert progress.progress_percent == 100.0
 
     def test_progress_default_message(self):
-        """Test domyślnej wiadomości."""
+        """Test of the default message."""
         progress = DownloadProgress(
             current=1, total=1, godlo="N-34-130-D", status="completed"
         )
@@ -63,23 +63,23 @@ class TestDownloadProgress:
 
 
 class TestDownloadManagerBasic:
-    """Testy podstawowej funkcjonalności DownloadManager."""
+    """Tests of the basic DownloadManager functionality."""
 
     def test_init_defaults(self):
-        """Test inicjalizacji z domyślnymi wartościami."""
+        """Test of initialisation with default values."""
         manager = DownloadManager()
 
         assert isinstance(manager.provider, GugikProvider)
         assert isinstance(manager.storage, FileStorage)
 
     def test_init_custom_output_dir(self, tmp_path):
-        """Test inicjalizacji z własnym katalogiem."""
+        """Test of initialisation with a custom directory."""
         manager = DownloadManager(output_dir=tmp_path)
 
         assert manager.storage.output_dir == tmp_path
 
     def test_init_custom_provider(self):
-        """Test inicjalizacji z własnym providerem."""
+        """Test of initialisation with a custom provider."""
         mock_provider = Mock()
         manager = DownloadManager(provider=mock_provider)
 
@@ -94,31 +94,31 @@ class TestDownloadManagerBasic:
         assert "GUGiK" in repr_str
 
     def test_default_resolution(self):
-        """Test domyślnej rozdzielczości."""
+        """Test of the default resolution."""
         manager = DownloadManager()
         assert manager.resolution == "1m"
 
     def test_resolution_1m_explicit(self):
-        """Test jawnego ustawienia rozdzielczości 1m."""
+        """Test of explicitly setting the 1m resolution."""
         manager = DownloadManager(resolution="1m")
         assert manager.resolution == "1m"
 
     def test_resolution_5m(self):
-        """Test ustawienia rozdzielczości 5m."""
+        """Test of setting the 5m resolution."""
         manager = DownloadManager(resolution="5m")
         assert manager.resolution == "5m"
         # 5m forces EVRF2007
         assert manager.vertical_crs == "EVRF2007"
 
     def test_resolution_5m_forces_evrf2007(self):
-        """Test że 5m wymusza EVRF2007."""
+        """Test that 5m forces EVRF2007."""
         manager = DownloadManager(resolution="5m", vertical_crs="KRON86")
         # Should be changed to EVRF2007
         assert manager.vertical_crs == "EVRF2007"
         assert manager.resolution == "5m"
 
     def test_repr_includes_resolution(self, tmp_path):
-        """Test że repr zawiera rozdzielczość."""
+        """Test that repr contains the resolution."""
         manager = DownloadManager(output_dir=tmp_path, resolution="5m")
         repr_str = repr(manager)
 
@@ -129,7 +129,8 @@ class TestDownloadManagerStorageFromDescriptor:
     """Testy wyprowadzania podkatalogu storage z deskryptora providera."""
 
     def test_manager_with_nmpt_provider_uses_nmpt_subdir(self, tmp_path):
-        """Manager z providerem NMPT uzywa podkatalogu 'nmpt', nie 'nmt_1m'."""
+        """A manager with an NMPT provider uses the 'nmpt' subdirectory, not
+        'nmt_1m'."""
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
         manager = DownloadManager(output_dir=tmp_path, provider=GugikNmptProvider())
@@ -137,7 +138,7 @@ class TestDownloadManagerStorageFromDescriptor:
         assert manager._storage._subdir == "nmpt/pl_{uklad}_1m_evrf2007"
 
     def test_nmt_and_nmpt_managers_do_not_collide(self, tmp_path):
-        """Sciezki NMT i NMPT dla tego samego godla nie moga byc identyczne."""
+        """NMT and NMPT paths for the same sheet code must not be identical."""
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
         nmt = DownloadManager(output_dir=tmp_path, provider=GugikProvider())
@@ -155,7 +156,8 @@ class TestDownloadManagerStorageFromDescriptor:
         assert manager._storage._subdir == "orto/pl_{uklad}"
 
     def test_manager_without_descriptor_key_falls_back_to_resolution(self, tmp_path):
-        """Provider bez descriptor_key -> podkatalog wg resolution (jak dotychczas)."""
+        """A provider without descriptor_key -> subdirectory per resolution (as
+        before)."""
         provider = Mock()
         provider.descriptor_key = None
         provider.default_extension = ".asc"
@@ -197,11 +199,11 @@ class TestDownloadManagerStorageFromDescriptor:
         assert manager._storage._subdir == "nmt/pl_{uklad}_1m_kron86"
 
     def test_manager_without_descriptor_key_keeps_kron86_in_segment(self, tmp_path):
-        """Blizniak testu wyzej: bez deskryptora {vcrs} wypelnia FileStorage.
+        """Twin of the test above: without a descriptor FileStorage fills {vcrs}.
 
-        Sciezka deskryptorowa wypelnia {vcrs} juz w `resolve_subdir`, wiec
-        argument `vertical_crs=` konstruktora `FileStorage` broni WYLACZNIE
-        tego fallbacku — bez niego zostaje nierozwiazana klamra.
+        The descriptor path fills {vcrs} already in `resolve_subdir`, so the
+        `vertical_crs=` argument of the `FileStorage` constructor defends ONLY this
+        fallback - without it an unresolved brace is left.
         """
         provider = Mock()
         provider.descriptor_key = None
@@ -214,12 +216,12 @@ class TestDownloadManagerStorageFromDescriptor:
         assert manager._storage._subdir == "nmt/pl_{uklad}_1m_kron86"
 
     def test_default_storage_follows_provider_vertical_crs(self, tmp_path):
-        """Segment bierze pion z PROVIDERA, nie z domyslu managera (ADR-026).
+        """The segment takes the vertical CRS from the PROVIDER, not from the manager
+        default (ADR-026).
 
-        Wywolanie z biblioteki (uzywa go Hydrograf) podaje provider, a nie
-        flage: bez tego dane KRON86 ladowaly w segmencie ...evrf2007, obok
-        sidecara deklarujacego EPSG:9650 — dokladnie to zderzenie ukladow,
-        ktore ADR-026 mial usunac.
+        A library call (used by Hydrograf) passes a provider, not a flag: without
+        this, KRON86 data landed in the ...evrf2007 segment, next to a sidecar
+        declaring EPSG:9650 - exactly the CRS clash ADR-026 was meant to remove.
         """
         manager = DownloadManager(
             output_dir=tmp_path, provider=GugikProvider(vertical_crs="KRON86")
@@ -242,7 +244,7 @@ class TestDownloadManagerStorageFromDescriptor:
         assert manager._storage._subdir == "nmt/pl_{uklad}_5m_evrf2007"
 
     def test_provider_with_empty_vertical_crs_raises(self, tmp_path):
-        """Zn. 7 przez publiczne API: wlasny provider z vertical_crs=''."""
+        """Item 7 through the public API: a custom provider with vertical_crs=''."""
         from kartograf.exceptions import ValidationError
 
         provider = Mock(spec=GugikProvider)
@@ -254,7 +256,7 @@ class TestDownloadManagerStorageFromDescriptor:
 
 
 class TestDownloadManagerDownloadSheet:
-    """Testy metody download_sheet() - pobiera ASC przez OpenData."""
+    """Tests of the download_sheet() method - downloads ASC via OpenData."""
 
     @pytest.fixture
     def mock_provider(self):
@@ -271,7 +273,7 @@ class TestDownloadManagerDownloadSheet:
         return provider
 
     def test_download_sheet_success(self, tmp_path, mock_provider):
-        """Test udanego pobierania arkusza 1:10000 jako ASC."""
+        """Test of a successful download of a 1:10000 sheet as ASC."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         result = manager.download_sheet("N-34-130-D-d-2-4")
@@ -281,7 +283,7 @@ class TestDownloadManagerDownloadSheet:
         assert result.exists()
 
     def test_download_sheet_skip_existing(self, tmp_path, mock_provider):
-        """Test pomijania istniejącego pliku."""
+        """Test of skipping an existing file."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         # Create existing ASC file
@@ -298,7 +300,7 @@ class TestDownloadManagerDownloadSheet:
         assert result.read_bytes() == b"existing data"
 
     def test_download_sheet_overwrite_existing(self, tmp_path, mock_provider):
-        """Test nadpisywania istniejącego pliku."""
+        """Test of overwriting an existing file."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         # Create existing ASC file
@@ -314,7 +316,8 @@ class TestDownloadManagerDownloadSheet:
         assert result.read_bytes() == b"ASC data"  # New data
 
     def test_download_sheet_expands_25k_to_10k(self, tmp_path, mock_provider):
-        """Test że download_sheet z godłem 1:25000 rozwija do 4 arkuszy 1:10000."""
+        """Test that download_sheet with a 1:25000 sheet code expands to 4 sheets of
+        1:10000."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         result = manager.download_sheet("N-34-130-D-d-2")
@@ -325,7 +328,8 @@ class TestDownloadManagerDownloadSheet:
         assert all(p.exists() for p in result)
 
     def test_download_sheet_expands_50k_to_10k(self, tmp_path, mock_provider):
-        """Test że download_sheet z godłem 1:50000 rozwija do 16 arkuszy 1:10000."""
+        """Test that download_sheet with a 1:50000 sheet code expands to 16 sheets of
+        1:10000."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         result = manager.download_sheet("N-34-130-D-d")
@@ -336,7 +340,8 @@ class TestDownloadManagerDownloadSheet:
         assert all(p.exists() for p in result)
 
     def test_download_sheet_expands_100k_to_10k(self, tmp_path, mock_provider):
-        """Test że download_sheet z godłem 1:100000 rozwija do 64 arkuszy 1:10000."""
+        """Test that download_sheet with a 1:100000 sheet code expands to 64 sheets of
+        1:10000."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         result = manager.download_sheet("N-34-130-D")
@@ -346,7 +351,7 @@ class TestDownloadManagerDownloadSheet:
         assert all(p.suffix == ".asc" for p in result)
 
     def test_download_sheet_expands_with_progress(self, tmp_path, mock_provider):
-        """Test że download_sheet przekazuje on_progress przy rozwijaniu."""
+        """Test that download_sheet passes on_progress when expanding."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         progress_calls = []
@@ -363,7 +368,7 @@ class TestDownloadManagerDownloadSheet:
 
 
 class TestDownloadManagerDownloadHierarchy:
-    """Testy metody download_hierarchy() - pobiera ASC przez OpenData."""
+    """Tests of the download_hierarchy() method - downloads ASC via OpenData."""
 
     @pytest.fixture
     def mock_provider(self):
@@ -380,7 +385,7 @@ class TestDownloadManagerDownloadHierarchy:
         return provider
 
     def test_download_hierarchy_success(self, tmp_path, mock_provider):
-        """Test udanego pobierania hierarchii."""
+        """Test of a successful hierarchy download."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         # Download 1:50k → 1:10k (16 sheets)
@@ -391,7 +396,7 @@ class TestDownloadManagerDownloadHierarchy:
         assert all(p.suffix == ".asc" for p in results)
 
     def test_download_hierarchy_with_progress(self, tmp_path, mock_provider):
-        """Test pobierania z callback postępu."""
+        """Test of download with a progress callback."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         progress_calls = []
@@ -406,7 +411,7 @@ class TestDownloadManagerDownloadHierarchy:
         assert len(progress_calls) == 8  # 4 sheets × 2 calls each
 
     def test_download_hierarchy_skip_existing(self, tmp_path, mock_provider):
-        """Test pomijania istniejących plików w hierarchii."""
+        """Test of skipping existing files in the hierarchy."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         # Pre-create some ASC files
@@ -433,7 +438,7 @@ class TestDownloadManagerDownloadHierarchy:
         assert len(skipped) == 2
 
     def test_download_hierarchy_handles_failures(self, tmp_path):
-        """Test obsługi błędów pobierania."""
+        """Test of download error handling."""
         provider = Mock(spec=GugikProvider)
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
@@ -469,7 +474,7 @@ class TestDownloadManagerDownloadHierarchy:
         assert len(failed) == 1
 
     def test_download_hierarchy_count(self, tmp_path, mock_provider):
-        """Test liczenia arkuszy w hierarchii."""
+        """Test of counting sheets in the hierarchy."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         # 1:100k → 1:10k = 4 × 4 × 4 = 64 sheets
@@ -517,7 +522,7 @@ class TestDownloadResultNoCoverage:
     def test_no_coverage_hints_kept_only_for_no_coverage(
         self, tmp_path, provider, workers
     ):
-        """O-6: podpowiedzi NoCoverageError w wyniku listy; twarda porazka bez."""
+        """O-6: NoCoverageError hints in the list result; a hard failure has none."""
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
         manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=workers)
         result = manager.last_result
@@ -531,8 +536,8 @@ class TestDownloadResultNoCoverage:
     def test_hard_failures_excludes_no_coverage_and_progress_status(
         self, tmp_path: Path, provider, workers
     ) -> None:
-        """D2/D11: ``hard_failures`` = porazki warte ponowienia; arkusz bez
-        danych raportuje status ``no_coverage`` (nie ``failed``)."""
+        """D2/D11: ``hard_failures`` = failures worth a retry; a sheet without
+        data reports the ``no_coverage`` status (not ``failed``)."""
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
         statuses: dict[str, str] = {}
         manager.download_sheets(
@@ -622,7 +627,7 @@ class TestDownloadManagerDownloadSheets:
 
 
 class TestDownloadManagerDownloadBbox:
-    """Testy metody download_bbox() - pobiera GeoTIFF przez WCS."""
+    """Tests of the download_bbox() method - downloads GeoTIFF via WCS."""
 
     @pytest.fixture
     def mock_provider(self):
@@ -640,13 +645,13 @@ class TestDownloadManagerDownloadBbox:
 
     @pytest.fixture
     def sample_bbox(self):
-        """Przykładowy bbox."""
+        """Sample bbox."""
         return BBox(
             min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
         )
 
     def test_download_bbox_success(self, tmp_path, mock_provider, sample_bbox):
-        """Test udanego pobierania bbox."""
+        """Test of a successful bbox download."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         result = manager.download_bbox(sample_bbox, "test.tif")
@@ -655,7 +660,7 @@ class TestDownloadManagerDownloadBbox:
         assert result.name == "test.tif"
 
     def test_download_bbox_custom_format(self, tmp_path, sample_bbox):
-        """Test pobierania bbox z własnym formatem."""
+        """Test of bbox download with a custom format."""
         mock_provider = Mock(spec=GugikProvider)
         type(mock_provider).default_extension = PropertyMock(return_value=".asc")
 
@@ -680,7 +685,7 @@ class TestDownloadManagerGetMissingSheets:
     """Testy metody get_missing_sheets()."""
 
     def test_get_missing_sheets_all_missing(self, tmp_path):
-        """Test gdy wszystkie arkusze brakują."""
+        """Test when all sheets are missing."""
         manager = DownloadManager(output_dir=tmp_path)
 
         missing = manager.get_missing_sheets("N-34-130-D-d-2", "1:10000")
@@ -688,7 +693,7 @@ class TestDownloadManagerGetMissingSheets:
         assert len(missing) == 4
 
     def test_get_missing_sheets_some_exist(self, tmp_path):
-        """Test gdy niektóre arkusze istnieją."""
+        """Test when some sheets exist."""
         manager = DownloadManager(output_dir=tmp_path)
 
         # Pre-create some ASC files
@@ -707,7 +712,7 @@ class TestDownloadManagerGetMissingSheets:
         assert "N-34-130-D-d-2-4" in missing
 
     def test_get_missing_sheets_none_missing(self, tmp_path):
-        """Test gdy żaden arkusz nie brakuje."""
+        """Test when no sheet is missing."""
         manager = DownloadManager(output_dir=tmp_path)
 
         # Pre-create all ASC files
@@ -727,7 +732,7 @@ class TestDownloadManagerCountSheets:
     """Testy metody count_sheets()."""
 
     def test_count_sheets_small_hierarchy(self, tmp_path):
-        """Test liczenia małej hierarchii."""
+        """Test of counting a small hierarchy."""
         manager = DownloadManager(output_dir=tmp_path)
 
         # 1:25k → 1:10k = 4 sheets
@@ -736,7 +741,7 @@ class TestDownloadManagerCountSheets:
         assert count == 4
 
     def test_count_sheets_medium_hierarchy(self, tmp_path):
-        """Test liczenia średniej hierarchii."""
+        """Test of counting a medium hierarchy."""
         manager = DownloadManager(output_dir=tmp_path)
 
         # 1:50k → 1:10k = 4 × 4 = 16 sheets
@@ -745,7 +750,7 @@ class TestDownloadManagerCountSheets:
         assert count == 16
 
     def test_count_sheets_large_hierarchy(self, tmp_path):
-        """Test liczenia dużej hierarchii."""
+        """Test of counting a large hierarchy."""
         manager = DownloadManager(output_dir=tmp_path)
 
         # 1:100k → 1:10k = 4 × 4 × 4 = 64 sheets
@@ -754,7 +759,7 @@ class TestDownloadManagerCountSheets:
         assert count == 64
 
     def test_count_sheets_500k_to_200k(self, tmp_path):
-        """Test liczenia hierarchii 1:500k → 1:200k (36 arkuszy)."""
+        """Test of counting the hierarchy 1:500k -> 1:200k (36 sheets)."""
         manager = DownloadManager(output_dir=tmp_path)
 
         count = manager.count_sheets("N-34-A", "1:200000")
@@ -793,10 +798,10 @@ class TestDownloadManagerDefaultExtension:
 
 
 class TestDownloadManagerPL2000:
-    """Testy DownloadManager z godłami PL-2000."""
+    """Tests of DownloadManager with PL-2000 sheet codes."""
 
     def test_count_sheets_pl2000_10k_to_2k(self, tmp_path):
-        """Test liczenia arkuszy PL-2000 1:10000 → 1:2000 (25 arkuszy)."""
+        """Test of counting PL-2000 sheets 1:10000 -> 1:2000 (25 sheets)."""
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
 
@@ -809,7 +814,7 @@ class TestDownloadManagerPL2000:
         assert count == 25
 
     def test_count_sheets_pl2000_10k_to_5k(self, tmp_path):
-        """Test liczenia arkuszy PL-2000 1:10000 → 1:5000 (4 arkusze)."""
+        """Test of counting PL-2000 sheets 1:10000 -> 1:5000 (4 sheets)."""
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
 
@@ -822,7 +827,7 @@ class TestDownloadManagerPL2000:
         assert count == 4
 
     def test_count_sheets_pl2000_2k_to_1k(self, tmp_path):
-        """Test liczenia arkuszy PL-2000 1:2000 → 1:1000 (4 arkusze)."""
+        """Test of counting PL-2000 sheets 1:2000 -> 1:1000 (4 sheets)."""
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
 
@@ -835,7 +840,8 @@ class TestDownloadManagerPL2000:
         assert count == 4
 
     def test_download_sheet_pl2000_10k_direct(self, tmp_path):
-        """Test że download_sheet z godłem PL-2000 1:10000 pobiera bezpośrednio."""
+        """Test that download_sheet with a PL-2000 1:10000 sheet code downloads
+        directly."""
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
 
@@ -858,7 +864,7 @@ class TestDownloadManagerPL2000:
         assert result.exists()
 
     def test_download_sheet_pl2000_sub10k_direct(self, tmp_path):
-        """Test że PL-2000 1:2000 pobiera bezpośrednio."""
+        """Test that PL-2000 1:2000 downloads directly."""
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
 
@@ -874,7 +880,7 @@ class TestDownloadManagerPL2000:
             output_dir=tmp_path, provider=mock_provider, storage=storage
         )
 
-        # PL-2000 1:2000 godło — should download directly, NOT expand to 1:10000
+        # PL-2000 1:2000 sheet code - should download directly, NOT expand to 1:10000
         result = manager.download_sheet("6.179.12.20")
 
         assert isinstance(result, Path)
@@ -883,7 +889,8 @@ class TestDownloadManagerPL2000:
         assert "6.179.12.20" in str(result)
 
     def test_download_sheet_pl2000_5k_direct(self, tmp_path):
-        """Test że download_sheet z godłem PL-2000 1:5000 pobiera bezpośrednio."""
+        """Test that download_sheet with a PL-2000 1:5000 sheet code downloads
+        directly."""
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
 
@@ -899,7 +906,7 @@ class TestDownloadManagerPL2000:
             output_dir=tmp_path, provider=mock_provider, storage=storage
         )
 
-        # PL-2000 1:5000 godło — should download directly
+        # PL-2000 1:5000 sheet code - should download directly
         result = manager.download_sheet("6.179.12.1")
 
         assert isinstance(result, Path)
@@ -926,7 +933,8 @@ class TestCreateNmtProviderFactory:
         assert "5m only supports EVRF2007" in caplog.text
 
     def test_rule_without_log_is_silent(self, caplog):
-        """D11: ``log=False`` (CLI, ``prepare_pl_cutout``) — korekta bez logu."""
+        """D11: ``log=False`` (CLI, ``prepare_pl_cutout``) - a correction without a
+        log."""
         import logging
 
         from kartograf.providers.pl import nmt_vertical_crs
@@ -983,9 +991,10 @@ class TestSidecarWritten:
 
     @pytest.mark.parametrize("mode", ["sheet", "list_seq", "list_parallel"])
     def test_every_mode_returns_provider_path(self, tmp_path, mode):
-        """D10: jedna tresc "pobierz arkusz" — sciezka i sidecar to plik, ktory
-        provider ZWROCIL. Wczesniej ``download_sheet`` zwracal (i opisywal
-        sidecarem) sciezke docelowa managera, a tryb listy — wynik providera."""
+        """D10: one "download sheet" content - the path and sidecar are the file the
+        provider RETURNED. Previously ``download_sheet`` returned (and described
+        with a sidecar) the manager's target path, while the list mode used the
+        provider result."""
         provider = self._mock_provider()
         written = self._mock_provider().download.side_effect
 
@@ -1061,7 +1070,7 @@ class TestSidecarWritten:
         assert payload["extra"] == {}
 
     def test_sidecar_carries_provider_source(self, tmp_path):
-        """D5: ``extra.source`` = pochodzenie arkusza wg ``provider.source_info``."""
+        """D5: ``extra.source`` = sheet origin per ``provider.source_info``."""
         import json
 
         source = {
@@ -1090,8 +1099,8 @@ class TestSidecarWritten:
         assert payload["schema"] == "kartograf-meta/1"
 
     def test_sidecar_without_provider_source_has_no_source_key(self, tmp_path):
-        """``source_info`` zwracajace None (provider bez pochodzenia) albo Mock
-        (``Mock(spec=GugikProvider)``) nie trafia do sidecara."""
+        """``source_info`` returning None (a provider without origin) or a Mock
+        (``Mock(spec=GugikProvider)``) does not reach the sidecar."""
         import json
 
         provider = self._mock_provider()  # MagicMock: source_info(...) -> MagicMock
@@ -1112,7 +1121,7 @@ class TestSidecarWritten:
 
 
 class TestReuseNotedInSidecar:
-    """N4: arkusz POMINIETY (juz w cache) dostaje ``extra.parent_requests``."""
+    """N4: a SKIPPED sheet (already in cache) gets ``extra.parent_requests``."""
 
     _FIRST = {
         "bbox": [1.0, 2.0, 3.0, 4.0],
@@ -1141,9 +1150,10 @@ class TestReuseNotedInSidecar:
 
     @pytest.mark.parametrize("workers", [1, 3])
     def test_skipped_sheet_gets_reusing_request_appended(self, tmp_path, workers):
-        """Pierwsze zadanie pobiera (``parent_request``), kolejne reuzywaja
-        (``parent_requests``: lista, bez duplikatow, bez rowniez zadania
-        pobierajacego). ``downloaded_at`` i reszta sidecara bez zmian."""
+        """The first request downloads (``parent_request``), later ones reuse
+        (``parent_requests``: a list, without duplicates, also without the
+        downloading request). ``downloaded_at`` and the rest of the sidecar
+        unchanged."""
         first = self._manager(tmp_path, self._FIRST)
         (path,) = first.download_sheets(["N-34-130-D-d-2-4"], max_workers=workers)
         before = self._payload(path)
@@ -1168,7 +1178,7 @@ class TestReuseNotedInSidecar:
         assert self._payload(path)["extra"]["parent_requests"] == [self._SECOND]
 
     def test_no_sidecar_means_nothing_is_invented(self, tmp_path):
-        """Cache sprzed 0.7.0 (bez sidecara): zaden sidecar nie powstaje."""
+        """Pre-0.7.0 cache (no sidecar): no sidecar is created."""
         first = self._manager(tmp_path, self._FIRST)
         path = first.download_sheet("N-34-130-D-d-2-4")
         (path.parent / f"{path.name}.meta.json").unlink()

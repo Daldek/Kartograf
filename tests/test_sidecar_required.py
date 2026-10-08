@@ -17,7 +17,7 @@ ASC_HEAD = (
 )
 
 
-# godlo naglowka 77912 (placeholder "G" z briefu nie przechodzi build_metadata)
+# header sheet code 77912 (the "G" placeholder from the brief fails build_metadata)
 GODLO = "7.125.11.19"
 
 
@@ -43,7 +43,7 @@ def test_required_sidecar_failure_raises_and_leaves_no_file(tmp_path, monkeypatc
         emit_sidecar(
             "pl.gugik.nmt_1m", _data(tmp_path), request={"sheet": GODLO}, required=True
         )
-    assert str(exc.value.__cause__) == "dysk pelny"  # porazka zapisu, nie budowy
+    assert str(exc.value.__cause__) == "dysk pelny"  # write failure, not build failure
     assert not (tmp_path / "x.asc.meta.json").exists() and not list(
         tmp_path.glob("*.tmp")
     )
@@ -71,5 +71,5 @@ def test_best_effort_default_unchanged(tmp_path, monkeypatch, caplog):
     )
     assert (
         emit_sidecar("pl.gugik.nmt_1m", _data(tmp_path), request={}) is None
-    )  # warning, bez wyjatku
+    )  # warning, no exception
     assert "Nie udalo sie zapisac sidecara" in caplog.text

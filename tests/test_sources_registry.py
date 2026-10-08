@@ -135,11 +135,11 @@ class TestRegistry:
             vertical_crs_code("Kronsztad")
 
     def test_resolve_vertical_crs(self):
-        # rodzina EVRF2007 -> realizacja PL, gdy kanal ja oferuje
+        # EVRF2007 family -> PL realization, when the channel offers it
         assert (
             resolve_vertical_crs("EVRF2007", ("EPSG:9650", "EPSG:9651")) == "EPSG:9651"
         )
-        # kanal CZ (Bpv) nie ma realizacji -> kod rodziny (cel transformacji)
+        # CZ channel (Bpv) has no realization -> family code (transformation target)
         assert resolve_vertical_crs("EVRF2007", ("EPSG:8357",)) == "EPSG:5621"
         assert resolve_vertical_crs("Bpv", ("EPSG:8357",)) == "EPSG:8357"
         assert resolve_vertical_crs("KRON86", ("EPSG:9650", "EPSG:9651")) == "EPSG:9650"
@@ -157,7 +157,7 @@ class TestRegistry:
         assert horizontal_crs_for_godlo("N-34-130-D-d-2-4") == "EPSG:2180"
 
     def test_horizontal_crs_for_uklad(self):
-        """Nazwy ukladu GUGiK (uklad_xy kafla LAZ, skorowidz) -> kod EPSG."""
+        """GUGiK CRS names (uklad_xy of a LAZ tile, index) -> EPSG code."""
         assert horizontal_crs_for_uklad("PL-2000:S6") == "EPSG:2177"
         assert horizontal_crs_for_uklad(" PL-2000:S8 ") == "EPSG:2179"
         assert horizontal_crs_for_uklad("PL-1992") == "EPSG:2180"
@@ -174,7 +174,7 @@ class TestRegistry:
         assert transports == {TransportKind.WMS_SHEET_INDEX, TransportKind.WCS}
 
     def test_nmt_1m_wcs_channel_is_kron86_only(self):
-        """Kanal WCS opisuje tylko KRON86 — endpoint EVRF2007 to HTTP 404."""
+        """The WCS channel describes only KRON86 - the EVRF2007 endpoint is HTTP 404."""
         d = get_source("pl.gugik.nmt_1m")
         wcs = [ch for ch in d.channels if ch.transport == TransportKind.WCS]
         assert len(wcs) == 1
@@ -214,7 +214,7 @@ class TestRegistry:
         assert ch.transport == TransportKind.ARCGIS_IMAGE
         assert ch.horizontal_crs == "EPSG:5514"
         assert ch.vertical_crs_options == ("EPSG:8357",)
-        # ADR-024: exportImage tylko w natywnym 5514, reprojekcja lokalna
+        # ADR-024: exportImage only in native 5514, local reprojection
         assert ch.server_reprojection is False
         assert "ADR-024" in ch.notes
         assert ch.capabilities == frozenset({"bbox_raster"})
@@ -242,7 +242,7 @@ class TestRegistry:
         )
         image_ch = d.channels[1]
         assert image_ch.capabilities == frozenset({"bbox_raster"})
-        # ADR-024: serwerowemu imageSR nie ufamy — reprojekcja lokalna
+        # ADR-024: we do not trust the server imageSR - local reprojection
         assert image_ch.server_reprojection is False
         assert "ADR-024" in image_ch.notes
         assert image_ch.endpoint == (
@@ -254,7 +254,7 @@ class TestRegistry:
 
 
 class TestDescriptorProviderConsistency:
-    """Spec 6.12: deskryptor musi zgadzac sie ze stanem faktycznym providera."""
+    """Spec 6.12: the descriptor must agree with the provider's actual state."""
 
     def test_nmt_1m(self, tmp_path):
         from kartograf import FileStorage, GugikProvider
@@ -265,8 +265,9 @@ class TestDescriptorProviderConsistency:
         storage = FileStorage(tmp_path, resolution="1m")
         assert d.resolve_subdir(vertical_crs="EVRF2007") == storage._subdir
         supported = provider.get_supported_vertical_crs_for_resolution("1m")
-        # Porownanie per kanal: skorowidz WMS obsluguje oba uklady pionowe,
-        # a kanal WCS tylko te, dla ktorych provider ma dzialajacy endpoint.
+        # Compared per channel: the WMS index (skorowidz) supports both vertical
+        # CRS, while the WCS channel only those for which the provider has a
+        # working endpoint.
         sheets_ch = next(
             ch for ch in d.channels if ch.transport == TransportKind.WMS_SHEET_INDEX
         )
@@ -355,7 +356,8 @@ class TestDescriptorProviderConsistency:
             assert d.license.attribution != ""
 
     def test_horizontal_crs_matches_channel_reality(self):
-        """CRS poziomy deskryptora = CRS faktycznie zwracany przez dany kanal."""
+        """The descriptor's horizontal CRS = the CRS actually returned by the
+        channel."""
         for key in (
             "pl.gugik.nmt_1m",
             "pl.gugik.nmt_5m",
@@ -366,8 +368,8 @@ class TestDescriptorProviderConsistency:
         ):
             for ch in get_source(key).channels:
                 assert ch.horizontal_crs == "EPSG:2180", key
-        # CORINE: EPSG:3035 dotyczy kanalu CLMS GeoTIFF (fallback PNG z WMS ma
-        # inny CRS i jest korygowany w LandCoverManager._write_sidecar)
+        # CORINE: EPSG:3035 applies to the CLMS GeoTIFF channel (the WMS PNG fallback
+        # has a different CRS and is corrected in LandCoverManager._write_sidecar)
         assert get_source("eu.clms.corine").channels[0].horizontal_crs == "EPSG:3035"
         assert (
             get_source("global.isric.soilgrids").channels[0].horizontal_crs
@@ -401,7 +403,7 @@ class TestDescriptorProviderConsistency:
 
 
 class TestResolveSubdir:
-    """ADR-026: storage_subdir jest szablonem; resolve_subdir wypelnia go."""
+    """ADR-026: storage_subdir is a template; resolve_subdir fills it in."""
 
     def _descriptor(self, subdir):
         from kartograf.sources.descriptor import (
@@ -442,7 +444,7 @@ class TestResolveSubdir:
         assert d.resolve_subdir(vertical_crs="Bpv") == "nmt/cz_dmr5g_bpv"
 
     def test_unknown_dimension_is_noop(self):
-        """Orto nie ma {vcrs} — podanie vertical_crs niczego nie psuje."""
+        """Ortho has no {vcrs} - passing vertical_crs breaks nothing."""
         d = self._descriptor("orto/pl_{uklad}")
         assert d.resolve_subdir(uklad="1992", vertical_crs="EVRF2007") == "orto/pl_1992"
 
@@ -459,9 +461,9 @@ class TestResolveSubdir:
         "kwargs", [{"vertical_crs": ""}, {"vertical_crs": "  "}, {"uklad": ""}]
     )
     def test_empty_dimension_raises(self, kwargs):
-        """Zn. 7: pusty string to blad wolajacego, nie brak wymiaru — dotad
-        dawal cichy segment `nmt/pl_{uklad}_1m_` (FileStorage zamyka te sama
-        pulapke falsy-checkiem)."""
+        """Item 7: an empty string is a caller error, not a missing dimension - so
+        far it gave a silent segment `nmt/pl_{uklad}_1m_` (FileStorage closes the
+        same trap with a falsy check)."""
         from kartograf.exceptions import ValidationError
 
         d = self._descriptor("nmt/pl_{uklad}_1m_{vcrs}")
