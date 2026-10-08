@@ -1087,6 +1087,21 @@ def test_reused_campaign_without_sidecar_with_foreign_content_fails(tmp_path):
     assert hardlinked(std) and linked(std) == str(target)
 
 
+def test_reused_campaign_without_sidecar_outside_frame_fails(tmp_path):
+    """B4 + R22: an existing file without a sidecar is extent-checked too."""
+    fake = FakeCampaignProvider(C14)
+    m = DownloadManager(tmp_path, provider=fake)
+    m.download_sheet(G)
+    target = campaign_path(tmp_path, REC["84183"])
+    sidecar(target).unlink()
+    b = SheetParser(G).get_bbox()
+    target.write_bytes(asc_for(G, shift_x=b.max_x - b.min_x))
+    with pytest.raises(DownloadError, match="zasieg"):
+        m.download_sheet(G)
+    assert not target.exists() and not sidecar(target).exists()
+    assert fake.downloads == [REC["84183"].url]
+
+
 # =============================================================================
 # M-6: a re-run without download does not move the link (copy)
 # =============================================================================
