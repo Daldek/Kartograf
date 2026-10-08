@@ -1224,7 +1224,10 @@ scalanie bledem `database is locked` (`Bdot10kProvider._merge_gpkg_files`).
 (`clay`, `sand`, `silt`) wg kanonicznego trojkata USDA (ADR-025) i pisze
 sidecar wyniku (`HSGCalculator._write_sidecar` -> `emit_sidecar`, best-effort):
 deskryptor `global.isric.soilgrids`, `capability="bbox_raster"`, `request`
-= bbox z jego ukladem, `horizontal_crs` = uklad rastra wyniku, `nodata: 0`,
+= bbox z jego ukladem (+ `sheet` = godlo, gdy zadanie szlo przez
+`--godlo`/`calculate_hsg_by_godlo`; domyslna nazwa pliku CLI zawiera
+glebokosc: `hsg_<godlo>_<depth>.tif`, `hsg_bbox_<depth>.tif`),
+`horizontal_crs` = uklad rastra wyniku, `nodata: 0`,
 `extra` = `{derived: "hsg", source_layers: ["clay", "sand", "silt"], depth,
 stat, classes: "1=A, 2=B, 3=C, 4=D"}`.
 
