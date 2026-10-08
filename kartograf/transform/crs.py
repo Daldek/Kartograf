@@ -1,21 +1,21 @@
 """
-Twarda polityka transformacji CRS.
+Strict CRS transformation policy.
 
-Cztery reguly bezpieczenstwa (kazda wynika ze zmierzonej pulapki, patrz spec
-sekcja 6.4 i docs/research/2026-08-10-*):
-1. Transformer budowany WYLACZNIE przez TransformerGroup(..., allow_ballpark=False,
-   always_xy=True) — Transformer.from_crs potrafi cicho zwrocic identycznosc.
-2. Pusta lista operacji = TransformUnavailableError, nigdy fallback.
-3. Filtr: odrzuc accuracy < 0 (nieznana; pyproj koduje jako -1 — 0.0 oznacza
-   operacje DOKLADNA i jest akceptowane) oraz accuracy > policy.min_accuracy_m;
-   nastepnie pin kroku datum dla ukladow wspoldzielonych przez kraje i probe
-   na punkcie kontrolnym (inf/NaN => odrzut operacji — przypadek siatki obcego
-   kraju). Z pozostalych wybierz najlepsza dokladnosc.
-4. Kazdy wynik transformacji przechodzi kontrole isfinite; inaczej TransformError.
+Four safety rules (each follows from a measured pitfall, see spec
+section 6.4 and docs/research/2026-08-10-*):
+1. The Transformer is built ONLY through TransformerGroup(..., allow_ballpark=False,
+   always_xy=True) - Transformer.from_crs can silently return the identity.
+2. An empty list of operations = TransformUnavailableError, never a fallback.
+3. Filter: reject accuracy < 0 (unknown; pyproj encodes it as -1 - 0.0 means
+   an EXACT operation and is accepted) and accuracy > policy.min_accuracy_m;
+   then pin the datum step for CRSs shared between countries and probe
+   a control point (inf/NaN => the operation is rejected - the case of a
+   foreign country's grid). Of the rest, pick the best accuracy.
+4. Every transformation result passes an isfinite check; otherwise TransformError.
 
-Polityka obowiazuje kod NOWY (etap 1+); migracja istniejacych wywolan pyproj w
+The policy applies to NEW code (stage 1+); migration of the existing pyproj calls in
 core/geometry.py, core/sheet_parser.py, core/parser_2000.py, providers/corine.py
-i providers/soilgrids.py jest odlozona (spec etapu 0, sekcja "Nie wchodzi").
+and providers/soilgrids.py is deferred (stage 0 spec, section "Out of scope").
 """
 
 from dataclasses import dataclass, field
@@ -29,11 +29,11 @@ from kartograf.exceptions import KartografError
 
 
 class TransformError(KartografError):
-    """Blad transformacji wspolrzednych (np. wynik nieskonczony)."""
+    """Coordinate transformation error (e.g. an infinite result)."""
 
 
 class TransformUnavailableError(TransformError):
-    """Brak bezpiecznej operacji transformacji dla pary ukladow."""
+    """No safe transformation operation for the CRS pair."""
 
     def __init__(
         self,
@@ -51,18 +51,19 @@ class TransformPolicy:
     """Polityka doboru operacji transformacji."""
 
     min_accuracy_m: float = 1.0
-    probe_point: tuple[float, float] | None = None  # w ukladzie zrodlowym
+    probe_point: tuple[float, float] | None = None  # in the source CRS
     allow_network_grids: bool = True  # PROJ CDN
 
 
-# Polityka operacji reprojektujacej TRESC rastra (tor CZ ``CuzkDmrProvider``
-# i wycinek PL ``download/cutout.py``) — jedyna, ktora przesuwa piksele, wiec
-# limit dokladnosci jest ostrzejszy niz dla obwiedni. Krok datum do ukladow
-# 2180/3045 jest przypiety do czeskiej EPSG:1622 (1,0 m, KNOWN_PATHS);
-# probe_point dokladany per zadanie (``dataclasses.replace``).
+# Policy for operations that reproject raster CONTENT (the CZ path
+# ``CuzkDmrProvider`` and the PL cutout ``download/cutout.py``) - the only one
+# that moves pixels, so the accuracy limit is stricter than for envelopes. The
+# datum step to the 2180/3045 CRSs is pinned to the Czech EPSG:1622 (1.0 m,
+# KNOWN_PATHS);
+# probe_point is added per request (``dataclasses.replace``).
 CONTENT_POLICY = TransformPolicy(min_accuracy_m=1.0, allow_network_grids=False)
-# Zapas obwiedni zrodla w pikselach przy warpie: pokrywa niepewnosc operacji
-# obwiedniowej (<= 2 m) i halo interpolatora bilinear (1 px) na krawedziach.
+# Source envelope margin in pixels for the warp: covers the uncertainty of the
+# envelope operation (<= 2 m) and the bilinear interpolator halo (1 px) at the edges.
 WARP_MARGIN_PX = 4
 
 
@@ -71,13 +72,13 @@ class PinnedTransform:
     """Przypieta (wybrana raz, deterministyczna) operacja transformacji."""
 
     accuracy_m: float
-    description: str  # opis operacji (trafia do sidecara w etapie 1+)
+    description: str  # operation description (goes to the sidecar in stage 1+)
     _transformer: Any = field(repr=False)
     src_crs: str | None = None
     dst_crs: str | None = None
 
     def transform(self, x, y, z=None) -> tuple:
-        """Transformuj punkt lub tablice numpy; wynik inf/NaN => TransformError."""
+        """Transform a point or numpy arrays; an inf/NaN result => TransformError."""
         if z is None:
             result = self._transformer.transform(x, y)
         else:
@@ -89,23 +90,25 @@ class PinnedTransform:
         return result
 
     def gdal_operation(self) -> str:
-        """Ta sama operacja jako pipeline PROJ dla GDAL (``COORDINATE_OPERATION``).
+        """The same operation as a PROJ pipeline for GDAL (``COORDINATE_OPERATION``).
 
-        Pozwala wymusic na ``rasterio.warp.reproject`` DOKLADNIE te operacje,
-        ktora przeszla polityke z ``build_pinned_transform`` — bez tego GDAL
-        wybiera operacje sam (zmierzone 2026-08-11: wybor GDAL-a rozni sie od
-        przypietego o srednio 0,08 m, maks. 1,9 m) i nie ma zadnego zakazu
-        ballparku.
+        Lets ``rasterio.warp.reproject`` be forced to use EXACTLY the operation
+        that passed the policy in ``build_pinned_transform`` - without it GDAL
+        picks the operation itself (measured 2026-08-11: GDAL's choice differs from
+        the pinned one by 0.08 m on average, 1.9 m max) and has no ban
+        on ballpark.
 
-        Korekta osi jest konieczna: pipeline pochodzi z transformera
-        ``always_xy=True`` (kolejnosc E-N), a GDAL podaje operacji wspolrzedne
-        w kolejnosci osi AUTORYTATYWNEJ obu ukladow. Dlatego ``axisswap``
-        dokladany jest NIEZALEZNIE dla zrodla (na czele) i dla celu (na koncu)
-        — za kazdym razem, gdy dany uklad jest northing-first (EPSG:2180,
-        EPSG:3045; EPSG:5514 nie jest). Brak korekty daje raster w calosci
-        nodata — cichy, latwy do przeoczenia tryb awarii (zmierzone dla toru
-        PL 2180 -> 5514 bez czolowego ``axisswap``: 0 z 46225 waznych
-        pikseli) — dlatego jest wyliczana z ``axis_info``, a nie zakladana.
+        The axis correction is necessary: the pipeline comes from an
+        ``always_xy=True`` transformer (E-N order), while GDAL passes coordinates to
+        the operation in the AUTHORITATIVE axis order of both CRSs. Therefore
+        ``axisswap``
+        is added INDEPENDENTLY for the source (at the front) and for the target (at the
+        end)
+        - each time the given CRS is northing-first (EPSG:2180,
+        EPSG:3045; EPSG:5514 is not). Without the correction the raster is entirely
+        nodata - a silent failure mode that is easy to overlook (measured for the
+        PL 2180 -> 5514 path without the leading ``axisswap``: 0 of 46225 valid
+        pixels) - so it is derived from ``axis_info`` rather than assumed.
         """
         if self.src_crs is None or self.dst_crs is None:
             raise TransformError(
@@ -127,14 +130,14 @@ _AXIS_SWAP = "proj=axisswap order=2,1"
 
 
 def _is_northing_first(crs: str) -> bool:
-    """Czy autorytatywna kolejnosc osi ukladu zaczyna sie od polnocy/poludnia?"""
+    """Whether the CRS's authoritative axis order starts with north/south?"""
     axes = CRS.from_user_input(crs).axis_info
     return bool(axes) and axes[0].direction.lower() in ("north", "south")
 
 
 @dataclass(frozen=True)
 class KnownPath:
-    """Wpis dokumentacyjny: zweryfikowana sciezka transformacji."""
+    """Documentation entry: a verified transformation path."""
 
     src: str
     dst: str
@@ -142,7 +145,7 @@ class KnownPath:
     note: str
 
 
-# Tabela referencyjna (spec 6.4); w etapie 0 konsumowana w testach.
+# Reference table (spec 6.4); in stage 0 consumed by tests.
 KNOWN_PATHS: tuple[KnownPath, ...] = (
     KnownPath(
         "EPSG:5514",
@@ -193,10 +196,11 @@ KNOWN_PATHS: tuple[KnownPath, ...] = (
     ),
 )
 
-# Obszary uzycia EPSG sa prostokatami: slowacki obejmuje takze Zlin
-# i Jaworzynke, wiec AOI ani ranking PROJ nie rozstrzygaja kraju danych.
-# S-JTSK CUZK wymaga czeskiego kroku datum, nie dokladniejszej na papierze
-# operacji slowackiej (EPSG:4829). Oba piny maja te same parametry Helmerta.
+# EPSG areas of use are rectangles: the Slovak one also covers Zlin
+# and Jablunkov, so neither the AOI nor the PROJ ranking decides a data's country.
+# The CUZK S-JTSK needs the Czech datum step, not the Slovak operation
+# (EPSG:4829) that is more accurate on paper. Both pins have the same Helmert
+# parameters.
 DATUM_STEP_PINS: dict[int, frozenset[str]] = {
     5514: frozenset({"EPSG:1622", "EPSG:1623"}),
 }
@@ -206,7 +210,7 @@ _KRON86_EVRF_REMEDY = (
     "PROJ_DATA albo uzyj EVRF2007 (EPSG:5621)."
 )
 
-# Remedium per DOCELOWY uklad, dolaczane do TransformUnavailableError.
+# Remedy per TARGET CRS, attached to TransformUnavailableError.
 REMEDIES: dict[str, str] = {
     "EPSG:9650": _KRON86_EVRF_REMEDY,
     "EPSG:9651": _KRON86_EVRF_REMEDY,
@@ -214,7 +218,7 @@ REMEDIES: dict[str, str] = {
 
 
 def _epsg_code(crs: str) -> int | None:
-    """Kod EPSG ukladu (None dla WKT/proj-string bez autorytetu)."""
+    """EPSG code of a CRS (None for WKT/proj-string without an authority)."""
     try:
         return CRS.from_user_input(crs).to_epsg()
     except Exception:  # noqa: BLE001
@@ -222,7 +226,7 @@ def _epsg_code(crs: str) -> int | None:
 
 
 def _operation_codes(transformer: Any) -> frozenset[str]:
-    """Kody krokow operacji, takze odwroconych: INVERSE(EPSG) -> EPSG."""
+    """Codes of operation steps, including inverted ones: INVERSE(EPSG) -> EPSG."""
     doc = transformer.to_json_dict()
     steps = doc.get("steps") or [doc]
     codes = set()
@@ -238,9 +242,9 @@ def _operation_codes(transformer: Any) -> frozenset[str]:
 def build_pinned_transform(
     src_crs: str, dst_crs: str, policy: TransformPolicy
 ) -> PinnedTransform:
-    """Zbuduj przypieta transformacje wg polityki albo rzuc TransformUnavailableError.
+    """Build a pinned transformation per the policy or raise TransformUnavailableError.
 
-    Rzuca ``TransformUnavailableError`` gdy brak bezpiecznej operacji.
+    Raises ``TransformUnavailableError`` when there is no safe operation.
     """
     required: frozenset[str] = frozenset()
     for crs in (src_crs, dst_crs):
@@ -280,7 +284,7 @@ def build_pinned_transform(
                 px, py = policy.probe_point
                 try:
                     probe = transformer.transform(px, py)
-                except Exception as e:  # noqa: BLE001 — kazdy blad probe = odrzut
+                except Exception as e:  # noqa: BLE001 — any probe error = rejection
                     rejected.append((description, f"probe rzucil wyjatek: {e}"))
                     continue
                 if not all(bool(np.all(np.isfinite(v))) for v in probe):

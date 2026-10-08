@@ -1,4 +1,4 @@
-"""Obwiednia bboxa EPSG:2180 w innym ukladzie (CORINE, SoilGrids; D19)."""
+"""Envelope of an EPSG:2180 bbox in another CRS (CORINE, SoilGrids; D19)."""
 
 from kartograf.core.bbox import BBox
 
@@ -6,16 +6,16 @@ from kartograf.core.bbox import BBox
 def envelope_from_2180(
     bbox: BBox, target_crs: str
 ) -> tuple[float, float, float, float]:
-    """Obwiednia prostokata EPSG:2180 w ``target_crs`` (osie x/y = lon/lat).
+    """Envelope of an EPSG:2180 rectangle in ``target_crs`` (x/y axes = lon/lat).
 
-    Obwiednia calego prostokata (krawedzie zageszczone, ``densify_pts=21``),
-    nie tylko dwoch naroznikow: siatka EPSG:2180 jest obrocona wzgledem
-    poludnikow, wiec para SW/NE ucina pasy polnocny i poludniowy.
+    Envelope of the whole rectangle (edges densified, ``densify_pts=21``),
+    not just two corners: the EPSG:2180 grid is rotated relative to the
+    meridians, so an SW/NE pair cuts off the northern and southern strips.
 
     Returns
     -------
     tuple
-        (min_x, min_y, max_x, max_y) w ``target_crs``; dla EPSG:4326
+        (min_x, min_y, max_x, max_y) in ``target_crs``; for EPSG:4326
         (min_lon, min_lat, max_lon, max_lat).
     """
     from pyproj import Transformer

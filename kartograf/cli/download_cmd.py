@@ -1,5 +1,5 @@
 """
-``kartograf download`` command (godlo / bbox / geometry / LAZ modes).
+``kartograf download`` command (sheet code / bbox / geometry / LAZ modes).
 """
 
 import argparse
@@ -30,10 +30,10 @@ from kartograf.sources.registry import horizontal_crs_for_godlo
 
 
 class _ProgressPrinter:
-    """Callback paska postepu; ``pending`` = ostatnia linia bez konca linii.
+    """Progress bar callback; ``pending`` = last line without a line ending.
 
-    Przy ``--workers > 1`` ``pending`` odzwierciedla ostatni zapis (najwyzej
-    zbedny albo brakujacy ``\\n`` przed ``Error:``).
+    With ``--workers > 1`` ``pending`` reflects the last write (at worst
+    a redundant or missing ``\\n`` before ``Error:``).
     """
 
     def __init__(self) -> None:
@@ -50,8 +50,8 @@ class _ProgressPrinter:
             "completed": "✓",
             "skipped": "○",
             "failed": "✗",
-            # D11: arkusz bez danych u zrodla (morze, obszar za granica) to
-            # oczekiwany stan, nie awaria — inna ikona niz porazka pobrania
+            # D11: a sheet with no data at the source (sea, area abroad) is an
+            # expected state, not a failure - a different icon than a download failure
             "no_coverage": "∅",
         }.get(progress.status, " ")
 
@@ -83,7 +83,7 @@ def create_progress_callback(quiet: bool = False):
     Returns
     -------
     callable or None
-        Progress callback (``None`` przy ``quiet``)
+        Progress callback (``None`` under ``quiet``)
     """
     if quiet:
         return None
@@ -91,7 +91,8 @@ def create_progress_callback(quiet: bool = False):
 
 
 def _error_lead(on_progress) -> str:
-    """``"\\n"`` tylko gdy pasek postepu zostal bez konca linii (bez pustej linii)."""
+    """``"\\n"`` only when the progress bar was left without a line ending (no blank
+    line)."""
     return "\n" if getattr(on_progress, "pending", False) is True else ""
 
 
@@ -101,9 +102,9 @@ def _create_provider_and_storage(
     """
     Create provider and storage based on product type.
 
-    ``cache`` (``MetadataCache`` albo ``None``) trafia do providera: rekordy
-    skorowidza GUGiK sa czytane i zapisywane wylacznie z cache (N6; CLI:
-    ``--force`` = cache w trybie ``refresh``, patrz ``_pl_metadata_cache``).
+    ``cache`` (``MetadataCache`` or ``None``) goes to the provider: GUGiK
+    index (skorowidz) records are read and written exclusively via the cache (N6; CLI:
+    ``--force`` = cache in ``refresh`` mode, see ``_pl_metadata_cache``).
 
     LAZ has a separate flow (`_cmd_download_laz`) and never reaches this
     helper — `cmd_download` short-circuits it before any provider is built.
@@ -139,13 +140,15 @@ def _create_provider_and_storage(
 @contextlib.contextmanager
 def _pl_metadata_cache(args: argparse.Namespace) -> Iterator[object | None]:
     """
-    ``MetadataCache`` toru PL na czas jednego zadania (N6; wzor: tor CZ).
+    ``MetadataCache`` of the PL path for the duration of one task (N6; model: the CZ
+    path).
 
-    ``--force`` = ``MetadataCache(refresh=True)`` (E14): rekordy skorowidza
-    NIE sa czytane, ale swiezo wybrany rekord (i potwierdzony brak pokrycia)
-    jest ZAPISYWANY — kolejny przebieg bez ``--force`` dostaje nowy rekord,
-    a nie stary sprzed zmiany kampanii (do wygasniecia TTL 7 d). Cache jest
-    otwierany w cwd i zamykany po zadaniu (``close()`` czysci wygasle wpisy).
+    ``--force`` = ``MetadataCache(refresh=True)`` (E14): index records
+    are NOT read, but the freshly chosen record (and a confirmed no coverage)
+    is WRITTEN - the next run without ``--force`` gets the new record,
+    not the old one from before a campaign change (until the 7-day TTL expires). The
+    cache is
+    opened in the cwd and closed after the task (``close()`` purges expired entries).
     """
     from kartograf.cache import MetadataCache
 
@@ -157,7 +160,7 @@ def _pl_metadata_cache(args: argparse.Namespace) -> Iterator[object | None]:
 
 
 def _product_label(product: str, resolution: str | None) -> str:
-    """Etykieta zadania w komunikatach: orto nie ma rozdzielczosci (K5)."""
+    """Task label in messages: orto has no resolution (K5)."""
     if product == "orto":
         return "product: orto"
     return f"resolution: {resolution}"
@@ -166,8 +169,8 @@ def _product_label(product: str, resolution: str | None) -> str:
 def _print_sheet_list(
     godla: list[str], target_scale: str, *, what: str, label: str
 ) -> None:
-    """Naglowek listy arkuszy PL (wycinek i tryb listy, D15): do 10 godel
-    w calosci, dluzsza lista jako 3 pierwsze + ``...`` + 2 ostatnie."""
+    """Header of the PL sheet list (cutout and list mode, D15): up to 10 sheet codes
+    in full, a longer list as the first 3 + ``...`` + the last 2."""
     print(f"Found {len(godla)} sheets at {target_scale} for {what} ({label})")
     sample = godla if len(godla) <= 10 else godla[:3] + ["..."] + godla[-2:]
     print(f"  Sheets: {', '.join(sample)}")
@@ -181,10 +184,10 @@ _CZ_ONLY_NMT_MSG = (
 
 def _reject_non_nmt_for_cz(product: str) -> bool:
     """
-    True (po komunikacie na stderr), gdy produkt CZ jest inny niz ``nmt``.
+    True (after a message on stderr) when the CZ product is other than ``nmt``.
 
-    Guard zyje w warstwie dyspozycji — przeplyw ``_cmd_download_cz`` zaklada
-    juz rozstrzygniety produkt.
+    The guard lives in the dispatch layer - the ``_cmd_download_cz`` flow assumes
+    an already resolved product.
     """
     if product == "nmt":
         return False
@@ -201,14 +204,15 @@ def _reject_campaign_opts_without_pl(
     args: argparse.Namespace, countries: tuple[str, ...]
 ) -> bool:
     """
-    Opcje kampanii (``--campaigns all``, ``--min-year``) dotycza tylko PL.
+    Campaign options (``--campaigns all``, ``--min-year``) apply to PL only.
 
-    Jedna regula dla wszystkich punktow wejscia CLI (ADR-030, errata (j) Q9
-    i errata 2 N-3): bez PL wsrod krajow -> ``Error:`` i True (przed siecia);
-    PL i CZ -> ``Info:`` raz, False (CZ pobierane dalej, biezaca wersja);
-    brak opcji albo sama PL -> False, cisza. Komunikaty na stderr (``-q`` ich
-    nie tlumi). Opcje kampanii celowo NIE wchodza do ``_pl_only_flags`` —
-    inaczej ``auto`` zwezaloby obszar przygraniczny do PL.
+    One rule for all CLI entry points (ADR-030, errata (j) Q9
+    and errata 2 N-3): no PL among the countries -> ``Error:`` and True (before the
+    network);
+    PL and CZ -> ``Info:`` once, False (CZ is downloaded anyway, current version);
+    no options or PL alone -> False, silence. Messages go to stderr (``-q`` does not
+    suppress them). Campaign options deliberately do NOT enter ``_pl_only_flags`` -
+    otherwise ``auto`` would narrow a border area to PL.
     """
     campaigns, min_year = _campaign_opts(args)
     if campaigns == "newest" and min_year is None:
@@ -231,12 +235,13 @@ def _reject_campaign_opts_without_pl(
 
 def _reject_campaign_opts_with_target_crs(args: argparse.Namespace) -> bool:
     """
-    Wycinek PL ``--target-crs`` + ``--campaigns all``/``--min-year`` = blad.
+    PL cutout ``--target-crs`` + ``--campaigns all``/``--min-year`` = error.
 
-    Errata (j) Q2: wycinek sklada jedna kampanie na arkusz, a jego nazwa nie
-    niesie granicy roku. True (po ``Error:`` na stderr) przed siecia.
-    Wolana wylacznie w ``_dispatch_area`` (jedyna droga do wycinka PL), przed
-    galezia CZ; godlo z ``--target-crs`` odrzuca wczesniej straz godla.
+    Errata (j) Q2: a cutout composes one campaign per sheet, and its name does not
+    carry a year bound. True (after ``Error:`` on stderr) before the network.
+    Called only in ``_dispatch_area`` (the sole path to a PL cutout), before the
+    CZ branch; a sheet code with ``--target-crs`` is rejected earlier by the sheet code
+    guard.
     """
     if getattr(args, "target_crs", None) is None:
         return False
@@ -260,22 +265,22 @@ def _reject_campaign_opts_with_target_crs(args: argparse.Namespace) -> bool:
 
 def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
     """
-    Rozwiaz sentinele None na polskie domysly; walidacje PL.
+    Resolve None sentinels to Polish defaults; PL validation.
 
-    Wywolywane WYLACZNIE na galezi PL, po rozstrzygnieciu kraju — mutuje
-    ``args``, wiec argumenty lecace do CZ musza zachowac wartosc ``None``
-    (``_cmd_download_cz`` odroznia „nie podano" od wartosci polskiej).
+    Called ONLY on the PL branch, after the country is resolved - it mutates
+    ``args``, so arguments heading to CZ must keep the value ``None``
+    (``_cmd_download_cz`` distinguishes "not given" from a Polish value).
 
-    Obejmuje walidacje par product/resolution i product/vertical_crs
-    (symetrycznie do twardych odrzucen galezi CZ) oraz wylaczen
-    ``--target-crs`` (produkt != nmt, ``--system 2000`` — ADR-027)
-    — sprawdzane PRZED podstawieniem domyslnych, zeby „nie podano" nie
-    udawalo wyboru uzytkownika.
+    Covers validation of the product/resolution and product/vertical_crs pairs
+    (symmetric to the hard rejections of the CZ branch) and of the ``--target-crs``
+    exclusions (product != nmt, ``--system 2000`` - ADR-027)
+    - checked BEFORE defaults are substituted, so that "not given" does not
+    pose as a user choice.
 
     Returns
     -------
     int
-        0 = OK, 1 = blad (komunikat juz wypisany na stderr)
+        0 = OK, 1 = error (message already printed to stderr)
     """
     product = getattr(args, "product", "nmt")
     if product == "nmpt" and getattr(args, "resolution", None) == "5m":
@@ -326,9 +331,9 @@ def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
         )
         return 1
     if product == "nmt":
-        # D11: jedna regula (`nmt_vertical_crs`), jeden skutek — korekta;
-        # CLI pokazuje ja jawnie (stderr, jak inne Info:), dalej leci juz
-        # pion FAKTYCZNY, wiec fabryka/manager/wycinek nic nie koryguja.
+        # D11: one rule (`nmt_vertical_crs`), one effect - a correction;
+        # the CLI shows it explicitly (stderr, like other Info:), and from here on the
+        # ACTUAL vertical CRS flows, so the factory/manager/cutout correct nothing.
         from kartograf.providers.pl import nmt_vertical_crs
 
         actual = nmt_vertical_crs(args.resolution, args.vertical_crs, log=False)
@@ -348,17 +353,19 @@ def _run_cz(
     parent_request: dict | None = None,
 ) -> int:
     """
-    Wywolaj przeplyw CZ, tlumaczac wyjatek zadania na komunikat CLI.
+    Call the CZ flow, translating a task exception into a CLI message.
 
-    Przeplyw CZ sygnalizuje zle zadanie wyjatkiem: ``ValidationError`` (np.
-    ``--target-crs`` z godlem), ``ParseError`` (godlo pasujace wzorcem do
-    TM33/SM5, ale niepoprawne — np. nieparzyste kilometry) albo
-    ``TransformError`` (normalizacja bboxa do ukladu zadania nie ma
-    bezpiecznej operacji). ``main`` ma bariere (``KartografError`` ->
-    ``Error: ...``, kod 1), ale wyjatek wyciekajacy stad przerwalby petle
-    krajow ``_dispatch_area`` — pod ``--country auto`` sukces drugiego kraju
-    nie dalby juz kodu 0 (ADR-023 pkt 4-5). Dlatego sa tlumaczone tutaj;
-    galaz PL lapie te same wyjatki w ``cmd_download``.
+    The CZ flow signals a bad task with an exception: ``ValidationError`` (e.g.
+    ``--target-crs`` with a sheet code), ``ParseError`` (a sheet code matching the
+    TM33/SM5
+    pattern but invalid - e.g. odd kilometers) or
+    ``TransformError`` (normalizing the bbox to the task CRS has no
+    safe operation). ``main`` has a barrier (``KartografError`` ->
+    ``Error: ...``, code 1), but an exception leaking from here would break the
+    country loop of ``_dispatch_area`` - under ``--country auto`` the success of the
+    other country
+    would no longer give code 0 (ADR-023 points 4-5). Hence they are translated here;
+    the PL branch catches the same exceptions in ``cmd_download``.
     """
     from kartograf.transform.crs import TransformError
 
@@ -372,10 +379,10 @@ def _run_cz(
 
 
 def _print_transform_error(error: Exception) -> int:
-    """Komunikat bledu transformacji (z remedium, gdy jest); zawsze zwraca 1.
+    """Transformation error message (with a remedy, if any); always returns 1.
 
-    Jedyne miejsce formatu ``Error: <blad> Remedium: <remedium>`` w CLI;
-    wyjatek bez atrybutu ``remedy`` daje samo ``Error: <blad>``.
+    The only place of the ``Error: <error> Remedium: <remedy>`` format in the CLI;
+    an exception without a ``remedy`` attribute gives just ``Error: <error>``.
     """
     remedy = getattr(error, "remedy", None)
     print(
@@ -387,14 +394,14 @@ def _print_transform_error(error: Exception) -> int:
 
 def _bbox_to_wgs84(bbox: BBox) -> BBox:
     """
-    Bbox w WGS84 — wspolny uklad rozpoznawania krajow i przycinania.
+    Bbox in WGS84 - the common CRS for country recognition and clipping.
 
-    Domyslny transformer pyproj (``core.bbox.transform_bbox``, obwiednia
-    z zageszczonych krawedzi): sluzy do ROZPOZNANIA kraju i przyciecia do jego
-    obwiedni, a nie do zadania pobrania. Przypieta operacja (``_country_bbox``
-    -> ``bbox_to_crs``) obowiazuje przy OPUSZCZANIU ukladow czeskich
-    (Krovak/UTM33N) — dla przycietego bboxa PL skok WGS84->EPSG:2180 idzie
-    swiadomie domyslnym (niepinowanym) transformerem pyproj, patrz
+    The default pyproj transformer (``core.bbox.transform_bbox``, an envelope
+    from densified edges): it serves to RECOGNIZE the country and clip to its
+    envelope, not to request a download. The pinned operation (``_country_bbox``
+    -> ``bbox_to_crs``) applies when LEAVING Czech CRSs
+    (Krovak/UTM33N) - for a clipped PL bbox the WGS84->EPSG:2180 jump goes
+    deliberately through the default (unpinned) pyproj transformer, see
     ``_country_bbox``.
     """
     from kartograf.core.bbox import transform_bbox
@@ -404,11 +411,11 @@ def _bbox_to_wgs84(bbox: BBox) -> BBox:
 
 def _countries_for_bbox(bbox: BBox) -> tuple[str, ...]:
     """
-    Kody krajow, ktorych ``extent_wgs84`` przecina bbox (posortowane).
+    Codes of countries whose ``extent_wgs84`` intersects the bbox (sorted).
 
-    Obwiednie krajow sa prostokatami, wiec pas przygraniczny jednego kraju
-    potrafi lezec wewnatrz prostokata sasiada (np. Opolszczyzna wewnatrz
-    obwiedni CZ) — auto-split zada wtedy obu zrodel, a nie zgaduje granicy.
+    Country envelopes are rectangles, so a border strip of one country
+    can lie inside the neighbor's rectangle (e.g. Opole Silesia inside the
+    CZ envelope) - auto-split then queries both sources instead of guessing the border.
     """
     from kartograf.sources.registry import all_countries
 
@@ -428,18 +435,18 @@ def _countries_for_bbox(bbox: BBox) -> tuple[str, ...]:
 
 @dataclass(frozen=True)
 class CountryPart:
-    """Czesc zadania obszarowego dla jednego kraju (``_country_bbox``).
+    """Part of an area task for one country (``_country_bbox``).
 
-    ``clipped`` wymienia krawedzie WGS84 faktycznie przyciete do obwiedni
-    kraju (``"W"``, ``"S"``, ``"E"``, ``"N"``; puste = bbox bez zmian) —
-    ``_dispatch_area`` robi z tego ``Info:`` (S3).
+    ``clipped`` lists the WGS84 edges actually clipped to the country's
+    envelope (``"W"``, ``"S"``, ``"E"``, ``"N"``; empty = bbox unchanged) -
+    ``_dispatch_area`` turns this into an ``Info:`` (S3).
     """
 
     bbox: BBox
     clipped: tuple[str, ...] = ()
 
 
-# krawedz -> (pole BBox, czy przyciecie podnosi minimum, jednostka)
+# edge -> (BBox field, whether clipping raises the minimum, unit)
 _EDGES = (
     ("W", "min_x", True, "E"),
     ("S", "min_y", True, "N"),
@@ -457,32 +464,33 @@ def _country_bbox(
     bbox: BBox, code: str, *, auto: bool, cz_crs: str = "EPSG:5514"
 ) -> CountryPart:
     """
-    Czesc bboxa dla kraju w ukladzie jego zadania.
+    Part of the bbox for a country in the CRS of its task.
 
-    Tryb ``auto`` przycina bbox do obwiedni kraju (w WGS84) i podaje wynik
-    w ukladzie roboczym: CZ — ``cz_crs`` (Krovak albo ``--target-crs``), PL —
-    uklad zadania bez zmian (zachowuje strefe PL-2000 i zerowy dryf). Jawny
-    ``--country`` NIE przycina niczego (uzytkownik zna zasieg swojego zadania).
-    Przyciete krawedzie wracaja w ``CountryPart.clipped`` — komunikat
-    ``Info:`` wypisuje ``_dispatch_area`` (S3).
+    ``auto`` mode clips the bbox to the country's envelope (in WGS84) and returns the
+    result
+    in the working CRS: CZ - ``cz_crs`` (Krovak or ``--target-crs``), PL -
+    the task CRS unchanged (keeps the PL-2000 zone and zero drift). An explicit
+    ``--country`` does NOT clip anything (the user knows the extent of their task).
+    Clipped edges come back in ``CountryPart.clipped`` - the ``Info:``
+    message is printed by ``_dispatch_area`` (S3).
 
-    Gdy przyciecie nic nie zmienia, transformowany jest ORYGINALNY bbox —
-    jeden skok z ukladu zadania zamiast dwoch (przez WGS84).
+    When clipping changes nothing, the ORIGINAL bbox is transformed -
+    one jump from the task CRS instead of two (via WGS84).
 
-    PL po przycieciu (S3): tylko krawedzie z ``clipped`` biora wartosc
-    z transformacji przycietego prostokata (obwiednia zakrzywionej krawedzi
-    kraju — konserwatywna na zewnatrz), pozostale zostaja wartoscia
-    oryginalu 1:1. Obwiednia CALEGO przycietego prostokata poszerzala
-    nietkniete krawedzie o dziesiatki metrow (Rozewie: W 110 / S 38 / E 82 m),
-    bo poludnik zadania nie jest linia prosta w EPSG:2180. Czesc CZ jest
-    z definicji w innym ukladzie (``bbox_to_crs`` z probkowaniem krawedzi),
-    wiec tam poszerzenie jest nieuniknione i uczciwe — bez zmian.
+    PL after clipping (S3): only the edges in ``clipped`` take their value
+    from the transformation of the clipped rectangle (the envelope of the country's
+    curved edge - conservative outward), the rest keep the
+    original value 1:1. The envelope of the WHOLE clipped rectangle widened
+    the untouched edges by tens of meters (Rozewie: W 110 / S 38 / E 82 m),
+    because the task meridian is not a straight line in EPSG:2180. The CZ part is
+    by definition in a different CRS (``bbox_to_crs`` with edge sampling),
+    so widening there is unavoidable and honest - unchanged.
 
-    Zadanie podane w ukladzie czeskim, ale kierowane do PL (``--bbox-crs
-    EPSG:5514`` z ``--country pl`` albo z auto-splitem), opuszcza Krovaka
-    OD RAZU i wylacznie przypieta operacja: dalsze kroki (przyciecie, wybor
-    arkuszy) pracuja juz w EPSG:2180, wiec selekcja arkuszy GUGiK nigdy nie
-    wynika z niepinowanej transformacji Krovaka.
+    A task given in a Czech CRS but directed to PL (``--bbox-crs
+    EPSG:5514`` with ``--country pl`` or with auto-split) leaves Krovak
+    IMMEDIATELY and only through the pinned operation: later steps (clipping, sheet
+    selection) already work in EPSG:2180, so GUGiK sheet selection never
+    results from an unpinned Krovak transformation.
     """
     from kartograf.core.bbox import is_czech_crs, transform_bbox
     from kartograf.providers.cuzk.client import wkid
@@ -507,7 +515,7 @@ def _country_bbox(
         )
     )
     if not clipped:
-        source = bbox  # przyciecie bylo no-opem
+        source = bbox  # clipping was a no-op
     else:
         source = BBox(
             max(wgs.min_x, extent.min_x),
@@ -521,13 +529,13 @@ def _country_bbox(
     if wkid(source.crs) == wkid(target):
         return CountryPart(source, clipped)
     if code == "CZ":
-        # do ukladu czeskiego wylacznie przypieta operacja z probkowaniem
-        # krawedzi (obraz prostokata w Krovaku ma krzywe boki)
+        # into a Czech CRS only the pinned operation with edge sampling
+        # (the image of a rectangle in Krovak has curved sides)
         return CountryPart(bbox_to_crs(source, target), clipped)
     transformed = transform_bbox(source, target)
     if not clipped:
         return CountryPart(transformed)
-    # PL: nietkniete krawedzie 1:1 z oryginalu, przyciete z transformacji
+    # PL: untouched edges 1:1 from the original, clipped ones from the transformation
     values = {
         attr: getattr(transformed if edge in clipped else bbox, attr)
         for edge, attr, _is_min, _unit in _EDGES
@@ -539,17 +547,17 @@ def _area_outside_extents(
     wgs: BBox, extents: Sequence[BBox]
 ) -> tuple[BBox | None, float]:
     """
-    Czesc bboxa WGS84 poza WSZYSTKIMI prostokatami ``extents`` (S3).
+    Part of the WGS84 bbox outside ALL ``extents`` rectangles (S3).
 
-    Krawedzie prostokatow tna bbox na komorki; komorka, ktorej srodka nie
-    przykrywa zaden prostokat, jest utracona (pod ``--country auto`` nikt jej
-    nie pobierze). Zwraca obwiednie utraconych komorek (``None`` gdy bbox
-    jest w calosci pokryty) i udzial ich powierzchni w powierzchni bboxa
-    (0..1; komorki wazone ``cos(szerokosci)``, wiec udzial jest metryczny).
+    The rectangle edges cut the bbox into cells; a cell whose center is not
+    covered by any rectangle is lost (under ``--country auto`` nobody will download
+    it). Returns the envelope of the lost cells (``None`` when the bbox
+    is fully covered) and their area share of the bbox area
+    (0..1; cells weighted by ``cos(latitude)``, so the share is metric).
 
-    Sam test krawedzi nie wystarcza: bbox 13-15°E x 53-55°N ma krawedz W
-    wewnatrz zakresu dlugosci CZ, ale CZ konczy sie na 51,06°N — utrata
-    w narozniku jest widoczna dopiero po podziale na komorki.
+    The edge test alone is not enough: a bbox 13-15°E x 53-55°N has its W edge
+    within the CZ longitude range, but CZ ends at 51.06°N - the loss
+    in the corner is visible only after the split into cells.
     """
     xs = sorted(
         {wgs.min_x, wgs.max_x}
@@ -592,10 +600,11 @@ def _print_clipping_info(
     pl_geometry_sheets: bool = False,
     pl_sheet_list: bool = False,
 ) -> None:
-    """``Info:`` o przycieciu pod ``--country auto`` (S3; stderr, ``-q`` nie tlumi).
+    """``Info:`` about clipping under ``--country auto`` (S3; stderr, ``-q`` does not
+    suppress).
 
-    PL --geometry bez wycinka pobiera arkusze z calej geometrii, wiec
-    przyciecie jej pomocniczego bboxa nie ogranicza pobierania PL.
+    PL --geometry without a cutout downloads sheets from the whole geometry, so
+    clipping its auxiliary bbox does not limit the PL download.
     """
     from kartograf.sources.registry import get_country
 
@@ -629,7 +638,7 @@ def _print_clipping_info(
     if not any(parts[code].clipped for code in countries):
         return
     if pl_geometry_sheets and "PL" in countries:
-        # PL czyta CALA geometrie, wiec rowniez obszar poza prostokatami.
+        # PL reads the WHOLE geometry, so also the area outside the rectangles.
         return
     lost, share = _area_outside_extents(
         _bbox_to_wgs84(bbox), [get_country(c).extent_wgs84 for c in countries]
@@ -649,16 +658,16 @@ def _print_clipping_info(
 
 def _build_parent_request(bbox: BBox, countries: tuple[str, ...]) -> dict:
     """
-    Opis zadania obszarowego do ``extra.parent_request`` sidecarow.
+    Description of an area task for the sidecars' ``extra.parent_request``.
 
-    Grupuje pliki jednego zadania bbox/geometry (takze te lezace po roznych
-    stronach granicy): niesie ORYGINALNY bbox zadania — przed przycieciem per
-    kraj — jego uklad i kraje ODPYTANE w tym wywolaniu (probowane, nie
-    pobrane — ADR-023 pkt 3).
+    Groups the files of one bbox/geometry task (including those lying on both
+    sides of the border): carries the task's ORIGINAL bbox - before per-country
+    clipping - its CRS and the countries QUERIED in this call (attempted, not
+    downloaded - ADR-023 point 3).
 
-    Zwrocony slownik NIE moze byc pozniej mutowany: konsumenci (sidecary CZ,
-    ``DownloadManager(sidecar_extra=)``) trzymaja go przez referencje, a plytka
-    kopia w managerze nie chroni zagniezdzen.
+    The returned dict must NOT be mutated later: consumers (CZ sidecars,
+    ``DownloadManager(sidecar_extra=)``) hold it by reference, and a shallow
+    copy in the manager does not protect nested values.
     """
     return {
         "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
@@ -674,25 +683,26 @@ def _validate_cross_country(
     args: argparse.Namespace, countries: tuple[str, ...]
 ) -> int:
     """
-    Opcje musza byc rozwiazywalne dla KAZDEGO przecietego kraju (0=OK, 1=blad).
+    Options must be resolvable for EVERY intersected country (0=OK, 1=error).
 
-    Walidacja idzie PRZED jakimkolwiek pobraniem — inaczej czesc jednego kraju
-    zostalaby pobrana, a druga galaz dopiero potem odrzucilaby zadanie
-    (czesciowe wykonanie). Zamiast cicho pomijac kraj, CLI podpowiada jawny
-    ``--country`` — ale tylko gdy obszar faktycznie przecina wiecej niz jeden
-    kraj (przy jednym kraju wybor jest juz rozstrzygniety).
+    Validation happens BEFORE any download - otherwise part of one country
+    would be downloaded and the other branch would reject the task only afterwards
+    (partial execution). Instead of silently skipping a country, the CLI suggests an
+    explicit
+    ``--country`` - but only when the area actually intersects more than one
+    country (with one country the choice is already resolved).
 
-    KOLEJNOSC: pod ``--country auto`` czesc opcji jest juz rozstrzygnieta
-    wczesniej (``_pl_only_flags`` w ``_dispatch_area``, ADR-023 pkt 5), wiec
-    ``countries`` jest wtedy jednoelementowe i te checki widza wylacznie
-    zadania faktycznie niejednoznaczne (np. ``--resolution 2m``, ktore nie ma
-    odpowiednika po stronie PL) albo jawny ``--country``, ktorego CLI nie
-    nadpisuje.
+    ORDER: under ``--country auto`` some options are already resolved
+    earlier (``_pl_only_flags`` in ``_dispatch_area``, ADR-023 point 5), so
+    ``countries`` is then single-element and these checks see only
+    truly ambiguous tasks (e.g. ``--resolution 2m``, which has no
+    PL counterpart) or an explicit ``--country``, which the CLI does not
+    override.
 
-    ``--target-crs`` NIE jest tu walidowane: od ADR-027 dziala po obu stronach
-    granicy (PL: scalony wycinek), wiec zadanie transgraniczne z ta flaga jest
-    legalne. Wylaczenia PL (produkt != nmt, ``--system 2000``) sprawdza
-    ``_resolve_pl_sentinels``, juz na galezi polskiej.
+    ``--target-crs`` is NOT validated here: since ADR-027 it works on both sides of the
+    border (PL: a merged cutout), so a cross-border task with this flag is
+    legal. PL exclusions (product != nmt, ``--system 2000``) are checked by
+    ``_resolve_pl_sentinels``, already on the Polish branch.
     """
     product = getattr(args, "product", "nmt")
     resolution = getattr(args, "resolution", None)
@@ -730,21 +740,21 @@ def _validate_cross_country(
 
 def _pl_only_flags(args: argparse.Namespace) -> list[str]:
     """
-    Opcje zadania, ktore w etapie 1 nie maja zadnego odpowiednika po CZ.
+    Task options that have no counterpart in CZ at stage 1.
 
-    Sluza rozstrzygnieciu ``--country auto`` (ADR-023 pkt 5): skoro wariant
-    istnieje wylacznie dla PL, intencja uzytkownika jest jednoznaczna i lepiej
-    wybrac kraj niz odrzucic cale zadanie. Lista jest CELOWO waska:
+    They serve to resolve ``--country auto`` (ADR-023 point 5): since the variant
+    exists only for PL, the user's intent is unambiguous and it is better to
+    pick the country than to reject the whole task. The list is DELIBERATELY narrow:
 
-    * ``--product laz`` nie nalezy do niej mimo bycia PL-owym — ma wlasny
-      przeplyw (``_cmd_download_laz``) i nigdy nie dociera do ``_dispatch_area``;
-    * ``--resolution 5m`` istnieje po obu stronach granicy (PL 5m, DMR 4G);
-    * ``--resolution 2m`` i ``--vertical-crs Bpv`` sa czeskie, wiec rozstrzygaja
-      co najwyzej w druga strone (dzis: blad walidacji);
-    * ``--target-crs`` od ADR-027 dziala po obu stronach granicy (PL: scalony
-      wycinek), wiec nie rozstrzyga kraju w zadna strone;
-    * ``--campaigns all``/``--min-year`` (ADR-030) tez nie: obszar PL+CZ
-      pobiera CZ w biezacej wersji (``_reject_campaign_opts_without_pl``).
+    * ``--product laz`` does not belong to it despite being PL-only - it has its own
+      flow (``_cmd_download_laz``) and never reaches ``_dispatch_area``;
+    * ``--resolution 5m`` exists on both sides of the border (PL 5m, DMR 4G);
+    * ``--resolution 2m`` and ``--vertical-crs Bpv`` are Czech, so they decide
+      at most in the other direction (today: a validation error);
+    * ``--target-crs`` since ADR-027 works on both sides of the border (PL: a merged
+      cutout), so it does not decide the country in either direction;
+    * ``--campaigns all``/``--min-year`` (ADR-030) neither: a PL+CZ area
+      downloads CZ in its current version (``_reject_campaign_opts_without_pl``).
     """
     flags: list[str] = []
     product = getattr(args, "product", "nmt")
@@ -763,15 +773,16 @@ def _dispatch_area(
     args: argparse.Namespace, bbox: BBox, filepath: Path | None = None
 ) -> int:
     """
-    Rozdziel zadanie obszarowe (bbox albo geometria) na kraje i wykonaj je.
+    Split an area task (bbox or geometry) into countries and run them.
 
-    ``bbox`` to zadanie uzytkownika: podany bbox albo obwiednia geometrii.
-    Przy ``filepath`` galaz PL pracuje dalej na pliku (arkusze per obiekt,
-    a nie z obwiedni), a bbox sluzy rozpoznaniu krajow i ``parent_request``.
+    ``bbox`` is the user's task: the given bbox or the geometry's envelope.
+    With ``filepath`` the PL branch keeps working on the file (sheets per feature,
+    not from the envelope), and the bbox serves to recognize countries and
+    ``parent_request``.
 
-    Komunikaty ``Info:``/``Warning:`` o rozstrzygnieciu kraju i o czesciowym
-    sukcesie ida na stderr, wiec ``-q`` (tlumiacy stdout) ich NIE ukrywa —
-    tak samo jak komunikatow ``Error:``.
+    ``Info:``/``Warning:`` messages about country resolution and partial
+    success go to stderr, so ``-q`` (suppressing stdout) does NOT hide them -
+    just like ``Error:`` messages.
     """
     from kartograf.transform.crs import TransformError
 
@@ -784,15 +795,16 @@ def _dispatch_area(
             file=sys.stderr,
         )
         return 1
-    # ADR-023 pkt 5 (N6-2): obwiednie krajow sa prostokatami (pkt 4), wiec
-    # auto-split wciaga CZ takze do zadan lezacych w calosci w Polsce — a wtedy
-    # opcja bez odpowiednika czeskiego przewracala cale polecenie (`--system
-    # 2000` pod Raciborzem: kod 1, regresja wzgledem 0.6.1). Taka opcja
-    # rozstrzyga wiec kraj, zamiast psuc zadanie; dalej jest to dokladnie jawny
-    # `--country pl` (auto=False => bez przycinania do obwiedni). Warunek
-    # `len(countries) > 1 and "PL" in countries` zaweza to do obszarow
-    # faktycznie spornych: obszar w calosci czeski dostaje nadal komunikat
-    # o etapie 2 (nizej), a obszar w calosci polski niczego nie potrzebuje.
+    # ADR-023 point 5 (N6-2): country envelopes are rectangles (point 4), so
+    # auto-split pulls CZ in also for tasks lying entirely in Poland - and then an
+    # option with no Czech counterpart broke the whole command (`--system
+    # 2000` near Racibórz: code 1, a regression vs 0.6.1). Such an option
+    # therefore decides the country instead of spoiling the task; from here on it is
+    # exactly an explicit
+    # `--country pl` (auto=False => no clipping to the envelope). The condition
+    # `len(countries) > 1 and "PL" in countries` narrows this to truly
+    # disputed areas: an entirely Czech area still gets the message
+    # about stage 2 (below), and an entirely Polish area needs nothing.
     if auto and len(countries) > 1 and "PL" in countries:
         pl_only = _pl_only_flags(args)
         if pl_only:
@@ -803,18 +815,18 @@ def _dispatch_area(
             auto = False
             countries = ("PL",)
     product = getattr(args, "product", "nmt")
-    # obszar w calosci czeski: komunikat o etapie 2 jest trafniejszy niz
-    # podpowiedz "wybierz kraj" — kraj jest juz rozstrzygniety
+    # an entirely Czech area: the stage 2 message is more apt than the
+    # "choose a country" hint - the country is already resolved
     if countries == ("CZ",) and _reject_non_nmt_for_cz(product):
         return 1
     if _validate_cross_country(args, countries):
         return 1
-    # Wycinek PL + opcje kampanii: jedyne miejsce tej strazy (wycinek PL
-    # powstaje tylko stad). Tu, a nie w galezi PL — pod auto CZ idzie PRZED
-    # PL (sortowanie), wiec pozniejsza straz przyszlaby po pobraniu CZ; przed
-    # Info o kampaniach, zeby odrzucone zadanie nie dostalo Info. Kraje sa
-    # juz rozstrzygniete (`_pl_only_flags` wyzej): obszar bez PL odrzuca
-    # opcje kampanii, obszar PL+CZ dostaje Info.
+    # PL cutout + campaign options: the only place of this guard (a PL cutout
+    # arises only from here). Here, not in the PL branch - under auto CZ goes BEFORE
+    # PL (sorting), so a later guard would come after the CZ download; before the
+    # campaign Info, so a rejected task does not get an Info. Countries are
+    # already resolved (`_pl_only_flags` above): an area without PL rejects
+    # campaign options, a PL+CZ area gets an Info.
     if "PL" in countries and _reject_campaign_opts_with_target_crs(args):
         return 1
     if _reject_campaign_opts_without_pl(args, countries):
@@ -823,9 +835,9 @@ def _dispatch_area(
     parent_request = _build_parent_request(bbox, countries)
     cz_crs = getattr(args, "target_crs", None) or "EPSG:5514"
 
-    # Czesci per kraj PRZED jakimkolwiek pobraniem: bledy transformacji
-    # przewracaja zadanie w calosci, a komunikaty o przycieciu (S3) ida
-    # jednym blokiem przed praca.
+    # Per-country parts BEFORE any download: transformation errors
+    # fail the whole task, and clipping messages (S3) go
+    # in one block before the work.
     parts: dict[str, CountryPart] = {}
     for code in countries:
         try:
@@ -850,8 +862,9 @@ def _dispatch_area(
         if code == "CZ":
             rc = _run_cz(args, bbox=part, parent_request=parent_request)
         else:
-            # KOPIA args: _resolve_pl_sentinels mutuje Namespace (None->"1m"),
-            # co zatrulo by galaz CZ; kopia uniezaleznia od kolejnosci krajow
+            # COPY of args: _resolve_pl_sentinels mutates the Namespace (None->"1m"),
+            # which would poison the CZ branch; the copy removes the dependence on
+            # country order
             pl_args = argparse.Namespace(**vars(args))
             if filepath is not None:
                 rc = _download_pl_geometry(pl_args, filepath, parent_request, bbox=part)
@@ -860,15 +873,17 @@ def _dispatch_area(
         results.append((code, rc))
 
     exit_codes = [rc for _, rc in results]
-    # A3-2: pod `auto` kraje bierze sie z PROSTOKATNYCH obwiedni (ADR-023
-    # pkt 4), wiec zadanie w glebi jednego kraju rutynowo trafia takze do
-    # drugiego, ktory danych tam nie ma — to normalny wynik doboru krajow,
-    # a nie awaria zadania. Kod 0, ale z ostrzezeniem, zeby porazka jednego
-    # kraju na pasie przygranicznym nie zniknela po cichu. Jawny `--country`
-    # (uzytkownik sam wskazal zasieg) i porazka WSZYSTKICH krajow zostaja
-    # przy dotychczasowym `max(exit_codes)`. Tresc bez zgadywania przyczyny:
-    # po D2 kod 1 galezi PL znaczy "blad pobrania albo zero danych" (czesc
-    # arkuszy mogla sie pobrac), a szczegoly stoja w Error wyzej.
+    # A3-2: under `auto` countries are taken from RECTANGULAR envelopes (ADR-023
+    # point 4), so a task deep inside one country routinely hits the
+    # other one too, which has no data there - this is a normal result of country
+    # selection,
+    # not a task failure. Code 0, but with a warning, so that one
+    # country's failure in a border strip does not vanish silently. An explicit
+    # `--country`
+    # (the user pointed out the extent themself) and failure of ALL countries stay
+    # with the existing `max(exit_codes)`. The text does not guess the cause:
+    # after D2 the PL branch's code 1 means "download error or zero data" (some
+    # sheets may have been downloaded), and details stand in the Error above.
     if auto and len(results) > 1 and 0 in exit_codes and max(exit_codes) != 0:
         failed = [code for code, rc in results if rc != 0]
         ok = [code for code, rc in results if rc == 0]
@@ -884,19 +899,20 @@ def _dispatch_area(
 
 def _resolve_cz_geometry_bbox(args: argparse.Namespace) -> BBox | None:
     """
-    Obwiednia geometrii w ukladzie zadania CZ (None => blad juz wypisany).
+    Envelope of a geometry in the CZ task CRS (None => error already printed).
 
-    CUZK nie przyjmuje pliku geometrii — zadanie obszarowe to jeden wycinek
-    ``exportImage``, wiec geometria sprowadza sie tu do obwiedni (jak
-    w przeplywie LAZ, tyle ze w ukladzie czeskim zamiast EPSG:2180).
+    CUZK does not accept a geometry file - an area task is one ``exportImage``
+    cutout, so the geometry is reduced here to an envelope (as
+    in the LAZ flow, except in a Czech CRS instead of EPSG:2180).
 
-    Obwiednia liczona jest W UKLADZIE PLIKU, a skok do ukladu docelowego robi
-    ``bbox_to_crs`` (przypieta operacja + probkowanie krawedzi). Transformacja
-    z ``core/geometry`` jest tu niedopuszczalna: uzywa domyslnego transformera
-    pyproj (ballpark dozwolony, nieznana dokladnosc) i obwiedni z czterech
-    naroznikow, ktora przy obroconym Krovaku ucina skrawki obszaru. Jeden skok
-    prosto do ukladu zadania oznacza tez, ze ``_cz_download_bbox`` nie
-    transformuje juz po raz drugi.
+    The envelope is computed IN THE FILE'S CRS, and the jump to the target CRS is done
+    by
+    ``bbox_to_crs`` (pinned operation + edge sampling). The transformation
+    from ``core/geometry`` is unacceptable here: it uses the default pyproj
+    transformer (ballpark allowed, unknown accuracy) and a four-corner
+    envelope that, with a rotated Krovak, cuts off slivers of the area. A single jump
+    straight to the task CRS also means that ``_cz_download_bbox`` does not
+    transform a second time.
     """
     from pyproj import CRS
 
@@ -915,7 +931,7 @@ def _resolve_cz_geometry_bbox(args: argparse.Namespace) -> BBox | None:
         source_crs = read_source_crs(filepath, layer=layer)
         bbox = get_overall_bbox(filepath, layer=layer, target_crs=source_crs.to_wkt())
         if source_crs == CRS.from_user_input(image_sr):
-            # plik juz w ukladzie zadania — tylko etykieta, zero transformacji
+            # the file is already in the task CRS - only a label, zero transformation
             return BBox(bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y, image_sr)
         return bbox_to_crs(bbox, image_sr)
     except (ValidationError, ValueError, TransformError) as e:
@@ -924,14 +940,15 @@ def _resolve_cz_geometry_bbox(args: argparse.Namespace) -> BBox | None:
 
 
 def _geometry_envelope(filepath: Path, layer: str | None) -> BBox:
-    """Obwiednia geometrii dla dyspozycji krajow (``--country auto``/``pl``).
+    """Envelope of a geometry for country dispatch (``--country auto``/``pl``).
 
-    Plik w ukladzie czeskim (EPSG:5514/3045): obwiednia W UKLADZIE PLIKU
-    z etykieta KODU EPSG — skok do EPSG:2180 wykona przypieta operacja
-    w ``_country_bbox`` (review max 2026-08-30, zn. 4: domyslny transformer
-    z ``core/geometry`` przesuwal siatke wyniku o ~1,2 m). Etykieta WKT by nie
-    wystarczyla: ``wkid()`` jej nie rozpoznaje i skok przypiety zostalby
-    pominiety. Pozostale uklady — jak dotad, wprost do EPSG:2180.
+    A file in a Czech CRS (EPSG:5514/3045): the envelope IN THE FILE'S CRS
+    labeled with the EPSG CODE - the jump to EPSG:2180 will be done by the pinned
+    operation
+    in ``_country_bbox`` (review max 2026-08-30, finding 4: the default transformer
+    from ``core/geometry`` shifted the result grid by ~1.2 m). A WKT label would not
+    suffice: ``wkid()`` does not recognize it and the pinned jump would be
+    skipped. Other CRSs - as before, straight to EPSG:2180.
     """
     from kartograf.core.bbox import is_czech_crs
     from kartograf.core.geometry import get_overall_bbox, read_source_crs
@@ -939,7 +956,7 @@ def _geometry_envelope(filepath: Path, layer: str | None) -> BBox:
     source_crs = read_source_crs(filepath, layer=layer)
     epsg = source_crs.to_epsg()
     if epsg is not None and is_czech_crs(f"EPSG:{epsg}"):
-        # obwiednia w ukladzie pliku (tozsamosc — zero transformacji)
+        # envelope in the file's CRS (identity - zero transformation)
         env = get_overall_bbox(filepath, layer=layer, target_crs=source_crs.to_wkt())
         return BBox(env.min_x, env.min_y, env.max_x, env.max_y, f"EPSG:{epsg}")
     return get_overall_bbox(filepath, layer=layer, target_crs="EPSG:2180")
@@ -978,15 +995,16 @@ def cmd_download(args: argparse.Namespace) -> int:
         )
         return 1
 
-    # --- Dyspozycja per kraj: godlo rozstrzyga kraj przez rejestr systemow ---
+    # --- Per-country dispatch: the sheet code decides the country via the system
+    # registry ---
     from kartograf.core.parser_registry import detect_system
 
-    # ADR-030: --min-year 1900..2100 (i strategia) przed jakakolwiek praca
+    # ADR-030: --min-year 1900..2100 (and the strategy) before any work
     campaigns, min_year = _campaign_opts(args)
     try:
         validate_campaign_args(campaigns, min_year)
     except ValidationError as e:
-        # komunikat biblioteki nazywa parametr; CLI mowi o fladze
+        # the library message names the parameter; the CLI speaks of the flag
         print(f"Error: {str(e).replace('min_year', '--min-year')}", file=sys.stderr)
         return 1
 
@@ -994,7 +1012,7 @@ def cmd_download(args: argparse.Namespace) -> int:
     product = getattr(args, "product", "nmt")
 
     if has_godlo:
-        # rejestr konczy sie fallbackiem pl1992 (zawsze pasuje, nigdy None)
+        # the registry ends with the pl1992 fallback (always matches, never None)
         system = detect_system(args.godlo)
         system_id = system.id
         system_country = system.country
@@ -1008,7 +1026,7 @@ def cmd_download(args: argparse.Namespace) -> int:
         if system_country == "CZ":
             if _reject_non_nmt_for_cz(product):
                 return 1
-            # godlo CZ niezaleznie od `country_flag` (jawne cz albo auto)
+            # a CZ sheet code regardless of `country_flag` (explicit cz or auto)
             if _reject_campaign_opts_without_pl(args, ("CZ",)):
                 return 1
             return _run_cz(args)
@@ -1024,21 +1042,21 @@ def cmd_download(args: argparse.Namespace) -> int:
             )
             return 1
 
-    # --- Produkt LAZ: dyskretny przepływ area→WFS→tiles (wszystkie 3 tryby) ---
+    # --- LAZ product: a discrete area->WFS->tiles flow (all 3 modes) ---
     if product == "laz":
         return _cmd_download_laz(args)
 
-    # --- Tryb geometry ---
+    # --- Geometry mode ---
     if has_geometry:
         return _cmd_download_geometry(args)
 
-    # --- Tryb bbox ---
+    # --- Bbox mode ---
     if has_bbox:
         return _cmd_download_bbox(args)
 
-    # --- Tryb godlo (istniejąca logika) ---
+    # --- Sheet code mode (existing logic) ---
     try:
-        # Validate godlo first
+        # Validate sheet code first
         SheetParser(args.godlo)
     except (ParseError, ValidationError) as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -1046,8 +1064,8 @@ def cmd_download(args: argparse.Namespace) -> int:
 
     # Create download manager with vertical CRS, resolution, and product
     output_dir = Path(args.output)
-    # sentinele PL sa juz rozwiazane (`_resolve_pl_sentinels`), a argparse
-    # zawsze tworzy oba atrybuty — czytamy je wprost
+    # the PL sentinels are already resolved (`_resolve_pl_sentinels`), and argparse
+    # always creates both attributes - we read them directly
     vertical_crs = args.vertical_crs
     resolution = args.resolution
     product = getattr(args, "product", "nmt")
@@ -1065,7 +1083,8 @@ def cmd_download(args: argparse.Namespace) -> int:
                 output_dir=output_dir,
                 provider=provider,
                 storage=storage,
-                # pion juz FAKTYCZNY: "5m => EVRF2007" w _resolve_pl_sentinels (D11)
+                # the vertical CRS is already ACTUAL: "5m => EVRF2007" in
+                # _resolve_pl_sentinels (D11)
                 vertical_crs=vertical_crs,
                 resolution=resolution,
                 max_workers=workers,
@@ -1098,13 +1117,13 @@ def cmd_download(args: argparse.Namespace) -> int:
             else:
                 # Download single sheet (may expand to hierarchy for non-1:10000)
                 def announce() -> None:
-                    # O-3: dopiero gdy rusza pobieranie (nie przy Skipped/Error)
+                    # O-3: only when the download starts (not on Skipped/Error)
                     if not args.quiet:
                         print(f"Downloading {args.godlo} ({label})...")
 
                 parsed = SheetParser(args.godlo)
                 if parsed.uklad != "2000" and parsed.scale != "1:10000":
-                    announce()  # godlo grubsze: rozwiniecie do hierarchii
+                    announce()  # coarser sheet code: expanded to a hierarchy
 
                 result = manager.download_sheet(
                     args.godlo,
@@ -1113,17 +1132,18 @@ def cmd_download(args: argparse.Namespace) -> int:
                     on_download=announce,
                 )
                 if not isinstance(result, list):
-                    # pojedynczy arkusz 1:10000 / PL-2000: sukces = brak
-                    # wyjatku (brak danych = DownloadError, kod 1 — D10).
-                    # E15: o skipie mowi manager (`last_sheet`), nie istnienie
-                    # sciezki standardowej — dowiazanie moze istniec, a nowa
-                    # kampania i tak zostac pobrana. isinstance (I-1): atrapa
-                    # Mock() managera ma `last_sheet.skipped` = Mock (prawda).
+                    # a single 1:10000 / PL-2000 sheet: success = no
+                    # exception (no data = DownloadError, code 1 - D10).
+                    # E15: skip is reported by the manager (`last_sheet`), not by the
+                    # existence
+                    # of the standard path - a link may exist while a new
+                    # campaign is still downloaded. isinstance (I-1): the manager's
+                    # Mock() stand-in has `last_sheet.skipped` = Mock (truthy).
                     fetch = manager.last_sheet
                     sheet = fetch if isinstance(fetch, SheetFetch) else None
                     if not args.quiet:
                         if campaigns == "all" and sheet is not None:
-                            # M-1: jak lista — pliki kampanii, nie arkusz
+                            # M-1: like the list - campaign files, not a sheet
                             _print_campaign_summary(
                                 len(sheet.downloaded), 1, output_dir, len(sheet.reused)
                             )
@@ -1151,10 +1171,10 @@ def cmd_download(args: argparse.Namespace) -> int:
             print(f"Error: {e}", file=sys.stderr)
             return 1
 
-    # Hierarchia (--scale albo godlo grubsze niz 1:10000) polyka porazki
-    # pojedynczych arkuszy i zdaje z nich sprawe w `last_result` — ten sam
-    # finisz co tryb listy arkuszy (D10: arkusze morskie pod godlem 1:50000
-    # na wybrzezu to ta sama sytuacja co pod --bbox).
+    # The hierarchy (--scale or a sheet code coarser than 1:10000) swallows failures
+    # of individual sheets and reports them in `last_result` - the same
+    # finish as the sheet list mode (D10: sea sheets under a 1:50000 sheet code
+    # on the coast are the same situation as under --bbox).
     return _finish_pl_sheets(
         _last_result(manager),
         paths,
@@ -1165,9 +1185,9 @@ def cmd_download(args: argparse.Namespace) -> int:
 
 
 def _last_result(manager: DownloadManager) -> DownloadResult:
-    """``manager.last_result`` po hierarchii/liscie — zawsze wypelnione (kontrakt)."""
+    """``manager.last_result`` after a hierarchy/list - always filled (contract)."""
     result = manager.last_result
-    if result is None:  # pragma: no cover — kontrakt download_sheets/hierarchy
+    if result is None:  # pragma: no cover — contract of download_sheets/hierarchy
         raise RuntimeError("DownloadManager nie wypelnil last_result po pobraniu listy")
     return result
 
@@ -1179,20 +1199,21 @@ def _download_godlo_list(
     on_progress,
 ) -> tuple[list[Path], DownloadResult]:
     """
-    Pobierz liste godel jednym ``DownloadManager.download_sheets`` (S2/D2).
+    Download a list of sheet codes with one ``DownloadManager.download_sheets`` (S2/D2).
 
-    Godla grubsze niz 1:10000 rozwija ``expand_sheets`` (manager), pobranie
-    idzie na ``max_workers`` managera, a porazki pojedynczych arkuszy NIE
-    przerywaja listy: ``NoCoverageError`` (morze, arkusz za granica) i
-    ``DownloadError`` (siec, serwer) laduja w ``DownloadResult`` — kazdy
-    arkusz jest probowany niezaleznie od ``--workers``. Kod wyjscia i
-    komunikaty robi ``_finish_pl_sheets``.
+    Sheet codes coarser than 1:10000 are expanded by ``expand_sheets`` (the manager),
+    the download
+    goes to the manager's ``max_workers``, and failures of individual sheets do NOT
+    abort the list: ``NoCoverageError`` (sea, a sheet abroad) and
+    ``DownloadError`` (network, server) land in ``DownloadResult`` - every
+    sheet is attempted independently of ``--workers``. The exit code and
+    messages are produced by ``_finish_pl_sheets``.
 
     Returns
     -------
     tuple[list[Path], DownloadResult]
-        Pliki dostepne po zadaniu (pobrane + pominiete jako istniejace)
-        i podsumowanie per arkusz (``manager.last_result``).
+        Files available after the task (downloaded + skipped as existing)
+        and a per-sheet summary (``manager.last_result``).
     """
     paths = manager.download_sheets(
         godlo_list, skip_existing=skip_existing, on_progress=on_progress
@@ -1201,7 +1222,7 @@ def _download_godlo_list(
 
 
 def _warn_copied_links(godla: Sequence[str]) -> None:
-    """``Warning:`` o sciezce standardowej jako KOPII kampanii (ADR-030)."""
+    """``Warning:`` about the standard path being a COPY of a campaign (ADR-030)."""
     shown = ", ".join(godla[:10]) + (" ..." if len(godla) > 10 else "")
     print(
         "Warning: hardlink niedostepny na tym systemie plikow — sciezka "
@@ -1215,12 +1236,12 @@ MAX_HINT_LINES = 5
 
 
 def _print_coverage_hints(result: DownloadResult) -> None:
-    """``Info:`` z podpowiedziami ``NoCoverageError`` (stderr, mimo ``-q``).
+    """``Info:`` with ``NoCoverageError`` hints (stderr, despite ``-q``).
 
-    Podpowiedzi buduje provider (``NoCoverageError.hints``); CLI tylko je
-    przenosi: bez doslownych duplikatow, w kolejnosci pierwszego wystapienia,
-    do ``MAX_HINT_LINES`` linii; reszta to jedna linia z liczba pominietych
-    (pelna lista w ``DownloadResult.no_coverage_hints``).
+    The hints are built by the provider (``NoCoverageError.hints``); the CLI only
+    relays them: without literal duplicates, in order of first occurrence,
+    up to ``MAX_HINT_LINES`` lines; the rest is one line with the number skipped
+    (full list in ``DownloadResult.no_coverage_hints``).
     """
     unique = dict.fromkeys(
         h for hints in result.no_coverage_hints.values() for h in hints
@@ -1240,7 +1261,7 @@ def _print_coverage_hints(result: DownloadResult) -> None:
 def _print_campaign_summary(
     downloaded: int, sheets: int, output_dir: Path, existed: int
 ) -> None:
-    """Podsumowanie ``--campaigns all`` (lista arkuszy i pojedyncze godlo)."""
+    """Summary of ``--campaigns all`` (sheet list and a single sheet code)."""
     print(
         f"Downloaded {downloaded} campaign files for "
         f"{sheets} sheets to {output_dir} ({existed} already existed)"
@@ -1248,7 +1269,8 @@ def _print_campaign_summary(
 
 
 def _warn_unverified(unverified: dict[str, str], *, from_sidecar: bool = False) -> None:
-    """``Warning:`` o arkuszach z lokalnej kampanii bez sprawdzenia (I-1)."""
+    """``Warning:`` about sheets taken from a local campaign without verification
+    (I-1)."""
     godla = list(unverified)
     shown = ", ".join(godla[:10]) + (" ..." if len(godla) > 10 else "")
     print(
@@ -1269,31 +1291,32 @@ def _finish_pl_sheets(
     campaigns: str = "newest",
 ) -> int:
     """
-    Wspolne podsumowanie i kod wyjscia trybu wielu arkuszy PL (D2/D10).
+    Shared summary and exit code of the multi-sheet PL mode (D2/D10).
 
-    Uzywany przez ``--bbox``/``--geometry`` (lista arkuszy) i przez tryb
-    godla z hierarchia (``--scale`` albo godlo grubsze niz 1:10000) — ta sama
-    semantyka "wiele plikow", te same arkusze morskie pod godlem 1:50000 na
-    wybrzezu co pod bboxem. Tolerancja R5 jak w wycinku:
+    Used by ``--bbox``/``--geometry`` (sheet list) and by the sheet code
+    mode with a hierarchy (``--scale`` or a sheet code coarser than 1:10000) - the same
+    "many files" semantics, the same sea sheets under a 1:50000 sheet code on the
+    coast as under a bbox. R5 tolerance as in the cutout:
 
-    - wszystko pobrane/pominiete -> 0, cisza;
-    - >= 1 plik, reszta bez danych GUGiK (``no_coverage``) -> ``Warning:``
-      z lista (do 10 godel), kod 0;
-    - >= 1 porazka pobrania (``hard_failures``: siec, serwer) -> ``Error:``
-      z PELNA lista i "ponow pobranie", kod 1 (plus ``Warning:`` jw., gdy
-      sa tez arkusze bez danych);
-    - 0 plikow i wszystkie bez danych -> ``Error:``, kod 1 (nic do pobrania,
-      spojnie z wycinkiem: ``ValidationError``).
+    - all downloaded/skipped -> 0, silence;
+    - >= 1 file, the rest without GUGiK data (``no_coverage``) -> ``Warning:``
+      with a list (up to 10 sheet codes), code 0;
+    - >= 1 download failure (``hard_failures``: network, server) -> ``Error:``
+      with the FULL list and "retry the download", code 1 (plus the ``Warning:`` above,
+      when
+      there are also sheets without data);
+    - 0 files and all without data -> ``Error:``, code 1 (nothing to download,
+      consistent with the cutout: ``ValidationError``).
 
-    Arkusze z niepelnej najnowszej kampanii (sidecar
-    ``extra.source.full_sheet: false``) -> ``Warning:`` (E13), kod bez zmian.
-    Sciezka standardowa jako KOPIA kampanii (``result.copied``) ->
-    ``Warning:``, kod bez zmian. ``campaigns="all"``: podsumowanie liczy
-    pliki kampanii (``result.campaign_files``), nie arkusze. Arkusze
-    ``newest`` z lokalnej kampanii przy awarii skorowidza
-    (``result.unverified``, I-1) -> ``Warning:``, kod bez zmian.
+    Sheets from an incomplete newest campaign (sidecar
+    ``extra.source.full_sheet: false``) -> ``Warning:`` (E13), code unchanged.
+    Standard path as a campaign COPY (``result.copied``) ->
+    ``Warning:``, code unchanged. ``campaigns="all"``: the summary counts
+    campaign files (``result.campaign_files``), not sheets. ``newest`` sheets
+    from a local campaign on an index failure
+    (``result.unverified``, I-1) -> ``Warning:``, code unchanged.
 
-    ``Warning:``/``Error:`` ida na stderr, wiec ``-q`` ich NIE tlumi.
+    ``Warning:``/``Error:`` go to stderr, so ``-q`` does NOT suppress them.
     """
     _warn_sheet_sidecars(paths)
     if result.copied:
@@ -1301,13 +1324,14 @@ def _finish_pl_sheets(
     if result.unverified:
         _warn_unverified(result.unverified)
     if not quiet:
-        # pasek postepu konczy "skipped"/"downloading" bez nowej linii
+        # the progress bar ends with "skipped"/"downloading" without a newline
         print()
     if not quiet and paths:
-        # O-7: bez pliku i bez skipu (same braki/porazki) podsumowanie 0 = szum
+        # O-7: without a file and without a skip (only gaps/failures) a summary of 0 is
+        # noise
         if campaigns == "all":
-            # `campaign_files` = pobrane + lokalne; lokalne osobno
-            # (`reused_campaign_files`, podzbior per arkusz)
+            # `campaign_files` = downloaded + local; local ones separately
+            # (`reused_campaign_files`, a per-sheet subset)
             files = result.campaign_files
             existed = sum(len(f) for f in result.reused_campaign_files.values())
             total_files = sum(len(f) for f in files.values())
@@ -1350,7 +1374,7 @@ def _finish_pl_sheets(
 
 def _cmd_download_bbox(args: argparse.Namespace) -> int:
     """
-    Handle download command in bbox mode (dyspozycja per kraj).
+    Handle download command in bbox mode (per-country dispatch).
 
     Parameters
     ----------
@@ -1367,7 +1391,7 @@ def _cmd_download_bbox(args: argparse.Namespace) -> int:
 
 
 def _read_sheet_sidecar(path: Path) -> dict | None:
-    """Sidecar ``<plik>.meta.json`` arkusza; ``None`` gdy brak/nieczytelny."""
+    """Sheet sidecar ``<file>.meta.json``; ``None`` if missing/unreadable."""
     sidecar = path.with_name(f"{path.name}.meta.json")
     try:
         meta = json.loads(sidecar.read_text(encoding="utf-8"))
@@ -1377,8 +1401,8 @@ def _read_sheet_sidecar(path: Path) -> dict | None:
 
 
 def _is_partial_sheet(path: Path) -> bool:
-    """Sidecar arkusza deklaruje niepelny arkusz (``extra.source.full_sheet``
-    ``false``, E13). Best-effort: brak/nieczytelny sidecar = ``False``."""
+    """The sheet sidecar declares an incomplete sheet (``extra.source.full_sheet``
+    ``false``, E13). Best-effort: missing/unreadable sidecar = ``False``."""
     try:
         source = (_read_sheet_sidecar(path) or {})["extra"]["source"]
         return source.get("full_sheet") is False
@@ -1387,10 +1411,10 @@ def _is_partial_sheet(path: Path) -> bool:
 
 
 def _sheet_crs_mismatch(path: Path) -> tuple[str, str, str] | None:
-    """E17: ``(godlo, uklad_godla, uklad_pliku)`` gdy sidecar arkusza PL ma
-    ``horizontal_crs`` (uklad PLIKU, ``pl_sheet_horizontal_crs``) inny niz
-    wynika z godla — np. arkusz PL-2000 strefy 7 opublikowany przez GUGiK
-    we wspolrzednych EPSG:2180. Best-effort: brak sidecara/godla = ``None``."""
+    """E17: ``(sheet code, sheet code CRS, file CRS)`` when a PL sheet sidecar has a
+    ``horizontal_crs`` (the FILE's CRS, ``pl_sheet_horizontal_crs``) different from what
+    the sheet code implies - e.g. a PL-2000 zone 7 sheet published by GUGiK
+    in EPSG:2180 coordinates. Best-effort: missing sidecar/sheet code = ``None``."""
     meta = _read_sheet_sidecar(path)
     if meta is None or meta.get("country") != "PL":
         return None
@@ -1409,9 +1433,9 @@ def _sheet_crs_mismatch(path: Path) -> tuple[str, str, str] | None:
 
 
 def _warn_crs_mismatch_sheets(paths) -> None:
-    """E17: ``Warning:`` o arkuszach, ktorych plik jest w innym ukladzie niz
-    deklaruje godlo/rekord skorowidza. Kod wyjscia bez zmian; sidecar opisuje
-    uklad PLIKU. Czyta sidecary, wiec powtarza sie przy skip."""
+    """E17: ``Warning:`` about sheets whose file is in a different CRS than
+    the sheet code/index record declares. Exit code unchanged; the sidecar describes
+    the FILE's CRS. Reads sidecars, so it repeats on skip."""
     found = [m for m in (_sheet_crs_mismatch(Path(p)) for p in paths) if m]
     if not found:
         return
@@ -1429,18 +1453,18 @@ def _warn_crs_mismatch_sheets(paths) -> None:
 
 
 def _warn_sheet_sidecars(paths) -> None:
-    """Ostrzezenia CLI z sidecarow arkuszy wyniku: niepelny arkusz (E13)
-    i uklad pliku inny niz godla (E17)."""
+    """CLI warnings from the result sheets' sidecars: incomplete sheet (E13)
+    and file CRS different from the sheet code's (E17)."""
     _warn_partial_sheets(paths)
     _warn_crs_mismatch_sheets(paths)
 
 
 def _warn_partial_sheets(paths) -> None:
-    """E13: ``Warning:`` o arkuszach z niepelnej najnowszej kampanii GUGiK.
+    """E13: ``Warning:`` about sheets from an incomplete newest GUGiK campaign.
 
-    Regula wyboru (ADR-028: najnowsza kampania, bez preferencji pelnego
-    arkusza) zostaje — ostrzezenie tylko ja uwidacznia. Czyta sidecary
-    plikow wyniku, wiec dziala takze dla arkuszy pominietych jako istniejace.
+    The selection rule (ADR-028: newest campaign, no preference for a full
+    sheet) stays - the warning only makes it visible. Reads the sidecars of
+    result files, so it also works for sheets skipped as existing.
     """
     partial = sorted(Path(p).stem for p in paths if _is_partial_sheet(Path(p)))
     if not partial:
@@ -1456,10 +1480,11 @@ def _warn_partial_sheets(paths) -> None:
 
 
 def _warn_missing_sheets(missing: tuple[str, ...], *, from_sidecar: bool) -> None:
-    """R5: ``Warning:`` o arkuszach bez danych GUGiK w wycinku (stderr, -q nie tlumi).
+    """R5: ``Warning:`` about sheets without GUGiK data in a cutout (stderr, -q does
+    not suppress).
 
-    Przy pominietym wycinku lista pochodzi z jego sidecara (N4) — ten sam
-    komunikat co przy budowie, z dopiskiem o zrodle.
+    For a skipped cutout the list comes from its sidecar (N4) - the same
+    message as on build, with a note about the source.
     """
     if not missing:
         return
@@ -1474,16 +1499,17 @@ def _warn_missing_sheets(missing: tuple[str, ...], *, from_sidecar: bool) -> Non
 
 
 def _report_pl_cutout(result, *, from_sidecar: bool) -> None:
-    """Komunikaty o tresci wycinka: brak arkuszy (R5), W1 (S5), same nodata (N2),
-    arkusze z niepelnej najnowszej kampanii (E13).
+    """Messages about cutout content: missing sheets (R5), W1 (S5), nodata only (N2),
+    sheets from an incomplete newest campaign (E13).
 
-    Przy pominietym wycinku wszystkie dane pochodza z jego sidecara
-    (``skipped_pl_cutout``) — ostrzezenia powtarzaja sie z dopiskiem o zrodle.
+    For a skipped cutout all data come from its sidecar
+    (``skipped_pl_cutout``) - warnings repeat with a note about the source.
     """
     _warn_missing_sheets(result.missing_sheets, from_sidecar=from_sidecar)
     unverified = getattr(result, "unverified", None)
     if isinstance(unverified, dict) and unverified:
-        # I-1: jak lista/godlo; lista pelna w sidecarze (extra.unverified_sheets)
+        # I-1: like the list/sheet code; full list in the sidecar
+        # (extra.unverified_sheets)
         _warn_unverified(unverified, from_sidecar=from_sidecar)
     origin = " (z sidecara istniejacego wycinka)" if from_sidecar else ""
     if result.off_grid_sheets:
@@ -1496,8 +1522,8 @@ def _report_pl_cutout(result, *, from_sidecar: bool) -> None:
     partial = tuple(getattr(result, "partial_sheets", ()))
     shown = ", ".join(partial[:10]) + (" ..." if len(partial) > 10 else "")
     if result.all_nodata and partial:
-        # C14-b: GUGiK ma dane w starszej kampanii, a najnowsza (wybrana wg
-        # ADR-028) jest ucieta — "brak danych GUGiK" bylby mylacy
+        # C14-b: GUGiK has data in an older campaign, while the newest (chosen per
+        # ADR-028) is truncated - "no GUGiK data" would be misleading
         print(
             "Warning: wycinek w calosci nodata — najnowsza kampania GUGiK "
             f"jest niepelna dla {len(partial)} arkuszy ({shown}) i nie pokrywa "
@@ -1521,18 +1547,19 @@ def _report_pl_cutout(result, *, from_sidecar: bool) -> None:
         )
 
 
-# opis kroku datum w sidecarach sprzed naprawy K2 (EPSG:4829, obszar uzycia:
-# Slowacja; tresc przesunieta 1-5 m) — po naprawie tor CZ i wycinek PL -> 5514
-# pinuja "S-JTSK to ETRS89 (1)"/"(2)"
+# description of the datum step in sidecars from before the K2 fix (EPSG:4829, area of
+# use:
+# Slovakia; content shifted 1-5 m) - after the fix the CZ path and the PL cutout -> 5514
+# pin "S-JTSK to ETRS89 (1)"/"(2)"
 _LEGACY_KROVAK_STEP = "S-JTSK to ETRS89 (3)"
 
 
 def _print_legacy_krovak_info(target: Path) -> None:
-    """D12: pomijany plik sprzed naprawy operacji S-JTSK dostaje ``Info:``.
+    """D12: a skipped file from before the S-JTSK operation fix gets an ``Info:``.
 
-    Czyta sidecar ``<plik>.meta.json`` (best-effort: brak/nieczytelny =
-    cisza) i sprawdza ``transform.horizontal``. Bez automatycznej
-    przebudowy — uzytkownik decyduje (``--force``).
+    Reads the ``<file>.meta.json`` sidecar (best-effort: missing/unreadable =
+    silence) and checks ``transform.horizontal``. No automatic
+    rebuild - the user decides (``--force``).
     """
     sidecar = target.parent / f"{target.name}.meta.json"
     try:
@@ -1554,19 +1581,19 @@ def _download_pl_cutout(
     parent_request: dict,
     geometry: Path | None = None,
 ) -> int:
-    """Polski wycinek --target-crs (ADR-027): nakladka CLI na download/cutout.py.
+    """Polish --target-crs cutout (ADR-027): a CLI overlay on download/cutout.py.
 
-    Wolane po ``_resolve_pl_sentinels``. Bledy przygotowania
-    (``TransformError``/``ValidationError``), selekcji arkuszy
-    (``ValidationError``) i KAZDY blad pobrania lub budowy wycinka (takze
-    ``GridMismatchError`` z podpowiedzia innego ``--target-crs``, S5) koncza
-    sie kodem 1 z komunikatem, nie tracebackiem: wyjatek wyciekajacy poza
-    petle krajow ``_dispatch_area`` zlamalby kontrakt czesciowego sukcesu
-    (ADR-023 pkt 4-5). Arkusz bez danych GUGiK nie jest bledem (R5): wycinek
-    powstaje z nodata w jego miejscu, a ``Warning:`` na stderr wymienia takie
-    arkusze (do 10; pelna lista w sidecarze, ``extra.missing_sheets``) —
-    takze przy pominieciu istniejacego wycinka (lista z jego sidecara, N4).
-    Wycinek bez ani jednego waznego piksela (N2) = ``Warning:``, kod 0.
+    Called after ``_resolve_pl_sentinels``. Preparation errors
+    (``TransformError``/``ValidationError``), sheet selection errors
+    (``ValidationError``) and EVERY download or cutout build error (also
+    ``GridMismatchError`` with a hint of another ``--target-crs``, S5) end
+    with code 1 and a message, not a traceback: an exception leaking out of the
+    country loop of ``_dispatch_area`` would break the partial success contract
+    (ADR-023 points 4-5). A sheet without GUGiK data is not an error (R5): the cutout
+    is built with nodata in its place, and a ``Warning:`` on stderr lists such
+    sheets (up to 10; full list in the sidecar, ``extra.missing_sheets``) -
+    also when skipping an existing cutout (list from its sidecar, N4).
+    A cutout without a single valid pixel (N2) = ``Warning:``, code 0.
     """
     from kartograf.download.cutout import (
         prepare_pl_cutout,
@@ -1586,7 +1613,7 @@ def _download_pl_cutout(
             cache=cache,
         )
         try:
-            # fail-fast: operacja przypieta budowana PRZED jakakolwiek siecia
+            # fail-fast: the pinned operation is built BEFORE any network access
             cutout = prepare_pl_cutout(
                 bbox,
                 args.target_crs,
@@ -1628,7 +1655,7 @@ def _download_pl_cutout(
             )
 
         if cutout.estimated_bytes >= 2**30:
-            # stderr, nie stdout: -q NIE tlumi Info:/Warning: (jak wyzej)
+            # stderr, not stdout: -q does NOT suppress Info:/Warning: (as above)
             height, width = cutout.grid_shape
             print(
                 f"Info: wycinek ~{cutout.estimated_bytes / 2**30:.1f} GiB "
@@ -1648,12 +1675,12 @@ def _download_pl_cutout(
                 on_progress=on_progress,
                 parent_request=parent_request,
             )
-        except Exception as e:  # noqa: BLE001 — kod 1 zamiast tracebacku (ADR-023)
+        except Exception as e:  # noqa: BLE001 — code 1 instead of a traceback (ADR-023)
             print(f"{_error_lead(on_progress)}Error: {e}", file=sys.stderr)
             return 1
     if not args.quiet:
-        # pasek postepu konczy "skipped" bez nowej linii — jak dotad pusta
-        # linia przed podsumowaniem (i przed ostrzezeniem na stderr ponizej)
+        # the progress bar ends with "skipped" without a newline - as before a blank
+        # line before the summary (and before the warning on stderr below)
         print()
     _report_pl_cutout(result, from_sidecar=False)
     if not args.quiet:
@@ -1665,18 +1692,18 @@ def _download_pl_bbox(
     args: argparse.Namespace, bbox: BBox, parent_request: dict
 ) -> int:
     """
-    Polska czesc zadania bbox: arkusze GUGiK z sidecarami niosacymi rodzica.
+    Polish part of a bbox task: GUGiK sheets with sidecars carrying the parent.
 
-    ``args`` to KOPIA namespace'u zadania (patrz ``_dispatch_area``) — sentinele
-    rozwiazywane sa tutaj, zeby nie dotknac argumentow lecacych do CZ.
+    ``args`` is a COPY of the task namespace (see ``_dispatch_area``) - sentinels
+    are resolved here so as not to touch the arguments going to CZ.
 
-    ``bbox`` jest juz w ukladzie polskim: zadania podane w ukladzie czeskim
-    normalizuje ``_country_bbox`` przypieta operacja (tu drugi, niepinowany
-    skok Krovaka bylby wlasnie tym, czego etap zabrania).
+    ``bbox`` is already in a Polish CRS: tasks given in a Czech CRS are
+    normalized by ``_country_bbox`` with the pinned operation (a second, unpinned
+    Krovak jump here would be exactly what the stage forbids).
 
-    Z ``--target-crs`` (ADR-027) — ``_download_pl_cutout`` (biblioteka
-    ``download/cutout.py``): jeden scalony wycinek zamiast listy arkuszy.
-    Bez niego — lista arkuszy z tolerancja R5 (``_finish_pl_sheets``, D2).
+    With ``--target-crs`` (ADR-027) - ``_download_pl_cutout`` (library
+    ``download/cutout.py``): one merged cutout instead of a sheet list.
+    Without it - a sheet list with R5 tolerance (``_finish_pl_sheets``, D2).
     """
     if _resolve_pl_sentinels(args):
         return 1
@@ -1685,7 +1712,7 @@ def _download_pl_bbox(
 
     target_scale = args.scale or "1:10000"
 
-    # Find sheets covering the bbox (zero sieci, zero cache)
+    # Find sheets covering the bbox (no network, no cache)
     try:
         godlo_list = find_sheets_for_bbox(bbox, target_scale, system=args.system)
     except ValidationError as e:
@@ -1709,11 +1736,11 @@ def _download_pl_sheet_list(
     what: str,
     target_scale: str,
 ) -> int:
-    """Tryb listy arkuszy PL (bbox/geometry bez ``--target-crs``): manager + finisz.
+    """PL sheet list mode (bbox/geometry without ``--target-crs``): manager + finish.
 
-    Sentinele PL sa juz rozwiazane (``_resolve_pl_sentinels``), a argparse
-    zawsze tworzy oba atrybuty — czytamy je wprost. ``MetadataCache`` zyje
-    tylko na czas zadania (N6).
+    The PL sentinels are already resolved (``_resolve_pl_sentinels``), and argparse
+    always creates both attributes - we read them directly. ``MetadataCache`` lives
+    only for the duration of the task (N6).
     """
     output_dir = Path(args.output)
     vertical_crs = args.vertical_crs
@@ -1741,7 +1768,8 @@ def _download_pl_sheet_list(
                 output_dir=output_dir,
                 provider=provider,
                 storage=storage,
-                # pion juz FAKTYCZNY: "5m => EVRF2007" w _resolve_pl_sentinels (D11)
+                # the vertical CRS is already ACTUAL: "5m => EVRF2007" in
+                # _resolve_pl_sentinels (D11)
                 vertical_crs=vertical_crs,
                 resolution=resolution,
                 max_workers=workers,
@@ -1770,7 +1798,7 @@ def _download_pl_sheet_list(
 
 def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
     """
-    Resolve a godło / --bbox / --geometry input to an EPSG:2180 BBox for LAZ.
+    Resolve a sheet code / --bbox / --geometry input to an EPSG:2180 BBox for LAZ.
 
     Returns None (after printing an error) if a geometry file is missing.
     Raises ParseError / ValidationError on invalid input.
@@ -1791,26 +1819,26 @@ def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
         from kartograf.core.bbox import is_czech_crs, transform_bbox
 
         if is_czech_crs(bbox.crs):
-            # Uklad czeski (Krovak/UTM33N) opuszczany WYLACZNIE przypieta
-            # operacja (jak _country_bbox) — niepinowany transformer pyproj
-            # (ballpark, nieznana dokladnosc) grozilby zla selekcja kafli
-            # LAZ na pasie granicznym.
+            # A Czech CRS (Krovak/UTM33N) is left ONLY via the pinned
+            # operation (like _country_bbox) - an unpinned pyproj transformer
+            # (ballpark, unknown accuracy) would risk a wrong selection of LAZ
+            # tiles on the border strip.
             from kartograf.providers.cuzk.dmr import bbox_to_crs
 
             return bbox_to_crs(bbox, "EPSG:2180")
         return transform_bbox(bbox, "EPSG:2180")
 
-    # godło mode — SheetParser validates and transforms to EPSG:2180
+    # sheet code mode - SheetParser validates and transforms to EPSG:2180
     return SheetParser(args.godlo).get_bbox(crs="EPSG:2180")
 
 
 def _laz_parent_request(args: argparse.Namespace, bbox: BBox) -> dict | None:
-    """``extra.parent_request`` kafli LAZ (ADR-023 (f).1, review-2 N15).
+    """``extra.parent_request`` of LAZ tiles (ADR-023 (f).1, review-2 N15).
 
-    Tylko tryb ``--bbox``/``--geometry`` (godlo: ``None``). Jak w pozostalych
-    torach: ``--bbox`` w ukladzie PODANYM (przed transformacja do EPSG:2180),
-    ``--geometry`` jako obwiednia EPSG:2180; ``countries`` = ``["PL"]`` — LAZ
-    odpytuje tylko GUGiK.
+    Only ``--bbox``/``--geometry`` mode (sheet code: ``None``). As in the other
+    paths: ``--bbox`` in the GIVEN CRS (before transformation to EPSG:2180),
+    ``--geometry`` as an EPSG:2180 envelope; ``countries`` = ``["PL"]`` - LAZ
+    queries GUGiK only.
     """
     if args.godlo is not None:
         return None
@@ -1825,7 +1853,7 @@ def _laz_tile_label(tile) -> str:
 
 
 def _print_laz_superseded(superseded) -> None:
-    """``Info:`` o kaflach pominietych przy wyborze (stderr, takze z ``-q``)."""
+    """``Info:`` about tiles skipped during selection (stderr, also with ``-q``)."""
     if not superseded:
         return
     print(
@@ -1847,7 +1875,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     """
     Handle the download command for the LAZ product (area-based via WFS).
 
-    Accepts the same inputs as the other products — a godło (down to 1:10000),
+    Accepts the same inputs as the other products — a sheet code (down to 1:10000),
     --bbox/--bbox-crs, or --geometry/--layer — resolves them to an EPSG:2180
     bbox and hands the work to the library (``kartograf.download.laz``):
     ``GugikLazProvider.select_tiles`` (newest tile per area) and
@@ -1857,8 +1885,9 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     from kartograf.download.laz import NO_TILES_MESSAGE, run_laz_download
     from kartograf.providers.pl.gugik_laz import GugikLazProvider
 
-    # godlo CZ + laz odpada juz w dyspozycji; tu zostaje jawny --country cz
-    # w trybie obszarowym (LAZ omija galezie bbox/geometry w cmd_download)
+    # a CZ sheet code + laz is dropped already at dispatch; what remains here is an
+    # explicit --country cz
+    # in area mode (LAZ bypasses the bbox/geometry branches in cmd_download)
     if getattr(args, "country", "auto") == "cz":
         print(_CZ_ONLY_NMT_MSG.format(product="laz"), file=sys.stderr)
         return 1
@@ -1877,9 +1906,9 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     if bbox is None:
         return 1  # error already printed
 
-    # tryb obszarowy: LAZ istnieje tylko dla PL, wiec obszar siegajacy CZ
-    # zostalby pobrany po cichu tylko czesciowo (spec 5.7: bez cichego pomijania
-    # kraju). Godlo PL jednoznacznie wskazuje kraj — bez guardu.
+    # area mode: LAZ exists only for PL, so an area reaching into CZ
+    # would be downloaded silently and only partially (spec 5.7: no silent skipping
+    # of a country). A PL sheet code unambiguously points to the country - no guard.
     if (
         getattr(args, "country", "auto") == "auto"
         and args.godlo is None
@@ -1917,8 +1946,8 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
 
     _print_laz_superseded(selection.superseded)
     if not selection.tiles:
-        # N7: discovery przeszlo (wszystkie roczniki odpowiedzialy), wiec pusta
-        # lista to zasieg/filtry, nie awaria WFS
+        # N7: discovery passed (all vintages answered), so an empty
+        # list means extent/filters, not a WFS failure
         print(f"Error: {NO_TILES_MESSAGE}", file=sys.stderr)
         return 1
 
@@ -1953,8 +1982,8 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
             f"({len(result.skipped)} skipped) to {output_dir / 'laz'}"
         )
     if result.failed:
-        # Kod 1 => `Error:` (konwencja: `Warning:` tylko przy kodzie 0) i PELNA
-        # lista nieudanych kafli do ponowienia — wzor `_finish_pl_sheets` (N6).
+        # Code 1 => `Error:` (convention: `Warning:` only with code 0) and the FULL
+        # list of failed tiles to retry - model `_finish_pl_sheets` (N6).
         names = ", ".join(f.tile.godlo for f in result.failed)
         print(
             f"Error: {len(result.failed)} z {total} kafli LAZ nie pobrano "
@@ -1969,28 +1998,28 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
 
 
 def _read_tif_nodata(path: Path) -> float | None:
-    """Nodata z tagu GeoTIFF (None gdy brak/nieczytelny)."""
+    """Nodata from a GeoTIFF tag (None if missing/unreadable)."""
     try:
         import rasterio
 
         with rasterio.open(path) as src:
             return src.nodata
-    except Exception:  # noqa: BLE001 — metadane wzbogacone < dane
+    except Exception:  # noqa: BLE001 — enriching metadata < data
         return None
 
 
 def _warn_cz_all_nodata(target: Path, nodata: float | None) -> None:
-    """N2: ``Warning:`` gdy raster CZ nie ma ani jednego waznego piksela (kod 0).
+    """N2: ``Warning:`` when a CZ raster has not a single valid pixel (code 0).
 
-    Best-effort jak ``_read_tif_nodata`` — blad odczytu = cisza (mocki
-    providera nie zapisuja pliku). Brak tagu nodata: CUZK pisze -9999.
+    Best-effort like ``_read_tif_nodata`` - a read error = silence (provider
+    mocks do not write a file). No nodata tag: CUZK writes -9999.
     """
     from kartograf.providers.cuzk.dmr import CUZK_NODATA
     from kartograf.transport.mosaic import has_valid_pixels
 
     try:
         empty = not has_valid_pixels(target, CUZK_NODATA if nodata is None else nodata)
-    except Exception:  # noqa: BLE001 — ostrzezenie nigdy nie przerywa pobrania
+    except Exception:  # noqa: BLE001 — a warning never aborts the download
         return
     if empty:
         print(
@@ -2010,15 +2039,15 @@ def _write_cz_sidecar(
     nodata: float | None,
     extra: dict | None = None,
 ) -> None:
-    """Best-effort sidecar dla wyniku CZ (blad nie przerywa pobrania).
+    """Best-effort sidecar for a CZ result (an error does not abort the download).
 
-    `horizontal_crs` to uklad FAKTYCZNEGO wyniku (kafel TM33: EPSG:3045,
-    --target-crs: uklad zadany przez uzytkownika), a nie domyslny uklad kanalu.
+    `horizontal_crs` is the CRS of the ACTUAL result (TM33 tile: EPSG:3045,
+    --target-crs: the CRS requested by the user), not the channel's default CRS.
 
-    Obie pozycje `transform` opisuja PRZYPIETE operacje wykonane lokalnie —
-    poziomo i pionowo tak samo (ADR-024). Wczesniej pole poziome niosło
-    `"server:EPSG:<kod>"` bez dokladnosci, co ukrywalo blad reprojekcji
-    serwerowej (135 m) przed konsumentem sidecara.
+    Both `transform` entries describe PINNED operations performed locally -
+    horizontal and vertical alike (ADR-024). Previously the horizontal field carried
+    `"server:EPSG:<code>"` without an accuracy, which hid the server-side
+    reprojection error (135 m) from the sidecar consumer.
     """
     from kartograf.sources.sidecar import emit_sidecar
 
@@ -2039,7 +2068,8 @@ def _write_cz_sidecar(
 
 
 def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> int:
-    """Godlo CZ: kafel TM33 (exportImage) lub arkusz SM5 (openzu) do FileStorage."""
+    """CZ sheet code: a TM33 tile (exportImage) or an SM5 sheet (openzu) into
+    FileStorage."""
     import logging
 
     from kartograf.core.parser_registry import detect_system
@@ -2081,7 +2111,7 @@ def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> i
                 extra["mapname"] = info.name
             if info.podil is not None:
                 extra["cz_share"] = info.podil
-        except Exception as e:  # noqa: BLE001 — dane wazniejsze niz metadane
+        except Exception as e:  # noqa: BLE001 — data matters more than metadata
             logging.getLogger(__name__).warning(
                 f"Sidecar {godlo} bez extra.cz_share (PODIL; blad indeksu): {e}"
             )
@@ -2090,7 +2120,7 @@ def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> i
         target,
         request={"sheet": godlo},
         capability="sheet_files" if is_sm5 else "bbox_raster",
-        # arkusz SM5 przychodzi w Krovaku, kafel TM33 w siatce UTM33/ETRS89
+        # an SM5 sheet arrives in Krovak, a TM33 tile in the UTM33/ETRS89 grid
         horizontal_crs="EPSG:5514" if is_sm5 else "EPSG:3045",
         nodata=nodata,
         extra=extra or None,
@@ -2109,12 +2139,12 @@ def _cz_download_bbox(
     quiet: bool,
     skip_existing: bool,
 ) -> int:
-    """Bbox CZ: jeden wycinek `exportImage` w `<subdir>/bbox/<coords>.tif`.
+    """CZ bbox: one `exportImage` cutout in `<subdir>/bbox/<coords>.tif`.
 
-    Bbox jest normalizowany do ukladu WYNIKU (`--target-crs` albo natywny
-    5514) — nazwa pliku niesie wspolrzedne faktycznie zadanego wycinka.
-    Do serwera idzie potem zadanie w ukladzie natywnym, a na siatke wyniku
-    przenosi je lokalny warp w providerze (ADR-024).
+    The bbox is normalized to the RESULT's CRS (`--target-crs` or native
+    5514) - the file name carries the coordinates of the actually requested cutout.
+    The request then goes to the server in the native CRS, and the local
+    warp in the provider moves it onto the result grid (ADR-024).
     """
     from kartograf.download.storage import bbox_cutout_path, prune_empty_dirs
     from kartograf.providers.cuzk.client import wkid
@@ -2123,8 +2153,8 @@ def _cz_download_bbox(
 
     image_sr = args.target_crs or "EPSG:5514"
     if wkid(bbox.crs) != wkid(image_sr):
-        # normalizacja PRZED nazwaniem pliku: nazwa niesie wspolrzedne
-        # faktycznie zadanego wycinka (w download_bbox to juz no-op)
+        # normalization BEFORE naming the file: the name carries the coordinates
+        # of the actually requested cutout (in download_bbox this is already a no-op)
         bbox = bbox_to_crs(bbox, image_sr)
 
     descriptor = get_source(provider.descriptor_key)
@@ -2146,12 +2176,13 @@ def _cz_download_bbox(
         if not quiet:
             print(f"Downloading CZ bbox ({provider.resolution}, {image_sr})...")
 
-    # provider tworzy katalogi dopiero przy fetchu — sidecar wymaga ich zawsze
+    # the provider creates directories only at fetch time - the sidecar always needs
+    # them
     target.parent.mkdir(parents=True, exist_ok=True)
     try:
         provider.download_bbox(bbox, target, on_download=announce)
     except (DownloadError, ValidationError) as e:
-        # zn. 10: porazka nie zostawia pustego drzewa <segment>/bbox/
+        # finding 10: a failure leaves no empty <segment>/bbox/ tree
         prune_empty_dirs(target.parent, Path(args.output))
         print(f"Error: {e}", file=sys.stderr)
         return 1
@@ -2186,20 +2217,20 @@ def _cmd_download_cz(
     """
     Handle the download command for Czech (CUZK) sources.
 
-    Wzor: :func:`_cmd_download_laz` — przeplyw poza ``DownloadManager``, bo
-    zadanie CZ daje dokladnie jeden plik (kafel TM33, arkusz SM5 albo wycinek
-    `exportImage`), a sidecary pisze warstwa CLI.
+    Model: :func:`_cmd_download_laz` - a flow outside ``DownloadManager``, because a
+    CZ task yields exactly one file (a TM33 tile, an SM5 sheet or an
+    `exportImage` cutout), and the sidecars are written by the CLI layer.
 
     Parameters
     ----------
     args : argparse.Namespace
-        Sparsowane argumenty (godlo / --bbox / --target-crs / --resolution ...).
+        Parsed arguments (sheet code / --bbox / --target-crs / --resolution ...).
     bbox : BBox, optional
-        Bbox trybu obszarowego (``_dispatch_area`` podaje go zawsze, takze
-        przy jawnym ``--country cz``); ``None`` = tryb godlowy (``args.godlo``).
+        Bbox of area mode (``_dispatch_area`` always passes it, also
+        with an explicit ``--country cz``); ``None`` = sheet code mode (``args.godlo``).
     parent_request : dict, optional
-        Oryginalne zadanie uzytkownika przed podzialem per kraj; trafia do
-        ``extra.parent_request`` sidecara.
+        The user's original task before the per-country split; goes to the sidecar's
+        ``extra.parent_request``.
 
     Returns
     -------
@@ -2209,10 +2240,11 @@ def _cmd_download_cz(
     Raises
     ------
     ValidationError
-        Gdy ``--target-crs`` towarzyszy godlu (godlo wyznacza zasieg i uklad
-        produktu: arkusz SM5 1:1 w EPSG:5514, kafel TM33 lokalnym warpem na
-        siatce EPSG:3045). Tlumaczy go ``_run_cz`` (wolany z ``cmd_download``
-        i ``_dispatch_area``) — tak jak inne przeplywy traktuja
+        When ``--target-crs`` accompanies a sheet code (the sheet code determines the
+        extent and CRS of
+        the product: an SM5 sheet 1:1 in EPSG:5514, a TM33 tile by a local warp onto the
+        EPSG:3045 grid). Translated by ``_run_cz`` (called from ``cmd_download``
+        and ``_dispatch_area``) - as the other flows treat
         ValidationError.
     """
     from kartograf.cache import MetadataCache
@@ -2251,15 +2283,15 @@ def _cmd_download_cz(
         )
         return 1
     if has_godlo and args.target_crs is not None:
-        # provider ignoruje target_crs w trybie godlowym — cisza bylaby klamstwem
+        # the provider ignores target_crs in sheet code mode - silence would be a lie
         raise ValidationError(
             "--target-crs dziala tylko z --bbox/--geometry; godlo wyznacza "
             "zasieg i uklad produktu (arkusz SM5 1:1 w EPSG:5514, kafel TM33 "
             "na siatce EPSG:3045)"
         )
 
-    # D16: --force jak w torze PL — odczyt cache (indeks arkuszy SM5)
-    # pominiety, swiezy wpis zapisany
+    # D16: --force as in the PL path - the cache read (SM5 sheet index)
+    # is skipped, the fresh entry is written
     cache = MetadataCache(refresh=bool(args.force))
     try:
         try:
@@ -2295,16 +2327,16 @@ def _cmd_download_cz(
 
 def _cmd_download_geometry(args: argparse.Namespace) -> int:
     """
-    Handle download command in geometry mode (dyspozycja per kraj).
+    Handle download command in geometry mode (per-country dispatch).
 
-    Jawny ``--country cz`` idzie sciezka ``_resolve_cz_geometry_bbox``
-    (obwiednia w ukladzie PLIKU + jeden skok przypieta operacja). Tryb auto
-    i ``--country pl`` licza obwiednie przez ``_geometry_envelope``: plik
-    w ukladzie czeskim (EPSG:5514/3045) zostaje w ukladzie PLIKU (etykieta
-    EPSG) i opuszcza Krovaka dopiero w ``_country_bbox`` przypieta operacja,
-    pozostale uklady licza obwiednie wprost w EPSG:2180 jak dotad. Wynik
-    rozstrzyga kraje i trafia do ``parent_request``, a arkusze PL dalej
-    wyznacza sama geometria (per obiekt), nie jej obwiednia.
+    An explicit ``--country cz`` goes through ``_resolve_cz_geometry_bbox``
+    (envelope in the FILE's CRS + one pinned-operation jump). The auto mode
+    and ``--country pl`` compute the envelope via ``_geometry_envelope``: a file
+    in a Czech CRS (EPSG:5514/3045) stays in the FILE's CRS (EPSG label)
+    and leaves Krovak only in ``_country_bbox`` via the pinned operation,
+    other CRSs compute the envelope straight in EPSG:2180 as before. The result
+    decides the countries and goes to ``parent_request``, while PL sheets are still
+    determined by the geometry itself (per feature), not by its envelope.
 
     Parameters
     ----------
@@ -2320,7 +2352,7 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
     if country_flag == "cz":
         if _reject_non_nmt_for_cz(getattr(args, "product", "nmt")):
             return 1
-        # ta galaz omija `_dispatch_area` — straz kampanii takze tutaj
+        # this branch bypasses `_dispatch_area` - the campaign guard here too
         if _reject_campaign_opts_without_pl(args, ("CZ",)):
             return 1
         bbox = _resolve_cz_geometry_bbox(args)
@@ -2351,18 +2383,21 @@ def _download_pl_geometry(
     bbox: BBox,
 ) -> int:
     """
-    Polska czesc zadania geometrycznego (arkusze per obiekt, nie z obwiedni).
+    Polish part of a geometry task (sheets per feature, not from the envelope).
 
-    ``args`` to KOPIA namespace'u zadania — patrz ``_dispatch_area``.
+    ``args`` is a COPY of the task namespace - see ``_dispatch_area``.
 
-    ``bbox`` — obwiednia zadania PL (przycieta pod auto), wymagana. Z
-    ``--target-crs`` (ADR-027) — ``_download_pl_cutout`` (biblioteka
-    ``download/cutout.py``): obwiednia wyznacza siatke i crop wycinka, wiec
-    wynik obejmuje CALA obwiednie geometrii, bez maskowania do jej obiektow
-    (przy warpie arkusze to suma godel geometrii i obwiedni z zapasem, R-01 —
-    ``select_pl_cutout_sheets``). Bez ``--target-crs`` arkusze wyznacza sama
-    geometria, a ``bbox`` nie jest uzywany; lista idzie przez
-    ``_download_pl_sheet_list`` (tolerancja R5, D2).
+    ``bbox`` - the envelope of the PL task (clipped under auto), required. With
+    ``--target-crs`` (ADR-027) - ``_download_pl_cutout`` (library
+    ``download/cutout.py``): the envelope determines the grid and the cutout crop, so
+    the result covers the WHOLE envelope of the geometry, without masking to its
+    features
+    (with a warp the sheets are the union of the geometry's sheet codes and the
+    envelope's with a margin, R-01 -
+    ``select_pl_cutout_sheets``). Without ``--target-crs`` the sheets are determined by
+    the
+    geometry itself and ``bbox`` is not used; the list goes through
+    ``_download_pl_sheet_list`` (R5 tolerance, D2).
     """
     from kartograf.core.geometry import find_sheets_for_geometry
 

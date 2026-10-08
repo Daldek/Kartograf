@@ -1,1 +1,1 @@
-"""Zrodla danych opisane deklaratywnie (deskryptory + rejestr + sidecar)."""
+"""Data sources described declaratively (descriptors + registry + sidecar)."""

@@ -2,9 +2,10 @@
 Metadata cache using SQLite for Kartograf.
 
 This module provides the MetadataCache class that caches:
-- Skorowidz records (product/resolution/vertical CRS/godlo -> metadata or no coverage)
+- Index (skorowidz) records (product/resolution/vertical CRS/sheet code -> metadata or
+no coverage)
 - TERYT code lookups (point -> TERYT) for BDOT10k provider
-- Sheet index lookups (system + godlo -> payload) for CUZK sheet providers
+- Sheet index lookups (system + sheet code -> payload) for CUZK sheet providers
   (sheet_cache, fixed TTL of 30 days)
 
 The cache uses SQLite with WAL mode for concurrent access support and
@@ -33,7 +34,7 @@ logger = logging.getLogger(__name__)
 # Default TTL: 7 days in seconds
 DEFAULT_TTL_SECONDS = 7 * 24 * 3600
 
-# TTL dla sheet_cache (indeks arkuszy CZ jest praktycznie staly): 30 dni.
+# TTL for sheet_cache (the CZ sheet index is practically constant): 30 days.
 SHEET_TTL_SECONDS = 30 * 24 * 3600
 
 # Default database filename
@@ -61,11 +62,11 @@ class MetadataCache:
         Does not apply to sheet_cache, which uses a separate fixed TTL of
         30 days (SHEET_TTL_SECONDS).
     refresh : bool, optional
-        Tryb odswiezania (E14, CLI ``--force``): kazdy odczyt
-        (``get_record``/``get_teryt``/``get_sheet``) jest chybieniem, a zapisy
-        dzialaja normalnie — swiezo pobrany rekord (albo potwierdzony brak
-        pokrycia) zastepuje stary wpis, wiec kolejny przebieg BEZ ``--force``
-        dostaje nowy rekord. Default ``False``.
+        Refresh mode (E14, CLI ``--force``): every read
+        (``get_record``/``get_teryt``/``get_sheet``) is a miss, while writes
+        work normally - a freshly fetched record (or a confirmed lack of
+        coverage) replaces the old entry, so the next run WITHOUT ``--force``
+        gets the new record. Default ``False``.
 
     Examples
     --------
@@ -200,7 +201,7 @@ class MetadataCache:
         vertical_crs: str,
         godlo: str,
     ) -> dict | None:
-        """Zwroc rekord skorowidza albo None (brak/wygasly/tryb refresh), TTL 7 dni."""
+        """Return the index record or None (missing/expired/refresh mode), 7-day TTL."""
         if self._refresh:
             return None
         # The lock also guards this read (not just writes): CPython caches a
@@ -254,7 +255,8 @@ class MetadataCache:
         godlo: str,
         payload: dict,
     ) -> None:
-        """Zapisz wybrany rekord lub pewny brak pokrycia po udanych zapytaniach."""
+        """Store the chosen record or a confirmed no coverage after successful
+        queries."""
         with self._write_lock:
             conn = self._connection()
             conn.execute(
@@ -286,13 +288,14 @@ class MetadataCache:
         vertical_crs: str,
         godlo: str,
     ) -> dict | None:
-        """Zwroc kampanie arkusza albo None (brak/wygasla/tryb refresh), TTL 7 dni.
+        """Return the sheet's campaigns or None (missing/expired/refresh mode), 7-day
+        TTL.
 
-        Klucz jak w record_cache; `--min-year` NIE wchodzi do klucza.
+        Key as in record_cache; `--min-year` is NOT part of the key.
         """
         if self._refresh:
             return None
-        # Lock obejmuje tez odczyt - patrz komentarz w get_record().
+        # The lock covers the read too - see the comment in get_record().
         with self._write_lock:
             conn = self._existing_connection()
             if conn is None:
@@ -331,7 +334,7 @@ class MetadataCache:
         godlo: str,
         payload: dict,
     ) -> None:
-        """Zapisz kampanie arkusza (od najnowszej) lub pewny brak pokrycia."""
+        """Store the sheet's campaigns (newest first) or a confirmed no coverage."""
         with self._write_lock:
             conn = self._connection()
             conn.execute(
@@ -429,14 +432,14 @@ class MetadataCache:
         logger.debug(f"Cached TERYT {teryt} for ({x}, {y})")
 
     # =========================================================================
-    # Sheet cache (indeks arkuszy CZ: KladyMapovychListu)
+    # Sheet cache (CZ sheet index: KladyMapovychListu)
     # =========================================================================
 
     def get_sheet(self, system: str, godlo: str) -> dict | None:
-        """Zwroc zdekodowany payload arkusza albo None (brak/wygasly).
+        """Return the decoded sheet payload or None (missing/expired).
 
-        Lock guards the read too - see comment in get_record(). Tryb
-        ``refresh``: zawsze None.
+        Lock guards the read too - see comment in get_record(). In
+        ``refresh`` mode: always None.
         """
         if self._refresh:
             return None
@@ -465,7 +468,7 @@ class MetadataCache:
             return json.loads(payload)
 
     def set_sheet(self, system: str, godlo: str, payload: dict) -> None:
-        """Zapisz payload arkusza (JSON) pod kluczem (system, godlo)."""
+        """Store the sheet payload (JSON) under the key (system, godlo)."""
         with self._write_lock:
             conn = self._connection()
             conn.execute(
@@ -512,7 +515,7 @@ class MetadataCache:
         -------
         dict
             Dictionary with keys:
-            - record_count: number of cached skorowidz entries
+            - record_count: number of cached index (skorowidz) entries
             - campaign_count: number of cached campaign lists
             - teryt_count: number of cached TERYT entries
             - sheet_count: number of cached sheet entries
@@ -596,13 +599,13 @@ class MetadataCache:
 
     def __del__(self):
         """Ensure database connection is closed on garbage collection."""
-        # Bez importow i bez wyjatkow: przy zamykaniu interpretera
-        # sys.meta_path bywa None (import w __del__ rzucal ImportError).
+        # No imports and no exceptions: at interpreter shutdown
+        # sys.meta_path can be None (an import in __del__ raised ImportError).
         try:
             conn = getattr(self, "_conn", None)
             if conn is not None:
                 conn.close()
-        except Exception:  # noqa: BLE001, S110 - finalizator nie rzuca
+        except Exception:  # noqa: BLE001, S110 - a finalizer must not raise
             pass
 
     def __repr__(self) -> str:
