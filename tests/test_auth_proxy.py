@@ -5,11 +5,69 @@ Tests cover CLMSCredentials (keychain loading, token exchange),
 ProxyHandler endpoints, and server startup.
 """
 
+import gzip
 import json
+import threading
+from contextlib import contextmanager
+from http.server import HTTPServer
 from io import BytesIO
 from unittest.mock import Mock, patch
 
+import pytest
+import requests
+import urllib3
+
 from kartograf.auth.proxy import CLMSCredentials, ProxyHandler, run_server
+
+
+@pytest.fixture(autouse=True)
+def _clean_clms_env(monkeypatch):
+    """CLMS_CREDENTIALS from the developer shell must not leak into tests."""
+    monkeypatch.delenv("CLMS_CREDENTIALS", raising=False)
+
+
+class TestCLMSCredentialsEnvLoad:
+    """Test CLMSCredentials.load_from_env (CLMS_CREDENTIALS)."""
+
+    def test_load_from_env_success(self, monkeypatch):
+        """Valid JSON in CLMS_CREDENTIALS -> True and credentials cached."""
+        monkeypatch.setenv(
+            "CLMS_CREDENTIALS",
+            json.dumps(
+                {
+                    "client_id": "x",
+                    "private_key": "k",
+                    "token_uri": "https://land.copernicus.eu/@@oauth2-token",
+                }
+            ),
+        )
+
+        creds = CLMSCredentials()
+        assert creds.load_from_env() is True
+        assert creds._credentials["client_id"] == "x"
+
+    def test_load_from_env_invalid_json(self, monkeypatch):
+        """Malformed JSON -> False, no exception, no credentials."""
+        monkeypatch.setenv("CLMS_CREDENTIALS", "{not json")
+
+        creds = CLMSCredentials()
+        assert creds.load_from_env() is False
+        assert creds._credentials is None
+
+    def test_load_from_env_missing(self, monkeypatch):
+        """CLMS_CREDENTIALS not set -> False."""
+        monkeypatch.delenv("CLMS_CREDENTIALS", raising=False)
+
+        creds = CLMSCredentials()
+        assert creds.load_from_env() is False
+
+    def test_load_from_env_missing_required_key(self, monkeypatch):
+        """JSON without private_key -> False (incomplete credentials)."""
+        monkeypatch.setenv("CLMS_CREDENTIALS", json.dumps({"client_id": "x"}))
+
+        creds = CLMSCredentials()
+        assert creds.load_from_env() is False
+        assert creds._credentials is None
 
 
 class TestCLMSCredentialsKeychainLoad:
@@ -111,6 +169,41 @@ class TestCLMSCredentialsToken:
             token = creds.get_access_token()
         assert token == "new_token"
 
+    def test_get_access_token_loads_env_first(self, monkeypatch):
+        """CLMS_CREDENTIALS set -> token exchanged without touching Keychain."""
+        import jwt as jwt_module
+
+        monkeypatch.setenv(
+            "CLMS_CREDENTIALS",
+            json.dumps(
+                {
+                    "client_id": "test_client",
+                    "user_id": "test_user",
+                    "token_uri": "https://land.copernicus.eu/@@oauth2-token",
+                    "private_key": "fake_key",
+                }
+            ),
+        )
+
+        creds = CLMSCredentials()
+
+        mock_resp = Mock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"access_token": "env_token"}
+        mock_resp.raise_for_status = Mock()
+
+        with (
+            patch.object(
+                creds, "load_from_keychain", return_value=False
+            ) as mock_keychain,
+            patch.object(jwt_module, "encode", return_value="fake_assertion"),
+            patch("requests.post", return_value=mock_resp),
+        ):
+            token = creds.get_access_token()
+
+        assert token == "env_token"
+        mock_keychain.assert_not_called()
+
     def test_get_access_token_no_creds(self):
         """No credentials and keychain fails -> None."""
         creds = CLMSCredentials()
@@ -150,6 +243,19 @@ class TestCLMSCredentialsAvailability:
         with patch.object(creds, "load_from_keychain", return_value=True):
             assert creds.is_available is True
 
+    def test_is_available_prefers_env_over_keychain(self, monkeypatch):
+        """CLMS_CREDENTIALS set -> available without querying Keychain."""
+        monkeypatch.setenv(
+            "CLMS_CREDENTIALS",
+            json.dumps({"client_id": "x", "private_key": "k"}),
+        )
+
+        creds = CLMSCredentials()
+        with patch.object(creds, "load_from_keychain") as mock_keychain:
+            assert creds.is_available is True
+
+        mock_keychain.assert_not_called()
+
     def test_is_available_no_keychain(self):
         """No cached credentials, keychain fails -> False."""
         creds = CLMSCredentials()
@@ -167,6 +273,10 @@ class TestProxyHandlerEndpoints:
         handler.headers = {}
         handler.wfile = BytesIO()
 
+        if body is not None:
+            handler.rfile = BytesIO(body)
+            handler.headers = {"Content-Length": str(len(body))}
+
         if credentials is None:
             credentials = Mock()
         handler.credentials = credentials
@@ -177,6 +287,8 @@ class TestProxyHandlerEndpoints:
 
         def fake_send_json(data, status=200):
             sent_responses.append({"data": data, "status": status})
+            # Mirror the real send_json: the body lands in wfile.
+            handler.wfile.write(json.dumps(data).encode("utf-8"))
 
         handler.send_json = fake_send_json
         handler._sent = sent_responses
@@ -196,8 +308,8 @@ class TestProxyHandlerEndpoints:
         assert handler._sent[0]["data"]["status"] == "ok"
         assert handler._sent[0]["data"]["credentials_available"] is True
 
-    def test_token_endpoint_success(self):
-        """GET /token returns access token."""
+    def test_token_endpoint_removed(self):
+        """GET /token no longer hands the access token to local processes."""
         creds = Mock()
         creds.get_access_token.return_value = "test_token"
         handler = self._make_handler("GET", "/token", credentials=creds)
@@ -205,19 +317,198 @@ class TestProxyHandlerEndpoints:
         ProxyHandler.do_GET(handler)
 
         assert len(handler._sent) == 1
-        assert handler._sent[0]["data"]["access_token"] == "test_token"
+        assert handler._sent[0]["status"] == 404
+        assert "access_token" not in handler._sent[0]["data"]
+        creds.get_access_token.assert_not_called()
 
-    def test_token_endpoint_failure(self):
-        """GET /token with no token -> 500."""
+    def test_proxy_rejects_foreign_host(self):
+        """POST /proxy to a host outside the allowlist -> 403, no token used."""
         creds = Mock()
-        creds.get_access_token.return_value = None
-        handler = self._make_handler("GET", "/token", credentials=creds)
+        creds.get_access_token.return_value = "SECRET-TOKEN"
+        body = json.dumps({"url": "https://attacker.invalid/steal"}).encode()
+        handler = self._make_handler("POST", "/proxy", body=body, credentials=creds)
 
-        ProxyHandler.do_GET(handler)
+        with patch("requests.get") as mock_get, patch("requests.post") as mock_post:
+            ProxyHandler.do_POST(handler)
 
-        assert len(handler._sent) == 1
-        assert handler._sent[0]["status"] == 500
-        assert "error" in handler._sent[0]["data"]
+        assert handler._sent[0]["status"] == 403
+        mock_get.assert_not_called()
+        mock_post.assert_not_called()
+        creds.get_access_token.assert_not_called()
+
+    def test_proxy_rejects_lookalike_host(self):
+        """Suffix match must not accept copernicus.eu.attacker.invalid."""
+        creds = Mock()
+        creds.get_access_token.return_value = "SECRET-TOKEN"
+        body = json.dumps(
+            {"url": "https://land.copernicus.eu.attacker.invalid/steal"}
+        ).encode()
+        handler = self._make_handler("POST", "/proxy", body=body, credentials=creds)
+
+        with patch("requests.get") as mock_get, patch("requests.post") as mock_post:
+            ProxyHandler.do_POST(handler)
+
+        assert handler._sent[0]["status"] == 403
+        mock_get.assert_not_called()
+        mock_post.assert_not_called()
+
+    def _download_upstream(self, payload=b"II*\x00PAYLOAD"):
+        """Upstream response mock for a successful /download forward."""
+        upstream = Mock()
+        upstream.status_code = 200
+        upstream.headers = {
+            "Content-Type": "image/tiff",
+            "Content-Length": str(len(payload)),
+        }
+        upstream.raw.stream = lambda chunk_size=8192, decode_content=False: iter(
+            [payload]
+        )
+        return upstream
+
+    def test_download_foreign_https_host_forwarded_without_token(self):
+        """A presigned DownloadURL off the allowlist is fetched WITHOUT the token."""
+        creds = Mock()
+        creds.get_access_token.return_value = "SECRET-TOKEN"
+        body = json.dumps({"url": "https://cdn.example.org/clc.tif"}).encode()
+        handler = self._make_handler("POST", "/download", body=body, credentials=creds)
+
+        upstream = self._download_upstream()
+        with patch("requests.get", return_value=upstream) as mock_get:
+            ProxyHandler.do_POST(handler)
+
+        assert handler._sent == []  # no JSON error, the body was forwarded
+        mock_get.assert_called_once()
+        assert "Authorization" not in mock_get.call_args.kwargs["headers"]
+        creds.get_access_token.assert_not_called()
+        assert b"II*\x00PAYLOAD" in handler.wfile.getvalue()
+
+    def test_download_allowed_host_gets_token(self):
+        """A host on the allowlist still receives the Bearer token."""
+        creds = Mock()
+        creds.get_access_token.return_value = "tok123"
+        body = json.dumps(
+            {"url": "https://land.copernicus.eu/api/download/clc.tif"}
+        ).encode()
+        handler = self._make_handler("POST", "/download", body=body, credentials=creds)
+
+        upstream = self._download_upstream()
+        with patch("requests.get", return_value=upstream) as mock_get:
+            ProxyHandler.do_POST(handler)
+
+        assert handler._sent == []
+        assert mock_get.call_args.kwargs["headers"]["Authorization"] == "Bearer tok123"
+
+    def test_download_rejects_http_scheme_foreign_host(self):
+        """Plain http is refused on /download regardless of the host."""
+        creds = Mock()
+        creds.get_access_token.return_value = "SECRET-TOKEN"
+        body = json.dumps({"url": "http://attacker.invalid/steal.tif"}).encode()
+        handler = self._make_handler("POST", "/download", body=body, credentials=creds)
+
+        with patch("requests.get") as mock_get:
+            ProxyHandler.do_POST(handler)
+
+        assert handler._sent[0]["status"] == 403
+        mock_get.assert_not_called()
+        creds.get_access_token.assert_not_called()
+
+    def test_download_rejects_http_scheme_allowed_host(self):
+        """http to an allowed host would leak the token in clear text -> 403."""
+        creds = Mock()
+        creds.get_access_token.return_value = "SECRET-TOKEN"
+        body = json.dumps({"url": "http://land.copernicus.eu/clc.tif"}).encode()
+        handler = self._make_handler("POST", "/download", body=body, credentials=creds)
+
+        with patch("requests.get") as mock_get:
+            ProxyHandler.do_POST(handler)
+
+        assert handler._sent[0]["status"] == 403
+        mock_get.assert_not_called()
+        creds.get_access_token.assert_not_called()
+
+    def test_proxy_rejects_http_scheme(self):
+        """Plain http to an allowed host would leak the token -> 403."""
+        creds = Mock()
+        creds.get_access_token.return_value = "SECRET-TOKEN"
+        body = json.dumps({"url": "http://land.copernicus.eu/api/x"}).encode()
+        handler = self._make_handler("POST", "/proxy", body=body, credentials=creds)
+
+        with patch("requests.get") as mock_get:
+            ProxyHandler.do_POST(handler)
+
+        assert handler._sent[0]["status"] == 403
+        mock_get.assert_not_called()
+
+    def test_proxy_allows_copernicus_host(self):
+        """POST /proxy to land.copernicus.eu is forwarded with the token."""
+        creds = Mock()
+        creds.get_access_token.return_value = "tok123"
+        body = json.dumps(
+            {
+                "url": "https://land.copernicus.eu/api/@datarequest_post",
+                "method": "POST",
+            }
+        ).encode()
+        handler = self._make_handler("POST", "/proxy", body=body, credentials=creds)
+
+        upstream = Mock()
+        upstream.status_code = 200
+        upstream.headers = {}
+        upstream.text = "ok"
+
+        with patch("requests.post", return_value=upstream) as mock_post:
+            ProxyHandler.do_POST(handler)
+
+        assert handler._sent[0]["status"] == 200
+        assert handler._sent[0]["data"]["status_code"] == 200
+        sent_headers = mock_post.call_args.kwargs["headers"]
+        assert sent_headers["Authorization"] == "Bearer tok123"
+
+    def test_download_stream_error_after_headers_does_not_append_json(self):
+        """Aborted stream must not append an HTTP 502 body to the raster."""
+        import requests
+
+        creds = Mock()
+        creds.get_access_token.return_value = "tok123"
+        body = json.dumps(
+            {"url": "https://land.copernicus.eu/api/download/clc.tif"}
+        ).encode()
+        handler = self._make_handler("POST", "/download", body=body, credentials=creds)
+
+        def fake_send_response(status, message=None):
+            handler.wfile.write(f"HTTP/1.0 {status}\r\n".encode())
+
+        def fake_send_header(key, value):
+            handler.wfile.write(f"{key}: {value}\r\n".encode())
+
+        def fake_end_headers():
+            handler.wfile.write(b"\r\n")
+
+        handler.send_response = fake_send_response
+        handler.send_header = fake_send_header
+        handler.end_headers = fake_end_headers
+
+        def broken_stream(chunk_size=8192, decode_content=False):
+            yield b"II*\x00AAAA"
+            raise requests.RequestException("Response ended prematurely")
+
+        upstream = Mock()
+        upstream.status_code = 200
+        upstream.headers = {"Content-Type": "image/tiff"}
+        upstream.raw.stream = broken_stream
+
+        with patch("requests.get", return_value=upstream):
+            ProxyHandler.do_POST(handler)
+
+        written = handler.wfile.getvalue()
+        assert handler._sent == []
+        assert handler.close_connection is True
+        assert b'{"error"' not in written
+        # No Content-Length upstream -> chunked framing, and the terminating
+        # chunk must be missing so the client sees a truncated body.
+        assert written.endswith(b"8\r\nII*\x00AAAA\r\n")  # 8 bytes, hex length
+        assert not written.endswith(b"0\r\n\r\n")
+        upstream.close.assert_called_once()
 
     def test_unknown_get_endpoint(self):
         """GET /unknown -> 404."""
@@ -259,3 +550,129 @@ class TestRunServer:
         main()
 
         mock_run.assert_called_once_with(8080)
+
+
+class _FakeUpstream:
+    """Minimal stand-in for a streaming requests.Response."""
+
+    def __init__(self, chunks, headers, status_code=200, error=None):
+        self._chunks = chunks
+        self.headers = headers
+        self.status_code = status_code
+        self._error = error
+        self.closed = False
+
+    @property
+    def raw(self):
+        return self
+
+    def stream(self, chunk_size=8192, decode_content=False):
+        assert decode_content is False, "proxy must forward raw bytes"
+        yield from self._chunks
+        if self._error is not None:
+            raise self._error
+
+    def close(self):
+        self.closed = True
+
+
+class TestDownloadFramingEndToEnd:
+    """Real HTTPServer + real requests client - what the caller actually sees.
+
+    ``requests.get`` (used by the handler) is patched; the client talks to the
+    proxy through ``requests.Session``, which is not affected by that patch.
+    """
+
+    @contextmanager
+    def _proxy(self, upstream):
+        creds = Mock()
+        creds.get_access_token.return_value = "tok123"
+        ProxyHandler.credentials = creds
+
+        server = HTTPServer(("127.0.0.1", 0), ProxyHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            with patch("requests.get", return_value=upstream):
+                yield f"http://127.0.0.1:{server.server_address[1]}/download"
+        finally:
+            server.shutdown()
+            server.server_close()
+            thread.join(timeout=5)
+
+    @staticmethod
+    def _client():
+        session = requests.Session()
+        # 127.0.0.1 only: never route through an ambient HTTP(S)_PROXY.
+        session.trust_env = False
+        return session
+
+    @staticmethod
+    def _fetch(session, proxy_url):
+        return session.post(
+            proxy_url,
+            json={"url": "https://land.copernicus.eu/api/download/clc.tif"},
+            timeout=10,
+            stream=True,
+        )
+
+    def test_truncated_with_content_length_raises(self):
+        """Upstream declares Content-Length and dies -> client sees an error."""
+        upstream = _FakeUpstream(
+            chunks=[b"II*\x00" + b"A" * 100],
+            headers={"Content-Type": "image/tiff", "Content-Length": "100000"},
+            error=urllib3.exceptions.ProtocolError("Response ended prematurely"),
+        )
+
+        with self._proxy(upstream) as proxy_url:
+            resp = self._fetch(self._client(), proxy_url)
+            with pytest.raises(requests.exceptions.ChunkedEncodingError):
+                _ = resp.content
+
+    def test_truncated_without_content_length_raises(self):
+        """No Content-Length upstream: truncation must not look like success."""
+        upstream = _FakeUpstream(
+            chunks=[b"II*\x00" + b"A" * 100],
+            headers={"Content-Type": "image/tiff"},
+            error=urllib3.exceptions.ProtocolError("Response ended prematurely"),
+        )
+
+        with self._proxy(upstream) as proxy_url:
+            resp = self._fetch(self._client(), proxy_url)
+            assert resp.status_code == 200
+            with pytest.raises(requests.exceptions.ChunkedEncodingError):
+                _ = resp.content
+
+    def test_complete_without_content_length_delivers_body(self):
+        """Happy path without Content-Length: the client gets the whole body."""
+        payload = b"II*\x00" + b"B" * 5000
+        upstream = _FakeUpstream(
+            chunks=[payload[:2000], payload[2000:]],
+            headers={"Content-Type": "image/tiff"},
+        )
+
+        with self._proxy(upstream) as proxy_url:
+            resp = self._fetch(self._client(), proxy_url)
+            assert resp.status_code == 200
+            assert resp.content == payload
+
+    def test_gzip_body_is_forwarded_raw(self):
+        """Content-Encoding/Content-Length stay consistent with the bytes sent."""
+        plain = b"II*\x00" + b"C" * 4000
+        compressed = gzip.compress(plain)
+        upstream = _FakeUpstream(
+            chunks=[compressed],
+            headers={
+                "Content-Type": "image/tiff",
+                "Content-Encoding": "gzip",
+                "Content-Length": str(len(compressed)),
+            },
+        )
+
+        with self._proxy(upstream) as proxy_url:
+            resp = self._fetch(self._client(), proxy_url)
+            # requests decodes gzip: the caller gets the original raster...
+            assert resp.content == plain
+            # ...while Content-Length still describes the compressed bytes.
+            assert resp.headers["Content-Length"] == str(len(compressed))
+            assert resp.headers["Content-Encoding"] == "gzip"

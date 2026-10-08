@@ -1,9 +1,47 @@
 # Standardy deweloperskie — Kartograf
 
-**Wersja:** 2.0
-**Data:** 2026-02-03
+**Wersja:** 3.3
+**Data:** 2026-10-08
 **Status:** Obowiazujacy
-**Zrodlo:** Zunifikowane standardy workspace (`shared/standards/DEVELOPMENT_STANDARDS.md`)
+**Zrodlo:** Zunifikowane standardy workspace (`shared/standards/DEVELOPMENT_STANDARDS.md` — repozytorium zewnetrzne, nieobecne w tym workspace)
+
+> **Nota 2.1 (2026-08-18):** aktualizacja do stanu po etapie 1 (v0.7.0-dev) —
+> struktura projektu (sekcja 7.1), komenda mypy bez `--strict` + baseline
+> (sekcja 8.3), przyklad nazewnictwa plikow (sekcja 4.1).
+>
+> **Nota 2.2 (2026-09-29, audyt dokumentacji):** komendy testow offline
+> z `-m "not live"` (sekcje 6.3, 10.1, 15), liczba testow i `download/`
+> w strukturze (7.1), `NoCoverageError` i wyjatki transformacji w hierarchii
+> (11.1), odnotowany rozjazd jezyka docstringow/commitow z praktyka (9.4).
+>
+> **Nota 2.3 (2026-09-30):** cache PL zapisuje rekord skorowidza lub
+> potwierdzony brak pokrycia (`get_record/set_record`, TTL 7 dni); uszkodzenie
+> odpowiedzi albo awaria warstwy to `DownloadError`, nie wpis negatywny.
+> `GridMismatchError(ValidationError)` chroni wartości 1:1 wycinka w EPSG:2180;
+> testy sieciowe `live` są poza bramką offline.
+>
+> **Nota 3.0 (2026-10-08, przeglad dokumentacji):** dokument jest glownym
+> zrodlem konwencji i procesu pracy projektu. Przejete
+> z usunietego `IMPLEMENTATION_PROMPT.md`: workflow, "Czego NIE robic",
+> typowe zadania (15-17); z CLAUDE.md: srodowisko i zmienne srodowiskowe
+> (6.1-6.2), komendy narzedziowe (6.3), zasady zapisu pobranych danych (6.4),
+> workflow sesji (15), praca na `develop` (1.1). Fragmenty powielajace stan
+> kodu (drzewo projektu 7.1, hierarchia wyjatkow 11.1, tabela timeoutow
+> 13.4, liczby testow i pokrycia 10.1) zastapione regula i odsylaczem do
+> zrodla prawdy; `CLMS_CREDENTIALS` zamiast nieistniejacej zmiennej (14).
+>
+> **Nota 3.1 (2026-10-08):** jezyk rozstrzygniety (9.4): kod po angielsku,
+> commity i dokumentacja po polsku; przyklady commitow (2.3, 15.4) po polsku.
+>
+> **Nota 3.2 (2026-10-08):** `CLAUDE.md` zminimalizowany do krytycznych zasad
+> i odsylaczy — ten dokument jest dla niego zrodlem konwencji. Dopisane:
+> konce linii (5.5, CRLF w `docs/DECISIONS.md`), dowolna niepusta wartosc
+> `KARTOGRAF_DEBUG` (6.2).
+>
+> **Nota 3.3 (2026-10-08):** brama zaostrzona — `ruff check .` i
+> `ruff format --check .` (cale repo, takze skrypty w `docs/research/`)
+> oraz `mypy kartograf/ tests/` bez bledow; koniec porownywania z lista
+> bledow (8.3, 3.1, 6.3, 18).
 
 ---
 
@@ -14,7 +52,7 @@
 3. [Code Review](#3-code-review)
 4. [Python — nazewnictwo](#4-python--nazewnictwo)
 5. [Python — formatowanie (Ruff)](#5-python--formatowanie-ruff)
-6. [Python — srodowisko wirtualne](#6-python--srodowisko-wirtualne)
+6. [Python — srodowisko i narzedzia](#6-python--srodowisko-i-narzedzia)
 7. [Python — struktura projektu](#7-python--struktura-projektu)
 8. [Python — type hints](#8-python--type-hints)
 9. [Python — docstrings](#9-python--docstrings)
@@ -23,7 +61,10 @@
 12. [Python — logging](#12-python--logging)
 13. [Python — wydajnosc](#13-python--wydajnosc)
 14. [Bezpieczenstwo](#14-bezpieczenstwo)
-15. [Pre-merge checklist](#15-pre-merge-checklist)
+15. [Workflow sesji i implementacji](#15-workflow-sesji-i-implementacji)
+16. [Czego NIE robic](#16-czego-nie-robic)
+17. [Typowe zadania](#17-typowe-zadania)
+18. [Pre-merge checklist](#18-pre-merge-checklist)
 
 ---
 
@@ -36,6 +77,7 @@ main              # Stabilna wersja (tylko merge z develop)
 develop           # Aktywny rozwoj (DOMYSLNA GALAZ ROBOCZA)
 feature/<nazwa>   # Nowe funkcjonalnosci
 fix/<nazwa>       # Poprawki bledow
+docs/<nazwa>      # Tylko dokumentacja
 hotfix/<nazwa>    # Pilne poprawki produkcyjne (branch z main)
 ```
 
@@ -43,8 +85,10 @@ hotfix/<nazwa>    # Pilne poprawki produkcyjne (branch z main)
 - `main` — tylko stabilny, przetestowany kod
 - `develop` — integracja feature'ow, domyslna galaz robocza
 - `feature/*` — branch z `develop`, merge do `develop`
-- `fix/*` — branch z `develop`, merge do `develop`
+- `fix/*`, `docs/*` — branch z `develop`, merge do `develop`
 - `hotfix/*` — branch z `main`, merge do `main` i `develop`
+- Praca biezaca ZAWSZE na `develop` albo na galezi krotkotrwalej
+  z `develop` — nigdy bezposrednio na `main`
 
 ### 1.2 Tagowanie
 
@@ -56,6 +100,9 @@ git push origin v0.4.0
 ```
 
 Checkpointy robocze (CP) sa sledzone tylko w `docs/PROGRESS.md`, bez tagow Git.
+
+Przed wydaniem: testy offline nie zastepuja ponownych testow na zywych
+serwisach (`-m live` oraz przebiegi CLI z jawnym `--output`, sekcja 6.4).
 
 ### 1.3 Zasady commitow
 
@@ -92,17 +139,20 @@ Checkpointy robocze (CP) sa sledzone tylko w `docs/PROGRESS.md`, bez tagow Git.
 
 ### 2.3 Scope — specyficzne dla Kartograf
 
+Typ i scope po angielsku (slowa kluczowe Conventional Commits), opis i tresc
+po polsku (sekcja 9.4):
+
 ```bash
-feat(parser): add support for 2000 coordinate system
-fix(download): handle timeout in retry logic
-feat(landcover): add BDOT10k provider
-feat(soilgrids): add WCS download for soil data
-feat(hsg): implement USDA texture classification
-fix(auth): fix proxy token refresh
-docs(readme): update installation instructions
-test(parser): add edge case tests for hierarchy
-refactor(providers): extract common validation
-chore(deps): update requests to 2.32.0
+feat(parser): obsluga godel ukladu 2000
+fix(download): obsluga timeoutu w logice ponowien
+feat(landcover): provider BDOT10k
+feat(soilgrids): pobieranie danych glebowych przez WCS
+feat(hsg): klasyfikacja tekstury wg trojkata USDA
+fix(auth): odswiezanie tokenu w proxy
+docs(readme): instrukcja instalacji
+test(parser): przypadki brzegowe hierarchii arkuszy
+refactor(providers): wspolna walidacja wejscia
+chore(deps): requests 2.32.0
 ```
 
 ---
@@ -113,11 +163,11 @@ chore(deps): update requests to 2.32.0
 
 ```
 1. Deweloper tworzy PR
-2. Automated checks:
-   ├─ Formatowanie (ruff format --check)
-   ├─ Linting (ruff check)
-   ├─ Type checking (mypy)
-   └─ Testy (pytest --cov)
+2. Kontrole (uruchamiane lokalnie, komendy w sekcji 6.3):
+   ├─ Formatowanie (ruff format --check .)
+   ├─ Linting (ruff check .)
+   ├─ Type checking (mypy kartograf/ tests/ bez bledow — sekcja 8.3)
+   └─ Testy offline z pokryciem (pytest -m "not live" --cov)
 3. Manual review
 4. Poprawki jesli potrzeba
 5. Approval → Merge
@@ -149,10 +199,10 @@ chore(deps): update requests to 2.32.0
 | Element | Konwencja | Przyklad |
 |---------|-----------|----------|
 | Zmienne | snake_case + jednostka | `area_km2`, `elevation_m` |
-| Funkcje | snake_case + czasownik | `download_sheet()`, `parse_godlo()` |
+| Funkcje | snake_case + czasownik | `download_sheet()`, `parse_bbox_arg()` |
 | Klasy | PascalCase | `SheetParser`, `GugikProvider` |
 | Stale | UPPER_SNAKE_CASE | `DEFAULT_FORMAT`, `MAX_RETRIES` |
-| Pliki .py | snake_case | `sheet_parser.py`, `landcover_base.py` |
+| Pliki .py | snake_case | `sheet_parser.py`, `gugik_nmpt.py` |
 | Protected | `_prefix` | `self._cache` |
 | Private | `__prefix` | `self.__internal_state` |
 
@@ -178,10 +228,10 @@ resolution = 1    # meters or pixels?
 | Prefiks | Znaczenie | Przyklad w Kartograf |
 |---------|-----------|----------------------|
 | `download_*` | Pobranie pliku / archiwum | `download_sheet()`, `download_bbox()` |
-| `parse_*` | Parsowanie danych | `parse_godlo()` |
+| `parse_*` | Parsowanie danych | `parse_bbox_arg()`, `parse_skorowidz_records()` |
 | `calculate_*` | Obliczenie wyniku | `calculate_hsg_by_godlo()` |
 | `get_*` | Pobranie atrybutu / danych | `get_parent()`, `get_children()` |
-| `list_*` | Listowanie zasobow | `list_sources()`, `list_layers()` |
+| `list_*` | Listowanie zasobow | `list_files()` |
 | `classify_*` | Klasyfikacja | `classify_usda_texture()` |
 
 ---
@@ -206,17 +256,17 @@ quote-style = "double"
 ### 5.2 Komendy
 
 ```bash
-# Formatowanie
-ruff format kartograf/ tests/
+# Formatowanie (cale repo; .claude/ wykluczone w pyproject.toml)
+ruff format .
 
 # Sprawdzenie (bez zmian)
-ruff format --check kartograf/ tests/
+ruff format --check .
 
 # Linting
-ruff check kartograf/ tests/
+ruff check .
 
 # Linting z auto-fix
-ruff check --fix kartograf/ tests/
+ruff check --fix .
 ```
 
 ### 5.3 Zasady formatowania
@@ -257,35 +307,112 @@ from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.exceptions import DownloadError
 ```
 
+### 5.5 Konce linii
+
+Wszystkie pliki maja konce linii LF (`.editorconfig`: `end_of_line = lf`).
+**Wyjatek:** `docs/DECISIONS.md` ma konce linii CRLF — edytuj go,
+zachowujac CRLF w kazdej linii (takze dopisywanej). Kontrola po edycji:
+`file docs/DECISIONS.md` nadal zglasza `CRLF line terminators`,
+`grep -c $'\r$' docs/DECISIONS.md` rowna sie `wc -l`, a `git diff --stat`
+nie obejmuje calego pliku (zmiana koncow linii = diff wszystkich wierszy).
+
 ---
 
-## 6. Python — srodowisko wirtualne
+## 6. Python — srodowisko i narzedzia
 
-### 6.1 Dwa konteksty pracy
+### 6.1 Srodowisko wirtualne
 
-| Kontekst | Srodowisko | Lokalizacja |
-|----------|------------|-------------|
-| Deweloper (czlowiek) | venv w projekcie | `Kartograf/.venv/` |
-| Agent AI (Claude Code) | Docker container | `/workspace/` mount |
+Wymagany Python 3.12+ (`requires-python` w `pyproject.toml`). Jedno
+srodowisko wirtualne `.venv/` w korzeniu projektu — dla ludzi i agentow AI:
 
-### 6.2 Deweloper — lokalne venv
+- Python: `.venv/bin/python`
+- Pip: `.venv/bin/pip`
+- CLI: `.venv/bin/kartograf`
 
 ```bash
-cd ~/workspace/projects/Kartograf
+cd Kartograf
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-### 6.3 Uruchamianie testow
+### 6.2 Zmienne srodowiskowe (opcjonalne)
+
+- `CLMS_CREDENTIALS` — credentials Copernicus CLMS API jako JSON string
+  (pola `client_id`, `private_key`, `token_uri`, opcjonalnie
+  `key_id`/`user_id`); potrzebne do CORINE GeoTIFF. Dziala na kazdym
+  systemie: czyta ja wylacznie **podproces Auth Proxy**
+  (`python -m kartograf.auth.proxy`), ktory dziedziczy srodowisko rodzica —
+  glowny proces nie widzi kluczy ani tokenu. Kolejnosc zrodel w proxy:
+  `CLMS_CREDENTIALS`, potem (tylko macOS) Keychain (service `clms-token`).
+  Bez zadnego z nich `AuthProxyClient.is_available()` na systemie innym niz
+  macOS zwraca `False` bez uruchamiania podprocesu. Bez credentials CORINE
+  pobiera podglad PNG przez WMS (sidecar: `extra.fallback = "wms_png"`).
+  Z poziomu biblioteki: `CorineProvider(clms_credentials={...})` (tryb
+  bezposredni, z pominieciem proxy). Szczegoly: sekcja 14.3.
+- `KARTOGRAF_DEBUG=1` (dziala dowolna niepusta wartosc) — pelny traceback
+  zamiast skroconego `Error: ...` z CLI (dla kazdego wyjatku docierajacego
+  do bariery `main`, takze `KartografError`).
+
+### 6.3 Komendy: testy, lint, typy
 
 ```bash
-# Z aktywnym venv
-pytest tests/ -v --tb=short
+# Testy offline (domyslna brama)
+.venv/bin/python -m pytest tests/ -v -m "not live"
 
-# Jawne wskazanie interpretera (bez aktywacji)
-.venv/bin/python -m pytest tests/ -v
+# Testy z pokryciem (offline)
+.venv/bin/python -m pytest tests/ -m "not live" --cov=kartograf --cov-report=html
+
+# Testy sieciowe (live) — tylko swiadomie
+.venv/bin/python -m pytest tests/ -m live
+
+# Liczba testow (zamiast liczb w dokumentacji)
+.venv/bin/python -m pytest tests/ --collect-only -q -m "not live"
+
+# Linter (cale repo)
+.venv/bin/python -m ruff check .
+
+# Formatowanie / sprawdzenie formatowania (bez zmian)
+.venv/bin/python -m ruff format .
+.venv/bin/python -m ruff format --check .
+
+# Type checking (sekcja 8.3)
+.venv/bin/python -m mypy kartograf/ tests/
 ```
+
+Testy sa **offline**: `tests/conftest.py` przewraca kazdy test otwierajacy
+gniazdo spoza loopbacku; wyjatek maja tylko testy z markerem `live`
+(zapytania o metadane, bez pobierania plikow). `pyproject.toml` nie
+odfiltrowuje testow `live` (`addopts` bez `-m`), wiec komenda bez
+`-m "not live"` wychodzi w siec. Szczegoly izolacji: sekcja 10.4.
+
+### 6.4 Gdzie zapisywac pobrane dane
+
+Dane przestrzenne pobierane podczas pracy (testy na zywo, weryfikacje E2E,
+reczne wywolania CLI, dane do analiz) zapisuj POZA repozytorium i poza
+`/tmp` — w katalogu danych wskazanym przez uzytkownika.
+
+- Domyslne `--output` CLI (`./data`, `./data/landcover`, `./data/hsg`)
+  wskazuja na repo — **zawsze podawaj `--output` jawnie**:
+
+  ```bash
+  kartograf download N-34-130-D-d-2-4 -o <katalog-danych>/kartograf/data
+  kartograf download --bbox 530000,382000,533000,386000 --target-crs EPSG:5514 \
+      -o <katalog-danych>/kartograf/e2e/<RRRR-MM-DD>-<cel>
+  ```
+
+- Uklad katalogow: `<katalog-danych>/kartograf/data/` — kanoniczny uklad
+  `data/` (ADR-026), wspolny dla kolejnych sesji;
+  `<katalog-danych>/kartograf/e2e/<RRRR-MM-DD>-<cel>/` — przebiegi testow na
+  zywo. Raporty `.md` z przebiegu trafiaja do `docs/research/` w repo.
+- Cache metadanych `.kartograf_cache.db` (SQLite WAL) **zostaje lokalnie**
+  (biezacy katalog = repo, gitignorowany): SQLite na udzialach sieciowych
+  jest zawodny. Uruchamiaj CLI z korzenia repo i kieruj poza repo tylko
+  `--output`.
+- Gdy katalog danych jest niedostepny, zatrzymaj sie i zapytaj uzytkownika
+  zamiast pisac lokalnie.
+- Testy pytest nie zapisuja w katalogu danych (offline: `tmp_path`;
+  `live`: tylko zapytania o metadane, bez plikow).
 
 ---
 
@@ -293,41 +420,15 @@ pytest tests/ -v --tb=short
 
 ### 7.1 Kartograf — flat layout
 
-```
-Kartograf/
-├── kartograf/               # kod zrodlowy (flat layout)
-│   ├── __init__.py          # public API exports
-│   ├── exceptions.py        # hierarchia wyjatkow
-│   ├── core/                # parser godel, BBox
-│   ├── providers/           # providery danych (GUGiK NMT/NMPT/Orto, BDOT10k, CORINE, SoilGrids)
-│   ├── download/            # download management (NMT/NMPT/Orto)
-│   ├── landcover/           # land cover management
-│   ├── hydrology/           # obliczenia hydrologiczne (HSG)
-│   ├── auth/                # autentykacja CLMS (Auth Proxy)
-│   └── cli/                 # interfejs CLI
-├── tests/                   # testy (636)
-│   ├── conftest.py
-│   ├── test_sheet_parser.py
-│   ├── test_gugik_provider.py
-│   ├── test_gugik_nmpt.py
-│   ├── test_gugik_orto.py
-│   ├── test_download_manager.py
-│   ├── test_storage.py
-│   ├── test_auth_client.py
-│   ├── test_auth_proxy.py
-│   ├── test_landcover.py
-│   ├── test_soilgrids.py
-│   ├── test_hsg.py
-│   ├── test_geometry.py
-│   ├── test_cli.py
-│   └── test_integration.py
-├── docs/                    # dokumentacja
-├── CLAUDE.md
-├── README.md
-├── pyproject.toml
-├── .editorconfig
-└── .gitignore
-```
+Pakiet `kartograf/` lezy w korzeniu repo (bez `src/`); testy w `tests/`
+(`conftest.py` + `fixtures/`), dokumentacja w `docs/`, konfiguracja narzedzi
+w `pyproject.toml`.
+
+Zrodlem prawdy dla struktury modulow i zaleznosci miedzy warstwami jest
+`docs/ARCHITECTURE.md`, sekcja 2 ("Warstwy i zaleznosci modulow"), a
+ostatecznie sam katalog `kartograf/`. Ten dokument nie powiela drzewa
+modulow. Nowy modul umieszczaj w warstwie zgodnej z ARCHITECTURE i aktualizuj
+tam jego opis w tym samym commicie.
 
 ### 7.2 Konfiguracja w pyproject.toml
 
@@ -372,8 +473,17 @@ Type hints sa wymagane dla:
 ### 8.3 Type checking
 
 ```bash
-mypy kartograf/ --strict
+.venv/bin/python -m mypy kartograf/ tests/
 ```
+
+`mypy kartograf/ tests/` musi konczyc sie bez bledow (konfiguracja
+`[tool.mypy]` w `pyproject.toml`, bez `--strict`). Blad naprawiaj
+merytorycznie; `# type: ignore` / `cast` tylko z jednozdaniowym
+uzasadnieniem w komentarzu, gdy typowanie biblioteki zewnetrznej jest
+bledne lub niepelne. Biblioteka bez stubow trafia do `[[tool.mypy.overrides]]`
+z `ignore_missing_imports`. Funkcja z adnotacjami zmiennych lokalnych
+dostaje sygnature z adnotacjami (inaczej mypy pomija jej cialo —
+`annotation-unchecked`).
 
 ---
 
@@ -457,9 +567,23 @@ timeout = 30
 
 ### 9.4 Jezyk
 
-- **Pliki .md** — po polsku
-- **Docstrings i komentarze w kodzie** — po angielsku
-- **Commit messages** — po angielsku
+Regula obowiazujaca (decyzja wlasciciela projektu, 2026-10-08):
+
+- **Docstringi i komentarze w kodzie** (`kartograf/`, `tests/`) — po angielsku
+- **Commit messages** — po polsku (format Conventional Commits z sekcji 2:
+  typ i scope to angielskie slowa kluczowe, opis i tresc po polsku)
+- **Dokumentacja** — po polsku: `docs/`, `README.md`, `CLAUDE.md` i inne
+  pliki `.md`
+- **Identyfikatory** (nowe nazwy w kodzie i API, klucze danych, np. sidecara)
+  — po angielsku; klucze sidecara od 0.7.0, istniejace polskie nazwy API/CLI
+  dostaja angielskie aliasy i znikaja w v1.0.0 (ADR-031 w `docs/DECISIONS.md`)
+
+Stan zastany: czesc kodu sprzed tej decyzji ma docstringi i komentarze po
+polsku bez polskich znakow (m.in. `download/cutout.py`, `transport/mosaic.py`,
+wiekszosc `cli/download_cmd.py`) — jest niezgodna z regula; nowy kod pisze
+sie po angielsku. Niezaleznie od jezyka: publiczne API wycinka
+(`download_pl_cutout` i kroki) ma docstringi bez pelnego kompletu sekcji
+NumPy (sekcja 9.1).
 
 ---
 
@@ -467,14 +591,37 @@ timeout = 30
 
 ### 10.1 Progi pokrycia
 
-| Warstwa | Wymagane pokrycie |
-|---------|-------------------|
-| Core (parser, providers, manager) | **>= 80%** |
-| CLI, utility, formatowanie | **>= 60%** |
+| Warstwa | Wymagane pokrycie | Egzekwowanie |
+|---------|-------------------|--------------|
+| Caly pakiet (prog globalny) | `fail_under` w `[tool.coverage.report]` (`pyproject.toml`) | automatycznie przy `--cov` |
+| Core (`core/`, `providers/`, `download/`) | **>= 80%** | recznie, komenda ponizej |
 
 ```bash
-pytest tests/ --cov=kartograf --cov-report=html --cov-fail-under=60
+.venv/bin/python -m pytest tests/ -m "not live" --cov=kartograf --cov-report=html
 ```
+
+`fail_under` w `pyproject.toml` jest jedynym zrodlem progu globalnego —
+nie powielaj jego wartosci w komendach (`--cov-fail-under`).
+`pytest-cov`/`coverage.py` nie ma wbudowanego progu per-warstwa — prog
+**>= 80%** dla warstwy core sprawdzaj druga komenda, na tych samych danych
+`.coverage` (bez ponownego uruchamiania testow):
+
+```bash
+.venv/bin/python -m pytest tests/ --cov=kartograf --cov-report=term -q -p no:cacheprovider -m "not live"
+.venv/bin/python -m coverage report --include='kartograf/core/*,kartograf/providers/*,kartograf/download/*' --fail-under=80
+```
+
+Moduly core ponizej progu (znane odstepstwa) wyznaczaj na biezaco, zamiast
+utrzymywac ich liste z procentami w dokumentacji:
+
+```bash
+.venv/bin/python -m pytest tests/ -q -p no:cacheprovider -m "not live" --cov=kartograf \
+    --cov-report=term-missing | grep -E '^kartograf/(core|providers|download)/.* [0-7]?[0-9]%'
+```
+
+Odstepstwo od progu core wymaga wpisu w backlogu `docs/PROGRESS.md`
+(modul + przyczyna). Progi warstwowe nie sa egzekwowane automatycznie —
+sprawdzaj je recznie przed merge (sekcja 18).
 
 ### 10.2 Nazewnictwo testow
 
@@ -490,7 +637,7 @@ def test_download_with_retry_on_timeout():
     pass
 
 def test_parse_invalid_godlo_raises():
-    """Test that invalid godlo raises ValueError."""
+    """Test that invalid godlo raises ParseError."""
     pass
 ```
 
@@ -529,31 +676,41 @@ def test_download_with_mock_http(sample_godlo):
         assert result.exists()
 ```
 
+**Izolacja sieci:** `tests/conftest.py` blokuje kazde polaczenie spoza
+loopback (`_block_network`, autouse) — testy jednostkowe MUSZA byc offline;
+siec realna wymaga jawnego markera `@pytest.mark.live` (domyslnie
+odfiltrowanego przez `-m "not live"`), a GetCapabilities WMS jest domyslnie
+serwowane offline przez stub (`_offline_wms_layers`, autouse), ktory testy
+cwiczace sam `_fetch_wms_layers` jawnie wylaczaja markerem
+`@pytest.mark.real_wms_layers`.
+
+**Fixtury z realnych odpowiedzi:** odpowiedzi serwerow w testach offline
+buduj z SUROWYCH odpowiedzi zapisanych z prawdziwych uslug (wzor:
+`tests/fixtures/cuzk/`, `tests/fixtures/gugik_skorowidz/`), nie
+z wyobrazenia o formacie.
+
 ---
 
 ## 11. Python — obsluga bledow
 
-### 11.1 Hierarchia wyjatkow Kartograf
+### 11.1 Wyjatki Kartograf
 
-```python
-# kartograf/exceptions.py
+Zrodlem prawdy hierarchii wyjatkow jest `kartograf/exceptions.py` (wyjatki
+transformacji CRS: `kartograf/transform/crs.py`). Ten dokument nie powiela
+listy klas. Zasady:
 
-class KartografError(Exception):
-    """Base exception for Kartograf."""
-    pass
-
-class ParseError(KartografError):
-    """Invalid sheet identifier (godlo)."""
-    pass
-
-class ValidationError(KartografError):
-    """Invalid input parameter."""
-    pass
-
-class DownloadError(KartografError):
-    """Download or network error."""
-    pass
-```
+- Kazdy wlasny wyjatek dziedziczy (bezposrednio lub posrednio)
+  z `KartografError` — uzytkownik biblioteki lapie wszystkie bledy pakietu
+  jednym `except KartografError`.
+- Uzywaj najwezszej istniejacej klasy (np. brak danych u zrodla to
+  `NoCoverageError`, nie ogolny `DownloadError`); nowa klase dodawaj tylko,
+  gdy wywolujacy musi ja odroznic, i od razu opisz ja w docstringu.
+- Informacje dla wywolujacego przekazuj atrybutami wyjatku (np.
+  `DownloadError.status_code`), nie przez parsowanie komunikatu.
+- `KartografError` docierajacy do bariery CLI (`main`) daje
+  `Error: <komunikat>` i kod 1 (pelny traceback: `KARTOGRAF_DEBUG=1`,
+  sekcja 6.2) — komunikat ma byc zrozumialy dla uzytkownika.
+- Zawsze zachowuj lancuch wyjatkow: `raise ... from err` (sekcja 11.3).
 
 ### 11.2 Walidacja na wejsciu
 
@@ -634,6 +791,9 @@ for godlo in godla:
     response = requests.get(url)
 ```
 
+W providerach nie tworz sesji recznie: sesje (takze per watek,
+`SessionPerThread`) daje `kartograf/transport/http.py`.
+
 ### 13.3 Duze pliki — streaming
 
 ```python
@@ -646,14 +806,22 @@ def download_large_file(url: str, filepath: Path) -> None:
                 f.write(chunk)
 ```
 
-### 13.4 Limity czasowe Kartograf
+### 13.4 Timeouty i ponowienia
 
-| Operacja | Timeout |
-|----------|---------|
-| GUGiK (NMT) | 30s |
-| Land Cover (BDOT10k, CORINE) | 60s |
-| SoilGrids (ISRIC WCS) | 60s |
-| Retry: max 3 proby, exponential backoff | — |
+- **Kazde zapytanie HTTP ma jawny timeout.** Wartosci domyslne sa stalymi
+  w modulach providerow (`DEFAULT_TIMEOUT` w klasie providera, np.
+  `GugikProvider.DEFAULT_TIMEOUT`, `Bdot10kProvider.DEFAULT_TIMEOUT`; osobne
+  stale dla innych operacji, np. `GugikLazProvider.WFS_TIMEOUT`) — to one sa
+  zrodlem prawdy, nie dokumentacja: `grep -rn "_TIMEOUT =" kartograf/providers`.
+- **Ponowienia sa w jednym miejscu:** `kartograf/transport/http.py` —
+  `download_to` dla plikow (zapis atomowy przez `os.replace`) i
+  `get_with_retry` dla zapytan. Providery nie implementuja wlasnych petli
+  retry.
+- Ponawiane sa tylko bledy sieci, HTTP 429 i 5xx (`is_retryable`); inne 4xx
+  koncza od razu z `DownloadError.status_code`.
+- Najwyzej `MAX_RETRIES` (3) proby, nie konfigurowalne z CLI; przerwa wg
+  `backoff_delay` (2 s, potem 4 s); naglowek `Retry-After` wydluza przerwe,
+  maksymalnie do `MAX_RETRY_AFTER` (60 s).
 
 ---
 
@@ -677,8 +845,9 @@ eval(user_input)  # NEVER!
 ```python
 import os
 
-# ALWAYS use environment variables for secrets
-client_id = os.getenv("CLMS_CLIENT_ID")
+# ALWAYS use environment variables for secrets — read them only where
+# they are needed (CLMS: only the Auth Proxy subprocess, see 14.3)
+raw_credentials = os.environ.get("CLMS_CREDENTIALS")
 
 # ALWAYS validate input at system boundaries
 if not godlo or not godlo.strip():
@@ -693,23 +862,157 @@ response = requests.get(url, timeout=30)
 CLMS credentials sa izolowane w osobnym procesie (Auth Proxy):
 
 ```
-CorineProvider → localhost HTTP → AuthProxy (subprocess) → Keychain → CLMS API
+CorineProvider → AuthProxyClient → HTTP 127.0.0.1 → Auth Proxy (podproces
+`python -m kartograf.auth.proxy`: CLMS_CREDENTIALS, potem tylko macOS
+Keychain `clms-token`) → CLMS API
 ```
 
 - Credentials (klucz prywatny RSA) nigdy nie opuszczaja procesu proxy
-- Glowna aplikacja nigdy nie widzi credentials
+- Glowna aplikacja nie widzi kluczy ani tokenu
 - Tylko odpowiedzi API sa przekazywane do aplikacji
+- Wyjatek swiadomy: `CorineProvider(clms_credentials={...})` w bibliotece
+  (tryb bezposredni, z pominieciem proxy)
+- Zmienne srodowiskowe i fallback bez credentials: sekcja 6.2
 
 ---
 
-## 15. Pre-merge checklist
+## 15. Workflow sesji i implementacji
+
+### 15.1 Poczatek sesji
+
+```
+1. Przeczytaj docs/PROGRESS.md — sekcja "Ostatnia sesja" (blok START)
+2. git status + git log --oneline -5
+3. Sprawdz galaz: git branch --show-current (develop albo galaz z develop)
+4. Zrozum zadanie — znajdz relevantne sekcje w SCOPE.md / PRD.md / ARCHITECTURE.md
+5. Zadaj pytania, jesli cos jest niejasne
+```
+
+Kolejnosc lektury dokumentacji: `docs/PROGRESS.md` (stan i zadania) ->
+`docs/SCOPE.md` (zakres) -> `docs/ARCHITECTURE.md` (architektura, kontrakty
+danych, uklad `data/`) -> `docs/PRD.md` (wymagania) -> `docs/CHANGELOG.md`
+(historia zmian) -> `docs/DECISIONS.md` (ADR — co i dlaczego).
+
+### 15.2 Implementacja
+
+```
+1. Pisz kod zgodnie z tym dokumentem
+2. Type hints (Python 3.12+ style: X | None zamiast Optional[X]) — sekcja 8
+3. Docstrings NumPy style — sekcja 9
+4. Walidacja inputu na granicy systemu — sekcja 11.2
+5. Timeout dla kazdego requestu HTTP — sekcja 13.4
+6. raise ... from err (zachowaj lancuch wyjatkow) — sekcja 11.3
+```
+
+### 15.3 Testowanie
+
+```
+1. Napisz testy (pytest, AAA pattern) — sekcja 10
+2. Testy offline: fixtures i mocking, bez prawdziwych API (sekcja 10.4)
+3. Pokrycie: progi z sekcji 10.1
+4. Uruchom: pytest tests/ -v --tb=short -m "not live"
+5. Sprawdz brame: ruff check ., ruff format --check ., mypy kartograf/ tests/
+```
+
+### 15.4 W trakcie sesji — commity
+
+```
+1. Conventional Commits (sekcja 2, opis po polsku — 9.4): feat(parser): obliczanie bbox arkusza
+2. Commituj czesto, male zmiany
+3. Aktualizuj docs/CHANGELOG.md na biezaco — sekcja wersji niewydanej
+   (naglowek "## [X.Y.Z] - Unreleased" na gorze pliku)
+4. W razie watpliwosci — pytaj
+```
+
+### 15.5 Koniec sesji
+
+**OBOWIAZKOWO** zaktualizuj `docs/PROGRESS.md` (sekcja "Ostatnia sesja"):
+
+- co zostalo zrobione,
+- co jest w trakcie (plik, linia, kontekst),
+- nastepne kroki.
+
+---
+
+## 16. Czego NIE robic
+
+- **Nie dodawaj funkcji poza zakresem** — sprawdz `docs/SCOPE.md`, sekcja 3 ("Out of Scope")
+- **Nie zmieniaj architektury** bez konsultacji — decyzje sa w `docs/DECISIONS.md`
+- **Nie pomijaj testow** — progi pokrycia z sekcji 10.1
+- **Nie hardcoduj secrets** — uzyj zmiennych srodowiskowych / Auth Proxy (sekcja 14)
+- **Nie uzywaj Optional/Union** — uzyj `X | None` i `X | Y` (Python 3.12+)
+- **Nie uzywaj f-stringow w loggerze** — uzyj `%s` formatting
+- **Nie tworz osobnych plikow konfiguracyjnych** — wszystko w `pyproject.toml`
+- **Nie wywoluj prawdziwych API w testach** — mockuj requesty; siec tylko w testach `live`
+- **Nie zapisuj pobranych danych w repo ani w `/tmp`** — sekcja 6.4
+
+---
+
+## 17. Typowe zadania
+
+### 17.1 Nowy provider pokrycia terenu / gleb (`LandCoverProvider`)
+
+```python
+# 1. Stworz klase w kartograf/providers/ (provider krajowy w podpakiecie
+#    kraju, np. kartograf/providers/pl/), dziedziczaca z LandCoverProvider
+#    (kartograf/providers/base.py).
+# 2. Zaimplementuj metody abstrakcyjne — te oznaczone @abstractmethod
+#    w kartograf/providers/base.py (LandCoverProvider i jego baza
+#    DataSourceProvider): wlasciwosci name i base_url oraz download_by_bbox.
+#    download_by_godlo jest dziedziczone (godlo -> bbox EPSG:2180 ->
+#    download_by_bbox); nadpisz je tylko, gdy zrodlo ma wlasny tor godla.
+#    download_by_admin_unit (TERYT) jest opcjonalne — domyslnie
+#    NotImplementedError; download_by_teryt to zdeprecjonowany alias z bazy.
+# 3. Dodaj deskryptor zrodla w kartograf/sources/registry.py i ustaw
+#    descriptor_key w providerze (katalog zapisu, sidecar) — patrz
+#    docs/ARCHITECTURE.md sekcja 5.
+# 4. Zarejestruj w slowniku modulowym PROVIDERS w kartograf/landcover/manager.py
+# 5. Dodaj eksport do kartograf/__init__.py (__all__)
+# 6. Napisz testy offline w tests/ (fixtury z realnych odpowiedzi serwera)
+# 7. CLI: dopisz zrodlo do choices --source w cli/_parser.py i logike
+#    w cli/landcover_cmd.py; cli/commands.py to tylko fasada zgodnosci
+```
+
+Nowe zrodlo NMT albo nowy kraj: checklista w `docs/ARCHITECTURE.md`,
+sekcja 5 ("Jak dodac nowe zrodlo albo nowy kraj").
+
+### 17.2 Rozszerzenie parsera godel
+
+```python
+# 1. PL-1992: kartograf/core/sheet_parser.py — wzorzec w PATTERNS, logika
+#    podzialu w get_children() / _get_children_from_*();
+#    PL-2000: kartograf/core/parser_2000.py.
+# 2. Nowy system godel (kraj): klasa parsera w core/ + wpis SheetSystem
+#    w literale SYSTEMS w core/parser_registry.py (ARCHITECTURE sekcja 5, pkt 3)
+# 3. Zaktualizuj testy: tests/test_sheet_parser.py, tests/test_parser_2000.py,
+#    tests/test_parser_registry.py
+# 4. Przetestuj hierarchie (get_parent, get_children, get_all_descendants)
+```
+
+### 17.3 Naprawa bledu w pobieraniu
+
+```python
+# 1. Zidentyfikuj provider (kartograf/providers/: pl/, cuzk/, corine.py,
+#    soilgrids.py)
+# 2. Sprawdz timeout providera i transport: retry/backoff sa wspolne
+#    w kartograf/transport/http.py (download_to, get_with_retry), nie
+#    w providerach
+# 3. Dodaj test reprodukujacy blad (offline, fixtura z realnej odpowiedzi)
+# 4. Napraw i potwierdz testem
+# 5. Uruchom caly zestaw testow offline — nic innego nie moze sie zepsuc
+```
+
+---
+
+## 18. Pre-merge checklist
 
 ```markdown
-- [ ] Testy przechodza (`pytest tests/ -v`)
-- [ ] Pokrycie kodu w normie (80% core / 60% utility)
-- [ ] Formatowanie OK (`ruff format --check kartograf/ tests/`)
-- [ ] Linting OK (`ruff check kartograf/ tests/`)
-- [ ] Type hints OK (`mypy kartograf/`)
+- [ ] Testy offline przechodza (`pytest tests/ -v -m "not live"`; testy
+      `live` tylko swiadomie: `pytest tests/ -m live`)
+- [ ] Pokrycie kodu w normie (sekcja 10.1: `fail_under` + 80% core)
+- [ ] Formatowanie OK (`ruff format --check .`)
+- [ ] Linting OK (`ruff check .`)
+- [ ] Type hints OK (`mypy kartograf/ tests/` bez bledow, sekcja 8.3)
 - [ ] Docstrings dla publicznych funkcji/klas
 - [ ] Brak hardcoded secrets
 - [ ] Dokumentacja zaktualizowana (jesli potrzeba)
@@ -720,8 +1023,8 @@ CorineProvider → localhost HTTP → AuthProxy (subprocess) → Keychain → CL
 
 ---
 
-**Wersja dokumentu:** 2.0
-**Data ostatniej aktualizacji:** 2026-02-03
-**Zrodlo:** `shared/standards/DEVELOPMENT_STANDARDS.md` v1.0
+**Wersja dokumentu:** 3.3
+**Data ostatniej aktualizacji:** 2026-10-08
+**Zrodlo:** `shared/standards/DEVELOPMENT_STANDARDS.md` v1.0 (repozytorium zewnetrzne, nieobecne w tym workspace)
 
-*Odstepstwa od tych standardow wymagaja uzasadnienia w `CLAUDE.md` projektu.*
+*Odstepstwa od tych standardow wymagaja uzasadnienia — w tym dokumencie albo w ADR (`docs/DECISIONS.md`).*

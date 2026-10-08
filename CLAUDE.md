@@ -1,166 +1,56 @@
 # Instrukcje dla Claude Code
 
-## Opis projektu
+Kartograf pobiera dane przestrzenne z publicznych uslug GUGiK (PL), CUZK (CZ),
+Copernicus i ISRIC (NMT/NMPT, ortofotomapa, LAZ, BDOT10k, CORINE, SoilGrids,
+HSG) i zapisuje je w ukladzie `data/` z sidecarem metadanych. Dziala jako CLI
+`kartograf` i biblioteka Python; jest czescia toolchainu hydrologicznego
+(Hydrograf, Hydrolog, IMGWTools). Wprowadzenie: `README.md`; zakres:
+`docs/SCOPE.md`.
 
-Kartograf — narzedzie do pobierania danych przestrzennych (NMT z GUGiK, BDOT10k, CORINE z Copernicus, SoilGrids z ISRIC) dla Polski. Dostepny jako CLI i biblioteka Python. Czesc toolchainu hydrologicznego (Hydrograf, Hydrolog, Kartograf, IMGWTools).
+## Zasady pracy (krytyczne)
 
-Glowne funkcjonalnosci:
-- **NMT** — pobieranie Numerycznego Modelu Terenu z GUGiK (1m i 5m)
-- **NMPT** — Numeryczny Model Pokrycia Terenu / DSM z GUGiK (1m)
-- **Ortofotomapa** — zdjecia lotnicze Standard Resolution (25cm, TIF) z GUGiK
-- **BDOT10k** — polska baza pokrycia terenu (15 warstw: 12 PT* + 3 SW*)
-- **CORINE Land Cover** — europejska klasyfikacja pokrycia terenu (44 klasy)
-- **SoilGrids** — globalne dane glebowe z ISRIC (11 parametrow, 6 glebokosci)
-- **HSG** — kalkulacja Hydrologic Soil Groups dla metody SCS-CN
+Glowne zrodlo konwencji i procesu: `docs/DEVELOPMENT_STANDARDS.md`.
 
-## Srodowisko Python
+- Python wylacznie z `.venv`: `.venv/bin/python`, `.venv/bin/kartograf`
+  (STANDARDS 6.1; zmienne srodowiskowe: 6.2).
+- Pobrane dane zapisuj poza repo i poza `/tmp`, zawsze z jawnym `--output`;
+  cache metadanych SQLite zostaje lokalnie, CLI uruchamiaj z korzenia repo
+  (STANDARDS 6.4).
+- Testy sa offline: `-m "not live"`; testy `live` tylko swiadomie
+  (STANDARDS 6.3, 10.4).
+- Brama przed commitem/merge: pytest offline zielone, `ruff check .` i
+  `ruff format --check .` czyste, `mypy kartograf/ tests/` bez bledow
+  (STANDARDS 6.3, 8.3, 18).
+- Praca na `develop` (albo galezi krotkotrwalej z `develop`); Conventional
+  Commits z opisem po polsku, docstringi i komentarze po angielsku,
+  dokumentacja po polsku (STANDARDS 1.1, 2, 9.4).
+- Na koniec sesji OBOWIAZKOWO zaktualizuj `docs/PROGRESS.md`; zmiany
+  dopisuj na biezaco do `docs/CHANGELOG.md` (STANDARDS 15).
+- `docs/DECISIONS.md` ma konce linii CRLF — zachowaj je przy edycji
+  (STANDARDS 5.5).
 
-Uzywaj srodowiska wirtualnego z `.venv`:
-- Python: `.venv/bin/python`
-- Pip: `.venv/bin/pip`
-- Wymagany Python: 3.12+
+## Mapa dokumentacji
 
-Zmienne srodowiskowe (opcjonalne):
-- `CLMS_CLIENT_ID` — client ID dla Copernicus CLMS API (potrzebne do CORINE GeoTIFF)
-- `CLMS_CLIENT_SECRET` — client secret dla CLMS API
-
-Bez zmiennych CLMS: CORINE automatycznie pobiera podglad PNG przez WMS (fallback).
-
-## Dokumentacja
-
-**Przeczytaj w kolejnosci:**
-1. `docs/PROGRESS.md` — aktualny stan projektu i zadania
-2. `docs/SCOPE.md` — zakres projektu (co jest, czego nie ma)
-3. `docs/PRD.md` — wymagania produktowe
-4. `docs/CHANGELOG.md` — historia zmian per-release
-5. `docs/DECISIONS.md` — rejestr decyzji architektonicznych (co i dlaczego)
-
-## Struktura modulow
-
-```
-kartograf/
-├── __init__.py          # Public API exports
-├── exceptions.py        # KartografError, ParseError, ValidationError, DownloadError
-├── core/                # Logika bazowa
-│   ├── sheet_parser.py  # SheetParser — parser godel map topograficznych, BBox
-│   ├── parser_2000.py   # Parser2000 — parser godal PL-2000, find_sheets_2000_for_bbox
-│   └── geometry.py      # Czytanie SHP/GPKG, find_sheets_for_geometry, get_overall_bbox
-├── providers/           # Providery danych (abstrakcje nad API)
-│   ├── base.py          # BaseProvider — abstrakcja dla NMT
-│   ├── gugik.py         # GugikProvider — NMT z GUGiK (WCS + OpenData)
-│   ├── gugik_nmpt.py    # GugikNmptProvider — NMPT/DSM z GUGiK (dziedziczy z GugikProvider)
-│   ├── gugik_orto.py    # GugikOrtoProvider — Ortofotomapa z GUGiK (BaseProvider)
-│   ├── landcover_base.py # LandCoverProvider — abstrakcja dla pokrycia terenu
-│   ├── bdot10k.py       # Bdot10kProvider — BDOT10k z GUGiK
-│   ├── corine.py        # CorineProvider — CORINE z Copernicus (CLMS API + WMS)
-│   └── soilgrids.py     # SoilGridsProvider — dane glebowe z ISRIC (WCS)
-├── cache/               # Cache metadanych
-│   └── metadata.py      # MetadataCache — SQLite WAL, TTL 7d, thread-safe
-├── download/            # Zarzadzanie pobieraniem NMT/NMPT/Orto
-│   ├── manager.py       # DownloadManager — koordynacja pobierania arkuszy (parallel)
-│   └── storage.py       # FileStorage — hierarchiczna struktura katalogow
-├── landcover/           # Zarzadzanie pobieraniem pokrycia terenu
-│   └── manager.py       # LandCoverManager — dispatch do providerow
-├── hydrology/           # Obliczenia hydrologiczne
-│   └── hsg.py           # HSGCalculator — klasyfikacja USDA, mapowanie HSG
-├── auth/                # Autentykacja CLMS (Auth Proxy)
-│   ├── proxy.py         # Serwer HTTP izolujacy credentials (subprocess)
-│   └── client.py        # Klient singleton, automatycznie uruchamia proxy
-└── cli/                 # Interfejs wiersza polecen
-    └── commands.py      # Komendy CLI (parse, download, landcover, soilgrids)
-```
-
-## Komendy
-
-```bash
-# Testy
-.venv/bin/python -m pytest tests/ -v
-
-# Testy z pokryciem
-.venv/bin/python -m pytest tests/ --cov=kartograf --cov-report=html
-
-# Linter
-.venv/bin/python -m ruff check kartograf/ tests/
-
-# Formatowanie
-.venv/bin/python -m ruff format kartograf/ tests/
-
-# Sprawdzenie formatowania (bez zmian)
-.venv/bin/python -m ruff format --check kartograf/ tests/
-
-# Type checking
-.venv/bin/python -m mypy kartograf/
-
-# CLI
-kartograf --help
-kartograf parse N-34-130-D-d-2-4
-kartograf download N-34-130-D-d-2-4
-kartograf download N-34-130-D-d-2-4 --product nmpt
-kartograf download N-34-130-D-d-2-4 --product orto
-kartograf download N-34-130-D --scale 1:10000 --resolution 5m --workers 8
-kartograf download --geometry area.shp
-kartograf download --geometry area.gpkg --layer catchments
-kartograf parse 6.179.12.20
-kartograf download 6.179.12.20
-kartograf download --bbox 6500000,5895000,6508000,5900000 --bbox-crs EPSG:2177 --system 2000
-kartograf landcover download --source bdot10k --teryt 1465
-kartograf landcover download --source corine --year 2018 --godlo N-34-130-D
-kartograf landcover download --source soilgrids --godlo N-34-130-D --property soc
-kartograf soilgrids hsg --godlo N-34-130-D --stats
-kartograf landcover list-sources
-kartograf landcover list-layers --source soilgrids
-kartograf cache stats
-kartograf cache clear
-kartograf cache path
-```
-
-## Workflow sesji
-
-### Poczatek sesji
-1. Przeczytaj `docs/PROGRESS.md` — sekcja "Ostatnia sesja"
-2. `git status` + `git log --oneline -5`
-3. Sprawdz na ktorej jestes galezi (`git branch --show-current`)
-
-### W trakcie sesji
-- Commituj czesto (male zmiany)
-- Aktualizuj `docs/CHANGELOG.md` na biezaco
-- W razie watpliwosci — pytaj
-
-### Koniec sesji
-**OBOWIAZKOWO zaktualizuj** `docs/PROGRESS.md`:
-- Co zostalo zrobione
-- Co jest w trakcie (plik, linia, kontekst)
-- Nastepne kroki
-
-### Git Workflow
-
-**Galecie:**
-- **main** — stabilna wersja (tylko merge z develop)
-- **develop** — aktywny rozwoj (ZAWSZE pracuj na tej galezi)
-
-**Commity:** Conventional Commits (`feat(parser): ...`, `fix(download): ...`, `docs(readme): ...`)
-
-## Specyfika projektu
-
-### Zaleznosci zewnetrzne
-- **requests** >= 2.31.0 — HTTP client (wymagane)
-- **pyproj** >= 3.6.0 — transformacje CRS (wymagane)
-- **PyJWT[crypto]** >= 2.8.0 — OAuth2 JWT dla CLMS API (wymagane)
-- **rasterio** >= 1.3.0 — przetwarzanie rastrow GeoTIFF (wymagane)
-- **numpy** >= 1.24.0 — operacje na tablicach (wymagane)
-- **pyshp** >= 2.3.0 — czytanie plikow Shapefile (wymagane)
-
-### Integracje
-- Kartograf jest uzywany przez **Hydrograf** jako zrodlo danych GIS (NMT, Land Cover)
-- Kartograf jest uzywany przez **Hydrolog** opcjonalnie (HSGCalculator, SoilGridsProvider)
-- Kartograf NIE zawiera obliczen hydrologicznych (poza HSG) — to zadanie Hydrolog
-- Kartograf NIE zawiera danych obserwacyjnych — to zadanie IMGWTools
-
-### Ograniczenia
-- Pobieranie rownolegle: ThreadPoolExecutor, domyslnie 4 workery (CLI: --workers)
-- NMT 5m dostepne tylko w ukladzie EVRF2007
-- WCS (download_bbox) niedostepne dla NMT 5m — tylko arkusze OpenData
-- CORINE GeoTIFF wymaga OAuth2 credentials w CLMS — bez nich fallback na PNG (WMS)
-- SoilGrids: tylko WGS84 bbox (transformacja z EPSG:2180 automatyczna)
-- Timeout: 30s dla GUGiK, 60s dla Land Cover
-- Max 3 proby retry (nie konfigurowalne)
+| Czego szukasz | Gdzie |
+|---|---|
+| Stan prac, ostatnia sesja, backlog | `docs/PROGRESS.md` |
+| Workflow sesji, kolejnosc lektury | `docs/DEVELOPMENT_STANDARDS.md` 15 |
+| Srodowisko, zmienne (`CLMS_CREDENTIALS`, `KARTOGRAF_DEBUG`), komendy testow/lint/mypy | STANDARDS 6.1-6.3, 8.3 |
+| Gdzie zapisywac pobrane dane | STANDARDS 6.4 |
+| Git, commity, jezyk, testy, wyjatki, timeouty i retry (zasady) | STANDARDS 1-2, 9.4, 10-11, 13.4 |
+| Zakres, co jest poza nim, ograniczenia techniczne (timeouty per provider, CZ, `--country auto`), zaleznosci | `docs/SCOPE.md` 2, 3.1, 3.2, 4.2 |
+| Wymagania produktowe (warstwy BDOT10k, parametry SoilGrids, lata CORINE) | `docs/PRD.md` |
+| Moduly i zaleznosci miedzy warstwami | `docs/ARCHITECTURE.md` 2 |
+| Deskryptory zrodel, sidecar `kartograf-meta/1`, `extra.parent_request` | ARCHITECTURE 3.1, 3.2, 3.4 |
+| Uklad `data/`, kampanie `kampanie/` i dowiazania | ARCHITECTURE 3.3 |
+| Godlo PL, skorowidz GUGiK, `MetadataCache`/`--force`, kampanie (`--campaigns`, `--min-year`, I-1) | ARCHITECTURE 4.1 |
+| Lista arkuszy PL (R5, kody wyjscia), WCS `download_bbox` | ARCHITECTURE 4.2 |
+| Wycinek PL `--target-crs` (ADR-027) | ARCHITECTURE 4.3 |
+| CZ (CUZK), `--country auto` | ARCHITECTURE 4.4-4.6 |
+| LAZ (ADR-029) | ARCHITECTURE 4.7 |
+| Land cover, BDOT10k, CORINE, SoilGrids, HSG | ARCHITECTURE 4.8 |
+| Nowe zrodlo albo kraj; nowy provider pokrycia terenu | ARCHITECTURE 5; STANDARDS 17 |
+| Przyklady CLI i biblioteki, wynik pobrania, kampanie, CLMS, znane problemy | `docs/USAGE.md` 1-7 |
+| Decyzje i ich erraty (indeks na poczatku pliku) | `docs/DECISIONS.md` |
+| Historia zmian per wydanie | `docs/CHANGELOG.md` |
+| Pelna lista opcji CLI / publiczne API | `kartograf <komenda> --help` / `kartograf/__init__.py` (`__all__`) |

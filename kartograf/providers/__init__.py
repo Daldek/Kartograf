@@ -1,26 +1,30 @@
 """
 Providers module for Kartograf.
 
-This module contains provider implementations for downloading data
-from various sources. Currently supported providers:
+This module re-exports a historical subset of the provider classes
+(dating from before the ``providers.pl``/``providers.cuzk`` package split).
+It does NOT re-export every provider that ships in this release (e.g.
+``GugikNmptProvider``, ``GugikOrtoProvider``, or the ``providers.cuzk``
+package with ``CuzkDmrProvider``/``create_dmr_provider`` are missing here).
 
-- GugikProvider: Downloads NMT data from GUGiK (Polish geodesy service)
-- LandCoverProvider: Abstract base for land cover data providers
-- Bdot10kProvider: Downloads land cover data from BDOT10k (GUGiK)
-- CorineProvider: Downloads CORINE Land Cover data (Copernicus/GIOŚ)
-- SoilGridsProvider: Downloads soil property data from ISRIC SoilGrids
+For the complete, currently maintained provider list, use the top-level
+package API: ``from kartograf import ...`` (see ``kartograf/__init__.py``).
+
+Polish providers (Gugik*, Bdot10kProvider) live in ``kartograf.providers.pl``;
+CUZK (Czech) providers live in ``kartograf.providers.cuzk``.
 """
 
-from kartograf.providers.base import BaseProvider
-from kartograf.providers.bdot10k import Bdot10kProvider
+from kartograf.providers.base import BaseProvider, LandCoverProvider
 from kartograf.providers.corine import CorineProvider
-from kartograf.providers.gugik import GugikProvider
-from kartograf.providers.landcover_base import LandCoverProvider
+from kartograf.providers.pl.bdot10k import Bdot10kProvider
+from kartograf.providers.pl.gugik import GugikProvider
+from kartograf.providers.pl.gugik_laz import GugikLazProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 
 __all__ = [
     "BaseProvider",
     "GugikProvider",
+    "GugikLazProvider",
     "LandCoverProvider",
     "Bdot10kProvider",
     "CorineProvider",

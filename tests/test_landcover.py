@@ -17,12 +17,13 @@ import requests
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
-from kartograf.providers.bdot10k import (
+from kartograf.providers.base import LandCoverProvider
+from kartograf.providers.corine import CorineProvider
+from kartograf.providers.pl.bdot10k import (
     WOJEWODZTWO_NAMES,
     Bdot10kProvider,
 )
-from kartograf.providers.corine import CorineProvider
-from kartograf.providers.landcover_base import LandCoverProvider
+from kartograf.transform.bbox import envelope_from_2180
 
 
 class TestLandCoverProviderBase:
@@ -83,6 +84,13 @@ class TestBdot10kProvider:
         assert "GPKG" in formats
         assert "SHP" in formats
 
+    def test_supported_formats_excludes_gml(self):
+        """GML was advertised but never implemented (phantom format)."""
+        provider = Bdot10kProvider()
+        formats = provider.get_supported_formats()
+        assert formats == ["GPKG", "SHP"]
+        assert "GML" not in formats
+
     def test_construct_opendata_url_gpkg(self):
         """Test OpenData URL construction for GPKG."""
         provider = Bdot10kProvider()
@@ -99,7 +107,7 @@ class TestBdot10kProvider:
         assert "1465_SHP.zip" in url
 
     def test_construct_opendata_url_invalid_woj(self):
-        """Test OpenData URL with invalid województwo code."""
+        """Test OpenData URL with invalid voivodeship code."""
         provider = Bdot10kProvider()
         with pytest.raises(ValidationError):
             provider._construct_opendata_url("9999", "GPKG")
@@ -174,7 +182,8 @@ class TestCorineProvider:
         """Test WMS URL construction for EEA endpoint."""
         provider = CorineProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        url = provider._construct_wms_url(bbox, 2018, 100, 100)
+        bounds = envelope_from_2180(bbox, "EPSG:3857")
+        url = provider._construct_wms_url(bounds, 2018, 100, 100)
         assert "WMS" in url
         assert "GetMap" in url
         assert "discomap.eea.europa.eu" in url  # EEA Discomap endpoint
@@ -184,7 +193,8 @@ class TestCorineProvider:
         """Test WMS URL construction for DLR fallback (1990)."""
         provider = CorineProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        url = provider._construct_wms_url(bbox, 1990, 100, 100)
+        bounds = envelope_from_2180(bbox, "EPSG:4326")
+        url = provider._construct_wms_url(bounds, 1990, 100, 100)
         assert "WMS" in url
         assert "GetMap" in url
         assert "geoservice.dlr.de" in url  # DLR WMS endpoint
@@ -299,6 +309,7 @@ class TestLandCoverCLI:
         captured = capsys.readouterr()
         assert "bdot10k" in captured.out
         assert "corine" in captured.out
+        assert "GML" not in captured.out
 
     def test_landcover_list_layers_bdot10k(self, capsys):
         """Test list-layers for BDOT10k."""
@@ -336,17 +347,125 @@ class TestLandCoverCLI:
         assert result == 1
         captured = capsys.readouterr()
         assert "Invalid bbox" in captured.err
+        # the "Expected" hint goes to stderr together with the error (review-1 D4)
+        assert "Expected" in captured.err
+        assert "Expected" not in captured.out
+
+    @pytest.mark.parametrize(
+        "bbox",
+        ["10,10,5,5", "1,10,5,5", "nan,1,2,3", "1,2,inf,4", "1,2,3", "1,2,3,4,5"],
+    )
+    def test_landcover_download_rejects_bad_bbox(self, bbox, capsys, tmp_path):
+        """Inverted/NaN/inf/wrong value count -> Error on stderr, code 1 (K7a)."""
+        from kartograf.cli.commands import main
+
+        with patch("kartograf.cli.landcover_cmd.LandCoverManager") as manager:
+            result = main(
+                ["landcover", "download", f"--bbox={bbox}", "-o", str(tmp_path)]
+            )
+        assert result == 1
+        manager.assert_not_called()
+        captured = capsys.readouterr()
+        assert "Error: Invalid bbox format" in captured.err
+        assert "ValueError" not in captured.err
+        assert "Expected" not in captured.out
+
+
+class TestLandCoverInvalidOptions:
+    """An invalid --property/--year/--depth/--stat is a USER error (N8).
+
+    `Error: <message>` without the exception type name and without the
+    KARTOGRAF_DEBUG hint (that one is for internal errors), exit code 1, before
+    the network (conftest blocks sockets - a connection attempt would fail the
+    test).
+    """
+
+    @pytest.mark.parametrize(
+        ("extra", "fragment"),
+        [
+            (["--source", "soilgrids", "--property", "foo"], "Invalid property"),
+            (["--source", "soilgrids", "--depth", "1-2cm"], "Invalid depth"),
+            (["--source", "soilgrids", "--stat", "median"], "Invalid stat"),
+            (["--source", "corine", "--year", "1999"], "1999"),
+        ],
+    )
+    def test_invalid_option_is_user_error(self, extra, fragment, tmp_path, capsys):
+        from kartograf.cli.commands import main
+
+        rc = main(
+            ["landcover", "download", "--godlo", "N-34-130-D", "-o", str(tmp_path)]
+            + extra
+        )
+        err = capsys.readouterr().err
+        assert rc == 1
+        assert fragment in err
+        assert "Error: " in err
+        assert "ValueError" not in err
+        assert "KARTOGRAF_DEBUG" not in err
+
+
+class TestBdot10kShpFormat:
+    """`--format SHP`: a ZIP archive of shapefiles must not pass as `.gpkg` (N1)."""
+
+    SHP_ZIP = b"PK\x03\x04 udawany ZIP z plikami .shp"
+
+    def _session(self):
+        response = Mock()
+        response.raise_for_status = Mock()
+        response.iter_content = lambda chunk_size: iter([self.SHP_ZIP])
+        session = Mock()
+        session.get.return_value = response
+        return session
+
+    def test_cli_saves_shp_package_as_zip(self, tmp_path, capsys):
+        from kartograf.cli.commands import main
+
+        session = self._session()
+        with patch("kartograf.transport.http.make_gugik_session", return_value=session):
+            rc = main(
+                [
+                    "landcover",
+                    "download",
+                    "--source",
+                    "bdot10k",
+                    "--teryt",
+                    "1465",
+                    "--format",
+                    "SHP",
+                    "-o",
+                    str(tmp_path),
+                ]
+            )
+        assert rc == 0
+        assert session.get.call_args[0][0].endswith("/SHP/14/1465_SHP.zip")
+        expected = tmp_path / "bdot10k_teryt_1465.zip"
+        assert expected.read_bytes().startswith(b"PK")
+        assert (tmp_path / "bdot10k_teryt_1465.zip.meta.json").exists()
+        assert sorted(p.name for p in tmp_path.iterdir()) == [
+            "bdot10k_teryt_1465.zip",
+            "bdot10k_teryt_1465.zip.meta.json",
+        ]
+        assert f"Downloaded to: {expected}" in capsys.readouterr().out
+
+    def test_provider_returns_zip_path_for_shp(self, tmp_path):
+        provider = Bdot10kProvider(session=self._session())
+        result = provider.download_by_admin_unit(
+            "1465", tmp_path / "powiat.gpkg", format="SHP"
+        )
+        assert result == tmp_path / "powiat.zip"
+        assert result.read_bytes() == self.SHP_ZIP
+        assert not (tmp_path / "powiat.gpkg").exists()
 
 
 class TestWojewodztwoMapping:
-    """Test województwo TERYT mapping."""
+    """Test voivodeship TERYT mapping."""
 
     def test_all_wojewodztwa_mapped(self):
-        """Test that all 16 województwa are mapped."""
+        """Test that all 16 voivodeships are mapped."""
         assert len(WOJEWODZTWO_NAMES) == 16
 
     def test_known_wojewodztwa(self):
-        """Test known województwo mappings."""
+        """Test known voivodeship mappings."""
         assert WOJEWODZTWO_NAMES["14"] == "mazowieckie"
         assert WOJEWODZTWO_NAMES["12"] == "malopolskie"
         assert WOJEWODZTWO_NAMES["02"] == "dolnoslaskie"
@@ -371,8 +490,8 @@ class TestBdot10kProviderDownload:
         provider = Bdot10kProvider()
         output = tmp_path / "out.gpkg"
 
-        with patch.object(
-            provider, "_download_with_retry", return_value=output
+        with patch(
+            "kartograf.providers.pl.bdot10k.download_to", return_value=output
         ) as mock_dl:
             result = provider.download_by_teryt("1465", output)
 
@@ -397,12 +516,57 @@ class TestBdot10kProviderDownload:
 
         with (
             patch.object(provider, "_get_teryt_for_point", return_value="1465"),
-            patch.object(provider, "download_by_teryt", return_value=output) as mock_dl,
+            patch.object(
+                provider, "download_by_admin_unit", return_value=output
+            ) as mock_dl,
         ):
             result = provider.download_by_godlo("N-34-130-D", output)
 
         assert result == output
         mock_dl.assert_called_once()
+
+    def test_download_by_admin_unit_returns_existing_gpkg_path(self, tmp_path):
+        """download_by_admin_unit must return the path that was actually
+        written to disk (the merged .gpkg), not the .zip target path that
+        _extract_gpkg_from_zip never creates.
+        """
+        provider = Bdot10kProvider()
+
+        # Minimal single-table GPKG, same recipe as test_extract_gpkg_from_zip.
+        gpkg_path = tmp_path / "temp_PTLZ.gpkg"
+        conn = sqlite3.connect(str(gpkg_path))
+        c = conn.cursor()
+        c.execute(
+            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+            "identifier TEXT, description TEXT, last_change TEXT, "
+            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+        )
+        c.execute(
+            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+        )
+        c.execute("CREATE TABLE PTLZ (id INTEGER PRIMARY KEY, name TEXT)")
+        c.execute("INSERT INTO PTLZ VALUES (1, 'forest')")
+        conn.commit()
+        conn.close()
+
+        zip_buf = BytesIO()
+        with zipfile.ZipFile(zip_buf, "w") as zf, open(gpkg_path, "rb") as f:
+            zf.writestr("data/BDOT10k_PTLZ.gpkg", f.read())
+
+        mock_resp = Mock()
+        mock_resp.iter_content.return_value = [zip_buf.getvalue()]
+        mock_resp.raise_for_status = Mock()
+
+        mock_session = Mock()
+        mock_session.get.return_value = mock_resp
+        provider._sessions.injected = mock_session
+
+        output_zip = tmp_path / "powiat_1465.zip"
+        result = provider.download_by_admin_unit("1465", output_zip)
+
+        assert result == tmp_path / "powiat_1465.gpkg"
+        assert result.exists()
 
     def test_get_teryt_for_point_gpkg_pattern(self):
         """Extract TERYT from GPKG URL pattern in WMS response."""
@@ -414,7 +578,7 @@ class TestBdot10kProviderDownload:
         )
         mock_resp.raise_for_status = Mock()
         mock_session.get.return_value = mock_resp
-        provider._session = mock_session
+        provider._sessions.injected = mock_session
 
         teryt = provider._get_teryt_for_point(500000, 600000)
         assert teryt == "1465"
@@ -429,7 +593,7 @@ class TestBdot10kProviderDownload:
         )
         mock_resp.raise_for_status = Mock()
         mock_session.get.return_value = mock_resp
-        provider._session = mock_session
+        provider._sessions.injected = mock_session
 
         teryt = provider._get_teryt_for_point(500000, 600000)
         assert teryt == "1465"
@@ -442,17 +606,18 @@ class TestBdot10kProviderDownload:
         mock_resp.text = "<html>No data here</html>"
         mock_resp.raise_for_status = Mock()
         mock_session.get.return_value = mock_resp
-        provider._session = mock_session
+        provider._sessions.injected = mock_session
 
         with pytest.raises(DownloadError, match="Could not determine TERYT"):
             provider._get_teryt_for_point(500000, 600000)
 
-    def test_get_teryt_for_point_network_error(self):
-        """Network error -> DownloadError."""
+    @patch("kartograf.transport.http.time.sleep")
+    def test_get_teryt_for_point_network_error(self, _sleep):
+        """Network error -> DownloadError (after 3 get_with_retry attempts)."""
         provider = Bdot10kProvider()
         mock_session = Mock()
         mock_session.get.side_effect = requests.RequestException("timeout")
-        provider._session = mock_session
+        provider._sessions.injected = mock_session
 
         with pytest.raises(DownloadError, match="WMS GetFeatureInfo failed"):
             provider._get_teryt_for_point(500000, 600000)
@@ -461,52 +626,47 @@ class TestBdot10kProviderDownload:
 class TestBdot10kRetryAndIO:
     """Test retry, save, extract, merge."""
 
-    def test_download_with_retry_success(self, tmp_path):
-        """Successful download on first attempt."""
-        provider = Bdot10kProvider()
-        output = tmp_path / "out.shp"
+    def test_download_shp_success(self, tmp_path):
+        """SHP package downloaded the first time: the stream saved as .zip."""
         mock_session = Mock()
         mock_resp = Mock()
         mock_resp.iter_content.return_value = [b"shp_data"]
         mock_resp.raise_for_status = Mock()
         mock_session.get.return_value = mock_resp
-        provider._session = mock_session
+        provider = Bdot10kProvider(session=mock_session)
 
-        result = provider._download_with_retry(
-            url="https://example.com/file.shp",
-            output_path=output,
-            timeout=30,
-            description="test",
+        result = provider.download_by_admin_unit(
+            "1465", tmp_path / "out.shp", format="SHP"
         )
-        assert result == output
-        assert output.read_bytes() == b"shp_data"
+        assert result == tmp_path / "out.zip"
+        assert result.read_bytes() == b"shp_data"
 
-    @patch("kartograf.providers.bdot10k.time.sleep")
-    def test_download_with_retry_all_fail(self, _sleep, tmp_path):
+    @patch("kartograf.transport.http.time.sleep")
+    def test_download_all_fail(self, _sleep, tmp_path):
         """All retries fail -> DownloadError."""
-        provider = Bdot10kProvider()
-        output = tmp_path / "out.shp"
         mock_session = Mock()
         mock_session.get.side_effect = requests.RequestException("fail")
-        provider._session = mock_session
+        provider = Bdot10kProvider(session=mock_session)
 
-        with pytest.raises(DownloadError, match="after 3 attempts"):
-            provider._download_with_retry(
-                url="https://example.com/file.shp",
-                output_path=output,
-                timeout=30,
-                description="test",
-            )
+        with pytest.raises(DownloadError, match="po 3 probach"):
+            provider.download_by_admin_unit("1465", tmp_path / "out.shp", format="SHP")
+        assert mock_session.get.call_count == 3
+        assert list(tmp_path.iterdir()) == []
 
-    def test_save_response(self, tmp_path):
-        """_save_response writes response content to file."""
-        provider = Bdot10kProvider()
-        output = tmp_path / "out.gpkg"
+    def test_download_writes_all_chunks(self, tmp_path):
+        """All response chunks end up in the file, no .tmp leftovers."""
+        mock_session = Mock()
         mock_resp = Mock()
         mock_resp.iter_content.return_value = [b"chunk1", b"chunk2"]
+        mock_resp.raise_for_status = Mock()
+        mock_session.get.return_value = mock_resp
+        provider = Bdot10kProvider(session=mock_session)
 
-        provider._save_response(mock_resp, output)
+        output = provider.download_by_admin_unit(
+            "1465", tmp_path / "out.gpkg", format="SHP"
+        )
         assert output.read_bytes() == b"chunk1chunk2"
+        assert [p.name for p in tmp_path.iterdir()] == ["out.zip"]
 
     def test_extract_gpkg_from_zip(self, tmp_path):
         """Extract PT* GPKG files from ZIP and merge."""
@@ -543,6 +703,40 @@ class TestBdot10kRetryAndIO:
 
         provider._extract_gpkg_from_zip(mock_resp, output)
         assert output.with_suffix(".gpkg").exists()
+
+    def test_merge_overwrites_existing_gpkg_like_windows(self, tmp_path):
+        """The merged GPKG overwrites the old file also under Windows semantics."""
+        import os
+
+        provider = Bdot10kProvider()
+        gpkg_path = tmp_path / "PTLZ.gpkg"
+        conn = sqlite3.connect(str(gpkg_path))
+        c = conn.cursor()
+        c.execute(
+            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+            "identifier TEXT, description TEXT, last_change TEXT, "
+            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+        )
+        c.execute(
+            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+        )
+        c.execute("CREATE TABLE PTLZ (id INTEGER PRIMARY KEY, name TEXT)")
+        conn.commit()
+        conn.close()
+        output = tmp_path / "out" / "merged.gpkg"
+        output.parent.mkdir()
+        output.write_bytes(b"stary plik")
+
+        def windows_rename(self, target):
+            if Path(target).exists():
+                raise FileExistsError(f"[WinError 183] {target}")
+            return os.replace(self, target)
+
+        with patch.object(Path, "rename", windows_rename):
+            provider._merge_gpkg_files([gpkg_path], output)
+        assert output.read_bytes().startswith(b"SQLite format 3")
+        assert [p.name for p in output.parent.iterdir()] == ["merged.gpkg"]
 
     def test_extract_gpkg_bad_zip(self, tmp_path):
         """Invalid ZIP -> DownloadError."""
@@ -649,6 +843,26 @@ class TestCorineProviderInit:
         provider = CorineProvider(use_proxy=False)
         assert provider._use_proxy is False
 
+    def test_env_var_does_not_enable_direct_mode(self, monkeypatch):
+        """CLMS_CREDENTIALS in env does NOT enable direct mode (ADR-002).
+
+        Credentials from env are consumed exclusively by the auth proxy subprocess
+        (kartograf.auth.proxy) - never by CorineProvider.__init__ directly. This
+        pins that removing the dead get_clms_credentials()/Keychain block in
+        corine.py (task 20 of the 0.7.0 audit) does not change this behaviour.
+        """
+        monkeypatch.setenv("CLMS_CREDENTIALS", '{"client_id": "x"}')
+        provider = CorineProvider()
+        assert provider._use_proxy is True
+        assert provider._clms_auth is None
+
+
+def _wms_bbox(url):
+    """Value of the BBOX parameter of a GetMap URL as four numbers."""
+    from urllib.parse import parse_qs, urlparse
+
+    return tuple(float(v) for v in parse_qs(urlparse(url).query)["BBOX"][0].split(","))
+
 
 class TestCorineProviderDownload:
     """Test CorineProvider download methods."""
@@ -671,8 +885,8 @@ class TestCorineProviderDownload:
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         output = tmp_path / "test.png"
 
-        with patch.object(
-            provider, "_download_with_retry", return_value=output
+        with patch(
+            "kartograf.providers.corine.download_to", return_value=output
         ) as mock_dl:
             result = provider._download_via_wms(bbox, output, 2018, 60)
 
@@ -681,20 +895,48 @@ class TestCorineProviderDownload:
 
     def test_download_via_wms_calculates_dimensions(self, tmp_path):
         """WMS dimensions are calculated from bbox size."""
+        import re
+
         provider = CorineProvider(use_proxy=False)
-        # 10km x 10km bbox at 100m resolution -> 100 x 100 pixels
+        # 10km x 10km bbox at 100m resolution -> 100 x ~100 pixels
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         output = tmp_path / "test.png"
 
-        with patch.object(
-            provider, "_download_with_retry", return_value=output
+        with patch(
+            "kartograf.providers.corine.download_to", return_value=output
         ) as mock_dl:
             provider._download_via_wms(bbox, output, 2018, 60)
 
-        call_args = mock_dl.call_args
-        url = call_args.kwargs.get("url", call_args[1].get("url", ""))
+        url = mock_dl.call_args.args[1]
         assert "WIDTH=100" in url
-        assert "HEIGHT=100" in url
+        # Height follows the EPSG:3857 envelope, which is not an exact square
+        height = int(re.search(r"HEIGHT=(\d+)", url).group(1))
+        assert 98 <= height <= 102
+
+    def test_download_via_wms_dlr_height_from_metric_aspect(self, tmp_path):
+        """DLR (1990, EPSG:4326 BBOX): height keeps the ground resolution.
+
+        Plate carree is not conformal - a pixel that is square in degrees is
+        1/cos(lat) taller on the ground, so the aspect ratio must come from
+        the metric (EPSG:3857) envelope, not from the degrees sent as BBOX.
+        """
+        import re
+
+        provider = CorineProvider(use_proxy=False)
+        # 10km x 10km bbox at 100m resolution -> 100 x ~100 pixels
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        output = tmp_path / "test.png"
+
+        with patch(
+            "kartograf.providers.corine.download_to", return_value=output
+        ) as mock_dl:
+            provider._download_via_wms(bbox, output, 1990, 60)
+
+        url = mock_dl.call_args.args[1]
+        assert "geoservice.dlr.de" in url  # DLR branch, BBOX in degrees
+        assert "WIDTH=100" in url
+        height = int(re.search(r"HEIGHT=(\d+)", url).group(1))
+        assert 98 <= height <= 102
 
     def test_download_via_wms_max_size_limit(self, tmp_path):
         """Huge bbox dimensions capped at 4096."""
@@ -703,15 +945,41 @@ class TestCorineProviderDownload:
         bbox = BBox(200000, 300000, 700000, 800000, "EPSG:2180")
         output = tmp_path / "test.png"
 
-        with patch.object(
-            provider, "_download_with_retry", return_value=output
+        with patch(
+            "kartograf.providers.corine.download_to", return_value=output
         ) as mock_dl:
             provider._download_via_wms(bbox, output, 2018, 60)
 
-        call_args = mock_dl.call_args
-        url = call_args.kwargs.get("url", call_args[1].get("url", ""))
+        url = mock_dl.call_args.args[1]
         assert "WIDTH=4096" in url
         assert "HEIGHT=4096" in url
+
+    def test_download_via_wms_aspect_matches_bbox_3857(self, tmp_path):
+        """Pixel aspect ratio matches the EPSG:3857 BBOX sent to the WMS."""
+        import re
+        from urllib.parse import unquote
+
+        from kartograf.core.sheet_parser import SheetParser
+
+        provider = CorineProvider(use_proxy=False)
+        bbox = SheetParser("N-34-130-D").get_bbox("EPSG:2180")
+        output = tmp_path / "test.png"
+
+        with patch(
+            "kartograf.providers.corine.download_to", return_value=output
+        ) as mock_dl:
+            provider._download_via_wms(bbox, output, 2018, 60)
+
+        url = mock_dl.call_args.args[1]
+        width = int(re.search(r"WIDTH=(\d+)", url).group(1))
+        height = int(re.search(r"HEIGHT=(\d+)", url).group(1))
+        bx_min, by_min, bx_max, by_max = (
+            float(v)
+            for v in unquote(re.search(r"BBOX=([^&]+)", url).group(1)).split(",")
+        )
+        aspect_px = width / height
+        aspect_bbox = (bx_max - bx_min) / (by_max - by_min)
+        assert abs(aspect_px - aspect_bbox) < 0.02
 
     @patch("kartograf.core.sheet_parser.SheetParser")
     def test_download_by_godlo_delegates_to_bbox(self, mock_parser_cls, tmp_path):
@@ -731,80 +999,56 @@ class TestCorineProviderDownload:
         assert result == output
         mock_dl.assert_called_once()
 
-    def test_download_with_retry_success(self, tmp_path):
-        """Successful download on first attempt."""
-        provider = CorineProvider(use_proxy=False)
-        output = tmp_path / "test.png"
+    _BBOX = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+
+    def test_download_via_wms_writes_png(self, tmp_path):
+        """A WMS preview downloaded the first time goes to .png."""
         mock_session = Mock()
         mock_resp = Mock()
         mock_resp.headers = {"Content-Type": "image/png"}
         mock_resp.iter_content.return_value = [b"png_data"]
         mock_resp.raise_for_status = Mock()
         mock_session.get.return_value = mock_resp
-        provider._session = mock_session
+        provider = CorineProvider(session=mock_session, use_proxy=False)
 
-        result = provider._download_with_retry(
-            url="https://example.com/wms",
-            output_path=output,
-            timeout=30,
-            description="test",
-        )
-        assert result == output
+        result = provider._download_via_wms(self._BBOX, tmp_path / "t.tif", 2018, 30)
+        assert result == tmp_path / "t.png"
+        assert result.read_bytes() == b"png_data"
+        # atomic write: no temporary file leftovers
+        assert [p.name for p in tmp_path.iterdir()] == ["t.png"]
 
-    def test_download_with_retry_wms_error_response(self, tmp_path):
-        """XML content type -> DownloadError."""
-        provider = CorineProvider(use_proxy=False)
-        output = tmp_path / "test.png"
+    @patch("kartograf.transport.http.time.sleep")
+    def test_download_via_wms_error_response(self, sleep, tmp_path):
+        """XML content type -> DownloadError without retries and without a file."""
         mock_session = Mock()
         mock_resp = Mock()
         mock_resp.headers = {"Content-Type": "application/xml"}
         mock_resp.text = "<ServiceException>Error</ServiceException>"
         mock_resp.raise_for_status = Mock()
         mock_session.get.return_value = mock_resp
-        provider._session = mock_session
+        provider = CorineProvider(session=mock_session, use_proxy=False)
 
         with pytest.raises(DownloadError, match="WMS returned error"):
-            provider._download_with_retry(
-                url="https://example.com/wms",
-                output_path=output,
-                timeout=30,
-                description="test",
-            )
+            provider._download_via_wms(self._BBOX, tmp_path / "t.png", 2018, 30)
+        assert mock_session.get.call_count == 1
+        sleep.assert_not_called()
+        assert list(tmp_path.iterdir()) == []
 
-    @patch("kartograf.providers.corine.time.sleep")
-    def test_download_with_retry_all_fail(self, _sleep, tmp_path):
+    @patch("kartograf.transport.http.time.sleep")
+    def test_download_via_wms_all_fail(self, _sleep, tmp_path):
         """All retries fail -> DownloadError."""
-        provider = CorineProvider(use_proxy=False)
-        output = tmp_path / "test.png"
         mock_session = Mock()
         mock_session.get.side_effect = requests.RequestException("timeout")
-        provider._session = mock_session
+        provider = CorineProvider(session=mock_session, use_proxy=False)
 
-        with pytest.raises(DownloadError, match="after 3 attempts"):
-            provider._download_with_retry(
-                url="https://example.com/wms",
-                output_path=output,
-                timeout=30,
-                description="test",
-            )
-
-    def test_save_response_atomic(self, tmp_path):
-        """_save_response writes atomically via temp file."""
-        provider = CorineProvider(use_proxy=False)
-        output = tmp_path / "out.png"
-        mock_resp = Mock()
-        mock_resp.iter_content.return_value = [b"data"]
-
-        provider._save_response(mock_resp, output)
-        assert output.read_bytes() == b"data"
-        # Temp file should not remain
-        assert not output.with_suffix(".png.tmp").exists()
+        with pytest.raises(DownloadError, match="po 3 probach"):
+            provider._download_via_wms(self._BBOX, tmp_path / "t.png", 2018, 30)
+        assert mock_session.get.call_count == 3
 
     def test_transform_bbox_to_wgs84(self):
         """Known EPSG:2180 bbox transforms to WGS84."""
-        provider = CorineProvider(use_proxy=False)
         bbox = BBox(500000, 600000, 510000, 610000, "EPSG:2180")
-        result = provider._transform_bbox_to_wgs84(bbox)
+        result = envelope_from_2180(bbox, "EPSG:4326")
         # Should be roughly in Poland (14-25 E, 49-55 N)
         assert 14 < result[0] < 25  # min_lon
         assert 49 < result[1] < 56  # min_lat
@@ -813,13 +1057,66 @@ class TestCorineProviderDownload:
 
     def test_transform_bbox_to_epsg3857(self):
         """Known EPSG:2180 bbox transforms to EPSG:3857."""
-        provider = CorineProvider(use_proxy=False)
         bbox = BBox(500000, 600000, 510000, 610000, "EPSG:2180")
-        result = provider._transform_bbox_to_epsg3857(bbox)
+        result = envelope_from_2180(bbox, "EPSG:3857")
         # EPSG:3857 values are in millions for European coordinates
         assert result[0] > 1_000_000
         assert result[2] > result[0]
         assert result[3] > result[1]
+
+    def test_wms_dlr_bbox_covers_all_corners(self, tmp_path):
+        """Envelope covers all four corners, not only SW and NE."""
+        from pyproj import Transformer
+
+        from kartograf.core.sheet_parser import SheetParser
+
+        bbox = SheetParser("N-34-130-D").get_bbox("EPSG:2180")
+        # provider path: DLR (1990) sends BBOX in EPSG:4326 (WMS 1.1.1, lon/lat)
+        provider = CorineProvider(use_proxy=False)
+        with patch("kartograf.providers.corine.download_to") as dl:
+            provider._download_via_wms(bbox, tmp_path / "x.png", 1990, 30)
+        min_lon, min_lat, max_lon, max_lat = _wms_bbox(dl.call_args.args[1])
+
+        transformer = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
+        for x, y in (
+            (bbox.min_x, bbox.min_y),
+            (bbox.min_x, bbox.max_y),
+            (bbox.max_x, bbox.min_y),
+            (bbox.max_x, bbox.max_y),
+        ):
+            lon, lat = transformer.transform(x, y)
+            assert min_lon <= lon <= max_lon, f"corner {(x, y)}: lon outside envelope"
+            assert min_lat <= lat <= max_lat, f"corner {(x, y)}: lat outside envelope"
+
+        # Two corners span 0.1657 deg of latitude, the true envelope 0.1830 deg.
+        assert max_lat - min_lat > 0.18
+
+    def test_wms_eea_bbox_covers_all_corners(self, tmp_path):
+        """Envelope covers all four corners, not only SW and NE."""
+        from pyproj import Transformer
+
+        from kartograf.core.sheet_parser import SheetParser
+
+        bbox = SheetParser("N-34-130-D").get_bbox("EPSG:2180")
+        # provider path: EEA (2018) sends BBOX in EPSG:3857
+        provider = CorineProvider(use_proxy=False)
+        with patch("kartograf.providers.corine.download_to") as dl:
+            provider._download_via_wms(bbox, tmp_path / "x.png", 2018, 30)
+        min_x, min_y, max_x, max_y = _wms_bbox(dl.call_args.args[1])
+
+        transformer = Transformer.from_crs("EPSG:2180", "EPSG:3857", always_xy=True)
+        for x, y in (
+            (bbox.min_x, bbox.min_y),
+            (bbox.min_x, bbox.max_y),
+            (bbox.max_x, bbox.min_y),
+            (bbox.max_x, bbox.max_y),
+        ):
+            merc_x, merc_y = transformer.transform(x, y)
+            assert min_x <= merc_x <= max_x, f"corner {(x, y)}: x outside envelope"
+            assert min_y <= merc_y <= max_y, f"corner {(x, y)}: y outside envelope"
+
+        # Two corners span 30244 m of northing, the true envelope 33406 m.
+        assert max_y - min_y > 33000
 
     def test_get_available_layers(self):
         """Returns CLC_year strings."""
@@ -868,7 +1165,7 @@ class TestLandCoverManagerDownload:
         # Check auto-generated path contains provider name and TERYT
         call_args = mock_provider.download_by_teryt.call_args
         auto_path = call_args[0][1]
-        assert "TestProv" in str(auto_path)
+        assert "testprov" in str(auto_path).lower()
         assert "1465" in str(auto_path)
 
     def test_download_by_bbox(self, tmp_path):
@@ -980,6 +1277,41 @@ class TestLandCoverManagerDownload:
         formats = manager.get_supported_formats()
 
         assert formats == ["GPKG"]
+
+    @pytest.mark.parametrize(
+        "call_kwargs,method_name",
+        [
+            ({"godlo": "N-34-130-D"}, "godlo"),
+            ({"teryt": "1465"}, "teryt"),
+            (
+                {"bbox": BBox(500000, 300000, 510000, 310000, "EPSG:2180")},
+                "bbox",
+            ),
+        ],
+    )
+    def test_download_and_download_by_x_generate_same_path(
+        self, tmp_path, call_kwargs, method_name
+    ):
+        """download() and download_by_* must generate identical paths without spaces."""
+        mock_provider = Mock()
+        mock_provider.name = "CORINE Land Cover"
+        provider_method = getattr(mock_provider, f"download_by_{method_name}")
+        provider_method.return_value = tmp_path / "out.gpkg"
+
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+
+        with patch.object(manager, "_write_sidecar"):
+            manager.download(**call_kwargs)
+        path_via_download = provider_method.call_args[0][1]
+
+        provider_method.reset_mock()
+        manager_method = getattr(manager, f"download_by_{method_name}")
+        manager_method(**call_kwargs)
+        path_via_download_by = provider_method.call_args[0][1]
+
+        assert path_via_download == path_via_download_by
+        assert " " not in str(path_via_download)
+        assert " " not in str(path_via_download_by)
 
     def test_generate_output_path(self, tmp_path):
         """_generate_output_path creates correct paths."""
@@ -1233,3 +1565,354 @@ class TestBdot10kRtreeIndex:
         results = cursor.fetchall()
         assert len(results) == 1
         conn.close()
+
+
+class TestAdminUnitAliases:
+    """Stage 0 (spec 6.7): canonical download_by_admin_unit + teryt aliases."""
+
+    def test_validate_admin_unit_same_as_teryt(self):
+        provider = Bdot10kProvider()
+        assert provider.validate_admin_unit("1465") is True
+        assert provider.validate_admin_unit("123") is False
+        assert provider.validate_teryt("1465") is provider.validate_admin_unit("1465")
+
+    def test_download_by_teryt_delegates_to_admin_unit(self, tmp_path):
+        provider = Bdot10kProvider()
+        output = tmp_path / "out.gpkg"
+        with patch.object(
+            provider, "download_by_admin_unit", return_value=output
+        ) as mock_new:
+            result = provider.download_by_teryt("1465", output, timeout=99)
+        mock_new.assert_called_once_with("1465", output, timeout=99)
+        assert result == output
+
+    def test_source_url_aliases_base_url(self):
+        provider = Bdot10kProvider()
+        assert provider.source_url == provider.base_url
+
+    def test_data_source_provider_hierarchy(self):
+        from kartograf.providers.base import BaseProvider, DataSourceProvider
+
+        assert issubclass(LandCoverProvider, DataSourceProvider)
+        assert issubclass(BaseProvider, DataSourceProvider)
+        assert DataSourceProvider.descriptor_key is None
+
+
+class TestSidecarLandCover:
+    """A .meta.json sidecar after a land cover download (spec stage 0)."""
+
+    def test_download_by_teryt_writes_sidecar(self, tmp_path):
+        mock_provider = Mock()
+        mock_provider.name = "BDOT10k"
+        mock_provider.descriptor_key = "pl.gugik.bdot10k"
+        out = tmp_path / "out.gpkg"
+
+        def fake(teryt, output_path, **kwargs):
+            out.write_bytes(b"GPKG")
+            return out
+
+        mock_provider.download_by_teryt.side_effect = fake
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+        result = manager.download_by_teryt("1465", output_path=out)
+        sidecar = result.parent / f"{result.name}.meta.json"
+        assert sidecar.exists()
+        import json
+
+        payload = json.loads(sidecar.read_text(encoding="utf-8"))
+        assert payload["dataset"] == "pl.gugik.bdot10k"
+        assert payload["request"] == {"teryt": "1465"}
+        assert payload["vertical_crs"] is None
+
+    def test_sidecar_failure_does_not_break_download(self, tmp_path, caplog):
+        """D7: a sidecar build error = warning, the data file stays."""
+        import logging
+
+        mock_provider = Mock()
+        mock_provider.name = "BDOT10k"
+        mock_provider.descriptor_key = "pl.gugik.bdot10k"
+        out = tmp_path / "out.gpkg"
+
+        def fake(teryt, output_path, **kwargs):
+            out.write_bytes(b"GPKG")
+            return out
+
+        mock_provider.download_by_teryt.side_effect = fake
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+        with (
+            patch(
+                "kartograf.sources.sidecar.build_metadata",
+                side_effect=RuntimeError("zepsuty deskryptor"),
+            ),
+            caplog.at_level(logging.WARNING),
+        ):
+            result = manager.download_by_teryt("1465", output_path=out)
+        assert result.exists()
+        assert not (result.parent / f"{result.name}.meta.json").exists()
+        assert "zepsuty deskryptor" in caplog.text
+
+    @staticmethod
+    def _corine_png_sidecar(tmp_path, **kwargs):
+        """Download CORINE by bbox with the PNG fallback; return the sidecar payload."""
+        import json
+
+        mock_provider = Mock()
+        mock_provider.name = "CORINE"
+        mock_provider.descriptor_key = "eu.clms.corine"
+        out = tmp_path / "clc.png"
+
+        def fake(bbox, output_path, **_kwargs):
+            out.write_bytes(b"\x89PNG")
+            return out
+
+        mock_provider.download_by_bbox.side_effect = fake
+        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+        result = manager.download_by_bbox(bbox, output_path=out, **kwargs)
+        sidecar = result.parent / f"{result.name}.meta.json"
+        assert sidecar.exists()
+        return json.loads(sidecar.read_text(encoding="utf-8"))
+
+    def test_corine_png_fallback_uses_web_mercator(self, tmp_path):
+        payload = self._corine_png_sidecar(tmp_path)
+        assert payload["horizontal_crs"] == "EPSG:3857"
+        assert payload["extra"]["fallback"] == "wms_png"
+        assert payload["extra"]["note"] == "podglad WMS, nie dane"
+
+    def test_corine_png_fallback_1990_uses_wgs84(self, tmp_path):
+        payload = self._corine_png_sidecar(tmp_path, year=1990)
+        assert payload["horizontal_crs"] == "EPSG:4326"
+        assert payload["extra"]["fallback"] == "wms_png"
+
+
+class TestBdot10kDefaultTimeout:
+    """N11: ``Bdot10kProvider.DEFAULT_TIMEOUT`` is the source of the default
+    download timeout in all modes (SCOPE 3.2: 120 s), not a dead constant
+    contradicting the signatures."""
+
+    @pytest.mark.parametrize(
+        "method", ["download_by_admin_unit", "download_by_godlo", "download_by_bbox"]
+    )
+    def test_download_default_timeout_is_class_constant(self, method):
+        import inspect
+
+        from kartograf.providers.pl.bdot10k import Bdot10kProvider
+
+        default = (
+            inspect.signature(getattr(Bdot10kProvider, method))
+            .parameters["timeout"]
+            .default
+        )
+        assert default == Bdot10kProvider.DEFAULT_TIMEOUT == 120
+
+
+def _make_layer_gpkg(path, table, value):
+    conn = sqlite3.connect(str(path))
+    c = conn.cursor()
+    c.execute(
+        "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
+        "identifier TEXT, description TEXT, last_change TEXT, "
+        "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
+    )
+    c.execute(
+        "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
+        "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+    )
+    c.execute(f"CREATE TABLE {table} (id INTEGER PRIMARY KEY, name TEXT)")
+    c.execute(f"INSERT INTO {table} VALUES (1, '{value}')")
+    conn.commit()
+    conn.close()
+
+
+class TestBdot10kMergeOnNetworkShare:
+    """CIFS/SMB without nobrl: SQLite cannot write in the output directory."""
+
+    def _patch_locked_in(self, monkeypatch, out_dir):
+        real_connect = sqlite3.connect
+
+        def fake_connect(database, *a, **kw):
+            if Path(str(database)).resolve().is_relative_to(out_dir.resolve()):
+                raise sqlite3.OperationalError("database is locked")
+            return real_connect(database, *a, **kw)
+
+        monkeypatch.setattr(sqlite3, "connect", fake_connect)
+
+    def test_merge_succeeds_when_sqlite_locked_in_output_dir(
+        self, tmp_path, monkeypatch
+    ):
+        src = tmp_path / "src"
+        src.mkdir()
+        out_dir = tmp_path / "share"
+        out_dir.mkdir()
+        g1, g2 = src / "one.gpkg", src / "two.gpkg"
+        _make_layer_gpkg(g1, "PTLZ", "forest")
+        _make_layer_gpkg(g2, "PTWP", "water")
+        self._patch_locked_in(monkeypatch, out_dir)
+
+        output = out_dir / "merged.gpkg"
+        Bdot10kProvider()._merge_gpkg_files([g1, g2], output)
+
+        monkeypatch.undo()
+        assert output.exists()
+        conn = sqlite3.connect(str(output))
+        tables = {
+            r[0]
+            for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        }
+        conn.close()
+        assert {"PTLZ", "PTWP"} <= tables
+        assert [p.name for p in out_dir.iterdir()] == ["merged.gpkg"]
+
+    def test_no_leftovers_on_failure(self, tmp_path, monkeypatch):
+        import tempfile
+
+        src = tmp_path / "src"
+        src.mkdir()
+        out_dir = tmp_path / "share"
+        out_dir.mkdir()
+        g1, g2 = src / "one.gpkg", src / "two.gpkg"
+        _make_layer_gpkg(g1, "PTLZ", "forest")
+        _make_layer_gpkg(g2, "PTWP", "water")
+
+        work_dirs = []
+        real_tmpdir = tempfile.TemporaryDirectory
+
+        class SpyTmp(real_tmpdir):
+            def __init__(self, *a, **kw):
+                super().__init__(*a, **kw)
+                work_dirs.append(Path(self.name))
+
+        monkeypatch.setattr(tempfile, "TemporaryDirectory", SpyTmp)
+
+        def boom(self, target):
+            # final_tmp already exists (copy after merging) - the swap fails
+            assert self.exists()
+            raise OSError("replace failed")
+
+        monkeypatch.setattr(Path, "replace", boom)
+
+        with pytest.raises(OSError, match="replace failed"):
+            Bdot10kProvider()._merge_gpkg_files([g1, g2], out_dir / "merged.gpkg")
+
+        assert list(out_dir.glob("*.tmp")) == []
+        assert list(out_dir.iterdir()) == []
+        assert len(work_dirs) == 1 and not work_dirs[0].exists()
+
+
+def _tree(root: Path) -> list[str]:
+    """Sorted relative paths of everything under ``root``."""
+    return sorted(str(p.relative_to(root)) for p in root.rglob("*"))
+
+
+def _stream_response(body: bytes, content_type: str) -> Mock:
+    resp = Mock()
+    resp.headers = {"Content-Type": content_type}
+    resp.raise_for_status = Mock()
+    resp.iter_content.return_value = [body]
+    return resp
+
+
+class TestLandCoverNoSideEffectsOnInit:
+    """The output directory is created only on write, not in ``__init__``."""
+
+    @pytest.fixture
+    def empty_cwd(self, tmp_path, monkeypatch):
+        cwd = tmp_path / "empty"
+        cwd.mkdir()
+        monkeypatch.chdir(cwd)
+        return cwd
+
+    def test_default_init_creates_nothing(self, empty_cwd):
+        LandCoverManager()
+        assert _tree(empty_cwd) == []
+
+    @pytest.mark.parametrize("source", ["bdot10k", "corine", "soilgrids"])
+    def test_init_with_output_dir_creates_nothing(self, empty_cwd, source):
+        out = empty_cwd / "a" / "b"
+        manager = LandCoverManager(output_dir=out, provider=source)
+        # Generating the path (without writing) must not create it either.
+        manager._generate_output_path("1465", None, None)
+        assert _tree(empty_cwd) == []
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["landcover", "list-sources"],
+            ["landcover", "list-layers", "--source", "bdot10k"],
+            ["landcover", "list-layers", "--source", "corine"],
+            ["landcover", "list-layers", "--source", "soilgrids"],
+        ],
+    )
+    def test_cli_list_commands_create_nothing(self, empty_cwd, argv, capsys):
+        from kartograf.cli.commands import main
+
+        assert main(argv) == 0
+        assert _tree(empty_cwd) == []
+
+    def test_bdot10k_download_creates_output_dir_and_file(self, empty_cwd):
+        out_dir = empty_cwd / "data" / "landcover"
+        provider = Bdot10kProvider()
+        session = Mock()
+        session.get.return_value = _stream_response(b"PK zip", "application/zip")
+        provider._sessions.injected = session
+        manager = LandCoverManager(output_dir=out_dir, provider=provider)
+        assert not out_dir.exists()
+
+        path = manager.download(teryt="1465", format="SHP")
+
+        assert path == out_dir / "bdot10k_teryt_1465.zip"
+        assert path.read_bytes() == b"PK zip"
+        assert (out_dir / "bdot10k_teryt_1465.zip.meta.json").exists()
+
+    def test_corine_wms_download_creates_output_dir_and_file(self, empty_cwd):
+        out_dir = empty_cwd / "out" / "corine"
+        provider = CorineProvider(use_proxy=False)
+        session = Mock()
+        session.get.return_value = _stream_response(b"\x89PNG", "image/png")
+        provider._sessions.injected = session
+        manager = LandCoverManager(output_dir=out_dir, provider=provider)
+        bbox = BBox(450000, 550000, 451000, 551000, "EPSG:2180")
+
+        path = manager.download(bbox=bbox, year=2018)
+
+        assert path.parent == out_dir
+        assert path.read_bytes() == b"\x89PNG"
+        assert (out_dir / f"{path.name}.meta.json").exists()
+
+    def test_soilgrids_download_creates_output_dir_and_file(self, empty_cwd):
+        from kartograf.providers.soilgrids import SoilGridsProvider
+
+        out_dir = empty_cwd / "out" / "soil"
+        provider = SoilGridsProvider()
+        session = Mock()
+        session.get.return_value = _stream_response(b"II*\x00", "image/tiff")
+        provider._sessions.injected = session
+        manager = LandCoverManager(output_dir=out_dir, provider=provider)
+        bbox = BBox(450000, 550000, 451000, 551000, "EPSG:2180")
+
+        path = manager.download(bbox=bbox)
+
+        assert path.parent == out_dir
+        assert path.read_bytes() == b"II*\x00"
+        assert (out_dir / f"{path.name}.meta.json").exists()
+
+    @pytest.mark.parametrize("source", ["bdot10k", "corine", "soilgrids"])
+    def test_failed_download_leaves_no_output_dir(self, empty_cwd, source):
+        out_dir = empty_cwd / "out"
+        manager = LandCoverManager(output_dir=out_dir, provider=source)
+        if source == "corine":
+            manager.set_provider(CorineProvider(use_proxy=False))
+        session = Mock()
+        response = Mock(status_code=404, headers={})
+        response.raise_for_status.side_effect = requests.HTTPError(
+            "404", response=response
+        )
+        session.get.return_value = response
+        manager.provider._sessions.injected = session
+
+        with pytest.raises(DownloadError):
+            if source == "bdot10k":
+                manager.download(teryt="1465")
+            else:
+                manager.download(bbox=BBox(450000, 550000, 451000, 551000, "EPSG:2180"))
+
+        assert _tree(empty_cwd) == []

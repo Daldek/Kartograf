@@ -14,7 +14,6 @@ import pytest
 
 from kartograf.core.geometry import (
     _parse_gpkg_envelope,
-    _transform_bbox,
     find_sheets_for_geometry,
     get_overall_bbox,
     read_feature_bboxes,
@@ -24,6 +23,11 @@ from kartograf.exceptions import ValidationError  # noqa: I001
 # =========================================================================
 # Fixtures — SHP
 # =========================================================================
+
+
+def _bbox_contains(bbox, x: float, y: float) -> bool:
+    """True when the point (x, y) lies in the ``bbox`` envelope (edges included)."""
+    return bbox.min_x <= x <= bbox.max_x and bbox.min_y <= y <= bbox.max_y
 
 
 def _write_prj(path: Path, epsg: int = 2180):
@@ -156,6 +160,40 @@ def shp_with_null(tmp_path):
     return shp_path
 
 
+@pytest.fixture
+def shp_points_epsg2180(tmp_path):
+    """Create a shapefile with 2 POINT features in EPSG:2180."""
+    import shapefile
+
+    shp_path = tmp_path / "points_2180.shp"
+    with shapefile.Writer(str(shp_path), shapeType=shapefile.POINT) as w:
+        w.field("name", "C", 40)
+        # Point 1: Warsaw (hydrological cross-section)
+        w.point(637000, 487000)
+        w.record("point1")
+        # Point 2: another 1:10000 sheet
+        w.point(605000, 495000)
+        w.record("point2")
+
+    _write_prj(shp_path.with_suffix(".prj"), 2180)
+    return shp_path
+
+
+@pytest.fixture
+def shp_pointz_epsg2180(tmp_path):
+    """Create a shapefile with a single POINTZ feature in EPSG:2180."""
+    import shapefile
+
+    shp_path = tmp_path / "pointz_2180.shp"
+    with shapefile.Writer(str(shp_path), shapeType=shapefile.POINTZ) as w:
+        w.field("name", "C", 40)
+        w.pointz(637000, 487000, 110.5)
+        w.record("outlet")
+
+    _write_prj(shp_path.with_suffix(".prj"), 2180)
+    return shp_path
+
+
 # =========================================================================
 # Fixtures — GPKG
 # =========================================================================
@@ -169,9 +207,16 @@ def _make_gpkg_blob(
     srs_id: int = 2180,
     envelope_type: int = 1,
     byte_order: int = 1,
+    wkb_type: int = 1,
+    empty: bool = False,
 ) -> bytes:
-    """Create a minimal GeoPackage binary geometry blob with envelope."""
+    """Create a minimal GeoPackage binary geometry blob (WKB POINT by default)."""
     flags = (envelope_type << 1) | byte_order
+    if empty:
+        # Bit 4 = "empty geometry" per the GeoPackage specification; GDAL then
+        # writes an empty POINT as WKB with NaN.
+        flags |= 1 << 4
+        min_x = min_y = float("nan")
     endian = "<" if byte_order == 1 else ">"
 
     header = b"GP"  # magic
@@ -184,7 +229,7 @@ def _make_gpkg_blob(
         header += struct.pack(f"{endian}4d", min_x, max_x, min_y, max_y)
 
     # Add minimal WKB point after envelope (for completeness)
-    header += struct.pack(f"{endian}Bi2d", byte_order, 1, min_x, min_y)
+    header += struct.pack(f"{endian}Bi2d", byte_order, wkb_type, min_x, min_y)
 
     return header
 
@@ -406,6 +451,82 @@ def gpkg_no_envelope(tmp_path):
     return gpkg_path
 
 
+def _build_gpkg(gpkg_path: Path, blobs: list[bytes], geometry_type: str = "POLYGON"):
+    """Build a minimal EPSG:2180 GeoPackage holding the given geometry blobs."""
+    from pyproj import CRS
+
+    conn = sqlite3.connect(str(gpkg_path))
+    wkt = CRS.from_epsg(2180).to_wkt()
+
+    conn.execute(
+        "CREATE TABLE gpkg_spatial_ref_sys ("
+        "srs_name TEXT, srs_id INTEGER PRIMARY KEY, "
+        "organization TEXT, organization_coordsys_id INTEGER, "
+        "definition TEXT, description TEXT)"
+    )
+    conn.execute(
+        "INSERT INTO gpkg_spatial_ref_sys VALUES (?, ?, ?, ?, ?, ?)",
+        ("EPSG:2180", 2180, "EPSG", 2180, wkt, "PL-1992"),
+    )
+
+    conn.execute(
+        "CREATE TABLE gpkg_contents ("
+        "table_name TEXT PRIMARY KEY, data_type TEXT, "
+        "identifier TEXT, description TEXT, "
+        "last_change TEXT, min_x REAL, min_y REAL, max_x REAL, max_y REAL, "
+        "srs_id INTEGER)"
+    )
+    conn.execute(
+        "INSERT INTO gpkg_contents VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        ("features", "features", "features", "", "", 0, 0, 0, 0, 2180),
+    )
+
+    conn.execute(
+        "CREATE TABLE gpkg_geometry_columns ("
+        "table_name TEXT, column_name TEXT, "
+        "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
+    )
+    conn.execute(
+        "INSERT INTO gpkg_geometry_columns VALUES (?, ?, ?, ?, ?, ?)",
+        ("features", "geom", geometry_type, 2180, 0, 0),
+    )
+
+    conn.execute(
+        "CREATE TABLE features (fid INTEGER PRIMARY KEY, name TEXT, geom BLOB)"
+    )
+    for i, blob in enumerate(blobs):
+        conn.execute("INSERT INTO features (name, geom) VALUES (?, ?)", (f"f{i}", blob))
+
+    conn.commit()
+    conn.close()
+    return gpkg_path
+
+
+@pytest.fixture
+def gpkg_no_envelope_polygon(tmp_path):
+    """GPKG with envelope_type=0 and a non-point geometry (WKB POLYGON)."""
+    blob = _make_gpkg_blob(420000, 230000, 421000, 231000, envelope_type=0, wkb_type=3)
+    return _build_gpkg(tmp_path / "no_env_poly.gpkg", [blob])
+
+
+@pytest.fixture
+def gpkg_empty_and_point(tmp_path):
+    """GPKG (envelope_type=0) with an empty geometry and a real point."""
+    empty_blob = _make_gpkg_blob(0, 0, 0, 0, envelope_type=0, empty=True)
+    point_blob = _make_gpkg_blob(420000, 230000, 420000, 230000, envelope_type=0)
+    return _build_gpkg(
+        tmp_path / "empty_and_point.gpkg",
+        [empty_blob, point_blob],
+        geometry_type="POINT",
+    )
+
+
+@pytest.fixture
+def gpkg_no_features_geom(tmp_path):
+    """A GPKG with a feature layer but without any row."""
+    return _build_gpkg(tmp_path / "empty_layer.gpkg", [])
+
+
 @pytest.fixture
 def gpkg_no_features(tmp_path):
     """Create a GPKG with no feature tables."""
@@ -462,11 +583,53 @@ class TestParseGpkgEnvelope:
         assert max_x == pytest.approx(300.0)
         assert max_y == pytest.approx(400.0)
 
-    def test_no_envelope_type_0(self):
-        """Envelope type 0 (no envelope) returns None."""
+    def test_no_envelope_point_read_from_wkb(self):
+        """Envelope type 0 + WKB POINT: coordinates come from the WKB itself."""
         blob = _make_gpkg_blob(100.0, 200.0, 300.0, 400.0, envelope_type=0)
         result = _parse_gpkg_envelope(blob)
-        assert result is None
+        assert result == (100.0, 200.0, 100.0, 200.0)
+
+    def test_no_envelope_pointz_ewkb_flag(self):
+        """Envelope type 0 + EWKB POINT Z (0x80000000 flag) is read as a point."""
+        header = b"GP" + struct.pack("B", 0) + struct.pack("B", 1)
+        header += struct.pack("<i", 2180)
+        blob = header + struct.pack("<BI2d", 1, 0x80000001, 5.0, 6.0)
+        blob += struct.pack("<d", 123.0)  # Z
+
+        assert _parse_gpkg_envelope(blob) == (5.0, 6.0, 5.0, 6.0)
+
+    def test_no_envelope_non_point_raises(self):
+        """Envelope type 0 + non-point WKB raises ValidationError."""
+        blob = _make_gpkg_blob(100.0, 200.0, 300.0, 400.0, envelope_type=0, wkb_type=3)
+        with pytest.raises(ValidationError, match="envelope"):
+            _parse_gpkg_envelope(blob)
+
+    def test_empty_geometry_flag_returns_none(self):
+        """Empty geometry (flags bit 4) is skipped, not read as a NaN point."""
+        blob = _make_gpkg_blob(0, 0, 0, 0, envelope_type=0, empty=True)
+        assert _parse_gpkg_envelope(blob) is None
+
+    def test_no_envelope_ewkb_with_srid_skips_srid_field(self):
+        """EWKB SRID flag (0x20000000) inserts 4 bytes before the coordinates."""
+        header = b"GP" + struct.pack("B", 0) + struct.pack("B", 1)
+        header += struct.pack("<i", 2180)
+        blob = header + struct.pack("<BIi2d", 1, 0x20000001, 2180, 5.0, 6.0)
+
+        assert _parse_gpkg_envelope(blob) == (5.0, 6.0, 5.0, 6.0)
+
+    def test_no_envelope_truncated_srid_wkb_returns_none(self):
+        """EWKB with SRID but truncated coordinates returns None."""
+        header = b"GP" + struct.pack("B", 0) + struct.pack("B", 1)
+        header += struct.pack("<i", 2180)
+        blob = header + struct.pack("<BIid", 1, 0x20000001, 2180, 5.0)
+
+        assert _parse_gpkg_envelope(blob) is None
+
+    def test_no_envelope_truncated_wkb_returns_none(self):
+        """Envelope type 0 with a truncated WKB returns None."""
+        header = b"GP" + struct.pack("B", 0) + struct.pack("B", 1)
+        header += struct.pack("<i", 2180)
+        assert _parse_gpkg_envelope(header + b"\x01\x01\x00") is None
 
     def test_empty_blob(self):
         """Empty blob returns None."""
@@ -529,6 +692,31 @@ class TestReadShpBboxes:
         with pytest.raises(ValidationError, match="Missing .prj"):
             read_feature_bboxes(shp_no_prj, target_crs="EPSG:2180")
 
+    def test_point_shapes_yield_degenerate_bboxes(self, shp_points_epsg2180):
+        """POINT features produce degenerate bboxes (min == max)."""
+        bboxes = read_feature_bboxes(shp_points_epsg2180, target_crs="EPSG:2180")
+        assert len(bboxes) == 2
+
+        assert bboxes[0].min_x == pytest.approx(637000)
+        assert bboxes[0].max_x == pytest.approx(637000)
+        assert bboxes[0].min_y == pytest.approx(487000)
+        assert bboxes[0].max_y == pytest.approx(487000)
+        assert bboxes[0].crs == "EPSG:2180"
+
+        assert bboxes[1].min_x == pytest.approx(605000)
+        assert bboxes[1].max_x == pytest.approx(605000)
+        assert bboxes[1].min_y == pytest.approx(495000)
+        assert bboxes[1].max_y == pytest.approx(495000)
+
+    def test_pointz_shape_supported(self, shp_pointz_epsg2180):
+        """POINTZ features are read like POINT (Z ignored)."""
+        bboxes = read_feature_bboxes(shp_pointz_epsg2180, target_crs="EPSG:2180")
+        assert len(bboxes) == 1
+        assert bboxes[0].min_x == pytest.approx(637000)
+        assert bboxes[0].max_x == pytest.approx(637000)
+        assert bboxes[0].min_y == pytest.approx(487000)
+        assert bboxes[0].max_y == pytest.approx(487000)
+
 
 # =========================================================================
 # Tests — GPKG reading
@@ -573,10 +761,28 @@ class TestReadGpkgBboxes:
         with pytest.raises(ValidationError, match="No feature tables"):
             read_feature_bboxes(gpkg_no_features, target_crs="EPSG:2180")
 
-    def test_no_envelope_skipped(self, gpkg_no_envelope):
-        """Features without envelope are skipped."""
+    def test_no_envelope_point_feature_is_read(self, gpkg_no_envelope):
+        """Point features without envelope in header are read from WKB."""
         bboxes = read_feature_bboxes(gpkg_no_envelope, target_crs="EPSG:2180")
-        assert len(bboxes) == 0
+        assert len(bboxes) == 1
+        assert bboxes[0].min_x == pytest.approx(420000)
+        assert bboxes[0].max_x == pytest.approx(420000)
+        assert bboxes[0].min_y == pytest.approx(230000)
+        assert bboxes[0].max_y == pytest.approx(230000)
+
+    def test_empty_point_feature_is_skipped(self, gpkg_empty_and_point):
+        """Empty geometry is skipped; only the real point yields a bbox."""
+        bboxes = read_feature_bboxes(gpkg_empty_and_point, target_crs="EPSG:2180")
+        assert len(bboxes) == 1
+        assert bboxes[0].min_x == pytest.approx(420000)
+        assert bboxes[0].min_y == pytest.approx(230000)
+
+    def test_read_gpkg_non_point_without_envelope_raises_validation_error(
+        self, gpkg_no_envelope_polygon
+    ):
+        """Non-point geometry without envelope raises instead of being skipped."""
+        with pytest.raises(ValidationError, match="envelope"):
+            read_feature_bboxes(gpkg_no_envelope_polygon, target_crs="EPSG:2180")
 
 
 # =========================================================================
@@ -630,52 +836,62 @@ class TestGetOverallBbox:
         assert bbox.min_x == pytest.approx(bboxes[0].min_x)
         assert bbox.min_y == pytest.approx(bboxes[0].min_y)
 
-    def test_no_features_raises_error(self, gpkg_no_envelope):
+    def test_no_features_raises_error(self, gpkg_no_features_geom):
         """No features with geometry raises ValidationError."""
         with pytest.raises(ValidationError, match="No features"):
-            get_overall_bbox(gpkg_no_envelope)
+            get_overall_bbox(gpkg_no_features_geom)
 
 
 # =========================================================================
-# Tests — _transform_bbox
+# Tests — read_source_crs
 # =========================================================================
 
 
-class TestTransformBbox:
-    """Tests for CRS transformation of bboxes."""
+class TestReadSourceCrs:
+    """Tests for read_source_crs (the file's storage CRS, without transformation)."""
 
-    def test_same_crs_no_transform(self):
-        """Same CRS returns original coordinates."""
+    def test_shp_crs(self, shp_epsg4326):
+        """SHP: CRS z .prj."""
         from pyproj import CRS
 
-        source = CRS.from_epsg(2180)
-        result = _transform_bbox(420000, 230000, 421000, 231000, source, "EPSG:2180")
+        from kartograf.core.geometry import read_source_crs
 
-        assert result.min_x == pytest.approx(420000)
-        assert result.min_y == pytest.approx(230000)
-        assert result.crs == "EPSG:2180"
+        assert read_source_crs(shp_epsg4326) == CRS.from_epsg(4326)
 
-    def test_4326_to_2180(self):
-        """Transform from WGS84 to PL-1992."""
+    def test_shp_missing_prj_raises(self, shp_no_prj):
+        from kartograf.core.geometry import read_source_crs
+
+        with pytest.raises(ValidationError, match="Missing .prj"):
+            read_source_crs(shp_no_prj)
+
+    def test_gpkg_crs(self, gpkg_epsg2180):
+        """GPKG: CRS from gpkg_spatial_ref_sys of the first layer."""
         from pyproj import CRS
 
-        source = CRS.from_epsg(4326)
-        result = _transform_bbox(19.93, 50.05, 19.95, 50.07, source, "EPSG:2180")
+        from kartograf.core.geometry import read_source_crs
 
-        assert 100_000 < result.min_x < 900_000
-        assert 100_000 < result.min_y < 900_000
-        assert result.crs == "EPSG:2180"
+        assert read_source_crs(gpkg_epsg2180) == CRS.from_epsg(2180)
 
-    def test_2180_to_4326(self):
-        """Transform from PL-1992 to WGS84."""
-        from pyproj import CRS
+    def test_gpkg_layer_selection_matches_bboxes(self, gpkg_multi_layer):
+        """Layer choice is the same as when reading features."""
+        from kartograf.core.geometry import read_source_crs
 
-        source = CRS.from_epsg(2180)
-        result = _transform_bbox(420000, 230000, 421000, 231000, source, "EPSG:4326")
+        crs = read_source_crs(gpkg_multi_layer, layer="layer_b")
+        assert crs.to_epsg() is not None
 
-        assert 14 < result.min_x < 25  # longitude range for Poland
-        assert 49 < result.min_y < 55  # latitude range for Poland
-        assert result.crs == "EPSG:4326"
+    def test_gpkg_unknown_layer_raises(self, gpkg_multi_layer):
+        from kartograf.core.geometry import read_source_crs
+
+        with pytest.raises(ValidationError, match="not found in GeoPackage"):
+            read_source_crs(gpkg_multi_layer, layer="nie_ma")
+
+    def test_unsupported_format_raises(self, tmp_path):
+        from kartograf.core.geometry import read_source_crs
+
+        path = tmp_path / "area.geojson"
+        path.write_text("{}", encoding="utf-8")
+        with pytest.raises(ValidationError, match="Unsupported geometry format"):
+            read_source_crs(path)
 
 
 # =========================================================================
@@ -732,9 +948,33 @@ class TestFindSheetsForGeometry:
         call_args = mock_find.call_args
         assert call_args[0][1] == "1:25000"
 
-    def test_no_features_returns_empty(self, gpkg_no_envelope):
+    def test_find_sheets_for_geometry_with_points(self, shp_points_epsg2180):
+        """Each point gives EXACTLY one 1:10000 sheet containing that point."""
+        from kartograf.core.sheet_parser import SheetParser
+
+        result = find_sheets_for_geometry(shp_points_epsg2180, target_scale="1:10000")
+
+        assert len(result) == 2
+        points = [(637000.0, 487000.0), (605000.0, 495000.0)]
+        for x, y in points:
+            containing = [
+                godlo
+                for godlo in result
+                if _bbox_contains(SheetParser(godlo).get_bbox("EPSG:2180"), x, y)
+            ]
+            assert len(containing) == 1, (
+                f"expected exactly one sheet in {result} for ({x}, {y}), "
+                f"got {containing}"
+            )
+
+    def test_empty_point_feature_does_not_raise(self, gpkg_empty_and_point):
+        """Empty geometry does not blow up sheet lookup (no NaN reaches int())."""
+        result = find_sheets_for_geometry(gpkg_empty_and_point)
+        assert len(result) == 1
+
+    def test_no_features_returns_empty(self, gpkg_no_features_geom):
         """File with no valid features returns empty list."""
-        result = find_sheets_for_geometry(gpkg_no_envelope)
+        result = find_sheets_for_geometry(gpkg_no_features_geom)
         assert result == []
 
     def test_gpkg_layer_param(self, gpkg_multi_layer):
@@ -745,3 +985,66 @@ class TestFindSheetsForGeometry:
             assert result == ["N-34-130-D-d-2-4"]
             # Should have been called once (one feature in layer_b)
             assert mock_find.call_count == 1
+
+
+# =========================================================================
+# Tests - readers through core.bbox.transform_bbox (parser review K4)
+# =========================================================================
+
+
+def _shp_with_rects(path: Path, rects, epsg: int = 2180) -> Path:
+    import shapefile
+
+    with shapefile.Writer(str(path)) as w:
+        w.field("name", "C", 10)
+        for i, (x0, y0, x1, y1) in enumerate(rects):
+            w.poly([[(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)]])
+            w.record(f"r{i}")
+    _write_prj(path.with_suffix(".prj"), epsg)
+    return path
+
+
+class TestReadersUseCoreBBox:
+    RECTS = [
+        (420000, 230000, 421000, 231000),
+        (500000, 300000, 501000, 301000),
+        (600000, 400000, 601000, 401000),
+    ]
+
+    @pytest.fixture(autouse=True)
+    def _fresh_cache(self):
+        from kartograf.core import bbox as bbox_mod
+
+        bbox_mod._transformer.cache_clear()
+        bbox_mod._same_crs.cache_clear()
+
+    def test_shp_one_transformer_per_layer(self, tmp_path):
+        from pyproj import Transformer
+
+        shp = _shp_with_rects(tmp_path / "three.shp", self.RECTS)
+        with patch.object(Transformer, "from_crs", wraps=Transformer.from_crs) as made:
+            bboxes = read_feature_bboxes(shp, target_crs="EPSG:4326")
+        assert len(bboxes) == 3
+        assert made.call_count == 1
+
+    def test_gpkg_one_transformer_per_layer(self, tmp_path):
+        from pyproj import Transformer
+
+        gpkg = tmp_path / "three.gpkg"
+        _build_gpkg(gpkg, [_make_gpkg_blob(*r) for r in self.RECTS])
+        with patch.object(Transformer, "from_crs", wraps=Transformer.from_crs) as made:
+            bboxes = read_feature_bboxes(gpkg, target_crs="EPSG:4326")
+        assert len(bboxes) == 3
+        assert made.call_count == 1
+
+    def test_shp_feature_across_19e_keeps_northern_band(self, tmp_path):
+        """A 50 km object through x=500000: 4 corners lost ~65 m in the north."""
+        shp = _shp_with_rects(tmp_path / "wide.shp", [(475000, 600000, 525000, 610000)])
+        (bbox,) = read_feature_bboxes(shp, target_crs="EPSG:4326")
+        assert bbox.max_y == pytest.approx(53.3551052, abs=1e-7)
+        assert bbox.crs == "EPSG:4326"
+
+    def test_same_crs_keeps_coordinates_and_target_label(self, tmp_path):
+        shp = _shp_with_rects(tmp_path / "same.shp", self.RECTS[:1])
+        (bbox,) = read_feature_bboxes(shp, target_crs="EPSG:2180")
+        assert tuple(bbox) == (420000, 230000, 421000, 231000, "EPSG:2180")

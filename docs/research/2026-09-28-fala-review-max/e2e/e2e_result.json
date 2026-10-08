@@ -1,0 +1,361 @@
+{
+  "cache_sheets_indexed": 1454,
+  "a_int": {
+    "bbox": [
+      642000,
+      480500,
+      644000,
+      481500
+    ],
+    "sheets_selected": [
+      "N-34-139-A-c-4-3",
+      "N-34-139-A-c-4-4"
+    ],
+    "provider_calls": [
+      "N-34-139-A-c-4-3",
+      "N-34-139-A-c-4-4"
+    ],
+    "prj_copied_next_to": [
+      "N-34-139-A-c-4-3.prj"
+    ],
+    "missing_sheets": [],
+    "result": "a_int/nmt/pl_1992_5m_evrf2007/bbox/642000_480500_644000_481500.tif",
+    "file_name_equals_request": true,
+    "sidecar": {
+      "horizontal_crs": "EPSG:2180",
+      "transform": null,
+      "request": {
+        "bbox": [
+          642000,
+          480500,
+          644000,
+          481500
+        ],
+        "bbox_crs": "EPSG:2180"
+      },
+      "nodata": -9999.0,
+      "extra_keys": [
+        "parent_request"
+      ]
+    },
+    "estimate_before_run": {
+      "bytes": 2624598,
+      "pending_sheets": 2
+    },
+    "actual_bytes_sheets_plus_result": 2852056,
+    "estimate_is_lower_bound": true,
+    "seconds": 0.091,
+    "check": {
+      "crs": "EPSG:2180",
+      "dtype": "float32",
+      "shape_hw": [
+        201,
+        401
+      ],
+      "origin": [
+        641997.5,
+        481502.5
+      ],
+      "phase_x_mod5": 2.5,
+      "phase_y_mod5": 2.5,
+      "pixel": [
+        5.0,
+        5.0
+      ],
+      "extension_beyond_request_m": {
+        "west": 2.5,
+        "south": 2.5,
+        "east": 2.5,
+        "north": 2.5
+      },
+      "pixels": 80601,
+      "value_mismatches": 0,
+      "both_sheets_valid_conflicts": 0,
+      "pixels_with_2plus_valid_sheets": 0,
+      "nodata_in_result": 0,
+      "expected_nodata_no_sheet_has_data": 0,
+      "nodata_where_some_sheet_has_data": 0
+    }
+  },
+  "a_frac": {
+    "bbox": [
+      642001.3,
+      480502.7,
+      643998.9,
+      481497.1
+    ],
+    "sheets_selected": [
+      "N-34-139-A-c-4-3",
+      "N-34-139-A-c-4-4"
+    ],
+    "provider_calls": [
+      "N-34-139-A-c-4-3",
+      "N-34-139-A-c-4-4"
+    ],
+    "prj_copied_next_to": [
+      "N-34-139-A-c-4-3.prj"
+    ],
+    "missing_sheets": [],
+    "result": "a_frac/nmt/pl_1992_5m_evrf2007/bbox/642001.3_480502.7_643998.9_481497.1.tif",
+    "file_name_equals_request": true,
+    "sidecar": {
+      "horizontal_crs": "EPSG:2180",
+      "transform": null,
+      "request": {
+        "bbox": [
+          642001.3,
+          480502.7,
+          643998.9,
+          481497.1
+        ],
+        "bbox_crs": "EPSG:2180"
+      },
+      "nodata": -9999.0,
+      "extra_keys": [
+        "parent_request"
+      ]
+    },
+    "estimate_before_run": {
+      "bytes": 2622998,
+      "pending_sheets": 2
+    },
+    "actual_bytes_sheets_plus_result": 2848848,
+    "estimate_is_lower_bound": true,
+    "seconds": 0.04,
+    "check": {
+      "crs": "EPSG:2180",
+      "dtype": "float32",
+      "shape_hw": [
+        199,
+        401
+      ],
+      "origin": [
+        641997.5,
+        481497.5
+      ],
+      "phase_x_mod5": 2.5,
+      "phase_y_mod5": 2.5,
+      "pixel": [
+        5.0,
+        5.0
+      ],
+      "extension_beyond_request_m": {
+        "west": 3.800000000046566,
+        "south": 0.20000000001164153,
+        "east": 3.599999999976717,
+        "north": 0.40000000002328306
+      },
+      "pixels": 79799,
+      "value_mismatches": 0,
+      "both_sheets_valid_conflicts": 0,
+      "pixels_with_2plus_valid_sheets": 0,
+      "nodata_in_result": 0,
+      "expected_nodata_no_sheet_has_data": 0,
+      "nodata_where_some_sheet_has_data": 0
+    }
+  },
+  "a_int_mixed_prj_vs_no_prj_bit_identical_pixels": true,
+  "b_5514": {
+    "bbox_request_2180": [
+      642000,
+      480500,
+      644000,
+      481500
+    ],
+    "bbox_target_5514": [
+      -257316.73085669964,
+      -855315.889057184,
+      -255240.12158373112,
+      -854161.6499533858
+    ],
+    "bbox_source_2180": [
+      641903.1560307927,
+      480326.2884404827,
+      644096.8691048946,
+      481673.7145626899
+    ],
+    "sheets_selected": [
+      "N-34-139-A-c-4-3",
+      "N-34-139-A-c-4-4"
+    ],
+    "provider_calls": [
+      "N-34-139-A-c-4-3",
+      "N-34-139-A-c-4-4"
+    ],
+    "missing_sheets": [],
+    "result": "b_5514/nmt/pl_1992_5m_evrf2007/bbox/-257316.7309_-855315.8891_-255240.1216_-854161.65.tif",
+    "result_profile": {
+      "crs": "EPSG:5514",
+      "dtype": "float32",
+      "compress": null,
+      "shape_hw": [
+        231,
+        415
+      ]
+    },
+    "bounds_equal_bbox_target": false,
+    "sidecar": {
+      "horizontal_crs": "EPSG:5514",
+      "transform": {
+        "horizontal": "pinned: axis order change (2D) + Inverse of Poland CS92 + ETRF2000-PL to ETRS89 (1) + Inverse of S-JTSK to ETRS89 (3) + Krovak East North (Greenwich) (0.5 m)"
+      },
+      "extra_keys": [
+        "parent_request"
+      ]
+    },
+    "pinned": "axis order change (2D) + Inverse of Poland CS92 + ETRF2000-PL to ETRS89 (1) + Inverse of S-JTSK to ETRS89 (3) + Krovak East North (Greenwich) (0.5 m)",
+    "estimate_before_run": {
+      "bytes": 2688058,
+      "pending_sheets": 2
+    },
+    "seconds": 0.078,
+    "independent_warp": {
+      "grid_hw": [
+        231,
+        415
+      ],
+      "bounds": [
+        -257316.73085669964,
+        -855316.6499533858,
+        -255241.73085669964,
+        -854161.6499533858
+      ],
+      "cutout_nodata": 0,
+      "independent_nodata": 0,
+      "valid_in_cutout_only": 0,
+      "valid_in_independent_only": 0,
+      "all_valid_in_both_(seam=mean_of_sheets)": {
+        "n": 95865,
+        "mean_abs_m": 0.002744104795933939,
+        "max_abs_m": 0.6674652099609375,
+        "n_diff_gt_0": 42382,
+        "n_diff_gt_1mm": 32584,
+        "n_diff_gt_1cm": 6915
+      },
+      "single_sheet_pixels": {
+        "n": 95865,
+        "mean_abs_m": 0.002744104795933939,
+        "max_abs_m": 0.6674652099609375,
+        "n_diff_gt_0": 42382,
+        "n_diff_gt_1mm": 32584,
+        "n_diff_gt_1cm": 6915
+      },
+      "seam_pixels_vs_mean_of_sheet_warps": {
+        "n": 0
+      },
+      "seam_pixels_vs_weight_reconstruction": {
+        "n": 0
+      }
+    }
+  },
+  "c_missing": {
+    "bbox": [
+      650500,
+      480800,
+      652500,
+      481800
+    ],
+    "sheets_selected": [
+      "N-34-139-A-d-4-3",
+      "N-34-139-A-d-4-4"
+    ],
+    "sheets_in_cache": [
+      "N-34-139-A-d-4-3"
+    ],
+    "provider_calls": [
+      "N-34-139-A-d-4-3",
+      "N-34-139-A-d-4-4"
+    ],
+    "missing_sheets_result": [
+      "N-34-139-A-d-4-4"
+    ],
+    "sidecar_extra_missing_sheets": [
+      "N-34-139-A-d-4-4"
+    ],
+    "sidecar_extra_parent_request": {
+      "bbox": [
+        650500,
+        480800,
+        652500,
+        481800
+      ],
+      "bbox_crs": "EPSG:2180",
+      "e2e": "c_missing"
+    },
+    "check": {
+      "crs": "EPSG:2180",
+      "dtype": "float32",
+      "shape_hw": [
+        201,
+        401
+      ],
+      "origin": [
+        650497.5,
+        481802.5
+      ],
+      "phase_x_mod5": 2.5,
+      "phase_y_mod5": 2.5,
+      "pixel": [
+        5.0,
+        5.0
+      ],
+      "extension_beyond_request_m": {
+        "west": 2.5,
+        "south": 2.5,
+        "east": 2.5,
+        "north": 2.5
+      },
+      "pixels": 80601,
+      "value_mismatches": 0,
+      "both_sheets_valid_conflicts": 0,
+      "pixels_with_2plus_valid_sheets": 0,
+      "nodata_in_result": 33775,
+      "expected_nodata_no_sheet_has_data": 33775,
+      "nodata_where_some_sheet_has_data": 0
+    },
+    "nodata_fraction": 0.419,
+    "max_x_of_valid_pixel_centre": 651675.0,
+    "min_x_of_nodata_pixel_centre": 651650.0,
+    "library_log_lines": [
+      [
+        "WARNING",
+        "kartograf.download.manager",
+        "No data for N-34-139-A-d-4-4: E2E: arkusza N-34-139-A-d-4-4 nie ma w cache Hydrografu"
+      ],
+      [
+        "INFO",
+        "kartograf.download.cutout",
+        "Brak danych GUGiK dla 1 arkuszy wycinka: N-34-139-A-d-4-4"
+      ]
+    ]
+  },
+  "d_cache_reuse": {
+    "provider_calls": [],
+    "rebuilt_bit_identical_file": true,
+    "rebuilt_identical_pixels": true,
+    "skipped_second_call_without_force": true
+  },
+  "e_failed_force_keeps_previous": {
+    "raised_DownloadError": "2 z 2 arkuszy nie pobrano (blad pobrania, nie brak danych): N-34-139-A-c-4-3, N-34-139-A-c-4-4 \u2014 wycinek nie powstal; ponow pobranie",
+    "previous_result_unchanged": true,
+    "tmp_leftovers": []
+  },
+  "f_intermediate_compression": {
+    "mosaic_hw": [
+      271,
+      439
+    ],
+    "plain_bytes": 476280,
+    "compressed_bytes": 224395,
+    "ratio": 2.12,
+    "pixels_identical": true,
+    "asc_sheets": 2,
+    "asc_bytes_per_value": 6.005
+  },
+  "network_attempts_blocked": [],
+  "kartograf_warning_or_worse_log_messages": [
+    "ERROR kartograf.download.manager: Failed to download N-34-139-A-c-4-3: E2E: symulowana awaria pobrania N-34-139-A-c-4-3",
+    "ERROR kartograf.download.manager: Failed to download N-34-139-A-c-4-4: E2E: symulowana awaria pobrania N-34-139-A-c-4-4",
+    "WARNING kartograf.download.manager: No data for N-34-139-A-d-4-4: E2E: arkusza N-34-139-A-d-4-4 nie ma w cache Hydrografu"
+  ]
+}

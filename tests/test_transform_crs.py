@@ -1,0 +1,368 @@
+"""Tests of the strict transformation policy (kartograf.transform.crs)."""
+
+import math
+from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pytest
+from pyproj import network
+from pyproj.enums import TransformDirection
+from pyproj.transformer import TransformerGroup
+
+from kartograf.exceptions import KartografError
+from kartograf.transform.crs import (
+    KNOWN_PATHS,
+    REMEDIES,
+    TransformError,
+    TransformPolicy,
+    TransformUnavailableError,
+    build_pinned_transform,
+)
+
+_GROUP_PATCH = "kartograf.transform.crs.TransformerGroup"
+
+
+def _mock_transformer(
+    accuracy, description, result=(100.0, 200.0), codes=("EPSG:1622",)
+):
+    t = MagicMock()
+    t.accuracy = accuracy
+    t.description = description
+    t.transform.return_value = result
+    t.to_json_dict.return_value = {
+        "steps": [
+            {"id": {"authority": authority, "code": int(code)}}
+            for authority, code in (value.split(":") for value in codes)
+        ]
+    }
+    return t
+
+
+def _mock_group(transformers):
+    g = MagicMock()
+    g.transformers = transformers
+    g.unavailable_operations = []
+    return g
+
+
+class TestErrorHierarchy:
+    def test_transform_errors_under_kartograf_error(self):
+        assert issubclass(TransformError, KartografError)
+        assert issubclass(TransformUnavailableError, TransformError)
+
+
+class TestBuildPinnedTransform:
+    def test_ballpark_disabled_in_group_construction(self):
+        """(a) The group is built only with allow_ballpark=False, always_xy=True."""
+        with patch(_GROUP_PATCH) as mock_cls:
+            mock_cls.return_value = _mock_group([_mock_transformer(0.5, "op dokladna")])
+            build_pinned_transform("EPSG:5514", "EPSG:2180", TransformPolicy())
+        _, kwargs = mock_cls.call_args
+        assert kwargs["allow_ballpark"] is False
+        assert kwargs["always_xy"] is True
+
+    def test_empty_group_raises_with_remedy(self):
+        """(b) An empty operation list => TransformUnavailableError with a remedy."""
+        with patch(_GROUP_PATCH) as mock_cls:
+            mock_cls.return_value = _mock_group([])
+            with pytest.raises(TransformUnavailableError) as exc:
+                build_pinned_transform("EPSG:8357", "EPSG:9651", TransformPolicy())
+        assert exc.value.remedy is not None
+        assert "pl07_2019" in exc.value.remedy
+
+    def test_network_state_restored(self):
+        """(g) The global PROJ network state is restored after build_pinned_transform,
+        for both values of allow_network_grids - the function must not
+        permanently mutate state shared with other pyproj consumers in the process.
+        """
+        for allow in (True, False):
+            before = network.is_network_enabled()
+            with patch(_GROUP_PATCH) as mock_cls:
+                mock_cls.return_value = _mock_group(
+                    [_mock_transformer(0.5, "op dokladna")]
+                )
+                build_pinned_transform(
+                    "EPSG:5514",
+                    "EPSG:2180",
+                    TransformPolicy(allow_network_grids=allow),
+                )
+            after = network.is_network_enabled()
+            assert after == before
+
+    def test_accuracy_filter(self):
+        """(c) Reject accuracy < 0 (unknown) and > min_accuracy_m; 0.0 accepted."""
+        good = _mock_transformer(0.0, "dokladna konwersja")
+        unknown = _mock_transformer(-1.0, "nieznana dokladnosc")
+        coarse = _mock_transformer(7.0, "za gruba")
+        with patch(_GROUP_PATCH) as mock_cls:
+            mock_cls.return_value = _mock_group([coarse, unknown, good])
+            pinned = build_pinned_transform(
+                "EPSG:25833", "EPSG:2180", TransformPolicy(min_accuracy_m=1.0)
+            )
+        assert pinned.accuracy_m == 0.0
+        assert pinned.description == "dokladna konwersja"
+
+    def test_probe_rejects_inf(self):
+        """(d) Probe: an operation returning inf at the control point is rejected."""
+        bad_grid = _mock_transformer(
+            0.03, "siatka obcego kraju", result=(math.inf, math.inf)
+        )
+        ok_op = _mock_transformer(0.5, "operacja bez siatek")
+        with patch(_GROUP_PATCH) as mock_cls:
+            mock_cls.return_value = _mock_group([bad_grid, ok_op])
+            pinned = build_pinned_transform(
+                "EPSG:5514",
+                "EPSG:2180",
+                TransformPolicy(probe_point=(-598000.0, -1160000.0)),
+            )
+        assert pinned.description == "operacja bez siatek"
+
+    def test_all_rejected_lists_reasons(self):
+        unknown = _mock_transformer(-1.0, "op A")
+        coarse = _mock_transformer(9.9, "op B")
+        with patch(_GROUP_PATCH) as mock_cls:
+            mock_cls.return_value = _mock_group([unknown, coarse])
+            with pytest.raises(TransformUnavailableError) as exc:
+                build_pinned_transform(
+                    "EPSG:4258", "EPSG:2180", TransformPolicy(min_accuracy_m=1.0)
+                )
+        reasons = dict(exc.value.rejected)
+        assert "op A" in reasons and "op B" in reasons
+
+    def test_result_isfinite_guard(self):
+        """(e) Infinite result => TransformError, not data."""
+        flaky = _mock_transformer(0.5, "psuje sie po zbudowaniu")
+        with patch(_GROUP_PATCH) as mock_cls:
+            mock_cls.return_value = _mock_group([flaky])
+            pinned = build_pinned_transform("EPSG:5514", "EPSG:2180", TransformPolicy())
+        flaky.transform.return_value = (math.inf, 5.0)
+        with pytest.raises(TransformError):
+            pinned.transform(1.0, 2.0)
+
+    def test_25833_to_2180_end_to_end_offline(self):
+        """(f) Real DE->PL pair: no grids, works offline, acc 0.0."""
+        policy = TransformPolicy(probe_point=(400000.0, 5800000.0))
+        pinned = build_pinned_transform("EPSG:25833", "EPSG:2180", policy)
+        assert pinned.accuracy_m == 0.0
+        x, y = pinned.transform(400000.0, 5800000.0)
+        assert x == pytest.approx(127742.88, abs=0.1)
+        assert y == pytest.approx(511326.23, abs=0.1)
+
+
+class TestDatumStepPins:
+    _POLICY = TransformPolicy(min_accuracy_m=1.0, allow_network_grids=False)
+
+    @pytest.mark.parametrize(
+        ("src", "dst"),
+        [
+            (5514, 2180),
+            (5514, 3045),
+            (5514, 4258),
+            (2180, 5514),
+            (3045, 5514),
+            (4258, 5514),
+        ],
+    )
+    def test_5514_pairs_pin_czech_operation(self, src, dst):
+        probes = {
+            5514: (-670165.0, -1084718.0),
+            2180: (300000.0, 250000.0),
+            3045: (550000.0, 5600000.0),
+            4258: (15.5, 49.8),
+        }
+        pinned = build_pinned_transform(
+            f"EPSG:{src}",
+            f"EPSG:{dst}",
+            TransformPolicy(
+                min_accuracy_m=1.0,
+                allow_network_grids=False,
+                probe_point=probes[src],
+            ),
+        )
+        assert "S-JTSK to ETRS89 (1)" in pinned.description
+        assert pinned.accuracy_m == 1.0
+        assert "molobadekas" not in pinned.gdal_operation()
+
+    @pytest.mark.parametrize(("src", "dst"), [(5514, 4326), (4326, 5514)])
+    def test_5514_wgs84_pairs_pin_twin_operation(self, src, dst):
+        pinned = build_pinned_transform(f"EPSG:{src}", f"EPSG:{dst}", self._POLICY)
+        assert "S-JTSK to WGS 84 (1)" in pinned.description
+        assert pinned.accuracy_m == 1.0
+
+    def test_pin_reports_rejected_datum_step(self):
+        wrong_country = _mock_transformer(
+            0.5, "operacja slowacka", codes=("EPSG:4829",)
+        )
+        with (
+            patch(_GROUP_PATCH, return_value=_mock_group([wrong_country])),
+            pytest.raises(TransformUnavailableError) as exc,
+        ):
+            build_pinned_transform("EPSG:5514", "EPSG:2180", self._POLICY)
+        reasons = dict(exc.value.rejected)
+        assert "EPSG:1622" in reasons["operacja slowacka"]
+
+    @pytest.mark.parametrize(
+        ("src", "dst", "accuracy"),
+        [(25833, 2180, 0.0), (2180, 3045, 0.0), (8357, 5621, 0.1)],
+    )
+    def test_pin_ignores_pairs_without_pinned_crs(self, src, dst, accuracy):
+        pinned = build_pinned_transform(f"EPSG:{src}", f"EPSG:{dst}", self._POLICY)
+        assert pinned.accuracy_m == accuracy
+        if src == 8357:
+            assert pinned.transform(15.5, 49.8, 300.0)[2] == pytest.approx(
+                300.13, abs=0.02
+            )
+
+    def test_pinned_operation_moves_content_by_known_offset(self):
+        group = TransformerGroup(
+            "EPSG:5514", "EPSG:4258", always_xy=True, allow_ballpark=False
+        )
+        czech = next(
+            t for t in group.transformers if "S-JTSK to ETRS89 (1)" in t.description
+        )
+        point = czech.transform(15.74, 50.735, direction=TransformDirection.INVERSE)
+        group_pl = TransformerGroup(
+            "EPSG:5514", "EPSG:2180", always_xy=True, allow_ballpark=False
+        )
+        slovak = next(
+            t for t in group_pl.transformers if "S-JTSK to ETRS89 (3)" in t.description
+        )
+        pinned = build_pinned_transform("EPSG:5514", "EPSG:2180", self._POLICY)
+        fixed = pinned.transform(*point)
+        previous = slovak.transform(*point)
+        assert math.dist(fixed, previous) == pytest.approx(2.73, abs=0.05)
+
+    def test_pin_accepts_single_inverse_operation(self):
+        czech = _mock_transformer(1.0, "odwrotna operacja czeska")
+        czech.to_json_dict.return_value = {
+            "id": {"authority": "INVERSE(EPSG)", "code": 1622}
+        }
+        with patch(_GROUP_PATCH, return_value=_mock_group([czech])):
+            pinned = build_pinned_transform("EPSG:2180", "epsg:5514", self._POLICY)
+        assert pinned.transform(1.0, 2.0) == (100.0, 200.0)
+
+
+class TestKnownPaths:
+    def test_documented_pairs_present(self):
+        pairs = {(p.src, p.dst) for p in KNOWN_PATHS}
+        assert ("EPSG:5514", "EPSG:2180") in pairs
+        assert ("EPSG:8353", "EPSG:2180") in pairs
+        assert ("EPSG:25833", "EPSG:2180") in pairs
+        assert ("EPSG:8357", "EPSG:5621") in pairs
+        assert ("EPSG:7837", "EPSG:5621") in pairs
+        assert ("EPSG:4937", "EPSG:8357") in pairs
+
+    def test_pl_cutout_pairs_documented_with_measured_accuracy(self):
+        """Accuracy of the documented PL pairs matches the real operation."""
+        by_pair = {(p.src, p.dst): p for p in KNOWN_PATHS}
+        probe = (530050.0, 382050.0)  # EPSG:2180, central Poland
+        for dst, expected in (("EPSG:5514", 1.0), ("EPSG:3045", 0.0)):
+            entry = by_pair[("EPSG:2180", dst)]  # KeyError = missing entry
+            pinned = build_pinned_transform(
+                "EPSG:2180",
+                dst,
+                TransformPolicy(
+                    min_accuracy_m=1.0, probe_point=probe, allow_network_grids=False
+                ),
+            )
+            assert entry.expected_accuracy_m == expected
+            assert pinned.accuracy_m == expected
+
+    def test_remedies_for_polish_vertical(self):
+        assert "EPSG:9650" in REMEDIES and "EPSG:9651" in REMEDIES
+
+
+class TestTransformPolymorphic:
+    def _pinned(self, transformer):
+        with patch(_GROUP_PATCH) as mock_cls:
+            mock_cls.return_value = _mock_group([transformer])
+            return build_pinned_transform(
+                "EPSG:8357", "EPSG:5621", TransformPolicy(min_accuracy_m=0.2)
+            )
+
+    def test_transform_accepts_numpy_arrays(self):
+        t = _mock_transformer(0.1, "op pionowa")
+        t.transform.return_value = (
+            np.array([1.0, 2.0]),
+            np.array([3.0, 4.0]),
+            np.array([300.13, 300.14]),
+        )
+        pinned = self._pinned(t)
+        rx, ry, rz = pinned.transform(np.zeros(2), np.zeros(2), np.zeros(2))
+        assert rz.tolist() == [300.13, 300.14]
+
+    def test_transform_array_with_inf_raises(self):
+        t = _mock_transformer(0.1, "op pionowa")
+        t.transform.return_value = (
+            np.array([1.0, np.inf]),
+            np.array([3.0, 4.0]),
+        )
+        pinned = self._pinned(t)
+        with pytest.raises(TransformError, match="nieskonczon"):
+            pinned.transform(np.zeros(2), np.zeros(2))
+
+
+class TestGdalOperation:
+    """Pipeline for GDAL's COORDINATE_OPERATION (rasterio.warp.reproject).
+
+    GDAL passes the operation coordinates in the AUTHORITATIVE axis order of the
+    CRS, while `PinnedTransform` is built with `always_xy=True` (E-N order).
+    Without the axis correction a warp to a northing-first CRS (EPSG:2180,
+    EPSG:3045) yields an all-nodata raster - measured 2026-08-11.
+    """
+
+    _POLICY = TransformPolicy(min_accuracy_m=1.0, allow_network_grids=False)
+
+    def test_northing_first_target_gets_axisswap(self):
+        pinned = build_pinned_transform("EPSG:5514", "EPSG:2180", self._POLICY)
+        operation = pinned.gdal_operation()
+        assert operation.startswith("proj=pipeline")
+        assert operation.endswith("step proj=axisswap order=2,1")
+
+    def test_easting_first_target_has_no_axisswap(self):
+        pinned = build_pinned_transform("EPSG:5514", "EPSG:32633", self._POLICY)
+        assert "axisswap" not in pinned.gdal_operation()
+
+    def test_operation_carries_datum_step(self):
+        """Crux: the operation MUST carry the S-JTSK->ETRS89 datum transformation."""
+        pinned = build_pinned_transform("EPSG:5514", "EPSG:2180", self._POLICY)
+        operation = pinned.gdal_operation()
+        assert "helmert" in operation and "x=570.8" in operation
+
+    def test_crs_pair_is_recorded(self):
+        pinned = build_pinned_transform("EPSG:5514", "EPSG:2180", self._POLICY)
+        assert (pinned.src_crs, pinned.dst_crs) == ("EPSG:5514", "EPSG:2180")
+
+    def test_without_crs_pair_raises(self):
+        from kartograf.transform.crs import PinnedTransform
+
+        pinned = PinnedTransform(
+            accuracy_m=0.5, description="op", _transformer=MagicMock()
+        )
+        with pytest.raises(TransformError, match="uklad"):
+            pinned.gdal_operation()
+
+
+class TestProbeUnderNetworkPolicy:
+    def test_probe_runs_under_policy_network_context(self):
+        """5.8b: the probe runs in the network context per policy,
+        not after the global state is restored."""
+        before = network.is_network_enabled()
+        states_during_probe = []
+
+        t = _mock_transformer(0.5, "op z probe")
+
+        def _probe(x, y):
+            states_during_probe.append(network.is_network_enabled())
+            return (x, y)
+
+        t.transform.side_effect = _probe
+        with patch(_GROUP_PATCH) as mock_cls:
+            mock_cls.return_value = _mock_group([t])
+            build_pinned_transform(
+                "EPSG:5514",
+                "EPSG:2180",
+                TransformPolicy(allow_network_grids=not before, probe_point=(1.0, 2.0)),
+            )
+        assert states_during_probe == [not before]
+        assert network.is_network_enabled() == before

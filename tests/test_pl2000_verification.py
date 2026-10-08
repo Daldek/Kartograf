@@ -1,15 +1,17 @@
 """
-Testy weryfikacyjne dla modulu parser_2000.
+Verification tests for the parser_2000 module.
 
-Ten modul zawiera testy weryfikacyjne dla PL-2000 BBox:
-- Wartosci referencyjne BBox dla wszystkich 4 stref
-- Spojnosc hierarchii (children tiling)
-- Testy live WMS z GUGiK
+This module contains verification tests for the PL-2000 BBox:
+- BBox reference values for all 4 zones
+- Hierarchy consistency (children tiling)
+- Live tests of the GUGiK index (skorowidz) (``live`` marker - only
+  deliberately, ``-m live``)
 - Edge cases: multi-zone, round-trip, drill-down
 """
 
+import datetime
+
 import pytest
-import requests
 
 from kartograf.core.parser_2000 import (
     SHEET_DIMENSIONS_2000,
@@ -17,7 +19,12 @@ from kartograf.core.parser_2000 import (
     Parser2000,
     find_sheets_2000_for_bbox,
 )
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.exceptions import DownloadError, NoCoverageError
+from kartograf.providers.pl.gugik import GugikProvider
+from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
+from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
+from kartograf.providers.pl.skorowidz import query_skorowidz_layer
 
 # =========================================================================
 # 1. TestPL2000BBoxReferenceValues
@@ -60,7 +67,7 @@ REFERENCE_10K_CASES = [
 
 
 class TestPL2000BBoxReferenceValues:
-    """Weryfikacja BBox wedlug wzoru referencyjnego dla wszystkich stref."""
+    """Verify the BBox against the reference formula for all zones."""
 
     @pytest.mark.parametrize(
         "godlo, strefa, pas, slup",
@@ -68,7 +75,7 @@ class TestPL2000BBoxReferenceValues:
         ids=[c[0] for c in REFERENCE_10K_CASES],
     )
     def test_bbox_10k_matches_formula(self, godlo, strefa, pas, slup):
-        """Weryfikacja BBox 1:10k zgodnie z formula referencyjne."""
+        """Verify the 1:10k BBox against the reference formula."""
         expected_south = pas * 5000 + 4_920_000
         expected_north = expected_south + 5000
         expected_west = strefa * 1_000_000 + slup * 8000 + 332_000
@@ -96,7 +103,7 @@ class TestPL2000BBoxReferenceValues:
         ids=["10k", "5k", "2k", "1k", "500"],
     )
     def test_sheet_dimensions_all_scales(self, scale, expected_height, expected_width):
-        """Weryfikacja wymiarow arkuszy dla kazdej skali."""
+        """Verify the sheet dimensions for every scale."""
         # Use a known valid godlo for each scale
         godla_per_scale = {
             "1:10000": "6.179.12",
@@ -120,7 +127,7 @@ class TestPL2000BBoxReferenceValues:
         ids=[s for s in SHEET_DIMENSIONS_2000],
     )
     def test_dimensions_match_constant(self, scale, expected_height, expected_width):
-        """Weryfikacja ze SHEET_DIMENSIONS_2000 zgadza sie z obliczonymi wymiarami."""
+        """Verify that SHEET_DIMENSIONS_2000 agrees with the computed dimensions."""
         godla_per_scale = {
             "1:10000": "7.160.15",
             "1:5000": "7.160.15.2",
@@ -139,14 +146,14 @@ class TestPL2000BBoxReferenceValues:
 
     @pytest.mark.parametrize("zone", [5, 6, 7, 8])
     def test_bbox_crs_matches_zone_epsg(self, zone):
-        """Weryfikacja ze CRS zwracany przez get_bbox pasuje do strefy."""
+        """Verify that the CRS returned by get_bbox matches the zone."""
         p = Parser2000(f"{zone}.150.10")
         bbox = p.get_bbox()
         assert bbox.crs == ZONE_EPSG[zone]
 
     @pytest.mark.parametrize("zone", [5, 6, 7, 8])
     def test_bbox_west_starts_with_zone_million(self, zone):
-        """Weryfikacja ze west zaczyna sie od zone*1_000_000 + offset."""
+        """Verify that west starts at zone*1_000_000 + offset."""
         p = Parser2000(f"{zone}.150.10")
         bbox = p.get_bbox()
         expected_west = zone * 1_000_000 + 10 * 8000 + 332_000
@@ -159,10 +166,10 @@ class TestPL2000BBoxReferenceValues:
 
 
 class TestPL2000HierarchyConsistency:
-    """Testy spojnosci hierarchii — children tiling, brak overlap."""
+    """Hierarchy consistency tests — children tiling, no overlap."""
 
     def test_5k_children_tile_exactly_over_parent(self):
-        """4 dzieci 1:5000 pokrywaja dokladnie rodzica 1:10000."""
+        """4 children 1:5000 exactly cover the 1:10000 parent."""
         parent = Parser2000("6.179.12")
         parent_bbox = parent.get_bbox()
         children = parent.get_children(scale="1:5000")
@@ -195,7 +202,7 @@ class TestPL2000HierarchyConsistency:
         assert children_area == pytest.approx(parent_area, abs=1.0)
 
     def test_2k_children_tile_exactly_over_parent(self):
-        """25 dzieci 1:2000 pokrywaja dokladnie rodzica 1:10000."""
+        """25 children 1:2000 exactly cover the 1:10000 parent."""
         parent = Parser2000("7.180.15")
         parent_bbox = parent.get_bbox()
         children = parent.get_children(scale="1:2000")
@@ -228,7 +235,7 @@ class TestPL2000HierarchyConsistency:
         assert children_area == pytest.approx(parent_area, abs=1.0)
 
     def test_1k_children_tile_over_2k_parent(self):
-        """4 dzieci 1:1000 pokrywaja dokladnie rodzica 1:2000."""
+        """4 children 1:1000 exactly cover the 1:2000 parent."""
         parent = Parser2000("8.170.10.13")
         parent_bbox = parent.get_bbox()
         children = parent.get_children()
@@ -261,7 +268,7 @@ class TestPL2000HierarchyConsistency:
         assert children_area == pytest.approx(parent_area, abs=1.0)
 
     def test_500_children_tile_over_1k_parent(self):
-        """4 dzieci 1:500 pokrywaja dokladnie rodzica 1:1000."""
+        """4 children 1:500 exactly cover the 1:1000 parent."""
         parent = Parser2000("5.160.8.07.2")
         parent_bbox = parent.get_bbox()
         children = parent.get_children()
@@ -284,7 +291,7 @@ class TestPL2000HierarchyConsistency:
         )
 
     def test_no_descendant_exceeds_ancestor_bbox(self):
-        """Zaden potomek nie wychodzi poza BBox przodka."""
+        """No descendant extends beyond the ancestor's BBox."""
         ancestor = Parser2000("6.179.12")
         ancestor_bbox = ancestor.get_bbox()
 
@@ -315,7 +322,7 @@ class TestPL2000HierarchyConsistency:
             assert desc_bbox.max_x <= ancestor_bbox.max_x + 0.01
 
     def test_no_5k_children_overlap(self):
-        """Dzieci 1:5000 nie nakladaja sie (brak wspolnej powierzchni wewnetrznej)."""
+        """1:5000 children do not overlap (no common interior area)."""
         parent = Parser2000("6.179.12")
         children = parent.get_children(scale="1:5000")
         bboxes = [c.get_bbox() for c in children]
@@ -334,7 +341,7 @@ class TestPL2000HierarchyConsistency:
                     )
 
     def test_no_2k_children_overlap(self):
-        """Dzieci 1:2000 nie nakladaja sie (brak wspolnej powierzchni wewnetrznej)."""
+        """1:2000 children do not overlap (no common interior area)."""
         parent = Parser2000("7.180.15")
         children = parent.get_children(scale="1:2000")
         bboxes = [c.get_bbox() for c in children]
@@ -351,7 +358,7 @@ class TestPL2000HierarchyConsistency:
                     )
 
     def test_no_1k_children_overlap(self):
-        """Dzieci 1:1000 nie nakladaja sie."""
+        """1:1000 children do not overlap."""
         parent = Parser2000("6.179.12.13")
         children = parent.get_children()
         bboxes = [c.get_bbox() for c in children]
@@ -368,7 +375,7 @@ class TestPL2000HierarchyConsistency:
                     )
 
     def test_hierarchy_tiling_multiple_zones(self):
-        """Weryfikacja tiling consistency w roznych strefach."""
+        """Verify tiling consistency in different zones."""
         for zone in [5, 6, 7, 8]:
             parent = Parser2000(f"{zone}.150.10")
             parent_bbox = parent.get_bbox()
@@ -398,14 +405,11 @@ class TestPL2000HierarchyConsistency:
 
 
 # =========================================================================
-# 3. TestPL2000LiveWMS
+# 3. TestLiveGugikIndex
 # =========================================================================
 
-# WMS endpoint for NMT skorowidze
-WMS_NMT_ENDPOINT = (
-    "https://mapy.geoportal.gov.pl/wss/service/PZGIK/NMT/WMS/SkorowidzeUkladEVRF2007"
-)
-
+# PL-2000 1:10000 sheet codes (interior PL, 1 m NMT coverage): a query in the
+# middle of a sheet checks the Parser2000 geometry against the GUGiK index polygons.
 LIVE_WMS_SHEETS = [
     # Zone 5 — western Poland
     ("5.176.14", 5),  # near Szczecin area
@@ -421,65 +425,157 @@ LIVE_WMS_SHEETS = [
     ("8.170.10", 8),  # far east
 ]
 
+LIVE_TIMEOUT = 15
+
+# (provider, endpoint, yearly rotation) - every public PL index; KRON86
+# is a frozen product (2019..2017iStarsze), with no new yearly layers
+LIVE_INDEX_ENDPOINTS = [
+    pytest.param(
+        GugikProvider(resolution="1m", vertical_crs="EVRF2007"),
+        GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"],
+        True,
+        id="nmt-1m-evrf2007",
+    ),
+    pytest.param(
+        GugikProvider(resolution="1m", vertical_crs="KRON86"),
+        GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["KRON86"],
+        False,
+        id="nmt-1m-kron86",
+    ),
+    pytest.param(
+        GugikProvider(resolution="5m"),
+        GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["5m"]["EVRF2007"],
+        True,
+        id="nmt-5m-evrf2007",
+    ),
+    pytest.param(
+        GugikNmptProvider(vertical_crs="EVRF2007"),
+        GugikNmptProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"],
+        True,
+        id="nmpt-1m-evrf2007",
+    ),
+    pytest.param(
+        GugikOrtoProvider(),
+        GugikOrtoProvider.WMS_SKOROWIDZE_ENDPOINT,
+        True,
+        id="orto",
+    ),
+]
+
+
+def _center_query_bbox(godlo: str) -> tuple[float, float, str]:
+    """A mid-sheet point (EPSG:2180) and a GetFeatureInfo BBOX as in providers."""
+    bbox = SheetParser(godlo).get_bbox(crs="EPSG:2180")
+    x = (bbox.min_x + bbox.max_x) / 2
+    y = (bbox.min_y + bbox.max_y) / 2
+    return x, y, f"{y - 10},{x - 10},{y + 10},{x + 10}"
+
 
 @pytest.mark.live
-class TestPL2000LiveWMS:
-    """Testy live WMS — sprawdzenie ze zapytanie WMS dziala dla centrum BBox.
+@pytest.mark.real_wms_layers
+class TestLiveGugikIndex:
+    """The live GUGiK index: layers, sheet selection, no coverage, geometry.
 
-    Te testy wymagaja polaczenia z internetem i dostepnosci GUGiK WMS.
-    Uruchomienie: pytest -m live
+    No ``skip`` on errors: a service failure after 3 tries = a test failure
+    (it is the only signal that S1/S4/K3 are back). Run: ``pytest -m live``.
     """
 
-    @pytest.mark.parametrize(
-        "godlo, zone",
-        LIVE_WMS_SHEETS,
-        ids=[s[0] for s in LIVE_WMS_SHEETS],
-    )
-    def test_wms_query_at_bbox_center(self, godlo, zone):
-        """Zapytanie WMS GetFeatureInfo w centrum BBox PL-2000."""
-        p = Parser2000(godlo)
-        bbox = p.get_bbox(crs="EPSG:2180")
+    @pytest.mark.parametrize(("provider", "endpoint", "rotates"), LIVE_INDEX_ENDPOINTS)
+    def test_getcapabilities_layers_match_pattern_and_rotate(
+        self, provider, endpoint, rotates
+    ):
+        """Layers from LAYER_PATTERN: yearly descending, ONE aggregate layer at
+        the end, an updated product has a current/last-year layer - the yearly
+        rotation and renames (S4) are visible only here."""
+        layers = provider._layers(endpoint)
 
-        center_x = (bbox.min_x + bbox.max_x) / 2
-        center_y = (bbox.min_y + bbox.max_y) / 2
+        assert layers, endpoint
+        matches = [provider.LAYER_PATTERN.fullmatch(name) for name in layers]
+        assert all(matches), layers
+        years = [int(m.group(1)) for m in matches if m.group(1)]
+        cumulative = [n for n, m in zip(layers, matches, strict=True) if m.group(2)]
+        assert years == sorted(years, reverse=True), layers
+        assert len(set(years)) == len(years), layers
+        assert len(cumulative) == 1 and layers[-1] == cumulative[0], layers
+        if rotates:
+            assert years[0] >= datetime.date.today().year - 1, layers
 
-        buffer = 10
-        query_bbox = (
-            f"{center_y - buffer},{center_x - buffer},"
-            f"{center_y + buffer},{center_x + buffer}"
+    def test_land_sheet_resolves_to_matching_asc(self):
+        """D4 live: a URL with the sheet code as a WHOLE token and 5 m resolution."""
+        provider = GugikProvider(resolution="5m")
+
+        url = provider._get_opendata_url("N-33-48-C-a-3-4", timeout=LIVE_TIMEOUT)
+
+        assert url.startswith("https://opendata.geoportal.gov.pl/")
+        assert url.lower().endswith("_n-33-48-c-a-3-4.asc"), url
+        source = provider.source_info("N-33-48-C-a-3-4")
+        assert source is not None
+        assert source["resolution_m"] == 5.0
+        assert source["uklad"] == "PL-1992"
+        assert source["layer"] in provider._layers(
+            GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["5m"]["EVRF2007"]
         )
 
-        params = {
-            "SERVICE": "WMS",
-            "VERSION": "1.3.0",
-            "REQUEST": "GetFeatureInfo",
-            "LAYERS": "SkorowidzeNMT2022iStarsze",
-            "QUERY_LAYERS": "SkorowidzeNMT2022iStarsze",
-            "INFO_FORMAT": "text/html",
-            "CRS": "EPSG:2180",
-            "BBOX": query_bbox,
-            "WIDTH": 100,
-            "HEIGHT": 100,
-            "I": 50,
-            "J": 50,
-        }
+    def test_sea_sheet_is_no_coverage(self):
+        """Sea (N-33-48-C-a-1-3): all layers empty = NoCoverageError (R5)."""
+        provider = GugikProvider(resolution="5m")
 
-        try:
-            from urllib.parse import urlencode
+        with pytest.raises(NoCoverageError) as exc:
+            provider._get_opendata_url("N-33-48-C-a-1-3", timeout=LIVE_TIMEOUT)
 
-            url = f"{WMS_NMT_ENDPOINT}?{urlencode(params)}"
-            response = requests.get(url, timeout=15)
-            # We only verify that the WMS service responds (status 200)
-            # We do NOT assert data presence because coverage varies
-            assert response.status_code == 200, (
-                f"WMS returned status {response.status_code} for {godlo}"
+        assert exc.value.godlo == "N-33-48-C-a-1-3"
+
+    def test_unknown_layer_is_service_exception_not_no_coverage(self):
+        """Nonexistent layer: an OGC report = DownloadError, never no coverage."""
+        provider = GugikProvider()
+        _, _, query_bbox = _center_query_bbox("N-33-48-C-a-3-4")
+
+        with pytest.raises(DownloadError, match="OGC") as exc:
+            query_skorowidz_layer(
+                provider._sessions.get(),
+                GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"],
+                "SkorowidzeNMT1999NieIstnieje",
+                query_bbox=query_bbox,
+                godlo="N-33-48-C-a-3-4",
+                timeout=LIVE_TIMEOUT,
             )
-        except (
-            requests.ConnectionError,
-            requests.Timeout,
-            requests.RequestException,
-        ) as e:
-            pytest.skip(f"WMS not reachable: {e}")
+
+        assert not isinstance(exc.value, NoCoverageError)
+
+    @pytest.mark.parametrize(
+        ("godlo", "zone"), LIVE_WMS_SHEETS, ids=[s[0] for s in LIVE_WMS_SHEETS]
+    )
+    def test_pl2000_center_query_returns_sheets_containing_the_point(self, godlo, zone):
+        """PL-2000 geometry vs the GUGiK index: the sheet centre hits the 1 m NMT
+        records, and the bbox of EVERY returned sheet code (PL-1992 or the proper
+        PL-2000 zone) contains the query point."""
+        provider = GugikProvider(resolution="1m", vertical_crs="EVRF2007")
+        endpoint = GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"]
+        x, y, query_bbox = _center_query_bbox(godlo)
+
+        records = []
+        for layer in provider._layers(endpoint):
+            records.extend(
+                query_skorowidz_layer(
+                    provider._sessions.get(),
+                    endpoint,
+                    layer,
+                    query_bbox=query_bbox,
+                    godlo=godlo,
+                    timeout=LIVE_TIMEOUT,
+                )
+            )
+
+        assert records, f"{godlo}: zaden rekord NMT 1 m w srodku arkusza"
+        for record in records:
+            sheet = SheetParser(record.godlo).get_bbox(crs="EPSG:2180")
+            assert sheet.min_x - 1 <= x <= sheet.max_x + 1, (godlo, record.godlo)
+            assert sheet.min_y - 1 <= y <= sheet.max_y + 1, (godlo, record.godlo)
+            assert record.uklad in {"1992", "2000"}, record
+            if record.uklad == "2000":
+                assert record.zone == zone, record
+                assert record.godlo.startswith(f"{zone}."), record
+                assert record.raw["ukladWspolrzednychPoziomych"] == (f"PL-2000:S{zone}")
 
 
 # =========================================================================
@@ -491,7 +587,7 @@ class TestPL2000EdgeCases:
     """Edge cases — multi-zone, round-trip, single point, zone forced, drill-down."""
 
     def test_multi_zone_bbox_crossing_16_5(self):
-        """BBox przecinajacy granice stref 5/6 (16.5E) zwraca arkusze z obu stref."""
+        """A BBox crossing the zone 5/6 boundary (16.5E) gets sheets of both zones."""
         # BBox in WGS84 crossing 16.5E (zone 5/6 boundary)
         bbox = BBox(min_x=16.3, min_y=52.0, max_x=16.7, max_y=52.1, crs="EPSG:4326")
         sheets = find_sheets_2000_for_bbox(bbox)
@@ -505,7 +601,7 @@ class TestPL2000EdgeCases:
         assert 6 in zones_found, "Should find sheets in zone 6"
 
     def test_multi_zone_bbox_crossing_19_5(self):
-        """BBox przecinajacy granice stref 6/7 (19.5E) zwraca arkusze z obu stref."""
+        """A BBox crossing the zone 6/7 boundary (19.5E) gets sheets of both zones."""
         bbox = BBox(min_x=19.3, min_y=52.0, max_x=19.7, max_y=52.1, crs="EPSG:4326")
         sheets = find_sheets_2000_for_bbox(bbox)
 
@@ -518,7 +614,7 @@ class TestPL2000EdgeCases:
         assert 7 in zones_found, "Should find sheets in zone 7"
 
     def test_multi_zone_bbox_crossing_22_5(self):
-        """BBox przecinajacy granice stref 7/8 (22.5E) zwraca arkusze z obu stref."""
+        """A BBox crossing the zone 7/8 boundary (22.5E) gets sheets of both zones."""
         bbox = BBox(min_x=22.3, min_y=52.0, max_x=22.7, max_y=52.1, crs="EPSG:4326")
         sheets = find_sheets_2000_for_bbox(bbox)
 
@@ -531,7 +627,7 @@ class TestPL2000EdgeCases:
         assert 8 in zones_found, "Should find sheets in zone 8"
 
     def test_round_trip_godlo_to_bbox_and_back(self):
-        """Round-trip: godlo -> BBox -> find_sheets -> zawiera oryginal."""
+        """Round-trip: sheet code -> BBox -> find_sheets -> contains the original."""
         test_godla = [
             "5.170.10",
             "6.179.12",
@@ -559,7 +655,7 @@ class TestPL2000EdgeCases:
             )
 
     def test_single_point_bbox_finds_exactly_one_sheet(self):
-        """Punkt (BBox z zerowa powierzchnia) powinien znalezc dokladnie 1 arkusz."""
+        """A point (BBox with zero area) should find exactly 1 sheet."""
         # Use center of a known sheet
         p = Parser2000("6.179.12")
         bbox = p.get_bbox()
@@ -579,7 +675,7 @@ class TestPL2000EdgeCases:
         assert sheets[0] == "6.179.12"
 
     def test_zone_forced_parameter_limits_search(self):
-        """Parametr zone ogranicza wyszukiwanie do jednej strefy."""
+        """The zone parameter limits the search to one zone."""
         # BBox that could span multiple zones in WGS84
         bbox = BBox(min_x=16.3, min_y=52.0, max_x=16.7, max_y=52.1, crs="EPSG:4326")
 
@@ -604,7 +700,7 @@ class TestPL2000EdgeCases:
         assert len(zones_all) >= 2, "Unrestricted search should span zones"
 
     def test_drill_down_to_5000(self):
-        """Drill-down do skali 1:5000 — wynik zawiera arkusze 1:5000."""
+        """Drill-down to the 1:5000 scale - the result contains 1:5000 sheets."""
         # Use center of a known sheet
         p = Parser2000("6.179.12")
         bbox = p.get_bbox()
@@ -632,7 +728,7 @@ class TestPL2000EdgeCases:
         assert set(sheets) == expected
 
     def test_drill_down_to_2000(self):
-        """Drill-down do skali 1:2000 — wynik zawiera arkusze 1:2000."""
+        """Drill-down to the 1:2000 scale - the result contains 1:2000 sheets."""
         p = Parser2000("7.180.15")
         bbox = p.get_bbox()
 
@@ -656,7 +752,7 @@ class TestPL2000EdgeCases:
         assert len(sheets) == 25
 
     def test_drill_down_partial_coverage(self):
-        """Drill-down z czesciowym pokryciem — nie wszystkie dzieci."""
+        """Drill-down with partial coverage - not all children."""
         # Small bbox covering only part of one 1:10000 sheet
         p = Parser2000("6.179.12")
         bbox = p.get_bbox()
@@ -677,7 +773,7 @@ class TestPL2000EdgeCases:
         assert sheets_5k[0] == "6.179.12.1"
 
     def test_round_trip_finer_scales(self):
-        """Round-trip dla drobniejszych skal: 1:5k i 1:2k."""
+        """Round-trip for finer scales: 1:5k and 1:2k."""
         # 1:5000 round-trip
         godlo_5k = "6.179.12.3"
         p5k = Parser2000(godlo_5k)
@@ -708,7 +804,7 @@ class TestPL2000EdgeCases:
         assert godlo_2k in sheets_2k
 
     def test_bbox_in_epsg2180_finds_sheets(self):
-        """BBox w EPSG:2180 (PL-1992) jest poprawnie obslugiwany."""
+        """A BBox in EPSG:2180 (PL-1992) is handled correctly."""
         # Transform known sheet BBox to EPSG:2180
         p = Parser2000("6.179.12")
         bbox_2180 = p.get_bbox(crs="EPSG:2180")
@@ -726,7 +822,7 @@ class TestPL2000EdgeCases:
         assert "6.179.12" in sheets
 
     def test_bbox_in_native_zone_crs(self):
-        """BBox w natywnym CRS strefy (EPSG:2177) jest poprawnie obslugiwany."""
+        """A BBox in the native zone CRS (EPSG:2177) is handled correctly."""
         p = Parser2000("6.179.12")
         bbox = p.get_bbox()  # native EPSG:2177
 
