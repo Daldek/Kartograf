@@ -414,8 +414,7 @@ adres `http` odrzucany).
 - [PROGRESS.md](docs/PROGRESS.md) - Status implementacji i checkpointy
 - [CHANGELOG.md](docs/CHANGELOG.md) - Historia zmian
 - [DECISIONS.md](docs/DECISIONS.md) - Rejestr decyzji architektonicznych (ADR)
-- [DEVELOPMENT_STANDARDS.md](docs/DEVELOPMENT_STANDARDS.md) - Standardy kodowania
-- [IMPLEMENTATION_PROMPT.md](docs/IMPLEMENTATION_PROMPT.md) - Kontekst dla asystentow AI
+- [DEVELOPMENT_STANDARDS.md](docs/DEVELOPMENT_STANDARDS.md) - Standardy kodowania i workflow pracy (także dla asystentów AI)
 
 ## Wymagania
 

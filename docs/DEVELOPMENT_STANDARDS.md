@@ -38,7 +38,10 @@
 12. [Python — logging](#12-python--logging)
 13. [Python — wydajnosc](#13-python--wydajnosc)
 14. [Bezpieczenstwo](#14-bezpieczenstwo)
-15. [Pre-merge checklist](#15-pre-merge-checklist)
+15. [Workflow implementacji](#15-workflow-implementacji)
+16. [Czego NIE robic](#16-czego-nie-robic)
+17. [Typowe zadania](#17-typowe-zadania)
+18. [Pre-merge checklist](#18-pre-merge-checklist)
 
 ---
 
@@ -806,7 +809,121 @@ CorineProvider → localhost HTTP → AuthProxy (subprocess) → Keychain → CL
 
 ---
 
-## 15. Pre-merge checklist
+## 15. Workflow implementacji
+
+### 15.1 Przed rozpoczeciem
+
+```
+1. Przeczytaj CLAUDE.md i docs/PROGRESS.md
+2. Sprawdz galaz: git branch --show-current (develop albo galaz z develop)
+3. Sprawdz status: git status
+4. Zrozum zadanie — znajdz relevantne sekcje w SCOPE.md / PRD.md / ARCHITECTURE.md
+5. Zadaj pytania, jesli cos jest niejasne
+```
+
+### 15.2 Implementacja
+
+```
+1. Pisz kod zgodnie z tym dokumentem
+2. Type hints (Python 3.12+ style: X | None zamiast Optional[X]) — sekcja 8
+3. Docstrings NumPy style — sekcja 9
+4. Walidacja inputu na granicy systemu — sekcja 11.2
+5. Timeout dla kazdego requestu HTTP — sekcja 13.4
+6. raise ... from err (zachowaj lancuch wyjatkow) — sekcja 11.3
+```
+
+### 15.3 Testowanie
+
+```
+1. Napisz testy (pytest, AAA pattern) — sekcja 10
+2. Testy offline: fixtures i mocking, bez prawdziwych API (sekcja 10.4)
+3. Pokrycie: progi z sekcji 10.1
+4. Uruchom: pytest tests/ -v --tb=short -m "not live"
+5. Sprawdz linting: ruff check kartograf/ tests/
+```
+
+### 15.4 Commit
+
+```
+1. Conventional Commits (sekcja 2): feat(parser): add bbox calculation
+2. Commituj czesto, male zmiany
+3. Zaktualizuj docs/CHANGELOG.md — sekcja wersji niewydanej
+   (naglowek "## [X.Y.Z] - Unreleased" na gorze pliku)
+4. Zaktualizuj docs/PROGRESS.md na koniec sesji
+```
+
+---
+
+## 16. Czego NIE robic
+
+- **Nie dodawaj funkcji poza zakresem** — sprawdz `docs/SCOPE.md`, sekcja 3 ("Out of Scope")
+- **Nie zmieniaj architektury** bez konsultacji — decyzje sa w `docs/DECISIONS.md`
+- **Nie pomijaj testow** — progi pokrycia z sekcji 10.1
+- **Nie hardcoduj secrets** — uzyj zmiennych srodowiskowych / Auth Proxy (sekcja 14)
+- **Nie uzywaj Optional/Union** — uzyj `X | None` i `X | Y` (Python 3.12+)
+- **Nie uzywaj f-stringow w loggerze** — uzyj `%s` formatting
+- **Nie tworz osobnych plikow konfiguracyjnych** — wszystko w `pyproject.toml`
+- **Nie wywoluj prawdziwych API w testach** — mockuj requesty; siec tylko w testach `live`
+
+---
+
+## 17. Typowe zadania
+
+### 17.1 Nowy provider pokrycia terenu / gleb (`LandCoverProvider`)
+
+```python
+# 1. Stworz klase w kartograf/providers/ (provider krajowy w podpakiecie
+#    kraju, np. kartograf/providers/pl/), dziedziczaca z LandCoverProvider
+#    (kartograf/providers/base.py).
+# 2. Zaimplementuj metody abstrakcyjne — te oznaczone @abstractmethod
+#    w kartograf/providers/base.py (LandCoverProvider i jego baza
+#    DataSourceProvider): wlasciwosci name i base_url oraz download_by_bbox.
+#    download_by_godlo jest dziedziczone (godlo -> bbox EPSG:2180 ->
+#    download_by_bbox); nadpisz je tylko, gdy zrodlo ma wlasny tor godla.
+#    download_by_admin_unit (TERYT) jest opcjonalne — domyslnie
+#    NotImplementedError; download_by_teryt to zdeprecjonowany alias z bazy.
+# 3. Dodaj deskryptor zrodla w kartograf/sources/registry.py i ustaw
+#    descriptor_key w providerze (katalog zapisu, sidecar) — patrz
+#    docs/ARCHITECTURE.md sekcja 5.
+# 4. Zarejestruj w slowniku modulowym PROVIDERS w kartograf/landcover/manager.py
+# 5. Dodaj eksport do kartograf/__init__.py (__all__)
+# 6. Napisz testy offline w tests/ (fixtury z realnych odpowiedzi serwera)
+# 7. CLI: dopisz zrodlo do choices --source w cli/_parser.py i logike
+#    w cli/landcover_cmd.py; cli/commands.py to tylko fasada zgodnosci
+```
+
+Nowe zrodlo NMT albo nowy kraj: checklista w `docs/ARCHITECTURE.md`,
+sekcja 5 ("Jak dodac nowe zrodlo albo nowy kraj").
+
+### 17.2 Rozszerzenie parsera godel
+
+```python
+# 1. PL-1992: kartograf/core/sheet_parser.py — wzorzec w PATTERNS, logika
+#    podzialu w get_children() / _get_children_from_*();
+#    PL-2000: kartograf/core/parser_2000.py.
+# 2. Nowy system godel (kraj): klasa parsera w core/ + wpis SheetSystem
+#    w literale SYSTEMS w core/parser_registry.py (ARCHITECTURE sekcja 5, pkt 3)
+# 3. Zaktualizuj testy: tests/test_sheet_parser.py, tests/test_parser_2000.py,
+#    tests/test_parser_registry.py
+# 4. Przetestuj hierarchie (get_parent, get_children, get_all_descendants)
+```
+
+### 17.3 Naprawa bledu w pobieraniu
+
+```python
+# 1. Zidentyfikuj provider (kartograf/providers/: pl/, cuzk/, corine.py,
+#    soilgrids.py)
+# 2. Sprawdz timeout providera i transport: retry/backoff sa wspolne
+#    w kartograf/transport/http.py (download_to, get_with_retry), nie
+#    w providerach
+# 3. Dodaj test reprodukujacy blad (offline, fixtura z realnej odpowiedzi)
+# 4. Napraw i potwierdz testem
+# 5. Uruchom caly zestaw testow offline — nic innego nie moze sie zepsuc
+```
+
+---
+
+## 18. Pre-merge checklist
 
 ```markdown
 - [ ] Testy przechodza (`pytest tests/ -v -m "not live"`; testy `live` — 16
