@@ -1288,6 +1288,28 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
 
 ## Backlog
 
+#### Do 0.8.0 — zmiany lamiace CLI skonsolidowane w jednym wydaniu (2026-10-08)
+
+0.8.0 lamie CLI przez magazyn wersjonowany (spec
+`docs/superpowers/specs/2026-10-08-versioned-store-design.md`, galaz
+`feat/versioned-store`), wiec pozostale zaplanowane zmiany lamiace CLI
+wchodza w tym samym wydaniu (decyzja uzytkownika). Kazda na wlasnej galezi.
+
+- [ ] **`--product` wymagane w `kartograf download`:** dzis domyslnie `nmt`
+  (`cli/_parser.py`, `default="nmt"`), niezgodnie z pozostalymi produktami;
+  brak flagi = blad argparse z lista produktow.
+- [ ] **Godlo po angielsku w CLI (ADR-031):** `--godlo` -> `--sheet`
+  (`landcover download`, `soilgrids hsg`); w `download` argument pozycyjny
+  `godlo` -> `--sheet` (spojnie z `--bbox`/`--geometry`/`--teryt`); `parse`
+  zachowuje argument pozycyjny (nazwa w pomocy: `SHEET`). Bez aliasow
+  (BREAKING w CHANGELOG) — errata ADR-031: dla CLI bez okresu przejsciowego.
+- [ ] **Godlo po angielsku w API biblioteki (ADR-031):** parametry, atrybuty
+  i nazwy w publicznym API (`kartograf/__init__.py` `__all__`) `godlo` ->
+  `sheet`, bez aliasow (BREAKING; Hydrograf i Hydrolog dostosuja importy).
+  Errata ADR-031: zamiast okresu aliasow zmiana w 0.8.0. Przy okazji
+  inwentaryzacja pozostalych polskich identyfikatorow publicznego API —
+  decyzja uzytkownika, czy tez wchodza do 0.8.0.
+
 #### Do v1.0.0 — roadmapa
 
 Podprojekty, kolejnosc i zasady: `docs/SCOPE.md` 3.3. Kazdy podprojekt
