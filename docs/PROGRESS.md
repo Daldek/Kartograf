@@ -14,10 +14,10 @@
 | HSG | ✅ Gotowy | v0.3.0+ |
 | bbox → godla | ✅ Gotowy | find_sheets_for_bbox(), CLI --bbox |
 | geometry → godla | ✅ Gotowy | find_sheets_for_geometry(), CLI --geometry |
-| CLI | ✅ Gotowy | 5 komend + --bbox + --product + --system + --geometry |
+| CLI | ✅ Gotowy | pelna lista komend i flag: `kartograf --help`, `kartograf download --help` (zrodlo prawdy: `kartograf/cli/_parser.py`) |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage; godlo PL-2000 bez pliku PL-2000 = `NoCoverageError` z podpowiedzia `--scale` (K4), sidecar EPSG:2176-2179 (N8) |
-| Pokrycie testami | ✅ Gotowy | 2622 testow offline + 16 `live` (2026-10-07 po ADR-030 T1-T9; 2406 po deduplikacji, parserach i LAZ ADR-029; 2216 2026-10-06 po rundzie review/E2E, w tym 28 na surowych body GUGiK; 2105 po polityce ponowien; 2058 po fali naprawczej 2026-09-30; wczesniej 1861 + 8 po fali review max 2026-09-28) |
+| Pokrycie testami | ✅ Gotowy | liczba testow: `.venv/bin/python -m pytest tests/ --collect-only -q -m "not live"`; prog pokrycia `fail_under` w `pyproject.toml`; brama: patrz "START NASTEPNEJ SESJI" |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
 | Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0; od 2026-09-30 `record_cache` (rekord skorowidza / `no_coverage` z podpowiedzia) podlaczony w torach PL (N6), `--force` = bez cache |
@@ -25,6 +25,8 @@
 | Walidacja warstw WMS | ✅ Gotowy | wylacznie GetCapabilities (lock, retry), `LAYER_PATTERN` per produkt, bez zaszytych list (S4, errata ADR-020) |
 | Etap 0 — zrodla wielokrajowe (sources/transform/transport/providers-pl/CLI split/sidecar) | ✅ Gotowy | zmergowane do develop 2026-08-11; E2E 12/12 na realnych danych |
 | Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | ZMERGOWANY do develop 2026-08-12; tor CZ odmrozony w fali 2026-09-29/30 (D1): pin EPSG:1622 (K2; live: Karkonosze PL-CZ mediana -0,15 m, przesuniecie < 1 px), budzet 4 Mpx kafli (K6; live: 29,8 Mpx w 3 min 38 s), piksel dokladnie 2 m (N3), `Warning:` przy 100 % nodata (N2); wersja `0.7.0-dev` |
+| LAZ — wybor kafli (ADR-029) | ✅ Gotowy | `download_laz_area` / `select_tiles`: najnowszy kafel per obszar wg pokrycia, `--year`, `--min-density`, `extra.parent_request` w trybie `--bbox`/`--geometry` |
+| Kampanie GUGiK (ADR-030 + errata 1-5) | ✅ Gotowy | `--campaigns {newest,all}`, `--min-year`; pliki w `<segment>/kampanie/`, sciezka standardowa = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`) |
 | Wycinek NMT PL `--target-crs` (ADR-027) + API biblioteki `download_pl_cutout` | ✅ Gotowy | fala review max 2026-09-28 + fala naprawcza 2026-09-30: `GridMismatchError` dla 2180 z arkuszy o roznych fazach, W1 (warp per arkusz) dla 5514/3045 (S5/D3/D8), `extra.sheet_sources`, `all_nodata`, `download_pl_cutout(cache=)`; live PASS Krakow 5 m |
 
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
@@ -83,38 +85,34 @@
 
 ## Ostatnia sesja
 
-**Data:** 2026-08-10 — 2026-09-30 (sekcje datowane ponizej)
+**Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **katalog danych DANYCH (2026-10-06):** wszystkie pobierane dane przestrzenne
-> zapisujemy na `<katalog-danych>`:
-> `kartograf/data/` (kanoniczny uklad) i `kartograf/e2e/<data>-<cel>/`
-> (testy na zywo); zawsze jawne `--output`, cache SQLite zostaje w repo.
-> Zasady: `CLAUDE.md` sekcja "katalog danych danych". `e2e-data/` (9,1 GB) w repo
-> nadal czeka na decyzje: przeniesc na katalog danych czy usunac.
-
-> **START NASTEPNEJ SESJI** (stan na koniec sesji 2026-09-30): **fala
-> naprawcza ZAKONCZONA** — 21 bledow z testow na zywo (K1-K6, S1-S5,
-> N1-N9, H1) naprawionych, review (5 znalezisk) domkniety, dokumentacja
-> bez not "znany blad", testy na zywo 2026-09-30: 11 PASS / 0 FAIL
-> (`docs/research/2026-09-29-fala-naprawcza/live-2026-09-30.md`). Nastepny
-> krok: **wydanie 0.7.0** ("Nastepne kroki" pkt 13-14: bump wersji
+> **START NASTEPNEJ SESJI:** ADR-030 (strategie kampanii) jest WDROZONY
+> i zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`);
+> fallback offline I-1 to "Errata 5" ADR-030 (`docs/DECISIONS.md`).
+> Przeglad dokumentacji 2026-10-08 (raport:
+> `docs/research/2026-10-08-przeglad-dokumentacji/raport.md`) zakonczony
+> fala poprawek dokumentacji. Kolejnosc: (1) przeglad dokumentacji ->
+> (2) poprawki dokumentacji (ta fala) -> (3) **wydanie 0.7.0** (bump
 > `0.7.0-dev` -> `0.7.0`, data w CHANGELOG, tag, push `develop`, merge do
-> `main` — WYLACZNIE na polecenie uzytkownika; checklista release pkt 14:
-> build sdist/wheel, zywa weryfikacja CORINE z credentials CLMS). Otwarte
-> po fali (backlog): scalanie PL+CZ w jedna powierzchnie (R6, etap 2),
-> rozwijanie godla PL-2000 1:10000 do potomkow z rekordami skorowidza
-> (etap 2), wielokat granicy zamiast prostokata (`--country auto`,
-> ADR-023), wycinek z arkuszy PL-2000 (etap 2). Stan repo: `develop`,
-> 2058 testow offline (+16 `live`), ruff czysty, mypy 32 (baseline),
-> 236 commitow przed origin (bez push); `e2e-data/2026-09-29-live/`
-> (8,6 GB) i `e2e-data/2026-09-30-live/` (0,6 GB) gitignorowane — czekaja
-> na decyzje uzytkownika o usunieciu. Modele: `task.agentModelOverrides`
-> = `openai-codex/gpt-6-sol` (zapisane globalnie 2026-09-30; astra
-> wyczerpuje limit po ~8 min pracy 3-4 agentow).
+> `main`) WYLACZNIE na polecenie uzytkownika.
+> Brama (stan sprawdzaj komendami, nie liczbami z dziennika):
+> `.venv/bin/python -m pytest tests/ -m "not live"` (zielone),
+> `.venv/bin/python -m ruff check kartograf/ tests/` i
+> `ruff format --check` (czyste), `.venv/bin/python -m mypy kartograf/`
+> (porownuj LISTE bledow z baseline'em bez numerow linii, nie ich liczbe).
+> Testy `live` tylko swiadomie (`-m live`).
+> **Otwarte drobiazgi:** (a) PRZYPOMNIEC o serwerze `<serwer>`:
+> udzial `<katalog-danych>` odrzuca blokady zakresow bajtow (`EACCES`) —
+> uzytkownik zajmie sie diagnoza Samby/systemu plikow (NIE `nobrl`, bo
+> dotknie tez klientow Windows); (b) drobne otwarte punkty ADR-030 w
+> dzienniku nizej ("Otwarte drobne"), do decyzji uzytkownika.
+> Dane testow na zywo: `<katalog-danych>` (CLAUDE.md, sekcja
+> "katalog danych danych"); katalog `e2e-data/` w repo nie istnieje.
 
 ### ADR-030 strategie kampanii — wdrozony i zweryfikowany na zywo (T1-T12, 2026-10-07)
 
-> **START NASTEPNEJ SESJI:** ADR-030 (+ errata 2026-10-07) WDROZONY w
+> **Stan na koniec sesji 2026-10-07/08 (zapis historyczny):** ADR-030 (+ errata 2026-10-07) WDROZONY w
 > `develop` (fale 1-4, T1-T9) i opisany w dokumentacji (T10: `CLAUDE.md`,
 > `docs/ARCHITECTURE.md` 3.2/3.3/4.1-4.3/4.6/4.7/6, `README.md` sekcja
 > "Kampanie", `docs/CHANGELOG.md` [0.7.0], `docs/SCOPE.md` 2.11/2.12/3.1).
@@ -159,8 +157,8 @@
 > **Serwer katalog danych (uzytkownik zajmie sie sam — PRZYPOMNIEC):** udzial odrzuca
 > blokady zakresow bajtow (`EACCES`) — diagnoza Samby/FS zamiast `nobrl`
 > (dotknie tez klientow Windows).
-> **Nastepny krok:** wydanie 0.7.0 (bump/tag/push/merge) TYLKO na polecenie
-> uzytkownika.
+> **Nastepny krok (wtedy):** wydanie 0.7.0 TYLKO na polecenie uzytkownika
+> (aktualny stan: blok "START NASTEPNEJ SESJI" wyzej).
 > Otwarte drobne (decyzja uzytkownika): wycinek `--target-crs` przy fallbacku
 > I-1 bez `Warning:`/`PlCutoutResult.unverified` (tylko log managera);
 > podwojna linia ostrzezenia I-1 w CLI (log + `Warning:`); `MetadataCache.__del__`
@@ -1140,15 +1138,12 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
    najpewniej roznica operacji EPSG:1622 - EPSG:4829, czyli blad lokalnej,
    slowackiej operacji przypietej, nie serwera (znany blad K2, errata
    ADR-024).
-3. **Push `develop` na origin** (**223 commity** lokalnie — pomiar
-   `git rev-list --count origin/develop..develop` 2026-09-29 po commicie
-   zamykajacym sesje testow na zywo; wczesniej 208 po fali review max
-   2026-09-28 i 148 po mergu audytu 0.7.0 2026-08-28; decyzja z etapu 0 nadal
-   nierozwiazana) — patrz wyzej
+3. **Push `develop` na origin** (stan: `git rev-list --count origin/develop..develop`;
+   decyzja z etapu 0 nadal nierozwiazana; razem z wydaniem 0.7.0, pkt 13)
 4. **Zgloszenie/naprawa WCS EVRF2007 GUGiK** (male, przedistniejace, poza
    etapami 0/1): aktualizacja `WCS_ENDPOINTS`/`COVERAGE_IDS` w
-   `providers/pl/gugik.py` po usunieciu endpointu przez GUGiK (patrz "Znany
-   problem uslugowy" wyzej); rozwazyc walidacje WCS analogiczna do
+   `providers/pl/gugik.py` po usunieciu endpointu przez GUGiK (patrz `CLAUDE.md`,
+   sekcja "Ograniczenia": WCS NMT EVRF2007 zwraca 404 od 2026-08); rozwazyc walidacje WCS analogiczna do
    walidacji warstw WMS (czesciowo zrobione w audycie A1-4:
    `download_bbox` z EVRF2007 konczy sie `ValidationError` przed siecia,
    a kanal WCS deskryptora deklaruje tylko KRON86; zostaje zgloszenie do
@@ -1164,9 +1159,8 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
    najwazniejszych)
    — najwazniejsze do rozwazenia przy etapie 2: eager import `rasterio`
    przy `import kartograf` (+55-65 ms, ADR-023 pkt 2 — naprawa: lazy import
-   w `providers/cuzk/client.py`/`dmr.py`); `Sm5Sheet.get_bbox` traci
-   memoizacje `self._index` bez wstrzknietego indeksu (regresja wydajnosciowa
-   przy wielu wywolaniach); duplikacja regul walidacji sentineli miedzy
+   w `providers/cuzk/client.py`/`dmr.py`; zweryfikowane: `import rasterio` na poziomie modulu w
+   `providers/cuzk/client.py` i `dmr.py`); duplikacja regul walidacji sentineli miedzy
    galezia PL i CZ w CLI; brak separatora przed "Remedium:" w komunikacie
    bledu KRON86
 7. ~~Audyt przedwydaniowy 0.7.0 — finalny review calej galezi~~ —
@@ -1242,10 +1236,12 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
     przez niestabilnosc GUGiK (poprawnie kod 1 "ponow"); tryb listy kod 1
     i jeden zgloszony arkusz (S2); PL-SK: nodata wewnatrz opublikowanych
     arkuszy (do 82 %) bez `missing_sheets`; 5 m brak w rejonie Sejn (L6).
-13. **Bump wersji + wydanie 0.7.0** — **czeka na fale naprawcza (pkt 15)**:
+13. **Bump wersji + wydanie 0.7.0** — **czeka WYLACZNIE na polecenie
+    uzytkownika** (fala naprawcza pkt 15 i przeglad dokumentacji 2026-10-08
+    zamkniete; kolejnosc: poprawki dokumentacji -> wydanie):
     `kartograf.__version__` `0.7.0-dev` -> `0.7.0` (pyproject czyta wersje
-    dynamicznie), data w CHANGELOG, tag `v0.7.0`, push `develop` na origin
-    (patrz pkt 3 wyzej).
+    dynamicznie), data w CHANGELOG (`## [0.7.0] - Unreleased`), tag
+    `v0.7.0`, push `develop` na origin (patrz pkt 3 wyzej), merge do `main`.
 14. **Checklista release** (z planu audytu 0.7.0): build sdist/wheel
     (`setuptools`); zywa weryfikacja CORINE GeoTIFF z prawdziwymi
     credentials CLMS vs allowlista hostow (Auth Proxy); ~~E2E kafelkowania
@@ -1507,10 +1503,11 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
       sciezki (`path is None`) nie trafia do licznika (dzis nieosiagalne —
       `_download_single` zawsze oddaje sciezke) i zliczanie jest
       zduplikowane w dwoch petlach (sekwencyjnej i rownoleglej).
-- [ ] A2-7 — fallback `urls[0]` w `_get_opendata_url` moze scache'owac URL
+- [x] A2-7 — fallback `urls[0]` w `_get_opendata_url` moze scache'owac URL
       innego arkusza (Minor) — log podniesiony do `warning` 2026-09-28
       (cc10773); zostaje weryfikacja zasiegu przy `FEATURE_COUNT>1` -> K4
       (wybor pliku arkusza, testy na zywo 2026-09-29).
+      **ZROBIONE:** `_get_opendata_url` zwraca `_resolve_sheet(...).url` (dopasowanie calego tokenu godla, ADR-028); fallback `urls[0]` usuniety.
 - [ ] A5-4 — regula "5m => EVRF2007" zaimplementowana w 3 miejscach
       (walidacja w `GugikProvider`, cicha korekta w `DownloadManager`,
       fabryka `create_nmt_provider`) — swiadome warstwowanie z etapu 0;
@@ -1526,8 +1523,8 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
       razem z etapem 2 (LAZ CZ).
 - [ ] A8-3 — testy toru CORINE GeoTIFF (CLMS/OAuth2): `_exchange_token`,
       `_download_via_clms_direct`, `_poll_clms_task` (happy + blad) — dlug
-      sprzed 0.6.0, czesciowo pokryty e2e (zad. 9); `providers/corine.py`
-      dzis 54% pokrycia (patrz DEVELOPMENT_STANDARDS 10.1) — M.
+      sprzed 0.6.0, czesciowo pokryty e2e (zad. 9); pokrycie `providers/corine.py`
+      sprawdz `pytest --cov=kartograf.providers.corine` — M.
 - [ ] A8-4 — testy `ProxyHandler.do_POST` (Bearer doklejony, 500 bez
       tokenu, 400 zly JSON, 404) — dlug sprzed 0.6.0, czesciowo pokryty
       e2e (zad. 9); `auth/proxy.py` jest juz >= 80% pokrycia calosciowo,
@@ -1537,10 +1534,11 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
       podprocesu (dzis `atexit`) — zmiana protokolu + ADR. (Wyscig
       `__new__`/`_proxy_process` per-instancja i `kill()` bez `wait()`
       naprawione w fali F-1, 2026-08-23.)
-- [ ] A5-3 — 6 providerow PL/EU ma wlasne kopie pobierania z retry zamiast
+- [x] A5-3 — 6 providerow PL/EU ma wlasne kopie pobierania z retry zamiast
       wspolnego `transport.download_to` (spec etapu 0 sekcja 6.5 swiadomie
       odlozyl migracje); skutek uboczny przyszlej zmiany: backoff
       2s/4s -> 1s/2s.
+      **ZROBIONE:** jeden `transport/http.download_to` dla wszystkich providerow, backoff 2 s/4 s (`9c7aaa9`, `e793a02`, D1).
 - [ ] A5-6 — polityka zero-ballpark z `transform/crs.py` obowiazuje dzis
       tylko na sciezce CZ — 9 miejsc (w tym `core/geometry.py:_transform_bbox`,
       CRS z pliku uzytkownika) uzywa surowego `Transformer.from_crs`
@@ -1628,10 +1626,11 @@ Rulingi i pelne uzasadnienia: `docs/research/2026-09-28-fala-review-max/`
       11,51 x 11,51 km zamiast 10 x 10 km).
 - [ ] Wycinek PL z arkuszy wydanych przez GUGiK w ukladzie PL-2000 pod
       godlem PL-1992 (reprojekcja per arkusz) — dzis glosny `ValidationError`.
-- [ ] Tryby CLI bez `--target-crs` na `DownloadManager.download_sheets`
+- [x] Tryby CLI bez `--target-crs` na `DownloadManager.download_sheets`
       (dzis `_download_godlo_list` w trybie rownoleglym rzuca pierwsza
       porazka, pozostale gina) + tolerancja braku pokrycia (`NoCoverageError`)
       poza wycinkiem -> S2.
+      **ZROBIONE:** tolerancja R5 w listach/hierarchii (`NoCoverageError` -> status `no_coverage`, `Warning:`), wszystkie arkusze probowane niezaleznie od `--workers` (CLAUDE.md, "Lista arkuszy PL").
 - [ ] Warp (`warp_to_grid` PL i `_warp_to_grid` CZ): wymiary siatki
       `max(1, round(...))` od naroznika NW — krawedz E/S do 0,5 px od obwiedni
       (E2E: 1,61 m / 0,76 m przy 5 m); skala resamplingu GDAL `XSCALE`/`YSCALE`
@@ -1659,12 +1658,14 @@ Rulingi i pelne uzasadnienia: `docs/research/2026-09-28-fala-review-max/`
       `transform/` (tor PL go importuje) i wspolny helper obwiedni geometrii
       w ukladzie pliku (`_geometry_envelope` / `_resolve_cz_geometry_bbox`);
       ta sama operacja S-JTSK -> K2.
-- [ ] Pobranie ASC bez kontroli `Content-Type`: strona bledu HTML z HTTP 200
+- [x] Pobranie ASC bez kontroli `Content-Type`: strona bledu HTML z HTTP 200
       zapisana jako `.asc` zostaje w cache — mozaika pada kodem 1, ale kolejne
       przebiegi pomijaja plik jako istniejacy az do recznego usuniecia.
-- [ ] Walidacja `--bbox`: NaN/inf przechodza `float()` (wycinek konczy sie
+      **ZROBIONE** na torze kampanii (`download/campaigns.py:verify_file_format` w `DownloadManager`, ADR-030; zla tresc = porazka, plik usuniety). Bezposrednie `provider.download()` w bibliotece nie weryfikuje tresci.
+- [x] Walidacja `--bbox`: NaN/inf przechodza `float()` (wycinek konczy sie
       `ValueError` w barierze `main()` albo mylacym `TransformError`),
       min > max przechodzi prepare/select wycinka.
+      **ZROBIONE:** `core/bbox.py:validate_bbox` (NaN/inf/min>max; bbox-punkt dozwolony), uzywane przez `parse_bbox_arg` i parsery arkuszy (`fec42d1`, `425ffc7`).
 - [ ] Straz I-2 (raport wyjatku OGC w odpowiedzi 2xx): test "URL wygrywa"
       takze dla odpowiedzi fallbackowej (URL innego arkusza + znacznik OGC);
       ograniczyc regex wyciagu komunikatu (`(.{0,2000}?)</` albo prefiks
