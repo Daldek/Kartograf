@@ -6,6 +6,16 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.7.0] - Unreleased
+### Dokumentacja
+- **Reorganizacja dokumentacji (2026-10-08):** nowy `docs/USAGE.md`
+  (przewodnik uzytkownika: przyklady CLI i biblioteki, wynik pobrania,
+  kampanie, CLMS, znane problemy); `IMPLEMENTATION_PROMPT.md` usuniety
+  (tresc w `docs/DEVELOPMENT_STANDARDS.md` 15-17, ktory jest glownym
+  zrodlem konwencji); `README.md` skrocony do wprowadzenia; `CLAUDE.md`
+  zminimalizowany do zasad krytycznych i odsylaczy (fakty przeniesione do
+  ARCHITECTURE/SCOPE/USAGE/STANDARDS); indeks ADR prowadzi wylacznie
+  `docs/DECISIONS.md` (ARCHITECTURE odsyla; errata 1 ADR-009).
+
 ### Poprawki po tescie na zywo ADR-030 (FA)
 - **BDOT10k GPKG na udzialach CIFS/SMB:** `_merge_gpkg_files` sklada GPKG
   w lokalnym katalogu tymczasowym systemu (SQLite bez `nobrl` konczyl na
