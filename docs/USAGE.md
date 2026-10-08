@@ -520,6 +520,11 @@ proxy).
   zwraca 404 od 2026-08); wysokości EVRF2007 z obszaru: CLI `--bbox`
   (arkusze OpenData) albo jeden GeoTIFF przez `--target-crs` /
   `download_pl_cutout`.
+- Uszkodzony albo nieczytelny cache metadanych (`.kartograf_cache.db`
+  w bieżącym katalogu) nie przerywa pobierania: CLI drukuje jedno
+  `Warning: cache metadanych nieczytelny (...)` i pracuje bez cache.
+  Naprawa: `kartograf cache clear` (usuwa nieczytelny plik wraz
+  z `-wal`/`-shm`) albo ręczne usunięcie pliku.
 
 Pełna lista ograniczeń technicznych (timeouty, ponowienia, CZ, `auto`):
 SCOPE 3.2; plany: SCOPE 3.1.

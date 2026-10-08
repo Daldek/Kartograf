@@ -10,6 +10,7 @@ import sys
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from kartograf.cli._parser import parse_bbox_arg
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
@@ -27,6 +28,9 @@ from kartograf.exceptions import (
     ValidationError,
 )
 from kartograf.sources.registry import horizontal_crs_for_godlo
+
+if TYPE_CHECKING:
+    from kartograf.cache import MetadataCache
 
 
 class _ProgressPrinter:
@@ -137,6 +141,31 @@ def _create_provider_and_storage(
     return provider, storage
 
 
+# Cache warnings already printed by the current ``cmd_download`` (PL and CZ
+# open separate caches on the same file, e.g. a border bbox under ``auto``).
+_cache_warnings_shown: set[str] = set()
+
+
+def _warn_cache_disabled(message: str) -> None:
+    """``on_disabled`` of the CLI ``MetadataCache``: one ``Warning:`` on stderr.
+
+    The library reports the disabled cache once per instance; the CLI
+    prints it right away (the download goes on without the cache, so the
+    exit code follows the download result) and once per command.
+    """
+    if message in _cache_warnings_shown:
+        return
+    _cache_warnings_shown.add(message)
+    print(f"Warning: {message}", file=sys.stderr, flush=True)
+
+
+def _cli_metadata_cache(force: bool) -> "MetadataCache":
+    """``MetadataCache`` in the cwd for the CLI (``--force`` = refresh mode)."""
+    from kartograf.cache import MetadataCache
+
+    return MetadataCache(refresh=force, on_disabled=_warn_cache_disabled)
+
+
 @contextlib.contextmanager
 def _pl_metadata_cache(args: argparse.Namespace) -> Iterator[object | None]:
     """
@@ -150,9 +179,7 @@ def _pl_metadata_cache(args: argparse.Namespace) -> Iterator[object | None]:
     cache is
     opened in the cwd and closed after the task (``close()`` purges expired entries).
     """
-    from kartograf.cache import MetadataCache
-
-    cache = MetadataCache(refresh=bool(args.force))
+    cache = _cli_metadata_cache(bool(args.force))
     try:
         yield cache
     finally:
@@ -976,6 +1003,7 @@ def cmd_download(args: argparse.Namespace) -> int:
     int
         Exit code (0 for success, 1 for error)
     """
+    _cache_warnings_shown.clear()
     has_godlo = args.godlo is not None
     has_bbox = args.bbox is not None
     has_geometry = getattr(args, "geometry", None) is not None
@@ -2247,7 +2275,6 @@ def _cmd_download_cz(
         and ``_dispatch_area``) - as the other flows treat
         ValidationError.
     """
-    from kartograf.cache import MetadataCache
     from kartograf.core.parser_registry import detect_system
     from kartograf.providers.cuzk import create_dmr_provider
     from kartograf.transform.crs import TransformError
@@ -2292,7 +2319,7 @@ def _cmd_download_cz(
 
     # D16: --force as in the PL path - the cache read (SM5 sheet index)
     # is skipped, the fresh entry is written
-    cache = MetadataCache(refresh=bool(args.force))
+    cache = _cli_metadata_cache(bool(args.force))
     try:
         try:
             provider = create_dmr_provider(
