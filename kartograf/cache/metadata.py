@@ -14,6 +14,10 @@ buys concurrency across separate processes/connections, not across threads
 sharing one Connection (CPython caches prepared statements per Connection,
 so unlocked concurrent reads on the same SQL text can return another key's
 row - see the comment in MetadataCache.get_record()).
+
+The database is opened lazily: constructing a MetadataCache, reading from
+or querying stats of a missing database, clear() and close() never create
+the file - only the first write (``set_*``) does.
 """
 
 from __future__ import annotations
@@ -51,7 +55,8 @@ class MetadataCache:
     ----------
     db_path : str or Path, optional
         Path to the SQLite database file. Defaults to
-        `.kartograf_cache.db` in the current working directory.
+        `.kartograf_cache.db` in the current working directory. The file
+        is created by the first write, not by the constructor.
     ttl_seconds : int, optional
         Time-to-live for cache entries in seconds. Default is 7 days
         (604800 seconds). Entries older than TTL are considered stale.
@@ -85,71 +90,106 @@ class MetadataCache:
         self._db_path = Path(db_path)
         self._ttl_seconds = ttl_seconds
         self._write_lock = threading.Lock()
-        self._conn = sqlite3.connect(
-            str(self._db_path),
-            check_same_thread=False,
-        )
-        # Enable WAL mode for better concurrent read/write performance
-        result = self._conn.execute("PRAGMA journal_mode=WAL").fetchone()
-        if result is None or result[0].lower() != "wal":
-            actual = result[0] if result else "unknown"
-            logger.warning(f"Failed to enable WAL journal mode, got: {actual}")
-        self._create_tables()
-        logger.debug(f"MetadataCache opened at {self._db_path}")
+        # Opened lazily under _write_lock (see _connection()): constructing
+        # the cache, reading a missing database, stats/clear/close never
+        # create the file - only the first write does.
+        self._conn: sqlite3.Connection | None = None
 
-    def _create_tables(self) -> None:
-        """Create cache tables if they don't exist."""
-        with self._write_lock:
-            self._conn.execute("DROP TABLE IF EXISTS url_cache")
-            self._conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS record_cache (
-                    godlo TEXT NOT NULL,
-                    resolution TEXT NOT NULL,
-                    vertical_crs TEXT NOT NULL,
-                    product TEXT NOT NULL,
-                    payload TEXT NOT NULL,
-                    cached_at REAL NOT NULL,
-                    PRIMARY KEY (godlo, resolution, vertical_crs, product)
-                )
-                """
+    @property
+    def db_path(self) -> Path:
+        """Path to the SQLite database file (it may not exist yet)."""
+        return self._db_path
+
+    def _existing_connection(self) -> sqlite3.Connection | None:
+        """Return the connection only if the database file already exists.
+
+        Read and management paths (``get_*``, ``stats``, ``clear``,
+        ``vacuum``, ``prune_expired``) use this: a missing file is not
+        created and None is returned (a miss / an empty cache). The check is
+        repeated on every call, so a file created later by another instance
+        or process is picked up. Caller must hold ``_write_lock``.
+        """
+        if self._conn is None and not self._db_path.exists():
+            return None
+        return self._connection()
+
+    def _connection(self) -> sqlite3.Connection:
+        """Return the shared connection, opening (and creating) it on first use.
+
+        Caller must hold ``_write_lock`` - this makes the check-and-open
+        atomic, so two threads never open two connections. Opening sets WAL
+        mode and creates missing tables (also migrating an older database).
+        """
+        if self._conn is not None:
+            return self._conn
+        conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
+        try:
+            # Enable WAL mode for better concurrent read/write performance
+            result = conn.execute("PRAGMA journal_mode=WAL").fetchone()
+            if result is None or result[0].lower() != "wal":
+                actual = result[0] if result else "unknown"
+                logger.warning(f"Failed to enable WAL journal mode, got: {actual}")
+            self._create_tables(conn)
+        except BaseException:
+            conn.close()
+            raise
+        self._conn = conn
+        logger.debug(f"MetadataCache opened at {self._db_path}")
+        return conn
+
+    @staticmethod
+    def _create_tables(conn: sqlite3.Connection) -> None:
+        """Create cache tables if they don't exist (caller holds the lock)."""
+        conn.execute("DROP TABLE IF EXISTS url_cache")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS record_cache (
+                godlo TEXT NOT NULL,
+                resolution TEXT NOT NULL,
+                vertical_crs TEXT NOT NULL,
+                product TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                cached_at REAL NOT NULL,
+                PRIMARY KEY (godlo, resolution, vertical_crs, product)
             )
-            self._conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS campaigns_cache (
-                    godlo TEXT NOT NULL,
-                    resolution TEXT NOT NULL,
-                    vertical_crs TEXT NOT NULL,
-                    product TEXT NOT NULL,
-                    payload TEXT NOT NULL,
-                    cached_at REAL NOT NULL,
-                    PRIMARY KEY (godlo, resolution, vertical_crs, product)
-                )
-                """
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS campaigns_cache (
+                godlo TEXT NOT NULL,
+                resolution TEXT NOT NULL,
+                vertical_crs TEXT NOT NULL,
+                product TEXT NOT NULL,
+                payload TEXT NOT NULL,
+                cached_at REAL NOT NULL,
+                PRIMARY KEY (godlo, resolution, vertical_crs, product)
             )
-            self._conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS teryt_cache (
-                    x REAL NOT NULL,
-                    y REAL NOT NULL,
-                    teryt TEXT NOT NULL,
-                    cached_at REAL NOT NULL,
-                    PRIMARY KEY (x, y)
-                )
-                """
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS teryt_cache (
+                x REAL NOT NULL,
+                y REAL NOT NULL,
+                teryt TEXT NOT NULL,
+                cached_at REAL NOT NULL,
+                PRIMARY KEY (x, y)
             )
-            self._conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS sheet_cache (
-                    system    TEXT NOT NULL,
-                    godlo     TEXT NOT NULL,
-                    payload   TEXT NOT NULL,
-                    cached_at REAL NOT NULL,
-                    PRIMARY KEY (system, godlo)
-                )
-                """
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS sheet_cache (
+                system    TEXT NOT NULL,
+                godlo     TEXT NOT NULL,
+                payload   TEXT NOT NULL,
+                cached_at REAL NOT NULL,
+                PRIMARY KEY (system, godlo)
             )
-            self._conn.commit()
+            """
+        )
+        conn.commit()
 
     # =========================================================================
     # Record cache (for GugikProvider, GugikNmptProvider, GugikOrtoProvider)
@@ -176,7 +216,10 @@ class MetadataCache:
         # opportunistic DELETE below) must happen as a single critical
         # section, not just the writes.
         with self._write_lock:
-            cursor = self._conn.execute(
+            conn = self._existing_connection()
+            if conn is None:
+                return None
+            cursor = conn.execute(
                 """
                 SELECT payload, cached_at FROM record_cache
                 WHERE godlo=? AND resolution=? AND vertical_crs=? AND product=?
@@ -192,14 +235,14 @@ class MetadataCache:
                 logger.debug(f"Record cache expired for {godlo} ({product})")
                 # Opportunistically delete the expired entry (same critical
                 # section - threading.Lock is not reentrant).
-                self._conn.execute(
+                conn.execute(
                     """
                     DELETE FROM record_cache
                     WHERE godlo=? AND resolution=? AND vertical_crs=? AND product=?
                     """,
                     (godlo, resolution, vertical_crs, product),
                 )
-                self._conn.commit()
+                conn.commit()
                 return None
 
             logger.debug(f"Record cache hit for {godlo} ({product})")
@@ -215,7 +258,8 @@ class MetadataCache:
     ) -> None:
         """Zapisz wybrany rekord lub pewny brak pokrycia po udanych zapytaniach."""
         with self._write_lock:
-            self._conn.execute(
+            conn = self._connection()
+            conn.execute(
                 """
                 INSERT OR REPLACE INTO record_cache
                 (godlo, resolution, vertical_crs, product, payload, cached_at)
@@ -230,7 +274,7 @@ class MetadataCache:
                     time.time(),
                 ),
             )
-            self._conn.commit()
+            conn.commit()
         logger.debug(f"Cached record for {godlo} ({product})")
 
     # =========================================================================
@@ -252,7 +296,10 @@ class MetadataCache:
             return None
         # Lock obejmuje tez odczyt - patrz komentarz w get_record().
         with self._write_lock:
-            row = self._conn.execute(
+            conn = self._existing_connection()
+            if conn is None:
+                return None
+            row = conn.execute(
                 """
                 SELECT payload, cached_at FROM campaigns_cache
                 WHERE godlo=? AND resolution=? AND vertical_crs=? AND product=?
@@ -265,14 +312,14 @@ class MetadataCache:
             payload, cached_at = row
             if time.time() - cached_at >= self._ttl_seconds:
                 logger.debug(f"Campaigns cache expired for {godlo} ({product})")
-                self._conn.execute(
+                conn.execute(
                     """
                     DELETE FROM campaigns_cache
                     WHERE godlo=? AND resolution=? AND vertical_crs=? AND product=?
                     """,
                     (godlo, resolution, vertical_crs, product),
                 )
-                self._conn.commit()
+                conn.commit()
                 return None
 
             logger.debug(f"Campaigns cache hit for {godlo} ({product})")
@@ -288,7 +335,8 @@ class MetadataCache:
     ) -> None:
         """Zapisz kampanie arkusza (od najnowszej) lub pewny brak pokrycia."""
         with self._write_lock:
-            self._conn.execute(
+            conn = self._connection()
+            conn.execute(
                 """
                 INSERT OR REPLACE INTO campaigns_cache
                 (godlo, resolution, vertical_crs, product, payload, cached_at)
@@ -303,7 +351,7 @@ class MetadataCache:
                     time.time(),
                 ),
             )
-            self._conn.commit()
+            conn.commit()
         logger.debug(f"Cached campaigns for {godlo} ({product})")
 
     # =========================================================================
@@ -331,7 +379,10 @@ class MetadataCache:
             return None
         # Lock guards the read too - see comment in get_record().
         with self._write_lock:
-            cursor = self._conn.execute(
+            conn = self._existing_connection()
+            if conn is None:
+                return None
+            cursor = conn.execute(
                 "SELECT teryt, cached_at FROM teryt_cache WHERE x=? AND y=?",
                 (x, y),
             )
@@ -344,11 +395,11 @@ class MetadataCache:
                 logger.debug(f"TERYT cache expired for ({x}, {y})")
                 # Opportunistically delete the expired entry (same critical
                 # section - threading.Lock is not reentrant).
-                self._conn.execute(
+                conn.execute(
                     "DELETE FROM teryt_cache WHERE x=? AND y=?",
                     (x, y),
                 )
-                self._conn.commit()
+                conn.commit()
                 return None
 
             logger.debug(f"TERYT cache hit for ({x}, {y}): {teryt}")
@@ -368,14 +419,15 @@ class MetadataCache:
             TERYT code to cache
         """
         with self._write_lock:
-            self._conn.execute(
+            conn = self._connection()
+            conn.execute(
                 """
                 INSERT OR REPLACE INTO teryt_cache (x, y, teryt, cached_at)
                 VALUES (?, ?, ?, ?)
                 """,
                 (x, y, teryt, time.time()),
             )
-            self._conn.commit()
+            conn.commit()
         logger.debug(f"Cached TERYT {teryt} for ({x}, {y})")
 
     # =========================================================================
@@ -391,7 +443,10 @@ class MetadataCache:
         if self._refresh:
             return None
         with self._write_lock:
-            cursor = self._conn.execute(
+            conn = self._existing_connection()
+            if conn is None:
+                return None
+            cursor = conn.execute(
                 "SELECT payload, cached_at FROM sheet_cache WHERE system=? AND godlo=?",
                 (system, godlo),
             )
@@ -402,11 +457,11 @@ class MetadataCache:
             if time.time() - cached_at >= SHEET_TTL_SECONDS:
                 logger.debug(f"Sheet cache expired for {system}/{godlo}")
                 # Same critical section - threading.Lock is not reentrant.
-                self._conn.execute(
+                conn.execute(
                     "DELETE FROM sheet_cache WHERE system=? AND godlo=?",
                     (system, godlo),
                 )
-                self._conn.commit()
+                conn.commit()
                 return None
             logger.debug(f"Sheet cache hit for {system}/{godlo}")
             return json.loads(payload)
@@ -414,14 +469,15 @@ class MetadataCache:
     def set_sheet(self, system: str, godlo: str, payload: dict) -> None:
         """Zapisz payload arkusza (JSON) pod kluczem (system, godlo)."""
         with self._write_lock:
-            self._conn.execute(
+            conn = self._connection()
+            conn.execute(
                 """
                 INSERT OR REPLACE INTO sheet_cache
                 (system, godlo, payload, cached_at) VALUES (?, ?, ?, ?)
                 """,
                 (system, godlo, json.dumps(payload, ensure_ascii=False), time.time()),
             )
-            self._conn.commit()
+            conn.commit()
         logger.debug(f"Cached sheet {system}/{godlo}")
 
     # =========================================================================
@@ -431,17 +487,23 @@ class MetadataCache:
     def clear(self) -> None:
         """Delete all cached entries from all tables."""
         with self._write_lock:
-            self._conn.execute("DELETE FROM record_cache")
-            self._conn.execute("DELETE FROM campaigns_cache")
-            self._conn.execute("DELETE FROM teryt_cache")
-            self._conn.execute("DELETE FROM sheet_cache")
-            self._conn.commit()
+            conn = self._existing_connection()
+            if conn is None:
+                return
+            conn.execute("DELETE FROM record_cache")
+            conn.execute("DELETE FROM campaigns_cache")
+            conn.execute("DELETE FROM teryt_cache")
+            conn.execute("DELETE FROM sheet_cache")
+            conn.commit()
         logger.info("Cache cleared")
 
     def vacuum(self) -> None:
         """Reclaim unused space in the database file."""
         with self._write_lock:
-            self._conn.execute("VACUUM")
+            conn = self._existing_connection()
+            if conn is None:
+                return
+            conn.execute("VACUUM")
         logger.debug("Cache vacuumed")
 
     def stats(self) -> dict:
@@ -458,25 +520,29 @@ class MetadataCache:
             - sheet_count: number of cached sheet entries
             - db_size_bytes: size of the database file in bytes
             - db_path: path to the database file
+            - db_exists: whether the database file exists (it is created
+              by the first write; until then all counts are 0)
         """
         # Lock guards these reads too - see comment in get_record().
         with self._write_lock:
-            record_count = self._conn.execute(
-                "SELECT COUNT(*) FROM record_cache"
-            ).fetchone()[0]
-            campaign_count = self._conn.execute(
-                "SELECT COUNT(*) FROM campaigns_cache"
-            ).fetchone()[0]
-            teryt_count = self._conn.execute(
-                "SELECT COUNT(*) FROM teryt_cache"
-            ).fetchone()[0]
-            sheet_count = self._conn.execute(
-                "SELECT COUNT(*) FROM sheet_cache"
-            ).fetchone()[0]
+            conn = self._existing_connection()
+            if conn is None:
+                # Nothing cached yet - report zeros without creating the file.
+                counts = (0, 0, 0, 0)
+            else:
+                counts = tuple(
+                    conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                    for table in (
+                        "record_cache",
+                        "campaigns_cache",
+                        "teryt_cache",
+                        "sheet_cache",
+                    )
+                )
+        record_count, campaign_count, teryt_count, sheet_count = counts
 
-        db_size = 0
-        if self._db_path.exists():
-            db_size = self._db_path.stat().st_size
+        db_exists = self._db_path.exists()
+        db_size = self._db_path.stat().st_size if db_exists else 0
 
         return {
             "record_count": record_count,
@@ -485,6 +551,7 @@ class MetadataCache:
             "sheet_count": sheet_count,
             "db_size_bytes": db_size,
             "db_path": str(self._db_path),
+            "db_exists": db_exists,
         }
 
     def prune_expired(self) -> int:
@@ -499,22 +566,19 @@ class MetadataCache:
         now = time.time()
         cutoff = now - self._ttl_seconds
         with self._write_lock:
-            self._conn.execute(
-                "DELETE FROM record_cache WHERE cached_at < ?", (cutoff,)
-            )
-            record_deleted = self._conn.execute("SELECT changes()").fetchone()[0]
-            self._conn.execute(
-                "DELETE FROM campaigns_cache WHERE cached_at < ?", (cutoff,)
-            )
-            campaign_deleted = self._conn.execute("SELECT changes()").fetchone()[0]
-            self._conn.execute("DELETE FROM teryt_cache WHERE cached_at < ?", (cutoff,))
-            teryt_deleted = self._conn.execute("SELECT changes()").fetchone()[0]
+            conn = self._existing_connection()
+            if conn is None:
+                return 0
+            conn.execute("DELETE FROM record_cache WHERE cached_at < ?", (cutoff,))
+            record_deleted = conn.execute("SELECT changes()").fetchone()[0]
+            conn.execute("DELETE FROM campaigns_cache WHERE cached_at < ?", (cutoff,))
+            campaign_deleted = conn.execute("SELECT changes()").fetchone()[0]
+            conn.execute("DELETE FROM teryt_cache WHERE cached_at < ?", (cutoff,))
+            teryt_deleted = conn.execute("SELECT changes()").fetchone()[0]
             sheet_cutoff = now - SHEET_TTL_SECONDS
-            self._conn.execute(
-                "DELETE FROM sheet_cache WHERE cached_at < ?", (sheet_cutoff,)
-            )
-            sheet_deleted = self._conn.execute("SELECT changes()").fetchone()[0]
-            self._conn.commit()
+            conn.execute("DELETE FROM sheet_cache WHERE cached_at < ?", (sheet_cutoff,))
+            sheet_deleted = conn.execute("SELECT changes()").fetchone()[0]
+            conn.commit()
         total = record_deleted + campaign_deleted + teryt_deleted + sheet_deleted
         if total > 0:
             logger.debug(
