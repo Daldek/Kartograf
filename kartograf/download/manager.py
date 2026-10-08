@@ -95,21 +95,22 @@ class DownloadResult:
         Subset of ``failed``: sheets the source has no data for
         (``NoCoverageError``) — as opposed to a transport/service failure.
     campaign_files : dict[str, tuple[Path, ...]]
-        Tor kampanii (ADR-030): godlo -> pliki kampanii pobrane w tym
-        przebiegu i juz lokalne (dla udanych arkuszy). Tor bez kampanii: puste.
+        Campaign flow (ADR-030): godlo -> campaign files downloaded in this
+        run and already local (for successful sheets). Flow without
+        campaigns: empty.
     copied : list[str]
-        Godla, ktorych sciezka standardowa jest KOPIA pliku kampanii
-        (hardlink niedostepny, np. exFAT/FAT, sshfs/FUSE).
+        Godla whose standard path is a COPY of the campaign file (hardlink
+        unavailable, e.g. exFAT/FAT, sshfs/FUSE).
     reused_campaign_files : dict[str, tuple[Path, ...]]
-        Podzbior ``campaign_files``: godlo -> pliki kampanii juz lokalne
-        (nie pobrane w tym przebiegu). Tor bez kampanii: puste.
+        Subset of ``campaign_files``: godlo -> campaign files already local
+        (not downloaded in this run). Flow without campaigns: empty.
     no_coverage_hints : dict[str, tuple[str, ...]]
-        Podzbior kluczy ``no_coverage``: godlo -> ``NoCoverageError.hints``
-        (np. ``uzyj --scale 1:2000``); tylko arkusze z podpowiedzia.
+        Subset of the ``no_coverage`` keys: godlo -> ``NoCoverageError.hints``
+        (e.g. ``use --scale 1:2000``); only sheets with a hint.
     unverified : dict[str, str]
-        Podzbior ``skipped``: godlo -> blad transportu skorowidza GUGiK,
-        przy ktorym ``newest`` uzyl lokalnej kampanii bez sprawdzenia
-        nowszej (``SheetFetch.unverified``). Inaczej puste.
+        Subset of ``skipped``: godlo -> GUGiK index (skorowidz) transport
+        error with which ``newest`` used a local campaign without checking
+        for a newer one (``SheetFetch.unverified``). Otherwise empty.
 
     Notes
     -----
@@ -151,28 +152,28 @@ class DownloadResult:
 
 @dataclass(frozen=True)
 class SheetFetch:
-    """Wynik pobrania jednego arkusza (``DownloadManager.last_sheet``).
+    """Result of downloading one sheet (``DownloadManager.last_sheet``).
 
     Attributes
     ----------
     godlo : str
-        Arkusz.
+        The sheet.
     path : Path
-        Sciezka standardowa (tor kampanii — dowiazanie) albo plik (tor bez
-        kampanii).
+        Standard path (campaign flow — a link) or the file (flow without
+        campaigns).
     skipped : bool
-        Nic nie pobrano w tym wywolaniu (wszystko juz lokalnie).
+        Nothing was downloaded in this call (everything already local).
     downloaded : tuple[Path, ...]
-        Pliki kampanii pobrane teraz.
+        Campaign files downloaded now.
     reused : tuple[Path, ...]
-        Pliki kampanii juz lokalne.
+        Campaign files already local.
     link : str or None
-        ``hardlink``/``copy``; ``None`` = tor bez kampanii.
+        ``hardlink``/``copy``; ``None`` = flow without campaigns.
     unverified : str or None
-        ``newest``: tresc bledu TRANSPORTU skorowidza GUGiK (siec, 429, 5xx),
-        przy ktorym uzyto istniejacej lokalnej kampanii bez sprawdzenia, czy
-        jest nowsza (``skipped=True``, dowiazanie nietkniete). ``None`` =
-        rekord rozwiazany normalnie.
+        ``newest``: text of the GUGiK index (skorowidz) TRANSPORT error
+        (network, 429, 5xx) with which an existing local campaign was used
+        without checking whether a newer one exists (``skipped=True``, link
+        untouched). ``None`` = record resolved normally.
     """
 
     godlo: str
@@ -185,10 +186,11 @@ class SheetFetch:
 
 
 class CampaignProvider(Protocol):
-    """API kampanii providera GUGiK (ADR-030; mechanizm WYLACZNIE PL).
+    """GUGiK provider campaign API (ADR-030; a PL-ONLY mechanism).
 
-    ``BaseProvider`` go nie deklaruje — manager wybiera tor kampanii po
-    ``supports_campaigns is True`` i rzutuje providera na ten protokol.
+    ``BaseProvider`` does not declare it — the manager picks the campaign
+    flow by ``supports_campaigns is True`` and casts the provider to this
+    protocol.
     """
 
     def resolve_campaigns(
@@ -205,14 +207,15 @@ ProgressCallback = Callable[[DownloadProgress], None]
 
 
 def _is_transport_failure(error: DownloadError) -> bool:
-    """Blad TRANSPORTU (siec, 429, 5xx) wg polityki ``transport/http.py``.
+    """A TRANSPORT error (network, 429, 5xx) per the ``transport/http.py`` policy.
 
-    ``status_code`` niesie kod HTTP ostatniej proby (``http_failure``): 429
-    i 5xx = transport, inne 4xx nie. Bez kodu rozstrzyga przyczyna
-    (``get_with_retry`` rzuca ``... from`` wyjatku ``requests``): blad
-    sieci/timeout. Brak pokrycia (``NoCoverageError``) i bledy tresci
-    odpowiedzi (raport OGC, zly szablon, XML) nie maja ani kodu, ani
-    przyczyny z ``requests`` — nie sa transportem.
+    ``status_code`` carries the HTTP code of the last attempt
+    (``http_failure``): 429 and 5xx = transport, other 4xx not. Without a
+    code the cause decides (``get_with_retry`` raises ``... from`` a
+    ``requests`` exception): a network/timeout error. No coverage
+    (``NoCoverageError``) and response content errors (OGC report, bad
+    template, XML) have neither a code nor a ``requests`` cause — they are
+    not transport.
     """
     if error.status_code is not None:
         return error.status_code == 429 or error.status_code >= 500
@@ -227,7 +230,7 @@ class DownloadManager:
     and sheet parser to download single sheets or entire hierarchies.
 
     Two download modes:
-    - By godło: downloads ASC files from OpenData
+    - By sheet code: downloads ASC files from OpenData
     - By bbox: downloads GeoTIFF from WCS (1m and KRON86 only — GUGiK withdrew
       the EVRF2007 WCS endpoint; for EVRF2007 heights of an area use sheets or
       ``kartograf.download_pl_cutout``)
@@ -251,11 +254,11 @@ class DownloadManager:
         `download_sheet` (a 1:10000 or PL-2000 godlo) leaves it None;
         `download_bbox` does not touch it.
     last_sheet : SheetFetch or None
-        Wynik pojedynczego arkusza pobranego bezposrednio przez
-        `download_sheet` (1:10000 albo PL-2000). Zerowany (None) na starcie
-        kazdego `download_sheet` / `download_hierarchy` / `download_sheets`
-        (wyjatek nie zostawia starego wyniku); None po rozwinieciu do
-        hierarchii i po liscie arkuszy.
+        Result of a single sheet downloaded directly by `download_sheet`
+        (1:10000 or PL-2000). Reset (None) at the start of every
+        `download_sheet` / `download_hierarchy` / `download_sheets` (an
+        exception does not leave a stale result); None after expansion to a
+        hierarchy and after a sheet list.
 
     Examples
     --------
@@ -325,24 +328,25 @@ class DownloadManager:
             When 1, downloads are sequential (backward compatible).
             When > 1, uses ThreadPoolExecutor for parallel downloads.
         sidecar_extra : dict, optional
-            Dodatkowe pola scalane do `extra` kazdego sidecara (etap 1:
-            `parent_request` w trybie bbox/geometry).
+            Extra fields merged into the `extra` of every sidecar (stage 1:
+            `parent_request` in bbox/geometry mode).
         campaigns : str, optional
-            Strategia kampanii ADR-030: ``"newest"`` (domyslnie) albo
-            ``"all"``. Dotyczy tylko providera z ``supports_campaigns is
+            ADR-030 campaign strategy: ``"newest"`` (default) or
+            ``"all"``. Applies only to a provider with ``supports_campaigns is
             True`` (GUGiK NMT/NMPT/orto).
         min_year : int, optional
-            Dolna granica roku ``aktualnosc`` kampanii (obie strategie).
+            Lower bound on the campaign acquisition-date year (``aktualnosc``;
+            both strategies).
 
         Raises
         ------
         ValidationError
-            Nieznana strategia / niepoprawny ``min_year`` albo provider bez
-            kampanii z ``campaigns="all"`` lub ``min_year``.
+            Unknown strategy / invalid ``min_year``, or a provider without
+            campaigns with ``campaigns="all"`` or ``min_year``.
         """
         validate_campaign_args(campaigns, min_year)
-        # Regula "5m => EVRF2007" zyje w fabryce (`nmt_vertical_crs`, D11);
-        # bez providera koryguje (i loguje) fabryka.
+        # The "5m => EVRF2007" rule lives in the factory (`nmt_vertical_crs`, D11);
+        # without a provider the factory corrects (and logs) it.
         self._provider = provider or create_nmt_provider(
             vertical_crs=vertical_crs, resolution=resolution
         )
@@ -370,7 +374,7 @@ class DownloadManager:
         self._default_ext = self._provider.default_extension
         self._max_workers = max(1, max_workers)
         self._sidecar_extra = sidecar_extra
-        # `is True`, nie prawdziwosc: Mock/Mock(spec=...) daje Mock -> tor plain.
+        # `is True`, not truthiness: Mock/Mock(spec=...) yields a Mock -> plain flow.
         self._campaign_aware = (
             getattr(self._provider, "supports_campaigns", False) is True
         )
@@ -396,12 +400,12 @@ class DownloadManager:
 
     @property
     def campaigns(self) -> str:
-        """Strategia kampanii (``newest``/``all``)."""
+        """Campaign strategy (``newest``/``all``)."""
         return self._campaigns
 
     @property
     def min_year(self) -> int | None:
-        """Dolna granica roku kampanii (``None`` = bez granicy)."""
+        """Lower bound of the campaign year (``None`` = no bound)."""
         return self._min_year
 
     @property
@@ -416,11 +420,11 @@ class DownloadManager:
 
     @property
     def _campaign_provider(self) -> CampaignProvider:
-        """Provider toru kampanii (``supports_campaigns is True``, GUGiK)."""
+        """Campaign-flow provider (``supports_campaigns is True``, GUGiK)."""
         return cast(CampaignProvider, self._provider)
 
     # =========================================================================
-    # Download by godło → ASC
+    # Download by sheet code → ASC
     # =========================================================================
 
     def download_sheet(
@@ -446,8 +450,8 @@ class DownloadManager:
         on_progress : callable, optional
             Callback function for progress updates (used when expanding hierarchy).
         on_download : callable, optional
-            Wolany raz, tuz przed pierwszym pobraniem pliku pojedynczego
-            arkusza (nie przy skip ani bledzie rozwiazania rekordu).
+            Called once, right before the first file download of a single
+            sheet (not on skip or on a record resolution error).
 
         Returns
         -------
@@ -471,14 +475,14 @@ class DownloadManager:
         `self.last_sheet` is reset the same way and set (``SheetFetch``) only
         for a single sheet downloaded directly.
         """
-        # Wynik poprzedniego przebiegu nie moze przeciec do tego wywolania.
-        # Reset jest idempotentny — rozwiniecie do hierarchii zeruje go ponownie.
+        # The previous run's result must not leak into this call.
+        # The reset is idempotent — expansion to a hierarchy resets it again.
         self.last_result = None
         self.last_sheet = None
 
         parser = SheetParser(godlo)
 
-        # PL-2000 godła are always downloaded directly (individual files on GUGiK)
+        # PL-2000 sheet codes are always downloaded directly (individual files on GUGiK)
         # PL-1992 coarser than 1:10000 must be expanded to 1:10000 descendants
         if parser.uklad != "2000" and parser.scale != "1:10000":
             return self.download_hierarchy(
@@ -546,8 +550,8 @@ class DownloadManager:
         >>> len(paths)  # 4 * 4 = 16 sheets
         16
         """
-        # Wynik poprzedniego przebiegu nie moze przeciec do tego wywolania —
-        # kasujemy go, zanim cokolwiek moze rzucic (ParseError/ValidationError).
+        # The previous run's result must not leak into this call —
+        # clear it before anything can raise (ParseError/ValidationError).
         self.last_result = None
         self.last_sheet = None
 
@@ -639,12 +643,12 @@ class DownloadManager:
         on_download: Callable[[], None] | None = None,
     ) -> SheetFetch:
         """
-        Pobierz jeden arkusz — jedyna tresc "pobierz arkusz" (D10).
+        Download one sheet — the single "download a sheet" implementation (D10).
 
-        Provider z kampaniami (``supports_campaigns is True``) idzie torem
-        kampanii (``_fetch_campaigns``), kazdy inny — dzisiejszym torem
-        (``_fetch_sheet_plain``). ``on_download`` jest wolany tuz przed
-        pierwszym pobraniem (tryb sekwencyjny raportuje ``"downloading"``).
+        A provider with campaigns (``supports_campaigns is True``) takes the
+        campaign flow (``_fetch_campaigns``), any other — today's flow
+        (``_fetch_sheet_plain``). ``on_download`` is called right before the
+        first download (sequential mode reports ``"downloading"``).
         """
         if self._campaign_aware:
             return self._fetch_campaigns(godlo, skip_existing, on_download)
@@ -657,12 +661,12 @@ class DownloadManager:
         on_download: Callable[[], None] | None = None,
     ) -> SheetFetch:
         """
-        Tor bez kampanii (atrapy, obce providery) — zachowanie sprzed ADR-030.
+        Flow without campaigns (stubs, foreign providers) — pre-ADR-030 behavior.
 
-        Sciezka z ``FileStorage``; istniejacy plik przy ``skip_existing``
-        jest pomijany (i notowany w sidecarze, N4); inaczej provider pobiera
-        plik, a manager pisze sidecar (best-effort). Wyjatki providera
-        wylatuja bez zmian.
+        Path from ``FileStorage``; an existing file with ``skip_existing`` is
+        skipped (and noted in the sidecar, N4); otherwise the provider
+        downloads the file and the manager writes a sidecar (best-effort).
+        Provider exceptions propagate unchanged.
         """
         target_path = self._storage.get_path(godlo, self._default_ext)
         if skip_existing and target_path.exists():
@@ -683,45 +687,47 @@ class DownloadManager:
         on_download: Callable[[], None] | None = None,
     ) -> SheetFetch:
         """
-        Tor kampanii (ADR-030): pliki w ``kampanie/``, dowiazanie standardowe.
+        Campaign flow (ADR-030): files in ``kampanie/``, standard link.
 
-        Rekordy z ``provider.resolve_campaigns`` (pusta lista nigdy — brak
-        = ``NoCoverageError``). Dla kazdej kampanii: rozszerzenie z pola
-        ``format`` rekordu (PRZED siecia), pominiecie istniejacego pliku
-        kampanii przy ``skip_existing`` (istnienie sciezki standardowej NIE
-        jest powodem pominiecia), inaczej ``download_record`` ->
-        ``verify_file_format`` -> obowiazkowy sidecar kampanii; porazka
-        ktoregokolwiek z tych krokow usuwa plik danych (nigdy plik bez
-        sidecara albo z obca trescia). Po zebraniu kampanii sciezka
-        standardowa wskazuje najnowsza LOKALNA kampanie (``max`` po
-        ``sort_key``; ``ensure_standard_link`` nigdy nie cofa dowiazania).
-        Istniejacy plik kampanii BEZ sidecara (R22: przerwanie przed jego
-        zapisem) przechodzi ``verify_file_format`` przed odtworzeniem
-        sidecara; niezgodna tresc = plik usuniety + porazka kampanii.
+        Records from ``provider.resolve_campaigns`` (never an empty list —
+        none = ``NoCoverageError``). For each campaign: the extension from
+        the record ``format`` field (BEFORE the network), skipping an existing
+        campaign file with ``skip_existing`` (the existence of the standard
+        path is NOT a reason to skip), otherwise ``download_record`` ->
+        ``verify_file_format`` -> mandatory campaign sidecar; a failure of
+        any of these steps removes the data file (never a file without a
+        sidecar or with foreign content). After the campaigns are collected
+        the standard path points to the newest LOCAL campaign (``max`` by
+        ``sort_key``; ``ensure_standard_link`` never moves the link back).
+        An existing campaign file WITHOUT a sidecar (R22: interrupted before
+        writing it) goes through ``verify_file_format`` before the sidecar is
+        recreated; mismatched content = file removed + campaign failure.
 
-        Wspolbieznosc: dowiazanie jest ustawiane RAZ na arkusz, po zebraniu
-        wszystkich jego kampanii, a ``expand_sheets`` deduplikuje godla —
-        jeden arkusz = jeden watek. Bezpieczenstwo w jednym wywolaniu
-        managera wynika wiec ze struktury, nie z blokady (blokad nie ma);
-        wyscig miedzy procesami opisuje ``ensure_standard_link``.
+        Concurrency: the link is set ONCE per sheet, after all its campaigns
+        are collected, and ``expand_sheets`` deduplicates godla — one sheet =
+        one thread. Safety within a single manager call therefore follows
+        from the structure, not from a lock (there are no locks); a race
+        between processes is described by ``ensure_standard_link``.
 
-        Awaria skorowidza (I-1): ``newest`` bez ``min_year`` przy
-        ``skip_existing``, gdy ``resolve_campaigns`` konczy sie bledem
-        TRANSPORTU (``_is_transport_failure``), a sciezka standardowa wskazuje
-        istniejaca lokalna kampanie (``linked_campaign``) — NIE porazka:
-        ``logger.warning`` i ``SheetFetch(skipped=True, unverified=<blad>)``
-        z lokalnej kampanii, dowiazanie bez zmian. ``all``, ``min_year``,
-        ``--force``, brak lokalnej kampanii albo inny blad — wyjatek jak dotad.
+        Index outage (I-1): ``newest`` without ``min_year`` with
+        ``skip_existing``, when ``resolve_campaigns`` ends with a TRANSPORT
+        error (``_is_transport_failure``) and the standard path points to an
+        existing local campaign (``linked_campaign``) — NOT a failure:
+        ``logger.warning`` and ``SheetFetch(skipped=True,
+        unverified=<error>)`` from the local campaign, link unchanged.
+        ``all``, ``min_year``, ``--force``, no local campaign or another
+        error — an exception as before.
 
         Raises
         ------
         NoCoverageError
-            Brak kampanii (z ``resolve_campaigns``).
+            No campaigns (from ``resolve_campaigns``).
         DownloadError
-            Porazka choc jednej kampanii (takze niepoprawna ``aktualnosc``
-            rekordu) albo dowiazania (``OSError`` z ``ensure_standard_link``)
-            — wszystko w jednym komunikacie; kampanie udane zostaja na dysku,
-            a dowiazanie wskazuje najnowsza z nich.
+            Failure of at least one campaign (an invalid record
+            ``aktualnosc`` too) or of the link (``OSError`` from
+            ``ensure_standard_link``) — all in one message; successful
+            campaigns stay on disk, and the link points to the newest of
+            them.
         """
         std = self._storage.get_path(godlo, self._default_ext)
         try:
@@ -743,16 +749,16 @@ class DownloadManager:
         downloaded: list[Path] = []
         reused: list[Path] = []
         local: list[tuple[CampaignRef, Path]] = []
-        errors: list[tuple[str, DownloadError]] = []  # (kampania, blad)
+        errors: list[tuple[str, DownloadError]] = []  # (campaign, error)
         started = False
         for record in records:
-            try:  # R16 (w duchu Q10): zla aktualnosc = porazka tej kampanii
+            try:  # R16 (cf. Q10): bad date = this campaign fails
                 ref = CampaignRef.from_record(record)
             except DownloadError as e:
                 errors.append((record.url, e))
                 continue
             try:
-                ext = campaign_extension(ref, self._default_ext)  # przed siecia
+                ext = campaign_extension(ref, self._default_ext)  # before the network
             except DownloadError as e:
                 errors.append((ref.dirname, e))
                 continue
@@ -760,8 +766,8 @@ class DownloadManager:
             if skip_existing and path.exists():
                 if path.with_name(path.name + ".meta.json").exists():
                     self._note_reuse(path)
-                else:  # R22: proces przerwany przed sidecarem — odtworz
-                    try:  # tresc niesprawdzona (przerwanie przed weryfikacja)
+                else:  # R22: process interrupted before the sidecar — recreate
+                    try:  # content unverified (interrupted before verification)
                         verify_file_format(path, ext)
                     except DownloadError as e:
                         path.unlink(missing_ok=True)
@@ -772,7 +778,7 @@ class DownloadManager:
                     except DownloadError as e:
                         errors.append(
                             (ref.dirname, e)
-                        )  # plik zostaje (sprzed przebiegu)
+                        )  # the file stays (from before the run)
                         continue
                 logger.info(f"Skipping {godlo} {ref.dirname} - already exists")
                 reused.append(path)
@@ -791,7 +797,7 @@ class DownloadManager:
                 errors.append((ref.dirname, e))
                 continue
             downloaded.append(path)
-            local.append((ref, path))  # kandydat dowiazania DOPIERO z sidecarem
+            local.append((ref, path))  # link candidate ONLY once it has a sidecar
         method: str | None = None
         link_error: OSError | None = None
         if local:
@@ -800,13 +806,13 @@ class DownloadManager:
                 outcome = ensure_standard_link(
                     std, path, ref.sort_key, refresh=path in downloaded
                 )
-            except OSError as e:  # R5: porazka arkusza, nie przerwanie listy
+            except OSError as e:  # R5: sheet failure, not an abort of the list
                 link_error = e
             else:
                 method = outcome.method
                 if not outcome.changed:
                     self._note_standard_reuse(std, outcome)
-        if errors or link_error is not None:  # Q10: pelna lista porazek
+        if errors or link_error is not None:  # Q10: full failure list
             problems = []
             if errors:
                 listing = ", ".join(f"{name}: {e}" for name, e in errors)
@@ -826,9 +832,9 @@ class DownloadManager:
         )
 
     def _note_standard_reuse(self, std: Path, outcome: LinkOutcome) -> None:
-        """Dowiazanie bez zmian: sidecar standardowy jako zwykly plik + N4."""
+        """Link unchanged: the standard sidecar as a regular file + N4."""
         std_sidecar = std.with_name(std.name + ".meta.json")
-        # sidecar podmieniony przez uzytkownika na symlink: nigdy zapis przez niego
+        # sidecar replaced by the user with a symlink: never write through it
         if std_sidecar.is_symlink():
             write_standard_sidecar(std, outcome.target, outcome.method)
         self._note_reuse(std)
@@ -836,13 +842,13 @@ class DownloadManager:
     def _local_newest(
         self, godlo: str, std: Path, error: DownloadError
     ) -> SheetFetch | None:
-        """I-1: lokalna kampania ``newest``, gdy skorowidz GUGiK niedostepny.
+        """I-1: the local ``newest`` campaign when the GUGiK index is unavailable.
 
-        ``None`` = brak lokalnej kampanii (brak pliku, ``extra.link_target``
-        nieistniejacy, stary zwykly plik, brak sidecara standardowego) —
-        wolajacy zglasza pierwotny blad. Dowiazanie NIE jest przestawiane:
-        ``ensure_standard_link`` z biezacym celem i najnizszym kluczem zwraca
-        je bez zmian.
+        ``None`` = no local campaign (no file, nonexistent
+        ``extra.link_target``, an old regular file, no standard sidecar) —
+        the caller reports the original error. The link is NOT moved:
+        ``ensure_standard_link`` with the current target and the lowest key
+        returns it unchanged.
         """
         target = linked_campaign(std)
         if target is None:
@@ -873,11 +879,12 @@ class DownloadManager:
         on_download: Callable[[], None] | None = None,
     ) -> tuple[str, SheetFetch | None, str, str, tuple[str, ...]]:
         """
-        Pobierz arkusz listy: ``DownloadError`` -> status zamiast wyjatku.
+        Download a list sheet: ``DownloadError`` -> a status instead of an
+        exception.
 
-        Wspolne dla trybu sekwencyjnego i rownoleglego. Inny wyjatek (np.
-        ``OSError`` zapisu) wylatuje: sekwencyjnie przerywa liste, w puli
-        watkow lapie go ``_download_many`` jako ``"failed"``.
+        Shared by sequential and parallel mode. Another exception (e.g. a
+        write ``OSError``) propagates: sequentially it aborts the list, in a
+        thread pool ``_download_many`` catches it as ``"failed"``.
 
         Returns
         -------
@@ -906,7 +913,7 @@ class DownloadManager:
         status: str,
         hints: tuple[str, ...] = (),
     ) -> None:
-        """Wpisz wynik jednego arkusza do ``DownloadResult`` i listy sciezek."""
+        """Record one sheet result into ``DownloadResult`` and the path list."""
         if status in ("completed", "skipped") and fetch is not None:
             if status == "skipped":
                 result.skipped.append(godlo)
@@ -921,7 +928,7 @@ class DownloadManager:
             if fetch.unverified is not None:
                 result.unverified[godlo] = fetch.unverified
         elif status in ("failed", "no_coverage"):
-            # R5: brak danych u zrodla — porazka listy, ale rozpoznawalna
+            # R5: no data at the source — a list failure, but recognizable
             result.failed.append(godlo)
             if status == "no_coverage":
                 result.no_coverage.append(godlo)
@@ -937,7 +944,7 @@ class DownloadManager:
         status: str,
         message: str = "",
     ) -> None:
-        """Jedno miejsce budowy ``DownloadProgress`` dla obu trybow."""
+        """The single place building ``DownloadProgress`` for both modes."""
         if on_progress:
             on_progress(
                 DownloadProgress(
@@ -956,12 +963,12 @@ class DownloadManager:
         on_progress: ProgressCallback | None,
         workers: int,
     ) -> list[Path]:
-        """Pobierz liste arkuszy (``workers <= 1`` sekwencyjnie, inaczej pula).
+        """Download a list of sheets (``workers <= 1`` sequential, otherwise a pool).
 
-        Oba tryby wolaja ``_download_single_sheet_task`` i raportuja przez
-        ``_emit``/``_record``. Sekwencyjny dodatkowo zglasza ``"downloading"``
-        przed kazdym pobraniem i przepuszcza wyjatki spoza ``DownloadError``;
-        rownolegly (kolejnosc ukonczenia) liczy je jako ``"failed"``.
+        Both modes call ``_download_single_sheet_task`` and report via
+        ``_emit``/``_record``. Sequential additionally reports ``"downloading"``
+        before each download and lets exceptions other than ``DownloadError``
+        through; parallel (completion order) counts them as ``"failed"``.
         """
         downloaded_paths: list[Path] = []
         result = DownloadResult()
@@ -1028,7 +1035,7 @@ class DownloadManager:
 
         Note: WCS download is only available for 1m resolution and KRON86
         heights (GUGiK withdrew the EVRF2007 WCS endpoint). For 5m, or for
-        EVRF2007 heights, use download_sheet() with a godło instead, or
+        EVRF2007 heights, use download_sheet() with a sheet code instead, or
         ``kartograf.download_pl_cutout`` for one GeoTIFF built from sheets.
 
         Parameters
@@ -1099,7 +1106,7 @@ class DownloadManager:
         Returns
         -------
         list[str]
-            List of godło identifiers for missing sheets
+            List of sheet code identifiers for missing sheets
         """
         parser = SheetParser(godlo)
         descendants = parser.get_all_descendants(target_scale)
@@ -1139,17 +1146,17 @@ class DownloadManager:
         extra_override: dict | None = None,
         required: bool = False,
     ) -> None:
-        """Zapis sidecara .meta.json; domyslnie best-effort (blad nie przerywa
-        pobrania).
+        """Write the .meta.json sidecar; best-effort by default (an error does
+        not abort the download).
 
-        Dla zadania z ``sheet`` dopisuje ``extra.source`` — pochodzenie pliku
-        wg ``provider.source_info(godlo)`` (rekord skorowidza GUGiK: URL,
-        warstwa, aktualnosc; D5). Tylko ``dict`` trafia do sidecara: provider
-        bez pochodzenia zwraca ``None``, a ``Mock(spec=...)`` — ``Mock``.
-        ``extra_override`` (sidecar kampanii) zastepuje ``source_info``:
-        jego pola sa scalane do ``extra`` po ``sidecar_extra``.
-        ``required=True`` = sidecar obowiazkowy (``emit_sidecar`` rzuca
-        ``DownloadError``, gdy nie powstal).
+        For a request with ``sheet`` it adds ``extra.source`` — the file origin
+        per ``provider.source_info(godlo)`` (GUGiK index record: URL, layer,
+        acquisition date; D5). Only a ``dict`` goes into the sidecar: a
+        provider without origin returns ``None``, and ``Mock(spec=...)`` — a
+        ``Mock``. ``extra_override`` (campaign sidecar) replaces
+        ``source_info``: its fields are merged into ``extra`` after
+        ``sidecar_extra``. ``required=True`` = mandatory sidecar
+        (``emit_sidecar`` raises ``DownloadError`` when it was not created).
         """
         from kartograf.sources.sidecar import emit_sidecar
 
@@ -1175,19 +1182,19 @@ class DownloadManager:
     def _write_campaign_sidecar(
         self, path: Path, godlo: str, record: SkorowidzRecord, ref: CampaignRef
     ) -> None:
-        """OBOWIAZKOWY sidecar pliku kampanii (errata 2 N-1).
+        """MANDATORY campaign file sidecar (errata 2 N-1).
 
-        ``request = {sheet, campaigns}`` + ``min_year`` tylko gdy podany;
+        ``request = {sheet, campaigns}`` + ``min_year`` only when given;
         ``extra`` = ``sidecar_extra`` + ``source`` (``provider.record_source``
-        TEGO rekordu, R13) + ``campaign`` (``ref.to_extra()``). Porazka =
-        ``DownloadError`` (wolajacy usuwa plik danych).
+        of THIS record, R13) + ``campaign`` (``ref.to_extra()``). Failure =
+        ``DownloadError`` (the caller removes the data file).
         """
         request: dict = {"sheet": godlo, "campaigns": self._campaigns}
         if self._min_year is not None:
             request["min_year"] = self._min_year
         try:
             source = self._campaign_provider.record_source(record)
-        except Exception as e:  # noqa: BLE001 — sidecar obowiazkowy: porazka kampanii
+        except Exception as e:  # noqa: BLE001 — mandatory sidecar: campaign failure
             raise DownloadError(
                 f"Nie udalo sie zapisac obowiazkowego sidecara kampanii "
                 f"{ref.dirname}: {e}",
@@ -1201,16 +1208,17 @@ class DownloadManager:
         )
 
     def _note_reuse(self, data_path: Path) -> None:
-        """Dopisz biezace zadanie do sidecara arkusza POMINIETEGO (N4, best-effort).
+        """Append the current request to a SKIPPED sheet's sidecar (N4, best-effort).
 
-        ``extra.parent_request`` to zadanie, ktore plik POBRALO (bez zmian —
-        ``downloaded_at`` zostaje prawdziwe); kolejne zadania obszarowe, ktore
-        arkusz reuzyly z cache, laduja w liscie ``extra.parent_requests``
-        (bez duplikatow; zadanie rowne ``parent_request`` nie jest dopisywane).
-        Konsument szuka ``parent_request == R or R in parent_requests``.
-        Bez sidecara (cache sprzed 0.7.0) nic nie powstaje — sidecar z
-        niepewna data i bez ``extra.source`` bylby zmyslaniem. Zapis przez plik
-        tymczasowy + ``os.replace`` (dwa procesy nad tym samym arkuszem).
+        ``extra.parent_request`` is the request that DOWNLOADED the file
+        (unchanged — ``downloaded_at`` stays true); later area requests that
+        reused the sheet from the cache land in the ``extra.parent_requests``
+        list (no duplicates; a request equal to ``parent_request`` is not
+        appended). The consumer looks for ``parent_request == R or R in
+        parent_requests``. Without a sidecar (cache from before 0.7.0) nothing
+        is created — a sidecar with an uncertain date and without
+        ``extra.source`` would be fabrication. Written via a temporary file +
+        ``os.replace`` (two processes over the same sheet).
         """
         request = (self._sidecar_extra or {}).get("parent_request")
         if request is None:
@@ -1240,7 +1248,7 @@ class DownloadManager:
                 encoding="utf-8",
             )
             os.replace(tmp, sidecar)
-        except Exception as e:  # noqa: BLE001 — sidecar nigdy nie przerywa pobrania
+        except Exception as e:  # noqa: BLE001 — a sidecar never aborts the download
             logger.warning(f"Nie udalo sie dopisac zadania do sidecara {sidecar}: {e}")
 
     def __repr__(self) -> str:

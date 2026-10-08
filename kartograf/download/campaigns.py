@@ -1,9 +1,10 @@
 """
-Tozsamosc kampanii GUGiK (ADR-030) — mechanizm WYLACZNIE PL.
+GUGiK campaign identity (ADR-030) — a PL-ONLY mechanism.
 
-Kampania = jedna dostawa danych GUGiK (rekord skorowidza). Katalog kampanii
-to ``<aktualnosc>_<id>``, gdzie ``id`` to pierwszy segment liczbowy nazwy
-pliku w URL. Jedyne IO modulu: ``verify_file_format`` (64 bajty naglowka).
+A campaign is one GUGiK data delivery (an index (skorowidz) record). The
+campaign directory is ``<acquisition date>_<id>``, where ``id`` is the first
+numeric segment of the file name in the URL. The module's only IO is
+``verify_file_format`` (64 header bytes).
 """
 
 import hashlib
@@ -18,13 +19,13 @@ from kartograf.exceptions import DownloadError, ValidationError
 CAMPAIGNS_DIR = "kampanie"
 CAMPAIGN_STRATEGIES = ("newest", "all")
 
-# pole `format` rekordu -> rozszerzenie kanoniczne (errata 2 N-2)
+# record `format` field -> canonical extension (errata 2 N-2)
 FILE_FORMATS: Mapping[str, str] = {"ARC/INFO ASCII GRID": ".asc"}
 
 _ID = re.compile(r"(\d+)_")
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
-# Klucze naglowka AAIGrid wg GDAL AAIGrid Identify
+# AAIGrid header keys per GDAL AAIGrid Identify
 _AAIGRID_KEYS = (
     "ncols",
     "nrows",
@@ -41,9 +42,10 @@ _FORMAT_NAMES = {".asc": "AAIGrid (ARC/INFO ASCII GRID)", ".tif": "TIFF"}
 
 
 def campaign_id_from_url(url: str) -> str:
-    """'83233' z '.../83233_1744736_<godlo>.asc'.
+    """'83233' from '.../83233_1744736_<godlo>.asc'.
 
-    Bez wiodacego '<cyfry>_' w nazwie pliku: 'u' + 8 znakow hex sha1(url).
+    Without a leading '<digits>_' in the file name: 'u' + 8 hex chars of
+    sha1(url).
     """
     name = PurePosixPath(urlparse(url).path).name
     m = _ID.match(name)
@@ -53,8 +55,8 @@ def campaign_id_from_url(url: str) -> str:
 
 
 def validate_campaign_args(campaigns: str, min_year: int | None) -> None:
-    """ValidationError: strategia spoza CAMPAIGN_STRATEGIES, min_year nie-int
-    (takze bool) albo poza 1900..2100."""
+    """Raise ValidationError for a strategy outside CAMPAIGN_STRATEGIES, or
+    a min_year that is not an int (bool included) or is outside 1900..2100."""
     if campaigns not in CAMPAIGN_STRATEGIES:
         raise ValidationError(
             f"Nieznana strategia kampanii {campaigns!r} "
@@ -72,22 +74,20 @@ def validate_campaign_args(campaigns: str, min_year: int | None) -> None:
 
 @dataclass(frozen=True)
 class CampaignRef:
-    id: str  # cyfry albo 'u'+8 hex — bezpieczne w sciezce
-    date: str  # aktualnosc, RRRR-MM-DD (walidowane)
+    id: str  # digits or 'u'+8 hex — path-safe
+    date: str  # acquisition date, YYYY-MM-DD (validated)
     dt_pzgik: str | None
     url: str
     zgloszenie: str | None  # numerZgloszeniaPracy
     source: str | None  # zrDanych / zrodloDanych
     full_sheet: bool | None
-    file_format: (
-        str | None
-    )  # pole `format` rekordu; None = brak pola (orto, stary cache)
+    file_format: str | None  # record `format` field; None = no field (orto, old cache)
 
     @classmethod
     def from_record(cls, record) -> "CampaignRef":
-        """Z rekordu skorowidza (duck typing: url, godlo, aktualnosc, dt_pzgik,
-        full_sheet, raw). aktualnosc spoza RRRR-MM-DD -> DownloadError —
-        wartosc z serwera trafia do sciezki."""
+        """Build from an index record (duck typing: url, godlo, aktualnosc,
+        dt_pzgik, full_sheet, raw). An aktualnosc outside YYYY-MM-DD raises
+        DownloadError — the server value ends up in a path."""
         date = record.aktualnosc
         if not isinstance(date, str) or not _DATE.fullmatch(date):
             raise DownloadError(
@@ -117,7 +117,7 @@ class CampaignRef:
 
     @property
     def sort_key(self) -> tuple[str, str, str]:
-        """(aktualnosc, dt_pzgik, url) — kolejnosc ADR-028."""
+        """(aktualnosc, dt_pzgik, url) — ADR-028 ordering."""
         return (self.date, self.dt_pzgik or "", self.url)
 
     def to_extra(self) -> dict:
@@ -133,10 +133,11 @@ class CampaignRef:
 
 
 def campaign_extension(ref: CampaignRef, default_ext: str) -> str:
-    """Rozszerzenie pliku kampanii z pola `format` rekordu (nie z URL).
+    """Campaign file extension from the record `format` field (not the URL).
 
-    Brak pola -> default_ext (orto, stare wpisy cache); znany format zgodny
-    z produktem -> default_ext; inaczej DownloadError PRZED pobraniem.
+    No field -> default_ext (orto, old cache entries); a known format
+    matching the product -> default_ext; otherwise DownloadError BEFORE
+    the download.
     """
     fmt = ref.file_format
     if fmt is None:
@@ -151,11 +152,11 @@ def campaign_extension(ref: CampaignRef, default_ext: str) -> str:
 
 
 def verify_file_format(path: Path, ext: str) -> None:
-    """Weryfikacja tresci pliku po pobraniu (64 pierwsze bajty).
+    """Verify the file content after download (first 64 bytes).
 
-    '.asc' -> naglowek AAIGrid, '.tif' -> sygnatura TIFF/BigTIFF. Niezgodnosc,
-    rozszerzenie spoza {'.asc', '.tif'} albo blad odczytu (``OSError``)
-    -> DownloadError.
+    '.asc' -> AAIGrid header, '.tif' -> TIFF/BigTIFF signature. A mismatch,
+    an extension outside {'.asc', '.tif'} or a read error (``OSError``)
+    raises DownloadError.
     """
     if ext not in _FORMAT_NAMES:
         raise DownloadError(f"{path.name}: brak weryfikacji formatu dla {ext!r}")
