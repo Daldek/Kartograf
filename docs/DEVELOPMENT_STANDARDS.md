@@ -1,6 +1,6 @@
 # Standardy deweloperskie — Kartograf
 
-**Wersja:** 3.1
+**Wersja:** 3.2
 **Data:** 2026-10-08
 **Status:** Obowiazujacy
 **Zrodlo:** Zunifikowane standardy workspace (`shared/standards/DEVELOPMENT_STANDARDS.md` — repozytorium zewnetrzne, nieobecne w tym workspace)
@@ -32,6 +32,11 @@
 >
 > **Nota 3.1 (2026-10-08):** jezyk rozstrzygniety (9.4): kod po angielsku,
 > commity i dokumentacja po polsku; przyklady commitow (2.3, 15.4) po polsku.
+>
+> **Nota 3.2 (2026-10-08):** `CLAUDE.md` zminimalizowany do krytycznych zasad
+> i odsylaczy — ten dokument jest dla niego zrodlem konwencji. Dopisane:
+> konce linii (5.5, CRLF w `docs/DECISIONS.md`), dowolna niepusta wartosc
+> `KARTOGRAF_DEBUG` (6.2).
 
 ---
 
@@ -297,6 +302,15 @@ from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.exceptions import DownloadError
 ```
 
+### 5.5 Konce linii
+
+Wszystkie pliki maja konce linii LF (`.editorconfig`: `end_of_line = lf`).
+**Wyjatek:** `docs/DECISIONS.md` ma konce linii CRLF — edytuj go,
+zachowujac CRLF w kazdej linii (takze dopisywanej). Kontrola po edycji:
+`file docs/DECISIONS.md` nadal zglasza `CRLF line terminators`,
+`grep -c $'\r$' docs/DECISIONS.md` rowna sie `wc -l`, a `git diff --stat`
+nie obejmuje calego pliku (zmiana koncow linii = diff wszystkich wierszy).
+
 ---
 
 ## 6. Python — srodowisko i narzedzia
@@ -331,9 +345,9 @@ pip install -e ".[dev]"
   pobiera podglad PNG przez WMS (sidecar: `extra.fallback = "wms_png"`).
   Z poziomu biblioteki: `CorineProvider(clms_credentials={...})` (tryb
   bezposredni, z pominieciem proxy). Szczegoly: sekcja 14.3.
-- `KARTOGRAF_DEBUG=1` — pelny traceback zamiast skroconego `Error: ...`
-  z CLI (dla kazdego wyjatku docierajacego do bariery `main`, takze
-  `KartografError`).
+- `KARTOGRAF_DEBUG=1` (dziala dowolna niepusta wartosc) — pelny traceback
+  zamiast skroconego `Error: ...` z CLI (dla kazdego wyjatku docierajacego
+  do bariery `main`, takze `KartografError`).
 
 ### 6.3 Komendy: testy, lint, typy
 
@@ -1004,7 +1018,7 @@ sekcja 5 ("Jak dodac nowe zrodlo albo nowy kraj").
 
 ---
 
-**Wersja dokumentu:** 3.1
+**Wersja dokumentu:** 3.2
 **Data ostatniej aktualizacji:** 2026-10-08
 **Zrodlo:** `shared/standards/DEVELOPMENT_STANDARDS.md` v1.0 (repozytorium zewnetrzne, nieobecne w tym workspace)
 

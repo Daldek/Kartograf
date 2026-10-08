@@ -222,6 +222,17 @@ dzis na SZABLON segmentu, nie na nazwe katalogu.
 
 **Konsekwencje:** Dokumenty sa samodzielne — nie wymagaja czytania shared/standards. Koszt: trzeba pamietac o aktualizacji obu zrodel gdy standard sie zmieni.
 
+**Errata 1 (2026-10-08, przeglad dokumentacji):** `IMPLEMENTATION_PROMPT.md`
+zostal usuniety; jego unikalna tresc (workflow, "Czego NIE robic", typowe
+zadania) przeszla do `docs/DEVELOPMENT_STANDARDS.md` (sekcje 15-17).
+`DEVELOPMENT_STANDARDS.md` jest odtad glownym zrodlem konwencji i procesu
+pracy projektu; `CLAUDE.md` zminimalizowano do krytycznych zasad i
+odsylaczy (bez drzewa modulow, przykladow CLI i ograniczen), `README.md`
+jest wprowadzeniem do projektu, a szczegoly uzytkowe (przyklady CLI
+i biblioteki, wynik pobrania, kampanie, CLMS) leza w `docs/USAGE.md`.
+Zasada samodzielnosci DEVELOPMENT_STANDARDS z decyzji obowiazuje dalej;
+czesc dotyczaca `IMPLEMENTATION_PROMPT.md` jest nieaktualna.
+
 ---
 
 ## ADR-010: Algorytm find_sheets_for_bbox — hierarchiczne przycinanie bez WFS

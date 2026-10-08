@@ -1479,6 +1479,9 @@ N = niski, H = hipoteza.
       `extra.parent_request.bbox_crs` miedzy trybami jawny/auto, scalanie
       PL+CZ w jedna powierzchnie przygraniczna (R6, 2026-09-28)
 - [ ] Etap 3 — ZABAGED (wektorowa baza topograficzna CZ, 149 warstw)
+- [ ] `kartograf parse` nie obsluguje godel CZ (TM33/SM5) — `parse 302_5550`
+      i `parse CTES96` = `Error: Nieprawidłowe godło` (kod 1; sprawdzone
+      2026-10-08); `kartograf download` obsluguje oba formaty
 
 #### Backlog po audycie 0.7.0
 
