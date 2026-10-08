@@ -19,7 +19,7 @@ import rasterio
 from rasterio.transform import Affine, from_bounds, from_origin
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.providers.cuzk import create_dmr_provider
 from kartograf.providers.cuzk.client import wkid
 from kartograf.providers.cuzk.dmr import CUZK_NODATA, CuzkDmrProvider, bbox_to_crs
@@ -803,6 +803,130 @@ class TestDownloadBbox:
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
         with pytest.raises(ValidationError, match="GTiff"):
             CuzkDmrProvider().download_bbox(bbox, tmp_path / "a.png", format="PNG")
+
+
+class TestOnDownloadCallback:
+    """``on_download`` fires once, after all validations, right before transfer.
+
+    The CLI passes its ``Downloading ...`` announcement here (as in the PL
+    flow, O-3), so a rejected request never claims a download.
+    """
+
+    @staticmethod
+    def _recorder():
+        events: list[str] = []
+        return events, lambda: events.append("announce")
+
+    def test_sm5_announces_after_index_validation_before_fetch(self, tmp_path):
+        events, announce = self._recorder()
+        with patch(_CLIENT_PATCH) as client_cls, patch(_INDEX_PATCH) as index_cls:
+
+            def fake_index(godlo):
+                events.append("index")
+                return _ctes96_info()
+
+            def fake_fetch(url, output_path, *, unzip_single=None):
+                events.append("fetch")
+                _write_tif(Path(output_path), crs=None)
+                return Path(output_path)
+
+            index_cls.return_value.sm5_sheet.side_effect = fake_index
+            client_cls.return_value.fetch_file.side_effect = fake_fetch
+            CuzkDmrProvider(resolution="5m").download(
+                "CTES96", tmp_path / "CTES96.tif", on_download=announce
+            )
+
+        assert events == ["index", "announce", "fetch"]
+
+    def test_sm5_unknown_sheet_does_not_announce(self, tmp_path):
+        events, announce = self._recorder()
+        with patch(_CLIENT_PATCH) as client_cls, patch(_INDEX_PATCH) as index_cls:
+            index_cls.return_value.sm5_sheet.side_effect = ValidationError(
+                "Arkusz SM5 'ABCD12' nie istnieje w indeksie KladyMapovychListu"
+            )
+            with pytest.raises(ValidationError, match="nie istnieje"):
+                CuzkDmrProvider(resolution="5m").download(
+                    "ABCD12", tmp_path / "ABCD12.tif", on_download=announce
+                )
+            client_cls.return_value.fetch_file.assert_not_called()
+        assert events == []
+
+    def test_sm5_index_network_failure_does_not_announce(self, tmp_path):
+        events, announce = self._recorder()
+        with patch(_CLIENT_PATCH), patch(_INDEX_PATCH) as index_cls:
+            index_cls.return_value.sm5_sheet.side_effect = DownloadError("timeout")
+            with pytest.raises(DownloadError):
+                CuzkDmrProvider(resolution="5m").download(
+                    "CTES96", tmp_path / "CTES96.tif", on_download=announce
+                )
+        assert events == []
+
+    def test_sm5_with_2m_does_not_announce(self, tmp_path):
+        events, announce = self._recorder()
+        with pytest.raises(ValidationError, match="5m"):
+            CuzkDmrProvider(resolution="2m").download(
+                "CTES96", tmp_path / "CTES96.tif", on_download=announce
+            )
+        assert events == []
+
+    def test_non_cz_godlo_does_not_announce(self, tmp_path):
+        events, announce = self._recorder()
+        with pytest.raises(ValidationError, match="CZ"):
+            CuzkDmrProvider().download(
+                "N-34-130-D-d-2-4", tmp_path / "x.tif", on_download=announce
+            )
+        assert events == []
+
+    def test_tm33_odd_km_does_not_announce(self, tmp_path):
+        events, announce = self._recorder()
+        with patch(_CLIENT_PATCH) as client_cls:
+            with pytest.raises(ParseError, match="parzyste"):
+                CuzkDmrProvider(resolution="2m").download(
+                    "301_5550", tmp_path / "t.tif", on_download=announce
+                )
+            client_cls.return_value.export_image.assert_not_called()
+        assert events == []
+
+    def test_tm33_announces_once_before_export(self, tmp_path):
+        events, announce = self._recorder()
+        emulate = _server_emulator()
+
+        def fake_export(endpoint, bbox, **kwargs):
+            events.append("export")
+            return emulate(endpoint, bbox, **kwargs)
+
+        with patch(_CLIENT_PATCH) as client_cls:
+            client_cls.return_value.export_image.side_effect = fake_export
+            CuzkDmrProvider(resolution="2m").download(
+                "302_5550", tmp_path / "t.tif", on_download=announce
+            )
+        assert events == ["announce", "export"]
+
+    @pytest.mark.parametrize("target_crs", [None, "EPSG:2180"])
+    def test_bbox_announces_once_before_export(self, tmp_path, target_crs):
+        events, announce = self._recorder()
+        emulate = _server_emulator()
+
+        def fake_export(endpoint, bbox, **kwargs):
+            events.append("export")
+            return emulate(endpoint, bbox, **kwargs)
+
+        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+        with patch(_CLIENT_PATCH) as client_cls:
+            client_cls.return_value.export_image.side_effect = fake_export
+            CuzkDmrProvider(resolution="2m", target_crs=target_crs).download_bbox(
+                bbox, tmp_path / "a.tif", on_download=announce
+            )
+        assert events == ["announce", "export"]
+
+    def test_bbox_non_gtiff_does_not_announce(self, tmp_path):
+        events, announce = self._recorder()
+        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+        with pytest.raises(ValidationError, match="GTiff"):
+            CuzkDmrProvider().download_bbox(
+                bbox, tmp_path / "a.png", format="PNG", on_download=announce
+            )
+        assert events == []
 
 
 class TestVerticalTransform:
