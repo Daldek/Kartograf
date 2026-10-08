@@ -179,8 +179,7 @@ class TestParseSkorowidzRecords:
         assert record.godlo == "N-34-130-D-d-2-4"
 
     def test_partition_violation_is_only_a_warning(self, caplog):
-        """P2: a record with a year outside the layer partition stays, but is
-        visible."""
+        """P2: a record with a year outside the layer partition stays, but visibly."""
         body = render_gfi_body(
             [gfi_record("N-34-130-D-d-2-4", aktualnosc="2025-03-01")]
         )
@@ -211,7 +210,7 @@ def _records(*specs: dict, layer: str = "L") -> list[SkorowidzRecord]:
 
 class TestSelectSheetRecord:
     def test_szczecin_exact_resolution_beats_html_order(self):
-        """K4: 0,50 m stoi pierwszy w HTML — wygrywa jedyny rekord 1,00 m."""
+        """K4: 0,50 m comes first in the HTML — the only 1,00 m record wins."""
         records = parse_skorowidz_records(
             sample("szczecin_c24_2024.body"), "SkorowidzeNMT2024"
         )
@@ -235,8 +234,7 @@ class TestSelectSheetRecord:
         assert chosen.aktualnosc == "2023-09-05"
 
     def test_pl2000_needs_whole_token_and_zone(self):
-        """K4: descendant ``7.173.21.06.3`` is not ``7.173.21.06``; the zone must
-        match."""
+        """K4: ``7.173.21.06.3`` is not ``7.173.21.06``; the zone must match."""
         records = parse_skorowidz_records(
             sample("warszawa_2023iStarsze.body"), "SkorowidzeNMT2023iStarsze"
         )
@@ -258,8 +256,7 @@ class TestSelectSheetRecord:
         )
 
     def test_other_system_record_never_matches(self):
-        """K4: a PL-1992 record is not a sheet of a PL-2000 sheet code (and vice
-        versa)."""
+        """K4: a PL-1992 record is not a PL-2000 sheet (and vice versa)."""
         records = _records(gfi_record("N-33-48-C-a-3-4", resolution="5.00 m"))
         assert (
             select_sheet_record(
@@ -335,8 +332,7 @@ class TestSelectSheetRecord:
         assert caplog.text.count("bez ukladu lub rozdzielczosci") == 2
 
     def test_newest_wins_regardless_of_full_sheet(self):
-        """D9: the newest acquisition date, also when ``calyArkuszWypelnionyTrescia:
-        NIE``."""
+        """D9: newest acquisition date, even if ``calyArkuszWypelnionyTrescia: NIE``."""
         records = _records(
             gfi_record(
                 "N-34-130-D-d-2-4", aktualnosc="2024-09-03", url="https://x/full.asc"
@@ -482,8 +478,7 @@ class TestQuerySkorowidzLayer:
         assert sleep.call_count == 1
 
     def test_exhausted_retries_raise_download_error_with_context(self):
-        """K3: a broken layer query = an error with the sheet code and layer, not a
-        missing sheet."""
+        """K3: a broken layer query = an error naming code and layer, not a no-sheet."""
         session = Mock(spec=requests.Session)
         session.get.side_effect = requests.ConnectionError("reset")
         with (
@@ -520,8 +515,7 @@ class TestQuerySkorowidzLayer:
         assert exc.value.godlo == "N-34-130-D-d-2-4"
 
     def test_non_template_html_is_not_an_answer(self):
-        """P7: an error page with HTTP 200 without OGC markers is an error, not
-        nodata."""
+        """P7: an HTTP 200 error page without OGC markers is an error, not nodata."""
         session = Mock(spec=requests.Session)
         session.get.return_value = response("<html><body>502 Bad Gateway</body></html>")
         with pytest.raises(DownloadError, match="nie jest szablonem skorowidza"):
@@ -631,7 +625,7 @@ class TestCoverageHints:
         for hint in self._EXPECTED:
             assert hint in message
         assert error.godlo == self._PL2000
-        # kolejnosc podpowiedzi stala (posortowane), oddzielone "; "
+        # stable hint order (sorted), separated by "; "
         assert message.endswith("; ".join(sorted(self._EXPECTED)))
         # the same structurally (the CLI does not parse the message)
         assert error.hints == tuple(sorted(self._EXPECTED))

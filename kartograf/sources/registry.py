@@ -28,10 +28,9 @@ _VERTICAL_CRS_CODES = {
     "Bpv": "EPSG:8357",  # Baltic 1957 (CZ)
 }
 
-# Family -> national realizations; consumed when building the sidecar:
-# if the family code is absent from the channel's vertical_crs_options but
-# its realization is present - the sidecar records the realization code (fact, not
-# wish).
+# Family -> national realizations; consumed when building the sidecar: if the family
+# code is absent from the channel's vertical_crs_options but its realization is
+# present, the sidecar records the realization code (fact, not wish).
 _VERTICAL_FAMILY: dict[str, tuple[str, ...]] = {"EPSG:5621": ("EPSG:9651",)}
 
 # Horizontal CRS of PL sources. Channels declare EPSG:2180 (the CRS of bbox/WCS
@@ -392,8 +391,7 @@ def vertical_crs_code(name: str) -> str:
 
 
 def resolve_vertical_crs(name: str, options: tuple[str, ...]) -> str:
-    """EPSG code for a CRS name relative to the channel options (family ->
-    realization)."""
+    """EPSG code of a CRS name given the channel options (family -> realization)."""
     code = vertical_crs_code(name)
     if code in options:
         return code
@@ -404,8 +402,7 @@ def resolve_vertical_crs(name: str, options: tuple[str, ...]) -> str:
 
 
 def horizontal_crs_for_godlo(godlo: str) -> str:
-    """Horizontal CRS of a PL sheet from the sheet code format: PL-1992 -> 2180,
-    PL-2000 -> zone."""
+    """Horizontal CRS of a PL sheet code: PL-1992 -> 2180, PL-2000 -> its zone."""
     parser = SheetParser(godlo)
     if parser.uklad == "2000":
         return ZONE_EPSG[int(parser.godlo.split(".")[0])]

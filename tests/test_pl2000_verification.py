@@ -75,7 +75,7 @@ class TestPL2000BBoxReferenceValues:
         ids=[c[0] for c in REFERENCE_10K_CASES],
     )
     def test_bbox_10k_matches_formula(self, godlo, strefa, pas, slup):
-        """Weryfikacja BBox 1:10k zgodnie z formula referencyjne."""
+        """Verify the 1:10k BBox against the reference formula."""
         expected_south = pas * 5000 + 4_920_000
         expected_north = expected_south + 5000
         expected_west = strefa * 1_000_000 + slup * 8000 + 332_000
@@ -166,10 +166,10 @@ class TestPL2000BBoxReferenceValues:
 
 
 class TestPL2000HierarchyConsistency:
-    """Testy spojnosci hierarchii — children tiling, brak overlap."""
+    """Hierarchy consistency tests — children tiling, no overlap."""
 
     def test_5k_children_tile_exactly_over_parent(self):
-        """4 dzieci 1:5000 pokrywaja dokladnie rodzica 1:10000."""
+        """4 children 1:5000 exactly cover the 1:10000 parent."""
         parent = Parser2000("6.179.12")
         parent_bbox = parent.get_bbox()
         children = parent.get_children(scale="1:5000")
@@ -202,7 +202,7 @@ class TestPL2000HierarchyConsistency:
         assert children_area == pytest.approx(parent_area, abs=1.0)
 
     def test_2k_children_tile_exactly_over_parent(self):
-        """25 dzieci 1:2000 pokrywaja dokladnie rodzica 1:10000."""
+        """25 children 1:2000 exactly cover the 1:10000 parent."""
         parent = Parser2000("7.180.15")
         parent_bbox = parent.get_bbox()
         children = parent.get_children(scale="1:2000")
@@ -235,7 +235,7 @@ class TestPL2000HierarchyConsistency:
         assert children_area == pytest.approx(parent_area, abs=1.0)
 
     def test_1k_children_tile_over_2k_parent(self):
-        """4 dzieci 1:1000 pokrywaja dokladnie rodzica 1:2000."""
+        """4 children 1:1000 exactly cover the 1:2000 parent."""
         parent = Parser2000("8.170.10.13")
         parent_bbox = parent.get_bbox()
         children = parent.get_children()
@@ -268,7 +268,7 @@ class TestPL2000HierarchyConsistency:
         assert children_area == pytest.approx(parent_area, abs=1.0)
 
     def test_500_children_tile_over_1k_parent(self):
-        """4 dzieci 1:500 pokrywaja dokladnie rodzica 1:1000."""
+        """4 children 1:500 exactly cover the 1:1000 parent."""
         parent = Parser2000("5.160.8.07.2")
         parent_bbox = parent.get_bbox()
         children = parent.get_children()
@@ -375,7 +375,7 @@ class TestPL2000HierarchyConsistency:
                     )
 
     def test_hierarchy_tiling_multiple_zones(self):
-        """Weryfikacja tiling consistency w roznych strefach."""
+        """Verify tiling consistency in different zones."""
         for zone in [5, 6, 7, 8]:
             parent = Parser2000(f"{zone}.150.10")
             parent_bbox = parent.get_bbox()
@@ -464,8 +464,7 @@ LIVE_INDEX_ENDPOINTS = [
 
 
 def _center_query_bbox(godlo: str) -> tuple[float, float, str]:
-    """A point in the middle of a sheet (EPSG:2180) and a GetFeatureInfo BBOX as in the
-    providers."""
+    """A mid-sheet point (EPSG:2180) and a GetFeatureInfo BBOX as in providers."""
     bbox = SheetParser(godlo).get_bbox(crs="EPSG:2180")
     x = (bbox.min_x + bbox.max_x) / 2
     y = (bbox.min_y + bbox.max_y) / 2
@@ -518,7 +517,7 @@ class TestLiveGugikIndex:
         )
 
     def test_sea_sheet_is_no_coverage(self):
-        """Morze (N-33-48-C-a-1-3): wszystkie warstwy puste = NoCoverageError (R5)."""
+        """Sea (N-33-48-C-a-1-3): all layers empty = NoCoverageError (R5)."""
         provider = GugikProvider(resolution="5m")
 
         with pytest.raises(NoCoverageError) as exc:
@@ -527,7 +526,7 @@ class TestLiveGugikIndex:
         assert exc.value.godlo == "N-33-48-C-a-1-3"
 
     def test_unknown_layer_is_service_exception_not_no_coverage(self):
-        """Nieistniejaca warstwa: raport OGC = DownloadError, nigdy brak pokrycia."""
+        """Nonexistent layer: an OGC report = DownloadError, never no coverage."""
         provider = GugikProvider()
         _, _, query_bbox = _center_query_bbox("N-33-48-C-a-3-4")
 
@@ -588,8 +587,7 @@ class TestPL2000EdgeCases:
     """Edge cases — multi-zone, round-trip, single point, zone forced, drill-down."""
 
     def test_multi_zone_bbox_crossing_16_5(self):
-        """A BBox crossing the zone 5/6 boundary (16.5E) returns sheets from both
-        zones."""
+        """A BBox crossing the zone 5/6 boundary (16.5E) gets sheets of both zones."""
         # BBox in WGS84 crossing 16.5E (zone 5/6 boundary)
         bbox = BBox(min_x=16.3, min_y=52.0, max_x=16.7, max_y=52.1, crs="EPSG:4326")
         sheets = find_sheets_2000_for_bbox(bbox)
@@ -603,8 +601,7 @@ class TestPL2000EdgeCases:
         assert 6 in zones_found, "Should find sheets in zone 6"
 
     def test_multi_zone_bbox_crossing_19_5(self):
-        """A BBox crossing the zone 6/7 boundary (19.5E) returns sheets from both
-        zones."""
+        """A BBox crossing the zone 6/7 boundary (19.5E) gets sheets of both zones."""
         bbox = BBox(min_x=19.3, min_y=52.0, max_x=19.7, max_y=52.1, crs="EPSG:4326")
         sheets = find_sheets_2000_for_bbox(bbox)
 
@@ -617,8 +614,7 @@ class TestPL2000EdgeCases:
         assert 7 in zones_found, "Should find sheets in zone 7"
 
     def test_multi_zone_bbox_crossing_22_5(self):
-        """A BBox crossing the zone 7/8 boundary (22.5E) returns sheets from both
-        zones."""
+        """A BBox crossing the zone 7/8 boundary (22.5E) gets sheets of both zones."""
         bbox = BBox(min_x=22.3, min_y=52.0, max_x=22.7, max_y=52.1, crs="EPSG:4326")
         sheets = find_sheets_2000_for_bbox(bbox)
 
@@ -631,7 +627,7 @@ class TestPL2000EdgeCases:
         assert 8 in zones_found, "Should find sheets in zone 8"
 
     def test_round_trip_godlo_to_bbox_and_back(self):
-        """Round-trip: godlo -> BBox -> find_sheets -> zawiera oryginal."""
+        """Round-trip: sheet code -> BBox -> find_sheets -> contains the original."""
         test_godla = [
             "5.170.10",
             "6.179.12",
@@ -679,7 +675,7 @@ class TestPL2000EdgeCases:
         assert sheets[0] == "6.179.12"
 
     def test_zone_forced_parameter_limits_search(self):
-        """Parametr zone ogranicza wyszukiwanie do jednej strefy."""
+        """The zone parameter limits the search to one zone."""
         # BBox that could span multiple zones in WGS84
         bbox = BBox(min_x=16.3, min_y=52.0, max_x=16.7, max_y=52.1, crs="EPSG:4326")
 

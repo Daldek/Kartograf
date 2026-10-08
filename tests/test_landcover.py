@@ -347,7 +347,7 @@ class TestLandCoverCLI:
         assert result == 1
         captured = capsys.readouterr()
         assert "Invalid bbox" in captured.err
-        # podpowiedz "Expected" idzie na stderr razem z bledem (review-1 D4)
+        # the "Expected" hint goes to stderr together with the error (review-1 D4)
         assert "Expected" in captured.err
         assert "Expected" not in captured.out
 
@@ -356,7 +356,7 @@ class TestLandCoverCLI:
         ["10,10,5,5", "1,10,5,5", "nan,1,2,3", "1,2,inf,4", "1,2,3", "1,2,3,4,5"],
     )
     def test_landcover_download_rejects_bad_bbox(self, bbox, capsys, tmp_path):
-        """Odwrocony/NaN/inf/zla liczba wartosci -> Error na stderr, kod 1 (K7a)."""
+        """Inverted/NaN/inf/wrong value count -> Error on stderr, code 1 (K7a)."""
         from kartograf.cli.commands import main
 
         with patch("kartograf.cli.landcover_cmd.LandCoverManager") as manager:
@@ -613,7 +613,7 @@ class TestBdot10kProviderDownload:
 
     @patch("kartograf.transport.http.time.sleep")
     def test_get_teryt_for_point_network_error(self, _sleep):
-        """Network error -> DownloadError (po 3 probach get_with_retry)."""
+        """Network error -> DownloadError (after 3 get_with_retry attempts)."""
         provider = Bdot10kProvider()
         mock_session = Mock()
         mock_session.get.side_effect = requests.RequestException("timeout")
@@ -627,7 +627,7 @@ class TestBdot10kRetryAndIO:
     """Test retry, save, extract, merge."""
 
     def test_download_shp_success(self, tmp_path):
-        """Paczka SHP pobrana za pierwszym razem: strumien zapisany w .zip."""
+        """SHP package downloaded the first time: the stream saved as .zip."""
         mock_session = Mock()
         mock_resp = Mock()
         mock_resp.iter_content.return_value = [b"shp_data"]
@@ -1002,7 +1002,7 @@ class TestCorineProviderDownload:
     _BBOX = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
 
     def test_download_via_wms_writes_png(self, tmp_path):
-        """Podglad WMS pobrany za pierwszym razem trafia do .png."""
+        """A WMS preview downloaded the first time goes to .png."""
         mock_session = Mock()
         mock_resp = Mock()
         mock_resp.headers = {"Content-Type": "image/png"}
@@ -1071,7 +1071,7 @@ class TestCorineProviderDownload:
         from kartograf.core.sheet_parser import SheetParser
 
         bbox = SheetParser("N-34-130-D").get_bbox("EPSG:2180")
-        # tor providera: DLR (1990) wysyla BBOX w EPSG:4326 (WMS 1.1.1, lon/lat)
+        # provider path: DLR (1990) sends BBOX in EPSG:4326 (WMS 1.1.1, lon/lat)
         provider = CorineProvider(use_proxy=False)
         with patch("kartograf.providers.corine.download_to") as dl:
             provider._download_via_wms(bbox, tmp_path / "x.png", 1990, 30)
@@ -1098,7 +1098,7 @@ class TestCorineProviderDownload:
         from kartograf.core.sheet_parser import SheetParser
 
         bbox = SheetParser("N-34-130-D").get_bbox("EPSG:2180")
-        # tor providera: EEA (2018) wysyla BBOX w EPSG:3857
+        # provider path: EEA (2018) sends BBOX in EPSG:3857
         provider = CorineProvider(use_proxy=False)
         with patch("kartograf.providers.corine.download_to") as dl:
             provider._download_via_wms(bbox, tmp_path / "x.png", 2018, 30)
@@ -1568,7 +1568,7 @@ class TestBdot10kRtreeIndex:
 
 
 class TestAdminUnitAliases:
-    """Etap 0 (spec 6.7): kanoniczne download_by_admin_unit + aliasy teryt."""
+    """Stage 0 (spec 6.7): canonical download_by_admin_unit + teryt aliases."""
 
     def test_validate_admin_unit_same_as_teryt(self):
         provider = Bdot10kProvider()
@@ -1599,7 +1599,7 @@ class TestAdminUnitAliases:
 
 
 class TestSidecarLandCover:
-    """Sidecar .meta.json po pobraniu pokrycia terenu (spec etap 0)."""
+    """A .meta.json sidecar after a land cover download (spec stage 0)."""
 
     def test_download_by_teryt_writes_sidecar(self, tmp_path):
         mock_provider = Mock()
@@ -1784,7 +1784,7 @@ class TestBdot10kMergeOnNetworkShare:
         monkeypatch.setattr(tempfile, "TemporaryDirectory", SpyTmp)
 
         def boom(self, target):
-            # final_tmp juz istnieje (kopia po scaleniu) - awaria podmiany
+            # final_tmp already exists (copy after merging) - the swap fails
             assert self.exists()
             raise OSError("replace failed")
 

@@ -1,4 +1,4 @@
-"""Testy kanonicznego downloadera (kartograf.transport.http)."""
+"""Tests of the canonical downloader (kartograf.transport.http)."""
 
 import os
 import threading
@@ -37,7 +37,7 @@ class TestDownloadTo:
         assert result == out
         assert out.read_bytes() == b"abcdef"
         leftovers = [p for p in out.parent.iterdir() if p.name != "plik.tif"]
-        assert leftovers == []  # tmp sprzatniety po os.replace
+        assert leftovers == []  # tmp cleaned up after os.replace
 
     def test_temp_name_uses_pid_and_thread(self, tmp_path):
         seen = {}
@@ -137,7 +137,7 @@ class TestGetWithRetry:
 
 
 def _http_response(status, headers=None, content=b""):
-    """Prawdziwa odpowiedz requests: raise_for_status niesie response w HTTPError."""
+    """A real requests response: raise_for_status carries the response in HTTPError."""
     response = requests.Response()
     response.status_code = status
     response.headers.update(headers or {})

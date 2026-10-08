@@ -1,4 +1,4 @@
-"""Testy rejestru systemow godel (kartograf.core.parser_registry)."""
+"""Tests of the sheet code system registry (kartograf.core.parser_registry)."""
 
 import pytest
 
@@ -15,7 +15,7 @@ class TestDetection:
     def test_pl1992_fallback(self):
         assert detect_system("N-34-130-D-d-2-4").id == "pl1992"
         assert detect_system("N-34").id == "pl1992"
-        # Opaque godlo kafla LAZ (drobniejsze niz 1:10000) tez trafia do pl1992
+        # An opaque LAZ tile sheet code (finer than 1:10000) also goes to pl1992
         assert detect_system("N-33-131-B-a-1-1-4").id == "pl1992"
 
     def test_systems_order_fallback_last(self):
@@ -29,7 +29,7 @@ class TestDetection:
 
 
 class TestPathParts:
-    """Zlote wartosci — identyczne z dotychczasowym FileStorage._get_directory_parts."""
+    """Golden values — identical to the former FileStorage._get_directory_parts."""
 
     @pytest.mark.parametrize(
         ("godlo", "expected"),
@@ -53,11 +53,11 @@ class TestSheetParserIntegration:
 
         assert _is_pl2000_format("6.179.12.20") is True
         assert _is_pl2000_format("N-34-130-D") is False
-        assert _is_pl2000_format("4.179.12") is False  # strefa spoza 5-8
+        assert _is_pl2000_format("4.179.12") is False  # zone outside 5-8
 
 
 class TestCzechSystems:
-    """Systemy cz_tm33/cz_sm5 — pomiedzy pl2000 a fallbackiem pl1992."""
+    """Systems cz_tm33/cz_sm5 — between pl2000 and the pl1992 fallback."""
 
     def test_cz_tm33_detected(self):
         system = detect_system("302_5550")
@@ -74,7 +74,7 @@ class TestCzechSystems:
         assert detect_system("N-34-130-D-d-2-4").id == "pl1992"
 
     def test_fallback_still_catches_everything_else(self):
-        # opaque godlo LAZ — musi dalej trafiac do pl1992 (get_raw_path)
+        # opaque LAZ sheet code — must still go to pl1992 (get_raw_path)
         assert detect_system("N-33-131-B-a-1-1-4").id == "pl1992"
         assert detect_system("cokolwiek").id == "pl1992"
 
@@ -91,7 +91,7 @@ class TestCzechSystems:
         assert path_parts(godlo) == parts
 
     def test_cz_patterns_are_shared_with_parsers(self):
-        """Jeden wzorzec na system: ParserTM33 i SheetIndex uzywaja rejestru."""
+        """One pattern per system: ParserTM33 and SheetIndex use the registry."""
         from kartograf.core import parser_tm33
         from kartograf.providers.cuzk import sheets
 
@@ -100,13 +100,13 @@ class TestCzechSystems:
 
     def test_no_pattern_collisions(self):
         """CZ patterns do not capture PL sheet codes and vice versa."""
-        assert detect_system("30_5550").id == "pl1992"  # za krotkie na TM33
-        assert detect_system("CTES9").id == "pl1992"  # za krotkie na SM5
-        assert detect_system("CTES961").id == "pl1992"  # za dlugie na SM5
+        assert detect_system("30_5550").id == "pl1992"  # too short for TM33
+        assert detect_system("CTES9").id == "pl1992"  # too short for SM5
+        assert detect_system("CTES961").id == "pl1992"  # too long for SM5
 
 
 class TestWhitespace:
-    """K5: detect_system i path_parts obcinaja biale znaki (jak parsery)."""
+    """K5: detect_system and path_parts strip whitespace (like the parsers)."""
 
     @pytest.mark.parametrize(
         ("godlo", "system_id"),

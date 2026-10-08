@@ -139,7 +139,7 @@ GODLO = "N-34-130-D-d-2-4"
 
 
 def _make_mock_response(text: str) -> Mock:
-    """Atrapa odpowiedzi HTTP 200 z podana trescia."""
+    """Fake HTTP 200 response with the given body."""
     mock_response = Mock()
     mock_response.status_code = 200
     mock_response.text = text
@@ -168,7 +168,7 @@ def _layer_of(url: str) -> str:
 
 @pytest.mark.real_wms_layers
 class TestFetchWmsLayers:
-    """GugikProvider._fetch_wms_layers() na wstrzynietej sesji."""
+    """GugikProvider._fetch_wms_layers() on an injected session."""
 
     def _fetch(self, xml_text: str) -> list[str]:
         session = _make_session(_make_mock_response(xml_text))
@@ -207,7 +207,7 @@ class TestFetchWmsLayers:
         ]
 
     def test_sorts_newest_first_istarsze_last(self):
-        """Losowa kolejnosc w XML -> rok malejaco, warstwa zbiorcza na koncu."""
+        """Random order in the XML -> year descending, the collective layer last."""
         assert self._fetch(WMS_XML_RANDOM_ORDER) == [
             "SkorowidzeNMT2025",
             "SkorowidzeNMT2024",
@@ -228,7 +228,7 @@ class TestFetchWmsLayers:
             self._fetch(WMS_XML_NO_SKOROWIDZE)
 
     def test_invalid_xml_raises_download_error(self):
-        """Odpowiedz niebedaca XML = DownloadError."""
+        """A non-XML response = DownloadError."""
         with pytest.raises(DownloadError, match="nieprawidlowy XML"):
             self._fetch("This is not XML at all")
 
@@ -247,7 +247,7 @@ class TestFetchWmsLayers:
         assert mock_sleep.call_count == 2
 
     def test_network_error_then_success_returns_layers(self):
-        """Jedna zerwana proba i sukces -> lista warstw po 2 zapytaniach."""
+        """One dropped attempt then success -> layer list after 2 requests."""
         session = _make_session(
             requests.ConnectionError("reset"),
             _make_mock_response(WMS_XML_WITH_NAMESPACE),
@@ -273,7 +273,7 @@ class TestFetchWmsLayers:
 
 
 class TestLayers:
-    """GugikProvider._layers(endpoint): memoizacja sukcesu pod lockiem."""
+    """GugikProvider._layers(endpoint): memoizing success under a lock."""
 
     @pytest.mark.real_wms_layers
     def test_memoizes_success_per_endpoint(self):
@@ -351,7 +351,7 @@ class TestLayers:
         session.get.assert_not_called()
 
     def test_get_opendata_url_queries_layers_newest_first(self):
-        """Puste odpowiedzi -> kazda warstwa z _layers po kolei, NoCoverageError."""
+        """Empty responses -> every layer from _layers in turn, NoCoverageError."""
         session = _make_session(_make_mock_response(render_gfi_body([])))
         provider = GugikProvider(session=session)
 
@@ -375,7 +375,7 @@ class TestLayers:
 
 
 class TestNmptLayerPattern:
-    """GugikNmptProvider odkrywa warstwy wlasnym wzorcem SkorowidzeNMPT*."""
+    """GugikNmptProvider discovers layers with its own SkorowidzeNMPT* pattern."""
 
     @pytest.mark.real_wms_layers
     def test_fetch_wms_layers_returns_only_nmpt(self):
@@ -393,7 +393,7 @@ class TestNmptLayerPattern:
 
 
 # ===========================================================================
-# N3 / E10: GetCapabilities skorowidza z timeoutem providera
+# N3 / E10: index GetCapabilities with the provider timeout
 # ===========================================================================
 
 
@@ -469,7 +469,7 @@ class TestCapabilitiesTimeout:
 
 
 # ===========================================================================
-# ADR-030: rodzina nazw warstw (LAYER_FAMILY) na realnych GetCapabilities
+# ADR-030: layer name family (LAYER_FAMILY) on real GetCapabilities
 # ===========================================================================
 
 CAPS = (

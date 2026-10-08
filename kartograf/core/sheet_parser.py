@@ -975,10 +975,9 @@ def find_sheets_for_bbox(
             f"Nieobsługiwany CRS: '{bbox.crs}'. Obsługiwane: EPSG:2180, EPSG:4326"
         )
 
-    # Normalize to WGS84. Densified envelope (core.bbox): in PUWG 1992 a line
-    # of constant y has its maximum latitude on the central meridian
-    # (x = 500 000 m, 19E), so 4 corners missed the strip at the upper edge
-    # (2026-09-28).
+    # Normalize to WGS84. Densified envelope (core.bbox): in PUWG 1992 a line of
+    # constant y has its maximum latitude on the central meridian (x = 500 000 m, 19E),
+    # so 4 corners missed the strip at the upper edge (2026-09-28).
     wgs_bbox = transform_bbox(bbox, "EPSG:4326")
     # Point/hairline: expand by eps on the MAX side to give exactly one sheet
     wgs_bbox = _expand_degenerate(wgs_bbox, _DEGENERATE_EPS_DEG)

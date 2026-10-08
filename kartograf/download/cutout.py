@@ -377,7 +377,7 @@ def build_pl_cutout(
     warp then reads it once and deletes it, so compression pays in disk space
     without a readability cost. With an EPSG:2180 target the same file IS the
     result (``os.replace`` onto ``target_path``), so it stays uncompressed —
-    as before (fact 9 of the max review wave).
+    as before (finding 9 of the max review wave).
     """
     _reject_pl2000_sheets(sheet_paths)
     from kartograf.transport.mosaic import check_source_grid, mosaic_and_crop
@@ -732,7 +732,7 @@ def run_pl_cutout(
     injects its own). An injected ``provider`` must supply the cutout's
     vertical CRS and resolution — otherwise ``ValidationError`` before any
     download. The disk space check (``check_pl_cutout_disk_space``) runs
-    BEFORE ``DownloadManager`` — a lower bound, not a guarantee (fact 9 of
+    BEFORE ``DownloadManager`` — a lower bound, not a guarantee (finding 9 of
     the max review wave).
     """
     if provider is not None:
@@ -803,7 +803,7 @@ def run_pl_cutout(
             cutout.target_path,
         )
     except BaseException:
-        # fact 10: a failed build does not leave an empty <segment>/bbox/ tree
+        # finding 10: a failed build does not leave an empty <segment>/bbox/ tree
         # (a directory with a previous result is not empty — it stays)
         prune_empty_dirs(cutout.target_path.parent, cutout.output_dir)
         raise

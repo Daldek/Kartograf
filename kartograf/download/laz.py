@@ -10,7 +10,7 @@ selection from the newest vintage without duplicating the area) ->
 ``run_laz_download`` (thread pool, ``<file>.laz.meta.json`` sidecar per
 tile, tile failures collected, not raised).
 
-Przyklad::
+Example::
 
     from kartograf import BBox, download_laz_area
 

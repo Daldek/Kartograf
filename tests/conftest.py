@@ -203,7 +203,7 @@ def gfi_record(
     url: str | None = None,
     **fields: str,
 ) -> dict:
-    """Rekord NMT/NMPT skorowidza o polach jak w odpowiedzi GUGiK (2026-09-29)."""
+    """NMT/NMPT index record with fields as in the GUGiK response (2026-09-29)."""
     record = {
         "url": url
         or f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/78955/78955_1_{godlo}.asc",

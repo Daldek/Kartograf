@@ -1,9 +1,10 @@
 """
-Kampanie w providerach GUGiK (ADR-030): ``resolve_campaigns``,
-``download_record``, ``record_source`` na SUROWYCH odpowiedziach skorowidza.
+Campaigns in the GUGiK providers (ADR-030): ``resolve_campaigns``,
+``download_record``, ``record_source`` on RAW index (skorowidz) responses.
 
-Fixtury: ``tests/fixtures/gugik_skorowidz/real_2026_10_06/`` (runda E2E
-2026-10-06); warstwy GetCapabilities z autouse stuba ``tests/conftest.py``.
+Fixtures: ``tests/fixtures/gugik_skorowidz/real_2026_10_06/`` (E2E round
+2026-10-06); GetCapabilities layers from the autouse stub in
+``tests/conftest.py``.
 """
 
 import re
@@ -91,7 +92,7 @@ def queried_layers(session: Mock) -> list[str]:
 
 
 def file_id(url: str) -> str:
-    """``78954_1462161`` z ``.../78954/78954_1462161_M-33-57-C-b-4-2.asc``."""
+    """``78954_1462161`` from ``.../78954/78954_1462161_M-33-57-C-b-4-2.asc``."""
     return "_".join(url.rsplit("/", 1)[-1].split("_")[:2])
 
 
@@ -116,7 +117,7 @@ def test_newest_min_year_older_newest_is_no_coverage_with_date():
 
 
 def test_newest_min_year_does_not_skip_layers():
-    """Q5: newest odpytuje warstwe 2023iStarsze mimo granicy 2024."""
+    """Q5: newest queries the 2023iStarsze layer despite the 2024 bound."""
     godlo = "M-34-66-B-a-2-1"
     s = nmt_session(godlo, "nmt1_evr")
     with pytest.raises(NoCoverageError, match=r"ma date 2023-03-29.*min_year=2024"):
@@ -130,7 +131,7 @@ def test_newest_min_year_does_not_skip_layers():
 
 
 def test_provider_does_not_log_campaign_count_at_info(caplog):
-    """M-7: liczbe kampanii na INFO loguje wylacznie manager."""
+    """M-7: only the manager logs the campaign count at INFO."""
     import logging
 
     with caplog.at_level(logging.INFO):
@@ -167,8 +168,7 @@ def test_all_min_year_2023_queries_2023iStarsze_and_filters_by_aktualnosc(tmp_pa
     )
     assert [r.aktualnosc[:4] for r in recs] == ["2025", "2025", "2023"]
     # The cut-off from the acquisition-date year, not dt_pzgik: 84183 (2025-10-21,
-    # dt_pzgik
-    # 2026-07-10) does not pass min_year=2026 -> 0 campaigns, not 1.
+    # dt_pzgik 2026-07-10) does not pass min_year=2026 -> 0 campaigns, not 1.
     cache = MetadataCache(tmp_path / "c.db")
     GugikProvider(session=c14_session(G), cache=cache).resolve_campaigns(
         G, campaigns="all"
@@ -305,8 +305,7 @@ def test_all_failed_layer_is_download_error_and_not_cached(tmp_path):
 
 
 def test_all_cached_partial_no_coverage_message_uses_current_bound(tmp_path):
-    """D-2: a no_coverage entry with scanned_from=2026 valid for 2027, text from
-    2027."""
+    """D-2: no_coverage with scanned_from=2026 valid for 2027, text from 2027."""
     cache = MetadataCache(tmp_path / "c.db")
     s = c14_session(G)
     with pytest.raises(NoCoverageError, match="od roku 2026"):
@@ -420,7 +419,7 @@ def test_all_cached_partial_no_coverage_does_not_serve_lower_bound(tmp_path):
 
 
 def _c14_copy(tmp_path: Path, blank_ids: set[str]) -> Mock:
-    """Kopia realnych body c14 w tmp_path z wyczyszczonym rokiem rekordow."""
+    """A copy of the real c14 bodies in tmp_path with the record year cleared."""
     copy = tmp_path / "c14"
     copy.mkdir()
     for src in (REAL / "nmt" / "c14").glob(f"{G}_EVRF2007_*.html"):

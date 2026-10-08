@@ -1,4 +1,4 @@
-"""Testy mozaikowania (kartograf.transport.mosaic) na syntetycznych rastrach."""
+"""Mosaicking tests (kartograf.transport.mosaic) on synthetic rasters."""
 
 import math
 import os
@@ -83,7 +83,7 @@ def _write_lattice_tile(path, col0, row0, cols, rows, *, x0=0.5, y_top=100.5, re
 
 @pytest.fixture
 def four_tiles(tmp_path):
-    # Kafle 2x2 (kazdy 10x10 m, res 1 m): wspolny naroznik w (10, 10).
+    # 2x2 tiles (each 10x10 m, res 1 m): a common corner at (10, 10).
     return [
         _write_tile(tmp_path / "a.tif", 0, 20, 1.0),  # NW
         _write_tile(tmp_path / "b.tif", 10, 20, 2.0),  # NE
@@ -187,7 +187,7 @@ def test_dst_kwds_forces_gtiff_and_crs(tmp_path):
 
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="/proc/self/fd")
 def test_many_inputs_do_not_exhaust_file_descriptors(tmp_path):
-    """Item 3 of review max: a 75 x 75 km cutout is >1200 sheets, while the
+    """Finding 3 of review max: a 75 x 75 km cutout is >1200 sheets, while the
     descriptor limit is 1024 (Linux) / 256 (macOS). The mosaic must not keep
     all sources open at once."""
     import resource
@@ -197,7 +197,7 @@ def test_many_inputs_do_not_exhaust_file_descriptors(tmp_path):
         _write_tile(tmp_path / f"t{i:03d}.tif", 2 * i, 2, float(i), size=2)
         for i in range(n)
     ]
-    # rozgrzewka: pierwsze otwarcie rastra otwiera na stale proj.db (+1 fd)
+    # warm-up: the first raster open keeps proj.db open for good (+1 fd)
     with rasterio.open(paths[0]) as src:
         _ = src.crs
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
@@ -221,15 +221,15 @@ def test_many_inputs_do_not_exhaust_file_descriptors(tmp_path):
     "bbox",
     [
         BBox(3.37, 92.13, 17.61, 97.9, "EPSG:2180"),
-        BBox(3.0, 92.0, 17.0, 98.0, "EPSG:2180"),  # calkowity = remis 0,5 px
+        BBox(3.0, 92.0, 17.0, 98.0, "EPSG:2180"),  # integer = a 0.5 px tie
     ],
     ids=["ulamkowy", "calkowity"],
 )
 def test_snap_copies_source_pixels_exactly(tmp_path, bbox):
-    """Item 1: result pixels = source pixels (no shift and no column
+    """Finding 1: result pixels = source pixels (no shift and no column
     mixing on a tie); extent = request + < 1 px per side."""
     a = _write_lattice_tile(tmp_path / "a.tif", 0, 0, 12, 10)
-    b = _write_lattice_tile(tmp_path / "b.tif", 10, 0, 12, 10)  # zakladka 2 px
+    b = _write_lattice_tile(tmp_path / "b.tif", 10, 0, 12, 10)  # 2 px overlap
     out = mosaic_and_crop(
         [a, b], bbox, tmp_path / "out.tif", nodata=-9999.0, snap_to_source_grid=True
     )
@@ -302,7 +302,7 @@ def test_check_source_grid_wraps_phase_through_one(tmp_path):
 
 
 def test_check_source_grid_reports_shift_of_every_off_grid_source(tmp_path):
-    """Przesuniecia w [-0,5; 0,5) wzgledem siatki WIEKSZOSCI, w obu osiach."""
+    """Offsets in [-0,5; 0,5) relative to the MAJORITY grid, on both axes."""
     on1 = _write_lattice_tile(tmp_path / "on1.tif", 0, 0, 12, 10)
     on2 = _write_lattice_tile(tmp_path / "on2.tif", 10, 0, 12, 10)
     west = _write_lattice_tile(tmp_path / "west.tif", 20, 0, 4, 10, x0=0.5 - 0.3)
@@ -378,7 +378,7 @@ def _write_prj(asc_path, wkt_text):
     asc_path.with_suffix(".prj").write_text(wkt_text)
 
 
-_HYDROGRAF_2180_WKT = (  # tresc .prj z cache Hydrografu (gdalsrsinfo -o wkt_simple)
+_HYDROGRAF_2180_WKT = (  # .prj from the Hydrograf cache (gdalsrsinfo -o wkt_simple)
     'PROJCS["ETRF2000-PL / CS92",GEOGCS["ETRF2000-PL",DATUM["ETRF2000_Poland",'
     'SPHEROID["GRS 1980",6378137,298.257222101]],PRIMEM["Greenwich",0],'
     'UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],'
@@ -388,9 +388,8 @@ _HYDROGRAF_2180_WKT = (  # tresc .prj z cache Hydrografu (gdalsrsinfo -o wkt_sim
 )
 
 # P-01: each of these three WKT1 strings describes EPSG:2180, but CRS.equals(...,
-# ignore_axis_order=True) alone returns False for all of them (pyproj 3.7.2 / PROJ
-# 9.5.1,
-# measured 2026-09-28) - hence _same_projection in Step 3.
+# ignore_axis_order=True) alone returns False for all of them (pyproj 3.7.2 /
+# PROJ 9.5.1, measured 2026-09-28) - hence _same_projection in Step 3.
 _2180_WKT_VARIANTS = [
     CRS.from_epsg(2180).to_wkt("WKT1_GDAL"),
     CRS.from_epsg(2180).to_wkt("WKT1_ESRI"),
@@ -410,7 +409,7 @@ def test_assign_crs_merges_sources_with_and_without_prj(tmp_path, prj_text):
     b = _write_asc_text(tmp_path / "b.asc", 4.5, 0.5, [["2.5"] * 4] * 4)
     _write_prj(a, prj_text)
     with rasterio.open(a) as sa, rasterio.open(b) as sb:
-        assert sa.crs is not None and sb.crs is None  # warunek sensownosci testu
+        assert sa.crs is not None and sb.crs is None  # test sanity check
     bbox = BBox(0.5, 0.5, 8.5, 4.5, "EPSG:2180")
     with pytest.raises(ValidationError, match="niezgodne CRS"):
         mosaic_and_crop([a, b], bbox, tmp_path / "x.tif")
@@ -418,7 +417,7 @@ def test_assign_crs_merges_sources_with_and_without_prj(tmp_path, prj_text):
     with rasterio.open(out) as src:
         data = src.read(1)
         assert src.crs.to_epsg() == 2180
-        assert src.driver == "GTiff"  # profil z pierwszego zrodla to VRT
+        assert src.driver == "GTiff"  # the profile from the first source is the VRT
     assert data[0, 0] == 1.5 and data[0, -1] == 2.5
 
 
@@ -441,7 +440,7 @@ def test_dtype_float32_keeps_decimals_when_first_source_is_integer(tmp_path):
     a = _write_asc_text(tmp_path / "a.asc", 0.5, 0.5, [["100"] * 4] * 4)
     b = _write_asc_text(tmp_path / "b.asc", 4.5, 0.5, [["100.25"] * 4] * 4)
     with rasterio.open(a) as sa:
-        assert sa.dtypes[0] == "int32"  # warunek sensownosci testu
+        assert sa.dtypes[0] == "int32"  # test sanity check
     out = mosaic_and_crop(
         [a, b],
         BBox(0.5, 0.5, 8.5, 4.5, "EPSG:2180"),
@@ -469,9 +468,10 @@ def test_vrt_wrapping_does_not_exhaust_file_descriptors(tmp_path):
         _ = src.crs
     soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
     in_use = len(os.listdir("/proc/self/fd"))
-    # poprawny kod potrzebuje < 6 deskryptorow; pula GDAL (GDAL_MAX_DATASET_POOL_SIZE,
-    # domyslnie 100) maskowalaby "wszystkie VRT naraz" przy zapasie > ~110 (P-05,
-    # zmierzone w pre-flight 2026-09-28: mutacja przechodzi przy 160, pada przy 64)
+    # correct code needs < 6 descriptors; the GDAL pool
+    # (GDAL_MAX_DATASET_POOL_SIZE, 100 by default) would mask "all VRTs at once"
+    # with headroom > ~110 (P-05, measured in pre-flight 2026-09-28: the mutation
+    # passes at 160, fails at 64)
     resource.setrlimit(resource.RLIMIT_NOFILE, (in_use + 64, hard))
     try:
         out = mosaic_and_crop(
@@ -530,7 +530,7 @@ def test_wrapping_rejects_type_without_vrt_name(tmp_path, source_dtype, dtype):
     ) as dst:
         dst.write(np.ones((1, 4, 4), dtype=source_dtype))
     with rasterio.open(path) as src:
-        assert src.dtypes[0] == source_dtype  # warunek sensownosci testu
+        assert src.dtypes[0] == source_dtype  # test sanity check
     with pytest.raises(ValidationError, match="typ pasma"):
         mosaic_and_crop(
             [path],
@@ -590,8 +590,7 @@ def test_wrapping_writes_short_wide_first_source(tmp_path, cols, rows):
 
 
 def test_wrapping_keeps_explicit_tiling_from_dst_kwds(tmp_path):
-    """The default write without tiles does not overwrite the caller's explicit
-    tiles."""
+    """Default write without tiles keeps the caller's explicit tiles."""
     a = _write_asc_text(tmp_path / "a.asc", 0.5, 0.5, [["1.5"] * 200] * 100)
     out = mosaic_and_crop(
         [a],

@@ -43,7 +43,7 @@ __all__ = [
 
 
 def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) -> int:
-    """Rozeslij sparsowane argumenty do wlasciwej komendy."""
+    """Dispatch the parsed arguments to the right command."""
     if parsed_args.command is None:
         parser.print_help()
         return 0

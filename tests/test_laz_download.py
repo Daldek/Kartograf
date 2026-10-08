@@ -74,7 +74,7 @@ def _tile(godlo: str, crs: str = "PL-2000:S6", year: int = 2024) -> LazTile:
 
 
 class FakeProvider:
-    """Provider z ``download`` zapisujacym bajty; wybrane godla zawodza."""
+    """Provider whose ``download`` writes bytes; selected sheet codes fail."""
 
     descriptor_key = "pl.gugik.laz"
 
@@ -133,7 +133,7 @@ class TestRunLazDownload:
         assert meta["dataset"] == "pl.gugik.laz"
         assert meta["horizontal_crs"] == "EPSG:2177"  # PL-2000:S6
         assert meta["request"]["bbox"] == [530000, 382000, 533000, 386000]
-        assert meta["request"]["year"] == 2024  # fala B (E16) zachowana
+        assert meta["request"]["year"] == 2024  # wave B (E16) preserved
         assert meta["request"]["min_density"] == 12
         # ADR-031: English keys only (tile_sheet / year / nominal_density)
         assert {k: meta["extra"][k] for k in ("tile_sheet", "year")} == {
@@ -145,7 +145,7 @@ class TestRunLazDownload:
         assert "parent_request" not in meta["extra"]  # not given
 
     def test_parent_request_written_to_every_tile_sidecar(self, tmp_path):
-        """N15: ADR-023 (f).1 — kafle LAZ z obszaru niosa klucz grupowania."""
+        """N15: ADR-023 (f).1 — LAZ tiles from an area carry the grouping key."""
         tiles = [_tile("N-33-131-B-a-1-1-4"), _tile("M-34-1-A-a-1-1-1", "PL-1992")]
         result = run_laz_download(
             _selection(*tiles),
@@ -274,7 +274,7 @@ class TestRunLazDownload:
 
 
 # =============================================================================
-# download_laz_area (end-to-end na surowym WFS w2)
+# download_laz_area (end-to-end on the raw WFS w2)
 # =============================================================================
 
 
@@ -321,7 +321,7 @@ class TestDownloadLazArea:
             download_laz_area(
                 W2_AREA,
                 output_dir=tmp_path,
-                year=2026,  # warstwa istnieje, 0 obiektow (C13 L5)
+                year=2026,  # the layer exists, 0 features (C13 L5)
                 provider=GugikLazProvider(session=session),
             )
         assert downloaded_urls(session) == []
@@ -337,7 +337,7 @@ class TestDownloadLazArea:
 
 
 # =============================================================================
-# CLI: cienka nakladka (`kartograf download --product laz`)
+# CLI: a thin layer (`kartograf download --product laz`)
 # =============================================================================
 
 
@@ -362,7 +362,7 @@ class TestCliOnRealWfs:
         assert [u.rsplit("/", 1)[-1] for u in downloaded_urls(session)] == [
             "83230_1743191_N-34-139-A-c-1-1-3-4.laz"
         ]
-        # Info na stderr mimo -q; pelna lista pominietych z kaflem pokrywajacym
+        # Info on stderr despite -q; full list of skipped tiles with the covering tile
         assert "Info: pominieto 2 kafli LAZ" in err
         assert (
             "7.173.21.06.2 (2022, PL-2000:S7): pokryty przez "

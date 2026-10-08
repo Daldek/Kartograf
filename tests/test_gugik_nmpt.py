@@ -2,8 +2,8 @@
 Unit tests for the GugikNmptProvider module.
 
 This module contains tests for the GugikNmptProvider class, which inherits
-from GugikProvider and provides NMPT (Numerical Land Cover Model) downloads
-from GUGiK - DSM (Digital Surface Model) data containing terrain + surface objects.
+from GugikProvider and provides Digital Surface Model (NMPT) downloads from
+GUGiK - DSM data containing terrain + surface objects.
 
 Endpoints and coverage IDs differ from NMT (DTM), but the download mechanism
 (WMS index -> OpenData ASC, WCS -> GeoTIFF) is identical.
@@ -34,7 +34,7 @@ def _layer_of(url: str) -> str:
 
 
 class TestGugikNmptProviderInit:
-    """Testy inicjalizacji GugikNmptProvider."""
+    """Tests of GugikNmptProvider initialization."""
 
     def test_default_vertical_crs(self):
         """Test that the default vertical CRS is EVRF2007."""
@@ -49,8 +49,7 @@ class TestGugikNmptProviderInit:
     def test_invalid_resolution_not_possible(self):
         """Test that __init__ forces resolution='1m' - no other can be given."""
         # GugikNmptProvider.__init__ always passes resolution="1m" to super()
-        # The only parameters are vertical_crs and session - resolution is not an
-        # argument
+        # The only parameters are vertical_crs and session - no resolution argument
         provider = GugikNmptProvider()
         assert provider.resolution == "1m"
 
@@ -58,7 +57,7 @@ class TestGugikNmptProviderInit:
         assert provider.SUPPORTED_RESOLUTIONS == ["1m"]
 
     def test_custom_vertical_crs_kron86(self):
-        """Test tworzenia providera z KRON86."""
+        """Test creating the provider with KRON86."""
         provider = GugikNmptProvider(vertical_crs="KRON86")
         assert provider.vertical_crs == "KRON86"
 
@@ -145,8 +144,7 @@ class TestGugikNmptProviderEndpoints:
             )
 
     def test_wcs_available_for_both_vertical_crs(self):
-        """A failure of the NMT EVRF2007 WCS endpoint does not affect NMPT (a different
-        endpoint)."""
+        """A broken NMT EVRF2007 WCS endpoint does not affect NMPT (own endpoint)."""
         assert GugikNmptProvider().WITHDRAWN_WCS_VERTICAL_CRS == ()
         assert GugikNmptProvider(vertical_crs="EVRF2007").is_wcs_available() is True
         assert GugikNmptProvider(vertical_crs="KRON86").is_wcs_available() is True
@@ -162,7 +160,7 @@ class TestGugikNmptProviderDownload:
 
     @pytest.fixture
     def mock_wms_response(self):
-        """Mock odpowiedzi WMS GetFeatureInfo z URL OpenData NMPT."""
+        """Mock WMS GetFeatureInfo response with an NMPT OpenData URL."""
         response = Mock(spec=requests.Response)
         response.status_code = 200
         response.text = render_gfi_body(
@@ -182,7 +180,7 @@ class TestGugikNmptProviderDownload:
 
     @pytest.fixture
     def mock_wcs_response(self):
-        """Mock odpowiedzi WCS."""
+        """Mock WCS response."""
         response = Mock(spec=requests.Response)
         response.status_code = 200
         response.iter_content = Mock(return_value=[b"TIFF data..."])
@@ -265,7 +263,7 @@ class TestGugikNmptProviderDownload:
 
 
 class TestGugikNmptProviderInheritance:
-    """Testy dziedziczenia GugikNmptProvider."""
+    """Tests of GugikNmptProvider inheritance."""
 
     def test_is_instance_of_base_provider(self):
         """Test that GugikNmptProvider is an instance of BaseProvider."""

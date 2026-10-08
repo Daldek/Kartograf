@@ -76,8 +76,7 @@ def read_asc_nodata(path: Path) -> float | None:
 
 
 def _file_min_x(path: Path) -> float | None:
-    """Left edge (x) of the raster from the ASC header or rasterio; None if
-    unreadable."""
+    """Raster left edge (x) from the ASC header or rasterio; None if unreadable."""
     suffix = path.suffix.lower()
     if suffix == ".asc":
         header = _read_asc_header(path)
@@ -124,7 +123,7 @@ def pl_sheet_horizontal_crs(data_path: Path | None, godlo: str) -> str:
 
 
 def _select_channel(descriptor: SourceDescriptor, request: dict) -> AccessChannel:
-    """Dobierz kanal do zadania (bbox -> kanal bbox_*, inaczej pierwszy pasujacy)."""
+    """Pick the request channel (bbox -> a bbox_* channel, else the first match)."""
     want_bbox = "bbox" in request
     for ch in descriptor.channels:
         has_bbox = bool(ch.capabilities & _BBOX_CAPS)
@@ -253,8 +252,7 @@ def write_sidecar(
 
 
 def pinned_label(pinned) -> str:
-    """Description of a pinned operation in the sidecar's ``transform`` field (one
-    format)."""
+    """Pinned operation description for the sidecar ``transform`` field (one format)."""
     return f"pinned: {pinned.description} ({pinned.accuracy_m} m)"
 
 

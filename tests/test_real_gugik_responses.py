@@ -67,7 +67,7 @@ def routed_session(path_for_layer) -> Mock:
 
 
 def nmt_session(godlo: str, prefix: str) -> Mock:
-    """Surowe body: ``real_2026_10_06/nmt/<godlo>/<prefix>__<warstwa>.body``."""
+    """Raw body: ``real_2026_10_06/nmt/<godlo>/<prefix>__<warstwa>.body``."""
 
     def path_for_layer(layer):
         path = REAL / "nmt" / godlo / f"{prefix}__{layer}.body"
@@ -101,12 +101,12 @@ def queried_layers(session: Mock) -> list[str]:
 
 
 def file_id(url: str) -> str:
-    """``78954_1462161`` z ``.../78954/78954_1462161_M-33-57-C-b-4-2.asc``."""
+    """``78954_1462161`` from ``.../78954/78954_1462161_M-33-57-C-b-4-2.asc``."""
     return "_".join(url.rsplit("/", 1)[-1].split("_")[:2])
 
 
 # =============================================================================
-# NMT: wybor rekordu (C1b, C3, C6, C9)
+# NMT: record selection (C1b, C3, C6, C9)
 # =============================================================================
 
 
@@ -153,7 +153,7 @@ class TestNmtRecordSelectionOnRealBodies:
         ]
 
     def test_c3_pooled_records_pick_resolution_by_request(self):
-        """Ta sama pula rekordow: 0,5 m -> 2025 (84161), 1 m -> 2023 (78954)."""
+        """The same record pool: 0,5 m -> 2025 (84161), 1 m -> 2023 (78954)."""
         godlo = "M-33-57-C-b-4-2"
         pool = []
         for layer in ("SkorowidzeNMT2025", "SkorowidzeNMT2023iStarsze"):
@@ -174,7 +174,7 @@ class TestNmtRecordSelectionOnRealBodies:
         assert record.aktualnosc == "2023-03-17"
 
     def test_c6_pl1992_sheet_in_same_body_ignores_pl2000_records(self):
-        """Ten sam punkt, godlo PL-1992: wygrywa najnowsza warstwa (2025, 83137)."""
+        """The same point, PL-1992 sheet code: the newest layer wins (2025, 83137)."""
         godlo = "M-34-64-D-d-2-3"
         record = GugikProvider(session=nmt_session(godlo, "nmt1_evr"))._resolve_sheet(
             godlo
@@ -183,8 +183,8 @@ class TestNmtRecordSelectionOnRealBodies:
         assert record.uklad == "1992"
 
     def test_campaign_date_beats_dt_pzgik(self):
-        """N-33-69-A-d-3-2 (2024): 2024-09-23 (81025) przed 2024-07-21 (81616),
-        choc ten drugi ma pozniejsze ``dt_pzgik`` (2025-06-20)."""
+        """N-33-69-A-d-3-2 (2024): 2024-09-23 (81025) before 2024-07-21 (81616),
+        although the latter has a later ``dt_pzgik`` (2025-06-20)."""
         godlo = "N-33-69-A-d-3-2"
         records = layer_records(
             REAL / "nmt" / godlo / "nmt1_evr__SkorowidzeNMT2024.body",
@@ -212,8 +212,8 @@ class TestNmtRecordSelectionOnRealBodies:
         assert chosen.url.endswith(".asc")
 
     def test_c9_uppercase_asc_record_is_available_but_loses_to_newer_layer(self):
-        """5 m N-33-115-C-d-2-2: ``.ASC`` z 2022iStarsze ma byc dostepny sam,
-        lecz w calym skorowidzu wygrywa 2025-03-20 (``.asc``)."""
+        """5 m N-33-115-C-d-2-2: ``.ASC`` from 2022iStarsze is available alone,
+        but across the whole index 2025-03-20 (``.asc``) wins."""
         godlo = "N-33-115-C-d-2-2"
         old = layer_records(
             REAL / "nmt" / godlo / "nmt5_evr__SkorowidzeNMT2022iStarsze.body",
@@ -231,7 +231,7 @@ class TestNmtRecordSelectionOnRealBodies:
         assert record.aktualnosc == "2025-03-20"
 
     def test_c9a_lowercase_godlo_in_record_is_normalised(self):
-        """KRON86 N-33-59-C-a-1-3: rekord z ``godlo:"N-33-59-c-a-1-3"`` (male c)."""
+        """KRON86 N-33-59-C-a-1-3: record ``godlo:"N-33-59-c-a-1-3"`` (lower-case c)."""
         godlo = "N-33-59-C-a-1-3"
         body = (REAL / "nmt" / godlo / "nmt1_krn__SkorowidzeNMT2018.body").read_text(
             encoding="utf-8"
@@ -247,7 +247,7 @@ class TestNmtRecordSelectionOnRealBodies:
 
 
 # =============================================================================
-# NoCoverageError: podpowiedzi (C6f, C6g, C10g)
+# NoCoverageError: hints (C6f, C6g, C10g)
 # =============================================================================
 
 
@@ -271,7 +271,7 @@ class TestNoCoverageHintsOnRealBodies:
         with pytest.raises(NoCoverageError, match="--scale 1:2000") as exc:
             provider._resolve_sheet(godlo)
         assert "5.167.25.13" in str(exc.value)
-        # warstwy KRON86: wszystkie sprawdzone, zanim padl brak pokrycia
+        # KRON86 layers: all checked before no coverage was reported
         assert queried_layers(provider._sessions.injected) == [
             "SkorowidzeNMT2019",
             "SkorowidzeNMT2018",
@@ -362,8 +362,8 @@ class TestOrtoRecordSelectionOnRealBodies:
         assert provider.source_info(godlo)["full_sheet"] is False
 
     def test_c12_pl2000_sheet_takes_own_record_not_descendants(self):
-        """7.173.21.01: rekord 2021-04-28 (75063), potomki 7.173.21.01.x z 2022
-        sa ignorowane (godlo to caly token)."""
+        """7.173.21.01: record 2021-04-28 (75063), descendants 7.173.21.01.x
+        from 2022 are ignored (the sheet code is a whole token)."""
         godlo = "7.173.21.01"
         provider = GugikOrtoProvider(session=orto_session(godlo))
         record = provider._resolve_sheet(godlo)
@@ -411,14 +411,14 @@ class TestCutoutSheetsFromDifferentCampaigns:
 
 
 # =============================================================================
-# LAZ: WFS na surowych XML (C13)
+# LAZ: WFS on raw XML (C13)
 # =============================================================================
 
 W2_BBOX = BBox(637200, 486900, 637500, 487100, "EPSG:2180")
 
 
 def laz_session() -> MagicMock:
-    """WFS: GetCapabilities i GetFeature z surowych XML rundy 2026-10-06."""
+    """WFS: GetCapabilities and GetFeature from raw XML of the 2026-10-06 round."""
     session = MagicMock()
 
     def get(url, **kwargs):
@@ -492,12 +492,12 @@ class TestLazDiscoveryOnRealWfs:
         tiles = provider.discover_tiles(W2_BBOX)
         assert [(t.godlo, t.year) for t in tiles] == [("N-34-139-A-c-1-1-3-4", 2018)]
         assert file_id(tiles[0].url) == "70707_846000"
-        # rocznik 2012 byl w usludze i zostal odpytany
+        # vintage 2012 was in the service and was queried
         assert "2012" in feature_years(session)
 
     def test_c13_las_format_in_wfs_still_yields_dot_laz_filename(self):
         raw = (REAL_LAZ / "w2_KRON86_2018.xml").read_text(encoding="utf-8")
-        assert "<gugik:format>LAS</gugik:format>" in raw  # surowe body
+        assert "<gugik:format>LAS</gugik:format>" in raw  # raw body
         tile = GugikLazProvider(
             session=laz_session(), vertical_crs="KRON86"
         ).discover_tiles(W2_BBOX)[0]
@@ -506,7 +506,7 @@ class TestLazDiscoveryOnRealWfs:
 
 
 # =============================================================================
-# ADR-030: lista kampanii (select_campaign_records) na realnych body
+# ADR-030: campaign list (select_campaign_records) on real bodies
 # =============================================================================
 
 NMT_DIR = REAL / "nmt"

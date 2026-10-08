@@ -19,7 +19,7 @@ from kartograf.providers.pl.gugik import GugikProvider
 
 
 class TestDownloadProgress:
-    """Testy klasy DownloadProgress."""
+    """Tests of the DownloadProgress class."""
 
     def test_progress_attributes(self):
         """Test of progress attributes."""
@@ -86,7 +86,7 @@ class TestDownloadManagerBasic:
         assert manager.provider == mock_provider
 
     def test_repr(self, tmp_path):
-        """Test reprezentacji tekstowej."""
+        """Test the string representation."""
         manager = DownloadManager(output_dir=tmp_path)
         repr_str = repr(manager)
 
@@ -126,11 +126,10 @@ class TestDownloadManagerBasic:
 
 
 class TestDownloadManagerStorageFromDescriptor:
-    """Testy wyprowadzania podkatalogu storage z deskryptora providera."""
+    """Tests of deriving the storage subdirectory from the provider descriptor."""
 
     def test_manager_with_nmpt_provider_uses_nmpt_subdir(self, tmp_path):
-        """A manager with an NMPT provider uses the 'nmpt' subdirectory, not
-        'nmt_1m'."""
+        """A manager with an NMPT provider uses the 'nmpt' subdir, not 'nmt_1m'."""
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
         manager = DownloadManager(output_dir=tmp_path, provider=GugikNmptProvider())
@@ -148,7 +147,7 @@ class TestDownloadManagerStorageFromDescriptor:
         assert nmt._storage.get_path(g, ".asc") != nmpt._storage.get_path(g, ".asc")
 
     def test_manager_with_orto_provider_uses_orto_subdir(self, tmp_path):
-        """Manager z providerem Orto uzywa podkatalogu 'orto'."""
+        """A manager with the Orto provider uses the 'orto' subdirectory."""
         from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
         manager = DownloadManager(output_dir=tmp_path, provider=GugikOrtoProvider())
@@ -156,8 +155,7 @@ class TestDownloadManagerStorageFromDescriptor:
         assert manager._storage._subdir == "orto/pl_{uklad}"
 
     def test_manager_without_descriptor_key_falls_back_to_resolution(self, tmp_path):
-        """A provider without descriptor_key -> subdirectory per resolution (as
-        before)."""
+        """A provider without descriptor_key -> subdirectory per resolution."""
         provider = Mock()
         provider.descriptor_key = None
         provider.default_extension = ".asc"
@@ -169,7 +167,7 @@ class TestDownloadManagerStorageFromDescriptor:
         assert manager._storage._subdir == "nmt/pl_{uklad}_5m_evrf2007"
 
     def test_manager_with_mock_spec_provider_falls_back_to_resolution(self, tmp_path):
-        """Mock(spec=GugikProvider).descriptor_key to Mock - traktowany jak brak."""
+        """Mock(spec=GugikProvider).descriptor_key is a Mock - treated as missing."""
         provider = Mock(spec=GugikProvider)
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
@@ -178,7 +176,7 @@ class TestDownloadManagerStorageFromDescriptor:
         assert manager._storage._subdir == "nmt/pl_{uklad}_1m_evrf2007"
 
     def test_explicit_storage_wins_over_descriptor(self, tmp_path):
-        """Jawny storage= ma pierwszenstwo przed deskryptorem providera."""
+        """An explicit storage= takes precedence over the provider descriptor."""
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
         storage = FileStorage(tmp_path, subdir="custom")
@@ -231,7 +229,7 @@ class TestDownloadManagerStorageFromDescriptor:
         assert manager.vertical_crs == "KRON86"
 
     def test_default_storage_5m_kron86_corrected_to_evrf(self, tmp_path):
-        """Regula 5m=>EVRF2007 dziala PRZED budowa segmentu."""
+        """The 5m=>EVRF2007 rule applies BEFORE the segment is built."""
         provider = Mock(spec=GugikProvider)
         provider.descriptor_key = "pl.gugik.nmt_5m"
         type(provider).default_extension = PropertyMock(return_value=".asc")
@@ -244,7 +242,7 @@ class TestDownloadManagerStorageFromDescriptor:
         assert manager._storage._subdir == "nmt/pl_{uklad}_5m_evrf2007"
 
     def test_provider_with_empty_vertical_crs_raises(self, tmp_path):
-        """Item 7 through the public API: a custom provider with vertical_crs=''."""
+        """Finding 7 through the public API: a custom provider with vertical_crs=''."""
         from kartograf.exceptions import ValidationError
 
         provider = Mock(spec=GugikProvider)
@@ -260,7 +258,7 @@ class TestDownloadManagerDownloadSheet:
 
     @pytest.fixture
     def mock_provider(self):
-        """Fixture z mockowanym providerem."""
+        """Fixture with a mocked provider."""
         provider = Mock(spec=GugikProvider)
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
@@ -316,8 +314,7 @@ class TestDownloadManagerDownloadSheet:
         assert result.read_bytes() == b"ASC data"  # New data
 
     def test_download_sheet_expands_25k_to_10k(self, tmp_path, mock_provider):
-        """Test that download_sheet with a 1:25000 sheet code expands to 4 sheets of
-        1:10000."""
+        """download_sheet with a 1:25000 sheet code expands to 4 sheets 1:10000."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         result = manager.download_sheet("N-34-130-D-d-2")
@@ -328,8 +325,7 @@ class TestDownloadManagerDownloadSheet:
         assert all(p.exists() for p in result)
 
     def test_download_sheet_expands_50k_to_10k(self, tmp_path, mock_provider):
-        """Test that download_sheet with a 1:50000 sheet code expands to 16 sheets of
-        1:10000."""
+        """download_sheet with a 1:50000 sheet code expands to 16 sheets 1:10000."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         result = manager.download_sheet("N-34-130-D-d")
@@ -340,8 +336,7 @@ class TestDownloadManagerDownloadSheet:
         assert all(p.exists() for p in result)
 
     def test_download_sheet_expands_100k_to_10k(self, tmp_path, mock_provider):
-        """Test that download_sheet with a 1:100000 sheet code expands to 64 sheets of
-        1:10000."""
+        """download_sheet with a 1:100000 code expands to 64 sheets 1:10000."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         result = manager.download_sheet("N-34-130-D")
@@ -372,7 +367,7 @@ class TestDownloadManagerDownloadHierarchy:
 
     @pytest.fixture
     def mock_provider(self):
-        """Fixture z mockowanym providerem."""
+        """Fixture with a mocked provider."""
         provider = Mock(spec=GugikProvider)
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
@@ -484,7 +479,7 @@ class TestDownloadManagerDownloadHierarchy:
 
 
 class TestDownloadResultNoCoverage:
-    """R5: brak danych u zrodla odrozniony od awarii pobrania."""
+    """R5: no data at the source is told apart from a download failure."""
 
     @pytest.fixture
     def provider(self):
@@ -554,7 +549,7 @@ class TestDownloadResultNoCoverage:
 
 
 class TestDownloadManagerDownloadSheets:
-    """download_sheets(): lista godel -> liscie 1:10000, porazki w last_result."""
+    """download_sheets(): sheet list -> 1:10000 leaves, failures in last_result."""
 
     @pytest.fixture
     def provider(self):
@@ -631,7 +626,7 @@ class TestDownloadManagerDownloadBbox:
 
     @pytest.fixture
     def mock_provider(self):
-        """Fixture z mockowanym providerem."""
+        """Fixture with a mocked provider."""
         provider = Mock(spec=GugikProvider)
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
@@ -682,7 +677,7 @@ class TestDownloadManagerDownloadBbox:
 
 
 class TestDownloadManagerGetMissingSheets:
-    """Testy metody get_missing_sheets()."""
+    """Tests of get_missing_sheets()."""
 
     def test_get_missing_sheets_all_missing(self, tmp_path):
         """Test when all sheets are missing."""
@@ -729,7 +724,7 @@ class TestDownloadManagerGetMissingSheets:
 
 
 class TestDownloadManagerCountSheets:
-    """Testy metody count_sheets()."""
+    """Tests of count_sheets()."""
 
     def test_count_sheets_small_hierarchy(self, tmp_path):
         """Test of counting a small hierarchy."""
@@ -840,8 +835,7 @@ class TestDownloadManagerPL2000:
         assert count == 4
 
     def test_download_sheet_pl2000_10k_direct(self, tmp_path):
-        """Test that download_sheet with a PL-2000 1:10000 sheet code downloads
-        directly."""
+        """download_sheet with a PL-2000 1:10000 code downloads it directly."""
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
 
@@ -889,8 +883,7 @@ class TestDownloadManagerPL2000:
         assert "6.179.12.20" in str(result)
 
     def test_download_sheet_pl2000_5k_direct(self, tmp_path):
-        """Test that download_sheet with a PL-2000 1:5000 sheet code downloads
-        directly."""
+        """download_sheet with a PL-2000 1:5000 code downloads it directly."""
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
 
@@ -933,8 +926,7 @@ class TestCreateNmtProviderFactory:
         assert "5m only supports EVRF2007" in caplog.text
 
     def test_rule_without_log_is_silent(self, caplog):
-        """D11: ``log=False`` (CLI, ``prepare_pl_cutout``) - a correction without a
-        log."""
+        """D11: ``log=False`` (CLI, ``prepare_pl_cutout``) - corrected, not logged."""
         import logging
 
         from kartograf.providers.pl import nmt_vertical_crs
@@ -955,7 +947,7 @@ class TestCreateNmtProviderFactory:
 
 
 class TestSidecarWritten:
-    """Sidecar .meta.json obok kazdego udanego pobrania (spec etap 0)."""
+    """A .meta.json sidecar next to every successful download (spec stage 0)."""
 
     def _mock_provider(self):
         from unittest.mock import MagicMock
@@ -1034,7 +1026,7 @@ class TestSidecarWritten:
 
     def test_mock_provider_without_key_is_skipped(self, tmp_path):
         provider = self._mock_provider()
-        del provider.descriptor_key  # atrybut Mock zamiast str -> guard pomija
+        del provider.descriptor_key  # Mock attribute, not str -> the guard skips
         provider.descriptor_key = object()
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
         result = manager.download_sheet("N-34-130-D-d-2-4")
@@ -1160,7 +1152,7 @@ class TestReuseNotedInSidecar:
 
         second = self._manager(tmp_path, self._SECOND)
         second.download_sheets(["N-34-130-D-d-2-4"], max_workers=workers)
-        second.download_sheets(["N-34-130-D-d-2-4"], max_workers=workers)  # duplikat
+        second.download_sheets(["N-34-130-D-d-2-4"], max_workers=workers)  # duplicate
         first.download_sheets(["N-34-130-D-d-2-4"], max_workers=workers)  # = parent
 
         after = self._payload(path)

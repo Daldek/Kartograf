@@ -22,7 +22,7 @@ W2_BBOX = BBox(637200, 486900, 637500, 487100, "EPSG:2180")
 
 
 def laz_session() -> MagicMock:
-    """WFS: GetCapabilities i GetFeature z surowych XML rundy 2026-10-06."""
+    """WFS: GetCapabilities and GetFeature from raw XML of the 2026-10-06 round."""
     session = MagicMock()
 
     def get(url, **kwargs):
@@ -208,7 +208,7 @@ def test_download_laz_area_all_writes_campaigns_to_sidecars(tmp_path):
 
 @pytest.mark.parametrize("bad", ["2020", True, 1800])
 def test_invalid_min_year_rejected_before_network(bad):
-    """M-3: ``select_tiles`` waliduje ``min_year`` jak ``DownloadManager``."""
+    """M-3: ``select_tiles`` validates ``min_year`` like ``DownloadManager``."""
     session = laz_session()
     with pytest.raises(ValidationError, match="min_year"):
         GugikLazProvider(session=session).select_tiles(W2_BBOX, min_year=bad)

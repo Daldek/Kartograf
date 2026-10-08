@@ -1,4 +1,4 @@
-"""Testy sidecara metadanych (kartograf.sources.sidecar)."""
+"""Tests of the metadata sidecar (kartograf.sources.sidecar)."""
 
 import json
 import logging
@@ -62,8 +62,7 @@ class TestPlSheetHorizontalCrs:
         assert "zapisano uklad pliku" not in caplog.text
 
     def test_file_in_other_system_wins_with_warning(self, tmp_path, caplog):
-        """K4: a PL-1992 file under a PL-2000 sheet code (cache from before 0.7.0) -
-        the file CRS."""
+        """K4: a PL-1992 file under a PL-2000 code (pre-0.7.0 cache) - the file CRS."""
         asc = tmp_path / "7.123.8.asc"
         _asc(asc, 542_560.30)
         with caplog.at_level(logging.WARNING):
@@ -135,8 +134,7 @@ class TestPlSheetHorizontalCrs:
         assert meta.horizontal_crs == "EPSG:2177"
 
     def test_non_sheet_pl_product_keeps_channel_crs(self):
-        """BDOT10k by a PL-2000 sheet code is a GPKG in EPSG:2180 - the code only
-        selects the area."""
+        """BDOT10k via PL-2000 code: GPKG in EPSG:2180; the code only picks the area."""
         meta = build_metadata(
             get_source("pl.gugik.bdot10k"), request={"sheet": "6.179.12"}
         )
@@ -235,11 +233,10 @@ class TestWriteSidecar:
 
 class TestSelectChannelByCapability:
     # dmr4g (Task 3) has two channels with the SAME horizontal_crs (EPSG:5514) -
-    # ResultMetadata carries no transport field, so assertions on
-    # ResultMetadata alone do not distinguish correct selection from a
-    # heuristic/ignoring
-    # `capability=`. So we test `_select_channel_by_capability` directly
-    # on the returned channel (transport + capabilities) - see R5 in the task brief.
+    # ResultMetadata carries no transport field, so assertions on ResultMetadata
+    # alone do not distinguish correct selection from a heuristic/ignoring
+    # `capability=`. So we test `_select_channel_by_capability` directly on the
+    # returned channel (transport + capabilities) - see R5 in the task brief.
     def test_sheet_files_returns_direct_files_channel(self):
         d = get_source("cz.cuzk.dmr4g")
         ch = _select_channel_by_capability(d, "sheet_files")
@@ -272,8 +269,8 @@ class TestBuildMetadataCapabilityAndNodata:
             d, request={"sheet": "CTES96"}, capability="bbox_raster"
         )
         # both dmr4g channels have 5514; the transport tells them apart - we check
-        # that selection did not use the bbox heuristic (request godlo + capability
-        # bbox)
+        # that selection did not use the bbox heuristic (request godlo +
+        # capability bbox)
         assert meta_bbox.horizontal_crs == "EPSG:5514"
 
     def test_capability_unknown_raises_keyerror(self):

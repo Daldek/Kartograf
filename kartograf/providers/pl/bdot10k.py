@@ -199,10 +199,9 @@ class Bdot10kProvider(LandCoverProvider):
 
         output_path = Path(output_path)
         if format == "SHP":
-            # The SHP package is a ZIP archive of shapefiles (not unpacked):
-            # the name must say so rather than pretend to be a GeoPackage
-            # (review N1). Symmetric to GPKG, where `_extract_gpkg_from_zip`
-            # assigns .gpkg.
+            # The SHP package is a ZIP archive of shapefiles (not unpacked): the name
+            # must say so rather than pretend to be a GeoPackage (review N1). Symmetric
+            # to GPKG, where `_extract_gpkg_from_zip` assigns .gpkg.
             output_path = output_path.with_suffix(".zip")
 
         # Construct OpenData URL
@@ -249,7 +248,7 @@ class Bdot10kProvider(LandCoverProvider):
         return pattern.format(base=self.OPENDATA_BASE, woj=woj_code, teryt=teryt)
 
     # =========================================================================
-    # Download by sheet code (godlo) → OpenData (via TERYT lookup)
+    # Download by sheet code → OpenData (via TERYT lookup)
     # =========================================================================
 
     def download_by_godlo(
@@ -561,10 +560,9 @@ class Bdot10kProvider(LandCoverProvider):
         if not source_files:
             raise DownloadError("No files to merge")
 
-        # SQLite ALWAYS writes in a local temp directory: on a CIFS/SMB share
-        # without `nobrl`, byte-range locks ended the merge with
-        # `database is locked`. The target receives the finished file (copy +
-        # os.replace).
+        # SQLite ALWAYS writes in a local temp directory: on a CIFS/SMB share without
+        # `nobrl`, byte-range locks ended the merge with `database is locked`. The
+        # target receives the finished file (copy + os.replace).
         final_tmp = output_path.with_suffix(".gpkg.tmp")
 
         try:
