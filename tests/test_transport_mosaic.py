@@ -46,7 +46,7 @@ def _write_tile(
 
 
 def _write_asc(path, xll, yll, ncols=4, nrows=4, cellsize=1.0, value=1.0):
-    """Syntetyczny Arc/Info ASCII Grid (bez CRS — jak arkusze GUGiK)."""
+    """Synthetic Arc/Info ASCII Grid (no CRS - like the GUGiK sheets)."""
     header = (
         f"ncols {ncols}\nnrows {nrows}\nxllcorner {xll}\nyllcorner {yll}\n"
         f"cellsize {cellsize}\nNODATA_value -9999\n"
@@ -57,10 +57,10 @@ def _write_asc(path, xll, yll, ncols=4, nrows=4, cellsize=1.0, value=1.0):
 
 
 def _write_lattice_tile(path, col0, row0, cols, rows, *, x0=0.5, y_top=100.5, res=1.0):
-    """Kafel na siatce z narozami w x0 + k*res — jak arkusze GUGiK, ktorych
-    narozniki leza pol piksela od liczb calkowitych (fakt 1 planu).
-    Wartosc = 1000 * globalny_wiersz + globalna_kolumna: jednoznaczna, wiec
-    kazde przesuniecie tresci widac jako rozbieznosc wartosci."""
+    """A tile on a grid with corners at x0 + k*res - like the GUGiK sheets, whose
+    corners lie half a pixel from integers (fact 1 of the plan).
+    Value = 1000 * global_row + global_column: unambiguous, so any shift of
+    the content shows up as a value mismatch."""
     transform = rasterio.transform.from_origin(
         x0 + col0 * res, y_top - row0 * res, res, res
     )
@@ -103,7 +103,7 @@ class TestMosaicAndCrop:
             assert src.width == 10 and src.height == 10
             assert src.bounds == pytest.approx((5.0, 5.0, 15.0, 15.0))
             data = src.read(1)
-        # Cwiartki wyniku pochodza z 4 roznych kafli.
+        # The result quadrants come from 4 different tiles.
         assert data[0, 0] == 1.0 and data[0, -1] == 2.0
         assert data[-1, 0] == 3.0 and data[-1, -1] == 4.0
 
@@ -120,14 +120,14 @@ class TestMosaicAndCrop:
         with rasterio.open(out) as src:
             assert src.nodata == -9999.0
             data = src.read(1)
-        # Obszar bez pokrycia (x 10..20) = nodata, NIE 0.
+        # Area without coverage (x 10..20) = nodata, NOT 0.
         assert data[0, -1] == -9999.0
 
     def test_mosaic_passes_dst_path_to_merge(self, four_tiles, tmp_path):
-        """merge ma pisac wynik sam (kawalkami wg mem_limit).
+        """merge must write the result itself (in chunks per mem_limit).
 
-        Bez dst_path rasterio trzyma caly wynik w jednej tablicy — szczyt
-        RAM 2,63x rozmiaru danych, czyli ~2,4 GB dla zlewni 30x30 km przy
+        Without dst_path rasterio keeps the whole result in a single array - peak
+        RAM 2.63x the data size, i.e. ~2.4 GB for a 30x30 km catchment at
         DMR 5G (A3-4).
         """
         out_path = tmp_path / "out.tif"
@@ -165,7 +165,7 @@ class TestMosaicAndCrop:
 
 
 def test_dst_kwds_forces_gtiff_and_crs(tmp_path):
-    """Wejscia ASC (AAIGrid, brak CRS) -> wynik GTiff z wpisanym CRS."""
+    """ASC inputs (AAIGrid, no CRS) -> GTiff result with the CRS set."""
     a = _write_asc(tmp_path / "a.asc", 0, 0)
     b = _write_asc(tmp_path / "b.asc", 4, 0)
     out = tmp_path / "out.tif"
@@ -187,9 +187,9 @@ def test_dst_kwds_forces_gtiff_and_crs(tmp_path):
 
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="/proc/self/fd")
 def test_many_inputs_do_not_exhaust_file_descriptors(tmp_path):
-    """Zn. 3 review max: wycinek 75 x 75 km to >1200 arkuszy, a limit
-    deskryptorow to 1024 (Linux) / 256 (macOS). Mozaika nie moze trzymac
-    otwartych wszystkich zrodel naraz."""
+    """Item 3 of review max: a 75 x 75 km cutout is >1200 sheets, while the
+    descriptor limit is 1024 (Linux) / 256 (macOS). The mosaic must not keep
+    all sources open at once."""
     import resource
 
     n = 300
@@ -226,8 +226,8 @@ def test_many_inputs_do_not_exhaust_file_descriptors(tmp_path):
     ids=["ulamkowy", "calkowity"],
 )
 def test_snap_copies_source_pixels_exactly(tmp_path, bbox):
-    """Zn. 1: piksele wyniku = piksele zrodel (bez przesuniecia i bez
-    mieszania kolumn przy remisie); zasieg = zadanie + < 1 px na strone."""
+    """Item 1: result pixels = source pixels (no shift and no column
+    mixing on a tie); extent = request + < 1 px per side."""
     a = _write_lattice_tile(tmp_path / "a.tif", 0, 0, 12, 10)
     b = _write_lattice_tile(tmp_path / "b.tif", 10, 0, 12, 10)  # zakladka 2 px
     out = mosaic_and_crop(
@@ -251,10 +251,10 @@ def test_snap_copies_source_pixels_exactly(tmp_path, bbox):
 
 
 def test_snap_rejects_off_grid_source(tmp_path):
-    """S5 (D3): zrodlo poza siatka wiekszosci = GridMismatchError z lista
-    przesuniec, nie ostrzezenie — ``merge`` przepisywalby je "przez okno"
-    (nie zawsze z najblizszego piksela, kolumna nodata na szwie); siatka
-    odniesienia to wiekszosc, nie 'pierwsze na liscie'. Bez pliku wyniku."""
+    """S5 (D3): a source off the majority grid = GridMismatchError with a list
+    of offsets, not a warning - ``merge`` would copy it "through a window" (not
+    always from the nearest pixel, a nodata column at the seam); the reference
+    grid is the majority, not 'first in the list'. No result file."""
     odd = _write_lattice_tile(tmp_path / "odd.tif", 20, 0, 4, 10, x0=0.75)
     a = _write_lattice_tile(tmp_path / "a.tif", 0, 0, 12, 10)
     b = _write_lattice_tile(tmp_path / "b.tif", 10, 0, 12, 10)
@@ -274,9 +274,9 @@ def test_snap_rejects_off_grid_source(tmp_path):
 
 
 def test_snap_tolerates_float_noise(tmp_path):
-    """Dwa kafle rozniace sie o 1e-9 px to JEDNA siatka: porownanie faz
-    z tolerancja, nie rownosc kubelkow (szumy po dwu stronach granicy kubelka
-    nie moga dac falszywego bledu twardego)."""
+    """Two tiles differing by 1e-9 px are ONE grid: the phase comparison is
+    tolerance-based, not bucket equality (noise on both sides of a bucket
+    boundary must not give a false hard error)."""
     a = _write_lattice_tile(tmp_path / "a.tif", 0, 0, 12, 10, x0=0.0)
     b = _write_lattice_tile(tmp_path / "b.tif", 10, 0, 12, 10, x0=1e-9)
     assert check_source_grid([a, b]).off_grid == ()
@@ -291,8 +291,8 @@ def test_snap_tolerates_float_noise(tmp_path):
 
 
 def test_check_source_grid_wraps_phase_through_one(tmp_path):
-    """Faza 0,9999999 i faza 0 to ta sama siatka (owiniecie przez 1) —
-    takze wtedy, gdy zrodlo odniesienia ma faze 0."""
+    """Phase 0.9999999 and phase 0 are the same grid (wrap-around by 1) -
+    also when the reference source has phase 0."""
     a = _write_lattice_tile(tmp_path / "a.tif", 0, 0, 12, 10, x0=0.0)
     b = _write_lattice_tile(tmp_path / "b.tif", 10, 0, 12, 10, x0=-1e-8)
     c = _write_lattice_tile(tmp_path / "c.tif", 20, 0, 12, 10, x0=0.0)
@@ -324,8 +324,8 @@ def test_check_source_grid_rejects_mixed_resolution(tmp_path):
 
 
 def test_snap_keeps_bbox_already_on_grid(tmp_path):
-    """3 * 0.1 == 0.30000000000000004: iloraz 3.0000000000000004 nie moze
-    dolozyc czwartej kolumny (tolerancja bledu zmiennoprzecinkowego)."""
+    """3 * 0.1 == 0.30000000000000004: the quotient 3.0000000000000004 must
+    not add a fourth column (floating-point error tolerance)."""
     a = _write_lattice_tile(
         tmp_path / "a.tif", 0, 0, 10, 10, x0=0.0, y_top=1.0, res=0.1
     )
@@ -365,7 +365,7 @@ def test_snap_rejects_rotated_source(tmp_path):
 
 
 def _write_asc_text(path, xll, yll, rows, *, cellsize=1.0, nodata_header="-9999"):
-    """ASC jak u GUGiK: naglowek z `nodata_value -9999` BEZ kropki (fakt 5)."""
+    """ASC like GUGiK's: header with `nodata_value -9999` WITHOUT a dot (fact 5)."""
     header = (
         f"ncols {len(rows[0])}\nnrows {len(rows)}\nxllcorner {xll}\n"
         f"yllcorner {yll}\ncellsize {cellsize}\nnodata_value {nodata_header}\n"
@@ -387,9 +387,10 @@ _HYDROGRAF_2180_WKT = (  # tresc .prj z cache Hydrografu (gdalsrsinfo -o wkt_sim
     'PARAMETER["false_northing",-5300000],UNIT["metre",1]]'
 )
 
-# P-01: kazdy z tych trzech WKT1 opisuje EPSG:2180, ale samo CRS.equals(...,
-# ignore_axis_order=True) zwraca dla wszystkich False (pyproj 3.7.2 / PROJ 9.5.1,
-# zmierzone 2026-09-28) — stad _same_projection w Step 3.
+# P-01: each of these three WKT1 strings describes EPSG:2180, but CRS.equals(...,
+# ignore_axis_order=True) alone returns False for all of them (pyproj 3.7.2 / PROJ
+# 9.5.1,
+# measured 2026-09-28) - hence _same_projection in Step 3.
 _2180_WKT_VARIANTS = [
     CRS.from_epsg(2180).to_wkt("WKT1_GDAL"),
     CRS.from_epsg(2180).to_wkt("WKT1_ESRI"),
@@ -401,10 +402,10 @@ _2180_WKT_VARIANTS = [
     "prj_text", _2180_WKT_VARIANTS, ids=["wkt1_gdal", "wkt1_esri", "hydrograf"]
 )
 def test_assign_crs_merges_sources_with_and_without_prj(tmp_path, prj_text):
-    """Fakt 6: Hydrograf dopisuje .prj do czesci arkuszy; merge rzucal
-    'CRS mismatch'. Z assign_crs zrodla dostaja jawny SRS przez VRT.
-    Wszystkie trzy warianty WKT1 EPSG:2180 (pyproj GDAL/ESRI, .prj Hydrografu)
-    musza zostac uznane za "ten sam" uklad (P-01)."""
+    """Fact 6: Hydrograf adds .prj to some sheets; merge raised
+    'CRS mismatch'. With assign_crs the sources get an explicit SRS via VRT.
+    All three WKT1 variants of EPSG:2180 (pyproj GDAL/ESRI, Hydrograf .prj)
+    must be recognised as the "same" CRS (P-01)."""
     a = _write_asc_text(tmp_path / "a.asc", 0.5, 0.5, [["1.5"] * 4] * 4)
     b = _write_asc_text(tmp_path / "b.asc", 4.5, 0.5, [["2.5"] * 4] * 4)
     _write_prj(a, prj_text)
@@ -434,9 +435,9 @@ def test_assign_crs_rejects_source_with_other_crs(tmp_path):
 
 
 def test_dtype_float32_keeps_decimals_when_first_source_is_integer(tmp_path):
-    """Fakt 5: ASC z samymi liczbami calkowitymi GDAL czyta jako Int32,
-    a merge bierze dtype z PIERWSZEGO zrodla — wysokosci innych arkuszy
-    bylyby obciete."""
+    """Fact 5: an ASC with integers only is read by GDAL as Int32,
+    and merge takes the dtype from the FIRST source - the elevations of other
+    sheets would be truncated."""
     a = _write_asc_text(tmp_path / "a.asc", 0.5, 0.5, [["100"] * 4] * 4)
     b = _write_asc_text(tmp_path / "b.asc", 4.5, 0.5, [["100.25"] * 4] * 4)
     with rasterio.open(a) as sa:
@@ -456,7 +457,7 @@ def test_dtype_float32_keeps_decimals_when_first_source_is_integer(tmp_path):
 
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="/proc/self/fd")
 def test_vrt_wrapping_does_not_exhaust_file_descriptors(tmp_path):
-    """Owijanie w VRT tez nie moze trzymac otwartych wszystkich zrodel."""
+    """Wrapping in VRT must not keep all sources open either."""
     import resource
 
     n = 300
@@ -487,8 +488,8 @@ def test_vrt_wrapping_does_not_exhaust_file_descriptors(tmp_path):
 
 
 def test_wrapping_rejects_multiband_source(tmp_path):
-    """VRT owija tylko pasmo 1 — zrodlo wielopasmowe to blad, nie cicha
-    utrata pozostalych pasm."""
+    """VRT wraps only band 1 - a multi-band source is an error, not a silent
+    loss of the remaining bands."""
     path = tmp_path / "rgb.tif"
     with rasterio.open(
         path,
@@ -514,7 +515,7 @@ def test_wrapping_rejects_multiband_source(tmp_path):
     ids=["zadany_typ", "typ_zrodla"],
 )
 def test_wrapping_rejects_type_without_vrt_name(tmp_path, source_dtype, dtype):
-    """Typ spoza mapy typow VRT: ValidationError, nie KeyError."""
+    """A type outside the VRT type map: ValidationError, not KeyError."""
     path = tmp_path / "t.tif"
     with rasterio.open(
         path,
@@ -541,13 +542,13 @@ def test_wrapping_rejects_type_without_vrt_name(tmp_path, source_dtype, dtype):
 
 
 def test_wrapping_keeps_each_source_own_nodata(tmp_path):
-    """VRT to widok 1:1 — NoDataValue = nodata ZRODLA, nie mozaiki.
+    """VRT is a 1:1 view - NoDataValue = the SOURCE nodata, not the mosaic's.
 
-    SimpleSource kopiuje piksele doslownie: przy nodata mozaiki innym niz
-    nodata zrodla -9999 pierwszego arkusza przestaloby byc maskowane i w
-    zakladce (sasiednie arkusze GUGiK zachodza na siebie, fakt 1) przykryloby
-    wazne dane drugiego. Owijanie nie moze zmienic wyniku wzgledem mozaiki
-    bez owijania.
+    SimpleSource copies pixels literally: with a mosaic nodata different from
+    the source nodata, -9999 of the first sheet would no longer be masked and in
+    the overlap (neighbouring GUGiK sheets overlap, fact 1) would cover valid
+    data of the second. Wrapping must not change the result relative to a mosaic
+    without wrapping.
     """
     a = _write_asc_text(
         tmp_path / "a.asc", 0.5, 0.5, [["1.5", "1.5", "-9999", "-9999"]] * 4
@@ -562,18 +563,18 @@ def test_wrapping_keeps_each_source_own_nodata(tmp_path):
     with rasterio.open(plain) as p, rasterio.open(wrapped) as w:
         expected = p.read(1)
         data = w.read(1)
-        assert w.nodata == -32768.0  # nodata WYNIKU nadal ustawia merge
+        assert w.nodata == -32768.0  # the RESULT nodata is still set by merge
     assert expected[0].tolist() == [1.5, 1.5, 2.5, 2.5, 2.5, 2.5]
     np.testing.assert_array_equal(data, expected)
 
 
 @pytest.mark.parametrize(("cols", "rows"), [(200, 100), (460, 50)])
 def test_wrapping_writes_short_wide_first_source(tmp_path, cols, rows):
-    """Profil wyniku ``merge`` bierze z PIERWSZEGO zrodla, czyli z VRT: bloki
-    min(128, szerokosc) x min(128, wysokosc), tiled dla zrodla szerszego niz
-    128 px. Wysokosc < 128 niepodzielna przez 16 konczyla zapis GTiff
-    ``RasterBlockError`` — np. arkusz przyciety na granicy albo wybrzezu
-    (ksztaltow arkuszy 1 m i przygranicznych offline nie znamy)."""
+    """The ``merge`` result profile is taken from the FIRST source, i.e. the VRT:
+    blocks of min(128, width) x min(128, height), tiled for a source wider than
+    128 px. A height < 128 not divisible by 16 ended the GTiff write with
+    ``RasterBlockError`` - e.g. a sheet cut at a border or coast (we do not know
+    the shapes of 1 m and border sheets offline)."""
     a = _write_asc_text(tmp_path / "a.asc", 0.5, 0.5, [["1.5"] * cols] * rows)
     out = mosaic_and_crop(
         [a],
@@ -589,7 +590,8 @@ def test_wrapping_writes_short_wide_first_source(tmp_path, cols, rows):
 
 
 def test_wrapping_keeps_explicit_tiling_from_dst_kwds(tmp_path):
-    """Domyslny zapis bez kafli nie nadpisuje jawnych kafli wolajacego."""
+    """The default write without tiles does not overwrite the caller's explicit
+    tiles."""
     a = _write_asc_text(tmp_path / "a.asc", 0.5, 0.5, [["1.5"] * 200] * 100)
     out = mosaic_and_crop(
         [a],

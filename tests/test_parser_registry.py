@@ -19,7 +19,7 @@ class TestDetection:
         assert detect_system("N-33-131-B-a-1-1-4").id == "pl1992"
 
     def test_systems_order_fallback_last(self):
-        """Kolejnosc = priorytet detekcji; pl1992 (detect zawsze True) ostatni."""
+        """Order = detection priority; pl1992 (detect always True) is last."""
         ids = [s.id for s in parser_registry.SYSTEMS]
         assert ids == ["pl2000", "cz_tm33", "cz_sm5", "pl1992"]
         assert all(isinstance(s, SheetSystem) for s in parser_registry.SYSTEMS)
@@ -99,7 +99,7 @@ class TestCzechSystems:
         assert sheets.CZ_SM5_PATTERN is parser_registry.CZ_SM5_PATTERN
 
     def test_no_pattern_collisions(self):
-        """Wzorce CZ nie przechwytuja godel PL i odwrotnie."""
+        """CZ patterns do not capture PL sheet codes and vice versa."""
         assert detect_system("30_5550").id == "pl1992"  # za krotkie na TM33
         assert detect_system("CTES9").id == "pl1992"  # za krotkie na SM5
         assert detect_system("CTES961").id == "pl1992"  # za dlugie na SM5
