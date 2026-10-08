@@ -6,7 +6,7 @@ Kartograf — narzedzie do pobierania danych przestrzennych: NMT z GUGiK (Polska
 
 Glowne funkcjonalnosci:
 - **NMT (PL)** — pobieranie Numerycznego Modelu Terenu z GUGiK (1m i 5m)
-- **NMT (CZ)** — DMR 5G/4G z CUZK (2m i 5m), godlo TM33/SM5 lub bbox, `--country {pl,cz,auto}` (etap 1, v0.7.0-dev)
+- **NMT (CZ)** — DMR 5G/4G z CUZK (2m i 5m), godlo TM33/SM5 lub bbox, `--country {pl,cz,auto}` (etap 1)
 - **NMPT** — Numeryczny Model Pokrycia Terenu / DSM z GUGiK (1m)
 - **Ortofotomapa** — zdjecia lotnicze Standard Resolution (25cm, TIF) z GUGiK
 - **LAZ** — chmury punktów LIDAR (dane pomiarowe ALS, .laz) z GUGiK przez WFS
@@ -31,7 +31,7 @@ Zmienne srodowiskowe (opcjonalne):
   Kolejnosc zrodel w proxy: `CLMS_CREDENTIALS`, potem (tylko macOS) Keychain
   (service `clms-token`). Bez zadnego z nich `AuthProxyClient.is_available()`
   na non-macOS zwraca False bez uruchamiania podprocesu.
-- `KARTOGRAF_DEBUG=1` — pelny traceback zamiast skroconego `Error: ...` z CLI
+- `KARTOGRAF_DEBUG=1` (dowolna niepusta wartosc) — pelny traceback zamiast skroconego `Error: ...` z CLI
   (dla kazdego wyjatku docierajacego do bariery `main`, takze `KartografError`)
 
 Bez credentials CLMS: CORINE automatycznie pobiera podglad PNG przez WMS (fallback,
@@ -81,10 +81,10 @@ serwerze sieciowym `<katalog-danych>` — NIE w repo i NIE w `/tmp`.
 ```
 kartograf/
 ├── __init__.py          # Public API exports
-├── exceptions.py        # KartografError, ValidationError, GridMismatchError(ValidationError), DownloadError, NoCoverageError(DownloadError)
+├── exceptions.py        # KartografError, ParseError, ValidationError, GridMismatchError(ValidationError), DownloadError(.status_code), NoCoverageError(DownloadError, .hints)
 ├── core/                # Logika bazowa
 │   ├── bbox.py             # BBox, validate_bbox, transform_bbox (gesta obwiednia densify 21, cache transformerow, transformer= duck typing), is_czech_crs
-│   ├── sheet_parser.py     # SheetParser — parser godel map topograficznych (BBox re-eksportowany z core/bbox.py)
+│   ├── sheet_parser.py     # SheetParser — parser godel map topograficznych, find_sheets_for_bbox (BBox re-eksportowany z core/bbox.py)
 │   ├── parser_2000.py      # Parser2000 — parser godal PL-2000, find_sheets_2000_for_bbox
 │   ├── parser_tm33.py      # ParserTM33 — obliczalna siatka kafli CZ 2x2 km (EPSG:3045), wzor: Parser2000
 │   ├── parser_registry.py  # Rejestr systemow godel (literal SYSTEMS: pl2000, cz_tm33, cz_sm5, fallback pl1992; detect_system/path_parts ze strip(); wzorce CZ_TM33_PATTERN/CZ_SM5_PATTERN); SheetParser/FileStorage delegowane
@@ -95,6 +95,7 @@ kartograf/
 │   ├── registry.py      # Rejestr PL/CZ/EU/GLOBAL — get_source, sources_for, get_country, all_countries, vertical_crs_code, resolve_vertical_crs (rodzina->realizacja)
 │   └── sidecar.py       # ResultMetadata, build_metadata (capability=, nodata=), write_sidecar (<plik>.meta.json), read_asc_nodata
 ├── transform/           # Transformacje CRS i rastrow
+│   ├── bbox.py          # envelope_from_2180 — obwiednia bboxa EPSG:2180 w innym CRS (densify 21; CORINE, SoilGrids)
 │   ├── crs.py           # PinnedTransform, pin datum EPSG:1622/1623 dla S-JTSK, bez ballpark
 │   └── raster.py        # warp_to_grid — pojedyncza mozaika lub lista arkuszy (W1)
 ├── transport/           # Wspolny transport pobierania
@@ -103,14 +104,15 @@ kartograf/
 ├── providers/           # Providery danych (abstrakcje nad API)
 │   ├── base.py          # DataSourceProvider (ABC), BaseProvider (NMT), LandCoverProvider (pokrycie terenu)
 │   ├── pl/               # Providery polskie (GUGiK, BDOT10k) — landcover_base.py USUNIETY (patrz base.py)
+│   │   ├── wcs.py           # GugikWcsMixin — wspolny URL WCS 2.0.1 GetCoverage (GugikProvider, GugikOrtoProvider)
 │   │   ├── gugik.py         # GugikProvider — NMT z GUGiK (WCS + OpenData)
 │   │   ├── gugik_nmpt.py    # GugikNmptProvider — NMPT/DSM z GUGiK (dziedziczy z GugikProvider)
 │   │   ├── gugik_orto.py    # GugikOrtoProvider — Ortofotomapa z GUGiK (BaseProvider)
-│   │   ├── gugik_laz.py     # GugikLazProvider — chmury punktów LAZ z GUGiK (WFS, area-based); select_tiles/select_newest_cover
-│   │   ├── skorowidz.py     # Rekordy GetFeatureInfo, wybor najnowszego zgodnego z zadaniem, source_info
+│   │   ├── gugik_laz.py     # GugikLazProvider — chmury punktów LAZ z GUGiK (WFS, area-based); select_tiles/select_newest_cover/select_all_intersecting (--campaigns all)
+│   │   ├── skorowidz.py     # Rekordy GetFeatureInfo, SkorowidzLayersMixin (resolve_campaigns, download_record, record_source), select_campaign_records, layer_upper_year, coverage_hints/no_coverage_error, source_info
 │   │   ├── bdot10k.py       # Bdot10kProvider — BDOT10k z GUGiK
 │   │   └── __init__.py      # create_nmt_provider() — fabryka, jedno miejsce polskich domyslow NMT
-│   ├── cuzk/             # Providery czeskie (CUZK) — etap 1 (v0.7.0-dev)
+│   ├── cuzk/             # Providery czeskie (CUZK) — etap 1
 │   │   ├── client.py        # CuzkClient — silnik sterowany deskryptorem (ArcGIS REST: query/export_image + pliki openzu)
 │   │   ├── sheets.py         # SheetIndex/SheetInfo — indeks arkuszy SM5/TM33 (KladyMapovychListu), filtr nadmiarowego wyboru
 │   │   ├── dmr.py            # CuzkDmrProvider — DMR 5G/4G, transformacja pionowa Bpv->EVRF2007 opcjonalna
@@ -118,8 +120,8 @@ kartograf/
 │   ├── corine.py        # CorineProvider — CORINE z Copernicus (CLMS API + WMS)
 │   └── soilgrids.py     # SoilGridsProvider — dane glebowe z ISRIC (WCS)
 ├── cache/               # Cache metadanych
-│   └── metadata.py      # MetadataCache — SQLite WAL; record_cache (7d, pozytywny/negatywny), campaigns_cache (7d, lista kampanii arkusza), sheet_cache (30d), thread-safe
-├── download/            # Zarzadzanie pobieraniem NMT/NMPT/Orto
+│   └── metadata.py      # MetadataCache — SQLite WAL; record_cache (7d, pozytywny/negatywny), campaigns_cache (7d, lista kampanii arkusza), teryt_cache (7d, BDOT10k), sheet_cache (30d), thread-safe
+├── download/            # Pobieranie NMT/NMPT/Orto/LAZ: arkusze, kampanie, wycinek PL
 │   ├── campaigns.py     # Kampanie GUGiK (ADR-030): CampaignRef (<data>_<id>), format z rekordu, verify_file_format, validate_campaign_args
 │   ├── links.py         # Dowiazanie sciezki standardowej do najnowszej kampanii (hardlink -> kopia, bez symlinkow, nigdy wstecz), sidecar standardowy
 │   ├── cutout.py        # Wycinek PL --target-crs jako API (ADR-027): R5, GridMismatchError/W1, all_nodata, sheet_sources
@@ -186,7 +188,7 @@ komendy ponizej podaja `-m "not live"` jawnie.
 .venv/bin/python -m pytest tests/ -m "not live" --cov=kartograf --cov-report=html
 
 # Testy sieciowe (live)
-.venv/bin/python -m pytest tests/ -m live   # 16 testow sieciowych — tylko swiadomie
+.venv/bin/python -m pytest tests/ -m live   # testy sieciowe — tylko swiadomie
 
 # Linter
 .venv/bin/python -m ruff check kartograf/ tests/
@@ -223,7 +225,7 @@ kartograf download --geometry area.gpkg --layer catchments
 kartograf parse 6.179.12.20
 kartograf download 6.179.12.20
 kartograf download --bbox 6500000,5895000,6508000,5900000 --bbox-crs EPSG:2177 --system 2000
-kartograf download 302_5550 --country cz                      # DMR 5G (TM33), 2m, Bpv (kafel ~93 % nodata — Niemcy)
+kartograf download 302_5550 --country cz                      # DMR 5G (TM33), 2m, Bpv (kafel w wiekszosci nodata — Niemcy)
 kartograf download CTES96 --resolution 5m                     # DMR 4G (SM5), kraj auto z godla
 # bbox przygraniczny --country auto -> osobne pliki PL i CZ, wspolny extra.parent_request
 # (bez --vertical-crs: PL w EVRF2007, CZ w Bpv)
@@ -416,7 +418,7 @@ kartograf cache path
   `FileStorage.list_files()` domyslnie pomija `kampanie/`
   (`campaigns=True` = tylko `kampanie/`). Bez skanowania
   `kampanie/` w 0.7.0.
-  Awaria skorowidza (I-1): `newest` (bez `--min-year`, bez `--force`) przy
+  Awaria skorowidza (I-1, errata 5 ADR-030): `newest` (bez `--min-year`, bez `--force`) przy
   bledzie TRANSPORTU `resolve_campaigns` (siec, 429, 5xx; nie
   `NoCoverageError`, nie inne 4xx/raport OGC) i istniejacej lokalnej
   kampanii (`linked_campaign(std)`) = arkusz pominiety z lokalnej kampanii,
@@ -428,7 +430,11 @@ kartograf cache path
   Wycinek `--target-crs` + (`--campaigns all` lub `--min-year`) = `Error:`
   kod 1 przed siecia; wycinek zawsze `newest`, czyta arkusze przez
   dowiazania (`run_pl_cutout` nie przyjmuje `campaigns`) i jest pomijany
-  po samym istnieniu pliku wyniku.
+  po samym istnieniu pliku wyniku. I-1 w wycinku: `PlCutoutResult.unverified`
+  + sidecar `extra.unverified_sheets` (`{godlo: blad}`), CLI `Warning:
+  skorowidz GUGiK niedostepny — dla N arkuszy uzyto lokalnej kampanii bez
+  sprawdzenia nowszej (...)`; skip odtwarza z sidecara (sufiks
+  ` (z sidecara istniejacego wycinka)`).
   Opcje kampanii a CZ (jedna regula, `_reject_campaign_opts_without_pl`):
   zadanie bez PL (godlo CZ takze pod `auto`, obszar/geometria z jawnym
   `--country cz`, obszar w calosci czeski pod `auto`) = `Error: CZ (CUZK)
@@ -449,7 +455,7 @@ kartograf cache path
   pomijany, gdy jego czesc wspolna z obszarem pokrywaja wybrane juz kafle
   (ramy `msGeometry` w EPSG:2180, osie N,E; kazda rama +1 m tolerancji,
   `COVERAGE_TOLERANCE_M`). Tak PL-1992 i PL-2000 tego miejsca sie nie
-  dubluja (w2: tylko 2025/PL-1992, bez 2022/PL-2000:S7). Kafel wnoszacy
+  dubluja. Kafel wnoszacy
   niepokryty kawalek zostaje (caly). `--year` = tylko ten rok, dedup
   pokryciowy w roku. Pokrywa tylko kafel `czy_ark_wypelniony` != `NIE`,
   rama albo tym samym godlem — nigdy obwiednia; kafel z rama poza obszarem
@@ -476,8 +482,11 @@ kartograf cache path
   1 m/5 m oraz RGB orto sa filtrowane twardo. W pierwszej pasujacej
   warstwie wygrywa najnowsza `aktualnosc`, potem `dt_pzgik`, URL,
   niezaleznie od flagi pelnego arkusza. Brak zgodnego rekordu to
-  `NoCoverageError` z podpowiedzia, dla PL-2000 1:10000 z dostepnymi
-  potomkami: `--scale 1:2000` (bez cichego fallbacku PL-1992).
+  `NoCoverageError` z podpowiedzia (`.hints`), dla PL-2000 1:10000 z dostepnymi
+  potomkami: `--scale 1:2000` (bez cichego fallbacku PL-1992). Tor listy CLI
+  drukuje podpowiedzi jako `Info: <hint>` (stderr, mimo `-q`), bez doslownych
+  duplikatow, max `MAX_HINT_LINES` linii + `Info: ... i N innych podpowiedzi`
+  (pelna lista: `DownloadResult.no_coverage_hints`).
   `extra.source` arkusza i `extra.sheet_sources` wycinka podaja pochodzenie.
   Rekord niepelnego arkusza (`full_sheet: false`) nadal wygrywa, gdy jest
   najnowszy (ADR-028), ale CLI drukuje `Warning:` (tor godla, listy
@@ -485,9 +494,8 @@ kartograf cache path
   `extra.sheet_sources[].full_sheet` / `PlCutoutResult.partial_sheets` to
   zapisuja; pusty wycinek z takich arkuszy ostrzega o niepelnej kampanii,
   nie o braku danych GUGiK (E13).
-  GUGiK publikuje czesc arkuszy PL-2000 (zaobserwowane: strefa 7, np.
-  `7.125.11.19`, `7.173.21.01`) we wspolrzednych EPSG:2180 z niecalkowitym
-  `cellsize` (np. 0,99937 m). Sidecar zapisuje faktyczny uklad PLIKU
+  GUGiK publikuje czesc arkuszy PL-2000 (zaobserwowane w strefie 7)
+  we wspolrzednych EPSG:2180 z niecalkowitym `cellsize`. Sidecar zapisuje faktyczny uklad PLIKU
   (`horizontal_crs: EPSG:2180`), deklaracje rekordu w `extra.source.uklad`
   (`PL-2000:S7`), a plik lezy w segmencie wg godla (`nmt/pl_2000_...`,
   ADR-026). CLI drukuje `Warning: N arkuszy GUGiK opublikowano w innym
@@ -527,8 +535,8 @@ kartograf cache path
   nieudany zapis pozostawia poprzedni plik. Kontrola wolnego miejsca
   przed siecia wykorzystuje wstepnie policzone brakujace arkusze.
   Pominiety wycinek zwraca `PlCutoutResult(skipped=True)` z
-  `missing_sheets`/`off_grid_sheets` odczytanymi z sidecara; CLI ponawia
-  ostrzezenie o brakach. `--force` pobiera ponownie takze arkusze;
+  `missing_sheets`/`off_grid_sheets`/`partial_sheets`/`unverified`/`all_nodata`
+  odczytanymi z sidecara (`skipped_pl_cutout`); CLI ponawia ostrzezenia. `--force` pobiera ponownie takze arkusze;
   tanszy rebuild: usun sam wycinek. Reuzyte arkusze dopisuja
   `extra.parent_requests` bez utraty oryginalnego `parent_request`.
 - **Lista arkuszy PL** (`--bbox`/`--geometry` bez `--target-crs`, takze
