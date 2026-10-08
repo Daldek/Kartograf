@@ -78,7 +78,7 @@ class NoCoverageError(DownloadError):
 
     Raised when every index (skorowidz) layer answered and none of them
     contains the sheet — a state of the data, not a transport failure:
-    retrying will not help. Raster builders (PL cutout, ADR-027 addendum
+    retrying will not help. Raster builders (PL cutout, ADR-027 errata 1,
     2026-09-28) treat it as nodata; every other DownloadError stays fatal.
 
     Attributes
