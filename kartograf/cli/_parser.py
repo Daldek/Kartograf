@@ -210,8 +210,11 @@ def create_parser() -> argparse.ArgumentParser:
     download_parser.add_argument(
         "--scale",
         metavar="SCALE",
-        help="Download all descendants to target scale (e.g., 1:10000; "
-        "etykiety Kartografu: godlo 7-czlonowe = 1:10000, u GUGiK modul 1:5000)",
+        help="Skala docelowa arkuszy PL (domyslnie 1:10000): godlo grubsze "
+        "rozwijane do potomkow w tej skali, --bbox/--geometry dzielone na "
+        "arkusze tej skali. Zbedna dla PL-1992; dla PL-2000 zwykle 1:2000 "
+        "(skala, w ktorej GUGiK publikuje arkusze; podaje ja podpowiedz "
+        "przy braku pokrycia). Szczegoly: docs/USAGE.md 1.6",
     )
     download_parser.add_argument(
         "--output",
@@ -246,7 +249,9 @@ def create_parser() -> argparse.ArgumentParser:
         "-r",
         choices=["1m", "5m", "2m"],
         default=None,
-        help="Rozdzielczosc siatki: PL 1m/5m (default 1m), CZ 2m/5m (default 2m)",
+        help="Rozdzielczosc siatki: PL 1m/5m (default 1m); CZ: godlo SM5 "
+        "tylko 5m (wynika z arkusza), kafel TM33 i --bbox/--geometry 2m "
+        "(default) lub 5m",
     )
     download_parser.add_argument(
         "--product",

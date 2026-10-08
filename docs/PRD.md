@@ -83,7 +83,9 @@ Pobieranie danych wysokościowych NMT z GUGiK w rozdzielczościach 1m i 5m
 #### Requirements
 - Godło PL-1992 (`SheetParser`, skale 1:1M–1:10k) i PL-2000 (`Parser2000`,
   strefy EPSG:2176–2179); godło grubsze niż 1:10000 rozwijane do arkuszy
-  1:10000 (`--scale` — dowolna skala docelowa).
+  1:10000 bez dodatkowych flag; `--scale` zmienia skalę docelową — potrzebne,
+  gdy GUGiK publikuje arkusze w innej skali (PL-2000, zwykle 1:2000;
+  USAGE 1.6).
 - `--bbox` / `--geometry` (SHP/GPKG) bez `--target-crs` rozwija obszar na
   listę arkuszy OpenData (`--system {1992,2000}`); stykające się krawędzie
   nie są przecięciem.
@@ -144,7 +146,8 @@ path = manager_5m.download_sheet("N-34-130-D-d-2-4")
 kartograf parse N-34-130-D-d-2-4
 kartograf parse N-34-130-D --hierarchy
 kartograf download N-34-130-D-d-2-4
-kartograf download N-34-130-D --scale 1:10000
+kartograf download N-34-130-D              # godło grubsze -> arkusze 1:10000 (bez --scale)
+kartograf download 7.171.21 --scale 1:2000  # PL-2000: skala arkuszy GUGiK (USAGE 1.6)
 kartograf download --bbox 771000,509000,772000,510000
 kartograf download --bbox 19.93,50.05,19.95,50.07 --bbox-crs EPSG:4326
 kartograf download N-34-130-D --resolution 5m
@@ -154,7 +157,7 @@ kartograf download N-34-130-D-d-2-4 --product laz
 kartograf download --bbox 771000,509000,772000,510000 --product orto
 kartograf download --geometry area.shp
 kartograf download --geometry area.gpkg --layer catchments
-kartograf download --bbox 6500000,5895000,6508000,5900000 --bbox-crs EPSG:2177 --system 2000
+kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --system 2000 --scale 1:2000
 ```
 
 ---
@@ -563,7 +566,7 @@ provider_evrf.download_bbox(bbox, Path("./area.tif"))      # wycinek exportImage
 #### CLI Commands
 ```bash
 kartograf download 302_5550 --country cz                       # DMR 5G (TM33), 2m, Bpv
-kartograf download CTES96 --resolution 5m                      # DMR 4G (SM5), kraj z godła
+kartograf download CTES96                                      # DMR 4G (SM5, tylko 5m), kraj z godła
 kartograf download 302_5550 --country cz --vertical-crs EVRF2007
 kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto
 kartograf download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --target-crs EPSG:2180
