@@ -1,7 +1,7 @@
 """
 Core module for Kartograf.
 
-This module contains the core functionality for parsing map sheet identifiers (godła)
+This module contains the core functionality for parsing map sheet codes
 and generating sheet hierarchies.
 """
 
