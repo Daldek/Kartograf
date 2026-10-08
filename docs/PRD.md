@@ -1,7 +1,7 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 4.0
+**Wersja:** 4.1
 **Data:** 2026-10-08
 **Product Owner:** Piotr
 **Status:** Wydanie v0.7.0 (2026-10-08)
@@ -11,7 +11,8 @@
 > kody wyjścia, przypadki brzegowe) — `docs/SCOPE.md` i
 > `docs/ARCHITECTURE.md`; uzasadnienia decyzji — `docs/DECISIONS.md`
 > (ADR-022..ADR-030); historia zmian — `docs/CHANGELOG.md`. Pełna lista
-> opcji CLI: `kartograf <komenda> --help`.
+> opcji CLI: `kartograf <komenda> --help`. Wymagania docelowe wersji
+> 1.0.0 — sekcja 8 (roadmapa i kolejność podprojektów: `docs/SCOPE.md` 3.3).
 
 ---
 
@@ -43,6 +44,13 @@ Kartograf to narzędzie CLI + biblioteka Python oferujące:
 | **Deweloper Hydrograf/Hydrolog** | Dane NMT, gleba, HSG dla obliczeń | Python API |
 | **Specjalista GIS** | Dane topograficzne, pokrycie terenu | CLI |
 | **Hydrolog** | HSG dla metody SCS-CN | CLI + Python API |
+
+Docelowo (v1.0.0, sekcja 8) dochodzą:
+
+| Persona | Potrzeby | Użycie |
+|---------|----------|--------|
+| **Użytkownik QGIS** | Dane GUGiK dla obszaru z mapy albo warstwy, gotowe do analizy | Wtyczka QGIS |
+| **Zespół projektowy / firma** | Wspólny magazyn danych, ponowne użycie w kolejnych projektach, zapis wersji danych użytych w projekcie | GUI webowe + CLI |
 
 ---
 
@@ -928,8 +936,33 @@ mypy >= 1.13           # Type checking
 - [ ] Wycinek PL `--target-crs` z arkuszy PL-2000
 - [ ] Składanie kampanii w jedną powierzchnię
 
-### Version 1.0+
-- [ ] GUI interface
+### Version 1.0.0 — roadmapa (kolejność i zasady: `docs/SCOPE.md` 3.3)
+
+Każdy punkt to osobny podprojekt z własnym specem i ADR; wymagania niżej
+opisują wynik, nie rozwiązanie.
+
+- [ ] **Magazyn wersjonowany:** żaden produkt nie nadpisuje po cichu
+      wcześniej pobranych danych; każda wersja pliku pozostaje dostępna
+      pod niezmienną ścieżką, a ścieżka standardowa wskazuje najnowszą
+      lokalną wersję (dziś tylko kampanie NMT/NMPT/orto PL, ADR-030).
+- [ ] **Manifest projektu:** projekt zapisuje, których konkretnie plików
+      i wersji użył (z sumami kontrolnymi); z CLI można pobrać dane do
+      projektu, sprawdzić ich integralność i dowiedzieć się, czy u źródła
+      są nowsze dane. Dane już obecne w magazynie nie są pobierane ponownie.
+- [ ] **Komplet publicznych danych GUGiK:** wszystkie produkty dostępne
+      publicznie i bez logowania, o ile pozwalają na to usługi
+      (inwentaryzacja w specu podprojektu).
+- [ ] **Gotowe dane:** dla każdego produktu wynik dopasowany do obszaru
+      zadania (wycinek, scalenie, reprojekcja tam, gdzie mają sens)
+      z sidecarem pochodzenia.
+- [ ] **Wtyczka QGIS:** pobieranie z poziomu QGIS przez publiczne API
+      biblioteki, bez własnej logiki pobierania.
+- [ ] **GUI webowe:** lokalny manager danych — przeglądarka magazynu
+      i manifestów projektów z informacją o nowszych danych; publikacja
+      po przetestowaniu lokalnym.
+- [ ] **Wyłącznie angielskie identyfikatory** w API, CLI i sidecarze (ADR-031).
+
+### Później (poza v1.0.0)
 - [ ] PostGIS integration
 - [ ] REST API server
 
@@ -957,6 +990,6 @@ HYDROGRAF (główna aplikacja)
 
 ---
 
-**Wersja dokumentu:** 4.0
+**Wersja dokumentu:** 4.1
 **Data ostatniej aktualizacji:** 2026-10-08
 **Status:** Wydanie v0.7.0 (2026-10-08)

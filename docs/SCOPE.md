@@ -1,7 +1,7 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.14
+**Wersja:** 3.15
 **Data:** 2026-10-08
 **Status:** Wydanie v0.7.0 (2026-10-08)
 
@@ -393,7 +393,7 @@ from kartograf import (
 - Słowacja (SK) — DMR 5.0, ZBGIS (uwaga: WCS zwraca wysokości elipsoidalne)
 
 # Wersja 1.0+:
-- GUI interface
+- GUI: wtyczka QGIS i GUI webowe — roadmapa w sekcji 3.3
 - Integracja z PostGIS
 - REST API server
 ```
@@ -522,6 +522,63 @@ from kartograf import (
 - extra.parent_request.countries = kraje PRÓBOWANE, nie pobrane (przy
   awarii jednego kraju w trybie auto sidecary drugiego nadal niosą oba kody)
 ```
+
+---
+
+### 3.3 Roadmapa do v1.0.0
+
+Kierunek zatwierdzony 2026-10-08. Każdy podprojekt ma własny spec, plan
+i wydanie 0.x; szczegóły rozstrzygają jego ADR, nie ta sekcja.
+
+**Cel v1.0.0:**
+
+1. **Komplet publicznych danych GUGiK** — wszystkie produkty, które GUGiK
+   udostępnia publicznie i bez logowania, o ile pozwalają na to usługi.
+   Pełny katalog jest warunkiem wejścia, nie wyróżnikiem.
+2. **Gotowe dane jako wyróżnik** — dla każdego produktu wynik dopasowany do
+   obszaru zadania (wycinek, scalenie, reprojekcja tam, gdzie mają sens)
+   z sidecarem pochodzenia, a nie tylko surowe arkusze i paczki.
+3. **Manager danych** — wspólny magazyn zespołu, z którego kolejne projekty
+   biorą dane zamiast pobierać je ponownie, z zapisem, jakich wersji danych
+   użył każdy projekt.
+4. **Wtyczka QGIS** i **GUI webowe** jako nakładki na bibliotekę.
+5. **Wyłącznie angielskie identyfikatory** w API, CLI i sidecarze (ADR-031).
+
+**Odbiorcy nakładek:** najpierw użytkownik i jego zespół (instalacja
+lokalna, GUI webowe uruchamiane na `localhost`), po przetestowaniu —
+publikacja (repozytorium wtyczek QGIS, publiczna instancja GUI webowego).
+
+**Zasady:**
+
+- Nakładki (QGIS, web) wołają wyłącznie publiczne API biblioteki
+  (`kartograf/__init__.py`); nie mają własnej logiki pobierania ani obróbki.
+- Magazyn nigdy nie nadpisuje danych po cichu: każdy produkt ma niezmienne
+  wersje, tak jak kampanie NMT/NMPT/orto PL (ADR-030); ścieżka standardowa
+  wskazuje najnowszą lokalną wersję.
+- Sidecar pozostaje niezmiennym opisem pochodzenia pliku. Powiązanie
+  projektu z danymi zapisuje manifest projektu (projekt → dane: konkretne
+  pliki, wersje i sumy kontrolne); informacja „które projekty używają tego
+  pliku” to indeks budowany z manifestów, nie wpis w sidecarze.
+- Magazyn może leżeć na udziale sieciowym bez blokad zakresów bajtów, więc
+  wspólny katalog nie może być bazą SQLite na udziale; źródłem prawdy są
+  sidecary i manifesty, indeks i cache metadanych są lokalne.
+- Manifest projektu jest nowym formatem, więc od początku używa angielskich
+  kluczy (bez migracji ADR-031).
+
+**Podprojekty i kolejność:**
+
+| # | Podprojekt | Zakres | Zależy od |
+|---|------------|--------|-----------|
+| 1 | Magazyn wersjonowany | niezmienne wersje dla wszystkich produktów, które dziś ich nie mają (wszystko poza kampaniami NMT/NMPT/orto PL: m.in. BDOT10k, LAZ, CORINE, SoilGrids, HSG, CZ, wycinki `bbox/`) | — |
+| 2 | Manifest projektu | plik manifestu w katalogu projektu; CLI: pobranie do projektu, weryfikacja (sumy kontrolne), wykrywanie nowszych danych u źródła | 1 |
+| 3 | Katalog GUGiK i gotowe dane | strumień kolejnych produktów (inwentaryzacja usług w specu podprojektu, m.in. PRG, PRNG, EGiB w zakresie publicznym, BDOO, modele 3D, zdjęcia lotnicze, obrazy intensywności, archiwalny BDOT10k); każdy nowy produkt od razu wersjonowany, z wycinkiem i sidecarem; obróbka także dla produktów istniejących | 1 |
+| 4 | Wtyczka QGIS | pobieranie z poziomu QGIS dla obszaru z mapy albo warstwy; repozytorium: to albo osobne, do decyzji w specu | 2, częściowo 3 |
+| 5 | GUI webowe | lokalny manager danych: przeglądarka magazynu i manifestów projektów, informacja o nowszych danych | 2 |
+| — | ADR-031 (angielskie identyfikatory) | aliasy, potem usunięcie polskich nazw | równolegle, przed v1.0.0 |
+| — | Publikacja nakładek | po przetestowaniu 4 i 5 lokalnie | 4, 5 |
+
+Podprojekt 3 to strumień, nie jeden blok: produkty dochodzą w kolejnych
+wydaniach i mogą iść równolegle z 2, 4 i 5.
 
 ---
 
@@ -686,9 +743,10 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-09-30 | 3.12 | Aktualizacja po fali naprawczej: filtr rekordow GUGiK i cache, R5 w liscie/hierarchii, W1/blad fazy w 2180, pin EPSG:1622/1623, budzet 4 Mpx, osie LAZ |
 | 2026-10-07 | 3.13 | Kampanie GUGiK (ADR-030): sekcja 2.12, uklad `kampanie/` z dowiazaniem w 2.11, odrzucone strategie w 3.1 |
 | 2026-10-08 | 3.14 | Przegląd dokumentacji: errata 5 ADR-030 (lokalna kampania przy awarii skorowidza), CZ i --min-year x --year w 2.12, sidecary (HSG, zasada ogólna), GPKG BDOT10k składany lokalnie, pełna lista eksportów w 2.10, drzewo modułów i tabele cache w 4.1, DLR w 5, bez wartości ulotnych w 6.2 i historii |
+| 2026-10-08 | 3.15 | Roadmapa do v1.0.0 (sekcja 3.3): komplet publicznych danych GUGiK, gotowe dane, manager danych (magazyn wersjonowany, manifest projektu), wtyczka QGIS, GUI webowe |
 
 ---
 
-**Wersja dokumentu:** 3.14
+**Wersja dokumentu:** 3.15
 **Data ostatniej aktualizacji:** 2026-10-08
 **Status:** Wydanie v0.7.0 (2026-10-08)
