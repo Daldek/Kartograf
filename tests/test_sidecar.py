@@ -33,7 +33,7 @@ class TestPlSheetHorizontalCrs:
         _asc(asc, 6_500_000.0)
         meta = build_metadata(
             get_source("pl.gugik.nmt_1m"),
-            request={"godlo": "6.179.12.20"},
+            request={"sheet": "6.179.12.20"},
             vertical_crs="EVRF2007",
             data_path=asc,
         )
@@ -50,7 +50,7 @@ class TestPlSheetHorizontalCrs:
         ],
     )
     def test_without_file_zone_comes_from_godlo(self, godlo, expected):
-        meta = build_metadata(get_source("pl.gugik.orto"), request={"godlo": godlo})
+        meta = build_metadata(get_source("pl.gugik.orto"), request={"sheet": godlo})
         assert meta.horizontal_crs == expected
         assert pl_sheet_horizontal_crs(None, godlo) == expected
 
@@ -68,7 +68,7 @@ class TestPlSheetHorizontalCrs:
         with caplog.at_level(logging.WARNING):
             meta = build_metadata(
                 get_source("pl.gugik.nmt_1m"),
-                request={"godlo": "7.123.8"},
+                request={"sheet": "7.123.8"},
                 vertical_crs="EVRF2007",
                 data_path=asc,
             )
@@ -100,7 +100,7 @@ class TestPlSheetHorizontalCrs:
         with caplog.at_level(logging.WARNING):
             meta = build_metadata(
                 get_source("pl.gugik.orto"),
-                request={"godlo": "7.124.07.24"},
+                request={"sheet": "7.124.07.24"},
                 data_path=tif,
             )
         assert meta.horizontal_crs == "EPSG:2178"
@@ -116,7 +116,7 @@ class TestPlSheetHorizontalCrs:
         _asc(asc, 6_500_000.0)
         meta = build_metadata(
             get_source("pl.gugik.nmt_1m"),
-            request={"godlo": "6.179.12.20"},
+            request={"sheet": "6.179.12.20"},
             data_path=asc,
             horizontal_crs="EPSG:5514",
         )
@@ -128,7 +128,7 @@ class TestPlSheetHorizontalCrs:
             get_source("pl.gugik.laz"),
             request={"bbox": [530500, 382500, 531000, 383000], "bbox_crs": "EPSG:2180"},
             vertical_crs="EVRF2007",
-            extra={"godlo_kafla": "N-33-131-B-a-1-1-4"},
+            extra={"tile_sheet": "N-33-131-B-a-1-1-4"},
             horizontal_crs=horizontal_crs_for_uklad("PL-2000:S6"),
         )
         assert meta.horizontal_crs == "EPSG:2177"
@@ -136,12 +136,12 @@ class TestPlSheetHorizontalCrs:
     def test_non_sheet_pl_product_keeps_channel_crs(self):
         """BDOT10k po godle PL-2000 to GPKG w EPSG:2180 — godlo tylko wybiera obszar."""
         meta = build_metadata(
-            get_source("pl.gugik.bdot10k"), request={"godlo": "6.179.12"}
+            get_source("pl.gugik.bdot10k"), request={"sheet": "6.179.12"}
         )
         assert meta.horizontal_crs == "EPSG:2180"
 
     def test_cz_sheet_request_keeps_channel_crs(self):
-        meta = build_metadata(get_source("cz.cuzk.dmr4g"), request={"godlo": "CTES96"})
+        meta = build_metadata(get_source("cz.cuzk.dmr4g"), request={"sheet": "CTES96"})
         assert meta.horizontal_crs == "EPSG:5514"
 
 
@@ -154,7 +154,7 @@ class TestBuildMetadata:
         )
         meta = build_metadata(
             get_source("pl.gugik.nmt_1m"),
-            request={"godlo": "N-34-130-D-d-2-4"},
+            request={"sheet": "N-34-130-D-d-2-4"},
             vertical_crs="EVRF2007",
             data_path=asc,
         )
@@ -168,7 +168,7 @@ class TestBuildMetadata:
         assert meta.vertical_source == "native"
         assert meta.resolution == "1m"
         assert meta.nodata == -9999.0
-        assert meta.request == {"godlo": "N-34-130-D-d-2-4"}
+        assert meta.request == {"sheet": "N-34-130-D-d-2-4"}
         assert meta.license["id"] == "PL-PGiK-40a"
         assert meta.transform is None
         assert meta.downloaded_at.endswith("+00:00")
@@ -189,7 +189,7 @@ class TestBuildMetadata:
 
     def test_no_vertical_for_orto(self):
         meta = build_metadata(
-            get_source("pl.gugik.orto"), request={"godlo": "N-34-130-D-d-2-4"}
+            get_source("pl.gugik.orto"), request={"sheet": "N-34-130-D-d-2-4"}
         )
         assert meta.vertical_crs is None
         assert meta.resolution is None
@@ -199,16 +199,16 @@ class TestBuildMetadata:
             get_source("pl.gugik.laz"),
             request={"bbox": [1, 2, 3, 4], "bbox_crs": "EPSG:2180"},
             vertical_crs="KRON86",
-            extra={"godlo_kafla": "N-33-131-B-a-1-1-4", "rok": 2024},
+            extra={"tile_sheet": "N-33-131-B-a-1-1-4", "year": 2024},
         )
         assert meta.vertical_crs == "EPSG:9650"
-        assert meta.extra["rok"] == 2024
+        assert meta.extra["year"] == 2024
 
 
 class TestWriteSidecar:
     def _meta(self) -> ResultMetadata:
         return build_metadata(
-            get_source("pl.gugik.orto"), request={"godlo": "N-34-130-D-d-2-4"}
+            get_source("pl.gugik.orto"), request={"sheet": "N-34-130-D-d-2-4"}
         )
 
     def test_writes_full_filename_meta_json(self, tmp_path):
@@ -262,11 +262,11 @@ class TestBuildMetadataCapabilityAndNodata:
         # TestSelectChannelByCapability powyzej dla wlasciwego dowodu).
         d = get_source("cz.cuzk.dmr4g")
         meta_files = build_metadata(
-            d, request={"godlo": "CTES96"}, capability="sheet_files"
+            d, request={"sheet": "CTES96"}, capability="sheet_files"
         )
         assert meta_files.horizontal_crs == "EPSG:5514"
         meta_bbox = build_metadata(
-            d, request={"godlo": "CTES96"}, capability="bbox_raster"
+            d, request={"sheet": "CTES96"}, capability="bbox_raster"
         )
         # oba kanaly dmr4g maja 5514; rozroznia je transport — sprawdzamy,
         # ze selekcja nie uzyla heurystyki bbox (request godlo + capability bbox)
@@ -275,7 +275,7 @@ class TestBuildMetadataCapabilityAndNodata:
     def test_capability_unknown_raises_keyerror(self):
         d = get_source("pl.gugik.orto")
         with pytest.raises(KeyError):
-            build_metadata(d, request={"godlo": "X"}, capability="bbox_raster")
+            build_metadata(d, request={"sheet": "X"}, capability="bbox_raster")
 
     def test_nodata_param_takes_precedence_over_asc_sniff(self, tmp_path):
         asc = tmp_path / "x.asc"
@@ -285,7 +285,7 @@ class TestBuildMetadataCapabilityAndNodata:
         )
         meta = build_metadata(
             get_source("pl.gugik.nmt_1m"),
-            request={"godlo": "N-34-130-D-d-2-4"},
+            request={"sheet": "N-34-130-D-d-2-4"},
             data_path=asc,
             nodata=-8888.0,
         )
@@ -385,7 +385,7 @@ class TestPl2000SheetPublishedIn2180:
         assert session.get.call_args_list[-1][0][0] == self.URL
         meta = json.loads(path.with_name(path.name + ".meta.json").read_text("utf-8"))
         assert meta["horizontal_crs"] == "EPSG:2180"
-        assert meta["extra"]["source"]["uklad"] == "PL-2000:S7"
+        assert meta["extra"]["source"]["declared_crs"] == "PL-2000:S7"
         assert meta["nodata"] == -9999
         warning = next(r for r in caplog.records if "wskazuje" in r.message)
         assert warning.levelno == logging.WARNING
@@ -407,8 +407,8 @@ class TestEmitSidecar:
         from kartograf.sources.sidecar import emit_sidecar
 
         data = self._data(tmp_path)
-        assert emit_sidecar(Mock(), data, request={"godlo": "X"}) is None
-        assert emit_sidecar(None, data, request={"godlo": "X"}) is None
+        assert emit_sidecar(Mock(), data, request={"sheet": "X"}) is None
+        assert emit_sidecar(None, data, request={"sheet": "X"}) is None
         assert list(tmp_path.glob("*.meta.json")) == []
 
     def test_build_error_is_logged_not_raised(self, tmp_path, caplog):

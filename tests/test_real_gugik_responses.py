@@ -126,7 +126,7 @@ class TestNmtRecordSelectionOnRealBodies:
         provider = GugikProvider(session=session)
         url = provider._get_opendata_url(godlo)
         assert file_id(url) == "77381_1339240"
-        assert provider.source_info(godlo)["aktualnosc"] == "2023-03-29"
+        assert provider.source_info(godlo)["acquisition_date"] == "2023-03-29"
         # Warstwy 2026..2024 puste -> przejscie do zbiorczej, bez bledu
         assert queried_layers(session)[-1] == "SkorowidzeNMT2023iStarsze"
 
@@ -242,7 +242,7 @@ class TestNmtRecordSelectionOnRealBodies:
         record = provider._resolve_sheet(godlo)
         assert file_id(record.url) == "67106_778610"
         assert record.godlo == godlo
-        assert provider.source_info(godlo)["godlo"] == godlo
+        assert provider.source_info(godlo)["sheet"] == godlo
 
 
 # =============================================================================
@@ -300,7 +300,7 @@ class TestOrtoRecordSelectionOnRealBodies:
         assert file_id(record.url) == "81434_1416956"
         assert record.layer == "SkorowidzeOrtofotomapy2024"
         assert record.resolution_m == 0.25
-        assert provider.source_info(self.GODLO)["kolor"] == "CIR"
+        assert provider.source_info(self.GODLO)["color"] == "CIR"
 
     def test_c12_rgb_comes_from_2025_at_5_cm(self):
         provider = GugikOrtoProvider(session=orto_session(self.GODLO))
@@ -308,7 +308,7 @@ class TestOrtoRecordSelectionOnRealBodies:
         assert file_id(record.url) == "83235_1485417"
         assert record.layer == "SkorowidzeOrtofotomapy2025"
         assert record.resolution_m == 0.05
-        assert provider.source_info(self.GODLO)["kolor"] == "RGB"
+        assert provider.source_info(self.GODLO)["color"] == "RGB"
 
     def test_c12_token_parent_request_never_takes_child_records(self):
         """M-34-90-C-b-4 (arkusz nadrzedny) -> jego wlasny rekord 0,75 m z 1997,

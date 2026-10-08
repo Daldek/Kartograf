@@ -614,7 +614,7 @@ def _print_clipping_info(
         if code == "PL" and pl_sheet_list:
             result = (
                 "arkusze wyznaczono z przycietego bboxa, sidecar ma "
-                "request.godlo; oryginal w extra.parent_request.bbox"
+                "request.sheet; oryginal w extra.parent_request.bbox"
             )
         else:
             result = (
@@ -1395,7 +1395,7 @@ def _sheet_crs_mismatch(path: Path) -> tuple[str, str, str] | None:
     if meta is None or meta.get("country") != "PL":
         return None
     request = meta.get("request")
-    godlo = request.get("godlo") if isinstance(request, dict) else None
+    godlo = request.get("sheet") if isinstance(request, dict) else None
     actual = meta.get("horizontal_crs")
     if not isinstance(godlo, str) or not isinstance(actual, str):
         return None
@@ -1423,7 +1423,7 @@ def _warn_crs_mismatch_sheets(paths) -> None:
     print(
         f"Warning: {len(found)} arkuszy GUGiK opublikowano w innym ukladzie "
         f"niz wskazuje godlo: {shown} — sidecar opisuje uklad pliku "
-        "(horizontal_crs); deklaracja rekordu w extra.source.uklad",
+        "(horizontal_crs); deklaracja rekordu w extra.source.declared_crs",
         file=sys.stderr,
     )
 
@@ -2076,15 +2076,15 @@ def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> i
             if info.name is not None:
                 extra["mapname"] = info.name
             if info.podil is not None:
-                extra["podil"] = info.podil
+                extra["cz_share"] = info.podil
         except Exception as e:  # noqa: BLE001 — dane wazniejsze niz metadane
             logging.getLogger(__name__).warning(
-                f"Sidecar {godlo} bez PODIL (blad indeksu): {e}"
+                f"Sidecar {godlo} bez extra.cz_share (PODIL; blad indeksu): {e}"
             )
     _write_cz_sidecar(
         provider,
         target,
-        request={"godlo": godlo},
+        request={"sheet": godlo},
         capability="sheet_files" if is_sm5 else "bbox_raster",
         # arkusz SM5 przychodzi w Krovaku, kafel TM33 w siatce UTM33/ETRS89
         horizontal_crs="EPSG:5514" if is_sm5 else "EPSG:3045",

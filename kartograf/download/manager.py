@@ -673,7 +673,7 @@ class DownloadManager:
             on_download()
         logger.info(f"Downloading {godlo}...")
         path = self._provider.download(godlo, target_path)
-        self._write_sidecar(path, {"godlo": godlo})
+        self._write_sidecar(path, {"sheet": godlo})
         return SheetFetch(godlo, path, skipped=False)
 
     def _fetch_campaigns(
@@ -1142,7 +1142,7 @@ class DownloadManager:
         """Zapis sidecara .meta.json; domyslnie best-effort (blad nie przerywa
         pobrania).
 
-        Dla zadania z ``godlo`` dopisuje ``extra.source`` — pochodzenie pliku
+        Dla zadania z ``sheet`` dopisuje ``extra.source`` — pochodzenie pliku
         wg ``provider.source_info(godlo)`` (rekord skorowidza GUGiK: URL,
         warstwa, aktualnosc; D5). Tylko ``dict`` trafia do sidecara: provider
         bez pochodzenia zwraca ``None``, a ``Mock(spec=...)`` — ``Mock``.
@@ -1157,7 +1157,7 @@ class DownloadManager:
         if extra_override is not None:
             extra.update(extra_override)
         else:
-            godlo = request.get("godlo")
+            godlo = request.get("sheet")
             source_info = getattr(self._provider, "source_info", None)
             if godlo is not None and callable(source_info):
                 source = source_info(godlo)
@@ -1177,12 +1177,12 @@ class DownloadManager:
     ) -> None:
         """OBOWIAZKOWY sidecar pliku kampanii (errata 2 N-1).
 
-        ``request = {godlo, campaigns}`` + ``min_year`` tylko gdy podany;
+        ``request = {sheet, campaigns}`` + ``min_year`` tylko gdy podany;
         ``extra`` = ``sidecar_extra`` + ``source`` (``provider.record_source``
         TEGO rekordu, R13) + ``campaign`` (``ref.to_extra()``). Porazka =
         ``DownloadError`` (wolajacy usuwa plik danych).
         """
-        request: dict = {"godlo": godlo, "campaigns": self._campaigns}
+        request: dict = {"sheet": godlo, "campaigns": self._campaigns}
         if self._min_year is not None:
             request["min_year"] = self._min_year
         try:

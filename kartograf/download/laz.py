@@ -96,7 +96,7 @@ def write_laz_sidecar(
     """Best-effort sidecar kafla LAZ przez ``emit_sidecar`` (blad = ostrzezenie w logu).
 
     ``request`` opisuje faktyczne zadanie: bbox oraz filtry ``year``
-    i ``min_density``, gdy podane (E16). ``extra.gestosc`` i ``min_density``
+    i ``min_density``, gdy podane (E16). ``extra.nominal_density`` i ``min_density``
     to wartosc NOMINALNA z WFS GUGiK (``char_przestrz``) — faktyczna gestosc
     kafla bywa kilkukrotnie wyzsza. ``request.campaigns`` tylko dla ``"all"``
     (``newest`` = ADR-029, bez zmian), ``request.min_year`` gdy podany
@@ -119,9 +119,9 @@ def write_laz_sidecar(
     if min_year is not None:
         request["min_year"] = min_year
     extra: dict = {
-        "godlo_kafla": tile.godlo,
-        "rok": tile.year,
-        "gestosc": tile.density,
+        "tile_sheet": tile.godlo,
+        "year": tile.year,
+        "nominal_density": tile.density,
         "url": tile.url,
     }
     if parent_request is not None:

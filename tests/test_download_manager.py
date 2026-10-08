@@ -978,7 +978,7 @@ class TestSidecarWritten:
         assert payload["dataset"] == "pl.gugik.nmt_1m"
         assert payload["vertical_crs"] == "EPSG:9651"
         assert payload["nodata"] == -9999.0
-        assert payload["request"] == {"godlo": "N-34-130-D-d-2-4"}
+        assert payload["request"] == {"sheet": "N-34-130-D-d-2-4"}
 
     @pytest.mark.parametrize("mode", ["sheet", "list_seq", "list_parallel"])
     def test_every_mode_returns_provider_path(self, tmp_path, mode):
@@ -1065,10 +1065,10 @@ class TestSidecarWritten:
 
         source = {
             "url": "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/1/1_N.asc",
-            "skorowidz": "https://mapy.geoportal.gov.pl/.../SkorowidzeUkladEVRF2007",
+            "index_url": "https://mapy.geoportal.gov.pl/.../SkorowidzeUkladEVRF2007",
             "layer": "SkorowidzeNMT2026",
-            "godlo": "N-34-130-D-d-2-4",
-            "aktualnosc": "2026-03-01",
+            "sheet": "N-34-130-D-d-2-4",
+            "acquisition_date": "2026-03-01",
             "resolution_m": 1.0,
         }
         provider = self._mock_provider()

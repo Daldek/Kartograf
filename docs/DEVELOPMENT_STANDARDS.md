@@ -572,6 +572,9 @@ Regula obowiazujaca (decyzja wlasciciela projektu, 2026-10-08):
   typ i scope to angielskie slowa kluczowe, opis i tresc po polsku)
 - **Dokumentacja** — po polsku: `docs/`, `README.md`, `CLAUDE.md` i inne
   pliki `.md`
+- **Identyfikatory** (nowe nazwy w kodzie i API, klucze danych, np. sidecara)
+  — po angielsku; klucze sidecara od 0.7.0, istniejace polskie nazwy API/CLI
+  dostaja angielskie aliasy i znikaja w v1.0.0 (ADR-031 w `docs/DECISIONS.md`)
 
 Stan zastany: czesc kodu sprzed tej decyzji ma docstringi i komentarze po
 polsku bez polskich znakow (m.in. `download/cutout.py`, `transport/mosaic.py`,

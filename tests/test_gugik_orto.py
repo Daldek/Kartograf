@@ -239,19 +239,19 @@ class TestGugikOrtoProviderSelection:
         assert provider._get_opendata_url(GODLO) == RGB_2024
         assert session.get.call_count == 1
 
-    def test_source_info_carries_kolor_and_campaign(self):
+    def test_source_info_carries_color_and_campaign(self):
         """extra.source (D5): url, warstwa, aktualnosc, piksel i kolor pliku."""
         provider, _ = self.provider_with(sample("orto_2024.html"))
         provider._get_opendata_url(GODLO)
 
         source = provider.source_info(GODLO)
         assert source["url"] == RGB_2024
-        assert source["kolor"] == "RGB"
-        assert source["aktualnosc"] == "2024-06-21"
+        assert source["color"] == "RGB"
+        assert source["acquisition_date"] == "2024-06-21"
         assert source["layer"] == "SkorowidzeOrtofotomapy2026"
         assert source["resolution_m"] == 0.25
-        assert source["uklad"] == "PL-1992"
-        assert source["skorowidz"] == ENDPOINT
+        assert source["declared_crs"] == "PL-1992"
+        assert source["index_url"] == ENDPOINT
 
     def test_starsze_picks_newest_rgb_not_oldest(self):
         """Warstwa zbiorcza rosnaco po dacie -> najnowsze RGB, nie 1997/2003 B-W."""
@@ -264,7 +264,7 @@ class TestGugikOrtoProviderSelection:
 
         assert url.endswith("76530_1087101_M-34-76-A-a-1-1.tif")
         assert queried_layers(session) == LAYERS
-        assert provider.source_info(GODLO)["aktualnosc"] == "2022-06-03"
+        assert provider.source_info(GODLO)["acquisition_date"] == "2022-06-03"
 
     def test_pl2000_godlo_gets_pl2000_record(self):
         """Godlo PL-2000 dostaje rekord PL-2000, nie CIR PL-1992 z pierwszej warstwy."""
@@ -278,7 +278,7 @@ class TestGugikOrtoProviderSelection:
         url = provider._get_opendata_url("7.124.07.24")
 
         assert url.endswith("64878_364829_7.124.07.24.tif")
-        assert provider.source_info("7.124.07.24")["uklad"] == "PL-2000:S7"
+        assert provider.source_info("7.124.07.24")["declared_crs"] == "PL-2000:S7"
 
     def test_pl1992_godlo_never_takes_pl2000_or_parent_sheet(self):
         """Arkusz nadrzedny (M-34-76-A-a-1) i rekord PL-2000 nie zastepuja arkusza."""
@@ -331,7 +331,7 @@ class TestGugikOrtoProviderSelection:
         provider = GugikOrtoProvider(session=session, color="CIR")
 
         assert provider._get_opendata_url(GODLO) == CIR_2024
-        assert provider.source_info(GODLO)["kolor"] == "CIR"
+        assert provider.source_info(GODLO)["color"] == "CIR"
 
     def test_stops_at_first_layer_with_matching_variant(self):
         """P2: rekord w warstwie rocznej konczy petle — starsze warstwy niepytane."""
@@ -445,7 +445,7 @@ class TestGugikOrtoProviderCache:
         assert str(cached.value) == str(first.value)
         assert "CIR 2024-06-21" in str(cached.value)
 
-    def test_cache_miss_stores_source_with_kolor(self, cache):
+    def test_cache_miss_stores_source_with_color(self, cache):
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
         provider = GugikOrtoProvider(session=session, cache=cache)
@@ -454,7 +454,7 @@ class TestGugikOrtoProviderCache:
 
         cached = cache.get_record("orto", "RGB", "none", GODLO)
         assert cached["source"]["url"] == RGB_2024
-        assert cached["source"]["kolor"] == "RGB"
+        assert cached["source"]["color"] == "RGB"
         assert cached["source"]["layer"] == "SkorowidzeOrtofotomapy2026"
         assert provider.source_info(GODLO) == cached["source"]
 
@@ -832,7 +832,7 @@ class TestOrtoVariantStorage:
         meta = json.loads(
             cir_path.with_name(cir_path.name + ".meta.json").read_text("utf-8")
         )
-        assert meta["extra"]["source"]["kolor"] == "CIR"
+        assert meta["extra"]["source"]["color"] == "CIR"
         assert meta["extra"]["source"]["url"] == CIR_2024
 
     @pytest.mark.parametrize(
@@ -882,9 +882,9 @@ class TestForceRefreshesRecordCache:
         stale_source = {
             "url": self.STALE,
             "layer": "SkorowidzeOrtofotomapyStarsze",
-            "godlo": GODLO,
-            "aktualnosc": "2020-01-01",
-            "kolor": "RGB",
+            "sheet": GODLO,
+            "acquisition_date": "2020-01-01",
+            "color": "RGB",
         }
         stale.set_record(*key, {"source": stale_source})
         stale.close()

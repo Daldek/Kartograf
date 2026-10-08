@@ -29,9 +29,9 @@ def _data(tmp_path):
 
 def test_required_sidecar_written_atomically(tmp_path):
     path = emit_sidecar(
-        "pl.gugik.nmt_1m", _data(tmp_path), request={"godlo": GODLO}, required=True
+        "pl.gugik.nmt_1m", _data(tmp_path), request={"sheet": GODLO}, required=True
     )
-    assert path.exists() and json.loads(path.read_text())["request"] == {"godlo": GODLO}
+    assert path.exists() and json.loads(path.read_text())["request"] == {"sheet": GODLO}
     assert not list(tmp_path.glob("*.tmp"))
 
 
@@ -41,7 +41,7 @@ def test_required_sidecar_failure_raises_and_leaves_no_file(tmp_path, monkeypatc
     )
     with pytest.raises(DownloadError, match="obowiazkowego sidecara") as exc:
         emit_sidecar(
-            "pl.gugik.nmt_1m", _data(tmp_path), request={"godlo": GODLO}, required=True
+            "pl.gugik.nmt_1m", _data(tmp_path), request={"sheet": GODLO}, required=True
         )
     assert str(exc.value.__cause__) == "dysk pelny"  # porazka zapisu, nie budowy
     assert not (tmp_path / "x.asc.meta.json").exists() and not list(
