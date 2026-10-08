@@ -1,8 +1,8 @@
-"""Polityka ponowien pobierania plikow GUGiK (NMT/NMPT/orto/LAZ/BDOT10k),
-CORINE i SoilGrids (review 2026-10-06 D1/N9).
+"""Retry policy for downloading GUGiK files (NMT/NMPT/orto/LAZ/BDOT10k),
+CORINE and SoilGrids (review 2026-10-06 D1/N9).
 
-Ponawiamy tylko bledy sieci, 429 i 5xx (z Retry-After); inne 4xx koncza
-pobieranie od razu z kodem HTTP w DownloadError.status_code.
+Only network errors, 429 and 5xx are retried (with Retry-After); other 4xx end
+the download at once with the HTTP code in DownloadError.status_code.
 """
 
 import os
@@ -29,7 +29,7 @@ _BBOX_2180 = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
 
 
 def _sheet(cls):
-    """NMT/NMPT/orto: arkusz z rozwiazanym rekordem skorowidza -> plik."""
+    """NMT/NMPT/orto: a sheet with a resolved index record -> file."""
 
     def run(provider, out):
         record = SimpleNamespace(url=_URL)
@@ -57,8 +57,8 @@ def _soilgrids(provider, out):
     )
 
 
-# Kazdy provider przez WLASNY tor pobierania pliku (nie przez transport
-# bezposrednio): dowod, ze wszystkie dawne kopie petli ida przez download_to.
+# Each provider through its OWN file download path (not through the transport
+# directly): proof that all the old copies of the loop go through download_to.
 PROVIDERS = [
     pytest.param(GugikProvider, _sheet(GugikProvider), ".bin", id="nmt"),
     pytest.param(GugikNmptProvider, _sheet(GugikNmptProvider), ".bin", id="nmpt"),
@@ -130,7 +130,7 @@ def test_exhausted_server_errors_keep_status(cls, download, suffix, tmp_path):
         download(provider, tmp_path / "x.bin")
     assert session.get.call_count == cls.MAX_RETRIES
     assert exc_info.value.status_code == 503
-    # jeden wykladnik backoffu dla wszystkich providerow (D1, 2026-10-07)
+    # one backoff exponent for all providers (D1, 2026-10-07)
     assert [c.args for c in sleep.call_args_list] == [(2,), (4,)]
 
 
@@ -143,10 +143,10 @@ def _windows_rename(self, target):
 
 @pytest.mark.parametrize(("cls", "download", "suffix"), PROVIDERS)
 def test_redownload_overwrites_existing_file(cls, download, suffix, tmp_path):
-    """--force nad juz pobranym plikiem: zapis atomowy przez os.replace.
+    """--force over an already downloaded file: an atomic write through os.replace.
 
-    Dawne kopie w providerach robily ``Path.rename``, ktore na Windows nie
-    nadpisuje istniejacego pliku (review 2026-10-06 D1 pkt 3).
+    The old copies in the providers used ``Path.rename``, which on Windows
+    does not overwrite an existing file (review 2026-10-06 D1 point 3).
     """
     out = tmp_path / "x.bin"
     out.with_suffix(suffix).write_bytes(b"stare")
@@ -159,7 +159,7 @@ def test_redownload_overwrites_existing_file(cls, download, suffix, tmp_path):
 
 
 class TestBdot10kSession:
-    """BDOT10k bez wstrzyknietej sesji: jedna sesja GUGiK na watek."""
+    """BDOT10k without an injected session: one GUGiK session per thread."""
 
     def test_downloads_and_teryt_share_one_gugik_session(self, tmp_path):
         session = MagicMock(spec=requests.Session)
@@ -238,7 +238,7 @@ SINGLE_QUERIES = [
 
 
 class TestSingleQueryRetries:
-    """Zapytania CuzkClient.query i TERYT BDOT10k ida przez get_with_retry (N5)."""
+    """CuzkClient.query and the BDOT10k TERYT queries go through get_with_retry (N5)."""
 
     @pytest.mark.parametrize(("query", "ok"), SINGLE_QUERIES)
     def test_connection_error_is_retried(self, query, ok):

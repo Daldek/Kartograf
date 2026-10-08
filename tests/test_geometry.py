@@ -26,7 +26,7 @@ from kartograf.exceptions import ValidationError  # noqa: I001
 
 
 def _bbox_contains(bbox, x: float, y: float) -> bool:
-    """True gdy punkt (x, y) lezy w obwiedni ``bbox`` (krawedzie wliczone)."""
+    """True when the point (x, y) lies in the ``bbox`` envelope (edges included)."""
     return bbox.min_x <= x <= bbox.max_x and bbox.min_y <= y <= bbox.max_y
 
 
@@ -171,7 +171,7 @@ def shp_points_epsg2180(tmp_path):
         # Punkt 1: Warszawa (przekroj hydrologiczny)
         w.point(637000, 487000)
         w.record("point1")
-        # Punkt 2: inny arkusz 1:10000
+        # Point 2: another 1:10000 sheet
         w.point(605000, 495000)
         w.record("point2")
 
@@ -213,8 +213,8 @@ def _make_gpkg_blob(
     """Create a minimal GeoPackage binary geometry blob (WKB POINT by default)."""
     flags = (envelope_type << 1) | byte_order
     if empty:
-        # Bit 4 = "empty geometry" wg specyfikacji GeoPackage; GDAL zapisuje
-        # wtedy pusty POINT jako WKB z NaN.
+        # Bit 4 = "empty geometry" per the GeoPackage specification; GDAL then
+        # writes an empty POINT as WKB with NaN.
         flags |= 1 << 4
         min_x = min_y = float("nan")
     endian = "<" if byte_order == 1 else ">"
@@ -523,7 +523,7 @@ def gpkg_empty_and_point(tmp_path):
 
 @pytest.fixture
 def gpkg_no_features_geom(tmp_path):
-    """GPKG z warstwa obiektow, ale bez zadnego wiersza."""
+    """A GPKG with a feature layer but without any row."""
     return _build_gpkg(tmp_path / "empty_layer.gpkg", [])
 
 
@@ -848,7 +848,7 @@ class TestGetOverallBbox:
 
 
 class TestReadSourceCrs:
-    """Tests for read_source_crs (uklad zapisu pliku, bez transformacji)."""
+    """Tests for read_source_crs (the file's storage CRS, without transformation)."""
 
     def test_shp_crs(self, shp_epsg4326):
         """SHP: CRS z .prj."""
@@ -949,7 +949,7 @@ class TestFindSheetsForGeometry:
         assert call_args[0][1] == "1:25000"
 
     def test_find_sheets_for_geometry_with_points(self, shp_points_epsg2180):
-        """Kazdy punkt daje DOKLADNIE jeden arkusz 1:10000 zawierajacy ten punkt."""
+        """Each point gives EXACTLY one 1:10000 sheet containing that point."""
         from kartograf.core.sheet_parser import SheetParser
 
         result = find_sheets_for_geometry(shp_points_epsg2180, target_scale="1:10000")
@@ -988,7 +988,7 @@ class TestFindSheetsForGeometry:
 
 
 # =========================================================================
-# Tests — czytniki przez core.bbox.transform_bbox (ocena parserow K4)
+# Tests - readers through core.bbox.transform_bbox (parser review K4)
 # =========================================================================
 
 
@@ -1038,7 +1038,7 @@ class TestReadersUseCoreBBox:
         assert made.call_count == 1
 
     def test_shp_feature_across_19e_keeps_northern_band(self, tmp_path):
-        """Obiekt 50 km przez x=500000: 4 narozniki gubily ~65 m na polnocy."""
+        """A 50 km object through x=500000: 4 corners lost ~65 m in the north."""
         shp = _shp_with_rects(tmp_path / "wide.shp", [(475000, 600000, 525000, 610000)])
         (bbox,) = read_feature_bboxes(shp, target_crs="EPSG:4326")
         assert bbox.max_y == pytest.approx(53.3551052, abs=1e-7)

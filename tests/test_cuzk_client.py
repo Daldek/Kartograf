@@ -1,4 +1,4 @@
-"""Testy CuzkClient — silnik ArcGIS REST + pliki openzu (offline)."""
+"""Tests of CuzkClient - the ArcGIS REST engine + openzu files (offline)."""
 
 import io
 import json
@@ -137,7 +137,7 @@ class TestQuery:
             client.query(KLADY, 24, where="zle")
 
     def test_real_fixture_shape_parses(self):
-        """Fixture z rekonesansu (Zad. 1) przechodzi przez query 1:1."""
+        """A reconnaissance fixture (Task 1) goes through query 1:1."""
         fixture = json.loads(
             Path("tests/fixtures/cuzk/klady_sm5_where_ctes96.json").read_text(
                 encoding="utf-8"
@@ -202,7 +202,7 @@ class TestFetchFile:
                 "http://x/CTES96.zip", target, unzip_single=".tif"
             )
         assert not target.exists()
-        # ZIP i ewentualne pliki tymczasowe posprzatane po bledzie
+        # the ZIP and any temporary files are cleaned up after the error
         assert list(tmp_path.glob("*.zip")) == []
         assert list(tmp_path.glob("*.tmp")) == []
 
@@ -217,15 +217,15 @@ class TestFetchFile:
                 "http://x/CTES96.zip", target, unzip_single=".tif"
             )
         assert not target.exists()
-        # ZIP i ewentualne pliki tymczasowe posprzatane po bledzie
+        # the ZIP and any temporary files are cleaned up after the error
         assert list(tmp_path.glob("*.zip")) == []
         assert list(tmp_path.glob("*.tmp")) == []
 
     def test_unzip_single_tfw_extraction_failure_leaves_no_files(self, tmp_path):
-        """Regresja (review Zad. 8): jesli ekstrakcja towarzyszacego .tfw
-        zawiedzie PO udanej ekstrakcji .tif (np. OSError, dysk pelny), cala
-        operacja ma byc atomowa jako calosc — na dysku nie moze zostac ani
-        czesciowy .tif, ani osierocony .tfw, ani smieci tymczasowe/ZIP."""
+        """Regression (Task 8 review): if extraction of the accompanying .tfw
+        fails AFTER the .tif was extracted successfully (e.g. OSError, disk
+        full), the whole operation must be atomic as a unit - neither a partial
+        .tif, nor an orphaned .tfw, nor temporary/ZIP leftovers may stay on disk."""
         zip_content = _zip_bytes(
             {"CTES96.tif": b"II*\x00tifdata", "CTES96.tfw": b"5\n0\n0\n-5\n1\n2\n"}
         )
@@ -240,9 +240,9 @@ class TestFetchFile:
         def flaky_extract_to(zf, member, dest):
             calls["n"] += 1
             if calls["n"] == 2:
-                # Druga ekstrakcja (towarzyszacy .tfw) pada - symulacja
-                # OSError/dysk pelny PO tym, jak .tif juz zostal wypakowany
-                # do pliku tymczasowego.
+                # The second extraction (the accompanying .tfw) fails - a simulation
+                # of OSError/disk full AFTER the .tif was already extracted
+                # to a temporary file.
                 raise OSError("disk full (symulowany)")
             real_extract_to(zf, member, dest)
 
@@ -284,13 +284,13 @@ class TestRetryPropagation:
 
 DMR5G = "https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr5g/ImageServer"
 
-# CRS faktycznie zwracany przez exportImage CUZK (rekonesans Zad. 1, krok 4):
-# LOCAL_CS zamiast PROJCS — GDAL nie rozwiazuje go do kodu EPSG mimo poprawnego
-# AUTHORITY. Uzywany w fixture'ach TestExportImage zamiast zwyklego
-# "EPSG:3045", zeby testy CRS-nadpisania faktycznie wykrywaly regresje: przy
-# hardkodowanym z gory poprawnym CRS-ie asercja `to_epsg() == 3045` przechodzi
-# nawet po usunieciu wywolania _overwrite_crs z export_image (reproduce
-# potwierdzone standalone przy review).
+# The CRS actually returned by the CUZK exportImage (reconnaissance Task 1, step 4):
+# LOCAL_CS instead of PROJCS - GDAL does not resolve it to an EPSG code despite a
+# correct AUTHORITY. Used in the TestExportImage fixtures instead of a plain
+# "EPSG:3045", so that the CRS-overwrite tests actually detect regressions: with a
+# hardcoded correct CRS the assertion `to_epsg() == 3045` passes even after
+# removing the _overwrite_crs call from export_image (reproduced standalone
+# during the review).
 _UNRESOLVABLE_CRS_WKT = (
     'LOCAL_CS["S-JTSK / Krovak East North",'
     'UNIT["metre",1,AUTHORITY["EPSG","9001"]],'
@@ -338,11 +338,11 @@ class TestExportImage:
 
         def fake_download(session, url, output_path, *, timeout, **kwargs):
             captured["url"] = url
-            # Poprawka 2 (rekonesans): export_image nadpisuje CRS bezwarunkowo
-            # po kazdym eksporcie (rasterio "r+"), wiec fixture musi byc
-            # naprawde otwieralnym GeoTIFF-em, nie tylko 4-bajtowym naglowkiem
-            # sniffowanym po magic number. CRS ustawiony na nierozwiazywalny
-            # (jak realna odpowiedz CUZK) — patrz asercja PO nizej.
+            # Fix 2 (reconnaissance): export_image overwrites the CRS unconditionally
+            # after every export (rasterio "r+"), so the fixture must be a
+            # really openable GeoTIFF, not just a 4-byte header
+            # sniffed by magic number. The CRS is set to an unresolvable one
+            # (like the real CUZK response) - see the assertion AFTER below.
             _write_geotiff(Path(output_path), bbox, 2, 2, crs=_UNRESOLVABLE_CRS_WKT)
             return Path(output_path)
 
@@ -369,11 +369,11 @@ class TestExportImage:
         assert params["size"] == ["1000,1000"]
         assert params["noData"] == ["-9999"]
         assert params["noDataInterpretation"] == ["esriNoDataMatchAny"]
-        # CRS nadpisany bezwarunkowo (rekonesans: to_epsg() bezuzyteczne dla
-        # obu SR zwracanych przez CUZK — patrz docs/research/...krok 4-5).
-        # Fixture PRZED nadpisaniem miala to_epsg()==None (_UNRESOLVABLE_CRS_WKT
-        # sanity-checkowany wyzej) — ta asercja wiec faktycznie dowodzi, ze
-        # _overwrite_crs zadzialal, a nie tylko przepisal juz-poprawny CRS.
+        # CRS overwritten unconditionally (reconnaissance: to_epsg() is useless for
+        # both SRs returned by CUZK - see docs/research/...step 4-5).
+        # The fixture BEFORE the overwrite had to_epsg()==None (_UNRESOLVABLE_CRS_WKT
+        # sanity-checked above) - so this assertion really proves that
+        # _overwrite_crs worked, rather than just rewriting an already-correct CRS.
         with rasterio.open(target) as src:
             assert src.crs.to_epsg() == 3045
 
@@ -407,8 +407,8 @@ class TestExportImage:
             tile_bbox = [float(v) for v in params["bbox"][0].split(",")]
             w, h = (int(v) for v in params["size"][0].split(","))
             requested.append((tile_bbox, w, h, params["noData"][0]))
-            # CRS nierozwiazywalny (jak realna odpowiedz CUZK dla kazdego
-            # kafla) — patrz asercja PO nizej i sanity-check przy
+            # An unresolvable CRS (like the real CUZK response for every
+            # tile) - see the assertion AFTER below and the sanity check at
             # _UNRESOLVABLE_CRS_WKT.
             _write_geotiff(
                 Path(output_path),
@@ -445,22 +445,22 @@ class TestExportImage:
             assert src.width == 8 and src.height == 8
             assert src.bounds == (0.0, 0.0, 16.0, 16.0)
             assert src.nodata == -9999.0
-            # Kazdy kafel mial to_epsg()==None (LOCAL_CS) przed mozaika/
-            # nadpisaniem — ta asercja dowodzi, ze _overwrite_crs zadzialal
-            # po mosaic_and_crop, a nie ze przepisal juz-poprawny CRS.
+            # Every tile had to_epsg()==None (LOCAL_CS) before the mosaic/
+            # overwrite - this assertion proves that _overwrite_crs worked
+            # after mosaic_and_crop, rather than rewriting an already-correct CRS.
             assert src.crs.to_epsg() == 3045
-        # pliki czastkowe posprzatane
+        # partial files cleaned up
         assert list(tmp_path.glob("*.part*.tif")) == []
 
     def test_tiling_fractional_height_keeps_content_aligned(self, tmp_path):
-        """Bbox o ulamkowej wysokosci (90,7 px -> 91): kafle musza byc
-        kotwiczone w narozniku NW, tak samo jak siatka wyniku
+        """A bbox with a fractional height (90.7 px -> 91): tiles must be
+        anchored at the NW corner, the same as the result grid
         `merge(bounds=...)`.
 
-        Kotwica SW dawala caly dolny wiersz -9999 i przesuwala tresc pasami
-        do 1 px (A3-1). Kazdy piksel niesie tu northing swojego srodka, wiec
-        ewentualne przesuniecie jest mierzalne wprost wzgledem transformu
-        wyniku.
+        An SW anchor gave a whole bottom row of -9999 and shifted the content
+        in strips by up to 1 px (A3-1). Every pixel here carries the northing
+        of its centre, so any shift is measurable directly against the
+        result transform.
         """
         from rasterio.transform import from_origin
 
@@ -508,21 +508,21 @@ class TestExportImage:
         with rasterio.open(target) as src:
             assert src.height == 91 and src.width == 250
             data = src.read(1)
-            # Zaden wiersz nie moze byc w calosci nodata — serwer zwrocil
-            # dane dla calej wysokosci zadania.
+            # No row may be entirely nodata - the server returned
+            # data for the whole request height.
             assert not np.any(np.all(data == -9999.0, axis=1))
-            # Zasieg wyniku = zasieg kafli (kotwica NW).
+            # The result extent = the tile extent (NW anchor).
             assert src.bounds.top == 181.4
             assert src.bounds.bottom == pytest.approx(181.4 - 91 * 2.0)
-            # Tresc zgodna z transformem wyniku — zero przesuniecia.
+            # Content consistent with the result transform - zero shift.
             for r in range(src.height):
                 assert np.allclose(data[r, :], (src.transform * (0.5, r + 0.5))[1])
         assert list(tmp_path.glob("*.part*.tif")) == []
 
     def test_tiling_corrupted_tile_raises_download_error_and_cleans_up(self, tmp_path):
-        """Kafel z poprawnym magic, ale urwanym cialem: blad mozaiki musi
-        wyjsc jako DownloadError (nie RasterioIOError) i nie zostawic
-        ani wyniku, ani plikow czastkowych — jak na sciezce SM5 (A3-3).
+        """A tile with a correct magic number but a truncated body: the mosaic
+        error must surface as DownloadError (not RasterioIOError) and leave
+        neither a result nor partial files - as on the SM5 path (A3-3).
         """
         calls = []
 

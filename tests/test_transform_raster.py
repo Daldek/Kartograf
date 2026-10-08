@@ -34,13 +34,14 @@ def _pinned_2180_to(target_crs):
 
 
 def _write_cone_tif(path, apex, size=300, pixel=1.0, *, hole=None, declare_nodata=True):
-    """Stozek wokol apex w EPSG:2180 (wzorzec _server_emulator z test_cuzk_dmr).
+    """A cone around the apex in EPSG:2180 (pattern _server_emulator from
+    test_cuzk_dmr).
 
-    ``hole`` to zakres (start, stop) wierszy i kolumn wypelniony wartoscia
-    nodata; ``declare_nodata=False`` daje raster, ktory dziury NIE deklaruje
-    w profilu — tylko taki obnaza brak ``src_nodata``/``dst_nodata`` w warpie
-    (przy zadeklarowanym nodata rasterio domysla sie go z pasma i test bylby
-    atrapa).
+    ``hole`` is a (start, stop) range of rows and columns filled with the
+    nodata value; ``declare_nodata=False`` gives a raster that does NOT
+    declare the hole in its profile - only such a raster exposes the missing
+    ``src_nodata``/``dst_nodata`` in the warp (with declared nodata rasterio
+    infers it from the band and the test would be a decoy).
     """
     west = apex[0] - size / 2 * pixel
     north = apex[1] + size / 2 * pixel
@@ -101,7 +102,7 @@ class TestWarpToGrid:
             assert (ds.width, ds.height) == (50, 40)
             assert ds.crs.to_epsg() == 5514
             assert ds.nodata == _NODATA
-        # zapis atomowy: brak plikow tymczasowych
+        # atomic write: no temporary files
         assert list(tmp_path.glob("*.warp.tif")) == []
 
     def test_operation_is_forced(self, tmp_path):
@@ -128,17 +129,18 @@ class TestWarpToGrid:
 
         warp.assert_called_once()
         assert warp.call_args.kwargs["COORDINATE_OPERATION"] == pinned.gdal_operation()
-        # bilinear, nie nearest: NMT jest polem ciaglym, a `nearest` cofnalby
-        # tez sens testu o nodata (bez interpolacji nie ma czego zatruc)
+        # bilinear, not nearest: the DEM is a continuous field, and `nearest` would
+        # also undo the point of the nodata test (no interpolation, nothing to poison)
         assert warp.call_args.kwargs["resampling"] == Resampling.bilinear
 
     def test_nodata_does_not_bleed_into_interpolation(self, tmp_path):
-        """Zrodlo BEZ zadeklarowanego nodata: maskowanie robia src/dst_nodata.
+        """A source WITHOUT declared nodata: masking is done by src/dst_nodata.
 
-        Fixtura deklarujaca nodata NIE strzeglaby tego — rasterio domysla sie
-        wtedy `src_nodata` z pasma i wynik jest ten sam z argumentami i bez.
-        Taki raster jest osiagalny na torze PL: `transport/mosaic.py` wpisuje
-        `nodata` do profilu tylko wtedy, gdy wolajacy poda wartosc.
+        A fixture declaring nodata would NOT guard this - rasterio then infers
+        `src_nodata` from the band and the result is the same with and without
+        the arguments. Such a raster is reachable on the PL path:
+        `transport/mosaic.py` writes `nodata` to the profile only when the
+        caller supplies a value.
         """
         src = _write_cone_tif(
             tmp_path / "src.tif", _APEX_2180, hole=(100, 140), declare_nodata=False
@@ -158,11 +160,12 @@ class TestWarpToGrid:
         assert valid.min() > 0.0, f"nodata weszlo do interpolacji: min {valid.min()}"
 
     def test_failed_warp_writes_only_to_temp_file(self, tmp_path):
-        """Zapis jest atomowy: sciezka docelowa nie powstaje w trakcie warpu.
+        """The write is atomic: the target path does not appear during the warp.
 
-        Sam brak `*.warp.tif` po udanym przebiegu tego nie dowodzi (bez pliku
-        tymczasowego tez go nie ma). Dowodem jest STAN W CHWILI AWARII: cel
-        jeszcze nie istnieje, a plik tymczasowy juz tak.
+        The mere absence of `*.warp.tif` after a successful run does not prove
+        it (without a temporary file it is absent too). The proof is the STATE
+        AT THE MOMENT OF FAILURE: the target does not exist yet, but the
+        temporary file already does.
         """
         src = _write_cone_tif(tmp_path / "src.tif", _APEX_2180)
         pinned = _pinned_2180_to("EPSG:5514")
@@ -190,11 +193,12 @@ class TestWarpToGrid:
         assert list(tmp_path.glob("*.warp.tif")) == []  # sprzatanie po awarii
 
     def test_failed_warp_keeps_previous_destination(self, tmp_path):
-        """Nieudany warp ZOSTAWIA poprzedni wynik nietkniety.
+        """A failed warp LEAVES the previous result untouched.
 
-        Zapis idzie przez plik tymczasowy i `os.replace`, wiec kasowanie celu
-        nie chronilo przed polzapisanym plikiem — niszczylo tylko stary,
-        poprawny wynik. Sam `exists()` tego nie dowodzi: sprawdzamy TRESC.
+        The write goes through a temporary file and `os.replace`, so deleting
+        the target did not protect against a half-written file - it only
+        destroyed the old, correct result. `exists()` alone does not prove it:
+        we check the CONTENT.
         """
         src = _write_cone_tif(tmp_path / "src.tif", _APEX_2180)
         pinned = _pinned_2180_to("EPSG:5514")
@@ -220,10 +224,10 @@ class TestWarpToGrid:
         assert list(tmp_path.glob("*.warp.tif")) == []  # sprzatanie po awarii
 
     def test_lowercase_crs_is_the_same_pair(self, tmp_path):
-        """`epsg:2180` to ten sam uklad co `EPSG:2180` — porownanie semantyczne.
+        """`epsg:2180` is the same CRS as `EPSG:2180` - a semantic comparison.
 
-        Guard pary ukladow porownuje CRS-y, nie stringi; samo `a == b`
-        odrzucaloby zdrowe wywolanie z inaczej zapisanym kodem.
+        The CRS-pair guard compares CRSs, not strings; a bare `a == b`
+        would reject a healthy call with a differently written code.
         """
         src = _write_cone_tif(tmp_path / "src.tif", _APEX_2180)
         pinned = _pinned_2180_to("EPSG:5514")
@@ -236,11 +240,12 @@ class TestWarpToGrid:
         assert dst.exists()
 
     def test_pinned_pair_must_match_src_crs(self, tmp_path):
-        """Niespojna para zrodlowa = blad, nie cichy zly wynik.
+        """An inconsistent source pair = an error, not a silently wrong result.
 
-        Przy wymuszonym `COORDINATE_OPERATION` GDAL ignoruje zadeklarowany
-        `src_crs` (zmierzone: 2180/4326/3857/32633/5514 daja ten sam wynik),
-        wiec bez tego guardu parametr bylby martwy i dawal falszywa asekuracje.
+        With a forced `COORDINATE_OPERATION` GDAL ignores the declared
+        `src_crs` (measured: 2180/4326/3857/32633/5514 give the same result),
+        so without this guard the parameter would be dead and give false
+        assurance.
         """
         src = _write_cone_tif(tmp_path / "src.tif", _APEX_2180)
         pinned = _pinned_2180_to("EPSG:5514")
@@ -256,7 +261,7 @@ class TestWarpToGrid:
         assert not dst.exists()
 
     def test_pinned_pair_must_match_bbox_crs(self, tmp_path):
-        """Niespojna para docelowa (bbox.crs != pinned.dst_crs) = blad."""
+        """An inconsistent target pair (bbox.crs != pinned.dst_crs) = an error."""
         src = _write_cone_tif(tmp_path / "src.tif", _APEX_2180)
         pinned = _pinned_2180_to("EPSG:5514")
         bbox = BBox(
@@ -276,11 +281,12 @@ class TestWarpToGrid:
         assert not dst.exists()
 
     def test_guard_skips_unknown_pinned_pair(self, tmp_path):
-        """Pola `src_crs`/`dst_crs` sa opcjonalne — guard nie moze na nich padac.
+        """The `src_crs`/`dst_crs` fields are optional - the guard must not fail on
+        them.
 
-        Gdy `pinned` nie zna swojej pary, o braku decyduje `gdal_operation()`
-        (jego wlasny komunikat), a nie guard — nawet jesli podany `src_crs`
-        rozni sie od faktycznego zrodla operacji.
+        When `pinned` does not know its pair, the absence is decided by
+        `gdal_operation()` (its own message), not by the guard - even if the
+        given `src_crs` differs from the operation's actual source.
         """
         src = _write_cone_tif(tmp_path / "src.tif", _APEX_2180)
         pinned = dataclasses.replace(
@@ -322,18 +328,18 @@ class TestWarpToGrid:
         return path
 
     def _grid_for(self, pinned, points):
-        """Siatka celu 5514 wokol obrazu bboxa 2180 (bez marginesu R-01 —
-        rogi moga byc nodata, testy patrza w srodek)."""
+        """A 5514 target grid around the image of a 2180 bbox (without the R-01
+        margin - the corners may be nodata, the tests look at the centre)."""
         xs, ys = zip(*(pinned.transform(x, y) for x, y in points), strict=True)
         return BBox(min(xs) + 5, min(ys) + 5, max(xs) - 5, max(ys) - 5, "EPSG:5514")
 
     def test_many_sources_first_wins_and_nodata_never_overwrites(self, tmp_path):
-        """W1 (S5): lista zrodel = kazde reprojektowane osobno do jednego pasma.
+        """W1 (S5): a list of sources = each reprojected separately into one band.
 
-        W zakladce wygrywa PIERWSZE zrodlo listy (jak w ``merge``), a nodata
-        pozniejszego zrodla nie kasuje waznych pikseli wczesniejszego — GDAL
-        nadpisuje wazne piksele kolejnym zrodlem (zmierzone 2026-09-29), stad
-        lista idzie od konca.
+        In the overlap the FIRST source of the list wins (as in ``merge``), and
+        the nodata of a later source does not erase valid pixels of an earlier
+        one - GDAL overwrites valid pixels with the next source (measured
+        2026-09-29), hence the list goes from the end.
         """
         # a: x 0..100, b: x 90..190 (zakladka 10 m); dziura w b w strefie zakladki
         a = self._flat_tif(tmp_path / "a.tif", 530000, 382100, 100.0)
@@ -371,9 +377,10 @@ class TestWarpToGrid:
         assert b_first == {"overlap": 200.0, "hole": 100.0, "only_b": 200.0}
 
     def test_source_without_crs_takes_src_crs(self, tmp_path):
-        """Arkusz ASC GUGiK nie ma CRS: ``src_crs`` musi obowiazywac zrodlo
-        (``reproject`` ze zrodla bez CRS zwracal sam nodata mimo ``src_crs``
-        — stad VRT z wymuszonym SRS nad kazdym zrodlem)."""
+        """A GUGiK ASC sheet has no CRS: ``src_crs`` must apply to the source
+        (``reproject`` from a source without a CRS returned only nodata despite
+        ``src_crs`` - hence a VRT with a forced SRS over every source)."""
+
         src = self._flat_tif(tmp_path / "nocrs.tif", 530000, 382100, 7.0, crs=None)
         with rasterio.open(src) as ds:
             assert ds.crs is None, "fixtura ma CRS — test bylby atrapa"

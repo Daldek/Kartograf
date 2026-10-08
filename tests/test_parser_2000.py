@@ -1,8 +1,8 @@
 """
-Testy jednostkowe dla modulu parser_2000.
+Unit tests for the parser_2000 module.
 
-Ten modul zawiera testy dla klasy Parser2000, weryfikujace poprawnosc
-parsowania godel PL-2000 dla skal 1:10000 do 1:500.
+This module contains tests for the Parser2000 class, verifying the
+correct parsing of PL-2000 sheet codes for scales 1:10000 to 1:500.
 """
 
 import pytest
@@ -85,7 +85,7 @@ class TestParser2000Parsing:
         }
 
     def test_parse_all_zones(self):
-        """Test parsowania dla kazdej strefy (5-8)."""
+        """Test parsing for each zone (5-8)."""
         for zone in [5, 6, 7, 8]:
             p = Parser2000(f"{zone}.100.10")
             assert p.zone == zone
@@ -104,7 +104,7 @@ class TestParser2000Parsing:
         assert p.components["slup"] == "1"
 
     def test_components_returns_copy(self):
-        """Test ze components zwraca kopie."""
+        """Test that components returns a copy."""
         p = Parser2000("6.179.12")
         c1 = p.components
         c2 = p.components
@@ -138,22 +138,22 @@ class TestParser2000Validation:
             Parser2000("   ")
 
     def test_pl1992_format_rejected(self):
-        """Test ze format PL-1992 (z myslnikami) jest odrzucany."""
+        """Test that the PL-1992 format (with hyphens) is rejected."""
         with pytest.raises(ParseError):
             Parser2000("N-34-130-D-d-2-4")
 
     def test_invalid_zone_low(self):
-        """Test ze strefa < 5 jest odrzucana."""
+        """Test that zone < 5 is rejected."""
         with pytest.raises(ParseError):
             Parser2000("4.179.12")
 
     def test_invalid_zone_high(self):
-        """Test ze strefa > 8 jest odrzucana."""
+        """Test that zone > 8 is rejected."""
         with pytest.raises(ParseError):
             Parser2000("9.179.12")
 
     def test_invalid_zone_zero(self):
-        """Test ze strefa 0 jest odrzucana."""
+        """Test that zone 0 is rejected."""
         with pytest.raises(ParseError):
             Parser2000("0.179.12")
 
@@ -168,47 +168,47 @@ class TestParser2000Validation:
             Parser2000("6.179.12.26")
 
     def test_ark_2k_boundary_01_valid(self):
-        """Test ze ark_2k = 01 jest prawidlowe."""
+        """Test that ark_2k = 01 is valid."""
         p = Parser2000("6.179.12.01")
         assert p.components["ark_2k"] == "01"
 
     def test_ark_2k_boundary_25_valid(self):
-        """Test ze ark_2k = 25 jest prawidlowe."""
+        """Test that ark_2k = 25 is valid."""
         p = Parser2000("6.179.12.25")
         assert p.components["ark_2k"] == "25"
 
     def test_quadrant_5k_invalid(self):
-        """Test ze kwadrant 5k > 4 jest odrzucany."""
+        """Test that 5k quadrant > 4 is rejected."""
         with pytest.raises(ParseError):
             Parser2000("6.179.12.5")
 
     def test_quadrant_5k_zero(self):
-        """Test ze kwadrant 5k = 0 jest odrzucany."""
+        """Test that 5k quadrant = 0 is rejected."""
         with pytest.raises(ParseError):
             Parser2000("6.179.12.0")
 
     def test_quadrant_1k_invalid(self):
-        """Test ze kwadrant 1k > 4 jest odrzucany."""
+        """Test that 1k quadrant > 4 is rejected."""
         with pytest.raises(ParseError):
             Parser2000("6.179.12.15.5")
 
     def test_quadrant_500_invalid(self):
-        """Test ze kwadrant 500 > 4 jest odrzucany."""
+        """Test that 500 quadrant > 4 is rejected."""
         with pytest.raises(ParseError):
             Parser2000("6.179.12.15.2.5")
 
     def test_garbage_string(self):
-        """Test ze losowy string jest odrzucany."""
+        """Test that a random string is rejected."""
         with pytest.raises(ParseError):
             Parser2000("abc.def.ghi")
 
     def test_too_many_dots(self):
-        """Test ze zbyt wiele segmentow jest odrzucane."""
+        """Test that too many segments are rejected."""
         with pytest.raises(ParseError):
             Parser2000("6.179.12.15.2.4.1")
 
     def test_trailing_dot(self):
-        """Test ze trailing dot jest odrzucany."""
+        """Test that a trailing dot is rejected."""
         with pytest.raises(ParseError):
             Parser2000("6.179.12.")
 
@@ -232,7 +232,7 @@ class TestParser2000Properties:
         assert p.scale == "1:10000"
 
     def test_uklad_always_2000(self):
-        """Test ze uklad jest zawsze '2000'."""
+        """Test that the CRS is always '2000'."""
         p = Parser2000("6.179.12")
         assert p.uklad == "2000"
 
@@ -243,22 +243,22 @@ class TestParser2000Properties:
             assert p.zone == z
 
     def test_native_crs_zone_5(self):
-        """Test native_crs dla strefy 5."""
+        """Test native_crs for zone 5."""
         p = Parser2000("5.100.10")
         assert p.native_crs == "EPSG:2176"
 
     def test_native_crs_zone_6(self):
-        """Test native_crs dla strefy 6."""
+        """Test native_crs for zone 6."""
         p = Parser2000("6.100.10")
         assert p.native_crs == "EPSG:2177"
 
     def test_native_crs_zone_7(self):
-        """Test native_crs dla strefy 7."""
+        """Test native_crs for zone 7."""
         p = Parser2000("7.100.10")
         assert p.native_crs == "EPSG:2178"
 
     def test_native_crs_zone_8(self):
-        """Test native_crs dla strefy 8."""
+        """Test native_crs for zone 8."""
         p = Parser2000("8.100.10")
         assert p.native_crs == "EPSG:2179"
 
@@ -298,7 +298,7 @@ class TestParser2000Equality:
         assert len(s) == 2
 
     def test_not_equal_to_non_parser(self):
-        """Test ze porownanie z non-Parser2000 zwraca NotImplemented."""
+        """Test that comparison with a non-Parser2000 returns NotImplemented."""
         p = Parser2000("6.179.12")
         assert p != "6.179.12"
         assert p != 42
@@ -335,7 +335,7 @@ class TestParser2000Repr:
 
 
 class TestParser2000BBox10k:
-    """Testy BBox dla skali 1:10000."""
+    """BBox tests for scale 1:10000."""
 
     def test_bbox_native_crs(self):
         """Test BBox w natywnym CRS (PL-2000 zone 6 = EPSG:2177)."""
@@ -382,7 +382,7 @@ class TestParser2000BBox10k:
 
 
 class TestParser2000BBox5k:
-    """Testy BBox dla skali 1:5000."""
+    """BBox tests for scale 1:5000."""
 
     def test_bbox_5k_quadrant_1(self):
         """Test BBox 1:5000 kwadrant 1 (NW = row0,col0)."""
@@ -441,14 +441,15 @@ class TestParser2000BBox5k:
 
 
 class TestParser2000BBox2k:
-    """Testy BBox dla skali 1:2000."""
+    """BBox tests for scale 1:2000."""
 
     def test_bbox_2k_ark_01(self):
-        """Test BBox 1:2000 arkusz 01 (row=0,col=0 w siatce 5x5 w 10k)."""
+        """Test BBox 1:2000 sheet 01 (row=0,col=0 in a 5x5 grid within 10k)."""
+
         p = Parser2000("6.179.12.01")
         bbox = p.get_bbox()
 
-        # Arkusz 01: divmod(0,5) -> row=0, col=0
+        # Sheet 01: divmod(0,5) -> row=0, col=0
         # south = parent_10k.north - 1*1000 = 5_820_000 - 1000 = 5_819_000
         # north = parent_10k.north - 0*1000 = 5_820_000
         # west = parent_10k.west + 0*1600 = 6_428_000
@@ -459,11 +460,11 @@ class TestParser2000BBox2k:
         assert bbox.max_x == pytest.approx(6_429_600)
 
     def test_bbox_2k_ark_05(self):
-        """Test BBox 1:2000 arkusz 05 (row=0,col=4 — koniec wiersza)."""
+        """Test BBox 1:2000 sheet 05 (row=0,col=4 - end of the row)."""
         p = Parser2000("6.179.12.05")
         bbox = p.get_bbox()
 
-        # Arkusz 05: divmod(4,5) -> row=0, col=4
+        # Sheet 05: divmod(4,5) -> row=0, col=4
         # west = 6_428_000 + 4*1600 = 6_434_400
         # east = 6_434_400 + 1600 = 6_436_000
         assert bbox.min_y == pytest.approx(5_819_000)
@@ -472,22 +473,22 @@ class TestParser2000BBox2k:
         assert bbox.max_x == pytest.approx(6_436_000)
 
     def test_bbox_2k_ark_06(self):
-        """Test BBox 1:2000 arkusz 06 (row=1,col=0 — nowy wiersz)."""
+        """Test BBox 1:2000 sheet 06 (row=1,col=0 - new row)."""
         p = Parser2000("6.179.12.06")
         bbox = p.get_bbox()
 
-        # Arkusz 06: divmod(5,5) -> row=1, col=0
+        # Sheet 06: divmod(5,5) -> row=1, col=0
         assert bbox.min_y == pytest.approx(5_818_000)
         assert bbox.max_y == pytest.approx(5_819_000)
         assert bbox.min_x == pytest.approx(6_428_000)
         assert bbox.max_x == pytest.approx(6_429_600)
 
     def test_bbox_2k_ark_25(self):
-        """Test BBox 1:2000 arkusz 25 (row=4,col=4 — ostatni)."""
+        """Test BBox 1:2000 sheet 25 (row=4,col=4 - the last)."""
         p = Parser2000("6.179.12.25")
         bbox = p.get_bbox()
 
-        # Arkusz 25: divmod(24,5) -> row=4, col=4
+        # Sheet 25: divmod(24,5) -> row=4, col=4
         # south = 5_820_000 - 5*1000 = 5_815_000
         # north = 5_815_000 + 1000 = 5_816_000
         # west = 6_428_000 + 4*1600 = 6_434_400
@@ -505,7 +506,7 @@ class TestParser2000BBox2k:
         assert bbox.max_x - bbox.min_x == pytest.approx(1600)
 
     def test_bbox_2k_all_25_tile_parent_10k(self):
-        """Test ze 25 arkuszy 1:2k pokrywa caly arkusz 1:10k."""
+        """Test that 25 sheets of 1:2k cover the whole 1:10k sheet."""
         parent = Parser2000("6.179.12")
         parent_bbox = parent.get_bbox()
 
@@ -534,10 +535,10 @@ class TestParser2000BBox2k:
 
 
 class TestParser2000BBox1k:
-    """Testy BBox dla skali 1:1000."""
+    """BBox tests for scale 1:1000."""
 
     def test_bbox_1k_quadrant_1(self):
-        """Test BBox 1:1000 kwadrant 1 w arkuszu 2k nr 01."""
+        """Test BBox 1:1000 quadrant 1 in 2k sheet no. 01."""
         p = Parser2000("6.179.12.01.1")
         bbox = p.get_bbox()
 
@@ -573,7 +574,7 @@ class TestParser2000BBox1k:
 
 
 class TestParser2000BBox500:
-    """Testy BBox dla skali 1:500."""
+    """BBox tests for scale 1:500."""
 
     def test_bbox_500_quadrant_1(self):
         """Test BBox 1:500 kwadrant 1 (NW)."""
@@ -686,10 +687,10 @@ class TestParser2000BBoxCRS:
 
 
 class TestParser2000BBoxType:
-    """Test ze get_bbox zwraca BBox NamedTuple."""
+    """Test that get_bbox returns a BBox NamedTuple."""
 
     def test_bbox_is_namedtuple(self):
-        """Test ze wynik jest instancja BBox."""
+        """Test that the result is a BBox instance."""
         p = Parser2000("6.179.12")
         bbox = p.get_bbox()
         assert isinstance(bbox, BBox)
@@ -736,7 +737,7 @@ class TestParser2000Constants:
     def test_sheet_dimensions_consistent_with_bbox(self):
         """Test ze wymiary w SHEET_DIMENSIONS_2000 sa zgodne z BBox."""
         for scale, (h, w) in SHEET_DIMENSIONS_2000.items():
-            # Tworzymy odpowiednie godlo dla kazdej skali
+            # Build a suitable sheet code for each scale
             if scale == "1:10000":
                 godlo = "6.179.12"
             elif scale == "1:5000":
@@ -784,7 +785,7 @@ class TestParser2000GetParent:
     """Testy metody get_parent()."""
 
     def test_parent_of_10k_is_none(self):
-        """1:10000 nie ma rodzica — zwraca None."""
+        """1:10000 has no parent - returns None."""
         p = Parser2000("6.179.12")
         assert p.get_parent() is None
 
@@ -821,7 +822,7 @@ class TestParser2000GetParent:
         assert parent.scale == "1:1000"
 
     def test_parent_returns_parser2000(self):
-        """get_parent zwraca instancje Parser2000."""
+        """get_parent returns a Parser2000 instance."""
         p = Parser2000("6.179.12.3")
         parent = p.get_parent()
         assert isinstance(parent, Parser2000)
@@ -853,7 +854,7 @@ class TestParser2000GetParent:
             assert parent.godlo == parent_godlo
 
     def test_parent_of_2k_all_arks(self):
-        """Wszystkie arkusze 1:2000 (01-25) maja tego samego rodzica 1:10000."""
+        """All 1:2000 sheets (01-25) have the same 1:10000 parent."""
         parent_godlo = "6.179.12"
         for ark in range(1, 26):
             p = Parser2000(f"6.179.12.{ark:02d}")
@@ -861,7 +862,7 @@ class TestParser2000GetParent:
             assert parent.godlo == parent_godlo
 
     def test_parent_different_zone(self):
-        """get_parent dziala poprawnie dla roznych stref."""
+        """get_parent works correctly for different zones."""
         p = Parser2000("8.100.5.15")
         parent = p.get_parent()
         assert parent.godlo == "8.100.5"
@@ -896,7 +897,7 @@ class TestParser2000GetChildren:
     # --- 1:10000 -> 1:2000 (5x5) ---
 
     def test_children_10k_to_2k(self):
-        """1:10000 -> 25 dzieci 1:2000 (arkusze 01-25)."""
+        """1:10000 -> 25 children of 1:2000 (sheets 01-25)."""
         p = Parser2000("6.179.12")
         children = p.get_children(scale="1:2000")
         assert len(children) == 25
@@ -905,7 +906,7 @@ class TestParser2000GetChildren:
         assert godla[24] == "6.179.12.25"
 
     def test_children_10k_default_is_2k(self):
-        """Domyslny scale dla 1:10000 to 1:2000."""
+        """The default scale for 1:10000 is 1:2000."""
         p = Parser2000("6.179.12")
         children_default = p.get_children()
         children_2k = p.get_children(scale="1:2000")
@@ -965,19 +966,19 @@ class TestParser2000GetChildren:
     # --- Leaf nodes ---
 
     def test_children_500_empty(self):
-        """1:500 nie ma dzieci — zwraca pusta liste."""
+        """1:500 has no children - returns an empty list."""
         p = Parser2000("6.179.12.15.2.4")
         assert p.get_children() == []
 
     def test_children_5k_empty(self):
-        """1:5000 nie ma dzieci — zwraca pusta liste (liscie galezi 5k)."""
+        """1:5000 has no children - returns an empty list (leaves of the 5k branch)."""
         p = Parser2000("6.179.12.3")
         assert p.get_children() == []
 
     # --- Return type ---
 
     def test_children_return_parser2000_instances(self):
-        """get_children zwraca liste instancji Parser2000."""
+        """get_children returns a list of Parser2000 instances."""
         p = Parser2000("6.179.12")
         children = p.get_children()
         for c in children:
@@ -995,7 +996,7 @@ class TestParser2000GetChildren:
     # --- Different zones ---
 
     def test_children_different_zone(self):
-        """get_children dziala poprawnie dla roznych stref."""
+        """get_children works correctly for different zones."""
         p = Parser2000("8.100.5")
         children = p.get_children(scale="1:5000")
         assert len(children) == 4
@@ -1014,14 +1015,14 @@ class TestParser2000GetAllDescendants:
     # --- Same scale ---
 
     def test_descendants_same_scale(self):
-        """Ta sama skala -> zwraca [self]."""
+        """The same scale -> returns [self]."""
         p = Parser2000("6.179.12")
         result = p.get_all_descendants("1:10000")
         assert len(result) == 1
         assert result[0] == p
 
     def test_descendants_same_scale_2k(self):
-        """Ta sama skala 1:2000 -> zwraca [self]."""
+        """The same scale 1:2000 -> returns [self]."""
         p = Parser2000("6.179.12.15")
         result = p.get_all_descendants("1:2000")
         assert len(result) == 1
@@ -1030,7 +1031,7 @@ class TestParser2000GetAllDescendants:
     # --- 1:10000 -> various targets ---
 
     def test_descendants_10k_to_5k(self):
-        """1:10000 -> 1:5000: 4 arkusze (galaz 5k)."""
+        """1:10000 -> 1:5000: 4 sheets (5k branch)."""
         p = Parser2000("6.179.12")
         result = p.get_all_descendants("1:5000")
         assert len(result) == 4
@@ -1038,7 +1039,7 @@ class TestParser2000GetAllDescendants:
             assert d.scale == "1:5000"
 
     def test_descendants_10k_to_2k(self):
-        """1:10000 -> 1:2000: 25 arkuszy."""
+        """1:10000 -> 1:2000: 25 sheets."""
         p = Parser2000("6.179.12")
         result = p.get_all_descendants("1:2000")
         assert len(result) == 25
@@ -1046,7 +1047,7 @@ class TestParser2000GetAllDescendants:
             assert d.scale == "1:2000"
 
     def test_descendants_10k_to_1k(self):
-        """1:10000 -> 1:1000: 25 * 4 = 100 arkuszy."""
+        """1:10000 -> 1:1000: 25 * 4 = 100 sheets."""
         p = Parser2000("6.179.12")
         result = p.get_all_descendants("1:1000")
         assert len(result) == 100
@@ -1054,7 +1055,7 @@ class TestParser2000GetAllDescendants:
             assert d.scale == "1:1000"
 
     def test_descendants_10k_to_500(self):
-        """1:10000 -> 1:500: 25 * 4 * 4 = 400 arkuszy."""
+        """1:10000 -> 1:500: 25 * 4 * 4 = 400 sheets."""
         p = Parser2000("6.179.12")
         result = p.get_all_descendants("1:500")
         assert len(result) == 400
@@ -1064,13 +1065,13 @@ class TestParser2000GetAllDescendants:
     # --- 1:2000 -> various targets ---
 
     def test_descendants_2k_to_1k(self):
-        """1:2000 -> 1:1000: 4 arkusze."""
+        """1:2000 -> 1:1000: 4 sheets."""
         p = Parser2000("6.179.12.15")
         result = p.get_all_descendants("1:1000")
         assert len(result) == 4
 
     def test_descendants_2k_to_500(self):
-        """1:2000 -> 1:500: 4 * 4 = 16 arkuszy."""
+        """1:2000 -> 1:500: 4 * 4 = 16 sheets."""
         p = Parser2000("6.179.12.15")
         result = p.get_all_descendants("1:500")
         assert len(result) == 16
@@ -1080,7 +1081,7 @@ class TestParser2000GetAllDescendants:
     # --- 1:1000 -> 1:500 ---
 
     def test_descendants_1k_to_500(self):
-        """1:1000 -> 1:500: 4 arkusze."""
+        """1:1000 -> 1:500: 4 sheets."""
         p = Parser2000("6.179.12.15.2")
         result = p.get_all_descendants("1:500")
         assert len(result) == 4
@@ -1088,7 +1089,7 @@ class TestParser2000GetAllDescendants:
     # --- Sorted output ---
 
     def test_descendants_sorted(self):
-        """Wyniki get_all_descendants sa posortowane wg godla."""
+        """get_all_descendants results are sorted by sheet code."""
         p = Parser2000("6.179.12")
         result = p.get_all_descendants("1:1000")
         godla = [d.godlo for d in result]
@@ -1125,14 +1126,14 @@ class TestParser2000GetAllDescendants:
     # --- Leaf nodes ---
 
     def test_descendants_500_same_scale(self):
-        """1:500 -> 1:500 zwraca [self]."""
+        """1:500 -> 1:500 returns [self]."""
         p = Parser2000("6.179.12.15.2.4")
         result = p.get_all_descendants("1:500")
         assert len(result) == 1
         assert result[0] == p
 
     def test_descendants_5k_same_scale(self):
-        """1:5000 -> 1:5000 zwraca [self]."""
+        """1:5000 -> 1:5000 returns [self]."""
         p = Parser2000("6.179.12.3")
         result = p.get_all_descendants("1:5000")
         assert len(result) == 1
@@ -1141,19 +1142,19 @@ class TestParser2000GetAllDescendants:
     # --- Cross-branch: 5k has no finer descendants ---
 
     def test_descendants_5k_to_2k_raises(self):
-        """1:5000 -> 1:2000 podnosi ValidationError (5k jest lisciem)."""
+        """1:5000 -> 1:2000 raises ValidationError (5k is a leaf)."""
         p = Parser2000("6.179.12.3")
         with pytest.raises(ValidationError):
             p.get_all_descendants("1:2000")
 
     def test_descendants_5k_to_1k_raises(self):
-        """1:5000 -> 1:1000 podnosi ValidationError (5k jest lisciem)."""
+        """1:5000 -> 1:1000 raises ValidationError (5k is a leaf)."""
         p = Parser2000("6.179.12.3")
         with pytest.raises(ValidationError):
             p.get_all_descendants("1:1000")
 
     def test_descendants_5k_to_500_raises(self):
-        """1:5000 -> 1:500 podnosi ValidationError (5k jest lisciem)."""
+        """1:5000 -> 1:500 raises ValidationError (5k is a leaf)."""
         p = Parser2000("6.179.12.3")
         with pytest.raises(ValidationError):
             p.get_all_descendants("1:500")
@@ -1161,7 +1162,7 @@ class TestParser2000GetAllDescendants:
     # --- Return type ---
 
     def test_descendants_return_parser2000_instances(self):
-        """get_all_descendants zwraca liste instancji Parser2000."""
+        """get_all_descendants returns a list of Parser2000 instances."""
         p = Parser2000("6.179.12")
         result = p.get_all_descendants("1:2000")
         for d in result:
@@ -1228,19 +1229,19 @@ class TestParser2000GetHierarchyUp:
         assert chain[3].scale == "1:10000"
 
     def test_hierarchy_up_first_is_self(self):
-        """Pierwszy element to zawsze self."""
+        """The first element is always self."""
         p = Parser2000("6.179.12.15.2")
         chain = p.get_hierarchy_up()
         assert chain[0] == p
 
     def test_hierarchy_up_last_is_10k(self):
-        """Ostatni element to zawsze 1:10000."""
+        """The last element is always 1:10000."""
         p = Parser2000("6.179.12.15.2.4")
         chain = p.get_hierarchy_up()
         assert chain[-1].scale == "1:10000"
 
     def test_hierarchy_up_returns_parser2000_instances(self):
-        """get_hierarchy_up zwraca liste instancji Parser2000."""
+        """get_hierarchy_up returns a list of Parser2000 instances."""
         p = Parser2000("6.179.12.15.2")
         chain = p.get_hierarchy_up()
         for item in chain:
@@ -1255,10 +1256,10 @@ class TestParser2000GetHierarchyUp:
 class TestFindSheets2000ForBBox:
     """Testy funkcji find_sheets_2000_for_bbox()."""
 
-    # --- Pojedynczy arkusz 1:10000 ---
+    # --- A single 1:10000 sheet ---
 
     def test_single_10k_sheet_native_crs(self):
-        """Bbox wewnatrz jednego arkusza 1:10k -> zwraca dokladnie ten arkusz."""
+        """A bbox inside one 1:10k sheet -> returns exactly that sheet."""
         # Punkt wewnatrz 6.179.12 (zone 6, native CRS EPSG:2177)
         # Sheet bbox: south=5815000, north=5820000, west=6428000, east=6436000
         bbox = BBox(
@@ -1268,16 +1269,16 @@ class TestFindSheets2000ForBBox:
         assert result == ["6.179.12"]
 
     def test_single_10k_sheet_wgs84(self):
-        """Bbox w WGS84 wewnatrz jednego arkusza 1:10k -> auto-detect zone."""
+        """A WGS84 bbox inside one 1:10k sheet -> auto-detect zone."""
         # 6.179.12 WGS84 bbox: lon ~16.94-17.06, lat ~52.46-52.51
         bbox = BBox(min_x=16.97, min_y=52.47, max_x=17.03, max_y=52.50, crs="EPSG:4326")
         result = find_sheets_2000_for_bbox(bbox)
         assert result == ["6.179.12"]
 
-    # --- Wiele arkuszy 1:10000 ---
+    # --- Multiple 1:10000 sheets ---
 
     def test_multiple_10k_sheets(self):
-        """Bbox rozciagajacy sie na kilka arkuszy 1:10k."""
+        """A bbox spanning several 1:10k sheets."""
         # Bbox covering 6.179.12 and 6.179.13 (adjacent columns)
         # 6.179.12: west=6428000, east=6436000
         # 6.179.13: west=6436000, east=6444000
@@ -1290,7 +1291,7 @@ class TestFindSheets2000ForBBox:
         assert len(result) >= 2
 
     def test_multiple_10k_sheets_rows_and_cols(self):
-        """Bbox rozciagajacy sie na 4 arkusze (2x2) 1:10k."""
+        """A bbox spanning 4 (2x2) 1:10k sheets."""
         # Bbox crossing 6.179.12 / 6.179.13 / 6.180.12 / 6.180.13
         # Row boundary at northing=5820000
         # Col boundary at easting=6436000
@@ -1306,8 +1307,8 @@ class TestFindSheets2000ForBBox:
     # --- Drill down do 1:2000 ---
 
     def test_drill_down_to_2k(self):
-        """Bbox w jednym arkuszu 1:10k -> drill down to 1:2k, mniejsza ilosc."""
-        # Maly bbox w srodku 6.179.12 -> powinien dac kilka arkuszy 1:2k
+        """A bbox in one 1:10k sheet -> drill down to 1:2k, fewer sheets."""
+        # A small bbox in the middle of 6.179.12 -> should give a few 1:2k sheets
         bbox = BBox(
             min_x=6431000, min_y=5817000, max_x=6433000, max_y=5818500, crs="EPSG:2177"
         )
@@ -1316,12 +1317,12 @@ class TestFindSheets2000ForBBox:
         # Wszystkie powinny byc potomkami 6.179.12
         for godlo in result:
             assert godlo.startswith("6.179.12.")
-        # Nie powinno byc wiecej niz 25 (caly arkusz 10k to 25 ark. 2k)
+        # There should be no more than 25 (a whole 10k sheet is 25 2k sheets)
         assert len(result) <= 25
 
     def test_small_bbox_fewer_2k_sheets(self):
-        """Bardzo maly bbox -> mala ilosc arkuszy 1:2000."""
-        # Bbox ~200m x 200m w srodku jednego 1:2k arkusza
+        """A very small bbox -> few 1:2000 sheets."""
+        # A bbox ~200m x 200m in the middle of one 1:2k sheet
         # 1:2000 sheet 6.179.12.13 bbox: S=5817000 N=5818000 W=6431200 E=6432800
         bbox = BBox(
             min_x=6431500, min_y=5817300, max_x=6431700, max_y=5817500, crs="EPSG:2177"
@@ -1331,9 +1332,9 @@ class TestFindSheets2000ForBBox:
         assert result == ["6.179.12.13"]
 
     def test_drill_down_full_10k_all_2k(self):
-        """Bbox pokrywajacy caly arkusz 1:10k (lekko zmniejszony) -> 25 arkuszy 1:2k."""
-        # Caly arkusz 6.179.12 — lekko scisniety, zeby nie zahaczac o sasiednie
-        # (transformacja CRS powoduje lekkie poszerzenie na granicach)
+        """A bbox covering a whole 1:10k sheet (slightly shrunk) -> 25 1:2k sheets."""
+        # The whole sheet 6.179.12 - slightly shrunk so as not to touch neighbours
+        # (the CRS transformation slightly widens it at the edges)
         bbox = BBox(
             min_x=6428001, min_y=5815001, max_x=6435999, max_y=5819999, crs="EPSG:2177"
         )
@@ -1343,7 +1344,7 @@ class TestFindSheets2000ForBBox:
     # --- Target 1:5000 ---
 
     def test_target_5k(self):
-        """Target 1:5000 — zwraca kwadrenty 5k."""
+        """Target 1:5000 - returns 5k quadrants."""
         # Maly bbox w polnocno-zachodnim rogu 6.179.12 -> 1:5k kwadrant 1
         # 5k.1 (NW): south=5817500, north=5820000, west=6428000, east=6432000
         bbox = BBox(
@@ -1354,8 +1355,8 @@ class TestFindSheets2000ForBBox:
         assert len(result) >= 1
 
     def test_target_5k_all_four(self):
-        """Target 1:5000 — caly arkusz 10k (lekko zmniejszony) -> 4 kwadrenty."""
-        # Lekko scisniety, zeby nie zahaczac o sasiednie arkusze
+        """Target 1:5000 - a whole 10k sheet (slightly shrunk) -> 4 quadrants."""
+        # Slightly shrunk so as not to touch neighbouring sheets
         bbox = BBox(
             min_x=6428001, min_y=5815001, max_x=6435999, max_y=5819999, crs="EPSG:2177"
         )
@@ -1370,7 +1371,7 @@ class TestFindSheets2000ForBBox:
         # Punkt okolo Warszawy (lon ~18, lat ~52)
         p = Parser2000("6.179.12")
         wgs_bbox = p.get_bbox("EPSG:4326")
-        # Uzyjmy bbox nieco mniejszy, zeby byc pewnym jednego arkusza
+        # Use a slightly smaller bbox to be sure of a single sheet
         bbox = BBox(
             min_x=wgs_bbox.min_x + 0.01,
             min_y=wgs_bbox.min_y + 0.01,
@@ -1401,7 +1402,7 @@ class TestFindSheets2000ForBBox:
         """Bbox w PL-1992 (EPSG:2180) — transformacja do WGS84 i auto-detect zone."""
         p = Parser2000("6.179.12")
         bbox_2180 = p.get_bbox("EPSG:2180")
-        # Lekko zmniejsz bbox zeby byc w jednym arkuszu
+        # Shrink the bbox slightly to stay within one sheet
         bbox = BBox(
             min_x=bbox_2180.min_x + 500,
             min_y=bbox_2180.min_y + 500,
@@ -1412,10 +1413,11 @@ class TestFindSheets2000ForBBox:
         result = find_sheets_2000_for_bbox(bbox)
         assert "6.179.12" in result
 
-    # --- Roundtrip: get_bbox -> find_sheets -> oryginalny arkusz ---
+    # --- Roundtrip: get_bbox -> find_sheets -> original sheet ---
 
     def test_roundtrip_10k(self):
-        """Roundtrip: get_bbox -> find_sheets -> oryginalne godlo w wynikach."""
+        """Roundtrip: get_bbox -> find_sheets -> the original sheet code in the
+        results."""
         p = Parser2000("6.179.12")
         native_bbox = p.get_bbox()
         # Lekko scisniety bbox, zeby na pewno w srodku
@@ -1444,8 +1446,8 @@ class TestFindSheets2000ForBBox:
         assert "5.179.12" in result
 
     def test_roundtrip_zone_8(self):
-        """Roundtrip zone 8 — uzywamy arkusza centralnie w strefie."""
-        # Arkusz 8.100.15 (lon ~23.3-23.5) jest bezpiecznie w strefie 8
+        """Roundtrip zone 8 - we use a sheet in the middle of the zone."""
+        # Sheet 8.100.15 (lon ~23.3-23.5) is safely within zone 8
         p = Parser2000("8.100.15")
         native_bbox = p.get_bbox()
         bbox = BBox(
@@ -1496,15 +1498,16 @@ class TestFindSheets2000ForBBox:
         )
         result = find_sheets_2000_for_bbox(bbox, zone=6)
         assert "6.179.12" in result
-        # Wszystkie wyniki sa w strefie 6
+        # All results are in zone 6
         for godlo in result:
             assert godlo.startswith("6.")
 
     def test_explicit_zone_wrong_zone_empty(self):
-        """Jawna strefa inna niz faktyczna -> pusty wynik (brak przeciecia)."""
-        # Bbox w natywnym CRS strefy 6, ale pytamy o strefe 7
-        # W strefie 7 te wspolrzedne nie beda sensowne (rozne CRS)
-        # Ale jesli bbox jest w WGS84 i jest w strefie 6, a pytamy o zone=7
+        """An explicit zone other than the actual one -> empty result (no
+        intersection)."""
+        # A bbox in the native CRS of zone 6, but we ask for zone 7
+        # In zone 7 these coordinates will not make sense (different CRS)
+        # But if the bbox is in WGS84 and lies in zone 6, and we ask for zone=7
         p = Parser2000("6.179.12")
         wgs_bbox = p.get_bbox("EPSG:4326")
         bbox = BBox(
@@ -1517,10 +1520,10 @@ class TestFindSheets2000ForBBox:
         result = find_sheets_2000_for_bbox(bbox, zone=7)
         assert result == []
 
-    # --- Posortowane wyniki ---
+    # --- Sorted results ---
 
     def test_results_sorted(self):
-        """Wyniki sa zawsze posortowane."""
+        """Results are always sorted."""
         bbox = BBox(
             min_x=6434000, min_y=5818000, max_x=6438000, max_y=5822000, crs="EPSG:2177"
         )
@@ -1528,7 +1531,7 @@ class TestFindSheets2000ForBBox:
         assert result == sorted(result)
 
     def test_results_sorted_2k(self):
-        """Wyniki 1:2000 sa posortowane."""
+        """1:2000 results are sorted."""
         bbox = BBox(
             min_x=6428000, min_y=5815000, max_x=6436000, max_y=5820000, crs="EPSG:2177"
         )
@@ -1538,34 +1541,35 @@ class TestFindSheets2000ForBBox:
     # --- Bbox na granicy stref ---
 
     def test_bbox_spanning_two_zones(self):
-        """Bbox na granicy stref 6 i 7 (lon ~19.5) -> arkusze z obu stref."""
-        # Granica stref 6/7 jest na 19.5E
+        """A bbox on the border of zones 6 and 7 (lon ~19.5) -> sheets from both
+        zones."""
+        # The border of zones 6/7 is at 19.5E
         bbox = BBox(min_x=19.4, min_y=52.0, max_x=19.6, max_y=52.1, crs="EPSG:4326")
         result = find_sheets_2000_for_bbox(bbox)
-        # Powinny byc arkusze z obu stref
+        # There should be sheets from both zones
         has_zone_6 = any(g.startswith("6.") for g in result)
         has_zone_7 = any(g.startswith("7.") for g in result)
         assert has_zone_6
         assert has_zone_7
 
-    # --- Stykajace sie krawedzie (audyt 0.7.0, A1-7) ---
+    # --- Touching edges (audit 0.7.0, A1-7) ---
 
     def test_bbox_equal_to_sheet_2000_returns_itself(self):
-        """Bbox rowny arkuszowi 1:2000 -> dokladnie ten jeden arkusz."""
+        """A bbox equal to a 1:2000 sheet -> exactly that one sheet."""
         godlo = "6.179.12.20"
         bbox = Parser2000(godlo).get_bbox()
         result = find_sheets_2000_for_bbox(bbox, target_scale="1:2000")
         assert result == [godlo]
 
     def test_bbox_equal_to_10k_sheet_2000_returns_itself(self):
-        """Bbox rowny arkuszowi 1:10000 -> dokladnie ten jeden arkusz."""
+        """A bbox equal to a 1:10000 sheet -> exactly that one sheet."""
         godlo = "6.179.12"
         bbox = Parser2000(godlo).get_bbox()
         assert find_sheets_2000_for_bbox(bbox) == [godlo]
 
     def test_point_bbox_2000_on_grid_line_returns_single_sheet(self):
-        """Zdegenerowany bbox na linii siatki -> dokladnie 1 arkusz (NE od linii)."""
-        # Naroznik SW arkusza 6.179.12: west=6428000, south=5815000
+        """A degenerate bbox on a grid line -> exactly 1 sheet (NE of the line)."""
+        # SW corner of sheet 6.179.12: west=6428000, south=5815000
         bbox = BBox(
             min_x=6428000, min_y=5815000, max_x=6428000, max_y=5815000, crs="EPSG:2177"
         )
@@ -1573,7 +1577,7 @@ class TestFindSheets2000ForBBox:
         assert result == ["6.179.12"]
 
     def test_hairline_bbox_2000_across_grid_line_returns_single_sheet(self):
-        """Bbox wezszy niz 2*_EDGE_TOL okrakiem na linii siatki -> 1 arkusz."""
+        """A bbox narrower than 2*_EDGE_TOL straddling a grid line -> 1 sheet."""
         # Zachodnia krawedz 6.179.12: x = 6428000 (metry)
         half_x = 0.75e-9
         bbox = BBox(
@@ -1586,13 +1590,13 @@ class TestFindSheets2000ForBBox:
         assert find_sheets_2000_for_bbox(bbox) == ["6.179.12"]
 
     def test_point_on_zone_boundary_meridian_returns_single_sheet(self):
-        """Punkt dokladnie na poludniku granicy stref 6/7 -> 1 arkusz strefy 7."""
+        """A point exactly on the meridian of the zone 6/7 border -> 1 zone-7 sheet."""
         result = find_sheets_2000_for_bbox(BBox(19.5, 52.0, 19.5, 52.0, "EPSG:4326"))
         assert len(result) == 1
         assert result[0].startswith("7.")
 
     def test_point_bbox_2000_inside_sheet_returns_single_sheet(self):
-        """Zdegenerowany bbox wewnatrz arkusza -> dokladnie 1 arkusz."""
+        """A degenerate bbox inside a sheet -> exactly 1 sheet."""
         bbox = BBox(
             min_x=6430000, min_y=5817000, max_x=6430000, max_y=5817000, crs="EPSG:2177"
         )
@@ -1601,7 +1605,7 @@ class TestFindSheets2000ForBBox:
     # --- Zwracane typy ---
 
     def test_returns_list_of_strings(self):
-        """Wynik to lista stringow."""
+        """The result is a list of strings."""
         bbox = BBox(
             min_x=6430000, min_y=5816000, max_x=6434000, max_y=5818000, crs="EPSG:2177"
         )
@@ -1610,10 +1614,10 @@ class TestFindSheets2000ForBBox:
         for item in result:
             assert isinstance(item, str)
 
-    # --- Validacja godla: kazdy wynik to prawidlowe godlo ---
+    # --- Sheet code validation: every result is a valid sheet code ---
 
     def test_each_result_is_valid_godlo(self):
-        """Kazdy wynik to prawidlowe godlo Parser2000."""
+        """Every result is a valid Parser2000 sheet code."""
         bbox = BBox(
             min_x=6428000, min_y=5815000, max_x=6436000, max_y=5820000, crs="EPSG:2177"
         )
@@ -1623,7 +1627,7 @@ class TestFindSheets2000ForBBox:
             assert p.scale == "1:2000"
 
     def test_each_10k_result_is_valid(self):
-        """Kazdy wynik 1:10k to prawidlowe godlo 1:10000."""
+        """Every 1:10k result is a valid 1:10000 sheet code."""
         bbox = BBox(
             min_x=6434000, min_y=5818000, max_x=6438000, max_y=5822000, crs="EPSG:2177"
         )
@@ -1648,13 +1652,13 @@ class TestBBoxesIntersect2000:
         assert _bboxes_intersect_2000(a, b) is True
 
     def test_touching_edge(self):
-        """Styk krawedzia -> NIE przeciecie (audyt 0.7.0, A1-7)."""
+        """Touching along an edge -> NOT an intersection (audit 0.7.0, A1-7)."""
         a = BBox(0, 0, 5, 5, "EPSG:2177")
         b = BBox(5, 0, 10, 5, "EPSG:2177")
         assert _bboxes_intersect_2000(a, b) is False
 
     def test_touching_corner(self):
-        """Styk naroznikiem -> NIE przeciecie."""
+        """Touching at a corner -> NOT an intersection."""
         a = BBox(0, 0, 5, 5, "EPSG:2177")
         b = BBox(5, 5, 10, 10, "EPSG:2177")
         assert _bboxes_intersect_2000(a, b) is False
@@ -1679,11 +1683,11 @@ class TestBBoxesIntersect2000:
 
 
 class TestFindSheets2000DenseEnvelope:
-    """K3 (ocena parserow): bbox WGS84 przez poludnik osiowy strefy (18E dla 6).
+    """K3 (parser review): a WGS84 bbox across the zone central meridian (18E for 6).
 
-    Rownoleznik w odwzorowaniu poprzecznym ma minimum ``y`` na poludniku
-    osiowym — obwiednia z 4 naroznikow podnosila dolna krawedz o ~76 m
-    i gubila caly wiersz arkuszy 6.135.* (8 zamiast 16 arkuszy).
+    A parallel in the transverse projection has its minimum ``y`` on the
+    central meridian - the envelope from 4 corners raised the lower edge by ~76 m
+    and lost a whole row of 6.135.* sheets (8 instead of 16 sheets).
     """
 
     BBOX = BBox(17.6, 50.535, 18.4, 50.555, "EPSG:4326")

@@ -1,8 +1,8 @@
-"""Testy tozsamosci kampanii (ADR-030, kartograf/download/campaigns.py).
+"""Tests of campaign identity (ADR-030, kartograf/download/campaigns.py).
 
-Fixtura ``72675_858113_N-33-69-A-d-3-2.head.xyz``: realny plik GUGiK 72675
-(.xyz, w istocie AAIGrid, 34,8 MB) przyciety do naglowka + 40 wartosci
-7. wiersza (448 B, CRLF); GDAL otwiera go jako AAIGrid 2131x2399.
+Fixture ``72675_858113_N-33-69-A-d-3-2.head.xyz``: a real GUGiK file 72675
+(.xyz, in fact an AAIGrid, 34.8 MB) truncated to the header + 40 values of
+the 7th row (448 B, CRLF); GDAL opens it as a 2131x2399 AAIGrid.
 """
 
 import hashlib
@@ -102,7 +102,7 @@ def test_ref_source_falls_back_to_zrodloDanych():
     )
 
 
-# --- errata 2 N-2: format z pola `format` rekordu, nie z URL ---
+# --- erratum 2 N-2: format from the record's `format` field, not from the URL ---
 def test_real_xyz_record_72675_gets_canonical_asc():
     url = "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/72675/72675_858113_N-33-69-A-d-3-2.xyz"
     ref = CampaignRef.from_record(
@@ -157,7 +157,7 @@ def test_verify_file_format_accepts_tiff_signatures(tmp_path):
         ),  # punkty XYZ != AAIGrid
         (b"", ".asc"),
         (b"TIFF header data\x00", ".tif"),
-        (None, ".tif"),  # None = tresc XYZ_HEAD (AAIGrid) zapisana jako .tif
+        (None, ".tif"),  # None = XYZ_HEAD content (AAIGrid) saved as .tif
     ],
 )
 def test_verify_file_format_rejects_mismatch(body, ext, tmp_path):
@@ -241,7 +241,7 @@ def test_validate_campaign_args_accepts():
 
 
 def test_verify_file_format_oserror_is_download_error(tmp_path):
-    """M-2: ``OSError`` odczytu (brak pliku, katalog) -> ``DownloadError``."""
+    """M-2: a read ``OSError`` (missing file, directory) -> ``DownloadError``."""
     with pytest.raises(DownloadError, match="missing.asc"):
         verify_file_format(tmp_path / "missing.asc", ".asc")
     (tmp_path / "dir.tif").mkdir()

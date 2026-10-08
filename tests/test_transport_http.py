@@ -78,7 +78,7 @@ class TestDownloadTo:
         ):
             download_to(session, "https://example.test/p", out, timeout=5, retries=3)
         assert session.get.call_count == 3
-        assert list(tmp_path.iterdir()) == []  # zadnych tmp ani czesciowych plikow
+        assert list(tmp_path.iterdir()) == []  # no tmp or partial files
 
     def test_error_mid_stream_cleans_tmp(self, tmp_path):
         def broken_iter(chunk_size):
@@ -147,7 +147,7 @@ def _http_response(status, headers=None, content=b""):
 
 
 class TestRetryPolicy:
-    """Ponawiamy tylko bledy sieci, 429 i 5xx; Retry-After ma pierwszenstwo."""
+    """Only network errors, 429 and 5xx are retried; Retry-After takes precedence."""
 
     @pytest.mark.parametrize("status", [400, 401, 403, 404, 410])
     def test_client_error_is_not_retryable(self, status):
@@ -266,7 +266,7 @@ class TestDownloadToPolicy:
 
 
 class TestSessionPerThread:
-    """Jedna sesja na watek albo sesja wolajacego (D2)."""
+    """One session per thread or the caller's session (D2)."""
 
     def test_injected_session_wins(self):
         session = MagicMock(spec=requests.Session)

@@ -1,9 +1,9 @@
 """
-Pobieranie kafli LAZ jako API biblioteki (review-1 D17, review-2 N15).
+LAZ tile download as a library API (review-1 D17, review-2 N15).
 
-``kartograf.download.laz``: pula watkow, sidecar kafla i porazki kafli zyja
-w bibliotece; CLI tylko drukuje. Offline: WFS z surowych XML rundy
-2026-10-06 (obszar w2), pobranie pliku podmienione na zapis kilku bajtow.
+``kartograf.download.laz``: the thread pool, the tile sidecar and tile
+failures live in the library; the CLI only prints. Offline: WFS from the raw
+XML of the 2026-10-06 round (area w2), file download replaced by writing a few bytes.
 """
 
 import json
@@ -33,7 +33,7 @@ PARENT = {"bbox": [637400, 487000, 637450, 487050], "bbox_crs": "EPSG:2180",
 
 
 def wfs_session() -> MagicMock:
-    """GetCapabilities/GetFeature z surowych XML; pliki .laz -> kilka bajtow."""
+    """GetCapabilities/GetFeature from raw XML; .laz files -> a few bytes."""
     session = MagicMock()
 
     def get(url, **kwargs):
@@ -142,7 +142,7 @@ class TestRunLazDownload:
         }
         assert meta["extra"]["nominal_density"] == tile.density
         assert not {"godlo_kafla", "rok", "gestosc"} & set(meta["extra"])
-        assert "parent_request" not in meta["extra"]  # nie podano
+        assert "parent_request" not in meta["extra"]  # not given
 
     def test_parent_request_written_to_every_tile_sidecar(self, tmp_path):
         """N15: ADR-023 (f).1 — kafle LAZ z obszaru niosa klucz grupowania."""
@@ -159,8 +159,8 @@ class TestRunLazDownload:
             assert _sidecar(path)["extra"]["parent_request"] == PARENT
 
     def test_sidecar_failure_does_not_abort_download(self, tmp_path, caplog):
-        """Sidecar przez wspolny ``emit_sidecar``: awaria budowy metadanych to
-        ostrzezenie w logu, kafel zostaje pobrany (D7, polityka best-effort)."""
+        """Sidecar through the shared ``emit_sidecar``: a metadata build failure is
+        a log warning, the tile stays downloaded (D7, best-effort policy)."""
         from unittest.mock import patch
 
         tile = _tile("N-33-131-B-a-1-1-4")
@@ -183,8 +183,8 @@ class TestRunLazDownload:
         assert "zepsuty deskryptor" in caplog.text
 
     def test_provider_without_descriptor_key_still_gets_laz_sidecar(self, tmp_path):
-        """Provider bez ``descriptor_key`` (str) — sidecar z kluczem
-        ``pl.gugik.laz``, nie cisza (``emit_sidecar`` sam by go pominal)."""
+        """A provider without ``descriptor_key`` (str) - a sidecar with the key
+        ``pl.gugik.laz``, not silence (``emit_sidecar`` itself would skip it)."""
         provider = FakeProvider()
         provider.descriptor_key = None
         result = run_laz_download(
@@ -208,7 +208,7 @@ class TestRunLazDownload:
         ]
         assert all(isinstance(f.error, DownloadError) for f in result.failed)
         assert not result.ok
-        # nieudany kafel nie zostawia sidecara
+        # a failed tile leaves no sidecar
         assert len(list(tmp_path.rglob("*.meta.json"))) == 2
 
     def test_existing_tiles_are_skipped_unless_force(self, tmp_path):
@@ -383,7 +383,7 @@ class TestCliOnRealWfs:
         }
 
     def test_parent_request_keeps_bbox_in_given_crs(self, tmp_path):
-        """Jak tory NMT: parent_request niesie bbox PODANY, nie EPSG:2180."""
+        """Like the NMT paths: parent_request carries the GIVEN bbox, not EPSG:2180."""
         from pyproj import Transformer
 
         to_wgs = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
