@@ -84,28 +84,28 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
     elif args.source == "corine":
         from kartograf.providers.corine import CorineProvider
 
-        provider = CorineProvider()
+        corine = CorineProvider()
         print("  CORINE provides unified land cover classification.")
         print("  Available years:")
-        for year in provider.get_available_years():
+        for year in corine.get_available_years():
             print(f"    {year}")
         print()
         print("  Use --year option to select reference year.")
     elif args.source == "soilgrids":
         from kartograf.providers.soilgrids import SoilGridsProvider
 
-        provider = SoilGridsProvider()
+        soilgrids = SoilGridsProvider()
         print("  Available soil properties:")
-        for prop in provider.get_available_properties():
-            desc = provider.get_property_description(prop)
+        for prop in soilgrids.get_available_properties():
+            desc = soilgrids.get_property_description(prop)
             print(f"    {prop:10} - {desc}")
         print()
         print("  Available depths:")
-        for depth in provider.get_available_depths():
+        for depth in soilgrids.get_available_depths():
             print(f"    {depth}")
         print()
         print("  Available statistics:")
-        for stat in provider.get_available_stats():
+        for stat in soilgrids.get_available_stats():
             print(f"    {stat}")
         print()
         print("  Use --property, --depth, --stat options to configure download.")

@@ -1,6 +1,6 @@
 # Standardy deweloperskie — Kartograf
 
-**Wersja:** 3.2
+**Wersja:** 3.3
 **Data:** 2026-10-08
 **Status:** Obowiazujacy
 **Zrodlo:** Zunifikowane standardy workspace (`shared/standards/DEVELOPMENT_STANDARDS.md` — repozytorium zewnetrzne, nieobecne w tym workspace)
@@ -37,6 +37,11 @@
 > i odsylaczy — ten dokument jest dla niego zrodlem konwencji. Dopisane:
 > konce linii (5.5, CRLF w `docs/DECISIONS.md`), dowolna niepusta wartosc
 > `KARTOGRAF_DEBUG` (6.2).
+>
+> **Nota 3.3 (2026-10-08):** brama zaostrzona — `ruff check .` i
+> `ruff format --check .` (cale repo, takze skrypty w `docs/research/`)
+> oraz `mypy kartograf/ tests/` bez bledow; koniec porownywania z lista
+> bledow (8.3, 3.1, 6.3, 18).
 
 ---
 
@@ -159,9 +164,9 @@ chore(deps): requests 2.32.0
 ```
 1. Deweloper tworzy PR
 2. Kontrole (uruchamiane lokalnie, komendy w sekcji 6.3):
-   ├─ Formatowanie (ruff format --check)
-   ├─ Linting (ruff check)
-   ├─ Type checking (mypy, bez nowych bledow — sekcja 8.3)
+   ├─ Formatowanie (ruff format --check .)
+   ├─ Linting (ruff check .)
+   ├─ Type checking (mypy kartograf/ tests/ bez bledow — sekcja 8.3)
    └─ Testy offline z pokryciem (pytest -m "not live" --cov)
 3. Manual review
 4. Poprawki jesli potrzeba
@@ -251,17 +256,17 @@ quote-style = "double"
 ### 5.2 Komendy
 
 ```bash
-# Formatowanie
-ruff format kartograf/ tests/
+# Formatowanie (cale repo; .claude/ wykluczone w pyproject.toml)
+ruff format .
 
 # Sprawdzenie (bez zmian)
-ruff format --check kartograf/ tests/
+ruff format --check .
 
 # Linting
-ruff check kartograf/ tests/
+ruff check .
 
 # Linting z auto-fix
-ruff check --fix kartograf/ tests/
+ruff check --fix .
 ```
 
 ### 5.3 Zasady formatowania
@@ -364,15 +369,15 @@ pip install -e ".[dev]"
 # Liczba testow (zamiast liczb w dokumentacji)
 .venv/bin/python -m pytest tests/ --collect-only -q -m "not live"
 
-# Linter
-.venv/bin/python -m ruff check kartograf/ tests/
+# Linter (cale repo)
+.venv/bin/python -m ruff check .
 
 # Formatowanie / sprawdzenie formatowania (bez zmian)
-.venv/bin/python -m ruff format kartograf/ tests/
-.venv/bin/python -m ruff format --check kartograf/ tests/
+.venv/bin/python -m ruff format .
+.venv/bin/python -m ruff format --check .
 
 # Type checking (sekcja 8.3)
-.venv/bin/python -m mypy kartograf/
+.venv/bin/python -m mypy kartograf/ tests/
 ```
 
 Testy sa **offline**: `tests/conftest.py` przewraca kazdy test otwierajacy
@@ -468,20 +473,17 @@ Type hints sa wymagane dla:
 ### 8.3 Type checking
 
 ```bash
-mypy kartograf/
+.venv/bin/python -m mypy kartograf/ tests/
 ```
 
-Projekt utrzymuje baseline mypy (konfiguracja `[tool.mypy]` w
-`pyproject.toml`, bez `--strict`) z przedistniejacymi bledami. Nowy kod nie
-moze dodawac nowych bledow do tego dlugu. Porownuj **liste bledow bez
-numerow linii** przed i po zmianie, nie ich liczbe (przesuniecie linii
-zmienia numery, a liczba moze sie zgadzac mimo zamiany bledow):
-
-```bash
-.venv/bin/python -m mypy kartograf/ | sed -E 's/:[0-9]+:/:/' | sort > mypy-po.txt
-# to samo na develop -> mypy-przed.txt; diff nie moze miec nowych pozycji
-diff mypy-przed.txt mypy-po.txt
-```
+`mypy kartograf/ tests/` musi konczyc sie bez bledow (konfiguracja
+`[tool.mypy]` w `pyproject.toml`, bez `--strict`). Blad naprawiaj
+merytorycznie; `# type: ignore` / `cast` tylko z jednozdaniowym
+uzasadnieniem w komentarzu, gdy typowanie biblioteki zewnetrznej jest
+bledne lub niepelne. Biblioteka bez stubow trafia do `[[tool.mypy.overrides]]`
+z `ignore_missing_imports`. Funkcja z adnotacjami zmiennych lokalnych
+dostaje sygnature z adnotacjami (inaczej mypy pomija jej cialo —
+`annotation-unchecked`).
 
 ---
 
@@ -909,7 +911,7 @@ danych, uklad `data/`) -> `docs/PRD.md` (wymagania) -> `docs/CHANGELOG.md`
 2. Testy offline: fixtures i mocking, bez prawdziwych API (sekcja 10.4)
 3. Pokrycie: progi z sekcji 10.1
 4. Uruchom: pytest tests/ -v --tb=short -m "not live"
-5. Sprawdz linting: ruff check kartograf/ tests/
+5. Sprawdz brame: ruff check ., ruff format --check ., mypy kartograf/ tests/
 ```
 
 ### 15.4 W trakcie sesji — commity
@@ -1008,9 +1010,9 @@ sekcja 5 ("Jak dodac nowe zrodlo albo nowy kraj").
 - [ ] Testy offline przechodza (`pytest tests/ -v -m "not live"`; testy
       `live` tylko swiadomie: `pytest tests/ -m live`)
 - [ ] Pokrycie kodu w normie (sekcja 10.1: `fail_under` + 80% core)
-- [ ] Formatowanie OK (`ruff format --check kartograf/ tests/`)
-- [ ] Linting OK (`ruff check kartograf/ tests/`)
-- [ ] Type hints OK (`mypy kartograf/` — bez nowych bledow wzgledem baseline'u, sekcja 8.3)
+- [ ] Formatowanie OK (`ruff format --check .`)
+- [ ] Linting OK (`ruff check .`)
+- [ ] Type hints OK (`mypy kartograf/ tests/` bez bledow, sekcja 8.3)
 - [ ] Docstrings dla publicznych funkcji/klas
 - [ ] Brak hardcoded secrets
 - [ ] Dokumentacja zaktualizowana (jesli potrzeba)
@@ -1021,7 +1023,7 @@ sekcja 5 ("Jak dodac nowe zrodlo albo nowy kraj").
 
 ---
 
-**Wersja dokumentu:** 3.2
+**Wersja dokumentu:** 3.3
 **Data ostatniej aktualizacji:** 2026-10-08
 **Zrodlo:** `shared/standards/DEVELOPMENT_STANDARDS.md` v1.0 (repozytorium zewnetrzne, nieobecne w tym workspace)
 

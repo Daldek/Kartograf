@@ -656,7 +656,8 @@ pyshp >= 2.3.0         # Shapefile reading
 - Wszystkie testy offline przechodzą (`pytest -m "not live"`); testy
   z markerem `live` wymagają sieci i nie należą do bramki offline
 - Pokrycie nie niższe niż próg `fail_under` w `pyproject.toml`
-- Kod zgodny z ruff (check + format), mypy bez nowego długu względem baseline
+- Kod zgodny z ruff (`ruff check .` i `ruff format --check .` czyste),
+  `mypy kartograf/ tests/` bez błędów
 - Dokumentacja zgodna z kodem; zmiany zachowania wobec usług GUGiK/CUZK
   weryfikowane na żywo przed wydaniem (raporty w `docs/research/`)
 ```

@@ -85,6 +85,7 @@ class LandCoverManager:
         self._storage = FileStorage(output_dir)
 
         # Initialize provider
+        self._provider: LandCoverProvider
         if provider is None:
             self._provider = Bdot10kProvider()
         elif isinstance(provider, str):
@@ -209,10 +210,12 @@ class LandCoverManager:
                 kwargs,
             )
             return path
-        else:
+        elif godlo is not None:
             path = self._provider.download_by_godlo(godlo, output_path, **kwargs)
             self._write_sidecar(path, {"sheet": godlo}, kwargs)
             return path
+        # Unreachable after the validation above; keeps godlo narrowed to str.
+        raise ValueError("Must provide one of: teryt, bbox, or godlo")
 
     def download_by_teryt(
         self,

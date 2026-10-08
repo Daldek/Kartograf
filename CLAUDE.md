@@ -18,8 +18,8 @@ Glowne zrodlo konwencji i procesu: `docs/DEVELOPMENT_STANDARDS.md`.
   (STANDARDS 6.4).
 - Testy sa offline: `-m "not live"`; testy `live` tylko swiadomie
   (STANDARDS 6.3, 10.4).
-- Brama przed commitem/merge: pytest offline, `ruff check` + `ruff format
-  --check`, `mypy` bez nowych pozycji na LISCIE bledow wzgledem baseline'u
+- Brama przed commitem/merge: pytest offline zielone, `ruff check .` i
+  `ruff format --check .` czyste, `mypy kartograf/ tests/` bez bledow
   (STANDARDS 6.3, 8.3, 18).
 - Praca na `develop` (albo galezi krotkotrwalej z `develop`); Conventional
   Commits z opisem po polsku, docstringi i komentarze po angielsku,

@@ -283,7 +283,7 @@ class TestAvailableYears:
 class TestSessionPerThread:
     """Sesja HTTP na watek, jak w pozostalych providerach GUGiK (D2)."""
 
-    def test_threads_get_separate_sessions(self):
+    def test_threads_get_separate_sessions(self) -> None:
         import threading
 
         made: list[MagicMock] = []

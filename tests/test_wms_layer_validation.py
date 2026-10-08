@@ -312,7 +312,7 @@ class TestLayers:
         assert mock_fetch.call_count == 2
 
     @pytest.mark.real_wms_layers
-    def test_lock_serializes_concurrent_discovery(self):
+    def test_lock_serializes_concurrent_discovery(self) -> None:
         """Cztery watki naraz -> dokladnie jedno GetCapabilities, wspolny wynik."""
         provider = GugikProvider()
         calls: list[str] = []

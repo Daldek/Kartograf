@@ -433,8 +433,8 @@ class HSGCalculator:
         output_path = Path(output_path)
 
         # Use temporary directory for intermediate files
-        with tempfile.TemporaryDirectory() as tmpdir:
-            tmpdir = Path(tmpdir)
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
 
             # Download clay, sand, silt
             logger.info("Downloading soil texture data from SoilGrids...")

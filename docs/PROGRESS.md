@@ -101,9 +101,8 @@
 > `main`) WYLACZNIE na polecenie uzytkownika.
 > Brama (stan sprawdzaj komendami, nie liczbami z dziennika):
 > `.venv/bin/python -m pytest tests/ -m "not live"` (zielone),
-> `.venv/bin/python -m ruff check kartograf/ tests/` i
-> `ruff format --check` (czyste), `.venv/bin/python -m mypy kartograf/`
-> (porownuj LISTE bledow z baseline'em bez numerow linii, nie ich liczbe).
+> `.venv/bin/python -m ruff check .` i `ruff format --check .` (czyste,
+> cale repo), `.venv/bin/python -m mypy kartograf/ tests/` (bez bledow).
 > Testy `live` tylko swiadomie (`-m live`).
 > **Otwarte drobiazgi:** drobne otwarte punkty ADR-030 w dzienniku nizej
 > ("Otwarte drobne"), do decyzji uzytkownika.
