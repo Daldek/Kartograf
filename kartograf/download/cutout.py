@@ -132,7 +132,7 @@ class PlCutoutResult:
     unverified: dict[str, str] = field(default_factory=dict)
 
 
-def _bbox_to_2180(bbox: BBox) -> BBox:
+def bbox_to_2180(bbox: BBox) -> BBox:
     """Request in EPSG:2180: Czech CRSs via the pinned operation, the rest as before.
 
     PL/WGS84 CRSs — deliberately the default transformer, as in the whole PL
@@ -193,7 +193,7 @@ def prepare_pl_cutout(
     # local import: tests replace the operation in the transform.crs module
     from kartograf.transform.crs import build_pinned_transform
 
-    bbox_2180 = _bbox_to_2180(bbox)
+    bbox_2180 = bbox_to_2180(bbox)
     pinned = None
     bbox_target = bbox_2180
     bbox_source_2180 = bbox_2180

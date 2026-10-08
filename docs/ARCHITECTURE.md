@@ -68,8 +68,8 @@ i przyciecia pod `auto` (`_bbox_to_wgs84` w `cli/download_cmd.py`, takze dla
 bboxa podanego w ukladzie czeskim) i obwiednia pliku geometrii w torze LAZ
 (`_resolve_laz_bbox`: `get_overall_bbox(..., target_crs="EPSG:2180")`).
 Przeliczenia obwiedni miedzy ukladami PL i WGS84 (selekcja arkuszy
-w `core/sheet_parser.py` i `core/geometry.py`, `_bbox_to_2180` wycinka dla
-ukladow nieczeskich, dyspozycja krajow w CLI, obwiednia bboxa EPSG:2180
+w `core/sheet_parser.py` i `core/geometry.py`, `bbox_to_2180` wycinka
+i odkrywania TERYT dla ukladow nieczeskich, dyspozycja krajow w CLI, obwiednia bboxa EPSG:2180
 w ukladzie uslugi CORINE/SoilGrids — `transform/bbox.py::envelope_from_2180`)
 swiadomie uzywaja domyslnego transformera pyproj — migracja to backlog A5-6.
 `transform/crs.py` ma cztery twarde reguly: (1) transformer budowany tylko przez
@@ -128,7 +128,7 @@ providers ──> sources, transform, transport, core, cache,
 sources ──> core, kartograf (l, __version__)
 transport ──> transform, core, kartograf (l, __version__)
 transform ──> core
-cache ──> (nic wewnetrznego)
+cache ──> core                         # tylko pod TYPE_CHECKING (BBox)
 auth ──> (nic wewnetrznego)
 core ──> (nic wewnetrznego)
 exceptions ──> (lisc; krawedzie DO niego pominiete powyzej — importuja go
@@ -178,7 +178,12 @@ Uwagi, ktore latwo przeoczyc:
   `download` importuje `providers` przy imporcie): walidacja opcji kampanii
   `download.campaigns.validate_campaign_args` w
   `SkorowidzLayersMixin.resolve_campaigns` (`providers/pl/skorowidz.py`)
-  i w `GugikLazProvider.select_tiles` (`providers/pl/gugik_laz.py`).
+  i w `GugikLazProvider.select_tiles` (`providers/pl/gugik_laz.py`) oraz
+  przeliczenie obszaru do EPSG:2180 `download.cutout.bbox_to_2180`
+  w `providers/pl/prg.py` (jedna regula dla wycinka PL i odkrywania TERYT).
+- `cache ──> core` istnieje tylko pod `if TYPE_CHECKING:` (adnotacja
+  `BBox` w `MetadataCache.get_teryts_for_bbox`/`set_teryts_for_bbox`);
+  w czasie wykonania `cache` nie importuje nic wewnetrznego.
 - `hydrology` importuje wszystko leniwie: `providers.soilgrids` (warstwy
   gleb), `core.sheet_parser` (godlo -> bbox) i `sources.sidecar.emit_sidecar`
   (sidecar wyniku HSG).
@@ -238,7 +243,7 @@ kartograf/
 ├── transport/           # Wspolny transport
 │   ├── http.py          # download_to (pliki WSZYSTKICH providerow; zapis atomowy os.replace)
 │   │                    # i get_with_retry (zapytania: skorowidz, WFS LAZ, TERYT BDOT10k,
-│   │                    # CuzkClient.query) — jedyne miejsce retry (siec, 429, 5xx;
+│   │                    # WFS PRG, CuzkClient.query) — jedyne miejsce retry (siec, 429, 5xx;
 │   │                    # Retry-After): is_retryable, retry_wait, backoff_delay;
 │   │                    # make_gugik_session, SessionPerThread (sesja per watek)
 │   └── mosaic.py        # mosaic_and_crop — merge rastrow + przyciecie, propagacja nodata;
@@ -253,6 +258,8 @@ kartograf/
 │   │                    # record_source; select_campaign_records, layer_upper_year,
 │   │                    # coverage_hints/no_coverage_error),
 │   │                    # wcs.py (GugikWcsMixin — URL GetCoverage dla NMT/NMPT/orto),
+│   │                    # prg.py (discover_teryts_for_bbox, teryt_for_point — TERYT
+│   │                    # powiatow z WFS PRG),
 │   │                    # __init__.py (create_nmt_provider, nmt_vertical_crs)
 │   ├── cuzk/            # CUZK: client.py (CuzkClient — silnik sterowany deskryptorem: ArcGIS
 │   │                    # REST query/export_image + pliki openzu), sheets.py (SheetIndex/
@@ -1285,6 +1292,28 @@ glebokosc: `hsg_<godlo>_<depth>.tif`, `hsg_bbox_<depth>.tif`),
 `horizontal_crs` = uklad rastra wyniku, `nodata: 0`,
 `extra` = `{derived: "hsg", source_layers: ["clay", "sand", "silt"], depth,
 stat, classes: "1=A, 2=B, 3=C, 4=D"}`.
+
+**Odkrywanie TERYT (od 0.7.1).** `providers/pl/prg.py` to jedyne miejsce,
+ktore pyta, w jakich powiatach lezy obszar albo punkt:
+`discover_teryts_for_bbox(bbox, *, session, cache, timeout)` zwraca
+posortowane, unikalne 4-cyfrowe kody powiatow, a `teryt_for_point(x, y,
+crs, ...)` kod powiatu punktu (`None` = brak powiatu: morze, za granica;
+punkt na granicy dwoch powiatow = nizszy kod). Zrodlo: WFS PRG GUGiK
+(WFS 2.0.0, MapServer), warstwa `ms:A02_Granice_powiatow`, atrybut
+`JPT_KOD_JE`. Obszar w dowolnym obslugiwanym ukladzie jest przeliczany do
+EPSG:2180 ta sama regula co wycinek PL (`download.cutout.bbox_to_2180`),
+a `BBOX` idzie w kolejnosci osi (N,E) z `urn:ogc:def:crs:EPSG::2180`.
+Filtr dziala na GEOMETRII powiatu, nie na jego obwiedni (sprawdzone na
+zywo 2026-10-08; surowe odpowiedzi: `tests/fixtures/gugik_prg/`). Pusta
+lista tylko z poprawnej odpowiedzi bez obiektow; blad HTTP (po wspolnej
+polityce ponowien `get_with_retry`), `ows:ExceptionReport`, odpowiedz nie-XML,
+kod spoza 4 cyfr i lista obcieta stronicowaniem = `DownloadError`.
+Obciecie: `numberReturned < numberMatched`, albo `numberMatched`
+nieliczbowe (MapServer: `unknown`) przy pelnej stronie, albo atrybut `next`
+kolekcji — tak wyglada prawdziwa strona MapServera (`unknown` + `next`).
+Odpowiedzi trafiaja do `MetadataCache`: obszar (EPSG:2180) -> lista kodow
+w `teryt_bbox_cache` (TTL jak pozostale tabele, takze pusta lista), punkt
+-> kod w `teryt_cache`; `kartograf cache stats` liczy oba w `TERYT entries`.
 
 ---
 
