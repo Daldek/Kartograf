@@ -1,35 +1,37 @@
 """
-Rejestr systemow godel: pl2000, cz_tm33, cz_sm5 i fallback pl1992.
+Registry of sheet code systems: pl2000, cz_tm33, cz_sm5 and the pl1992 fallback.
 
-Jedno zrodlo prawdy dla rozpoznania systemu z godla (``detect_system``),
-dla podzialu godla na katalogi ``FileStorage`` (``path_parts``) oraz dla
-wzorcow godel CZ (``CZ_TM33_PATTERN``, ``CZ_SM5_PATTERN`` — importowane przez
-``core.parser_tm33`` i ``providers.cuzk.sheets``). Biale znaki wokol godla sa
-obcinane w kazdej funkcji (spojnie z parserami).
+The single source of truth for recognising the system from a sheet code
+(``detect_system``), for splitting a sheet code into ``FileStorage``
+directories (``path_parts``) and for the CZ sheet code patterns
+(``CZ_TM33_PATTERN``, ``CZ_SM5_PATTERN`` - imported by ``core.parser_tm33``
+and ``providers.cuzk.sheets``). Whitespace around the sheet code is stripped
+in every function (consistent with the parsers).
 
-Rejestr jest literalem ``SYSTEMS`` (kolejnosc = priorytet detekcji); modul
-nie importuje niczego z ``kartograf`` — brak cykli z parserami.
+The registry is the ``SYSTEMS`` literal (order = detection priority); the
+module imports nothing from ``kartograf``, so there are no cycles with the
+parsers.
 """
 
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
-# Godlo kafla TM33 `{E_km}_{N_km}` (grupy: kilometry E i N narozniku SW).
+# TM33 tile sheet code `{E_km}_{N_km}` (groups: E and N kilometres of the SW corner).
 CZ_TM33_PATTERN = re.compile(r"^(\d{3})_(\d{4})$")
-# Godlo arkusza SM5 (MAPNOM): 4 wielkie litery + 2 cyfry, np. CTES96.
+# SM5 sheet code (MAPNOM): 4 uppercase letters + 2 digits, e.g. CTES96.
 CZ_SM5_PATTERN = re.compile(r"^[A-Z]{4}\d{2}$")
 _PL2000_PATTERN = re.compile(r"^[5-8]\.\d")
 
 
 @dataclass(frozen=True)
 class SheetSystem:
-    """Opis jednego systemu godlowania arkuszy."""
+    """Description of a single sheet coding system."""
 
     id: str  # "pl1992", "pl2000", "cz_tm33", "cz_sm5"
     country: str
-    detect: Callable[[str], bool]  # dostaje godlo bez bialych znakow
-    path_parts: Callable[[str], list[str]]  # czesci sciezki dla FileStorage
+    detect: Callable[[str], bool]  # receives the sheet code without whitespace
+    path_parts: Callable[[str], list[str]]  # path parts for FileStorage
 
 
 def _pl2000_path_parts(godlo: str) -> list[str]:
@@ -72,7 +74,7 @@ SYSTEMS: tuple[SheetSystem, ...] = (
     SheetSystem(
         id="pl1992",
         country="PL",
-        detect=lambda godlo: True,  # fallback — zawsze ostatni
+        detect=lambda godlo: True,  # fallback - always last
         path_parts=_pl1992_path_parts,
     ),
 )
@@ -80,17 +82,17 @@ SYSTEMS: tuple[SheetSystem, ...] = (
 
 def detect_system(godlo: str) -> SheetSystem:
     """
-    Pierwszy system (w kolejnosci ``SYSTEMS``), ktorego ``detect`` pasuje.
+    First system (in ``SYSTEMS`` order) whose ``detect`` matches.
 
-    Godlo jest obcinane z bialych znakow. Nigdy nie zwraca ``None``: ``pl1992``
-    jest fallbackiem dla kazdego identyfikatora (takze nieprawidlowego —
-    walidacje robi parser systemu).
+    The sheet code is stripped of whitespace. Never returns ``None``:
+    ``pl1992`` is the fallback for any identifier (including an invalid one -
+    validation is done by the system's parser).
     """
     cleaned = godlo.strip()
     return next(s for s in SYSTEMS if s.detect(cleaned))
 
 
 def path_parts(godlo: str) -> list[str]:
-    """Czesci sciezki katalogowej dla godla (bez bialych znakow) wg systemu."""
+    """Directory path parts for a sheet code (whitespace stripped), by system."""
     cleaned = godlo.strip()
     return detect_system(cleaned).path_parts(cleaned)

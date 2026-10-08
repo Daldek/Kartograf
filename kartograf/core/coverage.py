@@ -1,22 +1,23 @@
 """
-Pokrycie obszaru wypuklymi wielokatami — czysta geometria, bez IO i zaleznosci.
+Area coverage by convex polygons - pure geometry, no IO and no dependencies.
 
-Uzywane przez wybor kafli LAZ (``providers/pl/gugik_laz.py``): kafel starszy
-jest zbedny, jesli jego czesc wspolna z obszarem zadania jest juz pokryta
-przez kafle nowsze. Kafle GUGiK to czworokaty (rama arkusza, w EPSG:2180
-lekko obrocone — takze arkusze PL-1992 1:2500), wiec wystarcza arytmetyka
-wielokatow WYPUKLYCH:
+Used by LAZ tile selection (``providers/pl/gugik_laz.py``): an older tile is
+redundant if its intersection with the requested area is already covered by
+newer tiles. GUGiK tiles are quadrilaterals (the sheet frame, slightly
+rotated in EPSG:2180 - including PL-1992 1:2500 sheets), so arithmetic on
+CONVEX polygons is enough:
 
-- przeciecie dwoch wypuklych = obcinanie Sutherlanda-Hodgmana (wynik wypukly),
-- roznica ``P \\ Q`` dla wypuklego ``Q`` = rozlaczne kawalki
-  ``P ∩ H1 ∩ ... ∩ H(i-1) ∩ ¬Hi`` (``Hi`` — polplaszczyzna wewnetrzna i-tej
-  krawedzi ``Q``), kazdy wypukly,
-- tolerancja krawedzi = przesuniecie kazdej krawedzi pokrycia na zewnatrz
-  (bufor z ostrymi naroznikami — nieco wiekszy od okraglego w naroznikach).
+- intersection of two convex polygons = Sutherland-Hodgman clipping (the
+  result is convex),
+- difference ``P \\ Q`` for convex ``Q`` = disjoint pieces
+  ``P ∩ H1 ∩ ... ∩ H(i-1) ∩ ¬Hi`` (``Hi`` - the inner half-plane of the
+  i-th edge of ``Q``), each convex,
+- edge tolerance = shifting every edge of the cover outwards (a buffer with
+  sharp corners - slightly larger than a round one at the corners).
 
-Wielokaty sa krotkami punktow ``(x, y)`` w kierunku przeciwnym do wskazowek
-zegara (CCW), bez wierzcholka zamykajacego. Wspolrzedne warto przesunac do
-lokalnego poczatku (np. rogu obszaru) — rzad 10^5 m zjada precyzje pol.
+Polygons are tuples of ``(x, y)`` points in counter-clockwise (CCW) order,
+without a closing vertex. It is worth shifting coordinates to a local origin
+(e.g. the corner of the area) - the order of 10^5 m eats area precision.
 """
 
 from collections.abc import Iterable, Sequence
@@ -24,22 +25,22 @@ from collections.abc import Iterable, Sequence
 Point = tuple[float, float]
 Polygon = tuple[Point, ...]
 
-# Kawalki o polu nie wiekszym niz to (m^2) sa szumem numerycznym obcinania,
-# nie realnym niepokrytym obszarem (przy wspolrzednych lokalnych ~10^3 m blad
-# zaokraglen to ~10^-13 m).
+# Pieces with an area no larger than this (m^2) are numerical clipping noise,
+# not a real uncovered area (with local coordinates of ~10^3 m the rounding
+# error is ~10^-13 m).
 AREA_EPS = 1e-6
-# Wierzcholek odchylony od prostej sasiadow o nie wiecej niz tyle metrow jest
-# traktowany jako wspolliniowy i usuwany. Ramy arkuszy PL-1992 1:2500 maja
-# w WFS po 9 punktow (srodki bokow): boki rownoleznikowe sa w EPSG:2180 lukami,
-# srodek odchyla sie od cieciwy o ~3 cm (realny kafel M-34-76-A-a-1-1-3), raz
-# na zewnatrz, raz do wnetrza — bez progu rama wychodzi "wklesla". 10 cm
-# pokrywa tez wieksze arkusze, a zmiana ramy o <= 10 cm jest pomijalna wobec
-# tolerancji pokrycia (1 m).
+# A vertex deviating from the line of its neighbours by no more than this many
+# metres is treated as collinear and removed. PL-1992 1:2500 sheet frames have
+# 9 points in WFS (edge midpoints): parallel-aligned edges are arcs in
+# EPSG:2180, the midpoint deviates from the chord by ~3 cm (real tile
+# M-34-76-A-a-1-1-3), once outwards, once inwards - without a threshold the
+# frame comes out "concave". 10 cm also covers larger sheets, and changing the
+# frame by <= 10 cm is negligible against the coverage tolerance (1 m).
 COLLINEAR_TOL_M = 0.10
 
 
 def polygon_area(poly: Sequence[Point]) -> float:
-    """Pole ze znakiem (wzor Gaussa): dodatnie dla CCW."""
+    """Signed area (shoelace formula): positive for CCW."""
     total = 0.0
     n = len(poly)
     for i in range(n):
@@ -54,19 +55,18 @@ def _cross(o: Point, a: Point, b: Point) -> float:
 
 
 def rectangle(min_x: float, min_y: float, max_x: float, max_y: float) -> Polygon:
-    """Prostokat osiowy jako wielokat CCW."""
+    """Axis-aligned rectangle as a CCW polygon."""
     return ((min_x, min_y), (max_x, min_y), (max_x, max_y), (min_x, max_y))
 
 
 def normalize_convex(points: Iterable[Point]) -> Polygon | None:
     """
-    Pierscien z WFS -> wypukly wielokat CCW albo ``None``.
+    WFS ring -> convex CCW polygon or ``None``.
 
-    Usuwa wierzcholek zamykajacy, powtorzenia i wierzcholki wspolliniowe
-    (GUGiK publikuje ramy arkuszy 1:2500 z dziewiecioma punktami — srodki
-    bokow), odwraca pierscien CW. ``None`` dla wielokata niewypuklego albo
-    zdegenerowanego (< 3 wierzcholki, zerowe pole): wolajacy decyduje, jak
-    zachowac sie ostroznie.
+    Removes the closing vertex, repeated and collinear vertices (GUGiK
+    publishes 1:2500 sheet frames with nine points - edge midpoints), and
+    reverses a CW ring. ``None`` for a non-convex or degenerate polygon
+    (< 3 vertices, zero area): the caller decides how to behave cautiously.
     """
     pts: list[Point] = []
     for x, y in points:
@@ -94,12 +94,12 @@ def normalize_convex(points: Iterable[Point]) -> Polygon | None:
     n = len(pts)
     for i in range(n):
         if _cross(pts[i - 1], pts[i], pts[(i + 1) % n]) <= 0:
-            return None  # wklesly (albo zdegenerowany) — bez zgadywania
+            return None  # concave (or degenerate) - no guessing
     return tuple(pts)
 
 
 def _clip_halfplane(poly: Sequence[Point], a: Point, b: Point) -> Polygon:
-    """Czesc ``poly`` po lewej stronie (lacznie z prosta) skierowanej ``a -> b``."""
+    """Part of ``poly`` on the left of (and on) the directed line ``a -> b``."""
     out: list[Point] = []
     n = len(poly)
     for i in range(n):
@@ -116,7 +116,7 @@ def _clip_halfplane(poly: Sequence[Point], a: Point, b: Point) -> Polygon:
 
 
 def clip_convex(subject: Sequence[Point], clip: Sequence[Point]) -> Polygon:
-    """Przeciecie wielokata wypuklego ``subject`` z wypuklym CCW ``clip``."""
+    """Intersection of the convex polygon ``subject`` with the convex CCW ``clip``."""
     result: Polygon = tuple(subject)
     n = len(clip)
     for i in range(n):
@@ -131,13 +131,13 @@ def _significant(poly: Sequence[Point]) -> bool:
 
 
 def subtract_convex(subject: Sequence[Point], hole: Sequence[Point]) -> list[Polygon]:
-    """``subject \\ hole`` jako lista rozlacznych wypuklych kawalkow (bez szumu)."""
+    """``subject \\ hole`` as a list of disjoint convex pieces (noise-free)."""
     pieces: list[Polygon] = []
     rest: Polygon = tuple(subject)
     n = len(hole)
     for i in range(n):
         a, b = hole[i], hole[(i + 1) % n]
-        outside = _clip_halfplane(rest, b, a)  # prawa strona krawedzi a -> b
+        outside = _clip_halfplane(rest, b, a)  # right side of the edge a -> b
         if _significant(outside):
             pieces.append(outside)
         rest = _clip_halfplane(rest, a, b)
@@ -147,7 +147,7 @@ def subtract_convex(subject: Sequence[Point], hole: Sequence[Point]) -> list[Pol
 
 
 def expand_convex(poly: Sequence[Point], distance: float) -> Polygon:
-    """Kazda krawedz wypuklego CCW przesunieta o ``distance`` na zewnatrz."""
+    """Every edge of a convex CCW polygon shifted outwards by ``distance``."""
     if distance == 0:
         return tuple(poly)
     n = len(poly)
@@ -156,7 +156,7 @@ def expand_convex(poly: Sequence[Point], distance: float) -> Polygon:
         (x1, y1), (x2, y2) = poly[i], poly[(i + 1) % n]
         dx, dy = x2 - x1, y2 - y1
         length = (dx * dx + dy * dy) ** 0.5
-        # normalna zewnetrzna dla CCW: (dy, -dx)
+        # outward normal for CCW: (dy, -dx)
         ox, oy = dy / length * distance, -dx / length * distance
         lines.append(((x1 + ox, y1 + oy), (dx, dy)))
     out: list[Point] = []
@@ -164,7 +164,7 @@ def expand_convex(poly: Sequence[Point], distance: float) -> Polygon:
         (px, py), (rx, ry) = lines[i - 1]
         (qx, qy), (sx, sy) = lines[i]
         denom = rx * sy - ry * sx
-        # sasiednie krawedzie wypuklego po normalizacji nie sa rownolegle
+        # adjacent edges of a normalized convex polygon are not parallel
         t = ((qx - px) * sy - (qy - py) * sx) / denom
         out.append((px + t * rx, py + t * ry))
     return tuple(out)
@@ -173,7 +173,7 @@ def expand_convex(poly: Sequence[Point], distance: float) -> Polygon:
 def uncovered_pieces(
     region: Sequence[Point], covers: Iterable[Sequence[Point]]
 ) -> list[Polygon]:
-    """Czesc ``region`` niepokryta przez sume wypuklych ``covers`` (kawalki)."""
+    """Part of ``region`` not covered by the union of convex ``covers`` (pieces)."""
     pieces: list[Polygon] = [tuple(region)] if _significant(region) else []
     for cover in covers:
         if not pieces:

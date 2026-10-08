@@ -1,8 +1,8 @@
 """
-Parser godel map topograficznych dla ukladu PL-2000.
+Parser of topographic map sheet codes for the PL-2000 system.
 
 This module provides the Parser2000 class for parsing Polish topographic
-map sheet identifiers (godla) in PL-2000 coordinate system.
+map sheet codes (godla) in PL-2000 coordinate system.
 PL-2000 uses dot-separated numeric format: zone.row.column[.subdivisions]
 (e.g., 6.179.12, 6.179.12.20).
 """
@@ -19,10 +19,10 @@ from kartograf.core.sheet_parser import (
 )
 from kartograf.exceptions import ParseError, ValidationError
 
-# Hierarchia skal PL-2000 (od najgrubszej do najdrobniejszej)
+# PL-2000 scale hierarchy (from coarsest to finest)
 SCALE_HIERARCHY_2000 = ["1:10000", "1:5000", "1:2000", "1:1000", "1:500"]
 
-# Wymiary arkuszy w metrach (wysokosc N-S, szerokosc E-W)
+# Sheet dimensions in metres (height N-S, width E-W)
 SHEET_DIMENSIONS_2000 = {
     "1:10000": (5000, 8000),
     "1:5000": (2500, 4000),
@@ -31,7 +31,7 @@ SHEET_DIMENSIONS_2000 = {
     "1:500": (250, 400),
 }
 
-# Mapowanie strefy na EPSG
+# Zone to EPSG mapping
 ZONE_EPSG = {
     5: "EPSG:2176",
     6: "EPSG:2177",
@@ -39,7 +39,7 @@ ZONE_EPSG = {
     8: "EPSG:2179",
 }
 
-# Obsługiwane CRS dla get_bbox
+# CRSs supported by get_bbox
 _SUPPORTED_CRS = {
     "EPSG:2176",
     "EPSG:2177",
@@ -52,24 +52,25 @@ _SUPPORTED_CRS = {
 
 class Parser2000:
     """
-    Parser godel map topograficznych dla ukladu PL-2000.
+    Parser of topographic map sheet codes for the PL-2000 system.
 
-    Obslugiwane skale: 1:10000 do 1:500
+    Supported scales: 1:10000 to 1:500
 
     Attributes
     ----------
     godlo : str
-        Znormalizowane godlo arkusza (np. "6.179.12")
+        Normalized sheet code (e.g. "6.179.12")
     scale : str
-        Skala mapy (np. "1:10000")
+        Map scale (e.g. "1:10000")
     uklad : str
-        Uklad wspolrzednych (zawsze "2000")
+        Coordinate system (always "2000")
     components : dict[str, str]
-        Skladowe godla (strefa, pas, slup, oraz opcjonalne ark_5k/ark_2k/ark_1k/ark_500)
+        Sheet code components (strefa, pas, slup, and optionally
+        ark_5k/ark_2k/ark_1k/ark_500)
     zone : int
-        Numer strefy (5-8)
+        Zone number (5-8)
     native_crs : str
-        Natywny CRS strefy (np. "EPSG:2177")
+        Native CRS of the zone (e.g. "EPSG:2177")
 
     Examples
     --------
@@ -82,7 +83,7 @@ class Parser2000:
     'EPSG:2177'
     """
 
-    # Wzorce godla dla kazdej skali
+    # Sheet code patterns for each scale
     PATTERNS_2000 = {
         "1:10000": r"^([5-8])\.(\d{1,3})\.(\d{1,2})$",
         "1:5000": r"^([5-8])\.(\d{1,3})\.(\d{1,2})\.([1-4])$",
@@ -91,7 +92,7 @@ class Parser2000:
         "1:500": r"^([5-8])\.(\d{1,3})\.(\d{1,2})\.(\d{2})\.([1-4])\.([1-4])$",
     }
 
-    # Nazwy komponentow per skala (porzadek = grupy regex)
+    # Component names per scale (order = regex groups)
     _COMPONENT_NAMES = {
         "1:10000": ("strefa", "pas", "slup"),
         "1:5000": ("strefa", "pas", "slup", "ark_5k"),
@@ -100,7 +101,7 @@ class Parser2000:
         "1:500": ("strefa", "pas", "slup", "ark_2k", "ark_1k", "ark_500"),
     }
 
-    # Pozycje kwadrantow 2x2: {quadrant: (row, col)}
+    # Positions of 2x2 quadrants: {quadrant: (row, col)}
     _QUADRANT_POSITIONS = {
         1: (0, 0),  # NW
         2: (0, 1),  # NE
@@ -110,19 +111,19 @@ class Parser2000:
 
     def __init__(self, godlo: str):
         """
-        Inicjalizuje parser dla podanego godla PL-2000.
+        Initialize the parser for the given PL-2000 sheet code.
 
         Parameters
         ----------
         godlo : str
-            Godlo arkusza mapy (np. "6.179.12", "6.179.12.15")
+            Map sheet code (e.g. "6.179.12", "6.179.12.15")
 
         Raises
         ------
         ParseError
-            Jesli godlo jest nieprawidlowe lub nie pasuje do zadnego wzorca.
+            If the sheet code is invalid or matches no pattern.
         ValidationError
-            Jesli ark_2k jest poza zakresem 01-25.
+            If ark_2k is outside the range 01-25.
         """
         if not isinstance(godlo, str):
             raise ParseError(f"Godlo musi byc stringiem, otrzymano: {type(godlo)}")
@@ -131,7 +132,7 @@ class Parser2000:
         if not godlo:
             raise ParseError("Godlo nie moze byc puste")
 
-        # Odrzuc format PL-1992 (myslniki)
+        # Reject the PL-1992 format (dashes)
         if "-" in godlo:
             raise ParseError(
                 f"Nieprawidlowe godlo PL-2000: '{godlo}'. "
@@ -145,17 +146,17 @@ class Parser2000:
 
     def _determine_scale(self) -> str:
         """
-        Okresla skale na podstawie struktury godla.
+        Determine the scale from the structure of the sheet code.
 
         Returns
         -------
         str
-            Skala mapy (np. "1:10000")
+            Map scale (e.g. "1:10000")
 
         Raises
         ------
         ParseError
-            Jesli godlo nie pasuje do zadnego wzorca
+            If the sheet code matches no pattern
         """
         for scale, pattern in self.PATTERNS_2000.items():
             if re.match(pattern, self._godlo):
@@ -168,12 +169,12 @@ class Parser2000:
 
     def _parse_components(self) -> dict[str, str]:
         """
-        Parsuje skladowe godla.
+        Parse the sheet code components.
 
         Returns
         -------
         dict[str, str]
-            Slownik ze skladowymi godla
+            Dictionary of sheet code components
         """
         pattern = self.PATTERNS_2000[self._scale]
         match = re.match(pattern, self._godlo)
@@ -186,12 +187,12 @@ class Parser2000:
 
     def _validate_components(self) -> None:
         """
-        Waliduje skladowe godla.
+        Validate the sheet code components.
 
         Raises
         ------
         ValidationError
-            Jesli ark_2k jest poza zakresem 01-25
+            If ark_2k is outside the range 01-25
         """
         if "ark_2k" in self._components:
             ark_2k = int(self._components["ark_2k"])
@@ -203,59 +204,59 @@ class Parser2000:
                 )
 
     # =========================================================================
-    # Wlasciwosci
+    # Properties
     # =========================================================================
 
     @property
     def godlo(self) -> str:
-        """Zwraca godlo arkusza."""
+        """Return the sheet code."""
         return self._godlo
 
     @property
     def scale(self) -> str:
-        """Zwraca skale mapy."""
+        """Return the map scale."""
         return self._scale
 
     @property
     def uklad(self) -> str:
-        """Zwraca uklad wspolrzednych (zawsze '2000')."""
+        """Return the coordinate system (always '2000')."""
         return "2000"
 
     @property
     def components(self) -> dict[str, str]:
-        """Zwraca slownik ze skladowymi godla (kopia)."""
+        """Return a dictionary of sheet code components (a copy)."""
         return self._components.copy()
 
     @property
     def zone(self) -> int:
-        """Zwraca numer strefy (5-8)."""
+        """Return the zone number (5-8)."""
         return int(self._components["strefa"])
 
     @property
     def native_crs(self) -> str:
-        """Zwraca natywny CRS strefy (np. 'EPSG:2177')."""
+        """Return the native CRS of the zone (e.g. 'EPSG:2177')."""
         return ZONE_EPSG[self.zone]
 
     # =========================================================================
-    # Rownosc i hashing
+    # Equality and hashing
     # =========================================================================
 
     def __eq__(self, other: object) -> bool:
-        """Porownuje dwa parsery na podstawie godla."""
+        """Compare two parsers by sheet code."""
         if not isinstance(other, Parser2000):
             return NotImplemented
         return self._godlo == other._godlo
 
     def __hash__(self) -> int:
-        """Zwraca hash obiektu."""
+        """Return the object hash."""
         return hash(self._godlo)
 
     def __repr__(self) -> str:
-        """Zwraca reprezentacje obiektu do debugowania."""
+        """Return a debugging representation of the object."""
         return f"Parser2000(godlo='{self._godlo}', scale='{self._scale}', uklad='2000')"
 
     def __str__(self) -> str:
-        """Zwraca czytelna reprezentacje arkusza."""
+        """Return a readable representation of the sheet."""
         return f"{self._godlo} (skala {self._scale}, uklad 2000)"
 
     # =========================================================================
@@ -264,23 +265,23 @@ class Parser2000:
 
     def get_bbox(self, crs: str | None = None) -> BBox:
         """
-        Oblicza bounding box arkusza w zadanym ukladzie wspolrzednych.
+        Compute the bounding box of the sheet in the given coordinate system.
 
         Parameters
         ----------
         crs : str, optional
-            Docelowy uklad wspolrzednych (default: natywny CRS strefy).
-            Obslugiwane: EPSG:2176-2179, EPSG:2180, EPSG:4326.
+            Target coordinate system (default: native CRS of the zone).
+            Supported: EPSG:2176-2179, EPSG:2180, EPSG:4326.
 
         Returns
         -------
         BBox
-            NamedTuple z polami: min_x, min_y, max_x, max_y, crs
+            NamedTuple with fields: min_x, min_y, max_x, max_y, crs
 
         Raises
         ------
         ValidationError
-            Jesli CRS jest nieobslugiwany.
+            If the CRS is not supported.
 
         Examples
         --------
@@ -298,14 +299,14 @@ class Parser2000:
                 f"Obslugiwane: {', '.join(sorted(_SUPPORTED_CRS))}"
             )
 
-        # Oblicz bbox w natywnym CRS strefy
+        # Compute the bbox in the native CRS of the zone
         south, north, west, east = self._calculate_native_bbox()
         native_crs = self.native_crs
 
         if crs == native_crs:
             return BBox(min_x=west, min_y=south, max_x=east, max_y=north, crs=crs)
 
-        # Transformacja do docelowego CRS (gesta obwiednia, core.bbox)
+        # Transform to the target CRS (densified envelope, core.bbox)
         return transform_bbox(
             BBox(min_x=west, min_y=south, max_x=east, max_y=north, crs=native_crs),
             crs,
@@ -313,18 +314,18 @@ class Parser2000:
 
     def _calculate_native_bbox(self) -> tuple[float, float, float, float]:
         """
-        Oblicza bounding box w natywnym CRS strefy PL-2000.
+        Compute the bounding box in the native CRS of the PL-2000 zone.
 
         Returns
         -------
         tuple[float, float, float, float]
-            (south, north, west, east) w metrach
+            (south, north, west, east) in metres
         """
         strefa = int(self._components["strefa"])
         pas = int(self._components["pas"])
         slup = int(self._components["slup"])
 
-        # Bazowe wspolrzedne 1:10000
+        # Base 1:10000 coordinates
         south = pas * 5000 + 4_920_000
         north = south + 5000
         west = strefa * 1_000_000 + slup * 8000 + 332_000
@@ -333,15 +334,15 @@ class Parser2000:
         if self._scale == "1:10000":
             return (south, north, west, east)
 
-        # Podpodzial 1:5000 (2x2 w 10k)
+        # 1:5000 subdivision (2x2 in 10k)
         if self._scale == "1:5000":
             q = int(self._components["ark_5k"])
             return self._apply_quadrant(south, north, west, east, q, 2500, 4000)
 
-        # Podpodzial 1:2000 (5x5 w 10k)
+        # 1:2000 subdivision (5x5 in 10k)
         ark_2k = int(self._components["ark_2k"])
         row, col = divmod(ark_2k - 1, 5)
-        # Wiersze liczone od gory (row=0 to polnoc)
+        # Rows are counted from the top (row=0 is north)
         south_2k = north - (row + 1) * 1000
         north_2k = north - row * 1000
         west_2k = west + col * 1600
@@ -350,7 +351,7 @@ class Parser2000:
         if self._scale == "1:2000":
             return (south_2k, north_2k, west_2k, east_2k)
 
-        # Podpodzial 1:1000 (2x2 w 2k)
+        # 1:1000 subdivision (2x2 in 2k)
         q_1k = int(self._components["ark_1k"])
         south_1k, north_1k, west_1k, east_1k = self._apply_quadrant(
             south_2k, north_2k, west_2k, east_2k, q_1k, 500, 800
@@ -359,7 +360,7 @@ class Parser2000:
         if self._scale == "1:1000":
             return (south_1k, north_1k, west_1k, east_1k)
 
-        # Podpodzial 1:500 (2x2 w 1k)
+        # 1:500 subdivision (2x2 in 1k)
         q_500 = int(self._components["ark_500"])
         return self._apply_quadrant(
             south_1k, north_1k, west_1k, east_1k, q_500, 250, 400
@@ -376,18 +377,18 @@ class Parser2000:
         width: float,
     ) -> tuple[float, float, float, float]:
         """
-        Oblicza bbox kwadranta w siatce 2x2.
+        Compute the bbox of a quadrant in a 2x2 grid.
 
         Parameters
         ----------
         south, north, west, east : float
-            Bbox rodzica
+            Parent bbox
         quadrant : int
-            Numer kwadranta (1-4)
+            Quadrant number (1-4)
         height : float
-            Wysokosc kwadranta w metrach
+            Quadrant height in metres
         width : float
-            Szerokosc kwadranta w metrach
+            Quadrant width in metres
 
         Returns
         -------
@@ -402,17 +403,17 @@ class Parser2000:
         return (new_south, new_north, new_west, new_east)
 
     # =========================================================================
-    # Hierarchia
+    # Hierarchy
     # =========================================================================
 
     def get_parent(self) -> "Parser2000 | None":
         """
-        Zwraca rodzica arkusza (grubsza skala).
+        Return the parent of the sheet (coarser scale).
 
         Returns
         -------
         Parser2000 | None
-            Rodzic lub None jesli 1:10000 (najgrubsza skala).
+            Parent, or None for 1:10000 (the coarsest scale).
 
         Examples
         --------
@@ -422,28 +423,28 @@ class Parser2000:
         if self._scale == "1:10000":
             return None
 
-        # 1:5000 -> 1:10000 (usun ark_5k — ostatni segment)
-        # 1:2000 -> 1:10000 (usun ark_2k — ostatni segment)
-        # 1:1000 -> 1:2000 (usun ark_1k — ostatni segment)
-        # 1:500  -> 1:1000 (usun ark_500 — ostatni segment)
+        # 1:5000 -> 1:10000 (drop ark_5k - the last segment)
+        # 1:2000 -> 1:10000 (drop ark_2k - the last segment)
+        # 1:1000 -> 1:2000 (drop ark_1k - the last segment)
+        # 1:500  -> 1:1000 (drop ark_500 - the last segment)
         parent_godlo = self._godlo.rsplit(".", 1)[0]
         return Parser2000(parent_godlo)
 
     def get_children(self, scale: str | None = None) -> list["Parser2000"]:
         """
-        Zwraca dzieci arkusza (drobniejsza skala).
+        Return the children of the sheet (finer scale).
 
         Parameters
         ----------
         scale : str, optional
-            Skala dzieci. Istotne tylko dla 1:10000, ktore ma dwie sciezki:
-            - "1:5000" -> 4 dzieci (siatka 2x2)
-            - "1:2000" -> 25 dzieci (siatka 5x5) — domyslnie
+            Scale of the children. Relevant only for 1:10000, which has two paths:
+            - "1:5000" -> 4 children (2x2 grid)
+            - "1:2000" -> 25 children (5x5 grid) - the default
 
         Returns
         -------
         list[Parser2000]
-            Lista dzieci posortowana wg godla.
+            List of children sorted by sheet code.
 
         Examples
         --------
@@ -454,43 +455,43 @@ class Parser2000:
             if scale is None:
                 scale = "1:2000"
             if scale == "1:5000":
-                # 2x2: kwadrenty 1-4
+                # 2x2: quadrants 1-4
                 return [Parser2000(f"{self._godlo}.{q}") for q in range(1, 5)]
             if scale == "1:2000":
-                # 5x5: arkusze 01-25
+                # 5x5: sheets 01-25
                 return [Parser2000(f"{self._godlo}.{i:02d}") for i in range(1, 26)]
             return []
 
         if self._scale == "1:2000":
-            # 2x2: kwadrenty 1-4
+            # 2x2: quadrants 1-4
             return [Parser2000(f"{self._godlo}.{q}") for q in range(1, 5)]
 
         if self._scale == "1:1000":
-            # 2x2: kwadrenty 1-4
+            # 2x2: quadrants 1-4
             return [Parser2000(f"{self._godlo}.{q}") for q in range(1, 5)]
 
-        # 1:5000 i 1:500 to liscie — brak dzieci
+        # 1:5000 and 1:500 are leaves - no children
         return []
 
     def get_all_descendants(self, target_scale: str) -> list["Parser2000"]:
         """
-        Zwraca wszystkich potomkow na docelowej skali.
+        Return all descendants at the target scale.
 
         Parameters
         ----------
         target_scale : str
-            Docelowa skala (np. "1:1000").
+            Target scale (e.g. "1:1000").
 
         Returns
         -------
         list[Parser2000]
-            Lista potomkow posortowana wg godla.
+            List of descendants sorted by sheet code.
 
         Raises
         ------
         ValidationError
-            Jesli target_scale jest grubsza niz biezaca skala lub
-            jesli sciezka do target_scale nie istnieje (np. 1:5000 -> 1:2000).
+            If target_scale is coarser than the current scale or if there is
+            no path to target_scale (e.g. 1:5000 -> 1:2000).
 
         Examples
         --------
@@ -500,14 +501,14 @@ class Parser2000:
         if target_scale == self._scale:
             return [self]
 
-        # Sprawdz czy target_scale jest drobniejsza
+        # Check whether target_scale is finer
         if target_scale not in SCALE_HIERARCHY_2000:
             raise ValidationError(
                 f"Nieznana skala: {target_scale}. "
                 f"Dozwolone: {', '.join(SCALE_HIERARCHY_2000)}"
             )
 
-        # Znajdz indeksy w hierarchii
+        # Find the indices in the hierarchy
         current_idx = SCALE_HIERARCHY_2000.index(self._scale)
         target_idx = SCALE_HIERARCHY_2000.index(target_scale)
 
@@ -517,18 +518,18 @@ class Parser2000:
                 f"biezaca skala {self._scale}."
             )
 
-        # Specjalny przypadek: z 1:10000 do 1:5000 — galaz 5k
+        # Special case: from 1:10000 to 1:5000 - the 5k branch
         if self._scale == "1:10000" and target_scale == "1:5000":
             return self.get_children(scale="1:5000")
 
-        # Specjalny przypadek: z 1:5000 nie mozna isc dalej (liscie)
+        # Special case: nothing below 1:5000 (leaves)
         if self._scale == "1:5000" and target_scale != "1:5000":
             raise ValidationError(
                 f"Arkusz 1:5000 nie ma potomkow w skali {target_scale}. "
                 f"Galaz 1:5000 jest niezalezna i nie ma drobniejszych podzialkow."
             )
 
-        # Rekurencyjnie: rozwin dzieci az do target_scale
+        # Recursively: expand the children down to target_scale
         children = self.get_children()
         if not children:
             raise ValidationError(
@@ -539,7 +540,7 @@ class Parser2000:
         if children[0].scale == target_scale:
             return sorted(children, key=lambda p: p.godlo)
 
-        # Rekurencja
+        # Recursion
         result = []
         for child in children:
             result.extend(child.get_all_descendants(target_scale))
@@ -547,12 +548,12 @@ class Parser2000:
 
     def get_hierarchy_up(self) -> list["Parser2000"]:
         """
-        Zwraca lancuch od biezacego arkusza do 1:10000.
+        Return the chain from the current sheet up to 1:10000.
 
         Returns
         -------
         list[Parser2000]
-            Lista od self (pierwszy) do 1:10000 (ostatni).
+            List from self (first) to 1:10000 (last).
 
         Examples
         --------
@@ -571,10 +572,10 @@ class Parser2000:
 
 
 # =========================================================================
-# Standalone functions: bbox → godła lookup (PL-2000)
+# Standalone functions: bbox -> sheet code lookup (PL-2000)
 # =========================================================================
 
-# Zakresy dlugosci geograficznej dla stref PL-2000
+# Longitude ranges for PL-2000 zones
 _ZONE_LON_RANGES = {
     5: (13.5, 16.5),
     6: (16.5, 19.5),
@@ -591,22 +592,22 @@ def _bboxes_intersect_2000(a: BBox, b: BBox) -> bool:
     """
     Positive-area intersection (same convention as PL-1992).
 
-    Styk krawedzia lub naroznikiem NIE liczy sie jako przeciecie
-    (audyt 0.7.0, A1-7). Wspoldzielone z `sheet_parser.py` sa helpery
-    (`_axis_overlaps`, `_expand_degenerate`); osobny jest wylacznie prog
-    rozszerzania bboxa wyrodnialego w metrach (`_DEGENERATE_EPS_M`) — P-12.
+    Touching at an edge or corner does NOT count as an intersection
+    (audit 0.7.0, A1-7). The helpers (`_axis_overlaps`, `_expand_degenerate`)
+    are shared with `sheet_parser.py`; only the threshold for expanding a
+    degenerate bbox in metres (`_DEGENERATE_EPS_M`) is separate - P-12.
 
     Parameters
     ----------
     a, b : BBox
-        Bounding boxy do sprawdzenia (powinny byc w tym samym CRS).
-        `a` to bbox zapytania — jego zdegenerowana os (punkt) jest
-        rozstrzygana przez zawieranie w polotwartym przedziale `b`.
+        Bounding boxes to check (should be in the same CRS).
+        `a` is the query bbox - its degenerate axis (a point) is resolved
+        by containment in the half-open interval of `b`.
 
     Returns
     -------
     bool
-        True jesli pole przeciecia jest dodatnie
+        True if the intersection area is positive
     """
     return _axis_overlaps(a.min_x, a.max_x, b.min_x, b.max_x) and _axis_overlaps(
         a.min_y, a.max_y, b.min_y, b.max_y
@@ -615,24 +616,24 @@ def _bboxes_intersect_2000(a: BBox, b: BBox) -> bool:
 
 def _determine_zones_for_bbox(bbox_wgs84: BBox) -> list[int]:
     """
-    Okreslenie stref PL-2000 przecinanych przez bbox w WGS84.
+    Determine the PL-2000 zones intersected by a bbox in WGS84.
 
     Parameters
     ----------
     bbox_wgs84 : BBox
-        Bbox w EPSG:4326 (min_x=west_lon, max_x=east_lon)
+        Bbox in EPSG:4326 (min_x=west_lon, max_x=east_lon)
 
     Returns
     -------
     list[int]
-        Lista numerow stref (5-8) posortowana rosnaco
+        List of zone numbers (5-8) sorted ascending
     """
     west_lon = bbox_wgs84.min_x
     east_lon = bbox_wgs84.max_x
 
     zones = []
     for zone_num, (zone_west, zone_east) in _ZONE_LON_RANGES.items():
-        # Strefa przecina bbox jesli zakresy dlugosci sie nakladaja
+        # A zone intersects the bbox if the longitude ranges overlap
         if west_lon < zone_east and east_lon > zone_west:
             zones.append(zone_num)
 
@@ -645,33 +646,33 @@ def find_sheets_2000_for_bbox(
     zone: int | None = None,
 ) -> list[str]:
     """
-    Znajduje godla arkuszy PL-2000 pokrywajacych podany bounding box.
+    Find the PL-2000 sheet codes covering the given bounding box.
 
     Parameters
     ----------
     bbox : BBox
-        Bounding box w dowolnym obslugiwanym CRS
+        Bounding box in any supported CRS
         (EPSG:2176-2179, EPSG:2180, EPSG:4326)
     target_scale : str
-        Docelowa skala (default: "1:10000").
-        Obslugiwane: 1:10000, 1:5000, 1:2000, 1:1000, 1:500
+        Target scale (default: "1:10000").
+        Supported: 1:10000, 1:5000, 1:2000, 1:1000, 1:500
     zone : int | None
-        Jesli podano, ogranicza wyszukiwanie do tej strefy (5-8).
-        Jesli None, automatyczna detekcja na podstawie bbox.
+        If given, restricts the search to this zone (5-8).
+        If None, the zone is detected automatically from the bbox.
 
     Returns
     -------
     list[str]
-        Posortowana lista godel arkuszy PL-2000 pokrywajacych bbox.
-        Konwencja krawedzi jak w PL-1992: liczy sie tylko dodatnie pole
-        przeciecia (styk krawedzia to za malo), a bbox zdegenerowany (punkt)
-        daje dokladnie jeden arkusz — ten na wschod/polnoc od linii siatki.
+        Sorted list of PL-2000 sheet codes covering the bbox.
+        Edge convention as in PL-1992: only a positive intersection area
+        counts (touching at an edge is not enough), and a degenerate bbox
+        (a point) yields exactly one sheet - the one east/north of the grid line.
 
     Raises
     ------
     ValidationError
-        Jesli target_scale jest nieprawidlowa, CRS nieobslugiwany albo bbox
-        odwrocony (min > max) lub z wartoscia NaN/inf
+        If target_scale is invalid, the CRS is unsupported, or the bbox is
+        inverted (min > max) or has a NaN/inf value
     """
     if target_scale not in SCALE_HIERARCHY_2000:
         raise ValidationError(
@@ -681,54 +682,56 @@ def find_sheets_2000_for_bbox(
 
     validate_bbox(bbox)
 
-    # Krok 1: Transformuj do WGS84 dla detekcji strefy
+    # Step 1: Transform to WGS84 for zone detection
     bbox_wgs84 = transform_bbox(bbox, "EPSG:4326")
 
-    # Krok 2: Okresl strefy. Detekcja porownuje zakresy dlugosci ostrymi
-    # nierownosciami, wiec punkt na poludniku granicy stref (16.5/19.5/22.5E)
-    # bez rozszerzenia nie trafilby do zadnej strefy (review 0.7.0, runda 1).
-    # Rozszerzenie sluzy WYLACZNIE detekcji — do CRS strefy transformujemy
-    # dalej bbox dokladny, zeby o arkuszu decydowal eps metryczny.
+    # Step 2: Determine the zones. Detection compares longitude ranges with
+    # strict inequalities, so a point on a zone-boundary meridian
+    # (16.5/19.5/22.5E) would fall into no zone without the expansion
+    # (review 0.7.0, round 1). The expansion is used ONLY for detection - we
+    # keep transforming the exact bbox to the zone CRS, so that the metric
+    # eps decides the sheet.
     detect_bbox = _expand_degenerate(bbox_wgs84, _DEGENERATE_EPS_DEG)
     zones = [zone] if zone is not None else _determine_zones_for_bbox(detect_bbox)
 
     if not zones:
         return []
 
-    # Krok 3: Dla kazdej strefy znajdz arkusze 1:10k
+    # Step 3: For each zone find the 1:10k sheets
     all_godla: set[str] = set()
 
     for z in zones:
         zone_crs = ZONE_EPSG[z]
 
-        # Transformuj bbox do CRS strefy
+        # Transform the bbox to the zone CRS
         if bbox.crs == zone_crs:
             zone_bbox = bbox
         else:
-            # Gesta obwiednia: rownoleznik ma minimum y na poludniku osiowym
-            # strefy (15/18/21/24E) — 4 narozniki podnosily dolna krawedz
-            # i gubily caly wiersz arkuszy (ocena parserow 2026-10-07, K3)
+            # Densified envelope: a parallel has its minimum y on the central
+            # meridian of the zone (15/18/21/24E) - 4 corners raised the lower
+            # edge and lost a whole row of sheets (parser assessment
+            # 2026-10-07, K3)
             zone_bbox = transform_bbox(bbox_wgs84, zone_crs)
 
-        # Punkt/wlos: rozszerz o eps po stronie MAX (dokladnie jeden arkusz)
+        # Point/hairline: expand by eps on the MAX side (exactly one sheet)
         zone_bbox = _expand_degenerate(zone_bbox, _DEGENERATE_EPS_M)
 
-        # Oblicz zakres row/col dla 1:10k
+        # Compute the row/col range for 1:10k
         min_row = math.floor((zone_bbox.min_y - 4_920_000) / 5000) - 1
         max_row = math.floor((zone_bbox.max_y - 4_920_000) / 5000) + 1
         min_col = math.floor((zone_bbox.min_x - z * 1_000_000 - 332_000) / 8000) - 1
         max_col = math.floor((zone_bbox.max_x - z * 1_000_000 - 332_000) / 8000) + 1
 
-        # Clamp do rozsadnych wartosci (pas >= 0, slup >= 0)
+        # Clamp to sane values (pas >= 0, slup >= 0)
         min_row = max(0, min_row)
         min_col = max(0, min_col)
 
-        # Krok 4: Dla kazdego kandydata sprawdz przeciecie
+        # Step 4: Check the intersection for every candidate
         for row in range(min_row, max_row + 1):
             for col in range(min_col, max_col + 1):
                 godlo_10k = f"{z}.{row}.{col}"
 
-                # Sprobuj utworzyc Parser2000 — jesli godlo nieprawidlowe, pomin
+                # Try to create a Parser2000 - skip if the sheet code is invalid
                 try:
                     p = Parser2000(godlo_10k)
                 except (ParseError, ValidationError):
@@ -740,7 +743,7 @@ def find_sheets_2000_for_bbox(
                     if target_scale == "1:10000":
                         all_godla.add(godlo_10k)
                     else:
-                        # Drill down do target_scale
+                        # Drill down to target_scale
                         _drill_down(p, zone_bbox, target_scale, all_godla)
 
     return sorted(all_godla)
@@ -753,20 +756,20 @@ def _drill_down(
     result: set[str],
 ) -> None:
     """
-    Rekurencyjnie drazy w dol hierarchii, sprawdzajac przeciecie z bbox.
+    Recursively drill down the hierarchy, checking the intersection with the bbox.
 
     Parameters
     ----------
     parent : Parser2000
-        Rodzic do drylowania
+        Parent to drill down from
     zone_bbox : BBox
-        Bbox w natywnym CRS strefy
+        Bbox in the native CRS of the zone
     target_scale : str
-        Docelowa skala
+        Target scale
     result : set[str]
-        Zbiór wynikowych godel (modyfikowany in-place)
+        Result set of sheet codes (modified in place)
     """
-    # Specjalny przypadek: z 1:10000 do 1:5000 — galaz 5k
+    # Special case: from 1:10000 to 1:5000 - the 5k branch
     if parent.scale == "1:10000" and target_scale == "1:5000":
         children = parent.get_children(scale="1:5000")
     else:
