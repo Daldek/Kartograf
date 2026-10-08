@@ -7358,3 +7358,29 @@ class TestErrorWithoutBlankLine:
         cb(DownloadProgress(1, 1, "N-1", "failed", ""))
         assert _error_lead(cb) == ""
         assert _error_lead(None) == ""
+
+
+class TestSoilgridsHsgNoEarlyMkdir:
+    """soilgrids hsg nie zostawia pustego katalogu wyjsciowego po bledzie."""
+
+    def test_missing_geometry_leaves_no_default_dir(
+        self, capsys, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        result = main(["soilgrids", "hsg", "--geometry", "nieistniejacy.shp"])
+        assert result == 1
+        assert "Error:" in capsys.readouterr().err
+        assert not (tmp_path / "data").exists()
+
+    @patch("kartograf.hydrology.HSGCalculator")
+    def test_calculation_error_leaves_no_dir(
+        self, mock_calc_cls, capsys, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        mock_calc_cls.return_value.calculate_hsg_by_godlo.side_effect = DownloadError(
+            "siec"
+        )
+        out = tmp_path / "out" / "hsg"
+        result = main(["soilgrids", "hsg", "--godlo", "N-34-130-D", "-o", str(out)])
+        assert result == 1
+        assert not (tmp_path / "out").exists()

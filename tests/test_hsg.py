@@ -744,3 +744,38 @@ class TestHSGSidecar:
         with patch("kartograf.sources.sidecar.write_sidecar", side_effect=OSError("x")):
             result = self._calc().calculate_hsg_by_bbox(bbox, out)
         assert result == out and out.exists()
+
+
+class TestHSGOutputDirOnWrite:
+    """Katalog wyjsciowy powstaje dopiero tuz przed zapisem wyniku."""
+
+    @staticmethod
+    def _bbox():
+        from kartograf.core.sheet_parser import BBox
+
+        return BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+
+    def test_download_failure_leaves_no_output_dir(self, tmp_path):
+        from kartograf.exceptions import DownloadError
+
+        provider = Mock()
+        provider.download_by_bbox.side_effect = DownloadError("siec")
+        out = tmp_path / "a" / "b" / "hsg.tif"
+        with pytest.raises(DownloadError):
+            HSGCalculator(provider=provider).calculate_hsg_by_bbox(self._bbox(), out)
+        assert not (tmp_path / "a").exists()
+
+    def test_nested_output_dir_created_on_success(self, tmp_path):
+        def fake_download(bbox, path, timeout, property, depth, stat):
+            _create_test_raster(path, np.full((5, 5), 200, np.float32))
+            return path
+
+        provider = Mock()
+        provider.download_by_bbox.side_effect = fake_download
+        out = tmp_path / "a" / "b" / "hsg.tif"
+        HSGCalculator(provider=provider).calculate_hsg_by_bbox(
+            self._bbox(), out, keep_intermediate=True
+        )
+        assert out.exists()
+        assert (tmp_path / "a" / "b" / "hsg.tif.meta.json").exists()
+        assert (tmp_path / "a" / "b" / "clay.tif").exists()
