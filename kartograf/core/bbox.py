@@ -13,8 +13,6 @@ wchodzi przez duck typing (``transformer=``): ``core`` nie importuje
 ``transform`` i nie wybiera operacji — dostaje ja od wolajacego.
 """
 
-from __future__ import annotations
-
 import functools
 import math
 from typing import Any, NamedTuple

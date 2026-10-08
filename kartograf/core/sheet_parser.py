@@ -6,8 +6,6 @@ map sheet identifiers (godła) and extracting information about scale,
 coordinate system, and sheet components.
 """
 
-from __future__ import annotations
-
 import math
 import re
 
@@ -348,7 +346,7 @@ class SheetParser:
         "1:25000": ["1", "2", "3", "4"],  # 1:25k → 1:10k (4 części)
     }
 
-    def get_parent(self) -> SheetParser | None:
+    def get_parent(self) -> "SheetParser | None":
         """
         Zwraca arkusz nadrzędny (o skali mniejszej).
 
@@ -387,7 +385,7 @@ class SheetParser:
         parent_godlo = "-".join(parts[:-1])
         return SheetParser(parent_godlo, self._uklad)
 
-    def _get_parent_from_200k(self) -> SheetParser:
+    def _get_parent_from_200k(self) -> "SheetParser":
         """
         Zwraca arkusz nadrzędny 1:500k dla arkusza 1:200k.
 
@@ -416,7 +414,7 @@ class SheetParser:
         )
         return SheetParser(parent_godlo, self._uklad)
 
-    def get_children(self) -> list[SheetParser]:
+    def get_children(self) -> "list[SheetParser]":
         """
         Zwraca wszystkie arkusze podrzędne (o skali większej).
 
@@ -458,7 +456,7 @@ class SheetParser:
 
         return children
 
-    def _get_children_from_500k(self) -> list[SheetParser]:
+    def _get_children_from_500k(self) -> "list[SheetParser]":
         """
         Zwraca 36 arkuszy 1:200k dla arkusza 1:500k.
 
@@ -493,7 +491,7 @@ class SheetParser:
 
         return children
 
-    def get_hierarchy_up(self) -> list[SheetParser]:
+    def get_hierarchy_up(self) -> "list[SheetParser]":
         """
         Zwraca pełną hierarchię w górę (do 1:1000000).
 
@@ -528,7 +526,7 @@ class SheetParser:
 
         return hierarchy
 
-    def get_all_descendants(self, target_scale: str) -> list[SheetParser]:
+    def get_all_descendants(self, target_scale: str) -> "list[SheetParser]":
         """
         Zwraca wszystkie arkusze potomne do zadanej skali.
 
