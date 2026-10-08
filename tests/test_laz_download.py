@@ -78,7 +78,7 @@ class FakeProvider:
 
     descriptor_key = "pl.gugik.laz"
 
-    def __init__(self, vertical_crs="EVRF2007", failing=()):
+    def __init__(self, vertical_crs="EVRF2007", failing=()) -> None:
         self.vertical_crs = vertical_crs
         self.failing = set(failing)
         self.calls: list[str] = []
@@ -246,7 +246,7 @@ class TestRunLazDownload:
         assert result.superseded == (old,)
         assert result.tiles == (kept,)
 
-    def test_parallel_workers_and_progress(self, tmp_path):
+    def test_parallel_workers_and_progress(self, tmp_path: Path) -> None:
         tiles = [_tile(f"N-33-131-B-a-1-1-{i}") for i in range(1, 7)]
         progress: list[tuple[int, int]] = []
         result = run_laz_download(

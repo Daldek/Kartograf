@@ -606,7 +606,7 @@ class TestGugikOrtoProviderSession:
         factory.assert_called_once()
         assert session.get.call_count == 2
 
-    def test_separate_session_per_thread(self):
+    def test_separate_session_per_thread(self) -> None:
         sessions: list[Mock] = []
         results: list[str] = []
         errors: list[Exception] = []

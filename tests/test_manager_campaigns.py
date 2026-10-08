@@ -23,6 +23,7 @@ import requests
 from kartograf.download.links import linked_campaign
 from kartograf.download.manager import DownloadManager, DownloadProgress, SheetFetch
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.skorowidz import parse_skorowidz_records
 from kartograf.transport.http import get_with_retry
@@ -74,7 +75,7 @@ def tag(record) -> str:
     return record.url.rsplit("/", 1)[-1]
 
 
-class FakeCampaignProvider:
+class FakeCampaignProvider(BaseProvider):
     """supports_campaigns MUSI byc atrybutem KLASOWYM == True (DownloadManager
     sprawdza ``is True``; Mock/Mock(spec=...) daja Mock -> tor plain)."""
 
@@ -83,8 +84,13 @@ class FakeCampaignProvider:
     vertical_crs = "EVRF2007"
     default_extension = ".asc"
     name = "fake"
+    base_url = "https://wms"
 
-    def __init__(self, records_by_strategy, fail_urls=(), contents=None):
+    def download(self, godlo: str, output_path: Path, timeout: int = 30) -> Path:
+        """Campaign providers download through download_record()."""
+        raise NotImplementedError("FakeCampaignProvider: tor kampanii")
+
+    def __init__(self, records_by_strategy, fail_urls=(), contents=None) -> None:
         self.records = records_by_strategy
         self.fail_urls = set(fail_urls)
         self.contents = dict(contents or {})  # url -> bajty (domyslnie ASC)
@@ -630,12 +636,16 @@ def test_plain_track_sidecar_failure_still_best_effort(tmp_path, monkeypatch):
 # =============================================================================
 
 
-def test_min_year_newest_no_coverage_in_list_is_no_coverage_status(tmp_path):
+def test_min_year_newest_no_coverage_in_list_is_no_coverage_status(
+    tmp_path: Path,
+) -> None:
     events: list[DownloadProgress] = []
     m = DownloadManager(tmp_path, provider=FakeCampaignProvider(C14), min_year=2026)
     m.download_sheets([G], on_progress=events.append)
-    assert m.last_result.no_coverage == [G]
-    assert m.last_result.failed == [G]
+    result = m.last_result
+    assert result is not None
+    assert result.no_coverage == [G]
+    assert result.failed == [G]
     assert events[-1].status == "no_coverage"
 
 
@@ -797,7 +807,9 @@ def test_note_reuse_with_symlinked_standard_sidecar(tmp_path, parent):
         assert std["extra"]["parent_requests"] == [parent]
 
 
-def test_link_failure_is_sheet_failure_and_list_continues(tmp_path, monkeypatch):
+def test_link_failure_is_sheet_failure_and_list_continues(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """R5: porazka dowiazania (kopia pada) = porazka arkusza, nie przerwanie
     listy przy max_workers=1; pobrana kampania zostaje."""
     import shutil
@@ -817,9 +829,11 @@ def test_link_failure_is_sheet_failure_and_list_continues(tmp_path, monkeypatch)
     fake = FakeCampaignProvider({"newest": [REC["84183"], other]})
     m = DownloadManager(tmp_path, provider=fake, max_workers=1)
     m.download_sheets([G, g3], on_progress=events.append)
-    assert m.last_result.failed == [G]
-    assert m.last_result.no_coverage == []
-    assert m.last_result.succeeded == [std_path(tmp_path, g3)]
+    result = m.last_result
+    assert result is not None
+    assert result.failed == [G]
+    assert result.no_coverage == []
+    assert result.succeeded == [std_path(tmp_path, g3)]
     assert campaign_path(tmp_path, REC["84183"]).is_file()
     assert not std_path(tmp_path).exists()
     failed = next(e for e in events if e.godlo == G and e.status == "failed")
@@ -919,7 +933,9 @@ def test_newest_transport_failure_uses_local_campaign(tmp_path, failure, caplog)
     )
 
 
-def test_newest_transport_failure_in_list_is_skipped_and_reported(tmp_path):
+def test_newest_transport_failure_in_list_is_skipped_and_reported(
+    tmp_path: Path,
+) -> None:
     fake = FakeCampaignProvider(C14)
     m = DownloadManager(tmp_path, provider=fake)
     m.download_sheet(G)
@@ -927,6 +943,7 @@ def test_newest_transport_failure_in_list_is_skipped_and_reported(tmp_path):
     events: list[DownloadProgress] = []
     paths = m.download_sheets([G], on_progress=events.append)
     result = m.last_result
+    assert result is not None
     assert paths == [std_path(tmp_path)]
     assert result.skipped == [G] and result.failed == []
     assert set(result.unverified) == {G}
@@ -1036,14 +1053,19 @@ def test_reused_campaign_without_sidecar_with_foreign_content_fails(tmp_path):
 # =============================================================================
 
 
-def test_rerun_without_download_does_not_recopy(tmp_path, monkeypatch):
+def test_rerun_without_download_does_not_recopy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     import shutil
 
     deny_links(monkeypatch)
     fake = FakeCampaignProvider(C14)
     m = DownloadManager(tmp_path, provider=fake)
     std = m.download_sheet(G)
-    assert m.last_sheet.link == "copy"
+    assert isinstance(std, Path)
+    first = m.last_sheet
+    assert first is not None
+    assert first.link == "copy"
     aux = std.parent / f"{std.name}.aux.xml"
     aux.write_text("<PAMDataset/>")
     std_meta = sidecar(std).read_text(encoding="utf-8")
@@ -1059,5 +1081,7 @@ def test_rerun_without_download_does_not_recopy(tmp_path, monkeypatch):
     assert calls == []
     assert aux.exists()
     assert sidecar(std).read_text(encoding="utf-8") == std_meta
-    assert m.last_sheet.skipped is True and m.last_sheet.link == "copy"
+    again = m.last_sheet
+    assert again is not None
+    assert again.skipped is True and again.link == "copy"
     assert fake.downloads == [REC["84183"].url]

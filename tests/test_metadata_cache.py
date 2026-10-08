@@ -18,6 +18,7 @@ import logging
 import sqlite3
 import threading
 import time
+from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
@@ -808,7 +809,7 @@ class TestThreadSafety:
         cache.close()
         assert errors == [], f"Concurrent operations raised errors: {errors}"
 
-    def test_concurrent_get_record_returns_own_value(self, tmp_path):
+    def test_concurrent_get_record_returns_own_value(self, tmp_path: Path) -> None:
         """Parallel readers on one connection must never see another key's row."""
         cache = MetadataCache(db_path=tmp_path / "c.db")
         for i in range(300):
@@ -836,7 +837,7 @@ class TestThreadSafety:
         cache.close()
         assert errors == []
 
-    def test_concurrent_get_sheet_returns_own_payload(self, tmp_path):
+    def test_concurrent_get_sheet_returns_own_payload(self, tmp_path: Path) -> None:
         """Parallel readers of sheet_cache must never see another key's payload."""
         cache = MetadataCache(db_path=tmp_path / "c.db")
         for i in range(300):
@@ -1106,7 +1107,7 @@ class TestCampaignsCache:
         assert main(["cache", "stats"]) == 0
         assert "Campaign entries: 1" in capsys.readouterr().out
 
-    def test_concurrent_get_campaigns_returns_own_key(self, tmp_path):
+    def test_concurrent_get_campaigns_returns_own_key(self, tmp_path: Path) -> None:
         cache = MetadataCache(db_path=tmp_path / "c.db")
         for i in range(300):
             cache.set_campaigns(
@@ -1286,7 +1287,9 @@ class TestLazyOpen:
         finally:
             normal.close()
 
-    def test_concurrent_first_writes_open_one_connection(self, cache_path):
+    def test_concurrent_first_writes_open_one_connection(
+        self, cache_path: Path
+    ) -> None:
         """Kilka watkow naraz robi pierwszy zapis: jedno polaczenie, komplet."""
         c = MetadataCache(db_path=cache_path)
         real_connect = sqlite3.connect

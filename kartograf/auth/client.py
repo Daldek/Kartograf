@@ -129,13 +129,18 @@ class AuthProxyClient:
                 text=True,
             )
             AuthProxyClient._proxy_process = proc
+            # Both pipes exist (stdout/stderr=PIPE); the check narrows the
+            # Optional types of Popen.stdout/stderr.
+            stdout, stderr = proc.stdout, proc.stderr
+            if stdout is None or stderr is None:
+                raise RuntimeError("Proxy process pipes are not available")
 
             # The child logs one line per request to stderr. Nobody reading
             # that pipe means the child blocks on write() once the ~64 kB
             # pipe buffer fills (a few dozen downloads) - drain it.
             AuthProxyClient._stderr_thread = threading.Thread(
                 target=self._drain_stderr,
-                args=(proc.stderr,),
+                args=(stderr,),
                 daemon=True,
             )
             AuthProxyClient._stderr_thread.start()
@@ -144,7 +149,7 @@ class AuthProxyClient:
             # never exits) would otherwise block this call forever.
             port_line: list[str] = []
             reader = threading.Thread(
-                target=lambda: port_line.append(proc.stdout.readline()),
+                target=lambda: port_line.append(stdout.readline()),
                 daemon=True,
             )
             reader.start()

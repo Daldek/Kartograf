@@ -784,7 +784,7 @@ class TestGugikProviderSession:
         factory.assert_called_once()
         assert session.get.call_count == 2
 
-    def test_separate_session_per_thread(self, record_body):
+    def test_separate_session_per_thread(self, record_body) -> None:
         """Kazdy watek dostaje wlasna sesje i uzywa tylko jej."""
         sessions: list[Mock] = []
         results: list[str] = []

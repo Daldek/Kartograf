@@ -70,7 +70,7 @@ class CLMSCredentials:
     or, as a fallback, macOS Keychain (service clms-token).
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._credentials: dict | None = None
         self._access_token: str | None = None
         self._token_expires: float = 0
@@ -144,9 +144,10 @@ class CLMSCredentials:
 
     def get_access_token(self) -> str | None:
         """Get valid access token, refreshing if needed."""
-        if not self._credentials and not (
-            self.load_from_env() or self.load_from_keychain()
-        ):
+        if not self._credentials and not self.load_from_env():
+            self.load_from_keychain()
+        creds = self._credentials
+        if not creds:
             return None
 
         # Return cached token if still valid
@@ -158,7 +159,6 @@ class CLMSCredentials:
             import jwt
             import requests
 
-            creds = self._credentials
             now = int(time.time())
 
             payload = {
@@ -173,9 +173,14 @@ class CLMSCredentials:
             if creds.get("key_id"):
                 headers["kid"] = creds["key_id"]
 
+            private_key = creds.get("private_key")
+            if not private_key:
+                logger.error("Token exchange failed: credentials lack 'private_key'")
+                return None
+
             assertion = jwt.encode(
                 payload,
-                creds.get("private_key"),
+                private_key,
                 algorithm="RS256",
                 headers=headers if headers else None,
             )
@@ -211,7 +216,7 @@ class CLMSCredentials:
 class ProxyHandler(BaseHTTPRequestHandler):
     """HTTP request handler for the auth proxy."""
 
-    credentials: CLMSCredentials = None  # Set by server
+    credentials: CLMSCredentials  # Set by run_server() before serving
 
     def log_message(self, format, *args):
         """Log to stderr instead of stdout."""
@@ -222,7 +227,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
         body = json.dumps(data).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", len(body))
+        self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
 
