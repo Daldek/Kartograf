@@ -72,7 +72,7 @@ from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.base import BaseProvider, LandCoverProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.cuzk import CuzkDmrProvider, create_dmr_provider
-from kartograf.providers.pl.bdot10k import Bdot10kProvider
+from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import (
     GugikLazProvider,
@@ -133,6 +133,7 @@ __all__ = [
     "SupersededLazTile",
     "LandCoverProvider",
     "Bdot10kProvider",
+    "Bdot10kPackage",
     "CorineProvider",
     "SoilGridsProvider",
     "CuzkDmrProvider",

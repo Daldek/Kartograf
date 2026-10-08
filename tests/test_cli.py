@@ -1902,26 +1902,28 @@ class TestCmdLandcoverDownload:
 
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
     def test_landcover_download_by_godlo(self, mock_mgr_cls, capsys, tmp_path):
-        """landcover download --godlo calls manager.download with godlo."""
+        """landcover download --godlo (BDOT10k) downloads every powiat of the sheet."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download.return_value = tmp_path / "out.gpkg"
+        mock_mgr.download_all_counties.return_value = [tmp_path / "out.gpkg"]
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
             ["landcover", "download", "--godlo", "N-34-130-D", "-o", str(tmp_path)]
         )
         assert result == 0
-        mock_mgr.download.assert_called_once()
-        call_kwargs = mock_mgr.download.call_args
+        mock_mgr.download_all_counties.assert_called_once()
+        call_kwargs = mock_mgr.download_all_counties.call_args
         assert call_kwargs.kwargs.get("godlo") == "N-34-130-D"
+        mock_mgr.download.assert_not_called()
+        assert "Downloaded to" in capsys.readouterr().out
 
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
     def test_landcover_download_by_bbox_success(self, mock_mgr_cls, capsys, tmp_path):
-        """landcover download --bbox calls manager.download with bbox."""
+        """landcover download --bbox (BDOT10k) downloads every powiat of the bbox."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download.return_value = tmp_path / "out.gpkg"
+        mock_mgr.download_all_counties.return_value = [tmp_path / "out.gpkg"]
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -1935,7 +1937,9 @@ class TestCmdLandcoverDownload:
             ]
         )
         assert result == 0
-        mock_mgr.download.assert_called_once()
+        mock_mgr.download_all_counties.assert_called_once()
+        assert mock_mgr.download_all_counties.call_args.kwargs.get("bbox") is not None
+        mock_mgr.download.assert_not_called()
         captured = capsys.readouterr()
         assert "Downloaded to" in captured.out
 
@@ -2438,7 +2442,7 @@ class TestCmdLandcoverDownloadGeometry:
         mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download.return_value = tmp_path / "out.gpkg"
+        mock_mgr.download_all_counties.return_value = [tmp_path / "out.gpkg"]
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -2454,9 +2458,11 @@ class TestCmdLandcoverDownloadGeometry:
 
         assert result == 0
         mock_bbox.assert_called_once()
-        mock_mgr.download.assert_called_once()
-        call_kwargs = mock_mgr.download.call_args
+        mock_mgr.download_all_counties.assert_called_once()
+        call_kwargs = mock_mgr.download_all_counties.call_args
         assert call_kwargs.kwargs.get("bbox") is not None
+        mock_mgr.download.assert_not_called()
+        assert "Downloaded to" in capsys.readouterr().out
 
     def test_landcover_geometry_and_teryt_error(self, capsys, tmp_path):
         """--geometry + --teryt -> mutual exclusivity error."""

@@ -415,7 +415,7 @@ from kartograf import (
   i .WFS_TIMEOUT (discovery), CorineProvider.DEFAULT_TIMEOUT,
   SoilGridsProvider.DEFAULT_TIMEOUT (bbox; godło: domyślne 60 s
   z LandCoverProvider.download_by_godlo), Bdot10kProvider.DEFAULT_TIMEOUT
-  (zapytanie TERYT _get_teryt_for_point: 30 s), _DEFAULT_TIMEOUT
+  (zapytanie TERYT w PRG, teryts_for_area: 30 s), _DEFAULT_TIMEOUT
   w providers/cuzk/dmr.py, HSGCalculator: parametr timeout=120
   (grep -rn "_TIMEOUT =" kartograf/providers)
 - Max 3 próby retry (nie konfigurowalne); ponawiane tylko błędy sieci,

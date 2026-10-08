@@ -26,6 +26,14 @@ from kartograf.providers.soilgrids import SoilGridsProvider
 _URL = "https://opendata.geoportal.gov.pl/x"
 _SLEEP = "kartograf.transport.http.time.sleep"
 _BBOX_2180 = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+# Raw PRG WFS answer (two powiats) - the BDOT10k TERYT discovery goes through it.
+_PRG_TWO_COUNTIES = (
+    Path(__file__).parent
+    / "fixtures"
+    / "gugik_prg"
+    / "real_2026_10_08"
+    / "two_counties.xml"
+)
 
 
 def _sheet(cls):
@@ -163,17 +171,14 @@ class TestBdot10kSession:
 
     def test_downloads_and_teryt_share_one_gugik_session(self, tmp_path):
         session = MagicMock(spec=requests.Session)
-        teryt = MagicMock()
-        teryt.raise_for_status.return_value = None
-        teryt.text = "https://opendata.geoportal.gov.pl/bdot10k/GPKG/14/1465_GPKG.zip"
-        session.get.side_effect = [_ok_response(), _ok_response(), teryt]
+        session.get.side_effect = [_ok_response(), _ok_response(), _teryt_ok()]
         with patch(
             "kartograf.transport.http.make_gugik_session", return_value=session
         ) as factory:
             provider = Bdot10kProvider()
             _bdot10k(provider, tmp_path / "a.bin")
             _bdot10k(provider, tmp_path / "b.bin")
-            assert provider._get_teryt_for_point(637000, 486000) == "1465"
+            assert provider.teryts_for_area(_BBOX_2180) == ["0208", "0224"]
         factory.assert_called_once_with()
         assert session.get.call_count == 3
 
@@ -214,7 +219,9 @@ def _json_ok(payload):
 def _teryt_ok():
     response = MagicMock()
     response.raise_for_status.return_value = None
-    response.text = "https://opendata.geoportal.gov.pl/bdot10k/GPKG/14/1465_GPKG.zip"
+    response.status_code = 200
+    response.content = _PRG_TWO_COUNTIES.read_bytes()
+    response.text = response.content.decode()
     return response
 
 
@@ -228,7 +235,7 @@ def _cuzk_query(session):
 
 
 def _teryt_query(session):
-    return Bdot10kProvider(session=session)._get_teryt_for_point(637000, 486000)
+    return Bdot10kProvider(session=session).teryts_for_area(_BBOX_2180)
 
 
 SINGLE_QUERIES = [
@@ -238,7 +245,7 @@ SINGLE_QUERIES = [
 
 
 class TestSingleQueryRetries:
-    """CuzkClient.query and the BDOT10k TERYT queries go through get_with_retry (N5)."""
+    """CuzkClient.query and the BDOT10k TERYT discovery (PRG): get_with_retry (N5)."""
 
     @pytest.mark.parametrize(("query", "ok"), SINGLE_QUERIES)
     def test_connection_error_is_retried(self, query, ok):
@@ -246,7 +253,7 @@ class TestSingleQueryRetries:
         session.get.side_effect = [requests.ConnectionError("reset"), ok]
         with patch("kartograf.transport.http.time.sleep") as sleep:
             result = query(session)
-        assert result in ([{"a": 1}], "1465")
+        assert result in ([{"a": 1}], ["0208", "0224"])
         assert session.get.call_count == 2
         sleep.assert_called_once_with(2)
 

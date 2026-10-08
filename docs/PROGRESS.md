@@ -1469,9 +1469,10 @@ uzytkownika: U3 i U4 poprawione przed 0.7.0, reszta do 0.7.1).
 - [ ] **U2 — podpowiedzi braku pokrycia w liscie PL-2000 bez `--scale`:**
   drukowane dwa razy (linia `No data for ...` bez prefiksu + `Info:`), a
   podpowiedz wymienia jednego potomka zamiast wszystkich z obszaru.
-- [ ] **U5 — `cache stats` `TERYT entries` zawsze 0 z CLI:** tor land cover
+- [x] **U5 — `cache stats` `TERYT entries` zawsze 0 z CLI:** tor land cover
   (`landcover_cmd.py`, `LandCoverManager`) tworzy `Bdot10kProvider()` bez
-  `cache=`, wiec `teryt_cache` nie jest uzywany.
+  `cache=`, wiec `teryt_cache` nie jest uzywany. (Task 6 planu
+  hydrograf-0.7.1: `LandCoverManager(cache=)`, CLI przekazuje cache z cwd.)
 - [ ] **SoilGrids `nodata` w sidecarze:** GeoTIFF z WCS ISRIC nie ma tagu
   NoData, wiec sidecar zapisuje `nodata: null`; wg dokumentacji ISRIC brak
   danych = -32768 — zdecydowac, czy wpisywac wartosc z dokumentacji.

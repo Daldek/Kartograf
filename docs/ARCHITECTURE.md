@@ -121,7 +121,7 @@ kartograf ──> core, download, providers, landcover, hydrology,
 cli ──> kartograf (__version__), download, landcover, core, sources,
         providers (l), transform (l), transport (l), hydrology (l), cache (l)
 download ──> providers, sources, transform, core, transport (l)
-landcover ──> providers, download (FileStorage), core, sources (l)
+landcover ──> providers, download (FileStorage), core, cache, sources (l)
 hydrology ──> providers (l), core (l), sources (l)
 providers ──> sources, transform, transport, core, cache,
         auth (l), download (l)
@@ -132,7 +132,8 @@ cache ──> core                         # tylko pod TYPE_CHECKING (BBox)
 auth ──> (nic wewnetrznego)
 core ──> (nic wewnetrznego)
 exceptions ──> (lisc; krawedzie DO niego pominiete powyzej — importuja go
-        kartograf, cli, core, sources, transform, transport, providers, download)
+        kartograf, cli, core, sources, transform, transport, providers, download,
+        landcover)
 ```
 
 **Jak odtworzyc graf.** Kod uzywa wylacznie bezwzglednych importow
@@ -184,6 +185,10 @@ Uwagi, ktore latwo przeoczyc:
 - `cache ──> core` istnieje tylko pod `if TYPE_CHECKING:` (adnotacja
   `BBox` w `MetadataCache.get_teryts_for_bbox`/`set_teryts_for_bbox`);
   w czasie wykonania `cache` nie importuje nic wewnetrznego.
+- `landcover ──> cache`: `LandCoverManager(cache=MetadataCache | None)`
+  importuje `MetadataCache` na poziomie modulu (adnotacja) i przekazuje go
+  providerom tworzonym po nazwie (`Bdot10kProvider(cache=)` — odpowiedzi
+  PRG, `SoilGridsProvider(cache=)`); CORINE cache nie ma.
 - `hydrology` importuje wszystko leniwie: `providers.soilgrids` (warstwy
   gleb), `core.sheet_parser` (godlo -> bbox) i `sources.sidecar.emit_sidecar`
   (sidecar wyniku HSG).
@@ -285,7 +290,8 @@ kartograf/
 │   │                    # download_sheets/expand_sheets (lista godel, porazki w last_result)
 │   └── storage.py       # FileStorage — segmenty z szablonow rejestru (ADR-026);
 │                        # prune_empty_dirs — sprzatanie pustych bbox/ po porazce
-├── landcover/manager.py # LandCoverManager — dispatch do providerow pokrycia terenu
+├── landcover/manager.py # LandCoverManager — dispatch do providerow pokrycia terenu;
+│                        # download_all_counties (BDOT10k z kazdego powiatu obszaru)
 ├── hydrology/hsg.py     # HSGCalculator — klasyfikacja USDA -> HSG (ADR-025)
 ├── auth/                # proxy.py (subprocess izolujacy credentials CLMS), client.py
 │                        # (AuthProxyClient — singleton, sam uruchamia proxy)
@@ -1245,7 +1251,8 @@ tymczasowym. `LandCoverManager` ma **wlasny domyslny katalog**
 gdzie `<zrodlo>` to klucz `--source` (`bdot10k`/`corine`/`soilgrids`;
 provider spoza rejestru: nazwa malymi literami, spacje -> `_`), `<tryb>_<id>`
 to `teryt_<teryt>`, `bbox_<minx>_<miny>_<maxx>_<maxy>` (EPSG:2180, liczby
-calkowite; `--geometry` = obwiednia) albo `godlo_<godlo>`, a parametry to
+calkowite; `--geometry` = obwiednia) albo `godlo_<godlo>` — z wyjatkiem
+BDOT10k, ktorego plik nazywa sie ZAWSZE `teryt_<teryt>` (nizej), a parametry to
 KAZDA opcja zmieniajaca tresc wyniku, z wartoscia domyslna wlacznie
 (`LandCoverManager._content_params`, U3):
 
@@ -1253,12 +1260,12 @@ KAZDA opcja zmieniajaca tresc wyniku, z wartoscia domyslna wlacznie
 |---|---|---|
 | SoilGrids | `<property>_<depth>_<stat>` | `soilgrids_clay_0-5cm_mean_bbox_770000_509000_772000_511000.tif` |
 | CORINE | `<year>` | `corine_2018_godlo_N-34-130-D.tif` (`.png` z podgladu WMS) |
-| BDOT10k | brak — `format` niesie rozszerzenie | `bdot10k_teryt_1465.gpkg`, `bdot10k_teryt_1465.zip` (SHP) |
+| BDOT10k | opcjonalny filtr warstw `<kod>-<kod>...` (kody posortowane); `format` niesie rozszerzenie | `bdot10k_teryt_1465.gpkg`, `bdot10k_PTWP-SWRS_teryt_1465.gpkg` (`layers=`), `bdot10k_teryt_1465.zip` (SHP) |
 
 Rozne parametry = rozne pliki; te same parametry = ta sama sciezka (ponowne
 pobranie nadpisuje plik, land cover nie pomija istniejacych wynikow). Te
 same wartosci trafiaja do sidecara `request` (`property`/`depth`/`stat`,
-`year`, `format`; klucze ADR-031) obok `teryt`/`bbox`+`bbox_crs`/`sheet`,
+`year`, `format`, `layers`; klucze ADR-031) obok `teryt`/`bbox`+`bbox_crs`/`sheet`,
 a `nodata` wyniku GeoTIFF jest czytane z pliku (`null`, gdy plik go nie
 deklaruje — np. GeoTIFF z WCS SoilGrids bywa bez tagu NoData; Kartograf nie
 dopisuje wartosci z dokumentacji zrodla). Nazwy sprzed 0.7.0
@@ -1269,9 +1276,39 @@ sciezka i sidecar dotycza tego pliku (review 2026-10-06 N14). BDOT10k
 z `format="SHP"` (`--format SHP`) zapisuje oryginalne archiwum
 GUGiK z shapefile'ami pod ta sama nazwa z rozszerzeniem `.zip`
 (np. `bdot10k_teryt_1465.zip`, sidecar `bdot10k_teryt_1465.zip.meta.json`);
-rozszerzenie nadaje `Bdot10kProvider.download_by_admin_unit`, a CLI drukuje
+rozszerzenie nadaje `Bdot10kProvider.download_package`, a CLI drukuje
 faktyczna sciezke (review 2026-10-06 N1). Sidecary pisze `LandCoverManager` tak samo jak
-pozostale warstwy zarzadzajace. CORINE bez credentials CLMS pobiera podglad
+pozostale warstwy zarzadzajace.
+
+**BDOT10k z wielu powiatow (od 0.7.1, A2).** Pakiet BDOT10k jest zawsze
+pakietem CALEGO powiatu, wiec nazwa pliku i `request` sidecara opisuja
+tresc: `bdot10k[_<warstwy>]_teryt_<TERYT>.<ext>`, `request = {teryt,
+format[, layers]}` — takze przy zadaniu przez `--bbox`/`--godlo`/`--geometry`
+(dawne nazwy `bdot10k_bbox_*`/`bdot10k_godlo_*` nie sa rozpoznawane).
+Obszar zadania idzie do `extra.parent_request`: `{bbox, bbox_crs,
+countries: ["PL"]}` albo `{sheet, countries: ["PL"]}`.
+`LandCoverManager.download_all_counties(bbox=|godlo=, format=, layers=,
+timeout=)` pyta PRG (`Bdot10kProvider.teryts_for_area` ->
+`discover_teryts_for_bbox`, obszar w dowolnym obslugiwanym ukladzie) i
+pobiera pakiet KAZDEGO powiatu przecinajacego obszar, w kolejnosci kodow,
+przez `Bdot10kProvider.download_package(code, path, *, timeout, format,
+layers) -> Bdot10kPackage(path, teryt, url, format)`; jeden plik i sidecar
+per powiat (`_download_county`); brak powiatu = `NoCoverageError`, awaria
+PRG albo pakietu = `DownloadError` (pliki pobrane wczesniej zostaja). CLI
+`landcover download --source bdot10k` z `--bbox`/`--godlo`/`--geometry`
+wola te metode i drukuje `Downloaded to:` dla kazdego pliku; `--teryt`
+bez zmian. Stare `download_by_bbox`/`download_by_godlo` (menedzera bez
+jawnego `output_path` i providera) pobieraja JEDEN powiat ta sama sciezka
+(`_single_teryt`): obszar z kilku powiatow konczy sie `ValidationError`
+z lista kodow i wskazaniem `download_all_counties`. `layers=` (kody
+4-literowe, np. `PTWP`, `SWRS`; tylko GPKG) zostawia w scalonym GPKG
+wylacznie pliki `__OT_<kod>_*` pakietu — brakujaca warstwa to
+`DownloadError`, zly kod `ValidationError` przed siecia; plik z filtrem
+nosi token warstw w nazwie, bo nie jest juz pelnym pakietem. Scalanie
+pakietu (`_merge_gpkg_files`) konczy sie `DownloadError`, gdy nazwa
+tabeli powtarza sie w dwoch plikach pakietu (dotad druga kopia byla po
+cichu pomijana); w prawdziwej paczce (63 pliki `..._<TERYT>__OT_<KOD>_<A|L|P>.gpkg`,
+po jednej tabeli) duplikatow nie ma. CORINE bez credentials CLMS pobiera podglad
 PNG przez WMS: sidecar ma wtedy `horizontal_crs` uslugi WMS (EPSG:3857, dla
 rocznika 1990 EPSG:4326) oraz `extra.fallback = "wms_png"` i `extra.note`
 (`"podglad WMS, nie dane"`).

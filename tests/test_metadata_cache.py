@@ -9,7 +9,7 @@ Tests cover:
 - Migration of a legacy database (url_cache table dropped)
 - GugikProvider cache integration (hit, no-coverage hit, miss, K3-safe failure)
 - GugikNmptProvider cache integration (product key "nmpt")
-- Bdot10kProvider TERYT cache integration (cache hit, miss)
+- Bdot10kProvider TERYT cache integration (cache passed to PRG discovery, hit)
 - SoilGridsProvider cache parameter acceptance
 - CLI cache commands (stats, clear, path)
 """
@@ -638,62 +638,35 @@ class TestGugikNmptProviderCacheIntegration:
 
 
 class TestBdot10kCacheIntegration:
-    """Tests for Bdot10kProvider TERYT cache integration."""
+    """A13/U5: Bdot10kProvider passes its cache to the PRG TERYT discovery."""
 
-    def test_cache_hit_skips_wms(self, cache):
-        """Test that a TERYT cache hit skips WMS GetFeatureInfo."""
-        cache.set_teryt(500000.0, 400000.0, "1465")
+    AREA = BBox(340000, 290000, 350000, 300000, "EPSG:2180")
 
-        mock_session = Mock(spec=requests.Session)
-        provider = Bdot10kProvider(session=mock_session, cache=cache)
+    def test_teryts_for_area_passes_cache(self, cache):
+        provider = Bdot10kProvider(session=Mock(spec=requests.Session), cache=cache)
+        with patch(
+            "kartograf.providers.pl.bdot10k.discover_teryts_for_bbox",
+            return_value=["0208"],
+        ) as discover:
+            assert provider.teryts_for_area(self.AREA) == ["0208"]
+        assert discover.call_args.kwargs["cache"] is cache
 
-        result = provider._get_teryt_for_point(500000.0, 400000.0)
-        assert result == "1465"
-        mock_session.get.assert_not_called()
-
-    def test_cache_miss_queries_wms_and_stores(self, cache):
-        """Test that a TERYT cache miss queries WMS and stores."""
-        mock_session = Mock(spec=requests.Session)
-        mock_resp = Mock(spec=requests.Response)
-        mock_resp.status_code = 200
-        mock_resp.text = (
-            '<html>href="/bdot10k/schemat2021/GPKG/14/1465_GPKG.zip"</html>'
-        )
-        mock_resp.raise_for_status = Mock()
-        mock_session.get.return_value = mock_resp
-
-        provider = Bdot10kProvider(session=mock_session, cache=cache)
-        result = provider._get_teryt_for_point(500000.0, 400000.0)
-
-        assert result == "1465"
-        # Should be in cache now
-        cached = cache.get_teryt(500000.0, 400000.0)
-        assert cached == "1465"
-
-    def test_no_cache_backward_compat(self):
-        """Test Bdot10kProvider works without cache."""
-        mock_session = Mock(spec=requests.Session)
-        mock_resp = Mock(spec=requests.Response)
-        mock_resp.status_code = 200
-        mock_resp.text = (
-            '<html>href="/bdot10k/schemat2021/GPKG/14/1465_GPKG.zip"</html>'
-        )
-        mock_resp.raise_for_status = Mock()
-        mock_session.get.return_value = mock_resp
-
-        provider = Bdot10kProvider(session=mock_session)
-        result = provider._get_teryt_for_point(500000.0, 400000.0)
-        assert result == "1465"
-
-    def test_cache_hit_via_shp_pattern(self, cache):
-        """Test TERYT cache hit avoids SHP URL pattern extraction too."""
-        cache.set_teryt(600000.0, 500000.0, "2465")
-
-        mock_session = Mock(spec=requests.Session)
-        provider = Bdot10kProvider(session=mock_session, cache=cache)
-
-        result = provider._get_teryt_for_point(600000.0, 500000.0)
-        assert result == "2465"
+    def test_second_call_is_cache_hit(self, cache):
+        body = (
+            Path(__file__).parent
+            / "fixtures"
+            / "gugik_prg"
+            / "real_2026_10_08"
+            / "two_counties.xml"
+        ).read_bytes()
+        response = Mock(status_code=200, content=body, text=body.decode())
+        response.raise_for_status = Mock()
+        session = Mock(spec=requests.Session)
+        session.get.return_value = response
+        provider = Bdot10kProvider(session=session, cache=cache)
+        assert provider.teryts_for_area(self.AREA) == ["0208", "0224"]
+        assert provider.teryts_for_area(self.AREA) == ["0208", "0224"]
+        assert session.get.call_count == 1
 
 
 # =========================================================================
