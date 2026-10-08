@@ -532,7 +532,8 @@ Reguły szczegółowe: SCOPE 2.12, ARCHITECTURE 3.3 (reguła 6), ADR-030.
   robi to samo z gotowych rastrow (g/kg) na siatce o zadanym ukladzie
   i pikselu, bez wartosci domyslnych. Nodata wejscia tylko z jego tagu,
   a piksele poza zasiegiem wejscia dostaja `0`; sidecar zawiera skroty
-  SHA-256 plikow wejsciowych (`extra.source_layers`).
+  SHA-256 plikow wejsciowych (`extra.source_files`: `name`, `file`,
+  `sha256`; `extra.source_layers` to jak w HSG lista nazw warstw).
 - Klasyfikacja używa **kanonicznych progów trójkąta USDA** (skośne granice
   `silt + 1.5*clay`, `silt + 2*clay`), wspólnych dla wersji skalarnej
   i tablicowej. Mapowanie tekstura → HSG jest świadomie łagodniejsze niż

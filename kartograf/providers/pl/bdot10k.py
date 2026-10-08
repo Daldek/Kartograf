@@ -516,7 +516,10 @@ class Bdot10kProvider(LandCoverProvider):
         ------
         DownloadError
             Not a ZIP, no GPKG inside, a requested layer missing in the
-            package, or two files with the same table name
+            package, two files with the same table name, or an I/O error
+            while extracting, merging or writing the raw ZIP (a failed raw
+            ZIP write also removes the merged GPKG: no data file is left
+            without its sidecar)
         """
         # Read ZIP into memory
         zip_data = BytesIO()
@@ -559,7 +562,8 @@ class Bdot10kProvider(LandCoverProvider):
                             zf.open(gpkg_file) as src,
                             open(extracted_path, "wb") as dst,
                         ):
-                            dst.write(src.read())
+                            # streamed: never a whole layer in memory
+                            shutil.copyfileobj(src, dst)
                         extracted_files.append(extracted_path)
                         logger.debug(f"Extracted {Path(gpkg_file).name}")
 
@@ -567,20 +571,48 @@ class Bdot10kProvider(LandCoverProvider):
                     output_gpkg = output_path.with_suffix(".gpkg")
                     self._merge_gpkg_files(extracted_files, output_gpkg)
                     if raw_path is not None:
-                        # original GUGiK ZIP (A4), atomically like download_to
-                        tmp = raw_path.with_name(
-                            f"{raw_path.name}.{os.getpid()}_{threading.get_ident()}.tmp"
-                        )
                         try:
-                            tmp.write_bytes(zip_data.getvalue())
-                            os.replace(tmp, raw_path)
-                        except BaseException:
-                            tmp.unlink(missing_ok=True)
+                            self._write_raw_zip(zip_data, raw_path)
+                        except BaseException as e:
+                            # The caller writes the GPKG sidecar only after a
+                            # successful return: drop the GPKG instead of
+                            # leaving a data file without its sidecar.
+                            output_gpkg.unlink(missing_ok=True)
+                            if isinstance(e, OSError):
+                                raise DownloadError(
+                                    "Nie udalo sie zapisac oryginalnego ZIP "
+                                    f"BDOT10k {raw_path.name}: {e}; plik "
+                                    f"{output_gpkg.name} usuniety"
+                                ) from e
                             raise
                     return output_gpkg
 
         except zipfile.BadZipFile as e:
             raise DownloadError(f"Invalid ZIP file: {e}") from e
+        except OSError as e:
+            # disk full, no memory for the temp file, share errors: a
+            # KartografError, not a bare OSError
+            raise DownloadError(
+                "Nie udalo sie rozpakowac ani zapisac paczki BDOT10k "
+                f"({output_path.with_suffix('.gpkg').name}): {e}"
+            ) from e
+
+    @staticmethod
+    def _write_raw_zip(zip_data: BytesIO, raw_path: Path) -> None:
+        """Save the original GUGiK ZIP (A4) atomically, like ``download_to``.
+
+        Writes from a view of the buffer (no second in-memory copy).
+        """
+        tmp = raw_path.with_name(
+            f"{raw_path.name}.{os.getpid()}_{threading.get_ident()}.tmp"
+        )
+        try:
+            with zip_data.getbuffer() as view:
+                tmp.write_bytes(view)
+            os.replace(tmp, raw_path)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
 
     def _merge_gpkg_files(self, source_files: list[Path], output_path: Path) -> None:
         """

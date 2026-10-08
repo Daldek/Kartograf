@@ -750,7 +750,8 @@ def _write_rasters_sidecar(
         nodata=0,
         extra={
             "derived": "hsg",
-            "source_layers": [
+            "source_layers": list(layers),
+            "source_files": [
                 {"name": name, "file": path.name, "sha256": file_digest(path)[0]}
                 for name, path in layers.items()
             ],

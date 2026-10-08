@@ -394,7 +394,7 @@ Od 0.7.1 takze `download_cz_cutout`/`run_cz_cutout` (wycinek CZ),
 | `license` | `{id, attribution, url}` z deskryptora |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, sekundy) i wersja pakietu z `kartograf/_version.py::build_version()`: wydanie = samo `__version__`; wersja rozwojowa (`dev`) = `<__version__>+<krotki SHA>` commita, z ktorego zaimportowano pakiet, z sufiksem `.dirty`, gdy sledzone pliki katalogu `kartograf/` maja niezacommitowane zmiany (docs/testy sie nie licza); gdy git jest niedostepny albo pakiet nie pochodzi z repozytorium, w ktorym lezy (`os.path.samefile`), samo `__version__`. Ta sama wartosc w `kartograf --version`; `User-Agent` HTTP niesie samo `__version__` |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
-| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `tile_sheet`/`year`/`nominal_density`/`url`; SM5 ma `mapname`/`cz_share` (udzial arkusza w terytorium CZ, pole `PODIL` CUZK); wycinek bbox CZ (od 0.7.1) ma zawsze `all_nodata` (`true`/`false`, sekcja 4.5) i `parent_request` przy zadaniu obszarowym; arkusze NMT/NMPT/orto PL maja `source` (klucze w tabeli nizej); wycinek PL: `parent_request`, `missing_sheets`, `sheet_sources`, `off_grid_sheets`, `all_nodata`, `unverified_sheets` — znaczenie i warunki zapisu w akapicie "Wycinek PL w sidecarze" nizej (jedyne pelne zestawienie); CORINE z podgladu WMS: `fallback: "wms_png"` i `note` (`landcover/manager.py`, sekcja 4.8); wynik HSG: `derived: "hsg"`, `source_layers`, `depth`, `stat`, `classes` (sekcja 4.8); pakiet BDOT10k (od 0.7.1): `source` = `{url, teryt, format[, raw_file]}` i `http` = `{etag, last_modified, content_length}` (sekcja 4.8); plik kampanii (ADR-030): `campaign` = `{id, date, survey_work_id, source, full_sheet, pzgik_date}` obok `source`; sidecar sciezki standardowej: `link` (`hardlink`/`copy`) i `link_target` (sciezka celu wzgledem dowiazania; jedyne zrodlo celu) |
+| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `tile_sheet`/`year`/`nominal_density`/`url`; SM5 ma `mapname`/`cz_share` (udzial arkusza w terytorium CZ, pole `PODIL` CUZK); wycinek bbox CZ (od 0.7.1) ma zawsze `all_nodata` (`true`/`false`, sekcja 4.5) i `parent_request` przy zadaniu obszarowym; arkusze NMT/NMPT/orto PL maja `source` (klucze w tabeli nizej); wycinek PL: `parent_request`, `missing_sheets`, `sheet_sources`, `off_grid_sheets`, `all_nodata`, `unverified_sheets` — znaczenie i warunki zapisu w akapicie "Wycinek PL w sidecarze" nizej (jedyne pelne zestawienie); CORINE z podgladu WMS: `fallback: "wms_png"` i `note` (`landcover/manager.py`, sekcja 4.8); wynik HSG: `derived: "hsg"`, `source_layers` (lista nazw warstw), `depth`, `stat`, `classes`, a z `hsg_from_rasters` (od 0.7.1) zamiast `depth`/`stat` dodatkowo `source_files` (sekcja 4.8); pakiet BDOT10k (od 0.7.1): `source` = `{url, teryt, format[, raw_file]}` i `http` = `{etag, last_modified, content_length}` (sekcja 4.8); plik kampanii (ADR-030): `campaign` = `{id, date, survey_work_id, source, full_sheet, pzgik_date}` obok `source`; sidecar sciezki standardowej: `link` (`hardlink`/`copy`) i `link_target` (sciezka celu wzgledem dowiazania; jedyne zrodlo celu) |
 | `sha256`, `size_bytes` | od 0.7.1: skrot SHA-256 (hex) i rozmiar w bajtach pliku danych, liczone w `build_metadata` (`sources/sidecar.py::file_digest`) przez ponowny odczyt GOTOWEGO pliku — jedno miejsce dla wszystkich produktow, takze pochodnych (wycinek, scalony GPKG BDOT10k, HSG); `null`, gdy sidecar powstaje bez istniejacego pliku danych. Sidecar sciezki standardowej kampanii (kopia sidecara celu) niesie skrot celu — tresc dowiazania jest ta sama |
 | `schema` | stale `kartograf-meta/1` |
 
@@ -1414,7 +1414,10 @@ np. `{teryt, format}`; `extra.source` bez `raw_file`; `sha256`/`size_bytes`
 archiwum); sidecar GPKG dostaje wtedy
 `extra.source.raw_file` = nazwa archiwum. Archiwum jest zapisywane
 atomowo i dopiero po udanym scaleniu, wiec blad rozpakowania nie zostawia
-ZIP bez sidecara. `keep_raw` nie zmienia tresci GPKG, wiec nie trafia do
+ZIP bez sidecara; nieudany zapis archiwum usuwa juz zapisany GPKG (jego
+sidecar powstaje dopiero po powrocie z `download_package`). Blad
+wejscia-wyjscia przy rozpakowaniu (warstwy kopiowane strumieniowo), scalaniu
+albo zapisie archiwum to `DownloadError`. `keep_raw` nie zmienia tresci GPKG, wiec nie trafia do
 nazwy pliku ani do `request`. `extra.parent_request` (obszar zadania)
 zostaje obok `source` i `http`.
 
@@ -1437,8 +1440,9 @@ zaczepiona w `bbox` (przeliczonym do `crs`), a klasyfikacja (`_classify_hsg`)
 i zapis GeoTIFF (`_write_hsg_geotiff`) sa wspolne z
 `HSGCalculator.calculate_hsg_by_bbox`. Nodata wejscia pochodzi wylacznie z
 jego tagu (brak tagu = brak wartosci nodata, bez domyslnego `-32768`); piksele
-poza zasiegiem wejscia oraz trojki zerowe daja `0`. Sidecar jak wyzej, ale
-`extra.source_layers` to lista `{name, file, sha256}` (skrot pliku wejsciowego,
+poza zasiegiem wejscia oraz trojki zerowe daja `0`. Sidecar jak wyzej
+(`extra.source_layers` = `["clay", "sand", "silt"]`, ten sam typ), plus
+`extra.source_files` = lista `{name, file, sha256}` (skrot pliku wejsciowego,
 `file_digest`), bez `depth`/`stat` (nie sa znane), a `request` niesie
 siatke (`bbox` w `crs`).
 

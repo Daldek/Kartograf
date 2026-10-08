@@ -868,7 +868,9 @@ class TestHsgFromRasters:
         assert np.all(data == 4)
         meta = json.loads(out.with_name(out.name + ".meta.json").read_text())
         assert meta["extra"]["derived"] == "hsg"
-        layers = meta["extra"]["source_layers"]
+        # Same type as calculate_hsg_by_bbox: list[str] (kartograf-meta/1).
+        assert meta["extra"]["source_layers"] == ["clay", "sand", "silt"]
+        layers = meta["extra"]["source_files"]
         assert [layer["name"] for layer in layers] == ["clay", "sand", "silt"]
         assert [layer["file"] for layer in layers] == [
             "clay.tif",
@@ -896,7 +898,7 @@ class TestHsgFromRasters:
             output_path=tmp_path / "h.tif",
         )
         meta = json.loads(out.with_name(out.name + ".meta.json").read_text())
-        by_name = {x["name"]: x["sha256"] for x in meta["extra"]["source_layers"]}
+        by_name = {x["name"]: x["sha256"] for x in meta["extra"]["source_files"]}
         for name, path in (("clay", clay), ("sand", sand), ("silt", silt)):
             assert by_name[name] == hashlib.sha256(path.read_bytes()).hexdigest()
 
