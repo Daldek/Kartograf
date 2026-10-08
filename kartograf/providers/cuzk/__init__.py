@@ -1,4 +1,4 @@
-"""Providery czeskich zrodel danych (CUZK)."""
+"""Providers of Czech data sources (CUZK)."""
 
 import requests
 
@@ -24,7 +24,7 @@ def create_dmr_provider(
     target_crs: str | None = None,
     vertical_crs: str = "Bpv",
 ) -> CuzkDmrProvider:
-    """Fabryka providera DMR — jedno miejsce czeskich domyslow (wzor: pl)."""
+    """DMR provider factory — the one place for Czech defaults (model: pl)."""
     if resolution not in {"2m", "5m"}:
         raise ValidationError(
             f"Nieobslugiwana rozdzielczosc CZ: '{resolution}' (dostepne: 2m, 5m)"

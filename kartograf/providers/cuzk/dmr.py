@@ -1,13 +1,13 @@
 """
-CuzkDmrProvider — DMR 5G (2 m, exportImage) i DMR 4G (5 m, pliki openzu + exportImage).
+CuzkDmrProvider — DMR 5G (2 m, exportImage) and DMR 4G (5 m, openzu + exportImage).
 
-Zasada natywnosci: wynik exportImage to pochodna serwera (GeoTIFF); pliki
-openzu to bajty CUZK 1:1 — modyfikowany jest wylacznie tag CRS w GeoTIFF
-bez CRS (naprawa metadanych). Transformacja pionowa wylacznie na jawne
-zadanie (vertical_crs="EVRF2007").
+Nativeness rule: the exportImage result is a server derivative (GeoTIFF); the
+openzu files are CUZK bytes 1:1 — only the CRS tag is modified, in a GeoTIFF
+without a CRS (metadata repair). Vertical transformation only on an explicit
+request (vertical_crs="EVRF2007").
 
-Endpointy pochodza WYLACZNIE z deskryptorow (`get_source(...).channels[..].endpoint`)
-— provider nie zna zadnego URL-a. Sidecary pisze warstwa CLI/managera.
+Endpoints come ONLY from descriptors (`get_source(...).channels[..].endpoint`)
+— the provider knows no URL. Sidecars are written by the CLI/manager layer.
 """
 
 import dataclasses
@@ -50,10 +50,11 @@ logger = logging.getLogger(__name__)
 
 CUZK_NODATA = -9999.0
 
-# Uklad, w ktorym CUZK TRZYMA dane rastrowe. Serwer dostaje zadania wylacznie
-# w nim: imageSR=2180 gubi transformacje datum (blad 135 m, ADR-024).
-# Dawne 1,25 m dla 3045 wynikalo z roznicy operacji czeskiej EPSG:1622
-# i slowackiej EPSG:4829 w lokalnej referencji, nie bledu serwera (errata).
+# The CRS in which CUZK STORES the raster data. The server receives requests
+# only in it: imageSR=2180 loses the datum transformation (135 m error,
+# ADR-024). The former 1.25 m for 3045 came from the difference between the
+# Czech EPSG:1622 and the Slovak EPSG:4829 operations in the local reference,
+# not from a server error (errata).
 NATIVE_CRS = "EPSG:5514"
 
 _RESOLUTION_KEYS = {"2m": "cz.cuzk.dmr5g", "5m": "cz.cuzk.dmr4g"}
@@ -61,38 +62,39 @@ _PIXEL_SIZES = {"2m": 2.0, "5m": 5.0}
 _SUPPORTED_VERTICAL = ("Bpv", "EVRF2007")
 _DEFAULT_TIMEOUT = 60
 
-# Punkt kontrolny dla operacji POZIOMYCH, ktorych zrodlem jest uklad natywny
-# — mniej wiecej srodek Czech (15,5E / 49,8N) w Krovaku. Siatka, ktora go nie
-# pokrywa (np. sk_gku, Slowacja), zwraca tam inf i zostaje odrzucona, zanim
-# zdazy popsuc pobranie (audyt 0.7.0, A1-2).
+# Control point for HORIZONTAL operations whose source is the native CRS
+# — roughly the centre of Czechia (15.5E / 49.8N) in Krovak. A grid that does
+# not cover it (e.g. sk_gku, Slovakia) returns inf there and is rejected
+# before it can spoil a download (0.7.0 audit, A1-2).
 CZ_PROBE_NATIVE: tuple[float, float] = (-670165.0, -1084718.0)
 
-# Operacja pionowa Bpv->EVRF2007 ma dokladnosc 0,1 m (rekonesans Zad. 1, krok 7).
-# Bez probe: para jest czysto pionowa, wiec transformer.transform(x, y) nie ma
-# tu sensu jako test pokrycia.
+# The vertical Bpv->EVRF2007 operation has 0.1 m accuracy (reconnaissance
+# Task 1, step 7). Without a probe: the pair is purely vertical, so
+# transformer.transform(x, y) makes no sense here as a coverage test.
 _VERTICAL_POLICY = TransformPolicy(min_accuracy_m=0.2)
-# Pomocnicze przeliczenia poziome NIE dotykaja wartosci danych, wiec limit
-# jest luzniejszy niz dla operacji reprojektujacej tresc:
-#  - lon/lat dla operacji pionowej: offset zmienia sie o 0,014 m na stopien
-#    szerokosci, wiec blad 2 m to ~3e-7 m wysokosci;
-#  - obwiednia zadania natywnego: ma tylko POKRYC obszar celu, a ewentualny
-#    rozjazd z operacja przypieta (<= 2 m) miesci sie w zapasie
-#    WARP_MARGIN_PX (4 px = 8 m przy 2 m) — zmniejszajac ten zapas trzeba
-#    zaostrzyc te polityke albo policzyc obwiednie ta sama operacja co warp.
-# Siatki z CDN nie sa tu potrzebne (kosztuja ~2 s na pare ukladow), dlatego
+# Auxiliary horizontal conversions do NOT touch the data values, so the limit
+# is looser than for the operation reprojecting content:
+#  - lon/lat for the vertical operation: the offset changes by 0.014 m per
+#    degree of latitude, so a 2 m error is ~3e-7 m of height;
+#  - envelope of the native request: it only has to COVER the target area, and
+#    a possible divergence from the pinned operation (<= 2 m) fits in the
+#    WARP_MARGIN_PX margin (4 px = 8 m at 2 m) — when reducing this margin,
+#    tighten this policy or compute the envelope with the same operation as
+#    the warp.
+# CDN grids are not needed here (they cost ~2 s per CRS pair), hence
 # allow_network_grids=False.
 _LONLAT_POLICY = TransformPolicy(min_accuracy_m=2.0, allow_network_grids=False)
 _ENVELOPE_POLICY = TransformPolicy(min_accuracy_m=2.0, allow_network_grids=False)
-# Operacja reprojektujaca TRESC rastra: CONTENT_POLICY, zapas obwiedni:
-# WARP_MARGIN_PX — oba z transform/crs.py, wspolne z wycinkiem PL (D9).
+# Operation reprojecting the raster CONTENT: CONTENT_POLICY, envelope margin:
+# WARP_MARGIN_PX — both from transform/crs.py, shared with the PL cutout (D9).
 
-# Transformacja idzie pasami o stalej liczbie PIKSELI (nie wierszy): przy szerokim
-# rastrze pas wierszowy wygenerowalby wielkie tablice indeksow i lon/lat.
+# The transformation runs in strips of a fixed number of PIXELS (not rows): for a
+# wide raster a row strip would generate huge index and lon/lat arrays.
 _CHUNK_PIXELS = 4_000_000
 
 
 class CuzkDmrProvider(BaseProvider):
-    """Provider NMT dla Czech (CUZK): DMR 5G / DMR 4G."""
+    """NMT provider for Czechia (CUZK): DMR 5G / DMR 4G."""
 
     def __init__(
         self,
@@ -127,16 +129,17 @@ class CuzkDmrProvider(BaseProvider):
         self._client_timeout = _DEFAULT_TIMEOUT
         self._sheet_index = SheetIndex(session=self._session, cache=cache)
         self._transforms: dict[tuple[str, str], PinnedTransform] = {}
-        # Fail-fast jak przy KRON86: brak bezpiecznej operacji 8357->5621 ma
-        # przerwac PRZED jakimkolwiek pobieraniem, zeby uzytkownik nie zaplacil
-        # za transfer i nie dostal pliku w Bpv pod nazwa zamowiona jako EVRF2007.
+        # Fail-fast as with KRON86: the lack of a safe 8357->5621 operation must
+        # abort BEFORE any download, so the user does not pay for the transfer
+        # and does not get a Bpv file under the name ordered as EVRF2007.
         self._vertical_transform: PinnedTransform | None = (
             self._pinned("EPSG:8357", "EPSG:5621", _VERTICAL_POLICY)
             if vertical_crs == "EVRF2007"
             else None
         )
-        # Ta sama zasada dla poziomu: gdy uzytkownik zazadal ukladu innego niz
-        # natywny, brak bezpiecznej operacji ma przerwac przed transferem.
+        # The same rule for the horizontal part: when the user requested a CRS
+        # other than native, the lack of a safe operation must abort before
+        # the transfer.
         if target_crs is not None:
             self.horizontal_transform(target_crs)
 
@@ -149,8 +152,8 @@ class CuzkDmrProvider(BaseProvider):
                 f"pobieranie rastrow CUZK niemozliwe"
             )
         self._image_endpoint: str = image_endpoint
-        # Kanal plikowy istnieje tylko dla DMR 4G (arkusze SM5 z openzu);
-        # None jest tu poprawnym stanem, a nie bledem konfiguracji.
+        # The file channel exists only for DMR 4G (SM5 sheets from openzu);
+        # None is a valid state here, not a configuration error.
         self._files_endpoint: str | None = _endpoint_for(
             descriptor.channels, TransportKind.DIRECT_FILES
         )
@@ -173,20 +176,21 @@ class CuzkDmrProvider(BaseProvider):
 
     @property
     def vertical_crs(self) -> str:
-        """Nazwa CLI ukladu pionowego wyniku ("Bpv" albo "EVRF2007")."""
+        """CLI name of the result's vertical CRS ("Bpv" or "EVRF2007")."""
         return self._vertical_crs
 
     @property
     def sheet_index(self) -> SheetIndex:
-        """Wspoldzielony indeks arkuszy (walidacja SM5, PODIL do sidecara)."""
+        """Shared sheet index (SM5 validation, PODIL for the sidecar)."""
         return self._sheet_index
 
     def horizontal_transform(self, target_crs: str) -> PinnedTransform | None:
-        """Przypieta operacja ``EPSG:5514 -> target_crs`` uzyta do reprojekcji
-        TRESCI rastra; ``None``, gdy wynik zostaje w ukladzie natywnym.
+        """Pinned ``EPSG:5514 -> target_crs`` operation used to reproject the
+        raster CONTENT; ``None`` when the result stays in the native CRS.
 
-        Ta sama instancja co uzyta przy pobieraniu (cache ``_transforms``), wiec
-        opis i dokladnosc w sidecarze opisuja faktycznie wykonana operacje.
+        The same instance as used during download (``_transforms`` cache), so
+        the description and accuracy in the sidecar describe the operation
+        actually performed.
         """
         if wkid(target_crs) == wkid(NATIVE_CRS):
             return None
@@ -196,9 +200,9 @@ class CuzkDmrProvider(BaseProvider):
 
     @property
     def vertical_transform(self) -> PinnedTransform | None:
-        """Przypieta operacja 8357->5621 (None, gdy pobieranie natywne Bpv).
+        """Pinned 8357->5621 operation (None for a native Bpv download).
 
-        Budowana w konstruktorze — patrz uwaga o fail-fast tamze.
+        Built in the constructor — see the fail-fast note there.
         """
         return self._vertical_transform
 
@@ -210,13 +214,14 @@ class CuzkDmrProvider(BaseProvider):
         *,
         on_download: Callable[[], None] | None = None,
     ) -> Path:
-        """Pobierz kafel TM33 (siatka w 3045) lub arkusz SM5 (openzu, 5514).
+        """Download a TM33 tile (grid in 3045) or an SM5 sheet (openzu, 5514).
 
-        `target_crs` dotyczy wylacznie trybu bbox — godlo definiuje zasieg
-        w konkretnym ukladzie, wiec reprojekcja rozjechalaby go z siatka.
-        Kafel TM33 lezy w EPSG:3045, a dane CUZK w EPSG:5514: `exportImage`
-        dostaje zadanie natywne, a na siatke kafla przenosi je lokalny warp
-        (ADR-024). Arkusz SM5 przychodzi plikiem juz w 5514 — bez warpu.
+        `target_crs` applies only to bbox mode — the sheet code defines the
+        extent in a specific CRS, so reprojection would diverge it from the
+        grid. The TM33 tile lies in EPSG:3045 and the CUZK data in EPSG:5514:
+        `exportImage` gets a native request, and a local warp carries it onto
+        the tile grid (ADR-024). The SM5 sheet arrives as a file already in
+        5514 — no warp.
 
         ``on_download`` is called exactly once, after every validation
         (CZ system, SM5 resolution and sheet-index lookup, TM33 grid parse)
@@ -225,8 +230,8 @@ class CuzkDmrProvider(BaseProvider):
         ``DownloadManager.download_sheet(on_download=)`` in the PL flow).
         """
         output_path = Path(output_path)
-        # jak rejestr systemow: biale znaki nie sa czescia godla (URL openzu,
-        # indeks SM5 i ParserTM33 dostaja to samo obciete godlo)
+        # like the system registry: whitespace is not part of the sheet code
+        # (openzu URL, SM5 index and ParserTM33 get the same stripped code)
         godlo = godlo.strip()
         system = detect_system(godlo)
         if system.country != "CZ":
@@ -237,8 +242,8 @@ class CuzkDmrProvider(BaseProvider):
         if system.id == "cz_sm5":
             self._download_sm5(godlo, output_path, timeout, on_download)
         else:  # cz_tm33
-            # Parsowanie przez ParserTM33 (pelna walidacja: kilometry parzyste),
-            # nie przez sam regex rejestru systemow.
+            # Parsing through ParserTM33 (full validation: even kilometres),
+            # not through the system registry regex alone.
             bbox = ParserTM33(godlo).get_bbox()
             self._export_raster(bbox, output_path, timeout, on_download)
         if self.vertical_transform is not None:
@@ -254,7 +259,7 @@ class CuzkDmrProvider(BaseProvider):
         *,
         on_download: Callable[[], None] | None = None,
     ) -> Path:
-        """Jeden wycinek dla dowolnego bboxa (`--target-crs` => warp lokalny).
+        """A single cutout for any bbox (`--target-crs` => local warp).
 
         ``on_download``: called once right before the first ``exportImage``
         request, after format and CRS validation (see :meth:`download`).
@@ -280,26 +285,29 @@ class CuzkDmrProvider(BaseProvider):
         timeout: int,
         on_download: Callable[[], None] | None = None,
     ) -> None:
-        """Raster pokrywajacy ``bbox`` w ukladzie ``bbox.crs``.
+        """Raster covering ``bbox`` in the CRS ``bbox.crs``.
 
-        Serwer dostaje zadanie WYLACZNIE w ukladzie natywnym (``NATIVE_CRS``);
-        gdy cel jest inny, tresc jest reprojektowana lokalnie przypieta
-        operacja z czeskim krokiem datum EPSG:1622 (1,0 m).
-        ``exportImage&imageSR=2180`` gubi transformacje datum S-JTSK->ETRS89
-        (tresc przesunieta o 135 m; ADR-024). Dawne 1,25 m dla 3045 to roznica
-        EPSG:1622/4829 w referencji lokalnej, nie blad serwera (errata ADR-024).
-        Lokalny warp pozwala wymusic i zapisac operacje niezaleznie od serwera.
+        The server receives the request ONLY in the native CRS
+        (``NATIVE_CRS``); when the target is different, the content is
+        reprojected locally with a pinned operation with the Czech datum step
+        EPSG:1622 (1.0 m). ``exportImage&imageSR=2180`` loses the S-JTSK->ETRS89
+        datum transformation (content shifted by 135 m; ADR-024). The former
+        1.25 m for 3045 is the EPSG:1622/4829 difference in the local
+        reference, not a server error (ADR-024 errata). A local warp makes it
+        possible to enforce and record the operation independently of the
+        server.
 
-        Kafelkowanie (limity ``exportImage``) i mozaikowanie dzieja sie po
-        stronie ukladu natywnego, czyli PRZED warpem — szew kafli nie moze
-        wiec zostac utrwalony przez interpolacje.
+        Tiling (``exportImage`` limits) and mosaicking happen on the native
+        CRS side, i.e. BEFORE the warp — so the tile seam cannot be fixed in
+        by interpolation.
 
-        Warp to wspolny ``transform/raster.warp_to_grid`` (ten sam co w torze
-        PL): zapis przez plik tymczasowy i ``os.replace``, wiec nieudana
-        przebudowa (``--force``) zostawia poprzedni plik wyniku nietkniety.
+        The warp is the shared ``transform/raster.warp_to_grid`` (the same as in
+        the PL path): written through a temporary file and ``os.replace``, so
+        a failed rebuild (``--force``) leaves the previous result file
+        untouched.
         """
         client = self._client_for(timeout)
-        # None == cel jest ukladem natywnym: serwer wydaje dane wprost
+        # None == the target is the native CRS: the server serves the data directly
         pinned = self.horizontal_transform(bbox.crs)
         if pinned is None:
             if on_download is not None:
@@ -329,8 +337,9 @@ class CuzkDmrProvider(BaseProvider):
                 no_data=CUZK_NODATA,
                 output_path=native_path,
             )
-            # Wspolny warp torow PL i CZ (D8): zapis przez plik tymczasowy
-            # i os.replace — awaria NIE kasuje poprzedniego wyniku (N7).
+            # Warp shared by the PL and CZ paths (D8): written through a temp
+            # file and os.replace — a failure does NOT delete the previous
+            # result (N7).
             warp_to_grid(
                 native_path,
                 output_path,
@@ -344,7 +353,7 @@ class CuzkDmrProvider(BaseProvider):
             native_path.unlink(missing_ok=True)
 
     def _native_request_bbox(self, bbox: BBox) -> BBox:
-        """Obwiednia zadania natywnego: cel przeliczony do 5514 plus zapas."""
+        """Native request envelope: the target converted to 5514 plus a margin."""
         native = self._bbox_to_crs(bbox, NATIVE_CRS)
         margin = WARP_MARGIN_PX * self._pixel_size
         return BBox(
@@ -362,7 +371,7 @@ class CuzkDmrProvider(BaseProvider):
         timeout: int,
         on_download: Callable[[], None] | None = None,
     ) -> None:
-        """Arkusz SM5 (DMR 4G) z openzu + naprawa metadanych CRS."""
+        """SM5 sheet (DMR 4G) from openzu + CRS metadata repair."""
         if self._resolution != "5m":
             raise ValidationError(
                 f"Arkusze SM5 sa dostepne tylko dla --resolution 5m "
@@ -375,14 +384,14 @@ class CuzkDmrProvider(BaseProvider):
                 f"{TransportKind.DIRECT_FILES.name} z endpointem — "
                 f"pobieranie arkuszy SM5 niemozliwe"
             )
-        self._sheet_index.sm5_sheet(godlo)  # walidacja przed pobraniem
+        self._sheet_index.sm5_sheet(godlo)  # validation before download
         url = self._files_endpoint.format(sheet=godlo)
         if on_download is not None:
             on_download()
         try:
             self._client_for(timeout).fetch_file(url, output_path, unzip_single=".tif")
         except DownloadError as e:
-            # spec sekcja 7: 404 z openzu -> podpowiedz weryfikacji godla
+            # spec section 7: 404 from openzu -> hint to verify the sheet code
             raise DownloadError(
                 f"{e} — zweryfikuj godlo w indeksie KladyMapovychListu "
                 f"(arkusz moze byc znany indeksowi, ale plik openzu "
@@ -391,7 +400,7 @@ class CuzkDmrProvider(BaseProvider):
         _assign_crs(output_path, "EPSG:5514")
 
     def _client_for(self, timeout: int) -> CuzkClient:
-        """Klient dla zadanego timeoutu (sesja HTTP zawsze wspoldzielona)."""
+        """Client for the given timeout (the HTTP session is always shared)."""
         if timeout == self._client_timeout:
             return self._client
         return CuzkClient(session=self._session, timeout=timeout)
@@ -404,14 +413,15 @@ class CuzkDmrProvider(BaseProvider):
         *,
         probe: tuple[float, float] | None = None,
     ) -> PinnedTransform:
-        """Przypieta transformacja (jedna na pare ukladow w cyklu zycia providera).
+        """Pinned transformation (one per CRS pair over the provider's lifetime).
 
-        `probe` (w ukladzie ZRODLOWYM) doklada do polityki punkt kontrolny:
-        kandydat, ktory zwraca tam inf/NaN, odpada — tak wypada siatka obcego
-        kraju, formalnie dokladniejsza, ale nieobejmujaca naszych danych.
-        Klucz cache pozostaje sama para ukladow: probe wylacznie ODRZUCA
-        kandydatow (nie zmienia rankingu), wiec pierwsze zapytanie o pare
-        ustala operacje dla calego cyklu zycia providera.
+        `probe` (in the SOURCE CRS) adds a control point to the policy:
+        a candidate that returns inf/NaN there is dropped — this is how a
+        foreign country's grid is rejected, formally more accurate but not
+        covering our data. The cache key remains the CRS pair alone: probe
+        only REJECTS candidates (does not change the ranking), so the first
+        query for a pair fixes the operation for the provider's whole
+        lifetime.
         """
         key = (src_crs, dst_crs)
         if key not in self._transforms:
@@ -421,7 +431,7 @@ class CuzkDmrProvider(BaseProvider):
         return self._transforms[key]
 
     def _bbox_to_crs(self, bbox: BBox, target_crs: str) -> BBox:
-        """Obwiednia bboxa w ukladzie docelowym, z transformacja z cache providera."""
+        """Bbox envelope in the target CRS (transform cached by the provider)."""
         return bbox_to_crs(
             bbox,
             target_crs,
@@ -434,23 +444,24 @@ class CuzkDmrProvider(BaseProvider):
         )
 
     def _apply_vertical_shift(self, path: Path) -> None:
-        """Przelicz wartosci rastra przypieta operacja 8357->5621 (per piksel).
+        """Convert raster values with the pinned 8357->5621 operation (per pixel).
 
-        Operacja pionowa wymaga wspolrzednych poziomych w kolejnosci
-        (lon, lat, h) — always_xy=True, potwierdzone w rekonesansie (Zad. 1
-        krok 7a; zamiana argumentow daje cichy blad ~0,44 m). Piksele nodata
-        (oraz ewentualne NaN/inf) NIE sa transformowane — inaczej wartosc
-        -9999 zostalaby przesunieta o offset i przestala byc rozpoznawana.
+        The vertical operation requires horizontal coordinates in the order
+        (lon, lat, h) — always_xy=True, confirmed in reconnaissance (Task 1
+        step 7a; swapping the arguments gives a silent ~0.44 m error). Nodata
+        pixels (and any NaN/inf) are NOT transformed — otherwise the value
+        -9999 would be shifted by the offset and stop being recognized.
 
-        Przeliczenie idzie pasami, wiec pracuje na KOPII tymczasowej i dopiero
-        po pelnym sukcesie podmienia plik (`os.replace`) — inaczej awaria na
-        pasie k zostawilaby pod docelowa nazwa raster o wymieszanych ukladach
-        pionowych (pasy 0..k-1 w EVRF2007, reszta w Bpv), a `skip_existing`
-        w DownloadManagerze utrwalilby taka korupcje. Przy bledzie znikaja
-        zarowno kopia, jak i plik zrodlowy (wraz z towarzyszacym `.tfw`).
+        The conversion runs in strips, so it works on a temporary COPY and
+        replaces the file (`os.replace`) only after full success — otherwise a
+        failure at strip k would leave under the target name a raster with
+        mixed vertical CRSs (strips 0..k-1 in EVRF2007, the rest in Bpv), and
+        `skip_existing` in DownloadManager would make such corruption
+        permanent. On error both the copy and the source file (with the
+        accompanying `.tfw`) disappear.
         """
         pinned = self._vertical_transform
-        if pinned is None:  # pragma: no cover — wolane tylko dla EVRF2007
+        if pinned is None:  # pragma: no cover — called only for EVRF2007
             return
         temp_path = path.with_name(
             f"{path.name}.{os.getpid()}_{threading.get_ident()}.vshift.tif"
@@ -466,10 +477,10 @@ class CuzkDmrProvider(BaseProvider):
             raise
 
     def _shift_in_place(self, path: Path, pinned: PinnedTransform, label: str) -> None:
-        """Przelicz wysokosci pasami w podanym pliku (patrz _apply_vertical_shift).
+        """Convert heights in strips in the given file (see _apply_vertical_shift).
 
-        `label` to nazwa pliku DOCELOWEGO — komunikaty nie moga wskazywac na
-        nazwe kopii tymczasowej, ktorej uzytkownik nigdy nie zobaczy.
+        `label` is the name of the TARGET file — messages must not point to
+        the name of a temporary copy the user will never see.
         """
         with rasterio.open(path, "r+") as ds:
             if ds.crs is None:
@@ -522,18 +533,19 @@ class CuzkDmrProvider(BaseProvider):
 def bbox_to_crs(
     bbox: BBox, target_crs: str, pinned: PinnedTransform | None = None
 ) -> BBox:
-    """Obwiednia bboxa w ukladzie docelowym przez operacje PRZYPIETA (ADR-024).
+    """Envelope of a bbox in the target CRS through a PINNED operation (ADR-024).
 
-    Jedyne wejscie dla zadan opuszczajacych uklad czeski (i normalizacji
-    zadan exportImage): wybiera operacje obwiedniowa (``_ENVELOPE_POLICY``
-    z punktem kontrolnym w srodku bboxa), gdy wolajacy jej nie poda.
-    Obwiednie z zageszczonych krawedzi liczy ``core.bbox.transform_bbox``
-    (21 probek na krawedz) — obraz prostokata w innym ukladzie jest
-    czworokatem o krzywych bokach.
+    The only entry for requests leaving the Czech CRS (and for normalizing
+    exportImage requests): picks the envelope operation (``_ENVELOPE_POLICY``
+    with a control point in the middle of the bbox) when the caller does not
+    supply one. Envelopes from densified edges are computed by
+    ``core.bbox.transform_bbox`` (21 samples per edge) — the image of a
+    rectangle in another CRS is a quadrilateral with curved sides.
 
-    Funkcja modulowa (nie tylko metoda), bo warstwa CLI normalizuje bbox PRZED
-    zbudowaniem nazwy pliku — nazwa musi niesc wspolrzedne faktycznie zadanego
-    wycinka. Powtorna normalizacja w `download_bbox` jest wtedy strzezonym no-opem.
+    A module-level function (not just a method), because the CLI layer
+    normalizes the bbox BEFORE building the file name — the name must carry
+    the coordinates of the cutout actually requested. A repeated
+    normalization in `download_bbox` is then a guarded no-op.
     """
     if pinned is None:
         pinned = build_pinned_transform(
@@ -545,14 +557,14 @@ def bbox_to_crs(
 
 
 def _center_of(bbox: BBox) -> tuple[float, float]:
-    """Srodek bboxa — punkt kontrolny operacji obwiedniowej (uklad zrodlowy)."""
+    """Centre of the bbox — control point of the envelope operation (source CRS)."""
     return ((bbox.min_x + bbox.max_x) / 2, (bbox.min_y + bbox.max_y) / 2)
 
 
 def _endpoint_for(
     channels: tuple[AccessChannel, ...], transport: TransportKind
 ) -> str | None:
-    """Endpoint pierwszego kanalu danego transportu (None, gdy kanalu brak)."""
+    """Endpoint of the first channel of the given transport (None if none)."""
     return next(
         (ch.endpoint for ch in channels if ch.transport == transport and ch.endpoint),
         None,
@@ -560,15 +572,15 @@ def _endpoint_for(
 
 
 def _assign_crs(path: Path, crs: str) -> None:
-    """Naprawa metadanych DMR4G-TIFF: wpisz CRS (georeferencja jest w .tfw).
+    """Repair DMR4G-TIFF metadata: write the CRS (georeferencing is in .tfw).
 
-    Lustro `_overwrite_crs` w client.py: cale cialo w try/except, bo
-    uszkodzony TIFF z poprawnie rozpakowanego ZIP-a moze sprawic, ze
-    rasterio zglosi niemapowany wyjatek (np. TypeError) zamiast
-    (DownloadError, ValidationError) — bez przechwycenia taki wyjatek
-    uciekalby poza `_cz_download_godlo`/`_run_cz` traceback'iem. Przy
-    bledzie usuwany jest zarowno plik docelowy, jak i towarzyszacy .tfw,
-    zeby `skip_existing` w kolejnym uruchomieniu nie utrwalil korupcji.
+    Mirror of `_overwrite_crs` in client.py: the whole body in try/except,
+    because a corrupt TIFF from a correctly extracted ZIP can make rasterio
+    raise an unmapped exception (e.g. TypeError) instead of
+    (DownloadError, ValidationError) — without catching it such an exception
+    would escape `_cz_download_godlo`/`_run_cz` as a traceback. On error both
+    the target file and the accompanying .tfw are removed, so that
+    `skip_existing` on the next run does not make the corruption permanent.
     """
     try:
         with rasterio.open(path, "r+") as ds:

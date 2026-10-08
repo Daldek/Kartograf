@@ -1,4 +1,4 @@
-"""Providery polskich zrodel danych (GUGiK)."""
+"""Providers of Polish data sources (GUGiK)."""
 
 import logging
 
@@ -23,18 +23,18 @@ __all__ = [
     "nmt_vertical_crs",
 ]
 
-# NMT 5 m GUGiK istnieje wylacznie w EVRF2007 (skorowidz SheetsGrid5mEVRF2007).
+# GUGiK NMT 5 m exists only in EVRF2007 (index SheetsGrid5mEVRF2007).
 NMT_5M_VERTICAL_CRS = "EVRF2007"
 
 
 def nmt_vertical_crs(resolution: str, vertical_crs: str, *, log: bool = True) -> str:
-    """Pion FAKTYCZNY NMT PL — jedyne miejsce reguly "5m => EVRF2007" (D11).
+    """ACTUAL vertical CRS of PL NMT — the one place of the "5m => EVRF2007" rule (D11).
 
-    Skutek reguly jest jeden: korekta do EVRF2007. Fabryka providera
-    i ``DownloadManager`` loguja ja ostrzezeniem (``log=True``), CLI drukuje
-    ``Info:`` na stderr (``log=False`` + wlasny komunikat), a kroki
-    przyjmujace pion juz FAKTYCZNY (``prepare_pl_cutout``) odrzucaja
-    niezgodny ``ValidationError`` (``log=False``).
+    The rule has a single effect: correction to EVRF2007. The provider
+    factory and ``DownloadManager`` log it as a warning (``log=True``), the
+    CLI prints ``Info:`` to stderr (``log=False`` + its own message), and
+    steps that already take the ACTUAL vertical CRS (``prepare_pl_cutout``)
+    reject a mismatch with ``ValidationError`` (``log=False``).
     """
     actual = NMT_5M_VERTICAL_CRS if resolution == "5m" else vertical_crs
     if log and actual != vertical_crs:
@@ -51,9 +51,9 @@ def create_nmt_provider(
     session: requests.Session | None = None,
     cache=None,
 ) -> GugikProvider:
-    """Fabryka domyslnego providera NMT — jedno miejsce polskich domyslow.
+    """Factory of the default NMT provider — the one place for Polish defaults.
 
-    Regula "5m => EVRF2007": ``nmt_vertical_crs`` (korekta z ostrzezeniem).
+    Rule "5m => EVRF2007": ``nmt_vertical_crs`` (correction with a warning).
     """
     return GugikProvider(
         session=session,

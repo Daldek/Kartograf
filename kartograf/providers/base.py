@@ -1,11 +1,11 @@
 """
 Base provider classes for data download services.
 
-DataSourceProvider — wspolny korzen wszystkich providerow (nazwa, URL,
-wiazanie z rejestrem zrodel przez descriptor_key).
-BaseProvider — rastry/arkusze (NMT/NMPT/Orto/LAZ), jak dotychczas.
-LandCoverProvider — pokrycie terenu (BDOT10k/CORINE/SoilGrids); przeniesiony
-z landcover_base.py (usuniety bez shima, etap 0 spec 6.7).
+DataSourceProvider — common root of all providers (name, URL,
+binding to the source registry via descriptor_key).
+BaseProvider — rasters/sheets (NMT/NMPT/Orto/LAZ), as before.
+LandCoverProvider — land cover (BDOT10k/CORINE/SoilGrids); moved
+from landcover_base.py (removed without a shim, stage 0 spec 6.7).
 """
 
 from abc import ABC, abstractmethod
@@ -15,9 +15,9 @@ from kartograf.core.sheet_parser import BBox
 
 
 class DataSourceProvider(ABC):
-    """Wspolny korzen providerow zrodel danych."""
+    """Common root of data source providers."""
 
-    #: Klucz deskryptora w kartograf.sources.registry (None = niezwiazany).
+    #: Descriptor key in kartograf.sources.registry (None = unbound).
     descriptor_key: str | None = None
 
     @property
@@ -39,7 +39,7 @@ class BaseProvider(DataSourceProvider):
     the required abstract methods.
 
     Providers support two download modes:
-    - By godło (map sheet ID): returns data in provider's native format
+    - By sheet code (godlo): returns data in provider's native format
     - By bbox (bounding box): returns data in specified format (optional)
 
     Attributes
@@ -72,17 +72,18 @@ class BaseProvider(DataSourceProvider):
 
     @property
     def storage_variant(self) -> str | None:
-        """Wariant produktu w segmencie storage (``<kraj>_<uklad>_<wariant>``).
+        """Product variant in the storage segment.
 
-        ``None`` = wariant domyslny, bez sufiksu (ADR-026). Provider, ktory
-        pod tym samym godlem moze dostarczyc inny plik (orto CIR/B-W), zwraca
-        tu nazwe wariantu — inaczej skip zwrocilby po cichu plik innego
-        wariantu (E12).
+        Segment form: ``<country>_<crs>_<variant>``. ``None`` = default
+        variant, no suffix (ADR-026). A provider that can deliver a
+        different file under the same sheet code (CIR/B-W orto) returns the
+        variant name here — otherwise a skip would silently return a file of
+        another variant (E12).
         """
         return None
 
     def source_info(self, godlo: str) -> dict | None:
-        """Pochodzenie pobranego arkusza, jesli provider je udostepnia."""
+        """Origin of the downloaded sheet, if the provider exposes it."""
         return None
 
     @abstractmethod
@@ -93,7 +94,7 @@ class BaseProvider(DataSourceProvider):
         timeout: int = 30,
     ) -> Path:
         """
-        Download data for given map sheet (godło).
+        Download data for given map sheet (godlo).
 
         Parameters
         ----------
@@ -192,7 +193,7 @@ class BaseProvider(DataSourceProvider):
 
     def validate_godlo(self, godlo: str) -> bool:
         """
-        Validate that godło is in correct format for this provider.
+        Validate that godlo is in correct format for this provider.
 
         Parameters
         ----------
@@ -202,7 +203,7 @@ class BaseProvider(DataSourceProvider):
         Returns
         -------
         bool
-            True if godło is valid, False otherwise
+            True if godlo is valid, False otherwise
         """
         return True
 
@@ -223,8 +224,7 @@ class LandCoverProvider(DataSourceProvider):
     the required abstract methods. Providers support three download modes:
     - By TERYT code (administrative unit)
     - By bbox (bounding box)
-    - By godło (map sheet ID)
-
+    - By godlo (map sheet ID)
     Attributes
     ----------
     name : str
@@ -299,7 +299,7 @@ class LandCoverProvider(DataSourceProvider):
     ) -> Path:
         """Download data for an administrative unit (canonical name).
 
-        Dla PL kodem jednostki jest TERYT. Domyslnie nieobslugiwane.
+        For PL the unit code is TERYT. Unsupported by default.
         """
         raise NotImplementedError(
             f"{self.__class__.__name__} does not support TERYT downloads"
@@ -325,9 +325,9 @@ class LandCoverProvider(DataSourceProvider):
         **kwargs,
     ) -> Path:
         """
-        Download land cover data for a map sheet (godło).
+        Download land cover data for a map sheet (godlo).
 
-        Converts godło to bbox and calls download_by_bbox.
+        Converts godlo to bbox and calls download_by_bbox.
 
         Parameters
         ----------
@@ -348,7 +348,7 @@ class LandCoverProvider(DataSourceProvider):
         Raises
         ------
         ParseError
-            If godło format is invalid
+            If godlo format is invalid
         DownloadError
             If the download fails
         """
@@ -407,7 +407,7 @@ class LandCoverProvider(DataSourceProvider):
     def validate_admin_unit(self, code: str) -> bool:
         """Validate administrative-unit code (canonical name).
 
-        PL: TERYT — 4 cyfry (powiat) lub 7 cyfr (gmina).
+        PL: TERYT — 4 digits (powiat) or 7 digits (gmina).
         """
         if not code or not code.isdigit():
             return False

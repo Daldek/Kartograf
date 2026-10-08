@@ -1,4 +1,4 @@
-"""Rekordy skorowidza GUGiK: parsowanie, scisly wybor i pochodzenie arkusza."""
+"""GUGiK index (skorowidz) records: parsing, strict selection and sheet origin."""
 
 import json
 import logging
@@ -27,9 +27,9 @@ logger = logging.getLogger(__name__)
 
 _RECORD = re.compile(r"\.push\(\s*\{(.*?)\}\s*\)", re.DOTALL)
 _FIELD = re.compile(r'(\w+)\s*:\s*("(?:[^"\\]|\\.)*")')
-# Szablon HTML MapServera GUGiK: pusta odpowiedz (morze, zagranica) ma tylko
-# naglowek z funkcja createTable (gfi/01-04 z 2026-09-29), deklaracja tablicy
-# rekordow `var X = [];` pojawia sie dopiero razem z rekordami.
+# GUGiK MapServer HTML template: an empty response (sea, abroad) has only the
+# header with the createTable function (gfi/01-04 of 2026-09-29); the record
+# array declaration `var X = [];` appears only together with records.
 _TEMPLATE = re.compile(r"\bvar\s+\w+\s*=\s*\[\s*\]\s*;|\bfunction\s+createTable\s*\(")
 _OGC_REPORT = re.compile(r"<(?:\w+:)?(?:ServiceException|ExceptionReport)\b")
 _OGC_TEXT = re.compile(
@@ -38,8 +38,8 @@ _OGC_TEXT = re.compile(
 
 
 def _horizontal_crs(value: str | None) -> tuple[str | None, int | None]:
-    """``(uklad, strefa)`` rekordu; ``(None, None)`` = rekord bez ukladu
-    (odrzucany w ``select_sheet_record``). Parser: ``parse_pl_uklad`` (D3)."""
+    """``(uklad, zone)`` of a record; ``(None, None)`` = record without a CRS
+    (rejected in ``select_sheet_record``). Parser: ``parse_pl_uklad`` (D3)."""
     return parse_pl_uklad(value) or (None, None)
 
 
@@ -58,11 +58,11 @@ class SkorowidzRecord:
 
     @property
     def file_format(self) -> str | None:
-        """Pole ``format`` rekordu (NMT: ``ARC/INFO ASCII GRID``; orto: brak)."""
+        """The record's ``format`` field (NMT: ``ARC/INFO ASCII GRID``; orto: none)."""
         return self.raw.get("format")
 
     def to_source(self, endpoint: str) -> dict:
-        """Metadane wybranego pliku do sidecara oraz cache rekordow.
+        """Metadata of the selected file for the sidecar and the record cache.
 
         Keys follow the sidecar schema ``kartograf-meta/1`` (English names,
         ADR-031); GUGiK record fields are mapped here, in one place.
@@ -86,7 +86,7 @@ class SkorowidzRecord:
 
     @classmethod
     def from_source(cls, source: dict) -> "SkorowidzRecord":
-        """Odtworz wybrany rekord z payloadu cache (bez ponownej selekcji).
+        """Restore the selected record from a cache payload (no reselection).
 
         Raises ``KeyError`` when a required key (``url``, ``sheet``,
         ``acquisition_date``, ``layer``) is missing — e.g. a cache entry
@@ -135,19 +135,19 @@ def cached_record(source: object) -> SkorowidzRecord | None:
 
 
 def is_skorowidz_answer(text: str) -> bool:
-    """Odpowiedz warstwy = szablon skorowidza GUGiK (takze pusty); inny HTML nie."""
+    """Layer answer = GUGiK index template (also an empty one); other HTML is not."""
     return _TEMPLATE.search(text) is not None
 
 
 def _decode_value(literal: str) -> str:
     try:
         return json.loads(literal)
-    except ValueError:  # escape spoza JSON (np. \') — wartosc doslowna
+    except ValueError:  # non-JSON escape (e.g. \') — literal value
         return literal[1:-1]
 
 
 def parse_skorowidz_records(text: str, layer: str) -> list[SkorowidzRecord]:
-    """Rekordy `X.push({...})` z GetFeatureInfo; URL bez filtra rozszerzenia (H1)."""
+    """`X.push({...})` records from GetFeatureInfo; URL not extension-filtered (H1)."""
     records = []
     for match in _RECORD.finditer(text):
         raw = {key: _decode_value(value) for key, value in _FIELD.findall(match[1])}
@@ -215,10 +215,10 @@ def _matches(
     resolution_m: float | None,
     predicate: Callable[[SkorowidzRecord], bool] | None,
 ) -> bool:
-    """Twardy filtr ADR-028 wspolny dla wyboru jednego rekordu i listy kampanii.
+    """ADR-028 hard filter shared by single-record selection and campaign lists.
 
-    ``godlo`` ma byc juz znormalizowane; wolane raz na rekord (ostrzezenie
-    o braku ukladu/rozdzielczosci nie dubluje sie).
+    ``godlo`` must already be normalized; called once per record (the warning
+    about a missing CRS/resolution is not duplicated).
     """
     if record.uklad is None or record.resolution_m is None:
         logger.warning(
@@ -249,7 +249,7 @@ def select_sheet_record(
     resolution_m: float | None = None,
     predicate: Callable[[SkorowidzRecord], bool] | None = None,
 ) -> SkorowidzRecord | None:
-    """Wybierz najnowsza kampanie spelniajaca WSZYSTKIE wymagania zadania."""
+    """Pick the newest campaign meeting ALL requirements of the request."""
     godlo = SheetParser(godlo).godlo
     matching = [
         record
@@ -275,8 +275,8 @@ def select_campaign_records(
     resolution_m: float | None = None,
     predicate: Callable[[SkorowidzRecord], bool] | None = None,
 ) -> list[SkorowidzRecord]:
-    """Wszystkie rekordy przechodzace filtr ``select_sheet_record``, bez
-    duplikatow URL, malejaco po ``(aktualnosc, dt_pzgik, url)``."""
+    """All records passing the ``select_sheet_record`` filter, without
+    duplicate URLs, descending by ``(aktualnosc, dt_pzgik, url)``."""
     godlo = SheetParser(godlo).godlo
     unique: dict[str, SkorowidzRecord] = {}
     for record in records:
@@ -293,8 +293,8 @@ def select_campaign_records(
 
 
 def layer_upper_year(pattern: re.Pattern[str], name: str) -> int | None:
-    """Gorny rok z nazwy warstwy (grupa 1 ``LAYER_PATTERN``): ``2019`` -> 2019,
-    ``2017iStarsze`` -> 2017; ``Starsze`` albo nazwa spoza wzorca -> ``None``."""
+    """Upper year from a layer name (``LAYER_PATTERN`` group 1): ``2019`` -> 2019,
+    ``2017iStarsze`` -> 2017; ``Starsze`` or a name outside the pattern -> ``None``."""
     match = pattern.fullmatch(name)
     if match is None or match.group(1) is None:
         return None
@@ -311,7 +311,7 @@ def query_skorowidz_layer(
     timeout: float,
     retries: int = 3,
 ) -> list[SkorowidzRecord]:
-    """Zapytaj jedna warstwe; awaria nigdy nie oznacza braku pokrycia."""
+    """Query one layer; a failure never means no coverage."""
     params = {
         "SERVICE": "WMS",
         "VERSION": "1.3.0",
@@ -350,7 +350,7 @@ def query_skorowidz_layer(
 
 @dataclass(frozen=True)
 class SkorowidzQuery:
-    """Parametry rozwiazania arkusza u providera (hook ``_skorowidz_query``)."""
+    """Parameters of sheet resolution at a provider (hook ``_skorowidz_query``)."""
 
     cache_key: tuple[str, str, str, str]
     endpoint: str | None
@@ -361,19 +361,19 @@ class SkorowidzQuery:
 
 
 def _zone(parser: SheetParser) -> int | None:
-    """Strefa PL-2000 godla (filtr rekordow); PL-1992 -> ``None``."""
+    """PL-2000 zone of the sheet code (record filter); PL-1992 -> ``None``."""
     return int(parser.godlo.split(".")[0]) if parser.uklad == "2000" else None
 
 
 def _record_year(record: SkorowidzRecord) -> int | None:
-    """Rok kampanii jak w parserze (``aktualnoscRok`` albo ``aktualnosc``, nie
-    ``dt_pzgik``) — granica ``min_year``; nieustalony -> ``None``."""
+    """Campaign year as in the parser (``aktualnoscRok`` or ``aktualnosc``, not
+    ``dt_pzgik``) — the ``min_year`` boundary; undetermined -> ``None``."""
     year = record.raw.get("aktualnoscRok") or record.aktualnosc[:4]
     return int(year) if year.isdigit() else None
 
 
 def _meets_min_year(record: SkorowidzRecord, min_year: int | None) -> bool:
-    """Rekord spelnia granice; rok nieustalony nie spelnia zadnej granicy."""
+    """Record meets the boundary; an undetermined year meets no boundary."""
     if min_year is None:
         return True
     year = _record_year(record)
@@ -381,12 +381,12 @@ def _meets_min_year(record: SkorowidzRecord, min_year: int | None) -> bool:
 
 
 def _covers(scanned_from: int | None, min_year: int | None) -> bool:
-    """Wpis ze skanu od ``scanned_from`` (``None`` = pelny) wystarcza dla granicy."""
+    """Entry scanned from ``scanned_from`` (``None`` = full) covers the boundary."""
     return scanned_from is None or (min_year is not None and scanned_from <= min_year)
 
 
 def _partial_scan_no_coverage(godlo: str, min_year: int | None) -> NoCoverageError:
-    """Brak kampanii w skanie czesciowym — jedno zrodlo tresci (D-2)."""
+    """No campaign in a partial scan — single source of the message (D-2)."""
     return NoCoverageError(
         f"Brak kampanii {godlo} od roku {min_year} "
         f"(warstwy starsze niz {min_year} pominiete)",
@@ -395,7 +395,7 @@ def _partial_scan_no_coverage(godlo: str, min_year: int | None) -> NoCoverageErr
 
 
 class SourceInfoMixin:
-    """Pochodzenie per godlo, niezalezne od kolejnosci zakonczenia watkow."""
+    """Origin per sheet code, independent of thread completion order."""
 
     def __init__(self) -> None:
         super().__init__()
@@ -413,13 +413,13 @@ class SourceInfoMixin:
 
 
 class SkorowidzLayersMixin(SourceInfoMixin):
-    """Sesja HTTP na watek i warstwy skorowidza WMS odkrywane per endpoint.
+    """HTTP session per thread and WMS index layers discovered per endpoint.
 
-    Klasa pochodna deklaruje ``LAYER_PATTERN`` o dwoch grupach: grupa 1 = rok
-    warstwy (pusta dla warstwy bez roku), grupa 2 = znacznik warstwy zbiorczej
-    (``iStarsze``/``Starsze``, pusta dla warstwy rocznej) — oraz ustawia
-    ``self._sessions`` (``SessionPerThread`` z sesja powierzona przez
-    wolajacego albo ``None``).
+    The derived class declares a two-group ``LAYER_PATTERN``: group 1 = layer
+    year (empty for a layer without a year), group 2 = aggregate-layer marker
+    (``iStarsze``/``Starsze``, empty for a yearly layer) — and sets
+    ``self._sessions`` (``SessionPerThread`` with a session supplied by the
+    caller or ``None``).
     """
 
     LAYER_PATTERN: re.Pattern[str]
@@ -430,15 +430,15 @@ class SkorowidzLayersMixin(SourceInfoMixin):
     DEFAULT_TIMEOUT: int
 
     supports_campaigns: bool = True
-    # Opis pobrania w logach/komunikatach: "<plik z URL> (<etykieta>)"
+    # Download description in logs/messages: "<file from URL> (<label>)"
     DOWNLOAD_LABEL = "OpenData"
 
     def _skorowidz_query(self, parser: SheetParser) -> SkorowidzQuery:
-        """Hook providera: klucz cache, endpoint i filtr produktu dla arkusza."""
+        """Provider hook: cache key, endpoint and product filter for a sheet."""
         raise NotImplementedError
 
     def _resolve_sheet(self, godlo: str, timeout: int | None = None) -> SkorowidzRecord:
-        """Cache -> warstwy od najnowszej -> twardy filtr -> najnowsza kampania."""
+        """Cache -> layers newest first -> hard filter -> newest campaign."""
         parser = SheetParser(godlo)
         return self._resolve_record(
             parser,
@@ -448,7 +448,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
 
     @staticmethod
     def _query_bbox(parser: SheetParser) -> str:
-        """Bbox zapytania GetFeatureInfo (osie N,E) wokol srodka arkusza."""
+        """GetFeatureInfo query bbox (N,E axes) around the sheet centre."""
         bbox = parser.get_bbox(crs="EPSG:2180")
         x = (bbox.min_x + bbox.max_x) / 2
         y = (bbox.min_y + bbox.max_y) / 2
@@ -462,7 +462,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         timeout: int,
         query_bbox: str,
     ) -> list[SkorowidzRecord]:
-        """Rekordy jednej warstwy w punkcie srodkowym arkusza."""
+        """Records of one layer at the sheet's centre point."""
         return query_skorowidz_layer(
             self._sessions.get(),
             endpoint,
@@ -483,7 +483,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
     def _resolve_record(
         self, parser: SheetParser, timeout: int, query: SkorowidzQuery
     ) -> SkorowidzRecord:
-        """Rozwiaz arkusz po warstwach: cache, filtr produktu i podpowiedz braku."""
+        """Resolve a sheet over layers: cache, product filter and no-coverage hint."""
         godlo = parser.godlo
         if self._cache is not None:
             cached = self._cache.get_record(*query.cache_key)
@@ -545,13 +545,14 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         *,
         min_year: int | None,
     ) -> list[SkorowidzRecord]:
-        """Wszystkie kampanie arkusza ze wszystkich warstw (od najnowszej).
+        """All campaigns of a sheet from all layers (newest first).
 
-        Z ``min_year`` warstwa o gornym roku z nazwy < granicy nie jest
-        odpytywana (warstwa bez roku — zawsze). Wpis ``campaigns_cache`` ze
-        skanu czesciowego (``scanned_from``) jest wazny tylko dla granic
-        ``>= scanned_from``. Awaria warstwy = ``DownloadError``, nic nie
-        trafia do cache. Provider nie filtruje formatu pliku (errata 2 N-2).
+        With ``min_year`` a layer whose upper year from the name is < the
+        boundary is not queried (a layer without a year — always). A
+        ``campaigns_cache`` entry from a partial scan (``scanned_from``) is
+        valid only for boundaries ``>= scanned_from``. A layer failure =
+        ``DownloadError``, nothing goes to the cache. The provider does not
+        filter the file format (errata 2 N-2).
         """
         godlo = parser.godlo
         if self._cache is not None:
@@ -559,7 +560,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             if cached is not None and _covers(cached.get("scanned_from"), min_year):
                 if cached.get("no_coverage"):
                     if cached.get("scanned_from") is not None:
-                        # D-2: komunikat z BIEZACEJ granicy, nie zapamietanej
+                        # D-2: message from the CURRENT boundary, not the stored one
                         raise _partial_scan_no_coverage(godlo, min_year)
                     raise NoCoverageError(
                         cached.get("message") or str(query.no_coverage(parser, [])),
@@ -599,8 +600,8 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                 predicate=query.predicate,
             )
             found.extend(matched)
-            # rejected sluzy tylko podpowiedziom przy pustym found, czyli gdy
-            # zadna warstwa nic nie dopasowala — wtedy to wszystkie rekordy
+            # rejected serves only the hints when found is empty, i.e. when no
+            # layer matched anything — then it holds all records
             rejected.extend(records)
         found = sorted(
             {r.url: r for r in reversed(found)}.values(),
@@ -643,14 +644,14 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         min_year: int | None = None,
         timeout: int | None = None,
     ) -> list[SkorowidzRecord]:
-        """Kampanie arkusza wg strategii ADR-030 (od najnowszej).
+        """Campaigns of a sheet per the ADR-030 strategy (newest first).
 
-        ``newest`` = jeden rekord ADR-028 (bez zmian), z ``min_year``
-        starszy = ``NoCoverageError`` z jego data; ``all`` = kazdy rekord
-        przechodzacy twardy filtr ze wszystkich warstw, z ``min_year``
-        tylko kampanie z rokiem ``aktualnosc`` >= granicy.
+        ``newest`` = one ADR-028 record (unchanged); with ``min_year`` an
+        older one = ``NoCoverageError`` with its date; ``all`` = every record
+        passing the hard filter from all layers; with ``min_year`` only
+        campaigns with ``aktualnosc`` year >= the boundary.
         """
-        # lokalnie: pakiet kartograf.download importuje manager -> providers.pl
+        # local import: the kartograf.download package imports manager -> providers.pl
         from kartograf.download.campaigns import validate_campaign_args
 
         validate_campaign_args(campaigns, min_year)
@@ -676,12 +677,12 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                 f"(najnowsza: {found[0].aktualnosc})",
                 godlo=godlo,
             )
-        # liczbe kampanii na INFO loguje manager (`_fetch_campaigns`, M-7)
+        # the manager logs the campaign count at INFO (`_fetch_campaigns`, M-7)
         logger.debug("%s: %s kampanii", godlo, len(kept))
         return kept
 
     def record_source(self, record: SkorowidzRecord) -> dict:
-        """Metadane rekordu (``to_source``) z endpointem i ``source_extra``."""
+        """Record metadata (``to_source``) with the endpoint and ``source_extra``."""
         query = self._skorowidz_query(SheetParser(record.godlo))
         source = record.to_source(query.endpoint or "")
         if query.source_extra:
@@ -694,14 +695,14 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         output_path: Path,
         timeout: int | None = None,
     ) -> Path:
-        """Pobierz plik wskazanego rekordu (kampanii) do ``output_path``."""
+        """Download the file of the given record (campaign) to ``output_path``."""
         return download_to(
             self._sessions.get(),
             record.url,
             Path(output_path),
             timeout=self.DEFAULT_TIMEOUT if timeout is None else timeout,
             retries=self.MAX_RETRIES,
-            # nazwa pliku z URL (id kampanii + godlo) odroznia kampanie w logach
+            # file name from the URL (campaign id + godlo) tells campaigns apart in logs
             description=f"{record.url.rsplit('/', 1)[-1]} ({self.DOWNLOAD_LABEL})",
         )
 
@@ -711,7 +712,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         self._validated_layers: dict[str, list[str]] = {}
 
     def validate_godlo(self, godlo: str) -> bool:
-        """Godlo parsowalne przez ``SheetParser`` (PL-1992 albo PL-2000)."""
+        """Sheet code parsable by ``SheetParser`` (PL-1992 or PL-2000)."""
         try:
             SheetParser(godlo)
             return True
@@ -721,11 +722,11 @@ class SkorowidzLayersMixin(SourceInfoMixin):
     def _fetch_wms_layers(
         self, wms_endpoint: str, timeout: float | None = None
     ) -> list[str]:
-        """Odkryj warstwy produktu; blad uslugi nie ma zaszytego fallbacku.
+        """Discover the product's layers; a service error has no hardcoded fallback.
 
-        ``timeout`` domyslnie = ``DEFAULT_TIMEOUT`` providera (30 s NMT/NMPT,
-        60 s orto; N3) — porazka GetCapabilities konczy caly tor, wiec nie
-        moze miec krotszego limitu niz pobranie arkusza.
+        ``timeout`` defaults to the provider's ``DEFAULT_TIMEOUT`` (30 s
+        NMT/NMPT, 60 s orto; N3) — a GetCapabilities failure ends the whole
+        path, so it must not have a shorter limit than the sheet download.
         """
         if timeout is None:
             timeout = self.DEFAULT_TIMEOUT
@@ -742,8 +743,8 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             raise DownloadError(
                 f"GUGiK WMS GetCapabilities {wms_endpoint}: nieprawidlowy XML: {exc}"
             ) from exc
-        # {nazwa: (bez roku, zbiorcza, -rok)} — roczne od najnowszej, zbiorcza
-        # na koncu, warstwa bez roku ("Starsze") za wszystkimi rocznymi
+        # {name: (no year, aggregate, -year)} — yearly newest first, aggregate
+        # last, the layer without a year ("Starsze") after all yearly ones
         layers: dict[str, tuple[bool, bool, int]] = {}
         for elem in root.iter():
             if elem.tag.rsplit("}", 1)[-1] != "Name" or not elem.text:
@@ -772,10 +773,10 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         return sorted(layers, key=layers.__getitem__)
 
     def _layers(self, endpoint: str, timeout: float | None = None) -> list[str]:
-        """Memoizuj tylko sukces, raz na endpoint; zapytania chroni lock.
+        """Memoize only success, once per endpoint; a lock guards the queries.
 
-        ``timeout`` (domyslnie ``DEFAULT_TIMEOUT`` providera) trafia do
-        GetCapabilities — ten sam co dla zapytan warstw w ``_resolve_record``.
+        ``timeout`` (default: the provider's ``DEFAULT_TIMEOUT``) goes to
+        GetCapabilities — the same as for layer queries in ``_resolve_record``.
         """
         with self._layers_lock:
             if endpoint not in self._validated_layers:
@@ -786,12 +787,13 @@ class SkorowidzLayersMixin(SourceInfoMixin):
 
 
 def coverage_hints(parser: SheetParser, records: Iterable[SkorowidzRecord]) -> set[str]:
-    """Podpowiedzi ``NoCoverageError`` wspolne dla NMT/NMPT i orto (D14).
+    """``NoCoverageError`` hints shared by NMT/NMPT and orto (D14).
 
-    Potomek PL-2000 zadanego godla -> ``--scale`` potomka; rekord w innym
-    ukladzie -> jego godlo albo ``--system``/``--scale``. ``records`` sa juz
-    przefiltrowane przez providera (rozdzielczosc NMT); podpowiedzi wlasne
-    providera (rozdzielczosc, warianty koloru orto) zostaja u niego.
+    A PL-2000 descendant of the requested sheet code -> the descendant's
+    ``--scale``; a record in another CRS -> its sheet code or
+    ``--system``/``--scale``. ``records`` are already filtered by the provider
+    (NMT resolution); the provider's own hints (resolution, orto colour
+    variants) stay with it.
     """
     hints = set()
     for record in records:
@@ -811,7 +813,7 @@ def coverage_hints(parser: SheetParser, records: Iterable[SkorowidzRecord]) -> s
 def no_coverage_error(
     parser: SheetParser, message: str, hints: Iterable[str]
 ) -> NoCoverageError:
-    """``NoCoverageError`` z podpowiedziami dopisanymi w stalej kolejnosci."""
+    """``NoCoverageError`` with hints appended in a fixed order."""
     ordered = sorted(hints)
     if ordered:
         message += ". " + "; ".join(ordered)
