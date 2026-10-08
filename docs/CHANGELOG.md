@@ -6,6 +6,15 @@ Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.7.0] - Unreleased
+### Dodane
+- **Wersja rozwojowa z commitem:** `kartograf_version` w sidecarze
+  `.meta.json` i `kartograf --version` dla wersji `dev` podaja
+  `<wersja>+<krotki SHA>` (np. `0.7.0-dev+6db4408`), a przy
+  niezacommitowanych zmianach w `kartograf/` sufiks `.dirty`
+  (`kartograf/_version.py::build_version`, leniwie, cache na proces).
+  Bez gita albo dla pakietu spoza repozytorium — samo `__version__`;
+  wydania bez zmian. `__version__` i `User-Agent` bez zmian.
+
 ### Dokumentacja
 - **Reorganizacja dokumentacji (2026-10-08):** nowy `docs/USAGE.md`
   (przewodnik uzytkownika: przyklady CLI i biblioteki, wynik pobrania,
