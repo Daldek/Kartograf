@@ -233,7 +233,6 @@ class SoilGridsProvider(LandCoverProvider):
             )
 
         output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Transform bbox to WGS84 for WCS
         bbox_wgs84 = envelope_from_2180(bbox, "EPSG:4326")

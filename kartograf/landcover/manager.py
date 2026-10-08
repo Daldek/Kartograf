@@ -76,12 +76,12 @@ class LandCoverManager:
         Parameters
         ----------
         output_dir : str or Path, optional
-            Directory for downloaded files
+            Directory for downloaded files. It is not created here: the
+            directory appears only when a download writes its first file.
         provider : LandCoverProvider or str, optional
             Provider instance or name
         """
         self._output_dir = Path(output_dir)
-        self._output_dir.mkdir(parents=True, exist_ok=True)
         self._storage = FileStorage(output_dir)
 
         # Initialize provider
