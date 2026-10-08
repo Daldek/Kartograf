@@ -360,7 +360,7 @@ class HSGCalculator:
         timeout: int = 120,
     ) -> Path:
         """
-        Calculate HSG raster for a map sheet (godło).
+        Calculate HSG raster for a map sheet (sheet code).
 
         Parameters
         ----------
@@ -556,7 +556,7 @@ class HSGCalculator:
 
     @staticmethod
     def _write_sidecar(output_path: Path, bbox, depth: str, stat: str, crs) -> None:
-        """Best-effort sidecar wyniku (wynik obliczenia z warstw SoilGrids)."""
+        """Best-effort sidecar of the result (computed from SoilGrids layers)."""
         from kartograf.sources.sidecar import emit_sidecar
 
         emit_sidecar(

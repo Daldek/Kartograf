@@ -29,9 +29,9 @@ class KartografError(Exception):
 
 class ParseError(KartografError):
     """
-    Error parsing godło string.
+    Error parsing sheet code string.
 
-    Raised when a godło string cannot be parsed due to invalid format,
+    Raised when a sheet code string cannot be parsed due to invalid format,
     unknown scale, or other parsing issues.
 
     Examples
@@ -52,7 +52,7 @@ class DownloadError(KartografError):
     Attributes
     ----------
     godlo : str, optional
-        The godło that was being downloaded when the error occurred.
+        The sheet code that was being downloaded when the error occurred.
     status_code : int, optional
         HTTP status code if applicable.
 
@@ -84,8 +84,8 @@ class NoCoverageError(DownloadError):
     Attributes
     ----------
     hints : tuple[str, ...]
-        Podpowiedzi dla uzytkownika (np. ``uzyj --scale 1:2000``), te same
-        teksty, ktore komunikat zawiera po kropce; puste, gdy brak.
+        User-facing hints (e.g. ``use --scale 1:2000``), the same texts the
+        message contains after the period; empty when there are none.
     """
 
     def __init__(
