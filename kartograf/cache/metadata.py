@@ -20,8 +20,6 @@ or querying stats of a missing database, clear() and close() never create
 the file - only the first write (``set_*``) does.
 """
 
-from __future__ import annotations
-
 import json
 import logging
 import os

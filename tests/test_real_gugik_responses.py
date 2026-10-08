@@ -540,9 +540,9 @@ def _sheet_args(godlo):
     return {"godlo": godlo, "uklad": parser.uklad, "zone": zone}
 
 
-def _real_cases():
+def _real_cases() -> list[tuple]:
     """(godlo, rekordy, resolution_m, predicate) dla kazdego realnego body."""
-    cases = []
+    cases: list[tuple] = []
     for folder in sorted(NMT_DIR.iterdir()):
         if folder.name == "c14":
             continue

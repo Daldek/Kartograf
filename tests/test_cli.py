@@ -3497,7 +3497,9 @@ class TestCzDownloadingAfterValidation:
         assert "Downloading" not in captured.out
         assert "Error:" in captured.err and "parzyste" in captured.err
 
-    def test_sm5_announces_once_before_file_is_written(self, tmp_path, capsys):
+    def test_sm5_announces_once_before_file_is_written(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         seen_at_fetch: list[str] = []
 
         def fake_fetch(url, output_path, *, unzip_single=None):
@@ -3519,7 +3521,9 @@ class TestCzDownloadingAfterValidation:
         assert "Downloading" not in rest
         assert "Downloaded to " in rest
 
-    def test_tm33_announces_once_before_export(self, tmp_path, capsys):
+    def test_tm33_announces_once_before_export(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         seen_at_export: list[str] = []
 
         def fake_export(endpoint, bbox, **kwargs):
@@ -3546,7 +3550,9 @@ class TestCzDownloadingAfterValidation:
         assert seen_at_export[0].count("Downloading 302_5550 (CZ, resolution: 2m)") == 1
         assert "Downloading" not in rest
 
-    def test_bbox_announces_once_before_export(self, tmp_path, capsys):
+    def test_bbox_announces_once_before_export(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         seen_at_export: list[str] = []
 
         def fake_export(endpoint, bbox, **kwargs):

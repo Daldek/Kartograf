@@ -1,11 +1,6 @@
 """Obwiednia bboxa EPSG:2180 w innym ukladzie (CORINE, SoilGrids; D19)."""
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from kartograf.core.sheet_parser import BBox
+from kartograf.core.bbox import BBox
 
 
 def envelope_from_2180(

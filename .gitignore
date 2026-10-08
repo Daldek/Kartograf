@@ -69,3 +69,6 @@ data/
 # Odzyskane dane sesji E2E/weryfikacji ADR-024 (2026-08-18) — duze rastry, poza gitem
 seam/
 e2e-data/
+
+# Lokalne ustawienia Claude Code i tymczasowe worktree agentow
+.claude/

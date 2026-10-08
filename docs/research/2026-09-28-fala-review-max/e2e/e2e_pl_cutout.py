@@ -52,9 +52,7 @@ NET_ATTEMPTS: list = []
 
 def _guard(self, address):
     host = address[0] if isinstance(address, tuple) else str(address)
-    if host not in ("127.0.0.1", "::1", "localhost") and not str(host).startswith(
-        "/"
-    ):
+    if host not in ("127.0.0.1", "::1", "localhost") and not str(host).startswith("/"):
         NET_ATTEMPTS.append(host)
         raise OSError(f"E2E offline: zablokowane polaczenie do {address}")
     return _orig_connect(self, address)
@@ -110,7 +108,9 @@ class CacheCopyProvider:
         with self._lock:
             self.calls.append(godlo)
         if self.fail_with is not None:
-            raise self.fail_with(f"E2E: symulowana awaria pobrania {godlo}", godlo=godlo)
+            raise self.fail_with(
+                f"E2E: symulowana awaria pobrania {godlo}", godlo=godlo
+            )
         src = INDEX.get(godlo)
         if src is None:
             raise NoCoverageError(
@@ -165,7 +165,9 @@ def sheet_values_at(xs, ys, sheet_paths):
             vals = np.full(xs.shape, np.nan, dtype=np.float32)
             vals[inside] = a[rows[inside], cols[inside]]
             valid = inside & (vals != snd)
-            conflicts += int(np.count_nonzero(valid & (nvalid > 0) & (expected != vals)))
+            conflicts += int(
+                np.count_nonzero(valid & (nvalid > 0) & (expected != vals))
+            )
             first = valid & (nvalid == 0)
             expected[first] = vals[first]
             nvalid += valid
@@ -266,7 +268,9 @@ def independent_warp(result_path, sheet_paths, pinned):
     recon = np.where(
         seam, (np.where(valid, V * W, 0).sum(0)) / np.maximum(ws.sum(0), 1e-12), np.nan
     )
-    mean_seam = np.where(seam, np.where(valid, V, 0).sum(0) / np.maximum(nvalid, 1), np.nan)
+    mean_seam = np.where(
+        seam, np.where(valid, V, 0).sum(0) / np.maximum(nvalid, 1), np.nan
+    )
     cut_valid = arr != NODATA
     a64 = arr.astype(np.float64)
 
@@ -313,11 +317,15 @@ def main() -> None:
         ("a_int", BBox(642000, 480500, 644000, 481500, "EPSG:2180")),
         ("a_frac", BBox(642001.3, 480502.7, 643998.9, 481497.1, "EPSG:2180")),
     ):
-        cutout, sheets, prov, res, est, dt = run(label, bbox, "EPSG:2180", prj_for=seam_prj)
+        cutout, sheets, prov, res, est, dt = run(
+            label, bbox, "EPSG:2180", prj_for=seam_prj
+        )
         prj_files = sorted(p.name for p in (OUT / label).rglob("*.prj"))
         chk = check_2180(res.path, res.sheet_paths, bbox)
         meta = sidecar(res.path)
-        actual_bytes = sum(p.stat().st_size for p in res.sheet_paths) + res.path.stat().st_size
+        actual_bytes = (
+            sum(p.stat().st_size for p in res.sheet_paths) + res.path.stat().st_size
+        )
         report[label] = {
             "bbox": list(bbox[:4]),
             "sheets_selected": list(sheets.godla),
@@ -351,7 +359,9 @@ def main() -> None:
     )
 
     # ---------------- b) EPSG:5514, ten sam bbox ----------------------------
-    cutout, sheets, prov, res, est, dt = run("b_5514", b_int, "EPSG:5514", prj_for=seam_prj)
+    cutout, sheets, prov, res, est, dt = run(
+        "b_5514", b_int, "EPSG:5514", prj_for=seam_prj
+    )
     meta = sidecar(res.path)
     with rasterio.open(res.path) as ds:
         bounds_eq_target = all(
@@ -461,7 +471,9 @@ def main() -> None:
     except DownloadError as e:
         err = str(e)[:200]
     leftovers = sorted(
-        p.name for p in res.path.parent.iterdir() if ".mosaic." in p.name or ".warp." in p.name
+        p.name
+        for p in res.path.parent.iterdir()
+        if ".mosaic." in p.name or ".warp." in p.name
     )
     report["e_failed_force_keeps_previous"] = {
         "raised_DownloadError": err,
@@ -484,7 +496,11 @@ def main() -> None:
         dtype="float32",
     )
     mosaic_and_crop(
-        sheet_paths, src_bbox, plain, dst_kwds={"driver": "GTiff", "crs": "EPSG:2180"}, **common
+        sheet_paths,
+        src_bbox,
+        plain,
+        dst_kwds={"driver": "GTiff", "crs": "EPSG:2180"},
+        **common,
     )
     mosaic_and_crop(
         sheet_paths,
