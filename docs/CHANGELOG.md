@@ -44,8 +44,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Sidecar BDOT10k: `extra.source` (`url`, `teryt`, `format`) i `extra.http`
   (`etag`, `last_modified`, `content_length` z odpowiedzi; serwer paczek
   GUGiK podaje dzis tylko `Content-Length`). `keep_raw=True` zachowuje
-  oryginalny ZIP GUGiK obok GPKG (`<nazwa>_GPKG.zip`, z wlasnym sidecarem;
-  tylko GPKG). `Bdot10kPackage` ma pola `http` i `raw_path`.
+  oryginalny ZIP GUGiK obok GPKG (pelny pakiet: `bdot10k_teryt_<TERYT>_GPKG.zip`
+  bez tokenu warstw, jeden dla kazdego filtra `layers=`, z wlasnym
+  sidecarem; tylko GPKG). `Bdot10kPackage` ma pola `http` i `raw_path`.
 
 ### Zmienione
 
