@@ -4346,6 +4346,37 @@ class TestCmdDownloadCz:
         assert err.count("w calosci nodata") == 1
         assert "Warning:" in err
 
+    def test_library_log_unmuted_after_cli_call(self, tmp_path):
+        """The muted library logger is restored - also after a failed download."""
+        import logging
+
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        log = logging.getLogger("kartograf.download.cz_cutout")
+        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+
+        ok = _cz_provider_mock()
+        ok.download_bbox.side_effect = self._real_tif_writer(-9999.0)
+        with patch(_CZ_FACTORY_PATCH, return_value=ok):
+            assert _cmd_download_cz(_cz_args(tmp_path, godlo=None), bbox=bbox) == 0
+        assert log.disabled is False
+
+        failing = _cz_provider_mock()
+        failing.download_bbox.side_effect = DownloadError("boom")
+        with patch(_CZ_FACTORY_PATCH, return_value=failing):
+            rc = _cmd_download_cz(_cz_args(tmp_path / "b", godlo=None), bbox=bbox)
+        assert rc == 1
+        assert log.disabled is False
+
+        crashing = _cz_provider_mock()
+        crashing.download_bbox.side_effect = KeyboardInterrupt
+        with (
+            patch(_CZ_FACTORY_PATCH, return_value=crashing),
+            pytest.raises(KeyboardInterrupt),
+        ):
+            _cmd_download_cz(_cz_args(tmp_path / "c", godlo=None), bbox=bbox)
+        assert log.disabled is False
+
     def test_tm33_godlo_all_nodata_warns_but_returns_0(self, tmp_path, capsys):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
