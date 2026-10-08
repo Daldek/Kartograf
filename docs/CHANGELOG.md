@@ -66,7 +66,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   HSG z gotowych rastrow SoilGrids (g/kg) na jawnie podanej siatce, bez
   wartosci domyslnych (nodata wejsc tylko z tagu, jak w
   `calculate_hsg_by_bbox`); sidecar z `sha256` warstw wejsciowych
-  (`extra.source_layers`: `name`, `file`, `sha256`).
+  (`extra.source_files`: `name`, `file`, `sha256`; `extra.source_layers`
+  jak w `calculate_hsg_by_bbox` — lista nazw `clay`, `sand`, `silt`).
 - Weryfikacja ukladu wysokosci rekordu skorowidza GUGiK (NMT/NMPT): pole
   `ukladWspolrzednychPionowych` musi odpowiadac zadanemu ukladowi
   (`PL-KRON86-NH` dla KRON86, `PL-EVRF2007-NH` dla EVRF2007); inna wartosc
@@ -87,7 +88,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Godla PL-1992 spoza zakresu nomenklatury (pas inny niz M/N, slup spoza
   33-35, arkusz 1:200 000 spoza 1-144, np. `N-34-999-D`) koncza sie
   `ParseError` przed jakimkolwiek zapytaniem sieciowym; dotad trafialy do
-  uslug z bboxem `inf` albo poza Polska.
+  uslug z bboxem `inf` albo poza Polska. Co zrobic: nic, jesli godla sa
+  poprawne; kod, ktory dla takich godel oczekiwal `DownloadError` albo
+  pustego wyniku, powinien lapac `ParseError` (albo `ValidationError`).
 - `ParseError` dziedziczy po `ValidationError` — `except ValidationError`
   lapie tez bledy godel. Co zrobic: gdy kod obsluguje oba wyjatki osobno,
   `except ParseError` musi stac przed `except ValidationError`.
@@ -101,6 +104,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   obszar wychodzacy poza pasy M/N i slupy 33-35 (np. bbox przez 12E)
   daje godla tylko jego polskiej czesci, obszar calkowicie poza zakresem —
   pusta liste (dotad takze godla spoza zakresu, ktore nie maja danych).
+  Co zrobic: nic — usuniete godla i tak nie mialy danych; kod, ktory
+  traktowal pusta liste jako blad, dostaje ja teraz dla obszaru calkowicie
+  poza Polska.
 - `kartograf landcover download --source bdot10k` z `--bbox`, `--godlo`
   albo `--geometry` pobiera wszystkie powiaty z obszaru (dotad jeden, ze
   srodka obszaru — reszta obszaru po cichu bez danych) i drukuje linie
@@ -146,6 +152,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Scalanie paczki BDOT10k nie pomija juz po cichu tabeli o powtorzonej
   nazwie — to `DownloadError`.
+- BDOT10k: warstwy paczki sa rozpakowywane strumieniowo (bez wczytywania
+  calej warstwy do pamieci), a `keep_raw` zapisuje ZIP bez drugiej kopii
+  w pamieci. Blad wejscia-wyjscia przy rozpakowaniu, scalaniu albo zapisie
+  ZIP (brak miejsca, brak pamieci) to `DownloadError` (CLI: `Error:` z opisem,
+  kod 1), nie goly `OSError`. Nieudany zapis oryginalnego ZIP usuwa juz
+  zapisany GPKG — nie zostaje plik danych bez sidecara.
 - `cache stats`: `TERYT entries` liczy odpowiedzi PRG z `landcover download`
   (U5).
 

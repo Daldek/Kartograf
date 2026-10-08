@@ -2006,6 +2006,91 @@ class TestBdot10kSidecarSource:
             provider.download_package("0262", tmp_path / "o" / "x.gpkg", keep_raw=True)
         assert sorted(p.name for p in (tmp_path / "o").iterdir()) == []
 
+    def test_keep_raw_write_error_removes_gpkg(self, tmp_path, monkeypatch):
+        """OSError while writing the raw ZIP (after the GPKG is in place):
+        DownloadError, and neither the GPKG (it would have no sidecar) nor a
+        partial ZIP stays on disk."""
+        body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
+        real_write_bytes = Path.write_bytes
+
+        def disk_full(self, data):
+            if "_GPKG.zip" in self.name:
+                real_write_bytes(self, bytes(data)[:10])  # partial write
+                raise OSError(28, "No space left on device")
+            return real_write_bytes(self, data)
+
+        monkeypatch.setattr(Path, "write_bytes", disk_full)
+        provider = Bdot10kProvider(session=self._session(body, {}))
+        with pytest.raises(DownloadError, match="No space left") as exc:
+            provider.download_package(
+                "0262", tmp_path / "o" / "bdot10k_teryt_0262.gpkg", keep_raw=True
+            )
+        assert isinstance(exc.value.__cause__, OSError)
+        assert sorted(p.name for p in (tmp_path / "o").iterdir()) == []
+
+    def test_manager_keep_raw_write_error_leaves_no_file(self, tmp_path, monkeypatch):
+        """Through the manager: no data file without a sidecar, no sidecar."""
+
+        def disk_full(self, data):
+            raise OSError(28, "No space left on device")
+
+        body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
+        manager = LandCoverManager(output_dir=tmp_path / "out", provider="bdot10k")
+        manager.provider._sessions = SessionPerThread(self._session(body, {}))
+        monkeypatch.setattr(Path, "write_bytes", disk_full)
+        with pytest.raises(DownloadError):
+            manager.download(teryt="0262", keep_raw=True)
+        assert sorted(p.name for p in (tmp_path / "out").iterdir()) == []
+
+    def test_extraction_os_error_is_download_error(self, tmp_path, monkeypatch):
+        """An OSError while extracting a layer (e.g. ENOMEM, full temp disk)
+        is a DownloadError, not a bare OSError."""
+
+        def no_memory(src, dst, *args, **kwargs):
+            raise OSError(12, "Cannot allocate memory")
+
+        body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
+        provider = Bdot10kProvider(session=self._session(body, {}))
+        monkeypatch.setattr(
+            "kartograf.providers.pl.bdot10k.shutil.copyfileobj", no_memory
+        )
+        with pytest.raises(DownloadError, match="Cannot allocate memory"):
+            provider.download_package("0262", tmp_path / "o" / "x.gpkg")
+        assert not (tmp_path / "o" / "x.gpkg").exists()
+
+    def test_cli_extraction_os_error_exit_1(self, tmp_path, monkeypatch, capsys):
+        """CLI: the OSError reaches the user as a DownloadError message
+        (``Error: Nie udalo sie ...``), not via the last-resort barrier
+        (``Error: OSError: ...``)."""
+        from kartograf.cli.commands import main
+
+        def no_memory(src, dst, *args, **kwargs):
+            raise OSError(12, "Cannot allocate memory")
+
+        session = self._session(_bdot_zip(tmp_path, ["OT_PTWP_A"]), {})
+        monkeypatch.setattr(
+            "kartograf.providers.pl.bdot10k.shutil.copyfileobj", no_memory
+        )
+        out = tmp_path / "out"
+        with patch("kartograf.transport.http.make_gugik_session", return_value=session):
+            rc = main(
+                [
+                    "landcover",
+                    "download",
+                    "--source",
+                    "bdot10k",
+                    "--teryt",
+                    "0262",
+                    "-o",
+                    str(out),
+                ]
+            )
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "Error: Nie udalo sie rozpakowac" in err
+        assert "Cannot allocate memory" in err
+        assert "OSError" not in err
+
     def test_manager_sidecar_has_source_and_http(self, tmp_path):
         body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
         manager = LandCoverManager(output_dir=tmp_path / "out", provider="bdot10k")
