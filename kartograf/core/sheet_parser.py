@@ -1,8 +1,8 @@
 """
-Parser godeł map topograficznych dla układów 1992 i 2000.
+Parser of topographic map sheet codes for the 1992 and 2000 systems.
 
 This module provides the SheetParser class for parsing Polish topographic
-map sheet identifiers (godła) and extracting information about scale,
+map sheet codes (godlo) and extracting information about scale,
 coordinate system, and sheet components.
 """
 
@@ -34,20 +34,20 @@ def _zone_number_error(godlo: str) -> ParseError:
 
 class SheetParser:
     """
-    Parser godeł map topograficznych dla układów 1992 i 2000.
+    Parser of topographic map sheet codes for the 1992 and 2000 systems.
 
-    Obsługiwane skale: 1:1000000 do 1:10000
+    Supported scales: 1:1000000 to 1:10000
 
     Attributes
     ----------
     godlo : str
-        Znormalizowane godło arkusza (np. "N-34-130-D-d-2-4")
+        Normalized sheet code (e.g. "N-34-130-D-d-2-4")
     scale : str
-        Skala mapy (np. "1:10000")
+        Map scale (e.g. "1:10000")
     uklad : str
-        Układ współrzędnych ("1992" lub "2000")
+        Coordinate system ("1992" or "2000")
     components : Dict[str, str]
-        Składowe godła (pas, slup, oraz opcjonalne subdivisions)
+        Sheet code components (pas, slup, and optional subdivisions)
 
     Examples
     --------
@@ -68,7 +68,7 @@ class SheetParser:
     and CLI `--scale`; aliases are planned for the next major release.
     """
 
-    # Hierarchia skal (od największej do najmniejszej)
+    # Scale hierarchy (from largest to smallest)
     SCALE_HIERARCHY = [
         "1:1000000",
         "1:500000",
@@ -79,7 +79,7 @@ class SheetParser:
         "1:10000",
     ]
 
-    # Wzorce godła dla każdej skali
+    # Sheet code patterns for each scale
     PATTERNS = {
         "1:1000000": r"^([A-Z])-(\d{1,2})$",
         "1:500000": r"^([A-Z])-(\d{1,2})-([A-D])$",
@@ -90,7 +90,7 @@ class SheetParser:
         "1:10000": r"^([A-Z])-(\d{1,2})-(\d{1,3})-([A-D])-([a-d])-([1-4])-([1-4])$",
     }
 
-    # Nazwy komponentów dla każdej grupy w regex
+    # Component names for each regex group
     COMPONENT_NAMES = [
         "pas",
         "slup",
@@ -101,27 +101,27 @@ class SheetParser:
         "arkusz_10k",
     ]
 
-    # Dozwolone układy współrzędnych
+    # Allowed coordinate systems
     VALID_UKLADY = ("1992", "2000")
 
     def __init__(self, godlo: str, uklad: str | None = None):
         """
-        Inicjalizuje parser dla podanego godła.
+        Initialize the parser for the given sheet code.
 
         Parameters
         ----------
         godlo : str
-            Godło arkusza mapy (np. "N-34-130-D-d-2-4")
+            Map sheet code (e.g. "N-34-130-D-d-2-4")
         uklad : str, optional
-            Układ współrzędnych ("1992" lub "2000").
-            Jeśli None, zostanie ustawiony domyślnie na "1992".
+            Coordinate system ("1992" or "2000").
+            If None, it defaults to "1992".
 
         Raises
         ------
         ParseError
-            Jeśli godło jest nieprawidłowe lub nie pasuje do żadnego wzorca.
+            If the sheet code is invalid or matches no pattern.
         ValidationError
-            Jeśli układ jest nieprawidłowy.
+            If the coordinate system is invalid.
 
         Examples
         --------
@@ -160,78 +160,78 @@ class SheetParser:
             self._pl2000 = None
             self._original_godlo = cleaned
 
-            # Normalizacja godła (zachowuj małe litery dla arkuszy 50k i mniejszych)
+            # Normalize the sheet code (lowercase letters for 50k sheets and smaller)
             self._godlo = self._normalize_godlo(self._original_godlo)
 
-            # Walidacja i ustawienie układu
+            # Validate and set the coordinate system
             self._uklad = self._validate_uklad(uklad)
 
-            # Określenie skali i walidacja formatu
+            # Determine the scale and validate the format
             self._scale = self._determine_scale()
 
-            # Parsowanie komponentów
+            # Parse the components
             self._components = self._parse_components()
 
     def _normalize_godlo(self, godlo: str) -> str:
         """
-        Normalizuje godło do standardowego formatu.
+        Normalize the sheet code to the standard format.
 
-        Litera pasa (pierwsza) i litery arkuszy 100k są uppercase.
-        Litery arkuszy 50k i mniejszych są lowercase.
+        The band letter (first) and the 100k sheet letters are uppercase.
+        The 50k sheet letters and smaller are lowercase.
 
         Parameters
         ----------
         godlo : str
-            Oryginalne godło
+            Original sheet code
 
         Returns
         -------
         str
-            Znormalizowane godło
+            Normalized sheet code
         """
         parts = godlo.split("-")
         if len(parts) < 2:
-            return godlo  # Zwróć bez zmian, walidacja zgłosi błąd
+            return godlo  # Return unchanged, validation will report the error
 
         normalized = []
 
         for i, part in enumerate(parts):
             if i == 0:
-                # Pas literowy - zawsze uppercase
+                # Letter band - always uppercase
                 normalized.append(part.upper())
             elif i == 3:
-                # Arkusz 100k (A-D) - uppercase
+                # 100k sheet (A-D) - uppercase
                 normalized.append(part.upper())
             elif i == 4 and len(part) == 1 and part.upper() in "ABCD":
-                # Arkusz 50k (a-d) - lowercase
+                # 50k sheet (a-d) - lowercase
                 normalized.append(part.lower())
             else:
-                # Pozostałe części bez zmian
+                # Remaining parts unchanged
                 normalized.append(part)
 
         return "-".join(normalized)
 
     def _validate_uklad(self, uklad: str | None) -> str:
         """
-        Waliduje układ współrzędnych.
+        Validate the coordinate system.
 
         Parameters
         ----------
         uklad : str or None
-            Układ do walidacji lub None dla domyślnego
+            System to validate, or None for the default
 
         Returns
         -------
         str
-            Układ współrzędnych ("1992" lub "2000")
+            Coordinate system ("1992" or "2000")
 
         Raises
         ------
         ValidationError
-            Jeśli układ jest nieprawidłowy
+            If the coordinate system is invalid
         """
         if uklad is None:
-            return "1992"  # Domyślny układ
+            return "1992"  # Default system
 
         if uklad not in self.VALID_UKLADY:
             raise ValidationError(
@@ -243,17 +243,17 @@ class SheetParser:
 
     def _determine_scale(self) -> str:
         """
-        Określa skalę na podstawie struktury godła.
+        Determine the scale from the structure of the sheet code.
 
         Returns
         -------
         str
-            Skala mapy (np. "1:10000")
+            Map scale (e.g. "1:10000")
 
         Raises
         ------
         ParseError
-            Jeśli godło nie pasuje do żadnego wzorca
+            If the sheet code matches no pattern
         """
         for scale, pattern in self.PATTERNS.items():
             if re.match(pattern, self._godlo):
@@ -270,12 +270,12 @@ class SheetParser:
 
     def _parse_components(self) -> dict[str, str]:
         """
-        Parsuje składowe godła.
+        Parse the sheet code components.
 
         Returns
         -------
         Dict[str, str]
-            Słownik ze składowymi godła
+            Dictionary of sheet code components
         """
         pattern = self.PATTERNS[self._scale]
         match = re.match(pattern, self._godlo)
@@ -293,67 +293,67 @@ class SheetParser:
 
     @property
     def godlo(self) -> str:
-        """Zwraca znormalizowane godło arkusza."""
+        """Return the normalized sheet code."""
         return self._godlo
 
     @property
     def scale(self) -> str:
-        """Zwraca skalę mapy."""
+        """Return the map scale."""
         return self._scale
 
     @property
     def uklad(self) -> str:
-        """Zwraca układ współrzędnych."""
+        """Return the coordinate system."""
         return self._uklad
 
     @property
     def components(self) -> dict[str, str]:
-        """Zwraca słownik ze składowymi godła."""
+        """Return a dictionary of sheet code components."""
         return self._components.copy()
 
     def __repr__(self) -> str:
-        """Zwraca reprezentację obiektu do debugowania."""
+        """Return a debugging representation of the object."""
         return (
             f"SheetParser(godlo='{self._godlo}', "
             f"scale='{self._scale}', uklad='{self._uklad}')"
         )
 
     def __str__(self) -> str:
-        """Zwraca czytelną reprezentację arkusza."""
+        """Return a readable representation of the sheet."""
         return f"{self._godlo} (skala {self._scale}, układ {self._uklad})"
 
     def __eq__(self, other: object) -> bool:
-        """Porównuje dwa parsery na podstawie godła i układu."""
+        """Compare two parsers by sheet code and coordinate system."""
         if not isinstance(other, SheetParser):
             return NotImplemented
         return self._godlo == other._godlo and self._uklad == other._uklad
 
     def __hash__(self) -> int:
-        """Zwraca hash obiektu."""
+        """Return the object hash."""
         return hash((self._godlo, self._uklad))
 
     # =========================================================================
-    # Metody hierarchii
+    # Hierarchy methods
     # =========================================================================
 
-    # Mapowanie skal na suffiksy dla dzieci
+    # Mapping of scales to suffixes for children
     _CHILD_SUFFIXES = {
-        "1:1000000": ["A", "B", "C", "D"],  # 1:1M → 1:500k (4 części)
-        "1:500000": None,  # 1:500k → 1:200k (36 części, wymaga specjalnej logiki)
-        "1:200000": ["A", "B", "C", "D"],  # 1:200k → 1:100k (4 części)
-        "1:100000": ["a", "b", "c", "d"],  # 1:100k → 1:50k (4 części)
-        "1:50000": ["1", "2", "3", "4"],  # 1:50k → 1:25k (4 części)
-        "1:25000": ["1", "2", "3", "4"],  # 1:25k → 1:10k (4 części)
+        "1:1000000": ["A", "B", "C", "D"],  # 1:1M → 1:500k (4 parts)
+        "1:500000": None,  # 1:500k → 1:200k (36 parts, needs special logic)
+        "1:200000": ["A", "B", "C", "D"],  # 1:200k → 1:100k (4 parts)
+        "1:100000": ["a", "b", "c", "d"],  # 1:100k → 1:50k (4 parts)
+        "1:50000": ["1", "2", "3", "4"],  # 1:50k → 1:25k (4 parts)
+        "1:25000": ["1", "2", "3", "4"],  # 1:25k → 1:10k (4 parts)
     }
 
     def get_parent(self) -> "SheetParser | None":
         """
-        Zwraca arkusz nadrzędny (o skali mniejszej).
+        Return the parent sheet (of a smaller scale).
 
         Returns
         -------
         SheetParser or None
-            Parser arkusza nadrzędnego lub None jeśli to najwyższy poziom (1:1M)
+            Parser of the parent sheet, or None if this is the top level (1:1M)
 
         Examples
         --------
@@ -371,13 +371,13 @@ class SheetParser:
         current_scale_idx = self.SCALE_HIERARCHY.index(self._scale)
 
         if current_scale_idx == 0:
-            return None  # Już najwyższy poziom (1:1M)
+            return None  # Already the top level (1:1M)
 
-        # Specjalna logika dla 1:200k → 1:500k
+        # Special logic for 1:200k → 1:500k
         if self._scale == "1:200000":
             return self._get_parent_from_200k()
 
-        # Dla pozostałych skal: usuń ostatni komponent
+        # For the remaining scales: drop the last component
         parts = self._godlo.split("-")
         if len(parts) <= 2:
             return None
@@ -387,21 +387,21 @@ class SheetParser:
 
     def _get_parent_from_200k(self) -> "SheetParser":
         """
-        Zwraca arkusz nadrzędny 1:500k dla arkusza 1:200k.
+        Return the parent 1:500k sheet for a 1:200k sheet.
 
-        Arkusze 1:200k są numerowane 1-144 w siatce 12×12 w obrębie 1:1M
-        (wierszami, W->E, N->S — patrz `_apply_200k_subdivision`).
-        Każdy arkusz 1:500k (A, B, C, D) to blok 6×6 tej siatki:
+        1:200k sheets are numbered 1-144 in a 12×12 grid within 1:1M
+        (row by row, W->E, N->S - see `_apply_200k_subdivision`).
+        Each 1:500k sheet (A, B, C, D) is a 6×6 block of that grid:
 
-        A: wiersze 0-5, kolumny 0-5 (np. 1-6, 13-18, ..., 61-66)
-        B: wiersze 0-5, kolumny 6-11 (np. 7-12, 19-24, ..., 67-72)
-        C: wiersze 6-11, kolumny 0-5 (np. 73-78, 85-90, ..., 133-138)
-        D: wiersze 6-11, kolumny 6-11 (np. 79-84, 91-96, ..., 139-144)
+        A: rows 0-5, columns 0-5 (e.g. 1-6, 13-18, ..., 61-66)
+        B: rows 0-5, columns 6-11 (e.g. 7-12, 19-24, ..., 67-72)
+        C: rows 6-11, columns 0-5 (e.g. 73-78, 85-90, ..., 133-138)
+        D: rows 6-11, columns 6-11 (e.g. 79-84, 91-96, ..., 139-144)
 
         Returns
         -------
         SheetParser
-            Parser arkusza 1:500k
+            Parser of the 1:500k sheet
         """
         arkusz_num = int(self._components["arkusz_200k"])
         # Quadrant = block of 6 rows x 6 columns of the 12x12 grid, NOT a band
@@ -416,13 +416,13 @@ class SheetParser:
 
     def get_children(self) -> "list[SheetParser]":
         """
-        Zwraca wszystkie arkusze podrzędne (o skali większej).
+        Return all child sheets (of a larger scale).
 
         Returns
         -------
         List[SheetParser]
-            Lista parserów arkuszy podrzędnych.
-            Pusta lista jeśli to najniższy poziom (1:10k).
+            List of child sheet parsers.
+            Empty list if this is the lowest level (1:10k).
 
         Examples
         --------
@@ -439,13 +439,13 @@ class SheetParser:
         current_scale_idx = self.SCALE_HIERARCHY.index(self._scale)
 
         if current_scale_idx == len(self.SCALE_HIERARCHY) - 1:
-            return []  # Już najniższy poziom (1:10k)
+            return []  # Already the lowest level (1:10k)
 
-        # Specjalna logika dla 1:500k → 1:200k (36 arkuszy)
+        # Special logic for 1:500k → 1:200k (36 sheets)
         if self._scale == "1:500000":
             return self._get_children_from_500k()
 
-        # Dla pozostałych skal: dodaj suffiksy
+        # For the remaining scales: append suffixes
         # 1:500k (the only None entry) is handled above
         suffixes = self._CHILD_SUFFIXES.get(self._scale) or []
         children = []
@@ -458,22 +458,22 @@ class SheetParser:
 
     def _get_children_from_500k(self) -> "list[SheetParser]":
         """
-        Zwraca 36 arkuszy 1:200k dla arkusza 1:500k.
+        Return the 36 1:200k sheets for a 1:500k sheet.
 
-        Numeracja arkuszy 1:200k to siatka 12x12 (wierszami, W->E, N->S).
-        Sekcja 1:500k to blok 6x6 tej siatki:
+        1:200k sheets are numbered in a 12x12 grid (row by row, W->E, N->S).
+        A 1:500k section is a 6x6 block of that grid:
 
-        A: wiersze 0-5, kolumny 0-5 (np. 1-6, 13-18, ..., 61-66)
-        B: wiersze 0-5, kolumny 6-11 (np. 7-12, 19-24, ..., 67-72)
-        C: wiersze 6-11, kolumny 0-5 (np. 73-78, 85-90, ..., 133-138)
-        D: wiersze 6-11, kolumny 6-11 (np. 79-84, 91-96, ..., 139-144)
+        A: rows 0-5, columns 0-5 (e.g. 1-6, 13-18, ..., 61-66)
+        B: rows 0-5, columns 6-11 (e.g. 7-12, 19-24, ..., 67-72)
+        C: rows 6-11, columns 0-5 (e.g. 73-78, 85-90, ..., 133-138)
+        D: rows 6-11, columns 6-11 (e.g. 79-84, 91-96, ..., 139-144)
 
-        Kolejnosc dzieci: wierszami (N->S), w wierszu W->E.
+        Order of children: row by row (N->S), W->E within a row.
 
         Returns
         -------
         List[SheetParser]
-            Lista 36 parserów arkuszy 1:200k
+            List of 36 parsers of 1:200k sheets
         """
         section_letter = self._components["arkusz_200k"]  # A, B, C, or D
         section_idx = "ABCD".index(section_letter)
@@ -493,13 +493,13 @@ class SheetParser:
 
     def get_hierarchy_up(self) -> "list[SheetParser]":
         """
-        Zwraca pełną hierarchię w górę (do 1:1000000).
+        Return the full hierarchy upwards (up to 1:1000000).
 
         Returns
         -------
         List[SheetParser]
-            Lista parserów od bieżącego do najwyższego poziomu (włącznie).
-            Pierwszy element to bieżący arkusz, ostatni to arkusz 1:1M.
+            List of parsers from the current one to the top level (inclusive).
+            The first element is the current sheet, the last is the 1:1M sheet.
 
         Examples
         --------
@@ -528,30 +528,30 @@ class SheetParser:
 
     def get_all_descendants(self, target_scale: str) -> "list[SheetParser]":
         """
-        Zwraca wszystkie arkusze potomne do zadanej skali.
+        Return all descendant sheets down to the given scale.
 
         Parameters
         ----------
         target_scale : str
-            Docelowa skala (np. "1:10000")
+            Target scale (e.g. "1:10000")
 
         Returns
         -------
         List[SheetParser]
-            Lista wszystkich arkuszy potomnych w docelowej skali
+            List of all descendant sheets at the target scale
 
         Raises
         ------
         ValidationError
-            Jeśli target_scale nie jest prawidłową skalą
+            If target_scale is not a valid scale
         ValueError
-            Jeśli target_scale jest mniejsza lub równa bieżącej skali
+            If target_scale is smaller than or equal to the current scale
 
         Examples
         --------
         >>> parser = SheetParser("N-34-130-D-d")
         >>> descendants = parser.get_all_descendants("1:10000")
-        >>> len(descendants)  # 4 * 4 = 16 arkuszy
+        >>> len(descendants)  # 4 * 4 = 16 sheets
         16
         >>> all(d.scale == "1:10000" for d in descendants)
         True
@@ -575,7 +575,7 @@ class SheetParser:
                 f"(bardziej szczegółowa) niż bieżąca {self._scale}"
             )
 
-        # Rekurencyjnie zbieramy potomków
+        # Collect the descendants recursively
         def collect_descendants(parser: SheetParser) -> list[SheetParser]:
             if parser.scale == target_scale:
                 return [parser]
@@ -589,24 +589,24 @@ class SheetParser:
         return collect_descendants(self)
 
     # =========================================================================
-    # Metody obliczania bounding box
+    # Bounding box computation methods
     # =========================================================================
 
-    # Wymiary arkuszy w minutach kątowych (szerokość geo., długość geo.)
-    # Obliczone na podstawie hierarchii podziału
+    # Sheet dimensions in arc minutes (latitude, longitude)
+    # Computed from the subdivision hierarchy
     _SHEET_DIMENSIONS = {
         "1:1000000": (240.0, 360.0),  # 4° × 6°
         "1:500000": (120.0, 180.0),  # 2° × 3°
-        "1:200000": (20.0, 30.0),  # 20' × 30' (36 na 1:500k)
-        "1:100000": (10.0, 15.0),  # 10' × 15' (4 na 1:200k)
-        "1:50000": (5.0, 7.5),  # 5' × 7.5' (4 na 1:100k)
-        "1:25000": (2.5, 3.75),  # 2.5' × 3.75' (4 na 1:50k)
-        "1:10000": (1.25, 1.875),  # 1.25' × 1.875' (4 na 1:25k)
+        "1:200000": (20.0, 30.0),  # 20' × 30' (36 per 1:500k)
+        "1:100000": (10.0, 15.0),  # 10' × 15' (4 per 1:200k)
+        "1:50000": (5.0, 7.5),  # 5' × 7.5' (4 per 1:100k)
+        "1:25000": (2.5, 3.75),  # 2.5' × 3.75' (4 per 1:50k)
+        "1:10000": (1.25, 1.875),  # 1.25' × 1.875' (4 per 1:25k)
     }
 
-    # Mapowanie liter na pozycje w siatce 2×2 (row, col) - 0-indexed
-    # A/a/1 = NW (góra-lewo), B/b/2 = NE (góra-prawo)
-    # C/c/3 = SW (dół-lewo), D/d/4 = SE (dół-prawo)
+    # Mapping of letters to positions in the 2×2 grid (row, col) - 0-indexed
+    # A/a/1 = NW (top-left), B/b/2 = NE (top-right)
+    # C/c/3 = SW (bottom-left), D/d/4 = SE (bottom-right)
     _QUADRANT_POSITIONS = {
         "A": (0, 0),
         "B": (0, 1),
@@ -624,19 +624,19 @@ class SheetParser:
 
     def get_bbox(self, crs: str | None = None) -> BBox:
         """
-        Oblicza bounding box arkusza w zadanym układzie współrzędnych.
+        Compute the bounding box of the sheet in the given coordinate system.
 
         Parameters
         ----------
         crs : str, optional
-            Docelowy układ współrzędnych.
-            Domyślnie: "EPSG:2180" dla PL-1992, natywny CRS strefy dla PL-2000.
-            Obsługiwane: "EPSG:2180", "EPSG:4326", "EPSG:2176"-"EPSG:2179"
+            Target coordinate system.
+            Default: "EPSG:2180" for PL-1992, the native zone CRS for PL-2000.
+            Supported: "EPSG:2180", "EPSG:4326", "EPSG:2176"-"EPSG:2179"
 
         Returns
         -------
         BBox
-            NamedTuple z polami: min_x, min_y, max_x, max_y, crs
+            NamedTuple with fields: min_x, min_y, max_x, max_y, crs
 
         Examples
         --------
@@ -651,7 +651,7 @@ class SheetParser:
         if crs is None:
             crs = "EPSG:2180"
 
-        # Oblicz bbox w WGS84 (stopnie)
+        # Compute the bbox in WGS84 (degrees)
         south, north, west, east = self._calculate_wgs84_bbox()
 
         if crs == "EPSG:4326":
@@ -660,8 +660,8 @@ class SheetParser:
             )
 
         if crs == "EPSG:2180":
-            # Gesta obwiednia (core.bbox): przy arkuszach przecinajacych 19E
-            # 4 narozniki zawyzaly dolna krawedz (N-34: ~468 m)
+            # Densified envelope (core.bbox): for sheets crossing 19E,
+            # 4 corners raised the lower edge (N-34: ~468 m)
             return transform_bbox(
                 BBox(min_x=west, min_y=south, max_x=east, max_y=north, crs="EPSG:4326"),
                 "EPSG:2180",
@@ -674,30 +674,30 @@ class SheetParser:
 
     def _calculate_wgs84_bbox(self) -> tuple:
         """
-        Oblicza bounding box w WGS84 (stopnie).
+        Compute the bounding box in WGS84 (degrees).
 
         Returns
         -------
         tuple
-            (south_lat, north_lat, west_lon, east_lon) w stopniach
+            (south_lat, north_lat, west_lon, east_lon) in degrees
         """
-        # Podstawowe współrzędne arkusza 1:1M
+        # Base coordinates of the 1:1M sheet
         pas = self._components["pas"]
         slup = int(self._components["slup"])
 
-        # Pas: A=0, B=1, ..., N=13
+        # Band: A=0, B=1, ..., N=13
         row_1m = ord(pas) - ord("A")
 
-        # Współrzędne 1:1M
-        south_1m = row_1m * 4.0  # 4° na pas
+        # 1:1M coordinates
+        south_1m = row_1m * 4.0  # 4° per band
         north_1m = south_1m + 4.0
-        west_1m = (slup - 31) * 6.0  # Słup 31 = 0°E
+        west_1m = (slup - 31) * 6.0  # Column 31 = 0°E
         east_1m = west_1m + 6.0
 
         if self._scale == "1:1000000":
             return (south_1m, north_1m, west_1m, east_1m)
 
-        # 1:500k - podział 2×2 w 1:1M
+        # 1:500k - 2×2 subdivision of 1:1M
         if self._scale in (
             "1:500000",
             "1:200000",
@@ -717,13 +717,13 @@ class SheetParser:
     def _apply_500k_subdivision(
         self, south: float, north: float, west: float, east: float
     ) -> tuple:
-        """Aplikuje podział dla 1:500k i mniejszych skal."""
+        """Apply the subdivision for 1:500k and smaller scales."""
 
-        # 1:500k - arkusz_200k zawiera literę A-D (mylące nazewnictwo w COMPONENT_NAMES)
+        # 1:500k - arkusz_200k holds a letter A-D (misleading name in COMPONENT_NAMES)
         if "arkusz_200k" in self._components:
             letter = self._components["arkusz_200k"]
 
-            # Jeśli to litera A-D, to jest podział 1:500k
+            # If it is a letter A-D, this is the 1:500k subdivision
             if letter in "ABCD":
                 row, col = self._QUADRANT_POSITIONS[letter]
                 height = (north - south) / 2.0
@@ -736,7 +736,7 @@ class SheetParser:
                 if self._scale == "1:500000":
                     return (south, north, west, east)
 
-            # Jeśli to liczba, to jest numer arkusza 1:200k (1-144)
+            # If it is a number, it is the 1:200k sheet number (1-144)
             elif letter.isdigit() or (len(self._components.get("arkusz_200k", "")) > 1):
                 arkusz_num = int(self._components["arkusz_200k"])
                 return self._apply_200k_subdivision(
@@ -758,19 +758,19 @@ class SheetParser:
         arkusz_num: int,
     ) -> tuple:
         """
-        Oblicza bbox dla arkusza 1:200k i mniejszych.
+        Compute the bbox for a 1:200k sheet and smaller.
 
-        Arkusze 1:200k są numerowane 1-144 w siatce 12×12 w obrębie 1:1M.
+        1:200k sheets are numbered 1-144 in a 12×12 grid within 1:1M.
         """
-        # Pozycja w siatce 12×12 (numeracja od góry-lewej, wierszami)
+        # Position in the 12×12 grid (numbered from top-left, row by row)
         row = (arkusz_num - 1) // 12  # 0-11
         col = (arkusz_num - 1) % 12  # 0-11
 
-        # Wymiary pojedynczego arkusza 1:200k w stopniach
+        # Dimensions of a single 1:200k sheet in degrees
         height = (north_1m - south_1m) / 12.0  # 4°/12 = 20'
         width = (east_1m - west_1m) / 12.0  # 6°/12 = 30'
 
-        # Oblicz bbox (arkusze numerowane od góry, więc row=0 to północ)
+        # Compute the bbox (sheets are numbered from the top, so row=0 is north)
         north = north_1m - row * height
         south = north - height
         west = west_1m + col * width
@@ -779,7 +779,7 @@ class SheetParser:
         if self._scale == "1:200000":
             return (south, north, west, east)
 
-        # 1:100k - podział arkusza 1:200k na 4 części (A-D)
+        # 1:100k - 1:200k sheet split into 4 parts (A-D)
         if "arkusz_100k" in self._components:
             letter = self._components["arkusz_100k"]
             row_q, col_q = self._QUADRANT_POSITIONS[letter]
@@ -793,7 +793,7 @@ class SheetParser:
             if self._scale == "1:100000":
                 return (south, north, west, east)
 
-        # 1:50k - podział arkusza 1:100k na 4 części (a-d)
+        # 1:50k - 1:100k sheet split into 4 parts (a-d)
         if "arkusz_50k" in self._components:
             letter = self._components["arkusz_50k"]
             row_q, col_q = self._QUADRANT_POSITIONS[letter]
@@ -807,7 +807,7 @@ class SheetParser:
             if self._scale == "1:50000":
                 return (south, north, west, east)
 
-        # 1:25k - podział arkusza 1:50k na 4 części (1-4)
+        # 1:25k - 1:50k sheet split into 4 parts (1-4)
         if "arkusz_25k" in self._components:
             num = self._components["arkusz_25k"]
             row_q, col_q = self._QUADRANT_POSITIONS[num]
@@ -821,7 +821,7 @@ class SheetParser:
             if self._scale == "1:25000":
                 return (south, north, west, east)
 
-        # 1:10k - podział arkusza 1:25k na 4 części (1-4)
+        # 1:10k - 1:25k sheet split into 4 parts (1-4)
         if "arkusz_10k" in self._components:
             num = self._components["arkusz_10k"]
             row_q, col_q = self._QUADRANT_POSITIONS[num]
@@ -836,11 +836,11 @@ class SheetParser:
 
 
 # =========================================================================
-# Standalone functions: bbox → godła lookup
+# Standalone functions: bbox → sheet code lookup
 # =========================================================================
 
 
-# Tolerancja krawędzi — przecięcie musi mieć dodatnie pole (audyt 0.7.0, A1-7).
+# Edge tolerance - the intersection must have a positive area (audit 0.7.0, A1-7).
 _EDGE_TOL = 1e-9
 # degrees (~1 cm) - expands a point/line bbox on its max side (PL-1992, sheet_parser.py)
 _DEGENERATE_EPS_DEG = 1e-7
@@ -851,7 +851,7 @@ def _axis_overlaps(a_min: float, a_max: float, b_min: float, b_max: float) -> bo
     Positive-length overlap of two ranges on a single axis.
 
     A degenerate range ``a`` (a point/line, ``a_max - a_min <= _EDGE_TOL``) is
-    resolved by containment in the half-open interval ``[b_min, b_max)`` — a
+    resolved by containment in the half-open interval ``[b_min, b_max)`` - a
     point sitting on the MAX edge belongs to the next range, never to both.
     """
     if a_max - a_min <= _EDGE_TOL:  # degenerate axis: containment, half-open at max
@@ -861,27 +861,27 @@ def _axis_overlaps(a_min: float, a_max: float, b_min: float, b_max: float) -> bo
 
 def _expand_degenerate(bbox: BBox, eps: float) -> BBox:
     """
-    Rozszerza wyrodniałą oś bboxa (punkt/włos) o ``eps`` po stronie MAX.
+    Expand a degenerate bbox axis (point/hairline) by ``eps`` on the MAX side.
 
-    Dzięki temu punkt leżący dokładnie na linii siatki daje dokładnie jeden
-    arkusz — ten na wschód/północ od linii (audyt 0.7.0, A1-7/A1-13).
+    This way a point lying exactly on a grid line yields exactly one sheet -
+    the one east/north of the line (audit 0.7.0, A1-7/A1-13).
 
-    Za wyrodniałą uznajemy oś o rozpiętości ``<= 2 * _EDGE_TOL``: taki bbox
-    położony okrakiem na linii siatki nie jest w stanie dać nakładki większej
-    niż ``_EDGE_TOL`` po żadnej ze stron, więc bez normalizacji zwracałby
-    pustą listę arkuszy (review 0.7.0, runda 1).
+    An axis is considered degenerate when its span is ``<= 2 * _EDGE_TOL``: such
+    a bbox straddling a grid line cannot produce an overlap larger than
+    ``_EDGE_TOL`` on either side, so without normalization it would return
+    an empty list of sheets (review 0.7.0, round 1).
 
     Parameters
     ----------
     bbox : BBox
-        Bbox do znormalizowania
+        Bbox to normalize
     eps : float
-        Rozszerzenie w jednostkach CRS bboxa
+        Expansion in the units of the bbox CRS
 
     Returns
     -------
     BBox
-        Bbox o rozpiętości pozwalającej na dodatnie pole przecięcia
+        Bbox with a span allowing a positive intersection area
     """
     hairline = 2 * _EDGE_TOL
     max_x = bbox.max_x if bbox.max_x - bbox.min_x > hairline else bbox.min_x + eps
@@ -897,14 +897,14 @@ def _bboxes_intersect(a: BBox, b: BBox) -> bool:
     Parameters
     ----------
     a, b : BBox
-        Bounding boxy do sprawdzenia (powinny być w tym samym CRS).
-        ``a`` to bbox zapytania — jego zdegenerowana oś (punkt) jest
-        rozstrzygana przez zawieranie w półotwartym przedziale ``b``.
+        Bounding boxes to check (should be in the same CRS).
+        ``a`` is the query bbox - its degenerate axis (a point) is resolved
+        by containment in the half-open interval of ``b``.
 
     Returns
     -------
     bool
-        True jeśli pole przecięcia jest dodatnie (> _EDGE_TOL na obu osiach)
+        True if the intersection area is positive (> _EDGE_TOL on both axes)
     """
     return _axis_overlaps(a.min_x, a.max_x, b.min_x, b.max_x) and _axis_overlaps(
         a.min_y, a.max_y, b.min_y, b.max_y
@@ -917,39 +917,40 @@ def find_sheets_for_bbox(
     system: str = "1992",
 ) -> list[str]:
     """
-    Znajduje godła arkuszy pokrywających podany bounding box.
+    Find the sheet codes of the sheets covering the given bounding box.
 
-    Algorytm: hierarchiczne przycinanie — oblicza matematycznie arkusze 1:1M
-    i 1:200k, potem rekurencyjnie zawęża do docelowej skali.
+    Algorithm: hierarchical pruning - mathematically computes the 1:1M and
+    1:200k sheets, then recursively narrows down to the target scale.
 
-    Konwencja krawędzi: zwracane są tylko arkusze o dodatnim polu przecięcia
-    z bboxem — stykanie się krawędzi/narożników nie wystarcza (audyt 0.7.0,
-    A1-7). Bbox równy dokładnie arkuszowi W EPSG:4326 daje tylko ten arkusz
-    i jego potomków; bbox w EPSG:2180 jest najpierw zamieniany na obwiednię
-    WGS84 (szerszą), więc selekcja może objąć arkusze sąsiednie (obwiednia
-    EPSG:2180 arkusza N-34-130-D-d-2-4 daje 9 godeł). Bbox zdegenerowany
-    (punkt) daje dokładnie jeden arkusz — ten na wschód/północ od linii siatki.
+    Edge convention: only sheets with a positive intersection area with the
+    bbox are returned - touching edges/corners is not enough (audit 0.7.0,
+    A1-7). A bbox exactly equal to a sheet IN EPSG:4326 yields only that sheet
+    and its descendants; a bbox in EPSG:2180 is first converted to a WGS84
+    envelope (wider), so the selection may include neighbouring sheets (the
+    EPSG:2180 envelope of sheet N-34-130-D-d-2-4 yields 9 sheet codes). A
+    degenerate bbox (a point) yields exactly one sheet - the one east/north of
+    the grid line.
 
     Parameters
     ----------
     bbox : BBox
-        Bounding box w EPSG:2180 lub EPSG:4326
+        Bounding box in EPSG:2180 or EPSG:4326
     target_scale : str
-        Docelowa skala (default: "1:10000")
+        Target scale (default: "1:10000")
     system : str
-        Układ współrzędnych: "1992" (PL-1992) lub "2000" (PL-2000).
-        Default: "1992" — pełna kompatybilność wsteczna.
+        Coordinate system: "1992" (PL-1992) or "2000" (PL-2000).
+        Default: "1992" - full backward compatibility.
 
     Returns
     -------
     list[str]
-        Posortowana lista godeł arkuszy pokrywających bbox
+        Sorted list of sheet codes of the sheets covering the bbox
 
     Raises
     ------
     ValidationError
-        Jeśli system, target_scale lub CRS jest nieobsługiwany, a także dla
-        bboxa odwróconego (min > max) lub z wartością NaN/inf
+        If the system, target_scale or CRS is unsupported, and also for an
+        inverted bbox (min > max) or one with a NaN/inf value
     """
     if system not in ("1992", "2000"):
         raise ValidationError(
@@ -974,29 +975,30 @@ def find_sheets_for_bbox(
             f"Nieobsługiwany CRS: '{bbox.crs}'. Obsługiwane: EPSG:2180, EPSG:4326"
         )
 
-    # Normalizuj do WGS84. Gesta obwiednia (core.bbox): w PUWG 1992 linia
-    # stalego y ma maksimum szerokosci na poludniku osiowym (x = 500 000 m,
-    # 19E), wiec 4 narozniki gubily pas przy gornej krawedzi (2026-09-28).
+    # Normalize to WGS84. Densified envelope (core.bbox): in PUWG 1992 a line
+    # of constant y has its maximum latitude on the central meridian
+    # (x = 500 000 m, 19E), so 4 corners missed the strip at the upper edge
+    # (2026-09-28).
     wgs_bbox = transform_bbox(bbox, "EPSG:4326")
-    # Punkt/włos: rozszerz o eps po stronie MAX, żeby dać dokładnie jeden arkusz
+    # Point/hairline: expand by eps on the MAX side to give exactly one sheet
     wgs_bbox = _expand_degenerate(wgs_bbox, _DEGENERATE_EPS_DEG)
 
     target_idx = SheetParser.SCALE_HIERARCHY.index(target_scale)
 
-    # --- Krok 1: Znajdź arkusze 1:1M ---
+    # --- Step 1: Find the 1:1M sheets ---
     sheets_1m = _find_1m_sheets(wgs_bbox)
 
     if target_idx == 0:  # 1:1000000
         return sorted(sheets_1m)
 
-    # --- Krok 2: Znajdź arkusze 1:500k ---
+    # --- Step 2: Find the 1:500k sheets ---
     if target_idx == 1:  # 1:500000
         result = []
         for godlo_1m in sheets_1m:
             result.extend(_find_children_intersecting(godlo_1m, wgs_bbox))
         return sorted(result)
 
-    # --- Krok 3: Znajdź arkusze 1:200k (zoptymalizowane) ---
+    # --- Step 3: Find the 1:200k sheets (optimized) ---
     sheets_200k = []
     for godlo_1m in sheets_1m:
         sheets_200k.extend(_find_200k_sheets(godlo_1m, wgs_bbox))
@@ -1004,7 +1006,7 @@ def find_sheets_for_bbox(
     if target_idx == 2:  # 1:200000
         return sorted(sheets_200k)
 
-    # --- Krok 4: Rekurencyjnie drąż do docelowej skali ---
+    # --- Step 4: Drill down recursively to the target scale ---
     current_sheets = sheets_200k
     current_scale_idx = 2  # 1:200000
 
@@ -1020,29 +1022,29 @@ def find_sheets_for_bbox(
 
 def _find_1m_sheets(wgs_bbox: BBox) -> list[str]:
     """
-    Znajduje arkusze 1:1M przecinające bbox (WGS84).
+    Find the 1:1M sheets intersecting the bbox (WGS84).
 
     Parameters
     ----------
     wgs_bbox : BBox
-        Bbox w EPSG:4326 (min_x=west, min_y=south, max_x=east, max_y=north)
+        Bbox in EPSG:4326 (min_x=west, min_y=south, max_x=east, max_y=north)
 
     Returns
     -------
     list[str]
-        Lista godeł 1:1M
+        List of 1:1M sheet codes
     """
     south, north = wgs_bbox.min_y, wgs_bbox.max_y
     west, east = wgs_bbox.min_x, wgs_bbox.max_x
 
-    # Pas: row = floor(lat / 4), litera = chr(ord('A') + row)
+    # Band: row = floor(lat / 4), letter = chr(ord('A') + row)
     min_row = max(0, math.floor(south / 4.0))
     max_row = max(0, math.floor((north - 1e-10) / 4.0))
-    # Jeśli north jest dokładnie na granicy (np. 56.0), to należy do pasa niżej
+    # If north is exactly on a boundary (e.g. 56.0), it belongs to the band below
     if north == math.floor(north / 4.0) * 4.0 and north > south:
         max_row = max(0, int(north / 4.0) - 1)
 
-    # Słup: slup = floor(lon / 6) + 31
+    # Column: slup = floor(lon / 6) + 31
     min_slup = math.floor(west / 6.0) + 31
     max_slup = math.floor((east - 1e-10) / 6.0) + 31
     if east == math.floor(east / 6.0) * 6.0 and east > west:
@@ -1059,21 +1061,21 @@ def _find_1m_sheets(wgs_bbox: BBox) -> list[str]:
 
 def _find_200k_sheets(godlo_1m: str, wgs_bbox: BBox) -> list[str]:
     """
-    Znajduje arkusze 1:200k w obrębie arkusza 1:1M przecinające bbox.
+    Find the 1:200k sheets within a 1:1M sheet that intersect the bbox.
 
-    Optymalizacja: oblicza matematycznie zakres wierszy/kolumn w siatce 12x12.
+    Optimization: mathematically computes the row/column range in the 12x12 grid.
 
     Parameters
     ----------
     godlo_1m : str
-        Godło arkusza 1:1M (np. "N-34")
+        Sheet code of the 1:1M sheet (e.g. "N-34")
     wgs_bbox : BBox
-        Bbox w EPSG:4326
+        Bbox in EPSG:4326
 
     Returns
     -------
     list[str]
-        Lista godeł 1:200k
+        List of 1:200k sheet codes
     """
     parser_1m = SheetParser(godlo_1m)
     bbox_1m = parser_1m.get_bbox(crs="EPSG:4326")
@@ -1086,11 +1088,11 @@ def _find_200k_sheets(godlo_1m: str, wgs_bbox: BBox) -> list[str]:
     height_200k = (north_1m - south_1m) / 12.0
     width_200k = (east_1m - west_1m) / 12.0
 
-    # Oblicz zakres wierszy (od góry)
+    # Compute the row range (from the top)
     min_row = max(0, math.floor((north_1m - wgs_bbox.max_y) / height_200k))
     max_row = min(11, math.floor((north_1m - wgs_bbox.min_y - 1e-10) / height_200k))
 
-    # Oblicz zakres kolumn (od lewej)
+    # Compute the column range (from the left)
     min_col = max(0, math.floor((wgs_bbox.min_x - west_1m) / width_200k))
     max_col = min(11, math.floor((wgs_bbox.max_x - west_1m - 1e-10) / width_200k))
 
@@ -1108,7 +1110,7 @@ def _find_200k_sheets(godlo_1m: str, wgs_bbox: BBox) -> list[str]:
         for col in range(min_col, max_col + 1):
             arkusz_num = row * 12 + col + 1
             godlo = f"{pas}-{slup}-{arkusz_num}"
-            # Weryfikacja przecięcia (na wypadek edge case'ów)
+            # Verify the intersection (in case of edge cases)
             sp = SheetParser(godlo)
             sb = sp.get_bbox(crs="EPSG:4326")
             if _bboxes_intersect(wgs_bbox, sb):
@@ -1119,19 +1121,19 @@ def _find_200k_sheets(godlo_1m: str, wgs_bbox: BBox) -> list[str]:
 
 def _find_children_intersecting(godlo: str, wgs_bbox: BBox) -> list[str]:
     """
-    Znajduje dzieci arkusza, które przecinają bbox.
+    Find the children of a sheet that intersect the bbox.
 
     Parameters
     ----------
     godlo : str
-        Godło arkusza nadrzędnego
+        Sheet code of the parent sheet
     wgs_bbox : BBox
-        Bbox w EPSG:4326
+        Bbox in EPSG:4326
 
     Returns
     -------
     list[str]
-        Lista godeł dzieci przecinających bbox
+        List of sheet codes of children intersecting the bbox
     """
     parser = SheetParser(godlo)
     children = parser.get_children()
