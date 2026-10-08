@@ -77,11 +77,9 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
     output_path = Path(args.output)
     if args.godlo:
         if output_path.suffix.lower() != ".tif":
-            # Output is a directory, create filename
-            output_path.mkdir(parents=True, exist_ok=True)
+            # Output is a directory; the directory itself is created on write
             output_path = output_path / f"hsg_{args.godlo}.tif"
     elif (args.bbox or has_geometry) and output_path.suffix.lower() != ".tif":
-        output_path.mkdir(parents=True, exist_ok=True)
         output_path = output_path / "hsg_bbox.tif"
 
     # Parse bbox if provided (or compute from geometry)

@@ -431,7 +431,6 @@ class HSGCalculator:
         import rasterio
 
         output_path = Path(output_path)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Use temporary directory for intermediate files
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -527,6 +526,9 @@ class HSGCalculator:
             )
 
             hsg_crs = profile.get("crs")
+            # Create the output directory only now, right before writing, so a
+            # failed download leaves no empty directory behind.
+            output_path.parent.mkdir(parents=True, exist_ok=True)
             with rasterio.open(output_path, "w", **profile) as dst:
                 dst.write(hsg, 1)
 
