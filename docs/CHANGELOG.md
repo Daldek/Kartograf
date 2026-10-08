@@ -34,6 +34,16 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   przyjmuja opcjonalny, keyword-only `on_download: Callable[[], None] | None`
   wolany raz, po walidacjach, tuz przed pobraniem pliku SM5 / pierwszym
   zapytaniem `exportImage` (dotychczasowe wywolania bez zmian).
+- **Katalog wyjsciowy land cover powstaje dopiero przy zapisie:**
+  `LandCoverManager()` nie tworzy juz `output_dir` (domyslnie
+  `./data/landcover`) w konstruktorze — samo utworzenie menedzera
+  (np. przez biblioteke pobierajaca tylko NMT) i `kartograf landcover
+  list-layers` nie zostawiaja katalogow na dysku. Katalog tworzy zapis
+  pliku (`transport/http.download_to` po udanej odpowiedzi); providery
+  BDOT10k, CORINE i SoilGrids nie tworza go juz przed zapytaniem, wiec
+  nieudane pobranie (np. HTTP 404) nie zostawia pustego katalogu. Kod
+  biblioteczny, ktory zakladal istnienie `output_dir` zaraz po
+  `LandCoverManager(...)`, musi utworzyc go sam.
 
 ### Dokumentacja
 - **`--scale`:** nowy podrozdzial `docs/USAGE.md` 1.6 "Kiedy `--scale` jest

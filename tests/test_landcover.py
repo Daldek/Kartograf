@@ -1796,3 +1796,123 @@ class TestBdot10kMergeOnNetworkShare:
         assert list(out_dir.glob("*.tmp")) == []
         assert list(out_dir.iterdir()) == []
         assert len(work_dirs) == 1 and not work_dirs[0].exists()
+
+
+def _tree(root: Path) -> list[str]:
+    """Sorted relative paths of everything under ``root``."""
+    return sorted(str(p.relative_to(root)) for p in root.rglob("*"))
+
+
+def _stream_response(body: bytes, content_type: str) -> Mock:
+    resp = Mock()
+    resp.headers = {"Content-Type": content_type}
+    resp.raise_for_status = Mock()
+    resp.iter_content.return_value = [body]
+    return resp
+
+
+class TestLandCoverNoSideEffectsOnInit:
+    """Katalog wyjsciowy powstaje dopiero przy zapisie, nie w ``__init__``."""
+
+    @pytest.fixture
+    def empty_cwd(self, tmp_path, monkeypatch):
+        cwd = tmp_path / "empty"
+        cwd.mkdir()
+        monkeypatch.chdir(cwd)
+        return cwd
+
+    def test_default_init_creates_nothing(self, empty_cwd):
+        LandCoverManager()
+        assert _tree(empty_cwd) == []
+
+    @pytest.mark.parametrize("source", ["bdot10k", "corine", "soilgrids"])
+    def test_init_with_output_dir_creates_nothing(self, empty_cwd, source):
+        out = empty_cwd / "a" / "b"
+        manager = LandCoverManager(output_dir=out, provider=source)
+        # Generating the path (without writing) must not create it either.
+        manager._generate_output_path("1465", None, None)
+        assert _tree(empty_cwd) == []
+
+    @pytest.mark.parametrize(
+        "argv",
+        [
+            ["landcover", "list-sources"],
+            ["landcover", "list-layers", "--source", "bdot10k"],
+            ["landcover", "list-layers", "--source", "corine"],
+            ["landcover", "list-layers", "--source", "soilgrids"],
+        ],
+    )
+    def test_cli_list_commands_create_nothing(self, empty_cwd, argv, capsys):
+        from kartograf.cli.commands import main
+
+        assert main(argv) == 0
+        assert _tree(empty_cwd) == []
+
+    def test_bdot10k_download_creates_output_dir_and_file(self, empty_cwd):
+        out_dir = empty_cwd / "data" / "landcover"
+        provider = Bdot10kProvider()
+        session = Mock()
+        session.get.return_value = _stream_response(b"PK zip", "application/zip")
+        provider._sessions.injected = session
+        manager = LandCoverManager(output_dir=out_dir, provider=provider)
+        assert not out_dir.exists()
+
+        path = manager.download(teryt="1465", format="SHP")
+
+        assert path == out_dir / "bdot10k_teryt_1465.zip"
+        assert path.read_bytes() == b"PK zip"
+        assert (out_dir / "bdot10k_teryt_1465.zip.meta.json").exists()
+
+    def test_corine_wms_download_creates_output_dir_and_file(self, empty_cwd):
+        out_dir = empty_cwd / "out" / "corine"
+        provider = CorineProvider(use_proxy=False)
+        session = Mock()
+        session.get.return_value = _stream_response(b"\x89PNG", "image/png")
+        provider._sessions.injected = session
+        manager = LandCoverManager(output_dir=out_dir, provider=provider)
+        bbox = BBox(450000, 550000, 451000, 551000, "EPSG:2180")
+
+        path = manager.download(bbox=bbox, year=2018)
+
+        assert path.parent == out_dir
+        assert path.read_bytes() == b"\x89PNG"
+        assert (out_dir / f"{path.name}.meta.json").exists()
+
+    def test_soilgrids_download_creates_output_dir_and_file(self, empty_cwd):
+        from kartograf.providers.soilgrids import SoilGridsProvider
+
+        out_dir = empty_cwd / "out" / "soil"
+        provider = SoilGridsProvider()
+        session = Mock()
+        session.get.return_value = _stream_response(b"II*\x00", "image/tiff")
+        provider._sessions.injected = session
+        manager = LandCoverManager(output_dir=out_dir, provider=provider)
+        bbox = BBox(450000, 550000, 451000, 551000, "EPSG:2180")
+
+        path = manager.download(bbox=bbox)
+
+        assert path.parent == out_dir
+        assert path.read_bytes() == b"II*\x00"
+        assert (out_dir / f"{path.name}.meta.json").exists()
+
+    @pytest.mark.parametrize("source", ["bdot10k", "corine", "soilgrids"])
+    def test_failed_download_leaves_no_output_dir(self, empty_cwd, source):
+        out_dir = empty_cwd / "out"
+        manager = LandCoverManager(output_dir=out_dir, provider=source)
+        if source == "corine":
+            manager.set_provider(CorineProvider(use_proxy=False))
+        session = Mock()
+        response = Mock(status_code=404, headers={})
+        response.raise_for_status.side_effect = requests.HTTPError(
+            "404", response=response
+        )
+        session.get.return_value = response
+        manager.provider._sessions.injected = session
+
+        with pytest.raises(DownloadError):
+            if source == "bdot10k":
+                manager.download(teryt="1465")
+            else:
+                manager.download(bbox=BBox(450000, 550000, 451000, 551000, "EPSG:2180"))
+
+        assert _tree(empty_cwd) == []
