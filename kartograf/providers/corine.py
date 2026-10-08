@@ -135,6 +135,9 @@ class CLMSAuth:
         if self.key_id:
             headers["kid"] = self.key_id
 
+        if not self.private_key:
+            raise DownloadError("Failed to create JWT assertion: missing private_key")
+
         try:
             assertion = jwt.encode(
                 payload,
@@ -595,6 +598,10 @@ class CorineProvider(LandCoverProvider):
         session = self._sessions.get()
 
         # Get access token via OAuth2
+        # Reachable only via has_clms_token with the proxy off, i.e. with
+        # _clms_auth set; the check narrows the Optional for the type checker.
+        if self._clms_auth is None:
+            raise DownloadError("CLMS direct mode requires clms_credentials")
         access_token = self._clms_auth.get_access_token(session)
 
         headers = {

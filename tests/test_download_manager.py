@@ -529,8 +529,8 @@ class TestDownloadResultNoCoverage:
 
     @pytest.mark.parametrize("workers", [1, 4])
     def test_hard_failures_excludes_no_coverage_and_progress_status(
-        self, tmp_path, provider, workers
-    ):
+        self, tmp_path: Path, provider, workers
+    ) -> None:
         """D2/D11: ``hard_failures`` = porazki warte ponowienia; arkusz bez
         danych raportuje status ``no_coverage`` (nie ``failed``)."""
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
@@ -541,6 +541,7 @@ class TestDownloadResultNoCoverage:
             on_progress=lambda p: statuses.__setitem__(p.godlo, p.status),
         )
         result = manager.last_result
+        assert result is not None
         assert result.hard_failures == ["N-34-130-D-d-2-2"]
         assert statuses["N-34-130-D-d-2-1"] == "no_coverage"
         assert statuses["N-34-130-D-d-2-2"] == "failed"

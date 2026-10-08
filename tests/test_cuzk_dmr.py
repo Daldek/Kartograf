@@ -9,6 +9,7 @@ powstaja lokalnie przez rasterio (wzor: test_cuzk_client.py).
 """
 
 import warnings
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -424,7 +425,9 @@ class TestHorizontalReprojection:
     def _fake_server(calls, **kwargs):
         return _server_emulator(calls, **kwargs)
 
-    def test_bbox_target_crs_puts_content_where_pyproj_says(self, tmp_path):
+    def test_bbox_target_crs_puts_content_where_pyproj_says(
+        self, tmp_path: Path
+    ) -> None:
         """Regresja TRESCI: wierzcholek ma trafic tam, gdzie wskazuje pyproj."""
         target = tmp_path / "area.tif"
         bbox = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
@@ -439,7 +442,7 @@ class TestHorizontalReprojection:
         assert abs(got[0] - expected[0]) < 2.0, f"E: {got} vs {expected}"
         assert abs(got[1] - expected[1]) < 2.0, f"N: {got} vs {expected}"
 
-    def test_server_is_asked_only_for_native_5514(self, tmp_path):
+    def test_server_is_asked_only_for_native_5514(self, tmp_path: Path) -> None:
         """Zadania exportImage bija wylacznie w uklad natywny, niezaleznie od celu."""
         bbox = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
         calls: list = []
@@ -452,7 +455,7 @@ class TestHorizontalReprojection:
         assert all(wkid(image_sr) == "5514" for _, image_sr, _ in calls)
         assert all(wkid(sent.crs) == "5514" for sent, _, _ in calls)
 
-    def test_tm33_godlo_also_goes_native_then_local_warp(self, tmp_path):
+    def test_tm33_godlo_also_goes_native_then_local_warp(self, tmp_path: Path) -> None:
         """Kafel TM33 (3045) tez nie ufa reprojekcji serwerowej."""
         target = tmp_path / "302_5550.tif"
         calls: list = []
@@ -466,7 +469,7 @@ class TestHorizontalReprojection:
             assert ds.bounds == (302000.0, 5550000.0, 304000.0, 5552000.0)
             assert (ds.width, ds.height) == (1000, 1000)
 
-    def test_native_request_covers_whole_target_bbox(self, tmp_path):
+    def test_native_request_covers_whole_target_bbox(self, tmp_path: Path) -> None:
         """Obwiednia zadania natywnego musi POKRYWAC cel (z zapasem na warp)."""
         bbox = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
         calls: list = []
@@ -716,7 +719,7 @@ class TestProbePoint:
         assert pinned_mock.call_args.args[:2] == ("EPSG:5514", "EPSG:2180")
         assert pinned_mock.call_args.args[2].probe_point == CZ_PROBE_NATIVE
 
-    def test_all_horizontal_pinned_calls_carry_probe(self, tmp_path):
+    def test_all_horizontal_pinned_calls_carry_probe(self, tmp_path: Path) -> None:
         """Zadna operacja POZIOMA nie jest budowana bez punktu kontrolnego —
         ani reprojekcja tresci, ani obwiednia, ani lon/lat dla shiftu pionowego.
         Wyjatek jest jeden: para czysto pionowa 8357->5621."""
@@ -813,7 +816,7 @@ class TestOnDownloadCallback:
     """
 
     @staticmethod
-    def _recorder():
+    def _recorder() -> tuple[list[str], Callable[[], None]]:
         events: list[str] = []
         return events, lambda: events.append("announce")
 

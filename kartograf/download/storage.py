@@ -111,7 +111,7 @@ class FileStorage:
         self._variant = variant
         self._subdir_override = subdir
         if product:
-            self._product = product
+            self._product: str | None = product
             self._resolution = ""
         else:
             if resolution not in self.SUPPORTED_RESOLUTIONS:

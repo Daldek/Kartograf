@@ -144,7 +144,7 @@ class SheetParser:
                 raise ValidationError(
                     f"Godło '{cleaned}' ma format PL-2000, ale podano uklad='{uklad}'"
                 )
-            self._pl2000 = Parser2000(cleaned)
+            self._pl2000: Parser2000 | None = Parser2000(cleaned)
             self._original_godlo = cleaned
             self._godlo = self._pl2000.godlo
             self._uklad = "2000"
@@ -434,8 +434,7 @@ class SheetParser:
         'N-34-130-D-d-2-1'
         """
         if self._pl2000 is not None:
-            children = self._pl2000.get_children()
-            return [SheetParser(c.godlo) for c in children]
+            return [SheetParser(c.godlo) for c in self._pl2000.get_children()]
 
         current_scale_idx = self.SCALE_HIERARCHY.index(self._scale)
 
@@ -447,7 +446,8 @@ class SheetParser:
             return self._get_children_from_500k()
 
         # Dla pozostałych skal: dodaj suffiksy
-        suffixes = self._CHILD_SUFFIXES.get(self._scale, [])
+        # 1:500k (the only None entry) is handled above
+        suffixes = self._CHILD_SUFFIXES.get(self._scale) or []
         children = []
 
         for suffix in suffixes:
