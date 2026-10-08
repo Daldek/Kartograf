@@ -195,6 +195,12 @@ class TestCorineOutputParams:
             tmp_path, year=2000
         )
 
+    def test_godlo_leading_zeros_canonical(self, tmp_path):
+        """A7: land cover names and sidecars use the canonical godlo."""
+        path = self._download(tmp_path, godlo="M-33-036-A", year=2006)
+        assert path.name == "corine_2006_godlo_M-33-36-A.png"
+        assert _sidecar(path)["request"]["sheet"] == "M-33-36-A"
+
     def test_clms_geotiff_name_and_nodata_from_file(self, tmp_path):
         provider = CorineProvider(use_proxy=False)
         manager = LandCoverManager(output_dir=tmp_path, provider=provider)
