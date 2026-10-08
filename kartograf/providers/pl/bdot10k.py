@@ -28,26 +28,38 @@ Hydrographic (SW - Sieć Wodna, 3 layers):
 """
 
 import logging
+import re
 import shutil
 import sqlite3
 import tempfile
 import zipfile
+from collections.abc import Sequence
+from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
 
 import requests
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.base import LandCoverProvider
-from kartograf.transport.http import (
-    MAX_RETRIES,
-    SessionPerThread,
-    download_to,
-    get_with_retry,
-)
+from kartograf.providers.pl.prg import discover_teryts_for_bbox
+from kartograf.transport.http import MAX_RETRIES, SessionPerThread, download_to
 
 logger = logging.getLogger(__name__)
+
+# Layer code = the 4 letters after OT_ in GUGiK table names (e.g. PTWP in OT_PTWP_A)
+_LAYER_CODE = re.compile(r"[A-Z]{4}")
+
+
+@dataclass(frozen=True)
+class Bdot10kPackage:
+    """One downloaded powiat package (``Bdot10kProvider.download_package``)."""
+
+    path: Path  # the file actually written (.gpkg, or .zip for SHP)
+    teryt: str
+    url: str
+    format: str
 
 
 # Mapping of voivodeship (wojewodztwo) TERYT codes to names used in OpenData URLs
@@ -79,19 +91,21 @@ class Bdot10kProvider(LandCoverProvider):
     topographic database maintained by GUGiK. It contains detailed land
     cover information for the entire country.
 
-    Supports three download modes:
-    - By TERYT code: downloads pre-packaged county (powiat) data
-    - By bbox: downloads data via WFS service
-    - By sheet code (godlo): converts to bbox and downloads via WFS
+    Every download is a pre-packaged powiat (county) package from OpenData:
+    - By TERYT code: that powiat (``download_package``)
+    - By bbox or sheet code (godlo): the ONE powiat intersecting the area;
+      several powiats = ``ValidationError`` (use
+      ``LandCoverManager.download_all_counties`` or ``teryts_for_area``),
+      none = ``NoCoverageError``. The area may be in any supported CRS.
 
     Examples
     --------
     >>> provider = Bdot10kProvider()
     >>>
     >>> # Download by TERYT (powiat code)
-    >>> provider.download_by_admin_unit("1465", Path("./data/powiat_1465.gpkg"))
+    >>> provider.download_package("1465", Path("./data/powiat_1465.gpkg"))
     >>>
-    >>> # Download by bbox
+    >>> # Download by bbox (one powiat)
     >>> from kartograf import BBox
     >>> bbox = BBox(
     ...     min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
@@ -112,13 +126,8 @@ class Bdot10kProvider(LandCoverProvider):
         "SHP": "{base}/schemat2021/SHP/{woj}/{teryt}_SHP.zip",
     }
 
-    # WMS endpoint for BDOT10k downloads (used to get OpenData URLs)
-    WMS_ENDPOINT = (
-        "https://mapy.geoportal.gov.pl/wss/service/PZGIK/BDOT/WMS/PobieranieBDOT10k"
-    )
-
     # Default settings
-    DEFAULT_TIMEOUT = 120  # package download (all modes); TERYT: 30 s
+    DEFAULT_TIMEOUT = 120  # package download (all modes); TERYT (PRG): 30 s
     MAX_RETRIES = MAX_RETRIES
 
     def __init__(self, session: requests.Session | None = None, cache=None):
@@ -131,7 +140,7 @@ class Bdot10kProvider(LandCoverProvider):
             HTTP session to use for requests. Default: one keep-alive
             GUGiK session per thread (``make_gugik_session``).
         cache : MetadataCache, optional
-            Metadata cache instance for caching TERYT lookup results.
+            Metadata cache for the PRG TERYT discovery (``teryts_for_area``).
             If None, no caching is performed (default behavior).
         """
         self._sessions = SessionPerThread(session)
@@ -152,6 +161,89 @@ class Bdot10kProvider(LandCoverProvider):
     # Download by TERYT → OpenData packages
     # =========================================================================
 
+    def download_package(
+        self,
+        code: str,
+        output_path: Path,
+        *,
+        timeout: int = DEFAULT_TIMEOUT,
+        format: str = "GPKG",
+        layers: Sequence[str] | None = None,
+    ) -> Bdot10kPackage:
+        """Download one powiat package; ``layers`` keeps only those layer codes (GPKG).
+
+        Pre-packaged data from OpenData: the fastest way to get a large area,
+        as the files are pre-generated. The GPKG package is unpacked and its
+        per-layer files merged into one GeoPackage (``output_path`` with the
+        extension ``.gpkg``); the SHP package is saved as the original GUGiK
+        archive with shapefiles (``.zip``).
+
+        Parameters
+        ----------
+        code : str
+            4-digit TERYT code for powiat (e.g., "1465" for powiat
+            warszawski zachodni)
+        output_path : Path
+            Path where the file should be saved (extension follows the format)
+        timeout : int, optional
+            Request timeout in seconds (default: 120)
+        format : str, optional
+            Output format: "GPKG" or "SHP" (default: "GPKG")
+        layers : Sequence[str], optional
+            Layer codes to keep (4 upper-case letters, e.g. ``PTWP``,
+            ``SWRS``); every other layer of the package is dropped. GPKG only.
+
+        Returns
+        -------
+        Bdot10kPackage
+            ``path`` = the file actually written, plus ``teryt``, ``url``,
+            ``format``
+
+        Raises
+        ------
+        ValidationError
+            Invalid TERYT or layer code (before the network); ``layers`` with SHP.
+        DownloadError
+            Download failure, a requested layer missing in the package, or two
+            package files with the same table name.
+        """
+        if not self.validate_admin_unit(code):
+            raise ValidationError(f"Invalid TERYT code: {code}")
+        if format not in ["GPKG", "SHP"]:
+            raise ValueError(f"Unsupported format: {format}. Use 'GPKG' or 'SHP'")
+        wanted = None
+        if layers is not None:
+            wanted = sorted(set(layers))
+            bad = [layer for layer in wanted if not _LAYER_CODE.fullmatch(layer)]
+            if bad or not wanted:
+                raise ValidationError(
+                    f"Nieprawidlowe kody warstw BDOT10k: {bad or '[]'} "
+                    "(4 wielkie litery, np. PTWP, SWRS)"
+                )
+            if format != "GPKG":
+                raise ValidationError("Filtr warstw BDOT10k dziala tylko z GPKG")
+        output_path = Path(output_path)
+        if format == "SHP":
+            # The SHP package is a ZIP archive of shapefiles (not unpacked): the name
+            # must say so rather than pretend to be a GeoPackage (review N1). Symmetric
+            # to GPKG, where `_extract_gpkg_from_zip` assigns .gpkg.
+            output_path = output_path.with_suffix(".zip")
+        url = self._construct_opendata_url(code, format)
+
+        def save(response: requests.Response, target: Path) -> Path:
+            return self._extract_gpkg_from_zip(response, target, layers=wanted)
+
+        path = download_to(
+            self._sessions.get(),
+            url,
+            output_path,
+            timeout=timeout,
+            retries=self.MAX_RETRIES,
+            description=f"BDOT10k TERYT {code}",
+            save=save if format == "GPKG" else None,
+        )
+        return Bdot10kPackage(path=path, teryt=code, url=url, format=format)
+
     def download_by_admin_unit(
         self,
         code: str,
@@ -160,62 +252,18 @@ class Bdot10kProvider(LandCoverProvider):
         format: str = "GPKG",
         **kwargs,
     ) -> Path:
+        """``LandCoverProvider`` entry point: ``download_package(...).path``.
+
+        ``kwargs`` may carry ``layers`` (see ``download_package``); other
+        options are ignored.
         """
-        Download BDOT10k data package for a powiat (county) by TERYT code.
-
-        Downloads pre-packaged data from OpenData. This is the fastest method
-        for downloading large areas as files are pre-generated.
-
-        Parameters
-        ----------
-        code : str
-            4-digit TERYT code for powiat (e.g., "1465" for powiat
-            warszawski zachodni)
-        output_path : Path
-            Path where the file should be saved
-        timeout : int, optional
-            Request timeout in seconds (default: 120)
-        format : str, optional
-            Output format: "GPKG" or "SHP" (default: "GPKG")
-        Returns
-        -------
-        Path
-            Path to the downloaded file: ``output_path`` with the extension
-            ``.gpkg`` (GPKG, unpacked and merged) or ``.zip`` (SHP —
-            the original GUGiK archive with shapefiles)
-
-        Raises
-        ------
-        ValidationError
-            If TERYT code is invalid
-        DownloadError
-            If the download fails
-        """
-        if not self.validate_admin_unit(code):
-            raise ValidationError(f"Invalid TERYT code: {code}")
-
-        if format not in ["GPKG", "SHP"]:
-            raise ValueError(f"Unsupported format: {format}. Use 'GPKG' or 'SHP'")
-
-        output_path = Path(output_path)
-        if format == "SHP":
-            # The SHP package is a ZIP archive of shapefiles (not unpacked): the name
-            # must say so rather than pretend to be a GeoPackage (review N1). Symmetric
-            # to GPKG, where `_extract_gpkg_from_zip` assigns .gpkg.
-            output_path = output_path.with_suffix(".zip")
-
-        # Construct OpenData URL
-        url = self._construct_opendata_url(code, format)
-
-        return download_to(
-            self._sessions.get(),
-            url,
+        return self.download_package(
+            code,
             output_path,
             timeout=timeout,
-            retries=self.MAX_RETRIES,
-            description=f"BDOT10k TERYT {code}",
-            save=self._extract_gpkg_from_zip if format == "GPKG" else None,
-        )
+            format=format,
+            layers=kwargs.get("layers"),
+        ).path
 
     def _construct_opendata_url(self, teryt: str, format: str) -> str:
         """
@@ -248,8 +296,27 @@ class Bdot10kProvider(LandCoverProvider):
         return pattern.format(base=self.OPENDATA_BASE, woj=woj_code, teryt=teryt)
 
     # =========================================================================
-    # Download by sheet code → OpenData (via TERYT lookup)
+    # Download by sheet code / bbox → the one powiat of the area (PRG)
     # =========================================================================
+
+    def teryts_for_area(self, bbox: BBox, timeout: int = 30) -> list[str]:
+        """Powiat TERYT codes intersecting ``bbox`` (``discover_teryts_for_bbox``)."""
+        return discover_teryts_for_bbox(
+            bbox, session=self._sessions.get(), cache=self._cache, timeout=timeout
+        )
+
+    def _single_teryt(self, bbox: BBox, what: str) -> str:
+        """The one powiat of an area (several: ValidationError, none: NoCoverage)."""
+        teryts = self.teryts_for_area(bbox)
+        if not teryts:
+            raise NoCoverageError(f"{what}: obszar nie przecina zadnego powiatu (PRG)")
+        if len(teryts) > 1:
+            raise ValidationError(
+                f"{what}: obszar przecina {len(teryts)} powiaty ({', '.join(teryts)}); "
+                "uzyj LandCoverManager.download_all_counties albo pobierz kazdy "
+                "powiat przez --teryt"
+            )
+        return teryts[0]
 
     def download_by_godlo(
         self,
@@ -262,9 +329,9 @@ class Bdot10kProvider(LandCoverProvider):
         """
         Download BDOT10k data for a map sheet (godlo).
 
-        Finds the powiat (county) TERYT code for the given godlo
-        and downloads the entire county package. This is the recommended
-        method as it provides complete data coverage.
+        Finds the ONE powiat (county) intersecting the sheet frame (PRG WFS)
+        and downloads the entire county package. A sheet spanning several
+        powiats is an error - use ``LandCoverManager.download_all_counties``.
 
         Parameters
         ----------
@@ -277,137 +344,30 @@ class Bdot10kProvider(LandCoverProvider):
         format : str, optional
             Output format: "GPKG" or "SHP" (default: "GPKG")
         **kwargs
-            Additional options (unused)
+            ``layers`` (see ``download_package``); other options are ignored
 
         Returns
         -------
         Path
             Path to the downloaded file
-        """
-        from kartograf.core.sheet_parser import SheetParser
-
-        parser = SheetParser(godlo)
-        bbox = parser.get_bbox(crs="EPSG:2180")
-
-        # Get center point of the map sheet
-        center_x = (bbox.min_x + bbox.max_x) / 2
-        center_y = (bbox.min_y + bbox.max_y) / 2
-
-        # Find TERYT code for this location via WMS GetFeatureInfo
-        teryt = self._get_teryt_for_point(center_x, center_y, timeout)
-
-        logger.info(f"Godło {godlo} is in powiat {teryt}, downloading county package")
-
-        # Download the entire county package
-        return self.download_by_admin_unit(
-            teryt, output_path, timeout, format=format, **kwargs
-        )
-
-    def _get_teryt_for_point(
-        self,
-        x: float,
-        y: float,
-        timeout: int = 30,
-    ) -> str:
-        """
-        Get powiat TERYT code for a point using WMS GetFeatureInfo.
-
-        Parameters
-        ----------
-        x : float
-            X coordinate in EPSG:2180
-        y : float
-            Y coordinate in EPSG:2180
-        timeout : int
-            Request timeout
-
-        Returns
-        -------
-        str
-            4-digit TERYT code for the powiat
 
         Raises
         ------
+        ValidationError
+            The sheet intersects more than one powiat (codes in the message)
+        NoCoverageError
+            The sheet intersects no powiat
         DownloadError
-            If TERYT code cannot be determined
+            PRG query or download failure
         """
-        # Check cache first
-        if self._cache is not None:
-            cached_teryt = self._cache.get_teryt(x, y)
-            if cached_teryt is not None:
-                logger.debug(f"Using cached TERYT {cached_teryt} for ({x}, {y})")
-                return cached_teryt
+        from kartograf.core.sheet_parser import SheetParser
 
-        import re
-
-        session = self._sessions.get()
-
-        # Create small bbox around the point
-        buffer = 100  # meters
-        # WMS 1.3.0 with EPSG:2180 uses y,x order
-        query_bbox = f"{y - buffer},{x - buffer},{y + buffer},{x + buffer}"
-
-        params = {
-            "SERVICE": "WMS",
-            "VERSION": "1.3.0",
-            "REQUEST": "GetFeatureInfo",
-            "LAYERS": "Powiaty",
-            "QUERY_LAYERS": "Powiaty",
-            "INFO_FORMAT": "text/html",
-            "CRS": "EPSG:2180",
-            "BBOX": query_bbox,
-            "WIDTH": 100,
-            "HEIGHT": 100,
-            "I": 50,
-            "J": 50,
-        }
-
-        from urllib.parse import urlencode
-
-        url = f"{self.WMS_ENDPOINT}?{urlencode(params)}"
-        logger.debug(f"Querying WMS for TERYT at ({x:.2f}, {y:.2f})")
-
-        # Network/429/5xx are retried (3 attempts, Retry-After), 4xx fails at
-        # once — the shared transport/http.py policy (review N5).
-        try:
-            response = get_with_retry(
-                session, url, timeout=timeout, description="zapytanie TERYT"
-            )
-        except DownloadError as e:
-            raise DownloadError(
-                f"WMS GetFeatureInfo failed: {e}", status_code=e.status_code
-            ) from e
-
-        # Extract TERYT from GPKG URL pattern: .../GPKG/{woj}/{teryt}_GPKG.zip
-        gpkg_pattern = r"/GPKG/\d{2}/(\d{4})_GPKG\.zip"
-        match = re.search(gpkg_pattern, response.text)
-
-        if match:
-            teryt = match.group(1)
-            logger.debug(f"Found TERYT: {teryt}")
-            if self._cache is not None:
-                self._cache.set_teryt(x, y, teryt)
-            return teryt
-
-        # Alternative: extract from SHP URL pattern
-        shp_pattern = r"/SHP/\d{2}/(\d{4})_SHP\.zip"
-        match = re.search(shp_pattern, response.text)
-
-        if match:
-            teryt = match.group(1)
-            logger.debug(f"Found TERYT: {teryt}")
-            if self._cache is not None:
-                self._cache.set_teryt(x, y, teryt)
-            return teryt
-
-        raise DownloadError(
-            f"Could not determine TERYT for point ({x:.2f}, {y:.2f}). "
-            f"The location may be outside Poland or in a water body."
+        bbox = SheetParser(godlo).get_bbox(crs="EPSG:2180")
+        teryt = self._single_teryt(bbox, f"BDOT10k {godlo}")
+        logger.info(f"Godło {godlo} is in powiat {teryt}, downloading county package")
+        return self.download_by_admin_unit(
+            teryt, output_path, timeout, format=format, **kwargs
         )
-
-    # =========================================================================
-    # Download by bbox → Download county package
-    # =========================================================================
 
     def download_by_bbox(
         self,
@@ -420,9 +380,9 @@ class Bdot10kProvider(LandCoverProvider):
         """
         Download BDOT10k land cover data for a bounding box.
 
-        Finds the powiat (county) containing the center of the bbox
-        and downloads the entire county package. This provides complete
-        data coverage for the area.
+        Finds the ONE powiat (county) intersecting the bbox (PRG WFS) and
+        downloads the entire county package. A bbox spanning several powiats
+        is an error - use ``LandCoverManager.download_all_counties``.
 
         Note: The returned data covers the entire county, not just the bbox.
         Use GIS software to clip to the exact bbox if needed.
@@ -430,7 +390,8 @@ class Bdot10kProvider(LandCoverProvider):
         Parameters
         ----------
         bbox : BBox
-            Bounding box in EPSG:2180 coordinates
+            Bounding box in any supported CRS (converted to EPSG:2180 for
+            the PRG query)
         output_path : Path
             Path where the file should be saved
         timeout : int, optional
@@ -438,7 +399,7 @@ class Bdot10kProvider(LandCoverProvider):
         format : str, optional
             Output format: "GPKG" or "SHP" (default: "GPKG")
         **kwargs
-            Additional options (unused)
+            ``layers`` (see ``download_package``); other options are ignored
 
         Returns
         -------
@@ -447,27 +408,15 @@ class Bdot10kProvider(LandCoverProvider):
 
         Raises
         ------
-        ValueError
-            If bbox CRS is not EPSG:2180
+        ValidationError
+            The bbox intersects more than one powiat (codes in the message)
+        NoCoverageError
+            The bbox intersects no powiat
         DownloadError
-            If the download fails
+            PRG query or download failure
         """
-        if bbox.crs != "EPSG:2180":
-            raise ValueError(
-                f"BBox must be in EPSG:2180, got {bbox.crs}. "
-                f"Use SheetParser.get_bbox(crs='EPSG:2180') to convert."
-            )
-
-        # Get center point of the bbox
-        center_x = (bbox.min_x + bbox.max_x) / 2
-        center_y = (bbox.min_y + bbox.max_y) / 2
-
-        # Find TERYT code for this location
-        teryt = self._get_teryt_for_point(center_x, center_y, timeout)
-
-        logger.info(f"Bbox center is in powiat {teryt}, downloading county package")
-
-        # Download the entire county package
+        teryt = self._single_teryt(bbox, "BDOT10k bbox")
+        logger.info(f"Bbox is in powiat {teryt}, downloading county package")
         return self.download_by_admin_unit(
             teryt, output_path, timeout, format=format, **kwargs
         )
@@ -480,12 +429,14 @@ class Bdot10kProvider(LandCoverProvider):
         self,
         response: requests.Response,
         output_path: Path,
+        layers: Sequence[str] | None = None,
     ) -> Path:
         """
         Extract and merge all layers from downloaded ZIP.
 
-        BDOT10k packages contain separate GPKG files for each layer.
-        This method extracts all layers and merges them into a single
+        BDOT10k packages contain separate GPKG files for each layer
+        (``PL.PZGiK.337.BDOT10k.<TERYT>__OT_<CODE>_<A|L|P>.gpkg``, one table
+        each). This method extracts the layers and merges them into a single
         GeoPackage file.
 
         Parameters
@@ -496,11 +447,19 @@ class Bdot10kProvider(LandCoverProvider):
             Target path for merged GPKG (the actual file is written to
             ``output_path.with_suffix(".gpkg")``, which is also what is
             returned)
+        layers : Sequence[str], optional
+            Layer codes to keep (``OT_<code>_*`` files); None = all
 
         Returns
         -------
         Path
             Path to the merged GPKG file that was actually written to disk
+
+        Raises
+        ------
+        DownloadError
+            Not a ZIP, no GPKG inside, a requested layer missing in the
+            package, or two files with the same table name
         """
         # Read ZIP into memory
         zip_data = BytesIO()
@@ -516,6 +475,18 @@ class Bdot10kProvider(LandCoverProvider):
                     raise DownloadError(
                         f"No GPKG files found in ZIP. Contents: {zf.namelist()}"
                     )
+
+                if layers is not None:
+                    by_code = {
+                        code: [f for f in all_gpkg if f"__OT_{code}_" in Path(f).name]
+                        for code in layers
+                    }
+                    missing = [code for code, files in by_code.items() if not files]
+                    if missing:
+                        raise DownloadError(
+                            f"Paczka BDOT10k nie zawiera warstw: {', '.join(missing)}"
+                        )
+                    all_gpkg = [f for files in by_code.values() for f in files]
 
                 logger.debug(f"Found {len(all_gpkg)} layers to merge")
 
@@ -556,6 +527,12 @@ class Bdot10kProvider(LandCoverProvider):
             List of source GPKG files to merge
         output_path : Path
             Output merged GPKG file
+
+        Raises
+        ------
+        DownloadError
+            No files, or a table name repeated across files (the merge
+            would silently lose the second copy)
         """
         if not source_files:
             raise DownloadError("No files to merge")
@@ -630,8 +607,10 @@ class Bdot10kProvider(LandCoverProvider):
                     (table_name,),
                 )
                 if cursor.fetchone():
-                    logger.debug(f"Table {table_name} already exists, skipping")
-                    continue
+                    raise DownloadError(
+                        f"Paczka BDOT10k: tabela {table_name} wystepuje w wiecej niz "
+                        f"jednym pliku ({source_path.name}) — scalenie zgubiloby dane"
+                    )
 
                 # Get table schema from source
                 cursor.execute(

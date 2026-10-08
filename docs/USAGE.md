@@ -177,6 +177,12 @@ kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:55
 ```bash
 kartograf landcover download --source bdot10k --teryt 1465
 kartograf landcover download --source bdot10k --teryt 1465 --format SHP   # archiwum .zip
+# Obszar z dwóch powiatów (TERYT z WFS PRG): pakiet KAŻDEGO powiatu, osobny plik
+kartograf landcover download --source bdot10k --bbox 340000,290000,350000,300000 -o ./dane
+#   -> Downloaded to: ./dane/bdot10k_teryt_0208.gpkg
+#   -> Downloaded to: ./dane/bdot10k_teryt_0224.gpkg
+#   (nazwa zawsze teryt_<TERYT> — pakiet to cały powiat; obszar żądania
+#    w sidecarze extra.parent_request; to samo dla --godlo i --geometry)
 kartograf landcover download --source corine --year 2018 --godlo N-34-130-D
 #   -> corine_2018_godlo_N-34-130-D.tif (bez credentials CLMS: .png z WMS)
 kartograf landcover download --source soilgrids --godlo N-34-130-D --property clay --depth 15-30cm
@@ -197,7 +203,10 @@ kartograf cache path
 ```
 
 `--teryt` dotyczy tylko BDOT10k (CORINE/SoilGrids: `--godlo`, `--bbox`,
-`--geometry`). CORINE bez credentials CLMS pobiera podgląd PNG (sekcja 6).
+`--geometry`). BDOT10k z `--bbox`/`--godlo`/`--geometry` pobiera wszystkie
+powiaty obszaru (lista z WFS PRG, odpowiedzi w cache metadanych — `cache
+stats` liczy je w `TERYT entries`); obszar bez powiatu (morze) to `Error:`.
+CORINE bez credentials CLMS pobiera podgląd PNG (sekcja 6).
 Warstwy BDOT10k, parametry SoilGrids i lata CORINE: PRD 3.5–3.7.
 
 ### 1.6 Kiedy `--scale` jest niezbędne
@@ -299,6 +308,14 @@ path = kron.download_bbox(area, "my_area.tif")
 from kartograf import LandCoverManager
 lc = LandCoverManager()
 lc.download(teryt="1465")                   # BDOT10k (powiat)
+# BDOT10k z KAŻDEGO powiatu obszaru (bbox w dowolnym układzie, albo godlo=),
+# tylko wybrane warstwy -> [bdot10k_PTWP-SWKN-SWRM-SWRS_teryt_<T>.gpkg, ...]
+paths = lc.download_all_counties(
+    bbox=BBox(340000, 290000, 350000, 300000, "EPSG:2180"),
+    layers=["SWRS", "SWKN", "SWRM", "PTWP"],
+)
+# lc.download(bbox=...) dla BDOT10k: jeden powiat albo ValidationError z listą
+# kodów (kilka powiatów) / NoCoverageError (żaden)
 lc.set_provider("corine")
 lc.download(godlo="N-34-130-D", year=2018)  # CORINE
 
@@ -341,6 +358,8 @@ manager = DownloadManager(
     output_dir="./data",
     provider=create_nmt_provider(cache=MetadataCache()),  # albo GugikProvider(cache=...)
 )
+# Land cover: cache dla providera tworzonego po nazwie (BDOT10k: odpowiedzi PRG)
+lc = LandCoverManager(provider="bdot10k", cache=MetadataCache())
 ```
 
 Pozostałe elementy publicznego API (m.in. `GugikNmptProvider`,

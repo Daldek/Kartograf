@@ -34,6 +34,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   obiektow. Odpowiedzi trafiaja do cache metadanych (nowa tabela
   `teryt_bbox_cache`; `cache stats`: `TERYT entries` liczy punkty i
   obszary).
+- BDOT10k z wielu powiatow: `LandCoverManager.download_all_counties(bbox=
+  | godlo=, layers=)` pobiera pakiet KAZDEGO powiatu przecinajacego obszar
+  (TERYT z WFS PRG), opcjonalnie tylko wybrane warstwy (np. `PTWP`,
+  `SWRS`); `Bdot10kProvider.download_package` zwraca `Bdot10kPackage`
+  (`path`, `teryt`, `url`, `format`; eksport z `kartograf`).
+  `LandCoverManager(cache=)` przekazuje cache metadanych providerom
+  tworzonym po nazwie (BDOT10k, SoilGrids).
 
 ### Zmienione
 
@@ -57,6 +64,32 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   obszar wychodzacy poza pasy M/N i slupy 33-35 (np. bbox przez 12E)
   daje godla tylko jego polskiej czesci, obszar calkowicie poza zakresem —
   pusta liste (dotad takze godla spoza zakresu, ktore nie maja danych).
+- `kartograf landcover download --source bdot10k` z `--bbox`, `--godlo`
+  albo `--geometry` pobiera wszystkie powiaty z obszaru (dotad jeden, ze
+  srodka obszaru — reszta obszaru po cichu bez danych) i drukuje linie
+  `Downloaded to:` dla kazdego pliku.
+- Plik BDOT10k nazywa sie zawsze `bdot10k_teryt_<TERYT>.gpkg` (`.zip` dla
+  SHP), takze przy `--bbox`/`--godlo`/`--geometry` — zawiera caly pakiet
+  powiatu. Dotychczasowe `bdot10k_bbox_*`/`bdot10k_godlo_*` nie sa
+  rozpoznawane; pobierz obszar ponownie. Plik z filtrem warstw nosi ich
+  kody w nazwie (`bdot10k_PTWP-SWRS_teryt_<TERYT>.gpkg`).
+- `LandCoverManager.download_by_bbox`/`download_by_godlo` dla BDOT10k: obszar
+  z kilku powiatow konczy sie `ValidationError` z lista kodow (uzyj
+  `download_all_counties`), obszar bez powiatu — `NoCoverageError`; sidecar
+  pliku jednego powiatu ma `extra.parent_request` (obszar zadania).
+- `Bdot10kProvider.download_by_bbox` (i `LandCoverManager` dla BDOT10k)
+  przyjmuje obszar w dowolnym obslugiwanym ukladzie — dotad uklad inny niz
+  EPSG:2180 konczyl sie `ValueError`; obszar jest przeliczany do EPSG:2180
+  przy zapytaniu PRG. Prywatne `Bdot10kProvider._get_teryt_for_point`
+  (WMS GetFeatureInfo) i `WMS_ENDPOINT` usuniete bez zamiennika — uzyj
+  `teryt_for_point`/`discover_teryts_for_bbox`.
+
+### Naprawione
+
+- Scalanie paczki BDOT10k nie pomija juz po cichu tabeli o powtorzonej
+  nazwie — to `DownloadError`.
+- `cache stats`: `TERYT entries` liczy odpowiedzi PRG z `landcover download`
+  (U5).
 
 ## [0.7.0] - 2026-10-08
 
