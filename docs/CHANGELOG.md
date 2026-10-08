@@ -22,6 +22,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `height_rmse_m`, `position_rmse_m`, `archive_module`,
   `declared_vertical_crs` z rekordu skorowidza. Wpisy cache rekordow
   sprzed 0.7.1 sa odpytywane ponownie.
+- Weryfikacja arkuszy GUGiK (B4): URL rekordu skorowidza musi zawierac
+  godlo (NMT, NMPT, orto), a zasieg z naglowka ASC (NMT/NMPT) musi lezec
+  w ramie godla (co najmniej 50 % powierzchni pliku, rama w ukladzie
+  pliku — arkusze PL-2000 publikowane w EPSG:2180 przechodza);
+  rozbieznosc = `DownloadError` arkusza, plik nie zostaje zapisany.
 
 ### Zmienione
 

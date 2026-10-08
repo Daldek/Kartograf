@@ -4,7 +4,8 @@ GUGiK campaign identity (ADR-030) — a PL-ONLY mechanism.
 A campaign is one GUGiK data delivery (an index (skorowidz) record). The
 campaign directory is ``<acquisition date>_<id>``, where ``id`` is the first
 numeric segment of the file name in the URL. The module's only IO is
-``verify_file_format`` (64 header bytes).
+``verify_file_format`` (64 header bytes) and ``verify_sheet_extent`` (the
+ASC header).
 """
 
 import hashlib
@@ -14,7 +15,9 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse
 
+from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.sources.sidecar import read_asc_header
 
 CAMPAIGNS_DIR = "kampanie"
 CAMPAIGN_STRATEGIES = ("newest", "all")
@@ -39,6 +42,10 @@ _AAIGRID_KEYS = (
 )
 _TIFF_SIGNATURES = (b"II*\x00", b"MM\x00*", b"II+\x00", b"MM\x00+")
 _FORMAT_NAMES = {".asc": "AAIGrid (ARC/INFO ASCII GRID)", ".tif": "TIFF"}
+
+# Share of the file extent that must lie inside the sheet frame (B4): a
+# partial sheet lies inside, a neighbour or a file of another place does not.
+MIN_FRAME_OVERLAP = 0.5
 
 
 def campaign_id_from_url(url: str) -> str:
@@ -174,4 +181,62 @@ def verify_file_format(path: Path, ext: str) -> None:
         raise DownloadError(
             f"{path.name}: tresc nie jest {_FORMAT_NAMES[ext]} "
             f"(naglowek: {head[:16]!r})"
+        )
+
+
+def verify_record_url(url: str, godlo: str) -> None:
+    """The record URL file name must end with the sheet code (B4).
+
+    GUGiK names files ``<id>_<number>_<godlo>.<ext>``; a URL without the
+    sheet code (or with another one) points to an unknown file. Both codes
+    are compared in canonical form (``SheetParser.godlo``).
+    """
+    stem = PurePosixPath(urlparse(url).path).stem
+    token = stem.rsplit("_", 1)[-1]
+    try:
+        named = SheetParser(token).godlo
+    except ValidationError:
+        named = None
+    if named != SheetParser(godlo).godlo:
+        raise DownloadError(
+            f"URL rekordu skorowidza nie zawiera godla {godlo}: {url}", godlo=godlo
+        )
+
+
+def verify_sheet_extent(path: Path, godlo: str, ext: str) -> None:
+    """The ASC header extent must lie in the sheet frame (B4; '.asc' only).
+
+    At least ``MIN_FRAME_OVERLAP`` of the file extent must lie inside the
+    frame. The frame is taken in the FILE's CRS (the rule of
+    ``sidecar.pl_sheet_horizontal_crs``): x < 1e6 means EPSG:2180 - also a
+    PL-2000 sheet that GUGiK published in EPSG:2180 (E17); otherwise the
+    native CRS of the sheet code (PL-2000 zone). Other extensions are not
+    checked; an unreadable or incomplete header raises DownloadError.
+    """
+    if ext != ".asc":
+        return
+    h = read_asc_header(path)
+    try:
+        cell = h["cellsize"]
+        half = cell / 2
+        x0 = h["xllcorner"] if "xllcorner" in h else h["xllcenter"] - half
+        y0 = h["yllcorner"] if "yllcorner" in h else h["yllcenter"] - half
+        x1, y1 = x0 + h["ncols"] * cell, y0 + h["nrows"] * cell
+    except KeyError as e:
+        raise DownloadError(
+            f"{path.name}: niepelny naglowek ASC (brak {e}) — nie mozna "
+            f"sprawdzic zasiegu arkusza {godlo}",
+            godlo=godlo,
+        ) from e
+    parser = SheetParser(godlo)
+    frame = parser.get_bbox(crs="EPSG:2180") if x0 < 1e6 else parser.get_bbox()
+    ix = max(0.0, min(x1, frame.max_x) - max(x0, frame.min_x))
+    iy = max(0.0, min(y1, frame.max_y) - max(y0, frame.min_y))
+    area = (x1 - x0) * (y1 - y0)
+    if area <= 0 or ix * iy < MIN_FRAME_OVERLAP * area:
+        raise DownloadError(
+            f"{path.name}: zasieg pliku ({x0:.0f}, {y0:.0f}, {x1:.0f}, {y1:.0f}) "
+            f"nie pokrywa sie z rama godla {godlo} ({frame.min_x:.0f}, "
+            f"{frame.min_y:.0f}, {frame.max_x:.0f}, {frame.max_y:.0f}, {frame.crs})",
+            godlo=godlo,
         )

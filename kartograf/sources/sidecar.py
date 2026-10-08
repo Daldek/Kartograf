@@ -56,7 +56,7 @@ class ResultMetadata:
     schema: str = "kartograf-meta/1"
 
 
-def _read_asc_header(path: Path) -> dict[str, float]:
+def read_asc_header(path: Path) -> dict[str, float]:
     """Arc/Info ASCII Grid header: {lowercase key: value}; {} if absent."""
     header: dict[str, float] = {}
     try:
@@ -90,14 +90,14 @@ def file_digest(path: Path) -> tuple[str, int]:
 
 def read_asc_nodata(path: Path) -> float | None:
     """Read NODATA_value from an Arc/Info ASCII Grid header (None if absent)."""
-    return _read_asc_header(path).get("nodata_value")
+    return read_asc_header(path).get("nodata_value")
 
 
 def _file_min_x(path: Path) -> float | None:
     """Raster left edge (x) from the ASC header or rasterio; None if unreadable."""
     suffix = path.suffix.lower()
     if suffix == ".asc":
-        header = _read_asc_header(path)
+        header = read_asc_header(path)
         return header.get("xllcorner", header.get("xllcenter"))
     if suffix in {".tif", ".tiff"}:
         import rasterio  # lazy: an ASC sheet sidecar does not need GDAL

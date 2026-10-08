@@ -20,6 +20,7 @@ from unittest.mock import Mock, PropertyMock, patch
 import pytest
 import requests
 
+from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.links import linked_campaign
 from kartograf.download.manager import DownloadManager, DownloadProgress, SheetFetch
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
@@ -69,6 +70,16 @@ C14 = {"newest": [REC["84183"]], "all": C14_ALL}
 
 X_ALL = _filtered(sorted((NMT / G2).glob("*.body")), G2)
 XREC = {r.url.rsplit("/", 1)[-1].split("_")[0]: r for r in X_ALL}
+
+
+def asc_for(godlo: str, tag_line: str = "", *, shift_x: float = 0.0) -> bytes:
+    """ASC header whose extent is the sheet frame (B4), optional tag line."""
+    b = SheetParser(godlo).get_bbox()
+    return (
+        f"ncols {int(b.max_x - b.min_x)}\nnrows {int(b.max_y - b.min_y)}\n"
+        f"xllcorner {b.min_x + shift_x}\nyllcorner {b.min_y}\ncellsize 1\n"
+        f"nodata_value -9999\n{tag_line}\n"
+    ).encode()
 
 
 def tag(record) -> str:
@@ -133,7 +144,7 @@ class FakeCampaignProvider(BaseProvider):
         if r.url in self.contents:
             path.write_bytes(self.contents[r.url])
         else:
-            path.write_text(ASC_TEMPLATE.format(tag=f"{self.version} {tag(r)}"))
+            path.write_bytes(asc_for(r.godlo, f"{self.version} {tag(r)}"))
         if self.fixed_mtime is not None:
             os.utime(path, (self.fixed_mtime, self.fixed_mtime))
         return path
@@ -522,6 +533,30 @@ def test_content_mismatch_removes_file_and_fails(tmp_path):
     bad = campaign_path(tmp_path, new, G2)
     assert not bad.exists() and not sidecar(bad).exists()
     assert "2022-03-20_75506" in linked(std)
+
+
+def test_record_url_without_godlo_fails_before_download(tmp_path):
+    """B4: a record URL that does not name the sheet is never downloaded."""
+    bad = dataclasses.replace(REC["84183"], url="https://x/NMT/84183/84183_1_G.asc")
+    fake = FakeCampaignProvider({"newest": [bad]})
+    m = DownloadManager(tmp_path, provider=fake)
+    with pytest.raises(DownloadError, match="nie zawiera godla"):
+        m.download_sheet(G)
+    assert fake.downloads == []
+
+
+def test_neighbour_extent_removes_campaign_file(tmp_path):
+    """B4: a file whose header lies outside the sheet frame is rejected."""
+    rec = REC["84183"]
+    b = SheetParser(G).get_bbox()
+    fake = FakeCampaignProvider(
+        {"newest": [rec]}, contents={rec.url: asc_for(G, shift_x=b.max_x - b.min_x)}
+    )
+    m = DownloadManager(tmp_path, provider=fake)
+    with pytest.raises(DownloadError, match="zasieg"):
+        m.download_sheet(G)
+    bad = campaign_path(tmp_path, rec)
+    assert not bad.exists() and not sidecar(bad).exists()
 
 
 def test_all_content_mismatch_on_newest_links_previous(tmp_path):

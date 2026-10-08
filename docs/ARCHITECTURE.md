@@ -267,7 +267,7 @@ kartograf/
 │                        # i sheet_cache (30 d, SHEET_TTL_SECONDS); plik bazy
 │                        # otwierany leniwie, powstaje przy pierwszym zapisie
 ├── download/            # Pobieranie NMT/NMPT/Orto po godle + wycinek PL
-│   ├── campaigns.py     # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu, verify_file_format
+│   ├── campaigns.py     # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu, verify_file_format, verify_record_url/verify_sheet_extent (B4)
 │   ├── links.py         # Dowiazanie sciezki standardowej (hardlink -> kopia, bez symlinkow, nigdy wstecz)
 │   ├── cutout.py        # Wycinek PL --target-crs jako API (ADR-027): prepare/select/run/
 │   │                    # download_pl_cutout — mozaika arkuszy + warp, sidecar
@@ -695,12 +695,26 @@ przy kampaniach: `provider.source_info()` wypelnia przeplyw jednego rekordu
 `all` zostaje `None` — zrodlem pochodzenia jest wtedy sidecar
 (`extra.source`, `extra.campaign`); sidecar sciezki standardowej opisuje
 kampanie, na ktora wskazuje dowiazanie, a ta moze byc starsza niz najnowszy
-rekord, gdy jego pobranie sie nie powiodlo (A12). Plik: format z pola
-`format` rekordu (nie z URL; brak pola — format domyslny produktu),
-rozszerzenie zawsze kanoniczne (`.asc`/`.tif`; rekord 72675 z URL `.xyz` to
-AAIGrid, zwykla kampania `.asc`), po pobraniu `verify_file_format`
-(naglowek AAIGrid / sygnatura TIFF); nieznany format albo niezgodna tresc
-= `DownloadError` kampanii z nazwa formatu, plik usuniety. Blad pobrania
+rekord, gdy jego pobranie sie nie powiodlo (A12). Przed siecia
+`verify_record_url` (B4): nazwa pliku w URL rekordu musi konczyc sie godlem
+arkusza (`<id>_<numer>_<godlo>.<ext>`, porownanie w postaci kanonicznej);
+URL bez godla albo z innym godlem = `DownloadError` kampanii bez pobierania.
+Plik: format z pola `format` rekordu (nie z URL; brak pola — format
+domyslny produktu), rozszerzenie zawsze kanoniczne (`.asc`/`.tif`; rekord
+72675 z URL `.xyz` to AAIGrid, zwykla kampania `.asc`), po pobraniu `verify_file_format`
+(naglowek AAIGrid / sygnatura TIFF), potem `verify_sheet_extent` (B4,
+tylko `.asc`): zasieg z naglowka ASC (`xllcorner`/`xllcenter`,
+`yllcorner`/`yllcenter`, `ncols`, `nrows`, `cellsize`; wariant `*center`
+przesuniety o pol piksela) musi co najmniej w 50 % powierzchni
+(`MIN_FRAME_OVERLAP`) lezec w ramie godla liczonej w ukladzie PLIKU:
+`x < 1e6` = EPSG:2180 (takze arkusz PL-2000 opublikowany przez GUGiK w
+EPSG:2180, E17), inaczej natywna strefa PL-2000 godla. Arkusz czesciowy
+(`full_sheet=False`) lezy w ramie i przechodzi, arkusz sasiedni albo z
+innego miejsca nie; naglowek nieczytelny albo niepelny = blad. Te same dwie
+kontrole pliku przechodzi plik kampanii bez sidecara (R22) przed
+odtworzeniem sidecara. Nieznany format albo niezgodna tresc =
+`DownloadError` kampanii z nazwa formatu, zasieg spoza ramy =
+`DownloadError` z zasiegiem pliku i rama godla; plik usuniety. Blad pobrania
 podaje nazwe pliku z URL (`84183_1852496_N-34-139-C-a-3-1.asc (OpenData):
 HTTP 404`), co w `all` rozroznia kampanie. Porazki: kampania (w tym
 niepoprawna `aktualnosc` rekordu w `all`, brak sidecara, porazka
