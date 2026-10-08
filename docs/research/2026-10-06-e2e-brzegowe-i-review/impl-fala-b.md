@@ -1,7 +1,7 @@
 # Fala naprawcza B — implementacja (2026-10-06)
 
-Galaz `fix/review-2026-10-06` (worktree `Kartograf-fix`), baza `5fc894b`
-(fala A). Kontrakt: `cykl-e2e.md` E12-E17 (wersja z `develop` `b9bf05e`;
+Galaz `fix/review-2026-10-06` (worktree `Kartograf-fix`), baza `97175ff`
+(fala A). Kontrakt: `cykl-e2e.md` E12-E17 (wersja z `develop` `21d4e84`;
 w tej galezi plik jest jeszcze w wersji sprzed E12), raporty
 `e2e-a-nmt.md`, `e2e-b-orto-laz-wycinek.md`, `review-1-duplikacje.md` (D3),
 `review-2-deklaracje.md` (N3). Kazde zadanie TDD: test czerwony na kodzie
@@ -15,9 +15,9 @@ bazowym z wlasciwego powodu -> minimalna zmiana -> zielony -> mutacja
 - `ruff check kartograf/ tests/`: All checks passed; `ruff format --check`:
   91 files already formatted.
 - `mypy kartograf/`: 32 bledy; lista bez numerow linii (`sed -E
-  's/:[0-9]+: /: /' | sort`) **identyczna** z baza `5fc894b` (`diff` pusty).
+  's/:[0-9]+: /: /' | sort`) **identyczna** z baza `97175ff` (`diff` pusty).
   Po B2 byl 33. blad (`_partial_sheets` dostawal `Any | None`) — naprawiony
-  commitem `d66136a`.
+  commitem `0362b42`.
 - `docs/DECISIONS.md` nietkniety (CRLF zachowane).
 
 ## Tabela mutacji
@@ -65,7 +65,7 @@ Wszystkie mutacje przywrocone (`git status` czysty po kazdej).
 - **Po:** passed.
 - **Docs:** ARCHITECTURE sekcja 3 (drzewo, tabela deskryptorow, nowa regula
   segmentow 5), CLAUDE.md "Uklad data/", CHANGELOG.
-- **Commit:** `603b152` fix(orto): wariant koloru w segmencie storage — CIR nie dzieli sciezki z RGB
+- **Commit:** `dd5ae69` fix(orto): wariant koloru w segmencie storage — CIR nie dzieli sciezki z RGB
 
 ## B2 (E13) — niepelny arkusz widoczny
 
@@ -96,7 +96,7 @@ Wszystkie mutacje przywrocone (`git status` czysty po kazdej).
 - **Swiadoma zmiana testu:** `TestMissingSheets::test_sidecar_lists_sheet_sources_from_sheet_sidecars`
   — oczekiwane wpisy `sheet_sources` dostaly `full_sheet` (True/False z
   `source`, `None` bez sidecara) + asercja `result.partial_sheets`.
-- **Commit:** `3b50ac4` feat(skorowidz): niepelny arkusz widoczny — Warning i full_sheet w sheet_sources
+- **Commit:** `0dde66c` feat(skorowidz): niepelny arkusz widoczny — Warning i full_sheet w sheet_sources
 
 ## B3 (E14) — `--force` zapisuje swiezy rekord
 
@@ -119,7 +119,7 @@ Wszystkie mutacje przywrocone (`git status` czysty po kazdej).
   `MetadataCache` z `_refresh is True`, zamkniety po zadaniu). Kontrakt N6
   "`--force` = `None`" zmieniony swiadomie zgodnie z E14.
 - **Docs:** CLAUDE.md (Skorowidz GUGiK), ARCHITECTURE 4.1, SCOPE, CHANGELOG.
-- **Commit:** `3d419af` fix(cache): --force odswieza cache rekordow zamiast go pomijac
+- **Commit:** `60eaeb1` fix(cache): --force odswieza cache rekordow zamiast go pomijac
 
 ## B4 (E15) — skip
 
@@ -143,7 +143,7 @@ Wszystkie mutacje przywrocone (`git status` czysty po kazdej).
 - **Docs:** CLAUDE.md (zdanie "skipped nie czyta ponownie rastra" zastapione
   opisem odtwarzania z sidecara), ARCHITECTURE (tabela `extra`, krok 4 4.3),
   CHANGELOG.
-- **Commit:** `30e33d1` fix(cli): skip mowi o skip; pusty wycinek zapisany w sidecarze
+- **Commit:** `f545c11` fix(cli): skip mowi o skip; pusty wycinek zapisany w sidecarze
 
 ## B5 (E16) — LAZ `request.year`/`min_density`
 
@@ -155,7 +155,7 @@ Wszystkie mutacje przywrocone (`git status` czysty po kazdej).
 - **Docs:** CLAUDE.md (LAZ --year) i ARCHITECTURE 4.7: `gestosc` /
   `--min-density` to wartosc nominalna z WFS (`char_przestrz`), faktyczna
   bywa kilkukrotnie wyzsza (~119 pkt/m2 przy nominale 15). CHANGELOG.
-- **Commit:** `e899904` fix(laz): sidecar request zapisuje --year i --min-density
+- **Commit:** `aab9628` fix(laz): sidecar request zapisuje --year i --min-density
 
 ## B6 (N3) — timeout GetCapabilities
 
@@ -169,7 +169,7 @@ Wszystkie mutacje przywrocone (`git status` czysty po kazdej).
   GetCapabilities, domyslny `_layers()` = timeout providera.
 - **Przed:** 4 failed (`[10] == [30]`, `[10] == [60]`, `10 != 45`).
 - **Po:** passed.
-- **Commit:** `07831fb` fix(skorowidz): GetCapabilities z timeoutem providera zamiast 10 s
+- **Commit:** `26e4a63` fix(skorowidz): GetCapabilities z timeoutem providera zamiast 10 s
 
 ## B7 (D3, E11) — jeden parser `uklad_xy`
 
@@ -213,7 +213,7 @@ Wszystkie mutacje przywrocone (`git status` czysty po kazdej).
   parametryzowanym `test_unrecognized_crs_is_an_error_not_a_guess`.
 - **Docs:** ARCHITECTURE 4.7 i tabela wymiarow `{uklad}`, CHANGELOG
   (BREAKING).
-- **Commit:** `ea1e354` fix(sources)!: jeden parser ukladu GUGiK — parse_pl_uklad (D3)
+- **Commit:** `4594a87` fix(sources)!: jeden parser ukladu GUGiK — parse_pl_uklad (D3)
 
 ## B8 (E17) — PL-2000 strefa 7 w EPSG:2180 (dokumentacja)
 
@@ -238,11 +238,11 @@ Wszystkie mutacje przywrocone (`git status` czysty po kazdej).
   rc 0. CLAUDE.md opisuje zachowanie FAKTYCZNE ("przez logger na stderr —
   BEZ prefiksu `Warning:`"). Czy zamienic to na `Warning:` CLI — decyzja
   koordynatora (zmiana kodu poza zakresem B8).
-- **Commit:** `09f581e` docs(skorowidz): arkusze PL-2000 strefy 7 w EPSG:2180 — test i opis zachowania
+- **Commit:** `67971e5` docs(skorowidz): arkusze PL-2000 strefy 7 w EPSG:2180 — test i opis zachowania
 
 ## Pozostale commity
 
-- `d66136a` fix(cutout): typ listy sheet_sources w skipped_pl_cutout (mypy)
+- `0362b42` fix(cutout): typ listy sheet_sources w skipped_pl_cutout (mypy)
 
 ## Odstepstwa i decyzje
 
@@ -272,7 +272,7 @@ Wszystkie mutacje przywrocone (`git status` czysty po kazdej).
 6. **B8 — brak prefiksu `Warning:`** (wyzej). CLAUDE.md opisuje stan
    faktyczny zamiast deklaracji z zadania.
 7. **`cykl-e2e.md` w tej galezi jest w wersji sprzed E8-E18** (commity
-   `dc496c3`, `b9bf05e` sa tylko na `develop`); kontrakt czytany z
+   `ae89a73`, `21d4e84` sa tylko na `develop`); kontrakt czytany z
    `develop`. Raport nie konfliktuje (nowy plik).
 8. **Fixtury:** dodana tylko jedna (`tests/fixtures/gugik_asc/...`, B8).
    B1/B2/B3 korzystaja z istniejacej surowej `orto_2024.html` i syntetycznych

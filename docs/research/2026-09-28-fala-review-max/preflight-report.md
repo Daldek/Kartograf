@@ -1,6 +1,6 @@
 # Pre-flight audit — plan `2026-09-28-fala-review-max-i-wycinek-biblioteczny.md`
 
-- **Date:** 2026-09-28, repo `develop` @ `0bf3d9f` (clean tree, nothing tracked modified by this audit)
+- **Date:** 2026-09-28, repo `develop` @ `81e71cb` (clean tree, nothing tracked modified by this audit)
 - **Auditor:** pre-flight agent (opus), single reader of the whole plan (3196 lines) + spec
   `docs/research/2026-08-28-uklad-data-target-crs-pl/2026-08-30-code-review-max.md`
 - **Method (evidence, not reading):**
@@ -74,7 +74,7 @@ Counts: **BLOCKING 2 · IMPORTANT 5 · MINOR 14**.
 
 | Zad. | Verdict | Notes (simulated) |
 |---|---|---|
-| 0 | done (HEAD `0bf3d9f`) | Expected line "`1787 passed` (+ deselected `live`)" is inaccurate: default `pytest tests/ -q` does **not** deselect `live` (no `addopts -m`), 1787 includes 8 network tests; offline = 1779 → **P-16** |
+| 0 | done (HEAD `81e71cb`) | Expected line "`1787 passed` (+ deselected `live`)" is inaccurate: default `pytest tests/ -q` does **not** deselect `live` (no `addopts -m`), 1787 includes 8 network tests; offline = 1779 → **P-16** |
 | 1 | OK | Old texts match CLAUDE.md L297-298 and DECISIONS.md L1036-1038 / L1046-1048 byte-for-byte; new texts true vs code (CZ deletes: `dmr.py:557-558`, `client.py:186`); Step 5 grep today returns exactly those 4 lines |
 | 2 | OK | RED = `Too many open files` (t065.tif), GREEN; ExitStack mutation FAILs; CZ tests green |
 | 3 | OK (ruff) | RED `TypeError`, GREEN; mutations 1-4 all FAIL as claimed; code has 3 × `zip()` without `strict=` (B905 enabled) → **P-11** |

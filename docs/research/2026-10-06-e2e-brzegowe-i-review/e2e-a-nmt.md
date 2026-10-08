@@ -1,7 +1,7 @@
 # E2E-A: NMT i NMPT, przypadki brzegowe (C1-C11, C16)
 
-- **Data:** 2026-10-06, commit `55070f8` (develop), CLI `0.7.0-dev`
-- **katalog danych:** `<katalog-danych>/kartograf/e2e/2026-10-06-brzegowe/a/` (zamontowany, 100G, 1% uzycia na starcie; dane razem 352 MB)
+- **Data:** 2026-10-06, commit `ead24c2` (develop), CLI `0.7.0-dev`
+- **katalog danych:** `<katalog-danych>/kartograf/e2e/2026-10-06-brzegowe/a/` (dane razem 352 MB)
   - `raw/recon/<godlo>/<endpoint>__<warstwa>.body` — surowe odpowiedzi GetFeatureInfo; `raw/caps/*.xml` — GetCapabilities 5 endpointow; `raw/C6/*.head` — naglowki plikow z GUGiK (Range)
   - `out/<Cx>/` — pobrane pliki i sidecary; `out/oracle.txt|json` — wyrocznia; `out/verify.json` — wyniki F4
   - `logs/<Cx>.{meta,stdout,stderr}` — komenda, kod, czas, komunikaty; `scripts/` — oracle.py (wyrocznia niezalezna od kodu: reguly ADR-028 stosowane na surowych .body), recon.py, verify.py, w8.py, c7.py, uklad.py
@@ -128,7 +128,7 @@ Nie znaleziono: wariantow bez strefy (`'PL-2000'`), bialych znakow, malych liter
 
 ## Propozycje dla rejestru wymagan i testow offline
 
-Zadnych FAIL. Propozycje dla UWAG i nowych wzorcow (surowe body juz leza na katalog danych, kopiowac do `tests/fixtures/gugik_skorowidz/`):
+Zadnych FAIL. Propozycje dla UWAG i nowych wzorcow (surowe body juz leza w katalogu danych, kopiowac do `tests/fixtures/gugik_skorowidz/`):
 
 1. **PL-2000:S7 z plikiem w EPSG:2180 (C6b/C6h, UWAGA).** Fixture: `<katalog-danych>/kartograf/e2e/2026-10-06-brzegowe/a/raw/recon/M-34-64-D-d-2-3/nmt1_evr__SkorowidzeNMT2023iStarsze.body` (dwa rekordy 7.125.11.19: 2021-10-05 i 2023-03-17) oraz naglowek `.../raw/C6/77912_1384976_7.125.11.19.head`. Asercje: wybrany 77912 (max aktualnosc); przy pliku z `xllcenter 567975.95` sidecar ma `horizontal_crs == "EPSG:2180"`, `extra.source.uklad == "PL-2000:S7"`, ostrzezenie o niezgodnosci uklady; plik trafia do segmentu `pl_2000_`. Do rejestru: E-nowe "sidecar ma uklad faktycznego pliku, deklaracje rekordu zachowuje w `extra.source`" oraz decyzja, czy segment sciezki ma niesc uklad pliku (obecnie godla) — dla UZYTKOWNIKA plik w katalogu `pl_2000` ma wspolrzedne 1992 (rozbieznosc W7 vs W4; nie wiem, czy zamierzona — ADR-026 mowi o godle).
 2. **0,5 m nowsze niz 1 m w innej warstwie (C3/C1c).** Fixtury: `raw/recon/M-33-57-C-b-4-2/nmt1_evr__SkorowidzeNMT2025.body` + `...2023iStarsze.body`. Test: dla `resolution_m=1.0` wynik = rekord 1 m z 2023iStarsze (2023-05-04, URL 78954_1462161), bez bledu przy przejsciu przez warstwe 2025 zawierajaca tylko 0,5 m. Mutacja: usuniecie filtra rozdzielczosci wybiera 0,5 m z 2025.

@@ -1,20 +1,20 @@
-# Raport fali naprawczej po finalnym review (FIX_BASE fa1f771)
+# Raport fali naprawczej po finalnym review (FIX_BASE 84bd0a8)
 
 **Status:** DONE_WITH_CONCERNS (uwagi w sekcji "Watpliwosci"; zadna nie blokuje)
 **Implementer:** Opus 5.5, praca bezposrednio na `develop`, nic nie pushowane.
 
-## Commity (fa1f771..bbd1cd4)
+## Commity (84bd0a8..61f60de)
 
 | SHA | Temat | Pozycja |
 |---|---|---|
-| 63b612e | test(cli): --force i --workers toru wycinka PL bronione testem CLI | 1 (I-1 + m-1) |
-| 5e5763c | fix(gugik): raport wyjatku OGC w odpowiedzi 2xx skorowidza to blad warstwy, nie brak pokrycia | 2 (I-2) |
-| 2faf0b5 | fix(download): uklad czeski bboxa wycinka PL niezalezny od wielkosci liter | 3 (m-2) |
-| 7e0daa6 | docs(api): last_result i wyjatki DownloadManager, NoCoverageError w GugikProvider.download | 4 (m-6 + m-7) |
-| 27701eb | docs: domyslne komendy testow offline (-m "not live") w CLAUDE.md i README | 5 (m-8) |
-| bbd1cd4 | docs(architecture): precyzja 4.3 (...) i zaleznosc od bbox_to_crs CZ | 6 (m-9 + m-10) |
+| 899001f | test(cli): --force i --workers toru wycinka PL bronione testem CLI | 1 (I-1 + m-1) |
+| 89d4694 | fix(gugik): raport wyjatku OGC w odpowiedzi 2xx skorowidza to blad warstwy, nie brak pokrycia | 2 (I-2) |
+| 5f25f4c | fix(download): uklad czeski bboxa wycinka PL niezalezny od wielkosci liter | 3 (m-2) |
+| 83b4a96 | docs(api): last_result i wyjatki DownloadManager, NoCoverageError w GugikProvider.download | 4 (m-6 + m-7) |
+| e98016c | docs: domyslne komendy testow offline (-m "not live") w CLAUDE.md i README | 5 (m-8) |
+| 61f60de | docs(architecture): precyzja 4.3 (...) i zaleznosc od bbox_to_crs CZ | 6 (m-9 + m-10) |
 
-Commit 2faf0b5 powstal przez `--amend` pierwszej wersji (065fade, lokalna, nigdy
+Commit 5f25f4c powstal przez `--amend` pierwszej wersji (065fade, lokalna, nigdy
 niepushowana) — powod w pozycji 3 (mutacja, ktora przezyla). Stopki:
 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Zaden plik z `.superpowers/`
 nie jest w commitach.
@@ -54,7 +54,7 @@ arkusze pokrywaja bbox — wartosc literalna, nie wyliczona kodem);
 
 Na obecnym (poprawnym) kodzie test przechodzi — to straznik wiazania; jego "RED" to mutacje:
 
-| Mutacja (po commicie 63b612e) | Wynik z mutacja | Po `git checkout` |
+| Mutacja (po commicie 899001f) | Wynik z mutacja | Po `git checkout` |
 |---|---|---|
 | (a) CLI `force=args.force,` -> `force=False,` | `E AssertionError: --force nie przebudowal wycinka` / `assert b'II*\x00stary wycinek' != b'II*\x00stary wycinek'` — 1 failed | 1 passed, status czysty |
 | (b) CLI `max_workers=getattr(args, "workers", 4),` -> `max_workers=1,` | `E assert 1 == 3` — 1 failed | 1 passed, status czysty |
@@ -112,7 +112,7 @@ FAILED ...::test_ogc_exception_on_one_layer_is_uncertain_not_no_coverage
 ```
 **GREEN:** `tests/test_gugik_provider.py` — 47 passed.
 
-**Mutacje** (po commicie 5e5763c, swiezy bytecode, ten sam `-k`):
+**Mutacje** (po commicie 89d4694, swiezy bytecode, ten sam `-k`):
 
 | Mutacja | Wynik z mutacja | Po przywroceniu |
 |---|---|---|
@@ -161,7 +161,7 @@ E       min_x: 465068.15316368546 != 465068.15554981766...
 ```
 **GREEN:** `tests/test_pl_cutout.py` — 64 passed.
 
-**Mutacje** (po commicie 2faf0b5, swiezy bytecode,
+**Mutacje** (po commicie 5f25f4c, swiezy bytecode,
 `-k "czech_crs_label or lowercase_2180 or test_target_2180_no_pinned or wgs84_bbox_normalized"`):
 
 | Mutacja | Wynik z mutacja | Po przywroceniu |
@@ -175,7 +175,7 @@ przekazywala do `bbox_to_crs` bbox ze znormalizowana etykieta. Mutacja "galaz CZ
 z nieznormalizowana etykieta" przechodzila 4/4 — pyproj sam akceptuje `"epsg:5514"`,
 `" EPSG:5514 "`, `"\tepsg:5514\n"`, `"Epsg:5514"` (wynik identyczny, sprawdzone), wiec
 `_replace` w galezi czeskiej byl martwym kodem. Usuniety (commit poprawiony `--amend`
-do 2faf0b5); natomiast `_replace` w galezi 2180 ma skutek obserwowalny w publicznym
+do 5f25f4c); natomiast `_replace` w galezi 2180 ma skutek obserwowalny w publicznym
 `PlCutout` — dostal test (`:326`) i mutacja go zabija.
 
 **Dokumentacja:** `docs/CHANGELOG.md:650` (`### Fixed`, z pomiarem 1,06 m i informacja,
@@ -285,7 +285,7 @@ wewnatrz funkcji (leniwe). Naglowek "Dwie uwagi" -> "Trzy uwagi".
 
 ---
 
-## Brama koncowa (HEAD bbd1cd4, po usunieciu in-tree `__pycache__`)
+## Brama koncowa (HEAD 61f60de, po usunieciu in-tree `__pycache__`)
 
 - `.venv/bin/python -m pytest tests/ -q -m "not live"` -> **1861 passed, 8 deselected**
   (start: 1854; +7: 1 test CLI, 3 testy GUGiK, 3 testy m-2 — w tym 2 parametry).
@@ -293,7 +293,7 @@ wewnatrz funkcji (leniwe). Naglowek "Dwie uwagi" -> "Trzy uwagi".
 - `.venv/bin/python -m ruff format --check kartograf/ tests/` -> 87 files already formatted
 - `.venv/bin/python -m mypy kartograf/` -> Found 32 errors in 9 files; lista po
   `sed -E 's/:[0-9]+: /: /' | sort` **identyczna** z `mypy-baseline.txt` (zero nowych).
-- `git diff --stat fa1f771 -- kartograf/providers/cuzk kartograf/transform/raster.py docs/PROGRESS.md` -> pusto;
+- `git diff --stat 84bd0a8 -- kartograf/providers/cuzk kartograf/transform/raster.py docs/PROGRESS.md` -> pusto;
   `tests/test_cuzk_client.py tests/test_cuzk_dmr.py` -> 74 passed.
 - `git status --short` -> pusty.
 - Pokrycie (komenda z CLAUDE.md): 92,92 %.

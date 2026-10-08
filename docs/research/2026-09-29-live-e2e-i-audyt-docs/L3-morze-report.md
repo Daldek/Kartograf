@@ -1,6 +1,6 @@
 # L3-morze — NMT PL w pasie morskim na zywych danych GUGiK (2026-09-29)
 
-Galaz `develop`, HEAD 6985765, repo nietkniete (`git status` czysty). Katalog roboczy:
+Galaz `develop`, HEAD 152c31e, repo nietkniete (`git status` czysty). Katalog roboczy:
 `e2e-data/2026-09-29-live/L3-morze/` (dalej `WD/`). Wszystkie polecenia z `WD/`
 (`cd WD && kartograf ...`), dane `-o ./data`, `--workers 2` (dwa razy `1`).
 

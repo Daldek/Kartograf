@@ -1,6 +1,6 @@
 # Pre-flight — uklad data/ + --target-crs PL
 
-**Audyt:** 2026-08-28, galaz `develop` @ `ae6d072`
+**Audyt:** 2026-08-28, galaz `develop` @ `625183d`
 **Plan:** `docs/superpowers/plans/2026-08-28-uklad-data-i-target-crs-pl.md` (3073 linie, 12 zadan)
 **Spec:** `docs/superpowers/specs/2026-08-28-uklad-data-i-target-crs-pl-design.md` (350 linii)
 **Pomiary wlasne:** `mypy kartograf/` = **33 bledy** (potwierdzone, ostatni to
@@ -159,8 +159,8 @@ implementacja.
         (`skip_existing` polega na dzisiejszych sciezkach); dzis wspolny
         `nmt_2000_1m`.
   ```
-  Weryfikacja przyczyny: `git show 6cb662d:docs/PROGRESS.md | grep -n "A1-9"`
-  -> `683`. Commit `ae6d072` („docs(progress): sesja 2026-08-28") wstawil sekcje
+  Weryfikacja przyczyny: `git show af1e760:docs/PROGRESS.md | grep -n "A1-9"`
+  -> `683`. Commit `625183d` („docs(progress): sesja 2026-08-28") wstawil sekcje
   sesji i przesunal backlog o 58 linii JUZ PO napisaniu planu.
 - **Skutek:** nie zlamie niczego (plan cytuje tresc, wiec zakotwiczenie dziala),
   ale to jedyny blok planu, ktorego numeracja rozjechala sie systemowo —
@@ -402,7 +402,7 @@ Legenda: ZGODNY = pod wskazana linia jest dokladnie to, co plan mowi.
 | 11 | „DECISIONS.md: wstaw PRZED linia 923 (`<!-- Szablon nowej decyzji:`), bo `## ADR-XXX` z 925 lezy juz w komentarzu" | :923 i :925 dokladnie | ZGODNY — ostrzezenie trafne |
 | 11 | „koniec ADR-013 (~230)", „koniec ADR-017 (~299)", „`## ADR-024:` linia 635" | ADR-013 :215 (ADR-014 :232), ADR-017 :285 (ADR-018 :303, „Konsekwencje" :299), ADR-024 :635 | ZGODNY |
 | 11 | „ADR-023 pkt 5 ZACZYNA sie na linii 597" | faktycznie **596** | ROZJAZD (D-17) |
-| 11 | CHANGELOG: `[0.7.0]` 8-518, Breaking :10, Added :126, Changed :244, wpis d68be23 :245-250, korekty :122/:215/:430, 0.5.0 :595-599 | wszystkie dokladne (`[0.6.1]` zaczyna sie na :519) | ZGODNY |
+| 11 | CHANGELOG: `[0.7.0]` 8-518, Breaking :10, Added :126, Changed :244, wpis ed939a0 :245-250, korekty :122/:215/:430, 0.5.0 :595-599 | wszystkie dokladne (`[0.6.1]` zaczyna sie na :519) | ZGODNY |
 | 11 | README: :160, :179, :186, :190, tabela sidecara :136-147 (`horizontal_crs` :139, `transform` :146), struktura :294-312, stopka :353 | wszystkie dokladne | ZGODNY |
 | 11 | SCOPE: 2.2 linie 92-93; drzewo `transform/` na **371-372**, NIE 396 (`storage.py`); `_parser.py` :405 | :371 `├── transform/`, :372 `│   └── crs.py`, :396 `│   └── storage.py`, :405 `├── _parser.py` | ZGODNY — ostrzezenie trafne co do znaku |
 | 11 | PROGRESS: „backlog A1-9 (linie ~683-686)" | faktycznie **741-744** | **ROZJAZD (D-05)** |

@@ -1,6 +1,6 @@
 # L4 — pogranicze PL-CZ na zywych danych (GUGiK + CUZK), 2026-09-29
 
-Agent L4, galaz `develop` @ 6985765, repo nietkniete (`git status` czysty). Katalog roboczy:
+Agent L4, galaz `develop` @ 152c31e, repo nietkniete (`git status` czysty). Katalog roboczy:
 `e2e-data/2026-09-29-live/L4-pogranicze-cz/` (wszystkie polecenia z niego, cache `.kartograf_cache.db`
 lokalny). Pobrano lacznie ok. 0,53 GB (PL arkusze 273 MB, CUZK 254 MB z sondami). `--workers` <= 2.
 

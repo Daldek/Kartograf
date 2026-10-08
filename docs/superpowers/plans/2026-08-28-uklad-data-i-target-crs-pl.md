@@ -2688,7 +2688,7 @@ z placeholderami `{uklad}`/`{vcrs}`; `resolve_subdir()` wypelnia przez
 `str.replace` (czesciowe wypelnienie legalne, vcrs lowercased), FileStorage
 rozwiazuje `{uklad}` per godlo (regula `path_parts`: kropki=2000, inaczej
 1992) i waliduje zero klamer (`ValidationError` z nazwa wymiaru). Wycinki
-`--bbox` lada w `<segment>/bbox/<coords><ext>` (konwencja d68be23, wspolna
+`--bbox` lada w `<segment>/bbox/<coords><ext>` (konwencja ed939a0, wspolna
 PL/CZ). `landcover/` bez zmian.
 
 **Konsekwencje:** BREAKING na dysku (tabela migracji: CHANGELOG 0.7.0
@@ -2816,7 +2816,7 @@ naglowkiem `## ADR-024:` (linia 635), zeby nie rozciac punktu 5 w polowie:
 ```
 
 (c) Do `### Changed` (linia 244): w PIERWSZYM wpisie (wycinki bbox CZ,
-d68be23, linie 245-250) podmien przyklad sciezki
+ed939a0, linie 245-250) podmien przyklad sciezki
 `data/cz_dmr5g/bbox/-447000_-1114000_-446000_-1113000.tif` na
 `data/nmt/cz_dmr5g_bpv/bbox/-447000_-1114000_-446000_-1113000.tif`
 i dopisz na koncu wpisu: "(segment wg ADR-026)". Nastepnie dodaj wpis:

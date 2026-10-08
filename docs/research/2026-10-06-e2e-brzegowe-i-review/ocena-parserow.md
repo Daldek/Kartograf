@@ -1,6 +1,6 @@
 # Ocena parserow: mozliwosci uproszczenia (analiza, bez zmian kodu)
 
-Data: 2026-10-07. Galaz: `develop` @ `0f5e4f4`. Recenzent-architekt; zero
+Data: 2026-10-07. Galaz: `develop` @ `a7bf7a8`. Recenzent-architekt; zero
 zmian w kodzie i testach, zero sieci. Baseline: pliki testow parserow
 (`test_sheet_parser`, `test_parser_2000`, `test_parser_tm33`,
 `test_parser_registry`, `test_cuzk_sheets`, `test_geometry`, `test_skorowidz`,

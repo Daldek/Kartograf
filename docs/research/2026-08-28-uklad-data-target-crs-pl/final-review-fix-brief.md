@@ -4,7 +4,7 @@ Werdykt finalnego review: **GOTOWE PO NAPRAWACH**. Ponizej pelna lista do
 zamkniecia w JEDNYM przejsciu. Kolejnosc jest sugerowana (od najciezszego).
 
 Stan wejsciowy: **1775 testow PASS, pokrycie 93 %, mypy 32, ruff czysty**
-(commit `a9afc3f`). Po Twojej pracy: zero nowych bledow mypy, suita zielona.
+(commit `bf4d374`). Po Twojej pracy: zero nowych bledow mypy, suita zielona.
 
 Wiazace ograniczenia: testy OFFLINE (conftest przewraca gniazdo spoza
 loopbacku); **tor czeski `kartograf/providers/cuzk/` NIETYKALNY** (wolno tylko

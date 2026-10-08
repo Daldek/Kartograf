@@ -59,7 +59,7 @@ zaplanowany). Pozostale reprodukcje sa offline.
   ("Formats: GPKG, SHP, GML") i dodatkowo w publicznym API:
   `Bdot10kProvider.get_supported_formats()` -> `['GPKG','SHP','GML']`
   (`bdot10k.py`:845), a `providers/base.py`:385 mapuje `"GML" -> ".gml"`.
-  Historia: `git show 829d012:kartograf/providers/bdot10k.py` ma
+  Historia: `git show f2fc490:kartograf/providers/bdot10k.py` ma
   `raise ValueError(... Use 'GPKG' or 'SHP')` juz w pierwszym commicie land
   cover (v0.3.0) — GML nigdy nie byl zaimplementowany, mimo szablonu URL
   `OPENDATA_PATTERNS["GML"]` (`bdot10k.py`:108).

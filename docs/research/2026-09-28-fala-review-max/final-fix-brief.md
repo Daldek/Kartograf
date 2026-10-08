@@ -1,4 +1,4 @@
-# Fala naprawcza po finalnym review (Kartograf, develop, HEAD fa1f771)
+# Fala naprawcza po finalnym review (Kartograf, develop, HEAD 84bd0a8)
 
 Finalny review calej fali (fable) dal werdykt "With fixes": 0 Critical, 2 Important,
 11 Minor. Pelny raport z file:line, dowodami i mutacjami:

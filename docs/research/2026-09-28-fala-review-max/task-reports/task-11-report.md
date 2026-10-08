@@ -88,7 +88,7 @@ Pelna suita offline:
 
 ## Dowody mutacyjne
 
-Wszystkie wykonane PO commicie zadania (`97a5bb4`), kazda przywrocona
+Wszystkie wykonane PO commicie zadania (`209ca14`), kazda przywrocona
 `git checkout -- <plik>` (bezpieczne, bo commit juz istnieje), kazda
 zakonczona `git status --short` pustym i ponownym PASS.
 
@@ -222,7 +222,7 @@ tutaj, zeby nastepny agent/reviewer nie zlapal sie na "35 != 32" przy
 niefiltrowanym porownaniu.
 
 `git status --short`: puste. `git log --oneline -1`:
-`97a5bb4 feat(download): wycinek PL — kompresja pliku posredniego, kontrola miejsca na dysku, Info dla duzych siatek`
+`209ca14 feat(download): wycinek PL — kompresja pliku posredniego, kontrola miejsca na dysku, Info dla duzych siatek`
 
 ## Samoocena i watpliwosci
 

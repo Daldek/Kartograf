@@ -1,7 +1,7 @@
 # Raport Zad. 10 — arkusz bez danych GUGiK = nodata + ostrzezenie; awaria pobrania = blad (R5, zn. 2)
 
 **Status:** DONE
-**Commit:** `2807fe5` feat(download): arkusz bez danych GUGiK = nodata + ostrzezenie w wycinku PL (R5) (BASE `2ad46cf`)
+**Commit:** `608a386` feat(download): arkusz bez danych GUGiK = nodata + ostrzezenie w wycinku PL (R5) (BASE `924157c`)
 **Bramka:** pelna suita `1837 passed, 8 deselected` (bylo 1831; +6 testow); ruff check + format czyste; mypy 32 bledy, lista identyczna z baseline (`diff` pusty).
 
 ## Co zrobiono
@@ -88,7 +88,7 @@ Warning: GUGiK nie ma danych dla 12 arkuszy wycinka (N-34-130-D-d-00, ..., N-34-
 - `.venv/bin/python -m ruff format --check kartograf/ tests/` -> `87 files already formatted`
 - `.venv/bin/python -m mypy kartograf/` -> `Found 32 errors in 9 files`; `mypy ... | grep error: | sed -E 's/:[0-9]+: /: /' | sort` vs `mypy-baseline.txt` -> `diff` pusty (rc=0) — zero nowych bledow.
 
-## Dowody mutacyjne (PO commicie `2807fe5`; przywracanie `git checkout -- <plik>`)
+## Dowody mutacyjne (PO commicie `608a386`; przywracanie `git checkout -- <plik>`)
 
 Skrypt: `scratchpad/mutate.py` (kazda mutacja sprawdza, ze cel wystepuje w pliku DOKLADNIE raz; po kazdej: przywrocenie, ponowny przebieg = PASS, `git status --porcelain` pusty). Komenda testow per mutacja: `.venv/bin/python -m pytest -q -m "not live" <wymienione testy>`. Wynik: **9/9 zabitych, 9/9 przywroconych do PASS, drzewo czyste, HEAD bez zmian.**
 

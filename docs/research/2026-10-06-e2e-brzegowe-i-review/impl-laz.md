@@ -1,6 +1,6 @@
 # Naprawa LAZ — implementacja (2026-10-07)
 
-Galaz `refactor/laz` (worktree `Kartograf-laz`), baza `0f5e4f4`. Zrodla:
+Galaz `refactor/laz` (worktree `Kartograf-laz`), baza `a7bf7a8`. Zrodla:
 `e2e-b-orto-laz-wycinek.md` (C13, UWAGI LAZ 1 i 3), `review-1-duplikacje.md`
 (D17), `review-2-deklaracje.md` (N6, N15), `raport-koncowy.md` (backlog: LAZ
 dubluje obszar, LAZ bez `parent_request`). Decyzja: nowy **ADR-029**.
@@ -12,7 +12,7 @@ dubluje obszar, LAZ bez `parent_request`). Decyzja: nowy **ADR-029**.
 - `ruff check kartograf/ tests/`: All checks passed; `ruff format --check`:
   96 files already formatted.
 - `mypy kartograf/`: 32 bledy; lista bez numerow linii **identyczna** z baza
-  `0f5e4f4` (zaden z nich nie lezy w zmienianych plikach).
+  `a7bf7a8` (zaden z nich nie lezy w zmienianych plikach).
 - `docs/DECISIONS.md`: CRLF zachowane (1453 linii = 1453 `\r`); pozostale
   pliki bez zmian koncowek.
 - Nietkniete (zgodnie z zadaniem): `_download_with_retry`, `_make_request`,
@@ -135,7 +135,7 @@ i (nowe) ramy przez ten sam `_corner_xy`.
 | `tests/test_real_gugik_responses.py` | C13: test "dwa kafle w dwoch ukladach" zastapiony "2025/PL-1992 pokrywa oba uklady" (+ `superseded`) |
 | `tests/test_cli.py` | mocki `discover_tiles` -> `select_tiles` (`_selection(...)`), `vertical_crs` providera |
 
-Test C13 w nowej postaci pada na bazie `0f5e4f4` (sprawdzone `git stash`
+Test C13 w nowej postaci pada na bazie `a7bf7a8` (sprawdzone `git stash`
 kodu: `1 failed` w `-k c13`); pozostale nowe testy nie importuja sie na bazie
 (brak `select_tiles`/`download.laz`).
 
@@ -150,7 +150,7 @@ kodu: `1 failed` w `-k c13`); pozostale nowe testy nie importuja sie na bazie
 | M5 | kafel NIE pokrywa | 2 failed |
 | M6 | osie ramy (N,E) niezamienione | 18 failed |
 | M7 | obwiednia pokrywa | 1 failed (`test_envelope_alone_never_covers`) |
-| M8 | `akt_data` ignorowana | **przezyla** -> test wzmocniony (godla odwrotnie do dat, commit `2d904e6`) -> 1 failed |
+| M8 | `akt_data` ignorowana | **przezyla** -> test wzmocniony (godla odwrotnie do dat, commit `a184194`) -> 1 failed |
 | M9 | CLI bez `Info:` | 1 failed |
 | M10 | `parent_request` takze w trybie godla | 1 failed |
 | M11 | `parent_request` w EPSG:2180 zamiast ukladu podanego | 1 failed |
@@ -164,16 +164,16 @@ Kazda mutacja przywracana z kopii zrodla; `git status` czysty po przebiegu.
 
 | Commit | Zakres |
 |---|---|
-| `23e8b37` | feat(laz): wybor kafli wg pokrycia obszaru od najnowszego rocznika |
-| `348f036` | feat(laz): API biblioteki download_laz_area, parent_request w sidecarze |
-| `2d904e6` | test(laz): kolejnosc w roku po akt_data (mutacja M8) |
-| `3581c4f` | docs(laz): ADR-029, ARCHITECTURE 3.4/4.7, CLAUDE.md, README/PRD/SCOPE, CHANGELOG; errata N15 usunieta |
+| `dfe1372` | feat(laz): wybor kafli wg pokrycia obszaru od najnowszego rocznika |
+| `a14febe` | feat(laz): API biblioteki download_laz_area, parent_request w sidecarze |
+| `a184194` | test(laz): kolejnosc w roku po akt_data (mutacja M8) |
+| `bd07710` | docs(laz): ADR-029, ARCHITECTURE 3.4/4.7, CLAUDE.md, README/PRD/SCOPE, CHANGELOG; errata N15 usunieta |
 | (ten) | docs(research): raport impl-laz |
 
 ## Weryfikacja na zywo (jedno uruchomienie, 2026-10-07)
 
 Kod worktree (`python -c "from kartograf.cli.commands import main; ..."`,
-cwd = worktree), wynik na katalog danych:
+cwd = worktree), wynik w katalogu danych:
 
 ```
 download --bbox 637400,487000,637450,487050 --bbox-crs EPSG:2180 --country pl \

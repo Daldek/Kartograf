@@ -2,11 +2,11 @@
 
 **Status:** DONE_WITH_CONCERNS — dokumentacja, E2E i brama zamkniete; E2E nie wykazal defektu kodu tej fali, ale ujawnil dwie wlasnosci warpa (zamrozonego), ktore wymagaja decyzji kontrolera (sekcja "Watpliwosci").
 
-BASE `08fb3d5` -> HEAD `fa1f771`:
+BASE `6e49687` -> HEAD `84bd0a8`:
 
 | SHA | Temat |
 |---|---|
-| `fa1f771` | docs: synchronizacja po fali review max — wycinek PL (siatka arkuszy, R5, API biblioteki) |
+| `84bd0a8` | docs: synchronizacja po fali review max — wycinek PL (siatka arkuszy, R5, API biblioteki) |
 
 Zero zmian w kodzie produkcyjnym i testach (`git show --stat HEAD`: wylacznie CLAUDE.md, README.md, docs/ARCHITECTURE.md, docs/CHANGELOG.md, docs/DECISIONS.md, docs/SCOPE.md). PROGRESS.md i ledger — nietkniete (liczby nizej sa dla kontrolera).
 
@@ -70,7 +70,7 @@ Uklad: provider testowy `CacheCopyProvider` (`vertical_crs=EVRF2007`, `resolutio
 | M2 | `assign_crs="EPSG:2180"` -> `None` | exit 1: `ValidationError: mosaic_and_crop: niezgodne CRS wejsc: ['EPSG:2180', 'None']` (realny `.prj` Hydrografu obok arkusza bez) |
 | M3 | `fatal = [g for g in failed if g not in no_data]` -> `fatal = list(failed)` | exit 1: `DownloadError: 1 z 2 arkuszy nie pobrano (blad pobrania, nie brak danych): N-34-139-A-d-4-4` |
 
-## Step 5 — brama jakosci (HEAD przed commitem = drzewo `fa1f771`, zmiany wylacznie w docs)
+## Step 5 — brama jakosci (HEAD przed commitem = drzewo `84bd0a8`, zmiany wylacznie w docs)
 ```
 .venv/bin/python -m pytest tests/ -q -m "not live"
 ===================== 1854 passed, 8 deselected in 27.18s ======================

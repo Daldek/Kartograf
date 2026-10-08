@@ -1,6 +1,6 @@
 # Fala naprawcza A — implementacja (2026-10-06)
 
-Galaz `fix/review-2026-10-06` (worktree `Kartograf-fix`), baza `67f03d7`.
+Galaz `fix/review-2026-10-06` (worktree `Kartograf-fix`), baza `ce2ef40`.
 Zrodla znalezisk: `review-1-duplikacje.md` (D1, D8), `review-2-deklaracje.md`
 (N1, N5, N6, N7, N8, N9). Kazde zadanie TDD: test czerwony na kodzie bazowym
 z wlasciwego powodu -> minimalna zmiana -> zielony -> mutacja (cofniecie
@@ -13,7 +13,7 @@ naprawy) -> test znow czerwony -> przywrocenie.
 - `ruff check kartograf/ tests/`: All checks passed; `ruff format --check`:
   90 files already formatted.
 - `mypy kartograf/`: 32 bledy; lista bledow bez numerow linii (`sed
-  's/:[0-9]+: /: /' | sort`) **identyczna** z baza `67f03d7` (`diff` pusty).
+  's/:[0-9]+: /: /' | sort`) **identyczna** z baza `ce2ef40` (`diff` pusty).
 
 ## A1 (D8/N7) — tor CZ na wspolnym `warp_to_grid`
 
@@ -49,7 +49,7 @@ naprawy) -> test znow czerwony -> przywrocenie.
   w `transform/raster.warp_to_grid` -> **3 failed**: oba nowe testy CZ oraz
   `test_transform_raster.py::test_failed_warp_keeps_previous_destination`.
   Przywrocone.
-- **Commit:** `788dbf6` fix(cuzk): wspolny warp_to_grid w torze CZ, awaria nie kasuje wyniku
+- **Commit:** `009589b` fix(cuzk): wspolny warp_to_grid w torze CZ, awaria nie kasuje wyniku
 
 ## A2 (D1/N9) — CORINE i SoilGrids: polityka ponowien
 
@@ -73,7 +73,7 @@ naprawy) -> test znow czerwony -> przywrocenie.
 - **Mutacja 2:** `retry_wait(...)` -> sam backoff (ignorowanie Retry-After)
   -> 2 failed (`test_throttled_download_waits_retry_after[corine|soilgrids]`).
   Przywrocone.
-- **Commit:** `544eee7` fix(landcover): polityka ponowien 429/5xx i Retry-After w CORINE i SoilGrids
+- **Commit:** `982c42d` fix(landcover): polityka ponowien 429/5xx i Retry-After w CORINE i SoilGrids
 
 ## A3 (N5) — `CuzkClient.query` i TERYT BDOT10k przez `get_with_retry`
 
@@ -106,7 +106,7 @@ naprawy) -> test znow czerwony -> przywrocenie.
   (`test_connection_error_is_retried[...]`).
 - **Mutacja 2:** `is_retryable` zawsze True (ponawianie 404) -> 2 failed
   (`test_not_found_is_not_retried[...]`). Przywrocone.
-- **Commit:** `ae68dcf` fix(transport): CuzkClient.query i TERYT BDOT10k przez get_with_retry
+- **Commit:** `df99268` fix(transport): CuzkClient.query i TERYT BDOT10k przez get_with_retry
 
 ## A4 (N1) — BDOT10k `--format SHP` jako `.zip`
 
@@ -127,7 +127,7 @@ naprawy) -> test znow czerwony -> przywrocenie.
 - **Przed:** 2 failed (plik zapisany jako `.gpkg`).
 - **Po:** passed.
 - **Mutacja:** usuniecie `with_suffix(".zip")` -> 2 failed. Przywrocone.
-- **Commit:** `3969de0` fix(bdot10k): paczka --format SHP zapisywana jako .zip, nie .gpkg
+- **Commit:** `69ac07c` fix(bdot10k): paczka --format SHP zapisywana jako .zip, nie .gpkg
 
 ## A5 (N8) — bledne opcje `landcover download` = blad uzytkownika
 
@@ -142,7 +142,7 @@ naprawy) -> test znow czerwony -> przywrocenie.
 - **Po:** passed.
 - **Mutacja:** `except ValueError` -> `except ZeroDivisionError` -> 4 failed.
   Przywrocone.
-- **Commit:** `0fa3a0e` fix(cli): bledne opcje landcover download jako blad uzytkownika
+- **Commit:** `3de8504` fix(cli): bledne opcje landcover download jako blad uzytkownika
 
 ## A6 (N6) — LAZ: porazka kafli jako `Error:` z pelna lista
 
@@ -160,7 +160,7 @@ naprawy) -> test znow czerwony -> przywrocenie.
 - **Mutacja 1:** prefiks `Warning:` zamiast `Error:` -> failed.
 - **Mutacja 2:** obciecie listy do `failed[:5]` (podsumowanie i szczegoly)
   -> failed. Przywrocone.
-- **Commit:** `b65bb3a` fix(laz): porazka kafli jako Error z pelna lista nieudanych kafli
+- **Commit:** `d1fb580` fix(laz): porazka kafli jako Error z pelna lista nieudanych kafli
 
 ## Tabela mutacji
 

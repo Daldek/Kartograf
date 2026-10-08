@@ -1,6 +1,6 @@
 # Zad. 7: `DownloadManager.expand_sheets()` + `download_sheets()` — raport implementacji
 
-Commit: `2290be5` (na `cc10773`, HEAD-1)
+Commit: `3ce32a1` (na `2856f41`, HEAD-1)
 `feat(download): DownloadManager.download_sheets/expand_sheets — lista arkuszy z porazkami w last_result`
 
 ## Co zrobiono
@@ -11,7 +11,7 @@ Commit: `2290be5` (na `cc10773`, HEAD-1)
 2. `tests/test_download_manager.py` — nowa klasa `TestDownloadManagerDownloadSheets` (7 testow: `test_expand_sheets_leaves_dedup_order`, `test_expands_coarse_and_dedupes[1]`/`[4]`, `test_failures_collected_not_raised[1]`/`[4]`, `test_skip_existing`, `test_invalid_godlo_raises_before_any_download`) — tresc z briefu doslownie, wstawiona po `TestDownloadResultNoCoverage` (przed `TestDownloadManagerDownloadBbox`). `ruff format` przelamal jedna asercje (`sorted(manager.last_result.failed) == [...]`) na wiele linii (E501) — tresc bez zmian.
 3. `docs/CHANGELOG.md` — bullet z briefu dopisany na poczatku `### Added` w `[0.7.0] - Unreleased` (przed bulletem `NoCoverageError` z Zad. 6, ten sam wzorzec "najnowsze na gorze" co Zad. 6 zastosowal wobec Zad. 5).
 
-Zadne odejscie od kotwic z briefu — kod wstawiany "po `download_hierarchy`" pokrywal sie z aktualnym stanem `manager.py` (HEAD `cc10773`, bez zmian od Zad. 6).
+Zadne odejscie od kotwic z briefu — kod wstawiany "po `download_hierarchy`" pokrywal sie z aktualnym stanem `manager.py` (HEAD `2856f41`, bez zmian od Zad. 6).
 
 ## RED (przed implementacja)
 
@@ -51,7 +51,7 @@ Punkt startowy (kontroler, Zad. 6): 1799 passed. Przybylo 7 testow (dokladnie te
 - `ruff format --check kartograf/ tests/`: `86 files already formatted`.
 - `mypy kartograf/`: `Found 32 errors in 9 files`. Diff listy wzgledem `.superpowers/sdd/2026-09-28-fala-review-max-i-wycinek-biblioteczny/mypy-baseline.txt` (obie strony przez `grep ': error:' | sed -E 's/:[0-9]+: /: /' | sort`): **0 different, 0 new, 0 fixed** — listy identyczne (32/32).
 
-## Dowody mutacyjne (wszystkie PO commicie `2290be5`, przywracane `git checkout -- kartograf/download/manager.py`)
+## Dowody mutacyjne (wszystkie PO commicie `3ce32a1`, przywracane `git checkout -- kartograf/download/manager.py`)
 
 1. **`expand_sheets`: usuniecie dedup** (`if leaf not in seen: seen.add(leaf); leaves.append(leaf)` → zawsze `leaves.append(leaf)`):
    `pytest tests/test_download_manager.py::TestDownloadManagerDownloadSheets -v`

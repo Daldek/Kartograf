@@ -1,4 +1,4 @@
-# E2E pelny A (2026-10-07, develop ec19478) — polskie rastry z torem kampanii
+# E2E pelny A (2026-10-07, develop d589c88) — polskie rastry z torem kampanii
 
 Dane: `<katalog-danych>/kartograf/e2e/2026-10-07-adr030-full-A/data` (~840 MB wg `du`). Skrypty/logi: katalog tymczasowy `scratchpad/e2eA` (logi `logs/c*.log`).
 Weryfikacja plikow skryptem `verify.py`: kampanie/ + sidecar (`extra.campaign`, `request.campaigns/min_year`), sciezka standardowa = hardlink do NAJNOWSZEJ lokalnej kampanii (ten sam i-wezel, nlink 2, `extra.link=hardlink`, `link_target`), brak symlinkow (`find -type l` = 0), CRS poziomy/pionowy w sidecarze zgodny z segmentem, rasterio czyta plik.

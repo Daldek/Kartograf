@@ -64,7 +64,7 @@ data/
 │   ├── pl_1992_1m_evrf2007/bbox/<coords>.tif   # NOWE: wycinek --target-crs (sekcja 6)
 │   ├── pl_2000_1m_evrf2007/6/179/12/20/6.179.12.20.asc
 │   ├── cz_dmr5g_bpv/302/5550/302_5550.tif
-│   ├── cz_dmr5g_bpv/bbox/<coords>.tif      # wycinki bbox CZ (po fixie d68be23)
+│   ├── cz_dmr5g_bpv/bbox/<coords>.tif      # wycinki bbox CZ (po fixie ed939a0)
 │   ├── cz_dmr5g_evrf2007/...
 │   └── cz_dmr4g_bpv/CTES/96/CTES96.tif
 ├── nmpt/pl_1992_1m_evrf2007/...            # (+ _kron86, + pl_2000_...)
@@ -79,7 +79,7 @@ Reguly:
 - Hierarchia wewnatrz segmentu: bez zmian (`parser_registry.path_parts`).
 - Podkatalog `bbox/` wewnatrz segmentu: wycinki z trybu `--bbox`
   (`<coords><ext>`, wspolrzedne w ukladzie WYNIKU — konwencja z fixu
-  d68be23, teraz wspolna dla PL i CZ).
+  ed939a0, teraz wspolna dla PL i CZ).
 - Przyszle zrodla (DE): nowy wpis deskryptora wystarcza, np.
   `nmt/de_bb_dgm1_dhhn2016/` — zero zmian w kodzie sciezek.
 
@@ -156,7 +156,7 @@ Nowa metoda `SourceDescriptor.resolve_subdir(*, uklad=None, vertical_crs=None) -
 ### 5.4 CLI CZ — `_cz_download_godlo` / `_cz_download_bbox`
 - `descriptor.storage_subdir` -> `descriptor.resolve_subdir(
   vertical_crs=provider.vertical_crs)`; reszta przeplywu bez zmian
-  (wycinki bbox laduja w `.../bbox/` — fix d68be23 sklada sie
+  (wycinki bbox laduja w `.../bbox/` — fix ed939a0 sklada sie
   automatycznie).
 
 ### 5.5 CLI LAZ — `_cmd_download_laz`
@@ -291,7 +291,7 @@ Blad zapisu sidecara pozostaje warningiem (kontrakt etapu 0).
    nota o plikach bez sidecarow), Added (`--target-crs` PL,
    `ARCHITECTURE.md`, `resolve_subdir`, `FileStorage(vertical_crs=)`),
    Changed (szablony subdir); korekta przykladu sciezki we wpisie
-   o `bbox/` z d68be23 (nowy segment).
+   o `bbox/` z ed939a0 (nowy segment).
 6. **docs/DECISIONS.md:** ADR-026 (uklad data/: motywacja DE, reguly
    segmentow, szablony w deskryptorach, decyzje D1-D8); ADR-027
    (`--target-crs` PL: semantyka wycinka, mozaika+pinned warp,

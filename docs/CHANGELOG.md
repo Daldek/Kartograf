@@ -1823,12 +1823,12 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Configured with black, flake8, pytest
 
 [0.7.0]: https://github.com/Daldek/Kartograf/compare/v0.6.1...develop
-[0.6.1]: https://github.com/Daldek/Kartograf/compare/6e50abd8466a8ca64f300ff6ea84dc5d8444fa7f...v0.6.1
-[0.6.0]: https://github.com/Daldek/Kartograf/compare/v0.5.0...6e50abd8466a8ca64f300ff6ea84dc5d8444fa7f
+[0.6.1]: https://github.com/Daldek/Kartograf/compare/4cec5d87b9aad1ffdb59693ec7163c7c97540983...v0.6.1
+[0.6.0]: https://github.com/Daldek/Kartograf/compare/v0.5.0...4cec5d87b9aad1ffdb59693ec7163c7c97540983
 [0.5.0]: https://github.com/Daldek/Kartograf/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Daldek/Kartograf/compare/v0.4.0...v0.4.1
-[0.4.0]: https://github.com/Daldek/Kartograf/compare/44a72411ba33e42e3f90d09750f1a179d481381a...v0.4.0
-[0.3.2]: https://github.com/Daldek/Kartograf/compare/v0.3.1...44a72411ba33e42e3f90d09750f1a179d481381a
+[0.4.0]: https://github.com/Daldek/Kartograf/compare/402d8091dc02dfacb77619950fc06504bea6d7ec...v0.4.0
+[0.3.2]: https://github.com/Daldek/Kartograf/compare/v0.3.1...402d8091dc02dfacb77619950fc06504bea6d7ec
 [0.3.1]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.1
 [0.3.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.3.0
 [0.2.0]: https://github.com/Daldek/Kartograf/releases/tag/v0.2.0

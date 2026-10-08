@@ -1,18 +1,18 @@
 # Raport fali naprawczej (N-01 .. N-11)
 
-Galaz: `develop`. Wejscie: `a9afc3f` (1775 testow PASS, mypy 32, ruff czysty).
-Wyjscie: `03b5bac` (**1787 testow PASS**, mypy **32** — zero nowych, ruff
+Galaz: `develop`. Wejscie: `bf4d374` (1775 testow PASS, mypy 32, ruff czysty).
+Wyjscie: `551f323` (**1787 testow PASS**, mypy **32** — zero nowych, ruff
 czysty, pokrycie 93 % / 92,74 %, `git status` czysty).
 
 Commity (5, w kolejnosci):
 
 | SHA | Commit |
 |---|---|
-| `f2bd0e4` | `fix(cli): selekcja arkuszy w --geometry --target-crs obejmuje zapas zrodla` |
-| `d0a0572` | `fix(download): segment storage z pionu providera; pusty vertical_crs nie milczy` |
-| `eb625d8` | `test(transform): KNOWN_PATHS dla par toru PL (2180->5514, 2180->3045)` |
-| `4310896` | `fix(cli): wycinek PL nie kasuje poprzedniego wyniku; kod 1 zamiast tracebacku` |
-| `03b5bac` | `docs: teksty zgodne z faktem — siatka wyniku, selekcja arkuszy, korekta osi` |
+| `301ea94` | `fix(cli): selekcja arkuszy w --geometry --target-crs obejmuje zapas zrodla` |
+| `f80fd08` | `fix(download): segment storage z pionu providera; pusty vertical_crs nie milczy` |
+| `44464c4` | `test(transform): KNOWN_PATHS dla par toru PL (2180->5514, 2180->3045)` |
+| `1142657` | `fix(cli): wycinek PL nie kasuje poprzedniego wyniku; kod 1 zamiast tracebacku` |
+| `551f323` | `docs: teksty zgodne z faktem — siatka wyniku, selekcja arkuszy, korekta osi` |
 
 ---
 

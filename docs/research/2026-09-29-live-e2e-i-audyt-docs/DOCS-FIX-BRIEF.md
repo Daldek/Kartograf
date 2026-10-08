@@ -1,6 +1,6 @@
 # Fala poprawek dokumentacji po testach na zywo i audycie (Kartograf, 2026-09-29)
 
-**Kontekst.** Galaz `develop`, HEAD 6985765. Uzytkownik zapytal, czy CALA dokumentacja dotknieta
+**Kontekst.** Galaz `develop`, HEAD 152c31e. Uzytkownik zapytal, czy CALA dokumentacja dotknieta
 zmianami (uklad `data/` + `--target-crs` PL, fala "review max" z wycinkiem PL w bibliotece) jest
 aktualna, i zlecil testy na zywych danych (centrum, morze, pogranicza PL-CZ, PL-DE i inne).
 Wyniki (wszystko w tym katalogu `.superpowers/sdd/2026-09-29-live-e2e-i-docs/`):

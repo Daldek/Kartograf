@@ -1,6 +1,6 @@
 # Pakiet B1 — CLI integrator: S2 (D2/D10/D11), S3, N2, N4, N6, N7, N8, K2/D12, handoffy B2/B3
 
-Data: 2026-09-30. Galaz `develop`, baza: `2ab14a7` (B3). Testy offline, zero sieci.
+Data: 2026-09-30. Galaz `develop`, baza: `683f9c3` (B3). Testy offline, zero sieci.
 Pakiet zaczal agent B1 (transkrypt `history://B1Cli`, przerwany na `_download_pl_cutout`),
 dokonczyl B1CliResume w tym samym drzewie — jeden commit.
 
@@ -158,7 +158,7 @@ pinuje kroku "(3)"), `TestMissingSheets::test_cutout_entirely_nodata_warns_and_f
 
 ## Dowody
 
-- Failing-before: `git worktree add --detach /tmp/kb 2ab14a7` + skopiowane 3 pliki testow,
+- Failing-before: `git worktree add --detach /tmp/kb 683f9c3` + skopiowane 3 pliki testow,
   selekcja `-k` nowych testow: **38 failed, 4 passed** (4 = kontrole: sidecar `(1)`/`None`
   bez Info, brak sidecara = nic, manager bez parent_request). Charakterystyczne bledy HEAD:
   S2 `--workers 1` -> `Error: 1 of 4 sheets failed: N-34-130-D-d-2-3` (1 proba, Warning

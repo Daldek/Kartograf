@@ -1,6 +1,6 @@
 # L5-pogranicze-de — raport testow na zywych danych (2026-09-29)
 
-Galaz `develop`, HEAD 6985765, repo nietkniete (`git status` czysty). Wszystkie
+Galaz `develop`, HEAD 152c31e, repo nietkniete (`git status` czysty). Wszystkie
 polecenia z `e2e-data/2026-09-29-live/L5-pogranicze-de/`, dane w `runs/<przebieg>/data`,
 `--resolution 5m`, `--workers 2` (jeden przebieg `--workers 1`). Okno: 09:29-09:55 CEST.
 

@@ -65,7 +65,7 @@ Punkt startowy wg COMMON-CONTEXT/dispatch: 1846 offline. Po zadaniu: **1850**
 
 ## Dowod mutacyjny
 
-Mutacja (PO commicie `e6f70cf`, wiec `git checkout --` bezpieczny): usunieta
+Mutacja (PO commicie `3a3e863`, wiec `git checkout --` bezpieczny): usunieta
 cala petla walidacyjna z `resolve_subdir` (kod wraca do stanu sprzed zadania —
 prosto z kontroli `storage_subdir is None` do `subdir = self.storage_subdir`).
 
@@ -87,7 +87,7 @@ E   Failed: DID NOT RAISE <class 'kartograf.exceptions.ValidationError'>
 ```
 
 Przywrocenie: `git checkout -- kartograf/sources/descriptor.py` (bezpieczne —
-plik byl juz zacommitowany w `e6f70cf`). Po przywroceniu:
+plik byl juz zacommitowany w `3a3e863`). Po przywroceniu:
 ```
 4 passed in 0.28s
 ```

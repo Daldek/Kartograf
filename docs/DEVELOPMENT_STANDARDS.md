@@ -24,7 +24,7 @@
 > zrodlem konwencji i procesu pracy projektu. Przejete
 > z usunietego `IMPLEMENTATION_PROMPT.md`: workflow, "Czego NIE robic",
 > typowe zadania (15-17); z CLAUDE.md: srodowisko i zmienne srodowiskowe
-> (6.1-6.2), komendy narzedziowe (6.3), pelne zasady katalog danych danych (6.4),
+> (6.1-6.2), komendy narzedziowe (6.3), zasady zapisu pobranych danych (6.4),
 > workflow sesji (15), praca na `develop` (1.1). Fragmenty powielajace stan
 > kodu (drzewo projektu 7.1, hierarchia wyjatkow 11.1, tabela timeoutow
 > 13.4, liczby testow i pokrycia 10.1) zastapione regula i odsylaczem do
@@ -92,7 +92,7 @@ git push origin v0.4.0
 Checkpointy robocze (CP) sa sledzone tylko w `docs/PROGRESS.md`, bez tagow Git.
 
 Przed wydaniem: testy offline nie zastepuja ponownych testow na zywych
-serwisach (`-m live` oraz przebiegi CLI na katalog danych, sekcja 6.4).
+serwisach (`-m live` oraz przebiegi CLI z jawnym `--output`, sekcja 6.4).
 
 ### 1.3 Zasady commitow
 
@@ -367,17 +367,14 @@ gniazdo spoza loopbacku; wyjatek maja tylko testy z markerem `live`
 odfiltrowuje testow `live` (`addopts` bez `-m`), wiec komenda bez
 `-m "not live"` wychodzi w siec. Szczegoly izolacji: sekcja 10.4.
 
-### 6.4 katalog danych danych — gdzie zapisywac pobrane dane
+### 6.4 Gdzie zapisywac pobrane dane
 
-Od 2026-10-06 **wszystkie dane przestrzenne pobierane przez agentow AI**
-(testy na zywo, weryfikacje E2E, reczne wywolania CLI, dane do analiz)
-zapisujemy na serwerze sieciowym `<katalog-danych>` — NIE w repo
-i NIE w `/tmp`.
+Dane przestrzenne pobierane podczas pracy (testy na zywo, weryfikacje E2E,
+reczne wywolania CLI, dane do analiz) zapisuj POZA repozytorium i poza
+`/tmp` — w katalogu danych wskazanym przez uzytkownika.
 
-- Udzial CIFS/SMB `<udzial>` zapis dla
-  `claude-agent` (pliki 0640, katalogi 0750).
-- Domyslne `--output` CLI wskazuja na repo — **zawsze podawaj `--output`
-  jawnie**:
+- Domyslne `--output` CLI (`./data`, `./data/landcover`, `./data/hsg`)
+  wskazuja na repo — **zawsze podawaj `--output` jawnie**:
 
   ```bash
   kartograf download N-34-130-D-d-2-4 -o <katalog-danych>/kartograf/data
@@ -385,23 +382,18 @@ i NIE w `/tmp`.
       -o <katalog-danych>/kartograf/e2e/<RRRR-MM-DD>-<cel>
   ```
 
-- Uklad katalogow:
-  - `<katalog-danych>/kartograf/data/` — kanoniczny uklad `data/`
-    (ADR-026), wspolny dla kolejnych sesji (reuzycie pobranych arkuszy);
-  - `<katalog-danych>/kartograf/e2e/<RRRR-MM-DD>-<cel>/` — przebiegi
-    testow na zywo i weryfikacji;
-  - wyniki/notatki z przebiegu (raporty `.md`) trafiaja do `docs/research/`
-    w repo — na katalog danych idzie tylko ciezki raster/LAZ/GPKG.
+- Uklad katalogow: `<katalog-danych>/kartograf/data/` — kanoniczny uklad
+  `data/` (ADR-026), wspolny dla kolejnych sesji;
+  `<katalog-danych>/kartograf/e2e/<RRRR-MM-DD>-<cel>/` — przebiegi testow na
+  zywo. Raporty `.md` z przebiegu trafiaja do `docs/research/` w repo.
 - Cache metadanych `.kartograf_cache.db` (SQLite WAL) **zostaje lokalnie**
-  (biezacy katalog = repo, gitignorowany): WAL na udziale sieciowym jest
-  zawodny. Uruchamiaj CLI z korzenia repo i kieruj na katalog danych tylko
+  (biezacy katalog = repo, gitignorowany): SQLite na udzialach sieciowych
+  jest zawodny. Uruchamiaj CLI z korzenia repo i kieruj poza repo tylko
   `--output`.
-- Montowanie jest `soft`: przy niedostepnosci serwera zapis konczy sie
-  bledem I/O (nie wisi). Przed dlugim pobieraniem sprawdz
-  `df -h <katalog-danych>`; gdy udzial nie jest zamontowany, zatrzymaj
-  sie i zapytaj uzytkownika zamiast pisac lokalnie.
-- Testy pytest nie dotycza katalog danych (offline: `tmp_path`; `live`: tylko
-  zapytania o metadane, bez plikow).
+- Gdy katalog danych jest niedostepny, zatrzymaj sie i zapytaj uzytkownika
+  zamiast pisac lokalnie.
+- Testy pytest nie zapisuja w katalogu danych (offline: `tmp_path`;
+  `live`: tylko zapytania o metadane, bez plikow).
 
 ---
 
@@ -933,7 +925,7 @@ danych, uklad `data/`) -> `docs/PRD.md` (wymagania) -> `docs/CHANGELOG.md`
 - **Nie uzywaj f-stringow w loggerze** — uzyj `%s` formatting
 - **Nie tworz osobnych plikow konfiguracyjnych** — wszystko w `pyproject.toml`
 - **Nie wywoluj prawdziwych API w testach** — mockuj requesty; siec tylko w testach `live`
-- **Nie zapisuj pobranych danych w repo ani w `/tmp`** — katalog danych danych (sekcja 6.4)
+- **Nie zapisuj pobranych danych w repo ani w `/tmp`** — sekcja 6.4
 
 ---
 

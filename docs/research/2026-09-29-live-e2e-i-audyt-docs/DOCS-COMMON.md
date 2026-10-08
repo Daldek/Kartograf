@@ -1,6 +1,6 @@
 # Wspolne zasady audytu dokumentacji (Kartograf, 2026-09-29)
 
-**Kontekst.** Galaz `develop`, HEAD 6985765. Dwie fale zmian dotknely dokumentacji: (1) uklad `data/` + `--target-crs` PL (2026-08-28, ADR-026/027) i (2) fala naprawcza "review max" + wycinek PL w bibliotece (2026-09-28; zakres zmian: `git log --oneline 8cf1e5a..6985765`, pelny opis: `docs/PROGRESS.md` sekcja "Fala naprawcza po review max ..." i `docs/CHANGELOG.md` [0.7.0]). Uzytkownik pyta: **czy zaktualizowano CALA dokumentacje, ktorej dotykaja te zmiany?** W historii projektu dokumenty klamaly czesciej niz kod (kilkanascie przypadkow) — kazde twierdzenie weryfikuj na ZYWYM kodzie.
+**Kontekst.** Galaz `develop`, HEAD 152c31e. Dwie fale zmian dotknely dokumentacji: (1) uklad `data/` + `--target-crs` PL (2026-08-28, ADR-026/027) i (2) fala naprawcza "review max" + wycinek PL w bibliotece (2026-09-28; zakres zmian: `git log --oneline 5b5ffa4..152c31e`, pelny opis: `docs/PROGRESS.md` sekcja "Fala naprawcza po review max ..." i `docs/CHANGELOG.md` [0.7.0]). Uzytkownik pyta: **czy zaktualizowano CALA dokumentacje, ktorej dotykaja te zmiany?** W historii projektu dokumenty klamaly czesciej niz kod (kilkanascie przypadkow) — kazde twierdzenie weryfikuj na ZYWYM kodzie.
 
 ## Zasady
 - Repo `/home/claude-agent/workspace/Kartograf` **TYLKO DO ODCZYTU** — nie zmieniaj niczego, nie commituj. Hydrograf (`/home/claude-agent/workspace/Hydrograf`) — tylko odczyt.

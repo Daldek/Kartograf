@@ -1,6 +1,6 @@
 # Zad. 6: `NoCoverageError` — raport implementacji
 
-Commit: `cc10773674ddc5f77a9c7cb3c16b30b93da19e84`
+Commit: `2856f41b34044ce62cb305bcfe324196e66244e8`
 `feat(download): NoCoverageError — brak danych GUGiK odrozniony od awarii pobrania`
 
 ## Co zrobiono
@@ -23,7 +23,7 @@ Commit: `cc10773674ddc5f77a9c7cb3c16b30b93da19e84`
    - `tests/test_download_manager.py`: nowa klasa `TestDownloadResultNoCoverage` (fixture `provider` + `test_no_coverage_is_subset_of_failed` sparametryzowany `workers=[1,4]`), dokladnie tresc z briefu (jedna linia zawinieta przez `ruff format` — patrz nizej).
 6. `docs/CHANGELOG.md` — `### Added` i `### Changed` w `[0.7.0] - Unreleased`, tresc z briefu (2 bulletpointy, dopisane na poczatku odpowiednich sekcji).
 
-Zadne odejscie od kotwic file:line z briefu — kod pod l. 542-575 (`gugik.py`) i sekcje `manager.py` wskazane w briefie zgadzaly sie z aktualnym stanem (HEAD `c5b15dc`).
+Zadne odejscie od kotwic file:line z briefu — kod pod l. 542-575 (`gugik.py`) i sekcje `manager.py` wskazane w briefie zgadzaly sie z aktualnym stanem (HEAD `8c124fc`).
 
 ## RED (przed implementacja)
 
@@ -66,7 +66,7 @@ Punkt startowy (kontroler): 1796 passed. Przybylo 3 testy: `test_fallback_url_of
 - `ruff format --check kartograf/ tests/`: `86 files already formatted`.
 - `mypy kartograf/`: `Found 32 errors in 9 files` — diff listy (`sed -E 's/:[0-9]+: /: /' | sort`, oba pliki ograniczone do linii `: error:` — baseline sam w sobie ma tylko 32 linie error, bez linii `Found ...`/`note: annotation-unchecked`, wiec porownanie zrobione na przefiltrowanych `: error:`): **0 different, 0 new, 0 fixed** — listy identyczne.
 
-## Dowody mutacyjne (wszystkie PO commicie `cc10773`, przywracane `git checkout -- <plik>`)
+## Dowody mutacyjne (wszystkie PO commicie `2856f41`, przywracane `git checkout -- <plik>`)
 
 1. **`raise NoCoverageError` -> `raise DownloadError`** (koncowka `_get_opendata_url`):
    `pytest tests/test_gugik_provider.py::...::test_get_opendata_url_not_found tests/test_download_manager.py::TestDownloadResultNoCoverage -q`

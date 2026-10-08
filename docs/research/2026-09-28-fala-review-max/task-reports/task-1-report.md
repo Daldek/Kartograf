@@ -112,7 +112,7 @@ kodu/testow do zepsucia). Nie uruchamiano pytest/ruff/mypy.
 ## Commit
 
 ```
-f76b860 docs: semantyka --force i selekcja arkuszy R-01 zgodne z kodem (CLAUDE.md, ADR-027)
+d72ce37 docs: semantyka --force i selekcja arkuszy R-01 zgodne z kodem (CLAUDE.md, ADR-027)
 ```
 (2 pliki zmienione, 15 insercji, 8 usuniec). Stopka `Co-Authored-By: Claude Opus 5.5
 <noreply@anthropic.com>` wg wyraznej instrukcji kontrolera (nadpisuje domyslna stopke

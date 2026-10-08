@@ -1,8 +1,8 @@
 # Raport fali naprawczej F-1..F-7 (po finalnym review galezi `fix/release-0.7.0-audit`)
 
-Implementer: opus. Data: 2026-08-23. FIX_BASE: `f10388c`. HEAD po fali: `5dbd99c`.
-Commity fali (5): `3ee4315`, `9c83390`, `a60053a`, `2efcefc`, `5dbd99c`.
-Stan galezi: **71 commitow** od `f432403` (`git log --oneline f432403..HEAD | wc -l`).
+Implementer: opus. Data: 2026-08-23. FIX_BASE: `7e6036b`. HEAD po fali: `99f2909`.
+Commity fali (5): `d6ff941`, `297e3ec`, `d3c3b0a`, `3c6c5e5`, `99f2909`.
+Stan galezi: **71 commitow** od `ff145a9` (`git log --oneline ff145a9..HEAD | wc -l`).
 
 ---
 
@@ -40,7 +40,7 @@ je widziec i **uruchamialy prawdziwy podproces `python -m kartograf.auth.proxy`*
 2 osierocone procesy po przebiegu). Testy przepiete na `AuthProxyClient._proxy_process`;
 po naprawie `pgrep kartograf.auth.proxy` po przebiegu jest pusty.
 
-**Commit:** `3ee4315 fix(auth): singleton proxy pod lockiem i klasowy stan podprocesu`
+**Commit:** `d6ff941 fix(auth): singleton proxy pod lockiem i klasowy stan podprocesu`
 
 ---
 
@@ -76,7 +76,7 @@ niewolany, token niepobierany).
 Fixed opisujacy forward bez tokena. README (sekcja Bezpieczenstwo) zdanie "proxy pobiera
 dane samo, wylacznie z hostow ..." bylo po tej zmianie nieprawda — poprawione.
 
-**Commit:** `9c83390 fix(auth): /download bez tokena dla hosta https spoza allowlisty`
+**Commit:** `297e3ec fix(auth): /download bez tokena dla hosta https spoza allowlisty`
 
 ---
 
@@ -92,7 +92,7 @@ dane samo, wylacznie z hostow ..." bylo po tej zmianie nieprawda — poprawione.
   -> `2 failed`, m.in. `assert 'nie pobrano danych z CZ' in 'Warning: brak danych w CZ dla tego obszaru - pobrano PL (...)'`.
 - GREEN: te same 2 testy -> `2 passed`.
 
-**Commit:** `a60053a fix(cli): neutralna tresc ostrzezenia auto-splitu`
+**Commit:** `d3c3b0a fix(cli): neutralna tresc ostrzezenia auto-splitu`
 
 ---
 
@@ -131,7 +131,7 @@ dane samo, wylacznie z hostow ..." bylo po tej zmianie nieprawda — poprawione.
 - `kartograf/download/manager.py` `download_bbox` docstring `Raises` += `ValidationError`
   (odsylacz do `GugikProvider.download_bbox` / wycofany WCS EVRF2007).
 
-**Commit:** `2efcefc docs: timeouty, tabela sidecara w README i korekty liczb`
+**Commit:** `3c6c5e5 docs: timeouty, tabela sidecara w README i korekty liczb`
 
 ---
 
@@ -139,7 +139,7 @@ dane samo, wylacznie z hostow ..." bylo po tej zmianie nieprawda — poprawione.
 
 **Co:**
 - Sekcja audytu: nowy akapit o finalnym review (fable, werdykt, 0 Critical) i wyliczenie
-  F-1..F-7; liczba commitow **64 -> 71** (policzone: `git log --oneline f432403..HEAD | wc -l`
+  F-1..F-7; liczba commitow **64 -> 71** (policzone: `git log --oneline ff145a9..HEAD | wc -l`
   = 71 z tym commitem), rozklad typow 40 `fix` / 21 `docs` / 3 `test` / 2 `refactor` /
   2 `feat` / 2 `chore` / 1 `perf`; kanoniczny przebieg zaktualizowany.
 - Tabela statusu: "93%, 1716 testow (po fali naprawczej F-1..F-7)".
@@ -155,7 +155,7 @@ dane samo, wylacznie z hostow ..." bylo po tej zmianie nieprawda — poprawione.
   `_proxy_process` per instancja, `kill()` bez `wait()`), z adnotacja "naprawione w fali F-1".
 - Pkt 11 "Nastepne kroki": "plus 62 z audytu" -> "plus 71".
 
-**Commit:** `5dbd99c docs(progress): backlog i podsumowanie po fali naprawczej F-1..F-7`
+**Commit:** `99f2909 docs(progress): backlog i podsumowanie po fali naprawczej F-1..F-7`
 
 ---
 
@@ -186,7 +186,7 @@ zakres — do cofniecia jest 8 linii w 6 plikach.
   ale nie flakuje; kontrakt pinuje drugi test).
 - Po przebiegach brak osieroconych procesow `kartograf.auth.proxy`.
 
-## Self-review (`git diff f10388c..HEAD --stat`)
+## Self-review (`git diff 7e6036b..HEAD --stat`)
 
 17 plikow, +384/-96. Kod: `auth/client.py`, `auth/proxy.py`, `cli/download_cmd.py`
 (1 komunikat), `download/manager.py` (sam docstring). Testy: `test_auth_client.py`,

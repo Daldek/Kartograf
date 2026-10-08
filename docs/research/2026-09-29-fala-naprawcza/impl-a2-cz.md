@@ -1,6 +1,6 @@
 # Implementacja — pakiet A2 CZ (K2, K6, N3 + helper N2)
 
-Data: 2026-09-29. Galaz `develop`, baza `c5b3110`. Projekt: `research-cz.md`
+Data: 2026-09-29. Galaz `develop`, baza `eb2ea10`. Projekt: `research-cz.md`
 sekcje 1.2-1.3, 2.2-2.3, 3.2-3.3, 4.2, 6; decyzje D1 + rozstrzygniecia
 koordynatora (pin niejawny w `build_pinned_transform`, `MAX_EXPORT_PIXELS =
 4_000_000`, kafle kwadratowawe, snap NW). Prace rozpoczal agent `A2Cz`
@@ -56,7 +56,7 @@ Zero sieci; tylko wlasne pliki testow.
 
 ## Testy (failing-before / passing-after)
 
-Dowod failing-before: `git worktree add /tmp/kb HEAD` (= `c5b3110`), skopiowane
+Dowod failing-before: `git worktree add /tmp/kb HEAD` (= `eb2ea10`), skopiowane
 TYLKO nowe pliki testow A2 + A3, uruchomione `pytest tests/test_transform_crs.py
 tests/test_cuzk_dmr.py tests/test_cuzk_client.py tests/test_transport_mosaic.py
 tests/test_gugik_laz.py -m "not live"` -> **60 failed, 137 passed**. Po zmianach

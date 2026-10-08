@@ -7,7 +7,7 @@
 starsze kampanie (przy chwilowych bledach GUGiK), pliki 0,5 m w miejsce 1 m (wycinek "1m" w 0,5 m,
 w skrajnym przypadku 100 % nodata z kodem 0) oraz arkusz-dziecko PL-2000 w miejsce zadanego.
 
-Liczniki: **PASS 21, FAIL 6, UWAGA 5** (32 scenariusze). HEAD 6985765, repo nietkniete
+Liczniki: **PASS 21, FAIL 6, UWAGA 5** (32 scenariusze). HEAD 152c31e, repo nietkniete
 (`git status` czysty). Pobrano ok. 0,85 GB (limit 3 GB), `--workers 2`.
 
 ---

@@ -1,6 +1,6 @@
 # Fala naprawcza C — implementacja (2026-10-06)
 
-Galaz `fix/review-2026-10-06` (worktree `Kartograf-fix`), baza `7167ddb`
+Galaz `fix/review-2026-10-06` (worktree `Kartograf-fix`), baza `b42ceaa`
 (fale A i B + fixtury). Zrodla: `cykl-e2e.md` (E17), `impl-fala-b.md`
 (odstepstwo B8), `review-2-deklaracje.md` (N2, N4, N10-N17),
 `review-1-duplikacje.md` (D16). Zmiany kodu TDD: test czerwony na bazie ->
@@ -14,7 +14,7 @@ minimalna zmiana -> zielony -> mutacja -> czerwony -> przywrocenie.
 - `ruff check kartograf/ tests/`: All checks passed; `ruff format --check`:
   92 files already formatted.
 - `mypy kartograf/`: 32 bledy; lista bez numerow linii (`sed -E
-  's/:[0-9]+: /: /' | sort`) **identyczna** z baza `7167ddb` (`diff` pusty).
+  's/:[0-9]+: /: /' | sort`) **identyczna** z baza `b42ceaa` (`diff` pusty).
 - `docs/DECISIONS.md`: CRLF zachowane (`file`: "with CRLF line
   terminators"; 1394 `\n` = 1394 `\r\n`). Pozostale pliki bez `\r`.
 
@@ -22,12 +22,12 @@ minimalna zmiana -> zielony -> mutacja -> czerwony -> przywrocenie.
 
 | Commit | Zakres |
 |---|---|
-| `e3117d3` | C1 fix(cli): Warning o arkuszu PL w innym ukladzie niz godlo (E17) |
-| `1a20098` | C2 fix(cli): KARTOGRAF_DEBUG=1 takze dla KartografError (N17) |
-| `b9a0953` | C2 fix(bdot10k): DEFAULT_TIMEOUT = 120 s (N11) |
-| `9e7e32e` | C2 fix(cli): --force w torze CZ odswieza cache indeksu (D16) |
-| `dba011d` | C2 docs: errata N2, N4, N10, N12-N17, D16 |
-| `5f041d9` | C3 docs(changelog): runda review/E2E — fala C |
+| `87b92f9` | C1 fix(cli): Warning o arkuszu PL w innym ukladzie niz godlo (E17) |
+| `ee36306` | C2 fix(cli): KARTOGRAF_DEBUG=1 takze dla KartografError (N17) |
+| `b7471e6` | C2 fix(bdot10k): DEFAULT_TIMEOUT = 120 s (N11) |
+| `43cc922` | C2 fix(cli): --force w torze CZ odswieza cache indeksu (D16) |
+| `f05c49e` | C2 docs: errata N2, N4, N10, N12-N17, D16 |
+| `f5dcb40` | C3 docs(changelog): runda review/E2E — fala C |
 
 ## C1 (E17) — `Warning:` o arkuszu w innym ukladzie niz godlo
 
@@ -72,17 +72,17 @@ minimalna zmiana -> zielony -> mutacja -> czerwony -> przywrocenie.
 
 | Zn. | Status po falach A/B | Dzialanie | Pliki | Commit |
 |---|---|---|---|---|
-| N2 | aktualne | naprawione w dok.: arkusz za granica w trybie listy = `Warning:` + kod 0 (przy >= 1 pliku) | README.md | `dba011d` |
-| N4 | aktualne (9bcc040 poprawil tylko jedno miejsce ARCHITECTURE) | naprawione w dok.: "do 3 prob (siec, 429, 5xx; inne 4xx bez ponowien)"; errata ADR-028 obejmuje tez zdanie z errata ADR-020 | CLAUDE.md, SCOPE.md (2 miejsca), ARCHITECTURE.md 4.1/4.3, `download/cutout.py` docstring, DECISIONS.md | `dba011d` |
-| N10 | aktualne | naprawione w dok.: usuniete "CORINE przez TERYT"; dopisane: TERYT BDOT10k 30 s, GetCapabilities = timeout providera (po B6) | CLAUDE.md, SCOPE.md | `dba011d` |
-| N11 | aktualne | naprawione w kodzie: `DEFAULT_TIMEOUT = 120` i domyslna wartosc trzech sygnatur; test `TestBdot10kDefaultTimeout` (3 failed przed, mutacja `= 60` -> 3 failed) | `providers/pl/bdot10k.py`, `tests/test_landcover.py` | `b9a0953` |
-| N12 | aktualne (2057/2058) | naprawione w dok.: 2216 offline + 16 live (pomiar koncowy) | README.md (3 miejsca) | `dba011d` |
-| N13 | aktualne (`_warn_cz_all_nodata` importuje `transport.mosaic`) | naprawione w dok.: krawedz `cli -> transport (leniwie)` w grafie + opis; przeniesienie kontroli do providera CZ = backlog | ARCHITECTURE.md 2 | `dba011d` |
-| N14 | aktualne (A4 naprawil tylko BDOT10k SHP) | naprawione w dok.: "baza nazwy", rozszerzenie nadaje provider (`.gpkg`/`.tif`/`.png`/`.zip`) | ARCHITECTURE.md 4.8, CHANGELOG.md (wpis A5-2) | `dba011d` |
-| N15 | aktualne | naprawione w dok.: errata ADR-023 pkt 8; dopisanie `parent_request` do LAZ = backlog | DECISIONS.md | `dba011d` |
-| N16 | czesciowo nieaktualne (docstring klasy `LandCoverManager` mial juz `soilgrids`) | naprawione w dok.: dwa docstringi metod `LandCoverManager`, docstring `MetadataCache` (`sheet_cache` 30 d, `refresh`) | `landcover/manager.py`, `cache/metadata.py` | `dba011d` |
-| N17 | aktualne | naprawione w kodzie: bariera `main` przepuszcza `KartografError` przy `KARTOGRAF_DEBUG`; test `test_debug_env_reraises_kartograf_error` (czerwony bez zmiany = mutacja); CLAUDE.md doprecyzowane | `cli/commands.py`, `tests/test_cli.py`, CLAUDE.md | `1a20098`, `dba011d` |
-| D16 | aktualne (B3 zmienil tylko PL) | naprawione w kodzie: tor CZ `MetadataCache(refresh=bool(args.force))`; test `test_force_refreshes_sheet_index_cache[False/True]` (True czerwony bez zmiany); zdanie w CLAUDE.md, SCOPE, ARCHITECTURE 4.1 | `cli/download_cmd.py`, `tests/test_cli.py`, CLAUDE.md, SCOPE.md, ARCHITECTURE.md | `9e7e32e`, `dba011d` |
+| N2 | aktualne | naprawione w dok.: arkusz za granica w trybie listy = `Warning:` + kod 0 (przy >= 1 pliku) | README.md | `f05c49e` |
+| N4 | aktualne (ca4d004 poprawil tylko jedno miejsce ARCHITECTURE) | naprawione w dok.: "do 3 prob (siec, 429, 5xx; inne 4xx bez ponowien)"; errata ADR-028 obejmuje tez zdanie z errata ADR-020 | CLAUDE.md, SCOPE.md (2 miejsca), ARCHITECTURE.md 4.1/4.3, `download/cutout.py` docstring, DECISIONS.md | `f05c49e` |
+| N10 | aktualne | naprawione w dok.: usuniete "CORINE przez TERYT"; dopisane: TERYT BDOT10k 30 s, GetCapabilities = timeout providera (po B6) | CLAUDE.md, SCOPE.md | `f05c49e` |
+| N11 | aktualne | naprawione w kodzie: `DEFAULT_TIMEOUT = 120` i domyslna wartosc trzech sygnatur; test `TestBdot10kDefaultTimeout` (3 failed przed, mutacja `= 60` -> 3 failed) | `providers/pl/bdot10k.py`, `tests/test_landcover.py` | `b7471e6` |
+| N12 | aktualne (2057/2058) | naprawione w dok.: 2216 offline + 16 live (pomiar koncowy) | README.md (3 miejsca) | `f05c49e` |
+| N13 | aktualne (`_warn_cz_all_nodata` importuje `transport.mosaic`) | naprawione w dok.: krawedz `cli -> transport (leniwie)` w grafie + opis; przeniesienie kontroli do providera CZ = backlog | ARCHITECTURE.md 2 | `f05c49e` |
+| N14 | aktualne (A4 naprawil tylko BDOT10k SHP) | naprawione w dok.: "baza nazwy", rozszerzenie nadaje provider (`.gpkg`/`.tif`/`.png`/`.zip`) | ARCHITECTURE.md 4.8, CHANGELOG.md (wpis A5-2) | `f05c49e` |
+| N15 | aktualne | naprawione w dok.: errata ADR-023 pkt 8; dopisanie `parent_request` do LAZ = backlog | DECISIONS.md | `f05c49e` |
+| N16 | czesciowo nieaktualne (docstring klasy `LandCoverManager` mial juz `soilgrids`) | naprawione w dok.: dwa docstringi metod `LandCoverManager`, docstring `MetadataCache` (`sheet_cache` 30 d, `refresh`) | `landcover/manager.py`, `cache/metadata.py` | `f05c49e` |
+| N17 | aktualne | naprawione w kodzie: bariera `main` przepuszcza `KartografError` przy `KARTOGRAF_DEBUG`; test `test_debug_env_reraises_kartograf_error` (czerwony bez zmiany = mutacja); CLAUDE.md doprecyzowane | `cli/commands.py`, `tests/test_cli.py`, CLAUDE.md | `ee36306`, `f05c49e` |
+| D16 | aktualne (B3 zmienil tylko PL) | naprawione w kodzie: tor CZ `MetadataCache(refresh=bool(args.force))`; test `test_force_refreshes_sheet_index_cache[False/True]` (True czerwony bez zmiany); zdanie w CLAUDE.md, SCOPE, ARCHITECTURE 4.1 | `cli/download_cmd.py`, `tests/test_cli.py`, CLAUDE.md, SCOPE.md, ARCHITECTURE.md | `43cc922`, `f05c49e` |
 
 Faktyczne zachowanie CZ przed D16: `_cmd_download_cz` otwieral
 `MetadataCache()` zawsze, wiec `--force` pobieral plik na nowo, ale indeks

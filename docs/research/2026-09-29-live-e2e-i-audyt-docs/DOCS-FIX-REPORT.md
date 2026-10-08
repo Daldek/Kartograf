@@ -1,6 +1,6 @@
 # DOCS-FIX — fala poprawek dokumentacji po testach na zywo i audycie (2026-09-29)
 
-**Status: WYKONANE.** Galaz `develop`, start HEAD 6985765, koniec HEAD f577d1c
+**Status: WYKONANE.** Galaz `develop`, start HEAD 152c31e, koniec HEAD 515f275
 (12 commitow, niewypchniete; `origin/develop..develop` = 220). Kod bez zmian zachowania — w plikach `.py`
 zmienione wylacznie docstringi, komentarze i napisy pomocy CLI (dowod nizej).
 Repo Hydrografu nietkniete (tylko odczyt). `.superpowers/` i `e2e-data/` nie
@@ -31,22 +31,22 @@ Pozycje istniejacego backlogu oznaczone "-> ID": tryb listy na
 z wstrzykiwanym providerem (obejscie S1/N6). Istniejacy podpunkt backlogu nie
 dublowal zadnego opisu — pelne opisy zyja tylko w "Do naprawy".
 
-## 1. Commity (od 6985765)
+## 1. Commity (od 152c31e)
 
 | Commit | Zakres |
 |---|---|
-| 57ef96b `docs(api)` | docstringi/komentarze/`--help` (13 plikow `.py`) |
-| 45bf901 `docs(claude)` | CLAUDE.md |
-| 81147fb `docs(readme)` | README.md (sekcja "Znane problemy (0.7.0-dev)") |
-| b64903f `docs(scope,prd)` | SCOPE 3.11, PRD 3.7 |
-| dc19103 `docs(architecture)` | ARCHITECTURE.md |
-| 2b1fd26 `docs(decisions)` | DECISIONS.md (CRLF zachowane) |
-| 7b54fcf `docs(changelog)` | CHANGELOG.md [0.7.0] |
-| 3921bfc `docs(standards)` | DEVELOPMENT_STANDARDS 2.2, IMPLEMENTATION_PROMPT 4.2 |
-| aa1bb8e `docs(progress)` | PROGRESS.md |
-| f7b673e `docs` | drobne (polskie znaki README, zawijanie SCOPE) |
-| 1b30f13 `docs` | precyzja opisu S1/S2 (README, CLAUDE.md, PROGRESS) |
-| f577d1c `docs(progress)` | odsylacz do raportu fali w katalogu raportow |
+| af71c00 `docs(api)` | docstringi/komentarze/`--help` (13 plikow `.py`) |
+| 1c5d267 `docs(claude)` | CLAUDE.md |
+| 03e0728 `docs(readme)` | README.md (sekcja "Znane problemy (0.7.0-dev)") |
+| cc3476b `docs(scope,prd)` | SCOPE 3.11, PRD 3.7 |
+| 6533537 `docs(architecture)` | ARCHITECTURE.md |
+| c275974 `docs(decisions)` | DECISIONS.md (CRLF zachowane) |
+| e8a6892 `docs(changelog)` | CHANGELOG.md [0.7.0] |
+| 34460a0 `docs(standards)` | DEVELOPMENT_STANDARDS 2.2, IMPLEMENTATION_PROMPT 4.2 |
+| cbc2527 `docs(progress)` | PROGRESS.md |
+| a1295f5 `docs` | drobne (polskie znaki README, zawijanie SCOPE) |
+| cd482bd `docs` | precyzja opisu S1/S2 (README, CLAUDE.md, PROGRESS) |
+| 515f275 `docs(progress)` | odsylacz do raportu fali w katalogu raportow |
 
 Stopka kazdego commita: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 
@@ -57,9 +57,9 @@ Stopka kazdego commita: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 - `ruff check kartograf/ tests/` -> All checks passed; `ruff format --check` ->
   87 files already formatted.
 - `mypy kartograf/` -> **32 errors in 9 files**; lista `plik: komunikat` (bez
-  numerow linii) identyczna z baseline zmierzonym na 6985765 (`diff` pusty).
+  numerow linii) identyczna z baseline zmierzonym na 152c31e (`diff` pusty).
 - Zero zmian zachowania: AST kazdego zmienionego pliku `.py` po usunieciu
-  docstringow identyczny z HEAD 6985765 (12 plikow); w `cli/_parser.py`
+  docstringow identyczny z HEAD 152c31e (12 plikow); w `cli/_parser.py`
   roznia sie WYLACZNIE argumenty `help=`/`description=` (AST z zamaskowanymi
   tymi argumentami identyczny). Testy pomocy CLI (`CUZK`, `SoilGrids`,
   `--scale`, `--product`) przechodza.
@@ -68,7 +68,7 @@ Stopka kazdego commita: `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
 ## 3. Znaleziska D1 (35)
 
-Linie wg HEAD f577d1c (PROGRESS: jak w commicie f577d1c).
+Linie wg HEAD 515f275 (PROGRESS: jak w commicie 515f275).
 
 | ID | Status | Gdzie (plik:linia) | Uwagi |
 |---|---|---|---|
@@ -251,20 +251,20 @@ a `bootstrap.py:1079` szuka plikow nierekurencyjnym `glob("*.asc")`.
    pkt 13 wprost "czeka na decyzje z pkt 15".
 5. **Oryginalne brzmienie checklisty pkt 12 (a)-(j)** zastapione statusami
    (kazdy status powtarza nazwe pozycji); pelny tekst sprzed zmiany jest
-   w historii gita (6985765).
+   w historii gita (152c31e).
 6. **D2-40** (jezyk docstringow i commitow): odnotowane jako rozjazd do decyzji
    wlasciciela — nie wybralem kierunku za niego.
 
 ## 8. Runda poprawek po przegladzie (RR-1..RR-15)
 
 **Status: WYKONANE.** Zrodlo: `DOCS-REREVIEW-REPORT.md` (1 BLOKUJACE, 2 WAZNE,
-12 DROBNE). Jeden commit **f52593a** `docs: poprawki po przegladzie fali
-dokumentacji (RR-1..RR-15)` na f577d1c (niewypchniety; `origin/develop..develop`
+12 DROBNE). Jeden commit **2dbed85** `docs: poprawki po przegladzie fali
+dokumentacji (RR-1..RR-15)` na 515f275 (niewypchniety; `origin/develop..develop`
 = 221). Wynik: **15 NAPRAWIONE, 0 ODRZUCONE** — kazde znalezisko potwierdzone
 w kodzie albo pomiarem; w trzech miejscach tekst poszedl dalej niz propozycja
 (kolumna "Uwagi"). Zero zmian w `.py`, dokumenty historyczne nietkniete.
 
-### 8.1 Tabela (plik:linia wg f52593a)
+### 8.1 Tabela (plik:linia wg 2dbed85)
 
 | RR | Waga | Werdykt | Gdzie | Uwagi |
 |---|---|---|---|---|
@@ -339,7 +339,7 @@ Dopisane jako "Przy naprawie:" w istniejacych checkboxach `docs/PROGRESS.md`:
 
 - `.venv/bin/python -m pytest tests/ -q -m "not live" -p no:cacheprovider` ->
   **1861 passed, 8 deselected** (28,1 s).
-- `git diff --stat f577d1c..f52593a` -> 7 plikow, wylacznie dokumentacja
+- `git diff --stat 515f275..2dbed85` -> 7 plikow, wylacznie dokumentacja
   (CLAUDE.md, README.md, docs/ARCHITECTURE.md, docs/DECISIONS.md, docs/PRD.md,
   docs/PROGRESS.md, docs/SCOPE.md), +154/-76; zero `.py` (ruff/mypy bez
   zmian — nie dotyczy).

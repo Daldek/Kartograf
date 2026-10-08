@@ -1,7 +1,7 @@
 # Deduplikacja download/CLI/sidecar/landcover — implementacja (2026-10-07)
 
 Galaz `refactor/dedup-download` (worktree `Kartograf-dedup-download`), baza
-`0f5e4f4`. Zrodlo znalezisk: `review-1-duplikacje.md` — D7, D10, D11, D14,
+`a7bf7a8`. Zrodlo znalezisk: `review-1-duplikacje.md` — D7, D10, D11, D14,
 D15, D18. Poza zakresem (inni agenci / osobna ocena): LAZ w
 `cli/download_cmd.py` (sidecar i pula LAZ), deduplikacja providerow
 i transportu (D1, D2, D8, D9, D13, D19), parsery godel i `--bbox` (D4, D5,
@@ -21,19 +21,19 @@ testy dopisane, zanim mutacja zostala uznana).
 - `ruff check kartograf/ tests/`: All checks passed; `ruff format --check`:
   92 files already formatted.
 - `mypy kartograf/`: 32 bledy; lista bez numerow linii (`sed -E
-  's/:[0-9]+:/:/' | sort`) **identyczna** z baza `0f5e4f4` (`diff` pusty).
+  's/:[0-9]+:/:/' | sort`) **identyczna** z baza `a7bf7a8` (`diff` pusty).
 - Bilans linii `kartograf/`: +487 / -492 (netto -5; usunieta tresc
   zastapiona glownie docstringami nowych helperow), `tests/`: +483 / -4,
   `docs/`: ARCHITECTURE (D11), CHANGELOG, ten raport.
 
 | D | commit | kod (+/-) | testy (+/-) |
 |---|---|---|---|
-| D18 | `5f66954` | +56 / -37 | +105 / -3 |
-| D11 | `e9e12ff` | +51 / -27 | +82 / -0 |
-| D10 | `5be434c` | +136 / -237 | +76 / -0 |
-| D7 | `076263e` | +170 / -142 | +135 / -0 |
-| D15 | `795c17c` | +21 / -19 | +30 / -1 |
-| D14 | `cadb928` | +53 / -30 | +55 / -0 |
+| D18 | `83c864d` | +56 / -37 | +105 / -3 |
+| D11 | `f496cd5` | +51 / -27 | +82 / -0 |
+| D10 | `de433ed` | +136 / -237 | +76 / -0 |
+| D7 | `2f282d2` | +170 / -142 | +135 / -0 |
+| D15 | `d7899ca` | +21 / -19 | +30 / -1 |
+| D14 | `c95f1d0` | +53 / -30 | +55 / -0 |
 
 ## D18 — storage providera (5 miejsc, nie 4)
 
@@ -225,5 +225,5 @@ testy dopisane, zanim mutacja zostala uznana).
   mutowana linia), dalsze mutacje w prywatnym podkatalogu `dd/`. Na
   worktree providerow nie mialo to wplywu (jego czesc skryptu odwolywala sie
   do niezdefiniowanej zmiennej i nie wykonala zapisu).
-- Baseline mypy policzony ponownie z `git archive 0f5e4f4` (plik bazowy
+- Baseline mypy policzony ponownie z `git archive a7bf7a8` (plik bazowy
   w scratchpadzie mogl byc nadpisany tak samo).

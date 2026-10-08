@@ -3,7 +3,7 @@
 Recenzent: agent opus (read-only). Zakres: caly plan (1243 linie, 26 zadan), ledger
 `progress.md` (rulingi), raporty `audit/*-verify.md`. Zaden plik planu ani kodu nie zostal
 zmieniony. Weryfikacja odwolan `plik:linia` prowadzona grepem na `fix/release-0.7.0-audit`
-(HEAD a88a73a). Srodowisko sprawdzone: rasterio 1.5.0, pyproj 3.7.2, pyshp 3.0.3,
+(HEAD 951356d). Srodowisko sprawdzone: rasterio 1.5.0, pyproj 3.7.2, pyshp 3.0.3,
 pytest 9.0.2, `ruff check` czysty, `mypy kartograf/` = **Found 33 errors in 10 files**
 (baseline z Global Constraint (c) potwierdzony), `setuptools` NIEobecne w `.venv`.
 
@@ -30,7 +30,7 @@ pytest 9.0.2, `ruff check` czysty, `mypy kartograf/` = **Found 33 errors in 10 f
 | 19 | 21 | `pyproject.toml`: 19 dodaje marker `real_wms_layers`, 21 zmienia `[project]`/`[tool.setuptools]` | TAK | rozne sekcje | bez zmian |
 | 20 | 22-24 | 20 kasuje `get_clms_credentials`/`save_credentials_to_keychain`; docs nie moga ich wymieniac | TAK (20 < 22-24) | zad. 23 krok 1 ma jawny nakaz usuniecia odwolan | bez zmian |
 | 6 / 17 / 25 | - | `docs/DECISIONS.md`: 6 dodaje ADR-025 (przed szablonem ADR-XXX, l. 762); 17 dopisuje addendum ADR-023 pkt 5 + zdanie do pkt 4; 25 podmienia ilustracje w pkt 4 (l. 575) | TAK (6 < 17 < 25) | 17 i 25 edytuja TEN SAM akapit (pkt 4); plan jawnie rozdziela zakresy (l. 964) | zostawic, ale w zad. 25 dopisac "nie ruszac zdania dodanego w zad. 17" |
-| 22 | 1-21 | CHANGELOG konsumuje komunikaty commitow 1-21 (`git log f432403..HEAD`) | TAK | brak | bez zmian |
+| 22 | 1-21 | CHANGELOG konsumuje komunikaty commitow 1-21 (`git log ff145a9..HEAD`) | TAK | brak | bez zmian |
 | 22 / 23 / 26 | - | liczba testow i pokrycie wpisywane niezaleznie w trzech zadaniach | TAK, ale | 22 (krok 1), 23 (l. 287 README), 26 (krok 2) moga wpisac trzy rozne liczby | wskazac JEDEN przebieg zrodlowy (po zad. 21) i przepisywac go doslownie |
 | 19 | 1-18 | blokada sieci w conftest powstaje dopiero w 19, a testy dodaja zadania 1-18 | ryzyko | Global Constraint (g) mowi "mockowac jak dotychczas"; blad wyjdzie dopiero w kroku 1 zad. 19 | rozwazyc przesuniecie samej fixtury `_block_network` przed zad. 2 (patrz P-13) |
 | 8 | 20 | po zad. 8 `LandCoverProvider.validate_teryt` traci jedynego produkcyjnego konsumenta (`soilgrids.py:414`), na ktorym V5 oparl korekte "nie usuwac" | TAK | zad. 20 nie ma `validate_teryt` na liscie - brak realnego konfliktu | odnotowac w raporcie zad. 20, ze inwentarz V5 sie zdezaktualizowal |
@@ -132,7 +132,7 @@ Scope creep (zmiany, ktorych zaden raport nie uzasadnia):
 | proxy env/`/token` (9) -> klient (10) i martwy blok corine (20) | 9 < 10 < 20 | OK | - |
 | punkty (11) -> semantyka krawedzi (12) | 11 < 12 | OK; sprawdzone, ze test zad. 11 jest zielony takze przed zad. 12 | - |
 | ten sam plik `download_cmd.py` (16, 17) | 16 < 17 | OK | - |
-| kod (1-21) -> docs (22-26) | OK | OK | 22 wymaga `git log f432403..HEAD` - wykonalne dopiero po 21 |
+| kod (1-21) -> docs (22-26) | OK | OK | 22 wymaga `git log ff145a9..HEAD` - wykonalne dopiero po 21 |
 | martwy kod (20) -> docs (22-24) | 20 < 22 | OK | docs nie moga wymieniac `get_clms_credentials`/`save_credentials_to_keychain`/`DLR_YEARS` |
 | blokada sieci (19) vs testy dodane w 1-18 | **plan: 19 po 18** | ryzyko | testy z zadan 1-18 nie sa weryfikowane pod katem sieci az do zad. 19; krok 1 zad. 19 ("dokladnie 20 FAILED") moze pokazac wiecej pozycji - plan ma na to procedure, ale koszt to powrot do zadania zamknietego. Alternatywa: wydzielic sama fixture `_block_network` do mini-zadania przed zad. 2 (P-13) |
 | ADR-023 (17) vs ilustracja ADR-023 (25) | 17 < 25 | OK | ten sam akapit pkt 4 - zad. 25 nie moze skasowac zdania z zad. 17 |

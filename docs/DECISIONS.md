@@ -596,7 +596,7 @@ przypieta operacja; definicja siatki kafli w 3045 i asymetria bbox PL/CZ
 pozostaja aktualne.)* Pobranie godlem zadalo
 wiec `exportImage` z `bboxSR=imageSR=3045` — serwer reprojektowal w locie;
 "natywny" produkt trybu godlowego CZ to 3045 (definicja siatki kafli), nie
-5514 (katalog danych danych). To tworzy jawna asymetrie wzgledem PL: `--bbox` w PL
+5514 (uklad przechowywania danych CUZK). To tworzy jawna asymetrie wzgledem PL: `--bbox` w PL
 zwraca **liste arkuszy** OpenData (wiele plikow po godle, `find_sheets_for_bbox`
 + petla pobran), `--bbox` w CZ zwraca **jeden plik** — bezposredni wycinek
 serwerowy `exportImage`, bo CZ nie ma odpowiednika "OpenData po dowolnym
@@ -1194,7 +1194,7 @@ z placeholderami `{uklad}`/`{vcrs}`; `resolve_subdir()` wypelnia przez
 `str.replace` (czesciowe wypelnienie legalne, vcrs lowercased), FileStorage
 rozwiazuje `{uklad}` per godlo (regula `path_parts`: kropki=2000, inaczej
 1992) i waliduje zero klamer (`ValidationError` z nazwa wymiaru). Wycinki
-`--bbox` lada w `<segment>/bbox/<coords><ext>` (konwencja d68be23, wspolna
+`--bbox` lada w `<segment>/bbox/<coords><ext>` (konwencja ed939a0, wspolna
 PL/CZ). `landcover/` bez zmian.
 
 **Konsekwencje:** BREAKING na dysku (tabela migracji: CHANGELOG 0.7.0
@@ -1435,7 +1435,7 @@ inicjalizacji (ADR-019). Sidecar arkusza PL-2000 deklaruje rzeczywisty
 
 **Errata 1 (2026-10-06, review-2 N4, E14, E17, D16):**
 - "po 3 probach" (tu i w errata 3 ADR-020 z 2026-09-30 "Zapytania transportowe
-  maja 3 proby"): od 9bcc040 ponawiane sa tylko blad sieci, HTTP 429 i 5xx
+  maja 3 proby"): od ca4d004 ponawiane sa tylko blad sieci, HTTP 429 i 5xx
   (do 3 prob, `Retry-After` wydluza przerwe); inne 4xx (403/404) koncza
   przy pierwszej probie z `DownloadError.status_code`
   (`transport/http.py::is_retryable`).
@@ -1614,7 +1614,7 @@ dewelopera) — widac, na ktora kampanie wskazuje, `data/` mozna przenosic;
 wolumin); 3) kopia + `Warning:` (FAT32/exFAT, inny wolumin). Uzyta metoda:
 `extra.link` w sidecarze (`symlink|hardlink|copy`). Zweryfikowano
 2026-10-07: symlink, hardlink i atomowa podmiana dzialaja na dysku lokalnym
-i na udziale CIFS SMB 3.1.1 (`<katalog-danych>`). Dowiazanie wiszace (usunieta
+i na udziale sieciowym CIFS SMB 3.1.1. Dowiazanie wiszace (usunieta
 kampania) = plik brakujacy: kontrola istnienia sprawdza CEL, nie link.
 
 (e) **Brak migracji.** Pliki sprzed tej zmiany (zwykle pliki w sciezce
@@ -1779,7 +1779,7 @@ jest dowiazaniem WYLACZNIE twardym: metody `hardlink` -> `copy` (+ `Warning:`);
 symlink USUNIETY (zastepuje kolejnosc symlink -> hardlink -> kopia z punktu (d)).
 Powody: (1) symlink utworzony z Linuksa na udziale SMB (`reparse=nfs` albo
 `mfsymlinks`) jest nieczytelny dla klientow Windows, ktorzy beda korzystac
-z danych; (2) udzial katalog danych przyjmuje cel symlinku najwyzej 77 znakow, wiec
+z danych; (2) testowany udzial SMB przyjmowal cel symlinku najwyzej 77 znakow, wiec
 czesc arkuszy dostawala symlink (PL-2000, cel 65-72 znaki), a czesc hardlink
 (PL-1992, orto, 79-81) — zachowanie zalezne od dlugosci godla; (3) hardlink
 dziala bez uprawnien na ext4/btrfs/APFS/NTFS i przez SMB (serwer pokazuje

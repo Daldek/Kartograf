@@ -164,7 +164,7 @@ lapal to poprawnie. Po przywroceniu drzewo robocze identyczne z commitem
 
 ## Commit
 
-`08fb3d5` — `refactor(storage): szablony segmentow FileStorage z rejestru zrodel`
+`6e49687` — `refactor(storage): szablony segmentow FileStorage z rejestru zrodel`
 (3 pliki zmienione: `docs/CHANGELOG.md`, `kartograf/download/storage.py`,
 `tests/test_storage.py`).
 

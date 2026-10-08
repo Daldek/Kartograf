@@ -1,6 +1,6 @@
 # Research — klaster orto + LAZ (K5, K1, N7)
 
-Data: 2026-09-29, galaz `develop`, HEAD `2e25c18` (drzewo czyste). Faza: wylacznie
+Data: 2026-09-29, galaz `develop`, HEAD `b61d533` (drzewo czyste). Faza: wylacznie
 research przyczyn i projekt naprawy — zadnych zmian w `kartograf/`, `tests/`,
 `docs/` poza tym raportem. Zero zapytan sieciowych do GUGiK; dowody z kodu,
 testow offline, raportu `L1-centrum-produkty-report.md` i surowych artefaktow

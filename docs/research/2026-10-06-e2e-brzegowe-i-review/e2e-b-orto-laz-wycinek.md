@@ -1,7 +1,7 @@
 # E2E-B: orto, LAZ, wycinek, cache (C12-C15, C17)
 
-- **Data:** 2026-10-06, agent E2E-B (Sonnet), commit `55070f8` (develop, czyste drzewo)
-- **df:** `<udzial>, uzyte 128K -> po rundzie ~2,3 GB` (budzet 20 GB niewykorzystany)
+- **Data:** 2026-10-06, agent E2E-B (Sonnet), commit `ead24c2` (develop, czyste drzewo)
+- **Miejsce:** po rundzie ~2,3 GB (budzet 20 GB niewykorzystany)
 - **Dane:** `<katalog-danych>/kartograf/e2e/2026-10-06-brzegowe/b/` (`raw/<Cx>/` surowe odpowiedzi, `out/`, `logs/`, `scripts/`)
 - **Wyrocznia F2** zapisana przed uruchomieniem: `b/logs/ORACLE_F2_2227.txt`
 - Cache SQLite repo nie byl czyszczony. Testy C15 szly z cwd w scratchpadzie (wlasny `.kartograf_cache.db`); zapytania liczone przez podmiane `requests.Session.send` (`b/scripts/cli_count.py`).

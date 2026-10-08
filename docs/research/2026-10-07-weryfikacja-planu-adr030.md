@@ -1,8 +1,8 @@
 # Weryfikacja planu wdrozenia ADR-030 (2026-10-07)
 
 **Przedmiot:** `docs/research/2026-10-07-plan-adr030.md` wobec ADR-030
-(`docs/DECISIONS.md:1436-1588`) i kodu na develop `ed898ec` (plan cytuje
-`e875e60`; numery linii zgodne — commity po nim dotycza tylko docs).
+(`docs/DECISIONS.md:1436-1588`) i kodu na develop `4f2c416` (plan cytuje
+`b17b3b1`; numery linii zgodne — commity po nim dotycza tylko docs).
 **Glebokosc:** umiarkowana (celowane sprawdzenie, nie pelny audyt).
 **Metoda:** lektura planu i ADR, odczyt kodu (plik:linia), skrypt
 `/tmp/claude-2001/verify030/count_campaigns.py` (`.venv/bin/python -I`) na
