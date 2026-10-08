@@ -963,6 +963,11 @@ Wydanie wielokrajowe. Najwazniejsze nowosci wzgledem 0.6.1:
   izolacji wymaga setuptools >= 77, dystrybucje maja `Metadata-Version:
   2.4` z `License-Expression: MIT` i LICENSE w `dist-info/licenses/`,
   upload na PyPI wymaga twine >= 6.x.
+- **Paczka zrodlowa (sdist) z kompletnymi testami:** `MANIFEST.in`
+  (`graft tests`) dolacza `tests/conftest.py`, `tests/__init__.py`
+  i `tests/fixtures/` — testy offline przechodza z rozpakowanego sdist
+  (wheel nadal bez `tests/`). Klasyfikator `Programming Language :: Python
+  :: 3.13`.
 
 #### Jakosc kodu i brama
 - **Brama:** testy offline (`pytest tests/ -m "not live"`), prog pokrycia
