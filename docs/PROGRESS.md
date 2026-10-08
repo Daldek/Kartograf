@@ -103,8 +103,12 @@
 > `## [0.7.1] - Unreleased` w CHANGELOG (link `compare/v0.7.0...develop`);
 > zakres: backlog "Do 0.7.1" (sekcja Backlog nizej), potem ogolny backlog.
 > **Kierunek do v1.0.0:** roadmapa w `docs/SCOPE.md` 3.3 (zatwierdzona
-> 2026-10-08). Nastepny krok projektowy: brainstorming podprojektu 1
-> (magazyn wersjonowany) — spec przed jakakolwiek implementacja.
+> 2026-10-08). Podprojekt 1 (magazyn wersjonowany, docelowo 0.8.0): spec
+> zaakceptowany i plan 1/3 napisany na galezi `feat/versioned-store`
+> (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`,
+> `docs/superpowers/plans/2026-10-08-versioned-store-1-core-pl-sheets.md`);
+> implementacja WSTRZYMANA decyzja uzytkownika. Najpierw wydanie 0.7.1
+> (uwagi z Hydrografa + backlog "Do 0.7.1") z `develop`.
 > Brama (stan sprawdzaj komendami, nie liczbami z dziennika):
 > `.venv/bin/python -m pytest tests/ -m "not live"` (zielone),
 > `.venv/bin/python -m ruff check .` i `ruff format --check .` (czyste,
@@ -131,6 +135,16 @@
   wymagania v1.0.0 w sekcji 8.
 - Poczatek cyklu 0.7.1: `__version__ = "0.7.1-dev"`, sekcja
   `[0.7.1] - Unreleased` w CHANGELOG.
+
+### Magazyn wersjonowany — spec i plan 1/3 (2026-10-08)
+
+- Brainstorming podprojektu 1 roadmapy: decyzje D1-D12 (wersja = tresc
+  sha256, `versions/` zamiast `kampanie/`, tryby `--check-updates` /
+  `--upgrade` / `--force`, plan `kartograf-plan/1`, land cover i HSG
+  w ukladzie `data/`, bez migracji, bez `parent_requests`).
+- Spec i plan 1/3 na galezi `feat/versioned-store` (nie wypchnieta);
+  plany 2/3 i 3/3 po wykonaniu 1/3. Implementacja wstrzymana — najpierw 0.7.1.
+- Backlog "Do 0.8.0" (zmiany lamiace CLI/API) zapisany ponizej.
 
 ### Wydanie 0.7.0 (2026-10-08)
 
