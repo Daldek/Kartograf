@@ -78,7 +78,7 @@ from kartograf.exceptions import (
     ParseError,
     ValidationError,
 )
-from kartograf.hydrology.hsg import HSGCalculator
+from kartograf.hydrology.hsg import HSGCalculator, hsg_from_rasters
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.base import BaseProvider, LandCoverProvider
 from kartograf.providers.corine import CorineProvider
@@ -162,6 +162,7 @@ __all__ = [
     "teryt_for_point",
     # Hydrology
     "HSGCalculator",
+    "hsg_from_rasters",
     # Transport and mosaic (stable since 0.7.1)
     "get_with_retry",
     "make_gugik_session",
