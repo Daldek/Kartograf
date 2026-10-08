@@ -43,6 +43,8 @@ kartograf parse N-34-130-D --hierarchy
 # niż 1:10000 rozwija się do arkuszy 1:10000 samo — bez --scale (sekcja 1.6)
 kartograf download N-34-130-D-d-2-4
 kartograf download N-34-130-D --resolution 5m --workers 8 --output ./data
+# NMT 5 m istnieje tylko w EVRF2007: --resolution 5m z --vertical-crs KRON86
+# CLI zamienia na EVRF2007 i drukuje Info: (kod 0)
 
 # Inne produkty GUGiK: NMPT (DSM), ortofotomapa, chmury punktów LAZ
 kartograf download N-34-130-D-d-2-4 --product nmpt
@@ -294,6 +296,9 @@ bbox = parser.get_bbox(crs="EPSG:2180")  # lub "EPSG:4326"
 # Pobieranie przez godło -> ASC (OpenData); hierarchia: download_hierarchy()
 manager = DownloadManager(output_dir="./data")
 path = manager.download_sheet("N-34-130-D-d-2-4")
+# NMT 5 m tylko w EVRF2007: resolution="5m" z vertical_crs="KRON86" w DownloadManager,
+# create_nmt_provider i download_pl_cutout -> ValidationError (od 0.7.1; wcześniej
+# cicha zamiana na EVRF2007 z ostrzeżeniem w logu)
 
 # Pobieranie przez bbox -> GeoTIFF (WCS) — tylko NMT 1m i tylko w układzie KRON86:
 # endpoint WCS dla EVRF2007 GUGiK wycofał (HTTP 404 od 2026-08), więc
@@ -495,6 +500,11 @@ cache (7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania.
 - **Migracja:** brak; zwykły plik NMT/NMPT/orto w starej ścieżce
   standardowej jest traktowany jak nieznany — pierwsze uruchomienie pobiera
   go ponownie do `kampanie/` i zastępuje dowiązaniem.
+- **Układ wysokości rekordu:** rekord skorowidza NMT/NMPT musi deklarować
+  zadany układ (`ukladWspolrzednychPionowych`: `PL-KRON86-NH` dla KRON86,
+  `PL-EVRF2007-NH` dla EVRF2007); inna wartość kończy kampanię błędem przed
+  pobraniem pliku (arkusz: `Error:`/porażka wg listy, w `all` pozostałe
+  kampanie są pobierane). Rekord bez tego pola jest przyjmowany.
 - **Wycinek `--target-crs`** zawsze składa się z najnowszych kampanii i nie
   przyjmuje `--campaigns all`/`--min-year`.
 - **LAZ:** `--campaigns all` pobiera wszystkie kafle, których rama przecina

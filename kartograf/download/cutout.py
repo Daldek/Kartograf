@@ -166,8 +166,8 @@ def prepare_pl_cutout(
     Zero network. ``TransformError`` when the EPSG:2180 -> ``target_crs``
     pair has no pinned operation (ADR-024/027); ``ValidationError`` on bad
     parameters. ``vertical_crs`` is the ACTUAL vertical CRS: with 5m only
-    EVRF2007 (``download_pl_cutout`` applies the provider factory rule
-    itself).
+    EVRF2007 (``require_nmt_vertical_crs``; 5m with KRON86 =
+    ``ValidationError``).
 
     The cutout is always a GeoTIFF (``.tif``) — the descriptor's
     ``default_extension`` (``.asc``) concerns sheets, not the cutout.
@@ -183,10 +183,9 @@ def prepare_pl_cutout(
         raise ValidationError(
             f"Uklad wysokosci NMT PL: EVRF2007 albo KRON86 (podano {vertical_crs})"
         )
-    from kartograf.providers.pl import nmt_vertical_crs
+    from kartograf.providers.pl import require_nmt_vertical_crs
 
-    if nmt_vertical_crs(resolution, vertical_crs, log=False) != vertical_crs:
-        raise ValidationError("NMT 5m jest dostepny wylacznie w EVRF2007")
+    require_nmt_vertical_crs(resolution, vertical_crs)
 
     from kartograf.providers.cuzk.dmr import bbox_to_crs
     from kartograf.sources.registry import get_source
@@ -861,7 +860,8 @@ def download_pl_cutout(
 
     Geometry mode: ``bbox`` is the geometry envelope (e.g.
     ``get_overall_bbox(path, target_crs="EPSG:2180")``), ``geometry`` — the file.
-    NMT factory rule: 5m => EVRF2007 (with a log warning). The provider and
+    5m with KRON86 = ``ValidationError`` before the factory (5 m exists only
+    in EVRF2007; the CLI swaps the datum itself). The provider and
     session come from the factory; ``cache`` (``MetadataCache`` or ``None``)
     goes to the provider — index records are read and written only through
     the cache. ``force=True`` does NOT bypass the record cache by itself: to
@@ -911,8 +911,9 @@ def download_pl_cutout(
         raise ValidationError(
             f"Uklad wysokosci NMT PL: EVRF2007 albo KRON86 (podano {vertical_crs})"
         )
-    from kartograf.providers.pl import create_nmt_provider
+    from kartograf.providers.pl import create_nmt_provider, require_nmt_vertical_crs
 
+    require_nmt_vertical_crs(resolution, vertical_crs)  # before the factory
     provider = create_nmt_provider(
         vertical_crs=vertical_crs, resolution=resolution, cache=cache
     )

@@ -270,7 +270,8 @@ kartograf/
 │   │                    # wcs.py (GugikWcsMixin — URL GetCoverage dla NMT/NMPT/orto),
 │   │                    # prg.py (discover_teryts_for_bbox, teryt_for_point — TERYT
 │   │                    # powiatow z WFS PRG),
-│   │                    # __init__.py (create_nmt_provider, nmt_vertical_crs)
+│   │                    # __init__.py (create_nmt_provider, nmt_vertical_crs,
+│   │                    # require_nmt_vertical_crs)
 │   ├── cuzk/            # CUZK: client.py (CuzkClient — silnik sterowany deskryptorem: ArcGIS
 │   │                    # REST query/export_image + pliki openzu), sheets.py (SheetIndex/
 │   │                    # SheetInfo — indeks SM5/TM33 z KladyMapovychListu, odsiewa
@@ -640,7 +641,18 @@ kazdego arkusza pyta WMS skorowidz (`GetFeatureInfo`, warstwy wykryte lazy
 przez `GetCapabilities` — ADR-020). `providers/pl/skorowidz.py` parsuje
 pelne rekordy; filtruje cale godlo, zgodny uklad i rozdzielczosc
 (dla orto tez domyslnie RGB), wybiera (strategia `newest`) rekord z najnowsza data w pierwszej
-warstwie z dopasowaniem; remis rozstrzyga `dt_pzgik`, URL. Brak zgodnego rekordu
+warstwie z dopasowaniem; remis rozstrzyga `dt_pzgik`, URL. Uklad wysokosci
+wybiera wylacznie endpoint (osobny WMS skorowidza na uklad); przed pobraniem
+`verify_record_vertical_crs` (`download/campaigns.py`; wywolania w
+`DownloadManager._fetch_campaigns` dla `newest` i `all` oraz w
+`GugikProvider.download`) porownuje pole rekordu `ukladWspolrzednychPionowych`
+z zadanym ukladem (`RECORD_VERTICAL_CRS`: KRON86 -> `PL-KRON86-NH`, EVRF2007
+-> `PL-EVRF2007-NH`, wartosci z surowych odpowiedzi GUGiK). Inna wartosc =
+`DownloadError` kampanii przed pobraniem (w `all` pozostale kampanie sa
+pobierane, arkusz konczy sie porazka); brak pola = rekord przyjety (log
+`debug`); orto nie ma ukladu wysokosci — bez sprawdzenia. Wartosc z rekordu
+zapisuje `extra.source.declared_vertical_crs`, takze w cache rekordow —
+niezgodny rekord z cache daje ten sam blad, odswiezenie: `--force`. Brak zgodnego rekordu
 po poprawnych odpowiedziach warstw = `NoCoverageError`, np. dla PL-2000
 1:10000 z samymi potomkami podpowiedz `--scale 1:2000`. Awaria warstwy,
 raport OGC albo nieoczekiwany szablon = `DownloadError`, nie cichy fallback
@@ -872,9 +884,13 @@ drugiego kraju nie daje juz kodu 0. Biblioteka nie ma `print` ani argparse.
    uklad docelowy spoza `SUPPORTED_TARGET_CRS` (`EPSG:2180`, `EPSG:5514`,
    `EPSG:3045` — ta sama krotka ogranicza `choices` flagi CLI), rozdzielczosc
    spoza 1m/5m, pion spoza EVRF2007/KRON86 i 5m z KRON86 (`prepare_pl_cutout`
-   przyjmuje pion FAKTYCZNY; korekte 5m => EVRF2007 robi `download_pl_cutout`
-   przez fabryke providera, a CLI juz w `_resolve_pl_sentinels` z `Info:` na
-   stderr — regula zyje w jednym miejscu, `providers.pl.nmt_vertical_crs`). Bbox trafia do EPSG:2180 (uklady czeskie
+   przyjmuje pion FAKTYCZNY; `require_nmt_vertical_crs` w
+   `providers/pl/__init__.py`; od 0.7.1 te pare odrzucaja `ValidationError` z
+   remedium takze `download_pl_cutout` — przed fabryka providera —
+   `create_nmt_provider` i `DownloadManager`; zamiane 5m => EVRF2007 z `Info:`
+   na stderr robi wylacznie CLI w `_resolve_pl_sentinels`, zanim wywola
+   biblioteke — regula "5 m tylko w EVRF2007" zyje w jednym miejscu,
+   `providers.pl.nmt_vertical_crs`). Bbox trafia do EPSG:2180 (uklady czeskie
    przypieta operacja `bbox_to_crs`, pozostale domyslnym transformerem, jak
    w calym przeplywie PL), po czym dla pary `EPSG:2180 -> target_crs`
    budowana jest operacja przypieta (polityka `min_accuracy_m=1.0`, bez

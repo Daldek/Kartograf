@@ -1341,14 +1341,17 @@ class TestCreateProviderAndStorage:
         )
         assert storage._subdir == "nmt/pl_{uklad}_1m_kron86"
 
-    def test_nmt_5m_kron86_storage_follows_provider_correction(self, tmp_path):
-        """Factory corrects 5m=>EVRF2007 - the segment carries the fact, not a flag."""
+    def test_nmt_5m_needs_datum_resolved_by_sentinels(self, tmp_path):
+        """0.7.1: the helper gets the ACTUAL datum (``_resolve_pl_sentinels``);
+        the raw 5m + KRON86 pair reaches the library factory, which rejects it."""
         from kartograf.cli.download_cmd import _create_provider_and_storage
 
         provider, storage = _create_provider_and_storage(
-            "nmt", tmp_path, "KRON86", "5m"
+            "nmt", tmp_path, "EVRF2007", "5m"
         )
         assert storage._subdir == "nmt/pl_{uklad}_5m_evrf2007"
+        with pytest.raises(ValidationError, match="tylko w EVRF2007"):
+            _create_provider_and_storage("nmt", tmp_path, "KRON86", "5m")
 
     def test_nmpt_storage_segment(self, tmp_path):
         from kartograf.cli.download_cmd import _create_provider_and_storage
@@ -1357,6 +1360,45 @@ class TestCreateProviderAndStorage:
             "nmpt", tmp_path, "KRON86", "1m"
         )
         assert storage._subdir == "nmpt/pl_{uklad}_1m_kron86"
+
+
+class TestNmt5mKron86Swap:
+    """0.7.1: the CLI keeps its announced swap (``Info:``, code 0); the
+    library alone would reject 5m + KRON86 (``ValidationError``)."""
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_godlo_5m_kron86_info_and_evrf2007(
+        self, mock_manager_cls, capsys, tmp_path
+    ):
+        mock_manager = Mock()
+        mock_manager.last_result = None
+        mock_manager.download_sheet.return_value = tmp_path / "out" / "a.asc"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--resolution",
+                "5m",
+                "--vertical-crs",
+                "KRON86",
+                "-o",
+                str(tmp_path / "out"),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        err = capsys.readouterr().err
+        assert (
+            "Info: NMT 5m (PL) jest dostepny tylko w EVRF2007 — --vertical-crs "
+            "KRON86 zamieniony na EVRF2007"
+        ) in err
+        kwargs = mock_manager_cls.call_args.kwargs
+        assert kwargs["vertical_crs"] == "EVRF2007"
+        assert kwargs["resolution"] == "5m"
+        assert kwargs["provider"].vertical_crs == "EVRF2007"
 
 
 class TestCmdDownloadBBox:

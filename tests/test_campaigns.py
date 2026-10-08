@@ -5,7 +5,9 @@ Fixture ``72675_858113_N-33-69-A-d-3-2.head.xyz``: a real GUGiK file 72675
 the 7th row (448 B, CRLF); GDAL opens it as a 2131x2399 AAIGrid.
 """
 
+import dataclasses
 import hashlib
+import logging
 import re
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,15 +16,18 @@ import pytest
 
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.campaigns import (
+    RECORD_VERTICAL_CRS,
     CampaignRef,
     campaign_extension,
     campaign_id_from_url,
     validate_campaign_args,
     verify_file_format,
     verify_record_url,
+    verify_record_vertical_crs,
     verify_sheet_extent,
 )
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.providers.pl.skorowidz import SkorowidzRecord, parse_skorowidz_records
 
 URL = "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/83233/83233_1744736_N-34-139-C-a-3-1.asc"
 
@@ -336,3 +341,90 @@ class TestVerifySheetExtent:
         p = tmp_path / "a.tif"
         p.write_bytes(b"II*\x00")
         verify_sheet_extent(p, self.G, ".tif")
+
+
+REAL_NMT = (
+    Path(__file__).parent / "fixtures" / "gugik_skorowidz" / "real_2026_10_06" / "nmt"
+)
+VFIELD = "ukladWspolrzednychPionowych"
+
+
+def _real_records(pattern: str) -> list:
+    """Records of raw GUGiK index bodies (``REAL_NMT`` glob), unfiltered."""
+    return [
+        record
+        for path in sorted(REAL_NMT.glob(pattern))
+        for record in parse_skorowidz_records(
+            path.read_text(encoding="utf-8"), path.stem.rsplit("_", 1)[-1]
+        )
+    ]
+
+
+KRON86_RECORDS = _real_records("*/nmt1_krn__*.body")
+EVRF2007_RECORDS = _real_records("*/*_evr__*.body") + _real_records("c14/*.html")
+
+
+def _declaring(record, value):
+    """The record with the vertical datum field set to ``value`` (None = no field)."""
+    raw = {k: v for k, v in record.raw.items() if k != VFIELD}
+    if value is not None:
+        raw[VFIELD] = value
+    return dataclasses.replace(record, raw=raw)
+
+
+class TestVerifyRecordVerticalCrs:
+    """0.7.1: the record must declare the vertical datum of the request."""
+
+    def test_mapping_equals_values_of_real_records(self):
+        """Measured, not guessed: every raw record of a KRON86/EVRF2007 index."""
+        assert KRON86_RECORDS and EVRF2007_RECORDS
+        assert {r.raw[VFIELD] for r in KRON86_RECORDS} == {
+            RECORD_VERTICAL_CRS["KRON86"]
+        }
+        assert {r.raw[VFIELD] for r in EVRF2007_RECORDS} == {
+            RECORD_VERTICAL_CRS["EVRF2007"]
+        }
+
+    def test_every_real_record_passes_for_its_own_index(self):
+        for record in KRON86_RECORDS:
+            verify_record_vertical_crs(record, "KRON86", record.godlo)
+        for record in EVRF2007_RECORDS:
+            verify_record_vertical_crs(record, "EVRF2007", record.godlo)
+
+    @pytest.mark.parametrize(
+        ("records", "requested"),
+        [(KRON86_RECORDS, "EVRF2007"), (EVRF2007_RECORDS, "KRON86")],
+    )
+    def test_other_datum_raises_naming_godlo_and_both_datums(self, records, requested):
+        record = records[0]
+        with pytest.raises(DownloadError) as exc:
+            verify_record_vertical_crs(record, requested, record.godlo)
+        message = str(exc.value)
+        assert record.godlo in message
+        assert f"deklaruje uklad wysokosci {record.raw[VFIELD]}" in message
+        assert f"zadano {requested}" in message
+        assert RECORD_VERTICAL_CRS[requested] in message
+        assert exc.value.godlo == record.godlo
+
+    @pytest.mark.parametrize("value", [None, "", "  "])
+    def test_missing_or_empty_field_is_accepted_with_debug_log(self, value, caplog):
+        record = _declaring(KRON86_RECORDS[0], value)
+        with caplog.at_level(logging.DEBUG, logger="kartograf.download.campaigns"):
+            verify_record_vertical_crs(record, "EVRF2007", record.godlo)
+        assert "niesprawdzony" in caplog.text
+
+    def test_case_and_whitespace_of_declared_value_are_tolerated(self):
+        record = _declaring(EVRF2007_RECORDS[0], " pl-evrf2007-nh ")
+        verify_record_vertical_crs(record, "EVRF2007", record.godlo)
+
+    @pytest.mark.parametrize("requested", [None, "Bpv"])
+    def test_request_without_known_datum_is_not_checked(self, requested):
+        """Orto (no vertical datum) and datums outside the mapping."""
+        record = KRON86_RECORDS[0]
+        verify_record_vertical_crs(record, requested, record.godlo)
+
+    def test_record_restored_from_cache_keeps_the_check(self):
+        """Cache round trip (A3 ``declared_vertical_crs`` -> raw field again)."""
+        cached = SkorowidzRecord.from_source(KRON86_RECORDS[0].to_source("https://wms"))
+        with pytest.raises(DownloadError, match="PL-KRON86-NH"):
+            verify_record_vertical_crs(cached, "EVRF2007", cached.godlo)

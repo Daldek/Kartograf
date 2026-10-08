@@ -1139,3 +1139,68 @@ def test_rerun_without_download_does_not_recopy(
     assert again is not None
     assert again.skipped is True and again.link == "copy"
     assert fake.downloads == [REC["84183"].url]
+
+
+# --- 0.7.1: vertical datum declared by the record ------------------------------
+
+GK = "N-33-59-C-a-1-3"  # raw KRON86 index bodies (C9a), records PL-KRON86-NH
+KRN_ALL = _filtered(sorted((NMT / GK).glob("nmt1_krn__*.body")), GK)
+SEGMENT_KRON86 = Path("nmt/pl_1992_1m_kron86")
+
+
+def _without_vertical(record):
+    """The record without ``ukladWspolrzednychPionowych`` (cannot be verified)."""
+    raw = {k: v for k, v in record.raw.items() if k != "ukladWspolrzednychPionowych"}
+    return dataclasses.replace(record, raw=raw)
+
+
+def test_newest_record_of_other_vertical_crs_fails_before_download(tmp_path):
+    """0.7.1, standard path: a KRON86 record served by the EVRF2007 index."""
+    rec = KRN_ALL[0]
+    fake = FakeCampaignProvider({"newest": [rec]})  # vertical_crs EVRF2007
+    m = DownloadManager(tmp_path, provider=fake)
+    with pytest.raises(DownloadError) as exc:
+        m.download_sheet(GK)
+    message = str(exc.value)
+    assert GK in message
+    assert "deklaruje uklad wysokosci PL-KRON86-NH" in message
+    assert "zadano EVRF2007 (oczekiwano PL-EVRF2007-NH)" in message
+    assert fake.downloads == []
+    assert not (tmp_path / SEGMENT).exists()
+
+
+def test_all_campaign_of_other_vertical_crs_fails_others_kept(tmp_path):
+    """0.7.1, campaign path: the mislabelled campaign fails, the rest is kept."""
+    bad = dataclasses.replace(
+        REC["78047"],
+        raw={**REC["78047"].raw, "ukladWspolrzednychPionowych": "PL-KRON86-NH"},
+    )
+    records = [bad if r is REC["78047"] else r for r in C14_ALL]
+    fake = FakeCampaignProvider({"all": records})
+    m = DownloadManager(tmp_path, provider=fake, campaigns="all")
+    with pytest.raises(DownloadError, match="nie pobrano 1 z 4 kampanii") as exc:
+        m.download_sheet(G)
+    assert "2023-09-05_78047" in str(exc.value)
+    assert "PL-KRON86-NH" in str(exc.value)
+    assert bad.url not in fake.downloads and len(fake.downloads) == 3
+    assert not campaign_path(tmp_path, bad).exists()
+    assert "2025-10-21_84183" in linked(std_path(tmp_path))
+
+
+def test_kron86_provider_downloads_real_kron86_record(tmp_path):
+    """0.7.1: the record of the queried datum passes (KRON86 segment)."""
+    rec = KRN_ALL[0]
+    fake = FakeCampaignProvider({"newest": [rec]})
+    fake.vertical_crs = "KRON86"
+    m = DownloadManager(tmp_path, provider=fake)
+    m.download_sheet(GK)
+    assert fake.downloads == [rec.url]
+    assert (tmp_path / SEGMENT_KRON86).is_dir()
+
+
+def test_record_without_vertical_field_is_downloaded(tmp_path):
+    """0.7.1: no field = cannot verify -> accepted (debug log only)."""
+    rec = _without_vertical(REC["84183"])
+    fake = FakeCampaignProvider({"newest": [rec]})
+    DownloadManager(tmp_path, provider=fake).download_sheet(G)
+    assert fake.downloads == [rec.url]

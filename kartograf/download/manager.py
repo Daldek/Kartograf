@@ -26,6 +26,7 @@ from kartograf.download.campaigns import (
     validate_campaign_args,
     verify_file_format,
     verify_record_url,
+    verify_record_vertical_crs,
     verify_sheet_extent,
 )
 from kartograf.download.links import (
@@ -37,7 +38,7 @@ from kartograf.download.links import (
 from kartograf.download.storage import FileStorage, storage_for_provider
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.base import BaseProvider
-from kartograf.providers.pl import create_nmt_provider, nmt_vertical_crs
+from kartograf.providers.pl import create_nmt_provider, require_nmt_vertical_crs
 from kartograf.providers.pl.skorowidz import SkorowidzRecord
 
 logger = logging.getLogger(__name__)
@@ -319,7 +320,9 @@ class DownloadManager:
             is appended as `_<variant>`)
         vertical_crs : str, optional
             Vertical CRS: "EVRF2007" or "KRON86" (default: "EVRF2007").
-            Note: 5m resolution only supports EVRF2007.
+            Note: 5m exists only in EVRF2007 - "5m" with "KRON86" raises
+            ValidationError (an injected provider that declares its own
+            vertical_crs wins).
         resolution : str, optional
             Grid resolution: "1m" or "5m" (default: "1m").
             Note: 5m is only available for EVRF2007 and does not support
@@ -343,11 +346,13 @@ class DownloadManager:
         ------
         ValidationError
             Unknown strategy / invalid ``min_year``, or a provider without
-            campaigns with ``campaigns="all"`` or ``min_year``.
+            campaigns with ``campaigns="all"`` or ``min_year``;
+            ``resolution="5m"`` with ``vertical_crs="KRON86"`` (no provider, or
+            one without ``vertical_crs``).
         """
         validate_campaign_args(campaigns, min_year)
-        # The "5m => EVRF2007" rule lives in the factory (`nmt_vertical_crs`, D11);
-        # without a provider the factory corrects (and logs) it.
+        # The "5m => EVRF2007" rule (D11): without a provider the factory
+        # rejects 5m + KRON86 with ValidationError (0.7.1, no silent swap).
         self._provider = provider or create_nmt_provider(
             vertical_crs=vertical_crs, resolution=resolution
         )
@@ -361,7 +366,12 @@ class DownloadManager:
         if isinstance(provider_vertical_crs, str):
             vertical_crs = provider_vertical_crs
         else:
-            vertical_crs = nmt_vertical_crs(resolution, vertical_crs)
+            vertical_crs = require_nmt_vertical_crs(resolution, vertical_crs)
+        # Datum the index records must declare (``verify_record_vertical_crs``);
+        # ``None`` = the provider declares none (orto, stubs) - no check.
+        self._record_vertical_crs = (
+            provider_vertical_crs if isinstance(provider_vertical_crs, str) else None
+        )
         if storage is None:
             storage = storage_for_provider(
                 output_dir,
@@ -698,8 +708,10 @@ class DownloadManager:
 
         Records from ``provider.resolve_campaigns`` (never an empty list —
         none = ``NoCoverageError``). For each campaign, BEFORE the network:
-        ``verify_record_url`` (the record URL must name the sheet, B4) and
-        the extension from the record ``format`` field; then skipping an
+        ``verify_record_url`` (the record URL must name the sheet, B4),
+        ``verify_record_vertical_crs`` (the record vertical datum vs the
+        provider ``vertical_crs``) and the extension from the record
+        ``format`` field; then skipping an
         existing campaign file with ``skip_existing`` (the existence of the
         standard path is NOT a reason to skip), otherwise ``download_record``
         -> ``verify_file_format`` -> ``verify_sheet_extent`` (the ASC header
@@ -768,8 +780,9 @@ class DownloadManager:
             except DownloadError as e:
                 errors.append((record.url, e))
                 continue
-            try:  # B4: the URL must name the sheet - before the network
+            try:  # B4 + record datum - before the network
                 verify_record_url(record.url, godlo)
+                verify_record_vertical_crs(record, self._record_vertical_crs, godlo)
             except DownloadError as e:
                 errors.append((ref.dirname, e))
                 continue

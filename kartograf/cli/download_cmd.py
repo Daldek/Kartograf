@@ -362,9 +362,10 @@ def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
         )
         return 1
     if product == "nmt":
-        # D11: one rule (`nmt_vertical_crs`), one effect - a correction;
-        # the CLI shows it explicitly (stderr, like other Info:), and from here on the
-        # ACTUAL vertical CRS flows, so the factory/manager/cutout correct nothing.
+        # D11: one rule (`nmt_vertical_crs`); the CLI swaps and announces it
+        # (stderr, like other Info:), because the library rejects 5m + KRON86
+        # (`require_nmt_vertical_crs`, 0.7.1) - from here on the ACTUAL
+        # vertical CRS flows to the factory/manager/cutout.
         from kartograf.providers.pl import nmt_vertical_crs
 
         actual = nmt_vertical_crs(args.resolution, args.vertical_crs, log=False)

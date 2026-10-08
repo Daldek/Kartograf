@@ -14,7 +14,7 @@ import pytest
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.manager import DownloadManager, DownloadProgress
 from kartograf.download.storage import FileStorage
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.pl.gugik import GugikProvider
 
 
@@ -110,12 +110,10 @@ class TestDownloadManagerBasic:
         # 5m forces EVRF2007
         assert manager.vertical_crs == "EVRF2007"
 
-    def test_resolution_5m_forces_evrf2007(self):
-        """Test that 5m forces EVRF2007."""
-        manager = DownloadManager(resolution="5m", vertical_crs="KRON86")
-        # Should be changed to EVRF2007
-        assert manager.vertical_crs == "EVRF2007"
-        assert manager.resolution == "5m"
+    def test_resolution_5m_with_kron86_raises(self):
+        """0.7.1: 5m exists only in EVRF2007 - ValidationError, no silent swap."""
+        with pytest.raises(ValidationError, match="uzyj vertical_crs='EVRF2007'"):
+            DownloadManager(resolution="5m", vertical_crs="KRON86")
 
     def test_repr_includes_resolution(self, tmp_path):
         """Test that repr contains the resolution."""
@@ -228,18 +226,20 @@ class TestDownloadManagerStorageFromDescriptor:
         assert manager._storage._subdir == "nmt/pl_{uklad}_1m_kron86"
         assert manager.vertical_crs == "KRON86"
 
-    def test_default_storage_5m_kron86_corrected_to_evrf(self, tmp_path):
-        """The 5m=>EVRF2007 rule applies BEFORE the segment is built."""
+    def test_default_storage_5m_kron86_rejected(self, tmp_path):
+        """0.7.1: a provider without its own datum - the manager rejects
+        5m + KRON86 BEFORE the segment is built (no ``..._5m_evrf2007`` swap)."""
         provider = Mock(spec=GugikProvider)
         provider.descriptor_key = "pl.gugik.nmt_5m"
         type(provider).default_extension = PropertyMock(return_value=".asc")
-        manager = DownloadManager(
-            output_dir=tmp_path,
-            provider=provider,
-            vertical_crs="KRON86",
-            resolution="5m",
-        )
-        assert manager._storage._subdir == "nmt/pl_{uklad}_5m_evrf2007"
+        with pytest.raises(ValidationError, match="tylko w EVRF2007"):
+            DownloadManager(
+                output_dir=tmp_path,
+                provider=provider,
+                vertical_crs="KRON86",
+                resolution="5m",
+            )
+        assert not (tmp_path / "nmt").exists()
 
     def test_provider_with_empty_vertical_crs_raises(self, tmp_path):
         """Finding 7 through the public API: a custom provider with vertical_crs=''."""
@@ -954,14 +954,34 @@ class TestCreateNmtProviderFactory:
         assert provider.resolution == "1m"
         assert provider.vertical_crs == "EVRF2007"
 
-    def test_5m_forces_evrf2007_with_warning(self, caplog):
+    def test_5m_kron86_raises_with_remedy(self, caplog):
+        """0.7.1: no silent swap to EVRF2007 - an error naming the remedy."""
         import logging
 
         from kartograf.providers.pl import create_nmt_provider
 
+        with caplog.at_level(logging.WARNING), pytest.raises(ValidationError) as exc:
+            create_nmt_provider(vertical_crs="KRON86", resolution="5m")
+        message = str(exc.value)
+        assert "NMT 5m (PL) jest dostepny tylko w EVRF2007" in message
+        assert "uzyj vertical_crs='EVRF2007' albo resolution='1m'" in message
+        assert caplog.text == ""
+
+    def test_require_rule_silent_and_public_rule_unchanged(self, caplog):
+        """``require_nmt_vertical_crs`` never logs; ``nmt_vertical_crs`` keeps
+        its 0.7.0 contract (public API: ``log=True`` warns, still corrects)."""
+        import logging
+
+        from kartograf.providers.pl import nmt_vertical_crs, require_nmt_vertical_crs
+
+        with caplog.at_level(logging.DEBUG):
+            assert require_nmt_vertical_crs("5m", "EVRF2007") == "EVRF2007"
+            assert require_nmt_vertical_crs("1m", "KRON86") == "KRON86"
+            with pytest.raises(ValidationError):
+                require_nmt_vertical_crs("5m", "KRON86")
+        assert caplog.text == ""
         with caplog.at_level(logging.WARNING):
-            provider = create_nmt_provider(vertical_crs="KRON86", resolution="5m")
-        assert provider.vertical_crs == "EVRF2007"
+            assert nmt_vertical_crs("5m", "KRON86") == "EVRF2007"
         assert "5m only supports EVRF2007" in caplog.text
 
     def test_rule_without_log_is_silent(self, caplog):
