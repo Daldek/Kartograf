@@ -5,6 +5,7 @@ Tests cover:
 - MetadataCache record caching (set, get, TTL expiry, overwrite, key parts)
 - MetadataCache TERYT caching (set, get, TTL expiry)
 - MetadataCache management (clear, stats, vacuum, close)
+- Lazy opening (no database file until the first write; CLI cache commands)
 - Migration of a legacy database (url_cache table dropped)
 - GugikProvider cache integration (hit, no-coverage hit, miss, K3-safe failure)
 - GugikNmptProvider cache integration (product key "nmpt")
@@ -247,6 +248,7 @@ class TestMetadataCacheSheet:
     def test_old_database_gains_sheet_table(self, cache_path):
         """Stara baza (bez sheet_cache) doposaza sie przy otwarciu."""
         c = MetadataCache(db_path=cache_path)
+        c.set_teryt(1.0, 2.0, "1465")  # first write creates the database
         c._conn.execute("DROP TABLE sheet_cache")
         c._conn.commit()
         c._conn.close()
@@ -288,6 +290,8 @@ class TestMetadataCacheMigration:
 
         c = MetadataCache(db_path=cache_path)
         try:
+            # the existing file is opened (and migrated) by the first read
+            assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
             tables = {
                 row[0]
                 for row in c._conn.execute(
@@ -296,7 +300,6 @@ class TestMetadataCacheMigration:
             }
             assert "url_cache" not in tables
             assert "record_cache" in tables
-            assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
             assert c.stats()["record_count"] == 0
         finally:
             c.close()
@@ -873,6 +876,7 @@ class TestWALVerification:
     def test_wal_mode_enabled_by_default(self, cache_path):
         """Test that WAL mode is successfully enabled."""
         cache = MetadataCache(db_path=cache_path)
+        cache.set_teryt(1.0, 2.0, "1465")  # first write opens the database
         result = cache._conn.execute("PRAGMA journal_mode").fetchone()
         assert result[0] == "wal"
         cache.close()
@@ -912,6 +916,7 @@ class TestWALVerification:
             caplog.at_level(logging.WARNING, logger="kartograf.cache.metadata"),
         ):
             cache = MetadataCache(db_path=cache_path)
+            cache.set_teryt(1.0, 2.0, "1465")  # first write opens the database
             cache._conn = real_conn  # Restore real conn for cleanup
 
         assert any(
@@ -1160,3 +1165,202 @@ class TestMetadataCacheFinalizer:
 
     def test_del_without_conn_attribute(self):
         MetadataCache.__new__(MetadataCache).__del__()
+
+
+# =========================================================================
+# TestLazyOpen - baza powstaje dopiero przy pierwszym zapisie
+# =========================================================================
+
+
+class TestLazyOpen:
+    """Konstrukcja, odczyty, stats/clear/close nie tworza pliku bazy."""
+
+    def test_constructor_does_not_create_file(self, cache_path):
+        c = MetadataCache(db_path=cache_path)
+        assert not cache_path.exists()
+        assert c._conn is None
+        c.close()
+        assert not cache_path.exists()
+
+    def test_default_path_constructor_does_not_create_file(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        c = MetadataCache()
+        assert c.db_path == tmp_path / ".kartograf_cache.db"
+        c.close()
+        assert list(tmp_path.iterdir()) == []
+
+    def test_reads_on_missing_file_miss_without_creating(self, cache_path):
+        c = MetadataCache(db_path=cache_path)
+        assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+        assert c.get_campaigns("nmt", "1m", "EVRF2007", GODLO) is None
+        assert c.get_teryt(1.0, 2.0) is None
+        assert c.get_sheet("cz_sm5", "CTES96") is None
+        assert not cache_path.exists()
+        c.close()
+
+    def test_stats_on_missing_file_is_zero_without_creating(self, cache_path):
+        c = MetadataCache(db_path=cache_path)
+        st = c.stats()
+        assert st == {
+            "record_count": 0,
+            "campaign_count": 0,
+            "teryt_count": 0,
+            "sheet_count": 0,
+            "db_size_bytes": 0,
+            "db_path": str(cache_path),
+            "db_exists": False,
+        }
+        assert not cache_path.exists()
+        c.close()
+
+    def test_management_on_missing_file_is_noop(self, cache_path):
+        c = MetadataCache(db_path=cache_path)
+        c.clear()
+        c.vacuum()
+        assert c.prune_expired() == 0
+        c.close()
+        assert list(cache_path.parent.iterdir()) == []
+
+    @pytest.mark.parametrize(
+        ("setter", "getter", "expected"),
+        [
+            (
+                lambda c: c.set_record("nmt", "1m", "EVRF2007", GODLO, {"a": 1}),
+                lambda c: c.get_record("nmt", "1m", "EVRF2007", GODLO),
+                {"a": 1},
+            ),
+            (
+                lambda c: c.set_campaigns("nmt", "1m", "EVRF2007", GODLO, {"b": 2}),
+                lambda c: c.get_campaigns("nmt", "1m", "EVRF2007", GODLO),
+                {"b": 2},
+            ),
+            (
+                lambda c: c.set_teryt(1.0, 2.0, "1465"),
+                lambda c: c.get_teryt(1.0, 2.0),
+                "1465",
+            ),
+            (
+                lambda c: c.set_sheet("cz_sm5", "CTES96", {"c": 3}),
+                lambda c: c.get_sheet("cz_sm5", "CTES96"),
+                {"c": 3},
+            ),
+        ],
+        ids=["record", "campaigns", "teryt", "sheet"],
+    )
+    def test_first_write_creates_file_and_next_read_hits(
+        self, cache_path, setter, getter, expected
+    ):
+        c = MetadataCache(db_path=cache_path)
+        assert getter(c) is None
+        setter(c)
+        assert cache_path.exists()
+        assert getter(c) == expected
+        c.close()
+        c2 = MetadataCache(db_path=cache_path)
+        try:
+            assert getter(c2) == expected
+            assert c2.stats()["db_exists"] is True
+        finally:
+            c2.close()
+
+    def test_read_sees_file_created_later_by_other_instance(self, cache_path):
+        reader = MetadataCache(db_path=cache_path)
+        assert reader.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+        writer = MetadataCache(db_path=cache_path)
+        writer.set_record("nmt", "1m", "EVRF2007", GODLO, {"a": 1})
+        writer.close()
+        try:
+            assert reader.get_record("nmt", "1m", "EVRF2007", GODLO) == {"a": 1}
+        finally:
+            reader.close()
+
+    def test_refresh_reads_miss_and_write_creates_file(self, cache_path):
+        c = MetadataCache(db_path=cache_path, refresh=True)
+        assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+        assert not cache_path.exists()
+        c.set_record("nmt", "1m", "EVRF2007", GODLO, {"a": 1})
+        assert cache_path.exists()
+        assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+        c.close()
+        normal = MetadataCache(db_path=cache_path)
+        try:
+            assert normal.get_record("nmt", "1m", "EVRF2007", GODLO) == {"a": 1}
+        finally:
+            normal.close()
+
+    def test_concurrent_first_writes_open_one_connection(self, cache_path):
+        """Kilka watkow naraz robi pierwszy zapis: jedno polaczenie, komplet."""
+        c = MetadataCache(db_path=cache_path)
+        real_connect = sqlite3.connect
+        connects = []
+
+        def counting_connect(*a, **kw):
+            connects.append(a)
+            time.sleep(0.05)  # widen the window for a second opener
+            return real_connect(*a, **kw)
+
+        barrier = threading.Barrier(8)
+        errors: list[Exception] = []
+
+        def writer(t: int) -> None:
+            try:
+                barrier.wait()
+                for i in range(10):
+                    c.set_record("nmt", "1m", "EVRF2007", f"S{t}-{i}", {"t": t})
+            except Exception as e:  # noqa: BLE001 - any exception is a failure here
+                errors.append(e)
+
+        with patch("kartograf.cache.metadata.sqlite3.connect", counting_connect):
+            threads = [threading.Thread(target=writer, args=(t,)) for t in range(8)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+        try:
+            assert errors == []
+            assert len(connects) == 1
+            assert c.stats()["record_count"] == 80
+        finally:
+            c.close()
+
+    def test_close_twice_then_reuse_reopens(self, cache_path):
+        c = MetadataCache(db_path=cache_path)
+        c.set_record("nmt", "1m", "EVRF2007", GODLO, {"a": 1})
+        c.close()
+        c.close()
+        assert c.get_record("nmt", "1m", "EVRF2007", GODLO) == {"a": 1}
+        c.close()
+
+    def test_del_without_connection_does_not_raise_or_create(self, cache_path):
+        c = MetadataCache(db_path=cache_path)
+        c.__del__()
+        assert not cache_path.exists()
+
+
+class TestCLICacheCommandsWithoutDatabase:
+    """``kartograf cache path|stats|clear`` w katalogu bez bazy jej nie tworza."""
+
+    def test_cache_path_does_not_create_db(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+        assert main(["cache", "path"]) == 0
+        out = capsys.readouterr().out
+        assert out == f"{tmp_path / '.kartograf_cache.db'}\n"
+        assert list(tmp_path.iterdir()) == []
+
+    def test_cache_stats_does_not_create_db(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+        assert main(["cache", "stats"]) == 0
+        out = capsys.readouterr().out
+        assert "Record entries: 0" in out
+        assert "Campaign entries: 0" in out
+        assert "TERYT entries: 0" in out
+        assert "Sheet entries: 0" in out
+        assert "Database size: - (file not created yet)" in out
+        assert f"Database path: {tmp_path / '.kartograf_cache.db'}" in out
+        assert list(tmp_path.iterdir()) == []
+
+    def test_cache_clear_does_not_create_db(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.chdir(tmp_path)
+        assert main(["cache", "clear"]) == 0
+        assert "Cache cleared." in capsys.readouterr().out
+        assert list(tmp_path.iterdir()) == []
