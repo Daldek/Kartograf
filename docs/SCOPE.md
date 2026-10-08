@@ -252,7 +252,7 @@ kartograf download <godlo> --product orto  # pobierz ortofoto
 kartograf download <godlo> --product laz   # pobierz chmury punktów LAZ (wiele kafli)
 kartograf download --bbox ... --product laz --year 2024 --min-density 12
 kartograf download --bbox min_x,min_y,max_x,max_y  # NMT dla bbox
-kartograf download --bbox ... --system 2000  # NMT w ukladzie PL-2000
+kartograf download --bbox ... --system 2000 --scale 1:2000  # NMT w ukladzie PL-2000 (arkusze 1:2000)
 kartograf download --bbox ... --product orto  # ortofoto dla bbox
 kartograf download --geometry area.shp         # NMT z pliku geometrii
 kartograf download --geometry area.gpkg --layer catchments

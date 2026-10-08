@@ -147,7 +147,7 @@ kartograf parse N-34-130-D-d-2-4
 kartograf parse N-34-130-D --hierarchy
 kartograf download N-34-130-D-d-2-4
 kartograf download N-34-130-D              # godło grubsze -> arkusze 1:10000 (bez --scale)
-kartograf download 6.179.12 --scale 1:2000  # PL-2000: skala arkuszy GUGiK (USAGE 1.6)
+kartograf download 7.171.21 --scale 1:2000  # PL-2000: skala arkuszy GUGiK (USAGE 1.6)
 kartograf download --bbox 771000,509000,772000,510000
 kartograf download --bbox 19.93,50.05,19.95,50.07 --bbox-crs EPSG:4326
 kartograf download N-34-130-D --resolution 5m
@@ -157,7 +157,7 @@ kartograf download N-34-130-D-d-2-4 --product laz
 kartograf download --bbox 771000,509000,772000,510000 --product orto
 kartograf download --geometry area.shp
 kartograf download --geometry area.gpkg --layer catchments
-kartograf download --bbox 6500000,5895000,6508000,5900000 --bbox-crs EPSG:2177 --system 2000
+kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --system 2000 --scale 1:2000
 ```
 
 ---
