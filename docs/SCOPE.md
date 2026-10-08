@@ -1,9 +1,9 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.12
-**Data:** 2026-09-30
-**Status:** Rozwoj — v0.7.0 (Unreleased); naprawy offline po testach live 2026-09-29 sa wdrozone, ponowna weryfikacja na zywych serwisach przed wydaniem
+**Wersja:** 3.14
+**Data:** 2026-10-08
+**Status:** Rozwoj — v0.7.0 (Unreleased; `__version__ = "0.7.0-dev"`), ostatnie wydanie: v0.6.1
 
 ---
 
@@ -167,9 +167,14 @@ patrz sekcja 3.2, znane ograniczenie.
   błąd jednego rocznika przerywa odkrywanie (`DownloadError`)
 - Kafle drobniejsze niż 1:10000 (jedno godło 1:10000 → wiele kafli .laz)
 - url_do_pobrania brany wprost z atrybutu WFS (godło kafla nieparsowane)
-- Domyślnie najnowszy kafel per obszar (ADR-029); flagi --year, --vertical-crs, --min-density
+- Domyślnie najnowszy kafel per obszar (ADR-029); flagi --year, --vertical-crs,
+  --min-density, --campaigns/--min-year (sekcja 2.12)
 - Dwa układy wysokościowe: EVRF2007 (domyślny, 2018+), KRON86 (legacy, 2010-2019)
 - Pobieranie równoległe (--workers), pomijanie istniejących plików
+- Biblioteka: download_laz_area (wybór + pobranie + sidecary, wynik
+  LazDownloadResult: downloaded/skipped/failed/superseded) albo
+  GugikLazProvider.select_tiles + run_laz_download
+- Porażka choć jednego kafla = Error: z pełną listą, kod 1 (pobrane zostają)
 
 # Źródło: GUGiK
 # API: WFS (GetCapabilities + GetFeature), OpenData
@@ -183,16 +188,23 @@ patrz sekcja 3.2, znane ograniczenie.
 - Pobieranie calego pliku BDOT10k (wszystkie warstwy)
 - Pobieranie przez TERYT (powiat)
 - Pobieranie przez godło lub bbox
-- Format: GeoPackage, Shapefile
-- Automatyczne scalanie warstw z zachowaniem rtree spatial index
+- Format: GeoPackage (domyślny) albo Shapefile (archiwum .zip, bez rozpakowania)
+- Automatyczne scalanie warstw z zachowaniem rtree spatial index; GPKG
+  składany w lokalnym katalogu tymczasowym i przenoszony do --output
+  (SQLite nie pisze na udziale sieciowym — działa na CIFS/SMB bez blokad
+  zakresów bajtów)
 
 # CORINE Land Cover (Copernicus):
 - 44 klasy pokrycia terenu
 - Lata: 1990, 2000, 2006, 2012, 2018
 - Pobieranie przez godło lub bbox
-- Format: GeoTIFF (CLMS API) lub PNG (WMS fallback)
-- OAuth2 RSA authentication (opcjonalne)
+- Format: GeoTIFF (CLMS API) lub PNG (WMS fallback: EEA Discomap, dla 1990
+  DLR; sidecar extra.fallback = "wms_png")
+- OAuth2 RSA authentication (opcjonalne; CLMS_CREDENTIALS na każdym systemie,
+  Keychain tylko macOS)
 - Auth Proxy dla izolacji credentials
+
+# Wszystkie źródła land cover: sidecar <plik>.meta.json (sekcja 2.11)
 ```
 
 ### 2.7 SoilGrids (Dane Glebowe) - IN SCOPE
@@ -218,7 +230,10 @@ patrz sekcja 3.2, znane ograniczenie.
 - Mapowanie tekstury → HSG (A, B, C, D)
 - Automatyczne pobieranie clay/sand/silt z SoilGrids
 - Statystyki pokrycia dla każdej grupy
-- Format wyjściowy: GeoTIFF (wartości 1-4)
+- Format wyjściowy: GeoTIFF (wartości 1-4, 0 = nodata)
+- Selekcja: --godlo, --bbox, --geometry
+- Sidecar wyniku <plik>.meta.json (extra.derived = "hsg", warstwy źródłowe,
+  głębokość, statystyka, kody klas)
 
 # Moduł: kartograf.hydrology.hsg
 ```
@@ -246,6 +261,9 @@ kartograf download --bbox ... --bbox-crs EPSG:4326 --country auto   # bbox trans
 kartograf download --bbox ... --country cz --target-crs EPSG:2180   # reprojekcja lokalna (pinned)
 kartograf download --bbox ... --country pl --target-crs EPSG:2180   # wycinek PL: jeden GeoTIFF (ADR-027)
 kartograf download 302_5550 --country cz --vertical-crs EVRF2007    # Bpv -> EVRF2007 (EPSG:5621)
+kartograf download <godlo> --campaigns all              # wszystkie kampanie GUGiK arkusza (ADR-030)
+kartograf download <godlo> --min-year 2024              # tylko kampanie od roku (aktualnosc)
+kartograf download --bbox ... --product laz --campaigns all   # LAZ bez deduplikacji pokrycia
 kartograf landcover download --source bdot10k --teryt <kod>
 kartograf landcover download --source corine --godlo <godlo>
 kartograf landcover download --source soilgrids --property <param>  # --godlo/--bbox (bez --teryt)
@@ -253,28 +271,33 @@ kartograf landcover list-sources
 kartograf landcover list-layers --source <source>
 kartograf soilgrids hsg --godlo <godlo>    # oblicz HSG
 kartograf cache stats|clear|path           # cache metadanych (SQLite)
+# Pełna lista opcji: kartograf <komenda> --help
 ```
 
 ### 2.10 Python API - IN SCOPE
 
 ```python
-# Public API (kartograf/__init__.py):
+# Public API — źródło prawdy: kartograf/__init__.py (__all__); lista poniżej
+# jest z nim zgodna i aktualizowana razem z nim.
 from kartograf import (
     # Core
     SheetParser, Parser2000, ParserTM33, BBox,
     find_sheets_for_bbox, find_sheets_2000_for_bbox, find_sheets_for_geometry,
-    # Download (NMT/NMPT/Orto/LAZ)
-    DownloadManager, DownloadProgress, DownloadResult, FileStorage,
+    # Download (NMT/NMPT/Orto, kampanie ADR-030)
+    DownloadManager, DownloadProgress, DownloadResult, SheetFetch, CampaignRef,
+    FileStorage,
     # Download — wycinek PL (ADR-027)
     PlCutout, PlCutoutResult, PlCutoutSheets,
     download_pl_cutout, prepare_pl_cutout, run_pl_cutout, select_pl_cutout_sheets,
+    # Download — kafle LAZ (ADR-029)
+    LazDownloadResult, LazTileFailure, download_laz_area, run_laz_download,
     # Cache
     MetadataCache,
     # Land Cover
     LandCoverManager,
     # Providers
     BaseProvider, GugikProvider, GugikNmptProvider, GugikOrtoProvider,
-    GugikLazProvider, LazTile,
+    GugikLazProvider, LazTile, LazTileSelection, SupersededLazTile,
     LandCoverProvider, Bdot10kProvider, CorineProvider, SoilGridsProvider,
     # Providers — CZ (CUZK, etap 1)
     CuzkDmrProvider, create_dmr_provider,
@@ -282,6 +305,9 @@ from kartograf import (
     HSGCalculator,
     # Exceptions
     KartografError, ParseError, ValidationError, DownloadError, NoCoverageError,
+    GridMismatchError,
+    # Version
+    __version__,
 )
 ```
 
@@ -301,6 +327,10 @@ from kartograf import (
   `<segment>/kampanie/<data>_<id>/...`, ścieżka standardowa = dowiązanie do
   najnowszej lokalnej kampanii (hardlink → kopia, bez symlinków — errata 4); brak migracji
 - `landcover/` bez zmian (własny default `--output`)
+- Każde udane pobranie (CLI, DownloadManager, LandCoverManager,
+  download_pl_cutout, download_laz_area) i wynik HSG ma sidecar
+  `<plik>.meta.json` (schemat `kartograf-meta/1`, best-effort); sidecar pliku
+  kampanii jest obowiązkowy (porażka zapisu = porażka kampanii)
 
 ### 2.12 Kampanie GUGiK (ADR-030) - IN SCOPE
 
@@ -311,8 +341,18 @@ from kartograf import (
 - --campaigns all: każda kampania arkusza po twardym filtrze ADR-028, bez limitu
 - --min-year RRRR: dolna granica roku pozyskania (aktualnosc), obie strategie
 - LAZ: --campaigns all (kafle z ramą przecinającą obszar, bez deduplikacji ADR-029), --min-year (akt_rok)
+- LAZ: --min-year i --year wykluczają się (Error:)
 - Wycinek --target-crs: zawsze newest (all/--min-year = Error:)
-- API: DownloadManager(campaigns=, min_year=), SheetFetch, CampaignRef
+- CZ nie ma kampanii: zadanie bez części PL z --campaigns all/--min-year =
+  Error: przed siecią; obszar PL+CZ pod auto = Info:, CZ w bieżącej wersji
+- Weryfikacja treści pliku kampanii (nagłówek AAIGrid / sygnatura TIFF),
+  format z pola `format` rekordu; sidecar kampanii obowiązkowy
+- Skorowidz GUGiK niedostępny (błąd transportu) przy newest bez --min-year
+  i --force, z lokalną kampanią: arkusz z lokalnej kampanii + Warning:,
+  kod bez zmian (errata 5 ADR-030); all/--min-year/brak lokalnej = błąd
+- API: DownloadManager(campaigns=, min_year=), SheetFetch (.unverified),
+  DownloadResult (.unverified, .reused_campaign_files), CampaignRef,
+  PlCutoutResult.unverified
 ```
 
 ---
@@ -359,7 +399,9 @@ from kartograf import (
 ### 3.2 Ograniczenia Techniczne
 
 ```
-- Brak weryfikacji integralności plików (checksums)
+- Brak weryfikacji integralności sumami kontrolnymi (checksums); pliki
+  kampanii NMT/NMPT/orto PL mają tylko kontrolę formatu treści
+  (verify_file_format: nagłówek AAIGrid / sygnatura TIFF, ADR-030)
 - Timeouty domyślne: 30 s dla NMT/NMPT (GUGiK) i dla discovery WFS w LAZ,
   60 s dla Ortofoto, pobierania kafli LAZ, CORINE (bbox/godło), CUZK oraz
   SoilGrids przez godło, 120 s dla BDOT10k (wszystkie tryby) oraz SoilGrids
@@ -368,7 +410,8 @@ from kartograf import (
 - Max 3 próby retry (nie konfigurowalne); ponawiane tylko błędy sieci,
   HTTP 429 i 5xx — inne 4xx (np. 404) kończą od razu
 - Synchroniczne pobieranie w obrębie jednego pliku (równoległość tylko
-  między plikami, przez ThreadPoolExecutor/--workers)
+  między plikami, przez ThreadPoolExecutor/--workers; domyślnie 4 workery
+  w CLI, 1 w bibliotece — DownloadManager(max_workers=1))
 - NMT 5m (PL) wymaga EVRF2007
 - WCS (download_bbox) dla NMT działa tylko dla 1m i tylko w KRON86 —
   endpoint EVRF2007 wycofany przez GUGiK (404 od 2026-08), pod EVRF2007 jest
@@ -405,11 +448,12 @@ from kartograf import (
   przy sukcesie CZ: kod 0 + Warning:, patrz niżej) — R5, 2026-09-28,
   potwierdzone na żywo 2026-09-29; missing_sheets wymienia tylko arkusze bez
   pliku — nodata bywa też wewnątrz pobranych arkuszy przybrzeżnych
-  i przygranicznych (PL-SK: do 82 % arkusza); arkusz we współrzędnych PL-2000
+  i przygranicznych; arkusz we współrzędnych PL-2000
   = błąd; scalanie PL+CZ w jedną powierzchnię przygraniczną — etap 2 (R6)
 - Istniejący wycinek jest pomijany bez sieci; biblioteka
   PlCutoutResult(skipped=True) odtwarza missing_sheets/off_grid_sheets
-  z sidecara, CLI przypomina Warning: o brakach. --force ponownie pobiera
+  (oraz partial_sheets, unverified, all_nodata) z sidecara, CLI przypomina
+  Warning: o brakach. --force ponownie pobiera
   także arkusze i omija odczyt cache rekordów (świeży rekord zapisuje); tańszy rebuild: usunąć tylko wycinek.
   Nieudana przebudowa nie kasuje poprzedniego pliku. Kontrola miejsca na
   dysku korzysta z wcześniej ustalonego zbioru brakujących arkuszy;
@@ -471,22 +515,27 @@ from kartograf import (
 
 ### 4.1 Moduły
 
+Drzewo odpowiada katalogowi `kartograf/` (źródło prawdy: sam katalog); opis
+szczegółowy — `docs/ARCHITECTURE.md`.
+
 ```
 kartograf/
 ├── __init__.py           # Public API exports
-├── exceptions.py         # KartografError, ParseError, ValidationError, DownloadError, NoCoverageError
+├── exceptions.py         # KartografError, ParseError, ValidationError, GridMismatchError(ValidationError), DownloadError, NoCoverageError(DownloadError)
 ├── core/                 # Logika bazowa
 │   ├── bbox.py              # BBox, validate_bbox, transform_bbox, is_czech_crs
 │   ├── sheet_parser.py      # SheetParser — parser godeł map topograficznych
 │   ├── parser_2000.py       # Parser2000 — parser godeł PL-2000
 │   ├── parser_tm33.py       # ParserTM33 — obliczalna siatka kafli CZ 2x2 km (EPSG:3045)
 │   ├── parser_registry.py   # Rejestr systemów godeł (pl1992, pl2000, cz_tm33, cz_sm5)
-│   └── geometry.py          # SHP/GPKG reading, find_sheets_for_geometry, get_overall_bbox
+│   ├── geometry.py          # SHP/GPKG reading, find_sheets_for_geometry, get_overall_bbox
+│   └── coverage.py          # Wypukłe wielokąty (przecięcie/różnica/bufor) — wybór kafli LAZ (ADR-029)
 ├── sources/               # Deskryptory źródeł jako dane (zero IO przy imporcie)
 │   ├── descriptor.py        # SourceDescriptor, AccessChannel (+endpoint), TransportKind, LicenseInfo, CountryProfile
 │   ├── registry.py          # Rejestr PL/CZ/EU/GLOBAL — get_source, sources_for, get_country, all_countries, vertical_crs_code, resolve_vertical_crs
 │   └── sidecar.py           # ResultMetadata, build_metadata (capability=, nodata=), write_sidecar (<plik>.meta.json)
 ├── transform/             # Transformacje CRS i rastrów
+│   ├── bbox.py               # envelope_from_2180 — obwiednia bboxa EPSG:2180 w innym CRS (CORINE, SoilGrids)
 │   ├── crs.py                # TransformerGroup (allow_ballpark=False, probe pod polityką sieci); PinnedTransform.transform polimorficzne
 │   └── raster.py             # warp_to_grid — lokalny warp na siatkę, operacja WYMUSZONA (ADR-027)
 ├── transport/             # Wspólny transport pobierania
@@ -498,7 +547,9 @@ kartograf/
 │   │   ├── gugik.py             # GugikProvider (NMT)
 │   │   ├── gugik_nmpt.py        # GugikNmptProvider (NMPT/DSM)
 │   │   ├── gugik_orto.py        # GugikOrtoProvider (Ortofotomapa)
-│   │   ├── gugik_laz.py         # GugikLazProvider (chmury punktów LAZ, WFS)
+│   │   ├── gugik_laz.py         # GugikLazProvider (chmury punktów LAZ, WFS; select_tiles)
+│   │   ├── skorowidz.py         # Skorowidz GUGiK: rekordy GetFeatureInfo, wybór kampanii (ADR-028/030)
+│   │   ├── wcs.py               # GugikWcsMixin — wspólny URL WCS GetCoverage (NMT/NMPT 1m, orto)
 │   │   ├── bdot10k.py           # Bdot10kProvider
 │   │   └── __init__.py          # create_nmt_provider() — fabryka domyślnych NMT
 │   ├── cuzk/                  # Providery czeskie (CUZK, etap 1)
@@ -509,10 +560,13 @@ kartograf/
 │   ├── corine.py             # CorineProvider
 │   └── soilgrids.py          # SoilGridsProvider
 ├── cache/                 # Cache metadanych
-│   └── metadata.py           # MetadataCache — SQLite WAL (URL/TERYT TTL 7d, Sheet TTL 30d)
-├── download/              # Download management (NMT/NMPT/Orto; CZ ma własny przepływ w CLI)
+│   └── metadata.py           # MetadataCache — SQLite WAL: record_cache, campaigns_cache, teryt_cache (TTL 7d), sheet_cache (TTL 30d)
+├── download/              # Download management (NMT/NMPT/Orto, wycinek PL, LAZ, kampanie; CZ ma własny przepływ w CLI)
+│   ├── campaigns.py          # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu, verify_file_format
+│   ├── links.py              # Dowiązanie ścieżki standardowej do najnowszej kampanii (hardlink -> kopia)
 │   ├── cutout.py             # Wycinek PL --target-crs jako API (download_pl_cutout; prepare/select/run)
-│   ├── manager.py            # DownloadManager (sidecar_extra=..., download_sheets/expand_sheets)
+│   ├── laz.py                # Kafle LAZ jako API (download_laz_area, run_laz_download; ADR-029)
+│   ├── manager.py            # DownloadManager (campaigns=, min_year=, sidecar_extra=; download_sheets/expand_sheets)
 │   └── storage.py            # FileStorage(vertical_crs=) — segmenty z szablonów deskryptora (ADR-026)
 ├── landcover/             # Land Cover management
 │   └── manager.py
@@ -553,6 +607,7 @@ pyshp >= 2.3.0         # Shapefile reading
 | CUZK (etap 1) | NMT/DMR 5G/4G (Czechy) | ArcGIS REST (query, exportImage) + pliki openzu | Brak |
 | Copernicus CLMS | CORINE | REST API | OAuth2 RSA |
 | EEA Discomap | CORINE (podgląd) | WMS | Brak |
+| DLR | CORINE 1990 (podgląd, fallback) | WMS | Brak |
 | ISRIC SoilGrids | Gleba | WCS | Brak |
 
 ---
@@ -575,17 +630,21 @@ pyshp >= 2.3.0         # Shapefile reading
 - Wycinek NMT PL (--target-crs / download_pl_cutout): jeden GeoTIFF na
   siatce arkuszy (EPSG:2180) albo w EPSG:5514/3045; arkusz bez danych =
   nodata + extra.missing_sheets
+- Kampanie GUGiK: --campaigns newest/all i --min-year; pliki w kampanie/,
+  ścieżka standardowa jako dowiązanie twarde (albo kopia) do najnowszej
+- LAZ: wybór kafli wg pokrycia obszaru (ADR-029), API download_laz_area
 - Integracja z Hydrograf/Hydrolog działa
 ```
 
 ### 6.2 Jakościowe
 
 ```
-- 2057 testów offline przechodzi (`pytest -m "not live"`); 16 testów live
-  wymaga sieci i nie należy do bramki offline
+- Wszystkie testy offline przechodzą (`pytest -m "not live"`); testy
+  z markerem `live` wymagają sieci i nie należą do bramki offline
+- Pokrycie nie niższe niż próg `fail_under` w `pyproject.toml`
 - Kod zgodny z ruff (check + format), mypy bez nowego długu względem baseline
-- Dokumentacja aktualna; po naprawach potrzebne ponowne E2E na żywych
-  serwisach dla scenariuszy L1-L7
+- Dokumentacja zgodna z kodem; zmiany zachowania wobec usług GUGiK/CUZK
+  weryfikowane na żywo przed wydaniem (raporty w `docs/research/`)
 ```
 
 ---
@@ -604,16 +663,17 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-03-02 | 3.4 | PL-2000 support, bump to v0.5.0 |
 | 2026-03-24 | 3.5 | WMS layer validation, 5m bugfix, bump to v0.6.1 |
 | 2026-08-11 | 3.6 | Etap 0 (sources/transform/transport/providers-pl, CLI split, LAZ) + etap 1 (CZ/CUZK: DMR 5G/4G, --country/--target-crs, ADR-023); drzewo modułów i sekcje odświeżone |
-| 2026-08-18 | 3.7 | Przegląd spójności dokumentacji: status mergu etapu 1, nagłówek sekcji 2 (0.5.0→0.7.0), komenda `cache` w 2.9, brakujące eksporty w 2.10, liczba testów 1402 |
-| 2026-08-22 | 3.8 | Korekty spójności po audycie przedwydaniowym 0.7.0: WCS NMT tylko 1m/KRON86, 4 warstwy WMS ortofoto, SoilGrids bez TERYT, timeouty per źródło, konwencja krawędzi i etykiety skal, semantyka `--country auto` (zasięg prostokąta CZ/PL, Info/Warning, częściowy sukces), liczby 1716/93% |
-| 2026-08-28 | 3.9 | Układ data/ per produkt (ADR-026), --target-crs dla PL (ADR-027), sekcja 2.11, liczby 1775/93% (brama jakosci) |
-| 2026-09-28 | 3.10 | Fala review max: wycinek PL jako API biblioteki (download_pl_cutout), siatka arkuszy, R5 (NoCoverageError -> nodata + extra.missing_sheets), eksporty w 2.10, drzewo modulow, etap 2: scalanie PL+CZ i wycinek z arkuszy PL-2000; liczby 1861/92,9% (po fali naprawczej finalnego review) |
+| 2026-08-18 | 3.7 | Przegląd spójności dokumentacji: status mergu etapu 1, nagłówek sekcji 2 (0.5.0→0.7.0), komenda `cache` w 2.9, brakujące eksporty w 2.10 |
+| 2026-08-22 | 3.8 | Korekty spójności po audycie przedwydaniowym 0.7.0: WCS NMT tylko 1m/KRON86, 4 warstwy WMS ortofoto, SoilGrids bez TERYT, timeouty per źródło, konwencja krawędzi i etykiety skal, semantyka `--country auto` (zasięg prostokąta CZ/PL, Info/Warning, częściowy sukces) |
+| 2026-08-28 | 3.9 | Układ data/ per produkt (ADR-026), --target-crs dla PL (ADR-027), sekcja 2.11 |
+| 2026-09-28 | 3.10 | Fala review max: wycinek PL jako API biblioteki (download_pl_cutout), siatka arkuszy, R5 (NoCoverageError -> nodata + extra.missing_sheets), eksporty w 2.10, drzewo modulow, etap 2: scalanie PL+CZ i wycinek z arkuszy PL-2000 |
 | 2026-09-29 | 3.11 | Historyczne testy na żywo i audyt przed falą naprawczą: diagnozy LAZ, S-JTSK, skorowidza, orto, limitu CUZK i dyspozycji kraju; dowody zachowania na morzu i pograniczach oraz wejście do R6 |
-| 2026-09-30 | 3.12 | Aktualizacja po fali naprawczej: filtr rekordow GUGiK i cache, R5 w liscie/hierarchii, W1/blad fazy w 2180, pin EPSG:1622/1623, budzet 4 Mpx, osie LAZ; 2057 offline + 16 live nieuruchomionych |
+| 2026-09-30 | 3.12 | Aktualizacja po fali naprawczej: filtr rekordow GUGiK i cache, R5 w liscie/hierarchii, W1/blad fazy w 2180, pin EPSG:1622/1623, budzet 4 Mpx, osie LAZ |
 | 2026-10-07 | 3.13 | Kampanie GUGiK (ADR-030): sekcja 2.12, uklad `kampanie/` z dowiazaniem w 2.11, odrzucone strategie w 3.1 |
+| 2026-10-08 | 3.14 | Przegląd dokumentacji: errata 5 ADR-030 (lokalna kampania przy awarii skorowidza), CZ i --min-year x --year w 2.12, sidecary (HSG, zasada ogólna), GPKG BDOT10k składany lokalnie, pełna lista eksportów w 2.10, drzewo modułów i tabele cache w 4.1, DLR w 5, bez wartości ulotnych w 6.2 i historii |
 
 ---
 
-**Wersja dokumentu:** 3.13
-**Data ostatniej aktualizacji:** 2026-10-07
-**Status:** Rozwoj — v0.7.0 (Unreleased), etap 1 zmergowany do `develop` 2026-08-12
+**Wersja dokumentu:** 3.14
+**Data ostatniej aktualizacji:** 2026-10-08
+**Status:** Rozwoj — v0.7.0 (Unreleased)
