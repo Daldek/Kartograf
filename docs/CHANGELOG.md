@@ -13,9 +13,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   sekcja 8): komplet publicznych danych GUGiK, gotowe dane dla kazdego
   produktu, manager danych (magazyn wersjonowany, manifest projektu),
   wtyczka QGIS i GUI webowe.
+- Stabilne publiczne API: `get_with_retry`, `make_gugik_session`,
+  `mosaic_and_crop`, `check_source_grid` eksportowane z `kartograf`.
+- `MetadataCache(strict=True)`: blad SQLite konczy sie `CacheError`
+  (nowy wyjatek) zamiast cichego wylaczenia cache.
 
 ### Zmienione
 
+- `DownloadManager.download_sheet()` ustawia `last_result` takze dla
+  pojedynczego arkusza (jednoelementowy `DownloadResult`); dotad `None`.
+- Udokumentowano: przy kampaniach (`campaigns=`) zrodlem pochodzenia
+  arkusza jest sidecar, nie `source_info()` (A12).
 - Godla PL-1992 spoza zakresu nomenklatury (pas inny niz M/N, slup spoza
   33-35, arkusz 1:200 000 spoza 1-144, np. `N-34-999-D`) koncza sie
   `ParseError` przed jakimkolwiek zapytaniem sieciowym; dotad trafialy do

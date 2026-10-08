@@ -362,6 +362,45 @@ class TestDownloadManagerDownloadSheet:
         assert len(progress_calls) == 8
 
 
+class TestLastResultSingleSheet:
+    """A9: download_sheet() of one sheet sets last_result too."""
+
+    @staticmethod
+    def _plain_manager(tmp_path, fail=False):
+        provider = Mock(spec=GugikProvider)
+        type(provider).default_extension = PropertyMock(return_value=".asc")
+
+        def fake_download(godlo, path, timeout=30):
+            if fail:
+                raise DownloadError("boom", godlo=godlo)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"ASC data")
+            return path
+
+        provider.download = fake_download
+        return DownloadManager(output_dir=tmp_path, provider=provider)
+
+    def test_single_sheet_sets_last_result(self, tmp_path):
+        manager = self._plain_manager(tmp_path)
+        path = manager.download_sheet("N-34-130-D-d-2-4")
+        assert manager.last_sheet is not None
+        assert manager.last_result is not None
+        assert manager.last_result.succeeded == [path]
+        assert manager.last_result.failed == []
+
+    def test_single_sheet_skipped_is_in_skipped(self, tmp_path):
+        manager = self._plain_manager(tmp_path)
+        manager.download_sheet("N-34-130-D-d-2-4")
+        manager.download_sheet("N-34-130-D-d-2-4")
+        assert manager.last_result.skipped == ["N-34-130-D-d-2-4"]
+
+    def test_single_sheet_error_leaves_none(self, tmp_path):
+        manager = self._plain_manager(tmp_path, fail=True)
+        with pytest.raises(DownloadError):
+            manager.download_sheet("N-34-130-D-d-2-4")
+        assert manager.last_result is None
+
+
 class TestDownloadManagerDownloadHierarchy:
     """Tests of the download_hierarchy() method - downloads ASC via OpenData."""
 

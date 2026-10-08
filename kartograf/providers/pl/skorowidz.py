@@ -407,6 +407,17 @@ class SourceInfoMixin:
             self._sources[SheetParser(godlo).godlo] = dict(source)
 
     def source_info(self, godlo: str) -> dict | None:
+        """Origin of the sheet's index record (URL, layer, acquisition date).
+
+        Filled by the single-record flow (``_resolve_record``: ``download``,
+        ``get_download_url`` and ``resolve_campaigns(campaigns="newest")``).
+        With ``campaigns="all"`` (``DownloadManager(campaigns="all")``) it is
+        None: there is no single record. In the campaign flow the origin of a
+        sheet is its sidecar (``extra.source``, ``extra.campaign``) - the
+        standard path sidecar describes the campaign the link actually points
+        to, which can be older than the newest record when its download
+        failed.
+        """
         with self._sources_lock:
             source = self._sources.get(SheetParser(godlo).godlo)
             return dict(source) if source is not None else None

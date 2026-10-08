@@ -196,6 +196,11 @@ Drzewo wymienia kazdy modul `.py` pakietu (`auth/` i `cli/` zbiorczo,
 `__init__.py` podpakietow tylko gdy niosa wlasna logike). Zrodlo prawdy:
 `find kartograf -name '*.py'`; Public API: `kartograf/__init__.py` (`__all__`).
 
+Stabilne API transportu i mozaiki (od 0.7.1): `get_with_retry` (dowolny URL
+uslugi, polityka ponowien siec/429/5xx/`Retry-After`, tylko GET),
+`make_gugik_session`, `mosaic_and_crop`, `check_source_grid` — eksportowane
+z `kartograf`; zmiana sygnatury = zmiana lamiaca w CHANGELOG.
+
 ```
 kartograf/
 ├── __init__.py          # Public API (BBox, SheetParser, DownloadManager, providery, ...)
@@ -630,8 +635,10 @@ niczego nie zapisuja. Cache jest tylko przyspieszeniem: kazdy
 locked`) wylacza instancje na reszte jej zycia (odczyt = chybienie, zapis =
 no-op, `MetadataCache.error`, `stats()["error"]`) z jednym ostrzezeniem
 (`logger.warning` albo `on_disabled=`; CLI: jedno `Warning:` na komende);
-pobieranie idzie dalej. Naprawa: `kartograf cache clear` usuwa nieczytelny
-plik z `-wal`/`-shm`.
+pobieranie idzie dalej. `MetadataCache(strict=True)` (biblioteka, od 0.7.1):
+ten sam stan konczy sie `CacheError` na wywolaniu, ktore zawiodlo, i na
+kazdym kolejnym (`on_disabled` nadal raz). Naprawa: `kartograf cache clear`
+usuwa nieczytelny plik z `-wal`/`-shm`.
 `DownloadManager` pisze sidecar po kazdym udanym arkuszu; arkusz ASC GUGiK
 nie niesie CRS (rasterio: `crs=None`), wiec jedynym nosnikiem ukladu jest
 sidecar. Ponowne uruchomienie rozwiazuje najnowszy rekord arkusza (cache 7 d;
@@ -674,7 +681,14 @@ i hierarchii) niesie `succeeded`, `failed`, `skipped`, `no_coverage`
 `reused_campaign_files` (kampanie juz lokalne per arkusz), `copied`
 (arkusze, ktorych sciezka standardowa jest KOPIA) i `unverified` (ponizej).
 Pelna lista pol: docstringi `SheetFetch`/`DownloadResult` w
-`download/manager.py`. Plik: format z pola
+`download/manager.py`. `download_sheet` pojedynczego arkusza ustawia
+`last_result` jako wynik jednoelementowy (jak lista). Pochodzenie arkusza
+przy kampaniach: `provider.source_info()` wypelnia przeplyw jednego rekordu
+(`download`, `get_download_url`, `resolve_campaigns` w trybie `newest`), a przy
+`all` zostaje `None` — zrodlem pochodzenia jest wtedy sidecar
+(`extra.source`, `extra.campaign`); sidecar sciezki standardowej opisuje
+kampanie, na ktora wskazuje dowiazanie, a ta moze byc starsza niz najnowszy
+rekord, gdy jego pobranie sie nie powiodlo (A12). Plik: format z pola
 `format` rekordu (nie z URL; brak pola — format domyslny produktu),
 rozszerzenie zawsze kanoniczne (`.asc`/`.tif`; rekord 72675 z URL `.xyz` to
 AAIGrid, zwykla kampania `.asc`), po pobraniu `verify_file_format`

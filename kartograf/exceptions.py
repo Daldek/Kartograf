@@ -136,3 +136,13 @@ class GridMismatchError(ValidationError):
     def __init__(self, message: str, off_grid: tuple = ()):
         super().__init__(message)
         self.off_grid = off_grid
+
+
+class CacheError(KartografError):
+    """
+    The metadata cache cannot be used (``MetadataCache(strict=True)``).
+
+    Without ``strict`` an SQLite error disables the cache and the work goes
+    on without it (``on_disabled``); in strict mode the same state raises
+    this exception on the failing call and on every later one.
+    """
