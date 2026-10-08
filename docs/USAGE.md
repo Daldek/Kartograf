@@ -16,6 +16,7 @@ lista publicznego API: `kartograf/__init__.py` (`__all__`).
    - [1.3 Jeden scalony GeoTIFF (`--target-crs`)](#13-jeden-scalony-geotiff---target-crs)
    - [1.4 Czechy (CUZK)](#14-czechy-cuzk)
    - [1.5 Pokrycie terenu, gleby, HSG, cache](#15-pokrycie-terenu-gleby-hsg-cache)
+   - [1.6 Kiedy `--scale` jest niezbędne](#16-kiedy---scale-jest-niezbędne)
 2. [Biblioteka Python](#2-biblioteka-python)
 3. [Wynik pobrania](#3-wynik-pobrania)
 4. [Kampanie GUGiK](#4-kampanie-gugik)
@@ -38,9 +39,10 @@ HSG: `./data/hsg`) względem bieżącego katalogu — podaj własny katalog prze
 kartograf parse N-34-130-D-d-2-4
 kartograf parse N-34-130-D --hierarchy
 
-# NMT: pojedynczy arkusz albo hierarchia (godło grubsze rozwijane do --scale), opcjonalnie 5m
+# NMT: pojedynczy arkusz albo hierarchia, opcjonalnie 5m; godło PL-1992 grubsze
+# niż 1:10000 rozwija się do arkuszy 1:10000 samo — bez --scale (sekcja 1.6)
 kartograf download N-34-130-D-d-2-4
-kartograf download N-34-130-D --scale 1:10000 --resolution 5m --workers 8 --output ./data
+kartograf download N-34-130-D --resolution 5m --workers 8 --output ./data
 
 # Inne produkty GUGiK: NMPT (DSM), ortofotomapa, chmury punktów LAZ
 kartograf download N-34-130-D-d-2-4 --product nmpt
@@ -49,10 +51,12 @@ kartograf download N-34-130-D-d-2-4 --product laz
 kartograf download N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12
 kartograf download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86
 
-# PL-2000: godło albo bbox w CRS strefy
+# PL-2000: godło albo bbox w CRS strefy; godło grubsze i bbox wymagają --scale
+# zgodnej z arkuszami GUGiK (sekcja 1.6)
 kartograf parse 6.179.12.20
 kartograf download 6.179.12.20
-kartograf download --bbox 6500000,5895000,6508000,5900000 --bbox-crs EPSG:2177 --system 2000
+kartograf download 6.179.12 --scale 1:2000
+kartograf download --bbox 6500000,5895000,6508000,5900000 --bbox-crs EPSG:2177 --system 2000 --scale 1:2000
 
 # Kampanie GUGiK (sekcja 4): domyślnie najnowsza (newest); wszystkie kampanie
 # arkusza (all); tylko kampanie z roku pozyskania >= RRRR (--min-year)
@@ -139,7 +143,7 @@ kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --targe
 ```bash
 # DMR 5G (2 m), godło TM33 (ten kafel leży w większości w Niemczech — głównie nodata)
 kartograf download 302_5550 --country cz
-kartograf download CTES96 --resolution 5m                      # DMR 4G (5 m), godło SM5, kraj z godła
+kartograf download CTES96                                      # DMR 4G (5 m), godło SM5, kraj z godła
 kartograf download 302_5550 --country cz --vertical-crs EVRF2007   # Bpv -> EVRF2007 (EPSG:5621)
 # reprojekcja CZ (tylko --bbox/--geometry, nie godło), lokalnie przypiętą operacją
 kartograf download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --target-crs EPSG:2180
@@ -153,6 +157,12 @@ kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:55
 
 `kartograf parse` obsługuje tylko godła PL (PL-1992/PL-2000); godła CZ
 (TM33, SM5) przyjmuje `kartograf download`.
+
+- Rozdzielczość CZ: arkusz SM5 (np. `CTES96`) to gotowy plik DMR 4G,
+  który istnieje tylko w 5 m — bez `--resolution` pobierany jest w 5 m,
+  a jawne `--resolution 2m` jest błędem (`Error:`, kod 1, bez sieci).
+  Kafel TM33 i `--bbox`/`--geometry` są wycinane z usługi: domyślnie 2 m
+  (DMR 5G), `--resolution 5m` wybiera DMR 4G.
 
 - CZ `--bbox` zawsze daje jeden plik (wycinek), PL bez `--target-crs`
   listę arkuszy.
@@ -184,6 +194,75 @@ kartograf cache path
 `--teryt` dotyczy tylko BDOT10k (CORINE/SoilGrids: `--godlo`, `--bbox`,
 `--geometry`). CORINE bez credentials CLMS pobiera podgląd PNG (sekcja 6).
 Warstwy BDOT10k, parametry SoilGrids i lata CORINE: PRD 3.5–3.7.
+
+### 1.6 Kiedy `--scale` jest niezbędne
+
+`--scale` to skala **docelowa** arkuszy, które Kartograf zamawia u GUGiK
+(NMT, NMPT, ortofotomapa). Musi odpowiadać skali arkuszy, w jakich GUGiK
+publikuje dany produkt w danym układzie — Kartograf pobiera plik arkusza
+o dokładnie tym godle (cały token), więc arkusz w innej skali nie zostanie
+dopasowany. Domyślnie `1:10000`.
+
+**Zasięg flagi:**
+
+- godło grubsze od skali docelowej jest rozwijane do wszystkich potomków
+  w tej skali (`kartograf parse <godło> --descendants <skala>` pokazuje
+  listę przed pobraniem);
+- `--bbox`/`--geometry` bez `--target-crs`: obszar jest rozbijany na arkusze
+  w tej skali (z `--system 1992` albo `--system 2000`);
+- bez flagi godło 7-członowe PL-1992 i każde godło PL-2000 (także
+  1:10000, np. `6.179.12`) to pojedynczy arkusz — rozwijane jest tylko
+  godło PL-1992 grubsze niż 1:10000;
+- nie dotyczy LAZ (kafle wybierane z WFS) ani CZ (godło TM33/SM5 albo
+  wycinek z usługi).
+
+**PL-1992 — flaga zbędna.** Kartograf pobiera arkusze PL-1992 z 7-członowym
+godłem (np. `N-34-130-D-d-2-4`), oznaczane w Kartografie jako `1:10000` —
+to najdrobniejsza skala PL-1992 w Kartografie i wartość domyślna. Godło
+grubsze (np. `N-34-130-D`) rozwija się do tych arkuszy samo. Uwaga na
+nazewnictwo: etykiety skal Kartografu są o jeden poziom drobniejsze niż
+nomenklatura GUGiK — ten sam 7-członowy arkusz skorowidz GUGiK opisuje jako
+moduł archiwizacji 1:5000 (`modulArchiwizacji`). `--scale` przyjmuje
+etykiety Kartografu (SCOPE 2.1).
+
+**PL-2000 — flaga zwykle niezbędna.** Kartograf zaczyna podział PL-2000 od
+arkusza 1:10000 (`strefa.pas.słup`, np. `6.179.12`), a GUGiK publikuje
+arkusze PL-2000 w drobniejszych modułach. W zapisanych odpowiedziach
+skorowidza NMT 1 m i ortofotomapy, na których opierają się testy
+Kartografu, arkusze PL-2000 mają najczęściej moduł 1:2000 (np.
+`7.171.21.23`, `5.167.25.13`), a obok nich występują też arkusze 1:1000
+i 1:5000; arkusza PL-2000 1:10000 nie było w nich wcale. Dlatego dla godła 1:10000 i dla `--bbox`/`--geometry`
+z `--system 2000` podaj skalę arkuszy z danymi, zwykle `--scale 1:2000`:
+
+```bash
+kartograf download 6.179.12 --scale 1:2000
+kartograf download --bbox 6500000,5895000,6508000,5900000 --bbox-crs EPSG:2177 --system 2000 --scale 1:2000
+```
+
+**Co się dzieje przy niedopasowaniu.** Brak arkusza o zamówionym godle to
+brak pokrycia (`NoCoverageError`), nigdy ciche pobranie zastępcze (np.
+arkusza PL-1992). Skorowidz zwraca jednak arkusze z miejsca zapytania
+(np. potomka zamówionego godła), więc Kartograf podpowiada skalę, w której
+dane tam są:
+
+- pojedyncze godło: `Error:` (kod 1), a w treści błędu np.
+  `Dostepny potomek 5.167.25.13 — uzyj --scale 1:2000`;
+- lista arkuszy (`--bbox`/`--geometry`, godło rozwijane): arkusze bez
+  danych mają status `no_coverage` (`∅`), na stderr `Warning: GUGiK nie ma
+  danych dla N z M arkuszy ...` (kod 0, gdy pobrano choć jeden arkusz)
+  albo — gdy żaden arkusz nie ma danych — `Error: GUGiK nie ma danych dla
+  zadnego z M arkuszy obszaru` (kod 1); w obu przypadkach pod spodem
+  podpowiedzi `Info: Dostepny potomek <godło> — uzyj --scale <skala>`;
+- gdy skorowidz ma ten obszar w drugim układzie, podpowiedź wskazuje jego
+  godło albo `--system <układ> --scale <skala>`.
+
+**Jak ustalić właściwą skalę.** Najprościej z podpowiedzi CLI: skala
+w `uzyj --scale ...` to skala arkusza, który GUGiK faktycznie opublikował
+(może to być 1:2000, ale też np. 1:1000). Skalę godła i jego potomków
+pokazuje `kartograf parse` (`--descendants <skala>`). Jeśli różne miejsca
+obszaru mają arkusze w różnych skalach, jedno wywołanie z jedną `--scale`
+pobierze tylko część — pozostałe arkusze dociągnij kolejnym wywołaniem
+z podpowiedzianą skalą.
 
 ---
 
