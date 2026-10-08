@@ -47,6 +47,15 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   oryginalny ZIP GUGiK obok GPKG (pelny pakiet: `bdot10k_teryt_<TERYT>_GPKG.zip`
   bez tokenu warstw, jeden dla kazdego filtra `layers=`, z wlasnym
   sidecarem; tylko GPKG). `Bdot10kPackage` ma pola `http` i `raw_path`.
+- Wycinek CZ w bibliotece: `download_cz_cutout(bbox, output_dir=,
+  target_crs=, vertical_crs=, resolution=)` (np. EPSG:2180 + EVRF2007;
+  siatka od zadanego obszaru, jak w CLI) i `run_cz_cutout` z wlasnym
+  providerem; wynik `CzCutoutResult` z flaga `all_nodata` (takze
+  w sidecarze i w logu), sidecar pisze biblioteka. Podzial obszaru na
+  kraje: `countries_for_bbox`, `split_bbox_by_country`. CLI (`--bbox`/
+  `--geometry` dla CZ) korzysta z tej samej implementacji — komunikaty
+  i kody wyjscia bez zmian, sidecar wycinka CZ dostaje
+  `extra.all_nodata` (`true`/`false`).
 
 ### Zmienione
 

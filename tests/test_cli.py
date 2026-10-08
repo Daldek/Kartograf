@@ -4326,6 +4326,26 @@ class TestCmdDownloadCz:
         assert "poza granica CZ?" in err
         assert list((tmp_path / "nmt").rglob("*.tif.meta.json"))
 
+    def test_bbox_all_nodata_message_printed_once(self, tmp_path, capsys, monkeypatch):
+        """The library log does not repeat the CLI 'Warning:' line on stderr."""
+        import logging
+
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        # no handler on the 'kartograf' branch -> logging.lastResort writes to
+        # stderr, as in a real CLI run (pytest's root handler would hide it)
+        monkeypatch.setattr(logging.getLogger("kartograf"), "propagate", False)
+        provider = _cz_provider_mock()
+        provider.download_bbox.side_effect = self._real_tif_writer(-9999.0)
+        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+        with patch(_CZ_FACTORY_PATCH, return_value=provider):
+            rc = _cmd_download_cz(_cz_args(tmp_path, godlo=None), bbox=bbox)
+
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert err.count("w calosci nodata") == 1
+        assert "Warning:" in err
+
     def test_tm33_godlo_all_nodata_warns_but_returns_0(self, tmp_path, capsys):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
