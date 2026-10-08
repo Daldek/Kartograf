@@ -21,6 +21,19 @@ def _is_pl2000_format(godlo: str) -> bool:
     return parser_registry.detect_system(godlo).id == "pl2000"
 
 
+_PL2000_ZONES = ("5", "6", "7", "8")
+
+
+def _zone_number_error(godlo: str) -> ParseError:
+    """Build the error for a bare PL-2000 zone number used as a sheet code."""
+    return ParseError(
+        f"Nieprawidłowe godło: '{godlo}'. "
+        f"To numer strefy PL-2000, a nie godło arkusza. "
+        f"Najgrubsze godło PL-2000 ma format strefa.pas.slup "
+        f"(1:10000), np. 6.179.12."
+    )
+
+
 class SheetParser:
     """
     Parser godeł map topograficznych dla układów 1992 i 2000.
@@ -140,6 +153,8 @@ class SheetParser:
             self._scale = self._pl2000.scale
             self._components = self._pl2000.components
         else:
+            if cleaned in _PL2000_ZONES:
+                raise _zone_number_error(cleaned)
             if uklad is not None and uklad == "2000":
                 raise ValidationError(
                     f"Godło '{cleaned}' ma format PL-1992, ale podano uklad='2000'"
@@ -246,9 +261,13 @@ class SheetParser:
             if re.match(pattern, self._godlo):
                 return scale
 
+        if self._original_godlo in _PL2000_ZONES:
+            raise _zone_number_error(self._original_godlo)
+
         raise ParseError(
             f"Nieprawidłowe godło: '{self._original_godlo}'. "
-            f"Godło musi być w formacie zgodnym z układem 1992/2000."
+            f"Oczekiwano godła PL-1992 (np. N-34-130-D-d-2-4) "
+            f"albo PL-2000 (np. 6.179.12)."
         )
 
     def _parse_components(self) -> dict[str, str]:

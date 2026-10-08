@@ -169,6 +169,40 @@ class TestSheetParserValidation:
         with pytest.raises(ParseError, match="Nieprawidłowe godło"):
             SheetParser("INVALID-GODLO")
 
+    @pytest.mark.parametrize("zone", ["5", "6", "7", "8", " 6 "])
+    def test_bare_pl2000_zone_number_message(self, zone):
+        """Sama liczba 5-8 to numer strefy PL-2000, nie godło arkusza."""
+        with pytest.raises(ParseError, match="numer strefy PL-2000") as exc:
+            SheetParser(zone)
+        assert "strefa.pas.slup" in str(exc.value)
+        assert "6.179.12" in str(exc.value)
+
+    @pytest.mark.parametrize("junk", ["XYZ", "9", "0"])
+    def test_generic_error_shows_both_formats(self, junk):
+        """Ogólny błąd podaje oba formaty z przykładami."""
+        with pytest.raises(ParseError, match="Nieprawidłowe godło") as exc:
+            SheetParser(junk)
+        msg = str(exc.value)
+        assert "numer strefy" not in msg
+        assert "N-34-130-D-d-2-4" in msg
+        assert "6.179.12" in msg
+
+    @pytest.mark.parametrize("uklad", ["2000", "1992"])
+    @pytest.mark.parametrize("zone", ["5", "6", "7", "8", " 6 "])
+    def test_bare_zone_number_with_explicit_uklad(self, zone, uklad):
+        """Numer strefy z jawnym układem daje ten sam komunikat o strefie."""
+        with pytest.raises(ParseError, match="numer strefy PL-2000") as exc:
+            SheetParser(zone, uklad=uklad)
+        msg = str(exc.value)
+        assert "6.179.12" in msg
+        assert "format PL-1992" not in msg
+
+    def test_incomplete_pl2000_keeps_specific_message(self):
+        """Niepełne godło PL-2000 nadal daje komunikat z parsera PL-2000."""
+        with pytest.raises(ParseError, match="PL-2000") as exc:
+            SheetParser("6.179")
+        assert "numer strefy" not in str(exc.value)
+
     def test_empty_godlo(self):
         """Test pustego godła."""
         with pytest.raises(ParseError, match="nie może być puste"):
