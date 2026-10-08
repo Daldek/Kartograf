@@ -394,6 +394,7 @@ class HSGCalculator:
             stat=stat,
             keep_intermediate=keep_intermediate,
             timeout=timeout,
+            sheet=godlo,
         )
 
     def calculate_hsg_by_bbox(
@@ -404,6 +405,7 @@ class HSGCalculator:
         stat: str = "mean",
         keep_intermediate: bool = False,
         timeout: int = 120,
+        sheet: str | None = None,
     ) -> Path:
         """
         Calculate HSG raster for a bounding box.
@@ -422,6 +424,9 @@ class HSGCalculator:
             Keep intermediate clay/sand/silt files (default: False)
         timeout : int, optional
             Download timeout in seconds (default: 120)
+        sheet : str, optional
+            Sheet code the bbox was derived from; recorded in the sidecar as
+            ``request.sheet`` (set by :meth:`calculate_hsg_by_godlo`)
 
         Returns
         -------
@@ -549,23 +554,35 @@ class HSGCalculator:
                 shutil.copy(silt_path, out_dir / "silt.tif")
                 logger.info(f"Intermediate files saved to {out_dir}")
 
-        self._write_sidecar(output_path, bbox, depth, stat, hsg_crs)
+        self._write_sidecar(output_path, bbox, depth, stat, hsg_crs, sheet)
 
         logger.info(f"HSG calculation complete: {output_path}")
         return output_path
 
     @staticmethod
-    def _write_sidecar(output_path: Path, bbox, depth: str, stat: str, crs) -> None:
+    def _write_sidecar(
+        output_path: Path,
+        bbox,
+        depth: str,
+        stat: str,
+        crs,
+        sheet: str | None = None,
+    ) -> None:
         """Best-effort sidecar of the result (computed from SoilGrids layers)."""
         from kartograf.sources.sidecar import emit_sidecar
+
+        request: dict = {
+            "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+            "bbox_crs": getattr(bbox, "crs", None),
+        }
+        if sheet is not None:
+            # The user asked for a sheet code; the bbox is derived from it.
+            request["sheet"] = sheet
 
         emit_sidecar(
             "global.isric.soilgrids",
             output_path,
-            request={
-                "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
-                "bbox_crs": getattr(bbox, "crs", None),
-            },
+            request=request,
             horizontal_crs=str(crs) if crs else None,
             capability="bbox_raster",
             nodata=0,

@@ -2178,6 +2178,40 @@ class TestCmdSoilgrids:
         mock_calc.calculate_hsg_by_bbox.assert_called_once()
 
 
+class TestSoilgridsHsgOutputName:
+    """Default HSG file names carry the depth, so depths do not overwrite."""
+
+    @staticmethod
+    def _run(args, tmp_path, method):
+        with patch("kartograf.hydrology.HSGCalculator") as calc_cls:
+            calc = calc_cls.return_value
+            getattr(calc, method).return_value = tmp_path / "x.tif"
+            assert main(["soilgrids", "hsg", *args, "-o", str(tmp_path)]) == 0
+            return getattr(calc, method).call_args.kwargs["output_path"]
+
+    def test_godlo_name_has_depth(self, tmp_path):
+        a = self._run(
+            ["--godlo", "N-34-130-D", "--depth", "0-5cm"],
+            tmp_path,
+            "calculate_hsg_by_godlo",
+        )
+        b = self._run(
+            ["--godlo", "N-34-130-D", "--depth", "5-15cm"],
+            tmp_path,
+            "calculate_hsg_by_godlo",
+        )
+        assert a.name == "hsg_N-34-130-D_0-5cm.tif"
+        assert b.name == "hsg_N-34-130-D_5-15cm.tif"
+
+    def test_bbox_name_has_depth(self, tmp_path):
+        path = self._run(
+            ["--bbox", "450000,550000,460000,560000", "-d", "15-30cm"],
+            tmp_path,
+            "calculate_hsg_by_bbox",
+        )
+        assert path.name == "hsg_bbox_15-30cm.tif"
+
+
 def test_landcover_download_no_selection(capsys):
     """No selection method -> exit 1."""
     result = main(["landcover", "download"])
