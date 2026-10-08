@@ -823,8 +823,9 @@ class TestDownloadPlBboxCutout:
     def test_5m_kron86_grid_dataset_vertical_and_segment(self, tmp_path):
         """The whole 5m flow in one test: grid, descriptor, vertical, segment.
 
-        ``--resolution 5m`` with ``--vertical-crs KRON86`` is corrected to
-        EVRF2007 in the provider factory (5m does not exist in KRON86), so the
+        ``--resolution 5m`` with ``--vertical-crs KRON86`` is swapped to
+        EVRF2007 by the CLI (``_resolve_pl_sentinels``, ``Info:``); the library
+        itself rejects the pair (0.7.1) (5m does not exist in KRON86), so the
         cutout must follow the PROVIDER, not the raw CLI flag. For sheets this
         error class has long been guarded - the cutout path was a gap in it:
         a 1 m pixel from 5 m data (25x the file size) or a ``pl_1992_5m_kron86``
@@ -1702,38 +1703,19 @@ class TestLibraryApi:
         segments = {p.relative_to(tmp_path).parts[:2] for p in result.sheet_paths}
         assert segments == {("nmt", "pl_1992_1m_kron86")}
 
-    def test_5m_request_follows_factory_vertical_rule(self, tmp_path):
-        """NMT factory rule (5m => EVRF2007): the cutout follows the PROVIDER.
-
-        ``download_pl_cutout`` gives the factory the raw parameters, and takes
-        the cutout vertical from the provider - with the raw KRON86 flag a 5m
-        cutout would not be created (5m exists only in EVRF2007).
-        """
+    def test_5m_kron86_rejected_before_factory(self, tmp_path):
+        """0.7.1: 5m exists only in EVRF2007 - ``ValidationError`` with the
+        remedy BEFORE the provider factory, the network and the directories
+        (earlier the factory swapped the datum with a log warning)."""
         from kartograf import download_pl_cutout
+        from kartograf.exceptions import ValidationError
 
-        provider = self._provider()
-        # what the real factory returns for 5m + KRON86 (vertical correction)
-        provider.vertical_crs = "EVRF2007"
-        provider.resolution = "5m"
-        provider.descriptor_key = "pl.gugik.nmt_5m"
-
-        def download(godlo, path, timeout=30):
-            provider.calls.append(godlo)
-            west, south = self._SHEETS[godlo]
-            return _write_sheet_asc(path, west, south, size=40, pixel=5.0)
-
-        provider.download = download
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         with (
-            patch(
-                "kartograf.providers.pl.create_nmt_provider", return_value=provider
-            ) as factory,
-            patch(
-                "kartograf.download.cutout.find_sheets_for_bbox",
-                return_value=list(self._SHEETS),
-            ),
+            patch("kartograf.providers.pl.create_nmt_provider") as factory,
+            pytest.raises(ValidationError, match="uzyj vertical_crs='EVRF2007'"),
         ):
-            result = download_pl_cutout(
+            download_pl_cutout(
                 bbox,
                 "EPSG:2180",
                 output_dir=tmp_path,
@@ -1741,11 +1723,8 @@ class TestLibraryApi:
                 vertical_crs="KRON86",
             )
 
-        factory.assert_called_once_with(
-            vertical_crs="KRON86", resolution="5m", cache=None
-        )
-        assert result.path.parent == tmp_path / "nmt" / "pl_1992_5m_evrf2007" / "bbox"
-        assert result.path.exists()
+        factory.assert_not_called()
+        assert not (tmp_path / "nmt").exists()
 
     def test_cache_is_handed_to_the_factory(self, tmp_path):
         """N6: ``download_pl_cutout(cache=)`` -> a provider with the record cache;

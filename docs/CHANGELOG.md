@@ -65,6 +65,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   wartosci domyslnych (nodata wejsc tylko z tagu, jak w
   `calculate_hsg_by_bbox`); sidecar z `sha256` warstw wejsciowych
   (`extra.source_layers`: `name`, `file`, `sha256`).
+- Weryfikacja ukladu wysokosci rekordu skorowidza GUGiK (NMT/NMPT): pole
+  `ukladWspolrzednychPionowych` musi odpowiadac zadanemu ukladowi
+  (`PL-KRON86-NH` dla KRON86, `PL-EVRF2007-NH` dla EVRF2007); inna wartosc
+  = `DownloadError` kampanii przed pobraniem pliku (`newest` i `all`, takze
+  `GugikProvider.download`). Rekord bez tego pola jest przyjmowany.
+  Nowe: `kartograf.download.campaigns.verify_record_vertical_crs`,
+  `RECORD_VERTICAL_CRS`, `kartograf.providers.pl.require_nmt_vertical_crs`
+  (`nmt_vertical_crs` bez zmian).
 
 ### Zmienione
 
@@ -107,6 +115,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   przy zapytaniu PRG. Prywatne `Bdot10kProvider._get_teryt_for_point`
   (WMS GetFeatureInfo) i `WMS_ENDPOINT` usuniete bez zamiennika — uzyj
   `teryt_for_point`/`discover_teryts_for_bbox`.
+- Biblioteka: `create_nmt_provider`, `DownloadManager` (bez providera albo
+  z providerem bez wlasnego `vertical_crs`) i `download_pl_cutout` przy
+  `resolution="5m"` i `vertical_crs="KRON86"` koncza sie `ValidationError`
+  (NMT 5 m istnieje tylko w EVRF2007); dotad po cichu zamienialy uklad na
+  EVRF2007 z ostrzezeniem w logu. Co zrobic: podaj `vertical_crs="EVRF2007"`
+  (albo `resolution="1m"`, gdy potrzebny jest KRON86). CLI bez zmian:
+  `--resolution 5m --vertical-crs KRON86` nadal drukuje `Info:` i pobiera
+  EVRF2007 (kod 0).
 
 ### Naprawione
 

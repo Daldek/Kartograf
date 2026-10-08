@@ -5,10 +5,12 @@ A campaign is one GUGiK data delivery (an index (skorowidz) record). The
 campaign directory is ``<acquisition date>_<id>``, where ``id`` is the first
 numeric segment of the file name in the URL. The module's only IO is
 ``verify_file_format`` (64 header bytes) and ``verify_sheet_extent`` (the
-ASC header).
+ASC header). ``verify_record_vertical_crs`` checks the vertical datum
+declared by the record (no IO).
 """
 
 import hashlib
+import logging
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -18,6 +20,8 @@ from urllib.parse import urlparse
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.sources.sidecar import read_asc_header
+
+logger = logging.getLogger(__name__)
 
 CAMPAIGNS_DIR = "kampanie"
 CAMPAIGN_STRATEGIES = ("newest", "all")
@@ -137,6 +141,54 @@ class CampaignRef:
             "full_sheet": self.full_sheet,
             "pzgik_date": self.dt_pzgik,
         }
+
+
+# Value of the record field ``ukladWspolrzednychPionowych`` per requested
+# vertical CRS (``vertical_crs`` of GugikProvider/GugikNmptProvider). Measured
+# on raw index responses (tests/fixtures/gugik_skorowidz/real_2026_10_06/):
+# KRON86 endpoints give only "PL-KRON86-NH"; EVRF2007 endpoints (NMT 1 m,
+# NMT 5 m, NMPT) only "PL-EVRF2007-NH".
+RECORD_VERTICAL_CRS: Mapping[str, str] = {
+    "KRON86": "PL-KRON86-NH",
+    "EVRF2007": "PL-EVRF2007-NH",
+}
+
+
+def verify_record_vertical_crs(record, vertical_crs: str | None, godlo: str) -> None:
+    """The vertical datum declared by the record must be the requested one.
+
+    The datum is chosen only by the endpoint (one WMS index per datum); the
+    record field ``ukladWspolrzednychPionowych`` is the check that the
+    endpoint served what it should. No field (or empty) = cannot verify:
+    accepted with a debug log. ``vertical_crs`` ``None`` (orto) or outside
+    ``RECORD_VERTICAL_CRS`` = nothing to compare. Duck typing: ``url`` and
+    optional ``raw``.
+
+    Raises
+    ------
+    DownloadError
+        The record declares another datum (before any download).
+    """
+    expected = RECORD_VERTICAL_CRS.get(vertical_crs) if vertical_crs else None
+    if expected is None:
+        return
+    raw = getattr(record, "raw", None) or {}
+    declared = (raw.get("ukladWspolrzednychPionowych") or "").strip()
+    if not declared:
+        logger.debug(
+            "%s: rekord skorowidza bez ukladWspolrzednychPionowych — uklad "
+            "wysokosci niesprawdzony (%s)",
+            godlo,
+            record.url,
+        )
+        return
+    if declared.upper() != expected:
+        raise DownloadError(
+            f"{godlo}: rekord skorowidza deklaruje uklad wysokosci {declared}, "
+            f"a zadano {vertical_crs} (oczekiwano {expected}) — plik nie "
+            f"zostal pobrany: {record.url}",
+            godlo=godlo,
+        )
 
 
 def campaign_extension(ref: CampaignRef, default_ext: str) -> str:
