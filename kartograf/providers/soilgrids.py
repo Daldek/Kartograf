@@ -75,7 +75,7 @@ class SoilGridsProvider(LandCoverProvider):
 
     Supports two download modes:
     - By bbox: downloads data for specified bounding box
-    - By godło: converts map sheet ID to bbox and downloads
+    - By sheet code (godlo): converts map sheet ID to bbox and downloads
 
     TERYT (administrative unit) selection is not supported - SoilGrids is a
     global raster service and has no notion of Polish administrative
@@ -94,7 +94,7 @@ class SoilGridsProvider(LandCoverProvider):
     ...     bbox, Path("./soc.tif"), property="soc", depth="0-5cm"
     ... )
     >>>
-    >>> # Download clay content by godło
+    >>> # Download clay content by sheet code (godlo)
     >>> provider.download_by_godlo(
     ...     "N-34-130-D", Path("./clay.tif"), property="clay", depth="15-30cm"
     ... )

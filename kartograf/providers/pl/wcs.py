@@ -1,4 +1,4 @@
-"""WCS 2.0.1 GetCoverage GUGiK — wspolny dla NMT/NMPT 1 m i ortofotomapy (D13)."""
+"""GUGiK WCS 2.0.1 GetCoverage — shared by NMT/NMPT 1 m and orthophotomaps (D13)."""
 
 from urllib.parse import urlencode
 
@@ -6,11 +6,11 @@ from kartograf.core.sheet_parser import BBox
 
 
 class GugikWcsMixin:
-    """Format -> URL GetCoverage; klasa pochodna podaje endpoint i coverage.
+    """Format -> GetCoverage URL; the derived class supplies endpoint and coverage.
 
-    NMT/NMPT wybieraja endpoint i coverage po ukladzie wysokosci, orto ma
-    jeden staly — reszta zapytania (wersja, SUBSET w EPSG:2180, formaty) jest
-    wspolna.
+    NMT/NMPT choose the endpoint and coverage by vertical CRS, orto has a
+    single fixed one — the rest of the request (version, SUBSET in
+    EPSG:2180, formats) is shared.
     """
 
     WCS_FORMATS = {
@@ -20,11 +20,11 @@ class GugikWcsMixin:
     }
 
     def _wcs_target(self) -> tuple[str, str]:
-        """(endpoint WCS, COVERAGEID) dla biezacej konfiguracji providera."""
+        """(WCS endpoint, COVERAGEID) for the provider's current configuration."""
         raise NotImplementedError
 
     def _construct_wcs_url(self, bbox: BBox, format: str) -> str:
-        """URL GetCoverage dla bboxa w EPSG:2180 i formatu z ``WCS_FORMATS``."""
+        """GetCoverage URL for a bbox in EPSG:2180 and a ``WCS_FORMATS`` format."""
         endpoint, coverage_id = self._wcs_target()
         params = {
             "SERVICE": "WCS",
