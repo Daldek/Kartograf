@@ -4,9 +4,11 @@ Result sidecar for a download: `<full_file_name>.meta.json`.
 Contract for consumers (Hydrograf): CRSs, nodata, source, license.
 In 0.7.0 the consumer merges cross-border data; merging PL+CZ into one
 surface is Kartograf stage 2 (R6). The format is versioned by the `schema` field;
-fields are added additively.
+fields are added additively. Since 0.7.1 the top-level ``sha256`` and
+``size_bytes`` describe the data file.
 """
 
+import hashlib
 import json
 import logging
 import os
@@ -49,10 +51,12 @@ class ResultMetadata:
     kartograf_version: str
     transform: dict | None = None  # stage 0: None
     extra: dict = field(default_factory=dict)
+    sha256: str | None = None  # of the data file (A3, 0.7.1)
+    size_bytes: int | None = None
     schema: str = "kartograf-meta/1"
 
 
-def _read_asc_header(path: Path) -> dict[str, float]:
+def read_asc_header(path: Path) -> dict[str, float]:
     """Arc/Info ASCII Grid header: {lowercase key: value}; {} if absent."""
     header: dict[str, float] = {}
     try:
@@ -70,16 +74,30 @@ def _read_asc_header(path: Path) -> dict[str, float]:
     return header
 
 
+_DIGEST_CHUNK = 1_048_576
+
+
+def file_digest(path: Path) -> tuple[str, int]:
+    """``(sha256 hex, size in bytes)`` of a file, read in 1 MiB chunks."""
+    digest = hashlib.sha256()
+    size = 0
+    with open(path, "rb") as f:
+        while chunk := f.read(_DIGEST_CHUNK):
+            digest.update(chunk)
+            size += len(chunk)
+    return digest.hexdigest(), size
+
+
 def read_asc_nodata(path: Path) -> float | None:
     """Read NODATA_value from an Arc/Info ASCII Grid header (None if absent)."""
-    return _read_asc_header(path).get("nodata_value")
+    return read_asc_header(path).get("nodata_value")
 
 
 def _file_min_x(path: Path) -> float | None:
     """Raster left edge (x) from the ASC header or rasterio; None if unreadable."""
     suffix = path.suffix.lower()
     if suffix == ".asc":
-        header = _read_asc_header(path)
+        header = read_asc_header(path)
         return header.get("xllcorner", header.get("xllcenter"))
     if suffix in {".tif", ".tiff"}:
         import rasterio  # lazy: an ASC sheet sidecar does not need GDAL
@@ -193,6 +211,11 @@ def build_metadata(
     if nodata is None and data_path is not None and data_path.suffix.lower() == ".asc":
         nodata = read_asc_nodata(data_path)
 
+    sha256: str | None = None
+    size_bytes: int | None = None
+    if data_path is not None and Path(data_path).is_file():
+        sha256, size_bytes = file_digest(Path(data_path))
+
     return ResultMetadata(
         dataset=descriptor.key,
         country=descriptor.country,
@@ -212,6 +235,8 @@ def build_metadata(
         },
         transform=transform,
         extra=extra or {},
+        sha256=sha256,
+        size_bytes=size_bytes,
         downloaded_at=datetime.now(UTC).isoformat(timespec="seconds"),
         kartograf_version=build_version(),
     )

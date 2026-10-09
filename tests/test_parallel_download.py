@@ -402,7 +402,7 @@ class TestDownloadHierarchyLastResult:
     def test_last_result_reset_by_download_sheet_of_single_10k(
         self, tmp_path, flaky_provider
     ):
-        """download_sheet of a single 1:10000 clears the previous hierarchy result."""
+        """download_sheet of a single 1:10000 replaces the previous hierarchy result."""
         manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
 
         manager.download_hierarchy("N-34-130-D-d-1", "1:10000", max_workers=1)
@@ -412,8 +412,10 @@ class TestDownloadHierarchyLastResult:
         path = manager.download_sheet("N-34-130-D-d-2-4")
 
         assert path.exists()
-        # A single sheet does not fill last_result - nor does it leave the old one.
-        assert manager.last_result is None
+        # A9: a single sheet sets its own one-element result (old one not leaked)
+        assert manager.last_result is not None
+        assert manager.last_result.succeeded == [path]
+        assert manager.last_result.failed == []
 
     def test_last_result_set_when_download_sheet_expands_hierarchy(
         self, tmp_path, flaky_provider

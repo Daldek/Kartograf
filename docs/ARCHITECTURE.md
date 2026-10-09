@@ -38,14 +38,17 @@ wykonanych transformacji. Sidecary pisza **warstwy zarzadzajace** —
 `DownloadManager`, `LandCoverManager`, wycinek PL w bibliotece
 (`download/cutout.py::write_pl_cutout_sidecar`), kafle LAZ w bibliotece
 (`download/laz.py::write_laz_sidecar`, ADR-029), wynik HSG
-(`HSGCalculator._write_sidecar`, sekcja 4.8) i CLI (tor CZ) —
-nigdy providery; provider zwraca `Path`, metadane skladane sa pietro wyzej,
-gdzie znany jest kontekst zadania. Wynika z tego, ze bezposrednie wywolanie
+(`HSGCalculator._write_sidecar`, sekcja 4.8) i wynik CZ
+(`download/cz_cutout.py::write_cz_sidecar`, od 0.7.1) — nigdy providery;
+provider zwraca `Path`, metadane skladane sa pietro wyzej, gdzie znany jest
+kontekst zadania. Wynika z tego, ze bezposrednie wywolanie
 providera z biblioteki (np. `GugikProvider.download`,
 `CuzkDmrProvider.download`/`download_bbox`) zapisuje sam plik danych, bez
-sidecara — w szczegolnosci sidecar DMR CZ powstaje wylacznie w CLI
-(`cli/download_cmd.py::_write_cz_sidecar`), bo tor CZ omija warstwe
-zarzadzajaca (ADR-023). Nowy sidecar powstaje zawsze przez
+sidecara — w szczegolnosci sidecar DMR CZ pisze
+`download/cz_cutout.py::write_cz_sidecar`: dla wycinka bbox wolany przez
+`run_cz_cutout` (biblioteka i CLI, sekcja 4.5), dla godla CZ przez CLI
+(`_cz_download_godlo`), bo tor CZ omija `DownloadManager` (ADR-023).
+Nowy sidecar powstaje zawsze przez
 `sources/sidecar.py::emit_sidecar` — jedyne miejsce polityki zapisu
 (poza nim: kopia sidecara celu w sciezce standardowej,
 `download/links.py::write_standard_sidecar`, i dopisanie
@@ -64,13 +67,13 @@ oryginalnego `parent_request`.
 **Polityka transformacji (ADR-024).** Transformacje, ktore przesuwaja TRESC
 rastra albo opuszczaja uklady czeskie (EPSG:5514/3045), przechodza przez
 `kartograf/transform/crs.py` — poza obwiednia w WGS84 do rozpoznania kraju
-i przyciecia pod `auto` (`_bbox_to_wgs84` w `cli/download_cmd.py`, takze dla
+i przyciecia pod `auto` (`bbox_to_wgs84` w `download/countries.py`, takze dla
 bboxa podanego w ukladzie czeskim) i obwiednia pliku geometrii w torze LAZ
 (`_resolve_laz_bbox`: `get_overall_bbox(..., target_crs="EPSG:2180")`).
 Przeliczenia obwiedni miedzy ukladami PL i WGS84 (selekcja arkuszy
-w `core/sheet_parser.py` i `core/geometry.py`, `_bbox_to_2180` wycinka dla
-ukladow nieczeskich, dyspozycja krajow w CLI, obwiednia bboxa EPSG:2180
-w ukladzie uslugi CORINE/SoilGrids — `transform/bbox.py::envelope_from_2180`)
+w `core/sheet_parser.py` i `core/geometry.py`, `bbox_to_2180` wycinka
+i odkrywania TERYT dla ukladow nieczeskich, dyspozycja krajow w CLI,
+obwiednia bboxa EPSG:2180 w ukladzie uslugi CORINE/SoilGrids — `transform/bbox.py::envelope_from_2180`)
 swiadomie uzywaja domyslnego transformera pyproj — migracja to backlog A5-6.
 `transform/crs.py` ma cztery twarde reguly: (1) transformer budowany tylko przez
 `TransformerGroup(..., always_xy=True, allow_ballpark=False)` — `Transformer.
@@ -121,18 +124,19 @@ kartograf ──> core, download, providers, landcover, hydrology,
 cli ──> kartograf (__version__), download, landcover, core, sources,
         providers (l), transform (l), transport (l), hydrology (l), cache (l)
 download ──> providers, sources, transform, core, transport (l)
-landcover ──> providers, download (FileStorage), core, sources (l)
-hydrology ──> providers (l), core (l), sources (l)
+landcover ──> providers, download (FileStorage), core, cache, sources (l)
+hydrology ──> core, providers (l), sources (l), transform (l)
 providers ──> sources, transform, transport, core, cache,
         auth (l), download (l)
 sources ──> core, kartograf (l, __version__)
 transport ──> transform, core, kartograf (l, __version__)
 transform ──> core
-cache ──> (nic wewnetrznego)
+cache ──> core                         # tylko pod TYPE_CHECKING (BBox)
 auth ──> (nic wewnetrznego)
 core ──> (nic wewnetrznego)
 exceptions ──> (lisc; krawedzie DO niego pominiete powyzej — importuja go
-        kartograf, cli, core, sources, transform, transport, providers, download)
+        kartograf, cli, core, sources, transform, transport, providers, download,
+        landcover)
 ```
 
 **Jak odtworzyc graf.** Kod uzywa wylacznie bezwzglednych importow
@@ -157,20 +161,21 @@ Uwagi, ktore latwo przeoczyc:
   i `core.parser_tm33` importuja wzorce godel CZ z `core.parser_registry`.
   Operacja przypieta (ADR-024) wchodzi do `core.bbox.transform_bbox`
   przez duck typing (`transformer=`), bez importu `transform`.
-- `download` siega po `transform` i `transport` WYLACZNIE w
-  `download/cutout.py` (wycinek PL, sekcja 4.3): przy imporcie
-  `transform.crs` (`PinnedTransform`, `CONTENT_POLICY`, `WARP_MARGIN_PX`),
-  leniwie `transform.crs.build_pinned_transform` (`prepare_pl_cutout`),
+- `download` siega po `transform` WYLACZNIE w `download/cutout.py`
+  (wycinek PL, sekcja 4.3), a po `transport` w `download/cutout.py`
+  i `download/cz_cutout.py`: przy imporcie `transform.crs`
+  (`PinnedTransform`, `CONTENT_POLICY`, `WARP_MARGIN_PX`), leniwie
+  `transform.crs.build_pinned_transform` (`prepare_pl_cutout`),
   `transport.mosaic` i `transform.raster` (`build_pl_cutout`) oraz
-  `transport.mosaic.has_valid_pixels` (`run_pl_cutout`, kontrola
-  `all_nodata`). `manager.py` i `storage.py` nie importuja zadnego z nich —
+  `transport.mosaic.has_valid_pixels` (`run_pl_cutout` i `run_cz_cutout`,
+  kontrola `all_nodata`; w `cz_cutout.py` tylko ten leniwy import).
+  `manager.py` i `storage.py` nie importuja zadnego z nich —
   `DownloadManager` pozostaje warstwa koordynacji arkuszy.
 - `cli` nie buduje mozaiki ani warpu wycinka (robi to biblioteka, R3),
   a z `transform` bierze tylko `TransformError`. Jedyna krawedz
   `cli ──> transport` to leniwy import `transport.mosaic.has_valid_pixels`
-  w `_warn_cz_all_nodata` (kontrola "wynik CZ w calosci nodata"; review
-  N13 — przeniesienie jej do providera CZ, jak `all_nodata` w torze PL,
-  to backlog).
+  w `_warn_cz_all_nodata` (kontrola "wynik CZ w calosci nodata" dla godla
+  CZ; wycinek bbox CZ sprawdza biblioteka, `run_cz_cutout`).
 - `transport ──> transform`: `transport/mosaic.py` owija zrodla mozaiki
   w VRT przez `transform.raster` (`vrt_xml`, `VRT_TYPES`; import na poziomie
   modulu). `transform` nie importuje `transport` — cyklu nie ma.
@@ -178,10 +183,23 @@ Uwagi, ktore latwo przeoczyc:
   `download` importuje `providers` przy imporcie): walidacja opcji kampanii
   `download.campaigns.validate_campaign_args` w
   `SkorowidzLayersMixin.resolve_campaigns` (`providers/pl/skorowidz.py`)
-  i w `GugikLazProvider.select_tiles` (`providers/pl/gugik_laz.py`).
-- `hydrology` importuje wszystko leniwie: `providers.soilgrids` (warstwy
-  gleb), `core.sheet_parser` (godlo -> bbox) i `sources.sidecar.emit_sidecar`
-  (sidecar wyniku HSG).
+  i w `GugikLazProvider.select_tiles` (`providers/pl/gugik_laz.py`) oraz
+  przeliczenie obszaru do EPSG:2180 `download.cutout.bbox_to_2180`
+  w `providers/pl/prg.py` (jedna regula dla wycinka PL i odkrywania TERYT).
+- `cache ──> core` istnieje tylko pod `if TYPE_CHECKING:` (adnotacja
+  `BBox` w `MetadataCache.get_teryts_for_bbox`/`set_teryts_for_bbox`);
+  w czasie wykonania `cache` nie importuje nic wewnetrznego.
+- `landcover ──> cache`: `LandCoverManager(cache=MetadataCache | None)`
+  importuje `MetadataCache` na poziomie modulu (adnotacja) i przekazuje go
+  providerom tworzonym po nazwie (`Bdot10kProvider(cache=)` — odpowiedzi
+  PRG, `SoilGridsProvider(cache=)`); CORINE cache nie ma.
+- `hydrology ──> core` istnieje na poziomie modulu tylko pod
+  `if TYPE_CHECKING:` (adnotacja `BBox` w `hsg_from_rasters`; wg reguly grafu
+  to import na poziomie modulu). Reszta jest leniwa: `providers.soilgrids`
+  (warstwy gleb), `core.sheet_parser` (godlo -> bbox), `core.bbox`
+  (`transform_bbox`), `transform` (przypieta reprojekcja wejsc
+  `hsg_from_rasters`) i `sources.sidecar` (`emit_sidecar`, `file_digest` —
+  sidecar wyniku HSG).
 - `sources` i `transport` siegaja do pakietu glownego leniwie i tylko po
   `__version__` (sidecar, naglowek `User-Agent`) — import przy imporcie
   modulu dalby cykl, bo `kartograf/__init__.py` importuje providery.
@@ -195,6 +213,11 @@ Uwagi, ktore latwo przeoczyc:
 Drzewo wymienia kazdy modul `.py` pakietu (`auth/` i `cli/` zbiorczo,
 `__init__.py` podpakietow tylko gdy niosa wlasna logike). Zrodlo prawdy:
 `find kartograf -name '*.py'`; Public API: `kartograf/__init__.py` (`__all__`).
+
+Stabilne API transportu i mozaiki (od 0.7.1): `get_with_retry` (dowolny URL
+uslugi, polityka ponowien siec/429/5xx/`Retry-After`, tylko GET),
+`make_gugik_session`, `mosaic_and_crop`, `check_source_grid` — eksportowane
+z `kartograf`; zmiana sygnatury = zmiana lamiaca w CHANGELOG.
 
 ```
 kartograf/
@@ -232,7 +255,7 @@ kartograf/
 │                        # i CZ); vrt_xml/VRT_TYPES dla transport/mosaic.py
 ├── transport/           # Wspolny transport
 │   ├── http.py          # download_to (pliki WSZYSTKICH providerow; zapis atomowy os.replace)
-│   │                    # i get_with_retry (zapytania: skorowidz, WFS LAZ, TERYT BDOT10k,
+│   │                    # i get_with_retry (zapytania: skorowidz, WFS LAZ, WFS PRG,
 │   │                    # CuzkClient.query) — jedyne miejsce retry (siec, 429, 5xx;
 │   │                    # Retry-After): is_retryable, retry_wait, backoff_delay;
 │   │                    # make_gugik_session, SessionPerThread (sesja per watek)
@@ -248,7 +271,10 @@ kartograf/
 │   │                    # record_source; select_campaign_records, layer_upper_year,
 │   │                    # coverage_hints/no_coverage_error),
 │   │                    # wcs.py (GugikWcsMixin — URL GetCoverage dla NMT/NMPT/orto),
-│   │                    # __init__.py (create_nmt_provider, nmt_vertical_crs)
+│   │                    # prg.py (discover_teryts_for_bbox, teryt_for_point — TERYT
+│   │                    # powiatow z WFS PRG),
+│   │                    # __init__.py (create_nmt_provider, nmt_vertical_crs,
+│   │                    # require_nmt_vertical_crs)
 │   ├── cuzk/            # CUZK: client.py (CuzkClient — silnik sterowany deskryptorem: ArcGIS
 │   │                    # REST query/export_image + pliki openzu), sheets.py (SheetIndex/
 │   │                    # SheetInfo — indeks SM5/TM33 z KladyMapovychListu, odsiewa
@@ -258,14 +284,21 @@ kartograf/
 │   ├── corine.py        # CORINE z Copernicus CLMS (+ fallback WMS PNG)
 │   └── soilgrids.py     # SoilGrids z ISRIC (WCS)
 ├── cache/metadata.py    # MetadataCache — SQLite WAL, thread-safe; tabele record_cache,
-│                        # campaigns_cache, teryt_cache (TTL 7 d, DEFAULT_TTL_SECONDS)
+│                        # campaigns_cache, teryt_cache, teryt_bbox_cache (TTL 7 d,
+│                        # DEFAULT_TTL_SECONDS)
 │                        # i sheet_cache (30 d, SHEET_TTL_SECONDS); plik bazy
 │                        # otwierany leniwie, powstaje przy pierwszym zapisie
 ├── download/            # Pobieranie NMT/NMPT/Orto po godle + wycinek PL
-│   ├── campaigns.py     # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu, verify_file_format
+│   ├── campaigns.py     # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu,
+│   │                    # verify_file_format, verify_record_url/verify_sheet_extent (B4),
+│   │                    # verify_record_vertical_crs (uklad wysokosci rekordu)
+│   ├── countries.py     # Podzial obszaru na kraje: countries_for_bbox, split_bbox_by_country
 │   ├── links.py         # Dowiazanie sciezki standardowej (hardlink -> kopia, bez symlinkow, nigdy wstecz)
 │   ├── cutout.py        # Wycinek PL --target-crs jako API (ADR-027): prepare/select/run/
-│   │                    # download_pl_cutout — mozaika arkuszy + warp, sidecar
+│   │                    # download_pl_cutout — mozaika arkuszy + warp, sidecar;
+│   │                    # build_cutout_from_sheets (z lokalnych arkuszy, bez sieci)
+│   ├── cz_cutout.py     # Wycinek CZ jako API: download_cz_cutout/run_cz_cutout, all_nodata,
+│   │                    # write_cz_sidecar
 │   ├── laz.py           # Kafle LAZ jako API (ADR-029): download_laz_area/run_laz_download —
 │   │                    # pula watkow, sidecar kafla, porazki w wyniku
 │   ├── manager.py       # DownloadManager — koordynacja arkuszy (ThreadPoolExecutor), sidecary;
@@ -273,7 +306,8 @@ kartograf/
 │   │                    # download_sheets/expand_sheets (lista godel, porazki w last_result)
 │   └── storage.py       # FileStorage — segmenty z szablonow rejestru (ADR-026);
 │                        # prune_empty_dirs — sprzatanie pustych bbox/ po porazce
-├── landcover/manager.py # LandCoverManager — dispatch do providerow pokrycia terenu
+├── landcover/manager.py # LandCoverManager — dispatch do providerow pokrycia terenu;
+│                        # download_all_counties (BDOT10k z kazdego powiatu obszaru)
 ├── hydrology/hsg.py     # HSGCalculator — klasyfikacja USDA -> HSG (ADR-025)
 ├── auth/                # proxy.py (subprocess izolujacy credentials CLMS), client.py
 │                        # (AuthProxyClient — singleton, sam uruchamia proxy)
@@ -342,8 +376,10 @@ Kazde udane pobranie przez CLI albo warstwe zarzadzajaca biblioteki
 (`DownloadManager`, `LandCoverManager`, `download_pl_cutout`/`run_pl_cutout`,
 `download_laz_area`/`run_laz_download`, `HSGCalculator`) zapisuje **dwa**
 pliki: dane i `<plik>.meta.json` (zapis best-effort, wyjatki — sekcja 1).
-Bezposrednie wywolanie providera sidecara nie pisze; DMR CZ z biblioteki
-(`CuzkDmrProvider`) jest wiec bez sidecara — pisze go tylko CLI.
+Od 0.7.1 takze `download_cz_cutout`/`run_cz_cutout` (wycinek CZ),
+`build_cutout_from_sheets` (wycinek z lokalnych arkuszy) i
+`hsg_from_rasters`. Bezposrednie wywolanie providera sidecara nie pisze
+(np. `CuzkDmrProvider.download`); sidecar godla CZ pisze CLI.
 
 | Pole | Znaczenie |
 |---|---|
@@ -353,12 +389,13 @@ Bezposrednie wywolanie providera sidecara nie pisze; DMR CZ z biblioteki
 | `vertical_crs` | kod realizacji ukladu pionowego: `EPSG:9651` (EVRF2007-PL), `EPSG:9650` (KRON86), `EPSG:8357` (Bpv), `EPSG:5621` (EVRF2007); `null` gdy produkt nie ma pionu (orto) |
 | `vertical_source` | `native` / `ellipsoidal` / `server` (z `AccessChannel`) |
 | `resolution` | rozdzielczosc z deskryptora (`1m`/`5m`/`2m`) albo `null` |
-| `nodata` | wartosc pustego piksela: dla `.asc` czytana automatycznie z naglowka (`read_asc_nodata`), w torze CZ podawana przez CLI z tagu GeoTIFF (`_read_tif_nodata`; w trybie bbox z fallbackiem `CUZK_NODATA`), dla wycinka PL stala `-9999.0`, dla wyniku HSG `0`, dla GeoTIFF CORINE/SoilGrids z `LandCoverManager` z tagu pliku (sekcja 4.8); `null` gdy zadna z tych drog nie ma zastosowania (np. orto) |
+| `nodata` | wartosc pustego piksela: dla `.asc` czytana automatycznie z naglowka (`read_asc_nodata`), w torze CZ z tagu GeoTIFF (`download/cz_cutout.py::read_tif_nodata`; w trybie bbox z fallbackiem `CUZK_NODATA`), dla wycinka PL stala `-9999.0`, dla wyniku HSG `0`, dla GeoTIFF CORINE/SoilGrids z `LandCoverManager` z tagu pliku (sekcja 4.8); `null` gdy zadna z tych drog nie ma zastosowania (np. orto) |
 | `request` | zadanie, ktore dalo TEN plik: `sheet` (godlo), `bbox` + `bbox_crs` w ukladzie wyniku albo `teryt`; dla plikow PL (kampanie, ADR-030) `campaigns` (`newest`/`all`, zawsze) i `min_year` (tylko gdy podany; `request` opisuje POBRANIE, ktore dalo plik, a nie jego ostatnie uzycie — reuzycia ida do `extra.parent_requests`); LAZ: `year`/`min_density`/`min_year` gdy podane oraz `campaigns` tylko dla `all`; land cover: parametry tresci z wartosciami domyslnymi — SoilGrids `property`/`depth`/`stat`, CORINE `year`, BDOT10k `format` (sekcja 4.8); oryginalne zadanie niesie `extra.parent_request` (3.4), rekord skorowidza PL niesie `extra.source` |
 | `license` | `{id, attribution, url}` z deskryptora |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, sekundy) i wersja pakietu z `kartograf/_version.py::build_version()`: wydanie = samo `__version__`; wersja rozwojowa (`dev`) = `<__version__>+<krotki SHA>` commita, z ktorego zaimportowano pakiet, z sufiksem `.dirty`, gdy sledzone pliki katalogu `kartograf/` maja niezacommitowane zmiany (docs/testy sie nie licza); gdy git jest niedostepny albo pakiet nie pochodzi z repozytorium, w ktorym lezy (`os.path.samefile`), samo `__version__`. Ta sama wartosc w `kartograf --version`; `User-Agent` HTTP niesie samo `__version__` |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
-| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `tile_sheet`/`year`/`nominal_density`/`url`; SM5 ma `mapname`/`cz_share` (udzial arkusza w terytorium CZ, pole `PODIL` CUZK); arkusze NMT/NMPT/orto PL maja `source` (klucze w tabeli nizej); wycinek PL: `parent_request`, `missing_sheets`, `sheet_sources`, `off_grid_sheets`, `all_nodata`, `unverified_sheets` — znaczenie i warunki zapisu w akapicie "Wycinek PL w sidecarze" nizej (jedyne pelne zestawienie); CORINE z podgladu WMS: `fallback: "wms_png"` i `note` (`landcover/manager.py`, sekcja 4.8); wynik HSG: `derived: "hsg"`, `source_layers`, `depth`, `stat`, `classes` (sekcja 4.8); plik kampanii (ADR-030): `campaign` = `{id, date, survey_work_id, source, full_sheet, pzgik_date}` obok `source`; sidecar sciezki standardowej: `link` (`hardlink`/`copy`) i `link_target` (sciezka celu wzgledem dowiazania; jedyne zrodlo celu) |
+| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `tile_sheet`/`year`/`nominal_density`/`url`; SM5 ma `mapname`/`cz_share` (udzial arkusza w terytorium CZ, pole `PODIL` CUZK); wycinek bbox CZ (od 0.7.1) ma zawsze `all_nodata` (`true`/`false`, sekcja 4.5) i `parent_request` przy zadaniu obszarowym; arkusze NMT/NMPT/orto PL maja `source` (klucze w tabeli nizej); wycinek PL: `parent_request`, `missing_sheets`, `sheet_sources`, `off_grid_sheets`, `all_nodata`, `unverified_sheets` — znaczenie i warunki zapisu w akapicie "Wycinek PL w sidecarze" nizej (jedyne pelne zestawienie); CORINE z podgladu WMS: `fallback: "wms_png"` i `note` (`landcover/manager.py`, sekcja 4.8); wynik HSG: `derived: "hsg"`, `source_layers` (lista nazw warstw), `depth`, `stat`, `classes`, a z `hsg_from_rasters` (od 0.7.1) zamiast `depth`/`stat` dodatkowo `source_files` (sekcja 4.8); pakiet BDOT10k (od 0.7.1): `source` = `{url, teryt, format[, raw_file]}` i `http` = `{etag, last_modified, content_length}` (sekcja 4.8); plik kampanii (ADR-030): `campaign` = `{id, date, survey_work_id, source, full_sheet, pzgik_date}` obok `source`; sidecar sciezki standardowej: `link` (`hardlink`/`copy`) i `link_target` (sciezka celu wzgledem dowiazania; jedyne zrodlo celu) |
+| `sha256`, `size_bytes` | od 0.7.1: skrot SHA-256 (hex) i rozmiar w bajtach pliku danych, liczone w `build_metadata` (`sources/sidecar.py::file_digest`) przez ponowny odczyt GOTOWEGO pliku — jedno miejsce dla wszystkich produktow, takze pochodnych (wycinek, scalony GPKG BDOT10k, HSG); `null`, gdy sidecar powstaje bez istniejacego pliku danych. Sidecar sciezki standardowej kampanii (kopia sidecara celu) niesie skrot celu — tresc dowiazania jest ta sama |
 | `schema` | stale `kartograf-meta/1` |
 
 Nazwy kluczy sa angielskie (ADR-031, od 0.7.0); wyjatkiem jest `teryt` —
@@ -387,11 +424,17 @@ i `campaigns_cache`):
 | `survey_work_id` | numer zgloszenia pracy geodezyjnej (`numerZgloszeniaPracy`) |
 | `data_source` | zrodlo danych (`zrDanych`/`zrodloDanych`) |
 | `format` | format pliku z rekordu (`format`), np. `ARC/INFO ASCII GRID` |
+| `height_rmse_m` | od 0.7.1: blad sredni wysokosci w metrach (`bladSredniWysokosci`); `null`, gdy brak albo wartosc nieliczbowa |
+| `position_rmse_m` | od 0.7.1: blad sredni polozenia w metrach (`bladSredniPolozenia`); `null` jak wyzej |
+| `archive_module` | od 0.7.1: modul archiwizacji, np. `1:5000` (`modulArchiwizacji`), albo `null` |
+| `declared_vertical_crs` | od 0.7.1: uklad wysokosci zadeklarowany w rekordzie, np. `PL-EVRF2007-NH` (`ukladWspolrzednychPionowych`), albo `null` |
 | `color` | tylko orto: wariant `RGB`/`CIR`/`B/W` |
 
 **Stare sidecary i wpisy cache (sprzed ADR-031).** Wpis `record_cache`/
 `campaigns_cache` bez nowych kluczy jest chybieniem cache (skorowidz
-odpytywany ponownie, wpis nadpisany). Sidecar kampanii bez
+odpytywany ponownie, wpis nadpisany); od 0.7.1 dotyczy to takze wpisow
+bez klucza `archive_module` (zapisanych przed dodaniem kluczy dokladnosci).
+Sidecar kampanii bez
 `extra.campaign.pzgik_date` nie daje klucza dowiazania z sidecara —
 uzywane jest dolne oszacowanie z nazwy katalogu kampanii (jak przy braku
 sidecara). Wpisy `extra.sheet_sources` bez `sheet` nie licza sie jako
@@ -610,7 +653,18 @@ kazdego arkusza pyta WMS skorowidz (`GetFeatureInfo`, warstwy wykryte lazy
 przez `GetCapabilities` — ADR-020). `providers/pl/skorowidz.py` parsuje
 pelne rekordy; filtruje cale godlo, zgodny uklad i rozdzielczosc
 (dla orto tez domyslnie RGB), wybiera (strategia `newest`) rekord z najnowsza data w pierwszej
-warstwie z dopasowaniem; remis rozstrzyga `dt_pzgik`, URL. Brak zgodnego rekordu
+warstwie z dopasowaniem; remis rozstrzyga `dt_pzgik`, URL. Uklad wysokosci
+wybiera wylacznie endpoint (osobny WMS skorowidza na uklad); przed pobraniem
+`verify_record_vertical_crs` (`download/campaigns.py`; wywolania w
+`DownloadManager._fetch_campaigns` dla `newest` i `all` oraz w
+`GugikProvider.download`) porownuje pole rekordu `ukladWspolrzednychPionowych`
+z zadanym ukladem (`RECORD_VERTICAL_CRS`: KRON86 -> `PL-KRON86-NH`, EVRF2007
+-> `PL-EVRF2007-NH`, wartosci z surowych odpowiedzi GUGiK). Inna wartosc =
+`DownloadError` kampanii przed pobraniem (w `all` pozostale kampanie sa
+pobierane, arkusz konczy sie porazka); brak pola = rekord przyjety (log
+`debug`); orto nie ma ukladu wysokosci — bez sprawdzenia. Wartosc z rekordu
+zapisuje `extra.source.declared_vertical_crs`, takze w cache rekordow —
+niezgodny rekord z cache daje ten sam blad, odswiezenie: `--force`. Brak zgodnego rekordu
 po poprawnych odpowiedziach warstw = `NoCoverageError`, np. dla PL-2000
 1:10000 z samymi potomkami podpowiedz `--scale 1:2000`. Awaria warstwy,
 raport OGC albo nieoczekiwany szablon = `DownloadError`, nie cichy fallback
@@ -630,8 +684,10 @@ niczego nie zapisuja. Cache jest tylko przyspieszeniem: kazdy
 locked`) wylacza instancje na reszte jej zycia (odczyt = chybienie, zapis =
 no-op, `MetadataCache.error`, `stats()["error"]`) z jednym ostrzezeniem
 (`logger.warning` albo `on_disabled=`; CLI: jedno `Warning:` na komende);
-pobieranie idzie dalej. Naprawa: `kartograf cache clear` usuwa nieczytelny
-plik z `-wal`/`-shm`.
+pobieranie idzie dalej. `MetadataCache(strict=True)` (biblioteka, od 0.7.1):
+ten sam stan konczy sie `CacheError` na wywolaniu, ktore zawiodlo, i na
+kazdym kolejnym (`on_disabled` nadal raz). Naprawa: `kartograf cache clear`
+usuwa nieczytelny plik z `-wal`/`-shm`.
 `DownloadManager` pisze sidecar po kazdym udanym arkuszu; arkusz ASC GUGiK
 nie niesie CRS (rasterio: `crs=None`), wiec jedynym nosnikiem ukladu jest
 sidecar. Ponowne uruchomienie rozwiazuje najnowszy rekord arkusza (cache 7 d;
@@ -674,12 +730,33 @@ i hierarchii) niesie `succeeded`, `failed`, `skipped`, `no_coverage`
 `reused_campaign_files` (kampanie juz lokalne per arkusz), `copied`
 (arkusze, ktorych sciezka standardowa jest KOPIA) i `unverified` (ponizej).
 Pelna lista pol: docstringi `SheetFetch`/`DownloadResult` w
-`download/manager.py`. Plik: format z pola
-`format` rekordu (nie z URL; brak pola — format domyslny produktu),
-rozszerzenie zawsze kanoniczne (`.asc`/`.tif`; rekord 72675 z URL `.xyz` to
-AAIGrid, zwykla kampania `.asc`), po pobraniu `verify_file_format`
-(naglowek AAIGrid / sygnatura TIFF); nieznany format albo niezgodna tresc
-= `DownloadError` kampanii z nazwa formatu, plik usuniety. Blad pobrania
+`download/manager.py`. `download_sheet` pojedynczego arkusza ustawia
+`last_result` jako wynik jednoelementowy (jak lista). Pochodzenie arkusza
+przy kampaniach: `provider.source_info()` wypelnia przeplyw jednego rekordu
+(`download`, `get_download_url`, `resolve_campaigns` w trybie `newest`), a przy
+`all` zostaje `None` — zrodlem pochodzenia jest wtedy sidecar
+(`extra.source`, `extra.campaign`); sidecar sciezki standardowej opisuje
+kampanie, na ktora wskazuje dowiazanie, a ta moze byc starsza niz najnowszy
+rekord, gdy jego pobranie sie nie powiodlo (A12). Przed siecia
+`verify_record_url` (B4): nazwa pliku w URL rekordu musi konczyc sie godlem
+arkusza (`<id>_<numer>_<godlo>.<ext>`, porownanie w postaci kanonicznej);
+URL bez godla albo z innym godlem = `DownloadError` kampanii bez pobierania.
+Plik: format z pola `format` rekordu (nie z URL; brak pola — format
+domyslny produktu), rozszerzenie zawsze kanoniczne (`.asc`/`.tif`; rekord
+72675 z URL `.xyz` to AAIGrid, zwykla kampania `.asc`), po pobraniu `verify_file_format`
+(naglowek AAIGrid / sygnatura TIFF), potem `verify_sheet_extent` (B4,
+tylko `.asc`): zasieg z naglowka ASC (`xllcorner`/`xllcenter`,
+`yllcorner`/`yllcenter`, `ncols`, `nrows`, `cellsize`; wariant `*center`
+przesuniety o pol piksela) musi co najmniej w 50 % powierzchni
+(`MIN_FRAME_OVERLAP`) lezec w ramie godla liczonej w ukladzie PLIKU:
+`x < 1e6` = EPSG:2180 (takze arkusz PL-2000 opublikowany przez GUGiK w
+EPSG:2180, E17), inaczej natywna strefa PL-2000 godla. Arkusz czesciowy
+(`full_sheet=False`) lezy w ramie i przechodzi, arkusz sasiedni albo z
+innego miejsca nie; naglowek nieczytelny albo niepelny = blad. Te same dwie
+kontrole pliku przechodzi plik kampanii bez sidecara (R22) przed
+odtworzeniem sidecara. Nieznany format albo niezgodna tresc =
+`DownloadError` kampanii z nazwa formatu, zasieg spoza ramy =
+`DownloadError` z zasiegiem pliku i rama godla; plik usuniety. Blad pobrania
 podaje nazwe pliku z URL (`84183_1852496_N-34-139-C-a-3-1.asc (OpenData):
 HTTP 404`), co w `all` rozroznia kampanie. Porazki: kampania (w tym
 niepoprawna `aktualnosc` rekordu w `all`, brak sidecara, porazka
@@ -783,6 +860,20 @@ GeoTIFF zamiast listy arkuszy. Od 2026-09-28 (R3) caly tor zyje w bibliotece
   `run_pl_cutout` -> `PlCutoutResult` (`path`, `skipped`, `sheet_paths`,
   `missing_sheets`, `off_grid_sheets`, `all_nodata`, `partial_sheets`,
   `unverified`; zwiazek z kluczami sidecara — tabela w sekcji 3.2).
+- `build_cutout_from_sheets(sheet_paths, bbox, target_crs, output_path, *,
+  resolution, vertical_crs) -> PlCutoutResult` — ten sam wycinek z
+  LOKALNYCH arkuszy, zero sieci (A10): sciezka wyniku pochodzi od
+  wywolujacego (takze poza drzewem `data/`), sidecar powstaje obok pliku
+  wyniku (`extra.sheet_sources` z sidecarow arkuszy, o ile istnieja).
+  Reguly siatki i warpu jak w `download_pl_cutout` (`prepare_pl_cutout` +
+  `build_pl_cutout`): cel EPSG:2180 i arkusze o roznej fazie siatki =
+  `GridMismatchError`, cel z warpem raportuje je w `off_grid_sheets`;
+  arkusz PL-2000 = `ValidationError`. Wynik jest budowany zawsze (bez
+  pomijania istniejacego pliku). `ValidationError` przed jakimkolwiek
+  zapisem: puste `sheet_paths`, sciezka arkusza nieistniejaca / nie plik /
+  nieczytelna jako raster (komunikat wymienia sciezki) oraz `output_path`
+  rowny jednemu z arkuszy (porownanie po `resolve()`; inaczej wynik
+  nadpisalby dane wejsciowe).
 
 CLI jest nakladka: `_download_pl_bbox`/`_download_pl_geometry` wolaja
 `_download_pl_cutout` (`cli/download_cmd.py`), ktore wstrzykuje providera
@@ -805,9 +896,14 @@ drugiego kraju nie daje juz kodu 0. Biblioteka nie ma `print` ani argparse.
    uklad docelowy spoza `SUPPORTED_TARGET_CRS` (`EPSG:2180`, `EPSG:5514`,
    `EPSG:3045` — ta sama krotka ogranicza `choices` flagi CLI), rozdzielczosc
    spoza 1m/5m, pion spoza EVRF2007/KRON86 i 5m z KRON86 (`prepare_pl_cutout`
-   przyjmuje pion FAKTYCZNY; korekte 5m => EVRF2007 robi `download_pl_cutout`
-   przez fabryke providera, a CLI juz w `_resolve_pl_sentinels` z `Info:` na
-   stderr — regula zyje w jednym miejscu, `providers.pl.nmt_vertical_crs`). Bbox trafia do EPSG:2180 (uklady czeskie
+   przyjmuje pion FAKTYCZNY; `require_nmt_vertical_crs` w
+   `providers/pl/__init__.py`; od 0.7.1 te pare odrzucaja `ValidationError` z
+   remedium takze `download_pl_cutout` — przed fabryka providera —
+   `create_nmt_provider` i `DownloadManager`; CLI odrzuca jawne
+   `--resolution 5m --vertical-crs KRON86` w `_resolve_pl_sentinels`
+   komunikatem `Error:` z flagami CLI (kod 1), zanim wywola biblioteke —
+   zamiany nie ma nigdzie; regula "5 m tylko w EVRF2007" zyje w jednym
+   miejscu, `providers.pl.nmt_vertical_crs`). Bbox trafia do EPSG:2180 (uklady czeskie
    przypieta operacja `bbox_to_crs`, pozostale domyslnym transformerem, jak
    w calym przeplywie PL), po czym dla pary `EPSG:2180 -> target_crs`
    budowana jest operacja przypieta (polityka `min_accuracy_m=1.0`, bez
@@ -999,9 +1095,8 @@ i czyta arkusze przez dowiazania sciezki standardowej (hardlink i kopia to
 zwykle pliki), a `extra.sheet_sources` czyta
 sidecar standardowy. `--target-crs` + (`--campaigns all` lub `--min-year`)
 odrzuca CLI przed siecia (`Error: --campaigns all nie dziala z --target-crs
-— wycinek sklada jedna kampanie na arkusz; laczenie kampanii: narzedzie
-0.7.1` / `Error: --min-year nie dziala z --target-crs — nazwa wycinka nie
-niesie granicy roku`, kod 1). Wycinek jest pomijany po SAMYM istnieniu
+— wycinek sklada jedna kampanie na arkusz` / `Error: --min-year nie dziala
+z --target-crs — nazwa wycinka nie niesie granicy roku`, kod 1). Wycinek jest pomijany po SAMYM istnieniu
 pliku wyniku (Q4), takze gdy skorowidz ma juz nowsza kampanie — odswiezenie:
 `--force` albo usuniecie wycinka. Kontrola wolnego miejsca
 (`estimate_pl_cutout_bytes`, D-3) to DOLNE oszacowanie: liczy arkusze bez
@@ -1030,7 +1125,8 @@ DMR 5G ma faze (0,4; 1,88) m mod 2), wiec 1:1 daje tylko arkusz SM5.
 Godlo SM5 (`CTES96`) to gotowy plik z openzu, juz w EPSG:5514, bez warpa —
 po pobraniu nadpisywane sa tylko metadane CRS. `--vertical-crs EVRF2007` dokleja przypieta
 transformacje pionowa Bpv -> EPSG:5621 (przesuniecie w miejscu). `KRON86` dla
-CZ jest nieosiagalny (brak publicznych siatek). Sidecar pisze CLI.
+CZ jest nieosiagalny (brak publicznych siatek). Sidecar pisze CLI przez
+`download/cz_cutout.py::write_cz_sidecar`.
 
 Wynik: `data/nmt/cz_dmr5g_bpv/302/5550/302_5550.tif` (`horizontal_crs`
 EPSG:3045) albo `data/nmt/cz_dmr4g_bpv/CTES/96/CTES96.tif`
@@ -1052,11 +1148,35 @@ dokladnie 2 m/5 m, E/S moze odbiegac o <= 0,5 px (nazwa pliku i
 `request.bbox` niosa bbox sprzed snapu). Wycinek w calosci nodata
 daje `Warning:` i kod 0, nie pozorna cisze.
 
+Od 0.7.1 tor bbox CZ jest w bibliotece (`download/cz_cutout.py`, A6
+Hydrografa): `run_cz_cutout(provider, bbox, output_dir=, image_crs=,
+force=, parent_request=, on_download=)` robi normalizacje bboxa, sciezke,
+pobranie, kontrole nodata i sidecar; CLI (`_cz_download_bbox`) tylko
+drukuje komunikaty. `image_crs` (uklad wyniku, `None` = natywny EPSG:5514)
+podaje wywolujacy jawnie — CLI z `--target-crs` — a nie odczyt atrybutow
+providera. `download_cz_cutout(bbox, output_dir=, target_crs=,
+vertical_crs=, resolution=)` buduje providera (`create_dmr_provider`)
+i wola `run_cz_cutout`. Siatka wyniku startuje od zadanego bboxa
+przeliczonego do ukladu wyniku, dokladnie jak w CLI przed 0.7.1;
+wyrownania do siatki PL nie ma (osobny spec razem z R6). Wynik
+`CzCutoutResult(path, skipped, all_nodata)`: rastr bez ani jednego
+waznego piksela powstaje, ma `all_nodata=True`, `extra.all_nodata: true`
+w sidecarze (przy danych `false` — klucz jest zawsze) i `logger.warning`;
+CLI wycisza na czas wywolania ten logger (`_library_log_muted`), bo drukuje
+wlasna linie `Warning:`. Kontrola jest best-effort: nieczytelny plik daje
+`all_nodata=False` (log debug), nigdy przerwania po udanym pobraniu.
+Pominiety istniejacy plik (`force=False`) zwraca `skipped=True`
+z flaga `all_nodata` odczytana z pliku; sidecar zostaje bez zmian.
+Nieudane pobranie usuwa pusty katalog `<segment>/bbox/` i przekazuje
+wyjatek dalej.
+
 Wynik: `data/nmt/cz_dmr5g_<vcrs>/bbox/<coords>.tif` (+ `.meta.json`).
 
 ### 4.6 Dyspozycja per kraj (`--country auto`)
 
-`_countries_for_bbox` porownuje bbox (w WGS84) z `CountryProfile.extent_wgs84`
+Podzial na kraje jest w bibliotece (`download/countries.py`, od 0.7.1;
+CLI importuje te same funkcje): `countries_for_bbox` porownuje bbox
+(w WGS84) z `CountryProfile.extent_wgs84`
 kazdego kraju z rejestru. Obwiednie sa **prostokatami**, nie wielokatami
 granic, wiec obszar w glebi jednego kraju rutynowo trafia takze do drugiego.
 Konsekwencje: (1) obszar przecinajacy oba prostokaty pobiera sie z KAZDEGO
@@ -1070,7 +1190,9 @@ wiec `-q` ich nie tlumi. `--target-crs` NIE rozstrzyga kraju w zadna strone,
 bo od ADR-027 dziala po obu stronach granicy.
 
 Czesc zadania dla kazdego kraju jest pod `auto` PRZYCINANA do jego
-prostokata. `_country_bbox` zmienia tylko obciete krawedzie PL —
+prostokata (`country_bbox`; komplet czesci dla `auto` daje
+`split_bbox_by_country(bbox, cz_crs=)` — czesc CZ w `cz_crs`, czesc PL
+w ukladzie bboxa). `country_bbox` zmienia tylko obciete krawedzie PL —
 pozostale niosa oryginalne wspolrzedne; CZ pozostaje przeliczany
 przez WGS84. Przed pobraniem CLI drukuje `Info:` o przycieciu oraz
 o obszarze pozostawionym poza oboma prostokatami (takze naroznym).
@@ -1135,6 +1257,22 @@ rzuca `DownloadError` z informacja o niekompletnym wyniku, zamiast
 sugerowac brak kafli. Gdy wszystkie
 odpowiedza i nic nie znaleziono, CLI drukuje `No LAZ tiles found`
 (`download_laz_area`: `NoCoverageError`).
+
+**`--year` i `--min-density` tylko dla LAZ (0.7.1).** Opcje te czyta wylacznie
+`_cmd_download_laz`. Dla `--product nmt|nmpt|orto` (takze domyslnego)
+`cmd_download` odrzuca je w `_reject_laz_only_opts`: `Error: --year dziala
+tylko z --product laz (podano <produkt>); ...` albo `Error: --min-density
+dziala tylko z --product laz (podano <produkt>); ...`, kod 1. Sprawdzenie
+stoi zaraz po walidacji opcji kampanii, przed wyborem kraju, wiec obejmuje
+wszystkie tory (godlo, hierarchia, lista arkuszy, `--bbox`, `--geometry`,
+wycinek `--target-crs`, `--country auto`, CZ) i jest przed siecia,
+fabryka providera, `DownloadManager`, wycinkiem i `_run_cz` oraz przed
+utworzeniem katalogu wyjsciowego. Komunikat `--year` wskazuje wybor roku
+w 0.7.2 i `--min-year` (kampanie PL, bez `--target-crs`); bez podpowiedzi
+`--min-year`, gdy podano go juz razem z `--year`. Dla zadan wylacznie CZ
+(`_is_cz_only_task`: godlo CZ, `--country cz`, `--bbox`/`--geometry` w calosci
+w CZ pod `auto`; lokalnie, bez sieci) komunikat to `Error: --year nie dziala
+dla CZ (CUZK nie ma wyboru roku; podano <produkt>); pomin --year`.
 
 **Wybor kafli (ADR-029).** Domyslnie (bez `--year`) kafle sa wybierane
 zachlannie od najnowszego `akt_rok` (w roku: nowsza `akt_data`): kafel
@@ -1203,7 +1341,8 @@ tymczasowym. `LandCoverManager` ma **wlasny domyslny katalog**
 gdzie `<zrodlo>` to klucz `--source` (`bdot10k`/`corine`/`soilgrids`;
 provider spoza rejestru: nazwa malymi literami, spacje -> `_`), `<tryb>_<id>`
 to `teryt_<teryt>`, `bbox_<minx>_<miny>_<maxx>_<maxy>` (EPSG:2180, liczby
-calkowite; `--geometry` = obwiednia) albo `godlo_<godlo>`, a parametry to
+calkowite; `--geometry` = obwiednia) albo `godlo_<godlo>` — z wyjatkiem
+BDOT10k, ktorego plik nazywa sie ZAWSZE `teryt_<teryt>` (nizej), a parametry to
 KAZDA opcja zmieniajaca tresc wyniku, z wartoscia domyslna wlacznie
 (`LandCoverManager._content_params`, U3):
 
@@ -1211,12 +1350,12 @@ KAZDA opcja zmieniajaca tresc wyniku, z wartoscia domyslna wlacznie
 |---|---|---|
 | SoilGrids | `<property>_<depth>_<stat>` | `soilgrids_clay_0-5cm_mean_bbox_770000_509000_772000_511000.tif` |
 | CORINE | `<year>` | `corine_2018_godlo_N-34-130-D.tif` (`.png` z podgladu WMS) |
-| BDOT10k | brak — `format` niesie rozszerzenie | `bdot10k_teryt_1465.gpkg`, `bdot10k_teryt_1465.zip` (SHP) |
+| BDOT10k | opcjonalny filtr warstw `<kod>-<kod>...` (kody posortowane); `format` niesie rozszerzenie | `bdot10k_teryt_1465.gpkg`, `bdot10k_PTWP-SWRS_teryt_1465.gpkg` (`layers=`), `bdot10k_teryt_1465.zip` (SHP) |
 
 Rozne parametry = rozne pliki; te same parametry = ta sama sciezka (ponowne
 pobranie nadpisuje plik, land cover nie pomija istniejacych wynikow). Te
 same wartosci trafiaja do sidecara `request` (`property`/`depth`/`stat`,
-`year`, `format`; klucze ADR-031) obok `teryt`/`bbox`+`bbox_crs`/`sheet`,
+`year`, `format`, `layers`; klucze ADR-031) obok `teryt`/`bbox`+`bbox_crs`/`sheet`,
 a `nodata` wyniku GeoTIFF jest czytane z pliku (`null`, gdy plik go nie
 deklaruje — np. GeoTIFF z WCS SoilGrids bywa bez tagu NoData; Kartograf nie
 dopisuje wartosci z dokumentacji zrodla). Nazwy sprzed 0.7.0
@@ -1227,9 +1366,40 @@ sciezka i sidecar dotycza tego pliku (review 2026-10-06 N14). BDOT10k
 z `format="SHP"` (`--format SHP`) zapisuje oryginalne archiwum
 GUGiK z shapefile'ami pod ta sama nazwa z rozszerzeniem `.zip`
 (np. `bdot10k_teryt_1465.zip`, sidecar `bdot10k_teryt_1465.zip.meta.json`);
-rozszerzenie nadaje `Bdot10kProvider.download_by_admin_unit`, a CLI drukuje
+rozszerzenie nadaje `Bdot10kProvider.download_package`, a CLI drukuje
 faktyczna sciezke (review 2026-10-06 N1). Sidecary pisze `LandCoverManager` tak samo jak
-pozostale warstwy zarzadzajace. CORINE bez credentials CLMS pobiera podglad
+pozostale warstwy zarzadzajace.
+
+**BDOT10k z wielu powiatow (od 0.7.1, A2).** Pakiet BDOT10k jest zawsze
+pakietem CALEGO powiatu, wiec nazwa pliku i `request` sidecara opisuja
+tresc: `bdot10k[_<warstwy>]_teryt_<TERYT>.<ext>`, `request = {teryt,
+format[, layers]}` — takze przy zadaniu przez `--bbox`/`--godlo`/`--geometry`
+(dawne nazwy `bdot10k_bbox_*`/`bdot10k_godlo_*` nie sa rozpoznawane).
+Obszar zadania idzie do `extra.parent_request`: `{bbox, bbox_crs,
+countries: ["PL"]}` albo `{sheet, countries: ["PL"]}`.
+`LandCoverManager.download_all_counties(bbox=|godlo=, format=, layers=,
+timeout=)` pyta PRG (`Bdot10kProvider.teryts_for_area` ->
+`discover_teryts_for_bbox`, obszar w dowolnym obslugiwanym ukladzie) i
+pobiera pakiet KAZDEGO powiatu przecinajacego obszar, w kolejnosci kodow,
+przez `Bdot10kProvider.download_package(code, path, *, timeout, format,
+layers, keep_raw, raw_path) -> Bdot10kPackage(path, teryt, url, format, http,
+raw_path)`; jeden plik i sidecar per powiat (`_download_county`, jedyna
+sciezka pobrania BDOT10k w menedzerze, takze dla `--teryt`); brak powiatu =
+`NoCoverageError`, awaria PRG albo pakietu = `DownloadError` (pliki pobrane wczesniej zostaja). CLI
+`landcover download --source bdot10k` z `--bbox`/`--godlo`/`--geometry`
+wola te metode i drukuje `Downloaded to:` dla kazdego pliku; `--teryt`
+bez zmian. Stare `download_by_bbox`/`download_by_godlo` (menedzera bez
+jawnego `output_path` i providera) pobieraja JEDEN powiat ta sama sciezka
+(`_single_teryt`): obszar z kilku powiatow konczy sie `ValidationError`
+z lista kodow i wskazaniem `download_all_counties`. `layers=` (kody
+4-literowe, np. `PTWP`, `SWRS`; tylko GPKG) zostawia w scalonym GPKG
+wylacznie pliki `__OT_<kod>_*` pakietu — brakujaca warstwa to
+`DownloadError`, zly kod `ValidationError` przed siecia; plik z filtrem
+nosi token warstw w nazwie, bo nie jest juz pelnym pakietem. Scalanie
+pakietu (`_merge_gpkg_files`) konczy sie `DownloadError`, gdy nazwa
+tabeli powtarza sie w dwoch plikach pakietu (dotad druga kopia byla po
+cichu pomijana); w prawdziwej paczce (63 pliki `..._<TERYT>__OT_<KOD>_<A|L|P>.gpkg`,
+po jednej tabeli) duplikatow nie ma. CORINE bez credentials CLMS pobiera podglad
 PNG przez WMS: sidecar ma wtedy `horizontal_crs` uslugi WMS (EPSG:3857, dla
 rocznika 1990 EPSG:4326) oraz `extra.fallback = "wms_png"` i `extra.note`
 (`"podglad WMS, nie dane"`).
@@ -1239,6 +1409,34 @@ w jeden GeoPackage w LOKALNYM katalogu tymczasowym (`tempfile`); do
 `--output` trafia gotowy plik (kopia jako `.gpkg.tmp` + `os.replace`).
 Powod: SQLite na udzialach CIFS/SMB bez blokad zakresow bajtow konczyl
 scalanie bledem `database is locked` (`Bdot10kProvider._merge_gpkg_files`).
+
+**Pochodzenie pakietu BDOT10k w sidecarze (od 0.7.1, A4).** Sidecar pliku
+BDOT10k (`LandCoverManager._write_bdot_sidecars`) ma `extra.source = {url,
+teryt, format}` (URL paczki OpenData, z ktorej powstal plik) oraz
+`extra.http = {etag, last_modified, content_length}` — naglowki odpowiedzi
+GUGiK zapisane tak, jak przyszly (brak naglowka = `null`, nic nie jest
+zgadywane). Serwer paczek BDOT10k nie podaje dzis `ETag` ani
+`Last-Modified` (ani w `HEAD`, ani w `GET`), tylko `Content-Length`, i
+ignoruje `Range`; o zmianie paczki u zrodla mowi wiec glownie `sha256`
+pliku. `keep_raw=True` (biblioteka: `download_package`, `LandCoverManager.
+download*`; tylko GPKG — przy SHP `ValidationError`, bo wynik SHP to juz
+oryginalny ZIP) zapisuje obok GPKG nietkniete archiwum GUGiK. Archiwum
+to zawsze PELNY pakiet powiatu, wiec na sciezce standardowej nosi
+standardowa nazwe BEZ tokenu warstw (A2): `bdot10k_teryt_<TERYT>_GPKG.zip`
+(np. `bdot10k_teryt_1465_GPKG.zip`) — ten sam plik niezaleznie od filtra
+`layers=` (menedzer podaje go jako `download_package(raw_path=)`); przy
+jawnym `output_path` nazwe wybiera wywolujacy: `<rdzen output_path>_GPKG.zip`.
+Archiwum ma wlasny sidecar (`request` jak pliku wyniku, ale bez `layers`,
+np. `{teryt, format}`; `extra.source` bez `raw_file`; `sha256`/`size_bytes`
+archiwum); sidecar GPKG dostaje wtedy
+`extra.source.raw_file` = nazwa archiwum. Archiwum jest zapisywane
+atomowo i dopiero po udanym scaleniu, wiec blad rozpakowania nie zostawia
+ZIP bez sidecara; nieudany zapis archiwum usuwa juz zapisany GPKG (jego
+sidecar powstaje dopiero po powrocie z `download_package`). Blad
+wejscia-wyjscia przy rozpakowaniu (warstwy kopiowane strumieniowo), scalaniu
+albo zapisie archiwum to `DownloadError`. `keep_raw` nie zmienia tresci GPKG, wiec nie trafia do
+nazwy pliku ani do `request`. `extra.parent_request` (obszar zadania)
+zostaje obok `source` i `http`.
 
 `HSGCalculator` (`hydrology/hsg.py`) liczy grupy glebowe z warstw SoilGrids
 (`clay`, `sand`, `silt`) wg kanonicznego trojkata USDA (ADR-025) i pisze
@@ -1250,6 +1448,42 @@ glebokosc: `hsg_<godlo>_<depth>.tif`, `hsg_bbox_<depth>.tif`),
 `horizontal_crs` = uklad rastra wyniku, `nodata: 0`,
 `extra` = `{derived: "hsg", source_layers: ["clay", "sand", "silt"], depth,
 stat, classes: "1=A, 2=B, 3=C, 4=D"}`.
+
+`hsg_from_rasters(clay, sand, silt, *, bbox, crs, pixel_m, output_path)`
+(od 0.7.1, A8) liczy HSG z gotowych rastrow (g/kg, SoilGrids) bez pobierania
+i bez wartosci domyslnych: kazde wejscie jest reprojektowane przypieta
+operacja (`CONTENT_POLICY`, bilinear; `warp_to_grid`) na siatke `crs`/`pixel_m`
+zaczepiona w `bbox` (przeliczonym do `crs`), a klasyfikacja (`_classify_hsg`)
+i zapis GeoTIFF (`_write_hsg_geotiff`) sa wspolne z
+`HSGCalculator.calculate_hsg_by_bbox`. Nodata wejscia pochodzi wylacznie z
+jego tagu (brak tagu = brak wartosci nodata, bez domyslnego `-32768`); piksele
+poza zasiegiem wejscia oraz trojki zerowe daja `0`. Sidecar jak wyzej
+(`extra.source_layers` = `["clay", "sand", "silt"]`, ten sam typ), plus
+`extra.source_files` = lista `{name, file, sha256}` (skrot pliku wejsciowego,
+`file_digest`), bez `depth`/`stat` (nie sa znane), a `request` niesie
+siatke (`bbox` w `crs`).
+
+**Odkrywanie TERYT (od 0.7.1).** `providers/pl/prg.py` to jedyne miejsce,
+ktore pyta, w jakich powiatach lezy obszar albo punkt:
+`discover_teryts_for_bbox(bbox, *, session, cache, timeout)` zwraca
+posortowane, unikalne 4-cyfrowe kody powiatow, a `teryt_for_point(x, y,
+crs, ...)` kod powiatu punktu (`None` = brak powiatu: morze, za granica;
+punkt na granicy dwoch powiatow = nizszy kod). Zrodlo: WFS PRG GUGiK
+(WFS 2.0.0, MapServer), warstwa `ms:A02_Granice_powiatow`, atrybut
+`JPT_KOD_JE`. Obszar w dowolnym obslugiwanym ukladzie jest przeliczany do
+EPSG:2180 ta sama regula co wycinek PL (`download.cutout.bbox_to_2180`),
+a `BBOX` idzie w kolejnosci osi (N,E) z `urn:ogc:def:crs:EPSG::2180`.
+Filtr dziala na GEOMETRII powiatu, nie na jego obwiedni (sprawdzone na
+zywo 2026-10-08; surowe odpowiedzi: `tests/fixtures/gugik_prg/`). Pusta
+lista tylko z poprawnej odpowiedzi bez obiektow; blad HTTP (po wspolnej
+polityce ponowien `get_with_retry`), `ows:ExceptionReport`, odpowiedz nie-XML,
+kod spoza 4 cyfr i lista obcieta stronicowaniem = `DownloadError`.
+Obciecie: `numberReturned < numberMatched`, albo `numberMatched`
+nieliczbowe (MapServer: `unknown`) przy pelnej stronie, albo atrybut `next`
+kolekcji — tak wyglada prawdziwa strona MapServera (`unknown` + `next`).
+Odpowiedzi trafiaja do `MetadataCache`: obszar (EPSG:2180) -> lista kodow
+w `teryt_bbox_cache` (TTL jak pozostale tabele, takze pusta lista), punkt
+-> kod w `teryt_cache`; `kartograf cache stats` liczy oba w `TERYT entries`.
 
 ---
 
@@ -1266,7 +1500,7 @@ Checklist na przykladzie DE (Brandenburgia, DGM1):
    `_VERTICAL_CRS_CODES` (a przy rodzinie/realizacji takze do
    `_VERTICAL_FAMILY`).
 2. **`CountryProfile`** w `_COUNTRIES`: kod, nazwa, `extent_wgs84`
-   i `dataset_keys`. `_countries_for_bbox` czyta kraje z rejestru przez
+   i `dataset_keys`. `countries_for_bbox` czyta kraje z rejestru przez
    `all_countries()`, wiec dyspozycja `--country auto` zaczyna widziec nowy
    kraj bez zmian w CLI. Pamietaj, ze obwiednia jest prostokatem (sekcja 4.6).
 3. **Parser godel/kafli** w `core/` (jesli kraj ma wlasny system godel):

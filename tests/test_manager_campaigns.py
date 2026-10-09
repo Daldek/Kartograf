@@ -20,6 +20,7 @@ from unittest.mock import Mock, PropertyMock, patch
 import pytest
 import requests
 
+from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.links import linked_campaign
 from kartograf.download.manager import DownloadManager, DownloadProgress, SheetFetch
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
@@ -69,6 +70,16 @@ C14 = {"newest": [REC["84183"]], "all": C14_ALL}
 
 X_ALL = _filtered(sorted((NMT / G2).glob("*.body")), G2)
 XREC = {r.url.rsplit("/", 1)[-1].split("_")[0]: r for r in X_ALL}
+
+
+def asc_for(godlo: str, tag_line: str = "", *, shift_x: float = 0.0) -> bytes:
+    """ASC header whose extent is the sheet frame (B4), optional tag line."""
+    b = SheetParser(godlo).get_bbox()
+    return (
+        f"ncols {int(b.max_x - b.min_x)}\nnrows {int(b.max_y - b.min_y)}\n"
+        f"xllcorner {b.min_x + shift_x}\nyllcorner {b.min_y}\ncellsize 1\n"
+        f"nodata_value -9999\n{tag_line}\n"
+    ).encode()
 
 
 def tag(record) -> str:
@@ -133,7 +144,7 @@ class FakeCampaignProvider(BaseProvider):
         if r.url in self.contents:
             path.write_bytes(self.contents[r.url])
         else:
-            path.write_text(ASC_TEMPLATE.format(tag=f"{self.version} {tag(r)}"))
+            path.write_bytes(asc_for(r.godlo, f"{self.version} {tag(r)}"))
         if self.fixed_mtime is not None:
             os.utime(path, (self.fixed_mtime, self.fixed_mtime))
         return path
@@ -522,6 +533,30 @@ def test_content_mismatch_removes_file_and_fails(tmp_path):
     bad = campaign_path(tmp_path, new, G2)
     assert not bad.exists() and not sidecar(bad).exists()
     assert "2022-03-20_75506" in linked(std)
+
+
+def test_record_url_without_godlo_fails_before_download(tmp_path):
+    """B4: a record URL that does not name the sheet is never downloaded."""
+    bad = dataclasses.replace(REC["84183"], url="https://x/NMT/84183/84183_1_G.asc")
+    fake = FakeCampaignProvider({"newest": [bad]})
+    m = DownloadManager(tmp_path, provider=fake)
+    with pytest.raises(DownloadError, match="nie zawiera godla"):
+        m.download_sheet(G)
+    assert fake.downloads == []
+
+
+def test_neighbour_extent_removes_campaign_file(tmp_path):
+    """B4: a file whose header lies outside the sheet frame is rejected."""
+    rec = REC["84183"]
+    b = SheetParser(G).get_bbox()
+    fake = FakeCampaignProvider(
+        {"newest": [rec]}, contents={rec.url: asc_for(G, shift_x=b.max_x - b.min_x)}
+    )
+    m = DownloadManager(tmp_path, provider=fake)
+    with pytest.raises(DownloadError, match="zasieg"):
+        m.download_sheet(G)
+    bad = campaign_path(tmp_path, rec)
+    assert not bad.exists() and not sidecar(bad).exists()
 
 
 def test_all_content_mismatch_on_newest_links_previous(tmp_path):
@@ -1052,6 +1087,21 @@ def test_reused_campaign_without_sidecar_with_foreign_content_fails(tmp_path):
     assert hardlinked(std) and linked(std) == str(target)
 
 
+def test_reused_campaign_without_sidecar_outside_frame_fails(tmp_path):
+    """B4 + R22: an existing file without a sidecar is extent-checked too."""
+    fake = FakeCampaignProvider(C14)
+    m = DownloadManager(tmp_path, provider=fake)
+    m.download_sheet(G)
+    target = campaign_path(tmp_path, REC["84183"])
+    sidecar(target).unlink()
+    b = SheetParser(G).get_bbox()
+    target.write_bytes(asc_for(G, shift_x=b.max_x - b.min_x))
+    with pytest.raises(DownloadError, match="zasieg"):
+        m.download_sheet(G)
+    assert not target.exists() and not sidecar(target).exists()
+    assert fake.downloads == [REC["84183"].url]
+
+
 # =============================================================================
 # M-6: a re-run without download does not move the link (copy)
 # =============================================================================
@@ -1089,3 +1139,68 @@ def test_rerun_without_download_does_not_recopy(
     assert again is not None
     assert again.skipped is True and again.link == "copy"
     assert fake.downloads == [REC["84183"].url]
+
+
+# --- 0.7.1: vertical datum declared by the record ------------------------------
+
+GK = "N-33-59-C-a-1-3"  # raw KRON86 index bodies (C9a), records PL-KRON86-NH
+KRN_ALL = _filtered(sorted((NMT / GK).glob("nmt1_krn__*.body")), GK)
+SEGMENT_KRON86 = Path("nmt/pl_1992_1m_kron86")
+
+
+def _without_vertical(record):
+    """The record without ``ukladWspolrzednychPionowych`` (cannot be verified)."""
+    raw = {k: v for k, v in record.raw.items() if k != "ukladWspolrzednychPionowych"}
+    return dataclasses.replace(record, raw=raw)
+
+
+def test_newest_record_of_other_vertical_crs_fails_before_download(tmp_path):
+    """0.7.1, standard path: a KRON86 record served by the EVRF2007 index."""
+    rec = KRN_ALL[0]
+    fake = FakeCampaignProvider({"newest": [rec]})  # vertical_crs EVRF2007
+    m = DownloadManager(tmp_path, provider=fake)
+    with pytest.raises(DownloadError) as exc:
+        m.download_sheet(GK)
+    message = str(exc.value)
+    assert GK in message
+    assert "deklaruje uklad wysokosci PL-KRON86-NH" in message
+    assert "zadano EVRF2007 (oczekiwano PL-EVRF2007-NH)" in message
+    assert fake.downloads == []
+    assert not (tmp_path / SEGMENT).exists()
+
+
+def test_all_campaign_of_other_vertical_crs_fails_others_kept(tmp_path):
+    """0.7.1, campaign path: the mislabelled campaign fails, the rest is kept."""
+    bad = dataclasses.replace(
+        REC["78047"],
+        raw={**REC["78047"].raw, "ukladWspolrzednychPionowych": "PL-KRON86-NH"},
+    )
+    records = [bad if r is REC["78047"] else r for r in C14_ALL]
+    fake = FakeCampaignProvider({"all": records})
+    m = DownloadManager(tmp_path, provider=fake, campaigns="all")
+    with pytest.raises(DownloadError, match="nie pobrano 1 z 4 kampanii") as exc:
+        m.download_sheet(G)
+    assert "2023-09-05_78047" in str(exc.value)
+    assert "PL-KRON86-NH" in str(exc.value)
+    assert bad.url not in fake.downloads and len(fake.downloads) == 3
+    assert not campaign_path(tmp_path, bad).exists()
+    assert "2025-10-21_84183" in linked(std_path(tmp_path))
+
+
+def test_kron86_provider_downloads_real_kron86_record(tmp_path):
+    """0.7.1: the record of the queried datum passes (KRON86 segment)."""
+    rec = KRN_ALL[0]
+    fake = FakeCampaignProvider({"newest": [rec]})
+    fake.vertical_crs = "KRON86"
+    m = DownloadManager(tmp_path, provider=fake)
+    m.download_sheet(GK)
+    assert fake.downloads == [rec.url]
+    assert (tmp_path / SEGMENT_KRON86).is_dir()
+
+
+def test_record_without_vertical_field_is_downloaded(tmp_path):
+    """0.7.1: no field = cannot verify -> accepted (debug log only)."""
+    rec = _without_vertical(REC["84183"])
+    fake = FakeCampaignProvider({"newest": [rec]})
+    DownloadManager(tmp_path, provider=fake).download_sheet(G)
+    assert fake.downloads == [rec.url]

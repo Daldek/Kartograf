@@ -741,6 +741,16 @@ class TestHSGSidecar:
         assert request["bbox_crs"] == "EPSG:2180"
         assert len(request["bbox"]) == 4
 
+    def test_sidecar_by_godlo_leading_zeros_canonical(self, tmp_path):
+        """A7: the HSG sidecar records the canonical godlo, as NMT/land cover do."""
+        import json
+
+        out = tmp_path / "hsg_sheet.tif"
+        self._calc().calculate_hsg_by_godlo("M-33-036-A", out)
+
+        meta = json.loads((tmp_path / "hsg_sheet.tif.meta.json").read_text())
+        assert meta["request"]["sheet"] == "M-33-36-A"
+
     def test_sidecar_by_bbox_has_no_sheet(self, tmp_path):
         import json
 
@@ -806,3 +816,236 @@ class TestHSGOutputDirOnWrite:
         assert out.exists()
         assert (tmp_path / "a" / "b" / "hsg.tif.meta.json").exists()
         assert (tmp_path / "a" / "b" / "clay.tif").exists()
+
+
+class TestHsgFromRasters:
+    """A8: HSG from ready clay/sand/silt rasters, no configuration defaults."""
+
+    def _raster(self, path, value, nodata=None, width=20):
+        import rasterio
+        from rasterio.transform import from_origin
+
+        with rasterio.open(
+            path,
+            "w",
+            driver="GTiff",
+            dtype="int16",
+            count=1,
+            width=width,
+            height=20,
+            crs="EPSG:2180",
+            transform=from_origin(500000, 600000, 250, 250),
+            nodata=nodata,
+        ) as dst:
+            dst.write(np.full((20, width), value, dtype="int16"), 1)
+        return path
+
+    def test_classifies_on_requested_grid(self, tmp_path):
+        import json
+
+        import rasterio
+
+        from kartograf import BBox, hsg_from_rasters
+
+        clay = self._raster(tmp_path / "clay.tif", 450)  # 45 % clay -> D
+        sand = self._raster(tmp_path / "sand.tif", 200)
+        silt = self._raster(tmp_path / "silt.tif", 350)
+        bbox = BBox(501000, 596000, 503000, 598000, "EPSG:2180")
+        out = hsg_from_rasters(
+            clay,
+            sand,
+            silt,
+            bbox=bbox,
+            crs="EPSG:2180",
+            pixel_m=100.0,
+            output_path=tmp_path / "out" / "hsg.tif",
+        )
+        with rasterio.open(out) as src:
+            assert src.res == (100.0, 100.0)
+            assert (src.bounds.left, src.bounds.top) == (501000.0, 598000.0)
+            data = src.read(1)
+            assert src.nodata == 0
+        assert np.all(data == 4)
+        meta = json.loads(out.with_name(out.name + ".meta.json").read_text())
+        assert meta["extra"]["derived"] == "hsg"
+        # Same type as calculate_hsg_by_bbox: list[str] (kartograf-meta/1).
+        assert meta["extra"]["source_layers"] == ["clay", "sand", "silt"]
+        layers = meta["extra"]["source_files"]
+        assert [layer["name"] for layer in layers] == ["clay", "sand", "silt"]
+        assert [layer["file"] for layer in layers] == [
+            "clay.tif",
+            "sand.tif",
+            "silt.tif",
+        ]
+        assert all(len(layer["sha256"]) == 64 for layer in layers)
+
+    def test_sidecar_sha256_matches_input_files(self, tmp_path):
+        import hashlib
+        import json
+
+        from kartograf import BBox, hsg_from_rasters
+
+        clay = self._raster(tmp_path / "clay.tif", 450)
+        sand = self._raster(tmp_path / "sand.tif", 200)
+        silt = self._raster(tmp_path / "silt.tif", 350)
+        out = hsg_from_rasters(
+            clay,
+            sand,
+            silt,
+            bbox=BBox(501000, 596000, 502000, 597000, "EPSG:2180"),
+            crs="EPSG:2180",
+            pixel_m=250.0,
+            output_path=tmp_path / "h.tif",
+        )
+        meta = json.loads(out.with_name(out.name + ".meta.json").read_text())
+        by_name = {x["name"]: x["sha256"] for x in meta["extra"]["source_files"]}
+        for name, path in (("clay", clay), ("sand", sand), ("silt", silt)):
+            assert by_name[name] == hashlib.sha256(path.read_bytes()).hexdigest()
+
+    def test_nodata_triplet_is_zero(self, tmp_path):
+        import rasterio
+
+        from kartograf import BBox, hsg_from_rasters
+
+        clay = self._raster(tmp_path / "clay.tif", 0)
+        sand = self._raster(tmp_path / "sand.tif", 0)
+        silt = self._raster(tmp_path / "silt.tif", 0)
+        out = hsg_from_rasters(
+            clay,
+            sand,
+            silt,
+            bbox=BBox(501000, 596000, 502000, 597000, "EPSG:2180"),
+            crs="EPSG:2180",
+            pixel_m=250.0,
+            output_path=tmp_path / "h.tif",
+        )
+        with rasterio.open(out) as src:
+            assert np.all(src.read(1) == 0)
+
+    def test_untagged_inputs_outside_footprint_are_zero(self, tmp_path):
+        """No nodata tag = no nodata value; cells outside the inputs are gaps."""
+        import rasterio
+
+        from kartograf import BBox, hsg_from_rasters
+
+        clay = self._raster(tmp_path / "clay.tif", 450)  # no nodata tag
+        sand = self._raster(tmp_path / "sand.tif", 200)
+        silt = self._raster(tmp_path / "silt.tif", 350)
+        # top 1000 m of the grid lie north of the inputs (y > 600000)
+        out = hsg_from_rasters(
+            clay,
+            sand,
+            silt,
+            bbox=BBox(501000, 596000, 504000, 601000, "EPSG:2180"),
+            crs="EPSG:2180",
+            pixel_m=100.0,
+            output_path=tmp_path / "h.tif",
+        )
+        with rasterio.open(out) as src:
+            data = src.read(1)
+        assert np.all(data[:10] == 0)
+        assert np.all(data[10:] == 4)
+
+    def test_one_input_narrower_than_others_leaves_gap(self, tmp_path):
+        """A cell outside ONE input is a gap, not soil with that part set to 0."""
+        import rasterio
+
+        from kartograf import BBox, hsg_from_rasters
+
+        clay = self._raster(tmp_path / "clay.tif", 450, width=10)  # x < 502500
+        sand = self._raster(tmp_path / "sand.tif", 200)
+        silt = self._raster(tmp_path / "silt.tif", 350)
+        out = hsg_from_rasters(
+            clay,
+            sand,
+            silt,
+            bbox=BBox(501000, 596000, 504000, 598000, "EPSG:2180"),
+            crs="EPSG:2180",
+            pixel_m=250.0,
+            output_path=tmp_path / "h.tif",
+        )
+        with rasterio.open(out) as src:
+            data = src.read(1)
+        assert np.all(data[:, :6] == 4)  # x 501000-502500 covered by all three
+        assert np.all(data[:, 6:] == 0)  # beyond the clay footprint
+
+    def test_tagged_nodata_masks_cells(self, tmp_path):
+        import rasterio
+
+        from kartograf import BBox, hsg_from_rasters
+
+        clay = self._raster(tmp_path / "clay.tif", -1, nodata=-1)
+        sand = self._raster(tmp_path / "sand.tif", 200)
+        silt = self._raster(tmp_path / "silt.tif", 350)
+        out = hsg_from_rasters(
+            clay,
+            sand,
+            silt,
+            bbox=BBox(501000, 596000, 502000, 597000, "EPSG:2180"),
+            crs="EPSG:2180",
+            pixel_m=250.0,
+            output_path=tmp_path / "h.tif",
+        )
+        with rasterio.open(out) as src:
+            assert np.all(src.read(1) == 0)
+
+    def test_bbox_in_other_crs_is_converted_to_grid_crs(self, tmp_path):
+        import rasterio
+
+        from kartograf import BBox, hsg_from_rasters
+        from kartograf.core.bbox import transform_bbox
+
+        clay = self._raster(tmp_path / "clay.tif", 450)
+        sand = self._raster(tmp_path / "sand.tif", 200)
+        silt = self._raster(tmp_path / "silt.tif", 350)
+        bbox_2180 = BBox(501000, 596000, 503000, 598000, "EPSG:2180")
+        bbox_4326 = transform_bbox(bbox_2180, "EPSG:4326")
+        out = hsg_from_rasters(
+            clay,
+            sand,
+            silt,
+            bbox=bbox_4326,
+            crs="EPSG:2180",
+            pixel_m=100.0,
+            output_path=tmp_path / "h.tif",
+        )
+        expected = transform_bbox(bbox_4326, "EPSG:2180")
+        with rasterio.open(out) as src:
+            assert src.crs.to_string() == "EPSG:2180"
+            assert src.bounds.left == pytest.approx(expected.min_x)
+            assert src.bounds.top == pytest.approx(expected.max_y)
+
+    def test_non_positive_pixel_rejected(self, tmp_path):
+        from kartograf import BBox, ValidationError, hsg_from_rasters
+
+        clay = self._raster(tmp_path / "clay.tif", 450)
+        with pytest.raises(ValidationError, match="pixel_m"):
+            hsg_from_rasters(
+                clay,
+                clay,
+                clay,
+                bbox=BBox(501000, 596000, 502000, 597000, "EPSG:2180"),
+                crs="EPSG:2180",
+                pixel_m=0,
+                output_path=tmp_path / "h.tif",
+            )
+        assert not (tmp_path / "h.tif").exists()
+
+    def test_signature_has_no_defaults(self):
+        import inspect
+
+        from kartograf import hsg_from_rasters
+
+        params = inspect.signature(hsg_from_rasters).parameters.values()
+        assert all(p.default is inspect.Parameter.empty for p in params)
+
+    def test_shared_classifier_masks_tag_nan_and_zero_triplets(self):
+        """The helper used by calculate_hsg_by_bbox and hsg_from_rasters."""
+        from kartograf.hydrology.hsg import _classify_hsg
+
+        clay = np.array([[450.0, -1.0, 0.0, np.nan]], dtype=np.float32)
+        sand = np.array([[200.0, 200.0, 0.0, 200.0]], dtype=np.float32)
+        silt = np.array([[350.0, 350.0, 0.0, 350.0]], dtype=np.float32)
+        hsg = _classify_hsg(clay, sand, silt, (-1.0, None, None))
+        assert hsg.dtype == np.uint8
+        assert hsg.tolist() == [[4, 0, 0, 0]]
