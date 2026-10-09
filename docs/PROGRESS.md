@@ -112,7 +112,8 @@
 > 2026-10-09 (`__version__ = "0.7.2-dev"`, sekcja `## [0.7.2] - Unreleased`
 > w CHANGELOG). **W toku:** drobiazgi z review 0.7.1 — spec
 > `docs/superpowers/specs/2026-10-09-review-0.7.1-drobiazgi-design.md`
-> czeka na review uzytkownika (pytania Q1-Q5); dalej plan i galaz
+> ma decyzje Q1, Q2, Q4, Q5; Q3 (brzmienie komunikatu o brakujacych
+> arkuszach) czeka na akceptacje po sprawdzeniu na zywo; dalej plan i galaz
 > `fix/review-0.7.1`.
 > **Kierunek do v1.0.0:** roadmapa w `docs/SCOPE.md` 3.3 (zatwierdzona
 > 2026-10-08). Podprojekt 1 (magazyn wersjonowany, docelowo 0.8.0): spec
@@ -146,6 +147,16 @@
 - Pomiar przy specu: `SheetParser("M-３３-８-A")`, `"N-34-１３０-D"`,
   `"6.１４５.２０"` sa dzis przyjmowane z cyframi pelnej szerokosci w godle;
   wzorce CZ (`CZ_TM33_PATTERN`, `CZ_SM5_PATTERN`) tez je dopasowuja.
+- Decyzje uzytkownika do specu: Q1 ten sam `timeout` dla PRG co dla paczki,
+  Q2 cyfry spoza ASCII odrzucane, Q4 niespojny `numberReturned` = blad,
+  Q5 interpretacje testow P9 b/c wg rekomendacji. Q3: najpierw sprawdzic,
+  skad brak danych.
+- Sprawdzenie na zywo U1 (`N-34-130-D-d --resolution 5m`): skorowidz NMT
+  5 m GUGiK (wszystkie 4 warstwy, GetFeatureInfo w 9 punktach arkusza
+  i GetMap) nie ma arkuszy `-1-1`, `-1-2`, `-2-x`; brak obejmuje rozlegly
+  obszar na polnoc od arkusza, ktory skorowidz 1 m pokrywa (NMT 1 m
+  2022-2025). Komunikat "(morze, obszar za granica)" podaje wiec falszywa
+  przyczyne; szczegoly i propozycja brzmienia w specu (P10).
 - Bez zmian w kodzie poza numerem wersji.
 
 ### Wydanie 0.7.1 (2026-10-09)
