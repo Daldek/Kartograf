@@ -33,6 +33,7 @@ from kartograf.exceptions import (
     ParseError,
     ValidationError,
 )
+from kartograf.providers.pl import require_nmt_vertical_crs
 from kartograf.sources.registry import horizontal_crs_for_godlo
 
 if TYPE_CHECKING:
@@ -306,7 +307,9 @@ def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
     (symmetric to the hard rejections of the CZ branch) and of the ``--target-crs``
     exclusions (product != nmt, ``--system 2000`` - ADR-027)
     - checked BEFORE defaults are substituted, so that "not given" does not
-    pose as a user choice.
+    pose as a user choice. NMT 5m with KRON86 is rejected after the
+    defaults (0.7.1, ``require_nmt_vertical_crs``): only an explicit
+    ``--vertical-crs KRON86`` can produce the pair.
 
     Returns
     -------
@@ -362,20 +365,21 @@ def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
         )
         return 1
     if product == "nmt":
-        # D11: one rule (`nmt_vertical_crs`); the CLI swaps and announces it
-        # (stderr, like other Info:), because the library rejects 5m + KRON86
-        # (`require_nmt_vertical_crs`, 0.7.1) - from here on the ACTUAL
-        # vertical CRS flows to the factory/manager/cutout.
-        from kartograf.providers.pl import nmt_vertical_crs
-
-        actual = nmt_vertical_crs(args.resolution, args.vertical_crs, log=False)
-        if actual != args.vertical_crs:
+        # 0.7.1: the library rule (`require_nmt_vertical_crs`) - 5m exists only
+        # in EVRF2007, so an explicit --vertical-crs KRON86 is an error (no
+        # swap); the default (None -> EVRF2007 above) never trips it. The
+        # message names CLI flags instead of the library's keyword arguments.
+        try:
+            require_nmt_vertical_crs(args.resolution, args.vertical_crs)
+        except ValidationError:
             print(
-                f"Info: NMT 5m (PL) jest dostepny tylko w {actual} — "
-                f"--vertical-crs {args.vertical_crs} zamieniony na {actual}",
+                f"Error: NMT {args.resolution} (PL) jest dostepny tylko w "
+                f"EVRF2007 — podano --vertical-crs {args.vertical_crs}; uzyj "
+                "--vertical-crs EVRF2007 (albo pomin --vertical-crs) albo "
+                f"--resolution 1m dla {args.vertical_crs}",
                 file=sys.stderr,
             )
-            args.vertical_crs = actual
+            return 1
     return 0
 
 
@@ -959,8 +963,8 @@ def cmd_download(args: argparse.Namespace) -> int:
                 output_dir=output_dir,
                 provider=provider,
                 storage=storage,
-                # the vertical CRS is already ACTUAL: "5m => EVRF2007" in
-                # _resolve_pl_sentinels (D11)
+                # the vertical CRS is already validated: 5m + KRON86 is
+                # rejected in _resolve_pl_sentinels (0.7.1)
                 vertical_crs=vertical_crs,
                 resolution=resolution,
                 max_workers=workers,
@@ -1640,8 +1644,8 @@ def _download_pl_sheet_list(
                 output_dir=output_dir,
                 provider=provider,
                 storage=storage,
-                # the vertical CRS is already ACTUAL: "5m => EVRF2007" in
-                # _resolve_pl_sentinels (D11)
+                # the vertical CRS is already validated: 5m + KRON86 is
+                # rejected in _resolve_pl_sentinels (0.7.1)
                 vertical_crs=vertical_crs,
                 resolution=resolution,
                 max_workers=workers,

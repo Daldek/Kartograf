@@ -131,9 +131,16 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `resolution="5m"` i `vertical_crs="KRON86"` koncza sie `ValidationError`
   (NMT 5 m istnieje tylko w EVRF2007); dotad po cichu zamienialy uklad na
   EVRF2007 z ostrzezeniem w logu. Co zrobic: podaj `vertical_crs="EVRF2007"`
-  (albo `resolution="1m"`, gdy potrzebny jest KRON86). CLI bez zmian:
-  `--resolution 5m --vertical-crs KRON86` nadal drukuje `Info:` i pobiera
-  EVRF2007 (kod 0).
+  (albo `resolution="1m"`, gdy potrzebny jest KRON86). CLI — patrz wpis
+  nizej (tez blad).
+- CLI: `kartograf download ... --resolution 5m --vertical-crs KRON86`
+  (NMT PL: godlo, hierarchia, `--bbox`/`--geometry`, wycinek `--target-crs`,
+  takze `--country auto`) konczy sie `Error: NMT 5m (PL) jest dostepny tylko
+  w EVRF2007 ...` i kodem 1, zanim cokolwiek pojdzie w siec; dotad CLI
+  zamienialo uklad na EVRF2007 z komunikatem `Info:` i pobieralo (kod 0).
+  `--resolution 5m` bez `--vertical-crs` dziala jak dotad (EVRF2007). Co
+  zrobic: pomin `--vertical-crs` albo podaj `--vertical-crs EVRF2007`;
+  dla KRON86 uzyj `--resolution 1m`.
 - Pobieranie arkuszy NMT/NMPT/orto GUGiK (CLI i `DownloadManager`, takze
   wycinek `--target-crs`) odrzuca rekordy i pliki, ktore w 0.7.0 przechodzily:
   URL rekordu bez godla, plik ASC poza rama godla (B4) oraz rekord NMT/NMPT

@@ -43,8 +43,9 @@ kartograf parse N-34-130-D --hierarchy
 # niż 1:10000 rozwija się do arkuszy 1:10000 samo — bez --scale (sekcja 1.6)
 kartograf download N-34-130-D-d-2-4
 kartograf download N-34-130-D --resolution 5m --workers 8 --output ./data
-# NMT 5 m istnieje tylko w EVRF2007: --resolution 5m z --vertical-crs KRON86
-# CLI zamienia na EVRF2007 i drukuje Info: (kod 0)
+# NMT 5 m istnieje tylko w EVRF2007: --resolution 5m z jawnym --vertical-crs KRON86
+# kończy się Error: (kod 1, przed siecią; od 0.7.1, wcześniej zamiana z Info:) —
+# pomiń --vertical-crs (domyślny EVRF2007) albo użyj --resolution 1m dla KRON86
 
 # Inne produkty GUGiK: NMPT (DSM), ortofotomapa, chmury punktów LAZ
 kartograf download N-34-130-D-d-2-4 --product nmpt
