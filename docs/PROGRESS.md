@@ -139,8 +139,15 @@
   uwagi przeniesione wczesniej do "Po 0.7.1").
 - Wydanie: `__version__ = "0.7.1"`, data w CHANGELOG i link
   `compare/v0.7.0...v0.7.1`, status w SCOPE i PRD, przyklad `keep_raw=True`
-  w USAGE; merge `develop` -> `main`, tag `v0.7.1` (annotowany), push
-  `develop`, `main` i tagu na `origin`.
+  w USAGE; merge `develop` -> `main`, tag `v0.7.1` (annotowany) na commicie
+  merge. Push na `origin` to osobna decyzja uzytkownika, wykonywana po tym
+  commicie — czy `develop`, `main` i tag sa na `origin`, sprawdzaj
+  `git ls-remote origin`.
+- `docs/DECISIONS.md`: 84 linie ADR-031 konczyly sie `CR CR LF` (od
+  wprowadzenia ADR-031, takze w `v0.7.0`), co renderer pokazywal jako pusta
+  linie po kazdej linii — poprawione na `CR LF`, tresc bez zmian.
+- Dane testu na zywo: `<katalog-danych>/kartograf/e2e/2026-10-09-test-przed-0.7.1/`
+  (skrypty jednorazowe usuniete).
 
 ### Wymagania Hydrografa 0.7.1 — implementacja (Task 1-12, 2026-10-08/09)
 
