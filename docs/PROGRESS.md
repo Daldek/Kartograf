@@ -89,49 +89,58 @@
 - **Wersja:** v0.7.0
 - **Zakres:** NMT Czech (CUZK) i `--country`, LAZ (ADR-029), wycinek PL `--target-crs` (ADR-027), uklad `data/` (ADR-026), sidecar `kartograf-meta/1` z angielskimi kluczami (ADR-031), skorowidz GUGiK i kampanie (ADR-028, ADR-030), wspolny transport HTTP; pelna lista i zmiany lamiace: `docs/CHANGELOG.md` [0.7.0]
 
+### CP12 — Wymagania Hydrografa
+- **Data:** 2026-10-09
+- **Wersja:** v0.7.1
+- **Zakres:** `sha256`/`size_bytes` w sidecarze, pola rekordu skorowidza (RMSE, `declared_vertical_crs`) i weryfikacja rekordu/pliku GUGiK, godla PL-1992 bez zer wiodacych i `ParseError` spoza nomenklatury, BDOT10k z wielu powiatow (WFS PRG, `keep_raw`), wycinek CZ w bibliotece, `build_cutout_from_sheets`, `hsg_from_rasters`, bledy zamiast cichych zamian (5 m + KRON86, `--year`/`--min-density` poza LAZ); pelna lista: `docs/CHANGELOG.md` [0.7.1]
+
 ## Ostatnia sesja
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI:** **v0.7.0 WYDANA (2026-10-08)** — tag
-> `v0.7.0` na commicie merge `develop` -> `main`; `develop`, `main` i tag
-> na `origin`. Opis wydania: `docs/CHANGELOG.md` [0.7.0]; test na zywo
-> przed wydaniem: `docs/research/2026-10-08-test-przed-0.7.0/raport.md`.
-> Stan galezi i tagow sprawdzaj w gicie (`git status`, `git log`,
+> **START NASTEPNEJ SESJI:** **v0.7.1 WYDANA (2026-10-09)** — tag
+> `v0.7.1` na commicie merge `develop` -> `main`. Opis wydania:
+> `docs/CHANGELOG.md` [0.7.1]; test na zywo przed wydaniem:
+> `docs/research/2026-10-09-test-przed-0.7.1/raport.md` (bez FAIL).
+> Stan galezi, tagow i `origin` sprawdzaj w gicie (`git status`, `git log`,
 > `git ls-remote --tags origin`), nie w tym dzienniku.
-> **Cykl 0.7.1 otwarty:** `kartograf.__version__ = "0.7.1-dev"` i sekcja
-> `## [0.7.1] - Unreleased` w CHANGELOG (link `compare/v0.7.0...develop`);
-> zakres: backlog "Do 0.7.1" (sekcja Backlog nizej), potem ogolny backlog.
+> **Nastepny cykl:** backlog "Do 0.7.2" (decyzje uzytkownika 2026-10-09:
+> wycinki PL z WCS, wybor roku `--year`/`--min-year`/`--max-year` dla
+> NMT/NMPT/orto, drugie dowiazanie do pelnego lotu, domyslne
+> z inwentaryzacji) — kazda pozycja dopiero po specu/planie i zatwierdzeniu;
+> drobiazgi z review 0.7.1: sekcja "Po 0.7.1" nizej. Cykl nie jest jeszcze
+> otwarty (`__version__ = "0.7.1"`; otwarcie = `0.7.2-dev` i sekcja
+> `## [0.7.2] - Unreleased` w CHANGELOG).
 > **Kierunek do v1.0.0:** roadmapa w `docs/SCOPE.md` 3.3 (zatwierdzona
 > 2026-10-08). Podprojekt 1 (magazyn wersjonowany, docelowo 0.8.0): spec
 > zaakceptowany i plan 1/3 napisany na galezi `feat/versioned-store`
 > (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`,
 > `docs/superpowers/plans/2026-10-08-versioned-store-1-core-pl-sheets.md`);
-> implementacja WSTRZYMANA decyzja uzytkownika. Najpierw wydanie 0.7.1
-> (backlogi "Do 0.7.1": wymagania Hydrografa i uwagi z testu) z `develop`.
+> implementacja WSTRZYMANA decyzja uzytkownika.
 > Brama (stan sprawdzaj komendami, nie liczbami z dziennika):
 > `.venv/bin/python -m pytest tests/ -m "not live"` (zielone),
 > `.venv/bin/python -m ruff check .` i `ruff format --check .` (czyste,
 > cale repo), `.venv/bin/python -m mypy kartograf/ tests/` (bez bledow).
 > Testy `live` tylko swiadomie (`-m live`).
-> **Wymagania Hydrografa 0.7.1:** zaimplementowane na galezi
-> `feat/hydrograf-0.7.1` (Task 1-12 planu, wpis sesji nizej). Koncowe
-> review calej galezi wykonane (werdykt "gotowa po poprawkach"), fala
-> poprawek (`70beeca`, `ceda606`) przeszla ponowne review — wszystkie
-> uwagi zaadresowane; weryfikacja koordynatora na czystej kopii zielona
-> (2998 testow offline, ruff, format i mypy czyste, 5 wlasnych mutacji
-> zabitych). Galaz NIE jest zmergowana do `develop`, NIE jest wydana i nic
-> nie wypchnieto; merge i wydanie 0.7.1 czekaja na decyzje uzytkownika.
-> Drobiazgi odlozone z review: sekcja "Po 0.7.1" nizej.
-> **Task 14 (2026-10-09):** `--year`/`--min-density` z produktem innym niz
-> LAZ to `Error:` i kod 1 (dotad cicho pomijane); ostatnia zmiana przed
-> wydaniem 0.7.1. Decyzje uzytkownika z tego dnia (wycinki PL z WCS, wybor
-> roku `--year`/`--min-year`/`--max-year`, drugie dowiazanie do pelnego lotu,
-> domyslne z inwentaryzacji) sa w backlogu "Do 0.7.2" (sekcja Backlog).
 > **Otwarte drobiazgi:** drobne otwarte punkty ADR-030 w dzienniku nizej
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Wydanie 0.7.1 (2026-10-09)
+
+- Test na zywo galezi `feat/hydrograf-0.7.1` bez zmian w kodzie: brama
+  offline zielona (3076 testow), 13 scenariuszy CLI i biblioteki bez FAIL
+  (raport `docs/research/2026-10-09-test-przed-0.7.1/raport.md`); uwaga U1
+  (komunikat "morze, obszar za granica" przy luce 5 m w glebi kraju)
+  identyczna na 0.7.0 — nie regresja, w "Po 0.7.1".
+- Merge `feat/hydrograf-0.7.1` -> `develop` (`--no-ff`); katalog roboczy
+  SDD `.superpowers/sdd/2026-10-08-hydrograf-0.7.1` usuniety (odlozone
+  uwagi przeniesione wczesniej do "Po 0.7.1").
+- Wydanie: `__version__ = "0.7.1"`, data w CHANGELOG i link
+  `compare/v0.7.0...v0.7.1`, status w SCOPE i PRD, przyklad `keep_raw=True`
+  w USAGE; merge `develop` -> `main`, tag `v0.7.1` (annotowany), push
+  `develop`, `main` i tagu na `origin`.
 
 ### Wymagania Hydrografa 0.7.1 — implementacja (Task 1-12, 2026-10-08/09)
 
@@ -237,6 +246,10 @@ Odlozone z rulingiem "zostaw"; lista ma przezyc usuniecie katalogu roboczego.
   WARNING w komunikacie all-nodata; `TestLastResultSingleSheet` (puste
   `campaign_files`/`copied`); `test_cli_passes_metadata_cache` bez kodu
   wyjscia; bezposredni test zwalniania `getbuffer` (BDOT10k).
+- Komunikat podsumowania "GUGiK nie ma danych dla N z M arkuszy ...
+  (morze, obszar za granica)" przy luce w skorowidzu 5 m w glebi kraju
+  (np. `N-34-130-D-d --resolution 5m`: 6 z 16) zgaduje przyczyne za waskim
+  przykladem — tak samo w 0.7.0 (raport testu przed 0.7.1, U1).
 - Odrzucone swiadomie (bez dzialania): naglowek ASC `dx/dy`, godlo PL-1992 z
   plikiem w PL-2000 (glosne odrzucenie), `file_digest` OSError gubiacy caly
   sidecar (polityka "nigdy plik bez sidecara"), `_BDOT_OPTIONS` odrzuca
