@@ -27,12 +27,29 @@ class KartografError(Exception):
     pass
 
 
-class ParseError(KartografError):
+class ValidationError(KartografError):
+    """
+    Error validating input data.
+
+    Raised when input data fails validation checks,
+    such as invalid coordinate system or unsupported scale.
+
+    Examples
+    --------
+    >>> raise ValidationError("Invalid układ: '1965'. Must be '1992' or '2000'")
+    """
+
+    pass
+
+
+class ParseError(ValidationError):
     """
     Error parsing sheet code string.
 
     Raised when a sheet code string cannot be parsed due to invalid format,
-    unknown scale, or other parsing issues.
+    unknown scale, a value outside the nomenclature range, or other parsing
+    issues. A subclass of ``ValidationError`` (0.7.1): a bad sheet code is
+    invalid input, so ``except ValidationError`` catches it too.
 
     Examples
     --------
@@ -99,21 +116,6 @@ class NoCoverageError(DownloadError):
         self.hints = tuple(hints)
 
 
-class ValidationError(KartografError):
-    """
-    Error validating input data.
-
-    Raised when input data fails validation checks,
-    such as invalid coordinate system or unsupported scale.
-
-    Examples
-    --------
-    >>> raise ValidationError("Invalid układ: '1965'. Must be '1992' or '2000'")
-    """
-
-    pass
-
-
 class GridMismatchError(ValidationError):
     """
     Mosaic sources lie on different pixel grids (S5).
@@ -134,3 +136,13 @@ class GridMismatchError(ValidationError):
     def __init__(self, message: str, off_grid: tuple = ()):
         super().__init__(message)
         self.off_grid = off_grid
+
+
+class CacheError(KartografError):
+    """
+    The metadata cache cannot be used (``MetadataCache(strict=True)``).
+
+    Without ``strict`` an SQLite error disables the cache and the work goes
+    on without it (``on_disabled``); in strict mode the same state raises
+    this exception on the failing call and on every later one.
+    """

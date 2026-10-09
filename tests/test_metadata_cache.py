@@ -9,7 +9,7 @@ Tests cover:
 - Migration of a legacy database (url_cache table dropped)
 - GugikProvider cache integration (hit, no-coverage hit, miss, K3-safe failure)
 - GugikNmptProvider cache integration (product key "nmpt")
-- Bdot10kProvider TERYT cache integration (cache hit, miss)
+- Bdot10kProvider TERYT cache integration (cache passed to PRG discovery, hit)
 - SoilGridsProvider cache parameter acceptance
 - CLI cache commands (stats, clear, path)
 """
@@ -27,6 +27,7 @@ import requests
 
 from kartograf.cache.metadata import MetadataCache
 from kartograf.cli.commands import create_parser, main
+from kartograf.core.bbox import BBox
 from kartograf.exceptions import DownloadError, NoCoverageError
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.pl.gugik import GugikProvider
@@ -55,6 +56,10 @@ SOURCE = {
     "full_sheet": True,
     "survey_work_id": None,
     "data_source": None,
+    "height_rmse_m": None,
+    "position_rmse_m": None,
+    "archive_module": None,
+    "declared_vertical_crs": None,
 }
 
 
@@ -196,6 +201,37 @@ class TestMetadataCacheTERYT:
         assert cache.get_teryt(500000.0, 400000.0) == "1466"
 
 
+class TestTerytBboxCache:
+    """The teryt_bbox_cache table (A1/U5): powiat TERYT codes per area."""
+
+    B = BBox(1.0, 2.0, 3.0, 4.0, "EPSG:2180")
+
+    def test_round_trip(self, tmp_path):
+        cache = MetadataCache(db_path=tmp_path / "c.db")
+        assert cache.get_teryts_for_bbox(self.B) is None
+        cache.set_teryts_for_bbox(self.B, ["0208", "0224"])
+        assert cache.get_teryts_for_bbox(self.B) == ["0208", "0224"]
+
+    def test_empty_list_is_cached(self, tmp_path):
+        cache = MetadataCache(db_path=tmp_path / "c.db")
+        cache.set_teryts_for_bbox(self.B, [])
+        assert cache.get_teryts_for_bbox(self.B) == []
+
+    def test_refresh_mode_misses(self, tmp_path):
+        MetadataCache(db_path=tmp_path / "c.db").set_teryts_for_bbox(self.B, ["0208"])
+        fresh = MetadataCache(db_path=tmp_path / "c.db", refresh=True)
+        assert fresh.get_teryts_for_bbox(self.B) is None
+
+    def test_counted_cleared_and_pruned(self, tmp_path):
+        cache = MetadataCache(db_path=tmp_path / "c.db", ttl_seconds=0)
+        cache.set_teryts_for_bbox(self.B, ["0208"])
+        assert cache.stats()["teryt_count"] == 1
+        assert cache.prune_expired() == 1
+        cache.set_teryts_for_bbox(self.B, ["0208"])
+        cache.clear()
+        assert cache.stats()["teryt_count"] == 0
+
+
 # =========================================================================
 # TestMetadataCacheSheet
 # =========================================================================
@@ -303,6 +339,54 @@ class TestMetadataCacheMigration:
             assert c.stats()["record_count"] == 0
         finally:
             c.close()
+
+
+class TestStrictMode:
+    """A9: strict=True turns the disabled-cache state into CacheError."""
+
+    def _broken(self, tmp_path, **kw):
+        db = tmp_path / "cache.db"
+        db.write_bytes(b"not a sqlite database at all" * 10)
+        return MetadataCache(db_path=db, **kw)
+
+    def test_default_disables_silently(self, tmp_path):
+        messages = []
+        cache = self._broken(tmp_path, on_disabled=messages.append)
+        assert cache.get_teryt(1.0, 2.0) is None
+        assert cache.error is not None
+        assert len(messages) == 1
+
+    def test_strict_raises_cache_error(self, tmp_path):
+        from kartograf.exceptions import CacheError
+
+        cache = self._broken(tmp_path, strict=True)
+        with pytest.raises(CacheError, match="cache metadanych"):
+            cache.get_teryt(1.0, 2.0)
+
+    def test_strict_raises_on_every_later_call(self, tmp_path):
+        from kartograf.exceptions import CacheError
+
+        cache = self._broken(tmp_path, strict=True)
+        with pytest.raises(CacheError):
+            cache.get_teryt(1.0, 2.0)
+        with pytest.raises(CacheError):
+            cache.set_teryt(1.0, 2.0, "1465")
+
+    def test_strict_still_reports_on_disabled_once(self, tmp_path):
+        from kartograf.exceptions import CacheError
+
+        messages = []
+        cache = self._broken(tmp_path, strict=True, on_disabled=messages.append)
+        for _ in range(2):
+            with pytest.raises(CacheError):
+                cache.get_teryt(1.0, 2.0)
+        assert len(messages) == 1
+
+    def test_strict_healthy_cache_works(self, tmp_path):
+        cache = MetadataCache(db_path=tmp_path / "ok.db", strict=True)
+        cache.set_teryt(1.0, 2.0, "1465")
+        assert cache.get_teryt(1.0, 2.0) == "1465"
+        cache.close()
 
 
 # =========================================================================
@@ -554,62 +638,35 @@ class TestGugikNmptProviderCacheIntegration:
 
 
 class TestBdot10kCacheIntegration:
-    """Tests for Bdot10kProvider TERYT cache integration."""
+    """A13/U5: Bdot10kProvider passes its cache to the PRG TERYT discovery."""
 
-    def test_cache_hit_skips_wms(self, cache):
-        """Test that a TERYT cache hit skips WMS GetFeatureInfo."""
-        cache.set_teryt(500000.0, 400000.0, "1465")
+    AREA = BBox(340000, 290000, 350000, 300000, "EPSG:2180")
 
-        mock_session = Mock(spec=requests.Session)
-        provider = Bdot10kProvider(session=mock_session, cache=cache)
+    def test_teryts_for_area_passes_cache(self, cache):
+        provider = Bdot10kProvider(session=Mock(spec=requests.Session), cache=cache)
+        with patch(
+            "kartograf.providers.pl.bdot10k.discover_teryts_for_bbox",
+            return_value=["0208"],
+        ) as discover:
+            assert provider.teryts_for_area(self.AREA) == ["0208"]
+        assert discover.call_args.kwargs["cache"] is cache
 
-        result = provider._get_teryt_for_point(500000.0, 400000.0)
-        assert result == "1465"
-        mock_session.get.assert_not_called()
-
-    def test_cache_miss_queries_wms_and_stores(self, cache):
-        """Test that a TERYT cache miss queries WMS and stores."""
-        mock_session = Mock(spec=requests.Session)
-        mock_resp = Mock(spec=requests.Response)
-        mock_resp.status_code = 200
-        mock_resp.text = (
-            '<html>href="/bdot10k/schemat2021/GPKG/14/1465_GPKG.zip"</html>'
-        )
-        mock_resp.raise_for_status = Mock()
-        mock_session.get.return_value = mock_resp
-
-        provider = Bdot10kProvider(session=mock_session, cache=cache)
-        result = provider._get_teryt_for_point(500000.0, 400000.0)
-
-        assert result == "1465"
-        # Should be in cache now
-        cached = cache.get_teryt(500000.0, 400000.0)
-        assert cached == "1465"
-
-    def test_no_cache_backward_compat(self):
-        """Test Bdot10kProvider works without cache."""
-        mock_session = Mock(spec=requests.Session)
-        mock_resp = Mock(spec=requests.Response)
-        mock_resp.status_code = 200
-        mock_resp.text = (
-            '<html>href="/bdot10k/schemat2021/GPKG/14/1465_GPKG.zip"</html>'
-        )
-        mock_resp.raise_for_status = Mock()
-        mock_session.get.return_value = mock_resp
-
-        provider = Bdot10kProvider(session=mock_session)
-        result = provider._get_teryt_for_point(500000.0, 400000.0)
-        assert result == "1465"
-
-    def test_cache_hit_via_shp_pattern(self, cache):
-        """Test TERYT cache hit avoids SHP URL pattern extraction too."""
-        cache.set_teryt(600000.0, 500000.0, "2465")
-
-        mock_session = Mock(spec=requests.Session)
-        provider = Bdot10kProvider(session=mock_session, cache=cache)
-
-        result = provider._get_teryt_for_point(600000.0, 500000.0)
-        assert result == "2465"
+    def test_second_call_is_cache_hit(self, cache):
+        body = (
+            Path(__file__).parent
+            / "fixtures"
+            / "gugik_prg"
+            / "real_2026_10_08"
+            / "two_counties.xml"
+        ).read_bytes()
+        response = Mock(status_code=200, content=body, text=body.decode())
+        response.raise_for_status = Mock()
+        session = Mock(spec=requests.Session)
+        session.get.return_value = response
+        provider = Bdot10kProvider(session=session, cache=cache)
+        assert provider.teryts_for_area(self.AREA) == ["0208", "0224"]
+        assert provider.teryts_for_area(self.AREA) == ["0208", "0224"]
+        assert session.get.call_count == 1
 
 
 # =========================================================================

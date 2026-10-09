@@ -36,14 +36,25 @@ from kartograf.core.parser_2000 import Parser2000, find_sheets_2000_for_bbox
 from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
 from kartograf.download.campaigns import CampaignRef
+from kartograf.download.countries import (
+    CountryPart,
+    countries_for_bbox,
+    split_bbox_by_country,
+)
 from kartograf.download.cutout import (
     PlCutout,
     PlCutoutResult,
     PlCutoutSheets,
+    build_cutout_from_sheets,
     download_pl_cutout,
     prepare_pl_cutout,
     run_pl_cutout,
     select_pl_cutout_sheets,
+)
+from kartograf.download.cz_cutout import (
+    CzCutoutResult,
+    download_cz_cutout,
+    run_cz_cutout,
 )
 from kartograf.download.laz import (
     LazDownloadResult,
@@ -59,6 +70,7 @@ from kartograf.download.manager import (
 )
 from kartograf.download.storage import FileStorage
 from kartograf.exceptions import (
+    CacheError,
     DownloadError,
     GridMismatchError,
     KartografError,
@@ -66,12 +78,12 @@ from kartograf.exceptions import (
     ParseError,
     ValidationError,
 )
-from kartograf.hydrology.hsg import HSGCalculator
+from kartograf.hydrology.hsg import HSGCalculator, hsg_from_rasters
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.base import BaseProvider, LandCoverProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.cuzk import CuzkDmrProvider, create_dmr_provider
-from kartograf.providers.pl.bdot10k import Bdot10kProvider
+from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import (
     GugikLazProvider,
@@ -81,9 +93,12 @@ from kartograf.providers.pl.gugik_laz import (
 )
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
+from kartograf.providers.pl.prg import discover_teryts_for_bbox, teryt_for_point
 from kartograf.providers.soilgrids import SoilGridsProvider
+from kartograf.transport.http import get_with_retry, make_gugik_session
+from kartograf.transport.mosaic import check_source_grid, mosaic_and_crop
 
-__version__ = "0.7.0"
+__version__ = "0.7.1"
 
 __all__ = [
     # Cache
@@ -107,10 +122,18 @@ __all__ = [
     "PlCutout",
     "PlCutoutResult",
     "PlCutoutSheets",
+    "build_cutout_from_sheets",
     "download_pl_cutout",
     "prepare_pl_cutout",
     "run_pl_cutout",
     "select_pl_cutout_sheets",
+    # Download (CZ cutout, countries)
+    "CountryPart",
+    "countries_for_bbox",
+    "split_bbox_by_country",
+    "CzCutoutResult",
+    "download_cz_cutout",
+    "run_cz_cutout",
     # Download (LAZ tiles, D17)
     "LazDownloadResult",
     "LazTileFailure",
@@ -129,12 +152,22 @@ __all__ = [
     "SupersededLazTile",
     "LandCoverProvider",
     "Bdot10kProvider",
+    "Bdot10kPackage",
     "CorineProvider",
     "SoilGridsProvider",
     "CuzkDmrProvider",
     "create_dmr_provider",
+    # TERYT (PRG)
+    "discover_teryts_for_bbox",
+    "teryt_for_point",
     # Hydrology
     "HSGCalculator",
+    "hsg_from_rasters",
+    # Transport and mosaic (stable since 0.7.1)
+    "get_with_retry",
+    "make_gugik_session",
+    "mosaic_and_crop",
+    "check_source_grid",
     # Exceptions
     "KartografError",
     "ParseError",
@@ -142,6 +175,7 @@ __all__ = [
     "DownloadError",
     "NoCoverageError",
     "GridMismatchError",
+    "CacheError",
     # Version
     "__version__",
 ]
