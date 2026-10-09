@@ -115,10 +115,14 @@
 > cale repo), `.venv/bin/python -m mypy kartograf/ tests/` (bez bledow).
 > Testy `live` tylko swiadomie (`-m live`).
 > **Wymagania Hydrografa 0.7.1:** zaimplementowane na galezi
-> `feat/hydrograf-0.7.1` (Task 1-12 planu, wpis sesji nizej); galaz czeka
-> na koncowe review calej galezi (ewentualna fala poprawek), merge do
-> `develop` i decyzje uzytkownika o wydaniu 0.7.1 — nic z tego jeszcze nie
-> nastapilo.
+> `feat/hydrograf-0.7.1` (Task 1-12 planu, wpis sesji nizej). Koncowe
+> review calej galezi wykonane (werdykt "gotowa po poprawkach"), fala
+> poprawek (`70beeca`, `ceda606`) przeszla ponowne review — wszystkie
+> uwagi zaadresowane; weryfikacja koordynatora na czystej kopii zielona
+> (2998 testow offline, ruff, format i mypy czyste, 5 wlasnych mutacji
+> zabitych). Galaz NIE jest zmergowana do `develop`, NIE jest wydana i nic
+> nie wypchnieto; merge i wydanie 0.7.1 czekaja na decyzje uzytkownika.
+> Drobiazgi odlozone z review: sekcja "Po 0.7.1" nizej.
 > **Otwarte drobiazgi:** drobne otwarte punkty ADR-030 w dzienniku nizej
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
@@ -128,9 +132,10 @@
 
 Plan `docs/superpowers/plans/2026-10-08-hydrograf-0.7.1.md` wykonany na
 galezi `feat/hydrograf-0.7.1` (subagenci, review po kazdym zadaniu, dowody
-mutacyjne). Galaz NIE jest zmergowana ani wydana: czeka na koncowe review
-calej galezi (ewentualna fala poprawek), merge do `develop` i decyzje
-uzytkownika o wydaniu 0.7.1. Szczegoly zmian: `docs/CHANGELOG.md` [0.7.1].
+mutacyjne). Koncowe review calej galezi i fala poprawek sa zamkniete (ponowne
+review czyste, brama zielona na czystej kopii). Galaz NIE jest zmergowana ani
+wydana, nic nie wypchnieto: merge do `develop` i wydanie 0.7.1 czekaja na
+decyzje uzytkownika. Szczegoly zmian: `docs/CHANGELOG.md` [0.7.1].
 
 - **Decyzje uzytkownika:** A11 (`resample_off_grid`) i wyrownanie siatki
   wycinka CZ do siatki PL przeniesione do osobnego specu razem z R6
@@ -182,7 +187,50 @@ uzytkownika o wydaniu 0.7.1. Szczegoly zmian: `docs/CHANGELOG.md` [0.7.1].
   "gotowa po poprawkach"; poprawione: HSG `extra.source_layers` zawsze
   lista nazw (skroty wejsc `hsg_from_rasters` w nowym `extra.source_files`),
   BDOT10k rozpakowanie strumieniowe i `OSError` -> `DownloadError` (bez GPKG
-  bez sidecara), dwie linie "Co zrobic" w CHANGELOG; reszta uwag odlozona.
+  bez sidecara), dwie linie "Co zrobic" w CHANGELOG; reszta uwag odlozona
+  (lista nizej). Ponowne review fali poprawek (`70beeca`, `ceda606`): uwagi
+  zaadresowane; kontrola koordynatora na czystej kopii: 2998 testow offline,
+  ruff, format, mypy czyste, 5 wlasnych mutacji zabitych.
+
+#### Po 0.7.1 — drobiazgi z review galezi 0.7.1 (2026-10-09)
+
+Odlozone z rulingiem "zostaw"; lista ma przezyc usuniecie katalogu roboczego.
+
+- BDOT10k `keep_raw` + blad zapisu surowego ZIP przy ponownym pobraniu
+  zostawia STARY sidecar GPKG bez pliku danych (nowy GPKG usuniety;
+  zapisany stan i tak lepszy niz poprzednio) — zlozyc GPKG w katalogu
+  tymczasowym i przeniesc dopiero po udanym zapisie surowego ZIP.
+- `MetadataCache(strict=True)`: `stats()/clear()/vacuum()/prune_expired()/
+  close()` rzucaja `CacheError`, a docstring `stats()` obiecuje klucz
+  `error`; sciezka rownolegla zamienia `CacheError` na "failed" per arkusz —
+  dopisac to w Parameters `strict` przy najblizszej zmianie.
+- `bbox` w `:.0f` (zapytanie powiatowe) moze skurczyc obwiednie o 0,5 m na
+  strone — przy okazji zmienic na floor/ceil.
+- `skorowidz.py:109`: sprawdzenie obecnosci przez efekt uboczny — zapisac
+  jawnie (czytelnosc).
+- `lstrip` w parserze godla zostawia cyfry dziesietne spoza ASCII
+  (`M-３３`) — wejscie egzotyczne, `int()` i tak sprawdza zakres; ograniczyc
+  do `[0-9]`.
+- Liczba kodow sparsowanych vs `numberReturned` (WFS PRG) — rozwazyc
+  porownanie; `_check_complete` uzywa na razie atrybutu.
+- `download_by_godlo/bbox` nie przekazuja `timeout` do wyszukania TERYT
+  (stale 30 s) — przekazac; manager wola prywatne `_single_teryt` —
+  nadac nazwe publiczna w 0.8.0.
+- `file_digest` poza `try` sidecara w sciezce HSG + wejscie bez CRS daje
+  `AttributeError` (tylko biblioteka) — objac `try`/`ValidationError` w 0.8.0.
+- Docstringi wycinka (`build_cutout_from_sheets`): wynik to zawsze GeoTIFF
+  niezaleznie od rozszerzenia; po bledzie best-effort zostaje nieaktualny
+  sidecar — dopisac notatki.
+- Testy do dopisania: `DownloadManager` end-to-end z `sha256` w sidecarze;
+  przesuniecie srodka polkomorki (rzad 600 m) w kontroli ukladu; luka HSG
+  tylko piasek/pyl; `target_crs` EPSG:5514 -> `image_crs None` i poziom
+  WARNING w komunikacie all-nodata; `TestLastResultSingleSheet` (puste
+  `campaign_files`/`copied`); `test_cli_passes_metadata_cache` bez kodu
+  wyjscia; bezposredni test zwalniania `getbuffer` (BDOT10k).
+- Odrzucone swiadomie (bez dzialania): naglowek ASC `dx/dy`, godlo PL-1992 z
+  plikiem w PL-2000 (glosne odrzucenie), `file_digest` OSError gubiacy caly
+  sidecar (polityka "nigdy plik bez sidecara"), `_BDOT_OPTIONS` odrzuca
+  nieznane kwargs (jak dawne `**kwargs`).
 
 ### Wymagania Hydrografa -> zakres 0.7.1 (2026-10-08)
 
