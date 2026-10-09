@@ -7828,3 +7828,156 @@ class TestSoilgridsHsgNoEarlyMkdir:
         result = main(["soilgrids", "hsg", "--godlo", "N-34-130-D", "-o", str(out)])
         assert result == 1
         assert not (tmp_path / "out").exists()
+
+
+_LAZ_ONLY_YEAR_ERROR = (
+    "Error: --year dziala tylko z --product laz (podano {product}); wybor roku "
+    "dla NMT/NMPT/orto bedzie w 0.7.2. Teraz uzyj --min-year RRRR (najnowsza "
+    "kampania nie starsza niz podany rok; tylko PL, bez --target-crs) albo pomin "
+    "--year"
+)
+_LAZ_ONLY_DENSITY_ERROR = (
+    "Error: --min-density dziala tylko z --product laz (podano {product}); pomin "
+    "--min-density"
+)
+# every path of `download` that used to ignore the LAZ-only options silently
+_LAZ_ONLY_PATHS = {
+    "godlo": ["N-34-130-D-d-2-4"],
+    "hierarchy": ["N-34-130-D"],
+    "hierarchy_scale": ["N-34-130-D-d-2-4", "--scale", "1:10000"],
+    "list_bbox": _PL_BBOX_2180,
+    "geometry": ["--geometry", "area.gpkg"],
+    "cutout": [*_PL_BBOX_2180, "--target-crs", "EPSG:2180"],
+    "auto_border": _BORDER_BBOX,
+    "auto_cz_bbox": _CZ_ONLY_BBOX,
+    "cz_godlo": ["302_5550"],
+    "cz_forced": [*_CZ_ONLY_BBOX, "--country", "cz"],
+}
+_LAZ_ONLY_PRODUCTS = ["nmt", "nmpt", "orto"]
+
+
+class TestLazOnlyOptions:
+    """``--year``/``--min-density`` only with ``--product laz`` (0.7.1)."""
+
+    @pytest.fixture
+    def guards(self):
+        """Everything that would reach the network or the disk."""
+        with (
+            patch("kartograf.cli.download_cmd.DownloadManager") as manager,
+            patch("kartograf.cli.download_cmd._create_provider_and_storage") as factory,
+            patch("kartograf.download.cutout.prepare_pl_cutout") as cutout,
+            patch("kartograf.cli.download_cmd._run_cz") as run_cz,
+            patch("kartograf.cli.download_cmd._cmd_download_cz") as cmd_cz,
+            patch("kartograf.providers.pl.gugik_laz.GugikLazProvider") as laz,
+        ):
+            yield [manager, factory, cutout, run_cz, cmd_cz, laz]
+
+    @pytest.mark.parametrize("path", sorted(_LAZ_ONLY_PATHS))
+    @pytest.mark.parametrize("product", _LAZ_ONLY_PRODUCTS)
+    def test_year_rejected_for_other_products(
+        self, product, path, guards, capsys, tmp_path
+    ):
+        out = tmp_path / "out"
+        rc = main(
+            [
+                "download",
+                *_LAZ_ONLY_PATHS[path],
+                "--product",
+                product,
+                "--year",
+                "2022",
+                "-o",
+                str(out),
+            ]
+        )
+        assert rc == 1
+        assert capsys.readouterr().err == (
+            _LAZ_ONLY_YEAR_ERROR.format(product=product) + "\n"
+        )
+        for guard in guards:
+            guard.assert_not_called()
+        assert not out.exists()
+
+    @pytest.mark.parametrize("path", sorted(_LAZ_ONLY_PATHS))
+    @pytest.mark.parametrize("product", _LAZ_ONLY_PRODUCTS)
+    def test_min_density_rejected_for_other_products(
+        self, product, path, guards, capsys, tmp_path
+    ):
+        out = tmp_path / "out"
+        rc = main(
+            [
+                "download",
+                *_LAZ_ONLY_PATHS[path],
+                "--product",
+                product,
+                "--min-density",
+                "12",
+                "-o",
+                str(out),
+            ]
+        )
+        assert rc == 1
+        assert capsys.readouterr().err == (
+            _LAZ_ONLY_DENSITY_ERROR.format(product=product) + "\n"
+        )
+        for guard in guards:
+            guard.assert_not_called()
+        assert not out.exists()
+
+    def test_default_product_is_nmt_and_year_rejected(self, guards, capsys, tmp_path):
+        """No --product: the default (nmt) is rejected too, not just explicit."""
+        rc = main(
+            ["download", "N-34-130-D-d-2-4", "--year", "2022", "-o", str(tmp_path)]
+        )
+        assert rc == 1
+        assert "podano nmt" in capsys.readouterr().err
+        for guard in guards:
+            guard.assert_not_called()
+
+    def test_year_rejected_message_precedes_density(self, guards, capsys, tmp_path):
+        rc = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--year",
+                "2022",
+                "--min-density",
+                "12",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "--year dziala tylko" in err
+        assert "--min-density" not in err
+
+    @patch("kartograf.download.laz.run_laz_download")
+    @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
+    def test_laz_year_and_density_still_reach_laz_path(
+        self, mock_provider_cls, mock_run, capsys, tmp_path
+    ):
+        instance = Mock()
+        instance.select_tiles.return_value = _selection([])
+        mock_provider_cls.return_value = instance
+        rc = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--product",
+                "laz",
+                "--year",
+                "2022",
+                "--min-density",
+                "12",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+        err = capsys.readouterr().err
+        assert "dziala tylko z --product laz" not in err
+        kwargs = instance.select_tiles.call_args.kwargs
+        assert kwargs["year"] == 2022
+        assert kwargs["min_density"] == 12
+        assert rc == 1  # empty selection: "No LAZ tiles", past the new guard

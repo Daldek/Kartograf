@@ -1258,6 +1258,18 @@ sugerowac brak kafli. Gdy wszystkie
 odpowiedza i nic nie znaleziono, CLI drukuje `No LAZ tiles found`
 (`download_laz_area`: `NoCoverageError`).
 
+**`--year` i `--min-density` tylko dla LAZ (0.7.1).** Opcje te czyta wylacznie
+`_cmd_download_laz`. Dla `--product nmt|nmpt|orto` (takze domyslnego)
+`cmd_download` odrzuca je w `_reject_laz_only_opts`: `Error: --year dziala
+tylko z --product laz (podano <produkt>); ...` albo `Error: --min-density
+dziala tylko z --product laz (podano <produkt>); ...`, kod 1. Sprawdzenie
+stoi zaraz po walidacji opcji kampanii, przed wyborem kraju, wiec obejmuje
+wszystkie tory (godlo, hierarchia, lista arkuszy, `--bbox`, `--geometry`,
+wycinek `--target-crs`, `--country auto`, CZ) i jest przed siecia,
+fabryka providera, `DownloadManager`, wycinkiem i `_run_cz` oraz przed
+utworzeniem katalogu wyjsciowego. Komunikat `--year` wskazuje wybor roku
+w 0.7.2 i `--min-year` (kampanie PL, bez `--target-crs`).
+
 **Wybor kafli (ADR-029).** Domyslnie (bez `--year`) kafle sa wybierane
 zachlannie od najnowszego `akt_rok` (w roku: nowsza `akt_data`): kafel
 starszy jest pomijany, gdy jego czesc wspolna z obszarem zadania pokrywa

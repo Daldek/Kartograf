@@ -80,6 +80,14 @@ z listą dostępnych). WFS GUGiK w EPSG:2180 używa kolejności osi (N,E).
 `--min-density` i `extra.nominal_density` to gęstość **nominalna** z WFS
 GUGiK — faktyczna bywa wyższa.
 
+`--year` i `--min-density` działają **tylko z `--product laz`**. Z `nmt`,
+`nmpt` i `orto` (także domyślnym `nmt`) kończą się `Error:` i kodem 1 przed
+jakimkolwiek zapytaniem do sieci (do 0.7.0 były po cichu pomijane); dotyczy
+godła, hierarchii, listy arkuszy, `--bbox`, `--geometry`, `--target-crs`
+i `--country auto`. Wybór roku dla NMT/NMPT/orto będzie w 0.7.2; na razie
+`--min-year RRRR` (tylko PL, bez `--target-crs`) odcina kampanie starsze niż
+podany rok, a `--year`/`--min-density` w tych produktach trzeba pominąć.
+
 ### 1.2 Selekcja obszaru i wybór kraju (`--country`)
 
 ```bash
@@ -513,6 +521,8 @@ cache (7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania.
 - **LAZ:** `--campaigns all` pobiera wszystkie kafle, których rama przecina
   obszar (bez deduplikacji ADR-029), `--min-year` to dolna granica roku
   kafla; `--min-year` i `--year` wykluczają się. LAZ nie używa dowiązań.
+  `--year` i `--min-density` są tylko dla LAZ (z innymi produktami: `Error:`,
+  sekcja 1.1).
 - Składanie kilku kampanii w jedną powierzchnię nie jest częścią
   Kartografu (plany: SCOPE 3.1).
 
