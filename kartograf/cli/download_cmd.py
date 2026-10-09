@@ -232,6 +232,36 @@ def _campaign_opts(args: argparse.Namespace) -> tuple[str, int | None]:
     return getattr(args, "campaigns", "newest"), getattr(args, "min_year", None)
 
 
+def _is_cz_only_task(args: argparse.Namespace) -> bool:
+    """
+    True when the task can only be served by CZ (no PL among its countries).
+
+    Local, best-effort and network-free: a CZ sheet code, ``--country cz``, or
+    (under ``auto``) a ``--bbox``/``--geometry`` lying wholly in CZ. Anything that
+    cannot be resolved (missing file, bad bbox) counts as "not CZ-only" - the
+    caller then prints the generic text and the real error surfaces later.
+    """
+    from kartograf.core.parser_registry import detect_system
+
+    country = getattr(args, "country", "auto")
+    if country == "pl":
+        return False
+    if country == "cz":
+        return True
+    try:
+        if args.godlo is not None:
+            return detect_system(args.godlo).country == "CZ"
+        if getattr(args, "bbox", None) is not None:
+            area = parse_bbox_arg(args.bbox, args.bbox_crs)
+        elif getattr(args, "geometry", None) is not None:
+            area = _geometry_envelope(Path(args.geometry), getattr(args, "layer", None))
+        else:
+            return False
+        return _countries_for_bbox(area) == ("CZ",)
+    except Exception:
+        return False
+
+
 def _reject_laz_only_opts(args: argparse.Namespace) -> bool:
     """
     ``--year``/``--min-density`` apply to ``--product laz`` only (0.7.1).
@@ -247,13 +277,24 @@ def _reject_laz_only_opts(args: argparse.Namespace) -> bool:
     if product == "laz":
         return False
     if getattr(args, "year", None) is not None:
-        print(
-            f"Error: --year dziala tylko z --product laz (podano {product}); "
-            "wybor roku dla NMT/NMPT/orto bedzie w 0.7.2. Teraz uzyj "
-            "--min-year RRRR (najnowsza kampania nie starsza niz podany rok; "
-            "tylko PL, bez --target-crs) albo pomin --year",
-            file=sys.stderr,
-        )
+        if _is_cz_only_task(args):
+            message = (
+                f"Error: --year nie dziala dla CZ (CUZK nie ma wyboru roku; "
+                f"podano {product}); pomin --year"
+            )
+        else:
+            message = (
+                f"Error: --year dziala tylko z --product laz (podano {product}); "
+                "wybor roku dla NMT/NMPT/orto bedzie w 0.7.2. "
+            )
+            if getattr(args, "min_year", None) is None:
+                message += (
+                    "Teraz uzyj --min-year RRRR (najnowsza kampania nie starsza "
+                    "niz podany rok; tylko PL, bez --target-crs) albo pomin --year"
+                )
+            else:
+                message += "Pomin --year"
+        print(message, file=sys.stderr)
         return True
     if getattr(args, "min_density", None) is not None:
         print(
