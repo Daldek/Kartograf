@@ -112,8 +112,8 @@
 > 2026-10-09 (`__version__ = "0.7.2-dev"`, sekcja `## [0.7.2] - Unreleased`
 > w CHANGELOG). **W toku:** drobiazgi z review 0.7.1 — spec
 > `docs/superpowers/specs/2026-10-09-review-0.7.1-drobiazgi-design.md`
-> ma decyzje Q1, Q2, Q4, Q5; Q3 (brzmienie komunikatu o brakujacych
-> arkuszach) czeka na akceptacje po sprawdzeniu na zywo; dalej plan i galaz
+> ma komplet decyzji Q1-Q5 (2026-10-09); nastepny krok: plan
+> `docs/superpowers/plans/2026-10-09-review-0.7.1-drobiazgi.md` i galaz
 > `fix/review-0.7.1`.
 > **Kierunek do v1.0.0:** roadmapa w `docs/SCOPE.md` 3.3 (zatwierdzona
 > 2026-10-08). Podprojekt 1 (magazyn wersjonowany, docelowo 0.8.0): spec
@@ -156,7 +156,14 @@
   i GetMap) nie ma arkuszy `-1-1`, `-1-2`, `-2-x`; brak obejmuje rozlegly
   obszar na polnoc od arkusza, ktory skorowidz 1 m pokrywa (NMT 1 m
   2022-2025). Komunikat "(morze, obszar za granica)" podaje wiec falszywa
-  przyczyne; szczegoly i propozycja brzmienia w specu (P10).
+  przyczyne; szczegoly w specu (P10).
+- 1 m dla tych 6 arkuszy: 3-4 kampanie EVRF2007 (2022-2025), pliki
+  OpenData HTTP 200 (HEAD). Uzytkownik potwierdza duze braki pokrycia
+  GUGiK w EVRF2007 dla 1 m i 5 m.
+- Q3 rozstrzygniete: nowe brzmienie komunikatu zaakceptowane; podpowiedz
+  `Info:` o innym wariancie (rozdzielczosc / uklad wysokosci, z ktorego
+  skorowidz ma arkusz) w tym samym zestawie — projekt w specu (P10,
+  czesc 2).
 - Bez zmian w kodzie poza numerem wersji.
 
 ### Wydanie 0.7.1 (2026-10-09)
