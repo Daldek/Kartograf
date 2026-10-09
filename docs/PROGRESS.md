@@ -147,7 +147,9 @@ decyzje uzytkownika. Szczegoly zmian: `docs/CHANGELOG.md` [0.7.1].
   wspolny dla filtrow `layers=`); `build_cutout_from_sheets` odrzuca
   brakujace/nieczytelne arkusze i `output_path` rowny arkuszowi
   wejsciowemu (`ValidationError` przed zapisem); 5 m + KRON86 w bibliotece
-  = `ValidationError`, CLI zachowuje `Info:` o zamianie (kod 0).
+  = `ValidationError`; w CLI pierwotnie `Info:` o zamianie (kod 0), decyzja
+  uzytkownika 2026-10-09 (Task 13): jawne `--resolution 5m --vertical-crs
+  KRON86` w CLI = `Error:` i kod 1 przed siecia.
 - **Fakty z zywych uslug:** WFS PRG dla morza odpowiada
   `numberMatched="unknown" numberReturned="0"` (pusta lista), a przy
   stronicowaniu `numberMatched="unknown"` + link `next` (Kartograf:
@@ -183,6 +185,9 @@ decyzje uzytkownika. Szczegoly zmian: `docs/CHANGELOG.md` [0.7.1].
   `pl_1992_5m_evrf2007`, arkusz 1 304 067 B, sidecar `EPSG:9651`,
   `height_rmse_m` 0.5 (arkusz z planu, N-34-130-D-d-2-4, nie ma rekordu
   NMT 5 m u zrodla: `Error: Brak danych NMT 5m`, kod 1, takze z `--force`).
+  To byl stan przed Task 13: po nim ta sama komenda konczy sie `Error: NMT
+  5m (PL) jest dostepny tylko w EVRF2007 ...`, kod 1, bez zapytan do sieci
+  (sprawdzone 2026-10-09 z `--output <katalog-danych>`).
 - **Koncowe review calej galezi + fala poprawek (2026-10-09):** werdykt
   "gotowa po poprawkach"; poprawione: HSG `extra.source_layers` zawsze
   lista nazw (skroty wejsc `hsg_from_rasters` w nowym `extra.source_files`),
@@ -1567,7 +1572,15 @@ liczony w strumieniu `download_to` zostaje w magazynie 0.8.0.
   inna wartosc = `DownloadError` kampanii przed pobraniem, rekord bez pola
   przyjmowany; (b) biblioteka (`create_nmt_provider`, `DownloadManager`,
   `download_pl_cutout`) odrzuca 5 m + KRON86 `ValidationError` z remedium
-  (`require_nmt_vertical_crs`), CLI zachowuje zamiane z `Info:` (kod 0).
+  (`require_nmt_vertical_crs`); CLI pierwotnie zachowalo zamiane z `Info:`
+  (kod 0).
+- [x] **5 m + KRON86 w CLI jako blad** (Task 13; decyzja uzytkownika
+  2026-10-09, zmienia rozstrzygniecie koordynatora z Task 12): jawne
+  `--resolution 5m --vertical-crs KRON86` (NMT PL, wszystkie tory: godlo,
+  hierarchia, bbox/geometria, wycinek `--target-crs`, `--country auto`)
+  konczy sie `Error:` z remedium i kodem 1 w `_resolve_pl_sentinels`, przed
+  siecia (regula `require_nmt_vertical_crs`); `--resolution 5m` bez
+  `--vertical-crs` nadal pobiera EVRF2007.
 - [x] **Ryzyko KRON86 1 — uklad wysokosci tylko przez endpoint** (rekord
   innego ukladu przyjmowany bez sladu w sidecarze) — zamkniete Task 12 (a);
   deklaracja rekordu w `extra.source.declared_vertical_crs` (Task 3).

@@ -32,11 +32,10 @@ NMT_5M_VERTICAL_CRS = "EVRF2007"
 def nmt_vertical_crs(resolution: str, vertical_crs: str, *, log: bool = True) -> str:
     """ACTUAL vertical CRS of PL NMT — the one place of the "5m => EVRF2007" rule (D11).
 
-    The rule has a single effect: correction to EVRF2007, logged as a
-    warning with ``log=True``. The CLI prints ``Info:`` to stderr instead
-    (``log=False`` + its own message). Library entry points reject the
-    mismatch through ``require_nmt_vertical_crs`` (0.7.1); this function
-    stays the pure rule for callers that swap (CLI).
+    Returns the corrected vertical CRS (logged as a warning with
+    ``log=True``). Library entry points and the CLI reject the mismatch
+    through ``require_nmt_vertical_crs`` (0.7.1: no swap anywhere in
+    Kartograf); this function stays the pure rule behind it.
     """
     actual = NMT_5M_VERTICAL_CRS if resolution == "5m" else vertical_crs
     if log and actual != vertical_crs:

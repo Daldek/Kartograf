@@ -899,10 +899,11 @@ drugiego kraju nie daje juz kodu 0. Biblioteka nie ma `print` ani argparse.
    przyjmuje pion FAKTYCZNY; `require_nmt_vertical_crs` w
    `providers/pl/__init__.py`; od 0.7.1 te pare odrzucaja `ValidationError` z
    remedium takze `download_pl_cutout` — przed fabryka providera —
-   `create_nmt_provider` i `DownloadManager`; zamiane 5m => EVRF2007 z `Info:`
-   na stderr robi wylacznie CLI w `_resolve_pl_sentinels`, zanim wywola
-   biblioteke — regula "5 m tylko w EVRF2007" zyje w jednym miejscu,
-   `providers.pl.nmt_vertical_crs`). Bbox trafia do EPSG:2180 (uklady czeskie
+   `create_nmt_provider` i `DownloadManager`; CLI odrzuca jawne
+   `--resolution 5m --vertical-crs KRON86` w `_resolve_pl_sentinels`
+   komunikatem `Error:` z flagami CLI (kod 1), zanim wywola biblioteke —
+   zamiany nie ma nigdzie; regula "5 m tylko w EVRF2007" zyje w jednym
+   miejscu, `providers.pl.nmt_vertical_crs`). Bbox trafia do EPSG:2180 (uklady czeskie
    przypieta operacja `bbox_to_crs`, pozostale domyslnym transformerem, jak
    w calym przeplywie PL), po czym dla pary `EPSG:2180 -> target_crs`
    budowana jest operacja przypieta (polityka `min_accuracy_m=1.0`, bez

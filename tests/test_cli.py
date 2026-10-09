@@ -1342,8 +1342,8 @@ class TestCreateProviderAndStorage:
         assert storage._subdir == "nmt/pl_{uklad}_1m_kron86"
 
     def test_nmt_5m_needs_datum_resolved_by_sentinels(self, tmp_path):
-        """0.7.1: the helper gets the ACTUAL datum (``_resolve_pl_sentinels``);
-        the raw 5m + KRON86 pair reaches the library factory, which rejects it."""
+        """0.7.1: ``_resolve_pl_sentinels`` rejects 5m + KRON86 before this
+        helper; should the pair reach it, the library factory rejects it."""
         from kartograf.cli.download_cmd import _create_provider_and_storage
 
         provider, storage = _create_provider_and_storage(
@@ -1362,12 +1362,73 @@ class TestCreateProviderAndStorage:
         assert storage._subdir == "nmpt/pl_{uklad}_1m_kron86"
 
 
-class TestNmt5mKron86Swap:
-    """0.7.1: the CLI keeps its announced swap (``Info:``, code 0); the
-    library alone would reject 5m + KRON86 (``ValidationError``)."""
+_5M_KRON86_ERROR = (
+    "Error: NMT 5m (PL) jest dostepny tylko w EVRF2007 — podano --vertical-crs "
+    "KRON86; uzyj --vertical-crs EVRF2007 (albo pomin --vertical-crs) albo "
+    "--resolution 1m dla KRON86"
+)
+
+
+class TestNmt5mKron86Rejected:
+    """0.7.1: an explicit ``--resolution 5m --vertical-crs KRON86`` is a CLI
+    error (code 1) before any provider or network call - like the library
+    (``require_nmt_vertical_crs``); without ``--vertical-crs`` 5m still works
+    (default EVRF2007)."""
+
+    @pytest.mark.parametrize(
+        "task",
+        [
+            ["N-34-130-D-d-2-4"],
+            ["N-34-130-D"],
+            ["--bbox", "630000,480000,637000,487000", "--country", "pl"],
+            ["--bbox", "630000,480000,637000,487000"],
+            ["--bbox", "630000,480000,637000,487000", "--target-crs", "EPSG:2180"],
+        ],
+        ids=["godlo", "godlo-hierarchy", "bbox-pl", "bbox-auto", "bbox-cutout"],
+    )
+    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.cli.download_cmd._download_pl_cutout")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_explicit_kron86_with_5m_is_error(
+        self,
+        mock_manager_cls,
+        mock_create,
+        mock_find,
+        mock_cutout,
+        mock_run_cz,
+        capsys,
+        tmp_path,
+        task,
+    ):
+        result = main(
+            [
+                "download",
+                *task,
+                "--resolution",
+                "5m",
+                "--vertical-crs",
+                "KRON86",
+                "-o",
+                str(tmp_path / "out"),
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        err = capsys.readouterr().err
+        assert _5M_KRON86_ERROR in err
+        assert "zamieniony" not in err
+        mock_manager_cls.assert_not_called()
+        mock_create.assert_not_called()
+        mock_find.assert_not_called()
+        mock_cutout.assert_not_called()
+        mock_run_cz.assert_not_called()
+        assert not (tmp_path / "out").exists()
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_godlo_5m_kron86_info_and_evrf2007(
+    def test_godlo_5m_without_vertical_crs_uses_evrf2007(
         self, mock_manager_cls, capsys, tmp_path
     ):
         mock_manager = Mock()
@@ -1381,8 +1442,6 @@ class TestNmt5mKron86Swap:
                 "N-34-130-D-d-2-4",
                 "--resolution",
                 "5m",
-                "--vertical-crs",
-                "KRON86",
                 "-o",
                 str(tmp_path / "out"),
                 "-q",
@@ -1391,14 +1450,36 @@ class TestNmt5mKron86Swap:
 
         assert result == 0
         err = capsys.readouterr().err
-        assert (
-            "Info: NMT 5m (PL) jest dostepny tylko w EVRF2007 — --vertical-crs "
-            "KRON86 zamieniony na EVRF2007"
-        ) in err
+        assert "Error:" not in err and "Info:" not in err
         kwargs = mock_manager_cls.call_args.kwargs
         assert kwargs["vertical_crs"] == "EVRF2007"
         assert kwargs["resolution"] == "5m"
         assert kwargs["provider"].vertical_crs == "EVRF2007"
+
+    def test_sentinels_reject_only_explicit_kron86(self, capsys):
+        """The rule sits in ``_resolve_pl_sentinels``: the default (None ->
+        EVRF2007) and an explicit EVRF2007 pass, an explicit KRON86 fails."""
+        from kartograf.cli.download_cmd import _resolve_pl_sentinels
+
+        def ns(vertical_crs):
+            return argparse.Namespace(
+                product="nmt",
+                resolution="5m",
+                vertical_crs=vertical_crs,
+                target_crs=None,
+                system=None,
+            )
+
+        for given in (None, "EVRF2007"):
+            args = ns(given)
+            assert _resolve_pl_sentinels(args) == 0
+            assert args.vertical_crs == "EVRF2007"
+        assert capsys.readouterr().err == ""
+
+        args = ns("KRON86")
+        assert _resolve_pl_sentinels(args) == 1
+        assert _5M_KRON86_ERROR in capsys.readouterr().err
+        assert args.vertical_crs == "KRON86"  # no silent swap
 
 
 class TestCmdDownloadBBox:
@@ -4639,41 +4720,6 @@ class TestCountryDispatch:
         assert kwargs["resolution"] == "1m"
         assert kwargs["vertical_crs"] == "EVRF2007"
 
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_pl_5m_kron86_corrected_with_info(
-        self, mock_manager_class, mock_create, tmp_path, capsys
-    ):
-        """D11: one "5m => EVRF2007" rule, one effect - an explicit correction.
-
-        Previously the correction went only to the log (invisible in the CLI); now
-        ``Info:`` on stderr (also with ``-q``), and the factory and manager get
-        the ACTUAL vertical CRS.
-        """
-        mock_create.return_value = (Mock(), Mock())
-        mock_manager = Mock()
-        mock_manager.last_result = None
-        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
-        mock_manager_class.return_value = mock_manager
-        result = main(
-            [
-                "download",
-                "N-34-130-D-d-2-4",
-                "--resolution",
-                "5m",
-                "--vertical-crs",
-                "KRON86",
-                "-o",
-                str(tmp_path),
-                "-q",
-            ]
-        )
-        assert result == 0
-        err = capsys.readouterr().err
-        assert "Info:" in err and "KRON86" in err and "EVRF2007" in err
-        assert mock_create.call_args.args[2] == "EVRF2007"
-        assert mock_manager_class.call_args.kwargs["vertical_crs"] == "EVRF2007"
-
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_pl_1m_kron86_no_correction(self, mock_manager_class, tmp_path, capsys):
         mock_manager = Mock()
@@ -4708,7 +4754,8 @@ class TestCountryDispatch:
         )
         assert _resolve_pl_sentinels(args) == 0
         assert args.vertical_crs == "KRON86"
-        assert "Info:" not in capsys.readouterr().err
+        err = capsys.readouterr().err
+        assert "Info:" not in err and "Error:" not in err
 
     def test_pl_godlo_with_2m_rejected(self, tmp_path, capsys):
         result = main(

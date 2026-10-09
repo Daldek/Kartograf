@@ -820,24 +820,21 @@ class TestDownloadPlBboxCutout:
         assert sent.min_y < _BBOX_2180.min_y
         assert sent.max_y > _BBOX_2180.max_y
 
-    def test_5m_kron86_grid_dataset_vertical_and_segment(self, tmp_path):
+    def test_5m_grid_dataset_vertical_and_segment(self, tmp_path):
         """The whole 5m flow in one test: grid, descriptor, vertical, segment.
 
-        ``--resolution 5m`` with ``--vertical-crs KRON86`` is swapped to
-        EVRF2007 by the CLI (``_resolve_pl_sentinels``, ``Info:``); the library
-        itself rejects the pair (0.7.1) (5m does not exist in KRON86), so the
-        cutout must follow the PROVIDER, not the raw CLI flag. For sheets this
-        error class has long been guarded - the cutout path was a gap in it:
-        a 1 m pixel from 5 m data (25x the file size) or a ``pl_1992_5m_kron86``
+        ``--resolution 5m`` without ``--vertical-crs`` resolves to EVRF2007
+        (the only datum of 5 m; an explicit KRON86 is a CLI error since 0.7.1,
+        ``TestNmt5mKron86Rejected`` in test_cli.py). For sheets this error
+        class has long been guarded - the cutout path was a gap in it: a 1 m
+        pixel from 5 m data (25x the file size) or a ``pl_1992_5m_kron86``
         segment with an EPSG:9650 sidecar passed the whole suite.
         """
         sheets = [
             _write_sheet_asc(tmp_path / "s1.asc", 529900, 381950, size=40, pixel=5.0),
             _write_sheet_asc(tmp_path / "s2.asc", 530100, 381950, size=40, pixel=5.0),
         ]
-        args = _pl_args(
-            tmp_path, resolution="5m", vertical_crs="KRON86", target_crs="EPSG:5514"
-        )
+        args = _pl_args(tmp_path, resolution="5m", target_crs="EPSG:5514")
         rc, *_ = self._run(tmp_path, args, sheets)
 
         assert rc == 0
