@@ -108,9 +108,12 @@
 > wycinki PL z WCS, wybor roku `--year`/`--min-year`/`--max-year` dla
 > NMT/NMPT/orto, drugie dowiazanie do pelnego lotu, domyslne
 > z inwentaryzacji) — kazda pozycja dopiero po specu/planie i zatwierdzeniu;
-> drobiazgi z review 0.7.1: sekcja "Po 0.7.1" nizej. Cykl nie jest jeszcze
-> otwarty (`__version__ = "0.7.1"`; otwarcie = `0.7.2-dev` i sekcja
-> `## [0.7.2] - Unreleased` w CHANGELOG).
+> drobiazgi z review 0.7.1: sekcja "Po 0.7.1" nizej. Cykl otwarty
+> 2026-10-09 (`__version__ = "0.7.2-dev"`, sekcja `## [0.7.2] - Unreleased`
+> w CHANGELOG). **W toku:** drobiazgi z review 0.7.1 — spec
+> `docs/superpowers/specs/2026-10-09-review-0.7.1-drobiazgi-design.md`
+> czeka na review uzytkownika (pytania Q1-Q5); dalej plan i galaz
+> `fix/review-0.7.1`.
 > **Kierunek do v1.0.0:** roadmapa w `docs/SCOPE.md` 3.3 (zatwierdzona
 > 2026-10-08). Podprojekt 1 (magazyn wersjonowany, docelowo 0.8.0): spec
 > zaakceptowany i plan 1/3 napisany na galezi `feat/versioned-store`
@@ -126,6 +129,24 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Otwarcie cyklu 0.7.2 i spec drobiazgow z review 0.7.1 (2026-10-09)
+
+- Otwarcie cyklu: `__version__ = "0.7.2-dev"` (asercje w `test_cli.py`
+  i `test_integration.py`), sekcja `[0.7.2] - Unreleased` i link
+  `compare/v0.7.1...develop` w CHANGELOG (commit `chore(release): poczatek
+  cyklu 0.7.2`).
+- Decyzja uzytkownika: najpierw drobiazgi z review 0.7.1 (sekcja "Po
+  0.7.1"). Spec `docs/superpowers/specs/2026-10-09-review-0.7.1-drobiazgi-design.md`:
+  P1-P10 (BDOT10k `keep_raw` ze scaleniem w pliku tymczasowym, docstringi
+  `strict`, `BBOX` PRG floor/ceil, jawne sprawdzenie klucza w skorowidzu,
+  godla tylko z cyframi ASCII, `numberReturned` vs liczba kodow, `timeout`
+  do PRG, docstring `build_cutout_from_sheets`, 7 testow, komunikat
+  o brakujacych arkuszach); poza zakresem pozycje oznaczone na 0.8.0.
+- Pomiar przy specu: `SheetParser("M-３３-８-A")`, `"N-34-１３０-D"`,
+  `"6.１４５.２０"` sa dzis przyjmowane z cyframi pelnej szerokosci w godle;
+  wzorce CZ (`CZ_TM33_PATTERN`, `CZ_SM5_PATTERN`) tez je dopasowuja.
+- Bez zmian w kodzie poza numerem wersji.
 
 ### Wydanie 0.7.1 (2026-10-09)
 
