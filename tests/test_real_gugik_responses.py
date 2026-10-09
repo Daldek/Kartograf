@@ -18,7 +18,7 @@ import pytest
 import requests
 
 from kartograf.core.sheet_parser import BBox, SheetParser
-from kartograf.exceptions import NoCoverageError
+from kartograf.exceptions import DownloadError, NoCoverageError
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import GugikLazProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
@@ -652,3 +652,36 @@ class TestCampaignListsOnRealBodies:
             back = SkorowidzRecord.from_source(r.to_source("https://wms"))
             assert back.file_format is None
             assert "format" not in back.raw
+
+
+# =============================================================================
+# Declared vertical datum of the record vs the queried index (0.7.1, E5)
+# =============================================================================
+
+
+class TestDeclaredVerticalCrsOnRealBodies:
+    """``GugikProvider.download`` (path without the manager) checks the record."""
+
+    GODLO = "N-33-59-C-a-1-3"  # raw KRON86 bodies: records PL-KRON86-NH
+    KRN_2018 = REAL / "nmt" / GODLO / "nmt1_krn__SkorowidzeNMT2018.body"
+
+    def test_kron86_record_from_evrf2007_index_is_not_downloaded(self, tmp_path):
+        """E5: the EVRF2007 index answers with a KRON86 record -> DownloadError."""
+        provider = GugikProvider(session=routed_session(lambda layer: self.KRN_2018))
+        provider.download_record = Mock()
+        with pytest.raises(DownloadError) as exc:
+            provider.download(self.GODLO, tmp_path / "a.asc")
+        message = str(exc.value)
+        assert "deklaruje uklad wysokosci PL-KRON86-NH" in message
+        assert "zadano EVRF2007" in message
+        assert self.GODLO in message
+        provider.download_record.assert_not_called()
+
+    def test_kron86_record_from_kron86_index_is_downloaded(self, tmp_path):
+        provider = GugikProvider(
+            session=nmt_session(self.GODLO, "nmt1_krn"), vertical_crs="KRON86"
+        )
+        provider.download_record = Mock(return_value=tmp_path / "a.asc")
+        provider.download(self.GODLO, tmp_path / "a.asc")
+        record = provider.download_record.call_args.args[0]
+        assert record.raw["ukladWspolrzednychPionowych"] == "PL-KRON86-NH"

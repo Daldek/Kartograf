@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from kartograf.cli._parser import parse_bbox_arg
+from kartograf.cli.download_cmd import _cli_metadata_cache
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
 
@@ -139,9 +140,12 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
     # Parse bbox if provided (zly bbox -> ValidationError -> Error: w main)
     bbox = parse_bbox_arg(args.bbox, "EPSG:2180") if args.bbox else None
 
-    # Create manager with selected provider
+    # Create manager with selected provider; BDOT10k gets the metadata cache
+    # of the cwd (PRG TERYT answers, U5) like the PL/CZ download paths.
     output_dir = Path(args.output)
-    manager = LandCoverManager(output_dir=output_dir, provider=args.source)
+    is_bdot = args.source == "bdot10k"
+    cache = _cli_metadata_cache(False) if is_bdot else None
+    manager = LandCoverManager(output_dir=output_dir, provider=args.source, cache=cache)
 
     print(f"Downloading land cover data from {manager.provider_name}...")
 
@@ -150,7 +154,7 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
         kwargs = {}
         if args.source == "corine":
             kwargs["year"] = args.year
-        if args.source == "bdot10k":
+        if is_bdot:
             kwargs["format"] = args.format
         if args.source == "soilgrids":
             kwargs["property"] = args.property
@@ -167,19 +171,33 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
                 return 1
             bbox = get_overall_bbox(filepath, layer=getattr(args, "layer", None))
             print(f"  Geometry: {filepath.name}")
-            path = manager.download(bbox=bbox, **kwargs)
         elif args.teryt:
             print(f"  TERYT: {args.teryt}")
             path = manager.download(teryt=args.teryt, **kwargs)
+            print(f"Downloaded to: {path}")
+            return 0
         elif bbox:
             print(
                 f"  BBox: ({bbox.min_x}, {bbox.min_y}) - ({bbox.max_x}, {bbox.max_y})"
             )
-            path = manager.download(bbox=bbox, **kwargs)
         else:
             print(f"  Godło: {args.godlo}")
-            path = manager.download(godlo=args.godlo, **kwargs)
 
+        if is_bdot:
+            # Every powiat of the area, one package each (A2); the first
+            # failure stops the loop with Error: (files already written stay).
+            if bbox is not None:
+                paths = manager.download_all_counties(bbox=bbox, **kwargs)
+            else:
+                paths = manager.download_all_counties(godlo=args.godlo, **kwargs)
+            for path in paths:
+                print(f"Downloaded to: {path}")
+            return 0
+
+        if bbox is not None:
+            path = manager.download(bbox=bbox, **kwargs)
+        else:
+            path = manager.download(godlo=args.godlo, **kwargs)
         print(f"Downloaded to: {path}")
         return 0
 
@@ -198,3 +216,7 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
         # a program failure (no KARTOGRAF_DEBUG hint; review N8).
         print(f"Error: {e}", file=sys.stderr)
         return 1
+    finally:
+        # close() purges expired entries (as the PL/CZ download paths do)
+        if cache is not None:
+            cache.close()

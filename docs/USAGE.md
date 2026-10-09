@@ -43,6 +43,9 @@ kartograf parse N-34-130-D --hierarchy
 # niż 1:10000 rozwija się do arkuszy 1:10000 samo — bez --scale (sekcja 1.6)
 kartograf download N-34-130-D-d-2-4
 kartograf download N-34-130-D --resolution 5m --workers 8 --output ./data
+# NMT 5 m istnieje tylko w EVRF2007: --resolution 5m z jawnym --vertical-crs KRON86
+# kończy się Error: (kod 1, przed siecią; od 0.7.1, wcześniej zamiana z Info:) —
+# pomiń --vertical-crs (domyślny EVRF2007) albo użyj --resolution 1m dla KRON86
 
 # Inne produkty GUGiK: NMPT (DSM), ortofotomapa, chmury punktów LAZ
 kartograf download N-34-130-D-d-2-4 --product nmpt
@@ -76,6 +79,18 @@ kafli"); `--year` wybiera jeden rocznik (rocznik nieobecny w usłudze = błąd
 z listą dostępnych). WFS GUGiK w EPSG:2180 używa kolejności osi (N,E).
 `--min-density` i `extra.nominal_density` to gęstość **nominalna** z WFS
 GUGiK — faktyczna bywa wyższa.
+
+`--year` i `--min-density` działają **tylko z `--product laz`**. Z `nmt`,
+`nmpt` i `orto` (także domyślnym `nmt`) kończą się `Error:` i kodem 1 przed
+jakimkolwiek zapytaniem do sieci (do 0.7.0 były po cichu pomijane); dotyczy
+godła, hierarchii, listy arkuszy, `--bbox`, `--geometry`, `--target-crs`
+i `--country auto`. Wybór roku dla NMT/NMPT/orto będzie w 0.7.2; na razie
+`--min-year RRRR` (tylko PL, bez `--target-crs`) odcina kampanie starsze niż
+podany rok, a `--year`/`--min-density` w tych produktach trzeba pominąć.
+Dla zadań wyłącznie CZ (godło CZ, `--country cz`, obszar w całości w CZ) komunikat
+mówi, że CUZK nie ma wyboru roku — `--year` trzeba pominąć (bez wskazania
+0.7.2 i `--min-year`, który bez PL jest odrzucany). Gdy podano już `--min-year`,
+komunikat nie powtarza jego podpowiedzi.
 
 ### 1.2 Selekcja obszaru i wybór kraju (`--country`)
 
@@ -177,6 +192,12 @@ kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:55
 ```bash
 kartograf landcover download --source bdot10k --teryt 1465
 kartograf landcover download --source bdot10k --teryt 1465 --format SHP   # archiwum .zip
+# Obszar z dwóch powiatów (TERYT z WFS PRG): pakiet KAŻDEGO powiatu, osobny plik
+kartograf landcover download --source bdot10k --bbox 340000,290000,350000,300000 -o ./dane
+#   -> Downloaded to: dane/bdot10k_teryt_0208.gpkg
+#   -> Downloaded to: dane/bdot10k_teryt_0224.gpkg
+#   (nazwa zawsze teryt_<TERYT> — pakiet to cały powiat; obszar żądania
+#    w sidecarze extra.parent_request; to samo dla --godlo i --geometry)
 kartograf landcover download --source corine --year 2018 --godlo N-34-130-D
 #   -> corine_2018_godlo_N-34-130-D.tif (bez credentials CLMS: .png z WMS)
 kartograf landcover download --source soilgrids --godlo N-34-130-D --property clay --depth 15-30cm
@@ -197,7 +218,10 @@ kartograf cache path
 ```
 
 `--teryt` dotyczy tylko BDOT10k (CORINE/SoilGrids: `--godlo`, `--bbox`,
-`--geometry`). CORINE bez credentials CLMS pobiera podgląd PNG (sekcja 6).
+`--geometry`). BDOT10k z `--bbox`/`--godlo`/`--geometry` pobiera wszystkie
+powiaty obszaru (lista z WFS PRG, odpowiedzi w cache metadanych — `cache
+stats` liczy je w `TERYT entries`); obszar bez powiatu (morze) to `Error:`.
+CORINE bez credentials CLMS pobiera podgląd PNG (sekcja 6).
 Warstwy BDOT10k, parametry SoilGrids i lata CORINE: PRD 3.5–3.7.
 
 ### 1.6 Kiedy `--scale` jest niezbędne
@@ -285,6 +309,9 @@ bbox = parser.get_bbox(crs="EPSG:2180")  # lub "EPSG:4326"
 # Pobieranie przez godło -> ASC (OpenData); hierarchia: download_hierarchy()
 manager = DownloadManager(output_dir="./data")
 path = manager.download_sheet("N-34-130-D-d-2-4")
+# NMT 5 m tylko w EVRF2007: resolution="5m" z vertical_crs="KRON86" w DownloadManager,
+# create_nmt_provider i download_pl_cutout -> ValidationError (od 0.7.1; wcześniej
+# cicha zamiana na EVRF2007 z ostrzeżeniem w logu)
 
 # Pobieranie przez bbox -> GeoTIFF (WCS) — tylko NMT 1m i tylko w układzie KRON86:
 # endpoint WCS dla EVRF2007 GUGiK wycofał (HTTP 404 od 2026-08), więc
@@ -299,6 +326,14 @@ path = kron.download_bbox(area, "my_area.tif")
 from kartograf import LandCoverManager
 lc = LandCoverManager()
 lc.download(teryt="1465")                   # BDOT10k (powiat)
+# BDOT10k z KAŻDEGO powiatu obszaru (bbox w dowolnym układzie, albo godlo=),
+# tylko wybrane warstwy -> [bdot10k_PTWP-SWKN-SWRM-SWRS_teryt_<T>.gpkg, ...]
+paths = lc.download_all_counties(
+    bbox=BBox(340000, 290000, 350000, 300000, "EPSG:2180"),
+    layers=["SWRS", "SWKN", "SWRM", "PTWP"],
+)
+# lc.download(bbox=...) dla BDOT10k: jeden powiat albo ValidationError z listą
+# kodów (kilka powiatów) / NoCoverageError (żaden)
 lc.set_provider("corine")
 lc.download(godlo="N-34-130-D", year=2018)  # CORINE
 
@@ -307,6 +342,14 @@ from kartograf import HSGCalculator
 calc = HSGCalculator()
 calc.calculate_hsg_by_godlo("N-34-130-D", Path("./hsg.tif"))
 stats = calc.get_hsg_statistics(Path("./hsg.tif"))
+
+# HSG z gotowych rastrow clay/sand/silt (g/kg) na jawnej siatce - bez pobierania
+from kartograf import BBox, hsg_from_rasters
+hsg_from_rasters(
+    Path("clay.tif"), Path("sand.tif"), Path("silt.tif"),
+    bbox=BBox(501000, 596000, 503000, 598000, "EPSG:2180"),
+    crs="EPSG:2180", pixel_m=100.0, output_path=Path("./hsg_100m.tif"),
+)
 
 # Scalony wycinek NMT PL w zadanym układzie (jeden GeoTIFF + sidecar)
 from kartograf import download_pl_cutout, MetadataCache
@@ -326,6 +369,42 @@ print(result.missing_sheets)
 # nieobsługiwany parametr); GridMismatchError (różne fazy siatki przy EPSG:2180).
 # Kroki osobno (własny provider/sesja/FileStorage):
 # prepare_pl_cutout -> select_pl_cutout_sheets -> run_pl_cutout.
+
+# Mozaika z lokalnych arkuszy (bez sieci) do katalogu projektu — wynik
+# i sidecar pod ścieżką podaną przez wywołującego, te same reguły siatki
+# co w download_pl_cutout (EPSG:2180 + różne fazy siatki -> GridMismatchError)
+from kartograf import build_cutout_from_sheets
+
+local = build_cutout_from_sheets(
+    [Path("./arkusze/N-34-130-D-d-2-3.asc"), Path("./arkusze/N-34-130-D-d-2-4.asc")],
+    BBox(530000, 382000, 530200, 382100, "EPSG:2180"),
+    "EPSG:2180",
+    Path("./projekt/nmt.tif"),     # sidecar: ./projekt/nmt.tif.meta.json
+    resolution="1m",
+    vertical_crs="EVRF2007",
+)
+# ValidationError przed zapisem: brak/nieczytelny arkusz (lista ścieżek)
+# albo output_path równy jednemu z arkuszy (nadpisałby dane wejściowe)
+
+# Zlewnia przygraniczna PL/CZ: podział obszaru na kraje i wycinek CZ
+# w układzie PL (EPSG:2180 + EVRF2007); siatka CZ startuje od zadanego obszaru
+from kartograf import download_cz_cutout, split_bbox_by_country
+
+area = BBox(16.19, 50.42, 16.25, 50.45, "EPSG:4326")  # Kudowa-Zdrój / Náchod
+parts = split_bbox_by_country(area, cz_crs="EPSG:2180")  # {"CZ": ..., "PL": ...}
+cz = download_cz_cutout(
+    parts["CZ"].bbox,
+    output_dir="./data",
+    target_crs="EPSG:2180",
+    vertical_crs="EVRF2007",
+    resolution="2m",          # "2m" DMR 5G / "5m" DMR 4G
+)
+print(cz.path)                # data/nmt/cz_dmr5g_evrf2007/bbox/<coords>.tif
+# all_nodata=True: część CZ bez ani jednego ważnego piksela (prostokąt
+# obwiedni CZ sięga w głąb Polski) — plik powstaje, flaga też w sidecarze
+print(cz.all_nodata)
+# Część PL (parts["PL"].bbox) pobierz przez download_pl_cutout (wyżej).
+# Własny provider: run_cz_cutout(provider, bbox, output_dir=, image_crs=).
 ```
 
 **Cache metadanych w bibliotece.** Bez `MetadataCache` provider NMT pyta
@@ -341,6 +420,8 @@ manager = DownloadManager(
     output_dir="./data",
     provider=create_nmt_provider(cache=MetadataCache()),  # albo GugikProvider(cache=...)
 )
+# Land cover: cache dla providera tworzonego po nazwie (BDOT10k: odpowiedzi PRG)
+lc = LandCoverManager(provider="bdot10k", cache=MetadataCache())
 ```
 
 Pozostałe elementy publicznego API (m.in. `GugikNmptProvider`,
@@ -363,7 +444,8 @@ rozwijane do arkuszy 1:10000 przez `download_hierarchy()` (ta zawsze zwraca
 
 **Podsumowania** (pola: dataclassy w kodzie, opis — ARCHITECTURE 4.1–4.3):
 
-- `DownloadManager.last_result` (`DownloadResult`) po liście/hierarchii:
+- `DownloadManager.last_result` (`DownloadResult`) po liście/hierarchii
+  (także po pojedynczym arkuszu — wynik jednoelementowy):
   `succeeded`, `failed`, `skipped`, `no_coverage` (arkusze, dla których
   GUGiK nie ma danych — `NoCoverageError`, podklasa `DownloadError`; są też
   w `failed`), pliki kampanii i `unverified` (sekcja 4).
@@ -371,6 +453,8 @@ rozwijane do arkuszy 1:10000 przez `download_hierarchy()` (ta zawsze zwraca
   `path`, `skipped`, `downloaded`, `reused`, `link`, `unverified`.
 - `PlCutoutResult` (wycinek): `path`, `skipped`, `missing_sheets`,
   `off_grid_sheets`, `partial_sheets`, `all_nodata`, `unverified`.
+- `CzCutoutResult` (wycinek CZ, `download_cz_cutout`/`run_cz_cutout`):
+  `path`, `skipped`, `all_nodata`.
 - `LazDownloadResult` (`download_laz_area`): `downloaded`, `skipped`,
   `failed`, `superseded` (kafle pominięte jako pokryte przez nowsze).
 
@@ -381,8 +465,8 @@ poziomy i pionowy pliku, nodata, żądanie, licencja, użyte transformacje,
 pochodzenie (`extra.source`), a dla zadań obszarowych `extra.parent_request`
 łączący pliki jednego zadania. Pełna tabela pól: ARCHITECTURE 3.2,
 `parent_request`: ARCHITECTURE 3.4. Sidecary pisze warstwa zarządzająca
-(`DownloadManager`, `LandCoverManager`, wycinek PL i kafle LAZ w bibliotece;
-CLI dla CZ), a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
+(`DownloadManager`, `LandCoverManager`, wycinki PL i CZ oraz kafle LAZ
+w bibliotece; dla godła CZ — CLI), a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
 Bezpośrednie wywołanie providera (np. `CuzkDmrProvider` z biblioteki) zapisuje
 sam plik danych, bez sidecara.
 
@@ -431,13 +515,20 @@ cache (7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania.
 - **Migracja:** brak; zwykły plik NMT/NMPT/orto w starej ścieżce
   standardowej jest traktowany jak nieznany — pierwsze uruchomienie pobiera
   go ponownie do `kampanie/` i zastępuje dowiązaniem.
+- **Układ wysokości rekordu:** rekord skorowidza NMT/NMPT musi deklarować
+  zadany układ (`ukladWspolrzednychPionowych`: `PL-KRON86-NH` dla KRON86,
+  `PL-EVRF2007-NH` dla EVRF2007); inna wartość kończy kampanię błędem przed
+  pobraniem pliku (arkusz: `Error:`/porażka wg listy, w `all` pozostałe
+  kampanie są pobierane). Rekord bez tego pola jest przyjmowany.
 - **Wycinek `--target-crs`** zawsze składa się z najnowszych kampanii i nie
   przyjmuje `--campaigns all`/`--min-year`.
 - **LAZ:** `--campaigns all` pobiera wszystkie kafle, których rama przecina
   obszar (bez deduplikacji ADR-029), `--min-year` to dolna granica roku
   kafla; `--min-year` i `--year` wykluczają się. LAZ nie używa dowiązań.
-- Składanie kilku kampanii w jedną powierzchnię nie jest częścią 0.7.0
-  (planowane na 0.7.1, SCOPE 3.1).
+  `--year` i `--min-density` są tylko dla LAZ (z innymi produktami: `Error:`,
+  sekcja 1.1).
+- Składanie kilku kampanii w jedną powierzchnię nie jest częścią
+  Kartografu (plany: SCOPE 3.1).
 
 Reguły szczegółowe: SCOPE 2.12, ARCHITECTURE 3.3 (reguła 6), ADR-030.
 
@@ -452,6 +543,12 @@ Reguły szczegółowe: SCOPE 2.12, ARCHITECTURE 3.3 (reguła 6), ADR-030.
   `silt` z SoilGrids, klasyfikuje teksturę wg trójkąta USDA (12 klas)
   i mapuje ją na grupy A–D; wynik to GeoTIFF 1–4 (0 = nodata) z sidecarem
   (PRD 3.8).
+- `hsg_from_rasters(clay, sand, silt, *, bbox, crs, pixel_m, output_path)`
+  robi to samo z gotowych rastrow (g/kg) na siatce o zadanym ukladzie
+  i pikselu, bez wartosci domyslnych. Nodata wejscia tylko z jego tagu,
+  a piksele poza zasiegiem wejscia dostaja `0`; sidecar zawiera skroty
+  SHA-256 plikow wejsciowych (`extra.source_files`: `name`, `file`,
+  `sha256`; `extra.source_layers` to jak w HSG lista nazw warstw).
 - Klasyfikacja używa **kanonicznych progów trójkąta USDA** (skośne granice
   `silt + 1.5*clay`, `silt + 2*clay`), wspólnych dla wersji skalarnej
   i tablicowej. Mapowanie tekstura → HSG jest świadomie łagodniejsze niż

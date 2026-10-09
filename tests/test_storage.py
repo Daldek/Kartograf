@@ -997,3 +997,34 @@ class TestCampaignPaths:
         assert st.delete("N-34-139-C-a-3-1", ".asc") is True
         assert not link.exists() and not sidecar.exists()
         assert camp.read_text() == "x" and camp.stat().st_nlink == 1
+
+
+def test_leading_zero_godlo_same_path_and_sidecar(tmp_path):
+    """A7: '036' and '36' -> one path, one canonical code everywhere."""
+    import json
+    from unittest.mock import Mock
+
+    from kartograf.download.manager import DownloadManager
+
+    storage = FileStorage(tmp_path, resolution="1m")
+    assert storage.get_path("M-33-036-A-a-1-1") == storage.get_path("M-33-36-A-a-1-1")
+
+    provider = Mock(
+        spec=["download", "descriptor_key", "supports_campaigns", "default_extension"]
+    )
+    provider.supports_campaigns = False
+    provider.descriptor_key = "pl.gugik.nmt_1m"
+    provider.default_extension = ".asc"
+
+    def fake_download(godlo, target):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("ncols 1\nnrows 1\nxllcorner 0\nyllcorner 0\ncellsize 1\n0\n")
+        return target
+
+    provider.download.side_effect = fake_download
+    manager = DownloadManager(output_dir=tmp_path, provider=provider)
+    path = manager.download_sheet("M-33-036-A-a-1-1")
+    assert path.name == "M-33-36-A-a-1-1.asc"
+    assert provider.download.call_args[0][0] == "M-33-36-A-a-1-1"
+    meta = json.loads(path.with_name(path.name + ".meta.json").read_text())
+    assert meta["request"]["sheet"] == "M-33-36-A-a-1-1"

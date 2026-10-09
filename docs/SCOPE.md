@@ -1,8 +1,8 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.15
-**Data:** 2026-10-08
+**Wersja:** 3.16
+**Data:** 2026-10-09
 **Status:** Wydanie v0.7.0 (2026-10-08)
 
 ---
@@ -382,7 +382,8 @@ from kartograf import (
 
 # Kampanie — poza zakresem 0.7.0 (odrzucone w ADR-030):
 - --campaign <id> (wybór jednej kampanii), strategie coverage i mosaic
-- Narzędzie składania kampanii w jedną powierzchnię — 0.7.1
+- Narzędzie składania kampanii w jedną powierzchnię — bez przypisanego
+  wydania (nie weszło do 0.7.1; ADR-030 errata 6)
 - Kampanie dla CZ (CUZK nie publikuje historii) — backlog po 0.7.0
 
 # Etap 3 (CZ):
@@ -415,7 +416,7 @@ from kartograf import (
   i .WFS_TIMEOUT (discovery), CorineProvider.DEFAULT_TIMEOUT,
   SoilGridsProvider.DEFAULT_TIMEOUT (bbox; godło: domyślne 60 s
   z LandCoverProvider.download_by_godlo), Bdot10kProvider.DEFAULT_TIMEOUT
-  (zapytanie TERYT _get_teryt_for_point: 30 s), _DEFAULT_TIMEOUT
+  (zapytanie TERYT w PRG, teryts_for_area: 30 s), _DEFAULT_TIMEOUT
   w providers/cuzk/dmr.py, HSGCalculator: parametr timeout=120
   (grep -rn "_TIMEOUT =" kartograf/providers)
 - Max 3 próby retry (nie konfigurowalne); ponawiane tylko błędy sieci,
@@ -744,9 +745,10 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-10-07 | 3.13 | Kampanie GUGiK (ADR-030): sekcja 2.12, uklad `kampanie/` z dowiazaniem w 2.11, odrzucone strategie w 3.1 |
 | 2026-10-08 | 3.14 | Przegląd dokumentacji: errata 5 ADR-030 (lokalna kampania przy awarii skorowidza), CZ i --min-year x --year w 2.12, sidecary (HSG, zasada ogólna), GPKG BDOT10k składany lokalnie, pełna lista eksportów w 2.10, drzewo modułów i tabele cache w 4.1, DLR w 5, bez wartości ulotnych w 6.2 i historii |
 | 2026-10-08 | 3.15 | Roadmapa do v1.0.0 (sekcja 3.3): komplet publicznych danych GUGiK, gotowe dane, manager danych (magazyn wersjonowany, manifest projektu), wtyczka QGIS, GUI webowe |
+| 2026-10-09 | 3.16 | Narzędzie składania kampanii (3.1) bez przypisanego wydania — nie weszło do 0.7.1 (ADR-030 errata 6) |
 
 ---
 
-**Wersja dokumentu:** 3.15
-**Data ostatniej aktualizacji:** 2026-10-08
+**Wersja dokumentu:** 3.16
+**Data ostatniej aktualizacji:** 2026-10-09
 **Status:** Wydanie v0.7.0 (2026-10-08)

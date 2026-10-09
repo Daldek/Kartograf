@@ -247,17 +247,15 @@ class TestSheetParserValidation:
 class TestSheetParserEdgeCases:
     """Tests of edge cases."""
 
-    def test_single_digit_slup(self):
-        """Test of a single-character column number."""
-        parser = SheetParser("M-1", uklad="1992")
-        assert parser.godlo == "M-1"
-        assert parser.components["slup"] == "1"
+    def test_single_digit_slup_out_of_range(self):
+        """A7: a one-digit column is outside the PL-1992 range (33-35)."""
+        with pytest.raises(ParseError, match="slup 1 "):
+            SheetParser("M-1", uklad="1992")
 
-    def test_double_digit_slup(self):
-        """Test of a two-character column number."""
-        parser = SheetParser("M-99", uklad="1992")
-        assert parser.godlo == "M-99"
-        assert parser.components["slup"] == "99"
+    def test_double_digit_slup_out_of_range(self):
+        """A7: column 99 is outside the PL-1992 range (33-35)."""
+        with pytest.raises(ParseError, match="slup 99 "):
+            SheetParser("M-99", uklad="1992")
 
     def test_three_digit_arkusz_200k(self):
         """Test of a three-digit 200k sheet number."""
@@ -1473,3 +1471,87 @@ class TestSheetParserBBoxViaCoreBBox:
 
     def test_find_sheets_point_bbox_still_allowed(self):
         assert len(find_sheets_for_bbox(BBox(19.5, 50.5, 19.5, 50.5, "EPSG:4326"))) == 1
+
+
+class TestNomenclatureRange:
+    """A7: codes outside the PL-1992 nomenclature fail before any network call."""
+
+    @pytest.mark.parametrize(
+        "godlo",
+        [
+            "X-99-1-D-d-3",  # band and column out of range (bbox was inf)
+            "Z-99-144-D-d-4-4",
+            "N-34-999-D",  # 1:200k sheet number > 144 (bbox y = -2.2 mln)
+            "N-34-0-A",  # sheet number 0
+            "L-34-10-A",  # band outside M/N
+            "N-32-10-A",  # column outside 33-35
+            "N-36",  # 1:1M sheet outside Poland
+        ],
+    )
+    def test_out_of_range_raises_parse_error(self, godlo):
+        with pytest.raises(ParseError, match="poza zakresem"):
+            SheetParser(godlo)
+
+    def test_parse_error_is_validation_error(self):
+        from kartograf.exceptions import ValidationError
+
+        with pytest.raises(ValidationError):
+            SheetParser("N-34-999-D")
+
+    @pytest.mark.parametrize(
+        "godlo",
+        ["M-33", "N-35", "M-33-1-A", "N-34-144-D-d-4-4", "M-34-B"],
+    )
+    def test_edges_of_range_accepted(self, godlo):
+        assert SheetParser(godlo).godlo == godlo
+
+
+class TestCanonicalNumbers:
+    """A7: one canonical form - numbers without leading zeros (GUGiK index form)."""
+
+    @pytest.mark.parametrize(
+        ("given", "canonical"),
+        [
+            ("M-33-036-A", "M-33-36-A"),
+            ("m-33-008-a-a-3-1", "M-33-8-A-a-3-1"),
+            ("N-034-130-D", "N-34-130-D"),
+            ("M-33-36-A", "M-33-36-A"),
+        ],
+    )
+    def test_leading_zeros_stripped(self, given, canonical):
+        assert SheetParser(given).godlo == canonical
+
+    def test_zero_padded_and_plain_are_equal(self):
+        assert SheetParser("M-33-036-A") == SheetParser("M-33-36-A")
+
+    def test_pl2000_unchanged(self):
+        assert SheetParser("7.124.07.24").godlo == "7.124.07.24"
+
+
+class TestFindSheetsOutsideRange:
+    """A7: a bbox reaching outside M/N 33-35 gives only in-range codes, no error."""
+
+    def test_bbox_crossing_12e_returns_only_m33_sheets(self):
+        from kartograf.core.bbox import BBox
+
+        sheets = find_sheets_for_bbox(
+            BBox(11.9, 50.4, 12.2, 50.6, "EPSG:4326"), "1:100000"
+        )
+        assert sheets
+        assert all(s.startswith("M-33-") for s in sheets)
+
+    def test_bbox_crossing_48n_returns_only_m_band_sheets(self):
+        """Columns in range, band L (44-48N) outside it: only M-33 codes."""
+        from kartograf.core.bbox import BBox
+
+        sheets = find_sheets_for_bbox(
+            BBox(15.0, 47.9, 15.2, 48.1, "EPSG:4326"), "1:100000"
+        )
+        assert sheets
+        assert all(s.startswith("M-33-") for s in sheets)
+
+    def test_bbox_fully_outside_poland_returns_empty(self):
+        from kartograf.core.bbox import BBox
+
+        bbox = BBox(5.0, 45.0, 5.5, 45.5, "EPSG:4326")
+        assert find_sheets_for_bbox(bbox, "1:100000") == []

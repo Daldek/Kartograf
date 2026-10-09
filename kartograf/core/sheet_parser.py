@@ -104,6 +104,11 @@ class SheetParser:
     # Allowed coordinate systems
     VALID_UKLADY = ("1992", "2000")
 
+    # PL-1992 nomenclature range (A7): the 1:1M sheets covering Poland
+    VALID_BANDS = ("M", "N")
+    VALID_COLUMNS = range(33, 36)
+    VALID_SHEET_NUMBERS = range(1, 145)
+
     def __init__(self, godlo: str, uklad: str | None = None):
         """
         Initialize the parser for the given sheet code.
@@ -172,6 +177,9 @@ class SheetParser:
             # Parse the components
             self._components = self._parse_components()
 
+            # Reject codes outside the nomenclature range (A7)
+            self._validate_range()
+
     def _normalize_godlo(self, godlo: str) -> str:
         """
         Normalize the sheet code to the standard format.
@@ -205,6 +213,10 @@ class SheetParser:
             elif i == 4 and len(part) == 1 and part.upper() in "ABCD":
                 # 50k sheet (a-d) - lowercase
                 normalized.append(part.lower())
+            elif part.isdecimal():
+                # Numbers without leading zeros - the GUGiK index form
+                # (e.g. 'M-33-8-A-a-3-1'); '036' and '36' are one sheet (A7)
+                normalized.append(part.lstrip("0") or "0")
             else:
                 # Remaining parts unchanged
                 normalized.append(part)
@@ -290,6 +302,31 @@ class SheetParser:
             components[self.COMPONENT_NAMES[i]] = value
 
         return components
+
+    def _validate_range(self) -> None:
+        """Reject codes outside the PL-1992 nomenclature range (before any network).
+
+        Raises
+        ------
+        ParseError
+            Band outside M/N, column outside 33-35 or 1:200k sheet number
+            outside 1-144.
+        """
+        problems = []
+        pas = self._components["pas"]
+        slup = int(self._components["slup"])
+        if pas not in self.VALID_BANDS:
+            problems.append(f"pas {pas} (dozwolone: M, N)")
+        if slup not in self.VALID_COLUMNS:
+            problems.append(f"slup {slup} (dozwolone: 33-35)")
+        sheet = self._components.get("arkusz_200k", "")
+        if sheet.isdigit() and int(sheet) not in self.VALID_SHEET_NUMBERS:
+            problems.append(f"arkusz {sheet} (dozwolone: 1-144)")
+        if problems:
+            raise ParseError(
+                f"Nieprawidlowe godlo: '{self._original_godlo}' — poza zakresem "
+                f"nomenklatury PL-1992: {', '.join(problems)}"
+            )
 
     @property
     def godlo(self) -> str:
@@ -1031,7 +1068,8 @@ def _find_1m_sheets(wgs_bbox: BBox) -> list[str]:
     Returns
     -------
     list[str]
-        List of 1:1M sheet codes
+        1:1M sheet codes within the PL-1992 nomenclature range (bands M/N,
+        columns 33-35)
     """
     south, north = wgs_bbox.min_y, wgs_bbox.max_y
     west, east = wgs_bbox.min_x, wgs_bbox.max_x
@@ -1052,8 +1090,11 @@ def _find_1m_sheets(wgs_bbox: BBox) -> list[str]:
     result = []
     for row in range(min_row, max_row + 1):
         pas = chr(ord("A") + row)
+        if pas not in SheetParser.VALID_BANDS:
+            continue  # A7: outside the PL-1992 nomenclature - no sheets there
         for slup in range(min_slup, max_slup + 1):
-            result.append(f"{pas}-{slup}")
+            if slup in SheetParser.VALID_COLUMNS:
+                result.append(f"{pas}-{slup}")
 
     return result
 

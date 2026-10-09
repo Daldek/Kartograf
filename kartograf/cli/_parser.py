@@ -264,8 +264,9 @@ def create_parser() -> argparse.ArgumentParser:
         "--year",
         type=int,
         metavar="YYYY",
-        help="LAZ only: restrict to a single acquisition year "
-        "(default: newest available per tile); wyklucza sie z --min-year",
+        help="LAZ only (--product laz; an error with other products): restrict "
+        "to a single acquisition year (default: newest available per tile); "
+        "wyklucza sie z --min-year",
     )
     download_parser.add_argument(
         "--campaigns",
@@ -286,7 +287,8 @@ def create_parser() -> argparse.ArgumentParser:
         "--min-density",
         type=int,
         metavar="N",
-        help="LAZ only: keep tiles with point density >= N points/m²",
+        help="LAZ only (--product laz; an error with other products): keep "
+        "tiles with point density >= N points/m²",
     )
     download_parser.add_argument(
         "--geometry",
