@@ -154,6 +154,15 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Komunikat `Error: --campaigns all nie dziala z --target-crs` nie odsyla
   juz do "narzedzia 0.7.1" (skladanie kampanii nie ma przypisanego wydania,
   ADR-030 errata 6); kod wyjscia bez zmian.
+- `kartograf download --year RRRR` i `--min-density N` z `--product`
+  nmt/nmpt/orto koncza sie `Error:` i kodem 1 przed siecia (dotad opcje byly
+  po cichu pomijane: kod 0 i najnowsze dane). Dotyczy wszystkich torow
+  (godlo, hierarchia, lista arkuszy, `--bbox`, `--geometry`, `--target-crs`,
+  `--country auto`, CZ); `--product laz` bez zmian. Wybor roku dla
+  NMT/NMPT/orto bedzie w 0.7.2. Co zrobic: pomin opcje albo — dla roku —
+  uzyj `--min-year RRRR` (najnowsza kampania nie starsza niz podany rok;
+  tylko PL, bez `--target-crs`); skrypty przekazujace `--year`/
+  `--min-density` do innych produktow niz LAZ musza je usunac.
 
 ### Naprawione
 

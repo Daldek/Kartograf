@@ -123,6 +123,11 @@
 > zabitych). Galaz NIE jest zmergowana do `develop`, NIE jest wydana i nic
 > nie wypchnieto; merge i wydanie 0.7.1 czekaja na decyzje uzytkownika.
 > Drobiazgi odlozone z review: sekcja "Po 0.7.1" nizej.
+> **Task 14 (2026-10-09):** `--year`/`--min-density` z produktem innym niz
+> LAZ to `Error:` i kod 1 (dotad cicho pomijane); ostatnia zmiana przed
+> wydaniem 0.7.1. Decyzje uzytkownika z tego dnia (wycinki PL z WCS, wybor
+> roku `--year`/`--min-year`/`--max-year`, drugie dowiazanie do pelnego lotu,
+> domyslne z inwentaryzacji) sa w backlogu "Do 0.7.2" (sekcja Backlog).
 > **Otwarte drobiazgi:** drobne otwarte punkty ADR-030 w dzienniku nizej
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
@@ -1429,6 +1434,48 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
 
 ## Backlog
 
+#### Do 0.7.2 (decyzje uzytkownika 2026-10-09)
+
+Decyzje z 2026-10-09 (po Task 14); kazda pozycja zaczyna sie od ustalen,
+a implementacja dopiero po specu/planie i zatwierdzeniu.
+
+- [ ] **(a) Wycinki PL (`--target-crs`) z WCS zamiast z arkuszy** (odwraca
+  ADR-027, wymaga nowego ADR):
+  - EVRF2007: `https://mapy.geoportal.gov.pl/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModel`,
+    coverage `DTM_PL-EVRF2007-NH`, `FORMAT=image/x-aaigrid`; odpowiedz to
+    multipart/related (ASC + aux.xml + prj, bez linii NODATA);
+  - KRON86: `.../WCS/DigitalTerrainModelFormatTIFF`, coverage
+    `DTM_PL-KRON86-NH_TIFF`, `image/tiff`, float32;
+  - data pobrania w nazwie pliku wycinka; wycinki bez flag roku i kampanii;
+    wycinki 5 m znikaja; host bardzo niestabilny (EOF TLS, timeouty) —
+    ponowienia obowiazkowe;
+  - biblioteka: wpis WCS EVRF2007 (`providers/pl/gugik.py`,
+    `DigitalTerrainModelFormatTIFFEVRF2007`, `DTM_PL-EVRF2007-NH_TIFF`)
+    wskazuje nieistniejacy endpoint i coverage (zob. tez WCS EVRF2007 = 404
+    od 2026-08-11) — do poprawy.
+- [ ] **(b) Wybor roku `--year`/`--min-year`/`--max-year`** wg specu
+  `docs/superpowers/specs/2026-10-09-year-range-selection-design.md`
+  (NMT/NMPT/orto/LAZ; do czasu wdrozenia `--year` poza LAZ to `Error:`,
+  Task 14). Decyzje: Q2 — dowiazanie do najnowszego zostaje, pobierane sa
+  wszystkie loty z przedzialu i dochodzi `Info:` o pokryciu; Q1 — zatrzymanie
+  zadania obowiazkowe; Q4-Q8 przyjete; `newest` + `--min-year` zostaje;
+  `newest` + `--max-year` (i `--year`) = blad; wycinki nie przyjmuja flag
+  roku. Spec do uaktualnienia (m.in. wersja docelowa 0.7.1 -> 0.7.2) przed
+  planem.
+- [ ] **(c) Drugie dowiazanie do najnowszego PELNEGO lotu**
+  (`calyArkuszWypelnionyTrescia` = TAK) obok standardowego dowiazania do
+  najnowszego. Proponowane osobne drzewo:
+  `<segment>/pelne/<hierarchia>/<godlo>.<ext>`. Otwarte: arkusze brzegowe,
+  ktore nigdy nie sa pelne; czy pobierac najnowszy pelny lot, gdy pobrano
+  tylko najnowszy.
+- [ ] **(d) Z inwentaryzacji wartosci domyslnych:**
+  - `--country auto` PL+CZ bez `--vertical-crs`: mieszane uklady wysokosci,
+    cicho (szczegoly: "Ryzyko KRON86 3" wyzej);
+  - GPKG z wieloma warstwami bez `--layer` cicho uzywa pierwszej warstwy
+    (`core/geometry.py:351-357`, tylko `logger.info`);
+  - `mosaic_and_crop(dtype=None)` bierze typ pierwszego zrodla
+    (`transport/mosaic.py:174`, sygnatura; typ z `src.dtypes[0]`).
+
 #### Do 0.8.0 — zmiany lamiace CLI skonsolidowane w jednym wydaniu (2026-10-08)
 
 0.8.0 lamie CLI przez magazyn wersjonowany (spec
@@ -1581,6 +1628,17 @@ liczony w strumieniu `download_to` zostaje w magazynie 0.8.0.
   konczy sie `Error:` z remedium i kodem 1 w `_resolve_pl_sentinels`, przed
   siecia (regula `require_nmt_vertical_crs`); `--resolution 5m` bez
   `--vertical-crs` nadal pobiera EVRF2007.
+- [x] **`--year`/`--min-density` tylko dla LAZ** (Task 14; decyzja
+  uzytkownika 2026-10-09): `kartograf download --year RRRR` i
+  `--min-density N` z `--product nmt|nmpt|orto` byly po cichu pomijane (kod
+  0, najnowsze dane). Teraz `Error:` na stderr i kod 1 w `cmd_download`
+  (`_reject_laz_only_opts`), przed jakimkolwiek wyborem kraju, siecia i
+  tworzeniem katalogu — wspolny punkt dla wszystkich torow (godlo,
+  hierarchia, lista arkuszy, `--bbox`, `--geometry`, wycinek `--target-crs`,
+  `--country auto`, CZ). Komunikat `--year` wskazuje 0.7.2 i `--min-year`;
+  `--min-density` — pominiecie opcji. `--product laz` bez zmian. Biblioteka
+  nie ma tych opcji poza LAZ (`select_tiles(year=, min_density=)`), wiec bez
+  zmian w API.
 - [x] **Ryzyko KRON86 1 — uklad wysokosci tylko przez endpoint** (rekord
   innego ukladu przyjmowany bez sladu w sidecarze) — zamkniete Task 12 (a);
   deklaracja rekordu w `extra.source.declared_vertical_crs` (Task 3).

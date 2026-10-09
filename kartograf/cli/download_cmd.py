@@ -232,6 +232,39 @@ def _campaign_opts(args: argparse.Namespace) -> tuple[str, int | None]:
     return getattr(args, "campaigns", "newest"), getattr(args, "min_year", None)
 
 
+def _reject_laz_only_opts(args: argparse.Namespace) -> bool:
+    """
+    ``--year``/``--min-density`` apply to ``--product laz`` only (0.7.1).
+
+    Before 0.7.1 both were read on the LAZ path alone and silently ignored for
+    nmt/nmpt/orto (the user got the newest data and exit code 0). True (after an
+    ``Error:`` on stderr) when one of them is given with another product; checked
+    in ``cmd_download`` before any country dispatch, so no path (sheet code,
+    hierarchy, sheet list, ``--bbox``, ``--geometry``, cutout, CZ) reaches the
+    network. Year selection for NMT/NMPT/orto is planned for 0.7.2.
+    """
+    product = getattr(args, "product", "nmt")
+    if product == "laz":
+        return False
+    if getattr(args, "year", None) is not None:
+        print(
+            f"Error: --year dziala tylko z --product laz (podano {product}); "
+            "wybor roku dla NMT/NMPT/orto bedzie w 0.7.2. Teraz uzyj "
+            "--min-year RRRR (najnowsza kampania nie starsza niz podany rok; "
+            "tylko PL, bez --target-crs) albo pomin --year",
+            file=sys.stderr,
+        )
+        return True
+    if getattr(args, "min_density", None) is not None:
+        print(
+            f"Error: --min-density dziala tylko z --product laz (podano "
+            f"{product}); pomin --min-density",
+            file=sys.stderr,
+        )
+        return True
+    return False
+
+
 def _reject_campaign_opts_without_pl(
     args: argparse.Namespace, countries: tuple[str, ...]
 ) -> bool:
@@ -886,6 +919,10 @@ def cmd_download(args: argparse.Namespace) -> int:
     except ValidationError as e:
         # the library message names the parameter; the CLI speaks of the flag
         print(f"Error: {str(e).replace('min_year', '--min-year')}", file=sys.stderr)
+        return 1
+
+    # 0.7.1: --year/--min-density are LAZ-only; every path below would ignore them
+    if _reject_laz_only_opts(args):
         return 1
 
     country_flag = getattr(args, "country", "auto")
