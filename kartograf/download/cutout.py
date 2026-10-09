@@ -861,7 +861,7 @@ def download_pl_cutout(
     Geometry mode: ``bbox`` is the geometry envelope (e.g.
     ``get_overall_bbox(path, target_crs="EPSG:2180")``), ``geometry`` — the file.
     5m with KRON86 = ``ValidationError`` before the factory (5 m exists only
-    in EVRF2007; the CLI swaps the datum itself). The provider and
+    in EVRF2007; the CLI rejects the pair too, 0.7.1). The provider and
     session come from the factory; ``cache`` (``MetadataCache`` or ``None``)
     goes to the provider — index records are read and written only through
     the cache. ``force=True`` does NOT bypass the record cache by itself: to

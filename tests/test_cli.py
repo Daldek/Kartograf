@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest.mock import ANY, Mock, patch
 
 import pytest  # noqa: F401 - required for fixtures
+import shapefile
 from pyproj import CRS
 
 from kartograf.cli.commands import (
@@ -1369,6 +1370,29 @@ _5M_KRON86_ERROR = (
 )
 
 
+def _write_pl_shp_2180(directory):
+    """Small shapefile (a 1 km polygon near Krakow) in EPSG:2180 — offline data."""
+    shp_path = directory / "area_pl.shp"
+    with shapefile.Writer(str(shp_path)) as w:
+        w.field("name", "C", 40)
+        w.poly(
+            [
+                [
+                    (420000, 230000),
+                    (421000, 230000),
+                    (421000, 231000),
+                    (420000, 231000),
+                    (420000, 230000),
+                ]
+            ]
+        )
+        w.record("area1")
+    shp_path.with_suffix(".prj").write_text(
+        CRS.from_epsg(2180).to_wkt(), encoding="utf-8"
+    )
+    return shp_path
+
+
 class TestNmt5mKron86Rejected:
     """0.7.1: an explicit ``--resolution 5m --vertical-crs KRON86`` is a CLI
     error (code 1) before any provider or network call - like the library
@@ -1383,8 +1407,17 @@ class TestNmt5mKron86Rejected:
             ["--bbox", "630000,480000,637000,487000", "--country", "pl"],
             ["--bbox", "630000,480000,637000,487000"],
             ["--bbox", "630000,480000,637000,487000", "--target-crs", "EPSG:2180"],
+            # PL+CZ border area: under auto KRON86 decides PL, CZ never runs
+            ["--bbox", "18.5,49.7,18.9,49.95", "--bbox-crs", "EPSG:4326"],
         ],
-        ids=["godlo", "godlo-hierarchy", "bbox-pl", "bbox-auto", "bbox-cutout"],
+        ids=[
+            "godlo",
+            "godlo-hierarchy",
+            "bbox-pl",
+            "bbox-auto",
+            "bbox-cutout",
+            "bbox-auto-pl-cz-border",
+        ],
     )
     @patch("kartograf.cli.download_cmd._run_cz")
     @patch("kartograf.cli.download_cmd._download_pl_cutout")
@@ -1423,6 +1456,54 @@ class TestNmt5mKron86Rejected:
         mock_manager_cls.assert_not_called()
         mock_create.assert_not_called()
         mock_find.assert_not_called()
+        mock_cutout.assert_not_called()
+        mock_run_cz.assert_not_called()
+        assert not (tmp_path / "out").exists()
+
+    @pytest.mark.parametrize(
+        "extra", [[], ["--target-crs", "EPSG:2180"]], ids=["sheets", "cutout"]
+    )
+    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.cli.download_cmd._download_pl_cutout")
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_geometry_explicit_kron86_with_5m_is_error(
+        self,
+        mock_manager_cls,
+        mock_create,
+        mock_find_geom,
+        mock_cutout,
+        mock_run_cz,
+        capsys,
+        tmp_path,
+        extra,
+    ):
+        shp = _write_pl_shp_2180(tmp_path)
+
+        result = main(
+            [
+                "download",
+                "--geometry",
+                str(shp),
+                *extra,
+                "--resolution",
+                "5m",
+                "--vertical-crs",
+                "KRON86",
+                "-o",
+                str(tmp_path / "out"),
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        err = capsys.readouterr().err
+        assert _5M_KRON86_ERROR in err
+        assert "zamieniony" not in err
+        mock_manager_cls.assert_not_called()
+        mock_create.assert_not_called()
+        mock_find_geom.assert_not_called()
         mock_cutout.assert_not_called()
         mock_run_cz.assert_not_called()
         assert not (tmp_path / "out").exists()
