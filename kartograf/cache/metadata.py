@@ -4,7 +4,9 @@ Metadata cache using SQLite for Kartograf.
 This module provides the MetadataCache class that caches:
 - Index (skorowidz) records (product/resolution/vertical CRS/sheet code -> metadata or
 no coverage)
-- TERYT code lookups (point -> TERYT) for BDOT10k provider
+- TERYT code lookups (point -> TERYT, ``teryt_cache``) for BDOT10k provider
+- Powiat TERYT codes of an EPSG:2180 area (``teryt_bbox_cache``, PRG WFS
+  discovery; also an empty list = sea/abroad)
 - Sheet index lookups (system + sheet code -> payload) for CUZK sheet providers
   (sheet_cache, fixed TTL of 30 days)
 
@@ -25,7 +27,9 @@ any ``sqlite3.Error`` while opening, reading or writing (a corrupted or
 truncated file, no read permission, a lock held too long by another
 process) switches the instance into a disabled state for the rest of its
 life - reads are misses, writes are no-ops - and reports it exactly once
-(``logger.warning`` or the ``on_disabled`` callback).
+(``logger.warning`` or the ``on_disabled`` callback). With
+``MetadataCache(strict=True)`` the same state raises ``CacheError`` instead
+(on the failing call and on every later one).
 """
 
 import json
@@ -37,6 +41,12 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+from kartograf.exceptions import CacheError
+
+if TYPE_CHECKING:
+    from kartograf.core.bbox import BBox
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +74,12 @@ class MetadataCache:
     """
     SQLite-based metadata cache for Kartograf.
 
-    Caches WMS lookup results (skorowidz records and TERYT codes, TTL 7 days)
-    and CZ sheet index entries (``sheet_cache``, SM5, TTL 30 days) to avoid
-    repeated network requests for the same data. ``refresh=True`` turns
+    Caches lookup results to avoid repeated network requests for the same
+    data. Tables: ``record_cache`` (skorowidz records), ``campaigns_cache``
+    (campaign lists), ``teryt_cache`` (point -> powiat TERYT),
+    ``teryt_bbox_cache`` (EPSG:2180 area -> powiat TERYT codes, PRG WFS) -
+    all with the TTL (default 7 days) - and ``sheet_cache`` (CZ sheet index,
+    SM5, fixed TTL of 30 days). ``refresh=True`` turns
     every read into a miss while writes still happen (CLI ``--force``).
 
     Parameters
@@ -82,7 +95,8 @@ class MetadataCache:
         30 days (SHEET_TTL_SECONDS).
     refresh : bool, optional
         Refresh mode (E14, CLI ``--force``): every read
-        (``get_record``/``get_teryt``/``get_sheet``) is a miss, while writes
+        (``get_record``/``get_campaigns``/``get_teryt``/
+        ``get_teryts_for_bbox``/``get_sheet``) is a miss, while writes
         work normally - a freshly fetched record (or a confirmed lack of
         coverage) replaces the old entry, so the next run WITHOUT ``--force``
         gets the new record. Default ``False``.
@@ -90,6 +104,10 @@ class MetadataCache:
         Called once with a user-facing message when the cache gets disabled
         by an SQLite error (see the module docstring). Default ``None`` =
         the message goes to ``logger.warning`` instead.
+    strict : bool, optional
+        Strict mode (A9): an SQLite error raises ``CacheError`` on the
+        failing call and on every later call, instead of disabling the cache
+        silently. ``on_disabled`` is still called once. Default ``False``.
 
     Examples
     --------
@@ -106,9 +124,13 @@ class MetadataCache:
         ttl_seconds: int = DEFAULT_TTL_SECONDS,
         refresh: bool = False,
         on_disabled: Callable[[str], None] | None = None,
+        strict: bool = False,
     ):
         self._refresh = refresh
         self._on_disabled = on_disabled
+        self._strict = strict
+        # Message of the error that disabled the cache (for strict mode).
+        self._error_message: str = ""
         # First SQLite error; once set, the cache is disabled (guarded by
         # _write_lock, so concurrent threads report it only once).
         self._error: sqlite3.Error | None = None
@@ -142,12 +164,17 @@ class MetadataCache:
         try:
             yield
         except sqlite3.Error as e:
-            self._disable(e)
+            message = self._disable(e)
+            if self._strict:
+                raise CacheError(message) from e
 
-    def _disable(self, error: sqlite3.Error) -> None:
-        """Disable the cache and report it once (caller holds ``_write_lock``)."""
+    def _disable(self, error: sqlite3.Error) -> str:
+        """Disable the cache and report it once (caller holds ``_write_lock``).
+
+        Returns the message describing why the cache is disabled.
+        """
         if self._error is not None:
-            return
+            return self._error_message
         self._error = error
         if self._conn is not None:
             with suppress(sqlite3.Error):
@@ -163,10 +190,12 @@ class MetadataCache:
                 f"cache metadanych nieczytelny ({self._db_path}): {error} — "
                 f"praca bez cache; uzyj `kartograf cache clear` albo usun plik"
             )
+        self._error_message = message
         if self._on_disabled is not None:
             self._on_disabled(message)
         else:
             logger.warning(message)
+        return message
 
     def _existing_connection(self) -> sqlite3.Connection | None:
         """Return the connection only if the database file already exists.
@@ -178,6 +207,8 @@ class MetadataCache:
         or process is picked up. Caller must hold ``_write_lock``.
         """
         if self._error is not None:
+            if self._strict:
+                raise CacheError(self._error_message)
             return None
         if self._conn is None and not self._db_path.exists():
             return None
@@ -194,6 +225,8 @@ class MetadataCache:
         mode and creates missing tables (also migrating an older database).
         """
         if self._error is not None:
+            if self._strict:
+                raise CacheError(self._error_message)
             return None
         if self._conn is not None:
             return self._conn
@@ -250,6 +283,19 @@ class MetadataCache:
                 teryt TEXT NOT NULL,
                 cached_at REAL NOT NULL,
                 PRIMARY KEY (x, y)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS teryt_bbox_cache (
+                min_x REAL NOT NULL,
+                min_y REAL NOT NULL,
+                max_x REAL NOT NULL,
+                max_y REAL NOT NULL,
+                teryts TEXT NOT NULL,
+                cached_at REAL NOT NULL,
+                PRIMARY KEY (min_x, min_y, max_x, max_y)
             )
             """
         )
@@ -515,6 +561,64 @@ class MetadataCache:
             conn.commit()
         logger.debug(f"Cached TERYT {teryt} for ({x}, {y})")
 
+    def get_teryts_for_bbox(self, bbox: "BBox") -> list[str] | None:
+        """Cached powiat TERYT codes of an EPSG:2180 area (None = miss/expired).
+
+        An empty list is a valid cached answer (no powiat: sea, abroad).
+        Always None in ``refresh`` mode. Lock guards the read too - see the
+        comment in get_record().
+        """
+        if self._refresh:
+            return None
+        key = (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
+        with self._write_lock, self._db_errors():
+            conn = self._existing_connection()
+            if conn is None:
+                return None
+            row = conn.execute(
+                "SELECT teryts, cached_at FROM teryt_bbox_cache "
+                "WHERE min_x=? AND min_y=? AND max_x=? AND max_y=?",
+                key,
+            ).fetchone()
+            if row is None:
+                return None
+            teryts, cached_at = row
+            if time.time() - cached_at >= self._ttl_seconds:
+                logger.debug(f"TERYT area cache expired for {key}")
+                # Same critical section - threading.Lock is not reentrant.
+                conn.execute(
+                    "DELETE FROM teryt_bbox_cache "
+                    "WHERE min_x=? AND min_y=? AND max_x=? AND max_y=?",
+                    key,
+                )
+                conn.commit()
+                return None
+            logger.debug(f"TERYT area cache hit for {key}: {teryts}")
+            return list(json.loads(teryts))
+        return None  # disabled by an SQLite error (_db_errors)
+
+    def set_teryts_for_bbox(self, bbox: "BBox", teryts: list[str]) -> None:
+        """Cache the powiat TERYT codes of an EPSG:2180 area (also an empty list)."""
+        with self._write_lock, self._db_errors():
+            conn = self._connection()
+            if conn is None:
+                return
+            conn.execute(
+                "INSERT OR REPLACE INTO teryt_bbox_cache "
+                "(min_x, min_y, max_x, max_y, teryts, cached_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    bbox.min_x,
+                    bbox.min_y,
+                    bbox.max_x,
+                    bbox.max_y,
+                    json.dumps(list(teryts)),
+                    time.time(),
+                ),
+            )
+            conn.commit()
+        logger.debug(f"Cached TERYT codes {teryts} for area {bbox}")
+
     # =========================================================================
     # Sheet cache (CZ sheet index: KladyMapovychListu)
     # =========================================================================
@@ -581,6 +685,7 @@ class MetadataCache:
             conn.execute("DELETE FROM record_cache")
             conn.execute("DELETE FROM campaigns_cache")
             conn.execute("DELETE FROM teryt_cache")
+            conn.execute("DELETE FROM teryt_bbox_cache")
             conn.execute("DELETE FROM sheet_cache")
             conn.commit()
             logger.info("Cache cleared")
@@ -604,7 +709,8 @@ class MetadataCache:
             Dictionary with keys:
             - record_count: number of cached index entries
             - campaign_count: number of cached campaign lists
-            - teryt_count: number of cached TERYT entries
+            - teryt_count: number of cached TERYT entries: points
+              (``teryt_cache``) and areas (``teryt_bbox_cache``)
             - sheet_count: number of cached sheet entries
             - db_size_bytes: size of the database file in bytes
             - db_path: path to the database file
@@ -613,13 +719,13 @@ class MetadataCache:
             - error: ``str`` of the SQLite error that disabled the cache
               (counts are then 0), ``None`` while it works
         """
-        counts: tuple[int, ...] = (0, 0, 0, 0)
+        counts: tuple[int, ...] = (0, 0, 0, 0, 0)
         # Lock guards these reads too - see comment in get_record().
         with self._write_lock, self._db_errors():
             conn = self._existing_connection()
             if conn is None:
                 # Nothing cached yet - report zeros without creating the file.
-                counts = (0, 0, 0, 0)
+                counts = (0, 0, 0, 0, 0)
             else:
                 counts = tuple(
                     conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
@@ -627,10 +733,12 @@ class MetadataCache:
                         "record_cache",
                         "campaigns_cache",
                         "teryt_cache",
+                        "teryt_bbox_cache",
                         "sheet_cache",
                     )
                 )
-        record_count, campaign_count, teryt_count, sheet_count = counts
+        record_count, campaign_count, teryt_points, teryt_areas, sheet_count = counts
+        teryt_count = teryt_points + teryt_areas
 
         db_exists = self._db_path.exists()
         db_size = self._db_path.stat().st_size if db_exists else 0
@@ -667,6 +775,8 @@ class MetadataCache:
             campaign_deleted = conn.execute("SELECT changes()").fetchone()[0]
             conn.execute("DELETE FROM teryt_cache WHERE cached_at < ?", (cutoff,))
             teryt_deleted = conn.execute("SELECT changes()").fetchone()[0]
+            conn.execute("DELETE FROM teryt_bbox_cache WHERE cached_at < ?", (cutoff,))
+            teryt_deleted += conn.execute("SELECT changes()").fetchone()[0]
             sheet_cutoff = now - SHEET_TTL_SECONDS
             conn.execute("DELETE FROM sheet_cache WHERE cached_at < ?", (sheet_cutoff,))
             sheet_deleted = conn.execute("SELECT changes()").fetchone()[0]

@@ -1835,92 +1835,102 @@ uruchomienia, gdy dane sa juz lokalnie; `Warning:` zachowuje jawnosc.
 Biblioteka bez `MetadataCache` pyta skorowidz przy kazdym pobraniu arkusza —
 zalecane podpiecie cache (`docs/USAGE.md` sekcja 2).
 
+**Errata 6 (2026-10-09, domkniecie 0.7.1, przeglad dokumentacji):**
+zapowiedz "narzedzie skladania kampanii w jedna powierzchnie — 0.7.1"
+(Kontekst, opcja `mosaic`, decyzja, (j)) nie zostala zrealizowana: zakres
+0.7.1 wyznaczyly wymagania Hydrografa (`docs/PROGRESS.md`, backlog "Do 0.7.1
+— wymagania Hydrografa"), a skladanie kampanii nie jest przypisane do
+zadnego wydania. Decyzja bez zmian (`mosaic` odrzucona jako strategia
+pobierania; skladanie nalezy do uzytkownika albo osobnego narzedzia); stan
+planu: `docs/SCOPE.md` 3.1. Komunikat CLI dla `--target-crs` z `--campaigns
+all` (j) konczy sie od 0.7.1 na powodzie, bez odeslania do narzedzia.
+
 ---
 
-## ADR-031: Jezyk identyfikatorow — angielski (sidecar od 0.7.0, API/CLI do v1.0.0)
-
-**Data:** 2026-10-08 (decyzja uzytkownika)
-**Status:** Przyjeta; czesciowo zastepuje ADR-028 (nazwy kluczy `extra.source`) i ADR-030 (nazwy kluczy `extra.campaign`); uzupelnia ADR-022 (konwencja nazw kluczy sidecara `kartograf-meta/1`)
-
-**Kontekst:** Sidecar `<plik>.meta.json` (`kartograf-meta/1`, ADR-022) jest
-kontraktem dla konsumentow (Hydrograf), a jego klucze powstawaly
-przyrostowo: pola glowne i wiekszosc kluczy `extra` byly angielskie
-(`horizontal_crs`, `parent_request`, `sheet_sources`, `full_sheet`), a czesc
-polska — kopiowana z nazw pol rekordu GUGiK albo terminow domenowych:
-`request.godlo`, `extra.source.{godlo, aktualnosc, aktualnosc_rok, uklad,
-zrodlo_danych, numer_zgloszenia, skorowidz, dt_pzgik, kolor}`,
-`extra.campaign.{zgloszenie, dt_pzgik}`, LAZ `extra.{godlo_kafla, rok,
-gestosc}`, CORINE `extra.uwaga`, CZ `extra.podil`. W jednym slowniku
-sasiadowaly `full_sheet` i `aktualnosc`, a ten sam fakt mial dwie nazwy
-(`extra.source.numer_zgloszenia` i `extra.campaign.zgloszenie`). Ta sama
-mieszanka dotyczy API (`godlo` w sygnaturach, `CampaignRef.zgloszenie`)
-i CLI (`--godlo`). Schemat `kartograf-meta/1` nie byl jeszcze wydany
-(wchodzi w 0.7.0), wiec zmiana kluczy teraz nie lamie zadnego wydania.
-DEVELOPMENT_STANDARDS 9.4 rozstrzygala dotad jezyk docstringow,
-komentarzy, commitow i dokumentacji, ale nie identyfikatorow.
-
-**Opcje:**
-- A) Zostawic mieszanke — zero kosztu, ale kontrakt sidecara utrwala sie
-  w wydaniu 0.7.0 i kazda pozniejsza zmiana wymaga nowej wersji schematu.
-- B) Angielskie klucze sidecara teraz, w niewydanym `kartograf-meta/1`;
-  API/CLI stopniowo (aliasy), wylacznie angielskie od v1.0.0.
-- C) Wszystko naraz (sidecar, API, CLI) w 0.7.0 — jedno lamanie, ale
-  Hydrograf/Hydrolog i skrypty uzytkownikow musialyby zmienic wywolania
-  bez okresu przejsciowego.
-
-**Decyzja:** B.
-1. **0.7.0 — klucze sidecara po angielsku**, schemat zostaje
-   `kartograf-meta/1`, bez warstwy zgodnosci (zasada projektu: bez shimow,
-   BREAKING w CHANGELOG): `request.godlo` -> `request.sheet` (wszystkie
-   tory); `extra.source`: `godlo` -> `sheet`, `aktualnosc` ->
-   `acquisition_date`, `aktualnosc_rok` -> `acquisition_year`, `uklad` ->
-   `declared_crs`, `zrodlo_danych` -> `data_source`, `numer_zgloszenia` ->
-   `survey_work_id`, `skorowidz` -> `index_url`, `dt_pzgik` -> `pzgik_date`,
-   `kolor` (orto) -> `color`; `extra.campaign`: `zgloszenie` ->
-   `survey_work_id`, `dt_pzgik` -> `pzgik_date`; LAZ: `godlo_kafla` ->
-   `tile_sheet`, `rok` -> `year`, `gestosc` -> `nominal_density`; CORINE
-   PNG: `uwaga` -> `note`; CZ SM5: `podil` -> `cz_share`;
-   `extra.sheet_sources[]` wycinka: `godlo` -> `sheet`, `aktualnosc` ->
-   `acquisition_date`. `teryt` zostaje — nazwa wlasna rejestru TERYT, nie
-   slowo polskie do tlumaczenia. Wartosci (godla, nazwy warstw, daty, tresc
-   `note`) zostaja w postaci zrodlowej. Mapowanie pol rekordu GUGiK na
-   klucze sidecara jest w jednym miejscu (`SkorowidzRecord.to_source`).
-2. **Kolejne wydania 0.x — angielskie nazwy w API i CLI rownolegle**
-   z polskimi (aliasy obok obecnych nazw: parametry, atrybuty dataclass,
-   flagi CLI, np. `sheet` obok `godlo`). Polska nazwa dostaje ostrzezenie
-   o wycofaniu dopiero, gdy angielska jest dostepna.
-3. **Od v1.0.0 wylacznie angielskie identyfikatory** (kod, API, CLI,
-   klucze danych); polskie aliasy usuniete.
-
-Zakres jezyka poza identyfikatorami bez zmian: dokumentacja (`docs/`,
-`README.md`, `CLAUDE.md`) i commity po polsku, docstringi i komentarze po
-angielsku (STANDARDS 9.4); komunikaty CLI dla uzytkownika (`Error:`,
-`Warning:`, `Info:`) zostaja po polsku — 9.4 ich nie reguluje, a ta
-decyzja dotyczy wylacznie identyfikatorow. STANDARDS 9.4 odsyla tutaj.
-
-**Konsekwencje:**
-- BREAKING w 0.7.0: konsument sidecara czyta nowe nazwy (tabela w
-  `docs/ARCHITECTURE.md` 3.2 i w CHANGELOG 0.7.0, Breaking Changes).
-- Stare lokalne sidecary (sprzed tej decyzji) nie sa migrowane; kod, ktory
-  je czyta, traktuje brak nowego klucza jak brak informacji: sidecar
-  kampanii bez `extra.campaign.pzgik_date` nie daje klucza dowiazania
-  (dolne oszacowanie z nazwy katalogu kampanii, jak bez sidecara); wpisy
-  `sheet_sources` bez `sheet` nie licza sie jako niepelne arkusze przy
-  pominieciu wycinka; ostrzezenie E17 wymaga `request.sheet`. Odswiezenie:
-  `--force`.
-- Payload `record_cache`/`campaigns_cache` to ten sam slownik co
-  `extra.source`; wpis z polskimi kluczami jest chybieniem cache
-  (skorowidz odpytywany ponownie, wpis nadpisany) — bez `KeyError`.
-- Etap API/CLI (pkt 2-3) wymaga osobnego planu: lista identyfikatorow
-  (`godlo` w sygnaturach i flagach, `SheetFetch.godlo`,
-  `CampaignRef.zgloszenie`, `LazTile.godlo` itd.), aliasy z testami obu
-  nazw, ostrzezenia o wycofaniu i wpis w CHANGELOG kazdego wydania.
-  Nazwy pol surowych odpowiedzi zewnetrznych (rekord GUGiK
-  `aktualnoscRok`, `PODIL` CUZK) nie sa identyfikatorami Kartografa
-  i sie nie zmieniaja.
-
----
-
+## ADR-031: Jezyk identyfikatorow — angielski (sidecar od 0.7.0, API/CLI do v1.0.0)
+
+**Data:** 2026-10-08 (decyzja uzytkownika)
+**Status:** Przyjeta; czesciowo zastepuje ADR-028 (nazwy kluczy `extra.source`) i ADR-030 (nazwy kluczy `extra.campaign`); uzupelnia ADR-022 (konwencja nazw kluczy sidecara `kartograf-meta/1`)
+
+**Kontekst:** Sidecar `<plik>.meta.json` (`kartograf-meta/1`, ADR-022) jest
+kontraktem dla konsumentow (Hydrograf), a jego klucze powstawaly
+przyrostowo: pola glowne i wiekszosc kluczy `extra` byly angielskie
+(`horizontal_crs`, `parent_request`, `sheet_sources`, `full_sheet`), a czesc
+polska — kopiowana z nazw pol rekordu GUGiK albo terminow domenowych:
+`request.godlo`, `extra.source.{godlo, aktualnosc, aktualnosc_rok, uklad,
+zrodlo_danych, numer_zgloszenia, skorowidz, dt_pzgik, kolor}`,
+`extra.campaign.{zgloszenie, dt_pzgik}`, LAZ `extra.{godlo_kafla, rok,
+gestosc}`, CORINE `extra.uwaga`, CZ `extra.podil`. W jednym slowniku
+sasiadowaly `full_sheet` i `aktualnosc`, a ten sam fakt mial dwie nazwy
+(`extra.source.numer_zgloszenia` i `extra.campaign.zgloszenie`). Ta sama
+mieszanka dotyczy API (`godlo` w sygnaturach, `CampaignRef.zgloszenie`)
+i CLI (`--godlo`). Schemat `kartograf-meta/1` nie byl jeszcze wydany
+(wchodzi w 0.7.0), wiec zmiana kluczy teraz nie lamie zadnego wydania.
+DEVELOPMENT_STANDARDS 9.4 rozstrzygala dotad jezyk docstringow,
+komentarzy, commitow i dokumentacji, ale nie identyfikatorow.
+
+**Opcje:**
+- A) Zostawic mieszanke — zero kosztu, ale kontrakt sidecara utrwala sie
+  w wydaniu 0.7.0 i kazda pozniejsza zmiana wymaga nowej wersji schematu.
+- B) Angielskie klucze sidecara teraz, w niewydanym `kartograf-meta/1`;
+  API/CLI stopniowo (aliasy), wylacznie angielskie od v1.0.0.
+- C) Wszystko naraz (sidecar, API, CLI) w 0.7.0 — jedno lamanie, ale
+  Hydrograf/Hydrolog i skrypty uzytkownikow musialyby zmienic wywolania
+  bez okresu przejsciowego.
+
+**Decyzja:** B.
+1. **0.7.0 — klucze sidecara po angielsku**, schemat zostaje
+   `kartograf-meta/1`, bez warstwy zgodnosci (zasada projektu: bez shimow,
+   BREAKING w CHANGELOG): `request.godlo` -> `request.sheet` (wszystkie
+   tory); `extra.source`: `godlo` -> `sheet`, `aktualnosc` ->
+   `acquisition_date`, `aktualnosc_rok` -> `acquisition_year`, `uklad` ->
+   `declared_crs`, `zrodlo_danych` -> `data_source`, `numer_zgloszenia` ->
+   `survey_work_id`, `skorowidz` -> `index_url`, `dt_pzgik` -> `pzgik_date`,
+   `kolor` (orto) -> `color`; `extra.campaign`: `zgloszenie` ->
+   `survey_work_id`, `dt_pzgik` -> `pzgik_date`; LAZ: `godlo_kafla` ->
+   `tile_sheet`, `rok` -> `year`, `gestosc` -> `nominal_density`; CORINE
+   PNG: `uwaga` -> `note`; CZ SM5: `podil` -> `cz_share`;
+   `extra.sheet_sources[]` wycinka: `godlo` -> `sheet`, `aktualnosc` ->
+   `acquisition_date`. `teryt` zostaje — nazwa wlasna rejestru TERYT, nie
+   slowo polskie do tlumaczenia. Wartosci (godla, nazwy warstw, daty, tresc
+   `note`) zostaja w postaci zrodlowej. Mapowanie pol rekordu GUGiK na
+   klucze sidecara jest w jednym miejscu (`SkorowidzRecord.to_source`).
+2. **Kolejne wydania 0.x — angielskie nazwy w API i CLI rownolegle**
+   z polskimi (aliasy obok obecnych nazw: parametry, atrybuty dataclass,
+   flagi CLI, np. `sheet` obok `godlo`). Polska nazwa dostaje ostrzezenie
+   o wycofaniu dopiero, gdy angielska jest dostepna.
+3. **Od v1.0.0 wylacznie angielskie identyfikatory** (kod, API, CLI,
+   klucze danych); polskie aliasy usuniete.
+
+Zakres jezyka poza identyfikatorami bez zmian: dokumentacja (`docs/`,
+`README.md`, `CLAUDE.md`) i commity po polsku, docstringi i komentarze po
+angielsku (STANDARDS 9.4); komunikaty CLI dla uzytkownika (`Error:`,
+`Warning:`, `Info:`) zostaja po polsku — 9.4 ich nie reguluje, a ta
+decyzja dotyczy wylacznie identyfikatorow. STANDARDS 9.4 odsyla tutaj.
+
+**Konsekwencje:**
+- BREAKING w 0.7.0: konsument sidecara czyta nowe nazwy (tabela w
+  `docs/ARCHITECTURE.md` 3.2 i w CHANGELOG 0.7.0, Breaking Changes).
+- Stare lokalne sidecary (sprzed tej decyzji) nie sa migrowane; kod, ktory
+  je czyta, traktuje brak nowego klucza jak brak informacji: sidecar
+  kampanii bez `extra.campaign.pzgik_date` nie daje klucza dowiazania
+  (dolne oszacowanie z nazwy katalogu kampanii, jak bez sidecara); wpisy
+  `sheet_sources` bez `sheet` nie licza sie jako niepelne arkusze przy
+  pominieciu wycinka; ostrzezenie E17 wymaga `request.sheet`. Odswiezenie:
+  `--force`.
+- Payload `record_cache`/`campaigns_cache` to ten sam slownik co
+  `extra.source`; wpis z polskimi kluczami jest chybieniem cache
+  (skorowidz odpytywany ponownie, wpis nadpisany) — bez `KeyError`.
+- Etap API/CLI (pkt 2-3) wymaga osobnego planu: lista identyfikatorow
+  (`godlo` w sygnaturach i flagach, `SheetFetch.godlo`,
+  `CampaignRef.zgloszenie`, `LazTile.godlo` itd.), aliasy z testami obu
+  nazw, ostrzezenia o wycofaniu i wpis w CHANGELOG kazdego wydania.
+  Nazwy pol surowych odpowiedzi zewnetrznych (rekord GUGiK
+  `aktualnoscRok`, `PODIL` CUZK) nie sa identyfikatorami Kartografa
+  i sie nie zmieniaja.
+
+---
+
 ## Szablon nowego ADR
 
 Kopiuj ponizszy blok przy dodawaniu decyzji: kolejny numer, status ze

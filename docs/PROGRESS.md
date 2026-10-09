@@ -26,9 +26,10 @@
 | Etap 0 — zrodla wielokrajowe (sources/transform/transport/providers-pl/CLI split/sidecar) | ✅ Gotowy | zmergowane do develop 2026-08-11; E2E 12/12 na realnych danych |
 | Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | ZMERGOWANY do develop 2026-08-12; tor CZ odmrozony w fali 2026-09-29/30 (D1): pin EPSG:1622 (K2; live: Karkonosze PL-CZ mediana -0,15 m, przesuniecie < 1 px), budzet 4 Mpx kafli (K6; live: 29,8 Mpx w 3 min 38 s), piksel dokladnie 2 m (N3), `Warning:` przy 100 % nodata (N2); wydany w v0.7.0 |
 | LAZ — wybor kafli (ADR-029) | ✅ Gotowy | `download_laz_area` / `select_tiles`: najnowszy kafel per obszar wg pokrycia, `--year`, `--min-density`, `extra.parent_request` w trybie `--bbox`/`--geometry` |
-| Kampanie GUGiK (ADR-030 + errata 1-5) | ✅ Gotowy | `--campaigns {newest,all}`, `--min-year`; pliki w `<segment>/kampanie/`, sciezka standardowa = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`) |
+| Kampanie GUGiK (ADR-030 + errata 1-6) | ✅ Gotowy | `--campaigns {newest,all}`, `--min-year`; pliki w `<segment>/kampanie/`, sciezka standardowa = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`) |
 | Wycinek NMT PL `--target-crs` (ADR-027) + API biblioteki `download_pl_cutout` | ✅ Gotowy | fala review max 2026-09-28 + fala naprawcza 2026-09-30: `GridMismatchError` dla 2180 z arkuszy o roznych fazach, W1 (warp per arkusz) dla 5514/3045 (S5/D3/D8), `extra.sheet_sources`, `all_nodata`, `download_pl_cutout(cache=)`; live PASS Krakow 5 m |
 
+| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | ⏳ Zaplanowany | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3 |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
 ## Checkpointy
@@ -88,21 +89,34 @@
 - **Wersja:** v0.7.0
 - **Zakres:** NMT Czech (CUZK) i `--country`, LAZ (ADR-029), wycinek PL `--target-crs` (ADR-027), uklad `data/` (ADR-026), sidecar `kartograf-meta/1` z angielskimi kluczami (ADR-031), skorowidz GUGiK i kampanie (ADR-028, ADR-030), wspolny transport HTTP; pelna lista i zmiany lamiace: `docs/CHANGELOG.md` [0.7.0]
 
+### CP12 — Wymagania Hydrografa
+- **Data:** 2026-10-09
+- **Wersja:** v0.7.1
+- **Zakres:** `sha256`/`size_bytes` w sidecarze, pola rekordu skorowidza (RMSE, `declared_vertical_crs`) i weryfikacja rekordu/pliku GUGiK, godla PL-1992 bez zer wiodacych i `ParseError` spoza nomenklatury, BDOT10k z wielu powiatow (WFS PRG, `keep_raw`), wycinek CZ w bibliotece, `build_cutout_from_sheets`, `hsg_from_rasters`, bledy zamiast cichych zamian (5 m + KRON86, `--year`/`--min-density` poza LAZ); pelna lista: `docs/CHANGELOG.md` [0.7.1]
+
 ## Ostatnia sesja
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI:** **v0.7.0 WYDANA (2026-10-08)** — tag
-> `v0.7.0` na commicie merge `develop` -> `main`; `develop`, `main` i tag
-> na `origin`. Opis wydania: `docs/CHANGELOG.md` [0.7.0]; test na zywo
-> przed wydaniem: `docs/research/2026-10-08-test-przed-0.7.0/raport.md`.
-> Stan galezi i tagow sprawdzaj w gicie (`git status`, `git log`,
+> **START NASTEPNEJ SESJI:** **v0.7.1 WYDANA (2026-10-09)** — tag
+> `v0.7.1` na commicie merge `develop` -> `main`. Opis wydania:
+> `docs/CHANGELOG.md` [0.7.1]; test na zywo przed wydaniem:
+> `docs/research/2026-10-09-test-przed-0.7.1/raport.md` (bez FAIL).
+> Stan galezi, tagow i `origin` sprawdzaj w gicie (`git status`, `git log`,
 > `git ls-remote --tags origin`), nie w tym dzienniku.
-> **Nastepny cykl (0.7.1):** pierwszy commit cyklu podbija
-> `kartograf.__version__` do `0.7.1-dev` (asercje w `tests/test_cli.py`
-> i `tests/test_integration.py`) i dodaje na gorze CHANGELOG sekcje
-> `## [0.7.1] - Unreleased` z linkiem `compare/v0.7.0...develop`; zakres:
-> backlog "Do 0.7.1" (sekcja Backlog nizej), potem ogolny backlog.
+> **Nastepny cykl:** backlog "Do 0.7.2" (decyzje uzytkownika 2026-10-09:
+> wycinki PL z WCS, wybor roku `--year`/`--min-year`/`--max-year` dla
+> NMT/NMPT/orto, drugie dowiazanie do pelnego lotu, domyslne
+> z inwentaryzacji) — kazda pozycja dopiero po specu/planie i zatwierdzeniu;
+> drobiazgi z review 0.7.1: sekcja "Po 0.7.1" nizej. Cykl nie jest jeszcze
+> otwarty (`__version__ = "0.7.1"`; otwarcie = `0.7.2-dev` i sekcja
+> `## [0.7.2] - Unreleased` w CHANGELOG).
+> **Kierunek do v1.0.0:** roadmapa w `docs/SCOPE.md` 3.3 (zatwierdzona
+> 2026-10-08). Podprojekt 1 (magazyn wersjonowany, docelowo 0.8.0): spec
+> zaakceptowany i plan 1/3 napisany na galezi `feat/versioned-store`
+> (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`,
+> `docs/superpowers/plans/2026-10-08-versioned-store-1-core-pl-sheets.md`);
+> implementacja WSTRZYMANA decyzja uzytkownika.
 > Brama (stan sprawdzaj komendami, nie liczbami z dziennika):
 > `.venv/bin/python -m pytest tests/ -m "not live"` (zielone),
 > `.venv/bin/python -m ruff check .` i `ruff format --check .` (czyste,
@@ -112,6 +126,177 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Wydanie 0.7.1 (2026-10-09)
+
+- Test na zywo galezi `feat/hydrograf-0.7.1` bez zmian w kodzie: brama
+  offline zielona (3076 testow), 13 scenariuszy CLI i biblioteki bez FAIL
+  (raport `docs/research/2026-10-09-test-przed-0.7.1/raport.md`); uwaga U1
+  (komunikat "morze, obszar za granica" przy luce 5 m w glebi kraju)
+  identyczna na 0.7.0 — nie regresja, w "Po 0.7.1".
+- Merge `feat/hydrograf-0.7.1` -> `develop` (`--no-ff`); katalog roboczy
+  SDD `.superpowers/sdd/2026-10-08-hydrograf-0.7.1` usuniety (odlozone
+  uwagi przeniesione wczesniej do "Po 0.7.1").
+- Wydanie: `__version__ = "0.7.1"`, data w CHANGELOG i link
+  `compare/v0.7.0...v0.7.1`, status w SCOPE i PRD, przyklad `keep_raw=True`
+  w USAGE; merge `develop` -> `main`, tag `v0.7.1` (annotowany) na commicie
+  merge. Push na `origin` to osobna decyzja uzytkownika, wykonywana po tym
+  commicie — czy `develop`, `main` i tag sa na `origin`, sprawdzaj
+  `git ls-remote origin`.
+- `docs/DECISIONS.md`: 84 linie ADR-031 konczyly sie `CR CR LF` (od
+  wprowadzenia ADR-031, takze w `v0.7.0`), co renderer pokazywal jako pusta
+  linie po kazdej linii — poprawione na `CR LF`, tresc bez zmian.
+- Dane testu na zywo: `<katalog-danych>/kartograf/e2e/2026-10-09-test-przed-0.7.1/`
+  (skrypty jednorazowe usuniete).
+
+### Wymagania Hydrografa 0.7.1 — implementacja (Task 1-12, 2026-10-08/09)
+
+Plan `docs/superpowers/plans/2026-10-08-hydrograf-0.7.1.md` wykonany na
+galezi `feat/hydrograf-0.7.1` (subagenci, review po kazdym zadaniu, dowody
+mutacyjne). Koncowe review calej galezi i fala poprawek sa zamkniete (ponowne
+review czyste, brama zielona na czystej kopii). Galaz NIE jest zmergowana ani
+wydana, nic nie wypchnieto: merge do `develop` i wydanie 0.7.1 czekaja na
+decyzje uzytkownika. Szczegoly zmian: `docs/CHANGELOG.md` [0.7.1].
+
+- **Decyzje uzytkownika:** A11 (`resample_off_grid`) i wyrownanie siatki
+  wycinka CZ do siatki PL przeniesione do osobnego specu razem z R6
+  (scalanie PL+CZ) — nie wykonane w 0.7.1; `sha256` liczone przez ponowny
+  odczyt gotowego pliku w `build_metadata` (hash w strumieniu — magazyn
+  0.8.0); Task 12 dopisany po sidequescie KRON86 (backlog nizej).
+- **Rozstrzygniecia w trakcie:** surowy ZIP BDOT10k (`keep_raw`) zawsze pod
+  nazwa pelnego, niefiltrowanego pakietu (`bdot10k_teryt_<TERYT>_GPKG.zip`,
+  wspolny dla filtrow `layers=`); `build_cutout_from_sheets` odrzuca
+  brakujace/nieczytelne arkusze i `output_path` rowny arkuszowi
+  wejsciowemu (`ValidationError` przed zapisem); 5 m + KRON86 w bibliotece
+  = `ValidationError`; w CLI pierwotnie `Info:` o zamianie (kod 0), decyzja
+  uzytkownika 2026-10-09 (Task 13): jawne `--resolution 5m --vertical-crs
+  KRON86` w CLI = `Error:` i kod 1 przed siecia.
+- **Fakty z zywych uslug:** WFS PRG dla morza odpowiada
+  `numberMatched="unknown" numberReturned="0"` (pusta lista), a przy
+  stronicowaniu `numberMatched="unknown"` + link `next` (Kartograf:
+  `DownloadError`, nigdy cicho obcieta lista); rekordy NMPT KRON86
+  deklaruja `PL-KRON86-NH`; serwer paczek BDOT10k podaje tylko
+  `Content-Length`.
+- **Commity (od `ab19fe8`):** `9b4881a` plan (poprawki pre-flight),
+  `4279f24`/`1e54aaa`/`7a7a572` Task 1 (A7), `3be2c8a` Task 2 (A5, A9,
+  A12), `a84248a` Task 3 (A3), `ae9b0fb` plan (Task 12), `5ecbde6`/
+  `eaa240a` Task 4 (B4), `6d7df35`/`75e169e` Task 5 (A1), `3f9a38b` Task 6
+  (A2, A13, U5), `1cd8817`/`b3f6bdd`/`1a8a2f2` Task 7 (A4), `a8f2b0a`/
+  `938f14b` Task 8 (A6), `9f6edb6`/`3bc8a4e`/`c54d828` Task 9 (A10),
+  `450ca71`/`70a6cea` Task 10 (A8 czesc), `e1b614a` Task 12, Task 11
+  (ten wpis, spojnosc dokumentacji; ADR-030 errata 6 i SCOPE 3.1:
+  narzedzie skladania kampanii bez przypisanego wydania).
+- **E2E na zywo (Task 11, kod z `e1b614a`, dane w `<katalog-danych>`):**
+  `download N-34-130-D-d-2-4` — kod 0, arkusz 37 798 349 B (kampania
+  2025-04-26 `82710`, hardlink), sidecar z `sha256` (zgodny z `sha256sum`),
+  `size_bytes`, `extra.source.height_rmse_m` 0.06, `position_rmse_m` 0.07,
+  `declared_vertical_crs` `PL-EVRF2007-NH`; `parse M-33-036-A` — `Sheet:
+  M-33-36-A`, kod 0; `parse N-34-999-D` — `Error: Nieprawidlowe godlo ...
+  arkusz 999 (dozwolone: 1-144)`, kod 1; `landcover download --source
+  bdot10k --bbox 340000,290000,350000,300000` — kod 0,
+  `bdot10k_teryt_0208.gpkg` (377 253 888 B) i `bdot10k_teryt_0224.gpkg`
+  (147 329 024 B) z sidecarami (`extra.source.teryt`,
+  `extra.http.content_length` 112 600 860 / 59 490 718, `etag`/
+  `last_modified` `null`, `extra.parent_request`); pierwsze uruchomienie
+  tej komendy skonczylo sie `Error: OSError: [Errno 12] Cannot allocate
+  memory` (kod 1, bez plikow) przy duzym obciazeniu pamieci hosta — dwa
+  kolejne przebiegi kod 0, szczyt RSS 618 MB; `cache stats` — `TERYT
+  entries: 1`; `download N-33-115-C-d-2-2 --resolution 5m --vertical-crs
+  KRON86` — `Info:` o zamianie na EVRF2007, kod 0, segment
+  `pl_1992_5m_evrf2007`, arkusz 1 304 067 B, sidecar `EPSG:9651`,
+  `height_rmse_m` 0.5 (arkusz z planu, N-34-130-D-d-2-4, nie ma rekordu
+  NMT 5 m u zrodla: `Error: Brak danych NMT 5m`, kod 1, takze z `--force`).
+  To byl stan przed Task 13: po nim ta sama komenda konczy sie `Error: NMT
+  5m (PL) jest dostepny tylko w EVRF2007 ...`, kod 1, bez zapytan do sieci
+  (sprawdzone 2026-10-09 z `--output <katalog-danych>`).
+- **Koncowe review calej galezi + fala poprawek (2026-10-09):** werdykt
+  "gotowa po poprawkach"; poprawione: HSG `extra.source_layers` zawsze
+  lista nazw (skroty wejsc `hsg_from_rasters` w nowym `extra.source_files`),
+  BDOT10k rozpakowanie strumieniowe i `OSError` -> `DownloadError` (bez GPKG
+  bez sidecara), dwie linie "Co zrobic" w CHANGELOG; reszta uwag odlozona
+  (lista nizej). Ponowne review fali poprawek (`70beeca`, `ceda606`): uwagi
+  zaadresowane; kontrola koordynatora na czystej kopii: 2998 testow offline,
+  ruff, format, mypy czyste, 5 wlasnych mutacji zabitych.
+
+#### Po 0.7.1 — drobiazgi z review galezi 0.7.1 (2026-10-09)
+
+Odlozone z rulingiem "zostaw"; lista ma przezyc usuniecie katalogu roboczego.
+
+- BDOT10k `keep_raw` + blad zapisu surowego ZIP przy ponownym pobraniu
+  zostawia STARY sidecar GPKG bez pliku danych (nowy GPKG usuniety;
+  zapisany stan i tak lepszy niz poprzednio) — zlozyc GPKG w katalogu
+  tymczasowym i przeniesc dopiero po udanym zapisie surowego ZIP.
+- `MetadataCache(strict=True)`: `stats()/clear()/vacuum()/prune_expired()/
+  close()` rzucaja `CacheError`, a docstring `stats()` obiecuje klucz
+  `error`; sciezka rownolegla zamienia `CacheError` na "failed" per arkusz —
+  dopisac to w Parameters `strict` przy najblizszej zmianie.
+- `bbox` w `:.0f` (zapytanie powiatowe) moze skurczyc obwiednie o 0,5 m na
+  strone — przy okazji zmienic na floor/ceil.
+- `skorowidz.py:109`: sprawdzenie obecnosci przez efekt uboczny — zapisac
+  jawnie (czytelnosc).
+- `lstrip` w parserze godla zostawia cyfry dziesietne spoza ASCII
+  (`M-３３`) — wejscie egzotyczne, `int()` i tak sprawdza zakres; ograniczyc
+  do `[0-9]`.
+- Liczba kodow sparsowanych vs `numberReturned` (WFS PRG) — rozwazyc
+  porownanie; `_check_complete` uzywa na razie atrybutu.
+- `download_by_godlo/bbox` nie przekazuja `timeout` do wyszukania TERYT
+  (stale 30 s) — przekazac; manager wola prywatne `_single_teryt` —
+  nadac nazwe publiczna w 0.8.0.
+- `file_digest` poza `try` sidecara w sciezce HSG + wejscie bez CRS daje
+  `AttributeError` (tylko biblioteka) — objac `try`/`ValidationError` w 0.8.0.
+- Docstringi wycinka (`build_cutout_from_sheets`): wynik to zawsze GeoTIFF
+  niezaleznie od rozszerzenia; po bledzie best-effort zostaje nieaktualny
+  sidecar — dopisac notatki.
+- Testy do dopisania: `DownloadManager` end-to-end z `sha256` w sidecarze;
+  przesuniecie srodka polkomorki (rzad 600 m) w kontroli ukladu; luka HSG
+  tylko piasek/pyl; `target_crs` EPSG:5514 -> `image_crs None` i poziom
+  WARNING w komunikacie all-nodata; `TestLastResultSingleSheet` (puste
+  `campaign_files`/`copied`); `test_cli_passes_metadata_cache` bez kodu
+  wyjscia; bezposredni test zwalniania `getbuffer` (BDOT10k).
+- Komunikat podsumowania "GUGiK nie ma danych dla N z M arkuszy ...
+  (morze, obszar za granica)" przy luce w skorowidzu 5 m w glebi kraju
+  (np. `N-34-130-D-d --resolution 5m`: 6 z 16) zgaduje przyczyne za waskim
+  przykladem — tak samo w 0.7.0 (raport testu przed 0.7.1, U1).
+- Odrzucone swiadomie (bez dzialania): naglowek ASC `dx/dy`, godlo PL-1992 z
+  plikiem w PL-2000 (glosne odrzucenie), `file_digest` OSError gubiacy caly
+  sidecar (polityka "nigdy plik bez sidecara"), `_BDOT_OPTIONS` odrzuca
+  nieznane kwargs (jak dawne `**kwargs`).
+
+### Wymagania Hydrografa -> zakres 0.7.1 (2026-10-08)
+
+- Przeglad zgloszenia Hydrografa (A1-A9, B1-B4) wzgledem kodu i specu
+  magazynu wersjonowanego; podzial 0.7.1 / 0.8.0 zaakceptowany; decyzje
+  A2 i A7 w backlogu "Do 0.7.1 — wymagania Hydrografa"; uzupelnienie A10-A13
+  dopisane (R6 osobno po 0.7.1). Plan implementacji:
+  `docs/superpowers/plans/2026-10-08-hydrograf-0.7.1.md` (11 zadan, galaz
+  `feat/hydrograf-0.7.1`). Bez zmian w kodzie.
+
+### Roadmapa do v1.0.0 (2026-10-08)
+
+- Sesja projektowa (bez zmian w kodzie): ustalony cel v1.0.0 i kolejnosc
+  podprojektow, zapisane w `docs/SCOPE.md` 3.3 (wersja dokumentu 3.15).
+- Decyzje: pelny katalog publicznych danych GUGiK = warunek wejscia,
+  "gotowe dane" (wycinek, scalenie, reprojekcja, sidecar) = wyroznik;
+  manager danych = magazyn wersjonowany + manifest projektu (projekt ->
+  dane, sidecar niezmienny, indeks z manifestow) + GUI jako przegladarka;
+  nakladki najpierw lokalnie dla zespolu, publikacja po testach; kolejnosc
+  1 magazyn wersjonowany, 2 manifest, 3 katalog (strumien), 4 wtyczka QGIS,
+  5 GUI webowe.
+- Lista "poza zakresem 1.0+" w SCOPE 3.1: GUI zastapione odsylaczem do 3.3.
+- `docs/PRD.md` 4.1: docelowe persony (uzytkownik QGIS, zespol/firma) i
+  wymagania v1.0.0 w sekcji 8.
+- Poczatek cyklu 0.7.1: `__version__ = "0.7.1-dev"`, sekcja
+  `[0.7.1] - Unreleased` w CHANGELOG.
+
+### Magazyn wersjonowany — spec i plan 1/3 (2026-10-08)
+
+- Brainstorming podprojektu 1 roadmapy: decyzje D1-D12 (wersja = tresc
+  sha256, `versions/` zamiast `kampanie/`, tryby `--check-updates` /
+  `--upgrade` / `--force`, plan `kartograf-plan/1`, land cover i HSG
+  w ukladzie `data/`, bez migracji, bez `parent_requests`).
+- Spec i plan 1/3 na galezi `feat/versioned-store` (nie wypchnieta);
+  plany 2/3 i 3/3 po wykonaniu 1/3. Implementacja wstrzymana — najpierw 0.7.1.
+- Backlog "Do 0.8.0" (zmiany lamiace CLI/API) zapisany ponizej.
 
 ### Wydanie 0.7.0 (2026-10-08)
 
@@ -1269,6 +1454,233 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
 
 ## Backlog
 
+#### Do 0.7.2 (decyzje uzytkownika 2026-10-09)
+
+Decyzje z 2026-10-09 (po Task 14); kazda pozycja zaczyna sie od ustalen,
+a implementacja dopiero po specu/planie i zatwierdzeniu.
+
+- [ ] **(a) Wycinki PL (`--target-crs`) z WCS zamiast z arkuszy** (odwraca
+  ADR-027, wymaga nowego ADR):
+  - EVRF2007: `https://mapy.geoportal.gov.pl/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModel`,
+    coverage `DTM_PL-EVRF2007-NH`, `FORMAT=image/x-aaigrid`; odpowiedz to
+    multipart/related (ASC + aux.xml + prj, bez linii NODATA);
+  - KRON86: `.../WCS/DigitalTerrainModelFormatTIFF`, coverage
+    `DTM_PL-KRON86-NH_TIFF`, `image/tiff`, float32;
+  - data pobrania w nazwie pliku wycinka; wycinki bez flag roku i kampanii;
+    wycinki 5 m znikaja; host bardzo niestabilny (EOF TLS, timeouty) —
+    ponowienia obowiazkowe;
+  - biblioteka: wpis WCS EVRF2007 (`providers/pl/gugik.py`,
+    `DigitalTerrainModelFormatTIFFEVRF2007`, `DTM_PL-EVRF2007-NH_TIFF`)
+    wskazuje nieistniejacy endpoint i coverage (zob. tez WCS EVRF2007 = 404
+    od 2026-08-11) — do poprawy.
+- [ ] **(b) Wybor roku `--year`/`--min-year`/`--max-year`** wg specu
+  `docs/superpowers/specs/2026-10-09-year-range-selection-design.md`
+  (NMT/NMPT/orto/LAZ; do czasu wdrozenia `--year` poza LAZ to `Error:`,
+  Task 14). Decyzje: Q2 — dowiazanie do najnowszego zostaje, pobierane sa
+  wszystkie loty z przedzialu i dochodzi `Info:` o pokryciu; Q1 — zatrzymanie
+  zadania obowiazkowe; Q4-Q8 przyjete; `newest` + `--min-year` zostaje;
+  `newest` + `--max-year` (i `--year`) = blad; wycinki nie przyjmuja flag
+  roku. Spec do uaktualnienia (m.in. wersja docelowa 0.7.1 -> 0.7.2) przed
+  planem.
+- [ ] **(c) Drugie dowiazanie do najnowszego PELNEGO lotu**
+  (`calyArkuszWypelnionyTrescia` = TAK) obok standardowego dowiazania do
+  najnowszego. Proponowane osobne drzewo:
+  `<segment>/pelne/<hierarchia>/<godlo>.<ext>`. Otwarte: arkusze brzegowe,
+  ktore nigdy nie sa pelne; czy pobierac najnowszy pelny lot, gdy pobrano
+  tylko najnowszy.
+- [ ] **(d) Z inwentaryzacji wartosci domyslnych:**
+  - `--country auto` PL+CZ bez `--vertical-crs`: mieszane uklady wysokosci,
+    cicho (szczegoly: "Ryzyko KRON86 3" wyzej);
+  - GPKG z wieloma warstwami bez `--layer` cicho uzywa pierwszej warstwy
+    (`core/geometry.py:351-357`, tylko `logger.info`);
+  - `mosaic_and_crop(dtype=None)` bierze typ pierwszego zrodla
+    (`transport/mosaic.py:174`, sygnatura; typ z `src.dtypes[0]`).
+
+#### Do 0.8.0 — zmiany lamiace CLI skonsolidowane w jednym wydaniu (2026-10-08)
+
+0.8.0 lamie CLI przez magazyn wersjonowany (spec
+`docs/superpowers/specs/2026-10-08-versioned-store-design.md`, galaz
+`feat/versioned-store`), wiec pozostale zaplanowane zmiany lamiace CLI
+wchodza w tym samym wydaniu (decyzja uzytkownika). Kazda na wlasnej galezi.
+
+- [ ] **`--product` wymagane w `kartograf download`:** dzis domyslnie `nmt`
+  (`cli/_parser.py`, `default="nmt"`), niezgodnie z pozostalymi produktami;
+  brak flagi = blad argparse z lista produktow.
+- [ ] **Godlo po angielsku w CLI (ADR-031):** `--godlo` -> `--sheet`
+  (`landcover download`, `soilgrids hsg`); w `download` argument pozycyjny
+  `godlo` -> `--sheet` (spojnie z `--bbox`/`--geometry`/`--teryt`); `parse`
+  zachowuje argument pozycyjny (nazwa w pomocy: `SHEET`). Bez aliasow
+  (BREAKING w CHANGELOG) — errata ADR-031: dla CLI bez okresu przejsciowego.
+- [ ] **Godlo po angielsku w API biblioteki (ADR-031):** parametry, atrybuty
+  i nazwy w publicznym API (`kartograf/__init__.py` `__all__`) `godlo` ->
+  `sheet`, bez aliasow (BREAKING; Hydrograf i Hydrolog dostosuja importy).
+  Errata ADR-031: zamiast okresu aliasow zmiana w 0.8.0. Przy okazji
+  inwentaryzacja pozostalych polskich identyfikatorow publicznego API —
+  decyzja uzytkownika, czy tez wchodza do 0.8.0.
+
+- [ ] **Parametry wymagane w API (Hydrograf A8):** bez wartosci domyslnych
+  `output_dir="./data"`, `vertical_crs="EVRF2007"` (`DownloadManager`),
+  `MetadataCache` w biezacym katalogu, `depth="0-5cm"`/`stat="mean"`
+  (`calculate_hsg_by_bbox`) — BREAKING; w 0.7.x wartosci mozna podawac jawnie.
+
+#### Do v1.0.0 — roadmapa
+
+Podprojekty, kolejnosc i zasady: `docs/SCOPE.md` 3.3. Kazdy podprojekt
+zaczyna sie od brainstormingu i specu; implementacja dopiero po
+zatwierdzeniu specu i planu.
+
+- [ ] 1. Magazyn wersjonowany
+- [ ] 2. Manifest projektu
+- [ ] 3. Katalog GUGiK i gotowe dane (strumien produktow)
+- [ ] 4. Wtyczka QGIS
+- [ ] 5. GUI webowe (lokalny manager danych)
+
+#### Do 0.7.1 — wymagania Hydrografa (2026-10-08)
+
+Zgloszenie Hydrografa (pozycje A na 0.7.1, B na 0.8.0) przejrzane wzgledem
+kodu `develop` i specu magazynu wersjonowanego; podzial zaakceptowany przez
+uzytkownika. Kryterium 0.7.1: zmiany addytywne, bez lamania CLI i API.
+Z planu 0.8.0 wchodza wczesniej tylko: `sha256` w sidecarze oraz
+`extra.http` (spec 3.3, 8). `sha256` liczone przez ponowny odczyt
+gotowego pliku w `build_metadata` — jedno miejsce, obejmuje tez produkty
+pochodne (decyzja uzytkownika 2026-10-08 po pre-flight planu); hash
+liczony w strumieniu `download_to` zostaje w magazynie 0.8.0.
+
+- [x] **A1 — odkrywanie TERYT** (Task 5; U5 — Task 6): publiczne `discover_teryts_for_bbox(bbox, *,
+  session=None, cache=None) -> list[str]` (powiaty przecinajace obszar;
+  nowy endpoint WFS PRG — rozpoznanie na zywo i fixtury z surowych
+  odpowiedzi) oraz `teryt_for_point(x, y, crs) -> str | None`. Blad uslugi =
+  wyjatek; pusta lista / `None` tylko przy poprawnej odpowiedzi bez obiektow
+  (morze). Razem z U5 (cache TERYT w torze land cover).
+- [x] **A2 — BDOT10k z wielu powiatow** (Task 6; decyzje uzytkownika 2026-10-08):
+  - nowa funkcja biblioteki zwracajaca liste plikow (jeden pakiet na
+    powiat, przez A1), filtr `layers=[...]`;
+  - CLI `landcover download --bbox/--godlo/--geometry` pobiera WSZYSTKIE
+    powiaty przecinajace obszar;
+  - nazwa pliku ZAWSZE `bdot10k_teryt_XXXX.gpkg` (plik zawiera caly,
+    niezmieniony pakiet powiatu — tresc nie jest przycinana ani
+    reprojektowana, GPKG to tylko scalenie warstw z ZIP 1:1); takze dla
+    jednego powiatu — zmiana nazwy w CHANGELOG;
+  - stare `download_by_bbox`/`download_by_godlo`: jeden powiat = `Path` jak
+    dzis (nowa nazwa), kilka powiatow = `ValidationError` z lista TERYT
+    i wskazaniem nowej funkcji;
+  - scalanie wielu pakietow w jeden GPKG — 0.8.0 (produkt pochodny, D8 specu);
+  - luka: `_copy_gpkg_layer` po cichu pomija tabele o powtorzonej nazwie
+    (`logger.debug`) — zamienic na blad.
+- [x] **A3 — pelniejszy rekord w sidecarze NMT/NMPT/orto** (Task 3): do
+  `extra.source` pola `bladSredniWysokosci`, `bladSredniPolozenia`,
+  `modulArchiwizacji`, `ukladWspolrzednychPionowych` (nazwy angielskie,
+  ADR-031); `sha256` i `size_bytes` na GORNYM poziomie sidecara (zgodnie ze
+  specem 0.8.0, nie w `extra.source`). Wpisy `record_cache` bez nowych pol
+  traktowac jak brak wpisu.
+- [x] **A4 — sidecar BDOT10k** (Task 7): `extra.source` (URL pakietu, TERYT, data
+  pobrania), `extra.http` (`etag`, `last_modified`, `content_length` —
+  najpierw sprawdzic na zywo naglowki serwera paczek, spec sekcja 8);
+  parametr `keep_raw=True` (surowy ZIP GUGiK obok GPKG).
+- [x] **A5 — stabilne API** (Task 2): eksport `mosaic_and_crop`, `check_source_grid`,
+  `get_with_retry`, `make_gugik_session` w `kartograf/__init__.py`
+  (`get_with_retry` juz przyjmuje dowolny URL i `params`; tylko GET).
+- [x] **A6 — wycinek CZ w bibliotece** (Task 8): `download_cz_cutout(...)` (cel
+  EPSG:2180, `vertical_crs="EVRF2007"`), publiczny podzial obszaru na kraje
+  (dzis `_countries_for_bbox` w CLI), sidecar zapisywany przez biblioteke
+  (dzis `_write_cz_sidecar` w CLI), flaga `all_nodata` w wyniku (jak
+  `PlCutoutResult`). CLI bez zmian zachowania. Siatka wyniku od zadanego
+  bboxa, jak dzis w CLI. Dawne "do sprawdzenia: czy warp CZ do 2180 trafia
+  w siatke wycinka PL (ADR-027)" — wyrownanie siatki CZ do siatki PL
+  przeniesione do osobnego specu razem z R6 i A11 (decyzja uzytkownika
+  2026-10-08, fakt z pomiaru przy A11).
+- [x] **A7 — walidacja godel** (Task 1; decyzje uzytkownika 2026-10-08):
+  godla spoza nomenklatury (np. `N-34-999-D` daje dzis bbox y = -2,2 mln,
+  `X-99-1-D-d-3` bbox `inf`) -> `ParseError` przed zapytaniem sieciowym;
+  `ParseError` dziedziczy po `ValidationError` (sprawdzic miejsca lapiace
+  oba wyjatki osobno); zera wiodace PL-1992 normalizowane do postaci GUGiK
+  (`M-33-036-A` -> `M-33-36-A`) w `SheetParser.godlo` — ta sama postac
+  w sciezce, sidecarze i wyniku; pliki zapisane pod postacia z zerami
+  przestaja byc widziane (CHANGELOG). PL-2000 bez zmian.
+- [x] **A8 (czesc) — `hsg_from_rasters(clay, sand, silt, bbox, crs, pixel_m)`** (Task 10)
+  bez wartosci domyslnych (wydzielenie z `calculate_hsg_by_bbox`).
+  Parametry wymagane — backlog "Do 0.8.0".
+- [x] **A9 — spojnosc API** (Task 2): `download_sheet()` ustawia `last_result` takze
+  dla pojedynczego arkusza; `MetadataCache(strict=True)` — blad SQLite to
+  wyjatek zamiast `on_disabled`.
+- [x] **B4 — weryfikacja pobranych arkuszy NMT** (Task 4; przeniesione z 0.8.0):
+  naglowek ASC wzgledem bboxa godla, URL rekordu bez godla w nazwie = blad.
+- [x] **A10 — mozaika z lokalnych arkuszy** (Task 9): publiczna
+  `build_cutout_from_sheets(...)` bez sieci, wynik pod sciezka
+  wywolujacego (dzis `build_pl_cutout` wewnetrzne).
+- [ ] **A11 — jawny resampling przy EPSG:2180** — PRZENIESIONE poza 0.7.1,
+  do osobnego specu razem z R6 i wyrownaniem siatki CZ (decyzja
+  uzytkownika 2026-10-08 po pre-flight planu). Pierwotnie: opcja
+  `resample_off_grid=True` (W1 z operacja tozsamosciowa, siatka
+  w wielokrotnosciach piksela); domyslnie `GridMismatchError`, CLI bez zmian.
+  Fakt z pomiaru prawdziwych arkuszy GUGiK (lokalne ASC): 1 m — wiekszosc
+  arkuszy ma narozniki pikseli w `.5` m (srodki w pelnych metrach), czesc
+  w `.0`; 5 m — wiele roznych faz. "Siatka w wielokrotnosciach piksela" nie
+  odpowiada wiec danym: resampling na nia przesuwalby o pol piksela takze
+  arkusze zgodne z wiekszoscia. Punkt wyjscia dla specu: siatka zaczepiona
+  w fazie wiekszosci arkuszy (jak `check_source_grid`), resampling tylko
+  arkuszy spoza niej.
+- [x] **A12 — `source_info()` przy kampaniach** (Task 2): dokumentacja (decyzja:
+  bez zmiany kodu) — zrodlem pochodzenia arkusza jest sidecar sciezki
+  standardowej (link moze wskazywac starsza kampanie niz najnowszy rekord).
+- [x] **A13 — `LandCoverManager(cache=)`** (Task 6) przekazywany do BDOT10k
+  i SoilGrids (CORINE bez cache).
+- [x] **A6 (rozszerzenie) — 100 % nodata CZ w bibliotece** (Task 8; scalanie R6 — nie): flaga wyniku,
+  `extra.all_nodata` i `logger.warning`. Scalanie PL+CZ z priorytetem PL
+  (R6) — decyzja uzytkownika 2026-10-08: osobno po 0.7.1, wlasny
+  brainstorming i spec (ten sam spec obejmie A11 i wyrownanie siatki CZ
+  do siatki PL).
+- [x] **Uklad wysokosci rekordu i 5 m + KRON86 w bibliotece** (Task 12;
+  decyzja uzytkownika 2026-10-08 po sidequescie KRON86 — przeglad, czy
+  Kartograf po cichu zamienia KRON86 <-> EVRF2007; fallbacku zaleznego od
+  dostepnosci danych nie ma): (a) pole rekordu skorowidza
+  `ukladWspolrzednychPionowych` (NMT/NMPT) musi odpowiadac zadanemu ukladowi
+  (`PL-KRON86-NH` / `PL-EVRF2007-NH`, NMPT KRON86 potwierdzone na zywo),
+  inna wartosc = `DownloadError` kampanii przed pobraniem, rekord bez pola
+  przyjmowany; (b) biblioteka (`create_nmt_provider`, `DownloadManager`,
+  `download_pl_cutout`) odrzuca 5 m + KRON86 `ValidationError` z remedium
+  (`require_nmt_vertical_crs`); CLI pierwotnie zachowalo zamiane z `Info:`
+  (kod 0).
+- [x] **5 m + KRON86 w CLI jako blad** (Task 13; decyzja uzytkownika
+  2026-10-09, zmienia rozstrzygniecie koordynatora z Task 12): jawne
+  `--resolution 5m --vertical-crs KRON86` (NMT PL, wszystkie tory: godlo,
+  hierarchia, bbox/geometria, wycinek `--target-crs`, `--country auto`)
+  konczy sie `Error:` z remedium i kodem 1 w `_resolve_pl_sentinels`, przed
+  siecia (regula `require_nmt_vertical_crs`); `--resolution 5m` bez
+  `--vertical-crs` nadal pobiera EVRF2007.
+- [x] **`--year`/`--min-density` tylko dla LAZ** (Task 14; decyzja
+  uzytkownika 2026-10-09): `kartograf download --year RRRR` i
+  `--min-density N` z `--product nmt|nmpt|orto` byly po cichu pomijane (kod
+  0, najnowsze dane). Teraz `Error:` na stderr i kod 1 w `cmd_download`
+  (`_reject_laz_only_opts`), przed jakimkolwiek wyborem kraju, siecia i
+  tworzeniem katalogu — wspolny punkt dla wszystkich torow (godlo,
+  hierarchia, lista arkuszy, `--bbox`, `--geometry`, wycinek `--target-crs`,
+  `--country auto`, CZ). Komunikat `--year` wskazuje 0.7.2 i `--min-year`;
+  `--min-density` — pominiecie opcji. `--product laz` bez zmian. Biblioteka
+  nie ma tych opcji poza LAZ (`select_tiles(year=, min_density=)`), wiec bez
+  zmian w API.
+- [x] **Ryzyko KRON86 1 — uklad wysokosci tylko przez endpoint** (rekord
+  innego ukladu przyjmowany bez sladu w sidecarze) — zamkniete Task 12 (a);
+  deklaracja rekordu w `extra.source.declared_vertical_crs` (Task 3).
+- [x] **Ryzyko KRON86 2 — cicha zamiana 5 m w bibliotece** (KRON86 ->
+  EVRF2007 tylko z `logger.warning`) — zamkniete Task 12 (b).
+- [ ] **Ryzyko KRON86 3 — `--country auto` bez `--vertical-crs`:** obszar
+  PL+CZ daje PL w EVRF2007 (EPSG:9651) i CZ w Bpv (EPSG:8357), roznica ok.
+  0,1-0,15 m, bez komunikatu w runtime (tylko dokumentacja: ARCHITECTURE
+  4.6, USAGE 1.4; sidecary oznaczaja uklad poprawnie). Do decyzji: `Info:`
+  albo wspolny domyslny uklad.
+- [ ] **B1-B3 — rozbieznosci ze specem magazynu** (do rozstrzygniecia przed
+  implementacja 0.8.0, nie teraz): wersja NMT = kampania + odcisk vs D1
+  (sha256 tresci); `.lock` vs brak blokad; import plikow 0.6.1 vs D10 (bez
+  migracji); dwa korzenie staging/archiwum, `copy_to`/`fsck`/
+  `estimate_missing` vs `verify` w podprojekcie 2; "brak pokrycia" jako
+  wersja i SoilGrids z natywnych kafli ISRIC — poza specem;
+  rozszerzenie B1 (uzupelnienie 2026-10-08): tryb offline, wersja i sha256
+  w wyniku pobrania, migracja/import drzewa `kampanie/` -> `versions/`
+  (sprzeczne z D10 specu). Fakt: paczki BDOT10k nie maja `ETag` ani
+  `Last-Modified` (tylko `Content-Length`), wiec wersja BDOT10k
+  z `Last-Modified` (B2) jest niewykonalna.
+
 #### Do 0.7.1 — uwagi z testu na zywo przed wydaniem 0.7.0 (2026-10-08)
 
 Raport: `docs/research/2026-10-08-test-przed-0.7.0/raport.md` (decyzja
@@ -1281,9 +1693,10 @@ uzytkownika: U3 i U4 poprawione przed 0.7.0, reszta do 0.7.1).
 - [ ] **U2 — podpowiedzi braku pokrycia w liscie PL-2000 bez `--scale`:**
   drukowane dwa razy (linia `No data for ...` bez prefiksu + `Info:`), a
   podpowiedz wymienia jednego potomka zamiast wszystkich z obszaru.
-- [ ] **U5 — `cache stats` `TERYT entries` zawsze 0 z CLI:** tor land cover
+- [x] **U5 — `cache stats` `TERYT entries` zawsze 0 z CLI:** tor land cover
   (`landcover_cmd.py`, `LandCoverManager`) tworzy `Bdot10kProvider()` bez
-  `cache=`, wiec `teryt_cache` nie jest uzywany.
+  `cache=`, wiec `teryt_cache` nie jest uzywany. (Task 6 planu
+  hydrograf-0.7.1: `LandCoverManager(cache=)`, CLI przekazuje cache z cwd.)
 - [ ] **SoilGrids `nodata` w sidecarze:** GeoTIFF z WCS ISRIC nie ma tagu
   NoData, wiec sidecar zapisuje `nodata: null`; wg dokumentacji ISRIC brak
   danych = -32768 — zdecydowac, czy wpisywac wartosc z dokumentacji.

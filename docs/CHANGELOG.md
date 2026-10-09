@@ -5,6 +5,179 @@ Wszystkie istotne zmiany w projekcie sa dokumentowane w tym pliku.
 Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-10-09
+
+### Dodane
+
+- Roadmapa do v1.0.0 w dokumentacji (`docs/SCOPE.md` 3.3, `docs/PRD.md`
+  sekcja 8): komplet publicznych danych GUGiK, gotowe dane dla kazdego
+  produktu, manager danych (magazyn wersjonowany, manifest projektu),
+  wtyczka QGIS i GUI webowe.
+- Stabilne publiczne API: `get_with_retry`, `make_gugik_session`,
+  `mosaic_and_crop`, `check_source_grid` eksportowane z `kartograf`.
+- `MetadataCache(strict=True)`: blad SQLite konczy sie `CacheError`
+  (nowy wyjatek) zamiast cichego wylaczenia cache.
+- Sidecar: `sha256` i `size_bytes` pliku danych na gornym poziomie
+  (wszystkie produkty). Sidecar arkusza NMT/NMPT/orto: w `extra.source`
+  `height_rmse_m`, `position_rmse_m`, `archive_module`,
+  `declared_vertical_crs` z rekordu skorowidza. Wpisy cache rekordow
+  sprzed 0.7.1 sa odpytywane ponownie.
+- Weryfikacja arkuszy GUGiK (B4): URL rekordu skorowidza musi zawierac
+  godlo (NMT, NMPT, orto), a zasieg z naglowka ASC (NMT/NMPT) musi lezec
+  w ramie godla (co najmniej 50 % powierzchni pliku, rama w ukladzie
+  pliku — arkusze PL-2000 publikowane w EPSG:2180 przechodza);
+  rozbieznosc = `DownloadError` arkusza, plik nie zostaje zapisany.
+- `discover_teryts_for_bbox(bbox, *, session, cache)` i
+  `teryt_for_point(x, y, crs, ...)`: kody TERYT powiatow z WFS PRG GUGiK
+  (filtr po geometrii); blad uslugi albo lista obcieta stronicowaniem =
+  `DownloadError`, pusta lista tylko przy poprawnej odpowiedzi bez
+  obiektow. Odpowiedzi trafiaja do cache metadanych (nowa tabela
+  `teryt_bbox_cache`; `cache stats`: `TERYT entries` liczy punkty i
+  obszary).
+- BDOT10k z wielu powiatow: `LandCoverManager.download_all_counties(bbox=
+  | godlo=, layers=)` pobiera pakiet KAZDEGO powiatu przecinajacego obszar
+  (TERYT z WFS PRG), opcjonalnie tylko wybrane warstwy (np. `PTWP`,
+  `SWRS`); `Bdot10kProvider.download_package` zwraca `Bdot10kPackage`
+  (`path`, `teryt`, `url`, `format`; eksport z `kartograf`).
+  `LandCoverManager(cache=)` przekazuje cache metadanych providerom
+  tworzonym po nazwie (BDOT10k, SoilGrids).
+- Sidecar BDOT10k: `extra.source` (`url`, `teryt`, `format`) i `extra.http`
+  (`etag`, `last_modified`, `content_length` z odpowiedzi; serwer paczek
+  GUGiK podaje dzis tylko `Content-Length`). `keep_raw=True` zachowuje
+  oryginalny ZIP GUGiK obok GPKG (pelny pakiet: `bdot10k_teryt_<TERYT>_GPKG.zip`
+  bez tokenu warstw, ten sam plik niezaleznie od filtra `layers=`, z wlasnym
+  sidecarem; tylko GPKG). `Bdot10kPackage` ma pola `http` i `raw_path`.
+- Wycinek CZ w bibliotece: `download_cz_cutout(bbox, output_dir=,
+  target_crs=, vertical_crs=, resolution=)` (np. EPSG:2180 + EVRF2007;
+  siatka od zadanego obszaru, jak w CLI) i `run_cz_cutout` z wlasnym
+  providerem; wynik `CzCutoutResult` z flaga `all_nodata` (takze
+  w sidecarze i w logu), sidecar pisze biblioteka. Podzial obszaru na
+  kraje: `countries_for_bbox`, `split_bbox_by_country`. CLI (`--bbox`/
+  `--geometry` dla CZ) korzysta z tej samej implementacji — komunikaty
+  i kody wyjscia bez zmian, sidecar wycinka CZ dostaje
+  `extra.all_nodata` (`true`/`false`).
+- `build_cutout_from_sheets(sheet_paths, bbox, target_crs, output_path, *,
+  resolution, vertical_crs)`: wycinek NMT PL z lokalnych arkuszy bez
+  zapytan sieciowych, wynik i sidecar pod sciezka podana przez
+  wywolujacego (reguly siatki jak w `download_pl_cutout`). Brakujacy albo
+  nieczytelny arkusz i `output_path` rowny arkuszowi wejsciowemu =
+  `ValidationError` przed zapisem.
+- `hsg_from_rasters(clay, sand, silt, *, bbox, crs, pixel_m, output_path)`:
+  HSG z gotowych rastrow SoilGrids (g/kg) na jawnie podanej siatce, bez
+  wartosci domyslnych (nodata wejsc tylko z tagu, jak w
+  `calculate_hsg_by_bbox`); sidecar z `sha256` warstw wejsciowych
+  (`extra.source_files`: `name`, `file`, `sha256`; `extra.source_layers`
+  jak w `calculate_hsg_by_bbox` — lista nazw `clay`, `sand`, `silt`).
+- Weryfikacja ukladu wysokosci rekordu skorowidza GUGiK (NMT/NMPT): pole
+  `ukladWspolrzednychPionowych` musi odpowiadac zadanemu ukladowi
+  (`PL-KRON86-NH` dla KRON86, `PL-EVRF2007-NH` dla EVRF2007); inna wartosc
+  = `DownloadError` kampanii przed pobraniem pliku (`newest` i `all`, takze
+  `GugikProvider.download`). Rekord bez tego pola jest przyjmowany.
+  Nowe: `kartograf.download.campaigns.verify_record_vertical_crs`,
+  `RECORD_VERTICAL_CRS`, `kartograf.providers.pl.require_nmt_vertical_crs`
+  (`nmt_vertical_crs` bez zmian).
+
+### Zmienione
+
+- `DownloadManager.download_sheet()` ustawia `last_result` takze dla
+  pojedynczego arkusza (jednoelementowy `DownloadResult`); dotad `None`.
+  Co zrobic: kod, ktory po `download_sheet()` traktowal `last_result`
+  jako `None`, moze czytac z niego wynik arkusza.
+- Udokumentowano: przy kampaniach (`campaigns=`) zrodlem pochodzenia
+  arkusza jest sidecar, nie `source_info()` (A12).
+- Godla PL-1992 spoza zakresu nomenklatury (pas inny niz M/N, slup spoza
+  33-35, arkusz 1:200 000 spoza 1-144, np. `N-34-999-D`) koncza sie
+  `ParseError` przed jakimkolwiek zapytaniem sieciowym; dotad trafialy do
+  uslug z bboxem `inf` albo poza Polska. Co zrobic: nic, jesli godla sa
+  poprawne; kod, ktory dla takich godel oczekiwal `DownloadError` albo
+  pustego wyniku, powinien lapac `ParseError` (albo `ValidationError`).
+- `ParseError` dziedziczy po `ValidationError` — `except ValidationError`
+  lapie tez bledy godel. Co zrobic: gdy kod obsluguje oba wyjatki osobno,
+  `except ParseError` musi stac przed `except ValidationError`.
+- Liczby w godle PL-1992 sa zapisywane bez zer wiodacych, jak w skorowidzu
+  GUGiK (`M-33-036-A` -> `M-33-36-A`) — w sciezce, sidecarze i wyniku,
+  takze w nazwach plikow land cover (`..._godlo_M-33-36-A`) i w domyslnej
+  nazwie wyniku `kartograf soilgrids hsg --godlo`
+  (`hsg_M-33-36-A_<glebokosc>.tif`). Pliki zapisane wczesniej pod godlem
+  z zerami wiodacymi nie sa rozpoznawane; pobierz je ponownie.
+- `find_sheets_for_bbox` zwraca tylko godla z zakresu nomenklatury PL-1992:
+  obszar wychodzacy poza pasy M/N i slupy 33-35 (np. bbox przez 12E)
+  daje godla tylko jego polskiej czesci, obszar calkowicie poza zakresem —
+  pusta liste (dotad takze godla spoza zakresu, ktore nie maja danych).
+  Co zrobic: nic — usuniete godla i tak nie mialy danych; kod, ktory
+  traktowal pusta liste jako blad, dostaje ja teraz dla obszaru calkowicie
+  poza Polska.
+- `kartograf landcover download --source bdot10k` z `--bbox`, `--godlo`
+  albo `--geometry` pobiera wszystkie powiaty z obszaru (dotad jeden, ze
+  srodka obszaru — reszta obszaru po cichu bez danych) i drukuje linie
+  `Downloaded to:` dla kazdego pliku.
+- Plik BDOT10k nazywa sie zawsze `bdot10k_teryt_<TERYT>.gpkg` (`.zip` dla
+  SHP), takze przy `--bbox`/`--godlo`/`--geometry` — zawiera caly pakiet
+  powiatu. Dotychczasowe `bdot10k_bbox_*`/`bdot10k_godlo_*` nie sa
+  rozpoznawane; pobierz obszar ponownie. Plik z filtrem warstw nosi ich
+  kody w nazwie (`bdot10k_PTWP-SWRS_teryt_<TERYT>.gpkg`).
+- `LandCoverManager.download_by_bbox`/`download_by_godlo` dla BDOT10k: obszar
+  z kilku powiatow konczy sie `ValidationError` z lista kodow (uzyj
+  `download_all_counties`), obszar bez powiatu — `NoCoverageError`; sidecar
+  pliku jednego powiatu ma `extra.parent_request` (obszar zadania).
+- `Bdot10kProvider.download_by_bbox` (i `LandCoverManager` dla BDOT10k)
+  przyjmuje obszar w dowolnym obslugiwanym ukladzie — dotad uklad inny niz
+  EPSG:2180 konczyl sie `ValueError`; obszar jest przeliczany do EPSG:2180
+  przy zapytaniu PRG. Prywatne `Bdot10kProvider._get_teryt_for_point`
+  (WMS GetFeatureInfo) i `WMS_ENDPOINT` usuniete bez zamiennika — uzyj
+  `teryt_for_point`/`discover_teryts_for_bbox`.
+- Biblioteka: `create_nmt_provider`, `DownloadManager` (bez providera albo
+  z providerem bez wlasnego `vertical_crs`) i `download_pl_cutout` przy
+  `resolution="5m"` i `vertical_crs="KRON86"` koncza sie `ValidationError`
+  (NMT 5 m istnieje tylko w EVRF2007); dotad po cichu zamienialy uklad na
+  EVRF2007 z ostrzezeniem w logu. Co zrobic: podaj `vertical_crs="EVRF2007"`
+  (albo `resolution="1m"`, gdy potrzebny jest KRON86). CLI — patrz wpis
+  nizej (tez blad).
+- CLI: `kartograf download ... --resolution 5m --vertical-crs KRON86`
+  (NMT PL: godlo, hierarchia, `--bbox`/`--geometry`, wycinek `--target-crs`,
+  takze `--country auto`) konczy sie `Error: NMT 5m (PL) jest dostepny tylko
+  w EVRF2007 ...` i kodem 1, zanim cokolwiek pojdzie w siec; dotad CLI
+  zamienialo uklad na EVRF2007 z komunikatem `Info:` i pobieralo (kod 0).
+  `--resolution 5m` bez `--vertical-crs` dziala jak dotad (EVRF2007). Co
+  zrobic: pomin `--vertical-crs` albo podaj `--vertical-crs EVRF2007`;
+  dla KRON86 uzyj `--resolution 1m`.
+- Pobieranie arkuszy NMT/NMPT/orto GUGiK (CLI i `DownloadManager`, takze
+  wycinek `--target-crs`) odrzuca rekordy i pliki, ktore w 0.7.0 przechodzily:
+  URL rekordu bez godla, plik ASC poza rama godla (B4) oraz rekord NMT/NMPT
+  deklarujacy inny uklad wysokosci niz zadany — `DownloadError` arkusza
+  (kampanii), plik nie zostaje zapisany. Kontrole rekordu dzialaja przed
+  pominieciem juz pobranej kampanii, a `--force` (`skip_existing=False`) ich
+  nie wylacza. Co zrobic: sprawdz rekord w skorowidzu GUGiK (geoportal) —
+  komunikat podaje godlo i rozbieznosc; to blad danych u zrodla, ktory
+  warto zglosic GUGiK; dla innych arkuszy pobieranie trwa dalej (lista:
+  porazka arkusza wg R5, `--campaigns all`: pozostale kampanie).
+- Komunikat `Error: --campaigns all nie dziala z --target-crs` nie odsyla
+  juz do "narzedzia 0.7.1" (skladanie kampanii nie ma przypisanego wydania,
+  ADR-030 errata 6); kod wyjscia bez zmian.
+- `kartograf download --year RRRR` i `--min-density N` z `--product`
+  nmt/nmpt/orto koncza sie `Error:` i kodem 1 przed siecia (dotad opcje byly
+  po cichu pomijane: kod 0 i najnowsze dane). Dotyczy wszystkich torow
+  (godlo, hierarchia, lista arkuszy, `--bbox`, `--geometry`, `--target-crs`,
+  `--country auto`, CZ); `--product laz` bez zmian. Wybor roku dla
+  NMT/NMPT/orto bedzie w 0.7.2. Co zrobic: pomin opcje albo — dla roku —
+  uzyj `--min-year RRRR` (najnowsza kampania nie starsza niz podany rok;
+  tylko PL, bez `--target-crs`; dla zadan wylacznie CZ — CUZK nie ma wyboru
+  roku, komunikat kaze pominac `--year`); skrypty przekazujace `--year`/
+  `--min-density` do innych produktow niz LAZ musza je usunac.
+
+### Naprawione
+
+- Scalanie paczki BDOT10k nie pomija juz po cichu tabeli o powtorzonej
+  nazwie — to `DownloadError`.
+- BDOT10k: warstwy paczki sa rozpakowywane strumieniowo (bez wczytywania
+  calej warstwy do pamieci), a `keep_raw` zapisuje ZIP bez drugiej kopii
+  w pamieci. Blad wejscia-wyjscia przy rozpakowaniu, scalaniu albo zapisie
+  ZIP (brak miejsca, brak pamieci) to `DownloadError` (CLI: `Error:` z opisem,
+  kod 1), nie goly `OSError`. Nieudany zapis oryginalnego ZIP usuwa juz
+  zapisany GPKG — nie zostaje plik danych bez sidecara.
+- `cache stats`: `TERYT entries` liczy odpowiedzi PRG z `landcover download`
+  (U5).
+
 ## [0.7.0] - 2026-10-08
 
 Wydanie wielokrajowe. Najwazniejsze nowosci wzgledem 0.6.1:
@@ -1748,6 +1921,7 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
+[0.7.1]: https://github.com/Daldek/Kartograf/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/Daldek/Kartograf/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/Daldek/Kartograf/compare/4cec5d87b9aad1ffdb59693ec7163c7c97540983...v0.6.1
 [0.6.0]: https://github.com/Daldek/Kartograf/compare/v0.5.0...4cec5d87b9aad1ffdb59693ec7163c7c97540983

@@ -25,6 +25,9 @@ from kartograf.download.campaigns import (
     campaign_extension,
     validate_campaign_args,
     verify_file_format,
+    verify_record_url,
+    verify_record_vertical_crs,
+    verify_sheet_extent,
 )
 from kartograf.download.links import (
     LinkOutcome,
@@ -35,7 +38,7 @@ from kartograf.download.links import (
 from kartograf.download.storage import FileStorage, storage_for_provider
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.base import BaseProvider
-from kartograf.providers.pl import create_nmt_provider, nmt_vertical_crs
+from kartograf.providers.pl import create_nmt_provider, require_nmt_vertical_crs
 from kartograf.providers.pl.skorowidz import SkorowidzRecord
 
 logger = logging.getLogger(__name__)
@@ -114,8 +117,8 @@ class DownloadResult:
 
     Notes
     -----
-    Populated by `download_hierarchy` and `download_sheets` (and so by
-    `download_sheet` when it expands a coarser PL-1992 godlo) and exposed as
+    Populated by `download_hierarchy`, `download_sheets` and `download_sheet`
+    (a one-element result for a single sheet) and exposed as
     `DownloadManager.last_result`.
     """
 
@@ -246,12 +249,11 @@ class DownloadManager:
     Attributes
     ----------
     last_result : DownloadResult or None
-        Per-sheet outcome of the most recent multi-sheet download. Reset to
-        None at the start of each `download_sheet` / `download_hierarchy` /
-        `download_sheets` call; set by `download_hierarchy` and
-        `download_sheets` (and so by `download_sheet` when it expands a
-        coarser PL-1992 godlo). A single sheet downloaded directly via
-        `download_sheet` (a 1:10000 or PL-2000 godlo) leaves it None;
+        Per-sheet outcome of the most recent download. Reset to None at the
+        start of each `download_sheet` / `download_hierarchy` /
+        `download_sheets` call and set when the call completes - also for a
+        single sheet downloaded directly via `download_sheet` (a one-element
+        `DownloadResult`); a call that raises leaves it None.
         `download_bbox` does not touch it.
     last_sheet : SheetFetch or None
         Result of a single sheet downloaded directly by `download_sheet`
@@ -318,7 +320,9 @@ class DownloadManager:
             is appended as `_<variant>`)
         vertical_crs : str, optional
             Vertical CRS: "EVRF2007" or "KRON86" (default: "EVRF2007").
-            Note: 5m resolution only supports EVRF2007.
+            Note: 5m exists only in EVRF2007 - "5m" with "KRON86" raises
+            ValidationError (an injected provider that declares its own
+            vertical_crs wins).
         resolution : str, optional
             Grid resolution: "1m" or "5m" (default: "1m").
             Note: 5m is only available for EVRF2007 and does not support
@@ -342,11 +346,13 @@ class DownloadManager:
         ------
         ValidationError
             Unknown strategy / invalid ``min_year``, or a provider without
-            campaigns with ``campaigns="all"`` or ``min_year``.
+            campaigns with ``campaigns="all"`` or ``min_year``;
+            ``resolution="5m"`` with ``vertical_crs="KRON86"`` (no provider, or
+            one without ``vertical_crs``).
         """
         validate_campaign_args(campaigns, min_year)
-        # The "5m => EVRF2007" rule lives in the factory (`nmt_vertical_crs`, D11);
-        # without a provider the factory corrects (and logs) it.
+        # The "5m => EVRF2007" rule (D11): without a provider the factory
+        # rejects 5m + KRON86 with ValidationError (0.7.1, no silent swap).
         self._provider = provider or create_nmt_provider(
             vertical_crs=vertical_crs, resolution=resolution
         )
@@ -360,7 +366,12 @@ class DownloadManager:
         if isinstance(provider_vertical_crs, str):
             vertical_crs = provider_vertical_crs
         else:
-            vertical_crs = nmt_vertical_crs(resolution, vertical_crs)
+            vertical_crs = require_nmt_vertical_crs(resolution, vertical_crs)
+        # Datum the index records must declare (``verify_record_vertical_crs``);
+        # ``None`` = the provider declares none (orto, stubs) - no check.
+        self._record_vertical_crs = (
+            provider_vertical_crs if isinstance(provider_vertical_crs, str) else None
+        )
         if storage is None:
             storage = storage_for_provider(
                 output_dir,
@@ -469,9 +480,9 @@ class DownloadManager:
         Notes
         -----
         `self.last_result` is reset to None at the start of the call and set
-        only by the expansion to 1:10000 (via `download_hierarchy`), so a
-        single sheet downloaded here directly (a 1:10000 or PL-2000 godlo)
-        leaves it None and never exposes the previous run's result.
+        when the call completes - also for a single sheet downloaded here
+        directly (a one-element `DownloadResult`); a call that raises leaves
+        it None, so the previous run's result never leaks.
         `self.last_sheet` is reset the same way and set (``SheetFetch``) only
         for a single sheet downloaded directly.
         """
@@ -489,8 +500,14 @@ class DownloadManager:
                 godlo, "1:10000", skip_existing=skip_existing, on_progress=on_progress
             )
 
-        fetch = self._fetch_sheet(godlo, skip_existing, on_download)
+        fetch = self._fetch_sheet(parser.godlo, skip_existing, on_download)
         self.last_sheet = fetch
+        # A9: one sheet is a one-element result too - same reading as a list
+        result = DownloadResult()
+        self._record(
+            result, [], fetch.godlo, fetch, "skipped" if fetch.skipped else "completed"
+        )
+        self.last_result = result
         return fetch.path
 
     def download_hierarchy(
@@ -690,18 +707,24 @@ class DownloadManager:
         Campaign flow (ADR-030): files in ``kampanie/``, standard link.
 
         Records from ``provider.resolve_campaigns`` (never an empty list —
-        none = ``NoCoverageError``). For each campaign: the extension from
-        the record ``format`` field (BEFORE the network), skipping an existing
-        campaign file with ``skip_existing`` (the existence of the standard
-        path is NOT a reason to skip), otherwise ``download_record`` ->
-        ``verify_file_format`` -> mandatory campaign sidecar; a failure of
-        any of these steps removes the data file (never a file without a
-        sidecar or with foreign content). After the campaigns are collected
-        the standard path points to the newest LOCAL campaign (``max`` by
-        ``sort_key``; ``ensure_standard_link`` never moves the link back).
+        none = ``NoCoverageError``). For each campaign, BEFORE the network:
+        ``verify_record_url`` (the record URL must name the sheet, B4),
+        ``verify_record_vertical_crs`` (the record vertical datum vs the
+        provider ``vertical_crs``) and the extension from the record
+        ``format`` field; then skipping an
+        existing campaign file with ``skip_existing`` (the existence of the
+        standard path is NOT a reason to skip), otherwise ``download_record``
+        -> ``verify_file_format`` -> ``verify_sheet_extent`` (the ASC header
+        extent lies in the sheet frame, B4) -> mandatory campaign sidecar; a
+        failure of any of these steps removes the data file (never a file
+        without a sidecar or with foreign content). After the campaigns are
+        collected the standard path points to the newest LOCAL campaign
+        (``max`` by ``sort_key``; ``ensure_standard_link`` never moves the
+        link back).
         An existing campaign file WITHOUT a sidecar (R22: interrupted before
-        writing it) goes through ``verify_file_format`` before the sidecar is
-        recreated; mismatched content = file removed + campaign failure.
+        writing it) goes through ``verify_file_format`` and
+        ``verify_sheet_extent`` before the sidecar is recreated; mismatched
+        content = file removed + campaign failure.
 
         Concurrency: the link is set ONCE per sheet, after all its campaigns
         are collected, and ``expand_sheets`` deduplicates godla — one sheet =
@@ -757,6 +780,12 @@ class DownloadManager:
             except DownloadError as e:
                 errors.append((record.url, e))
                 continue
+            try:  # B4 + record datum - before the network
+                verify_record_url(record.url, godlo)
+                verify_record_vertical_crs(record, self._record_vertical_crs, godlo)
+            except DownloadError as e:
+                errors.append((ref.dirname, e))
+                continue
             try:
                 ext = campaign_extension(ref, self._default_ext)  # before the network
             except DownloadError as e:
@@ -769,6 +798,7 @@ class DownloadManager:
                 else:  # R22: process interrupted before the sidecar — recreate
                     try:  # content unverified (interrupted before verification)
                         verify_file_format(path, ext)
+                        verify_sheet_extent(path, godlo, ext)
                     except DownloadError as e:
                         path.unlink(missing_ok=True)
                         errors.append((ref.dirname, e))
@@ -791,6 +821,7 @@ class DownloadManager:
             try:
                 self._campaign_provider.download_record(record, path)
                 verify_file_format(path, ext)
+                verify_sheet_extent(path, godlo, ext)
                 self._write_campaign_sidecar(path, godlo, record, ref)
             except DownloadError as e:
                 path.unlink(missing_ok=True)

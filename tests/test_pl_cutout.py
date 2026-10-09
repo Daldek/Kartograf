@@ -820,23 +820,21 @@ class TestDownloadPlBboxCutout:
         assert sent.min_y < _BBOX_2180.min_y
         assert sent.max_y > _BBOX_2180.max_y
 
-    def test_5m_kron86_grid_dataset_vertical_and_segment(self, tmp_path):
+    def test_5m_grid_dataset_vertical_and_segment(self, tmp_path):
         """The whole 5m flow in one test: grid, descriptor, vertical, segment.
 
-        ``--resolution 5m`` with ``--vertical-crs KRON86`` is corrected to
-        EVRF2007 in the provider factory (5m does not exist in KRON86), so the
-        cutout must follow the PROVIDER, not the raw CLI flag. For sheets this
-        error class has long been guarded - the cutout path was a gap in it:
-        a 1 m pixel from 5 m data (25x the file size) or a ``pl_1992_5m_kron86``
+        ``--resolution 5m`` without ``--vertical-crs`` resolves to EVRF2007
+        (the only datum of 5 m; an explicit KRON86 is a CLI error since 0.7.1,
+        ``TestNmt5mKron86Rejected`` in test_cli.py). For sheets this error
+        class has long been guarded - the cutout path was a gap in it: a 1 m
+        pixel from 5 m data (25x the file size) or a ``pl_1992_5m_kron86``
         segment with an EPSG:9650 sidecar passed the whole suite.
         """
         sheets = [
             _write_sheet_asc(tmp_path / "s1.asc", 529900, 381950, size=40, pixel=5.0),
             _write_sheet_asc(tmp_path / "s2.asc", 530100, 381950, size=40, pixel=5.0),
         ]
-        args = _pl_args(
-            tmp_path, resolution="5m", vertical_crs="KRON86", target_crs="EPSG:5514"
-        )
+        args = _pl_args(tmp_path, resolution="5m", target_crs="EPSG:5514")
         rc, *_ = self._run(tmp_path, args, sheets)
 
         assert rc == 0
@@ -1702,38 +1700,19 @@ class TestLibraryApi:
         segments = {p.relative_to(tmp_path).parts[:2] for p in result.sheet_paths}
         assert segments == {("nmt", "pl_1992_1m_kron86")}
 
-    def test_5m_request_follows_factory_vertical_rule(self, tmp_path):
-        """NMT factory rule (5m => EVRF2007): the cutout follows the PROVIDER.
-
-        ``download_pl_cutout`` gives the factory the raw parameters, and takes
-        the cutout vertical from the provider - with the raw KRON86 flag a 5m
-        cutout would not be created (5m exists only in EVRF2007).
-        """
+    def test_5m_kron86_rejected_before_factory(self, tmp_path):
+        """0.7.1: 5m exists only in EVRF2007 - ``ValidationError`` with the
+        remedy BEFORE the provider factory, the network and the directories
+        (earlier the factory swapped the datum with a log warning)."""
         from kartograf import download_pl_cutout
+        from kartograf.exceptions import ValidationError
 
-        provider = self._provider()
-        # what the real factory returns for 5m + KRON86 (vertical correction)
-        provider.vertical_crs = "EVRF2007"
-        provider.resolution = "5m"
-        provider.descriptor_key = "pl.gugik.nmt_5m"
-
-        def download(godlo, path, timeout=30):
-            provider.calls.append(godlo)
-            west, south = self._SHEETS[godlo]
-            return _write_sheet_asc(path, west, south, size=40, pixel=5.0)
-
-        provider.download = download
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         with (
-            patch(
-                "kartograf.providers.pl.create_nmt_provider", return_value=provider
-            ) as factory,
-            patch(
-                "kartograf.download.cutout.find_sheets_for_bbox",
-                return_value=list(self._SHEETS),
-            ),
+            patch("kartograf.providers.pl.create_nmt_provider") as factory,
+            pytest.raises(ValidationError, match="uzyj vertical_crs='EVRF2007'"),
         ):
-            result = download_pl_cutout(
+            download_pl_cutout(
                 bbox,
                 "EPSG:2180",
                 output_dir=tmp_path,
@@ -1741,11 +1720,8 @@ class TestLibraryApi:
                 vertical_crs="KRON86",
             )
 
-        factory.assert_called_once_with(
-            vertical_crs="KRON86", resolution="5m", cache=None
-        )
-        assert result.path.parent == tmp_path / "nmt" / "pl_1992_5m_evrf2007" / "bbox"
-        assert result.path.exists()
+        factory.assert_not_called()
+        assert not (tmp_path / "nmt").exists()
 
     def test_cache_is_handed_to_the_factory(self, tmp_path):
         """N6: ``download_pl_cutout(cache=)`` -> a provider with the record cache;
@@ -2500,11 +2476,13 @@ class TestEmptyCutoutSkip:
 class TestCutoutOverCampaignLinks:
     """ADR-030 (errata Q4): the cutout reads sheets through campaign links."""
 
+    # Synthetic 100 m sheets inside their godlo frames (B4 extent check):
+    # the frames of 2-3 and 2-4 overlap around x = 770000 (EPSG:2180).
     _SHEETS = {
-        "N-34-130-D-d-2-3": (530000, 382000),
-        "N-34-130-D-d-2-4": (530100, 382000),
+        "N-34-130-D-d-2-3": (769900, 509000),
+        "N-34-130-D-d-2-4": (770000, 509000),
     }
-    _BBOX = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
+    _BBOX = BBox(769910, 509010, 770090, 509090, "EPSG:2180")
 
     class _CampaignProvider:
         """A fake with the campaign contract (CLASS attribute supports_campaigns)."""
@@ -2714,3 +2692,182 @@ class TestUnverifiedSheets:
         assert rc == 1
         err = capsys.readouterr().err
         assert err.endswith("\nError: padl\n")
+
+
+class TestBuildFromLocalSheets:
+    """A10: mosaic from local files, no network, caller's output path."""
+
+    def test_no_network_and_path_outside_data_tree(self, tmp_path):
+        from kartograf.download.cutout import build_cutout_from_sheets
+
+        a = _write_sheet_asc(
+            tmp_path / "s" / "N-34-130-D-d-2-3.asc", 500000.0, 600000.0, fill=100.0
+        )
+        out = tmp_path / "project" / "dem.tif"
+        result = build_cutout_from_sheets(
+            [a],
+            BBox(500010, 600010, 500090, 600090, "EPSG:2180"),
+            "EPSG:2180",
+            out,
+            resolution="1m",
+            vertical_crs="EVRF2007",
+        )
+        assert result.path == out and not result.all_nodata
+        assert result.sheet_paths == (a,)
+        assert sorted(p.name for p in out.parent.iterdir()) == [
+            "dem.tif",
+            "dem.tif.meta.json",
+        ]
+
+    def test_off_grid_sheets_with_2180_target_raise(self, tmp_path):
+        """Grid rule as in download_pl_cutout: no silent resampling (A11 deferred)."""
+        from kartograf.download.cutout import build_cutout_from_sheets
+        from kartograf.exceptions import GridMismatchError
+
+        a = _write_sheet_asc(tmp_path / "N-34-130-D-d-2-3.asc", 500000.0, 600000.0)
+        b = _write_sheet_asc(tmp_path / "N-34-130-D-d-2-4.asc", 500100.5, 600000.0)
+        with pytest.raises(GridMismatchError):
+            build_cutout_from_sheets(
+                [a, b],
+                BBox(500010, 600010, 500190, 600090, "EPSG:2180"),
+                "EPSG:2180",
+                tmp_path / "out" / "c.tif",
+                resolution="1m",
+                vertical_crs="EVRF2007",
+            )
+
+    def test_sidecar_has_sheet_sources_and_checksum(self, tmp_path):
+        from kartograf.download.cutout import build_cutout_from_sheets
+
+        a = _write_sheet_asc(
+            tmp_path / "s" / "N-34-130-D-d-2-3.asc", 500000.0, 600000.0
+        )
+        (tmp_path / "s" / "N-34-130-D-d-2-3.asc.meta.json").write_text(
+            json.dumps(
+                {
+                    "request": {"sheet": "N-34-130-D-d-2-3"},
+                    "extra": {
+                        "source": {
+                            "url": "https://example.test/a.asc",
+                            "layer": "L",
+                            "acquisition_date": "2022-01-01",
+                            "full_sheet": False,
+                        }
+                    },
+                }
+            ),
+            encoding="utf-8",
+        )
+        out = tmp_path / "project" / "dem.tif"
+        result = build_cutout_from_sheets(
+            [a],
+            BBox(500010, 600010, 500090, 600090, "EPSG:2180"),
+            "EPSG:2180",
+            out,
+            resolution="1m",
+            vertical_crs="EVRF2007",
+        )
+        meta = json.loads((out.parent / "dem.tif.meta.json").read_text("utf-8"))
+        assert meta["dataset"] == "pl.gugik.nmt_1m"
+        assert meta["sha256"] and meta["size_bytes"] == out.stat().st_size
+        (entry,) = meta["extra"]["sheet_sources"]
+        assert entry["sheet"] == "N-34-130-D-d-2-3"
+        assert entry["url"] == "https://example.test/a.asc"
+        assert result.partial_sheets == ("N-34-130-D-d-2-3",)
+
+    def test_off_grid_sheets_with_warp_target_are_reported(self, tmp_path):
+        """Warp target (W1): off-grid sheets are reprojected separately."""
+        from kartograf.download.cutout import build_cutout_from_sheets
+
+        a = _write_sheet_asc(tmp_path / "N-34-130-D-d-2-3.asc", 530000.0, 382000.0)
+        b = _write_sheet_asc(tmp_path / "N-34-130-D-d-2-4.asc", 530100.5, 382000.0)
+        c = _write_sheet_asc(tmp_path / "N-34-130-D-d-2-5.asc", 530200.0, 382000.0)
+        out = tmp_path / "out" / "c.tif"
+        result = build_cutout_from_sheets(
+            [a, b, c],
+            BBox(530010, 382010, 530290, 382090, "EPSG:2180"),
+            "EPSG:5514",
+            out,
+            resolution="1m",
+            vertical_crs="EVRF2007",
+        )
+        assert result.off_grid_sheets == ("N-34-130-D-d-2-4",)
+        meta = json.loads((out.parent / "c.tif.meta.json").read_text("utf-8"))
+        assert meta["extra"]["off_grid_sheets"] == ["N-34-130-D-d-2-4"]
+        with rasterio.open(out) as ds:
+            assert ds.crs.to_epsg() == 5514
+
+    def test_empty_list_rejected(self, tmp_path):
+        from kartograf.download.cutout import build_cutout_from_sheets
+        from kartograf.exceptions import ValidationError
+
+        with pytest.raises(ValidationError, match="arkusz"):
+            build_cutout_from_sheets(
+                [],
+                BBox(0, 0, 1, 1, "EPSG:2180"),
+                "EPSG:2180",
+                tmp_path / "c.tif",
+                resolution="1m",
+                vertical_crs="EVRF2007",
+            )
+
+    @staticmethod
+    def _call(sheets, out):
+        from kartograf.download.cutout import build_cutout_from_sheets
+
+        return build_cutout_from_sheets(
+            sheets,
+            BBox(500010, 600010, 500090, 600090, "EPSG:2180"),
+            "EPSG:2180",
+            out,
+            resolution="1m",
+            vertical_crs="EVRF2007",
+        )
+
+    def test_missing_sheet_is_validation_error_and_nothing_written(self, tmp_path):
+        from kartograf.exceptions import ValidationError
+
+        good = _write_sheet_asc(tmp_path / "good.asc", 500000.0, 600000.0)
+        ghost = tmp_path / "ghost.asc"
+        out = tmp_path / "project" / "dem.tif"
+        with pytest.raises(ValidationError, match="nie istnieje.*ghost.asc"):
+            self._call([good, ghost], out)
+        assert not out.parent.exists()
+
+    def test_directory_as_sheet_is_validation_error(self, tmp_path):
+        from kartograf.exceptions import ValidationError
+
+        folder = tmp_path / "folder.asc"
+        folder.mkdir()
+        out = tmp_path / "project" / "dem.tif"
+        with pytest.raises(ValidationError, match="nie istnieje.*folder.asc"):
+            self._call([folder], out)
+        assert not out.parent.exists()
+
+    def test_garbage_sheet_is_validation_error(self, tmp_path):
+        from kartograf.exceptions import ValidationError
+
+        junk = tmp_path / "junk.asc"
+        junk.write_text("this is not a raster", encoding="utf-8")
+        out = tmp_path / "project" / "dem.tif"
+        with pytest.raises(ValidationError, match="nie da sie odczytac.*junk.asc"):
+            self._call([junk], out)
+        assert not out.parent.exists()
+
+    def test_output_equal_to_input_sheet_is_rejected(self, tmp_path):
+        from kartograf.exceptions import ValidationError
+
+        a = _write_sheet_asc(tmp_path / "a.asc", 500000.0, 600000.0)
+        before = a.read_bytes()
+        # same file reached through a different spelling of the path
+        alias = tmp_path / "sub" / ".." / "a.asc"
+        (tmp_path / "sub").mkdir()
+        with pytest.raises(ValidationError, match="nadpisal"):
+            self._call([a], alias)
+        assert a.read_bytes() == before
+        assert not (tmp_path / "a.asc.meta.json").exists()
+
+    def test_exported(self):
+        import kartograf
+
+        assert "build_cutout_from_sheets" in kartograf.__all__

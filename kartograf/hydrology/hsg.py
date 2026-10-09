@@ -19,8 +19,12 @@ import logging
 import tempfile
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from kartograf.core.bbox import BBox
 
 logger = logging.getLogger(__name__)
 
@@ -312,6 +316,53 @@ def _geographic_row_cell_areas(src) -> np.ndarray:
     return areas
 
 
+def _classify_hsg(
+    clay: np.ndarray,
+    sand: np.ndarray,
+    silt: np.ndarray,
+    nodata: tuple[float | None, float | None, float | None],
+) -> np.ndarray:
+    """HSG classes (uint8, 0 = nodata) from clay/sand/silt in g/kg.
+
+    Nodata comes from the RAW values (before g/kg -> %): the texture
+    classifier falls back to loam for anything it cannot place. All-zero
+    triplets are gaps (SoilGrids convention).
+    """
+    factor = HSGCalculator.CONVERSION_FACTOR
+    texture = classify_usda_texture_array(clay / factor, sand / factor, silt / factor)
+    hsg = texture_to_hsg_array(texture)
+    mask = (
+        _nodata_mask(clay, nodata[0])
+        | _nodata_mask(sand, nodata[1])
+        | _nodata_mask(silt, nodata[2])
+    )
+    mask |= (clay == 0) & (sand == 0) & (silt == 0)
+    hsg[mask] = 0
+    return hsg
+
+
+def _write_hsg_geotiff(output_path: Path, hsg: np.ndarray, profile: dict) -> None:
+    """Write HSG classes as uint8 GeoTIFF (nodata 0) with the band tags."""
+    import rasterio
+
+    profile = {
+        **profile,
+        "dtype": rasterio.uint8,
+        "count": 1,
+        "nodata": 0,
+        "compress": "deflate",
+    }
+    # The directory appears only now, so a failed input leaves none behind.
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    with rasterio.open(output_path, "w", **profile) as dst:
+        dst.write(hsg, 1)
+        dst.update_tags(
+            1,
+            LAYER_NAME="Hydrologic Soil Group",
+            LAYER_DESCRIPTION="HSG classification: 1=A, 2=B, 3=C, 4=D",
+        )
+
+
 class HSGCalculator:
     """
     Calculator for Hydrologic Soil Groups from SoilGrids data.
@@ -394,7 +445,8 @@ class HSGCalculator:
             stat=stat,
             keep_intermediate=keep_intermediate,
             timeout=timeout,
-            sheet=godlo,
+            # Canonical sheet code in the sidecar, as for NMT and land cover (A7)
+            sheet=parser.godlo,
         )
 
     def calculate_hsg_by_bbox(
@@ -494,55 +546,12 @@ class HSGCalculator:
                 silt = silt_src.read(1).astype(np.float32)
                 silt_nd = silt_src.nodata
 
-            # Convert from g/kg to percentage
-            clay_pct = clay / self.CONVERSION_FACTOR
-            sand_pct = sand / self.CONVERSION_FACTOR
-            silt_pct = silt / self.CONVERSION_FACTOR
+            logger.info("Classifying HSG...")
+            hsg = _classify_hsg(clay, sand, silt, (clay_nd, sand_nd, silt_nd))
 
-            # Classify texture
-            logger.info("Classifying soil texture...")
-            texture = classify_usda_texture_array(clay_pct, sand_pct, silt_pct)
-
-            # Map to HSG
-            logger.info("Mapping to Hydrologic Soil Groups...")
-            hsg = texture_to_hsg_array(texture)
-
-            # Handle nodata.  Computed from the RAW source values (before the
-            # g/kg -> % conversion), because the classifier falls back to
-            # "loam" for anything it cannot place - so the absence of data has
-            # to be detected here, not inferred from the result.
-            nodata_mask = (
-                _nodata_mask(clay, clay_nd)
-                | _nodata_mask(sand, sand_nd)
-                | _nodata_mask(silt, silt_nd)
-            )
-            # Legacy convention: SoilGrids leaves gaps as all-zero triplets.
-            nodata_mask |= (clay == 0) & (sand == 0) & (silt == 0)
-            hsg[nodata_mask] = 0
-
-            # Write output
             logger.info(f"Writing HSG raster to {output_path}...")
-
-            profile.update(
-                dtype=rasterio.uint8,
-                count=1,
-                nodata=0,
-                compress="deflate",
-            )
-
             hsg_crs = profile.get("crs")
-            # Create the output directory only now, right before writing, so a
-            # failed download leaves no empty directory behind.
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            with rasterio.open(output_path, "w", **profile) as dst:
-                dst.write(hsg, 1)
-
-                # Add descriptions
-                dst.update_tags(
-                    1,
-                    LAYER_NAME="Hydrologic Soil Group",
-                    LAYER_DESCRIPTION="HSG classification: 1=A, 2=B, 3=C, 4=D",
-                )
+            _write_hsg_geotiff(output_path, hsg, profile)
 
             # Copy intermediate files if requested
             if keep_intermediate:
@@ -648,3 +657,104 @@ class HSGCalculator:
             }
 
         return stats
+
+
+def hsg_from_rasters(
+    clay: Path,
+    sand: Path,
+    silt: Path,
+    *,
+    bbox: "BBox",
+    crs: str,
+    pixel_m: float,
+    output_path: Path,
+) -> Path:
+    """HSG raster from ready clay/sand/silt rasters (g/kg) on an explicit grid (A8).
+
+    Each input is reprojected with a pinned operation (``CONTENT_POLICY``,
+    bilinear) onto the grid anchored at ``bbox`` (converted to ``crs``) with
+    ``pixel_m`` pixels, then classified like ``calculate_hsg_by_bbox``:
+    input nodata from its tag only (no tag = no nodata value), cells outside
+    an input and all-zero triplets are gaps (0). No configuration defaults.
+
+    Raises
+    ------
+    TransformError
+        No safe pinned operation from an input CRS to ``crs``.
+    ValidationError
+        ``pixel_m`` not positive.
+    """
+    import rasterio
+
+    from kartograf.core.bbox import transform_bbox
+    from kartograf.exceptions import ValidationError
+    from kartograf.transform.crs import CONTENT_POLICY, build_pinned_transform
+    from kartograf.transform.raster import warp_to_grid
+
+    if pixel_m <= 0:
+        raise ValidationError(f"pixel_m musi byc dodatni (podano {pixel_m})")
+    grid = bbox if bbox.crs == crs else transform_bbox(bbox, crs)
+    layers = {"clay": Path(clay), "sand": Path(sand), "silt": Path(silt)}
+    arrays: dict[str, np.ndarray] = {}
+    nodatas: dict[str, float | None] = {}
+    profile: dict = {}
+    with tempfile.TemporaryDirectory() as tmp:
+        for name, src_path in layers.items():
+            with rasterio.open(src_path) as src:
+                src_crs = src.crs.to_string()
+                nodatas[name] = src.nodata  # tag only, like calculate_hsg_by_bbox
+            pinned = build_pinned_transform(src_crs, crs, CONTENT_POLICY)
+            warped = Path(tmp) / f"{name}.tif"
+            # Untagged input: NaN as the warp fill - cells outside the input
+            # become NaN, which _nodata_mask catches; no value is masked.
+            fill = nodatas[name]
+            warp_to_grid(
+                src_path,
+                warped,
+                grid,
+                pixel_m,
+                pinned,
+                src_crs=src_crs,
+                nodata=float("nan") if fill is None else fill,
+            )
+            with rasterio.open(warped) as w:
+                arrays[name] = w.read(1).astype(np.float32)
+                profile = w.profile.copy()
+    hsg = _classify_hsg(
+        arrays["clay"],
+        arrays["sand"],
+        arrays["silt"],
+        (nodatas["clay"], nodatas["sand"], nodatas["silt"]),
+    )
+    output_path = Path(output_path)
+    _write_hsg_geotiff(output_path, hsg, profile)
+    _write_rasters_sidecar(output_path, grid, crs, layers)
+    return output_path
+
+
+def _write_rasters_sidecar(
+    output_path: Path, grid: "BBox", crs: str, layers: dict[str, Path]
+) -> None:
+    """Best-effort sidecar of hsg_from_rasters (inputs identified by sha256)."""
+    from kartograf.sources.sidecar import emit_sidecar, file_digest
+
+    emit_sidecar(
+        "global.isric.soilgrids",
+        output_path,
+        request={
+            "bbox": [grid.min_x, grid.min_y, grid.max_x, grid.max_y],
+            "bbox_crs": crs,
+        },
+        horizontal_crs=crs,
+        capability="bbox_raster",
+        nodata=0,
+        extra={
+            "derived": "hsg",
+            "source_layers": list(layers),
+            "source_files": [
+                {"name": name, "file": path.name, "sha256": file_digest(path)[0]}
+                for name, path in layers.items()
+            ],
+            "classes": "1=A, 2=B, 3=C, 4=D",
+        },
+    )

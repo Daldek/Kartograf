@@ -8,13 +8,19 @@ import json
 import math
 import sys
 from collections.abc import Iterator, Sequence
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from kartograf.cli._parser import parse_bbox_arg
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
 from kartograf.download.campaigns import validate_campaign_args
+from kartograf.download.countries import EDGES as _EDGES
+from kartograf.download.countries import CountryPart
+from kartograf.download.countries import bbox_to_wgs84 as _bbox_to_wgs84
+from kartograf.download.countries import countries_for_bbox as _countries_for_bbox
+from kartograf.download.countries import country_bbox as _country_bbox
+from kartograf.download.cz_cutout import read_tif_nodata as _read_tif_nodata
+from kartograf.download.cz_cutout import write_cz_sidecar as _write_cz_sidecar
 from kartograf.download.manager import (
     DownloadManager,
     DownloadProgress,
@@ -27,6 +33,7 @@ from kartograf.exceptions import (
     ParseError,
     ValidationError,
 )
+from kartograf.providers.pl import require_nmt_vertical_crs
 from kartograf.sources.registry import horizontal_crs_for_godlo
 
 if TYPE_CHECKING:
@@ -225,6 +232,80 @@ def _campaign_opts(args: argparse.Namespace) -> tuple[str, int | None]:
     return getattr(args, "campaigns", "newest"), getattr(args, "min_year", None)
 
 
+def _is_cz_only_task(args: argparse.Namespace) -> bool:
+    """
+    True when the task can only be served by CZ (no PL among its countries).
+
+    Local, best-effort and network-free: a CZ sheet code, ``--country cz``, or
+    (under ``auto``) a ``--bbox``/``--geometry`` lying wholly in CZ. Anything that
+    cannot be resolved (missing file, bad bbox) counts as "not CZ-only" - the
+    caller then prints the generic text and the real error surfaces later.
+    """
+    from kartograf.core.parser_registry import detect_system
+
+    country = getattr(args, "country", "auto")
+    if country == "pl":
+        return False
+    if country == "cz":
+        return True
+    try:
+        if args.godlo is not None:
+            return detect_system(args.godlo).country == "CZ"
+        if getattr(args, "bbox", None) is not None:
+            area = parse_bbox_arg(args.bbox, args.bbox_crs)
+        elif getattr(args, "geometry", None) is not None:
+            area = _geometry_envelope(Path(args.geometry), getattr(args, "layer", None))
+        else:
+            return False
+        return _countries_for_bbox(area) == ("CZ",)
+    except Exception:
+        return False
+
+
+def _reject_laz_only_opts(args: argparse.Namespace) -> bool:
+    """
+    ``--year``/``--min-density`` apply to ``--product laz`` only (0.7.1).
+
+    Before 0.7.1 both were read on the LAZ path alone and silently ignored for
+    nmt/nmpt/orto (the user got the newest data and exit code 0). True (after an
+    ``Error:`` on stderr) when one of them is given with another product; checked
+    in ``cmd_download`` before any country dispatch, so no path (sheet code,
+    hierarchy, sheet list, ``--bbox``, ``--geometry``, cutout, CZ) reaches the
+    network. Year selection for NMT/NMPT/orto is planned for 0.7.2.
+    """
+    product = getattr(args, "product", "nmt")
+    if product == "laz":
+        return False
+    if getattr(args, "year", None) is not None:
+        if _is_cz_only_task(args):
+            message = (
+                f"Error: --year nie dziala dla CZ (CUZK nie ma wyboru roku; "
+                f"podano {product}); pomin --year"
+            )
+        else:
+            message = (
+                f"Error: --year dziala tylko z --product laz (podano {product}); "
+                "wybor roku dla NMT/NMPT/orto bedzie w 0.7.2. "
+            )
+            if getattr(args, "min_year", None) is None:
+                message += (
+                    "Teraz uzyj --min-year RRRR (najnowsza kampania nie starsza "
+                    "niz podany rok; tylko PL, bez --target-crs) albo pomin --year"
+                )
+            else:
+                message += "Pomin --year"
+        print(message, file=sys.stderr)
+        return True
+    if getattr(args, "min_density", None) is not None:
+        print(
+            f"Error: --min-density dziala tylko z --product laz (podano "
+            f"{product}); pomin --min-density",
+            file=sys.stderr,
+        )
+        return True
+    return False
+
+
 def _reject_campaign_opts_without_pl(
     args: argparse.Namespace, countries: tuple[str, ...]
 ) -> bool:
@@ -274,7 +355,7 @@ def _reject_campaign_opts_with_target_crs(args: argparse.Namespace) -> bool:
     if campaigns == "all":
         print(
             "Error: --campaigns all nie dziala z --target-crs — wycinek sklada "
-            "jedna kampanie na arkusz; laczenie kampanii: narzedzie 0.7.1",
+            "jedna kampanie na arkusz",
             file=sys.stderr,
         )
         return True
@@ -300,7 +381,9 @@ def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
     (symmetric to the hard rejections of the CZ branch) and of the ``--target-crs``
     exclusions (product != nmt, ``--system 2000`` - ADR-027)
     - checked BEFORE defaults are substituted, so that "not given" does not
-    pose as a user choice.
+    pose as a user choice. NMT 5m with KRON86 is rejected after the
+    defaults (0.7.1, ``require_nmt_vertical_crs``): only an explicit
+    ``--vertical-crs KRON86`` can produce the pair.
 
     Returns
     -------
@@ -356,19 +439,21 @@ def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
         )
         return 1
     if product == "nmt":
-        # D11: one rule (`nmt_vertical_crs`), one effect - a correction;
-        # the CLI shows it explicitly (stderr, like other Info:), and from here on the
-        # ACTUAL vertical CRS flows, so the factory/manager/cutout correct nothing.
-        from kartograf.providers.pl import nmt_vertical_crs
-
-        actual = nmt_vertical_crs(args.resolution, args.vertical_crs, log=False)
-        if actual != args.vertical_crs:
+        # 0.7.1: the library rule (`require_nmt_vertical_crs`) - 5m exists only
+        # in EVRF2007, so an explicit --vertical-crs KRON86 is an error (no
+        # swap); the default (None -> EVRF2007 above) never trips it. The
+        # message names CLI flags instead of the library's keyword arguments.
+        try:
+            require_nmt_vertical_crs(args.resolution, args.vertical_crs)
+        except ValidationError:
             print(
-                f"Info: NMT 5m (PL) jest dostepny tylko w {actual} — "
-                f"--vertical-crs {args.vertical_crs} zamieniony na {actual}",
+                f"Error: NMT {args.resolution} (PL) jest dostepny tylko w "
+                f"EVRF2007 — podano --vertical-crs {args.vertical_crs}; uzyj "
+                "--vertical-crs EVRF2007 (albo pomin --vertical-crs) albo "
+                f"--resolution 1m dla {args.vertical_crs}",
                 file=sys.stderr,
             )
-            args.vertical_crs = actual
+            return 1
     return 0
 
 
@@ -415,154 +500,9 @@ def _print_transform_error(error: Exception) -> int:
     return 1
 
 
-def _bbox_to_wgs84(bbox: BBox) -> BBox:
-    """
-    Bbox in WGS84 - the common CRS for country recognition and clipping.
-
-    The default pyproj transformer (``core.bbox.transform_bbox``, an envelope
-    from densified edges): it serves to RECOGNIZE the country and clip to its
-    envelope, not to request a download. The pinned operation (``_country_bbox``
-    -> ``bbox_to_crs``) applies when LEAVING Czech CRSs
-    (Krovak/UTM33N) - for a clipped PL bbox the WGS84->EPSG:2180 jump goes
-    deliberately through the default (unpinned) pyproj transformer, see
-    ``_country_bbox``.
-    """
-    from kartograf.core.bbox import transform_bbox
-
-    return transform_bbox(bbox, "EPSG:4326")
-
-
-def _countries_for_bbox(bbox: BBox) -> tuple[str, ...]:
-    """
-    Codes of countries whose ``extent_wgs84`` intersects the bbox (sorted).
-
-    Country envelopes are rectangles, so a border strip of one country
-    can lie inside the neighbor's rectangle (e.g. Opole Silesia inside the
-    CZ envelope) - auto-split then queries both sources instead of guessing the border.
-    """
-    from kartograf.sources.registry import all_countries
-
-    wgs = _bbox_to_wgs84(bbox)
-    hits = [
-        profile.code
-        for profile in all_countries()
-        if (
-            wgs.min_x < profile.extent_wgs84.max_x
-            and wgs.max_x > profile.extent_wgs84.min_x
-            and wgs.min_y < profile.extent_wgs84.max_y
-            and wgs.max_y > profile.extent_wgs84.min_y
-        )
-    ]
-    return tuple(sorted(hits))
-
-
-@dataclass(frozen=True)
-class CountryPart:
-    """Part of an area task for one country (``_country_bbox``).
-
-    ``clipped`` lists the WGS84 edges actually clipped to the country's
-    envelope (``"W"``, ``"S"``, ``"E"``, ``"N"``; empty = bbox unchanged) -
-    ``_dispatch_area`` turns this into an ``Info:`` (S3).
-    """
-
-    bbox: BBox
-    clipped: tuple[str, ...] = ()
-
-
-# edge -> (BBox field, whether clipping raises the minimum, unit)
-_EDGES = (
-    ("W", "min_x", True, "E"),
-    ("S", "min_y", True, "N"),
-    ("E", "max_x", False, "E"),
-    ("N", "max_y", False, "N"),
-)
-
-
 def _deg(value: float, unit: str) -> str:
     """``54,90°N`` — degrees with a decimal comma (Polish messages)."""
     return f"{value:.2f}".replace(".", ",") + f"°{unit}"
-
-
-def _country_bbox(
-    bbox: BBox, code: str, *, auto: bool, cz_crs: str = "EPSG:5514"
-) -> CountryPart:
-    """
-    Part of the bbox for a country in the CRS of its task.
-
-    ``auto`` mode clips the bbox to the country's envelope (in WGS84) and returns the
-    result in the working CRS: CZ - ``cz_crs`` (Krovak or ``--target-crs``), PL - the
-    task CRS unchanged (keeps the PL-2000 zone and zero drift). An explicit
-    ``--country`` does NOT clip anything (the user knows the extent of their task).
-    Clipped edges come back in ``CountryPart.clipped`` - the ``Info:`` message is
-    printed by ``_dispatch_area`` (S3).
-
-    When clipping changes nothing, the ORIGINAL bbox is transformed -
-    one jump from the task CRS instead of two (via WGS84).
-
-    PL after clipping (S3): only the edges in ``clipped`` take their value
-    from the transformation of the clipped rectangle (the envelope of the country's
-    curved edge - conservative outward), the rest keep the
-    original value 1:1. The envelope of the WHOLE clipped rectangle widened
-    the untouched edges by tens of meters (Rozewie: W 110 / S 38 / E 82 m),
-    because the task meridian is not a straight line in EPSG:2180. The CZ part is
-    by definition in a different CRS (``bbox_to_crs`` with edge sampling),
-    so widening there is unavoidable and honest - unchanged.
-
-    A task given in a Czech CRS but directed to PL (``--bbox-crs
-    EPSG:5514`` with ``--country pl`` or with auto-split) leaves Krovak
-    IMMEDIATELY and only through the pinned operation: later steps (clipping, sheet
-    selection) already work in EPSG:2180, so GUGiK sheet selection never
-    results from an unpinned Krovak transformation.
-    """
-    from kartograf.core.bbox import is_czech_crs, transform_bbox
-    from kartograf.providers.cuzk.client import wkid
-    from kartograf.providers.cuzk.dmr import bbox_to_crs
-    from kartograf.sources.registry import get_country
-
-    if code != "CZ" and is_czech_crs(bbox.crs):
-        bbox = bbox_to_crs(bbox, "EPSG:2180")
-
-    if not auto:
-        return CountryPart(bbox)
-
-    wgs = _bbox_to_wgs84(bbox)
-    extent = get_country(code).extent_wgs84
-    clipped = tuple(
-        edge
-        for edge, attr, is_min, _unit in _EDGES
-        if (
-            getattr(wgs, attr) < getattr(extent, attr)
-            if is_min
-            else getattr(wgs, attr) > getattr(extent, attr)
-        )
-    )
-    if not clipped:
-        source = bbox  # clipping was a no-op
-    else:
-        source = BBox(
-            max(wgs.min_x, extent.min_x),
-            max(wgs.min_y, extent.min_y),
-            min(wgs.max_x, extent.max_x),
-            min(wgs.max_y, extent.max_y),
-            "EPSG:4326",
-        )
-
-    target = cz_crs if code == "CZ" else bbox.crs
-    if wkid(source.crs) == wkid(target):
-        return CountryPart(source, clipped)
-    if code == "CZ":
-        # into a Czech CRS only the pinned operation with edge sampling
-        # (the image of a rectangle in Krovak has curved sides)
-        return CountryPart(bbox_to_crs(source, target), clipped)
-    transformed = transform_bbox(source, target)
-    if not clipped:
-        return CountryPart(transformed)
-    # PL: untouched edges 1:1 from the original, clipped ones from the transformation
-    values = {
-        attr: getattr(transformed if edge in clipped else bbox, attr)
-        for edge, attr, _is_min, _unit in _EDGES
-    }
-    return CountryPart(BBox(**values, crs=target), clipped)
 
 
 def _area_outside_extents(
@@ -1022,6 +962,10 @@ def cmd_download(args: argparse.Namespace) -> int:
         print(f"Error: {str(e).replace('min_year', '--min-year')}", file=sys.stderr)
         return 1
 
+    # 0.7.1: --year/--min-density are LAZ-only; every path below would ignore them
+    if _reject_laz_only_opts(args):
+        return 1
+
     country_flag = getattr(args, "country", "auto")
     product = getattr(args, "product", "nmt")
 
@@ -1097,8 +1041,8 @@ def cmd_download(args: argparse.Namespace) -> int:
                 output_dir=output_dir,
                 provider=provider,
                 storage=storage,
-                # the vertical CRS is already ACTUAL: "5m => EVRF2007" in
-                # _resolve_pl_sentinels (D11)
+                # the vertical CRS is already validated: 5m + KRON86 is
+                # rejected in _resolve_pl_sentinels (0.7.1)
                 vertical_crs=vertical_crs,
                 resolution=resolution,
                 max_workers=workers,
@@ -1778,8 +1722,8 @@ def _download_pl_sheet_list(
                 output_dir=output_dir,
                 provider=provider,
                 storage=storage,
-                # the vertical CRS is already ACTUAL: "5m => EVRF2007" in
-                # _resolve_pl_sentinels (D11)
+                # the vertical CRS is already validated: 5m + KRON86 is
+                # rejected in _resolve_pl_sentinels (0.7.1)
                 vertical_crs=vertical_crs,
                 resolution=resolution,
                 max_workers=workers,
@@ -2007,17 +1951,6 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     return 0
 
 
-def _read_tif_nodata(path: Path) -> float | None:
-    """Nodata from a GeoTIFF tag (None if missing/unreadable)."""
-    try:
-        import rasterio
-
-        with rasterio.open(path) as src:
-            return src.nodata
-    except Exception:  # noqa: BLE001 — enriching metadata < data
-        return None
-
-
 def _warn_cz_all_nodata(target: Path, nodata: float | None) -> None:
     """N2: ``Warning:`` when a CZ raster has not a single valid pixel (code 0).
 
@@ -2037,44 +1970,6 @@ def _warn_cz_all_nodata(target: Path, nodata: float | None) -> None:
             "DMR CUZK (poza granica CZ?)",
             file=sys.stderr,
         )
-
-
-def _write_cz_sidecar(
-    provider,
-    target: Path,
-    *,
-    request: dict,
-    capability: str,
-    horizontal_crs: str,
-    nodata: float | None,
-    extra: dict | None = None,
-) -> None:
-    """Best-effort sidecar for a CZ result (an error does not abort the download).
-
-    `horizontal_crs` is the CRS of the ACTUAL result (TM33 tile: EPSG:3045,
-    --target-crs: the CRS requested by the user), not the channel's default CRS.
-
-    Both `transform` entries describe PINNED operations performed locally -
-    horizontal and vertical alike (ADR-024). Previously the horizontal field carried
-    `"server:EPSG:<code>"` without an accuracy, which hid the server-side
-    reprojection error (135 m) from the sidecar consumer.
-    """
-    from kartograf.sources.sidecar import emit_sidecar
-
-    emit_sidecar(
-        provider.descriptor_key,
-        target,
-        request=request,
-        vertical_crs=provider.vertical_crs,
-        horizontal_crs=horizontal_crs,
-        pinned_transforms={
-            "horizontal": provider.horizontal_transform(horizontal_crs),
-            "vertical": provider.vertical_transform,
-        },
-        capability=capability,
-        nodata=nodata,
-        extra=extra,
-    )
 
 
 def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> int:
@@ -2139,6 +2034,20 @@ def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> i
     return 0
 
 
+@contextlib.contextmanager
+def _library_log_muted(name: str) -> Iterator[None]:
+    """Mute one library logger while the CLI prints the same message itself."""
+    import logging
+
+    log = logging.getLogger(name)
+    previous = log.disabled
+    log.disabled = True
+    try:
+        yield
+    finally:
+        log.disabled = previous
+
+
 def _cz_download_bbox(
     args,
     provider,
@@ -2154,66 +2063,47 @@ def _cz_download_bbox(
     5514) - the file name carries the coordinates of the actually requested cutout.
     The request then goes to the server in the native CRS, and the local
     warp in the provider moves it onto the result grid (ADR-024).
+
+    Implementation: ``download.cz_cutout.run_cz_cutout``.
     """
-    from kartograf.download.storage import bbox_cutout_path, prune_empty_dirs
-    from kartograf.providers.cuzk.client import wkid
-    from kartograf.providers.cuzk.dmr import CUZK_NODATA, bbox_to_crs
-    from kartograf.sources.registry import get_source
+    from kartograf.download.cz_cutout import run_cz_cutout
 
     image_sr = args.target_crs or "EPSG:5514"
-    if wkid(bbox.crs) != wkid(image_sr):
-        # normalization BEFORE naming the file: the name carries the coordinates
-        # of the actually requested cutout (in download_bbox this is already a no-op)
-        bbox = bbox_to_crs(bbox, image_sr)
-
-    descriptor = get_source(provider.descriptor_key)
-    target = bbox_cutout_path(
-        args.output,
-        descriptor.resolve_subdir(vertical_crs=provider.vertical_crs),
-        bbox,
-        descriptor.default_extension,
-    )
-
-    if skip_existing and target.exists():
-        if not quiet:
-            print(f"Skipped - already exists at {target}")
-        _print_legacy_krovak_info(target)
-        return 0
 
     def announce() -> None:
         # O-3: printed by the provider right before the first exportImage
         if not quiet:
             print(f"Downloading CZ bbox ({provider.resolution}, {image_sr})...")
 
-    # the provider creates directories only when fetching - the sidecar needs them
-    target.parent.mkdir(parents=True, exist_ok=True)
     try:
-        provider.download_bbox(bbox, target, on_download=announce)
+        # the CLI prints its own 'Warning:' line - the library log would
+        # repeat it on stderr (logging.lastResort; the CLI configures no logging)
+        with _library_log_muted("kartograf.download.cz_cutout"):
+            result = run_cz_cutout(
+                provider,
+                bbox,
+                output_dir=args.output,
+                image_crs=args.target_crs,
+                force=not skip_existing,
+                parent_request=parent_request,
+                on_download=announce,
+            )
     except (DownloadError, ValidationError) as e:
-        # finding 10: a failure leaves no empty <segment>/bbox/ tree
-        prune_empty_dirs(target.parent, Path(args.output))
         print(f"Error: {e}", file=sys.stderr)
         return 1
-    except BaseException:
-        prune_empty_dirs(target.parent, Path(args.output))
-        raise
-
-    nodata = _read_tif_nodata(target)
-    _warn_cz_all_nodata(target, nodata)
-    _write_cz_sidecar(
-        provider,
-        target,
-        request={
-            "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
-            "bbox_crs": bbox.crs,
-        },
-        capability="bbox_raster",
-        horizontal_crs=image_sr,
-        nodata=nodata if nodata is not None else CUZK_NODATA,
-        extra={"parent_request": parent_request} if parent_request else None,
-    )
+    if result.skipped:
+        if not quiet:
+            print(f"Skipped - already exists at {result.path}")
+        _print_legacy_krovak_info(result.path)
+        return 0
+    if result.all_nodata:
+        print(
+            f"Warning: {result.path} jest w calosci nodata — obszar poza pokryciem "
+            "DMR CUZK (poza granica CZ?)",
+            file=sys.stderr,
+        )
     if not quiet:
-        print(f"Downloaded to {target}")
+        print(f"Downloaded to {result.path}")
     return 0
 
 

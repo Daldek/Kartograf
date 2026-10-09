@@ -260,16 +260,21 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         DownloadError
             If any index layer query fails after retries, its answer is
             invalid, or the ASC download fails after retries. An older campaign
-            is never substituted after a failed query.
+            is never substituted after a failed query. Also when the record
+            declares another vertical datum than ``vertical_crs``
+            (``verify_record_vertical_crs``; nothing is downloaded).
 
         Examples
         --------
         >>> provider = GugikProvider()
         >>> path = provider.download("N-34-130-D-d-2-4", Path("./data/sheet.asc"))
         """
-        return self.download_record(
-            self._resolve_sheet(godlo, timeout), Path(output_path), timeout
-        )
+        # local import: the kartograf.download package imports manager -> providers.pl
+        from kartograf.download.campaigns import verify_record_vertical_crs
+
+        record = self._resolve_sheet(godlo, timeout)
+        verify_record_vertical_crs(record, self._vertical_crs, godlo)
+        return self.download_record(record, Path(output_path), timeout)
 
     def _get_opendata_url(self, godlo: str, timeout: int = DEFAULT_TIMEOUT) -> str:
         """Return the URL of the strictly matching, newest index record."""

@@ -29,6 +29,7 @@ import json
 import logging
 import os
 import threading
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
@@ -132,7 +133,7 @@ class PlCutoutResult:
     unverified: dict[str, str] = field(default_factory=dict)
 
 
-def _bbox_to_2180(bbox: BBox) -> BBox:
+def bbox_to_2180(bbox: BBox) -> BBox:
     """Request in EPSG:2180: Czech CRSs via the pinned operation, the rest as before.
 
     PL/WGS84 CRSs — deliberately the default transformer, as in the whole PL
@@ -165,8 +166,8 @@ def prepare_pl_cutout(
     Zero network. ``TransformError`` when the EPSG:2180 -> ``target_crs``
     pair has no pinned operation (ADR-024/027); ``ValidationError`` on bad
     parameters. ``vertical_crs`` is the ACTUAL vertical CRS: with 5m only
-    EVRF2007 (``download_pl_cutout`` applies the provider factory rule
-    itself).
+    EVRF2007 (``require_nmt_vertical_crs``; 5m with KRON86 =
+    ``ValidationError``).
 
     The cutout is always a GeoTIFF (``.tif``) — the descriptor's
     ``default_extension`` (``.asc``) concerns sheets, not the cutout.
@@ -182,10 +183,9 @@ def prepare_pl_cutout(
         raise ValidationError(
             f"Uklad wysokosci NMT PL: EVRF2007 albo KRON86 (podano {vertical_crs})"
         )
-    from kartograf.providers.pl import nmt_vertical_crs
+    from kartograf.providers.pl import require_nmt_vertical_crs
 
-    if nmt_vertical_crs(resolution, vertical_crs, log=False) != vertical_crs:
-        raise ValidationError("NMT 5m jest dostepny wylacznie w EVRF2007")
+    require_nmt_vertical_crs(resolution, vertical_crs)
 
     from kartograf.providers.cuzk.dmr import bbox_to_crs
     from kartograf.sources.registry import get_source
@@ -193,7 +193,7 @@ def prepare_pl_cutout(
     # local import: tests replace the operation in the transform.crs module
     from kartograf.transform.crs import build_pinned_transform
 
-    bbox_2180 = _bbox_to_2180(bbox)
+    bbox_2180 = bbox_to_2180(bbox)
     pinned = None
     bbox_target = bbox_2180
     bbox_source_2180 = bbox_2180
@@ -860,7 +860,8 @@ def download_pl_cutout(
 
     Geometry mode: ``bbox`` is the geometry envelope (e.g.
     ``get_overall_bbox(path, target_crs="EPSG:2180")``), ``geometry`` — the file.
-    NMT factory rule: 5m => EVRF2007 (with a log warning). The provider and
+    5m with KRON86 = ``ValidationError`` before the factory (5 m exists only
+    in EVRF2007; the CLI rejects the pair too, 0.7.1). The provider and
     session come from the factory; ``cache`` (``MetadataCache`` or ``None``)
     goes to the provider — index records are read and written only through
     the cache. ``force=True`` does NOT bypass the record cache by itself: to
@@ -910,8 +911,9 @@ def download_pl_cutout(
         raise ValidationError(
             f"Uklad wysokosci NMT PL: EVRF2007 albo KRON86 (podano {vertical_crs})"
         )
-    from kartograf.providers.pl import create_nmt_provider
+    from kartograf.providers.pl import create_nmt_provider, require_nmt_vertical_crs
 
+    require_nmt_vertical_crs(resolution, vertical_crs)  # before the factory
     provider = create_nmt_provider(
         vertical_crs=vertical_crs, resolution=resolution, cache=cache
     )
@@ -935,4 +937,104 @@ def download_pl_cutout(
         force=force,
         on_progress=on_progress,
         parent_request=parent_request,
+    )
+
+
+def _unreadable_sheets(sheets: Sequence[Path]) -> list[Path]:
+    """Sheets that rasterio cannot open (damaged, not a raster)."""
+    import rasterio
+    from rasterio.errors import RasterioIOError
+
+    bad: list[Path] = []
+    for path in sheets:
+        try:
+            with rasterio.open(path):
+                pass
+        except RasterioIOError:
+            bad.append(path)
+    return bad
+
+
+def build_cutout_from_sheets(
+    sheet_paths: Sequence[Path],
+    bbox: BBox,
+    target_crs: str,
+    output_path: Path,
+    *,
+    resolution: str,
+    vertical_crs: str,
+) -> PlCutoutResult:
+    """NMT PL cutout from LOCAL sheet files - no network (A10).
+
+    The result goes to ``output_path`` chosen by the caller (also outside
+    the Kartograf ``data/`` tree), with its sidecar next to it
+    (``extra.sheet_sources`` from the sheets' sidecars, when present). Grid
+    and warp rules as in ``download_pl_cutout``; the file is always built
+    (no skip of an existing result).
+
+    Raises
+    ------
+    ValidationError
+        Empty sheet list, a sheet path that is missing, not a file or not
+        readable as a raster (the message lists the paths), ``output_path``
+        equal to one of the sheets (it would overwrite the input), bad
+        parameters, PL-2000 sheets. All input checks run before anything is
+        written.
+    GridMismatchError
+        EPSG:2180 target and sheets with different grid phases.
+    TransformError
+        No safe pinned operation to ``target_crs``.
+    """
+    if not sheet_paths:
+        raise ValidationError("build_cutout_from_sheets: brak arkuszy wejsciowych")
+    output_path = Path(output_path)
+    sheets = tuple(Path(p) for p in sheet_paths)
+    resolved_output = output_path.resolve()
+    if any(p.resolve() == resolved_output for p in sheets):
+        raise ValidationError(
+            f"build_cutout_from_sheets: sciezka wyniku {output_path} jest jednym "
+            "z arkuszy wejsciowych — wynik nadpisalby dane; podaj inna sciezke"
+        )
+    missing = [p for p in sheets if not p.is_file()]
+    if missing:
+        raise ValidationError(
+            f"build_cutout_from_sheets: {len(missing)} arkusz(y) nie istnieje "
+            f"albo nie jest plikiem: {', '.join(str(p) for p in missing)}"
+        )
+    unreadable = _unreadable_sheets(sheets)
+    if unreadable:
+        raise ValidationError(
+            f"build_cutout_from_sheets: {len(unreadable)} arkusz(y) nie da sie "
+            f"odczytac jako rastra: {', '.join(str(p) for p in unreadable)}"
+        )
+    prepared = prepare_pl_cutout(
+        bbox,
+        target_crs,
+        output_dir=output_path.parent,
+        resolution=resolution,
+        vertical_crs=vertical_crs,
+    )
+    cutout = replace(prepared, target_path=output_path)
+    off_grid = build_pl_cutout(
+        list(sheets),
+        cutout.bbox_source_2180,
+        cutout.bbox_target,
+        cutout.pixel_size,
+        cutout.pinned,
+        cutout.target_path,
+    )
+    from kartograf.transport.mosaic import has_valid_pixels
+
+    all_nodata = not has_valid_pixels(output_path, PL_NODATA)
+    if all_nodata:
+        logger.warning(f"Wycinek {output_path} jest w calosci nodata")
+    write_pl_cutout_sidecar(
+        cutout, sheet_paths=sheets, off_grid_sheets=off_grid, all_nodata=all_nodata
+    )
+    return PlCutoutResult(
+        path=output_path,
+        sheet_paths=sheets,
+        off_grid_sheets=off_grid,
+        all_nodata=all_nodata,
+        partial_sheets=_partial_sheets([_sheet_source(p) for p in sheets]),
     )

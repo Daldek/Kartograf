@@ -1,5 +1,6 @@
 """Tests of the metadata sidecar (kartograf.sources.sidecar)."""
 
+import hashlib
 import json
 import logging
 from pathlib import Path
@@ -12,6 +13,8 @@ from kartograf.sources.sidecar import (
     ResultMetadata,
     _select_channel_by_capability,
     build_metadata,
+    emit_sidecar,
+    file_digest,
     pl_sheet_horizontal_crs,
     read_asc_nodata,
     write_sidecar,
@@ -459,3 +462,42 @@ class TestEmitSidecar:
         )
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
         assert payload["transform"] is None
+
+
+class TestDigest:
+    """A3: every sidecar with a data file carries sha256 and size_bytes."""
+
+    def test_build_metadata_has_sha256_and_size(self, tmp_path):
+        data = tmp_path / "N-34-130-D-d-2-4.asc"
+        body = b"ncols 1\nnrows 1\nxllcorner 0\nyllcorner 0\ncellsize 1\n0\n"
+        data.write_bytes(body)
+        meta = build_metadata(
+            get_source("pl.gugik.nmt_1m"),
+            request={"sheet": "N-34-130-D-d-2-4"},
+            data_path=data,
+        )
+        assert meta.sha256 == hashlib.sha256(body).hexdigest()
+        assert meta.size_bytes == len(body)
+
+    def test_no_data_path_gives_none(self):
+        meta = build_metadata(
+            get_source("pl.gugik.nmt_1m"), request={"sheet": "N-34-130-D-d-2-4"}
+        )
+        assert meta.sha256 is None and meta.size_bytes is None
+
+    def test_file_digest_streams_large_file(self, tmp_path):
+        big = tmp_path / "big.bin"
+        body = b"x" * (3 * 1024 * 1024 + 7)
+        big.write_bytes(body)
+        assert file_digest(big) == (hashlib.sha256(body).hexdigest(), len(body))
+
+    def test_sidecar_json_has_top_level_keys(self, tmp_path):
+        data = tmp_path / "a.asc"
+        data.write_bytes(b"ncols 1\n")
+        sidecar = emit_sidecar(
+            "pl.gugik.nmt_1m", data, request={"sheet": "N-34-130-D-d-2-4"}
+        )
+        assert sidecar is not None
+        payload = json.loads(sidecar.read_text())
+        assert payload["sha256"] == hashlib.sha256(b"ncols 1\n").hexdigest()
+        assert payload["size_bytes"] == 8

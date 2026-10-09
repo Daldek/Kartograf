@@ -12,6 +12,7 @@ from pathlib import Path
 from unittest.mock import ANY, Mock, patch
 
 import pytest  # noqa: F401 - required for fixtures
+import shapefile
 from pyproj import CRS
 
 from kartograf.cli.commands import (
@@ -1341,14 +1342,17 @@ class TestCreateProviderAndStorage:
         )
         assert storage._subdir == "nmt/pl_{uklad}_1m_kron86"
 
-    def test_nmt_5m_kron86_storage_follows_provider_correction(self, tmp_path):
-        """Factory corrects 5m=>EVRF2007 - the segment carries the fact, not a flag."""
+    def test_nmt_5m_needs_datum_resolved_by_sentinels(self, tmp_path):
+        """0.7.1: ``_resolve_pl_sentinels`` rejects 5m + KRON86 before this
+        helper; should the pair reach it, the library factory rejects it."""
         from kartograf.cli.download_cmd import _create_provider_and_storage
 
         provider, storage = _create_provider_and_storage(
-            "nmt", tmp_path, "KRON86", "5m"
+            "nmt", tmp_path, "EVRF2007", "5m"
         )
         assert storage._subdir == "nmt/pl_{uklad}_5m_evrf2007"
+        with pytest.raises(ValidationError, match="tylko w EVRF2007"):
+            _create_provider_and_storage("nmt", tmp_path, "KRON86", "5m")
 
     def test_nmpt_storage_segment(self, tmp_path):
         from kartograf.cli.download_cmd import _create_provider_and_storage
@@ -1357,6 +1361,206 @@ class TestCreateProviderAndStorage:
             "nmpt", tmp_path, "KRON86", "1m"
         )
         assert storage._subdir == "nmpt/pl_{uklad}_1m_kron86"
+
+
+_5M_KRON86_ERROR = (
+    "Error: NMT 5m (PL) jest dostepny tylko w EVRF2007 — podano --vertical-crs "
+    "KRON86; uzyj --vertical-crs EVRF2007 (albo pomin --vertical-crs) albo "
+    "--resolution 1m dla KRON86"
+)
+
+
+def _write_pl_shp_2180(directory):
+    """Small shapefile (a 1 km polygon near Krakow) in EPSG:2180 — offline data."""
+    shp_path = directory / "area_pl.shp"
+    with shapefile.Writer(str(shp_path)) as w:
+        w.field("name", "C", 40)
+        w.poly(
+            [
+                [
+                    (420000, 230000),
+                    (421000, 230000),
+                    (421000, 231000),
+                    (420000, 231000),
+                    (420000, 230000),
+                ]
+            ]
+        )
+        w.record("area1")
+    shp_path.with_suffix(".prj").write_text(
+        CRS.from_epsg(2180).to_wkt(), encoding="utf-8"
+    )
+    return shp_path
+
+
+class TestNmt5mKron86Rejected:
+    """0.7.1: an explicit ``--resolution 5m --vertical-crs KRON86`` is a CLI
+    error (code 1) before any provider or network call - like the library
+    (``require_nmt_vertical_crs``); without ``--vertical-crs`` 5m still works
+    (default EVRF2007)."""
+
+    @pytest.mark.parametrize(
+        "task",
+        [
+            ["N-34-130-D-d-2-4"],
+            ["N-34-130-D"],
+            ["--bbox", "630000,480000,637000,487000", "--country", "pl"],
+            ["--bbox", "630000,480000,637000,487000"],
+            ["--bbox", "630000,480000,637000,487000", "--target-crs", "EPSG:2180"],
+            # PL+CZ border area: under auto KRON86 decides PL, CZ never runs
+            ["--bbox", "18.5,49.7,18.9,49.95", "--bbox-crs", "EPSG:4326"],
+        ],
+        ids=[
+            "godlo",
+            "godlo-hierarchy",
+            "bbox-pl",
+            "bbox-auto",
+            "bbox-cutout",
+            "bbox-auto-pl-cz-border",
+        ],
+    )
+    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.cli.download_cmd._download_pl_cutout")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_explicit_kron86_with_5m_is_error(
+        self,
+        mock_manager_cls,
+        mock_create,
+        mock_find,
+        mock_cutout,
+        mock_run_cz,
+        capsys,
+        tmp_path,
+        task,
+    ):
+        result = main(
+            [
+                "download",
+                *task,
+                "--resolution",
+                "5m",
+                "--vertical-crs",
+                "KRON86",
+                "-o",
+                str(tmp_path / "out"),
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        err = capsys.readouterr().err
+        assert _5M_KRON86_ERROR in err
+        assert "zamieniony" not in err
+        mock_manager_cls.assert_not_called()
+        mock_create.assert_not_called()
+        mock_find.assert_not_called()
+        mock_cutout.assert_not_called()
+        mock_run_cz.assert_not_called()
+        assert not (tmp_path / "out").exists()
+
+    @pytest.mark.parametrize(
+        "extra", [[], ["--target-crs", "EPSG:2180"]], ids=["sheets", "cutout"]
+    )
+    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.cli.download_cmd._download_pl_cutout")
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_geometry_explicit_kron86_with_5m_is_error(
+        self,
+        mock_manager_cls,
+        mock_create,
+        mock_find_geom,
+        mock_cutout,
+        mock_run_cz,
+        capsys,
+        tmp_path,
+        extra,
+    ):
+        shp = _write_pl_shp_2180(tmp_path)
+
+        result = main(
+            [
+                "download",
+                "--geometry",
+                str(shp),
+                *extra,
+                "--resolution",
+                "5m",
+                "--vertical-crs",
+                "KRON86",
+                "-o",
+                str(tmp_path / "out"),
+                "-q",
+            ]
+        )
+
+        assert result == 1
+        err = capsys.readouterr().err
+        assert _5M_KRON86_ERROR in err
+        assert "zamieniony" not in err
+        mock_manager_cls.assert_not_called()
+        mock_create.assert_not_called()
+        mock_find_geom.assert_not_called()
+        mock_cutout.assert_not_called()
+        mock_run_cz.assert_not_called()
+        assert not (tmp_path / "out").exists()
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_godlo_5m_without_vertical_crs_uses_evrf2007(
+        self, mock_manager_cls, capsys, tmp_path
+    ):
+        mock_manager = Mock()
+        mock_manager.last_result = None
+        mock_manager.download_sheet.return_value = tmp_path / "out" / "a.asc"
+        mock_manager_cls.return_value = mock_manager
+
+        result = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--resolution",
+                "5m",
+                "-o",
+                str(tmp_path / "out"),
+                "-q",
+            ]
+        )
+
+        assert result == 0
+        err = capsys.readouterr().err
+        assert "Error:" not in err and "Info:" not in err
+        kwargs = mock_manager_cls.call_args.kwargs
+        assert kwargs["vertical_crs"] == "EVRF2007"
+        assert kwargs["resolution"] == "5m"
+        assert kwargs["provider"].vertical_crs == "EVRF2007"
+
+    def test_sentinels_reject_only_explicit_kron86(self, capsys):
+        """The rule sits in ``_resolve_pl_sentinels``: the default (None ->
+        EVRF2007) and an explicit EVRF2007 pass, an explicit KRON86 fails."""
+        from kartograf.cli.download_cmd import _resolve_pl_sentinels
+
+        def ns(vertical_crs):
+            return argparse.Namespace(
+                product="nmt",
+                resolution="5m",
+                vertical_crs=vertical_crs,
+                target_crs=None,
+                system=None,
+            )
+
+        for given in (None, "EVRF2007"):
+            args = ns(given)
+            assert _resolve_pl_sentinels(args) == 0
+            assert args.vertical_crs == "EVRF2007"
+        assert capsys.readouterr().err == ""
+
+        args = ns("KRON86")
+        assert _resolve_pl_sentinels(args) == 1
+        assert _5M_KRON86_ERROR in capsys.readouterr().err
+        assert args.vertical_crs == "KRON86"  # no silent swap
 
 
 class TestCmdDownloadBBox:
@@ -1902,26 +2106,28 @@ class TestCmdLandcoverDownload:
 
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
     def test_landcover_download_by_godlo(self, mock_mgr_cls, capsys, tmp_path):
-        """landcover download --godlo calls manager.download with godlo."""
+        """landcover download --godlo (BDOT10k) downloads every powiat of the sheet."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download.return_value = tmp_path / "out.gpkg"
+        mock_mgr.download_all_counties.return_value = [tmp_path / "out.gpkg"]
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
             ["landcover", "download", "--godlo", "N-34-130-D", "-o", str(tmp_path)]
         )
         assert result == 0
-        mock_mgr.download.assert_called_once()
-        call_kwargs = mock_mgr.download.call_args
+        mock_mgr.download_all_counties.assert_called_once()
+        call_kwargs = mock_mgr.download_all_counties.call_args
         assert call_kwargs.kwargs.get("godlo") == "N-34-130-D"
+        mock_mgr.download.assert_not_called()
+        assert "Downloaded to" in capsys.readouterr().out
 
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
     def test_landcover_download_by_bbox_success(self, mock_mgr_cls, capsys, tmp_path):
-        """landcover download --bbox calls manager.download with bbox."""
+        """landcover download --bbox (BDOT10k) downloads every powiat of the bbox."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download.return_value = tmp_path / "out.gpkg"
+        mock_mgr.download_all_counties.return_value = [tmp_path / "out.gpkg"]
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -1935,7 +2141,9 @@ class TestCmdLandcoverDownload:
             ]
         )
         assert result == 0
-        mock_mgr.download.assert_called_once()
+        mock_mgr.download_all_counties.assert_called_once()
+        assert mock_mgr.download_all_counties.call_args.kwargs.get("bbox") is not None
+        mock_mgr.download.assert_not_called()
         captured = capsys.readouterr()
         assert "Downloaded to" in captured.out
 
@@ -2135,6 +2343,33 @@ class TestCmdSoilgrids:
         assert result == 1
         captured = capsys.readouterr()
         assert "Error" in captured.err
+
+    @patch("kartograf.hydrology.HSGCalculator")
+    def test_soilgrids_hsg_godlo_leading_zeros_canonical(self, mock_calc_cls, tmp_path):
+        """A7: default HSG file name and the calculator use the canonical godlo."""
+        mock_calc = mock_calc_cls.return_value
+        mock_calc.calculate_hsg_by_godlo.return_value = tmp_path / "hsg.tif"
+        out = tmp_path / "out"
+
+        result = main(["soilgrids", "hsg", "--godlo", "M-33-036-A", "-o", str(out)])
+
+        assert result == 0
+        kwargs = mock_calc.calculate_hsg_by_godlo.call_args.kwargs
+        assert kwargs["godlo"] == "M-33-36-A"
+        assert kwargs["output_path"] == out / "hsg_M-33-36-A_0-5cm.tif"
+
+    @patch("kartograf.hydrology.HSGCalculator")
+    def test_soilgrids_hsg_out_of_range_godlo(self, mock_calc_cls, capsys, tmp_path):
+        """A7: an out-of-range godlo -> Error on stderr, code 1, no calculation."""
+        out = tmp_path / "out"
+
+        result = main(["soilgrids", "hsg", "--godlo", "N-34-999-D", "-o", str(out)])
+
+        assert result == 1
+        mock_calc_cls.return_value.calculate_hsg_by_godlo.assert_not_called()
+        captured = capsys.readouterr()
+        assert "Error: " in captured.err
+        assert "poza zakresem" in captured.err
 
     @pytest.mark.parametrize(
         "bbox", ["invalid", "10,10,5,5", "nan,1,2,3", "1,2,-inf,4", "1,2,3"]
@@ -2411,7 +2646,7 @@ class TestCmdLandcoverDownloadGeometry:
         mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download.return_value = tmp_path / "out.gpkg"
+        mock_mgr.download_all_counties.return_value = [tmp_path / "out.gpkg"]
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -2427,9 +2662,11 @@ class TestCmdLandcoverDownloadGeometry:
 
         assert result == 0
         mock_bbox.assert_called_once()
-        mock_mgr.download.assert_called_once()
-        call_kwargs = mock_mgr.download.call_args
+        mock_mgr.download_all_counties.assert_called_once()
+        call_kwargs = mock_mgr.download_all_counties.call_args
         assert call_kwargs.kwargs.get("bbox") is not None
+        mock_mgr.download.assert_not_called()
+        assert "Downloaded to" in capsys.readouterr().out
 
     def test_landcover_geometry_and_teryt_error(self, capsys, tmp_path):
         """--geometry + --teryt -> mutual exclusivity error."""
@@ -4293,6 +4530,57 @@ class TestCmdDownloadCz:
         assert "poza granica CZ?" in err
         assert list((tmp_path / "nmt").rglob("*.tif.meta.json"))
 
+    def test_bbox_all_nodata_message_printed_once(self, tmp_path, capsys, monkeypatch):
+        """The library log does not repeat the CLI 'Warning:' line on stderr."""
+        import logging
+
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        # no handler on the 'kartograf' branch -> logging.lastResort writes to
+        # stderr, as in a real CLI run (pytest's root handler would hide it)
+        monkeypatch.setattr(logging.getLogger("kartograf"), "propagate", False)
+        provider = _cz_provider_mock()
+        provider.download_bbox.side_effect = self._real_tif_writer(-9999.0)
+        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+        with patch(_CZ_FACTORY_PATCH, return_value=provider):
+            rc = _cmd_download_cz(_cz_args(tmp_path, godlo=None), bbox=bbox)
+
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert err.count("w calosci nodata") == 1
+        assert "Warning:" in err
+
+    def test_library_log_unmuted_after_cli_call(self, tmp_path):
+        """The muted library logger is restored - also after a failed download."""
+        import logging
+
+        from kartograf.cli.download_cmd import _cmd_download_cz
+
+        log = logging.getLogger("kartograf.download.cz_cutout")
+        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+
+        ok = _cz_provider_mock()
+        ok.download_bbox.side_effect = self._real_tif_writer(-9999.0)
+        with patch(_CZ_FACTORY_PATCH, return_value=ok):
+            assert _cmd_download_cz(_cz_args(tmp_path, godlo=None), bbox=bbox) == 0
+        assert log.disabled is False
+
+        failing = _cz_provider_mock()
+        failing.download_bbox.side_effect = DownloadError("boom")
+        with patch(_CZ_FACTORY_PATCH, return_value=failing):
+            rc = _cmd_download_cz(_cz_args(tmp_path / "b", godlo=None), bbox=bbox)
+        assert rc == 1
+        assert log.disabled is False
+
+        crashing = _cz_provider_mock()
+        crashing.download_bbox.side_effect = KeyboardInterrupt
+        with (
+            patch(_CZ_FACTORY_PATCH, return_value=crashing),
+            pytest.raises(KeyboardInterrupt),
+        ):
+            _cmd_download_cz(_cz_args(tmp_path / "c", godlo=None), bbox=bbox)
+        assert log.disabled is False
+
     def test_tm33_godlo_all_nodata_warns_but_returns_0(self, tmp_path, capsys):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
@@ -4513,41 +4801,6 @@ class TestCountryDispatch:
         assert kwargs["resolution"] == "1m"
         assert kwargs["vertical_crs"] == "EVRF2007"
 
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_pl_5m_kron86_corrected_with_info(
-        self, mock_manager_class, mock_create, tmp_path, capsys
-    ):
-        """D11: one "5m => EVRF2007" rule, one effect - an explicit correction.
-
-        Previously the correction went only to the log (invisible in the CLI); now
-        ``Info:`` on stderr (also with ``-q``), and the factory and manager get
-        the ACTUAL vertical CRS.
-        """
-        mock_create.return_value = (Mock(), Mock())
-        mock_manager = Mock()
-        mock_manager.last_result = None
-        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
-        mock_manager_class.return_value = mock_manager
-        result = main(
-            [
-                "download",
-                "N-34-130-D-d-2-4",
-                "--resolution",
-                "5m",
-                "--vertical-crs",
-                "KRON86",
-                "-o",
-                str(tmp_path),
-                "-q",
-            ]
-        )
-        assert result == 0
-        err = capsys.readouterr().err
-        assert "Info:" in err and "KRON86" in err and "EVRF2007" in err
-        assert mock_create.call_args.args[2] == "EVRF2007"
-        assert mock_manager_class.call_args.kwargs["vertical_crs"] == "EVRF2007"
-
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_pl_1m_kron86_no_correction(self, mock_manager_class, tmp_path, capsys):
         mock_manager = Mock()
@@ -4582,7 +4835,8 @@ class TestCountryDispatch:
         )
         assert _resolve_pl_sentinels(args) == 0
         assert args.vertical_crs == "KRON86"
-        assert "Info:" not in capsys.readouterr().err
+        err = capsys.readouterr().err
+        assert "Info:" not in err and "Error:" not in err
 
     def test_pl_godlo_with_2m_rejected(self, tmp_path, capsys):
         result = main(
@@ -6042,7 +6296,7 @@ class TestPublicApiCz:
     def test_version_bumped(self):
         from kartograf import __version__
 
-        assert __version__ == "0.7.0"
+        assert __version__ == "0.7.1"
 
 
 class _PartialSheetProvider(_SheetProvider):
@@ -6424,8 +6678,13 @@ class TestSheetCrsMismatchWarning:
         assert self.GODLO in warning and "EPSG:2178" in warning
 
     def test_file_in_zone_crs_is_silent(self, tmp_path, capsys):
-        head = self.FIXTURE.read_bytes().replace(b"567975.95", b"7567975.95", 1)
-        assert head != self.FIXTURE.read_bytes()
+        # header moved into the real EPSG:2178 frame of 7.125.11.19
+        # (7424800, 5546000, 7426400, 5547000) - B4 extent check passes
+        raw = self.FIXTURE.read_bytes()
+        head = raw.replace(b"567975.95", b"7424800.5", 1).replace(
+            b"242449.35", b"5546000.5", 1
+        )
+        assert head.count(b"7424800.5") == 1 and head.count(b"5546000.5") == 1
 
         rc = self._run(tmp_path, ["download", self.GODLO], raw=head)
 
@@ -6566,7 +6825,10 @@ class TestCampaignOptions:
         assert rc == 1
         err = capsys.readouterr().err
         assert "Error: --campaigns all nie dziala z --target-crs" in err
-        assert "0.7.1" in err
+        # no promise of a campaign-composing tool in a given release (ADR-030
+        # errata 6): the message ends with the reason
+        assert "0.7.1" not in err
+        assert "narzedzie" not in err
         mock_prepare.assert_not_called()
 
     @patch("kartograf.download.cutout.prepare_pl_cutout")
@@ -6611,7 +6873,10 @@ class TestCampaignOptions:
             ]
         )
         assert rc == 1
-        assert "0.7.1" in capsys.readouterr().err
+        assert (
+            "Error: --campaigns all nie dziala z --target-crs"
+            in capsys.readouterr().err
+        )
         mock_run_cz.assert_not_called()
         mock_prepare.assert_not_called()
 
@@ -6950,7 +7215,7 @@ class TestCampaignOptions:
         )
         assert rc == 1
         err = capsys.readouterr().err
-        assert "0.7.1" in err
+        assert "Error: --campaigns all nie dziala z --target-crs" in err
         assert "Info:" not in err
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -6973,7 +7238,7 @@ class TestCampaignOptions:
         assert rc == 1
         err = capsys.readouterr().err
         assert "Error: --target-crs dziala tylko z --bbox/--geometry" in err
-        assert "0.7.1" not in err
+        assert "--campaigns all nie dziala" not in err
         mock_manager_class.assert_not_called()
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -7563,3 +7828,243 @@ class TestSoilgridsHsgNoEarlyMkdir:
         result = main(["soilgrids", "hsg", "--godlo", "N-34-130-D", "-o", str(out)])
         assert result == 1
         assert not (tmp_path / "out").exists()
+
+
+_LAZ_ONLY_YEAR_ERROR = (
+    "Error: --year dziala tylko z --product laz (podano {product}); wybor roku "
+    "dla NMT/NMPT/orto bedzie w 0.7.2. Teraz uzyj --min-year RRRR (najnowsza "
+    "kampania nie starsza niz podany rok; tylko PL, bez --target-crs) albo pomin "
+    "--year"
+)
+# the same, when --min-year was given too: no redundant hint
+_LAZ_ONLY_YEAR_WITH_MIN_YEAR_ERROR = (
+    "Error: --year dziala tylko z --product laz (podano {product}); wybor roku "
+    "dla NMT/NMPT/orto bedzie w 0.7.2. Pomin --year"
+)
+# CZ-only tasks: CUZK has no year selection (and --min-year is rejected without PL)
+_CZ_YEAR_ERROR = (
+    "Error: --year nie dziala dla CZ (CUZK nie ma wyboru roku; podano {product}); "
+    "pomin --year"
+)
+_LAZ_ONLY_DENSITY_ERROR = (
+    "Error: --min-density dziala tylko z --product laz (podano {product}); pomin "
+    "--min-density"
+)
+# every path of `download` that used to ignore the LAZ-only options silently
+_LAZ_ONLY_PATHS = {
+    "godlo": ["N-34-130-D-d-2-4"],
+    "hierarchy": ["N-34-130-D"],
+    "hierarchy_scale": ["N-34-130-D-d-2-4", "--scale", "1:10000"],
+    "list_bbox": _PL_BBOX_2180,
+    "geometry": ["--geometry", "area.gpkg"],
+    "cutout": [*_PL_BBOX_2180, "--target-crs", "EPSG:2180"],
+    "auto_border": _BORDER_BBOX,
+    "auto_cz_bbox": _CZ_ONLY_BBOX,
+    "cz_godlo": ["302_5550"],
+    "cz_forced": [*_CZ_ONLY_BBOX, "--country", "cz"],
+}
+_LAZ_ONLY_PRODUCTS = ["nmt", "nmpt", "orto"]
+# paths that can only be served by CZ -> the CZ wording; the rest keeps the generic one
+_LAZ_ONLY_CZ_PATHS = {"auto_cz_bbox", "cz_godlo", "cz_forced"}
+
+
+class TestLazOnlyOptions:
+    """``--year``/``--min-density`` only with ``--product laz`` (0.7.1)."""
+
+    @pytest.fixture
+    def guards(self):
+        """Everything that would reach the network or the disk."""
+        with (
+            patch("kartograf.cli.download_cmd.DownloadManager") as manager,
+            patch("kartograf.cli.download_cmd._create_provider_and_storage") as factory,
+            patch("kartograf.download.cutout.prepare_pl_cutout") as cutout,
+            patch("kartograf.cli.download_cmd._run_cz") as run_cz,
+            patch("kartograf.cli.download_cmd._cmd_download_cz") as cmd_cz,
+            patch("kartograf.providers.pl.gugik_laz.GugikLazProvider") as laz,
+        ):
+            yield [manager, factory, cutout, run_cz, cmd_cz, laz]
+
+    @pytest.mark.parametrize("path", sorted(_LAZ_ONLY_PATHS))
+    @pytest.mark.parametrize("product", _LAZ_ONLY_PRODUCTS)
+    def test_year_rejected_for_other_products(
+        self, product, path, guards, capsys, tmp_path
+    ):
+        out = tmp_path / "out"
+        rc = main(
+            [
+                "download",
+                *_LAZ_ONLY_PATHS[path],
+                "--product",
+                product,
+                "--year",
+                "2022",
+                "-o",
+                str(out),
+            ]
+        )
+        assert rc == 1
+        template = (
+            _CZ_YEAR_ERROR if path in _LAZ_ONLY_CZ_PATHS else _LAZ_ONLY_YEAR_ERROR
+        )
+        assert capsys.readouterr().err == template.format(product=product) + "\n"
+        for guard in guards:
+            guard.assert_not_called()
+        assert not out.exists()
+
+    @pytest.mark.parametrize("path", sorted(_LAZ_ONLY_PATHS))
+    @pytest.mark.parametrize("product", _LAZ_ONLY_PRODUCTS)
+    def test_min_density_rejected_for_other_products(
+        self, product, path, guards, capsys, tmp_path
+    ):
+        out = tmp_path / "out"
+        rc = main(
+            [
+                "download",
+                *_LAZ_ONLY_PATHS[path],
+                "--product",
+                product,
+                "--min-density",
+                "12",
+                "-o",
+                str(out),
+            ]
+        )
+        assert rc == 1
+        assert capsys.readouterr().err == (
+            _LAZ_ONLY_DENSITY_ERROR.format(product=product) + "\n"
+        )
+        for guard in guards:
+            guard.assert_not_called()
+        assert not out.exists()
+
+    def test_default_product_is_nmt_and_year_rejected(self, guards, capsys, tmp_path):
+        """No --product: the default (nmt) is rejected too, not just explicit."""
+        rc = main(
+            ["download", "N-34-130-D-d-2-4", "--year", "2022", "-o", str(tmp_path)]
+        )
+        assert rc == 1
+        assert "podano nmt" in capsys.readouterr().err
+        for guard in guards:
+            guard.assert_not_called()
+
+    @pytest.mark.parametrize("product", _LAZ_ONLY_PRODUCTS)
+    def test_year_with_min_year_drops_redundant_hint(
+        self, product, guards, capsys, tmp_path
+    ):
+        out = tmp_path / "out"
+        rc = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--product",
+                product,
+                "--year",
+                "2022",
+                "--min-year",
+                "2020",
+                "-o",
+                str(out),
+            ]
+        )
+        assert rc == 1
+        assert capsys.readouterr().err == (
+            _LAZ_ONLY_YEAR_WITH_MIN_YEAR_ERROR.format(product=product) + "\n"
+        )
+        for guard in guards:
+            guard.assert_not_called()
+        assert not out.exists()
+
+    def test_year_cz_godlo_with_min_year_uses_cz_text(self, guards, capsys, tmp_path):
+        rc = main(
+            ["download", "302_5550", "--year", "2022", "--min-year", "2020"]
+            + ["-o", str(tmp_path / "out")]
+        )
+        assert rc == 1
+        assert capsys.readouterr().err == _CZ_YEAR_ERROR.format(product="nmt") + "\n"
+
+    def test_year_explicit_pl_over_cz_area_keeps_generic_text(
+        self, guards, capsys, tmp_path
+    ):
+        rc = main(
+            ["download", *_CZ_ONLY_BBOX, "--country", "pl", "--year", "2022"]
+            + ["-o", str(tmp_path / "out")]
+        )
+        assert rc == 1
+        assert capsys.readouterr().err == (
+            _LAZ_ONLY_YEAR_ERROR.format(product="nmt") + "\n"
+        )
+
+    @pytest.mark.parametrize(
+        ("envelope", "template"),
+        [
+            (
+                BBox(14.45, 48.95, 14.50, 49.00, "EPSG:4326"),
+                _CZ_YEAR_ERROR,
+            ),
+            (BBox(530000.0, 382000.0, 533000.0, 386000.0, "EPSG:2180"), None),
+        ],
+    )
+    def test_year_geometry_wording_follows_country(
+        self, envelope, template, guards, capsys, tmp_path
+    ):
+        """--geometry under auto: wholly CZ -> CZ text, PL -> the generic one."""
+        template = template or _LAZ_ONLY_YEAR_ERROR
+        with patch(
+            "kartograf.cli.download_cmd._geometry_envelope", return_value=envelope
+        ):
+            rc = main(
+                ["download", "--geometry", "area.gpkg", "--year", "2022"]
+                + ["-o", str(tmp_path / "out")]
+            )
+        assert rc == 1
+        assert capsys.readouterr().err == template.format(product="nmt") + "\n"
+        for guard in guards:
+            guard.assert_not_called()
+
+    def test_year_rejected_message_precedes_density(self, guards, capsys, tmp_path):
+        rc = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--year",
+                "2022",
+                "--min-density",
+                "12",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "--year dziala tylko" in err
+        assert "--min-density" not in err
+
+    @patch("kartograf.download.laz.run_laz_download")
+    @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
+    def test_laz_year_and_density_still_reach_laz_path(
+        self, mock_provider_cls, mock_run, capsys, tmp_path
+    ):
+        instance = Mock()
+        instance.select_tiles.return_value = _selection([])
+        mock_provider_cls.return_value = instance
+        rc = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--product",
+                "laz",
+                "--year",
+                "2022",
+                "--min-density",
+                "12",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+        err = capsys.readouterr().err
+        assert "dziala tylko z --product laz" not in err
+        kwargs = instance.select_tiles.call_args.kwargs
+        assert kwargs["year"] == 2022
+        assert kwargs["min_density"] == 12
+        assert rc == 1  # empty selection: "No LAZ tiles", past the new guard
