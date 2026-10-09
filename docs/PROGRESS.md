@@ -112,9 +112,9 @@
 > 2026-10-09 (`__version__ = "0.7.2-dev"`, sekcja `## [0.7.2] - Unreleased`
 > w CHANGELOG). **W toku:** drobiazgi z review 0.7.1 — spec
 > `docs/superpowers/specs/2026-10-09-review-0.7.1-drobiazgi-design.md`
-> ma komplet decyzji Q1-Q5 (2026-10-09); nastepny krok: plan
-> `docs/superpowers/plans/2026-10-09-review-0.7.1-drobiazgi.md` i galaz
-> `fix/review-0.7.1`.
+> ma komplet decyzji Q1-Q5 (2026-10-09); plan
+> `docs/superpowers/plans/2026-10-09-review-0.7.1-drobiazgi.md` (Task 1-12)
+> na galezi `fix/review-0.7.1` czeka na zatwierdzenie przed implementacja.
 > **Kierunek do v1.0.0:** roadmapa w `docs/SCOPE.md` 3.3 (zatwierdzona
 > 2026-10-08). Podprojekt 1 (magazyn wersjonowany, docelowo 0.8.0): spec
 > zaakceptowany i plan 1/3 napisany na galezi `feat/versioned-store`
@@ -164,6 +164,13 @@
   `Info:` o innym wariancie (rozdzielczosc / uklad wysokosci, z ktorego
   skorowidz ma arkusz) w tym samym zestawie — projekt w specu (P10,
   czesc 2).
+- Plan `docs/superpowers/plans/2026-10-09-review-0.7.1-drobiazgi.md`
+  (12 zadan, jedno zadanie = jeden commit) na galezi `fix/review-0.7.1`
+  z `develop`. Ustalenia przy planie: CLI nie ma opcji `keep_raw`
+  (tylko biblioteka); sesje-atrapy skorowidza routuja tylko po warstwie,
+  a 5 m i 1 m EVRF2007 maja te same nazwy warstw — Task 10 dostaje
+  atrape po (endpoint, warstwa) i nowe surowe fixtury U1; testy
+  przypinajace "tylko wlasny endpoint" zmienione na intencje.
 - Bez zmian w kodzie poza numerem wersji.
 
 ### Wydanie 0.7.1 (2026-10-09)
