@@ -2,12 +2,12 @@
 **Kartograf - Narzędzie do Pobierania Danych Przestrzennych**
 
 **Wersja:** 4.1
-**Data:** 2026-10-08
+**Data:** 2026-10-09
 **Product Owner:** Piotr
-**Status:** Wydanie v0.7.0 (2026-10-08)
+**Status:** Wydanie v0.7.1 (2026-10-09)
 
-> Dokument opisuje wymagania produktowe wersji 0.7.0 w postaci
-> zrealizowanej w kodzie wydania v0.7.0. Szczegóły zachowania (komunikaty,
+> Dokument opisuje wymagania produktowe wersji 0.7.1 w postaci
+> zrealizowanej w kodzie wydania v0.7.1. Szczegóły zachowania (komunikaty,
 > kody wyjścia, przypadki brzegowe) — `docs/SCOPE.md` i
 > `docs/ARCHITECTURE.md`; uzasadnienia decyzji — `docs/DECISIONS.md`
 > (ADR-022..ADR-030); historia zmian — `docs/CHANGELOG.md`. Pełna lista
@@ -851,7 +851,7 @@ from kartograf import (
     GridMismatchError,      # (ValidationError)
 
     # Version
-    __version__,            # "0.7.0"
+    __version__,            # "0.7.1"
 )
 ```
 
@@ -991,5 +991,5 @@ HYDROGRAF (główna aplikacja)
 ---
 
 **Wersja dokumentu:** 4.1
-**Data ostatniej aktualizacji:** 2026-10-08
-**Status:** Wydanie v0.7.0 (2026-10-08)
+**Data ostatniej aktualizacji:** 2026-10-09
+**Status:** Wydanie v0.7.1 (2026-10-09)

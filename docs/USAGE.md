@@ -327,10 +327,13 @@ from kartograf import LandCoverManager
 lc = LandCoverManager()
 lc.download(teryt="1465")                   # BDOT10k (powiat)
 # BDOT10k z KAŻDEGO powiatu obszaru (bbox w dowolnym układzie, albo godlo=),
-# tylko wybrane warstwy -> [bdot10k_PTWP-SWKN-SWRM-SWRS_teryt_<T>.gpkg, ...]
+# tylko wybrane warstwy -> [bdot10k_PTWP-SWKN-SWRM-SWRS_teryt_<T>.gpkg, ...];
+# keep_raw=True zostawia obok oryginalny ZIP GUGiK (bdot10k_teryt_<T>_GPKG.zip,
+# pełny pakiet niezależnie od layers=, z własnym sidecarem; tylko GPKG)
 paths = lc.download_all_counties(
     bbox=BBox(340000, 290000, 350000, 300000, "EPSG:2180"),
     layers=["SWRS", "SWKN", "SWRM", "PTWP"],
+    keep_raw=True,
 )
 # lc.download(bbox=...) dla BDOT10k: jeden powiat albo ValidationError z listą
 # kodów (kilka powiatów) / NoCoverageError (żaden)

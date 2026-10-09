@@ -3,7 +3,7 @@
 
 **Wersja:** 3.16
 **Data:** 2026-10-09
-**Status:** Wydanie v0.7.0 (2026-10-08)
+**Status:** Wydanie v0.7.1 (2026-10-09)
 
 ---
 
@@ -751,4 +751,4 @@ pyshp >= 2.3.0         # Shapefile reading
 
 **Wersja dokumentu:** 3.16
 **Data ostatniej aktualizacji:** 2026-10-09
-**Status:** Wydanie v0.7.0 (2026-10-08)
+**Status:** Wydanie v0.7.1 (2026-10-09)
