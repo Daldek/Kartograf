@@ -87,6 +87,10 @@ godła, hierarchii, listy arkuszy, `--bbox`, `--geometry`, `--target-crs`
 i `--country auto`. Wybór roku dla NMT/NMPT/orto będzie w 0.7.2; na razie
 `--min-year RRRR` (tylko PL, bez `--target-crs`) odcina kampanie starsze niż
 podany rok, a `--year`/`--min-density` w tych produktach trzeba pominąć.
+Dla zadań wyłącznie CZ (godło CZ, `--country cz`, obszar w całości w CZ) komunikat
+mówi, że CUZK nie ma wyboru roku — `--year` trzeba pominąć (bez wskazania
+0.7.2 i `--min-year`, który bez PL jest odrzucany). Gdy podano już `--min-year`,
+komunikat nie powtarza jego podpowiedzi.
 
 ### 1.2 Selekcja obszaru i wybór kraju (`--country`)
 

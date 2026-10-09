@@ -161,7 +161,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--country auto`, CZ); `--product laz` bez zmian. Wybor roku dla
   NMT/NMPT/orto bedzie w 0.7.2. Co zrobic: pomin opcje albo — dla roku —
   uzyj `--min-year RRRR` (najnowsza kampania nie starsza niz podany rok;
-  tylko PL, bez `--target-crs`); skrypty przekazujace `--year`/
+  tylko PL, bez `--target-crs`; dla zadan wylacznie CZ — CUZK nie ma wyboru
+  roku, komunikat kaze pominac `--year`); skrypty przekazujace `--year`/
   `--min-density` do innych produktow niz LAZ musza je usunac.
 
 ### Naprawione

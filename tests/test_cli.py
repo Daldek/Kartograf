@@ -7836,6 +7836,16 @@ _LAZ_ONLY_YEAR_ERROR = (
     "kampania nie starsza niz podany rok; tylko PL, bez --target-crs) albo pomin "
     "--year"
 )
+# the same, when --min-year was given too: no redundant hint
+_LAZ_ONLY_YEAR_WITH_MIN_YEAR_ERROR = (
+    "Error: --year dziala tylko z --product laz (podano {product}); wybor roku "
+    "dla NMT/NMPT/orto bedzie w 0.7.2. Pomin --year"
+)
+# CZ-only tasks: CUZK has no year selection (and --min-year is rejected without PL)
+_CZ_YEAR_ERROR = (
+    "Error: --year nie dziala dla CZ (CUZK nie ma wyboru roku; podano {product}); "
+    "pomin --year"
+)
 _LAZ_ONLY_DENSITY_ERROR = (
     "Error: --min-density dziala tylko z --product laz (podano {product}); pomin "
     "--min-density"
@@ -7854,6 +7864,8 @@ _LAZ_ONLY_PATHS = {
     "cz_forced": [*_CZ_ONLY_BBOX, "--country", "cz"],
 }
 _LAZ_ONLY_PRODUCTS = ["nmt", "nmpt", "orto"]
+# paths that can only be served by CZ -> the CZ wording; the rest keeps the generic one
+_LAZ_ONLY_CZ_PATHS = {"auto_cz_bbox", "cz_godlo", "cz_forced"}
 
 
 class TestLazOnlyOptions:
@@ -7891,9 +7903,10 @@ class TestLazOnlyOptions:
             ]
         )
         assert rc == 1
-        assert capsys.readouterr().err == (
-            _LAZ_ONLY_YEAR_ERROR.format(product=product) + "\n"
+        template = (
+            _CZ_YEAR_ERROR if path in _LAZ_ONLY_CZ_PATHS else _LAZ_ONLY_YEAR_ERROR
         )
+        assert capsys.readouterr().err == template.format(product=product) + "\n"
         for guard in guards:
             guard.assert_not_called()
         assert not out.exists()
@@ -7931,6 +7944,80 @@ class TestLazOnlyOptions:
         )
         assert rc == 1
         assert "podano nmt" in capsys.readouterr().err
+        for guard in guards:
+            guard.assert_not_called()
+
+    @pytest.mark.parametrize("product", _LAZ_ONLY_PRODUCTS)
+    def test_year_with_min_year_drops_redundant_hint(
+        self, product, guards, capsys, tmp_path
+    ):
+        out = tmp_path / "out"
+        rc = main(
+            [
+                "download",
+                "N-34-130-D-d-2-4",
+                "--product",
+                product,
+                "--year",
+                "2022",
+                "--min-year",
+                "2020",
+                "-o",
+                str(out),
+            ]
+        )
+        assert rc == 1
+        assert capsys.readouterr().err == (
+            _LAZ_ONLY_YEAR_WITH_MIN_YEAR_ERROR.format(product=product) + "\n"
+        )
+        for guard in guards:
+            guard.assert_not_called()
+        assert not out.exists()
+
+    def test_year_cz_godlo_with_min_year_uses_cz_text(self, guards, capsys, tmp_path):
+        rc = main(
+            ["download", "302_5550", "--year", "2022", "--min-year", "2020"]
+            + ["-o", str(tmp_path / "out")]
+        )
+        assert rc == 1
+        assert capsys.readouterr().err == _CZ_YEAR_ERROR.format(product="nmt") + "\n"
+
+    def test_year_explicit_pl_over_cz_area_keeps_generic_text(
+        self, guards, capsys, tmp_path
+    ):
+        rc = main(
+            ["download", *_CZ_ONLY_BBOX, "--country", "pl", "--year", "2022"]
+            + ["-o", str(tmp_path / "out")]
+        )
+        assert rc == 1
+        assert capsys.readouterr().err == (
+            _LAZ_ONLY_YEAR_ERROR.format(product="nmt") + "\n"
+        )
+
+    @pytest.mark.parametrize(
+        ("envelope", "template"),
+        [
+            (
+                BBox(14.45, 48.95, 14.50, 49.00, "EPSG:4326"),
+                _CZ_YEAR_ERROR,
+            ),
+            (BBox(530000.0, 382000.0, 533000.0, 386000.0, "EPSG:2180"), None),
+        ],
+    )
+    def test_year_geometry_wording_follows_country(
+        self, envelope, template, guards, capsys, tmp_path
+    ):
+        """--geometry under auto: wholly CZ -> CZ text, PL -> the generic one."""
+        template = template or _LAZ_ONLY_YEAR_ERROR
+        with patch(
+            "kartograf.cli.download_cmd._geometry_envelope", return_value=envelope
+        ):
+            rc = main(
+                ["download", "--geometry", "area.gpkg", "--year", "2022"]
+                + ["-o", str(tmp_path / "out")]
+            )
+        assert rc == 1
+        assert capsys.readouterr().err == template.format(product="nmt") + "\n"
         for guard in guards:
             guard.assert_not_called()
 

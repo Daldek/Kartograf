@@ -1268,7 +1268,11 @@ wszystkie tory (godlo, hierarchia, lista arkuszy, `--bbox`, `--geometry`,
 wycinek `--target-crs`, `--country auto`, CZ) i jest przed siecia,
 fabryka providera, `DownloadManager`, wycinkiem i `_run_cz` oraz przed
 utworzeniem katalogu wyjsciowego. Komunikat `--year` wskazuje wybor roku
-w 0.7.2 i `--min-year` (kampanie PL, bez `--target-crs`).
+w 0.7.2 i `--min-year` (kampanie PL, bez `--target-crs`); bez podpowiedzi
+`--min-year`, gdy podano go juz razem z `--year`. Dla zadan wylacznie CZ
+(`_is_cz_only_task`: godlo CZ, `--country cz`, `--bbox`/`--geometry` w calosci
+w CZ pod `auto`; lokalnie, bez sieci) komunikat to `Error: --year nie dziala
+dla CZ (CUZK nie ma wyboru roku; podano <produkt>); pomin --year`.
 
 **Wybor kafli (ADR-029).** Domyslnie (bez `--year`) kafle sa wybierane
 zachlannie od najnowszego `akt_rok` (w roku: nowsza `akt_data`): kafel
