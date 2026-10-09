@@ -24,6 +24,8 @@ Glowne zrodlo konwencji i procesu: `docs/DEVELOPMENT_STANDARDS.md`.
 - Praca na `develop` (albo galezi krotkotrwalej z `develop`); Conventional
   Commits z opisem po polsku, docstringi i komentarze po angielsku,
   dokumentacja po polsku (STANDARDS 1.1, 2, 9.4).
+- Commity bez stopki `Co-Authored-By` (decyzja uzytkownika 2026-10-09;
+  stopki w starszej historii zostaja). Autor: `Daldek <git@debever.pl>`.
 - Na koniec sesji OBOWIAZKOWO zaktualizuj `docs/PROGRESS.md`; zmiany
   dopisuj na biezaco do `docs/CHANGELOG.md` (STANDARDS 15).
 - `docs/DECISIONS.md` ma konce linii CRLF — zachowaj je przy edycji
