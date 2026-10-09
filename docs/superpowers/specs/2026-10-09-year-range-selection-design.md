@@ -78,6 +78,10 @@ komendy — `_parser.py:356-359`, bez zmian).
 | U5 | Nowa flaga `--max-year`, symetryczna do `--min-year`; `--year Y` == `--min-year Y --max-year Y`; min+max = przedzial lat. |
 | U6 | Najpierw sprawdzenie wszystkich arkuszy, potem pobieranie (zadnego wyniku czesciowego po zatrzymaniu). Wybrany rok trafia do sidecara. |
 | U7 | (uzupelnienie 2026-10-09) Spec ma jawnie opisac przypadek DWOCH LUB WIECEJ kampanii (lotow) tego samego arkusza/kafla w JEDNYM roku: co jest dzis, co wybiera `--year`/`--min-year`/`--max-year`, jak dziala `--campaigns all`, co mowi sidecar, czy uzytkownik jest informowany. |
+| U8 | (decyzja Q2, 2026-10-09) Regula sciezki standardowej BEZ ZMIAN: zawsze najnowszy lot (klucz ADR-028 `(aktualnosc, dt_pzgik, url)`, ADR-030 (d) "dowiazanie nigdy wstecz"); bez preferencji pelnego arkusza i bez wyboru wg pokrycia — niepelne dane w sciezce standardowej sa akceptowane, bo liczy sie stabilna i prosta regula. |
+| U9 | (decyzja Q2) Z `--year` albo przedzialem (`--min-year`/`--max-year`) pobierane sa WSZYSTKIE loty z przedzialu do `kampanie/` — w praktyce `--campaigns all` zawezone do przedzialu. |
+| U10 | (decyzja Q2) Uzytkownik dostaje `Info:` (CLI) i pole w sidecarze, gdy arkusz mial w przedziale kilka lotow I inny pobrany lot ma WIEKSZE pokrycie niz najnowszy. Pokrycie = zmierzony po pobraniu udzial waznych pikseli (skorowidz ma tylko TAK/NIE w `calyArkuszWypelnionyTrescia`). Wyjatek: gdy najnowszy lot jest pelny (TAK) — bez komunikatu. |
+| U11 | (decyzja Q2) Pomysl alternatywny — dodatkowa flaga zmieniajaca regule domyslna (wymuszenie pelnego arkusza albo prog pokrycia, np. `--min-coverage 90`) — ma byc opisany jako OPCJA/pytanie otwarte, nie rozstrzygniety (sekcja 12, Q2a). |
 
 ## 3. Rozstrzygniecia projektowe (do akceptacji)
 
@@ -85,10 +89,11 @@ komendy — `_parser.py:356-359`, bez zmian).
 |---|---|---|
 | P1 | **Jeden mechanizm = przedzial `[min_year, max_year]`.** Regula "sprawdz wszystko, potem pobierz; konflikt = stop" (U4, U6) obowiazuje dla KAZDEGO przedzialu: `--year`, samo `--min-year`, samo `--max-year`, para. | U5 mowi, ze `--year Y` to `--min-year Y --max-year Y`; gdyby `--min-year` zachowal dzisiejsze "pomin arkusz z `Warning:`", to `--year Y` i `--min-year Y --max-year Y` roznilyby sie zachowaniem — sprzecznosc z U5. Zmiana zachowania `--min-year` opisana w CHANGELOG (sekcja 11). Pytanie otwarte Q1. |
 | P2 | **Rok rekordu bez zmian:** NMT/NMPT/orto = `aktualnoscRok`, inaczej `aktualnosc[:4]` (`_record_year`); LAZ = `akt_rok`. Rekord bez ustalonego roku nie spelnia zadnego przedzialu (jak dzis dla `min_year`). | ADR-030 (f): 1381 rekordow — `aktualnoscRok` zawsze zgodny z `aktualnosc`; pomiar 2026-10-09 na fixtures `real_2026_10_06` (NMT, NMPT, orto; 44 pary arkusz/wariant): zero rozbieznosci. `dt_pzgik` (data przyjecia do PZGiK) NIE jest rokiem danych — roznica siega roku (2025-10-21 -> 2026-07-10). |
-| P3 | **Wybor w przedziale = ADR-028 zawezone do przedzialu.** `newest`: najnowsza kampania (klucz `(aktualnosc, dt_pzgik, url)`) sposrod rekordow z rokiem w przedziale; `all`: wszystkie rekordy twardego filtru z rokiem w przedziale. Bez preferencji pelnego arkusza. | Regula wyboru ADR-028 pozostaje jedyna; przedzial jest tylko dodatkowym twardym filtrem. Pytanie otwarte Q2 (preferencja pelnego arkusza w roku). |
-| P4 | **Dwa loty w jednym roku (U7):** `newest` wybiera najnowszy `aktualnosc` w tym roku (P3); `all` pobiera wszystkie loty z przedzialu; sidecar identyfikuje lot (`extra.campaign`, istniejace) i wymienia pozostale loty z przedzialu (`extra.alternatives`, nowe) oraz wszystkie lata arkusza (`extra.available_years`, nowe); CLI drukuje `Info:` o arkuszach z wieloma lotami w wybranym roku (sekcja 6.3). | Pomiar (sekcja 4.3): dwa-trzy loty w jednym roku to w realnych danych norma, nie wyjatek; uzytkownik proszacy o "rok 2025" musi wiedziec, ktory lot dostal i ze byl inny. |
+| P3 | **Przedzial = `--campaigns all` zawezone do przedzialu (U9).** Pobierane sa WSZYSTKIE rekordy twardego filtru ADR-028 z rokiem w przedziale (kazdy do `kampanie/<data>_<id>/`); sciezka standardowa = dowiazanie do najnowszego lotu w przedziale (klucz ADR-028, ADR-030 (d) bez zmian — U8). Strategia `newest` ma sens tylko bez przedzialu. | Jedna regula wyboru (ADR-028) i jedna regula dowiazania (ADR-030 (d)); przedzial jest tylko dodatkowym twardym filtrem na liscie kampanii. Wszystkie loty lokalnie = uzytkownik sam sklada/wybiera w QGIS (ADR-030 kontekst), a Kartograf nie wybiera "lepszego" lotu. |
+| P3a | **`--campaigns` z flaga roku.** Parser: `--campaigns` dostaje domyslnie sentinel (brak flagi), jak `--resolution`/`--vertical-crs` (`_resolve_pl_sentinels`); bez flagi roku sentinel = `newest` (stan), z flaga roku sentinel = `all`. JAWNE `--campaigns newest` razem z `--year`/`--min-year`/`--max-year` = `Error:` przed siecia; jawne `--campaigns all` z flaga roku = to samo co bez flagi (dozwolone, redundantne). Biblioteka tak samo: `campaigns=None` domyslnie (rozwiazywany jak w CLI), jawne `campaigns="newest"` z `min_year`/`max_year` = `ValidationError`. LAZ: bez zmian (ADR-029 w obrebie przedzialu; `all` = bez deduplikacji) — patrz uzasadnienie i Q8. | Jawne `newest` ("jeden lot") i flaga roku ("wszystkie loty z przedzialu", U9) sa sprzeczne; ciche nadpisanie jawnej flagi powtorzyloby wzorzec bledu z 1.1 (flaga przyjeta, zachowanie inne). Sentinel pozwala odroznic "nie podano" od "podano newest" bez zmiany dzisiejszych wywolan bez flag roku. LAZ nie ma `kampanie/`, a regula ADR-029 juz dzis zachowuje kazdy lot niepelny (NIE nigdy nie wypiera i nie jest wypierany), deduplikuje tylko pelne powtorzenia tej samej ramy — cel U9 (nie gubic lotow) jest spelniony bez zmiany; `newest`+`--year` dla LAZ to dzis udokumentowane zachowanie (ADR-029 "z `--year` regula dziala w obrebie roku"). |
+| P4 | **Kilka lotow w przedziale (U7, U10):** wszystkie pobrane (P3); dowiazanie na najnowszy; po pobraniu Kartograf MIERZY pokrycie kazdego lotu arkusza (udzial waznych pikseli, sekcja 4.4) tylko wtedy, gdy arkusz ma w przedziale > 1 lot i najnowszy lot NIE jest pelny (TAK); gdy inny lot ma wieksze pokrycie niz najnowszy — `Info:` w CLI (6.3) i pola w sidecarze sciezki standardowej (`extra.flights`, `extra.better_coverage`, sekcja 7); kazdy sidecar kampanii dostaje `extra.coverage`, gdy zmierzono. Najnowszy pelny (TAK) = bez pomiaru i bez komunikatu. | Pomiar (sekcja 4.3): dwa-trzy loty w jednym roku to w realnych danych norma; skorowidz nie mierzy skali braku (ADR-030 kontekst: niepelny lot moze miec 0,9 % danych pelnego), wiec jedyna uczciwa informacja jest pomiar po pobraniu — a pobranie i tak nastepuje (P3). Dowiazanie sie NIE zmienia (U8). |
 | P5 | **Sprawdzenie wymaga PELNEJ listy kampanii arkusza** (wszystkie warstwy skorowidza), nie najnowszego rekordu z `record_cache`. Przy jakimkolwiek przedziale `newest` korzysta z `campaigns_cache` (lista), a nie z `record_cache`. Skan czesciowy (`scanned_from`, pomijanie warstw o gornym roku z nazwy < `min_year`) jest USUWANY: lista jest zawsze pelna. | Komunikat U4 ma wymienic WSZYSTKIE dostepne lata arkusza — po skanie czesciowym lata starsze od granicy sa nieznane. Gorny rok z nazwy warstwy nie pozwala pominac warstwy dla `max_year` (`2023iStarsze` zawiera wszystko starsze). Koszt: dla NMT EVRF2007 4 warstwy zamiast 1-3 zapytan GetFeatureInfo per arkusz, raz na 7 dni (TTL). Pytanie otwarte Q6. |
-| P6 | **Wycinek `--target-crs` (ADR-027) przyjmuje przedzial lat.** Wynik dostaje sufiks `_y<min>-<max>` (albo `_y<rok>` gdy min == max, `_y<min>-` / `_y-<max>` dla polotwartego) w nazwie pliku `bbox/<coords>_y2024.tif`; sidecar wycinka niesie `request.min_year`/`max_year`(/`year`) i `extra.sheet_sources` jak dotad. `--campaigns all` z wycinkiem = `Error:` bez zmian. | Powod odrzucenia `--min-year` w errata 1 [Q2] (nazwa wycinka nie niesie roku, wiec drugi rok bylby pominiety jako istniejacy) znika z sufiksem. Wycinek i tak sklada arkusze przez `DownloadManager.download_sheets` (`download/cutout.py:760-779`), wiec mechanika P1 przychodzi za darmo. Pytanie otwarte Q3. |
+| P6 | **Wycinek `--target-crs` (ADR-027) przyjmuje przedzial lat.** Wynik dostaje sufiks `_y<min>-<max>` (albo `_y<rok>` gdy min == max, `_y<min>-` / `_y-<max>` dla polotwartego) w nazwie pliku `bbox/<coords>_y2024.tif`; sidecar wycinka niesie `request.min_year`/`max_year`(/`year`) i `extra.sheet_sources` jak dotad. Z przedzialem arkusze sa pobierane wg P3 (wszystkie loty do `kampanie/`), a wycinek sklada sciezki standardowe (najnowszy lot w przedziale) — jedna kampania na arkusz jak dotad. Jawne `--campaigns all` z wycinkiem = `Error:` bez zmian (jawne `newest` z przedzialem = `Error:` P3a). | Powod odrzucenia `--min-year` w errata 1 [Q2] (nazwa wycinka nie niesie roku, wiec drugi rok bylby pominiety jako istniejacy) znika z sufiksem. Wycinek i tak sklada arkusze przez `DownloadManager.download_sheets` (`download/cutout.py:760-779`), wiec mechanika P1 przychodzi za darmo. Pytanie otwarte Q3. |
 | P7 | **CZ / `--country auto`:** `--year`, `--min-year`, `--max-year` to opcje kampanii PL — ta sama straz co dzis dla `--campaigns all`/`--min-year` (`_reject_campaign_opts_without_pl`): zadanie bez PL = `Error:`, kod 1; obszar PL+CZ pod `auto` = `Info:` raz, CZ pobierany w biezacej wersji; flagi roku NIE wchodza do `_pl_only_flags` (nie zawezaja `auto` do PL). | CUZK nie ma archiwum (ADR-030 errata 3) — roku nie da sie uszanowac; ciche zignorowanie dla CZ powtorzyloby blad z 1.1; odrzucenie calego zadania granicznego zlamaloby ADR-023 pkt 5 (zadanie PL+CZ ma dzialac). Spojne z (j), [Q9], [N-3]. |
 | P8 | **LAZ: "kafel zadania" = kafel wyboru referencyjnego.** Wybor referencyjny R = `select_newest_cover` po WSZYSTKICH rocznikach uslugi (z `--min-density`, `--vertical-crs`), czyli to, co uzytkownik dostalby bez flag roku. Kafel R o roku spoza przedzialu musi miec swoja czesc wspolna z obszarem pokryta kaflami z przedzialu (ta sama regula pokrycia co ADR-029, tolerancja 1 m); inaczej konflikt (U4) z latami kafli, ktorych rama przecina niepokryty kawalek. Czesc obszaru bez kafli w zadnym roku = jak dzis (bez ostrzezenia: obszar LAZ nie jest lista arkuszy). | Kafle roznych rocznikow maja rozne godla (PL-1992 vs PL-2000, inne ciecie), wiec "ten sam kafel w innym roku" da sie zdefiniowac tylko przez pokrycie; maszyneria (`select_newest_cover`, `uncovered_pieces`) juz istnieje. |
 | P9 | **Awaria skorowidza/WFS w fazie sprawdzania = przerwanie calego zadania** (`DownloadError`, kod 1, lista arkuszy, ktorych nie dalo sie sprawdzic), bez pobierania. Fallback I-1 (lokalna kampania bez sprawdzenia) dziala wylacznie bez flag roku — jak dzis bez `--min-year` (ADR-030 errata 5). | U6: warunek "kazdy arkusz ma rok Y" nie jest sprawdzalny bez odpowiedzi skorowidza; pobranie reszty byloby wynikiem czesciowym. Pytanie otwarte Q5. |
@@ -172,10 +177,29 @@ fixture do nagrania (sekcja 10.3).
   niepelny (`czy_ark_wypelniony = NIE`) nie pokrywa, wiec dwie dostawy NIE
   tego samego arkusza zostaja obie (`gugik_laz.py:187-196, 283-327`).
 
-**Decyzja dla przedzialu (P3, P4):** w roku wybiera ten sam klucz co ADR-028
-(najnowszy `aktualnosc`), `all` bierze wszystkie loty z przedzialu, LAZ bez
-zmian w regule ADR-029. Uzytkownik dowiaduje sie o pozostalych lotach z
-`Info:` (6.3) i z sidecara (sekcja 7).
+**Decyzja dla przedzialu (U8-U10, P3, P4):** wszystkie loty z przedzialu
+sa pobierane do `kampanie/`; dowiazanie wskazuje najnowszy lot (klucz
+ADR-028, bez preferencji pelnego arkusza, bez wyboru wg pokrycia); LAZ bez
+zmian w regule ADR-029 (loty niepelne i tak zostaja). Pokrycie lotow jest
+mierzone po pobraniu (4.4), a uzytkownik dowiaduje sie z `Info:` (6.3) i z
+sidecara (sekcja 7), gdy inny lot ma wieksze pokrycie niz najnowszy.
+
+### 4.4 Pokrycie lotu (pomiar po pobraniu)
+
+- **NMT/NMPT (`.asc`):** `pokrycie` = udzial komorek o wartosci roznej od
+  `NODATA_value` z naglowka AAIGrid (brak klucza = `-9999`, jak GDAL) w
+  calym pliku; wynik 0..1, zapis w sidecarze z 4 miejscami po przecinku.
+  Pomiar strumieniowy po pobraniu (plik jest juz lokalny; `verify_file_format`
+  i `verify_sheet_extent` czytaja tylko naglowek, pomiar czyta calosc —
+  ~100-300 MB tekstu dla 1 m, raz na kampanie).
+- **Orto (`.tif`):** udzial pikseli roznych od nodata (znacznik nodata
+  GeoTIFF albo kanal alfa; bez obu = pokrycie NIEUSTALONE, bez porownania i
+  bez komunikatu).
+- Mierzone TYLKO w przeplywie z przedzialem, tylko dla arkuszy z > 1 lotem
+  w przedziale i tylko, gdy najnowszy lot nie ma `calyArkuszWypelnionyTrescia
+  = TAK` (U10). Wynik mierzony raz, zapisywany w sidecarze kampanii
+  (`extra.coverage`); ponowne uruchomienie czyta z sidecara.
+- Pokrycie NIE wplywa na dowiazanie (U8) — sluzy wylacznie informacji.
 
 ## 5. Tabela decyzyjna
 
@@ -186,7 +210,7 @@ N-34-139-C-a-3-{1..4} z `--bbox`/`--geometry`/hierarchii.
 
 | # | Przypadek | Przyklad | Wynik |
 |---|---|---|---|
-| T1 | Wszystkie arkusze maja rok Y | lista, `--year 2025` | pobranie 4 arkuszy, kazdy najnowszy lot z 2025 (-1: 84183 niepelny, -2: 84183 niepelny, -3: 84183 niepelny, -4: 84183 pelny); `Info:` o wielu lotach (6.3); `Warning:` E13 o niepelnych; kod 0 |
+| T1 | Wszystkie arkusze maja rok Y | lista, `--year 2025` | pobranie WSZYSTKICH lotow z 2025 (-1: 2, -2: 3, -3: 2, -4: 3 = 10 plikow kampanii) do `kampanie/`; dowiazania na najnowszy lot 84183 (-1, -2, -3 niepelny; -4 pelny); pomiar pokrycia dla -1, -2, -3 (najnowszy NIE); `Info:` 6.3 dla arkuszy, gdzie starszy lot ma wieksze pokrycie; `Warning:` E13 o niepelnych; podsumowanie "Downloaded 10 campaign files for 4 sheets"; kod 0 |
 | T2 | Czesc arkuszy bez ZADNYCH danych | lista + arkusz morski, `--year 2025` | arkusz morski pominiety: `Warning: GUGiK nie ma danych dla 1 z 5 arkuszy (...) — pominiete (morze, obszar za granica)` (istniejacy R5), reszta jak T1, kod 0 |
 | T3 | Arkusz ma dane tylko z lat NOWSZYCH | pojedynczy -2 z `--year 2018` (lata 2019..2026) | `Error:` (6.2) z `dostepne roczniki 2019, 2022, 2023, 2024, 2025, 2026`; podpowiedz `--min-year 2018` (rok 2018 i nowsze); kod 1; nic nie pobrano |
 | T4 | Arkusz ma dane tylko z lat STARSZYCH | -1 z `--year 2026` (lata 2019, 2023, 2025) | `Error:` z lista lat; podpowiedz `--max-year 2026`; kod 1 |
@@ -199,13 +223,16 @@ N-34-139-C-a-3-{1..4} z `--bbox`/`--geometry`/hierarchii.
 | T11 | `--year` + `--max-year` | `--year 2024 --max-year 2025` | jak T10 |
 | T12 | `--min-year` > `--max-year` | `--min-year 2025 --max-year 2023` | `Error: --min-year (2025) nie moze byc wiekszy niz --max-year (2023)`; kod 1 |
 | T13 | Rok poza 1900..2100 | `--max-year 2200` | `Error: --max-year musi byc liczba calkowita 1900..2100, otrzymano 2200` (jak dzis `--min-year`); kod 1 |
-| T14 | Dwa loty w roku, `newest` | -1 z `--year 2025` | pobrany lot 2025-10-21_84183 (najnowszy `aktualnosc`, ADR-028 — niepelny); `Info: 1 arkusz ma w wybranym przedziale wiecej niz jedna kampanie (N-34-139-C-a-3-1: 2025-04-27_83233, 2025-10-21_84183) — pobrano najnowsza; wszystkie: --campaigns all`; `Warning:` E13 (niepelny); sidecar `extra.alternatives: [{id: "83233", date: "2025-04-27", full_sheet: true}]`; kod 0 |
-| T15 | Dwa loty w roku, `all` | -1 z `--year 2025 --campaigns all` | oba loty do `kampanie/`, dowiazanie na 2025-10-21_84183; podsumowanie "2 campaign files for 1 sheets"; bez `Info:` o lotach (wszystkie pobrane); kod 0 |
-| T16 | `all` + przedzial | lista, `--campaigns all --min-year 2024` | -2: 2024, 2025 x3, 2026; -4: 2024, 2025 x3, 2026; -1, -3 KONFLIKT -> `Error:` jak T7 (stop dotyczy obu strategii) |
+| T14 | Dwa loty w roku (bez `--campaigns`) | -1 z `--year 2025` | OBA loty do `kampanie/` (2025-04-27_83233 pelny, 2025-10-21_84183 niepelny); dowiazanie na 84183 (najnowszy, U8); pomiar pokrycia obu (najnowszy NIE); gdy 83233 ma wieksze pokrycie: `Info:` 6.3 i sidecar standardowy `extra.better_coverage: "83233"`, `extra.flights` z pokryciem obu; `Warning:` E13 (niepelny); "Downloaded 2 campaign files for 1 sheets"; kod 0 |
+| T15 | Dwa loty w roku, jawne `--campaigns all` | -1 z `--year 2025 --campaigns all` | identycznie jak T14 (flaga redundantna, P3a) |
+| T16 | Przedzial otwarty od dolu | lista, `--min-year 2024` | -2: 2024, 2025 x3, 2026; -4: 2024, 2025 x3, 2026 (po 5 plikow); -1, -3 KONFLIKT -> `Error:` jak T7, nic nie pobrano |
+| T26 | Jawne `--campaigns newest` + flaga roku | -1 z `--year 2025 --campaigns newest` | `Error: --campaigns newest wyklucza sie z --year/--min-year/--max-year — przedzial lat pobiera wszystkie kampanie z przedzialu (pomin --campaigns)`; kod 1; przed siecia |
+| T27 | Najnowszy lot w przedziale pelny (TAK) | -4 z `--year 2025` (84183 TAK) | 3 loty pobrane, dowiazanie na 84183, BEZ pomiaru pokrycia i bez `Info:` (U10 wyjatek); sidecary kampanii bez `extra.coverage` |
+| T28 | Jeden lot w przedziale | -1 z `--year 2023` (jeden lot: 78047) | jeden plik kampanii, bez pomiaru, bez `Info:`; podsumowanie "1 campaign files for 1 sheets" |
 | T17 | Wariant orto | N-34-139-A-c-1-1, `--product orto`, CIR, `--year 2025` | CIR ma lata 2011, 2014, 2017, 2022, 2024 -> KONFLIKT (RGB ma 2025, ale wariant jest osobnym filtrem); `dostepne roczniki` z puli CIR; kod 1 |
 | T18 | Godlo CZ / obszar bez PL | `kartograf download CTES96 --year 2023` | `Error: CZ (CUZK) nie ma kampanii — --campaigns all/--min-year/--max-year/--year dotycza tylko PL`; kod 1; przed siecia |
 | T19 | Obszar PL+CZ pod `auto` | `--bbox ... --country auto --year 2023` | `Info: --campaigns/--min-year/--max-year/--year dotycza tylko czesci PL (CZ: biezaca wersja danych CUZK)`; czesc PL wg tej tabeli; CZ biezaca |
-| T20 | Wycinek `--target-crs` | `--bbox ... --target-crs EPSG:5514 --year 2024` | P6: arkusze wg T1-T9; wynik `bbox/<coords>_y2024.tif`; przy konflikcie `Error:` i brak pliku; `--campaigns all` nadal `Error:` |
+| T20 | Wycinek `--target-crs` | `--bbox ... --target-crs EPSG:5514 --year 2024` | P6: arkusze wg T1-T9 (wszystkie loty z 2024 do `kampanie/`), wycinek z dowiazan (najnowszy lot 2024 per arkusz); wynik `bbox/<coords>_y2024.tif`; przy konflikcie `Error:` i brak pliku; jawne `--campaigns all` nadal `Error:`, jawne `newest` = T26 |
 | T21 | LAZ, rocznik w przedziale pokrywa to, co referencja | w2, `--product laz --year 2022` (referencja: kafel 2025 N-34-139-A-c-1-1-3-4; kafel 2022 7.173.21.06.2 pokrywa obszar) | pobranie kafla 2022; `Info:` o kaflach pominietych jak dzis; kod 0 |
 | T22 | LAZ, rocznik w usludze, brak kafli w czesci obszaru | w2, `--year 2024` (warstwa 2024 istnieje, w w2 pusta) | `Error: brak kafli LAZ z roku 2024 dla 1 z 1 kafli obszaru — nic nie pobrano:` / `  N-34-139-A-c-1-1-3-4 (2025, PL-1992): dostepne roczniki 2022, 2023, 2025` / podpowiedz `--min-year 2024` i `--max-year 2024`; kod 1 |
 | T23 | LAZ, rocznik nieobecny w usludze | `--year 2017` na EVRF2007 (warstwy 2018..2026) | `Error: rocznik 2017 nie istnieje w usludze EVRF2007 (dostepne: 2026, ..., 2018)` — jak dzis, bez GetFeature; dla przedzialu bez wspolnego rocznika z usluga: `Error: przedzial 2010-2017 nie ma rocznika w usludze EVRF2007 (dostepne: ...)` |
@@ -224,7 +251,13 @@ N-34-139-C-a-3-{1..4} z `--bbox`/`--geometry`/hierarchii.
   usunac "nie dziala z --target-crs" (P6).
 - `--max-year RRRR` (NOWA) — "Tylko PL: gorna granica roku danych
   (wlacznie) — najnowsze dane nie pozniejsze niz RRRR".
-- `--campaigns` bez zmian; opis LAZ bez zmian.
+- `--campaigns {newest,all}` — domyslnie sentinel (brak flagi; `default=None`
+  jak `--resolution`): bez flagi roku = `newest`, z flaga roku = `all`
+  (P3a); opis: "Kampanie GUGiK (tylko PL): newest = najnowsza kampania
+  arkusza (default bez flag roku), all = wszystkie kampanie do
+  <segment>/kampanie/ (default i jedyna strategia z --year/--min-year/
+  --max-year); LAZ: all = bez deduplikacji pokrycia". Jawne `newest` z
+  flaga roku = T26.
 - Walidacja przed siecia, w `cmd_download` tam, gdzie dzis
   `validate_campaign_args` (`download_cmd.py:883-889`): T10-T13.
 
@@ -262,21 +295,23 @@ Podpowiedz (liczona z arkuszy konfliktowych; L = `min_year`, U = `max_year`):
   (np. jeden tylko nowsze bez L, drugi tylko starsze bez U — niemozliwe przy
   jednej parze granic; zostawione dla kompletnosci) — tylko lista lat.
 
-### 6.3 `Info:` o wielu lotach w przedziale (P4)
+### 6.3 `Info:` o locie o wiekszym pokryciu (P4, U10)
 
-Tylko `newest`, tylko gdy dla arkusza w przedziale jest > 1 rekordu;
-stderr, raz na zadanie, przed pobieraniem:
+Tylko w przeplywie z przedzialem; tylko dla arkuszy, ktore maja w przedziale
+> 1 lot, ktorych najnowszy lot NIE jest pelny (TAK) i dla ktorych inny
+pobrany lot ma zmierzone pokrycie WIEKSZE niz najnowszy; stderr (takze z
+`-q`), raz na zadanie, po pobraniu (pomiar wymaga plikow):
 
 ```
-Info: 3 arkusze maja w wybranym przedziale wiecej niz jedna kampanie — pobrano najnowsza; wszystkie: --campaigns all
-  N-34-139-C-a-3-1: 2025-04-27_83233 (pelny), 2025-10-21_84183 (niepelny, wybrany)
-  N-34-139-C-a-3-2: 2025-04-04_81468 (pelny), 2025-04-27_83233 (pelny), 2025-10-21_84183 (niepelny, wybrany)
-  ...
+Info: dla 2 arkuszy starszy lot z przedzialu ma wieksze pokrycie niz najnowszy (dowiazanie wskazuje najnowszy):
+  N-34-139-C-a-3-1: dowiazanie 2025-10-21_84183 (niepelny, pokrycie 0,9 %); wieksze pokrycie: 2025-04-27_83233 (pelny, 99,8 %)
+  N-34-139-C-a-3-3: dowiazanie 2025-10-21_84183 (niepelny, 12,4 %); wieksze pokrycie: 2025-04-27_83233 (pelny, 100 %)
 ```
 
-Lista do 10 arkuszy, dalej `... i N innych`. Bez przedzialu (dzisiejszy
-`newest`) komunikatu NIE ma — `newest` nadal uzywa `record_cache` i nie zna
-listy (P5); pytanie otwarte Q4.
+Lista do 10 arkuszy, dalej `... i N innych`. Wartosci procentowe z
+`extra.coverage` (4.4). Bez przedzialu (dzisiejszy `newest`) komunikatu NIE
+ma — `newest` pobiera jeden lot i nie ma czego porownac; pytanie otwarte Q4
+(stderr vs log).
 
 ### 6.4 Pozostale komunikaty
 
@@ -306,7 +341,10 @@ listy (P5); pytanie otwarte Q4.
 | kampania NMT/NMPT/orto (`kampanie/...`) i sciezka standardowa (kopia sidecara) | `request.min_year`, `request.max_year` | gdy podane; `request.year` dodatkowo, gdy min == max (czytelnosc; LAZ ma `request.year` dzis) |
 | j.w. | `extra.campaign` | bez zmian — identyfikuje lot (`id`, `date`, `full_sheet`, ...) |
 | j.w. | `extra.available_years` (NOWE) | wszystkie lata arkusza w skorowidzu w chwili pobrania (lista int, rosnaco); tylko w przeplywie z przedzialem (tam lista jest znana) |
-| j.w. | `extra.alternatives` (NOWE) | `newest` z przedzialem: pozostale rekordy w przedziale, NIE pobrane: `[{"id", "date", "full_sheet"}]`; pomijane, gdy puste; `all`: pomijane |
+| kampania NMT/NMPT/orto | `extra.coverage` (NOWE) | zmierzony udzial waznych pikseli lotu, 0..1 (4.4); tylko gdy mierzono (arkusz z > 1 lotem w przedziale, najnowszy nie TAK); orto bez nodata/alfa: brak pola |
+| j.w. | `request.campaigns` | `"all"` (strategia ROZWIAZANA z sentinela, P3a) — sidecar opisuje, co zrobiono, nie jak wpisano flage |
+| sciezka standardowa (kopia sidecara kampanii + `link`) | `extra.flights` (NOWE) | wszystkie loty arkusza z przedzialu, malejaco wg klucza ADR-028: `[{"id", "date", "full_sheet", "coverage"}]` (`coverage` tylko gdy mierzono); tylko w przeplywie z przedzialem |
+| j.w. | `extra.better_coverage` (NOWE) | `id` lotu o NAJWIEKSZYM pokryciu, gdy jest ono wieksze niz pokrycie lotu dowiazania (U10); brak pola = brak lepszego lotu albo najnowszy pelny (TAK) |
 | wycinek PL (`bbox/<coords>_y....tif`) | `request.min_year`/`max_year`/`year` | jak wyzej; `extra.sheet_sources` bez zmian (kazdy wpis niesie `acquisition_date`/`acquisition_year` rekordu) |
 | kafel LAZ | `request.min_year`, `request.max_year`, `request.year` | gdy podane (`year` dzis jest; `max_year` nowe) |
 | kafel LAZ | `extra.acquisition_date` (NOWE), `extra.full_sheet` (NOWE) | `akt_data`, `czy_ark_wypelniony` kafla — dwie dostawy tego samego arkusza w roku (T25) roznia sie dzis tylko `url` |
@@ -338,10 +376,14 @@ zadanie — rozroznienie klasami, nie trescia. Eksport z `kartograf`
 
 ### 8.2 `DownloadManager` (`kartograf/download/manager.py`)
 
-- `DownloadManager(..., campaigns="newest", min_year=None, max_year=None)`;
-  wlasciwosc `max_year`; `validate_campaign_args(campaigns, min_year,
-  max_year)` (zmiana sygnatury — funkcja nie jest w `__all__`
-  `kartograf/__init__.py`, uzywana wewnetrznie i w `select_tiles`).
+- `DownloadManager(..., campaigns=None, min_year=None, max_year=None)`:
+  `campaigns=None` (nowy domyslny sentinel) = `"newest"` bez przedzialu,
+  `"all"` z przedzialem; jawne `"newest"` z przedzialem = `ValidationError`
+  (P3a); wlasciwosc `campaigns` zwraca strategie ROZWIAZANA; wlasciwosc
+  `max_year`; `validate_campaign_args(campaigns, min_year, max_year)`
+  przyjmuje `None` i egzekwuje P3a (zmiana sygnatury — funkcja nie jest w
+  `__all__` `kartograf/__init__.py`, uzywana wewnetrznie i w
+  `select_tiles`).
 - Przeplyw z jakimkolwiek przedzialem (`min_year` lub `max_year` podane),
   tylko provider z `supports_campaigns is True`:
   1. **Faza sprawdzania** (`check_year_range(godla) -> YearRangeCheck`,
@@ -351,30 +393,44 @@ zadanie — rozroznienie klasami, nie trescia. Eksport z `kartograf`
      `YearRangeCheck(selected: dict[godlo, list[SkorowidzRecord]],
      no_data: dict[godlo, NoCoverageError], conflicts: dict[godlo,
      tuple[int, ...]], failed: dict[godlo, DownloadError])`.
-     `selected` = rekordy w przedziale: `newest` -> jeden (max po kluczu
-     ADR-028), `all` -> wszystkie, malejaco.
+     `selected` = WSZYSTKIE rekordy w przedziale, malejaco po kluczu
+     ADR-028 (P3; strategia rozwiazana = `all`).
   2. `conflicts` niepuste -> `YearRangeError` (wszystkie arkusze, z
      podpowiedziami); `failed` niepuste -> `DownloadError` (P9); nic nie
      pobrane. Kolejnosc: najpierw `failed` (nie wiadomo, czy konflikt jest
      pelny), potem `conflicts`.
-  3. **Faza pobierania**: jak dzisiejszy `_fetch_campaigns`
+  3. **Faza pobierania**: jak dzisiejszy `_fetch_campaigns` dla `all`
      (`manager.py:700-863`), ale z rekordami z fazy 1 (bez drugiego
      `resolve_campaigns`); `no_data` -> `no_coverage` wyniku (R5, jak dzis);
-     sidecar kampanii z polami z sekcji 7.
+     dowiazanie na najnowszy lokalny lot (`max` po `sort_key`,
+     `ensure_standard_link` — bez zmian, U8); sidecar kampanii z polami z
+     sekcji 7.
+  4. **Faza pomiaru pokrycia** (per arkusz, po skompletowaniu jego lotow):
+     warunek U10 (> 1 lot w przedziale, najnowszy nie TAK) -> pomiar 4.4
+     kazdego lotu bez `extra.coverage` w sidecarze, dopisanie `extra.coverage`
+     do sidecara kampanii i `extra.flights`/`extra.better_coverage` do
+     sidecara standardowego; wynik `SheetFetch.better_coverage: str | None`
+     i `DownloadResult.better_coverage: dict[godlo, str]` (id lotu) dla CLI
+     (6.3). Blad pomiaru (np. nieczytelny ASC) = `logger.warning`, bez
+     porazki arkusza (plik juz zweryfikowany formatowo).
 - `download_sheet`, `download_sheets`, `download_hierarchy`: z przedzialem
   moga rzucic `YearRangeError` i `DownloadError` fazy 1 PRZED pierwszym
   pobraniem (dokumentacja: dotad lista nie rzucala `DownloadError`).
   `last_result` po fazie 1 z bledem = `None`.
 - Bez przedzialu: przeplyw bez zmian (w tym `record_cache` i fallback I-1).
-- `_write_campaign_sidecar`: `request.max_year`/`year`, `extra.available_years`,
-  `extra.alternatives` (sekcja 7).
+- `_write_campaign_sidecar`: `request.campaigns` (rozwiazana),
+  `request.max_year`/`year`, `extra.available_years`; po pomiarze
+  `extra.coverage` (kampania) oraz `extra.flights`/`extra.better_coverage`
+  (sciezka standardowa) — sekcja 7.
 
 ### 8.3 Provider skorowidza (`providers/pl/skorowidz.py`)
 
-- `resolve_campaigns(godlo, *, campaigns="newest", min_year=None,
-  max_year=None, timeout=None)`: z jakimkolwiek przedzialem — pelna lista
-  (`_resolve_all` bez pomijania warstw), filtr `min_year <= rok <= max_year`,
-  `newest` -> `[max]`; brak rekordu w przedziale przy niepustej liscie ->
+- `resolve_campaigns(godlo, *, campaigns=None, min_year=None,
+  max_year=None, timeout=None)`: sentinel jak w `DownloadManager` (P3a;
+  jawne `"newest"` z przedzialem = `ValidationError`); z przedzialem —
+  pelna lista (`_resolve_all` bez pomijania warstw), filtr
+  `min_year <= rok <= max_year`, zwrot WSZYSTKICH rekordow z przedzialu
+  (malejaco); brak rekordu w przedziale przy niepustej liscie ->
   `YearRangeError({godlo: lata})`; pusta lista -> `NoCoverageError` jak
   dzis. `_meets_min_year` -> `_in_year_range(record, min_year, max_year)`.
 - `_resolve_all`: parametr `min_year` i pomijanie warstw usuniete (P5);
@@ -396,8 +452,12 @@ zadanie — rozroznienie klasami, nie trescia. Eksport z `kartograf`
 
 ### 8.5 LAZ (`providers/pl/gugik_laz.py`, `download/laz.py`)
 
-- `select_tiles(bbox, year=None, min_density=None, ..., campaigns="newest",
-  min_year=None, max_year=None)`; `year=Y` == `min_year=max_year=Y`;
+- `select_tiles(bbox, year=None, min_density=None, ..., campaigns=None,
+  min_year=None, max_year=None)`: sentinel `None` = `newest` ZAWSZE (takze
+  z przedzialem — LAZ nie ma `kampanie/`, a ADR-029 zachowuje loty
+  niepelne, P3a); jawne `newest` z przedzialem dozwolone (dzisiejsze
+  zachowanie); `all` = bez deduplikacji w przedziale; pytanie otwarte Q8.
+  `year=Y` == `min_year=max_year=Y`;
   `year` z `min_year`/`max_year` = `ValidationError` (dzis tylko z
   `min_year`); `min_year > max_year` = `ValidationError`.
 - Roczniki uslugi: przedzial bez wspolnego rocznika = `DownloadError`
@@ -427,6 +487,15 @@ zadanie — rozroznienie klasami, nie trescia. Eksport z `kartograf`
   i tak przekazywany do WSZYSTKICH torow (godlo, hierarchia, lista
   `--bbox`/`--geometry`, wycinek, LAZ). `_cmd_download_laz` przestaje
   czytac `args.year` osobno (`download_cmd.py:1771-1773, 1801`).
+- `--campaigns` sentinel rozwiazywany w tym samym miejscu (P3a): `None` ->
+  `newest`/`all` wg flag roku; jawne `newest` + flaga roku = T26 (produkty
+  arkuszowe; LAZ: `newest` dozwolone — ADR-029 w obrebie przedzialu).
+  Straze CZ (`_reject_campaign_opts_without_pl`) i wycinka dzialaja na
+  strategii ROZWIAZANEJ (obszar PL+CZ z `--year` daje `Info:` jak dotad z
+  `all`).
+- Podsumowanie i `Info:` 6.3 w `_finish_pl_sheets` i w torze pojedynczego
+  godla (jak `_print_campaign_summary` dla `all` dzis;
+  `DownloadResult.better_coverage`).
 - `_reject_campaign_opts_without_pl` / `_reject_campaign_opts_with_target_crs`
   wg P6/P7.
 - `YearRangeError` -> komunikat 6.2 (CLI formatuje z `sheets`/`hints`),
@@ -462,23 +531,30 @@ N-34-139-C-a-3-{1..4}, warstwy 2023iStarsze/2024/2025/2026), helper
 
 | Test (nazwa robocza) | Warstwa | Przypadek |
 |---|---|---|
-| `test_resolve_campaigns_year_2025_c14_picks_newest_flight` | provider | T1/T14: -1 -> 84183; `alternatives` = 83233 |
+| `test_resolve_campaigns_year_2025_c14_returns_both_flights` | provider | T14: -1 -> [84183, 83233] (malejaco, klucz ADR-028); -2 -> 3 loty |
+| `test_resolve_campaigns_explicit_newest_with_range_is_validation_error` | provider | T26/P3a: `campaigns="newest", min_year=2025` -> `ValidationError`; `campaigns=None` -> lista |
 | `test_resolve_campaigns_year_2024_c14_conflict_lists_years` | provider | T5: -1 -> `YearRangeError` z (2019, 2023, 2025) |
 | `test_resolve_campaigns_max_year_2022_c14` | provider | T8: -1 -> 2019 (73021), -2 -> 2022 |
 | `test_resolve_campaigns_range_queries_all_layers_no_partial_scan` | provider | P5: `queried_layers` = 4 warstwy takze z `min_year=2026`; wpis cache bez `scanned_from`; stary wpis `scanned_from=2024` = chybienie |
 | `test_available_years_c14` | provider | 8.3: -2 -> (2019, 2022, 2023, 2024, 2025, 2026) |
 | `test_orto_cir_year_2025_conflict_rgb_has_it` | provider | T17 |
 | `test_manager_year_2024_list_stops_before_any_download` | manager | T5: `download_sheets` 4 arkusze -> `YearRangeError` z 2 arkuszami; `download_record` nie wywolany; brak plikow w `kampanie/` |
-| `test_manager_year_2025_list_downloads_all_four_with_info_data` | manager | T1: 4 kampanie, `last_result.campaign_files`, sidecar `request.year/min_year/max_year`, `extra.available_years`, `extra.alternatives` |
+| `test_manager_year_2025_list_downloads_every_flight_links_newest` | manager | T1: 10 plikow kampanii, `last_result.campaign_files`, dowiazania na 84183, sidecar `request.campaigns: "all"`, `request.year/min_year/max_year`, `extra.available_years`, `extra.flights` |
+| `test_manager_coverage_measured_only_when_newest_partial` | manager | T14 vs T27: stub `download_record` zapisuje ASC z roznym udzialem NODATA; -1: oba loty dostaja `extra.coverage`, sidecar standardowy `extra.better_coverage: "83233"`, `last_result.better_coverage`; -4 (najnowszy TAK): brak pomiaru i pol |
+| `test_manager_coverage_newest_has_more_data_no_info` | manager | U10: najnowszy niepelny, ale z wiekszym pokryciem niz starszy -> `extra.flights` z pokryciem, bez `better_coverage` |
+| `test_manager_single_flight_in_range_no_measurement` | manager | T28 |
+| `test_manager_explicit_newest_with_range_rejected` | manager | T26: `DownloadManager(campaigns="newest", min_year=2024)` -> `ValidationError`; `campaigns=None` -> `manager.campaigns == "all"` |
+| `test_coverage_of_asc_counts_nodata` | campaigns | 4.4: ASC z `NODATA_value` i bez (domyslne -9999), wynik 0..1 |
 | `test_manager_year_with_no_data_sheet_is_skipped` | manager | T2: `empty.body` dla 5. arkusza -> `no_coverage`, reszta pobrana |
 | `test_manager_min_year_alone_conflict_is_error_not_skip` | manager | T7 (P1): zmiana wobec `test_min_year_newest_no_coverage_in_list_is_no_coverage_status` (`tests/test_manager_campaigns.py:678`) — ten test do przepisania |
 | `test_manager_check_failure_aborts_whole_task` | manager | P9: jedna warstwa 5xx dla jednego arkusza -> `DownloadError`, zero pobran |
-| `test_manager_all_with_range_downloads_every_flight_in_range` | manager | T15/T16 |
+| `test_manager_explicit_all_with_range_same_as_default` | manager | T15/T16: `campaigns="all"` z przedzialem = ten sam wynik co `campaigns=None` |
 | `test_manager_without_range_unchanged_uses_record_cache` | manager | regresja: `newest` bez flag nie dotyka `campaigns_cache`, fallback I-1 dziala |
 | `test_cli_year_nmt_list_error_message_and_hints` | CLI | T5: dokladny tekst 6.2, kod 1, `MetadataCache` zamkniety |
 | `test_cli_year_conflicts_with_min_max` | CLI | T10-T12, przed siecia (`GugikProvider` nie tworzony) |
 | `test_cli_year_cz_godlo_rejected` / `test_cli_year_pl_cz_info` | CLI | T18/T19 (wzor: istniejace testy `--min-year` dla CZ w `tests/test_cli.py`) |
-| `test_cli_year_info_multiple_flights` | CLI | T14: tekst 6.3 |
+| `test_cli_year_info_better_coverage` | CLI | T14: tekst 6.3 (stderr, takze z `-q`), kod 0 |
+| `test_cli_explicit_newest_with_year_rejected` | CLI | T26: tekst, kod 1, przed siecia; `--campaigns all --year` = jak bez `--campaigns` |
 | `test_cli_year_target_crs_cutout_suffix` | CLI/cutout | T20: `bbox/<coords>_y2024.tif`, sidecar; `tests/test_pl_cutout.py:2502` (stub `resolve_campaigns`) rozszerzony o `max_year` |
 | `test_laz_year_2022_w2_covers_reference` | LAZ | T21: kafel 2022 wybrany; `test_c13_year_2023_returns_the_single_older_tile` (`tests/test_real_gugik_responses.py:475`) nadal przechodzi (ten sam godlo = pokrycie) |
 | `test_laz_year_2024_w2_conflict_lists_years` | LAZ | T22: `YearRangeError({"N-34-139-A-c-1-1-3-4": (2022, 2023, 2025)})`; wszystkie roczniki odpytane |
@@ -522,14 +598,21 @@ zadnych sciezek prywatnych w README).
   jest skrotem `--min-year RRRR --max-year RRRR`; brak roku na ktoryms
   arkuszu/kaflu zatrzymuje zadanie PRZED pobraniem z lista dostepnych lat i
   podpowiedzia; arkusze bez zadnych danych sa pomijane z `Warning:` jak
-  dotad.
+  dotad. Z flaga roku pobierane sa WSZYSTKIE kampanie (loty) z przedzialu
+  do `kampanie/` (strategia `all`), a sciezka standardowa wskazuje
+  najnowsza z nich (regula bez zmian).
+- Pokrycie lotu (`extra.coverage`, udzial waznych pikseli) mierzone po
+  pobraniu dla arkusza, ktory ma w przedziale kilka lotow, a najnowszy nie
+  jest pelny; gdy starszy lot ma wieksze pokrycie — `Info:` w CLI i
+  `extra.flights`/`extra.better_coverage` w sidecarze sciezki standardowej.
 - Biblioteka: `DownloadManager(max_year=)`, `download_pl_cutout(min_year=,
   max_year=)`, `download_laz_area(max_year=)`, `select_tiles(max_year=)`,
   `resolve_campaigns(max_year=)`, `available_years(godlo)`; nowy wyjatek
   `YearRangeError(DownloadError)` z `sheets` (godlo -> lata), `min_year`,
   `max_year`, `hints`.
 - Sidecar: `request.max_year`, `request.year` (gdy min == max),
-  `extra.available_years`, `extra.alternatives` (kampania NMT/NMPT/orto);
+  `extra.available_years`, `extra.coverage` (kampania NMT/NMPT/orto),
+  `extra.flights`, `extra.better_coverage` (sciezka standardowa);
   LAZ `extra.acquisition_date`, `extra.full_sheet`.
 - Wycinek `--target-crs` z przedzialem lat: nazwa `bbox/<coords>_y<...>.tif`.
 
@@ -547,6 +630,18 @@ zadnych sciezek prywatnych w README).
   chodzilo o "co najmniej rok RRRR, a reszte pomin", uruchom bez
   `--min-year` i odfiltruj po `extra.campaign.date` w sidecarach, albo
   obniz granice wg podpowiedzi.
+- `--min-year` bez `--campaigns` pobieral JEDNA (najnowsza) kampanie od
+  granicy; teraz kazda flaga roku pobiera WSZYSTKIE kampanie z przedzialu
+  (jak `--campaigns all`), a jawne `--campaigns newest` z flaga roku to
+  `Error:`. Biblioteka: `DownloadManager(campaigns="newest", min_year=...)`
+  i `resolve_campaigns(campaigns="newest", min_year=...)` rzucaja
+  `ValidationError`; domyslna wartosc `campaigns` to `None` (rozwiazywana:
+  `newest` bez przedzialu, `all` z przedzialem). Co zrobic: usun
+  `--campaigns newest`/`campaigns="newest"` z wywolan z flaga roku; jesli
+  potrzebny jest jeden plik na arkusz, uzyj sciezki standardowej
+  (dowiazanie na najnowszy lot z przedzialu) — pozostale loty leza w
+  `kampanie/` i mozna je usunac. Koszt: wiecej danych (orto: kilka
+  kampanii/rok na arkusz w duzych miastach).
 - `--min-year` dziala z `--target-crs` (dotad `Error:`); wynik ma sufiks
   `_y<...>` w nazwie. Co zrobic: nic; wczesniejsze wycinki bez sufiksu
   pozostaja wycinkami "najnowsze".
@@ -585,9 +680,11 @@ zadnych sciezek prywatnych w README).
 | # | Pytanie | Propozycja w specu |
 |---|---|---|
 | Q1 | Czy regula "konflikt = stop calego zadania" ma dotyczyc takze SAMEGO `--min-year` i SAMEGO `--max-year` (P1), czy tylko `--year`? Dzis `--min-year` pomija arkusz z `Warning:` (ADR-030 (f)). | Tak, kazdy przedzial (spojnosc z U5). |
-| Q2 | Dwa loty w jednym roku pod `newest`: najnowszy `aktualnosc` (ADR-028; dla N-34-139-C-a-3-1 w 2025 jest to lot NIEPELNY 2025-10-21) czy preferencja pelnego arkusza (`calyArkuszWypelnionyTrescia = TAK`) w obrebie roku? | Najnowszy (jedna regula ADR-028); uzytkownik widzi `Info:` + `Warning:` E13 i moze wziac `--campaigns all`. |
+| Q2 | ROZSTRZYGNIETE 2026-10-09 (U8-U11): regula sciezki standardowej bez zmian (najnowszy lot, ADR-028 + ADR-030 (d)); flaga roku pobiera wszystkie loty z przedzialu (`all` zawezone); `Info:` + sidecar, gdy starszy lot ma wieksze zmierzone pokrycie, a najnowszy nie jest TAK; jawne `--campaigns newest` z flaga roku = `Error:` (P3a). | — |
+| Q2a | OPCJA (nierozstrzygnieta, U11): dodatkowa flaga zmieniajaca regule domyslna dowiazania — `--full-sheet` (dowiazanie na najnowszy lot z `calyArkuszWypelnionyTrescia = TAK`) albo `--min-coverage N` (dowiazanie na najnowszy lot o zmierzonym pokryciu >= N %). Jak by to weszlo: pomiar 4.4 juz istnieje w przeplywie z przedzialem; flaga przelaczalaby KLUCZ dowiazania z `(aktualnosc, dt_pzgik, url)` na `(spelnia prog, aktualnosc, dt_pzgik, url)` i wymagalaby (a) pobrania wszystkich lotow przed wyborem (z przedzialem — juz tak; bez przedzialu `newest` musialby pobierac loty az do pierwszego spelniajacego prog, od najnowszego), (b) zlamania ADR-030 (d) "dowiazanie nigdy wstecz" przy zmianie progu miedzy uruchomieniami (albo zapisu progu w `extra.link_rule` i przestawiania tylko przy tej samej regule), (c) orto bez nodata/alfa = prog niemierzalny. | Rekomendacja: NIE w 0.7.1 — zalezy od magazynu wersjonowanego (0.8.0: reguly dowiazan i ich historia) i od decyzji, czy `newest` ma pobierac "az do progu"; w 0.7.1 wystarczy pomiar + `Info:` + `extra.flights` (uzytkownik widzi, ktory lot jest lepszy, i sam go uzywa z `kampanie/`). |
 | Q3 | Wycinek `--target-crs` z przedzialem: wspierac z sufiksem `_y<...>` w nazwie (P6), czy utrzymac odrzucenie z errata 1 [Q2] (teraz dla trzech flag)? | Wspierac (P6). |
 | Q4 | `Info:` o wielu lotach w przedziale (6.3): zawsze na stderr (takze z `-q`), czy tylko w logu (`logger.info`)? | stderr, jak `Info:` o kaflach LAZ. |
 | Q5 | Awaria skorowidza dla jednego arkusza w fazie sprawdzania: przerwac cale zadanie (P9), czy sprawdzic reszte, pobrac ja i zglosic ten arkusz jako porazke (kod 1, wynik czesciowy)? | Przerwac (U6: bez wyniku czesciowego). |
 | Q6 | Usunac skan czesciowy `all --min-year` (P5; koszt 1-3 zapytania/arkusz/7 dni), czy zachowac go dla `all --min-year` bez `--max-year` i akceptowac, ze komunikat konfliktu nie wymieni lat starszych od granicy? | Usunac. |
 | Q7 | LAZ: czy czesc obszaru bez kafli w ZADNYM roczniku ma dostac `Warning:` (analog U3 dla arkuszy)? Dzis LAZ milczy (obszar nie jest lista arkuszy). | Bez zmian (poza zakresem; osobna sprawa ADR-029). |
+| Q8 | LAZ z flaga roku: zostawic ADR-029 w obrebie przedzialu (P3a: pelne powtorzenia tej samej ramy deduplikowane, loty niepelne zawsze zostaja; jawne `newest` dozwolone) czy — jak dla arkuszy (U9) — pobierac WSZYSTKIE kafle z przedzialu bez deduplikacji (`all`), np. w2 `--min-year 2022` = 3 kafle/350 MB zamiast 1? | Zostawic ADR-029 (LAZ nie ma `kampanie/` ani dowiazan; cel "nie gubic lotow" juz spelniony). |
