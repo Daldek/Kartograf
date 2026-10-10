@@ -240,7 +240,8 @@ N-34-139-C-a-3-{1..4} z `--bbox`/`--geometry`/hierarchii.
 | T18 | Godlo CZ / obszar bez PL | `kartograf download CTES96 --year 2023` | `Error: CZ (CUZK) nie ma kampanii — --campaigns all/--min-year/--max-year/--year dotycza tylko PL`; kod 1; przed siecia |
 | T19 | Obszar PL+CZ pod `auto` | `--bbox ... --country auto --year 2023` | `Info: --campaigns/--min-year/--max-year/--year dotycza tylko czesci PL (CZ: biezaca wersja danych CUZK)`; czesc PL wg tej tabeli; CZ biezaca |
 | T20 | Wycinek `--target-crs` z flaga roku (P6) | `--bbox ... --target-crs EPSG:5514 --year 2024` (takze `--min-year`, `--max-year`) | `Error: --year nie dziala z --target-crs — wycinek sklada najnowsze kampanie, nazwa wycinka nie niesie roku` (nazwa flagi wg podanej); kod 1; przed siecia; nic nie pobrano |
-| T21 | LAZ, rocznik w przedziale pokrywa to, co referencja | w2, `--product laz --year 2022` (referencja: kafel 2025 N-34-139-A-c-1-1-3-4; kafel 2022 7.173.21.06.2 pokrywa obszar) | pobranie kafla 2022; `Info:` o kaflach pominietych jak dzis; kod 0 |
+| T21 | LAZ, rocznik w przedziale pokrywa to, co referencja | w2, `--product laz --year 2023` (referencja: kafel 2025 N-34-139-A-c-1-1-3-4; kafel 2023 ma ten sam godlo, czyli te sama rame) | pobranie kafla 2023; `Info:` o kaflach pominietych jak dzis; kod 0 |
+| T21a | LAZ, rocznik w przedziale pokrywa referencje czesciowo | w2, `--year 2022` (kafel 2022 7.173.21.06.2 obejmuje ok. 53 % obszaru — pomiar 2026-10-10: niepokryty kawalek 28 198 m2 z 60 000 m2) | konflikt P8: `Error:` z kaflem referencji N-34-139-A-c-1-1-3-4 i latami kafli przecinajacych niepokryty kawalek; podpowiedz `--min-year 2022`; kod 1; nic nie pobrano |
 | T22 | LAZ, rocznik w usludze, brak kafli w czesci obszaru | w2, `--year 2024` (warstwa 2024 istnieje, w w2 pusta) | `Error: brak kafli LAZ z roku 2024 dla 1 z 1 kafli obszaru — nic nie pobrano:` / `  N-34-139-A-c-1-1-3-4 (2025, PL-1992): dostepne roczniki 2022, 2023, 2025` / podpowiedz `--min-year 2024` i `--max-year 2024`; kod 1 |
 | T23 | LAZ, rocznik nieobecny w usludze | `--year 2017` na EVRF2007 (warstwy 2018..2026) | `Error: rocznik 2017 nie istnieje w usludze EVRF2007 (dostepne: 2026, ..., 2018)` — jak dzis, bez GetFeature; dla przedzialu bez wspolnego rocznika z usluga: `Error: przedzial 2010-2017 nie ma rocznika w usludze EVRF2007 (dostepne: ...)` |
 | T24 | LAZ, obszar bez kafli w zadnym roku | bbox na morzu, `--year 2023` | jak dzis: `Error: No LAZ tiles found ...`, kod 1 (referencja pusta — nie ma z czym porownac) |
@@ -359,11 +360,13 @@ porownac. Q4 rozstrzygniete (U12): stderr.
 | j.w. | `extra.better_coverage` (NOWE) | `id` lotu o NAJWIEKSZYM pokryciu, gdy jest ono wieksze niz pokrycie lotu dowiazania (U10); brak pola = brak lepszego lotu albo najnowszy pelny (TAK) |
 | kafel LAZ | `request.min_year`, `request.max_year`, `request.year` | gdy podane (`year` dzis jest; `max_year` nowe) |
 | kafel LAZ | `extra.acquisition_date` (NOWE), `extra.full_sheet` (NOWE) | `akt_data`, `czy_ark_wypelniony` kafla — dwie dostawy tego samego arkusza w roku (T25) roznia sie dzis tylko `url` |
-| sidecar standardowy po `_note_reuse` (N4) | `extra.parent_requests[].min_year/max_year/year` | zadania ponownie uzywajace pliku (jak dzis `min_year`) |
 
 `request` opisuje POBRANIE (ARCHITECTURE 3.2) — przy ponownym uruchomieniu z
-innym przedzialem, ktory wybiera te sama kampanie, plik jest pomijany, a
-nowy przedzial trafia do `extra.parent_requests` (istniejace N4).
+innym przedzialem, ktory wybiera te sama kampanie, plik jest pomijany,
+a `request` zostaje z pierwszego pobrania. `extra.parent_request(s)` (N4)
+nie niesie flag roku — `_build_parent_request` opisuje obszar zadania
+(bbox, uklad, kraje) i tak zostaje (korekta przy planie 2026-10-10:
+wczesniejsza wersja specu zakladala, ze niesie `min_year`).
 
 ## 8. Biblioteka
 
@@ -393,8 +396,10 @@ zadanie — rozroznienie klasami, nie trescia. Eksport z `kartograf`
   z samym `min_year` dozwolone (P3a); wlasciwosc `campaigns` zwraca
   strategie ROZWIAZANA; wlasciwosc `max_year`;
   `validate_campaign_args(campaigns, min_year, max_year)` przyjmuje `None`
-  i egzekwuje P3a (zmiana sygnatury — funkcja nie jest w `__all__`
-  `kartograf/__init__.py`, uzywana wewnetrznie i w `select_tiles`).
+  i sprawdza wartosci i `min_year <= max_year`; regula P3a jest w osobnej
+  `resolve_campaign_strategy(campaigns, max_year)` (korekta przy planie:
+  `validate_campaign_args` sluzy tez LAZ, gdzie jawne `newest` z gorna
+  granica jest dozwolone, Q8). Obie poza `__all__` `kartograf/__init__.py`.
 - Przeplyw z jakimkolwiek przedzialem (`min_year` lub `max_year` podane),
   tylko provider z `supports_campaigns is True`:
   1. **Faza sprawdzania** (`check_year_range(godla) -> YearRangeCheck`,
@@ -465,8 +470,8 @@ zadanie — rozroznienie klasami, nie trescia. Eksport z `kartograf`
 
 ### 8.5 LAZ (`providers/pl/gugik_laz.py`, `download/laz.py`)
 
-- `select_tiles(bbox, year=None, min_density=None, ..., campaigns=None,
-  min_year=None, max_year=None)`: sentinel `None` = `newest` ZAWSZE (takze
+- `select_tiles(bbox, year=None, min_density=None, ..., campaigns="newest",
+  min_year=None, max_year=None)`: domyslnie `newest` ZAWSZE (bez sentinela; takze
   z przedzialem — LAZ nie ma `kampanie/`, a ADR-029 zachowuje loty
   niepelne, P3a); jawne `newest` z przedzialem dozwolone (dzisiejsze
   zachowanie); `all` = bez deduplikacji w przedziale; Q8 rozstrzygniete (U12).
@@ -572,7 +577,8 @@ N-34-139-C-a-3-{1..4}, warstwy 2023iStarsze/2024/2025/2026), helper
 | `test_cli_year_info_better_coverage` | CLI | T14: tekst 6.3 (stderr, takze z `-q`), kod 0 |
 | `test_cli_explicit_newest_with_year_rejected` | CLI | T26: tekst, kod 1, przed siecia, dla `--year` i `--max-year`; `--campaigns newest --min-year` przechodzi (T26a); `--campaigns all --year` = jak bez `--campaigns` |
 | `test_cli_year_flags_rejected_with_target_crs` | CLI | T20: `--year`, `--min-year`, `--max-year` z `--target-crs` -> tekst 6.4, kod 1, `GugikProvider` nie tworzony |
-| `test_laz_year_2022_w2_covers_reference` | LAZ | T21: kafel 2022 wybrany; `test_c13_year_2023_returns_the_single_older_tile` (`tests/test_real_gugik_responses.py:475`) nadal przechodzi (ten sam godlo = pokrycie) |
+| `test_laz_year_2023_w2_covers_reference` | LAZ | T21: kafel 2023 wybrany; `test_c13_year_2023_returns_the_single_older_tile` (`tests/test_real_gugik_responses.py:614`) — wynik kafli bez zmian, odpytane wszystkie roczniki |
+| `test_laz_year_2022_w2_partial_cover_conflict` | LAZ | T21a: `YearRangeError` z kaflem N-34-139-A-c-1-1-3-4 |
 | `test_laz_year_2024_w2_conflict_lists_years` | LAZ | T22: `YearRangeError({"N-34-139-A-c-1-1-3-4": (2022, 2023, 2025)})`; wszystkie roczniki odpytane |
 | `test_laz_range_without_service_year` | LAZ | T23 |
 | `test_laz_year_and_range_exclusive` | LAZ | 8.5 (rozszerzenie `test_year_and_min_year_are_exclusive`, `tests/test_laz_campaigns.py:105`) |
