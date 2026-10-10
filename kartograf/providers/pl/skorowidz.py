@@ -665,6 +665,8 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                         }
                     )
                 )
+                if not years:
+                    raise NoCoverageError(f"Brak kampanii {godlo}", godlo=godlo)
                 raise year_range_error({godlo: years}, min_year, max_year, total=1)
         if strategy == "newest":
             return [kept[0]]

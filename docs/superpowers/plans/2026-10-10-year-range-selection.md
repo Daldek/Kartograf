@@ -85,8 +85,10 @@ GetCapabilities).
    fallback I-1 dziala. Test: Task 3
    `test_manager_without_range_unchanged_uses_record_cache`.
 5. **P8 (LAZ)** — konflikt liczony z referencji pokryciem, nie po godle;
-   obszar `w2` z `--year 2022` to konflikt (kafel 2022 pokrywa ok. 53 %
-   obszaru), z `--year 2023` — pobranie. Testy: Task 5.
+   obszar `w2` z `--year 2022` to pobranie dwoch kafli PL-2000, ktore
+   razem pokrywaja referencje (korekta po Task 8), z `--year 2023` —
+   pobranie; konflikt na czesci kafli: obszar w3 i Wroclaw. Testy: Task 5,
+   `test_w3_year_conflict_on_one_of_two_reference_tiles`.
 
 ---
 

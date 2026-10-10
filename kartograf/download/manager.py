@@ -479,13 +479,16 @@ class DownloadManager:
         """Campaign-flow provider (``supports_campaigns is True``, GUGiK)."""
         return cast(CampaignProvider, self._provider)
 
-    def check_year_range(self, godla: list[str]) -> YearRangeCheck:
+    def check_year_range(
+        self, godla: list[str], workers: int | None = None
+    ) -> YearRangeCheck:
         """Check every PL sheet against the year bounds before any download.
 
         The complete campaign list for each sheet is fetched exactly once,
         without year bounds, so callers can inspect ``available`` even when
         ``selected`` is empty. This public phase performs no file downloads;
         callers must abort if ``failed`` or ``conflicts`` is nonempty.
+        ``workers`` overrides the manager's ``max_workers`` for the queries.
         """
         if not self._campaign_aware or not self._has_range:
             raise ValidationError(
@@ -519,10 +522,9 @@ class DownloadManager:
                 selected = selected[:1]
             return godlo, selected, years, None
 
-        if len(godla) > 1 and self._max_workers > 1:
-            with concurrent.futures.ThreadPoolExecutor(
-                max_workers=self._max_workers
-            ) as executor:
+        pool = self._max_workers if workers is None else workers
+        if len(godla) > 1 and pool > 1:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=pool) as executor:
                 rows = list(executor.map(classify, godla))
         else:
             rows = [classify(g) for g in godla]
@@ -546,9 +548,11 @@ class DownloadManager:
                 available[godlo] = years
         return YearRangeCheck(selected, available, no_data, conflicts, failed)
 
-    def _checked_range(self, godla: list[str]) -> YearRangeCheck:
+    def _checked_range(
+        self, godla: list[str], workers: int | None = None
+    ) -> YearRangeCheck:
         """Abort the whole task on an index failure or a year conflict."""
-        check = self.check_year_range(godla)
+        check = self.check_year_range(godla, workers)
         if check.failed:
             names = ", ".join(check.failed)
             raise DownloadError(
@@ -1254,7 +1258,7 @@ class DownloadManager:
         before each download and lets exceptions other than ``DownloadError``
         through; parallel (completion order) counts them as ``"failed"``.
         """
-        check = self._checked_range(godla) if self._has_range else None
+        check = self._checked_range(godla, workers) if self._has_range else None
         downloaded_paths: list[Path] = []
         result = DownloadResult()
         total = len(godla)

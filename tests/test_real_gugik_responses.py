@@ -662,12 +662,16 @@ class TestLazDiscoveryOnRealWfs:
         assert list(tmp_path.iterdir()) == []
 
     @pytest.mark.parametrize(
-        "bounds",
-        [{"min_year": 2010, "max_year": 2017}, {"year": 2017}],
+        ("bounds", "message"),
+        [
+            ({"min_year": 2010, "max_year": 2017}, "przedzial 2010-2017 nie ma"),
+            ({"year": 2017}, "rocznik 2017 nie istnieje"),
+            ({"min_year": 2017, "max_year": 2017}, "rocznik 2017 nie istnieje"),
+        ],
     )
-    def test_laz_range_without_service_year(self, bounds):
+    def test_laz_range_without_service_year(self, bounds, message):
         session = laz_session()
-        with pytest.raises(DownloadError, match="2017.*usludze EVRF2007"):
+        with pytest.raises(DownloadError, match=f"{message} .*usludze EVRF2007"):
             GugikLazProvider(session=session).select_tiles(W2_BBOX, **bounds)
         assert feature_years(session) == []
 

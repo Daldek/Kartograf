@@ -506,6 +506,13 @@ def test_all_record_without_year_is_dropped_by_min_year(tmp_path):
     assert exc.value.sheets == {G: (2019, 2023, 2025)}
 
 
+def test_records_without_any_year_are_no_coverage_not_conflict(tmp_path):
+    """Spec 4.2 BRAK: no year to compare with = no data, as in the manager."""
+    s = _c14_copy(tmp_path, {"84183", "83233", "78047", "73021"})
+    with pytest.raises(NoCoverageError, match=f"Brak kampanii {G}"):
+        GugikProvider(session=s).resolve_campaigns(G, min_year=2024, max_year=2024)
+
+
 def test_newest_record_without_year_fails_min_year(tmp_path):
     s = _c14_copy(tmp_path, {"84183", "83233"})
     with pytest.raises(YearRangeError) as exc:
