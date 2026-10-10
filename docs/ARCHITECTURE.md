@@ -1433,8 +1433,12 @@ np. `{teryt, format}`; `extra.source` bez `raw_file`; `sha256`/`size_bytes`
 archiwum); sidecar GPKG dostaje wtedy
 `extra.source.raw_file` = nazwa archiwum. Archiwum jest zapisywane
 atomowo i dopiero po udanym scaleniu, wiec blad rozpakowania nie zostawia
-ZIP bez sidecara; nieudany zapis archiwum usuwa juz zapisany GPKG (jego
-sidecar powstaje dopiero po powrocie z `download_package`). Blad
+ZIP bez sidecara. Scalony GPKG czeka w `<nazwa>.gpkg.tmp` i zastepuje
+poprzedni plik dopiero po udanym zapisie archiwum (od 0.7.2): nieudany zapis
+archiwum albo podmiany zostawia poprzedni GPKG i jego sidecar bez zmian
+(przy pierwszym pobraniu — brak pliku), bo sidecar GPKG powstaje dopiero po
+powrocie z `download_package`. Okno resztkowe: blad miedzy podmiana
+archiwum i GPKG zostawia nowe archiwum ze starym sidecarem. Blad
 wejscia-wyjscia przy rozpakowaniu (warstwy kopiowane strumieniowo), scalaniu
 albo zapisie archiwum to `DownloadError`. `keep_raw` nie zmienia tresci GPKG, wiec nie trafia do
 nazwy pliku ani do `request`. `extra.parent_request` (obszar zadania)

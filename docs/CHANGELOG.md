@@ -25,6 +25,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   wczesniej PL-1992 i PL-2000 przechodzily walidacje i trafialy do sciezek
   i sidecarow w innej postaci niz godlo GUGiK. Co zrobic: podac godlo
   cyframi `0-9`.
+- BDOT10k `keep_raw=True`: nieudany zapis oryginalnego ZIP przy ponownym
+  pobraniu zostawia poprzedni GPKG i jego sidecar bez zmian (scalony GPKG
+  zastepuje poprzedni dopiero po zapisie ZIP). Wczesniej poprzedni GPKG
+  byl nadpisany, a potem usuniety, i zostawal sidecar bez pliku danych.
 
 ## [0.7.1] - 2026-10-09
 
