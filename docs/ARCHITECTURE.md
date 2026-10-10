@@ -1331,8 +1331,10 @@ i PL-2000 moga inaczej dzielic ten sam obszar. Niepokryta czesc
 kafla referencji = `YearRangeError` przed pobraniem z godlem
 referencji, jego rokiem/ukladem i latami kafli przecinajacych
 niepokryty fragment; tolerancja 1 m jak przy zwyklym wyborze.
-W obszarze w2 `--year 2022` daje konflikt (kafel pokrywa tylko
-~53 % obszaru), a `--year 2023` pokrywa referencje. Fragment
+W obszarze w2 `--year 2022` pokrywaja referencje razem dwa kafle
+PL-2000 (zaden sam), a `--year 2023` ten sam godlo. We Wroclawiu
+(`6.150.13.16.4`) `--year 2025` to konflikt: rok 2025 ma tam tylko
+dostawy `NIE`, ktore nie pokrywaja referencji 2024 (PL-1992). Fragment
 bez kafli w ZADNYM roku pozostaje bez ostrzezenia.
 
 Porazka pobrania choc jednego kafla trafia do `LazDownloadResult.failed`

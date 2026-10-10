@@ -1,4 +1,4 @@
-# Surowe odpowiedzi skorowidza GUGiK (2026-10-10, podpowiedz wariantu P10)
+# Surowe odpowiedzi skorowidza GUGiK (2026-10-10: podpowiedz wariantu P10, wybor roku)
 
 Zrodlo: zapytania GetFeatureInfo `text/html` wyslane 2026-10-10 przez
 Kartograf (punkt zapytania jak `SkorowidzLayersMixin._query_bbox`: kwadrat
@@ -25,3 +25,14 @@ warstwa dla 1 m EVRF2007: te same 4 pliki) — podpowiedz wariantu wysyla
 jedno zapytanie na wariant.
 
 Testy: `tests/test_real_gugik_responses.py` (`TestVariantHintOnRealBodies`).
+
+## Orto: dwa loty RGB o tej samej wielkosci piksela w jednym roku
+
+- `orto/N-33-130-D-d-1-4_<warstwa>.html` — skorowidz ortofotomapy
+  (`SkorowidzeOrtofotomapy2026`, `2025`, `2024`, `Starsze`) dla arkusza
+  N-33-130-D-d-1-4 (Poznan), punkt zapytania wg `_query_bbox`. W 2025 dwa
+  loty RGB 0,25 m: `83982` (2025-09-09, NIE) i `83832` (2025-04-26, TAK).
+  Pliki zapisane BEZ edycji tresci, 2026-10-10.
+
+Testy: `tests/test_provider_campaigns.py`
+(`test_orto_year_2025_two_rgb_flights_same_pixel_newest_first`).

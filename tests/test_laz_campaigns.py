@@ -1,8 +1,8 @@
 """
-LAZ range selection and sidecars on raw WFS XML from the 2026-10-06 round.
+LAZ range selection and sidecars on raw WFS XML recorded 2026-10-10 for W2_BBOX.
 
-The w2 area has 2022/PL-2000:S7 and 2023/2025/PL-1992 tiles; the 2022
-footprint only covers part of the larger request bbox.
+The w2 area has 2022/PL-2000:S7 tiles (two sheets, together covering the area)
+and 2023/2025/PL-1992 tiles of one sheet.
 """
 
 import json
@@ -17,12 +17,16 @@ from kartograf.download.laz import download_laz_area, write_laz_sidecar
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.pl.gugik_laz import GugikLazProvider
 
-REAL_LAZ = Path(__file__).parent / "fixtures" / "gugik_laz" / "real_2026_10_06"
+REAL_LAZ = Path(__file__).parent / "fixtures" / "gugik_laz" / "real_2026_10_10"
 W2_BBOX = BBox(637200, 486900, 637500, 487100, "EPSG:2180")
 
 
-def laz_session() -> MagicMock:
-    """WFS: GetCapabilities and GetFeature from raw XML of the 2026-10-06 round."""
+def laz_session(*, replay_any_bbox: bool = False) -> MagicMock:
+    """WFS: GetCapabilities and GetFeature from raw XML recorded for ``W2_BBOX``.
+
+    ``replay_any_bbox`` serves the W2_BBOX bodies for another query window
+    (a deliberate replay, not what the server answers for that window).
+    """
     session = MagicMock()
 
     def get(url, **kwargs):
@@ -31,6 +35,9 @@ def laz_session() -> MagicMock:
         if query["REQUEST"][0] == "GetCapabilities":
             path = REAL_LAZ / f"caps_{vcrs}.xml"
         else:
+            if not replay_any_bbox:
+                # the bodies answer exactly this query window (axes N,E)
+                assert query["BBOX"][0].startswith("486900,637200,487100,637500,")
             year = query["TYPENAMES"][0][-4:]
             path = REAL_LAZ / f"w2_{vcrs}_{year}.xml"
         response = MagicMock()
@@ -131,10 +138,12 @@ def test_unknown_campaigns_value_rejected():
 
 def test_all_still_drops_outside_tiles():
     # SW corner of the PL-2000 tile envelope: its footprint misses the area.
+    # The live service filters such tiles itself (2026-10-10); replaying the
+    # W2_BBOX bodies checks the client-side footprint filter behind it.
     area = BBox(637334, 486800, 637340, 486806, "EPSG:2180")
-    selection = GugikLazProvider(session=laz_session()).select_tiles(
-        area, campaigns="all"
-    )
+    selection = GugikLazProvider(
+        session=laz_session(replay_any_bbox=True)
+    ).select_tiles(area, campaigns="all")
     assert "7.173.21.06.2" not in {tile.godlo for tile in selection.tiles}
     (entry,) = (
         skipped

@@ -1553,8 +1553,10 @@ z obszarem pokryta kaflami z przedzialu wg tej samej reguly ram i tolerancji
 1 m. Rozne godla PL-1992/PL-2000 oznaczaja, ze konflikt wyznacza sie
 pokryciem, nie rownoscia godla. Brak pokrycia czesci R = `YearRangeError`
 z godlem referencyjnym, jego rokiem/ukladem i latami kafli przecinajacych
-niepokryty fragment; zero pobran. W2 z `--year 2022` to konflikt (kafel
-pokrywa ok. 53 % obszaru), `--year 2023` pokrywa referencje. Fragment
+niepokryty fragment; zero pobran. W2 z `--year 2022` pokrywaja razem dwa
+kafle PL-2000 (zaden sam), `--year 2023` ten sam godlo; Wroclaw
+(`6.150.13.16.4`) z `--year 2025` to konflikt (rok 2025 ma tam tylko
+dostawy `NIE`, referencja 2024 PL-1992 zostaje niepokryta). Fragment
 bez kafli w jakimkolwiek roku pozostaje bez ostrzezenia jak dotad.
 W samym przedziale `newest` zachowuje wybor ADR-029 (takze dla jawnego
 `--campaigns newest`); `all` zachowuje brak deduplikacji pokryciowej.

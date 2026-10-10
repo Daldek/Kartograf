@@ -1,0 +1,51 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<wfs:FeatureCollection
+   xmlns:gugik="http://www.gugik.gov.pl"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   xmlns:wfs="http://www.opengis.net/wfs/2.0"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://www.gugik.gov.pl https://mapy.geoportal.gov.pl/wss/service/PZGIK/DanePomiaroweLidarEVRF2007/WFS/Skorowidze?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;TYPENAME=gugik:SkorowidzDanychPomiarowychLIDAR2019&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B%20version%3D3.2 http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd"
+   timeStamp="2026-10-10T16:45:52" numberMatched="1" numberReturned="1">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>478312.400000 627128.850000</gml:lowerCorner>
+      		<gml:upperCorner>479497.940000 628227.000000</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2019 gml:id="SkorowidzDanychPomiarowychLIDAR2019.938121">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>478312.400000 627128.850000</gml:lowerCorner>
+        		<gml:upperCorner>479497.940000 628227.000000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2019.938121.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">478891.520000 627143.690000 479470.430000 627128.850000 479484.160000 627662.950000 479497.940000 628197.060000 478919.030000 628212.030000 478339.900000 628227.000000 478326.120000 627692.770000 478312.400000 627158.540000 478891.520000 627143.690000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-138-D-a-2-2-2</gugik:godlo>
+        <gugik:akt_rok>2019</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAS</gugik:format>
+        <gugik:char_przestrz>4 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.15</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:2500</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>DFT.7201.015.2019</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2019.938121.akt_data"><gml:timePosition>2019-04-19</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/73114/73114_938121_N-34-138-D-a-2-2-2.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2019.938121.dt_pzgik"><gml:timePosition>2019-12-20</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.30</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2019>
+    </wfs:member>
+</wfs:FeatureCollection>
+

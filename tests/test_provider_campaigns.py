@@ -3,8 +3,8 @@ Campaigns in the GUGiK providers (ADR-030): ``resolve_campaigns``,
 ``download_record``, ``record_source`` on RAW index (skorowidz) responses.
 
 Fixtures: ``tests/fixtures/gugik_skorowidz/real_2026_10_06/`` (E2E round
-2026-10-06); GetCapabilities layers from the autouse stub in
-``tests/conftest.py``.
+2026-10-06) and ``real_2026_10_10/`` (year-range round); GetCapabilities
+layers from the autouse stub in ``tests/conftest.py``.
 """
 
 import re
@@ -27,6 +27,7 @@ from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
 REAL = Path(__file__).parent / "fixtures" / "gugik_skorowidz" / "real_2026_10_06"
+REAL_10_10 = REAL.parent / "real_2026_10_10"
 EMPTY = (
     Path(__file__).parent / "fixtures" / "gugik_skorowidz" / "empty.body"
 ).read_text(encoding="utf-8")
@@ -72,9 +73,9 @@ def nmt_session(godlo: str, prefix: str) -> Mock:
     return routed_session(path_for_layer)
 
 
-def orto_session(godlo: str) -> Mock:
+def orto_session(godlo: str, base: Path = REAL) -> Mock:
     def path_for_layer(layer):
-        path = REAL / "orto" / f"{godlo}_{layer}.html"
+        path = base / "orto" / f"{godlo}_{layer}.html"
         return path if path.exists() else None
 
     return routed_session(path_for_layer)
@@ -279,6 +280,20 @@ def test_orto_cir_year_2025_conflict_rgb_has_it():
     assert 2025 in GugikOrtoProvider(
         session=orto_session(godlo), color="RGB"
     ).available_years(godlo)
+
+
+def test_orto_year_2025_two_rgb_flights_same_pixel_newest_first():
+    """T14 for orto: two 0.25 m RGB flights in 2025, newest (NIE) first."""
+    godlo = "N-33-130-D-d-1-4"
+    recs = GugikOrtoProvider(
+        session=orto_session(godlo, base=REAL_10_10)
+    ).resolve_campaigns(godlo, min_year=2025, max_year=2025)
+    assert [
+        (file_id(r.url), r.aktualnosc, r.resolution_m, r.full_sheet) for r in recs
+    ] == [
+        ("83982_1592962", "2025-09-09", 0.25, False),
+        ("83832_1514596", "2025-04-26", 0.25, True),
+    ]
 
 
 def test_all_min_year_2023_queries_2023iStarsze_and_filters_by_aktualnosc(tmp_path):
