@@ -37,7 +37,7 @@ import math
 import re
 import threading
 import xml.etree.ElementTree as ET
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlencode
@@ -236,6 +236,59 @@ def _bounds(poly: Polygon) -> tuple[float, float, float, float]:
     return min(xs), min(ys), max(xs), max(ys)
 
 
+def _add_full_cover(
+    tile: LazTile,
+    ox: float,
+    oy: float,
+    tolerance_m: float,
+    covers: list[tuple[LazTile, Polygon, tuple[float, float, float, float]]],
+    full_by_godlo: dict[str, LazTile],
+) -> None:
+    """Index a full tile's footprint and sheet code for the shared coverage rule."""
+    if tile.full_sheet is False:
+        return
+    full_by_godlo.setdefault(tile.godlo, tile)
+    if tile.footprint is not None:
+        grown = expand_convex(_shift(tile.footprint, ox, oy), tolerance_m)
+        covers.append((tile, grown, _bounds(grown)))
+
+
+def _uncovered_parts(
+    tile: LazTile,
+    part: Polygon | None,
+    covers: list[tuple[LazTile, Polygon, tuple[float, float, float, float]]],
+    full_by_godlo: Mapping[str, LazTile],
+) -> tuple[list[Polygon] | None, tuple[LazTile, ...]]:
+    """Return uncovered area and relevant covers; None means geometry is unknown.
+
+    A full tile with the same sheet code covers even when its geometry is
+    unavailable. Otherwise only full tiles with footprints count, expanded by
+    the caller's tolerance. Both greedy selection and range checking use this
+    exact rule.
+    """
+    same = full_by_godlo.get(tile.godlo)
+    if same is not None:
+        return [], (same,)
+    if part is None:
+        return None, ()
+    if not _significant(part):
+        return None, ()
+    px0, py0, px1, py1 = _bounds(part)
+    relevant = [
+        (other, grown)
+        for other, grown, (gx0, gy0, gx1, gy1) in covers
+        if gx0 < px1
+        and gx1 > px0
+        and gy0 < py1
+        and gy1 > py0
+        and _significant(clip_convex(part, grown))
+    ]
+    return (
+        uncovered_pieces(part, [grown for _, grown in relevant]),
+        tuple(other for other, _ in relevant),
+    )
+
+
 def select_newest_cover(
     tiles: Iterable[LazTile],
     area: BBox,
@@ -277,45 +330,17 @@ def select_newest_cover(
     # selected full tiles by godlo: the same godlo = the same sheet frame
     full_by_godlo: dict[str, LazTile] = {}
     for tile in sorted(tiles, key=_tile_order_key):
-        same = full_by_godlo.get(tile.godlo)
-        if same is not None:
-            superseded.append(SupersededLazTile(tile=tile, covered_by=(same,)))
-            continue
         region = _tile_region(tile, ox, oy)
-        if region is None:
-            kept.append(tile)  # cannot be judged without geometry — download
-            if tile.full_sheet is not False:
-                full_by_godlo.setdefault(tile.godlo, tile)
-            continue
-        part = clip_convex(region, area_poly)
-        if not _significant(part):
+        part = clip_convex(region, area_poly) if region is not None else None
+        remaining, covered_by = _uncovered_parts(tile, part, covers, full_by_godlo)
+        if part is not None and remaining is None and not covered_by:
             superseded.append(SupersededLazTile(tile=tile))  # envelope only
             continue
-        px0, py0, px1, py1 = _bounds(part)
-        relevant = [
-            (other, grown)
-            for other, grown, (gx0, gy0, gx1, gy1) in covers
-            if gx0 < px1
-            and gx1 > px0
-            and gy0 < py1
-            and gy1 > py0
-            and _significant(clip_convex(part, grown))
-        ]
-        if not uncovered_pieces(part, [grown for _, grown in relevant]):
-            superseded.append(
-                SupersededLazTile(
-                    tile=tile, covered_by=tuple(other for other, _ in relevant)
-                )
-            )
+        if remaining == []:
+            superseded.append(SupersededLazTile(tile=tile, covered_by=covered_by))
             continue
-        kept.append(tile)
-        if tile.full_sheet is False:
-            continue
-        full_by_godlo.setdefault(tile.godlo, tile)
-        if tile.footprint is not None:
-            grown = expand_convex(_shift(tile.footprint, ox, oy), tolerance_m)
-            covers.append((tile, grown, _bounds(grown)))
-
+        kept.append(tile)  # unknown geometry stays (doubt = download)
+        _add_full_cover(tile, ox, oy, tolerance_m, covers, full_by_godlo)
     return LazTileSelection(
         tiles=tuple(sorted(kept, key=lambda t: (t.godlo, t.url))),
         superseded=tuple(
@@ -357,6 +382,69 @@ def select_all_intersecting(tiles: Iterable[LazTile], area: BBox) -> LazTileSele
             sorted(superseded, key=lambda s: (s.tile.godlo, -(s.tile.year or 0)))
         ),
     )
+
+
+def _reference_year_conflicts(
+    reference: LazTileSelection,
+    selected: LazTileSelection,
+    found: list[LazTile],
+    area: BBox,
+    min_year: int | None,
+    max_year: int | None,
+    tolerance_m: float,
+) -> tuple[dict[str, tuple[int, ...]], dict[str, str], dict[str, frozenset[int]]]:
+    """Find reference tiles whose area the chosen years do not fully cover.
+
+    Also returns, per conflicting tile, the years whose intersecting tiles are
+    all partial sheets (``czy_ark_wypelniony=NIE``): they exist but cannot cover.
+    """
+    # Local import avoids the download -> manager -> provider import cycle.
+    from kartograf.download.campaigns import in_year_range
+
+    ox, oy = area.min_x, area.min_y
+    area_poly = rectangle(0.0, 0.0, area.max_x - ox, area.max_y - oy)
+    covers: list[tuple[LazTile, Polygon, tuple[float, float, float, float]]] = []
+    full_by_godlo: dict[str, LazTile] = {}
+    for tile in selected.tiles:
+        _add_full_cover(tile, ox, oy, tolerance_m, covers, full_by_godlo)
+
+    conflicts: dict[str, tuple[int, ...]] = {}
+    labels: dict[str, str] = {}
+    partial_years: dict[str, frozenset[int]] = {}
+    regions: list[tuple[LazTile, Polygon | None]] | None = None
+    for tile in reference.tiles:
+        if in_year_range(tile.year, min_year, max_year):
+            continue
+        region = _tile_region(tile, ox, oy)
+        part = clip_convex(region, area_poly) if region is not None else None
+        remaining, _ = _uncovered_parts(tile, part, covers, full_by_godlo)
+        if remaining == []:
+            continue
+        if regions is None:
+            regions = [(other, _tile_region(other, ox, oy)) for other in found]
+        # year -> True while every intersecting tile of that year is partial
+        partial_only: dict[int, bool] = {}
+        for other, other_region in regions:
+            if other.year is None:
+                continue
+            touches = (remaining is None and other.godlo == tile.godlo) or (
+                remaining is not None
+                and other_region is not None
+                and any(
+                    _significant(clip_convex(piece, other_region))
+                    for piece in remaining
+                )
+            )
+            if touches:
+                partial_only[other.year] = partial_only.get(other.year, True) and (
+                    other.full_sheet is False
+                )
+        conflicts[tile.godlo] = tuple(sorted(partial_only))
+        labels[tile.godlo] = f"({tile.year}, {tile.crs})"
+        partial = frozenset(y for y, only in partial_only.items() if only)
+        if partial:
+            partial_years[tile.godlo] = partial
+    return conflicts, labels, partial_years
 
 
 class GugikLazProvider(BaseProvider):
@@ -546,6 +634,9 @@ class GugikLazProvider(BaseProvider):
         min_density: int | None = None,
         vertical_crs: str | None = None,
         timeout: int = WFS_TIMEOUT,
+        *,
+        min_year: int | None = None,
+        max_year: int | None = None,
     ) -> list[LazTile]:
         """
         Discover the LAZ tiles to download for ``bbox`` (sorted by godlo).
@@ -562,6 +653,8 @@ class GugikLazProvider(BaseProvider):
                 min_density=min_density,
                 vertical_crs=vertical_crs,
                 timeout=timeout,
+                min_year=min_year,
+                max_year=max_year,
             ).tiles
         )
 
@@ -576,24 +669,24 @@ class GugikLazProvider(BaseProvider):
         *,
         campaigns: str = "newest",
         min_year: int | None = None,
+        max_year: int | None = None,
     ) -> LazTileSelection:
         """
         Query WFS for tiles intersecting ``bbox`` and pick those to download.
 
-        Every available year (or only ``year``) is queried; tiles below
-        ``min_density`` are dropped first. The rest is chosen greedily by
-        :func:`select_newest_cover`: from the newest year, a tile is skipped
-        when its overlap with ``bbox`` is already covered by the tiles chosen
-        before it (in EPSG:2180, edges with ``tolerance_m``), so one place
-        does not get both a 2022/PL-2000 and a 2025/PL-1992 tile. With
-        ``year`` the same rule deduplicates within that year only.
+        Every available year is queried when a range is requested, including
+        years outside it: they establish the reference coverage and the years
+        reported in conflicts. Tiles below ``min_density`` are dropped first.
+        Without a range, selection follows the usual ADR-029 coverage rule.
+        With a range, every reference tile must be covered by full tiles from
+        the range (the same 1 m-tolerant rule); otherwise nothing is downloaded.
 
         Parameters
         ----------
         bbox : BBox
             Area of interest in EPSG:2180.
         year : int, optional
-            Restrict to a single acquisition year.
+            Exact acquisition year (equivalent to ``min_year=max_year``).
         min_density : int, optional
             Drop tiles whose nominal point density is below this value
             (points/m²) — before the coverage rule.
@@ -608,9 +701,8 @@ class GugikLazProvider(BaseProvider):
             ``"newest"`` (default) — the rule above (ADR-029); ``"all"`` —
             every tile intersecting ``bbox`` (:func:`select_all_intersecting`),
             no coverage-based skipping (ADR-030).
-        min_year : int, optional
-            Lower bound of ``akt_rok``: year layers below it are not queried.
-            Exclusive with ``year``.
+        min_year, max_year : int, optional
+            Closed acquisition-year bounds; exclusive with ``year``.
 
         Returns
         -------
@@ -623,19 +715,25 @@ class GugikLazProvider(BaseProvider):
         ValueError
             If ``bbox`` is not in EPSG:2180.
         ValidationError
-            Unknown ``campaigns``, invalid ``min_year`` (not an int, bool,
-            outside 1900..2100) or ``year`` together with ``min_year``.
+            Unknown ``campaigns``, invalid year bounds or ``year`` together
+            with ``min_year``/``max_year``.
         DownloadError
-            If WFS discovery fails, returns unreadable XML or an exception,
-            or all returned tiles miss the requested bbox. Partial results
-            are never returned.
+            WFS discovery failure or a range without a year in the service.
+        YearRangeError
+            The requested years leave some reference tile area uncovered.
         """
-        # local import: the kartograf.download package imports manager -> providers.pl
-        from kartograf.download.campaigns import validate_campaign_args
+        # Local import: the kartograf.download package imports manager -> providers.pl
+        from kartograf.download.campaigns import (
+            in_year_range,
+            validate_campaign_args,
+            year_range_error,
+            year_range_label,
+        )
 
-        validate_campaign_args(campaigns, min_year)
-        if year is not None and min_year is not None:
-            raise ValidationError("year i min_year wykluczaja sie")
+        if year is not None and (min_year is not None or max_year is not None):
+            raise ValidationError("year wyklucza sie z min_year/max_year")
+        lo, hi = (year, year) if year is not None else (min_year, max_year)
+        validate_campaign_args(campaigns, lo, hi)
         if bbox.crs != "EPSG:2180":
             raise ValueError(
                 f"bbox must be in EPSG:2180, got {bbox.crs}. "
@@ -650,18 +748,26 @@ class GugikLazProvider(BaseProvider):
             )
 
         available_years = self._get_available_years(vcrs, timeout)
-        if year is not None and year not in available_years:
+        # `--year Y` reaches the provider as [Y, Y] (CLI): same wording as year=
+        if lo is not None and lo == hi and lo not in available_years:
             raise DownloadError(
-                f"rocznik {year} nie istnieje w usludze {vcrs} "
+                f"rocznik {lo} nie istnieje w usludze {vcrs} "
                 f"(dostepne: {', '.join(map(str, available_years))})"
             )
-        years = [year] if year is not None else available_years
-        if min_year is not None:
-            years = [y for y in years if y >= min_year]
+        has_range = lo is not None or hi is not None
+        if has_range and not any(in_year_range(y, lo, hi) for y in available_years):
+            label = (
+                f"{lo}-{hi}"
+                if lo is not None and hi is not None
+                else year_range_label(lo, hi)
+            )
+            raise DownloadError(
+                f"przedzial {label} nie ma rocznika w usludze {vcrs} "
+                f"(dostepne: {', '.join(map(str, available_years))})"
+            )
         endpoint = self.WFS_ENDPOINTS[vcrs]
-
         found: list[LazTile] = []
-        for yr in years:
+        for yr in available_years:
             for tile in self._query_layer(endpoint, yr, bbox, timeout):
                 if min_density is not None and (
                     tile.density is None or tile.density < min_density
@@ -669,9 +775,33 @@ class GugikLazProvider(BaseProvider):
                     continue
                 found.append(tile)
 
-        if campaigns == "all":
-            return select_all_intersecting(found, bbox)
-        return select_newest_cover(found, bbox, tolerance_m)
+        candidates = (
+            [tile for tile in found if in_year_range(tile.year, lo, hi)]
+            if has_range
+            else found
+        )
+        selection = (
+            select_all_intersecting(candidates, bbox)
+            if campaigns == "all"
+            else select_newest_cover(candidates, bbox, tolerance_m)
+        )
+        if has_range:
+            reference = select_newest_cover(found, bbox, tolerance_m)
+            conflicts, labels, partial_years = _reference_year_conflicts(
+                reference, selection, found, bbox, lo, hi, tolerance_m
+            )
+            if conflicts:
+                raise year_range_error(
+                    conflicts,
+                    lo,
+                    hi,
+                    total=len(reference.tiles),
+                    unit="kafli obszaru",
+                    subject="kafli LAZ",
+                    labels=labels,
+                    partial_years=partial_years,
+                )
+        return selection
 
     def _query_layer(
         self,

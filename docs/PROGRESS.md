@@ -110,23 +110,28 @@
 > raport `docs/research/2026-10-10-review-0.7.1/raport.md`, review galezi
 > bez blokerow, audyt dokumentacji zgodny) scalona `--no-ff` do `develop`
 > 2026-10-10 (brama na wyniku zielona), galaz usunieta, `develop`
-> wypchniety na `origin`. Kolejna praca: galaz `feat/year-range`
-> z `develop` (pozycja (b) nizej).
-> **Nastepne w 0.7.2:** backlog "Do 0.7.2" nizej (decyzje uzytkownika
-> 2026-10-09), kazda pozycja dopiero po specu/planie i zatwierdzeniu:
-> (a) wycinki PL z WCS (nowy ADR, odwraca ADR-027); (b) wybor roku
-> `--year`/`--min-year`/`--max-year` dla NMT/NMPT/orto (spec
-> `docs/superpowers/specs/2026-10-09-year-range-selection-design.md` do
-> uaktualnienia, m.in. wersja docelowa 0.7.1 -> 0.7.2); (c) drugie
-> dowiazanie do najnowszego pelnego lotu; (d) ciche wartosci domyslne
-> z inwentaryzacji. Kolejnosc wybiera uzytkownik.
-> **Otwarte decyzje przed wydaniem 0.7.2:** zdania "wybor roku dla
-> NMT/NMPT/orto bedzie w 0.7.2" (`docs/USAGE.md` 1.1, `docs/ARCHITECTURE.md`
-> 4.x przy `--year`, komunikat `Error:` i docstring
-> `_reject_laz_only_opts` w `kartograf/cli/download_cmd.py`) sa prawdziwe
-> tylko, jesli (b) wejdzie do 0.7.2 — inaczej poprawic przed wydaniem;
-> `docs/PRD.md` (`__version__ # "0.7.1"`), SCOPE i data w CHANGELOG —
-> przy wydaniu, jak dotad.
+> wypchniety na `origin`.
+> **(b) wybor roku — ZAIMPLEMENTOWANY, czeka na merge:** galaz
+> `feat/year-range` (Task 1-8 planu
+> `docs/superpowers/plans/2026-10-10-year-range-selection.md`; ADR-032;
+> raport na zywo `docs/research/2026-10-10-year-range/raport.md`; review
+> galezi "correct", bez blokerow, poprawki P3 w `026c5c4`). Merge `--no-ff`
+> do `develop` i usuniecie galezi TYLKO po zgodzie uzytkownika (2026-10-10:
+> "czekaj").
+> **Nastepne w 0.7.2:** po merge (b) kolejno (c) -> (d) -> (a) z backlogu
+> "Do 0.7.2" nizej (kolejnosc zatwierdzona 2026-10-10; kazda pozycja
+> dopiero po specu/planie i zatwierdzeniu): (c) drugie dowiazanie do
+> najnowszego pelnego lotu; (d) ciche wartosci domyslne z inwentaryzacji;
+> (a) wycinki PL z WCS (nowy ADR).
+> **Decyzje uzytkownika z (b), 2026-10-10 — wdrozone na galezi:** LAZ
+> `--year` przy rocznikach tylko z dostawami `NIE` dopisuje w `Error:`
+> `(tylko arkusze niepelne)`; `discover_tiles` dostal `min_year` (symetria
+> z `select_tiles`); po audycie logiki flag CLI **model A** (flagi roku =
+> filtr dopuszczalnych lat, `--campaigns` = liczba lotow, domyslnie jeden;
+> `Info:` gdy dowiazanie zostaje przy nowszym locie spoza zadania) — spec
+> sekcja 0 (U14-U16), ADR-032 pkt 3. Przelacznik zamiast `--campaigns
+> {newest,all}` w 0.8.0 (backlog). Przy wydaniu 0.7.2:
+> `docs/PRD.md` (`__version__ # "0.7.1"`), SCOPE i data w CHANGELOG.
 > **Katalog danych testow na zywo:** wskazuje uzytkownik (STANDARDS 6.4);
 > sciezki nie zapisuj w repo (straznik wzorcow commitow ja blokuje) —
 > zapytaj na poczatku sesji, jesli potrzebny.
@@ -148,6 +153,35 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Wybor roku danych — Task 8 planu (2026-10-10)
+
+- Galaz `feat/year-range`: Task 1-7 (`b41197a..7e40c18`) z poprzedniej
+  czesci sesji; Task 8 w tej: fixtury, przebieg na zywo, review, poprawki
+  (`2644f03`, `f37510f`, `026c5c4`). Brama: 3150 testow offline, ruff,
+  mypy czyste.
+- Przebieg na zywo (raport `docs/research/2026-10-10-year-range/raport.md`):
+  T1, T5, T16, T20 (3 flagi), T22, T23 i orto `N-33-130-D-d-1-4 --year
+  2025` zgodne ze specem. T21a (`--year 2022`, w2) pobral DWA kafle —
+  przyczyna: fixtures `gugik_laz/real_2026_10_06/w2_*` nagrane dla okna
+  C13 (50 x 50 m), a testy odtwarzaly je dla `W2_BBOX` (300 x 200 m).
+  Nowe nagranie `gugik_laz/real_2026_10_10/`, `laz_session` sprawdza okno
+  `BBOX`, T21a przepisany (dwa kafle razem pokrywaja referencje),
+  poprawione ADR-032, ARCHITECTURE 4.7, spec T21a/T25, plan.
+- Fixtury 10.3: orto N-33-130-D-d-1-4 (2 loty RGB 0,25 m w 2025), LAZ w3
+  (`627706,479258,628006,479558`, konflikt na 1 z 2 kafli w obu
+  kierunkach), LAZ Wroclaw `6.150.13.16.4` (2 dostawy NIE w 2025);
+  NMT PL-2000 z dwoma lotami w roku NIE znaleziony (112 arkuszy 1:2000),
+  bez testu syntetycznego.
+- Review galezi (reviewer): "correct", 8 uwag P3. Wdrozone: komunikat T23
+  dla `--year` LAZ z CLI, `NoCoverageError` dla arkusza bez rekordow
+  z rokiem w `resolve_campaigns`, `check_year_range(godla, workers=)`,
+  CHANGELOG (`available_years`, `validate_campaign_args`), plan. Decyzje
+  uzytkownika (ta sama sesja): dopisek `(tylko arkusze niepelne)` przy
+  roczniku LAZ z samymi dostawami NIE, `discover_tiles(min_year=)`.
+  Orto: pliki GUGiK
+  bez nodata i alfy, wiec `Info:` o wiekszym pokryciu dla orto nie wystapi
+  (zgodne z 4.4 specu).
 
 ### Implementacja drobiazgow z review 0.7.1 (2026-10-10)
 
@@ -1575,15 +1609,21 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
     `DigitalTerrainModelFormatTIFFEVRF2007`, `DTM_PL-EVRF2007-NH_TIFF`)
     wskazuje nieistniejacy endpoint i coverage (zob. tez WCS EVRF2007 = 404
     od 2026-08-11) — do poprawy.
-- [ ] **(b) Wybor roku `--year`/`--min-year`/`--max-year`** wg specu
+- [x] **(b) Wybor roku `--year`/`--min-year`/`--max-year`** wg specu
   `docs/superpowers/specs/2026-10-09-year-range-selection-design.md`
   (NMT/NMPT/orto/LAZ; do czasu wdrozenia `--year` poza LAZ to `Error:`,
   Task 14). Decyzje: Q2 — dowiazanie do najnowszego zostaje, pobierane sa
   wszystkie loty z przedzialu i dochodzi `Info:` o pokryciu; Q1 — zatrzymanie
   zadania obowiazkowe; Q4-Q8 przyjete; `newest` + `--min-year` zostaje;
   `newest` + `--max-year` (i `--year`) = blad; wycinki nie przyjmuja flag
-  roku. Spec do uaktualnienia (m.in. wersja docelowa 0.7.1 -> 0.7.2) przed
-  planem.
+  roku. Spec uaktualniony 2026-10-10 (wersja 0.7.2; U12 = powyzsze
+  decyzje; U13: samo `--min-year` bez `--campaigns` = jedna, najnowsza
+  kampania, `all` tylko z `--max-year`/`--year` albo jawnym `--campaigns
+  all`); spec zaakceptowany, plan
+  `docs/superpowers/plans/2026-10-10-year-range-selection.md` (2026-10-10).
+  **ZAIMPLEMENTOWANE 2026-10-10** na galezi `feat/year-range` (Task 1-8,
+  ADR-032, raport `docs/research/2026-10-10-year-range/raport.md`);
+  merge do `develop` po zgodzie uzytkownika.
 - [ ] **(c) Drugie dowiazanie do najnowszego PELNEGO lotu**
   (`calyArkuszWypelnionyTrescia` = TAK) obok standardowego dowiazania do
   najnowszego. Proponowane osobne drzewo:
@@ -1597,6 +1637,15 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
     (`core/geometry.py:351-357`, tylko `logger.info`);
   - `mosaic_and_crop(dtype=None)` bierze typ pierwszego zrodla
     (`transport/mosaic.py:174`, sygnatura; typ z `src.dtypes[0]`).
+- [ ] **(e) Testy LAZ odtwarzajace fixtures dla innego okna** (znalezione
+  przy (b), 2026-10-10): `tests/test_laz_coverage.py`
+  (`test_older_tile_adding_uncovered_area_is_kept`,
+  `test_tile_whose_footprint_misses_area_is_skipped_as_outside`) i 5 testow
+  `TestCliOnRealWfs` w `tests/test_laz_download.py` odtwarzaja odpowiedzi
+  okna `W2_AREA` (`gugik_laz/real_2026_10_06/`) dla innych zapytan (inne
+  okno, godlo, inny CRS). Wynik moze nie odpowiadac usludze (jak T21a).
+  Do decyzji: nagrac odpowiedzi dla faktycznych okien albo jawnie oznaczyc
+  odtworzenie (`replay_any_bbox`, jak `test_all_still_drops_outside_tiles`).
 
 #### Do 0.8.0 — zmiany lamiace CLI skonsolidowane w jednym wydaniu (2026-10-08)
 
@@ -1619,6 +1668,11 @@ wchodza w tym samym wydaniu (decyzja uzytkownika). Kazda na wlasnej galezi.
   Errata ADR-031: zamiast okresu aliasow zmiana w 0.8.0. Przy okazji
   inwentaryzacja pozostalych polskich identyfikatorow publicznego API —
   decyzja uzytkownika, czy tez wchodza do 0.8.0.
+- [ ] **`--campaigns {newest,all}` -> przelacznik bez wartosci** (decyzja
+  uzytkownika 2026-10-10, spec wyboru roku U16): w modelu A `newest` jest
+  zawsze domyslne, wiec jawne `--campaigns newest` niczego nie zmienia;
+  zastapic przelacznikiem (np. `--all-campaigns`), bez aliasu (BREAKING
+  w CHANGELOG z "Co zrobic"; wywolania Hydrografa do sprawdzenia).
 
 - [ ] **Parametry wymagane w API (Hydrograf A8):** bez wartosci domyslnych
   `output_dir="./data"`, `vertical_crs="EVRF2007"` (`DownloadManager`),

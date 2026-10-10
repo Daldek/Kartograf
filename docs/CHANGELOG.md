@@ -19,6 +19,41 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   nie jest juz pytany do konca zadania; wynik bez zmian. Wpisy cache braku
   pokrycia sprzed 0.7.2 nie maja tej podpowiedzi do konca TTL (7 dni) —
   odswieza `--force` albo `MetadataCache(refresh=True)`.
+- Biblioteka: `DownloadManager(max_year=)` i publiczne
+  `check_year_range(godla)` sprawdzaja pelna liste kampanii przed
+  pobraniem; `YearRangeError` podaje godla, dostepne lata i podpowiedzi.
+  `available_years(godlo)` providerow NMT/NMPT/orto zwraca rosnace lata
+  z pelnej listy kampanii arkusza.
+  Sidecar kampanii z przedzialem zawiera `request.max_year`, `request.year`
+  dla pojedynczego roku i `extra.available_years`.
+- NMT/NMPT/orto: po pobraniu kilku lotow arkusza z przedzialu lat,
+  gdy najnowszy nie jest pelny, mierzony jest udzial waznych pikseli
+  (`extra.coverage` w sidecarze kampanii). Sidecar sciezki standardowej
+  otrzymuje liste `extra.flights` i `extra.better_coverage` (ID lotu
+  z wiekszym pokryciem, gdy istnieje); biblioteka zwraca ten ID w
+  `SheetFetch.better_coverage` i `DownloadResult.better_coverage`.
+  Dowiazanie nadal wskazuje najnowszy lot, nie lot o najwiekszym pokryciu.
+- Biblioteka LAZ: `select_tiles(max_year=)`, `discover_tiles(min_year=,
+  max_year=)` i `download_laz_area(max_year=)` wybieraja kafle z domknietego
+  przedzialu. W `Error:` o braku rocznika rok, ktory w niepokrytej czesci
+  ma tylko dostawy arkuszy niepelnych (`czy_ark_wypelniony=NIE`), ma
+  dopisek `(tylko arkusze niepelne)`.
+  Sidecar LAZ zapisuje `request.max_year` (i `request.year`, gdy granice sa
+  rowne), a dla znanych wartosci `extra.acquisition_date` i `extra.full_sheet`.
+- CLI `download`: `--max-year RRRR` i `--year RRRR` dzialaja dla NMT,
+  NMPT, orto oraz LAZ. Flagi roku wyznaczaja tylko dopuszczalne lata,
+  a `--campaigns` liczbe lotow na arkusz: domyslnie (`newest`) jeden,
+  najnowszy lot z zakresu, `--campaigns all` wszystkie loty z zakresu.
+  `--year` jest skrotem obu granic na ten sam rok; brak rocznika dla
+  ktoregos arkusza/kafla zatrzymuje zadanie przed pobraniem, podaje
+  dostepne lata i podpowiedz. Przy `--campaigns all`, gdy starszy lot ma
+  wieksze zmierzone pokrycie niz najnowszy, CLI podaje `Info:` takze z `-q`
+  (dowiazanie pozostaje na najnowszym locie).
+- CLI i biblioteka: gdy przy granicy roku sciezka standardowa nadal wskazuje
+  nowszy lot pobrany wczesniej (dowiazanie nigdy nie cofa sie), CLI podaje
+  `Info: sciezka standardowa N arkuszy wskazuje nowszy lokalny lot spoza
+  tego zadania ...`; biblioteka: `SheetFetch.link_outside_range`,
+  `DownloadResult.link_outside_range`.
 
 ### Zmienione
 
@@ -28,6 +63,32 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   NMT 5 m w czesci kraju podaje jako przyklady (sprawdzone na zywo: np.
   `N-34-130-D-d --resolution 5m` — 6 z 16 arkuszy bez 5 m, NMT 1 m jest).
   Skrypty dopasowujace stary tekst trzeba poprawic.
+- `--year` z `--product nmt|nmpt|orto` nie jest juz ignorowany: pobiera
+  wskazany rocznik albo zwraca `Error:` z lista lat. Co zrobic: usun
+  `--year` podawany tylko "na wszelki wypadek" albo wybierz odpowiedni
+  przedzial `--min-year`/`--max-year`.
+- `--year`/`--max-year` z `--target-crs` zwracaja `Error:` (jak wczesniej
+  `--min-year`). Co zrobic: nie podawaj flag roku dla wycinka, ktory
+  sklada najnowsze kampanie.
+- `--campaigns all --min-year` zawsze odpytuje wszystkie warstwy skorowidza,
+  zeby moc podac pelna liste rocznikow. Wpisy `campaigns_cache` ze skanu
+  czesciowego sa odpytywane ponownie. Co zrobic: nic (koszt 1-3 zapytan
+  GetFeatureInfo wiecej na arkusz raz na 7 dni).
+- `DownloadManager(min_year=...)`: arkusz z danymi tylko poza przedzialem
+  zatrzymuje cale zadanie (takze liste/hierarchie) przed pobraniem, zamiast
+  byc pominietym. Awaria sprawdzenia skorowidza tez zatrzymuje zadanie;
+  lokalny fallback bez weryfikacji nadal dziala bez granic roku.
+  Co zrobic: dla list z celowym pominieciem starszych arkuszy pobierz bez
+  granicy i odfiltruj po `extra.campaign.date`, albo obniz granice.
+- `validate_campaign_args(campaigns, min_year, max_year)` ma nowy
+  obowiazkowy argument (funkcja wewnetrzna, poza `__all__`). Co zrobic: kod
+  wolajacy ja bezposrednio dodaje `max_year`.
+- LAZ `--year`/`--min-year`: czesci obszaru dostepne tylko w innych
+  rocznikach byly pobierane czesciowo bez komunikatu; teraz zadanie
+  zatrzymuje sie przed pobraniem, podaje roczniki kafli i podpowiedz.
+  WFS pyta o wszystkie roczniki uslugi takze z `--year`. Co zrobic:
+  jesli chcesz swiadomie pobrac mniej danych, zastosuj podpowiedz
+  `--min-year`/`--max-year` lub zawez `--bbox`.
 
 ### Naprawione
 

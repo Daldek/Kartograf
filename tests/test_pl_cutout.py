@@ -2499,7 +2499,7 @@ class TestCutoutOverCampaignLinks:
             self.resolve_calls = []
 
         def resolve_campaigns(
-            self, godlo, *, campaigns="newest", min_year=None, timeout=None
+            self, godlo, *, campaigns=None, min_year=None, max_year=None, timeout=None
         ):
             from kartograf.providers.pl.skorowidz import SkorowidzRecord
 
