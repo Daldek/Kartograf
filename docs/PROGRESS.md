@@ -110,11 +110,12 @@
 > z inwentaryzacji) — kazda pozycja dopiero po specu/planie i zatwierdzeniu;
 > drobiazgi z review 0.7.1: sekcja "Po 0.7.1" nizej. Cykl otwarty
 > 2026-10-09 (`__version__ = "0.7.2-dev"`, sekcja `## [0.7.2] - Unreleased`
-> w CHANGELOG). **W toku:** drobiazgi z review 0.7.1 — spec
-> `docs/superpowers/specs/2026-10-09-review-0.7.1-drobiazgi-design.md`
-> ma komplet decyzji Q1-Q5 (2026-10-09); plan
-> `docs/superpowers/plans/2026-10-09-review-0.7.1-drobiazgi.md` (Task 1-12)
-> na galezi `fix/review-0.7.1` czeka na zatwierdzenie przed implementacja.
+> w CHANGELOG). **W toku:** drobiazgi z review 0.7.1 (P1-P10) WDROZONE na
+> galezi `fix/review-0.7.1` (2026-10-10; spec
+> `docs/superpowers/specs/2026-10-09-review-0.7.1-drobiazgi-design.md`,
+> plan `docs/superpowers/plans/2026-10-09-review-0.7.1-drobiazgi.md`,
+> raport na zywo `docs/research/2026-10-10-review-0.7.1/raport.md`);
+> merge `--no-ff` do `develop` czeka na zgode uzytkownika.
 > **Kierunek do v1.0.0:** roadmapa w `docs/SCOPE.md` 3.3 (zatwierdzona
 > 2026-10-08). Podprojekt 1 (magazyn wersjonowany, docelowo 0.8.0): spec
 > zaakceptowany i plan 1/3 napisany na galezi `feat/versioned-store`
@@ -130,6 +131,35 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Implementacja drobiazgow z review 0.7.1 (2026-10-10)
+
+- Galaz `fix/review-0.7.1` z `develop`, Task 1-11 planu = osobne commity
+  (brama przed kazdym: pytest offline, ruff, mypy):
+  - P4 `from_source` jawny warunek; P2 i P8 tylko docstringi;
+  - P3 `BBOX` PRG floor/ceil z dokladnoscia do MILIMETRA (korekta specu:
+    przy pelnych metrach kwadrat `teryt_for_point` rosl z 1 m do 2 m;
+    usluga przyjmuje liczby dziesietne — sprawdzone na zywo);
+  - P6 niespojny `numberReturned` = `DownloadError`; P7 `timeout` do PRG
+    (provider i menedzer); P5 godla tylko z cyframi ASCII (wszystkie
+    wzorce: PL-1992, PL-2000, CZ TM33/SM5; ARCHITECTURE 4.1 poprawione —
+    opis zer wiodacych byl nieaktualny od A7);
+  - P1 BDOT10k: scalanie do `<nazwa>.gpkg.<pid>_<tid>.tmp`, zapis ZIP,
+    dopiero potem `os.replace` — blad zostawia poprzedni GPKG i sidecar;
+  - P10 komunikat bez zgadywania przyczyny + podpowiedz `Info:` o innym
+    wariancie NMT/NMPT (jedno GetFeatureInfo ze wszystkimi warstwami
+    wariantu, rozpoznane na zywo; fixtury `real_2026_10_10`); trafienie
+    w cache braku pokrycia nie odpytuje juz sieci;
+  - P9: 7 testow, kazdy sprawdzony na mutacji kodu.
+- Review galezi (reviewer): bez blokerow; poprawione — wariant z bledem
+  pomijany do konca zycia providera i jedna proba zapytania (wczesniej
+  awaria indeksu, o ktory uzytkownik nie prosil, kosztowala pelne
+  ponowienia na kazdy arkusz), nazwa pliku tymczasowego GPKG z pid/tid,
+  test nadpisania GPKG w semantyce Windows przeniesiony na
+  `download_package`.
+- Przebieg na zywo (raport `docs/research/2026-10-10-review-0.7.1/raport.md`):
+  6 PASS; wykryty i poprawiony blad etykiety zapytania wariantu (falszywe
+  ostrzezenia o roku warstwy).
 
 ### Otwarcie cyklu 0.7.2 i spec drobiazgow z review 0.7.1 (2026-10-09)
 
@@ -267,6 +297,11 @@ decyzje uzytkownika. Szczegoly zmian: `docs/CHANGELOG.md` [0.7.1].
 #### Po 0.7.1 — drobiazgi z review galezi 0.7.1 (2026-10-09)
 
 Odlozone z rulingiem "zostaw"; lista ma przezyc usuniecie katalogu roboczego.
+**Stan 2026-10-10:** wszystkie pozycje ponizej WDROZONE na galezi
+`fix/review-0.7.1` (P1-P10 specu
+`docs/superpowers/specs/2026-10-09-review-0.7.1-drobiazgi-design.md`)
+OPROCZ dwoch oznaczonych na 0.8.0: publiczna nazwa dla `_single_teryt`
+i `file_digest` w sciezce HSG — zostaja otwarte.
 
 - BDOT10k `keep_raw` + blad zapisu surowego ZIP przy ponownym pobraniu
   zostawia STARY sidecar GPKG bez pliku danych (nowy GPKG usuniety;
