@@ -138,6 +138,39 @@ class TestBdot10kProvider:
         assert package.call_args.args[0] == "0208"
 
 
+class TestBdot10kPrgTimeout:
+    """P7: the caller's ``timeout`` reaches the PRG powiat lookup too."""
+
+    BBOX = BBox(340000, 290000, 350000, 300000, "EPSG:2180")
+    DISCOVER = "kartograf.providers.pl.bdot10k.discover_teryts_for_bbox"
+
+    def test_provider_bbox_and_godlo(self, tmp_path):
+        provider = Bdot10kProvider()
+        with (
+            patch(self.DISCOVER, return_value=["0208"]) as discover,
+            patch.object(provider, "download_by_admin_unit"),
+        ):
+            provider.download_by_bbox(self.BBOX, tmp_path / "x.gpkg", timeout=7)
+            assert discover.call_args.kwargs["timeout"] == 7
+            provider.download_by_godlo("N-34-130-D", tmp_path / "x.gpkg", timeout=9)
+            assert discover.call_args.kwargs["timeout"] == 9
+
+    def test_manager_passes_timeout_option(self, tmp_path):
+        manager = LandCoverManager(output_dir=tmp_path, provider="bdot10k")
+        with (
+            patch(self.DISCOVER, return_value=["0208"]) as discover,
+            patch.object(manager, "_download_county", return_value=tmp_path / "x"),
+        ):
+            manager.download_by_bbox(self.BBOX, timeout=7)
+            assert discover.call_args.kwargs["timeout"] == 7
+            manager.download_by_godlo("N-34-130-D", timeout=8)
+            assert discover.call_args.kwargs["timeout"] == 8
+            manager.download_all_counties(bbox=self.BBOX, timeout=9)
+            assert discover.call_args.kwargs["timeout"] == 9
+            manager.download_by_bbox(self.BBOX)
+            assert discover.call_args.kwargs["timeout"] == 30
+
+
 class TestCorineProvider:
     """Test CorineProvider."""
 

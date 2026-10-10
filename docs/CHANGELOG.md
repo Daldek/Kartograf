@@ -16,6 +16,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - WFS PRG: odpowiedz, w ktorej `numberReturned` rozni sie od liczby
   odczytanych kodow powiatow, konczy sie `DownloadError` zamiast cicho
   krotszej listy powiatow (i brakujacego pakietu BDOT10k).
+- BDOT10k: opcja `timeout` (`Bdot10kProvider.download_by_bbox/godlo`,
+  `LandCoverManager.download_by_bbox/godlo/download_all_counties`)
+  dziala tez na zapytanie o powiat w WFS PRG; wczesniej to zapytanie
+  mialo zawsze 30 s. Bez `timeout` w menedzerze zostaje 30 s.
 
 ## [0.7.1] - 2026-10-09
 
