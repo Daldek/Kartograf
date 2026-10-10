@@ -20,6 +20,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `LandCoverManager.download_by_bbox/godlo/download_all_counties`)
   dziala tez na zapytanie o powiat w WFS PRG; wczesniej to zapytanie
   mialo zawsze 30 s. Bez `timeout` w menedzerze zostaje 30 s.
+- Godla z cyframi spoza ASCII (np. pelnej szerokosci `M-３３-８-A`,
+  `6.１４５.２０`, CZ `７３０_５５５５`) sa odrzucane (`ParseError`);
+  wczesniej PL-1992 i PL-2000 przechodzily walidacje i trafialy do sciezek
+  i sidecarow w innej postaci niz godlo GUGiK. Co zrobic: podac godlo
+  cyframi `0-9`.
 
 ## [0.7.1] - 2026-10-09
 

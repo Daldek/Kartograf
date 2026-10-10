@@ -79,15 +79,17 @@ class SheetParser:
         "1:10000",
     ]
 
-    # Sheet code patterns for each scale
+    # Sheet code patterns for each scale ([0-9]: ASCII digits only, not \d)
     PATTERNS = {
-        "1:1000000": r"^([A-Z])-(\d{1,2})$",
-        "1:500000": r"^([A-Z])-(\d{1,2})-([A-D])$",
-        "1:200000": r"^([A-Z])-(\d{1,2})-(\d{1,3})$",
-        "1:100000": r"^([A-Z])-(\d{1,2})-(\d{1,3})-([A-D])$",
-        "1:50000": r"^([A-Z])-(\d{1,2})-(\d{1,3})-([A-D])-([a-d])$",
-        "1:25000": r"^([A-Z])-(\d{1,2})-(\d{1,3})-([A-D])-([a-d])-([1-4])$",
-        "1:10000": r"^([A-Z])-(\d{1,2})-(\d{1,3})-([A-D])-([a-d])-([1-4])-([1-4])$",
+        "1:1000000": r"^([A-Z])-([0-9]{1,2})$",
+        "1:500000": r"^([A-Z])-([0-9]{1,2})-([A-D])$",
+        "1:200000": r"^([A-Z])-([0-9]{1,2})-([0-9]{1,3})$",
+        "1:100000": r"^([A-Z])-([0-9]{1,2})-([0-9]{1,3})-([A-D])$",
+        "1:50000": r"^([A-Z])-([0-9]{1,2})-([0-9]{1,3})-([A-D])-([a-d])$",
+        "1:25000": r"^([A-Z])-([0-9]{1,2})-([0-9]{1,3})-([A-D])-([a-d])-([1-4])$",
+        "1:10000": (
+            r"^([A-Z])-([0-9]{1,2})-([0-9]{1,3})-([A-D])-([a-d])-([1-4])-([1-4])$"
+        ),
     }
 
     # Component names for each regex group
@@ -213,7 +215,7 @@ class SheetParser:
             elif i == 4 and len(part) == 1 and part.upper() in "ABCD":
                 # 50k sheet (a-d) - lowercase
                 normalized.append(part.lower())
-            elif part.isdecimal():
+            elif part.isascii() and part.isdigit():
                 # Numbers without leading zeros - the GUGiK index form
                 # (e.g. 'M-33-8-A-a-3-1'); '036' and '36' are one sheet (A7)
                 normalized.append(part.lstrip("0") or "0")
