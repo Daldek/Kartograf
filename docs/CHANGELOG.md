@@ -7,6 +7,15 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.7.2] - Unreleased
 
+### Zmienione
+
+- Komunikat CLI o arkuszach bez danych GUGiK nie zgaduje przyczyny
+  "(morze, obszar za granica)": mowi, ze skorowidz GUGiK nie ma tych
+  arkuszy dla wybranego produktu i rozdzielczosci, a morze, granice i brak
+  NMT 5 m w czesci kraju podaje jako przyklady (sprawdzone na zywo: np.
+  `N-34-130-D-d --resolution 5m` — 6 z 16 arkuszy bez 5 m, NMT 1 m jest).
+  Skrypty dopasowujace stary tekst trzeba poprawic.
+
 ### Naprawione
 
 - Zapytanie o powiaty BDOT10k (WFS PRG) rozszerza obszar na zewnatrz

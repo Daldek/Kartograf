@@ -1304,8 +1304,9 @@ def _finish_pl_sheets(
         shown = ", ".join(missing[:10]) + (" ..." if len(missing) > 10 else "")
         print(
             f"Warning: GUGiK nie ma danych dla {len(missing)} z {total} arkuszy "
-            f"({shown}) — pominiete (morze, obszar za granica); pobrano "
-            f"{len(paths)}",
+            f"({shown}) — pominiete (skorowidz GUGiK nie ma tych arkuszy dla "
+            "wybranego produktu i rozdzielczosci, np. morze, obszar za granica, "
+            f"brak NMT 5 m w czesci kraju); pobrano {len(paths)}",
             file=sys.stderr,
         )
         _print_coverage_hints(result)
