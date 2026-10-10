@@ -54,6 +54,18 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Info: sciezka standardowa N arkuszy wskazuje nowszy lokalny lot spoza
   tego zadania ...`; biblioteka: `SheetFetch.link_outside_range`,
   `DownloadResult.link_outside_range`.
+- NMT/NMPT/orto: drugie dowiazanie
+  `<segment>/full_sheet/<hierarchia>/<godlo>.<ext>` do najnowszego
+  lokalnego lotu oznaczonego w skorowidzu GUGiK jako pelny
+  (`calyArkuszWypelnionyTrescia = TAK`; pelny = w granicach Polski). Ta sama
+  mechanika co sciezka standardowa: hardlink bez kosztu miejsca (kopia, gdy
+  hardlink niedostepny), nigdy wstecz, sidecar z `extra.link_target`. Gdy
+  najnowszy lot jest pelny, oba dowiazania wskazuja ten sam plik.
+  `FileStorage.list_files()` pomija `full_sheet/`, `FileStorage.delete()`
+  usuwa oba dowiazania (pliki w `kampanie/` zostaja); nowe
+  `FileStorage.get_full_sheet_path()`. Biblioteka: `SheetFetch.full_link`,
+  `SheetFetch.full_link_outside_range`, `DownloadResult.full_links`,
+  `DownloadResult.full_link_outside_range`.
 
 ### Zmienione
 
