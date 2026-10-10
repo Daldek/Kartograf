@@ -206,14 +206,15 @@ class TestSelectTilesOnRealWfs:
 
     def test_tile_whose_footprint_misses_area_is_skipped_as_outside(self):
         # SW corner of the PL-2000 tile envelope (rotated relative to EPSG:2180):
-        # the envelope intersects the area, the tile polygon does not
+        # the envelope intersects the area, the tile polygon does not.
         area = BBox(637334, 486800, 637340, 486806, "EPSG:2180")
-        selection = GugikLazProvider(session=laz_session()).select_tiles(
-            area, year=2022
+        selection = GugikLazProvider(session=laz_session()).select_tiles(area)
+        assert OLD_2000 not in {tile.godlo for tile in selection.tiles}
+        (entry,) = (
+            skipped
+            for skipped in selection.superseded
+            if skipped.tile.godlo == OLD_2000
         )
-        assert selection.tiles == ()
-        (entry,) = selection.superseded
-        assert entry.tile.godlo == OLD_2000
         assert entry.covered_by == ()
         assert entry.reason == "outside"
 
