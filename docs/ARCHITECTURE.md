@@ -1402,7 +1402,9 @@ wola te metode i drukuje `Downloaded to:` dla kazdego pliku; `--teryt`
 bez zmian. Stare `download_by_bbox`/`download_by_godlo` (menedzera bez
 jawnego `output_path` i providera) pobieraja JEDEN powiat ta sama sciezka
 (`_single_teryt`): obszar z kilku powiatow konczy sie `ValidationError`
-z lista kodow i wskazaniem `download_all_counties`. `layers=` (kody
+z lista kodow i wskazaniem `download_all_counties`. Opcja `timeout`
+(provider: domyslnie 120 s; menedzer: gdy nie podana, PRG 30 s) dziala od
+0.7.2 takze na zapytanie PRG, nie tylko na pobranie paczki. `layers=` (kody
 4-literowe, np. `PTWP`, `SWRS`; tylko GPKG) zostawia w scalonym GPKG
 wylacznie pliki `__OT_<kod>_*` pakietu — brakujaca warstwa to
 `DownloadError`, zly kod `ValidationError` przed siecia; plik z filtrem
