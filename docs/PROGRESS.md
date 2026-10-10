@@ -121,16 +121,26 @@
 > `docs/superpowers/specs/2026-10-09-year-range-selection-design.md`
 > (sekcja 0 = model A, nadrzedna), ADR-032, raport
 > `docs/research/2026-10-10-year-range/raport.md`.
-> **(c) drugie dowiazanie do najnowszego PELNEGO lotu — W TOKU** na galezi
-> `feat/full-sheet-link` (z `develop`): spec
-> `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md` napisany,
-> decyzje uzytkownika F-U1..F-U5 z 2026-10-10 w sekcji 0 (drzewo
-> `full_sheet/`, dociaganie pelnego lotu tylko z flaga `--full-sheet`,
-> arkusz bez pelnego lotu = brak pliku + `Warning:` laczony z E13, nigdy
-> wstecz + `Info:` jak U15, wycinki bez zmian); spec ZAAKCEPTOWANY.
-> **Nastepny krok:** implementacja wg planu
-> `docs/superpowers/plans/2026-10-10-full-sheet-link.md` (Task 1-6). Dalej w 0.7.2: (d) ciche
-> wartosci domyslne, (a) wycinki PL z WCS (nowy ADR), (e) testy LAZ
+> **(c) drugie dowiazanie do najnowszego PELNEGO lotu — SPEC I PLAN
+> GOTOWE, IMPLEMENTACJA W NASTEPNEJ SESJI** (polecenie uzytkownika
+> 2026-10-10). Galaz `feat/full-sheet-link` z `develop` (`fc4c176`),
+> 4 commity tylko z dokumentacja (`c68ab52`, `6521532`, `240a4ae` + ten
+> wpis), NIE wypchnieta na `origin`. Spec ZAAKCEPTOWANY:
+> `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md` (sekcja 0
+> = decyzje F-U1..F-U5: drzewo `<segment>/full_sheet/<hierarchia>/`,
+> flaga `--full-sheet` / `DownloadManager(full_sheet=True)` dociaga
+> najnowszy pelny lot tylko z flaga, bez flagi `full_sheet/` z lotow
+> zadania; arkusz bez pelnego lotu = brak pliku + jeden `Warning:`
+> zamiast E13; nigdy wstecz + `Info:` jak U15; wycinki bez zmian; nazwa
+> `full_sheet`, bo w kodzie `coverage` = pokrycie zmierzone/brak danych).
+> Znaczenie flagi GUGiK zmierzone: TAK = pelne w granicach Polski
+> (`docs/research/2026-10-10-full-sheet-link/granica-pelne-pokrycie.md`).
+> **NASTEPNA SESJA — START OD RAZU:** `git switch feat/full-sheet-link`,
+> wykonanie planu `docs/superpowers/plans/2026-10-10-full-sheet-link.md`
+> od Task 1 (Task 1-5 kod+dokumentacja, kazde zadanie = brama + commit;
+> Task 6 = test na zywo, review, merge po decyzji uzytkownika). Numery
+> linii w planie wg `fc4c176` — szukaj po symbolu. Dalej w 0.7.2: (d)
+> ciche wartosci domyslne, (a) wycinki PL z WCS (nowy ADR), (e) testy LAZ
 > z nagraniami innego okna; zakres wydania 0.7.2 (czy wszystkie pozycje)
 > — do decyzji uzytkownika.
 > **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
@@ -181,7 +191,13 @@
   ramki (narozniki = nodata, ~10 % takze w glebi kraju). Raport
   `docs/research/2026-10-10-full-sheet-link/granica-pelne-pokrycie.md`;
   spec 1.3 poprawiony (Slubice to nie blad flagi).
-- Bez zmian kodu; brama nieuruchamiana (tylko dokumentacja).
+- Plan `docs/superpowers/plans/2026-10-10-full-sheet-link.md` (6 zadan,
+  Review Focus 1-5; testy na rekordach C14: N-34-139-C-a-3-1 84183 NIE,
+  83233/78047/73021 TAK). Implementacja przeniesiona do nowej sesji
+  (polecenie uzytkownika).
+- Bez zmian kodu; brama nieuruchamiana (tylko dokumentacja). Skrypty
+  pomiaru granic i pobrane pliki w katalogu danych testow na zywo
+  (`kartograf/e2e/2026-10-10-pelne-pokrycie-granica/`).
 
 ### Wybor roku danych — model A i merge do develop (2026-10-10)
 
