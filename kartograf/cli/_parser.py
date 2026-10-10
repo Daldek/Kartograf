@@ -264,24 +264,34 @@ def create_parser() -> argparse.ArgumentParser:
         "--year",
         type=int,
         metavar="YYYY",
-        help="LAZ only (--product laz; an error with other products): restrict "
-        "to a single acquisition year (default: newest available per tile); "
-        "wyklucza sie z --min-year",
+        help="Tylko ten rok danych (PL: rok pozyskania aktualnosc NMT/NMPT/orto, "
+        "akt_rok LAZ); skrot --min-year YYYY --max-year YYYY; najnowszy lot "
+        "z tego roku (wszystkie: --campaigns all); brak roku na ktoryms "
+        "arkuszu/kaflu = blad przed pobraniem; nie dziala z --target-crs",
     )
     download_parser.add_argument(
         "--campaigns",
         choices=["newest", "all"],
-        default="newest",
-        help="Kampanie GUGiK (tylko PL): newest = najnowsza kampania arkusza "
-        "(default), all = wszystkie kampanie do <segment>/kampanie/; "
+        default=None,
+        help="Ile lotow na arkusz (tylko PL): newest = najnowszy lot w zakresie "
+        "lat (domyslne, nie trzeba podawac), all = wszystkie loty z zakresu do "
+        "<segment>/kampanie/; flagi roku wyznaczaja tylko dopuszczalne lata; "
         "LAZ: all = bez deduplikacji pokrycia",
     )
     download_parser.add_argument(
         "--min-year",
         type=int,
         metavar="YYYY",
-        help="Tylko PL: pomin kampanie starsze niz YYYY (rok aktualnosci; "
-        "LAZ: rok akt_rok); nie dziala z --target-crs",
+        help="Tylko PL: dolna granica roku danych (wlacznie); najnowszy lot "
+        "z lat >= YYYY (wszystkie: --campaigns all); nie dziala z --target-crs",
+    )
+    download_parser.add_argument(
+        "--max-year",
+        type=int,
+        metavar="YYYY",
+        help="Tylko PL: gorna granica roku danych (wlacznie); najnowszy lot "
+        "z lat <= YYYY (wszystkie: --campaigns all); sciezka standardowa nigdy "
+        "nie cofa sie na starszy lot; nie dziala z --target-crs",
     )
     download_parser.add_argument(
         "--min-density",

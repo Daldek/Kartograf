@@ -246,6 +246,40 @@ def write_standard_sidecar(link: Path, target: Path, method: LinkMethod) -> None
         logger.warning(f"Nie udalo sie zapisac sidecara {sidecar}: {e}")
 
 
+def update_sidecar_extra(data_path: Path, updates: dict) -> None:
+    """Atomically update existing sidecar extra fields, never create a sidecar.
+
+    ``None`` clears a stale optional field (for a later range with no measured
+    coverage). A missing or unreadable sidecar is best-effort: warn on errors,
+    but do not fail an already downloaded sheet.
+    """
+    sidecar = _sidecar_of(data_path)
+    if not sidecar.exists():
+        return
+    tmp = _tmp_name(sidecar, "tmp")
+    try:
+        payload = _read_json(sidecar)
+        if payload is None:
+            raise ValueError("nieczytelny JSON sidecara")
+        extra = payload.get("extra")
+        if not isinstance(extra, dict):
+            extra = {}
+            payload["extra"] = extra
+        for key, value in updates.items():
+            if value is None:
+                extra.pop(key, None)
+            else:
+                extra[key] = value
+        tmp.write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        os.replace(tmp, sidecar)
+    except Exception as e:  # noqa: BLE001 — metadata must not abort a download
+        with contextlib.suppress(OSError):
+            tmp.unlink(missing_ok=True)
+        logger.warning(f"Nie udalo sie dopisac danych do sidecara {sidecar}: {e}")
+
+
 def _current_method(link: Path) -> LinkMethod:
     meta = _read_json(_sidecar_of(link)) or {}
     extra = meta.get("extra")

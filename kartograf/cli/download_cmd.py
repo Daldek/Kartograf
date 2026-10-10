@@ -227,75 +227,22 @@ def _reject_non_nmt_for_cz(product: str) -> bool:
     return True
 
 
-def _campaign_opts(args: argparse.Namespace) -> tuple[str, int | None]:
-    """``(campaigns, min_year)`` via getattr: tests build the Namespace by hand."""
-    return getattr(args, "campaigns", "newest"), getattr(args, "min_year", None)
-
-
-def _is_cz_only_task(args: argparse.Namespace) -> bool:
-    """
-    True when the task can only be served by CZ (no PL among its countries).
-
-    Local, best-effort and network-free: a CZ sheet code, ``--country cz``, or
-    (under ``auto``) a ``--bbox``/``--geometry`` lying wholly in CZ. Anything that
-    cannot be resolved (missing file, bad bbox) counts as "not CZ-only" - the
-    caller then prints the generic text and the real error surfaces later.
-    """
-    from kartograf.core.parser_registry import detect_system
-
-    country = getattr(args, "country", "auto")
-    if country == "pl":
-        return False
-    if country == "cz":
-        return True
-    try:
-        if args.godlo is not None:
-            return detect_system(args.godlo).country == "CZ"
-        if getattr(args, "bbox", None) is not None:
-            area = parse_bbox_arg(args.bbox, args.bbox_crs)
-        elif getattr(args, "geometry", None) is not None:
-            area = _geometry_envelope(Path(args.geometry), getattr(args, "layer", None))
-        else:
-            return False
-        return _countries_for_bbox(area) == ("CZ",)
-    except Exception:
-        return False
+def _campaign_opts(
+    args: argparse.Namespace,
+) -> tuple[str | None, int | None, int | None]:
+    """Campaign strategy and year bounds; absent attributes support handmade tests."""
+    return (
+        getattr(args, "campaigns", None),
+        getattr(args, "min_year", None),
+        getattr(args, "max_year", None),
+    )
 
 
 def _reject_laz_only_opts(args: argparse.Namespace) -> bool:
-    """
-    ``--year``/``--min-density`` apply to ``--product laz`` only (0.7.1).
-
-    Before 0.7.1 both were read on the LAZ path alone and silently ignored for
-    nmt/nmpt/orto (the user got the newest data and exit code 0). True (after an
-    ``Error:`` on stderr) when one of them is given with another product; checked
-    in ``cmd_download`` before any country dispatch, so no path (sheet code,
-    hierarchy, sheet list, ``--bbox``, ``--geometry``, cutout, CZ) reaches the
-    network. Year selection for NMT/NMPT/orto is planned for 0.7.2.
-    """
+    """Reject ``--min-density`` on non-LAZ products before any network request."""
     product = getattr(args, "product", "nmt")
     if product == "laz":
         return False
-    if getattr(args, "year", None) is not None:
-        if _is_cz_only_task(args):
-            message = (
-                f"Error: --year nie dziala dla CZ (CUZK nie ma wyboru roku; "
-                f"podano {product}); pomin --year"
-            )
-        else:
-            message = (
-                f"Error: --year dziala tylko z --product laz (podano {product}); "
-                "wybor roku dla NMT/NMPT/orto bedzie w 0.7.2. "
-            )
-            if getattr(args, "min_year", None) is None:
-                message += (
-                    "Teraz uzyj --min-year RRRR (najnowsza kampania nie starsza "
-                    "niz podany rok; tylko PL, bez --target-crs) albo pomin --year"
-                )
-            else:
-                message += "Pomin --year"
-        print(message, file=sys.stderr)
-        return True
     if getattr(args, "min_density", None) is not None:
         print(
             f"Error: --min-density dziala tylko z --product laz (podano "
@@ -309,60 +256,59 @@ def _reject_laz_only_opts(args: argparse.Namespace) -> bool:
 def _reject_campaign_opts_without_pl(
     args: argparse.Namespace, countries: tuple[str, ...]
 ) -> bool:
-    """
-    Campaign options (``--campaigns all``, ``--min-year``) apply to PL only.
-
-    One rule for all CLI entry points (ADR-030, errata (j) Q9
-    and errata 2 N-3): no PL among the countries -> ``Error:`` and True (before the
-    network);
-    PL and CZ -> ``Info:`` once, False (CZ is downloaded anyway, current version);
-    no options or PL alone -> False, silence. Messages go to stderr (``-q`` does not
-    suppress them). Campaign options deliberately do NOT enter ``_pl_only_flags`` -
-    otherwise ``auto`` would narrow a border area to PL.
-    """
-    campaigns, min_year = _campaign_opts(args)
-    if campaigns == "newest" and min_year is None:
+    """Reject PL-only campaign/year choices in CZ; describe mixed tasks once."""
+    campaigns, min_year, max_year = _campaign_opts(args)
+    if (
+        campaigns != "all"
+        and min_year is None
+        and max_year is None
+        and getattr(args, "year", None) is None
+    ):
         return False
     if "PL" not in countries:
         print(
-            "Error: CZ (CUZK) nie ma kampanii — --campaigns all/--min-year "
-            "dotycza tylko PL",
+            "Error: CZ (CUZK) nie ma kampanii — "
+            "--campaigns all/--min-year/--max-year/--year dotycza tylko PL",
             file=sys.stderr,
         )
         return True
     if "CZ" in countries:
         print(
-            "Info: --campaigns/--min-year dotycza tylko czesci PL "
-            "(CZ: biezaca wersja danych CUZK)",
+            "Info: --campaigns/--min-year/--max-year/--year dotycza tylko "
+            "czesci PL (CZ: biezaca wersja danych CUZK)",
             file=sys.stderr,
         )
     return False
 
 
 def _reject_campaign_opts_with_target_crs(args: argparse.Namespace) -> bool:
-    """
-    PL cutout ``--target-crs`` + ``--campaigns all``/``--min-year`` = error.
-
-    Errata (j) Q2: a cutout composes one campaign per sheet, and its name does not
-    carry a year bound. True (after ``Error:`` on stderr) before the network.
-    Called only in ``_dispatch_area`` (the sole path to a PL cutout), before the
-    CZ branch; a sheet code with ``--target-crs`` is rejected earlier by the sheet code
-    guard.
-    """
+    """A PL cutout has no year in its name and composes newest campaigns only."""
     if getattr(args, "target_crs", None) is None:
         return False
-    campaigns, min_year = _campaign_opts(args)
+    campaigns, min_year, max_year = _campaign_opts(args)
+    flag = next(
+        (
+            name
+            for name, supplied in (
+                ("--year", getattr(args, "year", None)),
+                ("--min-year", min_year),
+                ("--max-year", max_year),
+            )
+            if supplied is not None
+        ),
+        None,
+    )
+    if flag is not None:
+        print(
+            f"Error: {flag} nie dziala z --target-crs — wycinek sklada najnowsze "
+            "kampanie, nazwa wycinka nie niesie roku",
+            file=sys.stderr,
+        )
+        return True
     if campaigns == "all":
         print(
             "Error: --campaigns all nie dziala z --target-crs — wycinek sklada "
             "jedna kampanie na arkusz",
-            file=sys.stderr,
-        )
-        return True
-    if min_year is not None:
-        print(
-            "Error: --min-year nie dziala z --target-crs — nazwa wycinka nie "
-            "niesie granicy roku",
             file=sys.stderr,
         )
         return True
@@ -953,16 +899,34 @@ def cmd_download(args: argparse.Namespace) -> int:
     # registry ---
     from kartograf.core.parser_registry import detect_system
 
-    # ADR-030: --min-year 1900..2100 (and the strategy) before any work
-    campaigns, min_year = _campaign_opts(args)
-    try:
-        validate_campaign_args(campaigns, min_year)
-    except ValidationError as e:
-        # the library message names the parameter; the CLI speaks of the flag
-        print(f"Error: {str(e).replace('min_year', '--min-year')}", file=sys.stderr)
+    campaigns, min_year, max_year = _campaign_opts(args)
+    year = getattr(args, "year", None)
+    if year is not None and (min_year is not None or max_year is not None):
+        print(
+            "Error: --year wyklucza sie z --min-year/--max-year "
+            "(--year Y to skrot --min-year Y --max-year Y)",
+            file=sys.stderr,
+        )
         return 1
+    if year is not None:
+        min_year = max_year = year
+    try:
+        validate_campaign_args(campaigns, min_year, max_year)
+    except ValidationError as e:
+        message = (
+            str(e)
+            .replace("min_year", "--year" if year is not None else "--min-year")
+            .replace("max_year", "--max-year")
+        )
+        print(f"Error: {message}", file=sys.stderr)
+        return 1
+    # Year bounds only restrict the admissible years; --campaigns sets how many
+    # flights (model A, ADR-032 point 3): the same rule for every product.
+    campaigns = campaigns or "newest"
+    args.campaigns = campaigns
+    args.min_year, args.max_year = min_year, max_year
 
-    # 0.7.1: --year/--min-density are LAZ-only; every path below would ignore them
+    # Only point-density filtering is LAZ-specific; every product supports year flags.
     if _reject_laz_only_opts(args):
         return 1
 
@@ -1048,6 +1012,7 @@ def cmd_download(args: argparse.Namespace) -> int:
                 max_workers=workers,
                 campaigns=campaigns,
                 min_year=min_year,
+                max_year=max_year,
             )
         except ValidationError as e:
             print(f"Error: {e}", file=sys.stderr)
@@ -1098,6 +1063,11 @@ def cmd_download(args: argparse.Namespace) -> int:
                     # `last_sheet.skipped` = Mock (truthy).
                     fetch = manager.last_sheet
                     sheet = fetch if isinstance(fetch, SheetFetch) else None
+                    # U15: when the standard path keeps a newer flight, name the
+                    # campaign file of this request instead.
+                    where = result
+                    if sheet is not None and sheet.link_outside_range is not None:
+                        where = (sheet.downloaded or sheet.reused)[0]
                     if not args.quiet:
                         if campaigns == "all" and sheet is not None:
                             # M-1: like the list - campaign files, not a sheet
@@ -1105,9 +1075,9 @@ def cmd_download(args: argparse.Namespace) -> int:
                                 len(sheet.downloaded), 1, output_dir, len(sheet.reused)
                             )
                         elif sheet is not None and sheet.skipped:
-                            print(f"Skipped {args.godlo} - already exists at {result}")
+                            print(f"Skipped {args.godlo} - already exists at {where}")
                         else:
-                            print(f"Downloaded to {result}")
+                            print(f"Downloaded to {where}")
                     if sheet is not None and sheet.link == "copy":
                         _warn_copied_links([args.godlo])
                     if sheet is not None and sheet.unverified is not None:
@@ -1118,6 +1088,17 @@ def cmd_download(args: argparse.Namespace) -> int:
                             file=sys.stderr,
                         )
                     _warn_sheet_sidecars([result])
+                    if sheet is not None and sheet.better_coverage is not None:
+                        _print_better_coverage(
+                            DownloadResult(
+                                better_coverage={sheet.godlo: sheet.better_coverage}
+                            ),
+                            [result],
+                        )
+                    if sheet is not None and sheet.link_outside_range is not None:
+                        _print_link_outside_range(
+                            {sheet.godlo: sheet.link_outside_range}
+                        )
                     return 0
                 paths = result
 
@@ -1274,6 +1255,8 @@ def _finish_pl_sheets(
     ``Warning:``/``Error:`` go to stderr, so ``-q`` does NOT suppress them.
     """
     _warn_sheet_sidecars(paths)
+    _print_better_coverage(result, paths)
+    _print_link_outside_range(result.link_outside_range)
     if result.copied:
         _warn_copied_links(result.copied)
     if result.unverified:
@@ -1353,6 +1336,111 @@ def _read_sheet_sidecar(path: Path) -> dict | None:
     except (OSError, ValueError):
         return None
     return meta if isinstance(meta, dict) else None
+
+
+def _flight_description(flight: dict) -> str:
+    """Format a flight's sidecar date, ID, completeness and measured coverage."""
+    flight_id = flight["id"]
+    date = flight.get("date")
+    name = f"{date}_{flight_id}" if isinstance(date, str) else str(flight_id)
+    details: list[str] = []
+    if flight.get("full_sheet") is True:
+        details.append("pelny")
+    elif flight.get("full_sheet") is False:
+        details.append("niepelny")
+    coverage = flight.get("coverage")
+    if (
+        isinstance(coverage, (int, float))
+        and not isinstance(coverage, bool)
+        and 0 <= coverage <= 1
+    ):
+        percent = f"{coverage * 100:.1f}".replace(".", ",").removesuffix(",0")
+        details.append(f"pokrycie {percent} %")
+    return f"{name} ({', '.join(details)})" if details else name
+
+
+def _print_better_coverage(result: DownloadResult, paths: list[Path]) -> None:
+    """Report older flights with higher coverage; sidecar detail is best-effort."""
+    better = result.better_coverage
+    if not better:
+        return
+    print(
+        f"Info: dla {len(better)} arkuszy starszy lot z przedzialu ma wieksze "
+        "pokrycie niz najnowszy (dowiazanie wskazuje najnowszy):",
+        file=sys.stderr,
+    )
+    shown = dict(sorted(better.items())[:10])
+    sidecars = {
+        Path(path).stem: _read_sheet_sidecar(Path(path))
+        for path in paths
+        if Path(path).stem in shown
+    }
+    for godlo, better_id in shown.items():
+        meta = sidecars.get(godlo) or {}
+        extra = meta.get("extra")
+        if not isinstance(extra, dict):
+            extra = {}
+        flights = extra.get("flights")
+        campaign = extra.get("campaign")
+        linked_id = campaign.get("id") if isinstance(campaign, dict) else None
+        if isinstance(flights, list):
+            linked = next(
+                (
+                    flight
+                    for flight in flights
+                    if isinstance(flight, dict) and flight.get("id") == linked_id
+                ),
+                None,
+            )
+            older = next(
+                (
+                    flight
+                    for flight in flights
+                    if isinstance(flight, dict) and flight.get("id") == better_id
+                ),
+                None,
+            )
+        else:
+            linked = older = None
+        if linked is not None and older is not None:
+            detail = (
+                f"dowiazanie {_flight_description(linked)}; "
+                f"wieksze pokrycie: {_flight_description(older)}"
+            )
+        else:
+            detail = f"wieksze pokrycie: lot {better_id} (brak szczegolow w sidecarze)"
+        print(f"  {godlo}: {detail}", file=sys.stderr)
+    if len(better) > len(shown):
+        print(f"  ... i {len(better) - len(shown)} innych", file=sys.stderr)
+
+
+def _campaign_dirname(path: Path) -> str:
+    """``<date>_<id>`` of a ``kampanie/<date>_<id>/...`` path; else the file name."""
+    parts = Path(path).parts
+    if "kampanie" in parts and parts.index("kampanie") + 1 < len(parts):
+        return parts[parts.index("kampanie") + 1]
+    return Path(path).name
+
+
+def _print_link_outside_range(outside: dict[str, Path]) -> None:
+    """Report standard paths still pointing at a newer flight outside the request.
+
+    ADR-032 point 3 (U15): the link never moves back to an older campaign, so
+    after a year-bounded request it may keep the previously downloaded flight.
+    """
+    if not outside:
+        return
+    print(
+        f"Info: sciezka standardowa {len(outside)} arkuszy wskazuje nowszy "
+        "lokalny lot spoza tego zadania (dowiazanie nigdy nie cofa sie na "
+        "starszy lot); pobrane loty sa w <segment>/kampanie/:",
+        file=sys.stderr,
+    )
+    shown = dict(sorted(outside.items())[:10])
+    for godlo, target in shown.items():
+        print(f"  {godlo}: dowiazanie {_campaign_dirname(target)}", file=sys.stderr)
+    if len(outside) > len(shown):
+        print(f"  ... i {len(outside) - len(shown)} innych", file=sys.stderr)
 
 
 def _is_partial_sheet(path: Path) -> bool:
@@ -1703,7 +1791,8 @@ def _download_pl_sheet_list(
     product = getattr(args, "product", "nmt")
     workers = getattr(args, "workers", 4)
     skip_existing = not args.force
-    campaigns, min_year = _campaign_opts(args)
+    campaigns, min_year, max_year = _campaign_opts(args)
+    campaigns = campaigns or "newest"
 
     if not args.quiet:
         _print_sheet_list(
@@ -1731,6 +1820,7 @@ def _download_pl_sheet_list(
                 sidecar_extra={"parent_request": parent_request},
                 campaigns=campaigns,
                 min_year=min_year,
+                max_year=max_year,
             )
             all_paths, result = _download_godlo_list(
                 manager, godlo_list, skip_existing, on_progress
@@ -1813,8 +1903,8 @@ def _print_laz_superseded(superseded) -> None:
         return
     print(
         f"Info: pominieto {len(superseded)} kafli LAZ — obszar pokrywaja "
-        "nowsze kafle (domyslnie najnowszy rocznik per obszar; starszy "
-        "rocznik: --year)",
+        "nowsze kafle (domyslnie najnowszy rocznik per obszar; inny "
+        "rocznik: --year/--min-year/--max-year)",
         file=sys.stderr,
     )
     for entry in superseded:
@@ -1846,10 +1936,8 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     if getattr(args, "country", "auto") == "cz":
         print(_CZ_ONLY_NMT_MSG.format(product="laz"), file=sys.stderr)
         return 1
-    campaigns, min_year = _campaign_opts(args)
-    if min_year is not None and getattr(args, "year", None) is not None:
-        print("Error: --min-year i --year wykluczaja sie (LAZ)", file=sys.stderr)
-        return 1
+    campaigns, min_year, max_year = _campaign_opts(args)
+    campaigns = campaigns or "newest"
     if _resolve_pl_sentinels(args):
         return 1
 
@@ -1877,7 +1965,6 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         return 1
 
     vertical_crs = args.vertical_crs
-    year = getattr(args, "year", None)
     min_density = getattr(args, "min_density", None)
     workers = getattr(args, "workers", 4) or 1
     output_dir = Path(args.output)
@@ -1890,10 +1977,10 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     try:
         selection = provider.select_tiles(
             bbox,
-            year=year,
             min_density=min_density,
             campaigns=campaigns,
             min_year=min_year,
+            max_year=max_year,
         )
     except (ValueError, ValidationError, DownloadError) as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -1920,10 +2007,10 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         provider=provider,
         bbox=bbox,
         output_dir=output_dir,
-        year=year,
         min_density=min_density,
         campaigns=campaigns,
         min_year=min_year,
+        max_year=max_year,
         max_workers=workers,
         force=args.force,
         on_progress=_progress,
