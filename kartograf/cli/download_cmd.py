@@ -1124,7 +1124,11 @@ def cmd_download(args: argparse.Namespace) -> int:
                     # one-element result from the sheet facts, read like a list
                     facts = _sheet_result(sheet)
                     _warn_sheet_sidecars(
-                        [result], facts, full_sheet=full_sheet, campaigns=campaigns
+                        [result],
+                        facts,
+                        full_sheet=full_sheet,
+                        campaigns=campaigns,
+                        ranged=min_year is not None or max_year is not None,
                     )
                     _print_better_coverage(facts, [result])
                     _print_link_outside_range(
@@ -1151,6 +1155,7 @@ def cmd_download(args: argparse.Namespace) -> int:
         quiet=args.quiet,
         campaigns=campaigns,
         full_sheet=full_sheet,
+        ranged=min_year is not None or max_year is not None,
     )
 
 
@@ -1258,6 +1263,7 @@ def _finish_pl_sheets(
     quiet: bool,
     campaigns: str = "newest",
     full_sheet: bool = False,
+    ranged: bool = False,
 ) -> int:
     """
     Shared summary and exit code of the multi-sheet PL mode (D2/D10).
@@ -1289,7 +1295,9 @@ def _finish_pl_sheets(
 
     ``Warning:``/``Error:`` go to stderr, so ``-q`` does NOT suppress them.
     """
-    _warn_sheet_sidecars(paths, result, full_sheet=full_sheet, campaigns=campaigns)
+    _warn_sheet_sidecars(
+        paths, result, full_sheet=full_sheet, campaigns=campaigns, ranged=ranged
+    )
     _print_better_coverage(result, paths)
     _print_link_outside_range(result.link_outside_range, result.full_link_outside_range)
     if result.copied:
@@ -1560,11 +1568,13 @@ def _warn_crs_mismatch_sheets(paths) -> None:
 
 
 def _warn_sheet_sidecars(
-    paths, result: DownloadResult, *, full_sheet: bool, campaigns: str
+    paths, result: DownloadResult, *, full_sheet: bool, campaigns: str, ranged: bool
 ) -> None:
     """CLI warnings from the result sheets' sidecars: incomplete sheet (E13)
     and file CRS different from the sheet code's (E17)."""
-    _warn_partial_sheets(paths, result, full_sheet=full_sheet, campaigns=campaigns)
+    _warn_partial_sheets(
+        paths, result, full_sheet=full_sheet, campaigns=campaigns, ranged=ranged
+    )
     _warn_crs_mismatch_sheets(paths)
 
 
@@ -1573,7 +1583,7 @@ def _godla_text(godla: list[str]) -> str:
 
 
 def _warn_partial_sheets(
-    paths, result: DownloadResult, *, full_sheet: bool, campaigns: str
+    paths, result: DownloadResult, *, full_sheet: bool, campaigns: str, ranged: bool
 ) -> None:
     """E13: ``Warning:`` about sheets from an incomplete newest GUGiK campaign.
 
@@ -1583,8 +1593,9 @@ def _warn_partial_sheets(
     ``Warning:`` splits the sheets (ADR-033): with a ``full_sheet/`` link
     (``result.full_links``), without a full flight in the index
     (``result.without_full``; with ``campaigns="all"`` every flight of the
-    range is local, so no link means none), and the rest — not downloaded,
-    with the ``--full-sheet`` hint unless the flag was given.
+    range is local, so no link means none; ``ranged`` limits that claim to
+    the year bounds), and the rest — not downloaded, with the
+    ``--full-sheet`` hint unless the flag was given.
     """
     partial = sorted(Path(p).stem for p in paths if _is_partial_sheet(Path(p)))
     if not partial:
@@ -1597,7 +1608,8 @@ def _warn_partial_sheets(
     if linked:
         groups.append(f"pelny lot w <segment>/full_sheet/: {_godla_text(linked)}")
     if absent:
-        groups.append(f"brak pelnego lotu w skorowidzu: {_godla_text(absent)}")
+        scope = " w zakresie lat zadania" if ranged else ""
+        groups.append(f"brak pelnego lotu w skorowidzu{scope}: {_godla_text(absent)}")
     if missing:
         hint = "" if full_sheet else " — uzyj --full-sheet"
         groups.append(f"pelny lot nie pobrany: {_godla_text(missing)}{hint}")
@@ -1929,6 +1941,7 @@ def _download_pl_sheet_list(
         quiet=args.quiet,
         campaigns=campaigns,
         full_sheet=full_sheet,
+        ranged=min_year is not None or max_year is not None,
     )
 
 

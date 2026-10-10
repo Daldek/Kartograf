@@ -634,8 +634,8 @@ kartograf download N-34-139-C-a-3-1 --full-sheet --max-year 2024   # pełny z za
   nic nie dodaje. Sidecar takiej kampanii ma `request.full_sheet: true`.
 - **Brak pełnego lotu:** w `full_sheet/` nie ma pliku. `Warning:` o niepełnej
   najnowszej kampanii dzieli arkusze na: `pelny lot w <segment>/full_sheet/`,
-  `brak pelnego lotu w skorowidzu` i `pelny lot nie pobrany ... — uzyj
-  --full-sheet`.
+  `brak pelnego lotu w skorowidzu` (przy flagach roku: `... w zakresie lat
+  zadania`) i `pelny lot nie pobrany ... — uzyj --full-sheet`.
 - **Pełny = w granicach Polski.** Arkusz graniczny oznaczony jako pełny ma
   nodata po stronie zagranicznej ramki — to normalne. `full_sheet/` ufa
   deklaracji skorowidza, nie mierzy pokrycia.

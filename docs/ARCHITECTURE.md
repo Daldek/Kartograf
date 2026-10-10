@@ -748,7 +748,8 @@ na stderr w torze godla, listy i hierarchii — takze dla arkuszy pominietych
 jako istniejace (kod bez zmian). Warning dzieli arkusze (ADR-033): "pelny
 lot w <segment>/full_sheet/" (`DownloadResult.full_links`), "brak pelnego
 lotu w skorowidzu" (`DownloadResult.without_full`; przy `all` kazdy arkusz
-bez dowiazania pelnego) i "pelny lot nie pobrany — uzyj --full-sheet".
+bez dowiazania pelnego; z granica roku z dopiskiem "w zakresie lat
+zadania") i "pelny lot nie pobrany — uzyj --full-sheet".
 Znaczenie flagi: TAK = pelne pokrycie w granicach Polski (pomiar
 `docs/research/2026-10-10-full-sheet-link/granica-pelne-pokrycie.md`:
 nodata za granica w arkuszach granicznych jest normalne), NIE nie mowi
