@@ -1,12 +1,15 @@
 """
-Linking the standard path to the newest local campaign (ADR-030 d).
+Linking a path to the newest local campaign (ADR-030 d, ADR-033).
 
-The real NMT/NMPT/orto files live in ``<segment>/kampanie/<date>_<id>/...``;
-the standard path ``<segment>/<hierarchy>/<godlo>.<ext>`` points to the
-newest LOCAL campaign. Method (errata 4 ADR-030): 1) hardlink, 2) copy
+The real NMT/NMPT/orto files live in ``<segment>/kampanie/<date>_<id>/...``.
+Two link paths point into them: the standard path
+``<segment>/<hierarchy>/<godlo>.<ext>`` (newest LOCAL campaign) and the
+second link ``<segment>/full_sheet/<hierarchy>/<godlo>.<ext>`` (newest LOCAL
+campaign declared full in the index). The mechanics below do not depend on
+which link path is used. Method (errata 4 ADR-030): 1) hardlink, 2) copy
 (``logger.warning``); we do not create symlinks (unreadable for Windows
 clients over SMB, target length limit on the share). The swap is always
-atomic (temporary file in the link directory + ``os.replace``). The standard
+atomic (temporary file in the link directory + ``os.replace``). The link
 path sidecar is a REGULAR file (a copy of the target sidecar +
 ``extra.link``/``extra.link_target``) and the ONLY source of the link target
 (a hardlink carries no pointer). An existing symlink (data from before the
@@ -40,10 +43,10 @@ _CAMPAIGN_DIR = re.compile(r"(\d{4}-\d{2}-\d{2})_(\d+|u[0-9a-f]{8})")
 
 @dataclass(frozen=True)
 class LinkOutcome:
-    """Result of ``ensure_standard_link``."""
+    """Result of ``ensure_link``."""
 
     method: LinkMethod
-    target: Path  # campaign file the standard path points to
+    target: Path  # campaign file the link path points to
     changed: bool  # link created/moved in this call
 
 
@@ -166,9 +169,9 @@ def campaign_key_of(data_path: Path) -> tuple[str, str, str] | None:
 
 
 def linked_campaign(link: Path) -> Path | None:
-    """Campaign file the standard path points to.
+    """Campaign file the link path points to.
 
-    The target comes ONLY from the standard sidecar (``extra.link`` in
+    The target comes ONLY from the link sidecar (``extra.link`` in
     {hardlink, copy} + ``extra.link_target``), verified against the file.
     ``None`` = no file, a file without ``extra.link`` or with another
     ``extra.link`` (old file — errata (e); symlink from before errata 4), a
@@ -210,15 +213,15 @@ def _link_target_text(link: Path, target: Path) -> str:
         return PurePath(_norm(target)).as_posix()
 
 
-def write_standard_sidecar(link: Path, target: Path, method: LinkMethod) -> None:
+def write_link_sidecar(link: Path, target: Path, method: LinkMethod) -> None:
     """``<link>.meta.json`` = target sidecar + ``extra.link`` + ``extra.link_target``.
 
     A REGULAR file: tmp + ``os.replace`` (also replaces a sidecar symlink
     left by the user — never a write "through" it into the campaign
     sidecar). ``extra.link_target`` = path relative to the campaign file
     (absolute when a relative one is impossible) — the only source of the
-    target. Unreadable target sidecar -> the old standard sidecar is removed
-    + ``logger.warning``. Never raises (the standard sidecar is best-effort).
+    target. Unreadable target sidecar -> the old link sidecar is removed
+    + ``logger.warning``. Never raises (the link sidecar is best-effort).
     """
     sidecar = _sidecar_of(link)
     tmp = _tmp_name(sidecar, "tmp")
@@ -240,7 +243,7 @@ def write_standard_sidecar(link: Path, target: Path, method: LinkMethod) -> None
             json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
         )
         os.replace(tmp, sidecar)
-    except Exception as e:  # noqa: BLE001 — standard sidecar is best-effort
+    except Exception as e:  # noqa: BLE001 — link sidecar is best-effort
         with contextlib.suppress(OSError):
             tmp.unlink(missing_ok=True)
         logger.warning(f"Nie udalo sie zapisac sidecara {sidecar}: {e}")
@@ -288,17 +291,17 @@ def _current_method(link: Path) -> LinkMethod:
     return "copy" if method == "copy" else "hardlink"
 
 
-def ensure_standard_link(
+def ensure_link(
     link: Path, target: Path, key: tuple[str, str, str], *, refresh: bool = False
 ) -> LinkOutcome:
-    """Standard link to the newest LOCAL campaign.
+    """Link ``link`` (standard or ``full_sheet/`` path) to the newest LOCAL campaign.
 
     The current target ``cur = linked_campaign(link)`` stays
     (``changed=False``) when it exists, this is not a refresh of the same
     target (``refresh`` and ``cur == target``), and either ``cur == target``
     OR the key of the current target (``campaign_key_of`` — sidecar, and
     when unreadable the directory name) is ``>= key``. Otherwise
-    ``link_atomic`` + ``write_standard_sidecar`` + removal of
+    ``link_atomic`` + ``write_link_sidecar`` + removal of
     ``<link>.aux.xml`` (stale GDAL PAM statistics). A missing
     ``<link>.meta.json`` = unknown path (the sidecar is the only source of
     the target), so the link is created anew. The ``cur == target``
@@ -323,6 +326,6 @@ def ensure_standard_link(
             if same or (cur_key is not None and cur_key >= key):
                 return LinkOutcome(_current_method(link), cur, False)
     method = link_atomic(target, link)
-    write_standard_sidecar(link, target, method)
+    write_link_sidecar(link, target, method)
     (link.parent / f"{link.name}.aux.xml").unlink(missing_ok=True)
     return LinkOutcome(method, target, True)

@@ -35,10 +35,10 @@ from kartograf.download.campaigns import (
 )
 from kartograf.download.links import (
     LinkOutcome,
-    ensure_standard_link,
+    ensure_link,
     linked_campaign,
     update_sidecar_extra,
-    write_standard_sidecar,
+    write_link_sidecar,
 )
 from kartograf.download.storage import FileStorage, storage_for_provider
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
@@ -884,7 +884,7 @@ class DownloadManager:
         failure of any of these steps removes the data file (never a file
         without a sidecar or with foreign content). After the campaigns are
         collected the standard path points to the newest LOCAL campaign
-        (``max`` by ``sort_key``; ``ensure_standard_link`` never moves the
+        (``max`` by ``sort_key``; ``ensure_link`` never moves the
         link back).
         An existing campaign file WITHOUT a sidecar (R22: interrupted before
         writing it) goes through ``verify_file_format`` and
@@ -900,7 +900,7 @@ class DownloadManager:
         are collected, and ``expand_sheets`` deduplicates godla — one sheet =
         one thread. Safety within a single manager call therefore follows
         from the structure, not from a lock (there are no locks); a race
-        between processes is described by ``ensure_standard_link``.
+        between processes is described by ``ensure_link``.
 
         Index outage (I-1): ``newest`` without year bounds with
         ``skip_existing``, when ``resolve_campaigns`` ends with a TRANSPORT
@@ -918,7 +918,7 @@ class DownloadManager:
         DownloadError
             Failure of at least one campaign (an invalid record
             ``aktualnosc`` too) or of the link (``OSError`` from
-            ``ensure_standard_link``) — all in one message; successful
+            ``ensure_link``) — all in one message; successful
             campaigns stay on disk, and the link points to the newest of
             them.
         """
@@ -1013,7 +1013,7 @@ class DownloadManager:
         if local:
             ref, path = max(local, key=lambda rp: rp[0].sort_key)
             try:
-                outcome = ensure_standard_link(
+                outcome = ensure_link(
                     std, path, ref.sort_key, refresh=path in downloaded
                 )
             except OSError as e:  # R5: sheet failure, not an abort of the list
@@ -1133,7 +1133,7 @@ class DownloadManager:
         std_sidecar = std.with_name(std.name + ".meta.json")
         # sidecar replaced by the user with a symlink: never write through it
         if std_sidecar.is_symlink():
-            write_standard_sidecar(std, outcome.target, outcome.method)
+            write_link_sidecar(std, outcome.target, outcome.method)
         self._note_reuse(std)
 
     def _local_newest(
@@ -1144,14 +1144,14 @@ class DownloadManager:
         ``None`` = no local campaign (no file, nonexistent
         ``extra.link_target``, an old regular file, no standard sidecar) —
         the caller reports the original error. The link is NOT moved:
-        ``ensure_standard_link`` with the current target and the lowest key
+        ``ensure_link`` with the current target and the lowest key
         returns it unchanged.
         """
         target = linked_campaign(std)
         if target is None:
             return None
         try:
-            outcome = ensure_standard_link(std, target, ("", "", ""))
+            outcome = ensure_link(std, target, ("", "", ""))
         except OSError:
             return None
         logger.warning(

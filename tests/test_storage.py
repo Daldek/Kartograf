@@ -998,6 +998,60 @@ class TestCampaignPaths:
         assert not link.exists() and not sidecar.exists()
         assert camp.read_text() == "x" and camp.stat().st_nlink == 1
 
+    def test_full_sheet_path_mirrors_standard_hierarchy(self, tmp_path):
+        st = FileStorage(tmp_path, resolution="1m")
+        g = "N-34-139-C-a-3-1"
+        assert st.get_full_sheet_path(g, ".asc") == (
+            tmp_path
+            / "nmt/pl_1992_1m_evrf2007/full_sheet"
+            / "N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc"
+        )
+        std = st.get_path(g, ".asc").relative_to(tmp_path / "nmt/pl_1992_1m_evrf2007")
+        full = st.get_full_sheet_path(g, ".asc").relative_to(
+            tmp_path / "nmt/pl_1992_1m_evrf2007/full_sheet"
+        )
+        assert full == std
+        p = st.get_full_sheet_path("6.129.30.13.4", ".asc")
+        assert p.relative_to(tmp_path).parts[:3] == (
+            "nmt",
+            "pl_2000_1m_evrf2007",
+            "full_sheet",
+        )
+
+    def test_list_files_excludes_full_sheet_tree(self, tmp_path):
+        st = FileStorage(tmp_path)
+        g = "N-34-139-C-a-3-1"
+        camp = st.get_campaign_path(g, REF, ".asc")
+        std = st.get_path(g, ".asc")
+        full = st.get_full_sheet_path(g, ".asc")
+        for p in (camp, std, full):
+            p.parent.mkdir(parents=True)
+            p.write_text("x")
+        assert st.list_files() == [std]
+        assert st.list_files(campaigns=True) == [camp]
+
+    def test_delete_removes_standard_and_full_sheet_links(self, tmp_path):
+        st = FileStorage(tmp_path)
+        g = "N-34-139-C-a-3-1"
+        camp = st.get_campaign_path(g, REF, ".asc")
+        camp.parent.mkdir(parents=True)
+        camp.write_text("x")
+        links = [st.get_path(g, ".asc"), st.get_full_sheet_path(g, ".asc")]
+        for link in links:
+            link.parent.mkdir(parents=True)
+            os.link(camp, link)
+            link.with_name(link.name + ".meta.json").write_text("{}")
+        assert st.delete(g, ".asc") is True
+        for link in links:
+            assert not link.exists()
+            assert not link.with_name(link.name + ".meta.json").exists()
+        assert camp.read_text() == "x" and camp.stat().st_nlink == 1
+        # only the full_sheet/ link left: still a deletion
+        os.link(camp, links[1])
+        assert st.delete(g, ".asc") is True
+        assert not links[1].exists()
+        assert st.delete(g, ".asc") is False
+
 
 def test_leading_zero_godlo_same_path_and_sidecar(tmp_path):
     """A7: '036' and '36' -> one path, one canonical code everywhere."""

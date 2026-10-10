@@ -51,7 +51,7 @@ sidecara — w szczegolnosci sidecar DMR CZ pisze
 Nowy sidecar powstaje zawsze przez
 `sources/sidecar.py::emit_sidecar` — jedyne miejsce polityki zapisu
 (poza nim: kopia sidecara celu w sciezce standardowej,
-`download/links.py::write_standard_sidecar`, i dopisanie
+`download/links.py::write_link_sidecar`, i dopisanie
 `extra.parent_requests` w `DownloadManager`). Zapis
 jest domyslnie best-effort: kazdy blad (IO, brakujacy klucz deskryptora,
 wyjatek w budowie metadanych) konczy sie `logger.warning` i zwrotem `None`,
