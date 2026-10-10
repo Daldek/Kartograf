@@ -35,7 +35,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `download_laz_area(max_year=)` wybieraja kafle z domknietego przedzialu.
   Sidecar LAZ zapisuje `request.max_year` (i `request.year`, gdy granice sa
   rowne), a dla znanych wartosci `extra.acquisition_date` i `extra.full_sheet`.
-
+- CLI `download`: `--max-year RRRR` i `--year RRRR` dzialaja dla NMT,
+  NMPT, orto oraz LAZ. `--year` jest skrotem obu granic na ten sam rok;
+  brak rocznika dla ktoregos arkusza/kafla zatrzymuje zadanie przed
+  pobraniem, podaje dostepne lata i podpowiedz. Samo `--min-year` nadal
+  pobiera jedna najnowsza kampanie. Gdy starszy lot ma wieksze zmierzone
+  pokrycie niz najnowszy, CLI podaje `Info:` takze z `-q` (dowiazanie
+  pozostaje na najnowszym locie).
 
 ### Zmienione
 
@@ -45,7 +51,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   NMT 5 m w czesci kraju podaje jako przyklady (sprawdzone na zywo: np.
   `N-34-130-D-d --resolution 5m` — 6 z 16 arkuszy bez 5 m, NMT 1 m jest).
   Skrypty dopasowujace stary tekst trzeba poprawic.
-
+- `--year` z `--product nmt|nmpt|orto` nie jest juz ignorowany: pobiera
+  wskazany rocznik albo zwraca `Error:` z lista lat. Co zrobic: usun
+  `--year` podawany tylko "na wszelki wypadek" albo wybierz odpowiedni
+  przedzial `--min-year`/`--max-year`.
+- `--year`/`--max-year` dla arkuszy PL wybieraja wszystkie kampanie
+  z przedzialu; jawne `--campaigns newest` z gorna granica zwraca
+  `Error:`. Co zrobic: pomin `--campaigns newest`, a sciezke standardowa
+  wykorzystaj jako dowiazanie do najnowszego lotu z przedzialu.
+- `--year`/`--max-year` z `--target-crs` zwracaja `Error:` (jak wczesniej
+  `--min-year`). Co zrobic: nie podawaj flag roku dla wycinka, ktory
+  sklada najnowsze kampanie.
 - `--campaigns all --min-year` zawsze odpytuje wszystkie warstwy skorowidza,
   zeby moc podac pelna liste rocznikow. Wpisy `campaigns_cache` ze skanu
   czesciowego sa odpytywane ponownie. Co zrobic: nic (koszt 1-3 zapytan
