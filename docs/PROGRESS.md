@@ -121,28 +121,19 @@
 > `docs/superpowers/specs/2026-10-09-year-range-selection-design.md`
 > (sekcja 0 = model A, nadrzedna), ADR-032, raport
 > `docs/research/2026-10-10-year-range/raport.md`.
-> **(c) drugie dowiazanie do najnowszego PELNEGO lotu — SPEC I PLAN
-> GOTOWE, IMPLEMENTACJA W NASTEPNEJ SESJI** (polecenie uzytkownika
-> 2026-10-10). Galaz `feat/full-sheet-link` z `develop` (`fc4c176`),
-> 4 commity tylko z dokumentacja (`c68ab52`, `6521532`, `240a4ae` + ten
-> wpis), NIE wypchnieta na `origin`. Spec ZAAKCEPTOWANY:
-> `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md` (sekcja 0
-> = decyzje F-U1..F-U5: drzewo `<segment>/full_sheet/<hierarchia>/`,
-> flaga `--full-sheet` / `DownloadManager(full_sheet=True)` dociaga
-> najnowszy pelny lot tylko z flaga, bez flagi `full_sheet/` z lotow
-> zadania; arkusz bez pelnego lotu = brak pliku + jeden `Warning:`
-> zamiast E13; nigdy wstecz + `Info:` jak U15; wycinki bez zmian; nazwa
-> `full_sheet`, bo w kodzie `coverage` = pokrycie zmierzone/brak danych).
-> Znaczenie flagi GUGiK zmierzone: TAK = pelne w granicach Polski
-> (`docs/research/2026-10-10-full-sheet-link/granica-pelne-pokrycie.md`).
-> **NASTEPNA SESJA — START OD RAZU:** `git switch feat/full-sheet-link`,
-> wykonanie planu `docs/superpowers/plans/2026-10-10-full-sheet-link.md`
-> od Task 1 (Task 1-5 kod+dokumentacja, kazde zadanie = brama + commit;
-> Task 6 = test na zywo, review, merge po decyzji uzytkownika). Numery
-> linii w planie wg `fc4c176` — szukaj po symbolu. Dalej w 0.7.2: (d)
-> ciche wartosci domyslne, (a) wycinki PL z WCS (nowy ADR), (e) testy LAZ
-> z nagraniami innego okna; zakres wydania 0.7.2 (czy wszystkie pozycje)
-> — do decyzji uzytkownika.
+> **(c) drugie dowiazanie do najnowszego PELNEGO lotu — ZAIMPLEMENTOWANE
+> na galezi `feat/full-sheet-link`, NIE scalone** (decyzja uzytkownika
+> 2026-10-10: galaz zostaje, merge w kolejnej sesji po jego decyzji;
+> galaz NIE wypchnieta na `origin`). Plan
+> `docs/superpowers/plans/2026-10-10-full-sheet-link.md` wykonany
+> (Task 1-5 + review + test na zywo), ADR-033, raport
+> `docs/research/2026-10-10-full-sheet-link/raport.md`. Spec:
+> `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`.
+> **NASTEPNA SESJA:** decyzja uzytkownika o merge `--no-ff`
+> `feat/full-sheet-link` -> `develop` (przed merge brama na galezi), potem
+> backlog (c) [x]. Dalej w 0.7.2: (d) ciche wartosci domyslne, (a) wycinki
+> PL z WCS (nowy ADR), (e) testy LAZ z nagraniami innego okna; zakres
+> wydania 0.7.2 (czy wszystkie pozycje) — do decyzji uzytkownika.
 > **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
 > na zywo z raportem, `__version__ = "0.7.2"` + asercje testow, data i link
 > `compare/v0.7.1...v0.7.2` w CHANGELOG, status w SCOPE i `docs/PRD.md`
@@ -169,6 +160,43 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Drugie dowiazanie do pelnego lotu — implementacja (2026-10-10)
+
+- Galaz `feat/full-sheet-link`, commity: `9fef2bb` (Task 1: `FULL_SHEET_DIR`,
+  `FileStorage.get_full_sheet_path`, `list_files`/`delete`, nazwy
+  `ensure_link`/`write_link_sidecar`), `807bf08` (Task 2: drugie dowiazanie
+  w `_fetch_campaigns`, `SheetFetch.full_link`/`full_link_outside_range`,
+  `DownloadResult.full_links`/`full_link_outside_range`), `bd4c99f` (Task 3:
+  `DownloadManager(full_sheet=True)`, `request.full_sheet`,
+  `DownloadResult.without_full`), `6fd7196` (Task 4: CLI `--full-sheet`,
+  straze LAZ/`--target-crs`/CZ, jeden `Warning:` E13 z grupami, wspolny
+  `Info:` dowiazan spoza zadania), `23c071c` (Task 5: ADR-033, errata 8
+  ADR-030, errata 1 ADR-032, ARCHITECTURE 3.3 regula 7 i 4.1, USAGE 4.2,
+  SCOPE 3.18, CLAUDE.md), `811c637` (poprawki review: dopisek "w zakresie
+  lat zadania" przy grupie "brak pelnego lotu", test grup `Warning:`
+  w hierarchii, raport na zywo).
+- Odstepstwa od planu: (1) F1 — najnowszy lot N-34-139-C-a-3-4 to 83998
+  (2026-04-05, TAK), nie 84183; testy i raport uzywaja 83998. (2)
+  `test_force_refreshes_full_link` podmienia `download_record` na zapis
+  tmp + `os.replace` (jak prawdziwy provider) — zapis w miejscu zachowuje
+  inode i test nie rozroznial odswiezenia. (3) Pojedyncze godlo z
+  `--full-sheet` i > 1 plikiem kampanii drukuje podsumowanie plikow kampanii
+  (jak `all`); lista z flaga tez. (4) `Info:` U15 ma nowy naglowek wspolny
+  dla obu drzew (`Info: N dowiazan wskazuje lokalny lot spoza tego
+  zadania ...`, linia `<godlo>: sciezka standardowa|full_sheet/ ->
+  dowiazanie <data>_<id>`); test U15 asercje na fakty.
+- Review galezi (agent reviewer, Review Focus 1-5): bez blokerow i majorow;
+  3 drobne — dopisek zakresu lat i test grup naprawione w `811c637`,
+  PROGRESS w tej sesji.
+- Na zywo (katalog danych od uzytkownika, poza repo): -4 standard
+  i `full_sheet/` = ten sam inode; -1 bez flagi 1 plik + podpowiedz; z
+  flaga `full_sheet/` -> 83233, `request.full_sheet: true`; powtorka =
+  Skipped + ten sam `Warning:`; orto M-34-90-C-b-4-4 84466 + 81437,
+  `full_sheet/` -> 81437; LAZ i `--target-crs` z flaga = `Error:` kod 1.
+  Raport `docs/research/2026-10-10-full-sheet-link/raport.md`.
+- Brama na galezi: pytest offline zielone (3185), ruff check/format czyste,
+  mypy bez bledow.
 
 ### Drugie dowiazanie do pelnego lotu — spec (2026-10-10)
 
@@ -1684,10 +1712,11 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
   zadania. ADR-032, plan
   `docs/superpowers/plans/2026-10-10-year-range-selection.md`, raport
   `docs/research/2026-10-10-year-range/raport.md`.
-- [ ] **(c) Drugie dowiazanie do najnowszego PELNEGO lotu** — spec
-  `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`
-  (decyzje F-U1..F-U5 z 2026-10-10: `<segment>/full_sheet/<hierarchia>/`,
-  `--full-sheet` dociaga najnowszy pelny lot); spec zaakceptowany, plan
+- [ ] **(c) Drugie dowiazanie do najnowszego PELNEGO lotu** —
+  ZAIMPLEMENTOWANE na galezi `feat/full-sheet-link` (2026-10-10, ADR-033,
+  raport `docs/research/2026-10-10-full-sheet-link/raport.md`); merge do
+  `develop` czeka na decyzje uzytkownika. Spec
+  `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`, plan
   `docs/superpowers/plans/2026-10-10-full-sheet-link.md`.
 - [ ] **(d) Z inwentaryzacji wartosci domyslnych:**
   - `--country auto` PL+CZ bez `--vertical-crs`: mieszane uklady wysokosci,
