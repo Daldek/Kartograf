@@ -45,8 +45,8 @@ Glowne zrodlo konwencji i procesu: `docs/DEVELOPMENT_STANDARDS.md`.
 | Wymagania produktowe (warstwy BDOT10k, parametry SoilGrids, lata CORINE) | `docs/PRD.md` |
 | Moduly i zaleznosci miedzy warstwami | `docs/ARCHITECTURE.md` 2 |
 | Deskryptory zrodel, sidecar `kartograf-meta/1`, `extra.parent_request` | ARCHITECTURE 3.1, 3.2, 3.4 |
-| Uklad `data/`, kampanie `kampanie/` i dowiazania | ARCHITECTURE 3.3 |
-| Godlo PL, skorowidz GUGiK, `MetadataCache`/`--force`, kampanie (`--campaigns`, `--min-year`, I-1) | ARCHITECTURE 4.1 |
+| Uklad `data/`, kampanie `kampanie/`, dowiazania i `full_sheet/` | ARCHITECTURE 3.3 |
+| Godlo PL, skorowidz GUGiK, `MetadataCache`/`--force`, kampanie (`--campaigns`, `--min-year`, `--full-sheet`, I-1) | ARCHITECTURE 4.1 |
 | Lista arkuszy PL (R5, kody wyjscia), WCS `download_bbox` | ARCHITECTURE 4.2 |
 | Wycinek PL `--target-crs` (ADR-027) | ARCHITECTURE 4.3 |
 | CZ (CUZK), `--country auto` | ARCHITECTURE 4.4-4.6 |

@@ -1,7 +1,7 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.17
+**Wersja:** 3.18
 **Data:** 2026-10-10
 **Status:** Wydanie v0.7.1 (2026-10-09)
 
@@ -331,6 +331,9 @@ from kartograf import (
 - Kampanie GUGiK (ADR-030): prawdziwe pliki NMT/NMPT/orto PL w
   `<segment>/kampanie/<data>_<id>/...`, ścieżka standardowa = dowiązanie do
   najnowszej lokalnej kampanii (hardlink → kopia, bez symlinków — errata 4); brak migracji
+- Drugie dowiązanie `<segment>/full_sheet/<hierarchia>/<godło>.<ext>` do
+  najnowszego lokalnego lotu pełnego (ADR-033); `list_files()` je pomija,
+  `delete()` usuwa oba dowiązania
 - `landcover/` bez zmian (własny default `--output`)
 - Każde udane pobranie (CLI, DownloadManager, LandCoverManager,
   download_pl_cutout, download_laz_area) i wynik HSG ma sidecar
@@ -352,20 +355,29 @@ from kartograf import (
   pobrane; arkusz bez danych = Warning: (pominięty); awaria skorowidza = Error:
 - Kilka lotów w przedziale (all): pomiar pokrycia gdy najnowszy niepełny;
   Info: + extra.better_coverage, dowiązanie bez zmian (najnowszy)
+- Drugie dowiązanie full_sheet/ (ADR-033): najnowszy lokalny lot z
+  calyArkuszWypelnionyTrescia = TAK (pełny = w granicach Polski), obok
+  ścieżki standardowej; --full-sheet dociąga najwyżej jeden lot na arkusz,
+  gdy najnowszy w zakresie nie jest pełny (z all bez skutku); Warning: E13
+  wskazuje full_sheet/ albo podpowiada --full-sheet
 - LAZ: --campaigns all (kafle z ramą przecinającą obszar, bez deduplikacji ADR-029);
   przedział lat z kontrolą pokrycia kafli referencji (ADR-032 P8); --year
   wyklucza się z --min-year/--max-year (Error:)
-- Wycinek --target-crs: zawsze newest (all/--year/--min-year/--max-year = Error:)
-- CZ nie ma kampanii ani wyboru roku: zadanie bez części PL z --campaigns all
-  albo flagą roku = Error: przed siecią; obszar PL+CZ pod auto = Info:, CZ w bieżącej wersji
+- Wycinek --target-crs: zawsze newest (all/--year/--min-year/--max-year/
+  --full-sheet = Error:); LAZ z --full-sheet = Error:
+- CZ nie ma kampanii ani wyboru roku: zadanie bez części PL z --campaigns all,
+  flagą roku albo --full-sheet = Error: przed siecią; obszar PL+CZ pod auto =
+  Info:, CZ w bieżącej wersji
 - Weryfikacja treści pliku kampanii (nagłówek AAIGrid / sygnatura TIFF),
   format z pola `format` rekordu; sidecar kampanii obowiązkowy
 - Skorowidz GUGiK niedostępny (błąd transportu) przy newest bez flag roku
   i --force, z lokalną kampanią: arkusz z lokalnej kampanii + Warning:,
   kod bez zmian (errata 5 ADR-030); all/flaga roku/brak lokalnej = błąd
-- API: DownloadManager(campaigns=, min_year=, max_year=), .check_year_range(),
-  YearRangeError, available_years (providery GUGiK), SheetFetch (.unverified, .better_coverage),
-  DownloadResult (.unverified, .reused_campaign_files, .better_coverage),
+- API: DownloadManager(campaigns=, min_year=, max_year=, full_sheet=),
+  .check_year_range(), YearRangeError, available_years (providery GUGiK),
+  SheetFetch (.unverified, .better_coverage, .full_link),
+  DownloadResult (.unverified, .reused_campaign_files, .better_coverage,
+  .full_links, .without_full), FileStorage.get_full_sheet_path,
   CampaignRef, PlCutoutResult.unverified
 ```
 
@@ -759,9 +771,10 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-10-08 | 3.15 | Roadmapa do v1.0.0 (sekcja 3.3): komplet publicznych danych GUGiK, gotowe dane, manager danych (magazyn wersjonowany, manifest projektu), wtyczka QGIS, GUI webowe |
 | 2026-10-09 | 3.16 | Narzędzie składania kampanii (3.1) bez przypisanego wydania — nie weszło do 0.7.1 (ADR-030 errata 6) |
 | 2026-10-10 | 3.17 | Wybór roku danych (ADR-032): --year/--min-year/--max-year dla NMT/NMPT/orto/LAZ w 2.12, CZ i wycinki bez roku; model A (rok = filtr lat, --campaigns = liczba lotów) |
+| 2026-10-10 | 3.18 | Drugie dowiązanie `full_sheet/` i `--full-sheet` (ADR-033) w 2.11 i 2.12 |
 
 ---
 
-**Wersja dokumentu:** 3.16
-**Data ostatniej aktualizacji:** 2026-10-09
+**Wersja dokumentu:** 3.18
+**Data ostatniej aktualizacji:** 2026-10-10
 **Status:** Wydanie v0.7.1 (2026-10-09)
