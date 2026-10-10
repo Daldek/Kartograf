@@ -19,7 +19,6 @@ from kartograf.cache.metadata import MetadataCache
 from kartograf.exceptions import (
     DownloadError,
     NoCoverageError,
-    ValidationError,
     YearRangeError,
 )
 from kartograf.providers.pl.gugik import GugikProvider
@@ -179,31 +178,24 @@ def test_all_lists_every_matching_campaign_from_all_layers():
 def test_resolve_campaigns_year_2025_c14_returns_both_flights(suffix, expected):
     godlo = f"N-34-139-C-a-3-{suffix}"
     records = GugikProvider(session=c14_session(godlo)).resolve_campaigns(
-        godlo, min_year=2025, max_year=2025
+        godlo, campaigns="all", min_year=2025, max_year=2025
     )
     assert ids(records) == expected
 
 
-def test_resolve_campaigns_explicit_newest_with_max_year_is_validation_error():
-    session = c14_session(G)
-    provider = GugikProvider(session=session)
-    with pytest.raises(ValidationError, match="newest.*max_year"):
-        provider.resolve_campaigns(G, campaigns="newest", max_year=2025)
-    assert session.get.call_count == 0
-    assert ids(provider.resolve_campaigns(G, campaigns="newest", min_year=2024)) == [
-        "84183"
+def test_resolve_campaigns_bounds_filter_years_campaigns_sets_count():
+    """Model A: bounds restrict years; ``newest`` (default) = newest within them."""
+    provider = GugikProvider(session=c14_session(G))
+    assert ids(provider.resolve_campaigns(G, min_year=2025, max_year=2025)) == ["84183"]
+    assert ids(provider.resolve_campaigns(G, max_year=2024)) == ["78047"]
+    assert ids(provider.resolve_campaigns(G, campaigns="newest", max_year=2024)) == [
+        "78047"
     ]
-    # An upper-only bound includes the older years as well as both 2025 flights.
-    assert ids(provider.resolve_campaigns(G, max_year=2025)) == [
-        "84183",
-        "83233",
+    assert ids(provider.resolve_campaigns(G, campaigns="all", max_year=2024)) == [
         "78047",
         "73021",
     ]
-    assert ids(provider.resolve_campaigns(G, min_year=2025, max_year=2025)) == [
-        "84183",
-        "83233",
-    ]
+    assert ids(provider.resolve_campaigns(G, min_year=2024)) == ["84183"]
 
 
 def test_newest_with_min_year_matches_newest_without_range():
@@ -226,7 +218,7 @@ def test_resolve_campaigns_year_2024_c14_conflict_lists_years():
 
 @pytest.mark.parametrize(
     "suffix,expected",
-    [(1, ["73021"]), (2, ["75162", "73021"])],
+    [(1, ["73021"]), (2, ["75162"])],
 )
 def test_resolve_campaigns_max_year_2022_c14(suffix, expected):
     godlo = f"N-34-139-C-a-3-{suffix}"
@@ -287,7 +279,7 @@ def test_orto_year_2025_two_rgb_flights_same_pixel_newest_first():
     godlo = "N-33-130-D-d-1-4"
     recs = GugikOrtoProvider(
         session=orto_session(godlo, base=REAL_10_10)
-    ).resolve_campaigns(godlo, min_year=2025, max_year=2025)
+    ).resolve_campaigns(godlo, campaigns="all", min_year=2025, max_year=2025)
     assert [
         (file_id(r.url), r.aktualnosc, r.resolution_m, r.full_sheet) for r in recs
     ] == [

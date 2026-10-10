@@ -26,7 +26,6 @@ from kartograf.download.campaigns import (
     in_year_range,
     measure_coverage,
     record_year,
-    resolve_campaign_strategy,
     validate_campaign_args,
     verify_file_format,
     verify_record_url,
@@ -123,6 +122,9 @@ class DownloadResult:
     better_coverage : dict[str, str]
         With a ranged ``all`` request, sheets whose older flight measured
         higher pixel coverage than the standard link: godlo -> flight ID.
+    link_outside_range : dict[str, Path]
+        With year bounds, sheets whose standard path still points to a newer
+        local flight outside this request: godlo -> that campaign file.
 
     Notes
     -----
@@ -141,6 +143,7 @@ class DownloadResult:
     unverified: dict[str, str] = field(default_factory=dict)
     no_coverage_hints: dict[str, tuple[str, ...]] = field(default_factory=dict)
     better_coverage: dict[str, str] = field(default_factory=dict)
+    link_outside_range: dict[str, Path] = field(default_factory=dict)
 
     @property
     def total(self) -> int:
@@ -208,6 +211,11 @@ class SheetFetch:
     better_coverage : str or None
         Flight ID with better measured coverage than the standard path
         (only for ranged ``all`` requests).
+    link_outside_range : Path or None
+        With year bounds: the campaign file the standard path still points to
+        when it is a newer local flight this request did not select (the link
+        never moves back, ADR-030 (d)). ``None`` = the link points at a
+        selected flight, or no bounds.
     """
 
     godlo: str
@@ -218,6 +226,7 @@ class SheetFetch:
     link: str | None = None
     unverified: str | None = None
     better_coverage: str | None = None
+    link_outside_range: Path | None = None
 
 
 class CampaignProvider(Protocol):
@@ -232,7 +241,7 @@ class CampaignProvider(Protocol):
         self,
         godlo: str,
         *,
-        campaigns: str | None = None,
+        campaigns: str = "newest",
         min_year: int | None = None,
         max_year: int | None = None,
     ) -> list[SkorowidzRecord]: ...
@@ -336,7 +345,7 @@ class DownloadManager:
         resolution: str = "1m",
         max_workers: int = 1,
         sidecar_extra: dict | None = None,
-        campaigns: str | None = None,
+        campaigns: str = "newest",
         min_year: int | None = None,
         max_year: int | None = None,
     ):
@@ -372,10 +381,11 @@ class DownloadManager:
         sidecar_extra : dict, optional
             Extra fields merged into the `extra` of every sidecar (stage 1:
             `parent_request` in bbox/geometry mode).
-        campaigns : str or None, optional
-            ADR-030 campaign strategy: ``None`` selects ``"newest"`` without
-            an upper bound, ``"all"`` with an upper bound. Explicit ``"newest"``
-            with ``max_year`` is invalid. Only PL GUGiK supports campaigns.
+        campaigns : str, optional
+            ADR-030 campaign strategy, i.e. how many flights per sheet:
+            ``"newest"`` (default) = the newest flight within the year bounds,
+            ``"all"`` = every flight within them. Year bounds only restrict the
+            admissible years (ADR-032 point 3). Only PL GUGiK supports campaigns.
         min_year, max_year : int, optional
             Inclusive bounds on the campaign acquisition year.
 
@@ -386,7 +396,6 @@ class DownloadManager:
             a year bound or ``campaigns="all"``; incompatible resolution/CRS.
         """
         validate_campaign_args(campaigns, min_year, max_year)
-        strategy = resolve_campaign_strategy(campaigns, max_year)
         # The "5m => EVRF2007" rule (D11): without a provider the factory
         # rejects 5m + KRON86 with ValidationError (0.7.1, no silent swap).
         self._provider = provider or create_nmt_provider(
@@ -432,7 +441,7 @@ class DownloadManager:
                 f"Provider {self._provider.name} nie obsluguje kampanii "
                 f"(--campaigns/--min-year/--max-year/--year)"
             )
-        self._campaigns = strategy
+        self._campaigns = campaigns
         self._min_year = min_year
         self._max_year = max_year
         self._has_range = min_year is not None or max_year is not None
@@ -1027,6 +1036,16 @@ class DownloadManager:
         better_coverage = None
         if self._has_range and self._campaigns == "all" and linked_target is not None:
             better_coverage = self._add_range_flights(std, local, linked_target)
+        # ADR-032 point 3 (U15): the link never moves back, so with year bounds
+        # it may keep pointing at a newer local flight this request did not pick.
+        link_outside_range = None
+        if (
+            self._has_range
+            and linked_target is not None
+            and os.path.abspath(linked_target)
+            not in {os.path.abspath(path) for _, path in local}
+        ):
+            link_outside_range = linked_target
         return SheetFetch(
             godlo,
             std,
@@ -1035,6 +1054,7 @@ class DownloadManager:
             reused=tuple(reused),
             link=method,
             better_coverage=better_coverage,
+            link_outside_range=link_outside_range,
         )
 
     def _add_range_flights(
@@ -1215,6 +1235,8 @@ class DownloadManager:
                 result.unverified[godlo] = fetch.unverified
             if fetch.better_coverage is not None:
                 result.better_coverage[godlo] = fetch.better_coverage
+            if fetch.link_outside_range is not None:
+                result.link_outside_range[godlo] = fetch.link_outside_range
         elif status in ("failed", "no_coverage"):
             # R5: no data at the source — a list failure, but recognizable
             result.failed.append(godlo)

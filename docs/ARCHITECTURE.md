@@ -734,17 +734,16 @@ jako istniejace (kod bez zmian). Wycinek: sekcja 4.3 (`partial_sheets`).
 **Kampanie i rok danych (ADR-030, ADR-032).** NMT/NMPT/orto przyjmuja
 `--year Y` (skrot `--min-year Y --max-year Y`), `--min-year L` i
 `--max-year U` (granice wlacznie, 1900..2100); rok to `aktualnoscRok`,
-inaczej `aktualnosc[:4]`, NIE `dt_pzgik`. Bez gornej granicy strategia
-domyslna `newest` bierze jeden najnowszy lot, takze z samym `--min-year`
-(kontrola najnowszego roku); z gorna granica domyslne `all` bierze
-WSZYSTKIE loty z przedzialu, takze kilka w roku; jawne
-`--campaigns all --min-year` tez bierze wszystkie od L. Jawne
-`--campaigns newest` z `--year`/`--max-year` = blad przed siecia.
+inaczej `aktualnosc[:4]`, NIE `dt_pzgik`. Flagi roku sa tylko filtrem
+dopuszczalnych lat; `--campaigns` decyduje o liczbie lotow (model A,
+ADR-032 pkt 3): `newest` (domyslnie, dozwolone z kazda granica) = jeden
+najnowszy lot z przedzialu, `all` = wszystkie loty z przedzialu, takze
+kilka w roku. Ta sama regula dla LAZ.
 Zadanie z jakakolwiek granica najpierw sprawdza WSZYSTKIE arkusze
 w `DownloadManager.check_year_range`: jedna pelna lista kampanii z kazdej
 warstwy GetCapabilities na arkusz, filtr lat po twardym filtrze ADR-028.
 Lista `campaigns_cache` (TTL 7 dni, bez `scanned_from`) sluzy rowniez
-`newest` z samym `--min-year`; bez granic `newest` nadal bierze
+`newest` z dowolna granica; bez granic `newest` nadal bierze
 `record_cache`. `GugikProvider.available_years(godlo)` zwraca rosnace
 lata z pelnej listy. Arkusz bez danych GUGiK = `NoCoverageError` i
 pominiecie R5, a z danymi tylko poza przedzialem = `YearRangeError`
@@ -755,7 +754,10 @@ pobraniem. Potem manager wykorzystuje JUZ sprawdzone rekordy,
 zapisuje kazdy wybrany lot w `kampanie/`, aktualizuje dowiazanie raz
 na arkusz (najnowszy lot wg ADR-028, nigdy wstecz), sidecary i pomiar
 opisany w 3.2. `DownloadResult.better_coverage` wskazuje arkusze z
-lotem o lepszym pokryciu. Dalsze szczegoly: manager pobiera kazda
+lotem o lepszym pokryciu (tylko `all`); `link_outside_range` (takze
+`SheetFetch`) — arkusze, ktorych dowiazanie zostalo przy nowszym
+lokalnym locie spoza zadania (nigdy wstecz), CLI drukuje wtedy `Info:`.
+Dalsze szczegoly: manager pobiera kazda
 brakujaca kampanie (`GugikProvider.download_record`; plik w `kampanie/`,
 `record_source` -> `extra.source`), po zebraniu kampanii przestawia
 dowiazanie RAZ na arkusz (deduplikacja godel; nigdy wstecz) i zwraca

@@ -41,12 +41,19 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Sidecar LAZ zapisuje `request.max_year` (i `request.year`, gdy granice sa
   rowne), a dla znanych wartosci `extra.acquisition_date` i `extra.full_sheet`.
 - CLI `download`: `--max-year RRRR` i `--year RRRR` dzialaja dla NMT,
-  NMPT, orto oraz LAZ. `--year` jest skrotem obu granic na ten sam rok;
-  brak rocznika dla ktoregos arkusza/kafla zatrzymuje zadanie przed
-  pobraniem, podaje dostepne lata i podpowiedz. Samo `--min-year` nadal
-  pobiera jedna najnowsza kampanie. Gdy starszy lot ma wieksze zmierzone
-  pokrycie niz najnowszy, CLI podaje `Info:` takze z `-q` (dowiazanie
-  pozostaje na najnowszym locie).
+  NMPT, orto oraz LAZ. Flagi roku wyznaczaja tylko dopuszczalne lata,
+  a `--campaigns` liczbe lotow na arkusz: domyslnie (`newest`) jeden,
+  najnowszy lot z zakresu, `--campaigns all` wszystkie loty z zakresu.
+  `--year` jest skrotem obu granic na ten sam rok; brak rocznika dla
+  ktoregos arkusza/kafla zatrzymuje zadanie przed pobraniem, podaje
+  dostepne lata i podpowiedz. Przy `--campaigns all`, gdy starszy lot ma
+  wieksze zmierzone pokrycie niz najnowszy, CLI podaje `Info:` takze z `-q`
+  (dowiazanie pozostaje na najnowszym locie).
+- CLI i biblioteka: gdy przy granicy roku sciezka standardowa nadal wskazuje
+  nowszy lot pobrany wczesniej (dowiazanie nigdy nie cofa sie), CLI podaje
+  `Info: sciezka standardowa N arkuszy wskazuje nowszy lokalny lot spoza
+  tego zadania ...`; biblioteka: `SheetFetch.link_outside_range`,
+  `DownloadResult.link_outside_range`.
 
 ### Zmienione
 
@@ -60,10 +67,6 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   wskazany rocznik albo zwraca `Error:` z lista lat. Co zrobic: usun
   `--year` podawany tylko "na wszelki wypadek" albo wybierz odpowiedni
   przedzial `--min-year`/`--max-year`.
-- `--year`/`--max-year` dla arkuszy PL wybieraja wszystkie kampanie
-  z przedzialu; jawne `--campaigns newest` z gorna granica zwraca
-  `Error:`. Co zrobic: pomin `--campaigns newest`, a sciezke standardowa
-  wykorzystaj jako dowiazanie do najnowszego lotu z przedzialu.
 - `--year`/`--max-year` z `--target-crs` zwracaja `Error:` (jak wczesniej
   `--min-year`). Co zrobic: nie podawaj flag roku dla wycinka, ktory
   sklada najnowsze kampanie.
@@ -71,11 +74,6 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   zeby moc podac pelna liste rocznikow. Wpisy `campaigns_cache` ze skanu
   czesciowego sa odpytywane ponownie. Co zrobic: nic (koszt 1-3 zapytan
   GetFeatureInfo wiecej na arkusz raz na 7 dni).
-- Biblioteka: `resolve_campaigns(campaigns="newest", max_year=...)` rzuca
-  `ValidationError`, a brak jawnej strategii (`campaigns=None`) z
-  `max_year` oznacza `all` w przedziale. Co zrobic: usun
-  `campaigns="newest"` przy gornej granicy; sciezka standardowa wskazuje
-  najnowszy lot w przedziale.
 - `DownloadManager(min_year=...)`: arkusz z danymi tylko poza przedzialem
   zatrzymuje cale zadanie (takze liste/hierarchie) przed pobraniem, zamiast
   byc pominietym. Awaria sprawdzenia skorowidza tez zatrzymuje zadanie;
@@ -85,10 +83,6 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `validate_campaign_args(campaigns, min_year, max_year)` ma nowy
   obowiazkowy argument (funkcja wewnetrzna, poza `__all__`). Co zrobic: kod
   wolajacy ja bezposrednio dodaje `max_year`.
-- `DownloadManager(campaigns=None)` domyslnie wybiera `all` z `max_year`,
-  bez gornej granicy `newest`; jawne `newest` z `max_year` jest bledem.
-  Co zrobic: przy gornej granicy usun `campaigns="newest"` i uwzglednij
-  wszystkie loty z przedzialu w `kampanie/`.
 - LAZ `--year`/`--min-year`: czesci obszaru dostepne tylko w innych
   rocznikach byly pobierane czesciowo bez komunikatu; teraz zadanie
   zatrzymuje sie przed pobraniem, podaje roczniki kafli i podpowiedz.

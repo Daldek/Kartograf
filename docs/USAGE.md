@@ -68,7 +68,8 @@ kartograf download N-34-130-D-d-2-4 --product laz --campaigns all
 kartograf download --bbox 530000,382000,533000,386000 --product laz --campaigns all
 
 # Wybór roku danych (NMT, NMPT, orto, LAZ; sekcja 4.1)
-kartograf download N-34-130-D-d-2-4 --year 2025          # wszystkie kampanie z 2025
+kartograf download N-34-130-D-d-2-4 --year 2025          # najnowszy lot z 2025
+kartograf download N-34-130-D-d-2-4 --year 2025 --campaigns all  # wszystkie loty z 2025
 kartograf download N-34-130-D-d-2-4 --product orto --year 2024
 kartograf download --bbox 530000,382000,533000,386000 --max-year 2022
 kartograf download --bbox 530000,382000,533000,386000 --min-year 2023 --max-year 2024
@@ -554,12 +555,18 @@ orto) albo `akt_rok` kafla LAZ — nie data przyjęcia do PZGiK. Granice są
 domknięte; `--year RRRR` to skrót `--min-year RRRR --max-year RRRR`
 ([ADR-032](DECISIONS.md)).
 
-- **Z górną granicą** (`--year`, `--max-year`, para) pobierane są WSZYSTKIE
-  kampanie (loty) z przedziału do `kampanie/` (strategia `all`), a ścieżka
-  standardowa wskazuje najnowszą z nich (reguła dowiązania bez zmian).
-- **Samo `--min-year`** pobiera jedną, najnowszą kampanię arkusza — działa jak
-  kontrola „najnowsze dane nie starsze niż RRRR”. `--campaigns all
-  --min-year RRRR` pobiera wszystkie kampanie od roku RRRR.
+- **Flagi roku wyznaczają tylko dopuszczalne lata, `--campaigns` — liczbę
+  lotów na arkusz.** Domyślnie (`newest`, nie trzeba podawać) pobierany jest
+  jeden, najnowszy lot z zakresu; `--campaigns all` pobiera wszystkie loty
+  z zakresu do `kampanie/`. Ta sama reguła dla każdej flagi roku i każdego
+  produktu. Przykład (arkusz z lotami 2019, 2023, 2025-04, 2025-10):
+  `--year 2025` = lot 2025-10; `--year 2025 --campaigns all` = oba loty
+  2025; `--max-year 2024` = lot 2023; `--min-year 2024` = lot 2025-10.
+- **Ścieżka standardowa** wskazuje najnowszy lokalny lot i nigdy nie cofa się
+  na starszy. Gdy wcześniej pobrano nowszy lot, a teraz zakres go wyklucza
+  (np. `--max-year 2022`), wybrany lot trafia do `kampanie/`, dowiązanie
+  zostaje przy nowszym, a CLI podaje `Info: sciezka standardowa N arkuszy
+  wskazuje nowszy lokalny lot spoza tego zadania ...` z nazwą kampanii.
 - **Najpierw sprawdzenie, potem pobranie.** Gdy któryś arkusz ma dane tylko
   z innych lat, zadanie kończy się `Error:` i kodem 1 przed pobraniem
   czegokolwiek (także z pozostałych arkuszy):
@@ -574,8 +581,8 @@ domknięte; `--year RRRR` to skrót `--min-year RRRR --max-year RRRR`
   Arkusz bez żadnych danych (morze, obszar za granicą) jest pomijany
   z `Warning:` jak dotąd. Awaria skorowidza przy sprawdzaniu przerywa całe
   zadanie (`Error: nie udalo sie sprawdzic roku danych ...`) — ponów pobranie.
-- **Kilka lotów w przedziale:** gdy najnowszy lot nie jest pełnym arkuszem,
-  Kartograf mierzy po pobraniu pokrycie każdego lotu (udział ważnych
+- **Kilka lotów w przedziale (`--campaigns all`):** gdy najnowszy lot nie
+  jest pełnym arkuszem, Kartograf mierzy po pobraniu pokrycie każdego lotu (udział ważnych
   pikseli, `extra.coverage`); jeśli starszy lot ma większe pokrycie, drukuje
   `Info:` (stderr, także z `-q`) i zapisuje `extra.flights`
   i `extra.better_coverage` w sidecarze ścieżki standardowej. Dowiązanie
@@ -583,9 +590,6 @@ domknięte; `--year RRRR` to skrót `--min-year RRRR --max-year RRRR`
 - **Sidecar:** `request.min_year`/`max_year` (gdy podane), `request.year`
   (gdy równe), `request.campaigns` (strategia faktycznie użyta),
   `extra.available_years` (wszystkie lata arkusza w skorowidzu).
-- **Jawne `--campaigns newest`** z `--year`/`--max-year` = `Error:` (górna
-  granica pobiera wszystkie kampanie z przedziału); z samym `--min-year` —
-  dozwolone. LAZ: `newest` dozwolone z każdym przedziałem.
 - **LAZ:** wybór ADR-029 w obrębie przedziału. Kafel, który bez flag roku
   zostałby wybrany, a ma rok spoza przedziału, musi być pokryty kaflami
   z przedziału; inaczej `Error: brak kafli LAZ z roku ... dla N z M kafli

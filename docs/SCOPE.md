@@ -264,9 +264,10 @@ kartograf download --bbox ... --country cz --target-crs EPSG:2180   # reprojekcj
 kartograf download --bbox ... --country pl --target-crs EPSG:2180   # wycinek PL: jeden GeoTIFF (ADR-027)
 kartograf download 302_5550 --country cz --vertical-crs EVRF2007    # Bpv -> EVRF2007 (EPSG:5621)
 kartograf download <godlo> --campaigns all              # wszystkie kampanie GUGiK arkusza (ADR-030)
-kartograf download <godlo> --year 2025                  # wszystkie kampanie z roku (ADR-032)
-kartograf download <godlo> --min-year 2024              # najnowsza kampania, nie starsza niż rok
-kartograf download --bbox ... --max-year 2022           # wszystkie kampanie do roku, dowiązanie na najnowszą
+kartograf download <godlo> --year 2025                  # najnowszy lot z roku (ADR-032)
+kartograf download <godlo> --year 2025 --campaigns all  # wszystkie loty z roku
+kartograf download <godlo> --min-year 2024              # najnowszy lot, nie starszy niż rok
+kartograf download --bbox ... --max-year 2022           # najnowszy lot do roku (dowiązanie nigdy wstecz)
 kartograf download --bbox ... --product laz --campaigns all   # LAZ bez deduplikacji pokrycia
 kartograf landcover download --source bdot10k --teryt <kod>
 kartograf landcover download --source corine --godlo <godlo>
@@ -340,12 +341,12 @@ from kartograf import (
 
 ```python
 # Strategie (tylko PL; CZ zawsze bieżąca mozaika):
-- --campaigns newest (domyślnie bez --year/--max-year): najnowszy rekord
-  skorowidza (ADR-028), sprawdzany przy każdym uruchomieniu po wygaśnięciu cache (7 dni)
-- --campaigns all: każda kampania arkusza po twardym filtrze ADR-028, bez limitu
+- --campaigns newest (domyślnie): najnowszy rekord skorowidza (ADR-028)
+  w zakresie lat, sprawdzany przy każdym uruchomieniu po wygaśnięciu cache (7 dni)
+- --campaigns all: każda kampania arkusza (w zakresie lat) po twardym filtrze ADR-028
 - Rok danych (ADR-032; NMT/NMPT/orto: aktualnosc, LAZ: akt_rok):
-  --year RRRR = --min-year RRRR --max-year RRRR; górna granica = strategia all
-  w przedziale (jawne newest = Error:); samo --min-year = newest z kontrolą roku
+  --year RRRR = --min-year RRRR --max-year RRRR; flagi roku wyznaczają tylko
+  dopuszczalne lata, --campaigns liczbę lotów (model A; każda kombinacja dozwolona)
 - Najpierw sprawdzenie pełnej listy kampanii każdego arkusza, potem pobranie:
   arkusz z danymi tylko z innych lat = Error: z latami i podpowiedzią, nic nie
   pobrane; arkusz bez danych = Warning: (pominięty); awaria skorowidza = Error:
@@ -757,7 +758,7 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-10-08 | 3.14 | Przegląd dokumentacji: errata 5 ADR-030 (lokalna kampania przy awarii skorowidza), CZ i --min-year x --year w 2.12, sidecary (HSG, zasada ogólna), GPKG BDOT10k składany lokalnie, pełna lista eksportów w 2.10, drzewo modułów i tabele cache w 4.1, DLR w 5, bez wartości ulotnych w 6.2 i historii |
 | 2026-10-08 | 3.15 | Roadmapa do v1.0.0 (sekcja 3.3): komplet publicznych danych GUGiK, gotowe dane, manager danych (magazyn wersjonowany, manifest projektu), wtyczka QGIS, GUI webowe |
 | 2026-10-09 | 3.16 | Narzędzie składania kampanii (3.1) bez przypisanego wydania — nie weszło do 0.7.1 (ADR-030 errata 6) |
-| 2026-10-10 | 3.17 | Wybór roku danych (ADR-032): --year/--min-year/--max-year dla NMT/NMPT/orto/LAZ w 2.12, CZ i wycinki bez roku |
+| 2026-10-10 | 3.17 | Wybór roku danych (ADR-032): --year/--min-year/--max-year dla NMT/NMPT/orto/LAZ w 2.12, CZ i wycinki bez roku; model A (rok = filtr lat, --campaigns = liczba lotów) |
 
 ---
 

@@ -97,20 +97,6 @@ def validate_campaign_args(
         )
 
 
-def resolve_campaign_strategy(campaigns: str | None, max_year: int | None) -> str:
-    """Resolve the default strategy; an explicit newest excludes an upper bound."""
-    if campaigns == "newest" and max_year is not None:
-        raise ValidationError(
-            'campaigns="newest" wyklucza sie z max_year — gorna granica roku '
-            "pobiera wszystkie kampanie z przedzialu (pomin campaigns)"
-        )
-    return (
-        campaigns
-        if campaigns is not None
-        else ("all" if max_year is not None else "newest")
-    )
-
-
 def record_year(record) -> int | None:
     """Year from ``aktualnoscRok``, else ``aktualnosc[:4]``; non-digit -> None."""
     year = record.raw.get("aktualnoscRok") or record.aktualnosc[:4]

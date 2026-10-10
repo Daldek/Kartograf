@@ -860,3 +860,17 @@ Wprowadzone w specu w tym samym commicie co plan:
   `W2_BBOX` (`tests/fixtures/gugik_laz/real_2026_10_10/`) to potwierdza.
   Kod zgodny z P8; poprawione testy, ADR-032, ARCHITECTURE 4.7 i spec
   (T21a, T25). Pomocniki `laz_session` sprawdzaja teraz okno `BBOX`.
+
+## Model A (2026-10-10, po audycie logiki flag CLI)
+
+Decyzja uzytkownika: flagi roku = filtr dopuszczalnych lat, `--campaigns` =
+liczba lotow (spec sekcja 0, U14-U16; ADR-032 pkt 3). Wdrozenie na tej
+samej galezi: usuniety sentinel `resolve_campaign_strategy` (domyslne
+`campaigns="newest"` w `DownloadManager`, `resolve_campaigns`, CLI dla
+kazdego produktu), brak bledu `--campaigns newest` z gorna granica,
+`SheetFetch/DownloadResult.link_outside_range` + `Info:` w CLI (U15),
+teksty `--help`, testy T1/T8/T14/T26 managera, providera i CLI, docs
+(USAGE 4.1, ARCHITECTURE 4.1, SCOPE 2.12, CHANGELOG, ADR-030 errata 7).
+Na zywo: `--year 2025` na C14 = 4 pliki (84183); `--campaigns newest
+--max-year 2022` po pobraniu 2025 = lot 73021 w `kampanie/`, `Info:`
+o dowiazaniu 2025-10-21_84183, kod 0.

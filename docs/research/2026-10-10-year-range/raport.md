@@ -1,5 +1,10 @@
 # Wybor roku danych — przebieg na zywo i fixtury (Task 8, 2026-10-10)
 
+> **Uwaga (model A, pozniej tego samego dnia):** przebieg T1 nizej (10
+> plikow dla `--year 2025`) dotyczy pierwszej wersji semantyki. Po
+> przyjeciu modelu A (spec sekcja 0) `--year 2025` daje 4 pliki (jeden lot
+> na arkusz, sprawdzone na zywo), a 10 plikow = `--year 2025 --campaigns all`.
+
 Galaz `feat/year-range` (Task 1-7 = `b41197a..7e40c18`). Dane w
 `<katalog-danych>/kartograf/2026-10-10-year-range/` (jawne `--output`,
 logi `logs/<id>.out|err`). CLI z korzenia repo, `.venv/bin/kartograf`.

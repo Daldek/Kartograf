@@ -24,7 +24,6 @@ from kartograf.download.campaigns import (
     in_year_range,
     measure_coverage,
     record_year,
-    resolve_campaign_strategy,
     validate_campaign_args,
     verify_file_format,
     verify_record_url,
@@ -377,14 +376,6 @@ def test_validate_campaign_args_rejects(campaigns, min_year, max_year):
 )
 def test_validate_campaign_args_accepts(campaigns, min_year, max_year):
     validate_campaign_args(campaigns, min_year, max_year)
-
-
-def test_resolve_campaign_strategy():
-    assert resolve_campaign_strategy(None, None) == "newest"
-    assert resolve_campaign_strategy(None, 2025) == "all"
-    assert resolve_campaign_strategy("all", None) == "all"
-    with pytest.raises(ValidationError, match="newest.*max_year"):
-        resolve_campaign_strategy("newest", 2025)
 
 
 def test_in_year_range_boundaries():

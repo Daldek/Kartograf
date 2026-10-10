@@ -22,11 +22,7 @@ import requests
 
 from kartograf.cache.metadata import MetadataCache
 from kartograf.core.sheet_parser import SheetParser
-from kartograf.download.campaigns import (
-    in_year_range,
-    record_year,
-    resolve_campaign_strategy,
-)
+from kartograf.download.campaigns import in_year_range, record_year
 from kartograf.download.links import linked_campaign, update_sidecar_extra
 from kartograf.download.manager import DownloadManager, DownloadProgress, SheetFetch
 from kartograf.exceptions import (
@@ -141,7 +137,7 @@ class FakeCampaignProvider(BaseProvider):
         self._lock = threading.Lock()  # D-6: number of resolutions per sheet code
 
     def resolve_campaigns(
-        self, godlo, *, campaigns=None, min_year=None, max_year=None, timeout=None
+        self, godlo, *, campaigns="newest", min_year=None, max_year=None, timeout=None
     ):
         with self._lock:
             self.resolve_calls.append((godlo, campaigns, min_year, max_year))
@@ -149,7 +145,7 @@ class FakeCampaignProvider(BaseProvider):
             raise self.errors[godlo]
         if self.resolve_error is not None:
             raise self.resolve_error
-        strategy = resolve_campaign_strategy(campaigns, max_year)
+        strategy = campaigns
         recs = [
             r
             for r in self.records[strategy]
@@ -733,30 +729,41 @@ def test_manager_year_2024_list_stops_before_any_download(tmp_path):
     assert not list(tmp_path.rglob("*.asc"))
 
 
-def test_manager_year_2025_list_downloads_every_flight_links_newest(tmp_path):
+@pytest.mark.parametrize(("campaigns", "files"), [("newest", 4), ("all", 10)])
+def test_manager_year_2025_list_flights_per_sheet_link_newest(
+    tmp_path, campaigns, files
+):
+    """Model A: the year bounds pick admissible years, ``campaigns`` the count."""
     fake = c14_fake()
     godla = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
-    manager = DownloadManager(tmp_path, provider=fake, min_year=2025, max_year=2025)
+    manager = DownloadManager(
+        tmp_path, provider=fake, campaigns=campaigns, min_year=2025, max_year=2025
+    )
     manager.download_sheets(godla)
-    assert manager.campaigns == "all" and manager.max_year == 2025
-    assert len(fake.downloads) == 10
-    assert len(list((tmp_path / SEGMENT / "kampanie").rglob("*.asc"))) == 10
+    assert manager.campaigns == campaigns and manager.max_year == 2025
+    assert len(fake.downloads) == files
+    assert len(list((tmp_path / SEGMENT / "kampanie").rglob("*.asc"))) == files
     for g in godla:
         assert "84183" in linked(std_path(tmp_path, g))
         request = meta(std_path(tmp_path, g))["request"]
-        assert request["campaigns"] == "all" and request["year"] == 2025
+        assert request["campaigns"] == campaigns and request["year"] == 2025
         assert request["min_year"] == request["max_year"] == 2025
         assert meta(std_path(tmp_path, g))["extra"]["available_years"] == sorted(
             {record_year(r) for r in c14_records(g)}
         )
+    assert manager.last_result is not None
+    assert manager.last_result.link_outside_range == {}
 
 
-def test_manager_max_year_2022_list(tmp_path):
+@pytest.mark.parametrize(("campaigns", "files"), [("newest", 4), ("all", 6)])
+def test_manager_max_year_2022_list(tmp_path, campaigns, files):
     fake = c14_fake()
     godla = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
-    manager = DownloadManager(tmp_path, provider=fake, max_year=2022)
+    manager = DownloadManager(
+        tmp_path, provider=fake, campaigns=campaigns, max_year=2022
+    )
     manager.download_sheets(godla)
-    assert manager.campaigns == "all" and len(fake.downloads) == 6
+    assert len(fake.downloads) == files
     for i, g in enumerate(godla, 1):
         assert ("73021" if i in (1, 3) else "75162") in linked(std_path(tmp_path, g))
         assert meta(std_path(tmp_path, g))["request"]["max_year"] == 2022
@@ -773,7 +780,7 @@ def test_manager_min_year_alone_downloads_newest_only(tmp_path):
         assert meta(std_path(tmp_path, g))["request"]["campaigns"] == "newest"
 
 
-def test_manager_explicit_all_with_range_same_as_default(tmp_path):
+def test_manager_explicit_all_with_min_year_downloads_every_flight(tmp_path):
     fake = c14_fake()
     godla = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
     manager = DownloadManager(tmp_path, provider=fake, min_year=2024, campaigns="all")
@@ -784,11 +791,25 @@ def test_manager_explicit_all_with_range_same_as_default(tmp_path):
     )
 
 
-def test_manager_explicit_newest_with_max_year_rejected(tmp_path):
-    with pytest.raises(ValidationError, match="max_year"):
-        DownloadManager(
-            tmp_path, provider=c14_fake(), campaigns="newest", max_year=2025
-        )
+def test_manager_range_reports_link_kept_on_newer_flight(tmp_path):
+    """U15: the link never moves back; a ranged request reports the kept target."""
+    fake = c14_fake()
+    DownloadManager(tmp_path, provider=fake).download_sheet(G)
+    newest = campaign_path(tmp_path, REC["84183"])
+    manager = DownloadManager(tmp_path, provider=fake, max_year=2022)
+    manager.download_sheet(G)
+    assert campaign_path(tmp_path, REC["73021"]).exists()
+    assert "84183" in linked(std_path(tmp_path))
+    assert manager.last_sheet is not None
+    assert manager.last_sheet.link_outside_range is not None
+    assert manager.last_sheet.link_outside_range.resolve() == newest.resolve()
+    assert manager.last_result is not None
+    assert list(manager.last_result.link_outside_range) == [G]
+    # a range that selects the linked flight reports nothing
+    within = DownloadManager(tmp_path, provider=fake, min_year=2025)
+    within.download_sheet(G)
+    assert within.last_sheet is not None
+    assert within.last_sheet.link_outside_range is None
 
 
 def test_manager_year_with_no_data_sheet_is_skipped(tmp_path):
@@ -799,7 +820,7 @@ def test_manager_year_with_no_data_sheet_is_skipped(tmp_path):
     assert manager.last_result is not None
     assert manager.last_result.no_coverage == [G2]
     assert G2 not in manager.last_result.campaign_files
-    assert len(fake.downloads) == 10
+    assert len(fake.downloads) == 4
 
 
 def test_manager_check_failure_aborts_whole_task(tmp_path):
@@ -815,7 +836,9 @@ def test_manager_check_failure_aborts_whole_task(tmp_path):
 def test_manager_check_reads_full_list_once_per_sheet(tmp_path):
     fake = c14_fake()
     godla = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
-    manager = DownloadManager(tmp_path, provider=fake, max_year=2025, max_workers=4)
+    manager = DownloadManager(
+        tmp_path, provider=fake, campaigns="all", max_year=2025, max_workers=4
+    )
     check = manager.check_year_range(godla)
     assert len(check.selected[G]) == 4
     assert check.available[G] == (2019, 2023, 2025)
@@ -898,7 +921,9 @@ def test_manager_coverage_measured_only_when_newest_partial(tmp_path):
             older.url: asc_pixels(G, (7, 8, 9, 10)),
         }
     )
-    manager = DownloadManager(tmp_path, provider=fake, min_year=2025, max_year=2025)
+    manager = DownloadManager(
+        tmp_path, provider=fake, campaigns="all", min_year=2025, max_year=2025
+    )
     manager.download_sheet(G)
     assert meta(campaign_path(tmp_path, newest))["extra"]["coverage"] == 0.25
     assert meta(campaign_path(tmp_path, older))["extra"]["coverage"] == 1.0
@@ -917,7 +942,11 @@ def test_manager_coverage_measured_only_when_newest_partial(tmp_path):
 
     full = "N-34-139-C-a-3-4"
     manager = DownloadManager(
-        tmp_path / "full", provider=c14_fake(), min_year=2025, max_year=2025
+        tmp_path / "full",
+        provider=c14_fake(),
+        campaigns="all",
+        min_year=2025,
+        max_year=2025,
     )
     manager.download_sheet(full)
     full_meta = meta(std_path(tmp_path / "full", full))["extra"]
@@ -938,7 +967,9 @@ def test_manager_coverage_newest_has_more_data_no_info(tmp_path):
             REC["83233"].url: asc_pixels(G, (1, -9999, -9999, -9999)),
         }
     )
-    manager = DownloadManager(tmp_path, provider=fake, min_year=2025, max_year=2025)
+    manager = DownloadManager(
+        tmp_path, provider=fake, campaigns="all", min_year=2025, max_year=2025
+    )
     manager.download_sheet(G)
     extra = meta(std_path(tmp_path))["extra"]
     assert [flight["coverage"] for flight in extra["flights"]] == [1.0, 0.25]
@@ -948,7 +979,7 @@ def test_manager_coverage_newest_has_more_data_no_info(tmp_path):
 
 def test_manager_single_flight_in_range_no_measurement(tmp_path):
     manager = DownloadManager(
-        tmp_path, provider=c14_fake(), min_year=2019, max_year=2019
+        tmp_path, provider=c14_fake(), campaigns="all", min_year=2019, max_year=2019
     )
     manager.download_sheet(G)
     extra = meta(std_path(tmp_path))["extra"]
@@ -966,7 +997,9 @@ def test_manager_coverage_read_from_sidecar_on_rerun(tmp_path):
             REC["83233"].url: asc_pixels(G, (1, 2, 3, 4)),
         }
     )
-    manager = DownloadManager(tmp_path, provider=fake, min_year=2025, max_year=2025)
+    manager = DownloadManager(
+        tmp_path, provider=fake, campaigns="all", min_year=2025, max_year=2025
+    )
     manager.download_sheet(G)
     assert manager.last_result.better_coverage == {G: "83233"}
     with patch("kartograf.download.manager.measure_coverage") as measure:
@@ -985,10 +1018,12 @@ def test_manager_new_range_clears_obsolete_better_flight_without_relinking(tmp_p
         }
     )
     DownloadManager(
-        tmp_path, provider=fake, min_year=2025, max_year=2025
+        tmp_path, provider=fake, campaigns="all", min_year=2025, max_year=2025
     ).download_sheet(G)
     assert meta(std_path(tmp_path))["extra"]["better_coverage"] == "83233"
-    older = DownloadManager(tmp_path, provider=fake, min_year=2019, max_year=2019)
+    older = DownloadManager(
+        tmp_path, provider=fake, campaigns="all", min_year=2019, max_year=2019
+    )
     older.download_sheet(G)
     extra = meta(std_path(tmp_path))["extra"]
     assert extra["flights"] == [
@@ -1026,7 +1061,9 @@ def test_manager_min_year_alone_no_measurement(tmp_path):
 
 def test_manager_coverage_read_error_does_not_fail_sheet(tmp_path, caplog):
     fake = c14_fake(contents={REC["83233"].url: asc_pixels(G, (1, 2, 3, 4))})
-    manager = DownloadManager(tmp_path, provider=fake, min_year=2025, max_year=2025)
+    manager = DownloadManager(
+        tmp_path, provider=fake, campaigns="all", min_year=2025, max_year=2025
+    )
     with caplog.at_level(logging.WARNING, logger="kartograf.download.manager"):
         manager.download_sheet(G)
     assert manager.last_result is not None
