@@ -644,9 +644,11 @@ utworzeniu.
 
 ### 4.1 Godlo PL (NMT/NMPT/Orto)
 
-`SheetParser` waliduje godlo i normalizuje wielkosc liter (zer wiodacych NIE
-usuwa: `M-33-036-...` i `M-33-36-...` to dla `FileStorage` dwie rozne
-sciezki; forma kanoniczna, bez zer, to ta z `find_sheets_for_bbox`); godlo
+`SheetParser` waliduje godlo i normalizuje je do postaci kanonicznej:
+wielkosc liter i liczby PL-1992 bez zer wiodacych (od 0.7.1, A7:
+`M-33-036-A` -> `M-33-36-A`, ta sama postac w sciezce, sidecarze i wyniku);
+cyfry tylko ASCII `0-9` we wszystkich ukladach godel (PL-1992, PL-2000, CZ;
+od 0.7.2 — cyfry pelnej szerokosci itp. to `ParseError`); godlo
 PL-1992 grubsze niz 1:10000 rozwija sie do arkuszy 1:10000
 (`download_hierarchy`), godlo PL-2000 pobierane jest bezposrednio. Dla
 kazdego arkusza pyta WMS skorowidz (`GetFeatureInfo`, warstwy wykryte lazy
