@@ -8,8 +8,10 @@ without features (sea, abroad).
 """
 
 import logging
+import math
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 
 import requests
 
@@ -43,6 +45,17 @@ def _to_2180(bbox: BBox) -> BBox:
     return bbox_to_2180(bbox)
 
 
+def _mm(value: float, rounding: Callable[[float], int]) -> str:
+    """Coordinate rounded to whole millimetres by ``math.floor``/``math.ceil``.
+
+    Outward rounding never shrinks the area; millimetres (not metres) keep
+    the 1 m point square of ``teryt_for_point`` a 1 m square. Trailing
+    zeros are dropped (``290000.000`` -> ``290000``).
+    """
+    text = f"{rounding(round(value * 1000, 6)) / 1000:.3f}"
+    return text.rstrip("0").rstrip(".")
+
+
 def _query(bbox: BBox, session: requests.Session, timeout: float) -> list[str]:
     """Sorted unique powiat codes of one GetFeature request (``bbox`` in 2180)."""
     params = {
@@ -52,9 +65,11 @@ def _query(bbox: BBox, session: requests.Session, timeout: float) -> list[str]:
         "TYPENAMES": POWIAT_LAYER,
         "PROPERTYNAME": "JPT_KOD_JE",
         "COUNT": str(_COUNT),
-        # WFS 2.0 + urn CRS: (N, E) axis order
+        # WFS 2.0 + urn CRS: (N, E) axis order; widened outward (rounding to
+        # the nearest metre could drop a 0.5 m edge strip of the area)
         "BBOX": (
-            f"{bbox.min_y:.0f},{bbox.min_x:.0f},{bbox.max_y:.0f},{bbox.max_x:.0f},"
+            f"{_mm(bbox.min_y, math.floor)},{_mm(bbox.min_x, math.floor)},"
+            f"{_mm(bbox.max_y, math.ceil)},{_mm(bbox.max_x, math.ceil)},"
             "urn:ogc:def:crs:EPSG::2180"
         ),
     }
@@ -83,9 +98,11 @@ def _query(bbox: BBox, session: requests.Session, timeout: float) -> list[str]:
 
 
 def _check_complete(root: ET.Element, found: int) -> None:
-    """DownloadError when the server may have cut the list (Review Focus 1).
+    """DownloadError when the list may be incomplete (Review Focus 1, P6).
 
-    Cut = ``numberReturned < numberMatched``; with a non-numeric
+    A numeric ``numberReturned`` different from the number of parsed codes
+    (``found``) means features without ``JPT_KOD_JE``. Cut =
+    ``numberReturned < numberMatched``; with a non-numeric
     ``numberMatched`` (MapServer ``unknown``: matches not counted) a full
     page (``>= _COUNT``) counts as cut; a ``next`` link always does. The
     real MapServer page (recorded 2026-10-08) carries ``unknown`` and a
@@ -93,7 +110,12 @@ def _check_complete(root: ET.Element, found: int) -> None:
     """
     matched = root.get("numberMatched", "")
     returned_attr = root.get("numberReturned", "")
-    returned = int(returned_attr) if returned_attr.isdigit() else found
+    if returned_attr.isdigit() and int(returned_attr) != found:
+        raise DownloadError(
+            f"PRG WFS: niespojna odpowiedz: numberReturned={returned_attr}, "
+            f"kodow {found}"
+        )
+    returned = found
     # non-numeric numberMatched ('unknown'): a full page counts as cut
     cut = returned < int(matched) if matched.isdigit() else returned >= _COUNT
     if cut or root.get("next"):

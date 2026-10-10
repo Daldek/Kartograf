@@ -5,7 +5,9 @@ Tests cover LandCoverProvider, Bdot10kProvider, CorineProvider,
 and LandCoverManager classes.
 """
 
+import hashlib
 import json
+import shutil
 import sqlite3
 import zipfile
 from io import BytesIO
@@ -136,6 +138,39 @@ class TestBdot10kProvider:
             )
         assert teryts.call_args.args[0] is bbox
         assert package.call_args.args[0] == "0208"
+
+
+class TestBdot10kPrgTimeout:
+    """P7: the caller's ``timeout`` reaches the PRG powiat lookup too."""
+
+    BBOX = BBox(340000, 290000, 350000, 300000, "EPSG:2180")
+    DISCOVER = "kartograf.providers.pl.bdot10k.discover_teryts_for_bbox"
+
+    def test_provider_bbox_and_godlo(self, tmp_path):
+        provider = Bdot10kProvider()
+        with (
+            patch(self.DISCOVER, return_value=["0208"]) as discover,
+            patch.object(provider, "download_by_admin_unit"),
+        ):
+            provider.download_by_bbox(self.BBOX, tmp_path / "x.gpkg", timeout=7)
+            assert discover.call_args.kwargs["timeout"] == 7
+            provider.download_by_godlo("N-34-130-D", tmp_path / "x.gpkg", timeout=9)
+            assert discover.call_args.kwargs["timeout"] == 9
+
+    def test_manager_passes_timeout_option(self, tmp_path):
+        manager = LandCoverManager(output_dir=tmp_path, provider="bdot10k")
+        with (
+            patch(self.DISCOVER, return_value=["0208"]) as discover,
+            patch.object(manager, "_download_county", return_value=tmp_path / "x"),
+        ):
+            manager.download_by_bbox(self.BBOX, timeout=7)
+            assert discover.call_args.kwargs["timeout"] == 7
+            manager.download_by_godlo("N-34-130-D", timeout=8)
+            assert discover.call_args.kwargs["timeout"] == 8
+            manager.download_all_counties(bbox=self.BBOX, timeout=9)
+            assert discover.call_args.kwargs["timeout"] == 9
+            manager.download_by_bbox(self.BBOX)
+            assert discover.call_args.kwargs["timeout"] == 30
 
 
 class TestCorineProvider:
@@ -662,27 +697,14 @@ class TestBdot10kRetryAndIO:
         provider._extract_gpkg_from_zip(mock_resp, output)
         assert output.with_suffix(".gpkg").exists()
 
-    def test_merge_overwrites_existing_gpkg_like_windows(self, tmp_path):
-        """The merged GPKG overwrites the old file also under Windows semantics."""
+    def test_redownload_overwrites_existing_gpkg_like_windows(self, tmp_path):
+        """The merged GPKG replaces the old file also under Windows semantics
+        (``Path.rename`` refuses an existing target; the swap is
+        ``os.replace``)."""
         import os
 
-        provider = Bdot10kProvider()
-        gpkg_path = tmp_path / "PTLZ.gpkg"
-        conn = sqlite3.connect(str(gpkg_path))
-        c = conn.cursor()
-        c.execute(
-            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
-            "identifier TEXT, description TEXT, last_change TEXT, "
-            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
-        )
-        c.execute(
-            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
-            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
-        )
-        c.execute("CREATE TABLE PTLZ (id INTEGER PRIMARY KEY, name TEXT)")
-        conn.commit()
-        conn.close()
-        output = tmp_path / "out" / "merged.gpkg"
+        body = _bdot_zip(tmp_path, ["OT_PTLZ_A"])
+        output = tmp_path / "out" / "bdot10k_teryt_0262.gpkg"
         output.parent.mkdir()
         output.write_bytes(b"stary plik")
 
@@ -691,10 +713,11 @@ class TestBdot10kRetryAndIO:
                 raise FileExistsError(f"[WinError 183] {target}")
             return os.replace(self, target)
 
+        provider = Bdot10kProvider(session=_zip_session(body))
         with patch.object(Path, "rename", windows_rename):
-            provider._merge_gpkg_files([gpkg_path], output)
+            provider.download_package("0262", output)
         assert output.read_bytes().startswith(b"SQLite format 3")
-        assert [p.name for p in output.parent.iterdir()] == ["merged.gpkg"]
+        assert [p.name for p in output.parent.iterdir()] == [output.name]
 
     def test_extract_gpkg_bad_zip(self, tmp_path):
         """Invalid ZIP -> DownloadError."""
@@ -1741,19 +1764,42 @@ class TestBdot10kMergeOnNetworkShare:
 
         monkeypatch.setattr(tempfile, "TemporaryDirectory", SpyTmp)
 
-        def boom(self, target):
-            # final_tmp already exists (copy after merging) - the swap fails
-            assert self.exists()
-            raise OSError("replace failed")
+        real_copyfile = shutil.copyfile
 
-        monkeypatch.setattr(Path, "replace", boom)
+        def partial_copy(src_path, dst_path, *a, **kw):
+            if Path(dst_path).parent == out_dir:
+                Path(dst_path).write_bytes(b"partial")
+                raise OSError("copy to share failed")
+            return real_copyfile(src_path, dst_path, *a, **kw)
 
-        with pytest.raises(OSError, match="replace failed"):
-            Bdot10kProvider()._merge_gpkg_files([g1, g2], out_dir / "merged.gpkg")
+        monkeypatch.setattr(
+            "kartograf.providers.pl.bdot10k.shutil.copyfile", partial_copy
+        )
 
-        assert list(out_dir.glob("*.tmp")) == []
+        with pytest.raises(OSError, match="copy to share failed"):
+            Bdot10kProvider()._merge_gpkg_files([g1, g2], out_dir / "merged.gpkg.tmp")
+
         assert list(out_dir.iterdir()) == []
         assert len(work_dirs) == 1 and not work_dirs[0].exists()
+
+    def test_failed_swap_keeps_previous_gpkg(self, tmp_path, monkeypatch):
+        """P1: the staged GPKG replaces the previous one last; a failed swap
+        leaves the previous file and no ``.tmp``."""
+        body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
+        out = tmp_path / "o"
+        out.mkdir()
+        target = out / "bdot10k_teryt_0262.gpkg"
+        target.write_bytes(b"previous")
+
+        def boom(src_path, dst_path):
+            raise OSError("replace failed")
+
+        monkeypatch.setattr("kartograf.providers.pl.bdot10k.os.replace", boom)
+        provider = Bdot10kProvider(session=_zip_session(body))
+        with pytest.raises(DownloadError, match="replace failed"):
+            provider.download_package("0262", target)
+        assert target.read_bytes() == b"previous"
+        assert sorted(p.name for p in out.iterdir()) == [target.name]
 
 
 def _tree(root: Path) -> list[str]:
@@ -2006,10 +2052,10 @@ class TestBdot10kSidecarSource:
             provider.download_package("0262", tmp_path / "o" / "x.gpkg", keep_raw=True)
         assert sorted(p.name for p in (tmp_path / "o").iterdir()) == []
 
-    def test_keep_raw_write_error_removes_gpkg(self, tmp_path, monkeypatch):
-        """OSError while writing the raw ZIP (after the GPKG is in place):
-        DownloadError, and neither the GPKG (it would have no sidecar) nor a
-        partial ZIP stays on disk."""
+    def test_keep_raw_write_error_leaves_no_file(self, tmp_path, monkeypatch):
+        """OSError while writing the raw ZIP (first download): DownloadError,
+        and neither the GPKG (it would have no sidecar) nor a partial ZIP
+        nor the staged GPKG stays on disk."""
         body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
         real_write_bytes = Path.write_bytes
 
@@ -2026,9 +2072,52 @@ class TestBdot10kSidecarSource:
                 "0262", tmp_path / "o" / "bdot10k_teryt_0262.gpkg", keep_raw=True
             )
         assert "No space left" in str(exc.value)
-        assert "bdot10k_teryt_0262.gpkg usuniety" in str(exc.value)
         assert isinstance(exc.value.__cause__, OSError)
         assert sorted(p.name for p in (tmp_path / "o").iterdir()) == []
+
+    def test_keep_raw_write_error_keeps_previous_result(self, tmp_path, monkeypatch):
+        """P1: a re-download whose raw ZIP write fails leaves the previous
+        GPKG and its sidecar untouched and consistent."""
+        out = tmp_path / "out"
+        manager = LandCoverManager(output_dir=out, provider="bdot10k")
+        z1, z2 = tmp_path / "z1", tmp_path / "z2"
+        z1.mkdir()
+        z2.mkdir()
+        first = _bdot_zip(z1, ["OT_PTWP_A"])
+        manager.provider._sessions = SessionPerThread(self._session(first, {}))
+        gpkg = manager.download(teryt="0262", keep_raw=True)
+        before = gpkg.read_bytes()
+        sidecar = json.loads((gpkg.parent / f"{gpkg.name}.meta.json").read_text())
+
+        second = _bdot_zip(z2, ["OT_PTWP_A", "OT_SWRS_L"])
+        manager.provider._sessions = SessionPerThread(self._session(second, {}))
+
+        def disk_full(self, data):
+            raise OSError(28, "No space left on device")
+
+        monkeypatch.setattr(Path, "write_bytes", disk_full)
+        with pytest.raises(DownloadError, match="No space left"):
+            manager.download(teryt="0262", keep_raw=True)
+        assert gpkg.read_bytes() == before
+        assert hashlib.sha256(before).hexdigest() == sidecar["sha256"]
+        assert [p.name for p in out.iterdir() if ".tmp" in p.name] == []
+
+    def test_failed_raw_zip_write_releases_buffer_view(self, tmp_path, monkeypatch):
+        """P9g: the ``getbuffer`` view is released even when the write fails
+        and the caller keeps the exception (``DownloadError ... from e``: the
+        traceback holds the frame). A held view makes the buffer unresizable
+        and unclosable (``BufferError``)."""
+        buf = BytesIO(b"PK zip bytes")
+
+        def disk_full(self, data):
+            raise OSError(28, "No space left on device")
+
+        monkeypatch.setattr(Path, "write_bytes", disk_full)
+        with pytest.raises(OSError) as exc:
+            Bdot10kProvider._write_raw_zip(buf, tmp_path / "a_GPKG.zip")
+        assert exc.value.__traceback__ is not None  # frame still referenced
+        buf.write(b" more")  # resizing needs no exported views
+        buf.close()
 
     def test_manager_keep_raw_write_error_leaves_no_file(self, tmp_path, monkeypatch):
         """Through the manager: no data file without a sidecar, no sidecar."""
@@ -2352,7 +2441,7 @@ class TestLandCoverCliManyCounties:
         assert f"Downloaded to: {tmp_path / 'out' / 'bdot10k_teryt_0208.gpkg'}" in out
         assert f"Downloaded to: {tmp_path / 'out' / 'bdot10k_teryt_0224.gpkg'}" in out
 
-    def test_cli_passes_metadata_cache(self, tmp_path, monkeypatch):
+    def test_cli_passes_metadata_cache(self, tmp_path, monkeypatch, capsys):
         from kartograf.cli.commands import main
 
         monkeypatch.chdir(tmp_path)
@@ -2366,7 +2455,7 @@ class TestLandCoverCliManyCounties:
             "kartograf.providers.pl.bdot10k.discover_teryts_for_bbox",
             side_effect=fake_discover,
         ):
-            main(
+            rc = main(
                 [
                     "landcover",
                     "download",
@@ -2379,3 +2468,6 @@ class TestLandCoverCliManyCounties:
                 ]
             )
         assert seen["cache"] is not None  # U5
+        # the sea answer (no powiat) reaches the user as an error, not a crash
+        assert rc == 1
+        assert "nie przecina zadnego powiatu" in capsys.readouterr().err

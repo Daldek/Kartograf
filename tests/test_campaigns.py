@@ -260,14 +260,15 @@ def test_verify_file_format_oserror_is_download_error(tmp_path):
 GUGIK_ASC = Path(__file__).parent / "fixtures" / "gugik_asc"
 
 
-def _asc_for_frame(path, godlo, *, shift_x=0.0, shrink=1.0, center=False):
+def _asc_for_frame(
+    path, godlo, *, shift_x=0.0, shift_y=0.0, shrink=1.0, center=False, cell=1.0
+):
     """ASC whose extent is the godlo frame (optionally shifted/shrunk)."""
     b = SheetParser(godlo).get_bbox()
     width = (b.max_x - b.min_x) * shrink
     height = (b.max_y - b.min_y) * shrink
-    cell = 1.0
-    ncols, nrows = int(width), int(height)
-    x0, y0 = b.min_x + shift_x, b.min_y
+    ncols, nrows = round(width / cell), round(height / cell)
+    x0, y0 = b.min_x + shift_x, b.min_y + shift_y
     kx, ky = ("xllcenter", "yllcenter") if center else ("xllcorner", "yllcorner")
     off = cell / 2 if center else 0.0
     path.write_text(
@@ -304,6 +305,26 @@ class TestVerifySheetExtent:
     def test_center_variant_passes(self, tmp_path):
         p = _asc_for_frame(tmp_path / "a.asc", self.G, center=True)
         verify_sheet_extent(p, self.G, ".asc")
+
+    def test_center_header_half_cell_correction(self, tmp_path):
+        """P9b: with a coarse 600 m cell the half-cell shift of an
+        ``xllcenter`` header decides the 50 % frame overlap both ways."""
+        # corner 400 m off: 65 % overlap (without the correction 47 %)
+        inside = _asc_for_frame(
+            tmp_path / "in.asc", self.G, shift_x=400, shift_y=400, center=True, cell=600
+        )
+        verify_sheet_extent(inside, self.G, ".asc")
+        # corner 700 m off: 47 % overlap (a sign error would give 65 %)
+        outside = _asc_for_frame(
+            tmp_path / "out.asc",
+            self.G,
+            shift_x=700,
+            shift_y=700,
+            center=True,
+            cell=600,
+        )
+        with pytest.raises(DownloadError, match="zasieg"):
+            verify_sheet_extent(outside, self.G, ".asc")
 
     def test_partial_sheet_inside_frame_passes(self, tmp_path):
         """Review Focus 4: full_sheet=False sheet smaller than the frame."""

@@ -543,7 +543,11 @@ class TestGugikProviderCacheIntegration:
         with pytest.raises(NoCoverageError, match=GODLO):
             provider._get_opendata_url(GODLO)
 
-        assert mock_session.get.call_count == 4
+        own = GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"]
+        own_calls = [
+            c for c in mock_session.get.call_args_list if c.args[0].startswith(own)
+        ]
+        assert len(own_calls) == 4  # every layer of its own index
         cached = cache.get_record("nmt", "1m", "EVRF2007", GODLO)
         assert cached is not None and cached["no_coverage"] is True
         assert "Brak danych" in cached["message"]

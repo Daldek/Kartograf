@@ -151,3 +151,34 @@ def test_download_cz_cutout_builds_provider(tmp_path, monkeypatch):
         result.path.with_name(result.path.name + ".meta.json").read_text()
     )
     assert meta["horizontal_crs"] == "EPSG:2180"
+
+
+def test_native_target_crs_gives_native_provider(tmp_path, monkeypatch, caplog):
+    """P9d: ``target_crs="EPSG:5514"`` (native) -> provider without
+    reprojection (``target_crs=None``); an all-nodata result is a WARNING."""
+    from kartograf.download import cz_cutout
+
+    seen = {}
+
+    def factory(**kw):
+        seen.update(kw)
+        return _provider(-9999.0)
+
+    monkeypatch.setattr("kartograf.providers.cuzk.create_dmr_provider", factory)
+    native = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+    result = cz_cutout.download_cz_cutout(
+        native,
+        output_dir=tmp_path,
+        target_crs="EPSG:5514",
+        vertical_crs="EVRF2007",
+        resolution="2m",
+    )
+    assert seen["target_crs"] is None
+    meta = json.loads(
+        result.path.with_name(result.path.name + ".meta.json").read_text()
+    )
+    assert meta["horizontal_crs"] == "EPSG:5514"
+    assert result.all_nodata is True
+    assert any(
+        r.levelname == "WARNING" and "nodata" in r.getMessage() for r in caplog.records
+    )

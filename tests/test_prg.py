@@ -41,6 +41,25 @@ def test_two_counties():
     assert params["TYPENAMES"] == "ms:A02_Granice_powiatow"
 
 
+def test_bbox_param_widened_outward():
+    """P3: rounding to the nearest metre shrank the area by up to 0.5 m."""
+    session = _session((FIX / "two_counties.xml").read_text(encoding="utf-8"))
+    area = BBox(340000.6004, 290000.3996, 349999.4004, 299999.6004, "EPSG:2180")
+    discover_teryts_for_bbox(area, session=session)
+    params = session.get.call_args.kwargs["params"]
+    assert params["BBOX"] == (
+        "290000.399,340000.6,299999.601,349999.401,urn:ogc:def:crs:EPSG::2180"
+    )
+
+
+def test_number_returned_mismatch_raises():
+    """P6: a feature without JPT_KOD_JE must not shorten the list silently."""
+    body = (FIX / "two_counties.xml").read_text(encoding="utf-8")
+    body = re.sub(r"<ms:JPT_KOD_JE>[^<]*</ms:JPT_KOD_JE>", "", body, count=1)
+    with pytest.raises(DownloadError, match="numberReturned=2"):
+        discover_teryts_for_bbox(BARDO, session=_session(body))
+
+
 def test_sea_is_empty_list():
     session = _session((FIX / "no_counties.xml").read_text(encoding="utf-8"))
     assert discover_teryts_for_bbox(BARDO, session=session) == []
@@ -153,7 +172,10 @@ def test_teryt_for_point():
     session = _session((FIX / "point_0224.xml").read_text(encoding="utf-8"))
     assert teryt_for_point(345000, 295000, "EPSG:2180", session=session) == "0224"
     params = session.get.call_args.kwargs["params"]
-    assert params["BBOX"] == "295000,345000,295000,345000,urn:ogc:def:crs:EPSG::2180"
+    # the 1 m square around the point, not widened to whole metres
+    assert params["BBOX"] == (
+        "294999.5,344999.5,295000.5,345000.5,urn:ogc:def:crs:EPSG::2180"
+    )
 
 
 def test_teryt_for_point_boundary_takes_lowest_code():

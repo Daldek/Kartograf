@@ -283,7 +283,15 @@ dane tam są:
   zadnego z M arkuszy obszaru` (kod 1); w obu przypadkach pod spodem
   podpowiedzi `Info: Dostepny potomek <godło> — uzyj --scale <skala>`;
 - gdy skorowidz ma ten obszar w drugim układzie, podpowiedź wskazuje jego
-  godło albo `--system <układ> --scale <skala>`.
+  godło albo `--system <układ> --scale <skala>`;
+- NMT i NMPT (od 0.7.2): gdy arkusza nie ma w wybranej rozdzielczości albo
+  układzie wysokości, a skorowidz GUGiK ma go w innym wariancie, podpowiedź
+  to np. `Info: Skorowidz GUGiK ma ten arkusz w NMT 1m EVRF2007 — uzyj
+  --resolution 1m` (albo `--vertical-crs KRON86`). GUGiK ma duże braki
+  pokrycia EVRF2007, także NMT 5 m (np. `N-34-130-D-d --resolution 5m`:
+  6 z 16 arkuszy tylko w 1 m). Sprawdzenie kosztuje jedno zapytanie
+  skorowidza na wariant i brakujący arkusz; wynik trafia do cache
+  metadanych razem z brakiem pokrycia.
 
 **Jak ustalić właściwą skalę.** Najprościej z podpowiedzi CLI: skala
 w `uzyj --scale ...` to skala arkusza, który GUGiK faktycznie opublikował
