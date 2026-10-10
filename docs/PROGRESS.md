@@ -121,17 +121,18 @@
 > `docs/superpowers/specs/2026-10-09-year-range-selection-design.md`
 > (sekcja 0 = model A, nadrzedna), ADR-032, raport
 > `docs/research/2026-10-10-year-range/raport.md`.
-> **NASTEPNA SESJA — PRZEJDZ OD RAZU DO POZYCJI (c)** (polecenie
-> uzytkownika 2026-10-10, bez pytania o wybor zadania): "drugie
-> dowiazanie do najnowszego PELNEGO lotu" z backlogu "Do 0.7.2" nizej.
-> Proces jak przy (b): galaz `feat/full-sheet-link` z `develop`, najpierw
-> ustalenia i spec (`docs/superpowers/specs/`) z pytaniami otwartymi
-> z backlogu (arkusze brzegowe, ktore nigdy nie sa pelne; czy dociagac
-> najnowszy pelny lot, gdy pobrano tylko najnowszy; relacja do modelu A,
-> `--campaigns all`, LAZ i wycinkow), akceptacja uzytkownika, plan,
-> implementacja. Dalej w 0.7.2: (d) ciche wartosci domyslne, (a) wycinki
-> PL z WCS (nowy ADR), (e) testy LAZ z nagraniami innego okna; zakres
-> wydania 0.7.2 (czy wszystkie pozycje) — do decyzji uzytkownika.
+> **(c) drugie dowiazanie do najnowszego PELNEGO lotu — W TOKU** na galezi
+> `feat/full-sheet-link` (z `develop`): spec
+> `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md` napisany,
+> decyzje uzytkownika F-U1..F-U5 z 2026-10-10 w sekcji 0 (drzewo
+> `full_coverage/`, dociaganie pelnego lotu tylko z flaga `--full-sheet`,
+> arkusz bez pelnego lotu = brak pliku + `Warning:` laczony z E13, nigdy
+> wstecz + `Info:` jak U15, wycinki bez zmian). **Nastepny krok:**
+> akceptacja calego specu przez uzytkownika, potem plan
+> (`docs/superpowers/plans/`) i implementacja. Dalej w 0.7.2: (d) ciche
+> wartosci domyslne, (a) wycinki PL z WCS (nowy ADR), (e) testy LAZ
+> z nagraniami innego okna; zakres wydania 0.7.2 (czy wszystkie pozycje)
+> — do decyzji uzytkownika.
 > **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
 > na zywo z raportem, `__version__ = "0.7.2"` + asercje testow, data i link
 > `compare/v0.7.1...v0.7.2` w CHANGELOG, status w SCOPE i `docs/PRD.md`
@@ -158,6 +159,19 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Drugie dowiazanie do pelnego lotu — spec (2026-10-10)
+
+- Galaz `feat/full-sheet-link` z `develop` (`fc4c176`). Ustalenia z kodu:
+  `ensure_standard_link` jest ogolne wzgledem sciezki (reuzycie jako
+  `ensure_link`); `local` w `_fetch_campaigns` to loty TEGO zadania;
+  `FileStorage.list_files` wlicza kazdy katalog segmentu poza `kampanie/`
+  (nowe drzewo trzeba wykluczyc).
+- Spec `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`;
+  decyzje uzytkownika (sekcja 0): Q1 = flaga `--full-sheet` (wariant C),
+  Q2 = brak pliku + komunikat, Q3 = jak U15, Q4 = wycinki ze sciezek
+  standardowych, Q5 = nazwa angielska `full_coverage/`.
+- Bez zmian kodu; brama nieuruchamiana (tylko dokumentacja).
 
 ### Wybor roku danych — model A i merge do develop (2026-10-10)
 
@@ -1644,12 +1658,11 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
   zadania. ADR-032, plan
   `docs/superpowers/plans/2026-10-10-year-range-selection.md`, raport
   `docs/research/2026-10-10-year-range/raport.md`.
-- [ ] **(c) Drugie dowiazanie do najnowszego PELNEGO lotu**
-  (`calyArkuszWypelnionyTrescia` = TAK) obok standardowego dowiazania do
-  najnowszego. Proponowane osobne drzewo:
-  `<segment>/pelne/<hierarchia>/<godlo>.<ext>`. Otwarte: arkusze brzegowe,
-  ktore nigdy nie sa pelne; czy pobierac najnowszy pelny lot, gdy pobrano
-  tylko najnowszy.
+- [ ] **(c) Drugie dowiazanie do najnowszego PELNEGO lotu** — spec
+  `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`
+  (decyzje F-U1..F-U5 z 2026-10-10: `<segment>/full_coverage/<hierarchia>/`,
+  `--full-sheet` dociaga najnowszy pelny lot); czeka na akceptacje
+  specu, potem plan i implementacja na `feat/full-sheet-link`.
 - [ ] **(d) Z inwentaryzacji wartosci domyslnych:**
   - `--country auto` PL+CZ bez `--vertical-crs`: mieszane uklady wysokosci,
     cicho (szczegoly: "Ryzyko KRON86 3" wyzej);
