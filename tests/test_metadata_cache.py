@@ -1106,7 +1106,7 @@ class TestPruneExpired:
 # =========================================================================
 
 _CAMP = ("nmt", "1m", "EVRF2007", "N-34-139-C-a-3-1")
-_CAMP_PAYLOAD = {"sources": [{"url": "u"}], "scanned_from": None}
+_CAMP_PAYLOAD = {"sources": [{"url": "u"}]}
 
 
 class TestCampaignsCache:
