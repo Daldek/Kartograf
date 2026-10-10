@@ -98,24 +98,41 @@
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI:** **v0.7.1 WYDANA (2026-10-09)** — tag
-> `v0.7.1` na commicie merge `develop` -> `main`. Opis wydania:
-> `docs/CHANGELOG.md` [0.7.1]; test na zywo przed wydaniem:
-> `docs/research/2026-10-09-test-przed-0.7.1/raport.md` (bez FAIL).
-> Stan galezi, tagow i `origin` sprawdzaj w gicie (`git status`, `git log`,
-> `git ls-remote --tags origin`), nie w tym dzienniku.
-> **Nastepny cykl:** backlog "Do 0.7.2" (decyzje uzytkownika 2026-10-09:
-> wycinki PL z WCS, wybor roku `--year`/`--min-year`/`--max-year` dla
-> NMT/NMPT/orto, drugie dowiazanie do pelnego lotu, domyslne
-> z inwentaryzacji) — kazda pozycja dopiero po specu/planie i zatwierdzeniu;
-> drobiazgi z review 0.7.1: sekcja "Po 0.7.1" nizej. Cykl otwarty
+> **START NASTEPNEJ SESJI (stan 2026-10-10):** cykl **0.7.2-dev** otwarty
 > 2026-10-09 (`__version__ = "0.7.2-dev"`, sekcja `## [0.7.2] - Unreleased`
-> w CHANGELOG). **W toku:** drobiazgi z review 0.7.1 (P1-P10) WDROZONE na
-> galezi `fix/review-0.7.1` (2026-10-10; spec
+> w CHANGELOG); ostatnie wydanie: v0.7.1 (2026-10-09). Stan galezi, tagow
+> i `origin` sprawdzaj w gicie (`git status`, `git log`,
+> `git ls-remote --tags origin`), nie w tym dzienniku.
+> **Zrobione w 0.7.2:** drobiazgi z review 0.7.1 (P1-P10) na galezi
+> `fix/review-0.7.1` (spec
 > `docs/superpowers/specs/2026-10-09-review-0.7.1-drobiazgi-design.md`,
 > plan `docs/superpowers/plans/2026-10-09-review-0.7.1-drobiazgi.md`,
-> raport na zywo `docs/research/2026-10-10-review-0.7.1/raport.md`);
-> merge `--no-ff` do `develop` czeka na zgode uzytkownika.
+> raport `docs/research/2026-10-10-review-0.7.1/raport.md`, review galezi
+> bez blokerow, audyt dokumentacji zgodny). Galaz NIE jest jeszcze
+> scalona: merge `--no-ff` do `develop` i usuniecie galezi czekaja na zgode
+> uzytkownika — ten wpis jest na galezi, na `develop` go nie ma, dopoki nie
+> bedzie merge. Nic nie wypchniete na `origin` (push tylko na polecenie).
+> **Nastepne w 0.7.2:** backlog "Do 0.7.2" nizej (decyzje uzytkownika
+> 2026-10-09), kazda pozycja dopiero po specu/planie i zatwierdzeniu:
+> (a) wycinki PL z WCS (nowy ADR, odwraca ADR-027); (b) wybor roku
+> `--year`/`--min-year`/`--max-year` dla NMT/NMPT/orto (spec
+> `docs/superpowers/specs/2026-10-09-year-range-selection-design.md` do
+> uaktualnienia, m.in. wersja docelowa 0.7.1 -> 0.7.2); (c) drugie
+> dowiazanie do najnowszego pelnego lotu; (d) ciche wartosci domyslne
+> z inwentaryzacji. Kolejnosc wybiera uzytkownik.
+> **Otwarte decyzje przed wydaniem 0.7.2:** zdania "wybor roku dla
+> NMT/NMPT/orto bedzie w 0.7.2" (`docs/USAGE.md` 1.1, `docs/ARCHITECTURE.md`
+> 4.x przy `--year`, komunikat `Error:` i docstring
+> `_reject_laz_only_opts` w `kartograf/cli/download_cmd.py`) sa prawdziwe
+> tylko, jesli (b) wejdzie do 0.7.2 — inaczej poprawic przed wydaniem;
+> `docs/PRD.md` (`__version__ # "0.7.1"`), SCOPE i data w CHANGELOG —
+> przy wydaniu, jak dotad.
+> **Katalog danych testow na zywo:** wskazuje uzytkownik (STANDARDS 6.4);
+> sciezki nie zapisuj w repo (straznik wzorcow commitow ja blokuje) —
+> zapytaj na poczatku sesji, jesli potrzebny.
+> **Commity:** przez straznik wzorcow
+> (`~/.config/kartograf/forbidden-patterns.txt`, jak w planach), autor
+> `Daldek <git@debever.pl>`, bez `Co-Authored-By`.
 > **Kierunek do v1.0.0:** roadmapa w `docs/SCOPE.md` 3.3 (zatwierdzona
 > 2026-10-08). Podprojekt 1 (magazyn wersjonowany, docelowo 0.8.0): spec
 > zaakceptowany i plan 1/3 napisany na galezi `feat/versioned-store`
@@ -160,6 +177,10 @@
 - Przebieg na zywo (raport `docs/research/2026-10-10-review-0.7.1/raport.md`):
   6 PASS; wykryty i poprawiony blad etykiety zapytania wariantu (falszywe
   ostrzezenia o roku warstwy).
+- Audyt dokumentacji wzgledem kodu galezi (CHANGELOG [0.7.2], USAGE,
+  ARCHITECTURE, DECISIONS, docstringi): zgodne; dopisane w ARCHITECTURE 4.8,
+  ze `timeout` BDOT10k dziala tez na zapytanie PRG. ADR-028 bez erraty
+  (podpowiedz wariantu jest addytywna).
 
 ### Otwarcie cyklu 0.7.2 i spec drobiazgow z review 0.7.1 (2026-10-09)
 
