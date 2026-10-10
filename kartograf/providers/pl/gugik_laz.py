@@ -633,7 +633,7 @@ class GugikLazProvider(BaseProvider):
         # local import: the kartograf.download package imports manager -> providers.pl
         from kartograf.download.campaigns import validate_campaign_args
 
-        validate_campaign_args(campaigns, min_year)
+        validate_campaign_args(campaigns, min_year, None)
         if year is not None and min_year is not None:
             raise ValidationError("year i min_year wykluczaja sie")
         if bbox.crs != "EPSG:2180":

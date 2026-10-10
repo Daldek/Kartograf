@@ -956,7 +956,7 @@ def cmd_download(args: argparse.Namespace) -> int:
     # ADR-030: --min-year 1900..2100 (and the strategy) before any work
     campaigns, min_year = _campaign_opts(args)
     try:
-        validate_campaign_args(campaigns, min_year)
+        validate_campaign_args(campaigns, min_year, None)
     except ValidationError as e:
         # the library message names the parameter; the CLI speaks of the flag
         print(f"Error: {str(e).replace('min_year', '--min-year')}", file=sys.stderr)

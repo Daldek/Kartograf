@@ -350,7 +350,7 @@ class DownloadManager:
             ``resolution="5m"`` with ``vertical_crs="KRON86"`` (no provider, or
             one without ``vertical_crs``).
         """
-        validate_campaign_args(campaigns, min_year)
+        validate_campaign_args(campaigns, min_year, None)
         # The "5m => EVRF2007" rule (D11): without a provider the factory
         # rejects 5m + KRON86 with ValidationError (0.7.1, no silent swap).
         self._provider = provider or create_nmt_provider(

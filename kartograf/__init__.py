@@ -77,6 +77,7 @@ from kartograf.exceptions import (
     NoCoverageError,
     ParseError,
     ValidationError,
+    YearRangeError,
 )
 from kartograf.hydrology.hsg import HSGCalculator, hsg_from_rasters
 from kartograf.landcover.manager import LandCoverManager
@@ -174,6 +175,7 @@ __all__ = [
     "ValidationError",
     "DownloadError",
     "NoCoverageError",
+    "YearRangeError",
     "GridMismatchError",
     "CacheError",
     # Version

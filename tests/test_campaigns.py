@@ -20,14 +20,24 @@ from kartograf.download.campaigns import (
     CampaignRef,
     campaign_extension,
     campaign_id_from_url,
+    in_year_range,
+    record_year,
+    resolve_campaign_strategy,
     validate_campaign_args,
     verify_file_format,
     verify_record_url,
     verify_record_vertical_crs,
     verify_sheet_extent,
+    year_range_error,
+    year_range_hints,
+    year_range_label,
 )
-from kartograf.exceptions import DownloadError, ValidationError
-from kartograf.providers.pl.skorowidz import SkorowidzRecord, parse_skorowidz_records
+from kartograf.exceptions import DownloadError, ValidationError, YearRangeError
+from kartograf.providers.pl.skorowidz import (
+    SkorowidzRecord,
+    parse_skorowidz_records,
+    select_campaign_records,
+)
 
 URL = "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/83233/83233_1744736_N-34-139-C-a-3-1.asc"
 
@@ -38,6 +48,27 @@ XYZ_HEAD = (
 ASC_HEAD = (
     Path(__file__).parent / "fixtures/gugik_asc/77912_1384976_7.125.11.19.head.asc"
 )
+
+C14 = Path(__file__).parent / "fixtures/gugik_skorowidz/real_2026_10_06/nmt/c14"
+
+
+def _c14_years(suffix: int) -> tuple[int, ...]:
+    godlo = f"N-34-139-C-a-3-{suffix}"
+    records = [
+        record
+        for path in C14.glob(f"{godlo}_EVRF2007_*.html")
+        for record in parse_skorowidz_records(
+            path.read_text(encoding="utf-8"), path.stem
+        )
+    ]
+    matching = select_campaign_records(
+        records, godlo=godlo, uklad="1992", resolution_m=1.0
+    )
+    return tuple(
+        sorted(
+            {year for record in matching if (year := record_year(record)) is not None}
+        )
+    )
 
 
 def _rec(url=URL, aktualnosc="2025-04-27", dt="2025-11-17", full=True, raw=None):
@@ -235,17 +266,151 @@ def test_invalid_aktualnosc_is_download_error(bad):
 
 
 @pytest.mark.parametrize(
-    "campaigns,min_year",
-    [("mosaic", None), ("newest", 1899), ("all", 2101), ("all", True), ("all", "2024")],
+    "campaigns,min_year,max_year",
+    [
+        ("mosaic", None, None),
+        ("newest", 1899, None),
+        ("all", 2101, None),
+        ("all", True, None),
+        ("all", "2024", None),
+        ("all", None, 1899),
+        ("all", None, 2101),
+        ("all", None, True),
+        ("all", 2025, 2023),
+    ],
 )
-def test_validate_campaign_args_rejects(campaigns, min_year):
+def test_validate_campaign_args_rejects(campaigns, min_year, max_year):
     with pytest.raises(ValidationError):
-        validate_campaign_args(campaigns, min_year)
+        validate_campaign_args(campaigns, min_year, max_year)
 
 
-def test_validate_campaign_args_accepts():
-    validate_campaign_args("newest", None)
-    validate_campaign_args("all", 2024)
+@pytest.mark.parametrize(
+    "campaigns,min_year,max_year",
+    [(None, None, None), ("all", 2023, 2024), ("newest", 2024, None)],
+)
+def test_validate_campaign_args_accepts(campaigns, min_year, max_year):
+    validate_campaign_args(campaigns, min_year, max_year)
+
+
+def test_resolve_campaign_strategy():
+    assert resolve_campaign_strategy(None, None) == "newest"
+    assert resolve_campaign_strategy(None, 2025) == "all"
+    assert resolve_campaign_strategy("all", None) == "all"
+    with pytest.raises(ValidationError, match="newest.*max_year"):
+        resolve_campaign_strategy("newest", 2025)
+
+
+def test_in_year_range_boundaries():
+    assert in_year_range(2023, 2023, 2024)
+    assert in_year_range(2024, 2023, 2024)
+    assert not in_year_range(2022, 2023, 2024)
+    assert not in_year_range(2025, 2023, 2024)
+    assert in_year_range(2024, None, 2024)
+    assert in_year_range(2024, 2024, None)
+    assert in_year_range(2024, None, None)
+    assert not in_year_range(None, None, None)
+
+
+def test_record_year_prefers_aktualnosc_rok():
+    path = C14 / "N-34-139-C-a-3-1_EVRF2007_SkorowidzeNMT2025.html"
+    record = next(
+        r
+        for r in parse_skorowidz_records(path.read_text(encoding="utf-8"), path.stem)
+        if "84183_" in r.url
+    )
+    assert record_year(record) == 2025
+    assert (
+        record_year(dataclasses.replace(record, raw={"aktualnoscRok": "2024"})) == 2024
+    )
+    assert record_year(dataclasses.replace(record, raw={})) == 2025
+    assert (
+        record_year(
+            dataclasses.replace(
+                record, aktualnosc="nieznana", raw={"aktualnoscRok": ""}
+            )
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    "suffixes,min_year,max_year,hints",
+    [
+        ((2,), 2018, 2018, ("--min-year 2018 (rok 2018 i nowsze)",)),
+        ((1,), 2026, 2026, ("--max-year 2026 (rok 2026 i starsze)",)),
+        (
+            (1, 3),
+            2024,
+            2024,
+            (
+                "--min-year 2024 (rok 2024 i nowsze)",
+                "--max-year 2024 (rok 2024 i starsze)",
+            ),
+        ),
+        ((1, 3), 2026, 2026, ("--max-year 2026 (rok 2026 i starsze)",)),
+        ((1, 3), 2026, None, ("--min-year 2025 (rok 2025 i nowsze)",)),
+        (
+            (3,),
+            2023,
+            2024,
+            (
+                "--min-year 2023 (rok 2023 i nowsze)",
+                "--max-year 2024 (rok 2024 i starsze)",
+            ),
+        ),
+    ],
+)
+def test_year_range_hints_spec_cases(suffixes, min_year, max_year, hints):
+    years = {f"N-34-139-C-a-3-{suffix}": _c14_years(suffix) for suffix in suffixes}
+    assert year_range_hints(years, min_year, max_year) == hints
+
+
+def test_year_range_error_lists_years_and_truncates():
+    conflicts = {
+        "N-34-139-C-a-3-1": _c14_years(1),
+        "N-34-139-C-a-3-3": _c14_years(3),
+    }
+    error = year_range_error(conflicts, 2024, 2024, total=4)
+    assert isinstance(error, YearRangeError)
+    assert isinstance(error, DownloadError)
+    assert "z roku 2024 dla 2 z 4 arkuszy" in str(error)
+    assert "N-34-139-C-a-3-1: dostepne roczniki 2019, 2023, 2025" in str(error)
+    assert "N-34-139-C-a-3-3: dostepne roczniki 2019, 2025" in str(error)
+    assert error.sheets == conflicts
+    assert error.min_year == error.max_year == 2024
+    assert error.hints == (
+        "--min-year 2024 (rok 2024 i nowsze)",
+        "--max-year 2024 (rok 2024 i starsze)",
+    )
+    assert "Podpowiedz: " + " albo ".join(error.hints) in str(error)
+
+    many = {f"N-34-139-C-a-3-{i:02d}": (2019, 2025) for i in range(25)}
+    truncated = year_range_error(many, 2024, 2024, total=25)
+    assert len(truncated.sheets) == 25
+    assert (
+        len(
+            [
+                line
+                for line in str(truncated).splitlines()
+                if "dostepne roczniki" in line
+            ]
+        )
+        == 20
+    )
+    assert "... i 5 innych" in str(truncated)
+
+
+@pytest.mark.parametrize(
+    "min_year,max_year,label",
+    [
+        (2024, 2024, "z roku 2024"),
+        (2026, None, "od roku 2026"),
+        (None, 2020, "do roku 2020"),
+        (2023, 2024, "z lat 2023-2024"),
+    ],
+)
+def test_year_range_label(min_year, max_year, label):
+    assert year_range_label(min_year, max_year) == label
 
 
 def test_verify_file_format_oserror_is_download_error(tmp_path):

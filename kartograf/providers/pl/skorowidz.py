@@ -387,18 +387,13 @@ def _zone(parser: SheetParser) -> int | None:
     return int(parser.godlo.split(".")[0]) if parser.uklad == "2000" else None
 
 
-def _record_year(record: SkorowidzRecord) -> int | None:
-    """Campaign year as in the parser (``aktualnoscRok`` or ``aktualnosc``, not
-    ``dt_pzgik``) — the ``min_year`` boundary; undetermined -> ``None``."""
-    year = record.raw.get("aktualnoscRok") or record.aktualnosc[:4]
-    return int(year) if year.isdigit() else None
-
-
 def _meets_min_year(record: SkorowidzRecord, min_year: int | None) -> bool:
     """Record meets the boundary; an undetermined year meets no boundary."""
     if min_year is None:
         return True
-    year = _record_year(record)
+    from kartograf.download.campaigns import record_year
+
+    year = record_year(record)
     return year is not None and year >= min_year
 
 
@@ -694,7 +689,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         # local import: the kartograf.download package imports manager -> providers.pl
         from kartograf.download.campaigns import validate_campaign_args
 
-        validate_campaign_args(campaigns, min_year)
+        validate_campaign_args(campaigns, min_year, None)
         if timeout is None:
             timeout = self.DEFAULT_TIMEOUT
         parser = SheetParser(godlo)
