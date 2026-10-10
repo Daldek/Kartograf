@@ -644,9 +644,11 @@ utworzeniu.
 
 ### 4.1 Godlo PL (NMT/NMPT/Orto)
 
-`SheetParser` waliduje godlo i normalizuje wielkosc liter (zer wiodacych NIE
-usuwa: `M-33-036-...` i `M-33-36-...` to dla `FileStorage` dwie rozne
-sciezki; forma kanoniczna, bez zer, to ta z `find_sheets_for_bbox`); godlo
+`SheetParser` waliduje godlo i normalizuje je do postaci kanonicznej:
+wielkosc liter i liczby PL-1992 bez zer wiodacych (od 0.7.1, A7:
+`M-33-036-A` -> `M-33-36-A`, ta sama postac w sciezce, sidecarze i wyniku);
+cyfry tylko ASCII `0-9` we wszystkich ukladach godel (PL-1992, PL-2000, CZ;
+od 0.7.2 — cyfry pelnej szerokosci itp. to `ParseError`); godlo
 PL-1992 grubsze niz 1:10000 rozwija sie do arkuszy 1:10000
 (`download_hierarchy`), godlo PL-2000 pobierane jest bezposrednio. Dla
 kazdego arkusza pyta WMS skorowidz (`GetFeatureInfo`, warstwy wykryte lazy
@@ -666,7 +668,16 @@ pobierane, arkusz konczy sie porazka); brak pola = rekord przyjety (log
 zapisuje `extra.source.declared_vertical_crs`, takze w cache rekordow —
 niezgodny rekord z cache daje ten sam blad, odswiezenie: `--force`. Brak zgodnego rekordu
 po poprawnych odpowiedziach warstw = `NoCoverageError`, np. dla PL-2000
-1:10000 z samymi potomkami podpowiedz `--scale 1:2000`. Awaria warstwy,
+1:10000 z samymi potomkami podpowiedz `--scale 1:2000`. NMT/NMPT (od 0.7.2,
+`GugikProvider._variant_hints`): przy braku pokrycia provider pyta pozostale
+warianty produktu z `WMS_SKOROWIDZE_ENDPOINTS` (rozdzielczosc, uklad
+wysokosci; jedno GetFeatureInfo ze wszystkimi warstwami wariantu, ten sam
+punkt i twardy filtr, timeout `DEFAULT_TIMEOUT`) i dopisuje podpowiedz
+`Skorowidz GUGiK ma ten arkusz w NMT 1m EVRF2007 — uzyj --resolution 1m`
+(bez godla: jedna linia `Info:` dla wielu arkuszy). Blad zapytania
+o wariant (jedna proba, bez ponowien) = brak tej podpowiedzi, `logger.warning`
+i pominiecie tego wariantu do konca zycia providera, nigdy zmiana wyniku;
+trafienie w cache braku pokrycia nie odpytuje sieci. Awaria warstwy,
 raport OGC albo nieoczekiwany szablon = `DownloadError`, nie cichy fallback
 do starszej kampanii. Zapytania i pobrania maja do 3 prob z backoffem
 (ponawiane: siec, 429, 5xx; inne 4xx koncza przy pierwszej probie)
@@ -1391,7 +1402,9 @@ wola te metode i drukuje `Downloaded to:` dla kazdego pliku; `--teryt`
 bez zmian. Stare `download_by_bbox`/`download_by_godlo` (menedzera bez
 jawnego `output_path` i providera) pobieraja JEDEN powiat ta sama sciezka
 (`_single_teryt`): obszar z kilku powiatow konczy sie `ValidationError`
-z lista kodow i wskazaniem `download_all_counties`. `layers=` (kody
+z lista kodow i wskazaniem `download_all_counties`. Opcja `timeout`
+(provider: domyslnie 120 s; menedzer: gdy nie podana, PRG 30 s) dziala od
+0.7.2 takze na zapytanie PRG, nie tylko na pobranie paczki. `layers=` (kody
 4-literowe, np. `PTWP`, `SWRS`; tylko GPKG) zostawia w scalonym GPKG
 wylacznie pliki `__OT_<kod>_*` pakietu — brakujaca warstwa to
 `DownloadError`, zly kod `ValidationError` przed siecia; plik z filtrem
@@ -1406,7 +1419,7 @@ rocznika 1990 EPSG:4326) oraz `extra.fallback = "wms_png"` i `extra.note`
 
 BDOT10k GPKG: archiwum ZIP z GUGiK jest rozpakowywane, a warstwy scalane
 w jeden GeoPackage w LOKALNYM katalogu tymczasowym (`tempfile`); do
-`--output` trafia gotowy plik (kopia jako `.gpkg.tmp` + `os.replace`).
+`--output` trafia gotowy plik (kopia jako `<nazwa>.gpkg.<pid>_<tid>.tmp` + `os.replace`).
 Powod: SQLite na udzialach CIFS/SMB bez blokad zakresow bajtow konczyl
 scalanie bledem `database is locked` (`Bdot10kProvider._merge_gpkg_files`).
 
@@ -1431,8 +1444,12 @@ np. `{teryt, format}`; `extra.source` bez `raw_file`; `sha256`/`size_bytes`
 archiwum); sidecar GPKG dostaje wtedy
 `extra.source.raw_file` = nazwa archiwum. Archiwum jest zapisywane
 atomowo i dopiero po udanym scaleniu, wiec blad rozpakowania nie zostawia
-ZIP bez sidecara; nieudany zapis archiwum usuwa juz zapisany GPKG (jego
-sidecar powstaje dopiero po powrocie z `download_package`). Blad
+ZIP bez sidecara. Scalony GPKG czeka w `<nazwa>.gpkg.<pid>_<tid>.tmp` i zastepuje
+poprzedni plik dopiero po udanym zapisie archiwum (od 0.7.2): nieudany zapis
+archiwum albo podmiany zostawia poprzedni GPKG i jego sidecar bez zmian
+(przy pierwszym pobraniu — brak pliku), bo sidecar GPKG powstaje dopiero po
+powrocie z `download_package`. Okno resztkowe: blad miedzy podmiana
+archiwum i GPKG zostawia nowe archiwum ze starym sidecarem. Blad
 wejscia-wyjscia przy rozpakowaniu (warstwy kopiowane strumieniowo), scalaniu
 albo zapisie archiwum to `DownloadError`. `keep_raw` nie zmienia tresci GPKG, wiec nie trafia do
 nazwy pliku ani do `request`. `extra.parent_request` (obszar zadania)
@@ -1472,7 +1489,8 @@ punkt na granicy dwoch powiatow = nizszy kod). Zrodlo: WFS PRG GUGiK
 (WFS 2.0.0, MapServer), warstwa `ms:A02_Granice_powiatow`, atrybut
 `JPT_KOD_JE`. Obszar w dowolnym obslugiwanym ukladzie jest przeliczany do
 EPSG:2180 ta sama regula co wycinek PL (`download.cutout.bbox_to_2180`),
-a `BBOX` idzie w kolejnosci osi (N,E) z `urn:ogc:def:crs:EPSG::2180`.
+a `BBOX` idzie w kolejnosci osi (N,E) z `urn:ogc:def:crs:EPSG::2180`,
+rozszerzony na zewnatrz do pelnych milimetrow (od 0.7.2).
 Filtr dziala na GEOMETRII powiatu, nie na jego obwiedni (sprawdzone na
 zywo 2026-10-08; surowe odpowiedzi: `tests/fixtures/gugik_prg/`). Pusta
 lista tylko z poprawnej odpowiedzi bez obiektow; blad HTTP (po wspolnej
@@ -1481,6 +1499,8 @@ kod spoza 4 cyfr i lista obcieta stronicowaniem = `DownloadError`.
 Obciecie: `numberReturned < numberMatched`, albo `numberMatched`
 nieliczbowe (MapServer: `unknown`) przy pelnej stronie, albo atrybut `next`
 kolekcji — tak wyglada prawdziwa strona MapServera (`unknown` + `next`).
+Odpowiedz, w ktorej liczbowe `numberReturned` rozni sie od liczby
+odczytanych kodow (obiekt bez `JPT_KOD_JE`), to tez `DownloadError` (od 0.7.2).
 Odpowiedzi trafiaja do `MetadataCache`: obszar (EPSG:2180) -> lista kodow
 w `teryt_bbox_cache` (TTL jak pozostale tabele, takze pusta lista), punkt
 -> kod w `teryt_cache`; `kartograf cache stats` liczy oba w `TERYT entries`.

@@ -624,7 +624,9 @@ class TestCoverageHints:
         from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
         cls = GugikProvider if product == "nmt" else GugikOrtoProvider
-        provider = cls(session=Mock())
+        # empty answers: the NMT variant check (P10) finds nothing to add
+        empty = Mock(status_code=200, text=sample("empty.body"))
+        provider = cls(session=Mock(get=Mock(return_value=empty)))
         error = provider._no_coverage(SheetParser(self._PL2000), list(self._RECORDS))
         message = str(error)
         for hint in self._EXPECTED:

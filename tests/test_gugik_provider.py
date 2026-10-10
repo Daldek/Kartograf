@@ -33,11 +33,13 @@ def _wms_response(body: str) -> Mock:
     return response
 
 
-def _queried_layers(session: Mock) -> list[str]:
-    """LAYERS= values from successive GetFeatureInfo requests on the session."""
+def _queried_layers(session: Mock, endpoint: str | None = None) -> list[str]:
+    """LAYERS= values from successive GetFeatureInfo requests on the session
+    (only those sent to ``endpoint`` when given)."""
     return [
         parse_qs(urlparse(call.args[0]).query)["LAYERS"][0]
         for call in session.get.call_args_list
+        if endpoint is None or call.args[0].startswith(f"{endpoint}?")
     ]
 
 
@@ -574,7 +576,9 @@ class TestGugikProviderGetOpendataUrl:
         assert f"Brak danych NMT 1m dla {self.GODLO} (uklad PL-1992, EVRF2007)" in str(
             exc_info.value
         )
-        assert _queried_layers(session) == list(_EVRF2007_LAYERS)
+        # its own index, all layers; the variant check (P10) asks other indexes
+        own = GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"]
+        assert _queried_layers(session, own) == list(_EVRF2007_LAYERS)
 
     def test_transport_error_retries_same_layer(self, record_response):
         """A dropped connection retries THE SAME layer after backoff."""

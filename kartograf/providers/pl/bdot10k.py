@@ -358,9 +358,9 @@ class Bdot10kProvider(LandCoverProvider):
             bbox, session=self._sessions.get(), cache=self._cache, timeout=timeout
         )
 
-    def _single_teryt(self, bbox: BBox, what: str) -> str:
+    def _single_teryt(self, bbox: BBox, what: str, timeout: int = 30) -> str:
         """The one powiat of an area (several: ValidationError, none: NoCoverage)."""
-        teryts = self.teryts_for_area(bbox)
+        teryts = self.teryts_for_area(bbox, timeout=timeout)
         if not teryts:
             raise NoCoverageError(f"{what}: obszar nie przecina zadnego powiatu (PRG)")
         if len(teryts) > 1:
@@ -416,7 +416,7 @@ class Bdot10kProvider(LandCoverProvider):
         from kartograf.core.sheet_parser import SheetParser
 
         bbox = SheetParser(godlo).get_bbox(crs="EPSG:2180")
-        teryt = self._single_teryt(bbox, f"BDOT10k {godlo}")
+        teryt = self._single_teryt(bbox, f"BDOT10k {godlo}", timeout)
         logger.info(f"Godło {godlo} is in powiat {teryt}, downloading county package")
         return self.download_by_admin_unit(
             teryt, output_path, timeout, format=format, **kwargs
@@ -468,7 +468,7 @@ class Bdot10kProvider(LandCoverProvider):
         DownloadError
             PRG query or download failure
         """
-        teryt = self._single_teryt(bbox, "BDOT10k bbox")
+        teryt = self._single_teryt(bbox, "BDOT10k bbox", timeout)
         logger.info(f"Bbox is in powiat {teryt}, downloading county package")
         return self.download_by_admin_unit(
             teryt, output_path, timeout, format=format, **kwargs
@@ -505,7 +505,8 @@ class Bdot10kProvider(LandCoverProvider):
             Layer codes to keep (``OT_<code>_*`` files); None = all
         raw_path : Path, optional
             Where to also save the downloaded ZIP unchanged (atomically, only
-            after a successful merge); None = not kept
+            after a successful merge, before the GPKG replaces the previous
+            one); None = not kept
 
         Returns
         -------
@@ -517,9 +518,13 @@ class Bdot10kProvider(LandCoverProvider):
         DownloadError
             Not a ZIP, no GPKG inside, a requested layer missing in the
             package, two files with the same table name, or an I/O error
-            while extracting, merging or writing the raw ZIP (a failed raw
-            ZIP write also removes the merged GPKG: no data file is left
-            without its sidecar)
+            while extracting, merging or writing the raw ZIP. The merged
+            GPKG waits in ``<name>.gpkg.<pid>_<tid>.tmp`` and replaces ``output_path``
+            only after the raw ZIP is saved, so on any error the previous
+            GPKG (and the sidecar the caller wrote for it) stays untouched
+            (P1). Residual window: a failure between the two ``os.replace``
+            calls (raw ZIP, then GPKG) leaves the new raw ZIP with its old
+            sidecar.
         """
         # Read ZIP into memory
         zip_data = BytesIO()
@@ -567,24 +572,33 @@ class Bdot10kProvider(LandCoverProvider):
                         extracted_files.append(extracted_path)
                         logger.debug(f"Extracted {Path(gpkg_file).name}")
 
-                    # Merge all layers into single GPKG
+                    # Merge all layers into a staged GPKG next to the target
+                    # (pid/tid in the name: concurrent downloads of the same
+                    # powiat never share it)
                     output_gpkg = output_path.with_suffix(".gpkg")
-                    self._merge_gpkg_files(extracted_files, output_gpkg)
-                    if raw_path is not None:
-                        try:
-                            self._write_raw_zip(zip_data, raw_path)
-                        except BaseException as e:
-                            # The caller writes the GPKG sidecar only after a
-                            # successful return: drop the GPKG instead of
-                            # leaving a data file without its sidecar.
-                            output_gpkg.unlink(missing_ok=True)
-                            if isinstance(e, OSError):
+                    staged = output_gpkg.with_name(
+                        f"{output_gpkg.name}.{os.getpid()}_{threading.get_ident()}.tmp"
+                    )
+                    self._merge_gpkg_files(extracted_files, staged)
+                    try:
+                        if raw_path is not None:
+                            try:
+                                self._write_raw_zip(zip_data, raw_path)
+                            except OSError as e:
                                 raise DownloadError(
                                     "Nie udalo sie zapisac oryginalnego ZIP "
-                                    f"BDOT10k {raw_path.name}: {e}; plik "
-                                    f"{output_gpkg.name} usuniety"
+                                    f"BDOT10k {raw_path.name}: {e}; poprzedni "
+                                    f"{output_gpkg.name} (jesli byl) bez zmian"
                                 ) from e
-                            raise
+                        # os.replace: overwrites an existing file on Windows
+                        # too (--force)
+                        os.replace(staged, output_gpkg)
+                    except BaseException:
+                        staged.unlink(missing_ok=True)
+                        raise
+                    logger.info(
+                        f"Merged {len(extracted_files)} layers into {output_gpkg}"
+                    )
                     return output_gpkg
 
         except zipfile.BadZipFile as e:
@@ -614,19 +628,21 @@ class Bdot10kProvider(LandCoverProvider):
             tmp.unlink(missing_ok=True)
             raise
 
-    def _merge_gpkg_files(self, source_files: list[Path], output_path: Path) -> None:
+    def _merge_gpkg_files(self, source_files: list[Path], staged_path: Path) -> None:
         """
-        Merge multiple GeoPackage files into one.
+        Merge multiple GeoPackage files into one, written to ``staged_path``.
 
         Each source file is expected to have a single data table.
-        All tables are copied to the output file, preserving geometry.
+        All tables are copied to the output file, preserving geometry. The
+        caller moves ``staged_path`` to its final name (``os.replace``) when
+        everything else succeeded; on an error here ``staged_path`` is removed.
 
         Parameters
         ----------
         source_files : list[Path]
             List of source GPKG files to merge
-        output_path : Path
-            Output merged GPKG file
+        staged_path : Path
+            Merged GPKG file (a temporary name next to the final one)
 
         Raises
         ------
@@ -639,9 +655,7 @@ class Bdot10kProvider(LandCoverProvider):
 
         # SQLite ALWAYS writes in a local temp directory: on a CIFS/SMB share without
         # `nobrl`, byte-range locks ended the merge with `database is locked`. The
-        # target receives the finished file (copy + os.replace).
-        final_tmp = output_path.with_suffix(".gpkg.tmp")
-
+        # target directory receives the finished file (copy).
         try:
             with tempfile.TemporaryDirectory() as work_dir:
                 local_path = Path(work_dir) / "merged.gpkg"
@@ -662,15 +676,9 @@ class Bdot10kProvider(LandCoverProvider):
                 finally:
                     conn.close()
 
-                shutil.copyfile(local_path, final_tmp)
-
-            # Atomic rename
-            # os.replace: overwrites an existing file on Windows too (--force)
-            final_tmp.replace(output_path)
-            logger.info(f"Merged {len(source_files)} layers into {output_path}")
-
-        except Exception:
-            final_tmp.unlink(missing_ok=True)
+                shutil.copyfile(local_path, staged_path)
+        except BaseException:
+            staged_path.unlink(missing_ok=True)
             raise
 
     def _copy_gpkg_layer(self, cursor, source_path: Path) -> None:

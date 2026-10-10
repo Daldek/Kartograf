@@ -7,6 +7,51 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.7.2] - Unreleased
 
+### Dodane
+
+- NMT/NMPT: przy arkuszu bez danych w wybranej rozdzielczosci albo
+  ukladzie wysokosci podpowiedz `Info:` o wariancie, w ktorym skorowidz
+  GUGiK ma ten arkusz, np. `Skorowidz GUGiK ma ten arkusz w NMT 1m
+  EVRF2007 — uzyj --resolution 1m` (biblioteka:
+  `NoCoverageError.hints`, `DownloadResult.no_coverage_hints`). Koszt: jedno
+  zapytanie skorowidza na wariant (NMT: 2, NMPT: 1) i brakujacy arkusz;
+  blad tego zapytania (jedna proba) pomija podpowiedz, a wariant z bledem
+  nie jest juz pytany do konca zadania; wynik bez zmian. Wpisy cache braku
+  pokrycia sprzed 0.7.2 nie maja tej podpowiedzi do konca TTL (7 dni) —
+  odswieza `--force` albo `MetadataCache(refresh=True)`.
+
+### Zmienione
+
+- Komunikat CLI o arkuszach bez danych GUGiK nie zgaduje przyczyny
+  "(morze, obszar za granica)": mowi, ze skorowidz GUGiK nie ma tych
+  arkuszy dla wybranego produktu i rozdzielczosci, a morze, granice i brak
+  NMT 5 m w czesci kraju podaje jako przyklady (sprawdzone na zywo: np.
+  `N-34-130-D-d --resolution 5m` — 6 z 16 arkuszy bez 5 m, NMT 1 m jest).
+  Skrypty dopasowujace stary tekst trzeba poprawic.
+
+### Naprawione
+
+- Zapytanie o powiaty BDOT10k (WFS PRG) rozszerza obszar na zewnatrz
+  z dokladnoscia do milimetra; wczesniej zaokraglenie do pelnych metrow
+  moglo pominac powiat stykajacy sie z obszarem w pasie do 0,5 m,
+  a `teryt_for_point` pytal raz o sam punkt, raz o kwadrat 2 m.
+- WFS PRG: odpowiedz, w ktorej `numberReturned` rozni sie od liczby
+  odczytanych kodow powiatow, konczy sie `DownloadError` zamiast cicho
+  krotszej listy powiatow (i brakujacego pakietu BDOT10k).
+- BDOT10k: opcja `timeout` (`Bdot10kProvider.download_by_bbox/godlo`,
+  `LandCoverManager.download_by_bbox/godlo/download_all_counties`)
+  dziala tez na zapytanie o powiat w WFS PRG; wczesniej to zapytanie
+  mialo zawsze 30 s. Bez `timeout` w menedzerze zostaje 30 s.
+- Godla z cyframi spoza ASCII (np. pelnej szerokosci `M-３３-８-A`,
+  `6.１４５.２０`, CZ `７３０_５５５５`) sa odrzucane (`ParseError`);
+  wczesniej PL-1992 i PL-2000 przechodzily walidacje i trafialy do sciezek
+  i sidecarow w innej postaci niz godlo GUGiK. Co zrobic: podac godlo
+  cyframi `0-9`.
+- BDOT10k `keep_raw=True`: nieudany zapis oryginalnego ZIP przy ponownym
+  pobraniu zostawia poprzedni GPKG i jego sidecar bez zmian (scalony GPKG
+  zastepuje poprzedni dopiero po zapisie ZIP). Wczesniej poprzedni GPKG
+  byl nadpisany, a potem usuniety, i zostawal sidecar bez pliku danych.
+
 ## [0.7.1] - 2026-10-09
 
 ### Dodane

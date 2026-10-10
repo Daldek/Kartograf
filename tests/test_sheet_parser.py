@@ -169,6 +169,12 @@ class TestSheetParserValidation:
         with pytest.raises(ParseError, match="Nieprawidłowe godło"):
             SheetParser("INVALID-GODLO")
 
+    @pytest.mark.parametrize("godlo", ["M-３３-８-A", "N-34-１３０-D", "6.１４５.２０"])
+    def test_non_ascii_digits_rejected(self, godlo):
+        """P5: \\d and isdecimal() let full-width digits into the sheet code."""
+        with pytest.raises(ParseError):
+            SheetParser(godlo)
+
     @pytest.mark.parametrize("zone", ["5", "6", "7", "8", " 6 "])
     def test_bare_pl2000_zone_number_message(self, zone):
         """A bare number 5-8 is a PL-2000 zone number, not a sheet code."""

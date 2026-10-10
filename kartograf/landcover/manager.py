@@ -317,7 +317,9 @@ class LandCoverManager:
         }
         if isinstance(self._provider, Bdot10kProvider):
             parent, area = self._bdot_area(bbox, None)
-            teryt = self._provider._single_teryt(area, "BDOT10k bbox")
+            teryt = self._provider._single_teryt(
+                area, "BDOT10k bbox", self._prg_timeout(kwargs)
+            )
             if output_path is None:
                 return self._download_county(teryt, kwargs, parent)
             return self._download_county(teryt, kwargs, None, output_path, request)
@@ -360,7 +362,9 @@ class LandCoverManager:
         godlo = SheetParser(godlo).godlo
         if isinstance(self._provider, Bdot10kProvider):
             parent, area = self._bdot_area(None, godlo)
-            teryt = self._provider._single_teryt(area, f"BDOT10k {parent['sheet']}")
+            teryt = self._provider._single_teryt(
+                area, f"BDOT10k {parent['sheet']}", self._prg_timeout(kwargs)
+            )
             if output_path is None:
                 return self._download_county(teryt, kwargs, parent)
             return self._download_county(
@@ -396,10 +400,15 @@ class LandCoverManager:
         if (bbox is None) == (godlo is None):
             raise ValidationError("Podaj dokladnie jedno z: bbox, godlo")
         parent, area = self._bdot_area(bbox, godlo)
-        teryts = self._provider.teryts_for_area(area)
+        teryts = self._provider.teryts_for_area(area, timeout=self._prg_timeout(kwargs))
         if not teryts:
             raise NoCoverageError("BDOT10k: obszar nie przecina zadnego powiatu (PRG)")
         return [self._download_county(teryt, kwargs, parent) for teryt in teryts]
+
+    @staticmethod
+    def _prg_timeout(kwargs: dict) -> int:
+        """PRG lookup timeout: the BDOT10k ``timeout`` option, else 30 s (P7)."""
+        return kwargs.get("timeout", 30)
 
     @staticmethod
     def _bdot_area(bbox: BBox | None, godlo: str | None) -> tuple[dict, BBox]:
