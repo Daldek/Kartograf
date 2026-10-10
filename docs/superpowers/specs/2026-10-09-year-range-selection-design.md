@@ -21,6 +21,60 @@ i 2026-10-10 (sekcja 2) sa wiazace; pytania Q1, Q3-Q8 rozstrzygniete
 
 ---
 
+## 0. Errata 2026-10-10 — model A (NADRZEDNA wobec sekcji 2-11)
+
+**Status:** zaakceptowany przez uzytkownika 2026-10-10 (model A po audycie
+logiki flag CLI, `agent://CliFlagLogicAudit`). Gdzie nizsze sekcje mowia
+inaczej, obowiazuje ta sekcja; wiersze tabeli 5 i testy 10.1 wymienione
+nizej sa zastapione.
+
+**Powod:** audyt wykazal, ze flagi roku mieszaly dwa pytania — KTORE lata
+(filtr) i ILE lotow na arkusz (strategia): samo `--min-year` dawalo 1 lot,
+a `--max-year`/`--year` wszystkie loty z przedzialu (`--min-year 1900` = 4
+pliki, `--max-year 2100` = 23 pliki na C14); jawne `--campaigns newest`
+z gorna granica bylo bledem, choc ma naturalne znaczenie; te same flagi
+znaczyly co innego dla LAZ niz dla NMT/NMPT/orto.
+
+| # | Decyzja (2026-10-10) | Zastepuje |
+|---|---|---|
+| U14 | **Flagi roku = filtr dopuszczalnych lat; `--campaigns` = ile lotow.** `--year`, `--min-year`, `--max-year` i para wyznaczaja przedzial lat (twardy filtr, sprawdzenie wszystkich arkuszy, konflikt = stop — U2-U6, P1 bez zmian). `--campaigns` decyduje o liczbie lotow na arkusz: `newest` (domyslnie) = jeden, najnowszy lot w przedziale (klucz ADR-028); `all` = wszystkie loty w przedziale. Kazda kombinacja jest dozwolona; jawne `--campaigns newest` znaczy to samo co brak flagi. Ta sama regula dla NMT, NMPT, orto i LAZ (dla LAZ to dzisiejsza semantyka ADR-029, bez zmian). | U9, U13 (staje sie regula, nie wyjatkiem), P3, P3a, czesc U12 ("z `--max-year` albo `--year` = blad") |
+| U15 | **Sciezka standardowa przy przedziale (opcja (i)):** regula dowiazania BEZ ZMIAN (ADR-030 (d): najnowszy lokalny lot, nigdy wstecz — U8). Gdy przy jakimkolwiek przedziale dowiazanie arkusza wskazuje lot SPOZA przedzialu (bo lokalnie jest nowszy), CLI wypisuje `Info:` (stderr, takze z `-q`) z godlem, lotem dowiazania i katalogiem pobranego lotu; biblioteka zwraca te informacje w wyniku (`SheetFetch`/`DownloadResult`). Kod wyjscia bez zmian. | zdanie P3 "sciezka standardowa = dowiazanie do najnowszego lotu w przedziale" |
+| U16 | **0.8.0:** `--campaigns {newest,all}` zostaje w 0.7.2; w 0.8.0 (zmiany lamiace CLI w jednym wydaniu) zastapione przelacznikiem bez wartosci (np. `--all-campaigns`), bo `newest` jest zawsze domyslne. Pozycja w backlogu "Do 0.8.0". | — |
+
+**Skutki (zastepuja wskazane miejsca):**
+
+- **Biblioteka:** brak sentinela strategii — `DownloadManager(campaigns=
+  "newest")`, `resolve_campaigns(campaigns="newest")` domyslnie;
+  `resolve_campaign_strategy` usuniety; `campaigns="newest"` z `max_year`
+  dozwolone (najnowszy lot w przedziale). 8.2, 8.3, 8.6 odpowiednio.
+- **Pomiar pokrycia i `Info:` 6.3** (U10, P4) — tylko przy `all` (jawnym)
+  z > 1 lotem w przedziale i niepelnym najnowszym; przy `newest` jeden lot,
+  bez pomiaru.
+- **Podpowiedzi 6.2** bez zmian w tekscie; obie (`--min-year Y`,
+  `--max-year Y`) daja teraz po jednym locie na arkusz.
+- **Tabela 5 (C14):**
+  - T1 `--year 2025` (lista) = 4 pliki kampanii (po jednym na arkusz,
+    wszystkie 84183, 2025-10-21), dowiazania na nie, `Warning:` E13 dla
+    -1, -2, -3, bez pomiaru i bez `Info:` 6.3; dzisiejszy wynik T1
+    (10 plikow, pomiar, `Info:`) = `--campaigns all --year 2025`.
+  - T8 `--max-year 2022` = 4 pliki: -1 i -3 73021 (2019), -2 i -4 75162
+    (2022); sidecar `request.campaigns: "newest"`, `request.max_year: 2022`.
+    Dzisiejszy wynik T8 (6 plikow) = `--campaigns all --max-year 2022`.
+  - T14 -1 `--year 2025` = jeden lot 84183; T15 (`--campaigns all`) = oba
+    loty (84183, 83233) z pomiarem — to dzisiejsze T14.
+  - T16, T16a bez zmian; T26 `--campaigns newest --year 2025` (albo
+    `--max-year 2025`) = jak bez `--campaigns` (jeden lot), kod 0 — bez
+    bledu; T26a bez zmian.
+  - T27, T28 — dotycza `--campaigns all`.
+  - T21-T25 (LAZ) bez zmian.
+- **Testy 10.1:** testy T1/T8/T14/T26 managera i CLI przepisane wg
+  powyzszego; testy `all` dostaja jawne `campaigns="all"`.
+- **CHANGELOG 11:** `--year`/`--max-year` pobieraja domyslnie jeden lot
+  w przedziale; wszystkie loty = `--campaigns all`; brak bledu
+  `--campaigns newest` z gorna granica; `Info:` o dowiazaniu spoza
+  przedzialu.
+
+
 ## 1. Kontekst i cel
 
 ### 1.1 Stan: `--year` poza LAZ jest odrzucany (0.7.1, Task 14)

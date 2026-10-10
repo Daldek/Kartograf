@@ -13,10 +13,7 @@ from typing import TYPE_CHECKING
 
 from kartograf.cli._parser import parse_bbox_arg
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
-from kartograf.download.campaigns import (
-    resolve_campaign_strategy,
-    validate_campaign_args,
-)
+from kartograf.download.campaigns import validate_campaign_args
 from kartograf.download.countries import EDGES as _EDGES
 from kartograf.download.countries import CountryPart
 from kartograf.download.countries import bbox_to_wgs84 as _bbox_to_wgs84
@@ -923,20 +920,9 @@ def cmd_download(args: argparse.Namespace) -> int:
         )
         print(f"Error: {message}", file=sys.stderr)
         return 1
-    if getattr(args, "product", "nmt") == "laz":
-        # LAZ retains ADR-029's default newest, even with an upper bound.
-        campaigns = campaigns or "newest"
-    else:
-        try:
-            campaigns = resolve_campaign_strategy(campaigns, max_year)
-        except ValidationError:
-            print(
-                "Error: --campaigns newest wyklucza sie z --year/--max-year — "
-                "gorna granica roku pobiera wszystkie kampanie z przedzialu "
-                "(pomin --campaigns)",
-                file=sys.stderr,
-            )
-            return 1
+    # Year bounds only restrict the admissible years; --campaigns sets how many
+    # flights (model A, ADR-032 point 3): the same rule for every product.
+    campaigns = campaigns or "newest"
     args.campaigns = campaigns
     args.min_year, args.max_year = min_year, max_year
 
@@ -1077,6 +1063,11 @@ def cmd_download(args: argparse.Namespace) -> int:
                     # `last_sheet.skipped` = Mock (truthy).
                     fetch = manager.last_sheet
                     sheet = fetch if isinstance(fetch, SheetFetch) else None
+                    # U15: when the standard path keeps a newer flight, name the
+                    # campaign file of this request instead.
+                    where = result
+                    if sheet is not None and sheet.link_outside_range is not None:
+                        where = (sheet.downloaded or sheet.reused)[0]
                     if not args.quiet:
                         if campaigns == "all" and sheet is not None:
                             # M-1: like the list - campaign files, not a sheet
@@ -1084,9 +1075,9 @@ def cmd_download(args: argparse.Namespace) -> int:
                                 len(sheet.downloaded), 1, output_dir, len(sheet.reused)
                             )
                         elif sheet is not None and sheet.skipped:
-                            print(f"Skipped {args.godlo} - already exists at {result}")
+                            print(f"Skipped {args.godlo} - already exists at {where}")
                         else:
-                            print(f"Downloaded to {result}")
+                            print(f"Downloaded to {where}")
                     if sheet is not None and sheet.link == "copy":
                         _warn_copied_links([args.godlo])
                     if sheet is not None and sheet.unverified is not None:
@@ -1103,6 +1094,10 @@ def cmd_download(args: argparse.Namespace) -> int:
                                 better_coverage={sheet.godlo: sheet.better_coverage}
                             ),
                             [result],
+                        )
+                    if sheet is not None and sheet.link_outside_range is not None:
+                        _print_link_outside_range(
+                            {sheet.godlo: sheet.link_outside_range}
                         )
                     return 0
                 paths = result
@@ -1261,6 +1256,7 @@ def _finish_pl_sheets(
     """
     _warn_sheet_sidecars(paths)
     _print_better_coverage(result, paths)
+    _print_link_outside_range(result.link_outside_range)
     if result.copied:
         _warn_copied_links(result.copied)
     if result.unverified:
@@ -1416,6 +1412,35 @@ def _print_better_coverage(result: DownloadResult, paths: list[Path]) -> None:
         print(f"  {godlo}: {detail}", file=sys.stderr)
     if len(better) > len(shown):
         print(f"  ... i {len(better) - len(shown)} innych", file=sys.stderr)
+
+
+def _campaign_dirname(path: Path) -> str:
+    """``<date>_<id>`` of a ``kampanie/<date>_<id>/...`` path; else the file name."""
+    parts = Path(path).parts
+    if "kampanie" in parts and parts.index("kampanie") + 1 < len(parts):
+        return parts[parts.index("kampanie") + 1]
+    return Path(path).name
+
+
+def _print_link_outside_range(outside: dict[str, Path]) -> None:
+    """Report standard paths still pointing at a newer flight outside the request.
+
+    ADR-032 point 3 (U15): the link never moves back to an older campaign, so
+    after a year-bounded request it may keep the previously downloaded flight.
+    """
+    if not outside:
+        return
+    print(
+        f"Info: sciezka standardowa {len(outside)} arkuszy wskazuje nowszy "
+        "lokalny lot spoza tego zadania (dowiazanie nigdy nie cofa sie na "
+        "starszy lot); pobrane loty sa w <segment>/kampanie/:",
+        file=sys.stderr,
+    )
+    shown = dict(sorted(outside.items())[:10])
+    for godlo, target in shown.items():
+        print(f"  {godlo}: dowiazanie {_campaign_dirname(target)}", file=sys.stderr)
+    if len(outside) > len(shown):
+        print(f"  ... i {len(outside) - len(shown)} innych", file=sys.stderr)
 
 
 def _is_partial_sheet(path: Path) -> bool:
@@ -1767,9 +1792,7 @@ def _download_pl_sheet_list(
     workers = getattr(args, "workers", 4)
     skip_existing = not args.force
     campaigns, min_year, max_year = _campaign_opts(args)
-    # Direct callers without cmd_download still get the same default strategy.
-    if campaigns is None:
-        campaigns = resolve_campaign_strategy(None, max_year)
+    campaigns = campaigns or "newest"
 
     if not args.quiet:
         _print_sheet_list(

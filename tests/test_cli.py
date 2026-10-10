@@ -6820,29 +6820,6 @@ class TestCampaignOptions:
         assert expected in err and ("2200" in err or "2023" in err)
         mock_manager.assert_not_called()
 
-    @pytest.mark.parametrize("upper", ["--year", "--max-year"])
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_cli_explicit_newest_with_year_rejected(
-        self, mock_manager, upper, capsys, tmp_path
-    ):
-        rc = main(
-            [
-                "download",
-                "N-34-130-D-d-2-4",
-                "--campaigns",
-                "newest",
-                upper,
-                "2025",
-                "-o",
-                str(tmp_path),
-                "-q",
-            ]
-        )
-        assert rc == 1
-        err = capsys.readouterr().err
-        assert "--campaigns newest wyklucza sie z --year/--max-year" in err
-        mock_manager.assert_not_called()
-
     @pytest.mark.parametrize("product", ["nmt", "nmpt", "orto"])
     @pytest.mark.parametrize("mode", ["godlo", "bbox"])
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
@@ -6874,7 +6851,7 @@ class TestCampaignOptions:
         assert (kwargs["min_year"], kwargs["max_year"], kwargs["campaigns"]) == (
             2025,
             2025,
-            "all",
+            "newest",
         )
 
     @pytest.mark.parametrize(
@@ -6882,20 +6859,52 @@ class TestCampaignOptions:
         [
             (["--min-year", "2024"], "newest", (2024, None)),
             (["--min-year", "2024", "--campaigns", "newest"], "newest", (2024, None)),
-            (["--max-year", "2024"], "all", (None, 2024)),
+            (["--max-year", "2024"], "newest", (None, 2024)),
+            (["--campaigns", "newest", "--year", "2025"], "newest", (2025, 2025)),
+            (["--campaigns", "all", "--max-year", "2024"], "all", (None, 2024)),
             (["--campaigns", "all", "--year", "2025"], "all", (2025, 2025)),
         ],
     )
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_cli_min_year_alone_keeps_newest(
+    def test_cli_campaigns_independent_of_year_flags(
         self, mock_manager_class, flags, strategy, bounds, tmp_path
     ):
+        """Model A: year flags set the bounds, ``--campaigns`` the flight count."""
         mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
         rc = main(["download", "N-34-130-D-d-2-4", *flags, "-o", str(tmp_path), "-q"])
         assert rc == 0
         kwargs = mock_manager_class.call_args.kwargs
         assert (kwargs["min_year"], kwargs["max_year"]) == bounds
         assert kwargs["campaigns"] == strategy
+
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_cli_reports_link_kept_outside_range(
+        self, mock_manager_class, mock_find, capsys, tmp_path
+    ):
+        """U15: `Info:` names the sheet and the campaign the link still uses."""
+        godlo = "N-34-130-D-d-2-4"
+        mock_find.return_value = [godlo]
+        manager = _sheet_list_manager(tmp_path / f"{godlo}.asc")
+        manager.last_result.link_outside_range = {
+            godlo: tmp_path / "kampanie" / "2025-10-21_84183" / f"{godlo}.asc"
+        }
+        mock_manager_class.return_value = manager
+        rc = main(
+            [
+                "download",
+                *_PL_BBOX_2180,
+                "--max-year",
+                "2022",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
+        assert rc == 0
+        err = capsys.readouterr().err
+        assert "Info: sciezka standardowa 1 arkuszy wskazuje nowszy" in err
+        assert f"  {godlo}: dowiazanie 2025-10-21_84183" in err
 
     @patch("kartograf.cli.download_cmd._create_provider_and_storage")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
@@ -7295,7 +7304,7 @@ class TestCampaignOptions:
         assert rc == 0
         err = capsys.readouterr().err
         assert err.count(_CAMPAIGN_INFO) == 1
-        assert mock_manager_class.call_args.kwargs["campaigns"] == "all"
+        assert mock_manager_class.call_args.kwargs["campaigns"] == "newest"
         assert mock_cz.call_count == 1
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")

@@ -617,34 +617,33 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         self,
         godlo: str,
         *,
-        campaigns: str | None = None,
+        campaigns: str = "newest",
         min_year: int | None = None,
         max_year: int | None = None,
         timeout: int | None = None,
     ) -> list[SkorowidzRecord]:
         """Campaigns of a sheet in a closed year range (newest first).
 
-        Without bounds, ``newest`` retains the single-record cache. With a
-        bound, the full campaign list supplies both selected records and
-        all available years on a range conflict.
+        ``campaigns`` sets how many flights: ``newest`` = the newest one within
+        the bounds, ``all`` = every one. Without bounds, ``newest`` retains the
+        single-record cache. With a bound, the full campaign list supplies both
+        selected records and all available years on a range conflict.
         """
         # local import: the kartograf.download package imports manager -> providers.pl
         from kartograf.download.campaigns import (
             in_year_range,
             record_year,
-            resolve_campaign_strategy,
             validate_campaign_args,
             year_range_error,
         )
 
         validate_campaign_args(campaigns, min_year, max_year)
-        strategy = resolve_campaign_strategy(campaigns, max_year)
         if timeout is None:
             timeout = self.DEFAULT_TIMEOUT
         parser = SheetParser(godlo)
         godlo = parser.godlo
         query = self._skorowidz_query(parser)
-        if min_year is None and max_year is None and strategy == "newest":
+        if min_year is None and max_year is None and campaigns == "newest":
             return [self._resolve_record(parser, timeout, query)]
         found = self._resolve_all(parser, timeout, query)
         if min_year is None and max_year is None:
@@ -668,7 +667,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                 if not years:
                     raise NoCoverageError(f"Brak kampanii {godlo}", godlo=godlo)
                 raise year_range_error({godlo: years}, min_year, max_year, total=1)
-        if strategy == "newest":
+        if campaigns == "newest":
             return [kept[0]]
         # the manager logs the campaign count at INFO (`_fetch_campaigns`, M-7)
         logger.debug("%s: %s kampanii", godlo, len(kept))

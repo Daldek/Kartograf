@@ -1901,14 +1901,14 @@ all` (j) konczy sie od 0.7.1 na powodzie, bez odeslania do narzedzia.
   i zachowuje lata dla sidecara; bledy skorowidza/WFS przerywaja cale
   zadanie przed pobraniem. Fallback lokalnej kampanii I-1 z erraty 5
   dziala tylko BEZ jakiejkolwiek granicy roku.
-- (a), (d) **Strategia i dowiazanie.** Brak jawnego `--campaigns`:
-  bez gornej granicy `newest`, z `--max-year`/`--year` `all` (wszystkie
-  loty z przedzialu, rowniez kilka w jednym roku). Samo `--min-year`
-  pozostaje `newest`, jeden najnowszy lot >= L; jawne `all --min-year`
-  pobiera wszystkie od L. Jawne `newest` z gorna granica = blad przed
-  siecia; `newest --min-year` jest dozwolone. Sciezka standardowa
-  wskazuje najnowszy lot z wybranych wg `(aktualnosc, dt_pzgik, url)`,
-  rowniez niepelny, a reguly "nigdy wstecz" (d) nie zmienia pokrycie.
+- (a), (d) **Strategia i dowiazanie (model A, ADR-032 pkt 3).** Flagi
+  roku zawezaja dopuszczalne lata, `--campaigns` decyduje o liczbie
+  lotow: `newest` (domyslnie, takze jawnie z kazda granica) = jeden
+  najnowszy lot w przedziale, `all` = wszystkie loty z przedzialu,
+  rowniez kilka w jednym roku. Sciezka standardowa wskazuje najnowszy
+  lokalny lot wg `(aktualnosc, dt_pzgik, url)`, rowniez niepelny;
+  reguly "nigdy wstecz" (d) nie zmienia ani pokrycie, ani przedzial —
+  dowiazanie spoza przedzialu CLI zglasza `Info:`.
 - (i) **Sidecar i pomiar.** `request.min_year`/`max_year` tylko gdy
   podane; dodatkowo `request.year`, gdy obie granice sa rowne,
   `request.campaigns` to rozwiazana strategia. W przeplywie z przedzialem
@@ -2037,14 +2037,15 @@ o dostepnych rocznikach. CUZK nie publikuje historii danych.
 - A) Tylko `--year` z zatrzymaniem, bez symetrycznej gornej granicy:
   niespojny wynik `--year Y` i pary granic `[Y, Y]`.
 - B) Domkniety przedzial z weryfikacja wszystkich arkuszy/kafli przed
-  pobraniem, jawnym konfliktem oraz strategia zaleznosci od gornej
-  granicy; bez zmiany reguly sciezki standardowej.
+  pobraniem i jawnym konfliktem; flagi roku wyznaczaja dopuszczalne
+  lata, `--campaigns` liczbe lotow; bez zmiany reguly sciezki
+  standardowej.
 - C) Pobieranie czesciowe albo dowiazanie do najbardziej pelnego lotu:
   nie gwarantuje zadanego roku dla calego zadania, zmienia klucz
   dowiazania ADR-030 (d) i wymaga pokrycia znanego dopiero po pobraniu.
 
-**Decyzja:** B (U1-U13; szczegoly i wyjatki w erracie 7 ADR-030
-i erracie 2 ADR-029).
+**Decyzja:** B (U1-U16 specu, w tym errata "model A" z 2026-10-10;
+szczegoly i wyjatki w erracie 7 ADR-030 i erracie 2 ADR-029).
 1. `--year Y` = zamkniety `[Y, Y]`, `--min-year L` = `[L, +inf)`,
    `--max-year U` = `(-inf, U]`, para = `[L, U]`; kazda granica to
    liczba calkowita 1900..2100, `L <= U`. `--year` z inna granica =
@@ -2064,16 +2065,17 @@ i erracie 2 ADR-029).
    podpowiedzi = tylko lata. Awaria skorowidza/WFS w tej fazie =
    blad calego zadania bez pobran; I-1 (lokalna kampania)
    pozostaje wylacznie dla zadania bez granic.
-3. NMT/NMPT/orto: brak jawnej strategii to `newest` bez gornej
-   granicy (samo `--min-year` bierze JEDEN najnowszy lot),
-   `all` z gorna granica (`--max-year`/`--year` bierze WSZYSTKIE
-   loty z przedzialu do `kampanie/`, takze kilka w jednym roku).
-   Jawne `all` z samym `--min-year` tez bierze wszystkie;
-   jawne `newest` z gorna granica = blad. Sciezka standardowa
-   wskazuje najnowszy wybrany lot wg ADR-028, takze gdy
-   starszy ma wieksze pokrycie, i nigdy nie cofa sie na
-   starsza kampanie lokalna (ADR-030 (d)).
-4. Dla > 1 lotu w przedziale z `all` i niepelnego najnowszego
+3. Flagi roku sa tylko filtrem dopuszczalnych lat, a `--campaigns`
+   decyduje o liczbie lotow na arkusz (model A): `newest`
+   (domyslnie) = jeden, najnowszy lot w przedziale (klucz ADR-028),
+   `all` = wszystkie loty z przedzialu do `kampanie/`, takze kilka
+   w jednym roku. Kazda kombinacja jest dozwolona; ta sama regula
+   dla NMT, NMPT, orto i LAZ. Sciezka standardowa wskazuje
+   najnowszy lokalny lot wg ADR-028 i nigdy nie cofa sie na
+   starsza kampanie lokalna (ADR-030 (d)); gdy przy przedziale
+   wskazuje lot spoza przedzialu, CLI drukuje `Info:`, a biblioteka
+   zwraca te informacje w wyniku.
+4. Dla > 1 lotu w przedziale z jawnym `all` i niepelnego najnowszego
    mierzone jest po pobraniu pokrycie waznymi pikselami. Gdy inny
    lot ma wieksze pokrycie, CLI drukuje `Info:` na stderr,
    sidecar wskazuje ten lot (`extra.better_coverage`), ale
@@ -2114,8 +2116,18 @@ z uslugi, zamiast czesciowego skanu albo tylko `record_cache`
 (TTL `campaigns_cache` = 7 dni). `YearRangeError.sheets`,
 `.min_year`, `.max_year` i `.hints` sa dostepne w bibliotece.
 Odmienny rocznik na jednym arkuszu zatrzymuje cala liste;
-rok lub gorna granica moga pobrac wiecej danych niz
+`--campaigns all` z przedzialem moze pobrac wiecej danych niz
 `newest`. Pokrycie informuje, nie zmienia celu dowiazania.
+W 0.8.0 `--campaigns {newest,all}` ma zostac zastapione
+przelacznikiem bez wartosci (np. `--all-campaigns`), bo `newest`
+jest zawsze domyslne (zmiana lamiaca CLI, backlog "Do 0.8.0").
+
+**Historia:** pierwsza wersja (2026-10-10, przed merge) uzalezniala
+strategie od granic: samo `--min-year` = `newest`, gorna granica =
+`all`, jawne `newest` z gorna granica = blad. Audyt logiki flag CLI
+wykazal asymetrie (`--min-year 1900` = 4 pliki, `--max-year 2100` =
+23 na C14), redundancje i rozjazd z LAZ; uzytkownik przyjal model A
+(2026-10-10).
 
 ---
 

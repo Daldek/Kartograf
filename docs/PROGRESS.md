@@ -126,7 +126,11 @@
 > **Decyzje uzytkownika z (b), 2026-10-10 — wdrozone na galezi:** LAZ
 > `--year` przy rocznikach tylko z dostawami `NIE` dopisuje w `Error:`
 > `(tylko arkusze niepelne)`; `discover_tiles` dostal `min_year` (symetria
-> z `select_tiles`). Przy wydaniu 0.7.2:
+> z `select_tiles`); po audycie logiki flag CLI **model A** (flagi roku =
+> filtr dopuszczalnych lat, `--campaigns` = liczba lotow, domyslnie jeden;
+> `Info:` gdy dowiazanie zostaje przy nowszym locie spoza zadania) — spec
+> sekcja 0 (U14-U16), ADR-032 pkt 3. Przelacznik zamiast `--campaigns
+> {newest,all}` w 0.8.0 (backlog). Przy wydaniu 0.7.2:
 > `docs/PRD.md` (`__version__ # "0.7.1"`), SCOPE i data w CHANGELOG.
 > **Katalog danych testow na zywo:** wskazuje uzytkownik (STANDARDS 6.4);
 > sciezki nie zapisuj w repo (straznik wzorcow commitow ja blokuje) —
@@ -1664,6 +1668,11 @@ wchodza w tym samym wydaniu (decyzja uzytkownika). Kazda na wlasnej galezi.
   Errata ADR-031: zamiast okresu aliasow zmiana w 0.8.0. Przy okazji
   inwentaryzacja pozostalych polskich identyfikatorow publicznego API —
   decyzja uzytkownika, czy tez wchodza do 0.8.0.
+- [ ] **`--campaigns {newest,all}` -> przelacznik bez wartosci** (decyzja
+  uzytkownika 2026-10-10, spec wyboru roku U16): w modelu A `newest` jest
+  zawsze domyslne, wiec jawne `--campaigns newest` niczego nie zmienia;
+  zastapic przelacznikiem (np. `--all-campaigns`), bez aliasu (BREAKING
+  w CHANGELOG z "Co zrobic"; wywolania Hydrografa do sprawdzenia).
 
 - [ ] **Parametry wymagane w API (Hydrograf A8):** bez wartosci domyslnych
   `output_dir="./data"`, `vertical_crs="EVRF2007"` (`DownloadManager`),
