@@ -358,9 +358,9 @@ class Bdot10kProvider(LandCoverProvider):
             bbox, session=self._sessions.get(), cache=self._cache, timeout=timeout
         )
 
-    def _single_teryt(self, bbox: BBox, what: str) -> str:
+    def _single_teryt(self, bbox: BBox, what: str, timeout: int = 30) -> str:
         """The one powiat of an area (several: ValidationError, none: NoCoverage)."""
-        teryts = self.teryts_for_area(bbox)
+        teryts = self.teryts_for_area(bbox, timeout=timeout)
         if not teryts:
             raise NoCoverageError(f"{what}: obszar nie przecina zadnego powiatu (PRG)")
         if len(teryts) > 1:
@@ -416,7 +416,7 @@ class Bdot10kProvider(LandCoverProvider):
         from kartograf.core.sheet_parser import SheetParser
 
         bbox = SheetParser(godlo).get_bbox(crs="EPSG:2180")
-        teryt = self._single_teryt(bbox, f"BDOT10k {godlo}")
+        teryt = self._single_teryt(bbox, f"BDOT10k {godlo}", timeout)
         logger.info(f"Godło {godlo} is in powiat {teryt}, downloading county package")
         return self.download_by_admin_unit(
             teryt, output_path, timeout, format=format, **kwargs
@@ -468,7 +468,7 @@ class Bdot10kProvider(LandCoverProvider):
         DownloadError
             PRG query or download failure
         """
-        teryt = self._single_teryt(bbox, "BDOT10k bbox")
+        teryt = self._single_teryt(bbox, "BDOT10k bbox", timeout)
         logger.info(f"Bbox is in powiat {teryt}, downloading county package")
         return self.download_by_admin_unit(
             teryt, output_path, timeout, format=format, **kwargs
