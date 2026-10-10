@@ -357,7 +357,9 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
                         godlo=parser.godlo,
                         timeout=self.DEFAULT_TIMEOUT,
                         retries=self.MAX_RETRIES,
-                        label=f"wariant {variant}",
+                        # no trailing digits: "EVRF2007" at the end of the
+                        # label would read as a layer year in the parser
+                        label=f"wariant {variant} (wszystkie warstwy)",
                     )
                 except DownloadError as e:
                     logger.warning(
