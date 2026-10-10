@@ -66,6 +66,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `FileStorage.get_full_sheet_path()`. Biblioteka: `SheetFetch.full_link`,
   `SheetFetch.full_link_outside_range`, `DownloadResult.full_links`,
   `DownloadResult.full_link_outside_range`.
+- Biblioteka: `DownloadManager(full_sheet=True)` (wlasciwosc
+  `full_sheet`) — gdy najnowszy lot arkusza w przedziale lat nie jest
+  pelny, pobiera dodatkowo najnowszy pelny lot z tego przedzialu
+  (najwyzej jeden dodatkowy lot na arkusz) i dowiazuje go w `full_sheet/`;
+  sciezka standardowa nadal wskazuje najnowszy lot. Sidecar kampanii takiego
+  zadania ma `request.full_sheet: true`. Arkusze bez pelnego lotu
+  w skorowidzu: `DownloadResult.without_full`. Provider bez kampanii
+  z `full_sheet=True` = `ValidationError`.
 
 ### Zmienione
 
