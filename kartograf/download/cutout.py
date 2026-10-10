@@ -984,6 +984,13 @@ def build_cutout_from_sheets(
         EPSG:2180 target and sheets with different grid phases.
     TransformError
         No safe pinned operation to ``target_crs``.
+
+    Notes
+    -----
+    The result is always a GeoTIFF, whatever the ``output_path`` suffix
+    (``cutout.asc`` holds GeoTIFF content). The sidecar is best-effort
+    (``write_pl_cutout_sidecar``): when writing it fails, the new raster
+    stays next to the sidecar of an earlier run (stale) or without one.
     """
     if not sheet_paths:
         raise ValidationError("build_cutout_from_sheets: brak arkuszy wejsciowych")
