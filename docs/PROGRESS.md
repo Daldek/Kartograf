@@ -117,8 +117,11 @@
 > kazda pozycja dopiero po specu/planie i zatwierdzeniu. (b) wybor roku:
 > spec `docs/superpowers/specs/2026-10-09-year-range-selection-design.md`
 > uaktualniony 2026-10-10 na galezi `feat/year-range` (wersja 0.7.2,
-> decyzje U12/U13, wycinki bez flag roku) — czeka na review uzytkownika,
-> potem plan; (c) drugie dowiazanie do najnowszego pelnego lotu; (d) ciche
+> decyzje U12/U13, wycinki bez flag roku) i zaakceptowany; plan
+> `docs/superpowers/plans/2026-10-10-year-range-selection.md` (8 zadan,
+> korekty specu przy planie: T21/T21a LAZ, `parent_requests`, P3a poza
+> `validate_campaign_args`) — implementacja od Task 1; (c) drugie
+> dowiazanie do najnowszego pelnego lotu; (d) ciche
 > wartosci domyslne z inwentaryzacji; (a) wycinki PL z WCS (nowy ADR).
 > **Otwarte decyzje przed wydaniem 0.7.2:** zdania "wybor roku dla
 > NMT/NMPT/orto bedzie w 0.7.2" (`docs/USAGE.md` 1.1, `docs/ARCHITECTURE.md`
@@ -1585,7 +1588,8 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
   roku. Spec uaktualniony 2026-10-10 (wersja 0.7.2; U12 = powyzsze
   decyzje; U13: samo `--min-year` bez `--campaigns` = jedna, najnowsza
   kampania, `all` tylko z `--max-year`/`--year` albo jawnym `--campaigns
-  all`); czeka na review uzytkownika przed planem.
+  all`); spec zaakceptowany, plan
+  `docs/superpowers/plans/2026-10-10-year-range-selection.md` (2026-10-10).
 - [ ] **(c) Drugie dowiazanie do najnowszego PELNEGO lotu**
   (`calyArkuszWypelnionyTrescia` = TAK) obok standardowego dowiazania do
   najnowszego. Proponowane osobne drzewo:
