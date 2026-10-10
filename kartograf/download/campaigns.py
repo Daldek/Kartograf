@@ -12,13 +12,13 @@ declared by the record (no IO).
 import hashlib
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse
 
 from kartograf.core.sheet_parser import SheetParser
-from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.exceptions import DownloadError, ValidationError, YearRangeError
 from kartograf.sources.sidecar import read_asc_header
 
 logger = logging.getLogger(__name__)
@@ -65,22 +65,138 @@ def campaign_id_from_url(url: str) -> str:
     return "u" + hashlib.sha1(url.encode("utf-8")).hexdigest()[:8]
 
 
-def validate_campaign_args(campaigns: str, min_year: int | None) -> None:
-    """Raise ValidationError for a strategy outside CAMPAIGN_STRATEGIES, or
-    a min_year that is not an int (bool included) or is outside 1900..2100."""
-    if campaigns not in CAMPAIGN_STRATEGIES:
+def validate_campaign_args(
+    campaigns: str | None, min_year: int | None, max_year: int | None
+) -> None:
+    """Validate a strategy (including the unresolved sentinel) and year bounds."""
+    if campaigns is not None and campaigns not in CAMPAIGN_STRATEGIES:
         raise ValidationError(
             f"Nieznana strategia kampanii {campaigns!r} "
             f"(dozwolone: {', '.join(CAMPAIGN_STRATEGIES)})"
         )
-    if min_year is not None and (
-        not isinstance(min_year, int)
-        or isinstance(min_year, bool)
-        or not 1900 <= min_year <= 2100
-    ):
+    for name, year in (("min_year", min_year), ("max_year", max_year)):
+        if year is not None and (
+            not isinstance(year, int)
+            or isinstance(year, bool)
+            or not 1900 <= year <= 2100
+        ):
+            raise ValidationError(
+                f"{name} musi byc liczba calkowita 1900..2100, otrzymano {year!r}"
+            )
+    if min_year is not None and max_year is not None and min_year > max_year:
         raise ValidationError(
-            f"min_year musi byc liczba calkowita 1900..2100, otrzymano {min_year!r}"
+            f"min_year ({min_year}) nie moze byc wiekszy niz max_year ({max_year})"
         )
+
+
+def resolve_campaign_strategy(campaigns: str | None, max_year: int | None) -> str:
+    """Resolve the default strategy; an explicit newest excludes an upper bound."""
+    if campaigns == "newest" and max_year is not None:
+        raise ValidationError(
+            'campaigns="newest" wyklucza sie z max_year — gorna granica roku '
+            "pobiera wszystkie kampanie z przedzialu (pomin campaigns)"
+        )
+    return (
+        campaigns
+        if campaigns is not None
+        else ("all" if max_year is not None else "newest")
+    )
+
+
+def record_year(record) -> int | None:
+    """Year from ``aktualnoscRok``, else ``aktualnosc[:4]``; non-digit -> None."""
+    year = record.raw.get("aktualnoscRok") or record.aktualnosc[:4]
+    return int(year) if year.isdigit() else None
+
+
+def in_year_range(year: int | None, min_year: int | None, max_year: int | None) -> bool:
+    """Whether a known year lies within the closed, optionally open range."""
+    return (
+        year is not None
+        and (min_year is None or year >= min_year)
+        and (max_year is None or year <= max_year)
+    )
+
+
+def year_range_label(min_year: int | None, max_year: int | None) -> str:
+    """Polish label of a single year, lower bound, upper bound or closed range."""
+    if min_year is not None and max_year is not None:
+        return (
+            f"z roku {min_year}"
+            if min_year == max_year
+            else f"z lat {min_year}-{max_year}"
+        )
+    if min_year is not None:
+        return f"od roku {min_year}"
+    if max_year is not None:
+        return f"do roku {max_year}"
+    raise ValueError("year_range_label wymaga co najmniej jednej granicy")
+
+
+def year_range_hints(
+    conflicts: Mapping[str, Sequence[int]], min_year: int | None, max_year: int | None
+) -> tuple[str, ...]:
+    """Suggest a one-sided bound that admits every conflicting sheet (6.2)."""
+    if not conflicts:
+        return ()
+    newer = (
+        [{year for year in years if year > max_year} for years in conflicts.values()]
+        if max_year is not None
+        else []
+    )
+    older = (
+        [{year for year in years if year < min_year} for years in conflicts.values()]
+        if min_year is not None
+        else []
+    )
+    hints: list[str] = []
+    if newer and all(newer):
+        if min_year is not None:
+            hints.append(f"--min-year {min_year} (rok {min_year} i nowsze)")
+        else:
+            upper = max(min(years) for years in newer)
+            hints.append(f"--max-year {upper} (rok {upper} i starsze)")
+    if older and all(older):
+        if max_year is not None:
+            hints.append(f"--max-year {max_year} (rok {max_year} i starsze)")
+        else:
+            lower = min(max(years) for years in older)
+            hints.append(f"--min-year {lower} (rok {lower} i nowsze)")
+    return tuple(hints)
+
+
+def year_range_error(
+    conflicts: Mapping[str, Sequence[int]],
+    min_year: int | None,
+    max_year: int | None,
+    *,
+    total: int,
+    unit: str = "arkuszy",
+) -> YearRangeError:
+    """Build the 6.2 conflict message and retain every sheet's available years."""
+    sheets = {
+        godlo: tuple(sorted(set(years))) for godlo, years in sorted(conflicts.items())
+    }
+    hints = year_range_hints(sheets, min_year, max_year)
+    lines = [
+        f"brak danych {year_range_label(min_year, max_year)} "
+        f"dla {len(sheets)} z {total} {unit} — nic nie pobrano:"
+    ]
+    lines.extend(
+        f"  {godlo}: dostepne roczniki {', '.join(map(str, years))}"
+        for godlo, years in list(sheets.items())[:20]
+    )
+    if len(sheets) > 20:
+        lines.append(f"  ... i {len(sheets) - 20} innych")
+    if hints:
+        lines.append(f"Podpowiedz: {' albo '.join(hints)}")
+    return YearRangeError(
+        "\n".join(lines),
+        sheets=sheets,
+        min_year=min_year,
+        max_year=max_year,
+        hints=hints,
+    )
 
 
 @dataclass(frozen=True)
