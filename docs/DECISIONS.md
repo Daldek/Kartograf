@@ -51,9 +51,10 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) | --target-crs dla PL — scalony wycinek bbox (mozaika + pinned warp) | 2026-08-28 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (wycinek tylko `newest`; arkusze bez sprawdzenia skorowidza: errata 5 [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem)); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (`--target-crs` wylacznie dla CZ) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (bbox = WCS GeoTIFF) |
 | [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) | Wybor rekordu skorowidza GUGiK i `extra.source` | 2026-09-30 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (strategie kampanii `newest`/`all`, `--min-year`; regula wyboru `newest` bez zmian; awaria skorowidza: errata 2); czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.source`); zastepuje czesc [ADR-020](#adr-020-walidacja-warstw-wms-przez-getcapabilities) (zaszyte warstwy i fallback) |
 | [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) | Wybor kafli LAZ wg pokrycia obszaru i pobieranie LAZ w bibliotece | 2026-10-07 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`all`/`--min-year`; errata 1) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial LAZ; errata 2); zastepuje czesc [ADR-021](#adr-021-laz-chmury-punktów-lidar--discovery-przez-wfs-area-based) (regula newest-per-tile) |
-| [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) | Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem | 2026-10-07 | Przyjeta — czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.campaign`) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial, skan i konflikt; errata 7); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`kampanie/`), [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wycinek tylko `newest`), [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (strategie), [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) (LAZ: `all`, `--min-year`) i [ADR-019](#adr-019-sqlite-wal-jako-metadata-cache) (`campaigns_cache`) |
+| [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) | Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem | 2026-10-07 | Przyjeta — czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.campaign`) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial, skan i konflikt; errata 7); uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (drugie dowiazanie `full_sheet/`; errata 8); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`kampanie/`), [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wycinek tylko `newest`), [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (strategie), [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) (LAZ: `all`, `--min-year`) i [ADR-019](#adr-019-sqlite-wal-jako-metadata-cache) (`campaigns_cache`) |
 | [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) | Jezyk identyfikatorow — angielski (sidecar od 0.7.0, API/CLI do v1.0.0) | 2026-10-08 | Przyjeta; czesciowo zastepuje [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (nazwy kluczy `extra.source`) i [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (nazwy kluczy `extra.campaign`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) (konwencja nazw kluczy sidecara) |
-| [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) | Wybor roku danych: przedzial lat, zatrzymanie przy konflikcie | 2026-10-10 | Przyjeta; uzupelnia ADR-029 i ADR-030 |
+| [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) | Wybor roku danych: przedzial lat, zatrzymanie przy konflikcie | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (`--full-sheet` z pkt 4; errata 1); uzupelnia ADR-029 i ADR-030 |
+| [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) | Drugie dowiazanie do najnowszego pelnego lotu (`full_sheet/`, `--full-sheet`) | 2026-10-10 | Przyjeta; uzupelnia [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) ((d): drugie dowiazanie) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 4: `--full-sheet`) |
 
 ---
 
@@ -1574,7 +1575,7 @@ GetFeature, nie konflikt z konkretnym kaflem. Sidecar kafla dostaje
 ## ADR-030: Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem
 
 **Data:** 2026-10-07 (decyzje uzytkownika)
-**Status:** Przyjeta — czesciowo zastapiona przez ADR-031 (nazwy kluczy `extra.campaign`) i ADR-032 (przedzial, skan i konflikt; errata 7); uzupelnia ADR-026 (`kampanie/`), ADR-027 (wycinek tylko `newest`), ADR-028 (strategie; regula wyboru `newest` bez zmian), ADR-029 (LAZ: `all`, `--min-year`) i ADR-019 (`campaigns_cache`)
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-031 (nazwy kluczy `extra.campaign`) i ADR-032 (przedzial, skan i konflikt; errata 7); uzupelniona przez ADR-033 (drugie dowiazanie `full_sheet/`; errata 8); uzupelnia ADR-026 (`kampanie/`), ADR-027 (wycinek tylko `newest`), ADR-028 (strategie; regula wyboru `newest` bez zmian), ADR-029 (LAZ: `all`, `--min-year`) i ADR-019 (`campaigns_cache`)
 
 **Kontekst:** Arkusz GUGiK ma czesto kilka kampanii (rozne daty pozyskania,
 zlecenia, zrodla: skaning laserowy albo zdjecia lotnicze). Pomiar 2026-10-07
@@ -1935,6 +1936,18 @@ all` (j) konczy sie od 0.7.1 na powodzie, bez odeslania do narzedzia.
   `Info:`. Flagi roku nie zwezaja automatycznie zadania do PL.
   LAZ: regula i referencja pokrycia w erracie 2 ADR-029.
 
+**Errata 8 (2026-10-10, ADR-033 — drugie dowiazanie):**
+- (d) Obok sciezki standardowej istnieje drugie dowiazanie
+  `<segment>/full_sheet/<hierarchia>/<godlo>.<ext>` do najnowszego
+  lokalnego lotu zadania z `full_sheet is True` (skorowidz: TAK). Ta sama
+  mechanika co sciezka standardowa (`download/links.py::ensure_link`,
+  dawniej `ensure_standard_link`; hardlink -> kopia, nigdy wstecz wsrod
+  lotow pelnych, sidecar z `extra.link_target`). Regula sciezki
+  standardowej bez zmian.
+- Konsekwencje dla `FileStorage`: `list_files()` pomija `kampanie/`
+  i `full_sheet/`, `delete(godlo)` usuwa oba dowiazania z sidecarami,
+  pliki w `kampanie/` zostaja.
+
 ---
 
 ## ADR-031: Jezyk identyfikatorow — angielski (sidecar od 0.7.0, API/CLI do v1.0.0)
@@ -2024,7 +2037,7 @@ decyzja dotyczy wylacznie identyfikatorow. STANDARDS 9.4 odsyla tutaj.
 ## ADR-032: Wybor roku danych: przedzial lat, zatrzymanie przy konflikcie
 
 **Data:** 2026-10-10 (decyzje uzytkownika 2026-10-09 i 2026-10-10)
-**Status:** Przyjeta; uzupelnia ADR-029 (LAZ) i ADR-030 (kampanie PL)
+**Status:** Przyjeta — uzupelniona przez ADR-033 (`--full-sheet` z pkt 4; errata 1); uzupelnia ADR-029 (LAZ) i ADR-030 (kampanie PL)
 
 **Kontekst:** `--year` dzialal tylko dla LAZ, a `--min-year` w liscie
 arkuszy pozwalal pominac arkusz, ktory mial wylacznie starsze dane.
@@ -2128,6 +2141,89 @@ strategie od granic: samo `--min-year` = `newest`, gorna granica =
 wykazal asymetrie (`--min-year 1900` = 4 pliki, `--max-year 2100` =
 23 na C14), redundancje i rozjazd z LAZ; uzytkownik przyjal model A
 (2026-10-10).
+
+**Errata 1 (2026-10-10, ADR-033):** opcja z pkt 4 (`--full-sheet`)
+wdrozona BEZ zmiany klucza dowiazania: sciezka standardowa nadal wskazuje
+najnowszy lot, a najnowszy pelny lot dostaje drugie dowiazanie
+`full_sheet/`. W modelu A `--campaigns` dalej oznacza liczbe lotow
+(`newest` = jeden), a `--full-sheet` doklada najwyzej jeden lot na arkusz
+— tylko gdy najnowszy w przedziale nie jest pelny; z `all` jest bez
+skutku. Przedzial lat filtruje takze lot pelny. `--min-coverage N`
+pozostaje poza zakresem.
+
+---
+
+## ADR-033: Drugie dowiazanie do najnowszego pelnego lotu (`full_sheet/`, `--full-sheet`)
+
+**Data:** 2026-10-10 (decyzje uzytkownika F-U1..F-U5)
+**Status:** Przyjeta; uzupelnia ADR-030 ((d): drugie dowiazanie; errata 8) i ADR-032 (pkt 4: `--full-sheet`; errata 1)
+
+**Kontekst:** Sciezka standardowa wskazuje najnowszy lokalny lot, takze
+niepelny (`calyArkuszWypelnionyTrescia = NIE`); E13 tylko o tym ostrzega.
+Pomiar 2026-10-07 (577 grup godlo x produkt,
+`docs/research/2026-10-06-e2e-brzegowe-i-review/pokrycie-kampanii.md`):
+14 arkuszy z niepelnym najnowszym rekordem, w 8 istnieje starszy pelny
+lot; pokrycie niepelnego od 0,9 % (NMT N-34-139-C-a-3-1) do 98,9 %.
+Pomiar granic 2026-10-10
+(`docs/research/2026-10-10-full-sheet-link/granica-pelne-pokrycie.md`):
+TAK znaczy "pelne pokrycie w granicach Polski" — 13 plikow TAK, 0 px
+nodata po stronie PL; nodata za granica (np. Slubice 75 %) to zagraniczna
+czesc ramki. NIE nie mowi o skali braku.
+
+**Opcje:**
+- A) Zmiana klucza dowiazania standardowego na najnowszy pelny lot:
+  lamie ADR-028/ADR-030 (d) i znaczenie sciezki standardowej dla
+  konsumentow (Hydrograf).
+- B) Mozaika lotow (nowy + uzupelnienie ze starszego): poza zakresem
+  (SCOPE 3.1).
+- C) Wybor wg zmierzonego pokrycia (`--min-coverage N`): pokrycie znane
+  dopiero po pobraniu.
+- D) Drugie dowiazanie obok standardowego do najnowszego lokalnego lotu
+  pelnego + flaga dociagajaca ten lot.
+- E) Jak D, ale dociaganie domyslne: zmienia liczbe lotow `newest`
+  (model A ADR-032).
+
+**Decyzja:** D.
+- F-U1: dociaganie tylko z `--full-sheet`
+  (`DownloadManager(full_sheet=True)`): gdy najnowszy lot w przedziale
+  lat nie jest pelny, zadanie pobiera DODATKOWO najnowszy pelny lot
+  z przedzialu (`resolve_campaigns(campaigns="all")`, pierwszy rekord
+  `full_sheet is True`). Bez flagi `full_sheet/` powstaje tylko z lotow,
+  ktore zadanie i tak ma lokalnie. Z `--campaigns all` flaga bez skutku.
+  Sidecar kampanii takiego zadania: `request.full_sheet: true`.
+- F-U2: arkusz bez lotu pelnego = brak pliku w `full_sheet/` (bez
+  dowiazania "najlepszego" niepelnego); jeden `Warning:` z E13 dzieli
+  arkusze na: z `full_sheet/`, bez pelnego lotu w skorowidzu
+  (`DownloadResult.without_full`), pelny lot nie pobrany (podpowiedz
+  `--full-sheet`).
+- F-U3: dowiazanie pelne nigdy wstecz; gdy zostaje przy locie spoza
+  przedzialu, `Info:` wspolny z U15
+  (`DownloadResult.full_link_outside_range`).
+- F-U4: wycinek `--target-crs` sklada sciezki standardowe bez zmian;
+  `--full-sheet` z `--target-crs` albo LAZ = `Error:` przed siecia;
+  CZ jak inne opcje kampanii (bez PL `Error:`, PL+CZ pod `auto` `Info:`).
+- F-U5: jedno angielskie pojecie `full_sheet` (katalog `full_sheet/`,
+  flaga `--full-sheet`, parametr `full_sheet=`) — tak nazywa sie juz flaga
+  GUGiK w rekordach i sidecarach; robocza nazwa `full_coverage/`
+  odrzucona, bo `coverage` w kodzie znaczy pokrycie zmierzone albo brak
+  danych. `kampanie/` zostaje (zmiana nazwy to osobna, lamiaca decyzja).
+- Kandydaci: wylacznie loty z `full_sheet is True` (NIE i brak flagi =
+  nie pelny). I-1 (skorowidz niedostepny) i brak kandydatow zostawiaja
+  istniejace dowiazanie pelne bez zmian; `--force` odswieza je jak
+  standardowe; porazka dowiazania = porazka arkusza.
+
+**Konsekwencje:** Gdy najnowszy lot jest pelny, oba dowiazania to
+hardlinki jednego pliku (bez kosztu miejsca; przy kopii — dwie kopie).
+Pierwsze uruchomienie po aktualizacji tworzy `full_sheet/` dla danych
+lokalnych, bo przeplyw kampanii przechodzi przez kazdy arkusz takze przy
+skip. `--full-sheet` pobiera najwyzej jeden dodatkowy lot na arkusz,
+a pelna liste warstw skorowidza czyta tylko dla arkuszy z niepelnym
+najnowszym lotem (`campaigns_cache`). `full_sheet/` ufa deklaracji
+skorowidza; pelny = w granicach Polski (arkusze graniczne maja nodata
+za granica). LAZ nie ma `full_sheet/`. Biblioteka: `SheetFetch.full_link`,
+`.full_link_outside_range`, `.no_full_flight`; `DownloadResult.full_links`,
+`.full_link_outside_range`, `.without_full`;
+`FileStorage.get_full_sheet_path()`.
 
 ---
 
