@@ -1,16 +1,17 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 4.1
-**Data:** 2026-10-09
+**Wersja:** 4.2
+**Data:** 2026-10-10
 **Product Owner:** Piotr
 **Status:** Wydanie v0.7.1 (2026-10-09)
 
 > Dokument opisuje wymagania produktowe wersji 0.7.1 w postaci
-> zrealizowanej w kodzie wydania v0.7.1. Szczegóły zachowania (komunikaty,
-> kody wyjścia, przypadki brzegowe) — `docs/SCOPE.md` i
-> `docs/ARCHITECTURE.md`; uzasadnienia decyzji — `docs/DECISIONS.md`
-> (ADR-022..ADR-030); historia zmian — `docs/CHANGELOG.md`. Pełna lista
+> zrealizowanej w kodzie wydania v0.7.1, z uzupelnieniami cyklu 0.7.2-dev
+> w sekcji 3.11 (rok danych ADR-032, `full_sheet/` ADR-033). Szczegóły
+> zachowania (komunikaty, kody wyjścia, przypadki brzegowe) —
+> `docs/SCOPE.md` i `docs/ARCHITECTURE.md`; uzasadnienia decyzji —
+> `docs/DECISIONS.md` (ADR-022..ADR-033); historia zmian — `docs/CHANGELOG.md`. Pełna lista
 > opcji CLI: `kartograf <komenda> --help`. Wymagania docelowe wersji
 > 1.0.0 — sekcja 8 (roadmapa i kolejność podprojektów: `docs/SCOPE.md` 3.3).
 
@@ -133,7 +134,7 @@ sheets = find_sheets_for_geometry(Path("area.shp"), "1:10000")
 # Pobieranie przez godło (ASC) — plik w data/nmt/pl_1992_1m_evrf2007/...
 manager = DownloadManager(output_dir="./data")
 path = manager.download_sheet("N-34-130-D-d-2-4")
-fetch = manager.last_sheet  # SheetFetch: skipped, downloaded, reused, link, unverified
+fetch = manager.last_sheet  # SheetFetch: skipped, downloaded, reused, link, unverified, full_link
 
 # Pobieranie przez bbox (GeoTIFF, WCS) — tylko NMT 1m i tylko KRON86:
 # endpoint WCS dla EVRF2007 został wycofany przez GUGiK (HTTP 404 od 2026-08),
@@ -641,13 +642,15 @@ wskazuje, która jest "bieżąca".
 
 #### Requirements
 - `--campaigns newest` (domyślnie): najnowsza kampania arkusza wg reguły
-  ADR-028, rozwiązywana przy każdym uruchomieniu (sieć, gdy wygasł cache
-  7 dni); pobierane są tylko brakujące kampanie.
-- `--campaigns all`: każda kampania arkusza po twardym filtrze ADR-028, bez
-  limitu liczby.
-- `--min-year RRRR` (1900..2100): odcina kampanie z rokiem `aktualnosc`
-  sprzed granicy; `newest` z najnowszą kampanią starszą od granicy =
-  `NoCoverageError`.
+  ADR-028 w zakresie lat, rozwiązywana przy każdym uruchomieniu (sieć, gdy
+  wygasł cache 7 dni); pobierane są tylko brakujące kampanie.
+- `--campaigns all`: każda kampania arkusza (w zakresie lat) po twardym
+  filtrze ADR-028, bez limitu liczby.
+- Rok danych (ADR-032): `--year RRRR` = `--min-year RRRR --max-year RRRR`,
+  granice domknięte 1900..2100; flagi roku wyznaczają tylko dopuszczalne
+  lata, `--campaigns` liczbę lotów. Najpierw sprawdzenie pełnej listy
+  kampanii każdego arkusza: dane tylko z innych lat = `YearRangeError`
+  (`Error:` z latami i podpowiedzią) i nic nie jest pobierane.
 - Pliki kampanii w `<segment>/kampanie/<data>_<id>/<hierarchia godła>/`
   z OBOWIĄZKOWYM sidecarem (`extra.campaign`); format pliku z pola `format`
   rekordu i weryfikacja treści po pobraniu (nagłówek AAIGrid / sygnatura TIFF).
@@ -656,25 +659,33 @@ wskazuje, która jest "bieżąca".
   z `Warning:`; bez symlinków (errata 4 ADR-030). Dowiązanie przestawiane
   tylko na kampanię nowszą, nigdy wstecz; cel zapisany w sidecarze
   (`extra.link`, `extra.link_target`).
+- Drugie dowiązanie `<segment>/full_sheet/<hierarchia>/<godło>.<ext>`
+  (ADR-033) do najnowszego lokalnego lotu oznaczonego w skorowidzu jako
+  pełny (`calyArkuszWypelnionyTrescia = TAK`, pełny = w granicach Polski);
+  `--full-sheet` / `DownloadManager(full_sheet=True)` dociąga najwyżej
+  jeden taki lot na arkusz, gdy najnowszy w zakresie lat nie jest pełny.
 - Skorowidz GUGiK niedostępny (błąd transportu) przy `newest` bez
-  `--min-year`/`--force` i istniejącej lokalnej kampanii: arkusz brany
+  flag roku i `--force` oraz istniejącej lokalnej kampanii: arkusz brany
   z lokalnej kampanii z `Warning:` (errata 5 ADR-030); biblioteka:
   `SheetFetch.unverified` / `DownloadResult.unverified` /
   `PlCutoutResult.unverified`.
-- Tylko PL: zadanie bez części PL z `--campaigns all`/`--min-year` =
-  `Error:` przed siecią; obszar PL+CZ pod `auto` = `Info:`, CZ pobierane
-  w bieżącej wersji.
-- LAZ: `--campaigns all` = kafle bez deduplikacji pokryciowej, `--min-year`
-  = granica `akt_rok`; LAZ bez dowiązań.
+- Tylko PL: zadanie bez części PL z `--campaigns all`, flagą roku albo
+  `--full-sheet` = `Error:` przed siecią; obszar PL+CZ pod `auto` =
+  `Info:`, CZ pobierane w bieżącej wersji. Wycinek `--target-crs` nie
+  przyjmuje `all`, flag roku ani `--full-sheet`.
+- LAZ: `--campaigns all` = kafle bez deduplikacji pokryciowej, flagi roku
+  = granice `akt_rok`; LAZ bez dowiązań i bez `--full-sheet`.
 
 #### Capabilities
 ```python
 from kartograf import DownloadManager
 
-manager = DownloadManager(output_dir="./data", campaigns="all", min_year=2022)
+manager = DownloadManager(output_dir="./data", min_year=2022, full_sheet=True)
 manager.download_sheet("N-34-139-C-a-3-1")
 manager.last_sheet.downloaded      # pliki kampanii pobrane teraz
 manager.last_sheet.link            # "hardlink" | "copy"
+manager.last_sheet.full_link       # ścieżka full_sheet/ albo None
+manager.last_result.without_full   # arkusze bez pełnego lotu w zakresie
 # CampaignRef — opis kampanii (id, data, dt_pzgik, url, ...)
 ```
 
@@ -683,6 +694,7 @@ manager.last_sheet.link            # "hardlink" | "copy"
 kartograf download N-34-130-D-d-2-4 --campaigns all
 kartograf download N-34-130-D-d-2-4 --min-year 2024
 kartograf download --bbox 530000,382000,533000,386000 --campaigns all --min-year 2022
+kartograf download N-34-139-C-a-3-1 --full-sheet
 ```
 
 ---
