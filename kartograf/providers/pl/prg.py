@@ -8,8 +8,10 @@ without features (sea, abroad).
 """
 
 import logging
+import math
 import re
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 
 import requests
 
@@ -43,6 +45,17 @@ def _to_2180(bbox: BBox) -> BBox:
     return bbox_to_2180(bbox)
 
 
+def _mm(value: float, rounding: Callable[[float], int]) -> str:
+    """Coordinate rounded to whole millimetres by ``math.floor``/``math.ceil``.
+
+    Outward rounding never shrinks the area; millimetres (not metres) keep
+    the 1 m point square of ``teryt_for_point`` a 1 m square. Trailing
+    zeros are dropped (``290000.000`` -> ``290000``).
+    """
+    text = f"{rounding(round(value * 1000, 6)) / 1000:.3f}"
+    return text.rstrip("0").rstrip(".")
+
+
 def _query(bbox: BBox, session: requests.Session, timeout: float) -> list[str]:
     """Sorted unique powiat codes of one GetFeature request (``bbox`` in 2180)."""
     params = {
@@ -52,9 +65,11 @@ def _query(bbox: BBox, session: requests.Session, timeout: float) -> list[str]:
         "TYPENAMES": POWIAT_LAYER,
         "PROPERTYNAME": "JPT_KOD_JE",
         "COUNT": str(_COUNT),
-        # WFS 2.0 + urn CRS: (N, E) axis order
+        # WFS 2.0 + urn CRS: (N, E) axis order; widened outward (rounding to
+        # the nearest metre could drop a 0.5 m edge strip of the area)
         "BBOX": (
-            f"{bbox.min_y:.0f},{bbox.min_x:.0f},{bbox.max_y:.0f},{bbox.max_x:.0f},"
+            f"{_mm(bbox.min_y, math.floor)},{_mm(bbox.min_x, math.floor)},"
+            f"{_mm(bbox.max_y, math.ceil)},{_mm(bbox.max_x, math.ceil)},"
             "urn:ogc:def:crs:EPSG::2180"
         ),
     }
