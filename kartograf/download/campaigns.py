@@ -3,10 +3,11 @@ GUGiK campaign identity (ADR-030) — a PL-ONLY mechanism.
 
 A campaign is one GUGiK data delivery (an index (skorowidz) record). The
 campaign directory is ``<acquisition date>_<id>``, where ``id`` is the first
-numeric segment of the file name in the URL. The module's only IO is
-``verify_file_format`` (64 header bytes) and ``verify_sheet_extent`` (the
-ASC header). ``verify_record_vertical_crs`` checks the vertical datum
-declared by the record (no IO).
+numeric segment of the file name in the URL. File validation reads ASC
+headers or TIFF signatures; ``measure_coverage`` additionally streams ASC
+pixels or reads GeoTIFF mask windows from an already downloaded file.
+``verify_record_vertical_crs`` checks the vertical datum declared by the
+record (no IO).
 """
 
 import hashlib
@@ -50,6 +51,12 @@ _FORMAT_NAMES = {".asc": "AAIGrid (ARC/INFO ASCII GRID)", ".tif": "TIFF"}
 # Share of the file extent that must lie inside the sheet frame (B4): a
 # partial sheet lies inside, a neighbour or a file of another place does not.
 MIN_FRAME_OVERLAP = 0.5
+
+# Limit peak memory when counting pixels of large AAIGrid campaign files.
+_COVERAGE_CHUNK = 8 * 1024 * 1024
+_AAIGRID_HEADER_KEYS = frozenset(
+    key.encode("ascii") for key in (*_AAIGRID_KEYS, "nodata_value")
+)
 
 
 def campaign_id_from_url(url: str) -> str:
@@ -350,6 +357,78 @@ def verify_file_format(path: Path, ext: str) -> None:
             f"{path.name}: tresc nie jest {_FORMAT_NAMES[ext]} "
             f"(naglowek: {head[:16]!r})"
         )
+
+
+def measure_coverage(path: Path, ext: str) -> float | None:
+    """Return valid-pixel share of an ASC/GeoTIFF, or None without a TIFF mask.
+
+    ASC values are streamed in bounded chunks; an incomplete or malformed
+    raster raises DownloadError rather than reporting a misleading share.
+    """
+    if ext == ".asc":
+        header = read_asc_header(path)
+        try:
+            cols, rows = header["ncols"], header["nrows"]
+            if cols <= 0 or rows <= 0 or not cols.is_integer() or not rows.is_integer():
+                raise ValueError("niepoprawne wymiary siatki")
+            expected = int(cols * rows)
+            nodata = header.get("nodata_value", -9999.0)
+            count = valid = 0
+            with path.open("rb") as stream:
+                # AAIGrid permits five header lines if NODATA_value is absent.
+                # Stop at the first non-header line, not after a fixed count.
+                while True:
+                    line = stream.readline()
+                    parts = line.split(None, 1)
+                    if not parts or parts[0].lower() not in _AAIGRID_HEADER_KEYS:
+                        stream.seek(-len(line), 1)
+                        break
+                carry = b""
+                while chunk := stream.read(_COVERAGE_CHUNK):
+                    data = carry + chunk
+                    cut = max(data.rfind(sep) for sep in (b" ", b"\n", b"\r", b"\t"))
+                    if cut < 0:
+                        carry = data
+                        continue
+                    for value in data[:cut].split():
+                        count += 1
+                        valid += float(value) != nodata
+                    carry = data[cut + 1 :]
+                for value in carry.split():
+                    count += 1
+                    valid += float(value) != nodata
+            if count != expected:
+                raise DownloadError(
+                    f"{path.name}: ASC ma {count} komorek, oczekiwano {expected}"
+                )
+            return round(valid / expected, 4)
+        except (OSError, ValueError, KeyError) as e:
+            raise DownloadError(
+                f"{path.name}: nie udalo sie zmierzyc pokrycia: {e}"
+            ) from e
+    if ext == ".tif":
+        import numpy as np
+        import rasterio
+        from rasterio.enums import ColorInterp, MaskFlags
+
+        try:
+            with rasterio.open(path) as dataset:
+                if dataset.nodata is None and (
+                    MaskFlags.alpha not in dataset.mask_flag_enums[0]
+                    and ColorInterp.alpha not in dataset.colorinterp
+                ):
+                    return None
+                valid = total = 0
+                for _, window in dataset.block_windows(1):
+                    mask = dataset.read_masks(1, window=window)
+                    valid += int(np.count_nonzero(mask))
+                    total += mask.size
+                return round(valid / total, 4)
+        except (OSError, ValueError, rasterio.errors.RasterioError) as e:
+            raise DownloadError(
+                f"{path.name}: nie udalo sie zmierzyc pokrycia: {e}"
+            ) from e
+    raise DownloadError(f"{path.name}: brak pomiaru pokrycia dla {ext!r}")
 
 
 def verify_record_url(url: str, godlo: str) -> None:

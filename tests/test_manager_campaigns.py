@@ -27,7 +27,7 @@ from kartograf.download.campaigns import (
     record_year,
     resolve_campaign_strategy,
 )
-from kartograf.download.links import linked_campaign
+from kartograf.download.links import linked_campaign, update_sidecar_extra
 from kartograf.download.manager import DownloadManager, DownloadProgress, SheetFetch
 from kartograf.exceptions import (
     DownloadError,
@@ -90,6 +90,17 @@ def asc_for(godlo: str, tag_line: str = "", *, shift_x: float = 0.0) -> bytes:
         f"ncols {int(b.max_x - b.min_x)}\nnrows {int(b.max_y - b.min_y)}\n"
         f"xllcorner {b.min_x + shift_x}\nyllcorner {b.min_y}\ncellsize 1\n"
         f"nodata_value -9999\n{tag_line}\n"
+    ).encode()
+
+
+def asc_pixels(godlo: str, values: tuple[int, int, int, int]) -> bytes:
+    """Small valid AAIGrid inside the real sheet frame, with measurable cells."""
+    bbox = SheetParser(godlo).get_bbox()
+    cell = min(bbox.max_x - bbox.min_x, bbox.max_y - bbox.min_y) / 2
+    return (
+        f"ncols 2\nnrows 2\nxllcorner {bbox.min_x}\nyllcorner {bbox.min_y}\n"
+        f"cellsize {cell}\nnodata_value -9999\n"
+        f"{values[0]} {values[1]}\n{values[2]} {values[3]}\n"
     ).encode()
 
 
@@ -877,6 +888,154 @@ def test_manager_hierarchy_check_precedes_every_download(tmp_path):
     assert G in exc.value.sheets and "N-34-139-C-a-3-3" in exc.value.sheets
     assert manager.last_result is None and not fake.downloads
     assert not list(tmp_path.rglob("*.asc"))
+
+
+def test_manager_coverage_measured_only_when_newest_partial(tmp_path):
+    newest, older = REC["84183"], REC["83233"]
+    fake = c14_fake(
+        contents={
+            newest.url: asc_pixels(G, (7, -9999, -9999, -9999)),
+            older.url: asc_pixels(G, (7, 8, 9, 10)),
+        }
+    )
+    manager = DownloadManager(tmp_path, provider=fake, min_year=2025, max_year=2025)
+    manager.download_sheet(G)
+    assert meta(campaign_path(tmp_path, newest))["extra"]["coverage"] == 0.25
+    assert meta(campaign_path(tmp_path, older))["extra"]["coverage"] == 1.0
+    standard = meta(std_path(tmp_path))
+    assert standard["extra"]["coverage"] == 0.25
+    assert standard["extra"]["better_coverage"] == "83233"
+    assert standard["extra"]["flights"] == [
+        {"id": "84183", "date": "2025-10-21", "full_sheet": False, "coverage": 0.25},
+        {"id": "83233", "date": "2025-04-27", "full_sheet": True, "coverage": 1.0},
+    ]
+    assert "84183" in linked(std_path(tmp_path))
+    assert manager.last_sheet is not None
+    assert manager.last_sheet.better_coverage == "83233"
+    assert manager.last_result is not None
+    assert manager.last_result.better_coverage == {G: "83233"}
+
+    full = "N-34-139-C-a-3-4"
+    manager = DownloadManager(
+        tmp_path / "full", provider=c14_fake(), min_year=2025, max_year=2025
+    )
+    manager.download_sheet(full)
+    full_meta = meta(std_path(tmp_path / "full", full))["extra"]
+    assert len(full_meta["flights"]) == 3
+    assert all("coverage" not in f for f in full_meta["flights"])
+    assert "coverage" not in full_meta and "better_coverage" not in full_meta
+    assert all(
+        "coverage" not in meta(p)["extra"]
+        for p in manager.last_result.campaign_files[full]
+    )
+    assert manager.last_result.better_coverage == {}
+
+
+def test_manager_coverage_newest_has_more_data_no_info(tmp_path):
+    fake = c14_fake(
+        contents={
+            REC["84183"].url: asc_pixels(G, (1, 2, 3, 4)),
+            REC["83233"].url: asc_pixels(G, (1, -9999, -9999, -9999)),
+        }
+    )
+    manager = DownloadManager(tmp_path, provider=fake, min_year=2025, max_year=2025)
+    manager.download_sheet(G)
+    extra = meta(std_path(tmp_path))["extra"]
+    assert [flight["coverage"] for flight in extra["flights"]] == [1.0, 0.25]
+    assert "better_coverage" not in extra
+    assert manager.last_result.better_coverage == {}
+
+
+def test_manager_single_flight_in_range_no_measurement(tmp_path):
+    manager = DownloadManager(
+        tmp_path, provider=c14_fake(), min_year=2019, max_year=2019
+    )
+    manager.download_sheet(G)
+    extra = meta(std_path(tmp_path))["extra"]
+    assert extra["flights"] == [
+        {"id": "73021", "date": "2019-04-18", "full_sheet": True}
+    ]
+    assert "coverage" not in meta(campaign_path(tmp_path, REC["73021"]))["extra"]
+    assert "better_coverage" not in extra
+
+
+def test_manager_coverage_read_from_sidecar_on_rerun(tmp_path):
+    fake = c14_fake(
+        contents={
+            REC["84183"].url: asc_pixels(G, (1, -9999, -9999, -9999)),
+            REC["83233"].url: asc_pixels(G, (1, 2, 3, 4)),
+        }
+    )
+    manager = DownloadManager(tmp_path, provider=fake, min_year=2025, max_year=2025)
+    manager.download_sheet(G)
+    assert manager.last_result.better_coverage == {G: "83233"}
+    with patch("kartograf.download.manager.measure_coverage") as measure:
+        manager.download_sheet(G)
+    measure.assert_not_called()
+    assert manager.last_sheet.skipped
+    assert manager.last_result.better_coverage == {G: "83233"}
+    assert len(fake.downloads) == 2
+
+
+def test_manager_new_range_clears_obsolete_better_flight_without_relinking(tmp_path):
+    fake = c14_fake(
+        contents={
+            REC["84183"].url: asc_pixels(G, (1, -9999, -9999, -9999)),
+            REC["83233"].url: asc_pixels(G, (1, 2, 3, 4)),
+        }
+    )
+    DownloadManager(
+        tmp_path, provider=fake, min_year=2025, max_year=2025
+    ).download_sheet(G)
+    assert meta(std_path(tmp_path))["extra"]["better_coverage"] == "83233"
+    older = DownloadManager(tmp_path, provider=fake, min_year=2019, max_year=2019)
+    older.download_sheet(G)
+    extra = meta(std_path(tmp_path))["extra"]
+    assert extra["flights"] == [
+        {"id": "73021", "date": "2019-04-18", "full_sheet": True}
+    ]
+    assert "better_coverage" not in extra
+    assert older.last_result.better_coverage == {}
+    assert "84183" in linked(std_path(tmp_path))
+
+
+def test_update_sidecar_extra_replaces_symlink_without_touching_campaign(tmp_path):
+    manager = DownloadManager(
+        tmp_path, provider=c14_fake(), min_year=2019, max_year=2019
+    )
+    manager.download_sheet(G)
+    std = std_path(tmp_path)
+    campaign = campaign_path(tmp_path, REC["73021"])
+    original = meta(campaign)
+    sidecar(std).unlink()
+    _REAL_SYMLINK(sidecar(campaign), sidecar(std))
+    update_sidecar_extra(std, {"flights": [{"id": "73021"}]})
+    assert not sidecar(std).is_symlink()
+    assert meta(std)["extra"]["flights"] == [{"id": "73021"}]
+    assert meta(campaign) == original
+
+
+def test_manager_min_year_alone_no_measurement(tmp_path):
+    manager = DownloadManager(tmp_path, provider=c14_fake(), min_year=2024)
+    manager.download_sheet(G)
+    assert manager.campaigns == "newest"
+    assert "flights" not in meta(std_path(tmp_path))["extra"]
+    assert "coverage" not in meta(campaign_path(tmp_path, REC["84183"]))["extra"]
+    assert manager.last_result.better_coverage == {}
+
+
+def test_manager_coverage_read_error_does_not_fail_sheet(tmp_path, caplog):
+    fake = c14_fake(contents={REC["83233"].url: asc_pixels(G, (1, 2, 3, 4))})
+    manager = DownloadManager(tmp_path, provider=fake, min_year=2025, max_year=2025)
+    with caplog.at_level(logging.WARNING, logger="kartograf.download.manager"):
+        manager.download_sheet(G)
+    assert manager.last_result is not None
+    assert manager.last_result.failed == []
+    assert "84183" in linked(std_path(tmp_path))
+    assert "pokrycia" in caplog.text
+    flights = meta(std_path(tmp_path))["extra"]["flights"]
+    assert "coverage" not in flights[0] and flights[1]["coverage"] == 1.0
+    assert "better_coverage" not in meta(std_path(tmp_path))["extra"]
 
 
 def test_parallel_all_campaigns_writes_each_file_once(tmp_path):
