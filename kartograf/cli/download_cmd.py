@@ -253,6 +253,20 @@ def _reject_laz_only_opts(args: argparse.Namespace) -> bool:
     return False
 
 
+def _reject_full_sheet_for_laz(args: argparse.Namespace) -> bool:
+    """Reject ``--full-sheet`` for LAZ before any network request (ADR-033)."""
+    if getattr(args, "product", "nmt") != "laz" or not getattr(
+        args, "full_sheet", False
+    ):
+        return False
+    print(
+        "Error: --full-sheet dziala tylko z NMT/NMPT/orto (podano laz) — LAZ "
+        "nie ma sciezki standardowej ani dowiazania full_sheet/; pomin --full-sheet",
+        file=sys.stderr,
+    )
+    return True
+
+
 def _reject_campaign_opts_without_pl(
     args: argparse.Namespace, countries: tuple[str, ...]
 ) -> bool:
@@ -263,19 +277,21 @@ def _reject_campaign_opts_without_pl(
         and min_year is None
         and max_year is None
         and getattr(args, "year", None) is None
+        and not getattr(args, "full_sheet", False)
     ):
         return False
     if "PL" not in countries:
         print(
             "Error: CZ (CUZK) nie ma kampanii — "
-            "--campaigns all/--min-year/--max-year/--year dotycza tylko PL",
+            "--campaigns all/--min-year/--max-year/--year/--full-sheet dotycza "
+            "tylko PL",
             file=sys.stderr,
         )
         return True
     if "CZ" in countries:
         print(
-            "Info: --campaigns/--min-year/--max-year/--year dotycza tylko "
-            "czesci PL (CZ: biezaca wersja danych CUZK)",
+            "Info: --campaigns/--min-year/--max-year/--year/--full-sheet dotycza "
+            "tylko czesci PL (CZ: biezaca wersja danych CUZK)",
             file=sys.stderr,
         )
     return False
@@ -309,6 +325,13 @@ def _reject_campaign_opts_with_target_crs(args: argparse.Namespace) -> bool:
         print(
             "Error: --campaigns all nie dziala z --target-crs — wycinek sklada "
             "jedna kampanie na arkusz",
+            file=sys.stderr,
+        )
+        return True
+    if getattr(args, "full_sheet", False):
+        print(
+            "Error: --full-sheet nie dziala z --target-crs — wycinek sklada "
+            "sciezki standardowe (najnowszy lot arkusza), nie full_sheet/",
             file=sys.stderr,
         )
         return True
@@ -925,9 +948,11 @@ def cmd_download(args: argparse.Namespace) -> int:
     campaigns = campaigns or "newest"
     args.campaigns = campaigns
     args.min_year, args.max_year = min_year, max_year
+    full_sheet = bool(getattr(args, "full_sheet", False))
 
-    # Only point-density filtering is LAZ-specific; every product supports year flags.
-    if _reject_laz_only_opts(args):
+    # Point-density filtering is LAZ-only, --full-sheet the reverse (ADR-033);
+    # every product supports year flags.
+    if _reject_laz_only_opts(args) or _reject_full_sheet_for_laz(args):
         return 1
 
     country_flag = getattr(args, "country", "auto")
@@ -1013,6 +1038,7 @@ def cmd_download(args: argparse.Namespace) -> int:
                 campaigns=campaigns,
                 min_year=min_year,
                 max_year=max_year,
+                full_sheet=full_sheet,
             )
         except ValidationError as e:
             print(f"Error: {e}", file=sys.stderr)
@@ -1076,6 +1102,14 @@ def cmd_download(args: argparse.Namespace) -> int:
                             )
                         elif sheet is not None and sheet.skipped:
                             print(f"Skipped {args.godlo} - already exists at {where}")
+                        elif (
+                            sheet is not None
+                            and len(sheet.downloaded + sheet.reused) > 1
+                        ):
+                            # --full-sheet: the newest and the newest full flight
+                            _print_campaign_summary(
+                                len(sheet.downloaded), 1, output_dir, len(sheet.reused)
+                            )
                         else:
                             print(f"Downloaded to {where}")
                     if sheet is not None and sheet.link == "copy":
@@ -1087,18 +1121,19 @@ def cmd_download(args: argparse.Namespace) -> int:
                             f"({sheet.unverified})",
                             file=sys.stderr,
                         )
-                    _warn_sheet_sidecars([result])
-                    if sheet is not None and sheet.better_coverage is not None:
-                        _print_better_coverage(
-                            DownloadResult(
-                                better_coverage={sheet.godlo: sheet.better_coverage}
-                            ),
-                            [result],
-                        )
-                    if sheet is not None and sheet.link_outside_range is not None:
-                        _print_link_outside_range(
-                            {sheet.godlo: sheet.link_outside_range}
-                        )
+                    # one-element result from the sheet facts, read like a list
+                    facts = _sheet_result(sheet)
+                    _warn_sheet_sidecars(
+                        [result],
+                        facts,
+                        full_sheet=full_sheet,
+                        campaigns=campaigns,
+                        ranged=min_year is not None or max_year is not None,
+                    )
+                    _print_better_coverage(facts, [result])
+                    _print_link_outside_range(
+                        facts.link_outside_range, facts.full_link_outside_range
+                    )
                     return 0
                 paths = result
 
@@ -1119,6 +1154,8 @@ def cmd_download(args: argparse.Namespace) -> int:
         output_dir=output_dir,
         quiet=args.quiet,
         campaigns=campaigns,
+        full_sheet=full_sheet,
+        ranged=min_year is not None or max_year is not None,
     )
 
 
@@ -1225,6 +1262,8 @@ def _finish_pl_sheets(
     output_dir: Path,
     quiet: bool,
     campaigns: str = "newest",
+    full_sheet: bool = False,
+    ranged: bool = False,
 ) -> int:
     """
     Shared summary and exit code of the multi-sheet PL mode (D2/D10).
@@ -1245,18 +1284,22 @@ def _finish_pl_sheets(
       consistent with the cutout: ``ValidationError``).
 
     Sheets from an incomplete newest campaign (sidecar
-    ``extra.source.full_sheet: false``) -> ``Warning:`` (E13), code unchanged.
+    ``extra.source.full_sheet: false``) -> ``Warning:`` (E13, ADR-033: which of
+    them have a ``full_sheet/`` link), code unchanged.
     Standard path as a campaign COPY (``result.copied``) ->
-    ``Warning:``, code unchanged. ``campaigns="all"``: the summary counts
-    campaign files (``result.campaign_files``), not sheets. ``newest`` sheets
+    ``Warning:``, code unchanged. ``campaigns="all"`` or ``full_sheet``: the
+    summary counts campaign files (``result.campaign_files``), not sheets.
+    ``newest`` sheets
     from a local campaign on an index failure
     (``result.unverified``, I-1) -> ``Warning:``, code unchanged.
 
     ``Warning:``/``Error:`` go to stderr, so ``-q`` does NOT suppress them.
     """
-    _warn_sheet_sidecars(paths)
+    _warn_sheet_sidecars(
+        paths, result, full_sheet=full_sheet, campaigns=campaigns, ranged=ranged
+    )
     _print_better_coverage(result, paths)
-    _print_link_outside_range(result.link_outside_range)
+    _print_link_outside_range(result.link_outside_range, result.full_link_outside_range)
     if result.copied:
         _warn_copied_links(result.copied)
     if result.unverified:
@@ -1266,7 +1309,7 @@ def _finish_pl_sheets(
         print()
     if not quiet and paths:
         # O-7: with no file and no skip (only gaps/failures) a summary of 0 is noise
-        if campaigns == "all":
+        if campaigns == "all" or full_sheet:
             # `campaign_files` = downloaded + local; local ones separately
             # (`reused_campaign_files`, a per-sheet subset)
             files = result.campaign_files
@@ -1422,25 +1465,54 @@ def _campaign_dirname(path: Path) -> str:
     return Path(path).name
 
 
-def _print_link_outside_range(outside: dict[str, Path]) -> None:
-    """Report standard paths still pointing at a newer flight outside the request.
+def _print_link_outside_range(
+    outside: dict[str, Path], full_outside: dict[str, Path] | None = None
+) -> None:
+    """Report links still pointing at a flight outside the request.
 
     ADR-032 point 3 (U15): the link never moves back to an older campaign, so
     after a year-bounded request it may keep the previously downloaded flight.
+    The same holds for the ``full_sheet/`` link (ADR-033): one line per sheet
+    and tree.
     """
-    if not outside:
+    rows = sorted(
+        [(godlo, "sciezka standardowa", t) for godlo, t in outside.items()]
+        + [(godlo, "full_sheet/", t) for godlo, t in (full_outside or {}).items()]
+    )
+    if not rows:
         return
     print(
-        f"Info: sciezka standardowa {len(outside)} arkuszy wskazuje nowszy "
-        "lokalny lot spoza tego zadania (dowiazanie nigdy nie cofa sie na "
-        "starszy lot); pobrane loty sa w <segment>/kampanie/:",
+        f"Info: {len(rows)} dowiazan wskazuje lokalny lot spoza tego zadania "
+        "(dowiazanie nigdy nie cofa sie na starszy lot); pobrane loty sa "
+        "w <segment>/kampanie/:",
         file=sys.stderr,
     )
-    shown = dict(sorted(outside.items())[:10])
-    for godlo, target in shown.items():
-        print(f"  {godlo}: dowiazanie {_campaign_dirname(target)}", file=sys.stderr)
-    if len(outside) > len(shown):
-        print(f"  ... i {len(outside) - len(shown)} innych", file=sys.stderr)
+    for godlo, tree, target in rows[:10]:
+        print(
+            f"  {godlo}: {tree} -> dowiazanie {_campaign_dirname(target)}",
+            file=sys.stderr,
+        )
+    if len(rows) > 10:
+        print(f"  ... i {len(rows) - 10} innych", file=sys.stderr)
+
+
+def _sheet_result(sheet: SheetFetch | None) -> DownloadResult:
+    """One-element ``DownloadResult`` with the message facts of one sheet."""
+    result = DownloadResult()
+    if sheet is None:
+        return result
+    g = sheet.godlo
+    if sheet.better_coverage is not None:
+        result.better_coverage[g] = sheet.better_coverage
+    if sheet.link_outside_range is not None:
+        result.link_outside_range[g] = sheet.link_outside_range
+    if sheet.full_link is not None:
+        result.full_links[g] = sheet.full_link
+    if sheet.full_link_outside_range is not None:
+        result.full_link_outside_range[g] = sheet.full_link_outside_range
+    if sheet.no_full_flight:
+        result.without_full.append(g)
+    return result
 
 
 def _is_partial_sheet(path: Path) -> bool:
@@ -1495,29 +1567,57 @@ def _warn_crs_mismatch_sheets(paths) -> None:
     )
 
 
-def _warn_sheet_sidecars(paths) -> None:
+def _warn_sheet_sidecars(
+    paths, result: DownloadResult, *, full_sheet: bool, campaigns: str, ranged: bool
+) -> None:
     """CLI warnings from the result sheets' sidecars: incomplete sheet (E13)
     and file CRS different from the sheet code's (E17)."""
-    _warn_partial_sheets(paths)
+    _warn_partial_sheets(
+        paths, result, full_sheet=full_sheet, campaigns=campaigns, ranged=ranged
+    )
     _warn_crs_mismatch_sheets(paths)
 
 
-def _warn_partial_sheets(paths) -> None:
+def _godla_text(godla: list[str]) -> str:
+    return ", ".join(godla[:10]) + (" ..." if len(godla) > 10 else "")
+
+
+def _warn_partial_sheets(
+    paths, result: DownloadResult, *, full_sheet: bool, campaigns: str, ranged: bool
+) -> None:
     """E13: ``Warning:`` about sheets from an incomplete newest GUGiK campaign.
 
     The selection rule (ADR-028: newest campaign, no preference for a full
     sheet) stays - the warning only makes it visible. Reads the sidecars of
-    result files, so it also works for sheets skipped as existing.
+    result files, so it also works for sheets skipped as existing. One
+    ``Warning:`` splits the sheets (ADR-033): with a ``full_sheet/`` link
+    (``result.full_links``), without a full flight in the index
+    (``result.without_full``; with ``campaigns="all"`` every flight of the
+    range is local, so no link means none; ``ranged`` limits that claim to
+    the year bounds), and the rest — not downloaded, with the
+    ``--full-sheet`` hint unless the flag was given.
     """
     partial = sorted(Path(p).stem for p in paths if _is_partial_sheet(Path(p)))
     if not partial:
         return
-    shown = ", ".join(partial[:10]) + (" ..." if len(partial) > 10 else "")
+    linked = [g for g in partial if g in result.full_links]
+    rest = [g for g in partial if g not in result.full_links]
+    absent = [g for g in rest if g in result.without_full or campaigns == "all"]
+    missing = [g for g in rest if g not in absent]
+    groups = []
+    if linked:
+        groups.append(f"pelny lot w <segment>/full_sheet/: {_godla_text(linked)}")
+    if absent:
+        scope = " w zakresie lat zadania" if ranged else ""
+        groups.append(f"brak pelnego lotu w skorowidzu{scope}: {_godla_text(absent)}")
+    if missing:
+        hint = "" if full_sheet else " — uzyj --full-sheet"
+        groups.append(f"pelny lot nie pobrany: {_godla_text(missing)}{hint}")
     print(
         f"Warning: najnowsza kampania GUGiK jest niepelna dla {len(partial)} "
-        f"arkuszy ({shown}) — skorowidz deklaruje arkusz nie w calosci "
-        "wypelniony trescia; plik moze miec duzo nodata/czerni "
-        "(extra.source.full_sheet w sidecarze)",
+        "arkuszy — skorowidz deklaruje arkusz nie w calosci wypelniony "
+        "trescia; plik w sciezce standardowej moze miec duzo nodata/czerni "
+        "(extra.source.full_sheet w sidecarze); " + "; ".join(groups),
         file=sys.stderr,
     )
 
@@ -1793,6 +1893,7 @@ def _download_pl_sheet_list(
     skip_existing = not args.force
     campaigns, min_year, max_year = _campaign_opts(args)
     campaigns = campaigns or "newest"
+    full_sheet = bool(getattr(args, "full_sheet", False))
 
     if not args.quiet:
         _print_sheet_list(
@@ -1821,6 +1922,7 @@ def _download_pl_sheet_list(
                 campaigns=campaigns,
                 min_year=min_year,
                 max_year=max_year,
+                full_sheet=full_sheet,
             )
             all_paths, result = _download_godlo_list(
                 manager, godlo_list, skip_existing, on_progress
@@ -1838,6 +1940,8 @@ def _download_pl_sheet_list(
         output_dir=output_dir,
         quiet=args.quiet,
         campaigns=campaigns,
+        full_sheet=full_sheet,
+        ranged=min_year is not None or max_year is not None,
     )
 
 

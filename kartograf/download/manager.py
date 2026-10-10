@@ -35,10 +35,10 @@ from kartograf.download.campaigns import (
 )
 from kartograf.download.links import (
     LinkOutcome,
-    ensure_standard_link,
+    ensure_link,
     linked_campaign,
     update_sidecar_extra,
-    write_standard_sidecar,
+    write_link_sidecar,
 )
 from kartograf.download.storage import FileStorage, storage_for_provider
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
@@ -125,6 +125,15 @@ class DownloadResult:
     link_outside_range : dict[str, Path]
         With year bounds, sheets whose standard path still points to a newer
         local flight outside this request: godlo -> that campaign file.
+    full_links : dict[str, Path]
+        Sheets with a ``full_sheet/`` link (ADR-033) after this request:
+        godlo -> that link path.
+    full_link_outside_range : dict[str, Path]
+        With year bounds, sheets whose ``full_sheet/`` link still points to a
+        full flight outside this request: godlo -> that campaign file.
+    without_full : list[str]
+        With ``full_sheet=True``: sheets whose newest flight is partial and
+        whose index lists no full flight within the year bounds.
 
     Notes
     -----
@@ -144,6 +153,9 @@ class DownloadResult:
     no_coverage_hints: dict[str, tuple[str, ...]] = field(default_factory=dict)
     better_coverage: dict[str, str] = field(default_factory=dict)
     link_outside_range: dict[str, Path] = field(default_factory=dict)
+    full_links: dict[str, Path] = field(default_factory=dict)
+    full_link_outside_range: dict[str, Path] = field(default_factory=dict)
+    without_full: list[str] = field(default_factory=list)
 
     @property
     def total(self) -> int:
@@ -216,6 +228,15 @@ class SheetFetch:
         when it is a newer local flight this request did not select (the link
         never moves back, ADR-030 (d)). ``None`` = the link points at a
         selected flight, or no bounds.
+    full_link : Path or None
+        The ``full_sheet/`` link path (ADR-033) when it exists after this
+        call; ``None`` = no local flight declared full has ever been linked.
+    full_link_outside_range : Path or None
+        With year bounds: the campaign file the ``full_sheet/`` link still
+        points to when this request did not select it (never moves back).
+    no_full_flight : bool
+        ``full_sheet=True`` and the index has no full flight within the
+        year bounds, while the newest one is partial.
     """
 
     godlo: str
@@ -227,6 +248,9 @@ class SheetFetch:
     unverified: str | None = None
     better_coverage: str | None = None
     link_outside_range: Path | None = None
+    full_link: Path | None = None
+    full_link_outside_range: Path | None = None
+    no_full_flight: bool = False
 
 
 class CampaignProvider(Protocol):
@@ -348,6 +372,7 @@ class DownloadManager:
         campaigns: str = "newest",
         min_year: int | None = None,
         max_year: int | None = None,
+        full_sheet: bool = False,
     ):
         """
         Initialize download manager.
@@ -388,12 +413,18 @@ class DownloadManager:
             admissible years (ADR-032 point 3). Only PL GUGiK supports campaigns.
         min_year, max_year : int, optional
             Inclusive bounds on the campaign acquisition year.
+        full_sheet : bool, optional
+            ADR-033: with ``campaigns="newest"``, when the newest flight within
+            the year bounds is not declared full, also download the newest
+            flight declared full within them (at most one extra flight per
+            sheet) and link it in ``full_sheet/``. No effect with ``all``.
 
         Raises
         ------
         ValidationError
             Invalid strategy/bounds or a provider without campaigns used with
-            a year bound or ``campaigns="all"``; incompatible resolution/CRS.
+            a year bound, ``campaigns="all"`` or ``full_sheet=True``;
+            incompatible resolution/CRS.
         """
         validate_campaign_args(campaigns, min_year, max_year)
         # The "5m => EVRF2007" rule (D11): without a provider the factory
@@ -435,15 +466,19 @@ class DownloadManager:
             getattr(self._provider, "supports_campaigns", False) is True
         )
         if not self._campaign_aware and (
-            campaigns == "all" or min_year is not None or max_year is not None
+            campaigns == "all"
+            or min_year is not None
+            or max_year is not None
+            or full_sheet
         ):
             raise ValidationError(
                 f"Provider {self._provider.name} nie obsluguje kampanii "
-                f"(--campaigns/--min-year/--max-year/--year)"
+                f"(--campaigns/--min-year/--max-year/--year/--full-sheet)"
             )
         self._campaigns = campaigns
         self._min_year = min_year
         self._max_year = max_year
+        self._full_sheet = full_sheet
         self._has_range = min_year is not None or max_year is not None
         self.last_result: DownloadResult | None = None
         self.last_sheet: SheetFetch | None = None
@@ -462,6 +497,11 @@ class DownloadManager:
     def campaigns(self) -> str:
         """Campaign strategy (``newest``/``all``)."""
         return self._campaigns
+
+    @property
+    def full_sheet(self) -> bool:
+        """Whether the newest declared-full flight is fetched too (ADR-033)."""
+        return self._full_sheet
 
     @property
     def min_year(self) -> int | None:
@@ -884,8 +924,11 @@ class DownloadManager:
         failure of any of these steps removes the data file (never a file
         without a sidecar or with foreign content). After the campaigns are
         collected the standard path points to the newest LOCAL campaign
-        (``max`` by ``sort_key``; ``ensure_standard_link`` never moves the
-        link back).
+        (``max`` by ``sort_key``; ``ensure_link`` never moves the
+        link back), and the ``full_sheet/`` path (ADR-033) to the newest
+        LOCAL campaign of this request declared full (``full_sheet is
+        True``); without such a campaign the ``full_sheet/`` link stays as
+        it is.
         An existing campaign file WITHOUT a sidecar (R22: interrupted before
         writing it) goes through ``verify_file_format`` and
         ``verify_sheet_extent`` before the sidecar is recreated; mismatched
@@ -900,7 +943,7 @@ class DownloadManager:
         are collected, and ``expand_sheets`` deduplicates godla — one sheet =
         one thread. Safety within a single manager call therefore follows
         from the structure, not from a lock (there are no locks); a race
-        between processes is described by ``ensure_standard_link``.
+        between processes is described by ``ensure_link``.
 
         Index outage (I-1): ``newest`` without year bounds with
         ``skip_existing``, when ``resolve_campaigns`` ends with a TRANSPORT
@@ -911,6 +954,13 @@ class DownloadManager:
         A year bound, ``all``, ``--force``, no local campaign or another
         error — an exception as before.
 
+        ``full_sheet=True`` with ``newest``: when the chosen record is not
+        declared full, the full list within the year bounds
+        (``resolve_campaigns(campaigns="all")``) supplies the newest
+        declared-full record as one extra campaign; none =
+        ``SheetFetch.no_full_flight``. An index error of that call is a
+        sheet failure, as with ``all``.
+
         Raises
         ------
         NoCoverageError
@@ -918,7 +968,7 @@ class DownloadManager:
         DownloadError
             Failure of at least one campaign (an invalid record
             ``aktualnosc`` too) or of the link (``OSError`` from
-            ``ensure_standard_link``) — all in one message; successful
+            ``ensure_link``) — all in one message; successful
             campaigns stay on disk, and the link points to the newest of
             them.
         """
@@ -942,6 +992,23 @@ class DownloadManager:
                 raise
         else:
             chosen = records
+        no_full_flight = False
+        if (
+            self._full_sheet
+            and self._campaigns == "newest"
+            and chosen[0].full_sheet is not True
+        ):
+            pool = self._campaign_provider.resolve_campaigns(
+                godlo,
+                campaigns="all",
+                min_year=self._min_year,
+                max_year=self._max_year,
+            )
+            extra_full = next((r for r in pool if r.full_sheet is True), None)
+            if extra_full is None:
+                no_full_flight = True
+            else:
+                chosen = [*chosen, extra_full]
         logger.info("%s: %d kampanii (%s)", godlo, len(chosen), self._campaigns)
         downloaded: list[Path] = []
         reused: list[Path] = []
@@ -1013,7 +1080,7 @@ class DownloadManager:
         if local:
             ref, path = max(local, key=lambda rp: rp[0].sort_key)
             try:
-                outcome = ensure_standard_link(
+                outcome = ensure_link(
                     std, path, ref.sort_key, refresh=path in downloaded
                 )
             except OSError as e:  # R5: sheet failure, not an abort of the list
@@ -1022,8 +1089,28 @@ class DownloadManager:
                 method = outcome.method
                 linked_target = outcome.target
                 if not outcome.changed:
-                    self._note_standard_reuse(std, outcome)
-        if errors or link_error is not None:  # Q10: full failure list
+                    self._note_link_reuse(std, outcome)
+        # ADR-033: the second link, same mechanics, only declared-full flights.
+        full = self._storage.get_full_sheet_path(godlo, self._default_ext)
+        full_target: Path | None = None
+        full_link_error: OSError | None = None
+        candidates = [rp for rp in local if rp[0].full_sheet is True]
+        if candidates:
+            ref, path = max(candidates, key=lambda rp: rp[0].sort_key)
+            try:
+                outcome = ensure_link(
+                    full, path, ref.sort_key, refresh=path in downloaded
+                )
+            except OSError as e:
+                full_link_error = e
+            else:
+                full_target = outcome.target
+                if not outcome.changed:
+                    self._note_link_reuse(full, outcome)
+        else:
+            full_target = linked_campaign(full)  # existing link stays untouched
+        # Q10: full failure list
+        if errors or link_error is not None or full_link_error is not None:
             problems = []
             if errors:
                 listing = ", ".join(f"{name}: {e}" for name, e in errors)
@@ -1032,20 +1119,29 @@ class DownloadManager:
                 )
             if link_error is not None:
                 problems.append(f"dowiazanie {std}: {link_error}")
+            if full_link_error is not None:
+                problems.append(f"dowiazanie {full}: {full_link_error}")
             raise DownloadError(f"{godlo}: " + "; ".join(problems), godlo=godlo)
         better_coverage = None
         if self._has_range and self._campaigns == "all" and linked_target is not None:
             better_coverage = self._add_range_flights(std, local, linked_target)
         # ADR-032 point 3 (U15): the link never moves back, so with year bounds
         # it may keep pointing at a newer local flight this request did not pick.
+        local_paths = {os.path.abspath(path) for _, path in local}
         link_outside_range = None
         if (
             self._has_range
             and linked_target is not None
-            and os.path.abspath(linked_target)
-            not in {os.path.abspath(path) for _, path in local}
+            and os.path.abspath(linked_target) not in local_paths
         ):
             link_outside_range = linked_target
+        full_link_outside_range = None
+        if (
+            self._has_range
+            and full_target is not None
+            and os.path.abspath(full_target) not in local_paths
+        ):
+            full_link_outside_range = full_target
         return SheetFetch(
             godlo,
             std,
@@ -1055,6 +1151,9 @@ class DownloadManager:
             link=method,
             better_coverage=better_coverage,
             link_outside_range=link_outside_range,
+            full_link=full if full_target is not None else None,
+            full_link_outside_range=full_link_outside_range,
+            no_full_flight=no_full_flight,
         )
 
     def _add_range_flights(
@@ -1128,13 +1227,13 @@ class DownloadManager:
         update_sidecar_extra(std, updates)
         return better
 
-    def _note_standard_reuse(self, std: Path, outcome: LinkOutcome) -> None:
-        """Link unchanged: the standard sidecar as a regular file + N4."""
-        std_sidecar = std.with_name(std.name + ".meta.json")
+    def _note_link_reuse(self, link: Path, outcome: LinkOutcome) -> None:
+        """Link unchanged: its sidecar as a regular file + N4."""
+        link_sidecar = link.with_name(link.name + ".meta.json")
         # sidecar replaced by the user with a symlink: never write through it
-        if std_sidecar.is_symlink():
-            write_standard_sidecar(std, outcome.target, outcome.method)
-        self._note_reuse(std)
+        if link_sidecar.is_symlink():
+            write_link_sidecar(link, outcome.target, outcome.method)
+        self._note_reuse(link)
 
     def _local_newest(
         self, godlo: str, std: Path, error: DownloadError
@@ -1144,14 +1243,14 @@ class DownloadManager:
         ``None`` = no local campaign (no file, nonexistent
         ``extra.link_target``, an old regular file, no standard sidecar) —
         the caller reports the original error. The link is NOT moved:
-        ``ensure_standard_link`` with the current target and the lowest key
-        returns it unchanged.
+        ``ensure_link`` with the current target and the lowest key
+        returns it unchanged. The ``full_sheet/`` link is not touched either.
         """
         target = linked_campaign(std)
         if target is None:
             return None
         try:
-            outcome = ensure_standard_link(std, target, ("", "", ""))
+            outcome = ensure_link(std, target, ("", "", ""))
         except OSError:
             return None
         logger.warning(
@@ -1159,7 +1258,8 @@ class DownloadManager:
             f"kampanii {outcome.target} bez sprawdzenia nowszej"
         )
         self._note_reuse(outcome.target)
-        self._note_standard_reuse(std, outcome)
+        self._note_link_reuse(std, outcome)
+        full = self._storage.get_full_sheet_path(godlo, self._default_ext)
         return SheetFetch(
             godlo,
             std,
@@ -1167,6 +1267,7 @@ class DownloadManager:
             reused=(outcome.target,),
             link=outcome.method,
             unverified=str(error),
+            full_link=full if linked_campaign(full) is not None else None,
         )
 
     def _download_single_sheet_task(
@@ -1237,6 +1338,12 @@ class DownloadManager:
                 result.better_coverage[godlo] = fetch.better_coverage
             if fetch.link_outside_range is not None:
                 result.link_outside_range[godlo] = fetch.link_outside_range
+            if fetch.full_link is not None:
+                result.full_links[godlo] = fetch.full_link
+            if fetch.full_link_outside_range is not None:
+                result.full_link_outside_range[godlo] = fetch.full_link_outside_range
+            if fetch.no_full_flight:
+                result.without_full.append(godlo)
         elif status in ("failed", "no_coverage"):
             # R5: no data at the source — a list failure, but recognizable
             result.failed.append(godlo)
@@ -1504,12 +1611,15 @@ class DownloadManager:
     ) -> None:
         """MANDATORY campaign file sidecar (errata 2 N-1).
 
-        ``request`` describes the resolved strategy and supplied year bounds;
+        ``request`` describes the resolved strategy, supplied year bounds and
+        ``full_sheet: true`` when that flag is set (ADR-033);
         ``extra`` includes the source and campaign identity of THIS record
         (R13), plus all available years for range-checked requests. Failure
         is a campaign ``DownloadError`` (the caller removes the data file).
         """
         request: dict = {"sheet": godlo, "campaigns": self._campaigns}
+        if self._full_sheet:  # describes the request, not this flight
+            request["full_sheet"] = True
         if self._min_year is not None:
             request["min_year"] = self._min_year
         if self._max_year is not None:

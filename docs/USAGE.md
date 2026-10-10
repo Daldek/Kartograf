@@ -64,6 +64,7 @@ kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 -
 # Kampanie GUGiK (sekcja 4): domyślnie najnowsza (newest); wszystkie kampanie
 # arkusza (all)
 kartograf download N-34-130-D-d-2-4 --campaigns all
+kartograf download N-34-139-C-a-3-1 --full-sheet   # + najnowszy pełny lot w full_sheet/ (sekcja 4.2)
 kartograf download N-34-130-D-d-2-4 --product laz --campaigns all
 kartograf download --bbox 530000,382000,533000,386000 --product laz --campaigns all
 
@@ -538,7 +539,7 @@ cache (7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania.
   pobraniem pliku (arkusz: `Error:`/porażka wg listy, w `all` pozostałe
   kampanie są pobierane). Rekord bez tego pola jest przyjmowany.
 - **Wycinek `--target-crs`** zawsze składa się z najnowszych kampanii i nie
-  przyjmuje `--campaigns all` ani flag roku.
+  przyjmuje `--campaigns all`, flag roku ani `--full-sheet`.
 - **LAZ:** `--campaigns all` pobiera wszystkie kafle, których rama przecina
   obszar (bez deduplikacji ADR-029). LAZ nie używa dowiązań.
   `--min-density` jest tylko dla LAZ (z innymi produktami: `Error:`,
@@ -546,7 +547,8 @@ cache (7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania.
 - Składanie kilku kampanii w jedną powierzchnię nie jest częścią
   Kartografu (plany: SCOPE 3.1).
 
-Reguły szczegółowe: SCOPE 2.12, ARCHITECTURE 3.3 (reguła 6), ADR-030.
+Reguły szczegółowe: SCOPE 2.12, ARCHITECTURE 3.3 (reguły 6 i 7), ADR-030,
+ADR-033.
 
 ### 4.1 Wybór roku danych (`--year`, `--min-year`, `--max-year`)
 
@@ -565,8 +567,9 @@ domknięte; `--year RRRR` to skrót `--min-year RRRR --max-year RRRR`
 - **Ścieżka standardowa** wskazuje najnowszy lokalny lot i nigdy nie cofa się
   na starszy. Gdy wcześniej pobrano nowszy lot, a teraz zakres go wyklucza
   (np. `--max-year 2022`), wybrany lot trafia do `kampanie/`, dowiązanie
-  zostaje przy nowszym, a CLI podaje `Info: sciezka standardowa N arkuszy
-  wskazuje nowszy lokalny lot spoza tego zadania ...` z nazwą kampanii.
+  zostaje przy nowszym, a CLI podaje `Info: N dowiazan wskazuje lokalny lot
+  spoza tego zadania ...` z linią `<godło>: sciezka standardowa -> dowiazanie
+  <data>_<id>` (to samo dla `full_sheet/`, sekcja 4.2).
 - **Najpierw sprawdzenie, potem pobranie.** Gdy któryś arkusz ma dane tylko
   z innych lat, zadanie kończy się `Error:` i kodem 1 przed pobraniem
   czegokolwiek (także z pozostałych arkuszy):
@@ -599,6 +602,55 @@ domknięte; `--year RRRR` to skrót `--min-year RRRR --max-year RRRR`
 - **Nie działa:** z `--target-crs` (`Error: --year nie dziala z
   --target-crs ...`), dla CZ (zadanie wyłącznie CZ = `Error:`, obszar PL+CZ
   pod `auto` = `Info:`, CZ w bieżącej wersji).
+
+### 4.2 Najnowszy pełny lot (`full_sheet/`, `--full-sheet`)
+
+Najnowszy lot bywa niepełny: skorowidz deklaruje
+`calyArkuszWypelnionyTrescia = NIE` i plik może mieć od 1 % do 99 % danych.
+Ścieżka standardowa nadal wskazuje najnowszy lot, a obok niej Kartograf
+utrzymuje drugie dowiązanie do najnowszego **lokalnego** lotu, który skorowidz
+deklaruje jako pełny ([ADR-033](DECISIONS.md)):
+
+```
+data/nmt/pl_1992_1m_evrf2007/N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc             # najnowszy lot
+data/nmt/pl_1992_1m_evrf2007/full_sheet/N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc  # najnowszy pełny
+```
+
+```bash
+# arkusz z niepełnym najnowszym lotem: pobiera najnowszy i najnowszy pełny
+kartograf download N-34-139-C-a-3-1 --full-sheet
+#   -> Downloaded 2 campaign files for 1 sheets to ./data (0 already existed)
+kartograf download M-34-90-C-b-4-4 --product orto --full-sheet
+kartograf download N-34-139-C-a-3-1 --full-sheet --max-year 2024   # pełny z zakresu lat
+```
+
+- **Bez flagi** `full_sheet/` powstaje tylko z lotów, które zadanie i tak
+  ma lokalnie: domyślnie, gdy najnowszy lot jest pełny (oba dowiązania to
+  ten sam plik, bez dodatkowego miejsca), a z `--campaigns all` — najnowszy
+  pełny spośród pobranych lotów. Pierwsze uruchomienie po aktualizacji tworzy
+  `full_sheet/` także dla danych już pobranych.
+- **`--full-sheet`** pobiera najwyżej jeden dodatkowy lot na arkusz i tylko
+  wtedy, gdy najnowszy lot z zakresu lat nie jest pełny; z `--campaigns all`
+  nic nie dodaje. Sidecar takiej kampanii ma `request.full_sheet: true`.
+- **Brak pełnego lotu:** w `full_sheet/` nie ma pliku. `Warning:` o niepełnej
+  najnowszej kampanii dzieli arkusze na: `pelny lot w <segment>/full_sheet/`,
+  `brak pelnego lotu w skorowidzu` (przy flagach roku: `... w zakresie lat
+  zadania`) i `pelny lot nie pobrany ... — uzyj --full-sheet`.
+- **Pełny = w granicach Polski.** Arkusz graniczny oznaczony jako pełny ma
+  nodata po stronie zagranicznej ramki — to normalne. `full_sheet/` ufa
+  deklaracji skorowidza, nie mierzy pokrycia.
+- **Nigdy wstecz:** jak ścieżka standardowa; gdy przy flagach roku
+  dowiązanie zostaje przy pełnym locie spoza zakresu, CLI podaje `Info:`
+  z linią `<godło>: full_sheet/ -> dowiazanie <data>_<id>`.
+- **`list_files()` / `delete()`:** `FileStorage.list_files()` pomija
+  `full_sheet/`, `delete(godło)` usuwa oba dowiązania (pliki w `kampanie/`
+  zostają).
+- **Nie działa:** z `--product laz` i `--target-crs` (`Error:` przed siecią);
+  dla CZ jak inne opcje kampanii.
+- **Biblioteka:** `DownloadManager(full_sheet=True)`;
+  `SheetFetch.full_link`, `DownloadResult.full_links` (godło -> ścieżka
+  `full_sheet/`), `DownloadResult.without_full`,
+  `DownloadResult.full_link_outside_range`.
 
 ---
 

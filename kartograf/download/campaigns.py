@@ -26,6 +26,8 @@ from kartograf.sources.sidecar import read_asc_header
 logger = logging.getLogger(__name__)
 
 CAMPAIGNS_DIR = "kampanie"
+# Second link to the newest local flight declared full in the index (ADR-033).
+FULL_SHEET_DIR = "full_sheet"
 CAMPAIGN_STRATEGIES = ("newest", "all")
 
 # record `format` field -> canonical extension (errata 2 N-2)

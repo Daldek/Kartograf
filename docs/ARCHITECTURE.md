@@ -51,7 +51,7 @@ sidecara — w szczegolnosci sidecar DMR CZ pisze
 Nowy sidecar powstaje zawsze przez
 `sources/sidecar.py::emit_sidecar` — jedyne miejsce polityki zapisu
 (poza nim: kopia sidecara celu w sciezce standardowej,
-`download/links.py::write_standard_sidecar`, i dopisanie
+`download/links.py::write_link_sidecar`, i dopisanie
 `extra.parent_requests` w `DownloadManager`). Zapis
 jest domyslnie best-effort: kazdy blad (IO, brakujacy klucz deskryptora,
 wyjatek w budowie metadanych) konczy sie `logger.warning` i zwrotem `None`,
@@ -514,6 +514,7 @@ zasada "nigdy wstecz"). Sidecar LAZ niesie dodatkowo `extra.acquisition_date`
 data/
 ├── nmt/
 │   ├── pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc   # DOWIAZANIE (regula 6)
+│   ├── pl_1992_1m_evrf2007/full_sheet/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc   # DOWIAZANIE do najnowszego pelnego lotu (regula 7)
 │   ├── pl_1992_1m_evrf2007/kampanie/2022-05-10_83233/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc   # prawdziwy plik
 │   ├── pl_1992_1m_kron86/...
 │   ├── pl_1992_5m_evrf2007/...              # 5m tylko EVRF2007 (regula istniejaca)
@@ -589,6 +590,21 @@ data/
    nie uzywaja `kampanie/`.
    Kopiowanie `data/`: `rsync -aH`/`cp -a` (bez zachowania hardlinkow
    powstaje duplikat).
+
+7. **Drugie dowiazanie `full_sheet/` (ADR-033).** Obok sciezki
+   standardowej `<segment>/full_sheet/<hierarchia>/<godlo>.<ext>`
+   (+ `.meta.json`) wskazuje najnowszy LOKALNY lot zadania oznaczony
+   w skorowidzu jako pelny (`full_sheet is True`; NIE i brak flagi = nie
+   pelny). Ta sama mechanika co regula 6 (`download/links.py::ensure_link`:
+   hardlink -> kopia, nigdy wstecz wsrod lotow pelnych, sidecar z
+   `extra.link_target`); gdy najnowszy lot jest pelny, oba dowiazania to
+   ten sam plik. Brak pelnego lotu = brak pliku w `full_sheet/`
+   (istniejace dowiazanie zostaje). `FileStorage.get_full_sheet_path`
+   buduje sciezke, `list_files()` pomija `full_sheet/` (tak jak
+   `kampanie/`), `delete(godlo)` usuwa oba dowiazania z sidecarami.
+   Kolizja z hierarchia niemozliwa: pierwszy czlon hierarchii to arkusz
+   1:1M albo strefa (`N-34`, `7`). LAZ, CZ, wycinki i land cover nie maja
+   `full_sheet/`.
 
 Nowe zrodlo dodaje sie samym wpisem deskryptora — np.
 `nmt/de_bb_dgm1_dhhn2016/` nie wymaga zadnej zmiany w kodzie sciezek.
@@ -727,9 +743,36 @@ kampanie — kampania juz lokalna jest pomijana (`SheetFetch.skipped`). `--targe
 (skorowidz deklaruje arkusz nie w calosci wypelniony) nadal wygrywa, gdy
 jest najnowszy (ADR-028 bez preferencji pelnego arkusza); fakt trafia do
 `extra.source.full_sheet`, a CLI czyta go z sidecarow wyniku i drukuje
-`Warning: najnowsza kampania GUGiK jest niepelna dla N arkuszy (...)` na
-stderr w torze godla, listy i hierarchii — takze dla arkuszy pominietych
-jako istniejace (kod bez zmian). Wycinek: sekcja 4.3 (`partial_sheets`).
+jeden `Warning: najnowsza kampania GUGiK jest niepelna dla N arkuszy ...`
+na stderr w torze godla, listy i hierarchii — takze dla arkuszy pominietych
+jako istniejace (kod bez zmian). Warning dzieli arkusze (ADR-033): "pelny
+lot w <segment>/full_sheet/" (`DownloadResult.full_links`), "brak pelnego
+lotu w skorowidzu" (`DownloadResult.without_full`; przy `all` kazdy arkusz
+bez dowiazania pelnego; z granica roku z dopiskiem "w zakresie lat
+zadania") i "pelny lot nie pobrany — uzyj --full-sheet".
+Znaczenie flagi: TAK = pelne pokrycie w granicach Polski (pomiar
+`docs/research/2026-10-10-full-sheet-link/granica-pelne-pokrycie.md`:
+nodata za granica w arkuszach granicznych jest normalne), NIE nie mowi
+o skali braku (0,9-98,9 %). Wycinek: sekcja 4.3 (`partial_sheets`),
+mozaika nadal ze sciezek standardowych.
+
+**Drugie dowiazanie i `--full-sheet` (ADR-033).** Po dowiazaniu
+standardowym `_fetch_campaigns` dowiazuje `full_sheet/` do najnowszego
+lotu z `full_sheet is True` wsrod lotow TEGO zadania (regula 7 w 3.3);
+bez kandydata dowiazanie pelne zostaje nietkniete. Porazka tego
+dowiazania = porazka arkusza (`dowiazanie <sciezka>: <blad>`), `--force`
+je odswieza, I-1 go nie dotyka. `DownloadManager(full_sheet=True)` (CLI
+`--full-sheet`): przy `newest`, gdy wybrany rekord nie jest pelny, manager
+wola dodatkowo `resolve_campaigns(campaigns="all", min_year, max_year)`
+i bierze pierwszy rekord pelny (lista od najnowszego, `campaigns_cache`)
+jako jeszcze jedna kampanie arkusza — najwyzej jeden dodatkowy lot;
+brak = `SheetFetch.no_full_flight` / `DownloadResult.without_full`.
+Awaria tego zapytania albo pobrania lotu pelnego = porazka arkusza
+(sciezka standardowa i tak wskazuje najnowszy). Sidecar kampanii zadania
+z flaga: `request.full_sheet: true`. Z `all` flaga bez skutku; z
+`--target-crs` i LAZ `Error:` przed siecia. Przy przedziale lat
+dowiazanie pelne spoza zadania: `full_link_outside_range` i wspolny
+`Info:` z U15.
 
 **Kampanie i rok danych (ADR-030, ADR-032).** NMT/NMPT/orto przyjmuja
 `--year Y` (skrot `--min-year Y --max-year Y`), `--min-year L` i
@@ -754,9 +797,11 @@ pobraniem. Potem manager wykorzystuje JUZ sprawdzone rekordy,
 zapisuje kazdy wybrany lot w `kampanie/`, aktualizuje dowiazanie raz
 na arkusz (najnowszy lot wg ADR-028, nigdy wstecz), sidecary i pomiar
 opisany w 3.2. `DownloadResult.better_coverage` wskazuje arkusze z
-lotem o lepszym pokryciu (tylko `all`); `link_outside_range` (takze
-`SheetFetch`) — arkusze, ktorych dowiazanie zostalo przy nowszym
-lokalnym locie spoza zadania (nigdy wstecz), CLI drukuje wtedy `Info:`.
+lotem o lepszym pokryciu (tylko `all`); `link_outside_range` i
+`full_link_outside_range` (takze `SheetFetch`) — arkusze, ktorych
+dowiazanie standardowe albo `full_sheet/` zostalo przy locie spoza
+zadania (nigdy wstecz), CLI drukuje wtedy jeden `Info:` z linia
+`<godlo>: sciezka standardowa|full_sheet/ -> dowiazanie <data>_<id>`.
 Dalsze szczegoly: manager pobiera kazda
 brakujaca kampanie (`GugikProvider.download_record`; plik w `kampanie/`,
 `record_source` -> `extra.source`), po zebraniu kampanii przestawia
@@ -808,9 +853,9 @@ biblioteki) moga chwilowo zostawic dowiazanie na starszej kampanii;
 kolejne `newest`/`all` je naprawia, pliki w `kampanie/` sa nietkniete.
 Przy metodzie `copy` CLI drukuje `Warning: hardlink niedostepny na tym
 systemie plikow — sciezka standardowa jest KOPIA najnowszej kampanii dla N
-arkuszy (<godla do 10>) (extra.link=copy)`; podsumowanie `all` (bez `-q`):
-`Downloaded <n> campaign files for <m> sheets to <dir> (<k> already
-existed)`. Pojedyncze godlo drukuje `Skipped <godlo> - already exists at
+arkuszy (<godla do 10>) (extra.link=copy)`; podsumowanie `all` albo
+`--full-sheet` (bez `-q`): `Downloaded <n> campaign files for <m> sheets
+to <dir> (<k> already existed)`. Pojedyncze godlo drukuje `Skipped <godlo> - already exists at
 <sciezka>` (zamiast `Downloaded to`) tylko, gdy `manager.last_sheet.skipped`.
 
 Awaria skorowidza przy `newest` (I-1, errata 5 ADR-030; wycinek `--target-crs` tez: `PlCutoutResult.unverified`, sidecar `extra.unverified_sheets` `{godlo: blad}`, `Warning:` jak dla listy): gdy `resolve_campaigns` konczy sie
