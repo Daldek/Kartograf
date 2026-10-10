@@ -106,7 +106,9 @@ class SkorowidzRecord:
         0.7.1 without the accuracy keys; callers treat that as a cache miss
         (``cached_record``). ``archive_module`` itself may be ``None``.
         """
-        source["archive_module"]  # 0.7.1 key: older cache entries are a miss
+        if "archive_module" not in source:
+            # 0.7.1 key: older cache entries are a miss (cached_record)
+            raise KeyError("archive_module")
         uklad, zone = _horizontal_crs(source.get("declared_crs") or "")
         raw = {
             key: str(source[field])
