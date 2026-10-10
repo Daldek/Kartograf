@@ -60,10 +60,13 @@ klucza standardowego.
 
 - Zmiana klucza sciezki standardowej (ADR-028/ADR-030 (d) bez zmian).
 - Mozaika lotow (nowy + uzupelnienie ze starszego) — SCOPE 3.1.
-- Wybor wg zmierzonego pokrycia (`--min-coverage`, Q2a). Flaga GUGiK
-  myli sie w obie strony (Slubice N-33-126-C-c-3-4: TAK przy 75 %
-  nodata) — `full_coverage/` ufa deklaracji skorowidza, co dokumentacja
-  mowi wprost.
+- Wybor wg zmierzonego pokrycia (`--min-coverage`, Q2a). Flaga TAK
+  znaczy "pelne pokrycie w granicach Polski" (pomiar 2026-10-10:
+  `docs/research/2026-10-10-full-sheet-link/granica-pelne-pokrycie.md`
+  — 13 plikow TAK, 0 px nodata po stronie PL; Slubice 75 % nodata to
+  zagraniczna czesc ramki); NIE nie mowi o skali braku (0,9-98,9 %).
+  `full_coverage/` ufa deklaracji skorowidza, co dokumentacja mowi
+  wprost.
 - Zmiana nazwy `kampanie/` na angielska.
 - CZ (6.4), LAZ (6.2), wycinki `--target-crs` (6.3), land cover.
 
@@ -264,7 +267,9 @@ i orto M-34-90-C-b-4-4 (84466 NIE 2026, 81437 TAK 2024); raport w
 Dokumentacja przy wdrozeniu: nowy ADR-033 (drzewo `full_coverage/`,
 regula, `--full-sheet`, decyzje F-U1..F-U5), errata ADR-030 (d) (drugie
 dowiazanie) i ADR-032 (flaga), ARCHITECTURE 3.3 i 4.1, USAGE 4.x,
-SCOPE 2.12, `--help`, CHANGELOG `[0.7.2]`.
+SCOPE 2.12, `--help`, CHANGELOG `[0.7.2]`. Znaczenie TAK ("pelne w
+granicach Polski"; nodata za granica w arkuszach granicznych jest
+normalne) — w ADR-033, ARCHITECTURE 4.1 (akapit E13) i USAGE.
 
 ## 9. Pytania otwarte
 

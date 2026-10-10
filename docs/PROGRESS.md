@@ -171,6 +171,14 @@
   decyzje uzytkownika (sekcja 0): Q1 = flaga `--full-sheet` (wariant C),
   Q2 = brak pliku + komunikat, Q3 = jak U15, Q4 = wycinki ze sciezek
   standardowych, Q5 = nazwa angielska `full_coverage/`.
+- Pomiar na zywo (pytanie uzytkownika o Slubice): flaga TAK = pelne
+  pokrycie w granicach Polski — 13 plikow TAK (12 arkuszy granicznych
+  DE/CZ/SK/UA/BY/LT + kontrola), 0 px nodata po stronie PL w ramce
+  arkusza; NIE (Terespol 2025) 13,8 % nodata po stronie PL; 61 z 62
+  rekordow 22 arkuszy granicznych to TAK. Plik ASC = obwiednia trapezu
+  ramki (narozniki = nodata, ~10 % takze w glebi kraju). Raport
+  `docs/research/2026-10-10-full-sheet-link/granica-pelne-pokrycie.md`;
+  spec 1.3 poprawiony (Slubice to nie blad flagi).
 - Bez zmian kodu; brama nieuruchamiana (tylko dokumentacja).
 
 ### Wybor roku danych — model A i merge do develop (2026-10-10)
