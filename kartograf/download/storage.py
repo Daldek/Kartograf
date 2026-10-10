@@ -13,7 +13,7 @@ from typing import BinaryIO
 
 from kartograf.core import parser_registry
 from kartograf.core.sheet_parser import BBox, SheetParser
-from kartograf.download.campaigns import CAMPAIGNS_DIR, CampaignRef
+from kartograf.download.campaigns import CAMPAIGNS_DIR, FULL_SHEET_DIR, CampaignRef
 from kartograf.exceptions import ValidationError
 from kartograf.sources.registry import get_source
 
@@ -238,21 +238,19 @@ class FileStorage:
         >>> storage.get_path("N-34-130-D-d-2-4", ".asc")
         PosixPath('data/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc')
         """
-        # Canonical sheet code via SheetParser (case and leading zeros, A7):
-        # 'M-33-036-...' and 'M-33-36-...' map to the same path
-        parser = SheetParser(godlo)
-        normalized_godlo = parser.godlo
+        normalized = SheetParser(godlo).godlo
+        return self._sheet_path(normalized, ext)
 
-        # Build directory path from sheet code components
-        dir_parts = self._get_directory_parts(normalized_godlo)
+    def _sheet_path(self, normalized: str, ext: str, *subtree: str) -> Path:
+        """``<output>/<segment>/<subtree...>/<hierarchy>/<godlo><ext>``.
 
-        # Construct full path with resolved segment (product or resolution)
-        dir_path = self._output_dir / self._resolved_subdir(normalized_godlo)
-        for part in dir_parts:
+        ``normalized`` is the canonical sheet code (``SheetParser(...).godlo``,
+        A7: ``'M-33-036-...'`` and ``'M-33-36-...'`` map to one path).
+        """
+        dir_path = self._output_dir / self._resolved_subdir(normalized)
+        for part in (*subtree, *self._get_directory_parts(normalized)):
             dir_path = dir_path / part
-
-        filename = f"{normalized_godlo}{ext}"
-        return dir_path / filename
+        return dir_path / f"{normalized}{ext}"
 
     def get_campaign_path(
         self, godlo: str, campaign: CampaignRef, ext: str = ".asc"
@@ -262,15 +260,16 @@ class FileStorage:
         ``<output>/<segment>/kampanie/<date>_<id>/<hierarchy>/<godlo><ext>``.
         """
         normalized = SheetParser(godlo).godlo
-        dir_path = (
-            self._output_dir
-            / self._resolved_subdir(normalized)
-            / CAMPAIGNS_DIR
-            / campaign.dirname
-        )
-        for part in self._get_directory_parts(normalized):
-            dir_path = dir_path / part
-        return dir_path / f"{normalized}{ext}"
+        return self._sheet_path(normalized, ext, CAMPAIGNS_DIR, campaign.dirname)
+
+    def get_full_sheet_path(self, godlo: str, ext: str = ".asc") -> Path:
+        """
+        Path of the second link to the newest declared-full flight (ADR-033):
+        ``<output>/<segment>/full_sheet/<hierarchy>/<godlo><ext>`` — the same
+        hierarchy as :meth:`get_path`.
+        """
+        normalized = SheetParser(godlo).godlo
+        return self._sheet_path(normalized, ext, FULL_SHEET_DIR)
 
     def get_raw_path(
         self, identifier: str, filename: str, *, uklad: str | None = None
@@ -451,9 +450,10 @@ class FileStorage:
 
     def delete(self, godlo: str, ext: str = ".asc") -> bool:
         """
-        Delete file for given sheet code.
+        Delete the links of a sheet: the standard path and ``full_sheet/``.
 
-        Also deletes the companion `<file>.meta.json` sidecar, if present.
+        Each one goes together with its companion `<file>.meta.json` sidecar.
+        Campaign files in ``kampanie/`` stay (ADR-030, ADR-033).
 
         Parameters
         ----------
@@ -465,17 +465,18 @@ class FileStorage:
         Returns
         -------
         bool
-            True if file was deleted, False if it didn't exist
+            True if any file was deleted, False if none existed
         """
-        path = self.get_path(godlo, ext)
-        # The campaign standard path is a hardlink or a copy (ADR-030):
-        # unlink() removes the path itself, the file in kampanie/ stays.
-        if path.exists():
-            path.unlink()
-            # The metadata sidecar must not outlive the data file.
-            path.with_name(path.name + ".meta.json").unlink(missing_ok=True)
-            return True
-        return False
+        deleted = False
+        for path in (self.get_path(godlo, ext), self.get_full_sheet_path(godlo, ext)):
+            # Both paths are a hardlink or a copy of a campaign file (ADR-030):
+            # unlink() removes the path itself, the file in kampanie/ stays.
+            if path.exists():
+                path.unlink()
+                # The metadata sidecar must not outlive the data file.
+                path.with_name(path.name + ".meta.json").unlink(missing_ok=True)
+                deleted = True
+        return deleted
 
     def list_files(
         self, pattern: str = "**/*.asc", *, campaigns: bool = False
@@ -492,8 +493,8 @@ class FileStorage:
         pattern : str, optional
             Glob pattern for matching files (default: "**/*.asc")
         campaigns : bool, optional
-            False (default): standard paths — without ``kampanie/``.
-            True: only files in ``kampanie/`` (ADR-030).
+            False (default): standard paths — without ``kampanie/`` and
+            ``full_sheet/``. True: only files in ``kampanie/`` (ADR-030).
 
         Returns
         -------
@@ -510,8 +511,11 @@ class FileStorage:
             root = self._output_dir / self._ensure_resolved(name)
             if root.exists():
                 for p in root.glob(pattern):
-                    in_campaigns = p.relative_to(root).parts[:1] == (CAMPAIGNS_DIR,)
-                    if in_campaigns != campaigns:
+                    top = p.relative_to(root).parts[:1]
+                    if campaigns:
+                        if top != (CAMPAIGNS_DIR,):
+                            continue
+                    elif top in ((CAMPAIGNS_DIR,), (FULL_SHEET_DIR,)):
                         continue
                     files.append(p)
         return files
