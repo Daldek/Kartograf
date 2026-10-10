@@ -22,6 +22,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Biblioteka: `DownloadManager(max_year=)` i publiczne
   `check_year_range(godla)` sprawdzaja pelna liste kampanii przed
   pobraniem; `YearRangeError` podaje godla, dostepne lata i podpowiedzi.
+  `available_years(godlo)` providerow NMT/NMPT/orto zwraca rosnace lata
+  z pelnej listy kampanii arkusza.
   Sidecar kampanii z przedzialem zawiera `request.max_year`, `request.year`
   dla pojedynczego roku i `extra.available_years`.
 - NMT/NMPT/orto: po pobraniu kilku lotow arkusza z przedzialu lat,
@@ -77,6 +79,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   lokalny fallback bez weryfikacji nadal dziala bez granic roku.
   Co zrobic: dla list z celowym pominieciem starszych arkuszy pobierz bez
   granicy i odfiltruj po `extra.campaign.date`, albo obniz granice.
+- `validate_campaign_args(campaigns, min_year, max_year)` ma nowy
+  obowiazkowy argument (funkcja wewnetrzna, poza `__all__`). Co zrobic: kod
+  wolajacy ja bezposrednio dodaje `max_year`.
 - `DownloadManager(campaigns=None)` domyslnie wybiera `all` z `max_year`,
   bez gornej granicy `newest`; jawne `newest` z `max_year` jest bledem.
   Co zrobic: przy gornej granicy usun `campaigns="newest"` i uwzglednij

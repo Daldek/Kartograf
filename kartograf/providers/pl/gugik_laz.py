@@ -737,9 +737,10 @@ class GugikLazProvider(BaseProvider):
             )
 
         available_years = self._get_available_years(vcrs, timeout)
-        if year is not None and year not in available_years:
+        # `--year Y` reaches the provider as [Y, Y] (CLI): same wording as year=
+        if lo is not None and lo == hi and lo not in available_years:
             raise DownloadError(
-                f"rocznik {year} nie istnieje w usludze {vcrs} "
+                f"rocznik {lo} nie istnieje w usludze {vcrs} "
                 f"(dostepne: {', '.join(map(str, available_years))})"
             )
         has_range = lo is not None or hi is not None
