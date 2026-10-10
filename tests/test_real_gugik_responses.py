@@ -344,10 +344,13 @@ class TestVariantHintOnRealBodies:
     """P10: no record in the chosen variant -> a hint naming the variants
     (resolution, vertical CRS) whose index has the sheet (U1, 2026-10-10)."""
 
-    def test_variant_hint_for_5m_gap(self):
+    def test_variant_hint_for_5m_gap(self, caplog):
         provider = GugikProvider(resolution="5m", session=variant_session())
         with pytest.raises(NoCoverageError) as exc:
             provider._resolve_sheet(U1)
+        # one answer for all layers: no per-layer year check ("EVRF2007" in
+        # a label must not read as the layer year 2007)
+        assert "poza partycja" not in caplog.text
         hints = _variant_hints(exc)
         assert len(hints) == 2
         evrf = next(h for h in hints if "EVRF2007" in h)
