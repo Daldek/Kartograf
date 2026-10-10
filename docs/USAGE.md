@@ -62,12 +62,18 @@ kartograf download 7.171.21 --scale 1:2000
 kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --system 2000 --scale 1:2000
 
 # Kampanie GUGiK (sekcja 4): domyślnie najnowsza (newest); wszystkie kampanie
-# arkusza (all); tylko kampanie z roku pozyskania >= RRRR (--min-year)
+# arkusza (all)
 kartograf download N-34-130-D-d-2-4 --campaigns all
-kartograf download N-34-130-D-d-2-4 --min-year 2024
-kartograf download --bbox 530000,382000,533000,386000 --campaigns all --min-year 2022
 kartograf download N-34-130-D-d-2-4 --product laz --campaigns all
 kartograf download --bbox 530000,382000,533000,386000 --product laz --campaigns all
+
+# Wybór roku danych (NMT, NMPT, orto, LAZ; sekcja 4.1)
+kartograf download N-34-130-D-d-2-4 --year 2025          # wszystkie kampanie z 2025
+kartograf download N-34-130-D-d-2-4 --product orto --year 2024
+kartograf download --bbox 530000,382000,533000,386000 --max-year 2022
+kartograf download --bbox 530000,382000,533000,386000 --min-year 2023 --max-year 2024
+kartograf download N-34-130-D-d-2-4 --min-year 2024      # najnowsza, nie starsza niż 2024
+kartograf download --bbox 530000,382000,533000,386000 --campaigns all --min-year 2022
 ```
 
 Pełna lista komend i opcji: `kartograf --help`, `kartograf <komenda> --help`.
@@ -75,22 +81,18 @@ Pełna lista komend i opcji: `kartograf --help`, `kartograf <komenda> --help`.
 LAZ: domyślnie pobierany jest najnowszy kafel dla każdego fragmentu obszaru;
 starsze kafle pokryte przez nowsze są pomijane z komunikatem `Info:`
 ([ADR-029](DECISIONS.md), szczegóły: SCOPE 2.5 i ARCHITECTURE 4.7 "Wybór
-kafli"); `--year` wybiera jeden rocznik (rocznik nieobecny w usłudze = błąd
-z listą dostępnych). WFS GUGiK w EPSG:2180 używa kolejności osi (N,E).
+kafli"); `--year`/`--min-year`/`--max-year` zawężają wybór do przedziału lat
+(sekcja 4.1; rocznik spoza usługi = błąd z listą dostępnych). WFS GUGiK
+w EPSG:2180 używa kolejności osi (N,E).
 `--min-density` i `extra.nominal_density` to gęstość **nominalna** z WFS
 GUGiK — faktyczna bywa wyższa.
 
-`--year` i `--min-density` działają **tylko z `--product laz`**. Z `nmt`,
-`nmpt` i `orto` (także domyślnym `nmt`) kończą się `Error:` i kodem 1 przed
-jakimkolwiek zapytaniem do sieci (do 0.7.0 były po cichu pomijane); dotyczy
-godła, hierarchii, listy arkuszy, `--bbox`, `--geometry`, `--target-crs`
-i `--country auto`. Wybór roku dla NMT/NMPT/orto będzie w 0.7.2; na razie
-`--min-year RRRR` (tylko PL, bez `--target-crs`) odcina kampanie starsze niż
-podany rok, a `--year`/`--min-density` w tych produktach trzeba pominąć.
-Dla zadań wyłącznie CZ (godło CZ, `--country cz`, obszar w całości w CZ) komunikat
-mówi, że CUZK nie ma wyboru roku — `--year` trzeba pominąć (bez wskazania
-0.7.2 i `--min-year`, który bez PL jest odrzucany). Gdy podano już `--min-year`,
-komunikat nie powtarza jego podpowiedzi.
+`--min-density` działa **tylko z `--product laz`**. Z `nmt`, `nmpt` i `orto`
+(także domyślnym `nmt`) kończy się `Error:` i kodem 1 przed jakimkolwiek
+zapytaniem do sieci (do 0.7.0 był po cichu pomijany). `--year`, `--min-year`
+i `--max-year` działają dla NMT, NMPT, orto i LAZ (od 0.7.2; wcześniej
+`--year` poza LAZ kończył się `Error:`) — tylko PL, bez `--target-crs`
+(sekcja 4.1).
 
 ### 1.2 Selekcja obszaru i wybór kraju (`--country`)
 
@@ -151,7 +153,8 @@ kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --targe
   miejsca = błąd przed siecią), `Info:` dla wycinka >= 1 GiB; twardego
   limitu rozmiaru nie ma.
 - Wycinek zawsze składa się z najnowszych kampanii (nie przyjmuje
-  `--campaigns all`/`--min-year`). Pełny opis: ARCHITECTURE 4.3.
+  `--campaigns all`, `--year`, `--min-year` ani `--max-year`). Pełny opis:
+  ARCHITECTURE 4.3.
 
 ### 1.4 Czechy (CUZK)
 
@@ -494,10 +497,11 @@ a ponowne pobranie wymusza `--force`.
 ## 4. Kampanie GUGiK
 
 GUGiK publikuje ten sam arkusz w kilku kampaniach (różne lata pozyskania).
-`--campaigns newest` (domyślnie) pobiera najnowszą; `--campaigns all` —
-każdą; `--min-year RRRR` odcina kampanie z `aktualnosc` sprzed danego roku
-(obie strategie). Kampanie dotyczą tylko PL — dla CZ opcje dają `Error:`
-(zadanie wyłącznie czeskie) albo `Info:` (obszar PL+CZ pod `auto`).
+`--campaigns newest` (domyślnie bez `--year`/`--max-year`) pobiera
+najnowszą; `--campaigns all` — każdą. Wybór roku (`--year`, `--min-year`,
+`--max-year`) opisuje sekcja 4.1. Kampanie i rok dotyczą tylko PL — dla CZ
+opcje dają `Error: CZ (CUZK) nie ma kampanii — ...` (zadanie wyłącznie
+czeskie) albo `Info:` (obszar PL+CZ pod `auto`, CZ w bieżącej wersji).
 
 Prawdziwe pliki NMT/NMPT/orto leżą w
 `data/<produkt>/<segment>/kampanie/<data>_<id>/<hierarchia godła>/<godło>.<ext>`
@@ -510,8 +514,9 @@ cache (7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania.
   429/5xx), a arkusz ma już lokalną kampanię, `newest` jej używa i drukuje
   `Warning: <godło>: skorowidz GUGiK niedostepny — uzyto lokalnej kampanii
   bez sprawdzenia nowszej (...)` (kod bez zmian, także z `-q`). Bez lokalnej
-  kampanii, z `--force`, `--campaigns all` albo `--min-year` taki błąd nadal
-  kończy pobranie arkusza porażką (errata 5 ADR-030). Biblioteka:
+  kampanii, z `--force`, `--campaigns all` albo dowolną flagą roku taki błąd
+  nadal kończy pobranie porażką (errata 5 ADR-030; z flagą roku całe
+  zadanie, sekcja 4.1). Biblioteka:
   `DownloadManager.last_sheet.unverified` / `DownloadResult.unverified`
   (treść błędu transportu).
 - **Dowiązanie = hardlink:** ścieżka standardowa to dowiązanie twarde do
@@ -532,16 +537,64 @@ cache (7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania.
   pobraniem pliku (arkusz: `Error:`/porażka wg listy, w `all` pozostałe
   kampanie są pobierane). Rekord bez tego pola jest przyjmowany.
 - **Wycinek `--target-crs`** zawsze składa się z najnowszych kampanii i nie
-  przyjmuje `--campaigns all`/`--min-year`.
+  przyjmuje `--campaigns all` ani flag roku.
 - **LAZ:** `--campaigns all` pobiera wszystkie kafle, których rama przecina
-  obszar (bez deduplikacji ADR-029), `--min-year` to dolna granica roku
-  kafla; `--min-year` i `--year` wykluczają się. LAZ nie używa dowiązań.
-  `--year` i `--min-density` są tylko dla LAZ (z innymi produktami: `Error:`,
+  obszar (bez deduplikacji ADR-029). LAZ nie używa dowiązań.
+  `--min-density` jest tylko dla LAZ (z innymi produktami: `Error:`,
   sekcja 1.1).
 - Składanie kilku kampanii w jedną powierzchnię nie jest częścią
   Kartografu (plany: SCOPE 3.1).
 
 Reguły szczegółowe: SCOPE 2.12, ARCHITECTURE 3.3 (reguła 6), ADR-030.
+
+### 4.1 Wybór roku danych (`--year`, `--min-year`, `--max-year`)
+
+Rok danych to rok pozyskania: `aktualnosc` rekordu skorowidza (NMT, NMPT,
+orto) albo `akt_rok` kafla LAZ — nie data przyjęcia do PZGiK. Granice są
+domknięte; `--year RRRR` to skrót `--min-year RRRR --max-year RRRR`
+([ADR-032](DECISIONS.md)).
+
+- **Z górną granicą** (`--year`, `--max-year`, para) pobierane są WSZYSTKIE
+  kampanie (loty) z przedziału do `kampanie/` (strategia `all`), a ścieżka
+  standardowa wskazuje najnowszą z nich (reguła dowiązania bez zmian).
+- **Samo `--min-year`** pobiera jedną, najnowszą kampanię arkusza — działa jak
+  kontrola „najnowsze dane nie starsze niż RRRR”. `--campaigns all
+  --min-year RRRR` pobiera wszystkie kampanie od roku RRRR.
+- **Najpierw sprawdzenie, potem pobranie.** Gdy któryś arkusz ma dane tylko
+  z innych lat, zadanie kończy się `Error:` i kodem 1 przed pobraniem
+  czegokolwiek (także z pozostałych arkuszy):
+
+  ```
+  Error: brak danych z roku 2024 dla 2 z 4 arkuszy — nic nie pobrano:
+    N-34-139-C-a-3-1: dostepne roczniki 2019, 2023, 2025
+    N-34-139-C-a-3-3: dostepne roczniki 2019, 2025
+  Podpowiedz: --min-year 2024 (rok 2024 i nowsze) albo --max-year 2024 (rok 2024 i starsze)
+  ```
+
+  Arkusz bez żadnych danych (morze, obszar za granicą) jest pomijany
+  z `Warning:` jak dotąd. Awaria skorowidza przy sprawdzaniu przerywa całe
+  zadanie (`Error: nie udalo sie sprawdzic roku danych ...`) — ponów pobranie.
+- **Kilka lotów w przedziale:** gdy najnowszy lot nie jest pełnym arkuszem,
+  Kartograf mierzy po pobraniu pokrycie każdego lotu (udział ważnych
+  pikseli, `extra.coverage`); jeśli starszy lot ma większe pokrycie, drukuje
+  `Info:` (stderr, także z `-q`) i zapisuje `extra.flights`
+  i `extra.better_coverage` w sidecarze ścieżki standardowej. Dowiązanie
+  nadal wskazuje najnowszy lot; starszy leży w `kampanie/`.
+- **Sidecar:** `request.min_year`/`max_year` (gdy podane), `request.year`
+  (gdy równe), `request.campaigns` (strategia faktycznie użyta),
+  `extra.available_years` (wszystkie lata arkusza w skorowidzu).
+- **Jawne `--campaigns newest`** z `--year`/`--max-year` = `Error:` (górna
+  granica pobiera wszystkie kampanie z przedziału); z samym `--min-year` —
+  dozwolone. LAZ: `newest` dozwolone z każdym przedziałem.
+- **LAZ:** wybór ADR-029 w obrębie przedziału. Kafel, który bez flag roku
+  zostałby wybrany, a ma rok spoza przedziału, musi być pokryty kaflami
+  z przedziału; inaczej `Error: brak kafli LAZ z roku ... dla N z M kafli
+  obszaru — nic nie pobrano:` z rocznikami per kafel. Zapytania WFS idą do
+  wszystkich roczników usługi. Sidecar kafla ma `extra.acquisition_date`
+  i `extra.full_sheet`.
+- **Nie działa:** z `--target-crs` (`Error: --year nie dziala z
+  --target-crs ...`), dla CZ (zadanie wyłącznie CZ = `Error:`, obszar PL+CZ
+  pod `auto` = `Info:`, CZ w bieżącej wersji).
 
 ---
 

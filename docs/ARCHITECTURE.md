@@ -268,7 +268,7 @@ kartograf/
 │   │                    # gugik_laz.py (select_tiles, select_all_intersecting), bdot10k.py,
 │   │                    # skorowidz.py (rekordy GetFeatureInfo, wybor ADR-028,
 │   │                    # SkorowidzLayersMixin: resolve_campaigns/download_record/
-│   │                    # record_source; select_campaign_records, layer_upper_year,
+│   │                    # record_source/available_years; select_campaign_records,
 │   │                    # coverage_hints/no_coverage_error),
 │   │                    # wcs.py (GugikWcsMixin — URL GetCoverage dla NMT/NMPT/orto),
 │   │                    # prg.py (discover_teryts_for_bbox, teryt_for_point — TERYT
@@ -302,7 +302,7 @@ kartograf/
 │   ├── laz.py           # Kafle LAZ jako API (ADR-029): download_laz_area/run_laz_download —
 │   │                    # pula watkow, sidecar kafla, porazki w wyniku
 │   ├── manager.py       # DownloadManager — koordynacja arkuszy (ThreadPoolExecutor), sidecary;
-│   │                    # kampanie (campaigns=, min_year=), SheetFetch/last_sheet
+│   │                    # kampanie (campaigns=, min_year=, max_year=), SheetFetch/last_sheet
 │   │                    # download_sheets/expand_sheets (lista godel, porazki w last_result)
 │   └── storage.py       # FileStorage — segmenty z szablonow rejestru (ADR-026);
 │                        # prune_empty_dirs — sprzatanie pustych bbox/ po porazce
@@ -390,11 +390,11 @@ Od 0.7.1 takze `download_cz_cutout`/`run_cz_cutout` (wycinek CZ),
 | `vertical_source` | `native` / `ellipsoidal` / `server` (z `AccessChannel`) |
 | `resolution` | rozdzielczosc z deskryptora (`1m`/`5m`/`2m`) albo `null` |
 | `nodata` | wartosc pustego piksela: dla `.asc` czytana automatycznie z naglowka (`read_asc_nodata`), w torze CZ z tagu GeoTIFF (`download/cz_cutout.py::read_tif_nodata`; w trybie bbox z fallbackiem `CUZK_NODATA`), dla wycinka PL stala `-9999.0`, dla wyniku HSG `0`, dla GeoTIFF CORINE/SoilGrids z `LandCoverManager` z tagu pliku (sekcja 4.8); `null` gdy zadna z tych drog nie ma zastosowania (np. orto) |
-| `request` | zadanie, ktore dalo TEN plik: `sheet` (godlo), `bbox` + `bbox_crs` w ukladzie wyniku albo `teryt`; dla plikow PL (kampanie, ADR-030) `campaigns` (`newest`/`all`, zawsze) i `min_year` (tylko gdy podany; `request` opisuje POBRANIE, ktore dalo plik, a nie jego ostatnie uzycie — reuzycia ida do `extra.parent_requests`); LAZ: `year`/`min_density`/`min_year` gdy podane oraz `campaigns` tylko dla `all`; land cover: parametry tresci z wartosciami domyslnymi — SoilGrids `property`/`depth`/`stat`, CORINE `year`, BDOT10k `format` (sekcja 4.8); oryginalne zadanie niesie `extra.parent_request` (3.4), rekord skorowidza PL niesie `extra.source` |
+| `request` | zadanie, ktore dalo TEN plik: `sheet` (godlo), `bbox` + `bbox_crs` w ukladzie wyniku albo `teryt`; dla kampanii PL `campaigns` (rozwiazane `newest`/`all`, zawsze), `min_year`/`max_year` (gdy podane) i `year` (gdy granice rowne); LAZ: `year`/`min_year`/`max_year`/`min_density` gdy podane, `campaigns` tylko dla `all`; land cover: parametry tresci z domyslnymi wartosciami — SoilGrids `property`/`depth`/`stat`, CORINE `year`, BDOT10k `format` (4.8). `request` opisuje pierwotne POBRANIE pliku, nie ostatnie wykorzystanie; `extra.parent_request(s)` nie niesie flag roku (3.4) |
 | `license` | `{id, attribution, url}` z deskryptora |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, sekundy) i wersja pakietu z `kartograf/_version.py::build_version()`: wydanie = samo `__version__`; wersja rozwojowa (`dev`) = `<__version__>+<krotki SHA>` commita, z ktorego zaimportowano pakiet, z sufiksem `.dirty`, gdy sledzone pliki katalogu `kartograf/` maja niezacommitowane zmiany (docs/testy sie nie licza); gdy git jest niedostepny albo pakiet nie pochodzi z repozytorium, w ktorym lezy (`os.path.samefile`), samo `__version__`. Ta sama wartosc w `kartograf --version`; `User-Agent` HTTP niesie samo `__version__` |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
-| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania wykorzystujace ten sam arkusz); LAZ ma `tile_sheet`/`year`/`nominal_density`/`url`; SM5 ma `mapname`/`cz_share` (udzial arkusza w terytorium CZ, pole `PODIL` CUZK); wycinek bbox CZ (od 0.7.1) ma zawsze `all_nodata` (`true`/`false`, sekcja 4.5) i `parent_request` przy zadaniu obszarowym; arkusze NMT/NMPT/orto PL maja `source` (klucze w tabeli nizej); wycinek PL: `parent_request`, `missing_sheets`, `sheet_sources`, `off_grid_sheets`, `all_nodata`, `unverified_sheets` — znaczenie i warunki zapisu w akapicie "Wycinek PL w sidecarze" nizej (jedyne pelne zestawienie); CORINE z podgladu WMS: `fallback: "wms_png"` i `note` (`landcover/manager.py`, sekcja 4.8); wynik HSG: `derived: "hsg"`, `source_layers` (lista nazw warstw), `depth`, `stat`, `classes`, a z `hsg_from_rasters` (od 0.7.1) zamiast `depth`/`stat` dodatkowo `source_files` (sekcja 4.8); pakiet BDOT10k (od 0.7.1): `source` = `{url, teryt, format[, raw_file]}` i `http` = `{etag, last_modified, content_length}` (sekcja 4.8); plik kampanii (ADR-030): `campaign` = `{id, date, survey_work_id, source, full_sheet, pzgik_date}` obok `source`; sidecar sciezki standardowej: `link` (`hardlink`/`copy`) i `link_target` (sciezka celu wzgledem dowiazania; jedyne zrodlo celu) |
+| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania); LAZ `tile_sheet`/`year`/`nominal_density`/`url`, dodatkowo `acquisition_date`/`full_sheet`, gdy znane; arkusze NMT/NMPT/orto PL `source`, `campaign` oraz pola rocznikow/lotow opisane nizej; SM5 `mapname`/`cz_share`; wycinek bbox CZ `all_nodata` i `parent_request`; wycinek PL: `parent_request`, `missing_sheets`, `sheet_sources`, `off_grid_sheets`, `all_nodata`, `unverified_sheets` (tabela ponizej); CORINE WMS `fallback`/`note`; HSG `derived` i parametry obliczen |
 | `sha256`, `size_bytes` | od 0.7.1: skrot SHA-256 (hex) i rozmiar w bajtach pliku danych, liczone w `build_metadata` (`sources/sidecar.py::file_digest`) przez ponowny odczyt GOTOWEGO pliku — jedno miejsce dla wszystkich produktow, takze pochodnych (wycinek, scalony GPKG BDOT10k, HSG); `null`, gdy sidecar powstaje bez istniejacego pliku danych. Sidecar sciezki standardowej kampanii (kopia sidecara celu) niesie skrot celu — tresc dowiazania jest ta sama |
 | `schema` | stale `kartograf-meta/1` |
 
@@ -490,6 +490,23 @@ i `extra.link_target` (zapis `tmp` + `os.replace`, nigdy "przez" symlink
 sidecara pozostawiony przez uzytkownika; best-effort). To JEDYNE zrodlo celu
 dowiazania (hardlink nie niesie wskazania): brak sidecara standardowego =
 sciezka nieznana.
+
+**Przedzial lat (ADR-032).** Przy zadaniu z granica roku sidecar kazdej
+kampanii NMT/NMPT/orto i jego kopia w sciezce standardowej zawieraja
+`extra.available_years` (posortowane wszystkie lata arkusza z pelnego
+skorowidza); bez granic brak pola. `extra.coverage` (0..1, cztery miejsca
+po przecinku) w sidecarze kampanii jest tylko po pomiarze waznych pikseli:
+ASC bez `NODATA_value` (domyslnie -9999), orto wg nodata/alfa (bez
+obu brak pomiaru). Pomiar nastepuje przy przedziale i `all`, > 1 locie,
+gdy najnowszy lot nie ma `full_sheet=true`. Sidecar standardowy dostaje
+`extra.flights` z lotami wybranego przedzialu (malejaco wg ADR-028;
+`id`, `date`, `full_sheet`, `coverage` tylko po pomiarze), a przy starszym
+locie o WIEKSZYM pokryciu `extra.better_coverage` = jego `id` i CLI `Info:`
+na stderr (takze z `-q`). Pole `better_coverage` jest usuwane, gdy ponowny
+pomiar nie wykaze lepszego lotu; brak pola nie oznacza pustej listy lotow.
+Pokrycie NIE przestawia dowiazania (najpierw najnowszy lot wg ADR-028,
+zasada "nigdy wstecz"). Sidecar LAZ niesie dodatkowo `extra.acquisition_date`
+(`akt_data`) i `extra.full_sheet` (`czy_ark_wypelniony`), gdy znane.
 
 ### 3.3 Kanoniczny uklad `data/`
 
@@ -714,22 +731,31 @@ jest najnowszy (ADR-028 bez preferencji pelnego arkusza); fakt trafia do
 stderr w torze godla, listy i hierarchii — takze dla arkuszy pominietych
 jako istniejace (kod bez zmian). Wycinek: sekcja 4.3 (`partial_sheets`).
 
-**Kampanie (ADR-030, errata 1-5).** `--campaigns {newest,all}`
-(domyslnie `newest`) i `--min-year RRRR` (granica na roku `aktualnosc`,
-nie `dt_pzgik`; 1900..2100) steruja wyborem rekordow.
-`GugikProvider.resolve_campaigns` zwraca `CampaignRef` (`download/campaigns.py`):
-`newest` = jeden rekord wg ADR-028 (bez zmian), `all` = kazdy rekord po
-twardym filtrze ADR-028 ze WSZYSTKICH warstw (`select_campaign_records`),
-bez limitu liczby kampanii (`logger.info` z liczba). Rok z nazwy warstwy
-(`layer_upper_year`) sluzy wylacznie do pominiecia zapytania i tylko w
-`all` (warstwa `Starsze` zawsze odpytywana); warstwa spoza `LAYER_PATTERN`
-nie jest odpytywana, nazwa z rodziny produktu (`LAYER_FAMILY`) daje
-`logger.warning`. Rekord bez ustalonego roku nie spelnia `--min-year`
-(`all`: pominiety; `newest`: `NoCoverageError` "starsza niz min_year" z data
-najnowszej kampanii). `MetadataCache` ma tabele `campaigns_cache` (klucz jak
-`record_cache`, TTL 7 d, `--min-year` poza kluczem; skan czesciowy obsluguje
-tylko granice >= granicy skanu), `kartograf cache stats` drukuje
-`Campaign entries`. `DownloadManager(campaigns=, min_year=)` pobiera kazda
+**Kampanie i rok danych (ADR-030, ADR-032).** NMT/NMPT/orto przyjmuja
+`--year Y` (skrot `--min-year Y --max-year Y`), `--min-year L` i
+`--max-year U` (granice wlacznie, 1900..2100); rok to `aktualnoscRok`,
+inaczej `aktualnosc[:4]`, NIE `dt_pzgik`. Bez gornej granicy strategia
+domyslna `newest` bierze jeden najnowszy lot, takze z samym `--min-year`
+(kontrola najnowszego roku); z gorna granica domyslne `all` bierze
+WSZYSTKIE loty z przedzialu, takze kilka w roku; jawne
+`--campaigns all --min-year` tez bierze wszystkie od L. Jawne
+`--campaigns newest` z `--year`/`--max-year` = blad przed siecia.
+Zadanie z jakakolwiek granica najpierw sprawdza WSZYSTKIE arkusze
+w `DownloadManager.check_year_range`: jedna pelna lista kampanii z kazdej
+warstwy GetCapabilities na arkusz, filtr lat po twardym filtrze ADR-028.
+Lista `campaigns_cache` (TTL 7 dni, bez `scanned_from`) sluzy rowniez
+`newest` z samym `--min-year`; bez granic `newest` nadal bierze
+`record_cache`. `GugikProvider.available_years(godlo)` zwraca rosnace
+lata z pelnej listy. Arkusz bez danych GUGiK = `NoCoverageError` i
+pominiecie R5, a z danymi tylko poza przedzialem = `YearRangeError`
+(lista lat do 20 arkuszy, podpowiedz tylko gdy jedna jednostronna
+granica obejmuje wszystkie konflikty), zero pobran dla CALEGO zadania.
+Awaria skorowidza w fazie sprawdzania tez przerywa zadanie przed
+pobraniem. Potem manager wykorzystuje JUZ sprawdzone rekordy,
+zapisuje kazdy wybrany lot w `kampanie/`, aktualizuje dowiazanie raz
+na arkusz (najnowszy lot wg ADR-028, nigdy wstecz), sidecary i pomiar
+opisany w 3.2. `DownloadResult.better_coverage` wskazuje arkusze z
+lotem o lepszym pokryciu. Dalsze szczegoly: manager pobiera kazda
 brakujaca kampanie (`GugikProvider.download_record`; plik w `kampanie/`,
 `record_source` -> `extra.source`), po zebraniu kampanii przestawia
 dowiazanie RAZ na arkusz (deduplikacja godel; nigdy wstecz) i zwraca
@@ -798,8 +824,9 @@ skorowidz GUGiK niedostepny — uzyto lokalnej kampanii bez sprawdzenia
 nowszej (<blad>)` (pojedyncze godlo) albo `Warning: skorowidz GUGiK
 niedostepny — dla N arkuszy uzyto lokalnej kampanii bez sprawdzenia nowszej
 (<godla do 10>) (<pierwszy blad>)` (lista), stderr takze z `-q`, kod bez
-zmian. `all`, `--min-year`, `--force` i brak lokalnej kampanii (takze
-dowiazanie z usunieta kampania docelowa) — blad jak dotad. Biblioteka bez `MetadataCache` pyta
+zmian. `all`, jakakolwiek granica roku, `--force` i brak lokalnej
+kampanii (takze dowiazanie z usunieta kampania docelowa) — blad jak dotad.
+Biblioteka bez `MetadataCache` pyta
 skorowidz przy KAZDYM `download_sheet` (takze arkusza juz pobranego);
 przekazanie cache providerowi ogranicza to do raz na 7 dni.
 
@@ -832,10 +859,12 @@ inna awaria pobrania, CLI konczy kodem 1 i wypisuje pelna liste porazek.
 Pojedynczy arkusz bez danych to kod 1; pod `--country auto` kod zalezy
 jeszcze od sukcesu drugiego kraju (sekcja 4.6).
 
-Opcje kampanii (`--campaigns`, `--min-year`, sekcja 4.1) dzialaja tu per
-arkusz; podsumowanie `all` liczy pliki kampanii, nie arkusze. Arkusz, ktorego
-najnowsza kampania jest starsza od `--min-year`, to `NoCoverageError`
-(status `no_coverage`, `Warning:` R5).
+Opcje kampanii i roku (`--campaigns`, `--year`, `--min-year`, `--max-year`,
+sekcja 4.1) dzialaja tu per arkusz; podsumowanie `all` liczy pliki kampanii,
+nie arkusze. Arkusz bez danych w zadnym roku ma status `no_coverage`
+(`Warning:` R5); arkusz z danymi tylko poza przedzialem to
+`YearRangeError` i przerwanie CALEJ listy przed pobraniem, rowniez przy
+samym `--min-year`. Nieudane sprawdzenie skorowidza tez przerywa liste.
 
 **WCS (`download_bbox`) — tylko biblioteka, tylko NMT/NMPT 1 m.** CLI nie
 uzywa WCS dla bboxa PL (ADR-003 czesciowo zastapiony przez ADR-027): zostal
@@ -1100,16 +1129,17 @@ pojdzie w siec. Scalanie PL+CZ w jedna ciagla powierzchnie przygraniczna
 `--country auto --target-crs` daje dwa osobne wycinki w tym samym ukladzie,
 ze wspolnym `extra.parent_request`.
 
-**Kampanie a wycinek (ADR-030, errata Q2/Q4).** Wycinek jest ZAWSZE
-`newest`: `run_pl_cutout` buduje wlasny `DownloadManager` bez `campaigns`
-i czyta arkusze przez dowiazania sciezki standardowej (hardlink i kopia to
-zwykle pliki), a `extra.sheet_sources` czyta
-sidecar standardowy. `--target-crs` + (`--campaigns all` lub `--min-year`)
-odrzuca CLI przed siecia (`Error: --campaigns all nie dziala z --target-crs
-— wycinek sklada jedna kampanie na arkusz` / `Error: --min-year nie dziala
-z --target-crs — nazwa wycinka nie niesie granicy roku`, kod 1). Wycinek jest pomijany po SAMYM istnieniu
-pliku wyniku (Q4), takze gdy skorowidz ma juz nowsza kampanie — odswiezenie:
-`--force` albo usuniecie wycinka. Kontrola wolnego miejsca
+**Kampanie a wycinek (ADR-030, ADR-032).** Wycinek jest ZAWSZE
+`newest`: `run_pl_cutout` buduje wlasny `DownloadManager` bez flag roku
+i czyta arkusze przez dowiazania sciezki standardowej (hardlink i kopia
+to zwykle pliki), a `extra.sheet_sources` z ich sidecarow. `--campaigns all`
+z `--target-crs` = `Error: --campaigns all nie dziala z --target-crs —
+wycinek sklada jedna kampanie na arkusz`; `--year`, `--min-year`,
+`--max-year` z `--target-crs` = `Error: <flaga> nie dziala z --target-crs —
+wycinek sklada najnowsze kampanie, nazwa wycinka nie niesie roku`.
+Walidacja jest przed siecia (kod 1). Wycinek jest pomijany po SAMYM
+istnieniu pliku wyniku (Q4), takze gdy skorowidz ma nowsza kampanie —
+odswiezenie: `--force` albo usuniecie wycinka. Kontrola wolnego miejsca
 (`estimate_pl_cutout_bytes`, D-3) to DOLNE oszacowanie: liczy arkusze bez
 pliku w sciezce standardowej, a pod `newest` arkusz z nowsza (albo
 usunieta) kampania zostanie pobrany mimo istniejacego dowiazania.
@@ -1225,15 +1255,16 @@ PL lub CZ pod `auto` daje kod 0, `Warning:` przy awarii drugiej
 czesci; `--resolution 1m` rozstrzyga do PL. Bez `--vertical-crs`
 pogranicze daje PL w EVRF2007 i CZ w Bpv.
 
-Opcje kampanii (ADR-030; errata Q9, N-3) dotycza tylko PL; jedna funkcja
-`_reject_campaign_opts_without_pl(args, countries)` obsluguje wszystkie
-punkty wejscia: zadanie bez PL wsrod krajow (godlo CZ pod `cz`/`auto`,
-obszar lub geometria z jawnym `--country cz`, obszar w calosci czeski pod
-`auto`) = `Error: CZ (CUZK) nie ma kampanii — --campaigns all/--min-year
-dotycza tylko PL`, kod 1, bez sieci; obszar pod `auto` z PL i CZ = jedno
-`Info: --campaigns/--min-year dotycza tylko czesci PL (CZ: biezaca wersja
-danych CUZK)`, CZ pobierane dalej. Opcje kampanii nie naleza do
-`_pl_only_flags` — nie zwezaja `auto` do PL.
+Opcje kampanii i flagi roku (ADR-030/032; erraty Q9, N-3) dotycza
+tylko PL; `_reject_campaign_opts_without_pl(args, countries)` obsluguje
+wszystkie wejscia: zadanie bez PL (godlo CZ pod `cz`/`auto`, jawne
+`--country cz`, obszar w calosci CZ pod `auto`) z `all` lub dowolna
+flaga roku = `Error: CZ (CUZK) nie ma kampanii —
+--campaigns all/--min-year/--max-year/--year dotycza tylko PL`,
+kod 1 bez sieci. Dla obszaru PL+CZ pod `auto` wypisuje raz
+`Info: --campaigns/--min-year/--max-year/--year dotycza tylko czesci PL
+(CZ: biezaca wersja danych CUZK)`; czesc CZ jest pobierana.
+Flagi roku nie naleza do `_pl_only_flags` i nie zwezaja `auto` do PL.
 
 Styk PL/CZ zmierzony na zywo 2026-09-29 (dane wejsciowe do R6; raport:
 `docs/research/2026-09-29-live-e2e-i-audyt-docs/L4-pogranicze-cz-report.md`; oba wycinki
@@ -1260,44 +1291,49 @@ pobierane sa rownolegle. WFS `urn:ogc:def:crs:EPSG::2180` oczekuje
 osi (N,E): bbox jest wysylany, a `gml:Envelope` i rama `msGeometry`
 czytane w tym porzadku, potem kafle sa filtrowane rzeczywistym przecieciem.
 GetCapabilities ustala roczniki (bez zaszytej listy); jawny `--year`
-jest sprawdzany wobec rocznikow danej uslugi wysokosciowej PRZED
-`GetFeature` — rok nieobecny to `DownloadError("rocznik <rok> nie istnieje
-w usludze <vcrs> (dostepne: ...)")` bez sugestii ponowienia. Jesli
-ktorykolwiek rocznik zawiedzie po ponowieniach, `select_tiles`
-rzuca `DownloadError` z informacja o niekompletnym wyniku, zamiast
-sugerowac brak kafli. Gdy wszystkie
-odpowiedza i nic nie znaleziono, CLI drukuje `No LAZ tiles found`
+nieobecny w usludze wysokosciowej = `DownloadError` z lista
+dostepnych rocznikow, przed GetFeature;
+przedzial bez rocznika uslugi rowniez daje `DownloadError`. Przy fladze
+roku WFS odpytuje WSZYSTKIE roczniki dla referencji, przed pobraniem.
+Jesli ktorykolwiek rocznik zawiedzie po ponowieniach, `select_tiles`
+rzuca `DownloadError` zamiast zgadywac brak kafli. Gdy wszystkie
+odpowiedza i nie ma zadnych kafli, CLI drukuje `No LAZ tiles found`
 (`download_laz_area`: `NoCoverageError`).
 
-**`--year` i `--min-density` tylko dla LAZ (0.7.1).** Opcje te czyta wylacznie
-`_cmd_download_laz`. Dla `--product nmt|nmpt|orto` (takze domyslnego)
-`cmd_download` odrzuca je w `_reject_laz_only_opts`: `Error: --year dziala
-tylko z --product laz (podano <produkt>); ...` albo `Error: --min-density
-dziala tylko z --product laz (podano <produkt>); ...`, kod 1. Sprawdzenie
-stoi zaraz po walidacji opcji kampanii, przed wyborem kraju, wiec obejmuje
-wszystkie tory (godlo, hierarchia, lista arkuszy, `--bbox`, `--geometry`,
-wycinek `--target-crs`, `--country auto`, CZ) i jest przed siecia,
-fabryka providera, `DownloadManager`, wycinkiem i `_run_cz` oraz przed
-utworzeniem katalogu wyjsciowego. Komunikat `--year` wskazuje wybor roku
-w 0.7.2 i `--min-year` (kampanie PL, bez `--target-crs`); bez podpowiedzi
-`--min-year`, gdy podano go juz razem z `--year`. Dla zadan wylacznie CZ
-(`_is_cz_only_task`: godlo CZ, `--country cz`, `--bbox`/`--geometry` w calosci
-w CZ pod `auto`; lokalnie, bez sieci) komunikat to `Error: --year nie dziala
-dla CZ (CUZK nie ma wyboru roku; podano <produkt>); pomin --year`.
+**Flagi roku wspolne, `--min-density` tylko LAZ (ADR-032).**
+`--year`/`--min-year`/`--max-year` dla NMT/NMPT/orto ida do
+`DownloadManager` (4.1), dla LAZ do `_cmd_download_laz`;
+`--min-density` dla innych produktow = `Error:` przed siecia
+(`_reject_laz_only_opts`). `--year` z dowolna granica roku =
+`Error: --year wyklucza sie z --min-year/--max-year` przed siecia,
+takze w LAZ. Zadanie wylacznie CZ z flagami roku = `Error: CZ (CUZK)
+nie ma kampanii` (4.6). Wycinek `--target-crs` z flaga roku = `Error:`
+(4.3).
 
-**Wybor kafli (ADR-029).** Domyslnie (bez `--year`) kafle sa wybierane
+**Wybor kafli (ADR-029/032).** Domyslnie (bez granic roku) kafle sa wybierane
 zachlannie od najnowszego `akt_rok` (w roku: nowsza `akt_data`): kafel
 starszy jest pomijany, gdy jego czesc wspolna z obszarem zadania pokrywa
 juz suma wybranych kafli — porownanie ram `msGeometry` w EPSG:2180,
 kazda rama pokrycia powiekszona o 1 m (`COVERAGE_TOLERANCE_M`); kafel
 wnoszacy niepokryty kawalek zostaje (caly — LAZ nie jest przycinany).
 Dzieki temu PL-1992 i PL-2000 tego samego miejsca nie dubluja sie (w2:
-2025/PL-1992 zamiast 2025 + 2022/PL-2000:S7). Z `--year` regula dziala
-w obrebie tego roku. Pokrywa tylko kafel pelny (`czy_ark_wypelniony` !=
+2025/PL-1992 zamiast 2025 + 2022/PL-2000:S7). W przedziale lat ta
+regula dziala na wybranych kaflach (jawne `newest` dozwolone).
 `NIE`) i tylko rama albo tym samym godlem, nigdy obwiednia. Kafel, ktorego
 rama nie przecina obszaru (przecina go tylko obwiednia), jest pomijany.
 Pominiete kafle: `LazTileSelection.superseded` / `LazDownloadResult.superseded`
 (kafel + kafle pokrywajace), w CLI `Info:` na stderr takze z `-q`.
+
+Z flaga roku `select_tiles` sprawdza pokrycie kafli referencyjnych,
+wybranych po WSZYSTKICH latach bez granic, kaflami z przedzialu
+(po filtrze gestosci i pionu). Porownuje ramy, nie godla: PL-1992
+i PL-2000 moga inaczej dzielic ten sam obszar. Niepokryta czesc
+kafla referencji = `YearRangeError` przed pobraniem z godlem
+referencji, jego rokiem/ukladem i latami kafli przecinajacych
+niepokryty fragment; tolerancja 1 m jak przy zwyklym wyborze.
+W obszarze w2 `--year 2022` daje konflikt (kafel pokrywa tylko
+~53 % obszaru), a `--year 2023` pokrywa referencje. Fragment
+bez kafli w ZADNYM roku pozostaje bez ostrzezenia.
 
 Porazka pobrania choc jednego kafla trafia do `LazDownloadResult.failed`
 (biblioteka nie rzuca); CLI konczy wtedy kodem 1 z `Error:`
@@ -1320,22 +1356,24 @@ jeden `FileStorage` wystarcza na cale zadanie. W trybie obszarowym
 `--country auto` obszar siegajacy CZ konczy sie bledem z podpowiedzia
 `--country pl` (LAZ dla CZ to etap 2).
 
-**Kampanie LAZ (ADR-030).** `--campaigns newest` (domyslnie) = ADR-029
-bez zmian. `--campaigns all` = wszystkie kafle, ktorych rama
-(`footprint`) przecina obszar, bez deduplikacji pokryciowej
-(`select_all_intersecting`); kafel, ktorego przecina obszar tylko obwiednia
-z WFS (rama bez czesci wspolnej), jest pomijany jak dotad i trafia do
-`superseded` z pusta lista pokrywajacych (powod "outside"). `--min-year RRRR` = dolna
-granica `akt_rok` (obie strategie; `download_laz_area(campaigns=, min_year=)`);
-`--min-year` z `--year` wykluczaja sie (`Error: --min-year i --year
-wykluczaja sie (LAZ)`, kod 1; w bibliotece `ValidationError`). Uklad LAZ
-bez zmian — bez `kampanie/` i dowiazan; `request.campaigns` w sidecarze
-tylko dla `all`, `request.min_year` gdy podany.
+**Kampanie LAZ (ADR-030/032).** `--campaigns newest` (domyslnie,
+rowniez z gorna granica) = zachlanny wybor ADR-029 w przedziale.
+`--campaigns all` = wszystkie kafle z rama przecinajaca obszar
+(`select_all_intersecting`), bez deduplikacji pokryciowej; kafel
+przeciety tylko obwiednia WFS trafia do `superseded` z powodem
+"outside". `--year Y` = przedzial `[Y, Y]`, `--min-year`/`--max-year`
+sa domknietymi granicami `akt_rok`; `--year` z dowolna z nich =
+blad w CLI (`ValidationError` w bibliotece). `download_laz_area`
+i `select_tiles` przyjmuja `year=`, `min_year=`, `max_year=`.
+Uklad LAZ bez zmian: bez `kampanie/` i dowiazan;
+`request.campaigns` w sidecarze tylko dla `all`.
 
 Wynik: `data/laz/pl_2000_evrf2007/6/162/34/02/3/<oryginalna_nazwa>.laz`
-(+ `.meta.json` z `extra.tile_sheet`/`year`/`nominal_density`/`url` oraz
+(+ `.meta.json` z `extra.tile_sheet`/`year`/`nominal_density`/`url`,
+`extra.acquisition_date`/`full_sheet`, gdy znane, oraz
 `extra.parent_request` w trybie `--bbox`/`--geometry`; `request`
-niesie bbox oraz `year`/`min_density`, gdy podane — E16).
+niesie bbox, podane granice roku, `year` dla jednego roku
+i `min_density`, gdy podane — E16).
 `nominal_density` i filtr `--min-density` to wartosc NOMINALNA z WFS GUGiK
 (`char_przestrz`); faktyczna gestosc kafla bywa kilkukrotnie wyzsza
 (E2E 2026-10-06: ~119 pkt/m2 przy nominale 15).
