@@ -1,5 +1,9 @@
 # Drugie dowiazanie do najnowszego pelnego lotu (`full_sheet/`, `--full-sheet`) — Implementation Plan
 
+**Status:** WYKONANY 2026-10-10 (Task 1-6; odstepstwa od planu:
+`docs/PROGRESS.md`, sesja "Drugie dowiazanie do pelnego lotu —
+implementacja"); checkboxy ponizej nieodhaczane.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Wdrozyc w 0.7.2 spec

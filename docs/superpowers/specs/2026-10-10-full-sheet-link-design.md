@@ -2,7 +2,9 @@
 
 **Data:** 2026-10-10
 **Status:** zaakceptowany przez uzytkownika 2026-10-10 (decyzje w sekcji 0);
-plan `docs/superpowers/plans/2026-10-10-full-sheet-link.md`
+WDROZONY 2026-10-10 (ADR-033, merge `feat/full-sheet-link` do `develop`);
+plan `docs/superpowers/plans/2026-10-10-full-sheet-link.md`, raport
+`docs/research/2026-10-10-full-sheet-link/raport.md`
 **Wersja docelowa:** 0.7.2 (galaz `feat/full-sheet-link` z `develop`)
 **Dokumenty zrodlowe:**
 - ADR-028 (wybor rekordu: najnowsza `(aktualnosc, dt_pzgik, url)`, bez
