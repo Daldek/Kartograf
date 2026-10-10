@@ -26,7 +26,7 @@
 | Etap 0 — zrodla wielokrajowe (sources/transform/transport/providers-pl/CLI split/sidecar) | ✅ Gotowy | zmergowane do develop 2026-08-11; E2E 12/12 na realnych danych |
 | Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | ZMERGOWANY do develop 2026-08-12; tor CZ odmrozony w fali 2026-09-29/30 (D1): pin EPSG:1622 (K2; live: Karkonosze PL-CZ mediana -0,15 m, przesuniecie < 1 px), budzet 4 Mpx kafli (K6; live: 29,8 Mpx w 3 min 38 s), piksel dokladnie 2 m (N3), `Warning:` przy 100 % nodata (N2); wydany w v0.7.0 |
 | LAZ — wybor kafli (ADR-029) | ✅ Gotowy | `download_laz_area` / `select_tiles`: najnowszy kafel per obszar wg pokrycia, `--year`, `--min-density`, `extra.parent_request` w trybie `--bbox`/`--geometry` |
-| Kampanie GUGiK (ADR-030 + errata 1-6) | ✅ Gotowy | `--campaigns {newest,all}`, `--min-year`; pliki w `<segment>/kampanie/`, sciezka standardowa = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`) |
+| Kampanie GUGiK (ADR-030 + errata 1-8, ADR-032, ADR-033) | ✅ Gotowy | `--campaigns {newest,all}`, `--year`/`--min-year`/`--max-year` (0.7.2-dev), `--full-sheet`; pliki w `<segment>/kampanie/`, sciezka standardowa i `full_sheet/` = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`, `docs/research/2026-10-10-full-sheet-link/raport.md`) |
 | Wycinek NMT PL `--target-crs` (ADR-027) + API biblioteki `download_pl_cutout` | ✅ Gotowy | fala review max 2026-09-28 + fala naprawcza 2026-09-30: `GridMismatchError` dla 2180 z arkuszy o roznych fazach, W1 (warp per arkusz) dla 5514/3045 (S5/D3/D8), `extra.sheet_sources`, `all_nodata`, `download_pl_cutout(cache=)`; live PASS Krakow 5 m |
 
 | Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | ⏳ Zaplanowany | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3 |
@@ -121,19 +121,21 @@
 > `docs/superpowers/specs/2026-10-09-year-range-selection-design.md`
 > (sekcja 0 = model A, nadrzedna), ADR-032, raport
 > `docs/research/2026-10-10-year-range/raport.md`.
-> **(c) drugie dowiazanie do najnowszego PELNEGO lotu — ZAIMPLEMENTOWANE
-> na galezi `feat/full-sheet-link`, NIE scalone** (decyzja uzytkownika
-> 2026-10-10: galaz zostaje, merge w kolejnej sesji po jego decyzji;
-> galaz NIE wypchnieta na `origin`). Plan
-> `docs/superpowers/plans/2026-10-10-full-sheet-link.md` wykonany
-> (Task 1-5 + review + test na zywo), ADR-033, raport
-> `docs/research/2026-10-10-full-sheet-link/raport.md`. Spec:
-> `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`.
-> **NASTEPNA SESJA:** decyzja uzytkownika o merge `--no-ff`
-> `feat/full-sheet-link` -> `develop` (przed merge brama na galezi), potem
-> backlog (c) [x]. Dalej w 0.7.2: (d) ciche wartosci domyslne, (a) wycinki
-> PL z WCS (nowy ADR), (e) testy LAZ z nagraniami innego okna; zakres
-> wydania 0.7.2 (czy wszystkie pozycje) — do decyzji uzytkownika.
+> **(c) drugie dowiazanie do najnowszego PELNEGO lotu — SCALONE do
+> `develop` 2026-10-10** (merge `--no-ff` `63aa8d2`, brama na wyniku
+> zielona: pytest offline 3185, ruff, mypy; galaz `feat/full-sheet-link`
+> usunieta; `develop` NIE wypchniety na `origin` — push to osobna decyzja
+> uzytkownika). Drzewo `<segment>/full_sheet/` (najnowszy lokalny lot
+> pelny), `--full-sheet` / `DownloadManager(full_sheet=True)` dociaga
+> najwyzej jeden pelny lot, jeden `Warning:` E13 z grupami. Zrodla: ADR-033,
+> spec `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`, plan
+> `docs/superpowers/plans/2026-10-10-full-sheet-link.md`, raport
+> `docs/research/2026-10-10-full-sheet-link/raport.md`.
+> **NASTEPNA SESJA:** kolejna pozycja backlogu "Do 0.7.2" — domyslnie
+> (d) ciche wartosci domyslne, potem (a) wycinki PL z WCS (nowy ADR) i (e)
+> testy LAZ z nagraniami innego okna; kolejnosc i zakres wydania 0.7.2
+> (czy wszystkie pozycje) — do decyzji uzytkownika. Kazda pozycja: spec ->
+> akceptacja -> plan -> galaz z `develop` -> implementacja.
 > **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
 > na zywo z raportem, `__version__ = "0.7.2"` + asercje testow, data i link
 > `compare/v0.7.1...v0.7.2` w CHANGELOG, status w SCOPE i `docs/PRD.md`
@@ -160,6 +162,16 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Merge `feat/full-sheet-link` i przeglad dokumentacji (2026-10-10)
+
+- Przeglad aktualnosci dokumentacji przed merge: `docs/PRD.md` 3.11 nie
+  znal ani roku danych (ADR-032, zaleglosc z merge (b)), ani `full_sheet/`
+  — uzupelniony (wersja 4.2); spec i plan oznaczone jako wdrozone; brak
+  odwolan do starych nazw (`ensure_standard_link`, `write_standard_sidecar`)
+  poza dziennikami historycznymi.
+- Merge `--no-ff` do `develop` (`63aa8d2`), brama na wyniku zielona, galaz
+  usunieta, bez push.
 
 ### Drugie dowiazanie do pelnego lotu — implementacja (2026-10-10)
 
@@ -1712,10 +1724,9 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
   zadania. ADR-032, plan
   `docs/superpowers/plans/2026-10-10-year-range-selection.md`, raport
   `docs/research/2026-10-10-year-range/raport.md`.
-- [ ] **(c) Drugie dowiazanie do najnowszego PELNEGO lotu** —
-  ZAIMPLEMENTOWANE na galezi `feat/full-sheet-link` (2026-10-10, ADR-033,
-  raport `docs/research/2026-10-10-full-sheet-link/raport.md`); merge do
-  `develop` czeka na decyzje uzytkownika. Spec
+- [x] **(c) Drugie dowiazanie do najnowszego PELNEGO lotu** — SCALONE do
+  `develop` 2026-10-10 (`63aa8d2`; ADR-033, raport
+  `docs/research/2026-10-10-full-sheet-link/raport.md`). Spec
   `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`, plan
   `docs/superpowers/plans/2026-10-10-full-sheet-link.md`.
 - [ ] **(d) Z inwentaryzacji wartosci domyslnych:**
