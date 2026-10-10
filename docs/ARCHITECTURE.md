@@ -668,7 +668,15 @@ pobierane, arkusz konczy sie porazka); brak pola = rekord przyjety (log
 zapisuje `extra.source.declared_vertical_crs`, takze w cache rekordow —
 niezgodny rekord z cache daje ten sam blad, odswiezenie: `--force`. Brak zgodnego rekordu
 po poprawnych odpowiedziach warstw = `NoCoverageError`, np. dla PL-2000
-1:10000 z samymi potomkami podpowiedz `--scale 1:2000`. Awaria warstwy,
+1:10000 z samymi potomkami podpowiedz `--scale 1:2000`. NMT/NMPT (od 0.7.2,
+`GugikProvider._variant_hints`): przy braku pokrycia provider pyta pozostale
+warianty produktu z `WMS_SKOROWIDZE_ENDPOINTS` (rozdzielczosc, uklad
+wysokosci; jedno GetFeatureInfo ze wszystkimi warstwami wariantu, ten sam
+punkt i twardy filtr, timeout `DEFAULT_TIMEOUT`) i dopisuje podpowiedz
+`Skorowidz GUGiK ma ten arkusz w NMT 1m EVRF2007 — uzyj --resolution 1m`
+(bez godla: jedna linia `Info:` dla wielu arkuszy). Blad zapytania
+o wariant = brak tej podpowiedzi i `logger.warning`, nigdy zmiana wyniku;
+trafienie w cache braku pokrycia nie odpytuje sieci. Awaria warstwy,
 raport OGC albo nieoczekiwany szablon = `DownloadError`, nie cichy fallback
 do starszej kampanii. Zapytania i pobrania maja do 3 prob z backoffem
 (ponawiane: siec, 429, 5xx; inne 4xx koncza przy pierwszej probie)

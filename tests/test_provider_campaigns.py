@@ -367,7 +367,9 @@ def test_nmpt_inherits_campaigns(tmp_path):
         )
     assert "GUGiK ma ten arkusz w 0.5 m" in str(exc.value)
     assert s.get.call_count > 0
-    assert all(c.args[0].startswith(NMPT_EVRF2007) for c in s.get.call_args_list)
+    # NMPT asks NMPT indexes only (its own and, for the variant hint, the
+    # other vertical CRS) - never NMT
+    assert all("/NMPT/" in c.args[0] for c in s.get.call_args_list)
     assert cache.get_campaigns("nmpt", "1m", "EVRF2007", godlo)["no_coverage"] is True
     assert cache.get_campaigns("nmt", "1m", "EVRF2007", godlo) is None
 

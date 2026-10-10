@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 import requests
 
+from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import DownloadError, NoCoverageError
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
@@ -358,8 +359,12 @@ class TestLayers:
         with pytest.raises(NoCoverageError, match="Brak danych NMT 1m"):
             provider._get_opendata_url(GODLO)
 
-        urls = [call[0][0] for call in session.get.call_args_list]
-        assert all(url.startswith(f"{NMT_1M_EVRF2007}?") for url in urls)
+        # own index only; the variant check (P10) asks the other indexes
+        urls = [
+            call[0][0]
+            for call in session.get.call_args_list
+            if call[0][0].startswith(f"{NMT_1M_EVRF2007}?")
+        ]
         assert [_layer_of(url) for url in urls] == provider._layers(NMT_1M_EVRF2007)
         assert [_layer_of(url) for url in urls] == [
             "SkorowidzeNMT2026",
@@ -436,10 +441,11 @@ class TestCapabilitiesTimeout:
         with pytest.raises(NoCoverageError):
             provider.download(GODLO, tmp_path / "x")
 
+        own = provider._skorowidz_query(SheetParser(GODLO)).endpoint
         timeouts = [
             call.kwargs.get("timeout")
             for call in session.get.call_args_list
-            if "GetCapabilities" in call.args[0]
+            if call.args[0].startswith(f"{own}?") and "GetCapabilities" in call.args[0]
         ]
         assert timeouts == [expected]
 
