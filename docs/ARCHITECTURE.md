@@ -675,7 +675,8 @@ wysokosci; jedno GetFeatureInfo ze wszystkimi warstwami wariantu, ten sam
 punkt i twardy filtr, timeout `DEFAULT_TIMEOUT`) i dopisuje podpowiedz
 `Skorowidz GUGiK ma ten arkusz w NMT 1m EVRF2007 — uzyj --resolution 1m`
 (bez godla: jedna linia `Info:` dla wielu arkuszy). Blad zapytania
-o wariant = brak tej podpowiedzi i `logger.warning`, nigdy zmiana wyniku;
+o wariant (jedna proba, bez ponowien) = brak tej podpowiedzi, `logger.warning`
+i pominiecie tego wariantu do konca zycia providera, nigdy zmiana wyniku;
 trafienie w cache braku pokrycia nie odpytuje sieci. Awaria warstwy,
 raport OGC albo nieoczekiwany szablon = `DownloadError`, nie cichy fallback
 do starszej kampanii. Zapytania i pobrania maja do 3 prob z backoffem
