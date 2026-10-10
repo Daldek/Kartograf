@@ -1,8 +1,8 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.16
-**Data:** 2026-10-09
+**Wersja:** 3.17
+**Data:** 2026-10-10
 **Status:** Wydanie v0.7.1 (2026-10-09)
 
 ---
@@ -169,8 +169,8 @@ patrz sekcja 3.2, znane ograniczenie.
   błąd jednego rocznika przerywa odkrywanie (`DownloadError`)
 - Kafle drobniejsze niż 1:10000 (jedno godło 1:10000 → wiele kafli .laz)
 - url_do_pobrania brany wprost z atrybutu WFS (godło kafla nieparsowane)
-- Domyślnie najnowszy kafel per obszar (ADR-029); flagi --year, --vertical-crs,
-  --min-density, --campaigns/--min-year (sekcja 2.12)
+- Domyślnie najnowszy kafel per obszar (ADR-029); flagi --year/--min-year/--max-year
+  (przedział lat, ADR-032), --vertical-crs, --min-density, --campaigns (sekcja 2.12)
 - Dwa układy wysokościowe: EVRF2007 (domyślny, 2018+), KRON86 (legacy, 2010-2019)
 - Pobieranie równoległe (--workers), pomijanie istniejących plików
 - Biblioteka: download_laz_area (wybór + pobranie + sidecary, wynik
@@ -264,7 +264,9 @@ kartograf download --bbox ... --country cz --target-crs EPSG:2180   # reprojekcj
 kartograf download --bbox ... --country pl --target-crs EPSG:2180   # wycinek PL: jeden GeoTIFF (ADR-027)
 kartograf download 302_5550 --country cz --vertical-crs EVRF2007    # Bpv -> EVRF2007 (EPSG:5621)
 kartograf download <godlo> --campaigns all              # wszystkie kampanie GUGiK arkusza (ADR-030)
-kartograf download <godlo> --min-year 2024              # tylko kampanie od roku (aktualnosc)
+kartograf download <godlo> --year 2025                  # wszystkie kampanie z roku (ADR-032)
+kartograf download <godlo> --min-year 2024              # najnowsza kampania, nie starsza niż rok
+kartograf download --bbox ... --max-year 2022           # wszystkie kampanie do roku, dowiązanie na najnowszą
 kartograf download --bbox ... --product laz --campaigns all   # LAZ bez deduplikacji pokrycia
 kartograf landcover download --source bdot10k --teryt <kod>
 kartograf landcover download --source corine --godlo <godlo>
@@ -338,23 +340,32 @@ from kartograf import (
 
 ```python
 # Strategie (tylko PL; CZ zawsze bieżąca mozaika):
-- --campaigns newest (domyślnie): najnowszy rekord skorowidza (ADR-028),
-  sprawdzany przy każdym uruchomieniu po wygaśnięciu cache (7 dni)
+- --campaigns newest (domyślnie bez --year/--max-year): najnowszy rekord
+  skorowidza (ADR-028), sprawdzany przy każdym uruchomieniu po wygaśnięciu cache (7 dni)
 - --campaigns all: każda kampania arkusza po twardym filtrze ADR-028, bez limitu
-- --min-year RRRR: dolna granica roku pozyskania (aktualnosc), obie strategie
-- LAZ: --campaigns all (kafle z ramą przecinającą obszar, bez deduplikacji ADR-029), --min-year (akt_rok)
-- LAZ: --min-year i --year wykluczają się (Error:)
-- Wycinek --target-crs: zawsze newest (all/--min-year = Error:)
-- CZ nie ma kampanii: zadanie bez części PL z --campaigns all/--min-year =
-  Error: przed siecią; obszar PL+CZ pod auto = Info:, CZ w bieżącej wersji
+- Rok danych (ADR-032; NMT/NMPT/orto: aktualnosc, LAZ: akt_rok):
+  --year RRRR = --min-year RRRR --max-year RRRR; górna granica = strategia all
+  w przedziale (jawne newest = Error:); samo --min-year = newest z kontrolą roku
+- Najpierw sprawdzenie pełnej listy kampanii każdego arkusza, potem pobranie:
+  arkusz z danymi tylko z innych lat = Error: z latami i podpowiedzią, nic nie
+  pobrane; arkusz bez danych = Warning: (pominięty); awaria skorowidza = Error:
+- Kilka lotów w przedziale (all): pomiar pokrycia gdy najnowszy niepełny;
+  Info: + extra.better_coverage, dowiązanie bez zmian (najnowszy)
+- LAZ: --campaigns all (kafle z ramą przecinającą obszar, bez deduplikacji ADR-029);
+  przedział lat z kontrolą pokrycia kafli referencji (ADR-032 P8); --year
+  wyklucza się z --min-year/--max-year (Error:)
+- Wycinek --target-crs: zawsze newest (all/--year/--min-year/--max-year = Error:)
+- CZ nie ma kampanii ani wyboru roku: zadanie bez części PL z --campaigns all
+  albo flagą roku = Error: przed siecią; obszar PL+CZ pod auto = Info:, CZ w bieżącej wersji
 - Weryfikacja treści pliku kampanii (nagłówek AAIGrid / sygnatura TIFF),
   format z pola `format` rekordu; sidecar kampanii obowiązkowy
-- Skorowidz GUGiK niedostępny (błąd transportu) przy newest bez --min-year
+- Skorowidz GUGiK niedostępny (błąd transportu) przy newest bez flag roku
   i --force, z lokalną kampanią: arkusz z lokalnej kampanii + Warning:,
-  kod bez zmian (errata 5 ADR-030); all/--min-year/brak lokalnej = błąd
-- API: DownloadManager(campaigns=, min_year=), SheetFetch (.unverified),
-  DownloadResult (.unverified, .reused_campaign_files), CampaignRef,
-  PlCutoutResult.unverified
+  kod bez zmian (errata 5 ADR-030); all/flaga roku/brak lokalnej = błąd
+- API: DownloadManager(campaigns=, min_year=, max_year=), .check_year_range(),
+  YearRangeError, available_years (providery GUGiK), SheetFetch (.unverified, .better_coverage),
+  DownloadResult (.unverified, .reused_campaign_files, .better_coverage),
+  CampaignRef, PlCutoutResult.unverified
 ```
 
 ---
@@ -702,8 +713,8 @@ pyshp >= 2.3.0         # Shapefile reading
 - Wycinek NMT PL (--target-crs / download_pl_cutout): jeden GeoTIFF na
   siatce arkuszy (EPSG:2180) albo w EPSG:5514/3045; arkusz bez danych =
   nodata + extra.missing_sheets
-- Kampanie GUGiK: --campaigns newest/all i --min-year; pliki w kampanie/,
-  ścieżka standardowa jako dowiązanie twarde (albo kopia) do najnowszej
+- Kampanie GUGiK: --campaigns newest/all, --year/--min-year/--max-year; pliki
+  w kampanie/, ścieżka standardowa jako dowiązanie twarde (albo kopia) do najnowszej
 - LAZ: wybór kafli wg pokrycia obszaru (ADR-029), API download_laz_area
 - Integracja z Hydrograf/Hydrolog działa
 ```
@@ -746,6 +757,7 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-10-08 | 3.14 | Przegląd dokumentacji: errata 5 ADR-030 (lokalna kampania przy awarii skorowidza), CZ i --min-year x --year w 2.12, sidecary (HSG, zasada ogólna), GPKG BDOT10k składany lokalnie, pełna lista eksportów w 2.10, drzewo modułów i tabele cache w 4.1, DLR w 5, bez wartości ulotnych w 6.2 i historii |
 | 2026-10-08 | 3.15 | Roadmapa do v1.0.0 (sekcja 3.3): komplet publicznych danych GUGiK, gotowe dane, manager danych (magazyn wersjonowany, manifest projektu), wtyczka QGIS, GUI webowe |
 | 2026-10-09 | 3.16 | Narzędzie składania kampanii (3.1) bez przypisanego wydania — nie weszło do 0.7.1 (ADR-030 errata 6) |
+| 2026-10-10 | 3.17 | Wybór roku danych (ADR-032): --year/--min-year/--max-year dla NMT/NMPT/orto/LAZ w 2.12, CZ i wycinki bez roku |
 
 ---
 
