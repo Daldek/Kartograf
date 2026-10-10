@@ -1472,7 +1472,8 @@ punkt na granicy dwoch powiatow = nizszy kod). Zrodlo: WFS PRG GUGiK
 (WFS 2.0.0, MapServer), warstwa `ms:A02_Granice_powiatow`, atrybut
 `JPT_KOD_JE`. Obszar w dowolnym obslugiwanym ukladzie jest przeliczany do
 EPSG:2180 ta sama regula co wycinek PL (`download.cutout.bbox_to_2180`),
-a `BBOX` idzie w kolejnosci osi (N,E) z `urn:ogc:def:crs:EPSG::2180`.
+a `BBOX` idzie w kolejnosci osi (N,E) z `urn:ogc:def:crs:EPSG::2180`,
+rozszerzony na zewnatrz do pelnych milimetrow (od 0.7.2).
 Filtr dziala na GEOMETRII powiatu, nie na jego obwiedni (sprawdzone na
 zywo 2026-10-08; surowe odpowiedzi: `tests/fixtures/gugik_prg/`). Pusta
 lista tylko z poprawnej odpowiedzi bez obiektow; blad HTTP (po wspolnej
@@ -1481,6 +1482,8 @@ kod spoza 4 cyfr i lista obcieta stronicowaniem = `DownloadError`.
 Obciecie: `numberReturned < numberMatched`, albo `numberMatched`
 nieliczbowe (MapServer: `unknown`) przy pelnej stronie, albo atrybut `next`
 kolekcji — tak wyglada prawdziwa strona MapServera (`unknown` + `next`).
+Odpowiedz, w ktorej liczbowe `numberReturned` rozni sie od liczby
+odczytanych kodow (obiekt bez `JPT_KOD_JE`), to tez `DownloadError` (od 0.7.2).
 Odpowiedzi trafiaja do `MetadataCache`: obszar (EPSG:2180) -> lista kodow
 w `teryt_bbox_cache` (TTL jak pozostale tabele, takze pusta lista), punkt
 -> kod w `teryt_cache`; `kartograf cache stats` liczy oba w `TERYT entries`.

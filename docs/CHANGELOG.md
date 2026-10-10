@@ -13,6 +13,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   z dokladnoscia do milimetra; wczesniej zaokraglenie do pelnych metrow
   moglo pominac powiat stykajacy sie z obszarem w pasie do 0,5 m,
   a `teryt_for_point` pytal raz o sam punkt, raz o kwadrat 2 m.
+- WFS PRG: odpowiedz, w ktorej `numberReturned` rozni sie od liczby
+  odczytanych kodow powiatow, konczy sie `DownloadError` zamiast cicho
+  krotszej listy powiatow (i brakujacego pakietu BDOT10k).
 
 ## [0.7.1] - 2026-10-09
 
