@@ -125,11 +125,11 @@
 > `feat/full-sheet-link` (z `develop`): spec
 > `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md` napisany,
 > decyzje uzytkownika F-U1..F-U5 z 2026-10-10 w sekcji 0 (drzewo
-> `full_coverage/`, dociaganie pelnego lotu tylko z flaga `--full-sheet`,
+> `full_sheet/`, dociaganie pelnego lotu tylko z flaga `--full-sheet`,
 > arkusz bez pelnego lotu = brak pliku + `Warning:` laczony z E13, nigdy
-> wstecz + `Info:` jak U15, wycinki bez zmian). **Nastepny krok:**
-> akceptacja calego specu przez uzytkownika, potem plan
-> (`docs/superpowers/plans/`) i implementacja. Dalej w 0.7.2: (d) ciche
+> wstecz + `Info:` jak U15, wycinki bez zmian); spec ZAAKCEPTOWANY.
+> **Nastepny krok:** implementacja wg planu
+> `docs/superpowers/plans/2026-10-10-full-sheet-link.md` (Task 1-6). Dalej w 0.7.2: (d) ciche
 > wartosci domyslne, (a) wycinki PL z WCS (nowy ADR), (e) testy LAZ
 > z nagraniami innego okna; zakres wydania 0.7.2 (czy wszystkie pozycje)
 > — do decyzji uzytkownika.
@@ -170,7 +170,9 @@
 - Spec `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`;
   decyzje uzytkownika (sekcja 0): Q1 = flaga `--full-sheet` (wariant C),
   Q2 = brak pliku + komunikat, Q3 = jak U15, Q4 = wycinki ze sciezek
-  standardowych, Q5 = nazwa angielska `full_coverage/`.
+  standardowych, Q5 = nazwy angielskie; potem zmiana na `full_sheet/`
+  (w kodzie `coverage` = pokrycie zmierzone / brak danych, `full_sheet` =
+  flaga GUGiK) — decyzja uzytkownika, spec zaakceptowany.
 - Pomiar na zywo (pytanie uzytkownika o Slubice): flaga TAK = pelne
   pokrycie w granicach Polski — 13 plikow TAK (12 arkuszy granicznych
   DE/CZ/SK/UA/BY/LT + kontrola), 0 px nodata po stronie PL w ramce
@@ -1668,9 +1670,9 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
   `docs/research/2026-10-10-year-range/raport.md`.
 - [ ] **(c) Drugie dowiazanie do najnowszego PELNEGO lotu** — spec
   `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`
-  (decyzje F-U1..F-U5 z 2026-10-10: `<segment>/full_coverage/<hierarchia>/`,
-  `--full-sheet` dociaga najnowszy pelny lot); czeka na akceptacje
-  specu, potem plan i implementacja na `feat/full-sheet-link`.
+  (decyzje F-U1..F-U5 z 2026-10-10: `<segment>/full_sheet/<hierarchia>/`,
+  `--full-sheet` dociaga najnowszy pelny lot); spec zaakceptowany, plan
+  `docs/superpowers/plans/2026-10-10-full-sheet-link.md`.
 - [ ] **(d) Z inwentaryzacji wartosci domyslnych:**
   - `--country auto` PL+CZ bez `--vertical-crs`: mieszane uklady wysokosci,
     cicho (szczegoly: "Ryzyko KRON86 3" wyzej);

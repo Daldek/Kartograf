@@ -1,8 +1,8 @@
-# Spec: Drugie dowiazanie do najnowszego PELNEGO lotu (`full_coverage/`)
+# Spec: Drugie dowiazanie do najnowszego PELNEGO lotu (`full_sheet/`)
 
 **Data:** 2026-10-10
-**Status:** decyzje uzytkownika z 2026-10-10 (sekcja 0) wiazace; spec do
-akceptacji calosci, potem plan i implementacja
+**Status:** zaakceptowany przez uzytkownika 2026-10-10 (decyzje w sekcji 0);
+plan `docs/superpowers/plans/2026-10-10-full-sheet-link.md`
 **Wersja docelowa:** 0.7.2 (galaz `feat/full-sheet-link` z `develop`)
 **Dokumenty zrodlowe:**
 - ADR-028 (wybor rekordu: najnowsza `(aktualnosc, dt_pzgik, url)`, bez
@@ -25,10 +25,10 @@ akceptacji calosci, potem plan i implementacja
 | # | Decyzja | Sekcja |
 |---|---|---|
 | F-U1 | **Dociaganie tylko z flaga `--full-sheet`** (wariant C). Bez flagi: drugie dowiazanie powstaje wylacznie z lotow, ktore zadanie i tak ma lokalnie (model A doslowny: `--campaigns` = liczba lotow). Z flaga: gdy najnowszy lot w przedziale nie jest pelny, zadanie pobiera DODATKOWO najnowszy pelny lot w przedziale. | 5.1, 5.2 |
-| F-U2 | **Arkusz bez zadnego pelnego lotu:** brak pliku w `full_coverage/` + komunikat laczony z E13 (jeden `Warning:`). Bez dowiazania "najlepszego" niepelnego. | 5.3 |
+| F-U2 | **Arkusz bez zadnego pelnego lotu:** brak pliku w `full_sheet/` + komunikat laczony z E13 (jeden `Warning:`). Bez dowiazania "najlepszego" niepelnego. | 5.3 |
 | F-U3 | **Przedzial lat:** dowiazanie pelne nigdy wstecz; gdy zostaje przy nowszym pelnym locie spoza przedzialu — `Info:` jak U15. | 5.4 |
 | F-U4 | **Wycinki `--target-crs`:** mozaika ze sciezek standardowych, bez zmian. | 6.3 |
-| F-U5 | **Nazwa katalogu po angielsku: `full_coverage/`** ("i tak przechodzimy na anglojezyczne nazwy"). `kampanie/` zostaje (zmiana nazwy to osobna, lamiaca decyzja — kandydat do 0.8.0). | 3 |
+| F-U5 | **Nazwy angielskie, jedno pojecie `full_sheet`: katalog `full_sheet/`, flaga `--full-sheet`, parametr `full_sheet=`** (decyzja 2026-10-10, po wskazaniu, ze w kodzie `coverage` znaczy pokrycie zmierzone — `extra.coverage`, `better_coverage` — albo brak danych — `NoCoverageError`, `no_coverage`; `full_sheet` to juz nazwa flagi GUGiK w rekordach, `CampaignRef`, `LazTile` i sidecarach). Wczesniejsza robocza nazwa `full_coverage/` odrzucona. `kampanie/` zostaje (zmiana nazwy to osobna, lamiaca decyzja — kandydat do 0.8.0). | 3 |
 
 ## 1. Kontekst i cel
 
@@ -49,7 +49,7 @@ klucza standardowego.
 
 1. Dla kazdego arkusza z co najmniej jednym lokalnym lotem pelnym
    (`full_sheet is True`) wsrod lotow zadania powstaje drugie dowiazanie
-   `<segment>/full_coverage/<hierarchia>/<godlo>.<ext>` do najnowszego
+   `<segment>/full_sheet/<hierarchia>/<godlo>.<ext>` do najnowszego
    takiego lotu (klucz ADR-028), z sidecarem jak sciezka standardowa.
 2. `--full-sheet` dociaga najnowszy pelny lot, gdy najnowszy nie jest
    pelny — uzytkownik dostaje uzywalny plik bez `--campaigns all`.
@@ -65,7 +65,7 @@ klucza standardowego.
   `docs/research/2026-10-10-full-sheet-link/granica-pelne-pokrycie.md`
   — 13 plikow TAK, 0 px nodata po stronie PL; Slubice 75 % nodata to
   zagraniczna czesc ramki); NIE nie mowi o skali braku (0,9-98,9 %).
-  `full_coverage/` ufa deklaracji skorowidza, co dokumentacja mowi
+  `full_sheet/` ufa deklaracji skorowidza, co dokumentacja mowi
   wprost.
 - Zmiana nazwy `kampanie/` na angielska.
 - CZ (6.4), LAZ (6.2), wycinki `--target-crs` (6.3), land cover.
@@ -95,23 +95,23 @@ Numery linii z pomiaru; plan weryfikuje je przed kazdym zadaniem.
 <segment>/
   <hierarchia>/<godlo>.<ext>                   # standard: najnowszy lokalny lot (bez zmian)
   <hierarchia>/<godlo>.<ext>.meta.json
-  full_coverage/<hierarchia>/<godlo>.<ext>     # NOWE: najnowszy lokalny lot pelny
-  full_coverage/<hierarchia>/<godlo>.<ext>.meta.json
+  full_sheet/<hierarchia>/<godlo>.<ext>     # NOWE: najnowszy lokalny lot pelny
+  full_sheet/<hierarchia>/<godlo>.<ext>.meta.json
   kampanie/<data>_<id>/<hierarchia>/<godlo>.<ext>   # pliki (bez zmian)
 ```
 
-- Stala `FULL_COVERAGE_DIR = "full_coverage"` obok `CAMPAIGNS_DIR`;
-  `FileStorage.get_full_coverage_path(godlo, ext)`.
+- Stala `FULL_SHEET_DIR = "full_sheet"` obok `CAMPAIGNS_DIR`;
+  `FileStorage.get_full_sheet_path(godlo, ext)`.
 - Dowiazanie: ta sama mechanika co standardowe — hardlink -> kopia,
   atomowa podmiana, nigdy wstecz (wsrod lotow pelnych), sidecar = kopia
   sidecara kampanii + `extra.link`, `extra.link_target`.
   `ensure_standard_link` dostaje nazwe ogolna `ensure_link` (wszyscy
   wolajacy zmigrowani, bez aliasu); `write_standard_sidecar` analogicznie
   `write_link_sidecar`.
-- Gdy najnowszy lot jest pelny, `full_coverage/` i standard wskazuja ten
+- Gdy najnowszy lot jest pelny, `full_sheet/` i standard wskazuja ten
   sam plik (dwa hardlinki jednego inode — bez kosztu miejsca; przy kopii
   — dwie kopie, istniejacy `Warning:` o kopii).
-- Kolizja nazw: brak — `full_coverage` nie jest czlonem hierarchii
+- Kolizja nazw: brak — `full_sheet` nie jest czlonem hierarchii
   (pierwszy czlon to arkusz 1:1M albo strefa, np. `N-34`, `7`).
 
 ## 4. Regula dowiazania pelnego
@@ -122,9 +122,9 @@ Numery linii z pomiaru; plan weryfikuje je przed kazdym zadaniem.
   refresh=path in downloaded)` — nigdy wstecz, wiec po wczesniejszym
   `--campaigns all` dowiazanie zostaje przy nowszym pelnym locie.
 - Dzialanie bez flagi (F-U1): domyslne `newest` z pelnym najnowszym
-  daje `full_coverage/` = ten sam plik co standard; `--campaigns all`
+  daje `full_sheet/` = ten sam plik co standard; `--campaigns all`
   daje najnowszy pelny z przedzialu. Pierwsze uruchomienie po
-  aktualizacji tworzy `full_coverage/` dla istniejacych danych
+  aktualizacji tworzy `full_sheet/` dla istniejacych danych
   (przeplyw kampanii przechodzi przez kazdy arkusz, takze przy skip).
 - Brak kandydatow: dowiazanie pelne nietkniete (istniejace zostaje,
   nowego nie ma); komunikat — 5.3.
@@ -142,7 +142,7 @@ Numery linii z pomiaru; plan weryfikuje je przed kazdym zadaniem.
 - Znaczenie: gdy wybrany najnowszy lot (w przedziale lat) ma
   `full_sheet is not True`, pobierz dodatkowo najnowszy lot z
   `full_sheet is True` w tym samym przedziale; dowiaz go w
-  `full_coverage/`. Gdy najnowszy jest pelny — flaga nic nie zmienia.
+  `full_sheet/`. Gdy najnowszy jest pelny — flaga nic nie zmienia.
 - Z `--campaigns all`: dozwolona, bez skutku (wszystkie loty i tak sa
   pobierane) — jak jawne `--campaigns newest` w modelu A, bez bledu.
 - Dozwolona z flagami roku (przedzial filtruje tez lot pelny).
@@ -168,27 +168,27 @@ Numery linii z pomiaru; plan weryfikuje je przed kazdym zadaniem.
 
 ### 5.3 Arkusze bez pelnego lotu (F-U2)
 
-- Brak pliku w `full_coverage/` (drzewo ma jedno znaczenie).
+- Brak pliku w `full_sheet/` (drzewo ma jedno znaczenie).
 - Jeden `Warning:` zamiast dzisiejszego E13 (stderr, takze z `-q`), dla
   arkuszy z niepelnym najnowszym lotem, z podzialem:
-  - "pelny lot w `full_coverage/`: <godla>" — gdy dowiazanie pelne
+  - "pelny lot w `full_sheet/`: <godla>" — gdy dowiazanie pelne
     istnieje (z flaga albo z lokalnych lotow);
   - "brak pelnego lotu w skorowidzu: <godla>" — z `--full-sheet`, gdy
     pelna lista nie ma lotu TAK w przedziale;
   - "pelny lot nie pobrany: <godla> — uzyj --full-sheet" — bez flagi,
     gdy lokalnie brak lotu pelnego (nie wiadomo, czy w skorowidzu jest).
   Tresc dokladna w planie; fakt czytany z sidecarow (dziala przy skip):
-  standardowy (`extra.source.full_sheet`) + istnienie `full_coverage/`.
+  standardowy (`extra.source.full_sheet`) + istnienie `full_sheet/`.
 - Biblioteka: `SheetFetch.full_link: Path | None`,
   `DownloadResult.full_links: dict[str, Path]` (godlo -> sciezka
-  `full_coverage/`), `DownloadResult.without_full: tuple[str, ...]`
+  `full_sheet/`), `DownloadResult.without_full: tuple[str, ...]`
   (godla, dla ktorych z `full_sheet=True` skorowidz nie ma lotu pelnego
   w przedziale).
 
 ### 5.4 Przedzial lat (F-U3)
 
 Kandydaci pochodza z lotow zadania (w przedziale), ale "nigdy wstecz"
-moze zostawic `full_coverage/` przy nowszym pelnym locie spoza
+moze zostawic `full_sheet/` przy nowszym pelnym locie spoza
 przedzialu. Wtedy: dowiazanie bez zmian, `SheetFetch.full_link_outside_range:
 Path | None`, `DownloadResult.full_link_outside_range: dict[str, Path]`,
 `Info:` w CLI wspolny z istniejacym `Info:` U15 (jedna linia na arkusz,
@@ -198,12 +198,12 @@ wskazuje ktore drzewo). Kod wyjscia bez zmian.
 
 ### 6.1 `--campaigns all`
 
-Wszystkie loty z przedzialu lokalnie -> `full_coverage/` = najnowszy
+Wszystkie loty z przedzialu lokalnie -> `full_sheet/` = najnowszy
 pelny wsrod nich. Pomiar pokrycia i `Info:` 6.3 ADR-032 bez zmian.
 
 ### 6.2 LAZ
 
-Bez `full_coverage/`: LAZ nie ma sciezki standardowej ani `kampanie/`;
+Bez `full_sheet/`: LAZ nie ma sciezki standardowej ani `kampanie/`;
 ADR-029 juz traktuje kafle NIE jako niepokrywajace. `--full-sheet`
 z `--product laz` = `Error:` przed siecia (wspolny punkt jak
 `_reject_laz_only_opts`, odwrotny kierunek), kod 1.
@@ -223,19 +223,19 @@ flaga dziala dla arkuszy PL.
 
 ### 6.5 `FileStorage`
 
-- `list_files(campaigns=False)` pomija tez `full_coverage/` (inaczej
+- `list_files(campaigns=False)` pomija tez `full_sheet/` (inaczej
   duplikaty w liscie plikow standardowych — zmiana konieczna).
-- `delete(godlo)` usuwa takze dowiazanie `full_coverage/` + sidecar (oba
+- `delete(godlo)` usuwa takze dowiazanie `full_sheet/` + sidecar (oba
   to dowiazania; pliki w `kampanie/` zostaja).
-- Bez nowego trybu listowania `full_coverage/` (brak konsumenta).
+- Bez nowego trybu listowania `full_sheet/` (brak konsumenta).
 
 ## 7. Sidecar
 
-- `full_coverage/...meta.json`: kopia sidecara kampanii + `extra.link`,
+- `full_sheet/...meta.json`: kopia sidecara kampanii + `extra.link`,
   `extra.link_target` (identycznie jak standardowy; pochodzenie i
   `full_sheet: true` z kampanii).
 - Sidecar kampanii dociagnietej: `request.full_sheet: true` (5.2).
-- Sidecar standardowy: bez nowych pol (sciezka `full_coverage/` wynika
+- Sidecar standardowy: bez nowych pol (sciezka `full_sheet/` wynika
   z ukladu).
 
 ## 8. Testy i weryfikacja
@@ -246,17 +246,17 @@ i `real_2026_10_10/` (C14: N-34-139-C-a-3-1 = 84183 NIE + 83233 TAK;
 
 | # | Scenariusz | Oczekiwane |
 |---|---|---|
-| F1 | -4, domyslnie (najnowszy TAK) | 1 plik; standard i `full_coverage/` = ten sam plik kampanii 84183 (hardlink, ten sam inode); bez komunikatu |
-| F2 | -1, domyslnie | 1 plik (84183); brak `full_coverage/`; `Warning:` "pelny lot nie pobrany ... --full-sheet" |
-| F3 | -1, `--full-sheet` | 2 pliki (84183, 83233); standard -> 84183, `full_coverage/` -> 83233; `Warning:` "pelny lot w full_coverage/"; sidecar 83233 `request.full_sheet: true`; "Downloaded 2 campaign files for 1 sheets" |
-| F4 | -1, `--campaigns all` (bez flagi) | `full_coverage/` -> 83233 (najnowszy TAK wsrod 4 lotow) |
+| F1 | -4, domyslnie (najnowszy TAK) | 1 plik; standard i `full_sheet/` = ten sam plik kampanii 84183 (hardlink, ten sam inode); bez komunikatu |
+| F2 | -1, domyslnie | 1 plik (84183); brak `full_sheet/`; `Warning:` "pelny lot nie pobrany ... --full-sheet" |
+| F3 | -1, `--full-sheet` | 2 pliki (84183, 83233); standard -> 84183, `full_sheet/` -> 83233; `Warning:` "pelny lot w full_sheet/"; sidecar 83233 `request.full_sheet: true`; "Downloaded 2 campaign files for 1 sheets" |
+| F4 | -1, `--campaigns all` (bez flagi) | `full_sheet/` -> 83233 (najnowszy TAK wsrod 4 lotow) |
 | F5 | powtorzenie F3 bez `--force` | Skipped, oba dowiazania bez zmian, bez pobrania; ten sam `Warning:` |
-| F6 | F2 po F3 (bez flagi, lot pelny lokalnie z poprzedniego zadania) | `full_coverage/` bez zmian (kandydatow brak w tym zadaniu — dowiazanie nietkniete); `Warning:` "pelny lot w full_coverage/" (z istnienia dowiazania) |
-| F7 | arkusz bez zadnego lotu TAK z `--full-sheet` | brak `full_coverage/`; "brak pelnego lotu w skorowidzu"; `without_full` |
-| F8 | nigdy wstecz: po F4 `--full-sheet --max-year` z wczesniejszym pelnym lotem | `full_coverage/` zostaje; `Info:` (5.4) |
-| F9 | hardlink niedostepny | kopia w `full_coverage/`, `Warning:` o kopii; `linked_campaign` rozpoznaje cel |
-| F10 | `list_files()`, `delete()` | bez plikow z `full_coverage/` i `kampanie/`; `delete` usuwa oba dowiazania, `kampanie/` zostaje |
-| F11 | I-1 | `full_coverage/` nietkniete |
+| F6 | F2 po F3 (bez flagi, lot pelny lokalnie z poprzedniego zadania) | `full_sheet/` bez zmian (kandydatow brak w tym zadaniu — dowiazanie nietkniete); `Warning:` "pelny lot w full_sheet/" (z istnienia dowiazania) |
+| F7 | arkusz bez zadnego lotu TAK z `--full-sheet` | brak `full_sheet/`; "brak pelnego lotu w skorowidzu"; `without_full` |
+| F8 | nigdy wstecz: po F4 `--full-sheet --max-year` z wczesniejszym pelnym lotem | `full_sheet/` zostaje; `Info:` (5.4) |
+| F9 | hardlink niedostepny | kopia w `full_sheet/`, `Warning:` o kopii; `linked_campaign` rozpoznaje cel |
+| F10 | `list_files()`, `delete()` | bez plikow z `full_sheet/` i `kampanie/`; `delete` usuwa oba dowiazania, `kampanie/` zostaje |
+| F11 | I-1 | `full_sheet/` nietkniete |
 | F12 | `--full-sheet` z `--product laz` / `--target-crs` / CZ | `Error:` kod 1 przed siecia; pod `auto` PL+CZ `Info:` |
 | F13 | NMPT N-33-77-A-d-2-2 `--full-sheet` (najnowszy TAK) | 1 plik 80195, flaga bez skutku |
 
@@ -264,7 +264,7 @@ Na zywo (katalog danych wskazuje uzytkownik): F1, F2, F3, F5 na C14
 i orto M-34-90-C-b-4-4 (84466 NIE 2026, 81437 TAK 2024); raport w
 `docs/research/<data>-full-sheet-link/raport.md`.
 
-Dokumentacja przy wdrozeniu: nowy ADR-033 (drzewo `full_coverage/`,
+Dokumentacja przy wdrozeniu: nowy ADR-033 (drzewo `full_sheet/`,
 regula, `--full-sheet`, decyzje F-U1..F-U5), errata ADR-030 (d) (drugie
 dowiazanie) i ADR-032 (flaga), ARCHITECTURE 3.3 i 4.1, USAGE 4.x,
 SCOPE 2.12, `--help`, CHANGELOG `[0.7.2]`. Znaczenie TAK ("pelne w

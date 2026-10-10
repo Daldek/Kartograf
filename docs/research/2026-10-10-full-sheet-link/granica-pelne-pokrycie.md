@@ -72,7 +72,7 @@ czesci ramki), ale nie cala zagraniczna czesc.
    graniczne maja loty TAK. Arkusze bez lotu TAK to (z wczesniejszych
    pomiarow) glownie NMT 0,5 m i pasy dosztukowane (NIE).
 3. Nodata w ramce arkusza TAK nie jest wiec miara jakosci danych na
-   pograniczu; plik `full_coverage/` ma pelne dane po stronie PL.
+   pograniczu; plik w `full_sheet/` ma pelne dane po stronie PL.
 4. Nie zmierzono: wybrzeza (zasieg poligonu A00 na morzu nie sprawdzony),
    NMPT, orto, 5 m.
 
