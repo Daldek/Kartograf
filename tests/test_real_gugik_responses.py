@@ -377,6 +377,18 @@ class TestVariantHintOnRealBodies:
             GugikProvider(resolution="5m", session=session)._resolve_sheet(U1)
         assert [h for h in _variant_hints(exc) if "KRON86" in h] == []
 
+    def test_failed_variant_is_not_asked_again(self):
+        """Review: an outage of a variant index costs one attempt per provider,
+        not one (with retries) per missing sheet."""
+        session = variant_session(fail_prefix="nmt1_evr")
+        provider = GugikProvider(resolution="5m", session=session)
+        evrf_1m = NMT_ENDPOINTS["1m"]["EVRF2007"]
+        for _ in range(2):
+            with pytest.raises(NoCoverageError):
+                provider._resolve_sheet(U1)
+        calls = [c for c in session.get.call_args_list if c.args[0].startswith(evrf_1m)]
+        assert len(calls) == 1
+
     def test_variant_query_failure_keeps_no_coverage(self, caplog):
         session = variant_session(fail_prefix="nmt1_evr")
         with pytest.raises(NoCoverageError) as exc:

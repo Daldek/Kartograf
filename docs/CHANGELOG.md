@@ -15,7 +15,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   EVRF2007 — uzyj --resolution 1m` (biblioteka:
   `NoCoverageError.hints`, `DownloadResult.no_coverage_hints`). Koszt: jedno
   zapytanie skorowidza na wariant (NMT: 2, NMPT: 1) i brakujacy arkusz;
-  blad tego zapytania pomija podpowiedz, wynik bez zmian. Wpisy cache braku
+  blad tego zapytania (jedna proba) pomija podpowiedz, a wariant z bledem
+  nie jest juz pytany do konca zadania; wynik bez zmian. Wpisy cache braku
   pokrycia sprzed 0.7.2 nie maja tej podpowiedzi do konca TTL (7 dni) —
   odswieza `--force` albo `MetadataCache(refresh=True)`.
 

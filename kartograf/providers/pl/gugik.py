@@ -17,6 +17,7 @@ Supported resolutions:
 
 import logging
 import re
+import threading
 from pathlib import Path
 
 import requests
@@ -193,6 +194,9 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         self._vertical_crs = vertical_crs
         self._resolution = resolution
         self._cache = cache
+        # Variant index endpoints that failed (P10): skipped from then on
+        self._failed_variants: set[str] = set()
+        self._failed_variants_lock = threading.Lock()
         self.descriptor_key = f"pl.gugik.nmt_{resolution}"
 
     @property
@@ -336,7 +340,10 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         query point; a record passes the same hard filter as a download
         (sheet code, horizontal CRS, zone, resolution of the variant).
         Advisory: a failed variant query is logged and gives no hint - it
-        never turns the no-coverage result into an error. The hint text has
+        never turns the no-coverage result into an error. One attempt per
+        query (no retries) and a failed variant endpoint is skipped for the
+        rest of the provider's life, so an outage of an index the user did
+        not ask for costs one timeout, not one per sheet. The hint text has
         no sheet code, so the CLI shows one line for many sheets. Timeout:
         ``DEFAULT_TIMEOUT`` (``no_coverage`` does not receive the call's one).
         """
@@ -348,6 +355,9 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
                 if (resolution, vertical_crs) == (self._resolution, self._vertical_crs):
                     continue
                 variant = f"{resolution} {vertical_crs}"
+                with self._failed_variants_lock:
+                    if endpoint in self._failed_variants:
+                        continue
                 try:
                     records = query_skorowidz_layer(
                         self._sessions.get(),
@@ -356,14 +366,17 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
                         query_bbox=query_bbox,
                         godlo=parser.godlo,
                         timeout=self.DEFAULT_TIMEOUT,
-                        retries=self.MAX_RETRIES,
+                        retries=1,
                         # no trailing digits: "EVRF2007" at the end of the
                         # label would read as a layer year in the parser
                         label=f"wariant {variant} (wszystkie warstwy)",
                     )
                 except DownloadError as e:
+                    with self._failed_variants_lock:
+                        self._failed_variants.add(endpoint)
                     logger.warning(
-                        "%s: nie sprawdzono wariantu %s (podpowiedz pominieta): %s",
+                        "%s: nie sprawdzono wariantu %s (podpowiedz pominieta, "
+                        "wariant pomijany do konca zadania): %s",
                         parser.godlo,
                         variant,
                         e,
