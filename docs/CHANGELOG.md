@@ -87,8 +87,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Zmienione
 
 - `Warning:` o niepelnej najnowszej kampanii (E13) dzieli arkusze: "pelny
-  lot w <segment>/full_sheet/", "brak pelnego lotu w skorowidzu" i "pelny
-  lot nie pobrany ... — uzyj --full-sheet". Komunikaty o opcjach kampanii
+  lot w <segment>/full_sheet/", "brak pelnego lotu w skorowidzu" (z flagami
+  roku: "... w zakresie lat zadania") i "pelny lot nie pobrany ... — uzyj
+  --full-sheet". Komunikaty o opcjach kampanii
   dla CZ wymieniaja `--full-sheet`. Skrypty dopasowujace stary tekst
   trzeba poprawic.
 - Komunikat CLI o arkuszach bez danych GUGiK nie zgaduje przyczyny

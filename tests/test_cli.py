@@ -8371,3 +8371,47 @@ class TestFullSheetOption:
         assert "Info:" in err
         (line,) = [ln for ln in err.splitlines() if "full_sheet/ ->" in ln]
         assert self.G in line and "2025-04-27_83233" in line
+
+    def test_hierarchy_warning_splits_linked_and_absent_sheets(self, capsys, tmp_path):
+        """``--campaigns all`` over a hierarchy: one Warning, two groups."""
+        import dataclasses
+
+        from tests.test_manager_campaigns import FakeCampaignProvider, c14_records
+
+        g3 = "N-34-139-C-a-3-3"
+        records = []
+        for i in range(1, 5):
+            godlo = f"N-34-139-C-a-3-{i}"
+            for r in c14_records(godlo):
+                no_full = godlo == g3
+                records.append(
+                    dataclasses.replace(r, full_sheet=False) if no_full else r
+                )
+        fake = FakeCampaignProvider({"all": records})
+        out = str(tmp_path / "out")
+        argv = ["N-34-139-C-a-3", "--campaigns", "all", "-o", out, "-q"]
+        assert self._run(fake, *argv) == 0
+        line = self._partial_warning(capsys.readouterr().err)
+        linked, absent = line.split("pelny lot w <segment>/full_sheet/: ")[1].split(
+            "; brak pelnego lotu w skorowidzu: "
+        )
+        assert linked == self.G and absent == g3
+
+    def test_ranged_absent_group_names_year_bounds(self, capsys, tmp_path):
+        """A full flight outside the year bounds is not "missing in the index"."""
+        import dataclasses
+
+        from tests.test_manager_campaigns import C14_ALL, FakeCampaignProvider
+
+        records = [
+            dataclasses.replace(r, full_sheet=False) if r.aktualnosc < "2024" else r
+            for r in C14_ALL
+        ]
+        fake = FakeCampaignProvider({"newest": records[:1], "all": records})
+        out = str(tmp_path / "out")
+        argv = [self.G, "--full-sheet", "--max-year", "2024", "-o", out, "-q"]
+        assert self._run(fake, *argv) == 0
+        line = self._partial_warning(capsys.readouterr().err)
+        assert (
+            f"brak pelnego lotu w skorowidzu w zakresie lat zadania: {self.G}" in line
+        )
