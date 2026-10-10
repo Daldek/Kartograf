@@ -325,8 +325,15 @@ def query_skorowidz_layer(
     godlo: str,
     timeout: float,
     retries: int = 3,
+    label: str | None = None,
 ) -> list[SkorowidzRecord]:
-    """Query one layer; a failure never means no coverage."""
+    """Query one layer; a failure never means no coverage.
+
+    ``layer`` may list several layers (``a,b``: one answer with the records
+    of all of them). ``label`` (default ``layer``) becomes
+    ``SkorowidzRecord.layer``; with several layers pass a label without a
+    trailing year, so the per-layer year check of the parser stays off.
+    """
     params = {
         "SERVICE": "WMS",
         "VERSION": "1.3.0",
@@ -360,7 +367,7 @@ def query_skorowidz_layer(
         raise DownloadError(
             f"{description}: odpowiedz nie jest szablonem skorowidza GUGiK", godlo=godlo
         )
-    return parse_skorowidz_records(text, layer)
+    return parse_skorowidz_records(text, label or layer)
 
 
 @dataclass(frozen=True)
@@ -398,6 +405,13 @@ def _meets_min_year(record: SkorowidzRecord, min_year: int | None) -> bool:
 def _covers(scanned_from: int | None, min_year: int | None) -> bool:
     """Entry scanned from ``scanned_from`` (``None`` = full) covers the boundary."""
     return scanned_from is None or (min_year is not None and scanned_from <= min_year)
+
+
+def _cached_no_coverage_message(godlo: str) -> str:
+    """Message of a cached no-coverage entry written without one (before
+    2026-10-07). A cache hit never calls the provider's ``no_coverage`` -
+    that may query the network (variant hints, P10)."""
+    return f"Brak danych dla {godlo} (z cache metadanych)"
 
 
 def _partial_scan_no_coverage(godlo: str, min_year: int | None) -> NoCoverageError:
@@ -516,7 +530,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             if cached is not None:
                 if cached.get("no_coverage"):
                     raise NoCoverageError(
-                        cached.get("message") or str(query.no_coverage(parser, [])),
+                        cached.get("message") or _cached_no_coverage_message(godlo),
                         godlo=godlo,
                         hints=tuple(cached.get("hints") or ()),
                     )
@@ -589,7 +603,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                         # D-2: message from the CURRENT boundary, not the stored one
                         raise _partial_scan_no_coverage(godlo, min_year)
                     raise NoCoverageError(
-                        cached.get("message") or str(query.no_coverage(parser, [])),
+                        cached.get("message") or _cached_no_coverage_message(godlo),
                         godlo=godlo,
                         hints=tuple(cached.get("hints") or ()),
                     )

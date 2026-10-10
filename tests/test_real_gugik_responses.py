@@ -271,8 +271,13 @@ class TestNoCoverageHintsOnRealBodies:
         with pytest.raises(NoCoverageError, match="--scale 1:2000") as exc:
             provider._resolve_sheet(godlo)
         assert "5.167.25.13" in str(exc.value)
-        # KRON86 layers: all checked before no coverage was reported
-        assert queried_layers(provider._sessions.injected) == [
+        # KRON86 layers: all checked before no coverage was reported (the
+        # variant check, P10, then asks the other indexes in one query each)
+        kron86 = GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["KRON86"]
+        calls = provider._sessions.injected.get.call_args_list
+        assert [
+            _layer_of(c.args[0]) for c in calls if c.args[0].startswith(kron86)
+        ] == [
             "SkorowidzeNMT2019",
             "SkorowidzeNMT2018",
             "SkorowidzeNMT2017iStarsze",
@@ -285,6 +290,125 @@ class TestNoCoverageHintsOnRealBodies:
             provider._resolve_sheet(godlo)
         assert "GUGiK ma ten arkusz w 0.5 m" in str(exc.value)
         assert "Kartograf pobiera dokladnie 1 m" in str(exc.value)
+
+
+REAL_U1 = (
+    Path(__file__).parent
+    / "fixtures"
+    / "gugik_skorowidz"
+    / "real_2026_10_10"
+    / "nmt"
+    / "N-34-130-D-d-1-1"
+)
+U1 = "N-34-130-D-d-1-1"
+NMT_ENDPOINTS = GugikProvider.WMS_SKOROWIDZE_ENDPOINTS
+
+
+def variant_session(fail_prefix: str | None = None, bodies=None) -> Mock:
+    """GetFeatureInfo body by (endpoint, layer) from ``real_2026_10_10``.
+
+    The 5 m and 1 m EVRF2007 indexes share layer names, so the plain
+    ``routed_session`` (layer only) cannot tell them apart. A query with
+    several layers (``LAYERS=a,b``) is answered by ``<prefix>__all.body``.
+    ``fail_prefix``: that endpoint answers a page that is not an index
+    template (``DownloadError``, no retries).
+    """
+    prefixes = {
+        NMT_ENDPOINTS["5m"]["EVRF2007"]: "nmt5_evr",
+        NMT_ENDPOINTS["1m"]["EVRF2007"]: "nmt1_evr",
+        NMT_ENDPOINTS["1m"]["KRON86"]: "nmt1_krn",
+    }
+    bodies = bodies or {}
+    session = Mock(spec=requests.Session)
+
+    def get(url, **kwargs):
+        prefix = prefixes[url.split("?", 1)[0]]
+        if prefix == fail_prefix:
+            return _response("<html><body>Service Unavailable</body></html>")
+        layer = _layer_of(url)
+        name = "all" if "," in layer else layer
+        if (prefix, name) in bodies:
+            return _response(bodies[(prefix, name)])
+        path = REAL_U1 / f"{prefix}__{name}.body"
+        return _response(path.read_text(encoding="utf-8") if path.exists() else EMPTY)
+
+    session.get = Mock(side_effect=get)
+    return session
+
+
+def _variant_hints(exc: pytest.ExceptionInfo) -> list[str]:
+    return [h for h in exc.value.hints if h.startswith("Skorowidz GUGiK ma ten arkusz")]
+
+
+class TestVariantHintOnRealBodies:
+    """P10: no record in the chosen variant -> a hint naming the variants
+    (resolution, vertical CRS) whose index has the sheet (U1, 2026-10-10)."""
+
+    def test_variant_hint_for_5m_gap(self):
+        provider = GugikProvider(resolution="5m", session=variant_session())
+        with pytest.raises(NoCoverageError) as exc:
+            provider._resolve_sheet(U1)
+        hints = _variant_hints(exc)
+        assert len(hints) == 2
+        evrf = next(h for h in hints if "EVRF2007" in h)
+        kron = next(h for h in hints if "KRON86" in h)
+        assert "--resolution 1m" in evrf and "--vertical-crs" not in evrf
+        assert "--resolution 1m --vertical-crs KRON86" in kron
+        assert U1 not in evrf  # one CLI line for many sheets
+
+    def test_one_query_per_variant(self):
+        session = variant_session()
+        with pytest.raises(NoCoverageError):
+            GugikProvider(resolution="5m", session=session)._resolve_sheet(U1)
+        variant_calls = [
+            c.args[0] for c in session.get.call_args_list if "," in _layer_of(c.args[0])
+        ]
+        assert len(variant_calls) == 2
+
+    def test_variant_with_other_sheet_gives_no_hint(self):
+        body = (REAL_U1 / "nmt1_krn__all.body").read_text(encoding="utf-8")
+        other = body.replace(U1, "N-34-130-D-d-1-2")
+        assert other != body
+        session = variant_session(bodies={("nmt1_krn", "all"): other})
+        with pytest.raises(NoCoverageError) as exc:
+            GugikProvider(resolution="5m", session=session)._resolve_sheet(U1)
+        assert [h for h in _variant_hints(exc) if "KRON86" in h] == []
+
+    def test_variant_query_failure_keeps_no_coverage(self, caplog):
+        session = variant_session(fail_prefix="nmt1_evr")
+        with pytest.raises(NoCoverageError) as exc:
+            GugikProvider(resolution="5m", session=session)._resolve_sheet(U1)
+        hints = _variant_hints(exc)
+        assert all("EVRF2007" not in h for h in hints)
+        assert any("KRON86" in h for h in hints)
+        assert any(
+            r.levelname == "WARNING" and "1m EVRF2007" in r.getMessage()
+            for r in caplog.records
+        )
+
+    def test_variant_hint_cached_with_no_coverage(self, tmp_path):
+        from kartograf.cache.metadata import MetadataCache
+
+        cache = MetadataCache(tmp_path / "c.db")
+        first = variant_session()
+        with pytest.raises(NoCoverageError) as exc1:
+            GugikProvider(resolution="5m", session=first, cache=cache)._resolve_sheet(
+                U1
+            )
+        again = variant_session()
+        with pytest.raises(NoCoverageError) as exc2:
+            GugikProvider(resolution="5m", session=again, cache=cache)._resolve_sheet(
+                U1
+            )
+        again.get.assert_not_called()
+        assert exc2.value.hints == exc1.value.hints
+
+    def test_nmpt_queries_only_nmpt_indexes(self):
+        godlo = "N-33-77-A-d-2-2"
+        session = nmt_session(godlo, "nmpt_evr")
+        with pytest.raises(NoCoverageError):
+            GugikNmptProvider(session=session)._resolve_sheet(godlo)
+        assert all("/NMPT/" in c.args[0] for c in session.get.call_args_list)
 
 
 # =============================================================================
