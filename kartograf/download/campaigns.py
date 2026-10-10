@@ -14,6 +14,7 @@ import hashlib
 import logging
 import re
 from collections.abc import Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse
@@ -181,11 +182,14 @@ def year_range_error(
     unit: str = "arkuszy",
     subject: str = "danych",
     labels: Mapping[str, str] | None = None,
+    partial_years: Mapping[str, AbstractSet[int]] | None = None,
 ) -> YearRangeError:
     """Build the conflict message and retain every sheet's available years.
 
     ``subject`` and optional per-sheet ``labels`` let LAZ report reference
-    tile vintages without duplicating the year-range formatting and hints.
+    tile vintages without duplicating the year-range formatting and hints;
+    years in ``partial_years[godlo]`` (LAZ: only partial sheets there) are
+    marked in the message.
     """
     sheets = {
         godlo: tuple(sorted(set(years))) for godlo, years in sorted(conflicts.items())
@@ -195,9 +199,15 @@ def year_range_error(
         f"brak {subject} {year_range_label(min_year, max_year)} "
         f"dla {len(sheets)} z {total} {unit} — nic nie pobrano:"
     ]
+
+    def year_text(godlo: str, year: int) -> str:
+        if partial_years and year in partial_years.get(godlo, ()):
+            return f"{year} (tylko arkusze niepelne)"
+        return str(year)
+
     lines.extend(
         f"  {godlo}{' ' + labels[godlo] if labels and godlo in labels else ''}: "
-        f"dostepne roczniki {', '.join(map(str, years))}"
+        f"dostepne roczniki {', '.join(year_text(godlo, y) for y in years)}"
         for godlo, years in list(sheets.items())[:20]
     )
     if len(sheets) > 20:

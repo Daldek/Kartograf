@@ -54,12 +54,11 @@ Nagrane przez prawdziwe providery (zapytania jak w kodzie), bez edycji:
 
 ## 4. Uwagi dla uzytkownika
 
-- **Wroclaw `--year 2025`:** `Error:` wymienia kafel referencji 2024 z
-  "dostepne roczniki 2019, 2022, 2024, 2025", choc odmawia roku 2025.
-  Zgodne ze specem (lata kafli przecinajacych niepokryty kawalek, w tym
-  dostawy NIE), ale mylace: rok 2025 jest, tylko jego dostawy sa niepelne
-  i nie licza sie jako pokrycie. Do decyzji: dopisek przy roczniku
-  "(tylko arkusze niepelne)" albo bez zmian.
+- **Wroclaw `--year 2025`:** `Error:` wymienial kafel referencji 2024 z
+  "dostepne roczniki 2019, 2022, 2024, 2025", choc odmawia roku 2025
+  (dostawy NIE nie licza sie jako pokrycie). Decyzja uzytkownika
+  2026-10-10: dopisek — teraz `2025 (tylko arkusze niepelne)`, sprawdzone
+  na zywo (kod 1, nic nie pobrano).
 - **Orto i `Info:` 6.3:** pliki orto GUGiK nie maja nodata ani alfy, wiec
   pokrycie orto jest zawsze NIEUSTALONE i komunikat o locie o wiekszym
   pokryciu dla orto sie nie pojawi (czarne wypelnienie = wartosc 0).

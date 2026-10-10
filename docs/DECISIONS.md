@@ -1556,7 +1556,11 @@ z godlem referencyjnym, jego rokiem/ukladem i latami kafli przecinajacych
 niepokryty fragment; zero pobran. W2 z `--year 2022` pokrywaja razem dwa
 kafle PL-2000 (zaden sam), `--year 2023` ten sam godlo; Wroclaw
 (`6.150.13.16.4`) z `--year 2025` to konflikt (rok 2025 ma tam tylko
-dostawy `NIE`, referencja 2024 PL-1992 zostaje niepokryta). Fragment
+dostawy `NIE`, referencja 2024 PL-1992 zostaje niepokryta). Rok, w ktorym
+niepokryty fragment przecinaja tylko dostawy `NIE`, dostaje w komunikacie
+dopisek `(tylko arkusze niepelne)` (decyzja uzytkownika 2026-10-10).
+`discover_tiles` przyjmuje `min_year` i `max_year` jak `select_tiles`
+(decyzja uzytkownika 2026-10-10, symetria). Fragment
 bez kafli w jakimkolwiek roku pozostaje bez ostrzezenia jak dotad.
 W samym przedziale `newest` zachowuje wybor ADR-029 (takze dla jawnego
 `--campaigns newest`); `all` zachowuje brak deduplikacji pokryciowej.

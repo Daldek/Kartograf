@@ -1334,7 +1334,9 @@ niepokryty fragment; tolerancja 1 m jak przy zwyklym wyborze.
 W obszarze w2 `--year 2022` pokrywaja referencje razem dwa kafle
 PL-2000 (zaden sam), a `--year 2023` ten sam godlo. We Wroclawiu
 (`6.150.13.16.4`) `--year 2025` to konflikt: rok 2025 ma tam tylko
-dostawy `NIE`, ktore nie pokrywaja referencji 2024 (PL-1992). Fragment
+dostawy `NIE`, ktore nie pokrywaja referencji 2024 (PL-1992); rok,
+w ktorym niepokryty fragment przecinaja tylko dostawy `NIE`, ma w
+komunikacie dopisek `(tylko arkusze niepelne)`. Fragment
 bez kafli w ZADNYM roku pozostaje bez ostrzezenia.
 
 Porazka pobrania choc jednego kafla trafia do `LazDownloadResult.failed`
