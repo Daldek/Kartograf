@@ -29,6 +29,16 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `N-34-130-D-d --resolution 5m` — 6 z 16 arkuszy bez 5 m, NMT 1 m jest).
   Skrypty dopasowujace stary tekst trzeba poprawic.
 
+- `--campaigns all --min-year` zawsze odpytuje wszystkie warstwy skorowidza,
+  zeby moc podac pelna liste rocznikow. Wpisy `campaigns_cache` ze skanu
+  czesciowego sa odpytywane ponownie. Co zrobic: nic (koszt 1-3 zapytan
+  GetFeatureInfo wiecej na arkusz raz na 7 dni).
+- Biblioteka: `resolve_campaigns(campaigns="newest", max_year=...)` rzuca
+  `ValidationError`, a brak jawnej strategii (`campaigns=None`) z
+  `max_year` oznacza `all` w przedziale. Co zrobic: usun
+  `campaigns="newest"` przy gornej granicy; sciezka standardowa wskazuje
+  najnowszy lot w przedziale.
+
 ### Naprawione
 
 - Zapytanie o powiaty BDOT10k (WFS PRG) rozszerza obszar na zewnatrz
