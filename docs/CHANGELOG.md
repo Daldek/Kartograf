@@ -49,11 +49,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dostepne lata i podpowiedz. Przy `--campaigns all`, gdy starszy lot ma
   wieksze zmierzone pokrycie niz najnowszy, CLI podaje `Info:` takze z `-q`
   (dowiazanie pozostaje na najnowszym locie).
-- CLI i biblioteka: gdy przy granicy roku sciezka standardowa nadal wskazuje
-  nowszy lot pobrany wczesniej (dowiazanie nigdy nie cofa sie), CLI podaje
-  `Info: sciezka standardowa N arkuszy wskazuje nowszy lokalny lot spoza
-  tego zadania ...`; biblioteka: `SheetFetch.link_outside_range`,
-  `DownloadResult.link_outside_range`.
+- CLI i biblioteka: gdy przy granicy roku dowiazanie nadal wskazuje
+  lot spoza zadania (dowiazanie nigdy nie cofa sie), CLI podaje
+  `Info: N dowiazan wskazuje lokalny lot spoza tego zadania ...` z linia
+  `<godlo>: sciezka standardowa|full_sheet/ -> dowiazanie <data>_<id>` na
+  dowiazanie; biblioteka: `SheetFetch.link_outside_range`,
+  `DownloadResult.link_outside_range` (dla `full_sheet/`: pola
+  `full_link_outside_range`).
 - NMT/NMPT/orto: drugie dowiazanie
   `<segment>/full_sheet/<hierarchia>/<godlo>.<ext>` do najnowszego
   lokalnego lotu oznaczonego w skorowidzu GUGiK jako pelny
@@ -74,9 +76,21 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   zadania ma `request.full_sheet: true`. Arkusze bez pelnego lotu
   w skorowidzu: `DownloadResult.without_full`. Provider bez kampanii
   z `full_sheet=True` = `ValidationError`.
+- CLI `download --full-sheet` (NMT/NMPT/orto PL, takze z flagami roku):
+  gdy najnowszy lot arkusza nie jest pelny, pobiera dodatkowo najnowszy
+  pelny lot z zakresu i dowiazuje go w `<segment>/full_sheet/`. Podsumowanie
+  liczy pliki kampanii (`Downloaded 2 campaign files for 1 sheets ...`).
+  `--full-sheet` z `--product laz` albo `--target-crs` = `Error:` przed
+  siecia (kod 1); dla CZ jak inne opcje kampanii (`Error:` bez PL, `Info:`
+  dla PL+CZ pod `--country auto`). Z `--campaigns all` bez skutku.
 
 ### Zmienione
 
+- `Warning:` o niepelnej najnowszej kampanii (E13) dzieli arkusze: "pelny
+  lot w <segment>/full_sheet/", "brak pelnego lotu w skorowidzu" i "pelny
+  lot nie pobrany ... — uzyj --full-sheet". Komunikaty o opcjach kampanii
+  dla CZ wymieniaja `--full-sheet`. Skrypty dopasowujace stary tekst
+  trzeba poprawic.
 - Komunikat CLI o arkuszach bez danych GUGiK nie zgaduje przyczyny
   "(morze, obszar za granica)": mowi, ze skorowidz GUGiK nie ma tych
   arkuszy dla wybranego produktu i rozdzielczosci, a morze, granice i brak

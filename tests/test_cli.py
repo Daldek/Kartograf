@@ -6696,11 +6696,12 @@ class TestSheetCrsMismatchWarning:
 # --- Campaign and year selection in the CLI -------------------------------
 
 _CAMPAIGN_INFO = (
-    "Info: --campaigns/--min-year/--max-year/--year dotycza tylko czesci PL"
+    "Info: --campaigns/--min-year/--max-year/--year/--full-sheet dotycza tylko "
+    "czesci PL"
 )
 _CZ_CAMPAIGN_ERROR = (
     "CZ (CUZK) nie ma kampanii — "
-    "--campaigns all/--min-year/--max-year/--year dotycza tylko PL"
+    "--campaigns all/--min-year/--max-year/--year/--full-sheet dotycza tylko PL"
 )
 # PL/CZ border strip (both rectangular envelopes, ADR-023)
 _BORDER_BBOX = ["--bbox", "18.4,49.55,18.8,49.75", "--bbox-crs", "EPSG:4326"]
@@ -6903,8 +6904,9 @@ class TestCampaignOptions:
         )
         assert rc == 0
         err = capsys.readouterr().err
-        assert "Info: sciezka standardowa 1 arkuszy wskazuje nowszy" in err
-        assert f"  {godlo}: dowiazanie 2025-10-21_84183" in err
+        (line,) = [ln for ln in err.splitlines() if ln.startswith(f"  {godlo}:")]
+        assert "sciezka standardowa" in line and "2025-10-21_84183" in line
+        assert "Info:" in err
 
     @patch("kartograf.cli.download_cmd._create_provider_and_storage")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
@@ -8222,3 +8224,150 @@ class TestLazOnlyOptions:
             assert kwargs["campaigns"] == "newest"
             assert kwargs.get("year") is None
             assert kwargs["min_density"] == 12
+
+
+class TestFullSheetOption:
+    """ADR-033: ``--full-sheet``, its guards and the combined E13 ``Warning:``."""
+
+    G = "N-34-139-C-a-3-1"  # newest 84183 partial, 83233 full
+
+    @staticmethod
+    def _run(fake, *argv):
+        with patch(
+            "kartograf.cli.download_cmd._create_provider_and_storage",
+            return_value=(fake, None),
+        ):
+            return main(["download", *argv])
+
+    @staticmethod
+    def _partial_warning(err: str) -> str:
+        (line,) = [ln for ln in err.splitlines() if "niepelna" in ln]
+        assert line.startswith("Warning:")
+        return line
+
+    def test_parser_flag_default_off(self):
+        assert create_parser().parse_args(["download", "X"]).full_sheet is False
+        args = create_parser().parse_args(["download", "X", "--full-sheet"])
+        assert args.full_sheet is True
+
+    @patch("kartograf.download.laz.run_laz_download")
+    @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
+    def test_laz_rejected_before_network(self, provider_cls, run, capsys, tmp_path):
+        out = tmp_path / "out"
+        rc = main(
+            ["download", self.G, "--product", "laz", "--full-sheet", "-o", str(out)]
+        )
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert err.startswith("Error:") and "--full-sheet" in err
+        provider_cls.assert_not_called()
+        run.assert_not_called()
+        assert not out.exists()
+
+    @pytest.mark.parametrize("location", [_PL_BBOX_2180, _BORDER_BBOX])
+    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.download.cutout.prepare_pl_cutout")
+    def test_target_crs_rejected_before_network(
+        self, prepare, run_cz, location, capsys, tmp_path
+    ):
+        rc = main(
+            [
+                "download",
+                *location,
+                "--target-crs",
+                "EPSG:2180",
+                "--full-sheet",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert "Error: --full-sheet nie dziala z --target-crs" in err
+        prepare.assert_not_called()
+        run_cz.assert_not_called()
+
+    @patch("kartograf.cli.download_cmd._run_cz")
+    def test_cz_only_is_error(self, run_cz, capsys, tmp_path):
+        rc = main(["download", "302_5550", "--full-sheet", "-o", str(tmp_path)])
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert _CZ_CAMPAIGN_ERROR in err and "Info:" not in err
+        run_cz.assert_not_called()
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_pl_cz_auto_info_and_flag_reaches_manager(
+        self, manager_cls, find, cz, capsys, tmp_path
+    ):
+        find.return_value = ["M-34-86-D-d-4-3"]
+        manager_cls.return_value = _sheet_list_manager(tmp_path / "x.asc")
+        cz.return_value = 0
+        rc = main(
+            ["download", *_BORDER_BBOX, "--full-sheet", "-o", str(tmp_path), "-q"]
+        )
+        assert rc == 0
+        assert capsys.readouterr().err.count(_CAMPAIGN_INFO) == 1
+        assert manager_cls.call_args.kwargs["full_sheet"] is True
+        cz.assert_called_once()
+
+    def test_flag_fetches_full_flight_and_warns_once(self, capsys, tmp_path):
+        """F3 + F5: two campaign files, one Warning naming full_sheet/; a rerun
+        skips without network and repeats the same Warning."""
+        from tests.test_manager_campaigns import REC, c14_fake
+
+        fake = c14_fake()
+        out = str(tmp_path / "out")
+        assert self._run(fake, self.G, "--full-sheet", "-o", out) == 0
+        captured = capsys.readouterr()
+        assert fake.downloads == [REC["84183"].url, REC["83233"].url]
+        assert "Downloaded 2 campaign files for 1 sheets" in captured.out
+        first = self._partial_warning(captured.err)
+        assert self.G in first and "full_sheet/" in first
+        assert "uzyj --full-sheet" not in first
+
+        assert self._run(fake, self.G, "--full-sheet", "-o", out) == 0
+        captured = capsys.readouterr()
+        assert len(fake.downloads) == 2
+        assert f"Skipped {self.G}" in captured.out
+        assert self._partial_warning(captured.err) == first
+
+    def test_without_flag_hints_full_sheet(self, capsys, tmp_path):
+        """F2: the partial newest flight only; the Warning suggests the flag."""
+        from tests.test_manager_campaigns import c14_fake
+
+        fake = c14_fake()
+        assert self._run(fake, self.G, "-o", str(tmp_path / "out"), "-q") == 0
+        line = self._partial_warning(capsys.readouterr().err)
+        assert self.G in line and "--full-sheet" in line
+        assert len(fake.downloads) == 1
+
+    def test_no_full_flight_in_index(self, capsys, tmp_path):
+        """F7: the flag finds no full flight -> named in the Warning, code 0."""
+        import dataclasses
+
+        from tests.test_manager_campaigns import C14_ALL, FakeCampaignProvider
+
+        records = [dataclasses.replace(r, full_sheet=False) for r in C14_ALL]
+        fake = FakeCampaignProvider({"newest": records[:1], "all": records})
+        out = str(tmp_path / "out")
+        assert self._run(fake, self.G, "--full-sheet", "-o", out, "-q") == 0
+        line = self._partial_warning(capsys.readouterr().err)
+        assert "brak pelnego lotu w skorowidzu" in line and self.G in line
+        assert "uzyj --full-sheet" not in line
+
+    def test_full_link_outside_range_info(self, capsys, tmp_path):
+        """F8: the full_sheet/ link stays on a newer full flight -> Info line."""
+        from tests.test_manager_campaigns import c14_fake
+
+        fake = c14_fake()
+        out = str(tmp_path / "out")
+        assert self._run(fake, self.G, "--campaigns", "all", "-o", out, "-q") == 0
+        capsys.readouterr()
+        argv = [self.G, "--campaigns", "all", "--max-year", "2024", "-o", out, "-q"]
+        assert self._run(fake, *argv) == 0
+        err = capsys.readouterr().err
+        assert "Info:" in err
+        (line,) = [ln for ln in err.splitlines() if "full_sheet/ ->" in ln]
+        assert self.G in line and "2025-04-27_83233" in line
