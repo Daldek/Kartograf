@@ -726,6 +726,10 @@ class TestLazDiscoveryOnRealWfs:
             GugikLazProvider(session=session).select_tiles(WRO_BBOX, year=2025)
         err = caught.value
         assert err.sheets == {"M-33-35-A-c-4-4-3-2": (2019, 2022, 2024, 2025)}
+        assert (
+            "M-33-35-A-c-4-4-3-2 (2024, PL-1992): dostepne roczniki "
+            "2019, 2022, 2024, 2025 (tylko arkusze niepelne)"
+        ) in str(err)
         assert "dla 1 z 3 kafli obszaru" in str(err)
         assert "--max-year 2025" in str(err)
         assert "--min-year" not in str(err)
@@ -756,6 +760,22 @@ class TestLazDiscoveryOnRealWfs:
         assert f"z roku {year} dla 1 z 2 kafli obszaru" in str(err)
         assert hint in str(err)
         assert no_hint not in str(err)
+        assert "niepelne" not in str(err)  # every tile here is a full sheet
+
+    def test_discover_tiles_forwards_min_year(self):
+        """``discover_tiles(min_year=)`` = ``select_tiles(min_year=).tiles``."""
+        with pytest.raises(YearRangeError) as caught:
+            GugikLazProvider(session=laz_session("w3")).discover_tiles(
+                W3_BBOX, min_year=2023
+            )
+        assert caught.value.sheets == {"N-34-138-D-a-2-2-2": (2019,)}
+        tiles = GugikLazProvider(session=laz_session("w3")).discover_tiles(
+            W3_BBOX, min_year=2019, max_year=2023
+        )
+        assert [(t.godlo, t.year) for t in tiles] == [
+            ("N-34-138-B-c-4-4-4-4", 2023),
+            ("N-34-138-D-a-2-2-2", 2019),
+        ]
 
 
 # =============================================================================

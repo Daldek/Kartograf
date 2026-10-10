@@ -33,8 +33,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   z wiekszym pokryciem, gdy istnieje); biblioteka zwraca ten ID w
   `SheetFetch.better_coverage` i `DownloadResult.better_coverage`.
   Dowiazanie nadal wskazuje najnowszy lot, nie lot o najwiekszym pokryciu.
-- Biblioteka LAZ: `select_tiles(max_year=)`, `discover_tiles(max_year=)` i
-  `download_laz_area(max_year=)` wybieraja kafle z domknietego przedzialu.
+- Biblioteka LAZ: `select_tiles(max_year=)`, `discover_tiles(min_year=,
+  max_year=)` i `download_laz_area(max_year=)` wybieraja kafle z domknietego
+  przedzialu. W `Error:` o braku rocznika rok, ktory w niepokrytej czesci
+  ma tylko dostawy arkuszy niepelnych (`czy_ark_wypelniony=NIE`), ma
+  dopisek `(tylko arkusze niepelne)`.
   Sidecar LAZ zapisuje `request.max_year` (i `request.year`, gdy granice sa
   rowne), a dla znanych wartosci `extra.acquisition_date` i `extra.full_sheet`.
 - CLI `download`: `--max-year RRRR` i `--year RRRR` dzialaja dla NMT,

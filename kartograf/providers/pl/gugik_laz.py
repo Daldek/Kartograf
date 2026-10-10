@@ -392,8 +392,12 @@ def _reference_year_conflicts(
     min_year: int | None,
     max_year: int | None,
     tolerance_m: float,
-) -> tuple[dict[str, tuple[int, ...]], dict[str, str]]:
-    """Find reference tiles whose area the chosen years do not fully cover."""
+) -> tuple[dict[str, tuple[int, ...]], dict[str, str], dict[str, frozenset[int]]]:
+    """Find reference tiles whose area the chosen years do not fully cover.
+
+    Also returns, per conflicting tile, the years whose intersecting tiles are
+    all partial sheets (``czy_ark_wypelniony=NIE``): they exist but cannot cover.
+    """
     # Local import avoids the download -> manager -> provider import cycle.
     from kartograf.download.campaigns import in_year_range
 
@@ -406,6 +410,7 @@ def _reference_year_conflicts(
 
     conflicts: dict[str, tuple[int, ...]] = {}
     labels: dict[str, str] = {}
+    partial_years: dict[str, frozenset[int]] = {}
     regions: list[tuple[LazTile, Polygon | None]] | None = None
     for tile in reference.tiles:
         if in_year_range(tile.year, min_year, max_year):
@@ -417,25 +422,29 @@ def _reference_year_conflicts(
             continue
         if regions is None:
             regions = [(other, _tile_region(other, ox, oy)) for other in found]
-        years = {
-            other.year
-            for other, other_region in regions
-            if other.year is not None
-            and (
-                (remaining is None and other.godlo == tile.godlo)
-                or (
-                    remaining is not None
-                    and other_region is not None
-                    and any(
-                        _significant(clip_convex(piece, other_region))
-                        for piece in remaining
-                    )
+        # year -> True while every intersecting tile of that year is partial
+        partial_only: dict[int, bool] = {}
+        for other, other_region in regions:
+            if other.year is None:
+                continue
+            touches = (remaining is None and other.godlo == tile.godlo) or (
+                remaining is not None
+                and other_region is not None
+                and any(
+                    _significant(clip_convex(piece, other_region))
+                    for piece in remaining
                 )
             )
-        }
-        conflicts[tile.godlo] = tuple(sorted(years))
+            if touches:
+                partial_only[other.year] = partial_only.get(other.year, True) and (
+                    other.full_sheet is False
+                )
+        conflicts[tile.godlo] = tuple(sorted(partial_only))
         labels[tile.godlo] = f"({tile.year}, {tile.crs})"
-    return conflicts, labels
+        partial = frozenset(y for y, only in partial_only.items() if only)
+        if partial:
+            partial_years[tile.godlo] = partial
+    return conflicts, labels, partial_years
 
 
 class GugikLazProvider(BaseProvider):
@@ -626,6 +635,7 @@ class GugikLazProvider(BaseProvider):
         vertical_crs: str | None = None,
         timeout: int = WFS_TIMEOUT,
         *,
+        min_year: int | None = None,
         max_year: int | None = None,
     ) -> list[LazTile]:
         """
@@ -643,6 +653,7 @@ class GugikLazProvider(BaseProvider):
                 min_density=min_density,
                 vertical_crs=vertical_crs,
                 timeout=timeout,
+                min_year=min_year,
                 max_year=max_year,
             ).tiles
         )
@@ -776,7 +787,7 @@ class GugikLazProvider(BaseProvider):
         )
         if has_range:
             reference = select_newest_cover(found, bbox, tolerance_m)
-            conflicts, labels = _reference_year_conflicts(
+            conflicts, labels, partial_years = _reference_year_conflicts(
                 reference, selection, found, bbox, lo, hi, tolerance_m
             )
             if conflicts:
@@ -788,6 +799,7 @@ class GugikLazProvider(BaseProvider):
                     unit="kafli obszaru",
                     subject="kafli LAZ",
                     labels=labels,
+                    partial_years=partial_years,
                 )
         return selection
 

@@ -245,7 +245,7 @@ N-34-139-C-a-3-{1..4} z `--bbox`/`--geometry`/hierarchii.
 | T22 | LAZ, rocznik w usludze, brak kafli w czesci obszaru | w2, `--year 2024` (warstwa 2024 istnieje, w w2 pusta) | `Error: brak kafli LAZ z roku 2024 dla 1 z 1 kafli obszaru — nic nie pobrano:` / `  N-34-139-A-c-1-1-3-4 (2025, PL-1992): dostepne roczniki 2022, 2023, 2025` / podpowiedz `--min-year 2024` i `--max-year 2024`; kod 1 |
 | T23 | LAZ, rocznik nieobecny w usludze | `--year 2017` na EVRF2007 (warstwy 2018..2026) | `Error: rocznik 2017 nie istnieje w usludze EVRF2007 (dostepne: 2026, ..., 2018)` — jak dzis, bez GetFeature; dla przedzialu bez wspolnego rocznika z usluga: `Error: przedzial 2010-2017 nie ma rocznika w usludze EVRF2007 (dostepne: ...)` |
 | T24 | LAZ, obszar bez kafli w zadnym roku | bbox na morzu, `--year 2023` | jak dzis: `Error: No LAZ tiles found ...`, kod 1 (referencja pusta — nie ma z czym porownac) |
-| T25 | LAZ, dwie dostawy NIE tego samego arkusza w jednym roku | Wroclaw `6.150.13.16.4` (ADR-029), domyslnie i `--max-year 2025` | obie zostaja (NIE nie pokrywa) — ADR-029 bez zmian; zostaje tez kafel 2024 PL-1992 `M-33-35-A-c-4-4-3-2`, ktorego nie pokrywa zaden kafel TAK. `--year 2025` = konflikt P8 (pomiar 2026-10-10): rok 2025 ma tu tylko dostawy NIE, referencja 2024 zostaje niepokryta; `Error:` wymienia ja z latami 2019, 2022, 2024, 2025 (2025 = lata dostaw NIE przecinajacych niepokryty kawalek) |
+| T25 | LAZ, dwie dostawy NIE tego samego arkusza w jednym roku | Wroclaw `6.150.13.16.4` (ADR-029), domyslnie i `--max-year 2025` | obie zostaja (NIE nie pokrywa) — ADR-029 bez zmian; zostaje tez kafel 2024 PL-1992 `M-33-35-A-c-4-4-3-2`, ktorego nie pokrywa zaden kafel TAK. `--year 2025` = konflikt P8 (pomiar 2026-10-10): rok 2025 ma tu tylko dostawy NIE, referencja 2024 zostaje niepokryta; `Error:` wymienia ja z latami `2019, 2022, 2024, 2025 (tylko arkusze niepelne)` (dopisek: decyzja uzytkownika 2026-10-10) |
 
 ## 6. CLI: flagi, komunikaty, kody wyjscia
 
@@ -495,8 +495,8 @@ zadanie — rozroznienie klasami, nie trescia. Eksport z `kartograf`
   rocznik to zapytania bbox, tanie wobec kafli 50-250 MB.
 - `download_laz_area(..., max_year=None)`; `write_laz_sidecar` z polami z
   sekcji 7; `LazDownloadResult` bez zmian.
-- `discover_tiles` (alias `select_tiles(...).tiles`) bez zmian sygnatury
-  poza `max_year`.
+- `discover_tiles` (alias `select_tiles(...).tiles`) dostaje `min_year`
+  i `max_year` (keyword-only; `min_year` — decyzja uzytkownika 2026-10-10).
 
 ### 8.6 CLI (`cli/download_cmd.py`)
 

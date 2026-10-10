@@ -123,11 +123,10 @@
 > dopiero po specu/planie i zatwierdzeniu): (c) drugie dowiazanie do
 > najnowszego pelnego lotu; (d) ciche wartosci domyslne z inwentaryzacji;
 > (a) wycinki PL z WCS (nowy ADR).
-> **Otwarte decyzje uzytkownika (z (b)):** 1) LAZ `--year` przy rocznikach
-> tylko z dostawami `NIE` (Wroclaw 2025): `Error:` wymienia ten rok wsrod
-> "dostepnych rocznikow" — zostawic czy dopisac "(tylko arkusze
-> niepelne)"; 2) `discover_tiles` ma `max_year`, ale nie `min_year` (spec
-> 8.5 doslownie) — dodac dla symetrii czy zostawic. Przy wydaniu 0.7.2:
+> **Decyzje uzytkownika z (b), 2026-10-10 — wdrozone na galezi:** LAZ
+> `--year` przy rocznikach tylko z dostawami `NIE` dopisuje w `Error:`
+> `(tylko arkusze niepelne)`; `discover_tiles` dostal `min_year` (symetria
+> z `select_tiles`). Przy wydaniu 0.7.2:
 > `docs/PRD.md` (`__version__ # "0.7.1"`), SCOPE i data w CHANGELOG.
 > **Katalog danych testow na zywo:** wskazuje uzytkownik (STANDARDS 6.4);
 > sciezki nie zapisuj w repo (straznik wzorcow commitow ja blokuje) —
@@ -173,8 +172,10 @@
 - Review galezi (reviewer): "correct", 8 uwag P3. Wdrozone: komunikat T23
   dla `--year` LAZ z CLI, `NoCoverageError` dla arkusza bez rekordow
   z rokiem w `resolve_campaigns`, `check_year_range(godla, workers=)`,
-  CHANGELOG (`available_years`, `validate_campaign_args`), plan. Do
-  decyzji uzytkownika: dwie pozycje w naglowku wyzej. Orto: pliki GUGiK
+  CHANGELOG (`available_years`, `validate_campaign_args`), plan. Decyzje
+  uzytkownika (ta sama sesja): dopisek `(tylko arkusze niepelne)` przy
+  roczniku LAZ z samymi dostawami NIE, `discover_tiles(min_year=)`.
+  Orto: pliki GUGiK
   bez nodata i alfy, wiec `Info:` o wiekszym pokryciu dla orto nie wystapi
   (zgodne z 4.4 specu).
 
