@@ -23,11 +23,15 @@ from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.campaigns import (
     CampaignRef,
     campaign_extension,
+    in_year_range,
+    record_year,
+    resolve_campaign_strategy,
     validate_campaign_args,
     verify_file_format,
     verify_record_url,
     verify_record_vertical_crs,
     verify_sheet_extent,
+    year_range_error,
 )
 from kartograf.download.links import (
     LinkOutcome,
@@ -154,6 +158,24 @@ class DownloadResult:
 
 
 @dataclass(frozen=True)
+class YearRangeCheck:
+    """Pre-download classification of every sheet against the requested year range.
+
+    ``selected`` contains the records to download, newest first; ``available``
+    includes all known years even when none fall inside the requested range.
+    ``no_data`` identifies sheets with no years at all, while ``conflicts``
+    identifies sheets with years only outside the range. ``failed`` contains
+    index errors for which the year cannot be established.
+    """
+
+    selected: dict[str, tuple[SkorowidzRecord, ...]]
+    available: dict[str, tuple[int, ...]]
+    no_data: dict[str, NoCoverageError]
+    conflicts: dict[str, tuple[int, ...]]
+    failed: dict[str, DownloadError]
+
+
+@dataclass(frozen=True)
 class SheetFetch:
     """Result of downloading one sheet (``DownloadManager.last_sheet``).
 
@@ -197,7 +219,12 @@ class CampaignProvider(Protocol):
     """
 
     def resolve_campaigns(
-        self, godlo: str, *, campaigns: str = "newest", min_year: int | None = None
+        self,
+        godlo: str,
+        *,
+        campaigns: str | None = None,
+        min_year: int | None = None,
+        max_year: int | None = None,
     ) -> list[SkorowidzRecord]: ...
 
     def download_record(self, record: SkorowidzRecord, output_path: Path) -> Path: ...
@@ -299,8 +326,9 @@ class DownloadManager:
         resolution: str = "1m",
         max_workers: int = 1,
         sidecar_extra: dict | None = None,
-        campaigns: str = "newest",
+        campaigns: str | None = None,
         min_year: int | None = None,
+        max_year: int | None = None,
     ):
         """
         Initialize download manager.
@@ -334,23 +362,21 @@ class DownloadManager:
         sidecar_extra : dict, optional
             Extra fields merged into the `extra` of every sidecar (stage 1:
             `parent_request` in bbox/geometry mode).
-        campaigns : str, optional
-            ADR-030 campaign strategy: ``"newest"`` (default) or
-            ``"all"``. Applies only to a provider with ``supports_campaigns is
-            True`` (GUGiK NMT/NMPT/orto).
-        min_year : int, optional
-            Lower bound on the campaign acquisition-date year (``aktualnosc``;
-            both strategies).
+        campaigns : str or None, optional
+            ADR-030 campaign strategy: ``None`` selects ``"newest"`` without
+            an upper bound, ``"all"`` with an upper bound. Explicit ``"newest"``
+            with ``max_year`` is invalid. Only PL GUGiK supports campaigns.
+        min_year, max_year : int, optional
+            Inclusive bounds on the campaign acquisition year.
 
         Raises
         ------
         ValidationError
-            Unknown strategy / invalid ``min_year``, or a provider without
-            campaigns with ``campaigns="all"`` or ``min_year``;
-            ``resolution="5m"`` with ``vertical_crs="KRON86"`` (no provider, or
-            one without ``vertical_crs``).
+            Invalid strategy/bounds or a provider without campaigns used with
+            a year bound or ``campaigns="all"``; incompatible resolution/CRS.
         """
-        validate_campaign_args(campaigns, min_year, None)
+        validate_campaign_args(campaigns, min_year, max_year)
+        strategy = resolve_campaign_strategy(campaigns, max_year)
         # The "5m => EVRF2007" rule (D11): without a provider the factory
         # rejects 5m + KRON86 with ValidationError (0.7.1, no silent swap).
         self._provider = provider or create_nmt_provider(
@@ -389,13 +415,17 @@ class DownloadManager:
         self._campaign_aware = (
             getattr(self._provider, "supports_campaigns", False) is True
         )
-        if not self._campaign_aware and (campaigns != "newest" or min_year is not None):
+        if not self._campaign_aware and (
+            campaigns == "all" or min_year is not None or max_year is not None
+        ):
             raise ValidationError(
                 f"Provider {self._provider.name} nie obsluguje kampanii "
-                f"(--campaigns/--min-year)"
+                f"(--campaigns/--min-year/--max-year/--year)"
             )
-        self._campaigns = campaigns
+        self._campaigns = strategy
         self._min_year = min_year
+        self._max_year = max_year
+        self._has_range = min_year is not None or max_year is not None
         self.last_result: DownloadResult | None = None
         self.last_sheet: SheetFetch | None = None
 
@@ -420,6 +450,11 @@ class DownloadManager:
         return self._min_year
 
     @property
+    def max_year(self) -> int | None:
+        """Upper bound of the campaign year (``None`` = no bound)."""
+        return self._max_year
+
+    @property
     def provider(self) -> BaseProvider:
         """Return the data provider."""
         return self._provider
@@ -433,6 +468,89 @@ class DownloadManager:
     def _campaign_provider(self) -> CampaignProvider:
         """Campaign-flow provider (``supports_campaigns is True``, GUGiK)."""
         return cast(CampaignProvider, self._provider)
+
+    def check_year_range(self, godla: list[str]) -> YearRangeCheck:
+        """Check every PL sheet against the year bounds before any download.
+
+        The complete campaign list for each sheet is fetched exactly once,
+        without year bounds, so callers can inspect ``available`` even when
+        ``selected`` is empty. This public phase performs no file downloads;
+        callers must abort if ``failed`` or ``conflicts`` is nonempty.
+        """
+        if not self._campaign_aware or not self._has_range:
+            raise ValidationError(
+                "Sprawdzenie przedzialu wymaga kampanii PL i granicy roku"
+            )
+
+        def classify(
+            godlo: str,
+        ) -> tuple[str, tuple[SkorowidzRecord, ...], tuple[int, ...], Exception | None]:
+            try:
+                records = self._campaign_provider.resolve_campaigns(
+                    godlo, campaigns="all"
+                )
+            except DownloadError as e:
+                return godlo, (), (), e
+            years = tuple(
+                sorted({y for r in records if (y := record_year(r)) is not None})
+            )
+            selected = tuple(
+                sorted(
+                    (
+                        r
+                        for r in records
+                        if in_year_range(record_year(r), self._min_year, self._max_year)
+                    ),
+                    key=lambda r: (r.aktualnosc, r.dt_pzgik or "", r.url),
+                    reverse=True,
+                )
+            )
+            if self._campaigns == "newest":
+                selected = selected[:1]
+            return godlo, selected, years, None
+
+        if len(godla) > 1 and self._max_workers > 1:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=self._max_workers
+            ) as executor:
+                rows = list(executor.map(classify, godla))
+        else:
+            rows = [classify(g) for g in godla]
+
+        selected: dict[str, tuple[SkorowidzRecord, ...]] = {}
+        available: dict[str, tuple[int, ...]] = {}
+        no_data: dict[str, NoCoverageError] = {}
+        conflicts: dict[str, tuple[int, ...]] = {}
+        failed: dict[str, DownloadError] = {}
+        for godlo, records, years, error in rows:
+            if isinstance(error, NoCoverageError):
+                no_data[godlo] = error
+            elif isinstance(error, DownloadError):
+                failed[godlo] = error
+            elif not years:
+                no_data[godlo] = NoCoverageError(f"Brak kampanii {godlo}", godlo=godlo)
+            elif not records:
+                conflicts[godlo] = years
+            else:
+                selected[godlo] = records
+                available[godlo] = years
+        return YearRangeCheck(selected, available, no_data, conflicts, failed)
+
+    def _checked_range(self, godla: list[str]) -> YearRangeCheck:
+        """Abort the whole task on an index failure or a year conflict."""
+        check = self.check_year_range(godla)
+        if check.failed:
+            names = ", ".join(check.failed)
+            raise DownloadError(
+                f"nie udalo sie sprawdzic roku danych dla {len(check.failed)} z "
+                f"{len(godla)} arkuszy (blad skorowidza, nie brak danych): "
+                f"{names} — ponow pobranie"
+            )
+        if check.conflicts:
+            raise year_range_error(
+                check.conflicts, self._min_year, self._max_year, total=len(godla)
+            )
+        return check
 
     # =========================================================================
     # Download by sheet code → ASC
@@ -473,7 +591,9 @@ class DownloadManager:
         Raises
         ------
         DownloadError
-            If download fails
+            If download fails, including a year-range index check before downloading.
+        YearRangeError
+            If data exists only outside the year range, before downloading.
         ParseError
             If godlo is invalid
 
@@ -500,7 +620,16 @@ class DownloadManager:
                 godlo, "1:10000", skip_existing=skip_existing, on_progress=on_progress
             )
 
-        fetch = self._fetch_sheet(parser.godlo, skip_existing, on_download)
+        check = self._checked_range([parser.godlo]) if self._has_range else None
+        if check is not None and parser.godlo in check.no_data:
+            raise check.no_data[parser.godlo]
+        fetch = self._fetch_sheet(
+            parser.godlo,
+            skip_existing,
+            on_download,
+            records=check.selected[parser.godlo] if check is not None else None,
+            available=check.available[parser.godlo] if check is not None else None,
+        )
         self.last_sheet = fetch
         # A9: one sheet is a one-element result too - same reading as a list
         result = DownloadResult()
@@ -546,6 +675,9 @@ class DownloadManager:
             If target_scale is invalid
         ParseError
             If godlo is invalid
+        DownloadError, YearRangeError
+            With year bounds, an index check failure or a conflicting sheet
+            aborts the whole task before any download.
 
         Notes
         -----
@@ -631,7 +763,8 @@ class DownloadManager:
         failures (``DownloadError``) do not raise: they are collected in
         ``self.last_result`` exactly like in :meth:`download_hierarchy`
         (``failed``; ``no_coverage`` for sheets the source has no data for;
-        other exceptions as described in its Notes).
+        other exceptions as described in its Notes). With year bounds, index
+        check failures and year conflicts raise before the first download.
 
         Returns
         -------
@@ -642,6 +775,9 @@ class DownloadManager:
         ------
         ParseError
             If any godlo is invalid — raised before any download starts
+        DownloadError, YearRangeError
+            With year bounds, an index check failure or a conflicting sheet
+            aborts the whole list before any download.
         """
         self.last_result = None
         self.last_sheet = None
@@ -658,6 +794,8 @@ class DownloadManager:
         godlo: str,
         skip_existing: bool,
         on_download: Callable[[], None] | None = None,
+        records: tuple[SkorowidzRecord, ...] | None = None,
+        available: tuple[int, ...] | None = None,
     ) -> SheetFetch:
         """
         Download one sheet — the single "download a sheet" implementation (D10).
@@ -668,7 +806,9 @@ class DownloadManager:
         first download (sequential mode reports ``"downloading"``).
         """
         if self._campaign_aware:
-            return self._fetch_campaigns(godlo, skip_existing, on_download)
+            return self._fetch_campaigns(
+                godlo, skip_existing, on_download, records=records, available=available
+            )
         return self._fetch_sheet_plain(godlo, skip_existing, on_download)
 
     def _fetch_sheet_plain(
@@ -702,6 +842,8 @@ class DownloadManager:
         godlo: str,
         skip_existing: bool,
         on_download: Callable[[], None] | None = None,
+        records: tuple[SkorowidzRecord, ...] | None = None,
+        available: tuple[int, ...] | None = None,
     ) -> SheetFetch:
         """
         Campaign flow (ADR-030): files in ``kampanie/``, standard link.
@@ -732,13 +874,13 @@ class DownloadManager:
         from the structure, not from a lock (there are no locks); a race
         between processes is described by ``ensure_standard_link``.
 
-        Index outage (I-1): ``newest`` without ``min_year`` with
+        Index outage (I-1): ``newest`` without year bounds with
         ``skip_existing``, when ``resolve_campaigns`` ends with a TRANSPORT
         error (``_is_transport_failure``) and the standard path points to an
         existing local campaign (``linked_campaign``) — NOT a failure:
         ``logger.warning`` and ``SheetFetch(skipped=True,
         unverified=<error>)`` from the local campaign, link unchanged.
-        ``all``, ``min_year``, ``--force``, no local campaign or another
+        A year bound, ``all``, ``--force``, no local campaign or another
         error — an exception as before.
 
         Raises
@@ -753,28 +895,32 @@ class DownloadManager:
             them.
         """
         std = self._storage.get_path(godlo, self._default_ext)
-        try:
-            records = self._campaign_provider.resolve_campaigns(
-                godlo, campaigns=self._campaigns, min_year=self._min_year
-            )
-        except DownloadError as e:
-            if (
-                self._campaigns == "newest"
-                and self._min_year is None
-                and skip_existing
-                and _is_transport_failure(e)
-            ):
-                fetch = self._local_newest(godlo, std, e)
-                if fetch is not None:
-                    return fetch
-            raise
-        logger.info("%s: %d kampanii (%s)", godlo, len(records), self._campaigns)
+        chosen: list[SkorowidzRecord] | tuple[SkorowidzRecord, ...]
+        if records is None:
+            try:
+                chosen = self._campaign_provider.resolve_campaigns(
+                    godlo, campaigns=self._campaigns, min_year=self._min_year
+                )
+            except DownloadError as e:
+                if (
+                    self._campaigns == "newest"
+                    and not self._has_range
+                    and skip_existing
+                    and _is_transport_failure(e)
+                ):
+                    fetch = self._local_newest(godlo, std, e)
+                    if fetch is not None:
+                        return fetch
+                raise
+        else:
+            chosen = records
+        logger.info("%s: %d kampanii (%s)", godlo, len(chosen), self._campaigns)
         downloaded: list[Path] = []
         reused: list[Path] = []
         local: list[tuple[CampaignRef, Path]] = []
         errors: list[tuple[str, DownloadError]] = []  # (campaign, error)
         started = False
-        for record in records:
+        for record in chosen:
             try:  # R16 (cf. Q10): bad date = this campaign fails
                 ref = CampaignRef.from_record(record)
             except DownloadError as e:
@@ -804,7 +950,9 @@ class DownloadManager:
                         errors.append((ref.dirname, e))
                         continue
                     try:
-                        self._write_campaign_sidecar(path, godlo, record, ref)
+                        self._write_campaign_sidecar(
+                            path, godlo, record, ref, available=available
+                        )
                     except DownloadError as e:
                         errors.append(
                             (ref.dirname, e)
@@ -822,7 +970,9 @@ class DownloadManager:
                 self._campaign_provider.download_record(record, path)
                 verify_file_format(path, ext)
                 verify_sheet_extent(path, godlo, ext)
-                self._write_campaign_sidecar(path, godlo, record, ref)
+                self._write_campaign_sidecar(
+                    path, godlo, record, ref, available=available
+                )
             except DownloadError as e:
                 path.unlink(missing_ok=True)
                 errors.append((ref.dirname, e))
@@ -848,7 +998,7 @@ class DownloadManager:
             if errors:
                 listing = ", ".join(f"{name}: {e}" for name, e in errors)
                 problems.append(
-                    f"nie pobrano {len(errors)} z {len(records)} kampanii ({listing})"
+                    f"nie pobrano {len(errors)} z {len(chosen)} kampanii ({listing})"
                 )
             if link_error is not None:
                 problems.append(f"dowiazanie {std}: {link_error}")
@@ -908,6 +1058,7 @@ class DownloadManager:
         godlo: str,
         skip_existing: bool,
         on_download: Callable[[], None] | None = None,
+        check: YearRangeCheck | None = None,
     ) -> tuple[str, SheetFetch | None, str, str, tuple[str, ...]]:
         """
         Download a list sheet: ``DownloadError`` -> a status instead of an
@@ -924,7 +1075,15 @@ class DownloadManager:
             status is one of: "skipped", "completed", "failed", "no_coverage"
         """
         try:
-            fetch = self._fetch_sheet(godlo, skip_existing, on_download)
+            if check is not None and godlo in check.no_data:
+                raise check.no_data[godlo]
+            fetch = self._fetch_sheet(
+                godlo,
+                skip_existing,
+                on_download,
+                records=check.selected[godlo] if check is not None else None,
+                available=check.available[godlo] if check is not None else None,
+            )
         except NoCoverageError as e:
             logger.warning(f"No data for {godlo}: {e}")
             return (godlo, None, "no_coverage", str(e), e.hints)
@@ -1001,6 +1160,7 @@ class DownloadManager:
         before each download and lets exceptions other than ``DownloadError``
         through; parallel (completion order) counts them as ``"failed"``.
         """
+        check = self._checked_range(godla) if self._has_range else None
         downloaded_paths: list[Path] = []
         result = DownloadResult()
         total = len(godla)
@@ -1012,7 +1172,7 @@ class DownloadManager:
                     self._emit(on_progress, i, total, godlo, "downloading")
 
                 _, fetch, status, message, hints = self._download_single_sheet_task(
-                    godlo, skip_existing, on_download=started
+                    godlo, skip_existing, on_download=started, check=check
                 )
                 self._record(result, downloaded_paths, godlo, fetch, status, hints)
                 self._emit(on_progress, i, total, godlo, status, message)
@@ -1022,7 +1182,10 @@ class DownloadManager:
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
                 future_to_godlo = {
                     executor.submit(
-                        self._download_single_sheet_task, godlo, skip_existing
+                        self._download_single_sheet_task,
+                        godlo,
+                        skip_existing,
+                        check=check,
                     ): godlo
                     for godlo in godla
                 }
@@ -1211,18 +1374,28 @@ class DownloadManager:
         )
 
     def _write_campaign_sidecar(
-        self, path: Path, godlo: str, record: SkorowidzRecord, ref: CampaignRef
+        self,
+        path: Path,
+        godlo: str,
+        record: SkorowidzRecord,
+        ref: CampaignRef,
+        *,
+        available: tuple[int, ...] | None = None,
     ) -> None:
         """MANDATORY campaign file sidecar (errata 2 N-1).
 
-        ``request = {sheet, campaigns}`` + ``min_year`` only when given;
-        ``extra`` = ``sidecar_extra`` + ``source`` (``provider.record_source``
-        of THIS record, R13) + ``campaign`` (``ref.to_extra()``). Failure =
-        ``DownloadError`` (the caller removes the data file).
+        ``request`` describes the resolved strategy and supplied year bounds;
+        ``extra`` includes the source and campaign identity of THIS record
+        (R13), plus all available years for range-checked requests. Failure
+        is a campaign ``DownloadError`` (the caller removes the data file).
         """
         request: dict = {"sheet": godlo, "campaigns": self._campaigns}
         if self._min_year is not None:
             request["min_year"] = self._min_year
+        if self._max_year is not None:
+            request["max_year"] = self._max_year
+        if self._min_year is not None and self._min_year == self._max_year:
+            request["year"] = self._min_year
         try:
             source = self._campaign_provider.record_source(record)
         except Exception as e:  # noqa: BLE001 — mandatory sidecar: campaign failure
@@ -1231,10 +1404,13 @@ class DownloadManager:
                 f"{ref.dirname}: {e}",
                 godlo=godlo,
             ) from e
+        extra: dict = {"source": source, "campaign": ref.to_extra()}
+        if available is not None:
+            extra["available_years"] = list(available)
         self._write_sidecar(
             path,
             request,
-            extra_override={"source": source, "campaign": ref.to_extra()},
+            extra_override=extra,
             required=True,
         )
 

@@ -19,6 +19,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   nie jest juz pytany do konca zadania; wynik bez zmian. Wpisy cache braku
   pokrycia sprzed 0.7.2 nie maja tej podpowiedzi do konca TTL (7 dni) —
   odswieza `--force` albo `MetadataCache(refresh=True)`.
+- Biblioteka: `DownloadManager(max_year=)` i publiczne
+  `check_year_range(godla)` sprawdzaja pelna liste kampanii przed
+  pobraniem; `YearRangeError` podaje godla, dostepne lata i podpowiedzi.
+  Sidecar kampanii z przedzialem zawiera `request.max_year`, `request.year`
+  dla pojedynczego roku i `extra.available_years`.
 
 ### Zmienione
 
@@ -38,6 +43,16 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `max_year` oznacza `all` w przedziale. Co zrobic: usun
   `campaigns="newest"` przy gornej granicy; sciezka standardowa wskazuje
   najnowszy lot w przedziale.
+- `DownloadManager(min_year=...)`: arkusz z danymi tylko poza przedzialem
+  zatrzymuje cale zadanie (takze liste/hierarchie) przed pobraniem, zamiast
+  byc pominietym. Awaria sprawdzenia skorowidza tez zatrzymuje zadanie;
+  lokalny fallback bez weryfikacji nadal dziala bez granic roku.
+  Co zrobic: dla list z celowym pominieciem starszych arkuszy pobierz bez
+  granicy i odfiltruj po `extra.campaign.date`, albo obniz granice.
+- `DownloadManager(campaigns=None)` domyslnie wybiera `all` z `max_year`,
+  bez gornej granicy `newest`; jawne `newest` z `max_year` jest bledem.
+  Co zrobic: przy gornej granicy usun `campaigns="newest"` i uwzglednij
+  wszystkie loty z przedzialu w `kampanie/`.
 
 ### Naprawione
 
