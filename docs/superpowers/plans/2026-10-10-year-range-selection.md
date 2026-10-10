@@ -848,3 +848,13 @@ Wprowadzone w specu w tym samym commicie co plan:
   druga sluzy tez LAZ, gdzie jawne `newest` z gorna granica jest
   dozwolone (Q8). LAZ zachowuje domyslne `campaigns="newest"` zamiast
   sentinela (zachowanie identyczne ze specem 8.5).
+
+## Korekta po Task 8 (2026-10-10)
+
+- **T21a nieprawdziwy:** fixtures `real_2026_10_06/w2_*` byly nagrane dla
+  okna C13 `637400,487000,637450,487050`, a testy odtwarzaly je dla
+  `W2_BBOX` (`637200,486900,637500,487100`). Przebieg na zywo `--year
+  2022` pobral dwa kafle (`7.173.21.06.1`, `.06.2`); nagranie dla
+  `W2_BBOX` (`tests/fixtures/gugik_laz/real_2026_10_10/`) to potwierdza.
+  Kod zgodny z P8; poprawione testy, ADR-032, ARCHITECTURE 4.7 i spec
+  (T21a, T25). Pomocniki `laz_session` sprawdzaja teraz okno `BBOX`.

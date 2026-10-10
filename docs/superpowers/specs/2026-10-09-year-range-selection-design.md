@@ -241,11 +241,11 @@ N-34-139-C-a-3-{1..4} z `--bbox`/`--geometry`/hierarchii.
 | T19 | Obszar PL+CZ pod `auto` | `--bbox ... --country auto --year 2023` | `Info: --campaigns/--min-year/--max-year/--year dotycza tylko czesci PL (CZ: biezaca wersja danych CUZK)`; czesc PL wg tej tabeli; CZ biezaca |
 | T20 | Wycinek `--target-crs` z flaga roku (P6) | `--bbox ... --target-crs EPSG:5514 --year 2024` (takze `--min-year`, `--max-year`) | `Error: --year nie dziala z --target-crs — wycinek sklada najnowsze kampanie, nazwa wycinka nie niesie roku` (nazwa flagi wg podanej); kod 1; przed siecia; nic nie pobrano |
 | T21 | LAZ, rocznik w przedziale pokrywa to, co referencja | w2, `--product laz --year 2023` (referencja: kafel 2025 N-34-139-A-c-1-1-3-4; kafel 2023 ma ten sam godlo, czyli te sama rame) | pobranie kafla 2023; `Info:` o kaflach pominietych jak dzis; kod 0 |
-| T21a | LAZ, rocznik w przedziale pokrywa referencje czesciowo | w2, `--year 2022` (kafel 2022 7.173.21.06.2 obejmuje ok. 53 % obszaru — pomiar 2026-10-10: niepokryty kawalek 28 198 m2 z 60 000 m2) | konflikt P8: `Error:` z kaflem referencji N-34-139-A-c-1-1-3-4 i latami kafli przecinajacych niepokryty kawalek; podpowiedz `--min-year 2022`; kod 1; nic nie pobrano |
+| T21a | LAZ, rocznik pokrywa referencje dopiero kilkoma kaflami | w2, `--year 2022` (korekta 2026-10-10 po nagraniu dla `W2_BBOX`: rok 2022 ma tu DWA kafle PL-2000 `7.173.21.06.1` i `.06.2`; zaden sam nie pokrywa obszaru, razem tak; wczesniejszy pomiar "53 %" wynikal z fixtures nagranych dla mniejszego okna C13) | pobranie obu kafli 2022; kod 0. Konflikt P8 na czesci kafli referencji: obszar w3 (T22 na dwoch kaflach, 10.3) |
 | T22 | LAZ, rocznik w usludze, brak kafli w czesci obszaru | w2, `--year 2024` (warstwa 2024 istnieje, w w2 pusta) | `Error: brak kafli LAZ z roku 2024 dla 1 z 1 kafli obszaru — nic nie pobrano:` / `  N-34-139-A-c-1-1-3-4 (2025, PL-1992): dostepne roczniki 2022, 2023, 2025` / podpowiedz `--min-year 2024` i `--max-year 2024`; kod 1 |
 | T23 | LAZ, rocznik nieobecny w usludze | `--year 2017` na EVRF2007 (warstwy 2018..2026) | `Error: rocznik 2017 nie istnieje w usludze EVRF2007 (dostepne: 2026, ..., 2018)` — jak dzis, bez GetFeature; dla przedzialu bez wspolnego rocznika z usluga: `Error: przedzial 2010-2017 nie ma rocznika w usludze EVRF2007 (dostepne: ...)` |
 | T24 | LAZ, obszar bez kafli w zadnym roku | bbox na morzu, `--year 2023` | jak dzis: `Error: No LAZ tiles found ...`, kod 1 (referencja pusta — nie ma z czym porownac) |
-| T25 | LAZ, dwie dostawy NIE tego samego arkusza w jednym roku | Wroclaw 2025 (ADR-029), `--year 2025` | obie zostaja (NIE nie pokrywa) — ADR-029 bez zmian; sidecary roznia sie `extra.url` i nowym `extra.acquisition_date` |
+| T25 | LAZ, dwie dostawy NIE tego samego arkusza w jednym roku | Wroclaw `6.150.13.16.4` (ADR-029), domyslnie i `--max-year 2025` | obie zostaja (NIE nie pokrywa) — ADR-029 bez zmian; zostaje tez kafel 2024 PL-1992 `M-33-35-A-c-4-4-3-2`, ktorego nie pokrywa zaden kafel TAK. `--year 2025` = konflikt P8 (pomiar 2026-10-10): rok 2025 ma tu tylko dostawy NIE, referencja 2024 zostaje niepokryta; `Error:` wymienia ja z latami 2019, 2022, 2024, 2025 (2025 = lata dostaw NIE przecinajacych niepokryty kawalek) |
 
 ## 6. CLI: flagi, komunikaty, kody wyjscia
 
@@ -578,7 +578,7 @@ N-34-139-C-a-3-{1..4}, warstwy 2023iStarsze/2024/2025/2026), helper
 | `test_cli_explicit_newest_with_year_rejected` | CLI | T26: tekst, kod 1, przed siecia, dla `--year` i `--max-year`; `--campaigns newest --min-year` przechodzi (T26a); `--campaigns all --year` = jak bez `--campaigns` |
 | `test_cli_year_flags_rejected_with_target_crs` | CLI | T20: `--year`, `--min-year`, `--max-year` z `--target-crs` -> tekst 6.4, kod 1, `GugikProvider` nie tworzony |
 | `test_laz_year_2023_w2_covers_reference` | LAZ | T21: kafel 2023 wybrany; `test_c13_year_2023_returns_the_single_older_tile` (`tests/test_real_gugik_responses.py:614`) — wynik kafli bez zmian, odpytane wszystkie roczniki |
-| `test_laz_year_2022_w2_partial_cover_conflict` | LAZ | T21a: `YearRangeError` z kaflem N-34-139-A-c-1-1-3-4 |
+| `test_laz_year_2022_two_tiles_together_cover_w2_reference` | LAZ | T21a (korekta 2026-10-10): dwa kafle 2022 wybrane, bez bledu |
 | `test_laz_year_2024_w2_conflict_lists_years` | LAZ | T22: `YearRangeError({"N-34-139-A-c-1-1-3-4": (2022, 2023, 2025)})`; wszystkie roczniki odpytane |
 | `test_laz_range_without_service_year` | LAZ | T23 |
 | `test_laz_year_and_range_exclusive` | LAZ | 8.5 (rozszerzenie `test_year_and_min_year_are_exclusive`, `tests/test_laz_campaigns.py:105`) |
@@ -606,6 +606,15 @@ przy samym `--max-year` (6.2).
 | LAZ: obszar o dwoch kaflach referencyjnych, z ktorych jeden ma TYLKO nowszy rocznik | T22 na dwoch kaflach (czesciowy konflikt), podpowiedz | GetFeature per rocznik (jak C13) dla bboxa na skraju kampanii 2025 (np. granica nalotu warszawskiego); pliki `w3_EVRF2007_<rok>.xml` |
 | LAZ: dwie dostawy NIE tego samego arkusza w jednym roku | T25 | GetFeature 2025 dla Wroclawia (ADR-029) |
 | NMT: arkusz PL-2000 z dwoma lotami w roku | regresja strefy w kluczu | C6-podobny (`6.129.30`) — w fixtures 1 lot/rok; wybor arkusza z `SkorowidzeNMT2025` po sprawdzeniu w QGIS |
+
+Stan nagran (2026-10-10, `tests/fixtures/gugik_laz/real_2026_10_10/`,
+`tests/fixtures/gugik_skorowidz/real_2026_10_10/orto/`): orto —
+N-33-130-D-d-1-4 (Poznan, 2025: dwa loty RGB 0,25 m); LAZ w3 —
+`627706,479258,628006,479558` (`--year 2019`: kafel tylko z nowszymi
+latami; `--year 2025`: kafel tylko ze starszym); LAZ Wroclaw —
+`6.150.13.16.4`; NMT PL-2000 z dwoma lotami w roku — NIE znaleziony
+(112 arkuszy 1:2000 w 6 miastach, okolice c14 i `6.129.30`: zaden rok
+z > 1 lotem), test nie powstal.
 
 Nagrywanie wg `tests/fixtures/gugik_skorowidz/real_2026_10_06/README.md`
 (pliki bez edycji; dane poza repo, tylko wybrany podzbior do fixtures;
