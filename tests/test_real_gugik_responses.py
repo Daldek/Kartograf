@@ -18,7 +18,8 @@ import pytest
 import requests
 
 from kartograf.core.sheet_parser import BBox, SheetParser
-from kartograf.exceptions import DownloadError, NoCoverageError
+from kartograf.download.laz import download_laz_area
+from kartograf.exceptions import DownloadError, NoCoverageError, YearRangeError
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import GugikLazProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
@@ -611,12 +612,50 @@ class TestLazDiscoveryOnRealWfs:
             "2000"
         ]
 
-    def test_c13_year_2023_returns_the_single_older_tile(self):
+    def test_laz_year_2023_w2_covers_reference(self):
         session = laz_session()
         tiles = GugikLazProvider(session=session).discover_tiles(W2_BBOX, year=2023)
         assert [(t.godlo, t.year) for t in tiles] == [("N-34-139-A-c-1-1-3-4", 2023)]
         assert file_id(tiles[0].url) == "78044_1403296"
-        assert feature_years(session) == ["2023"]
+        assert feature_years(session) == [str(y) for y in range(2026, 2017, -1)]
+
+    def test_laz_year_2022_w2_partial_cover_conflict(self):
+        session = laz_session()
+        with pytest.raises(YearRangeError) as caught:
+            GugikLazProvider(session=session).select_tiles(W2_BBOX, year=2022)
+        err = caught.value
+        assert err.sheets == {"N-34-139-A-c-1-1-3-4": (2023, 2025)}
+        assert err.min_year == err.max_year == 2022
+        assert "--min-year 2022" in str(err)
+        assert feature_years(session) == [str(y) for y in range(2026, 2017, -1)]
+
+    def test_laz_year_2024_w2_conflict_lists_years(self, tmp_path):
+        session = laz_session()
+        provider = GugikLazProvider(session=session)
+        provider.download = MagicMock()  # type: ignore[method-assign]
+        with pytest.raises(YearRangeError) as caught:
+            download_laz_area(
+                W2_BBOX, output_dir=tmp_path, provider=provider, year=2024
+            )
+        err = caught.value
+        assert err.sheets == {"N-34-139-A-c-1-1-3-4": (2022, 2023, 2025)}
+        assert "brak kafli LAZ z roku 2024 dla 1 z 1 kafli obszaru" in str(err)
+        assert "N-34-139-A-c-1-1-3-4 (2025, PL-1992)" in str(err)
+        assert "--min-year 2024" in str(err)
+        assert "--max-year 2024" in str(err)
+        assert feature_years(session) == [str(y) for y in range(2026, 2017, -1)]
+        provider.download.assert_not_called()
+        assert list(tmp_path.iterdir()) == []
+
+    @pytest.mark.parametrize(
+        "bounds",
+        [{"min_year": 2010, "max_year": 2017}, {"year": 2017}],
+    )
+    def test_laz_range_without_service_year(self, bounds):
+        session = laz_session()
+        with pytest.raises(DownloadError, match="2017.*usludze EVRF2007"):
+            GugikLazProvider(session=session).select_tiles(W2_BBOX, **bounds)
+        assert feature_years(session) == []
 
     def test_c13_min_density_13_drops_the_12_p_m2_tile(self):
         tiles = GugikLazProvider(session=laz_session()).discover_tiles(

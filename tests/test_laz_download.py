@@ -18,7 +18,7 @@ from kartograf import download_laz_area, run_laz_download
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.laz import LazDownloadResult
 from kartograf.download.storage import FileStorage
-from kartograf.exceptions import DownloadError, NoCoverageError
+from kartograf.exceptions import DownloadError, YearRangeError
 from kartograf.providers.pl.gugik_laz import (
     GugikLazProvider,
     LazTile,
@@ -315,16 +315,18 @@ class TestDownloadLazArea:
         assert [(t.godlo, t.year) for t in result.tiles] == [("7.173.21.06.2", 2022)]
         assert _sidecar(result.downloaded[0])["request"]["year"] == 2022
 
-    def test_no_tiles_raise_no_coverage(self, tmp_path):
+    def test_year_with_empty_service_layer_conflicts_before_download(self, tmp_path):
         session = wfs_session()
-        with pytest.raises(NoCoverageError, match="No LAZ tiles found"):
+        with pytest.raises(YearRangeError) as caught:
             download_laz_area(
                 W2_AREA,
                 output_dir=tmp_path,
-                year=2026,  # the layer exists, 0 features (C13 L5)
+                year=2026,  # the layer exists, but no tiles here
                 provider=GugikLazProvider(session=session),
             )
+        assert caught.value.sheets == {"N-34-139-A-c-1-1-3-4": (2022, 2023, 2025)}
         assert downloaded_urls(session) == []
+        assert list(tmp_path.iterdir()) == []
 
     def test_vertical_crs_mismatch_with_provider_is_rejected(self, tmp_path):
         with pytest.raises(ValueError, match="KRON86"):

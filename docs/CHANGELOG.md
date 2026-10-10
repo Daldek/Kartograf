@@ -31,6 +31,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   z wiekszym pokryciem, gdy istnieje); biblioteka zwraca ten ID w
   `SheetFetch.better_coverage` i `DownloadResult.better_coverage`.
   Dowiazanie nadal wskazuje najnowszy lot, nie lot o najwiekszym pokryciu.
+- Biblioteka LAZ: `select_tiles(max_year=)`, `discover_tiles(max_year=)` i
+  `download_laz_area(max_year=)` wybieraja kafle z domknietego przedzialu.
+  Sidecar LAZ zapisuje `request.max_year` (i `request.year`, gdy granice sa
+  rowne), a dla znanych wartosci `extra.acquisition_date` i `extra.full_sheet`.
+
 
 ### Zmienione
 
@@ -60,6 +65,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   bez gornej granicy `newest`; jawne `newest` z `max_year` jest bledem.
   Co zrobic: przy gornej granicy usun `campaigns="newest"` i uwzglednij
   wszystkie loty z przedzialu w `kampanie/`.
+- LAZ `--year`/`--min-year`: czesci obszaru dostepne tylko w innych
+  rocznikach byly pobierane czesciowo bez komunikatu; teraz zadanie
+  zatrzymuje sie przed pobraniem, podaje roczniki kafli i podpowiedz.
+  WFS pyta o wszystkie roczniki uslugi takze z `--year`. Co zrobic:
+  jesli chcesz swiadomie pobrac mniej danych, zastosuj podpowiedz
+  `--min-year`/`--max-year` lub zawez `--bbox`.
 
 ### Naprawione
 

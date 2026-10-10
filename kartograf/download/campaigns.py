@@ -179,18 +179,25 @@ def year_range_error(
     *,
     total: int,
     unit: str = "arkuszy",
+    subject: str = "danych",
+    labels: Mapping[str, str] | None = None,
 ) -> YearRangeError:
-    """Build the 6.2 conflict message and retain every sheet's available years."""
+    """Build the conflict message and retain every sheet's available years.
+
+    ``subject`` and optional per-sheet ``labels`` let LAZ report reference
+    tile vintages without duplicating the year-range formatting and hints.
+    """
     sheets = {
         godlo: tuple(sorted(set(years))) for godlo, years in sorted(conflicts.items())
     }
     hints = year_range_hints(sheets, min_year, max_year)
     lines = [
-        f"brak danych {year_range_label(min_year, max_year)} "
+        f"brak {subject} {year_range_label(min_year, max_year)} "
         f"dla {len(sheets)} z {total} {unit} — nic nie pobrano:"
     ]
     lines.extend(
-        f"  {godlo}: dostepne roczniki {', '.join(map(str, years))}"
+        f"  {godlo}{' ' + labels[godlo] if labels and godlo in labels else ''}: "
+        f"dostepne roczniki {', '.join(map(str, years))}"
         for godlo, years in list(sheets.items())[:20]
     )
     if len(sheets) > 20:

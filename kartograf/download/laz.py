@@ -46,7 +46,7 @@ LazProgressCallback = Callable[[int, int], None]
 
 NO_TILES_MESSAGE = (
     "No LAZ tiles found for the given area (sprawdz obszar, --year, "
-    "--min-year i --vertical-crs; wszystkie roczniki WFS odpowiedzialy)"
+    "--min-year, --max-year i --vertical-crs; wszystkie roczniki WFS odpowiedzialy)"
 )
 
 
@@ -92,18 +92,16 @@ def write_laz_sidecar(
     min_density: int | None = None,
     campaigns: str = "newest",
     min_year: int | None = None,
+    max_year: int | None = None,
     parent_request: dict | None = None,
 ) -> None:
     """Best-effort LAZ tile sidecar via ``emit_sidecar`` (error = warning in log).
 
-    ``request`` describes the actual request: the bbox and the ``year`` and
-    ``min_density`` filters, when given (E16). ``extra.nominal_density`` and
-    ``min_density`` are the NOMINAL value from the GUGiK WFS
-    (``char_przestrz``) — the actual tile density is often several times
-    higher. ``request.campaigns`` only for ``"all"`` (``newest`` = ADR-029,
-    unchanged), ``request.min_year`` when given (ADR-030).
-    ``extra.parent_request`` — only when given (ADR-023 (f).1: ``--bbox``/
-    ``--geometry`` mode).
+    ``request`` describes the bbox and requested year/density bounds (E16).
+    ``extra.nominal_density`` is the NOMINAL value from GUGiK WFS
+    (``char_przestrz``); actual density is often several times higher.
+    ``extra.acquisition_date`` and ``extra.full_sheet`` come from WFS when
+    known. ``extra.parent_request`` is only present when passed (ADR-023 (f).1).
     """
     from kartograf.sources.registry import horizontal_crs_for_uklad
     from kartograf.sources.sidecar import emit_sidecar
@@ -112,20 +110,26 @@ def write_laz_sidecar(
         "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
         "bbox_crs": bbox.crs,
     }
-    if year is not None:
-        request["year"] = year
+    if year is not None or (min_year is not None and min_year == max_year):
+        request["year"] = year if year is not None else min_year
     if min_density is not None:
         request["min_density"] = min_density
     if campaigns == "all":
         request["campaigns"] = campaigns
     if min_year is not None:
         request["min_year"] = min_year
+    if max_year is not None:
+        request["max_year"] = max_year
     extra: dict = {
         "tile_sheet": tile.godlo,
         "year": tile.year,
         "nominal_density": tile.density,
         "url": tile.url,
     }
+    if tile.date is not None:
+        extra["acquisition_date"] = tile.date
+    if tile.full_sheet is not None:
+        extra["full_sheet"] = tile.full_sheet
     if parent_request is not None:
         extra["parent_request"] = parent_request
     key = getattr(provider, "descriptor_key", None)
@@ -152,6 +156,7 @@ def run_laz_download(
     min_density: int | None = None,
     campaigns: str = "newest",
     min_year: int | None = None,
+    max_year: int | None = None,
     max_workers: int = 1,
     force: bool = False,
     on_progress: LazProgressCallback | None = None,
@@ -169,9 +174,8 @@ def run_laz_download(
     and successful tiles stay on disk. Other exceptions (e.g. a write
     ``OSError``) abort the call.
 
-    ``bbox``, ``year``, ``min_density``, ``campaigns``, ``min_year`` and
-    ``parent_request`` describe the request in the sidecars (``request`` and
-    ``extra.parent_request``).
+    ``bbox``, ``year``, ``min_density``, ``campaigns``, ``min_year``,
+    ``max_year`` and ``parent_request`` describe the request in the sidecars.
     """
     storage = FileStorage(output_dir, product="laz", vertical_crs=provider.vertical_crs)
     tiles = selection.tiles
@@ -194,6 +198,7 @@ def run_laz_download(
             min_density=min_density,
             campaigns=campaigns,
             min_year=min_year,
+            max_year=max_year,
             parent_request=parent_request,
         )
         return "ok", tile, target, None
@@ -242,6 +247,7 @@ def download_laz_area(
     min_density: int | None = None,
     campaigns: str = "newest",
     min_year: int | None = None,
+    max_year: int | None = None,
     max_workers: int = 1,
     force: bool = False,
     on_progress: LazProgressCallback | None = None,
@@ -263,17 +269,14 @@ def download_laz_area(
         defaults to its vertical CRS; an explicit, different value is a
         ``ValueError``.
     year, min_density
-        WFS filters (as in ``GugikLazProvider.select_tiles``). Without
-        ``year`` tiles are selected from the newest vintage, and an older
-        tile is dropped when its intersection with the area is covered by
-        newer ones (``result.superseded``); with ``year`` — only that
-        vintage.
+        Acquisition year / nominal-density filters. With ``year``, reference
+        coverage must be available within that year before downloading.
     campaigns : {"newest", "all"}
         ``"newest"`` — ADR-029 selection; ``"all"`` — every tile
         intersecting the area, without deduplication (ADR-030).
-    min_year : int, optional
-        Lower bound on ``akt_rok`` (older vintages are not queried);
-        mutually exclusive with ``year`` (``ValidationError``).
+    min_year, max_year : int, optional
+        Closed acquisition-year bounds; an uncovered reference tile raises
+        ``YearRangeError`` before any download. Exclusive with ``year``.
     parent_request : dict, optional
         Sidecar ``extra.parent_request`` (ADR-023 (f).1) — the CLI passes it
         in ``--bbox``/``--geometry`` mode.
@@ -293,13 +296,13 @@ def download_laz_area(
     ValueError
         ``bbox`` not in EPSG:2180, or an unknown / mismatched ``vertical_crs``.
     ValidationError
-        Unknown ``campaigns``, or ``year`` together with ``min_year``.
+        Unknown ``campaigns``/year bounds or ``year`` with a bound.
     DownloadError
-        WFS discovery failure (the result would be incomplete) or a
-        nonexistent ``year``.
+        WFS discovery failure or no matching year in the service.
+    YearRangeError
+        A reference tile has data outside the requested range only.
     NoCoverageError
-        (a ``DownloadError`` subclass) the WFS responded, but there are no
-        tiles for the area and filters.
+        (a ``DownloadError`` subclass) no tiles in any year for the area.
     """
     if provider is None:
         provider = GugikLazProvider(vertical_crs=vertical_crs or "EVRF2007")
@@ -315,6 +318,7 @@ def download_laz_area(
         tolerance_m=tolerance_m,
         campaigns=campaigns,
         min_year=min_year,
+        max_year=max_year,
     )
     if not selection.tiles:
         raise NoCoverageError(NO_TILES_MESSAGE)
@@ -327,6 +331,7 @@ def download_laz_area(
         min_density=min_density,
         campaigns=campaigns,
         min_year=min_year,
+        max_year=max_year,
         max_workers=max_workers,
         force=force,
         on_progress=on_progress,
