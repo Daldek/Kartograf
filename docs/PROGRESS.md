@@ -103,15 +103,15 @@
 > w CHANGELOG); ostatnie wydanie: v0.7.1 (2026-10-09). Stan galezi, tagow
 > i `origin` sprawdzaj w gicie (`git status`, `git log`,
 > `git ls-remote --tags origin`), nie w tym dzienniku.
-> **Zrobione w 0.7.2:** drobiazgi z review 0.7.1 (P1-P10) na galezi
+> **Zrobione w 0.7.2:** drobiazgi z review 0.7.1 (P1-P10), galaz
 > `fix/review-0.7.1` (spec
 > `docs/superpowers/specs/2026-10-09-review-0.7.1-drobiazgi-design.md`,
 > plan `docs/superpowers/plans/2026-10-09-review-0.7.1-drobiazgi.md`,
 > raport `docs/research/2026-10-10-review-0.7.1/raport.md`, review galezi
-> bez blokerow, audyt dokumentacji zgodny). Galaz NIE jest jeszcze
-> scalona: merge `--no-ff` do `develop` i usuniecie galezi czekaja na zgode
-> uzytkownika — ten wpis jest na galezi, na `develop` go nie ma, dopoki nie
-> bedzie merge. Nic nie wypchniete na `origin` (push tylko na polecenie).
+> bez blokerow, audyt dokumentacji zgodny) scalona `--no-ff` do `develop`
+> 2026-10-10 (brama na wyniku zielona), galaz usunieta, `develop`
+> wypchniety na `origin`. Kolejna praca: galaz `feat/year-range`
+> z `develop` (pozycja (b) nizej).
 > **Nastepne w 0.7.2:** backlog "Do 0.7.2" nizej (decyzje uzytkownika
 > 2026-10-09), kazda pozycja dopiero po specu/planie i zatwierdzeniu:
 > (a) wycinki PL z WCS (nowy ADR, odwraca ADR-027); (b) wybor roku
