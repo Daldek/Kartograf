@@ -52,6 +52,14 @@ def test_bbox_param_widened_outward():
     )
 
 
+def test_number_returned_mismatch_raises():
+    """P6: a feature without JPT_KOD_JE must not shorten the list silently."""
+    body = (FIX / "two_counties.xml").read_text(encoding="utf-8")
+    body = re.sub(r"<ms:JPT_KOD_JE>[^<]*</ms:JPT_KOD_JE>", "", body, count=1)
+    with pytest.raises(DownloadError, match="numberReturned=2"):
+        discover_teryts_for_bbox(BARDO, session=_session(body))
+
+
 def test_sea_is_empty_list():
     session = _session((FIX / "no_counties.xml").read_text(encoding="utf-8"))
     assert discover_teryts_for_bbox(BARDO, session=session) == []

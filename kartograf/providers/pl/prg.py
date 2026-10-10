@@ -98,9 +98,11 @@ def _query(bbox: BBox, session: requests.Session, timeout: float) -> list[str]:
 
 
 def _check_complete(root: ET.Element, found: int) -> None:
-    """DownloadError when the server may have cut the list (Review Focus 1).
+    """DownloadError when the list may be incomplete (Review Focus 1, P6).
 
-    Cut = ``numberReturned < numberMatched``; with a non-numeric
+    A numeric ``numberReturned`` different from the number of parsed codes
+    (``found``) means features without ``JPT_KOD_JE``. Cut =
+    ``numberReturned < numberMatched``; with a non-numeric
     ``numberMatched`` (MapServer ``unknown``: matches not counted) a full
     page (``>= _COUNT``) counts as cut; a ``next`` link always does. The
     real MapServer page (recorded 2026-10-08) carries ``unknown`` and a
@@ -108,7 +110,12 @@ def _check_complete(root: ET.Element, found: int) -> None:
     """
     matched = root.get("numberMatched", "")
     returned_attr = root.get("numberReturned", "")
-    returned = int(returned_attr) if returned_attr.isdigit() else found
+    if returned_attr.isdigit() and int(returned_attr) != found:
+        raise DownloadError(
+            f"PRG WFS: niespojna odpowiedz: numberReturned={returned_attr}, "
+            f"kodow {found}"
+        )
+    returned = found
     # non-numeric numberMatched ('unknown'): a full page counts as cut
     cut = returned < int(matched) if matched.isdigit() else returned >= _COUNT
     if cut or root.get("next"):
