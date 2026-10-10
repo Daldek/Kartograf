@@ -264,24 +264,35 @@ def create_parser() -> argparse.ArgumentParser:
         "--year",
         type=int,
         metavar="YYYY",
-        help="LAZ only (--product laz; an error with other products): restrict "
-        "to a single acquisition year (default: newest available per tile); "
-        "wyklucza sie z --min-year",
+        help="Tylko ten rok danych (PL: rok pozyskania aktualnosc NMT/NMPT/orto, "
+        "akt_rok LAZ); skrot --min-year YYYY --max-year YYYY; wszystkie kampanie "
+        "z roku; brak roku na ktoryms arkuszu/kaflu = blad przed pobraniem; "
+        "nie dziala z --target-crs",
     )
     download_parser.add_argument(
         "--campaigns",
         choices=["newest", "all"],
-        default="newest",
+        default=None,
         help="Kampanie GUGiK (tylko PL): newest = najnowsza kampania arkusza "
-        "(default), all = wszystkie kampanie do <segment>/kampanie/; "
+        "(default bez --max-year/--year), all = wszystkie kampanie do "
+        "<segment>/kampanie/ (default i jedyna strategia z --year/--max-year); "
         "LAZ: all = bez deduplikacji pokrycia",
     )
     download_parser.add_argument(
         "--min-year",
         type=int,
         metavar="YYYY",
-        help="Tylko PL: pomin kampanie starsze niz YYYY (rok aktualnosci; "
-        "LAZ: rok akt_rok); nie dziala z --target-crs",
+        help="Tylko PL: dolna granica roku danych (wlacznie); bez --campaigns all "
+        "pobiera najnowsza kampanie i konczy sie bledem, gdy jest starsza; "
+        "nie dziala z --target-crs",
+    )
+    download_parser.add_argument(
+        "--max-year",
+        type=int,
+        metavar="YYYY",
+        help="Tylko PL: gorna granica roku danych (wlacznie) — wszystkie kampanie "
+        "nie pozniejsze niz YYYY, dowiazanie na najnowsza z nich; "
+        "nie dziala z --target-crs",
     )
     download_parser.add_argument(
         "--min-density",
