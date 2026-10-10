@@ -111,27 +111,32 @@
 > bez blokerow, audyt dokumentacji zgodny) scalona `--no-ff` do `develop`
 > 2026-10-10 (brama na wyniku zielona), galaz usunieta, `develop`
 > wypchniety na `origin`.
-> **(b) wybor roku — ZAIMPLEMENTOWANY, czeka na merge:** galaz
-> `feat/year-range` (Task 1-8 planu
-> `docs/superpowers/plans/2026-10-10-year-range-selection.md`; ADR-032;
-> raport na zywo `docs/research/2026-10-10-year-range/raport.md`; review
-> galezi "correct", bez blokerow, poprawki P3 w `026c5c4`). Merge `--no-ff`
-> do `develop` i usuniecie galezi TYLKO po zgodzie uzytkownika (2026-10-10:
-> "czekaj").
-> **Nastepne w 0.7.2:** po merge (b) kolejno (c) -> (d) -> (a) z backlogu
-> "Do 0.7.2" nizej (kolejnosc zatwierdzona 2026-10-10; kazda pozycja
-> dopiero po specu/planie i zatwierdzeniu): (c) drugie dowiazanie do
-> najnowszego pelnego lotu; (d) ciche wartosci domyslne z inwentaryzacji;
-> (a) wycinki PL z WCS (nowy ADR).
-> **Decyzje uzytkownika z (b), 2026-10-10 — wdrozone na galezi:** LAZ
-> `--year` przy rocznikach tylko z dostawami `NIE` dopisuje w `Error:`
-> `(tylko arkusze niepelne)`; `discover_tiles` dostal `min_year` (symetria
-> z `select_tiles`); po audycie logiki flag CLI **model A** (flagi roku =
-> filtr dopuszczalnych lat, `--campaigns` = liczba lotow, domyslnie jeden;
-> `Info:` gdy dowiazanie zostaje przy nowszym locie spoza zadania) — spec
-> sekcja 0 (U14-U16), ADR-032 pkt 3. Przelacznik zamiast `--campaigns
-> {newest,all}` w 0.8.0 (backlog). Przy wydaniu 0.7.2:
-> `docs/PRD.md` (`__version__ # "0.7.1"`), SCOPE i data w CHANGELOG.
+> **(b) wybor roku — SCALONY do `develop` 2026-10-10** (merge `--no-ff`
+> `09070bf`, brama na wyniku zielona, galaz `feat/year-range` usunieta;
+> `develop` NIE wypchniety na `origin` — push to osobna decyzja
+> uzytkownika). Model A: flagi roku = filtr dopuszczalnych lat,
+> `--campaigns` = liczba lotow (domyslnie jeden); `Info:`, gdy dowiazanie
+> zostaje przy nowszym locie spoza zadania; LAZ: dopisek `(tylko arkusze
+> niepelne)`, `discover_tiles(min_year=)`. Zrodla: spec
+> `docs/superpowers/specs/2026-10-09-year-range-selection-design.md`
+> (sekcja 0 = model A, nadrzedna), ADR-032, raport
+> `docs/research/2026-10-10-year-range/raport.md`.
+> **NASTEPNA SESJA — PRZEJDZ OD RAZU DO POZYCJI (c)** (polecenie
+> uzytkownika 2026-10-10, bez pytania o wybor zadania): "drugie
+> dowiazanie do najnowszego PELNEGO lotu" z backlogu "Do 0.7.2" nizej.
+> Proces jak przy (b): galaz `feat/full-sheet-link` z `develop`, najpierw
+> ustalenia i spec (`docs/superpowers/specs/`) z pytaniami otwartymi
+> z backlogu (arkusze brzegowe, ktore nigdy nie sa pelne; czy dociagac
+> najnowszy pelny lot, gdy pobrano tylko najnowszy; relacja do modelu A,
+> `--campaigns all`, LAZ i wycinkow), akceptacja uzytkownika, plan,
+> implementacja. Dalej w 0.7.2: (d) ciche wartosci domyslne, (a) wycinki
+> PL z WCS (nowy ADR), (e) testy LAZ z nagraniami innego okna; zakres
+> wydania 0.7.2 (czy wszystkie pozycje) — do decyzji uzytkownika.
+> **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
+> na zywo z raportem, `__version__ = "0.7.2"` + asercje testow, data i link
+> `compare/v0.7.1...v0.7.2` w CHANGELOG, status w SCOPE i `docs/PRD.md`
+> (`__version__ # "0.7.1"`), merge `develop` -> `main`, tag `v0.7.2`
+> (annotowany); push na `origin` po decyzji uzytkownika.
 > **Katalog danych testow na zywo:** wskazuje uzytkownik (STANDARDS 6.4);
 > sciezki nie zapisuj w repo (straznik wzorcow commitow ja blokuje) —
 > zapytaj na poczatku sesji, jesli potrzebny.
@@ -153,6 +158,25 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Wybor roku danych — model A i merge do develop (2026-10-10)
+
+- Audyt logiki flag CLI (reviewer, `agent://CliFlagLogicAudit`): asymetria
+  `--min-year` (1 lot) vs `--max-year`/`--year` (wszystkie loty), blad
+  `--campaigns newest` z gorna granica, rozjazd z LAZ, dowiazanie spoza
+  przedzialu bez komunikatu. Decyzja uzytkownika: model A (spec sekcja 0,
+  U14-U16), przelacznik zamiast `--campaigns {newest,all}` w 0.8.0.
+- Wdrozenie `f9b0dc0`: bez sentinela `resolve_campaign_strategy`,
+  `SheetFetch/DownloadResult.link_outside_range` + `Info:` w CLI, `Downloaded
+  to`/`Skipped` wskazuja plik kampanii, gdy dowiazanie zostaje przy nowszym
+  locie; `--help`, USAGE 4.1, ARCHITECTURE 4.1, SCOPE 2.12, CHANGELOG,
+  ADR-032 pkt 3, errata 7 ADR-030. Na zywo: `--year 2025` na C14 = 4 pliki;
+  `--campaigns newest --max-year 2022` po pobraniu 2025 = lot 73021 +
+  `Info:`, kod 0.
+- Wczesniej w sesji (`cdfb509`): dopisek `(tylko arkusze niepelne)` w LAZ,
+  `discover_tiles(min_year=)` (decyzje uzytkownika).
+- Merge `feat/year-range` -> `develop` (`--no-ff`, `09070bf`), brama na
+  wyniku: 3153 testy offline, ruff, mypy czyste; galaz usunieta.
 
 ### Wybor roku danych — Task 8 planu (2026-10-10)
 
@@ -1609,21 +1633,17 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
     `DigitalTerrainModelFormatTIFFEVRF2007`, `DTM_PL-EVRF2007-NH_TIFF`)
     wskazuje nieistniejacy endpoint i coverage (zob. tez WCS EVRF2007 = 404
     od 2026-08-11) — do poprawy.
-- [x] **(b) Wybor roku `--year`/`--min-year`/`--max-year`** wg specu
+- [x] **(b) Wybor roku `--year`/`--min-year`/`--max-year`** — SCALONE do
+  `develop` 2026-10-10 (`09070bf`). Obowiazuje model A (decyzja uzytkownika
+  2026-10-10, spec
   `docs/superpowers/specs/2026-10-09-year-range-selection-design.md`
-  (NMT/NMPT/orto/LAZ; do czasu wdrozenia `--year` poza LAZ to `Error:`,
-  Task 14). Decyzje: Q2 — dowiazanie do najnowszego zostaje, pobierane sa
-  wszystkie loty z przedzialu i dochodzi `Info:` o pokryciu; Q1 — zatrzymanie
-  zadania obowiazkowe; Q4-Q8 przyjete; `newest` + `--min-year` zostaje;
-  `newest` + `--max-year` (i `--year`) = blad; wycinki nie przyjmuja flag
-  roku. Spec uaktualniony 2026-10-10 (wersja 0.7.2; U12 = powyzsze
-  decyzje; U13: samo `--min-year` bez `--campaigns` = jedna, najnowsza
-  kampania, `all` tylko z `--max-year`/`--year` albo jawnym `--campaigns
-  all`); spec zaakceptowany, plan
-  `docs/superpowers/plans/2026-10-10-year-range-selection.md` (2026-10-10).
-  **ZAIMPLEMENTOWANE 2026-10-10** na galezi `feat/year-range` (Task 1-8,
-  ADR-032, raport `docs/research/2026-10-10-year-range/raport.md`);
-  merge do `develop` po zgodzie uzytkownika.
+  sekcja 0, U14-U16, nadrzedna wobec wczesniejszych U9/U13/P3/P3a): flagi
+  roku = filtr dopuszczalnych lat, `--campaigns` = liczba lotow (`newest`
+  domyslnie, kazda kombinacja dozwolona); konflikt roku = stop przed
+  pobraniem; wycinki i CZ bez flag roku; `Info:` przy dowiazaniu spoza
+  zadania. ADR-032, plan
+  `docs/superpowers/plans/2026-10-10-year-range-selection.md`, raport
+  `docs/research/2026-10-10-year-range/raport.md`.
 - [ ] **(c) Drugie dowiazanie do najnowszego PELNEGO lotu**
   (`calyArkuszWypelnionyTrescia` = TAK) obok standardowego dowiazania do
   najnowszego. Proponowane osobne drzewo:
