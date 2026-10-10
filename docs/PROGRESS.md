@@ -121,15 +121,17 @@
 > `docs/superpowers/specs/2026-10-09-year-range-selection-design.md`
 > (sekcja 0 = model A, nadrzedna), ADR-032, raport
 > `docs/research/2026-10-10-year-range/raport.md`.
-> **NASTEPNA SESJA — PRZEJDZ OD RAZU DO POZYCJI (c)** (polecenie
-> uzytkownika 2026-10-10, bez pytania o wybor zadania): "drugie
-> dowiazanie do najnowszego PELNEGO lotu" z backlogu "Do 0.7.2" nizej.
-> Proces jak przy (b): galaz `feat/full-sheet-link` z `develop`, najpierw
-> ustalenia i spec (`docs/superpowers/specs/`) z pytaniami otwartymi
-> z backlogu (arkusze brzegowe, ktore nigdy nie sa pelne; czy dociagac
-> najnowszy pelny lot, gdy pobrano tylko najnowszy; relacja do modelu A,
-> `--campaigns all`, LAZ i wycinkow), akceptacja uzytkownika, plan,
-> implementacja. Dalej w 0.7.2: (d) ciche wartosci domyslne, (a) wycinki
+> **(c) drugie dowiazanie do najnowszego PELNEGO lotu — ZAIMPLEMENTOWANE
+> na galezi `feat/full-sheet-link`, NIE scalone** (decyzja uzytkownika
+> 2026-10-10: galaz zostaje, merge w kolejnej sesji po jego decyzji;
+> galaz NIE wypchnieta na `origin`). Plan
+> `docs/superpowers/plans/2026-10-10-full-sheet-link.md` wykonany
+> (Task 1-5 + review + test na zywo), ADR-033, raport
+> `docs/research/2026-10-10-full-sheet-link/raport.md`. Spec:
+> `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`.
+> **NASTEPNA SESJA:** decyzja uzytkownika o merge `--no-ff`
+> `feat/full-sheet-link` -> `develop` (przed merge brama na galezi), potem
+> backlog (c) [x]. Dalej w 0.7.2: (d) ciche wartosci domyslne, (a) wycinki
 > PL z WCS (nowy ADR), (e) testy LAZ z nagraniami innego okna; zakres
 > wydania 0.7.2 (czy wszystkie pozycje) — do decyzji uzytkownika.
 > **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
@@ -158,6 +160,72 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Drugie dowiazanie do pelnego lotu — implementacja (2026-10-10)
+
+- Galaz `feat/full-sheet-link`, commity: `9fef2bb` (Task 1: `FULL_SHEET_DIR`,
+  `FileStorage.get_full_sheet_path`, `list_files`/`delete`, nazwy
+  `ensure_link`/`write_link_sidecar`), `807bf08` (Task 2: drugie dowiazanie
+  w `_fetch_campaigns`, `SheetFetch.full_link`/`full_link_outside_range`,
+  `DownloadResult.full_links`/`full_link_outside_range`), `bd4c99f` (Task 3:
+  `DownloadManager(full_sheet=True)`, `request.full_sheet`,
+  `DownloadResult.without_full`), `6fd7196` (Task 4: CLI `--full-sheet`,
+  straze LAZ/`--target-crs`/CZ, jeden `Warning:` E13 z grupami, wspolny
+  `Info:` dowiazan spoza zadania), `23c071c` (Task 5: ADR-033, errata 8
+  ADR-030, errata 1 ADR-032, ARCHITECTURE 3.3 regula 7 i 4.1, USAGE 4.2,
+  SCOPE 3.18, CLAUDE.md), `811c637` (poprawki review: dopisek "w zakresie
+  lat zadania" przy grupie "brak pelnego lotu", test grup `Warning:`
+  w hierarchii, raport na zywo).
+- Odstepstwa od planu: (1) F1 — najnowszy lot N-34-139-C-a-3-4 to 83998
+  (2026-04-05, TAK), nie 84183; testy i raport uzywaja 83998. (2)
+  `test_force_refreshes_full_link` podmienia `download_record` na zapis
+  tmp + `os.replace` (jak prawdziwy provider) — zapis w miejscu zachowuje
+  inode i test nie rozroznial odswiezenia. (3) Pojedyncze godlo z
+  `--full-sheet` i > 1 plikiem kampanii drukuje podsumowanie plikow kampanii
+  (jak `all`); lista z flaga tez. (4) `Info:` U15 ma nowy naglowek wspolny
+  dla obu drzew (`Info: N dowiazan wskazuje lokalny lot spoza tego
+  zadania ...`, linia `<godlo>: sciezka standardowa|full_sheet/ ->
+  dowiazanie <data>_<id>`); test U15 asercje na fakty.
+- Review galezi (agent reviewer, Review Focus 1-5): bez blokerow i majorow;
+  3 drobne — dopisek zakresu lat i test grup naprawione w `811c637`,
+  PROGRESS w tej sesji.
+- Na zywo (katalog danych od uzytkownika, poza repo): -4 standard
+  i `full_sheet/` = ten sam inode; -1 bez flagi 1 plik + podpowiedz; z
+  flaga `full_sheet/` -> 83233, `request.full_sheet: true`; powtorka =
+  Skipped + ten sam `Warning:`; orto M-34-90-C-b-4-4 84466 + 81437,
+  `full_sheet/` -> 81437; LAZ i `--target-crs` z flaga = `Error:` kod 1.
+  Raport `docs/research/2026-10-10-full-sheet-link/raport.md`.
+- Brama na galezi: pytest offline zielone (3185), ruff check/format czyste,
+  mypy bez bledow.
+
+### Drugie dowiazanie do pelnego lotu — spec (2026-10-10)
+
+- Galaz `feat/full-sheet-link` z `develop` (`fc4c176`). Ustalenia z kodu:
+  `ensure_standard_link` jest ogolne wzgledem sciezki (reuzycie jako
+  `ensure_link`); `local` w `_fetch_campaigns` to loty TEGO zadania;
+  `FileStorage.list_files` wlicza kazdy katalog segmentu poza `kampanie/`
+  (nowe drzewo trzeba wykluczyc).
+- Spec `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`;
+  decyzje uzytkownika (sekcja 0): Q1 = flaga `--full-sheet` (wariant C),
+  Q2 = brak pliku + komunikat, Q3 = jak U15, Q4 = wycinki ze sciezek
+  standardowych, Q5 = nazwy angielskie; potem zmiana na `full_sheet/`
+  (w kodzie `coverage` = pokrycie zmierzone / brak danych, `full_sheet` =
+  flaga GUGiK) — decyzja uzytkownika, spec zaakceptowany.
+- Pomiar na zywo (pytanie uzytkownika o Slubice): flaga TAK = pelne
+  pokrycie w granicach Polski — 13 plikow TAK (12 arkuszy granicznych
+  DE/CZ/SK/UA/BY/LT + kontrola), 0 px nodata po stronie PL w ramce
+  arkusza; NIE (Terespol 2025) 13,8 % nodata po stronie PL; 61 z 62
+  rekordow 22 arkuszy granicznych to TAK. Plik ASC = obwiednia trapezu
+  ramki (narozniki = nodata, ~10 % takze w glebi kraju). Raport
+  `docs/research/2026-10-10-full-sheet-link/granica-pelne-pokrycie.md`;
+  spec 1.3 poprawiony (Slubice to nie blad flagi).
+- Plan `docs/superpowers/plans/2026-10-10-full-sheet-link.md` (6 zadan,
+  Review Focus 1-5; testy na rekordach C14: N-34-139-C-a-3-1 84183 NIE,
+  83233/78047/73021 TAK). Implementacja przeniesiona do nowej sesji
+  (polecenie uzytkownika).
+- Bez zmian kodu; brama nieuruchamiana (tylko dokumentacja). Skrypty
+  pomiaru granic i pobrane pliki w katalogu danych testow na zywo
+  (`kartograf/e2e/2026-10-10-pelne-pokrycie-granica/`).
 
 ### Wybor roku danych — model A i merge do develop (2026-10-10)
 
@@ -1644,12 +1712,12 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
   zadania. ADR-032, plan
   `docs/superpowers/plans/2026-10-10-year-range-selection.md`, raport
   `docs/research/2026-10-10-year-range/raport.md`.
-- [ ] **(c) Drugie dowiazanie do najnowszego PELNEGO lotu**
-  (`calyArkuszWypelnionyTrescia` = TAK) obok standardowego dowiazania do
-  najnowszego. Proponowane osobne drzewo:
-  `<segment>/pelne/<hierarchia>/<godlo>.<ext>`. Otwarte: arkusze brzegowe,
-  ktore nigdy nie sa pelne; czy pobierac najnowszy pelny lot, gdy pobrano
-  tylko najnowszy.
+- [ ] **(c) Drugie dowiazanie do najnowszego PELNEGO lotu** —
+  ZAIMPLEMENTOWANE na galezi `feat/full-sheet-link` (2026-10-10, ADR-033,
+  raport `docs/research/2026-10-10-full-sheet-link/raport.md`); merge do
+  `develop` czeka na decyzje uzytkownika. Spec
+  `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`, plan
+  `docs/superpowers/plans/2026-10-10-full-sheet-link.md`.
 - [ ] **(d) Z inwentaryzacji wartosci domyslnych:**
   - `--country auto` PL+CZ bez `--vertical-crs`: mieszane uklady wysokosci,
     cicho (szczegoly: "Ryzyko KRON86 3" wyzej);

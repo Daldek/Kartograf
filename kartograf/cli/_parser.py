@@ -294,6 +294,15 @@ def create_parser() -> argparse.ArgumentParser:
         "nie cofa sie na starszy lot; nie dziala z --target-crs",
     )
     download_parser.add_argument(
+        "--full-sheet",
+        action="store_true",
+        help="Tylko PL NMT/NMPT/orto: gdy najnowszy lot arkusza nie jest pelny "
+        "(calyArkuszWypelnionyTrescia), pobierz tez najnowszy pelny lot "
+        "z zakresu lat (najwyzej jeden dodatkowy lot na arkusz) i dowiaz go "
+        "w <segment>/full_sheet/; pelny = w granicach Polski; nie dziala "
+        "z --target-crs ani z LAZ",
+    )
+    download_parser.add_argument(
         "--min-density",
         type=int,
         metavar="N",

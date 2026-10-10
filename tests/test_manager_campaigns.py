@@ -1590,3 +1590,252 @@ def test_record_without_vertical_field_is_downloaded(tmp_path):
     fake = FakeCampaignProvider({"newest": [rec]})
     DownloadManager(tmp_path, provider=fake).download_sheet(G)
     assert fake.downloads == [rec.url]
+
+
+# =============================================================================
+# full_sheet/: second link to the newest declared-full flight (ADR-033)
+# =============================================================================
+
+G4 = "N-34-139-C-a-3-4"
+
+
+def full_path(tmp_path: Path, godlo: str = G) -> Path:
+    parts = godlo.split("-")
+    return (
+        tmp_path
+        / SEGMENT
+        / "full_sheet"
+        / "-".join(parts[:2])
+        / Path(*parts[2:])
+        / f"{godlo}.asc"
+    )
+
+
+def _rec_of(godlo: str, flight: str):
+    return next(r for r in c14_records(godlo) if tag(r).startswith(f"{flight}_"))
+
+
+def test_full_link_same_file_when_newest_full(tmp_path):
+    """F1: the newest flight is full -> both links share the campaign inode."""
+    fake = c14_fake()
+    m = DownloadManager(tmp_path, provider=fake)
+    m.download_sheet(G4)
+    newest = _rec_of(G4, "83998")
+    camp = campaign_path(tmp_path, newest, G4)
+    full = full_path(tmp_path, G4)
+    assert fake.downloads == [newest.url]
+    assert os.path.samefile(full, camp)
+    assert os.path.samefile(full, std_path(tmp_path, G4))
+    extra = meta(full)["extra"]
+    assert extra["link"] == "hardlink" and extra["campaign"]["full_sheet"] is True
+    assert linked_campaign(full) == camp
+    assert m.last_sheet is not None and m.last_sheet.full_link == full
+    assert m.last_result is not None and m.last_result.full_links == {G4: full}
+
+
+def test_without_flag_partial_newest_downloads_one_flight(tmp_path):
+    """F2: no flag, the newest flight is partial -> one flight, no full_sheet/."""
+    fake = c14_fake()
+    m = DownloadManager(tmp_path, provider=fake)
+    m.download_sheet(G)
+    assert fake.downloads == [REC["84183"].url]
+    assert {c[1] for c in fake.resolve_calls} == {"newest"}
+    assert not full_path(tmp_path).exists()
+    assert m.last_result is not None and m.last_result.full_links == {}
+    assert m.last_sheet is not None and m.last_sheet.full_link is None
+
+
+def test_campaigns_all_links_newest_full_flight(tmp_path):
+    """F4: ``all`` -> full_sheet/ = newest full flight, standard = newest."""
+    m = DownloadManager(tmp_path, provider=c14_fake(), campaigns="all")
+    m.download_sheets([G])
+    assert linked_campaign(full_path(tmp_path)) == campaign_path(tmp_path, REC["83233"])
+    assert linked_campaign(std_path(tmp_path)) == campaign_path(tmp_path, REC["84183"])
+    assert m.last_result is not None
+    assert m.last_result.full_links == {G: full_path(tmp_path)}
+
+
+def test_full_link_only_for_declared_full_flights(tmp_path):
+    """NIE and a missing flag both mean "not full" -> no full_sheet/ link."""
+    records = [
+        dataclasses.replace(r, full_sheet=None if i % 2 else False)
+        for i, r in enumerate(C14_ALL)
+    ]
+    fake = FakeCampaignProvider({"all": records})
+    m = DownloadManager(tmp_path, provider=fake, campaigns="all")
+    m.download_sheets([G])
+    assert len(fake.downloads) == len(C14_ALL)
+    assert not full_path(tmp_path).exists()
+    assert m.last_result is not None and m.last_result.full_links == {}
+
+
+def test_full_link_kept_when_run_has_no_full_candidate(tmp_path):
+    """F6: a later run without a full flight leaves the existing link alone."""
+    fake = c14_fake()
+    DownloadManager(tmp_path, provider=fake, campaigns="all").download_sheets([G])
+    full = full_path(tmp_path)
+    before = full.stat()
+    m = DownloadManager(tmp_path, provider=fake)
+    m.download_sheets([G])
+    after = full.stat()
+    assert (after.st_ino, after.st_mtime_ns) == (before.st_ino, before.st_mtime_ns)
+    assert linked_campaign(full) == campaign_path(tmp_path, REC["83233"])
+    assert m.last_result is not None and m.last_result.full_links == {G: full}
+    assert m.last_result.full_link_outside_range == {}
+
+
+def test_full_link_never_moves_back_reports_outside_range(tmp_path):
+    """F8: an older full flight in range never replaces a newer full link."""
+    fake = c14_fake()
+    DownloadManager(tmp_path, provider=fake, campaigns="all").download_sheets([G])
+    target = campaign_path(tmp_path, REC["83233"])
+    m = DownloadManager(tmp_path, provider=fake, campaigns="all", max_year=2024)
+    m.download_sheets([G])
+    assert linked_campaign(full_path(tmp_path)) == target
+    assert m.last_result is not None
+    kept = m.last_result.full_link_outside_range[G]
+    assert kept.resolve() == target.resolve()
+
+
+def test_full_link_failure_fails_sheet(tmp_path, monkeypatch):
+    """A full_sheet/ link failure is a sheet failure, the standard link stays."""
+    from kartograf.download import manager as manager_module
+
+    real = manager_module.ensure_link
+
+    def broken(link, *args, **kwargs):
+        if "full_sheet" in link.parts:
+            raise OSError("dysk pelny")
+        return real(link, *args, **kwargs)
+
+    monkeypatch.setattr(manager_module, "ensure_link", broken)
+    m = DownloadManager(tmp_path, provider=c14_fake(), campaigns="all")
+    with pytest.raises(DownloadError) as exc:
+        m.download_sheet(G)
+    assert "dowiazanie" in str(exc.value) and "full_sheet" in str(exc.value)
+    assert linked_campaign(std_path(tmp_path)) == campaign_path(tmp_path, REC["84183"])
+
+
+def test_local_newest_leaves_full_link_untouched(tmp_path):
+    """F11: index outage (I-1) keeps the full_sheet/ link as it is."""
+    fake = c14_fake()
+    DownloadManager(tmp_path, provider=fake, campaigns="all").download_sheets([G])
+    full = full_path(tmp_path)
+    before = full.stat()
+    fake.resolve_error = _transport_error(G, 503)
+    m = DownloadManager(tmp_path, provider=fake)
+    m.download_sheet(G)
+    assert m.last_sheet is not None and m.last_sheet.unverified
+    after = full.stat()
+    assert (after.st_ino, after.st_mtime_ns) == (before.st_ino, before.st_mtime_ns)
+    assert m.last_sheet.full_link == full
+    assert m.last_result is not None and m.last_result.full_links == {G: full}
+
+
+def test_force_refreshes_full_link(tmp_path):
+    """``--force`` re-downloads the full flight and moves the link to the new inode."""
+    fake = c14_fake()
+    plain = fake.download_record
+
+    def replacing(r, path, timeout=None):  # like the real provider: tmp + replace
+        tmp = path.with_name(path.name + ".part")
+        plain(r, tmp)
+        os.replace(tmp, path)
+        return path
+
+    fake.download_record = replacing  # type: ignore[method-assign]
+    DownloadManager(tmp_path, provider=fake).download_sheet(G4)
+    full = full_path(tmp_path, G4)
+    before = full.stat().st_ino
+    DownloadManager(tmp_path, provider=fake).download_sheet(G4, skip_existing=False)
+    camp = campaign_path(tmp_path, _rec_of(G4, "83998"), G4)
+    assert full.stat().st_ino != before
+    assert os.path.samefile(full, camp)
+
+
+def test_full_sheet_flag_fetches_newest_full_flight(tmp_path):
+    """F3: ``full_sheet=True`` adds the newest full flight to a partial newest."""
+    fake = c14_fake()
+    m = DownloadManager(tmp_path, provider=fake, full_sheet=True)
+    m.download_sheets([G])
+    newest = campaign_path(tmp_path, REC["84183"])
+    full_flight = campaign_path(tmp_path, REC["83233"])
+    assert fake.downloads == [REC["84183"].url, REC["83233"].url]
+    assert linked_campaign(std_path(tmp_path)) == newest
+    assert linked_campaign(full_path(tmp_path)) == full_flight
+    assert m.full_sheet is True
+    assert m.last_result is not None
+    assert set(m.last_result.campaign_files[G]) == {newest, full_flight}
+    assert meta(full_flight)["request"]["full_sheet"] is True
+    assert m.last_result.full_links == {G: full_path(tmp_path)}
+    assert m.last_result.without_full == []
+
+
+def test_full_sheet_flag_keeps_standard_link_on_newest(tmp_path):
+    fake = c14_fake()
+    DownloadManager(tmp_path, provider=fake, full_sheet=True).download_sheet(G)
+    target = meta(std_path(tmp_path))["extra"]["link_target"]
+    assert "2025-10-21_84183" in target
+
+
+def test_full_sheet_flag_noop_when_newest_full(tmp_path):
+    """F13: the newest flight is full -> the flag downloads nothing more."""
+    fake = c14_fake()
+    DownloadManager(tmp_path, provider=fake, full_sheet=True).download_sheet(G4)
+    assert fake.downloads == [_rec_of(G4, "83998").url]
+    assert {c[1] for c in fake.resolve_calls} == {"newest"}
+    assert os.path.samefile(full_path(tmp_path, G4), std_path(tmp_path, G4))
+
+
+def test_full_sheet_flag_without_full_flight_reports(tmp_path):
+    """F7: no full flight in the index -> one flight, no link, ``without_full``."""
+    records = [dataclasses.replace(r, full_sheet=False) for r in C14_ALL]
+    fake = FakeCampaignProvider({"newest": records[:1], "all": records})
+    m = DownloadManager(tmp_path, provider=fake, full_sheet=True)
+    m.download_sheets([G])
+    assert fake.downloads == [REC["84183"].url]
+    assert not full_path(tmp_path).exists()
+    assert m.last_result is not None
+    assert m.last_result.without_full == [G] and m.last_result.failed == []
+
+
+def test_full_sheet_flag_respects_year_range(tmp_path):
+    """The year bounds filter the full flight too."""
+    fake = c14_fake()
+    m = DownloadManager(tmp_path, provider=fake, full_sheet=True, max_year=2024)
+    m.download_sheets([G])
+    assert fake.downloads == [REC["78047"].url]  # newest in range is full
+    assert linked_campaign(full_path(tmp_path)) == campaign_path(tmp_path, REC["78047"])
+
+    other = tmp_path / "other"
+    records = [
+        dataclasses.replace(r, full_sheet=False) if r is REC["78047"] else r
+        for r in C14_ALL
+    ]
+    fake = FakeCampaignProvider({"newest": records[:1], "all": records})
+    m = DownloadManager(other, provider=fake, full_sheet=True, max_year=2024)
+    m.download_sheets([G])
+    assert fake.downloads == [REC["78047"].url, REC["73021"].url]
+    assert linked_campaign(full_path(other)) == campaign_path(other, REC["73021"])
+
+
+def test_full_sheet_flag_with_all_adds_nothing(tmp_path):
+    fake = c14_fake()
+    DownloadManager(
+        tmp_path, provider=fake, campaigns="all", full_sheet=True
+    ).download_sheets([G])
+    assert sorted(fake.downloads) == sorted(r.url for r in C14_ALL)
+
+
+def test_full_sheet_requires_campaign_provider():
+    with pytest.raises(ValidationError, match="nie obsluguje kampanii"):
+        DownloadManager(provider=_mock_provider(), full_sheet=True)
+
+
+def test_full_sheet_full_flight_download_failure_fails_sheet(tmp_path):
+    fake = c14_fake(fail_urls={REC["83233"].url})
+    m = DownloadManager(tmp_path, provider=fake, full_sheet=True)
+    with pytest.raises(DownloadError, match="83233"):
+        m.download_sheet(G)
+    assert linked_campaign(std_path(tmp_path)) == campaign_path(tmp_path, REC["84183"])
+    assert not full_path(tmp_path).exists()
