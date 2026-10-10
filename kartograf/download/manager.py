@@ -131,6 +131,9 @@ class DownloadResult:
     full_link_outside_range : dict[str, Path]
         With year bounds, sheets whose ``full_sheet/`` link still points to a
         full flight outside this request: godlo -> that campaign file.
+    without_full : list[str]
+        With ``full_sheet=True``: sheets whose newest flight is partial and
+        whose index lists no full flight within the year bounds.
 
     Notes
     -----
@@ -152,6 +155,7 @@ class DownloadResult:
     link_outside_range: dict[str, Path] = field(default_factory=dict)
     full_links: dict[str, Path] = field(default_factory=dict)
     full_link_outside_range: dict[str, Path] = field(default_factory=dict)
+    without_full: list[str] = field(default_factory=list)
 
     @property
     def total(self) -> int:
@@ -230,6 +234,9 @@ class SheetFetch:
     full_link_outside_range : Path or None
         With year bounds: the campaign file the ``full_sheet/`` link still
         points to when this request did not select it (never moves back).
+    no_full_flight : bool
+        ``full_sheet=True`` and the index has no full flight within the
+        year bounds, while the newest one is partial.
     """
 
     godlo: str
@@ -243,6 +250,7 @@ class SheetFetch:
     link_outside_range: Path | None = None
     full_link: Path | None = None
     full_link_outside_range: Path | None = None
+    no_full_flight: bool = False
 
 
 class CampaignProvider(Protocol):
@@ -364,6 +372,7 @@ class DownloadManager:
         campaigns: str = "newest",
         min_year: int | None = None,
         max_year: int | None = None,
+        full_sheet: bool = False,
     ):
         """
         Initialize download manager.
@@ -404,12 +413,18 @@ class DownloadManager:
             admissible years (ADR-032 point 3). Only PL GUGiK supports campaigns.
         min_year, max_year : int, optional
             Inclusive bounds on the campaign acquisition year.
+        full_sheet : bool, optional
+            ADR-033: with ``campaigns="newest"``, when the newest flight within
+            the year bounds is not declared full, also download the newest
+            flight declared full within them (at most one extra flight per
+            sheet) and link it in ``full_sheet/``. No effect with ``all``.
 
         Raises
         ------
         ValidationError
             Invalid strategy/bounds or a provider without campaigns used with
-            a year bound or ``campaigns="all"``; incompatible resolution/CRS.
+            a year bound, ``campaigns="all"`` or ``full_sheet=True``;
+            incompatible resolution/CRS.
         """
         validate_campaign_args(campaigns, min_year, max_year)
         # The "5m => EVRF2007" rule (D11): without a provider the factory
@@ -451,15 +466,19 @@ class DownloadManager:
             getattr(self._provider, "supports_campaigns", False) is True
         )
         if not self._campaign_aware and (
-            campaigns == "all" or min_year is not None or max_year is not None
+            campaigns == "all"
+            or min_year is not None
+            or max_year is not None
+            or full_sheet
         ):
             raise ValidationError(
                 f"Provider {self._provider.name} nie obsluguje kampanii "
-                f"(--campaigns/--min-year/--max-year/--year)"
+                f"(--campaigns/--min-year/--max-year/--year/--full-sheet)"
             )
         self._campaigns = campaigns
         self._min_year = min_year
         self._max_year = max_year
+        self._full_sheet = full_sheet
         self._has_range = min_year is not None or max_year is not None
         self.last_result: DownloadResult | None = None
         self.last_sheet: SheetFetch | None = None
@@ -478,6 +497,11 @@ class DownloadManager:
     def campaigns(self) -> str:
         """Campaign strategy (``newest``/``all``)."""
         return self._campaigns
+
+    @property
+    def full_sheet(self) -> bool:
+        """Whether the newest declared-full flight is fetched too (ADR-033)."""
+        return self._full_sheet
 
     @property
     def min_year(self) -> int | None:
@@ -930,6 +954,13 @@ class DownloadManager:
         A year bound, ``all``, ``--force``, no local campaign or another
         error — an exception as before.
 
+        ``full_sheet=True`` with ``newest``: when the chosen record is not
+        declared full, the full list within the year bounds
+        (``resolve_campaigns(campaigns="all")``) supplies the newest
+        declared-full record as one extra campaign; none =
+        ``SheetFetch.no_full_flight``. An index error of that call is a
+        sheet failure, as with ``all``.
+
         Raises
         ------
         NoCoverageError
@@ -961,6 +992,23 @@ class DownloadManager:
                 raise
         else:
             chosen = records
+        no_full_flight = False
+        if (
+            self._full_sheet
+            and self._campaigns == "newest"
+            and chosen[0].full_sheet is not True
+        ):
+            pool = self._campaign_provider.resolve_campaigns(
+                godlo,
+                campaigns="all",
+                min_year=self._min_year,
+                max_year=self._max_year,
+            )
+            extra_full = next((r for r in pool if r.full_sheet is True), None)
+            if extra_full is None:
+                no_full_flight = True
+            else:
+                chosen = [*chosen, extra_full]
         logger.info("%s: %d kampanii (%s)", godlo, len(chosen), self._campaigns)
         downloaded: list[Path] = []
         reused: list[Path] = []
@@ -1105,6 +1153,7 @@ class DownloadManager:
             link_outside_range=link_outside_range,
             full_link=full if full_target is not None else None,
             full_link_outside_range=full_link_outside_range,
+            no_full_flight=no_full_flight,
         )
 
     def _add_range_flights(
@@ -1293,6 +1342,8 @@ class DownloadManager:
                 result.full_links[godlo] = fetch.full_link
             if fetch.full_link_outside_range is not None:
                 result.full_link_outside_range[godlo] = fetch.full_link_outside_range
+            if fetch.no_full_flight:
+                result.without_full.append(godlo)
         elif status in ("failed", "no_coverage"):
             # R5: no data at the source — a list failure, but recognizable
             result.failed.append(godlo)
@@ -1560,12 +1611,15 @@ class DownloadManager:
     ) -> None:
         """MANDATORY campaign file sidecar (errata 2 N-1).
 
-        ``request`` describes the resolved strategy and supplied year bounds;
+        ``request`` describes the resolved strategy, supplied year bounds and
+        ``full_sheet: true`` when that flag is set (ADR-033);
         ``extra`` includes the source and campaign identity of THIS record
         (R13), plus all available years for range-checked requests. Failure
         is a campaign ``DownloadError`` (the caller removes the data file).
         """
         request: dict = {"sheet": godlo, "campaigns": self._campaigns}
+        if self._full_sheet:  # describes the request, not this flight
+            request["full_sheet"] = True
         if self._min_year is not None:
             request["min_year"] = self._min_year
         if self._max_year is not None:
