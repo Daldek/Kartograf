@@ -1416,7 +1416,7 @@ rocznika 1990 EPSG:4326) oraz `extra.fallback = "wms_png"` i `extra.note`
 
 BDOT10k GPKG: archiwum ZIP z GUGiK jest rozpakowywane, a warstwy scalane
 w jeden GeoPackage w LOKALNYM katalogu tymczasowym (`tempfile`); do
-`--output` trafia gotowy plik (kopia jako `.gpkg.tmp` + `os.replace`).
+`--output` trafia gotowy plik (kopia jako `<nazwa>.gpkg.<pid>_<tid>.tmp` + `os.replace`).
 Powod: SQLite na udzialach CIFS/SMB bez blokad zakresow bajtow konczyl
 scalanie bledem `database is locked` (`Bdot10kProvider._merge_gpkg_files`).
 
@@ -1441,7 +1441,7 @@ np. `{teryt, format}`; `extra.source` bez `raw_file`; `sha256`/`size_bytes`
 archiwum); sidecar GPKG dostaje wtedy
 `extra.source.raw_file` = nazwa archiwum. Archiwum jest zapisywane
 atomowo i dopiero po udanym scaleniu, wiec blad rozpakowania nie zostawia
-ZIP bez sidecara. Scalony GPKG czeka w `<nazwa>.gpkg.tmp` i zastepuje
+ZIP bez sidecara. Scalony GPKG czeka w `<nazwa>.gpkg.<pid>_<tid>.tmp` i zastepuje
 poprzedni plik dopiero po udanym zapisie archiwum (od 0.7.2): nieudany zapis
 archiwum albo podmiany zostawia poprzedni GPKG i jego sidecar bez zmian
 (przy pierwszym pobraniu — brak pliku), bo sidecar GPKG powstaje dopiero po

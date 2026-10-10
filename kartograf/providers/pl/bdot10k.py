@@ -519,7 +519,7 @@ class Bdot10kProvider(LandCoverProvider):
             Not a ZIP, no GPKG inside, a requested layer missing in the
             package, two files with the same table name, or an I/O error
             while extracting, merging or writing the raw ZIP. The merged
-            GPKG waits in ``<name>.gpkg.tmp`` and replaces ``output_path``
+            GPKG waits in ``<name>.gpkg.<pid>_<tid>.tmp`` and replaces ``output_path``
             only after the raw ZIP is saved, so on any error the previous
             GPKG (and the sidecar the caller wrote for it) stays untouched
             (P1). Residual window: a failure between the two ``os.replace``
@@ -573,8 +573,12 @@ class Bdot10kProvider(LandCoverProvider):
                         logger.debug(f"Extracted {Path(gpkg_file).name}")
 
                     # Merge all layers into a staged GPKG next to the target
+                    # (pid/tid in the name: concurrent downloads of the same
+                    # powiat never share it)
                     output_gpkg = output_path.with_suffix(".gpkg")
-                    staged = output_gpkg.with_suffix(".gpkg.tmp")
+                    staged = output_gpkg.with_name(
+                        f"{output_gpkg.name}.{os.getpid()}_{threading.get_ident()}.tmp"
+                    )
                     self._merge_gpkg_files(extracted_files, staged)
                     try:
                         if raw_path is not None:

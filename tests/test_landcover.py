@@ -697,27 +697,14 @@ class TestBdot10kRetryAndIO:
         provider._extract_gpkg_from_zip(mock_resp, output)
         assert output.with_suffix(".gpkg").exists()
 
-    def test_merge_overwrites_existing_gpkg_like_windows(self, tmp_path):
-        """The merged GPKG overwrites the old file also under Windows semantics."""
+    def test_redownload_overwrites_existing_gpkg_like_windows(self, tmp_path):
+        """The merged GPKG replaces the old file also under Windows semantics
+        (``Path.rename`` refuses an existing target; the swap is
+        ``os.replace``)."""
         import os
 
-        provider = Bdot10kProvider()
-        gpkg_path = tmp_path / "PTLZ.gpkg"
-        conn = sqlite3.connect(str(gpkg_path))
-        c = conn.cursor()
-        c.execute(
-            "CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, "
-            "identifier TEXT, description TEXT, last_change TEXT, "
-            "min_x REAL, min_y REAL, max_x REAL, max_y REAL, srs_id INTEGER)"
-        )
-        c.execute(
-            "CREATE TABLE gpkg_geometry_columns (table_name TEXT, column_name TEXT, "
-            "geometry_type_name TEXT, srs_id INTEGER, z INTEGER, m INTEGER)"
-        )
-        c.execute("CREATE TABLE PTLZ (id INTEGER PRIMARY KEY, name TEXT)")
-        conn.commit()
-        conn.close()
-        output = tmp_path / "out" / "merged.gpkg"
+        body = _bdot_zip(tmp_path, ["OT_PTLZ_A"])
+        output = tmp_path / "out" / "bdot10k_teryt_0262.gpkg"
         output.parent.mkdir()
         output.write_bytes(b"stary plik")
 
@@ -726,10 +713,11 @@ class TestBdot10kRetryAndIO:
                 raise FileExistsError(f"[WinError 183] {target}")
             return os.replace(self, target)
 
+        provider = Bdot10kProvider(session=_zip_session(body))
         with patch.object(Path, "rename", windows_rename):
-            provider._merge_gpkg_files([gpkg_path], output)
+            provider.download_package("0262", output)
         assert output.read_bytes().startswith(b"SQLite format 3")
-        assert [p.name for p in output.parent.iterdir()] == ["merged.gpkg"]
+        assert [p.name for p in output.parent.iterdir()] == [output.name]
 
     def test_extract_gpkg_bad_zip(self, tmp_path):
         """Invalid ZIP -> DownloadError."""
