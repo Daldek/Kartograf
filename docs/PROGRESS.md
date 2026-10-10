@@ -113,13 +113,13 @@
 > wypchniety na `origin`. Kolejna praca: galaz `feat/year-range`
 > z `develop` (pozycja (b) nizej).
 > **Nastepne w 0.7.2:** backlog "Do 0.7.2" nizej (decyzje uzytkownika
-> 2026-10-09), kazda pozycja dopiero po specu/planie i zatwierdzeniu:
-> (a) wycinki PL z WCS (nowy ADR, odwraca ADR-027); (b) wybor roku
-> `--year`/`--min-year`/`--max-year` dla NMT/NMPT/orto (spec
-> `docs/superpowers/specs/2026-10-09-year-range-selection-design.md` do
-> uaktualnienia, m.in. wersja docelowa 0.7.1 -> 0.7.2); (c) drugie
-> dowiazanie do najnowszego pelnego lotu; (d) ciche wartosci domyslne
-> z inwentaryzacji. Kolejnosc wybiera uzytkownik.
+> 2026-10-09), kolejnosc zatwierdzona 2026-10-10: (b) -> (c) -> (d) -> (a);
+> kazda pozycja dopiero po specu/planie i zatwierdzeniu. (b) wybor roku:
+> spec `docs/superpowers/specs/2026-10-09-year-range-selection-design.md`
+> uaktualniony 2026-10-10 na galezi `feat/year-range` (wersja 0.7.2,
+> decyzje U12/U13, wycinki bez flag roku) — czeka na review uzytkownika,
+> potem plan; (c) drugie dowiazanie do najnowszego pelnego lotu; (d) ciche
+> wartosci domyslne z inwentaryzacji; (a) wycinki PL z WCS (nowy ADR).
 > **Otwarte decyzje przed wydaniem 0.7.2:** zdania "wybor roku dla
 > NMT/NMPT/orto bedzie w 0.7.2" (`docs/USAGE.md` 1.1, `docs/ARCHITECTURE.md`
 > 4.x przy `--year`, komunikat `Error:` i docstring
@@ -1582,8 +1582,10 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
   wszystkie loty z przedzialu i dochodzi `Info:` o pokryciu; Q1 — zatrzymanie
   zadania obowiazkowe; Q4-Q8 przyjete; `newest` + `--min-year` zostaje;
   `newest` + `--max-year` (i `--year`) = blad; wycinki nie przyjmuja flag
-  roku. Spec do uaktualnienia (m.in. wersja docelowa 0.7.1 -> 0.7.2) przed
-  planem.
+  roku. Spec uaktualniony 2026-10-10 (wersja 0.7.2; U12 = powyzsze
+  decyzje; U13: samo `--min-year` bez `--campaigns` = jedna, najnowsza
+  kampania, `all` tylko z `--max-year`/`--year` albo jawnym `--campaigns
+  all`); czeka na review uzytkownika przed planem.
 - [ ] **(c) Drugie dowiazanie do najnowszego PELNEGO lotu**
   (`calyArkuszWypelnionyTrescia` = TAK) obok standardowego dowiazania do
   najnowszego. Proponowane osobne drzewo:
