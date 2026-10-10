@@ -7,6 +7,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.7.2] - Unreleased
 
+### Naprawione
+
+- Zapytanie o powiaty BDOT10k (WFS PRG) rozszerza obszar na zewnatrz
+  z dokladnoscia do milimetra; wczesniej zaokraglenie do pelnych metrow
+  moglo pominac powiat stykajacy sie z obszarem w pasie do 0,5 m,
+  a `teryt_for_point` pytal raz o sam punkt, raz o kwadrat 2 m.
+
 ## [0.7.1] - 2026-10-09
 
 ### Dodane
