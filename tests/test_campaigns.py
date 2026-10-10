@@ -15,12 +15,14 @@ from types import SimpleNamespace
 import pytest
 
 from kartograf.core.sheet_parser import SheetParser
+from kartograf.download import campaigns as campaign_module
 from kartograf.download.campaigns import (
     RECORD_VERTICAL_CRS,
     CampaignRef,
     campaign_extension,
     campaign_id_from_url,
     in_year_range,
+    measure_coverage,
     record_year,
     resolve_campaign_strategy,
     validate_campaign_args,
@@ -211,6 +213,91 @@ def test_verify_file_format_unsupported_extension(tmp_path):
     f.write_bytes(b"ncols 1")
     with pytest.raises(DownloadError):
         verify_file_format(f, ".laz")
+
+
+def test_coverage_of_asc_counts_nodata(tmp_path, monkeypatch):
+    path = tmp_path / "x.asc"
+    header = "ncols 3\nnrows 2\nxllcorner 0\nyllcorner 0\ncellsize 1\n"
+    path.write_text(header + "NODATA_value -1\n1 -1 2\n3 -1 4\n")
+    assert measure_coverage(path, ".asc") == 0.6667
+    path.write_text(header + "1 -9999 2\n3 -9999 4\n")
+    assert measure_coverage(path, ".asc") == 0.6667
+    # The token "-9999" spans multiple reads; the count must not drift.
+    monkeypatch.setattr(campaign_module, "_COVERAGE_CHUNK", 2)
+    assert measure_coverage(path, ".asc") == 0.6667
+    path.write_text(header + "1 -9999 2\n3 -9999\n")
+    with pytest.raises(DownloadError, match="5 komorek"):
+        measure_coverage(path, ".asc")
+
+
+def test_coverage_of_tif_without_nodata_is_none(tmp_path):
+    import numpy as np
+    import rasterio
+    from rasterio.transform import from_origin
+
+    path = tmp_path / "x.tif"
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=2,
+        width=3,
+        count=1,
+        dtype="uint8",
+        transform=from_origin(0, 2, 1, 1),
+    ) as dst:
+        dst.write(np.array([[1, 0, 2], [3, 0, 4]], dtype="uint8"), 1)
+    assert measure_coverage(path, ".tif") is None
+
+
+def test_coverage_of_tif_with_nodata_uses_mask(tmp_path):
+    import numpy as np
+    import rasterio
+    from rasterio.transform import from_origin
+
+    path = tmp_path / "x.tif"
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=2,
+        width=3,
+        count=1,
+        dtype="uint8",
+        nodata=0,
+        transform=from_origin(0, 2, 1, 1),
+    ) as dst:
+        dst.write(np.array([[1, 0, 2], [3, 0, 4]], dtype="uint8"), 1)
+    assert measure_coverage(path, ".tif") == 0.6667
+
+
+def test_coverage_of_tif_with_alpha_uses_mask(tmp_path):
+    import numpy as np
+    import rasterio
+    from rasterio.enums import ColorInterp
+    from rasterio.transform import from_origin
+
+    path = tmp_path / "rgba.tif"
+    with rasterio.open(
+        path,
+        "w",
+        driver="GTiff",
+        height=2,
+        width=2,
+        count=4,
+        dtype="uint8",
+        transform=from_origin(0, 2, 1, 1),
+    ) as dst:
+        for band in range(1, 4):
+            dst.write(np.ones((2, 2), dtype="uint8"), band)
+        dst.write(np.array([[255, 0], [255, 255]], dtype="uint8"), 4)
+        dst.colorinterp = (
+            ColorInterp.red,
+            ColorInterp.green,
+            ColorInterp.blue,
+            ColorInterp.alpha,
+        )
+    assert measure_coverage(path, ".tif") == 0.75
 
 
 def test_same_date_different_id_distinct_dirs_and_order():

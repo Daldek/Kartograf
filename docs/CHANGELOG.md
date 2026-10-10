@@ -24,6 +24,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pobraniem; `YearRangeError` podaje godla, dostepne lata i podpowiedzi.
   Sidecar kampanii z przedzialem zawiera `request.max_year`, `request.year`
   dla pojedynczego roku i `extra.available_years`.
+- NMT/NMPT/orto: po pobraniu kilku lotow arkusza z przedzialu lat,
+  gdy najnowszy nie jest pelny, mierzony jest udzial waznych pikseli
+  (`extra.coverage` w sidecarze kampanii). Sidecar sciezki standardowej
+  otrzymuje liste `extra.flights` i `extra.better_coverage` (ID lotu
+  z wiekszym pokryciem, gdy istnieje); biblioteka zwraca ten ID w
+  `SheetFetch.better_coverage` i `DownloadResult.better_coverage`.
+  Dowiazanie nadal wskazuje najnowszy lot, nie lot o najwiekszym pokryciu.
 
 ### Zmienione
 

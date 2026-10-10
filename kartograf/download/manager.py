@@ -24,6 +24,7 @@ from kartograf.download.campaigns import (
     CampaignRef,
     campaign_extension,
     in_year_range,
+    measure_coverage,
     record_year,
     resolve_campaign_strategy,
     validate_campaign_args,
@@ -37,6 +38,7 @@ from kartograf.download.links import (
     LinkOutcome,
     ensure_standard_link,
     linked_campaign,
+    update_sidecar_extra,
     write_standard_sidecar,
 )
 from kartograf.download.storage import FileStorage, storage_for_provider
@@ -118,6 +120,9 @@ class DownloadResult:
         Subset of ``skipped``: godlo -> GUGiK index (skorowidz) transport
         error with which ``newest`` used a local campaign without checking
         for a newer one (``SheetFetch.unverified``). Otherwise empty.
+    better_coverage : dict[str, str]
+        With a ranged ``all`` request, sheets whose older flight measured
+        higher pixel coverage than the standard link: godlo -> flight ID.
 
     Notes
     -----
@@ -135,6 +140,7 @@ class DownloadResult:
     reused_campaign_files: dict[str, tuple[Path, ...]] = field(default_factory=dict)
     unverified: dict[str, str] = field(default_factory=dict)
     no_coverage_hints: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    better_coverage: dict[str, str] = field(default_factory=dict)
 
     @property
     def total(self) -> int:
@@ -199,6 +205,9 @@ class SheetFetch:
         (network, 429, 5xx) with which an existing local campaign was used
         without checking whether a newer one exists (``skipped=True``, link
         untouched). ``None`` = record resolved normally.
+    better_coverage : str or None
+        Flight ID with better measured coverage than the standard path
+        (only for ranged ``all`` requests).
     """
 
     godlo: str
@@ -208,6 +217,7 @@ class SheetFetch:
     reused: tuple[Path, ...] = ()
     link: str | None = None
     unverified: str | None = None
+    better_coverage: str | None = None
 
 
 class CampaignProvider(Protocol):
@@ -868,6 +878,11 @@ class DownloadManager:
         ``verify_sheet_extent`` before the sidecar is recreated; mismatched
         content = file removed + campaign failure.
 
+        Ranged ``all`` requests list local flights in the standard sidecar.
+        Only if the linked flight is partial and there are multiple flights,
+        their pixel coverage is measured (or read from existing sidecars);
+        measurement errors warn without failing the downloaded sheet.
+
         Concurrency: the link is set ONCE per sheet, after all its campaigns
         are collected, and ``expand_sheets`` deduplicates godla — one sheet =
         one thread. Safety within a single manager call therefore follows
@@ -980,6 +995,7 @@ class DownloadManager:
             downloaded.append(path)
             local.append((ref, path))  # link candidate ONLY once it has a sidecar
         method: str | None = None
+        linked_target: Path | None = None
         link_error: OSError | None = None
         if local:
             ref, path = max(local, key=lambda rp: rp[0].sort_key)
@@ -991,6 +1007,7 @@ class DownloadManager:
                 link_error = e
             else:
                 method = outcome.method
+                linked_target = outcome.target
                 if not outcome.changed:
                     self._note_standard_reuse(std, outcome)
         if errors or link_error is not None:  # Q10: full failure list
@@ -1003,6 +1020,9 @@ class DownloadManager:
             if link_error is not None:
                 problems.append(f"dowiazanie {std}: {link_error}")
             raise DownloadError(f"{godlo}: " + "; ".join(problems), godlo=godlo)
+        better_coverage = None
+        if self._has_range and self._campaigns == "all" and linked_target is not None:
+            better_coverage = self._add_range_flights(std, local, linked_target)
         return SheetFetch(
             godlo,
             std,
@@ -1010,7 +1030,79 @@ class DownloadManager:
             downloaded=tuple(downloaded),
             reused=tuple(reused),
             link=method,
+            better_coverage=better_coverage,
         )
+
+    def _add_range_flights(
+        self, std: Path, local: list[tuple[CampaignRef, Path]], linked_target: Path
+    ) -> str | None:
+        """Add local flights and optional measured coverage to the standard sidecar.
+
+        Link selection has already finished and is never changed by this phase.
+        A newer local link outside the current selection cannot be compared
+        with these flights; keep its metadata but do not infer a better flight.
+        """
+        ordered = sorted(local, key=lambda rp: rp[0].sort_key, reverse=True)
+        linked = next(
+            (
+                ref
+                for ref, path in ordered
+                if os.path.abspath(path) == os.path.abspath(linked_target)
+            ),
+            None,
+        )
+        measure = (
+            len(ordered) > 1 and linked is not None and linked.full_sheet is not True
+        )
+        flights: list[dict] = []
+        measured: list[tuple[float, CampaignRef]] = []
+        linked_coverage: float | None = None
+        for ref, path in ordered:
+            flight: dict[str, object] = {
+                "id": ref.id,
+                "date": ref.date,
+                "full_sheet": ref.full_sheet,
+            }
+            if measure:
+                coverage: float | None = None
+                sidecar = path.with_name(path.name + ".meta.json")
+                try:
+                    payload = json.loads(sidecar.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    payload = {}
+                extra = payload.get("extra") if isinstance(payload, dict) else None
+                cached = extra.get("coverage") if isinstance(extra, dict) else None
+                if (
+                    isinstance(cached, (float, int))
+                    and not isinstance(cached, bool)
+                    and 0 <= cached <= 1
+                ):
+                    coverage = float(cached)
+                else:
+                    try:
+                        coverage = measure_coverage(path, path.suffix.lower())
+                    except DownloadError as e:
+                        logger.warning(
+                            "Nie udalo sie zmierzyc pokrycia %s: %s", path, e
+                        )
+                    if coverage is not None:
+                        update_sidecar_extra(path, {"coverage": coverage})
+                if coverage is not None:
+                    flight["coverage"] = coverage
+                    measured.append((coverage, ref))
+                    if ref is linked:
+                        linked_coverage = coverage
+            flights.append(flight)
+        better = None
+        if linked_coverage is not None and measured:
+            best_coverage, best_ref = max(measured, key=lambda item: item[0])
+            if best_coverage > linked_coverage:
+                better = best_ref.id
+        updates: dict = {"flights": flights, "better_coverage": better}
+        if measure:
+            updates["coverage"] = linked_coverage
+        update_sidecar_extra(std, updates)
+        return better
 
     def _note_standard_reuse(self, std: Path, outcome: LinkOutcome) -> None:
         """Link unchanged: the standard sidecar as a regular file + N4."""
@@ -1117,6 +1209,8 @@ class DownloadManager:
                 result.copied.append(godlo)
             if fetch.unverified is not None:
                 result.unverified[godlo] = fetch.unverified
+            if fetch.better_coverage is not None:
+                result.better_coverage[godlo] = fetch.better_coverage
         elif status in ("failed", "no_coverage"):
             # R5: no data at the source — a list failure, but recognizable
             result.failed.append(godlo)
