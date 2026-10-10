@@ -2114,6 +2114,23 @@ class TestBdot10kSidecarSource:
         assert hashlib.sha256(before).hexdigest() == sidecar["sha256"]
         assert [p.name for p in out.iterdir() if ".tmp" in p.name] == []
 
+    def test_failed_raw_zip_write_releases_buffer_view(self, tmp_path, monkeypatch):
+        """P9g: the ``getbuffer`` view is released even when the write fails
+        and the caller keeps the exception (``DownloadError ... from e``: the
+        traceback holds the frame). A held view makes the buffer unresizable
+        and unclosable (``BufferError``)."""
+        buf = BytesIO(b"PK zip bytes")
+
+        def disk_full(self, data):
+            raise OSError(28, "No space left on device")
+
+        monkeypatch.setattr(Path, "write_bytes", disk_full)
+        with pytest.raises(OSError) as exc:
+            Bdot10kProvider._write_raw_zip(buf, tmp_path / "a_GPKG.zip")
+        assert exc.value.__traceback__ is not None  # frame still referenced
+        buf.write(b" more")  # resizing needs no exported views
+        buf.close()
+
     def test_manager_keep_raw_write_error_leaves_no_file(self, tmp_path, monkeypatch):
         """Through the manager: no data file without a sidecar, no sidecar."""
 
@@ -2436,7 +2453,7 @@ class TestLandCoverCliManyCounties:
         assert f"Downloaded to: {tmp_path / 'out' / 'bdot10k_teryt_0208.gpkg'}" in out
         assert f"Downloaded to: {tmp_path / 'out' / 'bdot10k_teryt_0224.gpkg'}" in out
 
-    def test_cli_passes_metadata_cache(self, tmp_path, monkeypatch):
+    def test_cli_passes_metadata_cache(self, tmp_path, monkeypatch, capsys):
         from kartograf.cli.commands import main
 
         monkeypatch.chdir(tmp_path)
@@ -2450,7 +2467,7 @@ class TestLandCoverCliManyCounties:
             "kartograf.providers.pl.bdot10k.discover_teryts_for_bbox",
             side_effect=fake_discover,
         ):
-            main(
+            rc = main(
                 [
                     "landcover",
                     "download",
@@ -2463,3 +2480,6 @@ class TestLandCoverCliManyCounties:
                 ]
             )
         assert seen["cache"] is not None  # U5
+        # the sea answer (no powiat) reaches the user as an error, not a crash
+        assert rc == 1
+        assert "nie przecina zadnego powiatu" in capsys.readouterr().err

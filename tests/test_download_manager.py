@@ -400,6 +400,19 @@ class TestLastResultSingleSheet:
             manager.download_sheet("N-34-130-D-d-2-4")
         assert manager.last_result is None
 
+    def test_single_sheet_after_list_run_has_only_its_sheet(self, tmp_path):
+        """P9e: a single sheet after a hierarchy run on the same manager -
+        the one-element result carries no list state (no campaign files, no
+        copies, no other sheets)."""
+        manager = self._plain_manager(tmp_path)
+        manager.download_sheet("N-34-130-D-d-2")  # 1:25000 -> 4 sheets
+        assert len(manager.last_result.succeeded) == 4
+        path = manager.download_sheet("N-34-130-D-d-1-1")
+        result = manager.last_result
+        assert result.succeeded == [path]
+        assert result.skipped == [] and result.failed == []
+        assert result.campaign_files == {} and result.copied == []
+
 
 class TestDownloadManagerDownloadHierarchy:
     """Tests of the download_hierarchy() method - downloads ASC via OpenData."""
@@ -1039,6 +1052,21 @@ class TestSidecarWritten:
         assert payload["vertical_crs"] == "EPSG:9651"
         assert payload["nodata"] == -9999.0
         assert payload["request"] == {"sheet": "N-34-130-D-d-2-4"}
+
+    def test_download_sheet_sidecar_describes_file_bytes(self, tmp_path):
+        """P9a: ``sha256``/``size_bytes`` of the file the manager returns (the
+        consumer verifies the data against the sidecar)."""
+        import hashlib
+        import json
+
+        manager = DownloadManager(output_dir=tmp_path, provider=self._mock_provider())
+        result = manager.download_sheet("N-34-130-D-d-2-4")
+        payload = json.loads(
+            (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
+        )
+        data = result.read_bytes()
+        assert payload["sha256"] == hashlib.sha256(data).hexdigest()
+        assert payload["size_bytes"] == len(data)
 
     @pytest.mark.parametrize("mode", ["sheet", "list_seq", "list_parallel"])
     def test_every_mode_returns_provider_path(self, tmp_path, mode):
