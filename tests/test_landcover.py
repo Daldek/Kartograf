@@ -5,7 +5,9 @@ Tests cover LandCoverProvider, Bdot10kProvider, CorineProvider,
 and LandCoverManager classes.
 """
 
+import hashlib
 import json
+import shutil
 import sqlite3
 import zipfile
 from io import BytesIO
@@ -1774,19 +1776,42 @@ class TestBdot10kMergeOnNetworkShare:
 
         monkeypatch.setattr(tempfile, "TemporaryDirectory", SpyTmp)
 
-        def boom(self, target):
-            # final_tmp already exists (copy after merging) - the swap fails
-            assert self.exists()
-            raise OSError("replace failed")
+        real_copyfile = shutil.copyfile
 
-        monkeypatch.setattr(Path, "replace", boom)
+        def partial_copy(src_path, dst_path, *a, **kw):
+            if Path(dst_path).parent == out_dir:
+                Path(dst_path).write_bytes(b"partial")
+                raise OSError("copy to share failed")
+            return real_copyfile(src_path, dst_path, *a, **kw)
 
-        with pytest.raises(OSError, match="replace failed"):
-            Bdot10kProvider()._merge_gpkg_files([g1, g2], out_dir / "merged.gpkg")
+        monkeypatch.setattr(
+            "kartograf.providers.pl.bdot10k.shutil.copyfile", partial_copy
+        )
 
-        assert list(out_dir.glob("*.tmp")) == []
+        with pytest.raises(OSError, match="copy to share failed"):
+            Bdot10kProvider()._merge_gpkg_files([g1, g2], out_dir / "merged.gpkg.tmp")
+
         assert list(out_dir.iterdir()) == []
         assert len(work_dirs) == 1 and not work_dirs[0].exists()
+
+    def test_failed_swap_keeps_previous_gpkg(self, tmp_path, monkeypatch):
+        """P1: the staged GPKG replaces the previous one last; a failed swap
+        leaves the previous file and no ``.tmp``."""
+        body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
+        out = tmp_path / "o"
+        out.mkdir()
+        target = out / "bdot10k_teryt_0262.gpkg"
+        target.write_bytes(b"previous")
+
+        def boom(src_path, dst_path):
+            raise OSError("replace failed")
+
+        monkeypatch.setattr("kartograf.providers.pl.bdot10k.os.replace", boom)
+        provider = Bdot10kProvider(session=_zip_session(body))
+        with pytest.raises(DownloadError, match="replace failed"):
+            provider.download_package("0262", target)
+        assert target.read_bytes() == b"previous"
+        assert sorted(p.name for p in out.iterdir()) == [target.name]
 
 
 def _tree(root: Path) -> list[str]:
@@ -2039,10 +2064,10 @@ class TestBdot10kSidecarSource:
             provider.download_package("0262", tmp_path / "o" / "x.gpkg", keep_raw=True)
         assert sorted(p.name for p in (tmp_path / "o").iterdir()) == []
 
-    def test_keep_raw_write_error_removes_gpkg(self, tmp_path, monkeypatch):
-        """OSError while writing the raw ZIP (after the GPKG is in place):
-        DownloadError, and neither the GPKG (it would have no sidecar) nor a
-        partial ZIP stays on disk."""
+    def test_keep_raw_write_error_leaves_no_file(self, tmp_path, monkeypatch):
+        """OSError while writing the raw ZIP (first download): DownloadError,
+        and neither the GPKG (it would have no sidecar) nor a partial ZIP
+        nor the staged GPKG stays on disk."""
         body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
         real_write_bytes = Path.write_bytes
 
@@ -2059,9 +2084,35 @@ class TestBdot10kSidecarSource:
                 "0262", tmp_path / "o" / "bdot10k_teryt_0262.gpkg", keep_raw=True
             )
         assert "No space left" in str(exc.value)
-        assert "bdot10k_teryt_0262.gpkg usuniety" in str(exc.value)
         assert isinstance(exc.value.__cause__, OSError)
         assert sorted(p.name for p in (tmp_path / "o").iterdir()) == []
+
+    def test_keep_raw_write_error_keeps_previous_result(self, tmp_path, monkeypatch):
+        """P1: a re-download whose raw ZIP write fails leaves the previous
+        GPKG and its sidecar untouched and consistent."""
+        out = tmp_path / "out"
+        manager = LandCoverManager(output_dir=out, provider="bdot10k")
+        z1, z2 = tmp_path / "z1", tmp_path / "z2"
+        z1.mkdir()
+        z2.mkdir()
+        first = _bdot_zip(z1, ["OT_PTWP_A"])
+        manager.provider._sessions = SessionPerThread(self._session(first, {}))
+        gpkg = manager.download(teryt="0262", keep_raw=True)
+        before = gpkg.read_bytes()
+        sidecar = json.loads((gpkg.parent / f"{gpkg.name}.meta.json").read_text())
+
+        second = _bdot_zip(z2, ["OT_PTWP_A", "OT_SWRS_L"])
+        manager.provider._sessions = SessionPerThread(self._session(second, {}))
+
+        def disk_full(self, data):
+            raise OSError(28, "No space left on device")
+
+        monkeypatch.setattr(Path, "write_bytes", disk_full)
+        with pytest.raises(DownloadError, match="No space left"):
+            manager.download(teryt="0262", keep_raw=True)
+        assert gpkg.read_bytes() == before
+        assert hashlib.sha256(before).hexdigest() == sidecar["sha256"]
+        assert [p.name for p in out.iterdir() if ".tmp" in p.name] == []
 
     def test_manager_keep_raw_write_error_leaves_no_file(self, tmp_path, monkeypatch):
         """Through the manager: no data file without a sidecar, no sidecar."""
