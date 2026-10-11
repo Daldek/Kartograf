@@ -140,10 +140,18 @@
 > WCS `docs/research/2026-10-10-wcs-limits/raport.md`, weryfikacja na zywo
 > `docs/research/2026-10-10-silent-defaults/raport.md`; brama zielona
 > (pytest offline 3216, ruff, mypy), review bez blokerow (uwagi poprawione).
-> **NASTEPNA SESJA (decyzja uzytkownika 2026-10-10):** spec (a) wycinki PL
-> z WCS — wejscie zebrane w backlogu "Do 0.7.2" pozycja (a) (nowy ADR;
-> korzysta z `transport/chunks.py`; razem z naprawa NMPT `download_bbox`).
-> Spec (a) piszemy na `develop` (po merge (d)).
+> **Spec (a) wycinki PL z WCS — ZATWIERDZONY 2026-10-11:**
+> `docs/superpowers/specs/2026-10-11-wcs-cutouts-design.md`
+> (decyzje W-U1..W-U11: WCS zamiast arkuszy w CLI i `download_pl_cutout`,
+> API arkuszowe do 0.8.0, NMT i NMPT, maska ladu PRG A00 minus W02/W03,
+> kazde uruchomienie pobiera, data w nazwie, zakres wyrownany na zewnatrz
+> do siatki arkuszy 1 m, tylko 1 m, 0,0 na ladzie zostaje). Pomiary
+> M1-M3 wykonane 2026-10-11:
+> `docs/research/2026-10-11-wcs-cutouts/raport.md` (WCS na siatce arkusza
+> = arkusz bit w bit; WCS EVRF2007 dziala, wysokosci tylko
+> `image/x-aaigrid`, kawalek ASC 1 Mpx; arkusze 0,5 m maja siatke
+> `k + 0,25`). **Nastepny krok:** plan, potem implementacja na galezi
+> `feat/wcs-cutouts`.
 > Potem (e) testy LAZ; zakres wydania 0.7.2 — do decyzji uzytkownika.
 > **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
 > na zywo z raportem, `__version__ = "0.7.2"` + asercje testow, data i link
@@ -1789,6 +1797,10 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
     niedostepny). Otwarte tez: los wycinka z arkuszy i parametrow
     arkuszowych `mosaic_and_crop` (kandydat 0.8.0), sidecar wycinka bez
     kampanii.
+  - **Spec 2026-10-11 (zatwierdzony):**
+    `docs/superpowers/specs/2026-10-11-wcs-cutouts-design.md` — wszystkie
+    pytania wyzej rozstrzygniete (W-U1..W-U11); pomiary M1-M3 wykonane
+    (`docs/research/2026-10-11-wcs-cutouts/raport.md`).
 - [x] **(b) Wybor roku `--year`/`--min-year`/`--max-year`** — SCALONE do
   `develop` 2026-10-10 (`09070bf`). Obowiazuje model A (decyzja uzytkownika
   2026-10-10, spec
