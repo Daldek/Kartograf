@@ -742,9 +742,10 @@ def _dispatch_area(
     not from the envelope), and the bbox serves to recognize countries and
     ``parent_request``.
 
-    ``Info:``/``Warning:`` messages about country resolution and partial
-    success go to stderr, so ``-q`` (suppressing stdout) does NOT hide them -
-    just like ``Error:`` messages.
+    ``Info:``/``Warning:`` messages about country resolution, the mixed default
+    vertical CRSs of a PL+CZ task (PL EVRF2007, CZ Bpv) and partial success go
+    to stderr, so ``-q`` (suppressing stdout) does NOT hide them - just like
+    ``Error:`` messages.
     """
     from kartograf.transform.crs import TransformError
 
@@ -815,6 +816,17 @@ def _dispatch_area(
             pl_geometry_sheets=pl_geometry_sheets,
             pl_sheet_list=filepath is None and not getattr(args, "target_crs", None),
         )
+        # Each country keeps its own default vertical CRS (PL EVRF2007, CZ Bpv,
+        # ~0.11-0.15 m apart); say so before the work. The country envelopes are
+        # rectangles (ADR-023 point 4), so this names the CRS of the parts the task
+        # runs, not whether both hold data (spec silent-defaults 2.3).
+        if {"PL", "CZ"} <= parts.keys() and getattr(args, "vertical_crs", None) is None:
+            print(
+                "Info: --country auto bez --vertical-crs: czesc PL w EVRF2007, "
+                "czesc CZ w Bpv (rozne uklady wysokosci, roznica ok. "
+                "0,11-0,15 m); jeden uklad dla obu: --vertical-crs EVRF2007",
+                file=sys.stderr,
+            )
 
     results: list[tuple[str, int]] = []
     for code in countries:

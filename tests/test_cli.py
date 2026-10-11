@@ -5372,6 +5372,89 @@ class TestAutoSplitBBox:
         assert cz_kwargs["parent_request"] == expected_parent
         assert cz_kwargs["bbox"].crs == "EPSG:5514"
 
+    @staticmethod
+    def _mixed_info(err: str) -> list[str]:
+        return [line for line in err.splitlines() if "Bpv" in line]
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_auto_mixed_vertical_crs_info(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
+    ):
+        """PL+CZ without --vertical-crs: one Info naming both default CRSs and
+        the remedy; both countries still run."""
+        mock_find.return_value = ["M-34-86-D-d-4-3"]
+        mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
+        mock_cz.return_value = 0
+
+        assert main(self._BORDER + ["-o", str(tmp_path)]) == 0
+
+        info = self._mixed_info(capsys.readouterr().err)
+        assert len(info) == 1
+        assert info[0].startswith("Info:")
+        assert "EVRF2007" in info[0] and "--vertical-crs" in info[0]
+        mock_cz.assert_called_once()
+        mock_manager_class.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            ["--vertical-crs", "EVRF2007"],
+            ["--country", "pl"],
+            ["--vertical-crs", "KRON86"],
+        ],
+    )
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_no_mixed_vertical_crs_info(
+        self, mock_manager_class, mock_find, mock_cz, extra, tmp_path, capsys
+    ):
+        """Explicit EVRF2007 (one CRS for both), explicit country and KRON86
+        (resolves the country to PL) give no such Info."""
+        mock_find.return_value = ["M-34-86-D-d-4-3"]
+        mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
+        mock_cz.return_value = 0
+
+        main(self._BORDER + extra + ["-o", str(tmp_path)])
+
+        assert self._mixed_info(capsys.readouterr().err) == []
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_pl_only_area_no_mixed_vertical_crs_info(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
+    ):
+        mock_find.return_value = ["N-34-139-A-c-1-1"]
+        mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
+
+        main(self._PL_ONLY + ["-o", str(tmp_path)])
+
+        assert self._mixed_info(capsys.readouterr().err) == []
+        mock_cz.assert_not_called()
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_auto_geometry_cross_border_mixed_info(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
+    ):
+        shp = tmp_path / "area.shp"
+        shp.touch()
+        mock_find.return_value = ["M-34-86-D-d-4-3"]
+        mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
+        mock_cz.return_value = 0
+        border = BBox(18.4, 49.55, 18.8, 49.75, "EPSG:4326")
+
+        with patch(
+            "kartograf.cli.download_cmd._geometry_envelope", return_value=border
+        ):
+            main(["download", "--geometry", str(shp), "-q", "-o", str(tmp_path)])
+
+        assert len(self._mixed_info(capsys.readouterr().err)) == 1
+
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -5621,7 +5704,12 @@ class TestAutoSplitBBox:
 
         assert rc == 0
         err = capsys.readouterr().err
-        info_lines = [line for line in err.splitlines() if line.startswith("Info:")]
+        # clipping messages only (the vertical CRS Info of d1 is separate)
+        info_lines = [
+            line
+            for line in err.splitlines()
+            if line.startswith("Info:") and "Bpv" not in line
+        ]
         assert len(info_lines) == 1
         assert "czesc CZ przycieta" in info_lines[0] and "N: 51,06°N" in info_lines[0]
         assert "poza zasiegiem" not in err
@@ -5632,7 +5720,7 @@ class TestAutoSplitBBox:
     def test_bbox_inside_both_extents_stays_silent(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
-        """Silence regression: no Info: without clipping."""
+        """Silence regression: no clipping Info: without clipping."""
         mock_cz.return_value = 0
         rc = self._run_auto(
             mock_find,
@@ -5643,7 +5731,8 @@ class TestAutoSplitBBox:
         )
 
         assert rc == 0
-        assert "Info:" not in capsys.readouterr().err
+        err = capsys.readouterr().err
+        assert "przycieta" not in err and "poza zasiegiem" not in err
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
