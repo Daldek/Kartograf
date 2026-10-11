@@ -2,7 +2,6 @@
 
 import json
 import re
-import warnings
 from datetime import date
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -16,10 +15,8 @@ import requests
 from kartograf.cli.commands import main
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.cutout import (
-    PlCutoutSheets,
     download_pl_cutout,
     prepare_pl_cutout,
-    run_pl_cutout,
     run_pl_wcs_cutout,
 )
 from kartograf.exceptions import DownloadError, ValidationError
@@ -332,7 +329,7 @@ def test_5m_rejected_before_network(tmp_path):
     session = _recorded_session()
     cut = _cutout(tmp_path, resolution="5m")
     with patch(MASK) as mask:
-        with pytest.raises(ValidationError, match="run_pl_cutout"):
+        with pytest.raises(ValidationError, match="tylko 1m"):
             run_pl_wcs_cutout(cut, provider=GugikProvider(session=session), today=DAY)
         with pytest.raises(ValidationError, match="1m"):
             download_pl_cutout(BBOX, "EPSG:2180", output_dir=tmp_path, resolution="5m")
@@ -342,28 +339,7 @@ def test_5m_rejected_before_network(tmp_path):
     assert not (tmp_path / "nmt").exists()
 
 
-@pytest.mark.parametrize(
-    ("name", "value"),
-    [
-        ("geometry", "area.gpkg"),
-        ("layer", "dzialki"),
-        ("scale", "1:5000"),
-        ("max_workers", 4),
-        ("force", True),
-        ("on_progress", print),
-        ("cache", object()),
-    ],
-)
-def test_download_pl_cutout_sheet_params_warn(tmp_path, name, value):
-    with (
-        patch("kartograf.download.cutout.run_pl_wcs_cutout") as run,
-        pytest.warns(DeprecationWarning, match=name),
-    ):
-        download_pl_cutout(BBOX, "EPSG:2180", output_dir=tmp_path, **{name: value})
-    run.assert_called_once()
-
-
-def test_download_pl_cutout_defaults_do_not_warn(tmp_path):
+def test_download_pl_cutout_writes_parent_request(tmp_path):
     session = _recorded_session()
     with (
         patch(
@@ -371,9 +347,7 @@ def test_download_pl_cutout_defaults_do_not_warn(tmp_path):
             return_value=GugikProvider(session=session),
         ),
         patch(MASK, return_value=ALL_LAND),
-        warnings.catch_warnings(),
     ):
-        warnings.simplefilter("error", DeprecationWarning)
         result = download_pl_cutout(
             BBOX, "EPSG:2180", output_dir=tmp_path, parent_request={"p": 1}
         )
@@ -381,13 +355,6 @@ def test_download_pl_cutout_defaults_do_not_warn(tmp_path):
     assert result.path.name.endswith(f"_{date.today():%Y%m%d}.tif")
     assert _meta(result.path)["extra"]["parent_request"] == {"p": 1}
     assert session.get.call_count == 1
-
-
-def test_run_pl_cutout_rejects_nmpt(tmp_path):
-    cut = _cutout(tmp_path, product="nmpt")
-    with pytest.raises(ValidationError, match="run_pl_wcs_cutout"):
-        run_pl_cutout(cut, PlCutoutSheets(godla=("N-34-130-D-d-2-3",)))
-    assert not (tmp_path / "nmpt").exists()
 
 
 @pytest.mark.parametrize(

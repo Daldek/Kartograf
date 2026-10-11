@@ -166,9 +166,10 @@ Uwagi, ktore latwo przeoczyc:
   i `download/cz_cutout.py`: przy imporcie `transform.crs`
   (`PinnedTransform`, `CONTENT_POLICY`, `WARP_MARGIN_PX`), leniwie
   `transform.crs.build_pinned_transform` (`prepare_pl_cutout`),
-  `transport.mosaic` i `transform.raster` (`build_pl_cutout`) oraz
-  `transport.mosaic.has_valid_pixels` (`run_pl_cutout` i `run_cz_cutout`,
-  kontrola `all_nodata`; w `cz_cutout.py` tylko ten leniwy import).
+  `transform.raster` (warp wycinka WCS) oraz
+  `transport.mosaic.has_valid_pixels` (`run_pl_wcs_cutout` i
+  `run_cz_cutout`, kontrola `all_nodata`; w `cz_cutout.py` tylko ten leniwy
+  import).
   `manager.py` i `storage.py` nie importuja zadnego z nich —
   `DownloadManager` pozostaje warstwa koordynacji arkuszy.
 - `cli` nie buduje mozaiki ani warpu wycinka (robi to biblioteka, R3),
@@ -222,9 +223,8 @@ z `kartograf`; zmiana sygnatury = zmiana lamiaca w CHANGELOG.
 ```
 kartograf/
 ├── __init__.py          # Public API (BBox, SheetParser, DownloadManager, providery, ...)
-├── exceptions.py        # KartografError; ParseError; ValidationError
-│                        # -> GridMismatchError(ValidationError; .off_grid) — niezgodna faza
-│                        # siatki arkuszy przestarzalego API wycinka; DownloadError(.godlo, .status_code)
+├── exceptions.py        # KartografError; ParseError; ValidationError;
+│                        # DownloadError(.godlo, .status_code)
 │                        # -> NoCoverageError(DownloadError; .hints) — zrodlo nie ma danych
 │                        # arkusza, .hints = podpowiedzi (np. --scale 1:2000)
 ├── core/                # Logika bazowa, bez IO sieciowego
@@ -265,8 +265,8 @@ kartograf/
 │   ├── aaigrid.py       # multipart WCS -> ASC (streaming), walidacja siatki i atomowy GeoTIFF float32
 │   └── mosaic.py        # mosaic_and_crop — merge rastrow + przyciecie, propagacja nodata;
 │                        # bez dtype= mieszane typy pasm -> ValidationError;
-│                        # opcjonalnie crop na siatce zrodel i owijanie zrodel w VRT;
-│                        # check_source_grid (fazy siatki -> GridMismatchError), has_valid_pixels
+│                        # opcjonalnie (dtype=) owijanie zrodel w VRT;
+│                        # check_source_grid (fazy siatki, SourceGrid.off_grid), has_valid_pixels
 ├── providers/           # Providery danych
 │   ├── base.py          # DataSourceProvider (ABC), BaseProvider, LandCoverProvider
 │   ├── pl/              # GUGiK: gugik.py (NMT), gugik_nmpt.py, gugik_orto.py,
@@ -300,9 +300,7 @@ kartograf/
 │   ├── countries.py     # Podzial obszaru na kraje: countries_for_bbox, split_bbox_by_country
 │   ├── links.py         # Dowiazanie sciezki standardowej (hardlink -> kopia, bez symlinkow, nigdy wstecz)
 │   ├── cutout.py        # Wycinek PL WCS (ADR-035): prepare_pl_cutout,
-│   │                    # run_pl_wcs_cutout, download_pl_cutout, maska, sidecar;
-│   │                    # przestarzale API arkuszowe: select/run_pl_cutout,
-│   │                    # build_cutout_from_sheets (do usuniecia w 0.8.0)
+│   │                    # run_pl_wcs_cutout, download_pl_cutout, maska, sidecar
 │   ├── cz_cutout.py     # Wycinek CZ jako API: download_cz_cutout/run_cz_cutout, all_nodata,
 │   │                    # write_cz_sidecar
 │   ├── laz.py           # Kafle LAZ jako API (ADR-029): download_laz_area/run_laz_download —
@@ -383,12 +381,11 @@ klamra `{`, konczy sie `ValidationError` z nazwa brakujacego wymiaru
 ### 3.2 Schema sidecara `kartograf-meta/1`
 
 Kazde udane pobranie przez CLI albo warstwe zarzadzajaca biblioteki
-(`DownloadManager`, `LandCoverManager`, `download_pl_cutout`/`run_pl_cutout`,
+(`DownloadManager`, `LandCoverManager`, `download_pl_cutout`/`run_pl_wcs_cutout`,
 `download_laz_area`/`run_laz_download`, `HSGCalculator`) zapisuje **dwa**
 pliki: dane i `<plik>.meta.json` (zapis best-effort, wyjatki — sekcja 1).
-Od 0.7.1 takze `download_cz_cutout`/`run_cz_cutout` (wycinek CZ),
-`build_cutout_from_sheets` (wycinek z lokalnych arkuszy) i
-`hsg_from_rasters`. Bezposrednie wywolanie providera sidecara nie pisze
+Od 0.7.1 takze `download_cz_cutout`/`run_cz_cutout` (wycinek CZ)
+i `hsg_from_rasters`. Bezposrednie wywolanie providera sidecara nie pisze
 (np. `CuzkDmrProvider.download`); sidecar godla CZ pisze CLI.
 
 | Pole | Znaczenie |
@@ -404,7 +401,7 @@ Od 0.7.1 takze `download_cz_cutout`/`run_cz_cutout` (wycinek CZ),
 | `license` | `{id, attribution, url}` z deskryptora |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, sekundy) i wersja pakietu z `kartograf/_version.py::build_version()`: wydanie = samo `__version__`; wersja rozwojowa (`dev`) = `<__version__>+<krotki SHA>` commita, z ktorego zaimportowano pakiet, z sufiksem `.dirty`, gdy sledzone pliki katalogu `kartograf/` maja niezacommitowane zmiany (docs/testy sie nie licza); gdy git jest niedostepny albo pakiet nie pochodzi z repozytorium, w ktorym lezy (`os.path.samefile`), samo `__version__`. Ta sama wartosc w `kartograf --version`; `User-Agent` HTTP niesie samo `__version__` |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
-| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania); LAZ `tile_sheet`/`year`/`nominal_density`/`url`, dodatkowo `acquisition_date`/`full_sheet`, gdy znane; arkusze NMT/NMPT/orto PL `source`, `campaign` oraz pola rocznikow/lotow opisane nizej; SM5 `mapname`/`cz_share`; wycinek bbox CZ `all_nodata` i `parent_request`; wycinek PL WCS `source`, `mask`, `zero_pixels` (tylko gdy > 0), `all_nodata`, `parent_request` (sekcja 3.2); przestarzaly wycinek arkuszowy PL: `missing_sheets`, `sheet_sources`, `off_grid_sheets`, `unverified_sheets`; CORINE WMS `fallback`/`note`; HSG `derived` i parametry obliczen |
+| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania); LAZ `tile_sheet`/`year`/`nominal_density`/`url`, dodatkowo `acquisition_date`/`full_sheet`, gdy znane; arkusze NMT/NMPT/orto PL `source`, `campaign` oraz pola rocznikow/lotow opisane nizej; SM5 `mapname`/`cz_share`; wycinek bbox CZ `all_nodata` i `parent_request`; wycinek PL WCS `source`, `mask`, `zero_pixels` (tylko gdy > 0), `all_nodata`, `parent_request` (sekcja 3.2); CORINE WMS `fallback`/`note`; HSG `derived` i parametry obliczen |
 | `sha256`, `size_bytes` | od 0.7.1: skrot SHA-256 (hex) i rozmiar w bajtach pliku danych, liczone w `build_metadata` (`sources/sidecar.py::file_digest`) przez ponowny odczyt GOTOWEGO pliku — jedno miejsce dla wszystkich produktow, takze pochodnych (wycinek, scalony GPKG BDOT10k, HSG); `null`, gdy sidecar powstaje bez istniejacego pliku danych. Sidecar sciezki standardowej kampanii (kopia sidecara celu) niesie skrot celu — tresc dowiazania jest ta sama |
 | `schema` | stale `kartograf-meta/1` |
 
@@ -446,11 +443,8 @@ odpytywany ponownie, wpis nadpisany); od 0.7.1 dotyczy to takze wpisow
 bez klucza `archive_module` (zapisanych przed dodaniem kluczy dokladnosci).
 Sidecar kampanii bez `extra.campaign.pzgik_date` nie daje klucza
 dowiazania z sidecara — uzywane jest dolne oszacowanie z nazwy katalogu
-kampanii (jak przy braku sidecara). Wpisy `extra.sheet_sources` bez
-`sheet` nie licza sie jako niepelne arkusze w przestarzalym torze
-arkuszowym; arkusz ze starym sidecarem daje tam `null` w polach o
-zmienionej nazwie. Ostrzezenie E17 nie powstaje dla sidecara bez
-`request.sheet`. Odswiezenie arkusza: `--force`.
+kampanii (jak przy braku sidecara). Ostrzezenie E17 nie powstaje dla
+sidecara bez `request.sheet`. Odswiezenie arkusza: `--force`.
 
 Kanal, z ktorego brany jest `horizontal_crs`/`vertical_crs_options`/
 `vertical_source`, wybiera `build_metadata`: albo jawnie po `capability=`,
@@ -478,11 +472,6 @@ jest zapisywane tylko gdy liczba zerowych pikseli na ladzie > 0 (zera zostaja
 danymi); `extra.all_nodata` i `PlCutoutResult.all_nodata` sa prawdziwe, gdy
 caly wynik jest nodata. `extra.parent_request` powstaje tylko po przekazaniu
 `parent_request=` (w CLI: oryginalne zadanie, sekcja 3.4).
-
-Przestarzaly tor `run_pl_cutout` z arkuszy wciaz tworzy sidecar
-`capability="sheet_files"` z `extra.missing_sheets`, `sheet_sources`,
-`off_grid_sheets`, `unverified_sheets` i `all_nodata`; do usuniecia w 0.8.0
-razem z API arkuszowym. Nie sa to pola wycinka WCS.
 
 **Kampanie (ADR-030).** Sidecar pliku w `kampanie/` jest OBOWIAZKOWY:
 `emit_sidecar(..., required=True)` zapisuje go atomowo, a porazka zapisu
@@ -861,7 +850,7 @@ arkuszy (<godla do 10>) (extra.link=copy)`; podsumowanie `all` albo
 to <dir> (<k> already existed)`. Pojedyncze godlo drukuje `Skipped <godlo> - already exists at
 <sciezka>` (zamiast `Downloaded to`) tylko, gdy `manager.last_sheet.skipped`.
 
-Awaria skorowidza przy `newest` (I-1, errata 5 ADR-030; tylko arkusze i przestarzaly wycinek arkuszowy): gdy `resolve_campaigns` konczy sie
+Awaria skorowidza przy `newest` (I-1, errata 5 ADR-030; tylko arkusze): gdy `resolve_campaigns` konczy sie
 bledem TRANSPORTU (`DownloadError` z `status_code` 429/5xx albo bez kodu,
 ale z przyczyna `requests.RequestException` — siec/timeout; NIE
 `NoCoverageError`, inne 4xx ani raport OGC/zly szablon), a sciezka
@@ -978,7 +967,7 @@ przygotowuje `PlCutout` bez sieci (takze z `product="nmpt"`).
 wykonuje pobranie i zwraca `PlCutoutResult`; fabryka
 `download_pl_cutout(..., product="nmt"|"nmpt", output_dir=...)` wykonuje
 oba kroki. Wstrzykniety provider musi odpowiadac produktowi, pionowi
-i rozdzielczosci. `run_pl_cutout` NIE jest krokiem tego toru.
+i rozdzielczosci.
 
 1. `run_pl_wcs_cutout`/`download_pl_cutout` odrzucaja rozdzielczosc inna
    niz 1 m (`ValidationError`; CLI `Error:`), a `prepare_pl_cutout`
@@ -1031,22 +1020,12 @@ i siatki sa zgodne, zmierzone WCS i arkusz sa bit w bit zgodne
 `--full-sheet` z `--target-crs` pozostaja `Error:` przed siecia;
 serwer nie udostepnia wyboru lotu.
 
-**Przestarzaly tor arkuszowy (usuniecie w 0.8.0).**
-`prepare_pl_cutout -> select_pl_cutout_sheets -> run_pl_cutout`,
-`PlCutoutSheets` i `build_cutout_from_sheets` pozostaja w bibliotece
-bez zmiany zachowania: selekcja godel PL-1992, pobranie lub uzycie
-lokalnych arkuszy OpenData, mozaika/crop 1:1 w EPSG:2180 albo
-warp per arkusz przy roznych fazach siatki. Przy EPSG:2180 rozne
-fazy daja `GridMismatchError`; brak arkusza = `missing_sheets`,
-`extra.sheet_sources` odtwarza pochodzenie. `run_pl_cutout` nie
-przyjmuje NMPT. Parametry arkuszowe `download_pl_cutout` (`geometry`,
-`layer`, `scale`, `max_workers`, `force`, `on_progress`, `cache`)
-nie zmieniaja WCS; wartosci niedomyslne emituja
-`DeprecationWarning`, usuniecie w 0.8.0. To samo dotyczy
-`mosaic_and_crop(snap_to_source_grid=, assign_crs=)` uzywanego
-przez przestarzaly tor. Scalanie PL+CZ w jedna powierzchnie
-pozostaje etapem 2; pod `--country auto` powstaja dwa pliki ze
-wspolnym `extra.parent_request`.
+Tor arkuszowy wycinka (ADR-027: `select_pl_cutout_sheets`,
+`run_pl_cutout`, `build_cutout_from_sheets`, `PlCutoutSheets`, parametry
+arkuszowe `download_pl_cutout` i `mosaic_and_crop(snap_to_source_grid=,
+assign_crs=)`) usunieto w 0.8.0 (ADR-035 errata 2). Scalanie PL+CZ
+w jedna powierzchnie pozostaje etapem 2; pod `--country auto` powstaja
+dwa pliki ze wspolnym `extra.parent_request`.
 
 ### 4.4 Godlo CZ (DMR 5G / DMR 4G)
 

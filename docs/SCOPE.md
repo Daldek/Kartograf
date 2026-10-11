@@ -298,10 +298,9 @@ from kartograf import (
     # Download (NMT/NMPT/Orto, kampanie ADR-030)
     DownloadManager, DownloadProgress, DownloadResult, SheetFetch, CampaignRef,
     FileStorage,
-    # Download — wycinek PL WCS (ADR-035); API arkuszowe do 0.8.0
-    PlCutout, PlCutoutResult, PlCutoutSheets,
+    # Download — wycinek PL WCS (ADR-035)
+    PlCutout, PlCutoutResult,
     download_pl_cutout, prepare_pl_cutout, run_pl_wcs_cutout,
-    run_pl_cutout, select_pl_cutout_sheets, build_cutout_from_sheets,
     # Download — kafle LAZ (ADR-029)
     LazDownloadResult, LazTileFailure, download_laz_area, run_laz_download,
     # Cache
@@ -318,7 +317,6 @@ from kartograf import (
     HSGCalculator,
     # Exceptions
     KartografError, ParseError, ValidationError, DownloadError, NoCoverageError,
-    GridMismatchError,
     # Version
     __version__,
 )
@@ -478,7 +476,7 @@ from kartograf import (
   szablonu przerywa z DownloadError, bez degradacji kampanii. Rekord musi
   mieć całe godło, zgodny układ i rozdzielczość; w pierwszej warstwie
   z pasującymi rekordami wygrywa najnowsza data. Brak rekordu daje
-  NoCoverageError; extra.source / extra.sheet_sources zachowują pochodzenie.
+  NoCoverageError; extra.source zachowuje pochodzenie.
   Cache PL zapisuje pełen rekord albo brak pokrycia (TTL 7 dni); --force pomija
   odczyt i zapisuje świeży wpis (w CZ tak samo dla indeksu arkuszy SM5)
 
@@ -727,9 +725,9 @@ pyshp >= 2.3.0         # Shapefile reading
   z opcjonalną reprojekcją poziomą (--target-crs) i pionową (--vertical-crs)
 - Bbox/geometria transgraniczna PL/CZ dzieli się na osobne pliki per kraj
   (--country auto), bez scalania, ze wspólnym extra.parent_request
-- Wycinek NMT PL (--target-crs / download_pl_cutout): jeden GeoTIFF na
-  siatce arkuszy (EPSG:2180) albo w EPSG:5514/3045; arkusz bez danych =
-  nodata + extra.missing_sheets
+- Wycinek NMT/NMPT PL 1 m (--target-crs / download_pl_cutout): jeden GeoTIFF
+  z WCS GUGiK na siatce arkuszy (EPSG:2180) albo w EPSG:5514/3045; poza
+  ladem PL (maska PRG) nodata -9999
 - Kampanie GUGiK: --campaigns newest/all, --year/--min-year/--max-year; pliki
   w kampanie/, ścieżka standardowa jako dowiązanie twarde (albo kopia) do najnowszej
 - LAZ: wybór kafli wg pokrycia obszaru (ADR-029), API download_laz_area

@@ -44,13 +44,9 @@ from kartograf.download.countries import (
 from kartograf.download.cutout import (
     PlCutout,
     PlCutoutResult,
-    PlCutoutSheets,
-    build_cutout_from_sheets,
     download_pl_cutout,
     prepare_pl_cutout,
-    run_pl_cutout,
     run_pl_wcs_cutout,
-    select_pl_cutout_sheets,
 )
 from kartograf.download.cz_cutout import (
     CzCutoutResult,
@@ -73,7 +69,6 @@ from kartograf.download.storage import FileStorage
 from kartograf.exceptions import (
     CacheError,
     DownloadError,
-    GridMismatchError,
     KartografError,
     NoCoverageError,
     ParseError,
@@ -120,16 +115,12 @@ __all__ = [
     "SheetFetch",
     "CampaignRef",
     "FileStorage",
-    # Download (PL cutout: WCS ADR-035; sheet API ADR-027, deprecated)
+    # Download (PL cutout: WCS ADR-035)
     "PlCutout",
     "PlCutoutResult",
-    "PlCutoutSheets",
-    "build_cutout_from_sheets",
     "download_pl_cutout",
     "prepare_pl_cutout",
-    "run_pl_cutout",
     "run_pl_wcs_cutout",
-    "select_pl_cutout_sheets",
     # Download (CZ cutout, countries)
     "CountryPart",
     "countries_for_bbox",
@@ -178,7 +169,6 @@ __all__ = [
     "DownloadError",
     "NoCoverageError",
     "YearRangeError",
-    "GridMismatchError",
     "CacheError",
     # Version
     "__version__",

@@ -401,13 +401,6 @@ print(result.path, result.masked_pixels, result.zero_pixels, result.all_nodata)
 cutout = prepare_pl_cutout(bbox, "EPSG:2180", product="nmt")
 result = run_pl_wcs_cutout(cutout)
 
-# Przestarzałe API arkuszowe (usunięcie w 0.8.0):
-# prepare_pl_cutout -> select_pl_cutout_sheets -> run_pl_cutout,
-# build_cutout_from_sheets (lokalne arkusze), PlCutoutSheets.
-# Parametry geometry/layer/scale/max_workers/force/on_progress/cache
-# w download_pl_cutout nie zmieniają toru WCS; niestandardowe wartości
-# emitują DeprecationWarning i zostaną usunięte w 0.8.0.
-
 # Zlewnia przygraniczna PL/CZ: podział obszaru na kraje i wycinek CZ
 # w układzie PL (EPSG:2180 + EVRF2007); siatka CZ startuje od zadanego obszaru
 from kartograf import download_cz_cutout, split_bbox_by_country
@@ -481,8 +474,6 @@ rozwijane do arkuszy 1:10000 przez `download_hierarchy()` (ta zawsze zwraca
   i 4.2).
 - `PlCutoutResult` (wycinek WCS): `path`, `masked_pixels`,
   `zero_pixels`, `all_nodata`; `skipped` zawsze `False`.
-  Pola `missing_sheets`, `off_grid_sheets`, `partial_sheets`
-  i `unverified` dotyczą wyłącznie przestarzałego API arkuszowego.
 - `CzCutoutResult` (wycinek CZ, `download_cz_cutout`/`run_cz_cutout`):
   `path`, `skipped`, `all_nodata`.
 - `LazDownloadResult` (`download_laz_area`): `downloaded`, `skipped`,
@@ -752,10 +743,7 @@ proxy).
   granic; `--country auto` może odpytać CUZK poza Czechami i GUGiK
   w Czechach (sekcja 1.2).
 - NMT 5 m nie obsługuje `--target-crs`: pobieraj arkusze
-  bez tej flagi. W przestarzałym API arkuszowym (do 0.8.0)
-  `run_pl_cutout` z różnymi fazami siatki może dać
-  `GridMismatchError` przy EPSG:2180; inny CRS używa
-  warpu każdego arkusza.
+  bez tej flagi.
 - WCS `download_bbox` NMT KRON86 (TIFF) oraz NMT EVRF2007
   i NMPT (ASC multipart) daje wysokości float32 w rozdzielczości
   1 m. Samo `download_bbox` nie stosuje maski lądu PRG ani
