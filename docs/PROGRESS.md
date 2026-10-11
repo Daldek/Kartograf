@@ -131,9 +131,10 @@
 > spec `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`, plan
 > `docs/superpowers/plans/2026-10-10-full-sheet-link.md`, raport
 > `docs/research/2026-10-10-full-sheet-link/raport.md`.
-> **(d) ciche wartosci domyslne — WDROZONE na galezi `feat/silent-defaults`
-> 2026-10-10, NIE scalone do `develop`** (merge `--no-ff` po decyzji
-> uzytkownika). Spec
+> **(d) ciche wartosci domyslne — SCALONE do `develop` 2026-10-10** (merge
+> `--no-ff` `54c9c7e`, brama na wyniku zielona: pytest offline 3216, ruff,
+> mypy; galaz `feat/silent-defaults` usunieta; `develop` NIE wypchniety na
+> `origin` — push to osobna decyzja uzytkownika). Spec
 > `docs/superpowers/specs/2026-10-10-silent-defaults-design.md`, plan
 > `docs/superpowers/plans/2026-10-10-silent-defaults.md`, ADR-034, pomiar
 > WCS `docs/research/2026-10-10-wcs-limits/raport.md`, weryfikacja na zywo
@@ -142,8 +143,7 @@
 > **NASTEPNA SESJA (decyzja uzytkownika 2026-10-10):** spec (a) wycinki PL
 > z WCS — wejscie zebrane w backlogu "Do 0.7.2" pozycja (a) (nowy ADR;
 > korzysta z `transport/chunks.py`; razem z naprawa NMPT `download_bbox`).
-> Merge `feat/silent-defaults` do `develop` — nadal do decyzji uzytkownika
-> (spec (a) mozna pisac na `develop` po merge albo na galezi z (d)).
+> Spec (a) piszemy na `develop` (po merge (d)).
 > Potem (e) testy LAZ; zakres wydania 0.7.2 — do decyzji uzytkownika.
 > **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
 > na zywo z raportem, `__version__ = "0.7.2"` + asercje testow, data i link
@@ -1805,7 +1805,9 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
   `docs/research/2026-10-10-full-sheet-link/raport.md`). Spec
   `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`, plan
   `docs/superpowers/plans/2026-10-10-full-sheet-link.md`.
-- [ ] **(d) Z inwentaryzacji wartosci domyslnych:**
+- [x] **(d) Z inwentaryzacji wartosci domyslnych** — SCALONE do `develop`
+  2026-10-10 (`54c9c7e`; ADR-034, raport
+  `docs/research/2026-10-10-silent-defaults/raport.md`):
   - `--country auto` PL+CZ bez `--vertical-crs`: mieszane uklady wysokosci,
     cicho (szczegoly: "Ryzyko KRON86 3" wyzej);
   - GPKG z wieloma warstwami bez `--layer` cicho uzywa pierwszej warstwy
@@ -1825,7 +1827,7 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
     pokryciem; kawalki skladaja sie bit w bit).
   - Spec `docs/superpowers/specs/2026-10-10-silent-defaults-design.md`,
     plan `docs/superpowers/plans/2026-10-10-silent-defaults.md`
-    (2026-10-10; implementacja nie rozpoczeta).
+    (2026-10-10; wdrozone i scalone, `54c9c7e`).
 - [ ] **NMPT `download_bbox` zwraca RGB uint8 zamiast wysokosci**
   (znalezione przy pomiarze WCS 2026-10-10, raport
   `docs/research/2026-10-10-wcs-limits/raport.md` pkt 6):
@@ -2017,7 +2019,9 @@ liczony w strumieniu `download_to` zostaje w magazynie 0.8.0.
   deklaracja rekordu w `extra.source.declared_vertical_crs` (Task 3).
 - [x] **Ryzyko KRON86 2 — cicha zamiana 5 m w bibliotece** (KRON86 ->
   EVRF2007 tylko z `logger.warning`) — zamkniete Task 12 (b).
-- [ ] **Ryzyko KRON86 3 — `--country auto` bez `--vertical-crs`:** obszar
+- [x] **Ryzyko KRON86 3 — `--country auto` bez `--vertical-crs`** — zamkniete
+  komunikatem `Info:` (d1, merge `54c9c7e`; uklad domyslny bez zmian, decyzja
+  uzytkownika 2026-10-10). Stan wyjsciowy: obszar
   PL+CZ daje PL w EVRF2007 (EPSG:9651) i CZ w Bpv (EPSG:8357), roznica ok.
   0,1-0,15 m, bez komunikatu w runtime (tylko dokumentacja: ARCHITECTURE
   4.6, USAGE 1.4; sidecary oznaczaja uklad poprawnie). Do decyzji: `Info:`
