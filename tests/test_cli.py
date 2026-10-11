@@ -3661,6 +3661,32 @@ class TestResolveLazBbox:
         assert bbox.crs == "EPSG:2180"
         assert bbox.min_x < bbox.max_x and bbox.min_y < bbox.max_y
 
+    def test_geometry_multi_layer_info_and_explicit_layer(
+        self, tmp_path, capsys, caplog
+    ):
+        """LAZ --geometry resolves the GPKG layer like the other paths: one Info
+        in the CLI and the explicit name downstream (no raw library WARNING)."""
+        from argparse import Namespace
+
+        from kartograf.cli.download_cmd import _resolve_laz_bbox
+
+        gpkg = write_gpkg_layers(tmp_path / "multi.gpkg", ["layer_a", "layer_b"])
+        args = Namespace(godlo=None, bbox=None, geometry=str(gpkg), layer=None)
+        envelope = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
+        with (
+            patch(
+                "kartograf.core.geometry.get_overall_bbox", return_value=envelope
+            ) as overall,
+            caplog.at_level("WARNING", logger="kartograf.core.geometry"),
+        ):
+            assert _resolve_laz_bbox(args) == envelope
+
+        assert overall.call_args.kwargs["layer"] == "layer_a"
+        err_lines = capsys.readouterr().err.splitlines()
+        info = [line for line in err_lines if "warstw" in line]
+        assert len(info) == 1 and info[0].startswith("Info:")
+        assert caplog.records == []
+
     def test_bbox_wgs84_across_19e_keeps_southern_band(self):
         """K6: an envelope from densified edges - four corners lost
         ~479 m in the S for a bbox through 19E (LAZ tile selection too narrow)."""

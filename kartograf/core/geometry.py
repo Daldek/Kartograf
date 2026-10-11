@@ -531,7 +531,8 @@ def read_source_crs(filepath: Path, layer: str | None = None) -> CRS:
     filepath : Path
         Path to SHP or GPKG file
     layer : str or None
-        Layer name for GPKG (None = first feature table)
+        Layer name for GPKG (None = first feature table; with several layers a
+        logger WARNING names the choice)
 
     Returns
     -------
@@ -573,7 +574,8 @@ def get_overall_bbox(
     filepath : Path
         Path to SHP or GPKG file
     layer : str or None
-        Layer name for GPKG (None = first layer)
+        Layer name for GPKG (None = first layer; with several layers a
+        logger WARNING names the choice)
     target_crs : str
         Target CRS (default: "EPSG:2180")
 
@@ -620,7 +622,8 @@ def find_sheets_for_geometry(
     target_scale : str
         Target scale (default: "1:10000")
     layer : str or None
-        Layer name for GPKG (None = first layer)
+        Layer name for GPKG (None = first layer; with several layers a
+        logger WARNING names the choice)
     system : str
         Coordinate system: "1992" (PL-1992) or "2000" (PL-2000).
         Default: "1992" - full backward compatibility.

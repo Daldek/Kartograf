@@ -244,6 +244,25 @@ class TestGugikNmptProviderDownload:
         assert "SUBSET=x(" in call_url
         assert "SUBSET=y(" in call_url
 
+    def test_download_bbox_rejects_exception_report(self, tmp_path, sample_bbox):
+        """The single NMPT request is validated too: an OGC ExceptionReport with
+        HTTP 200 is a DownloadError, never a .tif file."""
+        from kartograf.exceptions import DownloadError
+
+        response = Mock(spec=requests.Response)
+        response.status_code = 200
+        response.headers = {"Content-Type": "text/xml"}
+        response.text = (
+            "<ows:ExceptionReport>InvalidParameterValue</ows:ExceptionReport>"
+        )
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=response)
+        output_path = tmp_path / "err.tif"
+
+        with pytest.raises(DownloadError, match="ExceptionReport"):
+            GugikNmptProvider(session=session).download_bbox(sample_bbox, output_path)
+        assert not output_path.exists()
+
     def test_get_opendata_url_uses_nmpt_endpoint(self, mock_wms_response):
         """Test that _get_opendata_url queries the NMPT endpoint (not NMT)."""
         session = Mock(spec=requests.Session)

@@ -1993,18 +1993,16 @@ def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
     """
     Resolve a sheet code / --bbox / --geometry input to an EPSG:2180 BBox for LAZ.
 
-    Returns None (after printing an error) if a geometry file is missing.
-    Raises ParseError / ValidationError on invalid input.
+    Returns None (after printing an error) if a geometry file is missing or its
+    layer is invalid. Raises ParseError / ValidationError on invalid input.
     """
     if getattr(args, "geometry", None):
         from kartograf.core.geometry import get_overall_bbox
 
-        filepath = Path(args.geometry)
-        if not filepath.exists():
-            print(f"Error: File not found: {filepath}", file=sys.stderr)
+        if not _announce_geometry_layer(args):
             return None
         return get_overall_bbox(
-            filepath, layer=getattr(args, "layer", None), target_crs="EPSG:2180"
+            Path(args.geometry), layer=args.layer, target_crs="EPSG:2180"
         )
 
     if args.bbox is not None:

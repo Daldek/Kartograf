@@ -692,6 +692,22 @@ class TestGugikOrtoProviderDownloadBbox:
         assert "Orthoimagery_StandardResolution" in call_url
         assert output_path.exists()
 
+    def test_download_bbox_rejects_exception_report(self, tmp_path, sample_bbox):
+        """An OGC ExceptionReport with HTTP 200 is a DownloadError, not a file."""
+        response = Mock(spec=requests.Response)
+        response.status_code = 200
+        response.headers = {"Content-Type": "text/xml"}
+        response.text = (
+            "<ows:ExceptionReport>InvalidParameterValue</ows:ExceptionReport>"
+        )
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=response)
+        output_path = tmp_path / "err.tif"
+
+        with pytest.raises(DownloadError, match="ExceptionReport"):
+            GugikOrtoProvider(session=session).download_bbox(sample_bbox, output_path)
+        assert not output_path.exists()
+
     def test_download_bbox_invalid_crs(self, tmp_path):
         """Test the error for a bbox with an invalid CRS (not EPSG:2180)."""
         provider = GugikOrtoProvider()
