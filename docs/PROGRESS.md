@@ -150,9 +150,11 @@
 > `docs/research/2026-10-11-wcs-cutouts/raport.md` (WCS na siatce arkusza
 > = arkusz bit w bit; WCS EVRF2007 dziala, wysokosci tylko
 > `image/x-aaigrid`, kawalek ASC 1 Mpx; arkusze 0,5 m maja siatke
-> `k + 0,25`). **Nastepny krok:** akceptacja planu
-> `docs/superpowers/plans/2026-10-11-wcs-cutouts.md`, potem Task 0
-> (galaz `feat/wcs-cutouts`) i implementacja.
+> `k + 0,25`). **NASTEPNA SESJA (decyzja uzytkownika 2026-10-11):**
+> implementacja planu `docs/superpowers/plans/2026-10-11-wcs-cutouts.md`
+> (`6e5b2cd`) od Task 0 — nowa galaz `feat/wcs-cutouts` z `develop`.
+> Dane na zywo i fixtury: katalog danych z pomiaru 2026-10-11 (wskazany
+> przez uzytkownika; tam skrypty pomiaru i arkusze 1 m / 0,5 m).
 > Potem (e) testy LAZ; zakres wydania 0.7.2 — do decyzji uzytkownika.
 > **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
 > na zywo z raportem, `__version__ = "0.7.2"` + asercje testow, data i link
@@ -197,9 +199,10 @@
   granicy), nie dziura lotu — potwierdzone rasteryzacja `A00`, raport
   poprawiony.
 - Spec zatwierdzony i scommitowany na `develop` (`f670d8b`); plan
-  `docs/superpowers/plans/2026-10-11-wcs-cutouts.md` (Task 0-9) czeka na
-  akceptacje. Brama przed commitem specu zielona (pytest offline 3216,
-  ruff, mypy).
+  `docs/superpowers/plans/2026-10-11-wcs-cutouts.md` (Task 0-9,
+  `6e5b2cd`) — implementacja w nastepnej sesji na `feat/wcs-cutouts`
+  (decyzja uzytkownika). Brama przed commitem specu zielona (pytest
+  offline 3216, ruff, mypy). `develop` NIE wypchniety na `origin`.
 
 ### (d) ciche wartosci domyslne — implementacja (2026-10-10)
 
