@@ -39,10 +39,10 @@ from kartograf.providers.pl.skorowidz import (
     select_sheet_record,
 )
 from kartograf.providers.pl.wcs import GugikWcsMixin
+from kartograf.transport.chunks import GridSpec
 from kartograf.transport.http import (
     MAX_RETRIES,
     SessionPerThread,
-    download_to,
 )
 
 logger = logging.getLogger(__name__)
@@ -132,6 +132,11 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         "KRON86": "DTM_PL-KRON86-NH_TIFF",
         "EVRF2007": "DTM_PL-EVRF2007-NH_TIFF",
     }
+
+    # NMT 1 m source grid: step 1 m, pixel edges at k + 0.5 m - measured in 9
+    # regions of Poland and identical to the OpenData sheets
+    # (docs/research/2026-10-10-wcs-limits/raport.md, points 4 and 7).
+    WCS_GRID: GridSpec | None = GridSpec(step=1.0, origin_x=0.5, origin_y=0.5)
 
     # Supported vertical CRS by resolution
     SUPPORTED_VERTICAL_CRS = ["KRON86", "EVRF2007"]
@@ -456,6 +461,14 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         ``vertical_crs="KRON86"``. Use ``download()`` with a sheet code to get
         EVRF2007 heights.
 
+        GeoTIFF (NMT only, ``WCS_GRID``): the file extent is the bbox expanded
+        OUTWARD to the source grid (pixel edges at k + 0.5 m, < 1 px per side),
+        because the server resamples to the requested grid and an off-grid bbox
+        would shift the content by a fraction of a pixel; areas above
+        ``WCS_CHUNK_LIMITS`` (16 Mpx) are fetched in chunks and stitched without
+        resampling (ADR-034). PNG/JPEG: one request with the bbox as given. An
+        OGC exception report is raised as ``DownloadError``, never saved.
+
         Examples
         --------
         >>> provider = GugikProvider(vertical_crs="KRON86")
@@ -492,20 +505,13 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
                 "or download sheets by godlo."
             )
 
-        output_path = Path(output_path)
-
-        url = self._construct_wcs_url(bbox, format)
-
-        return download_to(
-            self._sessions.get(),
-            url,
-            output_path,
-            timeout=timeout,
-            retries=self.MAX_RETRIES,
-            description=(
-                f"bbox ({bbox.min_x:.0f},{bbox.min_y:.0f})-"
-                f"({bbox.max_x:.0f},{bbox.max_y:.0f})"
-            ),
+        return self._download_wcs(
+            bbox,
+            Path(output_path),
+            format,
+            timeout,
+            f"bbox ({bbox.min_x:.0f},{bbox.min_y:.0f})-"
+            f"({bbox.max_x:.0f},{bbox.max_y:.0f})",
         )
 
     def _wcs_target(self) -> tuple[str, str]:

@@ -129,6 +129,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dotad wynik dostawal typ pierwszego zrodla (np. wysokosci float obciete
   do liczb calkowitych bez sladu). Co zrobic: przy mieszanych zrodlach
   podaj `dtype=` (np. `"float32"`).
+- `download_bbox()` NMT 1 m KRON86 (GeoTIFF; takze
+  `DownloadManager.download_bbox`): zasieg pliku to bbox rozszerzony na
+  zewnatrz do siatki zrodla (krawedzie pikseli `k + 0,5` m, < 1 px z kazdej
+  strony), a obszar powyzej 16 Mpx jest pobierany kawalkami i skladany bez
+  przeprobkowania (ADR-034). Sidecar `request.bbox` = bbox zadania. Co
+  zrobic: nic; kto liczyl na zasieg rowny bboxowi, czyta zasieg z pliku.
+  NMPT, ortofotomapa i PNG/JPEG — jedno zapytanie jak dotad.
 
 ### Naprawione
 
@@ -152,6 +159,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pobraniu zostawia poprzedni GPKG i jego sidecar bez zmian (scalony GPKG
   zastepuje poprzedni dopiero po zapisie ZIP). Wczesniej poprzedni GPKG
   byl nadpisany, a potem usuniety, i zostawal sidecar bez pliku danych.
+- `download_bbox()` NMT/NMPT/ortofotomapy nie zapisuje juz raportu bledu
+  WCS (`ows:ExceptionReport`, XML z HTTP 200) jako pliku rastra — to
+  `DownloadError`. NMT 1 m z bboxem poza siatka zrodla dawal tresc
+  przesunieta o ulamek piksela wzgledem georeferencji (serwer probkuje do
+  siatki zadania; pomiar `docs/research/2026-10-10-wcs-limits/raport.md`);
+  teraz zadanie jest wyrownane do siatki zrodla.
 
 ## [0.7.1] - 2026-10-09
 

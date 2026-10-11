@@ -90,6 +90,12 @@ class GugikNmptProvider(GugikProvider):
     # so nothing is withdrawn here.
     WITHDRAWN_WCS_VERTICAL_CRS: tuple[str, ...] = ()
 
+    # One request with the bbox as given (no chunking): the NMPT GeoTIFF is
+    # 3-band uint8 RGB, not heights - heights come only as image/x-aaigrid
+    # (multipart); fixed together with the WCS cutouts
+    # (docs/research/2026-10-10-wcs-limits/raport.md, point 6).
+    WCS_GRID = None
+
     # Product identifier for cache key (overrides GugikProvider's "nmt")
     _CACHE_PRODUCT = "nmpt"
 
