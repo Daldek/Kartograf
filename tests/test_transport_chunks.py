@@ -130,6 +130,19 @@ class TestPlanChunks:
             Chunk(bbox, 20, 10)
         ]
 
+    def test_plan_chunks_multiple_keeps_every_chunk_even(self):
+        """``multiple=2``: every chunk even-sized (budget 1 Mpx, isqrt = 1000)."""
+        bbox = BBox(0.5, 0.5, 0.5 + 2502, 0.5 + 1202, "EPSG:2180")
+        chunks = plan_chunks(
+            bbox, 2502, 1202, 1.0, ChunkLimits(40_000, 40_000, 1_000_000), multiple=2
+        )
+        assert all(c.width % 2 == 0 and c.height % 2 == 0 for c in chunks)
+        assert all(c.width * c.height <= 1_000_000 for c in chunks)
+        assert sum(c.width for c in chunks if c.bbox.max_y == bbox.max_y) == 2502
+        assert sum(c.height for c in chunks if c.bbox.min_x == bbox.min_x) == 1202
+        with pytest.raises(ValidationError, match="wielokrotnoscia"):
+            plan_chunks(bbox, 2501, 1202, 1.0, ChunkLimits(10, 10, 100), multiple=2)
+
 
 class TestFetchChunks:
     def test_fetch_chunks_single_writes_output_directly(self, tmp_path):

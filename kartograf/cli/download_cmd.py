@@ -233,7 +233,7 @@ def _product_label(product: str, resolution: str | None) -> str:
 def _print_sheet_list(
     godla: list[str], target_scale: str, *, what: str, label: str
 ) -> None:
-    """Header of the PL sheet list (cutout and list mode, D15): up to 10 sheet codes
+    """Header of the PL sheet list (list mode, D15): up to 10 sheet codes
     in full, a longer list as the first 3 + ``...`` + the last 2."""
     print(f"Found {len(godla)} sheets at {target_scale} for {what} ({label})")
     sample = godla if len(godla) <= 10 else godla[:3] + ["..."] + godla[-2:]
@@ -330,7 +330,8 @@ def _reject_campaign_opts_without_pl(
 
 
 def _reject_campaign_opts_with_target_crs(args: argparse.Namespace) -> bool:
-    """A PL cutout has no year in its name and composes newest campaigns only."""
+    """A PL cutout (WCS, ADR-035) has no year or campaign choice: the server's
+    flight composition, the download date in the name."""
     if getattr(args, "target_crs", None) is None:
         return False
     campaigns, min_year, max_year = _campaign_opts(args)
@@ -348,22 +349,24 @@ def _reject_campaign_opts_with_target_crs(args: argparse.Namespace) -> bool:
     )
     if flag is not None:
         print(
-            f"Error: {flag} nie dziala z --target-crs — wycinek sklada najnowsze "
-            "kampanie, nazwa wycinka nie niesie roku",
+            f"Error: {flag} nie dziala z --target-crs — wycinek z WCS GUGiK ma "
+            "kompozycje lotow serwera (bez wyboru roku); rok danych: pobierz "
+            "arkusze bez --target-crs",
             file=sys.stderr,
         )
         return True
     if campaigns == "all":
         print(
-            "Error: --campaigns all nie dziala z --target-crs — wycinek sklada "
-            "jedna kampanie na arkusz",
+            "Error: --campaigns all nie dziala z --target-crs — wycinek z WCS "
+            "GUGiK ma jedna kompozycje lotow serwera; wszystkie kampanie: "
+            "pobierz arkusze bez --target-crs",
             file=sys.stderr,
         )
         return True
     if getattr(args, "full_sheet", False):
         print(
-            "Error: --full-sheet nie dziala z --target-crs — wycinek sklada "
-            "sciezki standardowe (najnowszy lot arkusza), nie full_sheet/",
+            "Error: --full-sheet nie dziala z --target-crs — wycinek pochodzi "
+            "z WCS GUGiK, nie z arkuszy",
             file=sys.stderr,
         )
         return True
@@ -380,7 +383,8 @@ def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
 
     Covers validation of the product/resolution and product/vertical_crs pairs
     (symmetric to the hard rejections of the CZ branch) and of the ``--target-crs``
-    exclusions (product != nmt, ``--system 2000`` - ADR-027)
+    exclusions (product orto/laz, ``--resolution 5m``, ``--system 2000`` -
+    ADR-027/035)
     - checked BEFORE defaults are substituted, so that "not given" does not
     pose as a user choice. NMT 5m with KRON86 is rejected after the
     defaults (0.7.1, ``require_nmt_vertical_crs``): only an explicit
@@ -407,10 +411,18 @@ def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
         return 1
 
     target_crs = getattr(args, "target_crs", None)
-    if target_crs is not None and product in ("nmpt", "orto", "laz"):
+    if target_crs is not None and product in ("orto", "laz"):
         print(
-            "Error: --target-crs w 0.7.0 dziala tylko z --product nmt "
-            "(nmpt/orto — etap 2; laz to chmura punktow, nie raster)",
+            "Error: --target-crs dla PL dziala tylko z --product nmt albo nmpt "
+            "(wycinek wysokosci z WCS GUGiK; orto i laz — pobierz bez "
+            "--target-crs)",
+            file=sys.stderr,
+        )
+        return 1
+    if target_crs is not None and getattr(args, "resolution", None) == "5m":
+        print(
+            "Error: wycinki --target-crs sa tylko 1 m (WCS GUGiK); arkusze 5 m: "
+            "pomin --target-crs; wycinek: --resolution 1m",
             file=sys.stderr,
         )
         return 1
@@ -1286,15 +1298,14 @@ def _print_campaign_summary(
     )
 
 
-def _warn_unverified(unverified: dict[str, str], *, from_sidecar: bool = False) -> None:
+def _warn_unverified(unverified: dict[str, str]) -> None:
     """``Warning:`` for sheets taken from a local campaign unverified (I-1)."""
     godla = list(unverified)
     shown = ", ".join(godla[:10]) + (" ..." if len(godla) > 10 else "")
     print(
         "Warning: skorowidz GUGiK niedostepny — dla "
         f"{len(godla)} arkuszy uzyto lokalnej kampanii bez sprawdzenia nowszej "
-        f"({shown}) ({unverified[godla[0]]})"
-        + (" (z sidecara istniejacego wycinka)" if from_sidecar else ""),
+        f"({shown}) ({unverified[godla[0]]})",
         file=sys.stderr,
     )
 
@@ -1666,74 +1677,6 @@ def _warn_partial_sheets(
     )
 
 
-def _warn_missing_sheets(missing: tuple[str, ...], *, from_sidecar: bool) -> None:
-    """R5: ``Warning:`` about sheets without GUGiK data in a cutout (stderr, -q does
-    not suppress).
-
-    For a skipped cutout the list comes from its sidecar (N4) - the same
-    message as on build, with a note about the source.
-    """
-    if not missing:
-        return
-    shown = ", ".join(missing[:10]) + (" ..." if len(missing) > 10 else "")
-    origin = " (z sidecara istniejacego wycinka)" if from_sidecar else ""
-    print(
-        f"Warning: GUGiK nie ma danych dla {len(missing)} arkuszy wycinka "
-        f"({shown}) — w tych miejscach wycinek ma nodata (lista w sidecarze: "
-        f"extra.missing_sheets){origin}",
-        file=sys.stderr,
-    )
-
-
-def _report_pl_cutout(result, *, from_sidecar: bool) -> None:
-    """Messages about cutout content: missing sheets (R5), W1 (S5), nodata only (N2),
-    sheets from an incomplete newest campaign (E13).
-
-    For a skipped cutout all data come from its sidecar
-    (``skipped_pl_cutout``) - warnings repeat with a note about the source.
-    """
-    _warn_missing_sheets(result.missing_sheets, from_sidecar=from_sidecar)
-    unverified = getattr(result, "unverified", None)
-    if isinstance(unverified, dict) and unverified:
-        # I-1: like the list/sheet code; full list in the sidecar
-        # (extra.unverified_sheets)
-        _warn_unverified(unverified, from_sidecar=from_sidecar)
-    origin = " (z sidecara istniejacego wycinka)" if from_sidecar else ""
-    if result.off_grid_sheets:
-        print(
-            f"Info: {len(result.off_grid_sheets)} arkuszy o innej fazie siatki "
-            "przeprobkowanych osobno (W1; lista w sidecarze: "
-            f"extra.off_grid_sheets){origin}",
-            file=sys.stderr,
-        )
-    partial = tuple(getattr(result, "partial_sheets", ()))
-    shown = ", ".join(partial[:10]) + (" ..." if len(partial) > 10 else "")
-    if result.all_nodata and partial:
-        # C14-b: GUGiK has data in an older campaign, while the newest (chosen per
-        # ADR-028) is truncated - "no GUGiK data" would be misleading
-        print(
-            "Warning: wycinek w calosci nodata — najnowsza kampania GUGiK "
-            f"jest niepelna dla {len(partial)} arkuszy ({shown}) i nie pokrywa "
-            "obszaru zadania (starsza kampania moze miec dane; "
-            f"extra.sheet_sources[].full_sheet){origin}",
-            file=sys.stderr,
-        )
-    elif result.all_nodata:
-        print(
-            "Warning: wycinek w calosci nodata — pobrane arkusze nie wnosza "
-            "zadnego piksela w obszarze zadania (brak danych GUGiK / obszar "
-            f"poza pokryciem){origin}",
-            file=sys.stderr,
-        )
-    elif partial:
-        print(
-            f"Warning: najnowsza kampania GUGiK jest niepelna dla {len(partial)} "
-            f"arkuszy wycinka ({shown}) — wycinek moze miec w ich obszarze "
-            f"nodata (extra.sheet_sources[].full_sheet){origin}",
-            file=sys.stderr,
-        )
-
-
 # description of the datum step in sidecars from before the K2 fix (EPSG:4829, area of
 # use:
 # Slovakia; content shifted 1-5 m) - after the fix the CZ path and the PL cutout -> 5514
@@ -1766,110 +1709,65 @@ def _download_pl_cutout(
     args: argparse.Namespace,
     bbox: BBox,
     parent_request: dict,
-    geometry: Path | None = None,
 ) -> int:
-    """Polish --target-crs cutout (ADR-027): a CLI overlay on download/cutout.py.
+    """Polish --target-crs cutout from GUGiK WCS (ADR-035): a CLI overlay on
+    ``download/cutout.py``.
 
-    Called after ``_resolve_pl_sentinels``. Preparation errors
-    (``TransformError``/``ValidationError``), sheet selection errors
-    (``ValidationError``) and EVERY download or cutout build error (also
-    ``GridMismatchError`` with a hint of another ``--target-crs``, S5) end
-    with code 1 and a message, not a traceback: an exception leaking out of the
-    country loop of ``_dispatch_area`` would break the partial success contract
-    (ADR-023 points 4-5). A sheet without GUGiK data is not an error (R5): the cutout
-    is built with nodata in its place, and a ``Warning:`` on stderr lists such
-    sheets (up to 10; full list in the sidecar, ``extra.missing_sheets``) -
-    also when skipping an existing cutout (list from its sidecar, N4).
-    A cutout without a single valid pixel (N2) = ``Warning:``, code 0.
+    Called after ``_resolve_pl_sentinels`` (nmt/nmpt, 1m only). ``bbox`` is
+    the request or the ``--geometry`` envelope. Preparation errors
+    (``TransformError``/``ValidationError``) and EVERY download or build
+    error (PRG, WCS) end with code 1 and a message, not a traceback: an
+    exception leaking out of the country loop of ``_dispatch_area`` would break
+    the partial success contract (ADR-023 points 4-5). Every run downloads
+    (``--force``, ``--workers`` and ``--scale`` have no effect). A cutout
+    entirely outside PL land = ``Warning:``, code 0.
     """
-    from kartograf.download.cutout import (
-        prepare_pl_cutout,
-        run_pl_cutout,
-        select_pl_cutout_sheets,
-        skipped_pl_cutout,
-    )
+    from kartograf.download.cutout import prepare_pl_cutout, run_pl_wcs_cutout
     from kartograf.transform.crs import TransformError
 
+    product = getattr(args, "product", "nmt")
     output_dir = Path(args.output)
-    with _pl_metadata_cache(args) as cache:
-        provider, storage = _create_provider_and_storage(
-            getattr(args, "product", "nmt"),
-            output_dir,
-            args.vertical_crs,
-            args.resolution,
-            cache=cache,
+    try:
+        # fail-fast: the pinned operation is built BEFORE any network access
+        cutout = prepare_pl_cutout(
+            bbox,
+            args.target_crs,
+            output_dir=output_dir,
+            resolution=args.resolution,
+            vertical_crs=args.vertical_crs,
+            product=product,
         )
-        try:
-            # fail-fast: the pinned operation is built BEFORE any network access
-            cutout = prepare_pl_cutout(
-                bbox,
-                args.target_crs,
-                output_dir=output_dir,
-                resolution=args.resolution,
-                vertical_crs=args.vertical_crs,
-            )
-        except TransformError as e:
-            return _print_transform_error(e)
-        except ValidationError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 1
-        if not args.force and cutout.target_path.exists():
-            result = skipped_pl_cutout(cutout)
-            if not args.quiet:
-                print(f"Skipped - already exists at {cutout.target_path}")
-            _report_pl_cutout(result, from_sidecar=True)
-            _print_legacy_krovak_info(cutout.target_path)
-            return 0
-
-        target_scale = args.scale or "1:10000"
-        try:
-            sheets = select_pl_cutout_sheets(
-                cutout,
-                geometry=geometry,
-                layer=getattr(args, "layer", None),
-                scale=target_scale,
-            )
-        except ValidationError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 1
-
-        if not args.quiet:
-            _print_sheet_list(
-                list(sheets.godla),
-                target_scale,
-                what="bbox" if geometry is None else f"geometry {geometry.name}",
-                label=_product_label("nmt", args.resolution),
-            )
-
-        if cutout.estimated_bytes >= 2**30:
-            # stderr, not stdout: -q does NOT suppress Info:/Warning: (as above)
-            height, width = cutout.grid_shape
-            print(
-                f"Info: wycinek ~{cutout.estimated_bytes / 2**30:.1f} GiB "
-                f"({width} x {height} px float32)",
-                file=sys.stderr,
-            )
-
-        on_progress = create_progress_callback(args.quiet)
-        try:
-            result = run_pl_cutout(
-                cutout,
-                sheets,
-                provider=provider,
-                storage=storage,
-                max_workers=getattr(args, "workers", 4),
-                force=args.force,
-                on_progress=on_progress,
-                parent_request=parent_request,
-            )
-        except Exception as e:  # noqa: BLE001 — code 1 instead of a traceback (ADR-023)
-            print(f"{_error_lead(on_progress)}Error: {e}", file=sys.stderr)
-            return 1
-    if not args.quiet:
-        # the progress bar ends with "skipped" without a newline - as before a blank
-        # line before the summary (and before the warning on stderr below)
-        print()
-    _report_pl_cutout(result, from_sidecar=False)
+    except TransformError as e:
+        return _print_transform_error(e)
+    except ValidationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    provider, _storage = _create_provider_and_storage(
+        product, output_dir, args.vertical_crs, args.resolution
+    )
+    chunks = len(provider.plan_wcs_chunks(cutout.bbox_source_2180))
+    if chunks > 1 or cutout.estimated_bytes >= 2**30:
+        # stderr, not stdout: -q does NOT suppress Info:/Warning:
+        height, width = cutout.grid_shape
+        print(
+            f"Info: wycinek {width} x {height} px float32 "
+            f"(~{cutout.estimated_bytes / 2**20:.0f} MiB), {chunks} zapytan WCS "
+            "GUGiK pobieranych po kolei",
+            file=sys.stderr,
+        )
+    try:
+        result = run_pl_wcs_cutout(
+            cutout, provider=provider, parent_request=parent_request
+        )
+    except Exception as e:  # noqa: BLE001 — code 1 instead of a traceback (ADR-023)
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    if result.all_nodata:
+        print(
+            "Warning: wycinek w calosci nodata — obszar poza ladem PL (maska PRG: "
+            "granica panstwa bez morza terytorialnego i wod wewnetrznych)",
+            file=sys.stderr,
+        )
     if not args.quiet:
         print(f"Downloaded to {result.path}")
     return 0
@@ -1888,8 +1786,8 @@ def _download_pl_bbox(
     normalized by ``_country_bbox`` with the pinned operation (a second, unpinned
     Krovak jump here would be exactly what the stage forbids).
 
-    With ``--target-crs`` (ADR-027) - ``_download_pl_cutout`` (library
-    ``download/cutout.py``): one merged cutout instead of a sheet list.
+    With ``--target-crs`` (ADR-035) - ``_download_pl_cutout`` (library
+    ``download/cutout.py``): one cutout from GUGiK WCS instead of a sheet list.
     Without it - a sheet list with R5 tolerance (``_finish_pl_sheets``, D2).
     """
     if _resolve_pl_sentinels(args):
@@ -2520,11 +2418,9 @@ def _download_pl_geometry(
     ``args`` is a COPY of the task namespace - see ``_dispatch_area``.
 
     ``bbox`` - the envelope of the PL task (clipped under auto), required. With
-    ``--target-crs`` (ADR-027) - ``_download_pl_cutout`` (library
-    ``download/cutout.py``): the envelope determines the grid and the cutout crop, so
-    the result covers the WHOLE envelope of the geometry, without masking to its
-    features (with a warp the sheets are the union of the geometry's sheet codes and the
-    envelope's with a margin, R-01 - ``select_pl_cutout_sheets``). Without
+    ``--target-crs`` (ADR-035) - ``_download_pl_cutout`` (library
+    ``download/cutout.py``): the cutout covers the WHOLE envelope of the
+    geometry, without masking to its features (WCS area = the envelope). Without
     ``--target-crs`` the sheets are determined by the geometry itself and ``bbox`` is
     not used; the list goes through ``_download_pl_sheet_list`` (R5 tolerance, D2).
     """
@@ -2533,7 +2429,7 @@ def _download_pl_geometry(
     if _resolve_pl_sentinels(args):
         return 1
     if args.target_crs is not None:
-        return _download_pl_cutout(args, bbox, parent_request, geometry=filepath)
+        return _download_pl_cutout(args, bbox, parent_request)
 
     target_scale = args.scale or "1:10000"
     layer = getattr(args, "layer", None)

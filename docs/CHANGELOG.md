@@ -9,6 +9,20 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- CLI: `download --product nmpt --bbox/--geometry --target-crs ...` — wycinek
+  NMPT 1 m z WCS GUGiK (dotad `Error:`), segment
+  `nmpt/pl_1992_1m_<vcrs>/bbox/`.
+- Biblioteka: `run_pl_wcs_cutout(cutout, *, provider=None, parent_request=None,
+  today=None)` (w `__all__`) — wycinek PL z WCS GUGiK: siatka arkuszy 1 m,
+  maska ladu PL z PRG (`A00_Granice_panstwa` minus
+  `W02_Morze_terytorialne_RP` i `W03_Morskie_wody_wewnetrzne`, poza maska
+  -9999, 0,0 na ladzie zostaje), nazwa `<wsp>_<RRRRMMDD>.tif`, sidecar
+  `capability="bbox_raster"` z `extra.source` (`composition: "server"`)
+  i `extra.mask`. `prepare_pl_cutout(product=)` i
+  `download_pl_cutout(product=)`: `"nmt"` albo `"nmpt"` (wycinek NMPT 1 m,
+  segment `nmpt/pl_1992_1m_<vcrs>/bbox/`). `PlCutoutResult.masked_pixels`
+  (piksele poza maska) i `zero_pixels` (0,0 na ladzie; tez
+  `extra.zero_pixels`, gdy > 0).
 - NMT/NMPT: przy arkuszu bez danych w wybranej rozdzielczosci albo
   ukladzie wysokosci podpowiedz `Info:` o wariancie, w ktorym skorowidz
   GUGiK ma ten arkusz, np. `Skorowidz GUGiK ma ten arkusz w NMT 1m
@@ -95,6 +109,34 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Zmienione
 
+- CLI `download --bbox/--geometry --target-crs` (PL): wycinek z WCS GUGiK
+  zamiast mozaiki arkuszy (ADR-035) — siatka arkuszy 1 m, kompozycja lotow
+  serwera, nodata -9999 poza ladem PL (maska PRG), nazwa
+  `<wsp>_<RRRRMMDD>.tif`, kazde uruchomienie pobiera (bez `Skipped`; `--force`,
+  `--workers` i `--scale` bez wplywu). `--resolution 5m --target-crs` =
+  `Error:` (kod 1, przed siecia). Zamiast listy arkuszy i komunikatow
+  o arkuszach (`Warning:` R5/E13/I-1, `Info:` W1) jest `Info:` o liczbie
+  zapytan WCS (gdy > 1 albo wynik >= 1 GiB) i `Warning:`, gdy obszar lezy
+  w calosci poza ladem PL. Flagi roku, `--campaigns all` i `--full-sheet`
+  z `--target-crs` zostaja `Error:` (nowa tresc). Co zrobic: wycinek 5 m albo
+  najnowszy lot arkuszy (ADR-028) — pobierz arkusze bez `--target-crs`
+  (albo API arkuszowe); skrypty szukajace pliku po nazwie bez daty — dopasuj
+  wzorzec `<wsp>_*.tif`; starsze wycinki bez daty zostaja nietkniete.
+- `download_pl_cutout()` pobiera wycinek z WCS GUGiK (`run_pl_wcs_cutout`):
+  siatka arkuszy 1 m, kompozycja lotow serwera (nie najnowszy lot ADR-028),
+  nodata -9999 poza ladem PL (maska PRG), nazwa z data pobrania
+  `<wsp>_<RRRRMMDD>.tif`, kazde wywolanie pobiera (bez `skipped`),
+  `resolution="5m"` = `ValidationError`. Parametry arkuszowe `geometry`,
+  `layer`, `scale`, `max_workers`, `force`, `on_progress`, `cache` nie maja
+  wplywu; wartosc inna niz domyslna daje `DeprecationWarning` (usuniecie
+  w 0.8.0). API arkuszowe (`prepare_pl_cutout` -> `select_pl_cutout_sheets`
+  -> `run_pl_cutout`, `build_cutout_from_sheets`) dziala bez zmian i jest
+  przestarzale (usuniecie w 0.8.0); `run_pl_cutout` z
+  `cutout.product="nmpt"` = `ValidationError`. Co zrobic: wycinek z arkuszy
+  (najnowszy lot ADR-028, 5 m) — `prepare_pl_cutout` ->
+  `select_pl_cutout_sheets` -> `run_pl_cutout`; nie podawaj parametrow
+  arkuszowych `download_pl_cutout`; kod szukajacy pliku po nazwie bez daty —
+  uzyj `PlCutoutResult.path`.
 - `Warning:` o niepelnej najnowszej kampanii (E13) dzieli arkusze: "pelny
   lot w <segment>/full_sheet/", "brak pelnego lotu w skorowidzu" (z flagami
   roku: "... w zakresie lat zadania") i "pelny lot nie pobrany ... — uzyj
@@ -112,8 +154,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--year` podawany tylko "na wszelki wypadek" albo wybierz odpowiedni
   przedzial `--min-year`/`--max-year`.
 - `--year`/`--max-year` z `--target-crs` zwracaja `Error:` (jak wczesniej
-  `--min-year`). Co zrobic: nie podawaj flag roku dla wycinka, ktory
-  sklada najnowsze kampanie.
+  `--min-year`). Co zrobic: nie podawaj flag roku dla wycinka (wycinek
+  z WCS ma kompozycje lotow serwera, bez wyboru roku).
 - `--campaigns all --min-year` zawsze odpytuje wszystkie warstwy skorowidza,
   zeby moc podac pelna liste rocznikow. Wpisy `campaigns_cache` ze skanu
   czesciowego sa odpytywane ponownie. Co zrobic: nic (koszt 1-3 zapytan
@@ -144,7 +186,32 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   strony), a obszar powyzej 16 Mpx jest pobierany kawalkami i skladany bez
   przeprobkowania (ADR-034). Sidecar `request.bbox` = bbox zadania. Co
   zrobic: nic; kto liczyl na zasieg rowny bboxowi, czyta zasieg z pliku.
-  NMPT, ortofotomapa i PNG/JPEG — jedno zapytanie jak dotad.
+  Ortofotomapa i PNG/JPEG — jedno zapytanie jak dotad (NMPT: nizej).
+- `download_bbox()` NMT 1 m EVRF2007 dziala (dotad `ValidationError`
+  o wycofanym endpoincie): wysokosci float32 z WCS `DigitalTerrainModel`
+  (`image/x-aaigrid`, zapisywany jako GeoTIFF EPSG:2180) na siatce arkuszy
+  1 m; `is_wcs_available()` EVRF2007 = `True`, kanal WCS `pl.gugik.nmt_1m`
+  w rejestrze ma oba uklady wysokosci. Co zrobic: nic; kto lapal
+  `ValidationError` dla EVRF2007, moze usunac obejscie.
+- `download_bbox()` NMPT: rozdzielczosc 1 m (`SCALEFACTOR=0.5`; dotad
+  0,5 m) na siatce arkuszy 1 m, kawalkami jak NMT; rejestr `pl.gugik.nmpt`
+  ma kanal WCS `bbox_raster`. Co zrobic: nic; wynik odpowiada arkuszom
+  NMPT 1 m (nad lotem 0,5 m — piksel 0,5 m o srodku na pelnym metrze).
+- `download_bbox()` NMT EVRF2007 i NMPT pobiera kawalki do 1 Mpx pikseli
+  coverage (NMT 1 Mpx, NMPT 1 m = 0,25 Mpx wyniku; `image/x-aaigrid`
+  ok. 20 s/Mpx i ok. 20 MB/Mpx; dluzsze zadanie milczy przed pierwszym
+  bajtem dluzej niz timeout odczytu 30 s). KRON86 bez zmian (GeoTIFF,
+  16 Mpx). Kazde zapytanie WCS z siatka (NMT, NMPT, takze KRON86) ma
+  parzysta szerokosc i wysokosc: zakres wyrownany do siatki jest
+  poszerzany o najwyzej 1 px na wschod/poludnie i przycinany po zszyciu
+  (przy nieparzystym rozmiarze serwer bierze srodkowy wiersz i kolumne
+  z sasiedniego piksela zrodla, gdy przeprobkowuje — NMPT `SCALEFACTOR`,
+  NMT 1 m nad lotem 0,5 m; pomiar na zywo 2026-10-11). Kawalek
+  `image/x-aaigrid` czeka na pierwszy bajt co najmniej 120 s
+  (`WCS_ASC_READ_TIMEOUT`; `timeout` wolajacego, gdy wiekszy): serwer nie
+  wysyla nic przed policzeniem calego kawalka (NMPT: 19-106 s na zywo).
+  Co zrobic: nic; duze obszary EVRF2007/NMPT trwaja odpowiednio dluzej
+  niz KRON86.
 - Biblioteka: funkcje geometrii (`get_overall_bbox`, `read_feature_bboxes`,
   `find_sheets_for_geometry`, `read_source_crs`) przy GPKG z wieloma
   warstwami bez `layer=` loguja wybor pierwszej warstwy jako `WARNING`
@@ -179,6 +246,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   przesunieta o ulamek piksela wzgledem georeferencji (serwer probkuje do
   siatki zadania; pomiar `docs/research/2026-10-10-wcs-limits/raport.md`);
   teraz zadanie jest wyrownane do siatki zrodla.
+- `download_bbox()` NMPT zwracal 3-pasmowy RGB uint8 (podglad kolorow)
+  zamiast wysokosci; teraz 1 pasmo float32 z wysokosciami (1 m na siatce
+  arkuszy, bit w bit z arkuszami NMPT 1 m). Wpis WCS NMT EVRF2007
+  wskazywal nieistniejacy endpoint (`DigitalTerrainModelFormatTIFFEVRF2007`,
+  HTTP 404) — zastapiony dzialajacym `DigitalTerrainModel`.
 
 ## [0.7.1] - 2026-10-09
 

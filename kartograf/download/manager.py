@@ -304,9 +304,8 @@ class DownloadManager:
 
     Two download modes:
     - By sheet code: downloads ASC files from OpenData
-    - By bbox: downloads GeoTIFF from WCS (1m and KRON86 only — GUGiK withdrew
-      the EVRF2007 WCS endpoint; for EVRF2007 heights of an area use sheets or
-      ``kartograf.download_pl_cutout``)
+    - By bbox: downloads GeoTIFF float32 from WCS (1m, both vertical CRS) on the
+      1 m sheet grid
 
     Supports vertical CRS:
     - EVRF2007 (default) - European Vertical Reference Frame 2007
@@ -343,13 +342,12 @@ class DownloadManager:
     >>> # Download hierarchy (ASC)
     >>> manager.download_hierarchy("N-34-130-D", "1:10000")
     >>>
-    >>> # Download by bounding box (GeoTIFF, WCS) - only 1m and KRON86
+    >>> # Download by bounding box (GeoTIFF float32, WCS) - only 1m
     >>> from kartograf import BBox
     >>> bbox = BBox(
-    ...     min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
+    ...     min_x=450000, min_y=550000, max_x=451000, max_y=551000, crs="EPSG:2180"
     ... )
-    >>> kron = DownloadManager(output_dir="./data", vertical_crs="KRON86")
-    >>> kron.download_bbox(bbox, "area.tif")
+    >>> manager.download_bbox(bbox, "area.tif")
     >>>
     >>> # Download in legacy KRON86 vertical CRS
     >>> manager = DownloadManager(vertical_crs="KRON86")
@@ -1454,10 +1452,10 @@ class DownloadManager:
         Use this method when you need data for an arbitrary area
         (not aligned to standard map sheets).
 
-        Note: WCS download is only available for 1m resolution and KRON86
-        heights (GUGiK withdrew the EVRF2007 WCS endpoint). For 5m, or for
-        EVRF2007 heights, use download_sheet() with a sheet code instead, or
-        ``kartograf.download_pl_cutout`` for one GeoTIFF built from sheets.
+        Note: WCS download is only available for 1m resolution; for 5m use
+        download_sheet() with a sheet code instead. The result is float32
+        heights with no nodata on the 1 m sheet grid (see
+        ``GugikProvider.download_bbox``).
 
         Parameters
         ----------
@@ -1481,12 +1479,11 @@ class DownloadManager:
             If format is not supported, bbox CRS is wrong, or resolution is 5m
         ValidationError
             If the provider refuses the request before going out to the
-            network - today: EVRF2007 heights, whose WCS endpoint GUGiK
-            withdrew (see ``GugikProvider.download_bbox``)
+            network (a vertical CRS in ``WITHDRAWN_WCS_VERTICAL_CRS``; none today)
 
         Examples
         --------
-        >>> manager = DownloadManager(output_dir="./data", vertical_crs="KRON86")
+        >>> manager = DownloadManager(output_dir="./data")
         >>> bbox = BBox(
         ...     min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
         ... )

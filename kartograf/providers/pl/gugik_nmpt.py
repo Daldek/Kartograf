@@ -7,8 +7,9 @@ NMPT data from the Polish GUGiK services.
 NMPT includes terrain AND surface objects (buildings, trees) — unlike NMT
 which is bare-earth only.
 
-Uses the same mechanisms as NMT (WMS indexes (skorowidze) → OpenData ASC, WCS → GeoTIFF)
-but with different endpoints and coverage IDs.
+Uses the same mechanisms as NMT (WMS indexes (skorowidze) → OpenData ASC,
+WCS → GeoTIFF float32 1 m, heights requested as image/x-aaigrid) but with
+different endpoints and coverage IDs.
 
 Supported resolutions:
 - 1m only (no 5m for NMPT)
@@ -17,6 +18,8 @@ Supported resolutions:
 import re
 
 from kartograf.providers.pl.gugik import GugikProvider
+from kartograf.providers.pl.wcs import HEIGHT_AAIGRID
+from kartograf.transport.chunks import GridSpec
 
 
 class GugikNmptProvider(GugikProvider):
@@ -85,16 +88,14 @@ class GugikNmptProvider(GugikProvider):
     # Only 1m vertical CRS supported
     SUPPORTED_VERTICAL_CRS_5M: list[str] = []  # no 5m at all
 
-    # The 2026-08 GUGiK outage covers the NMT GRID1 EVRF2007 endpoint only;
-    # NMPT serves both vertical CRS from its own DigitalSurfaceModel endpoint,
-    # so nothing is withdrawn here.
-    WITHDRAWN_WCS_VERTICAL_CRS: tuple[str, ...] = ()
-
-    # One request with the bbox as given (no chunking): the NMPT GeoTIFF is
-    # 3-band uint8 RGB, not heights - heights come only as image/x-aaigrid
-    # (multipart); fixed together with the WCS cutouts
-    # (docs/research/2026-10-10-wcs-limits/raport.md, point 6).
-    WCS_GRID = None
+    # The NMPT image/tiff is 3-band uint8 RGB, not heights: heights come only as
+    # image/x-aaigrid. The coverage step is 0.5 m; the result is 1 m on the 1 m
+    # sheet grid via SCALEFACTOR=0.5 - bit for bit the 1 m NMPT sheets and an
+    # exact decimation of 0.5 m content (pixel centred on a whole metre), no
+    # averaging (docs/research/2026-10-11-wcs-cutouts/raport.md, point 3).
+    WCS_HEIGHT_FORMAT = {"KRON86": HEIGHT_AAIGRID, "EVRF2007": HEIGHT_AAIGRID}
+    WCS_GRID = GridSpec(step=1.0, origin_x=0.5, origin_y=0.5)
+    WCS_NATIVE_STEP = 0.5
 
     # Product identifier for cache key (overrides GugikProvider's "nmt")
     _CACHE_PRODUCT = "nmpt"

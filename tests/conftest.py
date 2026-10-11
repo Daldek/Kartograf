@@ -242,6 +242,59 @@ def write_gpkg_layers(path: Path, layers: list[str]) -> Path:
     return path
 
 
+WCS_FIXTURES = Path(__file__).parent / "fixtures" / "gugik_wcs" / "real_2026_10_11"
+
+
+def recorded_response(path: Path, body: bytes | None = None):
+    """Mock ``requests.Response`` replaying a recorded body and its headers.
+
+    ``<file>.headers.json`` next to the body holds the HTTP status and
+    ``Content-Type`` (fixture README); ``body`` overrides the recorded bytes.
+    ``iter_content`` yields small blocks, so streaming readers see several.
+    """
+    from unittest.mock import Mock
+
+    import requests
+
+    meta = json.loads(path.with_name(f"{path.name}.headers.json").read_text())
+    content = path.read_bytes() if body is None else body
+    response = Mock()
+    response.status_code = meta["status"]
+    response.headers = {"Content-Type": meta["Content-Type"]}
+    response.content = content
+    response.text = content.decode("utf-8", errors="replace")
+    response.iter_content = lambda chunk_size=1: (
+        content[i : i + 1000] for i in range(0, len(content), 1000)
+    )
+    if meta["status"] >= 400:
+        error = requests.HTTPError(f"{meta['status']} Error", response=response)
+        response.raise_for_status.side_effect = error
+    return response
+
+
+def multipart_asc_body(values, xll: float, yll: float, cellsize: float = 1.0) -> bytes:
+    """A GUGiK-shaped ``multipart/related; boundary=wcs`` body with one ASC grid.
+
+    Same framing as the recorded responses (fixture README): CRLF part headers,
+    LF ASC lines, an ``.prj`` part after the grid.
+    """
+    rows, cols = values.shape
+    header = (
+        f"ncols        {cols}\nnrows        {rows}\n"
+        f"xllcorner    {xll:.12f}\nyllcorner    {yll:.12f}\n"
+        f"cellsize     {cellsize:.12f}\n"
+    )
+    grid = "\n".join(" " + " ".join(repr(float(v)) for v in row) for row in values)
+    part = b"\r\n--wcs\r\nContent-Type: %s\r\nContent-ID: coverage/%s\r\n\r\n"
+    return (
+        part % (b"image/x-aaigrid", b"result.asc")
+        + (header + grid + "\n").encode()
+        + part % (b"application/octet-stream", b"result.prj")
+        + b'PROJCS["ETRS89_Poland_CS92"]'
+        + b"\r\n--wcs--\r\n"
+    )
+
+
 @pytest.fixture
 def sample_godlos() -> dict:
     """

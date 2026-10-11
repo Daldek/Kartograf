@@ -27,7 +27,7 @@
 | Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | ZMERGOWANY do develop 2026-08-12; tor CZ odmrozony w fali 2026-09-29/30 (D1): pin EPSG:1622 (K2; live: Karkonosze PL-CZ mediana -0,15 m, przesuniecie < 1 px), budzet 4 Mpx kafli (K6; live: 29,8 Mpx w 3 min 38 s), piksel dokladnie 2 m (N3), `Warning:` przy 100 % nodata (N2); wydany w v0.7.0 |
 | LAZ — wybor kafli (ADR-029) | ✅ Gotowy | `download_laz_area` / `select_tiles`: najnowszy kafel per obszar wg pokrycia, `--year`, `--min-density`, `extra.parent_request` w trybie `--bbox`/`--geometry` |
 | Kampanie GUGiK (ADR-030 + errata 1-8, ADR-032, ADR-033) | ✅ Gotowy | `--campaigns {newest,all}`, `--year`/`--min-year`/`--max-year` (0.7.2-dev), `--full-sheet`; pliki w `<segment>/kampanie/`, sciezka standardowa i `full_sheet/` = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`, `docs/research/2026-10-10-full-sheet-link/raport.md`) |
-| Wycinek NMT PL `--target-crs` (ADR-027) + API biblioteki `download_pl_cutout` | ✅ Gotowy | fala review max 2026-09-28 + fala naprawcza 2026-09-30: `GridMismatchError` dla 2180 z arkuszy o roznych fazach, W1 (warp per arkusz) dla 5514/3045 (S5/D3/D8), `extra.sheet_sources`, `all_nodata`, `download_pl_cutout(cache=)`; live PASS Krakow 5 m |
+| Wycinek NMT/NMPT PL `--target-crs` (ADR-035), API `download_pl_cutout` | 🔧 W trakcie | WCS 1 m z maska ladu PRG i data w nazwie wdrozone na `feat/wcs-cutouts`, NMPT `download_bbox` float32 naprawiony; zweryfikowany na zywo (`docs/research/2026-10-11-wcs-cutouts-live/raport.md`), merge do `develop` oczekuje na zgode. Arkuszowy tor ADR-027 zostaje jako przestarzale API do 0.8.0 |
 
 | Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | ⏳ Zaplanowany | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3 |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
@@ -150,12 +150,15 @@
 > `docs/research/2026-10-11-wcs-cutouts/raport.md` (WCS na siatce arkusza
 > = arkusz bit w bit; WCS EVRF2007 dziala, wysokosci tylko
 > `image/x-aaigrid`, kawalek ASC 1 Mpx; arkusze 0,5 m maja siatke
-> `k + 0,25`). **NASTEPNA SESJA (decyzja uzytkownika 2026-10-11):**
-> implementacja planu `docs/superpowers/plans/2026-10-11-wcs-cutouts.md`
-> (`6e5b2cd`) od Task 0 — nowa galaz `feat/wcs-cutouts` z `develop`.
-> Dane na zywo i fixtury: katalog danych z pomiaru 2026-10-11 (wskazany
-> przez uzytkownika; tam skrypty pomiaru i arkusze 1 m / 0,5 m).
-> Potem (e) testy LAZ; zakres wydania 0.7.2 — do decyzji uzytkownika.
+> `k + 0,25`).
+> **(a) ZAIMPLEMENTOWANE na `feat/wcs-cutouts` 2026-10-11** (plan
+> `docs/superpowers/plans/2026-10-11-wcs-cutouts.md`, Task 0-8 + review;
+> ADR-035; weryfikacja na zywo
+> `docs/research/2026-10-11-wcs-cutouts-live/raport.md`). **NASTEPNA
+> SESJA:** merge `--no-ff` `feat/wcs-cutouts` -> `develop` po zgodzie
+> uzytkownika (Task 9 Step 5), usuniecie galezi; potem strojenie kawalkow
+> ASC NMPT (backlog), (e) testy LAZ; zakres wydania 0.7.2 — do decyzji
+> uzytkownika.
 > **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
 > na zywo z raportem, `__version__ = "0.7.2"` + asercje testow, data i link
 > `compare/v0.7.1...v0.7.2` w CHANGELOG, status w SCOPE i `docs/PRD.md`
@@ -182,6 +185,31 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### (a) wycinki PL z WCS — implementacja (2026-10-11)
+
+- Galaz `feat/wcs-cutouts` z `develop`; Task 0-8 planu, kazdy krok przez
+  brame (pytest offline, ruff, mypy) i straznik wzorcow.
+- Fixtury z surowych odpowiedzi (WCS multipart AAIGrid NMT/NMPT + kawalki,
+  PRG A00/W02/W03) z README; `transport/aaigrid.py`; WCS EVRF2007/NMPT
+  w providerach i rejestrze; maska `LandMask`/`fetch_land_mask` w
+  `prg.py`; `run_pl_wcs_cutout` + `download_pl_cutout` na WCS
+  (`DeprecationWarning` parametrow arkuszowych); CLI `--target-crs`
+  na WCS (NMPT dozwolone, 5 m = `Error:`), testy CLI arkuszowego toru
+  usuniete lub przepiete (opis w commicie `b8d97dc`); ADR-035 i opisy.
+- Weryfikacja na zywo (raport `docs/research/2026-10-11-wcs-cutouts-live/raport.md`):
+  wycinki NMT/NMPT KRON86/EVRF2007 = arkusz w 100 %; znalezione i
+  poprawione: (1) przy nieparzystym rozmiarze zapytania serwer bierze
+  srodkowy wiersz/kolumne z sasiedniego piksela, gdy przeprobkowuje —
+  zapytania maja parzyste rozmiary i sa przycinane; (2) kawalek NMPT
+  1 Mpx wyniku przekraczal 30 s do pierwszego bajtu — budzet ASC w
+  pikselach coverage (NMPT 0,25 Mpx) i limit odczytu ASC 120 s. Host byl
+  w czasie pomiaru niestabilny (zawieszenia > 120 s) — strojenie w backlogu.
+- Review galezi (reviewer): bez blokerow; poprawione: maska liczona
+  pasami wierszy (pamiec niezalezna od rozmiaru wycinka), maska pobierana
+  dla zakresu wyrownanego do siatki (piksel brzegowy), drobiazgi
+  (martwy parametr `_warn_unverified`, docstringi, test ucietej odpowiedzi).
+- `develop` NIE wypchniety na `origin`; merge czeka na zgode uzytkownika.
 
 ### (a) wycinki PL z WCS — spec, pomiary i plan (2026-10-11)
 
@@ -1789,8 +1817,9 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
 Decyzje z 2026-10-09 (po Task 14); kazda pozycja zaczyna sie od ustalen,
 a implementacja dopiero po specu/planie i zatwierdzeniu.
 
-- [ ] **(a) Wycinki PL (`--target-crs`) z WCS zamiast z arkuszy** (odwraca
-  ADR-027, wymaga nowego ADR):
+- [x] **(a) Wycinki PL (`--target-crs`) z WCS zamiast z arkuszy** —
+  WDROZONE na `feat/wcs-cutouts` (ADR-035); weryfikacja na zywo
+  i merge jeszcze przed nami:
   - EVRF2007: `https://mapy.geoportal.gov.pl/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModel`,
     coverage `DTM_PL-EVRF2007-NH`, `FORMAT=image/x-aaigrid`; odpowiedz to
     multipart/related (ASC + aux.xml + prj, bez linii NODATA);
@@ -1799,28 +1828,18 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
   - data pobrania w nazwie pliku wycinka; wycinki bez flag roku i kampanii;
     wycinki 5 m znikaja; host bardzo niestabilny (EOF TLS, timeouty) —
     ponowienia obowiazkowe;
-  - biblioteka: wpis WCS EVRF2007 (`providers/pl/gugik.py`,
-    `DigitalTerrainModelFormatTIFFEVRF2007`, `DTM_PL-EVRF2007-NH_TIFF`)
-    wskazuje nieistniejacy endpoint i coverage (zob. tez WCS EVRF2007 = 404
-    od 2026-08-11) — do poprawy.
-  - **Wejscie do specu (a) (stan 2026-10-10):** mechanizm kawalkow gotowy
-    (`transport/chunks.py`, ADR-034: `GridSpec`, `ChunkLimits`,
-    `fetch_chunks`, `GugikWcsMixin._download_wcs`, `WCS_GRID` per provider;
-    na galezi `feat/silent-defaults`, do merge). Fakty z pomiaru
-    `docs/research/2026-10-10-wcs-limits/raport.md` do rozstrzygniecia
-    w specu: (1) brak nodata — poza pokryciem i w brakujacych arkuszach
-    0,0, a 0,0 wystepuje tez w danych waznych (Leba) (pkt 3, 8); (2) WCS
-    to kompozycja lotow serwera, nie najnowszy lot ADR-028 (Zulawy:
-    arkusze "2017 i starsze" inne o 7-14 cm; Terespol: 1,1 mln px
-    waznych w arkuszu = 0,0 w WCS) (pkt 8); (3) siatka NMT 1 m `k + 0,5`
-    w 9 rejonach, bbox poza siatka = cichy blad geolokalizacji (pkt 4,
-    7); (4) brak limitu do 100 Mpx, host zrywa polaczenia (pkt 2);
-    (5) NMPT `image/tiff` = RGB uint8, wysokosci tylko `image/x-aaigrid`
-    multipart — naprawa `download_bbox` NMPT w ramach (a) (pkt 6,
-    decyzja 2026-10-10); (6) EVRF2007 nie mierzony (endpoint tymczasowo
-    niedostepny). Otwarte tez: los wycinka z arkuszy i parametrow
-    arkuszowych `mosaic_and_crop` (kandydat 0.8.0), sidecar wycinka bez
-    kampanii.
+  - biblioteka: stary endpoint EVRF2007 TIFF byl niepoprawny (404);
+    nowy endpoint ASC multipart zwraca wysokosci, podobnie NMPT.
+  - **Wejscie do specu (a), pomiary historyczne:** wspolne kawalki
+    `transport/chunks.py` (ADR-034). Raport 2026-10-10
+    `docs/research/2026-10-10-wcs-limits/raport.md` (pkt 2-8):
+    WCS nie deklaruje nodata, 0,0 poza pokryciem i na ladzie;
+    siatka NMT 1 m `k + 0,5`, host niestabilny,
+    kompozycja serwera != wybor arkuszy wg ADR-028; NMPT TIFF RGB
+    byl bledem naprawionym w (a).
+    Raport 2026-10-11 `docs/research/2026-10-11-wcs-cutouts/raport.md`:
+    EVRF2007 dziala przez ASC multipart, maska PRG rozdziela lad
+    od morza, ASC dzielony na kawalki 1 Mpx.
   - **Spec 2026-10-11 (zatwierdzony):**
     `docs/superpowers/specs/2026-10-11-wcs-cutouts-design.md` — wszystkie
     pytania wyzej rozstrzygniete (W-U1..W-U11); pomiary M1-M3 wykonane
@@ -1864,14 +1883,18 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
   - Spec `docs/superpowers/specs/2026-10-10-silent-defaults-design.md`,
     plan `docs/superpowers/plans/2026-10-10-silent-defaults.md`
     (2026-10-10; wdrozone i scalone, `54c9c7e`).
-- [ ] **NMPT `download_bbox` zwraca RGB uint8 zamiast wysokosci**
-  (znalezione przy pomiarze WCS 2026-10-10, raport
-  `docs/research/2026-10-10-wcs-limits/raport.md` pkt 6):
-  `GugikNmptProvider.download_bbox` prosi o `image/tiff`, a coverage
-  `DSM_PL-KRON86-NH` w tym formacie to 3 x uint8; wysokosci tylko
-  w `image/x-aaigrid` (multipart). Blad biblioteki (CLI NMPT `--bbox` idzie
-  przez arkusze). **Decyzja uzytkownika 2026-10-10: naprawa razem z (a)**
-  (obsluga odpowiedzi multipart powstaje tam raz).
+- [x] **NMPT `download_bbox` zwracal RGB uint8 zamiast wysokosci** —
+  NAPRAWIONE na `feat/wcs-cutouts` w ramach (a): WCS
+  `image/x-aaigrid` multipart -> jednopasmowy GeoTIFF float32
+  wysokosci na siatce 1 m (oba uklady pionowe). Pierwotny blad:
+  `docs/research/2026-10-10-wcs-limits/raport.md` pkt 6; weryfikacja na
+  zywo 2026-10-11: `docs/research/2026-10-11-wcs-cutouts-live/raport.md`.
+- [ ] **Strojenie kawalkow ASC NMPT przy spokojnym hoscie** (z weryfikacji
+  na zywo 2026-10-11, raport `docs/research/2026-10-11-wcs-cutouts-live/raport.md`
+  pkt 4-5): kawalki NMPT 0,25 Mpx wyniku (1 Mpx coverage) czesto wisialy
+  > 120 s (pierwszy bajt 19-106 s), a jedno zapytanie 2 Mpx przeszlo w 78 s.
+  Zmierzyc pierwszy bajt NMT/NMPT w funkcji rozmiaru przy normalnym
+  obciazeniu i dobrac budzet kawalka oraz `WCS_ASC_READ_TIMEOUT`.
 - [ ] **(e) Testy LAZ odtwarzajace fixtures dla innego okna** (znalezione
   przy (b), 2026-10-10): `tests/test_laz_coverage.py`
   (`test_older_tile_adding_uncovered_area_is_kept`,
@@ -1909,6 +1932,13 @@ wchodza w tym samym wydaniu (decyzja uzytkownika). Kazda na wlasnej galezi.
   zastapic przelacznikiem (np. `--all-campaigns`), bez aliasu (BREAKING
   w CHANGELOG z "Co zrobic"; wywolania Hydrografa do sprawdzenia).
 
+- [ ] **Usunac przestarzaly tor arkuszowy wycinkow PL (ADR-035):**
+  `select_pl_cutout_sheets`, `run_pl_cutout`, `build_cutout_from_sheets`,
+  `PlCutoutSheets` i arkuszowe uzycie `prepare_pl_cutout`; usunac
+  parametry `geometry`, `layer`, `scale`, `max_workers`, `force`,
+  `on_progress`, `cache` z `download_pl_cutout` oraz
+  `snap_to_source_grid` i `assign_crs` z `mosaic_and_crop`.
+  Zmigrowac wywolania API przed usunieciem (BREAKING w CHANGELOG).
 - [ ] **Parametry wymagane w API (Hydrograf A8):** bez wartosci domyslnych
   `output_dir="./data"`, `vertical_crs="EVRF2007"` (`DownloadManager`),
   `MetadataCache` w biezacym katalogu, `depth="0-5cm"`/`stat="mean"`

@@ -111,14 +111,27 @@ def align_bbox(
 
 
 def plan_chunks(
-    bbox: BBox, width: int, height: int, pixel_size: float, limits: ChunkLimits
+    bbox: BBox,
+    width: int,
+    height: int,
+    pixel_size: float,
+    limits: ChunkLimits,
+    *,
+    multiple: int = 1,
 ) -> list[Chunk]:
     """Deterministic chunk grid cut on whole pixels (N->S, W->E), NW anchor.
 
     One chunk (the whole bbox) when the request fits the limits. Otherwise
     square-ish chunks instead of narrow strips (CUZK probes confirmed that class
-    of shapes), sizes split evenly by ``divmod``.
+    of shapes), sizes split evenly by ``divmod``. ``multiple``: every chunk
+    width and height is a multiple of it (``width``/``height`` must be too) -
+    GUGiK WCS resamples the middle row/column of an odd-sized request from the
+    neighbouring source pixel (``providers/pl/wcs.py``).
     """
+    if width % multiple or height % multiple:
+        raise ValidationError(
+            f"plan_chunks: {width} x {height} px nie jest wielokrotnoscia {multiple}"
+        )
     if (
         width <= limits.max_width
         and height <= limits.max_height
@@ -127,16 +140,22 @@ def plan_chunks(
         return [Chunk(bbox, width, height)]
 
     def _splits(total_px: int, parts: int) -> list[tuple[int, int]]:
-        base, extra = divmod(total_px, parts)
+        base, extra = divmod(total_px // multiple, parts)
         return [
-            (i * base + min(i, extra), base + (1 if i < extra else 0))
+            (
+                (i * base + min(i, extra)) * multiple,
+                (base + (1 if i < extra else 0)) * multiple,
+            )
             for i in range(parts)
         ]
 
-    col_cap = max(1, min(limits.max_width, math.isqrt(limits.max_pixels)))
+    def _cap(limit: int) -> int:
+        return max(multiple, limit // multiple * multiple)
+
+    col_cap = _cap(min(limits.max_width, math.isqrt(limits.max_pixels)))
     cols = _splits(width, math.ceil(width / col_cap))
     chunk_w = max(size for _, size in cols)
-    row_cap = max(1, min(limits.max_height, limits.max_pixels // chunk_w))
+    row_cap = _cap(min(limits.max_height, limits.max_pixels // chunk_w))
     rows = _splits(height, math.ceil(height / row_cap))
 
     return [
@@ -166,18 +185,19 @@ def fetch_chunks(
 ) -> Path:
     """Fetch every chunk and stitch them into ``output_path``; return it.
 
-    One chunk is fetched straight into ``output_path``. Several are fetched ONE
-    AT A TIME (the GUGiK host drops connections; CZ has a time budget) into part
-    files next to the result, stitched by ``mosaic_and_crop`` without resampling
-    and removed in any case. A ``fetch`` error propagates unchanged (retries are
-    per chunk, inside ``fetch``); a stitching error other than ``ValidationError``
-    becomes ``DownloadError`` and no partial result is left.
+    One chunk equal to ``bbox`` is fetched straight into ``output_path``.
+    Otherwise (several chunks, or chunks covering more than ``bbox``) they are
+    fetched ONE AT A TIME (the GUGiK host drops connections; CZ has a time
+    budget) into part files next to the result, stitched and cropped to
+    ``bbox`` by ``mosaic_and_crop`` without resampling and removed in any case.
+    A ``fetch`` error propagates unchanged (retries are per chunk, inside
+    ``fetch``); a stitching error other than ``ValidationError`` becomes
+    ``DownloadError`` and no partial result is left.
     """
     output_path = Path(output_path)
-    if len(chunks) == 1:
+    if len(chunks) == 1 and chunks[0].bbox == bbox:
         fetch(chunks[0], output_path)
         return output_path
-
     parts: list[Path] = []
     try:
         for i, chunk in enumerate(chunks):

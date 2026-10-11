@@ -6,6 +6,7 @@ This module contains tests for the GugikProvider class with the new architecture
 - download_bbox(bbox) -> WCS (GeoTIFF/PNG/JPEG)
 """
 
+import re
 import threading
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -17,9 +18,16 @@ import rasterio
 import requests
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.exceptions import DownloadError, NoCoverageError
 from kartograf.providers.pl.gugik import GugikProvider
-from tests.conftest import _STUB_LAYERS, gfi_record, render_gfi_body
+from tests.conftest import (
+    _STUB_LAYERS,
+    WCS_FIXTURES,
+    gfi_record,
+    multipart_asc_body,
+    recorded_response,
+    render_gfi_body,
+)
 
 _EVRF2007_LAYERS = _STUB_LAYERS["NMT/WMS/SkorowidzeUkladEVRF2007"]
 # The per-thread session factory lives in SkorowidzLayersMixin (skorowidz.py)
@@ -51,6 +59,19 @@ def _subset(url: str) -> tuple[float, float, float, float]:
     x = next(s for s in subsets if s.startswith("x("))[2:-1].split(",")
     y = next(s for s in subsets if s.startswith("y("))[2:-1].split(",")
     return float(x[0]), float(x[1]), float(y[0]), float(y[1])
+
+
+def _recorded_subset(path: Path) -> tuple[float, float, float, float]:
+    """(x0, x1, y0, y1) a recorded ASC response covers (from its ASC header)."""
+    head = path.read_bytes()[:600].decode()
+    field = {
+        key: float(value)
+        for key, value in re.findall(
+            r"(ncols|nrows|xllcorner|yllcorner|cellsize)\s+(\S+)", head
+        )
+    }
+    x0, y0, step = field["xllcorner"], field["yllcorner"], field["cellsize"]
+    return (x0, x0 + field["ncols"] * step, y0, y0 + field["nrows"] * step)
 
 
 def _encoded(left: float, top: float, width: int, height: int) -> np.ndarray:
@@ -181,14 +202,10 @@ class TestGugikProviderResolution:
         assert "KRON86" not in crs_list
 
     def test_is_wcs_available_1m(self):
-        """Test of WCS availability for 1m (KRON86 only - EVRF2007 = 404)."""
-        provider = GugikProvider(resolution="1m", vertical_crs="KRON86")
-        assert provider.is_wcs_available() is True
-
-    def test_is_wcs_available_1m_evrf2007_false(self):
-        """Test of WCS unavailability for 1m/EVRF2007 (endpoint withdrawn)."""
-        provider = GugikProvider(resolution="1m", vertical_crs="EVRF2007")
-        assert provider.is_wcs_available() is False
+        """WCS is available for 1m in both vertical CRS."""
+        for vertical_crs in ("KRON86", "EVRF2007"):
+            provider = GugikProvider(resolution="1m", vertical_crs=vertical_crs)
+            assert provider.is_wcs_available() is True
 
     def test_is_wcs_available_5m(self):
         """Test of WCS unavailability for 5m."""
@@ -354,10 +371,10 @@ class TestGugikProviderDownloadBbox:
             min_x=450000, min_y=550000, max_x=450100, max_y=550100, crs="EPSG:2180"
         )
 
-    def test_download_bbox_uses_wcs(self, tmp_path, mock_wcs_response, sample_bbox):
-        """Test that download_bbox uses WCS."""
+    def test_download_bbox_uses_wcs(self, tmp_path, sample_bbox):
+        """KRON86 GeoTIFF heights from the TIFF endpoint."""
         session = Mock(spec=requests.Session)
-        session.get = Mock(return_value=mock_wcs_response)
+        session.get = Mock(side_effect=lambda url, **kw: _geotiff_response(url))
 
         provider = GugikProvider(session=session, vertical_crs="KRON86")
         output_path = tmp_path / "test.tif"
@@ -366,26 +383,10 @@ class TestGugikProviderDownloadBbox:
 
         assert result == output_path
         assert output_path.exists()
-
-        # WCS bbox is available only in KRON86 (EVRF2007 = HTTP 404)
-        call_url = session.get.call_args[0][0]
-        assert "WCS" in call_url
-        assert "COVERAGEID=DTM_PL-KRON86-NH_TIFF" in call_url
-        assert "SUBSET=x(" in call_url
-        assert "SUBSET=y(" in call_url
-
-    def test_download_bbox_gtiff_format(self, tmp_path, mock_wcs_response, sample_bbox):
-        """Test of bbox download in the GTiff format."""
-        session = Mock(spec=requests.Session)
-        session.get = Mock(return_value=mock_wcs_response)
-
-        provider = GugikProvider(session=session, vertical_crs="KRON86")
-        output_path = tmp_path / "test.tif"
-
-        provider.download_bbox(sample_bbox, output_path, format="GTiff")
-
-        call_url = session.get.call_args[0][0]
-        assert "image%2Ftiff" in call_url or "image/tiff" in call_url
+        query = parse_qs(urlparse(session.get.call_args[0][0]).query)
+        assert query["COVERAGEID"] == ["DTM_PL-KRON86-NH_TIFF"]
+        assert query["FORMAT"] == ["image/tiff"]
+        assert session.get.call_args.kwargs["timeout"] == 30  # GeoTIFF streams early
 
     def test_download_bbox_png_format(self, tmp_path, mock_wcs_response, sample_bbox):
         """Test of bbox download in the PNG format."""
@@ -420,23 +421,32 @@ class TestGugikProviderDownloadBbox:
         with pytest.raises(ValueError, match="EPSG:2180"):
             provider.download_bbox(wrong_crs_bbox, output_path)
 
-    def test_download_bbox_contains_subset_parameters(
-        self, tmp_path, mock_wcs_response, sample_bbox
-    ):
-        """Test that the URL contains SUBSET parameters with the bounding box."""
+    def test_odd_size_requested_even_and_cropped(self, tmp_path, sample_bbox):
+        """The aligned bbox is 101 x 101 px: the request is widened east and
+        south to 102 x 102 (an odd size makes the server resample its middle
+        row/column from the neighbouring source pixel) and the file is cropped
+        back to the aligned bbox, values 1:1."""
         session = Mock(spec=requests.Session)
-        session.get = Mock(return_value=mock_wcs_response)
-
+        session.get = Mock(side_effect=lambda url, **kw: _geotiff_response(url))
         provider = GugikProvider(session=session, vertical_crs="KRON86")
         output_path = tmp_path / "test.tif"
 
         provider.download_bbox(sample_bbox, output_path)
 
-        call_url = session.get.call_args[0][0]
-
-        # The bbox is expanded outward to the source grid (edges at k + 0.5 m)
-        assert "SUBSET=x(449999.50,450100.50)" in call_url
-        assert "SUBSET=y(549999.50,550100.50)" in call_url
+        assert session.get.call_count == 1
+        assert _subset(session.get.call_args[0][0]) == (
+            449999.5,
+            450101.5,
+            549998.5,
+            550100.5,
+        )
+        with rasterio.open(output_path) as src:
+            assert src.shape == (101, 101)
+            assert (src.bounds.left, src.bounds.top) == (449999.5, 550100.5)
+            np.testing.assert_array_equal(
+                src.read(1), _encoded(449999.5, 550100.5, 101, 101)
+            )
+        assert list(tmp_path.glob("*.part*")) == []
 
     def test_nmt_download_bbox_chunks_large_area(self, tmp_path):
         """Above WCS_CHUNK_LIMITS the area is requested in chunks on the source
@@ -501,19 +511,130 @@ class TestGugikProviderDownloadBbox:
             provider.download_bbox(sample_bbox, output_path)
         assert not output_path.exists()
 
-    def test_download_bbox_evrf2007_raises_validation_error(
-        self, tmp_path, sample_bbox
-    ):
-        """WCS NMT 1m for EVRF2007 was withdrawn - a validation error, not 404."""
+    def test_evrf2007_download_bbox_aaigrid_on_sheet_grid(self, tmp_path):
+        """EVRF2007: image/x-aaigrid from DigitalTerrainModel, bbox expanded to the
+        sheet grid, written as float32 GeoTIFF equal to the OpenData sheet."""
         session = Mock(spec=requests.Session)
-
+        session.get = Mock(
+            return_value=recorded_response(WCS_FIXTURES / "nmt_evrf2007_20x20.mime")
+        )
         provider = GugikProvider(session=session)  # EVRF2007 by default
-        output_path = tmp_path / "test.tif"
+        output_path = tmp_path / "evrf.tif"
+        bbox = BBox(567580.6, 243664.7, 567600.4, 243684.3, "EPSG:2180")
 
-        with pytest.raises(ValidationError, match="KRON86"):
-            provider.download_bbox(sample_bbox, output_path)
+        provider.download_bbox(bbox, output_path)
 
-        session.get.assert_not_called()
+        assert session.get.call_count == 1
+        url = session.get.call_args[0][0]
+        query = parse_qs(urlparse(url).query)
+        assert urlparse(url).path.endswith("/NMT/GRID1/WCS/DigitalTerrainModel")
+        assert query["COVERAGEID"] == ["DTM_PL-EVRF2007-NH"]
+        assert query["FORMAT"] == ["image/x-aaigrid"]
+        assert "SCALEFACTOR" not in query
+        assert _subset(url) == (567580.5, 567600.5, 243664.5, 243684.5)
+        # ASC: no byte before the whole chunk is computed - a longer read timeout
+        assert session.get.call_args.kwargs["timeout"] == 120
+        with rasterio.open(output_path) as src:
+            assert (src.count, src.dtypes, src.crs.to_epsg()) == (1, ("float32",), 2180)
+            assert (src.bounds.left, src.bounds.top) == (567580.5, 243684.5)
+            values = src.read(1)
+        np.testing.assert_array_equal(
+            values, np.load(WCS_FIXTURES / "nmt_evrf2007_20x20_sheet_values.npy")
+        )
+
+    def test_aaigrid_chunk_budget_is_one_mpx(self, tmp_path):
+        """ASC chunks are cut at 1 Mpx, GeoTIFF at 16 Mpx: a 2000 x 1000 px area
+        is two EVRF2007 requests, stitched 1:1, and one KRON86 request."""
+        bbox = BBox(449999.5, 549999.5, 451999.5, 550999.5, "EPSG:2180")
+
+        def asc_response(url, **kwargs):
+            x0, x1, y0, y1 = _subset(url)
+            values = _encoded(x0, y1, round(x1 - x0), round(y1 - y0))
+            return recorded_response(
+                WCS_FIXTURES / "nmt_evrf2007_20x20.mime",
+                body=multipart_asc_body(values, x0, y0),
+            )
+
+        session = Mock(spec=requests.Session)
+        session.get = Mock(side_effect=asc_response)
+        GugikProvider(session=session).download_bbox(bbox, tmp_path / "evrf.tif")
+
+        subsets = [_subset(call.args[0]) for call in session.get.call_args_list]
+        assert subsets == [
+            (449999.5, 450999.5, 549999.5, 550999.5),
+            (450999.5, 451999.5, 549999.5, 550999.5),
+        ]
+        with rasterio.open(tmp_path / "evrf.tif") as src:
+            assert src.shape == (1000, 2000)
+            np.testing.assert_array_equal(
+                src.read(1), _encoded(449999.5, 550999.5, 2000, 1000)
+            )
+        assert list(tmp_path.glob("*.part*")) == []
+
+        kron = Mock(spec=requests.Session)
+        kron.get = Mock(side_effect=lambda url, **kw: _geotiff_response(url))
+        GugikProvider(session=kron, vertical_crs="KRON86").download_bbox(
+            bbox, tmp_path / "kron.tif"
+        )
+        assert kron.get.call_count == 1
+
+    def test_aaigrid_content_error_is_not_retried(self, tmp_path):
+        """An ASC whose corner differs from the request is a DownloadError after
+        one request (deterministic server answer), no file left."""
+        session = Mock(spec=requests.Session)
+        session.get = Mock(
+            return_value=recorded_response(WCS_FIXTURES / "nmt_evrf2007_20x20.mime")
+        )
+        output_path = tmp_path / "evrf.tif"
+        shifted = BBox(567590.6, 243664.7, 567610.4, 243684.3, "EPSG:2180")
+
+        with pytest.raises(DownloadError, match="xllcorner"):
+            GugikProvider(session=session).download_bbox(shifted, output_path)
+
+        assert session.get.call_count == 1
+        assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("provider_cls", "vertical_crs", "base", "budget"),
+    [
+        ("nmt", "EVRF2007", "nmt_evrf2007_20x20", 100),
+        # the ASC budget counts coverage pixels: 4 per NMPT 1 m pixel
+        ("nmpt", "EVRF2007", "nmpt_evrf2007_20x20_sf05", 400),
+    ],
+)
+def test_aaigrid_chunks_stitch_bit_exact_recorded(
+    tmp_path, provider_cls, vertical_crs, base, budget
+):
+    """Four recorded 10 x 10 chunks stitch into the recorded 20 x 20 response
+    (NMPT with SCALEFACTOR=0.5 too) - and both equal the OpenData sheet."""
+    from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
+    from kartograf.transport.chunks import ChunkLimits
+
+    by_subset = {
+        _recorded_subset(path): path for path in WCS_FIXTURES.glob(f"{base}*.mime")
+    }
+    session = Mock(spec=requests.Session)
+    session.get = Mock(
+        side_effect=lambda url, **kw: recorded_response(by_subset[_subset(url)])
+    )
+    cls = GugikProvider if provider_cls == "nmt" else GugikNmptProvider
+    provider = cls(session=session, vertical_crs=vertical_crs)
+    bbox = BBox(567580.5, 243664.5, 567600.5, 243684.5, "EPSG:2180")
+
+    provider.download_bbox(bbox, tmp_path / "whole.tif")
+    with patch.object(cls, "WCS_CHUNK_LIMITS_AAIGRID", ChunkLimits(10, 10, budget)):
+        provider.download_bbox(bbox, tmp_path / "chunked.tif")
+
+    assert session.get.call_count == 5
+    with rasterio.open(tmp_path / "whole.tif") as whole:
+        expected = whole.read(1)
+    with rasterio.open(tmp_path / "chunked.tif") as chunked:
+        assert chunked.bounds == whole.bounds
+        np.testing.assert_array_equal(chunked.read(1), expected)
+    np.testing.assert_array_equal(
+        expected, np.load(WCS_FIXTURES / f"{base}_sheet_values.npy")
+    )
 
 
 class TestGugikProviderRetry:

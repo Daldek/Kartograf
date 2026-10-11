@@ -48,14 +48,15 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) | Reprojekcja tresci CZ wylacznie lokalnie (zakaz `imageSR` != natywny) | 2026-08-11 | Przyjeta — uzupelniona przez [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (wspolne planowanie kawalkow z kotwica NW); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) |
 | [ADR-025](#adr-025-mapowanie-tekstura---hsg-i-kanoniczny-trojkat-usda-audyt-070) | Mapowanie tekstura -> HSG i kanoniczny trojkat USDA (audyt 0.7.0) | 2026-08-22 | Przyjeta |
 | [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) | Uklad data/ per produkt — segmenty i szablony w deskryptorach | 2026-08-28 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (pliki w `<segment>/kampanie/`, sciezka standardowa = dowiazanie twarde albo kopia; errata 2); zastepuje [ADR-013](#adr-013-zmiana-nazw-podkatalogow-storage-z-1m5m-na-nmt_1mnmt_5m) i realizacje ukladu z [ADR-005](#adr-005-struktura-katalogow-nmt-rozdzielona-wg-rozdzielczosci), uzupelnia [ADR-017](#adr-017-pl-2000-sheet-naming--composition-pattern-with-auto-detection) (domyka odroczenie) |
-| [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) | --target-crs dla PL — scalony wycinek bbox (mozaika + pinned warp) | 2026-08-28 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (wycinek tylko `newest`; arkusze bez sprawdzenia skorowidza: errata 5 [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem)); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (`--target-crs` wylacznie dla CZ) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (bbox = WCS GeoTIFF) |
+| [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) | --target-crs dla PL — scalony wycinek bbox (mozaika + pinned warp) | 2026-08-28 | Przyjeta — czesciowo zastapiona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (zrodlo wycinka w CLI i `download_pl_cutout`; API arkuszowe do 0.8.0); uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (tylko przestarzaly tor arkuszowy); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (`--target-crs` wylacznie dla CZ) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (bbox = WCS GeoTIFF) |
 | [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) | Wybor rekordu skorowidza GUGiK i `extra.source` | 2026-09-30 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (strategie kampanii `newest`/`all`, `--min-year`; regula wyboru `newest` bez zmian; awaria skorowidza: errata 2); czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.source`); zastepuje czesc [ADR-020](#adr-020-walidacja-warstw-wms-przez-getcapabilities) (zaszyte warstwy i fallback) |
 | [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) | Wybor kafli LAZ wg pokrycia obszaru i pobieranie LAZ w bibliotece | 2026-10-07 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`all`/`--min-year`; errata 1) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial LAZ; errata 2); zastepuje czesc [ADR-021](#adr-021-laz-chmury-punktów-lidar--discovery-przez-wfs-area-based) (regula newest-per-tile) |
 | [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) | Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem | 2026-10-07 | Przyjeta — czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.campaign`) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial, skan i konflikt; errata 7); uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (drugie dowiazanie `full_sheet/`; errata 8); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`kampanie/`), [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wycinek tylko `newest`), [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (strategie), [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) (LAZ: `all`, `--min-year`) i [ADR-019](#adr-019-sqlite-wal-jako-metadata-cache) (`campaigns_cache`) |
 | [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) | Jezyk identyfikatorow — angielski (sidecar od 0.7.0, API/CLI do v1.0.0) | 2026-10-08 | Przyjeta; czesciowo zastepuje [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (nazwy kluczy `extra.source`) i [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (nazwy kluczy `extra.campaign`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) (konwencja nazw kluczy sidecara) |
 | [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) | Wybor roku danych: przedzial lat, zatrzymanie przy konflikcie | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (`--full-sheet` z pkt 4; errata 1); uzupelnia ADR-029 i ADR-030 |
 | [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) | Drugie dowiazanie do najnowszego pelnego lotu (`full_sheet/`, `--full-sheet`) | 2026-10-10 | Przyjeta; uzupelnia [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) ((d): drugie dowiazanie) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 4: `--full-sheet`) |
-| [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) | Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla) | 2026-10-10 | Przyjeta; uzupelnia [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (kawalkowanie CUZK) i [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (kotwica NW) |
+| [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) | Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla) | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (ASC 1 Mpx i NMPT); uzupelnia [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (kawalkowanie CUZK) i [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (kotwica NW) |
+| [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) | Wycinki PL z WCS GUGiK z maska ladu PRG | 2026-10-11 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (zrodlo CLI i `download_pl_cutout`), uzupelnia [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (ASC 1 Mpx i NMPT) |
 
 ---
 
@@ -1241,7 +1242,7 @@ kampanii (ADR-030 (c), (d), errata 4). Segmenty z tej decyzji bez zmian.
 ## ADR-027: --target-crs dla PL — scalony wycinek bbox (mozaika + pinned warp)
 
 **Data:** 2026-08-28
-**Status:** Przyjeta — uzupelniona przez ADR-030 (wycinek tylko `newest`; arkusze bez sprawdzenia skorowidza: errata 5 ADR-030); zastepuje czesc ADR-023 (`--target-crs` wylacznie dla CZ) i ADR-003 (bbox = WCS GeoTIFF)
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-035 (zrodlo wycinka w CLI i `download_pl_cutout`); API arkuszowe do 0.8.0; uzupelniona przez ADR-030 (tylko przestarzaly tor arkuszowy); zastepuje czesc ADR-023 (`--target-crs` wylacznie dla CZ) i ADR-003 (bbox = WCS GeoTIFF)
 
 **Kontekst:** `--target-crs` istnial tylko dla CZ; scenariusz "obszar
 zainteresowania w jednym kraju + dociagniecie danych z drugiego" wymagal
@@ -2231,7 +2232,7 @@ za granica). LAZ nie ma `full_sheet/`. Biblioteka: `SheetFetch.full_link`,
 ## ADR-034: Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla)
 
 **Data:** 2026-10-10
-**Status:** Przyjeta; uzupelnia ADR-023 (kawalkowanie CUZK) i ADR-024 (kotwica NW)
+**Status:** Przyjeta — uzupelniona przez ADR-035 (ASC 1 Mpx i NMPT); uzupelnia ADR-023 (kawalkowanie CUZK) i ADR-024 (kotwica NW)
 
 **Kontekst:** CUZK dzielil duze zadania `exportImage` przez `_tile_grid`
 w kliencie, a GUGiK WCS `download_bbox` wykonywal jedno zapytanie bez
@@ -2281,6 +2282,91 @@ CUZK zachowuje dotychczasowy wynik i parametry zapytan. Wycinki PL
 z WCS w (a) moga wykorzystac ten mechanizm (D-U3), ale obecny wycinek
 PL nadal sklada arkusze; usuniecie parametrow arkuszowych publicznego
 `mosaic_and_crop` pozostaje kandydatem do 0.8.0.
+
+---
+
+## ADR-035: Wycinki PL z WCS GUGiK z maska ladu PRG
+
+**Data:** 2026-10-11
+**Status:** Przyjeta; czesciowo zastepuje ADR-027 (zrodlo wycinka w CLI i `download_pl_cutout`), uzupelnia ADR-034 (ASC 1 Mpx i NMPT)
+
+**Kontekst:** Wycinanie PL z mozaiki arkuszy OpenData (ADR-027) wymagalo
+skorowidza, pobierania calych arkuszy i obslugi ich roznych faz siatki.
+WCS moze odpowiedziec wprost na bbox, ale nie deklaruje nodata: poza
+pokryciem oddaje 0,0, ktore jest tez prawdziwa wysokoscia na ladzie
+(Zulawy). Zapytanie przesuniete poza siatke arkusza moze po cichu
+przesunac geolokalizacje. Raport
+`docs/research/2026-10-10-wcs-limits/raport.md` (pkt 2-8) wykazal
+niestabilnosc hosta, zgodnosc WCS z arkuszem na siatce 1 m, kompozycje
+lotow inna niz wybor ADR-028 i RGB uint8 zamiast wysokosci w NMPT TIFF.
+Raport `docs/research/2026-10-11-wcs-cutouts/raport.md` (pkt 1-6)
+potwierdzil dzialajacy WCS EVRF2007 przez ASC multipart, siatki 1 m
+i 0,5 m, decymacje, koszt ASC i przynaleznosc punktow do PRG.
+
+**Opcje:**
+- A) Zostawic wycinki z arkuszy — pewne pochodzenie per kampania,
+  ale koszt calych arkuszy i problemy faz siatki.
+- B) WCS bez maski — szybka selekcja obszaru, lecz 0,0 na morzu
+  i za granica udaje dane.
+- C) WCS z zamiana kazdego 0,0 na nodata — gubi poprawne piksele
+  o wysokosci 0 m na ladzie, szczegolnie na Zulawach.
+- D) WCS z maska ladu PRG — odrzuca piksele spoza ladu,
+  zachowujac 0,0 wewnatrz; przyjeta.
+
+**Decyzja:** D, zgodnie z W-U1..W-U11 specu
+`docs/superpowers/specs/2026-10-11-wcs-cutouts-design.md`:
+- W-U1, W-U6: CLI `--bbox`/`--geometry --target-crs` oraz
+  `download_pl_cutout` uzywaja WCS, nie arkuszy. Dawne API arkuszowe
+  (`prepare_pl_cutout` + `select_pl_cutout_sheets` + `run_pl_cutout`,
+  `build_cutout_from_sheets`, `PlCutoutSheets`) zostaje bez zmian
+  zachowania, oznaczone jako przestarzale do usuniecia w 0.8.0;
+  `prepare_pl_cutout` przygotowuje takze nowy tor WCS.
+- W-U2, W-U7, W-U10: wycinki NMT i NMPT tylko 1 m (KRON86 i
+  EVRF2007); 5 m odrzucane. Brak wyboru kampanii i roku.
+- W-U3, W-U8: nazwa `<segment>/bbox/<coords>_<YYYYMMDD>.tif`;
+  kazdy przebieg ponownie pobiera, nie pomija istniejacego pliku.
+  Udany zapis atomowo podmienia plik tego samego dnia, nieudany
+  zostawia poprzedni plik i sidecar.
+- W-U4: EVRF2007 NMT i oba piony NMPT dostaja wysokosci z
+  `image/x-aaigrid` (multipart ASC -> GeoTIFF float32);
+  NMT KRON86 zachowuje `image/tiff` float32.
+- W-U5, W-U11: przed WCS pobierana maska PRG
+  `A00_Granice_panstwa - W02_Morze_terytorialne_RP -
+  W03_Morskie_wody_wewnetrzne`, rasteryzowana wedlug srodka
+  piksela (`all_touched=False`); poza nia nodata -9999.
+  **0,0 na ladzie pozostaje danymi**, nie jest globalnie
+  zamieniane na nodata.
+- W-U9: bbox zrodla wyrownany NA ZEWNATRZ do siatki arkuszy 1 m
+  `GridSpec(1.0, 0.5, 0.5)` przed pobraniem i podzialem na kawalki.
+  NMPT o natywnym kroku 0,5 m daje wynik 1 m przez
+  `SCALEFACTOR=0.5`; nad lotem 0,5 m to decymacja, nie srednia.
+  Kawalki ASC maja limit 1 Mpx pikseli coverage (NMPT 1 m: 0,25 Mpx
+  wyniku) i limit odczytu co najmniej 120 s, TIFF 16 Mpx (ADR-034).
+  Kazde zapytanie ma parzysta szerokosc i wysokosc (zakres poszerzony
+  o najwyzej 1 px na wschod/poludnie, przyciety po zszyciu): przy
+  nieparzystym rozmiarze serwer, gdy przeprobkowuje, bierze srodkowy
+  wiersz i kolumne z sasiedniego piksela zrodla (weryfikacja na zywo
+  `docs/research/2026-10-11-wcs-cutouts-live/raport.md` pkt 3, 5).
+  Reprojekcja EPSG:5514/3045 pozostaje lokalna z przypieta operacja.
+
+**Konsekwencje:** WCS prezentuje najnowszy lot obszaru bez
+doklejania starszych; nie wybiera najnowszego arkusza dokladnie
+1 m wedlug ADR-028. Wycinek moze wiec miec inny lot niz pobrane
+arkusze (raport 2026-10-10 pkt 8, 2026-10-11 pkt 4), a zer
+wewnatrz maski nie uzupelnia sie starszym lotem. Sidecar opisuje
+`bbox_raster`, `extra.source` WCS z `composition="server"`,
+`extra.mask` PRG, `zero_pixels`, `all_nodata` i ewentualny
+`parent_request`; brak `sheet_sources` w nowym torze.
+`download_bbox` EVRF2007 i NMPT zwraca float32 z wysokosciami
+na 1-metrowej siatce arkuszy, bez maski PRG i bez nodata.
+Parametry arkuszowe `download_pl_cutout` i `mosaic_and_crop`
+(`snap_to_source_grid`, `assign_crs`) odchodza w 0.8.0.
+Stare decyzje ADR-027 i ADR-034 zachowuja opis stanu w chwili
+podjecia; ten ADR okresla nowy tor. Weryfikacja na zywo (raport
+2026-10-11-wcs-cutouts-live): wycinki NMT/NMPT obu ukladow = arkusz
+tego samego lotu w 100 %; na wybrzezu (Gdynia, Hel, Mierzeja Wislana)
+poza maska jest woda o wysokosci WCS ok. 0-0,3 m (mediana), zaden
+piksel > 5 m, > 2 m: 0-1048 px na 1 km2; na ladzie zostaje 0-82 px 0,0.
 
 ---
 

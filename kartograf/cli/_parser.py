@@ -150,8 +150,8 @@ def create_parser() -> argparse.ArgumentParser:
         description=(
             "Download geospatial data from GUGiK (PL: NMT, NMPT, orthophoto, LAZ) "
             "and CUZK (CZ: DMR 5G/4G). Dla PL --bbox/--geometry rozwija sie na "
-            "arkusze zrodlowe, a z --target-crs daje JEDEN scalony wycinek "
-            "(ADR-027); dla CZ --bbox/--geometry zawsze zwraca jeden wycinek "
+            "arkusze zrodlowe, a z --target-crs daje JEDEN wycinek 1 m z WCS "
+            "GUGiK (ADR-035); dla CZ --bbox/--geometry zawsze zwraca jeden wycinek "
             "(exportImage pobierany natywnie w EPSG:5514, z --target-crs "
             "reprojektowany lokalnie). Dane zrodlowe 1:1 daja arkusze PL "
             "i arkusz SM5; kafel TM33 to lokalny warp z EPSG:5514 na siatke "
@@ -203,12 +203,13 @@ def create_parser() -> argparse.ArgumentParser:
         choices=list(SUPPORTED_TARGET_CRS),
         default=None,
         help="Reprojekcja wyniku, wykonywana lokalnie przypieta operacja "
-        "(tylko tryb --bbox/--geometry, tylko --product nmt; PL: jeden "
-        "scalony wycinek GeoTIFF, tylko z --system 1992 — w trybie --geometry "
-        "obejmuje CALA obwiednie geometrii, bez maskowania do obiektow; nodata "
-        "tam, gdzie nie siega zaden pobrany arkusz; arkusz bez danych GUGiK = "
-        "nodata + Warning (lista w sidecarze), inna porazka pobrania = kod 1; "
-        "CZ: wycinek exportImage)",
+        "(tylko tryb --bbox/--geometry). PL: wycinek 1 m z WCS GUGiK (--product "
+        "nmt albo nmpt, tylko --system 1992 i --resolution 1m) na siatce "
+        "arkuszy, maska ladu PL (poza ladem nodata), nazwa z data pobrania "
+        "<wsp>_RRRRMMDD.tif, kazde uruchomienie pobiera; kompozycja lotow "
+        "serwera (najnowszy lot arkuszy: pobierz arkusze bez --target-crs); "
+        "w trybie --geometry obejmuje CALA obwiednie geometrii. CZ: wycinek "
+        "exportImage",
     )
     download_parser.add_argument(
         "--scale",
@@ -229,10 +230,9 @@ def create_parser() -> argparse.ArgumentParser:
     download_parser.add_argument(
         "--force",
         action="store_true",
-        help="Overwrite existing files (z --target-crs PL: przebudowuje wycinek "
-        "i pobiera ponownie wszystkie jego arkusze; nieudana przebudowa "
-        "zostawia poprzedni plik; PL nmt/nmpt/orto: pobiera ponownie "
-        "wybrane kampanie i odswieza ich liste z GUGiK)",
+        help="Overwrite existing files (PL nmt/nmpt/orto: pobiera ponownie "
+        "wybrane kampanie i odswieza ich liste z GUGiK; wycinek --target-crs "
+        "PL pobiera zawsze, --force nic nie zmienia)",
     )
     download_parser.add_argument(
         "--quiet",
