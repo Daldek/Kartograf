@@ -154,12 +154,16 @@
 - Dokumentacja: ADR-035 errata 1 (kawalek ASC NMPT 4 Mpx coverage; CRLF
   zachowane), PRD 4.3 (status, ADR-022..ADR-035, kawalki ASC, `__version__`),
   SCOPE 3.19 (status, historia), CHANGELOG (data, link
-  `compare/v0.7.1...v0.7.2`).
+  `compare/v0.7.1...v0.7.2`). USAGE: wycinek `--target-crs` z kompozycji
+  serwera WCS (sekcja 4), `newest` domyslne takze z flagami roku,
+  podpowiedz wariantu w `Error:`/`Info:` (1.6), pola 0.7.2 `SheetFetch`
+  i `DownloadResult` (3) — poprawione po pierwszym tagowaniu (decyzja
+  uzytkownika: tag `v0.7.2` przeniesiony, nie byl wypchniety).
 - Wydanie: `__version__ = "0.7.2"` (asercje w `test_cli.py`
   i `test_integration.py`), commit `chore(release): wydanie 0.7.2` na
   `develop`; merge `develop` -> `main` (`--no-ff`), tag `v0.7.2`
-  (annotowany) na commicie merge. Push na `origin` czeka na zgode
-  uzytkownika.
+  (annotowany) na ostatnim commicie merge do `main`. Push na `origin`
+  czeka na zgode uzytkownika.
 - Dane testu na zywo: `<katalog-danych>/kartograf/e2e/2026-10-11-test-przed-0.7.2/`
   (skrypty jednorazowe obok danych, poza repo).
 
