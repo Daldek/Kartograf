@@ -1,8 +1,8 @@
 # Spec: Magazyn wersjonowany (podprojekt 1 roadmapy v1.0.0)
 
-**Data:** 2026-10-08; rewizja 2026-10-11 (po 0.7.1 i 0.7.2, decyzje D13-D16)
-**Status:** projekt zatwierdzony w rozmowie 2026-10-08 (sekcje 1-4); rewizja
-2026-10-11 do review uzytkownika
+**Data:** 2026-10-08; rewizja 2026-10-11 (po 0.7.1 i 0.7.2 oraz review
+zapisu i skladowania, decyzje D13-D24)
+**Status:** ZAAKCEPTOWANY przez uzytkownika 2026-10-11 (rewizja D13-D24)
 **Galaz:** `feat/versioned-store` (z `develop`; rebase na 0.7.2 2026-10-11)
 **Wersja docelowa:** 0.8.0 (zmiany lamiace ukladu `data/`, `--force`,
 sidecara, nazw wycinkow `bbox/` i CLI land cover)
