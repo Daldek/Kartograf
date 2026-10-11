@@ -35,7 +35,6 @@ from kartograf.providers.pl.wcs import GugikWcsMixin
 from kartograf.transport.http import (
     MAX_RETRIES,
     SessionPerThread,
-    download_to,
 )
 
 logger = logging.getLogger(__name__)
@@ -275,20 +274,13 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
                 f"Supported formats: {list(self.WCS_FORMATS.keys())}"
             )
 
-        output_path = Path(output_path)
-
-        url = self._construct_wcs_url(bbox, format)
-
-        return download_to(
-            self._sessions.get(),
-            url,
-            output_path,
-            timeout=timeout,
-            retries=self.MAX_RETRIES,
-            description=(
-                f"ortofoto bbox ({bbox.min_x:.0f},{bbox.min_y:.0f})-"
-                f"({bbox.max_x:.0f},{bbox.max_y:.0f})"
-            ),
+        return self._download_wcs(
+            bbox,
+            Path(output_path),
+            format,
+            timeout,
+            f"ortofoto bbox ({bbox.min_x:.0f},{bbox.min_y:.0f})-"
+            f"({bbox.max_x:.0f},{bbox.max_y:.0f})",
         )
 
     def _wcs_target(self) -> tuple[str, str]:

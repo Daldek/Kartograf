@@ -41,6 +41,9 @@ class _LazyVersionAction(argparse.Action):
 
 
 _BBOX_EXPECTED = "Expected: min_x,min_y,max_x,max_y (e.g., 450000,550000,460000,560000)"
+_LAYER_HELP = (
+    "Warstwa GPKG (domyslnie pierwsza; przy wielu warstwach Info z lista pozostalych)"
+)
 
 
 def parse_bbox_arg(text: str, crs: str) -> BBox:
@@ -317,7 +320,7 @@ def create_parser() -> argparse.ArgumentParser:
     download_parser.add_argument(
         "--layer",
         metavar="NAME",
-        help="Layer name for multi-layer GPKG (default: first layer)",
+        help=_LAYER_HELP,
     )
     download_parser.add_argument(
         "--system",
@@ -401,7 +404,7 @@ def create_parser() -> argparse.ArgumentParser:
     lc_download.add_argument(
         "--layer",
         metavar="NAME",
-        help="Layer name for multi-layer GPKG (default: first layer)",
+        help=_LAYER_HELP,
     )
     lc_download.add_argument(
         "--property",
@@ -481,7 +484,7 @@ def create_parser() -> argparse.ArgumentParser:
     sg_hsg.add_argument(
         "--layer",
         metavar="NAME",
-        help="Layer name for multi-layer GPKG (default: first layer)",
+        help=_LAYER_HELP,
     )
     sg_hsg.add_argument(
         "--output",

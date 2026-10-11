@@ -27,6 +27,7 @@ from kartograf.cli.commands import (
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.manager import DownloadProgress, DownloadResult
 from kartograf.exceptions import DownloadError, ValidationError
+from tests.conftest import write_gpkg_layers
 
 
 @pytest.fixture(autouse=True)
@@ -2498,8 +2499,7 @@ class TestCmdDownloadGeometry:
         self, mock_overall, mock_manager_cls, mock_find, mock_read_crs, capsys, tmp_path
     ):
         """--geometry --layer passes layer parameter."""
-        gpkg_file = tmp_path / "area.gpkg"
-        gpkg_file.touch()
+        gpkg_file = write_gpkg_layers(tmp_path / "area.gpkg", ["my_layer", "other"])
 
         mock_overall.return_value = BBox(
             630000.0, 480000.0, 640000.0, 490000.0, "EPSG:2180"
@@ -2524,6 +2524,84 @@ class TestCmdDownloadGeometry:
         assert result == 0
         call_kwargs = mock_find.call_args
         assert call_kwargs.kwargs.get("layer") == "my_layer"
+        assert "warstw" not in capsys.readouterr().err
+
+    @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    def test_cli_geometry_multi_layer_info_once(
+        self, mock_overall, mock_manager_cls, mock_find, mock_read_crs, capsys, tmp_path
+    ):
+        """GPKG with several layers and no --layer: ONE Info naming the first
+        layer and the others; every reader then gets the explicit name."""
+        gpkg_file = write_gpkg_layers(tmp_path / "area.gpkg", ["layer_a", "layer_b"])
+        mock_overall.return_value = BBox(
+            630000.0, 480000.0, 640000.0, 490000.0, "EPSG:2180"
+        )  # Warsaw — deep inside PL
+        mock_find.return_value = ["N-34-130-D-d-2-4"]
+        mock_manager_cls.return_value = _sheet_list_manager(tmp_path / "test.asc")
+
+        result = main(
+            ["download", "--geometry", str(gpkg_file), "-o", str(tmp_path), "-q"]
+        )
+
+        assert result == 0
+        info = [
+            line for line in capsys.readouterr().err.splitlines() if "warstw" in line
+        ]
+        assert len(info) == 1
+        assert info[0].startswith("Info:")
+        assert "'layer_a'" in info[0] and "layer_b" in info[0]
+        assert "--layer" in info[0]
+        for mock in (mock_find, mock_overall, mock_read_crs):
+            assert all(c.kwargs.get("layer") == "layer_a" for c in mock.call_args_list)
+
+    @pytest.mark.parametrize("kind", ["single_gpkg", "shp"])
+    @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    def test_cli_geometry_single_layer_no_info(
+        self,
+        mock_overall,
+        mock_manager_cls,
+        mock_find,
+        mock_read_crs,
+        kind,
+        capsys,
+        tmp_path,
+    ):
+        if kind == "shp":
+            path = tmp_path / "area.shp"
+            path.touch()
+        else:
+            path = write_gpkg_layers(tmp_path / "area.gpkg", ["only"])
+        mock_overall.return_value = BBox(
+            630000.0, 480000.0, 640000.0, 490000.0, "EPSG:2180"
+        )
+        mock_find.return_value = ["N-34-130-D-d-2-4"]
+        mock_manager_cls.return_value = _sheet_list_manager(tmp_path / "test.asc")
+
+        assert main(["download", "--geometry", str(path), "-o", str(tmp_path)]) == 0
+        assert "warstw" not in capsys.readouterr().err
+
+    def test_cli_geometry_unknown_layer_error(self, capsys, tmp_path):
+        gpkg_file = write_gpkg_layers(tmp_path / "area.gpkg", ["layer_a", "layer_b"])
+        result = main(
+            [
+                "download",
+                "--geometry",
+                str(gpkg_file),
+                "--layer",
+                "x",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 1
+        err = capsys.readouterr().err
+        assert err.startswith("Error:") and "layer_a, layer_b" in err
 
     def test_download_geometry_and_godlo_error(self, capsys, tmp_path):
         """--geometry + godlo -> mutual exclusivity error."""
@@ -2668,6 +2746,29 @@ class TestCmdLandcoverDownloadGeometry:
         mock_mgr.download.assert_not_called()
         assert "Downloaded to" in capsys.readouterr().out
 
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    @patch("kartograf.cli.landcover_cmd.LandCoverManager")
+    def test_landcover_geometry_multi_layer_info(
+        self, mock_mgr_cls, mock_bbox, capsys, tmp_path
+    ):
+        gpkg = write_gpkg_layers(tmp_path / "area.gpkg", ["layer_a", "layer_b"])
+        mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
+        mock_mgr = Mock()
+        mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.download_all_counties.return_value = [tmp_path / "out.gpkg"]
+        mock_mgr_cls.return_value = mock_mgr
+
+        result = main(
+            ["landcover", "download", "--geometry", str(gpkg), "-o", str(tmp_path)]
+        )
+
+        assert result == 0
+        info = [
+            line for line in capsys.readouterr().err.splitlines() if "warstw" in line
+        ]
+        assert len(info) == 1 and "'layer_a'" in info[0] and "layer_b" in info[0]
+        assert mock_bbox.call_args.kwargs["layer"] == "layer_a"
+
     def test_landcover_geometry_and_teryt_error(self, capsys, tmp_path):
         """--geometry + --teryt -> mutual exclusivity error."""
         shp_file = tmp_path / "area.shp"
@@ -2739,6 +2840,28 @@ class TestCmdSoilgridsHsgGeometry:
         assert result == 0
         mock_bbox.assert_called_once()
         mock_calc.calculate_hsg_by_bbox.assert_called_once()
+
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    @patch("kartograf.hydrology.HSGCalculator")
+    def test_soilgrids_hsg_geometry_multi_layer_info(
+        self, mock_calc_cls, mock_bbox, capsys, tmp_path
+    ):
+        gpkg = write_gpkg_layers(tmp_path / "area.gpkg", ["layer_a", "layer_b"])
+        mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
+        mock_calc = Mock()
+        mock_calc.calculate_hsg_by_bbox.return_value = tmp_path / "hsg.tif"
+        mock_calc_cls.return_value = mock_calc
+
+        result = main(
+            ["soilgrids", "hsg", "--geometry", str(gpkg), "-o", str(tmp_path)]
+        )
+
+        assert result == 0
+        info = [
+            line for line in capsys.readouterr().err.splitlines() if "warstw" in line
+        ]
+        assert len(info) == 1 and "'layer_a'" in info[0] and "layer_b" in info[0]
+        assert mock_bbox.call_args.kwargs["layer"] == "layer_a"
 
     def test_soilgrids_hsg_geometry_and_godlo_error(self, capsys, tmp_path):
         """--geometry + --godlo -> mutual exclusivity error."""
@@ -3537,6 +3660,32 @@ class TestResolveLazBbox:
         bbox = _resolve_laz_bbox(args)
         assert bbox.crs == "EPSG:2180"
         assert bbox.min_x < bbox.max_x and bbox.min_y < bbox.max_y
+
+    def test_geometry_multi_layer_info_and_explicit_layer(
+        self, tmp_path, capsys, caplog
+    ):
+        """LAZ --geometry resolves the GPKG layer like the other paths: one Info
+        in the CLI and the explicit name downstream (no raw library WARNING)."""
+        from argparse import Namespace
+
+        from kartograf.cli.download_cmd import _resolve_laz_bbox
+
+        gpkg = write_gpkg_layers(tmp_path / "multi.gpkg", ["layer_a", "layer_b"])
+        args = Namespace(godlo=None, bbox=None, geometry=str(gpkg), layer=None)
+        envelope = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
+        with (
+            patch(
+                "kartograf.core.geometry.get_overall_bbox", return_value=envelope
+            ) as overall,
+            caplog.at_level("WARNING", logger="kartograf.core.geometry"),
+        ):
+            assert _resolve_laz_bbox(args) == envelope
+
+        assert overall.call_args.kwargs["layer"] == "layer_a"
+        err_lines = capsys.readouterr().err.splitlines()
+        info = [line for line in err_lines if "warstw" in line]
+        assert len(info) == 1 and info[0].startswith("Info:")
+        assert caplog.records == []
 
     def test_bbox_wgs84_across_19e_keeps_southern_band(self):
         """K6: an envelope from densified edges - four corners lost
@@ -5249,6 +5398,89 @@ class TestAutoSplitBBox:
         assert cz_kwargs["parent_request"] == expected_parent
         assert cz_kwargs["bbox"].crs == "EPSG:5514"
 
+    @staticmethod
+    def _mixed_info(err: str) -> list[str]:
+        return [line for line in err.splitlines() if "Bpv" in line]
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_auto_mixed_vertical_crs_info(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
+    ):
+        """PL+CZ without --vertical-crs: one Info naming both default CRSs and
+        the remedy; both countries still run."""
+        mock_find.return_value = ["M-34-86-D-d-4-3"]
+        mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
+        mock_cz.return_value = 0
+
+        assert main(self._BORDER + ["-o", str(tmp_path)]) == 0
+
+        info = self._mixed_info(capsys.readouterr().err)
+        assert len(info) == 1
+        assert info[0].startswith("Info:")
+        assert "EVRF2007" in info[0] and "--vertical-crs" in info[0]
+        mock_cz.assert_called_once()
+        mock_manager_class.assert_called_once()
+
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            ["--vertical-crs", "EVRF2007"],
+            ["--country", "pl"],
+            ["--vertical-crs", "KRON86"],
+        ],
+    )
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_no_mixed_vertical_crs_info(
+        self, mock_manager_class, mock_find, mock_cz, extra, tmp_path, capsys
+    ):
+        """Explicit EVRF2007 (one CRS for both), explicit country and KRON86
+        (resolves the country to PL) give no such Info."""
+        mock_find.return_value = ["M-34-86-D-d-4-3"]
+        mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
+        mock_cz.return_value = 0
+
+        main(self._BORDER + extra + ["-o", str(tmp_path)])
+
+        assert self._mixed_info(capsys.readouterr().err) == []
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_pl_only_area_no_mixed_vertical_crs_info(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
+    ):
+        mock_find.return_value = ["N-34-139-A-c-1-1"]
+        mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
+
+        main(self._PL_ONLY + ["-o", str(tmp_path)])
+
+        assert self._mixed_info(capsys.readouterr().err) == []
+        mock_cz.assert_not_called()
+
+    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_auto_geometry_cross_border_mixed_info(
+        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
+    ):
+        shp = tmp_path / "area.shp"
+        shp.touch()
+        mock_find.return_value = ["M-34-86-D-d-4-3"]
+        mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
+        mock_cz.return_value = 0
+        border = BBox(18.4, 49.55, 18.8, 49.75, "EPSG:4326")
+
+        with patch(
+            "kartograf.cli.download_cmd._geometry_envelope", return_value=border
+        ):
+            main(["download", "--geometry", str(shp), "-q", "-o", str(tmp_path)])
+
+        assert len(self._mixed_info(capsys.readouterr().err)) == 1
+
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -5498,7 +5730,12 @@ class TestAutoSplitBBox:
 
         assert rc == 0
         err = capsys.readouterr().err
-        info_lines = [line for line in err.splitlines() if line.startswith("Info:")]
+        # clipping messages only (the vertical CRS Info of d1 is separate)
+        info_lines = [
+            line
+            for line in err.splitlines()
+            if line.startswith("Info:") and "Bpv" not in line
+        ]
         assert len(info_lines) == 1
         assert "czesc CZ przycieta" in info_lines[0] and "N: 51,06°N" in info_lines[0]
         assert "poza zasiegiem" not in err
@@ -5509,7 +5746,7 @@ class TestAutoSplitBBox:
     def test_bbox_inside_both_extents_stays_silent(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
-        """Silence regression: no Info: without clipping."""
+        """Silence regression: no clipping Info: without clipping."""
         mock_cz.return_value = 0
         rc = self._run_auto(
             mock_find,
@@ -5520,7 +5757,8 @@ class TestAutoSplitBBox:
         )
 
         assert rc == 0
-        assert "Info:" not in capsys.readouterr().err
+        err = capsys.readouterr().err
+        assert "przycieta" not in err and "poza zasiegiem" not in err
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")

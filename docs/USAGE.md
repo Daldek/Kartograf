@@ -105,8 +105,13 @@ kartograf download --geometry zlewnia.gpkg --layer catchments
 kartograf download --bbox 530000,382000,533000,386000 --country pl
 ```
 
-- Domyślne `--bbox-crs` to `EPSG:2180`; plik geometrii: SHP albo GPKG
-  (`--layer` wybiera warstwę GPKG).
+- Domyślne `--bbox-crs` to `EPSG:2180`; plik geometrii: SHP albo GPKG.
+  `--layer` wybiera warstwę GPKG. Bez tej flagi GPKG z wieloma warstwami
+  używa pierwszej; CLI wypisuje jeden `Info:` z wybraną warstwą, listą
+  pozostałych i podpowiedzią `--layer NAZWA` (również przy `-q`).
+  Dotyczy też `landcover download` i `soilgrids hsg`; biblioteka przy
+  domyślnym wyborze z wielu warstw emituje `logger.warning` przy każdym
+  rozstrzygnięciu — podaj `layer=`, aby wskazać warstwę jawnie.
 - PL bez `--target-crs` zapisuje **listę arkuszy** w hierarchii godeł;
   arkusz bez danych GUGiK jest pomijany z `Warning:` (kod 0, gdy pobrano
   choć jeden arkusz).
@@ -167,8 +172,8 @@ kartograf download CTES96                                      # DMR 4G (5 m), g
 kartograf download 302_5550 --country cz --vertical-crs EVRF2007   # Bpv -> EVRF2007 (EPSG:5621)
 # reprojekcja CZ (tylko --bbox/--geometry, nie godło), lokalnie przypiętą operacją
 kartograf download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --target-crs EPSG:2180
-# pogranicze pod auto: osobne pliki PL i CZ, wspólny extra.parent_request
-# (bez --vertical-crs: PL w EVRF2007, CZ w Bpv)
+# pogranicze pod auto: osobne pliki PL i CZ, wspólny extra.parent_request;
+# bez --vertical-crs: PL w EVRF2007, CZ w Bpv (Info: przed pobraniem)
 kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto
 # bboxy w EPSG:5514 są na terytorium CZ ujemne — podaj je jako --bbox=... (bez spacji),
 # inaczej argparse odczyta wartość jako nieznaną flagę
@@ -177,6 +182,13 @@ kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:55
 
 `kartograf parse` obsługuje tylko godła PL (PL-1992/PL-2000); godła CZ
 (TM33, SM5) przyjmuje `kartograf download`.
+
+Bez `--vertical-crs` i gdy `--country auto` uruchamia obie części,
+CLI wypisuje jeden `Info:` o różnych układach wysokości (PL: EVRF2007,
+CZ: Bpv, różnica ok. 0,11–0,15 m), także z `-q`. Aby uzyskać jeden układ
+dla obu części, podaj `--vertical-crs EVRF2007`; jawna flaga eliminuje
+ten komunikat. Prostokątne obwiednie krajów mogą uruchomić CZ także
+dla obszaru w Polsce (część CZ bywa wtedy w całości nodata).
 
 - Rozdzielczość CZ: arkusz SM5 (np. `CTES96`) to gotowy plik DMR 4G,
   który istnieje tylko w 5 m — bez `--resolution` pobierany jest w 5 m,
