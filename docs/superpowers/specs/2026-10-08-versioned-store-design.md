@@ -62,14 +62,24 @@ projekty uzywaja pliku".
 | D14 | Zakres lat i niedostepny skorowidz: gdy KAZDY arkusz zadania ma lokalna wersje z rocznikiem w zakresie — lokalne wersje + `Warning:` (D5); w przeciwnym razie blad calego zadania bez pobran (ADR-032 pkt 2) (2026-10-11) | zawsze blad zadania; decyzja per arkusz (lamie "zero plikow" ADR-032) |
 | D15 | Wycinek PL z WCS (ADR-035) jak kazdy produkt: `bbox/<wsp>.tif` = dowiazanie do najnowszej wersji, data pobrania tylko w etykiecie wersji, domyslnie lokalna wersja (zmienia W-U3/W-U8) (2026-10-11) | pobieranie przy kazdym uruchomieniu; nazwy z data |
 | D16 | Przestarzaly tor arkuszowy wycinkow PL usuwany PRZED planem 1/3; magazyn go nie wersjonuje (2026-10-11) | magazyn najpierw z tymczasowa obsluga toru arkuszowego |
+| D17 | Uklad per plik: `<segment>/versions/<hierarchia>/<etykieta>_<sha8>/<nazwa>`; sprawdzenie "ta sama tresc" przeglada tylko wersje jednego pliku (review 2026-10-11, K1) | katalog wersji nad hierarchia: kazdy zapis przeglada wszystkie wersje segmentu (20 000 wersji: ok. 0,9 s lokalnie, szacunkowo 20-40 s na SMB na kazdy plik) |
+| D18 | Zapis wersji wylaczny: `os.link` pliku roboczego (nigdy nie nadpisuje); istniejacy cel sprawdzany sha256 (K2) | `os.replace` (drugi proces podmienia plik pod dowiazaniem pierwszego) |
+| D19 | Katalog roboczy `.incoming/<host>_<pid>_<token>/`; pozostalosci usuwane tylko wg wieku (mtime > 24 h) (I2) | `<pid>_<tid>` (niejednoznaczne miedzy hostami); sprzatanie przez nastepny zapis (moze usunac plik zywego procesu) |
+| D20 | Jeden odczyt pliku przy zapisie: sha256 i pokrycie w jednym przebiegu, wynik przekazany do `build_metadata(digest=)` (I3) | trzy pelne odczyty (sha przy zapisie, sha w `build_metadata`, pokrycie) |
+| D21 | `fsync` pliku roboczego przed `os.link` i tmp sidecara przed `os.replace` (I5) | brak gwarancji trwalosci przy utracie zasilania |
+| D22 | Hardlinki wymagane: brak hardlinku = `DownloadError` pliku, bez kopii (I4; zmienia ADR-030 errata 4) | kopia + `Warning:` (2-3x miejsca, pelna kopia przy kazdym przestawieniu dowiazania) |
 
 ## 3. Model wersji i uklad na dysku
 
 ```
-<segment>/versions/<etykieta>_<sha8>/<hierarchia>/<nazwa>.<ext>   (+ .meta.json)
+<segment>/versions/<hierarchia>/<etykieta>_<sha8>/<nazwa>.<ext>   (+ .meta.json)
 <segment>/<hierarchia>/<nazwa>.<ext>                               <- dowiazanie do najnowszej
 ```
 
+- Wszystkie wersje pliku leza w `<segment>/versions/<hierarchia>/` (D17);
+  sprawdzenie "ta sama tresc" czyta tylko katalogi tego miejsca i tylko
+  pliki `<nazwa>`. Kampania nie ma wspolnego katalogu (i tak rozbija ja
+  `sha8` per plik).
 - `<segment>` i `<hierarchia>` bez zmian wzgledem ADR-026 (dla land cover
   i HSG nowe segmenty — sekcja 3.4).
 - `sha8` = pierwsze 8 znakow szesnastkowych sha256 pliku danych; pelne
@@ -85,41 +95,56 @@ projekty uzywaja pliku".
 ### 3.1 Zapis wersji
 
 1. Provider pobiera plik do katalogu roboczego w tym samym segmencie:
-   `<segment>/versions/.incoming/<pid>_<tid>/<nazwa>` (ten sam system
-   plikow, wiec `os.replace` jest atomowe).
-2. sha256 liczone z gotowego pliku (`sources/sidecar.file_digest`, jak
-   `build_metadata` od 0.7.1) — jedna sciezka dla plikow pobranych (takze
-   rozpakowanych) i produktow pochodnych; bez liczenia w strumieniu
+   `<segment>/versions/.incoming/<host>_<pid>_<token>/<nazwa>` (`token`
+   losowy — unikalny takze miedzy hostami na wspolnym udziale; ten sam
+   system plikow, wiec dowiazanie i `os.replace` sa atomowe) (D19).
+2. Jeden odczyt gotowego pliku liczy sha256 (`sources/sidecar.file_digest`)
+   i — dla lotu bez `full_sheet = true` — pokrycie waznymi pikselami
+   (`extra.coverage`, D13); wynik trafia do `build_metadata(digest=)`, ktory
+   nie czyta pliku drugi raz (D20). Jedna sciezka dla plikow pobranych
+   (takze rozpakowanych) i produktow pochodnych; bez liczenia w strumieniu
    `download_to` (decyzja uzytkownika 2026-10-08).
 3. Jesli jakakolwiek WAZNA wersja tego pliku (dowolna etykieta) ma to samo
    sha256: plik roboczy usuwany, wynik "bez zmian" (`unchanged`).
-4. Jesli katalog `<etykieta>_<sha8>` istnieje, a jego sidecar ma INNE pelne
-   sha256 (kolizja prefiksu): `DownloadError`, bez zapisu.
-5. Pola wynikajace z tresci liczone przed sidecarem: pokrycie waznymi
-   pikselami (`extra.coverage`) dla lotu bez `full_sheet = true` (D13).
-6. `os.replace` pliku roboczego do katalogu wersji, potem obowiazkowy
-   sidecar wersji (zapis atomowy). Porazka sidecara = plik danych usuwany,
-   `DownloadError`. Kolejnosc dane -> sidecar, bo sidecar czyta plik (nodata
-   z naglowka ASC, uklad arkusza PL-2000, sha256).
+4. `fsync` pliku roboczego (D21), `mkdir` katalogu `<etykieta>_<sha8>`,
+   `os.link(roboczy, docelowy)` — tworzenie wylaczne, nigdy nie nadpisuje
+   (D18) — i usuniecie pliku roboczego. Brak obslugi hardlinkow =
+   `DownloadError` (D22).
+5. Cel juz istnieje (`FileExistsError`: rownolegly zapis albo wczesniej
+   przerwany): sha256 istniejacego pliku. Rowne — plik roboczy usuwany;
+   z sidecarem wersji `unchanged`, bez sidecara naprawa (sidecar pisany dla
+   SPRAWDZONEJ tresci). Rozne (kolizja prefiksu albo uszkodzony plik) —
+   `DownloadError`, bez zapisu.
+6. Sidecar wersji: tmp + `fsync` + `os.replace` (D21). Porazka sidecara =
+   plik danych usuwany, `DownloadError`. Kolejnosc dane -> sidecar, bo
+   sidecar czyta plik (nodata z naglowka ASC, uklad arkusza PL-2000).
 7. Przestawienie dowiazan (sekcja 3.2).
 
-Dwa procesy pobierajace te sama tresc koncza w tym samym katalogu wersji —
-bez blokad (udzialy SMB bez blokad zakresow bajtow).
+Dwa procesy (takze z roznych hostow na udziale) pobierajace te sama tresc
+koncza w jednym katalogu wersji bez blokad: pierwszy `os.link` wygrywa,
+drugi przechodzi krok 5 i konczy `unchanged`.
 
 **Waznosc wersji:** wersja jest wazna tylko, gdy ma plik danych i sidecar
 wersji. Katalog wersji bez jednego z nich (przerwany zapis) jest pomijany
-z `Warning:`; wersja z danymi bez sidecara jest naprawiana przy nastepnym
-zapisie tej samej tresci (sidecar dopisywany, bez kolizji). Pozostalosci
-`versions/.incoming/` nigdy nie sa wersjami; sprzata je nastepny zapis tego
-pliku.
+z `Warning:`; wersje z danymi bez sidecara naprawia nastepny zapis tej
+samej tresci (krok 5, po sprawdzeniu sha256). Pusty katalog wersji (awaria
+miedzy `mkdir` a `os.link`) nie jest wersja.
+
+**Sprzatanie (D19):** pozostalosci `versions/.incoming/` nigdy nie sa
+wersjami. Zapis pliku usuwa w `.incoming/` i w `versions/<hierarchia>/`
+tylko wpisy starsze niz 24 h (mtime: pliki robocze, puste katalogi
+wersji) — nigdy mlodsze, bo moga nalezec do zywego procesu na innym
+hoscie. Dotyczy tez pozostalosci po braku miejsca na dysku.
 
 ### 3.2 Dowiazanie standardowe
 
 Mechanizm ADR-030 (errata 4) i ADR-033 bez zmian w zasadzie, z kluczem
 wersji zamiast klucza kampanii:
 
-- metoda: hardlink, inaczej kopia + `Warning:` (`extra.link` = `hardlink`/`copy`);
-  bez symlinkow;
+- metoda: wylacznie hardlink (D22, zmienia ADR-030 errata 4 — bez kopii
+  zapasowej); magazyn wymaga systemu plikow z hardlinkami (ext4, NTFS,
+  SMB — sprawdzone w ADR-030 errata 4), brak hardlinku = `DownloadError`
+  pliku z opisem; bez symlinkow; `extra.link = "hardlink"`;
 - dwa dowiazania: sciezka standardowa `<segment>/<hierarchia>/<nazwa>` do
   najnowszej wersji oraz — tylko kampanie NMT/NMPT/orto —
   `<segment>/full_sheet/<hierarchia>/<nazwa>` do najnowszej wersji
@@ -139,6 +164,12 @@ wersji zamiast klucza kampanii:
 - recznie usuniety katalog wersji = brak wersji; dowiazanie przestawia sie
   na najnowsza zachowana, a gdy nie ma zadnej — plik uznaje sie za
   niepobrany.
+- Windows: plik standardowy otwarty przez inny program (np. QGIS) blokuje
+  przestawienie dowiazania — blad tego pliku; wersja zostaje zapisana,
+  dowiazanie przestawi nastepne uruchomienie;
+- dowiazanie i jego sidecar sa zapisywane osobno: przez chwile sidecar moze
+  opisywac poprzednia wersje (znane ograniczenie; naprawia nastepne
+  przestawienie, wykrywa manifest w podprojekcie 2).
 
 ### 3.3 Sidecar (`kartograf-meta/1`, klucze tylko dodawane/usuwane)
 
@@ -179,7 +210,10 @@ hsg/...
 
 Filtr warstw BDOT10k zmienia tresc, wiec jest parametrem segmentu, nie
 wersja. Oryginalny ZIP (`keep_raw=True`) jest osobnym plikiem z wlasnymi
-wersjami i sidecarem (jak w 0.7.1). `hsg_from_rasters` pisze pod
+wersjami i sidecarem (jak w 0.7.1); sidecar GPKG ma wtedy
+`extra.source_files[]` z sha256 ZIP-a. Zapisy ZIP i GPKG nie sa atomowe
+wzgledem siebie (awaria miedzy nimi = ZIP bez GPKG; naprawia nastepne
+uruchomienie). `hsg_from_rasters` pisze pod
 sciezke podana przez wywolujacego — poza magazynem, bez wersji.
 
 Zmiana zachowania (BREAKING): ponowne uruchomienie NIE pobiera ponownie
@@ -309,9 +343,10 @@ usluga, nie lokalne pliki — wersjonowane jak produkty zrodlowe (sekcja 4.6).
 ### 4.6 Wycinki `bbox/` (D15)
 
 - Nazwa bez daty: `<segment>/bbox/<wsp>.tif` = dowiazanie do najnowszej
-  wersji; wersje w `<segment>/bbox/versions/<etykieta>_<sha8>/<wsp>.tif`
-  z etykieta `downloaded` (data pobrania UTC). Dotychczasowe
-  `<wsp>_<RRRRMMDD>.tif` przestaja byc rozpoznawane (D10, bez migracji).
+  wersji; wersje w `<segment>/versions/bbox/<etykieta>_<sha8>/<wsp>.tif`
+  (D17, hierarchia = `bbox`) z etykieta `downloaded` (data pobrania UTC).
+  Dotychczasowe `<wsp>_<RRRRMMDD>.tif` przestaja byc rozpoznawane (D10,
+  bez migracji).
 - Domyslnie lokalna wersja (zmiana W-U8 ADR-035: koniec pobierania przy
   kazdym uruchomieniu); `--force` pobiera ponownie — ta sama tresc =
   "bez zmian", inna = nowa wersja. Sygnal wg inwentaryzacji (sekcja 8);
@@ -319,18 +354,22 @@ usluga, nie lokalne pliki — wersjonowane jak produkty zrodlowe (sekcja 4.6).
 - Wejscia spoza tresci (maska PRG `extra.mask`, `composition: "server"`)
   zostaja w sidecarze wersji; zmiana maski u zrodla jest niewykrywalna bez
   `--force` (jak cicha poprawka, sekcja 4.1).
+- Powtarzalnosc bajtowa wycinka (naglowki TIFF serwera, maska, zszycie
+  kawalkow, wersje GDAL/PROJ) jest niesprawdzona: bez niej kazde `--force`
+  to nowa wersja (setki MB-GiB, bez usuwania do podprojektu 2). Do
+  sprawdzenia w inwentaryzacji (sekcja 8).
 - Wycinek CZ: ta sama regula nazw i trybow.
 
 ## 5. Zmiany w kodzie
 
 | Modul | Zmiana |
 |---|---|
-| `download/versions.py` (NOWY) | `VersionRef`, etykiety, `commit_version` (katalog `.incoming`), `list_versions`, `newest_version`; wchlania sciezki `download/campaigns.py` (`CampaignRef` i weryfikacja rekordu zostaja) |
-| `download/links.py` | zostaje: hardlink/kopia, nigdy wstecz, oba dowiazania (standardowe i `full_sheet/`); `version_key_of` zamiast `campaign_key_of`; bez `update_sidecar_extra` dla sidecarow wersji (D13) |
+| `download/versions.py` (NOWY) | `VersionRef`, etykiety, `commit_version` (`.incoming/<host>_<pid>_<token>`, `fsync`, wylaczny `os.link`, sprawdzenie istniejacego celu, sprzatanie > 24 h), `list_versions` (tylko `versions/<hierarchia>/`), `newest_version`; wchlania sciezki `download/campaigns.py` (`CampaignRef` i weryfikacja rekordu zostaja) |
+| `download/links.py` | zostaje: wylacznie hardlink (bez kopii, D22), nigdy wstecz, oba dowiazania (standardowe i `full_sheet/`); `version_key_of` zamiast `campaign_key_of`; bez `update_sidecar_extra` dla sidecarow wersji (D13) |
 | `download/updates.py` (NOWY) | `UpdatePlan`, pozycje, serializacja `kartograf-plan/1`, `check_updates`, `upgrade` |
 | `transport/http.py` | bez liczenia sha256 (sekcja 3.1 pkt 2); zwrot `ETag`/`Last-Modified`/rozmiaru i `HEAD` dla sygnalu `http` |
 | `sources/` (deskryptory) | pole `update_signal` |
-| `sources/sidecar.py` | `extra.version`; usuniecie `parent_requests` (`sha256`/`size_bytes` juz sa) |
+| `sources/sidecar.py` | `extra.version`; `build_metadata(digest=)` (sha256 i rozmiar z zapisu, bez drugiego odczytu, D20); `fsync` tmp sidecara (D21); usuniecie `parent_requests` |
 | `download/storage.py` | `get_version_path` zamiast `get_campaign_path`; `list_files` pomija `versions/` i `full_sheet/` |
 | `download/manager.py` | `update=` zamiast `skip_existing`; usuniety `_note_reuse`; kampanie przez `versions.py`; faza zakresu lat (ADR-032) z regula D14; pomiar pokrycia przy zapisie wersji (D13); `full_sheet` jako pozycje "brak lokalnej wersji" |
 | `download/cutout.py` (tor WCS), `download/cz_cutout.py`, `download/laz.py` | zapis wersji; wycinki bez daty w nazwie (D15) |
@@ -343,9 +382,13 @@ usluga, nie lokalne pliki — wersjonowane jak produkty zrodlowe (sekcja 4.6).
 
 | Sytuacja | Zachowanie |
 |---|---|
-| Przerwany zapis | wersja bez danych albo sidecara pomijana z `Warning:`; tmp sprzata nastepny zapis |
-| Kolizja `sha8` | `DownloadError`, bez zapisu |
-| Hardlink niemozliwy | kopia + `Warning:` |
+| Przerwany zapis | wersja bez danych albo sidecara pomijana z `Warning:`; pozostalosci starsze niz 24 h sprzata zapis tego pliku (D19) |
+| Kolizja `sha8` / uszkodzony plik pod nazwa wersji | `DownloadError`, bez zapisu |
+| Rownolegly zapis tej samej tresci (takze inny host) | pierwszy `os.link` wygrywa, drugi `unchanged` (D18) |
+| Hardlink niemozliwy | `DownloadError` pliku (D22) |
+| Brak miejsca na dysku | `DownloadError`; plik roboczy usuwany, a jesli nie — sprzatanie > 24 h |
+| Utrata zasilania | `fsync` przed dowiazaniem i przed sidecarem (D21) |
+| Windows: plik standardowy otwarty | blad pliku, wersja zapisana, dowiazanie przy nastepnym uruchomieniu |
 | Plan nieaktualny | blad pozycji, reszta wykonana, kod czesciowego sukcesu |
 | Plan: nieznany schemat / inny magazyn | `ValidationError` przed pobraniem |
 | Recznie usuniety katalog wersji | dowiazanie na najnowsza zachowana albo "niepobrany" |
@@ -358,8 +401,11 @@ usluga, nie lokalne pliki — wersjonowane jak produkty zrodlowe (sekcja 4.6).
 Offline (`-m "not live"`), fixtury z surowych odpowiedzi:
 
 - `versions.py`: etykiety (3 zrodla), dedupe tej samej tresci, nowa wersja
-  przy innej tresci, nigdy wstecz, dwa zapisy tego samego sha, wersja
-  niekompletna pomijana, kolizja sha8, kopia zamiast hardlinku;
+  przy innej tresci, nigdy wstecz, rownolegly zapis tego samego sha
+  (`os.link` + `FileExistsError`), naprawa wersji bez sidecara po
+  sprawdzeniu sha256, wersja niekompletna pomijana, kolizja sha8, brak
+  hardlinku = blad, sprzatanie tylko wpisow > 24 h, jeden odczyt pliku
+  przy zapisie;
 - tabela 4.2: kazda komorka osobnym testem (sygnal podstawiony);
 - plan: round-trip JSON, nieaktualna pozycja, pozycja usunieta z planu,
   zly schemat/magazyn;
@@ -410,6 +456,9 @@ surowe odpowiedzi jako fixtury:
 - WCS GUGiK (wycinki `bbox/`, ADR-035): naglowki odpowiedzi
   (`ETag`/`Last-Modified`) i data aktualizacji w GetCapabilities; brak =
   `none`.
+- Powtarzalnosc bajtowa: dla kazdego zrodla pobrac ten sam obiekt dwa razy
+  i porownac sha256 (szczegolnie wycinki WCS, GPKG BDOT10k skladany
+  lokalnie, wycinki CZ); wynik zapisac w 4.6 i USAGE.
 
 Wynik ustala `update_signal` i etykiete zrodla per deskryptor; zrodlo bez
 taniego sygnalu dostaje `none`.
@@ -417,14 +466,18 @@ taniego sygnalu dostaje `none`.
 ## 9. Dokumentacja
 
 - Nowy ADR-036 "Magazyn wersjonowany" (CRLF w `docs/DECISIONS.md`):
-  czesciowo zastepuje ADR-030 (uklad `kampanie/`, automatyczne `newest`),
+  czesciowo zastepuje ADR-030 (uklad `kampanie/`, automatyczne `newest`,
+  errata 4: kopia zamiast hardlinku — D22),
   ADR-033 (F-U5: "`kampanie/` zostaje"), ADR-035 (W-U3/W-U8: nazwa z data,
   pobieranie przy kazdym uruchomieniu), ADR-032 (pkt 2: awaria skorowidza
   przy zakresie — D14; pkt 4: pomiar pokrycia — D13) i ADR-026 (land cover
   poza ukladem); errata/odsylacze w indeksie.
 - `ARCHITECTURE` 3.2, 3.3, 4.1-4.8; `SCOPE` 2.11, 2.12 (sumy kontrolne
-  w sidecarze sa od 0.7.1); `PRD` 3.12; `USAGE`; `CHANGELOG` (BREAKING:
+  w sidecarze sa od 0.7.1); `PRD` 3.12; `USAGE` (wymaganie systemu plikow
+  z hardlinkami, kopiowanie magazynu `rsync -aH`, zalecana kompresja
+  systemu plikow — tresc w magazynie jest nieskompresowana, bo sha256
+  liczone z bajtow); `CHANGELOG` (BREAKING:
   `kampanie/` -> `versions/`, `--force`, brak automatycznej aktualizacji,
   `parent_requests`, sciezki land cover/HSG, wycinki `bbox/` bez daty
-  w nazwie i bez pobierania przy kazdym uruchomieniu; Przejscie z 0.7.x:
-  ponowne pobranie danych).
+  w nazwie i bez pobierania przy kazdym uruchomieniu, koniec kopii zamiast
+  hardlinku; Przejscie z 0.7.x: ponowne pobranie danych).
