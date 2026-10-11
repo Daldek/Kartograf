@@ -949,11 +949,13 @@ przycinany po zszyciu. Powod (weryfikacja na zywo
 `docs/research/2026-10-11-wcs-cutouts-live/raport.md` pkt 3): gdy serwer
 przeprobkowuje (NMPT `SCALEFACTOR`, NMT 1 m nad lotem 0,5 m), przy
 nieparzystym rozmiarze bierze srodkowy wiersz i kolumne z sasiedniego
-piksela zrodla. Limity: 16 Mpx i 40000 px na bok dla TIFF, 1 Mpx
-pikseli coverage dla wolniejszego ASC (ok. 20 s/Mpx, odpowiedz dopiero
-po policzeniu calego kawalka; NMPT 1 m = 0,25 Mpx wyniku), a kawalek
-ASC czeka na dane co najmniej `WCS_ASC_READ_TIMEOUT` = 120 s (raport
-live pkt 5: pierwszy bajt NMPT 19-106 s). NMPT ma natywny krok coverage
+piksela zrodla. Limity: 16 Mpx i 40000 px na bok dla TIFF, dla
+wolniejszego ASC (ok. 20 s/Mpx, odpowiedz dopiero po policzeniu calego
+kawalka) 1 Mpx pikseli coverage w NMT i 4 Mpx w NMPT (1 Mpx wyniku 1 m;
+zawieszenia hosta nie zaleza od rozmiaru kawalka, a kawalek 4 Mpx
+odpowiada jak 1 Mpx — `docs/research/2026-10-11-nmpt-asc-tuning/raport.md`).
+Kawalek ASC czeka na dane co najmniej `WCS_ASC_READ_TIMEOUT` = 120 s
+(pierwszy bajt NMPT na zywo do 106 s). NMPT ma natywny krok coverage
 0,5 m; `SCALEFACTOR=0.5` daje wynik 1 m na siatce arkuszy. `fetch_chunks`
 sklada sekwencyjne kawalki bez
 resamplingu i ponawia kazdy osobno. `transport/aaigrid.py` wydobywa

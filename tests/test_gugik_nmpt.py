@@ -276,16 +276,16 @@ class TestGugikNmptProviderDownload:
         )
 
     def test_nmpt_chunk_budget_counts_coverage_pixels(self):
-        """NMPT 1 m reads 4 coverage pixels (0.5 m) per result pixel, so a
-        1000 x 1000 m area is cut into chunks of at most 0.25 Mpx (1 Mpx of
-        coverage); NMT EVRF2007 (1 m coverage) keeps 1 Mpx chunks."""
-        bbox = BBox(567099.5, 243999.5, 568099.5, 244999.5, "EPSG:2180")
+        """NMPT 1 m reads 4 coverage pixels (0.5 m) per result pixel, so its
+        4 Mpx coverage budget cuts a 2000 x 1000 m area into chunks of at most
+        1 Mpx of result; NMT EVRF2007 (1 m coverage, 1 Mpx budget) gets the same."""
+        bbox = BBox(567099.5, 243999.5, 569099.5, 244999.5, "EPSG:2180")
 
         nmpt = GugikNmptProvider().plan_wcs_chunks(bbox)
         nmt = GugikProvider(vertical_crs="EVRF2007").plan_wcs_chunks(bbox)
 
-        assert len(nmpt) == 4 and max(c.width * c.height for c in nmpt) <= 250_000
-        assert len(nmt) == 1 and nmt[0].width * nmt[0].height == 1_000_000
+        assert len(nmpt) == 2 and max(c.width * c.height for c in nmpt) <= 1_000_000
+        assert [(c.width, c.height) for c in nmt] == [(c.width, c.height) for c in nmpt]
 
     def test_download_bbox_rejects_exception_report(self, tmp_path, sample_bbox):
         """The single NMPT request is validated too: an OGC ExceptionReport with

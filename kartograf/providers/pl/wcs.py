@@ -73,7 +73,7 @@ class GugikWcsMixin:
     # within it (docs/research/2026-10-11-wcs-cutouts/raport.md, point 5). The
     # budget counts COVERAGE pixels: a result step coarser than the coverage
     # (NMPT 1 m from 0.5 m) reads (step / native)^2 coverage pixels per result
-    # pixel, and 1 Mpx of NMPT output timed out 3 times in a row (live 2026-10-11).
+    # pixel. NMPT overrides the budget (GugikNmptProvider).
     WCS_CHUNK_LIMITS_AAIGRID = ChunkLimits(
         max_width=40_000, max_height=40_000, max_pixels=1_000_000
     )
