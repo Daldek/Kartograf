@@ -1,9 +1,9 @@
 """
-Generic tiling fallback: download tiles -> stitch -> crop to bbox.
+Stitch rasters on one grid and crop to a bbox.
 
-First consumer: stage 1 (CZ exportImage tiling above the declared service limit
-of 15000x4100 px; the real limit is ~8 Mpx, known bug
-K6); next: the PL cutout (ADR-027); planned: Saxony (no WCS, DE stage).
+Consumers: assembling chunks of one area request (``transport/chunks.py`` - CZ
+exportImage, GUGiK WCS; ADR-034) and the PL cutout built from sheet files
+(ADR-027, until cutouts move to WCS).
 Nodata is propagated to the result - NEVER replaced with 0.
 """
 
@@ -221,6 +221,10 @@ def mosaic_and_crop(
     source and a band type outside ``VRT_TYPES``; the default result driver is GTiff, by
     default without tiles (``tiled=False``; explicit tiles in ``dst_kwds`` win) -
     ``merge`` takes the output profile from the first source, i.e. from the VRT.
+
+    Without ``dtype`` all sources must share one band type: ``merge`` would take the
+    type of the FIRST source (e.g. float heights silently truncated to integers), so
+    mixed types end in ``ValidationError`` asking for ``dtype=``.
     """
     if not inputs:
         raise ValidationError("mosaic_and_crop: brak rastrow wejsciowych")
@@ -269,6 +273,13 @@ def mosaic_and_crop(
         raise ValidationError(
             f"mosaic_and_crop: niezgodne rozdzielczosci wejsc: {sorted(res_set)}"
         )
+    if dtype is None:
+        dtype_set = {m["dtype"] for m in metas}
+        if len(dtype_set) > 1:
+            raise ValidationError(
+                "mosaic_and_crop: zrodla maja rozne typy pasm "
+                f"({', '.join(sorted(dtype_set))}) — podaj dtype="
+            )
     if wrap:
         for path, meta in zip(paths, metas, strict=True):
             if meta["count"] != 1:

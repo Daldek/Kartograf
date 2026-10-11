@@ -2,8 +2,9 @@
 LAZ tile download as a library API (review-1 D17, review-2 N15).
 
 ``kartograf.download.laz``: the thread pool, the tile sidecar and tile
-failures live in the library; the CLI only prints. Offline: WFS from the raw
-XML of the 2026-10-06 round (area w2), file download replaced by writing a few bytes.
+failures live in the library; the CLI only prints. Offline: WFS from raw XML
+recorded for exactly the queried window, file download replaced by writing a
+few bytes.
 """
 
 import json
@@ -18,7 +19,7 @@ from kartograf import download_laz_area, run_laz_download
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.laz import LazDownloadResult
 from kartograf.download.storage import FileStorage
-from kartograf.exceptions import DownloadError, NoCoverageError
+from kartograf.exceptions import DownloadError, YearRangeError
 from kartograf.providers.pl.gugik_laz import (
     GugikLazProvider,
     LazTile,
@@ -26,14 +27,37 @@ from kartograf.providers.pl.gugik_laz import (
     SupersededLazTile,
 )
 
-REAL_LAZ = Path(__file__).parent / "fixtures" / "gugik_laz" / "real_2026_10_06"
+LAZ_FIXTURES = Path(__file__).parent / "fixtures" / "gugik_laz"
+REAL_LAZ = LAZ_FIXTURES / "real_2026_10_06"
 W2_AREA = BBox(637400, 487000, 637450, 487050, "EPSG:2180")
 PARENT = {"bbox": [637400, 487000, 637450, 487050], "bbox_crs": "EPSG:2180",
           "countries": ["PL"]}  # fmt: skip
+# recorded area -> (directory, file prefix, query window N,E in EPSG:2180)
+_WINDOWS = {
+    # the 2026-10-06 round (C13): W2_AREA
+    "w2": (REAL_LAZ, "w2", (487000, 637400, 487050, 637450)),
+    # 2026-10-11: test_parent_request_keeps_bbox_in_given_crs (EPSG:4326 bbox)
+    "wgs": (
+        LAZ_FIXTURES / "real_2026_10_11",
+        "wgs",
+        (487009.9919, 637409.2163, 487039.9756, 637440.8126),
+    ),
+    # 2026-10-11: sheet N-34-139-A-c-1-1 (godlo mode)
+    "sheet": (
+        LAZ_FIXTURES / "real_2026_10_11",
+        "sheet",
+        (486674.8545, 636487.0308, 489050.3833, 638684.3633),
+    ),
+}
 
 
-def wfs_session() -> MagicMock:
-    """GetCapabilities/GetFeature from raw XML; .laz files -> a few bytes."""
+def wfs_session(area: str = "w2") -> MagicMock:
+    """GetCapabilities/GetFeature from raw XML; .laz files -> a few bytes.
+
+    GetFeature must ask for the window ``area`` was recorded for: the bodies
+    are what the service answered for that window, not for any other.
+    """
+    directory, prefix, window = _WINDOWS[area]
     session = MagicMock()
 
     def get(url, **kwargs):
@@ -47,7 +71,9 @@ def wfs_session() -> MagicMock:
         if query["REQUEST"][0] == "GetCapabilities":
             path = REAL_LAZ / f"caps_{vcrs}.xml"
         else:
-            path = REAL_LAZ / f"w2_{vcrs}_{query['TYPENAMES'][0][-4:]}.xml"
+            bbox = [float(v) for v in query["BBOX"][0].split(",")[:4]]
+            assert bbox == pytest.approx(window, abs=1e-3)
+            path = directory / f"{prefix}_{vcrs}_{query['TYPENAMES'][0][-4:]}.xml"
         response.text = path.read_text(encoding="utf-8")
         return response
 
@@ -315,16 +341,18 @@ class TestDownloadLazArea:
         assert [(t.godlo, t.year) for t in result.tiles] == [("7.173.21.06.2", 2022)]
         assert _sidecar(result.downloaded[0])["request"]["year"] == 2022
 
-    def test_no_tiles_raise_no_coverage(self, tmp_path):
+    def test_year_with_empty_service_layer_conflicts_before_download(self, tmp_path):
         session = wfs_session()
-        with pytest.raises(NoCoverageError, match="No LAZ tiles found"):
+        with pytest.raises(YearRangeError) as caught:
             download_laz_area(
                 W2_AREA,
                 output_dir=tmp_path,
-                year=2026,  # the layer exists, 0 features (C13 L5)
+                year=2026,  # the layer exists, but no tiles here
                 provider=GugikLazProvider(session=session),
             )
+        assert caught.value.sheets == {"N-34-139-A-c-1-1-3-4": (2022, 2023, 2025)}
         assert downloaded_urls(session) == []
+        assert list(tmp_path.iterdir()) == []
 
     def test_vertical_crs_mismatch_with_provider_is_rejected(self, tmp_path):
         with pytest.raises(ValueError, match="KRON86"):
@@ -341,12 +369,12 @@ class TestDownloadLazArea:
 # =============================================================================
 
 
-def _cli(tmp_path, *args):
+def _cli(tmp_path, *args, area: str = "w2"):
     from unittest.mock import patch
 
     from kartograf.cli.commands import main
 
-    session = wfs_session()
+    session = wfs_session(area)
     with patch("kartograf.transport.http.make_gugik_session", return_value=session):
         rc = main(["download", *args, "--product", "laz", "-o", str(tmp_path), "-q"])
     return rc, session
@@ -390,7 +418,7 @@ class TestCliOnRealWfs:
         lon0, lat0 = to_wgs.transform(637410, 487010)
         lon1, lat1 = to_wgs.transform(637440, 487040)
         bbox = f"{lon0:.6f},{lat0:.6f},{lon1:.6f},{lat1:.6f}"
-        rc, _ = _cli(tmp_path, "--bbox", bbox, "--bbox-crs", "EPSG:4326")
+        rc, _ = _cli(tmp_path, "--bbox", bbox, "--bbox-crs", "EPSG:4326", area="wgs")
         assert rc == 0
         (sidecar,) = tmp_path.rglob("*.meta.json")
         parent = json.loads(sidecar.read_text("utf-8"))["extra"]["parent_request"]
@@ -399,10 +427,10 @@ class TestCliOnRealWfs:
         assert parent["countries"] == ["PL"]
 
     def test_godlo_mode_has_no_parent_request(self, tmp_path):
-        rc, _ = _cli(tmp_path, "N-34-139-A-c-1-1")
+        rc, session = _cli(tmp_path, "N-34-139-A-c-1-1", area="sheet")
         assert rc == 0
         sidecars = list(tmp_path.rglob("*.meta.json"))
-        assert sidecars
+        assert len(sidecars) == len(downloaded_urls(session)) > 1
         for sidecar in sidecars:
             extra = json.loads(sidecar.read_text("utf-8"))["extra"]
             assert "parent_request" not in extra

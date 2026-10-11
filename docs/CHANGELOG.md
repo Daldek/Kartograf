@@ -5,6 +5,255 @@ Wszystkie istotne zmiany w projekcie sa dokumentowane w tym pliku.
 Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.2] - 2026-10-11
+
+### Dodane
+
+- CLI: `download --product nmpt --bbox/--geometry --target-crs ...` — wycinek
+  NMPT 1 m z WCS GUGiK (dotad `Error:`), segment
+  `nmpt/pl_1992_1m_<vcrs>/bbox/`.
+- Biblioteka: `run_pl_wcs_cutout(cutout, *, provider=None, parent_request=None,
+  today=None)` (w `__all__`) — wycinek PL z WCS GUGiK: siatka arkuszy 1 m,
+  maska ladu PL z PRG (`A00_Granice_panstwa` minus
+  `W02_Morze_terytorialne_RP` i `W03_Morskie_wody_wewnetrzne`, poza maska
+  -9999, 0,0 na ladzie zostaje), nazwa `<wsp>_<RRRRMMDD>.tif`, sidecar
+  `capability="bbox_raster"` z `extra.source` (`composition: "server"`)
+  i `extra.mask`. `prepare_pl_cutout(product=)` i
+  `download_pl_cutout(product=)`: `"nmt"` albo `"nmpt"` (wycinek NMPT 1 m,
+  segment `nmpt/pl_1992_1m_<vcrs>/bbox/`). `PlCutoutResult.masked_pixels`
+  (piksele poza maska) i `zero_pixels` (0,0 na ladzie; tez
+  `extra.zero_pixels`, gdy > 0).
+- NMT/NMPT: przy arkuszu bez danych w wybranej rozdzielczosci albo
+  ukladzie wysokosci podpowiedz `Info:` o wariancie, w ktorym skorowidz
+  GUGiK ma ten arkusz, np. `Skorowidz GUGiK ma ten arkusz w NMT 1m
+  EVRF2007 — uzyj --resolution 1m` (biblioteka:
+  `NoCoverageError.hints`, `DownloadResult.no_coverage_hints`). Koszt: jedno
+  zapytanie skorowidza na wariant (NMT: 2, NMPT: 1) i brakujacy arkusz;
+  blad tego zapytania (jedna proba) pomija podpowiedz, a wariant z bledem
+  nie jest juz pytany do konca zadania; wynik bez zmian. Wpisy cache braku
+  pokrycia sprzed 0.7.2 nie maja tej podpowiedzi do konca TTL (7 dni) —
+  odswieza `--force` albo `MetadataCache(refresh=True)`.
+- Biblioteka: `DownloadManager(max_year=)` i publiczne
+  `check_year_range(godla)` sprawdzaja pelna liste kampanii przed
+  pobraniem; `YearRangeError` podaje godla, dostepne lata i podpowiedzi.
+  `available_years(godlo)` providerow NMT/NMPT/orto zwraca rosnace lata
+  z pelnej listy kampanii arkusza.
+  Sidecar kampanii z przedzialem zawiera `request.max_year`, `request.year`
+  dla pojedynczego roku i `extra.available_years`.
+- NMT/NMPT/orto: po pobraniu kilku lotow arkusza z przedzialu lat,
+  gdy najnowszy nie jest pelny, mierzony jest udzial waznych pikseli
+  (`extra.coverage` w sidecarze kampanii). Sidecar sciezki standardowej
+  otrzymuje liste `extra.flights` i `extra.better_coverage` (ID lotu
+  z wiekszym pokryciem, gdy istnieje); biblioteka zwraca ten ID w
+  `SheetFetch.better_coverage` i `DownloadResult.better_coverage`.
+  Dowiazanie nadal wskazuje najnowszy lot, nie lot o najwiekszym pokryciu.
+- Biblioteka LAZ: `select_tiles(max_year=)`, `discover_tiles(min_year=,
+  max_year=)` i `download_laz_area(max_year=)` wybieraja kafle z domknietego
+  przedzialu. W `Error:` o braku rocznika rok, ktory w niepokrytej czesci
+  ma tylko dostawy arkuszy niepelnych (`czy_ark_wypelniony=NIE`), ma
+  dopisek `(tylko arkusze niepelne)`.
+  Sidecar LAZ zapisuje `request.max_year` (i `request.year`, gdy granice sa
+  rowne), a dla znanych wartosci `extra.acquisition_date` i `extra.full_sheet`.
+- CLI `download`: `--max-year RRRR` i `--year RRRR` dzialaja dla NMT,
+  NMPT, orto oraz LAZ. Flagi roku wyznaczaja tylko dopuszczalne lata,
+  a `--campaigns` liczbe lotow na arkusz: domyslnie (`newest`) jeden,
+  najnowszy lot z zakresu, `--campaigns all` wszystkie loty z zakresu.
+  `--year` jest skrotem obu granic na ten sam rok; brak rocznika dla
+  ktoregos arkusza/kafla zatrzymuje zadanie przed pobraniem, podaje
+  dostepne lata i podpowiedz. Przy `--campaigns all`, gdy starszy lot ma
+  wieksze zmierzone pokrycie niz najnowszy, CLI podaje `Info:` takze z `-q`
+  (dowiazanie pozostaje na najnowszym locie).
+- CLI i biblioteka: gdy przy granicy roku dowiazanie nadal wskazuje
+  lot spoza zadania (dowiazanie nigdy nie cofa sie), CLI podaje
+  `Info: N dowiazan wskazuje lokalny lot spoza tego zadania ...` z linia
+  `<godlo>: sciezka standardowa|full_sheet/ -> dowiazanie <data>_<id>` na
+  dowiazanie; biblioteka: `SheetFetch.link_outside_range`,
+  `DownloadResult.link_outside_range` (dla `full_sheet/`: pola
+  `full_link_outside_range`).
+- NMT/NMPT/orto: drugie dowiazanie
+  `<segment>/full_sheet/<hierarchia>/<godlo>.<ext>` do najnowszego
+  lokalnego lotu oznaczonego w skorowidzu GUGiK jako pelny
+  (`calyArkuszWypelnionyTrescia = TAK`; pelny = w granicach Polski). Ta sama
+  mechanika co sciezka standardowa: hardlink bez kosztu miejsca (kopia, gdy
+  hardlink niedostepny), nigdy wstecz, sidecar z `extra.link_target`. Gdy
+  najnowszy lot jest pelny, oba dowiazania wskazuja ten sam plik.
+  `FileStorage.list_files()` pomija `full_sheet/`, `FileStorage.delete()`
+  usuwa oba dowiazania (pliki w `kampanie/` zostaja); nowe
+  `FileStorage.get_full_sheet_path()`. Biblioteka: `SheetFetch.full_link`,
+  `SheetFetch.full_link_outside_range`, `DownloadResult.full_links`,
+  `DownloadResult.full_link_outside_range`.
+- Biblioteka: `DownloadManager(full_sheet=True)` (wlasciwosc
+  `full_sheet`) — gdy najnowszy lot arkusza w przedziale lat nie jest
+  pelny, pobiera dodatkowo najnowszy pelny lot z tego przedzialu
+  (najwyzej jeden dodatkowy lot na arkusz) i dowiazuje go w `full_sheet/`;
+  sciezka standardowa nadal wskazuje najnowszy lot. Sidecar kampanii takiego
+  zadania ma `request.full_sheet: true`. Arkusze bez pelnego lotu
+  w skorowidzu: `DownloadResult.without_full`. Provider bez kampanii
+  z `full_sheet=True` = `ValidationError`.
+- CLI `download --full-sheet` (NMT/NMPT/orto PL, takze z flagami roku):
+  gdy najnowszy lot arkusza nie jest pelny, pobiera dodatkowo najnowszy
+  pelny lot z zakresu i dowiazuje go w `<segment>/full_sheet/`. Podsumowanie
+  liczy pliki kampanii (`Downloaded 2 campaign files for 1 sheets ...`).
+  `--full-sheet` z `--product laz` albo `--target-crs` = `Error:` przed
+  siecia (kod 1); dla CZ jak inne opcje kampanii (`Error:` bez PL, `Info:`
+  dla PL+CZ pod `--country auto`). Z `--campaigns all` bez skutku.
+- `--geometry` z plikiem GPKG o wielu warstwach bez `--layer` (`download`,
+  `landcover download`, `soilgrids hsg`): jeden `Info:` na stderr (takze
+  z `-q`) z nazwa uzytej pierwszej warstwy, lista pozostalych i podpowiedzia
+  `--layer`. Wybor warstwy bez zmian.
+- `--country auto` dla obszaru PL+CZ bez `--vertical-crs`: jeden `Info:` przed
+  pobraniem, ze czesc PL jest w EVRF2007, a czesc CZ w Bpv (roznica ok.
+  0,11-0,15 m), z podpowiedzia `--vertical-crs EVRF2007` (jeden uklad dla
+  obu). Uklady domyslne bez zmian. Obwiednie krajow sa prostokatne, wiec
+  komunikat pojawia sie tez dla zadan, w ktorych czesc CZ okaze sie pusta.
+
+### Zmienione
+
+- CLI `download --bbox/--geometry --target-crs` (PL): wycinek z WCS GUGiK
+  zamiast mozaiki arkuszy (ADR-035) — siatka arkuszy 1 m, kompozycja lotow
+  serwera, nodata -9999 poza ladem PL (maska PRG), nazwa
+  `<wsp>_<RRRRMMDD>.tif`, kazde uruchomienie pobiera (bez `Skipped`; `--force`,
+  `--workers` i `--scale` bez wplywu). `--resolution 5m --target-crs` =
+  `Error:` (kod 1, przed siecia). Zamiast listy arkuszy i komunikatow
+  o arkuszach (`Warning:` R5/E13/I-1, `Info:` W1) jest `Info:` o liczbie
+  zapytan WCS (gdy > 1 albo wynik >= 1 GiB) i `Warning:`, gdy obszar lezy
+  w calosci poza ladem PL. Flagi roku, `--campaigns all` i `--full-sheet`
+  z `--target-crs` zostaja `Error:` (nowa tresc). Co zrobic: wycinek 5 m albo
+  najnowszy lot arkuszy (ADR-028) — pobierz arkusze bez `--target-crs`
+  (albo API arkuszowe); skrypty szukajace pliku po nazwie bez daty — dopasuj
+  wzorzec `<wsp>_*.tif`; starsze wycinki bez daty zostaja nietkniete.
+- `download_pl_cutout()` pobiera wycinek z WCS GUGiK (`run_pl_wcs_cutout`):
+  siatka arkuszy 1 m, kompozycja lotow serwera (nie najnowszy lot ADR-028),
+  nodata -9999 poza ladem PL (maska PRG), nazwa z data pobrania
+  `<wsp>_<RRRRMMDD>.tif`, kazde wywolanie pobiera (bez `skipped`),
+  `resolution="5m"` = `ValidationError`. Parametry arkuszowe `geometry`,
+  `layer`, `scale`, `max_workers`, `force`, `on_progress`, `cache` nie maja
+  wplywu; wartosc inna niz domyslna daje `DeprecationWarning` (usuniecie
+  w 0.8.0). API arkuszowe (`prepare_pl_cutout` -> `select_pl_cutout_sheets`
+  -> `run_pl_cutout`, `build_cutout_from_sheets`) dziala bez zmian i jest
+  przestarzale (usuniecie w 0.8.0); `run_pl_cutout` z
+  `cutout.product="nmpt"` = `ValidationError`. Co zrobic: wycinek z arkuszy
+  (najnowszy lot ADR-028, 5 m) — `prepare_pl_cutout` ->
+  `select_pl_cutout_sheets` -> `run_pl_cutout`; nie podawaj parametrow
+  arkuszowych `download_pl_cutout`; kod szukajacy pliku po nazwie bez daty —
+  uzyj `PlCutoutResult.path`.
+- `Warning:` o niepelnej najnowszej kampanii (E13) dzieli arkusze: "pelny
+  lot w <segment>/full_sheet/", "brak pelnego lotu w skorowidzu" (z flagami
+  roku: "... w zakresie lat zadania") i "pelny lot nie pobrany ... — uzyj
+  --full-sheet". Komunikaty o opcjach kampanii
+  dla CZ wymieniaja `--full-sheet`. Skrypty dopasowujace stary tekst
+  trzeba poprawic.
+- Komunikat CLI o arkuszach bez danych GUGiK nie zgaduje przyczyny
+  "(morze, obszar za granica)": mowi, ze skorowidz GUGiK nie ma tych
+  arkuszy dla wybranego produktu i rozdzielczosci, a morze, granice i brak
+  NMT 5 m w czesci kraju podaje jako przyklady (sprawdzone na zywo: np.
+  `N-34-130-D-d --resolution 5m` — 6 z 16 arkuszy bez 5 m, NMT 1 m jest).
+  Skrypty dopasowujace stary tekst trzeba poprawic.
+- `--year` z `--product nmt|nmpt|orto` nie jest juz ignorowany: pobiera
+  wskazany rocznik albo zwraca `Error:` z lista lat. Co zrobic: usun
+  `--year` podawany tylko "na wszelki wypadek" albo wybierz odpowiedni
+  przedzial `--min-year`/`--max-year`.
+- `--year`/`--max-year` z `--target-crs` zwracaja `Error:` (jak wczesniej
+  `--min-year`). Co zrobic: nie podawaj flag roku dla wycinka (wycinek
+  z WCS ma kompozycje lotow serwera, bez wyboru roku).
+- `--campaigns all --min-year` zawsze odpytuje wszystkie warstwy skorowidza,
+  zeby moc podac pelna liste rocznikow. Wpisy `campaigns_cache` ze skanu
+  czesciowego sa odpytywane ponownie. Co zrobic: nic (koszt 1-3 zapytan
+  GetFeatureInfo wiecej na arkusz raz na 7 dni).
+- `DownloadManager(min_year=...)`: arkusz z danymi tylko poza przedzialem
+  zatrzymuje cale zadanie (takze liste/hierarchie) przed pobraniem, zamiast
+  byc pominietym. Awaria sprawdzenia skorowidza tez zatrzymuje zadanie;
+  lokalny fallback bez weryfikacji nadal dziala bez granic roku.
+  Co zrobic: dla list z celowym pominieciem starszych arkuszy pobierz bez
+  granicy i odfiltruj po `extra.campaign.date`, albo obniz granice.
+- `validate_campaign_args(campaigns, min_year, max_year)` ma nowy
+  obowiazkowy argument (funkcja wewnetrzna, poza `__all__`). Co zrobic: kod
+  wolajacy ja bezposrednio dodaje `max_year`.
+- LAZ `--year`/`--min-year`: czesci obszaru dostepne tylko w innych
+  rocznikach byly pobierane czesciowo bez komunikatu; teraz zadanie
+  zatrzymuje sie przed pobraniem, podaje roczniki kafli i podpowiedz.
+  WFS pyta o wszystkie roczniki uslugi takze z `--year`. Co zrobic:
+  jesli chcesz swiadomie pobrac mniej danych, zastosuj podpowiedz
+  `--min-year`/`--max-year` lub zawez `--bbox`.
+- `mosaic_and_crop()` bez `dtype=` przy zrodlach o roznych typach pasm
+  (np. ASC int32 obok float32) konczy sie `ValidationError` z lista typow;
+  dotad wynik dostawal typ pierwszego zrodla (np. wysokosci float obciete
+  do liczb calkowitych bez sladu). Co zrobic: przy mieszanych zrodlach
+  podaj `dtype=` (np. `"float32"`).
+- `download_bbox()` NMT 1 m KRON86 (GeoTIFF; takze
+  `DownloadManager.download_bbox`): zasieg pliku to bbox rozszerzony na
+  zewnatrz do siatki zrodla (krawedzie pikseli `k + 0,5` m, < 1 px z kazdej
+  strony), a obszar powyzej 16 Mpx jest pobierany kawalkami i skladany bez
+  przeprobkowania (ADR-034). Sidecar `request.bbox` = bbox zadania. Co
+  zrobic: nic; kto liczyl na zasieg rowny bboxowi, czyta zasieg z pliku.
+  Ortofotomapa i PNG/JPEG — jedno zapytanie jak dotad (NMPT: nizej).
+- `download_bbox()` NMT 1 m EVRF2007 dziala (dotad `ValidationError`
+  o wycofanym endpoincie): wysokosci float32 z WCS `DigitalTerrainModel`
+  (`image/x-aaigrid`, zapisywany jako GeoTIFF EPSG:2180) na siatce arkuszy
+  1 m; `is_wcs_available()` EVRF2007 = `True`, kanal WCS `pl.gugik.nmt_1m`
+  w rejestrze ma oba uklady wysokosci. Co zrobic: nic; kto lapal
+  `ValidationError` dla EVRF2007, moze usunac obejscie.
+- `download_bbox()` NMPT: rozdzielczosc 1 m (`SCALEFACTOR=0.5`; dotad
+  0,5 m) na siatce arkuszy 1 m, kawalkami jak NMT; rejestr `pl.gugik.nmpt`
+  ma kanal WCS `bbox_raster`. Co zrobic: nic; wynik odpowiada arkuszom
+  NMPT 1 m (nad lotem 0,5 m — piksel 0,5 m o srodku na pelnym metrze).
+- `download_bbox()` NMT EVRF2007 i NMPT pobiera kawalki `image/x-aaigrid`
+  (NMT do 1 Mpx; NMPT do 4 Mpx pikseli coverage 0,5 m = 1 Mpx wyniku 1 m —
+  zawieszenia hosta trafiaja kawalki kazdego rozmiaru, wiec mniej kawalkow
+  to mniej ponowien; pomiar `docs/research/2026-10-11-nmpt-asc-tuning/`;
+  ASC ok. 20 s/Mpx i ok. 20 MB/Mpx; dluzsze zadanie milczy przed pierwszym
+  bajtem dluzej niz timeout odczytu 30 s). KRON86 NMT bez zmian (GeoTIFF,
+  16 Mpx). Kazde zapytanie WCS z siatka (NMT, NMPT, takze KRON86) ma
+  parzysta szerokosc i wysokosc: zakres wyrownany do siatki jest
+  poszerzany o najwyzej 1 px na wschod/poludnie i przycinany po zszyciu
+  (przy nieparzystym rozmiarze serwer bierze srodkowy wiersz i kolumne
+  z sasiedniego piksela zrodla, gdy przeprobkowuje — NMPT `SCALEFACTOR`,
+  NMT 1 m nad lotem 0,5 m; pomiar na zywo 2026-10-11). Kawalek
+  `image/x-aaigrid` czeka na pierwszy bajt co najmniej 120 s
+  (`WCS_ASC_READ_TIMEOUT`; `timeout` wolajacego, gdy wiekszy): serwer nie
+  wysyla nic przed policzeniem calego kawalka (NMPT: 19-106 s na zywo).
+  Co zrobic: nic; duze obszary EVRF2007/NMPT trwaja odpowiednio dluzej
+  niz KRON86.
+- Biblioteka: funkcje geometrii (`get_overall_bbox`, `read_feature_bboxes`,
+  `find_sheets_for_geometry`, `read_source_crs`) przy GPKG z wieloma
+  warstwami bez `layer=` loguja wybor pierwszej warstwy jako `WARNING`
+  (dotad `INFO`, domyslnie niewidoczne). Co zrobic: podaj `layer=`, jesli
+  komunikat przeszkadza.
+
+### Naprawione
+
+- Zapytanie o powiaty BDOT10k (WFS PRG) rozszerza obszar na zewnatrz
+  z dokladnoscia do milimetra; wczesniej zaokraglenie do pelnych metrow
+  moglo pominac powiat stykajacy sie z obszarem w pasie do 0,5 m,
+  a `teryt_for_point` pytal raz o sam punkt, raz o kwadrat 2 m.
+- WFS PRG: odpowiedz, w ktorej `numberReturned` rozni sie od liczby
+  odczytanych kodow powiatow, konczy sie `DownloadError` zamiast cicho
+  krotszej listy powiatow (i brakujacego pakietu BDOT10k).
+- BDOT10k: opcja `timeout` (`Bdot10kProvider.download_by_bbox/godlo`,
+  `LandCoverManager.download_by_bbox/godlo/download_all_counties`)
+  dziala tez na zapytanie o powiat w WFS PRG; wczesniej to zapytanie
+  mialo zawsze 30 s. Bez `timeout` w menedzerze zostaje 30 s.
+- Godla z cyframi spoza ASCII (np. pelnej szerokosci `M-３３-８-A`,
+  `6.１４５.２０`, CZ `７３０_５５５５`) sa odrzucane (`ParseError`);
+  wczesniej PL-1992 i PL-2000 przechodzily walidacje i trafialy do sciezek
+  i sidecarow w innej postaci niz godlo GUGiK. Co zrobic: podac godlo
+  cyframi `0-9`.
+- BDOT10k `keep_raw=True`: nieudany zapis oryginalnego ZIP przy ponownym
+  pobraniu zostawia poprzedni GPKG i jego sidecar bez zmian (scalony GPKG
+  zastepuje poprzedni dopiero po zapisie ZIP). Wczesniej poprzedni GPKG
+  byl nadpisany, a potem usuniety, i zostawal sidecar bez pliku danych.
+- `download_bbox()` NMT/NMPT/ortofotomapy nie zapisuje juz raportu bledu
+  WCS (`ows:ExceptionReport`, XML z HTTP 200) jako pliku rastra — to
+  `DownloadError`. NMT 1 m z bboxem poza siatka zrodla dawal tresc
+  przesunieta o ulamek piksela wzgledem georeferencji (serwer probkuje do
+  siatki zadania; pomiar `docs/research/2026-10-10-wcs-limits/raport.md`);
+  teraz zadanie jest wyrownane do siatki zrodla.
+- `download_bbox()` NMPT zwracal 3-pasmowy RGB uint8 (podglad kolorow)
+  zamiast wysokosci; teraz 1 pasmo float32 z wysokosciami (1 m na siatce
+  arkuszy, bit w bit z arkuszami NMPT 1 m). Wpis WCS NMT EVRF2007
+  wskazywal nieistniejacy endpoint (`DigitalTerrainModelFormatTIFFEVRF2007`,
+  HTTP 404) — zastapiony dzialajacym `DigitalTerrainModel`.
+
 ## [0.7.1] - 2026-10-09
 
 ### Dodane
@@ -1921,6 +2170,7 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
+[0.7.2]: https://github.com/Daldek/Kartograf/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/Daldek/Kartograf/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/Daldek/Kartograf/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/Daldek/Kartograf/compare/4cec5d87b9aad1ffdb59693ec7163c7c97540983...v0.6.1

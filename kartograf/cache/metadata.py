@@ -108,6 +108,11 @@ class MetadataCache:
         Strict mode (A9): an SQLite error raises ``CacheError`` on the
         failing call and on every later call, instead of disabling the cache
         silently. ``on_disabled`` is still called once. Default ``False``.
+        The management methods (``stats``, ``clear``, ``vacuum``,
+        ``prune_expired``, ``close`` - it prunes first) raise too; the
+        ``error`` property reports the state without raising.
+        ``DownloadManager`` lets the ``CacheError`` through when downloading
+        sequentially and records it as a failed sheet in the parallel pool.
 
     Examples
     --------
@@ -156,10 +161,11 @@ class MetadataCache:
 
     @contextmanager
     def _db_errors(self) -> Iterator[None]:
-        """Turn an ``sqlite3.Error`` into the disabled state (no exception).
+        """Turn an ``sqlite3.Error`` into the disabled state.
 
-        Used inside ``_write_lock``; the caller falls through to its "miss"
-        return value after a suppressed error.
+        Used inside ``_write_lock``; without ``strict`` the caller falls
+        through to its "miss" return value after a suppressed error, in
+        strict mode ``CacheError`` is raised.
         """
         try:
             yield
@@ -717,7 +723,9 @@ class MetadataCache:
             - db_exists: whether the database file exists (it is created
               by the first write; until then all counts are 0)
             - error: ``str`` of the SQLite error that disabled the cache
-              (counts are then 0), ``None`` while it works
+              (counts are then 0), ``None`` while it works; without
+              ``strict`` only - in strict mode the call raises
+              ``CacheError`` instead
         """
         counts: tuple[int, ...] = (0, 0, 0, 0, 0)
         # Lock guards these reads too - see comment in get_record().

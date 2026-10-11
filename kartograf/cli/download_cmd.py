@@ -172,6 +172,38 @@ def _cli_metadata_cache(force: bool) -> "MetadataCache":
     return MetadataCache(refresh=force, on_disabled=_warn_cache_disabled)
 
 
+def _announce_geometry_layer(args: argparse.Namespace) -> bool:
+    """Resolve the ``--geometry`` layer ONCE; ``Info:`` when the default was taken.
+
+    A GPKG with several layers and no ``--layer`` is read from its first layer
+    only - the area of the task comes from it. One ``Info:`` on stderr (also with
+    ``-q``) names the choice and the others; ``args.layer`` then carries the
+    explicit name, so the geometry readers called later neither repeat nor log it.
+    Errors (missing file, unknown layer, no feature tables) print ``Error:`` and
+    return ``False``.
+    """
+    from kartograf.core.geometry import resolve_layer
+
+    filepath = Path(args.geometry)
+    if not filepath.exists():
+        print(f"Error: File not found: {filepath}", file=sys.stderr)
+        return False
+    try:
+        choice = resolve_layer(filepath, getattr(args, "layer", None))
+    except ValidationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return False
+    if choice.defaulted and len(choice.available) > 1:
+        print(
+            f"Info: {filepath.name}: liczba warstw {len(choice.available)}, uzyto "
+            f"pierwszej '{choice.name}' (pozostale: "
+            f"{', '.join(choice.available[1:])}); inna warstwa: --layer NAZWA",
+            file=sys.stderr,
+        )
+    args.layer = choice.name
+    return True
+
+
 @contextlib.contextmanager
 def _pl_metadata_cache(args: argparse.Namespace) -> Iterator[object | None]:
     """
@@ -201,7 +233,7 @@ def _product_label(product: str, resolution: str | None) -> str:
 def _print_sheet_list(
     godla: list[str], target_scale: str, *, what: str, label: str
 ) -> None:
-    """Header of the PL sheet list (cutout and list mode, D15): up to 10 sheet codes
+    """Header of the PL sheet list (list mode, D15): up to 10 sheet codes
     in full, a longer list as the first 3 + ``...`` + the last 2."""
     print(f"Found {len(godla)} sheets at {target_scale} for {what} ({label})")
     sample = godla if len(godla) <= 10 else godla[:3] + ["..."] + godla[-2:]
@@ -227,75 +259,22 @@ def _reject_non_nmt_for_cz(product: str) -> bool:
     return True
 
 
-def _campaign_opts(args: argparse.Namespace) -> tuple[str, int | None]:
-    """``(campaigns, min_year)`` via getattr: tests build the Namespace by hand."""
-    return getattr(args, "campaigns", "newest"), getattr(args, "min_year", None)
-
-
-def _is_cz_only_task(args: argparse.Namespace) -> bool:
-    """
-    True when the task can only be served by CZ (no PL among its countries).
-
-    Local, best-effort and network-free: a CZ sheet code, ``--country cz``, or
-    (under ``auto``) a ``--bbox``/``--geometry`` lying wholly in CZ. Anything that
-    cannot be resolved (missing file, bad bbox) counts as "not CZ-only" - the
-    caller then prints the generic text and the real error surfaces later.
-    """
-    from kartograf.core.parser_registry import detect_system
-
-    country = getattr(args, "country", "auto")
-    if country == "pl":
-        return False
-    if country == "cz":
-        return True
-    try:
-        if args.godlo is not None:
-            return detect_system(args.godlo).country == "CZ"
-        if getattr(args, "bbox", None) is not None:
-            area = parse_bbox_arg(args.bbox, args.bbox_crs)
-        elif getattr(args, "geometry", None) is not None:
-            area = _geometry_envelope(Path(args.geometry), getattr(args, "layer", None))
-        else:
-            return False
-        return _countries_for_bbox(area) == ("CZ",)
-    except Exception:
-        return False
+def _campaign_opts(
+    args: argparse.Namespace,
+) -> tuple[str | None, int | None, int | None]:
+    """Campaign strategy and year bounds; absent attributes support handmade tests."""
+    return (
+        getattr(args, "campaigns", None),
+        getattr(args, "min_year", None),
+        getattr(args, "max_year", None),
+    )
 
 
 def _reject_laz_only_opts(args: argparse.Namespace) -> bool:
-    """
-    ``--year``/``--min-density`` apply to ``--product laz`` only (0.7.1).
-
-    Before 0.7.1 both were read on the LAZ path alone and silently ignored for
-    nmt/nmpt/orto (the user got the newest data and exit code 0). True (after an
-    ``Error:`` on stderr) when one of them is given with another product; checked
-    in ``cmd_download`` before any country dispatch, so no path (sheet code,
-    hierarchy, sheet list, ``--bbox``, ``--geometry``, cutout, CZ) reaches the
-    network. Year selection for NMT/NMPT/orto is planned for 0.7.2.
-    """
+    """Reject ``--min-density`` on non-LAZ products before any network request."""
     product = getattr(args, "product", "nmt")
     if product == "laz":
         return False
-    if getattr(args, "year", None) is not None:
-        if _is_cz_only_task(args):
-            message = (
-                f"Error: --year nie dziala dla CZ (CUZK nie ma wyboru roku; "
-                f"podano {product}); pomin --year"
-            )
-        else:
-            message = (
-                f"Error: --year dziala tylko z --product laz (podano {product}); "
-                "wybor roku dla NMT/NMPT/orto bedzie w 0.7.2. "
-            )
-            if getattr(args, "min_year", None) is None:
-                message += (
-                    "Teraz uzyj --min-year RRRR (najnowsza kampania nie starsza "
-                    "niz podany rok; tylko PL, bez --target-crs) albo pomin --year"
-                )
-            else:
-                message += "Pomin --year"
-        print(message, file=sys.stderr)
-        return True
     if getattr(args, "min_density", None) is not None:
         print(
             f"Error: --min-density dziala tylko z --product laz (podano "
@@ -306,63 +285,88 @@ def _reject_laz_only_opts(args: argparse.Namespace) -> bool:
     return False
 
 
+def _reject_full_sheet_for_laz(args: argparse.Namespace) -> bool:
+    """Reject ``--full-sheet`` for LAZ before any network request (ADR-033)."""
+    if getattr(args, "product", "nmt") != "laz" or not getattr(
+        args, "full_sheet", False
+    ):
+        return False
+    print(
+        "Error: --full-sheet dziala tylko z NMT/NMPT/orto (podano laz) — LAZ "
+        "nie ma sciezki standardowej ani dowiazania full_sheet/; pomin --full-sheet",
+        file=sys.stderr,
+    )
+    return True
+
+
 def _reject_campaign_opts_without_pl(
     args: argparse.Namespace, countries: tuple[str, ...]
 ) -> bool:
-    """
-    Campaign options (``--campaigns all``, ``--min-year``) apply to PL only.
-
-    One rule for all CLI entry points (ADR-030, errata (j) Q9
-    and errata 2 N-3): no PL among the countries -> ``Error:`` and True (before the
-    network);
-    PL and CZ -> ``Info:`` once, False (CZ is downloaded anyway, current version);
-    no options or PL alone -> False, silence. Messages go to stderr (``-q`` does not
-    suppress them). Campaign options deliberately do NOT enter ``_pl_only_flags`` -
-    otherwise ``auto`` would narrow a border area to PL.
-    """
-    campaigns, min_year = _campaign_opts(args)
-    if campaigns == "newest" and min_year is None:
+    """Reject PL-only campaign/year choices in CZ; describe mixed tasks once."""
+    campaigns, min_year, max_year = _campaign_opts(args)
+    if (
+        campaigns != "all"
+        and min_year is None
+        and max_year is None
+        and getattr(args, "year", None) is None
+        and not getattr(args, "full_sheet", False)
+    ):
         return False
     if "PL" not in countries:
         print(
-            "Error: CZ (CUZK) nie ma kampanii — --campaigns all/--min-year "
-            "dotycza tylko PL",
+            "Error: CZ (CUZK) nie ma kampanii — "
+            "--campaigns all/--min-year/--max-year/--year/--full-sheet dotycza "
+            "tylko PL",
             file=sys.stderr,
         )
         return True
     if "CZ" in countries:
         print(
-            "Info: --campaigns/--min-year dotycza tylko czesci PL "
-            "(CZ: biezaca wersja danych CUZK)",
+            "Info: --campaigns/--min-year/--max-year/--year/--full-sheet dotycza "
+            "tylko czesci PL (CZ: biezaca wersja danych CUZK)",
             file=sys.stderr,
         )
     return False
 
 
 def _reject_campaign_opts_with_target_crs(args: argparse.Namespace) -> bool:
-    """
-    PL cutout ``--target-crs`` + ``--campaigns all``/``--min-year`` = error.
-
-    Errata (j) Q2: a cutout composes one campaign per sheet, and its name does not
-    carry a year bound. True (after ``Error:`` on stderr) before the network.
-    Called only in ``_dispatch_area`` (the sole path to a PL cutout), before the
-    CZ branch; a sheet code with ``--target-crs`` is rejected earlier by the sheet code
-    guard.
-    """
+    """A PL cutout (WCS, ADR-035) has no year or campaign choice: the server's
+    flight composition, the download date in the name."""
     if getattr(args, "target_crs", None) is None:
         return False
-    campaigns, min_year = _campaign_opts(args)
-    if campaigns == "all":
+    campaigns, min_year, max_year = _campaign_opts(args)
+    flag = next(
+        (
+            name
+            for name, supplied in (
+                ("--year", getattr(args, "year", None)),
+                ("--min-year", min_year),
+                ("--max-year", max_year),
+            )
+            if supplied is not None
+        ),
+        None,
+    )
+    if flag is not None:
         print(
-            "Error: --campaigns all nie dziala z --target-crs — wycinek sklada "
-            "jedna kampanie na arkusz",
+            f"Error: {flag} nie dziala z --target-crs — wycinek z WCS GUGiK ma "
+            "kompozycje lotow serwera (bez wyboru roku); rok danych: pobierz "
+            "arkusze bez --target-crs",
             file=sys.stderr,
         )
         return True
-    if min_year is not None:
+    if campaigns == "all":
         print(
-            "Error: --min-year nie dziala z --target-crs — nazwa wycinka nie "
-            "niesie granicy roku",
+            "Error: --campaigns all nie dziala z --target-crs — wycinek z WCS "
+            "GUGiK ma jedna kompozycje lotow serwera; wszystkie kampanie: "
+            "pobierz arkusze bez --target-crs",
+            file=sys.stderr,
+        )
+        return True
+    if getattr(args, "full_sheet", False):
+        print(
+            "Error: --full-sheet nie dziala z --target-crs — wycinek pochodzi "
+            "z WCS GUGiK, nie z arkuszy",
             file=sys.stderr,
         )
         return True
@@ -379,7 +383,8 @@ def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
 
     Covers validation of the product/resolution and product/vertical_crs pairs
     (symmetric to the hard rejections of the CZ branch) and of the ``--target-crs``
-    exclusions (product != nmt, ``--system 2000`` - ADR-027)
+    exclusions (product orto/laz, ``--resolution 5m``, ``--system 2000`` -
+    ADR-027/035)
     - checked BEFORE defaults are substituted, so that "not given" does not
     pose as a user choice. NMT 5m with KRON86 is rejected after the
     defaults (0.7.1, ``require_nmt_vertical_crs``): only an explicit
@@ -406,10 +411,18 @@ def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
         return 1
 
     target_crs = getattr(args, "target_crs", None)
-    if target_crs is not None and product in ("nmpt", "orto", "laz"):
+    if target_crs is not None and product in ("orto", "laz"):
         print(
-            "Error: --target-crs w 0.7.0 dziala tylko z --product nmt "
-            "(nmpt/orto — etap 2; laz to chmura punktow, nie raster)",
+            "Error: --target-crs dla PL dziala tylko z --product nmt albo nmpt "
+            "(wycinek wysokosci z WCS GUGiK; orto i laz — pobierz bez "
+            "--target-crs)",
+            file=sys.stderr,
+        )
+        return 1
+    if target_crs is not None and getattr(args, "resolution", None) == "5m":
+        print(
+            "Error: wycinki --target-crs sa tylko 1 m (WCS GUGiK); arkusze 5 m: "
+            "pomin --target-crs; wycinek: --resolution 1m",
             file=sys.stderr,
         )
         return 1
@@ -741,9 +754,10 @@ def _dispatch_area(
     not from the envelope), and the bbox serves to recognize countries and
     ``parent_request``.
 
-    ``Info:``/``Warning:`` messages about country resolution and partial
-    success go to stderr, so ``-q`` (suppressing stdout) does NOT hide them -
-    just like ``Error:`` messages.
+    ``Info:``/``Warning:`` messages about country resolution, the mixed default
+    vertical CRSs of a PL+CZ task (PL EVRF2007, CZ Bpv) and partial success go
+    to stderr, so ``-q`` (suppressing stdout) does NOT hide them - just like
+    ``Error:`` messages.
     """
     from kartograf.transform.crs import TransformError
 
@@ -814,6 +828,17 @@ def _dispatch_area(
             pl_geometry_sheets=pl_geometry_sheets,
             pl_sheet_list=filepath is None and not getattr(args, "target_crs", None),
         )
+        # Each country keeps its own default vertical CRS (PL EVRF2007, CZ Bpv,
+        # ~0.11-0.15 m apart); say so before the work. The country envelopes are
+        # rectangles (ADR-023 point 4), so this names the CRS of the parts the task
+        # runs, not whether both hold data (spec silent-defaults 2.3).
+        if {"PL", "CZ"} <= parts.keys() and getattr(args, "vertical_crs", None) is None:
+            print(
+                "Info: --country auto bez --vertical-crs: czesc PL w EVRF2007, "
+                "czesc CZ w Bpv (rozne uklady wysokosci, roznica ok. "
+                "0,11-0,15 m); jeden uklad dla obu: --vertical-crs EVRF2007",
+                file=sys.stderr,
+            )
 
     results: list[tuple[str, int]] = []
     for code in countries:
@@ -953,17 +978,37 @@ def cmd_download(args: argparse.Namespace) -> int:
     # registry ---
     from kartograf.core.parser_registry import detect_system
 
-    # ADR-030: --min-year 1900..2100 (and the strategy) before any work
-    campaigns, min_year = _campaign_opts(args)
-    try:
-        validate_campaign_args(campaigns, min_year)
-    except ValidationError as e:
-        # the library message names the parameter; the CLI speaks of the flag
-        print(f"Error: {str(e).replace('min_year', '--min-year')}", file=sys.stderr)
+    campaigns, min_year, max_year = _campaign_opts(args)
+    year = getattr(args, "year", None)
+    if year is not None and (min_year is not None or max_year is not None):
+        print(
+            "Error: --year wyklucza sie z --min-year/--max-year "
+            "(--year Y to skrot --min-year Y --max-year Y)",
+            file=sys.stderr,
+        )
         return 1
+    if year is not None:
+        min_year = max_year = year
+    try:
+        validate_campaign_args(campaigns, min_year, max_year)
+    except ValidationError as e:
+        message = (
+            str(e)
+            .replace("min_year", "--year" if year is not None else "--min-year")
+            .replace("max_year", "--max-year")
+        )
+        print(f"Error: {message}", file=sys.stderr)
+        return 1
+    # Year bounds only restrict the admissible years; --campaigns sets how many
+    # flights (model A, ADR-032 point 3): the same rule for every product.
+    campaigns = campaigns or "newest"
+    args.campaigns = campaigns
+    args.min_year, args.max_year = min_year, max_year
+    full_sheet = bool(getattr(args, "full_sheet", False))
 
-    # 0.7.1: --year/--min-density are LAZ-only; every path below would ignore them
-    if _reject_laz_only_opts(args):
+    # Point-density filtering is LAZ-only, --full-sheet the reverse (ADR-033);
+    # every product supports year flags.
+    if _reject_laz_only_opts(args) or _reject_full_sheet_for_laz(args):
         return 1
 
     country_flag = getattr(args, "country", "auto")
@@ -1048,6 +1093,8 @@ def cmd_download(args: argparse.Namespace) -> int:
                 max_workers=workers,
                 campaigns=campaigns,
                 min_year=min_year,
+                max_year=max_year,
+                full_sheet=full_sheet,
             )
         except ValidationError as e:
             print(f"Error: {e}", file=sys.stderr)
@@ -1098,6 +1145,11 @@ def cmd_download(args: argparse.Namespace) -> int:
                     # `last_sheet.skipped` = Mock (truthy).
                     fetch = manager.last_sheet
                     sheet = fetch if isinstance(fetch, SheetFetch) else None
+                    # U15: when the standard path keeps a newer flight, name the
+                    # campaign file of this request instead.
+                    where = result
+                    if sheet is not None and sheet.link_outside_range is not None:
+                        where = (sheet.downloaded or sheet.reused)[0]
                     if not args.quiet:
                         if campaigns == "all" and sheet is not None:
                             # M-1: like the list - campaign files, not a sheet
@@ -1105,9 +1157,17 @@ def cmd_download(args: argparse.Namespace) -> int:
                                 len(sheet.downloaded), 1, output_dir, len(sheet.reused)
                             )
                         elif sheet is not None and sheet.skipped:
-                            print(f"Skipped {args.godlo} - already exists at {result}")
+                            print(f"Skipped {args.godlo} - already exists at {where}")
+                        elif (
+                            sheet is not None
+                            and len(sheet.downloaded + sheet.reused) > 1
+                        ):
+                            # --full-sheet: the newest and the newest full flight
+                            _print_campaign_summary(
+                                len(sheet.downloaded), 1, output_dir, len(sheet.reused)
+                            )
                         else:
-                            print(f"Downloaded to {result}")
+                            print(f"Downloaded to {where}")
                     if sheet is not None and sheet.link == "copy":
                         _warn_copied_links([args.godlo])
                     if sheet is not None and sheet.unverified is not None:
@@ -1117,7 +1177,19 @@ def cmd_download(args: argparse.Namespace) -> int:
                             f"({sheet.unverified})",
                             file=sys.stderr,
                         )
-                    _warn_sheet_sidecars([result])
+                    # one-element result from the sheet facts, read like a list
+                    facts = _sheet_result(sheet)
+                    _warn_sheet_sidecars(
+                        [result],
+                        facts,
+                        full_sheet=full_sheet,
+                        campaigns=campaigns,
+                        ranged=min_year is not None or max_year is not None,
+                    )
+                    _print_better_coverage(facts, [result])
+                    _print_link_outside_range(
+                        facts.link_outside_range, facts.full_link_outside_range
+                    )
                     return 0
                 paths = result
 
@@ -1138,6 +1210,8 @@ def cmd_download(args: argparse.Namespace) -> int:
         output_dir=output_dir,
         quiet=args.quiet,
         campaigns=campaigns,
+        full_sheet=full_sheet,
+        ranged=min_year is not None or max_year is not None,
     )
 
 
@@ -1224,15 +1298,14 @@ def _print_campaign_summary(
     )
 
 
-def _warn_unverified(unverified: dict[str, str], *, from_sidecar: bool = False) -> None:
+def _warn_unverified(unverified: dict[str, str]) -> None:
     """``Warning:`` for sheets taken from a local campaign unverified (I-1)."""
     godla = list(unverified)
     shown = ", ".join(godla[:10]) + (" ..." if len(godla) > 10 else "")
     print(
         "Warning: skorowidz GUGiK niedostepny — dla "
         f"{len(godla)} arkuszy uzyto lokalnej kampanii bez sprawdzenia nowszej "
-        f"({shown}) ({unverified[godla[0]]})"
-        + (" (z sidecara istniejacego wycinka)" if from_sidecar else ""),
+        f"({shown}) ({unverified[godla[0]]})",
         file=sys.stderr,
     )
 
@@ -1244,6 +1317,8 @@ def _finish_pl_sheets(
     output_dir: Path,
     quiet: bool,
     campaigns: str = "newest",
+    full_sheet: bool = False,
+    ranged: bool = False,
 ) -> int:
     """
     Shared summary and exit code of the multi-sheet PL mode (D2/D10).
@@ -1264,16 +1339,22 @@ def _finish_pl_sheets(
       consistent with the cutout: ``ValidationError``).
 
     Sheets from an incomplete newest campaign (sidecar
-    ``extra.source.full_sheet: false``) -> ``Warning:`` (E13), code unchanged.
+    ``extra.source.full_sheet: false``) -> ``Warning:`` (E13, ADR-033: which of
+    them have a ``full_sheet/`` link), code unchanged.
     Standard path as a campaign COPY (``result.copied``) ->
-    ``Warning:``, code unchanged. ``campaigns="all"``: the summary counts
-    campaign files (``result.campaign_files``), not sheets. ``newest`` sheets
+    ``Warning:``, code unchanged. ``campaigns="all"`` or ``full_sheet``: the
+    summary counts campaign files (``result.campaign_files``), not sheets.
+    ``newest`` sheets
     from a local campaign on an index failure
     (``result.unverified``, I-1) -> ``Warning:``, code unchanged.
 
     ``Warning:``/``Error:`` go to stderr, so ``-q`` does NOT suppress them.
     """
-    _warn_sheet_sidecars(paths)
+    _warn_sheet_sidecars(
+        paths, result, full_sheet=full_sheet, campaigns=campaigns, ranged=ranged
+    )
+    _print_better_coverage(result, paths)
+    _print_link_outside_range(result.link_outside_range, result.full_link_outside_range)
     if result.copied:
         _warn_copied_links(result.copied)
     if result.unverified:
@@ -1283,7 +1364,7 @@ def _finish_pl_sheets(
         print()
     if not quiet and paths:
         # O-7: with no file and no skip (only gaps/failures) a summary of 0 is noise
-        if campaigns == "all":
+        if campaigns == "all" or full_sheet:
             # `campaign_files` = downloaded + local; local ones separately
             # (`reused_campaign_files`, a per-sheet subset)
             files = result.campaign_files
@@ -1304,8 +1385,9 @@ def _finish_pl_sheets(
         shown = ", ".join(missing[:10]) + (" ..." if len(missing) > 10 else "")
         print(
             f"Warning: GUGiK nie ma danych dla {len(missing)} z {total} arkuszy "
-            f"({shown}) — pominiete (morze, obszar za granica); pobrano "
-            f"{len(paths)}",
+            f"({shown}) — pominiete (skorowidz GUGiK nie ma tych arkuszy dla "
+            "wybranego produktu i rozdzielczosci, np. morze, obszar za granica, "
+            f"brak NMT 5 m w czesci kraju); pobrano {len(paths)}",
             file=sys.stderr,
         )
         _print_coverage_hints(result)
@@ -1352,6 +1434,140 @@ def _read_sheet_sidecar(path: Path) -> dict | None:
     except (OSError, ValueError):
         return None
     return meta if isinstance(meta, dict) else None
+
+
+def _flight_description(flight: dict) -> str:
+    """Format a flight's sidecar date, ID, completeness and measured coverage."""
+    flight_id = flight["id"]
+    date = flight.get("date")
+    name = f"{date}_{flight_id}" if isinstance(date, str) else str(flight_id)
+    details: list[str] = []
+    if flight.get("full_sheet") is True:
+        details.append("pelny")
+    elif flight.get("full_sheet") is False:
+        details.append("niepelny")
+    coverage = flight.get("coverage")
+    if (
+        isinstance(coverage, (int, float))
+        and not isinstance(coverage, bool)
+        and 0 <= coverage <= 1
+    ):
+        percent = f"{coverage * 100:.1f}".replace(".", ",").removesuffix(",0")
+        details.append(f"pokrycie {percent} %")
+    return f"{name} ({', '.join(details)})" if details else name
+
+
+def _print_better_coverage(result: DownloadResult, paths: list[Path]) -> None:
+    """Report older flights with higher coverage; sidecar detail is best-effort."""
+    better = result.better_coverage
+    if not better:
+        return
+    print(
+        f"Info: dla {len(better)} arkuszy starszy lot z przedzialu ma wieksze "
+        "pokrycie niz najnowszy (dowiazanie wskazuje najnowszy):",
+        file=sys.stderr,
+    )
+    shown = dict(sorted(better.items())[:10])
+    sidecars = {
+        Path(path).stem: _read_sheet_sidecar(Path(path))
+        for path in paths
+        if Path(path).stem in shown
+    }
+    for godlo, better_id in shown.items():
+        meta = sidecars.get(godlo) or {}
+        extra = meta.get("extra")
+        if not isinstance(extra, dict):
+            extra = {}
+        flights = extra.get("flights")
+        campaign = extra.get("campaign")
+        linked_id = campaign.get("id") if isinstance(campaign, dict) else None
+        if isinstance(flights, list):
+            linked = next(
+                (
+                    flight
+                    for flight in flights
+                    if isinstance(flight, dict) and flight.get("id") == linked_id
+                ),
+                None,
+            )
+            older = next(
+                (
+                    flight
+                    for flight in flights
+                    if isinstance(flight, dict) and flight.get("id") == better_id
+                ),
+                None,
+            )
+        else:
+            linked = older = None
+        if linked is not None and older is not None:
+            detail = (
+                f"dowiazanie {_flight_description(linked)}; "
+                f"wieksze pokrycie: {_flight_description(older)}"
+            )
+        else:
+            detail = f"wieksze pokrycie: lot {better_id} (brak szczegolow w sidecarze)"
+        print(f"  {godlo}: {detail}", file=sys.stderr)
+    if len(better) > len(shown):
+        print(f"  ... i {len(better) - len(shown)} innych", file=sys.stderr)
+
+
+def _campaign_dirname(path: Path) -> str:
+    """``<date>_<id>`` of a ``kampanie/<date>_<id>/...`` path; else the file name."""
+    parts = Path(path).parts
+    if "kampanie" in parts and parts.index("kampanie") + 1 < len(parts):
+        return parts[parts.index("kampanie") + 1]
+    return Path(path).name
+
+
+def _print_link_outside_range(
+    outside: dict[str, Path], full_outside: dict[str, Path] | None = None
+) -> None:
+    """Report links still pointing at a flight outside the request.
+
+    ADR-032 point 3 (U15): the link never moves back to an older campaign, so
+    after a year-bounded request it may keep the previously downloaded flight.
+    The same holds for the ``full_sheet/`` link (ADR-033): one line per sheet
+    and tree.
+    """
+    rows = sorted(
+        [(godlo, "sciezka standardowa", t) for godlo, t in outside.items()]
+        + [(godlo, "full_sheet/", t) for godlo, t in (full_outside or {}).items()]
+    )
+    if not rows:
+        return
+    print(
+        f"Info: {len(rows)} dowiazan wskazuje lokalny lot spoza tego zadania "
+        "(dowiazanie nigdy nie cofa sie na starszy lot); pobrane loty sa "
+        "w <segment>/kampanie/:",
+        file=sys.stderr,
+    )
+    for godlo, tree, target in rows[:10]:
+        print(
+            f"  {godlo}: {tree} -> dowiazanie {_campaign_dirname(target)}",
+            file=sys.stderr,
+        )
+    if len(rows) > 10:
+        print(f"  ... i {len(rows) - 10} innych", file=sys.stderr)
+
+
+def _sheet_result(sheet: SheetFetch | None) -> DownloadResult:
+    """One-element ``DownloadResult`` with the message facts of one sheet."""
+    result = DownloadResult()
+    if sheet is None:
+        return result
+    g = sheet.godlo
+    if sheet.better_coverage is not None:
+        result.better_coverage[g] = sheet.better_coverage
+    if sheet.link_outside_range is not None:
+        result.link_outside_range[g] = sheet.link_outside_range
+    if sheet.full_link is not None:
+        result.full_links[g] = sheet.full_link
+    if sheet.full_link_outside_range is not None:
+        result.full_link_outside_range[g] = sheet.full_link_outside_range
+    if sheet.no_full_flight:
+        result.without_full.append(g)
+    return result
 
 
 def _is_partial_sheet(path: Path) -> bool:
@@ -1406,99 +1622,59 @@ def _warn_crs_mismatch_sheets(paths) -> None:
     )
 
 
-def _warn_sheet_sidecars(paths) -> None:
+def _warn_sheet_sidecars(
+    paths, result: DownloadResult, *, full_sheet: bool, campaigns: str, ranged: bool
+) -> None:
     """CLI warnings from the result sheets' sidecars: incomplete sheet (E13)
     and file CRS different from the sheet code's (E17)."""
-    _warn_partial_sheets(paths)
+    _warn_partial_sheets(
+        paths, result, full_sheet=full_sheet, campaigns=campaigns, ranged=ranged
+    )
     _warn_crs_mismatch_sheets(paths)
 
 
-def _warn_partial_sheets(paths) -> None:
+def _godla_text(godla: list[str]) -> str:
+    return ", ".join(godla[:10]) + (" ..." if len(godla) > 10 else "")
+
+
+def _warn_partial_sheets(
+    paths, result: DownloadResult, *, full_sheet: bool, campaigns: str, ranged: bool
+) -> None:
     """E13: ``Warning:`` about sheets from an incomplete newest GUGiK campaign.
 
     The selection rule (ADR-028: newest campaign, no preference for a full
     sheet) stays - the warning only makes it visible. Reads the sidecars of
-    result files, so it also works for sheets skipped as existing.
+    result files, so it also works for sheets skipped as existing. One
+    ``Warning:`` splits the sheets (ADR-033): with a ``full_sheet/`` link
+    (``result.full_links``), without a full flight in the index
+    (``result.without_full``; with ``campaigns="all"`` every flight of the
+    range is local, so no link means none; ``ranged`` limits that claim to
+    the year bounds), and the rest — not downloaded, with the
+    ``--full-sheet`` hint unless the flag was given.
     """
     partial = sorted(Path(p).stem for p in paths if _is_partial_sheet(Path(p)))
     if not partial:
         return
-    shown = ", ".join(partial[:10]) + (" ..." if len(partial) > 10 else "")
+    linked = [g for g in partial if g in result.full_links]
+    rest = [g for g in partial if g not in result.full_links]
+    absent = [g for g in rest if g in result.without_full or campaigns == "all"]
+    missing = [g for g in rest if g not in absent]
+    groups = []
+    if linked:
+        groups.append(f"pelny lot w <segment>/full_sheet/: {_godla_text(linked)}")
+    if absent:
+        scope = " w zakresie lat zadania" if ranged else ""
+        groups.append(f"brak pelnego lotu w skorowidzu{scope}: {_godla_text(absent)}")
+    if missing:
+        hint = "" if full_sheet else " — uzyj --full-sheet"
+        groups.append(f"pelny lot nie pobrany: {_godla_text(missing)}{hint}")
     print(
         f"Warning: najnowsza kampania GUGiK jest niepelna dla {len(partial)} "
-        f"arkuszy ({shown}) — skorowidz deklaruje arkusz nie w calosci "
-        "wypelniony trescia; plik moze miec duzo nodata/czerni "
-        "(extra.source.full_sheet w sidecarze)",
+        "arkuszy — skorowidz deklaruje arkusz nie w calosci wypelniony "
+        "trescia; plik w sciezce standardowej moze miec duzo nodata/czerni "
+        "(extra.source.full_sheet w sidecarze); " + "; ".join(groups),
         file=sys.stderr,
     )
-
-
-def _warn_missing_sheets(missing: tuple[str, ...], *, from_sidecar: bool) -> None:
-    """R5: ``Warning:`` about sheets without GUGiK data in a cutout (stderr, -q does
-    not suppress).
-
-    For a skipped cutout the list comes from its sidecar (N4) - the same
-    message as on build, with a note about the source.
-    """
-    if not missing:
-        return
-    shown = ", ".join(missing[:10]) + (" ..." if len(missing) > 10 else "")
-    origin = " (z sidecara istniejacego wycinka)" if from_sidecar else ""
-    print(
-        f"Warning: GUGiK nie ma danych dla {len(missing)} arkuszy wycinka "
-        f"({shown}) — w tych miejscach wycinek ma nodata (lista w sidecarze: "
-        f"extra.missing_sheets){origin}",
-        file=sys.stderr,
-    )
-
-
-def _report_pl_cutout(result, *, from_sidecar: bool) -> None:
-    """Messages about cutout content: missing sheets (R5), W1 (S5), nodata only (N2),
-    sheets from an incomplete newest campaign (E13).
-
-    For a skipped cutout all data come from its sidecar
-    (``skipped_pl_cutout``) - warnings repeat with a note about the source.
-    """
-    _warn_missing_sheets(result.missing_sheets, from_sidecar=from_sidecar)
-    unverified = getattr(result, "unverified", None)
-    if isinstance(unverified, dict) and unverified:
-        # I-1: like the list/sheet code; full list in the sidecar
-        # (extra.unverified_sheets)
-        _warn_unverified(unverified, from_sidecar=from_sidecar)
-    origin = " (z sidecara istniejacego wycinka)" if from_sidecar else ""
-    if result.off_grid_sheets:
-        print(
-            f"Info: {len(result.off_grid_sheets)} arkuszy o innej fazie siatki "
-            "przeprobkowanych osobno (W1; lista w sidecarze: "
-            f"extra.off_grid_sheets){origin}",
-            file=sys.stderr,
-        )
-    partial = tuple(getattr(result, "partial_sheets", ()))
-    shown = ", ".join(partial[:10]) + (" ..." if len(partial) > 10 else "")
-    if result.all_nodata and partial:
-        # C14-b: GUGiK has data in an older campaign, while the newest (chosen per
-        # ADR-028) is truncated - "no GUGiK data" would be misleading
-        print(
-            "Warning: wycinek w calosci nodata — najnowsza kampania GUGiK "
-            f"jest niepelna dla {len(partial)} arkuszy ({shown}) i nie pokrywa "
-            "obszaru zadania (starsza kampania moze miec dane; "
-            f"extra.sheet_sources[].full_sheet){origin}",
-            file=sys.stderr,
-        )
-    elif result.all_nodata:
-        print(
-            "Warning: wycinek w calosci nodata — pobrane arkusze nie wnosza "
-            "zadnego piksela w obszarze zadania (brak danych GUGiK / obszar "
-            f"poza pokryciem){origin}",
-            file=sys.stderr,
-        )
-    elif partial:
-        print(
-            f"Warning: najnowsza kampania GUGiK jest niepelna dla {len(partial)} "
-            f"arkuszy wycinka ({shown}) — wycinek moze miec w ich obszarze "
-            f"nodata (extra.sheet_sources[].full_sheet){origin}",
-            file=sys.stderr,
-        )
 
 
 # description of the datum step in sidecars from before the K2 fix (EPSG:4829, area of
@@ -1533,110 +1709,65 @@ def _download_pl_cutout(
     args: argparse.Namespace,
     bbox: BBox,
     parent_request: dict,
-    geometry: Path | None = None,
 ) -> int:
-    """Polish --target-crs cutout (ADR-027): a CLI overlay on download/cutout.py.
+    """Polish --target-crs cutout from GUGiK WCS (ADR-035): a CLI overlay on
+    ``download/cutout.py``.
 
-    Called after ``_resolve_pl_sentinels``. Preparation errors
-    (``TransformError``/``ValidationError``), sheet selection errors
-    (``ValidationError``) and EVERY download or cutout build error (also
-    ``GridMismatchError`` with a hint of another ``--target-crs``, S5) end
-    with code 1 and a message, not a traceback: an exception leaking out of the
-    country loop of ``_dispatch_area`` would break the partial success contract
-    (ADR-023 points 4-5). A sheet without GUGiK data is not an error (R5): the cutout
-    is built with nodata in its place, and a ``Warning:`` on stderr lists such
-    sheets (up to 10; full list in the sidecar, ``extra.missing_sheets``) -
-    also when skipping an existing cutout (list from its sidecar, N4).
-    A cutout without a single valid pixel (N2) = ``Warning:``, code 0.
+    Called after ``_resolve_pl_sentinels`` (nmt/nmpt, 1m only). ``bbox`` is
+    the request or the ``--geometry`` envelope. Preparation errors
+    (``TransformError``/``ValidationError``) and EVERY download or build
+    error (PRG, WCS) end with code 1 and a message, not a traceback: an
+    exception leaking out of the country loop of ``_dispatch_area`` would break
+    the partial success contract (ADR-023 points 4-5). Every run downloads
+    (``--force``, ``--workers`` and ``--scale`` have no effect). A cutout
+    entirely outside PL land = ``Warning:``, code 0.
     """
-    from kartograf.download.cutout import (
-        prepare_pl_cutout,
-        run_pl_cutout,
-        select_pl_cutout_sheets,
-        skipped_pl_cutout,
-    )
+    from kartograf.download.cutout import prepare_pl_cutout, run_pl_wcs_cutout
     from kartograf.transform.crs import TransformError
 
+    product = getattr(args, "product", "nmt")
     output_dir = Path(args.output)
-    with _pl_metadata_cache(args) as cache:
-        provider, storage = _create_provider_and_storage(
-            getattr(args, "product", "nmt"),
-            output_dir,
-            args.vertical_crs,
-            args.resolution,
-            cache=cache,
+    try:
+        # fail-fast: the pinned operation is built BEFORE any network access
+        cutout = prepare_pl_cutout(
+            bbox,
+            args.target_crs,
+            output_dir=output_dir,
+            resolution=args.resolution,
+            vertical_crs=args.vertical_crs,
+            product=product,
         )
-        try:
-            # fail-fast: the pinned operation is built BEFORE any network access
-            cutout = prepare_pl_cutout(
-                bbox,
-                args.target_crs,
-                output_dir=output_dir,
-                resolution=args.resolution,
-                vertical_crs=args.vertical_crs,
-            )
-        except TransformError as e:
-            return _print_transform_error(e)
-        except ValidationError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 1
-        if not args.force and cutout.target_path.exists():
-            result = skipped_pl_cutout(cutout)
-            if not args.quiet:
-                print(f"Skipped - already exists at {cutout.target_path}")
-            _report_pl_cutout(result, from_sidecar=True)
-            _print_legacy_krovak_info(cutout.target_path)
-            return 0
-
-        target_scale = args.scale or "1:10000"
-        try:
-            sheets = select_pl_cutout_sheets(
-                cutout,
-                geometry=geometry,
-                layer=getattr(args, "layer", None),
-                scale=target_scale,
-            )
-        except ValidationError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 1
-
-        if not args.quiet:
-            _print_sheet_list(
-                list(sheets.godla),
-                target_scale,
-                what="bbox" if geometry is None else f"geometry {geometry.name}",
-                label=_product_label("nmt", args.resolution),
-            )
-
-        if cutout.estimated_bytes >= 2**30:
-            # stderr, not stdout: -q does NOT suppress Info:/Warning: (as above)
-            height, width = cutout.grid_shape
-            print(
-                f"Info: wycinek ~{cutout.estimated_bytes / 2**30:.1f} GiB "
-                f"({width} x {height} px float32)",
-                file=sys.stderr,
-            )
-
-        on_progress = create_progress_callback(args.quiet)
-        try:
-            result = run_pl_cutout(
-                cutout,
-                sheets,
-                provider=provider,
-                storage=storage,
-                max_workers=getattr(args, "workers", 4),
-                force=args.force,
-                on_progress=on_progress,
-                parent_request=parent_request,
-            )
-        except Exception as e:  # noqa: BLE001 — code 1 instead of a traceback (ADR-023)
-            print(f"{_error_lead(on_progress)}Error: {e}", file=sys.stderr)
-            return 1
-    if not args.quiet:
-        # the progress bar ends with "skipped" without a newline - as before a blank
-        # line before the summary (and before the warning on stderr below)
-        print()
-    _report_pl_cutout(result, from_sidecar=False)
+    except TransformError as e:
+        return _print_transform_error(e)
+    except ValidationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    provider, _storage = _create_provider_and_storage(
+        product, output_dir, args.vertical_crs, args.resolution
+    )
+    chunks = len(provider.plan_wcs_chunks(cutout.bbox_source_2180))
+    if chunks > 1 or cutout.estimated_bytes >= 2**30:
+        # stderr, not stdout: -q does NOT suppress Info:/Warning:
+        height, width = cutout.grid_shape
+        print(
+            f"Info: wycinek {width} x {height} px float32 "
+            f"(~{cutout.estimated_bytes / 2**20:.0f} MiB), {chunks} zapytan WCS "
+            "GUGiK pobieranych po kolei",
+            file=sys.stderr,
+        )
+    try:
+        result = run_pl_wcs_cutout(
+            cutout, provider=provider, parent_request=parent_request
+        )
+    except Exception as e:  # noqa: BLE001 — code 1 instead of a traceback (ADR-023)
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    if result.all_nodata:
+        print(
+            "Warning: wycinek w calosci nodata — obszar poza ladem PL (maska PRG: "
+            "granica panstwa bez morza terytorialnego i wod wewnetrznych)",
+            file=sys.stderr,
+        )
     if not args.quiet:
         print(f"Downloaded to {result.path}")
     return 0
@@ -1655,8 +1786,8 @@ def _download_pl_bbox(
     normalized by ``_country_bbox`` with the pinned operation (a second, unpinned
     Krovak jump here would be exactly what the stage forbids).
 
-    With ``--target-crs`` (ADR-027) - ``_download_pl_cutout`` (library
-    ``download/cutout.py``): one merged cutout instead of a sheet list.
+    With ``--target-crs`` (ADR-035) - ``_download_pl_cutout`` (library
+    ``download/cutout.py``): one cutout from GUGiK WCS instead of a sheet list.
     Without it - a sheet list with R5 tolerance (``_finish_pl_sheets``, D2).
     """
     if _resolve_pl_sentinels(args):
@@ -1702,7 +1833,9 @@ def _download_pl_sheet_list(
     product = getattr(args, "product", "nmt")
     workers = getattr(args, "workers", 4)
     skip_existing = not args.force
-    campaigns, min_year = _campaign_opts(args)
+    campaigns, min_year, max_year = _campaign_opts(args)
+    campaigns = campaigns or "newest"
+    full_sheet = bool(getattr(args, "full_sheet", False))
 
     if not args.quiet:
         _print_sheet_list(
@@ -1730,6 +1863,8 @@ def _download_pl_sheet_list(
                 sidecar_extra={"parent_request": parent_request},
                 campaigns=campaigns,
                 min_year=min_year,
+                max_year=max_year,
+                full_sheet=full_sheet,
             )
             all_paths, result = _download_godlo_list(
                 manager, godlo_list, skip_existing, on_progress
@@ -1747,6 +1882,8 @@ def _download_pl_sheet_list(
         output_dir=output_dir,
         quiet=args.quiet,
         campaigns=campaigns,
+        full_sheet=full_sheet,
+        ranged=min_year is not None or max_year is not None,
     )
 
 
@@ -1754,18 +1891,16 @@ def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
     """
     Resolve a sheet code / --bbox / --geometry input to an EPSG:2180 BBox for LAZ.
 
-    Returns None (after printing an error) if a geometry file is missing.
-    Raises ParseError / ValidationError on invalid input.
+    Returns None (after printing an error) if a geometry file is missing or its
+    layer is invalid. Raises ParseError / ValidationError on invalid input.
     """
     if getattr(args, "geometry", None):
         from kartograf.core.geometry import get_overall_bbox
 
-        filepath = Path(args.geometry)
-        if not filepath.exists():
-            print(f"Error: File not found: {filepath}", file=sys.stderr)
+        if not _announce_geometry_layer(args):
             return None
         return get_overall_bbox(
-            filepath, layer=getattr(args, "layer", None), target_crs="EPSG:2180"
+            Path(args.geometry), layer=args.layer, target_crs="EPSG:2180"
         )
 
     if args.bbox is not None:
@@ -1812,8 +1947,8 @@ def _print_laz_superseded(superseded) -> None:
         return
     print(
         f"Info: pominieto {len(superseded)} kafli LAZ — obszar pokrywaja "
-        "nowsze kafle (domyslnie najnowszy rocznik per obszar; starszy "
-        "rocznik: --year)",
+        "nowsze kafle (domyslnie najnowszy rocznik per obszar; inny "
+        "rocznik: --year/--min-year/--max-year)",
         file=sys.stderr,
     )
     for entry in superseded:
@@ -1845,10 +1980,8 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     if getattr(args, "country", "auto") == "cz":
         print(_CZ_ONLY_NMT_MSG.format(product="laz"), file=sys.stderr)
         return 1
-    campaigns, min_year = _campaign_opts(args)
-    if min_year is not None and getattr(args, "year", None) is not None:
-        print("Error: --min-year i --year wykluczaja sie (LAZ)", file=sys.stderr)
-        return 1
+    campaigns, min_year, max_year = _campaign_opts(args)
+    campaigns = campaigns or "newest"
     if _resolve_pl_sentinels(args):
         return 1
 
@@ -1876,7 +2009,6 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         return 1
 
     vertical_crs = args.vertical_crs
-    year = getattr(args, "year", None)
     min_density = getattr(args, "min_density", None)
     workers = getattr(args, "workers", 4) or 1
     output_dir = Path(args.output)
@@ -1889,10 +2021,10 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     try:
         selection = provider.select_tiles(
             bbox,
-            year=year,
             min_density=min_density,
             campaigns=campaigns,
             min_year=min_year,
+            max_year=max_year,
         )
     except (ValueError, ValidationError, DownloadError) as e:
         print(f"Error: {e}", file=sys.stderr)
@@ -1919,10 +2051,10 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         provider=provider,
         bbox=bbox,
         output_dir=output_dir,
-        year=year,
         min_density=min_density,
         campaigns=campaigns,
         min_year=min_year,
+        max_year=max_year,
         max_workers=workers,
         force=args.force,
         on_progress=_progress,
@@ -2251,6 +2383,9 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
         # this branch bypasses `_dispatch_area` - the campaign guard here too
         if _reject_campaign_opts_without_pl(args, ("CZ",)):
             return 1
+        # after the option guards (no file I/O before them), before any reader
+        if not _announce_geometry_layer(args):
+            return 1
         bbox = _resolve_cz_geometry_bbox(args)
         if bbox is None:
             return 1  # error already printed
@@ -2258,10 +2393,9 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
             args, bbox=bbox, parent_request=_build_parent_request(bbox, ("CZ",))
         )
 
-    filepath = Path(args.geometry)
-    if not filepath.exists():
-        print(f"Error: File not found: {filepath}", file=sys.stderr)
+    if not _announce_geometry_layer(args):
         return 1
+    filepath = Path(args.geometry)
 
     try:
         overall = _geometry_envelope(filepath, getattr(args, "layer", None))
@@ -2284,11 +2418,9 @@ def _download_pl_geometry(
     ``args`` is a COPY of the task namespace - see ``_dispatch_area``.
 
     ``bbox`` - the envelope of the PL task (clipped under auto), required. With
-    ``--target-crs`` (ADR-027) - ``_download_pl_cutout`` (library
-    ``download/cutout.py``): the envelope determines the grid and the cutout crop, so
-    the result covers the WHOLE envelope of the geometry, without masking to its
-    features (with a warp the sheets are the union of the geometry's sheet codes and the
-    envelope's with a margin, R-01 - ``select_pl_cutout_sheets``). Without
+    ``--target-crs`` (ADR-035) - ``_download_pl_cutout`` (library
+    ``download/cutout.py``): the cutout covers the WHOLE envelope of the
+    geometry, without masking to its features (WCS area = the envelope). Without
     ``--target-crs`` the sheets are determined by the geometry itself and ``bbox`` is
     not used; the list goes through ``_download_pl_sheet_list`` (R5 tolerance, D2).
     """
@@ -2297,7 +2429,7 @@ def _download_pl_geometry(
     if _resolve_pl_sentinels(args):
         return 1
     if args.target_crs is not None:
-        return _download_pl_cutout(args, bbox, parent_request, geometry=filepath)
+        return _download_pl_cutout(args, bbox, parent_request)
 
     target_scale = args.scale or "1:10000"
     layer = getattr(args, "layer", None)

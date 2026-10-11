@@ -41,6 +41,9 @@ class _LazyVersionAction(argparse.Action):
 
 
 _BBOX_EXPECTED = "Expected: min_x,min_y,max_x,max_y (e.g., 450000,550000,460000,560000)"
+_LAYER_HELP = (
+    "Warstwa GPKG (domyslnie pierwsza; przy wielu warstwach Info z lista pozostalych)"
+)
 
 
 def parse_bbox_arg(text: str, crs: str) -> BBox:
@@ -147,8 +150,8 @@ def create_parser() -> argparse.ArgumentParser:
         description=(
             "Download geospatial data from GUGiK (PL: NMT, NMPT, orthophoto, LAZ) "
             "and CUZK (CZ: DMR 5G/4G). Dla PL --bbox/--geometry rozwija sie na "
-            "arkusze zrodlowe, a z --target-crs daje JEDEN scalony wycinek "
-            "(ADR-027); dla CZ --bbox/--geometry zawsze zwraca jeden wycinek "
+            "arkusze zrodlowe, a z --target-crs daje JEDEN wycinek 1 m z WCS "
+            "GUGiK (ADR-035); dla CZ --bbox/--geometry zawsze zwraca jeden wycinek "
             "(exportImage pobierany natywnie w EPSG:5514, z --target-crs "
             "reprojektowany lokalnie). Dane zrodlowe 1:1 daja arkusze PL "
             "i arkusz SM5; kafel TM33 to lokalny warp z EPSG:5514 na siatke "
@@ -200,12 +203,13 @@ def create_parser() -> argparse.ArgumentParser:
         choices=list(SUPPORTED_TARGET_CRS),
         default=None,
         help="Reprojekcja wyniku, wykonywana lokalnie przypieta operacja "
-        "(tylko tryb --bbox/--geometry, tylko --product nmt; PL: jeden "
-        "scalony wycinek GeoTIFF, tylko z --system 1992 — w trybie --geometry "
-        "obejmuje CALA obwiednie geometrii, bez maskowania do obiektow; nodata "
-        "tam, gdzie nie siega zaden pobrany arkusz; arkusz bez danych GUGiK = "
-        "nodata + Warning (lista w sidecarze), inna porazka pobrania = kod 1; "
-        "CZ: wycinek exportImage)",
+        "(tylko tryb --bbox/--geometry). PL: wycinek 1 m z WCS GUGiK (--product "
+        "nmt albo nmpt, tylko --system 1992 i --resolution 1m) na siatce "
+        "arkuszy, maska ladu PL (poza ladem nodata), nazwa z data pobrania "
+        "<wsp>_RRRRMMDD.tif, kazde uruchomienie pobiera; kompozycja lotow "
+        "serwera (najnowszy lot arkuszy: pobierz arkusze bez --target-crs); "
+        "w trybie --geometry obejmuje CALA obwiednie geometrii. CZ: wycinek "
+        "exportImage",
     )
     download_parser.add_argument(
         "--scale",
@@ -226,10 +230,9 @@ def create_parser() -> argparse.ArgumentParser:
     download_parser.add_argument(
         "--force",
         action="store_true",
-        help="Overwrite existing files (z --target-crs PL: przebudowuje wycinek "
-        "i pobiera ponownie wszystkie jego arkusze; nieudana przebudowa "
-        "zostawia poprzedni plik; PL nmt/nmpt/orto: pobiera ponownie "
-        "wybrane kampanie i odswieza ich liste z GUGiK)",
+        help="Overwrite existing files (PL nmt/nmpt/orto: pobiera ponownie "
+        "wybrane kampanie i odswieza ich liste z GUGiK; wycinek --target-crs "
+        "PL pobiera zawsze, --force nic nie zmienia)",
     )
     download_parser.add_argument(
         "--quiet",
@@ -264,24 +267,43 @@ def create_parser() -> argparse.ArgumentParser:
         "--year",
         type=int,
         metavar="YYYY",
-        help="LAZ only (--product laz; an error with other products): restrict "
-        "to a single acquisition year (default: newest available per tile); "
-        "wyklucza sie z --min-year",
+        help="Tylko ten rok danych (PL: rok pozyskania aktualnosc NMT/NMPT/orto, "
+        "akt_rok LAZ); skrot --min-year YYYY --max-year YYYY; najnowszy lot "
+        "z tego roku (wszystkie: --campaigns all); brak roku na ktoryms "
+        "arkuszu/kaflu = blad przed pobraniem; nie dziala z --target-crs",
     )
     download_parser.add_argument(
         "--campaigns",
         choices=["newest", "all"],
-        default="newest",
-        help="Kampanie GUGiK (tylko PL): newest = najnowsza kampania arkusza "
-        "(default), all = wszystkie kampanie do <segment>/kampanie/; "
+        default=None,
+        help="Ile lotow na arkusz (tylko PL): newest = najnowszy lot w zakresie "
+        "lat (domyslne, nie trzeba podawac), all = wszystkie loty z zakresu do "
+        "<segment>/kampanie/; flagi roku wyznaczaja tylko dopuszczalne lata; "
         "LAZ: all = bez deduplikacji pokrycia",
     )
     download_parser.add_argument(
         "--min-year",
         type=int,
         metavar="YYYY",
-        help="Tylko PL: pomin kampanie starsze niz YYYY (rok aktualnosci; "
-        "LAZ: rok akt_rok); nie dziala z --target-crs",
+        help="Tylko PL: dolna granica roku danych (wlacznie); najnowszy lot "
+        "z lat >= YYYY (wszystkie: --campaigns all); nie dziala z --target-crs",
+    )
+    download_parser.add_argument(
+        "--max-year",
+        type=int,
+        metavar="YYYY",
+        help="Tylko PL: gorna granica roku danych (wlacznie); najnowszy lot "
+        "z lat <= YYYY (wszystkie: --campaigns all); sciezka standardowa nigdy "
+        "nie cofa sie na starszy lot; nie dziala z --target-crs",
+    )
+    download_parser.add_argument(
+        "--full-sheet",
+        action="store_true",
+        help="Tylko PL NMT/NMPT/orto: gdy najnowszy lot arkusza nie jest pelny "
+        "(calyArkuszWypelnionyTrescia), pobierz tez najnowszy pelny lot "
+        "z zakresu lat (najwyzej jeden dodatkowy lot na arkusz) i dowiaz go "
+        "w <segment>/full_sheet/; pelny = w granicach Polski; nie dziala "
+        "z --target-crs ani z LAZ",
     )
     download_parser.add_argument(
         "--min-density",
@@ -298,7 +320,7 @@ def create_parser() -> argparse.ArgumentParser:
     download_parser.add_argument(
         "--layer",
         metavar="NAME",
-        help="Layer name for multi-layer GPKG (default: first layer)",
+        help=_LAYER_HELP,
     )
     download_parser.add_argument(
         "--system",
@@ -382,7 +404,7 @@ def create_parser() -> argparse.ArgumentParser:
     lc_download.add_argument(
         "--layer",
         metavar="NAME",
-        help="Layer name for multi-layer GPKG (default: first layer)",
+        help=_LAYER_HELP,
     )
     lc_download.add_argument(
         "--property",
@@ -462,7 +484,7 @@ def create_parser() -> argparse.ArgumentParser:
     sg_hsg.add_argument(
         "--layer",
         metavar="NAME",
-        help="Layer name for multi-layer GPKG (default: first layer)",
+        help=_LAYER_HELP,
     )
     sg_hsg.add_argument(
         "--output",

@@ -16,7 +16,7 @@ from kartograf.cli.commands import main
 from kartograf.cli.download_cmd import _download_pl_bbox
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.cutout import build_pl_cutout, prepare_pl_cutout
-from kartograf.download.manager import DownloadProgress, DownloadResult
+from kartograf.download.manager import DownloadResult
 from kartograf.exceptions import DownloadError
 from kartograf.transform.crs import (
     TransformPolicy,
@@ -53,6 +53,16 @@ def _write_sheet_asc(path, west, south, size=100, pixel=1.0, apex=None, fill=100
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(header + body + "\n", encoding="ascii")
     return path
+
+
+def _sheet_cutout(bbox, *, output_dir, force=False, vertical_crs="EVRF2007"):
+    """Sheet-API cutout (deprecated path): prepare -> select -> run_pl_cutout."""
+    from kartograf.download.cutout import run_pl_cutout, select_pl_cutout_sheets
+
+    cut = prepare_pl_cutout(
+        bbox, "EPSG:2180", output_dir=output_dir, vertical_crs=vertical_crs
+    )
+    return run_pl_cutout(cut, select_pl_cutout_sheets(cut), force=force)
 
 
 def _pinned_2180_to(target_crs):
@@ -712,7 +722,8 @@ class TestSheetGrid:
 
 
 class TestDownloadPlBboxCutout:
-    """Spec 8: the cutout flow at the PL worker level (mocked download)."""
+    """Spec 8: the sheet-API cutout flow (deprecated since 0.7.2) with a mocked
+    download; the CLI uses the WCS path (tests/test_wcs_cutout.py)."""
 
     def _run(
         self,
@@ -725,13 +736,15 @@ class TestDownloadPlBboxCutout:
         bbox=_BBOX_2180,
         godla=("N-1", "N-2"),
     ):
-        """PL worker with a mocked download; returns ``(rc, manager, find)``.
+        """prepare -> select -> run_pl_cutout with a mocked download.
 
-        The CLASS mock of ``DownloadManager`` (constructor kwargs, e.g.
-        ``sidecar_extra``) stays in ``self.dm`` - the return stays a triple
-        because later tests unpack it. ``no_coverage`` is a subset of
-        ``failed`` (sheets without GUGiK data, R5) - as in ``DownloadResult``.
+        Returns ``(rc, manager, find)``: ``rc`` 0 = cutout built (result in
+        ``self.result``), 1 = exception (in ``self.error``). The CLASS mock of
+        ``DownloadManager`` (constructor kwargs, e.g. ``sidecar_extra``) stays
+        in ``self.dm``. ``no_coverage`` is a subset of ``failed`` (sheets
+        without GUGiK data, R5) - as in ``DownloadResult``.
         """
+        from kartograf.download.cutout import run_pl_cutout, select_pl_cutout_sheets
         from kartograf.download.manager import DownloadResult
 
         provider = provider or SimpleNamespace(vertical_crs="EVRF2007")
@@ -740,29 +753,34 @@ class TestDownloadPlBboxCutout:
         manager.last_result = DownloadResult(
             failed=list(failed), no_coverage=list(no_coverage)
         )
+        self.result = self.error = None
+        rc = 0
         with (
             patch(f"{_CUT}.find_sheets_for_bbox", return_value=list(godla)) as find,
-            patch(
-                f"{_DL}._create_provider_and_storage",
-                return_value=(provider, Mock()),
-            ),
             patch(f"{_CUT}.DownloadManager", return_value=manager) as dm,
         ):
-            rc = _download_pl_bbox(args, bbox, _PARENT)
+            cut = prepare_pl_cutout(
+                bbox,
+                args.target_crs,
+                output_dir=args.output,
+                resolution=args.resolution or "1m",
+                vertical_crs=args.vertical_crs or "EVRF2007",
+            )
+            try:
+                self.result = run_pl_cutout(
+                    cut,
+                    select_pl_cutout_sheets(cut),
+                    provider=provider,
+                    storage=Mock(),
+                    max_workers=args.workers,
+                    force=args.force,
+                    parent_request=_PARENT,
+                )
+            except Exception as e:  # noqa: BLE001 - the harness reports, tests assert
+                self.error = str(e)
+                rc = 1
         self.dm = dm
         return rc, manager, find
-
-    def test_sheet_list_header(self, tmp_path, capsys):
-        """D15: the cutout sheet-list header = the same as in list mode."""
-        sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
-        godla = tuple(f"N-{i}" for i in range(1, 13))
-        rc, *_ = self._run(
-            tmp_path, _pl_args(tmp_path, quiet=False), sheets, godla=godla
-        )
-        assert rc == 0
-        out = capsys.readouterr().out
-        assert "Found 12 sheets at 1:10000 for bbox (resolution: 1m)\n" in out
-        assert "  Sheets: N-1, N-2, N-3, ..., N-11, N-12\n" in out
 
     def test_creates_cutout_and_sidecar(self, tmp_path):
         sheets = [
@@ -847,31 +865,11 @@ class TestDownloadPlBboxCutout:
         assert payload["dataset"] == "pl.gugik.nmt_5m"
         assert payload["vertical_crs"] == "EPSG:9651"
 
-    def test_unexpected_raster_error_returns_1(self, tmp_path, capsys):
-        """An error outside (ValidationError, TransformError) also ends with code 1.
-
-        ``mosaic_and_crop``/``warp_to_grid`` may raise ``RasterioIOError``
-        (a damaged cached sheet). Letting such an exception leak out of the
-        country loop of ``_dispatch_area`` breaks the ADR-023 partial-success
-        contract.
-        """
-        from rasterio.errors import RasterioIOError
-
-        sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
-        with patch(
-            f"{_CUT}.build_pl_cutout",
-            side_effect=RasterioIOError("uszkodzony arkusz"),
-        ):
-            rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
-
-        assert rc == 1
-        assert "uszkodzony arkusz" in capsys.readouterr().err
-
-    def test_pl2000_sheet_returns_1_with_reason(self, tmp_path, capsys):
+    def test_pl2000_sheet_fails_with_reason(self, tmp_path):
         foreign = _write_grid_sheet(tmp_path / "b.asc", 0, 160, 200, _ids, x0=6500000.5)
         rc, *_ = self._run(tmp_path, _pl_args(tmp_path), [foreign])
         assert rc == 1
-        assert "PL-2000" in capsys.readouterr().err
+        assert "PL-2000" in self.error
 
     def test_failed_sheet_returns_1_and_no_cutout(self, tmp_path):
         """R5: a sheet download failure (not missing GUGiK data) = code 1, no cutout."""
@@ -881,90 +879,30 @@ class TestDownloadPlBboxCutout:
         assert rc == 1
         assert not (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").exists()
 
-    def test_missing_sheet_warns_and_returns_0(self, tmp_path, capsys):
-        sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
-        rc, *_ = self._run(
-            tmp_path, _pl_args(tmp_path), sheets, failed=["N-2"], no_coverage=["N-2"]
-        )
-        assert rc == 0
-        err = capsys.readouterr().err
-        assert "Warning:" in err and "N-2" in err
-
-    def test_all_nodata_cutout_warns_and_returns_0(self, tmp_path, capsys):
-        """N2: downloaded sheets without a single valid pixel = Warning:, code 0."""
+    def test_all_nodata_cutout_is_created_and_flagged(self, tmp_path):
+        """N2: downloaded sheets without a single valid pixel = a file, flagged."""
         sheets = [
             _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000, fill=_NODATA),
             _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000, fill=_NODATA),
         ]
         rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
 
-        assert rc == 0
-        err = capsys.readouterr().err
-        assert "Warning: wycinek w calosci nodata" in err
-        assert "brak danych GUGiK / obszar poza pokryciem" in err
+        assert rc == 0 and self.result.all_nodata
         (tif,) = (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif")
         assert tif.exists()
 
-    def test_cutout_with_data_has_no_nodata_warning(self, tmp_path, capsys):
+    def test_cutout_with_data_is_not_all_nodata(self, tmp_path):
         sheets = [
             _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000, fill=_NODATA),
             _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000),
         ]
         rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
 
-        assert rc == 0
-        assert "w calosci nodata" not in capsys.readouterr().err
+        assert rc == 0 and not self.result.all_nodata
 
-    def test_skipped_cutout_repeats_missing_sheets_warning_from_sidecar(
-        self, tmp_path, capsys
-    ):
-        """N4: a skipped cutout warns about holes from the SIDECAR (silent before)."""
-        sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
-        rc, *_ = self._run(
-            tmp_path, _pl_args(tmp_path), sheets, failed=["N-2"], no_coverage=["N-2"]
-        )
-        assert rc == 0
-        first = capsys.readouterr().err
-        assert "z sidecara" not in first
+    def test_missing_sheets_sidecar_lists_all_sorted(self, tmp_path):
+        """The full, sorted list of sheets without data is in the sidecar.
 
-        rc, manager, find = self._run(tmp_path, _pl_args(tmp_path), sheets=[])
-
-        assert rc == 0
-        manager.download_sheets.assert_not_called()
-        find.assert_not_called()
-        second = capsys.readouterr().err
-        assert "Warning: GUGiK nie ma danych dla 1 arkuszy wycinka (N-2)" in second
-        assert "(z sidecara istniejacego wycinka)" in second
-
-    def test_skipped_cutout_to_krovak_reports_legacy_sidecar(self, tmp_path, capsys):
-        """D12: a PL -> 5514 cutout from before the S-JTSK fix (step "(3)") = Info:."""
-        sheets = [
-            _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000),
-            _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000),
-        ]
-        args = _pl_args(tmp_path, target_crs="EPSG:5514")
-        rc, *_ = self._run(tmp_path, args, sheets)
-        assert rc == 0
-        (tif,) = (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif")
-        sidecar = tif.with_name(f"{tif.name}.meta.json")
-        payload = json.loads(sidecar.read_text("utf-8"))
-        # after the K2 fix the new cutout does NOT pin step (3)
-        assert "S-JTSK to ETRS89 (3)" not in payload["transform"]["horizontal"]
-        assert "sprzed naprawy" not in capsys.readouterr().err
-
-        payload["transform"]["horizontal"] = "S-JTSK to ETRS89 (3) + Krovak (0.5 m)"
-        sidecar.write_text(json.dumps(payload), "utf-8")
-        rc, *_ = self._run(tmp_path, args, sheets=[])
-
-        assert rc == 0
-        err = capsys.readouterr().err
-        assert "sprzed naprawy operacji S-JTSK" in err and "--force" in err
-
-    def test_missing_sheets_warning_shows_10_sidecar_lists_all(self, tmp_path, capsys):
-        """Stderr shows up to 10 sheet codes; the full, sorted list is in the sidecar.
-
-        A coast or a border strip is dozens of sheets without data - stderr
-        stays readable, and the consumer gets the full list from the sidecar.
         Input in reverse order: parallel download returns sheets in completion
         order, and the list must be stable.
         """
@@ -979,16 +917,13 @@ class TestDownloadPlBboxCutout:
         )
 
         assert rc == 0
-        err = capsys.readouterr().err
-        assert "12 arkuszy" in err
-        # the first 10 after sorting, the rest as " ..."
-        assert "N-00, N-01" in err and "N-09 ..." in err and "N-10" not in err
+        assert self.result.missing_sheets == tuple(names)
         cut_dir = tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox"
         (tif,) = cut_dir.glob("*.tif")
         payload = json.loads((cut_dir / f"{tif.name}.meta.json").read_text("utf-8"))
         assert payload["extra"]["missing_sheets"] == names
 
-    def test_error_lists_all_failed_sheets(self, tmp_path, capsys):
+    def test_error_lists_all_failed_sheets(self, tmp_path):
         """The message lists ALL failed sheets (``download_sheets``).
 
         Until now the thread pool ended with the first exception - the user
@@ -997,8 +932,7 @@ class TestDownloadPlBboxCutout:
         rc, *_ = self._run(tmp_path, _pl_args(tmp_path), [], failed=["N-1", "N-2"])
 
         assert rc == 1
-        err = capsys.readouterr().err
-        assert "N-1" in err and "N-2" in err, err
+        assert "N-1" in self.error and "N-2" in self.error, self.error
         assert not (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").exists()
 
     def test_skip_existing_short_circuits_before_download(self, tmp_path):
@@ -1011,12 +945,10 @@ class TestDownloadPlBboxCutout:
         )
         target.parent.mkdir(parents=True)
         target.write_bytes(b"II*\x00")
-        rc, manager, find = self._run(tmp_path, _pl_args(tmp_path), sheets=[])
+        rc, manager, _ = self._run(tmp_path, _pl_args(tmp_path), sheets=[])
 
-        assert rc == 0
+        assert rc == 0 and self.result.skipped
         manager.download_sheets.assert_not_called()
-        # the shortcut works BEFORE sheet selection - no work on sheet codes
-        find.assert_not_called()
 
     def test_force_rebuilds_existing_cutout_and_passes_workers(self, tmp_path):
         """I-1/m-1: ``--force`` and ``--workers`` from the CLI reach the library.
@@ -1093,11 +1025,10 @@ class TestCutoutSize:
             "shutil.disk_usage", lambda path: SimpleNamespace(total=0, used=0, free=0)
         )
         sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
-        rc, manager, _ = TestDownloadPlBboxCutout()._run(
-            tmp_path, _pl_args(tmp_path), sheets
-        )
+        harness = TestDownloadPlBboxCutout()
+        rc, manager, _ = harness._run(tmp_path, _pl_args(tmp_path), sheets)
         assert rc == 1
-        assert "Za malo miejsca" in capsys.readouterr().err
+        assert "Za malo miejsca" in harness.error
         manager.download_sheets.assert_not_called()
 
     def test_estimate_counts_only_pending_sheets(self, tmp_path):
@@ -1201,33 +1132,10 @@ class TestCutoutSize:
         assert warp_kwds["bigtiff"] == "IF_SAFER"
         assert "compress" not in crop_kwds  # EPSG:2180: the intermediate is the result
 
-    def test_large_grid_prints_info(self, tmp_path, capsys):
-        from kartograf.download.cutout import PlCutoutResult
-
-        args = _pl_args(
-            tmp_path, bbox="400000,300000,440000,330000"
-        )  # 40 x 30 km @ 1 m
-        big = BBox(400000, 300000, 440000, 330000, "EPSG:2180")
-        with (
-            patch(f"{_CUT}.find_sheets_for_bbox", return_value=["N-1"]),
-            patch(
-                f"{_DL}._create_provider_and_storage",
-                return_value=(SimpleNamespace(vertical_crs="EVRF2007"), Mock()),
-            ),
-            patch(
-                f"{_CUT}.run_pl_cutout",
-                return_value=PlCutoutResult(path=tmp_path / "x.tif"),
-            ),
-        ):
-            rc = _download_pl_bbox(args, big, _PARENT)
-        assert rc == 0
-        err = capsys.readouterr().err
-        assert "Info:" in err and "GiB" in err
-
 
 class TestGeometryCutout:
     def test_geometry_mode_builds_cutout(self, tmp_path):
-        from kartograf.cli.download_cmd import _download_pl_geometry
+        from kartograf.download.cutout import run_pl_cutout, select_pl_cutout_sheets
         from kartograf.download.manager import DownloadResult
 
         sheets = [
@@ -1238,7 +1146,6 @@ class TestGeometryCutout:
         geom.write_bytes(b"stub")  # unused path: discovery mocked
         provider = SimpleNamespace(vertical_crs="EVRF2007")
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
-        args = _pl_args(tmp_path, bbox=None, geometry=str(geom))
         manager = Mock()
         manager.download_sheets.return_value = sheets
         manager.last_result = DownloadResult()
@@ -1250,15 +1157,16 @@ class TestGeometryCutout:
                 "kartograf.core.geometry.find_sheets_for_geometry",
                 return_value=["N-1", "N-2"],
             ),
-            patch(
-                f"{_DL}._create_provider_and_storage",
-                return_value=(provider, Mock()),
-            ),
             patch(f"{_CUT}.DownloadManager", return_value=manager),
         ):
-            rc = _download_pl_geometry(args, geom, _PARENT, bbox=bbox)
+            cut = prepare_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
+            run_pl_cutout(
+                cut,
+                select_pl_cutout_sheets(cut, geometry=geom),
+                provider=provider,
+                storage=Mock(),
+            )
 
-        assert rc == 0
         assert (
             tmp_path
             / "nmt"
@@ -1268,15 +1176,15 @@ class TestGeometryCutout:
         ).exists()
 
     def test_geometry_target_5514_covers_whole_envelope(self, tmp_path):
-        """R-01 also applies in `--geometry`: the margin enters SELECTION.
+        """R-01 also applies in geometry mode: the margin enters SELECTION.
 
         The geometry points at the western sheet only, but the target envelope
         returns to EPSG:2180 larger than the request (Krovak rotation) and
         already reaches the eastern sheet. Without the union with
         ``find_sheets_for_bbox`` the cutout has a nodata frame on the eastern
-        edge - with the same flag that gives a complete result in ``--bbox`` mode.
+        edge - with the same flag that gives a complete result in bbox mode.
         """
-        from kartograf.cli.download_cmd import _download_pl_geometry
+        from kartograf.download.cutout import run_pl_cutout, select_pl_cutout_sheets
         from kartograf.download.manager import DownloadResult
 
         sheets = {
@@ -1286,7 +1194,6 @@ class TestGeometryCutout:
         geom = tmp_path / "area.gpkg"
         geom.write_bytes(b"stub")  # unused path: discovery mocked
         provider = SimpleNamespace(vertical_crs="EVRF2007")
-        args = _pl_args(tmp_path, bbox=None, geometry=str(geom), target_crs="EPSG:5514")
         manager = Mock()
         # sheet codes -> sheets: EXACTLY the selected sheets go into the mosaic
         manager.download_sheets.side_effect = lambda godla, **kw: [
@@ -1300,15 +1207,16 @@ class TestGeometryCutout:
                 return_value=["N-1"],
             ),
             patch(f"{_CUT}.find_sheets_for_bbox", return_value=["N-1", "N-2"]) as find,
-            patch(
-                f"{_DL}._create_provider_and_storage",
-                return_value=(provider, Mock()),
-            ),
             patch(f"{_CUT}.DownloadManager", return_value=manager),
         ):
-            rc = _download_pl_geometry(args, geom, _PARENT, bbox=_BBOX_2180)
+            cut = prepare_pl_cutout(_BBOX_2180, "EPSG:5514", output_dir=tmp_path)
+            run_pl_cutout(
+                cut,
+                select_pl_cutout_sheets(cut, geometry=geom),
+                provider=provider,
+                storage=Mock(),
+            )
 
-        assert rc == 0
         cut = next(
             iter((tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif"))
         )
@@ -1319,234 +1227,6 @@ class TestGeometryCutout:
         )
         sent = find.call_args.args[0]
         assert sent.min_x < _BBOX_2180.min_x and sent.max_x > _BBOX_2180.max_x
-
-    def test_cli_geometry_target_crs_reaches_worker(self, tmp_path):
-        """The whole path through main(): dispatch MUST pass the envelope to the worker.
-
-        Guards `bbox=part` in `_dispatch_area` - the only line that makes the
-        geometry cutout reachable from the CLI: the envelope determines the
-        grid and the crop of the cutout, and ``bbox`` is a REQUIRED argument
-        in ``_download_pl_geometry``. Without that line the worker gets no
-        envelope and the cutout is not created (the command ends with code 1).
-        """
-        from pyproj import CRS
-
-        from kartograf.download.manager import DownloadResult
-
-        sheets = [
-            _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000),
-            _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000),
-        ]
-        geom = tmp_path / "area.gpkg"
-        geom.write_bytes(b"stub")  # content unused: discovery is mocked
-        provider = SimpleNamespace(vertical_crs="EVRF2007")
-        overall = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
-        manager = Mock()
-        manager.download_sheets.return_value = sheets
-        manager.last_result = DownloadResult()
-
-        with (
-            # both imports are local (cli.download_cmd, download.cutout) -> patch
-            # at the source;
-            # stub file (P-03): _geometry_envelope reads the CRS BEFORE the envelope
-            patch(
-                "kartograf.core.geometry.read_source_crs",
-                return_value=CRS.from_epsg(2180),
-            ),
-            patch("kartograf.core.geometry.get_overall_bbox", return_value=overall),
-            patch(
-                "kartograf.core.geometry.find_sheets_for_geometry",
-                return_value=["N-1", "N-2"],
-            ),
-            patch(
-                f"{_DL}._create_provider_and_storage",
-                return_value=(provider, Mock()),
-            ),
-            patch(f"{_CUT}.DownloadManager", return_value=manager),
-        ):
-            rc = main(
-                [
-                    "download",
-                    "--geometry",
-                    str(geom),
-                    "--country",
-                    "pl",
-                    "--target-crs",
-                    "EPSG:2180",
-                    "-o",
-                    str(tmp_path),
-                    "-q",
-                ]
-            )
-
-        assert rc == 0
-        target = (
-            tmp_path
-            / "nmt"
-            / "pl_1992_1m_evrf2007"
-            / "bbox"
-            / "530010_382010_530190_382090.tif"
-        )
-        assert target.exists()
-        # parent_request arises ONLY in the dispatch layer - proof that the
-        # cutout came through `_dispatch_area`, not beside it
-        payload = json.loads(
-            (target.parent / f"{target.name}.meta.json").read_text("utf-8")
-        )
-        assert payload["horizontal_crs"] == "EPSG:2180"
-        assert payload["nodata"] == _NODATA
-        assert payload["extra"]["parent_request"]["countries"] == ["PL"]
-
-
-class TestBorderTwoCutouts:
-    """Spec 13.6 / 8(e): one command -> two cutouts in the same CRS."""
-
-    # a small rectangle intersecting the RECTANGULAR envelopes of both countries
-    # (CZ: 12.09..18.86E / 48.55..51.06N, PL: 14.07..24.20E / 49.00..54.90N)
-    _BBOX = "18.80,49.70,18.801,49.7005"
-
-    def _cz_provider(self):
-        """CuzkDmrProvider stub: writes a file and pretends to be a pinned operation."""
-        provider = Mock()
-        provider.descriptor_key = "cz.cuzk.dmr4g"
-        provider.resolution = "5m"
-        provider.vertical_crs = "EVRF2007"
-        provider.vertical_transform = None
-
-        def fake_horizontal(target_crs):
-            pinned = Mock()
-            pinned.description = f"S-JTSK to ETRS89 (1) -> {target_crs}"
-            pinned.accuracy_m = 1.0
-            return pinned
-
-        provider.horizontal_transform.side_effect = fake_horizontal
-
-        def fake_bbox(bbox, target, **kw):
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_bytes(b"II*\x00dane")
-            return target
-
-        provider.download_bbox.side_effect = fake_bbox
-        return provider
-
-    def test_two_cutouts_share_parent_request(self, tmp_path):
-        from kartograf.core.bbox import transform_bbox
-        from kartograf.download.manager import DownloadResult
-
-        # one synthetic sheet covering the Polish part of the request
-        b = transform_bbox(
-            BBox(18.80, 49.70, 18.801, 49.7005, "EPSG:4326"), "EPSG:2180"
-        )
-        sheet = _write_sheet_asc(
-            tmp_path / "sheet.asc",
-            b.min_x - 100,
-            b.min_y - 100,
-            size=60,
-            pixel=5.0,
-        )
-        provider = SimpleNamespace(vertical_crs="EVRF2007")
-        manager = Mock()
-        manager.download_sheets.return_value = [sheet]
-        manager.last_result = DownloadResult()
-
-        with (
-            patch(
-                "kartograf.providers.cuzk.create_dmr_provider",
-                return_value=self._cz_provider(),
-            ),
-            patch(f"{_CUT}.find_sheets_for_bbox", return_value=["N-34-130-D"]),
-            patch(
-                f"{_DL}._create_provider_and_storage",
-                return_value=(provider, Mock()),
-            ),
-            patch(f"{_CUT}.DownloadManager", return_value=manager),
-        ):
-            rc = main(
-                [
-                    "download",
-                    "--bbox",
-                    self._BBOX,
-                    "--bbox-crs",
-                    "EPSG:4326",
-                    "--resolution",
-                    "5m",
-                    "--target-crs",
-                    "EPSG:2180",
-                    "--vertical-crs",
-                    "EVRF2007",
-                    "-o",
-                    str(tmp_path),
-                ]
-            )
-
-        assert rc == 0
-        pl = list((tmp_path / "nmt" / "pl_1992_5m_evrf2007" / "bbox").glob("*.tif"))
-        cz = list((tmp_path / "nmt" / "cz_dmr4g_evrf2007" / "bbox").glob("*.tif"))
-        assert len(pl) == 1 and len(cz) == 1
-        parents = []
-        for f in (*pl, *cz):
-            payload = json.loads((f.parent / f"{f.name}.meta.json").read_text("utf-8"))
-            assert payload["horizontal_crs"] == "EPSG:2180"
-            parents.append(payload["extra"]["parent_request"])
-        assert parents[0] == parents[1]
-        assert parents[0]["countries"] == ["CZ", "PL"]
-
-    def test_border_pl_sheet_without_data_still_gives_both_cutouts(
-        self, tmp_path, capsys
-    ):
-        """R5: the Czech side of a border bbox has no GUGiK data -
-        the PL cutout is created (nodata there), the CZ cutout too, code 0."""
-        from kartograf.core.bbox import transform_bbox
-        from kartograf.download.manager import DownloadResult
-
-        b = transform_bbox(
-            BBox(18.80, 49.70, 18.801, 49.7005, "EPSG:4326"), "EPSG:2180"
-        )
-        sheet = _write_sheet_asc(
-            tmp_path / "sheet.asc", b.min_x - 100, b.min_y - 100, size=60, pixel=5.0
-        )
-        manager = Mock()
-        manager.download_sheets.return_value = [sheet]
-        manager.last_result = DownloadResult(
-            failed=["N-34-130-D-d-2-1"], no_coverage=["N-34-130-D-d-2-1"]
-        )
-        with (
-            patch(
-                "kartograf.providers.cuzk.create_dmr_provider",
-                return_value=self._cz_provider(),
-            ),
-            patch(f"{_CUT}.find_sheets_for_bbox", return_value=["N-34-130-D"]),
-            patch(
-                f"{_DL}._create_provider_and_storage",
-                return_value=(SimpleNamespace(vertical_crs="EVRF2007"), Mock()),
-            ),
-            patch(f"{_CUT}.DownloadManager", return_value=manager),
-        ):
-            rc = main(
-                [
-                    "download",
-                    "--bbox",
-                    self._BBOX,
-                    "--bbox-crs",
-                    "EPSG:4326",
-                    "--resolution",
-                    "5m",
-                    "--target-crs",
-                    "EPSG:2180",
-                    "--vertical-crs",
-                    "EVRF2007",
-                    "-o",
-                    str(tmp_path),
-                ]
-            )
-
-        assert rc == 0
-        pl_dir = tmp_path / "nmt" / "pl_1992_5m_evrf2007" / "bbox"
-        assert len(list(pl_dir.glob("*.tif"))) == 1
-        cz_dir = tmp_path / "nmt" / "cz_dmr4g_evrf2007" / "bbox"
-        assert len(list(cz_dir.glob("*.tif"))) == 1
-        err = capsys.readouterr().err
-        assert "Warning:" in err and "N-34-130-D-d-2-1" in err
 
 
 class TestTargetCrsValidations:
@@ -1568,8 +1248,8 @@ class TestTargetCrsValidations:
         assert rc == 1
         assert "--bbox/--geometry" in capsys.readouterr().err
 
-    @pytest.mark.parametrize("product", ["nmpt", "orto", "laz"])
-    def test_non_nmt_rejected(self, product, tmp_path, capsys):
+    @pytest.mark.parametrize("product", ["orto", "laz"])
+    def test_non_height_product_rejected(self, product, tmp_path, capsys):
         rc = main(
             [
                 "download",
@@ -1626,9 +1306,7 @@ class TestLibraryApi:
         provider.download = download
         return provider
 
-    def test_download_pl_cutout_end_to_end_skip_and_force(self, tmp_path):
-        from kartograf import download_pl_cutout
-
+    def test_sheet_cutout_end_to_end_skip_and_force(self, tmp_path):
         provider = self._provider()
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         with (
@@ -1638,11 +1316,9 @@ class TestLibraryApi:
                 return_value=list(self._SHEETS),
             ),
         ):
-            first = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
-            second = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
-            third = download_pl_cutout(
-                bbox, "EPSG:2180", output_dir=tmp_path, force=True
-            )
+            first = _sheet_cutout(bbox, output_dir=tmp_path)
+            second = _sheet_cutout(bbox, output_dir=tmp_path)
+            third = _sheet_cutout(bbox, output_dir=tmp_path, force=True)
 
         assert first.path.exists() and not first.skipped
         assert first.path.with_name(first.path.name + ".meta.json").exists()
@@ -1657,8 +1333,6 @@ class TestLibraryApi:
         never-built cutout must not cost re-downloading sheets that already
         lie in their segment.
         """
-        from kartograf import download_pl_cutout
-
         provider = self._provider()
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         with (
@@ -1668,9 +1342,9 @@ class TestLibraryApi:
                 return_value=list(self._SHEETS),
             ),
         ):
-            first = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
+            first = _sheet_cutout(bbox, output_dir=tmp_path)
             first.path.unlink()  # the cutout disappears, the sheets stay in the segment
-            rebuilt = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
+            rebuilt = _sheet_cutout(bbox, output_dir=tmp_path)
 
         assert sorted(provider.calls) == sorted(self._SHEETS)  # the 1st run only
         assert not rebuilt.skipped and rebuilt.path == first.path
@@ -1681,8 +1355,6 @@ class TestLibraryApi:
         """D18: ``run_pl_cutout`` without ``storage=`` puts sheets in the
         provider's vertical segment (KRON86) - the same segment as the CLI sheet
         list."""
-        from kartograf import download_pl_cutout
-
         provider = self._provider()
         provider.vertical_crs = "KRON86"
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
@@ -1693,61 +1365,16 @@ class TestLibraryApi:
                 return_value=list(self._SHEETS),
             ),
         ):
-            result = download_pl_cutout(
-                bbox, "EPSG:2180", output_dir=tmp_path, vertical_crs="KRON86"
-            )
+            result = _sheet_cutout(bbox, output_dir=tmp_path, vertical_crs="KRON86")
 
         segments = {p.relative_to(tmp_path).parts[:2] for p in result.sheet_paths}
         assert segments == {("nmt", "pl_1992_1m_kron86")}
 
-    def test_5m_kron86_rejected_before_factory(self, tmp_path):
-        """0.7.1: 5m exists only in EVRF2007 - ``ValidationError`` with the
-        remedy BEFORE the provider factory, the network and the directories
-        (earlier the factory swapped the datum with a log warning)."""
-        from kartograf import download_pl_cutout
-        from kartograf.exceptions import ValidationError
-
-        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
-        with (
-            patch("kartograf.providers.pl.create_nmt_provider") as factory,
-            pytest.raises(ValidationError, match="uzyj vertical_crs='EVRF2007'"),
-        ):
-            download_pl_cutout(
-                bbox,
-                "EPSG:2180",
-                output_dir=tmp_path,
-                resolution="5m",
-                vertical_crs="KRON86",
-            )
-
-        factory.assert_not_called()
-        assert not (tmp_path / "nmt").exists()
-
-    def test_cache_is_handed_to_the_factory(self, tmp_path):
-        """N6: ``download_pl_cutout(cache=)`` -> a provider with the record cache;
-        without the kwarg the factory gets ``cache=None`` (CLI: ``--force``)."""
-        from kartograf import download_pl_cutout
-
-        provider = self._provider()
-        cache = object()
-        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
-        with (
-            patch(
-                "kartograf.providers.pl.create_nmt_provider", return_value=provider
-            ) as factory,
-            patch(
-                "kartograf.download.cutout.find_sheets_for_bbox",
-                return_value=list(self._SHEETS),
-            ),
-        ):
-            download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path, cache=cache)
-        assert factory.call_args.kwargs["cache"] is cache
-
-    def test_skipped_download_reads_sheet_lists_from_sidecar(self, tmp_path):
+    def test_skipped_run_reads_sheet_lists_from_sidecar(self, tmp_path):
         """N4: an existing cutout (``force=False``) returns ``missing_sheets``
         and ``off_grid_sheets`` from its OWN sidecar, not empty tuples - with
-        no network and no sheet selection."""
-        from kartograf import download_pl_cutout
+        no network."""
+        from kartograf.download.cutout import PlCutoutSheets, run_pl_cutout
 
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         cut = prepare_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
@@ -1764,17 +1391,15 @@ class TestLibraryApi:
             )
         )
         provider = self._provider()
-        with (
-            patch("kartograf.providers.pl.create_nmt_provider", return_value=provider),
-            patch("kartograf.download.cutout.find_sheets_for_bbox") as find,
-        ):
-            result = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
+        result = run_pl_cutout(
+            cut, PlCutoutSheets(godla=tuple(self._SHEETS)), provider=provider
+        )
 
         assert result.skipped and result.path == cut.target_path
         assert result.missing_sheets == ("N-34-130-D-d-2-4",)
         assert result.off_grid_sheets == ("N-34-130-D-d-2-3",)
         assert result.sheet_paths == ()
-        assert provider.calls == [] and not find.called
+        assert provider.calls == []
 
     @pytest.mark.parametrize(
         ("attr", "value"), [("vertical_crs", "KRON86"), ("resolution", "5m")]
@@ -1813,6 +1438,7 @@ class TestLibraryApi:
             "download_pl_cutout",
             "prepare_pl_cutout",
             "run_pl_cutout",
+            "run_pl_wcs_cutout",
             "select_pl_cutout_sheets",
         ):
             assert name in kartograf.__all__ and hasattr(kartograf, name)
@@ -1820,8 +1446,6 @@ class TestLibraryApi:
     def test_sidecar_failure_does_not_break_cutout(self, tmp_path, caplog):
         """D7: a cutout sidecar build error = a warning, the cutout stays."""
         import logging
-
-        from kartograf import download_pl_cutout
 
         provider = self._provider()
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
@@ -1837,7 +1461,7 @@ class TestLibraryApi:
             ),
             caplog.at_level(logging.WARNING),
         ):
-            result = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
+            result = _sheet_cutout(bbox, output_dir=tmp_path)
 
         assert result.path.exists()
         assert not result.path.with_name(result.path.name + ".meta.json").exists()
@@ -2175,31 +1799,6 @@ class TestOffGridSheets:
         storage = FileStorage(tmp_path, resolution="5m", vertical_crs="EVRF2007")
         assert all(storage.get_path(g, ".asc").exists() for g in self._GODLA)
 
-    def test_cli_target_2180_off_grid_returns_1_with_hint(self, tmp_path, capsys):
-        west = self._write_asc_5m(tmp_path / "M-34-76-A-a-1-1.asc", 535807.22, 460, 100)
-        east = self._write_asc_5m(tmp_path / "M-34-76-A-a-1-2.asc", 538045.16, 100, 200)
-        rc, *_ = TestDownloadPlBboxCutout()._run(
-            tmp_path, _pl_args(tmp_path), [west, east]
-        )
-        assert rc == 1
-        err = capsys.readouterr().err
-        assert err.startswith("Error: 1 z 2 arkuszy")
-        assert "--target-crs EPSG:5514" in err and "Arkusze zostaja w cache" in err
-
-    def test_cli_target_5514_off_grid_prints_info(self, tmp_path, capsys):
-        """W1 in the CLI: other-phase sheets = Info: (stderr), code 0, file made."""
-        west = self._write_asc_5m(tmp_path / "M-34-76-A-a-1-1.asc", 535807.22, 460, 100)
-        east = self._write_asc_5m(tmp_path / "M-34-76-A-a-1-2.asc", 538045.16, 100, 200)
-        args = _pl_args(tmp_path, target_crs="EPSG:5514", resolution="5m")
-        rc, *_ = TestDownloadPlBboxCutout()._run(
-            tmp_path, args, [west, east], bbox=self._BBOX
-        )
-        assert rc == 0
-        err = capsys.readouterr().err
-        assert "Info: 1 arkuszy o innej fazie siatki przeprobkowanych osobno (W1" in err
-        assert "extra.off_grid_sheets" in err
-        assert "Warning:" not in err
-
     def test_target_5514_warps_each_off_grid_sheet_separately(self, tmp_path):
         """D8 (W1): a warp from sheets with different phases - each sheet from
         its own grid straight to the result grid. The result has EXACTLY two
@@ -2320,34 +1919,26 @@ class TestPartialSheetVisibility:
         flags = {s["sheet"]: s["full_sheet"] for s in meta["extra"]["sheet_sources"]}
         assert flags == {"N-34-139-C-a-3-2": True, "N-34-139-C-a-3-1": False}
 
-    def test_partial_sheet_warns(self, tmp_path, capsys):
+    def test_partial_sheet_in_result(self, tmp_path):
         rc, *_ = self._run(tmp_path, _pl_args(tmp_path), self._sheets(tmp_path))
 
         assert rc == 0
-        err = capsys.readouterr().err
-        assert "Warning:" in err and "niepelna" in err
-        assert "N-34-139-C-a-3-1" in err and "N-34-139-C-a-3-2" not in err
+        assert self.result.partial_sheets == ("N-34-139-C-a-3-1",)
 
-    def test_skipped_cutout_repeats_partial_warning(self, tmp_path, capsys):
+    def test_skipped_cutout_restores_partial_sheets(self, tmp_path):
         """A skipped cutout restores ``partial_sheets`` from ``extra.sheet_sources``."""
         rc, *_ = self._run(tmp_path, _pl_args(tmp_path), self._sheets(tmp_path))
         assert rc == 0
-        capsys.readouterr()
 
         rc, manager, _ = self._run(tmp_path, _pl_args(tmp_path), sheets=[])
 
-        assert rc == 0
+        assert rc == 0 and self.result.skipped
         manager.download_sheets.assert_not_called()
-        err = capsys.readouterr().err
-        assert "niepelna" in err and "N-34-139-C-a-3-1" in err
+        assert self.result.partial_sheets == ("N-34-139-C-a-3-1",)
 
-    def test_skip_with_pre_adr031_cutout_sidecar_is_no_information(
-        self, tmp_path, capsys
-    ):
+    def test_skip_with_pre_adr031_cutout_sidecar_is_no_information(self, tmp_path):
         """ADR-031: ``sheet_sources`` with Polish keys (``godlo``) carry no
         usable sheet name — skip treats them as no information, no error."""
-        from kartograf.download.cutout import skipped_pl_cutout
-
         rc, *_ = self._run(tmp_path, _pl_args(tmp_path), self._sheets(tmp_path))
         assert rc == 0
         (tif,) = (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif")
@@ -2364,14 +1955,11 @@ class TestPartialSheetVisibility:
             for s in meta["extra"]["sheet_sources"]
         ]
         sidecar.write_text(json.dumps(meta), encoding="utf-8")
-        capsys.readouterr()
 
-        cutout = prepare_pl_cutout(_BBOX_2180, "EPSG:2180", output_dir=tmp_path)
-        assert skipped_pl_cutout(cutout).partial_sheets == ()
         rc, manager, _ = self._run(tmp_path, _pl_args(tmp_path), sheets=[])
-        assert rc == 0
+        assert rc == 0 and self.result.skipped
         manager.download_sheets.assert_not_called()
-        assert "niepelna" not in capsys.readouterr().err
+        assert self.result.partial_sheets == ()
 
     def test_pre_adr031_sheet_sidecar_gives_null_fields(self, tmp_path):
         """Sheet sidecar with Polish keys: ``sheet`` from the file name,
@@ -2402,23 +1990,11 @@ class TestPartialSheetVisibility:
             "full_sheet": None,
         }
 
-    def test_full_sheets_do_not_warn(self, tmp_path, capsys):
+    def test_full_sheets_are_not_partial(self, tmp_path):
         sheets = self._sheets(tmp_path, full=(True, True))
         rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
 
-        assert rc == 0
-        assert "niepelna" not in capsys.readouterr().err
-
-    def test_all_nodata_with_partial_sheet_blames_campaign(self, tmp_path, capsys):
-        """C14-b: an empty cutout from a partial campaign - not "no GUGiK data"."""
-        sheets = self._sheets(tmp_path, fill=_NODATA)
-        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
-
-        assert rc == 0
-        err = capsys.readouterr().err
-        assert "Warning: wycinek w calosci nodata" in err
-        assert "niepelna" in err and "N-34-139-C-a-3-1" in err
-        assert "brak danych GUGiK / obszar poza pokryciem" not in err
+        assert rc == 0 and self.result.partial_sheets == ()
 
 
 class TestEmptyCutoutSkip:
@@ -2448,19 +2024,6 @@ class TestEmptyCutoutSkip:
         (tif,) = (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif")
         meta = json.loads(tif.with_name(tif.name + ".meta.json").read_text("utf-8"))
         assert "all_nodata" not in meta["extra"]
-
-    def test_skip_repeats_all_nodata_warning(self, tmp_path, capsys):
-        rc, *_ = self._run(tmp_path, _pl_args(tmp_path), self._empty_sheets(tmp_path))
-        assert rc == 0
-        capsys.readouterr()
-
-        rc, manager, _ = self._run(tmp_path, _pl_args(tmp_path), sheets=[])
-
-        assert rc == 0
-        manager.download_sheets.assert_not_called()
-        err = capsys.readouterr().err
-        assert "Warning: wycinek w calosci nodata" in err
-        assert "(z sidecara istniejacego wycinka)" in err
 
     def test_library_skip_restores_all_nodata(self, tmp_path):
         from kartograf.download.cutout import skipped_pl_cutout
@@ -2499,7 +2062,7 @@ class TestCutoutOverCampaignLinks:
             self.resolve_calls = []
 
         def resolve_campaigns(
-            self, godlo, *, campaigns="newest", min_year=None, timeout=None
+            self, godlo, *, campaigns=None, min_year=None, max_year=None, timeout=None
         ):
             from kartograf.providers.pl.skorowidz import SkorowidzRecord
 
@@ -2528,8 +2091,6 @@ class TestCutoutOverCampaignLinks:
             return _write_sheet_asc(path, west, south)
 
     def _run(self, tmp_path, provider=None, **kwargs):
-        from kartograf import download_pl_cutout
-
         provider = provider or self._CampaignProvider(self._SHEETS)
         with (
             patch("kartograf.providers.pl.create_nmt_provider", return_value=provider),
@@ -2538,9 +2099,7 @@ class TestCutoutOverCampaignLinks:
                 return_value=list(self._SHEETS),
             ),
         ):
-            result = download_pl_cutout(
-                self._BBOX, "EPSG:2180", output_dir=tmp_path, **kwargs
-            )
+            result = _sheet_cutout(self._BBOX, output_dir=tmp_path, **kwargs)
         return result, provider
 
     def test_cutout_builds_from_hardlinked_sheets(self, tmp_path):
@@ -2641,57 +2200,31 @@ class TestUnverifiedSheets:
             rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
         return rc
 
-    def test_cli_warns_and_sidecar_records(self, tmp_path, capsys):
+    def test_sidecar_records_unverified(self, tmp_path):
         rc = self._run_unverified(tmp_path)
 
         assert rc == 0
-        err = capsys.readouterr().err
-        assert (
-            "Warning: skorowidz GUGiK niedostepny — dla 1 arkuszy uzyto lokalnej "
-            "kampanii bez sprawdzenia nowszej (N-1) (HTTP 503)"
-        ) in err
         (tif,) = (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif")
         meta = json.loads(tif.with_name(tif.name + ".meta.json").read_text("utf-8"))
         assert meta["extra"]["unverified_sheets"] == {"N-1": "HTTP 503"}
 
-    def test_verified_cutout_has_no_warning_nor_field(self, tmp_path, capsys):
+    def test_verified_cutout_has_no_field(self, tmp_path):
         sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
         rc, *_ = self._run(tmp_path, _pl_args(tmp_path), sheets)
 
-        assert rc == 0
-        assert "skorowidz GUGiK niedostepny" not in capsys.readouterr().err
+        assert rc == 0 and self.result.unverified == {}
         (tif,) = (tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox").glob("*.tif")
         meta = json.loads(tif.with_name(tif.name + ".meta.json").read_text("utf-8"))
         assert "unverified_sheets" not in (meta.get("extra") or {})
 
-    def test_skip_restores_unverified_from_sidecar_and_warns(self, tmp_path, capsys):
+    def test_skip_restores_unverified_from_sidecar(self, tmp_path):
         assert self._run_unverified(tmp_path) == 0
-        capsys.readouterr()
 
         rc, manager, _ = self._run(tmp_path, _pl_args(tmp_path), sheets=[])
 
-        assert rc == 0
+        assert rc == 0 and self.result.skipped
         manager.download_sheets.assert_not_called()
-        err = capsys.readouterr().err
-        assert "skorowidz GUGiK niedostepny" in err and "(N-1) (HTTP 503)" in err
-        assert "z sidecara istniejacego wycinka" in err
-
-    def test_cutout_error_after_unfinished_progress_starts_new_line(
-        self, tmp_path, capsys
-    ):
-        sheets = [_write_sheet_asc(tmp_path / "s1.asc", 530000, 382000)]
-        args = _pl_args(tmp_path, quiet=False)
-
-        def boom(*a, on_progress=None, **kw):
-            on_progress(DownloadProgress(0, 1, "N-1", "downloading", ""))
-            raise DownloadError("padl")
-
-        with patch(f"{_CUT}.run_pl_cutout", side_effect=boom):
-            rc, *_ = self._run(tmp_path, args, sheets)
-
-        assert rc == 1
-        err = capsys.readouterr().err
-        assert err.endswith("\nError: padl\n")
+        assert self.result.unverified == {"N-1": "HTTP 503"}
 
 
 class TestBuildFromLocalSheets:

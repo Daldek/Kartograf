@@ -24,6 +24,8 @@ Glowne zrodlo konwencji i procesu: `docs/DEVELOPMENT_STANDARDS.md`.
 - Praca na `develop` (albo galezi krotkotrwalej z `develop`); Conventional
   Commits z opisem po polsku, docstringi i komentarze po angielsku,
   dokumentacja po polsku (STANDARDS 1.1, 2, 9.4).
+- Commity bez stopki `Co-Authored-By` (decyzja uzytkownika 2026-10-09;
+  stopki w starszej historii zostaja). Autor: `Daldek <git@debever.pl>`.
 - Na koniec sesji OBOWIAZKOWO zaktualizuj `docs/PROGRESS.md`; zmiany
   dopisuj na biezaco do `docs/CHANGELOG.md` (STANDARDS 15).
 - `docs/DECISIONS.md` ma konce linii CRLF — zachowaj je przy edycji
@@ -43,9 +45,9 @@ Glowne zrodlo konwencji i procesu: `docs/DEVELOPMENT_STANDARDS.md`.
 | Wymagania produktowe (warstwy BDOT10k, parametry SoilGrids, lata CORINE) | `docs/PRD.md` |
 | Moduly i zaleznosci miedzy warstwami | `docs/ARCHITECTURE.md` 2 |
 | Deskryptory zrodel, sidecar `kartograf-meta/1`, `extra.parent_request` | ARCHITECTURE 3.1, 3.2, 3.4 |
-| Uklad `data/`, kampanie `kampanie/` i dowiazania | ARCHITECTURE 3.3 |
-| Godlo PL, skorowidz GUGiK, `MetadataCache`/`--force`, kampanie (`--campaigns`, `--min-year`, I-1) | ARCHITECTURE 4.1 |
-| Lista arkuszy PL (R5, kody wyjscia), WCS `download_bbox` | ARCHITECTURE 4.2 |
+| Uklad `data/`, kampanie `kampanie/`, dowiazania i `full_sheet/` | ARCHITECTURE 3.3 |
+| Godlo PL, skorowidz GUGiK, `MetadataCache`/`--force`, kampanie (`--campaigns`, `--min-year`, `--full-sheet`, I-1) | ARCHITECTURE 4.1 |
+| Lista arkuszy PL (R5, kody wyjscia), WCS `download_bbox` (siatka zrodla, kawalki `transport/chunks.py`, ADR-034) | ARCHITECTURE 4.2 |
 | Wycinek PL `--target-crs` (ADR-027) | ARCHITECTURE 4.3 |
 | CZ (CUZK), `--country auto` | ARCHITECTURE 4.4-4.6 |
 | LAZ (ADR-029) | ARCHITECTURE 4.7 |

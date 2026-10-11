@@ -4,6 +4,8 @@ import pytest
 
 from kartograf.core import parser_registry
 from kartograf.core.parser_registry import SheetSystem, detect_system, path_parts
+from kartograf.core.parser_tm33 import ParserTM33
+from kartograf.exceptions import ParseError
 
 
 class TestDetection:
@@ -26,6 +28,13 @@ class TestDetection:
 
     def test_detect_never_returns_none(self):
         assert detect_system("").id == "pl1992"
+
+    def test_cz_codes_with_non_ascii_digits_not_detected(self):
+        """P5: full-width digits are not a CZ sheet code (nor accepted by TM33)."""
+        assert detect_system("７３０_５５５５").id == "pl1992"
+        assert detect_system("CTES９６").id == "pl1992"
+        with pytest.raises(ParseError):
+            ParserTM33("７３０_５５５５")
 
 
 class TestPathParts:

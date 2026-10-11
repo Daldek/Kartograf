@@ -3,27 +3,31 @@ GUGiK campaign identity (ADR-030) — a PL-ONLY mechanism.
 
 A campaign is one GUGiK data delivery (an index (skorowidz) record). The
 campaign directory is ``<acquisition date>_<id>``, where ``id`` is the first
-numeric segment of the file name in the URL. The module's only IO is
-``verify_file_format`` (64 header bytes) and ``verify_sheet_extent`` (the
-ASC header). ``verify_record_vertical_crs`` checks the vertical datum
-declared by the record (no IO).
+numeric segment of the file name in the URL. File validation reads ASC
+headers or TIFF signatures; ``measure_coverage`` additionally streams ASC
+pixels or reads GeoTIFF mask windows from an already downloaded file.
+``verify_record_vertical_crs`` checks the vertical datum declared by the
+record (no IO).
 """
 
 import hashlib
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
+from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from urllib.parse import urlparse
 
 from kartograf.core.sheet_parser import SheetParser
-from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.exceptions import DownloadError, ValidationError, YearRangeError
 from kartograf.sources.sidecar import read_asc_header
 
 logger = logging.getLogger(__name__)
 
 CAMPAIGNS_DIR = "kampanie"
+# Second link to the newest local flight declared full in the index (ADR-033).
+FULL_SHEET_DIR = "full_sheet"
 CAMPAIGN_STRATEGIES = ("newest", "all")
 
 # record `format` field -> canonical extension (errata 2 N-2)
@@ -51,6 +55,12 @@ _FORMAT_NAMES = {".asc": "AAIGrid (ARC/INFO ASCII GRID)", ".tif": "TIFF"}
 # partial sheet lies inside, a neighbour or a file of another place does not.
 MIN_FRAME_OVERLAP = 0.5
 
+# Limit peak memory when counting pixels of large AAIGrid campaign files.
+_COVERAGE_CHUNK = 8 * 1024 * 1024
+_AAIGRID_HEADER_KEYS = frozenset(
+    key.encode("ascii") for key in (*_AAIGRID_KEYS, "nodata_value")
+)
+
 
 def campaign_id_from_url(url: str) -> str:
     """'83233' from '.../83233_1744736_<godlo>.asc'.
@@ -65,22 +75,140 @@ def campaign_id_from_url(url: str) -> str:
     return "u" + hashlib.sha1(url.encode("utf-8")).hexdigest()[:8]
 
 
-def validate_campaign_args(campaigns: str, min_year: int | None) -> None:
-    """Raise ValidationError for a strategy outside CAMPAIGN_STRATEGIES, or
-    a min_year that is not an int (bool included) or is outside 1900..2100."""
-    if campaigns not in CAMPAIGN_STRATEGIES:
+def validate_campaign_args(
+    campaigns: str | None, min_year: int | None, max_year: int | None
+) -> None:
+    """Validate a strategy (including the unresolved sentinel) and year bounds."""
+    if campaigns is not None and campaigns not in CAMPAIGN_STRATEGIES:
         raise ValidationError(
             f"Nieznana strategia kampanii {campaigns!r} "
             f"(dozwolone: {', '.join(CAMPAIGN_STRATEGIES)})"
         )
-    if min_year is not None and (
-        not isinstance(min_year, int)
-        or isinstance(min_year, bool)
-        or not 1900 <= min_year <= 2100
-    ):
+    for name, year in (("min_year", min_year), ("max_year", max_year)):
+        if year is not None and (
+            not isinstance(year, int)
+            or isinstance(year, bool)
+            or not 1900 <= year <= 2100
+        ):
+            raise ValidationError(
+                f"{name} musi byc liczba calkowita 1900..2100, otrzymano {year!r}"
+            )
+    if min_year is not None and max_year is not None and min_year > max_year:
         raise ValidationError(
-            f"min_year musi byc liczba calkowita 1900..2100, otrzymano {min_year!r}"
+            f"min_year ({min_year}) nie moze byc wiekszy niz max_year ({max_year})"
         )
+
+
+def record_year(record) -> int | None:
+    """Year from ``aktualnoscRok``, else ``aktualnosc[:4]``; non-digit -> None."""
+    year = record.raw.get("aktualnoscRok") or record.aktualnosc[:4]
+    return int(year) if year.isdigit() else None
+
+
+def in_year_range(year: int | None, min_year: int | None, max_year: int | None) -> bool:
+    """Whether a known year lies within the closed, optionally open range."""
+    return (
+        year is not None
+        and (min_year is None or year >= min_year)
+        and (max_year is None or year <= max_year)
+    )
+
+
+def year_range_label(min_year: int | None, max_year: int | None) -> str:
+    """Polish label of a single year, lower bound, upper bound or closed range."""
+    if min_year is not None and max_year is not None:
+        return (
+            f"z roku {min_year}"
+            if min_year == max_year
+            else f"z lat {min_year}-{max_year}"
+        )
+    if min_year is not None:
+        return f"od roku {min_year}"
+    if max_year is not None:
+        return f"do roku {max_year}"
+    raise ValueError("year_range_label wymaga co najmniej jednej granicy")
+
+
+def year_range_hints(
+    conflicts: Mapping[str, Sequence[int]], min_year: int | None, max_year: int | None
+) -> tuple[str, ...]:
+    """Suggest a one-sided bound that admits every conflicting sheet (6.2)."""
+    if not conflicts:
+        return ()
+    newer = (
+        [{year for year in years if year > max_year} for years in conflicts.values()]
+        if max_year is not None
+        else []
+    )
+    older = (
+        [{year for year in years if year < min_year} for years in conflicts.values()]
+        if min_year is not None
+        else []
+    )
+    hints: list[str] = []
+    if newer and all(newer):
+        if min_year is not None:
+            hints.append(f"--min-year {min_year} (rok {min_year} i nowsze)")
+        else:
+            upper = max(min(years) for years in newer)
+            hints.append(f"--max-year {upper} (rok {upper} i starsze)")
+    if older and all(older):
+        if max_year is not None:
+            hints.append(f"--max-year {max_year} (rok {max_year} i starsze)")
+        else:
+            lower = min(max(years) for years in older)
+            hints.append(f"--min-year {lower} (rok {lower} i nowsze)")
+    return tuple(hints)
+
+
+def year_range_error(
+    conflicts: Mapping[str, Sequence[int]],
+    min_year: int | None,
+    max_year: int | None,
+    *,
+    total: int,
+    unit: str = "arkuszy",
+    subject: str = "danych",
+    labels: Mapping[str, str] | None = None,
+    partial_years: Mapping[str, AbstractSet[int]] | None = None,
+) -> YearRangeError:
+    """Build the conflict message and retain every sheet's available years.
+
+    ``subject`` and optional per-sheet ``labels`` let LAZ report reference
+    tile vintages without duplicating the year-range formatting and hints;
+    years in ``partial_years[godlo]`` (LAZ: only partial sheets there) are
+    marked in the message.
+    """
+    sheets = {
+        godlo: tuple(sorted(set(years))) for godlo, years in sorted(conflicts.items())
+    }
+    hints = year_range_hints(sheets, min_year, max_year)
+    lines = [
+        f"brak {subject} {year_range_label(min_year, max_year)} "
+        f"dla {len(sheets)} z {total} {unit} — nic nie pobrano:"
+    ]
+
+    def year_text(godlo: str, year: int) -> str:
+        if partial_years and year in partial_years.get(godlo, ()):
+            return f"{year} (tylko arkusze niepelne)"
+        return str(year)
+
+    lines.extend(
+        f"  {godlo}{' ' + labels[godlo] if labels and godlo in labels else ''}: "
+        f"dostepne roczniki {', '.join(year_text(godlo, y) for y in years)}"
+        for godlo, years in list(sheets.items())[:20]
+    )
+    if len(sheets) > 20:
+        lines.append(f"  ... i {len(sheets) - 20} innych")
+    if hints:
+        lines.append(f"Podpowiedz: {' albo '.join(hints)}")
+    return YearRangeError(
+        "\n".join(lines),
+        sheets=sheets,
+        min_year=min_year,
+        max_year=max_year,
+        hints=hints,
+    )
 
 
 @dataclass(frozen=True)
@@ -234,6 +362,78 @@ def verify_file_format(path: Path, ext: str) -> None:
             f"{path.name}: tresc nie jest {_FORMAT_NAMES[ext]} "
             f"(naglowek: {head[:16]!r})"
         )
+
+
+def measure_coverage(path: Path, ext: str) -> float | None:
+    """Return valid-pixel share of an ASC/GeoTIFF, or None without a TIFF mask.
+
+    ASC values are streamed in bounded chunks; an incomplete or malformed
+    raster raises DownloadError rather than reporting a misleading share.
+    """
+    if ext == ".asc":
+        header = read_asc_header(path)
+        try:
+            cols, rows = header["ncols"], header["nrows"]
+            if cols <= 0 or rows <= 0 or not cols.is_integer() or not rows.is_integer():
+                raise ValueError("niepoprawne wymiary siatki")
+            expected = int(cols * rows)
+            nodata = header.get("nodata_value", -9999.0)
+            count = valid = 0
+            with path.open("rb") as stream:
+                # AAIGrid permits five header lines if NODATA_value is absent.
+                # Stop at the first non-header line, not after a fixed count.
+                while True:
+                    line = stream.readline()
+                    parts = line.split(None, 1)
+                    if not parts or parts[0].lower() not in _AAIGRID_HEADER_KEYS:
+                        stream.seek(-len(line), 1)
+                        break
+                carry = b""
+                while chunk := stream.read(_COVERAGE_CHUNK):
+                    data = carry + chunk
+                    cut = max(data.rfind(sep) for sep in (b" ", b"\n", b"\r", b"\t"))
+                    if cut < 0:
+                        carry = data
+                        continue
+                    for value in data[:cut].split():
+                        count += 1
+                        valid += float(value) != nodata
+                    carry = data[cut + 1 :]
+                for value in carry.split():
+                    count += 1
+                    valid += float(value) != nodata
+            if count != expected:
+                raise DownloadError(
+                    f"{path.name}: ASC ma {count} komorek, oczekiwano {expected}"
+                )
+            return round(valid / expected, 4)
+        except (OSError, ValueError, KeyError) as e:
+            raise DownloadError(
+                f"{path.name}: nie udalo sie zmierzyc pokrycia: {e}"
+            ) from e
+    if ext == ".tif":
+        import numpy as np
+        import rasterio
+        from rasterio.enums import ColorInterp, MaskFlags
+
+        try:
+            with rasterio.open(path) as dataset:
+                if dataset.nodata is None and (
+                    MaskFlags.alpha not in dataset.mask_flag_enums[0]
+                    and ColorInterp.alpha not in dataset.colorinterp
+                ):
+                    return None
+                valid = total = 0
+                for _, window in dataset.block_windows(1):
+                    mask = dataset.read_masks(1, window=window)
+                    valid += int(np.count_nonzero(mask))
+                    total += mask.size
+                return round(valid / total, 4)
+        except (OSError, ValueError, rasterio.errors.RasterioError) as e:
+            raise DownloadError(
+                f"{path.name}: nie udalo sie zmierzyc pokrycia: {e}"
+            ) from e
+    raise DownloadError(f"{path.name}: brak pomiaru pokrycia dla {ext!r}")
 
 
 def verify_record_url(url: str, godlo: str) -> None:

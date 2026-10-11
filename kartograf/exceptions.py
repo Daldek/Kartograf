@@ -7,6 +7,8 @@ This module defines the core custom exceptions of the Kartograf package
 KartografError for easy catching of package-specific errors.
 """
 
+from collections.abc import Mapping
+
 
 class KartografError(Exception):
     """
@@ -113,6 +115,38 @@ class NoCoverageError(DownloadError):
         hints: tuple[str, ...] = (),
     ):
         super().__init__(message, godlo=godlo, status_code=status_code)
+        self.hints = tuple(hints)
+
+
+class YearRangeError(DownloadError):
+    """
+    Data exists, but not in the requested year range — raised before any download.
+
+    Attributes
+    ----------
+    sheets : dict[str, tuple[int, ...]]
+        Sheet code (LAZ: tile sheet code) -> every year the source has for it
+        (ascending); only the conflicting sheets.
+    min_year, max_year : int or None
+        The requested range (closed; ``None`` = open side).
+    hints : tuple[str, ...]
+        Flag suggestions, the same texts as the message's ``Podpowiedz:`` line;
+        empty when none applies.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        sheets: Mapping[str, tuple[int, ...]],
+        min_year: int | None,
+        max_year: int | None,
+        hints: tuple[str, ...] = (),
+    ):
+        super().__init__(message)
+        self.sheets = dict(sheets)
+        self.min_year = min_year
+        self.max_year = max_year
         self.hints = tuple(hints)
 
 

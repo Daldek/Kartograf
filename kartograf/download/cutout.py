@@ -1,12 +1,20 @@
 """
-Merged NMT PL cutout in a requested CRS (ADR-027) — library layer.
+Merged NMT/NMPT PL cutout in a requested CRS (ADR-027, ADR-035) — library layer.
 
-GUGiK sheets are downloaded normally into their own segments (acting as a
-cache), the mosaic is cropped to the request area expanded outward to the
-sheet pixel grid (< 1 px; with reprojection — with a margin), and for a CRS
-other than EPSG:2180 the content lands on the result grid via a local warp
-with a FORCED pinned operation (ADR-024/027). The result is ONE GeoTIFF
-``<output_dir>/nmt/pl_1992_<res>_<vcrs>/bbox/<coords>.tif`` + sidecar.
+WCS path (CLI ``--target-crs`` and ``download_pl_cutout``, ADR-035):
+``prepare_pl_cutout`` -> ``run_pl_wcs_cutout``. One GetCoverage area from GUGiK
+WCS on the 1 m sheet grid (chunks, ADR-034), the PL land mask from PRG (nodata
+-9999 outside ``A00 - W02 - W03``), then for EPSG:2180 the file as is, for
+another CRS a local warp with a FORCED pinned operation (ADR-024/027). The
+result is ONE GeoTIFF ``<output_dir>/<segment>/bbox/<coords>_<YYYYMMDD>.tif``
++ sidecar; every run downloads (the server composition may change).
+
+Sheet path (deprecated since 0.7.2, removed in 0.8.0): ``prepare_pl_cutout`` ->
+``select_pl_cutout_sheets`` -> ``run_pl_cutout`` / ``build_cutout_from_sheets``.
+GUGiK sheets are downloaded into their own segments (acting as a cache), the
+mosaic is cropped to the request area expanded outward to the sheet pixel grid
+and warped like above; the result name has no date. Kept for the newest
+flight per ADR-028 and 5 m cutouts.
 
 The CLI (``kartograf download --bbox/--geometry --target-crs``) is a thin
 layer over this module: it prints messages and translates exceptions into
@@ -20,7 +28,6 @@ Example::
         BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
         "EPSG:5514",
         output_dir="./data",
-        max_workers=4,
     )
     print(result.path)
 """
@@ -28,9 +35,12 @@ Example::
 import json
 import logging
 import os
+import shutil
 import threading
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
+from datetime import date
 from pathlib import Path
 
 from kartograf.core.bbox import BBox, is_czech_crs, transform_bbox
@@ -56,6 +66,14 @@ SUPPORTED_TARGET_CRS = ("EPSG:2180", "EPSG:5514", "EPSG:3045")
 # CONTENT reprojection operation policy (CONTENT_POLICY) and source envelope
 # margin (WARP_MARGIN_PX) — shared with the CZ flow, from transform/crs.py (D9).
 _VERTICAL_CRS = ("EVRF2007", "KRON86")
+# Products of a PL cutout: NMT (sheets and WCS), NMPT (WCS only, 1 m).
+CUTOUT_PRODUCTS = ("nmt", "nmpt")
+# Layers of the PL land mask (sidecar ``extra.mask.layers``, ADR-035).
+LAND_MASK_LAYERS = (
+    "A00_Granice_panstwa",
+    "-W02_Morze_terytorialne_RP",
+    "-W03_Morskie_wody_wewnetrzne",
+)
 # Lower bound of an ASC sheet's size on disk: 5.74-7.95 B per value in real
 # GUGiK 5 m files (fact 9 of the 2026-09-28 plan) — we take less, so the check
 # does not reject requests that will fit.
@@ -64,17 +82,18 @@ _ASC_BYTES_PER_VALUE = 5.5
 
 @dataclass(frozen=True)
 class PlCutout:
-    """Prepared (fail-fast, no network) NMT PL cutout."""
+    """Prepared (fail-fast, no network) NMT/NMPT PL cutout."""
 
     target_crs: str
     resolution: str
     vertical_crs: str  # ACTUAL vertical CRS (after the 5m rule => EVRF2007)
     output_dir: Path
     bbox_2180: BBox  # exact request in EPSG:2180
-    bbox_source_2180: BBox  # request + warp margin: sheet selection and mosaic crop
+    bbox_source_2180: BBox  # request + warp margin: sheet selection / WCS area
     bbox_target: BBox  # result grid (target CRS)
     pinned: PinnedTransform | None  # None for EPSG:2180 (crop only)
-    target_path: Path
+    target_path: Path  # without the download date (WCS adds it, run_pl_wcs_cutout)
+    product: str = "nmt"  # "nmt" or "nmpt" (NMPT: WCS path only)
 
     @property
     def pixel_size(self) -> float:
@@ -106,13 +125,15 @@ class PlCutoutSheets:
 
 @dataclass(frozen=True)
 class PlCutoutResult:
-    """Result of ``run_pl_cutout`` / ``download_pl_cutout``.
+    """Result of ``run_pl_wcs_cutout`` / ``download_pl_cutout`` / ``run_pl_cutout``.
 
-    With ``skipped=True`` (file existed, ``force=False``) ``missing_sheets``,
-    ``off_grid_sheets``, ``partial_sheets``, ``unverified`` and ``all_nodata``
-    come from the sidecar of the existing cutout (``skipped_pl_cutout``; the
-    raster is not read again), and ``sheet_paths`` is empty — nobody touched
-    the sheets.
+    WCS path: ``path`` carries the download date, ``skipped`` is always
+    ``False``, ``masked_pixels``/``zero_pixels`` describe the land mask and the
+    sheet fields stay empty. Sheet path: with ``skipped=True`` (file existed,
+    ``force=False``) ``missing_sheets``, ``off_grid_sheets``, ``partial_sheets``,
+    ``unverified`` and ``all_nodata`` come from the sidecar of the existing
+    cutout (``skipped_pl_cutout``; the raster is not read again), and
+    ``sheet_paths`` is empty — nobody touched the sheets.
     """
 
     path: Path
@@ -122,7 +143,8 @@ class PlCutoutResult:
     # sheets with a different grid phase than the rest, reprojected separately (W1, S5)
     off_grid_sheets: tuple[str, ...] = ()
     # cutout without a single valid pixel (N2): the downloaded sheets lie in the
-    # selection margin or are nodata themselves — the file was created, exit 0 in CLI
+    # selection margin or are nodata themselves; WCS: the area is outside PL land
+    # — the file was created, exit 0 in CLI
     all_nodata: bool = False
     # sheets from an incomplete newest campaign (index record
     # ``full_sheet=False``, E13) — chosen per ADR-028, but may contribute nodata
@@ -131,6 +153,10 @@ class PlCutoutResult:
     # unavailable (transport error, I-1); a newer campaign was not checked. With
     # ``skipped=True`` restored from the sidecar (``extra.unverified_sheets``).
     unverified: dict[str, str] = field(default_factory=dict)
+    # WCS: pixels set to nodata by the land mask and 0.0 pixels kept on land,
+    # counted on the EPSG:2180 download grid (before a warp)
+    masked_pixels: int = 0
+    zero_pixels: int = 0
 
 
 def bbox_to_2180(bbox: BBox) -> BBox:
@@ -160,6 +186,7 @@ def prepare_pl_cutout(
     output_dir: str | Path = "./data",
     resolution: str = "1m",
     vertical_crs: str = "EVRF2007",
+    product: str = "nmt",
 ) -> PlCutout:
     """Fail-fast cutout preparation: operation, bboxes and result path.
 
@@ -167,11 +194,17 @@ def prepare_pl_cutout(
     pair has no pinned operation (ADR-024/027); ``ValidationError`` on bad
     parameters. ``vertical_crs`` is the ACTUAL vertical CRS: with 5m only
     EVRF2007 (``require_nmt_vertical_crs``; 5m with KRON86 =
-    ``ValidationError``).
+    ``ValidationError``). ``product``: ``"nmt"`` or ``"nmpt"`` (1m only; NMPT
+    cutouts exist only on the WCS path, ``run_pl_wcs_cutout``).
 
     The cutout is always a GeoTIFF (``.tif``) — the descriptor's
     ``default_extension`` (``.asc``) concerns sheets, not the cutout.
+    ``target_path`` has no date; the WCS path adds the download date.
     """
+    if product not in CUTOUT_PRODUCTS:
+        raise ValidationError(
+            f"Produkt wycinka PL: {' albo '.join(CUTOUT_PRODUCTS)} (podano {product})"
+        )
     if target_crs not in SUPPORTED_TARGET_CRS:
         raise ValidationError(
             f"Nieobslugiwany uklad docelowy wycinka PL: {target_crs} "
@@ -179,6 +212,8 @@ def prepare_pl_cutout(
         )
     if resolution not in PIXEL_SIZES:
         raise ValidationError(f"Rozdzielczosc NMT PL: 1m albo 5m (podano {resolution})")
+    if product == "nmpt" and resolution != "1m":
+        raise ValidationError(f"NMPT PL jest tylko 1m (podano {resolution})")
     if vertical_crs not in _VERTICAL_CRS:
         raise ValidationError(
             f"Uklad wysokosci NMT PL: EVRF2007 albo KRON86 (podano {vertical_crs})"
@@ -222,7 +257,10 @@ def prepare_pl_cutout(
             "EPSG:2180",
         )
 
-    key = "pl.gugik.nmt_5m" if resolution == "5m" else "pl.gugik.nmt_1m"
+    if product == "nmpt":
+        key = "pl.gugik.nmpt"
+    else:
+        key = "pl.gugik.nmt_5m" if resolution == "5m" else "pl.gugik.nmt_1m"
     subdir = get_source(key).resolve_subdir(uklad="1992", vertical_crs=vertical_crs)
     return PlCutout(
         target_crs=target_crs,
@@ -234,6 +272,7 @@ def prepare_pl_cutout(
         bbox_target=bbox_target,
         pinned=pinned,
         target_path=bbox_cutout_path(output_dir, subdir, bbox_target, ".tif"),
+        product=product,
     )
 
 
@@ -245,6 +284,9 @@ def select_pl_cutout_sheets(
     scale: str = "1:10000",
 ) -> PlCutoutSheets:
     """Cutout sheets (zero network).
+
+    Deprecated since 0.7.2 (sheet-based cutout; removed in 0.8.0) — use
+    ``download_pl_cutout`` / ``run_pl_wcs_cutout``. Behaviour unchanged.
 
     Bbox mode: sheets of the source envelope (request + margin) enlarged by 1
     pixel — the mosaic crop is snapped OUTWARD to the sheet grid (< 1 px,
@@ -517,9 +559,9 @@ def write_pl_cutout_sidecar(
 ) -> None:
     """Best-effort cutout sidecar (an error does not abort the download).
 
-    ``capability="sheet_files"``: the data come from OpenData sheets — the
-    ``bbox_raster`` channel does not exist for 5m, and for 1m it declares only
-    KRON86 (ADR-027, a departure from the letter of spec 6.1 item 5).
+    ``capability="sheet_files"``: the data come from OpenData sheets (the
+    deprecated sheet path, ADR-027; the WCS path writes ``bbox_raster``,
+    ``write_pl_wcs_cutout_sidecar``).
     ``missing_sheets`` (non-empty) -> ``extra.missing_sheets``: sheets without
     GUGiK data (R5). ``sheet_paths`` (non-empty) -> ``extra.sheet_sources``:
     the origin of each mosaic sheet ``{sheet, url, layer, acquisition_date,
@@ -569,25 +611,38 @@ def write_pl_cutout_sidecar(
     )
 
 
-def _require_matching_provider(cutout: PlCutout, provider) -> None:
-    """An injected provider must supply the cutout's vertical CRS and resolution.
+def _cutout_descriptor_key(cutout: PlCutout) -> str:
+    """Source descriptor of the cutout's product and resolution."""
+    if cutout.product == "nmpt":
+        return "pl.gugik.nmpt"
+    return "pl.gugik.nmt_5m" if cutout.resolution == "5m" else "pl.gugik.nmt_1m"
 
-    The sheet segment (shared cache) and the cutout sidecar take the vertical
-    CRS and resolution from ``cutout``, and the data from the provider — a
-    mismatch would write e.g. KRON86 heights into the ``..._evrf2007``
-    segment (or 5 m sheets into the 1 m segment), and later runs with
-    ``skip_existing`` would use them without a warning. ``isinstance(str)``
+
+def _require_matching_provider(cutout: PlCutout, provider) -> None:
+    """An injected provider must supply the cutout's product, vertical CRS and
+    resolution.
+
+    The sheet segment (shared cache) and the cutout sidecar take them from
+    ``cutout``, and the data from the provider — a mismatch would write e.g.
+    KRON86 heights into the ``..._evrf2007`` segment (or 5 m sheets into the
+    1 m segment, or NMT heights into an NMPT cutout), and later runs with
+    ``skip_existing`` would use them without a warning. The product is
+    compared through the provider's ``descriptor_key``. ``isinstance(str)``
     as in ``DownloadManager``: an absent attribute or a non-string one (e.g.
     a Mock) is not compared.
     """
-    for attr in ("vertical_crs", "resolution"):
+    checks = (
+        ("vertical_crs", cutout.vertical_crs),
+        ("resolution", cutout.resolution),
+        ("descriptor_key", _cutout_descriptor_key(cutout)),
+    )
+    for attr, expected in checks:
         actual = getattr(provider, attr, None)
-        expected = getattr(cutout, attr)
         if isinstance(actual, str) and actual != expected:
             raise ValidationError(
                 f"Provider niezgodny z wycinkiem: {attr} providera {actual}, "
                 f"wycinka {expected} — przygotuj wycinek (prepare_pl_cutout) "
-                "z pionem i rozdzielczoscia providera"
+                "z produktem, pionem i rozdzielczoscia providera"
             )
 
 
@@ -712,7 +767,12 @@ def run_pl_cutout(
     on_progress: ProgressCallback | None = None,
     parent_request: dict | None = None,
 ) -> PlCutoutResult:
-    """Download the sheets, build the cutout, write the sidecar.
+    """Download the sheets, build the cutout, write the sidecar (NMT only).
+
+    Deprecated since 0.7.2 (sheet-based cutout; removed in 0.8.0) — use
+    ``download_pl_cutout`` / ``run_pl_wcs_cutout``. Behaviour unchanged; kept
+    for the newest flight per ADR-028 and 5 m cutouts. ``cutout.product``
+    other than ``"nmt"`` = ``ValidationError`` (no NMPT sheet cutout).
 
     ``force=False`` + an existing result file -> ``skipped=True`` without
     network (``missing_sheets``/``off_grid_sheets`` from the existing cutout's
@@ -735,6 +795,11 @@ def run_pl_cutout(
     BEFORE ``DownloadManager`` — a lower bound, not a guarantee (finding 9 of
     the max review wave).
     """
+    if cutout.product != "nmt":
+        raise ValidationError(
+            f"Wycinek z arkuszy jest tylko dla NMT (produkt {cutout.product}) — "
+            "uzyj run_pl_wcs_cutout"
+        )
     if provider is not None:
         _require_matching_provider(cutout, provider)
     if not force and cutout.target_path.exists():
@@ -840,6 +905,227 @@ def run_pl_cutout(
     )
 
 
+# Deprecated download_pl_cutout parameters (sheet path) and their defaults.
+_SHEET_PARAMS_DEFAULTS: dict[str, object] = {
+    "geometry": None,
+    "layer": None,
+    "scale": "1:10000",
+    "max_workers": 1,
+    "force": False,
+    "on_progress": None,
+    "cache": None,
+}
+
+
+def _wcs_1m_only(resolution: str) -> ValidationError:
+    return ValidationError(
+        f"Wycinek PL z WCS GUGiK jest tylko 1m (podano {resolution}); NMT 5 m "
+        "z arkuszy: prepare_pl_cutout -> select_pl_cutout_sheets -> run_pl_cutout"
+    )
+
+
+def dated_cutout_path(cutout: PlCutout, day: date) -> Path:
+    """WCS cutout path: ``<coords>_<YYYYMMDD>.tif`` next to ``cutout.target_path``."""
+    path = cutout.target_path
+    return path.with_name(f"{path.stem}_{day:%Y%m%d}{path.suffix}")
+
+
+def _wcs_cutout_provider(cutout: PlCutout):
+    """Default provider of the cutout's product and vertical CRS (1 m)."""
+    if cutout.product == "nmpt":
+        from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
+
+        return GugikNmptProvider(vertical_crs=cutout.vertical_crs)
+    from kartograf.providers.pl import create_nmt_provider
+
+    return create_nmt_provider(vertical_crs=cutout.vertical_crs, resolution="1m")
+
+
+def _check_wcs_disk_space(cutout: PlCutout, path: Path) -> None:
+    """``ValidationError`` when the disk SURELY runs out (result + 2180 work file)."""
+    need = 2 * cutout.estimated_bytes
+    probe = path.parent
+    while not probe.exists():
+        probe = probe.parent
+    free = shutil.disk_usage(probe).free
+    if free < need:
+        height, width = cutout.grid_shape
+        raise ValidationError(
+            f"Za malo miejsca na dysku dla wycinka: potrzeba co najmniej "
+            f"~{need / 2**30:.1f} GiB (siatka {width} x {height} px float32 i plik "
+            f"roboczy EPSG:2180), wolne ~{free / 2**30:.1f} GiB w {probe}"
+        )
+
+
+def write_pl_wcs_cutout_sidecar(
+    cutout: PlCutout,
+    path: Path,
+    provider,
+    *,
+    parent_request: dict | None = None,
+    masked_pixels: int = 0,
+    zero_pixels: int = 0,
+    all_nodata: bool = False,
+) -> None:
+    """Best-effort sidecar of a WCS cutout (an error does not abort the download).
+
+    ``capability="bbox_raster"`` of the cutout's descriptor. ``extra.source``
+    names the WCS request (``service``, ``endpoint``, ``coverage``, ``format``)
+    and ``composition: "server"`` — the flight shown by the server, not chosen
+    by Kartograf (no campaign or year, ADR-035). ``extra.mask`` describes the
+    PRG land mask and ``masked_pixels``; ``extra.zero_pixels`` (> 0 only) counts
+    0.0 pixels kept on land; ``extra.all_nodata`` when no pixel is valid.
+    """
+    from kartograf.providers.pl.wcs import HEIGHT_AAIGRID
+    from kartograf.sources.sidecar import emit_sidecar
+    from kartograf.transport.aaigrid import ASC_MEDIA_TYPE
+
+    endpoint, coverage = provider._wcs_target()
+    asc = provider._wcs_height_format() == HEIGHT_AAIGRID
+    extra: dict = {}
+    if parent_request:
+        extra["parent_request"] = parent_request
+    extra["source"] = {
+        "service": "WCS",
+        "endpoint": endpoint,
+        "coverage": coverage,
+        "format": ASC_MEDIA_TYPE if asc else provider.WCS_FORMATS["GTiff"],
+        "composition": "server",
+    }
+    extra["mask"] = {
+        "source": "PRG",
+        "layers": list(LAND_MASK_LAYERS),
+        "masked_pixels": masked_pixels,
+    }
+    if zero_pixels:
+        extra["zero_pixels"] = zero_pixels
+    if all_nodata:
+        extra["all_nodata"] = True
+    b = cutout.bbox_target
+    emit_sidecar(
+        _cutout_descriptor_key(cutout),
+        path,
+        request={
+            "bbox": [b.min_x, b.min_y, b.max_x, b.max_y],
+            "bbox_crs": cutout.target_crs,
+        },
+        vertical_crs=cutout.vertical_crs,
+        horizontal_crs=cutout.target_crs,
+        pinned_transforms={"horizontal": cutout.pinned},
+        capability="bbox_raster",
+        nodata=PL_NODATA,
+        extra=extra,
+    )
+
+
+def run_pl_wcs_cutout(
+    cutout: PlCutout,
+    *,
+    provider=None,
+    parent_request: dict | None = None,
+    today: date | None = None,
+) -> PlCutoutResult:
+    """Download the cutout from GUGiK WCS, mask it to PL land, write the sidecar.
+
+    Steps (ADR-035): the PL land mask for ``bbox_source_2180`` from PRG
+    (``fetch_land_mask``; a failure = ``DownloadError`` before any WCS
+    request), one GetCoverage area on the 1 m sheet grid
+    (``bbox_source_2180`` aligned OUTWARD, chunks per ``plan_wcs_chunks``),
+    pixels outside ``A00 - W02 - W03`` -> -9999 (0.0 on land stays data), then
+    EPSG:2180: that file is the result; another CRS: ``warp_to_grid`` with the
+    pinned operation onto ``bbox_target``.
+
+    The result is ``<coords>_<YYYYMMDD>.tif`` (``today``, default: local
+    date). Every run downloads; on the same day the new file replaces the
+    previous one atomically only after a successful build — a failed run
+    leaves the previous file and its sidecar untouched and no empty
+    ``bbox/`` tree. The content is the server's flight composition, not the
+    newest flight per ADR-028 (sheet API).
+
+    ``provider`` (default: NMT or NMPT provider of the cutout's vertical CRS)
+    must match the cutout's product, vertical CRS and resolution.
+
+    Raises
+    ------
+    ValidationError
+        ``cutout.resolution`` other than ``"1m"`` (5 m: sheet API), provider
+        mismatch or too little disk space — before any network.
+    DownloadError
+        PRG or WCS failure (after retries), or a WCS response whose ASC size or
+        corner differs from the request; no result is written.
+    """
+    if cutout.resolution != "1m":
+        raise _wcs_1m_only(cutout.resolution)
+    if provider is not None:
+        _require_matching_provider(cutout, provider)
+    else:
+        provider = _wcs_cutout_provider(cutout)
+    path = dated_cutout_path(cutout, today or date.today())
+    _check_wcs_disk_space(cutout, path)
+
+    from kartograf.providers.pl.prg import fetch_land_mask
+    from kartograf.transport.chunks import align_bbox
+    from kartograf.transport.mosaic import has_valid_pixels
+
+    timeout = provider.DEFAULT_TIMEOUT
+    b = cutout.bbox_source_2180
+    # before WCS: a PRG failure must not waste a long download. The mask covers
+    # the raster actually written (aligned OUTWARD to the sheet grid): a W02/W03
+    # polygon touching only an edge pixel centre must be returned by the BBOX.
+    grid = provider.WCS_GRID
+    mask_area = align_bbox(b, grid.step, grid)[0] if grid is not None else b
+    mask = fetch_land_mask(mask_area, timeout=timeout)
+    description = (
+        f"wycinek {cutout.product.upper()} {cutout.vertical_crs} "
+        f"({b.min_x:.0f},{b.min_y:.0f})-({b.max_x:.0f},{b.max_y:.0f})"
+    )
+    work = path.with_name(f"{path.name}.{os.getpid()}_{threading.get_ident()}.wcs.tif")
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        provider._download_wcs(b, work, "GTiff", timeout, description)
+        masked, zeros = mask.apply(work, PL_NODATA)
+        if cutout.pinned is None:
+            os.replace(work, path)
+        else:
+            from kartograf.transform.raster import warp_to_grid
+
+            warp_to_grid(
+                work,
+                path,
+                cutout.bbox_target,
+                cutout.pixel_size,
+                cutout.pinned,
+                src_crs="EPSG:2180",
+                nodata=PL_NODATA,
+            )
+    except BaseException:
+        work.unlink(missing_ok=True)
+        # a failed run leaves no empty <segment>/bbox/ tree (a directory with a
+        # previous result is not empty — it stays)
+        prune_empty_dirs(path.parent, cutout.output_dir)
+        raise
+    work.unlink(missing_ok=True)
+
+    all_nodata = not has_valid_pixels(path, PL_NODATA)
+    if all_nodata:
+        logger.warning(
+            "Cutout %s is entirely nodata: the area lies outside PL land (PRG mask)",
+            path,
+        )
+    write_pl_wcs_cutout_sidecar(
+        cutout,
+        path,
+        provider,
+        parent_request=parent_request,
+        masked_pixels=masked,
+        zero_pixels=zeros,
+        all_nodata=all_nodata,
+    )
+    return PlCutoutResult(
+        path=path, all_nodata=all_nodata, masked_pixels=masked, zero_pixels=zeros
+    )
+
+
 def download_pl_cutout(
     bbox: BBox,
     target_crs: str,
@@ -855,89 +1141,72 @@ def download_pl_cutout(
     on_progress: ProgressCallback | None = None,
     parent_request: dict | None = None,
     cache=None,
+    product: str = "nmt",
 ) -> PlCutoutResult:
-    """One merged NMT PL GeoTIFF in ``target_crs`` for a bbox or a geometry.
+    """One NMT/NMPT PL GeoTIFF in ``target_crs`` for a bbox, from GUGiK WCS.
 
-    Geometry mode: ``bbox`` is the geometry envelope (e.g.
-    ``get_overall_bbox(path, target_crs="EPSG:2180")``), ``geometry`` — the file.
-    5m with KRON86 = ``ValidationError`` before the factory (5 m exists only
-    in EVRF2007; the CLI rejects the pair too, 0.7.1). The provider and
-    session come from the factory; ``cache`` (``MetadataCache`` or ``None``)
-    goes to the provider — index records are read and written only through
-    the cache. ``force=True`` does NOT bypass the record cache by itself: to
-    refresh records (skip the read, save the new choice), pass
-    ``MetadataCache(refresh=True)`` — which is what the CLI does with
-    ``--force`` (E14). Own provider/session: steps ``prepare_pl_cutout`` ->
-    ``select_pl_cutout_sheets`` -> ``run_pl_cutout(provider=...)``.
+    ``prepare_pl_cutout(product=)`` -> ``run_pl_wcs_cutout`` (ADR-035): 1 m on
+    the sheet grid, the server's flight composition (not the newest flight per
+    ADR-028), nodata -9999 outside PL land (PRG mask; 0.0 on land stays data),
+    the download date in the file name, every call downloads. Geometry mode:
+    ``bbox`` is the geometry envelope (e.g. ``get_overall_bbox(path,
+    target_crs="EPSG:2180")``); the cutout is the whole envelope.
+
+    The sheet parameters ``geometry``, ``layer``, ``scale``, ``max_workers``,
+    ``force``, ``on_progress`` and ``cache`` have no effect since 0.7.2; a
+    value other than the default gives a ``DeprecationWarning`` (removed in
+    0.8.0). A 5 m cutout or the newest flight per ADR-028: sheet API
+    ``prepare_pl_cutout`` -> ``select_pl_cutout_sheets`` -> ``run_pl_cutout``.
+    Own provider/session: ``run_pl_wcs_cutout(provider=...)``.
 
     Returns
     -------
     PlCutoutResult
-        ``path`` — the result file; ``skipped=True`` (no network) when the file
-        already existed and ``force=False`` (``missing_sheets``/
-        ``off_grid_sheets`` then from the sidecar of the existing cutout);
-        ``missing_sheets`` — sheets without GUGiK data (nodata in their
-        place); ``off_grid_sheets`` — sheets with a different grid phase,
-        reprojected separately (W1; only with a warp); ``sheet_paths`` —
-        sheets used for the mosaic (download completion order).
+        ``path`` — the dated result file; ``masked_pixels``/``zero_pixels`` —
+        land mask counts; ``all_nodata`` — the area is outside PL land.
 
     Raises
     ------
     ValidationError
-        Bad parameters, no sheets for the area, no sheet has GUGiK data, too
-        little disk space or a sheet in PL-2000 coordinates.
-    GridMismatchError
-        (a ``ValidationError`` subclass) ``target_crs="EPSG:2180"`` while the
-        sheets lie on different pixel grids (S5): 1:1 values are impossible —
-        ``.off_grid`` lists the shifted sheets; the sheets stay in the cache,
-        a cutout with a warp (5514/3045) can be built from them.
+        Bad parameters (also ``resolution="5m"``), too little disk space.
     TransformError
         No safe pinned EPSG:2180 -> ``target_crs`` operation (before any
         network).
     DownloadError
-        Sheet download failure (network, server; a broken index layer query —
-        up to 3 attempts on a network error, 429 and 5xx, other 4xx without
-        retries — not a lack of data); the cutout is not created.
-    OSError
-        Sheet write error with ``max_workers=1`` (in a thread pool it counts
-        as a download failure).
+        PRG or WCS failure; the cutout is not created.
 
-    ``parent_request`` goes to the cutout sidecar and the sidecars of sheets
-    downloaded in this call only when it was given.
+    ``parent_request`` goes to the cutout sidecar only when it was given.
     """
-    if resolution not in PIXEL_SIZES:
-        raise ValidationError(f"Rozdzielczosc NMT PL: 1m albo 5m (podano {resolution})")
-    if vertical_crs not in _VERTICAL_CRS:
-        raise ValidationError(
-            f"Uklad wysokosci NMT PL: EVRF2007 albo KRON86 (podano {vertical_crs})"
-        )
-    from kartograf.providers.pl import create_nmt_provider, require_nmt_vertical_crs
-
-    require_nmt_vertical_crs(resolution, vertical_crs)  # before the factory
-    provider = create_nmt_provider(
-        vertical_crs=vertical_crs, resolution=resolution, cache=cache
-    )
+    given = {
+        "geometry": geometry,
+        "layer": layer,
+        "scale": scale,
+        "max_workers": max_workers,
+        "force": force,
+        "on_progress": on_progress,
+        "cache": cache,
+    }
+    for name, value in given.items():
+        if value != _SHEET_PARAMS_DEFAULTS[name]:
+            warnings.warn(
+                f"download_pl_cutout({name}=...) has no effect since 0.7.2 (WCS "
+                "cutout) and will be removed in 0.8.0",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+    if resolution != "1m":
+        if resolution not in PIXEL_SIZES:
+            raise ValidationError(f"Rozdzielczosc NMT PL: 1m (podano {resolution})")
+        raise _wcs_1m_only(resolution)
     cutout = prepare_pl_cutout(
         bbox,
         target_crs,
         output_dir=output_dir,
         resolution=resolution,
-        vertical_crs=provider.vertical_crs,
+        vertical_crs=vertical_crs,
+        product=product,
     )
-    if not force and cutout.target_path.exists():
-        return skipped_pl_cutout(cutout)
-    sheets = select_pl_cutout_sheets(
-        cutout, geometry=geometry, layer=layer, scale=scale
-    )
-    return run_pl_cutout(
-        cutout,
-        sheets,
-        provider=provider,
-        max_workers=max_workers,
-        force=force,
-        on_progress=on_progress,
-        parent_request=parent_request,
-    )
+    return run_pl_wcs_cutout(cutout, parent_request=parent_request)
 
 
 def _unreadable_sheets(sheets: Sequence[Path]) -> list[Path]:
@@ -966,6 +1235,9 @@ def build_cutout_from_sheets(
 ) -> PlCutoutResult:
     """NMT PL cutout from LOCAL sheet files - no network (A10).
 
+    Deprecated since 0.7.2 (sheet-based cutout; removed in 0.8.0) — use
+    ``download_pl_cutout`` / ``run_pl_wcs_cutout``. Behaviour unchanged.
+
     The result goes to ``output_path`` chosen by the caller (also outside
     the Kartograf ``data/`` tree), with its sidecar next to it
     (``extra.sheet_sources`` from the sheets' sidecars, when present). Grid
@@ -984,6 +1256,13 @@ def build_cutout_from_sheets(
         EPSG:2180 target and sheets with different grid phases.
     TransformError
         No safe pinned operation to ``target_crs``.
+
+    Notes
+    -----
+    The result is always a GeoTIFF, whatever the ``output_path`` suffix
+    (``cutout.asc`` holds GeoTIFF content). The sidecar is best-effort
+    (``write_pl_cutout_sidecar``): when writing it fails, the new raster
+    stays next to the sidecar of an earlier run (stale) or without one.
     """
     if not sheet_paths:
         raise ValidationError("build_cutout_from_sheets: brak arkuszy wejsciowych")

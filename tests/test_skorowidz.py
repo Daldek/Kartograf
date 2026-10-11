@@ -18,15 +18,11 @@ import pytest
 import requests
 
 from kartograf.exceptions import DownloadError
-from kartograf.providers.pl.gugik import GugikProvider
-from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
-from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from kartograf.providers.pl.skorowidz import (
     SkorowidzRecord,
     SourceInfoMixin,
     cached_record,
     is_skorowidz_answer,
-    layer_upper_year,
     parse_skorowidz_records,
     query_skorowidz_layer,
     select_sheet_record,
@@ -624,7 +620,9 @@ class TestCoverageHints:
         from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
         cls = GugikProvider if product == "nmt" else GugikOrtoProvider
-        provider = cls(session=Mock())
+        # empty answers: the NMT variant check (P10) finds nothing to add
+        empty = Mock(status_code=200, text=sample("empty.body"))
+        provider = cls(session=Mock(get=Mock(return_value=empty)))
         error = provider._no_coverage(SheetParser(self._PL2000), list(self._RECORDS))
         message = str(error)
         for hint in self._EXPECTED:
@@ -642,21 +640,6 @@ class TestCoverageHints:
         error = no_coverage_error(SheetParser(self._PL2000), "Brak. Cos", [])
         assert error.hints == ()
         assert str(error) == "Brak. Cos"
-
-
-@pytest.mark.parametrize(
-    "cls,name,year",
-    [
-        (GugikProvider, "SkorowidzeNMT2019", 2019),
-        (GugikProvider, "SkorowidzeNMT2017iStarsze", 2017),
-        (GugikNmptProvider, "SkorowidzeNMPT2023iStarsze", 2023),
-        (GugikOrtoProvider, "SkorowidzeOrtofotomapy2026", 2026),
-        (GugikOrtoProvider, "SkorowidzeOrtofotomapyStarsze", None),
-        (GugikProvider, "SkorowidzeNMT2027Nowe", None),
-    ],
-)
-def test_layer_upper_year(cls, name, year):
-    assert layer_upper_year(cls.LAYER_PATTERN, name) == year
 
 
 class TestSourceExtraFields:

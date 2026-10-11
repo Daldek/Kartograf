@@ -1049,3 +1049,16 @@ class TestHsgFromRasters:
         hsg = _classify_hsg(clay, sand, silt, (-1.0, None, None))
         assert hsg.dtype == np.uint8
         assert hsg.tolist() == [[4, 0, 0, 0]]
+
+    def test_zero_clay_with_sand_or_silt_is_not_a_gap(self):
+        """P9c: only an all-zero triplet is a gap; pure sand or pure silt
+        (clay 0 g/kg) is real soil and gets a class."""
+        from kartograf.hydrology.hsg import _classify_hsg
+
+        clay = np.array([[0.0, 0.0, 0.0]], dtype=np.float32)
+        sand = np.array([[1000.0, 0.0, 0.0]], dtype=np.float32)
+        silt = np.array([[0.0, 1000.0, 0.0]], dtype=np.float32)
+        hsg = _classify_hsg(clay, sand, silt, (None, None, None))
+        sand_class, silt_class, gap = hsg[0].tolist()
+        assert sand_class != 0 and silt_class != 0
+        assert gap == 0

@@ -2,8 +2,9 @@
 
 Kartograf pobiera dane przestrzenne z publicznych usług GUGiK (Polska), CUZK
 (Czechy), Copernicus i ISRIC: wybierasz obszar (godło arkusza, bbox albo plik
-geometrii), a Kartograf znajduje właściwe arkusze, pobiera je i zapisuje
-w uporządkowanym katalogu `data/` razem z metadanymi każdego pliku. Działa
+geometrii), a Kartograf pobiera arkusze albo wycinek WCS NMT/NMPT PL
+(`--target-crs`) i zapisuje je w uporządkowanym katalogu `data/`
+razem z metadanymi każdego pliku. Działa
 jako narzędzie wiersza poleceń (`kartograf`) i jako biblioteka Python.
 
 Jest częścią toolchainu hydrologicznego: **Hydrograf** używa go jako źródła
@@ -70,7 +71,7 @@ from kartograf import BBox, DownloadManager, download_pl_cutout
 manager = DownloadManager(output_dir="./data")
 path = manager.download_sheet("N-34-130-D-d-2-4")
 
-# Obszar jako jeden GeoTIFF w zadanym układzie
+# Obszar NMT PL jako wycinek WCS 1 m z maską lądu, jeden GeoTIFF w zadanym układzie
 result = download_pl_cutout(
     BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
     "EPSG:2180",

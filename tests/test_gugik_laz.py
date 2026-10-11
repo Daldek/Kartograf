@@ -410,13 +410,11 @@ class TestDiscoverTiles:
             p.discover_tiles(BBox(0, 0, 1, 1, "EPSG:4326"), year=2024)
 
     def test_parses_and_filters_outside_tiles(self):
-        p, session = _provider_with_getfeature(COLLECTION_2024)
+        p, _ = _provider_with_getfeature(COLLECTION_2024)
         tiles = p.discover_tiles(QUERY_BBOX, year=2024)
         # Tile far outside the bbox is dropped by the intersection post-filter
         godla = [t.godlo for t in tiles]
         assert godla == ["N-33-131-B-a-1-1-4", "N-33-131-B-a-1-2-3"]
-        # one query (single year, single page)
-        assert session.get.call_count == 1
 
     def test_tile_attributes_parsed(self):
         p, _ = _provider_with_getfeature(COLLECTION_2024)

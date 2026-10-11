@@ -1,8 +1,8 @@
 """
-LAZ: the ``campaigns="all"`` strategy and ``min_year`` (ADR-030 j, library).
+LAZ range selection and sidecars on raw WFS XML recorded 2026-10-10 for W2_BBOX.
 
-Offline: WFS from the raw XML of the 2026-10-06 round (area w2: tiles 2022/PL-2000:S7,
-2023 and 2025/PL-1992). ``newest`` = ADR-029 unchanged (regression).
+The w2 area has 2022/PL-2000:S7 tiles (two sheets, together covering the area)
+and 2023/2025/PL-1992 tiles of one sheet.
 """
 
 import json
@@ -14,15 +14,19 @@ import pytest
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.laz import download_laz_area, write_laz_sidecar
-from kartograf.exceptions import NoCoverageError, ValidationError
-from kartograf.providers.pl.gugik_laz import GugikLazProvider, LazTile
+from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.providers.pl.gugik_laz import GugikLazProvider
 
-REAL_LAZ = Path(__file__).parent / "fixtures" / "gugik_laz" / "real_2026_10_06"
+REAL_LAZ = Path(__file__).parent / "fixtures" / "gugik_laz" / "real_2026_10_10"
 W2_BBOX = BBox(637200, 486900, 637500, 487100, "EPSG:2180")
 
 
-def laz_session() -> MagicMock:
-    """WFS: GetCapabilities and GetFeature from raw XML of the 2026-10-06 round."""
+def laz_session(*, replay_any_bbox: bool = False) -> MagicMock:
+    """WFS: GetCapabilities and GetFeature from raw XML recorded for ``W2_BBOX``.
+
+    ``replay_any_bbox`` serves the W2_BBOX bodies for another query window
+    (a deliberate replay, not what the server answers for that window).
+    """
     session = MagicMock()
 
     def get(url, **kwargs):
@@ -31,6 +35,9 @@ def laz_session() -> MagicMock:
         if query["REQUEST"][0] == "GetCapabilities":
             path = REAL_LAZ / f"caps_{vcrs}.xml"
         else:
+            if not replay_any_bbox:
+                # the bodies answer exactly this query window (axes N,E)
+                assert query["BBOX"][0].startswith("486900,637200,487100,637500,")
             year = query["TYPENAMES"][0][-4:]
             path = REAL_LAZ / f"w2_{vcrs}_{year}.xml"
         response = MagicMock()
@@ -71,15 +78,22 @@ def test_c13_newest_unchanged_single_tile():
     assert {s.reason for s in selection.superseded} == {"covered"}
 
 
-def test_min_year_skips_older_year_layers():
+def test_range_queries_every_service_year():
     session = laz_session()
     selection = GugikLazProvider(session=session).select_tiles(
         W2_BBOX, campaigns="all", min_year=2025
     )
-    years = feature_years(session)
-    assert years and all(int(y) >= 2025 for y in years)
-    assert "2025" in years
+    assert feature_years(session) == [str(y) for y in range(2026, 2017, -1)]
     assert {t.year for t in selection.tiles} == {2025}
+
+
+def test_discover_tiles_max_year_uses_reference_coverage():
+    tiles = GugikLazProvider(session=laz_session()).discover_tiles(
+        W2_BBOX, max_year=2023
+    )
+    assert [(tile.godlo, tile.year) for tile in tiles] == [
+        ("N-34-139-A-c-1-1-3-4", 2023)
+    ]
 
 
 def test_min_year_applies_to_newest_too():
@@ -89,23 +103,31 @@ def test_min_year_applies_to_newest_too():
     assert [(t.godlo, t.year) for t in selection.tiles] == [
         ("N-34-139-A-c-1-1-3-4", 2025)
     ]
-    assert all(int(y) >= 2024 for y in feature_years(session))
+    assert feature_years(session) == [str(y) for y in range(2026, 2017, -1)]
 
 
-def test_min_year_above_all_years_returns_empty_selection():
+def test_min_year_above_service_years_rejected_without_get_feature():
     session = laz_session()
-    selection = GugikLazProvider(session=session).select_tiles(
-        W2_BBOX, campaigns="all", min_year=2099
-    )
-    assert selection.tiles == ()
-    assert selection.superseded == ()
+    with pytest.raises(DownloadError, match="przedzial.*2099.*usludze EVRF2007"):
+        GugikLazProvider(session=session).select_tiles(
+            W2_BBOX, campaigns="all", min_year=2099
+        )
     assert feature_years(session) == []
 
 
-def test_year_and_min_year_are_exclusive():
-    provider = GugikLazProvider(session=laz_session())
-    with pytest.raises(ValidationError, match="wykluczaja"):
-        provider.select_tiles(W2_BBOX, year=2023, min_year=2024)
+@pytest.mark.parametrize(
+    "bounds",
+    [
+        {"year": 2023, "min_year": 2024},
+        {"year": 2023, "max_year": 2024},
+        {"min_year": 2025, "max_year": 2023},
+    ],
+)
+def test_laz_year_and_range_exclusive(bounds):
+    session = laz_session()
+    with pytest.raises(ValidationError):
+        GugikLazProvider(session=session).select_tiles(W2_BBOX, **bounds)
+    session.get.assert_not_called()
 
 
 def test_unknown_campaigns_value_rejected():
@@ -115,30 +137,20 @@ def test_unknown_campaigns_value_rejected():
 
 
 def test_all_still_drops_outside_tiles():
-    # SW corner of the PL-2000 tile envelope: the envelope intersects the area, the
-    # polygon does not
+    # SW corner of the PL-2000 tile envelope: its footprint misses the area.
+    # The live service filters such tiles itself (2026-10-10); replaying the
+    # W2_BBOX bodies checks the client-side footprint filter behind it.
     area = BBox(637334, 486800, 637340, 486806, "EPSG:2180")
-    selection = GugikLazProvider(session=laz_session()).select_tiles(
-        area, year=2022, campaigns="all"
+    selection = GugikLazProvider(
+        session=laz_session(replay_any_bbox=True)
+    ).select_tiles(area, campaigns="all")
+    assert "7.173.21.06.2" not in {tile.godlo for tile in selection.tiles}
+    (entry,) = (
+        skipped
+        for skipped in selection.superseded
+        if skipped.tile.godlo == "7.173.21.06.2"
     )
-    assert selection.tiles == ()
-    (entry,) = selection.superseded
-    assert entry.tile.godlo == "7.173.21.06.2"
     assert entry.reason == "outside"
-
-
-def _tile() -> LazTile:
-    return LazTile(
-        godlo="N-33-131-B-a-1-1-4",
-        url="https://opendata.geoportal.gov.pl/x/81121_1_N-33-131-B-a-1-1-4.laz",
-        year=2024,
-        density=25,
-        crs="PL-2000:S6",
-        min_x=530500,
-        min_y=382500,
-        max_x=531000,
-        max_y=383000,
-    )
 
 
 def _meta(path: Path) -> dict:
@@ -150,38 +162,40 @@ class _Provider:
     vertical_crs = "EVRF2007"
 
 
-def test_sidecar_request_records_campaigns_and_min_year(tmp_path):
-    bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
+def test_laz_sidecar_acquisition_date_and_max_year(tmp_path):
+    bbox = W2_BBOX
+    (tile,) = (
+        GugikLazProvider(session=laz_session()).select_tiles(bbox, year=2023).tiles
+    )
     target = tmp_path / "a.laz"
     write_laz_sidecar(
-        _Provider(), _tile(), target, bbox, campaigns="all", min_year=2024
+        _Provider(),
+        tile,
+        target,
+        bbox,
+        campaigns="all",
+        min_year=2022,
+        max_year=2023,
     )
-    request = _meta(target)["request"]
-    assert request["campaigns"] == "all"
-    assert request["min_year"] == 2024
+    meta = _meta(target)
+    assert meta["request"]["campaigns"] == "all"
+    assert meta["request"]["min_year"] == 2022
+    assert meta["request"]["max_year"] == 2023
+    assert "year" not in meta["request"]
+    assert meta["extra"]["acquisition_date"] == "2023-09-05"
+    assert meta["extra"]["full_sheet"] is True
 
-    plain = tmp_path / "b.laz"
-    write_laz_sidecar(_Provider(), _tile(), plain, bbox)
+    exact = tmp_path / "b.laz"
+    write_laz_sidecar(_Provider(), tile, exact, bbox, min_year=2023, max_year=2023)
+    assert _meta(exact)["request"]["year"] == 2023
+
+    plain = tmp_path / "c.laz"
+    write_laz_sidecar(_Provider(), tile, plain, bbox, year=2023)
     request = _meta(plain)["request"]
-    assert "campaigns" not in request  # newest = unchanged relative to ADR-029
+    assert request["year"] == 2023
+    assert "campaigns" not in request
     assert "min_year" not in request
-
-
-def test_download_laz_area_passes_campaigns(tmp_path):
-    provider = MagicMock()
-    provider.vertical_crs = "EVRF2007"
-    provider.select_tiles.return_value = MagicMock(tiles=(), superseded=())
-    with pytest.raises(NoCoverageError):
-        download_laz_area(
-            W2_BBOX,
-            output_dir=tmp_path,
-            provider=provider,
-            campaigns="all",
-            min_year=2024,
-        )
-    kwargs = provider.select_tiles.call_args.kwargs
-    assert kwargs["campaigns"] == "all"
-    assert kwargs["min_year"] == 2024
+    assert "max_year" not in request
 
 
 def test_download_laz_area_all_writes_campaigns_to_sidecars(tmp_path):
@@ -198,12 +212,17 @@ def test_download_laz_area_all_writes_campaigns_to_sidecars(tmp_path):
         provider=provider,
         campaigns="all",
         min_year=2022,
+        max_year=2023,
     )
-    assert len(result.downloaded) >= 2
+    assert {(tile.year, tile.crs) for tile in result.tiles} == {
+        (2022, "PL-2000:S7"),
+        (2023, "PL-1992"),
+    }
     for path in result.downloaded:
         request = _meta(path)["request"]
         assert request["campaigns"] == "all"
         assert request["min_year"] == 2022
+        assert request["max_year"] == 2023
 
 
 @pytest.mark.parametrize("bad", ["2020", True, 1800])

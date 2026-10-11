@@ -19,7 +19,7 @@ Example usage::
     # LAZ tiles for an area: newest per area, sidecars, failures in result
     laz = download_laz_area(BBox(637400, 487000, 637450, 487050, "EPSG:2180"))
 
-    # One merged NMT GeoTIFF for an area (PL cutout, ADR-027)
+    # One NMT GeoTIFF for an area (PL cutout from GUGiK WCS, ADR-035)
     result = download_pl_cutout(
         BBox(530000, 382000, 533000, 386000, "EPSG:2180"), "EPSG:2180"
     )
@@ -49,6 +49,7 @@ from kartograf.download.cutout import (
     download_pl_cutout,
     prepare_pl_cutout,
     run_pl_cutout,
+    run_pl_wcs_cutout,
     select_pl_cutout_sheets,
 )
 from kartograf.download.cz_cutout import (
@@ -77,6 +78,7 @@ from kartograf.exceptions import (
     NoCoverageError,
     ParseError,
     ValidationError,
+    YearRangeError,
 )
 from kartograf.hydrology.hsg import HSGCalculator, hsg_from_rasters
 from kartograf.landcover.manager import LandCoverManager
@@ -98,7 +100,7 @@ from kartograf.providers.soilgrids import SoilGridsProvider
 from kartograf.transport.http import get_with_retry, make_gugik_session
 from kartograf.transport.mosaic import check_source_grid, mosaic_and_crop
 
-__version__ = "0.7.1"
+__version__ = "0.7.2"
 
 __all__ = [
     # Cache
@@ -118,7 +120,7 @@ __all__ = [
     "SheetFetch",
     "CampaignRef",
     "FileStorage",
-    # Download (PL cutout, ADR-027)
+    # Download (PL cutout: WCS ADR-035; sheet API ADR-027, deprecated)
     "PlCutout",
     "PlCutoutResult",
     "PlCutoutSheets",
@@ -126,6 +128,7 @@ __all__ = [
     "download_pl_cutout",
     "prepare_pl_cutout",
     "run_pl_cutout",
+    "run_pl_wcs_cutout",
     "select_pl_cutout_sheets",
     # Download (CZ cutout, countries)
     "CountryPart",
@@ -174,6 +177,7 @@ __all__ = [
     "ValidationError",
     "DownloadError",
     "NoCoverageError",
+    "YearRangeError",
     "GridMismatchError",
     "CacheError",
     # Version

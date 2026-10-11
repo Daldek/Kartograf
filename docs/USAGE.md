@@ -62,12 +62,20 @@ kartograf download 7.171.21 --scale 1:2000
 kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --system 2000 --scale 1:2000
 
 # Kampanie GUGiK (sekcja 4): domyślnie najnowsza (newest); wszystkie kampanie
-# arkusza (all); tylko kampanie z roku pozyskania >= RRRR (--min-year)
+# arkusza (all)
 kartograf download N-34-130-D-d-2-4 --campaigns all
-kartograf download N-34-130-D-d-2-4 --min-year 2024
-kartograf download --bbox 530000,382000,533000,386000 --campaigns all --min-year 2022
+kartograf download N-34-139-C-a-3-1 --full-sheet   # + najnowszy pełny lot w full_sheet/ (sekcja 4.2)
 kartograf download N-34-130-D-d-2-4 --product laz --campaigns all
 kartograf download --bbox 530000,382000,533000,386000 --product laz --campaigns all
+
+# Wybór roku danych (NMT, NMPT, orto, LAZ; sekcja 4.1)
+kartograf download N-34-130-D-d-2-4 --year 2025          # najnowszy lot z 2025
+kartograf download N-34-130-D-d-2-4 --year 2025 --campaigns all  # wszystkie loty z 2025
+kartograf download N-34-130-D-d-2-4 --product orto --year 2024
+kartograf download --bbox 530000,382000,533000,386000 --max-year 2022
+kartograf download --bbox 530000,382000,533000,386000 --min-year 2023 --max-year 2024
+kartograf download N-34-130-D-d-2-4 --min-year 2024      # najnowsza, nie starsza niż 2024
+kartograf download --bbox 530000,382000,533000,386000 --campaigns all --min-year 2022
 ```
 
 Pełna lista komend i opcji: `kartograf --help`, `kartograf <komenda> --help`.
@@ -75,22 +83,18 @@ Pełna lista komend i opcji: `kartograf --help`, `kartograf <komenda> --help`.
 LAZ: domyślnie pobierany jest najnowszy kafel dla każdego fragmentu obszaru;
 starsze kafle pokryte przez nowsze są pomijane z komunikatem `Info:`
 ([ADR-029](DECISIONS.md), szczegóły: SCOPE 2.5 i ARCHITECTURE 4.7 "Wybór
-kafli"); `--year` wybiera jeden rocznik (rocznik nieobecny w usłudze = błąd
-z listą dostępnych). WFS GUGiK w EPSG:2180 używa kolejności osi (N,E).
+kafli"); `--year`/`--min-year`/`--max-year` zawężają wybór do przedziału lat
+(sekcja 4.1; rocznik spoza usługi = błąd z listą dostępnych). WFS GUGiK
+w EPSG:2180 używa kolejności osi (N,E).
 `--min-density` i `extra.nominal_density` to gęstość **nominalna** z WFS
 GUGiK — faktyczna bywa wyższa.
 
-`--year` i `--min-density` działają **tylko z `--product laz`**. Z `nmt`,
-`nmpt` i `orto` (także domyślnym `nmt`) kończą się `Error:` i kodem 1 przed
-jakimkolwiek zapytaniem do sieci (do 0.7.0 były po cichu pomijane); dotyczy
-godła, hierarchii, listy arkuszy, `--bbox`, `--geometry`, `--target-crs`
-i `--country auto`. Wybór roku dla NMT/NMPT/orto będzie w 0.7.2; na razie
-`--min-year RRRR` (tylko PL, bez `--target-crs`) odcina kampanie starsze niż
-podany rok, a `--year`/`--min-density` w tych produktach trzeba pominąć.
-Dla zadań wyłącznie CZ (godło CZ, `--country cz`, obszar w całości w CZ) komunikat
-mówi, że CUZK nie ma wyboru roku — `--year` trzeba pominąć (bez wskazania
-0.7.2 i `--min-year`, który bez PL jest odrzucany). Gdy podano już `--min-year`,
-komunikat nie powtarza jego podpowiedzi.
+`--min-density` działa **tylko z `--product laz`**. Z `nmt`, `nmpt` i `orto`
+(także domyślnym `nmt`) kończy się `Error:` i kodem 1 przed jakimkolwiek
+zapytaniem do sieci (do 0.7.0 był po cichu pomijany). `--year`, `--min-year`
+i `--max-year` działają dla NMT, NMPT, orto i LAZ (od 0.7.2; wcześniej
+`--year` poza LAZ kończył się `Error:`) — tylko PL, bez `--target-crs`
+(sekcja 4.1).
 
 ### 1.2 Selekcja obszaru i wybór kraju (`--country`)
 
@@ -101,8 +105,13 @@ kartograf download --geometry zlewnia.gpkg --layer catchments
 kartograf download --bbox 530000,382000,533000,386000 --country pl
 ```
 
-- Domyślne `--bbox-crs` to `EPSG:2180`; plik geometrii: SHP albo GPKG
-  (`--layer` wybiera warstwę GPKG).
+- Domyślne `--bbox-crs` to `EPSG:2180`; plik geometrii: SHP albo GPKG.
+  `--layer` wybiera warstwę GPKG. Bez tej flagi GPKG z wieloma warstwami
+  używa pierwszej; CLI wypisuje jeden `Info:` z wybraną warstwą, listą
+  pozostałych i podpowiedzią `--layer NAZWA` (również przy `-q`).
+  Dotyczy też `landcover download` i `soilgrids hsg`; biblioteka przy
+  domyślnym wyborze z wielu warstw emituje `logger.warning` przy każdym
+  rozstrzygnięciu — podaj `layer=`, aby wskazać warstwę jawnie.
 - PL bez `--target-crs` zapisuje **listę arkuszy** w hierarchii godeł;
   arkusz bez danych GUGiK jest pomijany z `Warning:` (kod 0, gdy pobrano
   choć jeden arkusz).
@@ -126,32 +135,44 @@ kartograf download --bbox 530000,382000,533000,386000 --country pl
 ### 1.3 Jeden scalony GeoTIFF (`--target-crs`)
 
 ```bash
-kartograf download --bbox 530000,382000,533000,386000 --country pl --target-crs EPSG:2180
-kartograf download --bbox 530000,382000,533000,386000 --country pl --target-crs EPSG:5514
-# pogranicze: dwa wycinki (PL + CZ) w tym samym układzie, wspólny parent_request
+# NMT 1 m, wycinek WCS w układzie źródłowym lub po lokalnej reprojekcji
+kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --target-crs EPSG:2180
+kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --target-crs EPSG:5514
+# NMPT 1 m, oba układy wysokościowe (tu KRON86)
+kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmpt --vertical-crs KRON86 --target-crs EPSG:2180
+# pogranicze: osobne wycinki PL + CZ, ten sam układ i parent_request
 kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --target-crs EPSG:2180 --vertical-crs EVRF2007
+# NMT 5 m: arkusze OpenData, bez --target-crs
+kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --resolution 5m
 ```
 
-- Mozaika arkuszy i lokalna reprojekcja przypiętą operacją; dla PL tylko
-  `--product nmt` i arkusze PL-1992 ([ADR-027](DECISIONS.md)).
-- Arkusz bez danych GUGiK (morze, strona zagraniczna) to nodata w wyniku,
-  `Warning:` i `extra.missing_sheets`. Na pograniczu — także z Niemcami,
-  których danych nie obsługujemy — `--target-crs` daje ciągły wycinek;
-  bez niego arkusz leżący za granicą po prostu nie pojawia się na liście
-  plików.
-- `EPSG:2180` zachowuje siatkę i wartości arkuszy 1:1; arkusze o różnych
-  fazach siatki kończą się `GridMismatchError` (podpowiedź: inny
-  `--target-crs`, który reprojektuje każdy arkusz osobno).
-- Istniejący wycinek (ta sama nazwa = te same współrzędne żądania) jest
-  pomijany bez sieci (`Skipped ... - already exists`). Przebudowa: `--force`
-  (pobiera ponownie także wszystkie arkusze) albo usunięcie samego pliku
-  wycinka (arkusze z dysku zostaną użyte ponownie). Nieudana przebudowa nie
-  kasuje poprzedniego pliku.
-- Przed pobraniem kontrola wolnego miejsca (dolne oszacowanie; brak
-  miejsca = błąd przed siecią), `Info:` dla wycinka >= 1 GiB; twardego
-  limitu rozmiaru nie ma.
-- Wycinek zawsze składa się z najnowszych kampanii (nie przyjmuje
-  `--campaigns all`/`--min-year`). Pełny opis: ARCHITECTURE 4.3.
+- PL: WCS GUGiK daje wysokości NMT/NMPT 1 m w jednym GeoTIFF
+  `<segment>/bbox/<współrzędne>_<YYYYMMDD>.tif`. Przed zapytaniem
+  WCS pobierana jest maska lądu PRG (`A00 - W02 - W03`): morze
+  i obszar poza Polską to nodata `-9999`, **0,0 na lądzie zostaje
+  danymi**. Wynik w całości nodata daje `Warning:` i kod 0. Na
+  wybrzeżu (pomiar 2026-10-11: Gdynia, Hel, Mierzeja Wiślana) poza
+  maską zostaje woda o wysokości WCS ok. 0–0,3 m; linia PRG nie odcina
+  lądu wyższego niż 5 m, ale wąski pas brzegu i nabrzeży (do ok. 2 m)
+  może trafić w nodata, a niska plaża po stronie lądu zostaje.
+- Zakres jest rozszerzany na zewnątrz do siatki arkuszy 1 m
+  EPSG:2180 (krawędzie `k + 0,5` m), potem dla innych CRS
+  lokalnie reprojektowany przypiętą operacją. WCS pokazuje
+  kompozycję serwera (najnowszy lot obszaru bez wypełniania
+  starszymi); wycinek może pokazywać inny lot niż pobrane
+  arkusze dokładnie 1 m. Nad lotem 0,5 m wynik 1 m to
+  decymacja, nie uśrednienie.
+- Każde uruchomienie pobiera ponownie (bez pomijania istniejącego
+  pliku); tego samego dnia udany wynik atomowo zastępuje
+  poprzedni, nieudany pozostawia plik i sidecar. `--force`,
+  `--workers` i `--scale` nie zmieniają wycinka WCS.
+  `Info:` podaje liczbę żądań przy więcej niż jednym kawałku
+  lub wyniku >= 1 GiB.
+- Wycinki 5 m, wybór roku (`--year`, `--min-year`, `--max-year`),
+  `--campaigns all` i `--full-sheet` z `--target-crs` są
+  odrzucane (`Error:`). Podobnie `--target-crs` dla orto/LAZ;
+  arkusze 5 m pobieraj bez `--target-crs`. Szczegóły:
+  [ADR-035](DECISIONS.md), ARCHITECTURE 4.3.
 
 ### 1.4 Czechy (CUZK)
 
@@ -162,8 +183,8 @@ kartograf download CTES96                                      # DMR 4G (5 m), g
 kartograf download 302_5550 --country cz --vertical-crs EVRF2007   # Bpv -> EVRF2007 (EPSG:5621)
 # reprojekcja CZ (tylko --bbox/--geometry, nie godło), lokalnie przypiętą operacją
 kartograf download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --target-crs EPSG:2180
-# pogranicze pod auto: osobne pliki PL i CZ, wspólny extra.parent_request
-# (bez --vertical-crs: PL w EVRF2007, CZ w Bpv)
+# pogranicze pod auto: osobne pliki PL i CZ, wspólny extra.parent_request;
+# bez --vertical-crs: PL w EVRF2007, CZ w Bpv (Info: przed pobraniem)
 kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto
 # bboxy w EPSG:5514 są na terytorium CZ ujemne — podaj je jako --bbox=... (bez spacji),
 # inaczej argparse odczyta wartość jako nieznaną flagę
@@ -172,6 +193,13 @@ kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:55
 
 `kartograf parse` obsługuje tylko godła PL (PL-1992/PL-2000); godła CZ
 (TM33, SM5) przyjmuje `kartograf download`.
+
+Bez `--vertical-crs` i gdy `--country auto` uruchamia obie części,
+CLI wypisuje jeden `Info:` o różnych układach wysokości (PL: EVRF2007,
+CZ: Bpv, różnica ok. 0,11–0,15 m), także z `-q`. Aby uzyskać jeden układ
+dla obu części, podaj `--vertical-crs EVRF2007`; jawna flaga eliminuje
+ten komunikat. Prostokątne obwiednie krajów mogą uruchomić CZ także
+dla obszaru w Polsce (część CZ bywa wtedy w całości nodata).
 
 - Rozdzielczość CZ: arkusz SM5 (np. `CTES96`) to gotowy plik DMR 4G,
   który istnieje tylko w 5 m — bez `--resolution` pobierany jest w 5 m,
@@ -283,7 +311,15 @@ dane tam są:
   zadnego z M arkuszy obszaru` (kod 1); w obu przypadkach pod spodem
   podpowiedzi `Info: Dostepny potomek <godło> — uzyj --scale <skala>`;
 - gdy skorowidz ma ten obszar w drugim układzie, podpowiedź wskazuje jego
-  godło albo `--system <układ> --scale <skala>`.
+  godło albo `--system <układ> --scale <skala>`;
+- NMT i NMPT (od 0.7.2): gdy arkusza nie ma w wybranej rozdzielczości albo
+  układzie wysokości, a skorowidz GUGiK ma go w innym wariancie, podpowiedź
+  to np. `Info: Skorowidz GUGiK ma ten arkusz w NMT 1m EVRF2007 — uzyj
+  --resolution 1m` (albo `--vertical-crs KRON86`). GUGiK ma duże braki
+  pokrycia EVRF2007, także NMT 5 m (np. `N-34-130-D-d --resolution 5m`:
+  6 z 16 arkuszy tylko w 1 m). Sprawdzenie kosztuje jedno zapytanie
+  skorowidza na wariant i brakujący arkusz; wynik trafia do cache
+  metadanych razem z brakiem pokrycia.
 
 **Jak ustalić właściwą skalę.** Najprościej z podpowiedzi CLI: skala
 w `uzyj --scale ...` to skala arkusza, który GUGiK faktycznie opublikował
@@ -309,15 +345,12 @@ bbox = parser.get_bbox(crs="EPSG:2180")  # lub "EPSG:4326"
 # Pobieranie przez godło -> ASC (OpenData); hierarchia: download_hierarchy()
 manager = DownloadManager(output_dir="./data")
 path = manager.download_sheet("N-34-130-D-d-2-4")
-# NMT 5 m tylko w EVRF2007: resolution="5m" z vertical_crs="KRON86" w DownloadManager,
-# create_nmt_provider i download_pl_cutout -> ValidationError (od 0.7.1; wcześniej
-# cicha zamiana na EVRF2007 z ostrzeżeniem w logu)
+# NMT 5 m tylko w EVRF2007: resolution="5m" z vertical_crs="KRON86"
+# w DownloadManager/create_nmt_provider i download_pl_cutout -> ValidationError
 
-# Pobieranie przez bbox -> GeoTIFF (WCS) — tylko NMT 1m i tylko w układzie KRON86:
-# endpoint WCS dla EVRF2007 GUGiK wycofał (HTTP 404 od 2026-08), więc
-# download_bbox pod EVRF2007 kończy się ValidationError. Wysokości EVRF2007
-# bierz z arkuszy (download_sheet / download_sheets), a jako jeden GeoTIFF
-# z arkuszy: download_pl_cutout() (niżej).
+# Biblioteczne download_bbox: NMT KRON86 (TIFF) i EVRF2007
+# (ASC multipart), a także NMPT (ASC multipart) — jednopasmowy
+# float32 GeoTIFF wysokości na siatce 1 m EPSG:2180, bez maski PRG
 kron = DownloadManager(output_dir="./data", vertical_crs="KRON86")
 area = BBox(min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180")
 path = kron.download_bbox(area, "my_area.tif")
@@ -354,40 +387,24 @@ hsg_from_rasters(
     crs="EPSG:2180", pixel_m=100.0, output_path=Path("./hsg_100m.tif"),
 )
 
-# Scalony wycinek NMT PL w zadanym układzie (jeden GeoTIFF + sidecar)
-from kartograf import download_pl_cutout, MetadataCache
+# Scalony wycinek WCS NMT lub NMPT PL (GeoTIFF + sidecar)
+from kartograf import download_pl_cutout, prepare_pl_cutout, run_pl_wcs_cutout
 
+bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
 result = download_pl_cutout(
-    BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
-    "EPSG:5514",
-    output_dir="./data",
-    max_workers=4,
-    cache=MetadataCache(),
+    bbox, "EPSG:5514", output_dir="./data", product="nmpt",
 )
-print(result.path)
-# arkusze bez danych GUGiK (nodata); także gdy result.skipped — z sidecara
-print(result.missing_sheets)
-# Wyjątki: DownloadError (awaria pobrania arkusza — wycinek nie powstaje),
-# ValidationError (żaden arkusz nie ma danych, za mało miejsca na dysku,
-# nieobsługiwany parametr); GridMismatchError (różne fazy siatki przy EPSG:2180).
-# Kroki osobno (własny provider/sesja/FileStorage):
-# prepare_pl_cutout -> select_pl_cutout_sheets -> run_pl_cutout.
+print(result.path, result.masked_pixels, result.zero_pixels, result.all_nodata)
+# osobne kroki przy własnym providerze; maska PRG pobierana przed WCS
+cutout = prepare_pl_cutout(bbox, "EPSG:2180", product="nmt")
+result = run_pl_wcs_cutout(cutout)
 
-# Mozaika z lokalnych arkuszy (bez sieci) do katalogu projektu — wynik
-# i sidecar pod ścieżką podaną przez wywołującego, te same reguły siatki
-# co w download_pl_cutout (EPSG:2180 + różne fazy siatki -> GridMismatchError)
-from kartograf import build_cutout_from_sheets
-
-local = build_cutout_from_sheets(
-    [Path("./arkusze/N-34-130-D-d-2-3.asc"), Path("./arkusze/N-34-130-D-d-2-4.asc")],
-    BBox(530000, 382000, 530200, 382100, "EPSG:2180"),
-    "EPSG:2180",
-    Path("./projekt/nmt.tif"),     # sidecar: ./projekt/nmt.tif.meta.json
-    resolution="1m",
-    vertical_crs="EVRF2007",
-)
-# ValidationError przed zapisem: brak/nieczytelny arkusz (lista ścieżek)
-# albo output_path równy jednemu z arkuszy (nadpisałby dane wejściowe)
+# Przestarzałe API arkuszowe (usunięcie w 0.8.0):
+# prepare_pl_cutout -> select_pl_cutout_sheets -> run_pl_cutout,
+# build_cutout_from_sheets (lokalne arkusze), PlCutoutSheets.
+# Parametry geometry/layer/scale/max_workers/force/on_progress/cache
+# w download_pl_cutout nie zmieniają toru WCS; niestandardowe wartości
+# emitują DeprecationWarning i zostaną usunięte w 0.8.0.
 
 # Zlewnia przygraniczna PL/CZ: podział obszaru na kraje i wycinek CZ
 # w układzie PL (EPSG:2180 + EVRF2007); siatka CZ startuje od zadanego obszaru
@@ -454,8 +471,10 @@ rozwijane do arkuszy 1:10000 przez `download_hierarchy()` (ta zawsze zwraca
   w `failed`), pliki kampanii i `unverified` (sekcja 4).
 - `DownloadManager.last_sheet` (`SheetFetch`) po pojedynczym arkuszu:
   `path`, `skipped`, `downloaded`, `reused`, `link`, `unverified`.
-- `PlCutoutResult` (wycinek): `path`, `skipped`, `missing_sheets`,
-  `off_grid_sheets`, `partial_sheets`, `all_nodata`, `unverified`.
+- `PlCutoutResult` (wycinek WCS): `path`, `masked_pixels`,
+  `zero_pixels`, `all_nodata`; `skipped` zawsze `False`.
+  Pola `missing_sheets`, `off_grid_sheets`, `partial_sheets`
+  i `unverified` dotyczą wyłącznie przestarzałego API arkuszowego.
 - `CzCutoutResult` (wycinek CZ, `download_cz_cutout`/`run_cz_cutout`):
   `path`, `skipped`, `all_nodata`.
 - `LazDownloadResult` (`download_laz_area`): `downloaded`, `skipped`,
@@ -476,20 +495,22 @@ sam plik danych, bez sidecara.
 **Gdzie leżą pliki.** `data/<produkt>/<kraj>_<układ>[_<wariant>][_<vcrs>]/...`
 — kanoniczna tabela, przykłady i migracja z 0.6.x: ARCHITECTURE 3.3.
 
-**Pliki CZ i wycinki PL sprzed przypięcia operacji EPSG:1622/1623.** Pliki,
-których sidecar w `transform.horizontal` zawiera `S-JTSK to ETRS89 (3)`, nie
-są przebudowywane automatycznie; CLI drukuje `Info:` przy ich pominięciu,
-a ponowne pobranie wymusza `--force`.
+**Starsze pliki CZ.** Pliki, których sidecar w
+`transform.horizontal` zawiera `S-JTSK to ETRS89 (3)`, nie są
+przebudowywane automatycznie; przy pominięciu istniejącego pliku
+CLI drukuje `Info:`, a ponowne pobranie wymusza `--force`.
+Wycinki PL WCS nie są pomijane — każdy przebieg pobiera na nowo.
 
 ---
 
 ## 4. Kampanie GUGiK
 
 GUGiK publikuje ten sam arkusz w kilku kampaniach (różne lata pozyskania).
-`--campaigns newest` (domyślnie) pobiera najnowszą; `--campaigns all` —
-każdą; `--min-year RRRR` odcina kampanie z `aktualnosc` sprzed danego roku
-(obie strategie). Kampanie dotyczą tylko PL — dla CZ opcje dają `Error:`
-(zadanie wyłącznie czeskie) albo `Info:` (obszar PL+CZ pod `auto`).
+`--campaigns newest` (domyślnie bez `--year`/`--max-year`) pobiera
+najnowszą; `--campaigns all` — każdą. Wybór roku (`--year`, `--min-year`,
+`--max-year`) opisuje sekcja 4.1. Kampanie i rok dotyczą tylko PL — dla CZ
+opcje dają `Error: CZ (CUZK) nie ma kampanii — ...` (zadanie wyłącznie
+czeskie) albo `Info:` (obszar PL+CZ pod `auto`, CZ w bieżącej wersji).
 
 Prawdziwe pliki NMT/NMPT/orto leżą w
 `data/<produkt>/<segment>/kampanie/<data>_<id>/<hierarchia godła>/<godło>.<ext>`
@@ -502,8 +523,9 @@ cache (7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania.
   429/5xx), a arkusz ma już lokalną kampanię, `newest` jej używa i drukuje
   `Warning: <godło>: skorowidz GUGiK niedostepny — uzyto lokalnej kampanii
   bez sprawdzenia nowszej (...)` (kod bez zmian, także z `-q`). Bez lokalnej
-  kampanii, z `--force`, `--campaigns all` albo `--min-year` taki błąd nadal
-  kończy pobranie arkusza porażką (errata 5 ADR-030). Biblioteka:
+  kampanii, z `--force`, `--campaigns all` albo dowolną flagą roku taki błąd
+  nadal kończy pobranie porażką (errata 5 ADR-030; z flagą roku całe
+  zadanie, sekcja 4.1). Biblioteka:
   `DownloadManager.last_sheet.unverified` / `DownloadResult.unverified`
   (treść błędu transportu).
 - **Dowiązanie = hardlink:** ścieżka standardowa to dowiązanie twarde do
@@ -524,16 +546,118 @@ cache (7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania.
   pobraniem pliku (arkusz: `Error:`/porażka wg listy, w `all` pozostałe
   kampanie są pobierane). Rekord bez tego pola jest przyjmowany.
 - **Wycinek `--target-crs`** zawsze składa się z najnowszych kampanii i nie
-  przyjmuje `--campaigns all`/`--min-year`.
+  przyjmuje `--campaigns all`, flag roku ani `--full-sheet`.
 - **LAZ:** `--campaigns all` pobiera wszystkie kafle, których rama przecina
-  obszar (bez deduplikacji ADR-029), `--min-year` to dolna granica roku
-  kafla; `--min-year` i `--year` wykluczają się. LAZ nie używa dowiązań.
-  `--year` i `--min-density` są tylko dla LAZ (z innymi produktami: `Error:`,
+  obszar (bez deduplikacji ADR-029). LAZ nie używa dowiązań.
+  `--min-density` jest tylko dla LAZ (z innymi produktami: `Error:`,
   sekcja 1.1).
 - Składanie kilku kampanii w jedną powierzchnię nie jest częścią
   Kartografu (plany: SCOPE 3.1).
 
-Reguły szczegółowe: SCOPE 2.12, ARCHITECTURE 3.3 (reguła 6), ADR-030.
+Reguły szczegółowe: SCOPE 2.12, ARCHITECTURE 3.3 (reguły 6 i 7), ADR-030,
+ADR-033.
+
+### 4.1 Wybór roku danych (`--year`, `--min-year`, `--max-year`)
+
+Rok danych to rok pozyskania: `aktualnosc` rekordu skorowidza (NMT, NMPT,
+orto) albo `akt_rok` kafla LAZ — nie data przyjęcia do PZGiK. Granice są
+domknięte; `--year RRRR` to skrót `--min-year RRRR --max-year RRRR`
+([ADR-032](DECISIONS.md)).
+
+- **Flagi roku wyznaczają tylko dopuszczalne lata, `--campaigns` — liczbę
+  lotów na arkusz.** Domyślnie (`newest`, nie trzeba podawać) pobierany jest
+  jeden, najnowszy lot z zakresu; `--campaigns all` pobiera wszystkie loty
+  z zakresu do `kampanie/`. Ta sama reguła dla każdej flagi roku i każdego
+  produktu. Przykład (arkusz z lotami 2019, 2023, 2025-04, 2025-10):
+  `--year 2025` = lot 2025-10; `--year 2025 --campaigns all` = oba loty
+  2025; `--max-year 2024` = lot 2023; `--min-year 2024` = lot 2025-10.
+- **Ścieżka standardowa** wskazuje najnowszy lokalny lot i nigdy nie cofa się
+  na starszy. Gdy wcześniej pobrano nowszy lot, a teraz zakres go wyklucza
+  (np. `--max-year 2022`), wybrany lot trafia do `kampanie/`, dowiązanie
+  zostaje przy nowszym, a CLI podaje `Info: N dowiazan wskazuje lokalny lot
+  spoza tego zadania ...` z linią `<godło>: sciezka standardowa -> dowiazanie
+  <data>_<id>` (to samo dla `full_sheet/`, sekcja 4.2).
+- **Najpierw sprawdzenie, potem pobranie.** Gdy któryś arkusz ma dane tylko
+  z innych lat, zadanie kończy się `Error:` i kodem 1 przed pobraniem
+  czegokolwiek (także z pozostałych arkuszy):
+
+  ```
+  Error: brak danych z roku 2024 dla 2 z 4 arkuszy — nic nie pobrano:
+    N-34-139-C-a-3-1: dostepne roczniki 2019, 2023, 2025
+    N-34-139-C-a-3-3: dostepne roczniki 2019, 2025
+  Podpowiedz: --min-year 2024 (rok 2024 i nowsze) albo --max-year 2024 (rok 2024 i starsze)
+  ```
+
+  Arkusz bez żadnych danych (morze, obszar za granicą) jest pomijany
+  z `Warning:` jak dotąd. Awaria skorowidza przy sprawdzaniu przerywa całe
+  zadanie (`Error: nie udalo sie sprawdzic roku danych ...`) — ponów pobranie.
+- **Kilka lotów w przedziale (`--campaigns all`):** gdy najnowszy lot nie
+  jest pełnym arkuszem, Kartograf mierzy po pobraniu pokrycie każdego lotu (udział ważnych
+  pikseli, `extra.coverage`); jeśli starszy lot ma większe pokrycie, drukuje
+  `Info:` (stderr, także z `-q`) i zapisuje `extra.flights`
+  i `extra.better_coverage` w sidecarze ścieżki standardowej. Dowiązanie
+  nadal wskazuje najnowszy lot; starszy leży w `kampanie/`.
+- **Sidecar:** `request.min_year`/`max_year` (gdy podane), `request.year`
+  (gdy równe), `request.campaigns` (strategia faktycznie użyta),
+  `extra.available_years` (wszystkie lata arkusza w skorowidzu).
+- **LAZ:** wybór ADR-029 w obrębie przedziału. Kafel, który bez flag roku
+  zostałby wybrany, a ma rok spoza przedziału, musi być pokryty kaflami
+  z przedziału; inaczej `Error: brak kafli LAZ z roku ... dla N z M kafli
+  obszaru — nic nie pobrano:` z rocznikami per kafel. Zapytania WFS idą do
+  wszystkich roczników usługi. Sidecar kafla ma `extra.acquisition_date`
+  i `extra.full_sheet`.
+- **Nie działa:** z `--target-crs` (`Error: --year nie dziala z
+  --target-crs ...`), dla CZ (zadanie wyłącznie CZ = `Error:`, obszar PL+CZ
+  pod `auto` = `Info:`, CZ w bieżącej wersji).
+
+### 4.2 Najnowszy pełny lot (`full_sheet/`, `--full-sheet`)
+
+Najnowszy lot bywa niepełny: skorowidz deklaruje
+`calyArkuszWypelnionyTrescia = NIE` i plik może mieć od 1 % do 99 % danych.
+Ścieżka standardowa nadal wskazuje najnowszy lot, a obok niej Kartograf
+utrzymuje drugie dowiązanie do najnowszego **lokalnego** lotu, który skorowidz
+deklaruje jako pełny ([ADR-033](DECISIONS.md)):
+
+```
+data/nmt/pl_1992_1m_evrf2007/N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc             # najnowszy lot
+data/nmt/pl_1992_1m_evrf2007/full_sheet/N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc  # najnowszy pełny
+```
+
+```bash
+# arkusz z niepełnym najnowszym lotem: pobiera najnowszy i najnowszy pełny
+kartograf download N-34-139-C-a-3-1 --full-sheet
+#   -> Downloaded 2 campaign files for 1 sheets to ./data (0 already existed)
+kartograf download M-34-90-C-b-4-4 --product orto --full-sheet
+kartograf download N-34-139-C-a-3-1 --full-sheet --max-year 2024   # pełny z zakresu lat
+```
+
+- **Bez flagi** `full_sheet/` powstaje tylko z lotów, które zadanie i tak
+  ma lokalnie: domyślnie, gdy najnowszy lot jest pełny (oba dowiązania to
+  ten sam plik, bez dodatkowego miejsca), a z `--campaigns all` — najnowszy
+  pełny spośród pobranych lotów. Pierwsze uruchomienie po aktualizacji tworzy
+  `full_sheet/` także dla danych już pobranych.
+- **`--full-sheet`** pobiera najwyżej jeden dodatkowy lot na arkusz i tylko
+  wtedy, gdy najnowszy lot z zakresu lat nie jest pełny; z `--campaigns all`
+  nic nie dodaje. Sidecar takiej kampanii ma `request.full_sheet: true`.
+- **Brak pełnego lotu:** w `full_sheet/` nie ma pliku. `Warning:` o niepełnej
+  najnowszej kampanii dzieli arkusze na: `pelny lot w <segment>/full_sheet/`,
+  `brak pelnego lotu w skorowidzu` (przy flagach roku: `... w zakresie lat
+  zadania`) i `pelny lot nie pobrany ... — uzyj --full-sheet`.
+- **Pełny = w granicach Polski.** Arkusz graniczny oznaczony jako pełny ma
+  nodata po stronie zagranicznej ramki — to normalne. `full_sheet/` ufa
+  deklaracji skorowidza, nie mierzy pokrycia.
+- **Nigdy wstecz:** jak ścieżka standardowa; gdy przy flagach roku
+  dowiązanie zostaje przy pełnym locie spoza zakresu, CLI podaje `Info:`
+  z linią `<godło>: full_sheet/ -> dowiazanie <data>_<id>`.
+- **`list_files()` / `delete()`:** `FileStorage.list_files()` pomija
+  `full_sheet/`, `delete(godło)` usuwa oba dowiązania (pliki w `kampanie/`
+  zostają).
+- **Nie działa:** z `--product laz` i `--target-crs` (`Error:` przed siecią);
+  dla CZ jak inne opcje kampanii.
+- **Biblioteka:** `DownloadManager(full_sheet=True)`;
+  `SheetFetch.full_link`, `DownloadResult.full_links` (godło -> ścieżka
+  `full_sheet/`), `DownloadResult.without_full`,
+  `DownloadResult.full_link_outside_range`.
 
 ---
 
@@ -618,13 +742,17 @@ proxy).
 - Rozpoznawanie krajów używa prostokątnych obwiedni (ADR-023), nie wielokąta
   granic; `--country auto` może odpytać CUZK poza Czechami i GUGiK
   w Czechach (sekcja 1.2).
-- Arkusze NMT 5 m mogą mieć różne fazy siatki: wycinek
-  `--target-crs EPSG:2180` kończy się `GridMismatchError` zamiast zwracać
-  niezgodne wartości; inny `--target-crs` uruchamia warp per arkusz (W1).
-- WCS NMT (`download_bbox`) działa tylko dla 1 m w KRON86 (endpoint EVRF2007
-  zwraca 404 od 2026-08); wysokości EVRF2007 z obszaru: CLI `--bbox`
-  (arkusze OpenData) albo jeden GeoTIFF przez `--target-crs` /
-  `download_pl_cutout`.
+- NMT 5 m nie obsługuje `--target-crs`: pobieraj arkusze
+  bez tej flagi. W przestarzałym API arkuszowym (do 0.8.0)
+  `run_pl_cutout` z różnymi fazami siatki może dać
+  `GridMismatchError` przy EPSG:2180; inny CRS używa
+  warpu każdego arkusza.
+- WCS `download_bbox` NMT KRON86 (TIFF) oraz NMT EVRF2007
+  i NMPT (ASC multipart) daje wysokości float32 w rozdzielczości
+  1 m. Samo `download_bbox` nie stosuje maski lądu PRG ani
+  nodata; maskę dostaje wycinek `--target-crs` /
+  `download_pl_cutout`. Kompozycja serwera może różnić się
+  od wyboru kampanii arkusza.
 - Uszkodzony albo nieczytelny cache metadanych (`.kartograf_cache.db`
   w bieżącym katalogu) nie przerywa pobierania: CLI drukuje jedno
   `Warning: cache metadanych nieczytelny (...)` i pracuje bez cache.
