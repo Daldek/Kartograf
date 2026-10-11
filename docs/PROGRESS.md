@@ -131,11 +131,21 @@
 > spec `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`, plan
 > `docs/superpowers/plans/2026-10-10-full-sheet-link.md`, raport
 > `docs/research/2026-10-10-full-sheet-link/raport.md`.
-> **NASTEPNA SESJA:** kolejna pozycja backlogu "Do 0.7.2" — domyslnie
-> (d) ciche wartosci domyslne, potem (a) wycinki PL z WCS (nowy ADR) i (e)
-> testy LAZ z nagraniami innego okna; kolejnosc i zakres wydania 0.7.2
-> (czy wszystkie pozycje) — do decyzji uzytkownika. Kazda pozycja: spec ->
-> akceptacja -> plan -> galaz z `develop` -> implementacja.
+> **(d) ciche wartosci domyslne — SPEC I PLAN GOTOWE 2026-10-10,
+> implementacja NIE rozpoczeta** (spec
+> `docs/superpowers/specs/2026-10-10-silent-defaults-design.md`, plan
+> `docs/superpowers/plans/2026-10-10-silent-defaults.md`, pomiar WCS
+> `docs/research/2026-10-10-wcs-limits/raport.md`; spec, plan, raport
+> i ten wpis NIE zacommitowane — commit `docs(spec): ...` to Task 0 planu).
+> Uzytkownik polecil plan bez czekania na przeglad specu; przed
+> implementacja — jego decyzja (spec sekcja 7: budzet 16 Mpx, tresc
+> komunikatow).
+> **NASTEPNA SESJA:** implementacja (d) wg planu (galaz
+> `feat/silent-defaults`), potem (a) wycinki PL z WCS (nowy ADR; korzysta
+> z `transport/chunks.py`; razem z naprawa NMPT `download_bbox`; fakty
+> z raportu WCS pkt 3, 6, 8: brak nodata, RGB NMPT, kompozycja lotow
+> serwera inna niz ADR-028) i (e) testy LAZ; kolejnosc i zakres wydania
+> 0.7.2 — do decyzji uzytkownika.
 > **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
 > na zywo z raportem, `__version__ = "0.7.2"` + asercje testow, data i link
 > `compare/v0.7.1...v0.7.2` w CHANGELOG, status w SCOPE i `docs/PRD.md`
@@ -162,6 +172,28 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### (d) ciche wartosci domyslne — pomiar WCS, spec i plan (2026-10-10)
+
+- Decyzje uzytkownika (spec sekcja 0, D-U1..D-U6): d1 tylko `Info:`
+  (bez zmiany ukladu domyslnego), d2 widoczne `Info:` o warstwie GPKG,
+  d3 wspolny mechanizm zapytan obszarowych w `transport/` (odejscie od
+  mozaikowania plikow arkuszy, (a) z niego korzysta), jeden spec, pomiar
+  tylko KRON86, naprawa NMPT `download_bbox` razem z (a).
+- Pomiar na zywo WCS GUGiK KRON86 (`docs/research/2026-10-10-wcs-limits/raport.md`):
+  brak limitu do 100 Mpx (ok. 3 s/Mpx, 4 MB/Mpx), zerwane polaczenia
+  (ponowienie przechodzi); serwer probkuje do siatki zadania — bbox poza
+  siatka zrodla = cichy blad geolokalizacji; siatka NMT 1 m `k + 0,5` m
+  w 9 rejonach (takze Krakow); kawalki skladaja sie bit w bit; brak nodata
+  (0,0 poza pokryciem i w danych waznych na wybrzezu); na pograniczu
+  (Cieszyn, Karkonosze, Tatry, Leba) WCS = arkusze bit w bit, ale Zulawy
+  (warstwa "2017 i starsze") i Terespol pokazuja inny lot niz ADR-028;
+  NMPT `image/tiff` = RGB uint8 (blad `download_bbox`, potwierdzony
+  wywolaniem biblioteki).
+- Spec `docs/superpowers/specs/2026-10-10-silent-defaults-design.md`
+  i plan `docs/superpowers/plans/2026-10-10-silent-defaults.md` (Task
+  0-7; ADR-034 w Task 6). Implementacja nie rozpoczeta; probki
+  i skrypty pomiaru poza repo.
 
 ### Merge `feat/full-sheet-link` i przeglad dokumentacji (2026-10-10)
 
@@ -1736,6 +1768,28 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
     (`core/geometry.py:351-357`, tylko `logger.info`);
   - `mosaic_and_crop(dtype=None)` bierze typ pierwszego zrodla
     (`transport/mosaic.py:174`, sygnatura; typ z `src.dtypes[0]`).
+  - **Decyzje uzytkownika 2026-10-10 (jeden spec na cale (d)):** d1 — tylko
+    komunikat w runtime, bez zmiany domyslnego ukladu (wspolny uklad: do
+    przemyslenia w kolejnych wydaniach); d2 — widoczne `Info:` z wybrana
+    warstwa, lista pozostalych i podpowiedzia `--layer` (wymaganie
+    `--layer` ewentualnie 0.8.0); d3 — odejscie od mozaikowania plikow
+    arkuszy i wspolny mechanizm dzielenia zapytan obszarowych
+    w `transport/` (wyciagniety z `CuzkClient._tile_grid`, uzyty przez CUZK
+    i `GugikWcsMixin`); (a) z niego korzysta. Pomiar limitow WCS GUGiK
+    KRON86: `docs/research/2026-10-10-wcs-limits/raport.md` (brak limitu
+    do 100 Mpx; bbox musi byc na siatce zrodla; brak nodata, 0,0 poza
+    pokryciem; kawalki skladaja sie bit w bit).
+  - Spec `docs/superpowers/specs/2026-10-10-silent-defaults-design.md`,
+    plan `docs/superpowers/plans/2026-10-10-silent-defaults.md`
+    (2026-10-10; implementacja nie rozpoczeta).
+- [ ] **NMPT `download_bbox` zwraca RGB uint8 zamiast wysokosci**
+  (znalezione przy pomiarze WCS 2026-10-10, raport
+  `docs/research/2026-10-10-wcs-limits/raport.md` pkt 6):
+  `GugikNmptProvider.download_bbox` prosi o `image/tiff`, a coverage
+  `DSM_PL-KRON86-NH` w tym formacie to 3 x uint8; wysokosci tylko
+  w `image/x-aaigrid` (multipart). Blad biblioteki (CLI NMPT `--bbox` idzie
+  przez arkusze). **Decyzja uzytkownika 2026-10-10: naprawa razem z (a)**
+  (obsluga odpowiedzi multipart powstaje tam raz).
 - [ ] **(e) Testy LAZ odtwarzajace fixtures dla innego okna** (znalezione
   przy (b), 2026-10-10): `tests/test_laz_coverage.py`
   (`test_older_tile_adding_uncovered_area_is_kept`,
