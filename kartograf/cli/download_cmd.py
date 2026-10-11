@@ -195,7 +195,7 @@ def _announce_geometry_layer(args: argparse.Namespace) -> bool:
         return False
     if choice.defaulted and len(choice.available) > 1:
         print(
-            f"Info: {filepath.name} ma {len(choice.available)} warstw, uzyto "
+            f"Info: {filepath.name}: liczba warstw {len(choice.available)}, uzyto "
             f"pierwszej '{choice.name}' (pozostale: "
             f"{', '.join(choice.available[1:])}); inna warstwa: --layer NAZWA",
             file=sys.stderr,
