@@ -116,33 +116,21 @@
 > oknach, strojenie kawalkow ASC NMPT; szczegoly w sesjach nizej
 > i w `docs/CHANGELOG.md` [0.7.2]. Test na zywo przed wydaniem:
 > `docs/research/2026-10-11-test-przed-0.7.2/raport.md` (bez FAIL).
-> **NASTEPNA SESJA: praca nad v0.8.0** (decyzja uzytkownika 2026-10-11;
-> 0.7.3 nie jest planowane). Cykl NIE jest otwarty (`__version__` bez
-> `-dev`): pierwszy krok = `__version__ = "0.8.0-dev"` + asercje
-> w `test_cli.py` i `test_integration.py` + sekcja `## [0.8.0] - Unreleased`
-> i link `compare/v0.7.2...develop` w CHANGELOG (wzor: commit
-> `chore(release): poczatek cyklu 0.7.2`). Zakres 0.8.0: backlog
-> "Do 0.8.0 — zmiany lamiace CLI" nizej (`--product` wymagane, `godlo` ->
-> `sheet` w CLI i API bez aliasow, `--campaigns` -> przelacznik, usuniecie
-> toru arkuszowego wycinkow ADR-035, parametry wymagane w API) oraz
-> podprojekt 1 roadmapy (magazyn wersjonowany). Kolejnosc i podzial na
-> galezie — do ustalenia z uzytkownikiem na poczatku sesji.
-> **Magazyn wersjonowany (stan 2026-10-11):** wstrzymanie ZDJETE
-> (decyzja uzytkownika 2026-10-11). Galaz `feat/versioned-store`
-> przestawiona (rebase) na `develop` i wypchnieta `--force-with-lease`.
-> Spec po rewizji wzgledem 0.7.1/0.7.2 (D13-D16: pokrycie przy zapisie
-> wersji, zakres lat przy awarii skorowidza, wycinki `bbox/` bez daty, tor
-> arkuszowy wycinkow usuwany najpierw) i po review zapisu/skladowania
-> (D17-D24: wersje per plik pod hierarchia, wylaczny `os.link` z kontrola
-> sha256, `.incoming/<host>_<pid>_<token>` ze sprzataniem > 24 h, jeden
-> odczyt pliku, `fsync`, hardlinki wymagane, `relabeled` dla tej samej
-> tresci pod nowym sygnalem, stare pliki LAZ/CZ nadpisywane); ADR
-> magazynu = ADR-036 — CZEKA NA AKCEPTACJE UZYTKOWNIKA
-> (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`).
-> Plan 1/3 oznaczony jako NIEAKTUALNY: po akceptacji specu przepisac go od
-> nowa (nie latac). Kolejnosc (D16): najpierw usuniecie przestarzalego
-> toru arkuszowego wycinkow PL (backlog "Do 0.8.0") na osobnej galezi
-> z `develop`, potem plan 1/3.
+> **Praca nad v0.8.0 (stan 2026-10-11):** cykl OTWARTY (`0.8.0-dev`,
+> commit `chore(release): poczatek cyklu 0.8.0`). Zrobione: usuniecie
+> przestarzalego toru arkuszowego wycinkow PL (merge
+> `refactor/remove-sheet-cutout`, ADR-035 errata 2, takze
+> `GridMismatchError`). Pozostale zmiany lamiace: backlog "Do 0.8.0"
+> nizej (`--product` wymagane, `godlo` -> `sheet` w CLI i API,
+> `--campaigns` -> przelacznik, parametry wymagane w API).
+> **Magazyn wersjonowany:** spec ZAAKCEPTOWANY 2026-10-11 (D1-D24, ADR
+> magazynu = ADR-036; `docs/superpowers/specs/2026-10-08-versioned-store-design.md`).
+> Plan 1/3 PRZEPISANY 2026-10-11
+> (`docs/superpowers/plans/2026-10-08-versioned-store-1-core-pl-sheets.md`,
+> galaz `feat/versioned-store`, na `origin`). Przed Task 1 decyzja
+> uzytkownika z sekcji "Pytania do uzytkownika" planu: czy pozostale
+> zmiany lamiace 0.8.0 (nazwy CLI/API) ida NAJPIERW na `develop`
+> (rekomendacja), potem rebase galezi i implementacja planu 1/3.
 > **Katalog danych testow na zywo:** wskazuje uzytkownik (STANDARDS 6.4);
 > sciezki nie zapisuj w repo (straznik wzorcow commitow ja blokuje) —
 > zapytaj na poczatku sesji, jesli potrzebny.
