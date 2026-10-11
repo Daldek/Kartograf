@@ -221,6 +221,27 @@ def gfi_record(
     return record
 
 
+def write_gpkg_layers(path: Path, layers: list[str]) -> Path:
+    """GeoPackage catalogue with the given feature tables and no features.
+
+    Enough for ``core.geometry.resolve_layer`` (the CLI resolves the layer before
+    the readers) in CLI tests that mock the geometry readers themselves.
+    """
+    import sqlite3
+
+    conn = sqlite3.connect(str(path))
+    try:
+        conn.execute("CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT)")
+        conn.executemany(
+            "INSERT INTO gpkg_contents VALUES (?, 'features')",
+            [(name,) for name in layers],
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return path
+
+
 @pytest.fixture
 def sample_godlos() -> dict:
     """

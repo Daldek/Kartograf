@@ -756,6 +756,36 @@ class TestReadGpkgBboxes:
                 gpkg_multi_layer, layer="nonexistent", target_crs="EPSG:2180"
             )
 
+    def test_resolve_layer_defaults_to_first(self, gpkg_multi_layer, shp_epsg2180):
+        from kartograf.core.geometry import resolve_layer
+
+        default = resolve_layer(gpkg_multi_layer, None)
+        assert default.name == "layer_a"
+        assert default.available == ("layer_a", "layer_b")
+        assert default.defaulted is True
+        explicit = resolve_layer(gpkg_multi_layer, "layer_b")
+        assert (explicit.name, explicit.defaulted) == ("layer_b", False)
+        with pytest.raises(ValidationError, match="layer_a, layer_b"):
+            resolve_layer(gpkg_multi_layer, "nonexistent")
+        shp = resolve_layer(shp_epsg2180, None)
+        assert (shp.name, shp.available, shp.defaulted) == (None, (), False)
+
+    def test_multi_layer_default_logs_warning(self, gpkg_multi_layer, caplog):
+        """The library names the default choice at WARNING (visible by default);
+        an explicit layer is silent."""
+        with caplog.at_level("WARNING", logger="kartograf.core.geometry"):
+            bbox = get_overall_bbox(gpkg_multi_layer, target_crs="EPSG:2180")
+        assert bbox.min_x == pytest.approx(420000, abs=1)  # first layer
+        warnings = [r for r in caplog.records if r.levelname == "WARNING"]
+        assert len(warnings) == 1
+        assert "layer_a" in warnings[0].getMessage()
+        assert "layer_b" in warnings[0].getMessage()
+
+        caplog.clear()
+        with caplog.at_level("WARNING", logger="kartograf.core.geometry"):
+            get_overall_bbox(gpkg_multi_layer, layer="layer_a", target_crs="EPSG:2180")
+        assert caplog.records == []
+
     def test_no_feature_tables_raises_error(self, gpkg_no_features):
         """GPKG without feature tables raises ValidationError."""
         with pytest.raises(ValidationError, match="No feature tables"):

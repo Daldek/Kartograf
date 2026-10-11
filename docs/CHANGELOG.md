@@ -83,6 +83,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--full-sheet` z `--product laz` albo `--target-crs` = `Error:` przed
   siecia (kod 1); dla CZ jak inne opcje kampanii (`Error:` bez PL, `Info:`
   dla PL+CZ pod `--country auto`). Z `--campaigns all` bez skutku.
+- `--geometry` z plikiem GPKG o wielu warstwach bez `--layer` (`download`,
+  `landcover download`, `soilgrids hsg`): jeden `Info:` na stderr (takze
+  z `-q`) z nazwa uzytej pierwszej warstwy, lista pozostalych i podpowiedzia
+  `--layer`. Wybor warstwy bez zmian.
 
 ### Zmienione
 
@@ -136,6 +140,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   przeprobkowania (ADR-034). Sidecar `request.bbox` = bbox zadania. Co
   zrobic: nic; kto liczyl na zasieg rowny bboxowi, czyta zasieg z pliku.
   NMPT, ortofotomapa i PNG/JPEG — jedno zapytanie jak dotad.
+- Biblioteka: funkcje geometrii (`get_overall_bbox`, `read_feature_bboxes`,
+  `find_sheets_for_geometry`, `read_source_crs`) przy GPKG z wieloma
+  warstwami bez `layer=` loguja wybor pierwszej warstwy jako `WARNING`
+  (dotad `INFO`, domyslnie niewidoczne). Co zrobic: podaj `layer=`, jesli
+  komunikat przeszkadza.
 
 ### Naprawione
 

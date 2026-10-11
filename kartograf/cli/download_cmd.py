@@ -172,6 +172,38 @@ def _cli_metadata_cache(force: bool) -> "MetadataCache":
     return MetadataCache(refresh=force, on_disabled=_warn_cache_disabled)
 
 
+def _announce_geometry_layer(args: argparse.Namespace) -> bool:
+    """Resolve the ``--geometry`` layer ONCE; ``Info:`` when the default was taken.
+
+    A GPKG with several layers and no ``--layer`` is read from its first layer
+    only - the area of the task comes from it. One ``Info:`` on stderr (also with
+    ``-q``) names the choice and the others; ``args.layer`` then carries the
+    explicit name, so the geometry readers called later neither repeat nor log it.
+    Errors (missing file, unknown layer, no feature tables) print ``Error:`` and
+    return ``False``.
+    """
+    from kartograf.core.geometry import resolve_layer
+
+    filepath = Path(args.geometry)
+    if not filepath.exists():
+        print(f"Error: File not found: {filepath}", file=sys.stderr)
+        return False
+    try:
+        choice = resolve_layer(filepath, getattr(args, "layer", None))
+    except ValidationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return False
+    if choice.defaulted and len(choice.available) > 1:
+        print(
+            f"Info: {filepath.name} ma {len(choice.available)} warstw, uzyto "
+            f"pierwszej '{choice.name}' (pozostale: "
+            f"{', '.join(choice.available[1:])}); inna warstwa: --layer NAZWA",
+            file=sys.stderr,
+        )
+    args.layer = choice.name
+    return True
+
+
 @contextlib.contextmanager
 def _pl_metadata_cache(args: argparse.Namespace) -> Iterator[object | None]:
     """
@@ -2443,6 +2475,9 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
         # this branch bypasses `_dispatch_area` - the campaign guard here too
         if _reject_campaign_opts_without_pl(args, ("CZ",)):
             return 1
+        # after the option guards (no file I/O before them), before any reader
+        if not _announce_geometry_layer(args):
+            return 1
         bbox = _resolve_cz_geometry_bbox(args)
         if bbox is None:
             return 1  # error already printed
@@ -2450,10 +2485,9 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
             args, bbox=bbox, parent_request=_build_parent_request(bbox, ("CZ",))
         )
 
-    filepath = Path(args.geometry)
-    if not filepath.exists():
-        print(f"Error: File not found: {filepath}", file=sys.stderr)
+    if not _announce_geometry_layer(args):
         return 1
+    filepath = Path(args.geometry)
 
     try:
         overall = _geometry_envelope(filepath, getattr(args, "layer", None))

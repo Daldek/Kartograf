@@ -27,6 +27,7 @@ from kartograf.cli.commands import (
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.manager import DownloadProgress, DownloadResult
 from kartograf.exceptions import DownloadError, ValidationError
+from tests.conftest import write_gpkg_layers
 
 
 @pytest.fixture(autouse=True)
@@ -2498,8 +2499,7 @@ class TestCmdDownloadGeometry:
         self, mock_overall, mock_manager_cls, mock_find, mock_read_crs, capsys, tmp_path
     ):
         """--geometry --layer passes layer parameter."""
-        gpkg_file = tmp_path / "area.gpkg"
-        gpkg_file.touch()
+        gpkg_file = write_gpkg_layers(tmp_path / "area.gpkg", ["my_layer", "other"])
 
         mock_overall.return_value = BBox(
             630000.0, 480000.0, 640000.0, 490000.0, "EPSG:2180"
@@ -2524,6 +2524,84 @@ class TestCmdDownloadGeometry:
         assert result == 0
         call_kwargs = mock_find.call_args
         assert call_kwargs.kwargs.get("layer") == "my_layer"
+        assert "warstw" not in capsys.readouterr().err
+
+    @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    def test_cli_geometry_multi_layer_info_once(
+        self, mock_overall, mock_manager_cls, mock_find, mock_read_crs, capsys, tmp_path
+    ):
+        """GPKG with several layers and no --layer: ONE Info naming the first
+        layer and the others; every reader then gets the explicit name."""
+        gpkg_file = write_gpkg_layers(tmp_path / "area.gpkg", ["layer_a", "layer_b"])
+        mock_overall.return_value = BBox(
+            630000.0, 480000.0, 640000.0, 490000.0, "EPSG:2180"
+        )  # Warsaw — deep inside PL
+        mock_find.return_value = ["N-34-130-D-d-2-4"]
+        mock_manager_cls.return_value = _sheet_list_manager(tmp_path / "test.asc")
+
+        result = main(
+            ["download", "--geometry", str(gpkg_file), "-o", str(tmp_path), "-q"]
+        )
+
+        assert result == 0
+        info = [
+            line for line in capsys.readouterr().err.splitlines() if "warstw" in line
+        ]
+        assert len(info) == 1
+        assert info[0].startswith("Info:")
+        assert "'layer_a'" in info[0] and "layer_b" in info[0]
+        assert "--layer" in info[0]
+        for mock in (mock_find, mock_overall, mock_read_crs):
+            assert all(c.kwargs.get("layer") == "layer_a" for c in mock.call_args_list)
+
+    @pytest.mark.parametrize("kind", ["single_gpkg", "shp"])
+    @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
+    @patch("kartograf.core.geometry.find_sheets_for_geometry")
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    def test_cli_geometry_single_layer_no_info(
+        self,
+        mock_overall,
+        mock_manager_cls,
+        mock_find,
+        mock_read_crs,
+        kind,
+        capsys,
+        tmp_path,
+    ):
+        if kind == "shp":
+            path = tmp_path / "area.shp"
+            path.touch()
+        else:
+            path = write_gpkg_layers(tmp_path / "area.gpkg", ["only"])
+        mock_overall.return_value = BBox(
+            630000.0, 480000.0, 640000.0, 490000.0, "EPSG:2180"
+        )
+        mock_find.return_value = ["N-34-130-D-d-2-4"]
+        mock_manager_cls.return_value = _sheet_list_manager(tmp_path / "test.asc")
+
+        assert main(["download", "--geometry", str(path), "-o", str(tmp_path)]) == 0
+        assert "warstw" not in capsys.readouterr().err
+
+    def test_cli_geometry_unknown_layer_error(self, capsys, tmp_path):
+        gpkg_file = write_gpkg_layers(tmp_path / "area.gpkg", ["layer_a", "layer_b"])
+        result = main(
+            [
+                "download",
+                "--geometry",
+                str(gpkg_file),
+                "--layer",
+                "x",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+        assert result == 1
+        err = capsys.readouterr().err
+        assert err.startswith("Error:") and "layer_a, layer_b" in err
 
     def test_download_geometry_and_godlo_error(self, capsys, tmp_path):
         """--geometry + godlo -> mutual exclusivity error."""
@@ -2668,6 +2746,29 @@ class TestCmdLandcoverDownloadGeometry:
         mock_mgr.download.assert_not_called()
         assert "Downloaded to" in capsys.readouterr().out
 
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    @patch("kartograf.cli.landcover_cmd.LandCoverManager")
+    def test_landcover_geometry_multi_layer_info(
+        self, mock_mgr_cls, mock_bbox, capsys, tmp_path
+    ):
+        gpkg = write_gpkg_layers(tmp_path / "area.gpkg", ["layer_a", "layer_b"])
+        mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
+        mock_mgr = Mock()
+        mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.download_all_counties.return_value = [tmp_path / "out.gpkg"]
+        mock_mgr_cls.return_value = mock_mgr
+
+        result = main(
+            ["landcover", "download", "--geometry", str(gpkg), "-o", str(tmp_path)]
+        )
+
+        assert result == 0
+        info = [
+            line for line in capsys.readouterr().err.splitlines() if "warstw" in line
+        ]
+        assert len(info) == 1 and "'layer_a'" in info[0] and "layer_b" in info[0]
+        assert mock_bbox.call_args.kwargs["layer"] == "layer_a"
+
     def test_landcover_geometry_and_teryt_error(self, capsys, tmp_path):
         """--geometry + --teryt -> mutual exclusivity error."""
         shp_file = tmp_path / "area.shp"
@@ -2739,6 +2840,28 @@ class TestCmdSoilgridsHsgGeometry:
         assert result == 0
         mock_bbox.assert_called_once()
         mock_calc.calculate_hsg_by_bbox.assert_called_once()
+
+    @patch("kartograf.core.geometry.get_overall_bbox")
+    @patch("kartograf.hydrology.HSGCalculator")
+    def test_soilgrids_hsg_geometry_multi_layer_info(
+        self, mock_calc_cls, mock_bbox, capsys, tmp_path
+    ):
+        gpkg = write_gpkg_layers(tmp_path / "area.gpkg", ["layer_a", "layer_b"])
+        mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
+        mock_calc = Mock()
+        mock_calc.calculate_hsg_by_bbox.return_value = tmp_path / "hsg.tif"
+        mock_calc_cls.return_value = mock_calc
+
+        result = main(
+            ["soilgrids", "hsg", "--geometry", str(gpkg), "-o", str(tmp_path)]
+        )
+
+        assert result == 0
+        info = [
+            line for line in capsys.readouterr().err.splitlines() if "warstw" in line
+        ]
+        assert len(info) == 1 and "'layer_a'" in info[0] and "layer_b" in info[0]
+        assert mock_bbox.call_args.kwargs["layer"] == "layer_a"
 
     def test_soilgrids_hsg_geometry_and_godlo_error(self, capsys, tmp_path):
         """--geometry + --godlo -> mutual exclusivity error."""
