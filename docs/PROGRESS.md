@@ -157,8 +157,12 @@
 > `origin` — push to osobna decyzja uzytkownika). ADR-035, plan
 > `docs/superpowers/plans/2026-10-11-wcs-cutouts.md`, weryfikacja na zywo
 > `docs/research/2026-10-11-wcs-cutouts-live/raport.md`.
-> **NASTEPNA SESJA:** do decyzji uzytkownika — strojenie kawalkow ASC NMPT
-> (backlog "Do 0.7.2"), (e) testy LAZ, zakres i kroki wydania 0.7.2.
+> **(e) testy LAZ na faktycznych oknach — galaz `test/laz-real-windows`
+> (2026-10-11, opcja 1 = nagranie, decyzja uzytkownika), NIE scalona:**
+> merge `--no-ff` do `develop` po zgodzie uzytkownika.
+> **NASTEPNA SESJA:** strojenie kawalkow ASC NMPT WCHODZI do 0.7.2
+> (decyzja uzytkownika 2026-10-11, backlog "Do 0.7.2"); potem zakres
+> i kroki wydania 0.7.2.
 > **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
 > na zywo z raportem, `__version__ = "0.7.2"` + asercje testow, data i link
 > `compare/v0.7.1...v0.7.2` w CHANGELOG, status w SCOPE i `docs/PRD.md`
@@ -185,6 +189,28 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### (e) testy LAZ na faktycznych oknach zapytan (2026-10-11)
+
+- Decyzje uzytkownika: strojenie kawalkow ASC NMPT wchodzi do 0.7.2; (e)
+  opcja 1 — nagrac odpowiedzi WFS dla okien, o ktore testy faktycznie pytaja.
+- Pomiar okien (tymczasowa wtyczka pytest logujaca `BBOX`): okno inne niz
+  nagranie `W2_AREA` mialy 4 testy, nie 5 — trzy testy CLI z bboxem W2 pytaja
+  o to samo okno (zapis `487000.0`).
+- Nagranie na zywo (2026-10-11, surowe odpowiedzi w katalogu danych):
+  `gugik_laz/real_2026_10_11/` (`wgs`, `sheet`); `wfs_session(area=)`
+  w `test_laz_download.py` i `laz_session` w `test_laz_coverage.py`
+  sprawdzaja `BBOX` (niezgodne okno = `AssertionError`).
+- Prawdziwe odpowiedzi obalily scenariusze dwoch testow wyboru kafli:
+  na wschod od `W2_AREA` kafle 2025 (`-3-4`, `-4-3`) kryja caly obszar,
+  a w rogu SW usluga nie zwraca `7.173.21.06.2` (filtr po geometrii).
+  `test_older_tile_adding_uncovered_area_is_kept` zastapiony
+  `test_w3_older_tile_adding_uncovered_area_is_kept` (nagranie `W3_BBOX`:
+  2019 obok 2025); `test_tile_whose_footprint_misses_area_is_skipped_as_outside`
+  usuniety — filtr obrysu klienta sprawdza jawne odtworzenie
+  `test_all_still_drops_outside_tiles` (`replay_any_bbox=True`).
+- Brama zielona: pytest offline 3262, ruff check/format, mypy. Bez wpisu
+  w CHANGELOG (tylko testy).
 
 ### (a) wycinki PL z WCS — implementacja (2026-10-11)
 
@@ -1896,15 +1922,12 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
   > 120 s (pierwszy bajt 19-106 s), a jedno zapytanie 2 Mpx przeszlo w 78 s.
   Zmierzyc pierwszy bajt NMT/NMPT w funkcji rozmiaru przy normalnym
   obciazeniu i dobrac budzet kawalka oraz `WCS_ASC_READ_TIMEOUT`.
-- [ ] **(e) Testy LAZ odtwarzajace fixtures dla innego okna** (znalezione
-  przy (b), 2026-10-10): `tests/test_laz_coverage.py`
-  (`test_older_tile_adding_uncovered_area_is_kept`,
-  `test_tile_whose_footprint_misses_area_is_skipped_as_outside`) i 5 testow
-  `TestCliOnRealWfs` w `tests/test_laz_download.py` odtwarzaja odpowiedzi
-  okna `W2_AREA` (`gugik_laz/real_2026_10_06/`) dla innych zapytan (inne
-  okno, godlo, inny CRS). Wynik moze nie odpowiadac usludze (jak T21a).
-  Do decyzji: nagrac odpowiedzi dla faktycznych okien albo jawnie oznaczyc
-  odtworzenie (`replay_any_bbox`, jak `test_all_still_drops_outside_tiles`).
+- [x] **(e) Testy LAZ odtwarzajace fixtures dla innego okna** — 2026-10-11,
+  galaz `test/laz-real-windows` (opcja 1, nagranie
+  `gugik_laz/real_2026_10_11/`; szczegoly: sesja "(e) testy LAZ na
+  faktycznych oknach zapytan"). Helpery sprawdzaja `BBOX`; dwa testy
+  z `test_laz_coverage.py` zastapione/usuniete, bo prawdziwe odpowiedzi
+  nie odtwarzaja ich scenariuszy.
 
 #### Do 0.8.0 — zmiany lamiace CLI skonsolidowane w jednym wydaniu (2026-10-08)
 
