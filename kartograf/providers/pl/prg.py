@@ -25,6 +25,7 @@ import numpy as np
 import rasterio
 import requests
 from rasterio.features import rasterize
+from rasterio.windows import Window
 
 from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import BBox
@@ -51,6 +52,9 @@ _TERYT = re.compile(r"\d{4}")
 _COUNT = 1000
 # Half-size (m) of the query square around a point.
 _POINT_HALF = 0.5
+# Pixels per row strip of LandMask.apply (~4 Mpx: tens of MB of working arrays,
+# a few hundred rasterize calls of the ~73k-vertex A00 polygon for 1000 km2).
+_MASK_STRIP_PX = 4_000_000
 
 _sessions = SessionPerThread(None)
 
@@ -187,33 +191,41 @@ class LandMask:
     water: tuple[dict, ...]
 
     def apply(self, path: Path, nodata: float) -> tuple[int, int]:
-        """Mask a float32 EPSG:2180 GeoTIFF in-place, loading the full band in memory.
+        """Mask a float32 EPSG:2180 GeoTIFF in place: pixels outside land -> nodata.
 
-        Returns masked pixel count and unmasked pixels whose original value is zero.
-        Pixel membership is decided by its centre (``all_touched=False``).
+        Pixel membership is decided by its centre (``all_touched=False``): A00
+        burns 1, W02/W03 burn 0 over it. Processed in row strips of about
+        ``_MASK_STRIP_PX`` pixels, so memory does not grow with the cutout.
+        Returns ``(masked, zero_on_land)``: pixels set to ``nodata`` and pixels
+        kept on land whose value is 0.0 (data, not nodata - ADR-035).
         """
+        masked = zero_on_land = 0
         with rasterio.open(path, "r+") as dataset:
-            land = rasterize(
-                [(geometry, 1) for geometry in self.country],
-                out_shape=(dataset.height, dataset.width),
-                transform=dataset.transform,
-                fill=0,
-                all_touched=False,
-                dtype=np.uint8,
-            )
-            if self.water:
-                rasterize(
-                    [(geometry, 0) for geometry in self.water],
-                    out=land,
-                    transform=dataset.transform,
+            rows = max(1, _MASK_STRIP_PX // dataset.width)
+            for row in range(0, dataset.height, rows):
+                window = Window(0, row, dataset.width, min(rows, dataset.height - row))
+                transform = dataset.window_transform(window)
+                land = rasterize(
+                    [(geometry, 1) for geometry in self.country],
+                    out_shape=(window.height, window.width),
+                    transform=transform,
+                    fill=0,
                     all_touched=False,
+                    dtype=np.uint8,
                 )
-            data = dataset.read(1)
-            on_land = land != 0
-            masked = int(np.count_nonzero(~on_land))
-            zero_on_land = int(np.count_nonzero(on_land & (data == 0.0)))
-            data[~on_land] = nodata
-            dataset.write(data, 1)
+                if self.water:
+                    rasterize(
+                        [(geometry, 0) for geometry in self.water],
+                        out=land,
+                        transform=transform,
+                        all_touched=False,
+                    )
+                data = dataset.read(1, window=window)
+                off_land = land == 0
+                masked += int(np.count_nonzero(off_land))
+                zero_on_land += int(np.count_nonzero(~off_land & (data == 0.0)))
+                data[off_land] = nodata
+                dataset.write(data, 1, window=window)
             dataset.nodata = nodata
         logger.debug("PRG land mask: masked=%s zero_on_land=%s", masked, zero_on_land)
         return masked, zero_on_land

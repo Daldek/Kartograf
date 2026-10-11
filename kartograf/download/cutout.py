@@ -559,9 +559,9 @@ def write_pl_cutout_sidecar(
 ) -> None:
     """Best-effort cutout sidecar (an error does not abort the download).
 
-    ``capability="sheet_files"``: the data come from OpenData sheets — the
-    ``bbox_raster`` channel does not exist for 5m, and for 1m it declares only
-    KRON86 (ADR-027, a departure from the letter of spec 6.1 item 5).
+    ``capability="sheet_files"``: the data come from OpenData sheets (the
+    deprecated sheet path, ADR-027; the WCS path writes ``bbox_raster``,
+    ``write_pl_wcs_cutout_sidecar``).
     ``missing_sheets`` (non-empty) -> ``extra.missing_sheets``: sheets without
     GUGiK data (R5). ``sheet_paths`` (non-empty) -> ``extra.sheet_sources``:
     the origin of each mosaic sheet ``{sheet, url, layer, acquisition_date,
@@ -1064,12 +1064,17 @@ def run_pl_wcs_cutout(
     _check_wcs_disk_space(cutout, path)
 
     from kartograf.providers.pl.prg import fetch_land_mask
+    from kartograf.transport.chunks import align_bbox
     from kartograf.transport.mosaic import has_valid_pixels
 
     timeout = provider.DEFAULT_TIMEOUT
-    # before WCS: a PRG failure must not waste a long download
-    mask = fetch_land_mask(cutout.bbox_source_2180, timeout=timeout)
     b = cutout.bbox_source_2180
+    # before WCS: a PRG failure must not waste a long download. The mask covers
+    # the raster actually written (aligned OUTWARD to the sheet grid): a W02/W03
+    # polygon touching only an edge pixel centre must be returned by the BBOX.
+    grid = provider.WCS_GRID
+    mask_area = align_bbox(b, grid.step, grid)[0] if grid is not None else b
+    mask = fetch_land_mask(mask_area, timeout=timeout)
     description = (
         f"wycinek {cutout.product.upper()} {cutout.vertical_crs} "
         f"({b.min_x:.0f},{b.min_y:.0f})-({b.max_x:.0f},{b.max_y:.0f})"

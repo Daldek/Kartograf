@@ -233,7 +233,7 @@ def _product_label(product: str, resolution: str | None) -> str:
 def _print_sheet_list(
     godla: list[str], target_scale: str, *, what: str, label: str
 ) -> None:
-    """Header of the PL sheet list (cutout and list mode, D15): up to 10 sheet codes
+    """Header of the PL sheet list (list mode, D15): up to 10 sheet codes
     in full, a longer list as the first 3 + ``...`` + the last 2."""
     print(f"Found {len(godla)} sheets at {target_scale} for {what} ({label})")
     sample = godla if len(godla) <= 10 else godla[:3] + ["..."] + godla[-2:]
@@ -1298,15 +1298,14 @@ def _print_campaign_summary(
     )
 
 
-def _warn_unverified(unverified: dict[str, str], *, from_sidecar: bool = False) -> None:
+def _warn_unverified(unverified: dict[str, str]) -> None:
     """``Warning:`` for sheets taken from a local campaign unverified (I-1)."""
     godla = list(unverified)
     shown = ", ".join(godla[:10]) + (" ..." if len(godla) > 10 else "")
     print(
         "Warning: skorowidz GUGiK niedostepny — dla "
         f"{len(godla)} arkuszy uzyto lokalnej kampanii bez sprawdzenia nowszej "
-        f"({shown}) ({unverified[godla[0]]})"
-        + (" (z sidecara istniejacego wycinka)" if from_sidecar else ""),
+        f"({shown}) ({unverified[godla[0]]})",
         file=sys.stderr,
     )
 
