@@ -7,8 +7,8 @@ Digital Terrain Model (NMT) data from the Polish GUGiK
 
 Two download methods based on input type:
 - Sheet code (godlo) → OpenData (ASC format)
-- BBox (bounding box) → WCS (GeoTIFF/PNG/JPEG formats; 1m and KRON86 only —
-  the EVRF2007 WCS endpoint was withdrawn by GUGiK, see ``download_bbox``)
+- BBox (bounding box) → WCS (GeoTIFF/PNG/JPEG formats; 1m only; EVRF2007
+  heights requested as image/x-aaigrid and written as GeoTIFF float32)
 
 Supported resolutions:
 - 1m (GRID1) - available for EVRF2007 and KRON86
@@ -38,7 +38,7 @@ from kartograf.providers.pl.skorowidz import (
     query_skorowidz_layer,
     select_sheet_record,
 )
-from kartograf.providers.pl.wcs import GugikWcsMixin
+from kartograf.providers.pl.wcs import HEIGHT_AAIGRID, HEIGHT_GTIFF, GugikWcsMixin
 from kartograf.transport.chunks import GridSpec
 from kartograf.transport.http import (
     MAX_RETRIES,
@@ -71,12 +71,12 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     >>> # Download by sheet code (godlo) → ASC from OpenData
     >>> provider.download("N-34-130-D-d-2-4", Path("./sheet.asc"))
     >>>
-    >>> # Download by bbox → GeoTIFF from WCS (KRON86 only, see download_bbox)
+    >>> # Download by bbox → GeoTIFF float32 from WCS (1m, both vertical CRS)
     >>> from kartograf import BBox
     >>> bbox = BBox(
     ...     min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
     ... )
-    >>> GugikProvider(vertical_crs="KRON86").download_bbox(bbox, Path("./area.tif"))
+    >>> provider.download_bbox(bbox, Path("./area.tif"))
     >>>
     >>> # Download in legacy KRON86 vertical CRS
     >>> provider = GugikProvider(vertical_crs="KRON86")
@@ -93,15 +93,15 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     # Supported resolutions
     SUPPORTED_RESOLUTIONS = ["1m", "5m"]
 
-    # WCS endpoints for NMT data (by vertical CRS) - only 1m resolution
+    # WCS endpoints for NMT data (by vertical CRS) - only 1m resolution.
+    # KRON86 heights come as float32 GeoTIFF from the TIFF endpoint; EVRF2007
+    # heights only as image/x-aaigrid from DigitalTerrainModel (its image/tiff is
+    # RGB) - docs/research/2026-10-11-wcs-cutouts/raport.md, point 1.
     # Note: 5m resolution is NOT available via WCS
     WCS_ENDPOINTS = {
         "KRON86": f"{BASE_URL}/wss/service/PZGIK/NMT/GRID1/WCS/"
         "DigitalTerrainModelFormatTIFF",
-        # Known service outage: HTTP 404 since 2026-08 (docs/PROGRESS.md);
-        # kept for when GUGiK restores it
-        "EVRF2007": f"{BASE_URL}/wss/service/PZGIK/NMT/GRID1/WCS/"
-        "DigitalTerrainModelFormatTIFFEVRF2007",
+        "EVRF2007": f"{BASE_URL}/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModel",
     }
 
     # WMS endpoints for the indexes (skorowidze) - used to find OpenData URLs
@@ -122,21 +122,25 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     # Product name family: a family name outside LAYER_PATTERN gives a warning
     LAYER_FAMILY = re.compile(r"^SkorowidzeNMT(?!P)")
 
-    # Vertical CRS whose WCS endpoint GUGiK withdrew (HTTP 404 since 2026-08,
-    # docs/PROGRESS.md). Applies to the NMT GRID1 endpoints declared above;
-    # subclasses serving their own endpoints (NMPT) override this.
-    WITHDRAWN_WCS_VERTICAL_CRS: tuple[str, ...] = ("EVRF2007",)
+    # Vertical CRS whose WCS endpoint GUGiK withdrew: download_bbox fails before
+    # the network. None today (the EVRF2007 entry pointed at a non-existent
+    # endpoint until 0.7.2); kept as the mechanism for future withdrawals.
+    WITHDRAWN_WCS_VERTICAL_CRS: tuple[str, ...] = ()
 
     # Coverage IDs for WCS (by vertical CRS) - only 1m resolution
     COVERAGE_IDS = {
         "KRON86": "DTM_PL-KRON86-NH_TIFF",
-        "EVRF2007": "DTM_PL-EVRF2007-NH_TIFF",
+        "EVRF2007": "DTM_PL-EVRF2007-NH",
     }
 
-    # NMT 1 m source grid: step 1 m, pixel edges at k + 0.5 m - measured in 9
+    # How heights of each vertical CRS are requested (GugikWcsMixin.HEIGHT_*).
+    WCS_HEIGHT_FORMAT = {"KRON86": HEIGHT_GTIFF, "EVRF2007": HEIGHT_AAIGRID}
+
+    # NMT 1 m sheet grid: step 1 m, pixel edges at k + 0.5 m - measured in 9
     # regions of Poland and identical to the OpenData sheets
     # (docs/research/2026-10-10-wcs-limits/raport.md, points 4 and 7).
     WCS_GRID: GridSpec | None = GridSpec(step=1.0, origin_x=0.5, origin_y=0.5)
+    WCS_NATIVE_STEP: float | None = 1.0
 
     # Supported vertical CRS by resolution
     SUPPORTED_VERTICAL_CRS = ["KRON86", "EVRF2007"]
@@ -451,29 +455,27 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
             If format is not supported, bbox CRS is not EPSG:2180,
             or resolution is 5m (WCS not available for 5m)
         ValidationError
-            If vertical_crs is EVRF2007 (WCS endpoint withdrawn by GUGiK)
+            If the vertical CRS is in ``WITHDRAWN_WCS_VERTICAL_CRS`` (none today)
 
         Notes
         -----
-        Known service outage: the EVRF2007 WCS endpoint
-        (DigitalTerrainModelFormatTIFFEVRF2007) has returned HTTP 404 since
-        2026-08 (docs/PROGRESS.md), so bbox downloads work only with
-        ``vertical_crs="KRON86"``. Use ``download()`` with a sheet code to get
-        EVRF2007 heights.
-
-        GeoTIFF (NMT only, ``WCS_GRID``): the file extent is the bbox expanded
-        OUTWARD to the source grid (pixel edges at k + 0.5 m, < 1 px per side),
-        because the server resamples to the requested grid and an off-grid bbox
-        would shift the content by a fraction of a pixel; areas above
-        ``WCS_CHUNK_LIMITS`` (16 Mpx) are fetched in chunks and stitched without
-        resampling (ADR-034). PNG/JPEG: one request with the bbox as given. An
-        OGC exception report is raised as ``DownloadError``, never saved.
+        GeoTIFF: the file extent is the bbox expanded OUTWARD to the 1 m sheet
+        grid (``WCS_GRID``: pixel edges at k + 0.5 m, < 1 px per side), because
+        the server resamples to the requested grid and an off-grid bbox would
+        shift the content by a fraction of a pixel; on that grid the content
+        equals the OpenData 1 m sheets of the flight the server shows. The area
+        is fetched in chunks (``plan_wcs_chunks``) and stitched without
+        resampling (ADR-034). Heights are float32 with no nodata: KRON86 as
+        GeoTIFF (16 Mpx chunks), EVRF2007 as ``image/x-aaigrid`` converted to
+        GeoTIFF in EPSG:2180 (1 Mpx chunks, ~20 s/Mpx). PNG/JPEG: one request
+        with the bbox as given (preview). An OGC exception report is raised as
+        ``DownloadError``, never saved.
 
         Examples
         --------
-        >>> provider = GugikProvider(vertical_crs="KRON86")
+        >>> provider = GugikProvider(vertical_crs="EVRF2007")
         >>> bbox = BBox(
-        ...     min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
+        ...     min_x=450000, min_y=550000, max_x=451000, max_y=551000, crs="EPSG:2180"
         ... )
         >>> path = provider.download_bbox(bbox, Path("./area.tif"))
         """
@@ -496,13 +498,11 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
                 f"Supported formats: {list(self.WCS_FORMATS.keys())}"
             )
 
-        # GUGiK withdrew the EVRF2007 WCS endpoint (HTTP 404 since 2026-08):
-        # fail with a readable message instead of three retried 404s
         if self._vertical_crs in self.WITHDRAWN_WCS_VERTICAL_CRS:
             raise ValidationError(
-                "WCS NMT 1m for EVRF2007 is not available (GUGiK removed the "
-                "endpoint, HTTP 404). Use GugikProvider(vertical_crs='KRON86') "
-                "or download sheets by godlo."
+                f"WCS {self._CACHE_PRODUCT.upper()} 1m for {self._vertical_crs} is "
+                "not available (endpoint withdrawn by GUGiK). Download sheets by "
+                "godlo instead."
             )
 
         return self._download_wcs(
@@ -520,6 +520,10 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
             self.WCS_ENDPOINTS[self._vertical_crs],
             self.COVERAGE_IDS[self._vertical_crs],
         )
+
+    def _wcs_height_format(self) -> str:
+        """``HEIGHT_GTIFF`` or ``HEIGHT_AAIGRID`` for the provider's vertical CRS."""
+        return self.WCS_HEIGHT_FORMAT[self._vertical_crs]
 
     # =========================================================================
     # Info methods
@@ -554,10 +558,8 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         """
         Check if WCS download is available for current configuration.
 
-        WCS is only available for 1m resolution and only for vertical CRS
-        whose endpoint is still served: the NMT EVRF2007 endpoint has
-        returned HTTP 404 since 2026-08 (docs/PROGRESS.md), so for NMT this
-        means KRON86 only.
+        WCS is only available for 1m resolution (both vertical CRS) and not for
+        a vertical CRS listed in ``WITHDRAWN_WCS_VERTICAL_CRS`` (none today).
 
         Returns
         -------

@@ -135,33 +135,44 @@ kartograf download --bbox 530000,382000,533000,386000 --country pl
 ### 1.3 Jeden scalony GeoTIFF (`--target-crs`)
 
 ```bash
-kartograf download --bbox 530000,382000,533000,386000 --country pl --target-crs EPSG:2180
-kartograf download --bbox 530000,382000,533000,386000 --country pl --target-crs EPSG:5514
-# pogranicze: dwa wycinki (PL + CZ) w tym samym układzie, wspólny parent_request
+# NMT 1 m, wycinek WCS w układzie źródłowym lub po lokalnej reprojekcji
+kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --target-crs EPSG:2180
+kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --target-crs EPSG:5514
+# NMPT 1 m, oba układy wysokościowe (tu KRON86)
+kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmpt --vertical-crs KRON86 --target-crs EPSG:2180
+# pogranicze: osobne wycinki PL + CZ, ten sam układ i parent_request
 kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --target-crs EPSG:2180 --vertical-crs EVRF2007
+# NMT 5 m: arkusze OpenData, bez --target-crs
+kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --resolution 5m
 ```
 
-- Mozaika arkuszy i lokalna reprojekcja przypiętą operacją; dla PL tylko
-  `--product nmt` i arkusze PL-1992 ([ADR-027](DECISIONS.md)).
-- Arkusz bez danych GUGiK (morze, strona zagraniczna) to nodata w wyniku,
-  `Warning:` i `extra.missing_sheets`. Na pograniczu — także z Niemcami,
-  których danych nie obsługujemy — `--target-crs` daje ciągły wycinek;
-  bez niego arkusz leżący za granicą po prostu nie pojawia się na liście
-  plików.
-- `EPSG:2180` zachowuje siatkę i wartości arkuszy 1:1; arkusze o różnych
-  fazach siatki kończą się `GridMismatchError` (podpowiedź: inny
-  `--target-crs`, który reprojektuje każdy arkusz osobno).
-- Istniejący wycinek (ta sama nazwa = te same współrzędne żądania) jest
-  pomijany bez sieci (`Skipped ... - already exists`). Przebudowa: `--force`
-  (pobiera ponownie także wszystkie arkusze) albo usunięcie samego pliku
-  wycinka (arkusze z dysku zostaną użyte ponownie). Nieudana przebudowa nie
-  kasuje poprzedniego pliku.
-- Przed pobraniem kontrola wolnego miejsca (dolne oszacowanie; brak
-  miejsca = błąd przed siecią), `Info:` dla wycinka >= 1 GiB; twardego
-  limitu rozmiaru nie ma.
-- Wycinek zawsze składa się z najnowszych kampanii (nie przyjmuje
-  `--campaigns all`, `--year`, `--min-year` ani `--max-year`). Pełny opis:
-  ARCHITECTURE 4.3.
+- PL: WCS GUGiK daje wysokości NMT/NMPT 1 m w jednym GeoTIFF
+  `<segment>/bbox/<współrzędne>_<YYYYMMDD>.tif`. Przed zapytaniem
+  WCS pobierana jest maska lądu PRG (`A00 - W02 - W03`): morze
+  i obszar poza Polską to nodata `-9999`, **0,0 na lądzie zostaje
+  danymi**. Wynik w całości nodata daje `Warning:` i kod 0. Na
+  wybrzeżu (pomiar 2026-10-11: Gdynia, Hel, Mierzeja Wiślana) poza
+  maską zostaje woda o wysokości WCS ok. 0–0,3 m; linia PRG nie odcina
+  lądu wyższego niż 5 m, ale wąski pas brzegu i nabrzeży (do ok. 2 m)
+  może trafić w nodata, a niska plaża po stronie lądu zostaje.
+- Zakres jest rozszerzany na zewnątrz do siatki arkuszy 1 m
+  EPSG:2180 (krawędzie `k + 0,5` m), potem dla innych CRS
+  lokalnie reprojektowany przypiętą operacją. WCS pokazuje
+  kompozycję serwera (najnowszy lot obszaru bez wypełniania
+  starszymi); wycinek może pokazywać inny lot niż pobrane
+  arkusze dokładnie 1 m. Nad lotem 0,5 m wynik 1 m to
+  decymacja, nie uśrednienie.
+- Każde uruchomienie pobiera ponownie (bez pomijania istniejącego
+  pliku); tego samego dnia udany wynik atomowo zastępuje
+  poprzedni, nieudany pozostawia plik i sidecar. `--force`,
+  `--workers` i `--scale` nie zmieniają wycinka WCS.
+  `Info:` podaje liczbę żądań przy więcej niż jednym kawałku
+  lub wyniku >= 1 GiB.
+- Wycinki 5 m, wybór roku (`--year`, `--min-year`, `--max-year`),
+  `--campaigns all` i `--full-sheet` z `--target-crs` są
+  odrzucane (`Error:`). Podobnie `--target-crs` dla orto/LAZ;
+  arkusze 5 m pobieraj bez `--target-crs`. Szczegóły:
+  [ADR-035](DECISIONS.md), ARCHITECTURE 4.3.
 
 ### 1.4 Czechy (CUZK)
 
@@ -334,15 +345,12 @@ bbox = parser.get_bbox(crs="EPSG:2180")  # lub "EPSG:4326"
 # Pobieranie przez godło -> ASC (OpenData); hierarchia: download_hierarchy()
 manager = DownloadManager(output_dir="./data")
 path = manager.download_sheet("N-34-130-D-d-2-4")
-# NMT 5 m tylko w EVRF2007: resolution="5m" z vertical_crs="KRON86" w DownloadManager,
-# create_nmt_provider i download_pl_cutout -> ValidationError (od 0.7.1; wcześniej
-# cicha zamiana na EVRF2007 z ostrzeżeniem w logu)
+# NMT 5 m tylko w EVRF2007: resolution="5m" z vertical_crs="KRON86"
+# w DownloadManager/create_nmt_provider i download_pl_cutout -> ValidationError
 
-# Pobieranie przez bbox -> GeoTIFF (WCS) — tylko NMT 1m i tylko w układzie KRON86:
-# endpoint WCS dla EVRF2007 GUGiK wycofał (HTTP 404 od 2026-08), więc
-# download_bbox pod EVRF2007 kończy się ValidationError. Wysokości EVRF2007
-# bierz z arkuszy (download_sheet / download_sheets), a jako jeden GeoTIFF
-# z arkuszy: download_pl_cutout() (niżej).
+# Biblioteczne download_bbox: NMT KRON86 (TIFF) i EVRF2007
+# (ASC multipart), a także NMPT (ASC multipart) — jednopasmowy
+# float32 GeoTIFF wysokości na siatce 1 m EPSG:2180, bez maski PRG
 kron = DownloadManager(output_dir="./data", vertical_crs="KRON86")
 area = BBox(min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180")
 path = kron.download_bbox(area, "my_area.tif")
@@ -379,40 +387,24 @@ hsg_from_rasters(
     crs="EPSG:2180", pixel_m=100.0, output_path=Path("./hsg_100m.tif"),
 )
 
-# Scalony wycinek NMT PL w zadanym układzie (jeden GeoTIFF + sidecar)
-from kartograf import download_pl_cutout, MetadataCache
+# Scalony wycinek WCS NMT lub NMPT PL (GeoTIFF + sidecar)
+from kartograf import download_pl_cutout, prepare_pl_cutout, run_pl_wcs_cutout
 
+bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
 result = download_pl_cutout(
-    BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
-    "EPSG:5514",
-    output_dir="./data",
-    max_workers=4,
-    cache=MetadataCache(),
+    bbox, "EPSG:5514", output_dir="./data", product="nmpt",
 )
-print(result.path)
-# arkusze bez danych GUGiK (nodata); także gdy result.skipped — z sidecara
-print(result.missing_sheets)
-# Wyjątki: DownloadError (awaria pobrania arkusza — wycinek nie powstaje),
-# ValidationError (żaden arkusz nie ma danych, za mało miejsca na dysku,
-# nieobsługiwany parametr); GridMismatchError (różne fazy siatki przy EPSG:2180).
-# Kroki osobno (własny provider/sesja/FileStorage):
-# prepare_pl_cutout -> select_pl_cutout_sheets -> run_pl_cutout.
+print(result.path, result.masked_pixels, result.zero_pixels, result.all_nodata)
+# osobne kroki przy własnym providerze; maska PRG pobierana przed WCS
+cutout = prepare_pl_cutout(bbox, "EPSG:2180", product="nmt")
+result = run_pl_wcs_cutout(cutout)
 
-# Mozaika z lokalnych arkuszy (bez sieci) do katalogu projektu — wynik
-# i sidecar pod ścieżką podaną przez wywołującego, te same reguły siatki
-# co w download_pl_cutout (EPSG:2180 + różne fazy siatki -> GridMismatchError)
-from kartograf import build_cutout_from_sheets
-
-local = build_cutout_from_sheets(
-    [Path("./arkusze/N-34-130-D-d-2-3.asc"), Path("./arkusze/N-34-130-D-d-2-4.asc")],
-    BBox(530000, 382000, 530200, 382100, "EPSG:2180"),
-    "EPSG:2180",
-    Path("./projekt/nmt.tif"),     # sidecar: ./projekt/nmt.tif.meta.json
-    resolution="1m",
-    vertical_crs="EVRF2007",
-)
-# ValidationError przed zapisem: brak/nieczytelny arkusz (lista ścieżek)
-# albo output_path równy jednemu z arkuszy (nadpisałby dane wejściowe)
+# Przestarzałe API arkuszowe (usunięcie w 0.8.0):
+# prepare_pl_cutout -> select_pl_cutout_sheets -> run_pl_cutout,
+# build_cutout_from_sheets (lokalne arkusze), PlCutoutSheets.
+# Parametry geometry/layer/scale/max_workers/force/on_progress/cache
+# w download_pl_cutout nie zmieniają toru WCS; niestandardowe wartości
+# emitują DeprecationWarning i zostaną usunięte w 0.8.0.
 
 # Zlewnia przygraniczna PL/CZ: podział obszaru na kraje i wycinek CZ
 # w układzie PL (EPSG:2180 + EVRF2007); siatka CZ startuje od zadanego obszaru
@@ -479,8 +471,10 @@ rozwijane do arkuszy 1:10000 przez `download_hierarchy()` (ta zawsze zwraca
   w `failed`), pliki kampanii i `unverified` (sekcja 4).
 - `DownloadManager.last_sheet` (`SheetFetch`) po pojedynczym arkuszu:
   `path`, `skipped`, `downloaded`, `reused`, `link`, `unverified`.
-- `PlCutoutResult` (wycinek): `path`, `skipped`, `missing_sheets`,
-  `off_grid_sheets`, `partial_sheets`, `all_nodata`, `unverified`.
+- `PlCutoutResult` (wycinek WCS): `path`, `masked_pixels`,
+  `zero_pixels`, `all_nodata`; `skipped` zawsze `False`.
+  Pola `missing_sheets`, `off_grid_sheets`, `partial_sheets`
+  i `unverified` dotyczą wyłącznie przestarzałego API arkuszowego.
 - `CzCutoutResult` (wycinek CZ, `download_cz_cutout`/`run_cz_cutout`):
   `path`, `skipped`, `all_nodata`.
 - `LazDownloadResult` (`download_laz_area`): `downloaded`, `skipped`,
@@ -501,10 +495,11 @@ sam plik danych, bez sidecara.
 **Gdzie leżą pliki.** `data/<produkt>/<kraj>_<układ>[_<wariant>][_<vcrs>]/...`
 — kanoniczna tabela, przykłady i migracja z 0.6.x: ARCHITECTURE 3.3.
 
-**Pliki CZ i wycinki PL sprzed przypięcia operacji EPSG:1622/1623.** Pliki,
-których sidecar w `transform.horizontal` zawiera `S-JTSK to ETRS89 (3)`, nie
-są przebudowywane automatycznie; CLI drukuje `Info:` przy ich pominięciu,
-a ponowne pobranie wymusza `--force`.
+**Starsze pliki CZ.** Pliki, których sidecar w
+`transform.horizontal` zawiera `S-JTSK to ETRS89 (3)`, nie są
+przebudowywane automatycznie; przy pominięciu istniejącego pliku
+CLI drukuje `Info:`, a ponowne pobranie wymusza `--force`.
+Wycinki PL WCS nie są pomijane — każdy przebieg pobiera na nowo.
 
 ---
 
@@ -747,13 +742,17 @@ proxy).
 - Rozpoznawanie krajów używa prostokątnych obwiedni (ADR-023), nie wielokąta
   granic; `--country auto` może odpytać CUZK poza Czechami i GUGiK
   w Czechach (sekcja 1.2).
-- Arkusze NMT 5 m mogą mieć różne fazy siatki: wycinek
-  `--target-crs EPSG:2180` kończy się `GridMismatchError` zamiast zwracać
-  niezgodne wartości; inny `--target-crs` uruchamia warp per arkusz (W1).
-- WCS NMT (`download_bbox`) działa tylko dla 1 m w KRON86 (endpoint EVRF2007
-  zwraca 404 od 2026-08); wysokości EVRF2007 z obszaru: CLI `--bbox`
-  (arkusze OpenData) albo jeden GeoTIFF przez `--target-crs` /
-  `download_pl_cutout`.
+- NMT 5 m nie obsługuje `--target-crs`: pobieraj arkusze
+  bez tej flagi. W przestarzałym API arkuszowym (do 0.8.0)
+  `run_pl_cutout` z różnymi fazami siatki może dać
+  `GridMismatchError` przy EPSG:2180; inny CRS używa
+  warpu każdego arkusza.
+- WCS `download_bbox` NMT KRON86 (TIFF) oraz NMT EVRF2007
+  i NMPT (ASC multipart) daje wysokości float32 w rozdzielczości
+  1 m. Samo `download_bbox` nie stosuje maski lądu PRG ani
+  nodata; maskę dostaje wycinek `--target-crs` /
+  `download_pl_cutout`. Kompozycja serwera może różnić się
+  od wyboru kampanii arkusza.
 - Uszkodzony albo nieczytelny cache metadanych (`.kartograf_cache.db`
   w bieżącym katalogu) nie przerywa pobierania: CLI drukuje jedno
   `Warning: cache metadanych nieczytelny (...)` i pracuje bez cache.
