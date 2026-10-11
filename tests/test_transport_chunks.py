@@ -140,17 +140,24 @@ class TestFetchChunks:
         assert calls == [out]
         assert list(tmp_path.glob("*.part*")) == []
 
-    def test_fetch_chunks_mosaics_bit_exact(self, tmp_path):
+    def test_fetch_chunks_mosaics_bit_exact(self, tmp_path, caplog):
+        """Striped chunks (like GUGiK WCS GeoTIFF) -> bit-exact, tiled result,
+        without GDAL's BLOCKXSIZE-without-TILED warning."""
         bbox = BBox(0.5, 0.5, 8.5, 6.5, "EPSG:2180")
         chunks = plan_chunks(bbox, 8, 6, 1.0, ChunkLimits(4, 3, 1000))
         assert len(chunks) == 4
         calls: list[Path] = []
-        out = fetch_chunks(chunks, bbox, tmp_path / "m.tif", _writer(bbox, 1.0, calls))
+        with caplog.at_level("WARNING"):
+            out = fetch_chunks(
+                chunks, bbox, tmp_path / "m.tif", _writer(bbox, 1.0, calls)
+            )
         assert len(calls) == 4 and out not in calls
         with rasterio.open(out) as src:
             np.testing.assert_array_equal(src.read(1), _global_values(bbox, bbox, 1.0))
             assert src.transform == from_origin(0.5, 6.5, 1.0, 1.0)
             assert src.shape == (6, 8)
+            assert src.profile["tiled"] is True
+        assert not [r for r in caplog.records if "BLOCKXSIZE" in r.getMessage()]
         assert list(tmp_path.glob("*.part*")) == []
 
     def test_fetch_chunks_cleans_parts_on_fetch_error(self, tmp_path):
