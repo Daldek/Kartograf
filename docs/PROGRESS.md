@@ -139,11 +139,12 @@
 > WCS `docs/research/2026-10-10-wcs-limits/raport.md`, weryfikacja na zywo
 > `docs/research/2026-10-10-silent-defaults/raport.md`; brama zielona
 > (pytest offline 3216, ruff, mypy), review bez blokerow (uwagi poprawione).
-> **NASTEPNA SESJA:** decyzja o merge (d), potem (a) wycinki PL z WCS (nowy
-> ADR; korzysta z `transport/chunks.py`; razem z naprawa NMPT
-> `download_bbox`; fakty z raportu WCS pkt 3, 6, 8: brak nodata, RGB NMPT,
-> kompozycja lotow serwera inna niz ADR-028) i (e) testy LAZ; kolejnosc
-> i zakres wydania 0.7.2 — do decyzji uzytkownika.
+> **NASTEPNA SESJA (decyzja uzytkownika 2026-10-10):** spec (a) wycinki PL
+> z WCS — wejscie zebrane w backlogu "Do 0.7.2" pozycja (a) (nowy ADR;
+> korzysta z `transport/chunks.py`; razem z naprawa NMPT `download_bbox`).
+> Merge `feat/silent-defaults` do `develop` — nadal do decyzji uzytkownika
+> (spec (a) mozna pisac na `develop` po merge albo na galezi z (d)).
+> Potem (e) testy LAZ; zakres wydania 0.7.2 — do decyzji uzytkownika.
 > **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
 > na zywo z raportem, `__version__ = "0.7.2"` + asercje testow, data i link
 > `compare/v0.7.1...v0.7.2` w CHANGELOG, status w SCOPE i `docs/PRD.md`
@@ -1770,6 +1771,24 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
     `DigitalTerrainModelFormatTIFFEVRF2007`, `DTM_PL-EVRF2007-NH_TIFF`)
     wskazuje nieistniejacy endpoint i coverage (zob. tez WCS EVRF2007 = 404
     od 2026-08-11) — do poprawy.
+  - **Wejscie do specu (a) (stan 2026-10-10):** mechanizm kawalkow gotowy
+    (`transport/chunks.py`, ADR-034: `GridSpec`, `ChunkLimits`,
+    `fetch_chunks`, `GugikWcsMixin._download_wcs`, `WCS_GRID` per provider;
+    na galezi `feat/silent-defaults`, do merge). Fakty z pomiaru
+    `docs/research/2026-10-10-wcs-limits/raport.md` do rozstrzygniecia
+    w specu: (1) brak nodata — poza pokryciem i w brakujacych arkuszach
+    0,0, a 0,0 wystepuje tez w danych waznych (Leba) (pkt 3, 8); (2) WCS
+    to kompozycja lotow serwera, nie najnowszy lot ADR-028 (Zulawy:
+    arkusze "2017 i starsze" inne o 7-14 cm; Terespol: 1,1 mln px
+    waznych w arkuszu = 0,0 w WCS) (pkt 8); (3) siatka NMT 1 m `k + 0,5`
+    w 9 rejonach, bbox poza siatka = cichy blad geolokalizacji (pkt 4,
+    7); (4) brak limitu do 100 Mpx, host zrywa polaczenia (pkt 2);
+    (5) NMPT `image/tiff` = RGB uint8, wysokosci tylko `image/x-aaigrid`
+    multipart — naprawa `download_bbox` NMPT w ramach (a) (pkt 6,
+    decyzja 2026-10-10); (6) EVRF2007 nie mierzony (endpoint tymczasowo
+    niedostepny). Otwarte tez: los wycinka z arkuszy i parametrow
+    arkuszowych `mosaic_and_crop` (kandydat 0.8.0), sidecar wycinka bez
+    kampanii.
 - [x] **(b) Wybor roku `--year`/`--min-year`/`--max-year`** — SCALONE do
   `develop` 2026-10-10 (`09070bf`). Obowiazuje model A (decyzja uzytkownika
   2026-10-10, spec
