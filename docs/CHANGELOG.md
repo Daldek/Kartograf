@@ -5,6 +5,8 @@ Wszystkie istotne zmiany w projekcie sa dokumentowane w tym pliku.
 Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - Unreleased
+
 ## [0.7.2] - 2026-10-11
 
 ### Dodane
@@ -2170,6 +2172,7 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
+[0.8.0]: https://github.com/Daldek/Kartograf/compare/v0.7.2...develop
 [0.7.2]: https://github.com/Daldek/Kartograf/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/Daldek/Kartograf/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/Daldek/Kartograf/compare/v0.6.1...v0.7.0
