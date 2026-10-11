@@ -2,9 +2,10 @@
 Regression tests of record selection and data handling on RAW GUGiK responses.
 
 Fixtures in ``tests/fixtures/gugik_skorowidz/real_2026_10_06/`` (NMT/NMPT/ortho)
-and ``tests/fixtures/gugik_laz/real_2026_10_06/`` (LAZ WFS) are unedited bodies
-from the live E2E round of 2026-10-06
-(``docs/research/2026-10-06-e2e-brzegowe-i-review/``, requirement E18). Each
+are unedited bodies from the live E2E round of 2026-10-06
+(``docs/research/2026-10-06-e2e-brzegowe-i-review/``, requirement E18);
+``tests/fixtures/gugik_laz/real_2026_10_10/`` (LAZ WFS) holds unedited bodies
+recorded 2026-10-10 for exactly ``W2_BBOX`` and ``WRO_BBOX``. Each
 index layer is returned from a file of its name, exactly as the server
 answered (layer order: newest -> oldest).
 The tests cover behaviours the code ALREADY has and the round confirmed.
@@ -18,7 +19,8 @@ import pytest
 import requests
 
 from kartograf.core.sheet_parser import BBox, SheetParser
-from kartograf.exceptions import DownloadError, NoCoverageError
+from kartograf.download.laz import download_laz_area
+from kartograf.exceptions import DownloadError, NoCoverageError, YearRangeError
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import GugikLazProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
@@ -31,7 +33,7 @@ from kartograf.providers.pl.skorowidz import (
 )
 
 REAL = Path(__file__).parent / "fixtures" / "gugik_skorowidz" / "real_2026_10_06"
-REAL_LAZ = Path(__file__).parent / "fixtures" / "gugik_laz" / "real_2026_10_06"
+REAL_LAZ = Path(__file__).parent / "fixtures" / "gugik_laz" / "real_2026_10_10"
 
 EMPTY = (
     Path(__file__).parent / "fixtures" / "gugik_skorowidz" / "empty.body"
@@ -271,8 +273,13 @@ class TestNoCoverageHintsOnRealBodies:
         with pytest.raises(NoCoverageError, match="--scale 1:2000") as exc:
             provider._resolve_sheet(godlo)
         assert "5.167.25.13" in str(exc.value)
-        # KRON86 layers: all checked before no coverage was reported
-        assert queried_layers(provider._sessions.injected) == [
+        # KRON86 layers: all checked before no coverage was reported (the
+        # variant check, P10, then asks the other indexes in one query each)
+        kron86 = GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["KRON86"]
+        calls = provider._sessions.injected.get.call_args_list
+        assert [
+            _layer_of(c.args[0]) for c in calls if c.args[0].startswith(kron86)
+        ] == [
             "SkorowidzeNMT2019",
             "SkorowidzeNMT2018",
             "SkorowidzeNMT2017iStarsze",
@@ -285,6 +292,140 @@ class TestNoCoverageHintsOnRealBodies:
             provider._resolve_sheet(godlo)
         assert "GUGiK ma ten arkusz w 0.5 m" in str(exc.value)
         assert "Kartograf pobiera dokladnie 1 m" in str(exc.value)
+
+
+REAL_U1 = (
+    Path(__file__).parent
+    / "fixtures"
+    / "gugik_skorowidz"
+    / "real_2026_10_10"
+    / "nmt"
+    / "N-34-130-D-d-1-1"
+)
+U1 = "N-34-130-D-d-1-1"
+NMT_ENDPOINTS = GugikProvider.WMS_SKOROWIDZE_ENDPOINTS
+
+
+def variant_session(fail_prefix: str | None = None, bodies=None) -> Mock:
+    """GetFeatureInfo body by (endpoint, layer) from ``real_2026_10_10``.
+
+    The 5 m and 1 m EVRF2007 indexes share layer names, so the plain
+    ``routed_session`` (layer only) cannot tell them apart. A query with
+    several layers (``LAYERS=a,b``) is answered by ``<prefix>__all.body``.
+    ``fail_prefix``: that endpoint answers a page that is not an index
+    template (``DownloadError``, no retries).
+    """
+    prefixes = {
+        NMT_ENDPOINTS["5m"]["EVRF2007"]: "nmt5_evr",
+        NMT_ENDPOINTS["1m"]["EVRF2007"]: "nmt1_evr",
+        NMT_ENDPOINTS["1m"]["KRON86"]: "nmt1_krn",
+    }
+    bodies = bodies or {}
+    session = Mock(spec=requests.Session)
+
+    def get(url, **kwargs):
+        prefix = prefixes[url.split("?", 1)[0]]
+        if prefix == fail_prefix:
+            return _response("<html><body>Service Unavailable</body></html>")
+        layer = _layer_of(url)
+        name = "all" if "," in layer else layer
+        if (prefix, name) in bodies:
+            return _response(bodies[(prefix, name)])
+        path = REAL_U1 / f"{prefix}__{name}.body"
+        return _response(path.read_text(encoding="utf-8") if path.exists() else EMPTY)
+
+    session.get = Mock(side_effect=get)
+    return session
+
+
+def _variant_hints(exc: pytest.ExceptionInfo) -> list[str]:
+    return [h for h in exc.value.hints if h.startswith("Skorowidz GUGiK ma ten arkusz")]
+
+
+class TestVariantHintOnRealBodies:
+    """P10: no record in the chosen variant -> a hint naming the variants
+    (resolution, vertical CRS) whose index has the sheet (U1, 2026-10-10)."""
+
+    def test_variant_hint_for_5m_gap(self, caplog):
+        provider = GugikProvider(resolution="5m", session=variant_session())
+        with pytest.raises(NoCoverageError) as exc:
+            provider._resolve_sheet(U1)
+        # one answer for all layers: no per-layer year check ("EVRF2007" in
+        # a label must not read as the layer year 2007)
+        assert "poza partycja" not in caplog.text
+        hints = _variant_hints(exc)
+        assert len(hints) == 2
+        evrf = next(h for h in hints if "EVRF2007" in h)
+        kron = next(h for h in hints if "KRON86" in h)
+        assert "--resolution 1m" in evrf and "--vertical-crs" not in evrf
+        assert "--resolution 1m --vertical-crs KRON86" in kron
+        assert U1 not in evrf  # one CLI line for many sheets
+
+    def test_one_query_per_variant(self):
+        session = variant_session()
+        with pytest.raises(NoCoverageError):
+            GugikProvider(resolution="5m", session=session)._resolve_sheet(U1)
+        variant_calls = [
+            c.args[0] for c in session.get.call_args_list if "," in _layer_of(c.args[0])
+        ]
+        assert len(variant_calls) == 2
+
+    def test_variant_with_other_sheet_gives_no_hint(self):
+        body = (REAL_U1 / "nmt1_krn__all.body").read_text(encoding="utf-8")
+        other = body.replace(U1, "N-34-130-D-d-1-2")
+        assert other != body
+        session = variant_session(bodies={("nmt1_krn", "all"): other})
+        with pytest.raises(NoCoverageError) as exc:
+            GugikProvider(resolution="5m", session=session)._resolve_sheet(U1)
+        assert [h for h in _variant_hints(exc) if "KRON86" in h] == []
+
+    def test_failed_variant_is_not_asked_again(self):
+        """Review: an outage of a variant index costs one attempt per provider,
+        not one (with retries) per missing sheet."""
+        session = variant_session(fail_prefix="nmt1_evr")
+        provider = GugikProvider(resolution="5m", session=session)
+        evrf_1m = NMT_ENDPOINTS["1m"]["EVRF2007"]
+        for _ in range(2):
+            with pytest.raises(NoCoverageError):
+                provider._resolve_sheet(U1)
+        calls = [c for c in session.get.call_args_list if c.args[0].startswith(evrf_1m)]
+        assert len(calls) == 1
+
+    def test_variant_query_failure_keeps_no_coverage(self, caplog):
+        session = variant_session(fail_prefix="nmt1_evr")
+        with pytest.raises(NoCoverageError) as exc:
+            GugikProvider(resolution="5m", session=session)._resolve_sheet(U1)
+        hints = _variant_hints(exc)
+        assert all("EVRF2007" not in h for h in hints)
+        assert any("KRON86" in h for h in hints)
+        assert any(
+            r.levelname == "WARNING" and "1m EVRF2007" in r.getMessage()
+            for r in caplog.records
+        )
+
+    def test_variant_hint_cached_with_no_coverage(self, tmp_path):
+        from kartograf.cache.metadata import MetadataCache
+
+        cache = MetadataCache(tmp_path / "c.db")
+        first = variant_session()
+        with pytest.raises(NoCoverageError) as exc1:
+            GugikProvider(resolution="5m", session=first, cache=cache)._resolve_sheet(
+                U1
+            )
+        again = variant_session()
+        with pytest.raises(NoCoverageError) as exc2:
+            GugikProvider(resolution="5m", session=again, cache=cache)._resolve_sheet(
+                U1
+            )
+        again.get.assert_not_called()
+        assert exc2.value.hints == exc1.value.hints
+
+    def test_nmpt_queries_only_nmpt_indexes(self):
+        godlo = "N-33-77-A-d-2-2"
+        session = nmt_session(godlo, "nmpt_evr")
+        with pytest.raises(NoCoverageError):
+            GugikNmptProvider(session=session)._resolve_sheet(godlo)
+        assert all("/NMPT/" in c.args[0] for c in session.get.call_args_list)
 
 
 # =============================================================================
@@ -415,10 +556,20 @@ class TestCutoutSheetsFromDifferentCampaigns:
 # =============================================================================
 
 W2_BBOX = BBox(637200, 486900, 637500, 487100, "EPSG:2180")
+# 50 x 50 m at the centre of 6.150.13.16.4 (Wroclaw, two NIE deliveries in 2025)
+WRO_BBOX = BBox(367331, 369020, 367381, 369070, "EPSG:2180")
+# 300 x 300 m on two PL-1992 sheets: one with 2023/2025, the other only 2019
+W3_BBOX = BBox(627706, 479258, 628006, 479558, "EPSG:2180")
+# query window (axes N,E) each recorded area answers
+_LAZ_WINDOWS = {
+    "w2": "486900,637200,487100,637500,",
+    "wro": "369020,367331,369070,367381,",
+    "w3": "479258,627706,479558,628006,",
+}
 
 
-def laz_session() -> MagicMock:
-    """WFS: GetCapabilities and GetFeature from raw XML of the 2026-10-06 round."""
+def laz_session(area: str = "w2") -> MagicMock:
+    """WFS: GetCapabilities and GetFeature from raw XML recorded for ``area``."""
     session = MagicMock()
 
     def get(url, **kwargs):
@@ -427,8 +578,9 @@ def laz_session() -> MagicMock:
         if query["REQUEST"][0] == "GetCapabilities":
             path = REAL_LAZ / f"caps_{vcrs}.xml"
         else:
+            assert query["BBOX"][0].startswith(_LAZ_WINDOWS[area])
             year = query["TYPENAMES"][0][-4:]
-            path = REAL_LAZ / f"w2_{vcrs}_{year}.xml"
+            path = REAL_LAZ / f"{area}_{vcrs}_{year}.xml"
         response = MagicMock()
         response.text = path.read_text(encoding="utf-8")
         response.raise_for_status = MagicMock()
@@ -450,8 +602,8 @@ class TestLazDiscoveryOnRealWfs:
     def test_c13_evrf2007_newest_tile_covers_both_systems(self):
         """L1: two CRS in the area, but 2025/PL-1992 covers it entirely.
 
-        Until 2026-10-06 the result had TWO tiles (dedup by sheet code only): 2022 in
-        PL-2000:S7 (250 MB) and 2025 in PL-1992 - a duplicated area (C13 NOTE 1).
+        Until 2026-10-06 the result also had the 2022 PL-2000:S7 tiles (dedup by
+        sheet code only) - a duplicated area (C13 NOTE 1).
         """
         selection = GugikLazProvider(session=laz_session()).select_tiles(W2_BBOX)
         tiles = selection.tiles
@@ -464,27 +616,73 @@ class TestLazDiscoveryOnRealWfs:
         assert sorted(
             (s.tile.godlo, s.tile.year, s.tile.crs) for s in selection.superseded
         ) == [
+            ("7.173.21.06.1", 2022, "PL-2000:S7"),
             ("7.173.21.06.2", 2022, "PL-2000:S7"),
             ("N-34-139-A-c-1-1-3-4", 2023, "PL-1992"),
         ]
         # the second horizontal CRS is still recognised (pl_2000 segment)
         assert [s.tile.uklad for s in selection.superseded if s.tile.year == 2022] == [
-            "2000"
+            "2000",
+            "2000",
         ]
 
-    def test_c13_year_2023_returns_the_single_older_tile(self):
+    def test_laz_year_2023_w2_covers_reference(self):
         session = laz_session()
         tiles = GugikLazProvider(session=session).discover_tiles(W2_BBOX, year=2023)
         assert [(t.godlo, t.year) for t in tiles] == [("N-34-139-A-c-1-1-3-4", 2023)]
         assert file_id(tiles[0].url) == "78044_1403296"
-        assert feature_years(session) == ["2023"]
+        assert feature_years(session) == [str(y) for y in range(2026, 2017, -1)]
+
+    def test_laz_year_2022_two_tiles_together_cover_w2_reference(self):
+        """P8: no single 2022 tile covers W2_BBOX, their union does - no conflict."""
+        session = laz_session()
+        selection = GugikLazProvider(session=session).select_tiles(W2_BBOX, year=2022)
+        assert [(t.godlo, t.year, t.crs) for t in selection.tiles] == [
+            ("7.173.21.06.1", 2022, "PL-2000:S7"),
+            ("7.173.21.06.2", 2022, "PL-2000:S7"),
+        ]
+        assert feature_years(session) == [str(y) for y in range(2026, 2017, -1)]
+
+    def test_laz_year_2024_w2_conflict_lists_years(self, tmp_path):
+        session = laz_session()
+        provider = GugikLazProvider(session=session)
+        provider.download = MagicMock()  # type: ignore[method-assign]
+        with pytest.raises(YearRangeError) as caught:
+            download_laz_area(
+                W2_BBOX, output_dir=tmp_path, provider=provider, year=2024
+            )
+        err = caught.value
+        assert err.sheets == {"N-34-139-A-c-1-1-3-4": (2022, 2023, 2025)}
+        assert "brak kafli LAZ z roku 2024 dla 1 z 1 kafli obszaru" in str(err)
+        assert "N-34-139-A-c-1-1-3-4 (2025, PL-1992)" in str(err)
+        assert "--min-year 2024" in str(err)
+        assert "--max-year 2024" in str(err)
+        assert feature_years(session) == [str(y) for y in range(2026, 2017, -1)]
+        provider.download.assert_not_called()
+        assert list(tmp_path.iterdir()) == []
+
+    @pytest.mark.parametrize(
+        ("bounds", "message"),
+        [
+            ({"min_year": 2010, "max_year": 2017}, "przedzial 2010-2017 nie ma"),
+            ({"year": 2017}, "rocznik 2017 nie istnieje"),
+            ({"min_year": 2017, "max_year": 2017}, "rocznik 2017 nie istnieje"),
+        ],
+    )
+    def test_laz_range_without_service_year(self, bounds, message):
+        session = laz_session()
+        with pytest.raises(DownloadError, match=f"{message} .*usludze EVRF2007"):
+            GugikLazProvider(session=session).select_tiles(W2_BBOX, **bounds)
+        assert feature_years(session) == []
 
     def test_c13_min_density_13_drops_the_12_p_m2_tile(self):
         tiles = GugikLazProvider(session=laz_session()).discover_tiles(
             W2_BBOX, min_density=13
         )
-        assert [t.godlo for t in tiles] == ["7.173.21.06.2"]
-        assert tiles[0].crs == "PL-2000:S7"
+        assert [(t.godlo, t.crs) for t in tiles] == [
+            ("7.173.21.06.1", "PL-2000:S7"),
+            ("7.173.21.06.2", "PL-2000:S7"),
+        ]
 
     def test_c13_kron86_returns_2018_tile_not_2012(self):
         session = laz_session()
@@ -503,6 +701,92 @@ class TestLazDiscoveryOnRealWfs:
         ).discover_tiles(W2_BBOX)[0]
         assert tile.filename == "70707_846000_N-34-139-A-c-1-1-3-4.laz"
         assert tile.filename.endswith(".laz")
+
+    @pytest.mark.parametrize("bounds", [{}, {"max_year": 2025}])
+    def test_wroclaw_two_nie_deliveries_of_one_sheet_both_kept(self, bounds):
+        """T25 / ADR-029: a NIE frame covers nothing, so both 2025 deliveries stay.
+
+        The PL-1992 2024 tile stays too: no full-sheet tile covers its area.
+        """
+        selection = GugikLazProvider(session=laz_session("wro")).select_tiles(
+            WRO_BBOX, **bounds
+        )
+        assert [
+            (t.godlo, t.year, t.full_sheet, file_id(t.url)) for t in selection.tiles
+        ] == [
+            ("6.150.13.16.4", 2025, False, "84048_1847378"),
+            ("6.150.13.16.4", 2025, False, "84169_1850670"),
+            ("M-33-35-A-c-4-4-3-2", 2024, True, "79805_1509323"),
+        ]
+
+    def test_wroclaw_year_2025_conflict_on_one_of_three_reference_tiles(self):
+        """P8: 2025 has only NIE tiles here, so the 2024 reference stays uncovered."""
+        session = laz_session("wro")
+        with pytest.raises(YearRangeError) as caught:
+            GugikLazProvider(session=session).select_tiles(WRO_BBOX, year=2025)
+        err = caught.value
+        assert err.sheets == {"M-33-35-A-c-4-4-3-2": (2019, 2022, 2024, 2025)}
+        assert (
+            "M-33-35-A-c-4-4-3-2 (2024, PL-1992): dostepne roczniki "
+            "2019, 2022, 2024, 2025 (tylko arkusze niepelne)"
+        ) in str(err)
+        assert "dla 1 z 3 kafli obszaru" in str(err)
+        assert "--max-year 2025" in str(err)
+        assert "--min-year" not in str(err)
+        assert feature_years(session) == [str(y) for y in range(2026, 2017, -1)]
+
+    @pytest.mark.parametrize(
+        ("year", "sheet", "years", "hint", "no_hint"),
+        [
+            (
+                2019,
+                "N-34-138-B-c-4-4-4-4",
+                (2023, 2025),
+                "--min-year 2019",
+                "--max-year",
+            ),
+            (2025, "N-34-138-D-a-2-2-2", (2019,), "--max-year 2025", "--min-year"),
+        ],
+    )
+    def test_w3_year_conflict_on_one_of_two_reference_tiles(
+        self, year, sheet, years, hint, no_hint
+    ):
+        """T22 on two reference tiles: only the tile without ``year`` is listed."""
+        session = laz_session("w3")
+        with pytest.raises(YearRangeError) as caught:
+            GugikLazProvider(session=session).select_tiles(W3_BBOX, year=year)
+        err = caught.value
+        assert err.sheets == {sheet: years}
+        assert f"z roku {year} dla 1 z 2 kafli obszaru" in str(err)
+        assert hint in str(err)
+        assert no_hint not in str(err)
+        assert "niepelne" not in str(err)  # every tile here is a full sheet
+
+    def test_discover_tiles_forwards_min_year(self):
+        """``discover_tiles(min_year=)`` = ``select_tiles(min_year=).tiles``."""
+        with pytest.raises(YearRangeError) as caught:
+            GugikLazProvider(session=laz_session("w3")).discover_tiles(
+                W3_BBOX, min_year=2023
+            )
+        assert caught.value.sheets == {"N-34-138-D-a-2-2-2": (2019,)}
+        tiles = GugikLazProvider(session=laz_session("w3")).discover_tiles(
+            W3_BBOX, min_year=2019, max_year=2023
+        )
+        assert [(t.godlo, t.year) for t in tiles] == [
+            ("N-34-138-B-c-4-4-4-4", 2023),
+            ("N-34-138-D-a-2-2-2", 2019),
+        ]
+
+    def test_w3_older_tile_adding_uncovered_area_is_kept(self):
+        """ADR-029: no newer tile covers the 2019 sheet, so 2019 stays beside 2025."""
+        selection = GugikLazProvider(session=laz_session("w3")).select_tiles(W3_BBOX)
+        assert [(t.godlo, t.year) for t in selection.tiles] == [
+            ("N-34-138-B-c-4-4-4-4", 2025),
+            ("N-34-138-D-a-2-2-2", 2019),
+        ]
+        assert [
+            (s.tile.godlo, s.tile.year, s.reason) for s in selection.superseded
+        ] == [("N-34-138-B-c-4-4-4-4", 2023, "covered")]
 
 
 # =============================================================================

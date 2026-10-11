@@ -90,12 +90,11 @@ _SOURCES: dict[str, SourceDescriptor] = {
                 AccessChannel(
                     transport=TransportKind.WCS,
                     horizontal_crs="EPSG:2180",
-                    vertical_crs_options=("EPSG:9650",),
+                    vertical_crs_options=_PL_VERTICAL_BOTH,
                     capabilities=frozenset({"bbox_raster"}),
                     notes=(
-                        "WCS EVRF2007 (DigitalTerrainModelFormatTIFFEVRF2007) "
-                        "wycofany przez GUGiK - HTTP 404 od 2026-08-11 "
-                        "(docs/PROGRESS.md); bbox raster tylko KRON86"
+                        "KRON86 GeoTIFF float32, EVRF2007 tylko image/x-aaigrid "
+                        "(zapisywany jako GeoTIFF float32); siatka arkuszy 1 m"
                     ),
                 ),
             ),
@@ -138,6 +137,16 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     horizontal_crs="EPSG:2180",
                     vertical_crs_options=_PL_VERTICAL_BOTH,
                     capabilities=frozenset({"sheet_files"}),
+                ),
+                AccessChannel(
+                    transport=TransportKind.WCS,
+                    horizontal_crs="EPSG:2180",
+                    vertical_crs_options=_PL_VERTICAL_BOTH,
+                    capabilities=frozenset({"bbox_raster"}),
+                    notes=(
+                        "wysokosci tylko image/x-aaigrid (zapisywany jako GeoTIFF "
+                        "float32); 1 m przez SCALEFACTOR=0.5 na siatce arkuszy 1 m"
+                    ),
                 ),
             ),
             tile_scheme=None,

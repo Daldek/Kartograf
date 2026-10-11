@@ -26,8 +26,8 @@
 | Etap 0 — zrodla wielokrajowe (sources/transform/transport/providers-pl/CLI split/sidecar) | ✅ Gotowy | zmergowane do develop 2026-08-11; E2E 12/12 na realnych danych |
 | Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | ZMERGOWANY do develop 2026-08-12; tor CZ odmrozony w fali 2026-09-29/30 (D1): pin EPSG:1622 (K2; live: Karkonosze PL-CZ mediana -0,15 m, przesuniecie < 1 px), budzet 4 Mpx kafli (K6; live: 29,8 Mpx w 3 min 38 s), piksel dokladnie 2 m (N3), `Warning:` przy 100 % nodata (N2); wydany w v0.7.0 |
 | LAZ — wybor kafli (ADR-029) | ✅ Gotowy | `download_laz_area` / `select_tiles`: najnowszy kafel per obszar wg pokrycia, `--year`, `--min-density`, `extra.parent_request` w trybie `--bbox`/`--geometry` |
-| Kampanie GUGiK (ADR-030 + errata 1-6) | ✅ Gotowy | `--campaigns {newest,all}`, `--min-year`; pliki w `<segment>/kampanie/`, sciezka standardowa = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`) |
-| Wycinek NMT PL `--target-crs` (ADR-027) + API biblioteki `download_pl_cutout` | ✅ Gotowy | fala review max 2026-09-28 + fala naprawcza 2026-09-30: `GridMismatchError` dla 2180 z arkuszy o roznych fazach, W1 (warp per arkusz) dla 5514/3045 (S5/D3/D8), `extra.sheet_sources`, `all_nodata`, `download_pl_cutout(cache=)`; live PASS Krakow 5 m |
+| Kampanie GUGiK (ADR-030 + errata 1-8, ADR-032, ADR-033) | ✅ Gotowy | `--campaigns {newest,all}`, `--year`/`--min-year`/`--max-year` (v0.7.2), `--full-sheet`; pliki w `<segment>/kampanie/`, sciezka standardowa i `full_sheet/` = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`, `docs/research/2026-10-10-full-sheet-link/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`) |
+| Wycinek NMT/NMPT PL `--target-crs` (ADR-035), API `download_pl_cutout` | ✅ Gotowy | v0.7.2: WCS 1 m z maska ladu PRG, data w nazwie, NMT i NMPT; NMPT `download_bbox` float32; kawalki ASC NMPT 4 Mpx coverage (ADR-035 errata 1); zweryfikowany na zywo (`docs/research/2026-10-11-wcs-cutouts-live/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`). Arkuszowy tor ADR-027 zostaje jako przestarzale API do 0.8.0 |
 
 | Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | ⏳ Zaplanowany | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3 |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
@@ -94,23 +94,40 @@
 - **Wersja:** v0.7.1
 - **Zakres:** `sha256`/`size_bytes` w sidecarze, pola rekordu skorowidza (RMSE, `declared_vertical_crs`) i weryfikacja rekordu/pliku GUGiK, godla PL-1992 bez zer wiodacych i `ParseError` spoza nomenklatury, BDOT10k z wielu powiatow (WFS PRG, `keep_raw`), wycinek CZ w bibliotece, `build_cutout_from_sheets`, `hsg_from_rasters`, bledy zamiast cichych zamian (5 m + KRON86, `--year`/`--min-density` poza LAZ); pelna lista: `docs/CHANGELOG.md` [0.7.1]
 
+### CP13 — Rok danych i wycinki z WCS
+- **Data:** 2026-10-11
+- **Wersja:** v0.7.2
+- **Zakres:** wybor roku `--year`/`--min-year`/`--max-year` dla NMT/NMPT/orto/LAZ (ADR-032), drugie dowiazanie `full_sheet/` i `--full-sheet` (ADR-033), wycinki NMT/NMPT PL z WCS GUGiK z maska ladu PRG (ADR-035), kawalki zapytan obszarowych na siatce zrodla (ADR-034), `download_bbox` NMT EVRF2007 i NMPT z wysokosciami float32, `Info:` o cichych wartosciach domyslnych, podpowiedz wariantu NMT/NMPT, drobiazgi z review 0.7.1; pelna lista: `docs/CHANGELOG.md` [0.7.2]
+
 ## Ostatnia sesja
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI:** **v0.7.1 WYDANA (2026-10-09)** — tag
-> `v0.7.1` na commicie merge `develop` -> `main`. Opis wydania:
-> `docs/CHANGELOG.md` [0.7.1]; test na zywo przed wydaniem:
-> `docs/research/2026-10-09-test-przed-0.7.1/raport.md` (bez FAIL).
-> Stan galezi, tagow i `origin` sprawdzaj w gicie (`git status`, `git log`,
-> `git ls-remote --tags origin`), nie w tym dzienniku.
-> **Nastepny cykl:** backlog "Do 0.7.2" (decyzje uzytkownika 2026-10-09:
-> wycinki PL z WCS, wybor roku `--year`/`--min-year`/`--max-year` dla
-> NMT/NMPT/orto, drugie dowiazanie do pelnego lotu, domyslne
-> z inwentaryzacji) — kazda pozycja dopiero po specu/planie i zatwierdzeniu;
-> drobiazgi z review 0.7.1: sekcja "Po 0.7.1" nizej. Cykl nie jest jeszcze
-> otwarty (`__version__ = "0.7.1"`; otwarcie = `0.7.2-dev` i sekcja
-> `## [0.7.2] - Unreleased` w CHANGELOG).
+> **START NASTEPNEJ SESJI (stan 2026-10-11):** wydano **v0.7.2**
+> (2026-10-11): `__version__ = "0.7.2"`, CHANGELOG `## [0.7.2] - 2026-10-11`,
+> merge `develop` -> `main` (`--no-ff`), tag `v0.7.2` (annotowany) na
+> commicie merge. Cykl 0.7.3/0.8.0 NIE jest otwarty (`__version__` bez
+> `-dev`); otwarcie cyklu = `__version__ = "<X.Y.Z>-dev"` + asercje
+> w `test_cli.py` i `test_integration.py` + sekcja `Unreleased` i link
+> `compare/v0.7.2...develop` w CHANGELOG (jak commit `chore(release):
+> poczatek cyklu 0.7.2`). Push `develop`, `main` i tagu `v0.7.2` na
+> `origin` wymaga zgody uzytkownika — stan galezi, tagow i `origin`
+> sprawdzaj w gicie (`git status`, `git log`, `git ls-remote origin`),
+> nie w tym dzienniku.
+> **Zakres 0.7.2:** drobiazgi z review 0.7.1 (P1-P10), (a) wycinki PL
+> z WCS (ADR-035), (b) wybor roku (ADR-032), (c) `full_sheet/` (ADR-033),
+> (d) ciche wartosci domyslne (ADR-034), (e) testy LAZ na faktycznych
+> oknach, strojenie kawalkow ASC NMPT; szczegoly w sesjach nizej
+> i w `docs/CHANGELOG.md` [0.7.2]. Test na zywo przed wydaniem:
+> `docs/research/2026-10-11-test-przed-0.7.2/raport.md` (bez FAIL).
+> **NASTEPNA SESJA:** do decyzji uzytkownika — push na `origin`, kolejny
+> cykl (backlog "Do 0.8.0" nizej; podprojekt 1 roadmapy wstrzymany).
+> **Katalog danych testow na zywo:** wskazuje uzytkownik (STANDARDS 6.4);
+> sciezki nie zapisuj w repo (straznik wzorcow commitow ja blokuje) —
+> zapytaj na poczatku sesji, jesli potrzebny.
+> **Commity:** przez straznik wzorcow
+> (`~/.config/kartograf/forbidden-patterns.txt`, jak w planach), autor
+> `Daldek <git@debever.pl>`, bez `Co-Authored-By`.
 > **Kierunek do v1.0.0:** roadmapa w `docs/SCOPE.md` 3.3 (zatwierdzona
 > 2026-10-08). Podprojekt 1 (magazyn wersjonowany, docelowo 0.8.0): spec
 > zaakceptowany i plan 1/3 napisany na galezi `feat/versioned-store`
@@ -126,6 +143,356 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Wydanie 0.7.2 (2026-10-11)
+
+- Test na zywo `develop` (`108c4f2`) bez zmian w kodzie: brama offline
+  zielona (3262 testy), 24 scenariusze CLI i 3 biblioteki bez FAIL
+  (raport `docs/research/2026-10-11-test-przed-0.7.2/raport.md`); jedna
+  porazka hosta GUGiK (3 x `RemoteDisconnected`, wycinek KRON86
+  EPSG:5514) przeszla w powtorce.
+- Dokumentacja: ADR-035 errata 1 (kawalek ASC NMPT 4 Mpx coverage; CRLF
+  zachowane), PRD 4.3 (status, ADR-022..ADR-035, kawalki ASC, `__version__`),
+  SCOPE 3.19 (status, historia), CHANGELOG (data, link
+  `compare/v0.7.1...v0.7.2`).
+- Wydanie: `__version__ = "0.7.2"` (asercje w `test_cli.py`
+  i `test_integration.py`), commit `chore(release): wydanie 0.7.2` na
+  `develop`; merge `develop` -> `main` (`--no-ff`), tag `v0.7.2`
+  (annotowany) na commicie merge. Push na `origin` czeka na zgode
+  uzytkownika.
+- Dane testu na zywo: `<katalog-danych>/kartograf/e2e/2026-10-11-test-przed-0.7.2/`
+  (skrypty jednorazowe obok danych, poza repo).
+
+### Strojenie kawalkow ASC NMPT (2026-10-11)
+
+- Pomiar pierwszego bajtu `image/x-aaigrid` (NMT EVRF2007, NMPT EVRF2007
+  i KRON86; 0,25-16 Mpx coverage; 28 z 36 zapytan): host niespokojny,
+  zawieszenia (300 s bez bajtu) trafiaja kawalki kazdego rozmiaru; kawalek
+  4 Mpx coverage odpowiada w 15-26 s jak 1 Mpx, 8 Mpx do 104 s.
+- Decyzja uzytkownika: `GugikNmptProvider.WCS_CHUNK_LIMITS_AAIGRID` =
+  4 Mpx coverage (1 Mpx wyniku), NMT 1 Mpx bez zmian,
+  `WCS_ASC_READ_TIMEOUT` 120 s bez zmian.
+- Na zywo: NMPT EVRF2007 2000 x 1000 px — 2 kawalki, 246 s (dotad 8
+  kawalkow, 1186 s), bit w bit z jednym zapytaniem.
+- CHANGELOG [0.7.2] (wpis o kawalkach ASC poprawiony, nie nowy),
+  ARCHITECTURE 4.2 (limity WCS), test budzetu w `test_gugik_nmpt.py`.
+
+### (e) testy LAZ na faktycznych oknach zapytan (2026-10-11)
+
+- Decyzje uzytkownika: strojenie kawalkow ASC NMPT wchodzi do 0.7.2; (e)
+  opcja 1 — nagrac odpowiedzi WFS dla okien, o ktore testy faktycznie pytaja.
+- Pomiar okien (tymczasowa wtyczka pytest logujaca `BBOX`): okno inne niz
+  nagranie `W2_AREA` mialy 4 testy, nie 5 — trzy testy CLI z bboxem W2 pytaja
+  o to samo okno (zapis `487000.0`).
+- Nagranie na zywo (2026-10-11, surowe odpowiedzi w katalogu danych):
+  `gugik_laz/real_2026_10_11/` (`wgs`, `sheet`); `wfs_session(area=)`
+  w `test_laz_download.py` i `laz_session` w `test_laz_coverage.py`
+  sprawdzaja `BBOX` (niezgodne okno = `AssertionError`).
+- Prawdziwe odpowiedzi obalily scenariusze dwoch testow wyboru kafli:
+  na wschod od `W2_AREA` kafle 2025 (`-3-4`, `-4-3`) kryja caly obszar,
+  a w rogu SW usluga nie zwraca `7.173.21.06.2` (filtr po geometrii).
+  `test_older_tile_adding_uncovered_area_is_kept` zastapiony
+  `test_w3_older_tile_adding_uncovered_area_is_kept` (nagranie `W3_BBOX`:
+  2019 obok 2025); `test_tile_whose_footprint_misses_area_is_skipped_as_outside`
+  usuniety — filtr obrysu klienta sprawdza jawne odtworzenie
+  `test_all_still_drops_outside_tiles` (`replay_any_bbox=True`).
+- Brama zielona: pytest offline 3262, ruff check/format, mypy. Bez wpisu
+  w CHANGELOG (tylko testy).
+
+### (a) wycinki PL z WCS — implementacja (2026-10-11)
+
+- Galaz `feat/wcs-cutouts` z `develop`; Task 0-8 planu, kazdy krok przez
+  brame (pytest offline, ruff, mypy) i straznik wzorcow.
+- Fixtury z surowych odpowiedzi (WCS multipart AAIGrid NMT/NMPT + kawalki,
+  PRG A00/W02/W03) z README; `transport/aaigrid.py`; WCS EVRF2007/NMPT
+  w providerach i rejestrze; maska `LandMask`/`fetch_land_mask` w
+  `prg.py`; `run_pl_wcs_cutout` + `download_pl_cutout` na WCS
+  (`DeprecationWarning` parametrow arkuszowych); CLI `--target-crs`
+  na WCS (NMPT dozwolone, 5 m = `Error:`), testy CLI arkuszowego toru
+  usuniete lub przepiete (opis w commicie `b8d97dc`); ADR-035 i opisy.
+- Weryfikacja na zywo (raport `docs/research/2026-10-11-wcs-cutouts-live/raport.md`):
+  wycinki NMT/NMPT KRON86/EVRF2007 = arkusz w 100 %; znalezione i
+  poprawione: (1) przy nieparzystym rozmiarze zapytania serwer bierze
+  srodkowy wiersz/kolumne z sasiedniego piksela, gdy przeprobkowuje —
+  zapytania maja parzyste rozmiary i sa przycinane; (2) kawalek NMPT
+  1 Mpx wyniku przekraczal 30 s do pierwszego bajtu — budzet ASC w
+  pikselach coverage (NMPT 0,25 Mpx) i limit odczytu ASC 120 s. Host byl
+  w czasie pomiaru niestabilny (zawieszenia > 120 s) — strojenie w backlogu.
+- Review galezi (reviewer): bez blokerow; poprawione: maska liczona
+  pasami wierszy (pamiec niezalezna od rozmiaru wycinka), maska pobierana
+  dla zakresu wyrownanego do siatki (piksel brzegowy), drobiazgi
+  (martwy parametr `_warn_unverified`, docstringi, test ucietej odpowiedzi).
+- Merge `--no-ff` do `develop` za zgoda uzytkownika (`bcf87d1`), brama na
+  wyniku zielona, galaz usunieta; `develop` NIE wypchniety na `origin`.
+
+### (a) wycinki PL z WCS — spec, pomiary i plan (2026-10-11)
+
+- Decyzje uzytkownika (spec sekcja 0, W-U1..W-U11): WCS zamiast arkuszy
+  w CLI i `download_pl_cutout`, API arkuszowe do 0.8.0, NMT i NMPT, maska
+  ladu PRG `A00 - W02 - W03`, kazde uruchomienie pobiera (nazwa z data),
+  zakres wyrownany na zewnatrz do siatki arkuszy 1 m (rozszerzenie
+  uzytkownika), tylko 1 m, 0,0 na ladzie zostaje (Zulawy).
+- Pomiary na zywo (`docs/research/2026-10-11-wcs-cutouts/raport.md`):
+  WCS EVRF2007 dziala (wysokosci tylko `image/x-aaigrid`); WCS na
+  siatce arkusza = arkusz bit w bit (NMT/NMPT, KRON86/EVRF2007, 1 m
+  i 0,5 m); arkusze 0,5 m maja siatke `k + 0,25`; ASC ok. 20 s/Mpx,
+  pierwszy bajt rosnie z rozmiarem — kawalek 1 Mpx. Uwaga uzytkownika:
+  0,0 w `M-33-57-C-b-4-2` to obszar za granica (lot 2025 przyciety do
+  granicy), nie dziura lotu — potwierdzone rasteryzacja `A00`, raport
+  poprawiony.
+- Spec zatwierdzony i scommitowany na `develop` (`f670d8b`); plan
+  `docs/superpowers/plans/2026-10-11-wcs-cutouts.md` (Task 0-9,
+  `6e5b2cd`) — implementacja w nastepnej sesji na `feat/wcs-cutouts`
+  (decyzja uzytkownika). Brama przed commitem specu zielona (pytest
+  offline 3216, ruff, mypy). `develop` NIE wypchniety na `origin`.
+
+### (d) ciche wartosci domyslne — implementacja (2026-10-10)
+
+- Decyzja uzytkownika: spec i plan bez uwag (budzet 16 Mpx, tresc
+  komunikatow), katalog danych na zywo jak przy pomiarze, implementacja (d)
+  przed (a).
+- Galaz `feat/silent-defaults`, commity: `063851b` (Task 0: spec, plan,
+  pomiar WCS na `develop`), `07e6b89` (Task 1: `transport/chunks.py`,
+  `mosaic_and_crop` mieszane typy = `ValidationError`), `4e5e66c` (Task 2:
+  CUZK `export_image` na kawalkach, `_tile_grid` usuniety), `1581054` (Task
+  3: WCS NMT 1 m na siatce `k + 0,5`, kawalki 16 Mpx, walidacja odpowiedzi
+  NMT/NMPT/orto), `f4ea872` (Task 4: `resolve_layer`, `Info:` d2,
+  `logger.warning`), `a121278` (Task 5: `Info:` d1), `841c7a9` (Task 6:
+  ADR-034, ARCHITECTURE, USAGE), poprawki `b0377e6`, `5522f20`, `fa85653`.
+- Odstepstwa od planu: Task 0 commit specu na `develop` przed galezia;
+  `Info:` d2 w `--country cz` po strazach opcji (testy strazy bez I/O
+  pliku); pomocnik testow `write_gpkg_layers` w `tests/conftest.py` (testy
+  CLI z mockowanymi czytnikami potrzebuja katalogu GPKG); wynik z kawalkow
+  paskowych zapisywany w kafelkach 256 x 256 (ostrzezenie GDAL z testu na
+  zywo); tekst d2 "liczba warstw N" (odmiana); LAZ `--geometry` takze przez
+  `Info:` d2 (review).
+- Na zywo (`docs/research/2026-10-10-silent-defaults/raport.md`): NMT 6 x 6
+  km kawalkami = jedno zapytanie bit w bit (z ponowieniem dwoch zerwanych
+  kawalkow), CUZK 29,8 Mpx identyczny z `develop`, `Info:` d1 (Cieszyn)
+  i d2 (GPKG 2 warstwy). Brama: pytest offline 3216, ruff, mypy.
+- Fakt srodowiska: SQLite na udziale SMB (katalog danych) daje `database
+  is locked` przy tworzeniu GPKG — plik testu d2 na dysku lokalnym.
+
+### (d) ciche wartosci domyslne — pomiar WCS, spec i plan (2026-10-10)
+
+- Decyzje uzytkownika (spec sekcja 0, D-U1..D-U6): d1 tylko `Info:`
+  (bez zmiany ukladu domyslnego), d2 widoczne `Info:` o warstwie GPKG,
+  d3 wspolny mechanizm zapytan obszarowych w `transport/` (odejscie od
+  mozaikowania plikow arkuszy, (a) z niego korzysta), jeden spec, pomiar
+  tylko KRON86, naprawa NMPT `download_bbox` razem z (a).
+- Pomiar na zywo WCS GUGiK KRON86 (`docs/research/2026-10-10-wcs-limits/raport.md`):
+  brak limitu do 100 Mpx (ok. 3 s/Mpx, 4 MB/Mpx), zerwane polaczenia
+  (ponowienie przechodzi); serwer probkuje do siatki zadania — bbox poza
+  siatka zrodla = cichy blad geolokalizacji; siatka NMT 1 m `k + 0,5` m
+  w 9 rejonach (takze Krakow); kawalki skladaja sie bit w bit; brak nodata
+  (0,0 poza pokryciem i w danych waznych na wybrzezu); na pograniczu
+  (Cieszyn, Karkonosze, Tatry, Leba) WCS = arkusze bit w bit, ale Zulawy
+  (warstwa "2017 i starsze") i Terespol pokazuja inny lot niz ADR-028;
+  NMPT `image/tiff` = RGB uint8 (blad `download_bbox`, potwierdzony
+  wywolaniem biblioteki).
+- Spec `docs/superpowers/specs/2026-10-10-silent-defaults-design.md`
+  i plan `docs/superpowers/plans/2026-10-10-silent-defaults.md` (Task
+  0-7; ADR-034 w Task 6). Implementacja nie rozpoczeta; probki
+  i skrypty pomiaru poza repo.
+
+### Merge `feat/full-sheet-link` i przeglad dokumentacji (2026-10-10)
+
+- Przeglad aktualnosci dokumentacji przed merge: `docs/PRD.md` 3.11 nie
+  znal ani roku danych (ADR-032, zaleglosc z merge (b)), ani `full_sheet/`
+  — uzupelniony (wersja 4.2); spec i plan oznaczone jako wdrozone; brak
+  odwolan do starych nazw (`ensure_standard_link`, `write_standard_sidecar`)
+  poza dziennikami historycznymi.
+- Merge `--no-ff` do `develop` (`63aa8d2`), brama na wyniku zielona, galaz
+  usunieta, bez push.
+
+### Drugie dowiazanie do pelnego lotu — implementacja (2026-10-10)
+
+- Galaz `feat/full-sheet-link`, commity: `9fef2bb` (Task 1: `FULL_SHEET_DIR`,
+  `FileStorage.get_full_sheet_path`, `list_files`/`delete`, nazwy
+  `ensure_link`/`write_link_sidecar`), `807bf08` (Task 2: drugie dowiazanie
+  w `_fetch_campaigns`, `SheetFetch.full_link`/`full_link_outside_range`,
+  `DownloadResult.full_links`/`full_link_outside_range`), `bd4c99f` (Task 3:
+  `DownloadManager(full_sheet=True)`, `request.full_sheet`,
+  `DownloadResult.without_full`), `6fd7196` (Task 4: CLI `--full-sheet`,
+  straze LAZ/`--target-crs`/CZ, jeden `Warning:` E13 z grupami, wspolny
+  `Info:` dowiazan spoza zadania), `23c071c` (Task 5: ADR-033, errata 8
+  ADR-030, errata 1 ADR-032, ARCHITECTURE 3.3 regula 7 i 4.1, USAGE 4.2,
+  SCOPE 3.18, CLAUDE.md), `811c637` (poprawki review: dopisek "w zakresie
+  lat zadania" przy grupie "brak pelnego lotu", test grup `Warning:`
+  w hierarchii, raport na zywo).
+- Odstepstwa od planu: (1) F1 — najnowszy lot N-34-139-C-a-3-4 to 83998
+  (2026-04-05, TAK), nie 84183; testy i raport uzywaja 83998. (2)
+  `test_force_refreshes_full_link` podmienia `download_record` na zapis
+  tmp + `os.replace` (jak prawdziwy provider) — zapis w miejscu zachowuje
+  inode i test nie rozroznial odswiezenia. (3) Pojedyncze godlo z
+  `--full-sheet` i > 1 plikiem kampanii drukuje podsumowanie plikow kampanii
+  (jak `all`); lista z flaga tez. (4) `Info:` U15 ma nowy naglowek wspolny
+  dla obu drzew (`Info: N dowiazan wskazuje lokalny lot spoza tego
+  zadania ...`, linia `<godlo>: sciezka standardowa|full_sheet/ ->
+  dowiazanie <data>_<id>`); test U15 asercje na fakty.
+- Review galezi (agent reviewer, Review Focus 1-5): bez blokerow i majorow;
+  3 drobne — dopisek zakresu lat i test grup naprawione w `811c637`,
+  PROGRESS w tej sesji.
+- Na zywo (katalog danych od uzytkownika, poza repo): -4 standard
+  i `full_sheet/` = ten sam inode; -1 bez flagi 1 plik + podpowiedz; z
+  flaga `full_sheet/` -> 83233, `request.full_sheet: true`; powtorka =
+  Skipped + ten sam `Warning:`; orto M-34-90-C-b-4-4 84466 + 81437,
+  `full_sheet/` -> 81437; LAZ i `--target-crs` z flaga = `Error:` kod 1.
+  Raport `docs/research/2026-10-10-full-sheet-link/raport.md`.
+- Brama na galezi: pytest offline zielone (3185), ruff check/format czyste,
+  mypy bez bledow.
+
+### Drugie dowiazanie do pelnego lotu — spec (2026-10-10)
+
+- Galaz `feat/full-sheet-link` z `develop` (`fc4c176`). Ustalenia z kodu:
+  `ensure_standard_link` jest ogolne wzgledem sciezki (reuzycie jako
+  `ensure_link`); `local` w `_fetch_campaigns` to loty TEGO zadania;
+  `FileStorage.list_files` wlicza kazdy katalog segmentu poza `kampanie/`
+  (nowe drzewo trzeba wykluczyc).
+- Spec `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`;
+  decyzje uzytkownika (sekcja 0): Q1 = flaga `--full-sheet` (wariant C),
+  Q2 = brak pliku + komunikat, Q3 = jak U15, Q4 = wycinki ze sciezek
+  standardowych, Q5 = nazwy angielskie; potem zmiana na `full_sheet/`
+  (w kodzie `coverage` = pokrycie zmierzone / brak danych, `full_sheet` =
+  flaga GUGiK) — decyzja uzytkownika, spec zaakceptowany.
+- Pomiar na zywo (pytanie uzytkownika o Slubice): flaga TAK = pelne
+  pokrycie w granicach Polski — 13 plikow TAK (12 arkuszy granicznych
+  DE/CZ/SK/UA/BY/LT + kontrola), 0 px nodata po stronie PL w ramce
+  arkusza; NIE (Terespol 2025) 13,8 % nodata po stronie PL; 61 z 62
+  rekordow 22 arkuszy granicznych to TAK. Plik ASC = obwiednia trapezu
+  ramki (narozniki = nodata, ~10 % takze w glebi kraju). Raport
+  `docs/research/2026-10-10-full-sheet-link/granica-pelne-pokrycie.md`;
+  spec 1.3 poprawiony (Slubice to nie blad flagi).
+- Plan `docs/superpowers/plans/2026-10-10-full-sheet-link.md` (6 zadan,
+  Review Focus 1-5; testy na rekordach C14: N-34-139-C-a-3-1 84183 NIE,
+  83233/78047/73021 TAK). Implementacja przeniesiona do nowej sesji
+  (polecenie uzytkownika).
+- Bez zmian kodu; brama nieuruchamiana (tylko dokumentacja). Skrypty
+  pomiaru granic i pobrane pliki w katalogu danych testow na zywo
+  (`kartograf/e2e/2026-10-10-pelne-pokrycie-granica/`).
+
+### Wybor roku danych — model A i merge do develop (2026-10-10)
+
+- Audyt logiki flag CLI (reviewer, `agent://CliFlagLogicAudit`): asymetria
+  `--min-year` (1 lot) vs `--max-year`/`--year` (wszystkie loty), blad
+  `--campaigns newest` z gorna granica, rozjazd z LAZ, dowiazanie spoza
+  przedzialu bez komunikatu. Decyzja uzytkownika: model A (spec sekcja 0,
+  U14-U16), przelacznik zamiast `--campaigns {newest,all}` w 0.8.0.
+- Wdrozenie `f9b0dc0`: bez sentinela `resolve_campaign_strategy`,
+  `SheetFetch/DownloadResult.link_outside_range` + `Info:` w CLI, `Downloaded
+  to`/`Skipped` wskazuja plik kampanii, gdy dowiazanie zostaje przy nowszym
+  locie; `--help`, USAGE 4.1, ARCHITECTURE 4.1, SCOPE 2.12, CHANGELOG,
+  ADR-032 pkt 3, errata 7 ADR-030. Na zywo: `--year 2025` na C14 = 4 pliki;
+  `--campaigns newest --max-year 2022` po pobraniu 2025 = lot 73021 +
+  `Info:`, kod 0.
+- Wczesniej w sesji (`cdfb509`): dopisek `(tylko arkusze niepelne)` w LAZ,
+  `discover_tiles(min_year=)` (decyzje uzytkownika).
+- Merge `feat/year-range` -> `develop` (`--no-ff`, `09070bf`), brama na
+  wyniku: 3153 testy offline, ruff, mypy czyste; galaz usunieta.
+
+### Wybor roku danych — Task 8 planu (2026-10-10)
+
+- Galaz `feat/year-range`: Task 1-7 (`b41197a..7e40c18`) z poprzedniej
+  czesci sesji; Task 8 w tej: fixtury, przebieg na zywo, review, poprawki
+  (`2644f03`, `f37510f`, `026c5c4`). Brama: 3150 testow offline, ruff,
+  mypy czyste.
+- Przebieg na zywo (raport `docs/research/2026-10-10-year-range/raport.md`):
+  T1, T5, T16, T20 (3 flagi), T22, T23 i orto `N-33-130-D-d-1-4 --year
+  2025` zgodne ze specem. T21a (`--year 2022`, w2) pobral DWA kafle —
+  przyczyna: fixtures `gugik_laz/real_2026_10_06/w2_*` nagrane dla okna
+  C13 (50 x 50 m), a testy odtwarzaly je dla `W2_BBOX` (300 x 200 m).
+  Nowe nagranie `gugik_laz/real_2026_10_10/`, `laz_session` sprawdza okno
+  `BBOX`, T21a przepisany (dwa kafle razem pokrywaja referencje),
+  poprawione ADR-032, ARCHITECTURE 4.7, spec T21a/T25, plan.
+- Fixtury 10.3: orto N-33-130-D-d-1-4 (2 loty RGB 0,25 m w 2025), LAZ w3
+  (`627706,479258,628006,479558`, konflikt na 1 z 2 kafli w obu
+  kierunkach), LAZ Wroclaw `6.150.13.16.4` (2 dostawy NIE w 2025);
+  NMT PL-2000 z dwoma lotami w roku NIE znaleziony (112 arkuszy 1:2000),
+  bez testu syntetycznego.
+- Review galezi (reviewer): "correct", 8 uwag P3. Wdrozone: komunikat T23
+  dla `--year` LAZ z CLI, `NoCoverageError` dla arkusza bez rekordow
+  z rokiem w `resolve_campaigns`, `check_year_range(godla, workers=)`,
+  CHANGELOG (`available_years`, `validate_campaign_args`), plan. Decyzje
+  uzytkownika (ta sama sesja): dopisek `(tylko arkusze niepelne)` przy
+  roczniku LAZ z samymi dostawami NIE, `discover_tiles(min_year=)`.
+  Orto: pliki GUGiK
+  bez nodata i alfy, wiec `Info:` o wiekszym pokryciu dla orto nie wystapi
+  (zgodne z 4.4 specu).
+
+### Implementacja drobiazgow z review 0.7.1 (2026-10-10)
+
+- Galaz `fix/review-0.7.1` z `develop`, Task 1-11 planu = osobne commity
+  (brama przed kazdym: pytest offline, ruff, mypy):
+  - P4 `from_source` jawny warunek; P2 i P8 tylko docstringi;
+  - P3 `BBOX` PRG floor/ceil z dokladnoscia do MILIMETRA (korekta specu:
+    przy pelnych metrach kwadrat `teryt_for_point` rosl z 1 m do 2 m;
+    usluga przyjmuje liczby dziesietne — sprawdzone na zywo);
+  - P6 niespojny `numberReturned` = `DownloadError`; P7 `timeout` do PRG
+    (provider i menedzer); P5 godla tylko z cyframi ASCII (wszystkie
+    wzorce: PL-1992, PL-2000, CZ TM33/SM5; ARCHITECTURE 4.1 poprawione —
+    opis zer wiodacych byl nieaktualny od A7);
+  - P1 BDOT10k: scalanie do `<nazwa>.gpkg.<pid>_<tid>.tmp`, zapis ZIP,
+    dopiero potem `os.replace` — blad zostawia poprzedni GPKG i sidecar;
+  - P10 komunikat bez zgadywania przyczyny + podpowiedz `Info:` o innym
+    wariancie NMT/NMPT (jedno GetFeatureInfo ze wszystkimi warstwami
+    wariantu, rozpoznane na zywo; fixtury `real_2026_10_10`); trafienie
+    w cache braku pokrycia nie odpytuje juz sieci;
+  - P9: 7 testow, kazdy sprawdzony na mutacji kodu.
+- Review galezi (reviewer): bez blokerow; poprawione — wariant z bledem
+  pomijany do konca zycia providera i jedna proba zapytania (wczesniej
+  awaria indeksu, o ktory uzytkownik nie prosil, kosztowala pelne
+  ponowienia na kazdy arkusz), nazwa pliku tymczasowego GPKG z pid/tid,
+  test nadpisania GPKG w semantyce Windows przeniesiony na
+  `download_package`.
+- Przebieg na zywo (raport `docs/research/2026-10-10-review-0.7.1/raport.md`):
+  6 PASS; wykryty i poprawiony blad etykiety zapytania wariantu (falszywe
+  ostrzezenia o roku warstwy).
+- Audyt dokumentacji wzgledem kodu galezi (CHANGELOG [0.7.2], USAGE,
+  ARCHITECTURE, DECISIONS, docstringi): zgodne; dopisane w ARCHITECTURE 4.8,
+  ze `timeout` BDOT10k dziala tez na zapytanie PRG. ADR-028 bez erraty
+  (podpowiedz wariantu jest addytywna).
+
+### Otwarcie cyklu 0.7.2 i spec drobiazgow z review 0.7.1 (2026-10-09)
+
+- Otwarcie cyklu: `__version__ = "0.7.2-dev"` (asercje w `test_cli.py`
+  i `test_integration.py`), sekcja `[0.7.2] - Unreleased` i link
+  `compare/v0.7.1...develop` w CHANGELOG (commit `chore(release): poczatek
+  cyklu 0.7.2`).
+- Decyzja uzytkownika: najpierw drobiazgi z review 0.7.1 (sekcja "Po
+  0.7.1"). Spec `docs/superpowers/specs/2026-10-09-review-0.7.1-drobiazgi-design.md`:
+  P1-P10 (BDOT10k `keep_raw` ze scaleniem w pliku tymczasowym, docstringi
+  `strict`, `BBOX` PRG floor/ceil, jawne sprawdzenie klucza w skorowidzu,
+  godla tylko z cyframi ASCII, `numberReturned` vs liczba kodow, `timeout`
+  do PRG, docstring `build_cutout_from_sheets`, 7 testow, komunikat
+  o brakujacych arkuszach); poza zakresem pozycje oznaczone na 0.8.0.
+- Pomiar przy specu: `SheetParser("M-３３-８-A")`, `"N-34-１３０-D"`,
+  `"6.１４５.２０"` sa dzis przyjmowane z cyframi pelnej szerokosci w godle;
+  wzorce CZ (`CZ_TM33_PATTERN`, `CZ_SM5_PATTERN`) tez je dopasowuja.
+- Decyzje uzytkownika do specu: Q1 ten sam `timeout` dla PRG co dla paczki,
+  Q2 cyfry spoza ASCII odrzucane, Q4 niespojny `numberReturned` = blad,
+  Q5 interpretacje testow P9 b/c wg rekomendacji. Q3: najpierw sprawdzic,
+  skad brak danych.
+- Sprawdzenie na zywo U1 (`N-34-130-D-d --resolution 5m`): skorowidz NMT
+  5 m GUGiK (wszystkie 4 warstwy, GetFeatureInfo w 9 punktach arkusza
+  i GetMap) nie ma arkuszy `-1-1`, `-1-2`, `-2-x`; brak obejmuje rozlegly
+  obszar na polnoc od arkusza, ktory skorowidz 1 m pokrywa (NMT 1 m
+  2022-2025). Komunikat "(morze, obszar za granica)" podaje wiec falszywa
+  przyczyne; szczegoly w specu (P10).
+- 1 m dla tych 6 arkuszy: 3-4 kampanie EVRF2007 (2022-2025), pliki
+  OpenData HTTP 200 (HEAD). Uzytkownik potwierdza duze braki pokrycia
+  GUGiK w EVRF2007 dla 1 m i 5 m.
+- Q3 rozstrzygniete: nowe brzmienie komunikatu zaakceptowane; podpowiedz
+  `Info:` o innym wariancie (rozdzielczosc / uklad wysokosci, z ktorego
+  skorowidz ma arkusz) w tym samym zestawie — projekt w specu (P10,
+  czesc 2).
+- Plan `docs/superpowers/plans/2026-10-09-review-0.7.1-drobiazgi.md`
+  (12 zadan, jedno zadanie = jeden commit) na galezi `fix/review-0.7.1`
+  z `develop`. Ustalenia przy planie: CLI nie ma opcji `keep_raw`
+  (tylko biblioteka); sesje-atrapy skorowidza routuja tylko po warstwie,
+  a 5 m i 1 m EVRF2007 maja te same nazwy warstw — Task 10 dostaje
+  atrape po (endpoint, warstwa) i nowe surowe fixtury U1; testy
+  przypinajace "tylko wlasny endpoint" zmienione na intencje.
+- Bez zmian w kodzie poza numerem wersji.
 
 ### Wydanie 0.7.1 (2026-10-09)
 
@@ -221,6 +588,11 @@ decyzje uzytkownika. Szczegoly zmian: `docs/CHANGELOG.md` [0.7.1].
 #### Po 0.7.1 — drobiazgi z review galezi 0.7.1 (2026-10-09)
 
 Odlozone z rulingiem "zostaw"; lista ma przezyc usuniecie katalogu roboczego.
+**Stan 2026-10-10:** wszystkie pozycje ponizej WDROZONE na galezi
+`fix/review-0.7.1` (P1-P10 specu
+`docs/superpowers/specs/2026-10-09-review-0.7.1-drobiazgi-design.md`)
+OPROCZ dwoch oznaczonych na 0.8.0: publiczna nazwa dla `_single_teryt`
+i `file_digest` w sciezce HSG — zostaja otwarte.
 
 - BDOT10k `keep_raw` + blad zapisu surowego ZIP przy ponownym pobraniu
   zostawia STARY sidecar GPKG bez pliku danych (nowy GPKG usuniety;
@@ -1454,13 +1826,14 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
 
 ## Backlog
 
-#### Do 0.7.2 (decyzje uzytkownika 2026-10-09)
+#### Do 0.7.2 (decyzje uzytkownika 2026-10-09) — ZAMKNIETE, wydane w v0.7.2
 
 Decyzje z 2026-10-09 (po Task 14); kazda pozycja zaczyna sie od ustalen,
 a implementacja dopiero po specu/planie i zatwierdzeniu.
 
-- [ ] **(a) Wycinki PL (`--target-crs`) z WCS zamiast z arkuszy** (odwraca
-  ADR-027, wymaga nowego ADR):
+- [x] **(a) Wycinki PL (`--target-crs`) z WCS zamiast z arkuszy** —
+  SCALONE do `develop` 2026-10-11 (ADR-035, merge `bcf87d1`; weryfikacja
+  na zywo `docs/research/2026-10-11-wcs-cutouts-live/raport.md`):
   - EVRF2007: `https://mapy.geoportal.gov.pl/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModel`,
     coverage `DTM_PL-EVRF2007-NH`, `FORMAT=image/x-aaigrid`; odpowiedz to
     multipart/related (ASC + aux.xml + prj, bez linii NODATA);
@@ -1469,32 +1842,77 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
   - data pobrania w nazwie pliku wycinka; wycinki bez flag roku i kampanii;
     wycinki 5 m znikaja; host bardzo niestabilny (EOF TLS, timeouty) —
     ponowienia obowiazkowe;
-  - biblioteka: wpis WCS EVRF2007 (`providers/pl/gugik.py`,
-    `DigitalTerrainModelFormatTIFFEVRF2007`, `DTM_PL-EVRF2007-NH_TIFF`)
-    wskazuje nieistniejacy endpoint i coverage (zob. tez WCS EVRF2007 = 404
-    od 2026-08-11) — do poprawy.
-- [ ] **(b) Wybor roku `--year`/`--min-year`/`--max-year`** wg specu
+  - biblioteka: stary endpoint EVRF2007 TIFF byl niepoprawny (404);
+    nowy endpoint ASC multipart zwraca wysokosci, podobnie NMPT.
+  - **Wejscie do specu (a), pomiary historyczne:** wspolne kawalki
+    `transport/chunks.py` (ADR-034). Raport 2026-10-10
+    `docs/research/2026-10-10-wcs-limits/raport.md` (pkt 2-8):
+    WCS nie deklaruje nodata, 0,0 poza pokryciem i na ladzie;
+    siatka NMT 1 m `k + 0,5`, host niestabilny,
+    kompozycja serwera != wybor arkuszy wg ADR-028; NMPT TIFF RGB
+    byl bledem naprawionym w (a).
+    Raport 2026-10-11 `docs/research/2026-10-11-wcs-cutouts/raport.md`:
+    EVRF2007 dziala przez ASC multipart, maska PRG rozdziela lad
+    od morza, ASC dzielony na kawalki 1 Mpx.
+  - **Spec 2026-10-11 (zatwierdzony):**
+    `docs/superpowers/specs/2026-10-11-wcs-cutouts-design.md` — wszystkie
+    pytania wyzej rozstrzygniete (W-U1..W-U11); pomiary M1-M3 wykonane
+    (`docs/research/2026-10-11-wcs-cutouts/raport.md`).
+- [x] **(b) Wybor roku `--year`/`--min-year`/`--max-year`** — SCALONE do
+  `develop` 2026-10-10 (`09070bf`). Obowiazuje model A (decyzja uzytkownika
+  2026-10-10, spec
   `docs/superpowers/specs/2026-10-09-year-range-selection-design.md`
-  (NMT/NMPT/orto/LAZ; do czasu wdrozenia `--year` poza LAZ to `Error:`,
-  Task 14). Decyzje: Q2 — dowiazanie do najnowszego zostaje, pobierane sa
-  wszystkie loty z przedzialu i dochodzi `Info:` o pokryciu; Q1 — zatrzymanie
-  zadania obowiazkowe; Q4-Q8 przyjete; `newest` + `--min-year` zostaje;
-  `newest` + `--max-year` (i `--year`) = blad; wycinki nie przyjmuja flag
-  roku. Spec do uaktualnienia (m.in. wersja docelowa 0.7.1 -> 0.7.2) przed
-  planem.
-- [ ] **(c) Drugie dowiazanie do najnowszego PELNEGO lotu**
-  (`calyArkuszWypelnionyTrescia` = TAK) obok standardowego dowiazania do
-  najnowszego. Proponowane osobne drzewo:
-  `<segment>/pelne/<hierarchia>/<godlo>.<ext>`. Otwarte: arkusze brzegowe,
-  ktore nigdy nie sa pelne; czy pobierac najnowszy pelny lot, gdy pobrano
-  tylko najnowszy.
-- [ ] **(d) Z inwentaryzacji wartosci domyslnych:**
+  sekcja 0, U14-U16, nadrzedna wobec wczesniejszych U9/U13/P3/P3a): flagi
+  roku = filtr dopuszczalnych lat, `--campaigns` = liczba lotow (`newest`
+  domyslnie, kazda kombinacja dozwolona); konflikt roku = stop przed
+  pobraniem; wycinki i CZ bez flag roku; `Info:` przy dowiazaniu spoza
+  zadania. ADR-032, plan
+  `docs/superpowers/plans/2026-10-10-year-range-selection.md`, raport
+  `docs/research/2026-10-10-year-range/raport.md`.
+- [x] **(c) Drugie dowiazanie do najnowszego PELNEGO lotu** — SCALONE do
+  `develop` 2026-10-10 (`63aa8d2`; ADR-033, raport
+  `docs/research/2026-10-10-full-sheet-link/raport.md`). Spec
+  `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`, plan
+  `docs/superpowers/plans/2026-10-10-full-sheet-link.md`.
+- [x] **(d) Z inwentaryzacji wartosci domyslnych** — SCALONE do `develop`
+  2026-10-10 (`54c9c7e`; ADR-034, raport
+  `docs/research/2026-10-10-silent-defaults/raport.md`):
   - `--country auto` PL+CZ bez `--vertical-crs`: mieszane uklady wysokosci,
     cicho (szczegoly: "Ryzyko KRON86 3" wyzej);
   - GPKG z wieloma warstwami bez `--layer` cicho uzywa pierwszej warstwy
     (`core/geometry.py:351-357`, tylko `logger.info`);
   - `mosaic_and_crop(dtype=None)` bierze typ pierwszego zrodla
     (`transport/mosaic.py:174`, sygnatura; typ z `src.dtypes[0]`).
+  - **Decyzje uzytkownika 2026-10-10 (jeden spec na cale (d)):** d1 — tylko
+    komunikat w runtime, bez zmiany domyslnego ukladu (wspolny uklad: do
+    przemyslenia w kolejnych wydaniach); d2 — widoczne `Info:` z wybrana
+    warstwa, lista pozostalych i podpowiedzia `--layer` (wymaganie
+    `--layer` ewentualnie 0.8.0); d3 — odejscie od mozaikowania plikow
+    arkuszy i wspolny mechanizm dzielenia zapytan obszarowych
+    w `transport/` (wyciagniety z `CuzkClient._tile_grid`, uzyty przez CUZK
+    i `GugikWcsMixin`); (a) z niego korzysta. Pomiar limitow WCS GUGiK
+    KRON86: `docs/research/2026-10-10-wcs-limits/raport.md` (brak limitu
+    do 100 Mpx; bbox musi byc na siatce zrodla; brak nodata, 0,0 poza
+    pokryciem; kawalki skladaja sie bit w bit).
+  - Spec `docs/superpowers/specs/2026-10-10-silent-defaults-design.md`,
+    plan `docs/superpowers/plans/2026-10-10-silent-defaults.md`
+    (2026-10-10; wdrozone i scalone, `54c9c7e`).
+- [x] **NMPT `download_bbox` zwracal RGB uint8 zamiast wysokosci** —
+  NAPRAWIONE na `feat/wcs-cutouts` w ramach (a): WCS
+  `image/x-aaigrid` multipart -> jednopasmowy GeoTIFF float32
+  wysokosci na siatce 1 m (oba uklady pionowe). Pierwotny blad:
+  `docs/research/2026-10-10-wcs-limits/raport.md` pkt 6; weryfikacja na
+  zywo 2026-10-11: `docs/research/2026-10-11-wcs-cutouts-live/raport.md`.
+- [x] **Strojenie kawalkow ASC NMPT** — 2026-10-11: NMPT 4 Mpx coverage
+  (1 Mpx wyniku), NMT i `WCS_ASC_READ_TIMEOUT` bez zmian; raport
+  `docs/research/2026-10-11-nmpt-asc-tuning/raport.md` (pomiar przy
+  niespokojnym hoscie: zawieszenia niezalezne od rozmiaru kawalka).
+- [x] **(e) Testy LAZ odtwarzajace fixtures dla innego okna** — SCALONE do
+  `develop` 2026-10-11 (`b7463e3`; opcja 1, nagranie
+  `gugik_laz/real_2026_10_11/`; szczegoly: sesja "(e) testy LAZ na
+  faktycznych oknach zapytan"). Helpery sprawdzaja `BBOX`; dwa testy
+  z `test_laz_coverage.py` zastapione/usuniete, bo prawdziwe odpowiedzi
+  nie odtwarzaja ich scenariuszy.
 
 #### Do 0.8.0 — zmiany lamiace CLI skonsolidowane w jednym wydaniu (2026-10-08)
 
@@ -1517,7 +1935,19 @@ wchodza w tym samym wydaniu (decyzja uzytkownika). Kazda na wlasnej galezi.
   Errata ADR-031: zamiast okresu aliasow zmiana w 0.8.0. Przy okazji
   inwentaryzacja pozostalych polskich identyfikatorow publicznego API —
   decyzja uzytkownika, czy tez wchodza do 0.8.0.
+- [ ] **`--campaigns {newest,all}` -> przelacznik bez wartosci** (decyzja
+  uzytkownika 2026-10-10, spec wyboru roku U16): w modelu A `newest` jest
+  zawsze domyslne, wiec jawne `--campaigns newest` niczego nie zmienia;
+  zastapic przelacznikiem (np. `--all-campaigns`), bez aliasu (BREAKING
+  w CHANGELOG z "Co zrobic"; wywolania Hydrografa do sprawdzenia).
 
+- [ ] **Usunac przestarzaly tor arkuszowy wycinkow PL (ADR-035):**
+  `select_pl_cutout_sheets`, `run_pl_cutout`, `build_cutout_from_sheets`,
+  `PlCutoutSheets` i arkuszowe uzycie `prepare_pl_cutout`; usunac
+  parametry `geometry`, `layer`, `scale`, `max_workers`, `force`,
+  `on_progress`, `cache` z `download_pl_cutout` oraz
+  `snap_to_source_grid` i `assign_crs` z `mosaic_and_crop`.
+  Zmigrowac wywolania API przed usunieciem (BREAKING w CHANGELOG).
 - [ ] **Parametry wymagane w API (Hydrograf A8):** bez wartosci domyslnych
   `output_dir="./data"`, `vertical_crs="EVRF2007"` (`DownloadManager`),
   `MetadataCache` w biezacym katalogu, `depth="0-5cm"`/`stat="mean"`
@@ -1664,7 +2094,9 @@ liczony w strumieniu `download_to` zostaje w magazynie 0.8.0.
   deklaracja rekordu w `extra.source.declared_vertical_crs` (Task 3).
 - [x] **Ryzyko KRON86 2 — cicha zamiana 5 m w bibliotece** (KRON86 ->
   EVRF2007 tylko z `logger.warning`) — zamkniete Task 12 (b).
-- [ ] **Ryzyko KRON86 3 — `--country auto` bez `--vertical-crs`:** obszar
+- [x] **Ryzyko KRON86 3 — `--country auto` bez `--vertical-crs`** — zamkniete
+  komunikatem `Info:` (d1, merge `54c9c7e`; uklad domyslny bez zmian, decyzja
+  uzytkownika 2026-10-10). Stan wyjsciowy: obszar
   PL+CZ daje PL w EVRF2007 (EPSG:9651) i CZ w Bpv (EPSG:8357), roznica ok.
   0,1-0,15 m, bez komunikatu w runtime (tylko dokumentacja: ARCHITECTURE
   4.6, USAGE 1.4; sidecary oznaczaja uklad poprawnie). Do decyzji: `Info:`

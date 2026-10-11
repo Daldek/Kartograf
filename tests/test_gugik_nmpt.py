@@ -12,14 +12,21 @@ Endpoints and coverage IDs differ from NMT (DTM), but the download mechanism
 from unittest.mock import Mock
 from urllib.parse import parse_qs, urlparse
 
+import numpy as np
 import pytest
+import rasterio
 import requests
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
-from tests.conftest import gfi_record, render_gfi_body
+from tests.conftest import (
+    WCS_FIXTURES,
+    gfi_record,
+    recorded_response,
+    render_gfi_body,
+)
 
 NMPT_OPENDATA_URL = "https://opendata.geoportal.gov.pl/NumDaneWys/NMPT/78955/78955_1467030_N-34-130-D.asc"
 
@@ -144,8 +151,7 @@ class TestGugikNmptProviderEndpoints:
             )
 
     def test_wcs_available_for_both_vertical_crs(self):
-        """A broken NMT EVRF2007 WCS endpoint does not affect NMPT (own endpoint)."""
-        assert GugikNmptProvider().WITHDRAWN_WCS_VERTICAL_CRS == ()
+        """WCS heights are available for both vertical CRS (own endpoint)."""
         assert GugikNmptProvider(vertical_crs="EVRF2007").is_wcs_available() is True
         assert GugikNmptProvider(vertical_crs="KRON86").is_wcs_available() is True
 
@@ -183,6 +189,7 @@ class TestGugikNmptProviderDownload:
         """Mock WCS response."""
         response = Mock(spec=requests.Response)
         response.status_code = 200
+        response.headers = {"Content-Type": "image/tiff"}
         response.iter_content = Mock(return_value=[b"TIFF data..."])
         return response
 
@@ -219,26 +226,85 @@ class TestGugikNmptProviderDownload:
         second_call_url = session.get.call_args_list[1][0][0]
         assert second_call_url == NMPT_OPENDATA_URL
 
-    def test_download_bbox_uses_wcs(self, tmp_path, mock_wcs_response, sample_bbox):
-        """Test that download_bbox uses WCS with the NMPT endpoint."""
+    @pytest.mark.parametrize(
+        ("vertical_crs", "base", "bbox"),
+        [
+            (
+                "EVRF2007",
+                "nmpt_evrf2007_20x20_sf05",
+                BBox(567580.6, 243664.7, 567600.4, 243684.3, "EPSG:2180"),
+            ),
+            (
+                "KRON86",
+                "nmpt_kron86_20x20_sf05",
+                BBox(479013.9, 451886.5, 479033.2, 451906.1, "EPSG:2180"),
+            ),
+        ],
+    )
+    def test_nmpt_download_bbox_on_sheet_grid_with_scalefactor(
+        self, tmp_path, vertical_crs, base, bbox
+    ):
+        """NMPT heights: image/x-aaigrid with SCALEFACTOR=0.5 (0.5 m coverage,
+        1 m result) on the 1 m sheet grid - one float32 band equal to the sheet
+        (before 0.7.2: a 3-band uint8 RGB GeoTIFF)."""
         session = Mock(spec=requests.Session)
-        session.get = Mock(return_value=mock_wcs_response)
+        session.get = Mock(
+            return_value=recorded_response(WCS_FIXTURES / f"{base}.mime")
+        )
+        output_path = tmp_path / "nmpt.tif"
 
-        provider = GugikNmptProvider(session=session)
-        output_path = tmp_path / "test.tif"
+        GugikNmptProvider(session=session, vertical_crs=vertical_crs).download_bbox(
+            bbox, output_path
+        )
 
-        result = provider.download_bbox(sample_bbox, output_path)
+        assert session.get.call_count == 1
+        url = session.get.call_args[0][0]
+        query = parse_qs(urlparse(url).query)
+        assert urlparse(url).path.endswith("/NMPT/GRID1/WCS/DigitalSurfaceModel")
+        assert query["COVERAGEID"] == [f"DSM_PL-{vertical_crs}-NH"]
+        assert query["FORMAT"] == ["image/x-aaigrid"]
+        assert query["SCALEFACTOR"] == ["0.5"]
+        for subset in query["SUBSET"]:
+            low, high = subset[2:-1].split(",")
+            assert float(low) % 1 == 0.5 and float(high) % 1 == 0.5
+        with rasterio.open(output_path) as src:
+            assert (src.count, src.dtypes, src.shape) == (1, ("float32",), (20, 20))
+            assert src.res == (1.0, 1.0)
+            values = src.read(1)
+        np.testing.assert_array_equal(
+            values, np.load(WCS_FIXTURES / f"{base}_sheet_values.npy")
+        )
 
-        assert result == output_path
-        assert output_path.exists()
+    def test_nmpt_chunk_budget_counts_coverage_pixels(self):
+        """NMPT 1 m reads 4 coverage pixels (0.5 m) per result pixel, so its
+        4 Mpx coverage budget cuts a 2000 x 1000 m area into chunks of at most
+        1 Mpx of result; NMT EVRF2007 (1 m coverage, 1 Mpx budget) gets the same."""
+        bbox = BBox(567099.5, 243999.5, 569099.5, 244999.5, "EPSG:2180")
 
-        # Should use NMPT WCS endpoint with DSM coverage ID
-        call_url = session.get.call_args[0][0]
-        assert "WCS" in call_url
-        assert "NMPT" in call_url
-        assert "COVERAGEID=DSM_PL-EVRF2007-NH" in call_url
-        assert "SUBSET=x(" in call_url
-        assert "SUBSET=y(" in call_url
+        nmpt = GugikNmptProvider().plan_wcs_chunks(bbox)
+        nmt = GugikProvider(vertical_crs="EVRF2007").plan_wcs_chunks(bbox)
+
+        assert len(nmpt) == 2 and max(c.width * c.height for c in nmpt) <= 1_000_000
+        assert [(c.width, c.height) for c in nmt] == [(c.width, c.height) for c in nmpt]
+
+    def test_download_bbox_rejects_exception_report(self, tmp_path, sample_bbox):
+        """The single NMPT request is validated too: an OGC ExceptionReport with
+        HTTP 200 is a DownloadError, never a .tif file."""
+        from kartograf.exceptions import DownloadError
+
+        response = Mock(spec=requests.Response)
+        response.status_code = 200
+        response.headers = {"Content-Type": "text/xml"}
+        response.text = (
+            "<ows:ExceptionReport>InvalidParameterValue</ows:ExceptionReport>"
+        )
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=response)
+        output_path = tmp_path / "err.tif"
+
+        with pytest.raises(DownloadError, match="ExceptionReport"):
+            GugikNmptProvider(session=session).download_bbox(sample_bbox, output_path)
+        assert not output_path.exists()
 
     def test_get_opendata_url_uses_nmpt_endpoint(self, mock_wms_response):
         """Test that _get_opendata_url queries the NMPT endpoint (not NMT)."""

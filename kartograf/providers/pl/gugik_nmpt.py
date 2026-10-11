@@ -7,8 +7,9 @@ NMPT data from the Polish GUGiK services.
 NMPT includes terrain AND surface objects (buildings, trees) — unlike NMT
 which is bare-earth only.
 
-Uses the same mechanisms as NMT (WMS indexes (skorowidze) → OpenData ASC, WCS → GeoTIFF)
-but with different endpoints and coverage IDs.
+Uses the same mechanisms as NMT (WMS indexes (skorowidze) → OpenData ASC,
+WCS → GeoTIFF float32 1 m, heights requested as image/x-aaigrid) but with
+different endpoints and coverage IDs.
 
 Supported resolutions:
 - 1m only (no 5m for NMPT)
@@ -17,6 +18,8 @@ Supported resolutions:
 import re
 
 from kartograf.providers.pl.gugik import GugikProvider
+from kartograf.providers.pl.wcs import HEIGHT_AAIGRID
+from kartograf.transport.chunks import ChunkLimits, GridSpec
 
 
 class GugikNmptProvider(GugikProvider):
@@ -85,10 +88,22 @@ class GugikNmptProvider(GugikProvider):
     # Only 1m vertical CRS supported
     SUPPORTED_VERTICAL_CRS_5M: list[str] = []  # no 5m at all
 
-    # The 2026-08 GUGiK outage covers the NMT GRID1 EVRF2007 endpoint only;
-    # NMPT serves both vertical CRS from its own DigitalSurfaceModel endpoint,
-    # so nothing is withdrawn here.
-    WITHDRAWN_WCS_VERTICAL_CRS: tuple[str, ...] = ()
+    # The NMPT image/tiff is 3-band uint8 RGB, not heights: heights come only as
+    # image/x-aaigrid. The coverage step is 0.5 m; the result is 1 m on the 1 m
+    # sheet grid via SCALEFACTOR=0.5 - bit for bit the 1 m NMPT sheets and an
+    # exact decimation of 0.5 m content (pixel centred on a whole metre), no
+    # averaging (docs/research/2026-10-11-wcs-cutouts/raport.md, point 3).
+    WCS_HEIGHT_FORMAT = {"KRON86": HEIGHT_AAIGRID, "EVRF2007": HEIGHT_AAIGRID}
+    WCS_GRID = GridSpec(step=1.0, origin_x=0.5, origin_y=0.5)
+    WCS_NATIVE_STEP = 0.5
+
+    # 4 Mpx of coverage = 1 Mpx of result per ASC chunk. Live 2026-10-11 hangs
+    # (no byte for 300 s) hit 0.25-16 Mpx chunks alike, so every chunk is one more
+    # draw at a 120 s hang; a 4 Mpx chunk answered in 15-26 s like a 1 Mpx one,
+    # 8 Mpx took up to 104 s (docs/research/2026-10-11-nmpt-asc-tuning/raport.md).
+    WCS_CHUNK_LIMITS_AAIGRID = ChunkLimits(
+        max_width=40_000, max_height=40_000, max_pixels=4_000_000
+    )
 
     # Product identifier for cache key (overrides GugikProvider's "nmt")
     _CACHE_PRODUCT = "nmpt"

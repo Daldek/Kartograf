@@ -106,7 +106,9 @@ class SkorowidzRecord:
         0.7.1 without the accuracy keys; callers treat that as a cache miss
         (``cached_record``). ``archive_module`` itself may be ``None``.
         """
-        source["archive_module"]  # 0.7.1 key: older cache entries are a miss
+        if "archive_module" not in source:
+            # 0.7.1 key: older cache entries are a miss (cached_record)
+            raise KeyError("archive_module")
         uklad, zone = _horizontal_crs(source.get("declared_crs") or "")
         raw = {
             key: str(source[field])
@@ -305,15 +307,6 @@ def select_campaign_records(
     return sorted(unique.values(), key=_campaign_key, reverse=True)
 
 
-def layer_upper_year(pattern: re.Pattern[str], name: str) -> int | None:
-    """Upper year from a layer name (``LAYER_PATTERN`` group 1): ``2019`` -> 2019,
-    ``2017iStarsze`` -> 2017; ``Starsze`` or a name outside the pattern -> ``None``."""
-    match = pattern.fullmatch(name)
-    if match is None or match.group(1) is None:
-        return None
-    return int(match.group(1))
-
-
 def query_skorowidz_layer(
     session: requests.Session,
     endpoint: str,
@@ -323,8 +316,15 @@ def query_skorowidz_layer(
     godlo: str,
     timeout: float,
     retries: int = 3,
+    label: str | None = None,
 ) -> list[SkorowidzRecord]:
-    """Query one layer; a failure never means no coverage."""
+    """Query one layer; a failure never means no coverage.
+
+    ``layer`` may list several layers (``a,b``: one answer with the records
+    of all of them). ``label`` (default ``layer``) becomes
+    ``SkorowidzRecord.layer``; with several layers pass a label without a
+    trailing year, so the per-layer year check of the parser stays off.
+    """
     params = {
         "SERVICE": "WMS",
         "VERSION": "1.3.0",
@@ -358,7 +358,7 @@ def query_skorowidz_layer(
         raise DownloadError(
             f"{description}: odpowiedz nie jest szablonem skorowidza GUGiK", godlo=godlo
         )
-    return parse_skorowidz_records(text, layer)
+    return parse_skorowidz_records(text, label or layer)
 
 
 @dataclass(frozen=True)
@@ -378,33 +378,11 @@ def _zone(parser: SheetParser) -> int | None:
     return int(parser.godlo.split(".")[0]) if parser.uklad == "2000" else None
 
 
-def _record_year(record: SkorowidzRecord) -> int | None:
-    """Campaign year as in the parser (``aktualnoscRok`` or ``aktualnosc``, not
-    ``dt_pzgik``) — the ``min_year`` boundary; undetermined -> ``None``."""
-    year = record.raw.get("aktualnoscRok") or record.aktualnosc[:4]
-    return int(year) if year.isdigit() else None
-
-
-def _meets_min_year(record: SkorowidzRecord, min_year: int | None) -> bool:
-    """Record meets the boundary; an undetermined year meets no boundary."""
-    if min_year is None:
-        return True
-    year = _record_year(record)
-    return year is not None and year >= min_year
-
-
-def _covers(scanned_from: int | None, min_year: int | None) -> bool:
-    """Entry scanned from ``scanned_from`` (``None`` = full) covers the boundary."""
-    return scanned_from is None or (min_year is not None and scanned_from <= min_year)
-
-
-def _partial_scan_no_coverage(godlo: str, min_year: int | None) -> NoCoverageError:
-    """No campaign in a partial scan — single source of the message (D-2)."""
-    return NoCoverageError(
-        f"Brak kampanii {godlo} od roku {min_year} "
-        f"(warstwy starsze niz {min_year} pominiete)",
-        godlo=godlo,
-    )
+def _cached_no_coverage_message(godlo: str) -> str:
+    """Message of a cached no-coverage entry written without one (before
+    2026-10-07). A cache hit never calls the provider's ``no_coverage`` -
+    that may query the network (variant hints, P10)."""
+    return f"Brak danych dla {godlo} (z cache metadanych)"
 
 
 class SourceInfoMixin:
@@ -514,7 +492,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             if cached is not None:
                 if cached.get("no_coverage"):
                     raise NoCoverageError(
-                        cached.get("message") or str(query.no_coverage(parser, [])),
+                        cached.get("message") or _cached_no_coverage_message(godlo),
                         godlo=godlo,
                         hints=tuple(cached.get("hints") or ()),
                     )
@@ -566,28 +544,20 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         parser: SheetParser,
         timeout: int,
         query: SkorowidzQuery,
-        *,
-        min_year: int | None,
     ) -> list[SkorowidzRecord]:
-        """All campaigns of a sheet from all layers (newest first).
+        """All campaigns of a sheet from every layer (newest first).
 
-        With ``min_year`` a layer whose upper year from the name is < the
-        boundary is not queried (a layer without a year — always). A
-        ``campaigns_cache`` entry from a partial scan (``scanned_from``) is
-        valid only for boundaries ``>= scanned_from``. A layer failure =
-        ``DownloadError``, nothing goes to the cache. The provider does not
-        filter the file format (errata 2 N-2).
+        A partially scanned ``campaigns_cache`` entry is stale (P5), as is a
+        pre-ADR-031 payload. A failed layer never writes to the cache. File
+        format remains outside the provider's hard filter (errata 2 N-2).
         """
         godlo = parser.godlo
         if self._cache is not None:
             cached = self._cache.get_campaigns(*query.cache_key)
-            if cached is not None and _covers(cached.get("scanned_from"), min_year):
+            if cached is not None and cached.get("scanned_from") is None:
                 if cached.get("no_coverage"):
-                    if cached.get("scanned_from") is not None:
-                        # D-2: message from the CURRENT boundary, not the stored one
-                        raise _partial_scan_no_coverage(godlo, min_year)
                     raise NoCoverageError(
-                        cached.get("message") or str(query.no_coverage(parser, [])),
+                        cached.get("message") or _cached_no_coverage_message(godlo),
                         godlo=godlo,
                         hints=tuple(cached.get("hints") or ()),
                     )
@@ -602,16 +572,8 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             raise self._missing_endpoint(query, godlo)
         found: list[SkorowidzRecord] = []
         rejected: list[SkorowidzRecord] = []
-        skipped = False
         query_bbox = self._query_bbox(parser)
         for layer in self._layers(query.endpoint, timeout):
-            upper = layer_upper_year(self.LAYER_PATTERN, layer)
-            if min_year is not None and upper is not None and upper < min_year:
-                skipped = True
-                logger.debug(
-                    "Warstwa %s pominieta (rok %s < %s)", layer, upper, min_year
-                )
-                continue
             records = self._query_layer(
                 parser, query.endpoint, layer, timeout, query_bbox
             )
@@ -632,13 +594,8 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             key=_campaign_key,
             reverse=True,
         )
-        scanned_from = min_year if skipped else None
         if not found:
-            error = (
-                _partial_scan_no_coverage(godlo, min_year)
-                if skipped and min_year is not None
-                else query.no_coverage(parser, rejected)
-            )
+            error = query.no_coverage(parser, rejected)
             if self._cache is not None:
                 self._cache.set_campaigns(
                     *query.cache_key,
@@ -646,17 +603,13 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                         "no_coverage": True,
                         "message": str(error),
                         **({"hints": list(error.hints)} if error.hints else {}),
-                        "scanned_from": scanned_from,
                     },
                 )
             raise error
         if self._cache is not None:
             self._cache.set_campaigns(
                 *query.cache_key,
-                {
-                    "sources": [self.record_source(r) for r in found],
-                    "scanned_from": scanned_from,
-                },
+                {"sources": [self.record_source(r) for r in found]},
             )
         return found
 
@@ -666,44 +619,78 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         *,
         campaigns: str = "newest",
         min_year: int | None = None,
+        max_year: int | None = None,
         timeout: int | None = None,
     ) -> list[SkorowidzRecord]:
-        """Campaigns of a sheet per the ADR-030 strategy (newest first).
+        """Campaigns of a sheet in a closed year range (newest first).
 
-        ``newest`` = one ADR-028 record (unchanged); with ``min_year`` an
-        older one = ``NoCoverageError`` with its date; ``all`` = every record
-        passing the hard filter from all layers; with ``min_year`` only
-        campaigns with ``aktualnosc`` year >= the boundary.
+        ``campaigns`` sets how many flights: ``newest`` = the newest one within
+        the bounds, ``all`` = every one. Without bounds, ``newest`` retains the
+        single-record cache. With a bound, the full campaign list supplies both
+        selected records and all available years on a range conflict.
         """
         # local import: the kartograf.download package imports manager -> providers.pl
-        from kartograf.download.campaigns import validate_campaign_args
+        from kartograf.download.campaigns import (
+            in_year_range,
+            record_year,
+            validate_campaign_args,
+            year_range_error,
+        )
 
-        validate_campaign_args(campaigns, min_year)
+        validate_campaign_args(campaigns, min_year, max_year)
         if timeout is None:
             timeout = self.DEFAULT_TIMEOUT
         parser = SheetParser(godlo)
         godlo = parser.godlo
         query = self._skorowidz_query(parser)
-        if campaigns == "newest":
-            record = self._resolve_record(parser, timeout, query)
-            if not _meets_min_year(record, min_year):
-                raise NoCoverageError(
-                    f"Najnowsza kampania {godlo} ma date {record.aktualnosc} — "
-                    f"starsza niz min_year={min_year} (--min-year)",
-                    godlo=godlo,
+        if min_year is None and max_year is None and campaigns == "newest":
+            return [self._resolve_record(parser, timeout, query)]
+        found = self._resolve_all(parser, timeout, query)
+        if min_year is None and max_year is None:
+            kept = found
+        else:
+            kept = [
+                record
+                for record in found
+                if in_year_range(record_year(record), min_year, max_year)
+            ]
+            if not kept:
+                years = tuple(
+                    sorted(
+                        {
+                            year
+                            for record in found
+                            if (year := record_year(record)) is not None
+                        }
+                    )
                 )
-            return [record]
-        found = self._resolve_all(parser, timeout, query, min_year=min_year)
-        kept = [r for r in found if _meets_min_year(r, min_year)]
-        if not kept:
-            raise NoCoverageError(
-                f"Brak kampanii {godlo} od roku {min_year} "
-                f"(najnowsza: {found[0].aktualnosc})",
-                godlo=godlo,
-            )
+                if not years:
+                    raise NoCoverageError(f"Brak kampanii {godlo}", godlo=godlo)
+                raise year_range_error({godlo: years}, min_year, max_year, total=1)
+        if campaigns == "newest":
+            return [kept[0]]
         # the manager logs the campaign count at INFO (`_fetch_campaigns`, M-7)
         logger.debug("%s: %s kampanii", godlo, len(kept))
         return kept
+
+    def available_years(
+        self, godlo: str, timeout: int | None = None
+    ) -> tuple[int, ...]:
+        """Ascending distinct acquisition years of a sheet's complete campaign list."""
+        # local import avoids the download -> manager -> providers import cycle
+        from kartograf.download.campaigns import record_year
+
+        parser = SheetParser(godlo)
+        found = self._resolve_all(
+            parser,
+            self.DEFAULT_TIMEOUT if timeout is None else timeout,
+            self._skorowidz_query(parser),
+        )
+        return tuple(
+            sorted(
+                {year for record in found if (year := record_year(record)) is not None}
+            )
+        )
 
     def record_source(self, record: SkorowidzRecord) -> dict:
         """Record metadata (``to_source``) with the endpoint and ``source_extra``."""

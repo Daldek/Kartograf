@@ -40,7 +40,10 @@ OLD_2000 = "7.173.21.06.2"  # 2022, PL-2000:S7
 
 
 def laz_session() -> MagicMock:
-    """WFS from raw XML of the 2026-10-06 round (GetCapabilities + GetFeature/year)."""
+    """WFS from raw XML of the 2026-10-06 round (GetCapabilities + GetFeature/year).
+
+    The bodies answer exactly the ``W2_AREA`` query window (axes N,E).
+    """
     session = MagicMock()
 
     def get(url, **kwargs):
@@ -49,6 +52,7 @@ def laz_session() -> MagicMock:
         if query["REQUEST"][0] == "GetCapabilities":
             path = REAL_LAZ / f"caps_{vcrs}.xml"
         else:
+            assert query["BBOX"][0].startswith("487000,637400,487050,637450,")
             year = query["TYPENAMES"][0][-4:]
             path = REAL_LAZ / f"w2_{vcrs}_{year}.xml"
         response = MagicMock()
@@ -184,38 +188,12 @@ class TestSelectTilesOnRealWfs:
             (NEW_1992, 2025)
         ]
 
-    def test_older_tile_adding_uncovered_area_is_kept(self):
-        # the area extends east beyond the 2025 tile (E <= 637617.67) into the
-        # 2022 tile (E up to ~638146) — the 2022 tile adds an uncovered piece
-        area = BBox(637500, 487000, 637800, 487100, "EPSG:2180")
-        selection = GugikLazProvider(session=laz_session()).select_tiles(area)
-        assert sorted((t.godlo, t.year) for t in selection.tiles) == [
-            (OLD_2000, 2022),
-            (NEW_1992, 2025),
-        ]
-        assert [(s.tile.godlo, s.tile.year) for s in selection.superseded] == [
-            (NEW_1992, 2023)
-        ]
-
     def test_year_restricts_to_one_year_without_cross_year_dedup(self):
         selection = GugikLazProvider(session=laz_session()).select_tiles(
             W2_AREA, year=2022
         )
         assert [(t.godlo, t.year) for t in selection.tiles] == [(OLD_2000, 2022)]
         assert selection.superseded == ()
-
-    def test_tile_whose_footprint_misses_area_is_skipped_as_outside(self):
-        # SW corner of the PL-2000 tile envelope (rotated relative to EPSG:2180):
-        # the envelope intersects the area, the tile polygon does not
-        area = BBox(637334, 486800, 637340, 486806, "EPSG:2180")
-        selection = GugikLazProvider(session=laz_session()).select_tiles(
-            area, year=2022
-        )
-        assert selection.tiles == ()
-        (entry,) = selection.superseded
-        assert entry.tile.godlo == OLD_2000
-        assert entry.covered_by == ()
-        assert entry.reason == "outside"
 
     def test_kron86_newest_year_covers_2012(self):
         selection = GugikLazProvider(

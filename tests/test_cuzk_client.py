@@ -13,7 +13,7 @@ import rasterio
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
-from kartograf.providers.cuzk.client import CuzkClient, _tile_grid, wkid
+from kartograf.providers.cuzk.client import CuzkClient, wkid
 
 _CUZK_SESSION_PATCH = "kartograf.providers.cuzk.client.requests.Session"
 _DOWNLOAD_TO_PATCH = "kartograf.providers.cuzk.client.download_to"
@@ -701,31 +701,6 @@ class TestExportPixelGrid:
             assert single.transform == tiled.transform
             assert single.shape == tiled.shape == (91, 500)
             np.testing.assert_array_equal(single.read(1), tiled.read(1))
-
-
-@pytest.mark.parametrize(
-    ("width", "height"), [(5000, 5000), (1800, 12300), (50000, 50), (8, 8)]
-)
-def test_tile_grid_respects_budget_and_covers_request(width, height):
-    bbox = BBox(0.3, 100.7 - height * 2, 0.3 + width * 2, 100.7, "EPSG:5514")
-    tiles = _tile_grid(bbox, 2.0, width, height, 15000, 4100, 4_000_000)
-    assert sum(w * h for _, w, h in tiles) == width * height
-    assert tiles[0][0].min_x == bbox.min_x
-    assert tiles[0][0].max_y == bbox.max_y
-    for index, (tile, w, h) in enumerate(tiles):
-        assert 0 < w <= 15000 and 0 < h <= 4100
-        assert w * h <= 4_000_000
-        assert tile.max_x - tile.min_x == pytest.approx(w * 2)
-        assert tile.max_y - tile.min_y == pytest.approx(h * 2)
-        assert bbox.min_x <= tile.min_x < tile.max_x <= bbox.max_x
-        assert bbox.min_y <= tile.min_y < tile.max_y <= bbox.max_y
-        for other, _, _ in tiles[index + 1 :]:
-            assert (
-                tile.max_x <= other.min_x
-                or other.max_x <= tile.min_x
-                or tile.max_y <= other.min_y
-                or other.max_y <= tile.min_y
-            )
 
 
 def test_default_budget_is_below_measured_server_limit():

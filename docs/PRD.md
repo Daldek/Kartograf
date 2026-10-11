@@ -1,16 +1,17 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 4.1
-**Data:** 2026-10-09
+**Wersja:** 4.3
+**Data:** 2026-10-11
 **Product Owner:** Piotr
-**Status:** Wydanie v0.7.1 (2026-10-09)
+**Status:** Wydanie v0.7.2 (2026-10-11)
 
-> Dokument opisuje wymagania produktowe wersji 0.7.1 w postaci
-> zrealizowanej w kodzie wydania v0.7.1. Szczegóły zachowania (komunikaty,
-> kody wyjścia, przypadki brzegowe) — `docs/SCOPE.md` i
-> `docs/ARCHITECTURE.md`; uzasadnienia decyzji — `docs/DECISIONS.md`
-> (ADR-022..ADR-030); historia zmian — `docs/CHANGELOG.md`. Pełna lista
+> Dokument opisuje wymagania produktowe wersji 0.7.2 w postaci
+> zrealizowanej w kodzie wydania v0.7.2 (w tym rok danych ADR-032,
+> `full_sheet/` ADR-033 i wycinki z WCS ADR-035). Szczegóły
+> zachowania (komunikaty, kody wyjścia, przypadki brzegowe) —
+> `docs/SCOPE.md` i `docs/ARCHITECTURE.md`; uzasadnienia decyzji —
+> `docs/DECISIONS.md` (ADR-022..ADR-035); historia zmian — `docs/CHANGELOG.md`. Pełna lista
 > opcji CLI: `kartograf <komenda> --help`. Wymagania docelowe wersji
 > 1.0.0 — sekcja 8 (roadmapa i kolejność podprojektów: `docs/SCOPE.md` 3.3).
 
@@ -33,7 +34,7 @@ Kartograf to narzędzie CLI + biblioteka Python oferujące:
 1. **Unified API** - jednolity interfejs dla NMT, NMPT, Ortofoto, LAZ, Land Cover, SoilGrids
 2. **Multiple Providers** - GUGiK (NMT/NMPT/Orto/LAZ/BDOT10k), CUZK (DMR 5G/4G, Czechy — etap 1), CORINE, SoilGrids
 3. **Intelligent Selection** - godło (PL-1992/PL-2000, CZ TM33/SM5), TERYT, bbox, plik geometrii; wybór kraju `--country {pl,cz,auto}`
-4. **Automatic Processing** - scalanie warstw BDOT10k, kalkulacja HSG, wycinek NMT z mozaiki arkuszy z lokalną reprojekcją (`--target-crs`)
+4. **Automatic Processing** - scalanie warstw BDOT10k, kalkulacja HSG, wycinek NMT/NMPT z WCS GUGiK z maska ladu PRG i lokalna reprojekcja (`--target-crs`)
 5. **Provenance** - kanoniczny układ katalogów `data/`, metadane `<plik>.meta.json` dla każdego pobrania, jawny wybór kampanii GUGiK
 6. **Secure Auth** - Auth Proxy dla izolacji credentials CLMS
 
@@ -133,13 +134,11 @@ sheets = find_sheets_for_geometry(Path("area.shp"), "1:10000")
 # Pobieranie przez godło (ASC) — plik w data/nmt/pl_1992_1m_evrf2007/...
 manager = DownloadManager(output_dir="./data")
 path = manager.download_sheet("N-34-130-D-d-2-4")
-fetch = manager.last_sheet  # SheetFetch: skipped, downloaded, reused, link, unverified
+fetch = manager.last_sheet  # SheetFetch: skipped, downloaded, reused, link, unverified, full_link
 
-# Pobieranie przez bbox (GeoTIFF, WCS) — tylko NMT 1m i tylko KRON86:
-# endpoint WCS dla EVRF2007 został wycofany przez GUGiK (HTTP 404 od 2026-08),
-# więc download_bbox pod EVRF2007 kończy się ValidationError. Wysokości
-# EVRF2007 bierz z arkuszy: download_sheet() albo CLI `--bbox`, a jako jeden
-# GeoTIFF: download_pl_cutout() / CLI `--target-crs` (0.7.0).
+# Biblioteczne bbox WCS NMT 1m: KRON86 z TIFF, EVRF2007 z ASC
+# multipart; obie sciezki daja GeoTIFF float32 z wysokosciami.
+# NMPT download_bbox rowniez daje wysokosci float32 (ASC multipart).
 kron = DownloadManager(output_dir="./data", vertical_crs="KRON86")
 bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
 path = kron.download_bbox(bbox, "area.tif")
@@ -178,8 +177,10 @@ kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 -
 #### Description
 Pobieranie danych NMPT (Digital Surface Model) z GUGiK — teren + obiekty powierzchniowe (drzewa, budynki).
 Tylko 1m; układy wysokościowe KRON86 i EVRF2007. Wybór rekordu skorowidza
-i kampanie jak dla NMT (sekcje 3.1, 3.11). CLI `--bbox` pobiera arkusze
-OpenData; WCS (`download_bbox`) dostępny z biblioteki.
+i kampanie jak dla NMT (sekcje 3.1, 3.11). CLI `--bbox` bez
+`--target-crs` pobiera arkusze OpenData; z `--target-crs` wycinek WCS
+(sekcja 3.10). Biblioteczne `download_bbox` zwraca wysokosci
+float32 z WCS, nie kolorowy TIFF.
 
 #### Capabilities
 ```python
@@ -583,48 +584,56 @@ kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:55
 
 ---
 
-### 3.10 Feature: Wycinek NMT PL (`--target-crs`, ADR-027)
+### 3.10 Feature: Wycinek NMT/NMPT PL (`--target-crs`, ADR-035)
 
 **Priority:** P1 (High)
-**Status:** Development (0.7.0)
+**Status:** Development (0.7.2)
 
 #### Description
-Jeden scalony GeoTIFF NMT dla obszaru PL (`--bbox`/`--geometry` +
-`--target-crs`): mozaika arkuszy PL-1992 przycięta do obszaru, opcjonalnie
-reprojektowana lokalnie przypiętą operacją. Zapis
-w `nmt/pl_1992_<res>_<vcrs>/bbox/`. Pogranicze: jedną komendą dwa wycinki
-(PL i CZ) w tym samym układzie, ze wspólnym `extra.parent_request`.
+Jeden GeoTIFF NMT albo NMPT 1 m z WCS GUGiK dla `--bbox` lub
+obwiedni `--geometry` + `--target-crs`. Maska ladu PRG nadaje
+nodata poza Polska; lokalny warp uzywa przypietej operacji.
+Wynik: `<segment>/bbox/<coords>_<YYYYMMDD>.tif` z sidecarem;
+pod `auto` PL i CZ to dwa pliki ze wspolnym `extra.parent_request`.
 
 #### Requirements
-- Tylko `--product nmt` i system 1992; `EPSG:2180` = crop 1:1 na siatce
-  arkuszy (arkusze o innej fazie = `GridMismatchError`, kod 1 z podpowiedzią);
-  inny cel — reprojekcja każdego arkusza osobno (W1, `extra.off_grid_sheets`).
-- Arkusz bez danych GUGiK = nodata, `Warning:` i `extra.missing_sheets` (R5);
-  inna awaria pobrania = kod 1. Wynik w całości nodata = `Warning:`
-  i `extra.all_nodata`.
-- Wycinek zawsze czyta najnowsze kampanie (`newest`); `--campaigns all` lub
-  `--min-year` z `--target-crs` = `Error:` przed siecią.
-- Istniejący wycinek jest pomijany; skip odtwarza ostrzeżenia z sidecara.
-  `--force` przebudowuje wycinek i pobiera ponownie arkusze; nieudana
-  przebudowa zostawia poprzedni plik.
-- `--geometry` obejmuje całą obwiednię geometrii (bez maskowania).
+- Tylko 1 m, oba uklady wysokosciowe. WCS NMT KRON86 zwraca
+  TIFF float32, EVRF2007 i NMPT — ASC multipart konwertowany
+  do float32 GeoTIFF. Zadanie wyrownane na zewnatrz do siatki
+  arkusza 1 m (`k + 0,5`), zapytania o parzystych rozmiarach (pomiar
+  na zywo 2026-10-11), ASC dzielony na kawalki do 1 Mpx pikseli coverage
+  w NMT i 4 Mpx w NMPT (1 Mpx wyniku 1 m).
+- Maska PRG `A00 - W02 - W03` przed WCS: piksele poza ladem
+  `-9999`, 0,0 wewnatrz maski pozostaje danymi.
+  Wynik caly nodata = `Warning:`, kod 0.
+- WCS daje kompozycje serwera, nie wybor najnowszego arkusza
+  dokladnie 1 m wg ADR-028; na locie 0,5 m 1 m jest decymacja.
+  Bez wyboru roku i kampanii: `--campaigns all`, flagi roku
+  i `--full-sheet` z `--target-crs` = `Error:`.
+- Kazdy przebieg pobiera (nie pomija istniejacego wycinka);
+  wynik z tego samego dnia atomowo zastepuje wczesniejszy
+  tylko po sukcesie. `--force`, `--workers`, `--scale` bez wplywu
+  na tor WCS. 5 m: arkusze bez `--target-crs`.
+- Przestarzale API arkuszowe `select_pl_cutout_sheets` /
+  `run_pl_cutout` i `build_cutout_from_sheets` pozostaje do
+  0.8.0; parametry arkuszowe `download_pl_cutout` sa ignorowane
+  z `DeprecationWarning`, gdy niedomyslne.
 
 #### Capabilities
 ```python
-from kartograf import BBox, MetadataCache, download_pl_cutout
+from kartograf import BBox, download_pl_cutout, prepare_pl_cutout, run_pl_wcs_cutout
 
 bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
-result = download_pl_cutout(bbox, "EPSG:5514", output_dir="./data", cache=MetadataCache())
-result.path, result.skipped
-result.missing_sheets, result.off_grid_sheets, result.partial_sheets
-result.all_nodata, result.unverified
-# kroki: prepare_pl_cutout -> select_pl_cutout_sheets -> run_pl_cutout
+result = download_pl_cutout(bbox, "EPSG:5514", output_dir="./data", product="nmpt")
+result.path, result.masked_pixels, result.zero_pixels, result.all_nodata
+prepared = prepare_pl_cutout(bbox, "EPSG:2180", product="nmt")
+result_nmt = run_pl_wcs_cutout(prepared)
 ```
 
 #### CLI Commands
 ```bash
-kartograf download --bbox 530000,382000,533000,386000 --country pl --target-crs EPSG:5514
-kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --target-crs EPSG:2180 --vertical-crs EVRF2007
+kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --target-crs EPSG:5514
+kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmpt --target-crs EPSG:2180
 ```
 
 ---
@@ -641,13 +650,15 @@ wskazuje, która jest "bieżąca".
 
 #### Requirements
 - `--campaigns newest` (domyślnie): najnowsza kampania arkusza wg reguły
-  ADR-028, rozwiązywana przy każdym uruchomieniu (sieć, gdy wygasł cache
-  7 dni); pobierane są tylko brakujące kampanie.
-- `--campaigns all`: każda kampania arkusza po twardym filtrze ADR-028, bez
-  limitu liczby.
-- `--min-year RRRR` (1900..2100): odcina kampanie z rokiem `aktualnosc`
-  sprzed granicy; `newest` z najnowszą kampanią starszą od granicy =
-  `NoCoverageError`.
+  ADR-028 w zakresie lat, rozwiązywana przy każdym uruchomieniu (sieć, gdy
+  wygasł cache 7 dni); pobierane są tylko brakujące kampanie.
+- `--campaigns all`: każda kampania arkusza (w zakresie lat) po twardym
+  filtrze ADR-028, bez limitu liczby.
+- Rok danych (ADR-032): `--year RRRR` = `--min-year RRRR --max-year RRRR`,
+  granice domknięte 1900..2100; flagi roku wyznaczają tylko dopuszczalne
+  lata, `--campaigns` liczbę lotów. Najpierw sprawdzenie pełnej listy
+  kampanii każdego arkusza: dane tylko z innych lat = `YearRangeError`
+  (`Error:` z latami i podpowiedzią) i nic nie jest pobierane.
 - Pliki kampanii w `<segment>/kampanie/<data>_<id>/<hierarchia godła>/`
   z OBOWIĄZKOWYM sidecarem (`extra.campaign`); format pliku z pola `format`
   rekordu i weryfikacja treści po pobraniu (nagłówek AAIGrid / sygnatura TIFF).
@@ -656,25 +667,33 @@ wskazuje, która jest "bieżąca".
   z `Warning:`; bez symlinków (errata 4 ADR-030). Dowiązanie przestawiane
   tylko na kampanię nowszą, nigdy wstecz; cel zapisany w sidecarze
   (`extra.link`, `extra.link_target`).
+- Drugie dowiązanie `<segment>/full_sheet/<hierarchia>/<godło>.<ext>`
+  (ADR-033) do najnowszego lokalnego lotu oznaczonego w skorowidzu jako
+  pełny (`calyArkuszWypelnionyTrescia = TAK`, pełny = w granicach Polski);
+  `--full-sheet` / `DownloadManager(full_sheet=True)` dociąga najwyżej
+  jeden taki lot na arkusz, gdy najnowszy w zakresie lat nie jest pełny.
 - Skorowidz GUGiK niedostępny (błąd transportu) przy `newest` bez
-  `--min-year`/`--force` i istniejącej lokalnej kampanii: arkusz brany
+  flag roku i `--force` oraz istniejącej lokalnej kampanii: arkusz brany
   z lokalnej kampanii z `Warning:` (errata 5 ADR-030); biblioteka:
   `SheetFetch.unverified` / `DownloadResult.unverified` /
   `PlCutoutResult.unverified`.
-- Tylko PL: zadanie bez części PL z `--campaigns all`/`--min-year` =
-  `Error:` przed siecią; obszar PL+CZ pod `auto` = `Info:`, CZ pobierane
-  w bieżącej wersji.
-- LAZ: `--campaigns all` = kafle bez deduplikacji pokryciowej, `--min-year`
-  = granica `akt_rok`; LAZ bez dowiązań.
+- Tylko PL: zadanie bez części PL z `--campaigns all`, flagą roku albo
+  `--full-sheet` = `Error:` przed siecią; obszar PL+CZ pod `auto` =
+  `Info:`, CZ pobierane w bieżącej wersji. Wycinek `--target-crs` nie
+  przyjmuje `all`, flag roku ani `--full-sheet`.
+- LAZ: `--campaigns all` = kafle bez deduplikacji pokryciowej, flagi roku
+  = granice `akt_rok`; LAZ bez dowiązań i bez `--full-sheet`.
 
 #### Capabilities
 ```python
 from kartograf import DownloadManager
 
-manager = DownloadManager(output_dir="./data", campaigns="all", min_year=2022)
+manager = DownloadManager(output_dir="./data", min_year=2022, full_sheet=True)
 manager.download_sheet("N-34-139-C-a-3-1")
 manager.last_sheet.downloaded      # pliki kampanii pobrane teraz
 manager.last_sheet.link            # "hardlink" | "copy"
+manager.last_sheet.full_link       # ścieżka full_sheet/ albo None
+manager.last_result.without_full   # arkusze bez pełnego lotu w zakresie
 # CampaignRef — opis kampanii (id, data, dt_pzgik, url, ...)
 ```
 
@@ -683,6 +702,7 @@ manager.last_sheet.link            # "hardlink" | "copy"
 kartograf download N-34-130-D-d-2-4 --campaigns all
 kartograf download N-34-130-D-d-2-4 --min-year 2024
 kartograf download --bbox 530000,382000,533000,386000 --campaigns all --min-year 2022
+kartograf download N-34-139-C-a-3-1 --full-sheet
 ```
 
 ---
@@ -730,7 +750,7 @@ kartograf download --bbox 530000,382000,533000,386000 --campaigns all --min-year
 ├────────────────────────────────────┬────────────────────────────────────┤
 │ DownloadManager (NMT/NMPT/Orto,    │ LandCoverManager                   │
 │   kampanie ADR-030)                │   (BDOT10k, CORINE, SoilGrids)     │
-│ download_pl_cutout (ADR-027)       │ HSGCalculator                      │
+│ download_pl_cutout (ADR-035)       │ HSGCalculator                      │
 │ download_laz_area (ADR-029)        │                                    │
 └──────────────┬─────────────────────┴───────────────────┬────────────────┘
                │                                         │
@@ -805,14 +825,16 @@ from kartograf import (
     CampaignRef,
     FileStorage,
 
-    # Download — wycinek PL (ADR-027)
+    # Download — wycinek PL WCS (ADR-035); API arkuszowe do 0.8.0
     PlCutout,
     PlCutoutResult,
     PlCutoutSheets,
     download_pl_cutout,
     prepare_pl_cutout,
+    run_pl_wcs_cutout,
     run_pl_cutout,
     select_pl_cutout_sheets,
+    build_cutout_from_sheets,
 
     # Download — kafle LAZ (ADR-029)
     LazDownloadResult,
@@ -851,7 +873,7 @@ from kartograf import (
     GridMismatchError,      # (ValidationError)
 
     # Version
-    __version__,            # "0.7.1"
+    __version__,            # "0.7.2"
 )
 ```
 
@@ -904,8 +926,9 @@ mypy >= 1.13           # Type checking
   w `docs/SCOPE.md` 3.2
 - Atomic writes (tmp → `os.replace`); nieudana przebudowa wycinka zostawia
   poprzedni plik
-- Skip-existing: pobrane pliki nie są pobierane ponownie (`--force` wymusza);
-  pod `--campaigns newest` sprawdzana jest dostępność nowszej kampanii
+- Skip-existing dotyczy arkuszy i innych pobran; wycinek PL WCS
+  nigdy nie pomija istniejacego pliku, pobiera przy kazdym wywolaniu.
+  Arkusze pod `--campaigns newest` sprawdzaja dostepnosc nowszej kampanii
 - Integralność treści: plik kampanii GUGiK weryfikowany formatem treści
   (nagłówek AAIGrid / sygnatura TIFF); brak sum kontrolnych
 
@@ -924,8 +947,9 @@ mypy >= 1.13           # Type checking
 ### Version 0.6+
 - [x] Parallel downloads (multi-threading) (implemented in v0.6.0)
 - [x] Metadata cache (SQLite) (implemented in v0.6.0)
-- [x] Automatic mosaic creation — NMT PL: wycinek `--target-crs` /
-      `download_pl_cutout` (0.7.0); pozostałe produkty — etap 2
+- [x] Automatic mosaic creation — dawne API arkuszowe NMT PL
+      (`run_pl_cutout`, 0.7.0) do 0.8.0; wycinki NMT/NMPT WCS
+      (`download_pl_cutout`, 0.7.2); pozostale produkty — etap 2
 - [x] Czechy, etap 1: DMR 5G/4G z CUZK, `--country` (0.7.0)
 - [x] Kampanie GUGiK `--campaigns`/`--min-year` (0.7.0)
 
@@ -990,6 +1014,6 @@ HYDROGRAF (główna aplikacja)
 
 ---
 
-**Wersja dokumentu:** 4.1
-**Data ostatniej aktualizacji:** 2026-10-09
-**Status:** Wydanie v0.7.1 (2026-10-09)
+**Wersja dokumentu:** 4.3
+**Data ostatniej aktualizacji:** 2026-10-11
+**Status:** Wydanie v0.7.2 (2026-10-11)

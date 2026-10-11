@@ -17,11 +17,12 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
+# Sheet code patterns use [0-9], not \d: \d also matches non-ASCII digits (P5).
 # TM33 tile sheet code `{E_km}_{N_km}` (groups: E and N kilometres of the SW corner).
-CZ_TM33_PATTERN = re.compile(r"^(\d{3})_(\d{4})$")
+CZ_TM33_PATTERN = re.compile(r"^([0-9]{3})_([0-9]{4})$")
 # SM5 sheet code (MAPNOM): 4 uppercase letters + 2 digits, e.g. CTES96.
-CZ_SM5_PATTERN = re.compile(r"^[A-Z]{4}\d{2}$")
-_PL2000_PATTERN = re.compile(r"^[5-8]\.\d")
+CZ_SM5_PATTERN = re.compile(r"^[A-Z]{4}[0-9]{2}$")
+_PL2000_PATTERN = re.compile(r"^[5-8]\.[0-9]")
 
 
 @dataclass(frozen=True)
