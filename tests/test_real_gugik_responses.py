@@ -777,6 +777,17 @@ class TestLazDiscoveryOnRealWfs:
             ("N-34-138-D-a-2-2-2", 2019),
         ]
 
+    def test_w3_older_tile_adding_uncovered_area_is_kept(self):
+        """ADR-029: no newer tile covers the 2019 sheet, so 2019 stays beside 2025."""
+        selection = GugikLazProvider(session=laz_session("w3")).select_tiles(W3_BBOX)
+        assert [(t.godlo, t.year) for t in selection.tiles] == [
+            ("N-34-138-B-c-4-4-4-4", 2025),
+            ("N-34-138-D-a-2-2-2", 2019),
+        ]
+        assert [
+            (s.tile.godlo, s.tile.year, s.reason) for s in selection.superseded
+        ] == [("N-34-138-B-c-4-4-4-4", 2023, "covered")]
+
 
 # =============================================================================
 # ADR-030: campaign list (select_campaign_records) on real bodies
