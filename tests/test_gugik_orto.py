@@ -91,6 +91,7 @@ def file_response(chunks: list[bytes] | None = None) -> Mock:
     response = Mock(spec=requests.Response)
     response.status_code = 200
     response.raise_for_status = Mock()
+    response.headers = {"Content-Type": "image/tiff"}
     response.iter_content = Mock(
         return_value=chunks or [b"II*\x00TIFF header data\x00"]
     )
@@ -667,10 +668,13 @@ class TestGugikOrtoProviderDownloadBbox:
         assert result == output_path
         assert output_path.exists()
 
+        # Orto has no declared source grid: one request with the bbox as given,
+        # even above the NMT chunk budget (100 Mpx at 1 m)
+        assert session.get.call_count == 1
         call_url = session.get.call_args[0][0]
         assert "WCS" in call_url
-        assert "SUBSET=x(" in call_url
-        assert "SUBSET=y(" in call_url
+        assert "SUBSET=x(450000.00,460000.00)" in call_url
+        assert "SUBSET=y(550000.00,560000.00)" in call_url
 
     def test_download_bbox_url_contains_coverage_id(
         self, tmp_path, mock_wcs_response, sample_bbox

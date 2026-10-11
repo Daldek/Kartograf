@@ -11,7 +11,9 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 from urllib.parse import parse_qs, urlparse
 
+import numpy as np
 import pytest
+import rasterio
 import requests
 
 from kartograf.core.sheet_parser import BBox
@@ -41,6 +43,47 @@ def _queried_layers(session: Mock, endpoint: str | None = None) -> list[str]:
         for call in session.get.call_args_list
         if endpoint is None or call.args[0].startswith(f"{endpoint}?")
     ]
+
+
+def _subset(url: str) -> tuple[float, float, float, float]:
+    """(x0, x1, y0, y1) from the SUBSET parameters of a WCS GetCoverage URL."""
+    subsets = parse_qs(urlparse(url).query)["SUBSET"]
+    x = next(s for s in subsets if s.startswith("x("))[2:-1].split(",")
+    y = next(s for s in subsets if s.startswith("y("))[2:-1].split(",")
+    return float(x[0]), float(x[1]), float(y[0]), float(y[1])
+
+
+def _encoded(left: float, top: float, width: int, height: int) -> np.ndarray:
+    """Pixel value = 1000 * northing index + easting index (1 m grid, absolute)."""
+    rows = (550200.5 - top) + np.arange(height)[:, None]
+    cols = (left - 449000.5) + np.arange(width)[None, :]
+    return (1000 * rows + cols).astype("float32")
+
+
+def _geotiff_response(url: str) -> Mock:
+    """HTTP 200 image/tiff with a 1 m GeoTIFF of the URL's SUBSET."""
+    from rasterio.io import MemoryFile
+    from rasterio.transform import from_origin
+
+    x0, x1, y0, y1 = _subset(url)
+    width, height = round(x1 - x0), round(y1 - y0)
+    with MemoryFile() as mem:
+        with mem.open(
+            driver="GTiff",
+            width=width,
+            height=height,
+            count=1,
+            dtype="float32",
+            crs="EPSG:2180",
+            transform=from_origin(x0, y1, 1.0, 1.0),
+        ) as dst:
+            dst.write(_encoded(x0, y1, width, height), 1)
+        body = mem.read()
+    response = Mock(spec=requests.Response)
+    response.status_code = 200
+    response.headers = {"Content-Type": "image/tiff"}
+    response.iter_content = Mock(return_value=[body])
+    return response
 
 
 class TestGugikProviderBasic:
@@ -300,14 +343,15 @@ class TestGugikProviderDownloadBbox:
         """Mock WCS response."""
         response = Mock(spec=requests.Response)
         response.status_code = 200
+        response.headers = {"Content-Type": "image/tiff"}
         response.iter_content = Mock(return_value=[b"TIFF data..."])
         return response
 
     @pytest.fixture
     def sample_bbox(self):
-        """Sample bbox in EPSG:2180."""
+        """Sample bbox in EPSG:2180 (100 x 100 m: one WCS request)."""
         return BBox(
-            min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
+            min_x=450000, min_y=550000, max_x=450100, max_y=550100, crs="EPSG:2180"
         )
 
     def test_download_bbox_uses_wcs(self, tmp_path, mock_wcs_response, sample_bbox):
@@ -390,9 +434,72 @@ class TestGugikProviderDownloadBbox:
 
         call_url = session.get.call_args[0][0]
 
-        # URL should contain SUBSET parameters with bbox values
-        assert "SUBSET=x(450000" in call_url
-        assert "SUBSET=y(550000" in call_url
+        # The bbox is expanded outward to the source grid (edges at k + 0.5 m)
+        assert "SUBSET=x(449999.50,450100.50)" in call_url
+        assert "SUBSET=y(549999.50,550100.50)" in call_url
+
+    def test_nmt_download_bbox_chunks_large_area(self, tmp_path):
+        """Above WCS_CHUNK_LIMITS the area is requested in chunks on the source
+        grid and stitched 1:1 (values encode the global pixel position)."""
+        from kartograf.transport.chunks import ChunkLimits
+
+        session = Mock(spec=requests.Session)
+        session.get = Mock(side_effect=lambda url, **kw: _geotiff_response(url))
+        provider = GugikProvider(session=session, vertical_crs="KRON86")
+        output_path = tmp_path / "big.tif"
+        bbox = BBox(450000, 550000, 450150, 550150, "EPSG:2180")
+
+        with patch.object(
+            GugikProvider, "WCS_CHUNK_LIMITS", ChunkLimits(100, 100, 10_000)
+        ):
+            provider.download_bbox(bbox, output_path)
+
+        subsets = [_subset(call.args[0]) for call in session.get.call_args_list]
+        assert len(subsets) == 4
+        for x0, x1, y0, y1 in subsets:
+            for v in (x0, x1, y0, y1):
+                assert v % 1 == 0.5
+        with rasterio.open(output_path) as src:
+            assert src.shape == (151, 151)
+            assert (src.bounds.left, src.bounds.top) == (449999.5, 550150.5)
+            np.testing.assert_array_equal(
+                src.read(1), _encoded(449999.5, 550150.5, 151, 151)
+            )
+        assert list(tmp_path.glob("*.part*")) == []
+
+    def test_nmt_download_bbox_png_single_request_unaligned(
+        self, tmp_path, mock_wcs_response, sample_bbox
+    ):
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=mock_wcs_response)
+        provider = GugikProvider(session=session, vertical_crs="KRON86")
+
+        provider.download_bbox(sample_bbox, tmp_path / "a.png", format="PNG")
+
+        assert session.get.call_count == 1
+        assert _subset(session.get.call_args[0][0]) == (
+            450000.0,
+            450100.0,
+            550000.0,
+            550100.0,
+        )
+
+    def test_nmt_download_bbox_rejects_exception_report(self, tmp_path, sample_bbox):
+        """An OGC ExceptionReport with HTTP 200 is an error, not a .tif file."""
+        response = Mock(spec=requests.Response)
+        response.status_code = 200
+        response.headers = {"Content-Type": "text/xml"}
+        response.text = (
+            "<ows:ExceptionReport>InvalidParameterValue</ows:ExceptionReport>"
+        )
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=response)
+        provider = GugikProvider(session=session, vertical_crs="KRON86")
+        output_path = tmp_path / "err.tif"
+
+        with pytest.raises(DownloadError, match="ExceptionReport"):
+            provider.download_bbox(sample_bbox, output_path)
+        assert not output_path.exists()
 
     def test_download_bbox_evrf2007_raises_validation_error(
         self, tmp_path, sample_bbox

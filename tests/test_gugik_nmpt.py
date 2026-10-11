@@ -183,6 +183,7 @@ class TestGugikNmptProviderDownload:
         """Mock WCS response."""
         response = Mock(spec=requests.Response)
         response.status_code = 200
+        response.headers = {"Content-Type": "image/tiff"}
         response.iter_content = Mock(return_value=[b"TIFF data..."])
         return response
 
@@ -232,8 +233,11 @@ class TestGugikNmptProviderDownload:
         assert result == output_path
         assert output_path.exists()
 
+        # NMPT GeoTIFF is RGB (no WCS_GRID): one request with the bbox as given
+        assert session.get.call_count == 1
         # Should use NMPT WCS endpoint with DSM coverage ID
         call_url = session.get.call_args[0][0]
+        assert "SUBSET=x(450000.00,460000.00)" in call_url
         assert "WCS" in call_url
         assert "NMPT" in call_url
         assert "COVERAGEID=DSM_PL-EVRF2007-NH" in call_url
