@@ -157,9 +157,10 @@
 > `origin` — push to osobna decyzja uzytkownika). ADR-035, plan
 > `docs/superpowers/plans/2026-10-11-wcs-cutouts.md`, weryfikacja na zywo
 > `docs/research/2026-10-11-wcs-cutouts-live/raport.md`.
-> **(e) testy LAZ na faktycznych oknach — galaz `test/laz-real-windows`
-> (2026-10-11, opcja 1 = nagranie, decyzja uzytkownika), NIE scalona:**
-> merge `--no-ff` do `develop` po zgodzie uzytkownika.
+> **(e) testy LAZ na faktycznych oknach — SCALONE do `develop` 2026-10-11**
+> (merge `--no-ff` `b7463e3`, brama na wyniku zielona: pytest offline 3262,
+> ruff, mypy; galaz `test/laz-real-windows` usunieta; `develop` NIE
+> wypchniety na `origin` — push to osobna decyzja uzytkownika).
 > **NASTEPNA SESJA:** strojenie kawalkow ASC NMPT WCHODZI do 0.7.2
 > (decyzja uzytkownika 2026-10-11, backlog "Do 0.7.2"); potem zakres
 > i kroki wydania 0.7.2.
@@ -1922,8 +1923,8 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
   > 120 s (pierwszy bajt 19-106 s), a jedno zapytanie 2 Mpx przeszlo w 78 s.
   Zmierzyc pierwszy bajt NMT/NMPT w funkcji rozmiaru przy normalnym
   obciazeniu i dobrac budzet kawalka oraz `WCS_ASC_READ_TIMEOUT`.
-- [x] **(e) Testy LAZ odtwarzajace fixtures dla innego okna** — 2026-10-11,
-  galaz `test/laz-real-windows` (opcja 1, nagranie
+- [x] **(e) Testy LAZ odtwarzajace fixtures dla innego okna** — SCALONE do
+  `develop` 2026-10-11 (`b7463e3`; opcja 1, nagranie
   `gugik_laz/real_2026_10_11/`; szczegoly: sesja "(e) testy LAZ na
   faktycznych oknach zapytan"). Helpery sprawdzaja `BBOX`; dwa testy
   z `test_laz_coverage.py` zastapione/usuniete, bo prawdziwe odpowiedzi
