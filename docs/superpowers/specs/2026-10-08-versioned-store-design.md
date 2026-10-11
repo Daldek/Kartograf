@@ -69,6 +69,7 @@ projekty uzywaja pliku".
 | D21 | `fsync` pliku roboczego przed `os.link` i tmp sidecara przed `os.replace` (I5) | brak gwarancji trwalosci przy utracie zasilania |
 | D22 | Hardlinki wymagane: brak hardlinku = `DownloadError` pliku, bez kopii (I4; zmienia ADR-030 errata 4) | kopia + `Warning:` (2-3x miejsca, pelna kopia przy kazdym przestawieniu dowiazania) |
 | D23 | Ta sama tresc pod nowym sygnalem (nowy rekord skorowidza, nowy `ETag`, nowa edycja): nowy katalog wersji `<nowa_etykieta>_<sha8>` z hardlinkiem do tych samych danych i wlasnym sidecarem; status `relabeled` (review 2026-10-11, I1) | `unchanged` bez sladu nowego sygnalu (petla "dostepna nowsza" -> `--upgrade` -> bez zmian); jeden katalog na tresc z etykieta poza niezmiennym sidecarem |
+| D24 | Stary zwykly plik 0.7.x w sciezce, ktora w 0.8.0 staje sie dowiazaniem (LAZ `laz/pl_<uklad>_<vcrs>/...`, CZ godlo i `bbox/` w `nmt/cz_*`), jest NADPISYWANY przy pierwszym dowiazaniu, bez kopii i bez komunikatu; tylko wpis BREAKING w CHANGELOG (review 2026-10-11, D5; uzytkownik: brak innych uzytkownikow 0.7.x) | odlozenie jako `<nazwa>.pre-0.8`; przyjecie starego pliku jako wersji (migracja, wbrew D10) |
 
 ## 3. Model wersji i uklad na dysku
 
@@ -403,6 +404,7 @@ usluga, nie lokalne pliki — wersjonowane jak produkty zrodlowe (sekcja 4.6).
 | Brak miejsca na dysku | `DownloadError`; plik roboczy usuwany, a jesli nie — sprzatanie > 24 h |
 | Utrata zasilania | `fsync` przed dowiazaniem i przed sidecarem (D21) |
 | Windows: plik standardowy otwarty | blad pliku, wersja zapisana, dowiazanie przy nastepnym uruchomieniu |
+| Stary zwykly plik 0.7.x w sciezce dowiazania (LAZ, CZ) | nadpisany dowiazaniem przy pierwszym zapisie (D24) |
 | Plan nieaktualny | blad pozycji, reszta wykonana, kod czesciowego sukcesu |
 | Plan: nieznany schemat / inny magazyn | `ValidationError` przed pobraniem |
 | Recznie usuniety katalog wersji | dowiazanie na najnowsza zachowana albo "niepobrany" |
@@ -496,4 +498,5 @@ taniego sygnalu dostaje `none`.
   `kampanie/` -> `versions/`, `--force`, brak automatycznej aktualizacji,
   `parent_requests`, sciezki land cover/HSG, wycinki `bbox/` bez daty
   w nazwie i bez pobierania przy kazdym uruchomieniu, koniec kopii zamiast
-  hardlinku; Przejscie z 0.7.x: ponowne pobranie danych).
+  hardlinku, stare pliki LAZ i CZ nadpisywane przy pierwszym pobraniu —
+  D24; Przejscie z 0.7.x: ponowne pobranie danych).
