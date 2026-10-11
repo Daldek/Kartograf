@@ -1407,7 +1407,6 @@ class TestNmt5mKron86Rejected:
             ["N-34-130-D"],
             ["--bbox", "630000,480000,637000,487000", "--country", "pl"],
             ["--bbox", "630000,480000,637000,487000"],
-            ["--bbox", "630000,480000,637000,487000", "--target-crs", "EPSG:2180"],
             # PL+CZ border area: under auto KRON86 decides PL, CZ never runs
             ["--bbox", "18.5,49.7,18.9,49.95", "--bbox-crs", "EPSG:4326"],
         ],
@@ -1416,7 +1415,6 @@ class TestNmt5mKron86Rejected:
             "godlo-hierarchy",
             "bbox-pl",
             "bbox-auto",
-            "bbox-cutout",
             "bbox-auto-pl-cz-border",
         ],
     )
@@ -1461,9 +1459,7 @@ class TestNmt5mKron86Rejected:
         mock_run_cz.assert_not_called()
         assert not (tmp_path / "out").exists()
 
-    @pytest.mark.parametrize(
-        "extra", [[], ["--target-crs", "EPSG:2180"]], ids=["sheets", "cutout"]
-    )
+    @pytest.mark.parametrize("extra", [[]], ids=["sheets"])
     @patch("kartograf.cli.download_cmd._run_cz")
     @patch("kartograf.cli.download_cmd._download_pl_cutout")
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
@@ -7349,8 +7345,7 @@ class TestCampaignOptions:
         assert rc == 1
         err = capsys.readouterr().err
         assert f"Error: {flag} nie dziala z --target-crs" in err
-        assert "wycinek sklada najnowsze kampanie" in err
-        assert "nazwa wycinka nie niesie roku" in err
+        assert "pobierz arkusze bez --target-crs" in err
         mock_prepare.assert_not_called()
         mock_run_cz.assert_not_called()
 

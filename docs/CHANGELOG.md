@@ -9,6 +9,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- CLI: `download --product nmpt --bbox/--geometry --target-crs ...` — wycinek
+  NMPT 1 m z WCS GUGiK (dotad `Error:`), segment
+  `nmpt/pl_1992_1m_<vcrs>/bbox/`.
 - Biblioteka: `run_pl_wcs_cutout(cutout, *, provider=None, parent_request=None,
   today=None)` (w `__all__`) — wycinek PL z WCS GUGiK: siatka arkuszy 1 m,
   maska ladu PL z PRG (`A00_Granice_panstwa` minus
@@ -106,6 +109,19 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Zmienione
 
+- CLI `download --bbox/--geometry --target-crs` (PL): wycinek z WCS GUGiK
+  zamiast mozaiki arkuszy (ADR-035) — siatka arkuszy 1 m, kompozycja lotow
+  serwera, nodata -9999 poza ladem PL (maska PRG), nazwa
+  `<wsp>_<RRRRMMDD>.tif`, kazde uruchomienie pobiera (bez `Skipped`; `--force`,
+  `--workers` i `--scale` bez wplywu). `--resolution 5m --target-crs` =
+  `Error:` (kod 1, przed siecia). Zamiast listy arkuszy i komunikatow
+  o arkuszach (`Warning:` R5/E13/I-1, `Info:` W1) jest `Info:` o liczbie
+  zapytan WCS (gdy > 1 albo wynik >= 1 GiB) i `Warning:`, gdy obszar lezy
+  w calosci poza ladem PL. Flagi roku, `--campaigns all` i `--full-sheet`
+  z `--target-crs` zostaja `Error:` (nowa tresc). Co zrobic: wycinek 5 m albo
+  najnowszy lot arkuszy (ADR-028) — pobierz arkusze bez `--target-crs`
+  (albo API arkuszowe); skrypty szukajace pliku po nazwie bez daty — dopasuj
+  wzorzec `<wsp>_*.tif`; starsze wycinki bez daty zostaja nietkniete.
 - `download_pl_cutout()` pobiera wycinek z WCS GUGiK (`run_pl_wcs_cutout`):
   siatka arkuszy 1 m, kompozycja lotow serwera (nie najnowszy lot ADR-028),
   nodata -9999 poza ladem PL (maska PRG), nazwa z data pobrania
@@ -138,8 +154,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--year` podawany tylko "na wszelki wypadek" albo wybierz odpowiedni
   przedzial `--min-year`/`--max-year`.
 - `--year`/`--max-year` z `--target-crs` zwracaja `Error:` (jak wczesniej
-  `--min-year`). Co zrobic: nie podawaj flag roku dla wycinka, ktory
-  sklada najnowsze kampanie.
+  `--min-year`). Co zrobic: nie podawaj flag roku dla wycinka (wycinek
+  z WCS ma kompozycje lotow serwera, bez wyboru roku).
 - `--campaigns all --min-year` zawsze odpytuje wszystkie warstwy skorowidza,
   zeby moc podac pelna liste rocznikow. Wpisy `campaigns_cache` ze skanu
   czesciowego sa odpytywane ponownie. Co zrobic: nic (koszt 1-3 zapytan
