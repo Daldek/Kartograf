@@ -23,6 +23,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+import rasterio
 from rasterio.transform import Affine
 
 from kartograf.core.sheet_parser import BBox
@@ -186,7 +187,9 @@ def fetch_chunks(
             parts.append(part)
             fetch(chunk, part)
         try:
-            mosaic_and_crop(parts, bbox, output_path, nodata=nodata)
+            mosaic_and_crop(
+                parts, bbox, output_path, nodata=nodata, dst_kwds=_result_kwds(parts[0])
+            )
         except ValidationError:
             output_path.unlink(missing_ok=True)
             raise
@@ -200,3 +203,17 @@ def fetch_chunks(
         for part in parts:
             part.unlink(missing_ok=True)
     return output_path
+
+
+def _result_kwds(first_part: Path) -> dict | None:
+    """Tiles for a result stitched from STRIPED chunks (GUGiK WCS GeoTIFF).
+
+    ``merge`` copies the profile of the first source; a striped GeoTIFF carries
+    ``blockxsize`` = its width without ``tiled``, which GDAL rejects for the result
+    with a warning ("BLOCKXSIZE can only be used with TILED=YES", live run
+    2026-10-10). Tiled chunks (CZ exportImage) keep their own profile.
+    """
+    with rasterio.open(first_part) as src:
+        if src.profile.get("tiled"):
+            return None
+    return {"tiled": True, "blockxsize": 256, "blockysize": 256}
