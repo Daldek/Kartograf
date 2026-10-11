@@ -173,14 +173,6 @@ class TestRegistry:
         transports = {ch.transport for ch in d.channels}
         assert transports == {TransportKind.WMS_SHEET_INDEX, TransportKind.WCS}
 
-    def test_nmt_1m_wcs_channel_is_kron86_only(self):
-        """The WCS channel describes only KRON86 - the EVRF2007 endpoint is HTTP 404."""
-        d = get_source("pl.gugik.nmt_1m")
-        wcs = [ch for ch in d.channels if ch.transport == TransportKind.WCS]
-        assert len(wcs) == 1
-        assert wcs[0].vertical_crs_options == ("EPSG:9650",)
-        assert "404" in wcs[0].notes
-
     def test_no_vertical_for_orto_and_landcover(self):
         for key in (
             "pl.gugik.orto",
@@ -265,9 +257,8 @@ class TestDescriptorProviderConsistency:
         storage = FileStorage(tmp_path, resolution="1m")
         assert d.resolve_subdir(vertical_crs="EVRF2007") == storage._subdir
         supported = provider.get_supported_vertical_crs_for_resolution("1m")
-        # Compared per channel: the WMS index (skorowidz) supports both vertical
-        # CRS, while the WCS channel only those for which the provider has a
-        # working endpoint.
+        # Compared per channel: the WMS index (skorowidz) and the WCS channel
+        # declare the vertical CRS for which the provider has a working source.
         sheets_ch = next(
             ch for ch in d.channels if ch.transport == TransportKind.WMS_SHEET_INDEX
         )
@@ -287,7 +278,21 @@ class TestDescriptorProviderConsistency:
             resolve_vertical_crs(n, wcs_ch.vertical_crs_options) for n in wcs_supported
         }
         assert set(wcs_ch.vertical_crs_options) == wcs_codes
-        assert wcs_codes == {"EPSG:9650"}
+        assert wcs_codes == {"EPSG:9650", "EPSG:9651"}
+
+    def test_nmpt_wcs_channel_matches_provider(self):
+        from kartograf import GugikNmptProvider
+
+        d = get_source("pl.gugik.nmpt")
+        wcs_ch = next(ch for ch in d.channels if ch.transport == TransportKind.WCS)
+        assert wcs_ch.capabilities == frozenset({"bbox_raster"})
+        wcs_codes = {
+            resolve_vertical_crs(n, wcs_ch.vertical_crs_options)
+            for n in ("KRON86", "EVRF2007")
+            if GugikNmptProvider(vertical_crs=n).is_wcs_available()
+        }
+        assert set(wcs_ch.vertical_crs_options) == wcs_codes
+        assert wcs_codes == {"EPSG:9650", "EPSG:9651"}
 
     def test_nmt_5m(self, tmp_path):
         from kartograf import FileStorage, GugikProvider

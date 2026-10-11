@@ -144,7 +144,22 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   strony), a obszar powyzej 16 Mpx jest pobierany kawalkami i skladany bez
   przeprobkowania (ADR-034). Sidecar `request.bbox` = bbox zadania. Co
   zrobic: nic; kto liczyl na zasieg rowny bboxowi, czyta zasieg z pliku.
-  NMPT, ortofotomapa i PNG/JPEG — jedno zapytanie jak dotad.
+  Ortofotomapa i PNG/JPEG — jedno zapytanie jak dotad (NMPT: nizej).
+- `download_bbox()` NMT 1 m EVRF2007 dziala (dotad `ValidationError`
+  o wycofanym endpoincie): wysokosci float32 z WCS `DigitalTerrainModel`
+  (`image/x-aaigrid`, zapisywany jako GeoTIFF EPSG:2180) na siatce arkuszy
+  1 m; `is_wcs_available()` EVRF2007 = `True`, kanal WCS `pl.gugik.nmt_1m`
+  w rejestrze ma oba uklady wysokosci. Co zrobic: nic; kto lapal
+  `ValidationError` dla EVRF2007, moze usunac obejscie.
+- `download_bbox()` NMPT: rozdzielczosc 1 m (`SCALEFACTOR=0.5`; dotad
+  0,5 m) na siatce arkuszy 1 m, kawalkami jak NMT; rejestr `pl.gugik.nmpt`
+  ma kanal WCS `bbox_raster`. Co zrobic: nic; wynik odpowiada arkuszom
+  NMPT 1 m (nad lotem 0,5 m — piksel 0,5 m o srodku na pelnym metrze).
+- `download_bbox()` NMT EVRF2007 i NMPT pobiera kawalki po 1 Mpx
+  (`image/x-aaigrid` ok. 20 s/Mpx i ok. 20 MB/Mpx; dluzsze zadanie milczy
+  przed pierwszym bajtem dluzej niz timeout odczytu 30 s). KRON86 bez zmian
+  (GeoTIFF, 16 Mpx). Co zrobic: nic; duze obszary EVRF2007/NMPT trwaja
+  odpowiednio dluzej niz KRON86.
 - Biblioteka: funkcje geometrii (`get_overall_bbox`, `read_feature_bboxes`,
   `find_sheets_for_geometry`, `read_source_crs`) przy GPKG z wieloma
   warstwami bez `layer=` loguja wybor pierwszej warstwy jako `WARNING`
@@ -179,6 +194,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   przesunieta o ulamek piksela wzgledem georeferencji (serwer probkuje do
   siatki zadania; pomiar `docs/research/2026-10-10-wcs-limits/raport.md`);
   teraz zadanie jest wyrownane do siatki zrodla.
+- `download_bbox()` NMPT zwracal 3-pasmowy RGB uint8 (podglad kolorow)
+  zamiast wysokosci; teraz 1 pasmo float32 z wysokosciami (1 m na siatce
+  arkuszy, bit w bit z arkuszami NMPT 1 m). Wpis WCS NMT EVRF2007
+  wskazywal nieistniejacy endpoint (`DigitalTerrainModelFormatTIFFEVRF2007`,
+  HTTP 404) — zastapiony dzialajacym `DigitalTerrainModel`.
 
 ## [0.7.1] - 2026-10-09
 

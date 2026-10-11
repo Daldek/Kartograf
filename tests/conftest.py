@@ -272,6 +272,29 @@ def recorded_response(path: Path, body: bytes | None = None):
     return response
 
 
+def multipart_asc_body(values, xll: float, yll: float, cellsize: float = 1.0) -> bytes:
+    """A GUGiK-shaped ``multipart/related; boundary=wcs`` body with one ASC grid.
+
+    Same framing as the recorded responses (fixture README): CRLF part headers,
+    LF ASC lines, an ``.prj`` part after the grid.
+    """
+    rows, cols = values.shape
+    header = (
+        f"ncols        {cols}\nnrows        {rows}\n"
+        f"xllcorner    {xll:.12f}\nyllcorner    {yll:.12f}\n"
+        f"cellsize     {cellsize:.12f}\n"
+    )
+    grid = "\n".join(" " + " ".join(repr(float(v)) for v in row) for row in values)
+    part = b"\r\n--wcs\r\nContent-Type: %s\r\nContent-ID: coverage/%s\r\n\r\n"
+    return (
+        part % (b"image/x-aaigrid", b"result.asc")
+        + (header + grid + "\n").encode()
+        + part % (b"application/octet-stream", b"result.prj")
+        + b'PROJCS["ETRS89_Poland_CS92"]'
+        + b"\r\n--wcs--\r\n"
+    )
+
+
 @pytest.fixture
 def sample_godlos() -> dict:
     """
