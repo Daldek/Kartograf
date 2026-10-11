@@ -124,6 +124,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   WFS pyta o wszystkie roczniki uslugi takze z `--year`. Co zrobic:
   jesli chcesz swiadomie pobrac mniej danych, zastosuj podpowiedz
   `--min-year`/`--max-year` lub zawez `--bbox`.
+- `mosaic_and_crop()` bez `dtype=` przy zrodlach o roznych typach pasm
+  (np. ASC int32 obok float32) konczy sie `ValidationError` z lista typow;
+  dotad wynik dostawal typ pierwszego zrodla (np. wysokosci float obciete
+  do liczb calkowitych bez sladu). Co zrobic: przy mieszanych zrodlach
+  podaj `dtype=` (np. `"float32"`).
 
 ### Naprawione
 
