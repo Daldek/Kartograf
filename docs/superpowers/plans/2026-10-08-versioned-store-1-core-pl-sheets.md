@@ -10,6 +10,16 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-08-versioned-store-design.md` (zaakceptowany 2026-10-08).
 
+> **Stan 2026-10-11: plan NIEAKTUALNY — nie wykonywac.** Powstal przed
+> 0.7.1/0.7.2 i przed rewizja specu (D13-D16). Do przepisania po akceptacji
+> specu. Rozbieznosci: stopka `Co-Authored-By` (zakazana od 2026-10-09);
+> ADR-032 zajety (magazyn = ADR-036); Task 1 czesciowo zrealizowany
+> decyzja 0.7.1 (sha256 z pliku w `build_metadata`); Task 3 dubluje
+> `sha256`/`size_bytes` z 0.7.1 (zostaje tylko `extra.version`); Task 4-5
+> nie znaja `full_sheet/`, zakresu lat (`YearRangeError`, `max_year`),
+> pomiaru pokrycia (`update_sidecar_extra`, D13) ani D14; `cutout.py`
+> (tor arkuszowy) usuwany przed planem (D16).
+
 **Kolejne plany (osobne dokumenty, pisane po wykonaniu tego):**
 - plan 2/3: LAZ, CZ (DMR 5G/4G), wycinki `bbox/` (PL `--target-crs`, CZ) — wersje, tryby `update`, sha256 wejsc;
 - plan 3/3: land cover (BDOT10k, CORINE, SoilGrids) i HSG w ukladzie `data/` + pelna aktualizacja dokumentacji i E2E calosci.
