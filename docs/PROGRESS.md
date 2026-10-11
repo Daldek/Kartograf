@@ -1964,7 +1964,9 @@ wchodza w tym samym wydaniu (decyzja uzytkownika). Kazda na wlasnej galezi.
   zastapic przelacznikiem (np. `--all-campaigns`), bez aliasu (BREAKING
   w CHANGELOG z "Co zrobic"; wywolania Hydrografa do sprawdzenia).
 
-- [ ] **Usunac przestarzaly tor arkuszowy wycinkow PL (ADR-035):**
+- [x] **Usunac przestarzaly tor arkuszowy wycinkow PL (ADR-035):** ZROBIONE
+  2026-10-11 na galezi `refactor/remove-sheet-cutout` (ADR-035 errata 2;
+  usuniety tez nieuzywany `GridMismatchError`). Zakres:
   `select_pl_cutout_sheets`, `run_pl_cutout`, `build_cutout_from_sheets`,
   `PlCutoutSheets` i arkuszowe uzycie `prepare_pl_cutout`; usunac
   parametry `geometry`, `layer`, `scale`, `max_workers`, `force`,

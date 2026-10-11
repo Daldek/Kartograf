@@ -7,6 +7,32 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.8.0] - Unreleased
 
+### Zmiany lamiace (BREAKING)
+
+- Usunieto arkuszowy tor wycinkow PL: `PlCutoutSheets`,
+  `select_pl_cutout_sheets`, `run_pl_cutout`, `build_pl_cutout`,
+  `build_cutout_from_sheets` oraz powiazane funkcje do estymacji miejsca,
+  zapisu sidecara i odtwarzania pominietych wycinkow. `PlCutoutResult`
+  nie zawiera juz pol arkuszowych (`sheet_paths`, `missing_sheets`,
+  `off_grid_sheets`, `partial_sheets`, `unverified`). Co zrobic:
+  dla wycinka NMT/NMPT 1 m uzyj `download_pl_cutout` lub
+  `prepare_pl_cutout` + `run_pl_wcs_cutout`; dla mozaiki arkuszy pobierz
+  arkusze osobno i scal je samodzielnie przez `mosaic_and_crop`.
+- `download_pl_cutout` nie przyjmuje juz ignorowanych parametrow
+  `geometry`, `layer`, `scale`, `max_workers`, `force`, `on_progress`,
+  `cache`. Co zrobic: przekaz obwiednie geometrii jako `bbox`; wybor
+  arkuszy, kampanii i 5 m realizuj przez pobieranie arkuszy bez
+  `--target-crs`. Wycinek WCS pobiera dane przy kazdym wywolaniu.
+- `mosaic_and_crop` nie przyjmuje juz `snap_to_source_grid` ani
+  `assign_crs`; `dtype=` i owijanie zrodel w VRT pozostaja. Co zrobic:
+  sprawdz siatke przez `check_source_grid`, a w razie potrzeby
+  wyrownaj obszar i przelicz rastry we wlasnym kodzie; CRS zrodel
+  przygotuj przed scaleniem, bez przypisywania go przez mozaike.
+- `GridMismatchError` usuniety z `kartograf` i `kartograf.exceptions` —
+  zglaszal go tylko usuniety tor arkuszowy (EPSG:2180 z arkuszy o roznej
+  fazie siatki). Co zrobic: usun obsluge tego wyjatku; faze siatki
+  wlasnych zrodel sprawdza `check_source_grid(...).off_grid`.
+
 ## [0.7.2] - 2026-10-11
 
 ### Dodane
