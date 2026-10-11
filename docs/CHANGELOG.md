@@ -197,10 +197,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   0,5 m) na siatce arkuszy 1 m, kawalkami jak NMT; rejestr `pl.gugik.nmpt`
   ma kanal WCS `bbox_raster`. Co zrobic: nic; wynik odpowiada arkuszom
   NMPT 1 m (nad lotem 0,5 m — piksel 0,5 m o srodku na pelnym metrze).
-- `download_bbox()` NMT EVRF2007 i NMPT pobiera kawalki do 1 Mpx pikseli
-  coverage (NMT 1 Mpx, NMPT 1 m = 0,25 Mpx wyniku; `image/x-aaigrid`
-  ok. 20 s/Mpx i ok. 20 MB/Mpx; dluzsze zadanie milczy przed pierwszym
-  bajtem dluzej niz timeout odczytu 30 s). KRON86 bez zmian (GeoTIFF,
+- `download_bbox()` NMT EVRF2007 i NMPT pobiera kawalki `image/x-aaigrid`
+  (NMT do 1 Mpx; NMPT do 4 Mpx pikseli coverage 0,5 m = 1 Mpx wyniku 1 m —
+  zawieszenia hosta trafiaja kawalki kazdego rozmiaru, wiec mniej kawalkow
+  to mniej ponowien; pomiar `docs/research/2026-10-11-nmpt-asc-tuning/`;
+  ASC ok. 20 s/Mpx i ok. 20 MB/Mpx; dluzsze zadanie milczy przed pierwszym
+  bajtem dluzej niz timeout odczytu 30 s). KRON86 NMT bez zmian (GeoTIFF,
   16 Mpx). Kazde zapytanie WCS z siatka (NMT, NMPT, takze KRON86) ma
   parzysta szerokosc i wysokosc: zakres wyrownany do siatki jest
   poszerzany o najwyzej 1 px na wschod/poludnie i przycinany po zszyciu

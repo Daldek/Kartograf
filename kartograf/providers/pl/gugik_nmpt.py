@@ -19,7 +19,7 @@ import re
 
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.wcs import HEIGHT_AAIGRID
-from kartograf.transport.chunks import GridSpec
+from kartograf.transport.chunks import ChunkLimits, GridSpec
 
 
 class GugikNmptProvider(GugikProvider):
@@ -96,6 +96,14 @@ class GugikNmptProvider(GugikProvider):
     WCS_HEIGHT_FORMAT = {"KRON86": HEIGHT_AAIGRID, "EVRF2007": HEIGHT_AAIGRID}
     WCS_GRID = GridSpec(step=1.0, origin_x=0.5, origin_y=0.5)
     WCS_NATIVE_STEP = 0.5
+
+    # 4 Mpx of coverage = 1 Mpx of result per ASC chunk. Live 2026-10-11 hangs
+    # (no byte for 300 s) hit 0.25-16 Mpx chunks alike, so every chunk is one more
+    # draw at a 120 s hang; a 4 Mpx chunk answered in 15-26 s like a 1 Mpx one,
+    # 8 Mpx took up to 104 s (docs/research/2026-10-11-nmpt-asc-tuning/raport.md).
+    WCS_CHUNK_LIMITS_AAIGRID = ChunkLimits(
+        max_width=40_000, max_height=40_000, max_pixels=4_000_000
+    )
 
     # Product identifier for cache key (overrides GugikProvider's "nmt")
     _CACHE_PRODUCT = "nmpt"

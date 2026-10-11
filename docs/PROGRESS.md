@@ -161,9 +161,11 @@
 > (merge `--no-ff` `b7463e3`, brama na wyniku zielona: pytest offline 3262,
 > ruff, mypy; galaz `test/laz-real-windows` usunieta; `develop` NIE
 > wypchniety na `origin` — push to osobna decyzja uzytkownika).
-> **NASTEPNA SESJA:** strojenie kawalkow ASC NMPT WCHODZI do 0.7.2
-> (decyzja uzytkownika 2026-10-11, backlog "Do 0.7.2"); potem zakres
-> i kroki wydania 0.7.2.
+> **Strojenie kawalkow ASC NMPT — ZROBIONE na `develop` 2026-10-11**
+> (decyzja uzytkownika: NMPT 4 Mpx coverage, NMT bez zmian, limit 120 s;
+> raport `docs/research/2026-10-11-nmpt-asc-tuning/raport.md`). Backlog
+> "Do 0.7.2" zamkniety.
+> **NASTEPNA SESJA:** zakres i kroki wydania 0.7.2 (do decyzji uzytkownika).
 > **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
 > na zywo z raportem, `__version__ = "0.7.2"` + asercje testow, data i link
 > `compare/v0.7.1...v0.7.2` w CHANGELOG, status w SCOPE i `docs/PRD.md`
@@ -190,6 +192,20 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Strojenie kawalkow ASC NMPT (2026-10-11)
+
+- Pomiar pierwszego bajtu `image/x-aaigrid` (NMT EVRF2007, NMPT EVRF2007
+  i KRON86; 0,25-16 Mpx coverage; 28 z 36 zapytan): host niespokojny,
+  zawieszenia (300 s bez bajtu) trafiaja kawalki kazdego rozmiaru; kawalek
+  4 Mpx coverage odpowiada w 15-26 s jak 1 Mpx, 8 Mpx do 104 s.
+- Decyzja uzytkownika: `GugikNmptProvider.WCS_CHUNK_LIMITS_AAIGRID` =
+  4 Mpx coverage (1 Mpx wyniku), NMT 1 Mpx bez zmian,
+  `WCS_ASC_READ_TIMEOUT` 120 s bez zmian.
+- Na zywo: NMPT EVRF2007 2000 x 1000 px — 2 kawalki, 246 s (dotad 8
+  kawalkow, 1186 s), bit w bit z jednym zapytaniem.
+- CHANGELOG [0.7.2] (wpis o kawalkach ASC poprawiony, nie nowy),
+  ARCHITECTURE 4.2 (limity WCS), test budzetu w `test_gugik_nmpt.py`.
 
 ### (e) testy LAZ na faktycznych oknach zapytan (2026-10-11)
 
@@ -1917,12 +1933,10 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
   wysokosci na siatce 1 m (oba uklady pionowe). Pierwotny blad:
   `docs/research/2026-10-10-wcs-limits/raport.md` pkt 6; weryfikacja na
   zywo 2026-10-11: `docs/research/2026-10-11-wcs-cutouts-live/raport.md`.
-- [ ] **Strojenie kawalkow ASC NMPT przy spokojnym hoscie** (z weryfikacji
-  na zywo 2026-10-11, raport `docs/research/2026-10-11-wcs-cutouts-live/raport.md`
-  pkt 4-5): kawalki NMPT 0,25 Mpx wyniku (1 Mpx coverage) czesto wisialy
-  > 120 s (pierwszy bajt 19-106 s), a jedno zapytanie 2 Mpx przeszlo w 78 s.
-  Zmierzyc pierwszy bajt NMT/NMPT w funkcji rozmiaru przy normalnym
-  obciazeniu i dobrac budzet kawalka oraz `WCS_ASC_READ_TIMEOUT`.
+- [x] **Strojenie kawalkow ASC NMPT** — 2026-10-11: NMPT 4 Mpx coverage
+  (1 Mpx wyniku), NMT i `WCS_ASC_READ_TIMEOUT` bez zmian; raport
+  `docs/research/2026-10-11-nmpt-asc-tuning/raport.md` (pomiar przy
+  niespokojnym hoscie: zawieszenia niezalezne od rozmiaru kawalka).
 - [x] **(e) Testy LAZ odtwarzajace fixtures dla innego okna** — SCALONE do
   `develop` 2026-10-11 (`b7463e3`; opcja 1, nagranie
   `gugik_laz/real_2026_10_11/`; szczegoly: sesja "(e) testy LAZ na
