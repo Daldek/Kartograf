@@ -26,8 +26,8 @@
 | Etap 0 — zrodla wielokrajowe (sources/transform/transport/providers-pl/CLI split/sidecar) | ✅ Gotowy | zmergowane do develop 2026-08-11; E2E 12/12 na realnych danych |
 | Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | ZMERGOWANY do develop 2026-08-12; tor CZ odmrozony w fali 2026-09-29/30 (D1): pin EPSG:1622 (K2; live: Karkonosze PL-CZ mediana -0,15 m, przesuniecie < 1 px), budzet 4 Mpx kafli (K6; live: 29,8 Mpx w 3 min 38 s), piksel dokladnie 2 m (N3), `Warning:` przy 100 % nodata (N2); wydany w v0.7.0 |
 | LAZ — wybor kafli (ADR-029) | ✅ Gotowy | `download_laz_area` / `select_tiles`: najnowszy kafel per obszar wg pokrycia, `--year`, `--min-density`, `extra.parent_request` w trybie `--bbox`/`--geometry` |
-| Kampanie GUGiK (ADR-030 + errata 1-8, ADR-032, ADR-033) | ✅ Gotowy | `--campaigns {newest,all}`, `--year`/`--min-year`/`--max-year` (0.7.2-dev), `--full-sheet`; pliki w `<segment>/kampanie/`, sciezka standardowa i `full_sheet/` = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`, `docs/research/2026-10-10-full-sheet-link/raport.md`) |
-| Wycinek NMT/NMPT PL `--target-crs` (ADR-035), API `download_pl_cutout` | ✅ Gotowy | 0.7.2-dev: WCS 1 m z maska ladu PRG, data w nazwie, NMT i NMPT; NMPT `download_bbox` float32; zweryfikowany na zywo (`docs/research/2026-10-11-wcs-cutouts-live/raport.md`), scalony do `develop` 2026-10-11. Arkuszowy tor ADR-027 zostaje jako przestarzale API do 0.8.0 |
+| Kampanie GUGiK (ADR-030 + errata 1-8, ADR-032, ADR-033) | ✅ Gotowy | `--campaigns {newest,all}`, `--year`/`--min-year`/`--max-year` (v0.7.2), `--full-sheet`; pliki w `<segment>/kampanie/`, sciezka standardowa i `full_sheet/` = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`, `docs/research/2026-10-10-full-sheet-link/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`) |
+| Wycinek NMT/NMPT PL `--target-crs` (ADR-035), API `download_pl_cutout` | ✅ Gotowy | v0.7.2: WCS 1 m z maska ladu PRG, data w nazwie, NMT i NMPT; NMPT `download_bbox` float32; kawalki ASC NMPT 4 Mpx coverage (ADR-035 errata 1); zweryfikowany na zywo (`docs/research/2026-10-11-wcs-cutouts-live/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`). Arkuszowy tor ADR-027 zostaje jako przestarzale API do 0.8.0 |
 
 | Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | ⏳ Zaplanowany | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3 |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
@@ -94,83 +94,34 @@
 - **Wersja:** v0.7.1
 - **Zakres:** `sha256`/`size_bytes` w sidecarze, pola rekordu skorowidza (RMSE, `declared_vertical_crs`) i weryfikacja rekordu/pliku GUGiK, godla PL-1992 bez zer wiodacych i `ParseError` spoza nomenklatury, BDOT10k z wielu powiatow (WFS PRG, `keep_raw`), wycinek CZ w bibliotece, `build_cutout_from_sheets`, `hsg_from_rasters`, bledy zamiast cichych zamian (5 m + KRON86, `--year`/`--min-density` poza LAZ); pelna lista: `docs/CHANGELOG.md` [0.7.1]
 
+### CP13 — Rok danych i wycinki z WCS
+- **Data:** 2026-10-11
+- **Wersja:** v0.7.2
+- **Zakres:** wybor roku `--year`/`--min-year`/`--max-year` dla NMT/NMPT/orto/LAZ (ADR-032), drugie dowiazanie `full_sheet/` i `--full-sheet` (ADR-033), wycinki NMT/NMPT PL z WCS GUGiK z maska ladu PRG (ADR-035), kawalki zapytan obszarowych na siatce zrodla (ADR-034), `download_bbox` NMT EVRF2007 i NMPT z wysokosciami float32, `Info:` o cichych wartosciach domyslnych, podpowiedz wariantu NMT/NMPT, drobiazgi z review 0.7.1; pelna lista: `docs/CHANGELOG.md` [0.7.2]
+
 ## Ostatnia sesja
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI (stan 2026-10-11):** cykl **0.7.2-dev** otwarty
-> 2026-10-09 (`__version__ = "0.7.2-dev"`, sekcja `## [0.7.2] - Unreleased`
-> w CHANGELOG); ostatnie wydanie: v0.7.1 (2026-10-09). Stan galezi, tagow
-> i `origin` sprawdzaj w gicie (`git status`, `git log`,
-> `git ls-remote --tags origin`), nie w tym dzienniku.
-> **Zrobione w 0.7.2:** drobiazgi z review 0.7.1 (P1-P10), galaz
-> `fix/review-0.7.1` (spec
-> `docs/superpowers/specs/2026-10-09-review-0.7.1-drobiazgi-design.md`,
-> plan `docs/superpowers/plans/2026-10-09-review-0.7.1-drobiazgi.md`,
-> raport `docs/research/2026-10-10-review-0.7.1/raport.md`, review galezi
-> bez blokerow, audyt dokumentacji zgodny) scalona `--no-ff` do `develop`
-> 2026-10-10 (brama na wyniku zielona), galaz usunieta, `develop`
-> wypchniety na `origin`.
-> **(b) wybor roku — SCALONY do `develop` 2026-10-10** (merge `--no-ff`
-> `09070bf`, brama na wyniku zielona, galaz `feat/year-range` usunieta;
-> `develop` NIE wypchniety na `origin` — push to osobna decyzja
-> uzytkownika). Model A: flagi roku = filtr dopuszczalnych lat,
-> `--campaigns` = liczba lotow (domyslnie jeden); `Info:`, gdy dowiazanie
-> zostaje przy nowszym locie spoza zadania; LAZ: dopisek `(tylko arkusze
-> niepelne)`, `discover_tiles(min_year=)`. Zrodla: spec
-> `docs/superpowers/specs/2026-10-09-year-range-selection-design.md`
-> (sekcja 0 = model A, nadrzedna), ADR-032, raport
-> `docs/research/2026-10-10-year-range/raport.md`.
-> **(c) drugie dowiazanie do najnowszego PELNEGO lotu — SCALONE do
-> `develop` 2026-10-10** (merge `--no-ff` `63aa8d2`, brama na wyniku
-> zielona: pytest offline 3185, ruff, mypy; galaz `feat/full-sheet-link`
-> usunieta; `develop` NIE wypchniety na `origin` — push to osobna decyzja
-> uzytkownika). Drzewo `<segment>/full_sheet/` (najnowszy lokalny lot
-> pelny), `--full-sheet` / `DownloadManager(full_sheet=True)` dociaga
-> najwyzej jeden pelny lot, jeden `Warning:` E13 z grupami. Zrodla: ADR-033,
-> spec `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`, plan
-> `docs/superpowers/plans/2026-10-10-full-sheet-link.md`, raport
-> `docs/research/2026-10-10-full-sheet-link/raport.md`.
-> **(d) ciche wartosci domyslne — SCALONE do `develop` 2026-10-10** (merge
-> `--no-ff` `54c9c7e`, brama na wyniku zielona: pytest offline 3216, ruff,
-> mypy; galaz `feat/silent-defaults` usunieta; `develop` NIE wypchniety na
-> `origin` — push to osobna decyzja uzytkownika). Spec
-> `docs/superpowers/specs/2026-10-10-silent-defaults-design.md`, plan
-> `docs/superpowers/plans/2026-10-10-silent-defaults.md`, ADR-034, pomiar
-> WCS `docs/research/2026-10-10-wcs-limits/raport.md`, weryfikacja na zywo
-> `docs/research/2026-10-10-silent-defaults/raport.md`; brama zielona
-> (pytest offline 3216, ruff, mypy), review bez blokerow (uwagi poprawione).
-> **Spec (a) wycinki PL z WCS — ZATWIERDZONY 2026-10-11:**
-> `docs/superpowers/specs/2026-10-11-wcs-cutouts-design.md`
-> (decyzje W-U1..W-U11: WCS zamiast arkuszy w CLI i `download_pl_cutout`,
-> API arkuszowe do 0.8.0, NMT i NMPT, maska ladu PRG A00 minus W02/W03,
-> kazde uruchomienie pobiera, data w nazwie, zakres wyrownany na zewnatrz
-> do siatki arkuszy 1 m, tylko 1 m, 0,0 na ladzie zostaje). Pomiary
-> M1-M3 wykonane 2026-10-11:
-> `docs/research/2026-10-11-wcs-cutouts/raport.md` (WCS na siatce arkusza
-> = arkusz bit w bit; WCS EVRF2007 dziala, wysokosci tylko
-> `image/x-aaigrid`, kawalek ASC 1 Mpx; arkusze 0,5 m maja siatke
-> `k + 0,25`).
-> **(a) wycinki PL z WCS — SCALONE do `develop` 2026-10-11** (merge
-> `--no-ff` `bcf87d1`, brama na wyniku zielona: pytest offline 3263, ruff,
-> mypy; galaz `feat/wcs-cutouts` usunieta; `develop` NIE wypchniety na
-> `origin` — push to osobna decyzja uzytkownika). ADR-035, plan
-> `docs/superpowers/plans/2026-10-11-wcs-cutouts.md`, weryfikacja na zywo
-> `docs/research/2026-10-11-wcs-cutouts-live/raport.md`.
-> **(e) testy LAZ na faktycznych oknach — SCALONE do `develop` 2026-10-11**
-> (merge `--no-ff` `b7463e3`, brama na wyniku zielona: pytest offline 3262,
-> ruff, mypy; galaz `test/laz-real-windows` usunieta; `develop` NIE
-> wypchniety na `origin` — push to osobna decyzja uzytkownika).
-> **Strojenie kawalkow ASC NMPT — ZROBIONE na `develop` 2026-10-11**
-> (decyzja uzytkownika: NMPT 4 Mpx coverage, NMT bez zmian, limit 120 s;
-> raport `docs/research/2026-10-11-nmpt-asc-tuning/raport.md`). Backlog
-> "Do 0.7.2" zamkniety.
-> **NASTEPNA SESJA:** zakres i kroki wydania 0.7.2 (do decyzji uzytkownika).
-> **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
-> na zywo z raportem, `__version__ = "0.7.2"` + asercje testow, data i link
-> `compare/v0.7.1...v0.7.2` w CHANGELOG, status w SCOPE i `docs/PRD.md`
-> (`__version__ # "0.7.1"`), merge `develop` -> `main`, tag `v0.7.2`
-> (annotowany); push na `origin` po decyzji uzytkownika.
+> **START NASTEPNEJ SESJI (stan 2026-10-11):** wydano **v0.7.2**
+> (2026-10-11): `__version__ = "0.7.2"`, CHANGELOG `## [0.7.2] - 2026-10-11`,
+> merge `develop` -> `main` (`--no-ff`), tag `v0.7.2` (annotowany) na
+> commicie merge. Cykl 0.7.3/0.8.0 NIE jest otwarty (`__version__` bez
+> `-dev`); otwarcie cyklu = `__version__ = "<X.Y.Z>-dev"` + asercje
+> w `test_cli.py` i `test_integration.py` + sekcja `Unreleased` i link
+> `compare/v0.7.2...develop` w CHANGELOG (jak commit `chore(release):
+> poczatek cyklu 0.7.2`). Push `develop`, `main` i tagu `v0.7.2` na
+> `origin` wymaga zgody uzytkownika — stan galezi, tagow i `origin`
+> sprawdzaj w gicie (`git status`, `git log`, `git ls-remote origin`),
+> nie w tym dzienniku.
+> **Zakres 0.7.2:** drobiazgi z review 0.7.1 (P1-P10), (a) wycinki PL
+> z WCS (ADR-035), (b) wybor roku (ADR-032), (c) `full_sheet/` (ADR-033),
+> (d) ciche wartosci domyslne (ADR-034), (e) testy LAZ na faktycznych
+> oknach, strojenie kawalkow ASC NMPT; szczegoly w sesjach nizej
+> i w `docs/CHANGELOG.md` [0.7.2]. Test na zywo przed wydaniem:
+> `docs/research/2026-10-11-test-przed-0.7.2/raport.md` (bez FAIL).
+> **NASTEPNA SESJA:** do decyzji uzytkownika — push na `origin`, kolejny
+> cykl (backlog "Do 0.8.0" nizej; podprojekt 1 roadmapy wstrzymany).
 > **Katalog danych testow na zywo:** wskazuje uzytkownik (STANDARDS 6.4);
 > sciezki nie zapisuj w repo (straznik wzorcow commitow ja blokuje) —
 > zapytaj na poczatku sesji, jesli potrzebny.
@@ -192,6 +143,25 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Wydanie 0.7.2 (2026-10-11)
+
+- Test na zywo `develop` (`108c4f2`) bez zmian w kodzie: brama offline
+  zielona (3262 testy), 24 scenariusze CLI i 3 biblioteki bez FAIL
+  (raport `docs/research/2026-10-11-test-przed-0.7.2/raport.md`); jedna
+  porazka hosta GUGiK (3 x `RemoteDisconnected`, wycinek KRON86
+  EPSG:5514) przeszla w powtorce.
+- Dokumentacja: ADR-035 errata 1 (kawalek ASC NMPT 4 Mpx coverage; CRLF
+  zachowane), PRD 4.3 (status, ADR-022..ADR-035, kawalki ASC, `__version__`),
+  SCOPE 3.19 (status, historia), CHANGELOG (data, link
+  `compare/v0.7.1...v0.7.2`).
+- Wydanie: `__version__ = "0.7.2"` (asercje w `test_cli.py`
+  i `test_integration.py`), commit `chore(release): wydanie 0.7.2` na
+  `develop`; merge `develop` -> `main` (`--no-ff`), tag `v0.7.2`
+  (annotowany) na commicie merge. Push na `origin` czeka na zgode
+  uzytkownika.
+- Dane testu na zywo: `<katalog-danych>/kartograf/e2e/2026-10-11-test-przed-0.7.2/`
+  (skrypty jednorazowe obok danych, poza repo).
 
 ### Strojenie kawalkow ASC NMPT (2026-10-11)
 
@@ -1856,7 +1826,7 @@ commity per zadanie i wpisy CHANGELOG/ADR dotkniete po drodze.
 
 ## Backlog
 
-#### Do 0.7.2 (decyzje uzytkownika 2026-10-09)
+#### Do 0.7.2 (decyzje uzytkownika 2026-10-09) — ZAMKNIETE, wydane w v0.7.2
 
 Decyzje z 2026-10-09 (po Task 14); kazda pozycja zaczyna sie od ustalen,
 a implementacja dopiero po specu/planie i zatwierdzeniu.
