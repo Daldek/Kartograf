@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from kartograf.cli._parser import parse_bbox_arg
+from kartograf.cli.download_cmd import _announce_geometry_layer
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 
@@ -98,11 +99,10 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
         from kartograf.core.geometry import get_overall_bbox
 
         filepath = Path(args.geometry)
-        if not filepath.exists():
-            print(f"Error: File not found: {filepath}", file=sys.stderr)
+        if not _announce_geometry_layer(args):
             return 1
         try:
-            bbox = get_overall_bbox(filepath, layer=getattr(args, "layer", None))
+            bbox = get_overall_bbox(filepath, layer=args.layer)
         except ValidationError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1

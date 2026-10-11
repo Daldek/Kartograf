@@ -1,8 +1,10 @@
 # Spec: Ciche wartosci domyslne (d) — komunikaty d1/d2 i wspolny mechanizm zapytan obszarowych d3
 
 **Data:** 2026-10-10
-**Status:** projekt; uzytkownik polecil przejsc do planu bez czekania na
-przeglad (2026-10-10) — decyzje w sekcji 0 pochodza z rozmowy 2026-10-10
+**Status:** decyzje w sekcji 0 (rozmowa 2026-10-10); WDROZONY 2026-10-10 na
+galezi `feat/silent-defaults` (ADR-034; raport
+`docs/research/2026-10-10-silent-defaults/raport.md`), merge do `develop`
+po decyzji uzytkownika
 **Wersja docelowa:** 0.7.2 (galaz `feat/silent-defaults` z `develop`)
 **Dokumenty zrodlowe:**
 - backlog `docs/PROGRESS.md` "Do 0.7.2" pozycja (d) i "Ryzyko KRON86 3"

@@ -172,6 +172,38 @@ def _cli_metadata_cache(force: bool) -> "MetadataCache":
     return MetadataCache(refresh=force, on_disabled=_warn_cache_disabled)
 
 
+def _announce_geometry_layer(args: argparse.Namespace) -> bool:
+    """Resolve the ``--geometry`` layer ONCE; ``Info:`` when the default was taken.
+
+    A GPKG with several layers and no ``--layer`` is read from its first layer
+    only - the area of the task comes from it. One ``Info:`` on stderr (also with
+    ``-q``) names the choice and the others; ``args.layer`` then carries the
+    explicit name, so the geometry readers called later neither repeat nor log it.
+    Errors (missing file, unknown layer, no feature tables) print ``Error:`` and
+    return ``False``.
+    """
+    from kartograf.core.geometry import resolve_layer
+
+    filepath = Path(args.geometry)
+    if not filepath.exists():
+        print(f"Error: File not found: {filepath}", file=sys.stderr)
+        return False
+    try:
+        choice = resolve_layer(filepath, getattr(args, "layer", None))
+    except ValidationError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return False
+    if choice.defaulted and len(choice.available) > 1:
+        print(
+            f"Info: {filepath.name}: liczba warstw {len(choice.available)}, uzyto "
+            f"pierwszej '{choice.name}' (pozostale: "
+            f"{', '.join(choice.available[1:])}); inna warstwa: --layer NAZWA",
+            file=sys.stderr,
+        )
+    args.layer = choice.name
+    return True
+
+
 @contextlib.contextmanager
 def _pl_metadata_cache(args: argparse.Namespace) -> Iterator[object | None]:
     """
@@ -710,9 +742,10 @@ def _dispatch_area(
     not from the envelope), and the bbox serves to recognize countries and
     ``parent_request``.
 
-    ``Info:``/``Warning:`` messages about country resolution and partial
-    success go to stderr, so ``-q`` (suppressing stdout) does NOT hide them -
-    just like ``Error:`` messages.
+    ``Info:``/``Warning:`` messages about country resolution, the mixed default
+    vertical CRSs of a PL+CZ task (PL EVRF2007, CZ Bpv) and partial success go
+    to stderr, so ``-q`` (suppressing stdout) does NOT hide them - just like
+    ``Error:`` messages.
     """
     from kartograf.transform.crs import TransformError
 
@@ -783,6 +816,17 @@ def _dispatch_area(
             pl_geometry_sheets=pl_geometry_sheets,
             pl_sheet_list=filepath is None and not getattr(args, "target_crs", None),
         )
+        # Each country keeps its own default vertical CRS (PL EVRF2007, CZ Bpv,
+        # ~0.11-0.15 m apart); say so before the work. The country envelopes are
+        # rectangles (ADR-023 point 4), so this names the CRS of the parts the task
+        # runs, not whether both hold data (spec silent-defaults 2.3).
+        if {"PL", "CZ"} <= parts.keys() and getattr(args, "vertical_crs", None) is None:
+            print(
+                "Info: --country auto bez --vertical-crs: czesc PL w EVRF2007, "
+                "czesc CZ w Bpv (rozne uklady wysokosci, roznica ok. "
+                "0,11-0,15 m); jeden uklad dla obu: --vertical-crs EVRF2007",
+                file=sys.stderr,
+            )
 
     results: list[tuple[str, int]] = []
     for code in countries:
@@ -1949,18 +1993,16 @@ def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
     """
     Resolve a sheet code / --bbox / --geometry input to an EPSG:2180 BBox for LAZ.
 
-    Returns None (after printing an error) if a geometry file is missing.
-    Raises ParseError / ValidationError on invalid input.
+    Returns None (after printing an error) if a geometry file is missing or its
+    layer is invalid. Raises ParseError / ValidationError on invalid input.
     """
     if getattr(args, "geometry", None):
         from kartograf.core.geometry import get_overall_bbox
 
-        filepath = Path(args.geometry)
-        if not filepath.exists():
-            print(f"Error: File not found: {filepath}", file=sys.stderr)
+        if not _announce_geometry_layer(args):
             return None
         return get_overall_bbox(
-            filepath, layer=getattr(args, "layer", None), target_crs="EPSG:2180"
+            Path(args.geometry), layer=args.layer, target_crs="EPSG:2180"
         )
 
     if args.bbox is not None:
@@ -2443,6 +2485,9 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
         # this branch bypasses `_dispatch_area` - the campaign guard here too
         if _reject_campaign_opts_without_pl(args, ("CZ",)):
             return 1
+        # after the option guards (no file I/O before them), before any reader
+        if not _announce_geometry_layer(args):
+            return 1
         bbox = _resolve_cz_geometry_bbox(args)
         if bbox is None:
             return 1  # error already printed
@@ -2450,10 +2495,9 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
             args, bbox=bbox, parent_request=_build_parent_request(bbox, ("CZ",))
         )
 
-    filepath = Path(args.geometry)
-    if not filepath.exists():
-        print(f"Error: File not found: {filepath}", file=sys.stderr)
+    if not _announce_geometry_layer(args):
         return 1
+    filepath = Path(args.geometry)
 
     try:
         overall = _geometry_envelope(filepath, getattr(args, "layer", None))

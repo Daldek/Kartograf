@@ -236,7 +236,8 @@ kartograf/
 │   ├── parser_tm33.py      # ParserTM33 — obliczalna siatka kafli CZ 2x2 km (EPSG:3045)
 │   ├── parser_registry.py  # Rejestr systemow godel (SYSTEMS: pl2000, cz_tm33, cz_sm5,
 │   │                       # pl1992), detect_system/path_parts ze strip(), wzorce CZ
-│   ├── geometry.py         # Czytanie SHP/GPKG, find_sheets_for_geometry, get_overall_bbox
+│   ├── geometry.py         # Czytanie SHP/GPKG, resolve_layer (wybor warstwy),
+│   │                       # find_sheets_for_geometry, get_overall_bbox
 │   └── coverage.py         # Wypukle wielokaty: przeciecie, roznica, bufor (wybor kafli LAZ)
 ├── sources/             # Deskryptory zrodel jako dane (zero IO przy imporcie)
 │   ├── descriptor.py    # SourceDescriptor (+ resolve_subdir), AccessChannel,
@@ -259,7 +260,10 @@ kartograf/
 │   │                    # CuzkClient.query) — jedyne miejsce retry (siec, 429, 5xx;
 │   │                    # Retry-After): is_retryable, retry_wait, backoff_delay;
 │   │                    # make_gugik_session, SessionPerThread (sesja per watek)
+│   ├── chunks.py        # GridSpec, ChunkLimits, Chunk; align_bbox, plan_chunks,
+│   │                    # fetch_chunks — wspolne kawalki CUZK i GUGiK WCS
 │   └── mosaic.py        # mosaic_and_crop — merge rastrow + przyciecie, propagacja nodata;
+│                        # bez dtype= mieszane typy pasm -> ValidationError;
 │                        # opcjonalnie crop na siatce zrodel i owijanie zrodel w VRT;
 │                        # check_source_grid (fazy siatki -> GridMismatchError), has_valid_pixels
 ├── providers/           # Providery danych
@@ -889,6 +893,15 @@ polska idzie do `_download_pl_bbox`. `find_sheets_for_bbox` (czysta matematyka
 siatki, bez zapytan sieciowych — ADR-010) daje liste godel 1:10000, ktore
 pobiera `DownloadManager` rownolegle. W trybie `--geometry` arkusze wyznacza
 sama geometria per obiekt (`find_sheets_for_geometry`), nie jej obwiednia.
+Gdy `--geometry` wskazuje GPKG z kilkoma warstwami i nie podano `--layer`,
+CLI wybiera pierwsza warstwe `gpkg_contents` i drukuje RAZ przed praca
+`Info:` z jej nazwa, pozostalymi warstwami i podpowiedzia `--layer NAZWA`
+(takze z `-q`); wybrana nazwa jest przekazywana dalej jawnie. Dotyczy
+rowniez `landcover download` i `soilgrids hsg`. Biblioteka bez jawnego
+`layer=` wybiera te sama warstwe, ale emituje `logger.warning` przy
+kazdym takim rozstrzygnieciu; SHP i jednowarstwowy GPKG nie daja
+komunikatu.
+
 Sidecar pobranego arkusza dostaje `extra.parent_request` i `extra.source`
 (URL, warstwa, data, rozdzielczosc). Przy ponownym wykorzystaniu arkusza
 sidecar zachowuje oryginalne zadanie, a nowy wpis trafia do
@@ -913,7 +926,7 @@ nie arkusze. Arkusz bez danych w zadnym roku ma status `no_coverage`
 `YearRangeError` i przerwanie CALEJ listy przed pobraniem, rowniez przy
 samym `--min-year`. Nieudane sprawdzenie skorowidza tez przerywa liste.
 
-**WCS (`download_bbox`) — tylko biblioteka, tylko NMT/NMPT 1 m.** CLI nie
+**WCS (`download_bbox`) — tylko biblioteka; NMT/NMPT 1 m i orto.** CLI nie
 uzywa WCS dla bboxa PL (ADR-003 czesciowo zastapiony przez ADR-027): zostal
 on w `DownloadManager.download_bbox`/`GugikProvider.download_bbox` (GeoTIFF).
 Dla 5 m WCS nie istnieje (`ValueError`). Dla NMT 1 m dziala
@@ -925,6 +938,22 @@ wiec deskryptor `pl.gugik.nmt_1m` deklaruje kanal `bbox_raster` tylko dla
 (`GugikProvider.WITHDRAWN_WCS_VERTICAL_CRS`; `GugikNmptProvider` ma te
 krotke pusta — WCS NMPT nie jest objety). Wysokosci EVRF2007 z obszaru:
 tryb listy powyzej albo jeden GeoTIFF z arkuszy (sekcja 4.3).
+
+NMT KRON86 GTiff: `GugikWcsMixin._download_wcs` przez
+`transport/chunks.py` wyrownuje bbox NA ZEWNATRZ do siatki zrodla
+1 m (krawedzie `k + 0,5` m), aby uniknac cichego przesuniecia
+geolokalizacji przez probkowanie serwera na siatce zadania. Wynik moze
+siegac o < 1 px dalej z kazdej strony; sidecar `request.bbox` nadal
+opisuje bbox zadania. `plan_chunks` dzieli zadanie przekraczajace
+16 Mpx albo 40000 px na bok na sekwencyjne kawalki tej samej siatki;
+16 Mpx to budzet niezawodnosci, NIE limit serwera (pomiar KRON86
+2026-10-10: brak twardego limitu do 100 Mpx). Kazdy kawalek ma osobne
+ponowienia `download_to`, a ich skladanie zachowuje wartosci bit w bit.
+Odpowiedzi WCS (rowniez pojedyncze) przechodza przez
+`reject_error_document("WCS")`, aby raport bledu XML nie trafil do
+pliku TIFF. NMPT i orto bez zmierzonej siatki pozostaja przy jednym
+zapytaniu, bez wyrownania; NMPT `image/tiff` zwraca RGB zamiast
+wysokosci — naprawa razem z wycinkami WCS w (a) (ADR-034).
 
 Wynik: **wiele plikow** — lista arkuszy w segmencie jak w 4.1 (dowiazania do
 `kampanie/`; przy `all` dodatkowo kazda kampania). To jest
@@ -1227,14 +1256,15 @@ Jeden wycinek `exportImage`. Bbox jest najpierw normalizowany do ukladu WYNIKU
 faktycznie zadanego wycinka. Zadanie do serwera idzie natywnie; przy
 `--target-crs` innym niz 5514 tresc reprojektuje lokalny warp
 z czeska operacja przypieta. Serwer deklaruje sufity 15000 x 4100 px,
-lecz realnie odrzuca zadania powyzej ok. 8 Mpx. `CuzkClient` dzieli
-zadanie z budzetem `MAX_EXPORT_PIXELS = 4_000_000` na kafle z kotwica
-NW (kwadratowawe, z zachowaniem sufitow wymiarowych); kafle sklada
-`mosaic_and_crop` bez resamplingu przed warpem. Bbox jest dociagany
-do calkowitej liczby pikseli takze bez kafelkowania: piksel to
-dokladnie 2 m/5 m, E/S moze odbiegac o <= 0,5 px (nazwa pliku i
-`request.bbox` niosa bbox sprzed snapu). Wycinek w calosci nodata
-daje `Warning:` i kod 0, nie pozorna cisze.
+lecz realnie odrzuca zadania powyzej ok. 8 Mpx. `CuzkClient.export_image`
+uzywa `transport/chunks.py`: `align_bbox` bez siatki zrodla zachowuje
+kotwice NW i `round` do calkowitej liczby pikseli, `plan_chunks` dzieli
+zadanie z budzetem `MAX_EXPORT_PIXELS = 4_000_000` (kwadratowawe kawalki
+z zachowaniem sufitow wymiarowych), `fetch_chunks` pobiera je po kolei
+i sklada przez `mosaic_and_crop` bez resamplingu przed warpem. Zachowanie
+CUZK jest bez zmian: piksel to dokladnie 2 m/5 m, E/S moze odbiegac
+o <= 0,5 px (nazwa pliku i `request.bbox` niosa bbox sprzed snapu).
+Wycinek w calosci nodata daje `Warning:` i kod 0, nie pozorna cisze.
 
 Od 0.7.1 tor bbox CZ jest w bibliotece (`download/cz_cutout.py`, A6
 Hydrografa): `run_cz_cutout(provider, bbox, output_dir=, image_crs=,
@@ -1300,7 +1330,12 @@ wielokatem granicy. Wynik calkowicie nodata (CZ albo wycinek PL
 z pobranymi arkuszami) daje `Warning:` i kod 0. Sukces czesciowy
 PL lub CZ pod `auto` daje kod 0, `Warning:` przy awarii drugiej
 czesci; `--resolution 1m` rozstrzyga do PL. Bez `--vertical-crs`
-pogranicze daje PL w EVRF2007 i CZ w Bpv.
+pogranicze daje PL w EVRF2007 i CZ w Bpv; CLI drukuje jeden `Info:`
+przed pobraniem z obiema nazwami i podpowiedzia
+`--vertical-crs EVRF2007` dla wspolnego ukladu, takze z `-q`.
+Jawny uklad pionowy lub zadanie tylko dla jednego kraju nie daje tego
+komunikatu. Poniewaz podzial opiera sie na prostokatach, komunikat moze
+pojawic sie takze wtedy, gdy czesc CZ okaze sie calkowicie nodata.
 
 Opcje kampanii i flagi roku (ADR-030/032; erraty Q9, N-3) dotycza
 tylko PL; `_reject_campaign_opts_without_pl(args, countries)` obsluguje

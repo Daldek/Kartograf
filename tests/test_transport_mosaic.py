@@ -454,6 +454,20 @@ def test_dtype_float32_keeps_decimals_when_first_source_is_integer(tmp_path):
     assert data[0, -1] == pytest.approx(100.25)
 
 
+def test_mixed_source_dtypes_without_dtype_raises(tmp_path):
+    """Without dtype= merge would give the result the FIRST source's type
+    (int32 here) and truncate 100.25 - mixed types are an error instead."""
+    a = _write_asc_text(tmp_path / "a.asc", 0.5, 0.5, [["100"] * 4] * 4)
+    b = _write_asc_text(tmp_path / "b.asc", 4.5, 0.5, [["100.25"] * 4] * 4)
+    out = tmp_path / "o.tif"
+    with pytest.raises(ValidationError, match="dtype=") as exc:
+        mosaic_and_crop(
+            [a, b], BBox(0.5, 0.5, 8.5, 4.5, "EPSG:2180"), out, assign_crs="EPSG:2180"
+        )
+    assert "float32" in str(exc.value) and "int32" in str(exc.value)
+    assert not out.exists()
+
+
 @pytest.mark.skipif(not sys.platform.startswith("linux"), reason="/proc/self/fd")
 def test_vrt_wrapping_does_not_exhaust_file_descriptors(tmp_path):
     """Wrapping in VRT must not keep all sources open either."""

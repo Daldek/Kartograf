@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from kartograf.cli._parser import parse_bbox_arg
-from kartograf.cli.download_cmd import _cli_metadata_cache
+from kartograf.cli.download_cmd import _announce_geometry_layer, _cli_metadata_cache
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
 
@@ -166,10 +166,9 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
             from kartograf.core.geometry import get_overall_bbox
 
             filepath = Path(args.geometry)
-            if not filepath.exists():
-                print(f"Error: File not found: {filepath}", file=sys.stderr)
+            if not _announce_geometry_layer(args):
                 return 1
-            bbox = get_overall_bbox(filepath, layer=getattr(args, "layer", None))
+            bbox = get_overall_bbox(filepath, layer=args.layer)
             print(f"  Geometry: {filepath.name}")
         elif args.teryt:
             print(f"  TERYT: {args.teryt}")

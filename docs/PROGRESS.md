@@ -131,21 +131,20 @@
 > spec `docs/superpowers/specs/2026-10-10-full-sheet-link-design.md`, plan
 > `docs/superpowers/plans/2026-10-10-full-sheet-link.md`, raport
 > `docs/research/2026-10-10-full-sheet-link/raport.md`.
-> **(d) ciche wartosci domyslne — SPEC I PLAN GOTOWE 2026-10-10,
-> implementacja NIE rozpoczeta** (spec
+> **(d) ciche wartosci domyslne — WDROZONE na galezi `feat/silent-defaults`
+> 2026-10-10, NIE scalone do `develop`** (merge `--no-ff` po decyzji
+> uzytkownika). Spec
 > `docs/superpowers/specs/2026-10-10-silent-defaults-design.md`, plan
-> `docs/superpowers/plans/2026-10-10-silent-defaults.md`, pomiar WCS
-> `docs/research/2026-10-10-wcs-limits/raport.md`; spec, plan, raport
-> i ten wpis NIE zacommitowane — commit `docs(spec): ...` to Task 0 planu).
-> Uzytkownik polecil plan bez czekania na przeglad specu; przed
-> implementacja — jego decyzja (spec sekcja 7: budzet 16 Mpx, tresc
-> komunikatow).
-> **NASTEPNA SESJA:** implementacja (d) wg planu (galaz
-> `feat/silent-defaults`), potem (a) wycinki PL z WCS (nowy ADR; korzysta
-> z `transport/chunks.py`; razem z naprawa NMPT `download_bbox`; fakty
-> z raportu WCS pkt 3, 6, 8: brak nodata, RGB NMPT, kompozycja lotow
-> serwera inna niz ADR-028) i (e) testy LAZ; kolejnosc i zakres wydania
-> 0.7.2 — do decyzji uzytkownika.
+> `docs/superpowers/plans/2026-10-10-silent-defaults.md`, ADR-034, pomiar
+> WCS `docs/research/2026-10-10-wcs-limits/raport.md`, weryfikacja na zywo
+> `docs/research/2026-10-10-silent-defaults/raport.md`; brama zielona
+> (pytest offline 3216, ruff, mypy), review bez blokerow (uwagi poprawione).
+> **NASTEPNA SESJA (decyzja uzytkownika 2026-10-10):** spec (a) wycinki PL
+> z WCS — wejscie zebrane w backlogu "Do 0.7.2" pozycja (a) (nowy ADR;
+> korzysta z `transport/chunks.py`; razem z naprawa NMPT `download_bbox`).
+> Merge `feat/silent-defaults` do `develop` — nadal do decyzji uzytkownika
+> (spec (a) mozna pisac na `develop` po merge albo na galezi z (d)).
+> Potem (e) testy LAZ; zakres wydania 0.7.2 — do decyzji uzytkownika.
 > **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
 > na zywo z raportem, `__version__ = "0.7.2"` + asercje testow, data i link
 > `compare/v0.7.1...v0.7.2` w CHANGELOG, status w SCOPE i `docs/PRD.md`
@@ -172,6 +171,33 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### (d) ciche wartosci domyslne — implementacja (2026-10-10)
+
+- Decyzja uzytkownika: spec i plan bez uwag (budzet 16 Mpx, tresc
+  komunikatow), katalog danych na zywo jak przy pomiarze, implementacja (d)
+  przed (a).
+- Galaz `feat/silent-defaults`, commity: `063851b` (Task 0: spec, plan,
+  pomiar WCS na `develop`), `07e6b89` (Task 1: `transport/chunks.py`,
+  `mosaic_and_crop` mieszane typy = `ValidationError`), `4e5e66c` (Task 2:
+  CUZK `export_image` na kawalkach, `_tile_grid` usuniety), `1581054` (Task
+  3: WCS NMT 1 m na siatce `k + 0,5`, kawalki 16 Mpx, walidacja odpowiedzi
+  NMT/NMPT/orto), `f4ea872` (Task 4: `resolve_layer`, `Info:` d2,
+  `logger.warning`), `a121278` (Task 5: `Info:` d1), `841c7a9` (Task 6:
+  ADR-034, ARCHITECTURE, USAGE), poprawki `b0377e6`, `5522f20`, `fa85653`.
+- Odstepstwa od planu: Task 0 commit specu na `develop` przed galezia;
+  `Info:` d2 w `--country cz` po strazach opcji (testy strazy bez I/O
+  pliku); pomocnik testow `write_gpkg_layers` w `tests/conftest.py` (testy
+  CLI z mockowanymi czytnikami potrzebuja katalogu GPKG); wynik z kawalkow
+  paskowych zapisywany w kafelkach 256 x 256 (ostrzezenie GDAL z testu na
+  zywo); tekst d2 "liczba warstw N" (odmiana); LAZ `--geometry` takze przez
+  `Info:` d2 (review).
+- Na zywo (`docs/research/2026-10-10-silent-defaults/raport.md`): NMT 6 x 6
+  km kawalkami = jedno zapytanie bit w bit (z ponowieniem dwoch zerwanych
+  kawalkow), CUZK 29,8 Mpx identyczny z `develop`, `Info:` d1 (Cieszyn)
+  i d2 (GPKG 2 warstwy). Brama: pytest offline 3216, ruff, mypy.
+- Fakt srodowiska: SQLite na udziale SMB (katalog danych) daje `database
+  is locked` przy tworzeniu GPKG — plik testu d2 na dysku lokalnym.
 
 ### (d) ciche wartosci domyslne — pomiar WCS, spec i plan (2026-10-10)
 
@@ -1745,6 +1771,24 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
     `DigitalTerrainModelFormatTIFFEVRF2007`, `DTM_PL-EVRF2007-NH_TIFF`)
     wskazuje nieistniejacy endpoint i coverage (zob. tez WCS EVRF2007 = 404
     od 2026-08-11) — do poprawy.
+  - **Wejscie do specu (a) (stan 2026-10-10):** mechanizm kawalkow gotowy
+    (`transport/chunks.py`, ADR-034: `GridSpec`, `ChunkLimits`,
+    `fetch_chunks`, `GugikWcsMixin._download_wcs`, `WCS_GRID` per provider;
+    na galezi `feat/silent-defaults`, do merge). Fakty z pomiaru
+    `docs/research/2026-10-10-wcs-limits/raport.md` do rozstrzygniecia
+    w specu: (1) brak nodata — poza pokryciem i w brakujacych arkuszach
+    0,0, a 0,0 wystepuje tez w danych waznych (Leba) (pkt 3, 8); (2) WCS
+    to kompozycja lotow serwera, nie najnowszy lot ADR-028 (Zulawy:
+    arkusze "2017 i starsze" inne o 7-14 cm; Terespol: 1,1 mln px
+    waznych w arkuszu = 0,0 w WCS) (pkt 8); (3) siatka NMT 1 m `k + 0,5`
+    w 9 rejonach, bbox poza siatka = cichy blad geolokalizacji (pkt 4,
+    7); (4) brak limitu do 100 Mpx, host zrywa polaczenia (pkt 2);
+    (5) NMPT `image/tiff` = RGB uint8, wysokosci tylko `image/x-aaigrid`
+    multipart — naprawa `download_bbox` NMPT w ramach (a) (pkt 6,
+    decyzja 2026-10-10); (6) EVRF2007 nie mierzony (endpoint tymczasowo
+    niedostepny). Otwarte tez: los wycinka z arkuszy i parametrow
+    arkuszowych `mosaic_and_crop` (kandydat 0.8.0), sidecar wycinka bez
+    kampanii.
 - [x] **(b) Wybor roku `--year`/`--min-year`/`--max-year`** — SCALONE do
   `develop` 2026-10-10 (`09070bf`). Obowiazuje model A (decyzja uzytkownika
   2026-10-10, spec
