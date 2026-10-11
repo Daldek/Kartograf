@@ -23,6 +23,7 @@ from kartograf.transform.crs import (
     TransformUnavailableError,
     build_pinned_transform,
 )
+from tests.conftest import write_gpkg_layers
 
 _NODATA = -9999.0
 _APEX = (530050.0, 382050.0)  # EPSG:2180, Piotrkow Trybunalski area
@@ -1337,8 +1338,8 @@ class TestGeometryCutout:
             _write_sheet_asc(tmp_path / "s1.asc", 530000, 382000),
             _write_sheet_asc(tmp_path / "s2.asc", 530100, 382000),
         ]
-        geom = tmp_path / "area.gpkg"
-        geom.write_bytes(b"stub")  # content unused: discovery is mocked
+        # features unused (readers mocked); the catalogue is read by resolve_layer
+        geom = write_gpkg_layers(tmp_path / "area.gpkg", ["area"])
         provider = SimpleNamespace(vertical_crs="EVRF2007")
         overall = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         manager = Mock()

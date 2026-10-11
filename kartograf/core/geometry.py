@@ -8,6 +8,7 @@ to map sheet codes (godla) for tile-based downloads.
 import logging
 import sqlite3
 import struct
+from dataclasses import dataclass
 from pathlib import Path
 
 from pyproj import CRS
@@ -311,11 +312,41 @@ def _read_gpkg_crs(conn: sqlite3.Connection, table_name: str) -> CRS:
             raise ValidationError(f"Cannot parse CRS for srs_id={srs_id}: {e}") from e
 
 
+@dataclass(frozen=True)
+class LayerChoice:
+    """Layer a geometry file is read from (``resolve_layer``)."""
+
+    name: str | None  # None for SHP (one layer, no names)
+    available: tuple[str, ...]  # GPKG feature tables in file order; () for SHP
+    defaulted: bool  # True when no layer was given and the first one was taken
+
+
+def _gpkg_layer_choice(
+    conn: sqlite3.Connection, filepath: Path, layer: str | None
+) -> LayerChoice:
+    """Validated GPKG layer choice (first feature table by default), no logging."""
+    tables = tuple(_get_gpkg_feature_tables(conn))
+    if not tables:
+        raise ValidationError(f"No feature tables found in GeoPackage: {filepath}")
+    if layer is not None:
+        if layer not in tables:
+            raise ValidationError(
+                f"Layer '{layer}' not found in GeoPackage. "
+                f"Available layers: {', '.join(tables)}"
+            )
+        return LayerChoice(layer, tables, defaulted=False)
+    return LayerChoice(tables[0], tables, defaulted=True)
+
+
 def _resolve_gpkg_layer(
     conn: sqlite3.Connection, filepath: Path, layer: str | None
 ) -> str:
     """
     Name of the feature table to read (``--layer`` validation, first by default).
+
+    The default choice among several layers is logged as a WARNING (visible by
+    default): the area then comes from the first layer only. Pass ``layer`` to
+    choose explicitly and silence it.
 
     Parameters
     ----------
@@ -336,26 +367,58 @@ def _resolve_gpkg_layer(
     ValidationError
         If the GeoPackage has no feature tables or the layer does not exist
     """
-    tables = _get_gpkg_feature_tables(conn)
-    if not tables:
-        raise ValidationError(f"No feature tables found in GeoPackage: {filepath}")
-
-    if layer is not None:
-        if layer not in tables:
-            raise ValidationError(
-                f"Layer '{layer}' not found in GeoPackage. "
-                f"Available layers: {', '.join(tables)}"
-            )
-        return layer
-
-    table_name = tables[0]
-    if len(tables) > 1:
-        logger.info(
-            "Multiple layers in GPKG, using '%s'. Available: %s",
-            table_name,
-            ", ".join(tables),
+    choice = _gpkg_layer_choice(conn, filepath, layer)
+    if choice.defaulted and len(choice.available) > 1:
+        logger.warning(
+            "GPKG %s has %d layers, using the first '%s' (others: %s); "
+            "pass layer= to choose",
+            filepath.name,
+            len(choice.available),
+            choice.name,
+            ", ".join(choice.available[1:]),
         )
-    return table_name
+    assert choice.name is not None  # GPKG always names its layer
+    return choice.name
+
+
+def resolve_layer(filepath: Path, layer: str | None = None) -> LayerChoice:
+    """
+    Which layer of a geometry file is read, without reading features.
+
+    For the CLI: resolve the layer ONCE, show the default choice, then pass the
+    explicit name on (the readers below would otherwise warn on every call).
+
+    Parameters
+    ----------
+    filepath : Path
+        Path to SHP or GPKG file
+    layer : str or None
+        Requested GPKG layer (None = first feature table); ignored for SHP
+
+    Returns
+    -------
+    LayerChoice
+        Chosen layer, all feature tables and whether the choice was the default
+
+    Raises
+    ------
+    ValidationError
+        If the format is unsupported, the GPKG has no feature tables or the
+        layer does not exist
+    """
+    ext = filepath.suffix.lower()
+    if ext == ".shp":
+        return LayerChoice(None, (), defaulted=False)
+    if ext == ".gpkg":
+        conn = sqlite3.connect(str(filepath))
+        try:
+            return _gpkg_layer_choice(conn, filepath, layer)
+        finally:
+            conn.close()
+    raise ValidationError(
+        f"Unsupported geometry format: '{ext}'. "
+        f"Supported: {', '.join(sorted(_SUPPORTED_EXTENSIONS))}"
+    )
 
 
 def _read_gpkg_bboxes(filepath: Path, layer: str | None, target_crs: str) -> list[BBox]:
@@ -426,7 +489,8 @@ def read_feature_bboxes(
     filepath : Path
         Path to SHP or GPKG file
     layer : str or None
-        Layer name for GPKG (None = first layer)
+        Layer name for GPKG (None = first layer; with several layers a
+        logger WARNING names the choice)
     target_crs : str
         Target CRS (default: "EPSG:2180")
 
