@@ -98,7 +98,7 @@
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI (stan 2026-10-10):** cykl **0.7.2-dev** otwarty
+> **START NASTEPNEJ SESJI (stan 2026-10-11):** cykl **0.7.2-dev** otwarty
 > 2026-10-09 (`__version__ = "0.7.2-dev"`, sekcja `## [0.7.2] - Unreleased`
 > w CHANGELOG); ostatnie wydanie: v0.7.1 (2026-10-09). Stan galezi, tagow
 > i `origin` sprawdzaj w gicie (`git status`, `git log`,
@@ -150,8 +150,9 @@
 > `docs/research/2026-10-11-wcs-cutouts/raport.md` (WCS na siatce arkusza
 > = arkusz bit w bit; WCS EVRF2007 dziala, wysokosci tylko
 > `image/x-aaigrid`, kawalek ASC 1 Mpx; arkusze 0,5 m maja siatke
-> `k + 0,25`). **Nastepny krok:** plan, potem implementacja na galezi
-> `feat/wcs-cutouts`.
+> `k + 0,25`). **Nastepny krok:** akceptacja planu
+> `docs/superpowers/plans/2026-10-11-wcs-cutouts.md`, potem Task 0
+> (galaz `feat/wcs-cutouts`) i implementacja.
 > Potem (e) testy LAZ; zakres wydania 0.7.2 — do decyzji uzytkownika.
 > **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
 > na zywo z raportem, `__version__ = "0.7.2"` + asercje testow, data i link
@@ -179,6 +180,26 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### (a) wycinki PL z WCS — spec, pomiary i plan (2026-10-11)
+
+- Decyzje uzytkownika (spec sekcja 0, W-U1..W-U11): WCS zamiast arkuszy
+  w CLI i `download_pl_cutout`, API arkuszowe do 0.8.0, NMT i NMPT, maska
+  ladu PRG `A00 - W02 - W03`, kazde uruchomienie pobiera (nazwa z data),
+  zakres wyrownany na zewnatrz do siatki arkuszy 1 m (rozszerzenie
+  uzytkownika), tylko 1 m, 0,0 na ladzie zostaje (Zulawy).
+- Pomiary na zywo (`docs/research/2026-10-11-wcs-cutouts/raport.md`):
+  WCS EVRF2007 dziala (wysokosci tylko `image/x-aaigrid`); WCS na
+  siatce arkusza = arkusz bit w bit (NMT/NMPT, KRON86/EVRF2007, 1 m
+  i 0,5 m); arkusze 0,5 m maja siatke `k + 0,25`; ASC ok. 20 s/Mpx,
+  pierwszy bajt rosnie z rozmiarem — kawalek 1 Mpx. Uwaga uzytkownika:
+  0,0 w `M-33-57-C-b-4-2` to obszar za granica (lot 2025 przyciety do
+  granicy), nie dziura lotu — potwierdzone rasteryzacja `A00`, raport
+  poprawiony.
+- Spec zatwierdzony i scommitowany na `develop` (`f670d8b`); plan
+  `docs/superpowers/plans/2026-10-11-wcs-cutouts.md` (Task 0-9) czeka na
+  akceptacje. Brama przed commitem specu zielona (pytest offline 3216,
+  ruff, mypy).
 
 ### (d) ciche wartosci domyslne — implementacja (2026-10-10)
 
