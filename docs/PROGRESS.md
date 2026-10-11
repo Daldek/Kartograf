@@ -130,10 +130,14 @@
 > **Magazyn wersjonowany (stan 2026-10-11):** wstrzymanie ZDJETE
 > (decyzja uzytkownika 2026-10-11). Galaz `feat/versioned-store`
 > przestawiona (rebase) na `develop` i wypchnieta `--force-with-lease`.
-> Spec po rewizji wzgledem 0.7.1/0.7.2 (decyzje D13-D16:
-> pokrycie przy zapisie wersji, zakres lat przy awarii skorowidza,
-> wycinki `bbox/` bez daty, tor arkuszowy wycinkow usuwany najpierw;
-> ADR magazynu = ADR-036) — CZEKA NA AKCEPTACJE UZYTKOWNIKA
+> Spec po rewizji wzgledem 0.7.1/0.7.2 (D13-D16: pokrycie przy zapisie
+> wersji, zakres lat przy awarii skorowidza, wycinki `bbox/` bez daty, tor
+> arkuszowy wycinkow usuwany najpierw) i po review zapisu/skladowania
+> (D17-D24: wersje per plik pod hierarchia, wylaczny `os.link` z kontrola
+> sha256, `.incoming/<host>_<pid>_<token>` ze sprzataniem > 24 h, jeden
+> odczyt pliku, `fsync`, hardlinki wymagane, `relabeled` dla tej samej
+> tresci pod nowym sygnalem, stare pliki LAZ/CZ nadpisywane); ADR
+> magazynu = ADR-036 — CZEKA NA AKCEPTACJE UZYTKOWNIKA
 > (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`).
 > Plan 1/3 oznaczony jako NIEAKTUALNY: po akceptacji specu przepisac go od
 > nowa (nie latac). Kolejnosc (D16): najpierw usuniecie przestarzalego
