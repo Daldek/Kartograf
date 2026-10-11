@@ -614,10 +614,6 @@ pod `auto` PL i CZ to dwa pliki ze wspolnym `extra.parent_request`.
   wynik z tego samego dnia atomowo zastepuje wczesniejszy
   tylko po sukcesie. `--force`, `--workers`, `--scale` bez wplywu
   na tor WCS. 5 m: arkusze bez `--target-crs`.
-- Przestarzale API arkuszowe `select_pl_cutout_sheets` /
-  `run_pl_cutout` i `build_cutout_from_sheets` pozostaje do
-  0.8.0; parametry arkuszowe `download_pl_cutout` sa ignorowane
-  z `DeprecationWarning`, gdy niedomyslne.
 
 #### Capabilities
 ```python
@@ -825,16 +821,12 @@ from kartograf import (
     CampaignRef,
     FileStorage,
 
-    # Download — wycinek PL WCS (ADR-035); API arkuszowe do 0.8.0
+    # Download — wycinek PL WCS (ADR-035)
     PlCutout,
     PlCutoutResult,
-    PlCutoutSheets,
     download_pl_cutout,
     prepare_pl_cutout,
     run_pl_wcs_cutout,
-    run_pl_cutout,
-    select_pl_cutout_sheets,
-    build_cutout_from_sheets,
 
     # Download — kafle LAZ (ADR-029)
     LazDownloadResult,
@@ -870,10 +862,9 @@ from kartograf import (
     ValidationError,
     DownloadError,
     NoCoverageError,        # (DownloadError)
-    GridMismatchError,      # (ValidationError)
 
     # Version
-    __version__,            # "0.7.2"
+    __version__,            # "0.8.0-dev"
 )
 ```
 
@@ -947,9 +938,9 @@ mypy >= 1.13           # Type checking
 ### Version 0.6+
 - [x] Parallel downloads (multi-threading) (implemented in v0.6.0)
 - [x] Metadata cache (SQLite) (implemented in v0.6.0)
-- [x] Automatic mosaic creation — dawne API arkuszowe NMT PL
-      (`run_pl_cutout`, 0.7.0) do 0.8.0; wycinki NMT/NMPT WCS
-      (`download_pl_cutout`, 0.7.2); pozostale produkty — etap 2
+- [x] Automatic mosaic creation — wycinki NMT/NMPT WCS
+      (`download_pl_cutout`, 0.7.2; tor arkuszowy z 0.7.0 usuniety
+      w 0.8.0); pozostale produkty — etap 2
 - [x] Czechy, etap 1: DMR 5G/4G z CUZK, `--country` (0.7.0)
 - [x] Kampanie GUGiK `--campaigns`/`--min-year` (0.7.0)
 

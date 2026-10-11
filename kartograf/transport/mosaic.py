@@ -2,13 +2,11 @@
 Stitch rasters on one grid and crop to a bbox.
 
 Consumers: assembling chunks of one area request (``transport/chunks.py`` - CZ
-exportImage, GUGiK WCS; ADR-034) and the PL cutout built from sheet files
-(ADR-027, until cutouts move to WCS).
+exportImage, GUGiK WCS; ADR-034) and caller-provided raster mosaics.
 Nodata is propagated to the result - NEVER replaced with 0.
 """
 
 import math
-import warnings
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -16,13 +14,12 @@ from pathlib import Path
 
 import numpy as np
 import rasterio
-from pyproj import CRS
 from rasterio.io import MemoryFile
 from rasterio.merge import merge
 from rasterio.transform import Affine
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import GridMismatchError, ValidationError
+from kartograf.exceptions import ValidationError
 from kartograf.transform.raster import VRT_TYPES, vrt_xml
 
 # Tolerance in pixels: matching grids and bboxes lying on a grid line
@@ -33,22 +30,6 @@ from kartograf.transform.raster import VRT_TYPES, vrt_xml
 # below
 # the smallest real offset.
 _GRID_TOL_PX = 1e-6
-
-
-def _same_projection(src_crs, target: CRS) -> bool:
-    """Is the source CRS the enforced CRS?
-
-    ``CRS.equals(..., ignore_axis_order=True)`` alone is NOT enough: every WKT1
-    of EPSG:2180 (WKT1_GDAL from pyproj, ESRI, ``gdalsrsinfo -o wkt_simple`` from
-    a Hydrograf .prj) gives False (measured 2026-09-28, pyproj 3.7.2 / PROJ 9.5.1),
-    so projection parameters are compared too (a PROJ.4 dict).
-    """
-    candidate = CRS.from_user_input(src_crs.to_wkt())
-    if candidate.equals(target, ignore_axis_order=True):
-        return True
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore", UserWarning)  # to_dict() warns about PROJ.4
-        return candidate.to_dict() == target.to_dict()
 
 
 @dataclass(frozen=True)
@@ -78,7 +59,7 @@ class SourceGrid:
     off_grid: tuple[OffGridSource, ...]
 
     def describe_off_grid(self, total: int, noun: str = "zrodel") -> str:
-        """``GridMismatchError`` text: count, largest offset, up to 10 names."""
+        """Description of ``off_grid``: count, largest offset, up to 10 names."""
         worst = max(max(abs(s.dx_px), abs(s.dy_px)) for s in self.off_grid)
         names = ", ".join(s.path.name for s in self.off_grid[:10])
         more = " ..." if len(self.off_grid) > 10 else ""
@@ -138,13 +119,10 @@ def _source_grid(paths: list[Path], transforms: list[Affine]) -> SourceGrid:
 def check_source_grid(paths: Sequence[Path]) -> SourceGrid:
     """Pixel grid of the sources: reference (majority) + sources off it.
 
-    Detection only, no decisions - what to do with ``off_grid`` sources is chosen by
-    the caller: ``mosaic_and_crop(snap_to_source_grid=True)`` raises
-    ``GridMismatchError`` (a 1:1 pixel copy is then impossible), while the PL
-    cutout with a warp reprojects each sheet separately onto the result grid
-    (``download/cutout.py``, W1). Sources are opened one at a time (metadata
-    only). ``ValidationError``: no sources, a rotated grid (rotation/skew
-    in the transform), differing resolutions.
+    Detection only, no decisions - callers can inspect ``off_grid`` and
+    reproject sources individually if needed. Sources are opened one at a time
+    (metadata only). ``ValidationError``: no sources, a rotated grid
+    (rotation/skew in the transform), differing resolutions.
     """
     if not paths:
         raise ValidationError("check_source_grid: brak rastrow wejsciowych")
@@ -178,8 +156,6 @@ def mosaic_and_crop(
     *,
     nodata: float | None = None,
     dst_kwds: dict | None = None,
-    snap_to_source_grid: bool = False,
-    assign_crs: str | None = None,
     dtype: str | None = None,
 ) -> Path:
     """Stitch the input rasters and crop to bbox; return output_path.
@@ -194,33 +170,13 @@ def mosaic_and_crop(
     once ended in "Too many open files" only AFTER a multi-hour download (review max
     2026-08-30, finding 3).
 
-    ``snap_to_source_grid`` (default ``False``, the CZ path unchanged): before
-    cropping it expands the bbox OUTWARD to the source pixel grid lines
-    (the grid of the MAJORITY of sources; a tie is broken by input order), so the
-    result copies source pixels 1:1 instead of shifting content by a fraction of a pixel
-    (review max 2026-08-30, finding 1). A source off this grid (farther than
-    ``_GRID_TOL_PX`` from its lines) ends in ``GridMismatchError`` with a list of
-    offsets (``.off_grid``): ``merge`` would rewrite it "through a window" -
-    not always from the nearest pixel and with a nodata column/row at the seam
-    (S5, live tests 2026-09-29) - while a caller who wants a warp has
-    ``check_source_grid`` and per-source reprojection. A source with a rotated grid
-    (rotation/skew in the transform) ends in ``ValidationError``.
-
-    ``assign_crs`` / ``dtype`` (default ``None``, the CZ path unchanged): when either is
-    given, each source is wrapped in a single-band 1:1 VRT in ``/vsimem/`` with SRS =
-    ``assign_crs`` (or the source's own CRS) and band type = ``dtype`` (or its own);
-    ``merge`` gets the VRT names, and the VRT carries the source's OWN nodata, so pixel
-    masking is the same as without wrapping. Why: Hydrograf writes a ``.prj``
-    (EPSG:2180) next to some ASC sheets - a sheet with a ``.prj`` has a CRS, a fresh one
-    without it has ``None``, and ``merge`` raised ``CRS mismatch``; an ASC sheet with
-    integers only is read by GDAL as Int32, and ``merge`` takes the type from the FIRST
-    source, so everything would be truncated to integers. With ``assign_crs`` a source
-    without a CRS is allowed, while a source with its OWN CRS different from the
-    enforced one ends in ``ValidationError`` (the enforcement does not convert
-    coordinates). When wrapping, ``ValidationError`` is also raised for a multiband
-    source and a band type outside ``VRT_TYPES``; the default result driver is GTiff, by
-    default without tiles (``tiled=False``; explicit tiles in ``dst_kwds`` win) -
-    ``merge`` takes the output profile from the first source, i.e. from the VRT.
+    ``dtype`` (default ``None``): when given, each source is wrapped in a
+    single-band 1:1 VRT in ``/vsimem/`` with its own CRS and nodata and the
+    requested band type. An integer source before a floating-point source
+    would otherwise truncate floating-point values when ``merge`` takes the
+    first source's type. Wrapping rejects multiband sources and band types
+    outside ``VRT_TYPES``; the default result driver is GTiff, without tiles
+    unless explicitly enabled in ``dst_kwds``.
 
     Without ``dtype`` all sources must share one band type: ``merge`` would take the
     type of the FIRST source (e.g. float heights silently truncated to integers), so
@@ -231,7 +187,7 @@ def mosaic_and_crop(
 
     output_path = Path(output_path)
     paths = [Path(p) for p in inputs]
-    wrap = assign_crs is not None or dtype is not None
+    wrap = dtype is not None
 
     res_set: set[tuple[float, float]] = set()
     metas: list[dict] = []
@@ -249,26 +205,12 @@ def mosaic_and_crop(
                     "nodata": src.nodata,
                 }
             )
-    # _source_grid consumes the sources' transforms - derived from metas,
-    # without a second loop opening the files.
-    transforms = [m["transform"] for m in metas]
 
-    if assign_crs is None:
-        crs_set = {str(m["crs"]) for m in metas}
-        if len(crs_set) > 1:
-            raise ValidationError(
-                f"mosaic_and_crop: niezgodne CRS wejsc: {sorted(crs_set)}"
-            )
-    else:
-        # A CRS of None (ASC without .prj) alongside EPSG:2180 is allowed - the VRT will
-        # assign it an SRS; we reject only a source with its OWN, different CRS.
-        target = CRS.from_user_input(assign_crs)
-        for path, meta in zip(paths, metas, strict=True):
-            if meta["crs"] is not None and not _same_projection(meta["crs"], target):
-                raise ValidationError(
-                    f"mosaic_and_crop: zrodlo {path.name} ma CRS {meta['crs']}, "
-                    f"a wymuszany jest {assign_crs}"
-                )
+    crs_set = {str(m["crs"]) for m in metas}
+    if len(crs_set) > 1:
+        raise ValidationError(
+            f"mosaic_and_crop: niezgodne CRS wejsc: {sorted(crs_set)}"
+        )
     if len(res_set) > 1:
         raise ValidationError(
             f"mosaic_and_crop: niezgodne rozdzielczosci wejsc: {sorted(res_set)}"
@@ -285,7 +227,7 @@ def mosaic_and_crop(
             if meta["count"] != 1:
                 raise ValidationError(
                     f"mosaic_and_crop: zrodlo {path.name} ma {meta['count']} "
-                    "pasm — owijanie w VRT (assign_crs/dtype) obsluguje tylko "
+                    "pasm — owijanie w VRT (dtype) obsluguje tylko "
                     "rastry jednopasmowe"
                 )
             band_type = dtype or meta["dtype"]
@@ -296,15 +238,6 @@ def mosaic_and_crop(
                 )
 
     bounds = (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
-    if snap_to_source_grid:
-        # Without this the result grid is anchored at the bbox corner, and merge
-        # rewrites pixels by nearest neighbor: content shifts by a fraction of a pixel,
-        # and on a tie (a bbox exactly on the GUGiK grid with corners at k + 0.5)
-        # neighboring columns get mixed (review max 2026-08-30, finding 1; plan fact 2).
-        grid = _source_grid(paths, transforms)
-        if grid.off_grid:
-            raise GridMismatchError(grid.describe_off_grid(len(paths)), grid.off_grid)
-        bounds = _snap_outward(bounds, grid.reference)
 
     # merge opens the file for writing from dst_path itself (hence mkdir BEFORE
     # the call) and computes the result in chunks per mem_limit; without dst_path
@@ -328,18 +261,14 @@ def mosaic_and_crop(
         # win (setdefault).
         kwds.setdefault("tiled", False)
 
-    # Wrapping AFTER snapping: VRT transforms = source transforms, so the
-    # grid computed on the originals is valid. A VRT in /vsimem/ holds no
-    # descriptors; merge opens them (and the sources beneath) one at a time.
+    # VRTs in /vsimem/ hold no descriptors; merge opens each VRT (and its
+    # source beneath) one at a time.
     memfiles: list[MemoryFile] = []
     try:
         if wrap:
-            forced_wkt = (
-                CRS.from_user_input(assign_crs).to_wkt() if assign_crs else None
-            )
             sources: list = []
             for path, meta in zip(paths, metas, strict=True):
-                wkt = forced_wkt or (meta["crs"].to_wkt() if meta["crs"] else None)
+                wkt = meta["crs"].to_wkt() if meta["crs"] else None
                 xml = vrt_xml(
                     path,
                     meta,
