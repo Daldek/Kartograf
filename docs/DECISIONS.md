@@ -44,8 +44,8 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-020](#adr-020-walidacja-warstw-wms-przez-getcapabilities) | Walidacja warstw WMS przez GetCapabilities | 2026-03-24 | Przyjeta — czesciowo zastapiona przez [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (warstwy wylacznie z GetCapabilities, bez list zaszytych i fallbacku; errata 3) |
 | [ADR-021](#adr-021-laz-chmury-punktów-lidar--discovery-przez-wfs-area-based) | LAZ (chmury punktów LIDAR) — discovery przez WFS, area-based | 2026-06-24 | Przyjeta — czesciowo zastapiona przez [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) (regula newest-per-tile) |
 | [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) | Architektura zrodel wielokrajowych — deskryptory, rejestry, sidecar, twarda polityka transformacji (etap 0) | 2026-08-10 | Przyjeta — uzupelniona przez [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (formalny interfejs silnika: `CuzkClient`, (a)) i [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (angielskie nazwy kluczy sidecara) |
-| [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) | Silnik CUZK, polityka układów CZ i EVRF2007→5621 (etap 1) | 2026-08-11 | Przyjeta — czesciowo zastapiona przez [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) i [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (`--target-crs` wylacznie dla CZ; Ustalenia dodatkowe pkt 6); uzupelniona przez [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) ((f).1 obejmuje LAZ); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) |
-| [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) | Reprojekcja tresci CZ wylacznie lokalnie (zakaz `imageSR` != natywny) | 2026-08-11 | Przyjeta; zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) |
+| [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) | Silnik CUZK, polityka układów CZ i EVRF2007→5621 (etap 1) | 2026-08-11 | Przyjeta — czesciowo zastapiona przez [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) i [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (`--target-crs` wylacznie dla CZ; Ustalenia dodatkowe pkt 6); uzupelniona przez [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) ((f).1 obejmuje LAZ) i [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (kawalkowanie CUZK w `transport/chunks.py`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) |
+| [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) | Reprojekcja tresci CZ wylacznie lokalnie (zakaz `imageSR` != natywny) | 2026-08-11 | Przyjeta — uzupelniona przez [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (wspolne planowanie kawalkow z kotwica NW); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) |
 | [ADR-025](#adr-025-mapowanie-tekstura---hsg-i-kanoniczny-trojkat-usda-audyt-070) | Mapowanie tekstura -> HSG i kanoniczny trojkat USDA (audyt 0.7.0) | 2026-08-22 | Przyjeta |
 | [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) | Uklad data/ per produkt — segmenty i szablony w deskryptorach | 2026-08-28 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (pliki w `<segment>/kampanie/`, sciezka standardowa = dowiazanie twarde albo kopia; errata 2); zastepuje [ADR-013](#adr-013-zmiana-nazw-podkatalogow-storage-z-1m5m-na-nmt_1mnmt_5m) i realizacje ukladu z [ADR-005](#adr-005-struktura-katalogow-nmt-rozdzielona-wg-rozdzielczosci), uzupelnia [ADR-017](#adr-017-pl-2000-sheet-naming--composition-pattern-with-auto-detection) (domyka odroczenie) |
 | [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) | --target-crs dla PL — scalony wycinek bbox (mozaika + pinned warp) | 2026-08-28 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (wycinek tylko `newest`; arkusze bez sprawdzenia skorowidza: errata 5 [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem)); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (`--target-crs` wylacznie dla CZ) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (bbox = WCS GeoTIFF) |
@@ -55,6 +55,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) | Jezyk identyfikatorow — angielski (sidecar od 0.7.0, API/CLI do v1.0.0) | 2026-10-08 | Przyjeta; czesciowo zastepuje [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (nazwy kluczy `extra.source`) i [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (nazwy kluczy `extra.campaign`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) (konwencja nazw kluczy sidecara) |
 | [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) | Wybor roku danych: przedzial lat, zatrzymanie przy konflikcie | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (`--full-sheet` z pkt 4; errata 1); uzupelnia ADR-029 i ADR-030 |
 | [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) | Drugie dowiazanie do najnowszego pelnego lotu (`full_sheet/`, `--full-sheet`) | 2026-10-10 | Przyjeta; uzupelnia [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) ((d): drugie dowiazanie) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 4: `--full-sheet`) |
+| [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) | Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla) | 2026-10-10 | Przyjeta; uzupelnia [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (kawalkowanie CUZK) i [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (kotwica NW) |
 
 ---
 
@@ -560,7 +561,7 @@ ktoregokolwiek rocznika po ponowieniach konczy `discover_tiles`
 ## ADR-023: Silnik CUZK, polityka układów CZ i EVRF2007→5621 (etap 1)
 
 **Data:** 2026-08-11
-**Status:** Przyjeta — czesciowo zastapiona przez ADR-024 (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) i ADR-027 (`--target-crs` wylacznie dla CZ; Ustalenia dodatkowe pkt 6); uzupelniona przez ADR-029 ((f).1 obejmuje LAZ); uzupelnia ADR-022
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-024 (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) i ADR-027 (`--target-crs` wylacznie dla CZ; Ustalenia dodatkowe pkt 6); uzupelniona przez ADR-029 ((f).1 obejmuje LAZ) i ADR-034 (kawalkowanie CUZK w `transport/chunks.py`); uzupelnia ADR-022
 
 **Kontekst:** Etap 1 dodaje pierwsze zagraniczne zrodlo danych — CUZK (Czeski
 Urzad Zememericky a Katastralni), DMR 5G (2 m, `exportImage`) i DMR 4G (5 m,
@@ -836,7 +837,7 @@ uzasadnic ekstrakcje silnika do `transport/` (punkt a).
 ## ADR-024: Reprojekcja tresci CZ wylacznie lokalnie (zakaz `imageSR` != natywny)
 
 **Data:** 2026-08-11
-**Status:** Przyjeta; zastepuje czesc ADR-023 (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1)
+**Status:** Przyjeta — uzupelniona przez ADR-034 (wspolne planowanie kawalkow z kotwica NW); zastepuje czesc ADR-023 (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1)
 
 **Kontekst:** Analiza szwu PL/CZ na Olzie (Cieszyn / Cesky Tesin) wykryla, ze
 `kartograf download --country cz --target-crs EPSG:2180` zwraca raster, ktorego
@@ -2224,6 +2225,62 @@ za granica). LAZ nie ma `full_sheet/`. Biblioteka: `SheetFetch.full_link`,
 `.full_link_outside_range`, `.no_full_flight`; `DownloadResult.full_links`,
 `.full_link_outside_range`, `.without_full`;
 `FileStorage.get_full_sheet_path()`.
+
+---
+
+## ADR-034: Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla)
+
+**Data:** 2026-10-10
+**Status:** Przyjeta; uzupelnia ADR-023 (kawalkowanie CUZK) i ADR-024 (kotwica NW)
+
+**Kontekst:** CUZK dzielil duze zadania `exportImage` przez `_tile_grid`
+w kliencie, a GUGiK WCS `download_bbox` wykonywal jedno zapytanie bez
+wyrownania do siatki zrodla. Pomiar KRON86 z 2026-10-10
+(`docs/research/2026-10-10-wcs-limits/raport.md`) nie wykazal twardego
+limitu WCS do 100 Mpx, ale host zrywal polaczenia. Serwer probkuje na
+siatke zadania: bbox poza siatka zrodla daje cichy blad geolokalizacji
+(tresc przesunieta wzgledem opisu o ulamek piksela). Siatka NMT 1 m
+ma krawedzie `k + 0,5` m w dziewieciu zmierzonych rejonach; kawalki
+z tej samej siatki skladaja sie bit w bit.
+
+**Opcje:**
+- A) Docelowo skladac wycinki PL z plikow arkuszy — odrzucone jako
+  docelowa droga wycinkow na rzecz przygotowania zapytan WCS (D-U3);
+  istniejacy wycinek nadal sklada arkusze do czasu prac nad (a).
+- B) Pobierac kawalki rownolegle — odrzucone przy niestabilnym hoscie
+  GUGiK i koszcie ponowienia duzego zapytania.
+- C) Wyrownac CZ do siatki uslugi ImageServer — odroczone; pomiar
+  CUZK z 2026-09-29, poza zakresem tej zmiany. Zachowano kotwice NW.
+- D) Wspolny plan zapytan obszarowych, sekwencyjne pobieranie i skladanie
+  na siatce zrodla tam, gdzie jest zmierzona.
+
+**Decyzja:** D. Wewnetrzny modul `kartograf/transport/chunks.py` udostepnia
+`GridSpec`, `ChunkLimits`, `Chunk`, `align_bbox`, `plan_chunks` i
+`fetch_chunks` dla CUZK i GUGiK WCS, bez znajomosci URL-i i produktow.
+Z podana siatka `align_bbox` rozszerza bbox NA ZEWNATRZ do jej linii;
+bez siatki (CZ) zachowuje kotwice NW i calkowita liczbe pikseli przez
+`round`. `plan_chunks` zachowuje podzial NW, polnoc-poludnie i
+zachod-wschod. Budzet CUZK to 4 Mpx na kawalek pod praktycznym limitem
+ok. 8 Mpx (oraz sufity 15000 x 4100 px); GUGiK NMT 1 m KRON86 GTiff
+to 16 Mpx i do 40000 px na bok — budzet niezawodnosci, NIE limit serwera.
+`fetch_chunks` pobiera kawalki sekwencyjnie, sklada je bez resamplingu
+i usuwa pliki posrednie; `download_to` ponawia kazdy kawalek osobno.
+Odpowiedzi WCS podlegaja `reject_error_document("WCS")`, rowniez przy
+jednym zapytaniu. NMPT i orto nie maja zmierzonej siatki: pozostaja przy
+jednym zapytaniu bez wyrownania (orto nie mierzono). GeoTIFF NMPT zwraca
+RGB uint8 zamiast wysokosci — naprawa z wycinkami WCS w (a) (D-U6).
+Pomiar WCS dotyczy tylko KRON86, bo endpoint EVRF2007 jest niedostepny
+(D-U5). `mosaic_and_crop` bez `dtype=` odrzuca zrodla o mieszanych
+typach pasm przez `ValidationError`, zamiast cicho przyjmowac typ
+pierwszego pliku.
+
+**Konsekwencje:** NMT KRON86 `download_bbox` GTiff moze miec zasieg
+wiekszy od bboxa zadania o mniej niz 1 px z kazdej strony, a zadania
+pow. 16 Mpx dziela sie na kawalki; sidecar zachowuje bbox zadania.
+CUZK zachowuje dotychczasowy wynik i parametry zapytan. Wycinki PL
+z WCS w (a) moga wykorzystac ten mechanizm (D-U3), ale obecny wycinek
+PL nadal sklada arkusze; usuniecie parametrow arkuszowych publicznego
+`mosaic_and_crop` pozostaje kandydatem do 0.8.0.
 
 ---
 
