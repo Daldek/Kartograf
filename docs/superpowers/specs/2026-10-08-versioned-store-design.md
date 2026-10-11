@@ -68,6 +68,7 @@ projekty uzywaja pliku".
 | D20 | Jeden odczyt pliku przy zapisie: sha256 i pokrycie w jednym przebiegu, wynik przekazany do `build_metadata(digest=)` (I3) | trzy pelne odczyty (sha przy zapisie, sha w `build_metadata`, pokrycie) |
 | D21 | `fsync` pliku roboczego przed `os.link` i tmp sidecara przed `os.replace` (I5) | brak gwarancji trwalosci przy utracie zasilania |
 | D22 | Hardlinki wymagane: brak hardlinku = `DownloadError` pliku, bez kopii (I4; zmienia ADR-030 errata 4) | kopia + `Warning:` (2-3x miejsca, pelna kopia przy kazdym przestawieniu dowiazania) |
+| D23 | Ta sama tresc pod nowym sygnalem (nowy rekord skorowidza, nowy `ETag`, nowa edycja): nowy katalog wersji `<nowa_etykieta>_<sha8>` z hardlinkiem do tych samych danych i wlasnym sidecarem; status `relabeled` (review 2026-10-11, I1) | `unchanged` bez sladu nowego sygnalu (petla "dostepna nowsza" -> `--upgrade` -> bez zmian); jeden katalog na tresc z etykieta poza niezmiennym sidecarem |
 
 ## 3. Model wersji i uklad na dysku
 
@@ -105,7 +106,19 @@ projekty uzywaja pliku".
    (takze rozpakowanych) i produktow pochodnych; bez liczenia w strumieniu
    `download_to` (decyzja uzytkownika 2026-10-08).
 3. Jesli jakakolwiek WAZNA wersja tego pliku (dowolna etykieta) ma to samo
-   sha256: plik roboczy usuwany, wynik "bez zmian" (`unchanged`).
+   sha256:
+   - sygnal tego pobrania (etykieta kampanii/edycji, rekord skorowidza,
+     `extra.http`) jest taki sam jak w ktorejs z tych wersji — plik
+     roboczy usuwany, wynik "bez zmian" (`unchanged`);
+   - sygnal jest inny (D23) — nowy katalog `<nowa_etykieta>_<sha8>`:
+     `os.link` z ISTNIEJACEJ wersji (bez dodatkowego miejsca), wlasny
+     sidecar wersji z nowym sygnalem, plik roboczy usuwany, wynik
+     `relabeled`; dalej kroki 6-7. Etykieta `downloaded` sama w sobie nie
+     jest sygnalem: zrodlo bez sygnalu (`none`) z ta sama trescia zawsze
+     daje `unchanged`.
+   Nowa etykieta przestawia dowiazanie wg zwyklej reguly "najnowsza
+   wersja"; dzieki temu powrot zrodla do starszej tresci pod nowym
+   sygnalem tez przestawia dowiazanie, mimo zasady "nigdy wstecz".
 4. `fsync` pliku roboczego (D21), `mkdir` katalogu `<etykieta>_<sha8>`,
    `os.link(roboczy, docelowy)` — tworzenie wylaczne, nigdy nie nadpisuje
    (D18) — i usuniecie pliku roboczego. Brak obslugi hardlinkow =
@@ -331,11 +344,12 @@ usluga, nie lokalne pliki — wersjonowane jak produkty zrodlowe (sekcja 4.6).
 
 - `SheetFetch`/`DownloadResult`, wyniki land cover, LAZ, wycinka i HSG
   dostaja informacje o wersji: etykieta, `sha256`, status
-  (`new`/`unchanged`/`reused`/`local`), sciezka wersji.
+  (`new`/`unchanged`/`relabeled`/`reused`/`local`), sciezka wersji.
 - CLI: jedna linia statusu na plik, np.
   `N-34-130-D-d-2-4: nowa wersja 2025-06-02_91234_3fa91c2e`,
   `1206: lokalna wersja 2026-10-08_ab12cd34 (bez sprawdzania; --check-updates)`;
-  podsumowanie z licznikami (nowe / bez zmian / uzyte ponownie / bledy).
+  podsumowanie z licznikami (nowe / nowa etykieta / bez zmian / uzyte
+  ponownie / bledy).
 - Stary katalog `kampanie/` w segmencie: jednorazowe
   `Info: katalog kampanie/ z wersji 0.7.0 nie jest uzywany; dane zostana
   pobrane ponownie do versions/` (bez migracji, D10).
@@ -405,7 +419,9 @@ Offline (`-m "not live"`), fixtury z surowych odpowiedzi:
   (`os.link` + `FileExistsError`), naprawa wersji bez sidecara po
   sprawdzeniu sha256, wersja niekompletna pomijana, kolizja sha8, brak
   hardlinku = blad, sprzatanie tylko wpisow > 24 h, jeden odczyt pliku
-  przy zapisie;
+  przy zapisie; ta sama tresc z nowym sygnalem = `relabeled` (hardlink,
+  bez nowego miejsca, dowiazanie na nowa etykiete), ta sama tresc bez
+  sygnalu = `unchanged`;
 - tabela 4.2: kazda komorka osobnym testem (sygnal podstawiony);
 - plan: round-trip JSON, nieaktualna pozycja, pozycja usunieta z planu,
   zly schemat/magazyn;
