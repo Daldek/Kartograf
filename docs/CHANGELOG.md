@@ -197,11 +197,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   0,5 m) na siatce arkuszy 1 m, kawalkami jak NMT; rejestr `pl.gugik.nmpt`
   ma kanal WCS `bbox_raster`. Co zrobic: nic; wynik odpowiada arkuszom
   NMPT 1 m (nad lotem 0,5 m — piksel 0,5 m o srodku na pelnym metrze).
-- `download_bbox()` NMT EVRF2007 i NMPT pobiera kawalki po 1 Mpx
-  (`image/x-aaigrid` ok. 20 s/Mpx i ok. 20 MB/Mpx; dluzsze zadanie milczy
-  przed pierwszym bajtem dluzej niz timeout odczytu 30 s). KRON86 bez zmian
-  (GeoTIFF, 16 Mpx). Co zrobic: nic; duze obszary EVRF2007/NMPT trwaja
-  odpowiednio dluzej niz KRON86.
+- `download_bbox()` NMT EVRF2007 i NMPT pobiera kawalki do 1 Mpx pikseli
+  coverage (NMT 1 Mpx, NMPT 1 m = 0,25 Mpx wyniku; `image/x-aaigrid`
+  ok. 20 s/Mpx i ok. 20 MB/Mpx; dluzsze zadanie milczy przed pierwszym
+  bajtem dluzej niz timeout odczytu 30 s). KRON86 bez zmian (GeoTIFF,
+  16 Mpx). Kazde zapytanie WCS z siatka (NMT, NMPT, takze KRON86) ma
+  parzysta szerokosc i wysokosc: zakres wyrownany do siatki jest
+  poszerzany o najwyzej 1 px na wschod/poludnie i przycinany po zszyciu
+  (przy nieparzystym rozmiarze serwer bierze srodkowy wiersz i kolumne
+  z sasiedniego piksela zrodla, gdy przeprobkowuje — NMPT `SCALEFACTOR`,
+  NMT 1 m nad lotem 0,5 m; pomiar na zywo 2026-10-11). Co zrobic: nic;
+  duze obszary EVRF2007/NMPT trwaja odpowiednio dluzej niz KRON86.
 - Biblioteka: funkcje geometrii (`get_overall_bbox`, `read_feature_bboxes`,
   `find_sheets_for_geometry`, `read_source_crs`) przy GPKG z wieloma
   warstwami bez `layer=` loguja wybor pierwszej warstwy jako `WARNING`

@@ -275,6 +275,18 @@ class TestGugikNmptProviderDownload:
             values, np.load(WCS_FIXTURES / f"{base}_sheet_values.npy")
         )
 
+    def test_nmpt_chunk_budget_counts_coverage_pixels(self):
+        """NMPT 1 m reads 4 coverage pixels (0.5 m) per result pixel, so a
+        1000 x 1000 m area is cut into chunks of at most 0.25 Mpx (1 Mpx of
+        coverage); NMT EVRF2007 (1 m coverage) keeps 1 Mpx chunks."""
+        bbox = BBox(567099.5, 243999.5, 568099.5, 244999.5, "EPSG:2180")
+
+        nmpt = GugikNmptProvider().plan_wcs_chunks(bbox)
+        nmt = GugikProvider(vertical_crs="EVRF2007").plan_wcs_chunks(bbox)
+
+        assert len(nmpt) == 4 and max(c.width * c.height for c in nmpt) <= 250_000
+        assert len(nmt) == 1 and nmt[0].width * nmt[0].height == 1_000_000
+
     def test_download_bbox_rejects_exception_report(self, tmp_path, sample_bbox):
         """The single NMPT request is validated too: an OGC ExceptionReport with
         HTTP 200 is a DownloadError, never a .tif file."""

@@ -9,6 +9,7 @@ float32 GeoTIFF per chunk (``transport/aaigrid.py``). Measurements:
 ``docs/research/2026-10-11-wcs-cutouts/raport.md``.
 """
 
+from dataclasses import replace
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -69,7 +70,10 @@ class GugikWcsMixin:
     # image/x-aaigrid: ~20.5 B/px and ~20 s/Mpx, and the server stays silent before
     # the first byte longer for larger requests (1 Mpx: ~7 s, 4 Mpx: ~25 s) while
     # DEFAULT_TIMEOUT (30 s) is a read timeout - 1 Mpx keeps the first byte well
-    # within it (docs/research/2026-10-11-wcs-cutouts/raport.md, point 5).
+    # within it (docs/research/2026-10-11-wcs-cutouts/raport.md, point 5). The
+    # budget counts COVERAGE pixels: a result step coarser than the coverage
+    # (NMPT 1 m from 0.5 m) reads (step / native)^2 coverage pixels per result
+    # pixel, and 1 Mpx of NMPT output timed out 3 times in a row (live 2026-10-11).
     WCS_CHUNK_LIMITS_AAIGRID = ChunkLimits(
         max_width=40_000, max_height=40_000, max_pixels=1_000_000
     )
@@ -120,20 +124,36 @@ class GugikWcsMixin:
     def plan_wcs_chunks(self, bbox: BBox) -> list[Chunk]:
         """Chunks of a ``format="GTiff"`` request of ``bbox`` (EPSG:2180).
 
-        The bbox aligned OUTWARD to ``WCS_GRID`` and cut by the chunk limits of
-        the height format (ASC: ``WCS_CHUNK_LIMITS_AAIGRID``). Without a grid:
-        one chunk with the bbox as given (size unknown, reported as 0 x 0).
+        The bbox aligned OUTWARD to ``WCS_GRID``, widened by at most 1 px east
+        and south to an even size and cut into even-sized chunks within the
+        limits of the height format (ASC: ``WCS_CHUNK_LIMITS_AAIGRID``): when the
+        server resamples (NMPT ``SCALEFACTOR``, NMT 1 m over a 0.5 m flight), an
+        odd-sized request takes its middle row and column from the neighbouring
+        source pixel (live 2026-10-11, ``docs/research/2026-10-11-wcs-cutouts-live``);
+        even sizes give the sheet content bit for bit. The extra pixels are
+        cropped after stitching (``fetch_chunks``).
         """
         grid = self.WCS_GRID
         if grid is None:
-            return [Chunk(bbox, 0, 0)]
+            raise ValueError("plan_wcs_chunks: the provider declares no WCS_GRID")
         aligned, width, height = align_bbox(bbox, grid.step, grid)
-        limits = (
-            self.WCS_CHUNK_LIMITS_AAIGRID
-            if self._wcs_height_format() == HEIGHT_AAIGRID
-            else self.WCS_CHUNK_LIMITS
+        even_w, even_h = width + width % 2, height + height % 2
+        request = BBox(
+            aligned.min_x,
+            aligned.max_y - even_h * grid.step,
+            aligned.min_x + even_w * grid.step,
+            aligned.max_y,
+            aligned.crs,
         )
-        return plan_chunks(aligned, width, height, grid.step, limits)
+        if self._wcs_height_format() == HEIGHT_AAIGRID:
+            limits = self.WCS_CHUNK_LIMITS_AAIGRID
+            native = self.WCS_NATIVE_STEP or grid.step
+            # the budget counts coverage pixels (NMPT: 4 per 1 m result pixel)
+            per_pixel = max(1.0, (grid.step / native) ** 2)
+            limits = replace(limits, max_pixels=int(limits.max_pixels / per_pixel))
+        else:
+            limits = self.WCS_CHUNK_LIMITS
+        return plan_chunks(request, even_w, even_h, grid.step, limits, multiple=2)
 
     def _download_wcs(
         self,
@@ -146,13 +166,15 @@ class GugikWcsMixin:
         """GetCoverage of ``bbox`` into ``output_path``; chunked on ``WCS_GRID``.
 
         GeoTIFF with a declared ``WCS_GRID``: the bbox is expanded outward to the
-        result grid (< 1 px per side) and requested in chunks (``plan_wcs_chunks``),
-        fetched one at a time and stitched 1:1 (ADR-034); each chunk is retried on
-        its own. Heights served only as ASC (``_wcs_height_format``) are requested
-        as ``image/x-aaigrid`` (with ``SCALEFACTOR`` when the coverage step differs
-        from the grid) and each chunk becomes a float32 GeoTIFF in EPSG:2180 after
-        its size and corner are checked. Otherwise one request with the bbox as
-        given. An OGC exception report (XML/HTML) is never saved as the result.
+        result grid (< 1 px per side) and requested in even-sized chunks
+        (``plan_wcs_chunks``), fetched one at a time, stitched 1:1 and cropped to
+        the aligned bbox (ADR-034); each chunk is retried on its own. Heights
+        served only as ASC (``_wcs_height_format``) are requested as
+        ``image/x-aaigrid`` (with ``SCALEFACTOR`` when the coverage step differs
+        from the grid) and each chunk becomes a float32 GeoTIFF in EPSG:2180
+        after its size and corner are checked. Otherwise one request with the
+        bbox as given. An OGC exception report (XML/HTML) is never saved as the
+        result.
         """
         session = self._sessions.get()
         validate = reject_error_document("WCS")
@@ -192,7 +214,8 @@ class GugikWcsMixin:
                 description=label,
             )
 
-        # WCS declares no nodata (report point 3); chunks cover the bbox exactly.
+        # WCS declares no nodata (report point 3); the chunks cover the aligned
+        # bbox plus at most 1 px east/south, cropped when stitching.
         return fetch_chunks(chunks, aligned, output_path, fetch, nodata=None)
 
     def get_supported_formats(self) -> list[str]:
