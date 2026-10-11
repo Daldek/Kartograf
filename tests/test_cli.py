@@ -6531,7 +6531,7 @@ class TestPublicApiCz:
     def test_version_bumped(self):
         from kartograf import __version__
 
-        assert __version__ == "0.7.2-dev"
+        assert __version__ == "0.7.2"
 
 
 class _PartialSheetProvider(_SheetProvider):

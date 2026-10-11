@@ -56,7 +56,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) | Wybor roku danych: przedzial lat, zatrzymanie przy konflikcie | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (`--full-sheet` z pkt 4; errata 1); uzupelnia ADR-029 i ADR-030 |
 | [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) | Drugie dowiazanie do najnowszego pelnego lotu (`full_sheet/`, `--full-sheet`) | 2026-10-10 | Przyjeta; uzupelnia [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) ((d): drugie dowiazanie) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 4: `--full-sheet`) |
 | [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) | Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla) | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (ASC 1 Mpx i NMPT); uzupelnia [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (kawalkowanie CUZK) i [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (kotwica NW) |
-| [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) | Wycinki PL z WCS GUGiK z maska ladu PRG | 2026-10-11 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (zrodlo CLI i `download_pl_cutout`), uzupelnia [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (ASC 1 Mpx i NMPT) |
+| [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) | Wycinki PL z WCS GUGiK z maska ladu PRG | 2026-10-11 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (zrodlo CLI i `download_pl_cutout`), uzupelnia [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (ASC 1 Mpx i NMPT); errata 1: kawalek ASC NMPT 4 Mpx coverage |
 
 ---
 
@@ -2288,7 +2288,7 @@ PL nadal sklada arkusze; usuniecie parametrow arkuszowych publicznego
 ## ADR-035: Wycinki PL z WCS GUGiK z maska ladu PRG
 
 **Data:** 2026-10-11
-**Status:** Przyjeta; czesciowo zastepuje ADR-027 (zrodlo wycinka w CLI i `download_pl_cutout`), uzupelnia ADR-034 (ASC 1 Mpx i NMPT)
+**Status:** Przyjeta; czesciowo zastepuje ADR-027 (zrodlo wycinka w CLI i `download_pl_cutout`), uzupelnia ADR-034 (ASC 1 Mpx i NMPT); errata 1: kawalek ASC NMPT 4 Mpx coverage
 
 **Kontekst:** Wycinanie PL z mozaiki arkuszy OpenData (ADR-027) wymagalo
 skorowidza, pobierania calych arkuszy i obslugi ich roznych faz siatki.
@@ -2367,6 +2367,16 @@ podjecia; ten ADR okresla nowy tor. Weryfikacja na zywo (raport
 tego samego lotu w 100 %; na wybrzezu (Gdynia, Hel, Mierzeja Wislana)
 poza maska jest woda o wysokosci WCS ok. 0-0,3 m (mediana), zaden
 piksel > 5 m, > 2 m: 0-1048 px na 1 km2; na ladzie zostaje 0-82 px 0,0.
+
+**Errata 1 (2026-10-11, strojenie kawalkow ASC NMPT,
+`docs/research/2026-10-11-nmpt-asc-tuning/raport.md`):** limit kawalka
+ASC NMPT to 4 Mpx pikseli coverage (1 Mpx wyniku 1 m), nie 1 Mpx
+coverage (0,25 Mpx wyniku) z W-U9; NMT EVRF2007 zostaje przy 1 Mpx,
+limit odczytu 120 s bez zmian. Zawieszenia hosta (brak bajtu przez
+300 s) trafialy kawalki kazdego rozmiaru, a kawalek 4 Mpx coverage
+odpowiadal w 15-26 s jak 1 Mpx; mniej kawalkow to mniej ponowien.
+Na zywo NMPT 2000 x 1000 px: 2 kawalki, 246 s (dotad 8 kawalkow,
+1186 s), bit w bit z jednym zapytaniem.
 
 ---
 

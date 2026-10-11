@@ -1,9 +1,9 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.18
-**Data:** 2026-10-10
-**Status:** Wydanie v0.7.1 (2026-10-09)
+**Wersja:** 3.19
+**Data:** 2026-10-11
+**Status:** Wydanie v0.7.2 (2026-10-11)
 
 ---
 
@@ -776,9 +776,10 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-10-09 | 3.16 | Narzędzie składania kampanii (3.1) bez przypisanego wydania — nie weszło do 0.7.1 (ADR-030 errata 6) |
 | 2026-10-10 | 3.17 | Wybór roku danych (ADR-032): --year/--min-year/--max-year dla NMT/NMPT/orto/LAZ w 2.12, CZ i wycinki bez roku; model A (rok = filtr lat, --campaigns = liczba lotów) |
 | 2026-10-10 | 3.18 | Drugie dowiązanie `full_sheet/` i `--full-sheet` (ADR-033) w 2.11 i 2.12 |
+| 2026-10-11 | 3.19 | Wydanie v0.7.2: wycinki NMT/NMPT PL z WCS GUGiK z maską lądu PRG (ADR-035), kawałki zapytań obszarowych na siatce źródła (ADR-034), status |
 
 ---
 
-**Wersja dokumentu:** 3.18
-**Data ostatniej aktualizacji:** 2026-10-10
-**Status:** Wydanie v0.7.1 (2026-10-09)
+**Wersja dokumentu:** 3.19
+**Data ostatniej aktualizacji:** 2026-10-11
+**Status:** Wydanie v0.7.2 (2026-10-11)

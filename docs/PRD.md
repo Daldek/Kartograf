@@ -1,17 +1,17 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 4.2
-**Data:** 2026-10-10
+**Wersja:** 4.3
+**Data:** 2026-10-11
 **Product Owner:** Piotr
-**Status:** Wydanie v0.7.1 (2026-10-09)
+**Status:** Wydanie v0.7.2 (2026-10-11)
 
-> Dokument opisuje wymagania produktowe wersji 0.7.1 w postaci
-> zrealizowanej w kodzie wydania v0.7.1, z uzupelnieniami cyklu 0.7.2-dev
-> w sekcji 3.11 (rok danych ADR-032, `full_sheet/` ADR-033). Szczegóły
+> Dokument opisuje wymagania produktowe wersji 0.7.2 w postaci
+> zrealizowanej w kodzie wydania v0.7.2 (w tym rok danych ADR-032,
+> `full_sheet/` ADR-033 i wycinki z WCS ADR-035). Szczegóły
 > zachowania (komunikaty, kody wyjścia, przypadki brzegowe) —
 > `docs/SCOPE.md` i `docs/ARCHITECTURE.md`; uzasadnienia decyzji —
-> `docs/DECISIONS.md` (ADR-022..ADR-033); historia zmian — `docs/CHANGELOG.md`. Pełna lista
+> `docs/DECISIONS.md` (ADR-022..ADR-035); historia zmian — `docs/CHANGELOG.md`. Pełna lista
 > opcji CLI: `kartograf <komenda> --help`. Wymagania docelowe wersji
 > 1.0.0 — sekcja 8 (roadmapa i kolejność podprojektów: `docs/SCOPE.md` 3.3).
 
@@ -601,7 +601,8 @@ pod `auto` PL i CZ to dwa pliki ze wspolnym `extra.parent_request`.
   TIFF float32, EVRF2007 i NMPT — ASC multipart konwertowany
   do float32 GeoTIFF. Zadanie wyrownane na zewnatrz do siatki
   arkusza 1 m (`k + 0,5`), zapytania o parzystych rozmiarach (pomiar
-  na zywo 2026-10-11), ASC dzielony na kawalki do 1 Mpx pikseli coverage.
+  na zywo 2026-10-11), ASC dzielony na kawalki do 1 Mpx pikseli coverage
+  w NMT i 4 Mpx w NMPT (1 Mpx wyniku 1 m).
 - Maska PRG `A00 - W02 - W03` przed WCS: piksele poza ladem
   `-9999`, 0,0 wewnatrz maski pozostaje danymi.
   Wynik caly nodata = `Warning:`, kod 0.
@@ -872,7 +873,7 @@ from kartograf import (
     GridMismatchError,      # (ValidationError)
 
     # Version
-    __version__,            # "0.7.1"
+    __version__,            # "0.7.2"
 )
 ```
 
@@ -1013,6 +1014,6 @@ HYDROGRAF (główna aplikacja)
 
 ---
 
-**Wersja dokumentu:** 4.1
-**Data ostatniej aktualizacji:** 2026-10-09
-**Status:** Wydanie v0.7.1 (2026-10-09)
+**Wersja dokumentu:** 4.3
+**Data ostatniej aktualizacji:** 2026-10-11
+**Status:** Wydanie v0.7.2 (2026-10-11)
