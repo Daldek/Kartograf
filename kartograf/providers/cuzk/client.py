@@ -6,7 +6,6 @@ parameterized by endpoint; the client knows no sheet codes, products or sidecars
 Retry/backoff and atomic write come from transport/http.py.
 """
 
-import math
 import os
 import threading
 import zipfile
@@ -19,8 +18,14 @@ from rasterio.crs import CRS
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.transport.chunks import (
+    Chunk,
+    ChunkLimits,
+    align_bbox,
+    fetch_chunks,
+    plan_chunks,
+)
 from kartograf.transport.http import download_to, get_with_retry
-from kartograf.transport.mosaic import mosaic_and_crop
 
 _TIFF_MAGIC = (b"II*\x00", b"MM\x00*")
 
@@ -148,76 +153,34 @@ class CuzkClient:
         image_sr.
         """
         output_path = Path(output_path)
-        width_px = max(1, round((bbox.max_x - bbox.min_x) / pixel_size))
-        height_px = max(1, round((bbox.max_y - bbox.min_y) / pixel_size))
         # NW anchor and an integer pixel count, shared by a single export,
-        # tiles and the mosaic. An unaligned bbox changed the pixel size.
-        bbox = BBox(
-            bbox.min_x,
-            bbox.max_y - height_px * pixel_size,
-            bbox.min_x + width_px * pixel_size,
-            bbox.max_y,
-            bbox.crs,
+        # chunks and the mosaic (transport/chunks.py, ADR-034). An unaligned bbox
+        # changed the pixel size.
+        aligned, width_px, height_px = align_bbox(bbox, pixel_size)
+        limits = ChunkLimits(
+            self.MAX_EXPORT_WIDTH, self.MAX_EXPORT_HEIGHT, self.MAX_EXPORT_PIXELS
         )
-
-        if (
-            width_px <= self.MAX_EXPORT_WIDTH
-            and height_px <= self.MAX_EXPORT_HEIGHT
-            and width_px * height_px <= self.MAX_EXPORT_PIXELS
-        ):
-            self._export_single(
-                endpoint, bbox, width_px, height_px, image_sr, no_data, output_path
-            )
-            _overwrite_crs(output_path, image_sr)
-            return output_path
-
-        if wkid(bbox.crs) != wkid(image_sr):
+        chunks = plan_chunks(aligned, width_px, height_px, pixel_size, limits)
+        if len(chunks) > 1 and wkid(aligned.crs) != wkid(image_sr):
             raise ValidationError(
                 f"Kafelkowanie exportImage wymaga bbox.crs == image_sr "
-                f"(bbox: {bbox.crs}, image_sr: {image_sr}) — znormalizuj bbox "
+                f"(bbox: {aligned.crs}, image_sr: {image_sr}) — znormalizuj bbox "
                 f"do ukladu wyjsciowego przed eksportem"
             )
 
-        tiles = _tile_grid(
-            bbox,
-            pixel_size,
-            width_px,
-            height_px,
-            self.MAX_EXPORT_WIDTH,
-            self.MAX_EXPORT_HEIGHT,
-            self.MAX_EXPORT_PIXELS,
-        )
-        tile_paths: list[Path] = []
-        try:
-            for i, (tile_bbox, tile_w, tile_h) in enumerate(tiles):
-                tile_path = output_path.with_name(
-                    f"{output_path.name}"
-                    f".{os.getpid()}_{threading.get_ident()}.part{i}.tif"
-                )
-                self._export_single(
-                    endpoint,
-                    tile_bbox,
-                    tile_w,
-                    tile_h,
-                    image_sr,
-                    no_data,
-                    tile_path,
-                )
-                tile_paths.append(tile_path)
-            try:
-                mosaic_and_crop(tile_paths, bbox, output_path, nodata=no_data)
-            except ValidationError:
-                raise
-            except Exception as e:  # noqa: BLE001 - rasterio/GDAL have no common base
-                output_path.unlink(missing_ok=True)
-                raise DownloadError(
-                    f"exportImage: nie udalo sie zszyc {len(tile_paths)} kafli "
-                    f"mozaiki w {output_path}: {e}"
-                ) from e
-            _overwrite_crs(output_path, image_sr)
-        finally:
-            for p in tile_paths:
-                p.unlink(missing_ok=True)
+        def fetch(chunk: Chunk, path: Path) -> None:
+            self._export_single(
+                endpoint,
+                chunk.bbox,
+                chunk.width,
+                chunk.height,
+                image_sr,
+                no_data,
+                path,
+            )
+
+        fetch_chunks(chunks, aligned, output_path, fetch, nodata=no_data)
+        _overwrite_crs(output_path, image_sr)
         return output_path
 
     def _export_single(
@@ -279,63 +242,6 @@ def _overwrite_crs(output_path: Path, image_sr: str) -> None:
             f"exportImage: nie udalo sie nadpisac CRS na {image_sr} "
             f"w {output_path}: {e}"
         ) from e
-
-
-def _tile_grid(
-    bbox: BBox,
-    pixel_size: float,
-    width_px: int,
-    height_px: int,
-    max_w: int,
-    max_h: int,
-    max_px: int,
-) -> list[tuple[BBox, int, int]]:
-    """Deterministic tile grid cut on whole pixels (N->S, W->E);
-    anchored at the NW corner — consistent with rasterio.merge(bounds=...) and
-    transform/raster.warp_to_grid (from_origin(min_x, max_y)).
-
-    Why NW: the mosaic result grid always starts at max_y and has height
-    round((max_y-min_y)/res), so for a bbox of fractional height an SW
-    anchor diverges from it by 0<delta<res: the bottom row of the result
-    falls below the tile extent (a whole nodata strip), and the content —
-    carried over by merge in blocks, without resampling — is shifted by up
-    to 1 px. This is the same order of geolocation error for which ADR-024
-    forbade server-side reprojection, and equally invisible in metadata
-    (A3-1).
-    """
-
-    def _splits(total_px: int, parts: int) -> list[tuple[int, int]]:
-        base, extra = divmod(total_px, parts)
-        return [
-            (i * base + min(i, extra), base + (1 if i < extra else 0))
-            for i in range(parts)
-        ]
-
-    # Square-ish tiles instead of narrow 15000 x 260 px strips:
-    # server probes confirmed this class of shapes, not long strips.
-    col_cap = max(1, min(max_w, math.isqrt(max_px)))
-    cols = _splits(width_px, math.ceil(width_px / col_cap))
-    tile_w = max(size for _, size in cols)
-    row_cap = max(1, min(max_h, max_px // tile_w))
-    rows = _splits(height_px, math.ceil(height_px / row_cap))
-
-    tiles: list[tuple[BBox, int, int]] = []
-    for row_off, row_px in rows:
-        for col_off, col_px in cols:
-            tiles.append(
-                (
-                    BBox(
-                        bbox.min_x + col_off * pixel_size,
-                        bbox.max_y - (row_off + row_px) * pixel_size,
-                        bbox.min_x + (col_off + col_px) * pixel_size,
-                        bbox.max_y - row_off * pixel_size,
-                        bbox.crs,
-                    ),
-                    col_px,
-                    row_px,
-                )
-            )
-    return tiles
 
 
 def _extract_zip_pair(
