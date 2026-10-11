@@ -27,7 +27,7 @@
 | Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | ZMERGOWANY do develop 2026-08-12; tor CZ odmrozony w fali 2026-09-29/30 (D1): pin EPSG:1622 (K2; live: Karkonosze PL-CZ mediana -0,15 m, przesuniecie < 1 px), budzet 4 Mpx kafli (K6; live: 29,8 Mpx w 3 min 38 s), piksel dokladnie 2 m (N3), `Warning:` przy 100 % nodata (N2); wydany w v0.7.0 |
 | LAZ — wybor kafli (ADR-029) | ✅ Gotowy | `download_laz_area` / `select_tiles`: najnowszy kafel per obszar wg pokrycia, `--year`, `--min-density`, `extra.parent_request` w trybie `--bbox`/`--geometry` |
 | Kampanie GUGiK (ADR-030 + errata 1-8, ADR-032, ADR-033) | ✅ Gotowy | `--campaigns {newest,all}`, `--year`/`--min-year`/`--max-year` (0.7.2-dev), `--full-sheet`; pliki w `<segment>/kampanie/`, sciezka standardowa i `full_sheet/` = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`, `docs/research/2026-10-10-full-sheet-link/raport.md`) |
-| Wycinek NMT/NMPT PL `--target-crs` (ADR-035), API `download_pl_cutout` | 🔧 W trakcie | WCS 1 m z maska ladu PRG i data w nazwie wdrozone na `feat/wcs-cutouts`, NMPT `download_bbox` float32 naprawiony; zweryfikowany na zywo (`docs/research/2026-10-11-wcs-cutouts-live/raport.md`), merge do `develop` oczekuje na zgode. Arkuszowy tor ADR-027 zostaje jako przestarzale API do 0.8.0 |
+| Wycinek NMT/NMPT PL `--target-crs` (ADR-035), API `download_pl_cutout` | ✅ Gotowy | 0.7.2-dev: WCS 1 m z maska ladu PRG, data w nazwie, NMT i NMPT; NMPT `download_bbox` float32; zweryfikowany na zywo (`docs/research/2026-10-11-wcs-cutouts-live/raport.md`), scalony do `develop` 2026-10-11. Arkuszowy tor ADR-027 zostaje jako przestarzale API do 0.8.0 |
 
 | Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | ⏳ Zaplanowany | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3 |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
@@ -151,14 +151,14 @@
 > = arkusz bit w bit; WCS EVRF2007 dziala, wysokosci tylko
 > `image/x-aaigrid`, kawalek ASC 1 Mpx; arkusze 0,5 m maja siatke
 > `k + 0,25`).
-> **(a) ZAIMPLEMENTOWANE na `feat/wcs-cutouts` 2026-10-11** (plan
-> `docs/superpowers/plans/2026-10-11-wcs-cutouts.md`, Task 0-8 + review;
-> ADR-035; weryfikacja na zywo
-> `docs/research/2026-10-11-wcs-cutouts-live/raport.md`). **NASTEPNA
-> SESJA:** merge `--no-ff` `feat/wcs-cutouts` -> `develop` po zgodzie
-> uzytkownika (Task 9 Step 5), usuniecie galezi; potem strojenie kawalkow
-> ASC NMPT (backlog), (e) testy LAZ; zakres wydania 0.7.2 — do decyzji
-> uzytkownika.
+> **(a) wycinki PL z WCS — SCALONE do `develop` 2026-10-11** (merge
+> `--no-ff` `bcf87d1`, brama na wyniku zielona: pytest offline 3263, ruff,
+> mypy; galaz `feat/wcs-cutouts` usunieta; `develop` NIE wypchniety na
+> `origin` — push to osobna decyzja uzytkownika). ADR-035, plan
+> `docs/superpowers/plans/2026-10-11-wcs-cutouts.md`, weryfikacja na zywo
+> `docs/research/2026-10-11-wcs-cutouts-live/raport.md`.
+> **NASTEPNA SESJA:** do decyzji uzytkownika — strojenie kawalkow ASC NMPT
+> (backlog "Do 0.7.2"), (e) testy LAZ, zakres i kroki wydania 0.7.2.
 > **Kroki wydania 0.7.2** (jak 0.7.1, sekcja "Wydanie 0.7.1" nizej): test
 > na zywo z raportem, `__version__ = "0.7.2"` + asercje testow, data i link
 > `compare/v0.7.1...v0.7.2` w CHANGELOG, status w SCOPE i `docs/PRD.md`
@@ -209,7 +209,8 @@
   pasami wierszy (pamiec niezalezna od rozmiaru wycinka), maska pobierana
   dla zakresu wyrownanego do siatki (piksel brzegowy), drobiazgi
   (martwy parametr `_warn_unverified`, docstringi, test ucietej odpowiedzi).
-- `develop` NIE wypchniety na `origin`; merge czeka na zgode uzytkownika.
+- Merge `--no-ff` do `develop` za zgoda uzytkownika (`bcf87d1`), brama na
+  wyniku zielona, galaz usunieta; `develop` NIE wypchniety na `origin`.
 
 ### (a) wycinki PL z WCS — spec, pomiary i plan (2026-10-11)
 
@@ -1818,8 +1819,8 @@ Decyzje z 2026-10-09 (po Task 14); kazda pozycja zaczyna sie od ustalen,
 a implementacja dopiero po specu/planie i zatwierdzeniu.
 
 - [x] **(a) Wycinki PL (`--target-crs`) z WCS zamiast z arkuszy** —
-  WDROZONE na `feat/wcs-cutouts` (ADR-035); weryfikacja na zywo
-  i merge jeszcze przed nami:
+  SCALONE do `develop` 2026-10-11 (ADR-035, merge `bcf87d1`; weryfikacja
+  na zywo `docs/research/2026-10-11-wcs-cutouts-live/raport.md`):
   - EVRF2007: `https://mapy.geoportal.gov.pl/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModel`,
     coverage `DTM_PL-EVRF2007-NH`, `FORMAT=image/x-aaigrid`; odpowiedz to
     multipart/related (ASC + aux.xml + prj, bez linii NODATA);
