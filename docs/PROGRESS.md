@@ -127,15 +127,18 @@
 > toru arkuszowego wycinkow ADR-035, parametry wymagane w API) oraz
 > podprojekt 1 roadmapy (magazyn wersjonowany). Kolejnosc i podzial na
 > galezie — do ustalenia z uzytkownikiem na poczatku sesji.
-> **Magazyn wersjonowany:** spec zaakceptowany i plan 1/3 na galezi
-> `feat/versioned-store` (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`,
-> `docs/superpowers/plans/2026-10-08-versioned-store-1-core-pl-sheets.md`;
-> galaz takze na `origin`, 3 commity docs, 135 commitow za `develop`
-> w dniu 2026-10-11). Spec i plan powstaly PRZED 0.7.1/0.7.2 — przed
-> wznowieniem przejrzec je wzgledem obecnego kodu (kampanie i `full_sheet/`
-> ADR-030/033, wybor roku ADR-032, wycinki z WCS ADR-035, `sha256`
-> w sidecarze z 0.7.1). Implementacja byla WSTRZYMANA decyzja uzytkownika
-> — wznowienie potwierdzic na starcie sesji.
+> **Magazyn wersjonowany (stan 2026-10-11):** wstrzymanie ZDJETE
+> (decyzja uzytkownika 2026-10-11). Galaz `feat/versioned-store`
+> przestawiona (rebase) na `develop` i wypchnieta `--force-with-lease`.
+> Spec po rewizji wzgledem 0.7.1/0.7.2 (decyzje D13-D16:
+> pokrycie przy zapisie wersji, zakres lat przy awarii skorowidza,
+> wycinki `bbox/` bez daty, tor arkuszowy wycinkow usuwany najpierw;
+> ADR magazynu = ADR-036) — CZEKA NA AKCEPTACJE UZYTKOWNIKA
+> (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`).
+> Plan 1/3 oznaczony jako NIEAKTUALNY: po akceptacji specu przepisac go od
+> nowa (nie latac). Kolejnosc (D16): najpierw usuniecie przestarzalego
+> toru arkuszowego wycinkow PL (backlog "Do 0.8.0") na osobnej galezi
+> z `develop`, potem plan 1/3.
 > **Katalog danych testow na zywo:** wskazuje uzytkownik (STANDARDS 6.4);
 > sciezki nie zapisuj w repo (straznik wzorcow commitow ja blokuje) —
 > zapytaj na poczatku sesji, jesli potrzebny.
@@ -1964,6 +1967,8 @@ wchodza w tym samym wydaniu (decyzja uzytkownika). Kazda na wlasnej galezi.
   `on_progress`, `cache` z `download_pl_cutout` oraz
   `snap_to_source_grid` i `assign_crs` z `mosaic_and_crop`.
   Zmigrowac wywolania API przed usunieciem (BREAKING w CHANGELOG).
+  Wykonac PRZED planem 1/3 magazynu wersjonowanego (D16 specu, decyzja
+  uzytkownika 2026-10-11).
 - [ ] **Parametry wymagane w API (Hydrograf A8):** bez wartosci domyslnych
   `output_dir="./data"`, `vertical_crs="EVRF2007"` (`DownloadManager`),
   `MetadataCache` w biezacym katalogu, `depth="0-5cm"`/`stat="mean"`
