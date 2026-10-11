@@ -433,3 +433,42 @@ def test_pixel_center_rule(tmp_path):
     with rasterio.open(tif) as src:
         np.testing.assert_array_equal(src.read(1), [[-9999.0, 0.0, -9999.0]])
         assert src.nodata == -9999.0
+
+
+@pytest.mark.parametrize("strip_px", [6, 12, 4_000_000])
+def test_mask_in_strips_equals_whole(tmp_path, monkeypatch, strip_px):
+    """Row strips (1, 2 rows or the whole raster) give the same mask and counts:
+    land = western half minus a water square in its NW corner."""
+    monkeypatch.setattr(prg, "_MASK_STRIP_PX", strip_px)
+    country = {
+        "type": "Polygon",
+        "coordinates": [[[0, 0], [3, 0], [3, 5], [0, 5], [0, 0]]],
+    }
+    water = {
+        "type": "Polygon",
+        "coordinates": [[[0, 3], [1, 3], [1, 5], [0, 5], [0, 3]]],
+    }
+    values = np.zeros((5, 6), dtype=np.float32)
+    values[:, 1] = 7.0
+    tif = tmp_path / "strips.tif"
+    with rasterio.open(
+        tif,
+        "w",
+        driver="GTiff",
+        width=6,
+        height=5,
+        count=1,
+        dtype="float32",
+        crs="EPSG:2180",
+        transform=from_origin(0, 5, 1, 1),
+    ) as dst:
+        dst.write(values, 1)
+
+    masked, zeros = LandMask((country,), (water,)).apply(tif, -9999.0)
+
+    expected = values.copy()
+    expected[:, 3:] = -9999.0  # east of the country
+    expected[0:2, 0] = -9999.0  # water square (rows 0-1, column 0)
+    with rasterio.open(tif) as src:
+        np.testing.assert_array_equal(src.read(1), expected)
+    assert (masked, zeros) == (17, 8)  # 15 + 2 masked; zeros: columns 0 and 2

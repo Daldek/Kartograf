@@ -123,6 +123,20 @@ def test_lf_only_multipart(tmp_path):
     )
 
 
+def test_truncated_asc_part_raises(tmp_path):
+    """A body cut inside the ASC part (no closing delimiter) is a DownloadError,
+    not a short raster; the partial ASC is not left behind."""
+    body = NMT.read_bytes()
+    src = tmp_path / "cut.mime"
+    src.write_bytes(body[: body.index(b"result.asc.aux.xml") - 200])
+    dst = tmp_path / "part.asc"
+
+    with pytest.raises(DownloadError, match="urwana"):
+        extract_multipart_asc(src, _content_type(NMT), dst)
+
+    assert not dst.exists()
+
+
 @pytest.mark.parametrize("buffer", [1, 3, 7, 64])
 def test_small_buffer_splits_delimiters(tmp_path, monkeypatch, buffer):
     """Delimiters and part headers cut across buffer reads give the same ASC."""

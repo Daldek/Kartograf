@@ -108,12 +108,15 @@ def _meta(path: Path) -> dict:
 
 def test_wcs_cutout_2180_corner_on_sheet_grid(tmp_path):
     session = _recorded_session()
-    with patch(MASK, return_value=ALL_LAND):
+    with patch(MASK, return_value=ALL_LAND) as mask:
         result = run_pl_wcs_cutout(
             _cutout(tmp_path), provider=GugikProvider(session=session), today=DAY
         )
 
     assert [_subset(c.args[0]) for c in session.get.call_args_list] == [WINDOW]
+    # the mask covers the raster actually written (aligned), not the raw request
+    area = mask.call_args.args[0]
+    assert (area.min_x, area.max_x, area.min_y, area.max_y) == WINDOW
     with rasterio.open(result.path) as src:
         assert (src.bounds.left, src.bounds.right) == (WINDOW[0], WINDOW[1])
         assert (src.bounds.bottom, src.bounds.top) == (WINDOW[2], WINDOW[3])
@@ -140,10 +143,13 @@ def test_wcs_cutout_5514_uses_pinned_warp(tmp_path):
             cut, provider=GugikProvider(session=session), today=DAY
         )
 
-    # the WCS area is the source envelope (with the warp margin) on the sheet grid
-    assert mask.call_args.args[0] == cut.bbox_source_2180
-    x0, x1, y0, y1 = _subset(session.get.call_args.args[0])
+    # the WCS area and the mask: the source envelope (warp margin) on the sheet grid
+    area = mask.call_args.args[0]
     src = cut.bbox_source_2180
+    assert all(v % 1 == 0.5 for v in (area.min_x, area.max_x, area.min_y, area.max_y))
+    assert area.min_x <= src.min_x and area.max_x >= src.max_x
+    assert area.min_y <= src.min_y and area.max_y >= src.max_y
+    x0, x1, y0, y1 = _subset(session.get.call_args.args[0])
     assert all(v % 1 == 0.5 for v in (x0, x1, y0, y1))
     assert x0 <= src.min_x and x1 >= src.max_x and y0 <= src.min_y and y1 >= src.max_y
     args, kwargs = warp.call_args
