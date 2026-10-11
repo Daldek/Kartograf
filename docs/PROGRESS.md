@@ -103,25 +103,39 @@
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI (stan 2026-10-11):** wydano **v0.7.2**
-> (2026-10-11): `__version__ = "0.7.2"`, CHANGELOG `## [0.7.2] - 2026-10-11`,
-> merge `develop` -> `main` (`--no-ff`), tag `v0.7.2` (annotowany) na
-> commicie merge. Cykl 0.7.3/0.8.0 NIE jest otwarty (`__version__` bez
-> `-dev`); otwarcie cyklu = `__version__ = "<X.Y.Z>-dev"` + asercje
-> w `test_cli.py` i `test_integration.py` + sekcja `Unreleased` i link
-> `compare/v0.7.2...develop` w CHANGELOG (jak commit `chore(release):
-> poczatek cyklu 0.7.2`). Push `develop`, `main` i tagu `v0.7.2` na
-> `origin` wymaga zgody uzytkownika — stan galezi, tagow i `origin`
-> sprawdzaj w gicie (`git status`, `git log`, `git ls-remote origin`),
-> nie w tym dzienniku.
+> **START NASTEPNEJ SESJI (stan 2026-10-11, koniec sesji):** wydano
+> **v0.7.2** (2026-10-11): `__version__ = "0.7.2"`, CHANGELOG
+> `## [0.7.2] - 2026-10-11`, merge `develop` -> `main` (`--no-ff`), tag
+> `v0.7.2` (annotowany) na commicie merge. `develop`, `main` i tag
+> `v0.7.2` WYPCHNIETE na `origin` 2026-10-11 (zgoda uzytkownika). Stan
+> galezi, tagow i `origin` sprawdzaj w gicie (`git status`, `git log`,
+> `git ls-remote origin`), nie w tym dzienniku.
 > **Zakres 0.7.2:** drobiazgi z review 0.7.1 (P1-P10), (a) wycinki PL
 > z WCS (ADR-035), (b) wybor roku (ADR-032), (c) `full_sheet/` (ADR-033),
 > (d) ciche wartosci domyslne (ADR-034), (e) testy LAZ na faktycznych
 > oknach, strojenie kawalkow ASC NMPT; szczegoly w sesjach nizej
 > i w `docs/CHANGELOG.md` [0.7.2]. Test na zywo przed wydaniem:
 > `docs/research/2026-10-11-test-przed-0.7.2/raport.md` (bez FAIL).
-> **NASTEPNA SESJA:** do decyzji uzytkownika — push na `origin`, kolejny
-> cykl (backlog "Do 0.8.0" nizej; podprojekt 1 roadmapy wstrzymany).
+> **NASTEPNA SESJA: praca nad v0.8.0** (decyzja uzytkownika 2026-10-11;
+> 0.7.3 nie jest planowane). Cykl NIE jest otwarty (`__version__` bez
+> `-dev`): pierwszy krok = `__version__ = "0.8.0-dev"` + asercje
+> w `test_cli.py` i `test_integration.py` + sekcja `## [0.8.0] - Unreleased`
+> i link `compare/v0.7.2...develop` w CHANGELOG (wzor: commit
+> `chore(release): poczatek cyklu 0.7.2`). Zakres 0.8.0: backlog
+> "Do 0.8.0 — zmiany lamiace CLI" nizej (`--product` wymagane, `godlo` ->
+> `sheet` w CLI i API bez aliasow, `--campaigns` -> przelacznik, usuniecie
+> toru arkuszowego wycinkow ADR-035, parametry wymagane w API) oraz
+> podprojekt 1 roadmapy (magazyn wersjonowany). Kolejnosc i podzial na
+> galezie — do ustalenia z uzytkownikiem na poczatku sesji.
+> **Magazyn wersjonowany:** spec zaakceptowany i plan 1/3 na galezi
+> `feat/versioned-store` (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`,
+> `docs/superpowers/plans/2026-10-08-versioned-store-1-core-pl-sheets.md`;
+> galaz takze na `origin`, 3 commity docs, 135 commitow za `develop`
+> w dniu 2026-10-11). Spec i plan powstaly PRZED 0.7.1/0.7.2 — przed
+> wznowieniem przejrzec je wzgledem obecnego kodu (kampanie i `full_sheet/`
+> ADR-030/033, wybor roku ADR-032, wycinki z WCS ADR-035, `sha256`
+> w sidecarze z 0.7.1). Implementacja byla WSTRZYMANA decyzja uzytkownika
+> — wznowienie potwierdzic na starcie sesji.
 > **Katalog danych testow na zywo:** wskazuje uzytkownik (STANDARDS 6.4);
 > sciezki nie zapisuj w repo (straznik wzorcow commitow ja blokuje) —
 > zapytaj na poczatku sesji, jesli potrzebny.
@@ -129,11 +143,7 @@
 > (`~/.config/kartograf/forbidden-patterns.txt`, jak w planach), autor
 > `Daldek <git@debever.pl>`, bez `Co-Authored-By`.
 > **Kierunek do v1.0.0:** roadmapa w `docs/SCOPE.md` 3.3 (zatwierdzona
-> 2026-10-08). Podprojekt 1 (magazyn wersjonowany, docelowo 0.8.0): spec
-> zaakceptowany i plan 1/3 napisany na galezi `feat/versioned-store`
-> (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`,
-> `docs/superpowers/plans/2026-10-08-versioned-store-1-core-pl-sheets.md`);
-> implementacja WSTRZYMANA decyzja uzytkownika.
+> 2026-10-08); podprojekt 1 = magazyn wersjonowany (wyzej).
 > Brama (stan sprawdzaj komendami, nie liczbami z dziennika):
 > `.venv/bin/python -m pytest tests/ -m "not live"` (zielone),
 > `.venv/bin/python -m ruff check .` i `ruff format --check .` (czyste,
@@ -162,8 +172,10 @@
 - Wydanie: `__version__ = "0.7.2"` (asercje w `test_cli.py`
   i `test_integration.py`), commit `chore(release): wydanie 0.7.2` na
   `develop`; merge `develop` -> `main` (`--no-ff`), tag `v0.7.2`
-  (annotowany) na ostatnim commicie merge do `main`. Push na `origin`
-  czeka na zgode uzytkownika.
+  (annotowany) na ostatnim commicie merge do `main`. `develop`, `main`
+  i tag `v0.7.2` wypchniete na `origin` (zgoda uzytkownika).
+- Na koniec sesji: v0.7.3 nie jest planowane; kolejna sesja = v0.8.0
+  (decyzja uzytkownika, blok "START NASTEPNEJ SESJI").
 - Dane testu na zywo: `<katalog-danych>/kartograf/e2e/2026-10-11-test-przed-0.7.2/`
   (skrypty jednorazowe obok danych, poza repo).
 
