@@ -1,0 +1,1171 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<wfs:FeatureCollection
+   xmlns:gugik="http://www.gugik.gov.pl"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   xmlns:wfs="http://www.opengis.net/wfs/2.0"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://www.gugik.gov.pl https://mapy.geoportal.gov.pl/wss/service/PZGIK/DanePomiaroweLidarEVRF2007/WFS/Skorowidze?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;TYPENAME=gugik:SkorowidzDanychPomiarowychLIDAR2023&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B%20version%3D3.2 http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd"
+   timeStamp="2026-10-11T16:27:29" numberMatched="33" numberReturned="33">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>486095.880000 635953.930000</gml:lowerCorner>
+      		<gml:upperCorner>489644.480000 639217.710000</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403293">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>487253.900000 636519.000000</gml:lowerCorner>
+        		<gml:upperCorner>487847.770000 637068.280000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403293.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">487268.650000 637068.280000 487253.900000 636534.990000 487833.020000 636519.000000 487847.770000 637052.230000 487268.650000 637068.280000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-1-3-1</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403293.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403293_N-34-139-A-c-1-1-3-1.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403293.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403103">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>489050.380000 638603.180000</gml:lowerCorner>
+        		<gml:upperCorner>489644.480000 639152.510000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403103.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">489065.360000 639152.510000 489050.380000 638619.420000 489629.500000 638603.180000 489644.480000 639136.210000 489065.360000 639152.510000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-a-3-4-3-3</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403103.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403103_N-34-139-A-a-3-4-3-3.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403103.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403311">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>486734.130000 638668.130000</gml:lowerCorner>
+        		<gml:upperCorner>487328.230000 639217.710000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403311.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">486749.120000 639217.710000 486734.130000 638684.370000 487313.250000 638668.130000 487328.230000 639201.410000 486749.120000 639217.710000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-2-3-3</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403311.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403311_N-34-139-A-c-1-2-3-3.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403311.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1402801">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>487818.330000 635969.860000</gml:lowerCorner>
+        		<gml:upperCorner>488411.930000 636519.000000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1402801.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">487833.020000 636519.000000 487818.330000 635985.780000 488397.230000 635969.860000 488411.930000 636503.020000 487833.020000 636519.000000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-138-B-d-2-2-2-4</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1402801.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1402801_N-34-138-B-d-2-2-2-4.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1402801.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403295">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>486674.780000 636534.990000</gml:lowerCorner>
+        		<gml:upperCorner>487268.650000 637084.330000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403295.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">486689.540000 637084.330000 486674.780000 636550.980000 487253.900000 636534.990000 487268.650000 637068.280000 486689.540000 637084.330000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-1-3-3</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403295.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403295_N-34-139-A-c-1-1-3-3.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403295.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403286">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>488426.670000 637020.130000</gml:lowerCorner>
+        		<gml:upperCorner>489020.600000 637569.340000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403286.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">488441.480000 637569.340000 488426.670000 637036.180000 489005.790000 637020.130000 489020.600000 637553.230000 488441.480000 637569.340000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-1-1-2</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403286.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403286_N-34-139-A-c-1-1-1-2.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403286.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403321">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>486125.440000 637617.670000</gml:lowerCorner>
+        		<gml:upperCorner>486719.210000 638167.190000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403321.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">486140.310000 638167.190000 486125.440000 637633.780000 486704.340000 637617.670000 486719.210000 638151.020000 486140.310000 638167.190000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-3-2-1</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403321.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403321_N-34-139-A-c-1-3-2-1.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403321.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403318">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>486110.630000 637084.330000</gml:lowerCorner>
+        		<gml:upperCorner>486704.340000 637633.780000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403318.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">486125.440000 637633.780000 486110.630000 637100.370000 486689.540000 637084.330000 486704.340000 637617.670000 486125.440000 637633.780000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-3-1-2</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403318.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403318_N-34-139-A-c-1-3-1-2.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403318.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403092">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>489035.460000 638070.140000</gml:lowerCorner>
+        		<gml:upperCorner>489629.500000 638619.420000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403092.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">489050.380000 638619.420000 489035.460000 638086.320000 489614.580000 638070.140000 489629.500000 638603.180000 489050.380000 638619.420000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-a-3-3-4-4</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403092.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403092_N-34-139-A-a-3-3-4-4.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403092.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403322">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>486140.310000 638151.020000</gml:lowerCorner>
+        		<gml:upperCorner>486734.130000 638700.590000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403322.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">486155.230000 638700.590000 486140.310000 638167.190000 486719.210000 638151.020000 486734.130000 638684.370000 486155.230000 638700.590000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-3-2-2</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403322.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403322_N-34-139-A-c-1-3-2-2.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403322.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403301">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>488471.270000 638619.420000</gml:lowerCorner>
+        		<gml:upperCorner>489065.360000 639168.820000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403301.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">488486.250000 639168.820000 488471.270000 638635.660000 489050.380000 638619.420000 489065.360000 639152.510000 488486.250000 639168.820000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-2-1-1</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403301.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403301_N-34-139-A-c-1-2-1-1.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403301.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1402807">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>487239.210000 635985.780000</gml:lowerCorner>
+        		<gml:upperCorner>487833.020000 636534.990000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1402807.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">487253.900000 636534.990000 487239.210000 636001.700000 487818.330000 635985.780000 487833.020000 636519.000000 487253.900000 636534.990000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-138-B-d-2-2-4-2</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1402807.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1402807_N-34-138-B-d-2-2-4-2.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1402807.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403288">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>487847.770000 637036.180000</gml:lowerCorner>
+        		<gml:upperCorner>488441.480000 637585.450000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403288.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">487862.580000 637585.450000 487847.770000 637052.230000 488426.670000 637036.180000 488441.480000 637569.340000 487862.580000 637585.450000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-1-1-4</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403288.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403288_N-34-139-A-c-1-1-1-4.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403288.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403297">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>487283.460000 637585.450000</gml:lowerCorner>
+        		<gml:upperCorner>487877.440000 638134.850000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403297.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">487298.330000 638134.850000 487283.460000 637601.560000 487862.580000 637585.450000 487877.440000 638118.670000 487298.330000 638134.850000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-1-4-1</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403297.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403297_N-34-139-A-c-1-1-4-1.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403297.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403088">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>489005.790000 637004.080000</gml:lowerCorner>
+        		<gml:upperCorner>489599.720000 637553.230000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403088.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">489020.600000 637553.230000 489005.790000 637020.130000 489584.910000 637004.080000 489599.720000 637537.110000 489020.600000 637553.230000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-a-3-3-3-4</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403088.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403088_N-34-139-A-a-3-3-3-4.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403088.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403290">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>488456.350000 638086.320000</gml:lowerCorner>
+        		<gml:upperCorner>489050.380000 638635.660000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403290.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">488471.270000 638635.660000 488456.350000 638102.500000 489035.460000 638086.320000 489050.380000 638619.420000 488471.270000 638635.660000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-1-2-2</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403290.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403290_N-34-139-A-c-1-1-2-2.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403290.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403309">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>487313.250000 638651.890000</gml:lowerCorner>
+        		<gml:upperCorner>487907.340000 639201.410000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403309.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">487328.230000 639201.410000 487313.250000 638668.130000 487892.360000 638651.890000 487907.340000 639185.110000 487328.230000 639201.410000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-2-3-1</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403309.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403309_N-34-139-A-c-1-2-3-1.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403309.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403087">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>488991.040000 636471.040000</gml:lowerCorner>
+        		<gml:upperCorner>489584.910000 637020.130000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403087.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">489005.790000 637020.130000 488991.040000 636487.030000 489570.160000 636471.040000 489584.910000 637004.080000 489005.790000 637020.130000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-a-3-3-3-3</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403087.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403087_N-34-139-A-a-3-3-3-3.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403087.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403303">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>487892.360000 638635.660000</gml:lowerCorner>
+        		<gml:upperCorner>488486.250000 639185.110000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403303.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">487907.340000 639185.110000 487892.360000 638651.890000 488471.270000 638635.660000 488486.250000 639168.820000 487907.340000 639185.110000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-2-1-3</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403303.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403303_N-34-139-A-c-1-2-1-3.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403303.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1402809">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>486660.090000 636001.700000</gml:lowerCorner>
+        		<gml:upperCorner>487253.900000 636550.980000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1402809.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">486674.780000 636550.980000 486660.090000 636017.630000 487239.210000 636001.700000 487253.900000 636534.990000 486674.780000 636550.980000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-138-B-d-2-2-4-4</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1402809.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1402809_N-34-138-B-d-2-2-4-4.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1402809.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403285">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>488411.930000 636487.030000</gml:lowerCorner>
+        		<gml:upperCorner>489005.790000 637036.180000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403285.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">488426.670000 637036.180000 488411.930000 636503.020000 488991.040000 636487.030000 489005.790000 637020.130000 488426.670000 637036.180000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-1-1-1</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403285.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403285_N-34-139-A-c-1-1-1-1.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403285.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403300">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>486719.210000 638134.850000</gml:lowerCorner>
+        		<gml:upperCorner>487313.250000 638684.370000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403300.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">486734.130000 638684.370000 486719.210000 638151.020000 487298.330000 638134.850000 487313.250000 638668.130000 486734.130000 638684.370000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-1-4-4</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403300.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403300_N-34-139-A-c-1-1-4-4.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403300.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403294">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>487268.650000 637052.230000</gml:lowerCorner>
+        		<gml:upperCorner>487862.580000 637601.560000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403294.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">487283.460000 637601.560000 487268.650000 637068.280000 487847.770000 637052.230000 487862.580000 637585.450000 487283.460000 637601.560000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-1-3-2</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403294.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403294_N-34-139-A-c-1-1-3-2.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403294.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403299">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>486704.340000 637601.560000</gml:lowerCorner>
+        		<gml:upperCorner>487298.330000 638151.020000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403299.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">486719.210000 638151.020000 486704.340000 637617.670000 487283.460000 637601.560000 487298.330000 638134.850000 486719.210000 638151.020000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-1-4-3</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403299.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403299_N-34-139-A-c-1-1-4-3.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403299.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403091">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>489020.600000 637537.110000</gml:lowerCorner>
+        		<gml:upperCorner>489614.580000 638086.320000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403091.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">489035.460000 638086.320000 489020.600000 637553.230000 489599.720000 637537.110000 489614.580000 638070.140000 489035.460000 638086.320000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-a-3-3-4-3</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403091.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403091_N-34-139-A-a-3-3-4-3.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403091.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403292">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>487877.440000 638102.500000</gml:lowerCorner>
+        		<gml:upperCorner>488471.270000 638651.890000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403292.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">487892.360000 638651.890000 487877.440000 638118.670000 488456.350000 638102.500000 488471.270000 638635.660000 487892.360000 638651.890000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-1-2-4</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403292.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403292_N-34-139-A-c-1-1-2-4.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403292.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403291">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>487862.580000 637569.340000</gml:lowerCorner>
+        		<gml:upperCorner>488456.350000 638118.670000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403291.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">487877.440000 638118.670000 487862.580000 637585.450000 488441.480000 637569.340000 488456.350000 638102.500000 487877.440000 638118.670000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-1-2-3</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403291.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403291_N-34-139-A-c-1-1-2-3.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403291.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403296">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>486689.540000 637068.280000</gml:lowerCorner>
+        		<gml:upperCorner>487283.460000 637617.670000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403296.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">486704.340000 637617.670000 486689.540000 637084.330000 487268.650000 637068.280000 487283.460000 637601.560000 486704.340000 637617.670000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-1-3-4</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403296.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403296_N-34-139-A-c-1-1-3-4.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403296.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403289">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>488441.480000 637553.230000</gml:lowerCorner>
+        		<gml:upperCorner>489035.460000 638102.500000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403289.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">488456.350000 638102.500000 488441.480000 637569.340000 489020.600000 637553.230000 489035.460000 638086.320000 488456.350000 638102.500000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-1-2-1</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403289.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403289_N-34-139-A-c-1-1-2-1.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403289.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403317">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>486095.880000 636550.980000</gml:lowerCorner>
+        		<gml:upperCorner>486689.540000 637100.370000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403317.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">486110.630000 637100.370000 486095.880000 636566.960000 486674.780000 636550.980000 486689.540000 637084.330000 486110.630000 637100.370000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-3-1-1</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403317.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403317_N-34-139-A-c-1-3-1-1.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403317.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403287">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>487833.020000 636503.020000</gml:lowerCorner>
+        		<gml:upperCorner>488426.670000 637052.230000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403287.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">487847.770000 637052.230000 487833.020000 636519.000000 488411.930000 636503.020000 488426.670000 637036.180000 487847.770000 637052.230000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-1-1-3</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403287.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403287_N-34-139-A-c-1-1-1-3.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403287.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403298">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>487298.330000 638118.670000</gml:lowerCorner>
+        		<gml:upperCorner>487892.360000 638668.130000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403298.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">487313.250000 638668.130000 487298.330000 638134.850000 487877.440000 638118.670000 487892.360000 638651.890000 487313.250000 638668.130000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-139-A-c-1-1-4-2</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403298.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1403298_N-34-139-A-c-1-1-4-2.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1403298.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzDanychPomiarowychLIDAR2023 gml:id="SkorowidzDanychPomiarowychLIDAR2023.1402799">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>488397.230000 635953.930000</gml:lowerCorner>
+        		<gml:upperCorner>488991.040000 636503.020000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzDanychPomiarowychLIDAR2023.1402799.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">488411.930000 636503.020000 488397.230000 635969.860000 488976.350000 635953.930000 488991.040000 636487.030000 488411.930000 636503.020000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>N-34-138-B-d-2-2-2-2</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>chmura punktow</gugik:asortyment>
+        <gugik:format>LAZ</gugik:format>
+        <gugik:char_przestrz>12 p/m2</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.10</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:1250</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6201.22.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzDanychPomiarowychLIDAR2023.1402799.akt_data"><gml:timePosition>2023-09-05</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/78044/78044_1402799_N-34-138-B-d-2-2-2-2.laz</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzDanychPomiarowychLIDAR2023.1402799.dt_pzgik"><gml:timePosition>2023-12-07</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.25</gugik:blad_sr_syt>
+      </gugik:SkorowidzDanychPomiarowychLIDAR2023>
+    </wfs:member>
+</wfs:FeatureCollection>
+
