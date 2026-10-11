@@ -87,6 +87,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `landcover download`, `soilgrids hsg`): jeden `Info:` na stderr (takze
   z `-q`) z nazwa uzytej pierwszej warstwy, lista pozostalych i podpowiedzia
   `--layer`. Wybor warstwy bez zmian.
+- `--country auto` dla obszaru PL+CZ bez `--vertical-crs`: jeden `Info:` przed
+  pobraniem, ze czesc PL jest w EVRF2007, a czesc CZ w Bpv (roznica ok.
+  0,11-0,15 m), z podpowiedzia `--vertical-crs EVRF2007` (jeden uklad dla
+  obu). Uklady domyslne bez zmian. Obwiednie krajow sa prostokatne, wiec
+  komunikat pojawia sie tez dla zadan, w ktorych czesc CZ okaze sie pusta.
 
 ### Zmienione
 
