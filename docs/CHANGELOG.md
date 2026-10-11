@@ -206,8 +206,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   poszerzany o najwyzej 1 px na wschod/poludnie i przycinany po zszyciu
   (przy nieparzystym rozmiarze serwer bierze srodkowy wiersz i kolumne
   z sasiedniego piksela zrodla, gdy przeprobkowuje — NMPT `SCALEFACTOR`,
-  NMT 1 m nad lotem 0,5 m; pomiar na zywo 2026-10-11). Co zrobic: nic;
-  duze obszary EVRF2007/NMPT trwaja odpowiednio dluzej niz KRON86.
+  NMT 1 m nad lotem 0,5 m; pomiar na zywo 2026-10-11). Kawalek
+  `image/x-aaigrid` czeka na pierwszy bajt co najmniej 120 s
+  (`WCS_ASC_READ_TIMEOUT`; `timeout` wolajacego, gdy wiekszy): serwer nie
+  wysyla nic przed policzeniem calego kawalka (NMPT: 19-106 s na zywo).
+  Co zrobic: nic; duze obszary EVRF2007/NMPT trwaja odpowiednio dluzej
+  niz KRON86.
 - Biblioteka: funkcje geometrii (`get_overall_bbox`, `read_feature_bboxes`,
   `find_sheets_for_geometry`, `read_source_crs`) przy GPKG z wieloma
   warstwami bez `layer=` loguja wybor pierwszej warstwy jako `WARNING`
