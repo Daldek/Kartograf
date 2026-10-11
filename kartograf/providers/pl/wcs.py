@@ -78,6 +78,13 @@ class GugikWcsMixin:
         max_width=40_000, max_height=40_000, max_pixels=1_000_000
     )
 
+    # image/x-aaigrid sends no byte before the whole chunk is computed. Live
+    # 2026-10-11 the first byte of NMPT (SCALEFACTOR, 1 Mpx of coverage) came after
+    # 19-106 s and NMT 1 Mpx went past 30 s under load, while hangs without a byte
+    # last 600-1200 s - an ASC chunk waits at least this long (s) for data, which
+    # still cuts a hang (report docs/research/2026-10-11-wcs-cutouts-live).
+    WCS_ASC_READ_TIMEOUT = 120
+
     # Provided by the concrete providers.
     _sessions: SessionPerThread
     MAX_RETRIES: int
@@ -207,7 +214,7 @@ class GugikWcsMixin:
                 session,
                 self._construct_wcs_url(chunk.bbox, request_format, scale),
                 path,
-                timeout=timeout,
+                timeout=max(timeout, self.WCS_ASC_READ_TIMEOUT) if asc else timeout,
                 retries=self.MAX_RETRIES,
                 validate=validate,
                 save=save_multipart_asc(chunk) if asc else None,

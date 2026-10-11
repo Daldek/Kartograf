@@ -386,6 +386,7 @@ class TestGugikProviderDownloadBbox:
         query = parse_qs(urlparse(session.get.call_args[0][0]).query)
         assert query["COVERAGEID"] == ["DTM_PL-KRON86-NH_TIFF"]
         assert query["FORMAT"] == ["image/tiff"]
+        assert session.get.call_args.kwargs["timeout"] == 30  # GeoTIFF streams early
 
     def test_download_bbox_png_format(self, tmp_path, mock_wcs_response, sample_bbox):
         """Test of bbox download in the PNG format."""
@@ -531,6 +532,8 @@ class TestGugikProviderDownloadBbox:
         assert query["FORMAT"] == ["image/x-aaigrid"]
         assert "SCALEFACTOR" not in query
         assert _subset(url) == (567580.5, 567600.5, 243664.5, 243684.5)
+        # ASC: no byte before the whole chunk is computed - a longer read timeout
+        assert session.get.call_args.kwargs["timeout"] == 120
         with rasterio.open(output_path) as src:
             assert (src.count, src.dtypes, src.crs.to_epsg()) == (1, ("float32",), 2180)
             assert (src.bounds.left, src.bounds.top) == (567580.5, 243684.5)
