@@ -9,12 +9,11 @@ from unittest.mock import patch
 import numpy as np
 import pytest
 import rasterio
-from pyproj import CRS
 from rasterio.merge import merge as rasterio_merge
 from rasterio.transform import from_origin
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import GridMismatchError, ValidationError
+from kartograf.exceptions import ValidationError
 from kartograf.transport.mosaic import check_source_grid, mosaic_and_crop
 
 
@@ -217,77 +216,13 @@ def test_many_inputs_do_not_exhaust_file_descriptors(tmp_path):
     assert data[0, 2 * n - 1] == float(n - 1)
 
 
-@pytest.mark.parametrize(
-    "bbox",
-    [
-        BBox(3.37, 92.13, 17.61, 97.9, "EPSG:2180"),
-        BBox(3.0, 92.0, 17.0, 98.0, "EPSG:2180"),  # integer = a 0.5 px tie
-    ],
-    ids=["ulamkowy", "calkowity"],
-)
-def test_snap_copies_source_pixels_exactly(tmp_path, bbox):
-    """Finding 1: result pixels = source pixels (no shift and no column
-    mixing on a tie); extent = request + < 1 px per side."""
-    a = _write_lattice_tile(tmp_path / "a.tif", 0, 0, 12, 10)
-    b = _write_lattice_tile(tmp_path / "b.tif", 10, 0, 12, 10)  # 2 px overlap
-    out = mosaic_and_crop(
-        [a, b], bbox, tmp_path / "out.tif", nodata=-9999.0, snap_to_source_grid=True
-    )
-    with rasterio.open(out) as src:
-        t, data = src.transform, src.read(1)
-        left, bottom, right, top = src.bounds
-
-    col0, row0 = t.c - 0.5, 100.5 - t.f
-    assert col0 == pytest.approx(round(col0), abs=1e-9)
-    assert row0 == pytest.approx(round(row0), abs=1e-9)
-    assert left <= bbox.min_x < left + 1.0 and right - 1.0 < bbox.max_x <= right
-    assert bottom <= bbox.min_y < bottom + 1.0 and top - 1.0 < bbox.max_y <= top
-    r, c = np.meshgrid(
-        np.arange(data.shape[0]) + round(row0),
-        np.arange(data.shape[1]) + round(col0),
-        indexing="ij",
-    )
-    np.testing.assert_array_equal(data, (1000.0 * r + c).astype("float32"))
-
-
-def test_snap_rejects_off_grid_source(tmp_path):
-    """S5 (D3): a source off the majority grid = GridMismatchError with a list
-    of offsets, not a warning - ``merge`` would copy it "through a window" (not
-    always from the nearest pixel, a nodata column at the seam); the reference
-    grid is the majority, not 'first in the list'. No result file."""
-    odd = _write_lattice_tile(tmp_path / "odd.tif", 20, 0, 4, 10, x0=0.75)
-    a = _write_lattice_tile(tmp_path / "a.tif", 0, 0, 12, 10)
-    b = _write_lattice_tile(tmp_path / "b.tif", 10, 0, 12, 10)
-    expected = r"1 z 3 zrodel .*0\.250 px.*odd\.tif"
-    with pytest.raises(GridMismatchError, match=expected) as e:
-        mosaic_and_crop(
-            [odd, a, b],
-            BBox(3.37, 92.13, 17.61, 97.9, "EPSG:2180"),
-            tmp_path / "o.tif",
-            snap_to_source_grid=True,
-        )
-    assert isinstance(e.value, ValidationError)
-    (source,) = e.value.off_grid
-    assert source.path == odd
-    assert (source.dx_px, source.dy_px) == pytest.approx((0.25, 0.0))
-    assert not (tmp_path / "o.tif").exists()
-
-
-def test_snap_tolerates_float_noise(tmp_path):
+def test_check_source_grid_tolerates_float_noise(tmp_path):
     """Two tiles differing by 1e-9 px are ONE grid: the phase comparison is
     tolerance-based, not bucket equality (noise on both sides of a bucket
     boundary must not give a false hard error)."""
     a = _write_lattice_tile(tmp_path / "a.tif", 0, 0, 12, 10, x0=0.0)
     b = _write_lattice_tile(tmp_path / "b.tif", 10, 0, 12, 10, x0=1e-9)
     assert check_source_grid([a, b]).off_grid == ()
-    out = mosaic_and_crop(
-        [a, b],
-        BBox(3.37, 92.13, 17.61, 97.9, "EPSG:2180"),
-        tmp_path / "o.tif",
-        snap_to_source_grid=True,
-    )
-    with rasterio.open(out) as src:
-        assert src.transform.c == pytest.approx(3.0, abs=1e-9)
 
 
 def test_check_source_grid_wraps_phase_through_one(tmp_path):
@@ -323,23 +258,7 @@ def test_check_source_grid_rejects_mixed_resolution(tmp_path):
         check_source_grid([a, b])
 
 
-def test_snap_keeps_bbox_already_on_grid(tmp_path):
-    """3 * 0.1 == 0.30000000000000004: the quotient 3.0000000000000004 must
-    not add a fourth column (floating-point error tolerance)."""
-    a = _write_lattice_tile(
-        tmp_path / "a.tif", 0, 0, 10, 10, x0=0.0, y_top=1.0, res=0.1
-    )
-    out = mosaic_and_crop(
-        [a],
-        BBox(0.0, 0.5, 3 * 0.1, 1.0, "EPSG:2180"),
-        tmp_path / "o.tif",
-        snap_to_source_grid=True,
-    )
-    with rasterio.open(out) as src:
-        assert (src.width, src.height) == (3, 5)
-
-
-def test_snap_rejects_rotated_source(tmp_path):
+def test_check_source_grid_rejects_rotated_source(tmp_path):
     from affine import Affine
 
     path = tmp_path / "rot.tif"
@@ -356,12 +275,7 @@ def test_snap_rejects_rotated_source(tmp_path):
     ) as dst:
         dst.write(np.ones((4, 4), dtype="float32"), 1)
     with pytest.raises(ValidationError, match="obrocona"):
-        mosaic_and_crop(
-            [path],
-            BBox(0, 0, 4, 4, "EPSG:2180"),
-            tmp_path / "o.tif",
-            snap_to_source_grid=True,
-        )
+        check_source_grid([path])
 
 
 def _write_asc_text(path, xll, yll, rows, *, cellsize=1.0, nodata_header="-9999"):
@@ -372,65 +286,6 @@ def _write_asc_text(path, xll, yll, rows, *, cellsize=1.0, nodata_header="-9999"
     )
     path.write_text(header + "\n".join(" ".join(r) for r in rows) + "\n")
     return path
-
-
-def _write_prj(asc_path, wkt_text):
-    asc_path.with_suffix(".prj").write_text(wkt_text)
-
-
-_HYDROGRAF_2180_WKT = (  # .prj from the Hydrograf cache (gdalsrsinfo -o wkt_simple)
-    'PROJCS["ETRF2000-PL / CS92",GEOGCS["ETRF2000-PL",DATUM["ETRF2000_Poland",'
-    'SPHEROID["GRS 1980",6378137,298.257222101]],PRIMEM["Greenwich",0],'
-    'UNIT["degree",0.0174532925199433]],PROJECTION["Transverse_Mercator"],'
-    'PARAMETER["latitude_of_origin",0],PARAMETER["central_meridian",19],'
-    'PARAMETER["scale_factor",0.9993],PARAMETER["false_easting",500000],'
-    'PARAMETER["false_northing",-5300000],UNIT["metre",1]]'
-)
-
-# P-01: each of these three WKT1 strings describes EPSG:2180, but CRS.equals(...,
-# ignore_axis_order=True) alone returns False for all of them (pyproj 3.7.2 /
-# PROJ 9.5.1, measured 2026-09-28) - hence _same_projection in Step 3.
-_2180_WKT_VARIANTS = [
-    CRS.from_epsg(2180).to_wkt("WKT1_GDAL"),
-    CRS.from_epsg(2180).to_wkt("WKT1_ESRI"),
-    _HYDROGRAF_2180_WKT,
-]
-
-
-@pytest.mark.parametrize(
-    "prj_text", _2180_WKT_VARIANTS, ids=["wkt1_gdal", "wkt1_esri", "hydrograf"]
-)
-def test_assign_crs_merges_sources_with_and_without_prj(tmp_path, prj_text):
-    """Fact 6: Hydrograf adds .prj to some sheets; merge raised
-    'CRS mismatch'. With assign_crs the sources get an explicit SRS via VRT.
-    All three WKT1 variants of EPSG:2180 (pyproj GDAL/ESRI, Hydrograf .prj)
-    must be recognised as the "same" CRS (P-01)."""
-    a = _write_asc_text(tmp_path / "a.asc", 0.5, 0.5, [["1.5"] * 4] * 4)
-    b = _write_asc_text(tmp_path / "b.asc", 4.5, 0.5, [["2.5"] * 4] * 4)
-    _write_prj(a, prj_text)
-    with rasterio.open(a) as sa, rasterio.open(b) as sb:
-        assert sa.crs is not None and sb.crs is None  # test sanity check
-    bbox = BBox(0.5, 0.5, 8.5, 4.5, "EPSG:2180")
-    with pytest.raises(ValidationError, match="niezgodne CRS"):
-        mosaic_and_crop([a, b], bbox, tmp_path / "x.tif")
-    out = mosaic_and_crop([a, b], bbox, tmp_path / "o.tif", assign_crs="EPSG:2180")
-    with rasterio.open(out) as src:
-        data = src.read(1)
-        assert src.crs.to_epsg() == 2180
-        assert src.driver == "GTiff"  # the profile from the first source is the VRT
-    assert data[0, 0] == 1.5 and data[0, -1] == 2.5
-
-
-def test_assign_crs_rejects_source_with_other_crs(tmp_path):
-    a = _write_asc_text(tmp_path / "a.asc", 0.5, 0.5, [["1.5"] * 4] * 4)
-    _write_prj(a, CRS.from_epsg(2177).to_wkt("WKT1_GDAL"))
-    with pytest.raises(ValidationError, match="wymuszany"):
-        mosaic_and_crop(
-            [a],
-            BBox(0.5, 0.5, 4.5, 4.5, "EPSG:2180"),
-            tmp_path / "o.tif",
-            assign_crs="EPSG:2180",
-        )
 
 
 def test_dtype_float32_keeps_decimals_when_first_source_is_integer(tmp_path):
@@ -445,7 +300,6 @@ def test_dtype_float32_keeps_decimals_when_first_source_is_integer(tmp_path):
         [a, b],
         BBox(0.5, 0.5, 8.5, 4.5, "EPSG:2180"),
         tmp_path / "o.tif",
-        assign_crs="EPSG:2180",
         dtype="float32",
     )
     with rasterio.open(out) as src:
@@ -461,9 +315,7 @@ def test_mixed_source_dtypes_without_dtype_raises(tmp_path):
     b = _write_asc_text(tmp_path / "b.asc", 4.5, 0.5, [["100.25"] * 4] * 4)
     out = tmp_path / "o.tif"
     with pytest.raises(ValidationError, match="dtype=") as exc:
-        mosaic_and_crop(
-            [a, b], BBox(0.5, 0.5, 8.5, 4.5, "EPSG:2180"), out, assign_crs="EPSG:2180"
-        )
+        mosaic_and_crop([a, b], BBox(0.5, 0.5, 8.5, 4.5, "EPSG:2180"), out)
     assert "float32" in str(exc.value) and "int32" in str(exc.value)
     assert not out.exists()
 
@@ -492,7 +344,6 @@ def test_vrt_wrapping_does_not_exhaust_file_descriptors(tmp_path):
             paths,
             BBox(0, 0, 2 * n, 2, "EPSG:2180"),
             tmp_path / "out.tif",
-            assign_crs="EPSG:2180",
             dtype="float32",
         )
     finally:
@@ -523,13 +374,9 @@ def test_wrapping_rejects_multiband_source(tmp_path):
         )
 
 
-@pytest.mark.parametrize(
-    ("source_dtype", "dtype"),
-    [("float32", "float16"), ("int8", None)],
-    ids=["zadany_typ", "typ_zrodla"],
-)
-def test_wrapping_rejects_type_without_vrt_name(tmp_path, source_dtype, dtype):
+def test_wrapping_rejects_type_without_vrt_name(tmp_path):
     """A type outside the VRT type map: ValidationError, not KeyError."""
+    source_dtype, dtype = "float32", "float16"
     path = tmp_path / "t.tif"
     with rasterio.open(
         path,
@@ -550,7 +397,6 @@ def test_wrapping_rejects_type_without_vrt_name(tmp_path, source_dtype, dtype):
             [path],
             BBox(0, 0, 4, 4, "EPSG:2180"),
             tmp_path / "o.tif",
-            assign_crs="EPSG:2180",
             dtype=dtype,
         )
 
@@ -595,7 +441,6 @@ def test_wrapping_writes_short_wide_first_source(tmp_path, cols, rows):
         BBox(0.5, 0.5, cols + 0.5, rows + 0.5, "EPSG:2180"),
         tmp_path / "o.tif",
         nodata=-9999.0,
-        assign_crs="EPSG:2180",
         dtype="float32",
     )
     with rasterio.open(out) as src:
@@ -611,7 +456,6 @@ def test_wrapping_keeps_explicit_tiling_from_dst_kwds(tmp_path):
         BBox(0.5, 0.5, 200.5, 100.5, "EPSG:2180"),
         tmp_path / "o.tif",
         dst_kwds={"tiled": True, "blockxsize": 512, "blockysize": 512},
-        assign_crs="EPSG:2180",
         dtype="float32",
     )
     with rasterio.open(out) as src:

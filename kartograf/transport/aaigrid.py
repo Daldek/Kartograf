@@ -216,9 +216,9 @@ def asc_to_gtiff(
     ``ncols``/``nrows``, ``cellsize`` and ``xllcorner``/``yllcorner`` must match
     ``expect`` (within ``_GRID_TOL_PX`` of a pixel) - otherwise ``DownloadError``
     and no ``tif``. The CRS is ``crs`` (a ``.prj`` of the response is ESRI WKT
-    and is ignored, like ``assign_crs`` of sheets); no nodata is declared (the
-    service declares none). The raster is read whole - callers bound its size
-    by chunk limits. Written atomically (temporary file + ``os.replace``).
+    and is ignored); no nodata is declared (the service declares none).
+    The raster is read whole - callers bound its size by chunk limits.
+    Written atomically (temporary file + ``os.replace``).
     """
     asc, tif = Path(asc), Path(tif)
     tmp = tif.with_name(f"{tif.name}.{os.getpid()}_{threading.get_ident()}.tmp")
