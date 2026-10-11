@@ -1,7 +1,7 @@
 # Ciche wartosci domyslne (d): `Info:` d1/d2 i wspolny mechanizm zapytan obszarowych d3 — Implementation Plan
 
-**Status:** projekt 2026-10-10; do wykonania po decyzji uzytkownika
-(implementacja NIE rozpoczeta).
+**Status:** WYKONANY 2026-10-10 (Task 0-7 bez merge; odstepstwa: `docs/PROGRESS.md`,
+sesja "(d) ciche wartosci domyslne — implementacja"); checkboxy nieodhaczane.
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
