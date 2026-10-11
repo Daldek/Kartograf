@@ -56,6 +56,16 @@ def _write_sheet_asc(path, west, south, size=100, pixel=1.0, apex=None, fill=100
     return path
 
 
+def _sheet_cutout(bbox, *, output_dir, force=False, vertical_crs="EVRF2007"):
+    """Sheet-API cutout (deprecated path): prepare -> select -> run_pl_cutout."""
+    from kartograf.download.cutout import run_pl_cutout, select_pl_cutout_sheets
+
+    cut = prepare_pl_cutout(
+        bbox, "EPSG:2180", output_dir=output_dir, vertical_crs=vertical_crs
+    )
+    return run_pl_cutout(cut, select_pl_cutout_sheets(cut), force=force)
+
+
 def _pinned_2180_to(target_crs):
     return build_pinned_transform(
         "EPSG:2180",
@@ -1627,9 +1637,7 @@ class TestLibraryApi:
         provider.download = download
         return provider
 
-    def test_download_pl_cutout_end_to_end_skip_and_force(self, tmp_path):
-        from kartograf import download_pl_cutout
-
+    def test_sheet_cutout_end_to_end_skip_and_force(self, tmp_path):
         provider = self._provider()
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         with (
@@ -1639,11 +1647,9 @@ class TestLibraryApi:
                 return_value=list(self._SHEETS),
             ),
         ):
-            first = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
-            second = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
-            third = download_pl_cutout(
-                bbox, "EPSG:2180", output_dir=tmp_path, force=True
-            )
+            first = _sheet_cutout(bbox, output_dir=tmp_path)
+            second = _sheet_cutout(bbox, output_dir=tmp_path)
+            third = _sheet_cutout(bbox, output_dir=tmp_path, force=True)
 
         assert first.path.exists() and not first.skipped
         assert first.path.with_name(first.path.name + ".meta.json").exists()
@@ -1658,8 +1664,6 @@ class TestLibraryApi:
         never-built cutout must not cost re-downloading sheets that already
         lie in their segment.
         """
-        from kartograf import download_pl_cutout
-
         provider = self._provider()
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         with (
@@ -1669,9 +1673,9 @@ class TestLibraryApi:
                 return_value=list(self._SHEETS),
             ),
         ):
-            first = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
+            first = _sheet_cutout(bbox, output_dir=tmp_path)
             first.path.unlink()  # the cutout disappears, the sheets stay in the segment
-            rebuilt = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
+            rebuilt = _sheet_cutout(bbox, output_dir=tmp_path)
 
         assert sorted(provider.calls) == sorted(self._SHEETS)  # the 1st run only
         assert not rebuilt.skipped and rebuilt.path == first.path
@@ -1682,8 +1686,6 @@ class TestLibraryApi:
         """D18: ``run_pl_cutout`` without ``storage=`` puts sheets in the
         provider's vertical segment (KRON86) - the same segment as the CLI sheet
         list."""
-        from kartograf import download_pl_cutout
-
         provider = self._provider()
         provider.vertical_crs = "KRON86"
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
@@ -1694,61 +1696,16 @@ class TestLibraryApi:
                 return_value=list(self._SHEETS),
             ),
         ):
-            result = download_pl_cutout(
-                bbox, "EPSG:2180", output_dir=tmp_path, vertical_crs="KRON86"
-            )
+            result = _sheet_cutout(bbox, output_dir=tmp_path, vertical_crs="KRON86")
 
         segments = {p.relative_to(tmp_path).parts[:2] for p in result.sheet_paths}
         assert segments == {("nmt", "pl_1992_1m_kron86")}
 
-    def test_5m_kron86_rejected_before_factory(self, tmp_path):
-        """0.7.1: 5m exists only in EVRF2007 - ``ValidationError`` with the
-        remedy BEFORE the provider factory, the network and the directories
-        (earlier the factory swapped the datum with a log warning)."""
-        from kartograf import download_pl_cutout
-        from kartograf.exceptions import ValidationError
-
-        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
-        with (
-            patch("kartograf.providers.pl.create_nmt_provider") as factory,
-            pytest.raises(ValidationError, match="uzyj vertical_crs='EVRF2007'"),
-        ):
-            download_pl_cutout(
-                bbox,
-                "EPSG:2180",
-                output_dir=tmp_path,
-                resolution="5m",
-                vertical_crs="KRON86",
-            )
-
-        factory.assert_not_called()
-        assert not (tmp_path / "nmt").exists()
-
-    def test_cache_is_handed_to_the_factory(self, tmp_path):
-        """N6: ``download_pl_cutout(cache=)`` -> a provider with the record cache;
-        without the kwarg the factory gets ``cache=None`` (CLI: ``--force``)."""
-        from kartograf import download_pl_cutout
-
-        provider = self._provider()
-        cache = object()
-        bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
-        with (
-            patch(
-                "kartograf.providers.pl.create_nmt_provider", return_value=provider
-            ) as factory,
-            patch(
-                "kartograf.download.cutout.find_sheets_for_bbox",
-                return_value=list(self._SHEETS),
-            ),
-        ):
-            download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path, cache=cache)
-        assert factory.call_args.kwargs["cache"] is cache
-
-    def test_skipped_download_reads_sheet_lists_from_sidecar(self, tmp_path):
+    def test_skipped_run_reads_sheet_lists_from_sidecar(self, tmp_path):
         """N4: an existing cutout (``force=False``) returns ``missing_sheets``
         and ``off_grid_sheets`` from its OWN sidecar, not empty tuples - with
-        no network and no sheet selection."""
-        from kartograf import download_pl_cutout
+        no network."""
+        from kartograf.download.cutout import PlCutoutSheets, run_pl_cutout
 
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         cut = prepare_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
@@ -1765,17 +1722,15 @@ class TestLibraryApi:
             )
         )
         provider = self._provider()
-        with (
-            patch("kartograf.providers.pl.create_nmt_provider", return_value=provider),
-            patch("kartograf.download.cutout.find_sheets_for_bbox") as find,
-        ):
-            result = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
+        result = run_pl_cutout(
+            cut, PlCutoutSheets(godla=tuple(self._SHEETS)), provider=provider
+        )
 
         assert result.skipped and result.path == cut.target_path
         assert result.missing_sheets == ("N-34-130-D-d-2-4",)
         assert result.off_grid_sheets == ("N-34-130-D-d-2-3",)
         assert result.sheet_paths == ()
-        assert provider.calls == [] and not find.called
+        assert provider.calls == []
 
     @pytest.mark.parametrize(
         ("attr", "value"), [("vertical_crs", "KRON86"), ("resolution", "5m")]
@@ -1814,6 +1769,7 @@ class TestLibraryApi:
             "download_pl_cutout",
             "prepare_pl_cutout",
             "run_pl_cutout",
+            "run_pl_wcs_cutout",
             "select_pl_cutout_sheets",
         ):
             assert name in kartograf.__all__ and hasattr(kartograf, name)
@@ -1821,8 +1777,6 @@ class TestLibraryApi:
     def test_sidecar_failure_does_not_break_cutout(self, tmp_path, caplog):
         """D7: a cutout sidecar build error = a warning, the cutout stays."""
         import logging
-
-        from kartograf import download_pl_cutout
 
         provider = self._provider()
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
@@ -1838,7 +1792,7 @@ class TestLibraryApi:
             ),
             caplog.at_level(logging.WARNING),
         ):
-            result = download_pl_cutout(bbox, "EPSG:2180", output_dir=tmp_path)
+            result = _sheet_cutout(bbox, output_dir=tmp_path)
 
         assert result.path.exists()
         assert not result.path.with_name(result.path.name + ".meta.json").exists()
@@ -2529,8 +2483,6 @@ class TestCutoutOverCampaignLinks:
             return _write_sheet_asc(path, west, south)
 
     def _run(self, tmp_path, provider=None, **kwargs):
-        from kartograf import download_pl_cutout
-
         provider = provider or self._CampaignProvider(self._SHEETS)
         with (
             patch("kartograf.providers.pl.create_nmt_provider", return_value=provider),
@@ -2539,9 +2491,7 @@ class TestCutoutOverCampaignLinks:
                 return_value=list(self._SHEETS),
             ),
         ):
-            result = download_pl_cutout(
-                self._BBOX, "EPSG:2180", output_dir=tmp_path, **kwargs
-            )
+            result = _sheet_cutout(self._BBOX, output_dir=tmp_path, **kwargs)
         return result, provider
 
     def test_cutout_builds_from_hardlinked_sheets(self, tmp_path):

@@ -9,6 +9,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- Biblioteka: `run_pl_wcs_cutout(cutout, *, provider=None, parent_request=None,
+  today=None)` (w `__all__`) — wycinek PL z WCS GUGiK: siatka arkuszy 1 m,
+  maska ladu PL z PRG (`A00_Granice_panstwa` minus
+  `W02_Morze_terytorialne_RP` i `W03_Morskie_wody_wewnetrzne`, poza maska
+  -9999, 0,0 na ladzie zostaje), nazwa `<wsp>_<RRRRMMDD>.tif`, sidecar
+  `capability="bbox_raster"` z `extra.source` (`composition: "server"`)
+  i `extra.mask`. `prepare_pl_cutout(product=)` i
+  `download_pl_cutout(product=)`: `"nmt"` albo `"nmpt"` (wycinek NMPT 1 m,
+  segment `nmpt/pl_1992_1m_<vcrs>/bbox/`). `PlCutoutResult.masked_pixels`
+  (piksele poza maska) i `zero_pixels` (0,0 na ladzie; tez
+  `extra.zero_pixels`, gdy > 0).
 - NMT/NMPT: przy arkuszu bez danych w wybranej rozdzielczosci albo
   ukladzie wysokosci podpowiedz `Info:` o wariancie, w ktorym skorowidz
   GUGiK ma ten arkusz, np. `Skorowidz GUGiK ma ten arkusz w NMT 1m
@@ -95,6 +106,21 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Zmienione
 
+- `download_pl_cutout()` pobiera wycinek z WCS GUGiK (`run_pl_wcs_cutout`):
+  siatka arkuszy 1 m, kompozycja lotow serwera (nie najnowszy lot ADR-028),
+  nodata -9999 poza ladem PL (maska PRG), nazwa z data pobrania
+  `<wsp>_<RRRRMMDD>.tif`, kazde wywolanie pobiera (bez `skipped`),
+  `resolution="5m"` = `ValidationError`. Parametry arkuszowe `geometry`,
+  `layer`, `scale`, `max_workers`, `force`, `on_progress`, `cache` nie maja
+  wplywu; wartosc inna niz domyslna daje `DeprecationWarning` (usuniecie
+  w 0.8.0). API arkuszowe (`prepare_pl_cutout` -> `select_pl_cutout_sheets`
+  -> `run_pl_cutout`, `build_cutout_from_sheets`) dziala bez zmian i jest
+  przestarzale (usuniecie w 0.8.0); `run_pl_cutout` z
+  `cutout.product="nmpt"` = `ValidationError`. Co zrobic: wycinek z arkuszy
+  (najnowszy lot ADR-028, 5 m) — `prepare_pl_cutout` ->
+  `select_pl_cutout_sheets` -> `run_pl_cutout`; nie podawaj parametrow
+  arkuszowych `download_pl_cutout`; kod szukajacy pliku po nazwie bez daty —
+  uzyj `PlCutoutResult.path`.
 - `Warning:` o niepelnej najnowszej kampanii (E13) dzieli arkusze: "pelny
   lot w <segment>/full_sheet/", "brak pelnego lotu w skorowidzu" (z flagami
   roku: "... w zakresie lat zadania") i "pelny lot nie pobrany ... — uzyj
