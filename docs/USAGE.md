@@ -314,10 +314,12 @@ dane tam są:
   godło albo `--system <układ> --scale <skala>`;
 - NMT i NMPT (od 0.7.2): gdy arkusza nie ma w wybranej rozdzielczości albo
   układzie wysokości, a skorowidz GUGiK ma go w innym wariancie, podpowiedź
-  to np. `Info: Skorowidz GUGiK ma ten arkusz w NMT 1m EVRF2007 — uzyj
-  --resolution 1m` (albo `--vertical-crs KRON86`). GUGiK ma duże braki
-  pokrycia EVRF2007, także NMT 5 m (np. `N-34-130-D-d --resolution 5m`:
-  6 z 16 arkuszy tylko w 1 m). Sprawdzenie kosztuje jedno zapytanie
+  to np. `Skorowidz GUGiK ma ten arkusz w NMT 1m EVRF2007 — uzyj
+  --resolution 1m` (albo `--vertical-crs KRON86`) — przy pojedynczym
+  godle w treści `Error:` (kod 1), przy liście arkuszy jako `Info:`.
+  GUGiK ma duże braki pokrycia EVRF2007, także NMT 5 m (np.
+  `N-34-130-D-d --resolution 5m`: 6 z 16 arkuszy tylko w 1 m).
+  Sprawdzenie kosztuje jedno zapytanie
   skorowidza na wariant i brakujący arkusz; wynik trafia do cache
   metadanych razem z brakiem pokrycia.
 
@@ -470,7 +472,13 @@ rozwijane do arkuszy 1:10000 przez `download_hierarchy()` (ta zawsze zwraca
   GUGiK nie ma danych — `NoCoverageError`, podklasa `DownloadError`; są też
   w `failed`), pliki kampanii i `unverified` (sekcja 4).
 - `DownloadManager.last_sheet` (`SheetFetch`) po pojedynczym arkuszu:
-  `path`, `skipped`, `downloaded`, `reused`, `link`, `unverified`.
+  `path`, `skipped`, `downloaded`, `reused`, `link`, `unverified`,
+  `better_coverage`, `link_outside_range`, `full_link`,
+  `full_link_outside_range` (sekcje 4.1 i 4.2).
+- `DownloadResult` ma też `no_coverage_hints` (godło -> podpowiedzi przy
+  braku pokrycia, sekcja 1.6), `better_coverage`, `link_outside_range`,
+  `full_links`, `full_link_outside_range` i `without_full` (sekcje 4.1
+  i 4.2).
 - `PlCutoutResult` (wycinek WCS): `path`, `masked_pixels`,
   `zero_pixels`, `all_nodata`; `skipped` zawsze `False`.
   Pola `missing_sheets`, `off_grid_sheets`, `partial_sheets`
@@ -506,7 +514,7 @@ Wycinki PL WCS nie są pomijane — każdy przebieg pobiera na nowo.
 ## 4. Kampanie GUGiK
 
 GUGiK publikuje ten sam arkusz w kilku kampaniach (różne lata pozyskania).
-`--campaigns newest` (domyślnie bez `--year`/`--max-year`) pobiera
+`--campaigns newest` (domyślnie, także z flagami roku) pobiera
 najnowszą; `--campaigns all` — każdą. Wybór roku (`--year`, `--min-year`,
 `--max-year`) opisuje sekcja 4.1. Kampanie i rok dotyczą tylko PL — dla CZ
 opcje dają `Error: CZ (CUZK) nie ma kampanii — ...` (zadanie wyłącznie
@@ -545,8 +553,9 @@ cache (7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania.
   `PL-EVRF2007-NH` dla EVRF2007); inna wartość kończy kampanię błędem przed
   pobraniem pliku (arkusz: `Error:`/porażka wg listy, w `all` pozostałe
   kampanie są pobierane). Rekord bez tego pola jest przyjmowany.
-- **Wycinek `--target-crs`** zawsze składa się z najnowszych kampanii i nie
-  przyjmuje `--campaigns all`, flag roku ani `--full-sheet`.
+- **Wycinek `--target-crs`** pochodzi z WCS GUGiK z kompozycją lotów
+  serwera (nie z kampanii arkuszy, sekcja 1.3) i nie przyjmuje
+  `--campaigns all`, flag roku ani `--full-sheet`.
 - **LAZ:** `--campaigns all` pobiera wszystkie kafle, których rama przecina
   obszar (bez deduplikacji ADR-029). LAZ nie używa dowiązań.
   `--min-density` jest tylko dla LAZ (z innymi produktami: `Error:`,
