@@ -10,6 +10,7 @@ pixels or reads GeoTIFF mask windows from an already downloaded file.
 record (no IO).
 """
 
+import contextlib
 import hashlib
 import logging
 import re
@@ -356,6 +357,93 @@ def verify_file_format(path: Path, ext: str) -> None:
         )
 
 
+class AscCoverage:
+    """Valid-cell share of an AAIGrid fed as consecutive raw byte chunks.
+
+    One streaming pass serves both ``measure_coverage`` and the version store
+    commit, which hashes the same chunks (D20). The header ends at the first
+    line whose first word is not an AAIGrid header key; a missing
+    ``NODATA_value`` means -9999. Tokens split across chunks are carried over.
+    """
+
+    def __init__(self, name: str):
+        self._name = name
+        self._header: dict[str, float] = {}
+        self._in_header = True
+        self._carry = b""
+        self._nodata = -9999.0
+        self._count = 0
+        self._valid = 0
+        self._error: ValueError | None = None
+
+    def feed(self, chunk: bytes) -> None:
+        """Consume the next chunk of the file."""
+        if self._error is not None:
+            return
+        data = self._carry + chunk
+        if self._in_header:
+            data = self._consume_header(data, final=False)
+            if self._in_header:
+                self._carry = data
+                return
+        cut = max(data.rfind(sep) for sep in (b" ", b"\n", b"\r", b"\t"))
+        if cut < 0:
+            self._carry = data
+            return
+        self._count_values(data[:cut])
+        self._carry = data[cut + 1 :]
+
+    def result(self) -> float:
+        """Valid share rounded to 4 places; ``DownloadError`` when malformed."""
+        if self._error is None:
+            data, self._carry = self._carry, b""
+            if self._in_header:
+                data = self._consume_header(data, final=True)
+            self._count_values(data)
+        try:
+            if self._error is not None:
+                raise self._error
+            cols, rows = self._header["ncols"], self._header["nrows"]
+            if cols <= 0 or rows <= 0 or not cols.is_integer() or not rows.is_integer():
+                raise ValueError("niepoprawne wymiary siatki")
+        except (ValueError, KeyError) as e:
+            raise DownloadError(
+                f"{self._name}: nie udalo sie zmierzyc pokrycia: {e}"
+            ) from e
+        expected = int(cols * rows)
+        if self._count != expected:
+            raise DownloadError(
+                f"{self._name}: ASC ma {self._count} komorek, oczekiwano {expected}"
+            )
+        return round(self._valid / expected, 4)
+
+    def _consume_header(self, data: bytes, *, final: bool) -> bytes:
+        """Parse complete header lines; return the unconsumed rest."""
+        while True:
+            end = data.find(b"\n")
+            if end < 0 and not final:
+                return data
+            line = data if end < 0 else data[: end + 1]
+            parts = line.split()
+            if not parts or parts[0].lower() not in _AAIGRID_HEADER_KEYS:
+                self._in_header = False
+                self._nodata = self._header.get("nodata_value", -9999.0)
+                return data
+            if len(parts) == 2:
+                with contextlib.suppress(ValueError):
+                    self._header[parts[0].lower().decode("ascii")] = float(parts[1])
+            data = b"" if end < 0 else data[end + 1 :]
+
+    def _count_values(self, data: bytes) -> None:
+        nodata = self._nodata
+        try:
+            for value in data.split():
+                self._count += 1
+                self._valid += float(value) != nodata
+        except ValueError as e:
+            self._error = e
+
+
 def measure_coverage(path: Path, ext: str) -> float | None:
     """Return valid-pixel share of an ASC/GeoTIFF, or None without a TIFF mask.
 
@@ -363,46 +451,16 @@ def measure_coverage(path: Path, ext: str) -> float | None:
     raster raises DownloadError rather than reporting a misleading share.
     """
     if ext == ".asc":
-        header = read_asc_header(path)
+        counter = AscCoverage(path.name)
         try:
-            cols, rows = header["ncols"], header["nrows"]
-            if cols <= 0 or rows <= 0 or not cols.is_integer() or not rows.is_integer():
-                raise ValueError("niepoprawne wymiary siatki")
-            expected = int(cols * rows)
-            nodata = header.get("nodata_value", -9999.0)
-            count = valid = 0
             with path.open("rb") as stream:
-                # AAIGrid permits five header lines if NODATA_value is absent.
-                # Stop at the first non-header line, not after a fixed count.
-                while True:
-                    line = stream.readline()
-                    parts = line.split(None, 1)
-                    if not parts or parts[0].lower() not in _AAIGRID_HEADER_KEYS:
-                        stream.seek(-len(line), 1)
-                        break
-                carry = b""
                 while chunk := stream.read(_COVERAGE_CHUNK):
-                    data = carry + chunk
-                    cut = max(data.rfind(sep) for sep in (b" ", b"\n", b"\r", b"\t"))
-                    if cut < 0:
-                        carry = data
-                        continue
-                    for value in data[:cut].split():
-                        count += 1
-                        valid += float(value) != nodata
-                    carry = data[cut + 1 :]
-                for value in carry.split():
-                    count += 1
-                    valid += float(value) != nodata
-            if count != expected:
-                raise DownloadError(
-                    f"{path.name}: ASC ma {count} komorek, oczekiwano {expected}"
-                )
-            return round(valid / expected, 4)
-        except (OSError, ValueError, KeyError) as e:
+                    counter.feed(chunk)
+        except OSError as e:
             raise DownloadError(
                 f"{path.name}: nie udalo sie zmierzyc pokrycia: {e}"
             ) from e
+        return counter.result()
     if ext == ".tif":
         import numpy as np
         import rasterio
