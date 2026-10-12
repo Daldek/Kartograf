@@ -29,7 +29,7 @@
 | Kampanie GUGiK (ADR-030 + errata 1-8, ADR-032 + errata 2, ADR-033) | ✅ Gotowy | `--all-campaigns` (od 0.8.0-dev; wczesniej `--campaigns {newest,all}`), `--year`/`--min-year`/`--max-year` (v0.7.2), `--full-sheet`; pliki w `<segment>/kampanie/`, sciezka standardowa i `full_sheet/` = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`, `docs/research/2026-10-10-full-sheet-link/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`) |
 | Wycinek NMT/NMPT PL `--target-crs` (ADR-035), API `download_pl_cutout` | ✅ Gotowy | v0.7.2: WCS 1 m z maska ladu PRG, data w nazwie, NMT i NMPT; NMPT `download_bbox` float32; kawalki ASC NMPT 4 Mpx coverage (ADR-035 errata 1); zweryfikowany na zywo (`docs/research/2026-10-11-wcs-cutouts-live/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`). Arkuszowy tor ADR-027 usuniety na `develop` (0.8.0-dev, ADR-035 errata 2) |
 
-| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekt 1 (magazyn wersjonowany): plan 1/3 wykonany na `feat/versioned-store`, plan 2/3 napisany (2026-10-12, rewizja specu D26-D28), plan 3/3 do napisania |
+| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekt 1 (magazyn wersjonowany): plany 1/3 i 2/3 wykonane na `feat/versioned-store` (2/3: 2026-10-12, weryfikacja na zywo PASS), plan 3/3 do napisania |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
 ## Checkpointy
@@ -103,18 +103,18 @@
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI (stan 2026-10-12, koniec trzeciej sesji):**
-> 1. **Plan 2/3 magazynu wersjonowanego NAPISANY** na galezi
->    `feat/versioned-store` (`ce6a45b`):
->    `docs/superpowers/plans/2026-10-12-versioned-store-2-laz-cz-cutouts.md`
->    (Task 1-13; sesja "plan 2/3" nizej). **Nastepna sesja: WDROZENIE
->    planu 2/3** (decyzja uzytkownika 2026-10-12) — `git switch
->    feat/versioned-store`, realizacja od Task 1 (inwentaryzacja na zywo:
->    NAJPIERW zapytac uzytkownika o katalog danych testow na zywo; wynik
->    rozny od tabeli "Oczekiwane przyporzadkowanie" w Task 1 = stop
->    i poprawka Task 2-9 przed implementacja). Spec: rewizja 2026-10-12,
->    D26-D28.
->    Plan 1/3 ZROBIONY (Task 1-9, ADR-036, CHANGELOG [0.8.0] na galezi).
+> **START NASTEPNEJ SESJI (stan 2026-10-12, koniec czwartej sesji):**
+> 1. **Plan 2/3 magazynu wersjonowanego WDROZONY** na galezi
+>    `feat/versioned-store` (`4b9767c`..`369e7cf`, Task 1-13; sesja
+>    "wdrozenie planu 2/3" nizej). Nastepny krok: **napisac plan 3/3**
+>    (land cover BDOT10k/CORINE/SoilGrids i HSG w ukladzie `data/`, D11,
+>    `keep_raw`, `source_files[]` HSG, tryby w `landcover`/`soilgrids`;
+>    inwentaryzacja sygnalow juz jest:
+>    `git show feat/versioned-store:docs/research/2026-10-12-signal-inventory/raport.md`).
+>    Decyzja uzytkownika do podjecia przy planie 3/3: SoilGrids `metadata`
+>    (edycja `SoilGrids250m 2.0`, bez wykrywania poprawek w obrebie
+>    wydania) albo `none`; w rejestrze na razie `none`. CORINE
+>    niesprawdzone na zywo (brak `CLMS_CREDENTIALS`).
 >    Galaz trafia do `develop` dopiero po planie 3/3.
 > 2. Udzial SMB bez `serverino` (`samefile` falszywe dla hardlinkow):
 >    ROZWIAZANE na galezi (`1c84b3e`, decyzja uzytkownika 2026-10-12) —
@@ -127,7 +127,7 @@
 >    `docs/research/2026-10-12-test-0.8.0/raport.md`).
 > **Stan galezi (sprawdzaj w gicie):** `develop` ma lokalne commity
 > NIEWYPCHNIETE na `origin`; `feat/versioned-store` po rebase na `develop`
-> (2026-10-12), z planem 1/3, poprawka `1c84b3e` i planem 2/3 `ce6a45b` — rozjechana z `origin`
+> (2026-10-12), z planem 1/3, poprawka `1c84b3e`, planem 2/3 `ce6a45b` i jego wdrozeniem (`369e7cf`) — rozjechana z `origin`
 > (wymaga `push --force-with-lease`). Push tylko za zgoda uzytkownika
 > (2026-10-12: "nic teraz").
 > **PROGRESS tylko na `develop`:** galaz nie zmienia `docs/PROGRESS.md`
@@ -165,6 +165,37 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Sesja 2026-10-12 (czwarta) — wdrozenie planu 2/3 magazynu wersjonowanego
+
+- Galaz `feat/versioned-store`, commity `c9f304d`..`369e7cf` (bez push):
+  Task 1 inwentaryzacja na zywo (`docs/research/2026-10-12-signal-inventory/`,
+  naglowki w `tests/fixtures/signals/real_2026_10_12/`; wynik zgodny
+  z oczekiwanym przyporzadkowaniem dla zrodel planu 2/3; `exportImage`
+  CUZK ma `ETag` zalezny od zapytania — zostaje `none`; wszystkie mierzone
+  obiekty bajtowo powtarzalne), Task 2-5 (`update_signal`, `response_signal`/
+  `head_signal`, `download/fetch.py`, `download/plan.py`), Task 6-9 (LAZ,
+  arkusze CZ w `download/cz_sheets.py`, wycinki CZ i PL w `bbox/` bez
+  daty), Task 10 (`DownloadManager.download_bbox` usuniete), Task 11 (CLI:
+  tryby i plan dla kazdego toru, jeden plan PL+CZ pod `--country auto`),
+  Task 12 (ADR-036, errata 2 ADR-003, CHANGELOG [0.8.0], ARCHITECTURE,
+  USAGE, SCOPE 3.20, PRD), Task 13 (`docs/research/2026-10-12-plan2-live/raport.md`:
+  LAZ, SM5, TM33, wycinki CZ/PL, `--country auto`, D24 — PASS; dane
+  `<katalog-danych>/kartograf/e2e/2026-10-12-plan2-live/`).
+- Decyzje w trakcie (zapisane w CHANGELOG/ARCHITECTURE): wynik torow
+  jednoplikowych `file: VersionedFile | None` (`None` tylko z `plan=`,
+  gdy plan nie wykonuje pliku i nie ma wersji lokalnej); `downloaded_at`
+  z mikrosekundami (`46ee0e0`, porzadek dwoch pobran w jednej sekundzie);
+  `VersionedFile` w `__all__`; errata ADR-003 zamiast ADR-004 (plan
+  wskazywal ADR-004, `download_bbox` opisuje ADR-003).
+- Poprawka wykryta niestabilnym testem (`d3826de`): sprzatanie pustego
+  `versions/.incoming` po nieudanym pobraniu scigalo sie z tworzeniem
+  katalogow przez inne watki (`--workers`); `ensure_dir` ponawia `mkdir`.
+- Odstepstwo: Task 7 i 8 (arkusze i wycinki CZ) w jednym commicie
+  `3107cf2` (przeplecione zmiany CLI/testow z rownoleglej pracy).
+- Brama na galezi: pytest offline 3307 zielone, ruff i mypy czyste.
+- Na `develop`: pozycja "Spojnosc CLI, biblioteki i API" w "Do 0.8.0"
+  (decyzja uzytkownika, `f5add77`).
 
 ### Sesja 2026-10-12 (trzecia) — weryfikacja specu i plan 2/3 magazynu wersjonowanego
 
