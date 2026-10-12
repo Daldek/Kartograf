@@ -46,7 +46,12 @@ from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.base import LandCoverProvider
 from kartograf.providers.pl.prg import discover_teryts_for_bbox
-from kartograf.transport.http import MAX_RETRIES, SessionPerThread, download_to
+from kartograf.transport.http import (
+    MAX_RETRIES,
+    SessionPerThread,
+    download_to,
+    response_signal,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -256,18 +261,8 @@ class Bdot10kProvider(LandCoverProvider):
         headers: dict = {}
 
         def capture(response: requests.Response) -> None:
-            def text(name: str) -> str | None:
-                # str only: anything else (e.g. a test double) is "absent"
-                value = response.headers.get(name)
-                return value if isinstance(value, str) else None
-
-            length = text("Content-Length")
             headers.clear()
-            headers.update(
-                etag=text("ETag"),
-                last_modified=text("Last-Modified"),
-                content_length=int(length) if length and length.isdigit() else None,
-            )
+            headers.update(response_signal(response))
 
         if keep_raw and raw_path is None:
             raw_path = output_path.with_name(f"{output_path.stem}_GPKG.zip")
@@ -284,7 +279,7 @@ class Bdot10kProvider(LandCoverProvider):
             timeout=timeout,
             retries=self.MAX_RETRIES,
             description=f"BDOT10k TERYT {code}",
-            validate=capture,
+            on_response=capture,
             save=save if format == "GPKG" else None,
         )
         return Bdot10kPackage(
