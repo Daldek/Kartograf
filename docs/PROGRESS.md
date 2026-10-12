@@ -119,6 +119,13 @@
 >    (pelna lista: `docs/CHANGELOG.md` [0.8.0]).
 > 3. Hydrograf i Hydrolog musza dostosowac wywolania (CHANGELOG [0.8.0],
 >    "Co zrobic") — sprawdzic przed wydaniem 0.8.0.
+> 4. Test na zywo zmian lamiacych 0.8.0 (CLI i biblioteka: `--sheet`,
+>    `--all-campaigns`, wartosci per kraj na pograniczu, PL-2000 `--scale`,
+>    land cover/HSG) — przed wydaniem 0.8.0; katalog danych wskazuje
+>    uzytkownik.
+> Uwaga: plik planu 1/3 istnieje TYLKO na galezi `feat/versioned-store`
+> (na `develop` go nie ma) — czytaj go po rebase albo przez
+> `git show feat/versioned-store:<sciezka>`.
 > **Stan galezi (sprawdzaj w gicie):** `develop` ma lokalne commity
 > NIEWYPCHNIETE na `origin` (cykl 0.8.0, usuniecie toru arkuszowego,
 > zmiany lamiace 2026-10-12, dokumenty) — push tylko za zgoda
