@@ -16,7 +16,7 @@ import rasterio
 import requests
 
 from kartograf.core.sheet_parser import SheetParser
-from kartograf.download.links import linked_campaign
+from kartograf.download.links import linked_version
 from kartograf.download.manager import DownloadManager
 from kartograf.providers.pl.gugik import GugikProvider
 
@@ -110,9 +110,8 @@ def test_end_to_end_all_on_real_c14_bodies(tmp_path):
     )
     m.download_sheet(G)
 
-    files = m.storage.list_files("**/*.asc", campaigns=True)
-    root = tmp_path / SEGMENT / "kampanie"
-    assert sorted(p.relative_to(root).parts[0] for p in files) == [
+    files = m.storage.list_files("**/*.asc", versions=True)
+    assert sorted(p.parent.name.rsplit("_", 1)[0] for p in files) == [
         "2019-04-18_73021",
         "2023-09-05_78047",
         "2025-04-27_83233",
@@ -121,7 +120,7 @@ def test_end_to_end_all_on_real_c14_bodies(tmp_path):
     meta = json.loads(sidecar(std_path(tmp_path, G)).read_text(encoding="utf-8"))
     assert meta["extra"]["source"]["full_sheet"] is False
     assert meta["extra"]["campaign"]["survey_work_id"] == "DFT.7201.053.2025"
-    assert "2025-10-21_84183" in str(linked_campaign(std_path(tmp_path, G)))
+    assert "2025-10-21_84183" in str(linked_version(std_path(tmp_path, G)))
 
 
 def test_download_sheet_returns_standard_path_readable_by_rasterio(tmp_path):
@@ -134,7 +133,7 @@ def test_download_sheet_returns_standard_path_readable_by_rasterio(tmp_path):
     path = m.download_sheet(G)
 
     assert path == std_path(tmp_path, G)
-    [campaign_file] = m.storage.list_files("**/*.asc", campaigns=True)
+    [campaign_file] = m.storage.list_files("**/*.asc", versions=True)
     assert not path.is_symlink() and os.path.samefile(path, campaign_file)
     meta = json.loads(sidecar(path).read_text(encoding="utf-8"))
     assert meta["extra"]["link"] == "hardlink"
@@ -167,16 +166,17 @@ def test_end_to_end_all_with_real_xyz_campaign(tmp_path):
     )
     m.download_sheet(G2)
 
-    asc = m.storage.list_files("**/*.asc", campaigns=True)
+    asc = m.storage.list_files("**/*.asc", versions=True)
     assert len(asc) == 5
     assert any(
-        p.as_posix().endswith(f"2019-04-29_72675/N-33/69/A/d/3/2/{G2}.asc") for p in asc
+        p.parent.name.startswith("2019-04-29_72675_") and p.name == f"{G2}.asc"
+        for p in asc
     )
     assert list(tmp_path.rglob("*.xyz")) == []
     [old] = [p for p in asc if "2019-04-29_72675" in p.as_posix()]
     meta = json.loads(sidecar(old).read_text(encoding="utf-8"))
     assert meta["extra"]["source"]["url"].endswith(".xyz")
-    assert "2024-09-23_81025" in str(linked_campaign(std_path(tmp_path, G2)))
+    assert "2024-09-23_81025" in str(linked_version(std_path(tmp_path, G2)))
 
 
 def test_newest_uses_local_campaign_when_skorowidz_unreachable(tmp_path):
@@ -192,7 +192,7 @@ def test_newest_uses_local_campaign_when_skorowidz_unreachable(tmp_path):
         ),
     )
     std = m.download_sheet(G)
-    before = str(linked_campaign(std))
+    before = str(linked_version(std))
     assert "2025-10-21_84183" in before
 
     offline = Mock(spec=requests.Session)
@@ -207,6 +207,6 @@ def test_newest_uses_local_campaign_when_skorowidz_unreachable(tmp_path):
         path = m2.download_sheet(G)
 
     assert offline.get.called  # no record cache: a query on every call
-    assert path == std and str(linked_campaign(std)) == before
+    assert path == std and str(linked_version(std)) == before
     assert m2.last_sheet.skipped is True
     assert "GUGiK lezy" in m2.last_sheet.unverified

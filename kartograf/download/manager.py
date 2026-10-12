@@ -8,14 +8,14 @@ Supports parallel downloads via ThreadPoolExecutor when max_workers > 1.
 """
 
 import concurrent.futures
-import json
 import logging
 import os
+import shutil
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Literal, Protocol, cast
 
 import requests
 
@@ -24,7 +24,6 @@ from kartograf.download.campaigns import (
     CampaignRef,
     campaign_extension,
     in_year_range,
-    measure_coverage,
     record_year,
     validate_year_bounds,
     verify_file_format,
@@ -33,17 +32,27 @@ from kartograf.download.campaigns import (
     verify_sheet_extent,
     year_range_error,
 )
-from kartograf.download.links import (
-    LinkOutcome,
-    ensure_link,
-    linked_campaign,
-    update_sidecar_extra,
-    write_link_sidecar,
-)
+from kartograf.download.links import ensure_link, linked_version, update_sidecar_extra
 from kartograf.download.storage import FileStorage, storage_for_provider
+from kartograf.download.versions import (
+    ContentDigest,
+    LocalVersion,
+    VersionCommit,
+    VersionRef,
+    commit_version,
+    list_versions,
+    new_incoming_dir,
+    newest_version,
+    read_content,
+    read_version,
+    version_key,
+)
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import SkorowidzRecord
+
+# Outcome of one sheet: the strongest status among its files (spec 4.5).
+SheetStatus = Literal["new", "unchanged", "relabeled", "local"]
 
 logger = logging.getLogger(__name__)
 
@@ -102,14 +111,15 @@ class DownloadResult:
         Subset of ``failed``: sheets the source has no data for
         (``NoCoverageError``) — as opposed to a transport/service failure.
     campaign_files : dict[str, tuple[Path, ...]]
-        Campaign flow (ADR-030): sheet -> campaign files downloaded in this
-        run and already local (for successful sheets). Flow without
-        campaigns: empty.
-    copied : list[str]
-        Sheets whose standard path is a COPY of the campaign file (hardlink
-        unavailable, e.g. exFAT/FAT, sshfs/FUSE).
+        Campaign flow (ADR-030): sheet -> version files of the campaigns
+        selected by this run, downloaded and already local (for successful
+        sheets). Flow without campaigns: empty.
+    new, relabeled, unchanged, local : list[str]
+        Successful sheets by ``SheetFetch.status``: a new version, the same
+        content under a new campaign label (D23), downloaded content equal
+        to an existing version, or only local versions used (no download).
     reused_campaign_files : dict[str, tuple[Path, ...]]
-        Subset of ``campaign_files``: sheet -> campaign files already local
+        Subset of ``campaign_files``: sheet -> version files already local
         (not downloaded in this run). Flow without campaigns: empty.
     no_coverage_hints : dict[str, tuple[str, ...]]
         Subset of the ``no_coverage`` keys: sheet -> ``NoCoverageError.hints``
@@ -146,7 +156,10 @@ class DownloadResult:
     skipped: list[str] = field(default_factory=list)
     no_coverage: list[str] = field(default_factory=list)
     campaign_files: dict[str, tuple[Path, ...]] = field(default_factory=dict)
-    copied: list[str] = field(default_factory=list)
+    new: list[str] = field(default_factory=list)
+    relabeled: list[str] = field(default_factory=list)
+    unchanged: list[str] = field(default_factory=list)
+    local: list[str] = field(default_factory=list)
     reused_campaign_files: dict[str, tuple[Path, ...]] = field(default_factory=dict)
     unverified: dict[str, str] = field(default_factory=dict)
     no_coverage_hints: dict[str, tuple[str, ...]] = field(default_factory=dict)
@@ -204,16 +217,19 @@ class SheetFetch:
     sheet : str
         The sheet.
     path : Path
-        Standard path (campaign flow — a link) or the file (flow without
-        campaigns).
+        Standard path — a hardlink of the newest local version.
     skipped : bool
         Nothing was downloaded in this call (everything already local).
     downloaded : tuple[Path, ...]
-        Campaign files downloaded now.
+        Version files committed from downloads in this call.
     reused : tuple[Path, ...]
-        Campaign files already local.
-    link : str or None
-        ``hardlink``/``copy``; ``None`` = flow without campaigns.
+        Version files already local (no download).
+    status : str
+        ``new`` (a new version), ``relabeled`` (same content, new campaign
+        label, D23), ``unchanged`` (downloaded content equal to a local
+        version) or ``local`` (no download) — the strongest among the files.
+    version : str or None
+        Label of the version the standard path points to after this call.
     unverified : str or None
         ``newest``: text of the GUGiK index TRANSPORT error
         (network, 429, 5xx) with which an existing local campaign was used
@@ -243,7 +259,8 @@ class SheetFetch:
     skipped: bool
     downloaded: tuple[Path, ...] = ()
     reused: tuple[Path, ...] = ()
-    link: str | None = None
+    status: SheetStatus = "local"
+    version: str | None = None
     unverified: str | None = None
     better_coverage: str | None = None
     link_outside_range: Path | None = None
@@ -277,6 +294,33 @@ class CampaignProvider(Protocol):
 
 # Type alias for progress callback
 ProgressCallback = Callable[[DownloadProgress], None]
+
+
+def _sheet_status(commits: list[VersionCommit]) -> SheetStatus:
+    """The strongest commit status of a sheet; no commit = ``local``."""
+    statuses = {c.status for c in commits}
+    for status in ("new", "relabeled", "unchanged"):
+        if status in statuses:
+            return cast(SheetStatus, status)
+    return "local"
+
+
+def _label_of(path: Path | None) -> str | None:
+    """Label of the version file ``path`` (from its version sidecar)."""
+    if path is None:
+        return None
+    version = read_version(path.parent, path.name)
+    return version.label if version is not None else None
+
+
+def _version_coverage(path: Path) -> float | None:
+    """``extra.coverage`` of a version sidecar (measured at commit, D13)."""
+    version = read_version(path.parent, path.name)
+    extra = version.meta.get("extra") if version is not None else None
+    value = extra.get("coverage") if isinstance(extra, dict) else None
+    if isinstance(value, (float, int)) and not isinstance(value, bool):
+        return float(value) if 0 <= value <= 1 else None
+    return None
 
 
 def _is_transport_failure(error: DownloadError) -> bool:
@@ -850,24 +894,108 @@ class DownloadManager:
         on_download: Callable[[], None] | None = None,
     ) -> SheetFetch:
         """
-        Flow without campaigns (stubs, foreign providers) — pre-ADR-030 behavior.
+        Flow without campaigns (stubs, foreign providers) on the version store.
 
-        Path from ``FileStorage``; an existing file with ``skip_existing`` is
-        skipped (and noted in the sidecar, N4); otherwise the provider
-        downloads the file and the manager writes a sidecar (best-effort).
-        Provider exceptions propagate unchanged.
+        With ``skip_existing`` the newest local version is used without a
+        download; otherwise the provider downloads into a private staging
+        directory and the file becomes a version labelled with the UTC
+        download date (``downloaded``, plan 1/3 decision 7). The standard path
+        is a hardlink of the newest version. Provider exceptions propagate
+        unchanged.
         """
-        target_path = self._storage.get_path(sheet, self._default_ext)
-        if skip_existing and target_path.exists():
-            logger.info(f"Skipping {sheet} - already exists at {target_path}")
-            self._note_reuse(target_path)
-            return SheetFetch(sheet, target_path, skipped=True)
+        std = self._storage.get_path(sheet, self._default_ext)
+        root = self._storage.get_versions_root(sheet)
+        if skip_existing:
+            newest = newest_version(list_versions(root, std.name))
+            if newest is not None:
+                logger.info(f"{sheet}: lokalna wersja {newest.label}")
+                self._link(std, newest.path, version_key(newest), refresh=False)
+                return SheetFetch(
+                    sheet, std, skipped=True, status="local", version=newest.label
+                )
         if on_download is not None:
             on_download()
         logger.info(f"Downloading {sheet}...")
-        path = self._provider.download(sheet, target_path)
-        self._write_sidecar(path, {"sheet": sheet})
-        return SheetFetch(sheet, path, skipped=False)
+        staged = new_incoming_dir(self._storage.get_versions_base(sheet)) / std.name
+        try:
+            path = self._provider.download(sheet, staged)
+            digest = read_content(Path(path), ext=self._default_ext, coverage=False)
+            commit = commit_version(
+                Path(path),
+                root,
+                std.name,
+                VersionRef.downloaded(),
+                digest,
+                lambda data, ref, dg: self._write_sidecar(
+                    data, {"sheet": sheet}, digest=dg, version=ref
+                ),
+            )
+        finally:
+            shutil.rmtree(staged.parent, ignore_errors=True)
+        version = read_version(commit.path.parent, commit.path.name)
+        if version is not None:
+            self._link(
+                std,
+                commit.path,
+                version_key(version),
+                refresh=commit.status != "unchanged",
+            )
+        return SheetFetch(
+            sheet, std, skipped=False, status=commit.status, version=commit.label
+        )
+
+    @staticmethod
+    def _link(
+        link: Path, target: Path, key: tuple[str, str, str], *, refresh: bool
+    ) -> Path:
+        """``ensure_link`` raising ``DownloadError`` (R5: a sheet failure)."""
+        try:
+            return ensure_link(link, target, key, refresh=refresh).target
+        except OSError as e:
+            raise DownloadError(f"dowiazanie {link}: {e}") from e
+
+    def _download_version(
+        self,
+        sheet: str,
+        record: SkorowidzRecord,
+        ref: CampaignRef,
+        ext: str,
+        available: tuple[int, ...] | None,
+    ) -> VersionCommit:
+        """Download one campaign file and commit it as a version (spec 3.1).
+
+        ``download_record`` writes into a private staging directory, then
+        ``verify_file_format`` and ``verify_sheet_extent`` (B4); one read gives
+        sha256 and — for a flight not declared full — ``extra.coverage``
+        (D13, D20); the mandatory version sidecar is written exclusively.
+        Any failure leaves no version and no staged file.
+        """
+        root = self._storage.get_versions_root(sheet)
+        name = self._storage.get_path(sheet, ext).name
+        staged = new_incoming_dir(self._storage.get_versions_base(sheet)) / name
+        try:
+            self._campaign_provider.download_record(record, staged)
+            verify_file_format(staged, ext)
+            verify_sheet_extent(staged, sheet, ext)
+            digest = read_content(staged, ext=ext, coverage=ref.full_sheet is not True)
+            return commit_version(
+                staged,
+                root,
+                name,
+                VersionRef(ref.dirname, "campaign"),
+                digest,
+                lambda data, version, dg: self._write_campaign_sidecar(
+                    data,
+                    sheet,
+                    record,
+                    ref,
+                    available=available,
+                    digest=dg,
+                    version=version,
+                ),
+            )
+        finally:
+            shutil.rmtree(staged.parent, ignore_errors=True)
 
     def _fetch_campaigns(
         self,
@@ -878,49 +1006,42 @@ class DownloadManager:
         available: tuple[int, ...] | None = None,
     ) -> SheetFetch:
         """
-        Campaign flow (ADR-030): files in ``kampanie/``, standard link.
+        Campaign flow (ADR-030) on the version store (spec 3).
 
         Records from ``provider.resolve_campaigns`` (never an empty list —
         none = ``NoCoverageError``). For each campaign, BEFORE the network:
         ``verify_record_url`` (the record URL must name the sheet, B4),
         ``verify_record_vertical_crs`` (the record vertical datum vs the
         provider ``vertical_crs``) and the extension from the record
-        ``format`` field; then skipping an
-        existing campaign file with ``skip_existing`` (the existence of the
-        standard path is NOT a reason to skip), otherwise ``download_record``
-        -> ``verify_file_format`` -> ``verify_sheet_extent`` (the ASC header
-        extent lies in the sheet frame, B4) -> mandatory campaign sidecar; a
-        failure of any of these steps removes the data file (never a file
-        without a sidecar or with foreign content). After the campaigns are
-        collected the standard path points to the newest LOCAL campaign
-        (``max`` by ``sort_key``; ``ensure_link`` never moves the
-        link back), and the ``full_sheet/`` path (ADR-033) to the newest
-        LOCAL campaign of this request declared full (``full_sheet is
-        True``); without such a campaign the ``full_sheet/`` link stays as
-        it is.
-        An existing campaign file WITHOUT a sidecar (R22: interrupted before
-        writing it) goes through ``verify_file_format`` and
-        ``verify_sheet_extent`` before the sidecar is recreated; mismatched
-        content = file removed + campaign failure.
+        ``format`` field. With ``skip_existing`` a local version labelled
+        ``<date>_<id>`` of the campaign is used without a download (the
+        existence of the standard path is NOT a reason to skip); otherwise
+        ``_download_version`` commits the file as a version (``new``,
+        ``unchanged`` or ``relabeled``, D23). After the campaigns are
+        collected the standard path points to the newest LOCAL version of
+        this request (``max`` by ``sort_key``; ``ensure_link`` never moves
+        the link back), and the ``full_sheet/`` path (ADR-033) to the newest
+        one declared full (``full_sheet is True``); without such a campaign
+        the ``full_sheet/`` link stays as it is.
 
-        Ranged ``all`` requests list local flights in the standard sidecar.
-        Only if the linked flight is partial and there are multiple flights,
-        their pixel coverage is measured (or read from existing sidecars);
-        measurement errors warn without failing the downloaded sheet.
+        Ranged ``all`` requests list the local flights in the standard
+        sidecar; when the linked flight is partial and there are several,
+        their coverage (``extra.coverage`` of the version sidecars, measured
+        at commit, D13) gives ``better_coverage`` — a declared-full flight
+        counts as fully covered.
 
         Concurrency: the link is set ONCE per sheet, after all its campaigns
         are collected, and ``expand_sheets`` deduplicates sheets — one sheet =
-        one thread. Safety within a single manager call therefore follows
-        from the structure, not from a lock (there are no locks); a race
-        between processes is described by ``ensure_link``.
+        one thread; concurrent writers of the same version are resolved by
+        ``commit_version`` (D18).
 
         Index outage (I-1): ``newest`` without year bounds with
         ``skip_existing``, when ``resolve_campaigns`` ends with a TRANSPORT
         error (``_is_transport_failure``) and the standard path points to an
-        existing local campaign (``linked_campaign``) — NOT a failure:
+        existing local version (``linked_version``) — NOT a failure:
         ``logger.warning`` and ``SheetFetch(skipped=True,
-        unverified=<error>)`` from the local campaign, link unchanged.
-        A year bound, ``all``, ``--force``, no local campaign or another
+        unverified=<error>)`` from the local version, link unchanged.
+        A year bound, ``all``, ``--force``, no local version or another
         error — an exception as before.
 
         ``full_sheet=True`` with ``newest``: when the chosen record is not
@@ -936,12 +1057,12 @@ class DownloadManager:
             No campaigns (from ``resolve_campaigns``).
         DownloadError
             Failure of at least one campaign (an invalid record
-            ``aktualnosc`` too) or of the link (``OSError`` from
-            ``ensure_link``) — all in one message; successful
-            campaigns stay on disk, and the link points to the newest of
-            them.
+            ``aktualnosc`` too) or of a link — all in one message;
+            successful versions stay on disk, and the link points to the
+            newest of them.
         """
         std = self._storage.get_path(sheet, self._default_ext)
+        root = self._storage.get_versions_root(sheet)
         chosen: list[SkorowidzRecord] | tuple[SkorowidzRecord, ...]
         if records is None:
             try:
@@ -987,7 +1108,9 @@ class DownloadManager:
         downloaded: list[Path] = []
         reused: list[Path] = []
         local: list[tuple[CampaignRef, Path]] = []
+        commits: list[VersionCommit] = []
         errors: list[tuple[str, DownloadError]] = []  # (campaign, error)
+        known: dict[str, list[LocalVersion]] = {}  # file name -> local versions
         started = False
         for record in chosen:
             try:  # R16 (cf. Q10): bad date = this campaign fails
@@ -995,94 +1118,63 @@ class DownloadManager:
             except DownloadError as e:
                 errors.append((record.url, e))
                 continue
-            try:  # B4 + record datum - before the network
+            try:  # B4 + record datum + extension - before the network
                 verify_record_url(record.url, sheet)
                 verify_record_vertical_crs(record, self._record_vertical_crs, sheet)
+                ext = campaign_extension(ref, self._default_ext)
             except DownloadError as e:
                 errors.append((ref.dirname, e))
                 continue
-            try:
-                ext = campaign_extension(ref, self._default_ext)  # before the network
-            except DownloadError as e:
-                errors.append((ref.dirname, e))
-                continue
-            path = self._storage.get_campaign_path(sheet, ref, ext)
-            if skip_existing and path.exists():
-                if path.with_name(path.name + ".meta.json").exists():
-                    self._note_reuse(path)
-                else:  # R22: process interrupted before the sidecar — recreate
-                    try:  # content unverified (interrupted before verification)
-                        verify_file_format(path, ext)
-                        verify_sheet_extent(path, sheet, ext)
-                    except DownloadError as e:
-                        path.unlink(missing_ok=True)
-                        errors.append((ref.dirname, e))
-                        continue
-                    try:
-                        self._write_campaign_sidecar(
-                            path, sheet, record, ref, available=available
-                        )
-                    except DownloadError as e:
-                        errors.append(
-                            (ref.dirname, e)
-                        )  # the file stays (from before the run)
-                        continue
-                logger.info(f"Skipping {sheet} {ref.dirname} - already exists")
-                reused.append(path)
-                local.append((ref, path))
-                continue
+            if skip_existing:
+                name = self._storage.get_path(sheet, ext).name
+                if name not in known:
+                    known[name] = list_versions(root, name)
+                existing = newest_version(
+                    v for v in known[name] if v.label == ref.dirname
+                )
+                if existing is not None:
+                    logger.info(f"{sheet} {ref.dirname}: lokalna wersja")
+                    reused.append(existing.path)
+                    local.append((ref, existing.path))
+                    continue
             if on_download is not None and not started:
                 on_download()
                 started = True
             logger.info(f"Downloading {sheet} {ref.dirname}...")
             try:
-                self._campaign_provider.download_record(record, path)
-                verify_file_format(path, ext)
-                verify_sheet_extent(path, sheet, ext)
-                self._write_campaign_sidecar(
-                    path, sheet, record, ref, available=available
-                )
+                commit = self._download_version(sheet, record, ref, ext, available)
             except DownloadError as e:
-                path.unlink(missing_ok=True)
                 errors.append((ref.dirname, e))
                 continue
-            downloaded.append(path)
-            local.append((ref, path))  # link candidate ONLY once it has a sidecar
-        method: str | None = None
+            commits.append(commit)
+            downloaded.append(commit.path)
+            local.append((ref, commit.path))
+        refreshed = {c.path for c in commits if c.status != "unchanged"}
         linked_target: Path | None = None
-        link_error: OSError | None = None
+        link_error: DownloadError | None = None
         if local:
             ref, path = max(local, key=lambda rp: rp[0].sort_key)
             try:
-                outcome = ensure_link(
-                    std, path, ref.sort_key, refresh=path in downloaded
+                linked_target = self._link(
+                    std, path, ref.sort_key, refresh=path in refreshed
                 )
-            except OSError as e:  # R5: sheet failure, not an abort of the list
+            except DownloadError as e:  # R5: sheet failure, not an abort of the list
                 link_error = e
-            else:
-                method = outcome.method
-                linked_target = outcome.target
-                if not outcome.changed:
-                    self._note_link_reuse(std, outcome)
         # ADR-033: the second link, same mechanics, only declared-full flights.
         full = self._storage.get_full_sheet_path(sheet, self._default_ext)
         full_target: Path | None = None
-        full_link_error: OSError | None = None
+        full_link_error: DownloadError | None = None
         candidates = [rp for rp in local if rp[0].full_sheet is True]
         if candidates:
             ref, path = max(candidates, key=lambda rp: rp[0].sort_key)
             try:
-                outcome = ensure_link(
-                    full, path, ref.sort_key, refresh=path in downloaded
+                full_target = self._link(
+                    full, path, ref.sort_key, refresh=path in refreshed
                 )
-            except OSError as e:
+            except DownloadError as e:
                 full_link_error = e
-            else:
-                full_target = outcome.target
-                if not outcome.changed:
-                    self._note_link_reuse(full, outcome)
         else:
-            full_target = linked_campaign(full)  # existing link stays untouched
+            full_target = linked_version(full)  # existing link stays untouched
         # Q10: full failure list
         if errors or link_error is not None or full_link_error is not None:
             problems = []
@@ -1091,10 +1183,9 @@ class DownloadManager:
                 problems.append(
                     f"nie pobrano {len(errors)} z {len(chosen)} kampanii ({listing})"
                 )
-            if link_error is not None:
-                problems.append(f"dowiazanie {std}: {link_error}")
-            if full_link_error is not None:
-                problems.append(f"dowiazanie {full}: {full_link_error}")
+            problems.extend(
+                str(e) for e in (link_error, full_link_error) if e is not None
+            )
             raise DownloadError(f"{sheet}: " + "; ".join(problems), sheet=sheet)
         better_coverage = None
         if self._has_range and self._all_campaigns and linked_target is not None:
@@ -1122,7 +1213,8 @@ class DownloadManager:
             skipped=not downloaded,
             downloaded=tuple(downloaded),
             reused=tuple(reused),
-            link=method,
+            status=_sheet_status(commits),
+            version=_label_of(linked_target),
             better_coverage=better_coverage,
             link_outside_range=link_outside_range,
             full_link=full if full_target is not None else None,
@@ -1133,11 +1225,13 @@ class DownloadManager:
     def _add_range_flights(
         self, std: Path, local: list[tuple[CampaignRef, Path]], linked_target: Path
     ) -> str | None:
-        """Add local flights and optional measured coverage to the standard sidecar.
+        """List local flights (and their coverage) in the standard link sidecar.
 
         Link selection has already finished and is never changed by this phase.
-        A newer local link outside the current selection cannot be compared
-        with these flights; keep its metadata but do not infer a better flight.
+        Coverage comes from the version sidecars (measured at commit, D13);
+        a version sidecar is never written here. A newer local link outside
+        the current selection cannot be compared with these flights; keep its
+        metadata but do not infer a better flight.
         """
         ordered = sorted(local, key=lambda rp: rp[0].sort_key, reverse=True)
         linked = next(
@@ -1152,8 +1246,8 @@ class DownloadManager:
             len(ordered) > 1 and linked is not None and linked.full_sheet is not True
         )
         flights: list[dict] = []
-        measured: list[tuple[float, CampaignRef]] = []
-        linked_coverage: float | None = None
+        scored: list[tuple[float, CampaignRef]] = []
+        linked_score: float | None = None
         for ref, path in ordered:
             flight: dict[str, object] = {
                 "id": ref.id,
@@ -1161,87 +1255,56 @@ class DownloadManager:
                 "full_sheet": ref.full_sheet,
             }
             if measure:
-                coverage: float | None = None
-                sidecar = path.with_name(path.name + ".meta.json")
-                try:
-                    payload = json.loads(sidecar.read_text(encoding="utf-8"))
-                except (OSError, ValueError):
-                    payload = {}
-                extra = payload.get("extra") if isinstance(payload, dict) else None
-                cached = extra.get("coverage") if isinstance(extra, dict) else None
-                if (
-                    isinstance(cached, (float, int))
-                    and not isinstance(cached, bool)
-                    and 0 <= cached <= 1
-                ):
-                    coverage = float(cached)
-                else:
-                    try:
-                        coverage = measure_coverage(path, path.suffix.lower())
-                    except DownloadError as e:
-                        logger.warning(
-                            "Nie udalo sie zmierzyc pokrycia %s: %s", path, e
-                        )
-                    if coverage is not None:
-                        update_sidecar_extra(path, {"coverage": coverage})
+                coverage = _version_coverage(path)
                 if coverage is not None:
                     flight["coverage"] = coverage
-                    measured.append((coverage, ref))
+                # a declared-full flight is not measured (D13): fully covered
+                score = 1.0 if ref.full_sheet is True else coverage
+                if score is not None:
+                    scored.append((score, ref))
                     if ref is linked:
-                        linked_coverage = coverage
+                        linked_score = score
             flights.append(flight)
         better = None
-        if linked_coverage is not None and measured:
-            best_coverage, best_ref = max(measured, key=lambda item: item[0])
-            if best_coverage > linked_coverage:
+        if linked_score is not None and scored:
+            best_score, best_ref = max(scored, key=lambda item: item[0])
+            if best_score > linked_score:
                 better = best_ref.id
-        updates: dict = {"flights": flights, "better_coverage": better}
-        if measure:
-            updates["coverage"] = linked_coverage
-        update_sidecar_extra(std, updates)
+        update_sidecar_extra(std, {"flights": flights, "better_coverage": better})
         return better
-
-    def _note_link_reuse(self, link: Path, outcome: LinkOutcome) -> None:
-        """Link unchanged: its sidecar as a regular file + N4."""
-        link_sidecar = link.with_name(link.name + ".meta.json")
-        # sidecar replaced by the user with a symlink: never write through it
-        if link_sidecar.is_symlink():
-            write_link_sidecar(link, outcome.target, outcome.method)
-        self._note_reuse(link)
 
     def _local_newest(
         self, sheet: str, std: Path, error: DownloadError
     ) -> SheetFetch | None:
-        """I-1: the local ``newest`` campaign when the GUGiK index is unavailable.
+        """I-1: the local ``newest`` version when the GUGiK index is unavailable.
 
-        ``None`` = no local campaign (no file, nonexistent
+        ``None`` = no local version (no file, nonexistent
         ``extra.link_target``, an old regular file, no standard sidecar) —
-        the caller reports the original error. The link is NOT moved:
-        ``ensure_link`` with the current target and the lowest key
-        returns it unchanged. The ``full_sheet/`` link is not touched either.
+        the caller reports the original error. The link is NOT moved; a
+        link sidecar replaced by a symlink is rewritten as a regular file.
+        The ``full_sheet/`` link is not touched either.
         """
-        target = linked_campaign(std)
+        target = linked_version(std)
         if target is None:
             return None
         try:
-            outcome = ensure_link(std, target, ("", "", ""))
-        except OSError:
+            ensure_link(std, target, ("", "", ""))
+        except (OSError, DownloadError):
             return None
         logger.warning(
             f"{sheet}: skorowidz GUGiK niedostepny ({error}) — uzyto lokalnej "
-            f"kampanii {outcome.target} bez sprawdzenia nowszej"
+            f"wersji {target} bez sprawdzenia nowszej"
         )
-        self._note_reuse(outcome.target)
-        self._note_link_reuse(std, outcome)
         full = self._storage.get_full_sheet_path(sheet, self._default_ext)
         return SheetFetch(
             sheet,
             std,
             skipped=True,
-            reused=(outcome.target,),
-            link=outcome.method,
+            reused=(target,),
+            status="local",
+            version=_label_of(target),
             unverified=str(error),
-            full_link=full if linked_campaign(full) is not None else None,
+            full_link=full if linked_version(full) is not None else None,
         )
 
     def _download_single_sheet_task(
@@ -1304,8 +1367,7 @@ class DownloadManager:
             if fetch.downloaded or fetch.reused:
                 result.campaign_files[sheet] = fetch.downloaded + fetch.reused
                 result.reused_campaign_files[sheet] = fetch.reused
-            if fetch.link == "copy":
-                result.copied.append(sheet)
+            getattr(result, fetch.status).append(sheet)
             if fetch.unverified is not None:
                 result.unverified[sheet] = fetch.unverified
             if fetch.better_coverage is not None:
@@ -1540,10 +1602,10 @@ class DownloadManager:
         request: dict,
         *,
         extra_override: dict | None = None,
-        required: bool = False,
+        digest: ContentDigest | None = None,
+        version: VersionRef | None = None,
     ) -> None:
-        """Write the .meta.json sidecar; best-effort by default (an error does
-        not abort the download).
+        """Write the .meta.json sidecar; best-effort without ``version``.
 
         For a request with ``sheet`` it adds ``extra.source`` — the file origin
         per ``provider.source_info`` (GUGiK index record: URL, layer,
@@ -1551,8 +1613,11 @@ class DownloadManager:
         provider without origin returns ``None``, and ``Mock(spec=...)`` — a
         ``Mock``. ``extra_override`` (campaign sidecar) replaces
         ``source_info``: its fields are merged into ``extra`` after
-        ``sidecar_extra``. ``required=True`` = mandatory sidecar
-        (``emit_sidecar`` raises ``DownloadError`` when it was not created).
+        ``sidecar_extra``. With ``version`` it is the mandatory VERSION
+        sidecar (spec 3.3): ``extra.version``, ``extra.coverage`` when
+        measured, sha256 from ``digest`` (D20), written exclusively —
+        ``FileExistsError`` propagates (another writer was first), any other
+        failure is a ``DownloadError``.
         """
         from kartograf.sources.sidecar import emit_sidecar
 
@@ -1566,13 +1631,17 @@ class DownloadManager:
                 source = source_info(sheet)
                 if isinstance(source, dict):
                     extra["source"] = source
+        if version is not None and digest is not None and digest.coverage is not None:
+            extra["coverage"] = digest.coverage
         emit_sidecar(
             getattr(self._provider, "descriptor_key", None),
             data_path,
             request=request,
             vertical_crs=getattr(self._provider, "vertical_crs", None),
             extra=extra or None,
-            required=required,
+            digest=(digest.sha256, digest.size_bytes) if digest is not None else None,
+            version=version.to_extra() if version is not None else None,
+            exclusive=version is not None,
         )
 
     def _write_campaign_sidecar(
@@ -1583,14 +1652,17 @@ class DownloadManager:
         ref: CampaignRef,
         *,
         available: tuple[int, ...] | None = None,
+        digest: ContentDigest,
+        version: VersionRef,
     ) -> None:
-        """MANDATORY campaign file sidecar (errata 2 N-1).
+        """MANDATORY version sidecar of a campaign file (errata 2 N-1, spec 3.3).
 
         ``request`` describes the resolved strategy, supplied year bounds and
         ``full_sheet: true`` when that flag is set (ADR-033);
         ``extra`` includes the source and campaign identity of THIS record
         (R13), plus all available years for range-checked requests. Failure
-        is a campaign ``DownloadError`` (the caller removes the data file).
+        is a campaign ``DownloadError`` (the commit removes the data file);
+        ``FileExistsError`` = another writer published it (``commit_version``).
         """
         request: dict = {
             "sheet": sheet,
@@ -1616,55 +1688,8 @@ class DownloadManager:
         if available is not None:
             extra["available_years"] = list(available)
         self._write_sidecar(
-            path,
-            request,
-            extra_override=extra,
-            required=True,
+            path, request, extra_override=extra, digest=digest, version=version
         )
-
-    def _note_reuse(self, data_path: Path) -> None:
-        """Append the current request to a SKIPPED sheet's sidecar (N4, best-effort).
-
-        ``extra.parent_request`` is the request that DOWNLOADED the file
-        (unchanged — ``downloaded_at`` stays true); later area requests that
-        reused the sheet from the cache land in the ``extra.parent_requests``
-        list (no duplicates; a request equal to ``parent_request`` is not
-        appended). The consumer looks for ``parent_request == R or R in
-        parent_requests``. Without a sidecar (cache from before 0.7.0) nothing
-        is created — a sidecar with an uncertain date and without
-        ``extra.source`` would be fabrication. Written via a temporary file +
-        ``os.replace`` (two processes over the same sheet).
-        """
-        request = (self._sidecar_extra or {}).get("parent_request")
-        if request is None:
-            return
-        sidecar = data_path.parent / f"{data_path.name}.meta.json"
-        try:
-            if not sidecar.exists():
-                return
-            payload = json.loads(sidecar.read_text(encoding="utf-8"))
-            extra = payload.get("extra")
-            if not isinstance(extra, dict):
-                extra = {}
-                payload["extra"] = extra
-            if extra.get("parent_request") == request:
-                return
-            seen = extra.get("parent_requests")
-            if not isinstance(seen, list):
-                seen = []
-            if request in seen:
-                return
-            extra["parent_requests"] = [*seen, request]
-            tmp = sidecar.with_name(
-                f"{sidecar.name}.{os.getpid()}_{threading.get_ident()}.tmp"
-            )
-            tmp.write_text(
-                json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-                encoding="utf-8",
-            )
-            os.replace(tmp, sidecar)
-        except Exception as e:  # noqa: BLE001 — a sidecar never aborts the download
-            logger.warning(f"Nie udalo sie dopisac zadania do sidecara {sidecar}: {e}")
 
     def __repr__(self) -> str:
         """Return string representation."""

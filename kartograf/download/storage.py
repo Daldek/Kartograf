@@ -13,9 +13,13 @@ from typing import BinaryIO
 
 from kartograf.core import parser_registry
 from kartograf.core.sheet_parser import BBox, SheetParser
-from kartograf.download.campaigns import CAMPAIGNS_DIR, FULL_SHEET_DIR, CampaignRef
+from kartograf.download.campaigns import FULL_SHEET_DIR
+from kartograf.download.versions import INCOMING_DIR, VERSIONS_DIR
 from kartograf.exceptions import ValidationError
 from kartograf.sources.registry import get_source
+
+# 0.7.x campaign directory, unused since the versioned store (spec 9).
+_LEGACY_CAMPAIGNS_DIR = "kampanie"
 
 
 class FileStorage:
@@ -250,14 +254,30 @@ class FileStorage:
             dir_path = dir_path / part
         return dir_path / f"{normalized}{ext}"
 
-    def get_campaign_path(self, sheet: str, campaign: CampaignRef, ext: str) -> Path:
-        """Path of a campaign file under ``kampanie/<date>_<id>``.
+    def get_versions_base(self, sheet: str) -> Path:
+        """``<output>/<segment>/versions`` of the sheet's segment (spec 3).
 
-        ``ext`` is the explicit file extension including dot: ".asc" for
-        NMT/NMPT or ".tif" for orthophotos.
+        Holds the staging directory ``.incoming/`` (same file system as the
+        versions, D19).
         """
         normalized = SheetParser(sheet).sheet
-        return self._sheet_path(normalized, ext, CAMPAIGNS_DIR, campaign.dirname)
+        return self._output_dir / self._resolved_subdir(normalized) / VERSIONS_DIR
+
+    def get_versions_root(self, sheet: str) -> Path:
+        """``<output>/<segment>/versions/<hierarchy>/`` — every version of the
+        sheet's files lives in ``<label>_<sha8>/`` directories here (D17)."""
+        normalized = SheetParser(sheet).sheet
+        path = self.get_versions_base(normalized)
+        for part in self._get_directory_parts(normalized):
+            path = path / part
+        return path
+
+    def has_legacy_campaigns(self) -> bool:
+        """Whether the segment holds a 0.7.x ``kampanie/`` directory (unused
+        since the versioned store; files are downloaded again)."""
+        return any(
+            (root / _LEGACY_CAMPAIGNS_DIR).is_dir() for root in self._segment_roots()
+        )
 
     def get_full_sheet_path(self, sheet: str, ext: str) -> Path:
         """
@@ -455,7 +475,7 @@ class FileStorage:
         Delete the links of a sheet: the standard path and ``full_sheet/``.
 
         Each one goes together with its companion `<file>.meta.json` sidecar.
-        Campaign files in ``kampanie/`` stay (ADR-030, ADR-033).
+        Versions in ``versions/`` stay (spec D9).
 
         Parameters
         ----------
@@ -471,8 +491,8 @@ class FileStorage:
         """
         deleted = False
         for path in (self.get_path(sheet, ext), self.get_full_sheet_path(sheet, ext)):
-            # Both paths are a hardlink or a copy of a campaign file (ADR-030):
-            # unlink() removes the path itself, the file in kampanie/ stays.
+            # Both paths are hardlinks of a version file (spec 3.2): unlink()
+            # removes the path itself, the version in versions/ stays.
             if path.exists():
                 path.unlink()
                 # The metadata sidecar must not outlive the data file.
@@ -480,7 +500,7 @@ class FileStorage:
                 deleted = True
         return deleted
 
-    def list_files(self, pattern: str, *, campaigns: bool = False) -> list[Path]:
+    def list_files(self, pattern: str, *, versions: bool = False) -> list[Path]:
         """
         List all files matching pattern in storage directory.
 
@@ -493,33 +513,42 @@ class FileStorage:
         pattern : str
             Explicit glob pattern, e.g. "**/*.asc" for NMT/NMPT sheets or
             "**/*.tif" for orthophotos.
-        campaigns : bool, optional
-            False (default): standard paths — without ``kampanie/`` and
-            ``full_sheet/``. True: only files in ``kampanie/`` (ADR-030).
+        versions : bool, optional
+            False (default): standard paths — without ``versions/``,
+            ``full_sheet/`` and a 0.7.x ``kampanie/``. True: only version
+            files in ``versions/`` (without the ``.incoming/`` staging area).
 
         Returns
         -------
         list[Path]
             List of matching file paths
         """
+        files: list[Path] = []
+        for root in self._segment_roots():
+            if not root.exists():
+                continue
+            for p in root.glob(pattern):
+                parts = p.relative_to(root).parts
+                if versions:
+                    if parts[:1] != (VERSIONS_DIR,) or INCOMING_DIR in parts:
+                        continue
+                elif parts[:1] in (
+                    (VERSIONS_DIR,),
+                    (FULL_SHEET_DIR,),
+                    (_LEGACY_CAMPAIGNS_DIR,),
+                ):
+                    continue
+                files.append(p)
+        return files
+
+    def _segment_roots(self) -> list[Path]:
+        """Segment directories; a ``{system}`` template spans both PL systems."""
         template = self._subdir
         if "{system}" in template:
-            subdirs = [template.replace("{system}", u) for u in ("1992", "2000")]
+            names = [template.replace("{system}", u) for u in ("1992", "2000")]
         else:
-            subdirs = [template]
-        files: list[Path] = []
-        for name in subdirs:
-            root = self._output_dir / self._ensure_resolved(name)
-            if root.exists():
-                for p in root.glob(pattern):
-                    top = p.relative_to(root).parts[:1]
-                    if campaigns:
-                        if top != (CAMPAIGNS_DIR,):
-                            continue
-                    elif top in ((CAMPAIGNS_DIR,), (FULL_SHEET_DIR,)):
-                        continue
-                    files.append(p)
-        return files
+            names = [template]
+        return [self._output_dir / self._ensure_resolved(name) for name in names]
 
     def get_size(self, sheet: str, ext: str) -> int | None:
         """

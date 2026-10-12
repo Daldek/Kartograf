@@ -119,22 +119,24 @@ class TestDownloadManagerIntegration:
         assert manager.storage.output_dir == test_data_dir
 
     def test_manager_skip_existing(self, test_data_dir, mock_tif_data):
-        """Test that manager skips existing files."""
-        storage = FileStorage(test_data_dir, resolution="1m", vertical_crs="EVRF2007")
-
-        # Create existing ASC file
-        existing_path = storage.get_path("N-34-130-D-d-2-4", ".asc")
-        existing_path.parent.mkdir(parents=True, exist_ok=True)
-        existing_path.write_bytes(mock_tif_data)
-
+        """Test that manager uses the local version without the provider."""
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
         mock_provider.resolution = "1m"
         mock_provider.vertical_crs = "EVRF2007"
+
+        def mock_download(sheet, path, timeout=30):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(mock_tif_data)
+            return path
+
+        mock_provider.download = Mock(side_effect=mock_download)
         manager = DownloadManager(
             output_dir=test_data_dir,
             provider=mock_provider,
         )
+        manager.download_sheet("N-34-130-D-d-2-4")
+        mock_provider.download.reset_mock()
 
         result = manager.download_sheet("N-34-130-D-d-2-4", skip_existing=True)
 
@@ -227,13 +229,6 @@ class TestProgressCallback:
         self, test_data_dir, mock_tif_data
     ):
         """Test that progress callback receives correct status updates."""
-        storage = FileStorage(test_data_dir, resolution="1m", vertical_crs="EVRF2007")
-
-        # Pre-create one ASC file to trigger skip
-        existing_path = storage.get_path("N-34-130-D-d-2-1", ".asc")
-        existing_path.parent.mkdir(parents=True, exist_ok=True)
-        existing_path.write_bytes(mock_tif_data)
-
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
         mock_provider.resolution = "1m"
@@ -247,6 +242,8 @@ class TestProgressCallback:
         mock_provider.download = mock_download
 
         manager = DownloadManager(output_dir=test_data_dir, provider=mock_provider)
+        # Pre-download one sheet to trigger skip
+        manager.download_sheets(["N-34-130-D-d-2-1"])
 
         progress_calls = []
 

@@ -164,7 +164,8 @@ def _warn_once(directory: Path, message: str) -> None:
     logger.warning(message)
 
 
-def _read_version(directory: Path, name: str) -> LocalVersion | None:
+def read_version(directory: Path, name: str) -> LocalVersion | None:
+    """The version ``directory/name`` when valid (see ``list_versions``)."""
     match = _VERSION_DIR.fullmatch(directory.name)
     data = directory / name
     if match is None or not data.is_file():
@@ -203,7 +204,7 @@ def list_versions(versions_root: Path, name: str) -> list[LocalVersion]:
     for directory in entries:
         if directory.name.startswith("."):
             continue
-        version = _read_version(directory, name)
+        version = read_version(directory, name)
         if version is not None:
             found.append(version)
     return found
@@ -233,8 +234,15 @@ def version_key(v: LocalVersion) -> tuple[str, str, str]:
 
 
 def newest_version(versions: Iterable[LocalVersion]) -> LocalVersion | None:
-    """The newest version by ``version_key``; ``None`` for no versions."""
-    return max(versions, key=version_key, default=None)
+    """The newest version by ``version_key``; ``None`` for no versions.
+
+    Equal keys (new content of the same campaign) — the later download wins.
+    """
+    return max(
+        versions,
+        key=lambda v: (version_key(v), str(v.meta.get("downloaded_at") or "")),
+        default=None,
+    )
 
 
 def _newest_mtime(path: Path) -> float:
@@ -372,6 +380,8 @@ def commit_version(
             return VersionCommit("unchanged", target, digest.sha256, version.label)
     except (OSError, NotImplementedError) as e:
         _discard(staged)
+        with contextlib.suppress(OSError):
+            vdir.rmdir()  # only when empty: created by this call
         if isinstance(e, NotImplementedError) or e.errno in _NO_HARDLINK:
             raise DownloadError(
                 f"{target}: magazyn wersji wymaga systemu plikow z hardlinkami "

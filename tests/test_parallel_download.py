@@ -182,12 +182,8 @@ class TestParallelDownloadHierarchy:
             output_dir=tmp_path, provider=mock_provider, max_workers=2
         )
 
-        # Pre-create some files
-        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
-        for sheet in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"]:
-            path = storage.get_path(sheet, ".asc")
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"existing")
+        # Pre-download some sheets (local versions)
+        manager.download_sheets(["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"])
 
         progress_calls = []
 
@@ -275,9 +271,7 @@ class TestDownloadHierarchyLastResult:
         manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
 
         existing_sheet = "N-34-130-D-d-2-2"
-        existing_path = manager.storage.get_path(existing_sheet, ".asc")
-        existing_path.parent.mkdir(parents=True, exist_ok=True)
-        existing_path.write_bytes(b"existing")
+        manager.download_sheets([existing_sheet])  # a local version
 
         with caplog.at_level(logging.INFO, logger="kartograf.download.manager"):
             paths = manager.download_hierarchy(
@@ -319,9 +313,7 @@ class TestDownloadHierarchyLastResult:
 
         provider.download = mock_download
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
-        existing = manager.storage.get_path("N-34-130-D-d-2-2", ".asc")
-        existing.parent.mkdir(parents=True, exist_ok=True)
-        existing.write_bytes(b"existing")
+        manager.download_sheets(["N-34-130-D-d-2-2"])  # a local version
 
         events = []
         manager.download_hierarchy(
