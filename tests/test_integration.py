@@ -138,7 +138,7 @@ class TestDownloadManagerIntegration:
         manager.download_sheet("N-34-130-D-d-2-4")
         mock_provider.download.reset_mock()
 
-        result = manager.download_sheet("N-34-130-D-d-2-4", skip_existing=True)
+        result = manager.download_sheet("N-34-130-D-d-2-4")
 
         # Should return path without calling provider
         assert result.exists()

@@ -331,17 +331,59 @@ def test_legacy_kampanie_files_are_not_versions(tmp_path):
     assert old.read_text() == "stary"
 
 
-def test_newer_campaign_appears_relinks(tmp_path):
+def test_newer_campaign_reported_by_default_downloaded_by_upgrade(tmp_path):
+    """D5: the default mode keeps the local version and reports the newer
+    campaign; ``upgrade`` downloads it and moves the link."""
     fake = FakeCampaignProvider({"newest": [REC["83233"]]})
     m = DownloadManager(tmp_path, provider=fake)
     std = m.download_sheet(G)
     assert "2025-04-27_83233" in linked(std)
     fake.records = {"newest": [REC["84183"]]}
     m.download_sheet(G)
+    assert fake.downloads == [REC["83233"].url]
+    assert m.last_sheet.status == "local" and m.last_sheet.skipped
+    assert m.last_sheet.newer == "2025-10-21_84183"
+    assert m.last_result.newer == {G: "2025-10-21_84183"}
+    assert "2025-04-27_83233" in linked(std)
+    m.download_sheet(G, update="upgrade")
     assert fake.downloads == [REC["83233"].url, REC["84183"].url]
+    assert m.last_sheet.status == "new" and m.last_sheet.newer is None
     assert "2025-10-21_84183" in linked(std)
     assert campaign_path(tmp_path, REC["83233"]).is_file()
     assert meta(std)["extra"]["campaign"]["id"] == "84183"
+
+
+def test_upgrade_with_newest_local_downloads_nothing(tmp_path):
+    fake = FakeCampaignProvider(C14)
+    m = DownloadManager(tmp_path, provider=fake)
+    m.download_sheet(G)
+    m.download_sheet(G, update="upgrade")
+    assert fake.downloads == [REC["84183"].url]
+    assert m.last_sheet.status == "local" and m.last_sheet.newer is None
+
+
+def test_stale_record_older_than_local_is_not_newer(tmp_path):
+    """A record older than the kept local version is no "newer" campaign."""
+    fake = FakeCampaignProvider({"newest": [REC["84183"]]})
+    m = DownloadManager(tmp_path, provider=fake)
+    m.download_sheet(G)
+    fake.records = {"newest": [REC["78047"]]}  # stale record cache
+    m.download_sheet(G)
+    assert fake.downloads == [REC["84183"].url]
+    assert m.last_sheet.newer is None and "84183" in linked(std_path(tmp_path))
+
+
+def test_check_mode_rejected_in_download_methods(tmp_path):
+    m = DownloadManager(tmp_path, provider=FakeCampaignProvider(C14))
+    for call in (
+        lambda: m.download_sheet(G, update="check"),
+        lambda: m.download_sheets([G], update="check"),
+        lambda: m.download_hierarchy("N-34-139-C-a-3", "1:10000", update="check"),
+    ):
+        with pytest.raises(ValidationError, match="check_updates"):
+            call()
+    with pytest.raises(ValidationError, match="Nieznany tryb"):
+        m.download_sheet(G, update="refresh")  # type: ignore[arg-type]
 
 
 # =============================================================================
@@ -449,7 +491,7 @@ def test_force_redownloads_all_campaigns_same_content_unchanged(tmp_path):
     m = DownloadManager(tmp_path, provider=fake, all_campaigns=True)
     m.download_sheets([G])
     fake.downloads.clear()
-    m.download_sheets([G], skip_existing=False)
+    m.download_sheets([G], update="force")
     assert sorted(fake.downloads) == sorted(r.url for r in C14_ALL)
     assert "2025-10-21_84183" in linked(std_path(tmp_path))
     assert m.last_result.succeeded == [std_path(tmp_path)]
@@ -463,7 +505,7 @@ def test_force_changed_content_same_campaign_new_version_and_relink(tmp_path):
     std = m.download_sheet(G)
     first = campaign_path(tmp_path, REC["84183"])
     fake.version = "v2"  # same size, other bytes
-    m.download_sheet(G, skip_existing=False)
+    m.download_sheet(G, update="force")
     versions = list(first.parent.parent.glob(f"2025-10-21_84183_*/{G}.asc"))
     (second,) = [v for v in versions if v != first]
     assert "v1" in first.read_text() and "v2" in second.read_text()  # old kept
@@ -573,7 +615,7 @@ def test_content_mismatch_removes_file_and_fails(tmp_path):
     std = m.download_sheet(G2)
     fake.records = {"newest": [new]}
     with pytest.raises(DownloadError, match="tresc nie jest"):
-        m.download_sheet(G2)
+        m.download_sheet(G2, update="upgrade")
     bad = campaign_path(tmp_path, new, G2)
     assert not bad.exists() and not sidecar(bad).exists()
     assert "2022-03-20_75506" in linked(std)
@@ -649,7 +691,7 @@ def test_campaign_sidecar_failure_removes_data_and_keeps_link(tmp_path, monkeypa
     monkeypatch.setattr("kartograf.sources.sidecar.build_metadata", broken)
     fake.records = {"newest": [REC["84183"]]}
     with pytest.raises(DownloadError, match="obowiazkowego sidecara"):
-        m.download_sheet(G)
+        m.download_sheet(G, update="upgrade")
     assert not campaign_path(tmp_path, REC["84183"]).exists()
     assert "2025-04-27_83233" in linked(std)
     assert sidecar(std).read_bytes() == before
@@ -909,7 +951,9 @@ def test_manager_without_range_unchanged_uses_record_cache(tmp_path):
     assert "84183" in linked(std_path(tmp_path))
 
 
-def test_manager_range_disables_local_fallback(tmp_path):
+def test_range_index_down_all_local_uses_local(tmp_path, caplog):
+    """D14: every sheet has a local version from the range -> local versions
+    with a warning, no download."""
     from tests.test_campaigns_flow import c14_session
 
     cache = MetadataCache(tmp_path / "cache.db")
@@ -934,11 +978,49 @@ def test_manager_range_disables_local_fallback(tmp_path):
     )
     with (
         patch("kartograf.transport.http.time.sleep"),
-        pytest.raises(DownloadError, match="nie udalo sie sprawdzic"),
+        caplog.at_level(logging.WARNING, logger="kartograf.download.manager"),
     ):
-        manager.download_sheet(G)
-    assert manager.last_result is None and manager.last_sheet is None
+        path = manager.download_sheet(G)
+    assert path == std_path(tmp_path)
+    assert manager.last_sheet.status == "local"
+    assert manager.last_sheet.version == "2025-10-21_84183"
+    assert manager.last_sheet.unverified
+    assert manager.last_result.unverified.keys() == {G}
     assert "84183" in linked(std_path(tmp_path))
+    assert "skorowidz GUGiK niedostepny" in caplog.text
+
+
+def test_range_index_down_one_missing_fails_task(tmp_path):
+    """D14: one sheet without a local version from the range -> the whole
+    task fails before any download."""
+    g2 = "N-34-139-C-a-3-2"
+    fake = c14_fake()
+    DownloadManager(tmp_path, provider=fake).download_sheet(G)
+    fake.downloads.clear()
+    fake.resolve_error = _transport_error(G, 503)
+    m = DownloadManager(tmp_path, provider=fake, min_year=2024)
+    with pytest.raises(DownloadError, match="nie udalo sie sprawdzic"):
+        m.download_sheets([G, g2])
+    assert fake.downloads == [] and m.last_result is None
+
+
+@pytest.mark.parametrize("update", ["upgrade", "force"])
+def test_range_index_down_upgrade_and_force_fail_task(tmp_path, update):
+    fake = c14_fake()
+    DownloadManager(tmp_path, provider=fake).download_sheet(G)
+    fake.resolve_error = _transport_error(G, 503)
+    m = DownloadManager(tmp_path, provider=fake, min_year=2024)
+    with pytest.raises(DownloadError, match="nie udalo sie sprawdzic"):
+        m.download_sheet(G, update=update)
+
+
+def test_range_index_down_local_outside_range_fails_task(tmp_path):
+    fake = c14_fake()
+    DownloadManager(tmp_path, provider=fake).download_sheet(G)  # 2025 flight
+    fake.resolve_error = _transport_error(G, 503)
+    m = DownloadManager(tmp_path, provider=fake, max_year=2024)
+    with pytest.raises(DownloadError, match="nie udalo sie sprawdzic"):
+        m.download_sheet(G)
 
 
 def test_manager_direct_sheet_conflict_and_no_data_do_not_fetch(tmp_path):
@@ -1200,7 +1282,7 @@ def test_provider_without_campaigns_versions_by_download_date(tmp_path):
     m.download_sheet(G)
     assert m.last_sheet.skipped is True and m.last_sheet.status == "local"
     assert p.download.call_count == 1
-    m.download_sheet(G, skip_existing=False)
+    m.download_sheet(G, update="force")
     assert m.last_sheet.status == "unchanged"  # same bytes, no new version
     assert len(list((tmp_path / SEGMENT / "versions").rglob(f"{G}.asc"))) == 1
 
@@ -1424,19 +1506,20 @@ def test_newest_transport_failure_keeps_link_untouched(tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("kwargs", "error"),
+    ("kwargs", "update", "error"),
     [
         # no coverage = a data state, not transport
-        ({}, NoCoverageError("Brak kampanii", sheet=G)),
+        ({}, None, NoCoverageError("Brak kampanii", sheet=G)),
         # 4xx without retries and a response-content error are not transport
-        ({}, "404"),
-        ({}, DownloadError("raport wyjatku OGC", sheet=G)),
-        # only newest without a year bound
-        ({"all_campaigns": True}, "conn"),
+        ({}, None, "404"),
+        ({}, None, DownloadError("raport wyjatku OGC", sheet=G)),
+        # only the default mode falls back to the local version
+        ({}, "upgrade", "conn"),
+        ({"all_campaigns": True}, "force", "conn"),
     ],
-    ids=["no-coverage", "http-404", "ogc", "all"],
+    ids=["no-coverage", "http-404", "ogc", "upgrade", "all-force"],
 )
-def test_resolve_failure_without_fallback_still_fails(tmp_path, kwargs, error):
+def test_resolve_failure_without_fallback_still_fails(tmp_path, kwargs, update, error):
     fake = FakeCampaignProvider(C14)
     DownloadManager(tmp_path, provider=fake, **kwargs).download_sheets([G])
     assert std_path(tmp_path).exists()
@@ -1447,9 +1530,20 @@ def test_resolve_failure_without_fallback_still_fails(tmp_path, kwargs, error):
     fake.resolve_error = error
     m = DownloadManager(tmp_path, provider=fake, **kwargs)
     with pytest.raises(type(error)) as exc:
-        m.download_sheet(G)
+        m.download_sheet(G, update=update)
     assert exc.value is error
     assert m.last_sheet is None
+
+
+def test_all_strategy_transport_failure_uses_local_link_target(tmp_path):
+    """I-1 for every strategy (spec 4.2): ``all`` without year bounds."""
+    fake = FakeCampaignProvider(C14)
+    DownloadManager(tmp_path, provider=fake, all_campaigns=True).download_sheets([G])
+    fake.resolve_error = _transport_error(G, requests.ConnectionError("x"))
+    m = DownloadManager(tmp_path, provider=fake, all_campaigns=True)
+    m.download_sheet(G)
+    assert m.last_sheet.status == "local" and m.last_sheet.unverified
+    assert m.last_sheet.version == "2025-10-21_84183"
 
 
 def test_transport_failure_without_local_campaign_fails(tmp_path):
@@ -1479,7 +1573,7 @@ def test_transport_failure_with_force_fails(tmp_path):
     m.download_sheet(G)
     fake.resolve_error = _transport_error(G, 503)
     with pytest.raises(DownloadError):
-        m.download_sheet(G, skip_existing=False)
+        m.download_sheet(G, update="force")
 
 
 # =============================================================================
@@ -1741,10 +1835,10 @@ def test_force_with_changed_content_moves_full_link(tmp_path):
     DownloadManager(tmp_path, provider=fake).download_sheet(G4)
     full = full_path(tmp_path, G4)
     before = full.stat().st_ino
-    DownloadManager(tmp_path, provider=fake).download_sheet(G4, skip_existing=False)
+    DownloadManager(tmp_path, provider=fake).download_sheet(G4, update="force")
     assert full.stat().st_ino == before  # unchanged content
     fake.version = "v2"
-    DownloadManager(tmp_path, provider=fake).download_sheet(G4, skip_existing=False)
+    DownloadManager(tmp_path, provider=fake).download_sheet(G4, update="force")
     assert full.stat().st_ino != before
     assert "v2" in full.read_text() and linked_version(full) is not None
 
@@ -1835,3 +1929,16 @@ def test_full_sheet_full_flight_download_failure_fails_sheet(tmp_path):
         m.download_sheet(G)
     assert linked_version(std_path(tmp_path)) == campaign_path(tmp_path, REC["84183"])
     assert not full_path(tmp_path).exists()
+
+
+def test_full_sheet_missing_full_flight_downloaded_by_default(tmp_path):
+    """Spec 4.2: a missing newest full flight is "no local version" — the
+    default mode downloads it, the local newest flight is not touched."""
+    fake = c14_fake()
+    DownloadManager(tmp_path, provider=fake).download_sheet(G)
+    assert fake.downloads == [REC["84183"].url]
+    m = DownloadManager(tmp_path, provider=fake, full_sheet=True)
+    m.download_sheet(G)
+    assert fake.downloads == [REC["84183"].url, REC["83233"].url]
+    assert linked_version(full_path(tmp_path)) == campaign_path(tmp_path, REC["83233"])
+    assert m.last_sheet.status == "new"

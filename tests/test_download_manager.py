@@ -285,7 +285,7 @@ class TestDownloadManagerDownloadSheet:
             raise AssertionError("download")
 
         mock_provider.download = must_not_download
-        result = manager.download_sheet("N-34-130-D-d-2-4", skip_existing=True)
+        result = manager.download_sheet("N-34-130-D-d-2-4")
 
         assert result == first
         assert result.read_bytes() == b"ASC data"
@@ -301,7 +301,7 @@ class TestDownloadManagerDownloadSheet:
         existing_path.parent.mkdir(parents=True, exist_ok=True)
         existing_path.write_bytes(b"existing data")
 
-        result = manager.download_sheet("N-34-130-D-d-2-4", skip_existing=False)
+        result = manager.download_sheet("N-34-130-D-d-2-4", update="force")
 
         assert isinstance(result, Path)
         assert result.exists()
@@ -1114,7 +1114,7 @@ class TestSidecarWritten:
         sidecar = version.parent / f"{version.name}.meta.json"
         before = sidecar.read_bytes()
         manager.download_sheet(sheet)
-        manager.download_sheet(sheet, skip_existing=False)
+        manager.download_sheet(sheet, update="force")
         assert sidecar.read_bytes() == before
 
     def test_sidecar_failure_fails_sheet_without_version(self, tmp_path):
@@ -1220,7 +1220,7 @@ class TestSidecarWritten:
         assert "source" not in payload["extra"]
 
         provider.source_info = lambda sheet: None
-        result = manager.download_sheet("N-34-130-D-d-2-4", skip_existing=False)
+        result = manager.download_sheet("N-34-130-D-d-2-4", update="force")
         payload = json.loads(
             (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
         )

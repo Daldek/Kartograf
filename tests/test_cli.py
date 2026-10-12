@@ -77,7 +77,7 @@ def _mock_manager(path):
 def _starting_download(path):
     """A fake ``download_sheet`` that calls ``on_download`` before downloading."""
 
-    def fake(sheet, skip_existing=True, on_progress=None, on_download=None):
+    def fake(sheet, update=None, on_progress=None, on_download=None):
         if on_download is not None:
             on_download()
         return path
@@ -696,7 +696,7 @@ class TestCmdDownload:
 
         assert result == 0
         mock_manager.download_sheet.assert_called_once_with(
-            "N-34-130-D-d-2-4", skip_existing=True, on_progress=None, on_download=ANY
+            "N-34-130-D-d-2-4", update=None, on_progress=None, on_download=ANY
         )
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -767,7 +767,7 @@ class TestCmdDownload:
 
         assert result == 0
         mock_manager.download_sheet.assert_called_once_with(
-            "N-34-130-D-d-2-4", skip_existing=False, on_progress=None, on_download=ANY
+            "N-34-130-D-d-2-4", update="force", on_progress=None, on_download=ANY
         )
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -2381,7 +2381,7 @@ class TestCmdDownloadBBox:
 
         assert result == 0
         mock_manager.download_sheets.assert_called_once_with(
-            ["A", "B"], skip_existing=True, on_progress=ANY
+            ["A", "B"], update=None, on_progress=ANY
         )
         # --workers reaches the manager, not the CLI loop
         assert mock_manager_cls.call_args.kwargs["max_workers"] == 1
