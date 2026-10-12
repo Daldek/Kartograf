@@ -504,3 +504,72 @@ class TestDigest:
         payload = json.loads(sidecar.read_text())
         assert payload["sha256"] == hashlib.sha256(b"ncols 1\n").hexdigest()
         assert payload["size_bytes"] == 8
+
+
+ASC_1X1 = "ncols 1\nnrows 1\nxllcorner 0\nyllcorner 0\ncellsize 1\n1\n"
+
+
+def test_build_metadata_with_digest_does_not_read_file(tmp_path, monkeypatch):
+    from kartograf.sources import sidecar as s
+
+    data = tmp_path / "N-34-139-C-a-3-1.asc"
+    data.write_text(ASC_1X1)
+    monkeypatch.setattr(s, "file_digest", lambda p: pytest.fail("second read"))
+    meta = build_metadata(
+        get_source("pl.gugik.nmt_1m"),
+        request={"sheet": "N-34-139-C-a-3-1"},
+        data_path=data,
+        digest=("ab" * 32, 7),
+        version={"label": "2025-06-02_91234", "label_source": "campaign"},
+    )
+    assert (meta.sha256, meta.size_bytes) == ("ab" * 32, 7)
+    assert meta.extra["version"] == {
+        "label": "2025-06-02_91234",
+        "label_source": "campaign",
+    }
+
+
+@pytest.mark.parametrize("mode", ["atomic", "exclusive"])
+def test_mandatory_sidecar_is_fsynced_before_publish(tmp_path, monkeypatch, mode):
+    from kartograf.sources import sidecar as s
+
+    calls = []
+    monkeypatch.setattr(s.os, "fsync", lambda fd: calls.append("fsync"))
+    for name in ("replace", "link"):
+        real = getattr(s.os, name)
+
+        def spy(a, b, real=real, name=name):
+            calls.append(name)
+            return real(a, b)
+
+        monkeypatch.setattr(s.os, name, spy)
+    data = tmp_path / "x.asc"
+    data.write_text(ASC_1X1)
+    path = emit_sidecar(
+        "pl.gugik.nmt_1m",
+        data,
+        request={"sheet": "N-34-139-C-a-3-1"},
+        required=True,
+        exclusive=mode == "exclusive",
+    )
+    published = "link" if mode == "exclusive" else "replace"
+    assert calls[:2] == ["fsync", published]
+    assert path is not None and json.loads(path.read_text())["dataset"]
+    assert {p.name for p in tmp_path.iterdir()} == {"x.asc", path.name}  # no tmp left
+
+
+def test_exclusive_sidecar_never_overwrites(tmp_path):
+    data = tmp_path / "x.asc"
+    data.write_text(ASC_1X1)
+    sidecar = tmp_path / "x.asc.meta.json"
+    sidecar.write_text("{}")
+    with pytest.raises(FileExistsError):
+        emit_sidecar(
+            "pl.gugik.nmt_1m",
+            data,
+            request={"sheet": "N-34-139-C-a-3-1"},
+            required=True,
+            exclusive=True,
+        )
+    assert sidecar.read_text() == "{}"
+    assert {p.name for p in tmp_path.iterdir()} == {"x.asc", "x.asc.meta.json"}

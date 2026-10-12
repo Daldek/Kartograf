@@ -42,6 +42,8 @@ Galaz `feat/versioned-store` trafia do `develop` dopiero po planie 3/3.
 6. **Klucz "najnowszej wersji":** kampania — `(extra.campaign.date, extra.campaign.pzgik_date or "", extra.source.url)` (jak dzis `campaign_key_from_sidecar`); pozostale — `(data z etykiety albo "", downloaded_at, sha256)`. Wersja bez czytelnego sidecara nie jest wazna, wiec fallbacku z nazwy katalogu nie ma.
 7. **Tor bez kampanii (`_fetch_sheet_plain`)** dostaje wersje z etykieta `downloaded` (providery bez kampanii: atrapy testowe, obce providery).
 8. **Tymczasowe odrzucenie w CLI:** `--check-updates`/`--upgrade` dla torow z planow 2/3 i 3/3 (LAZ, CZ, `--target-crs`, `landcover`, `soilgrids`) konczy sie `Error:` (kod 1) przed siecia; `--force` dziala tam jak dzis. Galaz nie trafia do `develop` przed planem 3/3, ktory usuwa to odrzucenie.
+9. **Sidecar wersji publikowany wylacznie (dopisane 2026-10-12, Task 1):** `write_sidecar` przekazany do `commit_version` tworzy `<plik>.meta.json` wylacznie (tmp + `fsync` + `os.link`, nie `os.replace`); `FileExistsError` = inny zapis opublikowal sidecar pierwszy -> `unchanged`. Bez tego dwa rownolegle zapisy tej samej tresci (drugi trafia w "naprawe", zanim pierwszy zapisze sidecar) koncza oba jako `new`, a sidecar wersji jest zapisywany dwa razy (wbrew D12). Task 2: `write_sidecar(..., exclusive=True)` i `emit_sidecar(..., exclusive=True)` przepuszczajace `FileExistsError`.
+10. **Jeden licznik pokrycia ASC (dopisane 2026-10-12, Task 1):** `campaigns.AscCoverage` (strumieniowy, karmiony kawalkami) liczy pokrycie dla `measure_coverage` i dla `read_content` — jedna implementacja, wyniki rowne z definicji.
 
 ## Warunek wstepny (spelniony 2026-10-12)
 
