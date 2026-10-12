@@ -485,11 +485,12 @@ rozwijane do arkuszy 1:10000 przez `download_hierarchy()` (ta zawsze zwraca
   (także po pojedynczym arkuszu — wynik jednoelementowy):
   `succeeded`, `failed`, `skipped`, `no_coverage` (arkusze, dla których
   GUGiK nie ma danych — `NoCoverageError`, podklasa `DownloadError`; są też
-  w `failed`), pliki kampanii i `unverified` (sekcja 4).
+  w `failed`), pliki kampanii, `unverified`, statusy wersji `new`/
+  `relabeled`/`unchanged`/`local`, `newer` i `files` (sekcja 4).
 - `DownloadManager.last_sheet` (`SheetFetch`) po pojedynczym arkuszu:
-  `path`, `skipped`, `downloaded`, `reused`, `link`, `unverified`,
-  `better_coverage`, `link_outside_range`, `full_link`,
-  `full_link_outside_range` (sekcje 4.1 i 4.2).
+  `path`, `skipped`, `downloaded`, `reused`, `status`, `version`, `newer`,
+  `files`, `unverified`, `better_coverage`, `link_outside_range`, `full_link`,
+  `full_link_outside_range` (sekcje 4.1–4.3).
 - `DownloadResult` ma też `no_coverage_hints` (godło -> podpowiedzi przy
   braku pokrycia, sekcja 1.6), `better_coverage`, `link_outside_range`,
   `full_links`, `full_link_outside_range` i `without_full` (sekcje 4.1
@@ -533,34 +534,42 @@ Domyślnie (również z flagami roku) pobiera najnowszą kampanię;
 opcje dają `Error: CZ (CUZK) nie ma kampanii — ...` (zadanie wyłącznie
 czeskie) albo `Info:` (obszar PL+CZ pod `auto`, CZ w bieżącej wersji).
 
-Prawdziwe pliki NMT/NMPT/orto leżą w
-`data/<produkt>/<segment>/kampanie/<data>_<id>/<hierarchia godła>/<godło>.<ext>`
-(`<data>` = data pozyskania, `<id>` = numer kampanii z nazwy pliku GUGiK),
-a ścieżka standardowa `data/<produkt>/<segment>/<hierarchia godła>/<godło>.<ext>`
-jest dowiązaniem do najnowszej lokalnej kampanii. `newest` po wygaśnięciu
-cache (7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania.
+Prawdziwe pliki NMT/NMPT/orto leżą jako **wersje** w
+`data/<produkt>/<segment>/versions/<hierarchia godła>/<data>_<id>_<sha8>/<godło>.<ext>`
+(`<data>` = data pozyskania, `<id>` = numer kampanii z nazwy pliku GUGiK,
+`<sha8>` = początek sumy SHA-256 treści), a ścieżka standardowa
+`data/<produkt>/<segment>/<hierarchia godła>/<godło>.<ext>` jest
+dowiązaniem twardym do najnowszej lokalnej wersji
+([ADR-036](DECISIONS.md)). Wersji nic nie nadpisuje: ponowne pobranie tej
+samej treści to „bez zmian”, inna treść to nowa wersja obok starej.
+Szczegóły trybów: sekcja 4.3.
 
 - **Skorowidz niedostępny:** gdy skorowidz GUGiK nie odpowiada (sieć, HTTP
-  429/5xx), a arkusz ma już lokalną kampanię, `newest` jej używa i drukuje
-  `Warning: <godło>: skorowidz GUGiK niedostepny — uzyto lokalnej kampanii
-  bez sprawdzenia nowszej (...)` (kod bez zmian, także z `-q`). Bez lokalnej
-  kampanii, z `--force`, `--all-campaigns` albo dowolną flagą roku taki błąd
-  nadal kończy pobranie porażką (errata 5 ADR-030; z flagą roku całe
-  zadanie, sekcja 4.1). Biblioteka:
+  429/5xx), a arkusz ma już lokalną wersję, tryb domyślny jej używa (każda
+  strategia) i drukuje `Warning: <godło>: skorowidz GUGiK niedostepny —
+  uzyto lokalnej wersji bez sprawdzenia nowszej (...)` (kod bez zmian,
+  także z `-q`). Z flagą roku: gdy KAŻDY arkusz zadania ma lokalną wersję
+  z zakresu lat — lokalne wersje z ostrzeżeniem, inaczej całe zadanie kończy
+  się błędem bez pobrań. Bez lokalnej wersji, z `--upgrade` albo `--force`
+  błąd kończy pobranie porażką. Biblioteka:
   `DownloadManager.last_sheet.unverified` / `DownloadResult.unverified`
   (treść błędu transportu).
-- **Dowiązanie = hardlink:** ścieżka standardowa to dowiązanie twarde do
-  pliku kampanii (ten sam plik na dysku, bez dodatkowego miejsca); Kartograf
-  nie tworzy symlinków. Gdy system plików nie obsługuje hardlinków
-  (exFAT/FAT, sshfs/FUSE), powstaje kopia z `Warning:` (`extra.link: copy`
-  w sidecarze).
+- **Wymagane hardlinki:** ścieżka standardowa to dowiązanie twarde do pliku
+  wersji (ten sam plik na dysku, bez dodatkowego miejsca); Kartograf nie
+  tworzy symlinków ani kopii. System plików bez hardlinków (exFAT/FAT,
+  sshfs/FUSE) kończy pobranie arkusza błędem. Udział SMB montowany bez
+  `serverino` (niestabilne numery i-węzłów) działa, ale dowiązanie jest
+  odtwarzane przy każdym uruchomieniu.
 - **Kopiowanie `data/`:** użyj `rsync -aH` albo `cp -a` — bez zachowania
   hardlinków ścieżka standardowa staje się osobną kopią (duplikat danych).
+  Treść wersji jest nieskompresowana (suma SHA-256 z bajtów) — przy dużych
+  zbiorach warto włączyć kompresję systemu plików.
 - **Windows:** hardlink działa bez dodatkowych uprawnień (NTFS), a dane
   udostępnione przez SMB klient Windows widzi jako zwykłe pliki.
-- **Migracja:** brak; zwykły plik NMT/NMPT/orto w starej ścieżce
-  standardowej jest traktowany jak nieznany — pierwsze uruchomienie pobiera
-  go ponownie do `kampanie/` i zastępuje dowiązaniem.
+- **Migracja z 0.7.x:** brak; katalog `kampanie/` nie jest czytany (CLI
+  raz drukuje `Info: katalog kampanie/ z wersji 0.7.x nie jest uzywany ...`),
+  a potrzebne kampanie są pobierane ponownie do `versions/`; zwykły plik albo
+  kopia w ścieżce standardowej jest zastępowana dowiązaniem.
 - **Układ wysokości rekordu:** rekord skorowidza NMT/NMPT musi deklarować
   zadany układ (`ukladWspolrzednychPionowych`: `PL-KRON86-NH` dla KRON86,
   `PL-EVRF2007-NH` dla EVRF2007); inna wartość kończy kampanię błędem przed
@@ -589,13 +598,13 @@ domknięte; `--year RRRR` to skrót `--min-year RRRR --max-year RRRR`
 - **Flagi roku wyznaczają tylko dopuszczalne lata, `--all-campaigns` — liczbę
   lotów na arkusz.** Domyślnie pobierany jest
   jeden, najnowszy lot z zakresu; `--all-campaigns` pobiera wszystkie loty
-  z zakresu do `kampanie/`. Ta sama reguła dla każdej flagi roku i każdego
+  z zakresu do `versions/`. Ta sama reguła dla każdej flagi roku i każdego
   produktu. Przykład (arkusz z lotami 2019, 2023, 2025-04, 2025-10):
   `--year 2025` = lot 2025-10; `--year 2025 --all-campaigns` = oba loty
   2025; `--max-year 2024` = lot 2023; `--min-year 2024` = lot 2025-10.
 - **Ścieżka standardowa** wskazuje najnowszy lokalny lot i nigdy nie cofa się
   na starszy. Gdy wcześniej pobrano nowszy lot, a teraz zakres go wyklucza
-  (np. `--max-year 2022`), wybrany lot trafia do `kampanie/`, dowiązanie
+  (np. `--max-year 2022`), wybrany lot trafia do `versions/`, dowiązanie
   zostaje przy nowszym, a CLI podaje `Info: N dowiazan wskazuje lokalny lot
   spoza tego zadania ...` z linią `<godło>: sciezka standardowa -> dowiazanie
   <data>_<id>` (to samo dla `full_sheet/`, sekcja 4.2).
@@ -613,12 +622,13 @@ domknięte; `--year RRRR` to skrót `--min-year RRRR --max-year RRRR`
   Arkusz bez żadnych danych (morze, obszar za granicą) jest pomijany
   z `Warning:` jak dotąd. Awaria skorowidza przy sprawdzaniu przerywa całe
   zadanie (`Error: nie udalo sie sprawdzic roku danych ...`) — ponów pobranie.
-- **Kilka lotów w przedziale (`--all-campaigns`):** gdy najnowszy lot nie
-  jest pełnym arkuszem, Kartograf mierzy po pobraniu pokrycie każdego lotu (udział ważnych
-  pikseli, `extra.coverage`); jeśli starszy lot ma większe pokrycie, drukuje
+- **Kilka lotów w przedziale (`--all-campaigns`):** każdy lot niepełny ma
+  w sidecarze wersji pokrycie zmierzone przy zapisie (udział ważnych pikseli,
+  `extra.coverage`); gdy najnowszy lot jest niepełny, a starszy ma większe
+  pokrycie (lot pełny liczy się jako pokryty w całości), Kartograf drukuje
   `Info:` (stderr, także z `-q`) i zapisuje `extra.flights`
   i `extra.better_coverage` w sidecarze ścieżki standardowej. Dowiązanie
-  nadal wskazuje najnowszy lot; starszy leży w `kampanie/`.
+  nadal wskazuje najnowszy lot; starszy leży w `versions/`.
 - **Sidecar:** `request.min_year`/`max_year` (gdy podane), `request.year`
   (gdy równe), `request.campaigns` (strategia faktycznie użyta),
   `extra.available_years` (wszystkie lata arkusza w skorowidzu).
@@ -648,7 +658,7 @@ data/nmt/pl_1992_1m_evrf2007/full_sheet/N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc  #
 ```bash
 # arkusz z niepełnym najnowszym lotem: pobiera najnowszy i najnowszy pełny
 kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
-#   -> Downloaded 2 campaign files for 1 sheets to ./data (0 already existed)
+#   -> N-34-139-C-a-3-1: nowa wersja 2025-10-21_84183_<sha8> (i druga: najnowszy pełny lot)
 kartograf download --sheet M-34-90-C-b-4-4 --product orto --full-sheet -o ./data
 kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # pełny z zakresu lat
 ```
@@ -672,7 +682,7 @@ kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 2024 --produ
   dowiązanie zostaje przy pełnym locie spoza zakresu, CLI podaje `Info:`
   z linią `<godło>: full_sheet/ -> dowiazanie <data>_<id>`.
 - **`list_files()` / `delete()`:** `FileStorage.list_files()` pomija
-  `full_sheet/`, `delete(godło)` usuwa oba dowiązania (pliki w `kampanie/`
+  `full_sheet/` i `versions/`, `delete(godło)` usuwa oba dowiązania (wersje
   zostają).
 - **Nie działa:** z `--product laz` i `--target-crs` (`Error:` przed siecią);
   dla CZ jak inne opcje kampanii.
@@ -680,6 +690,54 @@ kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 2024 --produ
   `SheetFetch.full_link`, `DownloadResult.full_links` (godło -> ścieżka
   `full_sheet/`), `DownloadResult.without_full`,
   `DownloadResult.full_link_outside_range`.
+
+
+### 4.3 Wersje, tryby i plan aktualizacji (`--check-updates`, `--upgrade`, `--force`)
+
+Dotyczy arkuszy PL NMT/NMPT/orto (`--sheet` oraz `--bbox`/`--geometry`
+z `--country pl` bez `--target-crs`); LAZ, CZ i wycinki dostaną to samo
+w kolejnych wersjach (z tymi flagami teraz: `Error:` przed siecią).
+Flagi wykluczają się wzajemnie.
+
+| Sytuacja | domyślnie | `--check-updates` | `--upgrade` | `--force` |
+|---|---|---|---|---|
+| lokalna wersja aktualna | lokalna wersja | `aktualne` | lokalna wersja | pobiera ponownie |
+| w skorowidzu nowsza kampania | lokalna wersja + `Info:` | `nowsza: <etykieta>` | pobiera nowszą | pobiera |
+| brak lokalnej wersji | pobiera | `do pobrania` | pobiera | pobiera |
+
+`--check-updates` niczego nie pobiera; z `--plan PLIK` zapisuje plan JSON
+(`kartograf-plan/1`), który `--upgrade --plan PLIK` wykonuje później —
+pozycja, której źródło zmieniło się od planu, kończy się `Error:` bez
+pobrania, a pozycje usunięte z pliku nie są wykonywane. `--force` pobiera
+ponownie i odświeża cache metadanych, ale nie nadpisuje: ta sama treść =
+`bez zmian`, inna = nowa wersja.
+
+```bash
+kartograf download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+#   N-34-139-C-a-3-1: nowa wersja 2025-10-21_84183_4de1eac7
+kartograf download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data --check-updates --plan plan.json
+#   N-34-139-C-a-3-1: aktualne (2025-10-21_84183)
+kartograf download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data --upgrade --plan plan.json
+```
+
+Wynik: jedna linia na plik — `nowa wersja <etykieta>_<sha8>`, `nowa
+etykieta <etykieta> (ta sama tresc)` (GUGiK opublikował tę samą treść pod
+nowym rekordem), `bez zmian <etykieta>`, `lokalna wersja <etykieta>`
+(z dopiskiem `; dostepna nowsza <etykieta> (--upgrade)`), po liście
+podsumowanie `Nowe: N, nowa etykieta: N, bez zmian: N, lokalne: N, bledy: N`.
+
+Biblioteka:
+
+```python
+from kartograf import DownloadManager, GugikProvider, UpdatePlan, check_updates, upgrade
+
+manager = DownloadManager("./data", GugikProvider(vertical_crs="EVRF2007", resolution="1m"))
+manager.download_sheet("N-34-139-C-a-3-1")                     # domyślnie
+manager.download_sheet("N-34-139-C-a-3-1", update="upgrade")   # albo "force"
+plan = check_updates(manager, ["N-34-139-C-a-3-1"])            # nic nie pobiera
+report = upgrade(manager, UpdatePlan.from_json(plan.to_json()))
+print(manager.last_sheet.status, manager.last_sheet.version)    # np. new 2025-10-21_84183
+```
 
 ---
 

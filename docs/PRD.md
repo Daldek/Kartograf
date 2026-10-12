@@ -658,14 +658,17 @@ wskazuje, która jest "bieżąca".
   lata, `--all-campaigns` liczbę lotów. Najpierw sprawdzenie pełnej listy
   kampanii każdego arkusza: dane tylko z innych lat = `YearRangeError`
   (`Error:` z latami i podpowiedzią) i nic nie jest pobierane.
-- Pliki kampanii w `<segment>/kampanie/<data>_<id>/<hierarchia godła>/`
-  z OBOWIĄZKOWYM sidecarem (`extra.campaign`); format pliku z pola `format`
-  rekordu i weryfikacja treści po pobraniu (nagłówek AAIGrid / sygnatura TIFF).
+- Pliki kampanii jako wersje (ADR-036) w
+  `<segment>/versions/<hierarchia godła>/<data>_<id>_<sha8>/` z OBOWIĄZKOWYM,
+  niezmiennym sidecarem (`extra.campaign`, `extra.version`); format pliku
+  z pola `format` rekordu i weryfikacja treści po pobraniu (nagłówek AAIGrid
+  / sygnatura TIFF); zapis wyłączny (nic nie jest nadpisywane).
 - Ścieżka standardowa `<segment>/<hierarchia>/<godło>.<ext>` to dowiązanie
-  TWARDE do najnowszej lokalnej kampanii, a gdy hardlink niedostępny — kopia
-  z `Warning:`; bez symlinków (errata 4 ADR-030). Dowiązanie przestawiane
-  tylko na kampanię nowszą, nigdy wstecz; cel zapisany w sidecarze
-  (`extra.link`, `extra.link_target`).
+  TWARDE do najnowszej lokalnej wersji; bez kopii i symlinków (system plików
+  bez hardlinków = błąd). Dowiązanie przestawiane tylko na wersję nowszą,
+  nigdy wstecz; cel zapisany w sidecarze (`extra.link`, `extra.link_target`).
+  Domyślnie nowsza kampania nie jest pobierana automatycznie (`Info:`,
+  `--upgrade`); `--check-updates` raportuje bez pobierania.
 - Drugie dowiązanie `<segment>/full_sheet/<hierarchia>/<godło>.<ext>`
   (ADR-033) do najnowszego lokalnego lotu oznaczonego w skorowidzu jako
   pełny (`calyArkuszWypelnionyTrescia = TAK`, pełny = w granicach Polski);

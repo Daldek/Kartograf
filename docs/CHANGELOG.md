@@ -73,8 +73,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   i parametrem `all_campaigns: bool = False` (arkusze PL i LAZ).
   Domyslnie pobierany jest najnowszy lot; przelacznik wybiera wszystkie
   loty w zakresie lat. Model A i tekstowe wartosci `request.campaigns`
-  w sidecarze (`"newest"`/`"all"`) pozostaja bez zmian; parametr
-  `FileStorage.list_files(campaigns: bool)` rowniez zostaje.
+  w sidecarze (`"newest"`/`"all"`) pozostaja bez zmian (parametr
+  `FileStorage.list_files(campaigns=)` — patrz magazyn wersjonowany nizej).
   Co zrobic: `--campaigns all` zamien na `--all-campaigns`,
   `--campaigns newest` usun; `campaigns="all"` zamien na
   `all_campaigns=True`, a `campaigns="newest"` usun lub zamien na
@@ -106,7 +106,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     parametry `vertical_crs` i `resolution` usuniete (decyduje provider);
     `FileStorage(output_dir, *, resolution, vertical_crs, ...)`, metody
     `get_path/exists/delete/get_full_sheet_path/get_campaign_path/get_size/
-    write_atomic` z wymaganym `ext`, `list_files(pattern, *, campaigns=False)`;
+    write_atomic` z wymaganym `ext`, `list_files(pattern, *, versions=False)`;
     `MetadataCache(db_path, ...)`; `GugikProvider(*, vertical_crs, resolution)`,
     `GugikNmptProvider(*, vertical_crs)`, `GugikLazProvider(*, vertical_crs)`,
     `GugikOrtoProvider(*, color)`, `create_nmt_provider(vertical_crs,
@@ -129,6 +129,69 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   usun `--scale` z zadan PL-1992). Biblioteka: przekaz provider
   i katalog do `DownloadManager`/`LandCoverManager`, sciezke do
   `MetadataCache` (CLI uzywa `.kartograf_cache.db` w katalogu biezacym).
+- Magazyn wersjonowany dla arkuszy PL NMT/NMPT/orto (ADR-036, plan 1/3;
+  spec `docs/superpowers/specs/2026-10-08-versioned-store-design.md`):
+  - Uklad: `<segment>/kampanie/<data>_<id>/...` -> `<segment>/versions/<hierarchia>/<data>_<id>_<sha8>/<godlo>.<ext>`
+    (wersja niezmienna, sidecar pisany raz). Brak migracji: `kampanie/`
+    nie jest czytany (CLI drukuje raz `Info:`). Co zrobic: pobierz dane
+    ponownie (np. tym samym poleceniem); stary katalog `kampanie/` mozna
+    usunac recznie.
+  - Tryb domyslny nie pobiera juz automatycznie nowszej kampanii przy
+    `newest`: zostaje lokalna wersja, a CLI dopisuje `; dostepna nowsza
+    <etykieta> (--upgrade)` i `Info:` (`SheetFetch.newer`,
+    `DownloadResult.newer`). Co zrobic: `--upgrade` / `update="upgrade"`,
+    gdy chcesz nowsza kampanie.
+  - `--force` pobiera ponownie i odswieza cache metadanych, ale niczego
+    nie nadpisuje: ta sama tresc = `bez zmian`, inna = nowa wersja obok
+    starej. `--force`, `--upgrade` i `--check-updates` wykluczaja sie.
+  - Biblioteka: `download_sheet/download_hierarchy/download_sheets(...,
+    skip_existing=)` -> `update: None | "upgrade" | "force"`. Co zrobic:
+    `skip_existing=False` zamien na `update="force"`, `skip_existing=True`
+    usun.
+  - Hardlinki wymagane: sciezka standardowa i `full_sheet/` to wylacznie
+    dowiazania twarde do wersji; kopia zamiast hardlinku znika (system
+    plikow bez hardlinkow = blad arkusza). `SheetFetch.link`,
+    `DownloadResult.copied` i CLI `Warning: hardlink niedostepny ...`
+    usuniete. Co zrobic: trzymaj dane na ext4/NTFS/SMB; kopiuj magazyn
+    przez `rsync -aH`.
+  - `extra.parent_requests` usuniete (sidecar wersji jest niezmienny;
+    `parent_request` = zadanie, ktore utworzylo wersje). `extra.coverage`
+    liczone przy zapisie dla kazdego lotu niepelnego, nigdy dopisywane;
+    lot pelny nie ma pomiaru. Co zrobic: grupuj pliki zadania po
+    `parent_request`.
+  - `FileStorage.get_campaign_path` usuniete, `list_files(campaigns=)` ->
+    `list_files(versions=)` (True = pliki wersji). Co zrobic: wersje
+    arkusza czytaj z `FileStorage.get_versions_root(sheet)` albo
+    `list_files(..., versions=True)`.
+  - Provider bez kampanii (atrapy, obce providery): plik tez jest wersja
+    (etykieta = data pobrania UTC); jego sidecar jest obowiazkowy (bez
+    deskryptora: sidecar okrojony), porazka zapisu = blad arkusza.
+  - CLI: zamiast `Downloaded to`, `Skipped ... already exists` i `Downloaded
+    N files ...` jedna linia na plik (`<godlo>: nowa wersja
+    <etykieta>_<sha8>` / `nowa etykieta ... (ta sama tresc)` / `bez zmian
+    ...` / `lokalna wersja ...`) i podsumowanie `Nowe: N, nowa etykieta:
+    N, bez zmian: N, lokalne: N, bledy: N`. Co zrobic: skrypty parsujace
+    wyjscie przestaw na nowe linie albo na biblioteke.
+  - Awaria skorowidza bez granicy roku: lokalna wersja dla kazdej
+    strategii (dotad tylko `newest`); z granica roku gdy KAZDY arkusz ma
+    lokalna wersje z zakresu — lokalne wersje z ostrzezeniem (dotad zawsze
+    blad zadania). Tylko tryb domyslny.
+
+### Dodane
+
+- CLI `download`: `--check-updates [--plan PLIK]` (raport bez pobierania,
+  plan JSON `kartograf-plan/1`), `--upgrade [--plan PLIK]` (pobranie
+  nowszej kampanii; wykonanie planu z kontrola, czy zrodlo nie zmienilo sie
+  od planu). W tej wersji dla arkuszy PL (`--sheet`, `--bbox`/`--geometry`
+  z `--country pl` bez `--target-crs`).
+- Biblioteka: `check_updates`, `upgrade`, `UpdatePlan`, `PlanItem`,
+  `UpgradeReport`, `UpdateMode`, `VersionRef` (w `__all__`);
+  `DownloadManager.inspect_sheets`, `download_records`; `SheetFetch.status`,
+  `.version`, `.newer`, `.files`; `DownloadResult.new`, `.relabeled`,
+  `.unchanged`, `.local`, `.newer`, `.files`; `FileStorage.get_versions_root`,
+  `get_versions_base`, `has_legacy_campaigns`; sidecar `extra.version`
+  (`label`, `label_source`); status `relabeled` (ta sama tresc pod nowym
+  rekordem kampanii).
 
 ## [0.7.2] - 2026-10-11
 
