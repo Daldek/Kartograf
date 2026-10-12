@@ -11,7 +11,7 @@ import math
 from collections.abc import Sequence
 from pathlib import Path
 
-from kartograf.core.bbox import BBox, is_czech_crs, transform_bbox
+from kartograf.core.bbox import BBox, bbox_coords, is_czech_crs, transform_bbox
 from kartograf.exceptions import ValidationError
 from kartograf.notices import (
     AUTO_AREA_OUTSIDE,
@@ -89,7 +89,7 @@ def parent_request_for(bbox: BBox, countries: Sequence[str]) -> dict:
     3). The returned dict must not be mutated later: sidecars hold it.
     """
     return {
-        "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+        "bbox": bbox_coords(bbox),
         "bbox_crs": bbox.crs,
         "countries": list(countries),
     }

@@ -14,7 +14,7 @@ from pathlib import Path
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
-from kartograf.core.bbox import BBox
+from kartograf.core.bbox import BBox, bbox_coords
 from kartograf.download.fetch import (
     FileSlot,
     UpdateMode,
@@ -249,7 +249,7 @@ def _run_cz_cutout(
             provider,
             data,
             request={
-                "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+                "bbox": bbox_coords(bbox),
                 "bbox_crs": bbox.crs,
             },
             capability="bbox_raster",

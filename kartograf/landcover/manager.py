@@ -24,6 +24,7 @@ from pathlib import Path
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
+from kartograf.core.bbox import bbox_coords
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.area import bbox_to_2180, geometry_envelope_2180
 from kartograf.download.fetch import (
@@ -675,7 +676,7 @@ class LandCoverManager:
         unit = selection_unit(bbox=bbox, sheet=sheet)
         if bbox is not None:
             request: dict = {
-                "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+                "bbox": bbox_coords(bbox),
                 "bbox_crs": bbox.crs,
             }
         else:
@@ -756,7 +757,7 @@ class LandCoverManager:
             return parent, parser.get_bbox(crs="EPSG:2180")
         assert bbox is not None
         parent = {
-            "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+            "bbox": bbox_coords(bbox),
             "bbox_crs": bbox.crs,
             "countries": ["PL"],
         }

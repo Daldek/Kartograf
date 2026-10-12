@@ -2943,7 +2943,7 @@ class TestCmdLandcoverDownload:
         assert result == 1
         captured = capsys.readouterr()
         err = captured.err
-        assert "only one of" in err.lower() or "Provide only one" in err
+        assert "Error: Podaj dokladnie jeden wybor" in err
 
     @pytest.mark.parametrize(
         ("flags", "missing", "choices"),
@@ -3268,7 +3268,7 @@ class TestCmdSoilgrids:
         result = main(["soilgrids", "hsg", "--output", "unused", "--depth", "0-5cm"])
         assert result == 1
         captured = capsys.readouterr()
-        assert "Must provide one of" in captured.err
+        assert "Error: Podaj dokladnie jeden wybor" in captured.err
 
     @patch("kartograf.hydrology.HSGCalculator")
     def test_soilgrids_hsg_by_bbox(self, mock_calc_cls, capsys, tmp_path):
@@ -3298,7 +3298,7 @@ def test_landcover_download_no_selection(capsys):
     result = main(["landcover", "download", "--source", "bdot10k", "-o", "unused"])
     assert result == 1
     captured = capsys.readouterr()
-    assert "Must provide one of" in captured.err
+    assert "Error: Podaj dokladnie jeden wybor" in captured.err
 
 
 # ===========================================================================
@@ -3764,7 +3764,7 @@ class TestCmdLandcoverDownloadGeometry:
         assert result == 1
         captured = capsys.readouterr()
         err = captured.err
-        assert "only one of" in err.lower() or "Provide only one" in err
+        assert "Error: Podaj dokladnie jeden wybor" in err
 
     def test_landcover_geometry_file_not_found(self, capsys, tmp_path):
         """--geometry with nonexistent file -> error."""
@@ -3845,7 +3845,7 @@ class TestCmdSoilgridsHsgGeometry:
         assert result == 1
         captured = capsys.readouterr()
         err = captured.err
-        assert "only one of" in err.lower() or "Provide only one" in err
+        assert "Error: Podaj dokladnie jeden wybor" in err
 
 
 # ===========================================================================

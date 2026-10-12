@@ -90,46 +90,30 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
 
     from kartograf.hydrology import HSGCalculator
 
-    # Check that exactly one selection method is provided
-    has_geometry = getattr(args, "geometry", None) is not None
-    methods = [args.bbox, args.sheet]
-    provided = [m for m in methods if m is not None]
-    if has_geometry:
-        provided.append(args.geometry)
-
-    if len(provided) == 0:
-        print(
-            "Error: Must provide one of: --bbox, --sheet, or --geometry",
-            file=sys.stderr,
-        )
-        return 1
-
-    if len(provided) > 1:
-        print(
-            "Error: Provide only one of: --bbox, --sheet, or --geometry",
-            file=sys.stderr,
-        )
-        return 1
-
-    # zly bbox -> ValidationError -> Error: w main (stderr, kod 1)
-    bbox = parse_bbox_arg(args.bbox, "EPSG:2180") if args.bbox else None
+    # one area choice: checked by the library (ValidationError -> Error:)
+    bbox = parse_bbox_arg(args.bbox, args.bbox_crs) if args.bbox else None
+    geometry = Path(args.geometry) if args.geometry is not None else None
     selection: dict = {
         "sheet": args.sheet,
         "bbox": bbox,
-        "geometry": Path(args.geometry) if has_geometry else None,
-        "layer": getattr(args, "layer", None),
+        "geometry": geometry,
+        "layer": args.layer,
     }
     calc = HSGCalculator(Path(args.output))
 
-    print("Calculating Hydrologic Soil Groups (HSG)...")
-    if args.sheet:
-        print(f"  Godło: {args.sheet}")
-    if has_geometry:
-        print(f"  Geometry: {Path(args.geometry).name}")
-    if bbox:
-        print(f"  BBox: ({bbox.min_x}, {bbox.min_y}) - ({bbox.max_x}, {bbox.max_y})")
-    print(f"  Depth: {args.depth}")
-    print()
+    if not args.quiet:
+        print("Calculating Hydrologic Soil Groups (HSG)...")
+        if args.sheet:
+            print(f"  Godlo: {args.sheet}")
+        if geometry is not None:
+            print(f"  Geometry: {geometry.name}")
+        if bbox:
+            print(
+                f"  BBox: ({bbox.min_x}, {bbox.min_y}) - ({bbox.max_x}, {bbox.max_y})"
+                f" {bbox.crs}"
+            )
+        print(f"  Depth: {args.depth}")
+        print()
 
     try:
         return run_with_plan_file(args, lambda a: _hsg_task(a, calc, selection))
@@ -182,8 +166,9 @@ def _hsg_task(args: argparse.Namespace, calc: "HSGCalculator", selection: dict) 
             print(f"  Group {group}: {pct:.1f}% ({area:.2f} ha)")
             print(f"           {data['description']}")
 
-    print()
-    print("Legend: 1=A (high infiltration), 2=B (moderate),")
-    print("        3=C (slow), 4=D (very slow)")
-    print("Use with SCS-CN method: HSG + Land Use -> Curve Number")
+    if not args.quiet:
+        print()
+        print("Legend: 1=A (high infiltration), 2=B (moderate),")
+        print("        3=C (slow), 4=D (very slow)")
+        print("Use with SCS-CN method: HSG + Land Use -> Curve Number")
     return rc

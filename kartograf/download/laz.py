@@ -35,6 +35,7 @@ from pathlib import Path
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
+from kartograf.core.bbox import bbox_coords
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.area import bbox_to_2180
 from kartograf.download.fetch import (
@@ -153,7 +154,7 @@ def write_laz_sidecar(
     from kartograf.sources.sidecar import emit_sidecar
 
     request: dict = {
-        "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+        "bbox": bbox_coords(bbox),
         "bbox_crs": bbox.crs,
     }
     if year is not None or (min_year is not None and min_year == max_year):

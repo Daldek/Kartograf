@@ -165,46 +165,33 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
                 "Q0.05 (5. percentyl), Q0.5 (mediana), "
                 "Q0.95 (95. percentyl), uncertainty (niepewnosc predykcji)"
             )
+    if args.source != "bdot10k":
+        for flag, given in (("--layers", args.layers), ("--keep-raw", args.keep_raw)):
+            if given:
+                missing.append(f"{flag} dziala tylko z --source bdot10k")
     if missing:
         for error in missing:
             print(f"Error: {error}", file=sys.stderr)
         return 1
 
-    # Check that exactly one selection method is provided
-    has_geometry = getattr(args, "geometry", None) is not None
-    methods = [args.teryt, args.bbox, args.sheet]
-    provided = [m for m in methods if m is not None]
-    if has_geometry:
-        provided.append(args.geometry)
-
-    if len(provided) == 0:
-        print(
-            "Error: Must provide one of: --teryt, --bbox, --sheet, or --geometry",
-            file=sys.stderr,
-        )
-        return 1
-
-    if len(provided) > 1:
-        print(
-            "Error: Provide only one of: --teryt, --bbox, --sheet, or --geometry",
-            file=sys.stderr,
-        )
-        return 1
-
-    # Parse bbox if provided (zly bbox -> ValidationError -> Error: w main)
-    bbox = parse_bbox_arg(args.bbox, "EPSG:2180") if args.bbox else None
+    # one area choice: checked by the library (ValidationError -> Error:)
+    bbox = parse_bbox_arg(args.bbox, args.bbox_crs) if args.bbox else None
     selection: dict = {
         "teryt": args.teryt,
         "sheet": args.sheet,
         "bbox": bbox,
-        "geometry": Path(args.geometry) if has_geometry else None,
-        "layer": getattr(args, "layer", None),
+        "geometry": Path(args.geometry) if args.geometry is not None else None,
+        "layer": args.layer,
     }
     options: dict = {}
     if args.source == "corine":
         options["year"] = args.year
     if args.source == "bdot10k":
         options["format"] = args.format
+        if args.layers is not None:
+            options["layers"] = args.layers
+        if args.keep_raw:
+            options["keep_raw"] = True
     if args.source == "soilgrids":
         options["property"] = args.property
         options["depth"] = args.depth
@@ -237,6 +224,7 @@ def _landcover_task(
         **selection,
         update=update,
         plan=_plan_context(args).loaded,
+        workers=args.workers,
         on_notice=_print_notice,
         **options,
     )
