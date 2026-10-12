@@ -189,6 +189,73 @@ def get_with_retry(
     ) from last_error
 
 
+def response_signal(response: requests.Response) -> dict:
+    """HTTP freshness signal of a response (versioned store, ``extra.http``).
+
+    ``{"etag", "last_modified", "content_length"}``; a missing header (or a
+    non-numeric ``Content-Length``) is ``None``.
+    """
+
+    def text(name: str) -> str | None:
+        # str only: anything else (e.g. a test double) is "absent"
+        value = response.headers.get(name)
+        return value if isinstance(value, str) else None
+
+    length = text("Content-Length")
+    return {
+        "etag": text("ETag"),
+        "last_modified": text("Last-Modified"),
+        "content_length": int(length) if length and length.isdigit() else None,
+    }
+
+
+def head_signal(
+    session: requests.Session,
+    url: str,
+    *,
+    timeout: float,
+    retries: int = MAX_RETRIES,
+    description: str = "",
+) -> dict:
+    """``response_signal`` of a ``HEAD`` request, with the retry policy of
+    ``get_with_retry`` (network errors, 429 and 5xx retried).
+
+    Raises
+    ------
+    DownloadError
+        A non-retryable HTTP error (e.g. 404) at once, otherwise after
+        ``retries`` attempts.
+    """
+    context = description or url
+    last_error: requests.RequestException | None = None
+    for attempt in range(retries):
+        try:
+            response = session.head(url, timeout=timeout, allow_redirects=True)
+            response.raise_for_status()
+            return response_signal(response)
+        except requests.RequestException as exc:
+            last_error = exc
+            if not is_retryable(exc):
+                raise http_failure(
+                    f"{context}: HTTP {http_status(exc)} (bez ponowien): {exc}", exc
+                ) from exc
+            if attempt < retries - 1:
+                delay = retry_wait(exc, backoff_delay(attempt))
+                logger.warning(
+                    "%s: proba %s/%s nieudana: %s; ponowienie za %ss",
+                    context,
+                    attempt + 1,
+                    retries,
+                    exc,
+                    delay,
+                )
+                time.sleep(delay)
+    raise http_failure(
+        f"{context}: sprawdzenie nieudane po {retries} probach: {last_error}",
+        last_error,
+    ) from last_error
+
+
 def _write_atomic(
     response: requests.Response, output_path: Path, chunk_size: int
 ) -> Path:
@@ -219,6 +286,7 @@ def download_to(
     validate: Callable[[requests.Response], None] | None = None,
     save: Callable[[requests.Response, Path], Path] | None = None,
     chunk_size: int = 1_048_576,
+    on_response: Callable[[requests.Response], None] | None = None,
 ) -> Path:
     """Download a URL to a file (atomically, with a retry policy); return the path.
 
@@ -234,6 +302,10 @@ def download_to(
         Write the response instead of the default atomic stream write;
         returns the path of the file actually written (e.g. an unpacked ZIP).
         An interrupted stream (``RequestException``) is retried.
+    on_response : callable, optional
+        Called with the response after ``validate``, before writing (e.g. to
+        capture ``response_signal``); a retried attempt calls it again, so
+        the last attempt wins.
 
     The target directory is created only after a successful response - an HTTP error
     leaves no empty directories.
@@ -249,6 +321,8 @@ def download_to(
             response.raise_for_status()
             if validate is not None:
                 validate(response)
+            if on_response is not None:
+                on_response(response)
             output_path.parent.mkdir(parents=True, exist_ok=True)
             if save is not None:
                 saved = save(response, output_path)
