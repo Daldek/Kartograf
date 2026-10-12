@@ -279,3 +279,85 @@ def test_cleanup_removes_only_old_empty_version_dirs(tmp_path):
 
 def test_incoming_dirs_are_unique_per_call(tmp_path):
     assert v.new_incoming_dir(tmp_path) != v.new_incoming_dir(tmp_path)
+
+
+def http_writer(signal):
+    """Version sidecar with ``extra.http`` (as the tracks write it)."""
+
+    def write(data: Path, ref: v.VersionRef, digest: v.ContentDigest) -> None:
+        payload = {
+            "sha256": digest.sha256,
+            "extra": {"version": ref.to_extra(), "http": signal},
+        }
+        with open(data.parent / f"{data.name}.meta.json", "x", encoding="utf-8") as f:
+            f.write(json.dumps(payload))
+
+    return write
+
+
+def commit_http(root: Path, label: str, signal: dict | None):
+    staged = stage(root)
+    digest = v.read_content(staged, ext=".asc", coverage=False)
+    return v.commit_version(
+        staged,
+        root,
+        NAME,
+        v.VersionRef(label, "downloaded"),
+        digest,
+        http_writer(signal),
+        signal=signal,
+    )
+
+
+E1 = {"etag": '"e1"', "last_modified": "Mon, 05 Oct 2026", "content_length": 1}
+E2 = {"etag": '"e2"', "last_modified": "Mon, 05 Oct 2026", "content_length": 1}
+
+
+def test_commit_same_content_new_etag_is_relabeled(tmp_path):
+    first = commit_http(tmp_path, "2026-10-10", E1)
+    second = commit_http(tmp_path, "2026-10-12", E2)
+    assert second.status == "relabeled" and second.label == "2026-10-12"
+    assert second.path.parent.name == f"2026-10-12_{first.sha256[:8]}"
+    assert os.path.samefile(first.path, second.path)
+    newest = v.newest_version(v.list_versions(tmp_path, NAME))
+    assert newest is not None and v.http_signal_of(newest) == E2
+
+
+def test_commit_same_content_same_etag_is_unchanged(tmp_path):
+    first = commit_http(tmp_path, "2026-10-10", E1)
+    again = commit_http(tmp_path, "2026-10-12", dict(E1, content_length=999))
+    assert again.status == "unchanged" and again.path == first.path
+    assert len(v.list_versions(tmp_path, NAME)) == 1
+
+
+def test_commit_same_content_without_signal_is_unchanged(tmp_path):
+    first = commit_http(tmp_path, "2026-10-10", E1)
+    again = commit_http(tmp_path, "2026-10-12", None)
+    assert again.status == "unchanged" and again.path == first.path
+
+
+def test_commit_same_day_relabel_collision_is_unchanged(tmp_path):
+    first = commit_http(tmp_path, "2026-10-12", E1)
+    again = commit_http(tmp_path, "2026-10-12", E2)
+    assert again.status == "unchanged" and again.path == first.path
+    assert len(v.list_versions(tmp_path, NAME)) == 1
+
+
+@pytest.mark.parametrize(
+    ("local", "remote", "expected"),
+    [
+        ({"etag": "a"}, {"etag": "a"}, True),
+        ({"etag": "a", "last_modified": "x"}, {"etag": "b", "last_modified": "x"}, 0),
+        ({"etag": None, "last_modified": "x"}, {"etag": "b", "last_modified": "x"}, 1),
+        ({"last_modified": "x"}, {"last_modified": "y"}, False),
+        ({"etag": "a"}, {"etag": None, "last_modified": "x"}, None),
+        ({"content_length": 1}, {"content_length": 2}, None),
+        ({"etag": "a", "content_length": 1}, {"etag": "a", "content_length": 2}, True),
+        (None, {"etag": "a"}, None),
+        ({"etag": "a"}, None, None),
+    ],
+)
+def test_same_http_signal_rules(local, remote, expected):
+    if expected in (0, 1):
+        expected = bool(expected)
+    assert v.same_http_signal(local, remote) is expected

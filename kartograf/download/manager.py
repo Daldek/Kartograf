@@ -32,6 +32,12 @@ from kartograf.download.campaigns import (
     verify_sheet_extent,
     year_range_error,
 )
+from kartograf.download.fetch import (
+    FileSlot,
+    UpdateMode,
+    fetch_version,
+    validate_update,
+)
 from kartograf.download.links import ensure_link, linked_version, update_sidecar_extra
 from kartograf.download.storage import FileStorage, storage_for_provider
 from kartograf.download.versions import (
@@ -53,10 +59,6 @@ from kartograf.providers.pl.skorowidz import SkorowidzRecord
 
 # Outcome of one sheet: the strongest status among its files (spec 4.5).
 SheetStatus = Literal["new", "unchanged", "relabeled", "local"]
-# Download modes (spec 4.2); ``None`` = default: local versions, missing
-# ones downloaded, a newer campaign only reported (D5).
-UpdateMode = Literal["check", "upgrade", "force"]
-_UPDATE_MODES = (None, "upgrade", "force")
 
 logger = logging.getLogger(__name__)
 
@@ -354,19 +356,6 @@ class CampaignProvider(Protocol):
 
 # Type alias for progress callback
 ProgressCallback = Callable[[DownloadProgress], None]
-
-
-def _validate_update(update: object) -> None:
-    """``update`` of the download methods: None, "upgrade" or "force"."""
-    if update == "check":
-        raise ValidationError(
-            "update='check' niczego nie pobiera — uzyj check_updates() (plan "
-            "aktualizacji, kartograf-plan/1)"
-        )
-    if update not in _UPDATE_MODES:
-        raise ValidationError(
-            f"Nieznany tryb update={update!r} (dozwolone: None, 'upgrade', 'force')"
-        )
 
 
 def _sheet_status(commits: list[VersionCommit]) -> SheetStatus:
@@ -835,7 +824,7 @@ class DownloadManager:
         # The reset is idempotent — expansion to a hierarchy resets it again.
         self.last_result = None
         self.last_sheet = None
-        _validate_update(update)
+        validate_update(update)
 
         parser = SheetParser(sheet)
 
@@ -936,7 +925,7 @@ class DownloadManager:
         # clear it before anything can raise (ParseError/ValidationError).
         self.last_result = None
         self.last_sheet = None
-        _validate_update(update)
+        validate_update(update)
 
         # Parse starting sheet and get all descendants
         parser = SheetParser(sheet)
@@ -1016,7 +1005,7 @@ class DownloadManager:
         """
         self.last_result = None
         self.last_sheet = None
-        _validate_update(update)
+        validate_update(update)
         leaves = [SheetParser(g) for g in self.expand_sheets(sheets)]
         total = len(leaves)
         workers = max_workers if max_workers is not None else self._max_workers
@@ -1148,54 +1137,41 @@ class DownloadManager:
         unchanged.
         """
         std = self._storage.get_path(sheet, self._default_ext)
-        root = self._storage.get_versions_root(sheet)
-        if update != "force":
-            newest = newest_version(list_versions(root, std.name))
-            if newest is not None:
-                logger.info(f"{sheet}: lokalna wersja {newest.label}")
-                self._link(std, newest.path, version_key(newest), refresh=False)
-                return SheetFetch(
-                    sheet,
-                    std,
-                    skipped=True,
-                    status="local",
-                    version=newest.label,
-                    files=((newest.path.parent.name, "local"),),
-                )
-        if on_download is not None:
-            on_download()
-        logger.info(f"Downloading {sheet}...")
-        staged = new_incoming_dir(self._storage.get_versions_base(sheet)) / std.name
-        try:
-            path = self._provider.download(sheet, staged)
-            digest = read_content(Path(path), ext=self._default_ext, coverage=False)
-            commit = commit_version(
-                Path(path),
-                root,
-                std.name,
-                VersionRef.downloaded(),
-                digest,
-                lambda data, ref, dg: self._write_sidecar(
-                    data, {"sheet": sheet}, digest=dg, version=ref
-                ),
-            )
-        finally:
-            shutil.rmtree(staged.parent, ignore_errors=True)
-        version = read_version(commit.path.parent, commit.path.name)
-        if version is not None:
-            self._link(
-                std,
-                commit.path,
-                version_key(version),
-                refresh=commit.status != "unchanged",
-            )
+        slot = FileSlot(
+            output_dir=self._storage.output_dir,
+            std=std,
+            versions_base=self._storage.get_versions_base(sheet),
+            versions_root=self._storage.get_versions_root(sheet),
+            ext=self._default_ext,
+        )
+
+        def fetch(staged: Path) -> None:
+            if on_download is not None:
+                on_download()
+            logger.info(f"Downloading {sheet}...")
+            path = Path(self._provider.download(sheet, staged))
+            if path != staged:
+                os.replace(path, staged)
+
+        result = fetch_version(
+            slot,
+            update,
+            signal="none",
+            fetch=fetch,
+            version=VersionRef.downloaded(),
+            write_sidecar=lambda data, ref, dg, _http: self._write_sidecar(
+                data, {"sheet": sheet}, digest=dg, version=ref
+            ),
+        )
+        if result.status == "local":
+            logger.info(f"{sheet}: lokalna wersja {result.label}")
         return SheetFetch(
             sheet,
             std,
-            skipped=False,
-            status=commit.status,
-            version=commit.label,
-            files=((commit.path.parent.name, commit.status),),
+            skipped=result.status == "local",
+            status=result.status,
+            version=result.label,
+            files=((result.version_path.parent.name, result.status),),
         )
 
     @staticmethod

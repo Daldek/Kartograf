@@ -68,6 +68,7 @@ from kartograf.download.cz_cutout import (
     download_cz_cutout,
     run_cz_cutout,
 )
+from kartograf.download.fetch import UpdateMode
 from kartograf.download.laz import (
     LazDownloadResult,
     LazTileFailure,
@@ -79,7 +80,6 @@ from kartograf.download.manager import (
     DownloadProgress,
     DownloadResult,
     SheetFetch,
-    UpdateMode,
 )
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.download.storage import FileStorage

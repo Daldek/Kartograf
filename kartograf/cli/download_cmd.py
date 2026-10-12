@@ -32,12 +32,12 @@ from kartograf.download.countries import countries_for_bbox as _countries_for_bb
 from kartograf.download.countries import country_bbox as _country_bbox
 from kartograf.download.cz_cutout import read_tif_nodata as _read_tif_nodata
 from kartograf.download.cz_cutout import write_cz_sidecar as _write_cz_sidecar
+from kartograf.download.fetch import UpdateMode
 from kartograf.download.manager import (
     DownloadManager,
     DownloadProgress,
     DownloadResult,
     SheetFetch,
-    UpdateMode,
 )
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.download.updates import (

@@ -14,6 +14,7 @@ from typing import BinaryIO
 from kartograf.core import parser_registry
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.campaigns import FULL_SHEET_DIR
+from kartograf.download.fetch import FileSlot
 from kartograf.download.versions import INCOMING_DIR, VERSIONS_DIR
 from kartograf.exceptions import ValidationError
 from kartograf.sources.registry import get_source
@@ -348,6 +349,29 @@ class FileStorage:
             dir_path = dir_path / part
         return dir_path / filename
 
+    def get_raw_versions_base(
+        self, identifier: str, *, system: str | None = None
+    ) -> Path:
+        """``<output>/<segment>/versions`` for an opaque identifier (LAZ tile,
+        CZ sheet) — the segment of :meth:`get_raw_path`, with the staging
+        directory ``.incoming/`` (D19)."""
+        if system is not None and system not in ("1992", "2000"):
+            raise ValidationError(
+                f"Nieznany uklad '{system}' (oczekiwano '1992' albo '2000')"
+            )
+        segment = self._resolved_subdir(identifier, system)
+        return self._output_dir / segment / VERSIONS_DIR
+
+    def get_raw_versions_root(
+        self, identifier: str, *, system: str | None = None
+    ) -> Path:
+        """``<output>/<segment>/versions/<hierarchy>/`` for an opaque identifier
+        — the versions of the files at :meth:`get_raw_path` (D17)."""
+        path = self.get_raw_versions_base(identifier, system=system)
+        for part in self._get_directory_parts(identifier):
+            path = path / part
+        return path
+
     def _get_directory_parts(self, sheet: str) -> list[str]:
         """
         Extract directory parts from sheet code.
@@ -662,3 +686,21 @@ def bbox_cutout_path(
         format(v, ".10g") for v in (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
     )
     return Path(output_dir) / subdir / "bbox" / f"{coords}{extension}"
+
+
+def bbox_slot(
+    output_dir: str | Path, subdir: str, bbox: BBox, extension: str
+) -> FileSlot:
+    """Version slot of a bbox cutout (D15).
+
+    Link path ``<output>/<segment>/bbox/<coords><ext>`` (``bbox_cutout_path``,
+    no date), versions in ``<output>/<segment>/versions/bbox/<label>_<sha8>/``.
+    """
+    base = Path(output_dir) / subdir / VERSIONS_DIR
+    return FileSlot(
+        output_dir=Path(output_dir),
+        std=bbox_cutout_path(output_dir, subdir, bbox, extension),
+        versions_base=base,
+        versions_root=base / "bbox",
+        ext=extension,
+    )
