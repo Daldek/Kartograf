@@ -58,9 +58,9 @@ def feature_years(session: MagicMock) -> list[str]:
 
 
 def test_c13_all_returns_both_systems_tiles():
-    selection = GugikLazProvider(session=laz_session()).select_tiles(
-        W2_BBOX, all_campaigns=True
-    )
+    selection = GugikLazProvider(
+        session=laz_session(), vertical_crs="EVRF2007"
+    ).select_tiles(W2_BBOX, all_campaigns=True)
     keys = {(t.year, t.crs) for t in selection.tiles}
     assert (2022, "PL-2000:S7") in keys
     assert (2025, "PL-1992") in keys
@@ -69,7 +69,9 @@ def test_c13_all_returns_both_systems_tiles():
 
 
 def test_c13_newest_unchanged_single_tile():
-    selection = GugikLazProvider(session=laz_session()).select_tiles(W2_BBOX)
+    selection = GugikLazProvider(
+        session=laz_session(), vertical_crs="EVRF2007"
+    ).select_tiles(W2_BBOX)
     assert [(t.sheet, t.year) for t in selection.tiles] == [
         ("N-34-139-A-c-1-1-3-4", 2025)
     ]
@@ -78,7 +80,7 @@ def test_c13_newest_unchanged_single_tile():
 
 def test_range_queries_every_service_year():
     session = laz_session()
-    selection = GugikLazProvider(session=session).select_tiles(
+    selection = GugikLazProvider(session=session, vertical_crs="EVRF2007").select_tiles(
         W2_BBOX, all_campaigns=True, min_year=2025
     )
     assert feature_years(session) == [str(y) for y in range(2026, 2017, -1)]
@@ -86,9 +88,9 @@ def test_range_queries_every_service_year():
 
 
 def test_discover_tiles_max_year_uses_reference_coverage():
-    tiles = GugikLazProvider(session=laz_session()).discover_tiles(
-        W2_BBOX, max_year=2023
-    )
+    tiles = GugikLazProvider(
+        session=laz_session(), vertical_crs="EVRF2007"
+    ).discover_tiles(W2_BBOX, max_year=2023)
     assert [(tile.sheet, tile.year) for tile in tiles] == [
         ("N-34-139-A-c-1-1-3-4", 2023)
     ]
@@ -96,7 +98,7 @@ def test_discover_tiles_max_year_uses_reference_coverage():
 
 def test_min_year_applies_to_newest_too():
     session = laz_session()
-    provider = GugikLazProvider(session=session)
+    provider = GugikLazProvider(session=session, vertical_crs="EVRF2007")
     selection = provider.select_tiles(W2_BBOX, min_year=2024)
     assert [(t.sheet, t.year) for t in selection.tiles] == [
         ("N-34-139-A-c-1-1-3-4", 2025)
@@ -107,7 +109,7 @@ def test_min_year_applies_to_newest_too():
 def test_min_year_above_service_years_rejected_without_get_feature():
     session = laz_session()
     with pytest.raises(DownloadError, match="przedzial.*2099.*usludze EVRF2007"):
-        GugikLazProvider(session=session).select_tiles(
+        GugikLazProvider(session=session, vertical_crs="EVRF2007").select_tiles(
             W2_BBOX, all_campaigns=True, min_year=2099
         )
     assert feature_years(session) == []
@@ -124,7 +126,9 @@ def test_min_year_above_service_years_rejected_without_get_feature():
 def test_laz_year_and_range_exclusive(bounds):
     session = laz_session()
     with pytest.raises(ValidationError):
-        GugikLazProvider(session=session).select_tiles(W2_BBOX, **bounds)
+        GugikLazProvider(session=session, vertical_crs="EVRF2007").select_tiles(
+            W2_BBOX, **bounds
+        )
     session.get.assert_not_called()
 
 
@@ -134,7 +138,7 @@ def test_all_still_drops_outside_tiles():
     # W2_BBOX bodies checks the client-side footprint filter behind it.
     area = BBox(637334, 486800, 637340, 486806, "EPSG:2180")
     selection = GugikLazProvider(
-        session=laz_session(replay_any_bbox=True)
+        session=laz_session(replay_any_bbox=True), vertical_crs="EVRF2007"
     ).select_tiles(area, all_campaigns=True)
     assert "7.173.21.06.2" not in {tile.sheet for tile in selection.tiles}
     (entry,) = (
@@ -157,7 +161,9 @@ class _Provider:
 def test_laz_sidecar_acquisition_date_and_max_year(tmp_path):
     bbox = W2_BBOX
     (tile,) = (
-        GugikLazProvider(session=laz_session()).select_tiles(bbox, year=2023).tiles
+        GugikLazProvider(session=laz_session(), vertical_crs="EVRF2007")
+        .select_tiles(bbox, year=2023)
+        .tiles
     )
     target = tmp_path / "a.laz"
     write_laz_sidecar(
@@ -191,7 +197,7 @@ def test_laz_sidecar_acquisition_date_and_max_year(tmp_path):
 
 
 def test_download_laz_area_all_writes_campaigns_to_sidecars(tmp_path):
-    provider = GugikLazProvider(session=laz_session())
+    provider = GugikLazProvider(session=laz_session(), vertical_crs="EVRF2007")
     provider.download = MagicMock(  # type: ignore[method-assign]
         side_effect=lambda url, target, **kw: (
             target.parent.mkdir(parents=True, exist_ok=True),
@@ -205,6 +211,7 @@ def test_download_laz_area_all_writes_campaigns_to_sidecars(tmp_path):
         all_campaigns=True,
         min_year=2022,
         max_year=2023,
+        vertical_crs="EVRF2007",
     )
     assert {(tile.year, tile.crs) for tile in result.tiles} == {
         (2022, "PL-2000:S7"),
@@ -222,5 +229,7 @@ def test_invalid_min_year_rejected_before_network(bad):
     """M-3: ``select_tiles`` validates ``min_year`` like ``DownloadManager``."""
     session = laz_session()
     with pytest.raises(ValidationError, match="min_year"):
-        GugikLazProvider(session=session).select_tiles(W2_BBOX, min_year=bad)
+        GugikLazProvider(session=session, vertical_crs="EVRF2007").select_tiles(
+            W2_BBOX, min_year=bad
+        )
     session.get.assert_not_called()

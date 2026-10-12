@@ -6,6 +6,15 @@ import argparse
 import sys
 from pathlib import Path
 
+# The CLI keeps its metadata cache in the working directory (the library has
+# no default location: ``MetadataCache(db_path)`` is required).
+CACHE_FILENAME = ".kartograf_cache.db"
+
+
+def cli_cache_path() -> Path:
+    """Path of the CLI metadata cache: ``.kartograf_cache.db`` in the cwd."""
+    return Path.cwd() / CACHE_FILENAME
+
 
 def _unreadable_message(path: Path, error: Exception) -> str:
     """``Error:`` line for ``stats``/``clear`` when the cache is unusable."""
@@ -64,7 +73,7 @@ def cmd_cache(args: argparse.Namespace) -> int:
     # creates the file when it does not exist yet. An SQLite error disables
     # the cache silently here (no-op callback) - the subcommands report it
     # themselves via cache.error.
-    cache = MetadataCache(on_disabled=lambda _message: None)
+    cache = MetadataCache(cli_cache_path(), on_disabled=lambda _message: None)
 
     try:
         if args.cache_command == "path":

@@ -392,12 +392,14 @@ Dane przestrzenne pobierane podczas pracy (testy na zywo, weryfikacje E2E,
 reczne wywolania CLI, dane do analiz) zapisuj POZA repozytorium i poza
 `/tmp` — w katalogu danych wskazanym przez uzytkownika.
 
-- Domyslne `--output` CLI (`./data`, `./data/landcover`, `./data/hsg`)
-  wskazuja na repo — **zawsze podawaj `--output` jawnie**:
+- `--output` jest w CLI wymagane od 0.8.0 (bez domyslnego `./data`) —
+  wskazuj katalog danych poza repo:
 
   ```bash
-  kartograf download --sheet N-34-130-D-d-2-4 -o <katalog-danych>/kartograf/data
-  kartograf download --bbox 530000,382000,533000,386000 --target-crs EPSG:5514 \
+  kartograf download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m \
+      --vertical-crs EVRF2007 -o <katalog-danych>/kartograf/data
+  kartograf download --bbox 530000,382000,533000,386000 --country pl \
+      --product nmt --vertical-crs EVRF2007 --target-crs EPSG:5514 \
       -o <katalog-danych>/kartograf/e2e/<RRRR-MM-DD>-<cel>
   ```
 
@@ -724,6 +726,18 @@ def download_sheet(sheet: str) -> Path:
     parser = SheetParser(sheet)  # raises ParseError if invalid
     ...
 ```
+
+**Bez wartosci domyslnych wplywajacych na dane (od 0.8.0).** Parametr API
+i flaga CLI, ktore wybieraja produkt, wariant, edycje, uklad pionowy,
+rozdzielczosc, wybor arkuszy albo miejsce zapisu, sa wymagane — brak
+wartosci to `TypeError` (API) albo `Error:` z lista dopuszczalnych wartosci
+(CLI, kod 1, przed siecia). Domyslne zostaja tylko: format danych
+(`format="GTiff"`/`"GPKG"`), uklad poziomy PL `EPSG:2180` i natywny
+`EPSG:5514` wyniku CZ, przelaczniki wylaczone (`force`, `full_sheet`,
+`all_campaigns`, ...), `None` = "nie podano", parametry z jedna
+dopuszczalna wartoscia (np. NMPT 1 m) i parametry techniczne (`timeout`,
+`max_workers`, `retries`, ...). Docstring i `--help` kazdego takiego
+parametru wymieniaja wszystkie wartosci, ich znaczenie i ograniczenia.
 
 ### 11.3 Raise from
 

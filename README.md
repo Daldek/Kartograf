@@ -43,19 +43,19 @@ pip install -e .
 kartograf parse N-34-130-D-d-2-4
 
 # NMT dla arkusza, inne produkty GUGiK
-kartograf download --sheet N-34-130-D-d-2-4
-kartograf download --sheet N-34-130-D-d-2-4 --product orto
+kartograf download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf download --sheet N-34-130-D-d-2-4 --product orto -o ./data
 
 # NMT dla obszaru: bbox (domyślnie EPSG:2180) albo plik SHP/GPKG
-kartograf download --bbox 530000,382000,533000,386000 --country pl
-kartograf download --geometry zlewnia.gpkg --layer catchments
+kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data
+kartograf download --geometry zlewnia.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data
 
 # NMT Czech
-kartograf download --sheet 302_5550 --country cz
+kartograf download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data
 
 # Pokrycie terenu i grupy hydrologiczne gleb
-kartograf landcover download --source bdot10k --teryt 1465
-kartograf soilgrids hsg --sheet N-34-130-D --stats
+kartograf landcover download --source bdot10k --teryt 1465 -o ./data/landcover
+kartograf soilgrids hsg --sheet N-34-130-D --stats -o ./data/hsg --depth 0-5cm
 ```
 
 Pełna lista opcji: `kartograf <komenda> --help`. Więcej przykładów, wybór
@@ -65,10 +65,11 @@ kraju (`--country`), scalony wycinek (`--target-crs`) i kampanie GUGiK:
 ### Biblioteka Python
 
 ```python
-from kartograf import BBox, DownloadManager, download_pl_cutout
+from kartograf import BBox, DownloadManager, GugikProvider, download_pl_cutout
 
-# Arkusz NMT po godle
-manager = DownloadManager(output_dir="./data")
+# Arkusz NMT po godle — każdy wybór danych jawny (od 0.8.0 bez wartości domyślnych)
+provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
+manager = DownloadManager("./data", provider)
 path = manager.download_sheet("N-34-130-D-d-2-4")
 
 # Obszar NMT PL jako wycinek WCS 1 m z maską lądu, jeden GeoTIFF w zadanym układzie
@@ -76,6 +77,8 @@ result = download_pl_cutout(
     BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
     "EPSG:2180",
     output_dir="./data",
+    vertical_crs="EVRF2007",
+    product="nmt",
 )
 print(result.path)
 ```

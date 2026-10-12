@@ -157,7 +157,8 @@ patrz sekcja 3.2, znane ograniczenie.
 - Pobieranie przez godło → TIF (OpenData)
 - Pobieranie przez bbox → GeoTIFF (WCS) — z biblioteki (`download_bbox`);
   CLI `--bbox` pobiera arkusze OpenData
-- Brak vertical CRS (2D RGB); domyślnie najnowszy zgodny rekord RGB z
+- Brak vertical CRS (2D RGB); najnowszy zgodny rekord wariantu `color`
+  (`RGB`/`CIR`/`B/W`, wymagany w API; CLI pobiera RGB) z
   GetCapabilities/GetFeatureInfo; `GugikOrtoProvider(color="CIR")` wybiera
   wariant podczerwieni
 - Obsługa formatów WCS: GTiff, PNG, JPEG
@@ -178,7 +179,7 @@ patrz sekcja 3.2, znane ograniczenie.
 - url_do_pobrania brany wprost z atrybutu WFS (godło kafla nieparsowane)
 - Domyślnie najnowszy kafel per obszar (ADR-029); flagi --year/--min-year/--max-year
   (przedział lat, ADR-032), --vertical-crs, --min-density, --all-campaigns (sekcja 2.12)
-- Dwa układy wysokościowe: EVRF2007 (domyślny, 2018+), KRON86 (legacy, 2010-2019)
+- Dwa układy wysokościowe (wybór wymagany od 0.8.0): EVRF2007 (2018+), KRON86 (legacy, 2010-2019)
 - Pobieranie równoległe (--workers), pomijanie istniejących plików
 - Biblioteka: download_laz_area (wybór + pobranie + sidecary, wynik
   LazDownloadResult: downloaded/skipped/failed/superseded) albo
@@ -253,35 +254,35 @@ patrz sekcja 3.2, znane ograniczenie.
 # Komendy:
 kartograf parse <godlo>                    # info o godle (PL-1992 lub PL-2000)
 kartograf parse 6.179.12.20               # PL-2000 auto-detekcja
-kartograf download --sheet <godlo>                 # pobierz NMT
-kartograf download --sheet <godlo> --product nmpt  # pobierz NMPT
-kartograf download --sheet <godlo> --product orto  # pobierz ortofoto
-kartograf download --sheet <godlo> --product laz   # pobierz chmury punktów LAZ (wiele kafli)
-kartograf download --bbox ... --product laz --year 2024 --min-density 12
-kartograf download --bbox min_x,min_y,max_x,max_y  # NMT dla bbox
-kartograf download --bbox ... --system 2000 --scale 1:2000  # NMT w ukladzie PL-2000 (arkusze 1:2000)
-kartograf download --bbox ... --product orto  # ortofoto dla bbox
-kartograf download --geometry area.shp         # NMT z pliku geometrii
-kartograf download --geometry area.gpkg --layer catchments
-kartograf download --sheet <godlo> --resolution 5m # NMT 5m
-kartograf download --sheet 302_5550 --country cz               # DMR 5G (CZ), godlo TM33
-kartograf download --sheet CTES96                               # DMR 4G (CZ, 5m), godlo SM5, kraj auto
-kartograf download --bbox ... --bbox-crs EPSG:4326 --country auto   # bbox transgraniczny -> pliki per kraj
-kartograf download --bbox ... --country cz --target-crs EPSG:2180   # reprojekcja lokalna (pinned)
-kartograf download --bbox ... --country pl --target-crs EPSG:2180   # wycinek NMT/NMPT 1 m WCS + maska PRG (ADR-035)
-kartograf download --sheet 302_5550 --country cz --vertical-crs EVRF2007    # Bpv -> EVRF2007 (EPSG:5621)
-kartograf download --sheet <godlo> --all-campaigns              # wszystkie kampanie GUGiK arkusza (ADR-030)
-kartograf download --sheet <godlo> --year 2025                  # najnowszy lot z roku (ADR-032)
-kartograf download --sheet <godlo> --year 2025 --all-campaigns  # wszystkie loty z roku
-kartograf download --sheet <godlo> --min-year 2024              # najnowszy lot, nie starszy niż rok
-kartograf download --bbox ... --max-year 2022           # najnowszy lot do roku (dowiązanie nigdy wstecz)
-kartograf download --bbox ... --product laz --all-campaigns   # LAZ bez deduplikacji pokrycia
-kartograf landcover download --source bdot10k --teryt <kod>
-kartograf landcover download --source corine --sheet <arkusz>
-kartograf landcover download --source soilgrids --property <param>  # --sheet/--bbox (bez --teryt)
+kartograf download --sheet <godlo> --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # pobierz NMT
+kartograf download --sheet <godlo> --product nmpt --vertical-crs EVRF2007 -o ./data # pobierz NMPT
+kartograf download --sheet <godlo> --product orto -o ./data # pobierz ortofoto
+kartograf download --sheet <godlo> --product laz --vertical-crs EVRF2007 -o ./data # pobierz chmury punktów LAZ (wiele kafli)
+kartograf download --bbox ... --product laz --year 2024 --min-density 12 --country pl --vertical-crs EVRF2007 -o ./data
+kartograf download --bbox min_x,min_y,max_x,max_y --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data # NMT dla bbox
+kartograf download --bbox ... --system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 -o ./data # NMT w ukladzie PL-2000 (arkusze 1:2000)
+kartograf download --bbox ... --product orto --country pl --system 1992 -o ./data # ortofoto dla bbox
+kartograf download --geometry area.shp --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data # NMT z pliku geometrii
+kartograf download --geometry area.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data
+kartograf download --sheet <godlo> --resolution 5m --product nmt --vertical-crs EVRF2007 -o ./data # NMT 5m
+kartograf download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data # DMR 5G (CZ), godlo TM33
+kartograf download --sheet CTES96 --product nmt --vertical-crs Bpv -o ./data # DMR 4G (CZ, 5m), godlo SM5, kraj auto
+kartograf download --bbox ... --bbox-crs EPSG:4326 --country auto --product nmt --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv --system 1992 -o ./data # bbox transgraniczny -> pliki per kraj
+kartograf download --bbox ... --country cz --target-crs EPSG:2180 --product nmt --resolution 2m --vertical-crs Bpv -o ./data # reprojekcja lokalna (pinned)
+kartograf download --bbox ... --country pl --target-crs EPSG:2180 --product nmt --vertical-crs EVRF2007 -o ./data # wycinek NMT/NMPT 1 m WCS + maska PRG (ADR-035)
+kartograf download --sheet 302_5550 --country cz --vertical-crs EVRF2007 --product nmt --resolution 2m -o ./data # Bpv -> EVRF2007 (EPSG:5621)
+kartograf download --sheet <godlo> --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # wszystkie kampanie GUGiK arkusza (ADR-030)
+kartograf download --sheet <godlo> --year 2025 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # najnowszy lot z roku (ADR-032)
+kartograf download --sheet <godlo> --year 2025 --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # wszystkie loty z roku
+kartograf download --sheet <godlo> --min-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # najnowszy lot, nie starszy niż rok
+kartograf download --bbox ... --max-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data # najnowszy lot do roku (dowiązanie nigdy wstecz)
+kartograf download --bbox ... --product laz --all-campaigns --country pl --vertical-crs EVRF2007 -o ./data # LAZ bez deduplikacji pokrycia
+kartograf landcover download --source bdot10k --teryt <kod> -o ./data/landcover
+kartograf landcover download --source corine --sheet <arkusz> -o ./data/landcover --year 2018
+kartograf landcover download --source soilgrids --property <param> -o ./data/landcover --depth 0-5cm --stat mean # --sheet/--bbox (bez --teryt)
 kartograf landcover list-sources
 kartograf landcover list-layers --source <source>
-kartograf soilgrids hsg --sheet <arkusz>    # oblicz HSG
+kartograf soilgrids hsg --sheet <arkusz> -o ./data/hsg --depth 0-5cm # oblicz HSG
 kartograf cache stats|clear|path           # cache metadanych (SQLite)
 # Pełna lista opcji: kartograf <komenda> --help
 ```
@@ -340,7 +341,7 @@ from kartograf import (
 - Drugie dowiązanie `<segment>/full_sheet/<hierarchia>/<godło>.<ext>` do
   najnowszego lokalnego lotu pełnego (ADR-033); `list_files()` je pomija,
   `delete()` usuwa oba dowiązania
-- `landcover/` bez zmian (własny default `--output`)
+- `landcover/` bez zmian (własny katalog `--output`, wymagany od 0.8.0)
 - Każde udane pobranie (CLI, DownloadManager, LandCoverManager,
   download_pl_cutout, download_laz_area) i wynik HSG ma sidecar
   `<plik>.meta.json` (schemat `kartograf-meta/1`, best-effort); sidecar pliku
@@ -519,9 +520,10 @@ from kartograf import (
   (14,07..24,20°E, 49,00..54,90°N) pokrywa
   większość Czech, więc auto w Pradze, Brnie czy Ostrawie odpytuje także
   GUGiK — naprawa (wielokąt granicy) planowana w etapie 2 (patrz ADR-023)
-- --country domyślnie = auto (nowość 0.7.0): na obszarze spornym flagi bez
-  odpowiednika czeskiego (--product nmpt|orto, --system, --vertical-crs
-  KRON86, --resolution 1m) ROZSTRZYGAJĄ kraj do pl z komunikatem Info: na
+- --country (wymagane z --bbox/--geometry od 0.8.0; wcześniej domyślnie
+  auto): pod auto na obszarze spornym wartości bez odpowiednika czeskiego
+  (--product nmpt|orto, --vertical-crs KRON86, --resolution 1m w zwykłej
+  postaci) ROZSTRZYGAJĄ kraj do pl z komunikatem Info: na
   stderr, zamiast przewracać zadanie; wyjątkiem jest --product laz, który ma
   własny przepływ i na obszarze sięgającym CZ nadal kończy się błędem
   z podpowiedzią --country pl
@@ -649,12 +651,12 @@ kartograf/
 │   │   ├── skorowidz.py         # Skorowidz GUGiK: rekordy GetFeatureInfo, wybór kampanii (ADR-028/030)
 │   │   ├── wcs.py               # GugikWcsMixin — wspólny URL WCS GetCoverage (NMT/NMPT 1m, orto)
 │   │   ├── bdot10k.py           # Bdot10kProvider
-│   │   └── __init__.py          # create_nmt_provider() — fabryka domyślnych NMT
+│   │   └── __init__.py          # create_nmt_provider() — fabryka providera NMT (vertical_crs, resolution wymagane)
 │   ├── cuzk/                  # Providery czeskie (CUZK, etap 1)
 │   │   ├── client.py            # CuzkClient — silnik sterowany deskryptorem (ArcGIS REST + openzu)
 │   │   ├── sheets.py            # SheetIndex/SheetInfo — indeks arkuszy SM5/TM33
 │   │   ├── dmr.py               # CuzkDmrProvider — DMR 5G/4G
-│   │   └── __init__.py          # create_dmr_provider() — fabryka domyślnych CZ
+│   │   └── __init__.py          # create_dmr_provider() — fabryka providera CZ (resolution, vertical_crs wymagane)
 │   ├── corine.py             # CorineProvider
 │   └── soilgrids.py          # SoilGridsProvider
 ├── cache/                 # Cache metadanych

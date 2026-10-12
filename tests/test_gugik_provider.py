@@ -24,6 +24,7 @@ from tests.conftest import (
     _STUB_LAYERS,
     WCS_FIXTURES,
     gfi_record,
+    make_provider,
     multipart_asc_body,
     recorded_response,
     render_gfi_body,
@@ -112,17 +113,17 @@ class TestGugikProviderBasic:
 
     def test_provider_name(self):
         """Test the provider name."""
-        provider = GugikProvider()
+        provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
         assert provider.name == "GUGiK"
 
     def test_provider_base_url(self):
         """Test the base URL."""
-        provider = GugikProvider()
+        provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
         assert provider.base_url == "https://mapy.geoportal.gov.pl"
 
     def test_supported_formats(self):
         """Test of the supported WCS formats."""
-        provider = GugikProvider()
+        provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
         formats = provider.get_supported_formats()
 
         assert "GTiff" in formats
@@ -132,7 +133,7 @@ class TestGugikProviderBasic:
 
     def test_file_extensions(self):
         """Test of file extensions."""
-        provider = GugikProvider()
+        provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
 
         assert provider.get_file_extension("GTiff") == ".tif"
         assert provider.get_file_extension("PNG") == ".png"
@@ -141,7 +142,7 @@ class TestGugikProviderBasic:
 
     def test_file_extension_invalid_format(self):
         """Test of the extension for an invalid format."""
-        provider = GugikProvider()
+        provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
 
         with pytest.raises(ValueError, match="Unknown format"):
             provider.get_file_extension("InvalidFormat")
@@ -150,14 +151,9 @@ class TestGugikProviderBasic:
 class TestGugikProviderResolution:
     """Tests of resolution handling (1m/5m)."""
 
-    def test_default_resolution_is_1m(self):
-        """Test that the default resolution is 1m."""
-        provider = GugikProvider()
-        assert provider.resolution == "1m"
-
     def test_resolution_1m_explicit(self):
         """Test of explicitly setting the 1m resolution."""
-        provider = GugikProvider(resolution="1m")
+        provider = GugikProvider(resolution="1m", vertical_crs="EVRF2007")
         assert provider.resolution == "1m"
 
     def test_resolution_5m(self):
@@ -174,11 +170,11 @@ class TestGugikProviderResolution:
     def test_resolution_invalid(self):
         """Test of an invalid resolution."""
         with pytest.raises(ValueError, match="Unsupported resolution"):
-            GugikProvider(resolution="2m")
+            GugikProvider(resolution="2m", vertical_crs="EVRF2007")
 
     def test_supported_resolutions(self):
         """Test of the list of supported resolutions."""
-        provider = GugikProvider()
+        provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
         resolutions = provider.get_supported_resolutions()
 
         assert "1m" in resolutions
@@ -187,7 +183,7 @@ class TestGugikProviderResolution:
 
     def test_supported_vertical_crs_for_1m(self):
         """Test of the supported CRS for 1m."""
-        provider = GugikProvider(resolution="1m")
+        provider = GugikProvider(resolution="1m", vertical_crs="EVRF2007")
         crs_list = provider.get_supported_vertical_crs_for_resolution()
 
         assert "KRON86" in crs_list
@@ -230,7 +226,7 @@ class TestGugikProviderValidation:
 
     def test_validate_valid_sheet(self):
         """Test of validation of a valid sheet code."""
-        provider = GugikProvider()
+        provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
 
         assert provider.validate_sheet("N-34-130-D") is True
         assert provider.validate_sheet("N-34-130-D-d-2-4") is True
@@ -238,7 +234,7 @@ class TestGugikProviderValidation:
 
     def test_validate_invalid_sheet(self):
         """Test of validation of an invalid sheet code."""
-        provider = GugikProvider()
+        provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
 
         assert provider.validate_sheet("INVALID") is False
         assert provider.validate_sheet("") is False
@@ -270,7 +266,9 @@ class TestGugikProviderDownloadSheet:
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[mock_wms_response, mock_opendata_response])
 
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )
         output_path = tmp_path / "test.asc"
 
         result = provider.download("N-34-130-D", output_path)
@@ -293,7 +291,9 @@ class TestGugikProviderDownloadSheet:
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[mock_wms_response, mock_opendata_response])
 
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )
         output_path = tmp_path / "subdir" / "nested" / "test.asc"
 
         result = provider.download("N-34-130-D", output_path)
@@ -308,7 +308,9 @@ class TestGugikProviderDownloadSheet:
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[mock_wms_response, mock_opendata_response])
 
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )
         output_path = tmp_path / "test.asc"
 
         provider.download("N-34-130-D", output_path)
@@ -323,7 +325,9 @@ class TestGugikProviderDownloadSheet:
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[mock_wms_response, mock_opendata_response])
 
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )
         output_path = tmp_path / "test.asc"
 
         provider.download("N-34-130-D", output_path, timeout=60)
@@ -341,7 +345,9 @@ class TestGugikProviderDownloadSheet:
             side_effect=[requests.ConnectionError("reset")] * 3
             + [mock_opendata_response]
         )
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )
         output_path = tmp_path / "not-created" / "test.asc"
 
         with patch("time.sleep"), pytest.raises(DownloadError) as exc_info:
@@ -376,7 +382,9 @@ class TestGugikProviderDownloadBbox:
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=lambda url, **kw: _geotiff_response(url))
 
-        provider = GugikProvider(session=session, vertical_crs="KRON86")
+        provider = GugikProvider(
+            session=session, vertical_crs="KRON86", resolution="1m"
+        )
         output_path = tmp_path / "test.tif"
 
         result = provider.download_bbox(sample_bbox, output_path)
@@ -393,7 +401,9 @@ class TestGugikProviderDownloadBbox:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=mock_wcs_response)
 
-        provider = GugikProvider(session=session, vertical_crs="KRON86")
+        provider = GugikProvider(
+            session=session, vertical_crs="KRON86", resolution="1m"
+        )
         output_path = tmp_path / "test.png"
 
         provider.download_bbox(sample_bbox, output_path, format="PNG")
@@ -403,7 +413,7 @@ class TestGugikProviderDownloadBbox:
 
     def test_download_bbox_invalid_format(self, tmp_path, sample_bbox):
         """Test of the error for an invalid format."""
-        provider = GugikProvider()
+        provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
         output_path = tmp_path / "test.xyz"
 
         with pytest.raises(ValueError, match="Unsupported WCS format"):
@@ -411,7 +421,7 @@ class TestGugikProviderDownloadBbox:
 
     def test_download_bbox_wrong_crs(self, tmp_path):
         """Test of the error for an invalid CRS."""
-        provider = GugikProvider()
+        provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
         output_path = tmp_path / "test.tif"
 
         wrong_crs_bbox = BBox(
@@ -428,7 +438,9 @@ class TestGugikProviderDownloadBbox:
         back to the aligned bbox, values 1:1."""
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=lambda url, **kw: _geotiff_response(url))
-        provider = GugikProvider(session=session, vertical_crs="KRON86")
+        provider = GugikProvider(
+            session=session, vertical_crs="KRON86", resolution="1m"
+        )
         output_path = tmp_path / "test.tif"
 
         provider.download_bbox(sample_bbox, output_path)
@@ -455,7 +467,9 @@ class TestGugikProviderDownloadBbox:
 
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=lambda url, **kw: _geotiff_response(url))
-        provider = GugikProvider(session=session, vertical_crs="KRON86")
+        provider = GugikProvider(
+            session=session, vertical_crs="KRON86", resolution="1m"
+        )
         output_path = tmp_path / "big.tif"
         bbox = BBox(450000, 550000, 450150, 550150, "EPSG:2180")
 
@@ -482,7 +496,9 @@ class TestGugikProviderDownloadBbox:
     ):
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=mock_wcs_response)
-        provider = GugikProvider(session=session, vertical_crs="KRON86")
+        provider = GugikProvider(
+            session=session, vertical_crs="KRON86", resolution="1m"
+        )
 
         provider.download_bbox(sample_bbox, tmp_path / "a.png", format="PNG")
 
@@ -504,7 +520,9 @@ class TestGugikProviderDownloadBbox:
         )
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=response)
-        provider = GugikProvider(session=session, vertical_crs="KRON86")
+        provider = GugikProvider(
+            session=session, vertical_crs="KRON86", resolution="1m"
+        )
         output_path = tmp_path / "err.tif"
 
         with pytest.raises(DownloadError, match="ExceptionReport"):
@@ -518,7 +536,9 @@ class TestGugikProviderDownloadBbox:
         session.get = Mock(
             return_value=recorded_response(WCS_FIXTURES / "nmt_evrf2007_20x20.mime")
         )
-        provider = GugikProvider(session=session)  # EVRF2007 by default
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )  # EVRF2007 by default
         output_path = tmp_path / "evrf.tif"
         bbox = BBox(567580.6, 243664.7, 567600.4, 243684.3, "EPSG:2180")
 
@@ -557,7 +577,9 @@ class TestGugikProviderDownloadBbox:
 
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=asc_response)
-        GugikProvider(session=session).download_bbox(bbox, tmp_path / "evrf.tif")
+        GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        ).download_bbox(bbox, tmp_path / "evrf.tif")
 
         subsets = [_subset(call.args[0]) for call in session.get.call_args_list]
         assert subsets == [
@@ -573,9 +595,9 @@ class TestGugikProviderDownloadBbox:
 
         kron = Mock(spec=requests.Session)
         kron.get = Mock(side_effect=lambda url, **kw: _geotiff_response(url))
-        GugikProvider(session=kron, vertical_crs="KRON86").download_bbox(
-            bbox, tmp_path / "kron.tif"
-        )
+        GugikProvider(
+            session=kron, vertical_crs="KRON86", resolution="1m"
+        ).download_bbox(bbox, tmp_path / "kron.tif")
         assert kron.get.call_count == 1
 
     def test_aaigrid_content_error_is_not_retried(self, tmp_path):
@@ -589,7 +611,9 @@ class TestGugikProviderDownloadBbox:
         shifted = BBox(567590.6, 243664.7, 567610.4, 243684.3, "EPSG:2180")
 
         with pytest.raises(DownloadError, match="xllcorner"):
-            GugikProvider(session=session).download_bbox(shifted, output_path)
+            GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            ).download_bbox(shifted, output_path)
 
         assert session.get.call_count == 1
         assert list(tmp_path.iterdir()) == []
@@ -619,7 +643,7 @@ def test_aaigrid_chunks_stitch_bit_exact_recorded(
         side_effect=lambda url, **kw: recorded_response(by_subset[_subset(url)])
     )
     cls = GugikProvider if provider_cls == "nmt" else GugikNmptProvider
-    provider = cls(session=session, vertical_crs=vertical_crs)
+    provider = make_provider(cls, session=session, vertical_crs=vertical_crs)
     bbox = BBox(567580.5, 243664.5, 567600.5, 243684.5, "EPSG:2180")
 
     provider.download_bbox(bbox, tmp_path / "whole.tif")
@@ -664,7 +688,9 @@ class TestGugikProviderRetry:
 
         session.get = Mock(side_effect=[wms_response, fail_response, success_response])
 
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )
         output_path = tmp_path / "test.asc"
 
         with patch("time.sleep"):
@@ -696,7 +722,9 @@ class TestGugikProviderRetry:
             side_effect=[wms_response, fail_response, fail_response, fail_response]
         )
 
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )
         output_path = tmp_path / "test.asc"
 
         with patch("time.sleep"), pytest.raises(DownloadError):
@@ -722,7 +750,9 @@ class TestGugikProviderRetry:
             side_effect=[wms_response, fail_response, fail_response, fail_response]
         )
 
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )
         output_path = tmp_path / "test.asc"
 
         sleep_times = []
@@ -788,7 +818,9 @@ class TestGugikProviderGetOpendataUrl:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=record_response)
 
-        url = GugikProvider(session=session)._get_opendata_url(self.SHEET)
+        url = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )._get_opendata_url(self.SHEET)
 
         assert url == self.URL
         assert _queried_layers(session) == [_EVRF2007_LAYERS[0]]
@@ -799,7 +831,9 @@ class TestGugikProviderGetOpendataUrl:
         session.get = Mock(return_value=empty_response)
 
         with pytest.raises(NoCoverageError) as exc_info:
-            GugikProvider(session=session)._get_opendata_url(self.SHEET)
+            GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            )._get_opendata_url(self.SHEET)
 
         assert f"Brak danych NMT 1m dla {self.SHEET} (uklad PL-1992, EVRF2007)" in str(
             exc_info.value
@@ -816,7 +850,9 @@ class TestGugikProviderGetOpendataUrl:
         )
 
         with patch("time.sleep") as sleep:
-            url = GugikProvider(session=session)._get_opendata_url(self.SHEET)
+            url = GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            )._get_opendata_url(self.SHEET)
 
         assert url == self.URL
         assert _queried_layers(session) == [_EVRF2007_LAYERS[0]] * 2
@@ -832,7 +868,9 @@ class TestGugikProviderGetOpendataUrl:
         )
 
         with patch("time.sleep") as sleep, pytest.raises(DownloadError) as exc_info:
-            GugikProvider(session=session)._get_opendata_url(self.SHEET)
+            GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            )._get_opendata_url(self.SHEET)
 
         assert not isinstance(exc_info.value, NoCoverageError)
         message = str(exc_info.value)
@@ -847,7 +885,9 @@ class TestGugikProviderGetOpendataUrl:
         session.get = Mock(return_value=_wms_response(_OGC_EXCEPTION_REPORT))
 
         with patch("time.sleep") as sleep, pytest.raises(DownloadError) as exc_info:
-            GugikProvider(session=session)._get_opendata_url(self.SHEET)
+            GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            )._get_opendata_url(self.SHEET)
 
         assert not isinstance(exc_info.value, NoCoverageError)
         assert "Invalid layer(s)" in str(exc_info.value)
@@ -862,7 +902,9 @@ class TestGugikProviderGetOpendataUrl:
         )
 
         with pytest.raises(DownloadError) as exc_info:
-            GugikProvider(session=session)._get_opendata_url(self.SHEET)
+            GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            )._get_opendata_url(self.SHEET)
 
         assert not isinstance(exc_info.value, NoCoverageError)
         assert session.get.call_count == 1
@@ -872,7 +914,9 @@ class TestGugikProviderGetOpendataUrl:
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[empty_response] * 3 + [record_response])
 
-        url = GugikProvider(session=session)._get_opendata_url(self.SHEET)
+        url = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )._get_opendata_url(self.SHEET)
 
         assert url == self.URL
         assert _queried_layers(session) == list(_EVRF2007_LAYERS)
@@ -889,7 +933,9 @@ class TestGugikProviderGetOpendataUrl:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=_wms_response(render_gfi_body(records)))
 
-        url = GugikProvider(session=session)._get_opendata_url(self.SHEET)
+        url = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )._get_opendata_url(self.SHEET)
 
         assert url == "https://x/new.asc"
 
@@ -902,7 +948,9 @@ class TestGugikProviderGetOpendataUrl:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=_wms_response(render_gfi_body(records)))
 
-        url = GugikProvider(session=session)._get_opendata_url(self.SHEET)
+        url = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )._get_opendata_url(self.SHEET)
 
         assert url == "https://x/later.asc"
 
@@ -913,7 +961,9 @@ class TestGugikProviderGetOpendataUrl:
         session.get = Mock(return_value=_wms_response(body))
 
         with pytest.raises(NoCoverageError) as exc_info:
-            GugikProvider(session=session)._get_opendata_url(self.SHEET)
+            GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            )._get_opendata_url(self.SHEET)
 
         assert "0.5 m" in str(exc_info.value)
 
@@ -925,7 +975,9 @@ class TestGugikProviderGetOpendataUrl:
         session.get = Mock(return_value=_wms_response(body))
         cache = MetadataCache(db_path=tmp_path / "cache.db")
         try:
-            provider = GugikProvider(session=session, cache=cache)
+            provider = GugikProvider(
+                session=session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+            )
             with pytest.raises(NoCoverageError) as first:
                 provider._get_opendata_url(self.SHEET)
             calls = session.get.call_count
@@ -945,7 +997,9 @@ class TestGugikProviderGetOpendataUrl:
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[first, record_response])
 
-        url = GugikProvider(session=session)._get_opendata_url(self.SHEET)
+        url = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )._get_opendata_url(self.SHEET)
 
         assert url == self.URL
         assert _queried_layers(session) == list(_EVRF2007_LAYERS[:2])
@@ -955,7 +1009,9 @@ class TestGugikProviderGetOpendataUrl:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=record_response)
 
-        provider = GugikProvider(session=session, resolution="1m")
+        provider = GugikProvider(
+            session=session, resolution="1m", vertical_crs="EVRF2007"
+        )
         provider._get_opendata_url(self.SHEET)
 
         call_url = session.get.call_args[0][0]
@@ -999,7 +1055,9 @@ class TestGugikProviderSession:
         )
 
         with patch(SESSION_FACTORY) as factory:
-            GugikProvider(session=session).download(self.SHEET, tmp_path / "test.asc")
+            GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            ).download(self.SHEET, tmp_path / "test.asc")
 
         factory.assert_not_called()
         assert session.get.call_count == 2
@@ -1010,7 +1068,7 @@ class TestGugikProviderSession:
         session.get = Mock(return_value=_wms_response(record_body))
 
         with patch(SESSION_FACTORY, return_value=session) as factory:
-            provider = GugikProvider()
+            provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
             provider._get_opendata_url(self.SHEET)
             provider._get_opendata_url(self.SHEET)
 
@@ -1030,7 +1088,7 @@ class TestGugikProviderSession:
             return session
 
         with patch(SESSION_FACTORY, side_effect=new_session) as factory:
-            provider = GugikProvider()
+            provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
 
             def worker():
                 try:
@@ -1064,7 +1122,9 @@ class TestGugikProviderSession:
         output_path = tmp_path / "test.asc"
 
         with patch(SESSION_FACTORY) as factory:
-            result = GugikProvider(session=session).download(self.SHEET, output_path)
+            result = GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            ).download(self.SHEET, output_path)
 
         factory.assert_not_called()
         assert result == output_path and output_path.read_bytes() == b"data"
@@ -1080,7 +1140,7 @@ class TestGugikProviderRepr:
 
     def test_repr(self):
         """Test __repr__."""
-        provider = GugikProvider()
+        provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
         repr_str = repr(provider)
 
         assert "GugikProvider" in repr_str
@@ -1088,7 +1148,7 @@ class TestGugikProviderRepr:
 
     def test_str(self):
         """Test __str__."""
-        provider = GugikProvider()
+        provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
         str_repr = str(provider)
 
         assert "GUGiK" in str_repr
@@ -1118,7 +1178,9 @@ class TestSkorowidzRegression:
             requests.ConnectionError("reset"),
             self.response(self.sample("szczecin_c24_2024.body")),
         ]
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )
         with (
             patch("time.sleep"),
             pytest.raises(DownloadError) as exc,
@@ -1139,7 +1201,9 @@ class TestSkorowidzRegression:
     def test_exact_resolution_and_latest_campaign(self, sheet, fixture, expected):
         session = Mock(spec=requests.Session)
         session.get.return_value = self.response(self.sample(fixture))
-        assert expected in GugikProvider(session=session)._get_opendata_url(sheet)
+        assert expected in GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )._get_opendata_url(sheet)
 
     @pytest.mark.parametrize(
         ("sheet", "record_sheet", "system", "hint"),
@@ -1165,16 +1229,18 @@ class TestSkorowidzRegression:
         session = Mock(spec=requests.Session)
         session.get.return_value = self.response(body)
         with pytest.raises(NoCoverageError, match=hint):
-            GugikProvider(session=session)._get_opendata_url(sheet)
+            GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            )._get_opendata_url(sheet)
 
     def test_uppercase_asc_is_available(self):
         session = Mock(spec=requests.Session)
         session.get.return_value = self.response(
             self.sample("slubice_c32_2022iStarsze.html")
         )
-        url = GugikProvider(session=session, resolution="5m")._get_opendata_url(
-            "N-33-126-C-c-3-2"
-        )
+        url = GugikProvider(
+            session=session, resolution="5m", vertical_crs="EVRF2007"
+        )._get_opendata_url("N-33-126-C-c-3-2")
         assert url.endswith("76969_1298029_N-33-126-C-c-3-2.ASC")
 
     def test_no_coverage_leaves_no_directory(self, tmp_path):
@@ -1182,7 +1248,9 @@ class TestSkorowidzRegression:
         session.get.return_value = self.response(self.sample("empty.body"))
         output = tmp_path / "not-created" / "sheet.asc"
         with pytest.raises(NoCoverageError):
-            GugikProvider(session=session).download("N-33-90-C-c-2-4", output)
+            GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            ).download("N-33-90-C-c-2-4", output)
         assert not output.parent.exists()
 
     def test_failed_layer_does_not_cache_older_record(self, tmp_path):
@@ -1196,7 +1264,9 @@ class TestSkorowidzRegression:
             requests.ConnectionError("reset"),
             self.response(self.sample("szczecin_c24_2024.body")),
         ]
-        provider = GugikProvider(session=session, cache=cache)
+        provider = GugikProvider(
+            session=session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+        )
         try:
             with patch("time.sleep"), pytest.raises(DownloadError):
                 provider._get_opendata_url("N-33-90-C-c-2-4")
@@ -1209,13 +1279,17 @@ class TestSkorowidzRegression:
         session = Mock(spec=requests.Session)
         session.get.return_value = self.response(body)
         with pytest.raises(NoCoverageError, match="5 m"):
-            GugikProvider(session=session)._get_opendata_url("N-33-90-C-c-2-4")
+            GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            )._get_opendata_url("N-33-90-C-c-2-4")
 
     def test_5m_accepts_5m_record(self):
         record = gfi_record("N-33-90-C-c-2-4", resolution="5.00 m")
         session = Mock(spec=requests.Session)
         session.get.return_value = self.response(render_gfi_body([record]))
-        provider = GugikProvider(session=session, resolution="5m")
+        provider = GugikProvider(
+            session=session, resolution="5m", vertical_crs="EVRF2007"
+        )
         assert provider._get_opendata_url("N-33-90-C-c-2-4") == record["url"]
 
     def test_pl2000_record_matches_only_same_zone(self):
@@ -1223,7 +1297,9 @@ class TestSkorowidzRegression:
         session = Mock(spec=requests.Session)
         session.get.return_value = self.response(render_gfi_body([record]))
         assert (
-            GugikProvider(session=session)._get_opendata_url("7.173.21.06")
+            GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            )._get_opendata_url("7.173.21.06")
             == (record["url"])
         )
 
@@ -1232,4 +1308,6 @@ class TestSkorowidzRegression:
             render_gfi_body([gfi_record("7.173.21.06", system="PL-2000:S6")])
         )
         with pytest.raises(NoCoverageError, match="PL-2000"):
-            GugikProvider(session=session)._get_opendata_url("7.173.21.06")
+            GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            )._get_opendata_url("7.173.21.06")

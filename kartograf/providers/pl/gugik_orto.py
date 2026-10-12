@@ -12,7 +12,7 @@ Unlike NMT/NMPT, orthophotos:
 - Use a single WMS endpoint (no KRON86/EVRF2007 split)
 - Download as TIF (not ASC)
 - Come in colour variants (RGB, CIR, B/W) published under the same sheet;
-  the provider downloads exactly one variant (``color``, default RGB)
+  the provider downloads exactly one variant (explicit ``color``)
 """
 
 import logging
@@ -50,7 +50,7 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
 
     Examples
     --------
-    >>> provider = GugikOrtoProvider()
+    >>> provider = GugikOrtoProvider(color="RGB")
     >>> provider.download("N-34-130-D-d-2-4", Path("./sheet.tif"))
     >>>
     >>> from kartograf import BBox
@@ -77,7 +77,7 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     LAYER_PATTERN = re.compile(r"^SkorowidzeOrtofotomapy(?:(\d{4})|(Starsze))$")
     LAYER_FAMILY = re.compile(r"^SkorowidzeOrtofotomapy(?!Zasiegi)")
 
-    # Colour variant downloaded by default; CIR/B-W only via the `color` kwarg
+    # RGB uses the original unsuffixed storage segment.
     DEFAULT_COLOR = "RGB"
 
     # record_cache key: the resolution slot carries the colour variant (orto has no
@@ -92,7 +92,8 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         self,
         session: requests.Session | None = None,
         cache=None,
-        color: str = DEFAULT_COLOR,
+        *,
+        color: str,
     ):
         """
         Initialize the GUGiK orthophoto map (Ortofotomapa) provider.
@@ -104,10 +105,11 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         cache : MetadataCache, optional
             Metadata cache instance for caching index (skorowidz) lookups.
             If None, no caching is performed (default behavior).
-        color : str, optional
-            Colour variant to download as published by GUGiK: "RGB"
-            (default), "CIR" or "B/W". A sheet without this variant is
-            ``NoCoverageError`` — other variants are never substituted.
+        color : str
+            Colour variant as published by GUGiK: "RGB" (natural colour),
+            "CIR" (colour infrared) or "B/W" (greyscale). A sheet without
+            the requested variant raises ``NoCoverageError``; no variant
+            substitution is made.
         """
         super().__init__()
         self._sessions = SessionPerThread(session)
@@ -132,7 +134,7 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
 
     @property
     def color(self) -> str:
-        """Colour variant this provider downloads (RGB by default)."""
+        """Return the explicitly requested RGB, CIR or B/W variant."""
         return self._color
 
     @property

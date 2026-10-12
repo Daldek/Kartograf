@@ -216,7 +216,7 @@ class TestCorineProvider:
         provider = CorineProvider()
         bbox = BBox(14.0, 52.0, 15.0, 53.0, "EPSG:4326")
         with pytest.raises(ValueError):
-            provider.download_by_bbox(bbox, Path("/tmp/test.png"))
+            provider.download_by_bbox(bbox, Path("/tmp/test.png"), year=2018)
 
     def test_download_by_bbox_invalid_year(self):
         """Test download with invalid year."""
@@ -275,36 +275,31 @@ class TestCorineProvider:
 class TestLandCoverManager:
     """Test LandCoverManager."""
 
-    def test_init_default_provider(self):
-        """Test default provider is BDOT10k."""
-        manager = LandCoverManager()
-        assert manager.provider_name == "BDOT10k"
-
     def test_init_with_provider_name(self):
         """Test initialization with provider name."""
-        manager = LandCoverManager(provider="corine")
+        manager = LandCoverManager(output_dir="data", provider="corine")
         assert manager.provider_name == "CORINE Land Cover"
 
     def test_init_with_provider_instance(self):
         """Test initialization with provider instance."""
         provider = CorineProvider()
-        manager = LandCoverManager(provider=provider)
+        manager = LandCoverManager(output_dir="data", provider=provider)
         assert manager.provider_name == "CORINE Land Cover"
 
     def test_init_invalid_provider(self):
         """Test initialization with invalid provider."""
         with pytest.raises(ValueError):
-            LandCoverManager(provider="invalid")
+            LandCoverManager(output_dir="data", provider="invalid")
 
     def test_set_provider_by_name(self):
         """Test setting provider by name."""
-        manager = LandCoverManager()
+        manager = LandCoverManager(output_dir="data", provider="bdot10k")
         manager.set_provider("corine")
         assert manager.provider_name == "CORINE Land Cover"
 
     def test_set_provider_by_instance(self):
         """Test setting provider by instance."""
-        manager = LandCoverManager()
+        manager = LandCoverManager(output_dir="data", provider="corine")
         manager.set_provider(Bdot10kProvider())
         assert manager.provider_name == "BDOT10k"
 
@@ -316,19 +311,19 @@ class TestLandCoverManager:
 
     def test_download_no_selection(self):
         """Test download with no selection method."""
-        manager = LandCoverManager()
+        manager = LandCoverManager(output_dir="data", provider="bdot10k")
         with pytest.raises(ValueError):
             manager.download()
 
     def test_download_multiple_selection(self):
         """Test download with multiple selection methods."""
-        manager = LandCoverManager()
+        manager = LandCoverManager(output_dir="data", provider="bdot10k")
         with pytest.raises(ValueError):
             manager.download(teryt="1465", sheet="N-34-130-D")
 
     def test_repr(self):
         """Test string representation."""
-        manager = LandCoverManager()
+        manager = LandCoverManager(output_dir="data", provider="bdot10k")
         repr_str = repr(manager)
         assert "LandCoverManager" in repr_str
         assert "BDOT10k" in repr_str
@@ -381,7 +376,7 @@ class TestLandCoverCLI:
         """Test download without selection method."""
         from kartograf.cli.commands import main
 
-        result = main(["landcover", "download"])
+        result = main(["landcover", "download", "--source", "bdot10k", "-o", "unused"])
         assert result == 1
         captured = capsys.readouterr()
         assert "Must provide one of" in captured.err
@@ -390,7 +385,18 @@ class TestLandCoverCLI:
         """Test download with invalid bbox."""
         from kartograf.cli.commands import main
 
-        result = main(["landcover", "download", "--bbox", "invalid"])
+        result = main(
+            [
+                "landcover",
+                "download",
+                "--source",
+                "bdot10k",
+                "-o",
+                "unused",
+                "--bbox",
+                "invalid",
+            ]
+        )
         assert result == 1
         captured = capsys.readouterr()
         assert "Invalid bbox" in captured.err
@@ -408,7 +414,15 @@ class TestLandCoverCLI:
 
         with patch("kartograf.cli.landcover_cmd.LandCoverManager") as manager:
             result = main(
-                ["landcover", "download", f"--bbox={bbox}", "-o", str(tmp_path)]
+                [
+                    "landcover",
+                    "download",
+                    "--source",
+                    "bdot10k",
+                    f"--bbox={bbox}",
+                    "-o",
+                    str(tmp_path),
+                ]
             )
         assert result == 1
         manager.assert_not_called()
@@ -430,9 +444,45 @@ class TestLandCoverInvalidOptions:
     @pytest.mark.parametrize(
         ("extra", "fragment"),
         [
-            (["--source", "soilgrids", "--property", "foo"], "Invalid property"),
-            (["--source", "soilgrids", "--depth", "1-2cm"], "Invalid depth"),
-            (["--source", "soilgrids", "--stat", "median"], "Invalid stat"),
+            (
+                [
+                    "--source",
+                    "soilgrids",
+                    "--property",
+                    "foo",
+                    "--depth",
+                    "0-5cm",
+                    "--stat",
+                    "mean",
+                ],
+                "Invalid property",
+            ),
+            (
+                [
+                    "--source",
+                    "soilgrids",
+                    "--property",
+                    "soc",
+                    "--depth",
+                    "1-2cm",
+                    "--stat",
+                    "mean",
+                ],
+                "Invalid depth",
+            ),
+            (
+                [
+                    "--source",
+                    "soilgrids",
+                    "--property",
+                    "soc",
+                    "--depth",
+                    "0-5cm",
+                    "--stat",
+                    "median",
+                ],
+                "Invalid stat",
+            ),
             (["--source", "corine", "--year", "1999"], "1999"),
         ],
     )
@@ -857,7 +907,7 @@ class TestCorineProviderDownload:
         with patch.object(
             provider, "_download_via_wms", return_value=output
         ) as mock_wms:
-            provider.download_by_bbox(bbox, output)
+            provider.download_by_bbox(bbox, output, year=2018)
         mock_wms.assert_called_once()
 
     def test_download_via_wms_success(self, tmp_path):
@@ -1825,16 +1875,16 @@ class TestLandCoverNoSideEffectsOnInit:
         monkeypatch.chdir(cwd)
         return cwd
 
-    def test_default_init_creates_nothing(self, empty_cwd):
-        LandCoverManager()
-        assert _tree(empty_cwd) == []
-
     @pytest.mark.parametrize("source", ["bdot10k", "corine", "soilgrids"])
     def test_init_with_output_dir_creates_nothing(self, empty_cwd, source):
         out = empty_cwd / "a" / "b"
         manager = LandCoverManager(output_dir=out, provider=source)
         # Generating the path (without writing) must not create it either.
-        manager._generate_output_path("1465", None, None)
+        options = {
+            "corine": {"year": 2018},
+            "soilgrids": {"property": "soc", "depth": "0-5cm", "stat": "mean"},
+        }.get(source, {})
+        manager._generate_output_path("1465", None, None, options)
         assert _tree(empty_cwd) == []
 
     @pytest.mark.parametrize(
@@ -1893,7 +1943,7 @@ class TestLandCoverNoSideEffectsOnInit:
         manager = LandCoverManager(output_dir=out_dir, provider=provider)
         bbox = BBox(450000, 550000, 451000, 551000, "EPSG:2180")
 
-        path = manager.download(bbox=bbox)
+        path = manager.download(bbox=bbox, property="soc", depth="0-5cm", stat="mean")
 
         assert path.parent == out_dir
         assert path.read_bytes() == b"II*\x00"
@@ -1917,7 +1967,15 @@ class TestLandCoverNoSideEffectsOnInit:
             if source == "bdot10k":
                 manager.download(teryt="1465")
             else:
-                manager.download(bbox=BBox(450000, 550000, 451000, 551000, "EPSG:2180"))
+                options = (
+                    {"year": 2018}
+                    if source == "corine"
+                    else {"property": "soc", "depth": "0-5cm", "stat": "mean"}
+                )
+                manager.download(
+                    bbox=BBox(450000, 550000, 451000, 551000, "EPSG:2180"),
+                    **options,
+                )
 
         assert _tree(empty_cwd) == []
 

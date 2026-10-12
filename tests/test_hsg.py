@@ -367,18 +367,6 @@ class TestHSGCLI:
         assert args.soilgrids_command == "hsg"
         assert args.sheet == "N-34-130-D"
 
-    def test_soilgrids_hsg_default_values(self):
-        """Test default values for soilgrids hsg command."""
-        from kartograf.cli.commands import create_parser
-
-        parser = create_parser()
-        args = parser.parse_args(["soilgrids", "hsg", "--sheet", "N-34-130-D"])
-
-        assert args.depth == "0-5cm"
-        assert args.output == "./data/hsg"
-        assert args.keep_intermediate is False
-        assert args.stats is False
-
     def test_soilgrids_hsg_custom_options(self):
         """Test custom options for soilgrids hsg command."""
         from kartograf.cli.commands import create_parser
@@ -463,7 +451,9 @@ class TestHSGCalculatorCalculateFull:
             )
             mock_parser_cls.return_value = mock_parser
 
-            result = calc.calculate_hsg_by_sheet("N-34-130-D", output)
+            result = calc.calculate_hsg_by_sheet(
+                "N-34-130-D", output, depth="0-5cm", stat="mean"
+            )
 
         assert result == output
         assert output.exists()
@@ -497,7 +487,7 @@ class TestHSGCalculatorCalculateFull:
 
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         output = tmp_path / "hsg.tif"
-        result = calc.calculate_hsg_by_bbox(bbox, output)
+        result = calc.calculate_hsg_by_bbox(bbox, output, depth="0-5cm", stat="mean")
 
         assert result == output
 
@@ -524,7 +514,7 @@ class TestHSGCalculatorCalculateFull:
 
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         output = tmp_path / "hsg.tif"
-        calc.calculate_hsg_by_bbox(bbox, output)
+        calc.calculate_hsg_by_bbox(bbox, output, depth="0-5cm", stat="mean")
 
         import rasterio
 
@@ -554,7 +544,7 @@ class TestHSGCalculatorCalculateFull:
 
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         output = tmp_path / "hsg.tif"
-        calc.calculate_hsg_by_bbox(bbox, output)
+        calc.calculate_hsg_by_bbox(bbox, output, depth="0-5cm", stat="mean")
 
         import rasterio
 
@@ -584,7 +574,7 @@ class TestHSGCalculatorCalculateFull:
 
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         output = tmp_path / "hsg.tif"
-        calc.calculate_hsg_by_bbox(bbox, output)
+        calc.calculate_hsg_by_bbox(bbox, output, depth="0-5cm", stat="mean")
 
         import rasterio
 
@@ -610,7 +600,9 @@ class TestHSGCalculatorCalculateFull:
 
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         output = tmp_path / "out" / "hsg.tif"
-        calc.calculate_hsg_by_bbox(bbox, output, keep_intermediate=True)
+        calc.calculate_hsg_by_bbox(
+            bbox, output, depth="0-5cm", stat="mean", keep_intermediate=True
+        )
 
         assert (tmp_path / "out" / "clay.tif").exists()
         assert (tmp_path / "out" / "sand.tif").exists()
@@ -732,7 +724,9 @@ class TestHSGSidecar:
         import json
 
         out = tmp_path / "hsg_sheet.tif"
-        self._calc().calculate_hsg_by_sheet("N-34-130-D", out)
+        self._calc().calculate_hsg_by_sheet(
+            "N-34-130-D", out, depth="0-5cm", stat="mean"
+        )
 
         request = json.loads((tmp_path / "hsg_sheet.tif.meta.json").read_text())[
             "request"
@@ -746,7 +740,9 @@ class TestHSGSidecar:
         import json
 
         out = tmp_path / "hsg_sheet.tif"
-        self._calc().calculate_hsg_by_sheet("M-33-036-A", out)
+        self._calc().calculate_hsg_by_sheet(
+            "M-33-036-A", out, depth="0-5cm", stat="mean"
+        )
 
         meta = json.loads((tmp_path / "hsg_sheet.tif.meta.json").read_text())
         assert meta["request"]["sheet"] == "M-33-36-A"
@@ -758,7 +754,7 @@ class TestHSGSidecar:
 
         out = tmp_path / "hsg_nosheet.tif"
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        self._calc().calculate_hsg_by_bbox(bbox, out)
+        self._calc().calculate_hsg_by_bbox(bbox, out, depth="0-5cm", stat="mean")
 
         request = json.loads((tmp_path / "hsg_nosheet.tif.meta.json").read_text())[
             "request"
@@ -770,7 +766,9 @@ class TestHSGSidecar:
 
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         with patch("kartograf.sources.sidecar.emit_sidecar") as emit:
-            self._calc().calculate_hsg_by_bbox(bbox, tmp_path / "h.tif")
+            self._calc().calculate_hsg_by_bbox(
+                bbox, tmp_path / "h.tif", depth="0-5cm", stat="mean"
+            )
         assert emit.call_args.kwargs["capability"] == "bbox_raster"
 
     def test_sidecar_failure_does_not_break(self, tmp_path):
@@ -779,7 +777,9 @@ class TestHSGSidecar:
         out = tmp_path / "hsg_y.tif"
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         with patch("kartograf.sources.sidecar.write_sidecar", side_effect=OSError("x")):
-            result = self._calc().calculate_hsg_by_bbox(bbox, out)
+            result = self._calc().calculate_hsg_by_bbox(
+                bbox, out, depth="0-5cm", stat="mean"
+            )
         assert result == out and out.exists()
 
 
@@ -799,7 +799,9 @@ class TestHSGOutputDirOnWrite:
         provider.download_by_bbox.side_effect = DownloadError("siec")
         out = tmp_path / "a" / "b" / "hsg.tif"
         with pytest.raises(DownloadError):
-            HSGCalculator(provider=provider).calculate_hsg_by_bbox(self._bbox(), out)
+            HSGCalculator(provider=provider).calculate_hsg_by_bbox(
+                self._bbox(), out, depth="0-5cm", stat="mean"
+            )
         assert not (tmp_path / "a").exists()
 
     def test_nested_output_dir_created_on_success(self, tmp_path):
@@ -811,7 +813,7 @@ class TestHSGOutputDirOnWrite:
         provider.download_by_bbox.side_effect = fake_download
         out = tmp_path / "a" / "b" / "hsg.tif"
         HSGCalculator(provider=provider).calculate_hsg_by_bbox(
-            self._bbox(), out, keep_intermediate=True
+            self._bbox(), out, depth="0-5cm", stat="mean", keep_intermediate=True
         )
         assert out.exists()
         assert (tmp_path / "a" / "b" / "hsg.tif.meta.json").exists()

@@ -25,7 +25,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-001](#adr-001-flat-layout-zamiast-src-layout) | Flat layout zamiast src layout | 2026-01-17 | Przyjeta |
 | [ADR-002](#adr-002-auth-proxy-do-izolacji-credentials-clms) | Auth Proxy do izolacji credentials CLMS | 2026-01-18 | Przyjeta |
 | [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) | OpenData (ASC) vs WCS (GeoTIFF) — rozdzielenie sciezek pobierania NMT | 2026-01-18 | Przyjeta — czesciowo zastapiona przez [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (bbox = WCS GeoTIFF; errata 1) |
-| [ADR-004](#adr-004-evrf2007-jako-domyslny-uklad-wysokosciowy) | EVRF2007 jako domyslny uklad wysokosciowy | 2026-01-21 | Przyjeta |
+| [ADR-004](#adr-004-evrf2007-jako-domyslny-uklad-wysokosciowy) | EVRF2007 jako domyslny uklad wysokosciowy | 2026-01-21 | Zastapiona w 0.8.0 (errata 1: uklad wysokosci wymagany, bez wartosci domyslnej) |
 | [ADR-005](#adr-005-struktura-katalogow-nmt-rozdzielona-wg-rozdzielczosci) | Struktura katalogow NMT rozdzielona wg rozdzielczosci | 2026-01-21 | Przyjeta — czesciowo zastapiona przez [ADR-013](#adr-013-zmiana-nazw-podkatalogow-storage-z-1m5m-na-nmt_1mnmt_5m), a nastepnie [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (realizacja ukladu katalogow; errata 1) |
 | [ADR-006](#adr-006-landcoverprovider-jako-osobna-hierarchia-od-baseprovider) | LandCoverProvider jako osobna hierarchia od BaseProvider | 2026-01-18 | Przyjeta |
 | [ADR-007](#adr-007-migracja-z-black--flake8-na-ruff) | Migracja z black + flake8 na ruff | 2026-02-03 | Przyjeta |
@@ -44,7 +44,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-020](#adr-020-walidacja-warstw-wms-przez-getcapabilities) | Walidacja warstw WMS przez GetCapabilities | 2026-03-24 | Przyjeta — czesciowo zastapiona przez [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (warstwy wylacznie z GetCapabilities, bez list zaszytych i fallbacku; errata 3) |
 | [ADR-021](#adr-021-laz-chmury-punktów-lidar--discovery-przez-wfs-area-based) | LAZ (chmury punktów LIDAR) — discovery przez WFS, area-based | 2026-06-24 | Przyjeta — czesciowo zastapiona przez [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) (regula newest-per-tile) |
 | [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) | Architektura zrodel wielokrajowych — deskryptory, rejestry, sidecar, twarda polityka transformacji (etap 0) | 2026-08-10 | Przyjeta — uzupelniona przez [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (formalny interfejs silnika: `CuzkClient`, (a)) i [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (angielskie nazwy kluczy sidecara) |
-| [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) | Silnik CUZK, polityka układów CZ i EVRF2007→5621 (etap 1) | 2026-08-11 | Przyjeta — czesciowo zastapiona przez [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) i [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (`--target-crs` wylacznie dla CZ; Ustalenia dodatkowe pkt 6); uzupelniona przez [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) ((f).1 obejmuje LAZ) i [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (kawalkowanie CUZK w `transport/chunks.py`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) |
+| [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) | Silnik CUZK, polityka układów CZ i EVRF2007→5621 (etap 1) | 2026-08-11 | Przyjeta — czesciowo zastapiona przez [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) i [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (`--target-crs` wylacznie dla CZ; Ustalenia dodatkowe pkt 6); uzupelniona przez [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) ((f).1 obejmuje LAZ) i [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (kawalkowanie CUZK w `transport/chunks.py`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0); errata 2: `--country` wymagane z obszarem, wartosci per kraj (0.8.0) |
 | [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) | Reprojekcja tresci CZ wylacznie lokalnie (zakaz `imageSR` != natywny) | 2026-08-11 | Przyjeta — uzupelniona przez [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (wspolne planowanie kawalkow z kotwica NW); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) |
 | [ADR-025](#adr-025-mapowanie-tekstura---hsg-i-kanoniczny-trojkat-usda-audyt-070) | Mapowanie tekstura -> HSG i kanoniczny trojkat USDA (audyt 0.7.0) | 2026-08-22 | Przyjeta |
 | [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) | Uklad data/ per produkt — segmenty i szablony w deskryptorach | 2026-08-28 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (pliki w `<segment>/kampanie/`, sciezka standardowa = dowiazanie twarde albo kopia; errata 2); zastepuje [ADR-013](#adr-013-zmiana-nazw-podkatalogow-storage-z-1m5m-na-nmt_1mnmt_5m) i realizacje ukladu z [ADR-005](#adr-005-struktura-katalogow-nmt-rozdzielona-wg-rozdzielczosci), uzupelnia [ADR-017](#adr-017-pl-2000-sheet-naming--composition-pattern-with-auto-detection) (domyka odroczenie) |
@@ -123,7 +123,7 @@ KRON86 — endpoint EVRF2007 GUGiK wycofal (HTTP 404 od 2026-08), a
 ## ADR-004: EVRF2007 jako domyslny uklad wysokosciowy
 
 **Data:** 2026-01-21
-**Status:** Przyjeta
+**Status:** Zastapiona w 0.8.0 — errata 1 (uklad wysokosci wymagany, bez wartosci domyslnej)
 
 **Kontekst:** GUGiK oferuje NMT w dwoch ukladach: KRON86 (Kronsztadt, historyczny) i EVRF2007 (European Vertical Reference Frame, aktualny standard). Wczesniej domyslny byl KRON86.
 
@@ -134,6 +134,15 @@ KRON86 — endpoint EVRF2007 GUGiK wycofal (HTTP 404 od 2026-08), a
 **Decyzja:** EVRF2007 jako domyslny (opcja B). Jest to aktualny standard geodezyjny w Polsce. KRON86 dostepny jako `--vertical-crs KRON86`.
 
 **Konsekwencje:** Breaking change w v0.3.2. Uzytkownicy uzywajacy KRON86 musza jawnie podac flage. NMT 5m dziala out-of-the-box.
+
+**Errata 1 (2026-10-12, 0.8.0, decyzja uzytkownika):** wartosci domyslnej
+ukladu wysokosci nie ma. CLI `--vertical-crs` jest wymagane dla NMT, NMPT
+i LAZ (PL: EVRF2007 albo KRON86; NMT 5 m tylko EVRF2007; CZ: Bpv albo
+EVRF2007), a w API `vertical_crs` jest wymagane w providerach GUGiK/CUZK,
+fabrykach, `FileStorage`, wycinku PL i LAZ. Powod: regula "bez wartosci
+domyslnych wplywajacych na dane" (DEVELOPMENT_STANDARDS 11.2) — uklad
+wysokosci wybiera dane, wiec wybiera go wolajacy. EVRF2007 pozostaje
+ukladem zalecanym (aktualny standard, jedyny dla NMT 5 m).
 
 ---
 
@@ -562,7 +571,7 @@ ktoregokolwiek rocznika po ponowieniach konczy `discover_tiles`
 ## ADR-023: Silnik CUZK, polityka układów CZ i EVRF2007→5621 (etap 1)
 
 **Data:** 2026-08-11
-**Status:** Przyjeta — czesciowo zastapiona przez ADR-024 (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) i ADR-027 (`--target-crs` wylacznie dla CZ; Ustalenia dodatkowe pkt 6); uzupelniona przez ADR-029 ((f).1 obejmuje LAZ) i ADR-034 (kawalkowanie CUZK w `transport/chunks.py`); uzupelnia ADR-022
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-024 (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) i ADR-027 (`--target-crs` wylacznie dla CZ; Ustalenia dodatkowe pkt 6); uzupelniona przez ADR-029 ((f).1 obejmuje LAZ) i ADR-034 (kawalkowanie CUZK w `transport/chunks.py`); uzupelnia ADR-022; errata 2: `--country` wymagane z obszarem, wartosci per kraj (0.8.0)
 
 **Kontekst:** Etap 1 dodaje pierwsze zagraniczne zrodlo danych — CUZK (Czeski
 Urzad Zememericky a Katastralni), DMR 5G (2 m, `exportImage`) i DMR 4G (5 m,
@@ -832,6 +841,19 @@ uzasadnic ekstrakcje silnika do `transport/` (punkt a).
 - deklarowany sufit `exportImage` 15000 x 4100 px pozostaje,
   realna granica ~8 Mpx prowadzi do kafelkowania klienta z budzetem
   4 Mpx na zapytanie (ADR-024 errata 2).
+
+**Errata 2 (2026-10-12, 0.8.0, bez wartosci domyslnych):** `--country`
+jest wymagane z `--bbox`/`--geometry` (z `--sheet` kraj nadal wynika
+z godla). Bez domyslnych PL 1m/EVRF2007 i CZ 2m/Bpv zadanie PL+CZ podaje
+`--resolution`/`--vertical-crs` jedna wartoscia dostepna w obu krajach
+(`5m`, `EVRF2007`) albo per kraj (`pl=1m,cz=2m`, `pl=EVRF2007,cz=Bpv`;
+decyzja uzytkownika 2026-10-12); walidacja kazdego kraju przed siecia.
+`Info:` o roznych domyslnych ukladach wysokosci czesci PL i CZ zniknal.
+Pkt 5 (flagi PL-only rozstrzygaja `auto` na `pl`) obowiazuje dla
+`--product nmpt|orto` oraz zwyklych `--vertical-crs KRON86`
+i `--resolution 1m`; `--system` (wymagane dla czesci PL) i wartosci per
+kraj kraju nie wybieraja, a zadanie PL+CZ z `--system` nie jest juz
+bledem po stronie CZ.
 
 ---
 

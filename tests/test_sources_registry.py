@@ -252,9 +252,9 @@ class TestDescriptorProviderConsistency:
         from kartograf import FileStorage, GugikProvider
 
         d = get_source("pl.gugik.nmt_1m")
-        provider = GugikProvider(resolution="1m")
+        provider = GugikProvider(resolution="1m", vertical_crs="EVRF2007")
         assert d.default_extension == provider.default_extension
-        storage = FileStorage(tmp_path, resolution="1m")
+        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
         assert d.resolve_subdir(vertical_crs="EVRF2007") == storage._subdir
         supported = provider.get_supported_vertical_crs_for_resolution("1m")
         # Compared per channel: the WMS index (skorowidz) and the WCS channel
@@ -298,9 +298,9 @@ class TestDescriptorProviderConsistency:
         from kartograf import FileStorage, GugikProvider
 
         d = get_source("pl.gugik.nmt_5m")
-        provider = GugikProvider(resolution="5m")
+        provider = GugikProvider(resolution="5m", vertical_crs="EVRF2007")
         assert d.default_extension == provider.default_extension
-        storage = FileStorage(tmp_path, resolution="5m")
+        storage = FileStorage(tmp_path, resolution="5m", vertical_crs="EVRF2007")
         assert d.resolve_subdir(vertical_crs="EVRF2007") == storage._subdir
         supported = provider.get_supported_vertical_crs_for_resolution("5m")
         assert {
@@ -312,9 +312,11 @@ class TestDescriptorProviderConsistency:
         from kartograf import FileStorage, GugikNmptProvider
 
         d = get_source("pl.gugik.nmpt")
-        provider = GugikNmptProvider()
+        provider = GugikNmptProvider(vertical_crs="EVRF2007")
         assert d.default_extension == provider.default_extension
-        storage = FileStorage(tmp_path, product="nmpt")
+        storage = FileStorage(
+            tmp_path, resolution="1m", vertical_crs="EVRF2007", product="nmpt"
+        )
         assert d.resolve_subdir(vertical_crs="EVRF2007") == storage._subdir
         codes = {
             resolve_vertical_crs(n, d.channels[0].vertical_crs_options)
@@ -326,18 +328,25 @@ class TestDescriptorProviderConsistency:
         from kartograf import FileStorage, GugikOrtoProvider
 
         d = get_source("pl.gugik.orto")
-        provider = GugikOrtoProvider()
+        provider = GugikOrtoProvider(color="RGB")
         assert d.default_extension == provider.default_extension
-        assert d.resolve_subdir() == FileStorage(tmp_path, product="orto")._subdir
+        assert (
+            d.resolve_subdir()
+            == FileStorage(
+                tmp_path, resolution=None, vertical_crs=None, product="orto"
+            )._subdir
+        )
         assert d.channels[0].vertical_crs_options == ()
 
     def test_laz(self, tmp_path):
         from kartograf import FileStorage, GugikLazProvider
 
         d = get_source("pl.gugik.laz")
-        provider = GugikLazProvider()
+        provider = GugikLazProvider(vertical_crs="EVRF2007")
         assert d.default_extension == provider.default_extension
-        storage = FileStorage(tmp_path, product="laz")
+        storage = FileStorage(
+            tmp_path, resolution=None, vertical_crs="EVRF2007", product="laz"
+        )
         assert d.resolve_subdir(vertical_crs="EVRF2007") == storage._subdir
         codes = {
             resolve_vertical_crs(n, d.channels[0].vertical_crs_options)
@@ -392,11 +401,11 @@ class TestDescriptorProviderConsistency:
         )
 
         expected = {
-            GugikProvider(resolution="1m"): "pl.gugik.nmt_1m",
-            GugikProvider(resolution="5m"): "pl.gugik.nmt_5m",
-            GugikNmptProvider(): "pl.gugik.nmpt",
-            GugikOrtoProvider(): "pl.gugik.orto",
-            GugikLazProvider(): "pl.gugik.laz",
+            GugikProvider(resolution="1m", vertical_crs="EVRF2007"): "pl.gugik.nmt_1m",
+            GugikProvider(resolution="5m", vertical_crs="EVRF2007"): "pl.gugik.nmt_5m",
+            GugikNmptProvider(vertical_crs="EVRF2007"): "pl.gugik.nmpt",
+            GugikOrtoProvider(color="RGB"): "pl.gugik.orto",
+            GugikLazProvider(vertical_crs="EVRF2007"): "pl.gugik.laz",
             Bdot10kProvider(): "pl.gugik.bdot10k",
             CorineProvider(use_proxy=False): "eu.clms.corine",
             SoilGridsProvider(): "global.isric.soilgrids",

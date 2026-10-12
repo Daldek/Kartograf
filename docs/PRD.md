@@ -87,7 +87,8 @@ Docelowo (v1.0.0, sekcja 8) dochodzą:
 
 #### Description
 Pobieranie danych wysokościowych NMT z GUGiK w rozdzielczościach 1m i 5m
-(5m tylko EVRF2007), w układach wysokościowych EVRF2007 (domyślny) i KRON86.
+(5m tylko EVRF2007), w układach wysokościowych EVRF2007 i KRON86 (wybór
+wymagany od 0.8.0, bez wartości domyślnej).
 
 #### Requirements
 - Godło PL-1992 (`SheetParser`, skale 1:1M–1:10k) i PL-2000 (`Parser2000`,
@@ -125,26 +126,26 @@ descendants = parser.get_all_descendants("1:10000")
 # Reverse lookup: bbox → godła
 from kartograf import find_sheets_for_bbox
 bbox = BBox(771000, 509000, 772000, 510000, "EPSG:2180")
-sheets = find_sheets_for_bbox(bbox, "1:10000")
+sheets = find_sheets_for_bbox(bbox, "1:10000", "1992")
 
 # Reverse lookup: geometry file → godła
 from kartograf import find_sheets_for_geometry
-sheets = find_sheets_for_geometry(Path("area.shp"), "1:10000")
+sheets = find_sheets_for_geometry(Path("area.shp"), "1:10000", system="1992")
 
 # Pobieranie przez godło (ASC) — plik w data/nmt/pl_1992_1m_evrf2007/...
-manager = DownloadManager(output_dir="./data")
+manager = DownloadManager("./data", GugikProvider(vertical_crs="EVRF2007", resolution="1m"))
 path = manager.download_sheet("N-34-130-D-d-2-4")
 fetch = manager.last_sheet  # SheetFetch: skipped, downloaded, reused, link, unverified, full_link
 
 # Biblioteczne bbox WCS NMT 1m: KRON86 z TIFF, EVRF2007 z ASC
 # multipart; obie sciezki daja GeoTIFF float32 z wysokosciami.
 # NMPT download_bbox rowniez daje wysokosci float32 (ASC multipart).
-kron = DownloadManager(output_dir="./data", vertical_crs="KRON86")
+kron = DownloadManager("./data", GugikProvider(vertical_crs="KRON86", resolution="1m"))
 bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
 path = kron.download_bbox(bbox, "area.tif")
 
 # Rozdzielczość 5m (tylko EVRF2007)
-manager_5m = DownloadManager(resolution="5m")
+manager_5m = DownloadManager("./data", GugikProvider(vertical_crs="EVRF2007", resolution="5m"))
 path = manager_5m.download_sheet("N-34-130-D-d-2-4")
 ```
 
@@ -152,19 +153,19 @@ path = manager_5m.download_sheet("N-34-130-D-d-2-4")
 ```bash
 kartograf parse N-34-130-D-d-2-4
 kartograf parse N-34-130-D --hierarchy
-kartograf download --sheet N-34-130-D-d-2-4
-kartograf download --sheet N-34-130-D              # godło grubsze -> arkusze 1:10000 (bez --scale)
-kartograf download --sheet 7.171.21 --scale 1:2000  # PL-2000: skala arkuszy GUGiK (USAGE 1.6)
-kartograf download --bbox 771000,509000,772000,510000
-kartograf download --bbox 19.93,50.05,19.95,50.07 --bbox-crs EPSG:4326
-kartograf download --sheet N-34-130-D --resolution 5m
-kartograf download --sheet N-34-130-D-d-2-4 --product nmpt
-kartograf download --sheet N-34-130-D-d-2-4 --product orto
-kartograf download --sheet N-34-130-D-d-2-4 --product laz
-kartograf download --bbox 771000,509000,772000,510000 --product orto
-kartograf download --geometry area.shp
-kartograf download --geometry area.gpkg --layer catchments
-kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --system 2000 --scale 1:2000
+kartograf download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf download --sheet N-34-130-D --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # godło grubsze -> arkusze 1:10000 (bez --scale)
+kartograf download --sheet 7.171.21 --scale 1:2000 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # PL-2000: skala arkuszy GUGiK (USAGE 1.6)
+kartograf download --bbox 771000,509000,772000,510000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data
+kartograf download --bbox 19.93,50.05,19.95,50.07 --bbox-crs EPSG:4326 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data
+kartograf download --sheet N-34-130-D --resolution 5m --product nmt --vertical-crs EVRF2007 -o ./data
+kartograf download --sheet N-34-130-D-d-2-4 --product nmpt --vertical-crs EVRF2007 -o ./data
+kartograf download --sheet N-34-130-D-d-2-4 --product orto -o ./data
+kartograf download --sheet N-34-130-D-d-2-4 --product laz --vertical-crs EVRF2007 -o ./data
+kartograf download --bbox 771000,509000,772000,510000 --product orto --country pl --system 1992 -o ./data
+kartograf download --geometry area.shp --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data
+kartograf download --geometry area.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data
+kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 -o ./data
 ```
 
 ---
@@ -197,8 +198,8 @@ provider.download_bbox(bbox, Path("./area.tif"))
 
 #### CLI Commands
 ```bash
-kartograf download --sheet N-34-130-D-d-2-4 --product nmpt
-kartograf download --bbox 771000,509000,772000,510000 --product nmpt
+kartograf download --sheet N-34-130-D-d-2-4 --product nmpt --vertical-crs EVRF2007 -o ./data
+kartograf download --bbox 771000,509000,772000,510000 --product nmpt --country pl --vertical-crs EVRF2007 --system 1992 -o ./data
 ```
 
 ---
@@ -210,7 +211,7 @@ kartograf download --bbox 771000,509000,772000,510000 --product nmpt
 
 #### Description
 Pobieranie ortofotomapy (zdjęcia lotnicze) z GUGiK w rozdzielczości 25cm.
-Domyślnie najnowszy zgodny rekord RGB; `GugikOrtoProvider(color="CIR")`
+Wariant koloru wymagany w API (`GugikOrtoProvider(color="RGB")`; CLI pobiera RGB); `GugikOrtoProvider(color="CIR")`
 wybiera podczerwień (osobny segment `orto/pl_<układ>_cir/`). Kampanie jak dla
 NMT (sekcja 3.11).
 
@@ -219,7 +220,7 @@ NMT (sekcja 3.11).
 from kartograf import GugikOrtoProvider
 
 # Ortofoto provider (brak vertical CRS — 2D RGB; color="CIR" — podczerwień)
-provider = GugikOrtoProvider()
+provider = GugikOrtoProvider(color="RGB")
 provider.download("N-34-130-D-d-2-4", Path("./sheet.tif"))
 
 # Przez bbox (WCS, formaty: GTiff, PNG, JPEG)
@@ -229,8 +230,8 @@ provider.download_bbox(bbox, Path("./area.tif"), format="GTiff")
 
 #### CLI Commands
 ```bash
-kartograf download --sheet N-34-130-D-d-2-4 --product orto
-kartograf download --bbox 771000,509000,772000,510000 --product orto
+kartograf download --sheet N-34-130-D-d-2-4 --product orto -o ./data
+kartograf download --bbox 771000,509000,772000,510000 --product orto --country pl --system 1992 -o ./data
 ```
 
 ---
@@ -250,7 +251,7 @@ from kartograf import BBox, GugikLazProvider, download_laz_area
 bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
 
 # Wybór i pobranie kafli z sidecarami (ADR-029) — jedno wywołanie
-result = download_laz_area(bbox, output_dir="./data", min_density=12)
+result = download_laz_area(bbox, output_dir="./data", vertical_crs="EVRF2007", min_density=12)
 result.downloaded, result.skipped   # pliki .laz w data/laz/pl_<układ>_<vcrs>/
 result.superseded                   # SupersededLazTile — starsze kafle pokryte nowszymi
 result.failed                       # LazTileFailure — porażki pojedynczych kafli
@@ -262,11 +263,11 @@ selection = provider.select_tiles(bbox, year=2024)  # LazTileSelection(tiles, su
 
 #### CLI Commands
 ```bash
-kartograf download --sheet N-34-130-D-d-2-4 --product laz
-kartograf download --sheet N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12
-kartograf download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86
-kartograf download --bbox 530000,382000,533000,386000 --product laz --all-campaigns
-kartograf download --geometry area.shp --product laz
+kartograf download --sheet N-34-130-D-d-2-4 --product laz --vertical-crs EVRF2007 -o ./data
+kartograf download --sheet N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12 --vertical-crs EVRF2007 -o ./data
+kartograf download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86 --country pl -o ./data
+kartograf download --bbox 530000,382000,533000,386000 --product laz --all-campaigns --country pl --vertical-crs EVRF2007 -o ./data
+kartograf download --geometry area.shp --product laz --country pl --vertical-crs EVRF2007 -o ./data
 ```
 
 #### Notes
@@ -306,8 +307,7 @@ from pathlib import Path
 from kartograf import LandCoverManager, Bdot10kProvider
 
 # katalog wyjściowy ustawia KONSTRUKTOR; download() przyjmuje output_path=
-lc = LandCoverManager(output_dir="./data")
-lc.set_provider("bdot10k")
+lc = LandCoverManager("./data", "bdot10k")
 
 # Pobieranie przez TERYT (powiat) — nazwa pliku generowana automatycznie
 lc.download(teryt="1465")
@@ -343,8 +343,8 @@ lc.download(sheet="N-34-130-D", output_path=Path("./data/bdot10k_N-34-130-D.gpkg
 
 #### CLI Commands
 ```bash
-kartograf landcover download --source bdot10k --teryt 1465
-kartograf landcover download --source bdot10k --sheet N-34-130-D
+kartograf landcover download --source bdot10k --teryt 1465 -o ./data/landcover
+kartograf landcover download --source bdot10k --sheet N-34-130-D -o ./data/landcover
 kartograf landcover list-layers --source bdot10k
 ```
 
@@ -364,8 +364,7 @@ from pathlib import Path
 
 from kartograf import LandCoverManager, CorineProvider
 
-lc = LandCoverManager(output_dir="./data")
-lc.set_provider("corine")
+lc = LandCoverManager("./data", "corine")
 
 # Pobieranie przez godło (rozszerzenie wymusza provider: .tif, .png dla WMS)
 lc.download(
@@ -399,7 +398,7 @@ ani tokenu. Bez credentials — podgląd PNG przez WMS (sidecar
 
 #### CLI Commands
 ```bash
-kartograf landcover download --source corine --year 2018 --sheet N-34-130-D
+kartograf landcover download --source corine --year 2018 --sheet N-34-130-D -o ./data/landcover
 kartograf landcover list-layers --source corine
 ```
 
@@ -419,8 +418,7 @@ from pathlib import Path
 
 from kartograf import LandCoverManager, SoilGridsProvider
 
-lc = LandCoverManager(output_dir="./data")
-lc.set_provider("soilgrids")
+lc = LandCoverManager("./data", "soilgrids")
 
 # Pobieranie węgla organicznego (selekcja: godło albo bbox — TERYT
 # nie jest obsługiwany przez SoilGrids i kończy się NotImplementedError)
@@ -436,7 +434,8 @@ lc.download(
 lc.download(
     sheet="N-34-130-D",
     property="clay",
-    depth="15-30cm"
+    depth="15-30cm",
+    stat="mean",
 )
 ```
 
@@ -463,8 +462,8 @@ mean, Q0.05, Q0.5, Q0.95, uncertainty
 
 #### CLI Commands
 ```bash
-kartograf landcover download --source soilgrids --sheet N-34-130-D --property soc
-kartograf landcover download --source soilgrids --sheet N-34-130-D --property clay --depth 15-30cm
+kartograf landcover download --source soilgrids --sheet N-34-130-D --property soc -o ./data/landcover --depth 0-5cm --stat mean
+kartograf landcover download --source soilgrids --sheet N-34-130-D --property clay --depth 15-30cm -o ./data/landcover --stat mean
 kartograf landcover list-layers --source soilgrids
 ```
 
@@ -486,7 +485,7 @@ from pathlib import Path
 calc = HSGCalculator()
 
 # Oblicz HSG dla godła
-calc.calculate_hsg_by_sheet("N-34-130-D", Path("./hsg.tif"))
+calc.calculate_hsg_by_sheet("N-34-130-D", Path("./hsg.tif"), depth="0-5cm", stat="mean")
 
 # Statystyki HSG
 stats = calc.get_hsg_statistics(Path("./hsg.tif"))
@@ -515,12 +514,12 @@ Wynik dostaje sidecar `.meta.json` (`extra.derived = "hsg"`, warstwy
 
 #### CLI Commands
 ```bash
-kartograf soilgrids hsg --sheet N-34-130-D
-kartograf soilgrids hsg --sheet N-34-130-D --stats
+kartograf soilgrids hsg --sheet N-34-130-D -o ./data/hsg --depth 0-5cm
+kartograf soilgrids hsg --sheet N-34-130-D --stats -o ./data/hsg --depth 0-5cm
 kartograf soilgrids hsg --sheet N-34-130-D --depth 15-30cm --output /tmp/hsg.tif
-kartograf soilgrids hsg --sheet N-34-130-D --keep-intermediate
-kartograf soilgrids hsg --bbox 450000,550000,460000,560000
-kartograf soilgrids hsg --geometry area.gpkg --layer catchments
+kartograf soilgrids hsg --sheet N-34-130-D --keep-intermediate -o ./data/hsg --depth 0-5cm
+kartograf soilgrids hsg --bbox 450000,550000,460000,560000 -o ./data/hsg --depth 0-5cm
+kartograf soilgrids hsg --geometry area.gpkg --layer catchments -o ./data/hsg --depth 0-5cm
 ```
 
 ---
@@ -538,7 +537,7 @@ siatka kafli 2x2 km w EPSG:3045) i DMR 4G (5 m, godło SM5 z indeksu arkuszy
 DMP, ortofoto, LAZ i ZABAGED dla CZ to etapy 2–3 (`docs/SCOPE.md` 3.1).
 
 #### Requirements
-- `--country {pl,cz,auto}` (domyślnie `auto`): kraj z formatu godła albo
+- `--country {pl,cz,auto}` (wymagane z `--bbox`/`--geometry` od 0.8.0; z `--sheet` kraj z godła): kraj z formatu godła albo
   z prostokątnych obwiedni krajów (ADR-023); bbox/geometria przygraniczna pod
   `auto` daje osobne pliki PL i CZ ze wspólnym `extra.parent_request` (bez
   scalania PL+CZ — R6, etap 2). Kod 0 = sukces co najmniej jednego kraju;
@@ -574,12 +573,12 @@ provider_evrf.download_bbox(bbox, Path("./area.tif"))      # wycinek exportImage
 
 #### CLI Commands
 ```bash
-kartograf download --sheet 302_5550 --country cz                       # DMR 5G (TM33), 2m, Bpv
-kartograf download --sheet CTES96                                      # DMR 4G (SM5, tylko 5m), kraj z godła
-kartograf download --sheet 302_5550 --country cz --vertical-crs EVRF2007
-kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto
-kartograf download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --target-crs EPSG:2180
-kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:5514 --country cz --resolution 5m
+kartograf download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data # DMR 5G (TM33), 2m, Bpv
+kartograf download --sheet CTES96 --product nmt --vertical-crs Bpv -o ./data # DMR 4G (SM5, tylko 5m), kraj z godła
+kartograf download --sheet 302_5550 --country cz --vertical-crs EVRF2007 --product nmt --resolution 2m -o ./data
+kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto --product nmt --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv --system 1992 -o ./data
+kartograf download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --target-crs EPSG:2180 --product nmt --resolution 2m --vertical-crs Bpv -o ./data
+kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:5514 --country cz --resolution 5m --product nmt --vertical-crs Bpv -o ./data
 ```
 
 ---
@@ -620,16 +619,20 @@ pod `auto` PL i CZ to dwa pliki ze wspolnym `extra.parent_request`.
 from kartograf import BBox, download_pl_cutout, prepare_pl_cutout, run_pl_wcs_cutout
 
 bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
-result = download_pl_cutout(bbox, "EPSG:5514", output_dir="./data", product="nmpt")
+result = download_pl_cutout(
+    bbox, "EPSG:5514", output_dir="./data", vertical_crs="EVRF2007", product="nmpt"
+)
 result.path, result.masked_pixels, result.zero_pixels, result.all_nodata
-prepared = prepare_pl_cutout(bbox, "EPSG:2180", product="nmt")
+prepared = prepare_pl_cutout(
+    bbox, "EPSG:2180", output_dir="./data", vertical_crs="EVRF2007", product="nmt"
+)
 result_nmt = run_pl_wcs_cutout(prepared)
 ```
 
 #### CLI Commands
 ```bash
-kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --target-crs EPSG:5514
-kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmpt --target-crs EPSG:2180
+kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --target-crs EPSG:5514 --vertical-crs EVRF2007 -o ./data
+kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmpt --target-crs EPSG:2180 --vertical-crs EVRF2007 -o ./data
 ```
 
 ---
@@ -682,9 +685,10 @@ wskazuje, która jest "bieżąca".
 
 #### Capabilities
 ```python
-from kartograf import DownloadManager
+from kartograf import DownloadManager, GugikProvider
 
-manager = DownloadManager(output_dir="./data", min_year=2022, full_sheet=True)
+provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
+manager = DownloadManager("./data", provider, min_year=2022, full_sheet=True)
 manager.download_sheet("N-34-139-C-a-3-1")
 manager.last_sheet.downloaded      # pliki kampanii pobrane teraz
 manager.last_sheet.link            # "hardlink" | "copy"
@@ -695,10 +699,10 @@ manager.last_result.without_full   # arkusze bez pełnego lotu w zakresie
 
 #### CLI Commands
 ```bash
-kartograf download --sheet N-34-130-D-d-2-4 --all-campaigns
-kartograf download --sheet N-34-130-D-d-2-4 --min-year 2024
-kartograf download --bbox 530000,382000,533000,386000 --all-campaigns --min-year 2022
-kartograf download --sheet N-34-139-C-a-3-1 --full-sheet
+kartograf download --sheet N-34-130-D-d-2-4 --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf download --sheet N-34-130-D-d-2-4 --min-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf download --bbox 530000,382000,533000,386000 --all-campaigns --min-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data
+kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
 ```
 
 ---

@@ -151,7 +151,7 @@ class TestRunLazDownload:
             min_density=12,
         )
         expected = FileStorage(
-            tmp_path, product="laz", vertical_crs="EVRF2007"
+            tmp_path, product="laz", vertical_crs="EVRF2007", resolution="1m"
         ).get_raw_path(tile.sheet, tile.filename, system="2000")
         assert result.downloaded == (expected,)
         assert expected.parts[-10:-8] == ("laz", "pl_2000_evrf2007")
@@ -310,8 +310,9 @@ class TestDownloadLazArea:
         result = download_laz_area(
             W2_AREA,
             output_dir=tmp_path,
-            provider=GugikLazProvider(session=session),
+            provider=GugikLazProvider(session=session, vertical_crs="EVRF2007"),
             parent_request=PARENT,
+            vertical_crs="EVRF2007",
         )
         assert isinstance(result, LazDownloadResult)
         assert [t.sheet for t in result.tiles] == ["N-34-139-A-c-1-1-3-4"]
@@ -336,7 +337,8 @@ class TestDownloadLazArea:
             W2_AREA,
             output_dir=tmp_path,
             year=2022,
-            provider=GugikLazProvider(session=session),
+            provider=GugikLazProvider(session=session, vertical_crs="EVRF2007"),
+            vertical_crs="EVRF2007",
         )
         assert [(t.sheet, t.year) for t in result.tiles] == [("7.173.21.06.2", 2022)]
         assert _sidecar(result.downloaded[0])["request"]["year"] == 2022
@@ -348,7 +350,8 @@ class TestDownloadLazArea:
                 W2_AREA,
                 output_dir=tmp_path,
                 year=2026,  # the layer exists, but no tiles here
-                provider=GugikLazProvider(session=session),
+                provider=GugikLazProvider(session=session, vertical_crs="EVRF2007"),
+                vertical_crs="EVRF2007",
             )
         assert caught.value.sheets == {"N-34-139-A-c-1-1-3-4": (2022, 2023, 2025)}
         assert downloaded_urls(session) == []
@@ -360,7 +363,9 @@ class TestDownloadLazArea:
                 W2_AREA,
                 output_dir=tmp_path,
                 vertical_crs="KRON86",
-                provider=GugikLazProvider(session=wfs_session()),
+                provider=GugikLazProvider(
+                    session=wfs_session(), vertical_crs="EVRF2007"
+                ),
             )
 
 
@@ -376,7 +381,27 @@ def _cli(tmp_path, *args, area: str = "w2"):
 
     session = wfs_session(area)
     with patch("kartograf.transport.http.make_gugik_session", return_value=session):
-        rc = main(["download", *args, "--product", "laz", "-o", str(tmp_path), "-q"])
+        rc = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                *args,
+                "--product",
+                "laz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
     return rc, session
 
 

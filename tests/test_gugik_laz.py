@@ -170,7 +170,7 @@ def _provider_with_getfeature(text):
     """Provider whose download session returns `text` for every GetFeature."""
     session = MagicMock()
     session.get.return_value = _make_response(text)
-    provider = GugikLazProvider(session=session)
+    provider = GugikLazProvider(session=session, vertical_crs="EVRF2007")
     provider._available_years["EVRF2007"] = [2024, 2023]
     return provider, session
 
@@ -182,7 +182,7 @@ def _provider_with_getfeature(text):
 
 class TestInitAndProperties:
     def test_defaults(self):
-        p = GugikLazProvider()
+        p = GugikLazProvider(vertical_crs="EVRF2007")
         assert p.name == "GUGiK LAZ (chmura punktów)"
         assert p.base_url == "https://mapy.geoportal.gov.pl"
         assert p.default_extension == ".laz"
@@ -197,7 +197,7 @@ class TestInitAndProperties:
             GugikLazProvider(vertical_crs="NONSENSE")
 
     def test_endpoints_present(self):
-        p = GugikLazProvider()
+        p = GugikLazProvider(vertical_crs="EVRF2007")
         assert "EVRF2007" in p.WFS_ENDPOINTS
         assert "KRON86" in p.WFS_ENDPOINTS
         assert "DanePomiaroweLidarEVRF2007" in p.WFS_ENDPOINTS["EVRF2007"]
@@ -275,7 +275,7 @@ class TestAvailableYears:
         session = MagicMock()
         session.get.return_value = _make_response(CAPABILITIES_XML)
         with patch(_LAZ_SESSION_PATCH, return_value=session):
-            p = GugikLazProvider()
+            p = GugikLazProvider(vertical_crs="EVRF2007")
             # the thread session is created on the first request, not in the constructor
             years = p._fetch_available_years("EVRF2007")
         assert years == [2025, 2024, 2018]
@@ -297,7 +297,7 @@ class TestSessionPerThread:
 
         errors: list[Exception] = []
         with patch(_LAZ_SESSION_PATCH, side_effect=new_session) as factory:
-            p = GugikLazProvider()
+            p = GugikLazProvider(vertical_crs="EVRF2007")
 
             def worker():
                 try:
@@ -319,7 +319,7 @@ class TestSessionPerThread:
         session = MagicMock()
         session.get.return_value = _make_response(CAPABILITIES_XML)
         with patch(_LAZ_SESSION_PATCH, return_value=session) as factory:
-            p = GugikLazProvider()
+            p = GugikLazProvider(vertical_crs="EVRF2007")
             p._fetch_available_years("EVRF2007")
             p._fetch_available_years("KRON86")
         factory.assert_called_once()
@@ -331,7 +331,7 @@ class TestSessionPerThread:
         injected = MagicMock()
         injected.get.return_value = _make_response(CAPABILITIES_XML)
         with patch(_LAZ_SESSION_PATCH) as factory:
-            p = GugikLazProvider(session=injected)
+            p = GugikLazProvider(session=injected, vertical_crs="EVRF2007")
             threads = [
                 threading.Thread(target=p._fetch_available_years, args=("EVRF2007",))
                 for _ in range(2)
@@ -352,7 +352,7 @@ class TestSessionPerThread:
         ],
     )
     def test_invalid_capabilities_abort_discovery(self, text, message):
-        p = GugikLazProvider()
+        p = GugikLazProvider(vertical_crs="EVRF2007")
         with (
             patch("requests.Session.get", return_value=_make_response(text)),
             pytest.raises(DownloadError, match=message),
@@ -360,7 +360,7 @@ class TestSessionPerThread:
             p.discover_tiles(QUERY_BBOX)
 
     def test_get_years_caches(self):
-        p = GugikLazProvider()
+        p = GugikLazProvider(vertical_crs="EVRF2007")
         with patch.object(
             p, "_fetch_available_years", return_value=[2025, 2024]
         ) as mock_fetch:
@@ -369,7 +369,7 @@ class TestSessionPerThread:
         mock_fetch.assert_called_once()
 
     def test_capabilities_network_failure_raises_without_caching(self):
-        p = GugikLazProvider()
+        p = GugikLazProvider(vertical_crs="EVRF2007")
         with (
             patch(
                 "requests.Session.get", side_effect=requests.ConnectionError("reset")
@@ -392,7 +392,7 @@ class TestSessionPerThread:
             requests.ConnectionError("reset"),
             _make_response(CAPABILITIES_XML),
         ]
-        p = GugikLazProvider(session=session)
+        p = GugikLazProvider(session=session, vertical_crs="EVRF2007")
         with patch("kartograf.transport.http.time.sleep"):
             assert p._get_available_years("EVRF2007") == [2025, 2024, 2018]
         assert session.get.call_count == 2
@@ -405,7 +405,7 @@ class TestSessionPerThread:
 
 class TestDiscoverTiles:
     def test_requires_epsg_2180(self):
-        p = GugikLazProvider()
+        p = GugikLazProvider(vertical_crs="EVRF2007")
         with pytest.raises(ValueError, match="EPSG:2180"):
             p.discover_tiles(BBox(0, 0, 1, 1, "EPSG:4326"), year=2024)
 
@@ -522,7 +522,7 @@ class TestDiscoverTiles:
             _make_response(coll_2024),
             _make_response(coll_2023),
         ]
-        p = GugikLazProvider(session=session)
+        p = GugikLazProvider(session=session, vertical_crs="EVRF2007")
         p._available_years["EVRF2007"] = [2024, 2023]  # skip GetCapabilities
         tiles = p.discover_tiles(QUERY_BBOX)
         assert len(tiles) == 1
@@ -541,7 +541,7 @@ class TestDiscoverTiles:
         )
         session = MagicMock()
         session.get.side_effect = [_make_response(page1), _make_response(page2)]
-        p = GugikLazProvider(session=session)
+        p = GugikLazProvider(session=session, vertical_crs="EVRF2007")
         p._available_years["EVRF2007"] = [2024]
         with patch.object(GugikLazProvider, "PAGE_SIZE", 2):
             tiles = p.discover_tiles(QUERY_BBOX, year=2024)
@@ -551,7 +551,7 @@ class TestDiscoverTiles:
     def test_unknown_year_reports_available_years_without_retry(self):
         session = MagicMock()
         session.get.return_value = _make_response(CAPABILITIES_XML)
-        provider = GugikLazProvider(session=session)
+        provider = GugikLazProvider(session=session, vertical_crs="EVRF2007")
 
         with pytest.raises(DownloadError) as exc:
             provider.discover_tiles(QUERY_BBOX, year=2099)
@@ -575,7 +575,7 @@ class TestDiscoverTiles:
     def test_network_error_raises_download_error(self):
         session = MagicMock()
         session.get.side_effect = requests.ConnectionError("reset")
-        p = GugikLazProvider(session=session)
+        p = GugikLazProvider(session=session, vertical_crs="EVRF2007")
         p._available_years["EVRF2007"] = [2024]
         with (
             patch("kartograf.transport.http.time.sleep"),
@@ -590,7 +590,7 @@ class TestDiscoverTiles:
             _make_response(COLLECTION_2024),
             *(requests.ConnectionError("reset") for _ in range(3)),
         ]
-        p = GugikLazProvider(session=session)
+        p = GugikLazProvider(session=session, vertical_crs="EVRF2007")
         p._available_years["EVRF2007"] = [2024, 2023]
         with (
             patch("kartograf.transport.http.time.sleep"),
@@ -605,7 +605,7 @@ class TestDiscoverTiles:
             _make_response(_collection([_TILE_A])),
             *(requests.ConnectionError("reset") for _ in range(3)),
         ]
-        p = GugikLazProvider(session=session)
+        p = GugikLazProvider(session=session, vertical_crs="EVRF2007")
         p._available_years["EVRF2007"] = [2024]
         with (
             patch.object(p, "PAGE_SIZE", 1),
@@ -623,7 +623,7 @@ class TestDiscoverTiles:
             _make_response(_collection([_TILE_B])),
             _make_response(_collection([])),
         ]
-        p = GugikLazProvider(session=session)
+        p = GugikLazProvider(session=session, vertical_crs="EVRF2007")
         p._available_years["EVRF2007"] = [2024]
         with (
             patch.object(p, "PAGE_SIZE", 1),
@@ -681,7 +681,7 @@ class TestDownload:
     def test_download_success(self, tmp_path):
         session = MagicMock()
         session.get.return_value = self._stream_response()
-        p = GugikLazProvider(session=session)
+        p = GugikLazProvider(session=session, vertical_crs="EVRF2007")
         out = tmp_path / "tile.laz"
         result = p.download("https://opendata.geoportal.gov.pl/x.laz", out)
         assert result == out
@@ -690,7 +690,7 @@ class TestDownload:
     def test_download_creates_parent_dir(self, tmp_path):
         session = MagicMock()
         session.get.return_value = self._stream_response()
-        p = GugikLazProvider(session=session)
+        p = GugikLazProvider(session=session, vertical_crs="EVRF2007")
         out = tmp_path / "laz" / "N-33" / "131" / "tile.laz"
         p.download("https://opendata.geoportal.gov.pl/x.laz", out)
         assert out.exists()
@@ -698,7 +698,7 @@ class TestDownload:
     def test_download_retries_then_fails(self, tmp_path):
         session = MagicMock()
         session.get.side_effect = requests.ConnectionError("down")
-        p = GugikLazProvider(session=session)
+        p = GugikLazProvider(session=session, vertical_crs="EVRF2007")
         with (
             patch("kartograf.transport.http.time.sleep"),
             pytest.raises(DownloadError),

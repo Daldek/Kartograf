@@ -34,7 +34,6 @@ life - reads are misses, writes are no-ops - and reports it exactly once
 
 import json
 import logging
-import os
 import sqlite3
 import threading
 import time
@@ -55,9 +54,6 @@ DEFAULT_TTL_SECONDS = 7 * 24 * 3600
 
 # TTL for sheet_cache (the CZ sheet index is practically constant): 30 days.
 SHEET_TTL_SECONDS = 30 * 24 * 3600
-
-# Default database filename
-DEFAULT_DB_NAME = ".kartograf_cache.db"
 
 
 def is_lock_error(error: BaseException) -> bool:
@@ -84,10 +80,10 @@ class MetadataCache:
 
     Parameters
     ----------
-    db_path : str or Path, optional
-        Path to the SQLite database file. Defaults to
-        `.kartograf_cache.db` in the current working directory. The file
-        is created by the first write, not by the constructor.
+    db_path : str or Path
+        Explicit path to the SQLite database file. It is created by the
+        first write, not by the constructor. Callers wishing to use the
+        conventional local cache may pass ``".kartograf_cache.db"``.
     ttl_seconds : int, optional
         Time-to-live for cache entries in seconds. Default is 7 days
         (604800 seconds). Entries older than TTL are considered stale.
@@ -116,7 +112,7 @@ class MetadataCache:
 
     Examples
     --------
-    >>> cache = MetadataCache()
+    >>> cache = MetadataCache(".kartograf_cache.db")
     >>> cache.set_record("nmt", "1m", "EVRF2007", "N-34-130-D-d-2-4",
     ...                  {"no_coverage": True})
     >>> record = cache.get_record("nmt", "1m", "EVRF2007", "N-34-130-D-d-2-4")
@@ -125,7 +121,7 @@ class MetadataCache:
 
     def __init__(
         self,
-        db_path: str | Path | None = None,
+        db_path: str | Path,
         ttl_seconds: int = DEFAULT_TTL_SECONDS,
         refresh: bool = False,
         on_disabled: Callable[[str], None] | None = None,
@@ -139,8 +135,6 @@ class MetadataCache:
         # First SQLite error; once set, the cache is disabled (guarded by
         # _write_lock, so concurrent threads report it only once).
         self._error: sqlite3.Error | None = None
-        if db_path is None:
-            db_path = Path(os.getcwd()) / DEFAULT_DB_NAME
         self._db_path = Path(db_path)
         self._ttl_seconds = ttl_seconds
         self._write_lock = threading.Lock()
