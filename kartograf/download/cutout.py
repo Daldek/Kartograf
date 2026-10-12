@@ -2,16 +2,17 @@
 Merged NMT/NMPT PL cutout in a requested CRS (ADR-027, ADR-035) — library layer.
 
 WCS path (CLI ``--target-crs`` and ``download_pl_cutout``, ADR-035):
-``prepare_pl_cutout`` -> ``run_pl_wcs_cutout``. One GetCoverage area from GUGiK
+``_prepare_pl_cutout`` -> ``_run_pl_wcs_cutout``. One GetCoverage area from GUGiK
 WCS on the 1 m sheet grid (chunks, ADR-034), the PL land mask from PRG (nodata
 -9999 outside ``A00 - W02 - W03``), then for EPSG:2180 the file as is, for
 another CRS a local warp with a FORCED pinned operation (ADR-024/027). The
 standard path ``<output_dir>/<segment>/bbox/<coords>.tif`` links to a version
 in ``<segment>/versions/bbox/``. A local version needs no PRG or WCS request.
 
-The CLI (``kartograf download --bbox/--geometry --target-crs``) is a thin
-layer over this module: it prints messages and translates exceptions into
-exit codes. There is no ``print`` or argparse here.
+Public pair (Z2): ``download_pl_cutout`` / ``check_pl_cutout`` with the same
+selection arguments. Data messages (cutout size, all-nodata) are
+``Notice``s in the result and go to ``on_notice`` when emitted. There is no
+``print`` or argparse here.
 
 Example::
 
@@ -19,7 +20,7 @@ Example::
 
     result = download_pl_cutout(
         BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
-        "EPSG:5514",
+        target_crs="EPSG:5514",
         output_dir="./data", vertical_crs="EVRF2007", product="nmt",
     )
     print(result.file.path)
@@ -28,10 +29,13 @@ Example::
 import logging
 import os
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
+from kartograf.cache.defaults import open_cache
+from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import BBox, is_czech_crs, transform_bbox
 from kartograf.download.fetch import (
     FileSlot,
@@ -54,6 +58,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import bbox_cutout_path, bbox_slot
 from kartograf.download.versions import ContentDigest, VersionRef, read_version
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.notices import ALL_NODATA, CUTOUT_SIZE, Notice, NoticeSink
 from kartograf.sources.descriptor import TransportKind
 from kartograf.sources.registry import channel_signal
 from kartograf.transform.crs import CONTENT_POLICY, WARP_MARGIN_PX, PinnedTransform
@@ -81,7 +86,7 @@ LAND_MASK_LAYERS = (
 
 @dataclass(frozen=True)
 class PlCutout:
-    """A prepared NMT/NMPT PL WCS cutout, always on the 1m grid.
+    """A prepared NMT/NMPT PL WCS cutout, always on the 1m grid (internal step).
 
     ``target_crs`` is EPSG:2180 (native PL), EPSG:5514 or EPSG:3045
     (reprojected). ``vertical_crs`` is EVRF2007 (current heights) or KRON86
@@ -123,10 +128,11 @@ class PlCutout:
 
 @dataclass(frozen=True)
 class PlCutoutResult:
-    """Versioned cutout file and its PRG mask counts.
+    """Versioned cutout file, its PRG mask counts and data notices.
 
     ``file`` is ``None`` only when a plan skips this cutout and nothing is
     available locally. Otherwise the file points to the standard bbox link.
+    ``notices`` holds the cutout size and all-nodata messages (Z3).
     """
 
     file: VersionedFile | None
@@ -134,6 +140,7 @@ class PlCutoutResult:
     masked_pixels: int = 0
     zero_pixels: int = 0
     stale: tuple[PlanItem, ...] = ()
+    notices: tuple[Notice, ...] = ()
 
 
 def bbox_to_2180(bbox: BBox) -> BBox:
@@ -156,7 +163,7 @@ def bbox_to_2180(bbox: BBox) -> BBox:
     return transform_bbox(bbox, "EPSG:2180")
 
 
-def prepare_pl_cutout(
+def _prepare_pl_cutout(
     bbox: BBox,
     target_crs: str,
     *,
@@ -262,20 +269,22 @@ def _require_matching_provider(cutout: PlCutout, provider) -> None:
         if isinstance(actual, str) and actual != expected:
             raise ValidationError(
                 f"Provider niezgodny z wycinkiem: {attr} providera {actual}, "
-                f"wycinka {expected} — przygotuj wycinek (prepare_pl_cutout) "
-                "z produktem, pionem i rozdzielczoscia providera"
+                f"wycinka {expected} - podaj provider z produktem, pionem "
+                "i rozdzielczoscia wycinka"
             )
 
 
-def _wcs_cutout_provider(cutout: PlCutout):
+def _wcs_cutout_provider(cutout: PlCutout, cache: MetadataCache | None = None):
     """Default provider of the cutout's product and vertical CRS (1 m)."""
     if cutout.product == "nmpt":
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
-        return GugikNmptProvider(vertical_crs=cutout.vertical_crs)
+        return GugikNmptProvider(vertical_crs=cutout.vertical_crs, cache=cache)
     from kartograf.providers.pl import create_nmt_provider
 
-    return create_nmt_provider(vertical_crs=cutout.vertical_crs, resolution="1m")
+    return create_nmt_provider(
+        vertical_crs=cutout.vertical_crs, resolution="1m", cache=cache
+    )
 
 
 def _check_wcs_disk_space(cutout: PlCutout, staged: Path) -> None:
@@ -372,8 +381,8 @@ def _pl_cutout_slot(cutout: PlCutout) -> FileSlot:
     return bbox_slot(cutout.output_dir, subdir, cutout.bbox_target, ".tif")
 
 
-def check_pl_cutout(cutout: PlCutout) -> UpdatePlan:
-    """Check a PL WCS cutout without fetching PRG or WCS data (signal ``none``)."""
+def _check_prepared(cutout: PlCutout) -> UpdatePlan:
+    """Plan of a prepared cutout from the local store only (signal ``none``)."""
     slot = _pl_cutout_slot(cutout)
     item = inspect_version(
         slot,
@@ -382,6 +391,36 @@ def check_pl_cutout(cutout: PlCutout) -> UpdatePlan:
         signal=channel_signal(_cutout_descriptor_key(cutout), TransportKind.WCS),
     )
     return new_plan(store_id(cutout.output_dir), (item,))
+
+
+def check_pl_cutout(
+    bbox: BBox,
+    *,
+    target_crs: str,
+    output_dir: str | Path,
+    vertical_crs: str,
+    product: str,
+    cache: MetadataCache | bool = True,
+    on_notice: Callable[[Notice], None] | None = None,
+) -> UpdatePlan:
+    """Update plan of ``download_pl_cutout`` with the same arguments, no download.
+
+    The WCS channel has no remote version signal, so the plan reads only the
+    local store: no PRG, WCS or metadata cache request is made. ``cache`` and
+    ``on_notice`` are accepted for symmetry with ``download_pl_cutout``.
+
+    Raises ``ValidationError`` for invalid choices and ``TransformError``
+    when no safe pinned reprojection exists, exactly as the download does.
+    """
+    del cache, on_notice  # same signature as the download (Z2); unused here
+    cutout = _prepare_pl_cutout(
+        bbox,
+        target_crs,
+        output_dir=output_dir,
+        vertical_crs=vertical_crs,
+        product=product,
+    )
+    return _check_prepared(cutout)
 
 
 def _cutout_result(
@@ -403,7 +442,7 @@ def _cutout_result(
     )
 
 
-def run_pl_wcs_cutout(
+def _run_pl_wcs_cutout(
     cutout: PlCutout,
     *,
     provider=None,
@@ -411,6 +450,7 @@ def run_pl_wcs_cutout(
     plan: UpdatePlan | None = None,
     parent_request: dict | None = None,
     now: datetime | None = None,
+    sink: NoticeSink | None = None,
 ) -> PlCutoutResult:
     """Use the local cutout or download a new immutable GUGiK WCS version.
 
@@ -424,7 +464,9 @@ def run_pl_wcs_cutout(
     A local version has no PRG/WCS request and its mask counts come from its
     immutable sidecar. A plan executes only matching missing positions; stale
     or removed positions are skipped. Without a local version, a skipped
-    position has ``file=None``.
+    position has ``file=None``. ``sink`` receives the ``CUTOUT_SIZE`` notice
+    right before the first request of a download that needs several WCS
+    chunks or at least 1 GiB.
     """
     validate_update(update)
     if provider is not None:
@@ -459,9 +501,19 @@ def run_pl_wcs_cutout(
 
     def fetch(staged: Path) -> None:
         nonlocal selected_provider, masked_pixels, zero_pixels, all_nodata
-        _check_wcs_disk_space(cutout, staged)
         if selected_provider is None:
             selected_provider = _wcs_cutout_provider(cutout)
+        chunks = len(selected_provider.plan_wcs_chunks(cutout.bbox_source_2180))
+        if sink is not None and (chunks > 1 or cutout.estimated_bytes >= 2**30):
+            height, width = cutout.grid_shape
+            sink.emit(
+                "info",
+                CUTOUT_SIZE,
+                f"wycinek {width} x {height} px float32 "
+                f"(~{cutout.estimated_bytes / 2**20:.0f} MiB), {chunks} zapytan "
+                "WCS GUGiK pobieranych po kolei",
+            )
+        _check_wcs_disk_space(cutout, staged)
         timeout = selected_provider.DEFAULT_TIMEOUT
         b = cutout.bbox_source_2180
         # PRG covers the source aligned OUTWARD to the sheet grid, including
@@ -495,11 +547,6 @@ def run_pl_wcs_cutout(
             work.unlink(missing_ok=True)
 
         all_nodata = not has_valid_pixels(staged, PL_NODATA)
-        if all_nodata:
-            logger.warning(
-                "Wycinek %s jest w calosci nodata: obszar poza ladem PL (maska PRG)",
-                slot.std,
-            )
         return None
 
     def write_sidecar(
@@ -532,54 +579,81 @@ def run_pl_wcs_cutout(
 
 def download_pl_cutout(
     bbox: BBox,
-    target_crs: str,
     *,
+    target_crs: str,
     output_dir: str | Path,
     vertical_crs: str,
     product: str,
     update: UpdateMode | None = None,
+    plan: UpdatePlan | None = None,
     parent_request: dict | None = None,
+    cache: MetadataCache | bool = True,
+    on_notice: Callable[[Notice], None] | None = None,
 ) -> PlCutoutResult:
     """One versioned NMT/NMPT PL GeoTIFF in ``target_crs`` from GUGiK WCS.
 
-    ``prepare_pl_cutout(product=)`` -> ``run_pl_wcs_cutout`` (ADR-035): the
-    source on the 1 m sheet grid, the server's flight composition (not the
-    newest flight per ADR-028), nodata -9999 outside PL land (PRG mask;
-    0.0 on land stays data). The undated standard bbox path links to an
-    immutable version. Default and ``update="upgrade"`` use a local version
-    without PRG or WCS requests; ``update="force"`` downloads again.
-    For a geometry request pass its envelope as ``bbox`` (e.g. via
+    ADR-035: the source on the 1 m sheet grid, the server's flight
+    composition (not the newest flight per ADR-028), nodata -9999 outside PL
+    land (PRG mask; 0.0 on land stays data). The undated standard bbox path
+    links to an immutable version. Default and ``update="upgrade"`` use a
+    local version without PRG or WCS requests; ``update="force"`` downloads
+    again. ``plan`` (from ``check_pl_cutout``) downloads only its missing
+    position; a changed position lands in ``stale``. For a geometry request
+    pass its envelope as ``bbox`` (e.g. via
     ``get_overall_bbox(path, target_crs="EPSG:2180")``).
 
-    ``output_dir`` selects the base directory; ``vertical_crs`` is
+    ``output_dir`` selects the base directory; ``target_crs`` is
+    "EPSG:2180", "EPSG:5514" or "EPSG:3045"; ``vertical_crs`` is
     "EVRF2007" (current heights) or "KRON86" (legacy heights), and
     ``product`` is "nmt" (terrain) or "nmpt" (surface). The only WCS cutout
-    resolution is 1m. ``parent_request=None`` adds no parent sidecar entry.
-    Own provider/session: ``run_pl_wcs_cutout(provider=...)``.
+    resolution is 1m. ``parent_request`` goes to the version sidecar only
+    when given. ``cache``: ``True`` = default metadata cache in the current
+    directory, a ``MetadataCache`` = that cache, ``False`` = none.
+    ``on_notice`` receives each data notice when it is emitted.
 
     Returns
     -------
     PlCutoutResult
         ``file`` — standard link and version status; ``masked_pixels`` and
-        ``zero_pixels`` — land mask counts; ``all_nodata`` — outside PL land.
+        ``zero_pixels`` — land mask counts; ``all_nodata`` — outside PL land;
+        ``notices`` — ``CUTOUT_SIZE`` (before the first WCS request) and
+        ``ALL_NODATA``.
 
     Raises
     ------
     ValidationError
-        Bad product, CRS or vertical CRS, or too little disk space on download.
+        Bad product, CRS, vertical CRS or update mode, or too little disk
+        space on download.
     TransformError
         No safe pinned EPSG:2180 -> ``target_crs`` operation (before any
         network).
     DownloadError
         PRG or WCS failure; no new version is committed.
-
-    ``parent_request`` goes to the cutout version sidecar only when given.
     """
-    cutout = prepare_pl_cutout(
+    validate_update(update)
+    cutout = _prepare_pl_cutout(
         bbox,
         target_crs,
         output_dir=output_dir,
         vertical_crs=vertical_crs,
         product=product,
     )
-    return run_pl_wcs_cutout(cutout, update=update, parent_request=parent_request)
+    sink = NoticeSink(on_notice)
+    with open_cache(cache, force=update == "force", on_notice=sink.add) as metadata:
+        result = _run_pl_wcs_cutout(
+            cutout,
+            provider=_wcs_cutout_provider(cutout, metadata),
+            update=update,
+            plan=plan,
+            parent_request=parent_request,
+            sink=sink,
+        )
+    file = result.file
+    if result.all_nodata and file is not None and file.status != "local":
+        sink.emit(
+            "warning",
+            ALL_NODATA,
+            "wycinek w calosci nodata - obszar poza ladem PL (maska PRG: "
+            "granica panstwa bez morza terytorialnego i wod wewnetrznych)",
+        )
+    return replace(result, notices=sink.notices)

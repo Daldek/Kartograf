@@ -91,6 +91,35 @@ def _block_network(request, monkeypatch):
     yield
 
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+
+@pytest.fixture(autouse=True)
+def _isolated_default_cache(monkeypatch, tmp_path_factory):
+    """Keep the default metadata cache (``cache=True``) out of the repository.
+
+    Library functions and the CLI open ``<cwd>/.kartograf_cache.db`` by
+    default (Z6). Tests run from the repository root, where the user's real
+    cache lives, and must not write fake index records into it: there the
+    default points at a per-test directory. A test that changes the working
+    directory still sees the real cwd default.
+    """
+    from kartograf.cache import defaults
+
+    real = defaults.default_cache_path
+    isolated: list[Path] = []
+
+    def default_cache_path() -> Path:
+        if Path.cwd().resolve() != _REPO_ROOT:
+            return real()
+        if not isolated:
+            isolated.append(tmp_path_factory.mktemp("default-cache"))
+        return isolated[0] / defaults.DEFAULT_CACHE_FILENAME
+
+    monkeypatch.setattr(defaults, "default_cache_path", default_cache_path)
+    yield
+
+
 # =============================================================================
 # Offline WMS GetCapabilities
 # =============================================================================

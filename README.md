@@ -76,7 +76,7 @@ path = result.files["N-34-130-D-d-2-4"][0].version_path
 # Obszar NMT PL jako wycinek WCS 1 m z maską lądu, jeden GeoTIFF w zadanym układzie
 result = download_pl_cutout(
     BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
-    "EPSG:2180",
+    target_crs="EPSG:2180",
     output_dir="./data",
     vertical_crs="EVRF2007",
     product="nmt",
