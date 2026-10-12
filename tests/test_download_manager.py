@@ -3,7 +3,6 @@ Unit tests for the download manager module.
 
 This module contains tests for the DownloadManager class with the new architecture:
 - download_sheet -> ASC
-- download_bbox(bbox) -> GeoTIFF
 """
 
 from pathlib import Path
@@ -11,7 +10,6 @@ from unittest.mock import Mock, PropertyMock
 
 import pytest
 
-from kartograf.core.sheet_parser import BBox
 from kartograf.download.manager import DownloadManager, DownloadProgress
 from kartograf.download.storage import FileStorage
 from kartograf.exceptions import DownloadError, ValidationError
@@ -659,63 +657,6 @@ class TestDownloadManagerDownloadSheets:
         with pytest.raises(ParseError):
             manager.download_sheets(["N-34-130-D-d-2-1", "XYZ"])
         assert provider.calls == []
-
-
-class TestDownloadManagerDownloadBbox:
-    """Tests of the download_bbox() method - downloads GeoTIFF via WCS."""
-
-    @pytest.fixture
-    def mock_provider(self):
-        """Fixture with a mocked provider."""
-        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
-        type(provider).default_extension = PropertyMock(return_value=".asc")
-
-        def mock_download_bbox(bbox, path, format="GTiff", timeout=30):
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"TIFF data")
-            return path
-
-        provider.download_bbox = mock_download_bbox
-        return provider
-
-    @pytest.fixture
-    def sample_bbox(self):
-        """Sample bbox."""
-        return BBox(
-            min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
-        )
-
-    def test_download_bbox_success(self, tmp_path, mock_provider, sample_bbox):
-        """Test of a successful bbox download."""
-        manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
-
-        result = manager.download_bbox(sample_bbox, "test.tif")
-
-        assert result.exists()
-        assert result.name == "test.tif"
-
-    def test_download_bbox_custom_format(self, tmp_path, sample_bbox):
-        """Test of bbox download with a custom format."""
-        mock_provider = Mock(
-            spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007"
-        )
-        type(mock_provider).default_extension = PropertyMock(return_value=".asc")
-
-        def mock_download_bbox(bbox, path, format="GTiff", timeout=30):
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"PNG data")
-            return path
-
-        mock_provider.download_bbox = Mock(side_effect=mock_download_bbox)
-
-        manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
-
-        manager.download_bbox(sample_bbox, "test.png", format="PNG")
-
-        # Verify format was passed
-        mock_provider.download_bbox.assert_called_once()
-        call_kwargs = mock_provider.download_bbox.call_args.kwargs
-        assert call_kwargs["format"] == "PNG"
 
 
 class TestDownloadManagerGetMissingSheets:
