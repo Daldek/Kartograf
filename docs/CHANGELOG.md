@@ -456,6 +456,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `soilgrids hsg --bbox ... -o <katalog>` pisal `hsg_bbox_<glebokosc>.tif`
   bez wspolrzednych — dwa obszary nadpisywaly jeden plik. Teraz
   `hsg/global_soilgrids_<gl>_<stat>/bbox/<wsp>.tif`.
+- Arkusze PL pobierane rownolegle (`workers > 1`): wynik (`DownloadResult`
+  listy, `files`) i komunikaty (np. lista arkuszy bez danych GUGiK)
+  w kolejnosci zlecenia, nie zakonczenia - to samo zadanie daje zawsze ten
+  sam raport (wykryte testem zgodnosci CLI = API).
 
 ## [0.7.2] - 2026-10-11
 
