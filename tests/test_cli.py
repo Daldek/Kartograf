@@ -26,8 +26,10 @@ from kartograf.cli.commands import (
     main,
 )
 from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.download.fetch import VersionedFile
 from kartograf.download.manager import DownloadProgress, DownloadResult
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.notices import Notice
 from tests.conftest import write_gpkg_layers
 
 
@@ -46,28 +48,28 @@ def _mock_provider_and_storage(extension):
     return provider, Mock()
 
 
-def _sheet_list_manager(*paths, failed=(), no_coverage=(), skipped=()):
-    """Sheet-list mode manager mock: ``download_sheets`` + ``last_result``.
+def _version(path, version="2025-01-01_1_0a1b2c3d", status="new", **kwargs):
+    return VersionedFile(
+        path=Path(path),
+        version_path=Path(path).parent / "versions" / version / Path(path).name,
+        label=version.rsplit("_", 1)[0],
+        sha256=version.rsplit("_", 1)[-1],
+        status=status,
+        **kwargs,
+    )
 
-    ``paths`` are the files returned from ``download_sheets`` (downloaded and
-    skipped); ``failed``/``no_coverage``/``skipped`` land in ``last_result`` as
-    in the real ``DownloadManager`` (``no_coverage`` is a subset of
-    ``failed``).
-    """
+
+def _sheet_list_manager(*paths, failed=(), no_coverage=(), skipped=()):
+    """Return a sheet-list manager with a concrete download outcome."""
     manager = Mock()
-    manager.last_result = None
-    manager.download_sheets.return_value = list(paths)
-    manager.last_result = DownloadResult(
+    manager.download_sheets.return_value = DownloadResult(
         succeeded=list(paths),
         failed=[*failed, *no_coverage],
         skipped=list(skipped),
         no_coverage=list(no_coverage),
         files={
             Path(p).stem: (
-                (
-                    "2025-01-01_1_0a1b2c3d",
-                    "local" if Path(p).stem in skipped else "new",
-                ),
+                _version(p, status="local" if Path(p).stem in skipped else "new"),
             )
             for p in paths
         },
@@ -76,15 +78,16 @@ def _sheet_list_manager(*paths, failed=(), no_coverage=(), skipped=()):
 
 
 def _files(sheets, status="new"):
-    """``DownloadResult.files`` of a fake: one version file per sheet."""
-    return {sheet: (("2025-01-01_1_0a1b2c3d", status),) for sheet in sheets}
+    """One version file per sheet in a fake download result."""
+    return {sheet: (_version(f"{sheet}.asc", status=status),) for sheet in sheets}
 
 
 def _mock_manager(path):
-    """Manager mock returning ``path`` and NO failures (``last_result=None``)."""
+    """Manager mock returning a successful single-sheet result."""
     manager = Mock()
-    manager.last_result = None
-    manager.download_sheet.return_value = path
+    manager.download_sheet.return_value = DownloadResult(
+        succeeded=[path] if path is not None else []
+    )
     return manager
 
 
@@ -94,9 +97,22 @@ def _starting_download(path):
     def fake(sheet, update=None, on_progress=None, on_download=None):
         if on_download is not None:
             on_download()
-        return path
+        return DownloadResult(succeeded=[path])
 
     return fake
+
+
+def _return_with_notices(manager_class, manager, method, result, *notices):
+    """Fake a manager publishing its result notices through on_notice."""
+    result.notices = tuple(notices)
+
+    def run(*args, **kwargs):
+        callback = manager_class.call_args.kwargs["on_notice"]
+        for notice in result.notices:
+            callback(notice)
+        return result
+
+    getattr(manager, method).side_effect = run
 
 
 class TestCreateParser:
@@ -683,8 +699,9 @@ class TestCmdDownload:
     def test_download_single_sheet(self, mock_manager_class, capsys, tmp_path):
         """Test downloading a single sheet."""
         mock_manager = Mock()
-        mock_manager.last_result = None
-        mock_manager.download_sheet.return_value = tmp_path / "test.tif"
+        mock_manager.download_sheet.return_value = DownloadResult(
+            succeeded=[tmp_path / "test.tif"]
+        )
         mock_manager_class.return_value = mock_manager
 
         result = main(
@@ -719,8 +736,7 @@ class TestCmdDownload:
         paths = [tmp_path / f"test{i}.tif" for i in range(4)]
         mock_manager = Mock()
         mock_manager.count_sheets.return_value = 4
-        mock_manager.download_hierarchy.return_value = paths
-        mock_manager.last_result = DownloadResult(succeeded=paths)
+        mock_manager.download_hierarchy.return_value = DownloadResult(succeeded=paths)
         mock_manager_class.return_value = mock_manager
 
         result = main(
@@ -753,8 +769,9 @@ class TestCmdDownload:
     def test_download_with_force(self, mock_manager_class, tmp_path):
         """Test downloading with --force flag."""
         mock_manager = Mock()
-        mock_manager.last_result = None
-        mock_manager.download_sheet.return_value = tmp_path / "test.tif"
+        mock_manager.download_sheet.return_value = DownloadResult(
+            succeeded=[tmp_path / "test.tif"]
+        )
         mock_manager_class.return_value = mock_manager
 
         result = main(
@@ -859,7 +876,6 @@ class TestCmdDownload:
     def test_download_shows_progress(self, mock_manager_class, capsys, tmp_path):
         """Test that download shows progress when not quiet."""
         mock_manager = Mock()
-        mock_manager.last_result = None
         mock_manager.download_sheet.side_effect = _starting_download(
             tmp_path / "test.tif"
         )
@@ -894,11 +910,10 @@ class TestCmdDownload:
 
     @staticmethod
     def _hierarchy_manager(result: DownloadResult):
-        """Code coarser than 1:10000: ``download_sheet`` -> list + ``last_result``."""
+        """Code coarser than 1:10000 returns a hierarchy result directly."""
         mock_manager = Mock()
-        mock_manager.download_sheet.return_value = list(result.succeeded)
+        mock_manager.download_sheet.return_value = result
         mock_manager.count_sheets.return_value = result.total
-        mock_manager.last_result = result
         return mock_manager
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -1058,7 +1073,10 @@ class TestCmdDownload:
                 files=_files(["A", "B", "C", "D"], "local"),
             )
         )
-        mock_manager.download_sheet.return_value = [tmp_path / "x.asc"] * 4
+        mock_manager.download_sheet.return_value = DownloadResult(
+            skipped=["A", "B", "C", "D"],
+            files=_files(["A", "B", "C", "D"], "local"),
+        )
         mock_manager_class.return_value = mock_manager
 
         result = main(
@@ -1096,9 +1114,8 @@ class TestCmdDownload:
         """The same check applies on the --scale branch."""
         mock_manager = Mock()
         mock_manager.count_sheets.return_value = 4
-        mock_manager.download_hierarchy.return_value = []
-        mock_manager.last_result = DownloadResult(
-            succeeded=[], failed=["A", "B", "C", "D"], skipped=[]
+        mock_manager.download_hierarchy.return_value = DownloadResult(
+            failed=["A", "B", "C", "D"]
         )
         mock_manager_class.return_value = mock_manager
 
@@ -1189,8 +1206,9 @@ class TestCmdDownloadProduct:
         mock_create.return_value = (mock_provider, mock_storage)
 
         mock_manager = Mock()
-        mock_manager.last_result = None
-        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager.download_sheet.return_value = DownloadResult(
+            succeeded=[tmp_path / "test.asc"]
+        )
         mock_manager_cls.return_value = mock_manager
 
         result = main(
@@ -1233,8 +1251,9 @@ class TestCmdDownloadProduct:
         mock_create.return_value = (mock_provider, mock_storage)
 
         mock_manager = Mock()
-        mock_manager.last_result = None
-        mock_manager.download_sheet.return_value = tmp_path / "test.tif"
+        mock_manager.download_sheet.return_value = DownloadResult(
+            succeeded=[tmp_path / "test.tif"]
+        )
         mock_manager_cls.return_value = mock_manager
 
         result = main(
@@ -1275,8 +1294,9 @@ class TestCmdDownloadProduct:
         mock_create.return_value = (mock_provider, mock_storage)
 
         mock_manager = Mock()
-        mock_manager.last_result = None
-        mock_manager.download_sheet.return_value = tmp_path / "test.asc"
+        mock_manager.download_sheet.return_value = DownloadResult(
+            succeeded=[tmp_path / "test.asc"]
+        )
         mock_manager_cls.return_value = mock_manager
 
         result = main(
@@ -1548,7 +1568,9 @@ class TestCmdDownloadProduct:
 
         mock_create.side_effect = create
         mock_manager_cls.return_value = _sheet_list_manager(tmp_path / "test.asc")
-        mock_manager_cls.return_value.download_sheet.return_value = tmp_path / "t.asc"
+        mock_manager_cls.return_value.download_sheet.return_value = DownloadResult(
+            succeeded=[tmp_path / "t.asc"]
+        )
 
         rc = main([*argv, "-o", str(tmp_path), "-q"])
 
@@ -2438,7 +2460,7 @@ class TestCmdDownloadBBox:
             ["A", "B"], update=None, on_progress=ANY
         )
         # --workers reaches the manager, not the CLI loop
-        assert mock_manager_cls.call_args.kwargs["max_workers"] == 1
+        assert mock_manager_cls.call_args.kwargs["workers"] == 1
         captured = capsys.readouterr()
         assert "Nowe: 3," in captured.out
 
@@ -6467,8 +6489,9 @@ class TestCountryDispatch:
     ):
         """pl=1m,cz=2m / pl=EVRF2007,cz=Bpv -> the PL provider gets 1m/EVRF2007."""
         mock_manager = Mock()
-        mock_manager.last_result = None
-        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager.download_sheet.return_value = DownloadResult(
+            succeeded=[tmp_path / "x.asc"]
+        )
         mock_manager_class.return_value = mock_manager
         result = main(
             [
@@ -6498,8 +6521,9 @@ class TestCountryDispatch:
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_pl_1m_kron86_no_correction(self, mock_manager_class, tmp_path, capsys):
         mock_manager = Mock()
-        mock_manager.last_result = None
-        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager.download_sheet.return_value = DownloadResult(
+            succeeded=[tmp_path / "x.asc"]
+        )
         mock_manager_class.return_value = mock_manager
         result = main(
             [
@@ -7750,8 +7774,9 @@ class TestAutoSplitBBox:
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_sheet_mode_has_no_parent_request(self, mock_manager_class, tmp_path):
         mock_manager = Mock()
-        mock_manager.last_result = None
-        mock_manager.download_sheet.return_value = tmp_path / "x.asc"
+        mock_manager.download_sheet.return_value = DownloadResult(
+            succeeded=[tmp_path / "x.asc"]
+        )
         mock_manager_class.return_value = mock_manager
         result = main(
             [
@@ -9484,7 +9509,7 @@ class TestCampaignOptions:
         sheet = "N-34-130-D-d-2-4"
         mock_find.return_value = [sheet]
         manager = _sheet_list_manager(tmp_path / f"{sheet}.asc")
-        manager.last_result.link_outside_range = {
+        manager.download_sheets.return_value.link_outside_range = {
             sheet: tmp_path / "versions" / "2025-10-21_84183_3fa91c2e" / f"{sheet}.asc"
         }
         mock_manager_class.return_value = manager
@@ -9574,7 +9599,7 @@ class TestCampaignOptions:
     def test_cli_year_info_better_coverage(
         self, mock_manager_class, mock_find, mode, capsys, tmp_path
     ):
-        from kartograf.download.manager import SheetFetch
+        """A higher-coverage flight is reported for sheet and bbox modes."""
 
         sheet = "N-34-139-C-a-3-1"
         path = tmp_path / f"{sheet}.asc"
@@ -9601,13 +9626,11 @@ class TestCampaignOptions:
         mock_find.return_value = [sheet]
         if mode == "sheet":
             manager = _mock_manager(path)
-            manager.last_sheet = SheetFetch(
-                sheet, path, skipped=False, better_coverage="83233"
-            )
+            manager.download_sheet.return_value.better_coverage = {sheet: "83233"}
             location = ["--sheet", sheet]
         else:
             manager = _sheet_list_manager(path)
-            manager.last_result.better_coverage = {sheet: "83233"}
+            manager.download_sheets.return_value.better_coverage = {sheet: "83233"}
             location = _PL_BBOX_2180
         mock_manager_class.return_value = manager
 
@@ -10241,17 +10264,35 @@ class TestCampaignOptions:
     def test_single_sheet_local_version_with_newer_campaign(
         self, mock_manager_class, capsys, tmp_path
     ):
-        from kartograf.download.manager import SheetFetch
-
         path = tmp_path / "a.asc"
         manager = _mock_manager(path)
-        manager.last_sheet = SheetFetch(
-            "N-34-130-D-d-2-4",
-            path,
-            skipped=True,
-            status="local",
-            newer="2025-10-21_84183",
-            files=(("2025-04-27_83233_0a1b2c3d", "local"),),
+        manager.download_sheet.return_value = DownloadResult(
+            skipped=["N-34-130-D-d-2-4"],
+            files={
+                "N-34-130-D-d-2-4": (
+                    _version(
+                        path,
+                        "2025-04-27_83233_0a1b2c3d",
+                        "local",
+                        newer="2025-10-21_84183",
+                    ),
+                )
+            },
+        )
+        manager.download_sheet.return_value.newer = {
+            "N-34-130-D-d-2-4": "2025-10-21_84183"
+        }
+        _return_with_notices(
+            mock_manager_class,
+            manager,
+            "download_sheet",
+            manager.download_sheet.return_value,
+            Notice(
+                "info",
+                "newer_available",
+                "dostepna nowsza kampania dla 1 arkuszy (N-34-130-D-d-2-4) - "
+                "uzyto lokalnych wersji; pobierz: --upgrade",
+            ),
         )
         mock_manager_class.return_value = manager
 
@@ -10265,16 +10306,13 @@ class TestCampaignOptions:
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_single_sheet_new_version_line(self, mock_manager_class, capsys, tmp_path):
-        from kartograf.download.manager import SheetFetch
-
         target = tmp_path / "N-34-130-D-d-2-4.asc"
         manager = _mock_manager(target)
-        manager.last_sheet = SheetFetch(
-            "N-34-130-D-d-2-4",
-            target,
-            skipped=False,
-            status="new",
-            files=(("2025-10-21_84183_0a1b2c3d", "new"),),
+        manager.download_sheet.return_value = DownloadResult(
+            succeeded=[target],
+            files={
+                "N-34-130-D-d-2-4": (_version(target, "2025-10-21_84183_0a1b2c3d"),)
+            },
         )
         mock_manager_class.return_value = manager
 
@@ -10286,7 +10324,7 @@ class TestCampaignOptions:
     def test_single_sheet_mock_manager_reports_result_path(
         self, mock_manager_class, capsys, tmp_path
     ):
-        """I-1: a Mock() fake has no ``SheetFetch``: the result path only."""
+        """A successful single-sheet result reports its downloaded path."""
         mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
 
         assert self._single(tmp_path) == 0
@@ -10300,15 +10338,15 @@ class TestCampaignOptions:
         mock_find.return_value = ["A", "B", "C"]
         a, b, c = (tmp_path / f"{n}.asc" for n in "abc")
         manager = _sheet_list_manager(a, b, c)
-        manager.last_result.files = {
+        manager.download_sheets.return_value.files = {
             "A": (
-                ("2025-10-21_84183_0a1b2c3d", "new"),
-                ("2023-09-05_78047_1a1b2c3d", "local"),
+                _version(a, "2025-10-21_84183_0a1b2c3d"),
+                _version(a, "2023-09-05_78047_1a1b2c3d", "local"),
             ),
-            "B": (("2025-10-21_84190_2a1b2c3d", "relabeled"),),
+            "B": (_version(b, "2025-10-21_84190_2a1b2c3d", "relabeled"),),
             "C": (
-                ("2025-10-21_84191_3a1b2c3d", "unchanged"),
-                ("2019-04-18_73021_4a1b2c3d", "local"),
+                _version(c, "2025-10-21_84191_3a1b2c3d", "unchanged"),
+                _version(c, "2019-04-18_73021_4a1b2c3d", "local"),
             ),
         }
         mock_manager_class.return_value = manager
@@ -10440,9 +10478,10 @@ class TestCampaignOptions:
     def test_campaigns_passed_to_manager_hierarchy(self, mock_manager_class, tmp_path):
         """Fix 5: the hierarchy path (--scale)."""
         manager = Mock()
-        manager.download_hierarchy.return_value = [tmp_path / "a.asc"]
+        manager.download_hierarchy.return_value = DownloadResult(
+            succeeded=[tmp_path / "a.asc"]
+        )
         manager.count_sheets.return_value = 1
-        manager.last_result = DownloadResult(succeeded=[tmp_path / "a.asc"])
         mock_manager_class.return_value = manager
 
         rc = main(
@@ -10663,17 +10702,34 @@ class TestCampaignOptions:
     def test_unverified_local_campaign_warns_single_sheet(
         self, mock_manager_class, capsys, tmp_path
     ):
-        from kartograf.download.manager import SheetFetch
-
         path = tmp_path / "a.asc"
         manager = _mock_manager(path)
-        manager.last_sheet = SheetFetch(
-            "N-34-130-D-d-2-4",
-            path,
-            skipped=True,
-            reused=(tmp_path / "versions" / "a.asc",),
-            status="local",
-            unverified="pobranie nieudane po 3 probach: HTTP 503",
+        manager.download_sheet.return_value = DownloadResult(
+            skipped=["N-34-130-D-d-2-4"],
+            files={
+                "N-34-130-D-d-2-4": (
+                    _version(
+                        path,
+                        status="local",
+                        unverified=(
+                            "check_failed: pobranie nieudane po 3 probach: HTTP 503"
+                        ),
+                    ),
+                )
+            },
+        )
+        _return_with_notices(
+            mock_manager_class,
+            manager,
+            "download_sheet",
+            manager.download_sheet.return_value,
+            Notice(
+                "warning",
+                "unverified_local",
+                "N-34-130-D-d-2-4: skorowidz GUGiK niedostepny - uzyto "
+                "lokalnej wersji bez sprawdzenia nowszej "
+                "(pobranie nieudane po 3 probach: HTTP 503)",
+            ),
         )
         mock_manager_class.return_value = manager
 
@@ -10701,7 +10757,7 @@ class TestCampaignOptions:
         assert rc == 0
         err = capsys.readouterr().err
         assert (
-            "Warning: N-34-130-D-d-2-4: skorowidz GUGiK niedostepny — uzyto "
+            "Warning: N-34-130-D-d-2-4: skorowidz GUGiK niedostepny - uzyto "
             "lokalnej wersji bez sprawdzenia nowszej "
             "(pobranie nieudane po 3 probach: HTTP 503)"
         ) in err
@@ -10710,11 +10766,12 @@ class TestCampaignOptions:
     def test_verified_single_sheet_has_no_unverified_warning(
         self, mock_manager_class, capsys, tmp_path
     ):
-        from kartograf.download.manager import SheetFetch
-
         path = tmp_path / "a.asc"
         manager = _mock_manager(path)
-        manager.last_sheet = SheetFetch("N-34-130-D-d-2-4", path, skipped=True)
+        manager.download_sheet.return_value = DownloadResult(
+            skipped=["N-34-130-D-d-2-4"],
+            files={"N-34-130-D-d-2-4": (_version(path, status="local"),)},
+        )
         mock_manager_class.return_value = manager
 
         assert (
@@ -10752,8 +10809,30 @@ class TestCampaignOptions:
         manager = _sheet_list_manager(
             tmp_path / "a.asc", tmp_path / "b.asc", skipped=sheets
         )
-        manager.last_result.succeeded = []
-        manager.last_result.unverified = {g: "HTTP 503" for g in sheets}
+        manager.download_sheets.return_value.succeeded = []
+        manager.download_sheets.return_value.files = {
+            g: (
+                _version(
+                    tmp_path / f"{g}.asc",
+                    status="local",
+                    unverified="check_failed: HTTP 503",
+                ),
+            )
+            for g in sheets
+        }
+        _return_with_notices(
+            mock_manager_class,
+            manager,
+            "download_sheets",
+            manager.download_sheets.return_value,
+            Notice(
+                "warning",
+                "unverified_local",
+                "skorowidz GUGiK niedostepny - dla 2 arkuszy uzyto lokalnych "
+                "wersji bez sprawdzenia nowszej "
+                "(N-34-130-D-d-2-4, N-34-130-D-d-2-3) (HTTP 503)",
+            ),
+        )
         mock_manager_class.return_value = manager
 
         rc = main(
@@ -10779,7 +10858,7 @@ class TestCampaignOptions:
         assert rc == 0
         err = capsys.readouterr().err
         assert (
-            "Warning: skorowidz GUGiK niedostepny — dla 2 arkuszy uzyto lokalnych "
+            "Warning: skorowidz GUGiK niedostepny - dla 2 arkuszy uzyto lokalnych "
             "wersji bez sprawdzenia nowszej (N-34-130-D-d-2-4, N-34-130-D-d-2-3) "
             "(HTTP 503)"
         ) in err
@@ -10840,15 +10919,15 @@ class TestListMessagesUx:
         self, mock_manager_class, capsys, tmp_path
     ):
         """O-3: a local version is not preceded by 'Downloading ...'."""
-        from kartograf.download.manager import SheetFetch
-
         path = tmp_path / "a.asc"
         manager = _mock_manager(path)  # the mock does not call on_download (skip)
-        manager.last_sheet = SheetFetch(
-            "N-34-130-D-d-2-4",
-            path,
-            skipped=True,
-            files=(("2025-04-27_83233_0a1b2c3d", "local"),),
+        manager.download_sheet.return_value = DownloadResult(
+            skipped=["N-34-130-D-d-2-4"],
+            files={
+                "N-34-130-D-d-2-4": (
+                    _version(path, "2025-04-27_83233_0a1b2c3d", "local"),
+                )
+            },
         )
         mock_manager_class.return_value = manager
 
@@ -10914,9 +10993,8 @@ class TestListMessagesUx:
     @staticmethod
     def _list_manager(result):
         manager = Mock()
-        manager.last_result = result
-        manager.download_sheets.return_value = []
-        manager.download_sheet.return_value = []
+        manager.download_sheets.return_value = result
+        manager.download_sheet.return_value = result
         return manager
 
     @staticmethod

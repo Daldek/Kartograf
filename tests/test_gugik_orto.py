@@ -818,10 +818,10 @@ class TestOrtoVariantStorage:
         import json
 
         rgb_manager, _ = self.manager_for(tmp_path, "RGB", b"II*\x00RGB")
-        rgb_path = rgb_manager.download_sheet(SHEET)
+        rgb_path = rgb_manager.download_sheet(SHEET).succeeded[0]
 
         cir_manager, cir_session = self.manager_for(tmp_path, "CIR", b"II*\x00CIR")
-        cir_path = cir_manager.download_sheet(SHEET)
+        cir_path = cir_manager.download_sheet(SHEET).succeeded[0]
 
         # RGB unchanged (no migration), CIR in its own variant segment.
         assert rgb_path.relative_to(tmp_path).parts[:2] == ("orto", "pl_1992")

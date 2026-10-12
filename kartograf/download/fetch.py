@@ -72,7 +72,7 @@ def validate_update(update: object) -> None:
     """
     if update == "check":
         raise ValidationError(
-            "update='check' niczego nie pobiera — uzyj check_updates() albo "
+            "update='check' niczego nie pobiera - uzyj check_sheets() albo "
             "check_*() danego toru (plan aktualizacji, kartograf-plan/1)"
         )
     if update not in _UPDATE_MODES:

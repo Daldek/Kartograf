@@ -70,7 +70,8 @@ from kartograf import BBox, DownloadManager, GugikProvider, download_pl_cutout
 # Arkusz NMT po godle — każdy wybór danych jawny (od 0.8.0 bez wartości domyślnych)
 provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
 manager = DownloadManager("./data", provider)
-path = manager.download_sheet("N-34-130-D-d-2-4")
+result = manager.download_sheet("N-34-130-D-d-2-4")
+path = result.files["N-34-130-D-d-2-4"][0].version_path
 
 # Obszar NMT PL jako wycinek WCS 1 m z maską lądu, jeden GeoTIFF w zadanym układzie
 result = download_pl_cutout(

@@ -316,12 +316,11 @@ kartograf/
 │   ├── laz.py           # Kafle LAZ jako API (ADR-029): download_laz_area/run_laz_download —
 │   │                    # pula watkow, sidecar kafla, porazki w wyniku
 │   ├── manager.py       # DownloadManager — koordynacja arkuszy (ThreadPoolExecutor), sidecary;
-│   │                    # kampanie (all_campaigns=, min_year=, max_year=), tryby update
-│   │                    # (None/upgrade/force), SheetFetch/last_sheet, inspect_sheets,
-│   │                    # download_sheets/expand_sheets (lista godel, porazki w last_result)
+│   │                    # kampanie (year=, all_campaigns=, min_year=, max_year=),
+│   │                    # update/plan, check_sheets, DownloadResult (wersje i porazki)
 │   ├── storage.py       # FileStorage — segmenty z szablonow rejestru (ADR-026), versions/;
 │   │                    # prune_empty_dirs — sprzatanie pustych bbox/ po porazce
-│   ├── updates.py       # Plan aktualizacji kartograf-plan/1 (ADR-036): check_updates, upgrade
+│   ├── updates.py       # Wewnetrzne pozycje planu PL (kartograf-plan/1, ADR-036)
 │   └── versions.py      # Magazyn wersjonowany (ADR-036): zapis wylaczny, etykiety,
 │                        # lista wersji, sprzatanie .incoming/
 ├── landcover/manager.py # LandCoverManager — land cover w magazynie wersji (D29-D32): segmenty,
@@ -849,28 +848,25 @@ i brakujacy lot jako wersje w `versions/`, aktualizuje dowiazanie raz
 na arkusz (najnowszy lot wg ADR-028, nigdy wstecz), sidecary i pokrycie
 opisane w 3.2. `DownloadResult.better_coverage` wskazuje arkusze z
 lotem o lepszym pokryciu (tylko `all`); `link_outside_range` i
-`full_link_outside_range` (takze `SheetFetch`) — arkusze, ktorych
-dowiazanie standardowe albo `full_sheet/` zostalo przy locie spoza
-zadania (nigdy wstecz), CLI drukuje wtedy jeden `Info:` z linia
-`<godlo>: sciezka standardowa|full_sheet/ -> dowiazanie <data>_<id>`.
-Dalsze szczegoly: jedna regula `DownloadManager._select` (wspolna dla
-pobierania i `inspect_sheets`) decyduje per rekord "lokalna wersja albo
-pobranie"; pobranie (`GugikProvider.download_record` do katalogu
-roboczego, `record_source` -> `extra.source`) konczy `commit_version`
-(ADR-036); po zebraniu kampanii manager przestawia dowiazanie RAZ na
-arkusz (deduplikacja godel; nigdy wstecz) i zwraca `SheetFetch(sheet,
-path, skipped, downloaded, reused, status, version, unverified, newer,
-files)` w `DownloadManager.last_sheet` (`status`: `new`/`relabeled`/
-`unchanged`/`local`, najsilniejszy z plikow; `files`: katalog wersji
-i status per plik). `DownloadResult` (`last_result` listy i hierarchii)
-niesie `succeeded`, `failed`, `skipped`, `no_coverage` (podzbior `failed`:
-brak danych u zrodla), `no_coverage_hints` (godlo -> `NoCoverageError.hints`),
-`campaign_files`, `reused_campaign_files` (wersje juz lokalne per arkusz),
-listy `new`/`relabeled`/`unchanged`/`local`, `newer` (godlo -> nowsza
-kampania nie pobrana), `files` i `unverified` (ponizej).
-Pelna lista pol: docstringi `SheetFetch`/`DownloadResult` w
-`download/manager.py`. `download_sheet` pojedynczego arkusza ustawia
-`last_result` jako wynik jednoelementowy (jak lista). Pochodzenie arkusza
+`full_link_outside_range` — arkusze, ktorych dowiazanie standardowe albo
+`full_sheet/` zostalo przy locie spoza zadania (nigdy wstecz), CLI drukuje
+wtedy jeden `Info:` z linia `<godlo>: sciezka standardowa|full_sheet/ ->
+dowiazanie <data>_<id>`. Dalsze szczegoly: jedna regula
+`DownloadManager._select` (wspolna dla pobierania i `inspect_sheets`)
+decyduje per rekord "lokalna wersja albo pobranie"; pobranie
+(`GugikProvider.download_record` do katalogu roboczego, `record_source`
+-> `extra.source`) konczy `commit_version` (ADR-036); po zebraniu kampanii
+manager przestawia dowiazanie RAZ na arkusz (deduplikacja godel; nigdy
+wstecz). `download_sheet`, `download_hierarchy` i `download_sheets`
+zwracaja `DownloadResult`: `succeeded`, `failed`, `skipped`, `no_coverage`
+(podzbior `failed`: brak danych u zrodla), `no_coverage_hints` (godlo ->
+`NoCoverageError.hints`), `campaign_files`, `reused_campaign_files`
+(wersje juz lokalne per arkusz), listy `new`/`relabeled`/`unchanged`/`local`,
+`newer` (godlo -> nowsza kampania nie pobrana), `unverified`, `stale`
+i `notices`. `files[godlo]` zawiera `VersionedFile` dla kazdego wybranego
+lotu, ze statusem, etykieta i sciezka wersji. Wynik pojedynczego arkusza
+ma ten sam ksztalt co wynik listy. Pelna lista pol: docstring
+`DownloadResult` w `download/manager.py`. Pochodzenie arkusza
 przy kampaniach: `provider.source_info()` wypelnia przeplyw jednego rekordu
 (`download`, `get_download_url`, `resolve_campaigns` w trybie `newest`), a przy
 `all` zostaje `None` — zrodlem pochodzenia jest wtedy sidecar
@@ -912,27 +908,27 @@ zostawic je na starszej wersji; kolejne wywolanie je naprawia.
 domyslnie lokalna wersja z etykieta rekordu jest uzywana bez pobrania,
 brakujace wersje (`all`, `--full-sheet`, brak lokalnej) sa pobierane,
 a gdy najnowszy lot nie jest lokalny, ale jest inna lokalna wersja
-z zakresu (najpierw cel dowiazania), zostaje ona i `SheetFetch.newer`
-/ `DownloadResult.newer` (CLI: dopisek `; dostepna nowsza <etykieta>
-(--upgrade)` i `Info:`). `upgrade` pobiera ten lot; `force` pobiera
-wszystkie wybrane loty ponownie i odswieza `MetadataCache` (ta sama tresc
-= `unchanged`, inna = nowa wersja tej samej etykiety), weryfikacja
-rekordu dziala we wszystkich trybach; `update="check"` to `ValidationError`
-(sprawdzenie robi `check_updates`). Providery bez kampanii: bez `force`
-najnowsza lokalna wersja (brak taniego sygnalu). `check_updates(manager,
-sheets)` (CLI `--check-updates [--plan PLIK]`) niczego nie pobiera
-i zwraca `UpdatePlan` (`kartograf-plan/1`: `store`, `checked_at`,
-`kartograf_version`, pozycje z segmentem, hierarchia, nazwa, wersja
-lokalna i sygnalem rekordu; statusy `current`/`newer`/`missing`/
-`unverifiable`/`check_failed`). `upgrade(manager, plan)` (CLI `--upgrade
---plan PLIK`) odrzuca inny magazyn i nieznany schemat przed siecia,
-czyta sygnal ponownie i pobiera wylacznie pozycje `newer`/`missing`
-z niezmienionym sygnalem (`DownloadManager.download_records`); zmieniony
-sygnal = pozycja `stale` (blad, bez pobrania). Typy planu leza w
+z zakresu (najpierw cel dowiazania), zostaje ona i `DownloadResult.newer`
+(CLI: dopisek `; dostepna nowsza <etykieta> (--upgrade)` i `Info:`).
+`update="upgrade"` pobiera ten lot; `force` pobiera wszystkie wybrane
+loty ponownie i odswieza `MetadataCache` (ta sama tresc = `unchanged`,
+inna = nowa wersja tej samej etykiety), weryfikacja rekordu dziala we
+wszystkich trybach; `update="check"` to `ValidationError` (sprawdzenie
+robi `manager.check_sheets(sheets)`). Providery bez kampanii: bez `force`
+najnowsza lokalna wersja (brak taniego sygnalu).
+`DownloadManager.check_sheets(sheets)` (CLI `--check-updates [--plan PLIK]`)
+niczego nie pobiera i zwraca `UpdatePlan` (`kartograf-plan/1`: `store`,
+`checked_at`, `kartograf_version`, pozycje z segmentem, hierarchia, nazwa,
+wersja lokalna i sygnalem rekordu; statusy `current`/`newer`/`missing`/
+`unverifiable`/`check_failed`). `manager.download_sheets(sheets,
+update="upgrade", plan=plan)` (CLI `--upgrade --plan PLIK`) odrzuca inny
+magazyn i nieznany schemat przed siecia, czyta sygnal ponownie i pobiera
+wylacznie pozycje `newer`/`missing` z niezmienionym sygnalem; zmieniony
+sygnal = pozycja `result.stale` (blad, bez pobrania). Typy planu leza w
 `download/plan.py` (`PlanItem.track` = `pl_sheet`/`laz_tile`/`cz_sheet`/
 `pl_cutout`/`cz_cutout`, `unit` = jednostka zadania; `UpdatePlan.merge`,
-`select_planned`, `new_plan`); `updates.upgrade` wykonuje tylko
-`pl_sheet`, pozostale tory dostaja `plan=` w swoich `run_*`.
+`select_planned`, `new_plan`); pozostale tory dostaja `plan=` w swoich
+`run_*`.
 
 **Tory bez kampanii (plan 2/3).** LAZ (`download/laz.py`), arkusze CZ
 (`download/cz_sheets.py`), wycinki CZ (`download/cz_cutout.py`) i PL

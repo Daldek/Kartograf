@@ -21,7 +21,8 @@ Example usage::
     # (product, resolution, vertical CRS, output) is explicit
     provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
     manager = DownloadManager("./data", provider)
-    path = manager.download_sheet("N-34-130-D-d-2-4")
+    result = manager.download_sheet("N-34-130-D-d-2-4")
+    print(result.files["N-34-130-D-d-2-4"][0].version_path)
 
     # LAZ tiles for an area: newest per area, sidecars, failures in result
     laz = download_laz_area(
@@ -82,19 +83,9 @@ from kartograf.download.laz import (
     download_laz_area,
     run_laz_download,
 )
-from kartograf.download.manager import (
-    DownloadManager,
-    DownloadProgress,
-    DownloadResult,
-    SheetFetch,
-)
+from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.download.storage import FileStorage
-from kartograf.download.updates import (
-    UpgradeReport,
-    check_updates,
-    upgrade,
-)
 from kartograf.download.versions import VersionRef
 from kartograf.exceptions import (
     CacheError,
@@ -151,7 +142,6 @@ __all__ = [
     "DownloadManager",
     "DownloadProgress",
     "DownloadResult",
-    "SheetFetch",
     "CampaignRef",
     "FileStorage",
     # Download (versioned store, update plan)
@@ -160,9 +150,6 @@ __all__ = [
     "VersionRef",
     "PlanItem",
     "UpdatePlan",
-    "UpgradeReport",
-    "check_updates",
-    "upgrade",
     # Download (PL cutout: WCS ADR-035)
     "PlCutout",
     "PlCutoutResult",
