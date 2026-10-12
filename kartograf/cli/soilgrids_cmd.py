@@ -99,15 +99,6 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
             print(f"Error: {e}", file=sys.stderr)
             return 1
 
-    # Determine output path
-    output_path = Path(args.output)
-    if sheet:
-        if output_path.suffix.lower() != ".tif":
-            # Output is a directory; the directory itself is created on write
-            output_path = output_path / f"hsg_{sheet}_{args.depth}.tif"
-    elif (args.bbox or has_geometry) and output_path.suffix.lower() != ".tif":
-        output_path = output_path / f"hsg_bbox_{args.depth}.tif"
-
     # Parse bbox if provided (or compute from geometry)
     bbox = None
     if has_geometry:
@@ -126,7 +117,7 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
         bbox = parse_bbox_arg(args.bbox, "EPSG:2180")
 
     # Create calculator
-    calc = HSGCalculator()
+    calc = HSGCalculator(Path(args.output))
 
     print("Calculating Hydrologic Soil Groups (HSG)...")
     if sheet:
@@ -140,21 +131,20 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
 
     try:
         if sheet:
-            result_path = calc.calculate_hsg_by_sheet(
-                sheet=sheet,
-                output_path=output_path,
+            result = calc.calculate_hsg_by_sheet(
+                sheet,
                 depth=args.depth,
-                keep_intermediate=args.keep_intermediate,
                 stat="mean",  # HSG uses the mean texture estimate
             )
         else:
-            result_path = calc.calculate_hsg_by_bbox(
-                bbox=bbox,
-                output_path=output_path,
+            assert bbox is not None
+            result = calc.calculate_hsg_by_bbox(
+                bbox,
                 depth=args.depth,
-                keep_intermediate=args.keep_intermediate,
                 stat="mean",  # HSG uses the mean texture estimate
             )
+        assert result.file is not None  # no plan: always a file
+        result_path = result.file.path
 
         print(f"HSG raster saved to: {result_path}")
 

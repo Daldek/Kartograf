@@ -3005,6 +3005,14 @@ class TestCmdLandcoverDownload:
 # ===========================================================================
 
 
+def _hsg_result(path: Path):
+    """An HSG result for a mocked ``HSGCalculator``."""
+    from kartograf.download.fetch import VersionedFile
+    from kartograf.hydrology.hsg import HsgResult
+
+    return HsgResult("u", VersionedFile(path, "new", "2.0", "0" * 64, path), ())
+
+
 class TestCmdSoilgrids:
     """Tests for soilgrids CLI commands."""
 
@@ -3019,7 +3027,9 @@ class TestCmdSoilgrids:
     def test_soilgrids_hsg_success(self, mock_calc_cls, capsys, tmp_path):
         """soilgrids hsg --sheet -> success output."""
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_sheet.return_value = tmp_path / "hsg.tif"
+        mock_calc.calculate_hsg_by_sheet.return_value = _hsg_result(
+            tmp_path / "hsg.tif"
+        )
         mock_calc_cls.return_value = mock_calc
 
         result = main(
@@ -3043,7 +3053,9 @@ class TestCmdSoilgrids:
     def test_soilgrids_hsg_with_stats(self, mock_calc_cls, capsys, tmp_path):
         """soilgrids hsg --stats prints statistics."""
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_sheet.return_value = tmp_path / "hsg.tif"
+        mock_calc.calculate_hsg_by_sheet.return_value = _hsg_result(
+            tmp_path / "hsg.tif"
+        )
         mock_calc.get_hsg_statistics.return_value = {
             "A": {
                 "count": 100,
@@ -3122,7 +3134,9 @@ class TestCmdSoilgrids:
     def test_soilgrids_hsg_sheet_leading_zeros_canonical(self, mock_calc_cls, tmp_path):
         """A7: default HSG file name and the calculator use the canonical sheet."""
         mock_calc = mock_calc_cls.return_value
-        mock_calc.calculate_hsg_by_sheet.return_value = tmp_path / "hsg.tif"
+        mock_calc.calculate_hsg_by_sheet.return_value = _hsg_result(
+            tmp_path / "hsg.tif"
+        )
         out = tmp_path / "out"
 
         result = main(
@@ -3139,9 +3153,8 @@ class TestCmdSoilgrids:
         )
 
         assert result == 0
-        kwargs = mock_calc.calculate_hsg_by_sheet.call_args.kwargs
-        assert kwargs["sheet"] == "M-33-36-A"
-        assert kwargs["output_path"] == out / "hsg_M-33-36-A_0-5cm.tif"
+        assert mock_calc_cls.call_args.args[0] == out
+        assert mock_calc.calculate_hsg_by_sheet.call_args.args[0] == "M-33-36-A"
 
     @patch("kartograf.hydrology.HSGCalculator")
     def test_soilgrids_hsg_out_of_range_sheet(self, mock_calc_cls, capsys, tmp_path):
@@ -3216,7 +3229,7 @@ class TestCmdSoilgrids:
     def test_soilgrids_hsg_by_bbox(self, mock_calc_cls, capsys, tmp_path):
         """soilgrids hsg --bbox -> calculate_hsg_by_bbox called."""
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_bbox.return_value = tmp_path / "hsg.tif"
+        mock_calc.calculate_hsg_by_bbox.return_value = _hsg_result(tmp_path / "hsg.tif")
         mock_calc_cls.return_value = mock_calc
 
         result = main(
@@ -3233,40 +3246,6 @@ class TestCmdSoilgrids:
         )
         assert result == 0
         mock_calc.calculate_hsg_by_bbox.assert_called_once()
-
-
-class TestSoilgridsHsgOutputName:
-    """Default HSG file names carry the depth, so depths do not overwrite."""
-
-    @staticmethod
-    def _run(args, tmp_path, method):
-        with patch("kartograf.hydrology.HSGCalculator") as calc_cls:
-            calc = calc_cls.return_value
-            getattr(calc, method).return_value = tmp_path / "x.tif"
-            assert main(["soilgrids", "hsg", *args, "-o", str(tmp_path)]) == 0
-            return getattr(calc, method).call_args.kwargs["output_path"]
-
-    def test_sheet_name_has_depth(self, tmp_path):
-        a = self._run(
-            ["--sheet", "N-34-130-D", "--depth", "0-5cm"],
-            tmp_path,
-            "calculate_hsg_by_sheet",
-        )
-        b = self._run(
-            ["--sheet", "N-34-130-D", "--depth", "5-15cm"],
-            tmp_path,
-            "calculate_hsg_by_sheet",
-        )
-        assert a.name == "hsg_N-34-130-D_0-5cm.tif"
-        assert b.name == "hsg_N-34-130-D_5-15cm.tif"
-
-    def test_bbox_name_has_depth(self, tmp_path):
-        path = self._run(
-            ["--bbox", "450000,550000,460000,560000", "-d", "15-30cm"],
-            tmp_path,
-            "calculate_hsg_by_bbox",
-        )
-        assert path.name == "hsg_bbox_15-30cm.tif"
 
 
 def test_landcover_download_no_selection(capsys):
@@ -3812,7 +3791,7 @@ class TestCmdSoilgridsHsgGeometry:
 
         mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_bbox.return_value = tmp_path / "hsg.tif"
+        mock_calc.calculate_hsg_by_bbox.return_value = _hsg_result(tmp_path / "hsg.tif")
         mock_calc_cls.return_value = mock_calc
 
         result = main(
@@ -3840,7 +3819,7 @@ class TestCmdSoilgridsHsgGeometry:
         gpkg = write_gpkg_layers(tmp_path / "area.gpkg", ["layer_a", "layer_b"])
         mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_bbox.return_value = tmp_path / "hsg.tif"
+        mock_calc.calculate_hsg_by_bbox.return_value = _hsg_result(tmp_path / "hsg.tif")
         mock_calc_cls.return_value = mock_calc
 
         result = main(
