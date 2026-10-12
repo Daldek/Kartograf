@@ -193,8 +193,8 @@ class CorineProvider(LandCoverProvider):
     >>> provider = CorineProvider()
     >>> provider.download_by_sheet("N-34-130-D", Path("./preview.png"), year=2018)
     >>>
-    >>> # Data mode (CLMS API - raw class codes)
-    >>> provider = CorineProvider(clms_token="your-token-here")
+    >>> # Data mode (CLMS API - raw class codes, with CLMS_CREDENTIALS configured)
+    >>> provider = CorineProvider()
     >>> provider.download_by_bbox(bbox, Path("./data.tif"), year=2018)
     """
 
@@ -241,7 +241,6 @@ class CorineProvider(LandCoverProvider):
     CLMS_POLL_INTERVAL = 10  # seconds between status checks
     CLMS_MAX_WAIT = 600  # max seconds to wait for CLMS download
     MAX_RETRIES = MAX_RETRIES
-    DEFAULT_YEAR = 2018
 
     # Output format settings
     WMS_FORMAT = "image/png"
@@ -315,12 +314,15 @@ class CorineProvider(LandCoverProvider):
     # Download by bbox
     # =========================================================================
 
-    def download_by_bbox(
+    # The generic provider interface permits source-specific **kwargs;
+    # CORINE requires its edition even when called through that interface.
+    def download_by_bbox(  # type: ignore[override]
         self,
         bbox: BBox,
         output_path: Path,
         timeout: int = DEFAULT_TIMEOUT,
-        year: int = DEFAULT_YEAR,
+        *,
+        year: int,
         **kwargs,
     ) -> Path:
         """
@@ -337,8 +339,9 @@ class CorineProvider(LandCoverProvider):
             Path where the file should be saved
         timeout : int, optional
             Request timeout in seconds (default: 60)
-        year : int, optional
-            Reference year: 2018, 2012, 2006, 2000, or 1990 (default: 2018)
+        year : int
+            CORINE edition: 2018 (newest), 2012, 2006, 2000, or 1990
+            (historical land cover; 1990 is WMS preview only).
         **kwargs
             Additional options (unused)
 
@@ -701,12 +704,14 @@ class CorineProvider(LandCoverProvider):
             f"CLMS download timed out after {self.CLMS_MAX_WAIT} seconds"
         )
 
-    def download_by_sheet(
+    # See download_by_bbox: the edition is mandatory for sheet downloads too.
+    def download_by_sheet(  # type: ignore[override]
         self,
         sheet: str,
         output_path: Path,
         timeout: int = DEFAULT_TIMEOUT,
-        year: int = DEFAULT_YEAR,
+        *,
+        year: int,
         **kwargs,
     ) -> Path:
         """
@@ -720,8 +725,9 @@ class CorineProvider(LandCoverProvider):
             Path where the file should be saved
         timeout : int, optional
             Request timeout in seconds (default: 60)
-        year : int, optional
-            Reference year: 2018, 2012, 2006, 2000, or 1990 (default: 2018)
+        year : int
+            CORINE edition: 2018 (newest), 2012, 2006, 2000, or 1990
+            (historical land cover; 1990 is WMS preview only).
         **kwargs
             Additional options (unused)
 

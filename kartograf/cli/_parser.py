@@ -45,6 +45,36 @@ _LAYER_HELP = (
     "Warstwa GPKG (domyslnie pierwsza; przy wielu warstwach Info z lista pozostalych)"
 )
 
+# Admissible values of the download data choices (0.8.0: no defaults). One
+# wording for --help and for the `Error:` of a missing value.
+PRODUCT_CHOICES = (
+    "nmt (Numeryczny Model Terenu; PL i CZ), nmpt (Numeryczny Model Pokrycia "
+    "Terenu; PL, tylko 1m), orto (ortofotomapa RGB; PL), laz (chmura punktow "
+    "LIDAR; PL)"
+)
+COUNTRY_CHOICES = (
+    "pl (GUGiK), cz (CUZK), auto (kraje wg prostokatnych obwiedni PL i CZ; "
+    "obszar w obu krajach daje osobne pliki per kraj)"
+)
+RESOLUTION_PL = "1m (NMT 1 m), 5m (NMT 5 m, tylko --vertical-crs EVRF2007)"
+RESOLUTION_CZ = "2m (DMR 5G), 5m (DMR 4G)"
+VERTICAL_CRS_PL = (
+    "EVRF2007 (PL-EVRF2007-NH, uklad obowiazujacy), KRON86 (PL-KRON86-NH, "
+    "uklad historyczny; nie dla NMT 5m)"
+)
+VERTICAL_CRS_CZ = (
+    "Bpv (natywny uklad CUZK), EVRF2007 (transformacja z Bpv, "
+    "ok. +0,11..+0,15 m, rosnaco S->N)"
+)
+SYSTEM_CHOICES = (
+    "1992 (godla PL-1992, arkusze 1:10000), 2000 (godla PL-2000, strefy "
+    "EPSG:2176-2179; wymaga --scale)"
+)
+SCALE_2000_CHOICES = (
+    "1:5000, 1:2000, 1:1000, 1:500 (GUGiK publikuje arkusze PL-2000 najczesciej "
+    "w 1:2000, takze w 1:1000 i 1:5000)"
+)
+
 
 def parse_bbox_arg(text: str, crs: str) -> BBox:
     """
@@ -193,10 +223,10 @@ def create_parser() -> argparse.ArgumentParser:
     download_parser.add_argument(
         "--country",
         choices=["pl", "cz", "auto"],
-        default="auto",
-        help="Kraj zrodla danych: pl (GUGiK), cz (CUZK) lub auto — wykrywany "
-        "z arkusza/bboxa; bbox przecinajacy oba kraje pobiera osobne pliki "
-        "per kraj (default: auto)",
+        default=None,
+        help="Kraj zrodla danych — wymagany z --bbox/--geometry: "
+        f"{COUNTRY_CHOICES}. Z --sheet kraj wynika z godla (podana wartosc "
+        "musi sie z nim zgadzac)",
     )
     download_parser.add_argument(
         "--target-crs",
@@ -216,18 +246,21 @@ def create_parser() -> argparse.ArgumentParser:
     download_parser.add_argument(
         "--scale",
         metavar="SCALE",
-        help="Skala docelowa arkuszy PL (domyslnie 1:10000): arkusz grubszy "
-        "rozwijany do potomkow w tej skali, --bbox/--geometry dzielone na "
-        "arkusze tej skali. Zbedna dla PL-1992; dla PL-2000 zwykle 1:2000 "
-        "(skala, w ktorej GUGiK publikuje arkusze; podaje ja podpowiedz "
-        "przy braku pokrycia). Szczegoly: docs/USAGE.md 1.6",
+        help="Skala arkuszy PL-2000 do pobrania — wymagana z --bbox/--geometry "
+        "--system 2000 i z godlem PL-2000 1:10000 (np. 7.171.21): "
+        f"{SCALE_2000_CHOICES}; z drobniejszym godlem PL-2000 opcjonalna "
+        "(rozwija godlo do potomkow w tej skali). PL-1992: niedozwolona — "
+        "GUGiK publikuje arkusze PL-1992 tylko w 1:10000 (godlo 7-czlonowe), "
+        "grubsze godlo rozwija sie do 1:10000 samo. Nie dotyczy CZ, LAZ "
+        "i --target-crs. Szczegoly: docs/USAGE.md 1.6",
     )
     download_parser.add_argument(
         "--output",
         "-o",
         metavar="DIR",
-        default="./data",
-        help="Output directory (default: ./data)",
+        default=None,
+        help="Katalog wyniku (wymagany); pliki trafiaja do "
+        "<DIR>/<produkt>/<segment>/...",
     )
     download_parser.add_argument(
         "--force",
@@ -244,26 +277,31 @@ def create_parser() -> argparse.ArgumentParser:
     )
     download_parser.add_argument(
         "--vertical-crs",
-        choices=["KRON86", "EVRF2007", "Bpv"],
+        metavar="VCRS",
         default=None,
-        help="Uklad pionowy: PL default EVRF2007 (lub KRON86); CZ default Bpv "
-        "(natywny) lub EVRF2007 (transformacja ok. +0,11..+0,15 m, rosnaco S->N)",
+        help="Uklad wysokosci — wymagany dla --product nmt, nmpt i laz (orto "
+        f"go nie ma). PL: {VERTICAL_CRS_PL}. CZ: {VERTICAL_CRS_CZ}. Jedna "
+        "wartosc dotyczy kazdego kraju zadania i musi byc dla niego "
+        "dostepna; zadanie PL+CZ z roznymi ukladami: pl=WARTOSC,cz=WARTOSC "
+        "(np. pl=EVRF2007,cz=Bpv)",
     )
     download_parser.add_argument(
         "--resolution",
         "-r",
-        choices=["1m", "5m", "2m"],
+        metavar="RES",
         default=None,
-        help="Rozdzielczosc siatki: PL 1m/5m (default 1m); CZ: arkusz SM5 "
-        "tylko 5m (wynika z arkusza), kafel TM33 i --bbox/--geometry 2m "
-        "(default) lub 5m",
+        help="Rozdzielczosc siatki NMT — wymagana tam, gdzie jest wybor. PL: "
+        f"{RESOLUTION_PL}; wycinek --target-crs tylko 1m. CZ: "
+        f"{RESOLUTION_CZ}; arkusz SM5 tylko 5m (mozna pominac). NMPT tylko "
+        "1m (mozna pominac); orto i LAZ bez rozdzielczosci. Jedna wartosc "
+        "dotyczy kazdego kraju zadania; zadanie PL+CZ z roznymi: "
+        "pl=WARTOSC,cz=WARTOSC (np. pl=1m,cz=2m)",
     )
     download_parser.add_argument(
         "--product",
         choices=["nmt", "nmpt", "orto", "laz"],
-        default="nmt",
-        help="Data product: nmt (terrain), nmpt (surface), "
-        "orto (orthophoto, RGB), laz (LIDAR point cloud). Default: nmt.",
+        default=None,
+        help=f"Produkt (wymagany): {PRODUCT_CHOICES}",
     )
     download_parser.add_argument(
         "--year",
@@ -327,7 +365,10 @@ def create_parser() -> argparse.ArgumentParser:
         "--system",
         choices=["1992", "2000"],
         default=None,
-        help="System godlowania dla --bbox/--geometry — tylko PL (default: 1992)",
+        help="Uklad godel arkuszy PL — wymagany z --bbox/--geometry dla PL "
+        f"(bez --target-crs): {SYSTEM_CHOICES}. Wycinek --target-crs: tylko "
+        "1992 (mozna pominac). Nie dotyczy --sheet (uklad z godla), LAZ "
+        "(uklad kazdego kafla z WFS) ani CZ",
     )
     download_parser.add_argument(
         "--workers",
@@ -359,8 +400,9 @@ def create_parser() -> argparse.ArgumentParser:
         "--source",
         "-s",
         choices=["bdot10k", "corine", "soilgrids"],
-        default="bdot10k",
-        help="Data source (default: bdot10k)",
+        default=None,
+        help="Wymagane: bdot10k (wektorowa baza topograficzna GUGiK), "
+        "corine (CORINE Land Cover, Copernicus), soilgrids (gleby SoilGrids, ISRIC)",
     )
     lc_download.add_argument(
         "--teryt",
@@ -380,22 +422,24 @@ def create_parser() -> argparse.ArgumentParser:
     lc_download.add_argument(
         "--year",
         type=int,
-        default=2018,
-        help="Reference year for CORINE (default: 2018)",
+        default=None,
+        help="Wymagane dla corine: 2018, 2012, 2006, 2000 "
+        "(edycje pokrycia terenu CLMS/WMS), 1990 (tylko podglad WMS)",
     )
     lc_download.add_argument(
         "--output",
         "-o",
         metavar="DIR",
-        default="./data/landcover",
-        help="Output directory (default: ./data/landcover)",
+        default=None,
+        help="Wymagane: katalog wyniku; kazda sciezka katalogu jest dopuszczalna",
     )
     lc_download.add_argument(
         "--format",
         "-f",
         choices=["GPKG", "SHP"],
         default="GPKG",
-        help="Output format for BDOT10k (default: GPKG)",
+        help="Tylko BDOT10k: GPKG (GeoPackage, domyslnie) lub SHP "
+        "(archiwum ZIP z plikami Shapefile)",
     )
     lc_download.add_argument(
         "--geometry",
@@ -410,22 +454,26 @@ def create_parser() -> argparse.ArgumentParser:
     lc_download.add_argument(
         "--property",
         "-p",
-        default="soc",
-        help="Soil property for SoilGrids (default: soc). "
-        "Options: bdod, cec, cfvo, clay, nitrogen, ocd, ocs, phh2o, sand, silt, soc",
+        default=None,
+        help="Wymagane dla soilgrids: bdod (gestosc objetosciowa), "
+        "cec (pojemnosc sorpcyjna), cfvo (frakcja szkieletowa), clay (il), "
+        "nitrogen (azot), ocd (gestosc wegla organicznego), "
+        "ocs (zasob wegla organicznego), phh2o (pH), sand (piasek), "
+        "silt (pyl), soc (wegiel organiczny)",
     )
     lc_download.add_argument(
         "--depth",
         "-d",
-        default="0-5cm",
-        help="Depth interval for SoilGrids (default: 0-5cm). "
-        "Options: 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm",
+        default=None,
+        help="Wymagane dla soilgrids: 0-5cm, 5-15cm, 15-30cm, 30-60cm, "
+        "60-100cm, 100-200cm (przedzial glebokosci ponizej powierzchni)",
     )
     lc_download.add_argument(
         "--stat",
-        default="mean",
-        help="Statistic for SoilGrids (default: mean). "
-        "Options: mean, Q0.05, Q0.5, Q0.95, uncertainty",
+        default=None,
+        help="Wymagane dla soilgrids: mean (srednia), Q0.05 (5. percentyl), "
+        "Q0.5 (mediana), Q0.95 (95. percentyl), "
+        "uncertainty (niepewnosc predykcji)",
     )
 
     # Landcover list-sources command
@@ -443,8 +491,9 @@ def create_parser() -> argparse.ArgumentParser:
         "--source",
         "-s",
         choices=["bdot10k", "corine", "soilgrids"],
-        default="bdot10k",
-        help="Data source (default: bdot10k)",
+        default=None,
+        help="Wymagane: bdot10k (wektorowa baza topograficzna GUGiK), "
+        "corine (CORINE Land Cover, Copernicus), soilgrids (gleby SoilGrids, ISRIC)",
     )
 
     # Soilgrids command group (for HSG calculation)
@@ -463,8 +512,9 @@ def create_parser() -> argparse.ArgumentParser:
         "hsg",
         help="Calculate Hydrologic Soil Groups from texture data",
         description=(
-            "Download clay, sand, silt data from SoilGrids and calculate "
-            "Hydrologic Soil Groups (HSG) for SCS-CN method"
+            "Pobierz clay (il), sand (piasek), silt (pyl) z SoilGrids "
+            "dla wybranej glebokosci; uzyj statystyki mean (srednia) "
+            "i oblicz grupy hydrologiczne HSG dla metody SCS-CN."
         ),
     )
     sg_hsg.add_argument(
@@ -491,15 +541,16 @@ def create_parser() -> argparse.ArgumentParser:
         "--output",
         "-o",
         metavar="PATH",
-        default="./data/hsg",
-        help="Output path or directory (default: ./data/hsg)",
+        default=None,
+        help="Wymagane: sciezka pliku GeoTIFF .tif lub katalog wyniku; "
+        "kazda sciezka jest dopuszczalna",
     )
     sg_hsg.add_argument(
         "--depth",
         "-d",
-        default="0-5cm",
-        help="Depth interval (default: 0-5cm). "
-        "Options: 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm",
+        default=None,
+        help="Wymagane: 0-5cm, 5-15cm, 15-30cm, 30-60cm, "
+        "60-100cm, 100-200cm (przedzial glebokosci ponizej powierzchni)",
     )
     sg_hsg.add_argument(
         "--keep-intermediate",

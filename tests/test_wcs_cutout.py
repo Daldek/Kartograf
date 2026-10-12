@@ -96,6 +96,7 @@ def _synthetic_session(values) -> Mock:
 
 
 def _cutout(tmp_path, target_crs="EPSG:2180", bbox=BBOX, **kwargs):
+    kwargs = {"vertical_crs": "EVRF2007", "product": "nmt", **kwargs}
     return prepare_pl_cutout(bbox, target_crs, output_dir=tmp_path, **kwargs)
 
 
@@ -107,7 +108,11 @@ def test_wcs_cutout_2180_corner_on_sheet_grid(tmp_path):
     session = _recorded_session()
     with patch(MASK, return_value=ALL_LAND) as mask:
         result = run_pl_wcs_cutout(
-            _cutout(tmp_path), provider=GugikProvider(session=session), today=DAY
+            _cutout(tmp_path),
+            provider=GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            ),
+            today=DAY,
         )
 
     assert [_subset(c.args[0]) for c in session.get.call_args_list] == [WINDOW]
@@ -137,7 +142,11 @@ def test_wcs_cutout_5514_uses_pinned_warp(tmp_path):
         patch.object(raster_mod, "warp_to_grid", wraps=raster_mod.warp_to_grid) as warp,
     ):
         result = run_pl_wcs_cutout(
-            cut, provider=GugikProvider(session=session), today=DAY
+            cut,
+            provider=GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            ),
+            today=DAY,
         )
 
     # the WCS area and the mask: the source envelope (warp margin) on the sheet grid
@@ -163,7 +172,9 @@ def test_name_carries_download_date(tmp_path):
     with patch(MASK, return_value=ALL_LAND):
         nmt = run_pl_wcs_cutout(
             _cutout(tmp_path),
-            provider=GugikProvider(session=_recorded_session()),
+            provider=GugikProvider(
+                session=_recorded_session(), vertical_crs="EVRF2007", resolution="1m"
+            ),
             today=DAY,
         )
         nmpt = run_pl_wcs_cutout(
@@ -202,12 +213,20 @@ def test_every_run_downloads(tmp_path):
     with patch(MASK, return_value=ALL_LAND):
         first = run_pl_wcs_cutout(
             cut,
-            provider=GugikProvider(session=_synthetic_session(lambda x, y: 1.0)),
+            provider=GugikProvider(
+                session=_synthetic_session(lambda x, y: 1.0),
+                vertical_crs="EVRF2007",
+                resolution="1m",
+            ),
             today=DAY,
         )
         session = _synthetic_session(lambda x, y: 2.0)
         second = run_pl_wcs_cutout(
-            cut, provider=GugikProvider(session=session), today=DAY
+            cut,
+            provider=GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            ),
+            today=DAY,
         )
 
     assert session.get.call_count == 1
@@ -223,7 +242,11 @@ def test_failed_rerun_keeps_previous_same_day_file(tmp_path):
     cut = _cutout(tmp_path)
     with patch(MASK, return_value=ALL_LAND):
         first = run_pl_wcs_cutout(
-            cut, provider=GugikProvider(session=_recorded_session()), today=DAY
+            cut,
+            provider=GugikProvider(
+                session=_recorded_session(), vertical_crs="EVRF2007", resolution="1m"
+            ),
+            today=DAY,
         )
     sidecar = first.path.with_name(f"{first.path.name}.meta.json")
     before = (first.path.read_bytes(), sidecar.read_bytes())
@@ -233,7 +256,13 @@ def test_failed_rerun_keeps_previous_same_day_file(tmp_path):
         return_value=recorded_response(WCS_FIXTURES / "exception_report.xml")
     )
     with patch(MASK, return_value=ALL_LAND), pytest.raises(DownloadError):
-        run_pl_wcs_cutout(cut, provider=GugikProvider(session=failing), today=DAY)
+        run_pl_wcs_cutout(
+            cut,
+            provider=GugikProvider(
+                session=failing, vertical_crs="EVRF2007", resolution="1m"
+            ),
+            today=DAY,
+        )
 
     assert (first.path.read_bytes(), sidecar.read_bytes()) == before
     assert sorted(p.name for p in first.path.parent.iterdir()) == sorted(
@@ -248,7 +277,11 @@ def test_prg_failure_makes_no_wcs_request(tmp_path):
         pytest.raises(DownloadError, match="PRG"),
     ):
         run_pl_wcs_cutout(
-            _cutout(tmp_path), provider=GugikProvider(session=session), today=DAY
+            _cutout(tmp_path),
+            provider=GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            ),
+            today=DAY,
         )
 
     session.get.assert_not_called()
@@ -262,7 +295,9 @@ def test_mask_counts_and_sidecar(tmp_path):
     with patch(MASK, return_value=land):
         result = run_pl_wcs_cutout(
             _cutout(tmp_path),
-            provider=GugikProvider(session=session),
+            provider=GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            ),
             parent_request={"bbox": [1, 2, 3, 4]},
             today=DAY,
         )
@@ -304,7 +339,9 @@ def test_zero_pixels_absent_from_sidecar_when_none(tmp_path):
     with patch(MASK, return_value=ALL_LAND):
         result = run_pl_wcs_cutout(
             _cutout(tmp_path),
-            provider=GugikProvider(session=_recorded_session()),
+            provider=GugikProvider(
+                session=_recorded_session(), vertical_crs="EVRF2007", resolution="1m"
+            ),
             today=DAY,
         )
     extra = _meta(result.path)["extra"]
@@ -316,7 +353,9 @@ def test_all_outside_land_is_all_nodata(tmp_path):
     with patch(MASK, return_value=abroad):
         result = run_pl_wcs_cutout(
             _cutout(tmp_path),
-            provider=GugikProvider(session=_recorded_session()),
+            provider=GugikProvider(
+                session=_recorded_session(), vertical_crs="EVRF2007", resolution="1m"
+            ),
             today=DAY,
         )
 
@@ -325,31 +364,24 @@ def test_all_outside_land_is_all_nodata(tmp_path):
     assert _meta(result.path)["extra"]["all_nodata"] is True
 
 
-def test_5m_rejected_before_network(tmp_path):
-    session = _recorded_session()
-    cut = _cutout(tmp_path, resolution="5m")
-    with patch(MASK) as mask:
-        with pytest.raises(ValidationError, match="tylko 1m"):
-            run_pl_wcs_cutout(cut, provider=GugikProvider(session=session), today=DAY)
-        with pytest.raises(ValidationError, match="1m"):
-            download_pl_cutout(BBOX, "EPSG:2180", output_dir=tmp_path, resolution="5m")
-
-    mask.assert_not_called()
-    session.get.assert_not_called()
-    assert not (tmp_path / "nmt").exists()
-
-
 def test_download_pl_cutout_writes_parent_request(tmp_path):
     session = _recorded_session()
     with (
         patch(
             "kartograf.providers.pl.create_nmt_provider",
-            return_value=GugikProvider(session=session),
+            return_value=GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            ),
         ),
         patch(MASK, return_value=ALL_LAND),
     ):
         result = download_pl_cutout(
-            BBOX, "EPSG:2180", output_dir=tmp_path, parent_request={"p": 1}
+            BBOX,
+            "EPSG:2180",
+            output_dir=tmp_path,
+            parent_request={"p": 1},
+            vertical_crs="EVRF2007",
+            product="nmt",
         )
 
     assert result.path.name.endswith(f"_{date.today():%Y%m%d}.tif")
@@ -360,11 +392,19 @@ def test_download_pl_cutout_writes_parent_request(tmp_path):
 @pytest.mark.parametrize(
     ("cutout_kwargs", "provider"),
     [
-        ({"product": "nmpt"}, lambda s: GugikProvider(session=s)),
-        ({"product": "nmt"}, lambda s: GugikNmptProvider(session=s)),
+        (
+            {"product": "nmpt"},
+            lambda s: GugikProvider(
+                session=s, vertical_crs="EVRF2007", resolution="1m"
+            ),
+        ),
+        (
+            {"product": "nmt"},
+            lambda s: GugikNmptProvider(session=s, vertical_crs="EVRF2007"),
+        ),
         (
             {"vertical_crs": "EVRF2007"},
-            lambda s: GugikProvider(session=s, vertical_crs="KRON86"),
+            lambda s: GugikProvider(session=s, vertical_crs="KRON86", resolution="1m"),
         ),
     ],
 )
@@ -378,11 +418,9 @@ def test_provider_mismatch_rejected(tmp_path, cutout_kwargs, provider):
     session.get.assert_not_called()
 
 
-def test_prepare_rejects_unknown_product_and_nmpt_5m(tmp_path):
+def test_prepare_rejects_unknown_product(tmp_path):
     with pytest.raises(ValidationError, match="orto"):
         _cutout(tmp_path, product="orto")
-    with pytest.raises(ValidationError, match="NMPT"):
-        _cutout(tmp_path, product="nmpt", resolution="5m")
 
 
 class TestCli:
@@ -399,6 +437,16 @@ class TestCli:
             rc = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     *self._BBOX_ARGS,
                     "--target-crs",
                     "EPSG:2180",
@@ -414,7 +462,10 @@ class TestCli:
     def test_cli_nmpt_target_crs_allowed(self, tmp_path, capsys):
         session = _recorded_session("nmpt_evrf2007_20x20_sf05")
         rc = self._main(
-            tmp_path, GugikNmptProvider(session=session), "--product", "nmpt"
+            tmp_path,
+            GugikNmptProvider(session=session, vertical_crs="EVRF2007"),
+            "--product",
+            "nmpt",
         )
 
         assert rc == 0, capsys.readouterr().err
@@ -429,7 +480,12 @@ class TestCli:
 
     def test_cli_5m_target_crs_rejected_before_network(self, tmp_path, capsys):
         session = _recorded_session()
-        rc = self._main(tmp_path, GugikProvider(session=session), "--resolution", "5m")
+        rc = self._main(
+            tmp_path,
+            GugikProvider(session=session, vertical_crs="EVRF2007", resolution="1m"),
+            "--resolution",
+            "5m",
+        )
 
         assert rc == 1
         err = capsys.readouterr().err
@@ -449,10 +505,23 @@ class TestCli:
 
     def test_cli_force_has_no_effect_and_no_message(self, tmp_path, capsys):
         first = _recorded_session()
-        assert self._main(tmp_path, GugikProvider(session=first)) == 0
+        assert (
+            self._main(
+                tmp_path,
+                GugikProvider(session=first, vertical_crs="EVRF2007", resolution="1m"),
+            )
+            == 0
+        )
         plain = capsys.readouterr()
         second = _recorded_session()
-        assert self._main(tmp_path, GugikProvider(session=second), "--force") == 0
+        assert (
+            self._main(
+                tmp_path,
+                GugikProvider(session=second, vertical_crs="EVRF2007", resolution="1m"),
+                "--force",
+            )
+            == 0
+        )
         forced = capsys.readouterr()
 
         # every run downloads; --force changes neither the work nor the messages
@@ -464,7 +533,10 @@ class TestCli:
         failing.get = Mock(
             return_value=recorded_response(WCS_FIXTURES / "exception_report.xml")
         )
-        rc = self._main(tmp_path, GugikProvider(session=failing))
+        rc = self._main(
+            tmp_path,
+            GugikProvider(session=failing, vertical_crs="EVRF2007", resolution="1m"),
+        )
 
         assert rc == 1
         err = capsys.readouterr().err
@@ -474,11 +546,34 @@ class TestCli:
     def test_cli_prg_error_code_1(self, tmp_path, capsys):
         session = _recorded_session()
         with (
-            patch(self._FACTORY, return_value=(GugikProvider(session=session), Mock())),
+            patch(
+                self._FACTORY,
+                return_value=(
+                    GugikProvider(
+                        session=session, vertical_crs="EVRF2007", resolution="1m"
+                    ),
+                    Mock(),
+                ),
+            ),
             patch(MASK, side_effect=DownloadError("PRG WFS: blad uslugi")),
         ):
             rc = main(
-                ["download", *self._BBOX_ARGS, "--target-crs", "EPSG:2180"]
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    *self._BBOX_ARGS,
+                    "--target-crs",
+                    "EPSG:2180",
+                ]
                 + ["-o", str(tmp_path), "-q"]
             )
 
@@ -489,7 +584,11 @@ class TestCli:
     def test_cli_all_nodata_warning_code_0(self, tmp_path, capsys):
         abroad = LandMask((_square(0, 0, 10, 10),), ())
         rc = self._main(
-            tmp_path, GugikProvider(session=_recorded_session()), mask=abroad
+            tmp_path,
+            GugikProvider(
+                session=_recorded_session(), vertical_crs="EVRF2007", resolution="1m"
+            ),
+            mask=abroad,
         )
 
         assert rc == 0
@@ -499,7 +598,10 @@ class TestCli:
 
     def test_cli_no_zero_pixels_info(self, tmp_path, capsys):
         session = _synthetic_session(lambda xs, ys: np.zeros_like(xs + ys))
-        rc = self._main(tmp_path, GugikProvider(session=session))
+        rc = self._main(
+            tmp_path,
+            GugikProvider(session=session, vertical_crs="EVRF2007", resolution="1m"),
+        )
 
         assert rc == 0
         assert "Info:" not in capsys.readouterr().err
@@ -513,7 +615,12 @@ class TestCli:
         with patch.object(
             GugikProvider, "WCS_CHUNK_LIMITS_AAIGRID", ChunkLimits(10, 10, 100)
         ):
-            rc = self._main(tmp_path, GugikProvider(session=session))
+            rc = self._main(
+                tmp_path,
+                GugikProvider(
+                    session=session, vertical_crs="EVRF2007", resolution="1m"
+                ),
+            )
 
         assert rc == 0
         err = capsys.readouterr().err
@@ -540,11 +647,37 @@ class TestCli:
                 return_value=CRS.from_epsg(2180),
             ),
             patch("kartograf.core.geometry.get_overall_bbox", return_value=BBOX),
-            patch(self._FACTORY, return_value=(GugikProvider(session=session), Mock())),
+            patch(
+                self._FACTORY,
+                return_value=(
+                    GugikProvider(
+                        session=session, vertical_crs="EVRF2007", resolution="1m"
+                    ),
+                    Mock(),
+                ),
+            ),
             patch(MASK, return_value=ALL_LAND),
         ):
             rc = main(
-                ["download", "--geometry", str(geom), "--country", "pl"]
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    "--system",
+                    "1992",
+                    "--geometry",
+                    str(geom),
+                    "--country",
+                    "pl",
+                ]
                 + ["--target-crs", "EPSG:2180", "-o", str(tmp_path), "-q"]
             )
 
@@ -586,12 +719,33 @@ class TestCli:
             ),
             patch(
                 self._FACTORY,
-                return_value=(GugikProvider(session=pl_session), Mock()),
+                return_value=(
+                    GugikProvider(
+                        session=pl_session, vertical_crs="EVRF2007", resolution="1m"
+                    ),
+                    Mock(),
+                ),
             ),
             patch(MASK, return_value=ALL_LAND),
         ):
             return main(
-                ["download", "--bbox", "18.80,49.70,18.801,49.7005"]
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    "--system",
+                    "1992",
+                    "--bbox",
+                    "18.80,49.70,18.801,49.7005",
+                ]
                 + ["--bbox-crs", "EPSG:4326", "--target-crs", "EPSG:2180"]
                 + ["--vertical-crs", "EVRF2007", "-o", str(tmp_path), "-q"]
             )

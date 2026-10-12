@@ -69,23 +69,38 @@ def cmd_landcover_list_sources(args: argparse.Namespace) -> int:
 
 
 def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
-    """List available layers for a source."""
-    manager = LandCoverManager(provider=args.source)
-
-    print(f"Available layers for {manager.provider_name}:")
-    print()
+    """List available layers for a selected source."""
+    if args.source is None:
+        print(
+            "Error: --source wymagane: bdot10k (wektorowa baza topograficzna "
+            "GUGiK), corine (pokrycie terenu Copernicus), soilgrids (gleby ISRIC)",
+            file=sys.stderr,
+        )
+        return 1
 
     if args.source == "bdot10k":
         from kartograf.providers.pl.bdot10k import Bdot10kProvider
 
-        provider = Bdot10kProvider()
-        for layer in provider.get_available_layers():
-            desc = provider.get_layer_description(layer)
-            print(f"    {layer}  - {desc}")
+        bdot = Bdot10kProvider()
+        provider_name = bdot.name
     elif args.source == "corine":
         from kartograf.providers.corine import CorineProvider
 
         corine = CorineProvider()
+        provider_name = corine.name
+    else:
+        from kartograf.providers.soilgrids import SoilGridsProvider
+
+        soilgrids = SoilGridsProvider()
+        provider_name = soilgrids.name
+    print(f"Available layers for {provider_name}:")
+    print()
+
+    if args.source == "bdot10k":
+        for layer in bdot.get_available_layers():
+            desc = bdot.get_layer_description(layer)
+            print(f"    {layer}  - {desc}")
+    elif args.source == "corine":
         print("  CORINE provides unified land cover classification.")
         print("  Available years:")
         for year in corine.get_available_years():
@@ -93,9 +108,6 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
         print()
         print("  Use --year option to select reference year.")
     elif args.source == "soilgrids":
-        from kartograf.providers.soilgrids import SoilGridsProvider
-
-        soilgrids = SoilGridsProvider()
         print("  Available soil properties:")
         for prop in soilgrids.get_available_properties():
             desc = soilgrids.get_property_description(prop)
@@ -116,6 +128,45 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
 
 def cmd_landcover_download(args: argparse.Namespace) -> int:
     """Execute landcover download command."""
+    missing = []
+    if args.source is None:
+        missing.append(
+            "--source wymagane: bdot10k (wektorowa baza topograficzna GUGiK), "
+            "corine (pokrycie terenu Copernicus), soilgrids (gleby ISRIC)"
+        )
+    if args.output is None:
+        missing.append("--output wymagane: dowolna sciezka katalogu wyniku")
+    if args.source == "corine" and args.year is None:
+        missing.append(
+            "--year wymagane dla corine: 2018, 2012, 2006, 2000 "
+            "(edycje pokrycia terenu CLMS/WMS), 1990 (tylko podglad WMS)"
+        )
+    if args.source == "soilgrids":
+        if args.property is None:
+            missing.append(
+                "--property wymagane dla soilgrids: bdod (gestosc objetosciowa), "
+                "cec (pojemnosc sorpcyjna), cfvo (frakcja szkieletowa), clay (il), "
+                "nitrogen (azot), ocd (gestosc wegla organicznego), "
+                "ocs (zasob wegla organicznego), phh2o (pH), sand (piasek), "
+                "silt (pyl), soc (wegiel organiczny)"
+            )
+        if args.depth is None:
+            missing.append(
+                "--depth wymagane dla soilgrids: 0-5cm, 5-15cm, 15-30cm, "
+                "30-60cm, 60-100cm, 100-200cm "
+                "(przedzial glebokosci ponizej powierzchni)"
+            )
+        if args.stat is None:
+            missing.append(
+                "--stat wymagane dla soilgrids: mean (srednia), "
+                "Q0.05 (5. percentyl), Q0.5 (mediana), "
+                "Q0.95 (95. percentyl), uncertainty (niepewnosc predykcji)"
+            )
+    if missing:
+        for error in missing:
+            print(f"Error: {error}", file=sys.stderr)
+        return 1
+
     # Check that exactly one selection method is provided
     has_geometry = getattr(args, "geometry", None) is not None
     methods = [args.teryt, args.bbox, args.sheet]

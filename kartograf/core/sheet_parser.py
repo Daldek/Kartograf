@@ -952,8 +952,8 @@ def _bboxes_intersect(a: BBox, b: BBox) -> bool:
 
 def find_sheets_for_bbox(
     bbox: BBox,
-    target_scale: str = "1:10000",
-    system: str = "1992",
+    target_scale: str,
+    system: str,
 ) -> list[str]:
     """
     Find the sheet codes of the sheets covering the given bounding box.
@@ -975,10 +975,12 @@ def find_sheets_for_bbox(
     bbox : BBox
         Bounding box in EPSG:2180 or EPSG:4326
     target_scale : str
-        Target scale (default: "1:10000")
+        PL-1992: "1:1000000", "1:500000", "1:200000", "1:100000",
+        "1:50000", "1:25000" or "1:10000" (published sheet scale).
+        PL-2000: "1:10000", "1:5000", "1:2000", "1:1000" or "1:500".
     system : str
-        Coordinate system: "1992" (PL-1992) or "2000" (PL-2000).
-        Default: "1992" - full backward compatibility.
+        "1992" selects the PL-1992 sheet hierarchy; "2000" selects the
+        PL-2000 zonal grid.
 
     Returns
     -------

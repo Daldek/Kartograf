@@ -153,7 +153,7 @@ class TestConvexGeometry:
 
 class TestFootprintParsing:
     def test_real_pl2000_footprint_is_easting_northing(self):
-        provider = GugikLazProvider(session=laz_session())
+        provider = GugikLazProvider(session=laz_session(), vertical_crs="EVRF2007")
         (tile,) = provider.select_tiles(W2_AREA, year=2022).tiles
         assert tile.sheet == OLD_2000
         assert tile.footprint is not None
@@ -174,7 +174,9 @@ class TestFootprintParsing:
 class TestSelectTilesOnRealWfs:
     def test_newest_tile_covers_area_older_systems_are_skipped(self):
         """C13 L1: 2025/PL-1992 covers the area -> 2022/PL-2000 and 2023 skipped."""
-        selection = GugikLazProvider(session=laz_session()).select_tiles(W2_AREA)
+        selection = GugikLazProvider(
+            session=laz_session(), vertical_crs="EVRF2007"
+        ).select_tiles(W2_AREA)
         assert [(t.sheet, t.year) for t in selection.tiles] == [(NEW_1992, 2025)]
         skipped = {(s.tile.sheet, s.tile.year): s for s in selection.superseded}
         assert set(skipped) == {(OLD_2000, 2022), (NEW_1992, 2023)}
@@ -183,15 +185,15 @@ class TestSelectTilesOnRealWfs:
             assert entry.reason == "covered"
 
     def test_discover_tiles_returns_the_selected_tiles(self):
-        provider = GugikLazProvider(session=laz_session())
+        provider = GugikLazProvider(session=laz_session(), vertical_crs="EVRF2007")
         assert [(t.sheet, t.year) for t in provider.discover_tiles(W2_AREA)] == [
             (NEW_1992, 2025)
         ]
 
     def test_year_restricts_to_one_year_without_cross_year_dedup(self):
-        selection = GugikLazProvider(session=laz_session()).select_tiles(
-            W2_AREA, year=2022
-        )
+        selection = GugikLazProvider(
+            session=laz_session(), vertical_crs="EVRF2007"
+        ).select_tiles(W2_AREA, year=2022)
         assert [(t.sheet, t.year) for t in selection.tiles] == [(OLD_2000, 2022)]
         assert selection.superseded == ()
 

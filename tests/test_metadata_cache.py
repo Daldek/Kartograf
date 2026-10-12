@@ -446,15 +446,6 @@ class TestMetadataCacheManagement:
         assert "MetadataCache" in r
         assert "ttl_seconds" in r
 
-    def test_default_db_path(self, tmp_path, monkeypatch):
-        """Test that default db path is in CWD."""
-        monkeypatch.chdir(tmp_path)
-        c = MetadataCache()
-        try:
-            assert str(tmp_path / ".kartograf_cache.db") == c.stats()["db_path"]
-        finally:
-            c.close()
-
 
 # =========================================================================
 # TestGugikProviderCacheIntegration
@@ -469,7 +460,9 @@ class TestGugikProviderCacheIntegration:
         cache.set_record("nmt", "1m", "EVRF2007", SHEET, {"source": SOURCE})
 
         mock_session = Mock(spec=requests.Session)
-        provider = GugikProvider(session=mock_session, cache=cache)
+        provider = GugikProvider(
+            session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+        )
 
         assert provider._get_opendata_url(SHEET) == SOURCE["url"]
         mock_session.get.assert_not_called()
@@ -479,7 +472,9 @@ class TestGugikProviderCacheIntegration:
         cache.set_record("nmt", "1m", "EVRF2007", SHEET, {"no_coverage": True})
 
         mock_session = Mock(spec=requests.Session)
-        provider = GugikProvider(session=mock_session, cache=cache)
+        provider = GugikProvider(
+            session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+        )
 
         with pytest.raises(NoCoverageError, match=SHEET):
             provider._get_opendata_url(SHEET)
@@ -492,7 +487,9 @@ class TestGugikProviderCacheIntegration:
             render_gfi_body([gfi_record(SHEET)])
         )
 
-        provider = GugikProvider(session=mock_session, cache=cache)
+        provider = GugikProvider(
+            session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+        )
         result = provider._get_opendata_url(SHEET)
 
         expected_url = gfi_record(SHEET)["url"]
@@ -510,7 +507,9 @@ class TestGugikProviderCacheIntegration:
         mock_session.get.return_value = _gfi_response(
             render_gfi_body([gfi_record(sheet, resolution="5.00 m")])
         )
-        provider = GugikProvider(session=mock_session, cache=cache)
+        provider = GugikProvider(
+            session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+        )
         with pytest.raises(NoCoverageError) as first:
             provider._get_opendata_url(sheet)
         assert first.value.hints
@@ -520,7 +519,9 @@ class TestGugikProviderCacheIntegration:
 
         offline = Mock(spec=requests.Session)
         with pytest.raises(NoCoverageError) as hit:
-            GugikProvider(session=offline, cache=cache)._get_opendata_url(sheet)
+            GugikProvider(
+                session=offline, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+            )._get_opendata_url(sheet)
         offline.get.assert_not_called()
         assert hit.value.hints == first.value.hints
 
@@ -530,7 +531,10 @@ class TestGugikProviderCacheIntegration:
         )
         with pytest.raises(NoCoverageError) as hit:
             GugikProvider(
-                session=Mock(spec=requests.Session), cache=cache
+                session=Mock(spec=requests.Session),
+                cache=cache,
+                vertical_crs="EVRF2007",
+                resolution="1m",
             )._get_opendata_url(SHEET)
         assert hit.value.hints == ()
 
@@ -539,7 +543,9 @@ class TestGugikProviderCacheIntegration:
         mock_session = Mock(spec=requests.Session)
         mock_session.get.return_value = _gfi_response(render_gfi_body([]))
 
-        provider = GugikProvider(session=mock_session, cache=cache)
+        provider = GugikProvider(
+            session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+        )
         with pytest.raises(NoCoverageError, match=SHEET):
             provider._get_opendata_url(SHEET)
 
@@ -557,7 +563,9 @@ class TestGugikProviderCacheIntegration:
         mock_session = Mock(spec=requests.Session)
         mock_session.get.side_effect = [requests.ConnectionError("boom")] * 3
 
-        provider = GugikProvider(session=mock_session, cache=cache)
+        provider = GugikProvider(
+            session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+        )
         with patch("time.sleep") as sleep, pytest.raises(DownloadError) as excinfo:
             provider._get_opendata_url(SHEET)
 
@@ -574,7 +582,9 @@ class TestGugikProviderCacheIntegration:
             render_gfi_body([gfi_record(SHEET)])
         )
 
-        provider = GugikProvider(session=mock_session)
+        provider = GugikProvider(
+            session=mock_session, vertical_crs="EVRF2007", resolution="1m"
+        )
         assert provider._get_opendata_url(SHEET) == gfi_record(SHEET)["url"]
 
     def test_5m_resolution_with_cache(self, cache):
@@ -583,7 +593,9 @@ class TestGugikProviderCacheIntegration:
             "nmt", "5m", "EVRF2007", SHEET, {"source": {**SOURCE, "resolution_m": 5.0}}
         )
         mock_session = Mock(spec=requests.Session)
-        provider = GugikProvider(session=mock_session, resolution="5m", cache=cache)
+        provider = GugikProvider(
+            session=mock_session, resolution="5m", cache=cache, vertical_crs="EVRF2007"
+        )
         assert provider._get_opendata_url(SHEET) == SOURCE["url"]
         mock_session.get.assert_not_called()
 
@@ -612,7 +624,9 @@ class TestGugikNmptProviderCacheIntegration:
         cache.set_record("nmpt", "1m", "EVRF2007", SHEET, {"source": nmpt_source})
 
         mock_session = Mock(spec=requests.Session)
-        provider = GugikNmptProvider(session=mock_session, cache=cache)
+        provider = GugikNmptProvider(
+            session=mock_session, cache=cache, vertical_crs="EVRF2007"
+        )
 
         assert provider._get_opendata_url(SHEET) == nmpt_source["url"]
         mock_session.get.assert_not_called()
@@ -626,7 +640,9 @@ class TestGugikNmptProviderCacheIntegration:
             render_gfi_body([gfi_record(SHEET, url=nmpt_url)])
         )
 
-        provider = GugikNmptProvider(session=mock_session, cache=cache)
+        provider = GugikNmptProvider(
+            session=mock_session, cache=cache, vertical_crs="EVRF2007"
+        )
         assert provider._get_opendata_url(SHEET) == nmpt_url
 
         assert mock_session.get.call_count == 1
@@ -1242,13 +1258,6 @@ class TestLazyOpen:
         assert c._conn is None
         c.close()
         assert not cache_path.exists()
-
-    def test_default_path_constructor_does_not_create_file(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        c = MetadataCache()
-        assert c.db_path == tmp_path / ".kartograf_cache.db"
-        c.close()
-        assert list(tmp_path.iterdir()) == []
 
     def test_reads_on_missing_file_miss_without_creating(self, cache_path):
         c = MetadataCache(db_path=cache_path)

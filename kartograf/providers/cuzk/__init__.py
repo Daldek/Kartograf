@@ -18,13 +18,20 @@ __all__ = [
 
 
 def create_dmr_provider(
-    resolution: str = "2m",
+    resolution: str,
     session: requests.Session | None = None,
     cache: MetadataCache | None = None,
     target_crs: str | None = None,
-    vertical_crs: str = "Bpv",
+    *,
+    vertical_crs: str,
 ) -> CuzkDmrProvider:
-    """DMR provider factory — the one place for Czech defaults (model: pl)."""
+    """Build CZ DMR: 2m DMR 5G or 5m DMR 4G (SM5 sheets).
+
+    ``vertical_crs`` is "Bpv" (native Baltic heights) or "EVRF2007"
+    (reprojected European heights). ``target_crs=None`` keeps native
+    EPSG:5514; ``session=None`` creates a session and ``cache=None``
+    disables metadata caching.
+    """
     if resolution not in {"2m", "5m"}:
         raise ValidationError(
             f"Nieobslugiwana rozdzielczosc CZ: '{resolution}' (dostepne: 2m, 5m)"

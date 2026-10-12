@@ -43,25 +43,10 @@ def _layer_of(url: str) -> str:
 class TestGugikNmptProviderInit:
     """Tests of GugikNmptProvider initialization."""
 
-    def test_default_vertical_crs(self):
-        """Test that the default vertical CRS is EVRF2007."""
-        provider = GugikNmptProvider()
-        assert provider.vertical_crs == "EVRF2007"
-
     def test_resolution_is_1m(self):
         """Test that the resolution is always 1m - NMPT has no 5m."""
-        provider = GugikNmptProvider()
+        provider = GugikNmptProvider(vertical_crs="EVRF2007")
         assert provider.resolution == "1m"
-
-    def test_invalid_resolution_not_possible(self):
-        """Test that __init__ forces resolution='1m' - no other can be given."""
-        # GugikNmptProvider.__init__ always passes resolution="1m" to super()
-        # The only parameters are vertical_crs and session - no resolution argument
-        provider = GugikNmptProvider()
-        assert provider.resolution == "1m"
-
-        # SUPPORTED_RESOLUTIONS contains only "1m"
-        assert provider.SUPPORTED_RESOLUTIONS == ["1m"]
 
     def test_custom_vertical_crs_kron86(self):
         """Test creating the provider with KRON86."""
@@ -84,29 +69,29 @@ class TestGugikNmptProviderProperties:
 
     def test_name(self):
         """Test that name returns 'GUGiK NMPT'."""
-        provider = GugikNmptProvider()
+        provider = GugikNmptProvider(vertical_crs="EVRF2007")
         assert provider.name == "GUGiK NMPT"
 
     def test_base_url(self):
         """Test that base_url returns the geoportal URL."""
-        provider = GugikNmptProvider()
+        provider = GugikNmptProvider(vertical_crs="EVRF2007")
         assert provider.base_url == "https://mapy.geoportal.gov.pl"
 
     def test_default_extension(self):
         """Test that the default extension is .asc."""
-        provider = GugikNmptProvider()
+        provider = GugikNmptProvider(vertical_crs="EVRF2007")
         assert provider.default_extension == ".asc"
 
     def test_repr(self):
         """Test that repr contains 'GugikNmptProvider'."""
-        provider = GugikNmptProvider()
+        provider = GugikNmptProvider(vertical_crs="EVRF2007")
         repr_str = repr(provider)
         assert "GugikNmptProvider" in repr_str
         assert "mapy.geoportal.gov.pl" in repr_str
 
     def test_str(self):
         """Test that str contains 'GUGiK NMPT'."""
-        provider = GugikNmptProvider()
+        provider = GugikNmptProvider(vertical_crs="EVRF2007")
         str_repr = str(provider)
         assert "GUGiK NMPT" in str_repr
         assert "mapy.geoportal.gov.pl" in str_repr
@@ -122,7 +107,7 @@ class TestGugikNmptProviderEndpoints:
 
     def test_wcs_endpoints_are_nmpt(self):
         """Test that the WCS endpoints contain 'NMPT' (not 'NMT')."""
-        provider = GugikNmptProvider()
+        provider = GugikNmptProvider(vertical_crs="EVRF2007")
         for crs, url in provider.WCS_ENDPOINTS.items():
             assert "NMPT" in url, f"WCS endpoint for {crs} should contain 'NMPT'"
             assert "NMT/" not in url, (
@@ -131,7 +116,7 @@ class TestGugikNmptProviderEndpoints:
 
     def test_wms_endpoints_are_nmpt(self):
         """Test that the WMS index endpoints contain 'NMPT'."""
-        provider = GugikNmptProvider()
+        provider = GugikNmptProvider(vertical_crs="EVRF2007")
         for resolution, crs_endpoints in provider.WMS_INDEX_ENDPOINTS.items():
             for crs, url in crs_endpoints.items():
                 assert "NMPT" in url, (
@@ -140,7 +125,7 @@ class TestGugikNmptProviderEndpoints:
 
     def test_coverage_ids_are_dsm(self):
         """Test that the coverage IDs are DSM_PL-* (not DTM)."""
-        provider = GugikNmptProvider()
+        provider = GugikNmptProvider(vertical_crs="EVRF2007")
         for crs, coverage_id in provider.COVERAGE_IDS.items():
             assert coverage_id.startswith("DSM_PL-"), (
                 f"Coverage ID for {crs} should start with "
@@ -207,7 +192,7 @@ class TestGugikNmptProviderDownload:
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[mock_wms_response, mock_opendata_response])
 
-        provider = GugikNmptProvider(session=session)
+        provider = GugikNmptProvider(session=session, vertical_crs="EVRF2007")
         output_path = tmp_path / "test.asc"
 
         result = provider.download("N-34-130-D", output_path)
@@ -281,8 +266,10 @@ class TestGugikNmptProviderDownload:
         1 Mpx of result; NMT EVRF2007 (1 m coverage, 1 Mpx budget) gets the same."""
         bbox = BBox(567099.5, 243999.5, 569099.5, 244999.5, "EPSG:2180")
 
-        nmpt = GugikNmptProvider().plan_wcs_chunks(bbox)
-        nmt = GugikProvider(vertical_crs="EVRF2007").plan_wcs_chunks(bbox)
+        nmpt = GugikNmptProvider(vertical_crs="EVRF2007").plan_wcs_chunks(bbox)
+        nmt = GugikProvider(vertical_crs="EVRF2007", resolution="1m").plan_wcs_chunks(
+            bbox
+        )
 
         assert len(nmpt) == 2 and max(c.width * c.height for c in nmpt) <= 1_000_000
         assert [(c.width, c.height) for c in nmt] == [(c.width, c.height) for c in nmpt]
@@ -303,7 +290,9 @@ class TestGugikNmptProviderDownload:
         output_path = tmp_path / "err.tif"
 
         with pytest.raises(DownloadError, match="ExceptionReport"):
-            GugikNmptProvider(session=session).download_bbox(sample_bbox, output_path)
+            GugikNmptProvider(session=session, vertical_crs="EVRF2007").download_bbox(
+                sample_bbox, output_path
+            )
         assert not output_path.exists()
 
     def test_get_opendata_url_uses_nmpt_endpoint(self, mock_wms_response):
@@ -311,7 +300,7 @@ class TestGugikNmptProviderDownload:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=mock_wms_response)
 
-        provider = GugikNmptProvider(session=session)
+        provider = GugikNmptProvider(session=session, vertical_crs="EVRF2007")
         url = provider._get_opendata_url("N-34-130-D")
 
         assert url == NMPT_OPENDATA_URL
@@ -333,15 +322,15 @@ class TestGugikNmptProviderInheritance:
 
     def test_is_instance_of_base_provider(self):
         """Test that GugikNmptProvider is an instance of BaseProvider."""
-        provider = GugikNmptProvider()
+        provider = GugikNmptProvider(vertical_crs="EVRF2007")
         assert isinstance(provider, BaseProvider)
 
     def test_is_instance_of_gugik_provider(self):
         """Test that GugikNmptProvider is an instance of GugikProvider."""
-        provider = GugikNmptProvider()
+        provider = GugikNmptProvider(vertical_crs="EVRF2007")
         assert isinstance(provider, GugikProvider)
 
     def test_inherits_retry_logic(self):
         """Test that MAX_RETRIES is inherited and equals 3."""
-        provider = GugikNmptProvider()
+        provider = GugikNmptProvider(vertical_crs="EVRF2007")
         assert provider.MAX_RETRIES == 3

@@ -1265,14 +1265,14 @@ class TestFindSheets2000ForBBox:
         bbox = BBox(
             min_x=6430000, min_y=5816000, max_x=6434000, max_y=5818000, crs="EPSG:2177"
         )
-        result = find_sheets_2000_for_bbox(bbox)
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
         assert result == ["6.179.12"]
 
     def test_single_10k_sheet_wgs84(self):
         """A WGS84 bbox inside one 1:10k sheet -> auto-detect zone."""
         # 6.179.12 WGS84 bbox: lon ~16.94-17.06, lat ~52.46-52.51
         bbox = BBox(min_x=16.97, min_y=52.47, max_x=17.03, max_y=52.50, crs="EPSG:4326")
-        result = find_sheets_2000_for_bbox(bbox)
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
         assert result == ["6.179.12"]
 
     # --- Multiple 1:10000 sheets ---
@@ -1285,7 +1285,7 @@ class TestFindSheets2000ForBBox:
         bbox = BBox(
             min_x=6434000, min_y=5816000, max_x=6438000, max_y=5818000, crs="EPSG:2177"
         )
-        result = find_sheets_2000_for_bbox(bbox)
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
         assert "6.179.12" in result
         assert "6.179.13" in result
         assert len(result) >= 2
@@ -1298,7 +1298,7 @@ class TestFindSheets2000ForBBox:
         bbox = BBox(
             min_x=6434000, min_y=5818000, max_x=6438000, max_y=5822000, crs="EPSG:2177"
         )
-        result = find_sheets_2000_for_bbox(bbox)
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
         assert "6.179.12" in result
         assert "6.179.13" in result
         assert "6.180.12" in result
@@ -1379,7 +1379,7 @@ class TestFindSheets2000ForBBox:
             max_y=wgs_bbox.max_y - 0.01,
             crs="EPSG:4326",
         )
-        result = find_sheets_2000_for_bbox(bbox)
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
         assert "6.179.12" in result
 
     def test_wgs84_bbox_auto_detect_zone_7(self):
@@ -1393,7 +1393,7 @@ class TestFindSheets2000ForBBox:
             max_y=wgs_bbox.max_y - 0.01,
             crs="EPSG:4326",
         )
-        result = find_sheets_2000_for_bbox(bbox)
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
         assert "7.179.12" in result
 
     # --- Bbox w EPSG:2180 (PL-1992) ---
@@ -1410,7 +1410,7 @@ class TestFindSheets2000ForBBox:
             max_y=bbox_2180.max_y - 500,
             crs="EPSG:2180",
         )
-        result = find_sheets_2000_for_bbox(bbox)
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
         assert "6.179.12" in result
 
     # --- Roundtrip: get_bbox -> find_sheets -> original sheet ---
@@ -1427,7 +1427,7 @@ class TestFindSheets2000ForBBox:
             max_y=native_bbox.max_y - 100,
             crs=native_bbox.crs,
         )
-        result = find_sheets_2000_for_bbox(bbox)
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
         assert "6.179.12" in result
 
     def test_roundtrip_zone_5(self):
@@ -1441,7 +1441,7 @@ class TestFindSheets2000ForBBox:
             max_y=native_bbox.max_y - 100,
             crs=native_bbox.crs,
         )
-        result = find_sheets_2000_for_bbox(bbox)
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
         assert "5.179.12" in result
 
     def test_roundtrip_zone_8(self):
@@ -1456,7 +1456,7 @@ class TestFindSheets2000ForBBox:
             max_y=native_bbox.max_y - 100,
             crs=native_bbox.crs,
         )
-        result = find_sheets_2000_for_bbox(bbox)
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
         assert "8.100.15" in result
 
     def test_roundtrip_2k(self):
@@ -1484,7 +1484,7 @@ class TestFindSheets2000ForBBox:
             max_y=wgs_bbox.max_y - 0.01,
             crs="EPSG:4326",
         )
-        result = find_sheets_2000_for_bbox(bbox)
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
         assert "6.179.12" in result
 
     # --- Explicit zone parameter ---
@@ -1495,7 +1495,7 @@ class TestFindSheets2000ForBBox:
         bbox = BBox(
             min_x=6430000, min_y=5816000, max_x=6434000, max_y=5818000, crs="EPSG:2177"
         )
-        result = find_sheets_2000_for_bbox(bbox, zone=6)
+        result = find_sheets_2000_for_bbox(bbox, zone=6, target_scale="1:10000")
         assert "6.179.12" in result
         # All results are in zone 6
         for sheet in result:
@@ -1515,7 +1515,7 @@ class TestFindSheets2000ForBBox:
             max_y=wgs_bbox.max_y - 0.01,
             crs="EPSG:4326",
         )
-        result = find_sheets_2000_for_bbox(bbox, zone=7)
+        result = find_sheets_2000_for_bbox(bbox, zone=7, target_scale="1:10000")
         assert result == []
 
     # --- Sorted results ---
@@ -1525,7 +1525,7 @@ class TestFindSheets2000ForBBox:
         bbox = BBox(
             min_x=6434000, min_y=5818000, max_x=6438000, max_y=5822000, crs="EPSG:2177"
         )
-        result = find_sheets_2000_for_bbox(bbox)
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
         assert result == sorted(result)
 
     def test_results_sorted_2k(self):
@@ -1542,7 +1542,7 @@ class TestFindSheets2000ForBBox:
         """A bbox on the zone 6/7 border (lon ~19.5) -> sheets from both zones."""
         # The border of zones 6/7 is at 19.5E
         bbox = BBox(min_x=19.4, min_y=52.0, max_x=19.6, max_y=52.1, crs="EPSG:4326")
-        result = find_sheets_2000_for_bbox(bbox)
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
         # There should be sheets from both zones
         has_zone_6 = any(g.startswith("6.") for g in result)
         has_zone_7 = any(g.startswith("7.") for g in result)
@@ -1562,7 +1562,7 @@ class TestFindSheets2000ForBBox:
         """A bbox equal to a 1:10000 sheet -> exactly that one sheet."""
         sheet = "6.179.12"
         bbox = Parser2000(sheet).get_bbox()
-        assert find_sheets_2000_for_bbox(bbox) == [sheet]
+        assert find_sheets_2000_for_bbox(bbox, target_scale="1:10000") == [sheet]
 
     def test_point_bbox_2000_on_grid_line_returns_single_sheet(self):
         """A degenerate bbox on a grid line -> exactly 1 sheet (NE of the line)."""
@@ -1570,7 +1570,7 @@ class TestFindSheets2000ForBBox:
         bbox = BBox(
             min_x=6428000, min_y=5815000, max_x=6428000, max_y=5815000, crs="EPSG:2177"
         )
-        result = find_sheets_2000_for_bbox(bbox)
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
         assert result == ["6.179.12"]
 
     def test_hairline_bbox_2000_across_grid_line_returns_single_sheet(self):
@@ -1584,11 +1584,13 @@ class TestFindSheets2000ForBBox:
             max_y=5816000 + 1.2e-9,
             crs="EPSG:2177",
         )
-        assert find_sheets_2000_for_bbox(bbox) == ["6.179.12"]
+        assert find_sheets_2000_for_bbox(bbox, target_scale="1:10000") == ["6.179.12"]
 
     def test_point_on_zone_boundary_meridian_returns_single_sheet(self):
         """A point exactly on the meridian of the zone 6/7 border -> 1 zone-7 sheet."""
-        result = find_sheets_2000_for_bbox(BBox(19.5, 52.0, 19.5, 52.0, "EPSG:4326"))
+        result = find_sheets_2000_for_bbox(
+            BBox(19.5, 52.0, 19.5, 52.0, "EPSG:4326"), target_scale="1:10000"
+        )
         assert len(result) == 1
         assert result[0].startswith("7.")
 
@@ -1597,7 +1599,7 @@ class TestFindSheets2000ForBBox:
         bbox = BBox(
             min_x=6430000, min_y=5817000, max_x=6430000, max_y=5817000, crs="EPSG:2177"
         )
-        assert find_sheets_2000_for_bbox(bbox) == ["6.179.12"]
+        assert find_sheets_2000_for_bbox(bbox, target_scale="1:10000") == ["6.179.12"]
 
     # --- Return types ---
 
@@ -1606,7 +1608,7 @@ class TestFindSheets2000ForBBox:
         bbox = BBox(
             min_x=6430000, min_y=5816000, max_x=6434000, max_y=5818000, crs="EPSG:2177"
         )
-        result = find_sheets_2000_for_bbox(bbox)
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
         assert isinstance(result, list)
         for item in result:
             assert isinstance(item, str)
@@ -1628,7 +1630,7 @@ class TestFindSheets2000ForBBox:
         bbox = BBox(
             min_x=6434000, min_y=5818000, max_x=6438000, max_y=5822000, crs="EPSG:2177"
         )
-        result = find_sheets_2000_for_bbox(bbox)
+        result = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
         for sheet in result:
             p = Parser2000(sheet)
             assert p.scale == "1:10000"
@@ -1692,18 +1694,19 @@ class TestFindSheets2000DenseEnvelope:
     def test_row_across_central_meridian_is_kept(self):
         from kartograf.core.sheet_parser import find_sheets_for_bbox
 
-        result = find_sheets_for_bbox(self.BBOX, system="2000")
+        result = find_sheets_for_bbox(self.BBOX, system="2000", target_scale="1:10000")
         assert {"6.135.17", "6.135.18", "6.135.19"} <= set(result)
         assert len(result) == 16
 
     def test_find_sheets_2000_directly(self):
-        result = find_sheets_2000_for_bbox(self.BBOX)
+        result = find_sheets_2000_for_bbox(self.BBOX, target_scale="1:10000")
         assert {"6.135.17", "6.135.18", "6.135.19"} <= set(result)
 
     def test_inverted_bbox_rejected(self):
         with pytest.raises(ValidationError, match="odwrocony"):
             find_sheets_2000_for_bbox(
-                BBox(6_500_000, 5_600_000, 6_490_000, 5_590_000, "EPSG:2177")
+                BBox(6_500_000, 5_600_000, 6_490_000, 5_590_000, "EPSG:2177"),
+                target_scale="1:10000",
             )
 
     def test_get_bbox_to_4326_uses_cached_transformer(self):

@@ -443,7 +443,7 @@ LIVE_INDEX_ENDPOINTS = [
         id="nmt-1m-kron86",
     ),
     pytest.param(
-        GugikProvider(resolution="5m"),
+        GugikProvider(resolution="5m", vertical_crs="EVRF2007"),
         GugikProvider.WMS_INDEX_ENDPOINTS["5m"]["EVRF2007"],
         True,
         id="nmt-5m-evrf2007",
@@ -455,7 +455,7 @@ LIVE_INDEX_ENDPOINTS = [
         id="nmpt-1m-evrf2007",
     ),
     pytest.param(
-        GugikOrtoProvider(),
+        GugikOrtoProvider(color="RGB"),
         GugikOrtoProvider.WMS_INDEX_ENDPOINT,
         True,
         id="orto",
@@ -502,7 +502,7 @@ class TestLiveGugikIndex:
 
     def test_land_sheet_resolves_to_matching_asc(self):
         """D4 live: a URL with the sheet code as a WHOLE token and 5 m resolution."""
-        provider = GugikProvider(resolution="5m")
+        provider = GugikProvider(resolution="5m", vertical_crs="EVRF2007")
 
         url = provider._get_opendata_url("N-33-48-C-a-3-4", timeout=LIVE_TIMEOUT)
 
@@ -518,7 +518,7 @@ class TestLiveGugikIndex:
 
     def test_sea_sheet_is_no_coverage(self):
         """Sea (N-33-48-C-a-1-3): all layers empty = NoCoverageError (R5)."""
-        provider = GugikProvider(resolution="5m")
+        provider = GugikProvider(resolution="5m", vertical_crs="EVRF2007")
 
         with pytest.raises(NoCoverageError) as exc:
             provider._get_opendata_url("N-33-48-C-a-1-3", timeout=LIVE_TIMEOUT)
@@ -527,7 +527,7 @@ class TestLiveGugikIndex:
 
     def test_unknown_layer_is_service_exception_not_no_coverage(self):
         """Nonexistent layer: an OGC report = DownloadError, never no coverage."""
-        provider = GugikProvider()
+        provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
         _, _, query_bbox = _center_query_bbox("N-33-48-C-a-3-4")
 
         with pytest.raises(DownloadError, match="OGC") as exc:
@@ -590,7 +590,7 @@ class TestPL2000EdgeCases:
         """A BBox crossing the zone 5/6 boundary (16.5E) gets sheets of both zones."""
         # BBox in WGS84 crossing 16.5E (zone 5/6 boundary)
         bbox = BBox(min_x=16.3, min_y=52.0, max_x=16.7, max_y=52.1, crs="EPSG:4326")
-        sheets = find_sheets_2000_for_bbox(bbox)
+        sheets = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
 
         zones_found = set()
         for sheet in sheets:
@@ -603,7 +603,7 @@ class TestPL2000EdgeCases:
     def test_multi_zone_bbox_crossing_19_5(self):
         """A BBox crossing the zone 6/7 boundary (19.5E) gets sheets of both zones."""
         bbox = BBox(min_x=19.3, min_y=52.0, max_x=19.7, max_y=52.1, crs="EPSG:4326")
-        sheets = find_sheets_2000_for_bbox(bbox)
+        sheets = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
 
         zones_found = set()
         for sheet in sheets:
@@ -616,7 +616,7 @@ class TestPL2000EdgeCases:
     def test_multi_zone_bbox_crossing_22_5(self):
         """A BBox crossing the zone 7/8 boundary (22.5E) gets sheets of both zones."""
         bbox = BBox(min_x=22.3, min_y=52.0, max_x=22.7, max_y=52.1, crs="EPSG:4326")
-        sheets = find_sheets_2000_for_bbox(bbox)
+        sheets = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
 
         zones_found = set()
         for sheet in sheets:
@@ -648,7 +648,7 @@ class TestPL2000EdgeCases:
                 crs=bbox.crs,
             )
 
-            sheets = find_sheets_2000_for_bbox(inner_bbox)
+            sheets = find_sheets_2000_for_bbox(inner_bbox, target_scale="1:10000")
             assert sheet in sheets, (
                 f"Round-trip failed: {sheet} not found in "
                 f"find_sheets_2000_for_bbox result {sheets}"
@@ -670,7 +670,7 @@ class TestPL2000EdgeCases:
             crs=bbox.crs,
         )
 
-        sheets = find_sheets_2000_for_bbox(point_bbox)
+        sheets = find_sheets_2000_for_bbox(point_bbox, target_scale="1:10000")
         assert len(sheets) == 1
         assert sheets[0] == "6.179.12"
 
@@ -680,14 +680,14 @@ class TestPL2000EdgeCases:
         bbox = BBox(min_x=16.3, min_y=52.0, max_x=16.7, max_y=52.1, crs="EPSG:4326")
 
         # Without zone restriction — finds from both zones
-        sheets_all = find_sheets_2000_for_bbox(bbox)
+        sheets_all = find_sheets_2000_for_bbox(bbox, target_scale="1:10000")
         zones_all = {int(g.split(".")[0]) for g in sheets_all}
 
         # With zone restriction — only one zone
-        sheets_z5 = find_sheets_2000_for_bbox(bbox, zone=5)
+        sheets_z5 = find_sheets_2000_for_bbox(bbox, zone=5, target_scale="1:10000")
         zones_z5 = {int(g.split(".")[0]) for g in sheets_z5}
 
-        sheets_z6 = find_sheets_2000_for_bbox(bbox, zone=6)
+        sheets_z6 = find_sheets_2000_for_bbox(bbox, zone=6, target_scale="1:10000")
         zones_z6 = {int(g.split(".")[0]) for g in sheets_z6}
 
         # zone=5 should only return zone 5 sheets
@@ -818,7 +818,7 @@ class TestPL2000EdgeCases:
             crs="EPSG:2180",
         )
 
-        sheets = find_sheets_2000_for_bbox(inner_bbox)
+        sheets = find_sheets_2000_for_bbox(inner_bbox, target_scale="1:10000")
         assert "6.179.12" in sheets
 
     def test_bbox_in_native_zone_crs(self):
@@ -835,5 +835,5 @@ class TestPL2000EdgeCases:
             crs=bbox.crs,
         )
 
-        sheets = find_sheets_2000_for_bbox(inner_bbox)
+        sheets = find_sheets_2000_for_bbox(inner_bbox, target_scale="1:10000")
         assert "6.179.12" in sheets

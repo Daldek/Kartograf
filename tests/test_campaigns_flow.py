@@ -102,11 +102,15 @@ def sidecar(path: Path) -> Path:
 
 def test_end_to_end_all_on_real_c14_bodies(tmp_path):
     m = DownloadManager(
-        tmp_path, provider=GugikProvider(session=c14_session(G)), all_campaigns=True
+        tmp_path,
+        provider=GugikProvider(
+            session=c14_session(G), vertical_crs="EVRF2007", resolution="1m"
+        ),
+        all_campaigns=True,
     )
     m.download_sheet(G)
 
-    files = m.storage.list_files(campaigns=True)
+    files = m.storage.list_files("**/*.asc", campaigns=True)
     root = tmp_path / SEGMENT / "kampanie"
     assert sorted(p.relative_to(root).parts[0] for p in files) == [
         "2019-04-18_73021",
@@ -121,11 +125,16 @@ def test_end_to_end_all_on_real_c14_bodies(tmp_path):
 
 
 def test_download_sheet_returns_standard_path_readable_by_rasterio(tmp_path):
-    m = DownloadManager(tmp_path, provider=GugikProvider(session=c14_session(G)))
+    m = DownloadManager(
+        tmp_path,
+        provider=GugikProvider(
+            session=c14_session(G), vertical_crs="EVRF2007", resolution="1m"
+        ),
+    )
     path = m.download_sheet(G)
 
     assert path == std_path(tmp_path, G)
-    [campaign_file] = m.storage.list_files(campaigns=True)
+    [campaign_file] = m.storage.list_files("**/*.asc", campaigns=True)
     assert not path.is_symlink() and os.path.samefile(path, campaign_file)
     meta = json.loads(sidecar(path).read_text(encoding="utf-8"))
     assert meta["extra"]["link"] == "hardlink"
@@ -150,7 +159,11 @@ def test_end_to_end_all_with_real_xyz_campaign(tmp_path):
     )
     session = nmt_session(G2, "nmt1_evr", downloads={url: XYZ_HEAD})
     m = DownloadManager(
-        tmp_path, provider=GugikProvider(session=session), all_campaigns=True
+        tmp_path,
+        provider=GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        ),
+        all_campaigns=True,
     )
     m.download_sheet(G2)
 
@@ -172,14 +185,24 @@ def test_newest_uses_local_campaign_when_skorowidz_unreachable(tmp_path):
     campaign."""
     from unittest.mock import patch
 
-    m = DownloadManager(tmp_path, provider=GugikProvider(session=c14_session(G)))
+    m = DownloadManager(
+        tmp_path,
+        provider=GugikProvider(
+            session=c14_session(G), vertical_crs="EVRF2007", resolution="1m"
+        ),
+    )
     std = m.download_sheet(G)
     before = str(linked_campaign(std))
     assert "2025-10-21_84183" in before
 
     offline = Mock(spec=requests.Session)
     offline.get = Mock(side_effect=requests.ConnectionError("GUGiK lezy"))
-    m2 = DownloadManager(tmp_path, provider=GugikProvider(session=offline))
+    m2 = DownloadManager(
+        tmp_path,
+        provider=GugikProvider(
+            session=offline, vertical_crs="EVRF2007", resolution="1m"
+        ),
+    )
     with patch("kartograf.transport.http.time.sleep"):
         path = m2.download_sheet(G)
 

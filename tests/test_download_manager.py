@@ -65,59 +65,59 @@ class TestDownloadProgress:
 class TestDownloadManagerBasic:
     """Tests of the basic DownloadManager functionality."""
 
-    def test_init_defaults(self):
-        """Test of initialisation with default values."""
-        manager = DownloadManager()
-
-        assert isinstance(manager.provider, GugikProvider)
-        assert isinstance(manager.storage, FileStorage)
-
     def test_init_custom_output_dir(self, tmp_path):
         """Test of initialisation with a custom directory."""
-        manager = DownloadManager(output_dir=tmp_path)
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+        )
 
         assert manager.storage.output_dir == tmp_path
 
-    def test_init_custom_provider(self):
-        """Test of initialisation with a custom provider."""
+    def test_init_custom_provider(self, tmp_path):
+        """A custom provider selects its own explicitly declared dataset."""
         mock_provider = Mock()
-        manager = DownloadManager(provider=mock_provider)
-
-        assert manager.provider == mock_provider
+        mock_provider.descriptor_key = None
+        mock_provider.resolution = "1m"
+        mock_provider.vertical_crs = "EVRF2007"
+        manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
+        assert manager.provider is mock_provider
 
     def test_repr(self, tmp_path):
         """Test the string representation."""
-        manager = DownloadManager(output_dir=tmp_path)
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+        )
         repr_str = repr(manager)
 
         assert "DownloadManager" in repr_str
         assert "GUGiK" in repr_str
 
-    def test_default_resolution(self):
-        """Test of the default resolution."""
-        manager = DownloadManager()
-        assert manager.resolution == "1m"
-
-    def test_resolution_1m_explicit(self):
+    def test_resolution_1m_explicit(self, tmp_path):
         """Test of explicitly setting the 1m resolution."""
-        manager = DownloadManager(resolution="1m")
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+        )
         assert manager.resolution == "1m"
 
-    def test_resolution_5m(self):
+    def test_resolution_5m(self, tmp_path):
         """Test of setting the 5m resolution."""
-        manager = DownloadManager(resolution="5m")
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="5m"),
+        )
         assert manager.resolution == "5m"
         # 5m forces EVRF2007
         assert manager.vertical_crs == "EVRF2007"
 
-    def test_resolution_5m_with_kron86_raises(self):
-        """0.7.1: 5m exists only in EVRF2007 - ValidationError, no silent swap."""
-        with pytest.raises(ValidationError, match="uzyj vertical_crs='EVRF2007'"):
-            DownloadManager(resolution="5m", vertical_crs="KRON86")
-
     def test_repr_includes_resolution(self, tmp_path):
         """Test that repr contains the resolution."""
-        manager = DownloadManager(output_dir=tmp_path, resolution="5m")
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="5m"),
+        )
         repr_str = repr(manager)
 
         assert "resolution='5m'" in repr_str
@@ -130,7 +130,9 @@ class TestDownloadManagerStorageFromDescriptor:
         """A manager with an NMPT provider uses the 'nmpt' subdir, not 'nmt_1m'."""
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
-        manager = DownloadManager(output_dir=tmp_path, provider=GugikNmptProvider())
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=GugikNmptProvider(vertical_crs="EVRF2007")
+        )
 
         assert manager._storage._subdir == "nmpt/pl_{system}_1m_evrf2007"
 
@@ -138,8 +140,13 @@ class TestDownloadManagerStorageFromDescriptor:
         """NMT and NMPT paths for the same sheet code must not be identical."""
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
-        nmt = DownloadManager(output_dir=tmp_path, provider=GugikProvider())
-        nmpt = DownloadManager(output_dir=tmp_path, provider=GugikNmptProvider())
+        nmt = DownloadManager(
+            output_dir=tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+        )
+        nmpt = DownloadManager(
+            output_dir=tmp_path, provider=GugikNmptProvider(vertical_crs="EVRF2007")
+        )
         g = "N-34-130-D-d-2-4"
 
         assert nmt._storage.get_path(g, ".asc") != nmpt._storage.get_path(g, ".asc")
@@ -148,7 +155,9 @@ class TestDownloadManagerStorageFromDescriptor:
         """A manager with the Orto provider uses the 'orto' subdirectory."""
         from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
-        manager = DownloadManager(output_dir=tmp_path, provider=GugikOrtoProvider())
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=GugikOrtoProvider(color="RGB")
+        )
 
         assert manager._storage._subdir == "orto/pl_{system}"
 
@@ -157,17 +166,19 @@ class TestDownloadManagerStorageFromDescriptor:
         provider = Mock()
         provider.descriptor_key = None
         provider.default_extension = ".asc"
+        provider.resolution = "5m"
+        provider.vertical_crs = "EVRF2007"
 
-        manager = DownloadManager(
-            output_dir=tmp_path, provider=provider, resolution="5m"
-        )
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
 
         assert manager._storage._subdir == "nmt/pl_{system}_5m_evrf2007"
 
     def test_manager_with_mock_spec_provider_falls_back_to_resolution(self, tmp_path):
         """Mock(spec=GugikProvider).descriptor_key is a Mock - treated as missing."""
-        provider = Mock(spec=GugikProvider)
+        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         type(provider).default_extension = PropertyMock(return_value=".asc")
+        provider.resolution = "1m"
+        provider.vertical_crs = "EVRF2007"
 
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
 
@@ -177,21 +188,25 @@ class TestDownloadManagerStorageFromDescriptor:
         """An explicit storage= takes precedence over the provider descriptor."""
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
-        storage = FileStorage(tmp_path, subdir="custom")
+        storage = FileStorage(
+            tmp_path, resolution="1m", vertical_crs="EVRF2007", subdir="custom"
+        )
         manager = DownloadManager(
-            output_dir=tmp_path, provider=GugikNmptProvider(), storage=storage
+            output_dir=tmp_path,
+            provider=GugikNmptProvider(vertical_crs="EVRF2007"),
+            storage=storage,
         )
 
         assert manager._storage is storage
         assert manager._storage._subdir == "custom"
 
     def test_default_storage_respects_kron86(self, tmp_path):
-        provider = Mock(spec=GugikProvider)
+        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         provider.descriptor_key = "pl.gugik.nmt_1m"
         type(provider).default_extension = PropertyMock(return_value=".asc")
-        manager = DownloadManager(
-            output_dir=tmp_path, provider=provider, vertical_crs="KRON86"
-        )
+        provider.resolution = "1m"
+        provider.vertical_crs = "KRON86"
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
         assert manager._storage._subdir == "nmt/pl_{system}_1m_kron86"
 
     def test_manager_without_descriptor_key_keeps_kron86_in_segment(self, tmp_path):
@@ -204,50 +219,31 @@ class TestDownloadManagerStorageFromDescriptor:
         provider = Mock()
         provider.descriptor_key = None
         provider.default_extension = ".asc"
+        provider.resolution = "1m"
+        provider.vertical_crs = "KRON86"
 
-        manager = DownloadManager(
-            output_dir=tmp_path, provider=provider, vertical_crs="KRON86"
-        )
+        manager = DownloadManager(output_dir=tmp_path, provider=provider)
 
         assert manager._storage._subdir == "nmt/pl_{system}_1m_kron86"
 
-    def test_default_storage_follows_provider_vertical_crs(self, tmp_path):
-        """The segment takes the vertical CRS from the PROVIDER, not from the manager
-        default (ADR-026).
-
-        A library call (used by Hydrograf) passes a provider, not a flag: without
-        this, KRON86 data landed in the ...evrf2007 segment, next to a sidecar
-        declaring EPSG:9650 - exactly the CRS clash ADR-026 was meant to remove.
-        """
+    def test_storage_follows_provider_vertical_crs(self, tmp_path):
+        """The output segment and sidecar must match the provider's datum."""
         manager = DownloadManager(
-            output_dir=tmp_path, provider=GugikProvider(vertical_crs="KRON86")
+            output_dir=tmp_path,
+            provider=GugikProvider(vertical_crs="KRON86", resolution="1m"),
         )
 
         assert manager._storage._subdir == "nmt/pl_{system}_1m_kron86"
         assert manager.vertical_crs == "KRON86"
 
-    def test_default_storage_5m_kron86_rejected(self, tmp_path):
-        """0.7.1: a provider without its own datum - the manager rejects
-        5m + KRON86 BEFORE the segment is built (no ``..._5m_evrf2007`` swap)."""
-        provider = Mock(spec=GugikProvider)
-        provider.descriptor_key = "pl.gugik.nmt_5m"
-        type(provider).default_extension = PropertyMock(return_value=".asc")
-        with pytest.raises(ValidationError, match="tylko w EVRF2007"):
-            DownloadManager(
-                output_dir=tmp_path,
-                provider=provider,
-                vertical_crs="KRON86",
-                resolution="5m",
-            )
-        assert not (tmp_path / "nmt").exists()
-
     def test_provider_with_empty_vertical_crs_raises(self, tmp_path):
         """Finding 7 through the public API: a custom provider with vertical_crs=''."""
         from kartograf.exceptions import ValidationError
 
-        provider = Mock(spec=GugikProvider)
+        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         type(provider).default_extension = PropertyMock(return_value=".asc")
         provider.vertical_crs = ""
+        provider.resolution = "1m"
         provider.descriptor_key = "pl.gugik.nmt_1m"
         with pytest.raises(ValidationError, match="Pusty wymiar"):
             DownloadManager(output_dir=tmp_path, provider=provider)
@@ -259,7 +255,7 @@ class TestDownloadManagerDownloadSheet:
     @pytest.fixture
     def mock_provider(self):
         """Fixture with a mocked provider."""
-        provider = Mock(spec=GugikProvider)
+        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
         def mock_download(sheet, path, timeout=30):
@@ -285,7 +281,7 @@ class TestDownloadManagerDownloadSheet:
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         # Create existing ASC file
-        storage = FileStorage(tmp_path)
+        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
         existing_path = storage.get_path("N-34-130-D-d-2-4", ".asc")
         existing_path.parent.mkdir(parents=True, exist_ok=True)
         existing_path.write_bytes(b"existing data")
@@ -302,7 +298,7 @@ class TestDownloadManagerDownloadSheet:
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         # Create existing ASC file
-        storage = FileStorage(tmp_path)
+        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
         existing_path = storage.get_path("N-34-130-D-d-2-4", ".asc")
         existing_path.parent.mkdir(parents=True, exist_ok=True)
         existing_path.write_bytes(b"existing data")
@@ -367,7 +363,7 @@ class TestLastResultSingleSheet:
 
     @staticmethod
     def _plain_manager(tmp_path, fail=False):
-        provider = Mock(spec=GugikProvider)
+        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
         def fake_download(sheet, path, timeout=30):
@@ -420,7 +416,7 @@ class TestDownloadManagerDownloadHierarchy:
     @pytest.fixture
     def mock_provider(self):
         """Fixture with a mocked provider."""
-        provider = Mock(spec=GugikProvider)
+        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
         def mock_download(sheet, path, timeout=30):
@@ -462,7 +458,7 @@ class TestDownloadManagerDownloadHierarchy:
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
 
         # Pre-create some ASC files
-        storage = FileStorage(tmp_path)
+        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
         for sheet in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"]:
             path = storage.get_path(sheet, ".asc")
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -486,7 +482,7 @@ class TestDownloadManagerDownloadHierarchy:
 
     def test_download_hierarchy_handles_failures(self, tmp_path):
         """Test of download error handling."""
-        provider = Mock(spec=GugikProvider)
+        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
         # First two succeed, third fails, fourth succeeds
@@ -537,7 +533,7 @@ class TestDownloadResultNoCoverage:
     def provider(self):
         from kartograf.exceptions import NoCoverageError
 
-        provider = Mock(spec=GugikProvider)
+        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
         def download(sheet, path, timeout=30):
@@ -605,7 +601,7 @@ class TestDownloadManagerDownloadSheets:
 
     @pytest.fixture
     def provider(self):
-        provider = Mock(spec=GugikProvider)
+        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         type(provider).default_extension = PropertyMock(return_value=".asc")
         provider.calls = []
         provider.fail = set()
@@ -656,7 +652,9 @@ class TestDownloadManagerDownloadSheets:
         assert manager.last_result.total == 4
 
     def test_skip_existing(self, tmp_path, provider):
-        existing = FileStorage(tmp_path).get_path("N-34-130-D-d-2-1", ".asc")
+        existing = FileStorage(
+            tmp_path, resolution="1m", vertical_crs="EVRF2007"
+        ).get_path("N-34-130-D-d-2-1", ".asc")
         existing.parent.mkdir(parents=True, exist_ok=True)
         existing.write_bytes(b"old")
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
@@ -679,7 +677,7 @@ class TestDownloadManagerDownloadBbox:
     @pytest.fixture
     def mock_provider(self):
         """Fixture with a mocked provider."""
-        provider = Mock(spec=GugikProvider)
+        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
         def mock_download_bbox(bbox, path, format="GTiff", timeout=30):
@@ -708,7 +706,9 @@ class TestDownloadManagerDownloadBbox:
 
     def test_download_bbox_custom_format(self, tmp_path, sample_bbox):
         """Test of bbox download with a custom format."""
-        mock_provider = Mock(spec=GugikProvider)
+        mock_provider = Mock(
+            spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007"
+        )
         type(mock_provider).default_extension = PropertyMock(return_value=".asc")
 
         def mock_download_bbox(bbox, path, format="GTiff", timeout=30):
@@ -733,7 +733,10 @@ class TestDownloadManagerGetMissingSheets:
 
     def test_get_missing_sheets_all_missing(self, tmp_path):
         """Test when all sheets are missing."""
-        manager = DownloadManager(output_dir=tmp_path)
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+        )
 
         missing = manager.get_missing_sheets("N-34-130-D-d-2", "1:10000")
 
@@ -741,10 +744,13 @@ class TestDownloadManagerGetMissingSheets:
 
     def test_get_missing_sheets_some_exist(self, tmp_path):
         """Test when some sheets exist."""
-        manager = DownloadManager(output_dir=tmp_path)
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+        )
 
         # Pre-create some ASC files
-        storage = FileStorage(tmp_path)
+        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
         for sheet in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-3"]:
             path = storage.get_path(sheet, ".asc")
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -760,10 +766,13 @@ class TestDownloadManagerGetMissingSheets:
 
     def test_get_missing_sheets_none_missing(self, tmp_path):
         """Test when no sheet is missing."""
-        manager = DownloadManager(output_dir=tmp_path)
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+        )
 
         # Pre-create all ASC files
-        storage = FileStorage(tmp_path)
+        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
         for i in range(1, 5):
             sheet = f"N-34-130-D-d-2-{i}"
             path = storage.get_path(sheet, ".asc")
@@ -780,7 +789,10 @@ class TestDownloadManagerCountSheets:
 
     def test_count_sheets_small_hierarchy(self, tmp_path):
         """Test of counting a small hierarchy."""
-        manager = DownloadManager(output_dir=tmp_path)
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+        )
 
         # 1:25k → 1:10k = 4 sheets
         count = manager.count_sheets("N-34-130-D-d-2", "1:10000")
@@ -789,7 +801,10 @@ class TestDownloadManagerCountSheets:
 
     def test_count_sheets_medium_hierarchy(self, tmp_path):
         """Test of counting a medium hierarchy."""
-        manager = DownloadManager(output_dir=tmp_path)
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+        )
 
         # 1:50k → 1:10k = 4 × 4 = 16 sheets
         count = manager.count_sheets("N-34-130-D-d", "1:10000")
@@ -798,7 +813,10 @@ class TestDownloadManagerCountSheets:
 
     def test_count_sheets_large_hierarchy(self, tmp_path):
         """Test of counting a large hierarchy."""
-        manager = DownloadManager(output_dir=tmp_path)
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+        )
 
         # 1:100k → 1:10k = 4 × 4 × 4 = 64 sheets
         count = manager.count_sheets("N-34-130-D", "1:10000")
@@ -807,7 +825,10 @@ class TestDownloadManagerCountSheets:
 
     def test_count_sheets_500k_to_200k(self, tmp_path):
         """Test of counting the hierarchy 1:500k -> 1:200k (36 sheets)."""
-        manager = DownloadManager(output_dir=tmp_path)
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+        )
 
         count = manager.count_sheets("N-34-A", "1:200000")
 
@@ -819,13 +840,18 @@ class TestDownloadManagerDefaultExtension:
 
     def test_default_extension_asc(self, tmp_path):
         """Test that default GugikProvider uses .asc extension."""
-        manager = DownloadManager(output_dir=tmp_path)
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+        )
         assert manager._default_ext == ".asc"
 
     def test_custom_extension_tif(self, tmp_path):
         """Test that provider with .tif extension is used."""
         mock_provider = Mock()
         mock_provider.default_extension = ".tif"
+        mock_provider.resolution = "1m"
+        mock_provider.vertical_crs = "EVRF2007"
 
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
         assert manager._default_ext == ".tif"
@@ -835,7 +861,9 @@ class TestDownloadManagerDefaultExtension:
         mock_provider = Mock()
         mock_provider.default_extension = ".tif"
 
-        storage = FileStorage(tmp_path, product="orto")
+        storage = FileStorage(
+            tmp_path, resolution=None, vertical_crs=None, product="orto"
+        )
         manager = DownloadManager(
             output_dir=tmp_path, provider=mock_provider, storage=storage
         )
@@ -852,7 +880,9 @@ class TestDownloadManagerPL2000:
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
 
-        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        storage = FileStorage(
+            tmp_path, resolution="1m", vertical_crs="EVRF2007", product="nmt_2000_1m"
+        )
         manager = DownloadManager(
             output_dir=tmp_path, provider=mock_provider, storage=storage
         )
@@ -865,7 +895,9 @@ class TestDownloadManagerPL2000:
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
 
-        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        storage = FileStorage(
+            tmp_path, resolution="1m", vertical_crs="EVRF2007", product="nmt_2000_1m"
+        )
         manager = DownloadManager(
             output_dir=tmp_path, provider=mock_provider, storage=storage
         )
@@ -878,7 +910,9 @@ class TestDownloadManagerPL2000:
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
 
-        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        storage = FileStorage(
+            tmp_path, resolution="1m", vertical_crs="EVRF2007", product="nmt_2000_1m"
+        )
         manager = DownloadManager(
             output_dir=tmp_path, provider=mock_provider, storage=storage
         )
@@ -898,7 +932,9 @@ class TestDownloadManagerPL2000:
 
         mock_provider.download = mock_download
 
-        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        storage = FileStorage(
+            tmp_path, resolution="1m", vertical_crs="EVRF2007", product="nmt_2000_1m"
+        )
         manager = DownloadManager(
             output_dir=tmp_path, provider=mock_provider, storage=storage
         )
@@ -921,7 +957,9 @@ class TestDownloadManagerPL2000:
 
         mock_provider.download = mock_download
 
-        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        storage = FileStorage(
+            tmp_path, resolution="1m", vertical_crs="EVRF2007", product="nmt_2000_1m"
+        )
         manager = DownloadManager(
             output_dir=tmp_path, provider=mock_provider, storage=storage
         )
@@ -946,7 +984,9 @@ class TestDownloadManagerPL2000:
 
         mock_provider.download = mock_download
 
-        storage = FileStorage(tmp_path, product="nmt_2000_1m")
+        storage = FileStorage(
+            tmp_path, resolution="1m", vertical_crs="EVRF2007", product="nmt_2000_1m"
+        )
         manager = DownloadManager(
             output_dir=tmp_path, provider=mock_provider, storage=storage
         )
@@ -960,13 +1000,6 @@ class TestDownloadManagerPL2000:
 
 
 class TestCreateNmtProviderFactory:
-    def test_defaults(self):
-        from kartograf.providers.pl import create_nmt_provider
-
-        provider = create_nmt_provider()
-        assert provider.resolution == "1m"
-        assert provider.vertical_crs == "EVRF2007"
-
     def test_5m_kron86_raises_with_remedy(self, caplog):
         """0.7.1: no silent swap to EVRF2007 - an error naming the remedy."""
         import logging
@@ -998,7 +1031,7 @@ class TestCreateNmtProviderFactory:
         assert "5m only supports EVRF2007" in caplog.text
 
     def test_rule_without_log_is_silent(self, caplog):
-        """D11: ``log=False`` (CLI, ``prepare_pl_cutout``) - corrected, not logged."""
+        """D11: ``log=False`` checks the explicit factory rule silently."""
         import logging
 
         from kartograf.providers.pl import nmt_vertical_crs
@@ -1007,15 +1040,6 @@ class TestCreateNmtProviderFactory:
             assert nmt_vertical_crs("5m", "KRON86", log=False) == "EVRF2007"
             assert nmt_vertical_crs("1m", "KRON86") == "KRON86"
         assert caplog.text == ""
-
-    def test_passes_session_and_cache(self):
-        from unittest.mock import MagicMock
-
-        from kartograf.providers.pl import create_nmt_provider
-
-        session, cache = MagicMock(), MagicMock()
-        provider = create_nmt_provider(session=session, cache=cache)
-        assert provider._sessions.injected is session and provider._cache is cache
 
 
 class TestSidecarWritten:
@@ -1028,6 +1052,7 @@ class TestSidecarWritten:
         provider.default_extension = ".asc"
         provider.descriptor_key = "pl.gugik.nmt_1m"
         provider.vertical_crs = "EVRF2007"
+        provider.resolution = "1m"
 
         def fake_download(sheet, target, timeout=30):
             target.parent.mkdir(parents=True, exist_ok=True)

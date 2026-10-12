@@ -374,7 +374,9 @@ class HSGCalculator:
     --------
     >>> from kartograf.hydrology import HSGCalculator
     >>> calc = HSGCalculator()
-    >>> calc.calculate_hsg_by_sheet("N-34-130-D", Path("./hsg.tif"))
+    >>> calc.calculate_hsg_by_sheet(
+    ...     "N-34-130-D", Path("./hsg.tif"), depth="0-5cm", stat="mean"
+    ... )
     """
 
     # SoilGrids conversion factors
@@ -405,8 +407,9 @@ class HSGCalculator:
         self,
         sheet: str,
         output_path: Path,
-        depth: str = "0-5cm",
-        stat: str = "mean",
+        *,
+        depth: str,
+        stat: str,
         keep_intermediate: bool = False,
         timeout: int = 120,
     ) -> Path:
@@ -419,10 +422,13 @@ class HSGCalculator:
             Map sheet identifier (e.g., "N-34-130-D")
         output_path : Path
             Path for output HSG GeoTIFF
-        depth : str, optional
-            Depth interval (default: "0-5cm")
-        stat : str, optional
-            Statistic to use (default: "mean")
+        depth : str
+            Soil interval below surface: 0-5cm, 5-15cm, 15-30cm,
+            30-60cm, 60-100cm, or 100-200cm.
+        stat : str
+            SoilGrids statistic: mean (average), Q0.05 (5th percentile),
+            Q0.5 (median), Q0.95 (95th percentile), or uncertainty
+            (prediction uncertainty).
         keep_intermediate : bool, optional
             Keep intermediate clay/sand/silt files (default: False)
         timeout : int, optional
@@ -453,8 +459,9 @@ class HSGCalculator:
         self,
         bbox,
         output_path: Path,
-        depth: str = "0-5cm",
-        stat: str = "mean",
+        *,
+        depth: str,
+        stat: str,
         keep_intermediate: bool = False,
         timeout: int = 120,
         sheet: str | None = None,
@@ -468,10 +475,13 @@ class HSGCalculator:
             Bounding box in EPSG:2180
         output_path : Path
             Path for output HSG GeoTIFF
-        depth : str, optional
-            Depth interval (default: "0-5cm")
-        stat : str, optional
-            Statistic to use (default: "mean")
+        depth : str
+            Soil interval below surface: 0-5cm, 5-15cm, 15-30cm,
+            30-60cm, 60-100cm, or 100-200cm.
+        stat : str
+            SoilGrids statistic: mean (average), Q0.05 (5th percentile),
+            Q0.5 (median), Q0.95 (95th percentile), or uncertainty
+            (prediction uncertainty).
         keep_intermediate : bool, optional
             Keep intermediate clay/sand/silt files (default: False)
         timeout : int, optional

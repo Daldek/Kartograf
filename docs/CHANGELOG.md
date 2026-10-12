@@ -80,6 +80,55 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `all_campaigns=True`, a `campaigns="newest"` usun lub zamien na
   `all_campaigns=False`; wlasciwosc `DownloadManager.campaigns` ->
   `DownloadManager.all_campaigns` (bool).
+- Bez wartosci domyslnych wplywajacych na dane (CLI i API; DEVELOPMENT_STANDARDS
+  11.2, ADR-004 errata 1, ADR-023 errata 2). Brak wartosci: CLI `Error:`
+  z lista dopuszczalnych wartosci (kod 1, przed siecia), API `TypeError`.
+  - CLI `download`: wymagane `--product` (nmt|nmpt|orto|laz), `--output`,
+    `--country` z `--bbox`/`--geometry` (pl|cz|auto; z `--sheet` kraj
+    z godla), `--vertical-crs` dla nmt/nmpt/laz (PL EVRF2007|KRON86, CZ
+    Bpv|EVRF2007), `--resolution` dla NMT tam, gdzie jest wybor (PL 1m|5m,
+    CZ TM33 i obszar 2m|5m; NMPT, wycinek `--target-crs` i arkusz SM5 maja
+    jedna wartosc i moga ja pominac), `--system` dla PL `--bbox`/`--geometry`
+    bez `--target-crs` (1992|2000). `--resolution` i `--vertical-crs`
+    przyjmuja jedna wartosc albo pary per kraj (`pl=1m,cz=2m`,
+    `pl=EVRF2007,cz=Bpv`); jedna wartosc musi pasowac kazdemu krajowi
+    zadania. `--scale`: PL-1992 zawsze 1:10000 — `--scale` z zadaniem
+    PL-1992 to `Error:`; PL-2000 wymaga `--scale` (1:5000|1:2000|1:1000|1:500)
+    z `--bbox`/`--geometry --system 2000` i z godlem 1:10000. Zniknal `Info:`
+    o roznych domyslnych ukladach wysokosci czesci PL i CZ; `--system` nie
+    przelacza juz `--country auto` na PL. Podpowiedz braku pokrycia dla
+    PL-1992 nie podaje `--scale`.
+  - CLI `landcover download`: wymagane `--source`, `--output`, `--year`
+    (corine), `--property`/`--depth`/`--stat` (soilgrids); `landcover
+    list-layers --source`; `soilgrids hsg --output` i `--depth`. `--format`
+    zostaje `GPKG`.
+  - API: `DownloadManager(output_dir, provider, *, ...)` — oba wymagane,
+    parametry `vertical_crs` i `resolution` usuniete (decyduje provider);
+    `FileStorage(output_dir, *, resolution, vertical_crs, ...)`, metody
+    `get_path/exists/delete/get_full_sheet_path/get_campaign_path/get_size/
+    write_atomic` z wymaganym `ext`, `list_files(pattern, *, campaigns=False)`;
+    `MetadataCache(db_path, ...)`; `GugikProvider(*, vertical_crs, resolution)`,
+    `GugikNmptProvider(*, vertical_crs)`, `GugikLazProvider(*, vertical_crs)`,
+    `GugikOrtoProvider(*, color)`, `create_nmt_provider(vertical_crs,
+    resolution)`, `CuzkDmrProvider(resolution, ..., *, vertical_crs)`,
+    `create_dmr_provider(resolution, ..., *, vertical_crs)`;
+    `prepare_pl_cutout`/`download_pl_cutout(bbox, target_crs, *, output_dir,
+    vertical_crs, product)` — parametr `resolution` usuniety (wycinek tylko
+    1 m); `download_laz_area(bbox, *, output_dir, vertical_crs, ...)`,
+    `run_laz_download(..., output_dir)`; `find_sheets_for_bbox(bbox,
+    target_scale, system)`, `find_sheets_2000_for_bbox(bbox, target_scale)`,
+    `find_sheets_for_geometry(filepath, target_scale, ..., *, system)`;
+    `LandCoverManager(output_dir, provider)`; `CorineProvider.download_by_bbox/
+    download_by_sheet(..., *, year)`; `SoilGridsProvider.download_by_bbox(...,
+    *, property, depth, stat)`; `HSGCalculator.calculate_hsg_by_bbox/
+    calculate_hsg_by_sheet(..., *, depth, stat)`.
+  Co zrobic: podaj jawnie wartosci, ktore dotad byly domyslne (CLI: `--product
+  nmt -o ./data --resolution 1m --vertical-crs EVRF2007`, z obszarem
+  `--country pl --system 1992`; CZ `--resolution 2m --vertical-crs Bpv`;
+  pogranicze `--resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv`;
+  usun `--scale` z zadan PL-1992). Biblioteka: przekaz provider
+  i katalog do `DownloadManager`/`LandCoverManager`, sciezke do
+  `MetadataCache` (CLI uzywa `.kartograf_cache.db` w katalogu biezacym).
 
 ## [0.7.2] - 2026-10-11
 

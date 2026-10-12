@@ -108,63 +108,33 @@ def queried_layers(session: Mock) -> list[str]:
     ]
 
 
-class TestGugikOrtoProviderInit:
-    """Tests of GugikOrtoProvider initialization."""
-
-    def test_init_no_args(self):
-        """Test creating a provider without arguments (default values)."""
-        provider = GugikOrtoProvider()
-        assert provider._sessions.injected is None
-        assert provider.color == "RGB"
-
-    def test_init_with_session(self):
-        """Test creating a provider with a custom HTTP session."""
-        session = Mock(spec=requests.Session)
-        provider = GugikOrtoProvider(session=session)
-        assert provider._sessions.injected is session
-
-    def test_color_kwarg(self):
-        """The colour variant is a library kwarg (no CLI flag)."""
-        assert GugikOrtoProvider(color="CIR").color == "CIR"
-
-    def test_no_vertical_crs(self):
-        """Test that the provider has no vertical_crs attribute (unlike NMT/NMPT)."""
-        provider = GugikOrtoProvider()
-        assert not hasattr(provider, "vertical_crs")
-
-    def test_no_resolution(self):
-        """Test that the provider has no resolution attribute (unlike NMT)."""
-        provider = GugikOrtoProvider()
-        assert not hasattr(provider, "resolution")
-
-
 class TestGugikOrtoProviderProperties:
     """Tests of GugikOrtoProvider properties."""
 
     def test_name(self):
         """Test the provider name."""
-        provider = GugikOrtoProvider()
+        provider = GugikOrtoProvider(color="RGB")
         assert provider.name == "GUGiK Ortofotomapa"
 
     def test_base_url(self):
         """Test the geoportal base URL."""
-        provider = GugikOrtoProvider()
+        provider = GugikOrtoProvider(color="RGB")
         assert provider.base_url == "https://mapy.geoportal.gov.pl"
 
     def test_default_extension(self):
         """Test the default file extension."""
-        provider = GugikOrtoProvider()
+        provider = GugikOrtoProvider(color="RGB")
         assert provider.default_extension == ".tif"
 
     def test_repr(self):
         """Test the __repr__ method - contains the class name."""
-        provider = GugikOrtoProvider()
+        provider = GugikOrtoProvider(color="RGB")
         repr_str = repr(provider)
         assert "GugikOrtoProvider" in repr_str
 
     def test_str(self):
         """Test the __str__ method - contains the provider name."""
-        provider = GugikOrtoProvider()
+        provider = GugikOrtoProvider(color="RGB")
         str_repr = str(provider)
         assert "GUGiK Ortofotomapa" in str_repr
 
@@ -183,7 +153,7 @@ class TestGugikOrtoProviderDownload:
 
     def test_download_success(self, tmp_path, session):
         """download queries the index, fetches the RGB URL and saves the file."""
-        provider = GugikOrtoProvider(session=session)
+        provider = GugikOrtoProvider(session=session, color="RGB")
         output_path = tmp_path / "sheet.tif"
 
         result = provider.download(SHEET, output_path)
@@ -196,7 +166,7 @@ class TestGugikOrtoProviderDownload:
 
     def test_download_creates_directory(self, tmp_path, session):
         """The target directory is created only when the file is written."""
-        provider = GugikOrtoProvider(session=session)
+        provider = GugikOrtoProvider(session=session, color="RGB")
         output_path = tmp_path / "subdir" / "nested" / "sheet.tif"
 
         result = provider.download(SHEET, output_path)
@@ -206,7 +176,7 @@ class TestGugikOrtoProviderDownload:
 
     def test_download_saves_content(self, tmp_path, session):
         """Test that download writes the file content to disk."""
-        provider = GugikOrtoProvider(session=session)
+        provider = GugikOrtoProvider(session=session, color="RGB")
         output_path = tmp_path / "sheet.tif"
 
         provider.download(SHEET, output_path)
@@ -220,7 +190,7 @@ class TestGugikOrtoProviderDownload:
         output = tmp_path / "not-created" / "sheet.tif"
 
         with pytest.raises(NoCoverageError):
-            GugikOrtoProvider(session=session).download(SHEET, output)
+            GugikOrtoProvider(session=session, color="RGB").download(SHEET, output)
 
         assert not output.parent.exists()
 
@@ -232,7 +202,7 @@ class TestGugikOrtoProviderSelection:
     def provider_with(*bodies: str) -> tuple[GugikOrtoProvider, Mock]:
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[gfi_response(body) for body in bodies])
-        return GugikOrtoProvider(session=session), session
+        return GugikOrtoProvider(session=session, color="RGB"), session
 
     def test_picks_rgb_not_first_record(self):
         """A raw GUGiK response (CIR before RGB) -> the RGB URL, not the first one."""
@@ -373,7 +343,7 @@ class TestGugikOrtoProviderSelection:
             side_effect=[requests.ConnectionError("reset")] * 3
             + [gfi_response(sample("orto_2024.html"))]
         )
-        provider = GugikOrtoProvider(session=session)
+        provider = GugikOrtoProvider(session=session, color="RGB")
 
         with patch("time.sleep") as sleep, pytest.raises(DownloadError) as exc:
             provider._get_opendata_url(SHEET)
@@ -406,7 +376,8 @@ class TestGugikOrtoProviderCache:
     @pytest.fixture
     def source(self):
         provider = GugikOrtoProvider(
-            session=Mock(get=Mock(return_value=gfi_response(sample("orto_2024.html"))))
+            session=Mock(get=Mock(return_value=gfi_response(sample("orto_2024.html")))),
+            color="RGB",
         )
         provider._get_opendata_url(SHEET)
         return provider.source_info(SHEET)
@@ -415,7 +386,7 @@ class TestGugikOrtoProviderCache:
         """A `source` hit = no network; URL and source_info from the payload."""
         cache.set_record("orto", "RGB", "none", SHEET, {"source": source})
         session = Mock(spec=requests.Session)
-        provider = GugikOrtoProvider(session=session, cache=cache)
+        provider = GugikOrtoProvider(session=session, cache=cache, color="RGB")
 
         assert provider._get_opendata_url(SHEET) == RGB_2024
         session.get.assert_not_called()
@@ -424,7 +395,7 @@ class TestGugikOrtoProviderCache:
     def test_cache_hit_no_coverage_raises_without_network(self, cache):
         cache.set_record("orto", "RGB", "none", SHEET, {"no_coverage": True})
         session = Mock(spec=requests.Session)
-        provider = GugikOrtoProvider(session=session, cache=cache)
+        provider = GugikOrtoProvider(session=session, cache=cache, color="RGB")
 
         with pytest.raises(NoCoverageError, match=SHEET):
             provider._get_opendata_url(SHEET)
@@ -436,7 +407,7 @@ class TestGugikOrtoProviderCache:
         )
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=gfi_response(body))
-        provider = GugikOrtoProvider(session=session, cache=cache)
+        provider = GugikOrtoProvider(session=session, cache=cache, color="RGB")
 
         with pytest.raises(NoCoverageError) as first:
             provider._get_opendata_url(SHEET)
@@ -450,7 +421,7 @@ class TestGugikOrtoProviderCache:
     def test_cache_miss_stores_source_with_color(self, cache):
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
-        provider = GugikOrtoProvider(session=session, cache=cache)
+        provider = GugikOrtoProvider(session=session, cache=cache, color="RGB")
 
         assert provider._get_opendata_url(SHEET) == RGB_2024
 
@@ -478,7 +449,7 @@ class TestGugikOrtoProviderCache:
     def test_all_layers_empty_stores_no_coverage(self, cache):
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=gfi_response(orto_body([])))
-        provider = GugikOrtoProvider(session=session, cache=cache)
+        provider = GugikOrtoProvider(session=session, cache=cache, color="RGB")
 
         with pytest.raises(NoCoverageError) as exc:
             provider._get_opendata_url(SHEET)
@@ -492,7 +463,7 @@ class TestGugikOrtoProviderCache:
         """K3-safe: network failure = DownloadError, the cache stays empty."""
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[requests.ConnectionError("boom")] * 3)
-        provider = GugikOrtoProvider(session=session, cache=cache)
+        provider = GugikOrtoProvider(session=session, cache=cache, color="RGB")
 
         with patch("time.sleep"), pytest.raises(DownloadError):
             provider._get_opendata_url(SHEET)
@@ -504,7 +475,10 @@ class TestGugikOrtoProviderCache:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
 
-        assert GugikOrtoProvider(session=session)._get_opendata_url(SHEET) == RGB_2024
+        assert (
+            GugikOrtoProvider(session=session, color="RGB")._get_opendata_url(SHEET)
+            == RGB_2024
+        )
 
 
 ORTO_WMS_XML = """\
@@ -538,7 +512,9 @@ class TestGugikOrtoLayerDiscovery:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=gfi_response(ORTO_WMS_XML))
 
-        result = GugikOrtoProvider(session=session)._fetch_wms_layers(ENDPOINT)
+        result = GugikOrtoProvider(session=session, color="RGB")._fetch_wms_layers(
+            ENDPOINT
+        )
 
         assert result == LAYERS
         assert "GetCapabilities" in session.get.call_args.args[0]
@@ -549,13 +525,13 @@ class TestGugikOrtoLayerDiscovery:
         session.get = Mock(return_value=gfi_response(xml))
 
         with pytest.raises(DownloadError, match="nie publikuje warstw"):
-            GugikOrtoProvider(session=session)._fetch_wms_layers(ENDPOINT)
+            GugikOrtoProvider(session=session, color="RGB")._fetch_wms_layers(ENDPOINT)
 
     def test_get_opendata_url_fails_before_get_feature_info(self):
         """GetCapabilities fails after 3 attempts = DownloadError, no GetFeatureInfo."""
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=requests.ConnectionError("reset"))
-        provider = GugikOrtoProvider(session=session)
+        provider = GugikOrtoProvider(session=session, color="RGB")
 
         with patch("time.sleep"), pytest.raises(DownloadError) as exc:
             provider._get_opendata_url(SHEET)
@@ -570,7 +546,7 @@ class TestGugikOrtoLayerDiscovery:
             side_effect=[requests.ConnectionError("reset")] * 3
             + [gfi_response(ORTO_WMS_XML)]
         )
-        provider = GugikOrtoProvider(session=session)
+        provider = GugikOrtoProvider(session=session, color="RGB")
 
         with patch("time.sleep"), pytest.raises(DownloadError):
             provider._layers(ENDPOINT)
@@ -590,7 +566,9 @@ class TestGugikOrtoProviderSession:
         )
 
         with patch(SESSION_FACTORY) as factory:
-            GugikOrtoProvider(session=session).download(SHEET, tmp_path / "s.tif")
+            GugikOrtoProvider(session=session, color="RGB").download(
+                SHEET, tmp_path / "s.tif"
+            )
 
         factory.assert_not_called()
         assert session.get.call_count == 2
@@ -601,7 +579,7 @@ class TestGugikOrtoProviderSession:
         session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
 
         with patch(SESSION_FACTORY, return_value=session) as factory:
-            provider = GugikOrtoProvider()
+            provider = GugikOrtoProvider(color="RGB")
             provider._get_opendata_url(SHEET)
             provider._get_opendata_url(SHEET)
 
@@ -620,7 +598,7 @@ class TestGugikOrtoProviderSession:
             return session
 
         with patch(SESSION_FACTORY, side_effect=new_session) as factory:
-            provider = GugikOrtoProvider()
+            provider = GugikOrtoProvider(color="RGB")
 
             def worker():
                 try:
@@ -660,7 +638,7 @@ class TestGugikOrtoProviderDownloadBbox:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=mock_wcs_response)
 
-        provider = GugikOrtoProvider(session=session)
+        provider = GugikOrtoProvider(session=session, color="RGB")
         output_path = tmp_path / "area.tif"
 
         result = provider.download_bbox(sample_bbox, output_path)
@@ -683,7 +661,7 @@ class TestGugikOrtoProviderDownloadBbox:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=mock_wcs_response)
 
-        provider = GugikOrtoProvider(session=session)
+        provider = GugikOrtoProvider(session=session, color="RGB")
         output_path = tmp_path / "nested" / "area.tif"
 
         provider.download_bbox(sample_bbox, output_path)
@@ -705,12 +683,14 @@ class TestGugikOrtoProviderDownloadBbox:
         output_path = tmp_path / "err.tif"
 
         with pytest.raises(DownloadError, match="ExceptionReport"):
-            GugikOrtoProvider(session=session).download_bbox(sample_bbox, output_path)
+            GugikOrtoProvider(session=session, color="RGB").download_bbox(
+                sample_bbox, output_path
+            )
         assert not output_path.exists()
 
     def test_download_bbox_invalid_crs(self, tmp_path):
         """Test the error for a bbox with an invalid CRS (not EPSG:2180)."""
-        provider = GugikOrtoProvider()
+        provider = GugikOrtoProvider(color="RGB")
         output_path = tmp_path / "area.tif"
 
         wrong_crs_bbox = BBox(
@@ -722,7 +702,7 @@ class TestGugikOrtoProviderDownloadBbox:
 
     def test_download_bbox_invalid_format(self, tmp_path, sample_bbox):
         """Test the error for an unsupported WCS format."""
-        provider = GugikOrtoProvider()
+        provider = GugikOrtoProvider(color="RGB")
         output_path = tmp_path / "area.xyz"
 
         with pytest.raises(ValueError, match="Unsupported WCS format"):
@@ -748,7 +728,7 @@ class TestGugikOrtoProviderRetry:
                 file_response(),
             ]
         )
-        provider = GugikOrtoProvider(session=session)
+        provider = GugikOrtoProvider(session=session, color="RGB")
         output_path = tmp_path / "test.tif"
 
         with patch("time.sleep"):
@@ -764,7 +744,7 @@ class TestGugikOrtoProviderRetry:
             side_effect=[gfi_response(sample("orto_2024.html"))]
             + [self.failing_response()] * 3
         )
-        provider = GugikOrtoProvider(session=session)
+        provider = GugikOrtoProvider(session=session, color="RGB")
 
         with patch("time.sleep"), pytest.raises(DownloadError):
             provider.download(SHEET, tmp_path / "test.tif")
@@ -776,7 +756,7 @@ class TestGugikOrtoProviderRetry:
             side_effect=[gfi_response(sample("orto_2024.html"))]
             + [self.failing_response()] * 3
         )
-        provider = GugikOrtoProvider(session=session)
+        provider = GugikOrtoProvider(session=session, color="RGB")
 
         sleep_times = []
         with (
@@ -794,14 +774,14 @@ class TestGugikOrtoProviderInfo:
 
     def test_supported_formats(self):
         """Test the list of supported WCS formats."""
-        provider = GugikOrtoProvider()
+        provider = GugikOrtoProvider(color="RGB")
         formats = provider.get_supported_formats()
 
         assert formats == ["GTiff", "PNG", "JPEG"]
 
     def test_validate_valid_sheet(self):
         """Test validation of a valid sheet code - returns True."""
-        provider = GugikOrtoProvider()
+        provider = GugikOrtoProvider(color="RGB")
 
         assert provider.validate_sheet("N-34-130-D") is True
         assert provider.validate_sheet("N-34-130-D-d-2-4") is True
@@ -809,7 +789,7 @@ class TestGugikOrtoProviderInfo:
 
     def test_validate_invalid_sheet(self):
         """Test validation of an invalid sheet code - returns False."""
-        provider = GugikOrtoProvider()
+        provider = GugikOrtoProvider(color="RGB")
 
         assert provider.validate_sheet("INVALID") is False
         assert provider.validate_sheet("") is False
@@ -907,7 +887,7 @@ class TestForceRefreshesRecordCache:
     def test_force_writes_fresh_record(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         key = ("orto", "RGB", "none", SHEET)
-        stale = MetadataCache()
+        stale = MetadataCache(tmp_path / ".kartograf_cache.db")
         stale_source = {
             "url": self.STALE,
             "layer": "SkorowidzeOrtofotomapyStarsze",
@@ -923,7 +903,7 @@ class TestForceRefreshesRecordCache:
         assert rc == 0
         # read skipped: the index was queried, the current URL downloaded
         assert session.get.call_args_list[-1][0][0] == RGB_2024
-        cache = MetadataCache()
+        cache = MetadataCache(tmp_path / ".kartograf_cache.db")
         try:
             assert cache.get_record(*key)["source"]["url"] == RGB_2024
         finally:

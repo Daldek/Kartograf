@@ -13,7 +13,6 @@ from pathlib import Path
 
 from kartograf.cache.metadata import MetadataCache
 from kartograf.core.sheet_parser import BBox, SheetParser
-from kartograf.download.storage import FileStorage
 from kartograf.exceptions import NoCoverageError, ValidationError
 from kartograf.providers.base import LandCoverProvider
 from kartograf.providers.corine import CorineProvider
@@ -66,11 +65,11 @@ class LandCoverManager:
 
     Parameters
     ----------
-    output_dir : str or Path, optional
-        Directory for downloaded files (default: "./data/landcover")
-    provider : LandCoverProvider or str, optional
-        Provider instance or name ("bdot10k", "corine", "soilgrids").
-        Default: Bdot10kProvider
+    output_dir : str or Path
+        Directory for downloaded files.
+    provider : LandCoverProvider or str
+        Provider instance or name: "bdot10k" (Polish topographic vectors),
+        "corine" (European land cover raster), or "soilgrids" (soil rasters).
     cache : MetadataCache, optional
         Metadata cache handed to a provider created BY NAME (BDOT10k: PRG
         TERYT answers; SoilGrids accepts it; CORINE has none). A provider
@@ -78,7 +77,7 @@ class LandCoverManager:
 
     Examples
     --------
-    >>> manager = LandCoverManager()
+    >>> manager = LandCoverManager("./data/landcover", "bdot10k")
     >>>
     >>> # Download by TERYT (BDOT10k)
     >>> manager.download(teryt="1465")
@@ -101,8 +100,8 @@ class LandCoverManager:
 
     def __init__(
         self,
-        output_dir: str | Path = "./data/landcover",
-        provider: LandCoverProvider | str | None = None,
+        output_dir: str | Path,
+        provider: LandCoverProvider | str,
         cache: MetadataCache | None = None,
     ):
         """
@@ -110,23 +109,21 @@ class LandCoverManager:
 
         Parameters
         ----------
-        output_dir : str or Path, optional
+        output_dir : str or Path
             Directory for downloaded files. It is not created here: the
             directory appears only when a download writes its first file.
-        provider : LandCoverProvider or str, optional
-            Provider instance or name
+        provider : LandCoverProvider or str
+            Provider instance or name: "bdot10k" (topographic vectors),
+            "corine" (land cover raster), or "soilgrids" (soil rasters).
         cache : MetadataCache, optional
-            Cache for providers created by name (see the class docstring)
+            Cache for providers created by name (see the class docstring).
         """
         self._output_dir = Path(output_dir)
-        self._storage = FileStorage(output_dir)
         self._cache = cache
 
         # Initialize provider
         self._provider: LandCoverProvider
-        if provider is None:
-            self._provider = Bdot10kProvider(cache=cache)
-        elif isinstance(provider, str):
+        if isinstance(provider, str):
             self._provider = self._get_provider_by_name(provider)
         else:
             self._provider = provider
@@ -211,7 +208,15 @@ class LandCoverManager:
         output_path : Path, optional
             Custom output path. If not provided, auto-generated.
         **kwargs
-            Additional provider-specific options (e.g., year, layers)
+            CORINE: required ``year`` 2018/2012/2006/2000 (CLMS or WMS),
+            1990 (WMS preview only). SoilGrids: required ``property``
+            (bdod density, cec exchange capacity, cfvo coarse fragments,
+            clay, nitrogen, ocd organic carbon density, ocs organic carbon
+            stock, phh2o pH, sand, silt, soc organic carbon), ``depth``
+            (0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm
+            below surface), ``stat`` (mean average, Q0.05 5th percentile,
+            Q0.5 median, Q0.95 95th percentile, uncertainty). BDOT10k:
+            ``format`` GPKG (default) or SHP (ZIP), optional ``layers``.
 
         Returns
         -------
@@ -304,7 +309,9 @@ class LandCoverManager:
             Custom output path. Default path follows the same naming as
             `download()` (see `_generate_output_path`).
         **kwargs
-            Provider-specific options
+            CORINE ``year``, SoilGrids ``property``/``depth``/``stat`` are
+            required; see ``download`` for all admissible values and meanings.
+            BDOT10k ``format`` defaults to GPKG (also SHP ZIP).
 
         Returns
         -------
@@ -351,7 +358,9 @@ class LandCoverManager:
             Custom output path. Default path follows the same naming as
             `download()` (see `_generate_output_path`).
         **kwargs
-            Provider-specific options
+            CORINE ``year``, SoilGrids ``property``/``depth``/``stat`` are
+            required; see ``download`` for all admissible values and meanings.
+            BDOT10k ``format`` defaults to GPKG (also SHP ZIP).
 
         Returns
         -------
@@ -511,7 +520,8 @@ class LandCoverManager:
             Maximum number of parallel download threads (default: 4).
             When <= 1, downloads sequentially.
         **kwargs
-            Additional provider-specific options passed to each download.
+            Provider-specific choices as for ``download``; CORINE ``year``
+            and SoilGrids ``property``, ``depth``, ``stat`` are required.
 
         Returns
         -------
@@ -521,7 +531,7 @@ class LandCoverManager:
 
         Examples
         --------
-        >>> manager = LandCoverManager()
+        >>> manager = LandCoverManager("./data/landcover", "bdot10k")
         >>> items = [
         ...     {"teryt": "1465"},
         ...     {"teryt": "1261"},
@@ -572,27 +582,23 @@ class LandCoverManager:
         return results
 
     def _content_params(self, kwargs: dict | None = None) -> dict[str, object]:
-        """Effective provider options that change the CONTENT of the result.
+        """Provider options that change the CONTENT of the result.
 
-        Defaults are filled in, so the result is unambiguous without knowing
-        them: SoilGrids ``property``/``depth``/``stat``, CORINE ``year``,
-        BDOT10k ``format`` (and ``layers`` when a filter is given). Options
-        that do not change the content (e.g. ``timeout``) are left out; an
-        unknown provider gives ``{}``.
-
-        The values go into the file name (`_generate_output_path`) and into
-        the sidecar ``request`` (`_write_sidecar`) - one source for both.
+        SoilGrids ``property``/``depth``/``stat`` and CORINE ``year`` must
+        be supplied by the caller; BDOT10k ``format`` keeps its GPKG default.
+        The values go into both the file name and the sidecar ``request``.
+        Unknown providers contribute no parameters.
         """
         kwargs = kwargs or {}
         provider = self._provider
         if isinstance(provider, SoilGridsProvider):
             return {
-                "property": kwargs.get("property", provider.DEFAULT_PROPERTY),
-                "depth": kwargs.get("depth", provider.DEFAULT_DEPTH),
-                "stat": kwargs.get("stat", provider.DEFAULT_STAT),
+                "property": kwargs["property"],
+                "depth": kwargs["depth"],
+                "stat": kwargs["stat"],
             }
         if isinstance(provider, CorineProvider):
-            return {"year": kwargs.get("year", provider.DEFAULT_YEAR)}
+            return {"year": kwargs["year"]}
         if isinstance(provider, Bdot10kProvider):
             # Default of Bdot10kProvider.download_package (``format="GPKG"``).
             params: dict[str, object] = {"format": kwargs.get("format", "GPKG")}

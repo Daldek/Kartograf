@@ -43,7 +43,6 @@ from kartograf.download.links import (
 from kartograf.download.storage import FileStorage, storage_for_provider
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.base import BaseProvider
-from kartograf.providers.pl import create_nmt_provider, require_nmt_vertical_crs
 from kartograf.providers.pl.skorowidz import SkorowidzRecord
 
 logger = logging.getLogger(__name__)
@@ -308,13 +307,9 @@ class DownloadManager:
     - By bbox: downloads GeoTIFF float32 from WCS (1m, both vertical CRS) on the
       1 m sheet grid
 
-    Supports vertical CRS:
-    - EVRF2007 (default) - European Vertical Reference Frame 2007
-    - KRON86 - legacy Kronsztadt 86
-
-    Supports resolutions:
-    - 1m (default) - high resolution, available for both EVRF2007 and KRON86
-    - 5m - lower resolution, available only for EVRF2007
+    The injected provider selects the product, resolution (NMT 1m or 5m)
+    and vertical CRS (EVRF2007 or KRON86 for PL). NMT 5m exists only in
+    EVRF2007; bbox WCS is available only for 1m.
 
     Attributes
     ----------
@@ -334,7 +329,8 @@ class DownloadManager:
 
     Examples
     --------
-    >>> manager = DownloadManager(output_dir="./data")
+    >>> from kartograf.providers.pl import create_nmt_provider
+    >>> manager = DownloadManager("./data", create_nmt_provider("EVRF2007", "1m"))
     >>>
     >>> # Download single sheet (ASC)
     >>> manager.download_sheet("N-34-130-D-d-2-4")
@@ -351,21 +347,20 @@ class DownloadManager:
     >>> manager.download_bbox(bbox, "area.tif")
     >>>
     >>> # Download in legacy KRON86 vertical CRS
-    >>> manager = DownloadManager(vertical_crs="KRON86")
+    >>> manager = DownloadManager("./data", create_nmt_provider("KRON86", "1m"))
     >>> manager.download_sheet("N-34-130-D-d-2-4")
     >>>
     >>> # Download 5m resolution (only EVRF2007)
-    >>> manager = DownloadManager(resolution="5m")
+    >>> manager = DownloadManager("./data", create_nmt_provider("EVRF2007", "5m"))
     >>> manager.download_sheet("N-34-130-D-d-2-4")
     """
 
     def __init__(
         self,
-        output_dir: str | Path = "./data",
-        provider: BaseProvider | None = None,
+        output_dir: str | Path,
+        provider: BaseProvider,
+        *,
         storage: FileStorage | None = None,
-        vertical_crs: str = "EVRF2007",
-        resolution: str = "1m",
         max_workers: int = 1,
         sidecar_extra: dict | None = None,
         all_campaigns: bool = False,
@@ -378,26 +373,16 @@ class DownloadManager:
 
         Parameters
         ----------
-        output_dir : str or Path, optional
-            Base directory for downloads (default: "./data")
-        provider : BaseProvider, optional
-            Data provider (default: GugikProvider with specified settings)
+        output_dir : str or Path
+            Base directory for downloads; the provider selects the segment.
+        provider : BaseProvider
+            Source of the downloaded data, its resolution and vertical CRS.
+            PL NMT supports 1m (EVRF2007 or KRON86) or 5m (EVRF2007 only);
+            NMPT supports 1m (EVRF2007 or KRON86); orthophotos select RGB,
+            CIR or B/W in the provider. No provider is created implicitly.
         storage : FileStorage, optional
-            Storage manager (default: FileStorage whose subdirectory comes
-            from the provider's source descriptor
-            (`resolve_subdir(vertical_crs=...)`, `{system}` resolved per sheet),
-            falling back to `resolution` when the provider has no
-            `descriptor_key`; the provider's `storage_variant`, e.g. orto CIR,
-            is appended as `_<variant>`)
-        vertical_crs : str, optional
-            Vertical CRS: "EVRF2007" or "KRON86" (default: "EVRF2007").
-            Note: 5m exists only in EVRF2007 - "5m" with "KRON86" raises
-            ValidationError (an injected provider that declares its own
-            vertical_crs wins).
-        resolution : str, optional
-            Grid resolution: "1m" or "5m" (default: "1m").
-            Note: 5m is only available for EVRF2007 and does not support
-            bbox download (WCS).
+            Explicit storage manager (default: storage from the provider's
+            descriptor, resolution, vertical CRS and optional variant).
         max_workers : int, optional
             Maximum number of parallel download threads (default: 1).
             When 1, downloads are sequential (backward compatible).
@@ -426,33 +411,21 @@ class DownloadManager:
             incompatible resolution/CRS.
         """
         validate_year_bounds(min_year, max_year)
-        # The "5m => EVRF2007" rule (D11): without a provider the factory
-        # rejects 5m + KRON86 with ValidationError (0.7.1, no silent swap).
-        self._provider = provider or create_nmt_provider(
-            vertical_crs=vertical_crs, resolution=resolution
+        self._provider = provider
+        # Do not infer a different dataset when the provider has no resolution
+        # or height dimension (e.g. ortho or lightweight test providers).
+        provider_resolution = getattr(provider, "resolution", None)
+        resolution = (
+            provider_resolution if isinstance(provider_resolution, str) else None
         )
-        # The provider is the authority on the vertical CRS actually delivered:
-        # `DownloadManager(provider=GugikProvider(vertical_crs="KRON86"))` used
-        # to write into a `..._evrf2007` segment next to a sidecar declaring
-        # EPSG:9650 (sidecars already read the provider, see `_write_sidecar`).
-        # isinstance(str), not `is not None`: for Mock(spec=Provider) the
-        # attribute yields a Mock, which must not reach the segment template.
-        provider_vertical_crs = getattr(self._provider, "vertical_crs", None)
-        if isinstance(provider_vertical_crs, str):
-            vertical_crs = provider_vertical_crs
-        else:
-            vertical_crs = require_nmt_vertical_crs(resolution, vertical_crs)
-        # Datum the index records must declare (``verify_record_vertical_crs``);
-        # ``None`` = the provider declares none (orto, stubs) - no check.
-        self._record_vertical_crs = (
+        provider_vertical_crs = getattr(provider, "vertical_crs", None)
+        vertical_crs = (
             provider_vertical_crs if isinstance(provider_vertical_crs, str) else None
         )
+        self._record_vertical_crs = vertical_crs
         if storage is None:
             storage = storage_for_provider(
-                output_dir,
-                self._provider,
-                resolution=resolution,
-                vertical_crs=vertical_crs,
+                output_dir, provider, resolution=resolution, vertical_crs=vertical_crs
             )
         self._storage = storage
         self._vertical_crs = vertical_crs
@@ -480,13 +453,13 @@ class DownloadManager:
         self.last_sheet: SheetFetch | None = None
 
     @property
-    def vertical_crs(self) -> str:
-        """Return current vertical CRS."""
+    def vertical_crs(self) -> str | None:
+        """Actual provider vertical CRS, or None for data without heights."""
         return self._vertical_crs
 
     @property
-    def resolution(self) -> str:
-        """Return current resolution."""
+    def resolution(self) -> str | None:
+        """Actual provider resolution, or None when the product has no grid."""
         return self._resolution
 
     @property
@@ -1486,7 +1459,9 @@ class DownloadManager:
 
         Examples
         --------
-        >>> manager = DownloadManager(output_dir="./data")
+        >>> manager = DownloadManager(
+        ...     "./data", create_nmt_provider("EVRF2007", "1m")
+        ... )
         >>> bbox = BBox(
         ...     min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
         ... )

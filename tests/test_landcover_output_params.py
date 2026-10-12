@@ -71,15 +71,18 @@ class TestSoilGridsOutputParams:
 
     def _download(self, tmp_path, value: int = 1, nodata=-32768, **kwargs) -> Path:
         manager = LandCoverManager(output_dir=tmp_path, provider=SoilGridsProvider())
+        options = {"property": "soc", "depth": "0-5cm", "stat": "mean"}
+        options.update(kwargs)
         with patch(
             "kartograf.providers.soilgrids.download_to",
             side_effect=_fake_download_to(_tiny_geotiff(nodata, value)),
         ):
-            return manager.download(bbox=BBOX, **kwargs)
-
-    def test_defaults_are_in_the_name(self, tmp_path):
-        path = self._download(tmp_path)
-        assert path == tmp_path / f"soilgrids_soc_0-5cm_mean_bbox_{COORDS}.tif"
+            return manager.download(
+                bbox=BBOX,
+                property=options["property"],
+                depth=options["depth"],
+                stat=options["stat"],
+            )
 
     @pytest.mark.parametrize(
         ("first", "second"),
@@ -121,14 +124,6 @@ class TestSoilGridsOutputParams:
         }
         assert meta["nodata"] == -32768
 
-    def test_sidecar_records_defaults(self, tmp_path):
-        request = _sidecar(self._download(tmp_path))["request"]
-        assert (request["property"], request["depth"], request["stat"]) == (
-            "soc",
-            "0-5cm",
-            "mean",
-        )
-
     def test_file_without_nodata_gives_null(self, tmp_path):
         assert _sidecar(self._download(tmp_path, nodata=None))["nodata"] is None
 
@@ -138,7 +133,9 @@ class TestSoilGridsOutputParams:
             "kartograf.providers.soilgrids.download_to",
             side_effect=_fake_download_to(_tiny_geotiff(-32768, 1)),
         ):
-            path = manager.download_by_sheet("N-34-130-D", property="silt")
+            path = manager.download_by_sheet(
+                "N-34-130-D", property="silt", depth="0-5cm", stat="mean"
+            )
         assert path.name == "soilgrids_silt_0-5cm_mean_sheet_N-34-130-D.tif"
         assert _sidecar(path)["request"] == {
             "sheet": "N-34-130-D",
@@ -153,8 +150,10 @@ class TestSoilGridsOutputParams:
             "kartograf.providers.soilgrids.download_to",
             side_effect=_fake_download_to(_tiny_geotiff(None, 1)),
         ):
-            a = manager.download(bbox=BBOX, property="clay")
-            b = manager.download_by_bbox(BBOX, property="clay")
+            a = manager.download(bbox=BBOX, property="clay", depth="0-5cm", stat="mean")
+            b = manager.download_by_bbox(
+                BBOX, property="clay", depth="0-5cm", stat="mean"
+            )
         assert a == b
 
 
@@ -179,11 +178,6 @@ class TestCorineOutputParams:
         assert a.name == f"corine_2018_bbox_{COORDS}.png"
         assert b.name == f"corine_2012_bbox_{COORDS}.png"
         assert a.exists() and b.exists()
-
-    def test_default_year_in_name_and_sidecar(self, tmp_path):
-        path = self._download(tmp_path)
-        assert path.name == f"corine_2018_bbox_{COORDS}.png"
-        assert _sidecar(path)["request"]["year"] == 2018
 
     def test_sheet_mode(self, tmp_path):
         path = self._download(tmp_path, sheet="N-34-130-D", year=2006)
@@ -264,8 +258,32 @@ class TestLandCoverCliOutputParams:
             )
 
     def test_clay_then_sand_two_files(self, tmp_path, capsys):
-        assert self._soilgrids(tmp_path, "--property", "clay", value=11) == 0
-        assert self._soilgrids(tmp_path, "--property", "sand", value=22) == 0
+        assert (
+            self._soilgrids(
+                tmp_path,
+                "--property",
+                "clay",
+                "--depth",
+                "0-5cm",
+                "--stat",
+                "mean",
+                value=11,
+            )
+            == 0
+        )
+        assert (
+            self._soilgrids(
+                tmp_path,
+                "--property",
+                "sand",
+                "--depth",
+                "0-5cm",
+                "--stat",
+                "mean",
+                value=22,
+            )
+            == 0
+        )
         out = tmp_path / "out"
         clay = out / f"soilgrids_clay_0-5cm_mean_bbox_{COORDS}.tif"
         sand = out / f"soilgrids_sand_0-5cm_mean_bbox_{COORDS}.tif"
@@ -276,7 +294,12 @@ class TestLandCoverCliOutputParams:
         assert f"Downloaded to: {sand}" in capsys.readouterr().out
 
     def test_depth_and_stat_from_cli(self, tmp_path):
-        assert self._soilgrids(tmp_path, "--depth", "30-60cm", "--stat", "Q0.05") == 0
+        assert (
+            self._soilgrids(
+                tmp_path, "--property", "soc", "--depth", "30-60cm", "--stat", "Q0.05"
+            )
+            == 0
+        )
         path = tmp_path / "out" / f"soilgrids_soc_30-60cm_Q0.05_bbox_{COORDS}.tif"
         request = _sidecar(path)["request"]
         assert (request["depth"], request["stat"]) == ("30-60cm", "Q0.05")

@@ -91,12 +91,13 @@ class SoilGridsProvider(LandCoverProvider):
     ...     min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
     ... )
     >>> provider.download_by_bbox(
-    ...     bbox, Path("./soc.tif"), property="soc", depth="0-5cm"
+    ...     bbox, Path("./soc.tif"), property="soc", depth="0-5cm", stat="mean"
     ... )
     >>>
     >>> # Download clay content by sheet code
     >>> provider.download_by_sheet(
-    ...     "N-34-130-D", Path("./clay.tif"), property="clay", depth="15-30cm"
+    ...     "N-34-130-D", Path("./clay.tif"), property="clay",
+    ...     depth="15-30cm", stat="mean"
     ... )
     """
 
@@ -127,9 +128,6 @@ class SoilGridsProvider(LandCoverProvider):
     # Default settings
     DEFAULT_TIMEOUT = 120
     MAX_RETRIES = MAX_RETRIES
-    DEFAULT_PROPERTY = "soc"
-    DEFAULT_DEPTH = "0-5cm"
-    DEFAULT_STAT = "mean"
 
     def __init__(self, session: requests.Session | None = None, cache=None):
         """
@@ -162,14 +160,17 @@ class SoilGridsProvider(LandCoverProvider):
     # Download by bbox → WCS
     # =========================================================================
 
-    def download_by_bbox(
+    # The generic provider interface permits source-specific **kwargs;
+    # SoilGrids requires an explicit property, depth and statistic.
+    def download_by_bbox(  # type: ignore[override]
         self,
         bbox: BBox,
         output_path: Path,
         timeout: int = DEFAULT_TIMEOUT,
-        property: str = DEFAULT_PROPERTY,
-        depth: str = DEFAULT_DEPTH,
-        stat: str = DEFAULT_STAT,
+        *,
+        property: str,
+        depth: str,
+        stat: str,
         **kwargs,
     ) -> Path:
         """
@@ -183,15 +184,17 @@ class SoilGridsProvider(LandCoverProvider):
             Path where the GeoTIFF should be saved
         timeout : int, optional
             Request timeout in seconds (default: 120)
-        property : str, optional
-            Soil property to download (default: "soc")
-            Options: bdod, cec, cfvo, clay, nitrogen, ocd, ocs, phh2o, sand, silt, soc
-        depth : str, optional
-            Depth interval (default: "0-5cm")
-            Options: 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm
-        stat : str, optional
-            Statistic to download (default: "mean")
-            Options: mean, Q0.05, Q0.5, Q0.95, uncertainty
+        property : str
+            bdod (bulk density), cec (cation exchange capacity), cfvo
+            (coarse fragments), clay (clay), nitrogen (total nitrogen),
+            ocd (organic carbon density), ocs (organic carbon stock),
+            phh2o (soil pH), sand (sand), silt (silt), soc (organic carbon).
+        depth : str
+            Soil interval: 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm,
+            or 100-200cm (centimetres below surface).
+        stat : str
+            mean (average), Q0.05 (5th percentile), Q0.5 (median),
+            Q0.95 (95th percentile), or uncertainty (prediction uncertainty).
         **kwargs
             Additional options (unused)
 
