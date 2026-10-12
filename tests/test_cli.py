@@ -4255,6 +4255,13 @@ def _selection(tiles, superseded=()):
     return LazTileSelection(tiles=tuple(tiles), superseded=tuple(superseded))
 
 
+def _write_laz_tile(_url, target, **_kwargs):
+    """Stub tile bytes at the staged location consumed by the version store."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(b"LASF")
+    return target
+
+
 class TestCmdDownloadLaz:
     """Tests for the LAZ product flow in the download command."""
 
@@ -4316,7 +4323,7 @@ class TestCmdDownloadLaz:
         instance = Mock()
         instance.vertical_crs = "EVRF2007"
         instance.select_tiles.return_value = _selection(self._fake_tiles())
-        instance.download.return_value = tmp_path / "x.laz"
+        instance.download.side_effect = _write_laz_tile
         mock_provider_cls.return_value = instance
 
         result = main(
@@ -4355,7 +4362,7 @@ class TestCmdDownloadLaz:
         instance = Mock()
         instance.vertical_crs = "EVRF2007"
         instance.select_tiles.return_value = _selection(self._fake_tiles())
-        instance.download.return_value = tmp_path / "x.laz"
+        instance.download.side_effect = _write_laz_tile
         mock_provider_cls.return_value = instance
 
         result = main(
@@ -4408,7 +4415,7 @@ class TestCmdDownloadLaz:
 
         def _download(url, target, **_kwargs):
             if good in url:
-                return target
+                return _write_laz_tile(url, target)
             raise DownloadError(f"HTTP 503 dla {url}")
 
         instance = Mock()
@@ -4453,7 +4460,7 @@ class TestCmdDownloadLaz:
         instance = Mock()
         instance.vertical_crs = "EVRF2007"
         instance.select_tiles.return_value = _selection(self._fake_tiles())
-        instance.download.return_value = tmp_path / "x.laz"
+        instance.download.side_effect = _write_laz_tile
         mock_provider_cls.return_value = instance
 
         main(
@@ -4624,7 +4631,9 @@ class TestCmdDownloadLaz:
         )
 
         assert result == 0
-        sidecars = list(tmp_path.rglob("*.meta.json"))
+        sidecars = [
+            p for p in tmp_path.rglob("*.meta.json") if "versions" not in p.parts
+        ]
         assert len(sidecars) == 1
         sidecar = sidecars[0]
         assert sidecar.name == f"{tile.filename}.meta.json"
@@ -4706,7 +4715,9 @@ class TestCmdDownloadLaz:
         )
 
         assert result == 0
-        sidecars = list(tmp_path.rglob("*.meta.json"))
+        sidecars = [
+            p for p in tmp_path.rglob("*.meta.json") if "versions" not in p.parts
+        ]
         assert len(sidecars) == 1
         sidecar = sidecars[0]
         assert "pl_2000_kron86" in str(sidecar.parent)
@@ -4760,7 +4771,9 @@ class TestCmdDownloadLaz:
         )
 
         assert result == 0
-        (sidecar,) = tmp_path.rglob("*.meta.json")
+        (sidecar,) = (
+            p for p in tmp_path.rglob("*.meta.json") if "versions" not in p.parts
+        )
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
         assert payload["horizontal_crs"] == "EPSG:2178"
 
@@ -8864,7 +8877,9 @@ class TestLazSidecarRequestFilters:
                 + list(extra)
                 + ["-o", str(tmp_path), "-q"]
             )
-        (sidecar,) = tmp_path.rglob("*.meta.json")
+        (sidecar,) = (
+            p for p in tmp_path.rglob("*.meta.json") if "versions" not in p.parts
+        )
         return rc, json.loads(sidecar.read_text(encoding="utf-8"))["request"]
 
     def test_filters_recorded(self, tmp_path):

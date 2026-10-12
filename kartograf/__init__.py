@@ -72,6 +72,7 @@ from kartograf.download.fetch import UpdateMode
 from kartograf.download.laz import (
     LazDownloadResult,
     LazTileFailure,
+    check_laz_updates,
     download_laz_area,
     run_laz_download,
 )
@@ -162,6 +163,7 @@ __all__ = [
     # Download (LAZ tiles, D17)
     "LazDownloadResult",
     "LazTileFailure",
+    "check_laz_updates",
     "download_laz_area",
     "run_laz_download",
     # Land Cover
