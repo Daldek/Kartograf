@@ -12,10 +12,13 @@ from the plan file are never executed.
 """
 
 import json
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, replace
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, cast, get_args
 
+from kartograf._version import build_version
 from kartograf.exceptions import ValidationError
 
 PLAN_SCHEMA = "kartograf-plan/1"
@@ -141,6 +144,16 @@ def _item(raw: dict) -> PlanItem:
 def store_id(output_dir: str | Path) -> str:
     """Identity of a store in a plan: the resolved output directory."""
     return str(Path(output_dir).resolve())
+
+
+def new_plan(output_dir: str | Path, items: Iterable[PlanItem]) -> UpdatePlan:
+    """A plan of the store ``output_dir`` checked now."""
+    return UpdatePlan(
+        store=store_id(output_dir),
+        checked_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        kartograf_version=build_version(),
+        items=tuple(items),
+    )
 
 
 def require_store(plan: UpdatePlan, store: str) -> None:

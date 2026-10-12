@@ -266,32 +266,32 @@ def create_parser() -> argparse.ArgumentParser:
     update_modes.add_argument(
         "--check-updates",
         action="store_true",
-        help="Tylko PL --sheet/--bbox/--geometry --country pl (bez --target-crs): "
-        "porownaj lokalne wersje ze skorowidzem GUGiK i wypisz raport "
-        "(aktualne / nowsza / do pobrania); niczego nie pobiera",
+        help="Porownaj lokalne wersje ze zrodlem i wypisz raport (aktualne / "
+        "nowsza / do pobrania / nie da sie sprawdzic bez pobrania); niczego nie "
+        "pobiera. Arkusze PL i LAZ: skorowidz/WFS, arkusze SM5: ETag, wycinki "
+        "i TM33: bez taniego sygnalu",
     )
     update_modes.add_argument(
         "--upgrade",
         action="store_true",
-        help="Tylko PL --sheet/--bbox/--geometry --country pl (bez --target-crs): "
-        "pobierz nowsza kampanie, gdy jest w skorowidzu (domyslnie tylko "
-        "Info: o nowszej); z --plan wykonaj zapisany plan",
+        help="Pobierz nowsza tresc, gdy sygnal zrodla ja wskazuje (domyslnie "
+        "tylko informacja); pliki bez taniego sygnalu zostaja lokalne "
+        "(pobranie: --force); z --plan wykonaj zapisany plan",
     )
     update_modes.add_argument(
         "--force",
         action="store_true",
-        help="PL nmt/nmpt/orto: pobierz ponownie wybrane kampanie i odswiez ich "
-        "liste z GUGiK (ta sama tresc = bez zmian, inna = nowa wersja; nic nie "
-        "jest nadpisywane); wycinek --target-crs PL pobiera zawsze; CZ i LAZ: "
-        "nadpisz istniejace pliki",
+        help="Pobierz ponownie kazdy plik zadania (arkusze, kafle LAZ, wycinki) "
+        "i odswiez liste kampanii z GUGiK; ta sama tresc = bez zmian, inna = "
+        "nowa wersja; nic nie jest nadpisywane",
     )
     download_parser.add_argument(
         "--plan",
         metavar="PLIK",
         default=None,
-        help="Z --check-updates: zapisz plan aktualizacji (JSON kartograf-plan/1); "
-        "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad, bez "
-        "pobrania)",
+        help="Z --check-updates: zapisz plan aktualizacji (JSON kartograf-plan/1, "
+        "przy --country auto jeden plan PL i CZ); z --upgrade: wykonaj plan "
+        "(pozycje zmienione od planu = blad, bez pobrania)",
     )
     download_parser.add_argument(
         "--quiet",

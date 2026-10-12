@@ -12,9 +12,7 @@ plan file are never executed. This module covers the ``pl_sheet`` track
 
 import dataclasses
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 
-from kartograf._version import build_version
 from kartograf.download.manager import (
     DownloadManager,
     SheetFetch,
@@ -26,6 +24,7 @@ from kartograf.download.plan import (
     ItemStatus,
     PlanItem,
     UpdatePlan,
+    new_plan,
     require_store,
     select_planned,
     store_id,
@@ -125,12 +124,7 @@ def check_updates(manager: DownloadManager, sheets: list[str]) -> UpdatePlan:
         for inspection in manager.inspect_sheets(sheets)
         for item in _items(manager, inspection)
     ]
-    return UpdatePlan(
-        store=_store(manager),
-        checked_at=datetime.now(UTC).isoformat(timespec="seconds"),
-        kartograf_version=build_version(),
-        items=tuple(items),
-    )
+    return new_plan(_store(manager), tuple(items))
 
 
 def upgrade(manager: DownloadManager, plan: UpdatePlan) -> UpgradeReport:

@@ -29,10 +29,9 @@ import logging
 import os
 import shutil
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 
-from kartograf._version import build_version
 from kartograf.core.bbox import BBox, is_czech_crs, transform_bbox
 from kartograf.download.fetch import (
     FileSlot,
@@ -47,6 +46,7 @@ from kartograf.download.fetch import (
 from kartograf.download.plan import (
     PlanItem,
     UpdatePlan,
+    new_plan,
     require_store,
     select_planned,
     store_id,
@@ -381,12 +381,7 @@ def check_pl_cutout(cutout: PlCutout) -> UpdatePlan:
         unit=slot.std.stem,
         signal=channel_signal(_cutout_descriptor_key(cutout), TransportKind.WCS),
     )
-    return UpdatePlan(
-        store=store_id(cutout.output_dir),
-        checked_at=datetime.now(UTC).isoformat(timespec="seconds"),
-        kartograf_version=build_version(),
-        items=(item,),
-    )
+    return new_plan(store_id(cutout.output_dir), (item,))
 
 
 def _cutout_result(

@@ -9,6 +9,7 @@ import math
 import sys
 from collections import Counter
 from collections.abc import Iterator, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -30,7 +31,7 @@ from kartograf.download.countries import CountryPart
 from kartograf.download.countries import bbox_to_wgs84 as _bbox_to_wgs84
 from kartograf.download.countries import countries_for_bbox as _countries_for_bbox
 from kartograf.download.countries import country_bbox as _country_bbox
-from kartograf.download.fetch import UpdateMode
+from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import (
     DownloadManager,
     DownloadProgress,
@@ -1077,9 +1078,35 @@ def _geometry_envelope(filepath: Path, layer: str | None) -> BBox:
     return get_overall_bbox(filepath, layer=layer, target_crs="EPSG:2180")
 
 
+@dataclass
+class _PlanContext:
+    """Update plan of one ``download`` run, shared by every track.
+
+    ``--check-updates`` collects one plan per track (``plans``) and writes
+    them as ONE plan file (``--country auto``: PL and CZ, ``UpdatePlan.merge``);
+    ``--upgrade --plan`` reads the file once (``loaded``) and every track
+    executes its own positions.
+    """
+
+    plans: list[UpdatePlan] = field(default_factory=list)
+    loaded: UpdatePlan | None = None
+
+
+def _plan_context(args: argparse.Namespace) -> _PlanContext:
+    """The run's plan context (a bare ``Namespace`` in tests: a fresh one)."""
+    ctx = getattr(args, "plan_ctx", None)
+    if not isinstance(ctx, _PlanContext):
+        ctx = _PlanContext()
+        args.plan_ctx = ctx
+    return ctx
+
+
 def cmd_download(args: argparse.Namespace) -> int:
     """
     Execute the download command.
+
+    ``--upgrade --plan`` reads the plan before any work; ``--check-updates
+    --plan`` writes the plan of every track of the task after it.
 
     Parameters
     ----------
@@ -1091,6 +1118,34 @@ def cmd_download(args: argparse.Namespace) -> int:
     int
         Exit code (0 for success, 1 for error)
     """
+    ctx = _PlanContext()
+    args.plan_ctx = ctx
+    plan_file = getattr(args, "plan", None)
+    if getattr(args, "upgrade", False) and plan_file:
+        try:
+            ctx.loaded = UpdatePlan.from_json(
+                Path(plan_file).read_text(encoding="utf-8")
+            )
+        except OSError as e:
+            print(
+                f"Error: nie udalo sie odczytac planu {plan_file}: {e}", file=sys.stderr
+            )
+            return 1
+        except ValidationError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+    rc = _cmd_download(args)
+    if getattr(args, "check_updates", False) and plan_file and ctx.plans:
+        plan = ctx.plans[0]
+        for other in ctx.plans[1:]:
+            plan = plan.merge(other)
+        Path(plan_file).write_text(plan.to_json(), encoding="utf-8")
+        print(f"Info: zapisano plan aktualizacji {plan_file}", file=sys.stderr)
+    return rc
+
+
+def _cmd_download(args: argparse.Namespace) -> int:
+    """``download`` after the plan file is read (see :func:`cmd_download`)."""
     _cache_warnings_shown.clear()
     has_sheet = args.sheet is not None
     has_bbox = args.bbox is not None
@@ -1172,14 +1227,6 @@ def cmd_download(args: argparse.Namespace) -> int:
     # every product supports year flags.
     if _reject_laz_only_opts(args) or _reject_full_sheet_for_laz(args):
         return 1
-    if _update_modes_requested(args) and (
-        args.product == "laz"
-        or (
-            not has_sheet
-            and (args.country != "pl" or getattr(args, "target_crs", None))
-        )
-    ):
-        return _reject_update_modes()
 
     country_flag = args.country
     product = args.product
@@ -1205,8 +1252,6 @@ def cmd_download(args: argparse.Namespace) -> int:
             # a CZ sheet code regardless of `country_flag` (explicit cz or auto)
             if _reject_campaign_opts_without_pl(args, ("CZ",)):
                 return 1
-            if _update_modes_requested(args):
-                return _reject_update_modes()
             return _run_cz(args)
         try:
             parsed = SheetParser(args.sheet)
@@ -1379,26 +1424,9 @@ def _last_result(manager: DownloadManager) -> DownloadResult:
     return result
 
 
-def _update_modes_requested(args: argparse.Namespace) -> bool:
-    return bool(
-        getattr(args, "check_updates", False) or getattr(args, "upgrade", False)
-    )
-
-
-def _reject_update_modes() -> int:
-    """Plan 1/3 decision 8: the versioned store covers PL sheets only so far."""
-    print(
-        "Error: --check-updates/--upgrade dzialaja w tej wersji tylko dla arkuszy "
-        "PL nmt/nmpt/orto (--sheet albo --bbox/--geometry z --country pl, bez "
-        "--target-crs); LAZ, CZ i wycinki: pobranie bez tych flag albo --force",
-        file=sys.stderr,
-    )
-    return 1
-
-
 def _update_mode(args: argparse.Namespace) -> UpdateMode | None:
-    """``update`` of the PL sheet download (spec 4.2): ``--upgrade`` /
-    ``--force``; ``--check-updates`` never downloads (``_run_plan_modes``)."""
+    """``update`` of every download track (spec 4.2): ``--upgrade`` /
+    ``--force``; ``--check-updates`` never downloads (``_report_plan``)."""
     if getattr(args, "upgrade", False):
         return "upgrade"
     return "force" if args.force else None
@@ -1434,7 +1462,11 @@ _PLAN_TEXT = {
 
 def _plan_line(item: PlanItem) -> str:
     if item.status == "newer":
-        text = f"nowsza: {item.available_label} (lokalna {item.local_label})"
+        signal = item.available_signal or {}
+        available = (
+            item.available_label or signal.get("etag") or signal.get("last_modified")
+        )
+        text = f"nowsza: {available} (lokalna {item.local_label})"
     elif item.status == "check_failed":
         text = f"nie udalo sie sprawdzic: {item.error}"
     else:
@@ -1445,44 +1477,50 @@ def _plan_line(item: PlanItem) -> str:
     return f"{item.unit}: {text}"
 
 
+def _report_plan(args: argparse.Namespace, plan: UpdatePlan) -> int:
+    """``--check-updates``: print the positions (stdout, also with ``-q`` — it
+    is the result) and keep the plan for ``--plan`` (written once by
+    ``cmd_download``). A position that could not be checked = code 1."""
+    for item in plan.items:
+        print(_plan_line(item))
+    _plan_context(args).plans.append(plan)
+    return 1 if any(i.status == "check_failed" for i in plan.items) else 0
+
+
+def _report_stale(stale: Sequence[PlanItem]) -> int:
+    """``--upgrade --plan``: positions whose source changed since the plan."""
+    for item in stale:
+        print(
+            f"Error: {item.unit}: zrodlo zmienilo sie od planu "
+            f"({item.available_label or item.available_signal}) — sprawdz "
+            "ponownie (--check-updates)",
+            file=sys.stderr,
+        )
+    return 1 if stale else 0
+
+
 def _run_plan_modes(
     args: argparse.Namespace, manager: DownloadManager, sheets: list[str]
 ) -> int | None:
-    """``--check-updates [--plan]`` and ``--upgrade --plan`` (spec 4.4).
+    """PL sheets: ``--check-updates`` and ``--upgrade --plan`` (spec 4.4).
 
-    ``None`` = neither: the caller downloads. The report goes to stdout also
-    with ``-q`` (it is the result); a position that could not be checked, a
-    stale position or a failure = code 1 (partial success).
+    ``None`` = neither: the caller downloads. A position that could not be
+    checked, a stale position or a failure = code 1 (partial success).
     """
     if getattr(args, "check_updates", False):
-        plan = check_updates(manager, sheets)
-        for item in plan.items:
-            print(_plan_line(item))
-        if args.plan:
-            Path(args.plan).write_text(plan.to_json(), encoding="utf-8")
-            print(f"Info: zapisano plan aktualizacji {args.plan}", file=sys.stderr)
-        return 1 if any(i.status == "check_failed" for i in plan.items) else 0
-    if not (getattr(args, "upgrade", False) and args.plan):
+        return _report_plan(args, check_updates(manager, sheets))
+    plan = _plan_context(args).loaded
+    if not getattr(args, "upgrade", False) or plan is None:
         return None
-    try:
-        plan = UpdatePlan.from_json(Path(args.plan).read_text(encoding="utf-8"))
-    except OSError as e:
-        print(f"Error: nie udalo sie odczytac planu {args.plan}: {e}", file=sys.stderr)
-        return 1
     report = upgrade(manager, plan)
     if not args.quiet:
         for fetch in report.done:
             for line in _status_lines(fetch.sheet, fetch.files, fetch.newer):
                 print(line)
-    for item in report.stale:
-        print(
-            f"Error: {item.unit}: zrodlo zmienilo sie od planu "
-            f"({item.available_label}) — sprawdz ponownie (--check-updates)",
-            file=sys.stderr,
-        )
+    rc = _report_stale(report.stale)
     for sheet, message in report.failed.items():
         print(f"Error: {sheet}: {message}", file=sys.stderr)
-    return 1 if report.stale or report.failed else 0
+    return 1 if rc or report.failed else 0
 
 
 _STATUS_TEXT = {
@@ -1512,13 +1550,62 @@ def _status_lines(
     return lines
 
 
-def _print_version_summary(result: DownloadResult, output_dir: Path) -> None:
+def _report_file(
+    args: argparse.Namespace,
+    unit: str,
+    file: VersionedFile | None,
+    update: UpdateMode | None,
+) -> None:
+    """Status line of one file of a track without campaigns (spec 4.2, 4.5).
+
+    A local version without a cheap signal gets ``(bez sprawdzania;
+    --check-updates)`` by default and an ``Info:`` about ``--force`` with
+    ``--upgrade``; a failed signal check is a ``Warning:`` (stderr, also with
+    ``-q``). ``file`` is ``None`` only when a plan skipped the file.
+    """
+    if file is None:
+        return
+    unverified = file.unverified or ""
+    if unverified.startswith("check_failed"):
+        error = unverified.split(":", 1)[1].strip()
+        print(
+            f"Warning: {unit}: nie udalo sie sprawdzic zrodla ({error}) — uzyto "
+            f"lokalnej wersji {file.label}",
+            file=sys.stderr,
+        )
+    unchecked = file.status == "local" and unverified == "none"
+    if not args.quiet:
+        (line,) = _status_lines(
+            unit, ((file.version_path.parent.name, file.status),), file.newer
+        )
+        if unchecked and update is None:
+            line += " (bez sprawdzania; --check-updates)"
+        print(line)
+    if unchecked and update == "upgrade":
+        print(
+            f"Info: {unit}: lokalna wersja {file.label} niesprawdzona — zrodlo "
+            "bez taniego sygnalu; pobierz ponownie: --force",
+            file=sys.stderr,
+        )
+
+
+def _unit_of(path: Path, output_dir: Path) -> str:
+    """Unit of a cutout in status lines: its path below ``--output``."""
+    try:
+        return Path(path).relative_to(output_dir).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _print_version_summary(
+    statuses: Sequence[str], failed: int, output_dir: Path
+) -> None:
     """Counters of the files of the task (spec 4.5)."""
-    counts = Counter(s for files in result.files.values() for _, s in files)
+    counts = Counter(statuses)
     print(
         f"Nowe: {counts['new']}, nowa etykieta: {counts['relabeled']}, "
         f"bez zmian: {counts['unchanged']}, lokalne: {counts['local']}, "
-        f"bledy: {len(result.failed)} ({output_dir})"
+        f"bledy: {failed} ({output_dir})"
     )
 
 
@@ -1654,7 +1741,11 @@ def _finish_pl_sheets(
                 print(line)
     if not quiet and paths:
         # O-7: with no file and no skip (only gaps/failures) a summary of 0 is noise
-        _print_version_summary(result, output_dir)
+        _print_version_summary(
+            [s for files in result.files.values() for _, s in files],
+            len(result.failed),
+            output_dir,
+        )
     total = result.total
     hard = result.hard_failures
     missing = result.no_coverage
@@ -1965,34 +2056,6 @@ def _warn_partial_sheets(
     )
 
 
-# description of the datum step in sidecars from before the K2 fix (EPSG:4829, area of
-# use:
-# Slovakia; content shifted 1-5 m) - after the fix the CZ path and the PL cutout -> 5514
-# pin "S-JTSK to ETRS89 (1)"/"(2)"
-_LEGACY_KROVAK_STEP = "S-JTSK to ETRS89 (3)"
-
-
-def _print_legacy_krovak_info(target: Path) -> None:
-    """D12: a skipped file from before the S-JTSK operation fix gets an ``Info:``.
-
-    Reads the ``<file>.meta.json`` sidecar (best-effort: missing/unreadable =
-    silence) and checks ``transform.horizontal``. No automatic
-    rebuild - the user decides (``--force``).
-    """
-    sidecar = target.parent / f"{target.name}.meta.json"
-    try:
-        payload = json.loads(sidecar.read_text(encoding="utf-8"))
-        horizontal = (payload.get("transform") or {}).get("horizontal")
-    except (OSError, ValueError, AttributeError):
-        return
-    if isinstance(horizontal, str) and _LEGACY_KROVAK_STEP in horizontal:
-        print(
-            f"Info: {target} pochodzi sprzed naprawy operacji S-JTSK (tresc "
-            "przesunieta 1-5 m) — pobierz ponownie z --force",
-            file=sys.stderr,
-        )
-
-
 def _download_pl_cutout(
     args: argparse.Namespace,
     bbox: BBox,
@@ -2032,8 +2095,13 @@ def _download_pl_cutout(
     provider, _storage = _create_provider_and_storage(
         product, output_dir, args.vertical_crs, args.resolution
     )
+    if getattr(args, "check_updates", False):
+        from kartograf.download.cutout import check_pl_cutout
+
+        return _report_plan(args, check_pl_cutout(cutout))
     chunks = len(provider.plan_wcs_chunks(cutout.bbox_source_2180))
-    if chunks > 1 or cutout.estimated_bytes >= 2**30:
+    fetching = args.force or not cutout.target_path.exists()
+    if fetching and (chunks > 1 or cutout.estimated_bytes >= 2**30):
         # stderr, not stdout: -q does NOT suppress Info:/Warning:
         height, width = cutout.grid_shape
         print(
@@ -2042,26 +2110,26 @@ def _download_pl_cutout(
             "GUGiK pobieranych po kolei",
             file=sys.stderr,
         )
+    update = _update_mode(args)
     try:
         result = run_pl_wcs_cutout(
             cutout,
             provider=provider,
-            update="force" if args.force else None,
+            update=update,
+            plan=_plan_context(args).loaded,
             parent_request=parent_request,
         )
     except Exception as e:  # noqa: BLE001 — code 1 instead of a traceback (ADR-023)
         print(f"Error: {e}", file=sys.stderr)
         return 1
-    if result.all_nodata:
+    if result.all_nodata and result.file is not None and result.file.status != "local":
         print(
             "Warning: wycinek w calosci nodata — obszar poza ladem PL (maska PRG: "
             "granica panstwa bez morza terytorialnego i wod wewnetrznych)",
             file=sys.stderr,
         )
-    if not args.quiet:
-        assert result.file is not None
-        print(f"Downloaded to {result.file.path}")
-    return 0
+    _report_file(args, _unit_of(cutout.target_path, output_dir), result.file, update)
+    return _report_stale(result.stale)
 
 
 def _download_pl_bbox(
@@ -2325,6 +2393,14 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         print(f"Error: {NO_TILES_MESSAGE}", file=sys.stderr)
         return 1
 
+    if getattr(args, "check_updates", False):
+        from kartograf.download.laz import check_laz_updates
+
+        return _report_plan(
+            args,
+            check_laz_updates(selection, provider=provider, output_dir=output_dir),
+        )
+
     total = len(selection.tiles)
     if not quiet:
         print(f"Found {total} LAZ tiles. Downloading with {workers} worker(s)...")
@@ -2334,6 +2410,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         if not quiet:
             print(f"\r  {done}/{count} tiles", end="", flush=True)
 
+    update = _update_mode(args)
     result = run_laz_download(
         selection,
         provider=provider,
@@ -2344,18 +2421,23 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         min_year=min_year,
         max_year=max_year,
         max_workers=workers,
-        update="force" if args.force else None,
+        update=update,
+        plan=_plan_context(args).loaded,
         on_progress=_progress,
         parent_request=_laz_parent_request(args, bbox),
     )
 
     if not quiet:
         print()
-        downloaded = sum(file.status != "local" for file in result.files)
-        local = len(result.files) - downloaded
-        print(
-            f"Downloaded {downloaded} tiles ({local} skipped) to {output_dir / 'laz'}"
+    for file in result.files:
+        _report_file(args, file.path.name, file, update)
+    if not quiet:
+        _print_version_summary(
+            [file.status for file in result.files],
+            len(result.failed),
+            output_dir / "laz",
         )
+    stale = _report_stale(result.stale)
     if result.failed:
         # Code 1 => `Error:` (convention: `Warning:` only with code 0) and the FULL
         # list of failed tiles to retry - model `_finish_pl_sheets` (N6).
@@ -2369,7 +2451,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
             print(f"  {failure.tile.sheet}: {failure.error}", file=sys.stderr)
         return 1
 
-    return 0
+    return stale
 
 
 @contextlib.contextmanager
@@ -2386,14 +2468,62 @@ def _library_log_muted(name: str) -> Iterator[None]:
         log.disabled = previous
 
 
+def _cz_download_sheet(args: argparse.Namespace, provider) -> int:
+    """CZ sheet code: TM33 tile (exportImage) or SM5 sheet (openzu).
+
+    Implementation: ``download.cz_sheets.run_cz_sheet`` / ``check_cz_sheet``.
+    """
+    from kartograf.download.cz_sheets import check_cz_sheet, run_cz_sheet
+
+    sheet = args.sheet
+    if getattr(args, "check_updates", False):
+        try:
+            plan = check_cz_sheet(provider, sheet, output_dir=args.output)
+        except (DownloadError, ValidationError) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        return _report_plan(args, plan)
+
+    def announce() -> None:
+        # O-3: only when the transfer really starts (after the provider's
+        # validations: SM5 sheet index, TM33 grid parse)
+        if not args.quiet:
+            print(f"Downloading {sheet} (CZ, resolution: {provider.resolution})...")
+
+    update = _update_mode(args)
+    try:
+        with _library_log_muted("kartograf.download.cz_sheets"):
+            result = run_cz_sheet(
+                provider,
+                sheet,
+                output_dir=args.output,
+                update=update,
+                plan=_plan_context(args).loaded,
+                on_download=announce,
+            )
+    except (DownloadError, ValidationError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    _warn_cz_all_nodata(result.file, result.all_nodata)
+    _report_file(args, sheet, result.file, update)
+    return _report_stale(result.stale)
+
+
+def _warn_cz_all_nodata(file: VersionedFile | None, all_nodata: bool) -> None:
+    """N2: ``Warning:`` when a downloaded CZ raster has no valid pixel (code 0)."""
+    if all_nodata and file is not None and file.status != "local":
+        print(
+            f"Warning: {file.path} jest w calosci nodata — obszar poza pokryciem "
+            "DMR CUZK (poza granica CZ?)",
+            file=sys.stderr,
+        )
+
+
 def _cz_download_bbox(
-    args,
+    args: argparse.Namespace,
     provider,
     bbox: BBox,
     parent_request: dict | None,
-    *,
-    quiet: bool,
-    skip_existing: bool,
 ) -> int:
     """CZ bbox: one `exportImage` cutout in `<subdir>/bbox/<coords>.tif`.
 
@@ -2402,17 +2532,23 @@ def _cz_download_bbox(
     The request then goes to the server in the native CRS, and the local
     warp in the provider moves it onto the result grid (ADR-024).
 
-    Implementation: ``download.cz_cutout.run_cz_cutout``.
+    Implementation: ``download.cz_cutout.run_cz_cutout`` / ``check_cz_cutout``.
     """
-    from kartograf.download.cz_cutout import run_cz_cutout
+    from kartograf.download.cz_cutout import check_cz_cutout, run_cz_cutout
 
     image_sr = args.target_crs or "EPSG:5514"
+    if getattr(args, "check_updates", False):
+        plan = check_cz_cutout(
+            provider, bbox, output_dir=args.output, image_crs=args.target_crs
+        )
+        return _report_plan(args, plan)
 
     def announce() -> None:
         # O-3: printed by the provider right before the first exportImage
-        if not quiet:
+        if not args.quiet:
             print(f"Downloading CZ bbox ({provider.resolution}, {image_sr})...")
 
+    update = _update_mode(args)
     try:
         # the CLI prints its own 'Warning:' line - the library log would
         # repeat it on stderr (logging.lastResort; the CLI configures no logging)
@@ -2422,28 +2558,19 @@ def _cz_download_bbox(
                 bbox,
                 output_dir=args.output,
                 image_crs=args.target_crs,
-                update=None if skip_existing else "force",
+                update=update,
+                plan=_plan_context(args).loaded,
                 parent_request=parent_request,
                 on_download=announce,
             )
     except (DownloadError, ValidationError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
-    assert result.file is not None  # without a plan a cutout always has a file
-    if result.file.status == "local":
-        if not quiet:
-            print(f"Skipped - already exists at {result.file.path}")
-        _print_legacy_krovak_info(result.file.path)
-        return 0
-    if result.all_nodata:
-        print(
-            f"Warning: {result.file.path} jest w calosci nodata - obszar poza "
-            "pokryciem DMR CUZK (poza granica CZ?)",
-            file=sys.stderr,
-        )
-    if not quiet:
-        print(f"Downloaded to {result.file.path}")
-    return 0
+    _warn_cz_all_nodata(result.file, result.all_nodata)
+    if result.file is not None:
+        unit = _unit_of(result.file.path, Path(args.output))
+        _report_file(args, unit, result.file, update)
+    return _report_stale(result.stale)
 
 
 def _cmd_download_cz(
@@ -2529,54 +2656,9 @@ def _cmd_download_cz(
             print(f"Error: {e}", file=sys.stderr)
             return 1
 
-        quiet = args.quiet
-        skip_existing = not args.force
         if bbox is None:
-            from kartograf.download.cz_sheets import run_cz_sheet
-
-            def announce() -> None:
-                if not quiet:
-                    print(
-                        f"Downloading {args.sheet} (CZ, resolution: "
-                        f"{provider.resolution})..."
-                    )
-
-            try:
-                with _library_log_muted("kartograf.download.cz_sheets"):
-                    result = run_cz_sheet(
-                        provider,
-                        args.sheet,
-                        output_dir=args.output,
-                        update="force" if args.force else None,
-                        on_download=announce,
-                    )
-            except (DownloadError, ValidationError) as e:
-                print(f"Error: {e}", file=sys.stderr)
-                return 1
-            assert result.file is not None  # without a plan, a sheet always has a file
-            if result.file.status == "local":
-                if not quiet:
-                    print(
-                        f"Skipped {args.sheet} - already exists at {result.file.path}"
-                    )
-                return 0
-            if result.all_nodata:
-                print(
-                    f"Warning: {result.file.path} jest w calosci nodata — "
-                    "obszar poza pokryciem DMR CUZK (poza granica CZ?)",
-                    file=sys.stderr,
-                )
-            if not quiet:
-                print(f"Downloaded to {result.file.path}")
-            return 0
-        return _cz_download_bbox(
-            args,
-            provider,
-            bbox,
-            parent_request,
-            quiet=quiet,
-            skip_existing=skip_existing,
-        )
+            return _cz_download_sheet(args, provider)
+        return _cz_download_bbox(args, provider, bbox, parent_request)
     finally:
         cache.close()
 

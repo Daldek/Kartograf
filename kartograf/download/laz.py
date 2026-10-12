@@ -28,10 +28,8 @@ Example::
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 
-from kartograf._version import build_version
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.fetch import (
     FileSlot,
@@ -44,6 +42,7 @@ from kartograf.download.fetch import (
 from kartograf.download.plan import (
     PlanItem,
     UpdatePlan,
+    new_plan,
     require_store,
     select_planned,
     store_id,
@@ -209,12 +208,7 @@ def check_laz_updates(
         )
         for tile in selection.tiles
     )
-    return UpdatePlan(
-        store=store_id(output_dir),
-        checked_at=datetime.now(UTC).isoformat(timespec="seconds"),
-        kartograf_version=build_version(),
-        items=items,
-    )
+    return new_plan(store_id(output_dir), items)
 
 
 def run_laz_download(
