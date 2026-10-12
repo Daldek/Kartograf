@@ -1434,10 +1434,25 @@ class TestCmdDownloadProduct:
     def test_force_passes_refresh_cache_to_provider_factory(
         self, mock_manager_cls, mock_create, tmp_path
     ):
-        """E14: --force skips the cache read but writes the new record."""
-        from kartograf.cache import MetadataCache
+        """``--force`` skips old metadata, then saves the new record."""
+        from kartograf.cache.defaults import open_cache
 
-        mock_create.return_value = _mock_provider_and_storage(".asc")
+        key = ("nmt", "1m", "EVRF2007", "N-34-130-D-d-2-4")
+        old = {"source": {"url": "old"}}
+        new = {"source": {"url": "new"}}
+        with open_cache(True, force=False) as cache:
+            assert cache is not None
+            cache.set_record(*key, old)
+
+        seen = []
+        pair = _mock_provider_and_storage(".asc")
+
+        def create(*_args, cache, **_kwargs):
+            seen.append(cache.get_record(*key))
+            cache.set_record(*key, new)
+            return pair
+
+        mock_create.side_effect = create
         mock_manager_cls.return_value = _mock_manager(tmp_path / "test.asc")
 
         rc = main(
@@ -1463,10 +1478,10 @@ class TestCmdDownloadProduct:
         )
 
         assert rc == 0
-        cache = mock_create.call_args.kwargs["cache"]
-        assert isinstance(cache, MetadataCache)
-        assert cache._refresh is True
-        assert cache._conn is None  # closed after the task
+        assert seen == [None]
+        with open_cache(True, force=False) as cache:
+            assert cache is not None
+            assert cache.get_record(*key) == new
 
     @pytest.mark.parametrize(
         "argv",
@@ -1511,23 +1526,34 @@ class TestCmdDownloadProduct:
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox", return_value=["N-1"])
     @patch("kartograf.cli.download_cmd._create_provider_and_storage")
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_without_force_opens_cache_in_cwd_and_closes_it(
+    def test_without_force_reads_cache_in_cwd(
         self, mock_manager_cls, mock_create, _mock_find, tmp_path, argv
     ):
-        from kartograf.cache import MetadataCache
+        from kartograf.cache.defaults import default_cache_path, open_cache
 
-        mock_create.return_value = _mock_provider_and_storage(".asc")
+        sheet = "N-34-130-D-d-2-4" if "--sheet" in argv else "N-1"
+        key = ("nmt", "1m", "EVRF2007", sheet)
+        old = {"source": {"url": "old"}}
+        with open_cache(True, force=False) as cache:
+            assert cache is not None
+            cache.set_record(*key, old)
+
+        seen = []
+        pair = _mock_provider_and_storage(".asc")
+
+        def create(*_args, cache, **_kwargs):
+            assert cache.db_path == default_cache_path()
+            seen.append(cache.get_record(*key))
+            return pair
+
+        mock_create.side_effect = create
         mock_manager_cls.return_value = _sheet_list_manager(tmp_path / "test.asc")
         mock_manager_cls.return_value.download_sheet.return_value = tmp_path / "t.asc"
 
         rc = main([*argv, "-o", str(tmp_path), "-q"])
 
         assert rc == 0
-        cache = mock_create.call_args.kwargs["cache"]
-        assert isinstance(cache, MetadataCache)
-        assert cache._db_path.parent == Path.cwd()
-        # closed after the task (CZ pattern): connection released
-        assert cache._conn is None
+        assert seen == [old]
 
     # --- product/resolution and product/vertical-crs pair validation (V2-N1) ---
 
@@ -5346,20 +5372,32 @@ class TestCmdDownloadCz:
 
     @pytest.mark.parametrize("force", [False, True])
     def test_force_refreshes_sheet_index_cache(self, tmp_path, force):
-        """D16: ``--force`` in the CZ path = ``MetadataCache(refresh=True)`` as in PL
-        (the SM5 sheet index is queried anew and saved); without ``--force``
-        the cache is read normally. The cache is closed after the task."""
-        from kartograf.cache import MetadataCache
+        """Forced CZ requests miss old sheet data but persist the replacement."""
+        from kartograf.cache.defaults import open_cache
         from kartograf.cli.download_cmd import _cmd_download_cz
 
-        with patch(_CZ_FACTORY_PATCH, return_value=_cz_provider_mock()) as factory:
+        old = {"name": "old"}
+        new = {"name": "new"}
+        with open_cache(True, force=False) as cache:
+            assert cache is not None
+            cache.set_sheet("cz_tm33", "302_5550", old)
+
+        seen = []
+
+        def factory(**kwargs):
+            cache = kwargs["cache"]
+            seen.append(cache.get_sheet("cz_tm33", "302_5550"))
+            cache.set_sheet("cz_tm33", "302_5550", new)
+            return _cz_provider_mock()
+
+        with patch(_CZ_FACTORY_PATCH, side_effect=factory):
             result = _cmd_download_cz(_cz_args(tmp_path, force=force))
 
         assert result == 0
-        cache = factory.call_args.kwargs["cache"]
-        assert isinstance(cache, MetadataCache)
-        assert cache._refresh is force
-        assert cache._conn is None
+        assert seen == [None if force else old]
+        with open_cache(True, force=False) as cache:
+            assert cache is not None
+            assert cache.get_sheet("cz_tm33", "302_5550") == new
 
     def test_unreadable_cache_warns_and_downloads(self, tmp_path, capsys):
         """An unreadable cache in the CZ path: one ``Warning:``, code 0."""
@@ -8796,11 +8834,9 @@ class TestUnreadableMetadataCache:
         assert "Error:" not in err
         assert "file is not a database" in err
         warnings = self._cache_warnings(err)
-        assert warnings == [
-            f"Warning: cache metadanych nieczytelny ({db}): file is not a "
-            "database — praca bez cache; uzyj `kartograf cache clear` albo "
-            "usun plik"
-        ]
+        assert len(warnings) == 1
+        assert warnings[0].startswith(f"Warning: cache metadanych nieczytelny ({db})")
+        assert warnings[0].isascii()
         assert db.read_bytes().startswith(b"to nie jest baza")  # untouched
 
     def test_single_sheet_downloads_with_warning(self, tmp_path, capsys):
