@@ -523,7 +523,7 @@ data/
 ├── orto/pl_1992/...                         # bez ukladu pionowego
 ├── orto/pl_1992_cir/...                     # wariant CIR (B/W: pl_<uklad>_bw), E12
 ├── laz/pl_2000_evrf2007/...                 # poziomy per kafel (uklad_xy), pionowy z flagi
-└── landcover/...                            # bez zmian (wlasny default --output)
+└── landcover/...                            # wlasny katalog (--output wymagane)
 ```
 
 **Reguly segmentow:**
@@ -549,7 +549,7 @@ data/
    ani dla orto/LAZ (brak takiego parametru).
 5. `<wariant>` rozroznia pliki tego samego godla i ukladu, ktore nie sa tym
    samym produktem (E12, 2026-10-06). Wariant deklaruje tylko orto
-   (`storage_variant`; w `BaseProvider` domyslnie `None`): RGB (domyslny)
+   (`storage_variant`; w `BaseProvider` domyslnie `None`): RGB
    bez sufiksu w `orto/pl_<uklad>/` (bez migracji), CIR w
    `orto/pl_<uklad>_cir/`, B/W w `orto/pl_<uklad>_bw/`. Wariant pochodzi
    z `provider.storage_variant` (`GugikOrtoProvider(color=...)`) i trafia do
@@ -679,7 +679,7 @@ PL-1992 grubsze niz 1:10000 rozwija sie do arkuszy 1:10000
 kazdego arkusza pyta WMS skorowidz (`GetFeatureInfo`, warstwy wykryte lazy
 przez `GetCapabilities` — ADR-020). `providers/pl/skorowidz.py` parsuje
 pelne rekordy; filtruje cale godlo, zgodny uklad i rozdzielczosc
-(dla orto tez domyslnie RGB), wybiera (strategia `newest`) rekord z najnowsza data w pierwszej
+(dla orto wariant koloru z `color`), wybiera (strategia `newest`) rekord z najnowsza data w pierwszej
 warstwie z dopasowaniem; remis rozstrzyga `dt_pzgik`, URL. Uklad wysokosci
 wybiera wylacznie endpoint (osobny WMS skorowidza na uklad); przed pobraniem
 `verify_record_vertical_crs` (`download/campaigns.py`; wywolania w

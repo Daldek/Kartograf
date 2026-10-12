@@ -14,7 +14,11 @@ class TestPreparePlCutout:
     def test_target_2180_no_pinned_and_native_name(self, tmp_path):
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         cut = prepare_pl_cutout(
-            bbox, "EPSG:2180", output_dir=str(tmp_path), vertical_crs="EVRF2007"
+            bbox,
+            "EPSG:2180",
+            output_dir=str(tmp_path),
+            vertical_crs="EVRF2007",
+            product="nmt",
         )
         assert cut.pinned is None
         assert cut.bbox_target is cut.bbox_2180
@@ -31,7 +35,11 @@ class TestPreparePlCutout:
     def test_target_5514_builds_pinned_and_names_in_target(self, tmp_path):
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         cut = prepare_pl_cutout(
-            bbox, "EPSG:5514", output_dir=str(tmp_path), vertical_crs="EVRF2007"
+            bbox,
+            "EPSG:5514",
+            output_dir=str(tmp_path),
+            vertical_crs="EVRF2007",
+            product="nmt",
         )
         assert cut.pinned is not None and cut.pinned.accuracy_m <= 1.0
         assert cut.bbox_target.crs == "EPSG:5514"
@@ -48,8 +56,7 @@ class TestPreparePlCutout:
             tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "bbox"
         )
 
-    @pytest.mark.parametrize(("resolution", "margin"), [("1m", 4.0), ("5m", 20.0)])
-    def test_source_has_warp_margin_of_four_pixels(self, tmp_path, resolution, margin):
+    def test_source_has_warp_margin_of_four_pixels(self, tmp_path):
         """D9: source margin = WARP_MARGIN_PX (4 px) on each side.
 
         Measured around the target envelope mapped to EPSG:2180 — the same
@@ -62,11 +69,12 @@ class TestPreparePlCutout:
             bbox,
             "EPSG:5514",
             output_dir=str(tmp_path),
-            resolution=resolution,
             vertical_crs="EVRF2007",
+            product="nmt",
         )
         back = bbox_to_crs(cut.bbox_target, "EPSG:2180")
         source = cut.bbox_source_2180
+        margin = 4.0  # WARP_MARGIN_PX at the fixed 1 m grid
         assert source.min_x == pytest.approx(back.min_x - margin)
         assert source.min_y == pytest.approx(back.min_y - margin)
         assert source.max_x == pytest.approx(back.max_x + margin)
@@ -75,7 +83,11 @@ class TestPreparePlCutout:
     def test_vertical_kron86_lands_in_kron86_segment(self, tmp_path):
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         cut = prepare_pl_cutout(
-            bbox, "EPSG:2180", output_dir=str(tmp_path), vertical_crs="KRON86"
+            bbox,
+            "EPSG:2180",
+            output_dir=str(tmp_path),
+            vertical_crs="KRON86",
+            product="nmt",
         )
         assert "pl_1992_1m_kron86" in cut.target_path.parts
 
@@ -95,6 +107,7 @@ class TestPreparePlCutout:
             "EPSG:2180",
             output_dir=str(tmp_path),
             vertical_crs="EVRF2007",
+            product="nmt",
         ).bbox_2180
         # sanity condition: the unpinned path gives a DIFFERENT bbox here (measured
         # 1.06 m on max_y) - otherwise the test would not tell the paths apart
@@ -107,6 +120,7 @@ class TestPreparePlCutout:
             "EPSG:2180",
             output_dir=str(tmp_path),
             vertical_crs="EVRF2007",
+            product="nmt",
         )
 
         assert cut.bbox_2180 == pinned
@@ -120,6 +134,7 @@ class TestPreparePlCutout:
             "EPSG:2180",
             output_dir=str(tmp_path),
             vertical_crs="EVRF2007",
+            product="nmt",
         )
 
         assert cut.bbox_2180 == BBox(530010, 382010, 530190, 382090, "EPSG:2180")
@@ -135,6 +150,7 @@ class TestPreparePlCutout:
             "EPSG:2180",
             output_dir=str(tmp_path),
             vertical_crs="EVRF2007",
+            product="nmt",
         )
 
         assert cut.bbox_2180.min_y == pytest.approx(236968.4486, abs=0.01)
@@ -148,6 +164,8 @@ class TestPreparePlCutout:
             BBox(530010, 382010, 530190, 382090, "EPSG:2180"),
             "EPSG:3045",
             output_dir=str(tmp_path),
+            vertical_crs="EVRF2007",
+            product="nmt",
         )
         b = cut.bbox_target
         coords = [format(v, ".10g") for v in (b.min_x, b.min_y, b.max_x, b.max_y)]
@@ -157,7 +175,11 @@ class TestPreparePlCutout:
     def test_wgs84_bbox_normalized_to_2180(self, tmp_path):
         bbox = BBox(18.60, 49.75, 18.65, 49.77, "EPSG:4326")
         cut = prepare_pl_cutout(
-            bbox, "EPSG:2180", output_dir=str(tmp_path), vertical_crs="EVRF2007"
+            bbox,
+            "EPSG:2180",
+            output_dir=str(tmp_path),
+            vertical_crs="EVRF2007",
+            product="nmt",
         )
         assert cut.bbox_2180.crs == "EPSG:2180"
         assert 400000 < cut.bbox_2180.min_x < 700000  # order of magnitude of 2180
@@ -173,7 +195,11 @@ class TestPreparePlCutout:
             pytest.raises(TransformUnavailableError),
         ):
             prepare_pl_cutout(
-                bbox, "EPSG:5514", output_dir=str(tmp_path), vertical_crs="EVRF2007"
+                bbox,
+                "EPSG:5514",
+                output_dir=str(tmp_path),
+                vertical_crs="EVRF2007",
+                product="nmt",
             )
 
     def test_public_exports(self):
@@ -192,15 +218,19 @@ class TestPreparePlCutout:
         "kwargs",
         [
             {"target_crs": "EPSG:4326"},
-            {"resolution": "2m"},
-            {"resolution": "5m", "vertical_crs": "KRON86"},
             {"vertical_crs": "Bpv"},
+            {"product": "orto"},
         ],
     )
     def test_prepare_rejects_bad_params(self, tmp_path, kwargs):
         from kartograf.exceptions import ValidationError
 
-        params = {"target_crs": "EPSG:2180", **kwargs}
+        params = {
+            "target_crs": "EPSG:2180",
+            "vertical_crs": "EVRF2007",
+            "product": "nmt",
+            **kwargs,
+        }
         target = params.pop("target_crs")
         with pytest.raises(ValidationError):
             prepare_pl_cutout(
@@ -220,6 +250,16 @@ class TestTargetCrsValidations:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--target-crs",
@@ -236,6 +276,16 @@ class TestTargetCrsValidations:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 *self._BBOX,
                 "--product",
                 product,
@@ -252,6 +302,16 @@ class TestTargetCrsValidations:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 *self._BBOX,
                 "--system",
                 "2000",

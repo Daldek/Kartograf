@@ -670,7 +670,7 @@ def test_reused_campaign_without_sidecar_gets_sidecar(tmp_path):
 
 
 def _mock_provider(tmp_payload: bytes = b"ncols 1\n") -> Mock:
-    p = Mock(spec=GugikProvider)
+    p = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
     type(p).default_extension = PropertyMock(return_value=".asc")
     type(p).descriptor_key = PropertyMock(return_value="pl.gugik.nmt_1m")
     type(p).vertical_crs = PropertyMock(return_value="EVRF2007")
@@ -862,7 +862,9 @@ def test_manager_without_range_unchanged_uses_record_cache(tmp_path):
     from tests.test_campaigns_flow import c14_session
 
     cache = MetadataCache(tmp_path / "cache.db")
-    provider = GugikProvider(session=c14_session(G), cache=cache)
+    provider = GugikProvider(
+        session=c14_session(G), cache=cache, vertical_crs="EVRF2007", resolution="1m"
+    )
     manager = DownloadManager(tmp_path, provider=provider)
     manager.download_sheet(G)
     assert cache.get_record("nmt", "1m", "EVRF2007", G) is not None
@@ -871,7 +873,10 @@ def test_manager_without_range_unchanged_uses_record_cache(tmp_path):
     offline.get = Mock(side_effect=requests.ConnectionError("brak indeksu"))
     refresh = MetadataCache(tmp_path / "cache.db", refresh=True)
     manager = DownloadManager(
-        tmp_path, provider=GugikProvider(session=offline, cache=refresh)
+        tmp_path,
+        provider=GugikProvider(
+            session=offline, cache=refresh, vertical_crs="EVRF2007", resolution="1m"
+        ),
     )
     with patch("kartograf.transport.http.time.sleep"):
         manager.download_sheet(G)
@@ -885,13 +890,23 @@ def test_manager_range_disables_local_fallback(tmp_path):
 
     cache = MetadataCache(tmp_path / "cache.db")
     DownloadManager(
-        tmp_path, provider=GugikProvider(session=c14_session(G), cache=cache)
+        tmp_path,
+        provider=GugikProvider(
+            session=c14_session(G),
+            cache=cache,
+            vertical_crs="EVRF2007",
+            resolution="1m",
+        ),
     ).download_sheet(G)
     offline = Mock(spec=requests.Session)
     offline.get = Mock(side_effect=requests.ConnectionError("brak indeksu"))
     refresh = MetadataCache(tmp_path / "cache.db", refresh=True)
     manager = DownloadManager(
-        tmp_path, provider=GugikProvider(session=offline, cache=refresh), min_year=2024
+        tmp_path,
+        provider=GugikProvider(
+            session=offline, cache=refresh, vertical_crs="EVRF2007", resolution="1m"
+        ),
+        min_year=2024,
     )
     with (
         patch("kartograf.transport.http.time.sleep"),
@@ -1149,15 +1164,15 @@ def test_provider_without_campaigns_keeps_plain_flow(tmp_path):
     assert p.download.call_count == 1
 
 
-def test_provider_without_campaigns_rejects_all_and_min_year():
+def test_provider_without_campaigns_rejects_all_and_min_year(tmp_path):
     with pytest.raises(ValidationError, match="nie obsluguje kampanii"):
-        DownloadManager(provider=_mock_provider(), all_campaigns=True)
+        DownloadManager(tmp_path, provider=_mock_provider(), all_campaigns=True)
     with pytest.raises(ValidationError, match="nie obsluguje kampanii"):
-        DownloadManager(provider=_mock_provider(), min_year=2024)
+        DownloadManager(tmp_path, provider=_mock_provider(), min_year=2024)
 
 
 def test_spec_mock_is_not_campaign_aware(tmp_path):
-    p = Mock(spec=GugikProvider)
+    p = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
     type(p).default_extension = PropertyMock(return_value=".asc")
     m = DownloadManager(tmp_path, provider=p)  # no exception
     assert m.all_campaigns is False and m.min_year is None
@@ -1173,9 +1188,9 @@ def test_spec_mock_is_not_campaign_aware(tmp_path):
     assert path.is_file() and not path.is_symlink()
 
 
-def test_invalid_year_bound():
+def test_invalid_year_bound(tmp_path):
     with pytest.raises(ValidationError):
-        DownloadManager(provider=FakeCampaignProvider(C14), min_year=True)
+        DownloadManager(tmp_path, provider=FakeCampaignProvider(C14), min_year=True)
 
 
 # =============================================================================
@@ -1838,9 +1853,9 @@ def test_full_sheet_flag_with_all_adds_nothing(tmp_path):
     assert sorted(fake.downloads) == sorted(r.url for r in C14_ALL)
 
 
-def test_full_sheet_requires_campaign_provider():
+def test_full_sheet_requires_campaign_provider(tmp_path):
     with pytest.raises(ValidationError, match="nie obsluguje kampanii"):
-        DownloadManager(provider=_mock_provider(), full_sheet=True)
+        DownloadManager(tmp_path, provider=_mock_provider(), full_sheet=True)
 
 
 def test_full_sheet_full_flight_download_failure_fails_sheet(tmp_path):

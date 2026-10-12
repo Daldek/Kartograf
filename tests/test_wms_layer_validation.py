@@ -30,7 +30,7 @@ from kartograf.exceptions import DownloadError, NoCoverageError
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
-from tests.conftest import render_gfi_body
+from tests.conftest import make_provider, render_gfi_body
 
 # ---------------------------------------------------------------------------
 # XML fixtures
@@ -173,13 +173,17 @@ class TestFetchWmsLayers:
 
     def _fetch(self, xml_text: str) -> list[str]:
         session = _make_session(_make_mock_response(xml_text))
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )
         return provider._fetch_wms_layers(ENDPOINT, timeout=10)
 
     def test_uses_injected_session_for_get_capabilities(self):
         """GetCapabilities goes through the session handed in by the caller."""
         session = _make_session(_make_mock_response(WMS_XML_WITH_NAMESPACE))
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )
 
         provider._fetch_wms_layers(ENDPOINT, timeout=10)
 
@@ -236,7 +240,9 @@ class TestFetchWmsLayers:
     def test_network_error_after_three_attempts_raises(self):
         """Three failed GetCapabilities tries = DownloadError (no fallback)."""
         session = _make_session(*[requests.ConnectionError("refused")] * 3)
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )
 
         with (
             patch("time.sleep") as mock_sleep,
@@ -253,7 +259,9 @@ class TestFetchWmsLayers:
             requests.ConnectionError("reset"),
             _make_mock_response(WMS_XML_WITH_NAMESPACE),
         )
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )
 
         with patch("time.sleep") as mock_sleep:
             result = provider._fetch_wms_layers(ENDPOINT, timeout=10)
@@ -279,7 +287,7 @@ class TestLayers:
     @pytest.mark.real_wms_layers
     def test_memoizes_success_per_endpoint(self):
         """A second call for the same endpoint does not query the service."""
-        provider = GugikProvider()
+        provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
         layers = ["SkorowidzeNMT2026", "SkorowidzeNMT2025iStarsze"]
 
         with patch.object(
@@ -299,7 +307,7 @@ class TestLayers:
     @pytest.mark.real_wms_layers
     def test_failure_is_not_memoized(self):
         """After a DownloadError the next call retries and may succeed."""
-        provider = GugikProvider()
+        provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
 
         with patch.object(
             provider,
@@ -316,7 +324,7 @@ class TestLayers:
     @pytest.mark.real_wms_layers
     def test_lock_serializes_concurrent_discovery(self) -> None:
         """Four threads at once -> exactly one GetCapabilities, shared result."""
-        provider = GugikProvider()
+        provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
         calls: list[str] = []
 
         def slow_fetch(endpoint, timeout=10):
@@ -337,7 +345,9 @@ class TestLayers:
     def test_get_opendata_url_fails_before_get_feature_info(self):
         """A layer discovery failure fails the query without GetFeatureInfo."""
         session = _make_session(_make_mock_response(render_gfi_body([])))
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )
 
         with (
             patch.object(
@@ -354,7 +364,9 @@ class TestLayers:
     def test_get_opendata_url_queries_layers_newest_first(self):
         """Empty responses -> every layer from _layers in turn, NoCoverageError."""
         session = _make_session(_make_mock_response(render_gfi_body([])))
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )
 
         with pytest.raises(NoCoverageError, match="Brak danych NMT 1m"):
             provider._get_opendata_url(SHEET)
@@ -386,7 +398,7 @@ class TestNmptLayerPattern:
     def test_fetch_wms_layers_returns_only_nmpt(self):
         """GetCapabilities with layers of both products -> only NMPT, sorted."""
         session = _make_session(_make_mock_response(WMS_XML_NMT_AND_NMPT))
-        provider = GugikNmptProvider(session=session)
+        provider = GugikNmptProvider(session=session, vertical_crs="EVRF2007")
 
         result = provider._fetch_wms_layers(ENDPOINT, timeout=10)
 
@@ -424,7 +436,7 @@ class TestCapabilitiesTimeout:
             "nmpt": GugikNmptProvider,
             "orto": GugikOrtoProvider,
         }[product]
-        return cls(session=session)
+        return make_provider(cls, session=session)
 
     @pytest.mark.parametrize(
         ("product", "expected"), [("nmt", 30), ("nmpt", 30), ("orto", 60)]
@@ -458,7 +470,9 @@ class TestCapabilitiesTimeout:
         )
 
         with pytest.raises(NoCoverageError):
-            GugikProvider(session=session).download(SHEET, tmp_path / "x", timeout=45)
+            GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            ).download(SHEET, tmp_path / "x", timeout=45)
 
         caps_call = next(
             c for c in session.get.call_args_list if "GetCapabilities" in c.args[0]
@@ -492,7 +506,7 @@ def test_real_caps_orto_skips_default_wms_and_zasiegi_without_warning(caplog):
     session = _make_session(
         _make_mock_response(_caps("ORTO_WMS_SkorowidzeWgAktualnosci.xml"))
     )
-    provider = GugikOrtoProvider(session=session)
+    provider = GugikOrtoProvider(session=session, color="RGB")
     with caplog.at_level(logging.WARNING):
         layers = provider._fetch_wms_layers(ENDPOINT, timeout=10)
     assert layers == [
@@ -513,7 +527,11 @@ def test_family_name_outside_pattern_warns_and_is_not_queried(caplog):
         "<Name>SkorowidzeNMT2026</Name><Name>SkorowidzeNMT2027Kwartal1</Name>",
         1,
     )
-    provider = GugikProvider(session=_make_session(_make_mock_response(xml)))
+    provider = GugikProvider(
+        session=_make_session(_make_mock_response(xml)),
+        vertical_crs="EVRF2007",
+        resolution="1m",
+    )
     with caplog.at_level(logging.WARNING):
         layers = provider._fetch_wms_layers(ENDPOINT, timeout=10)
     assert "SkorowidzeNMT2027Kwartal1" not in layers
@@ -525,7 +543,11 @@ def test_family_name_outside_pattern_warns_and_is_not_queried(caplog):
 @pytest.mark.real_wms_layers
 def test_nmt_family_does_not_warn_for_nmpt_names(caplog):
     xml = _caps("NMPT_WMS_SkorowidzeUkladEVRF2007.xml")
-    provider = GugikProvider(session=_make_session(_make_mock_response(xml)))
+    provider = GugikProvider(
+        session=_make_session(_make_mock_response(xml)),
+        vertical_crs="EVRF2007",
+        resolution="1m",
+    )
     with caplog.at_level(logging.WARNING), pytest.raises(DownloadError):
         provider._fetch_wms_layers(ENDPOINT, timeout=10)
     assert not [r for r in caplog.records if r.levelno >= logging.WARNING]

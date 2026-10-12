@@ -52,6 +52,21 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
     int
         Exit code (0 for success, 1 for error)
     """
+    missing = []
+    if args.output is None:
+        missing.append(
+            "--output wymagane: dowolna sciezka pliku GeoTIFF .tif lub katalogu wyniku"
+        )
+    if args.depth is None:
+        missing.append(
+            "--depth wymagane: 0-5cm, 5-15cm, 15-30cm, 30-60cm, "
+            "60-100cm, 100-200cm (przedzial glebokosci ponizej powierzchni)"
+        )
+    if missing:
+        for error in missing:
+            print(f"Error: {error}", file=sys.stderr)
+        return 1
+
     from kartograf.hydrology import HSGCalculator
 
     # Check that exactly one selection method is provided
@@ -130,6 +145,7 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
                 output_path=output_path,
                 depth=args.depth,
                 keep_intermediate=args.keep_intermediate,
+                stat="mean",  # HSG uses the mean texture estimate
             )
         else:
             result_path = calc.calculate_hsg_by_bbox(
@@ -137,6 +153,7 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
                 output_path=output_path,
                 depth=args.depth,
                 keep_intermediate=args.keep_intermediate,
+                stat="mean",  # HSG uses the mean texture estimate
             )
 
         print(f"HSG raster saved to: {result_path}")

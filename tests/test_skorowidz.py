@@ -27,7 +27,7 @@ from kartograf.providers.pl.skorowidz import (
     query_skorowidz_layer,
     select_sheet_record,
 )
-from tests.conftest import gfi_record, render_gfi_body
+from tests.conftest import gfi_record, make_provider, render_gfi_body
 
 FIXTURES = Path(__file__).parent / "fixtures" / "gugik_skorowidz"
 ENDPOINT = (
@@ -601,7 +601,7 @@ class TestCoverageHints:
     _EXPECTED = {
         "Dostepny potomek 6.129.30.13.4 — uzyj --scale 1:1000",
         "Skorowidz ma ten obszar w PL-1992: M-34-63-A-c-2-1 (1:10000) — uzyj "
-        "tego godla lub --system 1992 --scale 1:10000",
+        "tego godla lub --system 1992",
     }
 
     def test_helper(self):
@@ -622,7 +622,7 @@ class TestCoverageHints:
         cls = GugikProvider if product == "nmt" else GugikOrtoProvider
         # empty answers: the NMT variant check (P10) finds nothing to add
         empty = Mock(status_code=200, text=sample("empty.body"))
-        provider = cls(session=Mock(get=Mock(return_value=empty)))
+        provider = make_provider(cls, session=Mock(get=Mock(return_value=empty)))
         error = provider._no_coverage(SheetParser(self._PL2000), list(self._RECORDS))
         message = str(error)
         for hint in self._EXPECTED:

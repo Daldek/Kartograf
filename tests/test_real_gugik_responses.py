@@ -126,7 +126,9 @@ class TestNmtRecordSelectionOnRealBodies:
             "2023-03-29",
         ]
         session = nmt_session(sheet, "nmt1_evr")
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )
         url = provider._get_opendata_url(sheet)
         assert file_id(url) == "77381_1339240"
         assert provider.source_info(sheet)["acquisition_date"] == "2023-03-29"
@@ -142,7 +144,9 @@ class TestNmtRecordSelectionOnRealBodies:
         )
         assert [r.resolution_m for r in newer] == [0.5]
         session = nmt_session(sheet, "nmt1_evr")
-        provider = GugikProvider(session=session)
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )
         record = provider._resolve_sheet(sheet)
         assert file_id(record.url) == "78954_1462161"
         assert record.resolution_m == 1.0
@@ -170,7 +174,9 @@ class TestNmtRecordSelectionOnRealBodies:
     def test_c6_two_records_of_same_pl2000_sheet_newest_wins(self):
         """7.125.11.19 (PL-2000:S7): 2021-10-05 (75172) i 2023-03-17 (77912)."""
         session = nmt_session("M-34-64-D-d-2-3", "nmt1_evr")
-        record = GugikProvider(session=session)._resolve_sheet("7.125.11.19")
+        record = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        )._resolve_sheet("7.125.11.19")
         assert file_id(record.url) == "77912_1384976"
         assert (record.system, record.zone) == ("2000", 7)
         assert record.aktualnosc == "2023-03-17"
@@ -178,9 +184,11 @@ class TestNmtRecordSelectionOnRealBodies:
     def test_c6_pl1992_sheet_in_same_body_ignores_pl2000_records(self):
         """The same point, PL-1992 sheet code: the newest layer wins (2025, 83137)."""
         sheet = "M-34-64-D-d-2-3"
-        record = GugikProvider(session=nmt_session(sheet, "nmt1_evr"))._resolve_sheet(
-            sheet
-        )
+        record = GugikProvider(
+            session=nmt_session(sheet, "nmt1_evr"),
+            vertical_crs="EVRF2007",
+            resolution="1m",
+        )._resolve_sheet(sheet)
         assert file_id(record.url) == "83137_1729557"
         assert record.system == "1992"
 
@@ -194,9 +202,11 @@ class TestNmtRecordSelectionOnRealBodies:
         )
         by_id = {file_id(r.url): r for r in records}
         assert by_id["81616_1669599"].dt_pzgik > by_id["81025_1562196"].dt_pzgik
-        record = GugikProvider(session=nmt_session(sheet, "nmt1_evr"))._resolve_sheet(
-            sheet
-        )
+        record = GugikProvider(
+            session=nmt_session(sheet, "nmt1_evr"),
+            vertical_crs="EVRF2007",
+            resolution="1m",
+        )._resolve_sheet(sheet)
         assert file_id(record.url) == "81025_1562196"
 
     def test_c9_xyz_record_is_parsed_but_never_decides(self):
@@ -226,7 +236,9 @@ class TestNmtRecordSelectionOnRealBodies:
         assert alone is not None and alone.url.endswith(".ASC")
 
         provider = GugikProvider(
-            session=nmt_session(sheet, "nmt5_evr"), resolution="5m"
+            session=nmt_session(sheet, "nmt5_evr"),
+            resolution="5m",
+            vertical_crs="EVRF2007",
         )
         record = provider._resolve_sheet(sheet)
         assert file_id(record.url) == "83841_1816160"
@@ -240,7 +252,9 @@ class TestNmtRecordSelectionOnRealBodies:
         )
         assert 'godlo:"N-33-59-c-a-1-3"' in body  # raw body, unedited
         provider = GugikProvider(
-            session=nmt_session(sheet, "nmt1_krn"), vertical_crs="KRON86"
+            session=nmt_session(sheet, "nmt1_krn"),
+            vertical_crs="KRON86",
+            resolution="1m",
         )
         record = provider._resolve_sheet(sheet)
         assert file_id(record.url) == "67106_778610"
@@ -256,7 +270,11 @@ class TestNmtRecordSelectionOnRealBodies:
 class TestNoCoverageHintsOnRealBodies:
     def test_c6f_pl2000_1_10000_hints_descendant_scale_and_pl1992_sheet(self):
         sheet = "6.129.30"
-        provider = GugikProvider(session=nmt_session(sheet, "nmt1_evr"))
+        provider = GugikProvider(
+            session=nmt_session(sheet, "nmt1_evr"),
+            vertical_crs="EVRF2007",
+            resolution="1m",
+        )
         with pytest.raises(NoCoverageError) as exc:
             provider._resolve_sheet(sheet)
         message = str(exc.value)
@@ -268,7 +286,9 @@ class TestNoCoverageHintsOnRealBodies:
     def test_c6g_pl2000_kron86_hint_points_to_1_2000(self):
         sheet = "5.167.25"
         provider = GugikProvider(
-            session=nmt_session(sheet, "nmt1_krn"), vertical_crs="KRON86"
+            session=nmt_session(sheet, "nmt1_krn"),
+            vertical_crs="KRON86",
+            resolution="1m",
         )
         with pytest.raises(NoCoverageError, match="--scale 1:2000") as exc:
             provider._resolve_sheet(sheet)
@@ -287,7 +307,9 @@ class TestNoCoverageHintsOnRealBodies:
 
     def test_c10g_nmpt_only_half_metre_names_the_resolution(self):
         sheet = "N-33-77-A-d-2-2"
-        provider = GugikNmptProvider(session=nmt_session(sheet, "nmpt_evr"))
+        provider = GugikNmptProvider(
+            session=nmt_session(sheet, "nmpt_evr"), vertical_crs="EVRF2007"
+        )
         with pytest.raises(NoCoverageError) as exc:
             provider._resolve_sheet(sheet)
         assert "GUGiK ma ten arkusz w 0.5 m" in str(exc.value)
@@ -347,7 +369,9 @@ class TestVariantHintOnRealBodies:
     (resolution, vertical CRS) whose index has the sheet (U1, 2026-10-10)."""
 
     def test_variant_hint_for_5m_gap(self, caplog):
-        provider = GugikProvider(resolution="5m", session=variant_session())
+        provider = GugikProvider(
+            resolution="5m", session=variant_session(), vertical_crs="EVRF2007"
+        )
         with pytest.raises(NoCoverageError) as exc:
             provider._resolve_sheet(U1)
         # one answer for all layers: no per-layer year check ("EVRF2007" in
@@ -364,7 +388,9 @@ class TestVariantHintOnRealBodies:
     def test_one_query_per_variant(self):
         session = variant_session()
         with pytest.raises(NoCoverageError):
-            GugikProvider(resolution="5m", session=session)._resolve_sheet(U1)
+            GugikProvider(
+                resolution="5m", session=session, vertical_crs="EVRF2007"
+            )._resolve_sheet(U1)
         variant_calls = [
             c.args[0] for c in session.get.call_args_list if "," in _layer_of(c.args[0])
         ]
@@ -376,14 +402,18 @@ class TestVariantHintOnRealBodies:
         assert other != body
         session = variant_session(bodies={("nmt1_krn", "all"): other})
         with pytest.raises(NoCoverageError) as exc:
-            GugikProvider(resolution="5m", session=session)._resolve_sheet(U1)
+            GugikProvider(
+                resolution="5m", session=session, vertical_crs="EVRF2007"
+            )._resolve_sheet(U1)
         assert [h for h in _variant_hints(exc) if "KRON86" in h] == []
 
     def test_failed_variant_is_not_asked_again(self):
         """Review: an outage of a variant index costs one attempt per provider,
         not one (with retries) per missing sheet."""
         session = variant_session(fail_prefix="nmt1_evr")
-        provider = GugikProvider(resolution="5m", session=session)
+        provider = GugikProvider(
+            resolution="5m", session=session, vertical_crs="EVRF2007"
+        )
         evrf_1m = NMT_ENDPOINTS["1m"]["EVRF2007"]
         for _ in range(2):
             with pytest.raises(NoCoverageError):
@@ -394,7 +424,9 @@ class TestVariantHintOnRealBodies:
     def test_variant_query_failure_keeps_no_coverage(self, caplog):
         session = variant_session(fail_prefix="nmt1_evr")
         with pytest.raises(NoCoverageError) as exc:
-            GugikProvider(resolution="5m", session=session)._resolve_sheet(U1)
+            GugikProvider(
+                resolution="5m", session=session, vertical_crs="EVRF2007"
+            )._resolve_sheet(U1)
         hints = _variant_hints(exc)
         assert all("EVRF2007" not in h for h in hints)
         assert any("KRON86" in h for h in hints)
@@ -409,14 +441,14 @@ class TestVariantHintOnRealBodies:
         cache = MetadataCache(tmp_path / "c.db")
         first = variant_session()
         with pytest.raises(NoCoverageError) as exc1:
-            GugikProvider(resolution="5m", session=first, cache=cache)._resolve_sheet(
-                U1
-            )
+            GugikProvider(
+                resolution="5m", session=first, cache=cache, vertical_crs="EVRF2007"
+            )._resolve_sheet(U1)
         again = variant_session()
         with pytest.raises(NoCoverageError) as exc2:
-            GugikProvider(resolution="5m", session=again, cache=cache)._resolve_sheet(
-                U1
-            )
+            GugikProvider(
+                resolution="5m", session=again, cache=cache, vertical_crs="EVRF2007"
+            )._resolve_sheet(U1)
         again.get.assert_not_called()
         assert exc2.value.hints == exc1.value.hints
 
@@ -424,7 +456,9 @@ class TestVariantHintOnRealBodies:
         sheet = "N-33-77-A-d-2-2"
         session = nmt_session(sheet, "nmpt_evr")
         with pytest.raises(NoCoverageError):
-            GugikNmptProvider(session=session)._resolve_sheet(sheet)
+            GugikNmptProvider(session=session, vertical_crs="EVRF2007")._resolve_sheet(
+                sheet
+            )
         assert all("/NMPT/" in c.args[0] for c in session.get.call_args_list)
 
 
@@ -445,7 +479,7 @@ class TestOrtoRecordSelectionOnRealBodies:
         assert provider.source_info(self.SHEET)["color"] == "CIR"
 
     def test_c12_rgb_comes_from_2025_at_5_cm(self):
-        provider = GugikOrtoProvider(session=orto_session(self.SHEET))
+        provider = GugikOrtoProvider(session=orto_session(self.SHEET), color="RGB")
         record = provider._resolve_sheet(self.SHEET)
         assert file_id(record.url) == "83235_1485417"
         assert record.layer == "SkorowidzeOrtofotomapy2025"
@@ -495,7 +529,7 @@ class TestOrtoRecordSelectionOnRealBodies:
         """M-34-90-C-b-4-4: 2026 (partial sheet) before the full 2024 - no
         preference for the ``calyArkuszWypelnionyTrescia`` flag."""
         sheet = "M-34-90-C-b-4-4"
-        provider = GugikOrtoProvider(session=orto_session(sheet))
+        provider = GugikOrtoProvider(session=orto_session(sheet), color="RGB")
         record = provider._resolve_sheet(sheet)
         assert file_id(record.url) == "84466_1602825"
         assert record.full_sheet is False
@@ -506,7 +540,7 @@ class TestOrtoRecordSelectionOnRealBodies:
         """7.173.21.01: record 2021-04-28 (75063), descendants 7.173.21.01.x
         from 2022 are ignored (the sheet code is a whole token)."""
         sheet = "7.173.21.01"
-        provider = GugikOrtoProvider(session=orto_session(sheet))
+        provider = GugikOrtoProvider(session=orto_session(sheet), color="RGB")
         record = provider._resolve_sheet(sheet)
         assert file_id(record.url) == "75063_1038529"
         assert record.sheet == sheet
@@ -531,7 +565,9 @@ class TestCutoutSheetsFromDifferentCampaigns:
     def test_c14_each_sheet_gets_its_own_newest_campaign(
         self, sheet, expected_id, layer, full_sheet
     ):
-        provider = GugikProvider(session=c14_session(sheet))
+        provider = GugikProvider(
+            session=c14_session(sheet), vertical_crs="EVRF2007", resolution="1m"
+        )
         record = provider._resolve_sheet(sheet)
         assert file_id(record.url) == expected_id
         assert record.layer == layer
@@ -544,7 +580,9 @@ class TestCutoutSheetsFromDifferentCampaigns:
         prefixes = set()
         urls = set()
         for sheet in (f"N-34-139-C-a-3-{n}" for n in range(1, 5)):
-            record = GugikProvider(session=c14_session(sheet))._resolve_sheet(sheet)
+            record = GugikProvider(
+                session=c14_session(sheet), vertical_crs="EVRF2007", resolution="1m"
+            )._resolve_sheet(sheet)
             prefixes.add(file_id(record.url).split("_")[0])
             urls.add(record.url)
         assert prefixes == {"84183", "83998"}
@@ -605,7 +643,9 @@ class TestLazDiscoveryOnRealWfs:
         Until 2026-10-06 the result also had the 2022 PL-2000:S7 tiles (dedup by
         sheet code only) - a duplicated area (C13 NOTE 1).
         """
-        selection = GugikLazProvider(session=laz_session()).select_tiles(W2_BBOX)
+        selection = GugikLazProvider(
+            session=laz_session(), vertical_crs="EVRF2007"
+        ).select_tiles(W2_BBOX)
         tiles = selection.tiles
         assert [(t.sheet, t.year, t.crs) for t in tiles] == [
             ("N-34-139-A-c-1-1-3-4", 2025, "PL-1992"),
@@ -628,7 +668,9 @@ class TestLazDiscoveryOnRealWfs:
 
     def test_laz_year_2023_w2_covers_reference(self):
         session = laz_session()
-        tiles = GugikLazProvider(session=session).discover_tiles(W2_BBOX, year=2023)
+        tiles = GugikLazProvider(
+            session=session, vertical_crs="EVRF2007"
+        ).discover_tiles(W2_BBOX, year=2023)
         assert [(t.sheet, t.year) for t in tiles] == [("N-34-139-A-c-1-1-3-4", 2023)]
         assert file_id(tiles[0].url) == "78044_1403296"
         assert feature_years(session) == [str(y) for y in range(2026, 2017, -1)]
@@ -636,7 +678,9 @@ class TestLazDiscoveryOnRealWfs:
     def test_laz_year_2022_two_tiles_together_cover_w2_reference(self):
         """P8: no single 2022 tile covers W2_BBOX, their union does - no conflict."""
         session = laz_session()
-        selection = GugikLazProvider(session=session).select_tiles(W2_BBOX, year=2022)
+        selection = GugikLazProvider(
+            session=session, vertical_crs="EVRF2007"
+        ).select_tiles(W2_BBOX, year=2022)
         assert [(t.sheet, t.year, t.crs) for t in selection.tiles] == [
             ("7.173.21.06.1", 2022, "PL-2000:S7"),
             ("7.173.21.06.2", 2022, "PL-2000:S7"),
@@ -645,11 +689,15 @@ class TestLazDiscoveryOnRealWfs:
 
     def test_laz_year_2024_w2_conflict_lists_years(self, tmp_path):
         session = laz_session()
-        provider = GugikLazProvider(session=session)
+        provider = GugikLazProvider(session=session, vertical_crs="EVRF2007")
         provider.download = MagicMock()  # type: ignore[method-assign]
         with pytest.raises(YearRangeError) as caught:
             download_laz_area(
-                W2_BBOX, output_dir=tmp_path, provider=provider, year=2024
+                W2_BBOX,
+                output_dir=tmp_path,
+                provider=provider,
+                year=2024,
+                vertical_crs="EVRF2007",
             )
         err = caught.value
         assert err.sheets == {"N-34-139-A-c-1-1-3-4": (2022, 2023, 2025)}
@@ -672,13 +720,15 @@ class TestLazDiscoveryOnRealWfs:
     def test_laz_range_without_service_year(self, bounds, message):
         session = laz_session()
         with pytest.raises(DownloadError, match=f"{message} .*usludze EVRF2007"):
-            GugikLazProvider(session=session).select_tiles(W2_BBOX, **bounds)
+            GugikLazProvider(session=session, vertical_crs="EVRF2007").select_tiles(
+                W2_BBOX, **bounds
+            )
         assert feature_years(session) == []
 
     def test_c13_min_density_13_drops_the_12_p_m2_tile(self):
-        tiles = GugikLazProvider(session=laz_session()).discover_tiles(
-            W2_BBOX, min_density=13
-        )
+        tiles = GugikLazProvider(
+            session=laz_session(), vertical_crs="EVRF2007"
+        ).discover_tiles(W2_BBOX, min_density=13)
         assert [(t.sheet, t.crs) for t in tiles] == [
             ("7.173.21.06.1", "PL-2000:S7"),
             ("7.173.21.06.2", "PL-2000:S7"),
@@ -708,9 +758,9 @@ class TestLazDiscoveryOnRealWfs:
 
         The PL-1992 2024 tile stays too: no full-sheet tile covers its area.
         """
-        selection = GugikLazProvider(session=laz_session("wro")).select_tiles(
-            WRO_BBOX, **bounds
-        )
+        selection = GugikLazProvider(
+            session=laz_session("wro"), vertical_crs="EVRF2007"
+        ).select_tiles(WRO_BBOX, **bounds)
         assert [
             (t.sheet, t.year, t.full_sheet, file_id(t.url)) for t in selection.tiles
         ] == [
@@ -723,7 +773,9 @@ class TestLazDiscoveryOnRealWfs:
         """P8: 2025 has only NIE tiles here, so the 2024 reference stays uncovered."""
         session = laz_session("wro")
         with pytest.raises(YearRangeError) as caught:
-            GugikLazProvider(session=session).select_tiles(WRO_BBOX, year=2025)
+            GugikLazProvider(session=session, vertical_crs="EVRF2007").select_tiles(
+                WRO_BBOX, year=2025
+            )
         err = caught.value
         assert err.sheets == {"M-33-35-A-c-4-4-3-2": (2019, 2022, 2024, 2025)}
         assert (
@@ -754,7 +806,9 @@ class TestLazDiscoveryOnRealWfs:
         """T22 on two reference tiles: only the tile without ``year`` is listed."""
         session = laz_session("w3")
         with pytest.raises(YearRangeError) as caught:
-            GugikLazProvider(session=session).select_tiles(W3_BBOX, year=year)
+            GugikLazProvider(session=session, vertical_crs="EVRF2007").select_tiles(
+                W3_BBOX, year=year
+            )
         err = caught.value
         assert err.sheets == {sheet: years}
         assert f"z roku {year} dla 1 z 2 kafli obszaru" in str(err)
@@ -765,13 +819,13 @@ class TestLazDiscoveryOnRealWfs:
     def test_discover_tiles_forwards_min_year(self):
         """``discover_tiles(min_year=)`` = ``select_tiles(min_year=).tiles``."""
         with pytest.raises(YearRangeError) as caught:
-            GugikLazProvider(session=laz_session("w3")).discover_tiles(
-                W3_BBOX, min_year=2023
-            )
+            GugikLazProvider(
+                session=laz_session("w3"), vertical_crs="EVRF2007"
+            ).discover_tiles(W3_BBOX, min_year=2023)
         assert caught.value.sheets == {"N-34-138-D-a-2-2-2": (2019,)}
-        tiles = GugikLazProvider(session=laz_session("w3")).discover_tiles(
-            W3_BBOX, min_year=2019, max_year=2023
-        )
+        tiles = GugikLazProvider(
+            session=laz_session("w3"), vertical_crs="EVRF2007"
+        ).discover_tiles(W3_BBOX, min_year=2019, max_year=2023)
         assert [(t.sheet, t.year) for t in tiles] == [
             ("N-34-138-B-c-4-4-4-4", 2023),
             ("N-34-138-D-a-2-2-2", 2019),
@@ -779,7 +833,9 @@ class TestLazDiscoveryOnRealWfs:
 
     def test_w3_older_tile_adding_uncovered_area_is_kept(self):
         """ADR-029: no newer tile covers the 2019 sheet, so 2019 stays beside 2025."""
-        selection = GugikLazProvider(session=laz_session("w3")).select_tiles(W3_BBOX)
+        selection = GugikLazProvider(
+            session=laz_session("w3"), vertical_crs="EVRF2007"
+        ).select_tiles(W3_BBOX)
         assert [(t.sheet, t.year) for t in selection.tiles] == [
             ("N-34-138-B-c-4-4-4-4", 2025),
             ("N-34-138-D-a-2-2-2", 2019),
@@ -951,7 +1007,11 @@ class TestDeclaredVerticalCrsOnRealBodies:
 
     def test_kron86_record_from_evrf2007_index_is_not_downloaded(self, tmp_path):
         """E5: the EVRF2007 index answers with a KRON86 record -> DownloadError."""
-        provider = GugikProvider(session=routed_session(lambda layer: self.KRN_2018))
+        provider = GugikProvider(
+            session=routed_session(lambda layer: self.KRN_2018),
+            vertical_crs="EVRF2007",
+            resolution="1m",
+        )
         provider.download_record = Mock()
         with pytest.raises(DownloadError) as exc:
             provider.download(self.SHEET, tmp_path / "a.asc")
@@ -963,7 +1023,9 @@ class TestDeclaredVerticalCrsOnRealBodies:
 
     def test_kron86_record_from_kron86_index_is_downloaded(self, tmp_path):
         provider = GugikProvider(
-            session=nmt_session(self.SHEET, "nmt1_krn"), vertical_crs="KRON86"
+            session=nmt_session(self.SHEET, "nmt1_krn"),
+            vertical_crs="KRON86",
+            resolution="1m",
         )
         provider.download_record = Mock(return_value=tmp_path / "a.asc")
         provider.download(self.SHEET, tmp_path / "a.asc")

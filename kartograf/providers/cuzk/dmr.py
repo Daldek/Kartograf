@@ -94,16 +94,26 @@ _CHUNK_PIXELS = 4_000_000
 
 
 class CuzkDmrProvider(BaseProvider):
-    """NMT provider for Czechia (CUZK): DMR 5G / DMR 4G."""
+    """CZ DMR: 2m DMR 5G or 5m DMR 4G (SM5 sheet), Bpv or EVRF2007 heights."""
 
     def __init__(
         self,
-        resolution: str = "2m",
+        resolution: str,
         session: requests.Session | None = None,
         cache: MetadataCache | None = None,
         target_crs: str | None = None,
-        vertical_crs: str = "Bpv",
+        *,
+        vertical_crs: str,
     ):
+        """Choose the CZ model and vertical reference explicitly.
+
+        ``resolution`` is "2m" for DMR 5G raster export or "5m" for
+        DMR 4G and SM5 sheets. ``vertical_crs`` is "Bpv" (native Baltic
+        heights) or "EVRF2007" (transformed European heights); KRON86 has
+        no available transformation. ``target_crs=None`` keeps native
+        EPSG:5514, ``session=None`` creates a session and ``cache=None``
+        disables the sheet index cache.
+        """
         if resolution not in _RESOLUTION_KEYS:
             raise ValidationError(
                 f"Nieobslugiwana rozdzielczosc CZ: '{resolution}' (dostepne: 2m, 5m)"

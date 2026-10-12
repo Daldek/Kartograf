@@ -5,28 +5,43 @@ DMR 5G/4G from CUZK (CZ), BDOT10k, CORINE (Copernicus) and SoilGrids (ISRIC).
 Example usage::
 
     from kartograf import (
-        BBox, DownloadManager, SheetParser, download_laz_area, download_pl_cutout
+        BBox,
+        DownloadManager,
+        GugikProvider,
+        SheetParser,
+        download_laz_area,
+        download_pl_cutout,
     )
 
     # Parse a map sheet identifier
     parser = SheetParser("N-34-130-D-d-2-4")
     print(f"Scale: {parser.scale}")
 
-    # Download NMT data (one sheet from GUGiK OpenData)
-    manager = DownloadManager(output_dir="./data")
+    # Download NMT data (one sheet from GUGiK OpenData); every data choice
+    # (product, resolution, vertical CRS, output) is explicit
+    provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
+    manager = DownloadManager("./data", provider)
     path = manager.download_sheet("N-34-130-D-d-2-4")
 
     # LAZ tiles for an area: newest per area, sidecars, failures in result
-    laz = download_laz_area(BBox(637400, 487000, 637450, 487050, "EPSG:2180"))
+    laz = download_laz_area(
+        BBox(637400, 487000, 637450, 487050, "EPSG:2180"),
+        output_dir="./data",
+        vertical_crs="EVRF2007",
+    )
 
     # One NMT GeoTIFF for an area (PL cutout from GUGiK WCS, ADR-035)
     result = download_pl_cutout(
-        BBox(530000, 382000, 533000, 386000, "EPSG:2180"), "EPSG:2180"
+        BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
+        "EPSG:2180",
+        output_dir="./data",
+        vertical_crs="EVRF2007",
+        product="nmt",
     )
 
     # Download Land Cover data
     from kartograf import LandCoverManager
-    lc_manager = LandCoverManager()
+    lc_manager = LandCoverManager("./data/landcover", "bdot10k")
     lc_manager.download(sheet="N-34-130-D")
 """
 

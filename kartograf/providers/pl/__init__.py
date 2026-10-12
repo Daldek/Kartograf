@@ -69,15 +69,17 @@ def require_nmt_vertical_crs(resolution: str, vertical_crs: str) -> str:
 
 
 def create_nmt_provider(
-    vertical_crs: str = "EVRF2007",
-    resolution: str = "1m",
+    vertical_crs: str,
+    resolution: str,
     session: requests.Session | None = None,
     cache=None,
 ) -> GugikProvider:
-    """Factory of the default NMT provider — the one place for Polish defaults.
+    """Build an NMT provider for an explicitly selected PL dataset.
 
-    Rule "5m => EVRF2007": ``require_nmt_vertical_crs`` - 5 m with KRON86
-    raises ``ValidationError`` (0.7.1; earlier a silent swap with a warning).
+    ``vertical_crs``: "EVRF2007" (current heights) or "KRON86" (legacy).
+    ``resolution``: "1m" for either vertical CRS, or "5m" for EVRF2007
+    only (a mismatch raises ``ValidationError``). ``session=None`` uses a
+    managed HTTP session; ``cache=None`` disables metadata caching.
     """
     return GugikProvider(
         session=session,

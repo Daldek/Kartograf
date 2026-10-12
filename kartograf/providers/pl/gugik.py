@@ -55,19 +55,15 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     Supports two download modes:
     - By sheet code: downloads from OpenData as ASC
     - By bbox (bounding box): downloads from WCS as GeoTIFF/PNG/JPEG
-      (1m and KRON86 only, see ``download_bbox``)
+      (1m for EVRF2007 and KRON86; see ``download_bbox``)
 
-    Supports two vertical coordinate systems:
-    - EVRF2007 (PL-EVRF2007-NH) - default, European Vertical Reference Frame 2007
-    - KRON86 (PL-KRON86-NH) - legacy Kronsztadt 86
-
-    Supports two resolutions:
-    - 1m (default) - high resolution, available for both EVRF2007 and KRON86
-    - 5m - lower resolution, available only for EVRF2007
+    Supported vertical systems: EVRF2007 (current European frame) and
+    KRON86 (legacy Kronsztadt 86). Supported NMT resolutions: 1m with either
+    vertical system, or 5m with EVRF2007 only. WCS bbox downloads require 1m.
 
     Examples
     --------
-    >>> provider = GugikProvider()
+    >>> provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
     >>> # Download by sheet code → ASC from OpenData
     >>> provider.download("N-34-130-D-d-2-4", Path("./sheet.asc"))
     >>>
@@ -79,11 +75,11 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     >>> provider.download_bbox(bbox, Path("./area.tif"))
     >>>
     >>> # Download in legacy KRON86 vertical CRS
-    >>> provider = GugikProvider(vertical_crs="KRON86")
+    >>> provider = GugikProvider(vertical_crs="KRON86", resolution="1m")
     >>> provider.download("N-34-130-D-d-2-4", Path("./sheet_kron.asc"))
     >>>
     >>> # Download 5m resolution (only EVRF2007)
-    >>> provider = GugikProvider(resolution="5m")
+    >>> provider = GugikProvider(vertical_crs="EVRF2007", resolution="5m")
     >>> provider.download("N-34-130-D-d-2-4", Path("./sheet_5m.asc"))
     """
 
@@ -156,8 +152,9 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     def __init__(
         self,
         session: requests.Session | None = None,
-        vertical_crs: str = "EVRF2007",
-        resolution: str = "1m",
+        *,
+        vertical_crs: str,
+        resolution: str,
         cache=None,
     ):
         """
@@ -167,12 +164,12 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         ----------
         session : requests.Session, optional
             HTTP session to use for requests.
-        vertical_crs : str, optional
-            Vertical coordinate reference system: "KRON86" or "EVRF2007".
-            Default is "EVRF2007" (European Vertical Reference Frame 2007).
-        resolution : str, optional
-            Grid resolution: "1m" or "5m". Default is "1m".
-            Note: 5m resolution is only available for EVRF2007.
+        vertical_crs : str
+            "EVRF2007" (European Vertical Reference Frame 2007) or
+            "KRON86" (legacy Kronsztadt 86); 5m permits only EVRF2007.
+        resolution : str
+            "1m" (high-resolution grid, both vertical CRSs) or "5m"
+            (lower-resolution grid, EVRF2007 only; no WCS bbox download).
         cache : MetadataCache, optional
             Metadata cache instance for caching WMS lookup results.
             If None, no caching is performed (default behavior).
@@ -473,7 +470,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
 
         Examples
         --------
-        >>> provider = GugikProvider(vertical_crs="EVRF2007")
+        >>> provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
         >>> bbox = BBox(
         ...     min_x=450000, min_y=550000, max_x=451000, max_y=551000, crs="EPSG:2180"
         ... )

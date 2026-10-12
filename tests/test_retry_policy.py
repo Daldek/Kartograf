@@ -22,6 +22,7 @@ from kartograf.providers.pl.gugik_laz import GugikLazProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
+from tests.conftest import make_provider
 
 _URL = "https://opendata.geoportal.gov.pl/x"
 _SLEEP = "kartograf.transport.http.time.sleep"
@@ -98,7 +99,7 @@ def _ok_response():
 def test_not_found_is_not_retried(cls, download, suffix, tmp_path):
     session = MagicMock(spec=requests.Session)
     session.get.return_value = _http_response(404)
-    provider = cls(session=session)
+    provider = make_provider(cls, session=session)
     with (
         patch(_SLEEP) as sleep,
         pytest.raises(DownloadError, match="HTTP 404") as exc_info,
@@ -117,7 +118,7 @@ def test_throttled_download_waits_retry_after(cls, download, suffix, tmp_path):
         _http_response(429, {"Retry-After": "11"}),
         _ok_response(),
     ]
-    provider = cls(session=session)
+    provider = make_provider(cls, session=session)
     out = tmp_path / "x.bin"
     with patch(_SLEEP) as sleep:
         assert download(provider, out) == out.with_suffix(suffix)
@@ -130,7 +131,7 @@ def test_throttled_download_waits_retry_after(cls, download, suffix, tmp_path):
 def test_exhausted_server_errors_keep_status(cls, download, suffix, tmp_path):
     session = MagicMock(spec=requests.Session)
     session.get.return_value = _http_response(503)
-    provider = cls(session=session)
+    provider = make_provider(cls, session=session)
     with (
         patch(_SLEEP) as sleep,
         pytest.raises(DownloadError, match="po 3 probach") as exc_info,
@@ -160,7 +161,7 @@ def test_redownload_overwrites_existing_file(cls, download, suffix, tmp_path):
     out.with_suffix(suffix).write_bytes(b"stare")
     session = MagicMock(spec=requests.Session)
     session.get.return_value = _ok_response()
-    provider = cls(session=session)
+    provider = make_provider(cls, session=session)
     with patch.object(Path, "rename", _windows_rename):
         assert download(provider, out) == out.with_suffix(suffix)
     assert out.with_suffix(suffix).read_bytes() == b"dane"

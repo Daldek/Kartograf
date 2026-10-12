@@ -25,7 +25,7 @@ Key differences from the other GUGiK products:
 Examples
 --------
 >>> from kartograf import BBox
->>> provider = GugikLazProvider()
+>>> provider = GugikLazProvider(vertical_crs="EVRF2007")
 >>> bbox = BBox(530469, 382961, 532660, 385291, "EPSG:2180")
 >>> tiles = provider.discover_tiles(bbox)
 >>> for tile in tiles:
@@ -462,9 +462,9 @@ class GugikLazProvider(BaseProvider):
     session : requests.Session, optional
         HTTP session for WFS metadata requests and tile downloads. Defaults
         to a shared-connection GUGiK session.
-    vertical_crs : str, optional
-        Default height system: ``"EVRF2007"`` (current, default) or
-        ``"KRON86"`` (legacy). Selects which WFS service is queried.
+    vertical_crs : str
+        "EVRF2007" (current European heights) or "KRON86" (legacy heights).
+        Selects which WFS service is queried and the storage segment.
     cache : MetadataCache, optional
         Unused placeholder for API symmetry with the other providers.
     """
@@ -495,7 +495,8 @@ class GugikLazProvider(BaseProvider):
     def __init__(
         self,
         session: requests.Session | None = None,
-        vertical_crs: str = "EVRF2007",
+        *,
+        vertical_crs: str,
         cache=None,
     ):
         if vertical_crs not in self.SUPPORTED_VERTICAL_CRS:

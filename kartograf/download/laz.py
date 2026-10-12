@@ -16,7 +16,7 @@ Example::
 
     result = download_laz_area(
         BBox(637400, 487000, 637450, 487050, "EPSG:2180"),
-        output_dir="./data",
+        output_dir="./data", vertical_crs="EVRF2007",
         max_workers=4,
     )
     for skipped in result.superseded:
@@ -154,7 +154,7 @@ def run_laz_download(
     *,
     provider,
     bbox: BBox,
-    output_dir: str | Path = "./data",
+    output_dir: str | Path,
     year: int | None = None,
     min_density: int | None = None,
     all_campaigns: bool = False,
@@ -168,21 +168,24 @@ def run_laz_download(
     """
     Download the selected LAZ tiles (in parallel) and write sidecars.
 
-    A tile goes to ``FileStorage(output_dir, product="laz",
-    vertical_crs=provider.vertical_crs)`` — the ``{system}`` segment per tile
-    (``LazTile.system``), so one request may write to ``pl_1992_*`` and
-    ``pl_2000_*``. An existing file is skipped without network access,
-    unless ``force=True``. A tile download failure (``DownloadError``) does
-    NOT abort the others: it goes to ``failed`` (sorted by sheet and URL),
-    and successful tiles stay on disk. Other exceptions (e.g. a write
-    ``OSError``) abort the call.
+    ``output_dir`` is the required base path. A tile goes to
+    ``FileStorage(output_dir, product="laz", resolution=None,
+    vertical_crs=provider.vertical_crs)``; the ``{system}`` segment follows
+    each tile's ``LazTile.system``. An existing file is skipped unless
+    ``force=True`` (default False). A tile ``DownloadError`` is collected
+    in ``failed``; other exceptions abort the call.
 
-    ``bbox``, ``year``, ``min_density``, ``min_year``, ``max_year`` and
-    ``parent_request`` describe the request in sidecars. ``all_campaigns=False``
-    selects the newest flight within year bounds; True selects every flight
-    within them without coverage deduplication; the sidecar records this choice.
+    ``bbox``, optional ``year`` (None: no single-year filter),
+    ``min_density`` (None: no density filter), ``min_year``/``max_year``
+    (None: no year bounds) and ``parent_request`` (None: no parent entry)
+    describe the request in sidecars. ``all_campaigns=False`` selects
+    the newest flight in the year bounds; True selects all flights without
+    coverage deduplication. ``max_workers=1`` runs sequentially, and
+    ``on_progress=None`` emits no callbacks.
     """
-    storage = FileStorage(output_dir, product="laz", vertical_crs=provider.vertical_crs)
+    storage = FileStorage(
+        output_dir, resolution=None, vertical_crs=provider.vertical_crs, product="laz"
+    )
     tiles = selection.tiles
     total = len(tiles)
 
@@ -246,8 +249,8 @@ def run_laz_download(
 def download_laz_area(
     bbox: BBox,
     *,
-    output_dir: str | Path = "./data",
-    vertical_crs: str | None = None,
+    output_dir: str | Path,
+    vertical_crs: str,
     year: int | None = None,
     min_density: int | None = None,
     all_campaigns: bool = False,
@@ -268,11 +271,12 @@ def download_laz_area(
     bbox : BBox
         Area in EPSG:2180 (e.g. ``SheetParser.get_bbox(crs="EPSG:2180")``
         or ``get_overall_bbox(path, target_crs="EPSG:2180")``).
-    vertical_crs : str, optional
-        ``"EVRF2007"`` (default) or ``"KRON86"`` — the WFS service and the
-        ``laz/pl_<system>_<vcrs>`` segment. With a custom ``provider`` it
-        defaults to its vertical CRS; an explicit, different value is a
-        ``ValueError``.
+    output_dir : str or Path
+        Explicit base directory for LAZ tiles and their sidecars.
+    vertical_crs : str
+        "EVRF2007" (current European heights) or "KRON86" (legacy
+        Kronsztadt 86). Chooses the WFS service and output segment;
+        an injected provider must declare the same height system.
     year, min_density
         Acquisition year / nominal-density filters. With ``year``, reference
         coverage must be available within that year before downloading.
@@ -311,8 +315,8 @@ def download_laz_area(
         (a ``DownloadError`` subclass) no tiles in any year for the area.
     """
     if provider is None:
-        provider = GugikLazProvider(vertical_crs=vertical_crs or "EVRF2007")
-    elif vertical_crs is not None and vertical_crs != provider.vertical_crs:
+        provider = GugikLazProvider(vertical_crs=vertical_crs)
+    elif vertical_crs != provider.vertical_crs:
         raise ValueError(
             f"vertical_crs={vertical_crs} niezgodny z providerem "
             f"({provider.vertical_crs})"

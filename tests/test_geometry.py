@@ -937,7 +937,9 @@ class TestFindSheetsForGeometry:
         """Single feature calls find_sheets_for_bbox once."""
         mock_find.return_value = ["M-34-76-A-a-1-1"]
 
-        result = find_sheets_for_geometry(shp_epsg4326, target_scale="1:10000")
+        result = find_sheets_for_geometry(
+            shp_epsg4326, target_scale="1:10000", system="1992"
+        )
 
         assert result == ["M-34-76-A-a-1-1"]
         assert mock_find.call_count == 1
@@ -950,7 +952,9 @@ class TestFindSheetsForGeometry:
             ["M-34-76-A-a-1-2", "N-34-130-D-d-2-4"],
         ]
 
-        result = find_sheets_for_geometry(shp_epsg2180, target_scale="1:10000")
+        result = find_sheets_for_geometry(
+            shp_epsg2180, target_scale="1:10000", system="1992"
+        )
 
         # Deduplicated and sorted
         assert result == [
@@ -965,7 +969,9 @@ class TestFindSheetsForGeometry:
         """No matching sheets returns empty list."""
         mock_find.return_value = []
 
-        result = find_sheets_for_geometry(shp_epsg4326)
+        result = find_sheets_for_geometry(
+            shp_epsg4326, target_scale="1:10000", system="1992"
+        )
         assert result == []
 
     @patch("kartograf.core.geometry.find_sheets_for_bbox")
@@ -973,7 +979,7 @@ class TestFindSheetsForGeometry:
         """Target scale is passed to find_sheets_for_bbox."""
         mock_find.return_value = ["M-34-76-A-a-1-1"]
 
-        find_sheets_for_geometry(shp_epsg4326, target_scale="1:25000")
+        find_sheets_for_geometry(shp_epsg4326, target_scale="1:25000", system="1992")
 
         call_args = mock_find.call_args
         assert call_args[0][1] == "1:25000"
@@ -982,7 +988,9 @@ class TestFindSheetsForGeometry:
         """Each point gives EXACTLY one 1:10000 sheet containing that point."""
         from kartograf.core.sheet_parser import SheetParser
 
-        result = find_sheets_for_geometry(shp_points_epsg2180, target_scale="1:10000")
+        result = find_sheets_for_geometry(
+            shp_points_epsg2180, target_scale="1:10000", system="1992"
+        )
 
         assert len(result) == 2
         points = [(637000.0, 487000.0), (605000.0, 495000.0)]
@@ -999,19 +1007,25 @@ class TestFindSheetsForGeometry:
 
     def test_empty_point_feature_does_not_raise(self, gpkg_empty_and_point):
         """Empty geometry does not blow up sheet lookup (no NaN reaches int())."""
-        result = find_sheets_for_geometry(gpkg_empty_and_point)
+        result = find_sheets_for_geometry(
+            gpkg_empty_and_point, target_scale="1:10000", system="1992"
+        )
         assert len(result) == 1
 
     def test_no_features_returns_empty(self, gpkg_no_features_geom):
         """File with no valid features returns empty list."""
-        result = find_sheets_for_geometry(gpkg_no_features_geom)
+        result = find_sheets_for_geometry(
+            gpkg_no_features_geom, target_scale="1:10000", system="1992"
+        )
         assert result == []
 
     def test_gpkg_layer_param(self, gpkg_multi_layer):
         """Layer parameter is forwarded for GPKG."""
         with patch("kartograf.core.geometry.find_sheets_for_bbox") as mock_find:
             mock_find.return_value = ["N-34-130-D-d-2-4"]
-            result = find_sheets_for_geometry(gpkg_multi_layer, layer="layer_b")
+            result = find_sheets_for_geometry(
+                gpkg_multi_layer, layer="layer_b", target_scale="1:10000", system="1992"
+            )
             assert result == ["N-34-130-D-d-2-4"]
             # Should have been called once (one feature in layer_b)
             assert mock_find.call_count == 1
