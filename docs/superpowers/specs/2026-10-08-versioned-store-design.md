@@ -42,7 +42,7 @@ Poza zakresem (podprojekt 2): manifest projektu, `prune` (usuwanie wersji),
 weryfikacja integralnosci lokalnych plikow (`verify`), indeks "ktore
 projekty uzywaja pliku".
 
-## 2. Decyzje (rozmowy 2026-10-08, 2026-10-11 i 2026-10-12)
+## 2. Decyzje (rozmowy 2026-10-08 i 2026-10-11)
 
 | # | Decyzja | Odrzucone |
 |---|---|---|
@@ -60,7 +60,7 @@ projekty uzywaja pliku".
 | D12 | Sidecar wersji pisany RAZ; `extra.parent_requests` usuniete (Hydrograf z niego nie korzysta), `extra.parent_request` zostaje | dopiski w sidecarze standardowym scalane przy przestawieniu |
 | D13 | Pokrycie lotu (`extra.coverage`) mierzone PRZED zapisem sidecara wersji dla kazdego lotu bez `full_sheet = true` (takze pojedynczego); sidecar wersji niezmienny bez wyjatkow (2026-10-11) | dopisywanie po pobraniu (0.7.2); pokrycie tylko w sidecarze dowiazania (pomiar w kazdym zadaniu); wyjatek dla pol wynikajacych z tresci |
 | D14 | Zakres lat i niedostepny skorowidz: gdy KAZDY arkusz zadania ma lokalna wersje z rocznikiem w zakresie — lokalne wersje + `Warning:` (D5); w przeciwnym razie blad calego zadania bez pobran (ADR-032 pkt 2) (2026-10-11) | zawsze blad zadania; decyzja per arkusz (lamie "zero plikow" ADR-032) |
-| D15 | Wycinek PL z WCS (ADR-035) jak kazdy produkt: `bbox/<nazwa>.tif` (bez daty; `<nazwa>` wg D25) = dowiazanie do najnowszej wersji, data pobrania tylko w etykiecie wersji, domyslnie lokalna wersja (zmienia W-U3/W-U8) (2026-10-11) | pobieranie przy kazdym uruchomieniu; nazwy z data |
+| D15 | Wycinek PL z WCS (ADR-035) jak kazdy produkt: `bbox/<wsp>.tif` = dowiazanie do najnowszej wersji, data pobrania tylko w etykiecie wersji, domyslnie lokalna wersja (zmienia W-U3/W-U8) (2026-10-11) | pobieranie przy kazdym uruchomieniu; nazwy z data |
 | D16 | Przestarzaly tor arkuszowy wycinkow PL usuwany PRZED planem 1/3; magazyn go nie wersjonuje (2026-10-11) | magazyn najpierw z tymczasowa obsluga toru arkuszowego |
 | D17 | Uklad per plik: `<segment>/versions/<hierarchia>/<etykieta>_<sha8>/<nazwa>`; sprawdzenie "ta sama tresc" przeglada tylko wersje jednego pliku (review 2026-10-11, K1) | katalog wersji nad hierarchia: kazdy zapis przeglada wszystkie wersje segmentu (20 000 wersji: ok. 0,9 s lokalnie, szacunkowo 20-40 s na SMB na kazdy plik) |
 | D18 | Zapis wersji wylaczny: `os.link` pliku roboczego (nigdy nie nadpisuje); istniejacy cel sprawdzany sha256 (K2) | `os.replace` (drugi proces podmienia plik pod dowiazaniem pierwszego) |
@@ -70,7 +70,6 @@ projekty uzywaja pliku".
 | D22 | Hardlinki wymagane: brak hardlinku = `DownloadError` pliku, bez kopii (I4; zmienia ADR-030 errata 4) | kopia + `Warning:` (2-3x miejsca, pelna kopia przy kazdym przestawieniu dowiazania) |
 | D23 | Ta sama tresc pod nowym sygnalem (nowy rekord skorowidza, nowy `ETag`, nowa edycja): nowy katalog wersji `<nowa_etykieta>_<sha8>` z hardlinkiem do tych samych danych i wlasnym sidecarem; status `relabeled` (review 2026-10-11, I1) | `unchanged` bez sladu nowego sygnalu (petla "dostepna nowsza" -> `--upgrade` -> bez zmian); jeden katalog na tresc z etykieta poza niezmiennym sidecarem |
 | D24 | Stary zwykly plik 0.7.x w sciezce, ktora w 0.8.0 staje sie dowiazaniem (LAZ `laz/pl_<uklad>_<vcrs>/...`, CZ godlo i `bbox/` w `nmt/cz_*`), jest NADPISYWANY przy pierwszym dowiazaniu, bez kopii i bez komunikatu; tylko wpis BREAKING w CHANGELOG (review 2026-10-11, D5; uzytkownik: brak innych uzytkownikow 0.7.x) | odlozenie jako `<nazwa>.pre-0.8`; przyjecie starego pliku jako wersji (migracja, wbrew D10) |
-| D25 | Nazwa pliku sama opisuje dane bez kontekstu katalogu: zbior/produkt i obszar (np. `bdot10k_teryt_1206.gpkg`, nie `1206.gpkg`); wyjatek — arkusze PL zachowuja nazwe `<godlo>.<ext>` (konwencja GUGiK i konsumentow, ADR-026; produkt i uklad w segmencie i sidecarze) (2026-10-12, przeglad czytelnosci ukladu) | nazwy skrocone do identyfikatora obszaru, bo segment niesie produkt (plik skopiowany poza drzewo nic nie mowi) |
 
 ## 3. Model wersji i uklad na dysku
 
@@ -85,9 +84,6 @@ projekty uzywaja pliku".
   `sha8` per plik).
 - `<segment>` i `<hierarchia>` bez zmian wzgledem ADR-026 (dla land cover
   i HSG nowe segmenty — sekcja 3.4).
-- Nazwa pliku (takze w katalogu wersji) wg D25: czytelna bez sciezki.
-  Segment niesie parametry tresci, ale ich NIE zastepuje w nazwie pliku
-  (poza arkuszami PL, gdzie nazwa = godlo).
 - `sha8` = pierwsze 8 znakow szesnastkowych sha256 pliku danych; pelne
   sha256 w sidecarze.
 - **Etykieta** (tylko dla czlowieka; w kolejnosci):
@@ -212,19 +208,18 @@ Schemat pozostaje `kartograf-meta/1`: stare sidecary czytane jak dzis
 ### 3.4 Land cover i HSG w ukladzie `data/`
 
 `LandCoverManager` i `HSGCalculator` przechodza na `storage_for_provider`
-i segmenty ADR-026. Segmenty niosa parametry tresci (filtr warstw, edycja,
-wlasciwosc/glebokosc), a nazwa pliku pozostaje samoopisowa (D25) — jak dzis
-od 0.7.1 `bdot10k_teryt_<TERYT>.gpkg`, z filtrem warstw
-`bdot10k_PTWP-SWRS_teryt_<TERYT>.gpkg`. Przyklad (dokladne nazwy w planie
-3/3, zgodnie z regulami segmentow ADR-026 i D25):
+i segmenty ADR-026. Segmenty niosa parametry tresci, ktore dzis sa w nazwie
+pliku (od 0.7.1 `bdot10k_teryt_<TERYT>.gpkg`, z filtrem warstw
+`bdot10k_PTWP-SWRS_teryt_<TERYT>.gpkg`), np. (dokladne nazwy w planie
+implementacji, zgodnie z regulami segmentow ADR-026):
 
 ```
-landcover/pl_bdot10k_gpkg/teryt/bdot10k_teryt_1206.gpkg
-landcover/pl_bdot10k_gpkg_PTWP-SWRS/teryt/bdot10k_PTWP-SWRS_teryt_1206.gpkg
-landcover/pl_bdot10k_raw_zip/teryt/bdot10k_teryt_1206_GPKG.zip     (keep_raw)
-landcover/eu_corine_2018/...      (nazwa z produktem i rokiem, np. corine_2018_...)
-soil/global_soilgrids_clay_0-5cm_mean/...   (nazwa z wlasciwoscia, glebokoscia, statystyka)
-hsg/...                            (nazwa z produktem i glebokoscia, np. hsg_...)
+landcover/pl_bdot10k_gpkg/teryt/1206.gpkg
+landcover/pl_bdot10k_gpkg_PTWP-SWRS/teryt/1206.gpkg
+landcover/pl_bdot10k_raw_zip/teryt/1206.zip     (keep_raw)
+landcover/eu_corine_2018/...
+soil/global_soilgrids_clay_0-5cm_mean/...
+hsg/...
 ```
 
 Filtr warstw BDOT10k zmienia tresc, wiec jest parametrem segmentu, nie
@@ -362,11 +357,9 @@ usluga, nie lokalne pliki — wersjonowane jak produkty zrodlowe (sekcja 4.6).
 
 ### 4.6 Wycinki `bbox/` (D15)
 
-- Nazwa bez daty: `<segment>/bbox/<nazwa>.tif` = dowiazanie do najnowszej
-  wersji; wersje w `<segment>/versions/bbox/<etykieta>_<sha8>/<nazwa>.tif`
+- Nazwa bez daty: `<segment>/bbox/<wsp>.tif` = dowiazanie do najnowszej
+  wersji; wersje w `<segment>/versions/bbox/<etykieta>_<sha8>/<wsp>.tif`
   (D17, hierarchia = `bbox`) z etykieta `downloaded` (data pobrania UTC).
-  `<nazwa>` wg D25: produkt i wspolrzedne (np. `nmt_<wsp>`, `nmpt_<wsp>`;
-  dokladna postac w planie 2/3), nie same `<wsp>`.
   Dotychczasowe `<wsp>_<RRRRMMDD>.tif` przestaja byc rozpoznawane (D10,
   bez migracji).
 - Domyslnie lokalna wersja (zmiana W-U8 ADR-035: koniec pobierania przy
