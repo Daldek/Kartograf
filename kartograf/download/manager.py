@@ -1745,7 +1745,9 @@ class DownloadManager:
         Both modes call ``_download_single_sheet_task`` and report via
         ``_emit``/``_record``. Sequential additionally reports ``"downloading"``
         before each download and lets exceptions other than ``DownloadError``
-        through; parallel (completion order) counts them as ``"failed"``.
+        through; parallel counts them as ``"failed"``. Progress follows the
+        completion order; the result (and its notices) the order of ``sheets``,
+        so the same request always gives the same report.
         """
         check = (
             self._checked_range(sheets, workers, update) if self._has_range else None
@@ -1766,6 +1768,7 @@ class DownloadManager:
                 self._emit(on_progress, i, total, sheet, status, message)
         else:
             counter = 0
+            outcomes: dict[str, tuple] = {}
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
                 future_to_sheet = {
                     executor.submit(
@@ -1784,8 +1787,10 @@ class DownloadManager:
                         logger.error(f"Unexpected error downloading {sheet}: {e}")
                         fetch, status, message, hints = None, "failed", str(e), ()
                     counter += 1
-                    self._record(result, sheet, fetch, status, hints, message)
+                    outcomes[sheet] = (fetch, status, hints, message)
                     self._emit(on_progress, counter, total, sheet, status, message)
+            for sheet in sheets:
+                self._record(result, sheet, *outcomes[sheet])
 
         logger.info(
             f"Hierarchy download complete: {len(result.succeeded)} downloaded, "
