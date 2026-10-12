@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.soilgrids import PROPERTY_DESCRIPTIONS, SoilGridsProvider
 from kartograf.transform.bbox import envelope_from_2180
 
@@ -91,7 +91,7 @@ class TestSoilGridsValidation:
         """Test download with wrong CRS."""
         provider = SoilGridsProvider()
         bbox = BBox(14.0, 52.0, 15.0, 53.0, "EPSG:4326")
-        with pytest.raises(ValueError, match="EPSG:2180"):
+        with pytest.raises(ValidationError, match="EPSG:2180"):
             provider.download_by_bbox(
                 bbox, Path("/tmp/test.tif"), property="soc", depth="0-5cm", stat="mean"
             )
@@ -100,7 +100,7 @@ class TestSoilGridsValidation:
         """Test download with invalid property."""
         provider = SoilGridsProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        with pytest.raises(ValueError, match="Invalid property"):
+        with pytest.raises(ValidationError, match="Invalid property"):
             provider.download_by_bbox(
                 bbox,
                 Path("/tmp/test.tif"),
@@ -113,7 +113,7 @@ class TestSoilGridsValidation:
         """Test download with invalid depth."""
         provider = SoilGridsProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        with pytest.raises(ValueError, match="Invalid depth"):
+        with pytest.raises(ValidationError, match="Invalid depth"):
             provider.download_by_bbox(
                 bbox,
                 Path("/tmp/test.tif"),
@@ -126,7 +126,7 @@ class TestSoilGridsValidation:
         """Test download with invalid stat."""
         provider = SoilGridsProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        with pytest.raises(ValueError, match="Invalid stat"):
+        with pytest.raises(ValidationError, match="Invalid stat"):
             provider.download_by_bbox(
                 bbox,
                 Path("/tmp/test.tif"),

@@ -125,7 +125,7 @@ class TestBdot10kProvider:
             provider.download_by_teryt("invalid", Path("/tmp/test.gpkg"))
 
     def test_download_by_bbox_any_crs(self, tmp_path):
-        """A bbox in EPSG:4326 goes unchanged to the PRG discovery (no ValueError)."""
+        """A bbox in EPSG:4326 reaches PRG discovery without CRS rejection."""
         provider = Bdot10kProvider()
         bbox = BBox(14.0, 52.0, 15.0, 53.0, "EPSG:4326")
         with (
@@ -216,14 +216,14 @@ class TestCorineProvider:
         """Test download with wrong CRS."""
         provider = CorineProvider()
         bbox = BBox(14.0, 52.0, 15.0, 53.0, "EPSG:4326")
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             provider.download_by_bbox(bbox, Path("/tmp/test.png"), year=2018)
 
     def test_download_by_bbox_invalid_year(self):
         """Test download with invalid year."""
         provider = CorineProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             provider.download_by_bbox(bbox, Path("/tmp/test.png"), year=2020)
 
     def test_construct_wms_url_eea(self):
@@ -289,7 +289,7 @@ class TestLandCoverManager:
 
     def test_init_invalid_provider(self):
         """Test initialization with invalid provider."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             LandCoverManager(output_dir="data", provider="invalid")
 
     def test_set_provider_by_name(self):
@@ -313,13 +313,13 @@ class TestLandCoverManager:
     def test_download_no_selection(self):
         """Test download with no selection method."""
         manager = LandCoverManager(output_dir="data", provider="bdot10k")
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             manager.download()
 
     def test_download_multiple_selection(self):
         """Test download with multiple selection methods."""
         manager = LandCoverManager(output_dir="data", provider="bdot10k")
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             manager.download(teryt="1465", sheet="N-34-130-D")
 
     def test_repr(self):
@@ -580,9 +580,9 @@ class TestBdot10kProviderDownload:
     """Test Bdot10kProvider download methods with mocks."""
 
     def test_download_by_teryt_invalid_format(self):
-        """Invalid format raises ValueError."""
+        """Invalid format raises ValidationError."""
         provider = Bdot10kProvider()
-        with pytest.raises(ValueError, match="Unsupported format"):
+        with pytest.raises(ValidationError, match="Unsupported format"):
             provider.download_by_teryt("1465", Path("/tmp/out.gpkg"), format="XML")
 
     def test_download_by_teryt_success(self, tmp_path):

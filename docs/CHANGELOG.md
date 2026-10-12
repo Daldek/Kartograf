@@ -9,6 +9,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Zmiany lamiace (BREAKING)
 
+- Biblioteka: bledne wartosci wejscia providerow, magazynu, wycinka LAZ
+  i skali docelowej arkuszy zglaszaja `ValidationError` (podklasa
+  `KartografError`), a nie `ValueError`; CLI nie przechwytuje juz
+  `ValueError` jako bledu uzytkownika. Co zrobic: zmien
+  `except ValueError` na `except ValidationError` dla bledow argumentow;
+  nie obejmuj nim bledow wewnetrznych niezmiennikow programu.
 - Usunieto arkuszowy tor wycinkow PL: `PlCutoutSheets`,
   `select_pl_cutout_sheets`, `run_pl_cutout`, `build_pl_cutout`,
   `build_cutout_from_sheets` oraz powiazane funkcje do estymacji miejsca,

@@ -318,7 +318,7 @@ def select_newest_cover(
     ``area`` must be in EPSG:2180 (like the WFS tiles).
     """
     if area.crs != "EPSG:2180":
-        raise ValueError(f"area must be in EPSG:2180, got {area.crs}")
+        raise ValidationError(f"area must be in EPSG:2180, got {area.crs}")
     # Local coordinate origin: coordinates of ~10^5-10^6 m eat up precision.
     ox, oy = area.min_x, area.min_y
     area_poly = rectangle(0.0, 0.0, area.max_x - ox, area.max_y - oy)
@@ -361,7 +361,7 @@ def select_all_intersecting(tiles: Iterable[LazTile], area: BBox) -> LazTileSele
     A tile without any geometry (NaN) stays. ``area`` in EPSG:2180.
     """
     if area.crs != "EPSG:2180":
-        raise ValueError(f"area must be in EPSG:2180, got {area.crs}")
+        raise ValidationError(f"area must be in EPSG:2180, got {area.crs}")
     ox, oy = area.min_x, area.min_y
     area_poly = rectangle(0.0, 0.0, area.max_x - ox, area.max_y - oy)
 
@@ -500,7 +500,7 @@ class GugikLazProvider(BaseProvider):
         cache=None,
     ):
         if vertical_crs not in self.SUPPORTED_VERTICAL_CRS:
-            raise ValueError(
+            raise ValidationError(
                 f"Unsupported vertical_crs: '{vertical_crs}'. "
                 f"Supported: {self.SUPPORTED_VERTICAL_CRS}"
             )
@@ -714,11 +714,9 @@ class GugikLazProvider(BaseProvider):
 
         Raises
         ------
-        ValueError
-            If ``bbox`` is not in EPSG:2180.
         ValidationError
-            Invalid year bounds or ``year`` together with
-            ``min_year``/``max_year``.
+            If ``bbox`` is not in EPSG:2180, the year bounds are invalid, or
+            ``year`` is combined with ``min_year``/``max_year``.
         DownloadError
             WFS discovery failure or a range without a year in the service.
         YearRangeError
@@ -737,14 +735,14 @@ class GugikLazProvider(BaseProvider):
         lo, hi = (year, year) if year is not None else (min_year, max_year)
         validate_year_bounds(lo, hi)
         if bbox.crs != "EPSG:2180":
-            raise ValueError(
+            raise ValidationError(
                 f"bbox must be in EPSG:2180, got {bbox.crs}. "
                 f"Transform it first (e.g. SheetParser.get_bbox(crs='EPSG:2180'))."
             )
 
         vcrs = vertical_crs or self._vertical_crs
         if vcrs not in self.SUPPORTED_VERTICAL_CRS:
-            raise ValueError(
+            raise ValidationError(
                 f"Unsupported vertical_crs: '{vcrs}'. "
                 f"Supported: {self.SUPPORTED_VERTICAL_CRS}"
             )

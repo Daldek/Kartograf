@@ -175,7 +175,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
             If None, no caching is performed (default behavior).
         """
         if resolution not in self.SUPPORTED_RESOLUTIONS:
-            raise ValueError(
+            raise ValidationError(
                 f"Unsupported resolution: '{resolution}'. "
                 f"Supported: {self.SUPPORTED_RESOLUTIONS}"
             )
@@ -183,14 +183,14 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         # 5m resolution only supports EVRF2007
         if resolution == "5m":
             if vertical_crs not in self.SUPPORTED_VERTICAL_CRS_5M:
-                raise ValueError(
+                raise ValidationError(
                     f"Resolution 5m is only available for EVRF2007, "
                     f"got vertical_crs='{vertical_crs}'. "
                     f"Use vertical_crs='EVRF2007' for 5m resolution."
                 )
         else:
             if vertical_crs not in self.SUPPORTED_VERTICAL_CRS:
-                raise ValueError(
+                raise ValidationError(
                     f"Unsupported vertical CRS: '{vertical_crs}'. "
                     f"Supported: {self.SUPPORTED_VERTICAL_CRS}"
                 )
@@ -448,11 +448,10 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         ------
         DownloadError
             If the download fails
-        ValueError
-            If format is not supported, bbox CRS is not EPSG:2180,
-            or resolution is 5m (WCS not available for 5m)
         ValidationError
-            If the vertical CRS is in ``WITHDRAWN_WCS_VERTICAL_CRS`` (none today)
+            If format is not supported, bbox CRS is not EPSG:2180,
+            resolution is 5m (WCS not available for 5m), or the vertical
+            CRS is in ``WITHDRAWN_WCS_VERTICAL_CRS`` (none today)
 
         Notes
         -----
@@ -478,19 +477,19 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         """
         # WCS is only available for 1m resolution
         if self._resolution == "5m":
-            raise ValueError(
+            raise ValidationError(
                 "WCS download (download_bbox) is not available for 5m resolution. "
                 "Use download() with a godło instead, or use resolution='1m'."
             )
 
         if bbox.crs != "EPSG:2180":
-            raise ValueError(
+            raise ValidationError(
                 f"BBox must be in EPSG:2180, got {bbox.crs}. "
                 f"Use SheetParser.get_bbox(crs='EPSG:2180') to convert."
             )
 
         if format not in self.WCS_FORMATS:
-            raise ValueError(
+            raise ValidationError(
                 f"Unsupported WCS format: '{format}'. "
                 f"Supported formats: {list(self.WCS_FORMATS.keys())}"
             )

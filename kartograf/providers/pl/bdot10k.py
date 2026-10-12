@@ -249,7 +249,7 @@ class Bdot10kProvider(LandCoverProvider):
         if not self.validate_admin_unit(code):
             raise ValidationError(f"Invalid TERYT code: {code}")
         if format not in ["GPKG", "SHP"]:
-            raise ValueError(f"Unsupported format: {format}. Use 'GPKG' or 'SHP'")
+            raise ValidationError(f"Unsupported format: {format}. Use 'GPKG' or 'SHP'")
         wanted = None
         if layers is not None:
             wanted = normalize_layers(layers)

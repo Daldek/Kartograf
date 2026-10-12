@@ -405,19 +405,19 @@ class CorineProvider(LandCoverProvider):
 
         Raises
         ------
-        ValueError
+        ValidationError
             If bbox CRS is not EPSG:2180 or year is invalid
         DownloadError
             If the download fails
         """
         if bbox.crs != "EPSG:2180":
-            raise ValueError(
+            raise ValidationError(
                 f"BBox must be in EPSG:2180, got {bbox.crs}. "
                 f"Use SheetParser.get_bbox(crs='EPSG:2180') to convert."
             )
 
         if year not in self.AVAILABLE_YEARS:
-            raise ValueError(
+            raise ValidationError(
                 f"Invalid year: {year}. Available years: {self.AVAILABLE_YEARS}"
             )
 

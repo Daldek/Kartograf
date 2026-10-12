@@ -49,7 +49,7 @@ from kartograf.download.plan import (
 )
 from kartograf.download.storage import FileStorage
 from kartograf.download.versions import ContentDigest, VersionRef
-from kartograf.exceptions import DownloadError, NoCoverageError
+from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.pl.gugik_laz import (
     COVERAGE_TOLERANCE_M,
     GugikLazProvider,
@@ -395,10 +395,9 @@ def download_laz_area(
 
     Raises
     ------
-    ValueError
-        ``bbox`` not in EPSG:2180, or an unknown / mismatched ``vertical_crs``.
     ValidationError
-        Invalid year bounds, ``year`` with a bound, or invalid update mode.
+        ``bbox`` not in EPSG:2180, unknown/mismatched ``vertical_crs`` or invalid
+        year bounds / ``update`` mode.
     DownloadError
         WFS discovery failure or no matching year in the service.
     YearRangeError
@@ -410,7 +409,7 @@ def download_laz_area(
     if provider is None:
         provider = GugikLazProvider(vertical_crs=vertical_crs)
     elif vertical_crs != provider.vertical_crs:
-        raise ValueError(
+        raise ValidationError(
             f"vertical_crs={vertical_crs} niezgodny z providerem "
             f"({provider.vertical_crs})"
         )

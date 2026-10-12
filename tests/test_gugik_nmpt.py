@@ -18,6 +18,7 @@ import rasterio
 import requests
 
 from kartograf.core.sheet_parser import BBox
+from kartograf.exceptions import ValidationError
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
@@ -54,8 +55,8 @@ class TestGugikNmptProviderInit:
         assert provider.vertical_crs == "KRON86"
 
     def test_invalid_vertical_crs(self):
-        """Test that an invalid vertical CRS raises ValueError."""
-        with pytest.raises(ValueError, match="Unsupported vertical CRS"):
+        """Test that an invalid vertical CRS raises ValidationError."""
+        with pytest.raises(ValidationError, match="Unsupported vertical CRS"):
             GugikNmptProvider(vertical_crs="INVALID")
 
 
