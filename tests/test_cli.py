@@ -2700,6 +2700,22 @@ class TestProgressNoCoverage:
 # ===========================================================================
 
 
+def _lc_result(path: Path):
+    """A land cover result for a mocked ``LandCoverManager``."""
+    from kartograf.download.fetch import VersionedFile
+    from kartograf.landcover.manager import LandCoverResult
+
+    return LandCoverResult(
+        "u", VersionedFile(path, "new", "2026-10-12", "0" * 64, path)
+    )
+
+
+def _lc_area(path: Path):
+    from kartograf.landcover.manager import LandCoverAreaResult
+
+    return LandCoverAreaResult((_lc_result(path),))
+
+
 class TestCmdLandcoverDownload:
     """Tests for landcover download CLI."""
 
@@ -2708,7 +2724,7 @@ class TestCmdLandcoverDownload:
         """landcover download --teryt calls manager.download with teryt."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download.return_value = tmp_path / "out.gpkg"
+        mock_mgr.download.return_value = _lc_result(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -2757,7 +2773,7 @@ class TestCmdLandcoverDownload:
         """landcover download --sheet (BDOT10k) downloads every powiat of the sheet."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download_all_counties.return_value = [tmp_path / "out.gpkg"]
+        mock_mgr.download_all_counties.return_value = _lc_area(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -2784,7 +2800,7 @@ class TestCmdLandcoverDownload:
         """landcover download --bbox (BDOT10k) downloads every powiat of the bbox."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download_all_counties.return_value = [tmp_path / "out.gpkg"]
+        mock_mgr.download_all_counties.return_value = _lc_area(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -2811,7 +2827,7 @@ class TestCmdLandcoverDownload:
         """--source corine creates manager with corine provider."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "CORINE Land Cover"
-        mock_mgr.download.return_value = tmp_path / "out.png"
+        mock_mgr.download.return_value = _lc_result(tmp_path / "out.png")
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -3678,7 +3694,7 @@ class TestCmdLandcoverDownloadGeometry:
         mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download_all_counties.return_value = [tmp_path / "out.gpkg"]
+        mock_mgr.download_all_counties.return_value = _lc_area(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -3711,7 +3727,7 @@ class TestCmdLandcoverDownloadGeometry:
         mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download_all_counties.return_value = [tmp_path / "out.gpkg"]
+        mock_mgr.download_all_counties.return_value = _lc_area(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(

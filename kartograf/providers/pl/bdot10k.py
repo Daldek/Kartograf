@@ -59,6 +59,22 @@ logger = logging.getLogger(__name__)
 _LAYER_CODE = re.compile(r"[A-Z]{4}")
 
 
+def normalize_layers(layers: Sequence[str]) -> list[str]:
+    """Sorted unique BDOT10k layer codes; ``ValidationError`` for a bad code.
+
+    A code is 4 upper-case letters (``PTWP``, ``SWRS``); an empty selection
+    is an error too.
+    """
+    wanted = sorted(set(layers))
+    bad = [layer for layer in wanted if not _LAYER_CODE.fullmatch(layer)]
+    if bad or not wanted:
+        raise ValidationError(
+            f"Nieprawidlowe kody warstw BDOT10k: {bad or '[]'} "
+            "(4 wielkie litery, np. PTWP, SWRS)"
+        )
+    return wanted
+
+
 @dataclass(frozen=True)
 class Bdot10kPackage:
     """One downloaded powiat package (``Bdot10kProvider.download_package``)."""
@@ -236,13 +252,7 @@ class Bdot10kProvider(LandCoverProvider):
             raise ValueError(f"Unsupported format: {format}. Use 'GPKG' or 'SHP'")
         wanted = None
         if layers is not None:
-            wanted = sorted(set(layers))
-            bad = [layer for layer in wanted if not _LAYER_CODE.fullmatch(layer)]
-            if bad or not wanted:
-                raise ValidationError(
-                    f"Nieprawidlowe kody warstw BDOT10k: {bad or '[]'} "
-                    "(4 wielkie litery, np. PTWP, SWRS)"
-                )
+            wanted = normalize_layers(layers)
             if format != "GPKG":
                 raise ValidationError("Filtr warstw BDOT10k dziala tylko z GPKG")
         if keep_raw and format != "GPKG":
