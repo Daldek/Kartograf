@@ -475,12 +475,23 @@ print(cz.file.path)           # data/nmt/cz_dmr5g_evrf2007/bbox/<coords>.tif
 # obwiedni CZ sięga w głąb Polski) — plik powstaje, flaga też w sidecarze
 print(cz.all_nodata)
 # Część PL (parts["PL"].bbox) pobierz przez download_pl_cutout (wyżej).
-# Własny provider: run_cz_cutout(provider, bbox, output_dir=, image_crs=).
 
-# Sprawdzenie bez pobierania (plan kartograf-plan/1) dla każdego toru:
-from kartograf import check_cz_cutout, check_laz_updates, check_pl_cutout
-plan = check_pl_cutout(cutout)          # status "unverifiable"/"missing"
+# Arkusz CZ: SM5 (gotowy plik DMR 4G, tylko 5m - resolution można pominąć)
+# albo kafel TM33 (resolution wymagane: "2m" / "5m")
+from kartograf import check_cz_sheet, download_cz_sheet
+
+sm5 = download_cz_sheet("CTES96", output_dir="./data", vertical_crs="Bpv")
+tm33 = download_cz_sheet(
+    "302_5550", output_dir="./data", vertical_crs="EVRF2007", resolution="2m"
+)
+
+# Sprawdzenie bez pobierania (plan kartograf-plan/1): blizniak check_* z tymi
+# samymi argumentami co pobranie; plan wykonuje pobranie z update="upgrade"
+plan = check_cz_sheet("CTES96", output_dir="./data", vertical_crs="Bpv")
 print([(i.track, i.unit, i.status) for i in plan.items])
+sm5 = download_cz_sheet(
+    "CTES96", output_dir="./data", vertical_crs="Bpv", update="upgrade", plan=plan
+)
 ```
 
 **Cache metadanych w bibliotece.** Bez `MetadataCache` provider NMT pyta
@@ -529,9 +540,9 @@ pozycje planu, `notices` komunikaty o danych przekazywane rowniez przez
 `full_links`, `full_link_outside_range` i `without_full` (sekcje 4.1 i 4.2).
 
 - `PlCutoutResult` (wycinek WCS): `file` (`VersionedFile`),
-  `masked_pixels`, `zero_pixels`, `all_nodata`, `stale`.
-- `CzCutoutResult` (wycinek CZ, `download_cz_cutout`/`run_cz_cutout`):
-  `file`, `all_nodata`, `stale`.
+  `masked_pixels`, `zero_pixels`, `all_nodata`, `stale`, `notices`.
+- `CzCutoutResult` (wycinek CZ, `download_cz_cutout`) i `CzSheetResult`
+  (arkusz CZ, `download_cz_sheet`): `file`, `all_nodata`, `stale`, `notices`.
 - `LazDownloadResult` (`download_laz_area`): `files` (`VersionedFile` na
   kafel), `failed`, `superseded` (kafle pominięte jako pokryte przez
   nowsze), `stale`.
@@ -798,9 +809,10 @@ report = manager.download_sheets(
     [godlo], update="upgrade", plan=UpdatePlan.from_json(plan.to_json())
 )
 print(report.stale, report.files.get(godlo, ()))
-# LAZ / CZ / wycinki: run_laz_download(..., update=, plan=), check_laz_updates,
-# run_cz_cutout(..., update=, plan=), check_cz_cutout, run_pl_wcs_cutout(...,
-# update=, plan=), check_pl_cutout; land cover: LandCoverManager.download(...,
+# LAZ: run_laz_download(..., update=, plan=), check_laz_updates;
+# wycinki i arkusz CZ: download_pl_cutout / download_cz_cutout /
+# download_cz_sheet(..., update=, plan=) + check_pl_cutout / check_cz_cutout /
+# check_cz_sheet (te same argumenty); land cover: LandCoverManager.download(...,
 # update=, plan=), check, check_all_counties; HSG: calculate_hsg_by_*(...,
 # update=, plan=), check_hsg_by_*; pozycje planu: item.track, item.unit
 ```

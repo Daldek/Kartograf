@@ -33,6 +33,19 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `target_crs=` nazwany; `check_pl_cutout(cutout)` ->
   `check_pl_cutout(bbox, target_crs=..., output_dir=..., vertical_crs=...,
   product=...)`; plan wykonuj przez `download_pl_cutout(..., plan=plan)`.
+- CZ: arkusz CZ ma publiczne API `download_cz_sheet(sheet, *, output_dir,
+  vertical_crs, resolution=None, update, plan, cache, on_notice)` i
+  `check_cz_sheet` z tymi samymi argumentami (`CzSheetResult`; arkusz SM5
+  tylko `5m`, kafel TM33 wymaga `2m`/`5m`; errata decyzji 9 planu 2/3).
+  `check_cz_cutout(bbox, *, output_dir, target_crs, vertical_crs,
+  resolution)` przyjmuje argumenty `download_cz_cutout` (bez providera
+  i `image_crs`); `download_cz_cutout` dostaje `plan=`, `on_notice=`,
+  `cache=True` (domyslny cache w cwd). Wyniki CZ maja `notices`
+  (`all_nodata` zamiast ostrzezenia w logu). `run_cz_cutout` poza API.
+  Co zrobic: `run_cz_cutout(provider, bbox, ...)` ->
+  `download_cz_cutout(bbox, ...)`; `check_cz_cutout(provider, bbox,
+  output_dir=, image_crs=)` -> `check_cz_cutout(bbox, output_dir=,
+  target_crs=, vertical_crs=, resolution=)`.
 
 - Biblioteka: bledne wartosci wejscia providerow, magazynu, wycinka LAZ
   i skali docelowej arkuszy zglaszaja `ValidationError` (podklasa

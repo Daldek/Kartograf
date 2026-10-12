@@ -434,12 +434,12 @@ def _cz_option_error(
     res_hint = _per_country_hint(args.resolution, "--resolution", countries)
     vcrs_hint = _per_country_hint(args.vertical_crs, "--vertical-crs", countries)
     if is_sm5:
-        if resolution not in (None, "5m"):
-            return (
-                f"Arkusze SM5 sa dostepne tylko w 5m (DMR 4G) — pomin "
-                f"--resolution albo podaj 5m; dla {resolution} uzyj godla TM33 "
-                f"albo --bbox [arkusz: {args.sheet}]"
-            )
+        from kartograf.download.cz_sheets import cz_sheet_resolution
+
+        try:
+            cz_sheet_resolution(args.sheet, resolution)
+        except ValidationError as e:
+            return str(e)
     elif resolution is None:
         return f"--resolution wymagane dla NMT CZ: {RESOLUTION_CZ}{res_hint}"
     elif resolution not in ("2m", "5m"):
@@ -2354,17 +2354,25 @@ def _library_log_muted(name: str) -> Iterator[None]:
         log.disabled = previous
 
 
-def _cz_download_sheet(args: argparse.Namespace, provider) -> int:
+def _cz_download_sheet(
+    args: argparse.Namespace, *, vertical_crs: str, resolution: str
+) -> int:
     """CZ sheet code: TM33 tile (exportImage) or SM5 sheet (openzu).
 
-    Implementation: ``download.cz_sheets.run_cz_sheet`` / ``check_cz_sheet``.
+    Implementation: ``download.cz_sheets.download_cz_sheet`` / ``check_cz_sheet``.
     """
-    from kartograf.download.cz_sheets import check_cz_sheet, run_cz_sheet
+    from kartograf.download.cz_sheets import check_cz_sheet, download_cz_sheet
 
     sheet = args.sheet
+    selection = {
+        "output_dir": args.output,
+        "vertical_crs": vertical_crs,
+        "resolution": resolution,
+        "on_notice": _print_notice,
+    }
     if getattr(args, "check_updates", False):
         try:
-            plan = check_cz_sheet(provider, sheet, output_dir=args.output)
+            plan = check_cz_sheet(sheet, **selection)
         except (DownloadError, ValidationError) as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
@@ -2374,42 +2382,32 @@ def _cz_download_sheet(args: argparse.Namespace, provider) -> int:
         # O-3: only when the transfer really starts (after the provider's
         # validations: SM5 sheet index, TM33 grid parse)
         if not args.quiet:
-            print(f"Downloading {sheet} (CZ, resolution: {provider.resolution})...")
+            print(f"Downloading {sheet} (CZ, resolution: {resolution})...")
 
     update = _update_mode(args)
     try:
         with _library_log_muted("kartograf.download.cz_sheets"):
-            result = run_cz_sheet(
-                provider,
+            result = download_cz_sheet(
                 sheet,
-                output_dir=args.output,
                 update=update,
                 plan=_plan_context(args).loaded,
                 on_download=announce,
+                **selection,
             )
     except (DownloadError, ValidationError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
-    _warn_cz_all_nodata(result.file, result.all_nodata)
     _report_file(args, sheet, result.file, update)
     return _report_stale(result.stale)
 
 
-def _warn_cz_all_nodata(file: VersionedFile | None, all_nodata: bool) -> None:
-    """N2: ``Warning:`` when a downloaded CZ raster has no valid pixel (code 0)."""
-    if all_nodata and file is not None and file.status != "local":
-        print(
-            f"Warning: {file.path} jest w calosci nodata — obszar poza pokryciem "
-            "DMR CUZK (poza granica CZ?)",
-            file=sys.stderr,
-        )
-
-
 def _cz_download_bbox(
     args: argparse.Namespace,
-    provider,
     bbox: BBox,
     parent_request: dict | None,
+    *,
+    vertical_crs: str,
+    resolution: str,
 ) -> int:
     """CZ bbox: one `exportImage` cutout in `<subdir>/bbox/<coords>.tif`.
 
@@ -2418,41 +2416,39 @@ def _cz_download_bbox(
     The request then goes to the server in the native CRS, and the local
     warp in the provider moves it onto the result grid (ADR-024).
 
-    Implementation: ``download.cz_cutout.run_cz_cutout`` / ``check_cz_cutout``.
+    Implementation: ``download.cz_cutout.download_cz_cutout`` / ``check_cz_cutout``.
     """
-    from kartograf.download.cz_cutout import check_cz_cutout, run_cz_cutout
+    from kartograf.download.cz_cutout import check_cz_cutout, download_cz_cutout
 
     image_sr = args.target_crs or "EPSG:5514"
+    selection = {
+        "output_dir": args.output,
+        "target_crs": image_sr,
+        "vertical_crs": vertical_crs,
+        "resolution": resolution,
+        "on_notice": _print_notice,
+    }
     if getattr(args, "check_updates", False):
-        plan = check_cz_cutout(
-            provider, bbox, output_dir=args.output, image_crs=args.target_crs
-        )
-        return _report_plan(args, plan)
+        return _report_plan(args, check_cz_cutout(bbox, **selection))
 
     def announce() -> None:
         # O-3: printed by the provider right before the first exportImage
         if not args.quiet:
-            print(f"Downloading CZ bbox ({provider.resolution}, {image_sr})...")
+            print(f"Downloading CZ bbox ({resolution}, {image_sr})...")
 
     update = _update_mode(args)
     try:
-        # the CLI prints its own 'Warning:' line - the library log would
-        # repeat it on stderr (logging.lastResort; the CLI configures no logging)
-        with _library_log_muted("kartograf.download.cz_cutout"):
-            result = run_cz_cutout(
-                provider,
-                bbox,
-                output_dir=args.output,
-                image_crs=args.target_crs,
-                update=update,
-                plan=_plan_context(args).loaded,
-                parent_request=parent_request,
-                on_download=announce,
-            )
+        result = download_cz_cutout(
+            bbox,
+            update=update,
+            plan=_plan_context(args).loaded,
+            parent_request=parent_request,
+            on_download=announce,
+            **selection,
+        )
     except (DownloadError, ValidationError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
-    _warn_cz_all_nodata(result.file, result.all_nodata)
     if result.file is not None:
         unit = _unit_of(result.file.path, Path(args.output))
         _report_file(args, unit, result.file, update)
@@ -2497,8 +2493,6 @@ def _cmd_download_cz(
         ValidationError.
     """
     from kartograf.core.parser_registry import detect_system
-    from kartograf.providers.cuzk import create_dmr_provider
-    from kartograf.transform.crs import TransformError
 
     has_sheet = bbox is None
     # An SM5 sheet is a ready-made DMR 4G file that exists only at 5 m, so the
@@ -2525,27 +2519,16 @@ def _cmd_download_cz(
             "na siatce EPSG:3045)"
         )
 
-    # D16: --force as in the PL path - the cache read (SM5 sheet index)
-    # is skipped, the fresh entry is written.
-    with open_cache(
-        True, force=bool(args.force), on_notice=_warn_cache_disabled
-    ) as cache:
-        try:
-            provider = create_dmr_provider(
-                resolution=resolution,
-                cache=cache,
-                target_crs=None if has_sheet else args.target_crs,
-                vertical_crs=vertical_crs,
-            )
-        except TransformError as e:
-            return _print_transform_error(e)
-        except ValidationError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 1
-
-        if bbox is None:
-            return _cz_download_sheet(args, provider)
-        return _cz_download_bbox(args, provider, bbox, parent_request)
+    # D16: --force as in the PL path - the library skips the cache read (SM5
+    # sheet index) and writes the fresh entry; TransformError (bbox target
+    # CRS) is translated by ``_run_cz``.
+    if bbox is None:
+        return _cz_download_sheet(
+            args, vertical_crs=vertical_crs, resolution=resolution
+        )
+    return _cz_download_bbox(
+        args, bbox, parent_request, vertical_crs=vertical_crs, resolution=resolution
+    )
 
 
 def _cmd_download_geometry(args: argparse.Namespace) -> int:

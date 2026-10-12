@@ -11,8 +11,14 @@ import pytest
 import rasterio
 from rasterio.transform import from_origin
 
-from kartograf.download.cz_sheets import check_cz_sheet, run_cz_sheet
+from kartograf.download.cz_sheets import (
+    _check_sheet,
+    _run_cz_sheet,
+    check_cz_sheet,
+    download_cz_sheet,
+)
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.notices import ALL_NODATA, Notice
 
 _FIXTURE = Path("tests/fixtures/signals/real_2026_10_12/cuzk_sm5_ctes96_get.json")
 _GET_HEADERS = json.loads(_FIXTURE.read_text(encoding="utf-8"))["headers"]
@@ -88,7 +94,7 @@ class SheetProvider:
 
 def test_sm5_version_with_extra_http(tmp_path):
     provider = SheetProvider()
-    result = run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
+    result = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
     file = result.file
     assert file is not None
     assert file.status == "new"
@@ -113,8 +119,8 @@ def test_sm5_version_with_extra_http(tmp_path):
 
 def test_sm5_default_same_etag_is_local_one_head(tmp_path):
     provider = SheetProvider()
-    first = run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
-    second = run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
+    first = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
+    second = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
     assert second.file is not None and first.file is not None
     assert second.file.status == "local"
     assert second.file.version_path == first.file.version_path
@@ -123,9 +129,9 @@ def test_sm5_default_same_etag_is_local_one_head(tmp_path):
 
 def test_sm5_default_new_etag_is_local_with_newer(tmp_path):
     provider = SheetProvider()
-    run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
+    _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
     provider.http["etag"] = '"new-release"'
-    result = run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
+    result = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
     assert result.file is not None
     assert result.file.status == "local" and result.file.newer == '"new-release"'
     assert provider.heads == 1 and provider.fetches == 1
@@ -133,10 +139,10 @@ def test_sm5_default_new_etag_is_local_with_newer(tmp_path):
 
 def test_sm5_upgrade_new_etag_downloads(tmp_path):
     provider = SheetProvider()
-    before = run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
+    before = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
     provider.http["etag"] = '"new-release"'
     provider.value = 250.0
-    after = run_cz_sheet(provider, _SHEET, output_dir=tmp_path, update="upgrade")
+    after = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path, update="upgrade")
     assert after.file is not None and before.file is not None
     assert after.file.status == "new"
     assert after.file.sha256 != before.file.sha256
@@ -150,21 +156,21 @@ def test_sm5_upgrade_new_etag_downloads(tmp_path):
 
 def test_sm5_upgrade_head_failure_is_error(tmp_path):
     provider = SheetProvider()
-    before = run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
+    before = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
     with (
         patch.object(provider, "sm5_signal", side_effect=DownloadError("brak HEAD")),
         pytest.raises(DownloadError, match="brak HEAD"),
     ):
-        run_cz_sheet(provider, _SHEET, output_dir=tmp_path, update="upgrade")
+        _run_cz_sheet(provider, _SHEET, output_dir=tmp_path, update="upgrade")
     assert before.file is not None and before.file.path.exists()
     assert provider.fetches == 1
 
 
 def test_sm5_default_head_failure_is_local_unverified(tmp_path):
     provider = SheetProvider()
-    run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
+    _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
     with patch.object(provider, "sm5_signal", side_effect=DownloadError("brak HEAD")):
-        result = run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
+        result = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
     assert result.file is not None
     assert result.file.status == "local"
     assert result.file.unverified == "check_failed: brak HEAD"
@@ -173,8 +179,8 @@ def test_sm5_default_head_failure_is_local_unverified(tmp_path):
 
 def test_tm33_default_is_local_without_network(tmp_path):
     provider = SheetProvider(sm5=False)
-    first = run_cz_sheet(provider, _TM33, output_dir=tmp_path)
-    second = run_cz_sheet(provider, _TM33, output_dir=tmp_path)
+    first = _run_cz_sheet(provider, _TM33, output_dir=tmp_path)
+    second = _run_cz_sheet(provider, _TM33, output_dir=tmp_path)
     assert first.file is not None and second.file is not None
     assert second.file.status == "local" and second.file.newer is None
     assert provider.heads == 0 and provider.fetches == 1
@@ -183,8 +189,8 @@ def test_tm33_default_is_local_without_network(tmp_path):
 
 def test_tm33_upgrade_is_local_unverified_none(tmp_path):
     provider = SheetProvider(sm5=False)
-    run_cz_sheet(provider, _TM33, output_dir=tmp_path)
-    result = run_cz_sheet(provider, _TM33, output_dir=tmp_path, update="upgrade")
+    _run_cz_sheet(provider, _TM33, output_dir=tmp_path)
+    result = _run_cz_sheet(provider, _TM33, output_dir=tmp_path, update="upgrade")
     assert result.file is not None
     assert result.file.status == "local" and result.file.unverified == "none"
     assert provider.fetches == 1 and provider.heads == 0
@@ -192,35 +198,34 @@ def test_tm33_upgrade_is_local_unverified_none(tmp_path):
 
 def test_check_cz_sheet_never_downloads(tmp_path):
     sm5 = SheetProvider()
-    missing = check_cz_sheet(sm5, _SHEET, output_dir=tmp_path)
+    missing = _check_sheet(sm5, _SHEET, output_dir=tmp_path)
     assert missing.items[0].status == "missing"
     assert missing.items[0].track == "cz_sheet" and missing.items[0].unit == _SHEET
     assert missing.items[0].available_signal == _HTTP
     assert sm5.fetches == 0
-    run_cz_sheet(sm5, _SHEET, output_dir=tmp_path)
-    assert check_cz_sheet(sm5, _SHEET, output_dir=tmp_path).items[0].status == "current"
+    _run_cz_sheet(sm5, _SHEET, output_dir=tmp_path)
+    assert _check_sheet(sm5, _SHEET, output_dir=tmp_path).items[0].status == "current"
     sm5.http["etag"] = '"changed"'
-    assert check_cz_sheet(sm5, _SHEET, output_dir=tmp_path).items[0].status == "newer"
+    assert _check_sheet(sm5, _SHEET, output_dir=tmp_path).items[0].status == "newer"
     with patch.object(sm5, "sm5_signal", side_effect=DownloadError("brak HEAD")):
-        failure = check_cz_sheet(sm5, _SHEET, output_dir=tmp_path).items[0]
+        failure = _check_sheet(sm5, _SHEET, output_dir=tmp_path).items[0]
     assert failure.status == "check_failed" and failure.error == "brak HEAD"
     assert sm5.fetches == 1
 
     tm33 = SheetProvider(sm5=False)
-    assert check_cz_sheet(tm33, _TM33, output_dir=tmp_path).items[0].status == "missing"
-    run_cz_sheet(tm33, _TM33, output_dir=tmp_path)
+    assert _check_sheet(tm33, _TM33, output_dir=tmp_path).items[0].status == "missing"
+    _run_cz_sheet(tm33, _TM33, output_dir=tmp_path)
     assert (
-        check_cz_sheet(tm33, _TM33, output_dir=tmp_path).items[0].status
-        == "unverifiable"
+        _check_sheet(tm33, _TM33, output_dir=tmp_path).items[0].status == "unverifiable"
     )
     assert tm33.fetches == 1 and tm33.heads == 0
 
 
 def test_cz_sm5_upgrade_plan_etag_changed_is_stale(tmp_path):
     provider = SheetProvider()
-    plan = check_cz_sheet(provider, _SHEET, output_dir=tmp_path)
+    plan = _check_sheet(provider, _SHEET, output_dir=tmp_path)
     provider.http["etag"] = '"replaced-since-plan"'
-    result = run_cz_sheet(
+    result = _run_cz_sheet(
         provider, _SHEET, output_dir=tmp_path, update="upgrade", plan=plan
     )
     assert result.file is None
@@ -231,8 +236,8 @@ def test_cz_sm5_upgrade_plan_etag_changed_is_stale(tmp_path):
 
 def test_cz_sm5_upgrade_plan_downloads_only_matching_signal(tmp_path):
     provider = SheetProvider()
-    plan = check_cz_sheet(provider, _SHEET, output_dir=tmp_path)
-    result = run_cz_sheet(
+    plan = _check_sheet(provider, _SHEET, output_dir=tmp_path)
+    result = _run_cz_sheet(
         provider, _SHEET, output_dir=tmp_path, update="upgrade", plan=plan
     )
     assert result.file is not None and result.file.status == "new"
@@ -242,20 +247,22 @@ def test_cz_sm5_upgrade_plan_downloads_only_matching_signal(tmp_path):
 
 def test_cz_sm5_upgrade_plan_head_failure_is_error(tmp_path):
     provider = SheetProvider()
-    plan = check_cz_sheet(provider, _SHEET, output_dir=tmp_path)
+    plan = _check_sheet(provider, _SHEET, output_dir=tmp_path)
     with (
         patch.object(provider, "sm5_signal", side_effect=DownloadError("brak HEAD")),
         pytest.raises(DownloadError, match="brak HEAD"),
     ):
-        run_cz_sheet(provider, _SHEET, output_dir=tmp_path, update="upgrade", plan=plan)
+        _run_cz_sheet(
+            provider, _SHEET, output_dir=tmp_path, update="upgrade", plan=plan
+        )
     assert provider.fetches == 0
 
 
 def test_cz_sheet_unrelated_plan_item_is_not_stale(tmp_path):
     provider = SheetProvider()
     tm33 = SheetProvider(sm5=False)
-    plan = check_cz_sheet(tm33, _TM33, output_dir=tmp_path)
-    result = run_cz_sheet(
+    plan = _check_sheet(tm33, _TM33, output_dir=tmp_path)
+    result = _run_cz_sheet(
         provider, _SHEET, output_dir=tmp_path, update="upgrade", plan=plan
     )
     assert result.file is None and result.stale == ()
@@ -264,10 +271,10 @@ def test_cz_sheet_unrelated_plan_item_is_not_stale(tmp_path):
 
 def test_cz_sheet_plan_omitted_item_keeps_local_without_probe(tmp_path):
     provider = SheetProvider()
-    first = run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
-    current = check_cz_sheet(provider, _SHEET, output_dir=tmp_path)
+    first = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
+    current = _check_sheet(provider, _SHEET, output_dir=tmp_path)
     with patch.object(provider, "sm5_signal", side_effect=AssertionError("extra HEAD")):
-        result = run_cz_sheet(
+        result = _run_cz_sheet(
             provider, _SHEET, output_dir=tmp_path, update="upgrade", plan=current
         )
     assert result.file is not None and first.file is not None
@@ -282,7 +289,7 @@ def test_cz_sheet_legacy_plain_file_replaced_by_link(tmp_path):
     path = tmp_path / "nmt/cz_dmr5g_bpv/302/5550/302_5550.tif"
     _write_raster(path, value=99)
     Path(f"{path}.meta.json").write_text(json.dumps({"request": {"sheet": _TM33}}))
-    result = run_cz_sheet(provider, _TM33, output_dir=tmp_path)
+    result = _run_cz_sheet(provider, _TM33, output_dir=tmp_path)
     assert result.file is not None and result.file.status == "new"
     assert os.path.samefile(path, result.file.version_path)
     assert _metadata(path)["extra"]["link"] == "hardlink"
@@ -324,7 +331,7 @@ def test_sm5_worldfile_georeference_survives_staging_cleanup(tmp_path):
         )
         client.return_value.fetch_file.side_effect = fetch_zip
         provider = CuzkDmrProvider(resolution="5m", vertical_crs="Bpv")
-        result = run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
+        result = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
 
     assert result.file is not None
     assert not result.file.path.with_suffix(".tfw").exists()
@@ -335,7 +342,7 @@ def test_sm5_worldfile_georeference_survives_staging_cleanup(tmp_path):
 
 def test_cz_sheet_sidecar_fields_unchanged(tmp_path):
     sm5 = SheetProvider()
-    result = run_cz_sheet(sm5, _SHEET, output_dir=tmp_path)
+    result = _run_cz_sheet(sm5, _SHEET, output_dir=tmp_path)
     assert result.file is not None
     meta = _metadata(result.file.version_path)
     assert meta["dataset"] == "cz.cuzk.dmr4g"
@@ -345,7 +352,7 @@ def test_cz_sheet_sidecar_fields_unchanged(tmp_path):
     assert meta["extra"]["mapname"] == "Cesky Tesin 9-6"
     assert meta["extra"]["cz_share"] == 0.99
     tm33 = SheetProvider(sm5=False)
-    tile = run_cz_sheet(tm33, _TM33, output_dir=tmp_path)
+    tile = _run_cz_sheet(tm33, _TM33, output_dir=tmp_path)
     assert tile.file is not None
     tile_meta = _metadata(tile.file.version_path)
     assert tile_meta["dataset"] == "cz.cuzk.dmr5g"
@@ -356,7 +363,7 @@ def test_cz_sheet_sidecar_fields_unchanged(tmp_path):
 
 def test_cz_sheet_local_all_nodata_from_sidecar(tmp_path):
     provider = SheetProvider(sm5=False, value=-9999.0)
-    first = run_cz_sheet(provider, _TM33, output_dir=tmp_path)
+    first = _run_cz_sheet(provider, _TM33, output_dir=tmp_path)
     assert first.file is not None and first.all_nodata
     assert _metadata(first.file.version_path)["extra"]["all_nodata"] is True
     with (
@@ -369,7 +376,7 @@ def test_cz_sheet_local_all_nodata_from_sidecar(tmp_path):
             side_effect=AssertionError("raster scanned"),
         ),
     ):
-        result = run_cz_sheet(provider, _TM33, output_dir=tmp_path)
+        result = _run_cz_sheet(provider, _TM33, output_dir=tmp_path)
     assert result.file is not None and result.file.status == "local"
     assert result.all_nodata
 
@@ -377,5 +384,105 @@ def test_cz_sheet_local_all_nodata_from_sidecar(tmp_path):
 def test_cz_sheet_check_mode_rejects_download(tmp_path):
     provider = SheetProvider()
     with pytest.raises(ValidationError, match="check"):
-        run_cz_sheet(provider, _SHEET, output_dir=tmp_path, update="check")
+        _run_cz_sheet(provider, _SHEET, output_dir=tmp_path, update="check")
     assert provider.fetches == 0
+
+
+# --- public API: download_cz_sheet / check_cz_sheet (same selection arguments)
+
+
+def _factory(provider: SheetProvider, seen: dict | None = None):
+    """Patch of the CZ DMR provider factory used by the public sheet functions."""
+
+    def create(**kwargs):
+        if seen is not None:
+            seen.update(kwargs)
+        return provider
+
+    return patch("kartograf.providers.cuzk.create_dmr_provider", side_effect=create)
+
+
+def test_download_cz_sheet_sm5_without_resolution(tmp_path):
+    seen: dict = {}
+    with _factory(SheetProvider(), seen):
+        result = download_cz_sheet(
+            _SHEET, output_dir=tmp_path, vertical_crs="Bpv", cache=False
+        )
+    assert seen["resolution"] == "5m" and seen["vertical_crs"] == "Bpv"
+    assert result.file is not None and result.file.status == "new"
+    assert result.notices == ()
+
+
+def test_download_cz_sheet_sm5_2m_is_validation_error(tmp_path):
+    provider = SheetProvider()
+    with _factory(provider), pytest.raises(ValidationError) as error:
+        download_cz_sheet(
+            _SHEET,
+            output_dir=tmp_path,
+            vertical_crs="Bpv",
+            resolution="2m",
+            cache=False,
+        )
+    assert str(error.value) == (
+        "Arkusze SM5 sa dostepne tylko w 5m (DMR 4G) - pomin --resolution albo "
+        "podaj 5m; dla 2m uzyj godla TM33 albo --bbox [arkusz: CTES96]"
+    )
+    assert provider.fetches == 0
+
+
+def test_download_cz_sheet_tm33_requires_resolution(tmp_path):
+    provider = SheetProvider(sm5=False)
+    with _factory(provider), pytest.raises(ValidationError, match="wymagane"):
+        download_cz_sheet(_TM33, output_dir=tmp_path, vertical_crs="Bpv", cache=False)
+    assert provider.fetches == 0
+    seen: dict = {}
+    with _factory(provider, seen):
+        result = download_cz_sheet(
+            _TM33,
+            output_dir=tmp_path,
+            vertical_crs="Bpv",
+            resolution="2m",
+            cache=False,
+        )
+    assert seen["resolution"] == "2m"
+    assert result.file is not None and result.file.status == "new"
+
+
+def test_check_cz_sheet_plan_items(tmp_path):
+    """The check takes the download's arguments; its plan drives the upgrade."""
+    provider = SheetProvider()
+    selection = {"output_dir": tmp_path, "vertical_crs": "Bpv", "cache": False}
+    with _factory(provider):
+        missing = check_cz_sheet(_SHEET, **selection)
+        assert [(i.track, i.unit, i.status) for i in missing.items] == [
+            ("cz_sheet", _SHEET, "missing")
+        ]
+        assert provider.fetches == 0
+        done = download_cz_sheet(_SHEET, update="upgrade", plan=missing, **selection)
+        assert done.file is not None and done.file.status == "new"
+        assert check_cz_sheet(_SHEET, **selection).items[0].status == "current"
+
+
+def test_cz_all_nodata_notice(tmp_path):
+    provider = SheetProvider(sm5=False, value=-9999.0)
+    seen: list[Notice] = []
+    selection = {
+        "output_dir": tmp_path,
+        "vertical_crs": "Bpv",
+        "resolution": "2m",
+        "cache": False,
+    }
+    with _factory(provider):
+        result = download_cz_sheet(_TM33, on_notice=seen.append, **selection)
+        local = download_cz_sheet(_TM33, **selection)
+    assert result.file is not None and result.all_nodata
+    expected = Notice(
+        "warning",
+        ALL_NODATA,
+        f"{result.file.path} jest w calosci nodata - obszar poza pokryciem DMR "
+        "CUZK (poza granica CZ?)",
+    )
+    assert result.notices == (expected,)
+    assert seen == [expected]
+    assert local.file is not None and local.file.status == "local"
+    assert local.all_nodata and local.notices == ()

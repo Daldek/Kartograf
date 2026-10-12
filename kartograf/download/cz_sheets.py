@@ -1,4 +1,8 @@
-"""CUZK SM5 and TM33 sheet downloads on the versioned file store."""
+"""CUZK SM5 and TM33 sheet downloads on the versioned file store.
+
+Public pair (Z2): ``download_cz_sheet`` / ``check_cz_sheet`` with the same
+selection arguments; data messages are ``Notice``s in the result.
+"""
 
 import logging
 from collections.abc import Callable
@@ -7,8 +11,14 @@ from pathlib import Path
 
 import requests
 
+from kartograf.cache.defaults import open_cache
+from kartograf.cache.metadata import MetadataCache
 from kartograf.core.parser_registry import detect_system
-from kartograf.download.cz_cutout import _all_nodata, read_tif_nodata
+from kartograf.download.cz_cutout import (
+    _all_nodata,
+    emit_cz_all_nodata,
+    read_tif_nodata,
+)
 from kartograf.download.fetch import (
     FileSlot,
     UpdateMode,
@@ -31,6 +41,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import storage_for_provider
 from kartograf.download.versions import ContentDigest, VersionRef, read_version
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.notices import Notice, NoticeSink
 from kartograf.sources.descriptor import SignalKind, TransportKind
 from kartograf.sources.registry import channel_signal, get_source
 from kartograf.sources.sidecar import emit_sidecar
@@ -38,14 +49,45 @@ from kartograf.transport.http import response_signal
 
 logger = logging.getLogger(__name__)
 
+# Resolutions of CZ DMR (help and error texts of the CLI and the library).
+RESOLUTION_CZ = "2m (DMR 5G), 5m (DMR 4G)"
+
 
 @dataclass(frozen=True)
 class CzSheetResult:
-    """One CZ sheet; ``file=None`` only when a plan skips a missing file."""
+    """One CZ sheet; ``file=None`` only when a plan skips a missing file.
+
+    ``notices`` holds the all-nodata message of a freshly downloaded file.
+    """
 
     file: VersionedFile | None
     all_nodata: bool
     stale: tuple[PlanItem, ...] = ()
+    notices: tuple[Notice, ...] = ()
+
+
+def cz_sheet_resolution(sheet: str, resolution: str | None) -> str:
+    """Resolution of a CZ sheet code: SM5 only ``5m`` (default), TM33 required.
+
+    An SM5 sheet is a ready-made DMR 4G file that exists only at 5 m; TM33
+    tiles are cut from the service, where ``2m`` and ``5m`` are a real choice.
+    Raises ``ValidationError`` (or ``ParseError`` for a malformed code).
+    """
+    sheet = sheet.strip()
+    system = detect_system(sheet)
+    if system.country != "CZ":
+        raise ValidationError(f"Godlo '{sheet}' nie nalezy do zadnego systemu CZ")
+    if system.id == "cz_sm5":
+        if resolution not in (None, "5m"):
+            raise ValidationError(
+                f"Arkusze SM5 sa dostepne tylko w 5m (DMR 4G) - pomin "
+                f"--resolution albo podaj 5m; dla {resolution} uzyj godla TM33 "
+                f"albo --bbox [arkusz: {sheet}]"
+            )
+        return "5m"
+    if resolution is None:
+        raise ValidationError(f"--resolution wymagane dla NMT CZ: {RESOLUTION_CZ}")
+    return resolution
 
 
 def _sheet_slot(provider, sheet: str, output_dir: str | Path) -> tuple[FileSlot, bool]:
@@ -78,7 +120,7 @@ def _signal(provider, sm5: bool) -> SignalKind:
     return channel_signal(provider.descriptor_key, transport)
 
 
-def check_cz_sheet(provider, sheet: str, *, output_dir: str | Path) -> UpdatePlan:
+def _check_sheet(provider, sheet: str, *, output_dir: str | Path) -> UpdatePlan:
     """Inspect one CZ sheet without transferring raster bytes."""
     sheet = sheet.strip()
     slot, sm5 = _sheet_slot(provider, sheet, output_dir)
@@ -105,7 +147,7 @@ def _local_result(slot: FileSlot, stale: tuple[PlanItem, ...]) -> CzSheetResult:
     )
 
 
-def run_cz_sheet(
+def _run_cz_sheet(
     provider,
     sheet: str,
     *,
@@ -139,7 +181,7 @@ def run_cz_sheet(
         )
         if not any(item.status in TODO_STATUSES for item in scoped.items):
             return _local_result(slot, ())
-        fresh = check_cz_sheet(provider, sheet, output_dir=output_dir).items
+        fresh = _check_sheet(provider, sheet, output_dir=output_dir).items
         if fresh[0].status == "check_failed":
             raise DownloadError(
                 f"Nie udalo sie sprawdzic arkusza CZ {sheet}: {fresh[0].error}"
@@ -228,9 +270,90 @@ def run_cz_sheet(
             stored is not None
             and stored.meta.get("extra", {}).get("all_nodata", False) is True
         )
-    elif empty:
-        logger.warning(
-            f"Arkusz CZ {file.path} jest w calosci nodata — obszar poza pokryciem "
-            "DMR CUZK (poza granica CZ?)"
-        )
     return CzSheetResult(file, empty, stale)
+
+
+def _sheet_provider(sheet: str, *, vertical_crs: str, resolution: str | None, cache):
+    """CZ DMR provider for a sheet code after the resolution rule of the code."""
+    from kartograf.providers.cuzk import create_dmr_provider
+
+    return create_dmr_provider(
+        resolution=cz_sheet_resolution(sheet, resolution),
+        cache=cache,
+        vertical_crs=vertical_crs,
+    )
+
+
+def check_cz_sheet(
+    sheet: str,
+    *,
+    output_dir: str | Path,
+    vertical_crs: str,
+    resolution: str | None = None,
+    cache: MetadataCache | bool = True,
+    on_notice: Callable[[Notice], None] | None = None,
+) -> UpdatePlan:
+    """Update plan of ``download_cz_sheet`` with the same arguments, no download.
+
+    SM5 compares the openzu ZIP's HTTP signal (one HEAD request, sheet index
+    from the metadata cache); TM33 has no remote signal and reads only the
+    local store. Invalid choices raise the same errors as the download.
+    """
+    sink = NoticeSink(on_notice)
+    with open_cache(cache, force=False, on_notice=sink.add) as metadata:
+        provider = _sheet_provider(
+            sheet, vertical_crs=vertical_crs, resolution=resolution, cache=metadata
+        )
+        return _check_sheet(provider, sheet, output_dir=output_dir)
+
+
+def download_cz_sheet(
+    sheet: str,
+    *,
+    output_dir: str | Path,
+    vertical_crs: str,
+    resolution: str | None = None,
+    update: UpdateMode | None = None,
+    plan: UpdatePlan | None = None,
+    cache: MetadataCache | bool = True,
+    on_notice: Callable[[Notice], None] | None = None,
+    on_download: Callable[[], None] | None = None,
+) -> CzSheetResult:
+    """Download or reuse one CZ sheet: an SM5 sheet (openzu) or a TM33 tile.
+
+    ``resolution``: an SM5 sheet exists only at ``5m`` (``None`` = ``5m``);
+    a TM33 tile requires ``2m`` or ``5m``. ``vertical_crs`` is ``"Bpv"``
+    (native) or ``"EVRF2007"``. SM5 compares the openzu ZIP's HTTP signal with
+    one HEAD request when a local version exists; TM33 has no cheap signal.
+    ``plan`` (from ``check_cz_sheet`` with ``update="upgrade"``) downloads
+    only a matching ``missing``/``newer`` position; a changed position lands in
+    ``stale``. ``cache``: ``True`` = default metadata cache in the current
+    directory, a ``MetadataCache`` = that cache, ``False`` = none.
+    ``on_notice`` receives each data notice when emitted; ``on_download`` is
+    called right before the transfer starts.
+
+    Raises
+    ------
+    ParseError
+        Malformed sheet code.
+    ValidationError
+        Not a CZ code, bad resolution or vertical CRS, plan without upgrade.
+    DownloadError
+        CUZK service failure; no new version is committed.
+    """
+    validate_update(update)
+    sink = NoticeSink(on_notice)
+    with open_cache(cache, force=update == "force", on_notice=sink.add) as metadata:
+        provider = _sheet_provider(
+            sheet, vertical_crs=vertical_crs, resolution=resolution, cache=metadata
+        )
+        result = _run_cz_sheet(
+            provider,
+            sheet,
+            output_dir=output_dir,
+            update=update,
+            plan=plan,
+            on_download=on_download,
+        )
+    emit_cz_all_nodata(sink, result.file, result.all_nodata)
+    return replace(result, notices=sink.notices)
