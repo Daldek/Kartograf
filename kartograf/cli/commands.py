@@ -52,6 +52,10 @@ def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) 
         return cmd_parse(parsed_args)
 
     if parsed_args.command == "download":
+        if parsed_args.plan is not None and not (
+            parsed_args.check_updates or parsed_args.upgrade
+        ):
+            parser.error("--plan wymaga --check-updates albo --upgrade")
         return cmd_download(parsed_args)
 
     if parsed_args.command == "landcover":

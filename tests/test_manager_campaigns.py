@@ -1277,7 +1277,12 @@ def test_provider_without_campaigns_versions_by_download_date(tmp_path):
     assert target is not None and os.path.samefile(path, target)
     assert meta(target)["extra"]["version"]["label_source"] == "downloaded"
     assert m.last_sheet == SheetFetch(
-        G, path, skipped=False, status="new", version=target.parent.name[:10]
+        G,
+        path,
+        skipped=False,
+        status="new",
+        version=target.parent.name[:10],
+        files=((target.parent.name, "new"),),
     )
     m.download_sheet(G)
     assert m.last_sheet.skipped is True and m.last_sheet.status == "local"
