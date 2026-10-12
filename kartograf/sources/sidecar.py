@@ -135,7 +135,7 @@ def pl_sheet_horizontal_crs(data_path: Path | None, sheet: str) -> str:
         return expected
     logger.warning(
         f"Sidecar {data_path}: godlo {sheet} wskazuje {expected}, ale wspolrzedne "
-        f"pliku (x = {x:.0f}) sa w {actual} — zapisano uklad pliku"
+        f"pliku (x = {x:.0f}) sa w {actual} - zapisano uklad pliku"
     )
     return actual
 

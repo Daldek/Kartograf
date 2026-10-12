@@ -122,7 +122,7 @@ class CuzkDmrProvider(BaseProvider):
         if vertical_crs == "KRON86":
             raise TransformUnavailableError(
                 "Brak transformacji Bpv (EPSG:8357) -> KRON86 (EPSG:9650) "
-                "— siatki GUGiK nie sa publiczne",
+                "- siatki GUGiK nie sa publiczne",
                 remedy=REMEDIES["EPSG:9650"],
             )
         if vertical_crs not in _SUPPORTED_VERTICAL:
@@ -158,7 +158,7 @@ class CuzkDmrProvider(BaseProvider):
         if image_endpoint is None:
             raise ValidationError(
                 f"Deskryptor '{self.descriptor_key}' nie ma kanalu "
-                f"{TransportKind.ARCGIS_IMAGE.name} z endpointem — "
+                f"{TransportKind.ARCGIS_IMAGE.name} z endpointem - "
                 f"pobieranie rastrow CUZK niemozliwe"
             )
         self._image_endpoint: str = image_endpoint
@@ -392,7 +392,7 @@ class CuzkDmrProvider(BaseProvider):
         if self._files_endpoint is None:
             raise ValidationError(
                 f"Deskryptor '{self.descriptor_key}' nie ma kanalu "
-                f"{TransportKind.DIRECT_FILES.name} z endpointem — "
+                f"{TransportKind.DIRECT_FILES.name} z endpointem - "
                 f"pobieranie arkuszy SM5 niemozliwe"
             )
         return self._files_endpoint.format(sheet=sheet)
@@ -417,7 +417,7 @@ class CuzkDmrProvider(BaseProvider):
         except DownloadError as e:
             # spec section 7: 404 from openzu -> hint to verify the sheet code
             raise DownloadError(
-                f"{e} — zweryfikuj godlo w indeksie KladyMapovychListu "
+                f"{e} - zweryfikuj godlo w indeksie KladyMapovychListu "
                 f"(arkusz moze byc znany indeksowi, ale plik openzu "
                 f"niedostepny)"
             ) from e
@@ -509,13 +509,13 @@ class CuzkDmrProvider(BaseProvider):
         with rasterio.open(path, "r+") as ds:
             if ds.crs is None:
                 raise ValidationError(
-                    f"Raster {label} nie ma CRS — nie da sie wyznaczyc "
+                    f"Raster {label} nie ma CRS - nie da sie wyznaczyc "
                     f"(lon, lat) wymaganych przez operacje pionowa"
                 )
             if ds.transform.is_identity or not ds.transform.is_rectilinear:
                 raise ValidationError(
                     f"Raster {label} nie ma uzytecznej geotransformacji "
-                    f"(jednostkowa/nieprostokatna) — nie da sie wyznaczyc "
+                    f"(jednostkowa/nieprostokatna) - nie da sie wyznaczyc "
                     f"(lon, lat) dla operacji pionowej"
                 )
             bounds = ds.bounds
@@ -609,7 +609,7 @@ def _assign_crs(path: Path, crs: str) -> None:
     try:
         with rasterio.open(path, "r+") as ds:
             if ds.crs is None:
-                logger.debug(f"{path.name}: brak CRS w GeoTIFF — wpisuje {crs}")
+                logger.debug(f"{path.name}: brak CRS w GeoTIFF - wpisuje {crs}")
                 ds.crs = CRS.from_string(crs)
     except Exception as e:
         path.unlink(missing_ok=True)

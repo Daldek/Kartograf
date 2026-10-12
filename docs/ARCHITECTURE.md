@@ -765,7 +765,7 @@ oraz sesje keep-alive per watek. `MetadataCache` (SQLite WAL, TTL 7 dni)
 zapisuje rekord `{"source": ...}` lub potwierdzony `{"no_coverage": true}`;
 CLI podpina cache w torach PL i CZ; `--force` otwiera go w obu w trybie
 `MetadataCache(refresh=True)` — odczyt pominiety, swiezy rekord zapisany
-(E14) — biblioteka przyjmuje `cache=`; `kartograf cache stats` pokazuje `Record entries`.
+(E14) — biblioteka przyjmuje `cache=`; `kartograf cache stats` pokazuje `Wpisy rekordow`.
 Baza jest otwierana leniwie: plik `.kartograf_cache.db` powstaje dopiero przy
 pierwszym zapisie (`set_*`); konstrukcja, odczyty (`get_*` = chybienie),
 `stats()` (zera, `db_exists: false`), `clear()` i `close()` na braku pliku
@@ -1012,7 +1012,7 @@ Sidecar pobranego arkusza dostaje `extra.parent_request` i `extra.source`
 zmienia jej sidecara (ADR-036). Tryb listy (takze hierarchia godla) probuje
 WSZYSTKIE arkusze niezaleznie od `--workers` (ADR-027 errata 3, R5-lista).
 `NoCoverageError` dopisuje brakujace godlo i `Warning:`, status postepu
-`no_coverage` (`∅`, `DownloadProgress.status`), bez wetowania pobranych
+`no_coverage` (ikona `0`, `DownloadProgress.status`), bez wetowania pobranych
 plikow. Podpowiedzi `NoCoverageError.hints` (np. `--scale 1:2000`) CLI
 drukuje jako `Info: <podpowiedz>` na stderr (takze z `-q`), bez doslownych
 duplikatow, najwyzej `MAX_HINT_LINES` linii plus `Info: ... i N innych

@@ -347,7 +347,7 @@ dane tam są:
 - pojedyncze godło: `Error:` (kod 1), a w treści błędu np.
   `Dostepny potomek 5.167.25.13 — uzyj --scale 1:2000`;
 - lista arkuszy (`--bbox`/`--geometry`, godło rozwijane): arkusze bez
-  danych mają status `no_coverage` (`∅`), na stderr `Warning: GUGiK nie ma
+  danych mają status `no_coverage` (ikona `0` na pasku postepu), na stderr `Warning: GUGiK nie ma
   danych dla N z M arkuszy ...` (kod 0, gdy pobrano choć jeden arkusz)
   albo — gdy żaden arkusz nie ma danych — `Error: GUGiK nie ma danych dla
   zadnego z M arkuszy obszaru` (kod 1); w obu przypadkach pod spodem

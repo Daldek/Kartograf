@@ -228,8 +228,8 @@ def test_hsg_cli_stats_from_store_path(tmp_path, capsys):
     with _session(FakeSoilGrids("2.0")):
         assert _hsg(tmp_path, "--stats") == 0
     out = capsys.readouterr().out
-    assert "HSG Statistics:" in out
-    assert "Group B: " in out or "Group A: " in out
+    assert "Statystyki HSG:" in out
+    assert "Grupa B: " in out or "Grupa A: " in out
     store = Path(tmp_path / "out" / "hsg/global_soilgrids_0-5cm_mean/bbox")
     assert (store / f"{COORDS}.tif").exists()
 

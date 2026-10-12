@@ -177,7 +177,7 @@ def year_range_error(
     hints = year_range_hints(sheets, min_year, max_year)
     lines = [
         f"brak {subject} {year_range_label(min_year, max_year)} "
-        f"dla {len(sheets)} z {total} {unit} — nic nie pobrano:"
+        f"dla {len(sheets)} z {total} {unit} - nic nie pobrano:"
     ]
 
     def year_text(sheet: str, year: int) -> str:
@@ -319,7 +319,7 @@ def verify_record_vertical_crs(record, vertical_crs: str | None, sheet: str) -> 
     declared = (raw.get("ukladWspolrzednychPionowych") or "").strip()
     if not declared:
         logger.debug(
-            "%s: rekord skorowidza bez ukladWspolrzednychPionowych — uklad "
+            "%s: rekord skorowidza bez ukladWspolrzednychPionowych - uklad "
             "wysokosci niesprawdzony (%s)",
             sheet,
             record.url,
@@ -328,7 +328,7 @@ def verify_record_vertical_crs(record, vertical_crs: str | None, sheet: str) -> 
     if declared.upper() != expected:
         raise DownloadError(
             f"{sheet}: rekord skorowidza deklaruje uklad wysokosci {declared}, "
-            f"a zadano {vertical_crs} (oczekiwano {expected}) — plik nie "
+            f"a zadano {vertical_crs} (oczekiwano {expected}) - plik nie "
             f"zostal pobrany: {record.url}",
             sheet=sheet,
         )
@@ -548,7 +548,7 @@ def verify_sheet_extent(path: Path, sheet: str, ext: str) -> None:
         x1, y1 = x0 + h["ncols"] * cell, y0 + h["nrows"] * cell
     except KeyError as e:
         raise DownloadError(
-            f"{path.name}: niepelny naglowek ASC (brak {e}) — nie mozna "
+            f"{path.name}: niepelny naglowek ASC (brak {e}) - nie mozna "
             f"sprawdzic zasiegu arkusza {sheet}",
             sheet=sheet,
         ) from e

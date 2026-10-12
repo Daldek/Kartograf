@@ -71,7 +71,7 @@ from kartograf.providers.pl.gugik_laz import (
 LazProgressCallback = Callable[[int, int], None]
 
 NO_TILES_MESSAGE = (
-    "No LAZ tiles found for the given area (sprawdz obszar, --year, "
+    "Brak kafli LAZ dla podanego obszaru (sprawdz obszar, --year, "
     "--min-year, --max-year i --vertical-crs; wszystkie roczniki WFS odpowiedzialy)"
 )
 

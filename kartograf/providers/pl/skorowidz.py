@@ -237,7 +237,7 @@ def _matches(
     """
     if record.system is None or record.resolution_m is None:
         logger.warning(
-            "Warstwa %s: rekord %s bez ukladu lub rozdzielczosci — pominieto",
+            "Warstwa %s: rekord %s bez ukladu lub rozdzielczosci - pominieto",
             record.layer,
             record.sheet,
         )
@@ -502,7 +502,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                     self._remember_source(sheet, source)
                     return record
                 # pre-ADR-031 payload (Polish keys) = cache miss
-                logger.debug("%s: unreadable record_cache entry — refreshing", sheet)
+                logger.debug("%s: unreadable record_cache entry - refreshing", sheet)
 
         if query.endpoint is None:
             raise self._missing_endpoint(query, sheet)
@@ -566,7 +566,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                 if sources and all(r is not None for r in restored):
                     return [r for r in restored if r is not None]
                 # pre-ADR-031 payload (Polish keys) = cache miss
-                logger.debug("%s: unreadable campaigns_cache entry — refreshing", sheet)
+                logger.debug("%s: unreadable campaigns_cache entry - refreshing", sheet)
 
         if query.endpoint is None:
             raise self._missing_endpoint(query, sheet)
@@ -766,7 +766,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                 if self.LAYER_FAMILY.match(elem.text):
                     logger.warning(
                         "Warstwa GetCapabilities %s z rodziny produktu nie pasuje "
-                        "do wzorca %s — NIE odpytywana",
+                        "do wzorca %s - NIE odpytywana",
                         elem.text,
                         self.LAYER_PATTERN.pattern,
                     )

@@ -68,7 +68,10 @@ def add_update_flags(
     parser.add_argument("--plan", metavar="PLIK", default=None, help=plan_help)
 
 
-_BBOX_EXPECTED = "Expected: min_x,min_y,max_x,max_y (e.g., 450000,550000,460000,560000)"
+_BBOX_EXPECTED = "Oczekiwano: min_x,min_y,max_x,max_y (np. 450000,550000,460000,560000)"
+_BBOX_HELP = "Prostokat obszaru: min_x,min_y,max_x,max_y (domyslny uklad: EPSG:2180)"
+_SHEET_HELP = "Godlo arkusza (np. N-34-130-D)"
+_GEOMETRY_HELP = "Plik geometrii (SHP albo GPKG); obszar = obwiednia obiektow"
 _LAYER_HELP = (
     "Warstwa GPKG (domyslnie pierwsza; przy wielu warstwach Info z lista pozostalych)"
 )
@@ -89,7 +92,7 @@ def _add_bbox_crs(parser: argparse.ArgumentParser) -> None:
         "--bbox-crs",
         choices=BBOX_CRS_CHOICES,
         default="EPSG:2180",
-        help="CRS for --bbox coordinates (default: EPSG:2180)",
+        help="Uklad wspolrzednych --bbox (domyslnie EPSG:2180)",
     )
 
 
@@ -98,7 +101,8 @@ def _add_quiet(parser: argparse.ArgumentParser) -> None:
         "--quiet",
         "-q",
         action="store_true",
-        help="Suppress progress output",
+        help="Bez paska postepu i linii statusu na stdout (Info:, Warning: "
+        "i Error: na stderr zostaja)",
     )
 
 
@@ -130,28 +134,28 @@ def parse_bbox_arg(text: str, crs: str) -> BBox:
     Raises
     ------
     ValidationError
-        ``Invalid bbox format: <reason>. Expected: ...`` for a number of values
+        ``Nieprawidlowy bbox: <reason>. Oczekiwano: ...`` for a number of values
         other than 4, a non-numeric value, NaN/inf or ``min > max``
         (``core.bbox.validate_bbox``; a point bbox is allowed).
     """
     parts = text.split(",")
     if len(parts) != 4:
-        reason = f"expected 4 comma-separated values, got {len(parts)}"
-        raise ValidationError(f"Invalid bbox format: {reason}. {_BBOX_EXPECTED}")
+        reason = f"oczekiwano 4 wartosci rozdzielonych przecinkami, podano {len(parts)}"
+        raise ValidationError(f"Nieprawidlowy bbox: {reason}. {_BBOX_EXPECTED}")
     values = []
     for part in parts:
         try:
             values.append(float(part.strip()))
         except ValueError:
-            reason = f"{part.strip()!r} is not a number"
+            reason = f"{part.strip()!r} nie jest liczba"
             raise ValidationError(
-                f"Invalid bbox format: {reason}. {_BBOX_EXPECTED}"
+                f"Nieprawidlowy bbox: {reason}. {_BBOX_EXPECTED}"
             ) from None
     bbox = BBox(values[0], values[1], values[2], values[3], crs)
     try:
         validate_bbox(bbox)
     except ValidationError as e:
-        raise ValidationError(f"Invalid bbox format: {e}. {_BBOX_EXPECTED}") from e
+        raise ValidationError(f"Nieprawidlowy bbox: {e}. {_BBOX_EXPECTED}") from e
     return bbox
 
 
@@ -167,55 +171,55 @@ def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="kartograf",
         description=(
-            "Tool for downloading spatial data from GUGiK (PL) and CUZK (CZ): "
-            "DEM/NMT, NMPT, orthophoto, LAZ, BDOT10k, CORINE, SoilGrids"
+            "Pobieranie danych przestrzennych z GUGiK (PL), CUZK (CZ), Copernicus "
+            "i ISRIC: NMT, NMPT, ortofotomapa, LAZ, BDOT10k, CORINE, SoilGrids"
         ),
-        epilog="Example: kartograf parse N-34-130-D --hierarchy",
+        epilog="Przyklad: kartograf parse N-34-130-D --hierarchy",
     )
 
     parser.add_argument(
         "--version",
         action=_LazyVersionAction,
-        help="show program's version number and exit",
+        help="pokaz wersje programu i zakoncz",
     )
 
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+    subparsers = parser.add_subparsers(dest="command", help="Komendy")
 
     # Parse command
     parse_parser = subparsers.add_parser(
         "parse",
-        help="Parse and display information about a map sheet",
-        description="Parse a map sheet code and display its properties",
+        help="Rozpoznaj godlo arkusza i pokaz jego wlasciwosci",
+        description="Rozpoznaj godlo arkusza i pokaz jego wlasciwosci",
     )
     parse_parser.add_argument(
         "sheet",
-        metavar="SHEET",
+        metavar="GODLO",
         type=str.strip,
-        help="Map sheet code (e.g., N-34-130-D, N-34-130-D-d-2-4)",
+        help="Godlo arkusza (np. N-34-130-D, N-34-130-D-d-2-4)",
     )
     parse_parser.add_argument(
         "--hierarchy",
         action="store_true",
-        help="Display the full hierarchy from this sheet up to 1:1000000",
+        help="Pokaz hierarchie od arkusza do skali 1:1000000",
     )
     parse_parser.add_argument(
         "--children",
         action="store_true",
-        help="Display direct children of this sheet",
+        help="Pokaz bezposrednie arkusze potomne",
     )
     parse_parser.add_argument(
         "--descendants",
-        metavar="SCALE",
-        help="Display all descendants to target scale (e.g., 1:10000)",
+        metavar="SKALA",
+        help="Pokaz wszystkie arkusze potomne do skali docelowej (np. 1:10000)",
     )
 
     # Download command
     download_parser = subparsers.add_parser(
         "download",
-        help="Download geospatial data from GUGiK (PL) and CUZK (CZ)",
+        help="Pobierz NMT, NMPT, ortofotomape albo LAZ z GUGiK (PL) i CUZK (CZ)",
         description=(
-            "Download geospatial data from GUGiK (PL: NMT, NMPT, orthophoto, LAZ) "
-            "and CUZK (CZ: DMR 5G/4G). Dla PL --bbox/--geometry rozwija sie na "
+            "Pobierz dane z GUGiK (PL: NMT, NMPT, ortofotomapa, LAZ) i CUZK "
+            "(CZ: DMR 5G/4G). Dla PL --bbox/--geometry rozwija sie na "
             "arkusze zrodlowe, a z --target-crs daje JEDEN wycinek 1 m z WCS "
             "GUGiK (ADR-035); dla CZ --bbox/--geometry zawsze zwraca jeden wycinek "
             "(exportImage pobierany natywnie w EPSG:5514, z --target-crs "
@@ -226,18 +230,18 @@ def create_parser() -> argparse.ArgumentParser:
     )
     download_parser.add_argument(
         "--sheet",
-        metavar="SHEET",
+        metavar="GODLO",
         default=None,
         # argparse does not strip whitespace; a sheet code with padding would reach
         # the system registry and the file name (parser review 2026-10-07, K5)
         type=str.strip,
-        help="Map sheet code: PL-1992 (e.g. N-34-130-D-d-2-4), PL-2000 "
-        "(e.g. 6.129.30.25.3), CZ SM5 (e.g. CTES96) or CZ TM33 (e.g. 302_5550)",
+        help="Godlo arkusza: PL-1992 (np. N-34-130-D-d-2-4), PL-2000 "
+        "(np. 6.129.30.25.3), CZ SM5 (np. CTES96) albo CZ TM33 (np. 302_5550)",
     )
     download_parser.add_argument(
         "--bbox",
         metavar="BBOX",
-        help="Bounding box: min_x,min_y,max_x,max_y (default CRS: EPSG:2180; "
+        help="Prostokat obszaru: min_x,min_y,max_x,max_y (domyslny uklad: EPSG:2180; "
         "ujemne wspolrzedne, np. EPSG:5514, podaj bez spacji: --bbox=-447000,...)",
     )
     _add_bbox_crs(download_parser)
@@ -245,7 +249,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--country",
         choices=["pl", "cz", "auto"],
         default=None,
-        help="Kraj zrodla danych — wymagany z --bbox/--geometry: "
+        help="Kraj zrodla danych - wymagany z --bbox/--geometry: "
         f"{COUNTRY_CHOICES}. Z --sheet kraj wynika z godla (podana wartosc "
         "musi sie z nim zgadzac)",
     )
@@ -266,11 +270,11 @@ def create_parser() -> argparse.ArgumentParser:
     )
     download_parser.add_argument(
         "--scale",
-        metavar="SCALE",
-        help="Skala arkuszy PL-2000 do pobrania — wymagana z --bbox/--geometry "
+        metavar="SKALA",
+        help="Skala arkuszy PL-2000 do pobrania - wymagana z --bbox/--geometry "
         "--system 2000 i z godlem PL-2000 1:10000 (np. 7.171.21): "
         f"{SCALE_2000_CHOICES}; z drobniejszym godlem PL-2000 opcjonalna "
-        "(rozwija godlo do potomkow w tej skali). PL-1992: niedozwolona — "
+        "(rozwija godlo do potomkow w tej skali). PL-1992: niedozwolona - "
         "GUGiK publikuje arkusze PL-1992 tylko w 1:10000 (godlo 7-czlonowe), "
         "grubsze godlo rozwija sie do 1:10000 samo. Nie dotyczy CZ, LAZ "
         "i --target-crs. Szczegoly: docs/USAGE.md 1.6",
@@ -278,10 +282,10 @@ def create_parser() -> argparse.ArgumentParser:
     download_parser.add_argument(
         "--output",
         "-o",
-        metavar="DIR",
+        metavar="KATALOG",
         default=None,
         help="Katalog wyniku (wymagany); pliki trafiaja do "
-        "<DIR>/<produkt>/<segment>/...",
+        "<KATALOG>/<produkt>/<segment>/...",
     )
     add_update_flags(
         download_parser,
@@ -304,7 +308,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--vertical-crs",
         metavar="VCRS",
         default=None,
-        help="Uklad wysokosci — wymagany dla --product nmt, nmpt i laz (orto "
+        help="Uklad wysokosci - wymagany dla --product nmt, nmpt i laz (orto "
         f"go nie ma). PL: {VERTICAL_CRS_PL}. CZ: {VERTICAL_CRS_CZ}. Jedna "
         "wartosc dotyczy kazdego kraju zadania i musi byc dla niego "
         "dostepna; zadanie PL+CZ z roznymi ukladami: pl=WARTOSC,cz=WARTOSC "
@@ -315,7 +319,7 @@ def create_parser() -> argparse.ArgumentParser:
         "-r",
         metavar="RES",
         default=None,
-        help="Rozdzielczosc siatki NMT — wymagana tam, gdzie jest wybor. PL: "
+        help="Rozdzielczosc siatki NMT - wymagana tam, gdzie jest wybor. PL: "
         f"{RESOLUTION_PL}; wycinek --target-crs tylko 1m. CZ: "
         f"{RESOLUTION_CZ}; arkusz SM5 tylko 5m (mozna pominac). NMPT tylko "
         "1m (mozna pominac); orto i LAZ bez rozdzielczosci. Jedna wartosc "
@@ -331,9 +335,9 @@ def create_parser() -> argparse.ArgumentParser:
     download_parser.add_argument(
         "--year",
         type=int,
-        metavar="YYYY",
+        metavar="ROK",
         help="Tylko ten rok danych (PL: rok pozyskania aktualnosc NMT/NMPT/orto, "
-        "akt_rok LAZ); skrot --min-year YYYY --max-year YYYY; najnowszy lot "
+        "akt_rok LAZ); skrot --min-year ROK --max-year ROK; najnowszy lot "
         "z tego roku (wszystkie: --all-campaigns); brak roku na ktoryms "
         "arkuszu/kaflu = blad przed pobraniem; nie dziala z --target-crs",
     )
@@ -348,16 +352,16 @@ def create_parser() -> argparse.ArgumentParser:
     download_parser.add_argument(
         "--min-year",
         type=int,
-        metavar="YYYY",
+        metavar="ROK",
         help="Tylko PL: dolna granica roku danych (wlacznie); najnowszy lot "
-        "z lat >= YYYY (wszystkie: --all-campaigns); nie dziala z --target-crs",
+        "z lat >= ROK (wszystkie: --all-campaigns); nie dziala z --target-crs",
     )
     download_parser.add_argument(
         "--max-year",
         type=int,
-        metavar="YYYY",
+        metavar="ROK",
         help="Tylko PL: gorna granica roku danych (wlacznie); najnowszy lot "
-        "z lat <= YYYY (wszystkie: --all-campaigns); sciezka standardowa nigdy "
+        "z lat <= ROK (wszystkie: --all-campaigns); sciezka standardowa nigdy "
         "nie cofa sie na starszy lot; nie dziala z --target-crs",
     )
     download_parser.add_argument(
@@ -373,24 +377,25 @@ def create_parser() -> argparse.ArgumentParser:
         "--min-density",
         type=int,
         metavar="N",
-        help="LAZ only (--product laz; an error with other products): keep "
-        "tiles with point density >= N points/m²",
+        help="Tylko LAZ (--product laz; z innym produktem blad): zostaw kafle "
+        "o gestosci punktow >= N pkt/m2",
     )
     download_parser.add_argument(
         "--geometry",
-        metavar="FILE",
-        help="Geometry file (SHP or GPKG) — download tiles intersecting features",
+        metavar="PLIK",
+        help="Plik geometrii obszaru (SHP albo GPKG): arkusze i kafle LAZ "
+        "przecinajace obiekty; wycinek (--target-crs, CZ) - obwiednia geometrii",
     )
     download_parser.add_argument(
         "--layer",
-        metavar="NAME",
+        metavar="NAZWA",
         help=_LAYER_HELP,
     )
     download_parser.add_argument(
         "--system",
         choices=["1992", "2000"],
         default=None,
-        help="Uklad godel arkuszy PL — wymagany z --bbox/--geometry dla PL "
+        help="Uklad godel arkuszy PL - wymagany z --bbox/--geometry dla PL "
         f"(bez --target-crs): {SYSTEM_CHOICES}. Wycinek --target-crs: tylko "
         "1992 (mozna pominac). Nie dotyczy --sheet (uklad z godla), LAZ "
         "(uklad kazdego kafla z WFS) ani CZ",
@@ -400,26 +405,27 @@ def create_parser() -> argparse.ArgumentParser:
         "-w",
         type=int,
         default=4,
-        help="Number of parallel download threads (default: 4). "
-        "Use 1 for sequential downloads.",
+        help="Liczba rownoleglych pobran (domyslnie 4; 1 = po kolei)",
     )
 
     # Landcover command group
     landcover_parser = subparsers.add_parser(
         "landcover",
-        help="Download land cover and soil data (BDOT10k, CORINE, SoilGrids)",
-        description="Download land cover / soil data from BDOT10k, CORINE or SoilGrids",
+        help="Pobierz pokrycie terenu i dane glebowe (BDOT10k, CORINE, SoilGrids)",
+        description="Pobierz pokrycie terenu albo dane glebowe z BDOT10k, CORINE "
+        "lub SoilGrids do magazynu wersji",
     )
     landcover_subparsers = landcover_parser.add_subparsers(
         dest="landcover_command",
-        help="Land cover commands",
+        help="Komendy landcover",
     )
 
     # Landcover download command
     lc_download = landcover_subparsers.add_parser(
         "download",
-        help="Download land cover data",
-        description="Download land cover data from selected source",
+        help="Pobierz dane wybranego zrodla",
+        description="Pobierz dane wybranego zrodla (--source) dla jednego "
+        "obszaru: --teryt, --sheet, --bbox albo --geometry",
     )
     lc_download.add_argument(
         "--source",
@@ -431,23 +437,24 @@ def create_parser() -> argparse.ArgumentParser:
     )
     lc_download.add_argument(
         "--teryt",
-        metavar="CODE",
-        help="TERYT code (4-digit powiat code, e.g., 1465)",
+        metavar="KOD",
+        help="Kod TERYT powiatu (4 cyfry, np. 1465; tylko BDOT10k)",
     )
     lc_download.add_argument(
         "--bbox",
         metavar="BBOX",
-        help="Bounding box: min_x,min_y,max_x,max_y (default CRS: EPSG:2180)",
+        help=_BBOX_HELP,
     )
     _add_bbox_crs(lc_download)
     lc_download.add_argument(
         "--sheet",
-        metavar="SHEET",
-        help="Map sheet code (e.g., N-34-130-D)",
+        metavar="GODLO",
+        help=_SHEET_HELP,
     )
     lc_download.add_argument(
         "--year",
         type=int,
+        metavar="ROK",
         default=None,
         help="Wymagane dla corine: 2018, 2012, 2006, 2000 "
         "(edycje pokrycia terenu CLMS/WMS), 1990 (tylko podglad WMS)",
@@ -455,10 +462,10 @@ def create_parser() -> argparse.ArgumentParser:
     lc_download.add_argument(
         "--output",
         "-o",
-        metavar="DIR",
+        metavar="KATALOG",
         default=None,
         help="Wymagane: katalog magazynu; pliki trafiaja do "
-        "<DIR>/landcover/... i <DIR>/soil/... (wersje w versions/)",
+        "<KATALOG>/landcover/... i <KATALOG>/soil/... (wersje w versions/)",
     )
     add_update_flags(
         lc_download,
@@ -505,12 +512,12 @@ def create_parser() -> argparse.ArgumentParser:
     )
     lc_download.add_argument(
         "--geometry",
-        metavar="FILE",
-        help="Geometry file (SHP or GPKG) for area selection",
+        metavar="PLIK",
+        help=_GEOMETRY_HELP,
     )
     lc_download.add_argument(
         "--layer",
-        metavar="NAME",
+        metavar="NAZWA",
         help=_LAYER_HELP,
     )
     lc_download.add_argument(
@@ -542,13 +549,13 @@ def create_parser() -> argparse.ArgumentParser:
     # Landcover list-sources command
     landcover_subparsers.add_parser(
         "list-sources",
-        help="List available data sources",
+        help="Wypisz dostepne zrodla danych",
     )
 
     # Landcover list-layers command
     lc_layers = landcover_subparsers.add_parser(
         "list-layers",
-        help="List available layers for a source",
+        help="Wypisz warstwy wybranego zrodla",
     )
     lc_layers.add_argument(
         "--source",
@@ -562,18 +569,18 @@ def create_parser() -> argparse.ArgumentParser:
     # Soilgrids command group (for HSG calculation)
     soilgrids_parser = subparsers.add_parser(
         "soilgrids",
-        help="SoilGrids data processing (HSG calculation)",
-        description="Process SoilGrids data for hydrological analysis",
+        help="SoilGrids: grupy hydrologiczne gleb (HSG)",
+        description="Przetwarzanie danych SoilGrids do analiz hydrologicznych",
     )
     soilgrids_subparsers = soilgrids_parser.add_subparsers(
         dest="soilgrids_command",
-        help="SoilGrids commands",
+        help="Komendy soilgrids",
     )
 
     # Soilgrids HSG command
     sg_hsg = soilgrids_subparsers.add_parser(
         "hsg",
-        help="Calculate Hydrologic Soil Groups from texture data",
+        help="Oblicz grupy hydrologiczne gleb (HSG) z uziarnienia",
         description=(
             "Pobierz clay (il), sand (piasek), silt (pyl) z SoilGrids "
             "dla wybranej glebokosci; uzyj statystyki mean (srednia) "
@@ -582,32 +589,32 @@ def create_parser() -> argparse.ArgumentParser:
     )
     sg_hsg.add_argument(
         "--sheet",
-        metavar="SHEET",
-        help="Map sheet code (e.g., N-34-130-D)",
+        metavar="GODLO",
+        help=_SHEET_HELP,
     )
     sg_hsg.add_argument(
         "--bbox",
         metavar="BBOX",
-        help="Bounding box: min_x,min_y,max_x,max_y (default CRS: EPSG:2180)",
+        help=_BBOX_HELP,
     )
     _add_bbox_crs(sg_hsg)
     sg_hsg.add_argument(
         "--geometry",
-        metavar="FILE",
-        help="Geometry file (SHP or GPKG) for area selection",
+        metavar="PLIK",
+        help=_GEOMETRY_HELP,
     )
     sg_hsg.add_argument(
         "--layer",
-        metavar="NAME",
+        metavar="NAZWA",
         help=_LAYER_HELP,
     )
     sg_hsg.add_argument(
         "--output",
         "-o",
-        metavar="DIR",
+        metavar="KATALOG",
         default=None,
-        help="Wymagane: katalog magazynu; wejscia w <DIR>/soil/..., HSG w "
-        "<DIR>/hsg/... (plik poza magazynem: hsg_from_rasters)",
+        help="Wymagane: katalog magazynu; wejscia w <KATALOG>/soil/..., HSG w "
+        "<KATALOG>/hsg/... (plik poza magazynem: hsg_from_rasters)",
     )
     sg_hsg.add_argument(
         "--depth",
@@ -630,37 +637,37 @@ def create_parser() -> argparse.ArgumentParser:
     sg_hsg.add_argument(
         "--stats",
         action="store_true",
-        help="Print HSG statistics after calculation",
+        help="Wypisz statystyki HSG po obliczeniu",
     )
     _add_quiet(sg_hsg)
 
     # Cache command group
     cache_parser = subparsers.add_parser(
         "cache",
-        help="Manage metadata cache",
+        help="Zarzadzaj cache metadanych",
         description=(
-            "Manage the local SQLite metadata cache (WMS lookups, TERYT, "
-            "CUZK sheet index)"
+            "Lokalny cache metadanych SQLite (odpowiedzi WMS, TERYT, indeks "
+            "arkuszy CUZK)"
         ),
     )
     cache_subparsers = cache_parser.add_subparsers(
         dest="cache_command",
-        help="Cache commands",
+        help="Komendy cache",
     )
 
     cache_subparsers.add_parser(
         "stats",
-        help="Show cache statistics (entry counts, db size)",
+        help="Pokaz statystyki cache (liczby wpisow, rozmiar bazy)",
     )
 
     cache_subparsers.add_parser(
         "clear",
-        help="Delete all cached entries",
+        help="Usun wszystkie wpisy cache",
     )
 
     cache_subparsers.add_parser(
         "path",
-        help="Show path to cache database file",
+        help="Pokaz sciezke pliku bazy cache",
     )
 
     return parser

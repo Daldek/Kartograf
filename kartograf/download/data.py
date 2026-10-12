@@ -742,7 +742,7 @@ def _download_pl_bbox(
     target_scale = pl_target_scale(task)
     sheets = find_sheets_for_bbox(bbox, target_scale, system=task.system)
     if not sheets:
-        return run.fail("PL", "PL", "No sheets found for the given bbox", "no_coverage")
+        return run.fail("PL", "PL", "Brak arkuszy dla podanego bbox", "no_coverage")
     return _download_pl_sheet_list(
         task, run, sheets, parent_request, what="bbox", target_scale=target_scale
     )
@@ -767,9 +767,7 @@ def _download_pl_geometry(
         filepath, target_scale=target_scale, layer=task.layer, system=task.system
     )
     if not sheets:
-        return run.fail(
-            "PL", "PL", "No sheets found for the given geometry", "no_coverage"
-        )
+        return run.fail("PL", "PL", "Brak arkuszy dla podanej geometrii", "no_coverage")
     return _download_pl_sheet_list(
         task,
         run,
@@ -794,9 +792,9 @@ def _download_pl_sheet_list(
     run.sink.emit(
         "info",
         SHEET_LIST,
-        f"Found {len(sheets)} sheets at {target_scale} for {what} "
+        f"Znaleziono arkuszy w skali {target_scale}: {len(sheets)} dla {what} "
         f"({_product_label(task.product, task.resolution)})\n"
-        f"  Sheets: {', '.join(sample)}",
+        f"  Arkusze: {', '.join(sample)}",
     )
     with open_cache(
         run.cache, force=run.update == "force", on_notice=run.sink.add

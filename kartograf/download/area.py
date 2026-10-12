@@ -57,7 +57,7 @@ def resolve_geometry_layer(
 
     filepath = Path(path)
     if not filepath.exists():
-        raise ValidationError(f"File not found: {filepath}")
+        raise ValidationError(f"Brak pliku: {filepath}")
     choice = resolve_layer(filepath, layer)
     if choice.defaulted and len(choice.available) > 1:
         sink.emit(

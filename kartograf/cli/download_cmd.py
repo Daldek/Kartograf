@@ -47,23 +47,23 @@ class _ProgressPrinter:
         if progress.status == "start":
             if progress.total > 1:  # a sheet hierarchy: "<code> to <scale>"
                 print(
-                    f"Downloading {progress.total} sheets from {progress.sheet} "
+                    f"Pobieranie {progress.total} arkuszy z {progress.sheet} "
                     f"({progress.message})"
                 )
                 print()
             else:
-                print(f"Downloading {progress.sheet} ({progress.message})...")
+                print(f"Pobieranie {progress.sheet} ({progress.message})...")
             return
         self.used = True
         if progress.status == "tiles":
             if progress.current == 0:
                 print(
-                    f"Found {progress.total} LAZ tiles. Downloading with "
-                    f"{self.workers} worker(s)..."
+                    f"Znaleziono kafli LAZ: {progress.total}. Pobieranie, "
+                    f"watki: {self.workers}..."
                 )
                 print()
                 return
-            print(f"\r  {progress.current}/{progress.total} tiles", end="", flush=True)
+            print(f"\r  {progress.current}/{progress.total} kafli", end="", flush=True)
             self.pending = True
             return
         bar_width = 30
@@ -71,13 +71,13 @@ class _ProgressPrinter:
         bar = "=" * filled + "-" * (bar_width - filled)
 
         status_icon = {
-            "downloading": "↓",
-            "completed": "✓",
-            "skipped": "○",
-            "failed": "✗",
+            "downloading": ">",
+            "completed": "+",
+            "skipped": "o",
+            "failed": "x",
             # D11: a sheet with no data at the source (sea, area abroad) is an
             # expected state, not a failure - a different icon than a download failure
-            "no_coverage": "∅",
+            "no_coverage": "0",
         }.get(progress.status, " ")
 
         line = (
@@ -420,13 +420,13 @@ def _cmd_download(args: argparse.Namespace) -> int:
     try:
         if getattr(args, "check_updates", False):
             if args.product == "laz" and not quiet:
-                print(f"Querying GUGiK WFS for LAZ tiles ({args.vertical_crs})...")
+                print(f"Zapytanie WFS GUGiK o kafle LAZ ({args.vertical_crs})...")
             plan = check_data(**arguments, on_notice=on_notice)
             return _report_plan(args, plan)
         workers = getattr(args, "workers", 4) or 1
         on_progress = create_progress_callback(quiet, workers)
         if args.product == "laz" and not quiet:
-            print(f"Querying GUGiK WFS for LAZ tiles ({args.vertical_crs})...")
+            print(f"Zapytanie WFS GUGiK o kafle LAZ ({args.vertical_crs})...")
         report = download_data(
             **arguments,
             update=_update_mode(args),

@@ -266,14 +266,14 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         """
         if bbox.crs != "EPSG:2180":
             raise ValidationError(
-                f"BBox must be in EPSG:2180, got {bbox.crs}. "
-                f"Use SheetParser.get_bbox(crs='EPSG:2180') to convert."
+                f"bbox musi byc w EPSG:2180, podano {bbox.crs}. "
+                "Przelicz: SheetParser.get_bbox(crs='EPSG:2180')."
             )
 
         if format not in self.WCS_FORMATS:
             raise ValidationError(
-                f"Unsupported WCS format: '{format}'. "
-                f"Supported formats: {list(self.WCS_FORMATS.keys())}"
+                f"Nieobslugiwany format WCS: '{format}'. "
+                f"Obslugiwane formaty: {list(self.WCS_FORMATS.keys())}"
             )
 
         return self._download_wcs(

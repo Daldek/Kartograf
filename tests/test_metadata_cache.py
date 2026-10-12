@@ -179,7 +179,7 @@ class TestMetadataCacheTERYT:
         assert result is None
 
     def test_ttl_expiry(self, short_ttl_cache):
-        """Test that TERYT entries expire after TTL."""
+        """Test that Wpisy TERYT expire after TTL."""
         short_ttl_cache.set_teryt(500000.0, 400000.0, "1465")
         assert short_ttl_cache.get_teryt(500000.0, 400000.0) is not None
 
@@ -747,9 +747,9 @@ class TestCLICacheCommands:
         result = main(["cache", "stats"])
         assert result == 0
         captured = capsys.readouterr()
-        assert "Record entries: 1" in captured.out
-        assert "TERYT entries" in captured.out
-        assert "Sheet entries:" in captured.out
+        assert "Wpisy rekordow: 1" in captured.out
+        assert "Wpisy TERYT" in captured.out
+        assert "Wpisy arkuszy:" in captured.out
 
     def test_cmd_cache_clear(self, tmp_path, monkeypatch, capsys):
         """Test that 'cache clear' clears and vacuums."""
@@ -762,7 +762,7 @@ class TestCLICacheCommands:
         result = main(["cache", "clear"])
         assert result == 0
         captured = capsys.readouterr()
-        assert "cleared" in captured.out.lower()
+        assert "wyczyszczony" in captured.out.lower()
 
         c = MetadataCache(db_path=tmp_path / ".kartograf_cache.db")
         try:
@@ -783,7 +783,7 @@ class TestCLICacheCommands:
         result = main(["cache"])
         assert result == 0
         captured = capsys.readouterr()
-        assert "Usage" in captured.out
+        assert "Uzycie" in captured.out
 
 
 # =========================================================================
@@ -1036,7 +1036,7 @@ class TestPruneExpired:
         cache.close()
 
     def test_prune_expired_removes_old_teryt_entries(self, cache_path):
-        """Test that prune_expired deletes expired TERYT entries."""
+        """Test that prune_expired deletes expired Wpisy TERYT."""
         cache = MetadataCache(db_path=cache_path, ttl_seconds=1)
         cache.set_teryt(1.0, 2.0, "1234")
         cache.set_teryt(3.0, 4.0, "5678")
@@ -1183,7 +1183,7 @@ class TestCampaignsCache:
         c.set_campaigns(*_CAMP, _CAMP_PAYLOAD)
         c.close()
         assert main(["cache", "stats"]) == 0
-        assert "Campaign entries: 1" in capsys.readouterr().out
+        assert "Wpisy kampanii: 1" in capsys.readouterr().out
 
     def test_concurrent_get_campaigns_returns_own_key(self, tmp_path: Path) -> None:
         cache = MetadataCache(db_path=tmp_path / "c.db")
@@ -1424,18 +1424,18 @@ class TestCLICacheCommandsWithoutDatabase:
         monkeypatch.chdir(tmp_path)
         assert main(["cache", "stats"]) == 0
         out = capsys.readouterr().out
-        assert "Record entries: 0" in out
-        assert "Campaign entries: 0" in out
-        assert "TERYT entries: 0" in out
-        assert "Sheet entries: 0" in out
-        assert "Database size: - (file not created yet)" in out
-        assert f"Database path: {tmp_path / '.kartograf_cache.db'}" in out
+        assert "Wpisy rekordow: 0" in out
+        assert "Wpisy kampanii: 0" in out
+        assert "Wpisy TERYT: 0" in out
+        assert "Wpisy arkuszy: 0" in out
+        assert "Rozmiar bazy: - (plik jeszcze nie utworzony)" in out
+        assert f"Sciezka bazy: {tmp_path / '.kartograf_cache.db'}" in out
         assert list(tmp_path.iterdir()) == []
 
     def test_cache_clear_does_not_create_db(self, tmp_path, monkeypatch, capsys):
         monkeypatch.chdir(tmp_path)
         assert main(["cache", "clear"]) == 0
-        assert "Cache cleared." in capsys.readouterr().out
+        assert "Cache wyczyszczony." in capsys.readouterr().out
         assert list(tmp_path.iterdir()) == []
 
 
@@ -1703,7 +1703,7 @@ class TestCLICacheCommandsUnreadable:
         lines = captured.err.splitlines()
         assert len(lines) == 1
         assert lines[0].startswith(f"Error: cache nieczytelny: {db} (")
-        assert lines[0].endswith("— uzyj `kartograf cache clear`")
+        assert lines[0].endswith("- uzyj `kartograf cache clear`")
         assert "DatabaseError" not in captured.err
         assert db.exists()
 

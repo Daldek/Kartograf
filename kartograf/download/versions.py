@@ -435,7 +435,7 @@ def commit_version(
             _discard(staged)
             raise DownloadError(
                 f"{target}: plik wersji ma inne sha256 ({existing[:8]}) niz pobrany "
-                f"({digest.sha256[:8]}) — kolizja albo uszkodzony plik"
+                f"({digest.sha256[:8]}) - kolizja albo uszkodzony plik"
             ) from None
         if _sidecar(target).exists():
             _discard(staged)

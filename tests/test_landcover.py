@@ -80,7 +80,7 @@ class TestBdot10kProvider:
     def test_layer_description(self):
         """Test layer descriptions."""
         provider = Bdot10kProvider()
-        assert provider.get_layer_description("PTLZ") == "Tereny leśne"
+        assert provider.get_layer_description("PTLZ") == "Tereny lesne"
         assert provider.get_layer_description("PTWP") == "Wody powierzchniowe"
 
     def test_supported_formats(self):
@@ -360,7 +360,7 @@ class TestLandCoverCLI:
         assert result == 0
         captured = capsys.readouterr()
         assert "PTLZ" in captured.out
-        assert "Tereny leśne" in captured.out
+        assert "Tereny lesne" in captured.out
 
     def test_landcover_list_layers_corine(self, capsys):
         """Test list-layers for CORINE."""
@@ -398,10 +398,10 @@ class TestLandCoverCLI:
         )
         assert result == 1
         captured = capsys.readouterr()
-        assert "Invalid bbox" in captured.err
-        # the "Expected" hint goes to stderr together with the error (review-1 D4)
-        assert "Expected" in captured.err
-        assert "Expected" not in captured.out
+        assert "Nieprawidlowy bbox" in captured.err
+        # the "Oczekiwano" hint goes to stderr together with the error (review-1 D4)
+        assert "Oczekiwano" in captured.err
+        assert "Oczekiwano" not in captured.out
 
     @pytest.mark.parametrize(
         "bbox",
@@ -426,9 +426,9 @@ class TestLandCoverCLI:
         assert result == 1
         manager.assert_not_called()
         captured = capsys.readouterr()
-        assert "Error: Invalid bbox format" in captured.err
+        assert "Error: Nieprawidlowy bbox" in captured.err
         assert "ValueError" not in captured.err
-        assert "Expected" not in captured.out
+        assert "Oczekiwano" not in captured.out
 
 
 class TestLandCoverInvalidOptions:
@@ -454,7 +454,7 @@ class TestLandCoverInvalidOptions:
                     "--stat",
                     "mean",
                 ],
-                "Invalid property",
+                "Nieprawidlowa wlasciwosc",
             ),
             (
                 [
@@ -467,7 +467,7 @@ class TestLandCoverInvalidOptions:
                     "--stat",
                     "mean",
                 ],
-                "Invalid depth",
+                "Nieprawidlowa glebokosc",
             ),
             (
                 [
@@ -480,7 +480,7 @@ class TestLandCoverInvalidOptions:
                     "--stat",
                     "median",
                 ],
-                "Invalid stat",
+                "Nieprawidlowa statystyka",
             ),
             (["--source", "corine", "--year", "1999"], "1999"),
         ],
@@ -580,7 +580,7 @@ class TestBdot10kProviderDownload:
     def test_download_by_teryt_invalid_format(self):
         """Invalid format raises ValidationError."""
         provider = Bdot10kProvider()
-        with pytest.raises(ValidationError, match="Unsupported format"):
+        with pytest.raises(ValidationError, match="Nieobslugiwany format"):
             provider.download_by_teryt("1465", Path("/tmp/out.gpkg"), format="XML")
 
     def test_download_by_teryt_success(self, tmp_path):
@@ -771,20 +771,20 @@ class TestBdot10kRetryAndIO:
         assert [p.name for p in output.parent.iterdir()] == [output.name]
 
     def test_extract_gpkg_bad_zip(self, tmp_path):
-        """Invalid ZIP -> DownloadError."""
+        """Nieprawidlowy plik ZIP -> DownloadError."""
         provider = Bdot10kProvider()
         output = tmp_path / "merged.gpkg"
 
         mock_resp = Mock()
         mock_resp.iter_content.return_value = [b"not a zip file"]
 
-        with pytest.raises(DownloadError, match="Invalid ZIP"):
+        with pytest.raises(DownloadError, match="Nieprawidlowy plik ZIP"):
             provider._extract_gpkg_from_zip(mock_resp, output)
 
     def test_merge_gpkg_files_empty(self):
         """Empty file list -> DownloadError."""
         provider = Bdot10kProvider()
-        with pytest.raises(DownloadError, match="No files to merge"):
+        with pytest.raises(DownloadError, match="Brak plikow do scalenia"):
             provider._merge_gpkg_files([], Path("/tmp/out.gpkg"))
 
     def test_merge_gpkg_files(self, tmp_path):

@@ -705,7 +705,7 @@ class TestGugikOrtoProviderDownloadBbox:
         provider = GugikOrtoProvider(color="RGB")
         output_path = tmp_path / "area.xyz"
 
-        with pytest.raises(ValidationError, match="Unsupported WCS format"):
+        with pytest.raises(ValidationError, match="Nieobslugiwany format WCS"):
             provider.download_bbox(sample_bbox, output_path, format="InvalidFormat")
 
 

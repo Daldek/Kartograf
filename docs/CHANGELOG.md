@@ -114,6 +114,21 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   calkowitych - ten sam plik z CLI i z biblioteki. Co zrobic: nic
   (porownanie wartosci liczbowych bez zmian); porownania tekstowe sidecarow
   musza przyjac zapis `.0`.
+- Jezyk (Z5): pomoc wszystkich komend, komunikaty CLI, teksty `Notice`
+  i bledow `KartografError` po polsku i wylacznie w ASCII. Zmienione m.in.:
+  `Invalid bbox format` -> `Nieprawidlowy bbox`, `Must provide one of` /
+  `Specify only one of` -> `Podaj (dokladnie jeden) wybor obszaru`,
+  `File not found` -> `Brak pliku`, `Unsupported ...`/`Invalid ...` ->
+  `Nieobslugiwany ...`/`Nieprawidlowy ...`, `Found N sheets ...` ->
+  `Znaleziono arkuszy w skali ...`, `Downloading ...` -> `Pobieranie ...`,
+  wyjscie `parse` (`Godlo:`, `Skala:`, `Uklad:`, `Czlony:`, `Hierarchia`,
+  `Arkusze potomne`), `cache stats` (`Wpisy rekordow:` ...), komunikaty
+  `sheet_parser` bez polskich znakow (`Nieprawidlowe godlo`), opisy warstw
+  BDOT10k (`Tereny lesne`), `metavar` (`GODLO`, `KATALOG`, `PLIK`, `ROK`,
+  `NAZWA`, `KOD`, `SKALA`); ikony paska postepu ASCII: `>` pobieranie,
+  `+` pobrano, `o` pominieto, `x` blad, `0` brak danych (bylo `↓ ✓ ○ ✗ ∅`).
+  Co zrobic: skrypty dopasowujace teksty CLI albo `str(wyjatek)` - nowe
+  brzmienie; lepiej typ wyjatku (`ValidationError`) i kod wyjscia.
 
 - Biblioteka: bledne wartosci wejscia providerow, magazynu, wycinka LAZ
   i skali docelowej arkuszy zglaszaja `ValidationError` (podklasa

@@ -280,8 +280,7 @@ class LandCoverManager:
         name_lower = name.lower()
         if name_lower not in PROVIDERS:
             raise ValidationError(
-                f"Unknown provider: {name}. "
-                f"Available providers: {list(PROVIDERS.keys())}"
+                f"Nieznane zrodlo: {name}. Dostepne: {list(PROVIDERS.keys())}"
             )
         if name_lower == "bdot10k":
             return Bdot10kProvider(cache=cache)
@@ -581,26 +580,28 @@ class LandCoverManager:
             raise TypeError(f"{self._provider.name}: wymagane opcje {missing}")
         provider = self._provider
         if isinstance(provider, SoilGridsProvider):
-            for name, allowed in (
-                ("property", provider.PROPERTIES),
-                ("depth", provider.DEPTHS),
-                ("stat", provider.STATS),
+            for name, label, allowed in (
+                ("property", "wlasciwosc", provider.PROPERTIES),
+                ("depth", "glebokosc", provider.DEPTHS),
+                ("stat", "statystyka", provider.STATS),
             ):
                 if kwargs[name] not in allowed:
                     raise ValidationError(
-                        f"Invalid {name}: {kwargs[name]}. "
-                        f"Available: {', '.join(allowed)}"
+                        f"Nieprawidlowa {label}: {kwargs[name]}. "
+                        f"Dostepne: {', '.join(allowed)}"
                     )
         elif isinstance(provider, CorineProvider):
             if kwargs["year"] not in provider.AVAILABLE_YEARS:
                 raise ValidationError(
-                    f"Invalid year: {kwargs['year']}. "
-                    f"Available years: {provider.AVAILABLE_YEARS}"
+                    f"Nieprawidlowy rok: {kwargs['year']}. "
+                    f"Dostepne lata: {provider.AVAILABLE_YEARS}"
                 )
         else:
             fmt = kwargs.get("format", "GPKG")
             if fmt not in ("GPKG", "SHP"):
-                raise ValidationError(f"Unsupported format: {fmt}. Use 'GPKG' or 'SHP'")
+                raise ValidationError(
+                    f"Nieobslugiwany format: {fmt}. Uzyj 'GPKG' albo 'SHP'"
+                )
             if kwargs.get("layers") is not None:
                 normalize_layers(kwargs["layers"])
                 if fmt != "GPKG":
