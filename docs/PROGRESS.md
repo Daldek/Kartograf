@@ -107,9 +107,13 @@
 > 1. **Plan 2/3 magazynu wersjonowanego NAPISANY** na galezi
 >    `feat/versioned-store` (`ce6a45b`):
 >    `docs/superpowers/plans/2026-10-12-versioned-store-2-laz-cz-cutouts.md`
->    (Task 1-13; sesja "plan 2/3" nizej). Nastepny krok: przeglad planu
->    przez uzytkownika, potem realizacja od Task 1 (inwentaryzacja na
->    zywo — zapytac o katalog danych). Spec: rewizja 2026-10-12, D26-D28.
+>    (Task 1-13; sesja "plan 2/3" nizej). **Nastepna sesja: WDROZENIE
+>    planu 2/3** (decyzja uzytkownika 2026-10-12) — `git switch
+>    feat/versioned-store`, realizacja od Task 1 (inwentaryzacja na zywo:
+>    NAJPIERW zapytac uzytkownika o katalog danych testow na zywo; wynik
+>    rozny od tabeli "Oczekiwane przyporzadkowanie" w Task 1 = stop
+>    i poprawka Task 2-9 przed implementacja). Spec: rewizja 2026-10-12,
+>    D26-D28.
 >    Plan 1/3 ZROBIONY (Task 1-9, ADR-036, CHANGELOG [0.8.0] na galezi).
 >    Galaz trafia do `develop` dopiero po planie 3/3.
 > 2. Udzial SMB bez `serverino` (`samefile` falszywe dla hardlinkow):
