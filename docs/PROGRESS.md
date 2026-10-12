@@ -193,8 +193,16 @@
   wersja z pierwszymi `source_files` — takie wejscia licza HSG przy kazdym
   uruchomieniu (ADR-036, ARCHITECTURE 4.8).
 - Subagenci nie wystartowali (limit modelu) — wdrozenie wykonane recznie.
-- Brama na galezi: pytest offline 3379 zielone, ruff i mypy czyste; live
-  `tests/test_edition.py` 2 passed.
+- Brama na galezi i po merge na `develop`: pytest offline 3379 zielone,
+  ruff i mypy czyste; live `tests/test_edition.py` 2 passed.
+- Inne drobne zmiany API w tej sesji: `get_with_retry(headers=)`,
+  `bdot10k.normalize_layers()` (walidacja kodow warstw wspolna dla
+  providera i menedzera), `storage_subdir: str` (bez `None`).
+- Koniec sesji: `develop` czysty, nic niewypchniete na `origin` (push
+  `develop` i los `feat/versioned-store` na `origin` — decyzja
+  uzytkownika). Przed 0.8.0: Hydrograf (`download_landcover.py`,
+  `cn_calculator.py`, `bootstrap.py` -> `result.file.path`), Hydrolog,
+  backlog CLMS z credentials i CLMS 1990 jako dane.
 
 ### Sesja 2026-10-12 (piata) — weryfikacja specu i plan 3/3 magazynu wersjonowanego
 
