@@ -195,7 +195,13 @@ def run_with_plan_file(
         plan = ctx.plans[0]
         for other in ctx.plans[1:]:
             plan = plan.merge(other)
-        Path(plan_file).write_text(plan.to_json(), encoding="utf-8")
+        try:
+            Path(plan_file).write_text(plan.to_json(), encoding="utf-8")
+        except OSError as e:
+            print(
+                f"Error: nie udalo sie zapisac planu {plan_file}: {e}", file=sys.stderr
+            )
+            return 1
         print(f"Info: zapisano plan aktualizacji {plan_file}", file=sys.stderr)
     return rc
 

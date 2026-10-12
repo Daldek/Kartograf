@@ -113,6 +113,25 @@ def test_check_updates_writes_plan_file_and_upgrade_executes_it(tmp_path, capsys
     assert fake.downloads == [REC["84183"].url]
 
 
+def test_plan_file_in_missing_directory_is_one_error_line(tmp_path, capsys):
+    """Live 2026-10-12: a --plan path in a missing directory crashed with
+    ``Error: FileNotFoundError: ...`` and the debug hint."""
+    plan = tmp_path / "missing" / "plan.json"
+    rc = _run(
+        FakeCampaignProvider(C14),
+        tmp_path / "data",
+        "--sheet",
+        G,
+        "--check-updates",
+        "--plan",
+        str(plan),
+    )
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert f"Error: nie udalo sie zapisac planu {plan}: " in err
+    assert "KARTOGRAF_DEBUG" not in err and "FileNotFoundError" not in err
+
+
 def test_upgrade_plan_of_other_store_is_error(tmp_path, capsys):
     fake = FakeCampaignProvider(C14)
     plan = tmp_path / "plan.json"
