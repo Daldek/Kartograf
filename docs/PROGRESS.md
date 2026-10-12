@@ -29,7 +29,7 @@
 | Kampanie GUGiK (ADR-030 + errata 1-8, ADR-032 + errata 2, ADR-033) | ✅ Gotowy | `--all-campaigns` (od 0.8.0-dev; wczesniej `--campaigns {newest,all}`), `--year`/`--min-year`/`--max-year` (v0.7.2), `--full-sheet`; pliki w `<segment>/kampanie/`, sciezka standardowa i `full_sheet/` = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`, `docs/research/2026-10-10-full-sheet-link/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`) |
 | Wycinek NMT/NMPT PL `--target-crs` (ADR-035), API `download_pl_cutout` | ✅ Gotowy | v0.7.2: WCS 1 m z maska ladu PRG, data w nazwie, NMT i NMPT; NMPT `download_bbox` float32; kawalki ASC NMPT 4 Mpx coverage (ADR-035 errata 1); zweryfikowany na zywo (`docs/research/2026-10-11-wcs-cutouts-live/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`). Arkuszowy tor ADR-027 usuniety na `develop` (0.8.0-dev, ADR-035 errata 2) |
 
-| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekt 1 (magazyn wersjonowany): plany 1/3 i 2/3 wykonane na `feat/versioned-store` (2/3: 2026-10-12, weryfikacja na zywo PASS), plan 3/3 do napisania |
+| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekt 1 (magazyn wersjonowany): plany 1/3 i 2/3 wykonane na `feat/versioned-store` (2/3: 2026-10-12, weryfikacja na zywo PASS), plan 3/3 napisany (2026-10-12, spec D29-D33), do wdrozenia |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
 ## Checkpointy
@@ -103,19 +103,18 @@
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI (stan 2026-10-12, koniec czwartej sesji):**
-> 1. **Plan 2/3 magazynu wersjonowanego WDROZONY** na galezi
->    `feat/versioned-store` (`4b9767c`..`369e7cf`, Task 1-13; sesja
->    "wdrozenie planu 2/3" nizej). Nastepny krok: **napisac plan 3/3**
->    (land cover BDOT10k/CORINE/SoilGrids i HSG w ukladzie `data/`, D11,
->    `keep_raw`, `source_files[]` HSG, tryby w `landcover`/`soilgrids`;
->    inwentaryzacja sygnalow juz jest:
->    `git show feat/versioned-store:docs/research/2026-10-12-signal-inventory/raport.md`).
->    Decyzja uzytkownika do podjecia przy planie 3/3: SoilGrids `metadata`
->    (edycja `SoilGrids250m 2.0`, bez wykrywania poprawek w obrebie
->    wydania) albo `none`; w rejestrze na razie `none`. CORINE
->    niesprawdzone na zywo (brak `CLMS_CREDENTIALS`).
->    Galaz trafia do `develop` dopiero po planie 3/3.
+> **START NASTEPNEJ SESJI (stan 2026-10-12, koniec piatej sesji):**
+> 1. **Plan 3/3 magazynu wersjonowanego NAPISANY** na galezi
+>    `feat/versioned-store`
+>    (`docs/superpowers/plans/2026-10-12-versioned-store-3-landcover-hsg.md`,
+>    `20ba175`; spec zweryfikowany i uzupelniony o D29-D33, `9a8f392`,
+>    raport `docs/research/2026-10-12-plan3-spec-check/raport.md`).
+>    Nastepny krok: **wdrozenie planu 3/3 od Task 1**. Task 11 (E2E na
+>    zywo) uzywa katalogu danych wskazanego przez uzytkownika 2026-10-12
+>    (zapytaj ponownie, jesli nie ma go w kontekscie; NIE zapisuj sciezki).
+>    Task 12: galaz do `develop` tylko za zgoda uzytkownika.
+>    `CLMS_CREDENTIALS` odlozone (decyzja uzytkownika 2026-10-12) —
+>    pobranie CLMS zostaje niesprawdzone na zywo.
 > 2. Udzial SMB bez `serverino` (`samefile` falszywe dla hardlinkow):
 >    ROZWIAZANE na galezi (`1c84b3e`, decyzja uzytkownika 2026-10-12) —
 >    `linked_version` potwierdza dowiazanie trescia (oba pliki > 1 link,
@@ -127,7 +126,7 @@
 >    `docs/research/2026-10-12-test-0.8.0/raport.md`).
 > **Stan galezi (sprawdzaj w gicie):** `develop` ma lokalne commity
 > NIEWYPCHNIETE na `origin`; `feat/versioned-store` po rebase na `develop`
-> (2026-10-12), z planem 1/3, poprawka `1c84b3e`, planem 2/3 `ce6a45b` i jego wdrozeniem (`369e7cf`) — rozjechana z `origin`
+> (2026-10-12), z planem 1/3, poprawka `1c84b3e`, planem 2/3 `ce6a45b` i jego wdrozeniem (`369e7cf`), specem D29-D33 (`9a8f392`) i planem 3/3 (`20ba175`) — rozjechana z `origin`
 > (wymaga `push --force-with-lease`). Push tylko za zgoda uzytkownika
 > (2026-10-12: "nic teraz").
 > **PROGRESS tylko na `develop`:** galaz nie zmienia `docs/PROGRESS.md`
@@ -141,9 +140,9 @@
 > domyslnych wplywajacych na dane (ADR-004 errata 1, ADR-023 errata 2) —
 > CHANGELOG [0.8.0] BREAKING.
 > **Magazyn wersjonowany:** spec ZAAKCEPTOWANY 2026-10-11, decyzje D1-D24,
-> rewizja 2026-10-12 D26-D28
-> (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`, plany 1/3
-> i 2/3 oraz ADR-036 na galezi `feat/versioned-store`). Samoopisowe nazwy
+> rewizje 2026-10-12 D26-D28 i D29-D33
+> (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`, plany 1/3,
+> 2/3, 3/3 oraz ADR-036 na galezi `feat/versioned-store`). Samoopisowe nazwy
 > plikow (proponowane D25) ODRZUCONE 2026-10-12 — parametry niesie
 > sciezka. Poprawki czytelnosci ukladu na pozniej: backlog "Do v1.0.0".
 > **Wydanie 0.7.2** (2026-10-11): `develop`, `main` i tag `v0.7.2` na
@@ -165,6 +164,28 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Sesja 2026-10-12 (piata) — weryfikacja specu i plan 3/3 magazynu wersjonowanego
+
+- Galaz `feat/versioned-store` (bez push): `9a8f392` spec (rewizja przed
+  planem 3/3, D29-D33) + raport `docs/research/2026-10-12-plan3-spec-check/`
+  + fixtura `clms_corine_2018_search.json`; `20ba175` plan 3/3 (12 zadan:
+  wydania, `fetch.py` dla `metadata`, segmenty land cover, `LandCoverManager`,
+  HSG, CLI `landcover`/`soilgrids hsg`, API, dokumentacja, E2E, merge).
+- Decyzje (uzytkownik powierzyl wybor sygnalow SoilGrids/CORINE z wymogiem
+  porownywalnosci wersji): D29 sygnal `metadata` = wydanie zbioru (SoilGrids
+  `2.0` z GetCapabilities mapy wlasciwosci; CORINE `V2020_20u1` z publicznego
+  katalogu CLMS `@search`, bez credentials); D30 zadnej wersji bez wydania;
+  D31 podglad CORINE WMS jako osobny segment `_preview` (`none`); D32
+  `LandCoverManager`/`HSGCalculator` tylko magazyn, bez `output_path`
+  (BREAKING dla Hydrografa: `download_landcover.py`, `cn_calculator.py`,
+  `bootstrap.py`); D33 HSG z wersji wejsc, `reused`, bez `keep_intermediate`.
+- Ustalenia: UID-y CLMS 2012/2006/2000 w `providers/corine.py` nie istnieja
+  w katalogu (poprawka w Task 1 planu 3/3); `fetch.py` traktuje `metadata`
+  jak `index` (lokalna zawsze aktualna); kanal `none` z `content_length`
+  dawalby `relabeled` zamiast `unchanged`; CLI `soilgrids hsg --bbox` z
+  katalogiem nadpisuje `hsg_bbox_<depth>.tif` niezaleznie od obszaru.
+- Bez zmian kodu; brama nie uruchamiana (tylko dokumenty i fixtura).
 
 ### Sesja 2026-10-12 (czwarta) — wdrozenie planu 2/3 magazynu wersjonowanego
 
