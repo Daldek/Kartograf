@@ -44,9 +44,7 @@ Example usage::
     from kartograf import HSGCalculator, LandCoverManager
     lc = LandCoverManager("./data", "bdot10k").download(teryt="1465")
     print(lc.files[0].file.path, lc.ok)  # data/landcover/pl_bdot10k_gpkg/...
-    hsg = HSGCalculator("./data").calculate_hsg_by_sheet(
-        "N-34-130-D", depth="0-5cm", stat="mean"
-    )
+    hsg = HSGCalculator("./data").calculate_hsg(sheet="N-34-130-D", depth="0-5cm")
     print(hsg.file.path, hsg.file.label)  # data/hsg/..., SoilGrids edition
 """
 

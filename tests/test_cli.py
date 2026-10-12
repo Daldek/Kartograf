@@ -3078,9 +3078,7 @@ class TestCmdSoilgrids:
     def test_soilgrids_hsg_success(self, mock_calc_cls, capsys, tmp_path):
         """soilgrids hsg --sheet -> success output."""
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_sheet.return_value = _hsg_result(
-            tmp_path / "hsg.tif"
-        )
+        mock_calc.calculate_hsg.return_value = _hsg_result(tmp_path / "hsg.tif")
         mock_calc_cls.return_value = mock_calc
 
         result = main(
@@ -3098,15 +3096,13 @@ class TestCmdSoilgrids:
         assert result == 0
         captured = capsys.readouterr()
         assert "hsg.tif: nowa wersja" in captured.out
-        mock_calc.calculate_hsg_by_sheet.assert_called_once()
+        mock_calc.calculate_hsg.assert_called_once()
 
     @patch("kartograf.hydrology.HSGCalculator")
     def test_soilgrids_hsg_with_stats(self, mock_calc_cls, capsys, tmp_path):
         """soilgrids hsg --stats prints statistics."""
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_sheet.return_value = _hsg_result(
-            tmp_path / "hsg.tif"
-        )
+        mock_calc.calculate_hsg.return_value = _hsg_result(tmp_path / "hsg.tif")
         mock_calc.get_hsg_statistics.return_value = {
             "A": {
                 "count": 100,
@@ -3162,7 +3158,7 @@ class TestCmdSoilgrids:
     def test_soilgrids_hsg_error(self, mock_calc_cls, capsys, tmp_path):
         """soilgrids hsg raises DownloadError -> exit 1."""
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_sheet.side_effect = DownloadError("Network error")
+        mock_calc.calculate_hsg.side_effect = DownloadError("Network error")
         mock_calc_cls.return_value = mock_calc
 
         result = main(
@@ -3182,12 +3178,10 @@ class TestCmdSoilgrids:
         assert "Error" in captured.err
 
     @patch("kartograf.hydrology.HSGCalculator")
-    def test_soilgrids_hsg_sheet_leading_zeros_canonical(self, mock_calc_cls, tmp_path):
-        """A7: default HSG file name and the calculator use the canonical sheet."""
+    def test_soilgrids_hsg_sheet_passed_to_library(self, mock_calc_cls, tmp_path):
+        """--sheet/--depth/-o go to the library as given (canonical code there)."""
         mock_calc = mock_calc_cls.return_value
-        mock_calc.calculate_hsg_by_sheet.return_value = _hsg_result(
-            tmp_path / "hsg.tif"
-        )
+        mock_calc.calculate_hsg.return_value = _hsg_result(tmp_path / "hsg.tif")
         out = tmp_path / "out"
 
         result = main(
@@ -3205,11 +3199,12 @@ class TestCmdSoilgrids:
 
         assert result == 0
         assert mock_calc_cls.call_args.args[0] == out
-        assert mock_calc.calculate_hsg_by_sheet.call_args.args[0] == "M-33-36-A"
+        kwargs = mock_calc.calculate_hsg.call_args.kwargs
+        assert (kwargs["sheet"], kwargs["depth"]) == ("M-33-036-A", "0-5cm")
+        assert "stat" not in kwargs
 
-    @patch("kartograf.hydrology.HSGCalculator")
-    def test_soilgrids_hsg_out_of_range_sheet(self, mock_calc_cls, capsys, tmp_path):
-        """A7: an out-of-range sheet -> Error on stderr, code 1, no calculation."""
+    def test_soilgrids_hsg_out_of_range_sheet(self, capsys, tmp_path):
+        """A7: an out-of-range sheet -> Error on stderr, code 1, before network."""
         out = tmp_path / "out"
 
         result = main(
@@ -3226,10 +3221,10 @@ class TestCmdSoilgrids:
         )
 
         assert result == 1
-        mock_calc_cls.return_value.calculate_hsg_by_sheet.assert_not_called()
         captured = capsys.readouterr()
         assert "Error: " in captured.err
         assert "poza zakresem" in captured.err
+        assert not out.exists()
 
     @pytest.mark.parametrize(
         "bbox", ["invalid", "10,10,5,5", "nan,1,2,3", "1,2,-inf,4", "1,2,3"]
@@ -3249,7 +3244,7 @@ class TestCmdSoilgrids:
                 ]
             )
         assert result == 1
-        calc_cls.return_value.calculate_hsg_by_bbox.assert_not_called()
+        calc_cls.return_value.calculate_hsg.assert_not_called()
         captured = capsys.readouterr()
         assert "Error: Invalid bbox format" in captured.err
         assert "ValueError" not in captured.err
@@ -3280,7 +3275,7 @@ class TestCmdSoilgrids:
     def test_soilgrids_hsg_by_bbox(self, mock_calc_cls, capsys, tmp_path):
         """soilgrids hsg --bbox -> calculate_hsg_by_bbox called."""
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_bbox.return_value = _hsg_result(tmp_path / "hsg.tif")
+        mock_calc.calculate_hsg.return_value = _hsg_result(tmp_path / "hsg.tif")
         mock_calc_cls.return_value = mock_calc
 
         result = main(
@@ -3296,7 +3291,7 @@ class TestCmdSoilgrids:
             ]
         )
         assert result == 0
-        mock_calc.calculate_hsg_by_bbox.assert_called_once()
+        mock_calc.calculate_hsg.assert_called_once()
 
 
 def test_landcover_download_no_selection(capsys):
@@ -3800,16 +3795,14 @@ class TestCmdLandcoverDownloadGeometry:
 class TestCmdSoilgridsHsgGeometry:
     """Tests for soilgrids hsg command with --geometry option."""
 
-    @patch("kartograf.core.geometry.get_overall_bbox")
     @patch("kartograf.hydrology.HSGCalculator")
-    def test_soilgrids_hsg_geometry(self, mock_calc_cls, mock_bbox, capsys, tmp_path):
-        """--geometry computes bbox and calls calculate_hsg_by_bbox."""
+    def test_soilgrids_hsg_geometry(self, mock_calc_cls, capsys, tmp_path):
+        """--geometry/--layer go to calculate_hsg unchanged (envelope there)."""
         shp_file = tmp_path / "area.shp"
         shp_file.touch()
 
-        mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_bbox.return_value = _hsg_result(tmp_path / "hsg.tif")
+        mock_calc.calculate_hsg.return_value = _hsg_result(tmp_path / "hsg.tif")
         mock_calc_cls.return_value = mock_calc
 
         result = main(
@@ -3826,39 +3819,9 @@ class TestCmdSoilgridsHsgGeometry:
         )
 
         assert result == 0
-        mock_bbox.assert_called_once()
-        mock_calc.calculate_hsg_by_bbox.assert_called_once()
-
-    @patch("kartograf.core.geometry.get_overall_bbox")
-    @patch("kartograf.hydrology.HSGCalculator")
-    def test_soilgrids_hsg_geometry_multi_layer_info(
-        self, mock_calc_cls, mock_bbox, capsys, tmp_path
-    ):
-        gpkg = write_gpkg_layers(tmp_path / "area.gpkg", ["layer_a", "layer_b"])
-        mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
-        mock_calc = Mock()
-        mock_calc.calculate_hsg_by_bbox.return_value = _hsg_result(tmp_path / "hsg.tif")
-        mock_calc_cls.return_value = mock_calc
-
-        result = main(
-            [
-                "soilgrids",
-                "hsg",
-                "--geometry",
-                str(gpkg),
-                "--depth",
-                "0-5cm",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-
-        assert result == 0
-        info = [
-            line for line in capsys.readouterr().err.splitlines() if "warstw" in line
-        ]
-        assert len(info) == 1 and "'layer_a'" in info[0] and "layer_b" in info[0]
-        assert mock_bbox.call_args.kwargs["layer"] == "layer_a"
+        kwargs = mock_calc.calculate_hsg.call_args.kwargs
+        assert kwargs["geometry"] == shp_file and kwargs["layer"] is None
+        assert kwargs["bbox"] is None and kwargs["sheet"] is None
 
     def test_soilgrids_hsg_geometry_and_sheet_error(self, capsys, tmp_path):
         """--geometry + --sheet -> mutual exclusivity error."""
@@ -11166,9 +11129,7 @@ class TestSoilgridsHsgNoEarlyMkdir:
         self, mock_calc_cls, capsys, tmp_path, monkeypatch
     ):
         monkeypatch.chdir(tmp_path)
-        mock_calc_cls.return_value.calculate_hsg_by_sheet.side_effect = DownloadError(
-            "siec"
-        )
+        mock_calc_cls.return_value.calculate_hsg.side_effect = DownloadError("siec")
         out = tmp_path / "out" / "hsg"
         result = main(
             [

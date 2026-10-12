@@ -9,8 +9,8 @@ from typing import TYPE_CHECKING
 
 from kartograf.cli._parser import parse_bbox_arg
 from kartograf.cli.download_cmd import (
-    _announce_geometry_layer,
     _plan_context,
+    _print_notice,
     _report_file,
     _report_plan,
     _report_stale,
@@ -18,8 +18,6 @@ from kartograf.cli.download_cmd import (
     _update_mode,
     run_with_plan_file,
 )
-from kartograf.core.sheet_parser import BBox, SheetParser
-from kartograf.download.fetch import UpdateMode
 from kartograf.download.plan import PlanItem
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 
@@ -113,37 +111,19 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
         )
         return 1
 
-    # Canonical sheet code (A7): 'M-33-036-A' and 'M-33-36-A' give one file
-    sheet = None
-    if args.sheet:
-        try:
-            sheet = SheetParser(args.sheet).sheet
-        except (ParseError, ValidationError) as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 1
-
-    # Parse bbox if provided (or compute from geometry)
-    bbox = None
-    if has_geometry:
-        from kartograf.core.geometry import get_overall_bbox
-
-        filepath = Path(args.geometry)
-        if not _announce_geometry_layer(args):
-            return 1
-        try:
-            bbox = get_overall_bbox(filepath, layer=args.layer)
-        except ValidationError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 1
-    elif args.bbox:
-        # zly bbox -> ValidationError -> Error: w main (stderr, kod 1)
-        bbox = parse_bbox_arg(args.bbox, "EPSG:2180")
-
+    # zly bbox -> ValidationError -> Error: w main (stderr, kod 1)
+    bbox = parse_bbox_arg(args.bbox, "EPSG:2180") if args.bbox else None
+    selection: dict = {
+        "sheet": args.sheet,
+        "bbox": bbox,
+        "geometry": Path(args.geometry) if has_geometry else None,
+        "layer": getattr(args, "layer", None),
+    }
     calc = HSGCalculator(Path(args.output))
 
     print("Calculating Hydrologic Soil Groups (HSG)...")
-    if sheet:
-        print(f"  Godło: {sheet}")
+    if args.sheet:
+        print(f"  Godło: {args.sheet}")
     if has_geometry:
         print(f"  Geometry: {Path(args.geometry).name}")
     if bbox:
@@ -152,13 +132,8 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
     print()
 
     try:
-        return run_with_plan_file(
-            args, lambda a: _hsg_task(a, calc, sheet, bbox, _update_mode(a))
-        )
-    except (ParseError, ValidationError) as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-    except DownloadError as e:
+        return run_with_plan_file(args, lambda a: _hsg_task(a, calc, selection))
+    except (DownloadError, ParseError, ValidationError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
     except Exception as e:
@@ -174,40 +149,28 @@ def _plan_label(item: PlanItem) -> str:
     return f"{item.segment.rsplit('/', 1)[-1].split('_')[2]} {item.unit}"
 
 
-def _hsg_task(
-    args: argparse.Namespace,
-    calc: "HSGCalculator",
-    sheet: str | None,
-    bbox: BBox | None,
-    update: UpdateMode | None,
-) -> int:
+def _hsg_task(args: argparse.Namespace, calc: "HSGCalculator", selection: dict) -> int:
     """One ``soilgrids hsg`` request: a plan (``--check-updates``) or the
     inputs and the HSG with one status line each (spec 4.5)."""
-    stat = "mean"  # HSG uses the mean texture estimate
     if args.check_updates:
-        if sheet:
-            plan = calc.check_hsg_by_sheet(sheet, depth=args.depth, stat=stat)
-        else:
-            assert bbox is not None
-            plan = calc.check_hsg_by_bbox(bbox, depth=args.depth, stat=stat)
+        plan = calc.check_hsg(**selection, depth=args.depth, on_notice=_print_notice)
         return _report_plan(args, plan, _plan_label)
-    loaded = _plan_context(args).loaded
-    if sheet:
-        result = calc.calculate_hsg_by_sheet(
-            sheet, depth=args.depth, stat=stat, update=update, plan=loaded
-        )
-    else:
-        assert bbox is not None
-        result = calc.calculate_hsg_by_bbox(
-            bbox, depth=args.depth, stat=stat, update=update, plan=loaded
-        )
+    update = _update_mode(args)
+    result = calc.calculate_hsg(
+        **selection,
+        depth=args.depth,
+        update=update,
+        plan=_plan_context(args).loaded,
+        on_notice=_print_notice,
+    )
     out = Path(args.output)
     for item in result.inputs:
         if item.file is not None:
             _report_file(args, _unit_of(item.file.path, out), item.file, update)
     if result.file is not None:
         _report_file(args, _unit_of(result.file.path, out), result.file, update)
-    rc = _report_stale(result.stale)
+    _report_stale(result.stale)
+    rc = 0 if result.ok else 1
 
     if args.stats and result.file is not None:
         print()

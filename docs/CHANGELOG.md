@@ -73,6 +73,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `result.files[0].file`; nieaktualne pozycje planu: `result.stale`;
   `download_batch(items)` -> petla po `download` albo `workers=` dla
   powiatow obszaru.
+- HSG: `HSGCalculator.calculate_hsg(*, sheet, bbox, geometry, layer, depth,
+  update, plan, timeout, on_notice)` i `check_hsg` z tym samym wyborem
+  zastepuja `calculate_hsg_by_sheet/bbox` i `check_hsg_by_sheet/bbox`.
+  Bez parametru `stat`: HSG zawsze ze statystyki `mean` (segmenty
+  `soil/global_soilgrids_<wlasciwosc>_<glebokosc>_mean` i
+  `hsg/global_soilgrids_<glebokosc>_mean` bez zmian - istniejace magazyny
+  dzialaja bez migracji). `bbox` w dowolnym CRS, `geometry` = obwiednia
+  pliku; `HsgResult.notices` i `ok`; `HSGCalculator(cache=True)`. Co
+  zrobic (Hydrograf `core/cn_calculator.py`, `scripts/bootstrap.py`):
+  `calculate_hsg_by_bbox(bbox, depth=..., stat="mean")` ->
+  `calculate_hsg(bbox=bbox, depth=...)`; analogicznie arkusz i `check_hsg`.
 
 - Biblioteka: bledne wartosci wejscia providerow, magazynu, wycinka LAZ
   i skali docelowej arkuszy zglaszaja `ValidationError` (podklasa

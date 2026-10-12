@@ -431,11 +431,13 @@ plan = lc.check(sheet="N-34-130-D", property="clay", depth="0-5cm", stat="mean")
 lc.download(sheet="N-34-130-D", property="clay", depth="0-5cm", stat="mean",
             update="upgrade", plan=plan)    # tylko pozycje planu
 
-# Hydrologic Soil Groups (wejścia = wersje SoilGrids w tym samym magazynie)
+# Hydrologic Soil Groups (wejścia = wersje SoilGrids "mean" w tym samym magazynie);
+# wybór: sheet=, bbox= (dowolny układ) albo geometry= (obwiednia pliku)
 from kartograf import HSGCalculator
 calc = HSGCalculator("./data")
-hsg = calc.calculate_hsg_by_sheet("N-34-130-D", depth="0-5cm", stat="mean")
+hsg = calc.calculate_hsg(sheet="N-34-130-D", depth="0-5cm")
 print(hsg.file.status, hsg.file.label)      # new 2.0 (ponownie: reused 2.0)
+plan = calc.check_hsg(sheet="N-34-130-D", depth="0-5cm")  # bez pobierania
 stats = calc.get_hsg_statistics(hsg.file.path)
 
 # HSG z gotowych rastrow clay/sand/silt (g/kg) na jawnej siatce - bez pobierania
@@ -816,8 +818,8 @@ print(report.stale, report.files.get(godlo, ()))
 # wycinki i arkusz CZ: download_pl_cutout / download_cz_cutout /
 # download_cz_sheet(..., update=, plan=) + check_pl_cutout / check_cz_cutout /
 # check_cz_sheet (te same argumenty); land cover: LandCoverManager.download(...,
-# update=, plan=) + check (te same argumenty); HSG: calculate_hsg_by_*(...,
-# update=, plan=), check_hsg_by_*; pozycje planu: item.track, item.unit
+# update=, plan=) + check (te same argumenty); HSG: calculate_hsg(...,
+# update=, plan=) + check_hsg; pozycje planu: item.track, item.unit
 ```
 
 ---
