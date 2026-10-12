@@ -59,7 +59,7 @@ def feature_years(session: MagicMock) -> list[str]:
 
 def test_c13_all_returns_both_systems_tiles():
     selection = GugikLazProvider(session=laz_session()).select_tiles(
-        W2_BBOX, campaigns="all"
+        W2_BBOX, all_campaigns=True
     )
     keys = {(t.year, t.crs) for t in selection.tiles}
     assert (2022, "PL-2000:S7") in keys
@@ -69,9 +69,7 @@ def test_c13_all_returns_both_systems_tiles():
 
 
 def test_c13_newest_unchanged_single_tile():
-    selection = GugikLazProvider(session=laz_session()).select_tiles(
-        W2_BBOX, campaigns="newest"
-    )
+    selection = GugikLazProvider(session=laz_session()).select_tiles(W2_BBOX)
     assert [(t.sheet, t.year) for t in selection.tiles] == [
         ("N-34-139-A-c-1-1-3-4", 2025)
     ]
@@ -81,7 +79,7 @@ def test_c13_newest_unchanged_single_tile():
 def test_range_queries_every_service_year():
     session = laz_session()
     selection = GugikLazProvider(session=session).select_tiles(
-        W2_BBOX, campaigns="all", min_year=2025
+        W2_BBOX, all_campaigns=True, min_year=2025
     )
     assert feature_years(session) == [str(y) for y in range(2026, 2017, -1)]
     assert {t.year for t in selection.tiles} == {2025}
@@ -110,7 +108,7 @@ def test_min_year_above_service_years_rejected_without_get_feature():
     session = laz_session()
     with pytest.raises(DownloadError, match="przedzial.*2099.*usludze EVRF2007"):
         GugikLazProvider(session=session).select_tiles(
-            W2_BBOX, campaigns="all", min_year=2099
+            W2_BBOX, all_campaigns=True, min_year=2099
         )
     assert feature_years(session) == []
 
@@ -130,12 +128,6 @@ def test_laz_year_and_range_exclusive(bounds):
     session.get.assert_not_called()
 
 
-def test_unknown_campaigns_value_rejected():
-    provider = GugikLazProvider(session=laz_session())
-    with pytest.raises(ValidationError, match="Nieznana strategia kampanii"):
-        provider.select_tiles(W2_BBOX, campaigns="coverage")
-
-
 def test_all_still_drops_outside_tiles():
     # SW corner of the PL-2000 tile envelope: its footprint misses the area.
     # The live service filters such tiles itself (2026-10-10); replaying the
@@ -143,7 +135,7 @@ def test_all_still_drops_outside_tiles():
     area = BBox(637334, 486800, 637340, 486806, "EPSG:2180")
     selection = GugikLazProvider(
         session=laz_session(replay_any_bbox=True)
-    ).select_tiles(area, campaigns="all")
+    ).select_tiles(area, all_campaigns=True)
     assert "7.173.21.06.2" not in {tile.sheet for tile in selection.tiles}
     (entry,) = (
         skipped
@@ -173,7 +165,7 @@ def test_laz_sidecar_acquisition_date_and_max_year(tmp_path):
         tile,
         target,
         bbox,
-        campaigns="all",
+        all_campaigns=True,
         min_year=2022,
         max_year=2023,
     )
@@ -210,7 +202,7 @@ def test_download_laz_area_all_writes_campaigns_to_sidecars(tmp_path):
         W2_BBOX,
         output_dir=tmp_path,
         provider=provider,
-        campaigns="all",
+        all_campaigns=True,
         min_year=2022,
         max_year=2023,
     )
