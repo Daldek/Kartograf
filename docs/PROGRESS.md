@@ -1981,8 +1981,9 @@ zatwierdzeniu specu i planu.
 - [ ] 5. GUI webowe (lokalny manager danych)
 
 Czytelnosc ukladu `data/` po magazynie wersjonowanym (przeglad
-2026-10-12; zasada samoopisowych nazw plikow weszla do specu jako D25,
-reszta na kolejne etapy, decyzja uzytkownika 2026-10-12):
+2026-10-12, poprawki na kolejne etapy; decyzja uzytkownika 2026-10-12).
+Samoopisowe nazwy plikow ODRZUCONE: parametry niesie sciezka, nazwe przy
+kopiowaniu poza drzewo zmienia sie recznie.
 
 - [ ] `versions/README.txt` w segmencie, tworzony przy pierwszym zapisie:
   objasnienie nazwy `<data>_<id>_<sha8>`, hardlinkow i tego, ze wersji nie
