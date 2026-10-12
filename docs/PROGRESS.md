@@ -27,9 +27,9 @@
 | Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | ZMERGOWANY do develop 2026-08-12; tor CZ odmrozony w fali 2026-09-29/30 (D1): pin EPSG:1622 (K2; live: Karkonosze PL-CZ mediana -0,15 m, przesuniecie < 1 px), budzet 4 Mpx kafli (K6; live: 29,8 Mpx w 3 min 38 s), piksel dokladnie 2 m (N3), `Warning:` przy 100 % nodata (N2); wydany w v0.7.0 |
 | LAZ — wybor kafli (ADR-029) | ✅ Gotowy | `download_laz_area` / `select_tiles`: najnowszy kafel per obszar wg pokrycia, `--year`, `--min-density`, `extra.parent_request` w trybie `--bbox`/`--geometry` |
 | Kampanie GUGiK (ADR-030 + errata 1-8, ADR-032, ADR-033) | ✅ Gotowy | `--campaigns {newest,all}`, `--year`/`--min-year`/`--max-year` (v0.7.2), `--full-sheet`; pliki w `<segment>/kampanie/`, sciezka standardowa i `full_sheet/` = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`, `docs/research/2026-10-10-full-sheet-link/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`) |
-| Wycinek NMT/NMPT PL `--target-crs` (ADR-035), API `download_pl_cutout` | ✅ Gotowy | v0.7.2: WCS 1 m z maska ladu PRG, data w nazwie, NMT i NMPT; NMPT `download_bbox` float32; kawalki ASC NMPT 4 Mpx coverage (ADR-035 errata 1); zweryfikowany na zywo (`docs/research/2026-10-11-wcs-cutouts-live/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`). Arkuszowy tor ADR-027 zostaje jako przestarzale API do 0.8.0 |
+| Wycinek NMT/NMPT PL `--target-crs` (ADR-035), API `download_pl_cutout` | ✅ Gotowy | v0.7.2: WCS 1 m z maska ladu PRG, data w nazwie, NMT i NMPT; NMPT `download_bbox` float32; kawalki ASC NMPT 4 Mpx coverage (ADR-035 errata 1); zweryfikowany na zywo (`docs/research/2026-10-11-wcs-cutouts-live/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`). Arkuszowy tor ADR-027 usuniety na `develop` (0.8.0-dev, ADR-035 errata 2) |
 
-| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | ⏳ Zaplanowany | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3 |
+| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekt 1 (magazyn wersjonowany): spec zaakceptowany, plan 1/3 gotowy, implementacja po zmianach lamiacych 0.8.0 (sesja 2026-10-11/12) |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
 ## Checkpointy
@@ -103,34 +103,39 @@
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI (stan 2026-10-11, koniec sesji):** wydano
-> **v0.7.2** (2026-10-11): `__version__ = "0.7.2"`, CHANGELOG
-> `## [0.7.2] - 2026-10-11`, merge `develop` -> `main` (`--no-ff`), tag
-> `v0.7.2` (annotowany) na commicie merge. `develop`, `main` i tag
-> `v0.7.2` WYPCHNIETE na `origin` 2026-10-11 (zgoda uzytkownika). Stan
-> galezi, tagow i `origin` sprawdzaj w gicie (`git status`, `git log`,
-> `git ls-remote origin`), nie w tym dzienniku.
-> **Zakres 0.7.2:** drobiazgi z review 0.7.1 (P1-P10), (a) wycinki PL
-> z WCS (ADR-035), (b) wybor roku (ADR-032), (c) `full_sheet/` (ADR-033),
-> (d) ciche wartosci domyslne (ADR-034), (e) testy LAZ na faktycznych
-> oknach, strojenie kawalkow ASC NMPT; szczegoly w sesjach nizej
-> i w `docs/CHANGELOG.md` [0.7.2]. Test na zywo przed wydaniem:
-> `docs/research/2026-10-11-test-przed-0.7.2/raport.md` (bez FAIL).
-> **Praca nad v0.8.0 (stan 2026-10-11):** cykl OTWARTY (`0.8.0-dev`,
-> commit `chore(release): poczatek cyklu 0.8.0`). Zrobione: usuniecie
-> przestarzalego toru arkuszowego wycinkow PL (merge
-> `refactor/remove-sheet-cutout`, ADR-035 errata 2, takze
-> `GridMismatchError`). Pozostale zmiany lamiace: backlog "Do 0.8.0"
-> nizej (`--product` wymagane, `godlo` -> `sheet` w CLI i API,
-> `--campaigns` -> przelacznik, parametry wymagane w API).
-> **Magazyn wersjonowany:** spec ZAAKCEPTOWANY 2026-10-11 (D1-D24, ADR
-> magazynu = ADR-036; `docs/superpowers/specs/2026-10-08-versioned-store-design.md`).
-> Plan 1/3 PRZEPISANY 2026-10-11
-> (`docs/superpowers/plans/2026-10-08-versioned-store-1-core-pl-sheets.md`,
-> galaz `feat/versioned-store`, na `origin`). Przed Task 1 decyzja
-> uzytkownika z sekcji "Pytania do uzytkownika" planu: czy pozostale
-> zmiany lamiace 0.8.0 (nazwy CLI/API) ida NAJPIERW na `develop`
-> (rekomendacja), potem rebase galezi i implementacja planu 1/3.
+> **START NASTEPNEJ SESJI (stan 2026-10-12, koniec sesji):** NIC nie jest
+> w trakcie implementacji; nastepna sesja od razu WDRAZA w kolejnosci
+> zatwierdzonej przez uzytkownika 2026-10-12:
+> 1. Zmiany lamiace 0.8.0 na `develop` (kazda na krotkiej galezi
+>    z `develop`, wg backlogu "Do 0.8.0" nizej): `godlo` -> `sheet`
+>    w CLI i API (bez aliasow), `--campaigns` -> przelacznik
+>    `--all-campaigns`, "Bez wartosci domyslnych wplywajacych na dane"
+>    (pelna lista parametrow i wymagania opisow w docstringach i `--help`
+>    w tej pozycji; obejmuje tez osobna pozycje `--product` wymagane).
+>    Kolejnosc miedzy nimi do ustalenia na starcie (rekomendacja: najpierw
+>    `godlo` -> `sheet`, bo zmienia najwiecej sygnatur).
+> 2. `git rebase develop` galezi `feat/versioned-store` (+ push
+>    `--force-with-lease`; galaz zawiera tylko dokumenty specu i planu).
+> 3. Plan 1/3 magazynu wersjonowanego od Task 1
+>    (`docs/superpowers/plans/2026-10-08-versioned-store-1-core-pl-sheets.md`;
+>    po zmianach z pkt 1 nazwy w planie dostosowac do nowych — `sheet`,
+>    wymagane `output_dir`/`vertical_crs` itd.; sekcja "Pytania do
+>    uzytkownika" planu jest rozstrzygnieta: najpierw zmiany lamiace).
+> **Stan galezi (sprawdzaj w gicie):** `develop` ma lokalne commity
+> NIEWYPCHNIETE na `origin` (cykl 0.8.0, usuniecie toru arkuszowego,
+> dokumenty) — push tylko za zgoda uzytkownika. `feat/versioned-store`
+> jest na `origin`.
+> **v0.8.0-dev:** cykl OTWARTY (`chore(release): poczatek cyklu 0.8.0`).
+> Zrobione: usuniecie przestarzalego toru arkuszowego wycinkow PL i
+> `GridMismatchError` (merge `refactor/remove-sheet-cutout`, ADR-035
+> errata 2, CHANGELOG [0.8.0] BREAKING).
+> **Magazyn wersjonowany:** spec ZAAKCEPTOWANY 2026-10-11, decyzje D1-D24
+> (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`; ADR
+> magazynu = ADR-036, powstaje w Task 8 planu 1/3). Samoopisowe nazwy
+> plikow (proponowane D25) ODRZUCONE 2026-10-12 — parametry niesie
+> sciezka. Poprawki czytelnosci ukladu na pozniej: backlog "Do v1.0.0".
+> **Wydanie 0.7.2** (2026-10-11): `develop`, `main` i tag `v0.7.2` na
+> `origin`; szczegoly w sesjach nizej i w `docs/CHANGELOG.md` [0.7.2].
 > **Katalog danych testow na zywo:** wskazuje uzytkownik (STANDARDS 6.4);
 > sciezki nie zapisuj w repo (straznik wzorcow commitow ja blokuje) —
 > zapytaj na poczatku sesji, jesli potrzebny.
@@ -148,6 +153,26 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Sesja 2026-10-11/12 — v0.8.0: magazyn wersjonowany (spec, plan), usuniecie toru arkuszowego
+
+- Wstrzymanie magazynu wersjonowanego zdjete; spec przejrzany wzgledem
+  0.7.1/0.7.2 (D13-D16) i po review zapisu/skladowania (D17-D24: wersje per
+  plik pod hierarchia, wylaczny `os.link` z kontrola sha256,
+  `.incoming/<host>_<pid>_<token>` ze sprzataniem > 24 h, jeden odczyt
+  pliku, `fsync`, hardlinki wymagane, `relabeled`, stare pliki LAZ/CZ
+  nadpisywane); spec zaakceptowany 2026-10-11.
+- Cykl 0.8.0 otwarty; tor arkuszowy wycinkow PL i `GridMismatchError`
+  usuniete (D16; brama offline zielona, smoke API i `mosaic_and_crop(dtype=)`).
+- Plan 1/3 przepisany od nowa (9 zadan, odwolania do kodu po usunieciu
+  toru arkuszowego). D25 (samoopisowe nazwy plikow) dodane i wycofane na
+  prosbe uzytkownika.
+- Backlog "Do 0.8.0": pozycja "Bez wartosci domyslnych wplywajacych na
+  dane" z pelna lista CLI/API (zastepuje Hydrograf A8); zostaja format,
+  `EPSG:2180`/natywny `EPSG:5514`, przelaczniki, `None`, parametry
+  jednowartosciowe i techniczne; wymagania opisow w docstringach i
+  `--help`.
+- Kolejnosc zatwierdzona: zmiany lamiace 0.8.0 -> rebase galezi -> plan 1/3.
 
 ### Wydanie 0.7.2 (2026-10-11)
 
