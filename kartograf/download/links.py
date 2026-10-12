@@ -31,6 +31,7 @@ from pathlib import Path, PurePath
 
 from kartograf.download.versions import read_version, version_key
 from kartograf.exceptions import DownloadError
+from kartograf.sources.sidecar import file_digest
 
 logger = logging.getLogger(__name__)
 
@@ -110,10 +111,15 @@ def linked_version(link: Path) -> Path | None:
     """Version file the link path points to.
 
     The target comes ONLY from the link sidecar (``extra.link == "hardlink"``
-    + ``extra.link_target``), verified with ``samefile``. ``None`` = no file,
-    a sidecar without ``extra.link``, a ``copy`` from 0.7.x (D22: never
-    trusted), a nonexistent ``link_target`` (version directory removed) or a
-    hardlink that is no longer the same file.
+    + ``extra.link_target``), verified with ``samefile``. Where the file
+    system reports no stable inode numbers (e.g. SMB mounted without
+    ``serverino``) ``samefile`` is false even for a hardlink; the link is
+    then confirmed by content: both paths have more than one link, the same
+    size and the link's sha256 equals the version sidecar's (one full read,
+    only on such mounts). ``None`` = no file, a sidecar without
+    ``extra.link``, a ``copy`` from 0.7.x (D22: never trusted), a
+    nonexistent ``link_target`` (version directory removed) or a link that
+    no longer holds the version content.
     """
     if not link.is_file():
         return None
@@ -126,11 +132,22 @@ def linked_version(link: Path) -> Path | None:
         return None
     target = Path(_norm(link.parent / rel))
     try:
-        if target.is_file() and os.path.samefile(link, target):
+        if not target.is_file():
+            return None
+        if os.path.samefile(link, target):
             return target
+        return target if _same_content_hardlink(link, target) else None
     except OSError:
-        pass
-    return None
+        return None
+
+
+def _same_content_hardlink(link: Path, target: Path) -> bool:
+    """Hardlink confirmation without inode identity (``linked_version``)."""
+    l_stat, t_stat = link.stat(), target.stat()
+    if l_stat.st_nlink < 2 or t_stat.st_nlink < 2 or l_stat.st_size != t_stat.st_size:
+        return False
+    version = read_version(target.parent, target.name)
+    return version is not None and file_digest(link)[0] == version.sha256
 
 
 def _link_target_text(link: Path, target: Path) -> str:
