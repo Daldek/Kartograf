@@ -2,14 +2,23 @@
 
 import json
 import os
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
 from kartograf.download import versions as v
-from kartograf.download.fetch import FileSlot, fetch_version, inspect_version
+from kartograf.download.fetch import (
+    FileSlot,
+    fetch_version,
+    inspect_version,
+    new_staging,
+    store_file,
+    use_local,
+)
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.sources.edition import Edition
 
 NAME = "CTES96.tif"
 E1 = {"etag": '"e1"', "last_modified": "Mon, 05 Oct 2026", "content_length": 3}
@@ -108,11 +117,10 @@ MATRIX = [
     ("none", None, None, "local", None, "none", 0),
     ("none", None, "upgrade", "local", None, "none", 0),
     ("none", None, "force", "unchanged", None, None, 1),
-    # index/metadata: the caller selected the file by its signal
+    # index: the caller selected the file by its signal
     ("index", None, None, "local", None, None, 0),
     ("index", None, "upgrade", "local", None, None, 0),
     ("index", None, "force", "unchanged", None, None, 1),
-    ("metadata", None, None, "local", None, None, 0),
 ]
 
 
@@ -292,3 +300,230 @@ def test_inspect_version_never_calls_fetch(tmp_path):
     assert not (slot.versions_base / v.INCOMING_DIR).exists() or not any(
         (slot.versions_base / v.INCOMING_DIR).iterdir()
     )
+
+
+# --- metadata (edition) signal, plan 3/3 decision 2 -------------------------
+
+
+class Editions:
+    """Fake edition lookup: ``id`` or a ``DownloadError``, counts calls."""
+
+    def __init__(self, current):
+        self.current, self.calls = current, 0
+
+    def __call__(self) -> Edition:
+        self.calls += 1
+        if isinstance(self.current, Exception):
+            raise self.current
+        return Edition(self.current, "https://example.test/caps")
+
+
+def run_meta(slot, src, update=None, *, edition):
+    return fetch_version(
+        slot,
+        update,
+        signal="metadata",
+        fetch=src.fetch,
+        write_sidecar=write_sidecar,
+        edition=edition,
+    )
+
+
+def seed_meta(slot, label="2.0", body=b"abc"):
+    return run_meta(slot, Source(body), edition=Editions(label))
+
+
+FAIL = DownloadError("GetCapabilities 503")
+
+# (local, edition(), mode) -> (status, label, newer, unverified, downloads)
+META_MATRIX = [
+    (None, "2.0", None, "new", "2.0", None, None, 1),
+    (None, "2.0", "upgrade", "new", "2.0", None, None, 1),
+    (None, "2.0", "force", "new", "2.0", None, None, 1),
+    ("2.0", "2.0", None, "local", "2.0", None, None, 0),
+    ("2.0", "2.0", "upgrade", "local", "2.0", None, None, 0),
+    ("2.0", "2.0", "force", "unchanged", "2.0", None, None, 1),
+    ("2.0", "2.1", None, "local", "2.0", "2.1", None, 0),
+    ("2.0", "2.1", "upgrade", "relabeled", "2.1", None, None, 1),
+    ("2.0", "2.1", "force", "relabeled", "2.1", None, None, 1),
+    ("2.0", FAIL, None, "local", "2.0", None, "check_failed", 0),
+    ("downloaded", "2.0", None, "local", "2026-10-01", None, "none", 0),
+    ("downloaded", "2.0", "upgrade", "local", "2026-10-01", None, "none", 0),
+    ("downloaded", "2.0", "force", "relabeled", "2.0", None, None, 1),
+]
+
+
+@pytest.mark.parametrize(
+    ("local", "current", "update", "status", "label", "newer", "unverified", "dl"),
+    META_MATRIX,
+)
+def test_fetch_version_metadata_matrix(
+    tmp_path, local, current, update, status, label, newer, unverified, dl
+):
+    slot = make_slot(tmp_path)
+    if local == "downloaded":
+        seed(slot, signal=None)  # a version not labelled by an edition
+    elif local is not None:
+        seed_meta(slot, local)
+    src, editions = Source(b"abc"), Editions(current)
+    result = run_meta(slot, src, update, edition=editions)
+    assert (result.status, result.label) == (status, label)
+    assert result.newer == newer
+    assert (result.unverified or "").split(":")[0] == (unverified or "")
+    assert src.downloads == dl
+    assert editions.calls <= 1
+    assert os.path.samefile(slot.std, result.version_path)
+
+
+@pytest.mark.parametrize(
+    ("local", "update"),
+    [
+        (None, None),
+        (None, "upgrade"),
+        (None, "force"),
+        ("2.0", "upgrade"),
+        ("2.0", "force"),
+    ],
+)
+def test_fetch_version_metadata_unavailable_is_error(tmp_path, local, update):
+    """No version without an edition; ``--upgrade``/``--force`` need it too."""
+    slot = make_slot(tmp_path)
+    if local is not None:
+        seed_meta(slot, local)
+    src = Source(b"new")
+    with pytest.raises(DownloadError, match="503"):
+        run_meta(slot, src, update, edition=Editions(FAIL))
+    assert src.downloads == 0
+    assert len(v.list_versions(slot.versions_root, NAME)) == (local is not None)
+
+
+def test_metadata_same_content_new_edition_is_relabeled(tmp_path):
+    """D23: same sha256 under a new edition = own directory, hardlinked data."""
+    slot = make_slot(tmp_path)
+    first = seed_meta(slot, "2.0")
+    result = run_meta(slot, Source(b"abc"), "upgrade", edition=Editions("2.1"))
+    assert result.status == "relabeled"
+    assert result.version_path.parent.name == f"2.1_{first.sha256[:8]}"
+    assert os.path.samefile(result.version_path, first.version_path)
+    meta = json.loads(Path(f"{result.version_path}.meta.json").read_text())
+    assert meta["extra"]["version"] == {"label": "2.1", "label_source": "edition"}
+
+
+def test_metadata_edition_called_once_per_file(tmp_path):
+    slot = make_slot(tmp_path)
+    seed_meta(slot, "2.0")
+    editions = Editions("2.1")
+    run_meta(slot, Source(b"new"), "upgrade", edition=editions)
+    assert editions.calls == 1  # compared with the local version AND labelled
+
+
+@pytest.mark.parametrize(
+    ("local", "current", "status", "label"),
+    [
+        (None, "2.0", "missing", "2.0"),
+        ("2.0", "2.0", "current", "2.0"),
+        ("2.0", "2.1", "newer", "2.1"),
+        ("2.0", FAIL, "check_failed", None),
+        ("downloaded", "2.0", "unverifiable", "2.0"),
+    ],
+)
+def test_inspect_version_metadata_statuses(tmp_path, local, current, status, label):
+    slot = make_slot(tmp_path)
+    if local == "downloaded":
+        seed(slot, signal=None)
+    elif local is not None:
+        seed_meta(slot, local)
+    item = inspect_version(
+        slot, track="landcover", unit="u", signal="metadata", edition=Editions(current)
+    )
+    assert (item.status, item.available_label) == (status, label)
+    if label is not None:
+        assert item.available_signal == {"edition": label}
+    if status == "check_failed":
+        assert "503" in (item.error or "")
+
+
+def test_inspect_version_metadata_requires_edition(tmp_path):
+    with pytest.raises(ValidationError):
+        inspect_version(
+            make_slot(tmp_path), track="landcover", unit="u", signal="metadata"
+        )
+
+
+def test_none_channel_headers_are_not_a_signal(tmp_path):
+    """Plan 3/3 decision 4: headers of a ``none`` channel never relabel."""
+    slot = make_slot(tmp_path)
+    day1 = v.VersionRef.downloaded(datetime(2026, 10, 1, tzinfo=UTC))
+    day2 = v.VersionRef.downloaded(datetime(2026, 10, 2, tzinfo=UTC))
+    for ref, length in ((day1, 10), (day2, 11)):
+        result = fetch_version(
+            slot,
+            "force",
+            signal="none",
+            fetch=Source(b"abc", {"content_length": length}).fetch,
+            version=ref,
+            write_sidecar=write_sidecar,
+        )
+    assert (result.status, result.label) == ("unchanged", "2026-10-01")
+    assert len(v.list_versions(slot.versions_root, NAME)) == 1
+
+
+def test_store_file_equals_fetch_version_tail(tmp_path):
+    """``use_local`` + ``store_file`` give the same version as ``fetch_version``."""
+    a, b = make_slot(tmp_path / "a"), make_slot(tmp_path / "b")
+    ref = v.VersionRef("2026-10-12", "downloaded")
+    via_fetch = fetch_version(
+        a,
+        None,
+        signal="http",
+        fetch=Source(b"abc", E1).fetch,
+        version=ref,
+        write_sidecar=write_sidecar,
+    )
+    assert use_local(b, None, signal="http") is None
+    staged = new_staging(b)
+    staged.write_bytes(b"abc")
+    via_store = store_file(
+        b, staged, version=ref, write_sidecar=write_sidecar, http=E1, signal="http"
+    )
+    assert (via_store.status, via_store.label, via_store.sha256) == (
+        via_fetch.status,
+        via_fetch.label,
+        via_fetch.sha256,
+    )
+    assert via_store.version_path.relative_to(tmp_path / "b") == (
+        via_fetch.version_path.relative_to(tmp_path / "a")
+    )
+    assert json.loads(Path(f"{via_store.version_path}.meta.json").read_text()) == (
+        json.loads(Path(f"{via_fetch.version_path}.meta.json").read_text())
+    )
+    assert not any((b.versions_base / v.INCOMING_DIR).iterdir())
+    assert use_local(b, None, signal="http") is not None
+
+
+@pytest.mark.parametrize(
+    ("signal", "with_version", "with_edition"),
+    [
+        ("metadata", True, True),
+        ("metadata", True, False),
+        ("metadata", False, False),
+        ("http", False, True),
+        ("none", True, True),
+        ("none", False, False),
+    ],
+)
+def test_fetch_version_rejects_version_and_edition_mix(
+    tmp_path, signal, with_version, with_edition
+):
+    src = Source()
+    with pytest.raises(ValidationError):
+        fetch_version(
+            make_slot(tmp_path),
+            None,
+            signal=signal,
+            fetch=src.fetch,
+            write_sidecar=write_sidecar,
+            version=v.VersionRef("x", "downloaded") if with_version else None,
+            edition=Editions("2.0") if with_edition else None,
+        )
+    assert src.downloads == 0

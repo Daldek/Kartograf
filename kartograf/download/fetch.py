@@ -1,15 +1,19 @@
 """
 One policy for files without campaigns on the version store (spec 4.2).
 
-LAZ tiles, CZ sheets, bbox cutouts (PL WCS, CZ) and the PL sheet flow
-without campaigns share it: the newest local version, the check of the
-channel's freshness signal (``index``/``metadata``/``http``/``none``), the
-download into ``<segment>/versions/.incoming/`` (D19), ``commit_version`` and
-the hardlink at the standard path. ``fetch_version`` downloads (modes
-``None``/``"upgrade"``/``"force"``); ``inspect_version`` builds the update
-plan position WITHOUT downloading (``--check-updates``).
+LAZ tiles, CZ sheets, bbox cutouts (PL WCS, CZ), the PL sheet flow without
+campaigns, land cover and HSG share it: the newest local version, the check
+of the channel's freshness signal (``index``/``metadata``/``http``/``none``),
+the download into ``<segment>/versions/.incoming/`` (D19), ``commit_version``
+and the hardlink at the standard path. ``fetch_version`` downloads (modes
+``None``/``"upgrade"``/``"force"``) as ``use_local`` (decision without
+downloading data) + download + ``store_file`` (the staged file becomes a
+version); callers storing several files of one download use the two parts
+directly. ``inspect_version`` builds the update plan position WITHOUT
+downloading (``--check-updates``).
 """
 
+import functools
 import logging
 import shutil
 from collections.abc import Callable
@@ -35,6 +39,7 @@ from kartograf.download.versions import (
 )
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.sources.descriptor import SignalKind
+from kartograf.sources.edition import Edition
 
 logger = logging.getLogger(__name__)
 
@@ -43,13 +48,16 @@ logger = logging.getLogger(__name__)
 UpdateMode = Literal["check", "upgrade", "force"]
 _UPDATE_MODES = (None, "upgrade", "force")
 
-FileStatus = Literal["new", "unchanged", "relabeled", "local"]
+FileStatus = Literal["new", "unchanged", "relabeled", "local", "reused"]
 
 # Download into the staged path; returns the HTTP signal of the response
 # (``response_signal``) or ``None`` for a channel without one.
 Fetch = Callable[[Path], dict | None]
 # Current HTTP signal of the source file (``HEAD``); raises ``DownloadError``.
 Probe = Callable[[], dict]
+# Current edition of the source (signal ``metadata``, D29/D30); raises
+# ``DownloadError``. Memoized by the caller: one request per job (spec 4.1).
+EditionLookup = Callable[[], Edition]
 WriteSidecar = Callable[[Path, VersionRef, ContentDigest, dict | None], None]
 
 
@@ -110,10 +118,12 @@ class VersionedFile:
 
     ``status``: ``new`` (new version), ``unchanged`` (downloaded content
     equal to an existing version), ``relabeled`` (same content, new label,
-    D23) or ``local`` (no download). ``newer``: default mode, the source
-    signal differs from the local version (ETag or Last-Modified of the
-    source). ``unverified``: the local version was used without a
-    comparison — ``"none"`` (no cheap signal) or ``"check_failed: <error>"``.
+    D23), ``local`` (no download) or ``reused`` (a derived file whose inputs
+    match an existing version, nothing computed, D33). ``newer``: default
+    mode, the source signal differs from the local version (ETag or
+    Last-Modified of the source, or the newer edition). ``unverified``: the
+    local version was used without a comparison — ``"none"`` (no cheap or
+    comparable signal) or ``"check_failed: <error>"``.
     """
 
     path: Path
@@ -150,15 +160,42 @@ def _prune_empty(start: Path, stop: Path) -> None:
         current = current.parent
 
 
+def new_staging(slot: FileSlot) -> Path:
+    """Private staging path of one download of the slot (D19)."""
+    return new_incoming_dir(slot.versions_base) / slot.name
+
+
+def discard_staging(staged: Path, slot: FileSlot) -> None:
+    """Remove a staging directory and the empty ``.incoming`` tree above it."""
+    shutil.rmtree(staged.parent, ignore_errors=True)
+    _prune_empty(staged.parent.parent, slot.output_dir)
+
+
 def _signal_label(signal: dict) -> str:
     return str(signal.get("etag") or signal.get("last_modified") or "?")
 
 
-def _use_local(
+def _check_label_args(
+    signal: SignalKind, version: VersionRef | None, edition: EditionLookup | None
+) -> None:
+    """``metadata``: the edition labels the version; other signals: ``version``."""
+    if signal == "metadata":
+        if edition is None or version is not None:
+            raise ValidationError(
+                "sygnal metadata: wersje etykietuje wydanie (edition=, bez version=)"
+            )
+    elif version is None or edition is not None:
+        raise ValidationError(
+            f"sygnal {signal}: wymagane version=, edition= tylko dla metadata"
+        )
+
+
+def _keep_local(
     local: LocalVersion,
     update: UpdateMode | None,
     signal: SignalKind,
     probe: Probe | None,
+    edition: EditionLookup | None,
 ) -> tuple[bool, str | None, str | None]:
     """``(keep_local, newer, unverified)`` for an existing local version."""
     if signal == "http" and probe is not None:
@@ -176,64 +213,98 @@ def _use_local(
         if update == "upgrade":
             return False, None, None
         return True, _signal_label(remote), None
+    if signal == "metadata" and edition is not None:
+        if local.label_source != "edition":
+            return True, None, "none"  # not from an edition: not comparable
+        try:
+            current = edition().id
+        except DownloadError as e:
+            if update == "upgrade":
+                raise
+            return True, None, f"check_failed: {e}"
+        if local.label == current:
+            return True, None, None
+        if update == "upgrade":
+            return False, None, None
+        return True, current, None
     if signal in ("none", "http"):  # http without a probe: no cheap signal
         return True, None, "none"
-    return True, None, None  # index/metadata: the caller selected the file
+    return True, None, None  # index: the caller selected the file
 
 
-def fetch_version(
+def use_local(
     slot: FileSlot,
     update: UpdateMode | None,
     *,
     signal: SignalKind,
-    fetch: Fetch,
-    version: VersionRef,
-    write_sidecar: WriteSidecar,
     probe: Probe | None = None,
-    coverage: bool = False,
-) -> VersionedFile:
-    """Local version or download of one file (spec 4.2 table, plan 2/3 4).
+    edition: EditionLookup | None = None,
+) -> VersionedFile | None:
+    """The local version to use, or ``None`` = the file must be downloaded.
 
-    Without ``"force"`` an existing local version is used; with the
-    ``http`` signal and a ``probe`` one ``HEAD`` compares it with the
-    source: equal = local, different = local with ``newer`` (default) or a
-    download (``"upgrade"``), not comparable = local, ``unverified="none"``;
-    a probe failure is ``unverified="check_failed: ..."`` (default) or the
-    ``DownloadError`` (``"upgrade"``). ``none`` (and ``http`` without a
-    probe) = local with ``unverified="none"``; ``index``/``metadata`` =
-    local (the caller already selected the file by its signal). A
-    download goes into a private staging directory, becomes a version
-    (``commit_version`` with the HTTP signal returned by ``fetch``) and the
-    standard path is linked to it. A failure leaves no version and no
-    staging directory.
+    Spec 4.2 table (plan 2/3 4, plan 3/3 decision 2). Without ``"force"``
+    an existing local version is used; ``http`` + ``probe``: one ``HEAD``
+    compares it with the source — equal = local, different = local with
+    ``newer`` (default) or a download (``"upgrade"``), not comparable =
+    ``unverified="none"``, a probe failure = ``unverified="check_failed:
+    ..."`` (default) or the ``DownloadError`` (``"upgrade"``). ``metadata``
+    + ``edition``: a version labelled by an edition is compared with the
+    current edition the same way; a version with another label source is
+    not comparable. ``none`` (and ``http`` without a probe) = local with
+    ``unverified="none"``; ``index`` = local (the caller selected the file
+    by its signal). A used local version gets the standard path linked.
 
     Raises
     ------
     ValidationError
         ``update="check"`` or an unknown mode.
     DownloadError
-        Download, version or link failure; with ``"upgrade"`` also a failed
-        probe.
+        Link failure; with ``"upgrade"`` also a failed probe or edition.
     """
     validate_update(update)
     local = local_version(slot) if update != "force" else None
-    if local is not None:
-        keep, newer, unverified = _use_local(local, update, signal, probe)
-        if keep:
-            link_version(slot.std, local, refresh=False)
-            return VersionedFile(
-                slot.std,
-                "local",
-                local.label,
-                local.sha256,
-                local.path,
-                newer=newer,
-                unverified=unverified,
-            )
-    incoming = new_incoming_dir(slot.versions_base)
-    staged = incoming / slot.name
+    if local is None:
+        return None
+    keep, newer, unverified = _keep_local(local, update, signal, probe, edition)
+    if not keep:
+        return None
+    link_version(slot.std, local, refresh=False)
+    return VersionedFile(
+        slot.std,
+        "local",
+        local.label,
+        local.sha256,
+        local.path,
+        newer=newer,
+        unverified=unverified,
+    )
+
+
+def store_file(
+    slot: FileSlot,
+    staged: Path,
+    *,
+    version: VersionRef,
+    write_sidecar: WriteSidecar,
+    http: dict | None,
+    signal: SignalKind,
+    coverage: bool = False,
+) -> VersionedFile:
+    """The staged file (``new_staging``) as a version of the slot, linked.
+
+    sha256 from one read (D20), ``commit_version`` and the hardlink of the
+    standard path. ``http`` (headers of the download) is passed to
+    ``write_sidecar`` (``extra.http``) and, ONLY for the ``http`` channel,
+    to ``commit_version`` as the D23 signal — headers of a channel without
+    a freshness signal never turn equal content into ``relabeled``. The
+    staging directory is always removed; a failure leaves no version.
+
+    Raises
+    ------
+    DownloadError
+        Version, sidecar or link failure.
+    """
     try:
-        http = fetch(staged)
         digest = read_content(staged, ext=slot.ext, coverage=coverage)
         commit = commit_version(
             staged,
@@ -242,19 +313,78 @@ def fetch_version(
             version,
             digest,
             lambda data, ref, dg: write_sidecar(data, ref, dg, http),
-            signal=http,
+            signal=http if signal == "http" else None,
         )
     except BaseException:
-        shutil.rmtree(incoming, ignore_errors=True)
-        _prune_empty(incoming.parent, slot.output_dir)
+        discard_staging(staged, slot)
         raise
-    shutil.rmtree(incoming, ignore_errors=True)
+    shutil.rmtree(staged.parent, ignore_errors=True)
     committed = read_version(commit.path.parent, commit.path.name)
     if committed is None:
         raise DownloadError(f"{commit.path}: wersja bez czytelnego sidecara")
     link_version(slot.std, committed, refresh=commit.status != "unchanged")
     return VersionedFile(
         slot.std, commit.status, commit.label, commit.sha256, commit.path
+    )
+
+
+def memoized_edition(edition: EditionLookup) -> EditionLookup:
+    """``edition`` asked at most once (a failure is asked again)."""
+    return functools.cache(edition)
+
+
+def fetch_version(
+    slot: FileSlot,
+    update: UpdateMode | None,
+    *,
+    signal: SignalKind,
+    fetch: Fetch,
+    write_sidecar: WriteSidecar,
+    version: VersionRef | None = None,
+    probe: Probe | None = None,
+    edition: EditionLookup | None = None,
+    coverage: bool = False,
+) -> VersionedFile:
+    """Local version or download of one file: ``use_local`` + ``store_file``.
+
+    ``signal="metadata"`` requires ``edition`` (the version label is
+    ``VersionRef(edition().id, "edition")``, asked BEFORE the download: no
+    version without an edition, D30); other signals require ``version``.
+    A download goes into a private staging directory and becomes a version;
+    a failure leaves no version and no staging directory.
+
+    Raises
+    ------
+    ValidationError
+        ``update="check"``, an unknown mode or a wrong ``version``/``edition``
+        pair.
+    DownloadError
+        Download, edition, version or link failure; with ``"upgrade"`` also
+        a failed probe or edition check.
+    """
+    validate_update(update)
+    _check_label_args(signal, version, edition)
+    lookup = memoized_edition(edition) if edition is not None else None
+    local = use_local(slot, update, signal=signal, probe=probe, edition=lookup)
+    if local is not None:
+        return local
+    if version is None:
+        assert lookup is not None  # _check_label_args
+        version = VersionRef(lookup().id, "edition")
+    staged = new_staging(slot)
+    try:
+        http = fetch(staged)
+    except BaseException:
+        discard_staging(staged, slot)
+        raise
+    return store_file(
+        slot,
+        staged,
+        version=version,
+        write_sidecar=write_sidecar,
+        http=http,
+        signal=signal,
+        coverage=coverage,
     )
 
 
@@ -265,17 +395,28 @@ def inspect_version(
     unit: str,
     signal: SignalKind,
     probe: Probe | None = None,
+    edition: EditionLookup | None = None,
     available: tuple[str | None, dict | None] = (None, None),
 ) -> PlanItem:
     """Plan position of one file WITHOUT downloading (``--check-updates``).
 
     ``missing`` without a local version; with a local version: ``http`` +
     ``probe`` -> ``current``/``newer`` (``unverifiable`` when the signals
-    are not comparable), ``index``/``metadata`` -> ``current``,
-    ``none`` -> ``unverifiable``. A failed probe = ``check_failed``.
-    ``available`` = ``(label, signal)`` of the source known to the caller
-    (e.g. the LAZ tile record); with ``http`` the signal is the probe's.
+    are not comparable), ``metadata`` -> ``current``/``newer`` by the
+    edition (``unverifiable`` for a version not labelled by an edition),
+    ``index`` -> ``current``, ``none`` -> ``unverifiable``. A failed probe
+    or edition = ``check_failed``. ``available`` = ``(label, signal)`` of
+    the source known to the caller (e.g. the LAZ tile record); with
+    ``http`` the signal is the probe's, with ``metadata``
+    ``(edition id, {"edition": id})``.
+
+    Raises
+    ------
+    ValidationError
+        ``signal="metadata"`` without ``edition``.
     """
+    if signal == "metadata" and edition is None:
+        raise ValidationError("sygnal metadata: wymagane edition=")
     local = local_version(slot)
     label, remote = available
     status: ItemStatus
@@ -283,6 +424,9 @@ def inspect_version(
     try:
         if signal == "http" and probe is not None:
             remote = probe()
+        elif signal == "metadata" and edition is not None:
+            label = edition().id
+            remote = {"edition": label}
     except DownloadError as e:
         status, error = "check_failed", str(e)
     else:
@@ -291,7 +435,12 @@ def inspect_version(
         elif signal == "http" and probe is not None:
             same = same_http_signal(http_signal_of(local), remote)
             status = "unverifiable" if same is None else "current" if same else "newer"
-        elif signal in ("index", "metadata"):
+        elif signal == "metadata":
+            if local.label_source != "edition":
+                status = "unverifiable"
+            else:
+                status = "current" if local.label == label else "newer"
+        elif signal == "index":
             status = "current"
         else:
             status = "unverifiable"
