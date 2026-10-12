@@ -79,8 +79,17 @@ from kartograf.download.manager import (
     DownloadProgress,
     DownloadResult,
     SheetFetch,
+    UpdateMode,
 )
 from kartograf.download.storage import FileStorage
+from kartograf.download.updates import (
+    PlanItem,
+    UpdatePlan,
+    UpgradeReport,
+    check_updates,
+    upgrade,
+)
+from kartograf.download.versions import VersionRef
 from kartograf.exceptions import (
     CacheError,
     DownloadError,
@@ -130,6 +139,14 @@ __all__ = [
     "SheetFetch",
     "CampaignRef",
     "FileStorage",
+    # Download (versioned store, update plan)
+    "UpdateMode",
+    "VersionRef",
+    "PlanItem",
+    "UpdatePlan",
+    "UpgradeReport",
+    "check_updates",
+    "upgrade",
     # Download (PL cutout: WCS ADR-035)
     "PlCutout",
     "PlCutoutResult",

@@ -281,6 +281,47 @@ class SheetFetch:
     newer: str | None = None
 
 
+@dataclass(frozen=True)
+class _Pick:
+    """Decision for one record of a sheet (``DownloadManager._select``).
+
+    ``local`` set = keep that local version (``local_ref`` its campaign);
+    ``None`` = download the record. ``newer``: the kept version is older
+    than the record (D5, default mode). ``previous``: a local version with
+    the record's label when it is downloaded anyway (``force``).
+    """
+
+    record: SkorowidzRecord
+    ref: CampaignRef
+    ext: str
+    name: str
+    local: LocalVersion | None
+    local_ref: CampaignRef | None
+    newer: bool
+    previous: LocalVersion | None = None
+
+
+@dataclass(frozen=True)
+class SheetInspection:
+    """Freshness of one sheet without downloading (``inspect_sheets``).
+
+    ``picks`` follow the default-mode rule (the same as downloads);
+    ``records`` are the resolved records (``upgrade`` reuses them);
+    ``error`` = the index could not be checked (or no data / a year
+    conflict); ``record_errors`` = invalid records (campaign, error).
+    ``versions`` = local versions of a sheet without campaigns.
+    """
+
+    sheet: str
+    std: Path
+    picks: tuple[_Pick, ...] = ()
+    records: tuple[SkorowidzRecord, ...] = ()
+    available: tuple[int, ...] | None = None
+    error: Exception | None = None
+    record_errors: tuple[tuple[str, DownloadError], ...] = ()
+    versions: tuple[LocalVersion, ...] = ()
+
+
 class CampaignProvider(Protocol):
     """GUGiK provider campaign API (ADR-030; a PL-ONLY mechanism).
 
@@ -976,6 +1017,89 @@ class DownloadManager:
             [leaf.sheet for leaf in leaves], update, on_progress, workers
         )
 
+    def inspect_sheets(self, sheets: list[str]) -> list[SheetInspection]:
+        """Freshness of the leaf sheets WITHOUT downloading (spec 4.1, 4.4).
+
+        Campaign providers: the records of the request (strategy, year
+        bounds via ``check_year_range``, ``full_sheet``) compared with the
+        local versions by the same rule as the default download mode
+        (``_select``). An index error, no data or a year conflict is the
+        sheet's ``error``. Providers without campaigns have no cheap signal:
+        only their local versions are listed.
+        """
+        leaves = self.expand_sheets(sheets)
+        if not self._campaign_aware:
+            result = []
+            for sheet in leaves:
+                std = self._storage.get_path(sheet, self._default_ext)
+                root = self._storage.get_versions_root(sheet)
+                versions = tuple(list_versions(root, std.name))
+                result.append(SheetInspection(sheet, std, versions=versions))
+            return result
+        check = self.check_year_range(leaves) if self._has_range else None
+
+        def inspect(sheet: str) -> SheetInspection:
+            std = self._storage.get_path(sheet, self._default_ext)
+            available = None
+            try:
+                if check is not None:
+                    if sheet in check.failed:
+                        raise check.failed[sheet]
+                    if sheet in check.no_data:
+                        raise check.no_data[sheet]
+                    if sheet in check.conflicts:
+                        raise year_range_error(
+                            {sheet: check.conflicts[sheet]},
+                            self._min_year,
+                            self._max_year,
+                            total=1,
+                        )
+                    available = check.available[sheet]
+                    chosen, _ = self._resolve_chosen(sheet, check.selected[sheet])
+                else:
+                    chosen, _ = self._resolve_chosen(sheet)
+            except DownloadError as e:
+                return SheetInspection(sheet, std, error=e)
+            picks, errors = self._select(sheet, chosen, None)
+            return SheetInspection(
+                sheet,
+                std,
+                picks=tuple(picks),
+                records=tuple(chosen),
+                available=available,
+                record_errors=tuple(errors),
+            )
+
+        if len(leaves) > 1 and self._max_workers > 1:
+            with concurrent.futures.ThreadPoolExecutor(self._max_workers) as executor:
+                return list(executor.map(inspect, leaves))
+        return [inspect(sheet) for sheet in leaves]
+
+    def download_records(
+        self,
+        sheet: str,
+        records: tuple[SkorowidzRecord, ...],
+        available: tuple[int, ...] | None = None,
+    ) -> SheetFetch:
+        """Fetch exactly these records of a sheet in the ``upgrade`` mode.
+
+        For ``upgrade(plan)`` (spec 4.4): only the plan's positions are
+        downloaded; records already local stay local. Sets ``last_sheet``
+        and a one-element ``last_result`` like :meth:`download_sheet`.
+        """
+        self.last_result = None
+        self.last_sheet = None
+        fetch = self._fetch_campaigns(
+            sheet, "upgrade", records=records, available=available, exact=True
+        )
+        self.last_sheet = fetch
+        result = DownloadResult()
+        self._record(
+            result, [], fetch.sheet, fetch, "skipped" if fetch.skipped else "completed"
+        )
+        self.last_result = result
+        return fetch
+
     def _fetch_sheet(
         self,
         sheet: str,
@@ -1109,6 +1233,104 @@ class DownloadManager:
         finally:
             shutil.rmtree(staged.parent, ignore_errors=True)
 
+    def _resolve_chosen(
+        self, sheet: str, records: tuple[SkorowidzRecord, ...] | None = None
+    ) -> tuple[list[SkorowidzRecord], bool]:
+        """Records of the request (strategy, year bounds, ``full_sheet``).
+
+        ``records`` = already selected by the year-range check; otherwise
+        ``resolve_campaigns`` (an index error propagates). ``full_sheet`` with
+        ``newest``: a partial newest record gets the newest declared-full
+        record of the range appended; ``True`` in the result = none exists.
+        """
+        if records is None:
+            chosen = list(
+                self._campaign_provider.resolve_campaigns(
+                    sheet, all_campaigns=self._all_campaigns, min_year=self._min_year
+                )
+            )
+        else:
+            chosen = list(records)
+        if (
+            self._full_sheet
+            and not self._all_campaigns
+            and chosen[0].full_sheet is not True
+        ):
+            pool = self._campaign_provider.resolve_campaigns(
+                sheet,
+                all_campaigns=True,
+                min_year=self._min_year,
+                max_year=self._max_year,
+            )
+            extra_full = next((r for r in pool if r.full_sheet is True), None)
+            if extra_full is None:
+                return chosen, True
+            chosen.append(extra_full)
+        return chosen, False
+
+    def _select(
+        self,
+        sheet: str,
+        chosen: list[SkorowidzRecord],
+        update: UpdateMode | None,
+    ) -> tuple[list[_Pick], list[tuple[str, DownloadError]]]:
+        """The single rule "local or download" per record (spec 4.2, D5).
+
+        Each record is checked BEFORE the network (``verify_record_url``, B4;
+        ``verify_record_vertical_crs``; extension from ``format``) — a bad
+        record is an error of that campaign. Without ``force`` a local
+        version with the record's label is kept. Default mode, newest flight
+        not local: another local version in range (the standard link target
+        first) is kept and ``newer`` says whether the record is newer than
+        it. Anything else is downloaded. Used by downloads and by
+        ``inspect_sheets`` (``check_updates``), so both read one rule.
+        """
+        std = self._storage.get_path(sheet, self._default_ext)
+        root = self._storage.get_versions_root(sheet)
+        known: dict[str, list[LocalVersion]] = {}  # file name -> local versions
+        picks: list[_Pick] = []
+        errors: list[tuple[str, DownloadError]] = []  # (campaign, error)
+        for index, record in enumerate(chosen):
+            try:  # R16 (cf. Q10): bad date = this campaign fails
+                ref = CampaignRef.from_record(record)
+            except DownloadError as e:
+                errors.append((record.url, e))
+                continue
+            try:  # B4 + record datum + extension - before the network
+                verify_record_url(record.url, sheet)
+                verify_record_vertical_crs(record, self._record_vertical_crs, sheet)
+                ext = campaign_extension(ref, self._default_ext)
+            except DownloadError as e:
+                errors.append((ref.dirname, e))
+                continue
+            name = self._storage.get_path(sheet, ext).name
+            if name not in known:
+                known[name] = list_versions(root, name)
+            same = newest_version(v for v in known[name] if v.label == ref.dirname)
+            if update != "force" and same is not None:
+                picks.append(_Pick(record, ref, ext, name, same, ref, False))
+                continue
+            if (
+                update is None
+                and same is None
+                and not self._all_campaigns
+                and index == 0
+            ):
+                current = self._current_local(std, known[name])
+                current_ref = (
+                    CampaignRef.from_sidecar(current.meta)
+                    if current is not None
+                    else None
+                )
+                if current is not None and current_ref is not None:
+                    newer = ref.sort_key > current_ref.sort_key
+                    picks.append(
+                        _Pick(record, ref, ext, name, current, current_ref, newer)
+                    )
+                    continue
+            picks.append(_Pick(record, ref, ext, name, None, None, False, same))
+        return picks, errors
+
     def _fetch_campaigns(
         self,
         sheet: str,
@@ -1116,6 +1338,8 @@ class DownloadManager:
         on_download: Callable[[], None] | None = None,
         records: tuple[SkorowidzRecord, ...] | None = None,
         available: tuple[int, ...] | None = None,
+        *,
+        exact: bool = False,
     ) -> SheetFetch:
         """
         Campaign flow (ADR-030) on the version store (spec 3).
@@ -1179,13 +1403,9 @@ class DownloadManager:
             newest of them.
         """
         std = self._storage.get_path(sheet, self._default_ext)
-        root = self._storage.get_versions_root(sheet)
-        chosen: list[SkorowidzRecord] | tuple[SkorowidzRecord, ...]
         if records is None:
             try:
-                chosen = self._campaign_provider.resolve_campaigns(
-                    sheet, all_campaigns=self._all_campaigns, min_year=self._min_year
-                )
+                chosen, no_full_flight = self._resolve_chosen(sheet)
             except DownloadError as e:
                 # I-1 for every strategy without year bounds (spec 4.2)
                 if update is None and not self._has_range and _is_transport_failure(e):
@@ -1193,94 +1413,45 @@ class DownloadManager:
                     if fetch is not None:
                         return fetch
                 raise
+        elif exact:  # download_records: exactly the plan's records
+            chosen, no_full_flight = list(records), False
         else:
-            chosen = records
-        no_full_flight = False
-        if (
-            self._full_sheet
-            and not self._all_campaigns
-            and chosen[0].full_sheet is not True
-        ):
-            pool = self._campaign_provider.resolve_campaigns(
-                sheet,
-                all_campaigns=True,
-                min_year=self._min_year,
-                max_year=self._max_year,
-            )
-            extra_full = next((r for r in pool if r.full_sheet is True), None)
-            if extra_full is None:
-                no_full_flight = True
-            else:
-                chosen = [*chosen, extra_full]
+            chosen, no_full_flight = self._resolve_chosen(sheet, records)
         logger.info(
             "%s: %d kampanii (%s)",
             sheet,
             len(chosen),
             "all" if self._all_campaigns else "newest",
         )
+        picks, errors = self._select(sheet, chosen, update)
         downloaded: list[Path] = []
         reused: list[Path] = []
         local: list[tuple[CampaignRef, Path]] = []
         commits: list[VersionCommit] = []
-        errors: list[tuple[str, DownloadError]] = []  # (campaign, error)
-        known: dict[str, list[LocalVersion]] = {}  # file name -> local versions
         started = False
         newer: str | None = None
-        for index, record in enumerate(chosen):
-            try:  # R16 (cf. Q10): bad date = this campaign fails
-                ref = CampaignRef.from_record(record)
-            except DownloadError as e:
-                errors.append((record.url, e))
+        for pick in picks:
+            if pick.local is not None and pick.local_ref is not None:
+                logger.info(f"{sheet} {pick.local.label}: lokalna wersja")
+                if pick.newer:
+                    newer = pick.ref.dirname
+                reused.append(pick.local.path)
+                local.append((pick.local_ref, pick.local.path))
                 continue
-            try:  # B4 + record datum + extension - before the network
-                verify_record_url(record.url, sheet)
-                verify_record_vertical_crs(record, self._record_vertical_crs, sheet)
-                ext = campaign_extension(ref, self._default_ext)
-            except DownloadError as e:
-                errors.append((ref.dirname, e))
-                continue
-            if update != "force":
-                name = self._storage.get_path(sheet, ext).name
-                if name not in known:
-                    known[name] = list_versions(root, name)
-                existing = newest_version(
-                    v for v in known[name] if v.label == ref.dirname
-                )
-                if (
-                    existing is None
-                    and update is None
-                    and not self._all_campaigns
-                    and index == 0
-                ):
-                    # D5: the newest flight is not local, but another one in
-                    # range is — keep it and only report the newer campaign
-                    current = self._current_local(std, known[name])
-                    current_ref = (
-                        CampaignRef.from_sidecar(current.meta)
-                        if current is not None
-                        else None
-                    )
-                    if current is not None and current_ref is not None:
-                        if ref.sort_key > current_ref.sort_key:
-                            newer = ref.dirname
-                        existing, ref = current, current_ref
-                if existing is not None:
-                    logger.info(f"{sheet} {ref.dirname}: lokalna wersja")
-                    reused.append(existing.path)
-                    local.append((ref, existing.path))
-                    continue
             if on_download is not None and not started:
                 on_download()
                 started = True
-            logger.info(f"Downloading {sheet} {ref.dirname}...")
+            logger.info(f"Downloading {sheet} {pick.ref.dirname}...")
             try:
-                commit = self._download_version(sheet, record, ref, ext, available)
+                commit = self._download_version(
+                    sheet, pick.record, pick.ref, pick.ext, available
+                )
             except DownloadError as e:
-                errors.append((ref.dirname, e))
+                errors.append((pick.ref.dirname, e))
                 continue
             commits.append(commit)
             downloaded.append(commit.path)
-            local.append((ref, commit.path))
+            local.append((pick.ref, commit.path))
         refreshed = {c.path for c in commits if c.status != "unchanged"}
         linked_target: Path | None = None
         link_error: DownloadError | None = None
