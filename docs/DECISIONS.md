@@ -24,7 +24,7 @@ kazda relacja jest zapisana po obu stronach.
 |---|---|---|---|
 | [ADR-001](#adr-001-flat-layout-zamiast-src-layout) | Flat layout zamiast src layout | 2026-01-17 | Przyjeta |
 | [ADR-002](#adr-002-auth-proxy-do-izolacji-credentials-clms) | Auth Proxy do izolacji credentials CLMS | 2026-01-18 | Przyjeta |
-| [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) | OpenData (ASC) vs WCS (GeoTIFF) — rozdzielenie sciezek pobierania NMT | 2026-01-18 | Przyjeta — czesciowo zastapiona przez [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (bbox = WCS GeoTIFF; errata 1) |
+| [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) | OpenData (ASC) vs WCS (GeoTIFF) — rozdzielenie sciezek pobierania NMT | 2026-01-18 | Przyjeta — czesciowo zastapiona przez [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (bbox = WCS GeoTIFF; errata 1) i [ADR-036](#adr-036-magazyn-wersjonowany) (`DownloadManager.download_bbox` usuniete; errata 2) |
 | [ADR-004](#adr-004-evrf2007-jako-domyslny-uklad-wysokosciowy) | EVRF2007 jako domyslny uklad wysokosciowy | 2026-01-21 | Zastapiona w 0.8.0 (errata 1: uklad wysokosci wymagany, bez wartosci domyslnej) |
 | [ADR-005](#adr-005-struktura-katalogow-nmt-rozdzielona-wg-rozdzielczosci) | Struktura katalogow NMT rozdzielona wg rozdzielczosci | 2026-01-21 | Przyjeta — czesciowo zastapiona przez [ADR-013](#adr-013-zmiana-nazw-podkatalogow-storage-z-1m5m-na-nmt_1mnmt_5m), a nastepnie [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (realizacja ukladu katalogow; errata 1) |
 | [ADR-006](#adr-006-landcoverprovider-jako-osobna-hierarchia-od-baseprovider) | LandCoverProvider jako osobna hierarchia od BaseProvider | 2026-01-18 | Przyjeta |
@@ -47,16 +47,17 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) | Silnik CUZK, polityka układów CZ i EVRF2007→5621 (etap 1) | 2026-08-11 | Przyjeta — czesciowo zastapiona przez [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) i [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (`--target-crs` wylacznie dla CZ; Ustalenia dodatkowe pkt 6); uzupelniona przez [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) ((f).1 obejmuje LAZ) i [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (kawalkowanie CUZK w `transport/chunks.py`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0); errata 2: `--country` wymagane z obszarem, wartosci per kraj (0.8.0) |
 | [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) | Reprojekcja tresci CZ wylacznie lokalnie (zakaz `imageSR` != natywny) | 2026-08-11 | Przyjeta — uzupelniona przez [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (wspolne planowanie kawalkow z kotwica NW); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) |
 | [ADR-025](#adr-025-mapowanie-tekstura---hsg-i-kanoniczny-trojkat-usda-audyt-070) | Mapowanie tekstura -> HSG i kanoniczny trojkat USDA (audyt 0.7.0) | 2026-08-22 | Przyjeta |
-| [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) | Uklad data/ per produkt — segmenty i szablony w deskryptorach | 2026-08-28 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (pliki w `<segment>/kampanie/`, sciezka standardowa = dowiazanie twarde albo kopia; errata 2); zastepuje [ADR-013](#adr-013-zmiana-nazw-podkatalogow-storage-z-1m5m-na-nmt_1mnmt_5m) i realizacje ukladu z [ADR-005](#adr-005-struktura-katalogow-nmt-rozdzielona-wg-rozdzielczosci), uzupelnia [ADR-017](#adr-017-pl-2000-sheet-naming--composition-pattern-with-auto-detection) (domyka odroczenie) |
+| [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) | Uklad data/ per produkt — segmenty i szablony w deskryptorach | 2026-08-28 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (pliki w `<segment>/kampanie/`, sciezka standardowa = dowiazanie twarde albo kopia; errata 2) i [ADR-036](#adr-036-magazyn-wersjonowany) (`<segment>/versions/`, land cover i HSG w ukladzie; errata 3); zastepuje [ADR-013](#adr-013-zmiana-nazw-podkatalogow-storage-z-1m5m-na-nmt_1mnmt_5m) i realizacje ukladu z [ADR-005](#adr-005-struktura-katalogow-nmt-rozdzielona-wg-rozdzielczosci), uzupelnia [ADR-017](#adr-017-pl-2000-sheet-naming--composition-pattern-with-auto-detection) (domyka odroczenie) |
 | [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) | --target-crs dla PL — scalony wycinek bbox (mozaika + pinned warp) | 2026-08-28 | Przyjeta — czesciowo zastapiona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (zrodlo wycinka w CLI i `download_pl_cutout`; API arkuszowe usuniete w 0.8.0, errata 2 ADR-035); uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (tylko przestarzaly tor arkuszowy); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (`--target-crs` wylacznie dla CZ) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (bbox = WCS GeoTIFF) |
 | [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) | Wybor rekordu skorowidza GUGiK i `extra.source` | 2026-09-30 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (strategie kampanii `newest`/`all`, `--min-year`; regula wyboru `newest` bez zmian; awaria skorowidza: errata 2); czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.source`); zastepuje czesc [ADR-020](#adr-020-walidacja-warstw-wms-przez-getcapabilities) (zaszyte warstwy i fallback) |
 | [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) | Wybor kafli LAZ wg pokrycia obszaru i pobieranie LAZ w bibliotece | 2026-10-07 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`all`/`--min-year`; errata 1) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial LAZ; errata 2); zastepuje czesc [ADR-021](#adr-021-laz-chmury-punktów-lidar--discovery-przez-wfs-area-based) (regula newest-per-tile) |
-| [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) | Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem | 2026-10-07 | Przyjeta — czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.campaign`) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial, skan i konflikt; errata 7); uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (drugie dowiazanie `full_sheet/`; errata 8); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`kampanie/`), [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wycinek tylko `newest`), [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (strategie), [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) (LAZ: `all`, `--min-year`) i [ADR-019](#adr-019-sqlite-wal-jako-metadata-cache) (`campaigns_cache`) |
+| [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) | Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem | 2026-10-07 | Przyjeta — czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.campaign`), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial, skan i konflikt; errata 7) i [ADR-036](#adr-036-magazyn-wersjonowany) (uklad `kampanie/`, automatyczne `newest`, kopia zamiast hardlinku; errata 9); uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (drugie dowiazanie `full_sheet/`; errata 8); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`kampanie/`), [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wycinek tylko `newest`), [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (strategie), [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) (LAZ: `all`, `--min-year`) i [ADR-019](#adr-019-sqlite-wal-jako-metadata-cache) (`campaigns_cache`) |
 | [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) | Jezyk identyfikatorow — angielski (sidecar od 0.7.0, API/CLI do v1.0.0) | 2026-10-08 | Przyjeta; czesciowo zastepuje [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (nazwy kluczy `extra.source`) i [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (nazwy kluczy `extra.campaign`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) (konwencja nazw kluczy sidecara); errata 1: API/CLI po angielsku w 0.8.0 bez aliasow |
-| [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) | Wybor roku danych: przedzial lat, zatrzymanie przy konflikcie | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (`--full-sheet` z pkt 4; errata 1); errata 2: `--all-campaigns`/`all_campaigns` od 0.8.0; uzupelnia ADR-029 i ADR-030 |
-| [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) | Drugie dowiazanie do najnowszego pelnego lotu (`full_sheet/`, `--full-sheet`) | 2026-10-10 | Przyjeta; uzupelnia [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) ((d): drugie dowiazanie) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 4: `--full-sheet`) |
+| [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) | Wybor roku danych: przedzial lat, zatrzymanie przy konflikcie | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (`--full-sheet` z pkt 4; errata 1); czesciowo zastapiona przez [ADR-036](#adr-036-magazyn-wersjonowany) (pkt 2: D14, pkt 4: D13; errata 3); errata 2: `--all-campaigns`/`all_campaigns` od 0.8.0; uzupelnia ADR-029 i ADR-030 |
+| [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) | Drugie dowiazanie do najnowszego pelnego lotu (`full_sheet/`, `--full-sheet`) | 2026-10-10 | Przyjeta — czesciowo zastapiona przez [ADR-036](#adr-036-magazyn-wersjonowany) (F-U5: `kampanie/`; errata 1); uzupelnia [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) ((d): drugie dowiazanie) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 4: `--full-sheet`) |
 | [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) | Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla) | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (ASC 1 Mpx i NMPT); uzupelnia [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (kawalkowanie CUZK) i [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (kotwica NW) |
-| [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) | Wycinki PL z WCS GUGiK z maska ladu PRG | 2026-10-11 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (zrodlo CLI i `download_pl_cutout`), uzupelnia [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (ASC 1 Mpx i NMPT); errata 1: kawalek ASC NMPT 4 Mpx coverage; errata 2: tor arkuszowy usuniety w 0.8.0 |
+| [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) | Wycinki PL z WCS GUGiK z maska ladu PRG | 2026-10-11 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (zrodlo CLI i `download_pl_cutout`), uzupelnia [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (ASC 1 Mpx i NMPT); errata 1: kawalek ASC NMPT 4 Mpx coverage; errata 2: tor arkuszowy usuniety w 0.8.0; errata 3: W-U3/W-U8 zastapione przez [ADR-036](#adr-036-magazyn-wersjonowany) (D15, realizacja w planie 2/3) |
+| [ADR-036](#adr-036-magazyn-wersjonowany) | Magazyn wersjonowany | 2026-10-12 | Przyjeta; czesciowo zastepuje [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`kampanie/`, automatyczne `newest`, kopia), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 2 i 4), [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (F-U5) i [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (W-U3/W-U8, plan 2/3); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`versions/`; land cover i HSG, D29-D33) |
 
 ---
 
@@ -98,7 +99,7 @@ kazda relacja jest zapisana po obu stronach.
 ## ADR-003: OpenData (ASC) vs WCS (GeoTIFF) — rozdzielenie sciezek pobierania NMT
 
 **Data:** 2026-01-18
-**Status:** Przyjeta — czesciowo zastapiona przez ADR-027 (bbox = WCS GeoTIFF; errata 1)
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-027 (bbox = WCS GeoTIFF; errata 1) i ADR-036 (`DownloadManager.download_bbox` usuniete; errata 2)
 
 **Kontekst:** GUGiK oferuje dwa sposoby pobierania NMT: OpenData (pliki ASC po godle) i WCS (GeoTIFF po bbox). Poczatkowo probowano ujednolicic oba w jednym flow.
 
@@ -117,6 +118,12 @@ a jeden GeoTIFF dla bboxa/geometrii buduje z arkuszy wycinek `--target-crs` /
 `DownloadManager.download_bbox` / `GugikProvider.download_bbox` i tylko dla
 KRON86 — endpoint EVRF2007 GUGiK wycofal (HTTP 404 od 2026-08), a
 `download_bbox` z EVRF2007 konczy sie `ValidationError` przed siecia.
+
+**Errata 2 (2026-10-12, ADR-036 D27, 0.8.0):** `DownloadManager.download_bbox`
+usuniete — pisal plik w korzeniu magazynu, zawsze nadpisywal i dublowal
+`download_pl_cutout(EPSG:2180)` bez maski PRG. Wycinek NMT/NMPT w magazynie:
+`download_pl_cutout`; surowy WCS (np. ortofotomapa) poza magazynem:
+`provider.download_bbox(bbox, path)` (metody providerow zostaja).
 
 ---
 
@@ -1200,7 +1207,7 @@ tabeli powyzej — policzone testem wprost na implementacji z punktu (a).
 ## ADR-026: Uklad data/ per produkt — segmenty i szablony w deskryptorach
 
 **Data:** 2026-08-28
-**Status:** Przyjeta — uzupelniona przez ADR-030 (pliki w `<segment>/kampanie/`, sciezka standardowa = dowiazanie twarde albo kopia; errata 2); zastepuje ADR-013 i realizacje ukladu z ADR-005, uzupelnia ADR-017 (domyka odroczenie)
+**Status:** Przyjeta — uzupelniona przez ADR-030 (pliki w `<segment>/kampanie/`, sciezka standardowa = dowiazanie twarde albo kopia; errata 2) i ADR-036 (`<segment>/versions/`; errata 3); zastepuje ADR-013 i realizacje ukladu z ADR-005, uzupelnia ADR-017 (domyka odroczenie)
 
 **Kontekst:** Plaski uklad `data/` nie kodowal kraju ani ukladow (`nmt_1m/`
 obok `cz_dmr5g/`; PL-2000 dzielil katalog z PL-1992; ten sam arkusz w KRON86
@@ -1258,6 +1265,17 @@ orto) sciezka `<segment>/<hierarchia>/<godlo>.<ext>` nie jest juz zwyklym
 plikiem: prawdziwe pliki leza w `<segment>/kampanie/<data>_<id>/<hierarchia>/`,
 a sciezka standardowa to dowiazanie twarde (albo kopia) do najnowszej lokalnej
 kampanii (ADR-030 (c), (d), errata 4). Segmenty z tej decyzji bez zmian.
+
+**Errata 3 (2026-10-12, ADR-036):** w 0.8.0 arkusze PL NMT/NMPT/orto leza
+jako wersje w `<segment>/versions/<hierarchia>/<etykieta>_<sha8>/`;
+sciezka standardowa i `full_sheet/` to wylacznie dowiazania twarde do
+wersji (bez kopii). Katalog `kampanie/` z 0.7.x nie jest uzywany. Land
+cover i HSG leza w ukladzie `data/` (plan 3/3, ADR-036 D29-D33): segmenty
+`landcover/pl_bdot10k_*`, `landcover/eu_corine_<rok>[_preview]`,
+`soil/global_soilgrids_<wlasciwosc>_<glebokosc>_<stat>`,
+`hsg/global_soilgrids_<glebokosc>_<stat>` (prefiksy w `storage_subdir`
+deskryptorow, tokeny tresci lowercase), pod nimi `teryt/<T>`,
+`bbox/<wsp>` albo hierarchia godla.
 
 ---
 
@@ -1599,7 +1617,7 @@ GetFeature, nie konflikt z konkretnym kaflem. Sidecar kafla dostaje
 ## ADR-030: Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem
 
 **Data:** 2026-10-07 (decyzje uzytkownika)
-**Status:** Przyjeta — czesciowo zastapiona przez ADR-031 (nazwy kluczy `extra.campaign`) i ADR-032 (przedzial, skan i konflikt; errata 7); uzupelniona przez ADR-033 (drugie dowiazanie `full_sheet/`; errata 8); uzupelnia ADR-026 (`kampanie/`), ADR-027 (wycinek tylko `newest`), ADR-028 (strategie; regula wyboru `newest` bez zmian), ADR-029 (LAZ: `all`, `--min-year`) i ADR-019 (`campaigns_cache`)
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-031 (nazwy kluczy `extra.campaign`), ADR-032 (przedzial, skan i konflikt; errata 7) i ADR-036 (uklad `kampanie/`, automatyczne `newest`, kopia zamiast hardlinku; errata 9); uzupelniona przez ADR-033 (drugie dowiazanie `full_sheet/`; errata 8); uzupelnia ADR-026 (`kampanie/`), ADR-027 (wycinek tylko `newest`), ADR-028 (strategie; regula wyboru `newest` bez zmian), ADR-029 (LAZ: `all`, `--min-year`) i ADR-019 (`campaigns_cache`)
 
 **Kontekst:** Arkusz GUGiK ma czesto kilka kampanii (rozne daty pozyskania,
 zlecenia, zrodla: skaning laserowy albo zdjecia lotnicze). Pomiar 2026-10-07
@@ -1972,6 +1990,16 @@ all` (j) konczy sie od 0.7.1 na powodzie, bez odeslania do narzedzia.
   i `full_sheet/`, `delete(godlo)` usuwa oba dowiazania z sidecarami,
   pliki w `kampanie/` zostaja.
 
+**Errata 9 (2026-10-12, ADR-036, 0.8.0):** (1) uklad `kampanie/<data>_<id>/`
+zastapiony wersjami `<segment>/versions/<hierarchia>/<data>_<id>_<sha8>/`
+(etykieta wersji = dawna nazwa katalogu kampanii); (2) tryb domyslny nie
+pobiera juz automatycznie nowszej kampanii przy `newest` — zostaje
+lokalna wersja i informacja o nowszej (`--upgrade` / `update="upgrade"`);
+(3) errata 4: kopia zamiast hardlinku znika — brak hardlinku to blad
+pliku (D22); (4) `--force` pobiera ponownie, ale nie nadpisuje (ta sama
+tresc = `unchanged`, inna = nowa wersja). Regula wyboru rekordu i klucz
+"najnowszej" bez zmian.
+
 ---
 
 ## ADR-031: Jezyk identyfikatorow — angielski (sidecar od 0.7.0, API/CLI do v1.0.0)
@@ -2081,7 +2109,7 @@ nie sa API publicznym i zostaja.
 ## ADR-032: Wybor roku danych: przedzial lat, zatrzymanie przy konflikcie
 
 **Data:** 2026-10-10 (decyzje uzytkownika 2026-10-09 i 2026-10-10)
-**Status:** Przyjeta — uzupelniona przez ADR-033 (`--full-sheet` z pkt 4; errata 1); errata 2: `--all-campaigns`/`all_campaigns` od 0.8.0; uzupelnia ADR-029 (LAZ) i ADR-030 (kampanie PL)
+**Status:** Przyjeta — uzupelniona przez ADR-033 (`--full-sheet` z pkt 4; errata 1); czesciowo zastapiona przez ADR-036 (pkt 2: D14, pkt 4: D13; errata 3); errata 2: `--all-campaigns`/`all_campaigns` od 0.8.0; uzupelnia ADR-029 (LAZ) i ADR-030 (kampanie PL)
 
 **Kontekst:** `--year` dzialal tylko dla LAZ, a `--min-year` w liscie
 arkuszy pozwalal pominac arkusz, ktory mial wylacznie starsze dane.
@@ -2206,12 +2234,21 @@ lata, przelacznik okresla liczbe lotow. Pole sidecara
 `request.campaigns` pozostaje tekstowa strategia `"newest"` lub `"all"`
 (schemat `kartograf-meta/1` bez zmiany).
 
+**Errata 3 (2026-10-12, ADR-036, 0.8.0):** pkt 2 — przy niedostepnym
+skorowidzu i zakresie lat zadanie nie konczy sie juz zawsze bledem:
+gdy KAZDY arkusz ma lokalna wersje z rocznikiem w zakresie, uzywane sa
+lokalne wersje z ostrzezeniem; inaczej blad calego zadania bez pobran
+(D14; tylko tryb domyslny). Pkt 4 — pokrycie lotu niepelnego jest
+mierzone przy zapisie wersji (`extra.coverage` w sidecarze wersji,
+D13), nie dopisywane pozniej; lot zadeklarowany jako pelny nie jest
+mierzony i przy porownaniu liczy sie jako w pelni pokryty.
+
 ---
 
 ## ADR-033: Drugie dowiazanie do najnowszego pelnego lotu (`full_sheet/`, `--full-sheet`)
 
 **Data:** 2026-10-10 (decyzje uzytkownika F-U1..F-U5)
-**Status:** Przyjeta; uzupelnia ADR-030 ((d): drugie dowiazanie; errata 8) i ADR-032 (pkt 4: `--full-sheet`; errata 1)
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-036 (F-U5: `kampanie/`; errata 1); uzupelnia ADR-030 ((d): drugie dowiazanie; errata 8) i ADR-032 (pkt 4: `--full-sheet`; errata 1)
 
 **Kontekst:** Sciezka standardowa wskazuje najnowszy lokalny lot, takze
 niepelny (`calyArkuszWypelnionyTrescia = NIE`); E13 tylko o tym ostrzega.
@@ -2280,6 +2317,11 @@ za granica). LAZ nie ma `full_sheet/`. Biblioteka: `SheetFetch.full_link`,
 `.full_link_outside_range`, `.without_full`;
 `FileStorage.get_full_sheet_path()`.
 
+**Errata 1 (2026-10-12, ADR-036, 0.8.0):** F-U5 — "`kampanie/` zostaje"
+nie obowiazuje: `full_sheet/` wskazuje najnowsza lokalna WERSJE lotu
+zadeklarowanego jako pelny w `versions/`. Brakujacy najnowszy pelny lot
+z zakresu to "brak lokalnej wersji" (tryb domyslny go pobiera).
+
 ---
 
 ## ADR-034: Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla)
@@ -2341,7 +2383,7 @@ PL nadal sklada arkusze; usuniecie parametrow arkuszowych publicznego
 ## ADR-035: Wycinki PL z WCS GUGiK z maska ladu PRG
 
 **Data:** 2026-10-11
-**Status:** Przyjeta; czesciowo zastepuje ADR-027 (zrodlo wycinka w CLI i `download_pl_cutout`), uzupelnia ADR-034 (ASC 1 Mpx i NMPT); errata 1: kawalek ASC NMPT 4 Mpx coverage; errata 2: tor arkuszowy usuniety w 0.8.0
+**Status:** Przyjeta; czesciowo zastepuje ADR-027 (zrodlo wycinka w CLI i `download_pl_cutout`), uzupelnia ADR-034 (ASC 1 Mpx i NMPT); errata 1: kawalek ASC NMPT 4 Mpx coverage; errata 2: tor arkuszowy usuniety w 0.8.0; errata 3: W-U3/W-U8 zastapione przez ADR-036 (D15, plan 2/3)
 
 **Kontekst:** Wycinanie PL z mozaiki arkuszy OpenData (ADR-027) wymagalo
 skorowidza, pobierania calych arkuszy i obslugi ich roznych faz siatki.
@@ -2439,6 +2481,136 @@ D16):** przestarzaly tor arkuszowy usuniety bez okresu przejsciowego:
 assign_crs=)` oraz nieuzywany juz `GridMismatchError`. Wycinek PL
 powstaje wylacznie z WCS; mozaike arkuszy sklada wywolujacy
 (`mosaic_and_crop`, `check_source_grid`).
+
+**Errata 3 (2026-10-12, ADR-036):** W-U3/W-U8 (nazwa z data, pobieranie
+przy kazdym uruchomieniu) zastapione decyzja D15 magazynu wersjonowanego:
+`bbox/<wsp>.tif` jako dowiazanie do najnowszej wersji, data tylko
+w etykiecie wersji, domyslnie lokalna wersja (bez zapytan PRG i WCS),
+`--force` pobiera ponownie. Zrealizowane w 0.8.0 (plan 2/3 magazynu);
+pliki `<wsp>_<RRRRMMDD>.tif` z 0.7.x nie sa rozpoznawane (D10).
+
+---
+
+## ADR-036: Magazyn wersjonowany
+
+**Data:** 2026-10-12 (spec zaakceptowany 2026-10-11, decyzje D1-D24; rewizje 2026-10-12, D26-D28 i D29-D33)
+**Status:** Przyjeta; czesciowo zastepuje ADR-030 (`kampanie/`, automatyczne `newest`, kopia), ADR-032 (pkt 2 i 4), ADR-033 (F-U5), ADR-035 (W-U3/W-U8) i ADR-003 (`DownloadManager.download_bbox`); uzupelnia ADR-026 (`versions/`; land cover i HSG w ukladzie `data/`)
+
+**Kontekst:** Do 0.7.x magazyn mogl po cichu nadpisac dane: `--force`
+nadpisywal plik kampanii, `newest` automatycznie przestawial sciezke na
+nowsza kampanie, sidecar kampanii byl dopisywany (`parent_requests`,
+`coverage`), a przy braku hardlinku sciezka standardowa byla kopia.
+Nie bylo sposobu sprawdzenia aktualnosci bez pobierania.
+
+**Opcje:**
+- A) Zostawic `kampanie/` i dopisac sumy kontrolne.
+- B) Wersje identyfikowane trescia (sha256) z niezmiennym sidecarem,
+  zapis wylaczny, tryby aktualizacji i plan aktualizacji.
+
+**Decyzja:** B, wg specu
+`docs/superpowers/specs/2026-10-08-versioned-store-design.md` (D1-D24):
+- uklad `<segment>/versions/<hierarchia>/<etykieta>_<sha8>/<nazwa>`
+  (D17), etykieta `<data>_<id>` kampanii / edycja / data pobrania UTC;
+- zapis: katalog roboczy `versions/.incoming/<host>_<pid>_<token>/`,
+  jeden odczyt (sha256 + pokrycie, D20), `fsync`, wylaczny `os.link`
+  (D18, D21), sprzatanie pozostalosci > 24 h (D19); ta sama tresc =
+  `unchanged`, ta sama tresc z nowa etykieta kampanii = `relabeled`
+  (nowy katalog z hardlinkiem, D23); sidecar wersji pisany raz
+  (`extra.version`, `extra.coverage`, D12, D13), publikowany wylacznie;
+- sciezka standardowa i `full_sheet/` = wylacznie hardlinki do wersji
+  (D22; brak hardlinkow = blad), nigdy wstecz;
+- tryby `update`: domyslny (lokalne wersje, brakujace pobierane, nowsza
+  kampania tylko zglaszana — D5), `upgrade`, `force` (pobiera, nie
+  nadpisuje), `check` = `check_updates` (plan `kartograf-plan/1`,
+  niczego nie pobiera); `upgrade(plan)` sprawdza sygnal ponownie;
+- skorowidz niedostepny: bez zakresu lat lokalna wersja + ostrzezenie
+  (kazda strategia), z zakresem D14.
+
+**Konsekwencje:** Plan 1/3 (2026-10-12) realizuje magazyn dla arkuszy PL
+NMT/NMPT/orto (`DownloadManager`, CLI `--sheet`/`--bbox`/`--geometry`
+bez `--target-crs`): `versions.py`, `updates.py`, `--check-updates`,
+`--upgrade`, `--plan`, statusy wersji w CLI. `kampanie/` z 0.7.x nie
+jest migrowany (ponowne pobranie, `Info:`). Plan 2/3 (2026-10-12)
+obejmuje pozostale tory `kartograf download`: kafle LAZ, arkusze CZ
+(TM33/SM5, przeniesione z CLI do `download/cz_sheets.py`), wycinki CZ
+i wycinki PL z WCS w `bbox/<wsp>.tif` bez daty (D15); wspolna polityka
+plikow bez kampanii `download/fetch.py`, plan z torem pozycji
+(`download/plan.py`, `PlanItem.track`/`unit`), `--check-updates`/
+`--upgrade`/`--plan` dla kazdego toru (przy `--country auto` jeden plan
+PL i CZ). Plan 3/3 (2026-10-12): land cover (BDOT10k, CORINE, SoilGrids)
+i HSG w ukladzie `data/` (D29-D33 nizej). Magazyn wymaga systemu plikow z hardlinkami; gdy system plikow
+nie podaje stabilnych numerow i-wezlow (SMB bez `serverino`, `samefile`
+falszywe dla hardlinku), dowiazanie potwierdza tresc: obie sciezki maja
+wiecej niz 1 link, ten sam rozmiar, a sha256 dowiazania = sha256 z sidecara wersji
+(pelny odczyt pliku tylko na takich udzialach). Kopia magazynu: `rsync -aH`.
+
+Decyzje rewizji 2026-10-12 (plan 2/3):
+- D26: plik LAZ = wersja per plik (nazwa `<zgloszenie>_<rekord>_<godlo>.laz`
+  zmienia sie z nalotem), etykieta `<data>_<zgloszenie>`; wyjatek od D5 —
+  nowszy nalot to nowe pliki, pobierane domyslnie, kafel z lokalna wersja
+  nie jest pobierany ponownie (tylko `--force`).
+- D27: `DownloadManager.download_bbox` usuniete (errata 2 ADR-003).
+- D28: `Content-Length` nie jest sygnalem swiezosci.
+- Sygnal per kanal dostepu (`AccessChannel.update_signal`, inwentaryzacja
+  `docs/research/2026-10-12-signal-inventory/raport.md`):
+
+| Kanal | Sygnal | Etykieta |
+|---|---|---|
+| arkusze PL NMT/NMPT/orto (skorowidz) | `index` | kampania |
+| LAZ (rekord WFS) | `index` | kampania (D26) |
+| WCS GUGiK (wycinki PL) | `none` | data pobrania |
+| SM5 CUZK (`openzu`) | `http` (`ETag`, `Last-Modified` w `extra.http`) | data pobrania |
+| `exportImage` CUZK (TM33, wycinki CZ) | `none` (`ETag` zalezny od zapytania) | data pobrania |
+| BDOT10k (paczka powiatu) | `none` | data pobrania |
+| SoilGrids (WCS) | `metadata` (wydanie z GetCapabilities, D29) | wydanie, np. `2.0` |
+| CORINE CLMS | `metadata` (`characteristics_release_major_version` z katalogu CLMS, D29) | wydanie, np. `V2020_20u1` |
+| CORINE podglad WMS (EEA/DLR) | `none` (D31) | data pobrania |
+| HSG (pochodna) | zestaw sha256 wejsc (D33) | wydanie wejsc |
+
+  Ta sama tresc pod nowym `ETag` = `relabeled`, pod tym samym albo bez
+  sygnalu = `unchanged` (D23 dla `http`). Bez taniego sygnalu: domyslnie
+  i przy `--upgrade` lokalna wersja (niesprawdzona, `--force` pobiera).
+  Wszystkie mierzone obiekty byly bajtowo powtarzalne, wiec `--force` przy
+  niezmienionym zrodle daje "bez zmian".
+
+Decyzje rewizji 2026-10-12 (plan 3/3, weryfikacja
+`docs/research/2026-10-12-plan3-spec-check/raport.md`):
+- D29: sygnal `metadata` SoilGrids i CORINE = wydanie zrodla: tytul
+  GetCapabilities mapy wlasciwosci (`SoilGrids250m 2.0 - Clay content` ->
+  `2.0`) i `characteristics_release_major_version` publicznego katalogu
+  CLMS (bez credentials). Wydanie jest etykieta wersji (`label_source =
+  "edition"`), opis w `extra.edition`. UID-y CLMS 2012/2006/2000 poprawione
+  wg katalogu.
+- D30: zadna wersja SoilGrids/CORINE nie powstaje bez wydania: wydanie
+  niedostepne bez lokalnej wersji = blad pliku; z lokalna wersja domyslnie
+  `Warning:` (lokalna niesprawdzona), `--upgrade`/`--force` = blad.
+  Porownanie: etykieta lokalnej wersji z wydaniem zrodla (inne wydanie =
+  domyslnie informacja, `--upgrade` pobiera); wersja z inna etykieta
+  (nie z wydania) jest nieporownywalna. Naglowki HTTP kanalu bez sygnalu
+  (`none`) nie rozrozniaja wersji (ta sama tresc innego dnia = `unchanged`).
+- D31: podglad CORINE z WMS (bez `CLMS_CREDENTIALS`, takze 1990) to osobny
+  produkt w segmencie `eu_corine_<rok>_preview` (kanal WMS, `none`,
+  etykieta daty) — nigdy wersja pliku danych CLMS.
+- D32: `LandCoverManager` i `HSGCalculator` pisza wylacznie do magazynu
+  (`output_dir` = korzen `--output`, bez `output_path`); wynik
+  `LandCoverResult`/`LandCoverAreaResult`/`HsgResult` z `VersionedFile`.
+  Plik poza magazynem: `provider.download_by_*` i `hsg_from_rasters`.
+- D33: HSG liczony z wersji wejsc clay/sand/silt (tabela 4.2, bez katalogu
+  tymczasowego i bez `keep_intermediate`); etykieta = wydanie wejsc
+  (rozne: posortowane, laczone `+`), `extra.source_files[]` z `sha256`
+  i sciezka wersji wejscia; wersja o tym samym zestawie sha256 wejsc jest
+  uzywana ponownie (`reused`, bez liczenia), `--force` dotyczy wejsc.
+- Segmenty (spec 3.4, lowercase): `landcover/pl_bdot10k_gpkg[_<warstwy>]`,
+  `landcover/pl_bdot10k_gpkg_zip` (`keep_raw`), `landcover/pl_bdot10k_shp`,
+  `landcover/eu_corine_<rok>[_preview]`,
+  `soil/global_soilgrids_<wlasciwosc>_<glebokosc>_<stat>`,
+  `hsg/global_soilgrids_<glebokosc>_<stat>`; pod segmentem `teryt/<T>`,
+  `bbox/<wsp>` albo hierarchia godla. Tory planu `landcover` i `hsg`.
+- Ograniczenia: poprawka danych w obrebie tego samego wydania (bez zmiany
+  etykiety) wykrywa tylko `--force`; pobranie CLMS z credentials nie bylo
+  sprawdzone na zywo (2026-10-12). HSG o tej samej tresci z innych wejsc
+  zostaje wersja z pierwszymi wejsciami w `source_files` (wersje sa
+  niezmienne), wiec takie wejscia licza HSG przy kazdym uruchomieniu.
 
 ---
 

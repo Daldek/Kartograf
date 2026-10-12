@@ -22,7 +22,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `geometry`, `layer`, `scale`, `max_workers`, `force`, `on_progress`,
   `cache`. Co zrobic: przekaz obwiednie geometrii jako `bbox`; wybor
   arkuszy, kampanii i 5 m realizuj przez pobieranie arkuszy bez
-  `--target-crs`. Wycinek WCS pobiera dane przy kazdym wywolaniu.
+  `--target-crs`.
 - `mosaic_and_crop` nie przyjmuje juz `snap_to_source_grid` ani
   `assign_crs`; `dtype=` i owijanie zrodel w VRT pozostaja. Co zrobic:
   sprawdz siatke przez `check_source_grid`, a w razie potrzeby
@@ -61,20 +61,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`GugikProvider`, `GugikNmptProvider`, `GugikOrtoProvider`). Co zrobic:
   zamien nazwy w wywolaniach i odczytach atrybutow (Hydrograf, Hydrolog).
   Klucze sidecara i wartosci (godla) bez zmian.
-- Land cover: domyslna nazwa pliku dla zadania przez arkusz ma czlon
-  `sheet_` zamiast `godlo_` (np. `corine_2018_sheet_N-34-130-D.tif`,
-  `soilgrids_clay_15-30cm_mean_sheet_N-34-130-D.tif`). Co zrobic: skrypty
-  szukajace plikow po nazwie dostosuj do nowego czlonu; pliki pobrane
-  wczesniej zostaja pod stara nazwa (land cover nie pomija istniejacych
-  plikow, kolejne pobranie zapisze plik pod nowa nazwa).
-
 - CLI i biblioteka: `--campaigns {newest,all}` oraz parametr
   `campaigns="newest"|"all"` zastapiono przelacznikiem `--all-campaigns`
   i parametrem `all_campaigns: bool = False` (arkusze PL i LAZ).
   Domyslnie pobierany jest najnowszy lot; przelacznik wybiera wszystkie
   loty w zakresie lat. Model A i tekstowe wartosci `request.campaigns`
-  w sidecarze (`"newest"`/`"all"`) pozostaja bez zmian; parametr
-  `FileStorage.list_files(campaigns: bool)` rowniez zostaje.
+  w sidecarze (`"newest"`/`"all"`) pozostaja bez zmian (parametr
+  `FileStorage.list_files(campaigns=)` — patrz magazyn wersjonowany nizej).
   Co zrobic: `--campaigns all` zamien na `--all-campaigns`,
   `--campaigns newest` usun; `campaigns="all"` zamien na
   `all_campaigns=True`, a `campaigns="newest"` usun lub zamien na
@@ -106,7 +99,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     parametry `vertical_crs` i `resolution` usuniete (decyduje provider);
     `FileStorage(output_dir, *, resolution, vertical_crs, ...)`, metody
     `get_path/exists/delete/get_full_sheet_path/get_campaign_path/get_size/
-    write_atomic` z wymaganym `ext`, `list_files(pattern, *, campaigns=False)`;
+    write_atomic` z wymaganym `ext`, `list_files(pattern, *, versions=False)`;
     `MetadataCache(db_path, ...)`; `GugikProvider(*, vertical_crs, resolution)`,
     `GugikNmptProvider(*, vertical_crs)`, `GugikLazProvider(*, vertical_crs)`,
     `GugikOrtoProvider(*, color)`, `create_nmt_provider(vertical_crs,
@@ -129,6 +122,205 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   usun `--scale` z zadan PL-1992). Biblioteka: przekaz provider
   i katalog do `DownloadManager`/`LandCoverManager`, sciezke do
   `MetadataCache` (CLI uzywa `.kartograf_cache.db` w katalogu biezacym).
+- Magazyn wersjonowany dla arkuszy PL NMT/NMPT/orto (ADR-036, plan 1/3;
+  spec `docs/superpowers/specs/2026-10-08-versioned-store-design.md`):
+  - Uklad: `<segment>/kampanie/<data>_<id>/...` -> `<segment>/versions/<hierarchia>/<data>_<id>_<sha8>/<godlo>.<ext>`
+    (wersja niezmienna, sidecar pisany raz). Brak migracji: `kampanie/`
+    nie jest czytany (CLI drukuje raz `Info:`). Co zrobic: pobierz dane
+    ponownie (np. tym samym poleceniem); stary katalog `kampanie/` mozna
+    usunac recznie.
+  - Tryb domyslny nie pobiera juz automatycznie nowszej kampanii przy
+    `newest`: zostaje lokalna wersja, a CLI dopisuje `; dostepna nowsza
+    <etykieta> (--upgrade)` i `Info:` (`SheetFetch.newer`,
+    `DownloadResult.newer`). Co zrobic: `--upgrade` / `update="upgrade"`,
+    gdy chcesz nowsza kampanie.
+  - `--force` pobiera ponownie i odswieza cache metadanych, ale niczego
+    nie nadpisuje: ta sama tresc = `bez zmian`, inna = nowa wersja obok
+    starej. `--force`, `--upgrade` i `--check-updates` wykluczaja sie.
+  - Biblioteka: `download_sheet/download_hierarchy/download_sheets(...,
+    skip_existing=)` -> `update: None | "upgrade" | "force"`. Co zrobic:
+    `skip_existing=False` zamien na `update="force"`, `skip_existing=True`
+    usun.
+  - Hardlinki wymagane: sciezka standardowa i `full_sheet/` to wylacznie
+    dowiazania twarde do wersji; kopia zamiast hardlinku znika (system
+    plikow bez hardlinkow = blad arkusza). `SheetFetch.link`,
+    `DownloadResult.copied` i CLI `Warning: hardlink niedostepny ...`
+    usuniete. Co zrobic: trzymaj dane na ext4/NTFS/SMB; kopiuj magazyn
+    przez `rsync -aH`.
+  - `extra.parent_requests` usuniete (sidecar wersji jest niezmienny;
+    `parent_request` = zadanie, ktore utworzylo wersje). `extra.coverage`
+    liczone przy zapisie dla kazdego lotu niepelnego, nigdy dopisywane;
+    lot pelny nie ma pomiaru. Co zrobic: grupuj pliki zadania po
+    `parent_request`.
+  - `FileStorage.get_campaign_path` usuniete, `list_files(campaigns=)` ->
+    `list_files(versions=)` (True = pliki wersji). Co zrobic: wersje
+    arkusza czytaj z `FileStorage.get_versions_root(sheet)` albo
+    `list_files(..., versions=True)`.
+  - Provider bez kampanii (atrapy, obce providery): plik tez jest wersja
+    (etykieta = data pobrania UTC); jego sidecar jest obowiazkowy (bez
+    deskryptora: sidecar okrojony), porazka zapisu = blad arkusza.
+  - CLI: zamiast `Downloaded to`, `Skipped ... already exists` i `Downloaded
+    N files ...` jedna linia na plik (`<godlo>: nowa wersja
+    <etykieta>_<sha8>` / `nowa etykieta ... (ta sama tresc)` / `bez zmian
+    ...` / `lokalna wersja ...`) i podsumowanie `Nowe: N, nowa etykieta:
+    N, bez zmian: N, lokalne: N, bledy: N`. Co zrobic: skrypty parsujace
+    wyjscie przestaw na nowe linie albo na biblioteke.
+  - Awaria skorowidza bez granicy roku: lokalna wersja dla kazdej
+    strategii (dotad tylko `newest`); z granica roku gdy KAZDY arkusz ma
+    lokalna wersje z zakresu — lokalne wersje z ostrzezeniem (dotad zawsze
+    blad zadania). Tylko tryb domyslny.
+- Magazyn wersjonowany dla LAZ, arkuszy i wycinkow CZ oraz wycinkow PL
+  z WCS (ADR-036, plan 2/3):
+  - LAZ: kafel = wersja w `laz/<segment>/versions/<hierarchia>/<data>_<zgloszenie>_<sha8>/<plik>.laz`,
+    sciezka standardowa = hardlink, sidecar wersji obowiazkowy. Kafel
+    z lokalna wersja nie jest pobierany ponownie; nowszy nalot (inne
+    pliki) pobiera sie domyslnie (D26). `run_laz_download`/
+    `download_laz_area(force=)` -> `update=None|"upgrade"|"force"`,
+    `LazDownloadResult.downloaded`/`.skipped` -> `.files`
+    (`VersionedFile`, status `new`/`unchanged`/`relabeled`/`local`) i
+    `.stale`. Co zrobic: `force=True` zamien na `update="force"`, liczniki
+    licz z `result.files` po `status`.
+  - Arkusze CZ (TM33, SM5) i wycinek CZ: wersje w `<segment>/versions/`,
+    `bbox/<wsp>.tif` i sciezka arkusza to hardlinki. SM5 zapisuje
+    `ETag`/`Last-Modified` w `extra.http` i domyslnie robi jedno `HEAD`
+    na plik z lokalna wersja (nowsza tresc tylko zglaszana, `--upgrade`
+    pobiera). `run_cz_cutout`/`download_cz_cutout(force=)` -> `update=`,
+    `CzCutoutResult.path`/`.skipped` -> `.file` (`VersionedFile`) i
+    `.stale`. Co zrobic: `force=True` -> `update="force"`, sciezke czytaj
+    z `result.file.path`, pominiecie z `result.file.status == "local"`.
+  - Wycinek PL z WCS: `bbox/<wsp>.tif` bez daty w nazwie jest dowiazaniem
+    do wersji w `versions/bbox/<RRRR-MM-DD>_<sha8>/`; domyslnie i przy
+    `--upgrade` lokalna wersja bez zapytan PRG i WCS (dotad kazde
+    wywolanie pobieralo), `--force` pobiera ponownie (ta sama tresc =
+    bez zmian). Pliki `<wsp>_<RRRRMMDD>.tif` z 0.7.x nie sa rozpoznawane.
+    `PlCutoutResult.path`/`.skipped` -> `.file` i `.stale`;
+    `run_pl_wcs_cutout(today=)` -> `now=` (+ `update=`, `plan=`),
+    `download_pl_cutout(..., update=)`; `dated_cutout_path` usuniete. Co
+    zrobic: sciezke czytaj z `result.file.path`; ponowne pobranie tylko
+    przez `update="force"`/`--force`; stare pliki z data usun recznie.
+  - Stary zwykly plik 0.7.x w sciezce LAZ/CZ/wycinka jest zastepowany
+    dowiazaniem do nowej wersji przy pierwszym pobraniu (D24). Co zrobic:
+    nic (kopie poza magazynem nie sa ruszane).
+  - `run_cz_cutout`, `run_cz_sheet`, `run_pl_wcs_cutout`: pole `file` jest
+    `None` tylko z `plan=`, gdy plan nie wykonuje tego pliku i nie ma
+    wersji lokalnej.
+  - `PlanItem.sheet` -> `PlanItem.unit`, nowe pole `track` (`pl_sheet`,
+    `laz_tile`, `cz_sheet`, `pl_cutout`, `cz_cutout`); `PlanItem`/
+    `UpdatePlan` w `kartograf.download.plan` (eksport z `kartograf` bez
+    zmian), `UpdateMode` w `kartograf.download.fetch`. Schemat planu
+    zostaje `kartograf-plan/1`. Co zrobic: `item.sheet` -> `item.unit`;
+    importy z `kartograf.download.updates`/`manager` przestaw na
+    `kartograf`.
+  - `DownloadManager.download_bbox` usuniete (D27, errata 2 ADR-003). Co
+    zrobic: wycinek NMT/NMPT w magazynie — `download_pl_cutout(bbox,
+    "EPSG:2180", ...)`; surowy WCS (np. ortofotomapa) poza magazynem —
+    `provider.download_bbox(bbox, path)`.
+  - CLI LAZ, CZ i wycinki: zamiast `Downloaded to ...`/`Skipped ...`
+    jedna linia statusu na plik (`<arkusz|sciezka wycinka|plik LAZ>:
+    nowa wersja ...` / `lokalna wersja ...`), dla LAZ podsumowanie
+    licznikow; plik bez taniego sygnalu (TM33, wycinki) dostaje
+    `(bez sprawdzania; --check-updates)`. Co zrobic: skrypty parsujace
+    wyjscie przestaw na nowe linie.
+  - Sidecar: `downloaded_at` z mikrosekundami (porzadek dwoch pobran
+    w tej samej sekundzie). Co zrobic: parsery ISO 8601 bez zmian.
+- Magazyn wersjonowany dla land cover i HSG (ADR-036 D29-D33, plan 3/3):
+  - Uklad: pliki `bdot10k_..._teryt_<T>.gpkg`, `corine_<rok>_sheet_<godlo>.png`,
+    `soilgrids_<wl>_<gl>_<stat>_bbox_<wsp>.tif`, `hsg_<godlo>_<gl>.tif`
+    -> segmenty spec 3.4 z wersjami: `landcover/pl_bdot10k_gpkg[_<warstwy>]/teryt/<T>.gpkg`
+    (`keep_raw`: `landcover/pl_bdot10k_gpkg_zip/teryt/<T>.zip`, SHP:
+    `landcover/pl_bdot10k_shp/teryt/<T>.zip`), `landcover/eu_corine_<rok>/...tif`
+    (CLMS), `landcover/eu_corine_<rok>_preview/...png` (podglad WMS bez
+    credentials), `soil/global_soilgrids_<wl>_<gl>_<stat>/...tif`,
+    `hsg/global_soilgrids_<gl>_<stat>/...tif`; pod segmentem `teryt/<T>`,
+    `bbox/<wsp>` (EPSG:2180, jak wycinki) albo hierarchia godla. Brak
+    migracji. Co zrobic: pobierz ponownie do katalogu magazynu (`--output`)
+    i czytaj sciezke z linii statusu / `result.file.path`; stare pliki
+    usun recznie.
+  - `LandCoverManager` i `HSGCalculator` pisza wylacznie do magazynu:
+    `output_path` usuniety (`TypeError`), wynik `LandCoverResult` /
+    `LandCoverAreaResult` / `HsgResult` zamiast `Path`, `HSGCalculator(output_dir,
+    provider=None)` (katalog wymagany), `keep_intermediate` usuniety (wejscia
+    clay/sand/silt to wersje SoilGrids w magazynie). Co zrobic (Hydrograf:
+    `backend/scripts/download_landcover.py`, `backend/core/cn_calculator.py`,
+    `backend/scripts/bootstrap.py`): `LandCoverManager(<korzen magazynu>,
+    ...).download_by_*(...)` bez `output_path` i `path = result.file.path`;
+    `HSGCalculator(<korzen>).calculate_hsg_by_bbox(bbox, depth=..., stat=...)`
+    i `result.file.path`. Plik w wybranym miejscu poza magazynem:
+    `provider.download_by_*(..., output_path)` albo `hsg_from_rasters`.
+  - Land cover nie pobiera juz ponownie istniejacego pliku: domyslnie
+    lokalna wersja (SoilGrids/CORINE CLMS: jedno zapytanie o wydanie,
+    nowsze wydanie tylko zglaszane; BDOT10k i podglad CORINE bez taniego
+    sygnalu: `(bez sprawdzania; --check-updates)`). Wersje SoilGrids
+    i CORINE CLMS maja etykiete wydania zrodla (`2.0`, `V2020_20u1`), bez
+    wydania nie powstaja (blad). Co zrobic: ponowne pobranie — `--force` /
+    `update="force"`, nowsze wydanie — `--upgrade` / `update="upgrade"`.
+  - `download_all_counties` nie przerywa na pierwszym bledzie powiatu:
+    zwraca `LandCoverAreaResult(files, failed, stale)`; CLI wypisuje
+    `Error: <TERYT>: ...` dla kazdego bledu i konczy kodem 1. Co zrobic:
+    sprawdzaj `result.failed` zamiast lapac wyjatek.
+  - `extra.source.raw_file` (BDOT10k `keep_raw`) zastapione
+    `extra.source_files` (`name`, `file` = sciezka wersji ZIP wzgledem
+    `--output`, `sha256`). Sidecar HSG: `extra.source_files` z `file`,
+    `sha256`, `label` wejsc; `request` = wybor (bez `bbox` przy arkuszu).
+  - CLI `landcover download` i `soilgrids hsg`: zamiast `Downloaded to:` /
+    `HSG raster saved to:` linia statusu na plik (sciezka wzgledem
+    `--output`); `soilgrids hsg --output` tylko katalog magazynu (`.tif` =
+    `Error:`), `--keep-intermediate` usuniete. Co zrobic: skrypty parsujace
+    wyjscie przestaw na linie statusu.
+  - `SourceDescriptor.storage_subdir` jest zawsze `str` (land cover:
+    prefiks segmentu); `CorineProvider.CLMS_DATASET_UIDS`/
+    `CLMS_RASTER_DOWNLOAD_IDS` 2012/2006/2000 zmienione na identyfikatory
+    z katalogu CLMS.
+
+### Dodane
+
+- CLI `download`: `--check-updates [--plan PLIK]` (raport bez pobierania,
+  plan JSON `kartograf-plan/1`), `--upgrade [--plan PLIK]` (pobranie
+  nowszej tresci; wykonanie planu z kontrola, czy zrodlo nie zmienilo sie
+  od planu) — dla kazdego toru: arkusze PL, kafle LAZ, arkusze CZ (SM5:
+  `ETag`), wycinki CZ i PL (bez taniego sygnalu: "nie da sie sprawdzic bez
+  pobrania"); przy `--country auto` jeden plan PL i CZ.
+- CLI `landcover download` i `soilgrids hsg`: `--check-updates`,
+  `--upgrade`, `--force`, `--plan PLIK` (tory planu `landcover` i `hsg`);
+  status `uzyta ponownie` (HSG z tych samych wejsc, bez liczenia).
+- Biblioteka: `check_updates`, `upgrade`, `UpdatePlan`, `PlanItem`,
+  `UpgradeReport`, `UpdateMode`, `VersionRef` (w `__all__`);
+  `DownloadManager.inspect_sheets`, `download_records`; `SheetFetch.status`,
+  `.version`, `.newer`, `.files`; `DownloadResult.new`, `.relabeled`,
+  `.unchanged`, `.local`, `.newer`, `.files`; `FileStorage.get_versions_root`,
+  `get_versions_base`, `has_legacy_campaigns`; sidecar `extra.version`
+  (`label`, `label_source`); status `relabeled` (ta sama tresc pod nowym
+  rekordem kampanii).
+- Biblioteka (plan 2/3): `check_laz_updates`, `check_cz_cutout`,
+  `check_pl_cutout` (w `__all__`), `kartograf.download.cz_sheets`
+  (`run_cz_sheet`, `check_cz_sheet`, `CzSheetResult` — bez eksportu w
+  `__all__`), `VersionedFile` (w `__all__`), `fetch_version`/`inspect_version`
+  (`kartograf.download.fetch`), `UpdatePlan.merge`/`items_for`,
+  `select_planned`, `new_plan`; `AccessChannel.update_signal` i
+  `channel_signal`; transport `response_signal`, `head_signal`,
+  `download_to(on_response=)`; `CuzkDmrProvider.sm5_signal`,
+  `download(..., on_response=)`; sidecar `extra.http` (SM5).
+- Biblioteka (plan 3/3): `LandCoverResult`, `LandCoverAreaResult`,
+  `LandCoverFailure`, `HsgResult`, `Edition` (w `__all__`);
+  `LandCoverManager(..., update=, plan=)`, `check`, `check_all_counties`;
+  `HSGCalculator.check_hsg_by_bbox`/`check_hsg_by_sheet`;
+  `SoilGridsProvider.edition`/`capabilities_url`,
+  `CorineProvider.edition`/`uses_clms`; `kartograf.landcover.store`
+  (`landcover_segment`, `hsg_segment`, `selection_slot`, `selection_unit`);
+  `kartograf.download.fetch.use_local`/`store_file`, status `reused`;
+  `fetch_version(edition=)`/`inspect_version(edition=)` (sygnal `metadata`);
+  `get_with_retry(headers=)`; `TransportKind.WMS` (kanal podgladu CORINE);
+  sidecar `extra.edition`.
+
+### Naprawione
+
+- CORINE CLMS 2012/2006/2000: UID-y zbiorow i `@id` rastra nie istnialy
+  w katalogu CLMS (`items_total: 0`); poprawione wg katalogu
+  (`docs/research/2026-10-12-plan3-spec-check/raport.md`). Pobranie CLMS
+  z credentials niesprawdzone na zywo.
+- `soilgrids hsg --bbox ... -o <katalog>` pisal `hsg_bbox_<glebokosc>.tif`
+  bez wspolrzednych — dwa obszary nadpisywaly jeden plik. Teraz
+  `hsg/global_soilgrids_<gl>_<stat>/bbox/<wsp>.tif`.
 
 ## [0.7.2] - 2026-10-11
 

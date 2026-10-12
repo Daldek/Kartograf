@@ -208,6 +208,7 @@ class TestPreparePlCutout:
         for name in (
             "PlCutout",
             "PlCutoutResult",
+            "check_pl_cutout",
             "download_pl_cutout",
             "prepare_pl_cutout",
             "run_pl_wcs_cutout",

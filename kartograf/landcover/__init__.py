@@ -1,10 +1,20 @@
 """
 Land Cover module for Kartograf.
 
-This module provides functionality for downloading land cover data
-from various sources like BDOT10k and CORINE Land Cover.
+Downloads BDOT10k, CORINE Land Cover and SoilGrids into the version store
+(``data/`` layout, spec 3.4).
 """
 
-from kartograf.landcover.manager import LandCoverManager
+from kartograf.landcover.manager import (
+    LandCoverAreaResult,
+    LandCoverFailure,
+    LandCoverManager,
+    LandCoverResult,
+)
 
-__all__ = ["LandCoverManager"]
+__all__ = [
+    "LandCoverManager",
+    "LandCoverResult",
+    "LandCoverAreaResult",
+    "LandCoverFailure",
+]

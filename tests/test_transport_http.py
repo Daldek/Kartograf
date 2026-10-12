@@ -1,5 +1,6 @@
 """Tests of the canonical downloader (kartograf.transport.http)."""
 
+import io
 import os
 import threading
 from datetime import UTC, datetime, timedelta
@@ -15,8 +16,10 @@ from kartograf.transport.http import (
     SessionPerThread,
     download_to,
     get_with_retry,
+    head_signal,
     is_retryable,
     make_gugik_session,
+    response_signal,
     retry_wait,
 )
 
@@ -290,3 +293,118 @@ class TestSessionPerThread:
         with patch("kartograf.transport.http.make_gugik_session") as factory:
             assert sessions.get() is factory.return_value
         factory.assert_called_once_with()
+
+
+def _response(status: int, headers: dict, body: bytes = b"") -> requests.Response:
+    """A real ``requests.Response`` (headers case-insensitive, raise_for_status)."""
+    resp = requests.Response()
+    resp.status_code = status
+    resp.headers.update(headers)
+    resp.raw = io.BytesIO(body)
+    resp.url = "https://example.test/p"
+    return resp
+
+
+class TestResponseSignal:
+    def test_response_signal_reads_headers_case_insensitively(self):
+        resp = _response(
+            200,
+            {
+                "etag": '"abc"',
+                "last-modified": "Mon, 12 Oct 2026 08:00:00 GMT",
+                "content-length": "123",
+            },
+        )
+        assert response_signal(resp) == {
+            "etag": '"abc"',
+            "last_modified": "Mon, 12 Oct 2026 08:00:00 GMT",
+            "content_length": 123,
+        }
+
+    def test_response_signal_missing_headers_are_none(self):
+        assert response_signal(_response(200, {})) == {
+            "etag": None,
+            "last_modified": None,
+            "content_length": None,
+        }
+
+    def test_response_signal_non_numeric_length_is_none(self):
+        resp = _response(200, {"Content-Length": "12x", "ETag": "W/1"})
+        assert response_signal(resp)["content_length"] is None
+        assert response_signal(resp)["etag"] == "W/1"
+
+    def test_download_to_on_response_sees_last_attempt(self, tmp_path):
+        session = MagicMock()
+        session.get.side_effect = [
+            _response(503, {"ETag": '"stary"'}),
+            _response(200, {"ETag": '"nowy"'}, b"dane"),
+        ]
+        seen = []
+        out = tmp_path / "plik.zip"
+        with patch("kartograf.transport.http.time.sleep"):
+            download_to(
+                session,
+                "https://example.test/p",
+                out,
+                timeout=5,
+                on_response=lambda r: seen.append(response_signal(r)),
+            )
+        assert [s["etag"] for s in seen] == ['"nowy"']
+        assert out.read_bytes() == b"dane"
+
+    def test_download_to_on_response_called_per_successful_attempt(self, tmp_path):
+        def broken_iter(chunk_size):
+            yield b"abc"
+            raise requests.exceptions.ChunkedEncodingError("przerwane")
+
+        first = _response(200, {"ETag": '"a"'})
+        first.iter_content = broken_iter
+        session = MagicMock()
+        session.get.side_effect = [first, _response(200, {"ETag": '"b"'}, b"x")]
+        seen = []
+        with patch("kartograf.transport.http.time.sleep"):
+            download_to(
+                session,
+                "https://example.test/p",
+                tmp_path / "f",
+                timeout=5,
+                on_response=lambda r: seen.append(response_signal(r)["etag"]),
+            )
+        assert seen == ['"a"', '"b"']  # the caller keeps the last one
+
+
+class TestHeadSignal:
+    def test_head_signal_retries_and_returns_headers(self):
+        session = MagicMock()
+        session.head.side_effect = [
+            requests.ConnectionError("boom"),
+            _response(200, {"ETag": '"e1"', "Last-Modified": "lm"}),
+        ]
+        with patch("kartograf.transport.http.time.sleep") as sleep:
+            signal = head_signal(session, "https://example.test/p", timeout=5)
+        assert signal == {"etag": '"e1"', "last_modified": "lm", "content_length": None}
+        assert session.head.call_count == 2
+        assert sleep.call_count == 1
+
+    def test_head_signal_404_is_download_error_without_retry(self):
+        session = MagicMock()
+        session.head.return_value = _response(404, {})
+        with (
+            patch("kartograf.transport.http.time.sleep") as sleep,
+            pytest.raises(DownloadError) as exc,
+        ):
+            head_signal(session, "https://example.test/p", timeout=5)
+        assert exc.value.status_code == 404
+        assert session.head.call_count == 1
+        assert sleep.call_count == 0
+
+    def test_head_signal_exhausted_retries_is_download_error(self):
+        session = MagicMock()
+        session.head.return_value = _response(503, {})
+        with (
+            patch("kartograf.transport.http.time.sleep"),
+            pytest.raises(DownloadError) as exc,
+        ):
+            head_signal(session, "https://example.test/p", timeout=5, retries=2)
+        assert exc.value.status_code == 503
+        assert session.head.call_count == 2

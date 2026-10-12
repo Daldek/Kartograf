@@ -5,6 +5,7 @@ import dataclasses
 import pytest
 
 from kartograf.core.sheet_parser import BBox
+from kartograf.exceptions import ValidationError
 from kartograf.sources.descriptor import (
     AccessChannel,
     CountryProfile,
@@ -15,6 +16,7 @@ from kartograf.sources.descriptor import (
 )
 from kartograf.sources.registry import (
     all_countries,
+    channel_signal,
     get_country,
     get_source,
     horizontal_crs_for_sheet,
@@ -36,6 +38,44 @@ EXPECTED_KEYS = {
     "cz.cuzk.dmr5g",
     "cz.cuzk.dmr4g",
 }
+
+# Signal inventory (docs/research/2026-10-12-signal-inventory/raport.md).
+CHANNEL_SIGNALS = [
+    ("pl.gugik.nmt_1m", TransportKind.WMS_SHEET_INDEX, "index"),
+    ("pl.gugik.nmt_1m", TransportKind.WCS, "none"),
+    ("pl.gugik.nmt_5m", TransportKind.WMS_SHEET_INDEX, "index"),
+    ("pl.gugik.nmpt", TransportKind.WMS_SHEET_INDEX, "index"),
+    ("pl.gugik.nmpt", TransportKind.WCS, "none"),
+    ("pl.gugik.orto", TransportKind.WMS_SHEET_INDEX, "index"),
+    ("pl.gugik.laz", TransportKind.WFS, "index"),
+    ("pl.gugik.bdot10k", TransportKind.DIRECT_FILES, "none"),
+    ("eu.clms.corine", TransportKind.CLMS_API, "metadata"),
+    ("eu.clms.corine", TransportKind.WMS, "none"),
+    ("global.isric.soilgrids", TransportKind.WCS, "metadata"),
+    ("cz.cuzk.dmr5g", TransportKind.ARCGIS_IMAGE, "none"),
+    ("cz.cuzk.dmr4g", TransportKind.DIRECT_FILES, "http"),
+    ("cz.cuzk.dmr4g", TransportKind.ARCGIS_IMAGE, "none"),
+]
+
+
+@pytest.mark.parametrize(("key", "transport", "signal"), CHANNEL_SIGNALS)
+def test_channel_signals_match_inventory(key, transport, signal):
+    assert channel_signal(key, transport) == signal
+
+
+def test_every_channel_has_an_inventoried_signal():
+    inventoried = {(key, transport) for key, transport, _ in CHANNEL_SIGNALS}
+    channels = {(d.key, c.transport) for d in sources_for() for c in d.channels}
+    assert channels == inventoried
+
+
+@pytest.mark.parametrize(
+    ("key", "transport"),
+    [("xx.none.zadne", TransportKind.WCS), ("pl.gugik.nmt_5m", TransportKind.WCS)],
+)
+def test_unknown_channel_signal_is_error(key, transport):
+    with pytest.raises(ValidationError):
+        channel_signal(key, transport)
 
 
 class TestDescriptorDataclasses:
@@ -364,10 +404,20 @@ class TestDescriptorProviderConsistency:
         ]
         for key, provider, fmt in cases:
             d = get_source(key)
-            assert d.storage_subdir is None
             assert d.default_extension == provider.get_file_extension(fmt)
             assert d.provider_name != ""
             assert d.license.attribution != ""
+
+    def test_landcover_storage_prefixes(self):
+        """Spec 3.4: land cover segments = prefix + content tokens, no placeholders."""
+        assert {
+            key: get_source(key).storage_subdir
+            for key in ("pl.gugik.bdot10k", "eu.clms.corine", "global.isric.soilgrids")
+        } == {
+            "pl.gugik.bdot10k": "landcover/pl_bdot10k",
+            "eu.clms.corine": "landcover/eu_corine",
+            "global.isric.soilgrids": "soil/global_soilgrids",
+        }
 
     def test_horizontal_crs_matches_channel_reality(self):
         """Descriptor horizontal CRS = the CRS the channel actually returns."""
@@ -381,9 +431,10 @@ class TestDescriptorProviderConsistency:
         ):
             for ch in get_source(key).channels:
                 assert ch.horizontal_crs == "EPSG:2180", key
-        # CORINE: EPSG:3035 applies to the CLMS GeoTIFF channel (the WMS PNG fallback
-        # has a different CRS and is corrected in LandCoverManager._write_sidecar)
+        # CORINE: EPSG:3035 is the CLMS GeoTIFF channel; the WMS preview channel
+        # is EPSG:3857 (1990 DLR: EPSG:4326, set by LandCoverManager per file)
         assert get_source("eu.clms.corine").channels[0].horizontal_crs == "EPSG:3035"
+        assert get_source("eu.clms.corine").channels[1].horizontal_crs == "EPSG:3857"
         assert (
             get_source("global.isric.soilgrids").channels[0].horizontal_crs
             == "EPSG:4326"
@@ -466,11 +517,6 @@ class TestResolveSubdir:
     def test_no_args_returns_template(self):
         d = self._descriptor("laz/pl_{system}_{vcrs}")
         assert d.resolve_subdir() == "laz/pl_{system}_{vcrs}"
-
-    def test_none_subdir_raises(self):
-        d = self._descriptor(None)
-        with pytest.raises(ValueError, match="test.key"):
-            d.resolve_subdir()
 
     @pytest.mark.parametrize(
         "kwargs", [{"vertical_crs": ""}, {"vertical_crs": "  "}, {"system": ""}]

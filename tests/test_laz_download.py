@@ -9,17 +9,19 @@ few bytes.
 
 import json
 import threading
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import MagicMock
 from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from kartograf import download_laz_area, run_laz_download
+from kartograf import check_laz_updates, download_laz_area, run_laz_download
 from kartograf.core.sheet_parser import BBox
-from kartograf.download.laz import LazDownloadResult
+from kartograf.download.laz import LazDownloadResult, laz_slot, laz_version_ref
+from kartograf.download.plan import UpdatePlan
 from kartograf.download.storage import FileStorage
-from kartograf.exceptions import DownloadError, YearRangeError
+from kartograf.exceptions import DownloadError, ValidationError, YearRangeError
 from kartograf.providers.pl.gugik_laz import (
     GugikLazProvider,
     LazTile,
@@ -139,7 +141,7 @@ def _sidecar(path: Path) -> dict:
 
 
 class TestRunLazDownload:
-    def test_tiles_land_in_storage_with_sidecar(self, tmp_path):
+    def test_laz_tile_lands_as_version_with_link(self, tmp_path):
         tile = _tile("N-33-131-B-a-1-1-4")
         provider = FakeProvider()
         result = run_laz_download(
@@ -153,10 +155,35 @@ class TestRunLazDownload:
         expected = FileStorage(
             tmp_path, product="laz", vertical_crs="EVRF2007", resolution="1m"
         ).get_raw_path(tile.sheet, tile.filename, system="2000")
-        assert result.downloaded == (expected,)
+        (file,) = result.files
+        assert file.status == "new" and file.path == expected
+        assert file.label == "2024_81121"
+        assert file.version_path == (
+            tmp_path
+            / "laz"
+            / "pl_2000_evrf2007"
+            / "versions"
+            / "N-33"
+            / "131"
+            / "B"
+            / "a"
+            / "1"
+            / "1"
+            / "4"
+            / f"2024_81121_{file.sha256[:8]}"
+            / tile.filename
+        )
+        assert file.version_path.read_bytes() == b"LASF"
+        assert expected.stat().st_ino == file.version_path.stat().st_ino
         assert expected.parts[-10:-8] == ("laz", "pl_2000_evrf2007")
-        meta = _sidecar(expected)
-        assert meta["dataset"] == "pl.gugik.laz"
+        meta = _sidecar(file.version_path)
+        assert meta["sha256"] == file.sha256
+        assert meta["extra"]["version"] == {
+            "label": "2024_81121",
+            "label_source": "campaign",
+        }
+        assert "link" not in meta["extra"]
+        assert _sidecar(expected)["extra"]["link"] == "hardlink"
         assert meta["horizontal_crs"] == "EPSG:2177"  # PL-2000:S6
         assert meta["request"]["bbox"] == [530000, 382000, 533000, 386000]
         assert meta["request"]["year"] == 2024  # wave B (E16) preserved
@@ -180,22 +207,18 @@ class TestRunLazDownload:
             output_dir=tmp_path,
             parent_request=PARENT,
         )
-        assert len(result.downloaded) == 2
-        for path in result.downloaded:
-            assert _sidecar(path)["extra"]["parent_request"] == PARENT
+        assert len(result.files) == 2
+        for file in result.files:
+            assert _sidecar(file.path)["extra"]["parent_request"] == PARENT
 
-    def test_sidecar_failure_does_not_abort_download(self, tmp_path, caplog):
-        """Sidecar through the shared ``emit_sidecar``: a metadata build failure is
-        a log warning, the tile stays downloaded (D7, best-effort policy)."""
+    def test_sidecar_failure_rolls_back_version(self, tmp_path):
+        """Mandatory version metadata failure does not leave a usable file."""
         from unittest.mock import patch
 
         tile = _tile("N-33-131-B-a-1-1-4")
-        with (
-            patch(
-                "kartograf.sources.sidecar.build_metadata",
-                side_effect=RuntimeError("zepsuty deskryptor"),
-            ),
-            caplog.at_level("WARNING", logger="kartograf.sources.sidecar"),
+        with patch(
+            "kartograf.sources.sidecar.build_metadata",
+            side_effect=RuntimeError("zepsuty deskryptor"),
         ):
             result = run_laz_download(
                 _selection(tile),
@@ -203,10 +226,14 @@ class TestRunLazDownload:
                 bbox=BBOX,
                 output_dir=tmp_path,
             )
-        (path,) = result.downloaded
-        assert path.exists()
-        assert not path.with_name(path.name + ".meta.json").exists()
-        assert "zepsuty deskryptor" in caplog.text
+        assert not result.ok and not result.files
+        assert "zepsuty deskryptor" in str(result.failed[0].error)
+        storage = FileStorage(
+            tmp_path, product="laz", vertical_crs="EVRF2007", resolution=None
+        )
+        slot = laz_slot(storage, tile)
+        assert not slot.std.exists()
+        assert not list(slot.versions_root.glob("*/" + tile.filename))
 
     def test_provider_without_descriptor_key_still_gets_laz_sidecar(self, tmp_path):
         """A provider without ``descriptor_key`` (str) - a sidecar with the key
@@ -219,7 +246,7 @@ class TestRunLazDownload:
             bbox=BBOX,
             output_dir=tmp_path,
         )
-        assert _sidecar(result.downloaded[0])["dataset"] == "pl.gugik.laz"
+        assert _sidecar(result.files[0].version_path)["dataset"] == "pl.gugik.laz"
 
     def test_failures_are_collected_not_raised(self, tmp_path):
         tiles = [_tile(f"N-33-131-B-a-1-1-{i}") for i in range(1, 5)]
@@ -227,37 +254,216 @@ class TestRunLazDownload:
         result = run_laz_download(
             _selection(*tiles), provider=provider, bbox=BBOX, output_dir=tmp_path
         )
-        assert len(result.downloaded) == 2
+        assert len(result.files) == 2
         assert [f.tile.sheet for f in result.failed] == [
             "N-33-131-B-a-1-1-2",
             "N-33-131-B-a-1-1-4",
         ]
         assert all(isinstance(f.error, DownloadError) for f in result.failed)
         assert not result.ok
-        # a failed tile leaves no sidecar
-        assert len(list(tmp_path.rglob("*.meta.json"))) == 2
+        # A failed tile leaves no committed version or sidecar.
+        assert len(list(tmp_path.rglob("versions/**/*.meta.json"))) == 2
 
-    def test_existing_tiles_are_skipped_unless_force(self, tmp_path):
+    def test_laz_force_same_content_is_unchanged(self, tmp_path):
         tile = _tile("N-33-131-B-a-1-1-4")
         provider = FakeProvider()
         first = run_laz_download(
             _selection(tile), provider=provider, bbox=BBOX, output_dir=tmp_path
         )
-        again = run_laz_download(
-            _selection(tile), provider=provider, bbox=BBOX, output_dir=tmp_path
-        )
-        assert again.skipped == first.downloaded
-        assert again.downloaded == ()
-        assert len(provider.calls) == 1
         forced = run_laz_download(
             _selection(tile),
             provider=provider,
             bbox=BBOX,
             output_dir=tmp_path,
-            force=True,
+            update="force",
         )
-        assert forced.downloaded == first.downloaded
+        assert [file.status for file in (first.files[0], forced.files[0])] == [
+            "new",
+            "unchanged",
+        ]
+        assert forced.files[0].version_path == first.files[0].version_path
         assert len(provider.calls) == 2
+        assert len(list(tmp_path.rglob("versions/**/*.laz.meta.json"))) == 1
+
+    def test_laz_force_new_content_is_new_version(self, tmp_path):
+        tile = _tile("N-33-131-B-a-1-1-4")
+        provider = FakeProvider()
+        original = run_laz_download(
+            _selection(tile), provider=provider, bbox=BBOX, output_dir=tmp_path
+        ).files[0]
+
+        def revised(url, target):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(b"LASF updated")
+            return target
+
+        provider.download = revised
+        changed = run_laz_download(
+            _selection(tile),
+            provider=provider,
+            bbox=BBOX,
+            output_dir=tmp_path,
+            update="force",
+        ).files[0]
+        assert changed.status == "new"
+        assert changed.version_path != original.version_path
+        assert changed.path.read_bytes() == b"LASF updated"
+        assert original.version_path.read_bytes() == b"LASF"
+        assert changed.path.stat().st_ino == changed.version_path.stat().st_ino
+
+    def test_laz_default_keeps_local_tile_and_fetches_new_flight(self, tmp_path):
+        first_tile = _tile("N-33-131-B-a-1-1-4")
+        second_tile = replace(
+            first_tile,
+            url=f"https://opendata.geoportal.gov.pl/x/93455_2_{first_tile.sheet}.laz",
+            year=2025,
+            date="2025-08-12",
+        )
+        provider = FakeProvider()
+        previous = run_laz_download(
+            _selection(first_tile), provider=provider, bbox=BBOX, output_dir=tmp_path
+        ).files[0]
+        current = run_laz_download(
+            _selection(first_tile, second_tile),
+            provider=provider,
+            bbox=BBOX,
+            output_dir=tmp_path,
+        )
+        assert [file.status for file in current.files] == ["local", "new"]
+        assert current.files[0].version_path == previous.version_path
+        assert current.files[1].label == "2025-08-12_93455"
+        assert provider.calls == [first_tile.url, second_tile.url]
+        assert current.files[0].path.exists() and current.files[1].path.exists()
+
+    def test_check_laz_never_downloads(self, tmp_path):
+        current, missing = (_tile(f"N-33-131-B-a-1-1-{i}") for i in (1, 2))
+        provider = FakeProvider()
+        run_laz_download(
+            _selection(current), provider=provider, bbox=BBOX, output_dir=tmp_path
+        )
+        provider.calls.clear()
+        plan = check_laz_updates(
+            _selection(current, missing), provider=provider, output_dir=tmp_path
+        )
+        assert plan.store == str(tmp_path.resolve())
+        assert [(item.track, item.unit, item.status) for item in plan.items] == [
+            ("laz_tile", current.sheet, "current"),
+            ("laz_tile", missing.sheet, "missing"),
+        ]
+        assert plan.items[1].available_label == laz_version_ref(missing).label
+        assert plan.items[1].available_signal == {
+            "url": missing.url,
+            "year": missing.year,
+            "date": missing.date,
+        }
+        assert provider.calls == []
+        assert not laz_slot(
+            FileStorage(
+                tmp_path, product="laz", resolution=None, vertical_crs="EVRF2007"
+            ),
+            missing,
+        ).std.exists()
+
+    def test_laz_upgrade_plan_stale_tile(self, tmp_path):
+        tile = _tile("N-33-131-B-a-1-1-4")
+        provider = FakeProvider()
+        plan = check_laz_updates(
+            _selection(tile), provider=provider, output_dir=tmp_path
+        )
+        changed = replace(tile, url=tile.url.replace("81121", "93455"))
+        outcome = run_laz_download(
+            _selection(changed),
+            provider=provider,
+            bbox=BBOX,
+            output_dir=tmp_path,
+            update="upgrade",
+            plan=plan,
+        )
+        assert outcome.files == () and outcome.stale == plan.items
+        assert provider.calls == []
+        # A changed index record must also be stale even if the file name stays.
+        changed_record = replace(tile, date="2025-08-12", year=2025)
+        stale_record = run_laz_download(
+            _selection(changed_record),
+            provider=provider,
+            bbox=BBOX,
+            output_dir=tmp_path,
+            update="upgrade",
+            plan=plan,
+        )
+        assert stale_record.files == () and stale_record.stale == plan.items
+        removed = run_laz_download(
+            _selection(),
+            provider=provider,
+            bbox=BBOX,
+            output_dir=tmp_path,
+            update="upgrade",
+            plan=plan,
+        )
+        assert removed.files == () and removed.stale == plan.items
+        assert provider.calls == []
+
+    def test_laz_upgrade_plan_skips_removed_items(self, tmp_path):
+        first, removed = (_tile(f"N-33-131-B-a-1-1-{i}") for i in (1, 2))
+        provider = FakeProvider()
+        checked = check_laz_updates(
+            _selection(first, removed), provider=provider, output_dir=tmp_path
+        )
+        plan = UpdatePlan(
+            store=checked.store,
+            checked_at=checked.checked_at,
+            kartograf_version=checked.kartograf_version,
+            items=checked.items[:1],
+        )
+        outcome = run_laz_download(
+            _selection(first, removed),
+            provider=provider,
+            bbox=BBOX,
+            output_dir=tmp_path,
+            update="upgrade",
+            plan=plan,
+        )
+        assert [file.status for file in outcome.files] == ["new"]
+        assert provider.calls == [first.url]
+        assert outcome.stale == ()
+        assert not laz_slot(
+            FileStorage(
+                tmp_path, product="laz", resolution=None, vertical_crs="EVRF2007"
+            ),
+            removed,
+        ).std.exists()
+
+    def test_laz_legacy_plain_file_replaced_by_link(self, tmp_path):
+        tile = _tile("N-33-131-B-a-1-1-4")
+        storage = FileStorage(
+            tmp_path, product="laz", resolution=None, vertical_crs="EVRF2007"
+        )
+        slot = laz_slot(storage, tile)
+        slot.std.parent.mkdir(parents=True)
+        slot.std.write_bytes(b"old plain tile")
+        old_sidecar = slot.std.with_name(f"{slot.name}.meta.json")
+        old_sidecar.write_text('{"schema":"kartograf-meta/1","extra":{}}')
+        provider = FakeProvider()
+        (file,) = run_laz_download(
+            _selection(tile), provider=provider, bbox=BBOX, output_dir=tmp_path
+        ).files
+        assert provider.calls == [tile.url] and file.status == "new"
+        assert file.path.read_bytes() == b"LASF"
+        assert file.path.stat().st_ino == file.version_path.stat().st_ino
+        assert _sidecar(slot.std)["extra"]["link"] == "hardlink"
+
+    def test_laz_update_check_rejected_without_network(self, tmp_path):
+        tile = _tile("N-33-131-B-a-1-1-4")
+        provider = FakeProvider()
+        with pytest.raises(ValidationError, match="check"):
+            run_laz_download(
+                _selection(tile),
+                provider=provider,
+                bbox=BBOX,
+                output_dir=tmp_path,
+                update="check",
+            )
+        assert provider.calls == []
 
     def test_superseded_tiles_pass_through(self, tmp_path):
         kept = _tile("N-34-139-A-c-1-1-3-4", "PL-1992", 2025)
@@ -272,7 +478,7 @@ class TestRunLazDownload:
         assert result.superseded == (old,)
         assert result.tiles == (kept,)
 
-    def test_parallel_workers_and_progress(self, tmp_path: Path) -> None:
+    def test_laz_parallel_workers_one_version_per_tile(self, tmp_path: Path) -> None:
         tiles = [_tile(f"N-33-131-B-a-1-1-{i}") for i in range(1, 7)]
         progress: list[tuple[int, int]] = []
         result = run_laz_download(
@@ -283,7 +489,13 @@ class TestRunLazDownload:
             max_workers=3,
             on_progress=lambda done, total: progress.append((done, total)),
         )
-        assert len(result.downloaded) == 6
+        assert len(result.files) == 6
+        assert [file.status for file in result.files] == ["new"] * 6
+        assert all(
+            file.path.stat().st_ino == file.version_path.stat().st_ino
+            for file in result.files
+        )
+        assert len(list(tmp_path.rglob("versions/**/*.laz.meta.json"))) == 6
         assert progress == [(i, 6) for i in range(1, 7)]
 
     def test_kron86_segment_follows_provider(self, tmp_path):
@@ -294,7 +506,7 @@ class TestRunLazDownload:
             bbox=BBOX,
             output_dir=tmp_path,
         )
-        (path,) = result.downloaded
+        (path,) = (file.path for file in result.files)
         assert "pl_2000_kron86" in path.parts
         assert _sidecar(path)["vertical_crs"] == "EPSG:9650"
 
@@ -320,7 +532,7 @@ class TestDownloadLazArea:
             "https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/"
             "83230/83230_1743191_N-34-139-A-c-1-1-3-4.laz"
         ]
-        (path,) = result.downloaded
+        (path,) = (file.path for file in result.files)
         assert path.parts[-11:-9] == ("laz", "pl_1992_evrf2007")
         assert sorted((s.tile.sheet, s.tile.year) for s in result.superseded) == [
             ("7.173.21.06.2", 2022),
@@ -341,7 +553,7 @@ class TestDownloadLazArea:
             vertical_crs="EVRF2007",
         )
         assert [(t.sheet, t.year) for t in result.tiles] == [("7.173.21.06.2", 2022)]
-        assert _sidecar(result.downloaded[0])["request"]["year"] == 2022
+        assert _sidecar(result.files[0].path)["request"]["year"] == 2022
 
     def test_year_with_empty_service_layer_conflicts_before_download(self, tmp_path):
         session = wfs_session()
@@ -356,6 +568,18 @@ class TestDownloadLazArea:
         assert caught.value.sheets == {"N-34-139-A-c-1-1-3-4": (2022, 2023, 2025)}
         assert downloaded_urls(session) == []
         assert list(tmp_path.iterdir()) == []
+
+    def test_check_mode_rejected_before_wfs_selection(self, tmp_path):
+        session = wfs_session()
+        with pytest.raises(ValidationError, match="check"):
+            download_laz_area(
+                W2_AREA,
+                output_dir=tmp_path,
+                vertical_crs="EVRF2007",
+                provider=GugikLazProvider(session=session, vertical_crs="EVRF2007"),
+                update="check",
+            )
+        session.get.assert_not_called()
 
     def test_vertical_crs_mismatch_with_provider_is_rejected(self, tmp_path):
         with pytest.raises(ValueError, match="KRON86"):
@@ -424,10 +648,22 @@ class TestCliOnRealWfs:
         assert "N-34-139-A-c-1-1-3-4 (2023, PL-1992): pokryty przez" in err
         assert not (tmp_path / "laz" / "pl_2000_evrf2007").exists()
 
+    def test_cli_local_then_force_redownloads_without_overwriting(self, tmp_path):
+        first, first_session = _cli(tmp_path, *self.W2, "--country", "pl")
+        second, second_session = _cli(tmp_path, *self.W2, "--country", "pl")
+        forced, forced_session = _cli(tmp_path, *self.W2, "--country", "pl", "--force")
+        assert (first, second, forced) == (0, 0, 0)
+        assert len(downloaded_urls(first_session)) == 1
+        assert downloaded_urls(second_session) == []
+        assert downloaded_urls(forced_session) == downloaded_urls(first_session)
+        assert len(list(tmp_path.rglob("versions/**/*.laz.meta.json"))) == 1
+
     def test_bbox_mode_sidecar_has_parent_request(self, tmp_path):
         rc, _ = _cli(tmp_path, *self.W2, "--country", "pl")
         assert rc == 0
-        (sidecar,) = tmp_path.rglob("*.meta.json")
+        (sidecar,) = (
+            p for p in tmp_path.rglob("*.meta.json") if "versions" not in p.parts
+        )
         extra = json.loads(sidecar.read_text("utf-8"))["extra"]
         assert extra["parent_request"] == {
             "bbox": [637400.0, 487000.0, 637450.0, 487050.0],
@@ -445,7 +681,9 @@ class TestCliOnRealWfs:
         bbox = f"{lon0:.6f},{lat0:.6f},{lon1:.6f},{lat1:.6f}"
         rc, _ = _cli(tmp_path, "--bbox", bbox, "--bbox-crs", "EPSG:4326", area="wgs")
         assert rc == 0
-        (sidecar,) = tmp_path.rglob("*.meta.json")
+        (sidecar,) = (
+            p for p in tmp_path.rglob("*.meta.json") if "versions" not in p.parts
+        )
         parent = json.loads(sidecar.read_text("utf-8"))["extra"]["parent_request"]
         assert parent["bbox_crs"] == "EPSG:4326"
         assert parent["bbox"] == [float(v) for v in bbox.split(",")]
@@ -454,7 +692,9 @@ class TestCliOnRealWfs:
     def test_sheet_mode_has_no_parent_request(self, tmp_path):
         rc, session = _cli(tmp_path, "--sheet", "N-34-139-A-c-1-1", area="sheet")
         assert rc == 0
-        sidecars = list(tmp_path.rglob("*.meta.json"))
+        sidecars = [
+            p for p in tmp_path.rglob("*.meta.json") if "versions" not in p.parts
+        ]
         assert len(sidecars) == len(downloaded_urls(session)) > 1
         for sidecar in sidecars:
             extra = json.loads(sidecar.read_text("utf-8"))["extra"]

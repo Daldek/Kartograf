@@ -1,9 +1,8 @@
-"""CZ (CUZK) DMR cutout in the library (A6, 0.7.1).
+"""Versioned CZ (CUZK) DMR bbox cutouts shared by the CLI and library.
 
-The CLI ``--country cz``/``auto`` bbox flow and library callers share one
-implementation: request normalization, download, the all-nodata flag and
-the sidecar. The grid starts at the requested bbox (as in the CLI before
-0.7.1); aligning it to the PL grid is a separate future spec.
+The result grid starts at the bbox normalized to the requested image CRS.
+The standard ``bbox/<coords>.tif`` path is a hardlink to an immutable
+version; local versions restore ``all_nodata`` from their sidecar.
 """
 
 import logging
@@ -12,7 +11,27 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from kartograf.core.bbox import BBox
-from kartograf.download.storage import bbox_cutout_path, prune_empty_dirs
+from kartograf.download.fetch import (
+    FileSlot,
+    UpdateMode,
+    VersionedFile,
+    fetch_version,
+    inspect_version,
+    link_version,
+    local_version,
+    validate_update,
+)
+from kartograf.download.plan import (
+    PlanItem,
+    UpdatePlan,
+    new_plan,
+    require_store,
+    select_planned,
+    store_id,
+)
+from kartograf.download.storage import bbox_slot
+from kartograf.download.versions import ContentDigest, VersionRef, read_version
+from kartograf.exceptions import ValidationError
 from kartograf.providers.cuzk.client import wkid
 from kartograf.providers.cuzk.dmr import CUZK_NODATA, NATIVE_CRS
 from kartograf.sources.registry import get_source
@@ -22,12 +41,11 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class CzCutoutResult:
-    """Result of ``run_cz_cutout`` / ``download_cz_cutout``."""
+    """Result of a CZ cutout; ``file=None`` only when a plan excludes a missing file."""
 
-    path: Path
-    skipped: bool = False  # file existed (force=False) - no network
-    # not a single valid pixel (area outside CUZK coverage); the file exists
+    file: VersionedFile | None
     all_nodata: bool = False
+    stale: tuple[PlanItem, ...] = ()
 
 
 def read_tif_nodata(path: Path) -> float | None:
@@ -64,9 +82,12 @@ def write_cz_sidecar(
     capability: str,
     horizontal_crs: str,
     nodata: float | None,
-    extra: dict | None = None,
+    extra: dict | None,
+    version: VersionRef,
+    digest: ContentDigest,
+    http: dict | None,
 ) -> None:
-    """Best-effort sidecar for a CZ result (an error does not abort the download).
+    """Write the mandatory, exclusive sidecar of a versioned CZ cutout.
 
     `horizontal_crs` is the CRS of the ACTUAL result (TM33 tile: EPSG:3045,
     --target-crs: the CRS requested by the user), not the channel's default CRS.
@@ -78,6 +99,9 @@ def write_cz_sidecar(
     """
     from kartograf.sources.sidecar import emit_sidecar
 
+    metadata_extra = dict(extra or {})
+    if http is not None:
+        metadata_extra["http"] = http
     emit_sidecar(
         provider.descriptor_key,
         target,
@@ -90,8 +114,60 @@ def write_cz_sidecar(
         },
         capability=capability,
         nodata=nodata,
-        extra=extra,
+        extra=metadata_extra,
+        version=version.to_extra(),
+        digest=(digest.sha256, digest.size_bytes),
+        exclusive=True,
     )
+
+
+def _cutout_slot(
+    provider, bbox: BBox, output_dir: str | Path, image_crs: str | None
+) -> tuple[BBox, str, FileSlot]:
+    """Normalize to the result CRS before choosing the stable bbox file name."""
+    from kartograf.providers.cuzk.dmr import bbox_to_crs  # CLI patch point
+
+    image_sr = image_crs or NATIVE_CRS
+    if wkid(bbox.crs) != wkid(image_sr):
+        bbox = bbox_to_crs(bbox, image_sr)
+    descriptor = get_source(provider.descriptor_key)
+    slot = bbox_slot(
+        output_dir,
+        descriptor.resolve_subdir(vertical_crs=provider.vertical_crs),
+        bbox,
+        ".tif",
+    )
+    return bbox, image_sr, slot
+
+
+def _result(
+    file: VersionedFile | None, stale: tuple[PlanItem, ...] = ()
+) -> CzCutoutResult:
+    """Read the nodata flag from the immutable version sidecar, not the raster."""
+    if file is None:
+        return CzCutoutResult(None, stale=stale)
+
+    version = read_version(file.version_path.parent, file.version_path.name)
+    extra = version.meta.get("extra", {}) if version is not None else {}
+    return CzCutoutResult(file, all_nodata=extra.get("all_nodata") is True, stale=stale)
+
+
+def check_cz_cutout(
+    provider,
+    bbox: BBox,
+    *,
+    output_dir: str | Path,
+    image_crs: str | None,
+) -> UpdatePlan:
+    """Check a CZ bbox version without raster access or network requests."""
+    _, _, slot = _cutout_slot(provider, bbox, output_dir, image_crs)
+    item = inspect_version(
+        slot,
+        track="cz_cutout",
+        unit=slot.std.stem,
+        signal="none",
+    )
+    return new_plan(store_id(output_dir), (item,))
 
 
 def run_cz_cutout(
@@ -100,71 +176,83 @@ def run_cz_cutout(
     *,
     output_dir: str | Path,
     image_crs: str | None,
-    force: bool = False,
+    update: UpdateMode | None = None,
+    plan: UpdatePlan | None = None,
     parent_request: dict | None = None,
     on_download: Callable[[], None] | None = None,
 ) -> CzCutoutResult:
-    """One CZ GeoTIFF for ``bbox`` with a given provider (CLI and library).
+    """Fetch or reuse a CZ cutout; planned upgrades fetch only selected files.
 
-    ``image_crs`` is the result CRS the provider was built for (None =
-    native EPSG:5514); the bbox is normalized to it before naming the file.
-    An existing file with ``force=False`` is returned as skipped
-    (``all_nodata`` read from it). A failed download removes the empty
-    ``<segment>/bbox/`` tree and re-raises.
+    A plan-excluded cutout with no local version returns ``file=None``.
+    Local versions restore ``all_nodata`` from their immutable sidecar.
     """
-    from kartograf.providers.cuzk.dmr import bbox_to_crs  # patch point of CLI tests
+    validate_update(update)
+    if plan is not None:
+        if update != "upgrade":
+            raise ValidationError("Plan wycinka CZ wymaga update='upgrade'")
+        require_store(plan, store_id(output_dir))
+    bbox, image_sr, slot = _cutout_slot(provider, bbox, output_dir, image_crs)
+    stale: tuple[PlanItem, ...] = ()
+    if plan is not None:
+        fresh = inspect_version(
+            slot,
+            track="cz_cutout",
+            unit=slot.std.stem,
+            signal="none",
+        )
+        todo, skipped = select_planned(plan, [fresh], "cz_cutout")
+        stale = tuple(skipped)
+        if not todo:
+            local = local_version(slot)
+            if local is None:
+                return _result(None, stale)
+            link_version(slot.std, local, refresh=False)
+            return _result(
+                VersionedFile(slot.std, "local", local.label, local.sha256, local.path),
+                stale,
+            )
 
-    image_sr = image_crs or NATIVE_CRS
-    if wkid(bbox.crs) != wkid(image_sr):
-        # normalization BEFORE naming the file: the name carries the
-        # coordinates of the actually requested cutout (in download_bbox
-        # this is already a no-op)
-        bbox = bbox_to_crs(bbox, image_sr)
-    descriptor = get_source(provider.descriptor_key)
-    target = bbox_cutout_path(
-        output_dir,
-        descriptor.resolve_subdir(vertical_crs=provider.vertical_crs),
-        bbox,
-        descriptor.default_extension,
-    )
-    if not force and target.exists():
-        return CzCutoutResult(
-            target,
-            skipped=True,
-            all_nodata=_all_nodata(target, read_tif_nodata(target)),
+    def fetch(staged: Path) -> None:
+        provider.download_bbox(bbox, staged, on_download=on_download)
+
+    def sidecar(
+        data: Path, ref: VersionRef, digest: ContentDigest, http: dict | None
+    ) -> None:
+        nodata = read_tif_nodata(data)
+        empty = _all_nodata(data, nodata)
+        if empty:
+            logger.warning(
+                f"Wycinek CZ {slot.std} jest w calosci nodata - obszar poza pokryciem "
+                "DMR CUZK (poza granica CZ?)"
+            )
+        extra: dict = {"all_nodata": empty}
+        if parent_request:
+            extra["parent_request"] = parent_request
+        write_cz_sidecar(
+            provider,
+            data,
+            request={
+                "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+                "bbox_crs": bbox.crs,
+            },
+            capability="bbox_raster",
+            horizontal_crs=image_sr,
+            nodata=nodata if nodata is not None else CUZK_NODATA,
+            extra=extra,
+            version=ref,
+            digest=digest,
+            http=http,
         )
-    # the provider creates directories only when fetching - the sidecar needs them
-    target.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        provider.download_bbox(bbox, target, on_download=on_download)
-    except BaseException:
-        # a failure leaves no empty <segment>/bbox/ tree
-        prune_empty_dirs(target.parent, Path(output_dir))
-        raise
-    nodata = read_tif_nodata(target)
-    empty = _all_nodata(target, nodata)
-    if empty:
-        # A6: the library reports it too (result flag + sidecar + log)
-        logger.warning(
-            f"Wycinek CZ {target} jest w calosci nodata — obszar poza pokryciem "
-            "DMR CUZK (poza granica CZ?)"
-        )
-    extra: dict = {"all_nodata": empty}
-    if parent_request:
-        extra["parent_request"] = parent_request
-    write_cz_sidecar(
-        provider,
-        target,
-        request={
-            "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
-            "bbox_crs": bbox.crs,
-        },
-        capability="bbox_raster",
-        horizontal_crs=image_sr,
-        nodata=nodata if nodata is not None else CUZK_NODATA,
-        extra=extra,
+
+    file = fetch_version(
+        slot,
+        update,
+        signal="none",
+        fetch=fetch,
+        version=VersionRef.downloaded(),
+        write_sidecar=sidecar,
     )
-    return CzCutoutResult(target, all_nodata=empty)
+    return _result(file, stale)
 
 
 def download_cz_cutout(
@@ -174,7 +262,7 @@ def download_cz_cutout(
     target_crs: str,
     vertical_crs: str,
     resolution: str,
-    force: bool = False,
+    update: UpdateMode | None = None,
     cache=None,
     parent_request: dict | None = None,
 ) -> CzCutoutResult:
@@ -207,6 +295,6 @@ def download_cz_cutout(
         bbox,
         output_dir=output_dir,
         image_crs=image_crs,
-        force=force,
+        update=update,
         parent_request=parent_request,
     )

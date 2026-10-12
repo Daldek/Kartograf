@@ -182,12 +182,8 @@ class TestParallelDownloadHierarchy:
             output_dir=tmp_path, provider=mock_provider, max_workers=2
         )
 
-        # Pre-create some files
-        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
-        for sheet in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"]:
-            path = storage.get_path(sheet, ".asc")
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"existing")
+        # Pre-download some sheets (local versions)
+        manager.download_sheets(["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"])
 
         progress_calls = []
 
@@ -275,9 +271,7 @@ class TestDownloadHierarchyLastResult:
         manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
 
         existing_sheet = "N-34-130-D-d-2-2"
-        existing_path = manager.storage.get_path(existing_sheet, ".asc")
-        existing_path.parent.mkdir(parents=True, exist_ok=True)
-        existing_path.write_bytes(b"existing")
+        manager.download_sheets([existing_sheet])  # a local version
 
         with caplog.at_level(logging.INFO, logger="kartograf.download.manager"):
             paths = manager.download_hierarchy(
@@ -319,9 +313,7 @@ class TestDownloadHierarchyLastResult:
 
         provider.download = mock_download
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
-        existing = manager.storage.get_path("N-34-130-D-d-2-2", ".asc")
-        existing.parent.mkdir(parents=True, exist_ok=True)
-        existing.write_bytes(b"existing")
+        manager.download_sheets(["N-34-130-D-d-2-2"])  # a local version
 
         events = []
         manager.download_hierarchy(
@@ -522,131 +514,64 @@ class TestProviderThreadSafety:
 class TestLandCoverParallelDownload:
     """Tests for LandCoverManager.download_batch."""
 
-    def test_download_batch_sequential(self, tmp_path):
-        """Test download_batch with max_workers=1 (sequential)."""
-        mock_provider = Mock()
-        mock_provider.name = "bdot10k"
-        mock_provider.get_available_layers.return_value = []
+    @staticmethod
+    def _bdot(tmp_path, fail=()):
+        from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
 
-        call_count = {"n": 0}
+        provider = Bdot10kProvider()
+        calls: list[str] = []
+        lock = threading.Lock()
 
-        def mock_download_by_teryt(teryt, output_path, **kwargs):
-            call_count["n"] += 1
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_bytes(b"data")
-            return output_path
+        def package(code, output_path, **kwargs):
+            with lock:
+                calls.append(code)
+            if code in fail:
+                raise DownloadError("Network error")
+            output_path.write_bytes(f"data-{code}".encode())
+            return Bdot10kPackage(path=output_path, teryt=code, url="u", format="GPKG")
 
-        mock_provider.download_by_teryt = mock_download_by_teryt
+        patcher = patch.object(provider, "download_package", side_effect=package)
+        return LandCoverManager(output_dir=tmp_path, provider=provider), calls, patcher
 
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
+    ITEMS = [{"teryt": "1465"}, {"teryt": "1261"}, {"teryt": "0616"}]
 
-        items = [
-            {"teryt": "1465"},
-            {"teryt": "1261"},
-            {"teryt": "0616"},
-        ]
-
-        results = manager.download_batch(items, max_workers=1)
-
-        assert len(results) == 3
-        assert call_count["n"] == 3
-
-    def test_download_batch_parallel(self, tmp_path):
-        """Test download_batch with max_workers=2."""
-        mock_provider = Mock()
-        mock_provider.name = "bdot10k"
-        mock_provider.get_available_layers.return_value = []
-
-        def mock_download_by_teryt(teryt, output_path, **kwargs):
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_bytes(f"data-{teryt}".encode())
-            return output_path
-
-        mock_provider.download_by_teryt = mock_download_by_teryt
-
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-
-        items = [
-            {"teryt": "1465"},
-            {"teryt": "1261"},
-            {"teryt": "0616"},
-        ]
-
-        results = manager.download_batch(items, max_workers=2)
-
-        assert len(results) == 3
+    @pytest.mark.parametrize("workers", [1, 2])
+    def test_download_batch_every_item_in_store(self, tmp_path, workers):
+        manager, calls, patcher = self._bdot(tmp_path)
+        with patcher:
+            results = manager.download_batch(self.ITEMS, max_workers=workers)
+        assert sorted(calls) == ["0616", "1261", "1465"]
+        assert sorted(r.unit for r in results) == ["0616", "1261", "1465"]
+        for r in results:
+            assert r.file.path.read_bytes() == f"data-{r.unit}".encode()
 
     def test_download_batch_handles_failures(self, tmp_path):
-        """Test that download_batch logs failures but continues."""
-        mock_provider = Mock()
-        mock_provider.name = "bdot10k"
-        mock_provider.get_available_layers.return_value = []
-
-        call_count = {"n": 0}
-
-        def mock_download_by_teryt(teryt, output_path, **kwargs):
-            call_count["n"] += 1
-            if teryt == "1261":
-                raise DownloadError("Network error")
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_bytes(b"data")
-            return output_path
-
-        mock_provider.download_by_teryt = mock_download_by_teryt
-
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-
-        items = [
-            {"teryt": "1465"},
-            {"teryt": "1261"},
-            {"teryt": "0616"},
-        ]
-
-        results = manager.download_batch(items, max_workers=2)
-
-        # 2 succeeded, 1 failed
-        assert len(results) == 2
+        """A failed item is logged; the others still land in the store."""
+        manager, _, patcher = self._bdot(tmp_path, fail={"1261"})
+        with patcher:
+            results = manager.download_batch(self.ITEMS, max_workers=2)
+        assert sorted(r.unit for r in results) == ["0616", "1465"]
 
     def test_download_batch_empty_list(self, tmp_path):
-        """Test download_batch with empty list returns empty."""
-        mock_provider = Mock()
-        mock_provider.name = "bdot10k"
-        mock_provider.get_available_layers.return_value = []
-
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-
-        results = manager.download_batch([], max_workers=2)
-
-        assert results == []
+        manager = LandCoverManager(output_dir=tmp_path, provider="bdot10k")
+        assert manager.download_batch([], max_workers=2) == []
 
     def test_download_batch_with_kwargs(self, tmp_path):
-        """Test download_batch passes kwargs to each download."""
-        mock_provider = Mock()
-        mock_provider.name = "corine"
-        mock_provider.get_available_layers.return_value = []
+        """Batch options (CORINE ``year``) select the segment of every item."""
+        from kartograf.providers.corine import CorineProvider
+        from tests.conftest import FakeCorine
 
-        def mock_download_by_sheet(sheet, output_path, **kwargs):
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            # Store kwargs in file to verify they were passed
-            output_path.write_bytes(str(kwargs).encode())
-            return output_path
-
-        mock_provider.download_by_sheet = mock_download_by_sheet
-
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-
-        items = [
-            {"sheet": "N-34-130-D"},
-            {"sheet": "N-34-130-C"},
+        provider = CorineProvider(session=FakeCorine(), use_proxy=False)
+        manager = LandCoverManager(output_dir=tmp_path, provider=provider)
+        items = [{"sheet": "N-34-130-D"}, {"sheet": "N-34-130-C"}]
+        with patch.object(CorineProvider, "has_clms_token", new=False):
+            results = manager.download_batch(items, max_workers=1, year=2012)
+        assert sorted(r.file.path.name for r in results) == [
+            "N-34-130-C.png",
+            "N-34-130-D.png",
         ]
-
-        results = manager.download_batch(items, max_workers=1, year=2018)
-
-        assert len(results) == 2
-        # Verify kwargs were passed through
-        for path in results:
-            content = path.read_bytes().decode()
-            assert "'year': 2018" in content
+        for r in results:
+            assert "eu_corine_2012_preview" in r.file.path.parts[-5]
 
 
 class TestCLIWorkersFlag:

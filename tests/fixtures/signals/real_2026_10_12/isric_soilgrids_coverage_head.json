@@ -1,0 +1,11 @@
+{
+  "url": "https://maps.isric.org/mapserv?map=/map/clay.map&SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=clay_0-5cm_mean&FORMAT=image%2Ftiff&SUBSETTINGCRS=http%3A%2F%2Fwww.opengis.net%2Fdef%2Fcrs%2FEPSG%2F0%2F4326&OUTPUTCRS=http%3A%2F%2Fwww.opengis.net%2Fdef%2Fcrs%2FEPSG%2F0%2F4326&SUBSET=long(19.01,19.03)&SUBSET=lat(50.01,50.03)",
+  "method": "HEAD",
+  "status": 200,
+  "headers": {
+    "Content-Type": "text/html",
+    "Content-Length": "181",
+    "Cache-Control": "max-age=0, must-revalidate, no-cache, no-store"
+  },
+  "recorded": "2026-10-12"
+}

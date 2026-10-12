@@ -9,6 +9,7 @@ in the sidecar (``build_metadata(capability=)``) and are not enforced in manager
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Literal
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import ValidationError
@@ -22,9 +23,16 @@ class TransportKind(StrEnum):
     WFS = "wfs"  # PL LAZ
     DIRECT_FILES = "direct_files"  # PL BDOT10k, CZ openzu (DMR 4G)
     CLMS_API = "clms_api"  # CORINE
+    WMS = "wms"  # CORINE preview (EEA/DLR styled PNG, not data)
     ARCGIS_IMAGE = "arcgis_image"  # stage 1 (CZ exportImage)
     ARCGIS_QUERY = "arcgis_query"  # stage 3 (ZABAGED), SK
     OGC_API_FEATURES = "ogc_api_features"  # DE basemap.de
+
+
+# Cheap freshness signal of a channel (versioned store spec 4.1, 8): the
+# sheet index record (``index``), source metadata (``metadata``), HTTP
+# ``ETag``/``Last-Modified`` of the file (``http``) or none (``none``).
+SignalKind = Literal["index", "metadata", "http", "none"]
 
 
 @dataclass(frozen=True)
@@ -51,6 +59,9 @@ class AccessChannel:
     endpoint: str = ""
     # Channel URL for descriptor-driven engines (stage 1: CuzkClient).
     # PL entries: "" - the provider constants remain the source of truth (stage 0).
+    update_signal: SignalKind = "none"
+    # Freshness signal of THIS channel (one dataset may have several, e.g.
+    # CZ DMR 4G: SM5 files with ETag, exportImage without a content signal).
 
 
 @dataclass(frozen=True)
@@ -75,8 +86,9 @@ class SourceDescriptor:
     provider_name: str  # "GUGiK", "CUZK", ...
     channels: tuple[AccessChannel, ...]
     tile_scheme: TileScheme | None
-    # Segment template {system}/{vcrs} (ADR-026); None for LandCoverManager sources
-    storage_subdir: str | None
+    # Segment template {system}/{vcrs} (ADR-026); land cover: a prefix completed
+    # by content tokens (landcover.store.landcover_segment, spec 3.4)
+    storage_subdir: str
     default_extension: str
     license: LicenseInfo
     resolution: str | None = None
@@ -98,8 +110,6 @@ class SourceDescriptor:
         this check it produced a silent, dangling storage segment (e.g.
         `nmt/pl_1992_1m_`, review max 2026-08-30, finding 7).
         """
-        if self.storage_subdir is None:
-            raise ValueError(f"Zrodlo '{self.key}' nie ma storage_subdir")
         for name, value in (("system", system), ("vcrs", vertical_crs)):
             if value is not None and not value.strip():
                 raise ValidationError(

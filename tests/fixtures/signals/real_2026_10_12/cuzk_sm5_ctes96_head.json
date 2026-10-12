@@ -1,0 +1,12 @@
+{
+  "url": "https://openzu.cuzk.gov.cz/opendata/DMR4G-TIFF/epsg-5514/CTES96.zip",
+  "method": "HEAD",
+  "status": 200,
+  "headers": {
+    "Content-Length": "752795",
+    "Content-Type": "application/x-zip-compressed",
+    "Last-Modified": "Mon, 19 Jan 2026 14:10:33 GMT",
+    "ETag": "\"d19f2c604d89dc1:0\""
+  },
+  "recorded": "2026-10-12"
+}

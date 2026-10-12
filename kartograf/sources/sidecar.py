@@ -179,6 +179,12 @@ def _select_channel_by_capability(
     )
 
 
+def _now_iso() -> str:
+    """``downloaded_at``: UTC with microseconds — orders two versions of
+    one file downloaded within the same second (``version_key``)."""
+    return datetime.now(UTC).isoformat(timespec="microseconds")
+
+
 def build_metadata(
     descriptor: SourceDescriptor,
     *,
@@ -190,6 +196,8 @@ def build_metadata(
     capability: str | None = None,
     nodata: float | None = None,
     horizontal_crs: str | None = None,
+    digest: tuple[str, int] | None = None,
+    version: dict | None = None,
 ) -> ResultMetadata:
     """Build metadata from the descriptor + the call context.
 
@@ -198,6 +206,10 @@ def build_metadata(
     (channel ``sheet_files``) gets the CRS from ``pl_sheet_horizontal_crs``
     - the PL-2000 zone from the sheet code checked against the file's coordinates;
     other results inherit the channel's ``horizontal_crs``.
+
+    ``digest`` — (sha256, size) computed by the store commit from the same
+    read (D20); the file is then not hashed again. ``version`` becomes
+    ``extra.version`` (a version sidecar is written once, D12).
     """
     if capability is not None:
         channel = _select_channel_by_capability(descriptor, capability)
@@ -213,8 +225,12 @@ def build_metadata(
 
     sha256: str | None = None
     size_bytes: int | None = None
-    if data_path is not None and Path(data_path).is_file():
+    if digest is not None:
+        sha256, size_bytes = digest
+    elif data_path is not None and Path(data_path).is_file():
         sha256, size_bytes = file_digest(Path(data_path))
+    if version is not None:
+        extra = {**(extra or {}), "version": dict(version)}
 
     return ResultMetadata(
         dataset=descriptor.key,
@@ -237,13 +253,17 @@ def build_metadata(
         extra=extra or {},
         sha256=sha256,
         size_bytes=size_bytes,
-        downloaded_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        downloaded_at=_now_iso(),
         kartograf_version=build_version(),
     )
 
 
 def write_sidecar(
-    data_path: Path, meta: ResultMetadata, *, atomic: bool = False
+    data_path: Path,
+    meta: ResultMetadata | dict,
+    *,
+    atomic: bool = False,
+    exclusive: bool = False,
 ) -> Path:
     """Write `<data_path>.meta.json` next to the data file; return the sidecar path.
 
@@ -252,24 +272,38 @@ def write_sidecar(
     on error the returned path points to a file that was NOT created.
 
     ``atomic=True`` (mandatory sidecar, ADR-030 errata 2 N-1): written to
-    ``<name>.meta.json.<pid>_<tid>.tmp`` + ``os.replace``; ``OSError``
-    PROPAGATES, the tmp file is cleaned up (never a partial sidecar).
+    ``<name>.meta.json.<pid>_<tid>.tmp``, ``fsync`` + ``os.replace``;
+    ``OSError`` PROPAGATES, the tmp file is cleaned up (never a partial
+    sidecar).
+
+    ``exclusive=True`` (version sidecar, D18/D21): as ``atomic`` but published
+    with ``os.link`` - never replaces an existing sidecar; ``FileExistsError``
+    means another writer published it first.
+
+    ``meta`` may be a plain ``dict`` (bare version sidecar of a provider
+    without a descriptor, ``emit_sidecar``).
     """
     sidecar_path = data_path.parent / f"{data_path.name}.meta.json"
-    if atomic:
-        payload = json.dumps(asdict(meta), ensure_ascii=False, indent=2)
+    fields = meta if isinstance(meta, dict) else asdict(meta)
+    if atomic or exclusive:
+        payload = json.dumps(fields, ensure_ascii=False, indent=2)
         tmp = sidecar_path.with_name(
             f"{sidecar_path.name}.{os.getpid()}_{threading.get_ident()}.tmp"
         )
         try:
-            tmp.write_text(payload + "\n", encoding="utf-8")
-            os.replace(tmp, sidecar_path)
-        except BaseException:
+            with open(tmp, "w", encoding="utf-8") as f:
+                f.write(payload + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+            if exclusive:
+                os.link(tmp, sidecar_path)
+            else:
+                os.replace(tmp, sidecar_path)
+        finally:
             tmp.unlink(missing_ok=True)
-            raise
         return sidecar_path
     try:
-        payload = json.dumps(asdict(meta), ensure_ascii=False, indent=2)
+        payload = json.dumps(fields, ensure_ascii=False, indent=2)
         sidecar_path.write_text(payload + "\n", encoding="utf-8")
     except OSError as e:
         logger.warning(f"Nie udalo sie zapisac sidecara {sidecar_path}: {e}")
@@ -293,6 +327,9 @@ def emit_sidecar(
     capability: str | None = None,
     nodata: float | None = None,
     required: bool = False,
+    digest: tuple[str, int] | None = None,
+    version: dict | None = None,
+    exclusive: bool = False,
 ) -> Path | None:
     """Best-effort result sidecar - the one place of the policy "a sidecar never
     aborts the download" (D7): any build/write exception ends in
@@ -310,6 +347,14 @@ def emit_sidecar(
     any build/write exception ends in ``DownloadError`` - the caller
     chooses only the mode, the interpretation of the failure stays here (D7).
 
+    ``exclusive=True`` (version sidecar, implies ``required``): published with
+    ``os.link`` (``write_sidecar(exclusive=True)``); ``FileExistsError``
+    PROPAGATES unchanged - another writer published the sidecar first.
+    ``digest``/``version`` as in ``build_metadata``. A version must always
+    have a sidecar, so without a descriptor a BARE one is written: only
+    ``request``, ``extra``, ``sha256``, ``size_bytes``, ``downloaded_at``
+    and ``kartograf_version`` (a stub or foreign provider; plan 1/3 decision 7).
+
     Returns
     -------
     Path or None
@@ -319,10 +364,12 @@ def emit_sidecar(
     Raises
     ------
     DownloadError
-        Only with ``required=True``, when the sidecar was not created.
+        Only with ``required=True``/``exclusive=True``, when the sidecar was
+        not created.
     """
     sidecar_path = data_path.parent / f"{data_path.name}.meta.json"
-    if not isinstance(descriptor_key, str):
+    required = required or exclusive
+    if not isinstance(descriptor_key, str) and not exclusive:
         if required:
             raise DownloadError(
                 f"Nie udalo sie zapisac obowiazkowego sidecara {sidecar_path}: "
@@ -330,6 +377,19 @@ def emit_sidecar(
             )
         return None
     try:
+        if not isinstance(descriptor_key, str):
+            sha256, size_bytes = (
+                digest if digest is not None else file_digest(data_path)
+            )
+            bare = {
+                "request": request,
+                "extra": {**(extra or {}), **({"version": version} if version else {})},
+                "sha256": sha256,
+                "size_bytes": size_bytes,
+                "downloaded_at": _now_iso(),
+                "kartograf_version": build_version(),
+            }
+            return write_sidecar(data_path, bare, exclusive=True)
         from kartograf.sources.registry import get_source
 
         transform = {
@@ -347,9 +407,13 @@ def emit_sidecar(
             capability=capability,
             nodata=nodata,
             horizontal_crs=horizontal_crs,
+            digest=digest,
+            version=version,
         )
-        return write_sidecar(data_path, meta, atomic=required)
+        return write_sidecar(data_path, meta, atomic=required, exclusive=exclusive)
     except Exception as e:  # noqa: BLE001 — failure policy in one place (D7)
+        if exclusive and isinstance(e, FileExistsError):
+            raise
         if required:
             raise DownloadError(
                 f"Nie udalo sie zapisac obowiazkowego sidecara {sidecar_path}: {e}"

@@ -45,6 +45,7 @@ from kartograf.transform.crs import (
     build_pinned_transform,
 )
 from kartograf.transform.raster import warp_to_grid
+from kartograf.transport.http import head_signal
 
 logger = logging.getLogger(__name__)
 
@@ -222,6 +223,7 @@ class CuzkDmrProvider(BaseProvider):
         timeout: int = _DEFAULT_TIMEOUT,
         *,
         on_download: Callable[[], None] | None = None,
+        on_response: Callable[[requests.Response], None] | None = None,
     ) -> Path:
         """Download a TM33 tile (grid in 3045) or an SM5 sheet (openzu, 5514).
 
@@ -249,7 +251,7 @@ class CuzkDmrProvider(BaseProvider):
                 f"(TM33: 302_5550, SM5: CTES96)"
             )
         if system.id == "cz_sm5":
-            self._download_sm5(sheet, output_path, timeout, on_download)
+            self._download_sm5(sheet, output_path, timeout, on_download, on_response)
         else:  # cz_tm33
             # Parsing through ParserTM33 (full validation: even kilometres),
             # not through the system registry regex alone.
@@ -372,14 +374,15 @@ class CuzkDmrProvider(BaseProvider):
             NATIVE_CRS,
         )
 
-    def _download_sm5(
-        self,
-        sheet: str,
-        output_path: Path,
-        timeout: int,
-        on_download: Callable[[], None] | None = None,
-    ) -> None:
-        """SM5 sheet (DMR 4G) from openzu + CRS metadata repair."""
+    def sm5_signal(self, sheet: str, timeout: int = _DEFAULT_TIMEOUT) -> dict:
+        """Current HTTP signal of the SM5 openzu ZIP, without downloading it."""
+        sheet = sheet.strip()
+        if detect_system(sheet).id != "cz_sm5":
+            raise ValidationError(f"Godlo '{sheet}' nie jest arkuszem SM5")
+        url = self._sm5_url(sheet)
+        return head_signal(self._session, url, timeout=timeout)
+
+    def _sm5_url(self, sheet: str) -> str:
         if self._resolution != "5m":
             raise ValidationError(
                 f"Arkusze SM5 sa dostepne tylko dla --resolution 5m "
@@ -392,12 +395,25 @@ class CuzkDmrProvider(BaseProvider):
                 f"{TransportKind.DIRECT_FILES.name} z endpointem — "
                 f"pobieranie arkuszy SM5 niemozliwe"
             )
+        return self._files_endpoint.format(sheet=sheet)
+
+    def _download_sm5(
+        self,
+        sheet: str,
+        output_path: Path,
+        timeout: int,
+        on_download: Callable[[], None] | None = None,
+        on_response: Callable[[requests.Response], None] | None = None,
+    ) -> None:
+        """SM5 sheet (DMR 4G) from openzu + CRS metadata repair."""
+        url = self._sm5_url(sheet)
         self._sheet_index.sm5_sheet(sheet)  # validation before download
-        url = self._files_endpoint.format(sheet=sheet)
         if on_download is not None:
             on_download()
         try:
-            self._client_for(timeout).fetch_file(url, output_path, unzip_single=".tif")
+            self._client_for(timeout).fetch_file(
+                url, output_path, unzip_single=".tif", on_response=on_response
+            )
         except DownloadError as e:
             # spec section 7: 404 from openzu -> hint to verify the sheet code
             raise DownloadError(

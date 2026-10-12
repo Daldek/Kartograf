@@ -5,11 +5,26 @@
 import argparse
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from kartograf.cli._parser import parse_bbox_arg
-from kartograf.cli.download_cmd import _announce_geometry_layer
-from kartograf.core.sheet_parser import SheetParser
+from kartograf.cli.download_cmd import (
+    _announce_geometry_layer,
+    _plan_context,
+    _report_file,
+    _report_plan,
+    _report_stale,
+    _unit_of,
+    _update_mode,
+    run_with_plan_file,
+)
+from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.download.fetch import UpdateMode
+from kartograf.download.plan import PlanItem
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
+
+if TYPE_CHECKING:
+    from kartograf.hydrology import HSGCalculator
 
 
 def cmd_soilgrids(args: argparse.Namespace) -> int:
@@ -55,7 +70,8 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
     missing = []
     if args.output is None:
         missing.append(
-            "--output wymagane: dowolna sciezka pliku GeoTIFF .tif lub katalogu wyniku"
+            "--output wymagane: katalog magazynu (wejscia w <DIR>/soil/..., "
+            "HSG w <DIR>/hsg/...)"
         )
     if args.depth is None:
         missing.append(
@@ -65,6 +81,13 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
     if missing:
         for error in missing:
             print(f"Error: {error}", file=sys.stderr)
+        return 1
+    if Path(args.output).suffix.lower() in (".tif", ".tiff"):
+        print(
+            "Error: --output to katalog magazynu (od 0.8.0); plik poza "
+            "magazynem: hsg_from_rasters",
+            file=sys.stderr,
+        )
         return 1
 
     from kartograf.hydrology import HSGCalculator
@@ -99,15 +122,6 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
             print(f"Error: {e}", file=sys.stderr)
             return 1
 
-    # Determine output path
-    output_path = Path(args.output)
-    if sheet:
-        if output_path.suffix.lower() != ".tif":
-            # Output is a directory; the directory itself is created on write
-            output_path = output_path / f"hsg_{sheet}_{args.depth}.tif"
-    elif (args.bbox or has_geometry) and output_path.suffix.lower() != ".tif":
-        output_path = output_path / f"hsg_bbox_{args.depth}.tif"
-
     # Parse bbox if provided (or compute from geometry)
     bbox = None
     if has_geometry:
@@ -125,8 +139,7 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
         # zly bbox -> ValidationError -> Error: w main (stderr, kod 1)
         bbox = parse_bbox_arg(args.bbox, "EPSG:2180")
 
-    # Create calculator
-    calc = HSGCalculator()
+    calc = HSGCalculator(Path(args.output))
 
     print("Calculating Hydrologic Soil Groups (HSG)...")
     if sheet:
@@ -139,43 +152,9 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
     print()
 
     try:
-        if sheet:
-            result_path = calc.calculate_hsg_by_sheet(
-                sheet=sheet,
-                output_path=output_path,
-                depth=args.depth,
-                keep_intermediate=args.keep_intermediate,
-                stat="mean",  # HSG uses the mean texture estimate
-            )
-        else:
-            result_path = calc.calculate_hsg_by_bbox(
-                bbox=bbox,
-                output_path=output_path,
-                depth=args.depth,
-                keep_intermediate=args.keep_intermediate,
-                stat="mean",  # HSG uses the mean texture estimate
-            )
-
-        print(f"HSG raster saved to: {result_path}")
-
-        # Print statistics if requested
-        if args.stats:
-            print()
-            print("HSG Statistics:")
-            stats = calc.get_hsg_statistics(result_path)
-            for group, data in stats.items():
-                pct = data["percent"]
-                area = data["area_ha"]
-                print(f"  Group {group}: {pct:.1f}% ({area:.2f} ha)")
-                print(f"           {data['description']}")
-
-        print()
-        print("Legend: 1=A (high infiltration), 2=B (moderate),")
-        print("        3=C (slow), 4=D (very slow)")
-        print("Use with SCS-CN method: HSG + Land Use -> Curve Number")
-
-        return 0
-
+        return run_with_plan_file(
+            args, lambda a: _hsg_task(a, calc, sheet, bbox, _update_mode(a))
+        )
     except (ParseError, ValidationError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
@@ -185,3 +164,63 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
+
+
+def _plan_label(item: PlanItem) -> str:
+    """``clay <unit>`` / ``hsg <unit>``: the layer of a position in its line."""
+    if item.track == "hsg":
+        return f"hsg {item.unit}"
+    # soil/global_soilgrids_<property>_<depth>_<stat>
+    return f"{item.segment.rsplit('/', 1)[-1].split('_')[2]} {item.unit}"
+
+
+def _hsg_task(
+    args: argparse.Namespace,
+    calc: "HSGCalculator",
+    sheet: str | None,
+    bbox: BBox | None,
+    update: UpdateMode | None,
+) -> int:
+    """One ``soilgrids hsg`` request: a plan (``--check-updates``) or the
+    inputs and the HSG with one status line each (spec 4.5)."""
+    stat = "mean"  # HSG uses the mean texture estimate
+    if args.check_updates:
+        if sheet:
+            plan = calc.check_hsg_by_sheet(sheet, depth=args.depth, stat=stat)
+        else:
+            assert bbox is not None
+            plan = calc.check_hsg_by_bbox(bbox, depth=args.depth, stat=stat)
+        return _report_plan(args, plan, _plan_label)
+    loaded = _plan_context(args).loaded
+    if sheet:
+        result = calc.calculate_hsg_by_sheet(
+            sheet, depth=args.depth, stat=stat, update=update, plan=loaded
+        )
+    else:
+        assert bbox is not None
+        result = calc.calculate_hsg_by_bbox(
+            bbox, depth=args.depth, stat=stat, update=update, plan=loaded
+        )
+    out = Path(args.output)
+    for item in result.inputs:
+        if item.file is not None:
+            _report_file(args, _unit_of(item.file.path, out), item.file, update)
+    if result.file is not None:
+        _report_file(args, _unit_of(result.file.path, out), result.file, update)
+    rc = _report_stale(result.stale)
+
+    if args.stats and result.file is not None:
+        print()
+        print("HSG Statistics:")
+        stats = calc.get_hsg_statistics(result.file.path)
+        for group, data in stats.items():
+            pct = data["percent"]
+            area = data["area_ha"]
+            print(f"  Group {group}: {pct:.1f}% ({area:.2f} ha)")
+            print(f"           {data['description']}")
+
+    print()
+    print("Legend: 1=A (high infiltration), 2=B (moderate),")
+    print("        3=C (slow), 4=D (very slow)")
+    print("Use with SCS-CN method: HSG + Land Use -> Curve Number")
+    return rc

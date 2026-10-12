@@ -1,0 +1,1 @@
+{"displayFieldName":"ID","fieldAliases":{"rok":"Rok aktualizace","id":"ID"},"fields":[{"name":"rok","type":"esriFieldTypeInteger","alias":"Rok aktualizace"},{"name":"id","type":"esriFieldTypeInteger","alias":"ID"}],"features":[{"attributes":{"rok":2010,"id":525}}]}

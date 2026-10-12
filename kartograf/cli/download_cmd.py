@@ -7,7 +7,9 @@ import contextlib
 import json
 import math
 import sys
-from collections.abc import Iterator, Sequence
+from collections import Counter
+from collections.abc import Callable, Iterator, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -29,13 +31,17 @@ from kartograf.download.countries import CountryPart
 from kartograf.download.countries import bbox_to_wgs84 as _bbox_to_wgs84
 from kartograf.download.countries import countries_for_bbox as _countries_for_bbox
 from kartograf.download.countries import country_bbox as _country_bbox
-from kartograf.download.cz_cutout import read_tif_nodata as _read_tif_nodata
-from kartograf.download.cz_cutout import write_cz_sidecar as _write_cz_sidecar
+from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import (
     DownloadManager,
     DownloadProgress,
     DownloadResult,
     SheetFetch,
+)
+from kartograf.download.plan import PlanItem, UpdatePlan
+from kartograf.download.updates import (
+    check_updates,
+    upgrade,
 )
 from kartograf.exceptions import (
     DownloadError,
@@ -1072,9 +1078,73 @@ def _geometry_envelope(filepath: Path, layer: str | None) -> BBox:
     return get_overall_bbox(filepath, layer=layer, target_crs="EPSG:2180")
 
 
+@dataclass
+class _PlanContext:
+    """Update plan of one ``download`` run, shared by every track.
+
+    ``--check-updates`` collects one plan per track (``plans``) and writes
+    them as ONE plan file (``--country auto``: PL and CZ, ``UpdatePlan.merge``);
+    ``--upgrade --plan`` reads the file once (``loaded``) and every track
+    executes its own positions.
+    """
+
+    plans: list[UpdatePlan] = field(default_factory=list)
+    loaded: UpdatePlan | None = None
+
+
+def _plan_context(args: argparse.Namespace) -> _PlanContext:
+    """The run's plan context (a bare ``Namespace`` in tests: a fresh one)."""
+    ctx = getattr(args, "plan_ctx", None)
+    if not isinstance(ctx, _PlanContext):
+        ctx = _PlanContext()
+        args.plan_ctx = ctx
+    return ctx
+
+
+def run_with_plan_file(
+    args: argparse.Namespace, body: Callable[[argparse.Namespace], int]
+) -> int:
+    """Plan file cycle of a store command (``download``, ``landcover
+    download``, ``soilgrids hsg``; spec 4.4).
+
+    ``--upgrade --plan`` reads the plan before any work (``_PlanContext.loaded``);
+    ``--check-updates --plan`` writes the plans collected by ``body``
+    (``_report_plan``) as ONE file after it. A plan that cannot be read =
+    ``Error:``, code 1, no work.
+    """
+    ctx = _PlanContext()
+    args.plan_ctx = ctx
+    plan_file = getattr(args, "plan", None)
+    if getattr(args, "upgrade", False) and plan_file:
+        try:
+            ctx.loaded = UpdatePlan.from_json(
+                Path(plan_file).read_text(encoding="utf-8")
+            )
+        except OSError as e:
+            print(
+                f"Error: nie udalo sie odczytac planu {plan_file}: {e}", file=sys.stderr
+            )
+            return 1
+        except ValidationError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+    rc = body(args)
+    if getattr(args, "check_updates", False) and plan_file and ctx.plans:
+        plan = ctx.plans[0]
+        for other in ctx.plans[1:]:
+            plan = plan.merge(other)
+        Path(plan_file).write_text(plan.to_json(), encoding="utf-8")
+        print(f"Info: zapisano plan aktualizacji {plan_file}", file=sys.stderr)
+    return rc
+
+
 def cmd_download(args: argparse.Namespace) -> int:
     """
     Execute the download command.
+
+    ``--upgrade --plan`` reads the plan before any work; ``--check-updates
+    --plan`` writes the plan of every track of the task after it
+    (`run_with_plan_file`).
 
     Parameters
     ----------
@@ -1086,6 +1156,11 @@ def cmd_download(args: argparse.Namespace) -> int:
     int
         Exit code (0 for success, 1 for error)
     """
+    return run_with_plan_file(args, _cmd_download)
+
+
+def _cmd_download(args: argparse.Namespace) -> int:
+    """``download`` after the plan file is read (see :func:`cmd_download`)."""
     _cache_warnings_shown.clear()
     has_sheet = args.sheet is not None
     has_bbox = args.bbox is not None
@@ -1252,8 +1327,11 @@ def cmd_download(args: argparse.Namespace) -> int:
         except ValidationError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
-
-        skip_existing = not args.force
+        _info_legacy_campaigns(manager)
+        update = _update_mode(args)
+        planned = _run_plan_modes(args, manager, _requested_sheets(args))
+        if planned is not None:
+            return planned
 
         try:
             if args.scale:
@@ -1269,7 +1347,7 @@ def cmd_download(args: argparse.Namespace) -> int:
                 paths = manager.download_hierarchy(
                     args.sheet,
                     args.scale,
-                    skip_existing=skip_existing,
+                    update=update,
                     on_progress=on_progress,
                 )
             else:
@@ -1285,7 +1363,7 @@ def cmd_download(args: argparse.Namespace) -> int:
 
                 result = manager.download_sheet(
                     args.sheet,
-                    skip_existing=skip_existing,
+                    update=update,
                     on_progress=on_progress,
                     on_download=announce,
                 )
@@ -1298,35 +1376,20 @@ def cmd_download(args: argparse.Namespace) -> int:
                     # `last_sheet.skipped` = Mock (truthy).
                     fetch = manager.last_sheet
                     sheet = fetch if isinstance(fetch, SheetFetch) else None
-                    # U15: when the standard path keeps a newer flight, name the
-                    # campaign file of this request instead.
-                    where = result
-                    if sheet is not None and sheet.link_outside_range is not None:
-                        where = (sheet.downloaded or sheet.reused)[0]
                     if not args.quiet:
-                        if all_campaigns and sheet is not None:
-                            # M-1: like the list - campaign files, not a sheet
-                            _print_campaign_summary(
-                                len(sheet.downloaded), 1, output_dir, len(sheet.reused)
-                            )
-                        elif sheet is not None and sheet.skipped:
-                            print(f"Skipped {args.sheet} - already exists at {where}")
-                        elif (
-                            sheet is not None
-                            and len(sheet.downloaded + sheet.reused) > 1
-                        ):
-                            # --full-sheet: the newest and the newest full flight
-                            _print_campaign_summary(
-                                len(sheet.downloaded), 1, output_dir, len(sheet.reused)
-                            )
-                        else:
-                            print(f"Downloaded to {where}")
-                    if sheet is not None and sheet.link == "copy":
-                        _warn_copied_links([args.sheet])
+                        if sheet is not None and sheet.files:
+                            for line in _status_lines(
+                                args.sheet, sheet.files, sheet.newer
+                            ):
+                                print(line)
+                        else:  # a manager stand-in without version facts
+                            print(f"{args.sheet}: {result}")
+                    if sheet is not None and sheet.newer is not None:
+                        _info_newer({args.sheet: sheet.newer})
                     if sheet is not None and sheet.unverified is not None:
                         print(
                             f"Warning: {args.sheet}: skorowidz GUGiK niedostepny "
-                            "— uzyto lokalnej kampanii bez sprawdzenia nowszej "
+                            "— uzyto lokalnej wersji bez sprawdzenia nowszej "
                             f"({sheet.unverified})",
                             file=sys.stderr,
                         )
@@ -1376,10 +1439,219 @@ def _last_result(manager: DownloadManager) -> DownloadResult:
     return result
 
 
+def _update_mode(args: argparse.Namespace) -> UpdateMode | None:
+    """``update`` of every download track (spec 4.2): ``--upgrade`` /
+    ``--force``; ``--check-updates`` never downloads (``_report_plan``)."""
+    if getattr(args, "upgrade", False):
+        return "upgrade"
+    return "force" if args.force else None
+
+
+def _requested_sheets(args: argparse.Namespace) -> list[str]:
+    """Sheets of the sheet-code mode (``--scale``: its descendants)."""
+    if args.scale:
+        return [
+            d.sheet for d in SheetParser(args.sheet).get_all_descendants(args.scale)
+        ]
+    return [args.sheet]
+
+
+def _info_legacy_campaigns(manager: DownloadManager) -> None:
+    """Spec 4.5: a 0.7.x ``kampanie/`` directory is not used (no migration, D10).
+
+    ``is True``: a manager stand-in (``Mock``) answers with a ``Mock``."""
+    if manager.storage.has_legacy_campaigns() is True:
+        print(
+            "Info: katalog kampanie/ z wersji 0.7.x nie jest uzywany; dane "
+            "zostana pobrane ponownie do versions/",
+            file=sys.stderr,
+        )
+
+
+_PLAN_TEXT = {
+    "current": "aktualne",
+    "missing": "do pobrania",
+    "unverifiable": "nie da sie sprawdzic bez pobrania",
+}
+
+
+def _plan_line(item: PlanItem) -> str:
+    if item.status == "newer":
+        signal = item.available_signal or {}
+        available = (
+            item.available_label or signal.get("etag") or signal.get("last_modified")
+        )
+        text = f"nowsza: {available} (lokalna {item.local_label})"
+    elif item.status == "check_failed":
+        text = f"nie udalo sie sprawdzic: {item.error}"
+    else:
+        text = _PLAN_TEXT[item.status]
+        label = item.local_label or item.available_label
+        if label:
+            text += f" ({label})"
+    return f"{item.unit}: {text}"
+
+
+def _report_plan(
+    args: argparse.Namespace,
+    plan: UpdatePlan,
+    label: Callable[[PlanItem], str] | None = None,
+) -> int:
+    """``--check-updates``: print the positions (stdout, also with ``-q`` — it
+    is the result) and keep the plan for ``--plan`` (written once by
+    `run_with_plan_file`). ``label`` names a position in its line (default:
+    its unit). A position that could not be checked = code 1."""
+    for item in plan.items:
+        line = _plan_line(item)
+        if label is not None:
+            line = f"{label(item)}{line[len(item.unit) :]}"
+        print(line)
+    _plan_context(args).plans.append(plan)
+    return 1 if any(i.status == "check_failed" for i in plan.items) else 0
+
+
+def _report_stale(stale: Sequence[PlanItem]) -> int:
+    """``--upgrade --plan``: positions whose source changed since the plan."""
+    for item in stale:
+        print(
+            f"Error: {item.unit}: zrodlo zmienilo sie od planu "
+            f"({item.available_label or item.available_signal}) — sprawdz "
+            "ponownie (--check-updates)",
+            file=sys.stderr,
+        )
+    return 1 if stale else 0
+
+
+def _run_plan_modes(
+    args: argparse.Namespace, manager: DownloadManager, sheets: list[str]
+) -> int | None:
+    """PL sheets: ``--check-updates`` and ``--upgrade --plan`` (spec 4.4).
+
+    ``None`` = neither: the caller downloads. A position that could not be
+    checked, a stale position or a failure = code 1 (partial success).
+    """
+    if getattr(args, "check_updates", False):
+        return _report_plan(args, check_updates(manager, sheets))
+    plan = _plan_context(args).loaded
+    if not getattr(args, "upgrade", False) or plan is None:
+        return None
+    report = upgrade(manager, plan)
+    if not args.quiet:
+        for fetch in report.done:
+            for line in _status_lines(fetch.sheet, fetch.files, fetch.newer):
+                print(line)
+    rc = _report_stale(report.stale)
+    for sheet, message in report.failed.items():
+        print(f"Error: {sheet}: {message}", file=sys.stderr)
+    return 1 if rc or report.failed else 0
+
+
+_STATUS_TEXT = {
+    "new": "nowa wersja",
+    "relabeled": "nowa etykieta",
+    "unchanged": "bez zmian",
+    "local": "lokalna wersja",
+    "reused": "uzyta ponownie",
+}
+
+
+def _status_lines(
+    sheet: str, files: tuple[tuple[str, str], ...], newer: str | None
+) -> list[str]:
+    """One line per file (spec 4.5): ``<sheet>: nowa wersja <label>_<sha8>``,
+    ``nowa etykieta <label> (ta sama tresc)``, ``bez zmian <label>``,
+    ``lokalna wersja <label>`` (+ the newer campaign, D5)."""
+    lines = []
+    for dirname, status in files:
+        label = dirname.rsplit("_", 1)[0] if status != "new" else dirname
+        text = f"{sheet}: {_STATUS_TEXT.get(status, status)} {label}"
+        if status == "relabeled":
+            text += " (ta sama tresc)"
+        if status == "local" and newer is not None:
+            text += f"; dostepna nowsza {newer} (--upgrade)"
+            newer = None
+        lines.append(text)
+    return lines
+
+
+def _report_file(
+    args: argparse.Namespace,
+    unit: str,
+    file: VersionedFile | None,
+    update: UpdateMode | None,
+) -> None:
+    """Status line of one file of a track without campaigns (spec 4.2, 4.5).
+
+    A local version without a cheap signal gets ``(bez sprawdzania;
+    --check-updates)`` by default and an ``Info:`` about ``--force`` with
+    ``--upgrade``; a failed signal check is a ``Warning:`` (stderr, also with
+    ``-q``). ``file`` is ``None`` only when a plan skipped the file.
+    """
+    if file is None:
+        return
+    unverified = file.unverified or ""
+    if unverified.startswith("check_failed"):
+        error = unverified.split(":", 1)[1].strip()
+        print(
+            f"Warning: {unit}: nie udalo sie sprawdzic zrodla ({error}) — uzyto "
+            f"lokalnej wersji {file.label}",
+            file=sys.stderr,
+        )
+    unchecked = file.status == "local" and unverified == "none"
+    if not args.quiet:
+        (line,) = _status_lines(
+            unit, ((file.version_path.parent.name, file.status),), file.newer
+        )
+        if unchecked and update is None:
+            line += " (bez sprawdzania; --check-updates)"
+        print(line)
+    if unchecked and update == "upgrade":
+        print(
+            f"Info: {unit}: lokalna wersja {file.label} niesprawdzona — zrodlo "
+            "bez taniego sygnalu; pobierz ponownie: --force",
+            file=sys.stderr,
+        )
+
+
+def _unit_of(path: Path, output_dir: Path) -> str:
+    """Unit of a cutout in status lines: its path below ``--output``."""
+    try:
+        return Path(path).relative_to(output_dir).as_posix()
+    except ValueError:
+        return str(path)
+
+
+def _print_version_summary(
+    statuses: Sequence[str], failed: int, output_dir: Path
+) -> None:
+    """Counters of the files of the task (spec 4.5); ``uzyte ponownie`` (HSG,
+    D33) only when a derived file was reused."""
+    counts = Counter(statuses)
+    reused = f"uzyte ponownie: {counts['reused']}, " if counts["reused"] else ""
+    print(
+        f"Nowe: {counts['new']}, nowa etykieta: {counts['relabeled']}, "
+        f"bez zmian: {counts['unchanged']}, lokalne: {counts['local']}, "
+        f"{reused}bledy: {failed} ({output_dir})"
+    )
+
+
+def _info_newer(newer: dict[str, str]) -> None:
+    """D5: newer campaigns exist but the default mode did not download them."""
+    if not newer:
+        return
+    sheets = list(newer)
+    shown = ", ".join(sheets[:10]) + (" ..." if len(sheets) > 10 else "")
+    print(
+        f"Info: dostepna nowsza kampania dla {len(sheets)} arkuszy ({shown}) — "
+        "uzyto lokalnych wersji; pobierz: --upgrade",
+        file=sys.stderr,
+    )
+
+
 def _download_sheet_list(
     manager: DownloadManager,
     sheet_list: list[str],
-    skip_existing: bool,
+    update: UpdateMode | None,
     on_progress,
 ) -> tuple[list[Path], DownloadResult]:
     """
@@ -1398,21 +1670,8 @@ def _download_sheet_list(
         Files available after the task (downloaded + skipped as existing)
         and a per-sheet summary (``manager.last_result``).
     """
-    paths = manager.download_sheets(
-        sheet_list, skip_existing=skip_existing, on_progress=on_progress
-    )
+    paths = manager.download_sheets(sheet_list, update=update, on_progress=on_progress)
     return list(paths), _last_result(manager)
-
-
-def _warn_copied_links(sheets: Sequence[str]) -> None:
-    """``Warning:`` about the standard path being a COPY of a campaign (ADR-030)."""
-    shown = ", ".join(sheets[:10]) + (" ..." if len(sheets) > 10 else "")
-    print(
-        "Warning: hardlink niedostepny na tym systemie plikow — sciezka "
-        f"standardowa jest KOPIA najnowszej kampanii dla {len(sheets)} arkuszy "
-        f"({shown}) (extra.link=copy)",
-        file=sys.stderr,
-    )
 
 
 MAX_HINT_LINES = 5
@@ -1441,23 +1700,13 @@ def _print_coverage_hints(result: DownloadResult) -> None:
         )
 
 
-def _print_campaign_summary(
-    downloaded: int, sheets: int, output_dir: Path, existed: int
-) -> None:
-    """Summary of ``--all-campaigns`` (sheet list and a single sheet code)."""
-    print(
-        f"Downloaded {downloaded} campaign files for "
-        f"{sheets} sheets to {output_dir} ({existed} already existed)"
-    )
-
-
 def _warn_unverified(unverified: dict[str, str]) -> None:
     """``Warning:`` for sheets taken from a local campaign unverified (I-1)."""
     sheets = list(unverified)
     shown = ", ".join(sheets[:10]) + (" ..." if len(sheets) > 10 else "")
     print(
         "Warning: skorowidz GUGiK niedostepny — dla "
-        f"{len(sheets)} arkuszy uzyto lokalnej kampanii bez sprawdzenia nowszej "
+        f"{len(sheets)} arkuszy uzyto lokalnych wersji bez sprawdzenia nowszej "
         f"({shown}) ({unverified[sheets[0]]})",
         file=sys.stderr,
     )
@@ -1494,8 +1743,7 @@ def _finish_pl_sheets(
     Sheets from an incomplete newest campaign (sidecar
     ``extra.source.full_sheet: false``) -> ``Warning:`` (E13, ADR-033: which of
     them have a ``full_sheet/`` link), code unchanged.
-    Standard path as a campaign COPY (``result.copied``) ->
-    ``Warning:``, code unchanged. ``all_campaigns=True`` or ``full_sheet``: the
+    ``all_campaigns=True`` or ``full_sheet``: the
     summary counts campaign files (``result.campaign_files``), not sheets.
     ``newest`` sheets
     from a local campaign on an index failure
@@ -1508,29 +1756,22 @@ def _finish_pl_sheets(
     )
     _print_better_coverage(result, paths)
     _print_link_outside_range(result.link_outside_range, result.full_link_outside_range)
-    if result.copied:
-        _warn_copied_links(result.copied)
     if result.unverified:
         _warn_unverified(result.unverified)
+    _info_newer(result.newer)
     if not quiet:
         # the progress bar ends with "skipped"/"downloading" without a newline
         print()
+        for sheet, files in result.files.items():
+            for line in _status_lines(sheet, files, result.newer.get(sheet)):
+                print(line)
     if not quiet and paths:
         # O-7: with no file and no skip (only gaps/failures) a summary of 0 is noise
-        if all_campaigns or full_sheet:
-            # `campaign_files` = downloaded + local; local ones separately
-            # (`reused_campaign_files`, a per-sheet subset)
-            files = result.campaign_files
-            existed = sum(len(f) for f in result.reused_campaign_files.values())
-            total_files = sum(len(f) for f in files.values())
-            _print_campaign_summary(
-                total_files - existed, len(files), output_dir, existed
-            )
-        else:
-            print(
-                f"Downloaded {len(result.succeeded)} files to {output_dir} "
-                f"({len(result.skipped)} already existed)"
-            )
+        _print_version_summary(
+            [s for files in result.files.values() for _, s in files],
+            len(result.failed),
+            output_dir,
+        )
     total = result.total
     hard = result.hard_failures
     missing = result.no_coverage
@@ -1666,11 +1907,12 @@ def _print_better_coverage(result: DownloadResult, paths: list[Path]) -> None:
 
 
 def _campaign_dirname(path: Path) -> str:
-    """``<date>_<id>`` of a ``kampanie/<date>_<id>/...`` path; else the file name."""
-    parts = Path(path).parts
-    if "kampanie" in parts and parts.index("kampanie") + 1 < len(parts):
-        return parts[parts.index("kampanie") + 1]
-    return Path(path).name
+    """``<date>_<id>`` label of a version file ``<label>_<sha8>/<file>``; else
+    the file name."""
+    path = Path(path)
+    if "versions" in path.parts and "_" in path.parent.name:
+        return path.parent.name.rsplit("_", 1)[0]
+    return path.name
 
 
 def _print_link_outside_range(
@@ -1692,7 +1934,7 @@ def _print_link_outside_range(
     print(
         f"Info: {len(rows)} dowiazan wskazuje lokalny lot spoza tego zadania "
         "(dowiazanie nigdy nie cofa sie na starszy lot); pobrane loty sa "
-        "w <segment>/kampanie/:",
+        "w <segment>/versions/:",
         file=sys.stderr,
     )
     for sheet, tree, target in rows[:10]:
@@ -1840,34 +2082,6 @@ def _warn_partial_sheets(
     )
 
 
-# description of the datum step in sidecars from before the K2 fix (EPSG:4829, area of
-# use:
-# Slovakia; content shifted 1-5 m) - after the fix the CZ path and the PL cutout -> 5514
-# pin "S-JTSK to ETRS89 (1)"/"(2)"
-_LEGACY_KROVAK_STEP = "S-JTSK to ETRS89 (3)"
-
-
-def _print_legacy_krovak_info(target: Path) -> None:
-    """D12: a skipped file from before the S-JTSK operation fix gets an ``Info:``.
-
-    Reads the ``<file>.meta.json`` sidecar (best-effort: missing/unreadable =
-    silence) and checks ``transform.horizontal``. No automatic
-    rebuild - the user decides (``--force``).
-    """
-    sidecar = target.parent / f"{target.name}.meta.json"
-    try:
-        payload = json.loads(sidecar.read_text(encoding="utf-8"))
-        horizontal = (payload.get("transform") or {}).get("horizontal")
-    except (OSError, ValueError, AttributeError):
-        return
-    if isinstance(horizontal, str) and _LEGACY_KROVAK_STEP in horizontal:
-        print(
-            f"Info: {target} pochodzi sprzed naprawy operacji S-JTSK (tresc "
-            "przesunieta 1-5 m) — pobierz ponownie z --force",
-            file=sys.stderr,
-        )
-
-
 def _download_pl_cutout(
     args: argparse.Namespace,
     bbox: BBox,
@@ -1881,9 +2095,9 @@ def _download_pl_cutout(
     (``TransformError``/``ValidationError``) and EVERY download or build
     error (PRG, WCS) end with code 1 and a message, not a traceback: an
     exception leaking out of the country loop of ``_dispatch_area`` would break
-    the partial success contract (ADR-023 points 4-5). Every run downloads
-    (``--force``, ``--workers`` and ``--scale`` have no effect). A cutout
-    entirely outside PL land = ``Warning:``, code 0.
+    the partial success contract (ADR-023 points 4-5). ``--force`` fetches a
+    new version; by default a local version is reused. ``--workers`` and
+    ``--scale`` have no effect. An all-nodata cutout = ``Warning:``, code 0.
     """
     from kartograf.download.cutout import prepare_pl_cutout, run_pl_wcs_cutout
     from kartograf.transform.crs import TransformError
@@ -1907,8 +2121,13 @@ def _download_pl_cutout(
     provider, _storage = _create_provider_and_storage(
         product, output_dir, args.vertical_crs, args.resolution
     )
+    if getattr(args, "check_updates", False):
+        from kartograf.download.cutout import check_pl_cutout
+
+        return _report_plan(args, check_pl_cutout(cutout))
     chunks = len(provider.plan_wcs_chunks(cutout.bbox_source_2180))
-    if chunks > 1 or cutout.estimated_bytes >= 2**30:
+    fetching = args.force or not cutout.target_path.exists()
+    if fetching and (chunks > 1 or cutout.estimated_bytes >= 2**30):
         # stderr, not stdout: -q does NOT suppress Info:/Warning:
         height, width = cutout.grid_shape
         print(
@@ -1917,22 +2136,26 @@ def _download_pl_cutout(
             "GUGiK pobieranych po kolei",
             file=sys.stderr,
         )
+    update = _update_mode(args)
     try:
         result = run_pl_wcs_cutout(
-            cutout, provider=provider, parent_request=parent_request
+            cutout,
+            provider=provider,
+            update=update,
+            plan=_plan_context(args).loaded,
+            parent_request=parent_request,
         )
     except Exception as e:  # noqa: BLE001 — code 1 instead of a traceback (ADR-023)
         print(f"Error: {e}", file=sys.stderr)
         return 1
-    if result.all_nodata:
+    if result.all_nodata and result.file is not None and result.file.status != "local":
         print(
             "Warning: wycinek w calosci nodata — obszar poza ladem PL (maska PRG: "
             "granica panstwa bez morza terytorialnego i wod wewnetrznych)",
             file=sys.stderr,
         )
-    if not args.quiet:
-        print(f"Downloaded to {result.path}")
-    return 0
+    _report_file(args, _unit_of(cutout.target_path, output_dir), result.file, update)
+    return _report_stale(result.stale)
 
 
 def _download_pl_bbox(
@@ -1993,7 +2216,7 @@ def _download_pl_sheet_list(
     resolution = args.resolution
     product = args.product
     workers = getattr(args, "workers", 4)
-    skip_existing = not args.force
+    update = _update_mode(args)
     all_campaigns, min_year, max_year = _campaign_opts(args)
     full_sheet = bool(getattr(args, "full_sheet", False))
 
@@ -2022,8 +2245,12 @@ def _download_pl_sheet_list(
                 max_year=max_year,
                 full_sheet=full_sheet,
             )
+            _info_legacy_campaigns(manager)
+            planned = _run_plan_modes(args, manager, sheet_list)
+            if planned is not None:
+                return planned
             all_paths, result = _download_sheet_list(
-                manager, sheet_list, skip_existing, on_progress
+                manager, sheet_list, update, on_progress
             )
         except DownloadError as e:
             print(f"{_error_lead(on_progress)}Error: {e}", file=sys.stderr)
@@ -2192,6 +2419,14 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         print(f"Error: {NO_TILES_MESSAGE}", file=sys.stderr)
         return 1
 
+    if getattr(args, "check_updates", False):
+        from kartograf.download.laz import check_laz_updates
+
+        return _report_plan(
+            args,
+            check_laz_updates(selection, provider=provider, output_dir=output_dir),
+        )
+
     total = len(selection.tiles)
     if not quiet:
         print(f"Found {total} LAZ tiles. Downloading with {workers} worker(s)...")
@@ -2201,6 +2436,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         if not quiet:
             print(f"\r  {done}/{count} tiles", end="", flush=True)
 
+    update = _update_mode(args)
     result = run_laz_download(
         selection,
         provider=provider,
@@ -2211,17 +2447,23 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         min_year=min_year,
         max_year=max_year,
         max_workers=workers,
-        force=args.force,
+        update=update,
+        plan=_plan_context(args).loaded,
         on_progress=_progress,
         parent_request=_laz_parent_request(args, bbox),
     )
 
     if not quiet:
         print()
-        print(
-            f"Downloaded {len(result.downloaded)} tiles "
-            f"({len(result.skipped)} skipped) to {output_dir / 'laz'}"
+    for file in result.files:
+        _report_file(args, file.path.name, file, update)
+    if not quiet:
+        _print_version_summary(
+            [file.status for file in result.files],
+            len(result.failed),
+            output_dir / "laz",
         )
+    stale = _report_stale(result.stale)
     if result.failed:
         # Code 1 => `Error:` (convention: `Warning:` only with code 0) and the FULL
         # list of failed tiles to retry - model `_finish_pl_sheets` (N6).
@@ -2235,95 +2477,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
             print(f"  {failure.tile.sheet}: {failure.error}", file=sys.stderr)
         return 1
 
-    return 0
-
-
-def _warn_cz_all_nodata(target: Path, nodata: float | None) -> None:
-    """N2: ``Warning:`` when a CZ raster has not a single valid pixel (code 0).
-
-    Best-effort like ``_read_tif_nodata`` - a read error = silence (provider
-    mocks do not write a file). No nodata tag: CUZK writes -9999.
-    """
-    from kartograf.providers.cuzk.dmr import CUZK_NODATA
-    from kartograf.transport.mosaic import has_valid_pixels
-
-    try:
-        empty = not has_valid_pixels(target, CUZK_NODATA if nodata is None else nodata)
-    except Exception:  # noqa: BLE001 — a warning never aborts the download
-        return
-    if empty:
-        print(
-            f"Warning: {target} jest w calosci nodata — obszar poza pokryciem "
-            "DMR CUZK (poza granica CZ?)",
-            file=sys.stderr,
-        )
-
-
-def _cz_download_sheet(args, provider, *, quiet: bool, skip_existing: bool) -> int:
-    """CZ sheet code: TM33 tile (exportImage) or SM5 sheet (openzu) into FileStorage."""
-    import logging
-
-    from kartograf.core.parser_registry import detect_system
-    from kartograf.download.storage import storage_for_provider
-    from kartograf.sources.registry import get_source
-
-    sheet = args.sheet
-    system = detect_system(sheet)
-    descriptor = get_source(provider.descriptor_key)
-    storage = storage_for_provider(
-        args.output,
-        provider,
-        resolution=provider.resolution,
-        vertical_crs=provider.vertical_crs,
-    )
-    target = storage.get_raw_path(sheet, f"{sheet}{descriptor.default_extension}")
-
-    if skip_existing and target.exists():
-        if not quiet:
-            print(f"Skipped {sheet} - already exists at {target}")
-        _print_legacy_krovak_info(target)
-        return 0
-
-    def announce() -> None:
-        # O-3 as in the PL flow: only when the transfer really starts (after
-        # the provider's validations: SM5 sheet index, TM33 grid parse)
-        if not quiet:
-            print(f"Downloading {sheet} (CZ, resolution: {provider.resolution})...")
-
-    try:
-        provider.download(sheet, target, on_download=announce)
-    except (DownloadError, ValidationError) as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-
-    nodata = _read_tif_nodata(target)
-    _warn_cz_all_nodata(target, nodata)
-    is_sm5 = system.id == "cz_sm5"
-    extra: dict = {}
-    if is_sm5:
-        try:
-            info = provider.sheet_index.sm5_sheet(sheet)
-            if info.name is not None:
-                extra["mapname"] = info.name
-            if info.podil is not None:
-                extra["cz_share"] = info.podil
-        except Exception as e:  # noqa: BLE001 — data matters more than metadata
-            logging.getLogger(__name__).warning(
-                f"Sidecar {sheet} bez extra.cz_share (PODIL; blad indeksu): {e}"
-            )
-    _write_cz_sidecar(
-        provider,
-        target,
-        request={"sheet": sheet},
-        capability="sheet_files" if is_sm5 else "bbox_raster",
-        # an SM5 sheet arrives in Krovak, a TM33 tile in the UTM33/ETRS89 grid
-        horizontal_crs="EPSG:5514" if is_sm5 else "EPSG:3045",
-        nodata=nodata,
-        extra=extra or None,
-    )
-    if not quiet:
-        print(f"Downloaded to {target}")
-    return 0
+    return stale
 
 
 @contextlib.contextmanager
@@ -2340,14 +2494,62 @@ def _library_log_muted(name: str) -> Iterator[None]:
         log.disabled = previous
 
 
+def _cz_download_sheet(args: argparse.Namespace, provider) -> int:
+    """CZ sheet code: TM33 tile (exportImage) or SM5 sheet (openzu).
+
+    Implementation: ``download.cz_sheets.run_cz_sheet`` / ``check_cz_sheet``.
+    """
+    from kartograf.download.cz_sheets import check_cz_sheet, run_cz_sheet
+
+    sheet = args.sheet
+    if getattr(args, "check_updates", False):
+        try:
+            plan = check_cz_sheet(provider, sheet, output_dir=args.output)
+        except (DownloadError, ValidationError) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        return _report_plan(args, plan)
+
+    def announce() -> None:
+        # O-3: only when the transfer really starts (after the provider's
+        # validations: SM5 sheet index, TM33 grid parse)
+        if not args.quiet:
+            print(f"Downloading {sheet} (CZ, resolution: {provider.resolution})...")
+
+    update = _update_mode(args)
+    try:
+        with _library_log_muted("kartograf.download.cz_sheets"):
+            result = run_cz_sheet(
+                provider,
+                sheet,
+                output_dir=args.output,
+                update=update,
+                plan=_plan_context(args).loaded,
+                on_download=announce,
+            )
+    except (DownloadError, ValidationError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    _warn_cz_all_nodata(result.file, result.all_nodata)
+    _report_file(args, sheet, result.file, update)
+    return _report_stale(result.stale)
+
+
+def _warn_cz_all_nodata(file: VersionedFile | None, all_nodata: bool) -> None:
+    """N2: ``Warning:`` when a downloaded CZ raster has no valid pixel (code 0)."""
+    if all_nodata and file is not None and file.status != "local":
+        print(
+            f"Warning: {file.path} jest w calosci nodata — obszar poza pokryciem "
+            "DMR CUZK (poza granica CZ?)",
+            file=sys.stderr,
+        )
+
+
 def _cz_download_bbox(
-    args,
+    args: argparse.Namespace,
     provider,
     bbox: BBox,
     parent_request: dict | None,
-    *,
-    quiet: bool,
-    skip_existing: bool,
 ) -> int:
     """CZ bbox: one `exportImage` cutout in `<subdir>/bbox/<coords>.tif`.
 
@@ -2356,17 +2558,23 @@ def _cz_download_bbox(
     The request then goes to the server in the native CRS, and the local
     warp in the provider moves it onto the result grid (ADR-024).
 
-    Implementation: ``download.cz_cutout.run_cz_cutout``.
+    Implementation: ``download.cz_cutout.run_cz_cutout`` / ``check_cz_cutout``.
     """
-    from kartograf.download.cz_cutout import run_cz_cutout
+    from kartograf.download.cz_cutout import check_cz_cutout, run_cz_cutout
 
     image_sr = args.target_crs or "EPSG:5514"
+    if getattr(args, "check_updates", False):
+        plan = check_cz_cutout(
+            provider, bbox, output_dir=args.output, image_crs=args.target_crs
+        )
+        return _report_plan(args, plan)
 
     def announce() -> None:
         # O-3: printed by the provider right before the first exportImage
-        if not quiet:
+        if not args.quiet:
             print(f"Downloading CZ bbox ({provider.resolution}, {image_sr})...")
 
+    update = _update_mode(args)
     try:
         # the CLI prints its own 'Warning:' line - the library log would
         # repeat it on stderr (logging.lastResort; the CLI configures no logging)
@@ -2376,27 +2584,19 @@ def _cz_download_bbox(
                 bbox,
                 output_dir=args.output,
                 image_crs=args.target_crs,
-                force=not skip_existing,
+                update=update,
+                plan=_plan_context(args).loaded,
                 parent_request=parent_request,
                 on_download=announce,
             )
     except (DownloadError, ValidationError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
-    if result.skipped:
-        if not quiet:
-            print(f"Skipped - already exists at {result.path}")
-        _print_legacy_krovak_info(result.path)
-        return 0
-    if result.all_nodata:
-        print(
-            f"Warning: {result.path} jest w calosci nodata — obszar poza pokryciem "
-            "DMR CUZK (poza granica CZ?)",
-            file=sys.stderr,
-        )
-    if not quiet:
-        print(f"Downloaded to {result.path}")
-    return 0
+    _warn_cz_all_nodata(result.file, result.all_nodata)
+    if result.file is not None:
+        unit = _unit_of(result.file.path, Path(args.output))
+        _report_file(args, unit, result.file, update)
+    return _report_stale(result.stale)
 
 
 def _cmd_download_cz(
@@ -2409,7 +2609,7 @@ def _cmd_download_cz(
 
     Model: :func:`_cmd_download_laz` - a flow outside ``DownloadManager``, because a
     CZ task yields exactly one file (a TM33 tile, an SM5 sheet or an
-    `exportImage` cutout), and the sidecars are written by the CLI layer.
+    `exportImage` cutout); the library writes its versioned sidecar.
 
     Parameters
     ----------
@@ -2482,20 +2682,9 @@ def _cmd_download_cz(
             print(f"Error: {e}", file=sys.stderr)
             return 1
 
-        quiet = args.quiet
-        skip_existing = not args.force
         if bbox is None:
-            return _cz_download_sheet(
-                args, provider, quiet=quiet, skip_existing=skip_existing
-            )
-        return _cz_download_bbox(
-            args,
-            provider,
-            bbox,
-            parent_request,
-            quiet=quiet,
-            skip_existing=skip_existing,
-        )
+            return _cz_download_sheet(args, provider)
+        return _cz_download_bbox(args, provider, bbox, parent_request)
     finally:
         cache.close()
 

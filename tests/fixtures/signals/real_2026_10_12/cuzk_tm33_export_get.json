@@ -1,0 +1,12 @@
+{
+  "url": "https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr5g/ImageServer/exportImage?f=image&format=tiff&pixelType=F32&bbox=-670100%2C-1084800%2C-670000%2C-1084700&bboxSR=5514&imageSR=5514&size=50%2C50&noData=-9999&noDataInterpretation=esriNoDataMatchAny",
+  "method": "GET",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "must-revalidate,max-age=43200,public",
+    "Content-Length": "66902",
+    "Content-Type": "image/tiff",
+    "ETag": "\"5e254ee7\""
+  },
+  "recorded": "2026-10-12"
+}

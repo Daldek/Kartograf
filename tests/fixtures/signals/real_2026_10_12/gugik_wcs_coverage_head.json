@@ -1,0 +1,9 @@
+{
+  "url": "https://mapy.geoportal.gov.pl/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModel?SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCoverage&COVERAGEID=DTM_PL-EVRF2007-NH&FORMAT=image%2Fx-aaigrid&SUBSET=x(530100.50,530140.50)&SUBSET=y(382100.50,382140.50)",
+  "method": "HEAD",
+  "status": 200,
+  "headers": {
+    "Content-Type": "text/html"
+  },
+  "recorded": "2026-10-12"
+}

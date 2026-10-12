@@ -7,9 +7,23 @@ import sys
 from pathlib import Path
 
 from kartograf.cli._parser import parse_bbox_arg
-from kartograf.cli.download_cmd import _announce_geometry_layer, _cli_metadata_cache
+from kartograf.cli.download_cmd import (
+    _announce_geometry_layer,
+    _cli_metadata_cache,
+    _plan_context,
+    _print_version_summary,
+    _report_file,
+    _report_plan,
+    _report_stale,
+    _unit_of,
+    _update_mode,
+    run_with_plan_file,
+)
+from kartograf.core.sheet_parser import BBox
+from kartograf.download.fetch import UpdateMode
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
+from kartograf.providers.corine import CorineProvider
 
 
 def cmd_landcover(args: argparse.Namespace) -> int:
@@ -135,7 +149,10 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
             "corine (pokrycie terenu Copernicus), soilgrids (gleby ISRIC)"
         )
     if args.output is None:
-        missing.append("--output wymagane: dowolna sciezka katalogu wyniku")
+        missing.append(
+            "--output wymagane: katalog magazynu (pliki w <DIR>/landcover/... "
+            "i <DIR>/soil/...)"
+        )
     if args.source == "corine" and args.year is None:
         missing.append(
             "--year wymagane dla corine: 2018, 2012, 2006, 2000 "
@@ -191,66 +208,34 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
     # Parse bbox if provided (zly bbox -> ValidationError -> Error: w main)
     bbox = parse_bbox_arg(args.bbox, "EPSG:2180") if args.bbox else None
 
-    # Create manager with selected provider; BDOT10k gets the metadata cache
-    # of the cwd (PRG TERYT answers, U5) like the PL/CZ download paths.
+    # BDOT10k gets the metadata cache of the cwd (PRG TERYT answers, U5) like
+    # the PL/CZ download paths; --force refreshes it.
     output_dir = Path(args.output)
     is_bdot = args.source == "bdot10k"
-    cache = _cli_metadata_cache(False) if is_bdot else None
+    update = _update_mode(args)
+    cache = _cli_metadata_cache(update == "force") if is_bdot else None
     manager = LandCoverManager(output_dir=output_dir, provider=args.source, cache=cache)
 
-    print(f"Downloading land cover data from {manager.provider_name}...")
+    kwargs: dict = {}
+    if args.source == "corine":
+        kwargs["year"] = args.year
+    if is_bdot:
+        kwargs["format"] = args.format
+    if args.source == "soilgrids":
+        kwargs["property"] = args.property
+        kwargs["depth"] = args.depth
+        kwargs["stat"] = args.stat
 
     try:
-        # Build kwargs for provider-specific options
-        kwargs = {}
-        if args.source == "corine":
-            kwargs["year"] = args.year
-        if is_bdot:
-            kwargs["format"] = args.format
-        if args.source == "soilgrids":
-            kwargs["property"] = args.property
-            kwargs["depth"] = args.depth
-            kwargs["stat"] = args.stat
-
-        # Download
         if has_geometry:
             from kartograf.core.geometry import get_overall_bbox
 
-            filepath = Path(args.geometry)
             if not _announce_geometry_layer(args):
                 return 1
-            bbox = get_overall_bbox(filepath, layer=args.layer)
-            print(f"  Geometry: {filepath.name}")
-        elif args.teryt:
-            print(f"  TERYT: {args.teryt}")
-            path = manager.download(teryt=args.teryt, **kwargs)
-            print(f"Downloaded to: {path}")
-            return 0
-        elif bbox:
-            print(
-                f"  BBox: ({bbox.min_x}, {bbox.min_y}) - ({bbox.max_x}, {bbox.max_y})"
-            )
-        else:
-            print(f"  Godło: {args.sheet}")
-
-        if is_bdot:
-            # Every powiat of the area, one package each (A2); the first
-            # failure stops the loop with Error: (files already written stay).
-            if bbox is not None:
-                paths = manager.download_all_counties(bbox=bbox, **kwargs)
-            else:
-                paths = manager.download_all_counties(sheet=args.sheet, **kwargs)
-            for path in paths:
-                print(f"Downloaded to: {path}")
-            return 0
-
-        if bbox is not None:
-            path = manager.download(bbox=bbox, **kwargs)
-        else:
-            path = manager.download(sheet=args.sheet, **kwargs)
-        print(f"Downloaded to: {path}")
-        return 0
-
+            bbox = get_overall_bbox(Path(args.geometry), layer=args.layer)
+        return run_with_plan_file(
+            args, lambda a: _landcover_task(a, manager, bbox, kwargs, update)
+        )
     except NotImplementedError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
@@ -270,3 +255,64 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
         # close() purges expired entries (as the PL/CZ download paths do)
         if cache is not None:
             cache.close()
+
+
+def _landcover_task(
+    args: argparse.Namespace,
+    manager: LandCoverManager,
+    bbox: BBox | None,
+    kwargs: dict,
+    update: UpdateMode | None,
+) -> int:
+    """One ``landcover download`` request: a plan (``--check-updates``) or
+    the files with one status line each (spec 4.5)."""
+    teryt, sheet = args.teryt, args.sheet
+    plan = _plan_context(args).loaded
+    is_bdot = args.source == "bdot10k"
+    if (
+        isinstance(manager.provider, CorineProvider)
+        and not manager.provider.uses_clms(args.year)
+        and not args.check_updates
+    ):
+        print(
+            f"Info: CORINE {args.year}: podglad WMS (stylizowany PNG, nie dane; "
+            "dane CLMS wymagaja CLMS_CREDENTIALS)",
+            file=sys.stderr,
+        )
+    out = manager.output_dir
+    if teryt is None and is_bdot:
+        # Every powiat of the area, one package each (A2); a failed powiat is
+        # reported, the others still run (exit code 1, ARCHITECTURE 4.2).
+        area = {"bbox": bbox} if bbox is not None else {"sheet": sheet}
+        if args.check_updates:
+            return _report_plan(args, manager.check_all_counties(**area, **kwargs))
+        result = manager.download_all_counties(
+            **area, update=update, plan=plan, **kwargs
+        )
+        statuses = []
+        for item in result.files:
+            for file in (item.file, item.raw):
+                if file is not None:
+                    _report_file(args, _unit_of(file.path, out), file, update)
+                    statuses.append(file.status)
+        for failure in result.failed:
+            print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
+        rc = _report_stale(result.stale)
+        if not args.quiet:
+            _print_version_summary(statuses, len(result.failed), manager.output_dir)
+        return 1 if rc or result.failed else 0
+
+    where = (
+        {"teryt": teryt}
+        if teryt is not None
+        else {"bbox": bbox}
+        if bbox is not None
+        else {"sheet": sheet}
+    )
+    if args.check_updates:
+        return _report_plan(args, manager.check(**where, **kwargs))
+    single = manager.download(**where, update=update, plan=plan, **kwargs)
+    for file in (single.file, single.raw):
+        if file is not None:
+            _report_file(args, _unit_of(file.path, out), file, update)
+    return _report_stale(single.stale)

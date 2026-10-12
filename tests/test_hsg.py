@@ -4,11 +4,14 @@ Tests for Hydrologic Soil Group (HSG) calculation functionality.
 Tests cover USDA texture classification, HSG mapping, and HSGCalculator.
 """
 
-from unittest.mock import Mock, patch
+from pathlib import Path
+from unittest.mock import patch
 
 import numpy as np
 import pytest
 
+from kartograf.core.sheet_parser import BBox
+from kartograf.exceptions import DownloadError
 from kartograf.hydrology.hsg import (
     HSG_DESCRIPTIONS,
     HSG_VALUES,
@@ -20,6 +23,8 @@ from kartograf.hydrology.hsg import (
     texture_to_hsg,
     texture_to_hsg_array,
 )
+from kartograf.providers.soilgrids import SoilGridsProvider
+from kartograf.sources.edition import Edition
 
 # Control points of the canonical USDA triangle (Soil Survey Manual):
 # 4 points from verification A4-4 + the centres of all 12 classes.
@@ -302,47 +307,20 @@ class TestHSGDescriptions:
 class TestHSGCalculator:
     """Test HSGCalculator class."""
 
-    def test_calculator_initialization(self):
-        """Test calculator initialization."""
-        calc = HSGCalculator()
-        assert calc._provider is None
+    def test_calculator_requires_output_dir(self):
+        with pytest.raises(TypeError):
+            HSGCalculator()  # type: ignore[call-arg]
 
-    def test_calculator_with_provider(self):
-        """Test calculator with custom provider."""
-        mock_provider = Mock()
-        calc = HSGCalculator(provider=mock_provider)
-        assert calc._provider is mock_provider
+    def test_lazy_provider_loading(self, tmp_path):
+        from kartograf.providers.soilgrids import SoilGridsProvider
 
-    def test_lazy_provider_loading(self):
-        """Test that provider is lazy-loaded."""
-        calc = HSGCalculator()
-        assert calc._provider is None
-
-        # Accessing provider should load it
-        provider = calc.provider
-        assert provider is not None
-        assert calc._provider is not None
+        calc = HSGCalculator(tmp_path)
+        assert isinstance(calc.provider, SoilGridsProvider)
+        assert list(tmp_path.iterdir()) == []
 
     def test_conversion_factor(self):
         """Test conversion factor is correct."""
         assert HSGCalculator.CONVERSION_FACTOR == 10.0
-
-
-class TestHSGCalculatorCalculation:
-    """Test HSGCalculator calculation methods (with mocks)."""
-
-    def test_calculator_with_custom_provider(self):
-        """Test that calculator accepts custom provider."""
-        mock_provider = Mock()
-        calc = HSGCalculator(provider=mock_provider)
-        assert calc.provider is mock_provider
-
-    def test_calculator_provider_attribute(self):
-        """Test provider attribute is set correctly."""
-        mock_provider = Mock()
-        mock_provider.name = "MockProvider"
-        calc = HSGCalculator(provider=mock_provider)
-        assert calc._provider is mock_provider
 
 
 class TestHSGCLI:
@@ -381,15 +359,16 @@ class TestHSGCLI:
                 "--depth",
                 "15-30cm",
                 "--output",
-                "/tmp/custom.tif",
-                "--keep-intermediate",
+                "store",
+                "--force",
                 "--stats",
             ]
         )
 
         assert args.depth == "15-30cm"
-        assert args.output == "/tmp/custom.tif"
-        assert args.keep_intermediate is True
+        assert args.output == "store"
+        assert args.force is True
+        assert not hasattr(args, "keep_intermediate")
         assert args.stats is True
 
 
@@ -418,199 +397,294 @@ def _create_test_raster(path, data, transform=None, crs="EPSG:2180", nodata=0):
         dst.write(data, 1)
 
 
+class RasterSoilGrids(SoilGridsProvider):
+    """SoilGrids without network: fixed editions and rasters per property.
+
+    ``rasters[property]`` = ``(array, nodata)``; ``editions[property]`` = an
+    edition id or a ``DownloadError``. Counts GetCapabilities
+    (``capabilities``) and GetCoverage (``downloads``).
+    """
+
+    def __init__(self, rasters=None, editions=None):
+        super().__init__()
+        self.rasters = dict(rasters or {})
+        self.editions = dict(editions or {})
+        self.capabilities = 0
+        self.downloads: list[str] = []
+
+    def edition(self, property, timeout=120):
+        self.capabilities += 1
+        current = self.editions.get(property, "2.0")
+        if isinstance(current, Exception):
+            raise current
+        return Edition(current, f"https://example.test/{property}")
+
+    def download_by_bbox(self, bbox, output_path, timeout=120, *, property, **kwargs):
+        self.downloads.append(property)
+        if isinstance(self.rasters.get(property), Exception):
+            raise self.rasters[property]
+        data, nodata = self.rasters.get(property, (_LOAM[property], 0))
+        target = Path(output_path).with_suffix(".tif")
+        _create_test_raster(target, data, nodata=nodata)
+        return target
+
+
+# 20% clay, 40% sand, 40% silt (g/kg) -> loam -> HSG B
+_LOAM = {
+    "clay": np.full((5, 5), 200, np.float32),
+    "sand": np.full((5, 5), 400, np.float32),
+    "silt": np.full((5, 5), 400, np.float32),
+}
+BBOX = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+COORDS = "450000_550000_460000_560000"
+HSG_SEG = "hsg/global_soilgrids_0-5cm_mean"
+
+
+def _hsg(path: Path) -> np.ndarray:
+    import rasterio
+
+    with rasterio.open(path) as src:
+        return src.read(1)
+
+
+def _meta(file) -> dict:
+    import json
+
+    return json.loads(Path(f"{file.version_path}.meta.json").read_text())
+
+
 class TestHSGCalculatorCalculateFull:
-    """Test HSGCalculator calculation with mocked provider and rasterio."""
+    """HSG from SoilGrids input versions (D33)."""
 
     def test_calculate_hsg_by_sheet(self, tmp_path):
-        """calculate_hsg_by_sheet downloads clay/sand/silt and produces HSG."""
-        mock_provider = Mock()
-        calc = HSGCalculator(provider=mock_provider)
-
-        # Mock download_by_bbox to create test rasters
-        def fake_download(bbox, path, timeout, property, depth, stat):
-            # Create raster with data in g/kg
-            if property == "clay":
-                data = np.full((10, 10), 200, dtype=np.float32)  # 20%
-            elif property == "sand":
-                data = np.full((10, 10), 400, dtype=np.float32)  # 40%
-            else:  # silt
-                data = np.full((10, 10), 400, dtype=np.float32)  # 40%
-            _create_test_raster(path, data)
-            return path
-
-        mock_provider.download_by_bbox.side_effect = fake_download
-
-        output = tmp_path / "hsg.tif"
-
-        with patch("kartograf.core.sheet_parser.SheetParser") as mock_parser_cls:
-            from kartograf.core.sheet_parser import BBox
-
-            mock_parser = Mock()
-            mock_parser.get_bbox.return_value = BBox(
-                450000, 550000, 460000, 560000, "EPSG:2180"
-            )
-            mock_parser_cls.return_value = mock_parser
-
-            result = calc.calculate_hsg_by_sheet(
-                "N-34-130-D", output, depth="0-5cm", stat="mean"
-            )
-
-        assert result == output
-        assert output.exists()
-
-        # Verify HSG content
-        import rasterio
-
-        with rasterio.open(output) as src:
-            hsg = src.read(1)
-        # 20% clay, 40% sand, 40% silt -> loam -> HSG B = 2
-        assert np.all(hsg == 2)
+        calc = HSGCalculator(tmp_path, RasterSoilGrids())
+        result = calc.calculate_hsg_by_sheet("N-34-130-D", depth="0-5cm", stat="mean")
+        assert result.file.path == tmp_path / HSG_SEG / "N-34/130/D/N-34-130-D.tif"
+        assert np.all(_hsg(result.file.path) == 2)  # loam -> B
 
     def test_calculate_hsg_by_bbox(self, tmp_path):
-        """calculate_hsg_by_bbox produces HSG raster."""
-        from kartograf.core.sheet_parser import BBox
-
-        mock_provider = Mock()
-        calc = HSGCalculator(provider=mock_provider)
-
-        def fake_download(bbox, path, timeout, property, depth, stat):
-            if property == "clay":
-                data = np.full((5, 5), 50, dtype=np.float32)  # 5%
-            elif property == "sand":
-                data = np.full((5, 5), 900, dtype=np.float32)  # 90%
-            else:  # silt
-                data = np.full((5, 5), 50, dtype=np.float32)  # 5%
-            _create_test_raster(path, data)
-            return path
-
-        mock_provider.download_by_bbox.side_effect = fake_download
-
-        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        output = tmp_path / "hsg.tif"
-        result = calc.calculate_hsg_by_bbox(bbox, output, depth="0-5cm", stat="mean")
-
-        assert result == output
-
-        import rasterio
-
-        with rasterio.open(output) as src:
-            hsg = src.read(1)
-        # 5% clay, 90% sand, 5% silt -> sand -> HSG A = 1
-        assert np.all(hsg == 1)
+        rasters = {
+            "clay": (np.full((5, 5), 50, np.float32), 0),  # 5%
+            "sand": (np.full((5, 5), 900, np.float32), 0),  # 90%
+            "silt": (np.full((5, 5), 50, np.float32), 0),  # 5%
+        }
+        result = HSGCalculator(
+            tmp_path, RasterSoilGrids(rasters)
+        ).calculate_hsg_by_bbox(BBOX, depth="0-5cm", stat="mean")
+        assert np.all(_hsg(result.file.path) == 1)  # sand -> A
 
     def test_calculate_hsg_nodata_handling(self, tmp_path):
         """Cells with all-zero values -> nodata (0)."""
-        from kartograf.core.sheet_parser import BBox
-
-        mock_provider = Mock()
-        calc = HSGCalculator(provider=mock_provider)
-
-        def fake_download(bbox, path, timeout, property, depth, stat):
-            data = np.zeros((5, 5), dtype=np.float32)
-            _create_test_raster(path, data)
-            return path
-
-        mock_provider.download_by_bbox.side_effect = fake_download
-
-        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        output = tmp_path / "hsg.tif"
-        calc.calculate_hsg_by_bbox(bbox, output, depth="0-5cm", stat="mean")
-
-        import rasterio
-
-        with rasterio.open(output) as src:
-            hsg = src.read(1)
-        assert np.all(hsg == 0)
+        zeros = {p: (np.zeros((5, 5), np.float32), 0) for p in ("clay", "sand", "silt")}
+        result = HSGCalculator(tmp_path, RasterSoilGrids(zeros)).calculate_hsg_by_bbox(
+            BBOX, depth="0-5cm", stat="mean"
+        )
+        assert np.all(_hsg(result.file.path) == 0)
 
     def test_calculate_hsg_masks_int16_nodata(self, tmp_path):
         """Cells flagged as nodata in the source rasters -> HSG 0, not B."""
-        from kartograf.core.sheet_parser import BBox
-
-        mock_provider = Mock()
-        calc = HSGCalculator(provider=mock_provider)
-
-        # Valid soil everywhere: clay=300, sand=300, silt=400 g/kg -> clay_loam -> C
-        def fake_download(bbox, path, timeout, property, depth, stat):
-            fill = {"clay": 300, "sand": 300, "silt": 400}[property]
+        rasters = {}
+        for prop, fill in {"clay": 300, "sand": 300, "silt": 400}.items():
             data = np.full((3, 3), fill, dtype=np.int16)
-            # [1, 1] is nodata in clay only, [2, 2] is nodata in all three
-            if property == "clay":
-                data[1, 1] = -32768
-            data[2, 2] = -32768
-            _create_test_raster(path, data, nodata=-32768)
-            return path
-
-        mock_provider.download_by_bbox.side_effect = fake_download
-
-        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        output = tmp_path / "hsg.tif"
-        calc.calculate_hsg_by_bbox(bbox, output, depth="0-5cm", stat="mean")
-
-        import rasterio
-
-        with rasterio.open(output) as src:
-            hsg = src.read(1)
-
+            if prop == "clay":
+                data[1, 1] = -32768  # nodata in clay only
+            data[2, 2] = -32768  # nodata in all three
+            rasters[prop] = (data, -32768)
+        result = HSGCalculator(
+            tmp_path, RasterSoilGrids(rasters)
+        ).calculate_hsg_by_bbox(BBOX, depth="0-5cm", stat="mean")
+        hsg = _hsg(result.file.path)
         assert hsg[0, 0] == 3  # clay_loam -> C
-        assert hsg[1, 1] == 0  # nodata in clay alone is enough
-        assert hsg[2, 2] == 0  # nodata in all three bands
+        assert hsg[1, 1] == 0
+        assert hsg[2, 2] == 0
 
     def test_calculate_hsg_masks_nan(self, tmp_path):
         """NaN in a source raster -> HSG 0, even without a nodata tag."""
-        from kartograf.core.sheet_parser import BBox
-
-        mock_provider = Mock()
-        calc = HSGCalculator(provider=mock_provider)
-
-        def fake_download(bbox, path, timeout, property, depth, stat):
-            fill = {"clay": 300.0, "sand": 300.0, "silt": 400.0}[property]
+        rasters = {}
+        for prop, fill in {"clay": 300.0, "sand": 300.0, "silt": 400.0}.items():
             data = np.full((3, 3), fill, dtype=np.float32)
-            if property == "sand":
+            if prop == "sand":
                 data[1, 1] = np.nan
-            _create_test_raster(path, data, nodata=None)
-            return path
-
-        mock_provider.download_by_bbox.side_effect = fake_download
-
-        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        output = tmp_path / "hsg.tif"
-        calc.calculate_hsg_by_bbox(bbox, output, depth="0-5cm", stat="mean")
-
-        import rasterio
-
-        with rasterio.open(output) as src:
-            hsg = src.read(1)
-
+            rasters[prop] = (data, None)
+        result = HSGCalculator(
+            tmp_path, RasterSoilGrids(rasters)
+        ).calculate_hsg_by_bbox(BBOX, depth="0-5cm", stat="mean")
+        hsg = _hsg(result.file.path)
         assert hsg[1, 1] == 0
         assert np.all(np.delete(hsg.reshape(-1), 4) > 0)
 
-    def test_calculate_hsg_keep_intermediate(self, tmp_path):
-        """keep_intermediate=True copies clay/sand/silt files."""
-        from kartograf.core.sheet_parser import BBox
-
-        mock_provider = Mock()
-        calc = HSGCalculator(provider=mock_provider)
-
-        def fake_download(bbox, path, timeout, property, depth, stat):
-            data = np.full((3, 3), 333, dtype=np.float32)
-            _create_test_raster(path, data)
-            return path
-
-        mock_provider.download_by_bbox.side_effect = fake_download
-
-        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        output = tmp_path / "out" / "hsg.tif"
-        calc.calculate_hsg_by_bbox(
-            bbox, output, depth="0-5cm", stat="mean", keep_intermediate=True
+    def test_hsg_version_from_input_versions(self, tmp_path):
+        provider = RasterSoilGrids()
+        result = HSGCalculator(tmp_path, provider).calculate_hsg_by_bbox(
+            BBOX, depth="0-5cm", stat="mean"
         )
+        file = result.file
+        assert result.unit == COORDS
+        assert file.path == tmp_path / HSG_SEG / "bbox" / f"{COORDS}.tif"
+        assert (file.status, file.label) == ("new", "2.0")
+        assert file.version_path.parent.name == f"2.0_{file.sha256[:8]}"
+        assert [r.file.path.parent.parent.name for r in result.inputs] == [
+            "global_soilgrids_clay_0-5cm_mean",
+            "global_soilgrids_sand_0-5cm_mean",
+            "global_soilgrids_silt_0-5cm_mean",
+        ]
+        meta = _meta(file)
+        assert meta["extra"]["version"] == {"label": "2.0", "label_source": "edition"}
+        assert meta["extra"]["source_files"] == [
+            {
+                "name": name,
+                "file": r.file.version_path.relative_to(tmp_path).as_posix(),
+                "sha256": r.file.sha256,
+                "label": "2.0",
+            }
+            for name, r in zip(("clay", "sand", "silt"), result.inputs, strict=True)
+        ]
+        assert meta["dataset"] == "global.isric.soilgrids"
+        assert meta["horizontal_crs"] == "EPSG:2180" and meta["nodata"] == 0
+        assert meta["request"] == {
+            "bbox": [450000, 550000, 460000, 560000],
+            "bbox_crs": "EPSG:2180",
+        }
+        assert meta["extra"]["derived"] == "hsg"
+        assert (meta["extra"]["depth"], meta["extra"]["stat"]) == ("0-5cm", "mean")
 
-        assert (tmp_path / "out" / "clay.tif").exists()
-        assert (tmp_path / "out" / "sand.tif").exists()
-        assert (tmp_path / "out" / "silt.tif").exists()
+    def test_hsg_rerun_reused_no_compute(self, tmp_path):
+        first = HSGCalculator(tmp_path, RasterSoilGrids()).calculate_hsg_by_bbox(
+            BBOX, depth="0-5cm", stat="mean"
+        )
+        provider = RasterSoilGrids()
+        with patch("kartograf.hydrology.hsg._classify_hsg") as classify:
+            again = HSGCalculator(tmp_path, provider).calculate_hsg_by_bbox(
+                BBOX, depth="0-5cm", stat="mean"
+            )
+        classify.assert_not_called()
+        assert provider.downloads == []
+        assert (again.file.status, again.file.version_path) == (
+            "reused",
+            first.file.version_path,
+        )
+        assert [r.file.status for r in again.inputs] == ["local"] * 3
+
+    def test_hsg_new_input_content_new_version(self, tmp_path):
+        HSGCalculator(tmp_path, RasterSoilGrids()).calculate_hsg_by_bbox(
+            BBOX, depth="0-5cm", stat="mean"
+        )
+        # 600 g/kg clay with sand/silt 400 -> clay -> D (loam B before)
+        sandy = RasterSoilGrids({"clay": (np.full((5, 5), 600, np.float32), 0)})
+        result = HSGCalculator(tmp_path, sandy).calculate_hsg_by_bbox(
+            BBOX, depth="0-5cm", stat="mean", update="force"
+        )
+        assert [r.file.status for r in result.inputs] == [
+            "new",
+            "unchanged",
+            "unchanged",
+        ]
+        assert result.file.status == "new"
+        assert len(list(result.file.version_path.parent.parent.iterdir())) == 2
+
+    def test_hsg_force_same_inputs_is_reused(self, tmp_path):
+        first = HSGCalculator(tmp_path, RasterSoilGrids()).calculate_hsg_by_bbox(
+            BBOX, depth="0-5cm", stat="mean"
+        )
+        provider = RasterSoilGrids()
+        again = HSGCalculator(tmp_path, provider).calculate_hsg_by_bbox(
+            BBOX, depth="0-5cm", stat="mean", update="force"
+        )
+        assert provider.downloads == ["clay", "sand", "silt"]
+        assert [r.file.status for r in again.inputs] == ["unchanged"] * 3
+        assert again.file.status == "reused"
+        assert again.file.version_path == first.file.version_path
+
+    def test_hsg_mixed_editions_label(self, tmp_path):
+        provider = RasterSoilGrids(editions={"sand": "2.1"})
+        result = HSGCalculator(tmp_path, provider).calculate_hsg_by_bbox(
+            BBOX, depth="0-5cm", stat="mean"
+        )
+        assert result.file.label == "2.0+2.1"
+        assert [f["label"] for f in _meta(result.file)["extra"]["source_files"]] == [
+            "2.0",
+            "2.1",
+            "2.0",
+        ]
+
+    def test_hsg_input_error_no_result(self, tmp_path):
+        provider = RasterSoilGrids({"silt": DownloadError("WCS 500")})
+        with pytest.raises(DownloadError, match="WCS 500"):
+            HSGCalculator(tmp_path, provider).calculate_hsg_by_bbox(
+                BBOX, depth="0-5cm", stat="mean"
+            )
+        assert not (tmp_path / "hsg").exists()
+        assert not (tmp_path / "soil/global_soilgrids_silt_0-5cm_mean/bbox").exists()
+
+    def test_check_hsg_never_downloads_or_computes(self, tmp_path):
+        provider = RasterSoilGrids()
+        calc = HSGCalculator(tmp_path, provider)
+        with patch("kartograf.hydrology.hsg._classify_hsg") as classify:
+            plan = calc.check_hsg_by_bbox(BBOX, depth="0-5cm", stat="mean")
+        classify.assert_not_called()
+        assert provider.downloads == []
+        assert [(i.track, i.status) for i in plan.items] == [
+            ("landcover", "missing"),
+            ("landcover", "missing"),
+            ("landcover", "missing"),
+            ("hsg", "missing"),
+        ]
+        assert plan.items[3].available_label == "2.0"
+        assert plan.items[3].segment == HSG_SEG
+        calc.calculate_hsg_by_bbox(BBOX, depth="0-5cm", stat="mean")
+        current = calc.check_hsg_by_bbox(BBOX, depth="0-5cm", stat="mean")
+        assert [i.status for i in current.items] == ["current"] * 4
+        provider.editions["clay"] = "2.1"
+        newer = calc.check_hsg_by_bbox(BBOX, depth="0-5cm", stat="mean")
+        assert [i.status for i in newer.items] == [
+            "newer",
+            "current",
+            "current",
+            "missing",
+        ]
+        assert newer.items[3].available_label == "2.0+2.1"
+        provider.editions["clay"] = DownloadError("caps 503")
+        failed = calc.check_hsg_by_bbox(BBOX, depth="0-5cm", stat="mean")
+        assert failed.items[3].status == "check_failed"
+        assert len(provider.downloads) == 3  # only the calculate call above
+
+    def test_hsg_plan_upgrade_recomputes_with_new_input(self, tmp_path):
+        provider = RasterSoilGrids()
+        calc = HSGCalculator(tmp_path, provider)
+        calc.calculate_hsg_by_bbox(BBOX, depth="0-5cm", stat="mean")
+        provider.editions["clay"] = "2.1"
+        provider.rasters["clay"] = (np.full((5, 5), 600, np.float32), 0)  # -> D
+        plan = calc.check_hsg_by_bbox(BBOX, depth="0-5cm", stat="mean")
+        result = calc.calculate_hsg_by_bbox(
+            BBOX, depth="0-5cm", stat="mean", update="upgrade", plan=plan
+        )
+        assert [r.file.status for r in result.inputs] == ["new", "local", "local"]
+        assert (result.file.status, result.file.label) == ("new", "2.0+2.1")
+        assert result.stale == ()
+
+    def test_hsg_sheet_and_bbox_distinct_paths(self, tmp_path):
+        calc = HSGCalculator(tmp_path, RasterSoilGrids())
+        by_sheet = calc.calculate_hsg_by_sheet("M-33-036-A", depth="0-5cm", stat="mean")
+        by_bbox = calc.calculate_hsg_by_bbox(BBOX, depth="0-5cm", stat="mean")
+        other = calc.calculate_hsg_by_bbox(
+            BBox(450000, 550000, 455000, 555000, "EPSG:2180"),
+            depth="0-5cm",
+            stat="mean",
+        )
+        paths = {by_sheet.file.path, by_bbox.file.path, other.file.path}
+        assert len(paths) == 3
+        assert by_sheet.file.path.name == "M-33-36-A.tif"
+        assert _meta(by_sheet.file)["request"] == {"sheet": "M-33-36-A"}
+
+    def test_hsg_no_keep_intermediate(self, tmp_path):
+        with pytest.raises(TypeError):
+            HSGCalculator(tmp_path, RasterSoilGrids()).calculate_hsg_by_bbox(
+                BBOX, depth="0-5cm", stat="mean", keep_intermediate=True
+            )
 
     def test_get_hsg_statistics(self, tmp_path):
         """get_hsg_statistics returns correct counts and areas."""
-        calc = HSGCalculator()
+        calc = HSGCalculator(tmp_path)
 
         # Create test HSG raster: 2x A, 1x B, 1x C
         data = np.array([[1, 1], [2, 3]], dtype=np.uint8)
@@ -631,7 +705,7 @@ class TestHSGCalculatorCalculateFull:
         from pyproj import Geod
         from rasterio.transform import from_origin
 
-        calc = HSGCalculator()
+        calc = HSGCalculator(tmp_path)
 
         res = 0.0022457  # ~250 m in latitude
         transform = from_origin(22.7, 52.5, res, res)
@@ -655,7 +729,7 @@ class TestHSGCalculatorCalculateFull:
 
     def test_get_hsg_statistics_projected_crs_unchanged(self, tmp_path):
         """Metric CRS keeps the plain width*height cell area."""
-        calc = HSGCalculator()
+        calc = HSGCalculator(tmp_path)
 
         # 2x2 raster over 10x10 km -> 5x5 km cells = 2500 ha each
         data = np.array([[1, 1], [2, 3]], dtype=np.uint8)
@@ -667,157 +741,21 @@ class TestHSGCalculatorCalculateFull:
         assert stats["A"]["area_ha"] == pytest.approx(5000.0)
         assert stats["B"]["area_ha"] == pytest.approx(2500.0)
 
-    def test_get_hsg_statistics_structure(self, tmp_path):
-        """Verify stats dict has required keys."""
-        calc = HSGCalculator()
-
-        data = np.array([[1, 2], [3, 4]], dtype=np.uint8)
-        hsg_path = tmp_path / "hsg.tif"
-        _create_test_raster(hsg_path, data)
-
-        stats = calc.get_hsg_statistics(hsg_path)
-
-        for group in ["A", "B", "C", "D"]:
-            assert group in stats
-            assert "count" in stats[group]
-            assert "area_m2" in stats[group]
-            assert "area_ha" in stats[group]
-            assert "percent" in stats[group]
-            assert "description" in stats[group]
-
-
-class TestHSGSidecar:
-    """The HSG result gets a <file>.meta.json sidecar (project rule)."""
-
-    def _calc(self):
-        mock_provider = Mock()
-
-        def fake_download(bbox, path, timeout, property, depth, stat):
-            data = np.full((5, 5), 200 if property == "clay" else 400, np.float32)
-            _create_test_raster(path, data)
-            return path
-
-        mock_provider.download_by_bbox.side_effect = fake_download
-        return HSGCalculator(provider=mock_provider)
-
-    def test_sidecar_written(self, tmp_path):
-        import json
-
-        from kartograf.core.sheet_parser import BBox
-
-        out = tmp_path / "hsg_x.tif"
-        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        self._calc().calculate_hsg_by_bbox(bbox, out, depth="5-15cm", stat="mean")
-
-        meta = json.loads((tmp_path / "hsg_x.tif.meta.json").read_text())
-        assert meta["dataset"] == "global.isric.soilgrids"
-        assert meta["horizontal_crs"] == "EPSG:2180"
-        assert meta["nodata"] == 0
-        assert meta["request"]["bbox"] == [450000, 550000, 460000, 560000]
-        assert meta["request"]["bbox_crs"] == "EPSG:2180"
-        assert meta["extra"]["derived"] == "hsg"
-        assert meta["extra"]["source_layers"] == ["clay", "sand", "silt"]
-        assert meta["extra"]["depth"] == "5-15cm"
-        assert meta["extra"]["stat"] == "mean"
-
-    def test_sidecar_by_sheet_records_sheet(self, tmp_path):
-        import json
-
-        out = tmp_path / "hsg_sheet.tif"
-        self._calc().calculate_hsg_by_sheet(
-            "N-34-130-D", out, depth="0-5cm", stat="mean"
-        )
-
-        request = json.loads((tmp_path / "hsg_sheet.tif.meta.json").read_text())[
-            "request"
-        ]
-        assert request["sheet"] == "N-34-130-D"
-        assert request["bbox_crs"] == "EPSG:2180"
-        assert len(request["bbox"]) == 4
-
-    def test_sidecar_by_sheet_leading_zeros_canonical(self, tmp_path):
-        """A7: the HSG sidecar records the canonical sheet, as NMT/land cover do."""
-        import json
-
-        out = tmp_path / "hsg_sheet.tif"
-        self._calc().calculate_hsg_by_sheet(
-            "M-33-036-A", out, depth="0-5cm", stat="mean"
-        )
-
-        meta = json.loads((tmp_path / "hsg_sheet.tif.meta.json").read_text())
-        assert meta["request"]["sheet"] == "M-33-36-A"
-
-    def test_sidecar_by_bbox_has_no_sheet(self, tmp_path):
-        import json
-
-        from kartograf.core.sheet_parser import BBox
-
-        out = tmp_path / "hsg_nosheet.tif"
-        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        self._calc().calculate_hsg_by_bbox(bbox, out, depth="0-5cm", stat="mean")
-
-        request = json.loads((tmp_path / "hsg_nosheet.tif.meta.json").read_text())[
-            "request"
-        ]
-        assert "sheet" not in request
-
-    def test_sidecar_uses_bbox_raster_capability(self, tmp_path):
-        from kartograf.core.sheet_parser import BBox
-
-        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        with patch("kartograf.sources.sidecar.emit_sidecar") as emit:
-            self._calc().calculate_hsg_by_bbox(
-                bbox, tmp_path / "h.tif", depth="0-5cm", stat="mean"
-            )
-        assert emit.call_args.kwargs["capability"] == "bbox_raster"
-
-    def test_sidecar_failure_does_not_break(self, tmp_path):
-        from kartograf.core.sheet_parser import BBox
-
-        out = tmp_path / "hsg_y.tif"
-        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        with patch("kartograf.sources.sidecar.write_sidecar", side_effect=OSError("x")):
-            result = self._calc().calculate_hsg_by_bbox(
-                bbox, out, depth="0-5cm", stat="mean"
-            )
-        assert result == out and out.exists()
-
 
 class TestHSGOutputDirOnWrite:
-    """The output directory is created only right before the result is written."""
+    """The store root is not touched before an input exists."""
 
-    @staticmethod
-    def _bbox():
-        from kartograf.core.sheet_parser import BBox
+    def test_init_creates_nothing(self, tmp_path):
+        HSGCalculator(tmp_path / "a" / "b", RasterSoilGrids())
+        assert list(tmp_path.iterdir()) == []
 
-        return BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-
-    def test_download_failure_leaves_no_output_dir(self, tmp_path):
-        from kartograf.exceptions import DownloadError
-
-        provider = Mock()
-        provider.download_by_bbox.side_effect = DownloadError("siec")
-        out = tmp_path / "a" / "b" / "hsg.tif"
+    def test_edition_failure_leaves_no_output_dir(self, tmp_path):
+        provider = RasterSoilGrids(editions={"clay": DownloadError("caps")})
         with pytest.raises(DownloadError):
-            HSGCalculator(provider=provider).calculate_hsg_by_bbox(
-                self._bbox(), out, depth="0-5cm", stat="mean"
+            HSGCalculator(tmp_path / "a", provider).calculate_hsg_by_bbox(
+                BBOX, depth="0-5cm", stat="mean"
             )
         assert not (tmp_path / "a").exists()
-
-    def test_nested_output_dir_created_on_success(self, tmp_path):
-        def fake_download(bbox, path, timeout, property, depth, stat):
-            _create_test_raster(path, np.full((5, 5), 200, np.float32))
-            return path
-
-        provider = Mock()
-        provider.download_by_bbox.side_effect = fake_download
-        out = tmp_path / "a" / "b" / "hsg.tif"
-        HSGCalculator(provider=provider).calculate_hsg_by_bbox(
-            self._bbox(), out, depth="0-5cm", stat="mean", keep_intermediate=True
-        )
-        assert out.exists()
-        assert (tmp_path / "a" / "b" / "hsg.tif.meta.json").exists()
-        assert (tmp_path / "a" / "b" / "clay.tif").exists()
 
 
 class TestHsgFromRasters:
