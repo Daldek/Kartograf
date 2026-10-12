@@ -47,7 +47,7 @@ providera z biblioteki (np. `GugikProvider.download`,
 sidecara — w szczegolnosci sidecar DMR CZ pisze
 `download/cz_cutout.py::write_cz_sidecar`: dla wycinka bbox wolany przez
 `run_cz_cutout` (biblioteka i CLI, sekcja 4.5), dla godla CZ przez CLI
-(`_cz_download_godlo`), bo tor CZ omija `DownloadManager` (ADR-023).
+(`_cz_download_sheet`), bo tor CZ omija `DownloadManager` (ADR-023).
 Nowy sidecar powstaje zawsze przez
 `sources/sidecar.py::emit_sidecar` — jedyne miejsce polityki zapisu
 (poza nim: kopia sidecara celu w sciezce standardowej,
@@ -224,7 +224,7 @@ z `kartograf`; zmiana sygnatury = zmiana lamiaca w CHANGELOG.
 kartograf/
 ├── __init__.py          # Public API (BBox, SheetParser, DownloadManager, providery, ...)
 ├── exceptions.py        # KartografError; ParseError; ValidationError;
-│                        # DownloadError(.godlo, .status_code)
+│                        # DownloadError(.sheet, .status_code)
 │                        # -> NoCoverageError(DownloadError; .hints) — zrodlo nie ma danych
 │                        # arkusza, .hints = podpowiedzi (np. --scale 1:2000)
 ├── core/                # Logika bazowa, bez IO sieciowego
@@ -244,7 +244,7 @@ kartograf/
 │   │                    # TransportKind, TileScheme, LicenseInfo, CountryProfile
 │   ├── registry.py      # Rejestr PL/CZ/EU/GLOBAL: get_source, sources_for, get_country,
 │   │                    # all_countries, vertical_crs_code, resolve_vertical_crs (rodzina ->
-│   │                    # realizacja), parse_pl_uklad, horizontal_crs_for_godlo/_for_uklad
+│   │                    # realizacja), parse_pl_system, horizontal_crs_for_sheet/_for_system
 │   └── sidecar.py       # ResultMetadata, build_metadata, write_sidecar, emit_sidecar
 │                        # (jedyna polityka zapisu), pl_sheet_horizontal_crs, read_asc_nodata
 ├── transform/           # Transformacje wspolrzednych i rastrow
@@ -333,17 +333,17 @@ kartograf/
 `license`, `resolution`, `auth`.
 
 Od 0.7.0 (ADR-026) `storage_subdir` jest **szablonem** z placeholderami
-`{uklad}` i `{vcrs}`, a nie literalna nazwa katalogu. Konsument zewnetrzny
+`{system}` i `{vcrs}`, a nie literalna nazwa katalogu. Konsument zewnetrzny
 czytajacy to pole wprost dostanie szablon — swiadomy trade-off; poprawna droga
 to `resolve_subdir()`.
 
 | Klucz deskryptora | `storage_subdir` | `default_extension` |
 |---|---|---|
-| `pl.gugik.nmt_1m` | `nmt/pl_{uklad}_1m_{vcrs}` | `.asc` |
-| `pl.gugik.nmt_5m` | `nmt/pl_{uklad}_5m_{vcrs}` | `.asc` |
-| `pl.gugik.nmpt` | `nmpt/pl_{uklad}_1m_{vcrs}` | `.asc` |
-| `pl.gugik.orto` | `orto/pl_{uklad}` (+ `_<wariant>` dla CIR/B-W, regula 5) | `.tif` |
-| `pl.gugik.laz` | `laz/pl_{uklad}_{vcrs}` | `.laz` |
+| `pl.gugik.nmt_1m` | `nmt/pl_{system}_1m_{vcrs}` | `.asc` |
+| `pl.gugik.nmt_5m` | `nmt/pl_{system}_5m_{vcrs}` | `.asc` |
+| `pl.gugik.nmpt` | `nmpt/pl_{system}_1m_{vcrs}` | `.asc` |
+| `pl.gugik.orto` | `orto/pl_{system}` (+ `_<wariant>` dla CIR/B-W, regula 5) | `.tif` |
+| `pl.gugik.laz` | `laz/pl_{system}_{vcrs}` | `.laz` |
 | `cz.cuzk.dmr5g` | `nmt/cz_dmr5g_{vcrs}` | `.tif` |
 | `cz.cuzk.dmr4g` | `nmt/cz_dmr4g_{vcrs}` | `.tif` |
 | `pl.gugik.bdot10k` | `None` | `.gpkg` |
@@ -357,12 +357,12 @@ osobno arkuszom OpenData. NMT 5 m nie ma kanalu WCS.
 `None` oznacza zrodlo obslugiwane przez `LandCoverManager`, ktory ma wlasna
 konwencje nazw i wlasny domyslny `--output` (sekcja 4.8).
 
-**`SourceDescriptor.resolve_subdir(*, uklad=None, vertical_crs=None) -> str`**
+**`SourceDescriptor.resolve_subdir(*, system=None, vertical_crs=None) -> str`**
 wypelnia szablon przez `str.replace`, a nie `str.format` — czesciowe
 wypelnienie jest legalne. `vertical_crs` jest normalizowany do lowercase
 (`"Bpv"` -> `"bpv"`). Podanie wymiaru, ktorego szablon nie ma, to no-op
 (orto ignoruje `vertical_crs`). Zrodlo bez `storage_subdir` rzuca `ValueError`.
-Pusty string (albo sam whitespace) w `uklad`/`vertical_crs` to
+Pusty string (albo sam whitespace) w `system`/`vertical_crs` to
 `ValidationError` — `None` znaczy "wypelnij pozniej", a pusty napis dawal
 cichy segment `nmt/pl_1992_1m_` (review max zn. 7).
 
@@ -371,12 +371,12 @@ Kto wypelnia ktory placeholder:
 | Placeholder | Kto wypelnia | Kiedy |
 |---|---|---|
 | `{vcrs}` | konstruktor `FileStorage(vertical_crs=)` albo jawne `resolve_subdir(vertical_crs=)` | raz, na starcie zadania — uklad pionowy jest wlasnoscia zadania, nie arkusza |
-| `{uklad}` | `FileStorage` per identyfikator (`get_path`/`get_raw_path`/`exists`/`delete`/`ensure_directory`), regula ta sama co `parser_registry.path_parts`: kropki -> `2000`, reszta -> `1992` | przy budowie kazdej sciezki |
-| `{uklad}` (jawnie) | tor LAZ: `LazTile.uklad` (`uklad_xy` kafla przez `parse_pl_uklad`; nieznany = kafel pominiety / `ValidationError`) przez `FileStorage.get_raw_path(..., uklad=)` — jedno zrodlo prawdy dla CLI i biblioteki (zn. 8, review max); wycinek PL WCS (`prepare_pl_cutout`: `uklad="1992"` na stale — `--target-crs` z `--system 2000` jest odrzucane, sekcja 4.3); przestarzaly tor arkuszowy odrzuca arkusz we wspolrzednych PL-2000 | przed utworzeniem `FileStorage` / sciezki wycinka |
+| `{system}` | `FileStorage` per identyfikator (`get_path`/`get_raw_path`/`exists`/`delete`/`ensure_directory`), regula ta sama co `parser_registry.path_parts`: kropki -> `2000`, reszta -> `1992` | przy budowie kazdej sciezki |
+| `{system}` (jawnie) | tor LAZ: `LazTile.system` (`uklad_xy` kafla przez `parse_pl_system`; nieznany = kafel pominiety / `ValidationError`) przez `FileStorage.get_raw_path(..., system=)` — jedno zrodlo prawdy dla CLI i biblioteki (zn. 8, review max); wycinek PL WCS (`prepare_pl_cutout`: `system="1992"` na stale — `--target-crs` z `--system 2000` jest odrzucane, sekcja 4.3); przestarzaly tor arkuszowy odrzuca arkusz we wspolrzednych PL-2000 | przed utworzeniem `FileStorage` / sciezki wycinka |
 
 `FileStorage` waliduje wynik koncowy: segment, w ktorym po wypelnieniu zostala
 klamra `{`, konczy sie `ValidationError` z nazwa brakujacego wymiaru
-(`_ensure_resolved`). Cichy katalog `pl_{uklad}_1m_evrf2007` nigdy nie powstanie.
+(`_ensure_resolved`). Cichy katalog `pl_{system}_1m_evrf2007` nigdy nie powstanie.
 
 ### 3.2 Schema sidecara `kartograf-meta/1`
 
@@ -593,7 +593,7 @@ data/
    ten sam plik. Brak pelnego lotu = brak pliku w `full_sheet/`
    (istniejace dowiazanie zostaje). `FileStorage.get_full_sheet_path`
    buduje sciezke, `list_files()` pomija `full_sheet/` (tak jak
-   `kampanie/`), `delete(godlo)` usuwa oba dowiazania z sidecarami.
+   `kampanie/`), `delete(sheet)` usuwa oba dowiazania z sidecarami.
    Kolizja z hierarchia niemozliwa: pierwszy czlon hierarchii to arkusz
    1:1M albo strefa (`N-34`, `7`). LAZ, CZ, wycinki i land cover nie maja
    `full_sheet/`.
@@ -695,7 +695,7 @@ niezgodny rekord z cache daje ten sam blad, odswiezenie: `--force`. Brak zgodneg
 po poprawnych odpowiedziach warstw = `NoCoverageError`, np. dla PL-2000
 1:10000 z samymi potomkami podpowiedz `--scale 1:2000`. NMT/NMPT (od 0.7.2,
 `GugikProvider._variant_hints`): przy braku pokrycia provider pyta pozostale
-warianty produktu z `WMS_SKOROWIDZE_ENDPOINTS` (rozdzielczosc, uklad
+warianty produktu z `WMS_INDEX_ENDPOINTS` (rozdzielczosc, uklad
 wysokosci; jedno GetFeatureInfo ze wszystkimi warstwami wariantu, ten sam
 punkt i twardy filtr, timeout `DEFAULT_TIMEOUT`) i dopisuje podpowiedz
 `Skorowidz GUGiK ma ten arkusz w NMT 1m EVRF2007 — uzyj --resolution 1m`
@@ -779,7 +779,7 @@ w `DownloadManager.check_year_range`: jedna pelna lista kampanii z kazdej
 warstwy GetCapabilities na arkusz, filtr lat po twardym filtrze ADR-028.
 Lista `campaigns_cache` (TTL 7 dni, bez `scanned_from`) sluzy rowniez
 `newest` z dowolna granica; bez granic `newest` nadal bierze
-`record_cache`. `GugikProvider.available_years(godlo)` zwraca rosnace
+`record_cache`. `GugikProvider.available_years(sheet)` zwraca rosnace
 lata z pelnej listy. Arkusz bez danych GUGiK = `NoCoverageError` i
 pominiecie R5, a z danymi tylko poza przedzialem = `YearRangeError`
 (lista lat do 20 arkuszy, podpowiedz tylko gdy jedna jednostronna
@@ -798,7 +798,7 @@ Dalsze szczegoly: manager pobiera kazda
 brakujaca kampanie (`GugikProvider.download_record`; plik w `kampanie/`,
 `record_source` -> `extra.source`), po zebraniu kampanii przestawia
 dowiazanie RAZ na arkusz (deduplikacja godel; nigdy wstecz) i zwraca
-`SheetFetch(godlo, path, skipped, downloaded, reused, link, unverified)` w
+`SheetFetch(sheet, path, skipped, downloaded, reused, link, unverified)` w
 `DownloadManager.last_sheet`. `DownloadResult` (`last_result` listy
 i hierarchii) niesie `succeeded`, `failed`, `skipped`, `no_coverage`
 (podzbior `failed`: brak danych u zrodla), `no_coverage_hints` (godlo ->
@@ -1225,18 +1225,18 @@ Porazka pobrania choc jednego kafla trafia do `LazDownloadResult.failed`
 i PELNA lista nieudanych kafli (jak `_finish_pl_sheets`; udane kafle
 zostaja na dysku i przy ponowieniu bez `--force` sa pomijane).
 Godlo kafla jest drobniejsze niz 1:10000 i NIE jest
-parsowane — `FileStorage.get_raw_path(..., uklad=tile.uklad)` buduje z niego
+parsowane — `FileStorage.get_raw_path(..., system=tile.system)` buduje z niego
 sama hierarchie katalogow. Uklad poziomy jest ustalany **per kafel**
-wlasnoscia `LazTile.uklad` (jedno zrodlo prawdy dla CLI i biblioteki, zn. 8
-review max) z `uklad_xy` kafla, parserem `sources.registry.parse_pl_uklad`
-wspolnym ze skorowidzem i sidecarem (`horizontal_crs_for_uklad`; review-1 D3):
+wlasnoscia `LazTile.system` (jedno zrodlo prawdy dla CLI i biblioteki, zn. 8
+review max) z `uklad_xy` kafla, parserem `sources.registry.parse_pl_system`
+wspolnym ze skorowidzem i sidecarem (`horizontal_crs_for_system`; review-1 D3):
 `PL-1992` -> `1992`, `PL-2000:S5..S8` -> `2000`. Nierozpoznana wartosc (np.
 `PL-2000` bez strefy) — kafel pominiety w discovery z ostrzezeniem w logu,
-a `LazTile.uklad` recznie zbudowanego kafla rzuca `ValidationError` (dawniej
+a `LazTile.system` recznie zbudowanego kafla rzuca `ValidationError` (dawniej
 zgadywanie z formatu godla dawalo segment `pl_2000` z sidecarem EPSG:2180).
 Uklad pionowy bierze sie z flagi CLI (biblioteka:
 `FileStorage(vertical_crs=)`). Jedno zadanie moze wiec zapisac kafle do dwoch
-segmentow naraz — `{uklad}` rozwiazuje sie per wywolanie `get_raw_path`,
+segmentow naraz — `{system}` rozwiazuje sie per wywolanie `get_raw_path`,
 jeden `FileStorage` wystarcza na cale zadanie. W trybie obszarowym
 `--country auto` obszar siegajacy CZ konczy sie bledem z podpowiedzia
 `--country pl` (LAZ dla CZ to etap 2).
@@ -1283,7 +1283,7 @@ KAZDA opcja zmieniajaca tresc wyniku, z wartoscia domyslna wlacznie
 | Zrodlo | Parametry w nazwie | Przyklad |
 |---|---|---|
 | SoilGrids | `<property>_<depth>_<stat>` | `soilgrids_clay_0-5cm_mean_bbox_770000_509000_772000_511000.tif` |
-| CORINE | `<year>` | `corine_2018_godlo_N-34-130-D.tif` (`.png` z podgladu WMS) |
+| CORINE | `<year>` | `corine_2018_sheet_N-34-130-D.tif` (`.png` z podgladu WMS) |
 | BDOT10k | opcjonalny filtr warstw `<kod>-<kod>...` (kody posortowane); `format` niesie rozszerzenie | `bdot10k_teryt_1465.gpkg`, `bdot10k_PTWP-SWRS_teryt_1465.gpkg` (`layers=`), `bdot10k_teryt_1465.zip` (SHP) |
 
 Rozne parametry = rozne pliki; te same parametry = ta sama sciezka (ponowne
@@ -1307,11 +1307,11 @@ pozostale warstwy zarzadzajace.
 **BDOT10k z wielu powiatow (od 0.7.1, A2).** Pakiet BDOT10k jest zawsze
 pakietem CALEGO powiatu, wiec nazwa pliku i `request` sidecara opisuja
 tresc: `bdot10k[_<warstwy>]_teryt_<TERYT>.<ext>`, `request = {teryt,
-format[, layers]}` — takze przy zadaniu przez `--bbox`/`--godlo`/`--geometry`
+format[, layers]}` — takze przy zadaniu przez `--bbox`/`--sheet`/`--geometry`
 (dawne nazwy `bdot10k_bbox_*`/`bdot10k_godlo_*` nie sa rozpoznawane).
 Obszar zadania idzie do `extra.parent_request`: `{bbox, bbox_crs,
 countries: ["PL"]}` albo `{sheet, countries: ["PL"]}`.
-`LandCoverManager.download_all_counties(bbox=|godlo=, format=, layers=,
+`LandCoverManager.download_all_counties(bbox=|sheet=, format=, layers=,
 timeout=)` pyta PRG (`Bdot10kProvider.teryts_for_area` ->
 `discover_teryts_for_bbox`, obszar w dowolnym obslugiwanym ukladzie) i
 pobiera pakiet KAZDEGO powiatu przecinajacego obszar, w kolejnosci kodow,
@@ -1320,9 +1320,9 @@ layers, keep_raw, raw_path) -> Bdot10kPackage(path, teryt, url, format, http,
 raw_path)`; jeden plik i sidecar per powiat (`_download_county`, jedyna
 sciezka pobrania BDOT10k w menedzerze, takze dla `--teryt`); brak powiatu =
 `NoCoverageError`, awaria PRG albo pakietu = `DownloadError` (pliki pobrane wczesniej zostaja). CLI
-`landcover download --source bdot10k` z `--bbox`/`--godlo`/`--geometry`
+`landcover download --source bdot10k` z `--bbox`/`--sheet`/`--geometry`
 wola te metode i drukuje `Downloaded to:` dla kazdego pliku; `--teryt`
-bez zmian. Stare `download_by_bbox`/`download_by_godlo` (menedzera bez
+bez zmian. Stare `download_by_bbox`/`download_by_sheet` (menedzera bez
 jawnego `output_path` i providera) pobieraja JEDEN powiat ta sama sciezka
 (`_single_teryt`): obszar z kilku powiatow konczy sie `ValidationError`
 z lista kodow i wskazaniem `download_all_counties`. Opcja `timeout`
@@ -1383,7 +1383,7 @@ zostaje obok `source` i `http`.
 sidecar wyniku (`HSGCalculator._write_sidecar` -> `emit_sidecar`, best-effort):
 deskryptor `global.isric.soilgrids`, `capability="bbox_raster"`, `request`
 = bbox z jego ukladem (+ `sheet` = godlo, gdy zadanie szlo przez
-`--godlo`/`calculate_hsg_by_godlo`; domyslna nazwa pliku CLI zawiera
+`--sheet`/`calculate_hsg_by_sheet`; domyslna nazwa pliku CLI zawiera
 glebokosc: `hsg_<godlo>_<depth>.tif`, `hsg_bbox_<depth>.tif`),
 `horizontal_crs` = uklad rastra wyniku, `nodata: 0`,
 `extra` = `{derived: "hsg", source_layers: ["clay", "sand", "silt"], depth,

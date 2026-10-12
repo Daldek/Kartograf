@@ -195,10 +195,10 @@ def render_gfi_body(records: list[dict], var: str = "skor_NMT_wg_akt") -> str:
 
 
 def gfi_record(
-    godlo: str,
+    sheet: str,
     *,
     resolution: str = "1.00 m",
-    uklad: str = "PL-1992",
+    system: str = "PL-1992",
     aktualnosc: str = "2024-09-03",
     url: str | None = None,
     **fields: str,
@@ -206,12 +206,12 @@ def gfi_record(
     """NMT/NMPT index record with fields as in the GUGiK response (2026-09-29)."""
     record = {
         "url": url
-        or f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/78955/78955_1_{godlo}.asc",
-        "godlo": godlo,
+        or f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/78955/78955_1_{sheet}.asc",
+        "godlo": sheet,
         "aktualnosc": aktualnosc,
         "format": "ARC/INFO ASCII GRID",
         "charakterystykaPrzestrzenna": resolution,
-        "ukladWspolrzednychPoziomych": uklad,
+        "ukladWspolrzednychPoziomych": system,
         "ukladWspolrzednychPionowych": "PL-EVRF2007-NH",
         "calyArkuszWypelnionyTrescia": "TAK",
         "aktualnoscRok": aktualnosc[:4],
@@ -296,14 +296,14 @@ def multipart_asc_body(values, xll: float, yll: float, cellsize: float = 1.0) ->
 
 
 @pytest.fixture
-def sample_godlos() -> dict:
+def sample_sheets() -> dict:
     """
-    Provide sample godlo identifiers for each scale.
+    Provide sample sheet identifiers for each scale.
 
     Returns
     -------
     dict
-        Dictionary mapping scale names to sample godlo identifiers
+        Dictionary mapping scale names to sample sheet identifiers
     """
     return {
         "1:1000000": "N-34",

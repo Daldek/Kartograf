@@ -6,7 +6,7 @@ Digital Terrain Model (NMT) data from the Polish GUGiK
 (Główny Urząd Geodezji i Kartografii) services.
 
 Two download methods based on input type:
-- Sheet code (godlo) → OpenData (ASC format)
+- Sheet code → OpenData (ASC format)
 - BBox (bounding box) → WCS (GeoTIFF/PNG/JPEG formats; 1m only; EVRF2007
   heights requested as image/x-aaigrid and written as GeoTIFF float32)
 
@@ -53,7 +53,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     Provider for downloading NMT data from GUGiK.
 
     Supports two download modes:
-    - By sheet code (godlo): downloads from OpenData as ASC
+    - By sheet code: downloads from OpenData as ASC
     - By bbox (bounding box): downloads from WCS as GeoTIFF/PNG/JPEG
       (1m and KRON86 only, see ``download_bbox``)
 
@@ -68,7 +68,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     Examples
     --------
     >>> provider = GugikProvider()
-    >>> # Download by sheet code (godlo) → ASC from OpenData
+    >>> # Download by sheet code → ASC from OpenData
     >>> provider.download("N-34-130-D-d-2-4", Path("./sheet.asc"))
     >>>
     >>> # Download by bbox → GeoTIFF float32 from WCS (1m, both vertical CRS)
@@ -106,7 +106,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
 
     # WMS endpoints for the indexes (skorowidze) - used to find OpenData URLs
     # Structure: {resolution: {vertical_crs: endpoint}}
-    WMS_SKOROWIDZE_ENDPOINTS = {
+    WMS_INDEX_ENDPOINTS = {
         "1m": {
             "KRON86": f"{BASE_URL}/wss/service/PZGIK/NMT/WMS/SkorowidzeUkladKRON86",
             "EVRF2007": f"{BASE_URL}/wss/service/PZGIK/NMT/WMS/SkorowidzeUkladEVRF2007",
@@ -239,19 +239,19 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
 
     def download(
         self,
-        godlo: str,
+        sheet: str,
         output_path: Path,
         timeout: int = DEFAULT_TIMEOUT,
     ) -> Path:
         """
-        Download NMT data for a map sheet (godlo) from OpenData.
+        Download NMT data for a map sheet from OpenData.
 
         Always downloads ASC format - this is the native format for
         sheet-code-based downloads from GUGiK OpenData.
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet identifier (e.g., "N-34-130-D-d-2-4")
         output_path : Path
             Path where the ASC file should be saved
@@ -268,7 +268,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         NoCoverageError
             Subclass of ``DownloadError``: every index (skorowidz) layer answered and
             none of them has the sheet, i.e. the source has no data for this
-            godlo (sea, the Czech side of a border bbox, gaps in 1m coverage).
+            sheet (sea, the Czech side of a border bbox, gaps in 1m coverage).
             An OGC exception report in a response is not an answer (see
             ``_resolve_sheet``). ``DownloadManager`` records such sheets in
             ``DownloadResult.no_coverage`` and the PL cutout fills them with
@@ -288,28 +288,28 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         # local import: the kartograf.download package imports manager -> providers.pl
         from kartograf.download.campaigns import verify_record_vertical_crs
 
-        record = self._resolve_sheet(godlo, timeout)
-        verify_record_vertical_crs(record, self._vertical_crs, godlo)
+        record = self._resolve_sheet(sheet, timeout)
+        verify_record_vertical_crs(record, self._vertical_crs, sheet)
         return self.download_record(record, Path(output_path), timeout)
 
-    def _get_opendata_url(self, godlo: str, timeout: int = DEFAULT_TIMEOUT) -> str:
+    def _get_opendata_url(self, sheet: str, timeout: int = DEFAULT_TIMEOUT) -> str:
         """Return the URL of the strictly matching, newest index record."""
-        return self._resolve_sheet(godlo, timeout).url
+        return self._resolve_sheet(sheet, timeout).url
 
     def _skorowidz_query(self, parser: SheetParser) -> SkorowidzQuery:
         """Cache key, endpoint (resolution + vertical CRS) and resolution filter.
 
         Reads attributes through ``self`` — NMPT overrides ``_CACHE_PRODUCT``
-        and ``WMS_SKOROWIDZE_ENDPOINTS``.
+        and ``WMS_INDEX_ENDPOINTS``.
         """
         return SkorowidzQuery(
             cache_key=(
                 self._CACHE_PRODUCT,
                 self._resolution,
                 self._vertical_crs,
-                parser.godlo,
+                parser.sheet,
             ),
-            endpoint=self.WMS_SKOROWIDZE_ENDPOINTS.get(self._resolution, {}).get(
+            endpoint=self.WMS_INDEX_ENDPOINTS.get(self._resolution, {}).get(
                 self._vertical_crs
             ),
             resolution_m=float(self._resolution[:-1]),
@@ -324,7 +324,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         matching = []
         for record in records:
             if record.resolution_m != wanted_resolution:
-                if record.godlo == parser.godlo and record.resolution_m is not None:
+                if record.sheet == parser.sheet and record.resolution_m is not None:
                     hints.add(
                         f"GUGiK ma ten arkusz w {record.resolution_m:g} m — "
                         f"Kartograf pobiera dokladnie {wanted_resolution:g} m"
@@ -336,13 +336,13 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         return no_coverage_error(
             parser,
             f"Brak danych {self._CACHE_PRODUCT.upper()} {self._resolution} dla "
-            f"{parser.godlo} (uklad PL-{parser.uklad}, {self._vertical_crs})",
+            f"{parser.sheet} (uklad PL-{parser.system}, {self._vertical_crs})",
             hints,
         )
 
     def _variant_hints(self, parser: SheetParser) -> set[str]:
         """Hints naming the other variants of the product (resolution,
-        vertical CRS from ``WMS_SKOROWIDZE_ENDPOINTS``) whose index has the
+        vertical CRS from ``WMS_INDEX_ENDPOINTS``) whose index has the
         sheet (P10, 0.7.2).
 
         One GetFeatureInfo per variant with all its layers at the sheet's
@@ -358,8 +358,8 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         """
         hints: set[str] = set()
         query_bbox = self._query_bbox(parser)
-        zone = int(parser.godlo.split(".")[0]) if parser.uklad == "2000" else None
-        for resolution, by_crs in self.WMS_SKOROWIDZE_ENDPOINTS.items():
+        zone = int(parser.sheet.split(".")[0]) if parser.system == "2000" else None
+        for resolution, by_crs in self.WMS_INDEX_ENDPOINTS.items():
             for vertical_crs, endpoint in by_crs.items():
                 if (resolution, vertical_crs) == (self._resolution, self._vertical_crs):
                     continue
@@ -373,7 +373,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
                         endpoint,
                         ",".join(self._layers(endpoint, self.DEFAULT_TIMEOUT)),
                         query_bbox=query_bbox,
-                        godlo=parser.godlo,
+                        sheet=parser.sheet,
                         timeout=self.DEFAULT_TIMEOUT,
                         retries=1,
                         # no trailing digits: "EVRF2007" at the end of the
@@ -386,15 +386,15 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
                     logger.warning(
                         "%s: nie sprawdzono wariantu %s (podpowiedz pominieta, "
                         "wariant pomijany do konca zadania): %s",
-                        parser.godlo,
+                        parser.sheet,
                         variant,
                         e,
                     )
                     continue
                 found = select_sheet_record(
                     records,
-                    godlo=parser.godlo,
-                    uklad=parser.uklad,
+                    sheet=parser.sheet,
+                    system=parser.system,
                     zone=zone,
                     resolution_m=float(resolution[:-1]),
                 )
@@ -502,7 +502,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
             raise ValidationError(
                 f"WCS {self._CACHE_PRODUCT.upper()} 1m for {self._vertical_crs} is "
                 "not available (endpoint withdrawn by GUGiK). Download sheets by "
-                "godlo instead."
+                "sheet code instead."
             )
 
         return self._download_wcs(

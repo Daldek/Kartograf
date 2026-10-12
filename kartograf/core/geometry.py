@@ -2,7 +2,7 @@
 Reading geometry files (SHP, GPKG) for spatial data selection.
 
 Extracts per-feature bounding boxes from geometry files and maps them
-to map sheet codes (godla) for tile-based downloads.
+to map sheet codes for tile-based downloads.
 """
 
 import logging
@@ -631,16 +631,16 @@ def find_sheets_for_geometry(
     Returns
     -------
     list[str]
-        Sorted, deduplicated list of sheet codes (godla)
+        Sorted, deduplicated list of sheet codes
     """
     bboxes = read_feature_bboxes(filepath, layer=layer, target_crs="EPSG:2180")
 
     if not bboxes:
         return []
 
-    all_godla: set[str] = set()
+    all_sheets: set[str] = set()
     for bbox in bboxes:
-        godla = find_sheets_for_bbox(bbox, target_scale, system=system)
-        all_godla.update(godla)
+        sheets = find_sheets_for_bbox(bbox, target_scale, system=system)
+        all_sheets.update(sheets)
 
-    return sorted(all_godla)
+    return sorted(all_sheets)

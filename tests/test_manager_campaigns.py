@@ -52,7 +52,7 @@ ASC_TEMPLATE = (
 )
 
 
-def _filtered(files: list[Path], godlo: str) -> list:
+def _filtered(files: list[Path], sheet: str) -> list:
     """Records passing the hard filter (PL-1992, 1 m), newest first."""
     records = []
     for f in files:
@@ -60,15 +60,15 @@ def _filtered(files: list[Path], godlo: str) -> list:
         records += [
             r
             for r in parse_skorowidz_records(f.read_text(encoding="utf-8"), layer)
-            if r.godlo == godlo and r.uklad == "1992" and r.resolution_m == 1.0
+            if r.sheet == sheet and r.system == "1992" and r.resolution_m == 1.0
         ]
     return sorted(
         records, key=lambda r: (r.aktualnosc, r.dt_pzgik or "", r.url), reverse=True
     )
 
 
-def c14_records(godlo: str = G) -> list:
-    return _filtered(sorted((NMT / "c14").glob(f"{godlo}_EVRF2007_*.html")), godlo)
+def c14_records(sheet: str = G) -> list:
+    return _filtered(sorted((NMT / "c14").glob(f"{sheet}_EVRF2007_*.html")), sheet)
 
 
 C14_ALL = c14_records()
@@ -79,9 +79,9 @@ X_ALL = _filtered(sorted((NMT / G2).glob("*.body")), G2)
 XREC = {r.url.rsplit("/", 1)[-1].split("_")[0]: r for r in X_ALL}
 
 
-def asc_for(godlo: str, tag_line: str = "", *, shift_x: float = 0.0) -> bytes:
+def asc_for(sheet: str, tag_line: str = "", *, shift_x: float = 0.0) -> bytes:
     """ASC header whose extent is the sheet frame (B4), optional tag line."""
-    b = SheetParser(godlo).get_bbox()
+    b = SheetParser(sheet).get_bbox()
     return (
         f"ncols {int(b.max_x - b.min_x)}\nnrows {int(b.max_y - b.min_y)}\n"
         f"xllcorner {b.min_x + shift_x}\nyllcorner {b.min_y}\ncellsize 1\n"
@@ -89,9 +89,9 @@ def asc_for(godlo: str, tag_line: str = "", *, shift_x: float = 0.0) -> bytes:
     ).encode()
 
 
-def asc_pixels(godlo: str, values: tuple[int, int, int, int]) -> bytes:
+def asc_pixels(sheet: str, values: tuple[int, int, int, int]) -> bytes:
     """Small valid AAIGrid inside the real sheet frame, with measurable cells."""
-    bbox = SheetParser(godlo).get_bbox()
+    bbox = SheetParser(sheet).get_bbox()
     cell = min(bbox.max_x - bbox.min_x, bbox.max_y - bbox.min_y) / 2
     return (
         f"ncols 2\nnrows 2\nxllcorner {bbox.min_x}\nyllcorner {bbox.min_y}\n"
@@ -118,7 +118,7 @@ class FakeCampaignProvider(BaseProvider):
     name = "fake"
     base_url = "https://wms"
 
-    def download(self, godlo: str, output_path: Path, timeout: int = 30) -> Path:
+    def download(self, sheet: str, output_path: Path, timeout: int = 30) -> Path:
         """Campaign providers download through download_record()."""
         raise NotImplementedError("FakeCampaignProvider: tor kampanii")
 
@@ -137,22 +137,22 @@ class FakeCampaignProvider(BaseProvider):
         self._lock = threading.Lock()  # D-6: number of resolutions per sheet code
 
     def resolve_campaigns(
-        self, godlo, *, campaigns="newest", min_year=None, max_year=None, timeout=None
+        self, sheet, *, campaigns="newest", min_year=None, max_year=None, timeout=None
     ):
         with self._lock:
-            self.resolve_calls.append((godlo, campaigns, min_year, max_year))
-        if godlo in self.errors:
-            raise self.errors[godlo]
+            self.resolve_calls.append((sheet, campaigns, min_year, max_year))
+        if sheet in self.errors:
+            raise self.errors[sheet]
         if self.resolve_error is not None:
             raise self.resolve_error
         strategy = campaigns
         recs = [
             r
             for r in self.records[strategy]
-            if r.godlo == godlo and in_year_range(record_year(r), min_year, max_year)
+            if r.sheet == sheet and in_year_range(record_year(r), min_year, max_year)
         ]
         if not recs:
-            raise NoCoverageError(f"Brak kampanii {godlo}", godlo=godlo)
+            raise NoCoverageError(f"Brak kampanii {sheet}", sheet=sheet)
         return recs
 
     def record_source(self, r):
@@ -160,26 +160,26 @@ class FakeCampaignProvider(BaseProvider):
 
     def download_record(self, r, path, timeout=None):
         if r.url in self.fail_urls:
-            raise DownloadError("siec", godlo=r.godlo)
+            raise DownloadError("siec", sheet=r.sheet)
         with self._lock:
             self.downloads.append(r.url)
         path.parent.mkdir(parents=True, exist_ok=True)
         if r.url in self.contents:
             path.write_bytes(self.contents[r.url])
         else:
-            path.write_bytes(asc_for(r.godlo, f"{self.version} {tag(r)}"))
+            path.write_bytes(asc_for(r.sheet, f"{self.version} {tag(r)}"))
         if self.fixed_mtime is not None:
             os.utime(path, (self.fixed_mtime, self.fixed_mtime))
         return path
 
 
-def std_path(tmp_path: Path, godlo: str = G) -> Path:
-    parts = godlo.split("-")
-    return tmp_path / SEGMENT / "-".join(parts[:2]) / Path(*parts[2:]) / f"{godlo}.asc"
+def std_path(tmp_path: Path, sheet: str = G) -> Path:
+    parts = sheet.split("-")
+    return tmp_path / SEGMENT / "-".join(parts[:2]) / Path(*parts[2:]) / f"{sheet}.asc"
 
 
-def campaign_path(tmp_path: Path, record, godlo: str = G) -> Path:
-    parts = godlo.split("-")
+def campaign_path(tmp_path: Path, record, sheet: str = G) -> Path:
+    parts = sheet.split("-")
     dirname = f"{record.aktualnosc}_{tag(record).split('_')[0]}"
     return (
         tmp_path
@@ -188,7 +188,7 @@ def campaign_path(tmp_path: Path, record, godlo: str = G) -> Path:
         / dirname
         / "-".join(parts[:2])
         / Path(*parts[2:])
-        / f"{godlo}.asc"
+        / f"{sheet}.asc"
     )
 
 
@@ -558,7 +558,7 @@ def test_content_mismatch_removes_file_and_fails(tmp_path):
     assert "2022-03-20_75506" in linked(std)
 
 
-def test_record_url_without_godlo_fails_before_download(tmp_path):
+def test_record_url_without_sheet_fails_before_download(tmp_path):
     """B4: a record URL that does not name the sheet is never downloaded."""
     bad = dataclasses.replace(REC["84183"], url="https://x/NMT/84183/84183_1_G.asc")
     fake = FakeCampaignProvider({"newest": [bad]})
@@ -672,7 +672,7 @@ def _mock_provider(tmp_payload: bytes = b"ncols 1\n") -> Mock:
     type(p).vertical_crs = PropertyMock(return_value="EVRF2007")
     p.name = "mock"
 
-    def download(godlo, path):
+    def download(sheet, path):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(tmp_payload)
         return path
@@ -700,10 +700,10 @@ def test_plain_track_sidecar_failure_still_best_effort(tmp_path, monkeypatch):
 
 def c14_fake(**kwargs):
     """All four C14 sheets from raw index bodies, including their newest records."""
-    godla = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
-    records = [r for g in godla for r in c14_records(g)]
+    sheets = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
+    records = [r for g in sheets for r in c14_records(g)]
     return FakeCampaignProvider(
-        {"all": records, "newest": [c14_records(g)[0] for g in godla]}, **kwargs
+        {"all": records, "newest": [c14_records(g)[0] for g in sheets]}, **kwargs
     )
 
 
@@ -735,15 +735,15 @@ def test_manager_year_2025_list_flights_per_sheet_link_newest(
 ):
     """Model A: the year bounds pick admissible years, ``campaigns`` the count."""
     fake = c14_fake()
-    godla = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
+    sheets = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
     manager = DownloadManager(
         tmp_path, provider=fake, campaigns=campaigns, min_year=2025, max_year=2025
     )
-    manager.download_sheets(godla)
+    manager.download_sheets(sheets)
     assert manager.campaigns == campaigns and manager.max_year == 2025
     assert len(fake.downloads) == files
     assert len(list((tmp_path / SEGMENT / "kampanie").rglob("*.asc"))) == files
-    for g in godla:
+    for g in sheets:
         assert "84183" in linked(std_path(tmp_path, g))
         request = meta(std_path(tmp_path, g))["request"]
         assert request["campaigns"] == campaigns and request["year"] == 2025
@@ -758,36 +758,36 @@ def test_manager_year_2025_list_flights_per_sheet_link_newest(
 @pytest.mark.parametrize(("campaigns", "files"), [("newest", 4), ("all", 6)])
 def test_manager_max_year_2022_list(tmp_path, campaigns, files):
     fake = c14_fake()
-    godla = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
+    sheets = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
     manager = DownloadManager(
         tmp_path, provider=fake, campaigns=campaigns, max_year=2022
     )
-    manager.download_sheets(godla)
+    manager.download_sheets(sheets)
     assert len(fake.downloads) == files
-    for i, g in enumerate(godla, 1):
+    for i, g in enumerate(sheets, 1):
         assert ("73021" if i in (1, 3) else "75162") in linked(std_path(tmp_path, g))
         assert meta(std_path(tmp_path, g))["request"]["max_year"] == 2022
 
 
 def test_manager_min_year_alone_downloads_newest_only(tmp_path):
     fake = c14_fake()
-    godla = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
+    sheets = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
     manager = DownloadManager(tmp_path, provider=fake, min_year=2024)
-    manager.download_sheets(godla)
+    manager.download_sheets(sheets)
     assert manager.campaigns == "newest" and len(fake.downloads) == 4
-    for i, g in enumerate(godla, 1):
+    for i, g in enumerate(sheets, 1):
         assert ("84183" if i in (1, 3) else "83998") in linked(std_path(tmp_path, g))
         assert meta(std_path(tmp_path, g))["request"]["campaigns"] == "newest"
 
 
 def test_manager_explicit_all_with_min_year_downloads_every_flight(tmp_path):
     fake = c14_fake()
-    godla = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
+    sheets = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
     manager = DownloadManager(tmp_path, provider=fake, min_year=2024, campaigns="all")
-    manager.download_sheets(godla)
+    manager.download_sheets(sheets)
     assert len(fake.downloads) == 14
     assert all(
-        meta(std_path(tmp_path, g))["request"]["campaigns"] == "all" for g in godla
+        meta(std_path(tmp_path, g))["request"]["campaigns"] == "all" for g in sheets
     )
 
 
@@ -814,9 +814,9 @@ def test_manager_range_reports_link_kept_on_newer_flight(tmp_path):
 
 def test_manager_year_with_no_data_sheet_is_skipped(tmp_path):
     fake = c14_fake()
-    godla = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
+    sheets = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
     manager = DownloadManager(tmp_path, provider=fake, min_year=2025, max_year=2025)
-    manager.download_sheets([*godla, G2])
+    manager.download_sheets([*sheets, G2])
     assert manager.last_result is not None
     assert manager.last_result.no_coverage == [G2]
     assert G2 not in manager.last_result.campaign_files
@@ -835,16 +835,16 @@ def test_manager_check_failure_aborts_whole_task(tmp_path):
 
 def test_manager_check_reads_full_list_once_per_sheet(tmp_path):
     fake = c14_fake()
-    godla = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
+    sheets = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
     manager = DownloadManager(
         tmp_path, provider=fake, campaigns="all", max_year=2025, max_workers=4
     )
-    check = manager.check_year_range(godla)
+    check = manager.check_year_range(sheets)
     assert len(check.selected[G]) == 4
     assert check.available[G] == (2019, 2023, 2025)
     fake.resolve_calls.clear()
-    manager.download_sheets(godla)
-    assert sorted(fake.resolve_calls) == [(g, "all", None, None) for g in godla]
+    manager.download_sheets(sheets)
+    assert sorted(fake.resolve_calls) == [(g, "all", None, None) for g in sheets]
 
 
 def test_manager_without_range_unchanged_uses_record_cache(tmp_path):
@@ -1076,19 +1076,19 @@ def test_manager_coverage_read_error_does_not_fail_sheet(tmp_path, caplog):
 
 
 def test_parallel_all_campaigns_writes_each_file_once(tmp_path):
-    godla = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
-    records = [r for g in godla for r in c14_records(g)]
+    sheets = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
+    records = [r for g in sheets for r in c14_records(g)]
     fake = FakeCampaignProvider({"all": records})
     m = DownloadManager(tmp_path, provider=fake, campaigns="all", max_workers=4)
-    m.download_sheets(godla)
+    m.download_sheets(sheets)
     assert sorted(fake.downloads) == sorted(r.url for r in records)
     assert m.last_result.failed == []
-    for g in godla:
+    for g in sheets:
         assert std_path(tmp_path, g).exists()
         assert len(m.last_result.campaign_files[g]) == len(c14_records(g))
 
 
-def test_duplicate_godla_in_list_download_once_and_link_once(tmp_path):
+def test_duplicate_sheets_in_list_download_once_and_link_once(tmp_path):
     fake = FakeCampaignProvider(C14)
     m = DownloadManager(tmp_path, provider=fake, max_workers=4)
     m.download_sheets([G, G, G])
@@ -1149,7 +1149,7 @@ def test_spec_mock_is_not_campaign_aware(tmp_path):
     m = DownloadManager(tmp_path, provider=p)  # no exception
     assert m.campaigns == "newest" and m.min_year is None
 
-    def download(godlo, path):
+    def download(sheet, path):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"ncols 1\n")
         return path
@@ -1262,7 +1262,7 @@ def test_link_failure_is_sheet_failure_and_list_continues(
     assert result.succeeded == [std_path(tmp_path, g3)]
     assert campaign_path(tmp_path, REC["84183"]).is_file()
     assert not std_path(tmp_path).exists()
-    failed = next(e for e in events if e.godlo == G and e.status == "failed")
+    failed = next(e for e in events if e.sheet == G and e.status == "failed")
     assert "dowiazanie" in failed.message and "dysk pelny" in failed.message
 
 
@@ -1303,7 +1303,7 @@ def test_invalid_aktualnosc_is_campaign_failure_links_best_valid(tmp_path):
 # =============================================================================
 
 
-def _transport_error(godlo: str, failure) -> DownloadError:
+def _transport_error(sheet: str, failure) -> DownloadError:
     """``DownloadError`` exactly from ``get_with_retry`` (retries without waiting).
 
     ``failure``: a ``session.get`` exception or the HTTP status code of the response.
@@ -1321,7 +1321,7 @@ def _transport_error(godlo: str, failure) -> DownloadError:
         session.get = Mock(side_effect=failure)
     with patch("kartograf.transport.http.time.sleep"):
         try:
-            get_with_retry(session, "https://wms", timeout=1, description=godlo)
+            get_with_retry(session, "https://wms", timeout=1, description=sheet)
         except DownloadError as e:
             return e
     raise AssertionError("get_with_retry nie zglosil bledu")
@@ -1395,10 +1395,10 @@ def test_newest_transport_failure_keeps_copy_link_untouched(tmp_path, monkeypatc
     ("kwargs", "error"),
     [
         # no coverage = a data state, not transport
-        ({}, NoCoverageError("Brak kampanii", godlo=G)),
+        ({}, NoCoverageError("Brak kampanii", sheet=G)),
         # 4xx without retries and a response-content error are not transport
         ({}, "404"),
-        ({}, DownloadError("raport wyjatku OGC", godlo=G)),
+        ({}, DownloadError("raport wyjatku OGC", sheet=G)),
         # only newest without a year bound
         ({"campaigns": "all"}, "conn"),
     ],
@@ -1599,20 +1599,20 @@ def test_record_without_vertical_field_is_downloaded(tmp_path):
 G4 = "N-34-139-C-a-3-4"
 
 
-def full_path(tmp_path: Path, godlo: str = G) -> Path:
-    parts = godlo.split("-")
+def full_path(tmp_path: Path, sheet: str = G) -> Path:
+    parts = sheet.split("-")
     return (
         tmp_path
         / SEGMENT
         / "full_sheet"
         / "-".join(parts[:2])
         / Path(*parts[2:])
-        / f"{godlo}.asc"
+        / f"{sheet}.asc"
     )
 
 
-def _rec_of(godlo: str, flight: str):
-    return next(r for r in c14_records(godlo) if tag(r).startswith(f"{flight}_"))
+def _rec_of(sheet: str, flight: str):
+    return next(r for r in c14_records(sheet) if tag(r).startswith(f"{flight}_"))
 
 
 def test_full_link_same_file_when_newest_full(tmp_path):

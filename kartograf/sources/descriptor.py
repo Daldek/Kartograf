@@ -75,7 +75,7 @@ class SourceDescriptor:
     provider_name: str  # "GUGiK", "CUZK", ...
     channels: tuple[AccessChannel, ...]
     tile_scheme: TileScheme | None
-    # Segment template {uklad}/{vcrs} (ADR-026); None for LandCoverManager sources
+    # Segment template {system}/{vcrs} (ADR-026); None for LandCoverManager sources
     storage_subdir: str | None
     default_extension: str
     license: LicenseInfo
@@ -83,12 +83,12 @@ class SourceDescriptor:
     auth: str = "none"  # "none" | "clms_oauth"
 
     def resolve_subdir(
-        self, *, uklad: str | None = None, vertical_crs: str | None = None
+        self, *, system: str | None = None, vertical_crs: str | None = None
     ) -> str:
-        """Fill in the ``storage_subdir`` template (placeholders {uklad}, {vcrs}).
+        """Fill in the ``storage_subdir`` template (placeholders {system}, {vcrs}).
 
         ``str.replace``, not ``str.format`` - partial filling is legal
-        ({uklad} may be left to be resolved later, per sheet code, in
+        ({system} may be left to be resolved later, per sheet code, in
         FileStorage). A dimension absent from the template = no-op (orto ignores
         vcrs). The "no braces left in the segment" validation is done by the
         final caller (FileStorage) - ADR-026.
@@ -100,15 +100,15 @@ class SourceDescriptor:
         """
         if self.storage_subdir is None:
             raise ValueError(f"Zrodlo '{self.key}' nie ma storage_subdir")
-        for name, value in (("uklad", uklad), ("vcrs", vertical_crs)):
+        for name, value in (("system", system), ("vcrs", vertical_crs)):
             if value is not None and not value.strip():
                 raise ValidationError(
                     f"Pusty wymiar segmentu storage '{name}' (zrodlo '{self.key}') "
                     "— podaj wartosc albo None"
                 )
         subdir = self.storage_subdir
-        if uklad is not None:
-            subdir = subdir.replace("{uklad}", uklad)
+        if system is not None:
+            subdir = subdir.replace("{system}", system)
         if vertical_crs is not None:
             subdir = subdir.replace("{vcrs}", vertical_crs.lower())
         return subdir

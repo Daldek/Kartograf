@@ -2,7 +2,7 @@
 Unit tests for the gugik_orto provider module.
 
 GugikOrtoProvider consumes the shared index (skorowidz) module (K5, D4, D5):
-- download(godlo) → index (layers from the newest) → OpenData (TIF)
+- download → index (layers from the newest) → OpenData (TIF)
 - file selection: the sheet code as a whole token, CRS from the sheet code
   format, colour variant (RGB by default) as a hard filter, then the newest
   `aktualnosc` (acquisition date)
@@ -27,14 +27,14 @@ from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from tests.conftest import render_gfi_body
 
 FIXTURES = Path(__file__).parent / "fixtures" / "gugik_skorowidz"
-ENDPOINT = GugikOrtoProvider.WMS_SKOROWIDZE_ENDPOINT
+ENDPOINT = GugikOrtoProvider.WMS_INDEX_ENDPOINT
 LAYERS = [
     "SkorowidzeOrtofotomapy2026",
     "SkorowidzeOrtofotomapy2025",
     "SkorowidzeOrtofotomapy2024",
     "SkorowidzeOrtofotomapyStarsze",
 ]
-GODLO = "M-34-76-A-a-1-1"
+SHEET = "M-34-76-A-a-1-1"
 RGB_2024 = "https://opendata.geoportal.gov.pl/ortofotomapa/81423/81423_1371958_M-34-76-A-a-1-1.tif"
 CIR_2024 = "https://opendata.geoportal.gov.pl/ortofotomapa/81422/81422_1368112_M-34-76-A-a-1-1.tif"
 SESSION_FACTORY = "kartograf.transport.http.make_gugik_session"
@@ -45,22 +45,22 @@ def sample(name: str) -> str:
 
 
 def orto_record(
-    godlo: str = GODLO,
+    sheet: str = SHEET,
     *,
     kolor: str = "RGB",
     aktualnosc: str = "2024-06-21",
-    uklad: str = "PL-1992",
+    system: str = "PL-1992",
     url: str | None = None,
     **fields: str,
 ) -> dict:
     """Orto index record with fields as in the GUGiK response (2026-09-29)."""
     record = {
         "url": url
-        or f"https://opendata.geoportal.gov.pl/ortofotomapa/81423/81423_1_{godlo}.tif",
-        "godlo": godlo,
+        or f"https://opendata.geoportal.gov.pl/ortofotomapa/81423/81423_1_{sheet}.tif",
+        "godlo": sheet,
         "aktualnosc": aktualnosc,
         "wielkoscPiksela": "0.25",
-        "ukladWspolrzednych": uklad,
+        "ukladWspolrzednych": system,
         "calyArkuszWyeplnionyTrescia": "TAK",
         "modulArchiwizacji": "1:5000",
         "rozmiarPlikuMB": "41",
@@ -182,11 +182,11 @@ class TestGugikOrtoProviderDownload:
         return session
 
     def test_download_success(self, tmp_path, session):
-        """download(godlo) queries the index, fetches the RGB URL and saves the file."""
+        """download queries the index, fetches the RGB URL and saves the file."""
         provider = GugikOrtoProvider(session=session)
         output_path = tmp_path / "sheet.tif"
 
-        result = provider.download(GODLO, output_path)
+        result = provider.download(SHEET, output_path)
 
         assert result == output_path
         assert output_path.exists()
@@ -199,7 +199,7 @@ class TestGugikOrtoProviderDownload:
         provider = GugikOrtoProvider(session=session)
         output_path = tmp_path / "subdir" / "nested" / "sheet.tif"
 
-        result = provider.download(GODLO, output_path)
+        result = provider.download(SHEET, output_path)
 
         assert result == output_path
         assert output_path.parent.exists()
@@ -209,7 +209,7 @@ class TestGugikOrtoProviderDownload:
         provider = GugikOrtoProvider(session=session)
         output_path = tmp_path / "sheet.tif"
 
-        provider.download(GODLO, output_path)
+        provider.download(SHEET, output_path)
 
         assert b"TIFF header data" in output_path.read_bytes()
 
@@ -220,7 +220,7 @@ class TestGugikOrtoProviderDownload:
         output = tmp_path / "not-created" / "sheet.tif"
 
         with pytest.raises(NoCoverageError):
-            GugikOrtoProvider(session=session).download(GODLO, output)
+            GugikOrtoProvider(session=session).download(SHEET, output)
 
         assert not output.parent.exists()
 
@@ -238,15 +238,15 @@ class TestGugikOrtoProviderSelection:
         """A raw GUGiK response (CIR before RGB) -> the RGB URL, not the first one."""
         provider, session = self.provider_with(sample("orto_2024.html"))
 
-        assert provider._get_opendata_url(GODLO) == RGB_2024
+        assert provider._get_opendata_url(SHEET) == RGB_2024
         assert session.get.call_count == 1
 
     def test_source_info_carries_color_and_campaign(self):
         """extra.source (D5): url, layer, acquisition date, pixel and file colour."""
         provider, _ = self.provider_with(sample("orto_2024.html"))
-        provider._get_opendata_url(GODLO)
+        provider._get_opendata_url(SHEET)
 
-        source = provider.source_info(GODLO)
+        source = provider.source_info(SHEET)
         assert source["url"] == RGB_2024
         assert source["color"] == "RGB"
         assert source["acquisition_date"] == "2024-06-21"
@@ -262,13 +262,13 @@ class TestGugikOrtoProviderSelection:
             empty, empty, empty, sample("orto_starsze.html")
         )
 
-        url = provider._get_opendata_url(GODLO)
+        url = provider._get_opendata_url(SHEET)
 
         assert url.endswith("76530_1087101_M-34-76-A-a-1-1.tif")
         assert queried_layers(session) == LAYERS
-        assert provider.source_info(GODLO)["acquisition_date"] == "2022-06-03"
+        assert provider.source_info(SHEET)["acquisition_date"] == "2022-06-03"
 
-    def test_pl2000_godlo_gets_pl2000_record(self):
+    def test_pl2000_sheet_gets_pl2000_record(self):
         """A PL-2000 code gets a PL-2000 record, not the first layer's PL-1992 CIR."""
         provider, _ = self.provider_with(
             sample("orto_2024.html"),
@@ -282,7 +282,7 @@ class TestGugikOrtoProviderSelection:
         assert url.endswith("64878_364829_7.124.07.24.tif")
         assert provider.source_info("7.124.07.24")["declared_crs"] == "PL-2000:S7"
 
-    def test_pl1992_godlo_never_takes_pl2000_or_parent_sheet(self):
+    def test_pl1992_sheet_never_takes_pl2000_or_parent_sheet(self):
         """A parent sheet (M-34-76-A-a-1) or a PL-2000 record never stands in."""
         body = orto_body(
             [
@@ -293,7 +293,7 @@ class TestGugikOrtoProviderSelection:
                 ),
                 orto_record(
                     "7.124.07.24",
-                    uklad="PL-2000:S7",
+                    system="PL-2000:S7",
                     aktualnosc="2015-04-23",
                     url="https://opendata.geoportal.gov.pl/ortofotomapa/64878/64878_364829_7.124.07.24.tif",
                 ),
@@ -302,7 +302,7 @@ class TestGugikOrtoProviderSelection:
         provider, _ = self.provider_with(*[body] * 4)
 
         with pytest.raises(NoCoverageError) as exc:
-            provider._get_opendata_url(GODLO)
+            provider._get_opendata_url(SHEET)
 
         message = str(exc.value)
         assert "Brak ortofotomapy RGB dla M-34-76-A-a-1-1" in message
@@ -319,11 +319,11 @@ class TestGugikOrtoProviderSelection:
         provider, _ = self.provider_with(*[body] * 4)
 
         with pytest.raises(NoCoverageError, match="Dostepne warianty") as exc:
-            provider._get_opendata_url(GODLO)
+            provider._get_opendata_url(SHEET)
 
         message = str(exc.value)
         assert "B/W 2003-01-01, CIR 2024-06-21" in message
-        assert exc.value.godlo == GODLO
+        assert exc.value.sheet == SHEET
 
     def test_color_kwarg_selects_other_variant(self):
         """color="CIR" downloads CIR - colour is a hard filter, not a preference."""
@@ -332,8 +332,8 @@ class TestGugikOrtoProviderSelection:
 
         provider = GugikOrtoProvider(session=session, color="CIR")
 
-        assert provider._get_opendata_url(GODLO) == CIR_2024
-        assert provider.source_info(GODLO)["color"] == "CIR"
+        assert provider._get_opendata_url(SHEET) == CIR_2024
+        assert provider.source_info(SHEET)["color"] == "CIR"
 
     def test_stops_at_first_layer_with_matching_variant(self):
         """P2: a record in a yearly layer ends the loop — older layers not queried."""
@@ -342,7 +342,7 @@ class TestGugikOrtoProviderSelection:
             orto_body([orto_record(aktualnosc="2025-07-02")]),
         )
 
-        provider._get_opendata_url(GODLO)
+        provider._get_opendata_url(SHEET)
 
         assert queried_layers(session) == LAYERS[:2]
 
@@ -354,7 +354,7 @@ class TestGugikOrtoProviderSelection:
             orto_body([rgb_2025]),
         )
 
-        assert provider._get_opendata_url(GODLO) == rgb_2025["url"]
+        assert provider._get_opendata_url(SHEET) == rgb_2025["url"]
         assert queried_layers(session) == LAYERS[:2]
 
     def test_all_layers_empty_is_no_coverage(self):
@@ -362,7 +362,7 @@ class TestGugikOrtoProviderSelection:
         provider, session = self.provider_with(*[orto_body([])] * 4)
 
         with pytest.raises(NoCoverageError, match="Brak ortofotomapy RGB"):
-            provider._get_opendata_url(GODLO)
+            provider._get_opendata_url(SHEET)
 
         assert queried_layers(session) == LAYERS
 
@@ -376,7 +376,7 @@ class TestGugikOrtoProviderSelection:
         provider = GugikOrtoProvider(session=session)
 
         with patch("time.sleep") as sleep, pytest.raises(DownloadError) as exc:
-            provider._get_opendata_url(GODLO)
+            provider._get_opendata_url(SHEET)
 
         assert not isinstance(exc.value, NoCoverageError)
         assert "SkorowidzeOrtofotomapy2026" in str(exc.value)
@@ -388,14 +388,14 @@ class TestGugikOrtoProviderSelection:
         provider, session = self.provider_with(sample("ogc_exception.body"))
 
         with pytest.raises(DownloadError) as exc:
-            provider._get_opendata_url(GODLO)
+            provider._get_opendata_url(SHEET)
 
         assert not isinstance(exc.value, NoCoverageError)
         assert session.get.call_count == 1
 
 
 class TestGugikOrtoProviderCache:
-    """MetadataCache: key (orto, <colour>, none, godlo); payload source/no_coverage."""
+    """MetadataCache: key (orto, <colour>, none, sheet); payload source/no_coverage."""
 
     @pytest.fixture
     def cache(self, tmp_path):
@@ -408,26 +408,26 @@ class TestGugikOrtoProviderCache:
         provider = GugikOrtoProvider(
             session=Mock(get=Mock(return_value=gfi_response(sample("orto_2024.html"))))
         )
-        provider._get_opendata_url(GODLO)
-        return provider.source_info(GODLO)
+        provider._get_opendata_url(SHEET)
+        return provider.source_info(SHEET)
 
     def test_cache_hit_source_skips_network(self, cache, source):
         """A `source` hit = no network; URL and source_info from the payload."""
-        cache.set_record("orto", "RGB", "none", GODLO, {"source": source})
+        cache.set_record("orto", "RGB", "none", SHEET, {"source": source})
         session = Mock(spec=requests.Session)
         provider = GugikOrtoProvider(session=session, cache=cache)
 
-        assert provider._get_opendata_url(GODLO) == RGB_2024
+        assert provider._get_opendata_url(SHEET) == RGB_2024
         session.get.assert_not_called()
-        assert provider.source_info(GODLO) == source
+        assert provider.source_info(SHEET) == source
 
     def test_cache_hit_no_coverage_raises_without_network(self, cache):
-        cache.set_record("orto", "RGB", "none", GODLO, {"no_coverage": True})
+        cache.set_record("orto", "RGB", "none", SHEET, {"no_coverage": True})
         session = Mock(spec=requests.Session)
         provider = GugikOrtoProvider(session=session, cache=cache)
 
-        with pytest.raises(NoCoverageError, match=GODLO):
-            provider._get_opendata_url(GODLO)
+        with pytest.raises(NoCoverageError, match=SHEET):
+            provider._get_opendata_url(SHEET)
         session.get.assert_not_called()
 
     def test_negative_cache_preserves_variant_hint(self, cache):
@@ -439,10 +439,10 @@ class TestGugikOrtoProviderCache:
         provider = GugikOrtoProvider(session=session, cache=cache)
 
         with pytest.raises(NoCoverageError) as first:
-            provider._get_opendata_url(GODLO)
+            provider._get_opendata_url(SHEET)
         calls = session.get.call_count
         with pytest.raises(NoCoverageError) as cached:
-            provider._get_opendata_url(GODLO)
+            provider._get_opendata_url(SHEET)
         assert session.get.call_count == calls
         assert str(cached.value) == str(first.value)
         assert "CIR 2024-06-21" in str(cached.value)
@@ -452,28 +452,28 @@ class TestGugikOrtoProviderCache:
         session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
         provider = GugikOrtoProvider(session=session, cache=cache)
 
-        assert provider._get_opendata_url(GODLO) == RGB_2024
+        assert provider._get_opendata_url(SHEET) == RGB_2024
 
-        cached = cache.get_record("orto", "RGB", "none", GODLO)
+        cached = cache.get_record("orto", "RGB", "none", SHEET)
         assert cached["source"]["url"] == RGB_2024
         assert cached["source"]["color"] == "RGB"
         assert cached["source"]["layer"] == "SkorowidzeOrtofotomapy2026"
-        assert provider.source_info(GODLO) == cached["source"]
+        assert provider.source_info(SHEET) == cached["source"]
 
     def test_cache_key_distinguishes_color(self, cache, source):
         """An RGB entry does not serve a CIR provider - other file, other key."""
-        cache.set_record("orto", "RGB", "none", GODLO, {"source": source})
+        cache.set_record("orto", "RGB", "none", SHEET, {"source": source})
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
         provider = GugikOrtoProvider(session=session, cache=cache, color="CIR")
 
-        assert provider._get_opendata_url(GODLO) == CIR_2024
+        assert provider._get_opendata_url(SHEET) == CIR_2024
 
         assert session.get.call_count == 1
-        assert cache.get_record("orto", "CIR", "none", GODLO)["source"]["url"] == (
+        assert cache.get_record("orto", "CIR", "none", SHEET)["source"]["url"] == (
             CIR_2024
         )
-        assert cache.get_record("orto", "RGB", "none", GODLO) == {"source": source}
+        assert cache.get_record("orto", "RGB", "none", SHEET) == {"source": source}
 
     def test_all_layers_empty_stores_no_coverage(self, cache):
         session = Mock(spec=requests.Session)
@@ -481,9 +481,9 @@ class TestGugikOrtoProviderCache:
         provider = GugikOrtoProvider(session=session, cache=cache)
 
         with pytest.raises(NoCoverageError) as exc:
-            provider._get_opendata_url(GODLO)
+            provider._get_opendata_url(SHEET)
 
-        assert cache.get_record("orto", "RGB", "none", GODLO) == {
+        assert cache.get_record("orto", "RGB", "none", SHEET) == {
             "no_coverage": True,
             "message": str(exc.value),
         }
@@ -495,16 +495,16 @@ class TestGugikOrtoProviderCache:
         provider = GugikOrtoProvider(session=session, cache=cache)
 
         with patch("time.sleep"), pytest.raises(DownloadError):
-            provider._get_opendata_url(GODLO)
+            provider._get_opendata_url(SHEET)
 
-        assert cache.get_record("orto", "RGB", "none", GODLO) is None
+        assert cache.get_record("orto", "RGB", "none", SHEET) is None
 
     def test_no_cache_backward_compat(self):
         """cache=None: the same resolution, without writing."""
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
 
-        assert GugikOrtoProvider(session=session)._get_opendata_url(GODLO) == RGB_2024
+        assert GugikOrtoProvider(session=session)._get_opendata_url(SHEET) == RGB_2024
 
 
 ORTO_WMS_XML = """\
@@ -558,7 +558,7 @@ class TestGugikOrtoLayerDiscovery:
         provider = GugikOrtoProvider(session=session)
 
         with patch("time.sleep"), pytest.raises(DownloadError) as exc:
-            provider._get_opendata_url(GODLO)
+            provider._get_opendata_url(SHEET)
 
         assert not isinstance(exc.value, NoCoverageError)
         assert session.get.call_count == 3
@@ -590,7 +590,7 @@ class TestGugikOrtoProviderSession:
         )
 
         with patch(SESSION_FACTORY) as factory:
-            GugikOrtoProvider(session=session).download(GODLO, tmp_path / "s.tif")
+            GugikOrtoProvider(session=session).download(SHEET, tmp_path / "s.tif")
 
         factory.assert_not_called()
         assert session.get.call_count == 2
@@ -602,8 +602,8 @@ class TestGugikOrtoProviderSession:
 
         with patch(SESSION_FACTORY, return_value=session) as factory:
             provider = GugikOrtoProvider()
-            provider._get_opendata_url(GODLO)
-            provider._get_opendata_url(GODLO)
+            provider._get_opendata_url(SHEET)
+            provider._get_opendata_url(SHEET)
 
         factory.assert_called_once()
         assert session.get.call_count == 2
@@ -624,7 +624,7 @@ class TestGugikOrtoProviderSession:
 
             def worker():
                 try:
-                    results.append(provider._get_opendata_url(GODLO))
+                    results.append(provider._get_opendata_url(SHEET))
                 except Exception as exc:  # noqa: BLE001 — collected for the assertion
                     errors.append(exc)
 
@@ -752,7 +752,7 @@ class TestGugikOrtoProviderRetry:
         output_path = tmp_path / "test.tif"
 
         with patch("time.sleep"):
-            result = provider.download(GODLO, output_path)
+            result = provider.download(SHEET, output_path)
 
         assert result == output_path
         assert session.get.call_count == 3
@@ -767,7 +767,7 @@ class TestGugikOrtoProviderRetry:
         provider = GugikOrtoProvider(session=session)
 
         with patch("time.sleep"), pytest.raises(DownloadError):
-            provider.download(GODLO, tmp_path / "test.tif")
+            provider.download(SHEET, tmp_path / "test.tif")
 
     def test_download_exponential_backoff(self, tmp_path):
         """Test exponential backoff — waits of [2, 4] seconds."""
@@ -783,7 +783,7 @@ class TestGugikOrtoProviderRetry:
             patch("time.sleep", side_effect=lambda t: sleep_times.append(t)),
             pytest.raises(DownloadError),
         ):
-            provider.download(GODLO, tmp_path / "test.tif")
+            provider.download(SHEET, tmp_path / "test.tif")
 
         # Exponential backoff: 2^1=2, 2^2=4 seconds
         assert sleep_times == [2, 4]
@@ -799,21 +799,21 @@ class TestGugikOrtoProviderInfo:
 
         assert formats == ["GTiff", "PNG", "JPEG"]
 
-    def test_validate_valid_godlo(self):
+    def test_validate_valid_sheet(self):
         """Test validation of a valid sheet code - returns True."""
         provider = GugikOrtoProvider()
 
-        assert provider.validate_godlo("N-34-130-D") is True
-        assert provider.validate_godlo("N-34-130-D-d-2-4") is True
-        assert provider.validate_godlo("M-33-A") is True
+        assert provider.validate_sheet("N-34-130-D") is True
+        assert provider.validate_sheet("N-34-130-D-d-2-4") is True
+        assert provider.validate_sheet("M-33-A") is True
 
-    def test_validate_invalid_godlo(self):
+    def test_validate_invalid_sheet(self):
         """Test validation of an invalid sheet code - returns False."""
         provider = GugikOrtoProvider()
 
-        assert provider.validate_godlo("INVALID") is False
-        assert provider.validate_godlo("") is False
-        assert provider.validate_godlo("123") is False
+        assert provider.validate_sheet("INVALID") is False
+        assert provider.validate_sheet("") is False
+        assert provider.validate_sheet("123") is False
 
 
 class TestOrtoVariantStorage:
@@ -838,10 +838,10 @@ class TestOrtoVariantStorage:
         import json
 
         rgb_manager, _ = self.manager_for(tmp_path, "RGB", b"II*\x00RGB")
-        rgb_path = rgb_manager.download_sheet(GODLO)
+        rgb_path = rgb_manager.download_sheet(SHEET)
 
         cir_manager, cir_session = self.manager_for(tmp_path, "CIR", b"II*\x00CIR")
-        cir_path = cir_manager.download_sheet(GODLO)
+        cir_path = cir_manager.download_sheet(SHEET)
 
         # RGB unchanged (no migration), CIR in its own variant segment.
         assert rgb_path.relative_to(tmp_path).parts[:2] == ("orto", "pl_1992")
@@ -872,7 +872,7 @@ class TestOrtoVariantStorage:
             output_dir=tmp_path, provider=GugikOrtoProvider(color=color)
         )
 
-        path = manager.storage.get_path(GODLO, ".tif")
+        path = manager.storage.get_path(SHEET, ".tif")
         assert path.relative_to(tmp_path).as_posix().startswith(segment + "/M-34/")
 
 
@@ -891,19 +891,27 @@ class TestForceRefreshesRecordCache:
         )
         with patch(SESSION_FACTORY, return_value=session):
             rc = main(
-                ["download", GODLO, "--product", "orto", "-o", str(tmp_path / "out")]
+                [
+                    "download",
+                    "--sheet",
+                    SHEET,
+                    "--product",
+                    "orto",
+                    "-o",
+                    str(tmp_path / "out"),
+                ]
                 + list(extra)
             )
         return rc, session
 
     def test_force_writes_fresh_record(self, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        key = ("orto", "RGB", "none", GODLO)
+        key = ("orto", "RGB", "none", SHEET)
         stale = MetadataCache()
         stale_source = {
             "url": self.STALE,
             "layer": "SkorowidzeOrtofotomapyStarsze",
-            "sheet": GODLO,
+            "sheet": SHEET,
             "acquisition_date": "2020-01-01",
             "color": "RGB",
         }

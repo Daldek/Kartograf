@@ -20,7 +20,7 @@ Example::
         max_workers=4,
     )
     for skipped in result.superseded:
-        print(skipped.tile.godlo, "covered by", skipped.covered_by)
+        print(skipped.tile.sheet, "covered by", skipped.covered_by)
     if result.failed:
         ...  # retry: tiles already downloaded are skipped (force=False)
 """
@@ -63,7 +63,7 @@ class LazDownloadResult:
     """
     Result of ``run_laz_download`` / ``download_laz_area``.
 
-    ``tiles`` — tiles selected for download (by godlo); each ends up in
+    ``tiles`` — tiles selected for download (by sheet); each ends up in
     exactly one of the lists ``downloaded`` (downloaded now), ``skipped``
     (file already existed, ``force=False``) or ``failed``. ``superseded`` —
     tiles dropped during selection (covered by newer tiles or outside the
@@ -103,7 +103,7 @@ def write_laz_sidecar(
     ``extra.acquisition_date`` and ``extra.full_sheet`` come from WFS when
     known. ``extra.parent_request`` is only present when passed (ADR-023 (f).1).
     """
-    from kartograf.sources.registry import horizontal_crs_for_uklad
+    from kartograf.sources.registry import horizontal_crs_for_system
     from kartograf.sources.sidecar import emit_sidecar
 
     request: dict = {
@@ -121,7 +121,7 @@ def write_laz_sidecar(
     if max_year is not None:
         request["max_year"] = max_year
     extra: dict = {
-        "tile_sheet": tile.godlo,
+        "tile_sheet": tile.sheet,
         "year": tile.year,
         "nominal_density": tile.density,
         "url": tile.url,
@@ -141,7 +141,7 @@ def write_laz_sidecar(
         vertical_crs=provider.vertical_crs,
         # N8: the tile carries its own CRS (PL-1992 or a PL-2000 zone), while
         # the WFS channel declares only the default — unknown CRS = channel
-        horizontal_crs=horizontal_crs_for_uklad(tile.crs),
+        horizontal_crs=horizontal_crs_for_system(tile.crs),
         extra=extra,
     )
 
@@ -166,11 +166,11 @@ def run_laz_download(
     Download the selected LAZ tiles (in parallel) and write sidecars.
 
     A tile goes to ``FileStorage(output_dir, product="laz",
-    vertical_crs=provider.vertical_crs)`` — the ``{uklad}`` segment per tile
-    (``LazTile.uklad``), so one request may write to ``pl_1992_*`` and
+    vertical_crs=provider.vertical_crs)`` — the ``{system}`` segment per tile
+    (``LazTile.system``), so one request may write to ``pl_1992_*`` and
     ``pl_2000_*``. An existing file is skipped without network access,
     unless ``force=True``. A tile download failure (``DownloadError``) does
-    NOT abort the others: it goes to ``failed`` (sorted by godlo and URL),
+    NOT abort the others: it goes to ``failed`` (sorted by sheet and URL),
     and successful tiles stay on disk. Other exceptions (e.g. a write
     ``OSError``) abort the call.
 
@@ -182,7 +182,7 @@ def run_laz_download(
     total = len(tiles)
 
     def fetch(tile: LazTile) -> tuple[str, LazTile, Path | None, DownloadError | None]:
-        target = storage.get_raw_path(tile.godlo, tile.filename, uklad=tile.uklad)
+        target = storage.get_raw_path(tile.sheet, tile.filename, system=tile.system)
         if not force and target.exists():
             return "skip", tile, target, None
         try:
@@ -227,7 +227,7 @@ def run_laz_download(
             for s, t, _, e in outcomes
             if s == "fail" and e
         ),
-        key=lambda f: (f.tile.godlo, f.tile.url),
+        key=lambda f: (f.tile.sheet, f.tile.url),
     )
     return LazDownloadResult(
         tiles=tiles,
@@ -261,11 +261,11 @@ def download_laz_area(
     Parameters
     ----------
     bbox : BBox
-        Area in EPSG:2180 (e.g. ``SheetParser(godlo).get_bbox(crs="EPSG:2180")``
+        Area in EPSG:2180 (e.g. ``SheetParser.get_bbox(crs="EPSG:2180")``
         or ``get_overall_bbox(path, target_crs="EPSG:2180")``).
     vertical_crs : str, optional
         ``"EVRF2007"`` (default) or ``"KRON86"`` — the WFS service and the
-        ``laz/pl_<uklad>_<vcrs>`` segment. With a custom ``provider`` it
+        ``laz/pl_<system>_<vcrs>`` segment. With a custom ``provider`` it
         defaults to its vertical CRS; an explicit, different value is a
         ``ValueError``.
     year, min_density

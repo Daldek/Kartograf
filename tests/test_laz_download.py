@@ -42,7 +42,7 @@ _WINDOWS = {
         "wgs",
         (487009.9919, 637409.2163, 487039.9756, 637440.8126),
     ),
-    # 2026-10-11: sheet N-34-139-A-c-1-1 (godlo mode)
+    # 2026-10-11: sheet N-34-139-A-c-1-1 (sheet mode)
     "sheet": (
         LAZ_FIXTURES / "real_2026_10_11",
         "sheet",
@@ -85,10 +85,10 @@ def downloaded_urls(session: MagicMock) -> list[str]:
     return [c.args[0] for c in session.get.call_args_list if c.args[0].endswith(".laz")]
 
 
-def _tile(godlo: str, crs: str = "PL-2000:S6", year: int = 2024) -> LazTile:
+def _tile(sheet: str, crs: str = "PL-2000:S6", year: int = 2024) -> LazTile:
     return LazTile(
-        godlo=godlo,
-        url=f"https://opendata.geoportal.gov.pl/x/81121_1_{godlo}.laz",
+        sheet=sheet,
+        url=f"https://opendata.geoportal.gov.pl/x/81121_1_{sheet}.laz",
         year=year,
         density=25,
         crs=crs,
@@ -152,7 +152,7 @@ class TestRunLazDownload:
         )
         expected = FileStorage(
             tmp_path, product="laz", vertical_crs="EVRF2007"
-        ).get_raw_path(tile.godlo, tile.filename, uklad="2000")
+        ).get_raw_path(tile.sheet, tile.filename, system="2000")
         assert result.downloaded == (expected,)
         assert expected.parts[-10:-8] == ("laz", "pl_2000_evrf2007")
         meta = _sidecar(expected)
@@ -163,7 +163,7 @@ class TestRunLazDownload:
         assert meta["request"]["min_density"] == 12
         # ADR-031: English keys only (tile_sheet / year / nominal_density)
         assert {k: meta["extra"][k] for k in ("tile_sheet", "year")} == {
-            "tile_sheet": tile.godlo,
+            "tile_sheet": tile.sheet,
             "year": tile.year,
         }
         assert meta["extra"]["nominal_density"] == tile.density
@@ -228,7 +228,7 @@ class TestRunLazDownload:
             _selection(*tiles), provider=provider, bbox=BBOX, output_dir=tmp_path
         )
         assert len(result.downloaded) == 2
-        assert [f.tile.godlo for f in result.failed] == [
+        assert [f.tile.sheet for f in result.failed] == [
             "N-33-131-B-a-1-1-2",
             "N-33-131-B-a-1-1-4",
         ]
@@ -314,14 +314,14 @@ class TestDownloadLazArea:
             parent_request=PARENT,
         )
         assert isinstance(result, LazDownloadResult)
-        assert [t.godlo for t in result.tiles] == ["N-34-139-A-c-1-1-3-4"]
+        assert [t.sheet for t in result.tiles] == ["N-34-139-A-c-1-1-3-4"]
         assert downloaded_urls(session) == [
             "https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/"
             "83230/83230_1743191_N-34-139-A-c-1-1-3-4.laz"
         ]
         (path,) = result.downloaded
         assert path.parts[-11:-9] == ("laz", "pl_1992_evrf2007")
-        assert sorted((s.tile.godlo, s.tile.year) for s in result.superseded) == [
+        assert sorted((s.tile.sheet, s.tile.year) for s in result.superseded) == [
             ("7.173.21.06.2", 2022),
             ("N-34-139-A-c-1-1-3-4", 2023),
         ]
@@ -338,7 +338,7 @@ class TestDownloadLazArea:
             year=2022,
             provider=GugikLazProvider(session=session),
         )
-        assert [(t.godlo, t.year) for t in result.tiles] == [("7.173.21.06.2", 2022)]
+        assert [(t.sheet, t.year) for t in result.tiles] == [("7.173.21.06.2", 2022)]
         assert _sidecar(result.downloaded[0])["request"]["year"] == 2022
 
     def test_year_with_empty_service_layer_conflicts_before_download(self, tmp_path):
@@ -426,8 +426,8 @@ class TestCliOnRealWfs:
         assert parent["bbox"] == [float(v) for v in bbox.split(",")]
         assert parent["countries"] == ["PL"]
 
-    def test_godlo_mode_has_no_parent_request(self, tmp_path):
-        rc, session = _cli(tmp_path, "N-34-139-A-c-1-1", area="sheet")
+    def test_sheet_mode_has_no_parent_request(self, tmp_path):
+        rc, session = _cli(tmp_path, "--sheet", "N-34-139-A-c-1-1", area="sheet")
         assert rc == 0
         sidecars = list(tmp_path.rglob("*.meta.json"))
         assert len(sidecars) == len(downloaded_urls(session)) > 1

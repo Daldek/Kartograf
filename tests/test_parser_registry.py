@@ -41,7 +41,7 @@ class TestPathParts:
     """Golden values — identical to the former FileStorage._get_directory_parts."""
 
     @pytest.mark.parametrize(
-        ("godlo", "expected"),
+        ("sheet", "expected"),
         [
             ("N-34-130-D-d-2-4", ["N-34", "130", "D", "d", "2", "4"]),
             ("N-34-130-D", ["N-34", "130", "D"]),
@@ -52,8 +52,8 @@ class TestPathParts:
             ("6.162.34.02.3", ["6", "162", "34", "02", "3"]),
         ],
     )
-    def test_golden_values(self, godlo, expected):
-        assert path_parts(godlo) == expected
+    def test_golden_values(self, sheet, expected):
+        assert path_parts(sheet) == expected
 
 
 class TestSheetParserIntegration:
@@ -78,7 +78,7 @@ class TestCzechSystems:
         assert system.id == "cz_sm5"
         assert system.country == "CZ"
 
-    def test_pl_godla_still_detected_first(self):
+    def test_pl_sheets_still_detected_first(self):
         assert detect_system("6.179.12.20").id == "pl2000"
         assert detect_system("N-34-130-D-d-2-4").id == "pl1992"
 
@@ -88,7 +88,7 @@ class TestCzechSystems:
         assert detect_system("cokolwiek").id == "pl1992"
 
     @pytest.mark.parametrize(
-        "godlo,parts",
+        "sheet,parts",
         [
             ("302_5550", ["302", "5550"]),
             ("756_5516", ["756", "5516"]),
@@ -96,8 +96,8 @@ class TestCzechSystems:
             ("BENE09", ["BENE", "09"]),
         ],
     )
-    def test_cz_path_parts(self, godlo, parts):
-        assert path_parts(godlo) == parts
+    def test_cz_path_parts(self, sheet, parts):
+        assert path_parts(sheet) == parts
 
     def test_cz_patterns_are_shared_with_parsers(self):
         """One pattern per system: ParserTM33 and SheetIndex use the registry."""
@@ -118,7 +118,7 @@ class TestWhitespace:
     """K5: detect_system and path_parts strip whitespace (like the parsers)."""
 
     @pytest.mark.parametrize(
-        ("godlo", "system_id"),
+        ("sheet", "system_id"),
         [
             (" CTES96", "cz_sm5"),
             ("CTES96 ", "cz_sm5"),
@@ -128,11 +128,11 @@ class TestWhitespace:
             ("\tN-34-130-D ", "pl1992"),
         ],
     )
-    def test_detect_strips(self, godlo, system_id):
-        assert detect_system(godlo).id == system_id
+    def test_detect_strips(self, sheet, system_id):
+        assert detect_system(sheet).id == system_id
 
     @pytest.mark.parametrize(
-        ("godlo", "parts"),
+        ("sheet", "parts"),
         [
             (" 302_5550", ["302", "5550"]),
             ("CTES96 ", ["CTES", "96"]),
@@ -140,5 +140,5 @@ class TestWhitespace:
             (" N-34-130-D", ["N-34", "130", "D"]),
         ],
     )
-    def test_path_parts_strip(self, godlo, parts):
-        assert path_parts(godlo) == parts
+    def test_path_parts_strip(self, sheet, parts):
+        assert path_parts(sheet) == parts

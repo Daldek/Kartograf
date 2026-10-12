@@ -28,15 +28,15 @@ class TestParser2000Parsing:
     def test_parse_10k(self):
         """Test parsing a 1:10000 sheet code."""
         p = Parser2000("6.179.12")
-        assert p.godlo == "6.179.12"
+        assert p.sheet == "6.179.12"
         assert p.scale == "1:10000"
-        assert p.uklad == "2000"
+        assert p.system == "2000"
         assert p.components == {"strefa": "6", "pas": "179", "slup": "12"}
 
     def test_parse_5k(self):
         """Test parsing a 1:5000 sheet code."""
         p = Parser2000("6.179.12.3")
-        assert p.godlo == "6.179.12.3"
+        assert p.sheet == "6.179.12.3"
         assert p.scale == "1:5000"
         assert p.components == {
             "strefa": "6",
@@ -48,7 +48,7 @@ class TestParser2000Parsing:
     def test_parse_2k(self):
         """Test parsing a 1:2000 sheet code."""
         p = Parser2000("6.179.12.15")
-        assert p.godlo == "6.179.12.15"
+        assert p.sheet == "6.179.12.15"
         assert p.scale == "1:2000"
         assert p.components == {
             "strefa": "6",
@@ -60,7 +60,7 @@ class TestParser2000Parsing:
     def test_parse_1k(self):
         """Test parsing a 1:1000 sheet code."""
         p = Parser2000("6.179.12.15.2")
-        assert p.godlo == "6.179.12.15.2"
+        assert p.sheet == "6.179.12.15.2"
         assert p.scale == "1:1000"
         assert p.components == {
             "strefa": "6",
@@ -73,7 +73,7 @@ class TestParser2000Parsing:
     def test_parse_500(self):
         """Test parsing a 1:500 sheet code."""
         p = Parser2000("6.179.12.15.2.4")
-        assert p.godlo == "6.179.12.15.2.4"
+        assert p.sheet == "6.179.12.15.2.4"
         assert p.scale == "1:500"
         assert p.components == {
             "strefa": "6",
@@ -221,20 +221,20 @@ class TestParser2000Validation:
 class TestParser2000Properties:
     """Tests of Parser2000 properties."""
 
-    def test_godlo_property(self):
-        """Test the godlo property."""
+    def test_sheet_property(self):
+        """Test the sheet property."""
         p = Parser2000("7.200.15")
-        assert p.godlo == "7.200.15"
+        assert p.sheet == "7.200.15"
 
     def test_scale_property(self):
         """Test the scale property."""
         p = Parser2000("7.200.15")
         assert p.scale == "1:10000"
 
-    def test_uklad_always_2000(self):
+    def test_system_always_2000(self):
         """Test that the CRS is always '2000'."""
         p = Parser2000("6.179.12")
-        assert p.uklad == "2000"
+        assert p.system == "2000"
 
     def test_zone_property(self):
         """Test the zone property."""
@@ -739,19 +739,19 @@ class TestParser2000Constants:
         for scale, (h, w) in SHEET_DIMENSIONS_2000.items():
             # Build a suitable sheet code for each scale
             if scale == "1:10000":
-                godlo = "6.179.12"
+                sheet = "6.179.12"
             elif scale == "1:5000":
-                godlo = "6.179.12.1"
+                sheet = "6.179.12.1"
             elif scale == "1:2000":
-                godlo = "6.179.12.01"
+                sheet = "6.179.12.01"
             elif scale == "1:1000":
-                godlo = "6.179.12.01.1"
+                sheet = "6.179.12.01.1"
             elif scale == "1:500":
-                godlo = "6.179.12.01.1.1"
+                sheet = "6.179.12.01.1.1"
             else:
                 continue
 
-            p = Parser2000(godlo)
+            p = Parser2000(sheet)
             bbox = p.get_bbox()
             assert bbox.max_y - bbox.min_y == pytest.approx(h), (
                 f"Height mismatch for {scale}"
@@ -772,7 +772,7 @@ class TestParser2000Whitespace:
     def test_leading_trailing_whitespace_stripped(self):
         """Test that leading/trailing whitespace is removed."""
         p = Parser2000("  6.179.12  ")
-        assert p.godlo == "6.179.12"
+        assert p.sheet == "6.179.12"
         assert p.scale == "1:10000"
 
 
@@ -794,7 +794,7 @@ class TestParser2000GetParent:
         p = Parser2000("6.179.12.3")
         parent = p.get_parent()
         assert parent is not None
-        assert parent.godlo == "6.179.12"
+        assert parent.sheet == "6.179.12"
         assert parent.scale == "1:10000"
 
     def test_parent_of_2k(self):
@@ -802,7 +802,7 @@ class TestParser2000GetParent:
         p = Parser2000("6.179.12.15")
         parent = p.get_parent()
         assert parent is not None
-        assert parent.godlo == "6.179.12"
+        assert parent.sheet == "6.179.12"
         assert parent.scale == "1:10000"
 
     def test_parent_of_1k(self):
@@ -810,7 +810,7 @@ class TestParser2000GetParent:
         p = Parser2000("6.179.12.15.2")
         parent = p.get_parent()
         assert parent is not None
-        assert parent.godlo == "6.179.12.15"
+        assert parent.sheet == "6.179.12.15"
         assert parent.scale == "1:2000"
 
     def test_parent_of_500(self):
@@ -818,7 +818,7 @@ class TestParser2000GetParent:
         p = Parser2000("6.179.12.15.2.4")
         parent = p.get_parent()
         assert parent is not None
-        assert parent.godlo == "6.179.12.15.2"
+        assert parent.sheet == "6.179.12.15.2"
         assert parent.scale == "1:1000"
 
     def test_parent_returns_parser2000(self):
@@ -833,39 +833,39 @@ class TestParser2000GetParent:
         # 1:500 -> 1:1000
         p1 = p.get_parent()
         assert p1.scale == "1:1000"
-        assert p1.godlo == "6.179.12.15.2"
+        assert p1.sheet == "6.179.12.15.2"
         # 1:1000 -> 1:2000
         p2 = p1.get_parent()
         assert p2.scale == "1:2000"
-        assert p2.godlo == "6.179.12.15"
+        assert p2.sheet == "6.179.12.15"
         # 1:2000 -> 1:10000
         p3 = p2.get_parent()
         assert p3.scale == "1:10000"
-        assert p3.godlo == "6.179.12"
+        assert p3.sheet == "6.179.12"
         # 1:10000 -> None
         assert p3.get_parent() is None
 
     def test_parent_of_5k_all_quadrants(self):
         """All 1:5000 quadrants have the same 1:10000 parent."""
-        parent_godlo = "6.179.12"
+        parent_sheet = "6.179.12"
         for q in [1, 2, 3, 4]:
             p = Parser2000(f"6.179.12.{q}")
             parent = p.get_parent()
-            assert parent.godlo == parent_godlo
+            assert parent.sheet == parent_sheet
 
     def test_parent_of_2k_all_arks(self):
         """All 1:2000 sheets (01-25) have the same 1:10000 parent."""
-        parent_godlo = "6.179.12"
+        parent_sheet = "6.179.12"
         for ark in range(1, 26):
             p = Parser2000(f"6.179.12.{ark:02d}")
             parent = p.get_parent()
-            assert parent.godlo == parent_godlo
+            assert parent.sheet == parent_sheet
 
     def test_parent_different_zone(self):
         """get_parent works correctly for different zones."""
         p = Parser2000("8.100.5.15")
         parent = p.get_parent()
-        assert parent.godlo == "8.100.5"
+        assert parent.sheet == "8.100.5"
         assert parent.zone == 8
 
 
@@ -884,8 +884,8 @@ class TestParser2000GetChildren:
         p = Parser2000("6.179.12")
         children = p.get_children(scale="1:5000")
         assert len(children) == 4
-        godla = [c.godlo for c in children]
-        assert godla == ["6.179.12.1", "6.179.12.2", "6.179.12.3", "6.179.12.4"]
+        sheets = [c.sheet for c in children]
+        assert sheets == ["6.179.12.1", "6.179.12.2", "6.179.12.3", "6.179.12.4"]
 
     def test_children_10k_to_5k_all_are_5k(self):
         """All children of 1:10000 at scale=1:5000 have scale 1:5000."""
@@ -901,16 +901,16 @@ class TestParser2000GetChildren:
         p = Parser2000("6.179.12")
         children = p.get_children(scale="1:2000")
         assert len(children) == 25
-        godla = [c.godlo for c in children]
-        assert godla[0] == "6.179.12.01"
-        assert godla[24] == "6.179.12.25"
+        sheets = [c.sheet for c in children]
+        assert sheets[0] == "6.179.12.01"
+        assert sheets[24] == "6.179.12.25"
 
     def test_children_10k_default_is_2k(self):
         """The default scale for 1:10000 is 1:2000."""
         p = Parser2000("6.179.12")
         children_default = p.get_children()
         children_2k = p.get_children(scale="1:2000")
-        assert [c.godlo for c in children_default] == [c.godlo for c in children_2k]
+        assert [c.sheet for c in children_default] == [c.sheet for c in children_2k]
 
     def test_children_10k_to_2k_all_are_2k(self):
         """All children of 1:10000 at scale=1:2000 have scale 1:2000."""
@@ -926,8 +926,8 @@ class TestParser2000GetChildren:
         p = Parser2000("6.179.12.15")
         children = p.get_children()
         assert len(children) == 4
-        godla = [c.godlo for c in children]
-        assert godla == [
+        sheets = [c.sheet for c in children]
+        assert sheets == [
             "6.179.12.15.1",
             "6.179.12.15.2",
             "6.179.12.15.3",
@@ -948,8 +948,8 @@ class TestParser2000GetChildren:
         p = Parser2000("6.179.12.15.2")
         children = p.get_children()
         assert len(children) == 4
-        godla = [c.godlo for c in children]
-        assert godla == [
+        sheets = [c.sheet for c in children]
+        assert sheets == [
             "6.179.12.15.2.1",
             "6.179.12.15.2.2",
             "6.179.12.15.2.3",
@@ -990,8 +990,8 @@ class TestParser2000GetChildren:
         """Children 1:10000 -> 1:2000 are sorted by sheet code."""
         p = Parser2000("6.179.12")
         children = p.get_children(scale="1:2000")
-        godla = [c.godlo for c in children]
-        assert godla == sorted(godla)
+        sheets = [c.sheet for c in children]
+        assert sheets == sorted(sheets)
 
     # --- Different zones ---
 
@@ -1092,16 +1092,16 @@ class TestParser2000GetAllDescendants:
         """get_all_descendants results are sorted by sheet code."""
         p = Parser2000("6.179.12")
         result = p.get_all_descendants("1:1000")
-        godla = [d.godlo for d in result]
-        assert godla == sorted(godla)
+        sheets = [d.sheet for d in result]
+        assert sheets == sorted(sheets)
 
     def test_descendants_10k_to_2k_sorted(self):
         """1:10000 -> 1:2000 sorted: 01, 02, ..., 25."""
         p = Parser2000("6.179.12")
         result = p.get_all_descendants("1:2000")
-        godla = [d.godlo for d in result]
+        sheets = [d.sheet for d in result]
         expected = [f"6.179.12.{i:02d}" for i in range(1, 26)]
-        assert godla == expected
+        assert sheets == expected
 
     # --- Coarser target raises error ---
 
@@ -1189,9 +1189,9 @@ class TestParser2000GetHierarchyUp:
         p = Parser2000("6.179.12.3")
         chain = p.get_hierarchy_up()
         assert len(chain) == 2
-        assert chain[0].godlo == "6.179.12.3"
+        assert chain[0].sheet == "6.179.12.3"
         assert chain[0].scale == "1:5000"
-        assert chain[1].godlo == "6.179.12"
+        assert chain[1].sheet == "6.179.12"
         assert chain[1].scale == "1:10000"
 
     def test_hierarchy_up_2k(self):
@@ -1199,19 +1199,19 @@ class TestParser2000GetHierarchyUp:
         p = Parser2000("6.179.12.15")
         chain = p.get_hierarchy_up()
         assert len(chain) == 2
-        assert chain[0].godlo == "6.179.12.15"
-        assert chain[1].godlo == "6.179.12"
+        assert chain[0].sheet == "6.179.12.15"
+        assert chain[1].sheet == "6.179.12"
 
     def test_hierarchy_up_1k(self):
         """1:1000 -> [self, parent_2k, parent_10k]."""
         p = Parser2000("6.179.12.15.2")
         chain = p.get_hierarchy_up()
         assert len(chain) == 3
-        assert chain[0].godlo == "6.179.12.15.2"
+        assert chain[0].sheet == "6.179.12.15.2"
         assert chain[0].scale == "1:1000"
-        assert chain[1].godlo == "6.179.12.15"
+        assert chain[1].sheet == "6.179.12.15"
         assert chain[1].scale == "1:2000"
-        assert chain[2].godlo == "6.179.12"
+        assert chain[2].sheet == "6.179.12"
         assert chain[2].scale == "1:10000"
 
     def test_hierarchy_up_500(self):
@@ -1219,13 +1219,13 @@ class TestParser2000GetHierarchyUp:
         p = Parser2000("6.179.12.15.2.4")
         chain = p.get_hierarchy_up()
         assert len(chain) == 4
-        assert chain[0].godlo == "6.179.12.15.2.4"
+        assert chain[0].sheet == "6.179.12.15.2.4"
         assert chain[0].scale == "1:500"
-        assert chain[1].godlo == "6.179.12.15.2"
+        assert chain[1].sheet == "6.179.12.15.2"
         assert chain[1].scale == "1:1000"
-        assert chain[2].godlo == "6.179.12.15"
+        assert chain[2].sheet == "6.179.12.15"
         assert chain[2].scale == "1:2000"
-        assert chain[3].godlo == "6.179.12"
+        assert chain[3].sheet == "6.179.12"
         assert chain[3].scale == "1:10000"
 
     def test_hierarchy_up_first_is_self(self):
@@ -1315,8 +1315,8 @@ class TestFindSheets2000ForBBox:
         result = find_sheets_2000_for_bbox(bbox, target_scale="1:2000")
         assert len(result) > 0
         # All should be descendants of 6.179.12
-        for godlo in result:
-            assert godlo.startswith("6.179.12.")
+        for sheet in result:
+            assert sheet.startswith("6.179.12.")
         # There should be no more than 25 (a whole 10k sheet is 25 2k sheets)
         assert len(result) <= 25
 
@@ -1498,8 +1498,8 @@ class TestFindSheets2000ForBBox:
         result = find_sheets_2000_for_bbox(bbox, zone=6)
         assert "6.179.12" in result
         # All results are in zone 6
-        for godlo in result:
-            assert godlo.startswith("6.")
+        for sheet in result:
+            assert sheet.startswith("6.")
 
     def test_explicit_zone_wrong_zone_empty(self):
         """An explicit zone other than the actual one -> empty result (no overlap)."""
@@ -1553,16 +1553,16 @@ class TestFindSheets2000ForBBox:
 
     def test_bbox_equal_to_sheet_2000_returns_itself(self):
         """A bbox equal to a 1:2000 sheet -> exactly that one sheet."""
-        godlo = "6.179.12.20"
-        bbox = Parser2000(godlo).get_bbox()
+        sheet = "6.179.12.20"
+        bbox = Parser2000(sheet).get_bbox()
         result = find_sheets_2000_for_bbox(bbox, target_scale="1:2000")
-        assert result == [godlo]
+        assert result == [sheet]
 
     def test_bbox_equal_to_10k_sheet_2000_returns_itself(self):
         """A bbox equal to a 1:10000 sheet -> exactly that one sheet."""
-        godlo = "6.179.12"
-        bbox = Parser2000(godlo).get_bbox()
-        assert find_sheets_2000_for_bbox(bbox) == [godlo]
+        sheet = "6.179.12"
+        bbox = Parser2000(sheet).get_bbox()
+        assert find_sheets_2000_for_bbox(bbox) == [sheet]
 
     def test_point_bbox_2000_on_grid_line_returns_single_sheet(self):
         """A degenerate bbox on a grid line -> exactly 1 sheet (NE of the line)."""
@@ -1613,14 +1613,14 @@ class TestFindSheets2000ForBBox:
 
     # --- Sheet code validation: every result is a valid sheet code ---
 
-    def test_each_result_is_valid_godlo(self):
+    def test_each_result_is_valid_sheet(self):
         """Every result is a valid Parser2000 sheet code."""
         bbox = BBox(
             min_x=6428000, min_y=5815000, max_x=6436000, max_y=5820000, crs="EPSG:2177"
         )
         result = find_sheets_2000_for_bbox(bbox, target_scale="1:2000")
-        for godlo in result:
-            p = Parser2000(godlo)
+        for sheet in result:
+            p = Parser2000(sheet)
             assert p.scale == "1:2000"
 
     def test_each_10k_result_is_valid(self):
@@ -1629,8 +1629,8 @@ class TestFindSheets2000ForBBox:
             min_x=6434000, min_y=5818000, max_x=6438000, max_y=5822000, crs="EPSG:2177"
         )
         result = find_sheets_2000_for_bbox(bbox)
-        for godlo in result:
-            p = Parser2000(godlo)
+        for sheet in result:
+            p = Parser2000(sheet)
             assert p.scale == "1:10000"
 
 

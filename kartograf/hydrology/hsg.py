@@ -374,7 +374,7 @@ class HSGCalculator:
     --------
     >>> from kartograf.hydrology import HSGCalculator
     >>> calc = HSGCalculator()
-    >>> calc.calculate_hsg_by_godlo("N-34-130-D", Path("./hsg.tif"))
+    >>> calc.calculate_hsg_by_sheet("N-34-130-D", Path("./hsg.tif"))
     """
 
     # SoilGrids conversion factors
@@ -401,9 +401,9 @@ class HSGCalculator:
             self._provider = SoilGridsProvider()
         return self._provider
 
-    def calculate_hsg_by_godlo(
+    def calculate_hsg_by_sheet(
         self,
-        godlo: str,
+        sheet: str,
         output_path: Path,
         depth: str = "0-5cm",
         stat: str = "mean",
@@ -415,7 +415,7 @@ class HSGCalculator:
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet identifier (e.g., "N-34-130-D")
         output_path : Path
             Path for output HSG GeoTIFF
@@ -435,7 +435,7 @@ class HSGCalculator:
         """
         from kartograf.core.sheet_parser import SheetParser
 
-        parser = SheetParser(godlo)
+        parser = SheetParser(sheet)
         bbox = parser.get_bbox(crs="EPSG:2180")
 
         return self.calculate_hsg_by_bbox(
@@ -446,7 +446,7 @@ class HSGCalculator:
             keep_intermediate=keep_intermediate,
             timeout=timeout,
             # Canonical sheet code in the sidecar, as for NMT and land cover (A7)
-            sheet=parser.godlo,
+            sheet=parser.sheet,
         )
 
     def calculate_hsg_by_bbox(
@@ -478,7 +478,7 @@ class HSGCalculator:
             Download timeout in seconds (default: 120)
         sheet : str, optional
             Sheet code the bbox was derived from; recorded in the sidecar as
-            ``request.sheet`` (set by :meth:`calculate_hsg_by_godlo`)
+            ``request.sheet`` (set by :meth:`calculate_hsg_by_sheet`)
 
         Returns
         -------

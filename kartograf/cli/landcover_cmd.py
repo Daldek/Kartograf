@@ -118,21 +118,21 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
     """Execute landcover download command."""
     # Check that exactly one selection method is provided
     has_geometry = getattr(args, "geometry", None) is not None
-    methods = [args.teryt, args.bbox, args.godlo]
+    methods = [args.teryt, args.bbox, args.sheet]
     provided = [m for m in methods if m is not None]
     if has_geometry:
         provided.append(args.geometry)
 
     if len(provided) == 0:
         print(
-            "Error: Must provide one of: --teryt, --bbox, --godlo, or --geometry",
+            "Error: Must provide one of: --teryt, --bbox, --sheet, or --geometry",
             file=sys.stderr,
         )
         return 1
 
     if len(provided) > 1:
         print(
-            "Error: Provide only one of: --teryt, --bbox, --godlo, or --geometry",
+            "Error: Provide only one of: --teryt, --bbox, --sheet, or --geometry",
             file=sys.stderr,
         )
         return 1
@@ -180,7 +180,7 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
                 f"  BBox: ({bbox.min_x}, {bbox.min_y}) - ({bbox.max_x}, {bbox.max_y})"
             )
         else:
-            print(f"  Godło: {args.godlo}")
+            print(f"  Godło: {args.sheet}")
 
         if is_bdot:
             # Every powiat of the area, one package each (A2); the first
@@ -188,7 +188,7 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
             if bbox is not None:
                 paths = manager.download_all_counties(bbox=bbox, **kwargs)
             else:
-                paths = manager.download_all_counties(godlo=args.godlo, **kwargs)
+                paths = manager.download_all_counties(sheet=args.sheet, **kwargs)
             for path in paths:
                 print(f"Downloaded to: {path}")
             return 0
@@ -196,7 +196,7 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
         if bbox is not None:
             path = manager.download(bbox=bbox, **kwargs)
         else:
-            path = manager.download(godlo=args.godlo, **kwargs)
+            path = manager.download(sheet=args.sheet, **kwargs)
         print(f"Downloaded to: {path}")
         return 0
 

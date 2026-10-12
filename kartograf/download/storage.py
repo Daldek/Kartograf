@@ -80,12 +80,12 @@ class FileStorage:
         resolution : str, optional
             Resolution picking the NMT segment template: "1m" or "5m"
             (default: "1m"). Files land in
-            `output_dir/nmt/pl_<uklad>_<resolution>_<vcrs>/...`.
+            `output_dir/nmt/pl_<system>_<resolution>_<vcrs>/...`.
             Ignored when product is set.
         product : str, optional
             Product name picking the segment template (e.g. "nmpt", "orto",
             "laz"). When set, the product template replaces the resolution one
-            (`output_dir/nmpt/pl_<uklad>_1m_<vcrs>/...`).
+            (`output_dir/nmpt/pl_<system>_1m_<vcrs>/...`).
         subdir : str, optional
             Explicit segment template driven by the source descriptor
             (e.g. "nmt/cz_dmr5g_{vcrs}"). Takes precedence over product
@@ -97,9 +97,9 @@ class FileStorage:
             ``ValidationError`` for templates that require it.
         variant : str, optional
             Product variant appended to the END of the segment as
-            ``_<variant>`` (E12: orto CIR -> ``orto/pl_<uklad>_cir``). Only
+            ``_<variant>`` (E12: orto CIR -> ``orto/pl_<system>_cir``). Only
             orto uses it today; its template has no ``{vcrs}``, so the ADR-026
-            order ``<kraj>_<uklad>[_<wariant>][_<vcrs>]`` holds. ``None``
+            order ``<kraj>_<system>[_<wariant>][_<vcrs>]`` holds. ``None``
             (default) = no suffix — the default variant (RGB) keeps its
             pre-E12 path. Take it from ``provider.storage_variant``.
         """
@@ -160,7 +160,7 @@ class FileStorage:
     def _subdir(self) -> str:
         """Return the segment template (override, product or resolution).
 
-        ``{vcrs}`` is already filled from ``vertical_crs``; ``{uklad}`` may
+        ``{vcrs}`` is already filled from ``vertical_crs``; ``{system}`` may
         remain — path methods resolve it per identifier.
         """
         if self._subdir_override:
@@ -190,27 +190,27 @@ class FileStorage:
             )
         return subdir
 
-    def _resolved_subdir(self, identifier: str, uklad: str | None = None) -> str:
-        """Segment for the identifier: {uklad} given explicitly or from the
+    def _resolved_subdir(self, identifier: str, system: str | None = None) -> str:
+        """Segment for the identifier: {system} given explicitly or from the
         sheet system.
 
-        Same rule as ``parser_registry.path_parts`` when ``uklad`` is not
+        Same rule as ``parser_registry.path_parts`` when ``system`` is not
         given explicitly: dots (system ``pl2000``) -> "2000", anything else
-        (incl. the pl1992 fallback) -> "1992". An explicit ``uklad`` overrides
+        (incl. the pl1992 fallback) -> "1992". An explicit ``system`` overrides
         this detection — required for LAZ tiles, whose true horizontal system
-        comes from ``uklad_xy`` (``LazTile.uklad``), not necessarily from the
-        godlo format.
+        comes from ``uklad_xy`` (``LazTile.system``), not necessarily from the
+        sheet format.
         """
         subdir = self._subdir
-        if "{uklad}" in subdir:
-            if uklad is None:
+        if "{system}" in subdir:
+            if system is None:
                 # pl1992 is the registry fallback (never None)
-                system = parser_registry.detect_system(identifier)
-                uklad = "2000" if system.id == "pl2000" else "1992"
-            subdir = subdir.replace("{uklad}", uklad)
+                detected = parser_registry.detect_system(identifier)
+                system = "2000" if detected.id == "pl2000" else "1992"
+            subdir = subdir.replace("{system}", system)
         return self._ensure_resolved(subdir)
 
-    def get_path(self, godlo: str, ext: str = ".asc") -> Path:
+    def get_path(self, sheet: str, ext: str = ".asc") -> Path:
         """
         Generate file path for given sheet code and extension.
 
@@ -222,7 +222,7 @@ class FileStorage:
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet identifier (e.g., "N-34-130-D-d-2-4")
         ext : str, optional
             File extension including dot (default: ".asc")
@@ -238,13 +238,13 @@ class FileStorage:
         >>> storage.get_path("N-34-130-D-d-2-4", ".asc")
         PosixPath('data/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc')
         """
-        normalized = SheetParser(godlo).godlo
+        normalized = SheetParser(sheet).sheet
         return self._sheet_path(normalized, ext)
 
     def _sheet_path(self, normalized: str, ext: str, *subtree: str) -> Path:
-        """``<output>/<segment>/<subtree...>/<hierarchy>/<godlo><ext>``.
+        """``<output>/<segment>/<subtree...>/<hierarchy>/<sheet><ext>``.
 
-        ``normalized`` is the canonical sheet code (``SheetParser(...).godlo``,
+        ``normalized`` is the canonical sheet code (``SheetParser(...).sheet``,
         A7: ``'M-33-036-...'`` and ``'M-33-36-...'`` map to one path).
         """
         dir_path = self._output_dir / self._resolved_subdir(normalized)
@@ -253,26 +253,26 @@ class FileStorage:
         return dir_path / f"{normalized}{ext}"
 
     def get_campaign_path(
-        self, godlo: str, campaign: CampaignRef, ext: str = ".asc"
+        self, sheet: str, campaign: CampaignRef, ext: str = ".asc"
     ) -> Path:
         """
         Path of a campaign file (ADR-030):
-        ``<output>/<segment>/kampanie/<date>_<id>/<hierarchy>/<godlo><ext>``.
+        ``<output>/<segment>/kampanie/<date>_<id>/<hierarchy>/<sheet><ext>``.
         """
-        normalized = SheetParser(godlo).godlo
+        normalized = SheetParser(sheet).sheet
         return self._sheet_path(normalized, ext, CAMPAIGNS_DIR, campaign.dirname)
 
-    def get_full_sheet_path(self, godlo: str, ext: str = ".asc") -> Path:
+    def get_full_sheet_path(self, sheet: str, ext: str = ".asc") -> Path:
         """
         Path of the second link to the newest declared-full flight (ADR-033):
-        ``<output>/<segment>/full_sheet/<hierarchy>/<godlo><ext>`` — the same
+        ``<output>/<segment>/full_sheet/<hierarchy>/<sheet><ext>`` — the same
         hierarchy as :meth:`get_path`.
         """
-        normalized = SheetParser(godlo).godlo
+        normalized = SheetParser(sheet).sheet
         return self._sheet_path(normalized, ext, FULL_SHEET_DIR)
 
     def get_raw_path(
-        self, identifier: str, filename: str, *, uklad: str | None = None
+        self, identifier: str, filename: str, *, system: str | None = None
     ) -> Path:
         """
         Generate a file path for an opaque identifier WITHOUT parsing it.
@@ -289,10 +289,10 @@ class FileStorage:
             (e.g. ``"N-33-131-B-a-1-1-4"`` or ``"6.162.34.02.3"``).
         filename : str
             File name to use as-is (e.g. the original OpenData ``.laz`` name).
-        uklad : str, optional
+        system : str, optional
             Explicit horizontal system (``"1992"`` or ``"2000"``) filling the
-            ``{uklad}`` segment placeholder. For LAZ tiles pass ``tile.uklad``
-            — the tile's ``uklad_xy`` decides, not the godlo format (a
+            ``{system}`` segment placeholder. For LAZ tiles pass ``tile.system``
+            — the tile's ``uklad_xy`` decides, not the sheet format (a
             ``"PL-2000:*"`` tile can still carry a dash-form sheet code). ``None``
             (default) keeps the previous behaviour: detect the system from
             ``identifier``'s format.
@@ -305,7 +305,7 @@ class FileStorage:
         Raises
         ------
         ValidationError
-            If ``uklad`` is given but is neither ``"1992"`` nor ``"2000"``.
+            If ``system`` is given but is neither ``"1992"`` nor ``"2000"``.
 
         Examples
         --------
@@ -313,22 +313,22 @@ class FileStorage:
         >>> storage.get_raw_path("N-33-131-B-a-1-1-4", "81121_x.laz")
         PosixPath('data/laz/pl_1992_evrf2007/N-33/131/B/a/1/1/4/81121_x.laz')
 
-        For LAZ tiles, prefer the explicit ``uklad`` (the tile's ``uklad_xy``
-        decides, not the godlo format)::
+        For LAZ tiles, prefer the explicit ``system`` (the tile's ``uklad_xy``
+        decides, not the sheet format)::
 
-            storage.get_raw_path(tile.godlo, tile.filename, uklad=tile.uklad)
+            storage.get_raw_path(tile.sheet, tile.filename, system=tile.system)
         """
-        if uklad is not None and uklad not in ("1992", "2000"):
+        if system is not None and system not in ("1992", "2000"):
             raise ValidationError(
-                f"Nieznany uklad '{uklad}' (oczekiwano '1992' albo '2000')"
+                f"Nieznany uklad '{system}' (oczekiwano '1992' albo '2000')"
             )
         dir_parts = self._get_directory_parts(identifier)
-        dir_path = self._output_dir / self._resolved_subdir(identifier, uklad)
+        dir_path = self._output_dir / self._resolved_subdir(identifier, system)
         for part in dir_parts:
             dir_path = dir_path / part
         return dir_path / filename
 
-    def _get_directory_parts(self, godlo: str) -> list[str]:
+    def _get_directory_parts(self, sheet: str) -> list[str]:
         """
         Extract directory parts from sheet code.
 
@@ -339,7 +339,7 @@ class FileStorage:
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Normalized sheet code string
 
         Returns
@@ -347,15 +347,15 @@ class FileStorage:
         list[str]
             List of directory parts
         """
-        return parser_registry.path_parts(godlo)
+        return parser_registry.path_parts(sheet)
 
-    def ensure_directory(self, godlo: str) -> Path:
+    def ensure_directory(self, sheet: str) -> Path:
         """
         Ensure directory exists for given sheet code.
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet identifier
 
         Returns
@@ -363,17 +363,17 @@ class FileStorage:
         Path
             Path to the directory (created if needed)
         """
-        path = self.get_path(godlo)
+        path = self.get_path(sheet)
         path.parent.mkdir(parents=True, exist_ok=True)
         return path.parent
 
-    def exists(self, godlo: str, ext: str = ".asc") -> bool:
+    def exists(self, sheet: str, ext: str = ".asc") -> bool:
         """
         Check if file for given sheet code exists.
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet identifier
         ext : str, optional
             File extension including dot (default: ".asc")
@@ -383,11 +383,11 @@ class FileStorage:
         bool
             True if file exists
         """
-        return self.get_path(godlo, ext).exists()
+        return self.get_path(sheet, ext).exists()
 
     def write_atomic(
         self,
-        godlo: str,
+        sheet: str,
         content: bytes | BinaryIO,
         ext: str = ".asc",
     ) -> Path:
@@ -403,7 +403,7 @@ class FileStorage:
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet identifier
         content : bytes or BinaryIO
             Content to write (bytes or file-like object)
@@ -420,7 +420,7 @@ class FileStorage:
         >>> storage = FileStorage("./data")
         >>> path = storage.write_atomic("N-34-130-D", b"data", ".asc")
         """
-        target_path = self.get_path(godlo, ext)
+        target_path = self.get_path(sheet, ext)
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Use unique temp filename per process/thread to prevent collisions
@@ -448,7 +448,7 @@ class FileStorage:
                 temp_path.unlink()
             raise
 
-    def delete(self, godlo: str, ext: str = ".asc") -> bool:
+    def delete(self, sheet: str, ext: str = ".asc") -> bool:
         """
         Delete the links of a sheet: the standard path and ``full_sheet/``.
 
@@ -457,7 +457,7 @@ class FileStorage:
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet identifier
         ext : str, optional
             File extension including dot (default: ".asc")
@@ -468,7 +468,7 @@ class FileStorage:
             True if any file was deleted, False if none existed
         """
         deleted = False
-        for path in (self.get_path(godlo, ext), self.get_full_sheet_path(godlo, ext)):
+        for path in (self.get_path(sheet, ext), self.get_full_sheet_path(sheet, ext)):
             # Both paths are a hardlink or a copy of a campaign file (ADR-030):
             # unlink() removes the path itself, the file in kampanie/ stays.
             if path.exists():
@@ -485,7 +485,7 @@ class FileStorage:
         List all files matching pattern in storage directory.
 
         Searches within the segment (ADR-026). A segment template carrying
-        `{uklad}` spans BOTH systems, so PL-1992 and PL-2000 files are listed
+        `{system}` spans BOTH systems, so PL-1992 and PL-2000 files are listed
         together even though they live in separate directories.
 
         Parameters
@@ -502,8 +502,8 @@ class FileStorage:
             List of matching file paths
         """
         template = self._subdir
-        if "{uklad}" in template:
-            subdirs = [template.replace("{uklad}", u) for u in ("1992", "2000")]
+        if "{system}" in template:
+            subdirs = [template.replace("{system}", u) for u in ("1992", "2000")]
         else:
             subdirs = [template]
         files: list[Path] = []
@@ -520,13 +520,13 @@ class FileStorage:
                     files.append(p)
         return files
 
-    def get_size(self, godlo: str, ext: str = ".asc") -> int | None:
+    def get_size(self, sheet: str, ext: str = ".asc") -> int | None:
         """
         Get file size for given sheet code.
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet identifier
         ext : str, optional
             File extension including dot (default: ".asc")
@@ -536,7 +536,7 @@ class FileStorage:
         int or None
             File size in bytes, or None if file doesn't exist
         """
-        path = self.get_path(godlo, ext)
+        path = self.get_path(sheet, ext)
         if path.exists():
             return path.stat().st_size
         return None
@@ -591,7 +591,7 @@ def storage_for_provider(
     flow).
 
     The segment comes from the provider's source descriptor
-    (``resolve_subdir(vertical_crs=...)``, ``{uklad}`` resolved per godlo),
+    (``resolve_subdir(vertical_crs=...)``, ``{system}`` resolved per sheet),
     and without ``descriptor_key`` from ``resolution`` (PL NMT template).
     Vertical CRS: the provider's ACTUAL vertical CRS when it knows it
     (``str``), otherwise ``vertical_crs`` — the segment carries the fact,

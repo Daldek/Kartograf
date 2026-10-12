@@ -89,10 +89,10 @@ class TestParseSkorowidzRecords:
             sample("land5m_2025.body"), "SkorowidzeNMT2025"
         )
         assert record.url.endswith("83885_1835900_N-33-48-C-a-3-4.asc")
-        assert record.godlo == "N-33-48-C-a-3-4"
+        assert record.sheet == "N-33-48-C-a-3-4"
         assert record.aktualnosc == "2025-05-20"
         assert record.layer == "SkorowidzeNMT2025"
-        assert (record.uklad, record.zone) == ("1992", None)
+        assert (record.system, record.zone) == ("1992", None)
         assert record.resolution_m == 5.0
         assert record.full_sheet is True
         assert record.raw["format"] == "ARC/INFO ASCII GRID"
@@ -116,13 +116,13 @@ class TestParseSkorowidzRecords:
             "2022-05-09",
             "2023-09-05",
         ]
-        assert [r.godlo for r in records] == [
+        assert [r.sheet for r in records] == [
             "N-34-139-A-c-1-1",
             "7.173.21.06",
             "7.173.21.06.3",
             "N-34-139-A-c-1-1",
         ]
-        assert (records[1].uklad, records[1].zone) == ("2000", 7)
+        assert (records[1].system, records[1].zone) == ("2000", 7)
         assert records[2].resolution_m == 0.5
 
     def test_orto_fields_map_to_the_same_record(self):
@@ -132,7 +132,7 @@ class TestParseSkorowidzRecords:
         )
         assert [r.raw["kolor"] for r in records] == ["CIR", "RGB"]
         assert {r.resolution_m for r in records} == {0.25}
-        assert {r.uklad for r in records} == {"1992"}
+        assert {r.system for r in records} == {"1992"}
         assert {r.full_sheet for r in records} == {True}
 
     def test_record_without_https_url_is_dropped(self, caplog):
@@ -147,7 +147,7 @@ class TestParseSkorowidzRecords:
             assert parse_skorowidz_records(body, "L") == []
         assert "URL HTTPS" in caplog.text
 
-    def test_record_with_unparseable_godlo_is_dropped(self, caplog):
+    def test_record_with_unparseable_sheet_is_dropped(self, caplog):
         record = gfi_record("N-34-130-D-d-2-4")
         record["godlo"] = "???"
         with caplog.at_level("WARNING"):
@@ -166,14 +166,14 @@ class TestParseSkorowidzRecords:
         )
         (record,) = parse_skorowidz_records(body, "L")
         assert record.resolution_m is None
-        assert record.uklad is None
+        assert record.system is None
         assert record.full_sheet is None
         assert record.dt_pzgik is None
 
-    def test_godlo_is_normalized_like_sheet_parser(self):
+    def test_sheet_is_normalized_like_sheet_parser(self):
         body = render_gfi_body([gfi_record("n-34-130-d-d-2-4")])
         (record,) = parse_skorowidz_records(body, "L")
-        assert record.godlo == "N-34-130-D-d-2-4"
+        assert record.sheet == "N-34-130-D-d-2-4"
 
     def test_partition_violation_is_only_a_warning(self, caplog):
         """P2: a record with a year outside the layer partition stays, but visibly."""
@@ -212,7 +212,7 @@ class TestSelectSheetRecord:
             sample("szczecin_c24_2024.body"), "SkorowidzeNMT2024"
         )
         chosen = select_sheet_record(
-            records, godlo="N-33-90-C-c-2-4", uklad="1992", resolution_m=1.0
+            records, sheet="N-33-90-C-c-2-4", system="1992", resolution_m=1.0
         )
         assert chosen is not None
         assert "80225_1536688" in chosen.url
@@ -224,7 +224,7 @@ class TestSelectSheetRecord:
             sample("warszawa_2023iStarsze.body"), "SkorowidzeNMT2023iStarsze"
         )
         chosen = select_sheet_record(
-            records, godlo="N-34-139-A-c-1-1", uklad="1992", resolution_m=1.0
+            records, sheet="N-34-139-A-c-1-1", system="1992", resolution_m=1.0
         )
         assert chosen is not None
         assert "78047_1404533" in chosen.url
@@ -236,18 +236,18 @@ class TestSelectSheetRecord:
             sample("warszawa_2023iStarsze.body"), "SkorowidzeNMT2023iStarsze"
         )
         chosen = select_sheet_record(
-            records, godlo="7.173.21.06", uklad="2000", zone=7, resolution_m=1.0
+            records, sheet="7.173.21.06", system="2000", zone=7, resolution_m=1.0
         )
-        assert chosen is not None and chosen.godlo == "7.173.21.06"
+        assert chosen is not None and chosen.sheet == "7.173.21.06"
         assert (
             select_sheet_record(
-                records, godlo="7.173.21.06", uklad="2000", zone=6, resolution_m=1.0
+                records, sheet="7.173.21.06", system="2000", zone=6, resolution_m=1.0
             )
             is None
         )
         assert (
             select_sheet_record(
-                records, godlo="7.173.21", uklad="2000", zone=7, resolution_m=1.0
+                records, sheet="7.173.21", system="2000", zone=7, resolution_m=1.0
             )
             is None
         )
@@ -257,14 +257,14 @@ class TestSelectSheetRecord:
         records = _records(gfi_record("N-33-48-C-a-3-4", resolution="5.00 m"))
         assert (
             select_sheet_record(
-                records, godlo="7.124.7.4", uklad="2000", zone=7, resolution_m=5.0
+                records, sheet="7.124.7.4", system="2000", zone=7, resolution_m=5.0
             )
             is None
         )
-        records = _records(gfi_record("7.124.7.4", uklad="PL-2000:S7"))
+        records = _records(gfi_record("7.124.7.4", system="PL-2000:S7"))
         assert (
             select_sheet_record(
-                records, godlo="7.124.7.4", uklad="1992", resolution_m=1.0
+                records, sheet="7.124.7.4", system="1992", resolution_m=1.0
             )
             is None
         )
@@ -276,18 +276,18 @@ class TestSelectSheetRecord:
         )
         assert (
             select_sheet_record(
-                records, godlo="N-34-130-D-d-2-4", uklad="1992", resolution_m=1.0
+                records, sheet="N-34-130-D-d-2-4", system="1992", resolution_m=1.0
             )
             is None
         )
         chosen = select_sheet_record(
-            records, godlo="N-34-130-D-d-2-4", uklad="1992", resolution_m=5.0
+            records, sheet="N-34-130-D-d-2-4", system="1992", resolution_m=5.0
         )
         assert chosen is not None and chosen.resolution_m == 5.0
 
     def test_no_resolution_filter_when_none(self):
         records = _records(gfi_record("N-34-130-D-d-2-4", resolution="0.25 m"))
-        chosen = select_sheet_record(records, godlo="N-34-130-D-d-2-4", uklad="1992")
+        chosen = select_sheet_record(records, sheet="N-34-130-D-d-2-4", system="1992")
         assert chosen is not None
 
     def test_predicate_filters_records(self):
@@ -296,8 +296,8 @@ class TestSelectSheetRecord:
         )
         chosen = select_sheet_record(
             records,
-            godlo="M-34-76-A-a-1-1",
-            uklad="1992",
+            sheet="M-34-76-A-a-1-1",
+            system="1992",
             predicate=lambda r: r.raw.get("kolor") == "RGB",
         )
         assert chosen is not None and "81423_1371958" in chosen.url
@@ -323,7 +323,7 @@ class TestSelectSheetRecord:
         records = parse_skorowidz_records(body, "L")
         with caplog.at_level("WARNING"):
             assert (
-                select_sheet_record(records, godlo="N-34-130-D-d-2-4", uklad="1992")
+                select_sheet_record(records, sheet="N-34-130-D-d-2-4", system="1992")
                 is None
             )
         assert caplog.text.count("bez ukladu lub rozdzielczosci") == 2
@@ -342,7 +342,7 @@ class TestSelectSheetRecord:
             ),
         )
         chosen = select_sheet_record(
-            records, godlo="N-34-130-D-d-2-4", uklad="1992", resolution_m=1.0
+            records, sheet="N-34-130-D-d-2-4", system="1992", resolution_m=1.0
         )
         assert chosen is not None and chosen.url == "https://x/partial.asc"
         assert chosen.full_sheet is False
@@ -360,14 +360,14 @@ class TestSelectSheetRecord:
             ),
         )
         chosen = select_sheet_record(
-            records, godlo="N-34-130-D-d-2-4", uklad="1992", resolution_m=1.0
+            records, sheet="N-34-130-D-d-2-4", system="1992", resolution_m=1.0
         )
         assert chosen is not None and chosen.url == "https://x/c.asc"
 
-    def test_requested_godlo_is_normalized(self):
+    def test_requested_sheet_is_normalized(self):
         records = _records(gfi_record("N-34-130-D-d-2-4"))
         assert (
-            select_sheet_record(records, godlo="n-34-130-d-d-2-4", uklad="1992")
+            select_sheet_record(records, sheet="n-34-130-d-d-2-4", system="1992")
             is not None
         )
 
@@ -409,12 +409,12 @@ class TestSourcePayload:
         )
         record = records[1]  # 7.173.21.06, PL-2000:S7
         restored = SkorowidzRecord.from_source(record.to_source(ENDPOINT))
-        assert (restored.url, restored.godlo, restored.layer) == (
+        assert (restored.url, restored.sheet, restored.layer) == (
             record.url,
-            record.godlo,
+            record.sheet,
             record.layer,
         )
-        assert (restored.uklad, restored.zone, restored.resolution_m) == (
+        assert (restored.system, restored.zone, restored.resolution_m) == (
             "2000",
             7,
             1.0,
@@ -435,7 +435,7 @@ class TestQuerySkorowidzLayer:
             ENDPOINT,
             "SkorowidzeNMT2026",
             query_bbox="1,2,3,4",
-            godlo="N-34-130-D-d-2-4",
+            sheet="N-34-130-D-d-2-4",
             timeout=30,
             retries=retries,
         )
@@ -490,7 +490,7 @@ class TestQuerySkorowidzLayer:
         assert session.get.call_count == 3
         assert "N-34-130-D-d-2-4" in str(exc.value)
         assert "SkorowidzeNMT2026" in str(exc.value)
-        assert exc.value.godlo is None or exc.value.godlo == "N-34-130-D-d-2-4"
+        assert exc.value.sheet is None or exc.value.sheet == "N-34-130-D-d-2-4"
 
     def test_http_error_is_retried(self):
         session = Mock(spec=requests.Session)
@@ -513,7 +513,7 @@ class TestQuerySkorowidzLayer:
         assert session.get.call_count == 1
         assert sleep.call_count == 0
         assert "Invalid layer" in str(exc.value)
-        assert exc.value.godlo == "N-34-130-D-d-2-4"
+        assert exc.value.sheet == "N-34-130-D-d-2-4"
 
     def test_non_template_html_is_not_an_answer(self):
         """P7: an HTTP 200 error page without OGC markers is an error, not nodata."""
@@ -540,10 +540,10 @@ class TestSourceInfoMixin:
     class Holder(SourceInfoMixin):
         pass
 
-    def test_unknown_godlo_is_none(self):
+    def test_unknown_sheet_is_none(self):
         assert self.Holder().source_info("N-34-130-D-d-2-4") is None
 
-    def test_remembers_per_godlo_and_normalizes_key(self):
+    def test_remembers_per_sheet_and_normalizes_key(self):
         holder = self.Holder()
         holder._remember_source("n-34-130-d-d-2-4", {"url": "https://x/a.asc"})
         holder._remember_source("N-34-130-D-d-2-3", {"url": "https://x/b.asc"})
@@ -561,28 +561,28 @@ class TestSourceInfoMixin:
 
     def test_threads_keep_their_own_sheets(self):
         holder = self.Holder()
-        godla = [f"N-34-130-D-d-2-{i}" for i in (1, 2, 3, 4)]
+        sheets = [f"N-34-130-D-d-2-{i}" for i in (1, 2, 3, 4)]
 
-        def remember(godlo):
+        def remember(sheet):
             for _ in range(200):
-                holder._remember_source(godlo, {"godlo": godlo})
+                holder._remember_source(sheet, {"godlo": sheet})
 
-        threads = [threading.Thread(target=remember, args=(g,)) for g in godla]
+        threads = [threading.Thread(target=remember, args=(g,)) for g in sheets]
         for t in threads:
             t.start()
         for t in threads:
             t.join()
-        assert [holder.source_info(g)["godlo"] for g in godla] == godla
+        assert [holder.source_info(g)["godlo"] for g in sheets] == sheets
 
 
-def _hint_record(godlo, uklad, zone=None, resolution_m=1.0):
+def _hint_record(sheet, system, zone=None, resolution_m=1.0):
     return SkorowidzRecord(
-        url=f"https://example.invalid/{godlo}.asc",
-        godlo=godlo,
+        url=f"https://example.invalid/{sheet}.asc",
+        sheet=sheet,
         aktualnosc="2024-01-01",
         dt_pzgik=None,
         layer="L",
-        uklad=uklad,
+        system=system,
         zone=zone,
         resolution_m=resolution_m,
         full_sheet=True,
@@ -627,7 +627,7 @@ class TestCoverageHints:
         message = str(error)
         for hint in self._EXPECTED:
             assert hint in message
-        assert error.godlo == self._PL2000
+        assert error.sheet == self._PL2000
         # stable hint order (sorted), separated by "; "
         assert message.endswith("; ".join(sorted(self._EXPECTED)))
         # the same structurally (the CLI does not parse the message)
@@ -655,11 +655,11 @@ class TestSourceExtraFields:
         base.update(raw)
         return SkorowidzRecord(
             url="https://x/1_2_N-34-130-D-d-2-4.asc",
-            godlo="N-34-130-D-d-2-4",
+            sheet="N-34-130-D-d-2-4",
             aktualnosc="2020-05-01",
             dt_pzgik=None,
             layer="L",
-            uklad="1992",
+            system="1992",
             zone=None,
             resolution_m=1.0,
             full_sheet=True,

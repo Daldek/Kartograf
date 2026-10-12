@@ -24,16 +24,16 @@ def format_sheet_info(parser: SheetParser) -> str:
         Formatted information string
     """
     lines = [
-        f"Sheet:     {parser.godlo}",
+        f"Sheet:     {parser.sheet}",
         f"Scale:     {parser.scale}",
-        f"Layout:    {parser.uklad}",
+        f"Layout:    {parser.system}",
         "Components:",
     ]
 
     for name, value in parser.components.items():
         lines.append(f"  {name}: {value}")
 
-    if parser.uklad == "2000":
+    if parser.system == "2000":
         from kartograf.core.parser_2000 import ZONE_EPSG
 
         zone = int(parser.components["strefa"])
@@ -61,10 +61,10 @@ def format_hierarchy(parser: SheetParser) -> str:
     top_scale = hierarchy[-1].scale if hierarchy else parser.scale
     lines = [f"Hierarchy (from current to {top_scale}):", ""]
 
-    for i, sheet in enumerate(hierarchy):
+    for i, level in enumerate(hierarchy):
         indent = "  " * i
         arrow = "└─ " if i > 0 else ""
-        lines.append(f"{indent}{arrow}{sheet.godlo} ({sheet.scale})")
+        lines.append(f"{indent}{arrow}{level.sheet} ({level.scale})")
 
     return "\n".join(lines)
 
@@ -87,17 +87,17 @@ def format_children(parser: SheetParser) -> str:
 
     if not children:
         return (
-            f"Sheet {parser.godlo} has no children "
+            f"Sheet {parser.sheet} has no children "
             f"(already at finest scale {parser.scale})"
         )
 
     lines = [
-        f"Children of {parser.godlo} ({len(children)} sheets):",
+        f"Children of {parser.sheet} ({len(children)} sheets):",
         "",
     ]
 
     for child in children:
-        lines.append(f"  {child.godlo} ({child.scale})")
+        lines.append(f"  {child.sheet} ({child.scale})")
 
     return "\n".join(lines)
 
@@ -121,21 +121,21 @@ def format_descendants(parser: SheetParser, target_scale: str) -> str:
     descendants = parser.get_all_descendants(target_scale)
 
     lines = [
-        f"Descendants of {parser.godlo} to {target_scale} ({len(descendants)} sheets):",
+        f"Descendants of {parser.sheet} to {target_scale} ({len(descendants)} sheets):",
         "",
     ]
 
     # Group by intermediate scales if there are many
     if len(descendants) <= 20:
         for desc in descendants:
-            lines.append(f"  {desc.godlo}")
+            lines.append(f"  {desc.sheet}")
     else:
         # Just show count and first/last few
-        lines.append(f"  {descendants[0].godlo}")
-        lines.append(f"  {descendants[1].godlo}")
+        lines.append(f"  {descendants[0].sheet}")
+        lines.append(f"  {descendants[1].sheet}")
         lines.append("  ...")
-        lines.append(f"  {descendants[-2].godlo}")
-        lines.append(f"  {descendants[-1].godlo}")
+        lines.append(f"  {descendants[-2].sheet}")
+        lines.append(f"  {descendants[-1].sheet}")
 
     return "\n".join(lines)
 
@@ -155,7 +155,7 @@ def cmd_parse(args: argparse.Namespace) -> int:
         Exit code (0 for success, 1 for error)
     """
     try:
-        parser = SheetParser(args.godlo)
+        parser = SheetParser(args.sheet)
     except (ParseError, ValidationError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1

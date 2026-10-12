@@ -2,7 +2,7 @@
 Unit tests for the gugik provider module.
 
 This module contains tests for the GugikProvider class with the new architecture:
-- download(godlo) -> OpenData (ASC)
+- download -> OpenData (ASC)
 - download_bbox(bbox) -> WCS (GeoTIFF/PNG/JPEG)
 """
 
@@ -228,24 +228,24 @@ class TestGugikProviderResolution:
 class TestGugikProviderValidation:
     """Tests of sheet code validation."""
 
-    def test_validate_valid_godlo(self):
+    def test_validate_valid_sheet(self):
         """Test of validation of a valid sheet code."""
         provider = GugikProvider()
 
-        assert provider.validate_godlo("N-34-130-D") is True
-        assert provider.validate_godlo("N-34-130-D-d-2-4") is True
-        assert provider.validate_godlo("M-33-A") is True
+        assert provider.validate_sheet("N-34-130-D") is True
+        assert provider.validate_sheet("N-34-130-D-d-2-4") is True
+        assert provider.validate_sheet("M-33-A") is True
 
-    def test_validate_invalid_godlo(self):
+    def test_validate_invalid_sheet(self):
         """Test of validation of an invalid sheet code."""
         provider = GugikProvider()
 
-        assert provider.validate_godlo("INVALID") is False
-        assert provider.validate_godlo("") is False
-        assert provider.validate_godlo("123") is False
+        assert provider.validate_sheet("INVALID") is False
+        assert provider.validate_sheet("") is False
+        assert provider.validate_sheet("123") is False
 
 
-class TestGugikProviderDownloadGodlo:
+class TestGugikProviderDownloadSheet:
     """Tests of download by sheet code (OpenData)."""
 
     @pytest.fixture
@@ -263,10 +263,10 @@ class TestGugikProviderDownloadGodlo:
         )
         return response
 
-    def test_download_godlo_uses_opendata(
+    def test_download_sheet_uses_opendata(
         self, tmp_path, mock_wms_response, mock_opendata_response
     ):
-        """Test that download(godlo) uses OpenData."""
+        """Test that download uses OpenData."""
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[mock_wms_response, mock_opendata_response])
 
@@ -286,7 +286,7 @@ class TestGugikProviderDownloadGodlo:
         second_call_url = session.get.call_args_list[1][0][0]
         assert "opendata.geoportal.gov.pl" in second_call_url
 
-    def test_download_godlo_creates_directory(
+    def test_download_sheet_creates_directory(
         self, tmp_path, mock_wms_response, mock_opendata_response
     ):
         """Test that download creates the target directory."""
@@ -301,7 +301,7 @@ class TestGugikProviderDownloadGodlo:
         assert result == output_path
         assert output_path.parent.exists()
 
-    def test_download_godlo_saves_content(
+    def test_download_sheet_saves_content(
         self, tmp_path, mock_wms_response, mock_opendata_response
     ):
         """Test that download writes the file content."""
@@ -316,7 +316,7 @@ class TestGugikProviderDownloadGodlo:
         content = output_path.read_bytes()
         assert b"ncols" in content
 
-    def test_download_godlo_with_timeout(
+    def test_download_sheet_with_timeout(
         self, tmp_path, mock_wms_response, mock_opendata_response
     ):
         """Test of download with a specified timeout."""
@@ -770,13 +770,13 @@ _CAPABILITIES_XML = (
 class TestGugikProviderGetOpendataUrl:
     """Tests of _get_opendata_url (layers from the conftest autouse stub)."""
 
-    GODLO = "N-34-130-D-d-2-4"
-    URL = f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/78955/78955_1_{GODLO}.asc"
+    SHEET = "N-34-130-D-d-2-4"
+    URL = f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/78955/78955_1_{SHEET}.asc"
 
     @pytest.fixture
     def record_response(self):
-        """Response with a single 1 m PL-1992 record for GODLO."""
-        return _wms_response(render_gfi_body([gfi_record(self.GODLO)]))
+        """Response with a single 1 m PL-1992 record for SHEET."""
+        return _wms_response(render_gfi_body([gfi_record(self.SHEET)]))
 
     @pytest.fixture
     def empty_response(self):
@@ -788,7 +788,7 @@ class TestGugikProviderGetOpendataUrl:
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=record_response)
 
-        url = GugikProvider(session=session)._get_opendata_url(self.GODLO)
+        url = GugikProvider(session=session)._get_opendata_url(self.SHEET)
 
         assert url == self.URL
         assert _queried_layers(session) == [_EVRF2007_LAYERS[0]]
@@ -799,13 +799,13 @@ class TestGugikProviderGetOpendataUrl:
         session.get = Mock(return_value=empty_response)
 
         with pytest.raises(NoCoverageError) as exc_info:
-            GugikProvider(session=session)._get_opendata_url(self.GODLO)
+            GugikProvider(session=session)._get_opendata_url(self.SHEET)
 
-        assert f"Brak danych NMT 1m dla {self.GODLO} (uklad PL-1992, EVRF2007)" in str(
+        assert f"Brak danych NMT 1m dla {self.SHEET} (uklad PL-1992, EVRF2007)" in str(
             exc_info.value
         )
         # its own index, all layers; the variant check (P10) asks other indexes
-        own = GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"]
+        own = GugikProvider.WMS_INDEX_ENDPOINTS["1m"]["EVRF2007"]
         assert _queried_layers(session, own) == list(_EVRF2007_LAYERS)
 
     def test_transport_error_retries_same_layer(self, record_response):
@@ -816,7 +816,7 @@ class TestGugikProviderGetOpendataUrl:
         )
 
         with patch("time.sleep") as sleep:
-            url = GugikProvider(session=session)._get_opendata_url(self.GODLO)
+            url = GugikProvider(session=session)._get_opendata_url(self.SHEET)
 
         assert url == self.URL
         assert _queried_layers(session) == [_EVRF2007_LAYERS[0]] * 2
@@ -832,11 +832,11 @@ class TestGugikProviderGetOpendataUrl:
         )
 
         with patch("time.sleep") as sleep, pytest.raises(DownloadError) as exc_info:
-            GugikProvider(session=session)._get_opendata_url(self.GODLO)
+            GugikProvider(session=session)._get_opendata_url(self.SHEET)
 
         assert not isinstance(exc_info.value, NoCoverageError)
         message = str(exc_info.value)
-        assert self.GODLO in message and _EVRF2007_LAYERS[0] in message
+        assert self.SHEET in message and _EVRF2007_LAYERS[0] in message
         assert _queried_layers(session) == [_EVRF2007_LAYERS[0]] * 3
         assert sleep.call_count == 2
 
@@ -847,7 +847,7 @@ class TestGugikProviderGetOpendataUrl:
         session.get = Mock(return_value=_wms_response(_OGC_EXCEPTION_REPORT))
 
         with patch("time.sleep") as sleep, pytest.raises(DownloadError) as exc_info:
-            GugikProvider(session=session)._get_opendata_url(self.GODLO)
+            GugikProvider(session=session)._get_opendata_url(self.SHEET)
 
         assert not isinstance(exc_info.value, NoCoverageError)
         assert "Invalid layer(s)" in str(exc_info.value)
@@ -862,7 +862,7 @@ class TestGugikProviderGetOpendataUrl:
         )
 
         with pytest.raises(DownloadError) as exc_info:
-            GugikProvider(session=session)._get_opendata_url(self.GODLO)
+            GugikProvider(session=session)._get_opendata_url(self.SHEET)
 
         assert not isinstance(exc_info.value, NoCoverageError)
         assert session.get.call_count == 1
@@ -872,7 +872,7 @@ class TestGugikProviderGetOpendataUrl:
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[empty_response] * 3 + [record_response])
 
-        url = GugikProvider(session=session)._get_opendata_url(self.GODLO)
+        url = GugikProvider(session=session)._get_opendata_url(self.SHEET)
 
         assert url == self.URL
         assert _queried_layers(session) == list(_EVRF2007_LAYERS)
@@ -881,56 +881,56 @@ class TestGugikProviderGetOpendataUrl:
     def test_latest_campaign_wins_within_layer(self, newest_first):
         """Within a layer the newest acquisition date wins, not the HTML order."""
         records = [
-            gfi_record(self.GODLO, aktualnosc="2024-09-03", url="https://x/new.asc"),
-            gfi_record(self.GODLO, aktualnosc="2019-04-18", url="https://x/old.asc"),
+            gfi_record(self.SHEET, aktualnosc="2024-09-03", url="https://x/new.asc"),
+            gfi_record(self.SHEET, aktualnosc="2019-04-18", url="https://x/old.asc"),
         ]
         if not newest_first:
             records.reverse()
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=_wms_response(render_gfi_body(records)))
 
-        url = GugikProvider(session=session)._get_opendata_url(self.GODLO)
+        url = GugikProvider(session=session)._get_opendata_url(self.SHEET)
 
         assert url == "https://x/new.asc"
 
     def test_dt_pzgik_breaks_aktualnosc_tie(self):
         """An acquisition date tie is broken by the later dt_pzgik."""
         records = [
-            gfi_record(self.GODLO, dt_pzgik="2024-11-02", url="https://x/earlier.asc"),
-            gfi_record(self.GODLO, dt_pzgik="2025-01-10", url="https://x/later.asc"),
+            gfi_record(self.SHEET, dt_pzgik="2024-11-02", url="https://x/earlier.asc"),
+            gfi_record(self.SHEET, dt_pzgik="2025-01-10", url="https://x/later.asc"),
         ]
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=_wms_response(render_gfi_body(records)))
 
-        url = GugikProvider(session=session)._get_opendata_url(self.GODLO)
+        url = GugikProvider(session=session)._get_opendata_url(self.SHEET)
 
         assert url == "https://x/later.asc"
 
     def test_other_resolution_only_is_no_coverage_with_hint(self):
         """The only 0.50 m record: there is no 1 m, but the hint says what exists."""
-        body = render_gfi_body([gfi_record(self.GODLO, resolution="0.50 m")])
+        body = render_gfi_body([gfi_record(self.SHEET, resolution="0.50 m")])
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=_wms_response(body))
 
         with pytest.raises(NoCoverageError) as exc_info:
-            GugikProvider(session=session)._get_opendata_url(self.GODLO)
+            GugikProvider(session=session)._get_opendata_url(self.SHEET)
 
         assert "0.5 m" in str(exc_info.value)
 
     def test_negative_cache_preserves_resolution_hint(self, tmp_path):
         from kartograf.cache.metadata import MetadataCache
 
-        body = render_gfi_body([gfi_record(self.GODLO, resolution="0.50 m")])
+        body = render_gfi_body([gfi_record(self.SHEET, resolution="0.50 m")])
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=_wms_response(body))
         cache = MetadataCache(db_path=tmp_path / "cache.db")
         try:
             provider = GugikProvider(session=session, cache=cache)
             with pytest.raises(NoCoverageError) as first:
-                provider._get_opendata_url(self.GODLO)
+                provider._get_opendata_url(self.SHEET)
             calls = session.get.call_count
             with pytest.raises(NoCoverageError) as cached:
-                provider._get_opendata_url(self.GODLO)
+                provider._get_opendata_url(self.SHEET)
             assert session.get.call_count == calls
             assert str(cached.value) == str(first.value)
             assert "0.5 m" in str(cached.value)
@@ -940,12 +940,12 @@ class TestGugikProviderGetOpendataUrl:
     def test_rejected_record_does_not_stop_layer_loop(self, record_response):
         """A layer with only 0.50 m does not end the loop - 1 m from the next layer."""
         first = _wms_response(
-            render_gfi_body([gfi_record(self.GODLO, resolution="0.50 m")])
+            render_gfi_body([gfi_record(self.SHEET, resolution="0.50 m")])
         )
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[first, record_response])
 
-        url = GugikProvider(session=session)._get_opendata_url(self.GODLO)
+        url = GugikProvider(session=session)._get_opendata_url(self.SHEET)
 
         assert url == self.URL
         assert _queried_layers(session) == list(_EVRF2007_LAYERS[:2])
@@ -956,21 +956,21 @@ class TestGugikProviderGetOpendataUrl:
         session.get = Mock(return_value=record_response)
 
         provider = GugikProvider(session=session, resolution="1m")
-        provider._get_opendata_url(self.GODLO)
+        provider._get_opendata_url(self.SHEET)
 
         call_url = session.get.call_args[0][0]
         assert "SkorowidzeUkladEVRF2007" in call_url
 
     def test_get_opendata_url_uses_correct_endpoint_for_5m(self):
         """Test that 5m uses the right endpoint."""
-        body = render_gfi_body([gfi_record(self.GODLO, resolution="5.00 m")])
+        body = render_gfi_body([gfi_record(self.SHEET, resolution="5.00 m")])
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=_wms_response(body))
 
         provider = GugikProvider(
             session=session, resolution="5m", vertical_crs="EVRF2007"
         )
-        assert provider._get_opendata_url(self.GODLO) == self.URL
+        assert provider._get_opendata_url(self.SHEET) == self.URL
 
         call_url = session.get.call_args[0][0]
         assert "SheetsGrid5mEVRF2007" in call_url
@@ -979,11 +979,11 @@ class TestGugikProviderGetOpendataUrl:
 class TestGugikProviderSession:
     """Tests of HTTP session management: one injected or one per thread."""
 
-    GODLO = "N-34-130-D"
+    SHEET = "N-34-130-D"
 
     @pytest.fixture
     def record_body(self):
-        return render_gfi_body([gfi_record(self.GODLO)])
+        return render_gfi_body([gfi_record(self.SHEET)])
 
     @staticmethod
     def file_response():
@@ -999,7 +999,7 @@ class TestGugikProviderSession:
         )
 
         with patch(SESSION_FACTORY) as factory:
-            GugikProvider(session=session).download(self.GODLO, tmp_path / "test.asc")
+            GugikProvider(session=session).download(self.SHEET, tmp_path / "test.asc")
 
         factory.assert_not_called()
         assert session.get.call_count == 2
@@ -1011,8 +1011,8 @@ class TestGugikProviderSession:
 
         with patch(SESSION_FACTORY, return_value=session) as factory:
             provider = GugikProvider()
-            provider._get_opendata_url(self.GODLO)
-            provider._get_opendata_url(self.GODLO)
+            provider._get_opendata_url(self.SHEET)
+            provider._get_opendata_url(self.SHEET)
 
         factory.assert_called_once()
         assert session.get.call_count == 2
@@ -1034,7 +1034,7 @@ class TestGugikProviderSession:
 
             def worker():
                 try:
-                    results.append(provider._get_opendata_url(self.GODLO))
+                    results.append(provider._get_opendata_url(self.SHEET))
                 except Exception as exc:
                     errors.append(exc)
 
@@ -1047,7 +1047,7 @@ class TestGugikProviderSession:
         assert errors == []
         assert factory.call_count == 2
         assert [session.get.call_count for session in sessions] == [1, 1]
-        assert results == [gfi_record(self.GODLO)["url"]] * 2
+        assert results == [gfi_record(self.SHEET)["url"]] * 2
 
     @pytest.mark.real_wms_layers
     def test_provided_session_serves_get_capabilities(self, tmp_path, record_body):
@@ -1064,7 +1064,7 @@ class TestGugikProviderSession:
         output_path = tmp_path / "test.asc"
 
         with patch(SESSION_FACTORY) as factory:
-            result = GugikProvider(session=session).download(self.GODLO, output_path)
+            result = GugikProvider(session=session).download(self.SHEET, output_path)
 
         factory.assert_not_called()
         assert result == output_path and output_path.read_bytes() == b"data"
@@ -1130,33 +1130,33 @@ class TestSkorowidzRegression:
         assert session.get.call_count == 3
 
     @pytest.mark.parametrize(
-        ("godlo", "fixture", "expected"),
+        ("sheet", "fixture", "expected"),
         [
             ("N-33-90-C-c-2-4", "szczecin_c24_2024.body", "80225_1536688"),
             ("N-34-139-A-c-1-1", "warszawa_2023iStarsze.body", "78047_1404533"),
         ],
     )
-    def test_exact_resolution_and_latest_campaign(self, godlo, fixture, expected):
+    def test_exact_resolution_and_latest_campaign(self, sheet, fixture, expected):
         session = Mock(spec=requests.Session)
         session.get.return_value = self.response(self.sample(fixture))
-        assert expected in GugikProvider(session=session)._get_opendata_url(godlo)
+        assert expected in GugikProvider(session=session)._get_opendata_url(sheet)
 
     @pytest.mark.parametrize(
-        ("godlo", "record_godlo", "uklad", "hint"),
+        ("sheet", "record_sheet", "system", "hint"),
         [
             ("5.167.25", "5.167.25.13", "PL-2000:S5", "--scale 1:2000"),
             ("7.124.7.4", "N-33-48-C-a-3-4", "PL-1992", "PL-1992"),
         ],
     )
     def test_no_substring_or_other_system_fallback(
-        self, godlo, record_godlo, uklad, hint
+        self, sheet, record_sheet, system, hint
     ):
         body = render_gfi_body(
             [
                 {
-                    "url": f"https://opendata.geoportal.gov.pl/{record_godlo}.asc",
-                    "godlo": record_godlo,
-                    "ukladWspolrzednychPoziomych": uklad,
+                    "url": f"https://opendata.geoportal.gov.pl/{record_sheet}.asc",
+                    "godlo": record_sheet,
+                    "ukladWspolrzednychPoziomych": system,
                     "charakterystykaPrzestrzenna": "1.00 m",
                     "aktualnosc": "2024-09-03",
                 }
@@ -1165,7 +1165,7 @@ class TestSkorowidzRegression:
         session = Mock(spec=requests.Session)
         session.get.return_value = self.response(body)
         with pytest.raises(NoCoverageError, match=hint):
-            GugikProvider(session=session)._get_opendata_url(godlo)
+            GugikProvider(session=session)._get_opendata_url(sheet)
 
     def test_uppercase_asc_is_available(self):
         session = Mock(spec=requests.Session)
@@ -1219,7 +1219,7 @@ class TestSkorowidzRegression:
         assert provider._get_opendata_url("N-33-90-C-c-2-4") == record["url"]
 
     def test_pl2000_record_matches_only_same_zone(self):
-        record = gfi_record("7.173.21.06", uklad="PL-2000:S7")
+        record = gfi_record("7.173.21.06", system="PL-2000:S7")
         session = Mock(spec=requests.Session)
         session.get.return_value = self.response(render_gfi_body([record]))
         assert (
@@ -1229,7 +1229,7 @@ class TestSkorowidzRegression:
 
         session = Mock(spec=requests.Session)
         session.get.return_value = self.response(
-            render_gfi_body([gfi_record("7.173.21.06", uklad="PL-2000:S6")])
+            render_gfi_body([gfi_record("7.173.21.06", system="PL-2000:S6")])
         )
         with pytest.raises(NoCoverageError, match="PL-2000"):
             GugikProvider(session=session)._get_opendata_url("7.173.21.06")
