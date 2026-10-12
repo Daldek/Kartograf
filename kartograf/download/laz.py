@@ -36,6 +36,7 @@ from pathlib import Path
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
 from kartograf.core.sheet_parser import BBox
+from kartograf.download.area import bbox_to_2180
 from kartograf.download.fetch import (
     FileSlot,
     UpdateMode,
@@ -345,23 +346,6 @@ def _run_laz_download(
     )
 
 
-def area_to_2180(bbox: BBox) -> BBox:
-    """LAZ area in EPSG:2180: Czech CRSs only via the pinned operation.
-
-    A Czech CRS (Krovak/UTM33N) is left ONLY via the pinned operation (like
-    the country split) - an unpinned pyproj transformer (ballpark, unknown
-    accuracy) would risk a wrong selection of LAZ tiles on the border strip.
-    Other CRSs use the densified-edge envelope (``transform_bbox``).
-    """
-    from kartograf.core.bbox import is_czech_crs, transform_bbox
-
-    if is_czech_crs(bbox.crs):
-        from kartograf.providers.cuzk.dmr import bbox_to_crs
-
-        return bbox_to_crs(bbox, "EPSG:2180")
-    return transform_bbox(bbox, "EPSG:2180")
-
-
 @contextmanager
 def _selected(
     bbox: BBox,
@@ -383,7 +367,7 @@ def _selected(
     The ``LAZ_SUPERSEDED`` notice is emitted right after the selection; an
     empty selection raises ``NoCoverageError`` after that notice.
     """
-    area = area_to_2180(bbox)
+    area = bbox_to_2180(bbox)
     with open_cache(cache, force=force, on_notice=sink.add) as metadata:
         if provider is None:
             # looked up on the module: callers patch the class at its source

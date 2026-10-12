@@ -192,25 +192,16 @@ def _announce_geometry_layer(args: argparse.Namespace) -> bool:
     Errors (missing file, unknown layer, no feature tables) print ``Error:`` and
     return ``False``.
     """
-    from kartograf.core.geometry import resolve_layer
+    from kartograf.download.area import resolve_geometry_layer
+    from kartograf.notices import NoticeSink
 
-    filepath = Path(args.geometry)
-    if not filepath.exists():
-        print(f"Error: File not found: {filepath}", file=sys.stderr)
-        return False
     try:
-        choice = resolve_layer(filepath, getattr(args, "layer", None))
+        args.layer = resolve_geometry_layer(
+            args.geometry, getattr(args, "layer", None), NoticeSink(_print_notice)
+        )
     except ValidationError as e:
         print(f"Error: {e}", file=sys.stderr)
         return False
-    if choice.defaulted and len(choice.available) > 1:
-        print(
-            f"Info: {filepath.name}: liczba warstw {len(choice.available)}, uzyto "
-            f"pierwszej '{choice.name}' (pozostale: "
-            f"{', '.join(choice.available[1:])}); inna warstwa: --layer NAZWA",
-            file=sys.stderr,
-        )
-    args.layer = choice.name
     return True
 
 
@@ -2177,11 +2168,8 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     per area, parallel download, sidecars, failures). This function only
     prints and maps the result to an exit code.
     """
-    from kartograf.download.laz import (
-        area_to_2180,
-        check_laz_area,
-        download_laz_area,
-    )
+    from kartograf.download.area import bbox_to_2180
+    from kartograf.download.laz import check_laz_area, download_laz_area
 
     # a CZ sheet code + laz is dropped already at dispatch; what remains here is an
     # explicit --country cz in area mode (LAZ skips cmd_download's bbox/geometry
@@ -2207,7 +2195,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     if (
         args.country == "auto"
         and args.sheet is None
-        and "CZ" in _countries_for_bbox(area_to_2180(bbox))
+        and "CZ" in _countries_for_bbox(bbox_to_2180(bbox))
     ):
         print(
             "Error: --product laz jest dostepny tylko dla PL, a obszar "

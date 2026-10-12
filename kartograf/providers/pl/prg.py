@@ -60,9 +60,9 @@ _sessions = SessionPerThread(None)
 
 
 def _to_2180(bbox: BBox) -> BBox:
-    """Area in EPSG:2180 - the PL cutout rule (Czech CRSs via the pinned operation)."""
+    """Area in EPSG:2180 - the shared rule (Czech CRSs via the pinned operation)."""
     # providers -> download must stay lazy (download imports providers)
-    from kartograf.download.cutout import bbox_to_2180
+    from kartograf.download.area import bbox_to_2180
 
     return bbox_to_2180(bbox)
 

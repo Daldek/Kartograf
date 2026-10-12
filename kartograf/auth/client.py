@@ -67,8 +67,8 @@ class AuthProxyClient:
         """Singleton pattern - only one proxy instance.
 
         Double-checked under ``_lock``: the first client is routinely built
-        from several threads at once (``LandCoverManager.download_batch``
-        runs 4 workers by default), and two instances would mean two proxy
+        from several threads at once (parallel downloads with ``workers``),
+        and two instances would mean two proxy
         subprocesses. ``__new__`` never runs under ``_ensure_proxy``, so the
         non-reentrant lock is never taken twice.
         """

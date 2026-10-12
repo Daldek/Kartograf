@@ -6,25 +6,20 @@ import argparse
 import sys
 from pathlib import Path
 
-from kartograf.cache.defaults import open_cache
 from kartograf.cli._parser import parse_bbox_arg
 from kartograf.cli.download_cmd import (
-    _announce_geometry_layer,
     _plan_context,
+    _print_notice,
     _print_version_summary,
     _report_file,
     _report_plan,
     _report_stale,
     _unit_of,
     _update_mode,
-    _warn_cache_disabled,
     run_with_plan_file,
 )
-from kartograf.core.sheet_parser import BBox
-from kartograf.download.fetch import UpdateMode
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
-from kartograf.providers.corine import CorineProvider
 
 
 def cmd_landcover(args: argparse.Namespace) -> int:
@@ -208,105 +203,64 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
 
     # Parse bbox if provided (zly bbox -> ValidationError -> Error: w main)
     bbox = parse_bbox_arg(args.bbox, "EPSG:2180") if args.bbox else None
+    selection: dict = {
+        "teryt": args.teryt,
+        "sheet": args.sheet,
+        "bbox": bbox,
+        "geometry": Path(args.geometry) if has_geometry else None,
+        "layer": getattr(args, "layer", None),
+    }
+    options: dict = {}
+    if args.source == "corine":
+        options["year"] = args.year
+    if args.source == "bdot10k":
+        options["format"] = args.format
+    if args.source == "soilgrids":
+        options["property"] = args.property
+        options["depth"] = args.depth
+        options["stat"] = args.stat
 
-    # BDOT10k uses the same cwd cache as PL/CZ downloads for PRG answers.
-    output_dir = Path(args.output)
-    is_bdot = args.source == "bdot10k"
-    update = _update_mode(args)
-    with open_cache(
-        is_bdot, force=update == "force", on_notice=_warn_cache_disabled
-    ) as cache:
-        manager = LandCoverManager(
-            output_dir=output_dir, provider=args.source, cache=cache
+    manager = LandCoverManager(output_dir=Path(args.output), provider=args.source)
+    try:
+        return run_with_plan_file(
+            args, lambda a: _landcover_task(a, manager, selection, options)
         )
-
-        kwargs: dict = {}
-        if args.source == "corine":
-            kwargs["year"] = args.year
-        if is_bdot:
-            kwargs["format"] = args.format
-        if args.source == "soilgrids":
-            kwargs["property"] = args.property
-            kwargs["depth"] = args.depth
-            kwargs["stat"] = args.stat
-
-        try:
-            if has_geometry:
-                from kartograf.core.geometry import get_overall_bbox
-
-                if not _announce_geometry_layer(args):
-                    return 1
-                bbox = get_overall_bbox(Path(args.geometry), layer=args.layer)
-            return run_with_plan_file(
-                args, lambda a: _landcover_task(a, manager, bbox, kwargs, update)
-            )
-        except NotImplementedError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 1
-        except DownloadError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 1
-        except (ParseError, ValidationError) as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 1
+    except (DownloadError, ParseError, ValidationError) as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
 
 
 def _landcover_task(
     args: argparse.Namespace,
     manager: LandCoverManager,
-    bbox: BBox | None,
-    kwargs: dict,
-    update: UpdateMode | None,
+    selection: dict,
+    options: dict,
 ) -> int:
     """One ``landcover download`` request: a plan (``--check-updates``) or
     the files with one status line each (spec 4.5)."""
-    teryt, sheet = args.teryt, args.sheet
-    plan = _plan_context(args).loaded
-    is_bdot = args.source == "bdot10k"
-    if (
-        isinstance(manager.provider, CorineProvider)
-        and not manager.provider.uses_clms(args.year)
-        and not args.check_updates
-    ):
-        print(
-            f"Info: CORINE {args.year}: podglad WMS (stylizowany PNG, nie dane; "
-            "dane CLMS wymagaja CLMS_CREDENTIALS)",
-            file=sys.stderr,
-        )
-    out = manager.output_dir
-    if teryt is None and is_bdot:
-        # Every powiat of the area, one package each (A2); a failed powiat is
-        # reported, the others still run (exit code 1, ARCHITECTURE 4.2).
-        area = {"bbox": bbox} if bbox is not None else {"sheet": sheet}
-        if args.check_updates:
-            return _report_plan(args, manager.check_all_counties(**area, **kwargs))
-        result = manager.download_all_counties(
-            **area, update=update, plan=plan, **kwargs
-        )
-        statuses = []
-        for item in result.files:
-            for file in (item.file, item.raw):
-                if file is not None:
-                    _report_file(args, _unit_of(file.path, out), file, update)
-                    statuses.append(file.status)
-        for failure in result.failed:
-            print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
-        rc = _report_stale(result.stale)
-        if not args.quiet:
-            _print_version_summary(statuses, len(result.failed), manager.output_dir)
-        return 1 if rc or result.failed else 0
-
-    where = (
-        {"teryt": teryt}
-        if teryt is not None
-        else {"bbox": bbox}
-        if bbox is not None
-        else {"sheet": sheet}
-    )
     if args.check_updates:
-        return _report_plan(args, manager.check(**where, **kwargs))
-    single = manager.download(**where, update=update, plan=plan, **kwargs)
-    for file in (single.file, single.raw):
-        if file is not None:
-            _report_file(args, _unit_of(file.path, out), file, update)
-    return _report_stale(single.stale)
+        return _report_plan(
+            args, manager.check(**selection, on_notice=_print_notice, **options)
+        )
+    update = _update_mode(args)
+    result = manager.download(
+        **selection,
+        update=update,
+        plan=_plan_context(args).loaded,
+        on_notice=_print_notice,
+        **options,
+    )
+    out = manager.output_dir
+    statuses = []
+    for item in result.files:
+        for file in (item.file, item.raw):
+            if file is not None:
+                _report_file(args, _unit_of(file.path, out), file, update)
+                statuses.append(file.status)
+    for failure in result.failed:
+        print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
+    _report_stale(result.stale)
+    # several files (BDOT10k area): one summary line, as for sheet lists
+    if args.source == "bdot10k" and args.teryt is None and not args.quiet:
+        _print_version_summary(statuses, len(result.failed), out)
+    return 0 if result.ok else 1
