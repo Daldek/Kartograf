@@ -29,7 +29,7 @@ import threading
 from dataclasses import dataclass
 from pathlib import Path, PurePath
 
-from kartograf.download.versions import read_version, version_key
+from kartograf.download.versions import ensure_dir, read_version, version_key
 from kartograf.exceptions import DownloadError
 from kartograf.sources.sidecar import file_digest
 
@@ -74,7 +74,7 @@ def link_atomic(target: Path, link: Path) -> None:
     ``DownloadError`` with a description; any other ``OSError`` propagates.
     The existing link is left untouched on failure and tmp is cleaned up.
     """
-    link.parent.mkdir(parents=True, exist_ok=True)
+    ensure_dir(link.parent)
     tmp = _tmp_name(link, "link.tmp")
     tmp.unlink(missing_ok=True)  # leftover from an interrupted run (same pid_tid)
     try:
