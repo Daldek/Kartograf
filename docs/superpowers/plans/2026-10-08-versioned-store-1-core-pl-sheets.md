@@ -43,9 +43,9 @@ Galaz `feat/versioned-store` trafia do `develop` dopiero po planie 3/3.
 7. **Tor bez kampanii (`_fetch_sheet_plain`)** dostaje wersje z etykieta `downloaded` (providery bez kampanii: atrapy testowe, obce providery).
 8. **Tymczasowe odrzucenie w CLI:** `--check-updates`/`--upgrade` dla torow z planow 2/3 i 3/3 (LAZ, CZ, `--target-crs`, `landcover`, `soilgrids`) konczy sie `Error:` (kod 1) przed siecia; `--force` dziala tam jak dzis. Galaz nie trafia do `develop` przed planem 3/3, ktory usuwa to odrzucenie.
 
-## Pytania do uzytkownika (przed Task 1)
+## Warunek wstepny (rozstrzygniety 2026-10-12)
 
-- **Kolejnosc wzgledem pozostalych zmian lamiacych 0.8.0** (`godlo` -> `sheet` w CLI i API, `--product` wymagane, `--campaigns` -> `--all-campaigns`, parametry wymagane w API). Wszystkie dotykaja `cli/_parser.py`, `cli/download_cmd.py` i sygnatur `DownloadManager`, ktore ten plan przebudowuje. Rekomendacja: wykonac je NAJPIERW na `develop` (osobne galezie, jak w backlogu), potem `git rebase develop` tej galezi i dopiero Task 1 — kod magazynu powstaje od razu z nowymi nazwami, bez konfliktow na dlugo zyjacej galezi. Jesli uzytkownik wybierze kolejnosc odwrotna, Task 6-7 uzywaja dzisiejszych nazw, a zmiany nazw ida po merge planu 3/3.
+- **Kolejnosc:** pozostale zmiany lamiace 0.8.0 (`godlo` -> `sheet` w CLI i API, `--all-campaigns`, "Bez wartosci domyslnych wplywajacych na dane" z `--product` wymaganym — backlog "Do 0.8.0" w `docs/PROGRESS.md`) ida NAJPIERW na `develop` (decyzja uzytkownika 2026-10-12), potem `git rebase develop` tej galezi i dopiero Task 1. Przed Task 1 dostosuj nazwy i sygnatury w tym planie do stanu po tych zmianach (`sheet` zamiast `godlo`, wymagane `output_dir`/`vertical_crs`/`resolution`, brak `ext='.asc'` w `FileStorage`, przelacznik zamiast `campaigns=`) i zweryfikuj odwolania plik:linia.
 
 ## Review Focus
 
