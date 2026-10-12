@@ -103,7 +103,26 @@
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI (stan 2026-10-12, koniec szostej sesji):**
+> **START NASTEPNEJ SESJI (stan 2026-10-12, koniec siodmej sesji):**
+> 0. **Audyt spojnosci CLI/biblioteka/API ZROBIONY** na galezi
+>    `chore/cli-api-consistency` (bez commitu, bez zmian kodu):
+>    `docs/research/2026-10-12-cli-api-consistency/raport.md` (R1-R13).
+>    Zatwierdzone 2026-10-12 (cel: to samo zachowanie niezaleznie od
+>    sposobu uruchomienia): R11 CLI tylko tlumaczy (R1 `--country auto`
+>    i R4 arkusz CZ PRZENIESIONE do biblioteki, nie zapisywane jako "tylko
+>    CLI"; z R5), R12 jedna polityka cache i `--force`, R13 testy
+>    zgodnosci CLI = API; warunek: R2 (wspolny ksztalt wyniku/planu).
+>    Decyzje 2026-10-12: R3 usunac `stat` z API HSG (tylko `mean`), R7
+>    brakujace flagi w 0.8.0, R12 biblioteka domyslnie z cache jak CLI,
+>    R6 wariant B (`ValidationError` bez dziedziczenia z `ValueError`),
+>    R9 polski z wymuszonym ASCII. Spec ZAAKCEPTOWANY 2026-10-12 (S1-S6):
+>    `docs/superpowers/specs/2026-10-12-cli-api-consistency-design.md`.
+>    Plan (Task 0-18, bez commitow; nic nie wdrozone):
+>    `docs/superpowers/plans/2026-10-12-cli-api-consistency.md`.
+>    `LandCoverManager.download_by_*`/`download_batch` USUWANE w Task 9
+>    (decyzja uzytkownika 2026-10-12). Nastepny krok: commit dokumentow
+>    galezi (raport, spec, plan, PROGRESS — dzis niezacommitowane), potem
+>    Task 0.
 > 1. **Magazyn wersjonowany (plany 1/3-3/3) SCALONY do `develop`
 >    lokalnie** (merge `--no-ff` `423a664` po rebase na `develop`, brama
 >    zielona; plan 3/3: `d2e936c`..`3f313a2`, E2E na zywo calosci PASS:
@@ -159,6 +178,35 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Sesja 2026-10-12 (siodma) — audyt spojnosci CLI, biblioteki i API; spec i plan
+
+- Galaz `chore/cli-api-consistency` od `develop` `d5215e8`; tylko dokumenty
+  (bez commitu, bez zmian kodu): raport
+  `docs/research/2026-10-12-cli-api-consistency/raport.md` (R1-R13), spec
+  `docs/superpowers/specs/2026-10-12-cli-api-consistency-design.md`
+  (ZAAKCEPTOWANY, Z1-Z7, S1-S6), plan
+  `docs/superpowers/plans/2026-10-12-cli-api-consistency.md` (Task 0-18).
+  Metoda audytu: `--help` kazdej komendy, `inspect.signature` `__all__`,
+  lektura torow CLI, parsowanie 67 przykladow CLI z dokumentacji (wszystkie
+  OK), smoke bibliotek z bbox EPSG:4326 (LAZ: `ValueError`, land cover/HSG:
+  `ValidationError`).
+- Najwazniejsze ustalenia: logika tylko w CLI (`--country auto`, walidacja
+  `--system`/`--scale`, `parent_request`, `--geometry`/`--bbox-crs` poza
+  `download` arkuszy), cztery ksztalty wyniku/planu (arkusze PL ze stanem
+  `last_result`), `stat` HSG zaszyte w CLI, mieszane typy wyjatkow (36
+  `ValueError` / 122 `ValidationError`), mieszany jezyk pomocy CLI (141
+  literalow spoza ASCII), CLI `landcover` pobiera wszystkie powiaty, a
+  `LandCoverManager.download(bbox=)` jeden.
+- Decyzje uzytkownika: R1-R5, R7, R11-R13; R3 bez `stat` (HSG tylko
+  `mean`, sciezki magazynu bez zmian); R6 wariant B; R9 polski ASCII; R12
+  biblioteka z cache jak CLI; S1-S6 wg propozycji specu (m.in.
+  `download_data`/`check_data`, kroki wewnetrzne poza `__all__`); kryterium
+  zgodnosci przy zamrozonym zegarze (pola czasowe to fakt przebiegu);
+  `LandCoverManager.download_by_*`/`download_batch` usuwane w Task 9.
+- Sprawdzone uzycie API w `../Hydrograf` (spec sekcja 8); `../Hydrolog` bez
+  importow `kartograf`.
+- Brama nieuruchamiana (bez zmian kodu).
 
 ### Sesja 2026-10-12 (szosta) — wdrozenie planu 3/3 magazynu wersjonowanego
 
@@ -2250,6 +2298,11 @@ wchodza w tym samym wydaniu (decyzja uzytkownika). Kazda na wlasnej galezi.
   tabela flaga/parametr -> CLI / biblioteka / `__all__` z lukami;
   rozbieznosci naprawic albo zapisac jako decyzje (np. arkusz CZ bez
   publicznego API — decyzja 9 planu 2/3 magazynu).
+  Stan 2026-10-12: raport R1-R13
+  (`docs/research/2026-10-12-cli-api-consistency/raport.md`), spec
+  ZAAKCEPTOWANY i plan Task 0-18
+  (`docs/superpowers/plans/2026-10-12-cli-api-consistency.md`) na galezi
+  `chore/cli-api-consistency`; wdrozenie nie zaczete.
 
 #### Do v1.0.0 — roadmapa
 
