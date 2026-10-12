@@ -81,10 +81,9 @@ from kartograf.download.manager import (
     SheetFetch,
     UpdateMode,
 )
+from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.download.storage import FileStorage
 from kartograf.download.updates import (
-    PlanItem,
-    UpdatePlan,
     UpgradeReport,
     check_updates,
     upgrade,

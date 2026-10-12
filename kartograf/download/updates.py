@@ -6,15 +6,13 @@ with its local version WITHOUT downloading anything and returns an
 ``UpdatePlan`` (JSON with English keys). ``upgrade`` executes a plan: before
 each position the signal is read again — a position whose signal changed
 since the plan is ``stale`` and is not downloaded; positions removed from the
-plan file are never executed. Plan 1/3 covers PL sheets downloaded through
-``DownloadManager``.
+plan file are never executed. This module covers the ``pl_sheet`` track
+(``DownloadManager``); the plan types live in ``kartograf.download.plan``.
 """
 
-import json
-from dataclasses import asdict, dataclass, field
+import dataclasses
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from pathlib import Path
-from typing import Literal, cast, get_args
 
 from kartograf._version import build_version
 from kartograf.download.manager import (
@@ -23,76 +21,17 @@ from kartograf.download.manager import (
     SheetInspection,
     _Pick,
 )
-from kartograf.download.versions import newest_version
-from kartograf.exceptions import DownloadError, ValidationError
-
-PLAN_SCHEMA = "kartograf-plan/1"
-ItemStatus = Literal["current", "newer", "missing", "unverifiable", "check_failed"]
-_TODO = ("newer", "missing")
-
-
-@dataclass(frozen=True)
-class PlanItem:
-    """One file of the request: local version vs. the source signal.
-
-    ``available_signal`` for an index (skorowidz) record: ``url``, ``date``
-    and ``pzgik_date``. ``status``: ``current`` (the local version is the
-    newest), ``newer`` (a newer campaign exists, not local), ``missing`` (no
-    local version), ``unverifiable`` (no cheap signal), ``check_failed``
-    (the signal could not be read; ``error``).
-    """
-
-    segment: str
-    hierarchy: str
-    name: str
-    sheet: str
-    local_label: str | None
-    local_sha256: str | None
-    available_label: str | None
-    available_signal: dict | None
-    status: ItemStatus
-    error: str | None = None
-
-
-@dataclass(frozen=True)
-class UpdatePlan:
-    """Result of ``check_updates``; ``store`` = resolved output directory."""
-
-    store: str
-    checked_at: str
-    kartograf_version: str
-    items: tuple[PlanItem, ...]
-    schema: str = PLAN_SCHEMA
-
-    def to_json(self) -> str:
-        """The plan as JSON (``kartograf-plan/1``)."""
-        payload = asdict(self)
-        payload["items"] = [asdict(item) for item in self.items]
-        return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
-
-    @classmethod
-    def from_json(cls, text: str) -> "UpdatePlan":
-        """Read a plan; an unknown schema or a malformed plan = ``ValidationError``."""
-        try:
-            payload = json.loads(text)
-        except ValueError as e:
-            raise ValidationError(f"Plan aktualizacji nie jest JSON: {e}") from e
-        if not isinstance(payload, dict) or payload.get("schema") != PLAN_SCHEMA:
-            schema = payload.get("schema") if isinstance(payload, dict) else None
-            raise ValidationError(
-                f"Nieznany schemat planu aktualizacji {schema!r} "
-                f"(oczekiwano {PLAN_SCHEMA!r})"
-            )
-        try:
-            items = tuple(_item(raw) for raw in payload["items"])
-            return cls(
-                store=str(payload["store"]),
-                checked_at=str(payload["checked_at"]),
-                kartograf_version=str(payload["kartograf_version"]),
-                items=items,
-            )
-        except (KeyError, TypeError) as e:
-            raise ValidationError(f"Niekompletny plan aktualizacji: {e}") from e
+from kartograf.download.plan import (
+    TODO_STATUSES,
+    ItemStatus,
+    PlanItem,
+    UpdatePlan,
+    require_store,
+    select_planned,
+    store_id,
+)
+from kartograf.download.versions import LocalVersion, newest_version
+from kartograf.exceptions import DownloadError
 
 
 @dataclass(frozen=True)
@@ -104,26 +43,8 @@ class UpgradeReport:
     failed: dict[str, str] = field(default_factory=dict)
 
 
-def _item(raw: dict) -> PlanItem:
-    status = raw["status"]
-    if status not in get_args(ItemStatus):
-        raise ValidationError(f"Nieznany status pozycji planu {status!r}")
-    return PlanItem(
-        segment=str(raw["segment"]),
-        hierarchy=str(raw["hierarchy"]),
-        name=str(raw["name"]),
-        sheet=str(raw["sheet"]),
-        local_label=raw.get("local_label"),
-        local_sha256=raw.get("local_sha256"),
-        available_label=raw.get("available_label"),
-        available_signal=raw.get("available_signal"),
-        status=cast(ItemStatus, status),
-        error=raw.get("error"),
-    )
-
-
 def _store(manager: DownloadManager) -> str:
-    return str(Path(manager.storage.output_dir).resolve())
+    return store_id(manager.storage.output_dir)
 
 
 def _where(manager: DownloadManager, sheet: str) -> tuple[str, str]:
@@ -151,63 +72,42 @@ def _status(pick: _Pick) -> ItemStatus:
 def _items(manager: DownloadManager, inspection: SheetInspection) -> list[PlanItem]:
     sheet = inspection.sheet
     segment, hierarchy = _where(manager, sheet)
+
+    def item(
+        name: str,
+        local: LocalVersion | None,
+        label: str | None,
+        signal: dict | None,
+        status: ItemStatus,
+        error: str | None = None,
+    ) -> PlanItem:
+        return PlanItem(
+            track="pl_sheet",
+            segment=segment,
+            hierarchy=hierarchy,
+            name=name,
+            unit=sheet,
+            local_label=local.label if local is not None else None,
+            local_sha256=local.sha256 if local is not None else None,
+            available_label=label,
+            available_signal=signal,
+            status=status,
+            error=error,
+        )
+
+    std = inspection.std.name
     if inspection.error is not None:
-        return [
-            PlanItem(
-                segment,
-                hierarchy,
-                inspection.std.name,
-                sheet,
-                None,
-                None,
-                None,
-                None,
-                "check_failed",
-                str(inspection.error),
-            )
-        ]
+        return [item(std, None, None, None, "check_failed", str(inspection.error))]
     if not inspection.picks and not inspection.record_errors:
         local = newest_version(inspection.versions)
-        return [
-            PlanItem(
-                segment,
-                hierarchy,
-                inspection.std.name,
-                sheet,
-                local.label if local is not None else None,
-                local.sha256 if local is not None else None,
-                None,
-                None,
-                "unverifiable" if local is not None else "missing",
-            )
-        ]
+        status: ItemStatus = "unverifiable" if local is not None else "missing"
+        return [item(std, local, None, None, status)]
     items = [
-        PlanItem(
-            segment,
-            hierarchy,
-            pick.name,
-            sheet,
-            pick.local.label if pick.local is not None else None,
-            pick.local.sha256 if pick.local is not None else None,
-            pick.ref.dirname,
-            _signal(pick),
-            _status(pick),
-        )
+        item(pick.name, pick.local, pick.ref.dirname, _signal(pick), _status(pick))
         for pick in inspection.picks
     ]
     items.extend(
-        PlanItem(
-            segment,
-            hierarchy,
-            inspection.std.name,
-            sheet,
-            None,
-            None,
-            label,
-            None,
-            "check_failed",
-            str(error),
-        )
+        item(std, None, label, None, "check_failed", str(error))
         for label, error in inspection.record_errors
     )
     return items
@@ -218,7 +118,7 @@ def check_updates(manager: DownloadManager, sheets: list[str]) -> UpdatePlan:
 
     The manager's strategy (``all_campaigns``), year bounds and ``full_sheet``
     select the files, exactly as a download would; coarser PL-1992 sheets
-    expand to 1:10000.
+    expand to 1:10000. Every position has the track ``pl_sheet``.
     """
     items = [
         item
@@ -234,7 +134,11 @@ def check_updates(manager: DownloadManager, sheets: list[str]) -> UpdatePlan:
 
 
 def upgrade(manager: DownloadManager, plan: UpdatePlan) -> UpgradeReport:
-    """Execute the ``newer``/``missing`` positions of a plan (spec 4.4).
+    """Execute the ``newer``/``missing`` ``pl_sheet`` positions of a plan (spec 4.4).
+
+    Positions of other tracks are left to their own ``run_*`` functions
+    (``plan=``). Before downloading, every planned sheet is checked again;
+    ``select_planned`` decides what runs and what is ``stale``.
 
     Raises
     ------
@@ -242,27 +146,20 @@ def upgrade(manager: DownloadManager, plan: UpdatePlan) -> UpgradeReport:
         Unknown schema or a plan of another store (``--output``), before any
         request to the source.
     """
-    if plan.schema != PLAN_SCHEMA:
-        raise ValidationError(
-            f"Nieznany schemat planu aktualizacji {plan.schema!r} "
-            f"(oczekiwano {PLAN_SCHEMA!r})"
-        )
-    if plan.store != _store(manager):
-        raise ValidationError(
-            f"Plan dotyczy innego magazynu ({plan.store}), nie {_store(manager)}"
-        )
-    todo: dict[str, list[PlanItem]] = {}
-    for item in plan.items:
-        if item.status in _TODO:
-            todo.setdefault(item.sheet, []).append(item)
+    require_store(plan, _store(manager))
+    planned = [i for i in plan.items_for("pl_sheet") if i.status in TODO_STATUSES]
+    sheets = list(dict.fromkeys(item.unit for item in planned))
     done: list[SheetFetch] = []
-    stale: list[PlanItem] = []
     failed: dict[str, str] = {}
-    if not todo:
+    if not sheets:
         return UpgradeReport((), (), failed)
-    for inspection in manager.inspect_sheets(list(todo)):
+    checked: set[str] = set()
+    fresh: list[PlanItem] = []
+    picks: dict[tuple[str, str, str], _Pick] = {}
+    available: dict[str, tuple[int, ...] | None] = {}
+    for inspection in manager.inspect_sheets(sheets):
         sheet = inspection.sheet
-        if sheet not in todo:
+        if sheet not in sheets:
             continue
         if inspection.error is not None:
             failed[sheet] = str(inspection.error)
@@ -276,19 +173,23 @@ def upgrade(manager: DownloadManager, plan: UpdatePlan) -> UpgradeReport:
             if manager.last_sheet is not None:
                 done.append(manager.last_sheet)
             continue
-        fresh = {(p.name, p.ref.dirname): p for p in inspection.picks}
-        records = []
-        for item in todo[sheet]:
-            pick = fresh.get((item.name, item.available_label or ""))
-            if pick is None or _signal(pick) != item.available_signal:
-                stale.append(item)  # the source changed since the plan
-            elif _status(pick) in _TODO:
-                records.append(pick.record)
-        if not records:
-            continue
+        checked.add(sheet)
+        fresh.extend(_items(manager, inspection))
+        available[sheet] = inspection.available
+        for pick in inspection.picks:
+            picks[(sheet, pick.name, pick.ref.dirname)] = pick
+    scope = dataclasses.replace(
+        plan, items=tuple(i for i in planned if i.unit in checked)
+    )
+    todo, stale = select_planned(scope, fresh, "pl_sheet")
+    records: dict[str, list] = {}
+    for item in todo:
+        pick = picks[(item.unit, item.name, item.available_label or "")]
+        records.setdefault(item.unit, []).append(pick.record)
+    for sheet, chosen in records.items():
         try:
             done.append(
-                manager.download_records(sheet, tuple(records), inspection.available)
+                manager.download_records(sheet, tuple(chosen), available[sheet])
             )
         except DownloadError as e:
             failed[sheet] = str(e)
