@@ -8,11 +8,11 @@
 
 **Architecture:** Nowy modul `kartograf/download/versions.py` (tozsamosc, zapis, lista wersji, sprzatanie). `download/links.py` zostaje mechanizmem dowiazan (standardowe i `full_sheet/`), wylacznie hardlink, klucz wersji zamiast klucza kampanii. `DownloadManager` zastepuje `skip_existing` parametrem `update`; kampania GUGiK = wersja z etykieta `<aktualnosc>_<id>`. Nowy modul `kartograf/download/updates.py` (plan aktualizacji). CLI: `--check-updates` / `--upgrade` / `--force` (grupa wykluczajaca) i `--plan`.
 
-**Spec:** `docs/superpowers/specs/2026-10-08-versioned-store-design.md` — ZAAKCEPTOWANY 2026-10-11 (D1-D24), uzupelniony 2026-10-12 o D25 (samoopisowe nazwy plikow). Numeracja decyzji (Dn) w tym planie odnosi sie do specu.
+**Spec:** `docs/superpowers/specs/2026-10-08-versioned-store-design.md` — ZAAKCEPTOWANY 2026-10-11 (D1-D24). Numeracja decyzji (Dn) w tym planie odnosi sie do specu.
 
 **Poza planem 1/3 (osobne plany po wykonaniu tego):**
-- plan 2/3: inwentaryzacja sygnalow (spec sekcja 8) dla zrodel spoza arkuszy PL, LAZ, CZ (godlo i `bbox/`), wycinki PL z WCS `bbox/` (D15; nazwa samoopisowa wg D25, np. `nmt_<wsp>.tif`), nadpisanie starych plikow LAZ/CZ (D24), `DownloadManager.download_bbox`, `extra.http` i sygnal `http`;
-- plan 3/3: land cover (BDOT10k, CORINE, SoilGrids) i HSG w ukladzie `data/` (D11) z samoopisowymi nazwami plikow (D25, np. `bdot10k_teryt_1206.gpkg`, nie `1206.gpkg`), `keep_raw`, pelna dokumentacja i E2E calosci.
+- plan 2/3: inwentaryzacja sygnalow (spec sekcja 8) dla zrodel spoza arkuszy PL, LAZ, CZ (godlo i `bbox/`), wycinki PL z WCS `bbox/` (D15), nadpisanie starych plikow LAZ/CZ (D24), `DownloadManager.download_bbox`, `extra.http` i sygnal `http`;
+- plan 3/3: land cover (BDOT10k, CORINE, SoilGrids) i HSG w ukladzie `data/` (D11), `keep_raw`, pelna dokumentacja i E2E calosci.
 Galaz `feat/versioned-store` trafia do `develop` dopiero po planie 3/3.
 
 ---
@@ -31,7 +31,6 @@ Galaz `feat/versioned-store` trafia do `develop` dopiero po planie 3/3.
 - Stale: `VERSIONS_DIR = "versions"`, `INCOMING_DIR = ".incoming"`, `STALE_AFTER_S = 24 * 3600`, `PLAN_SCHEMA = "kartograf-plan/1"`.
 - Tryby: `UpdateMode = Literal["check", "upgrade", "force"]`; brak trybu = `None` (domyslny).
 - Testy: zachowanie, granice, niezmienniki, przejscia; nie okablowanie ani tekst zrodla. Testy stare, ktore pinuja usuwane zachowanie (`kampanie/`, kopia zamiast hardlinku, `parent_requests`, `skip_existing`), usuwaj albo przepisuj na nowe zachowanie — nie zostawiaj podwojnych sciezek.
-- Nazwy plikow (D25): nazwa pliku w sciezce standardowej i w katalogu wersji jest ta sama i opisuje dane bez kontekstu katalogu. W planie 1/3 arkusze PL zachowuja `<godlo>.<ext>` (wyjatek D25); kazda nowa nazwa pliku wprowadzana przez ten plan (np. pliki testowe, plan aktualizacji) tez ma byc samoopisowa.
 
 ## Decyzje implementacyjne (bez nowych decyzji produktowych)
 
@@ -663,10 +662,10 @@ Helpery do dopisania w `tests/test_manager_campaigns.py`: `FakeCampaignProvider.
 **Files:**
 - Modify: `docs/DECISIONS.md` (CRLF), `docs/CHANGELOG.md`, `docs/ARCHITECTURE.md` (3.2, 3.3 reguly 6-7, 4.1), `docs/USAGE.md`, `docs/SCOPE.md` (2.11, 2.12), `docs/PROGRESS.md`
 
-- [ ] **Step 1: ADR-036 "Magazyn wersjonowany"** — Kontekst/Opcje/Decyzja = D1-D25 w skrocie z odsylaczem do specu; Konsekwencje: zakres planu 1/3 i plany 2/3, 3/3. Wiersz indeksu; erraty/statusy wg spec sekcja 9 (ADR-030 uklad `kampanie/`, automatyczne `newest`, errata 4 kopia; ADR-033 F-U5; ADR-032 pkt 2 i 4; ADR-035 W-U3/W-U8 — to ostatnie oznacz "realizacja w planie 2/3"; ADR-026 land cover — "realizacja w planie 3/3"). Sprawdz CRLF:
+- [ ] **Step 1: ADR-036 "Magazyn wersjonowany"** — Kontekst/Opcje/Decyzja = D1-D24 w skrocie z odsylaczem do specu; Konsekwencje: zakres planu 1/3 i plany 2/3, 3/3. Wiersz indeksu; erraty/statusy wg spec sekcja 9 (ADR-030 uklad `kampanie/`, automatyczne `newest`, errata 4 kopia; ADR-033 F-U5; ADR-032 pkt 2 i 4; ADR-035 W-U3/W-U8 — to ostatnie oznacz "realizacja w planie 2/3"; ADR-026 land cover — "realizacja w planie 3/3"). Sprawdz CRLF:
   `.venv/bin/python -c "b=open('docs/DECISIONS.md','rb').read().split(b'\n'); print([i for i,l in enumerate(b[:-1],1) if not l.endswith(b'\r')][:5])"` -> `[]`.
 - [ ] **Step 2: CHANGELOG `[0.8.0] - Unreleased` / `Zmiany lamiace (BREAKING)`** (styl wpisow 0.7.2, kazdy z "Co zrobic"): `kampanie/` -> `versions/<hierarchia>/<etykieta>_<sha8>/` (bez migracji, ponowne pobranie); domyslnie lokalna wersja zamiast automatycznego pobrania nowszej kampanii (`--upgrade`); nowe znaczenie `--force`; `skip_existing` -> `update=`; hardlinki wymagane (koniec kopii; FS bez hardlinkow = blad); `extra.parent_requests` usuniete; `SheetFetch.link`, `DownloadResult.copied` usuniete; pola `status`/`version`/`newer`. `Dodane`: `--check-updates`, `--upgrade`, `--plan`, `check_updates`, `upgrade`, `UpdatePlan`, `VersionRef`, `extra.version`, `relabeled`.
-- [ ] **Step 3: ARCHITECTURE/USAGE/SCOPE** — uklad `versions/` dla arkuszy PL, tryby, plan aktualizacji, wymaganie hardlinkow, `rsync -aH`, kompresja systemu plikow (spec 9); zasada nazw plikow D25 jako regula ukladu `data/` w ARCHITECTURE 3.3 (z wyjatkiem `<godlo>.<ext>` dla arkuszy PL); usun opisy `kampanie/`, kopii i `parent_requests` dla arkuszy PL.
+- [ ] **Step 3: ARCHITECTURE/USAGE/SCOPE** — uklad `versions/` dla arkuszy PL, tryby, plan aktualizacji, wymaganie hardlinkow, `rsync -aH`, kompresja systemu plikow (spec 9); usun opisy `kampanie/`, kopii i `parent_requests` dla arkuszy PL.
 - [ ] **Step 4: PROGRESS** — sesja, stan planu 1/3, nastepny krok (plan 2/3).
 - [ ] **Step 5: Commit** — `docs: magazyn wersjonowany dla arkuszy PL (ADR-036, CHANGELOG, uklad versions/)`
 
