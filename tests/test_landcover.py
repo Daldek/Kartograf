@@ -544,7 +544,8 @@ class TestBdot10kShpFormat:
             "1465.zip.meta.json",
         ]
         assert os.path.samefile(expected, version / "1465.zip")
-        assert f"Downloaded to: {expected}" in capsys.readouterr().out
+        out = capsys.readouterr().out
+        assert "landcover/pl_bdot10k_shp/teryt/1465.zip: nowa wersja " in out
 
     def test_provider_returns_zip_path_for_shp(self, tmp_path):
         provider = Bdot10kProvider(session=self._session())
@@ -1966,9 +1967,8 @@ class TestLandCoverCliManyCounties:
             )
         assert rc == 0
         out = capsys.readouterr().out
-        bdot = tmp_path / "out" / "landcover" / "pl_bdot10k_gpkg" / "teryt"
-        assert f"Downloaded to: {bdot / '0208.gpkg'}" in out
-        assert f"Downloaded to: {bdot / '0224.gpkg'}" in out
+        assert "landcover/pl_bdot10k_gpkg/teryt/0208.gpkg: nowa wersja " in out
+        assert "landcover/pl_bdot10k_gpkg/teryt/0224.gpkg: nowa wersja " in out
 
     def test_cli_passes_metadata_cache(self, tmp_path, monkeypatch, capsys):
         from kartograf.cli.commands import main

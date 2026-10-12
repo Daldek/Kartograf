@@ -2724,6 +2724,7 @@ class TestCmdLandcoverDownload:
         """landcover download --teryt calls manager.download with teryt."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.output_dir = tmp_path
         mock_mgr.download.return_value = _lc_result(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
@@ -2773,6 +2774,7 @@ class TestCmdLandcoverDownload:
         """landcover download --sheet (BDOT10k) downloads every powiat of the sheet."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.output_dir = tmp_path
         mock_mgr.download_all_counties.return_value = _lc_area(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
@@ -2793,13 +2795,14 @@ class TestCmdLandcoverDownload:
         call_kwargs = mock_mgr.download_all_counties.call_args
         assert call_kwargs.kwargs.get("sheet") == "N-34-130-D"
         mock_mgr.download.assert_not_called()
-        assert "Downloaded to" in capsys.readouterr().out
+        assert "out.gpkg: nowa wersja " in capsys.readouterr().out
 
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
     def test_landcover_download_by_bbox_success(self, mock_mgr_cls, capsys, tmp_path):
         """landcover download --bbox (BDOT10k) downloads every powiat of the bbox."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.output_dir = tmp_path
         mock_mgr.download_all_counties.return_value = _lc_area(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
@@ -2820,13 +2823,14 @@ class TestCmdLandcoverDownload:
         assert mock_mgr.download_all_counties.call_args.kwargs.get("bbox") is not None
         mock_mgr.download.assert_not_called()
         captured = capsys.readouterr()
-        assert "Downloaded to" in captured.out
+        assert "out.gpkg: nowa wersja " in captured.out
 
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
     def test_landcover_download_source_corine(self, mock_mgr_cls, capsys, tmp_path):
         """--source corine creates manager with corine provider."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "CORINE Land Cover"
+        mock_mgr.output_dir = tmp_path
         mock_mgr.download.return_value = _lc_result(tmp_path / "out.png")
         mock_mgr_cls.return_value = mock_mgr
 
@@ -3046,7 +3050,7 @@ class TestCmdSoilgrids:
         )
         assert result == 0
         captured = capsys.readouterr()
-        assert "HSG raster saved to" in captured.out
+        assert "hsg.tif: nowa wersja" in captured.out
         mock_calc.calculate_hsg_by_sheet.assert_called_once()
 
     @patch("kartograf.hydrology.HSGCalculator")
@@ -3673,6 +3677,7 @@ class TestCmdLandcoverDownloadGeometry:
         mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.output_dir = tmp_path
         mock_mgr.download_all_counties.return_value = _lc_area(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
@@ -3695,7 +3700,7 @@ class TestCmdLandcoverDownloadGeometry:
         call_kwargs = mock_mgr.download_all_counties.call_args
         assert call_kwargs.kwargs.get("bbox") is not None
         mock_mgr.download.assert_not_called()
-        assert "Downloaded to" in capsys.readouterr().out
+        assert "out.gpkg: nowa wersja " in capsys.readouterr().out
 
     @patch("kartograf.core.geometry.get_overall_bbox")
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
@@ -3706,6 +3711,7 @@ class TestCmdLandcoverDownloadGeometry:
         mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
+        mock_mgr.output_dir = tmp_path
         mock_mgr.download_all_counties.return_value = _lc_area(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 

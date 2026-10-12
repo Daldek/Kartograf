@@ -40,6 +40,24 @@ class _LazyVersionAction(argparse.Action):
         parser.exit()
 
 
+def add_update_flags(
+    parser: argparse.ArgumentParser,
+    *,
+    check_help: str,
+    upgrade_help: str,
+    force_help: str,
+    plan_help: str,
+) -> None:
+    """Update modes of a store command (spec 4.2, 4.4): ``--check-updates``,
+    ``--upgrade``, ``--force`` (mutually exclusive) and ``--plan PLIK``
+    (with a mode only — checked in ``commands._dispatch``)."""
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument("--check-updates", action="store_true", help=check_help)
+    modes.add_argument("--upgrade", action="store_true", help=upgrade_help)
+    modes.add_argument("--force", action="store_true", help=force_help)
+    parser.add_argument("--plan", metavar="PLIK", default=None, help=plan_help)
+
+
 _BBOX_EXPECTED = "Expected: min_x,min_y,max_x,max_y (e.g., 450000,550000,460000,560000)"
 _LAYER_HELP = (
     "Warstwa GPKG (domyslnie pierwsza; przy wielu warstwach Info z lista pozostalych)"
@@ -262,36 +280,21 @@ def create_parser() -> argparse.ArgumentParser:
         help="Katalog wyniku (wymagany); pliki trafiaja do "
         "<DIR>/<produkt>/<segment>/...",
     )
-    update_modes = download_parser.add_mutually_exclusive_group()
-    update_modes.add_argument(
-        "--check-updates",
-        action="store_true",
-        help="Porownaj lokalne wersje ze zrodlem i wypisz raport (aktualne / "
+    add_update_flags(
+        download_parser,
+        check_help="Porownaj lokalne wersje ze zrodlem i wypisz raport (aktualne / "
         "nowsza / do pobrania / nie da sie sprawdzic bez pobrania); niczego nie "
         "pobiera. Arkusze PL i LAZ: skorowidz/WFS, arkusze SM5: ETag, wycinki "
         "i TM33: bez taniego sygnalu",
-    )
-    update_modes.add_argument(
-        "--upgrade",
-        action="store_true",
-        help="Pobierz nowsza tresc, gdy sygnal zrodla ja wskazuje (domyslnie "
+        upgrade_help="Pobierz nowsza tresc, gdy sygnal zrodla ja wskazuje (domyslnie "
         "tylko informacja); pliki bez taniego sygnalu zostaja lokalne "
         "(pobranie: --force); z --plan wykonaj zapisany plan",
-    )
-    update_modes.add_argument(
-        "--force",
-        action="store_true",
-        help="Pobierz ponownie kazdy plik zadania (arkusze, kafle LAZ, wycinki) "
-        "i odswiez liste kampanii z GUGiK; ta sama tresc = bez zmian, inna = "
-        "nowa wersja; nic nie jest nadpisywane",
-    )
-    download_parser.add_argument(
-        "--plan",
-        metavar="PLIK",
-        default=None,
-        help="Z --check-updates: zapisz plan aktualizacji (JSON kartograf-plan/1, "
-        "przy --country auto jeden plan PL i CZ); z --upgrade: wykonaj plan "
-        "(pozycje zmienione od planu = blad, bez pobrania)",
+        force_help="Pobierz ponownie kazdy plik zadania (arkusze, kafle LAZ, "
+        "wycinki) i odswiez liste kampanii z GUGiK; ta sama tresc = bez zmian, "
+        "inna = nowa wersja; nic nie jest nadpisywane",
+        plan_help="Z --check-updates: zapisz plan aktualizacji (JSON "
+        "kartograf-plan/1, przy --country auto jeden plan PL i CZ); z --upgrade: "
+        "wykonaj plan (pozycje zmienione od planu = blad, bez pobrania)",
     )
     download_parser.add_argument(
         "--quiet",
@@ -455,7 +458,21 @@ def create_parser() -> argparse.ArgumentParser:
         "-o",
         metavar="DIR",
         default=None,
-        help="Wymagane: katalog wyniku; kazda sciezka katalogu jest dopuszczalna",
+        help="Wymagane: katalog magazynu; pliki trafiaja do "
+        "<DIR>/landcover/... i <DIR>/soil/... (wersje w versions/)",
+    )
+    add_update_flags(
+        lc_download,
+        check_help="Porownaj lokalne wersje ze zrodlem bez pobierania: SoilGrids "
+        "i CORINE (CLMS) - wydanie zrodla; BDOT10k i podglad CORINE - brak "
+        "taniego sygnalu (nie da sie sprawdzic bez pobrania)",
+        upgrade_help="Pobierz nowsze wydanie SoilGrids/CORINE (domyslnie tylko "
+        "informacja); BDOT10k i podglad CORINE zostaja lokalne (pobranie: "
+        "--force); z --plan wykonaj zapisany plan",
+        force_help="Pobierz ponownie kazdy plik (BDOT10k: takze odswiez powiaty "
+        "z PRG); ta sama tresc = bez zmian, inna = nowa wersja",
+        plan_help="Z --check-updates: zapisz plan aktualizacji (kartograf-plan/1); "
+        "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad)",
     )
     lc_download.add_argument(
         "--format",
@@ -499,6 +516,7 @@ def create_parser() -> argparse.ArgumentParser:
         "Q0.5 (mediana), Q0.95 (95. percentyl), "
         "uncertainty (niepewnosc predykcji)",
     )
+    lc_download.set_defaults(quiet=False)
 
     # Landcover list-sources command
     landcover_subparsers.add_parser(
@@ -564,10 +582,10 @@ def create_parser() -> argparse.ArgumentParser:
     sg_hsg.add_argument(
         "--output",
         "-o",
-        metavar="PATH",
+        metavar="DIR",
         default=None,
-        help="Wymagane: sciezka pliku GeoTIFF .tif lub katalog wyniku; "
-        "kazda sciezka jest dopuszczalna",
+        help="Wymagane: katalog magazynu; wejscia w <DIR>/soil/..., HSG w "
+        "<DIR>/hsg/... (plik poza magazynem: hsg_from_rasters)",
     )
     sg_hsg.add_argument(
         "--depth",
@@ -576,16 +594,23 @@ def create_parser() -> argparse.ArgumentParser:
         help="Wymagane: 0-5cm, 5-15cm, 15-30cm, 30-60cm, "
         "60-100cm, 100-200cm (przedzial glebokosci ponizej powierzchni)",
     )
-    sg_hsg.add_argument(
-        "--keep-intermediate",
-        action="store_true",
-        help="Keep intermediate clay/sand/silt files",
+    add_update_flags(
+        sg_hsg,
+        check_help="Porownaj wejscia clay/sand/silt z wydaniem SoilGrids i HSG "
+        "z wejsciami bez pobierania i bez liczenia",
+        upgrade_help="Pobierz nowsze wydanie wejsc (domyslnie tylko informacja); "
+        "HSG liczony tylko dla nowego zestawu wejsc; z --plan wykonaj plan",
+        force_help="Pobierz ponownie wejscia; HSG liczony tylko, gdy tresc "
+        "wejsc sie zmienila (inaczej uzyta ponownie)",
+        plan_help="Z --check-updates: zapisz plan aktualizacji (kartograf-plan/1); "
+        "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad)",
     )
     sg_hsg.add_argument(
         "--stats",
         action="store_true",
         help="Print HSG statistics after calculation",
     )
+    sg_hsg.set_defaults(quiet=False)
 
     # Cache command group
     cache_parser = subparsers.add_parser(

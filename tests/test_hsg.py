@@ -359,15 +359,16 @@ class TestHSGCLI:
                 "--depth",
                 "15-30cm",
                 "--output",
-                "/tmp/custom.tif",
-                "--keep-intermediate",
+                "store",
+                "--force",
                 "--stats",
             ]
         )
 
         assert args.depth == "15-30cm"
-        assert args.output == "/tmp/custom.tif"
-        assert args.keep_intermediate is True
+        assert args.output == "store"
+        assert args.force is True
+        assert not hasattr(args, "keep_intermediate")
         assert args.stats is True
 
 
