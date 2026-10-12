@@ -6,10 +6,10 @@ import argparse
 import sys
 from pathlib import Path
 
+from kartograf.cache.defaults import open_cache
 from kartograf.cli._parser import parse_bbox_arg
 from kartograf.cli.download_cmd import (
     _announce_geometry_layer,
-    _cli_metadata_cache,
     _plan_context,
     _print_version_summary,
     _report_file,
@@ -17,6 +17,7 @@ from kartograf.cli.download_cmd import (
     _report_stale,
     _unit_of,
     _update_mode,
+    _warn_cache_disabled,
     run_with_plan_file,
 )
 from kartograf.core.sheet_parser import BBox
@@ -208,47 +209,46 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
     # Parse bbox if provided (zly bbox -> ValidationError -> Error: w main)
     bbox = parse_bbox_arg(args.bbox, "EPSG:2180") if args.bbox else None
 
-    # BDOT10k gets the metadata cache of the cwd (PRG TERYT answers, U5) like
-    # the PL/CZ download paths; --force refreshes it.
+    # BDOT10k uses the same cwd cache as PL/CZ downloads for PRG answers.
     output_dir = Path(args.output)
     is_bdot = args.source == "bdot10k"
     update = _update_mode(args)
-    cache = _cli_metadata_cache(update == "force") if is_bdot else None
-    manager = LandCoverManager(output_dir=output_dir, provider=args.source, cache=cache)
-
-    kwargs: dict = {}
-    if args.source == "corine":
-        kwargs["year"] = args.year
-    if is_bdot:
-        kwargs["format"] = args.format
-    if args.source == "soilgrids":
-        kwargs["property"] = args.property
-        kwargs["depth"] = args.depth
-        kwargs["stat"] = args.stat
-
-    try:
-        if has_geometry:
-            from kartograf.core.geometry import get_overall_bbox
-
-            if not _announce_geometry_layer(args):
-                return 1
-            bbox = get_overall_bbox(Path(args.geometry), layer=args.layer)
-        return run_with_plan_file(
-            args, lambda a: _landcover_task(a, manager, bbox, kwargs, update)
+    with open_cache(
+        is_bdot, force=update == "force", on_notice=_warn_cache_disabled
+    ) as cache:
+        manager = LandCoverManager(
+            output_dir=output_dir, provider=args.source, cache=cache
         )
-    except NotImplementedError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-    except DownloadError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-    except (ParseError, ValidationError) as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-    finally:
-        # close() purges expired entries (as the PL/CZ download paths do)
-        if cache is not None:
-            cache.close()
+
+        kwargs: dict = {}
+        if args.source == "corine":
+            kwargs["year"] = args.year
+        if is_bdot:
+            kwargs["format"] = args.format
+        if args.source == "soilgrids":
+            kwargs["property"] = args.property
+            kwargs["depth"] = args.depth
+            kwargs["stat"] = args.stat
+
+        try:
+            if has_geometry:
+                from kartograf.core.geometry import get_overall_bbox
+
+                if not _announce_geometry_layer(args):
+                    return 1
+                bbox = get_overall_bbox(Path(args.geometry), layer=args.layer)
+            return run_with_plan_file(
+                args, lambda a: _landcover_task(a, manager, bbox, kwargs, update)
+            )
+        except NotImplementedError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        except DownloadError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        except (ParseError, ValidationError) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
 
 
 def _landcover_task(

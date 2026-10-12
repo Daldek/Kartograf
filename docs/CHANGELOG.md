@@ -283,6 +283,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Biblioteka: `Notice(level, code, text)` w publicznym API oraz
   `kartograf.notices.NoticeSink` (zbieranie komunikatow i przekazanie do
   callbacku); tekst komunikatow ograniczony do ASCII, kody sa stale.
+- Biblioteka i CLI: `kartograf.cache.defaults.open_cache(cache, force=...)`
+  wspoldzieli domyslna baze metadanych `.kartograf_cache.db` w katalogu
+  biezacym (`default_cache_path()`); `cache=False` pomija cache, a `force=True`
+  dla przekazanej instancji uzywa osobnego polaczenia bez zmiany jej odczytow.
+  Wylaczenie cache jest zglaszane przez `Notice` (`cache_disabled`).
 - CLI `download`: `--check-updates [--plan PLIK]` (raport bez pobierania,
   plan JSON `kartograf-plan/1`), `--upgrade [--plan PLIK]` (pobranie
   nowszej tresci; wykonanie planu z kontrola, czy zrodlo nie zmienilo sie

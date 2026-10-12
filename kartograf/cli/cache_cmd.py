@@ -6,14 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
-# The CLI keeps its metadata cache in the working directory (the library has
-# no default location: ``MetadataCache(db_path)`` is required).
-CACHE_FILENAME = ".kartograf_cache.db"
-
-
-def cli_cache_path() -> Path:
-    """Path of the CLI metadata cache: ``.kartograf_cache.db`` in the cwd."""
-    return Path.cwd() / CACHE_FILENAME
+from kartograf.cache.defaults import default_cache_path, open_cache
 
 
 def _unreadable_message(path: Path, error: Exception) -> str:
@@ -59,7 +52,7 @@ def cmd_cache(args: argparse.Namespace) -> int:
     int
         Exit code (0 for success, 1 for error)
     """
-    from kartograf.cache import MetadataCache
+    from kartograf.cache.metadata import is_lock_error
 
     if args.cache_command is None:
         print("Usage: kartograf cache <command>")
@@ -67,17 +60,12 @@ def cmd_cache(args: argparse.Namespace) -> int:
         print("Run 'kartograf cache <command> --help' for details")
         return 0
 
-    from kartograf.cache.metadata import is_lock_error
-
-    # MetadataCache opens the database lazily: none of these subcommands
-    # creates the file when it does not exist yet. An SQLite error disables
-    # the cache silently here (no-op callback) - the subcommands report it
-    # themselves via cache.error.
-    cache = MetadataCache(cli_cache_path(), on_disabled=lambda _message: None)
-
-    try:
+    # Reads and management calls never create a missing database. Ignore the
+    # disabled-cache notice here: these commands report cache.error themselves.
+    with open_cache(True, force=False, on_notice=lambda _notice: None) as cache:
+        assert cache is not None
         if args.cache_command == "path":
-            print(cache.db_path)
+            print(default_cache_path())
             return 0
 
         if args.cache_command == "stats":
@@ -107,13 +95,10 @@ def cmd_cache(args: argparse.Namespace) -> int:
                 print("Cache cleared.")
                 return 0
             if is_lock_error(cache.error):
-                # the file is fine, another process holds it: never delete it
+                # The file is fine, another process holds it: never delete it.
                 print(_unreadable_message(cache.db_path, cache.error), file=sys.stderr)
                 return 1
             cache.close()
             return _remove_unreadable(cache.db_path)
-
-    finally:
-        cache.close()
 
     return 0

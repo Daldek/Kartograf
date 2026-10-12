@@ -11,8 +11,8 @@ from collections import Counter
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING
 
+from kartograf.cache.defaults import open_cache
 from kartograf.cli._parser import (
     COUNTRY_CHOICES,
     PRODUCT_CHOICES,
@@ -49,12 +49,9 @@ from kartograf.exceptions import (
     ParseError,
     ValidationError,
 )
+from kartograf.notices import Notice
 from kartograf.providers.pl import require_nmt_vertical_crs
 from kartograf.sources.registry import horizontal_crs_for_sheet
-
-if TYPE_CHECKING:
-    from kartograf.cache import MetadataCache
-
 
 # PL-2000 sheet scales GUGiK can publish below the 1:10000 frame.
 _SCALES_2000 = ("1:5000", "1:2000", "1:1000", "1:500")
@@ -133,8 +130,8 @@ def _create_provider_and_storage(
     Create provider and storage based on product type.
 
     ``cache`` (``MetadataCache`` or ``None``) goes to the provider: GUGiK
-    index (skorowidz) records are read and written exclusively via the cache (N6; CLI:
-    ``--force`` = cache in ``refresh`` mode, see ``_pl_metadata_cache``).
+    index records are read and written exclusively via the cache (N6;
+    ``--force`` uses a refresh-mode cache from ``open_cache``).
 
     LAZ has a separate flow (`_cmd_download_laz`) and never reaches this
     helper — `cmd_download` short-circuits it before any provider is built.
@@ -173,27 +170,12 @@ def _create_provider_and_storage(
 _cache_warnings_shown: set[str] = set()
 
 
-def _warn_cache_disabled(message: str) -> None:
-    """``on_disabled`` of the CLI ``MetadataCache``: one ``Warning:`` on stderr.
-
-    The library reports the disabled cache once per instance; the CLI
-    prints it right away (the download goes on without the cache, so the
-    exit code follows the download result) and once per command.
-    """
-    if message in _cache_warnings_shown:
+def _warn_cache_disabled(notice: Notice) -> None:
+    """Print one disabled-cache warning per CLI command."""
+    if notice.text in _cache_warnings_shown:
         return
-    _cache_warnings_shown.add(message)
-    print(f"Warning: {message}", file=sys.stderr, flush=True)
-
-
-def _cli_metadata_cache(force: bool) -> "MetadataCache":
-    """``MetadataCache`` in the cwd for the CLI (``--force`` = refresh mode)."""
-    from kartograf.cache import MetadataCache
-    from kartograf.cli.cache_cmd import cli_cache_path
-
-    return MetadataCache(
-        cli_cache_path(), refresh=force, on_disabled=_warn_cache_disabled
-    )
+    _cache_warnings_shown.add(notice.text)
+    print(f"Warning: {notice.text}", file=sys.stderr, flush=True)
 
 
 def _announce_geometry_layer(args: argparse.Namespace) -> bool:
@@ -226,25 +208,6 @@ def _announce_geometry_layer(args: argparse.Namespace) -> bool:
         )
     args.layer = choice.name
     return True
-
-
-@contextlib.contextmanager
-def _pl_metadata_cache(args: argparse.Namespace) -> Iterator[object | None]:
-    """
-    ``MetadataCache`` of the PL path for the duration of one task (N6; model: the CZ
-    path).
-
-    ``--force`` = ``MetadataCache(refresh=True)`` (E14): index records are NOT read, but
-    the freshly chosen record (and a confirmed no coverage) is WRITTEN - the next run
-    without ``--force`` gets the new record, not the old one from before a campaign
-    change (until the 7-day TTL expires). The cache is opened in the cwd and closed
-    after the task (``close()`` purges expired entries).
-    """
-    cache = _cli_metadata_cache(bool(args.force))
-    try:
-        yield cache
-    finally:
-        cache.close()
 
 
 def _product_label(product: str, resolution: str | None) -> str:
@@ -1308,7 +1271,9 @@ def _cmd_download(args: argparse.Namespace) -> int:
 
     workers = getattr(args, "workers", 4)
 
-    with _pl_metadata_cache(args) as cache:
+    with open_cache(
+        True, force=bool(args.force), on_notice=_warn_cache_disabled
+    ) as cache:
         provider, storage = _create_provider_and_storage(
             product, output_dir, vertical_crs, resolution, cache=cache
         )
@@ -2228,7 +2193,9 @@ def _download_pl_sheet_list(
             label=_product_label(product, resolution),
         )
 
-    with _pl_metadata_cache(args) as cache:
+    with open_cache(
+        True, force=bool(args.force), on_notice=_warn_cache_disabled
+    ) as cache:
         provider, storage = _create_provider_and_storage(
             product, output_dir, vertical_crs, resolution, cache=cache
         )
@@ -2666,9 +2633,10 @@ def _cmd_download_cz(
         )
 
     # D16: --force as in the PL path - the cache read (SM5 sheet index)
-    # is skipped, the fresh entry is written
-    cache = _cli_metadata_cache(bool(args.force))
-    try:
+    # is skipped, the fresh entry is written.
+    with open_cache(
+        True, force=bool(args.force), on_notice=_warn_cache_disabled
+    ) as cache:
         try:
             provider = create_dmr_provider(
                 resolution=resolution,
@@ -2685,8 +2653,6 @@ def _cmd_download_cz(
         if bbox is None:
             return _cz_download_sheet(args, provider)
         return _cz_download_bbox(args, provider, bbox, parent_request)
-    finally:
-        cache.close()
 
 
 def _cmd_download_geometry(args: argparse.Namespace) -> int:

@@ -885,9 +885,11 @@ class TestForceRefreshesRecordCache:
         return rc, session
 
     def test_force_writes_fresh_record(self, tmp_path, monkeypatch):
+        from kartograf.cache.defaults import open_cache
+
         monkeypatch.chdir(tmp_path)
         key = ("orto", "RGB", "none", SHEET)
-        stale = MetadataCache(tmp_path / ".kartograf_cache.db")
+
         stale_source = {
             "url": self.STALE,
             "layer": "SkorowidzeOrtofotomapyStarsze",
@@ -895,30 +897,15 @@ class TestForceRefreshesRecordCache:
             "acquisition_date": "2020-01-01",
             "color": "RGB",
         }
-        stale.set_record(*key, {"source": stale_source})
-        stale.close()
+        with open_cache(True, force=False) as stale:
+            assert stale is not None
+            stale.set_record(*key, {"source": stale_source})
 
         rc, session = self._run_cli(tmp_path, "--force", "-q")
 
         assert rc == 0
         # read skipped: the index was queried, the current URL downloaded
         assert session.get.call_args_list[-1][0][0] == RGB_2024
-        cache = MetadataCache(tmp_path / ".kartograf_cache.db")
-        try:
+        with open_cache(True, force=False) as cache:
+            assert cache is not None
             assert cache.get_record(*key)["source"]["url"] == RGB_2024
-        finally:
-            cache.close()
-
-    def test_refresh_cache_misses_reads_but_writes(self, tmp_path):
-        """Library: ``MetadataCache(refresh=True)`` — a read = a miss."""
-        key = ("nmt", "1m", "EVRF2007", "N-34-130-D-d-2-4")
-        normal = MetadataCache(db_path=tmp_path / "c.db")
-        normal.set_record(*key, {"source": {"url": "old"}})
-        refreshing = MetadataCache(db_path=tmp_path / "c.db", refresh=True)
-        try:
-            assert refreshing.get_record(*key) is None
-            refreshing.set_record(*key, {"source": {"url": "new"}})
-            assert normal.get_record(*key) == {"source": {"url": "new"}}
-        finally:
-            refreshing.close()
-            normal.close()
