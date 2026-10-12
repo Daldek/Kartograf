@@ -10,7 +10,8 @@ import os
 
 import pytest  # noqa: F401 - required for fixtures
 
-from kartograf.download.storage import FileStorage
+from kartograf.core.sheet_parser import BBox
+from kartograf.download.storage import FileStorage, bbox_slot
 from kartograf.exceptions import ValidationError
 
 
@@ -1141,3 +1142,33 @@ def test_leading_zero_sheet_same_path_and_sidecar(tmp_path):
     assert provider.download.call_args[0][0] == "M-33-36-A-a-1-1"
     meta = json.loads(path.with_name(path.name + ".meta.json").read_text())
     assert meta["request"]["sheet"] == "M-33-36-A-a-1-1"
+
+
+class TestVersionSlots:
+    """Version roots of opaque identifiers and bbox cutouts (plan 2/3 Task 4)."""
+
+    def test_raw_versions_root_follows_hierarchy_and_system(self, tmp_path):
+        storage = FileStorage(
+            tmp_path, resolution=None, vertical_crs="EVRF2007", product="laz"
+        )
+        sheet = "N-33-131-B-a-1-1-4"
+        root = storage.get_raw_versions_root(sheet, system="2000")
+        base = tmp_path / "laz" / "pl_2000_evrf2007" / "versions"
+        assert storage.get_raw_versions_base(sheet, system="2000") == base
+        std = storage.get_raw_path(sheet, "a.laz", system="2000")
+        hierarchy = std.parent.relative_to(tmp_path / "laz" / "pl_2000_evrf2007")
+        assert root == base / hierarchy
+        default = storage.get_raw_versions_root(sheet).relative_to(tmp_path)
+        assert default.parts[:3] == ("laz", "pl_1992_evrf2007", "versions")
+        with pytest.raises(ValidationError):
+            storage.get_raw_versions_root(sheet, system="1965")
+
+    def test_bbox_slot_paths(self, tmp_path):
+        bbox = BBox(500000.0, 600000.0, 500500.5, 600500.0, "EPSG:2180")
+        slot = bbox_slot(tmp_path, "nmt/pl_1992_1m_evrf2007", bbox, ".tif")
+        segment = tmp_path / "nmt" / "pl_1992_1m_evrf2007"
+        assert slot.std == segment / "bbox" / "500000_600000_500500.5_600500.tif"
+        assert slot.versions_root == segment / "versions" / "bbox"
+        assert slot.versions_base == segment / "versions"
+        assert (slot.segment, slot.hierarchy) == ("nmt/pl_1992_1m_evrf2007", "bbox")
+        assert slot.name == slot.std.name

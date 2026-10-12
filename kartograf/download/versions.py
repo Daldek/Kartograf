@@ -312,6 +312,33 @@ def _fsync(path: Path) -> None:
         os.close(fd)
 
 
+def http_signal_of(v: LocalVersion) -> dict | None:
+    """``extra.http`` of a version sidecar (``etag``, ``last_modified``, ...)."""
+    extra = v.meta.get("extra")
+    http = extra.get("http") if isinstance(extra, dict) else None
+    return http if isinstance(http, dict) else None
+
+
+def same_http_signal(local: dict | None, remote: dict | None) -> bool | None:
+    """Compare HTTP signals (plan 2/3 decision 2); ``None`` = not comparable.
+
+    Both with ``etag``: equal ETags. Local without ``etag``: equal
+    ``last_modified`` when both have it. ``content_length`` never counts
+    (D28).
+    """
+    if not local or not remote:
+        return None
+    if local.get("etag") and remote.get("etag"):
+        return bool(local["etag"] == remote["etag"])
+    if (
+        not local.get("etag")
+        and local.get("last_modified")
+        and remote.get("last_modified")
+    ):
+        return bool(local["last_modified"] == remote["last_modified"])
+    return None
+
+
 def commit_version(
     staged: Path,
     versions_root: Path,
@@ -319,21 +346,27 @@ def commit_version(
     version: VersionRef,
     digest: ContentDigest,
     write_sidecar: Callable[[Path, VersionRef, ContentDigest], None],
+    *,
+    signal: dict | None = None,
 ) -> VersionCommit:
     """Publish a staged file as a version of ``name`` (spec 3.1).
 
-    Same sha256 as a valid version: ``unchanged`` when the label matches or
-    the label is ``downloaded`` (no signal); a new campaign/edition label
-    gets its own directory hardlinked to the existing data, ``relabeled``
-    (D23). Otherwise ``os.link`` publishes the data exclusively (D18); an
-    existing target is compared by sha256: different = ``DownloadError``,
-    equal with a sidecar = ``unchanged``, equal without = repair.
+    Same sha256 as a valid version: ``unchanged`` when the label matches;
+    a ``downloaded`` label is ``unchanged`` too when ``signal`` (the HTTP
+    signal of this download) is ``None`` or equal to the ``extra.http`` of
+    a version with that sha256 (``same_http_signal``). Otherwise — a new
+    campaign/edition label or the same content under a new HTTP signal —
+    the version gets its own directory hardlinked to the existing data,
+    ``relabeled`` (D23). New content: ``os.link`` publishes the data
+    exclusively (D18); an existing target is compared by sha256:
+    different = ``DownloadError``, equal with a sidecar = ``unchanged``
+    (e.g. a second download on the same day), equal without = repair.
 
     ``write_sidecar(data, version, digest)`` must create ``<data>.meta.json``
     EXCLUSIVELY: ``FileExistsError`` means another writer published the
     sidecar first (``unchanged``); any other failure removes the data file
     created by this call and raises ``DownloadError``. The staged file is
-    always removed.
+    always removed. The caller puts ``signal`` into ``extra.http``.
 
     Raises
     ------
@@ -352,8 +385,14 @@ def commit_version(
     status: CommitStatus = "new"
     if same:
         labelled = [v for v in same if v.label == version.label]
-        if labelled or version.label_source == "downloaded":
-            match = labelled[0] if labelled else max(same, key=version_key)
+        if not labelled and version.label_source == "downloaded":
+            labelled = [
+                v
+                for v in same
+                if signal is None or same_http_signal(http_signal_of(v), signal)
+            ]
+        if labelled:
+            match = max(labelled, key=version_key)
             _discard(staged)
             return VersionCommit("unchanged", match.path, digest.sha256, match.label)
         source, status = same[0].path, "relabeled"
