@@ -110,12 +110,11 @@
 >    planie 3/3. Nastepny krok: napisac plan 2/3 (inwentaryzacja sygnalow
 >    spec 8, LAZ, CZ, wycinki `bbox/` D15, `download_bbox`, `extra.http`)
 >    na podstawie specu i stanu galezi.
-> 2. Otwarte z weryfikacji na zywo planu 1/3 (do decyzji uzytkownika):
->    udzial SMB bez `serverino` — `os.path.samefile` falszywe dla
->    hardlinkow, wiec `linked_version` nie rozpoznaje dowiazania (odtwarzane
->    przy kazdym uruchomieniu; mylacy `Warning:` "pelny lot nie pobrany",
->    I-1 bez lokalnej wersji). Udokumentowane w ADR-036/USAGE 4; mozliwa
->    poprawka (np. porownanie sha256 sidecara z trescia) — nie podjeta.
+> 2. Udzial SMB bez `serverino` (`samefile` falszywe dla hardlinkow):
+>    ROZWIAZANE na galezi (`1c84b3e`, decyzja uzytkownika 2026-10-12) —
+>    `linked_version` potwierdza dowiazanie trescia (oba pliki > 1 link,
+>    ten sam rozmiar, sha256 = sidecar wersji). Na zywo: rerun bez
+>    przepisania sidecara dowiazania, `full_sheet/` rozpoznany.
 > 3. Hydrograf i Hydrolog musza dostosowac wywolania (CHANGELOG [0.8.0],
 >    "Co zrobic") — sprawdzic przed wydaniem 0.8.0.
 > 4. Test na zywo zmian lamiacych 0.8.0 na `develop` ZROBIONY (0 FAIL,
