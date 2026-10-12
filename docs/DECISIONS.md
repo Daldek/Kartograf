@@ -24,7 +24,7 @@ kazda relacja jest zapisana po obu stronach.
 |---|---|---|---|
 | [ADR-001](#adr-001-flat-layout-zamiast-src-layout) | Flat layout zamiast src layout | 2026-01-17 | Przyjeta |
 | [ADR-002](#adr-002-auth-proxy-do-izolacji-credentials-clms) | Auth Proxy do izolacji credentials CLMS | 2026-01-18 | Przyjeta |
-| [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) | OpenData (ASC) vs WCS (GeoTIFF) — rozdzielenie sciezek pobierania NMT | 2026-01-18 | Przyjeta — czesciowo zastapiona przez [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (bbox = WCS GeoTIFF; errata 1) |
+| [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) | OpenData (ASC) vs WCS (GeoTIFF) — rozdzielenie sciezek pobierania NMT | 2026-01-18 | Przyjeta — czesciowo zastapiona przez [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (bbox = WCS GeoTIFF; errata 1) i [ADR-036](#adr-036-magazyn-wersjonowany) (`DownloadManager.download_bbox` usuniete; errata 2) |
 | [ADR-004](#adr-004-evrf2007-jako-domyslny-uklad-wysokosciowy) | EVRF2007 jako domyslny uklad wysokosciowy | 2026-01-21 | Zastapiona w 0.8.0 (errata 1: uklad wysokosci wymagany, bez wartosci domyslnej) |
 | [ADR-005](#adr-005-struktura-katalogow-nmt-rozdzielona-wg-rozdzielczosci) | Struktura katalogow NMT rozdzielona wg rozdzielczosci | 2026-01-21 | Przyjeta — czesciowo zastapiona przez [ADR-013](#adr-013-zmiana-nazw-podkatalogow-storage-z-1m5m-na-nmt_1mnmt_5m), a nastepnie [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (realizacja ukladu katalogow; errata 1) |
 | [ADR-006](#adr-006-landcoverprovider-jako-osobna-hierarchia-od-baseprovider) | LandCoverProvider jako osobna hierarchia od BaseProvider | 2026-01-18 | Przyjeta |
@@ -99,7 +99,7 @@ kazda relacja jest zapisana po obu stronach.
 ## ADR-003: OpenData (ASC) vs WCS (GeoTIFF) — rozdzielenie sciezek pobierania NMT
 
 **Data:** 2026-01-18
-**Status:** Przyjeta — czesciowo zastapiona przez ADR-027 (bbox = WCS GeoTIFF; errata 1)
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-027 (bbox = WCS GeoTIFF; errata 1) i ADR-036 (`DownloadManager.download_bbox` usuniete; errata 2)
 
 **Kontekst:** GUGiK oferuje dwa sposoby pobierania NMT: OpenData (pliki ASC po godle) i WCS (GeoTIFF po bbox). Poczatkowo probowano ujednolicic oba w jednym flow.
 
@@ -118,6 +118,12 @@ a jeden GeoTIFF dla bboxa/geometrii buduje z arkuszy wycinek `--target-crs` /
 `DownloadManager.download_bbox` / `GugikProvider.download_bbox` i tylko dla
 KRON86 — endpoint EVRF2007 GUGiK wycofal (HTTP 404 od 2026-08), a
 `download_bbox` z EVRF2007 konczy sie `ValidationError` przed siecia.
+
+**Errata 2 (2026-10-12, ADR-036 D27, 0.8.0):** `DownloadManager.download_bbox`
+usuniete — pisal plik w korzeniu magazynu, zawsze nadpisywal i dublowal
+`download_pl_cutout(EPSG:2180)` bez maski PRG. Wycinek NMT/NMPT w magazynie:
+`download_pl_cutout`; surowy WCS (np. ortofotomapa) poza magazynem:
+`provider.download_bbox(bbox, path)` (metody providerow zostaja).
 
 ---
 
@@ -2474,15 +2480,16 @@ powstaje wylacznie z WCS; mozaike arkuszy sklada wywolujacy
 **Errata 3 (2026-10-12, ADR-036):** W-U3/W-U8 (nazwa z data, pobieranie
 przy kazdym uruchomieniu) zastapione decyzja D15 magazynu wersjonowanego:
 `bbox/<wsp>.tif` jako dowiazanie do najnowszej wersji, data tylko
-w etykiecie wersji, domyslnie lokalna wersja. Realizacja w planie 2/3;
-do tego czasu wycinek dziala jak w 0.7.2.
+w etykiecie wersji, domyslnie lokalna wersja (bez zapytan PRG i WCS),
+`--force` pobiera ponownie. Zrealizowane w 0.8.0 (plan 2/3 magazynu);
+pliki `<wsp>_<RRRRMMDD>.tif` z 0.7.x nie sa rozpoznawane (D10).
 
 ---
 
 ## ADR-036: Magazyn wersjonowany
 
-**Data:** 2026-10-12 (spec zaakceptowany 2026-10-11, decyzje D1-D24)
-**Status:** Przyjeta; czesciowo zastepuje ADR-030 (`kampanie/`, automatyczne `newest`, kopia), ADR-032 (pkt 2 i 4), ADR-033 (F-U5) i ADR-035 (W-U3/W-U8, plan 2/3); uzupelnia ADR-026 (`versions/`; land cover w planie 3/3)
+**Data:** 2026-10-12 (spec zaakceptowany 2026-10-11, decyzje D1-D24; rewizja 2026-10-12, D26-D28)
+**Status:** Przyjeta; czesciowo zastepuje ADR-030 (`kampanie/`, automatyczne `newest`, kopia), ADR-032 (pkt 2 i 4), ADR-033 (F-U5), ADR-035 (W-U3/W-U8) i ADR-003 (`DownloadManager.download_bbox`); uzupelnia ADR-026 (`versions/`; land cover w planie 3/3)
 
 **Kontekst:** Do 0.7.x magazyn mogl po cichu nadpisac dane: `--force`
 nadpisywal plik kampanii, `newest` automatycznie przestawial sciezke na
@@ -2518,13 +2525,42 @@ Nie bylo sposobu sprawdzenia aktualnosci bez pobierania.
 NMT/NMPT/orto (`DownloadManager`, CLI `--sheet`/`--bbox`/`--geometry`
 bez `--target-crs`): `versions.py`, `updates.py`, `--check-updates`,
 `--upgrade`, `--plan`, statusy wersji w CLI. `kampanie/` z 0.7.x nie
-jest migrowany (ponowne pobranie, `Info:`). Plan 2/3: LAZ, CZ, wycinki
-`bbox/` (D15), sygnaly `http`; plan 3/3: land cover i HSG w ukladzie
-`data/`. Magazyn wymaga systemu plikow z hardlinkami; gdy system plikow
+jest migrowany (ponowne pobranie, `Info:`). Plan 2/3 (2026-10-12)
+obejmuje pozostale tory `kartograf download`: kafle LAZ, arkusze CZ
+(TM33/SM5, przeniesione z CLI do `download/cz_sheets.py`), wycinki CZ
+i wycinki PL z WCS w `bbox/<wsp>.tif` bez daty (D15); wspolna polityka
+plikow bez kampanii `download/fetch.py`, plan z torem pozycji
+(`download/plan.py`, `PlanItem.track`/`unit`), `--check-updates`/
+`--upgrade`/`--plan` dla kazdego toru (przy `--country auto` jeden plan
+PL i CZ). Plan 3/3: land cover i HSG w ukladzie `data/`. Magazyn wymaga systemu plikow z hardlinkami; gdy system plikow
 nie podaje stabilnych numerow i-wezlow (SMB bez `serverino`, `samefile`
 falszywe dla hardlinku), dowiazanie potwierdza tresc: obie sciezki maja
 wiecej niz 1 link, ten sam rozmiar, a sha256 dowiazania = sha256 z sidecara wersji
 (pelny odczyt pliku tylko na takich udzialach). Kopia magazynu: `rsync -aH`.
+
+Decyzje rewizji 2026-10-12 (plan 2/3):
+- D26: plik LAZ = wersja per plik (nazwa `<zgloszenie>_<rekord>_<godlo>.laz`
+  zmienia sie z nalotem), etykieta `<data>_<zgloszenie>`; wyjatek od D5 —
+  nowszy nalot to nowe pliki, pobierane domyslnie, kafel z lokalna wersja
+  nie jest pobierany ponownie (tylko `--force`).
+- D27: `DownloadManager.download_bbox` usuniete (errata 2 ADR-003).
+- D28: `Content-Length` nie jest sygnalem swiezosci.
+- Sygnal per kanal dostepu (`AccessChannel.update_signal`, inwentaryzacja
+  `docs/research/2026-10-12-signal-inventory/raport.md`):
+
+| Kanal | Sygnal | Etykieta |
+|---|---|---|
+| arkusze PL NMT/NMPT/orto (skorowidz) | `index` | kampania |
+| LAZ (rekord WFS) | `index` | kampania (D26) |
+| WCS GUGiK (wycinki PL) | `none` | data pobrania |
+| SM5 CUZK (`openzu`) | `http` (`ETag`, `Last-Modified` w `extra.http`) | data pobrania |
+| `exportImage` CUZK (TM33, wycinki CZ) | `none` (`ETag` zalezny od zapytania) | data pobrania |
+
+  Ta sama tresc pod nowym `ETag` = `relabeled`, pod tym samym albo bez
+  sygnalu = `unchanged` (D23 dla `http`). Bez taniego sygnalu: domyslnie
+  i przy `--upgrade` lokalna wersja (niesprawdzona, `--force` pobiera).
+  Wszystkie mierzone obiekty byly bajtowo powtarzalne, wiec `--force` przy
+  niezmienionym zrodle daje "bez zmian".
 
 ---
 

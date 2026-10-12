@@ -158,7 +158,7 @@ kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt
 ```
 
 - PL: WCS GUGiK daje wysokości NMT/NMPT 1 m w jednym GeoTIFF
-  `<segment>/bbox/<współrzędne>_<YYYYMMDD>.tif`. Przed zapytaniem
+  `<segment>/bbox/<współrzędne>.tif`. Przed zapytaniem
   WCS pobierana jest maska lądu PRG (`A00 - W02 - W03`): morze
   i obszar poza Polską to nodata `-9999`, **0,0 na lądzie zostaje
   danymi**. Wynik w całości nodata daje `Warning:` i kod 0. Na
@@ -173,12 +173,17 @@ kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt
   starszymi); wycinek może pokazywać inny lot niż pobrane
   arkusze dokładnie 1 m. Nad lotem 0,5 m wynik 1 m to
   decymacja, nie uśrednienie.
-- Każde uruchomienie pobiera ponownie (bez pomijania istniejącego
-  pliku); tego samego dnia udany wynik atomowo zastępuje
-  poprzedni, nieudany pozostawia plik i sidecar. `--force`,
-  `--workers` i `--scale` nie zmieniają wycinka WCS.
-  `Info:` podaje liczbę żądań przy więcej niż jednym kawałku
-  lub wyniku >= 1 GiB.
+- Wynik to dowiązanie `<segment>/bbox/<współrzędne>.tif` (bez daty) do
+  wersji w `<segment>/versions/bbox/<RRRR-MM-DD>_<sha8>/`. Domyślnie
+  i z `--upgrade` istniejąca wersja jest używana bez zapytań PRG i WCS
+  (linia `... lokalna wersja ... (bez sprawdzania; --check-updates)`);
+  `--force` pobiera ponownie — ta sama treść to „bez zmian” (wycinki są
+  bajtowo powtarzalne, pomiar 2026-10-12), inna to nowa wersja obok
+  starej. Nieudane pobranie nie rusza poprzedniej wersji ani dowiązania.
+  Pliki `<współrzędne>_<RRRRMMDD>.tif` z 0.7.x nie są rozpoznawane (usuń
+  je ręcznie). `--workers` i `--scale` nie zmieniają wycinka WCS.
+  `Info:` podaje liczbę żądań przy więcej niż jednym kawałku lub wyniku
+  >= 1 GiB (tylko gdy wycinek będzie pobierany).
 - Wycinki 5 m, wybór roku (`--year`, `--min-year`, `--max-year`),
   `--all-campaigns` i `--full-sheet` z `--target-crs` są
   odrzucane (`Error:`). Podobnie `--target-crs` dla orto/LAZ;
@@ -229,6 +234,15 @@ w Polsce (część CZ bywa wtedy w całości nodata).
   żaden kraj nie dał wyniku albo `--country` było jawne.
 - Natywnie S-JTSK/Bpv (EPSG:5514); `KRON86` dla CZ jest nieosiągalny.
   Szczegóły: SCOPE 2.2 i 3.2, ARCHITECTURE 4.4–4.6.
+- Magazyn wersji (0.8.0): arkusz CZ i wycinek CZ leżą jako wersje
+  w `<segment>/versions/`, ścieżka arkusza i `bbox/<współrzędne>.tif` to
+  hardlinki. Arkusz SM5 ma tani sygnał (`ETag`/`Last-Modified` pliku
+  `openzu`, zapisany w `extra.http` sidecara wersji): domyślnie jedno
+  `HEAD` na plik z lokalną wersją — nowsza treść daje dopisek `; dostępna
+  nowsza ... (--upgrade)`, a `--upgrade` ją pobiera; nieudane `HEAD` to
+  `Warning:` i lokalna wersja (z `--upgrade` — błąd). Kafel TM33 i wycinek
+  CZ (`exportImage`) nie mają taniego sygnału: lokalna wersja bez
+  sieci, ponowne pobranie tylko `--force`.
 
 ### 1.5 Pokrycie terenu, gleby, HSG, cache
 
@@ -368,12 +382,13 @@ path = manager.download_sheet("N-34-130-D-d-2-4")
 # NMT 5 m tylko w EVRF2007: GugikProvider(resolution="5m", vertical_crs="KRON86")
 # -> ValueError (create_nmt_provider: ValidationError)
 
-# Biblioteczne download_bbox: NMT KRON86 (TIFF) i EVRF2007
-# (ASC multipart), a także NMPT (ASC multipart) — jednopasmowy
-# float32 GeoTIFF wysokości na siatce 1 m EPSG:2180, bez maski PRG
-kron = DownloadManager("./data", GugikProvider(vertical_crs="KRON86", resolution="1m"))
+# Surowy WCS poza magazynem (np. ortofotomapa albo NMT KRON86 jako TIFF):
+# provider.download_bbox(bbox, path) — jednopasmowy float32 GeoTIFF na
+# siatce 1 m EPSG:2180, bez maski PRG i bez wersji. Wycinek NMT/NMPT
+# w magazynie wersji: download_pl_cutout (niżej).
 area = BBox(min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180")
-path = kron.download_bbox(area, "my_area.tif")
+kron = GugikProvider(vertical_crs="KRON86", resolution="1m")
+path = kron.download_bbox(area, Path("my_area.tif"))
 
 # Land Cover: BDOT10k / CORINE / SoilGrids (provider wymagany)
 from kartograf import LandCoverManager
@@ -414,7 +429,8 @@ bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
 result = download_pl_cutout(
     bbox, "EPSG:5514", output_dir="./data", vertical_crs="EVRF2007", product="nmpt",
 )
-print(result.path, result.masked_pixels, result.zero_pixels, result.all_nodata)
+print(result.file.path, result.file.status, result.masked_pixels, result.all_nodata)
+# domyślnie istniejąca wersja bez zapytań PRG/WCS; update="force" pobiera ponownie
 # osobne kroki przy własnym providerze; maska PRG pobierana przed WCS
 cutout = prepare_pl_cutout(
     bbox, "EPSG:2180", output_dir="./data", vertical_crs="EVRF2007", product="nmt"
@@ -434,12 +450,17 @@ cz = download_cz_cutout(
     vertical_crs="EVRF2007",
     resolution="2m",          # "2m" DMR 5G / "5m" DMR 4G
 )
-print(cz.path)                # data/nmt/cz_dmr5g_evrf2007/bbox/<coords>.tif
+print(cz.file.path)           # data/nmt/cz_dmr5g_evrf2007/bbox/<coords>.tif
 # all_nodata=True: część CZ bez ani jednego ważnego piksela (prostokąt
 # obwiedni CZ sięga w głąb Polski) — plik powstaje, flaga też w sidecarze
 print(cz.all_nodata)
 # Część PL (parts["PL"].bbox) pobierz przez download_pl_cutout (wyżej).
 # Własny provider: run_cz_cutout(provider, bbox, output_dir=, image_crs=).
+
+# Sprawdzenie bez pobierania (plan kartograf-plan/1) dla każdego toru:
+from kartograf import check_cz_cutout, check_laz_updates, check_pl_cutout
+plan = check_pl_cutout(cutout)          # status "unverifiable"/"missing"
+print([(i.track, i.unit, i.status) for i in plan.items])
 ```
 
 **Cache metadanych w bibliotece.** Bez `MetadataCache` provider NMT pyta
@@ -495,12 +516,19 @@ rozwijane do arkuszy 1:10000 przez `download_hierarchy()` (ta zawsze zwraca
   braku pokrycia, sekcja 1.6), `better_coverage`, `link_outside_range`,
   `full_links`, `full_link_outside_range` i `without_full` (sekcje 4.1
   i 4.2).
-- `PlCutoutResult` (wycinek WCS): `path`, `masked_pixels`,
-  `zero_pixels`, `all_nodata`; `skipped` zawsze `False`.
+- `PlCutoutResult` (wycinek WCS): `file` (`VersionedFile`),
+  `masked_pixels`, `zero_pixels`, `all_nodata`, `stale`.
 - `CzCutoutResult` (wycinek CZ, `download_cz_cutout`/`run_cz_cutout`):
-  `path`, `skipped`, `all_nodata`.
-- `LazDownloadResult` (`download_laz_area`): `downloaded`, `skipped`,
-  `failed`, `superseded` (kafle pominięte jako pokryte przez nowsze).
+  `file`, `all_nodata`, `stale`.
+- `LazDownloadResult` (`download_laz_area`): `files` (`VersionedFile` na
+  kafel), `failed`, `superseded` (kafle pominięte jako pokryte przez
+  nowsze), `stale`.
+- `VersionedFile`: `path` (ścieżka standardowa = hardlink), `status`
+  (`new`/`unchanged`/`relabeled`/`local`), `label`, `sha256`,
+  `version_path`, `newer` (źródło ma nowszą treść, tryb domyślny),
+  `unverified` (`"none"` — brak taniego sygnału, `"check_failed: ..."`).
+  `file` wyników jednoplikowych jest `None` tylko z `plan=`, gdy plan nie
+  wykonuje tego pliku i nie ma wersji lokalnej.
 
 **Sidecar.** Każde udane pobranie przez CLI albo warstwę zarządzającą
 biblioteki (niżej) zapisuje dwa pliki: dane (`.asc`, `.tif`,
@@ -510,7 +538,7 @@ pochodzenie (`extra.source`), a dla zadań obszarowych `extra.parent_request`
 łączący pliki jednego zadania. Pełna tabela pól: ARCHITECTURE 3.2,
 `parent_request`: ARCHITECTURE 3.4. Sidecary pisze warstwa zarządzająca
 (`DownloadManager`, `LandCoverManager`, wycinki PL i CZ oraz kafle LAZ
-w bibliotece; dla godła CZ — CLI), a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
+i arkusze CZ w bibliotece), a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
 Bezpośrednie wywołanie providera (np. `CuzkDmrProvider` z biblioteki) zapisuje
 sam plik danych, bez sidecara.
 
@@ -694,10 +722,21 @@ kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 2024 --produ
 
 ### 4.3 Wersje, tryby i plan aktualizacji (`--check-updates`, `--upgrade`, `--force`)
 
-Dotyczy arkuszy PL NMT/NMPT/orto (`--sheet` oraz `--bbox`/`--geometry`
-z `--country pl` bez `--target-crs`); LAZ, CZ i wycinki dostaną to samo
-w kolejnych wersjach (z tymi flagami teraz: `Error:` przed siecią).
-Flagi wykluczają się wzajemnie.
+Dotyczy każdego toru `kartograf download`: arkuszy PL NMT/NMPT/orto,
+kafli LAZ, arkuszy CZ (TM33, SM5), wycinków CZ i wycinków PL
+`--target-crs`. Flagi wykluczają się wzajemnie. Tabela niżej opisuje
+arkusze PL (sygnał: skorowidz); pozostałe tory różnią się sygnałem:
+
+| Tor | Sygnał świeżości | Uwagi |
+|---|---|---|
+| arkusze PL | skorowidz GUGiK (`index`) | tabela niżej |
+| kafle LAZ | rekord WFS (`index`) | nowszy nalot to nowe pliki — pobierane domyślnie; kafel z lokalną wersją tylko `--force` (D26) |
+| arkusze SM5 (CZ) | `ETag`/`Last-Modified` (`http`) | jedno `HEAD` na plik; inny `ETag` = `nowsza`, `--upgrade` pobiera |
+| kafle TM33, wycinki CZ i PL | brak (`none`) | domyślnie `lokalna wersja ... (bez sprawdzania; --check-updates)`; `--check-updates` = `nie da sie sprawdzic bez pobrania`; `--upgrade` = lokalna + `Info:` o `--force` |
+
+Pod `--country auto` `--check-updates --plan PLIK` zapisuje JEDEN plan
+z pozycjami PL i CZ (pole `track`), a `--upgrade --plan PLIK` wykonuje
+pozycje każdego toru.
 
 | Sytuacja | domyślnie | `--check-updates` | `--upgrade` | `--force` |
 |---|---|---|---|---|
@@ -724,7 +763,9 @@ Wynik: jedna linia na plik — `nowa wersja <etykieta>_<sha8>`, `nowa
 etykieta <etykieta> (ta sama tresc)` (GUGiK opublikował tę samą treść pod
 nowym rekordem), `bez zmian <etykieta>`, `lokalna wersja <etykieta>`
 (z dopiskiem `; dostepna nowsza <etykieta> (--upgrade)`), po liście
-podsumowanie `Nowe: N, nowa etykieta: N, bez zmian: N, lokalne: N, bledy: N`.
+podsumowanie `Nowe: N, nowa etykieta: N, bez zmian: N, lokalne: N, bledy: N`
+(także dla kafli LAZ). Arkusz CZ i wycinek dają jedną linię statusu
+(jednostka: godło albo ścieżka wycinka pod `--output`).
 
 Biblioteka:
 
@@ -737,6 +778,9 @@ manager.download_sheet("N-34-139-C-a-3-1", update="upgrade")   # albo "force"
 plan = check_updates(manager, ["N-34-139-C-a-3-1"])            # nic nie pobiera
 report = upgrade(manager, UpdatePlan.from_json(plan.to_json()))
 print(manager.last_sheet.status, manager.last_sheet.version)    # np. new 2025-10-21_84183
+# LAZ / CZ / wycinki: run_laz_download(..., update=, plan=), check_laz_updates,
+# run_cz_cutout(..., update=, plan=), check_cz_cutout, run_pl_wcs_cutout(...,
+# update=, plan=), check_pl_cutout; pozycje planu: item.track, item.unit
 ```
 
 ---
@@ -824,12 +868,14 @@ proxy).
   w Czechach (sekcja 1.2).
 - NMT 5 m nie obsługuje `--target-crs`: pobieraj arkusze
   bez tej flagi.
-- WCS `download_bbox` NMT KRON86 (TIFF) oraz NMT EVRF2007
-  i NMPT (ASC multipart) daje wysokości float32 w rozdzielczości
-  1 m. Samo `download_bbox` nie stosuje maski lądu PRG ani
-  nodata; maskę dostaje wycinek `--target-crs` /
+- `provider.download_bbox` (WCS: NMT KRON86 TIFF, NMT EVRF2007
+  i NMPT ASC multipart) daje wysokości float32 w rozdzielczości
+  1 m poza magazynem wersji, bez maski lądu PRG i bez sidecara;
+  maskę i wersję dostaje wycinek `--target-crs` /
   `download_pl_cutout`. Kompozycja serwera może różnić się
   od wyboru kampanii arkusza.
+- Wycinki (PL, CZ) i kafle TM33 nie mają taniego sygnału świeżości:
+  zmiana treści u źródła albo maski PRG jest niewidoczna bez `--force`.
 - Uszkodzony albo nieczytelny cache metadanych (`.kartograf_cache.db`
   w bieżącym katalogu) nie przerywa pobierania: CLI drukuje jedno
   `Warning: cache metadanych nieczytelny (...)` i pracuje bez cache.

@@ -135,14 +135,14 @@ sheets = find_sheets_for_geometry(Path("area.shp"), "1:10000", system="1992")
 # Pobieranie przez godło (ASC) — plik w data/nmt/pl_1992_1m_evrf2007/...
 manager = DownloadManager("./data", GugikProvider(vertical_crs="EVRF2007", resolution="1m"))
 path = manager.download_sheet("N-34-130-D-d-2-4")
-fetch = manager.last_sheet  # SheetFetch: skipped, downloaded, reused, link, unverified, full_link
+fetch = manager.last_sheet  # SheetFetch: status, version, newer, files, unverified, full_link
 
-# Biblioteczne bbox WCS NMT 1m: KRON86 z TIFF, EVRF2007 z ASC
-# multipart; obie sciezki daja GeoTIFF float32 z wysokosciami.
-# NMPT download_bbox rowniez daje wysokosci float32 (ASC multipart).
-kron = DownloadManager("./data", GugikProvider(vertical_crs="KRON86", resolution="1m"))
+# Surowy WCS NMT 1m poza magazynem wersji: KRON86 z TIFF, EVRF2007 z ASC
+# multipart; obie sciezki daja GeoTIFF float32 z wysokosciami (NMPT tez).
+# Wycinek w magazynie (maska PRG, wersje): download_pl_cutout (sekcja 3.10).
+kron = GugikProvider(vertical_crs="KRON86", resolution="1m")
 bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-path = kron.download_bbox(bbox, "area.tif")
+path = kron.download_bbox(bbox, Path("area.tif"))
 
 # Rozdzielczość 5m (tylko EVRF2007)
 manager_5m = DownloadManager("./data", GugikProvider(vertical_crs="EVRF2007", resolution="5m"))
@@ -180,7 +180,7 @@ Pobieranie danych NMPT (Digital Surface Model) z GUGiK — teren + obiekty powie
 Tylko 1m; układy wysokościowe KRON86 i EVRF2007. Wybór rekordu skorowidza
 i kampanie jak dla NMT (sekcje 3.1, 3.11). CLI `--bbox` bez
 `--target-crs` pobiera arkusze OpenData; z `--target-crs` wycinek WCS
-(sekcja 3.10). Biblioteczne `download_bbox` zwraca wysokosci
+(sekcja 3.10). `GugikNmptProvider.download_bbox` zwraca wysokosci
 float32 z WCS, nie kolorowy TIFF.
 
 #### Capabilities
@@ -252,7 +252,7 @@ bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
 
 # Wybór i pobranie kafli z sidecarami (ADR-029) — jedno wywołanie
 result = download_laz_area(bbox, output_dir="./data", vertical_crs="EVRF2007", min_density=12)
-result.downloaded, result.skipped   # pliki .laz w data/laz/pl_<układ>_<vcrs>/
+result.files                        # VersionedFile per kafel (status new/local/...), hardlinki w data/laz/pl_<układ>_<vcrs>/
 result.superseded                   # SupersededLazTile — starsze kafle pokryte nowszymi
 result.failed                       # LazTileFailure — porażki pojedynczych kafli
 
@@ -563,7 +563,7 @@ from pathlib import Path
 
 from kartograf import BBox, create_dmr_provider
 
-provider = create_dmr_provider(resolution="2m")            # DMR 5G, Bpv
+provider = create_dmr_provider(resolution="2m", vertical_crs="Bpv")  # DMR 5G
 provider.download("302_5550", Path("./302_5550.tif"))      # kafel TM33
 
 provider_evrf = create_dmr_provider(resolution="5m", vertical_crs="EVRF2007")
@@ -592,7 +592,8 @@ kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:55
 Jeden GeoTIFF NMT albo NMPT 1 m z WCS GUGiK dla `--bbox` lub
 obwiedni `--geometry` + `--target-crs`. Maska ladu PRG nadaje
 nodata poza Polska; lokalny warp uzywa przypietej operacji.
-Wynik: `<segment>/bbox/<coords>_<YYYYMMDD>.tif` z sidecarem;
+Wynik: `<segment>/bbox/<coords>.tif` (dowiazanie do wersji w
+`versions/bbox/`, ADR-036 D15) z sidecarem;
 pod `auto` PL i CZ to dwa pliki ze wspolnym `extra.parent_request`.
 
 #### Requirements
